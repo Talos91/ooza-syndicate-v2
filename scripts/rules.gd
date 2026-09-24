@@ -1,12 +1,13 @@
 class_name Rules
 extends RefCounted
 ## Every tunable number of the prototype in one place.
-## Kit sizes match Models/2.0/build_kit_2_0.py. Army numbers are PROVISIONAL placeholders
-## (PARAMETERS.md: army scale and vat caps are open questions) - change here only.
+## Kit sizes match Models/2.0/build_kit_2_0.py. Army numbers follow Alpha 11's logic scaled by
+## SCALE (PARAMETERS.md: army scale ~5x; vat caps are still an open question) - change here only.
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.8.0"
+const VERSION := "0.12.0"
+const VERSION_NAME := "Alpha 12"
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius
@@ -47,66 +48,111 @@ const DOOR_RATE_DEFAULT := DECK_SPEED_DEFAULT * NODE_SPEED_MULT_DEFAULT / METRES
 static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug panel)
 static var node_fight_mult: float = 1.0                # live-tunable: x combat rates on a platform
 
-# RUDIMENTARY relay cycling and Last Stand (Daniele, 2026-09-25: "without the rotating platforms
-# and Last Stand the game is eternal - test with the real maps even if rudimental"). Real per-map
-# authoring (fixed state order, warnings, ride/fall/carry consequences, hidden Last Stand method,
-# waves per map) is a separate later pass; this is the minimum that makes every starter map END.
-const RELAY_FIRE_COOLDOWN := 15.0    # GAME-RULES sec8: 15 s cooldown between fires (no 3 s warning yet)
-const LAST_STAND_TIME := 120.0       # Daniele, 2026-09-25: moved earlier than GAME-RULES sec10's
-                                      # 3:00 for this rudimentary pass, to keep matches shorter
-const LAST_STAND_WAVE := 14.0        # seconds between collapse waves; always "inward" (rim first) here
+# CONTACT (Alpha 12, Daniele: "whenever an enemy crosses the hitbox of a unit they fight... a unit
+# crossing an enemy unit should always start a combat to death"): contact is geometric, anywhere -
+# decks, piers, platform arcs - a horde's head within CONTACT_R of any patch of an enemy line
+# engages it; the fight then lasts until one side is gone.
+const CONTACT_R := 2.1               # metres: about one deck width across, one patch along
+const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
+
+# RELAYS (GAME-RULES sec8): player-fired; 3 s warning previews the outcome, then the authoritative
+# tick applies the per-kind troop fate over RELAY_MOVE seconds of visible motion (rotation pivots,
+# retract slides in, switch/remote dissolve), then RELAY_COOLDOWN before the next fire.
+const RELAY_WARNING := 3.0
+const RELAY_COOLDOWN := 15.0
+const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves; hordes on it ride
+
+# LAST STAND (GAME-RULES sec10; Daniele 2026-09-25: 2:00 "seems ok" for now, not 3:00). The method
+# (inward / outward / chaos, from the map's eligible list) is hidden until the start, then the
+# whole order is revealed; every node gets a 10 s warning before it falls; everything on a falling
+# node or its decks dies. The final node is never dropped. Wave interval per map so the collapse
+# is over well before the hard end.
+const LAST_STAND_TIME := 120.0
+const LAST_STAND_WARNING := 10.0
+const LAST_STAND_WAVE_MIN := 12.0
+const LAST_STAND_WAVE_MAX := 30.0
 const MATCH_HARD_END := 420.0        # 7:00 safety net: still undecided -> stronger seat wins outright
 
-# economy - PROVISIONAL (~5x the 12/48/120 placeholder caps)
-const CAPS := {1: 60, 2: 240, 3: 600, 4: 1000}
-const PROD := {1: 2.0, 2: 4.0, 3: 7.0, 4: 10.0}     # units per second while below cap
+# economy - Alpha 11 logic x SCALE (Daniele, Alpha 12: "start from the logic of Alpha 11... upgrades
+# are free" - they are not any more). Alpha 11: caps 30/40/80/160, upgrades 10/20/30 units paid from
+# the vat, cannon tiers 15/25/35, forge 20 (single tier here), 5 s builds (10 s here: PARAMETERS).
+const SCALE := 5.0
+const CAPS := {1: 150, 2: 200, 3: 400, 4: 800}       # Alpha 11 owned caps x5
+const PROD := {1: 5.0, 2: 8.0, 3: 12.0, 4: 17.5}     # Alpha 11 1.0/1.6/2.4/3.5 units/s x5
 const HOME_TIER := 2
-
-# RUDIMENTARY structures (Daniele, 2026-09-25: "implement all we have already model wise... all
-# structures and their functions"). Real costs, tiers and swap rules (GAME-RULES sec6) wait on the
-# army-scale/vat-cap decision (BUILD-LOG open questions); this is enough to make every modelled
-# piece (Vat_T1-4, Cannon_T1-3, Forge) functional, not just decorative, on any starter map.
+const VAT_COST := {1: 50, 2: 100, 3: 150}            # tier t -> t+1
+const CANNON_COST := {1: 75, 2: 125, 3: 175}         # build T1, then upgrade to T2, T3
+const FORGE_COST := 100
 const BUILD_SECONDS := 10.0          # vat upgrade or attachment build/upgrade time (GAME-RULES sec6)
-const CANNON_RANGE := 10.0           # metres from the node's centre a burst reaches
-# T1->T2->T3, double-tap to upgrade (Alpha 11 convention) - rudimentary rate/kill scaling
-const CANNON_STATS := {1: {"period": 4.0, "kill": 10.0}, 2: {"period": 3.0, "kill": 16.0},
-		3: {"period": 2.0, "kill": 25.0}}
-static var forge_bonus: float = 0.15 # live-tunable: a forge's attack/defence bonus for its owner
-
-# SHIELD (Daniele, 2026-09-25): passing through an enemy node is now allowed - the goo RING around
-# the tower (not the tower/garrison itself) is a shield worth SHIELD_FRACTION of the current
-# garrison, regenerating from "excess minions" while below that cap. A transiting force fights the
-# shield, not the real garrison (only an actual arrival ever touches that); the garrison still
-# fires back at the transiting force as before. If the shield breaks, the specific deck the
-# attacker is using to approach is destroyed outright ("the bond with the other node disappears") -
-# rudimentary reading: the ONE edge on the attacker's route immediately before this node, not every
-# edge the node has. Neutral nodes have no shield (already a free glide - see _register_transit).
-const SHIELD_FRACTION := 0.2
-const SHIELD_REGEN := 3.0            # units/s, whenever the shield is below its cap
+const SWAP_COOLDOWN := 10.0          # after an attachment swap completes, before the next swap
+const CANNON_RANGE := 12.0           # metres from the node's centre: covers its piers + first module
+# Alpha 11 cannon: a burst lasts 2 s and kills at most 10/25/40 bodies (x5 here), recharge AFTER
+# the burst 4/2.4/1.6 s; body kills bypass fight math.
+const CANNON_STATS := {1: {"recharge": 4.0, "kill": 50.0}, 2: {"recharge": 2.4, "kill": 125.0},
+		3: {"recharge": 1.6, "kill": 200.0}}
+const CANNON_BURST := 2.0
+# Alpha 11 forge: strongest completed forge adds +50 on the 100 attack scale (+0.5 displayed attack)
+# - a +50 % damage bonus to everything its owner's troops deal. Single tier in 2.0 (GAME-RULES
+# sec6); a mixed allied garrison defends at the population-weighted average (Sim.forge_of).
+static var forge_bonus: float = 0.5  # live-tunable
 const HOME_UNITS := 80
 const NEUTRAL_UNITS := {1: 30, 2: 60, 3: 120, 4: 200}
 const SEND_FRACTIONS := [0.25, 0.5, 0.75, 1.0]
 
+# SHIELD (Daniele, 2026-09-25 / Alpha 12 clarification): passing through an enemy node is allowed -
+# the goo RING around the tower is a shield worth SHIELD_FRACTION of the garrison; a transiting
+# force fights the shield, never the garrison (only an arrival touches that), while the garrison
+# fires back. Breaking it does NOT destroy any bridge: the BOND is the goo trail between two of a
+# player's adjacent nodes - shown only while BOTH shields are up - and it disappears when either
+# shield breaks. A broken shield is DOWN (free passage) until it has regenerated to full.
+const SHIELD_FRACTION := 0.2
+const SHIELD_REGEN := 3.0            # units/s, whenever the shield is below its cap
+
 # frontline combat - PROVISIONAL: each side loses BASE + K * enemy units per second
 const FIGHT_RATE_BASE := 12.0
 const FIGHT_RATE_K := 0.08
-const FRONT_CONTACT := 1.4           # metres between heads that starts a frontline
 
 const SEATS := {
 	"A": Color("#2ee6ff"), "B": Color("#7dff5a"), "C": Color("#b48cff"),
-	"D": Color("#ff5a5a"), "E": Color("#ffd23f"),
+	"D": Color("#ff5a5a"), "E": Color("#ffd23f"), "F": Color("#ff8fc8"),
 }
 const NEUTRAL := Color("#a9b8c8")
+# relay state colours - the roster legend (BUILDING-PIECES.md B): the deck a state controls carries
+# its colour on its edge lights, the relay tower's symbol glows in the current state's colour
+const STATE_COLORS := {
+	"r1": Color("#ffd23f"), "r2": Color("#ff8c2a"), "r3": Color("#ff4f9a"), "retract": Color("#ff5a5a"),
+	"s1": Color("#ffffff"), "s2": Color("#8fb3ff"), "s3": Color("#c9a3ff"),
+	"m1": Color("#ff9ecf"), "m2": Color("#9be7c4"), "warn": Color("#ff5a5a"), "build": Color("#ffd23f"),
+}
+const RELAY_GLYPH := {"rotation": "↻", "retract": "⇤", "switch": "⇄", "remote": "⌁"}
 # texture hue of each Alpha 11 creature map, and the race accent colour
 const FACTIONS := {
 	"vex": [0.518, Color("#19e5ff")], "null": [0.894, Color("#ff19ab")],
 	"bloom": [0.236, Color("#6fff2a")], "ember": [0.085, Color("#ff3b1f")],
 	"solar": [0.12, Color("#ffbe19")],
 }
+const FACTION_BLURB := {
+	"vex": "VEX Bioengineers - mobility and routes. Faster, weaker garrison.",
+	"null": "NULL Data Cartel - deception and disruption. Near baseline.",
+	"bloom": "Viridian Bloom - growth. Faster production, slower movement.",
+	"ember": "Ember Maw - siege. Stronger attack, slower production.",
+	"solar": "Solar Shells - defense. More HP and defense, slower to move and produce.",
+}
+# AI levels (Alpha 11 had five; three here - no economy or combat cheats, only how often it thinks
+# and how much margin it wants before attacking)
+const AI_LEVELS := {
+	"Casual": {"period": 4.0, "margin": 1.5, "relays": false},
+	"Standard": {"period": 2.5, "margin": 1.15, "relays": true},
+	"Veteran": {"period": 1.6, "margin": 1.0, "relays": true},
+}
 
 
 static func seat_color(seat: String) -> Color:
 	return SEATS.get(seat, NEUTRAL)
+
+
+static func state_color(state: String) -> Color:
+	return STATE_COLORS.get(state, Color.WHITE)
 
 
 static func span(modules: int) -> float:

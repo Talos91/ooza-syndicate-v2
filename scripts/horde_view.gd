@@ -118,6 +118,7 @@ func sync(sim: Sim, viewer: String) -> void:
 	_draw_rivers(sim, seen, dt)
 	_draw_transit_skirmishes(sim, seen)
 	_draw_corridors(sim)
+	_draw_puddles(sim)
 	for key in contacts.keys():
 		if not seen.has(key):
 			contacts[key]["root"].queue_free()
@@ -287,15 +288,15 @@ func _sync_contacts(sim: Sim, by_id: Dictionary) -> Dictionary:
 
 
 func _draw_corridors(sim: Sim) -> void:
-	## "If two platforms owned by a player are adjacent, the corridor is covered in goo"
-	## (Daniele, 2026-09-25): a held deck between two of your own nodes reads as safely yours,
-	## the same way a held platform's river does.
+	## THE BOND (Daniele, Alpha 12): "two vats form a bond when both have the shield active - the
+	## road becomes covered in goo; if one of the two loses its shield the path is gone". A deck
+	## between two of your own nodes wears your goo only while BOTH shields are up (Sim.bonded).
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		var a: Dictionary = sim.nodes[e["a"]]
 		var b: Dictionary = sim.nodes[e["b"]]
 		var owner: String = a["owner"]
-		var held: bool = owner != "" and owner == b["owner"]
+		var held: bool = sim.bonded(i)
 		if not held:
 			if corridors.has(i):
 				(corridors[i] as MeshInstance3D).visible = false
@@ -316,6 +317,47 @@ func _draw_corridors(sim: Sim) -> void:
 		mi.position = mid + Vector3(0, 0.06, 0)
 		mi.rotation = Vector3(0, Rules.heading((pb - pa).normalized()), 0)
 		mi.scale = Vector3(len, 1.0, Rules.W * 0.92)
+
+
+var puddles := {}     # node id -> MeshInstance3D: the pool at the tank bottoms while an order drains out
+var _puddle_mesh: CylinderMesh
+
+
+func _draw_puddles(sim: Sim) -> void:
+	## EXIT BY DRAINING FROM THE TANK BOTTOMS (behaviour board F): while a vat's door is emitting an
+	## order, a pool of the owner's goo swells at the tower's foot on the side the line leaves by.
+	if _puddle_mesh == null:
+		_puddle_mesh = CylinderMesh.new()
+		_puddle_mesh.top_radius = 1.0
+		_puddle_mesh.bottom_radius = 1.0
+		_puddle_mesh.height = 0.16
+		_puddle_mesh.radial_segments = 20
+	for n in sim.nodes:
+		var id: int = n["id"]
+		var streaming: bool = not n["streaming"].is_empty()
+		if not streaming:
+			if puddles.has(id):
+				(puddles[id] as MeshInstance3D).visible = false
+			continue
+		if not puddles.has(id):
+			var mi := MeshInstance3D.new()
+			mi.mesh = _puddle_mesh
+			add_child(mi)
+			puddles[id] = mi
+		var mi: MeshInstance3D = puddles[id]
+		var h: Dictionary = sim._horde(n["streaming"]["hid"])
+		if h.is_empty():
+			mi.visible = false
+			continue
+		mi.visible = true
+		mi.material_override = Mats.goo(n["owner"])
+		var start: Vector3 = h["pts"][0]
+		var d: Vector3 = ((start - n["pos"]) as Vector3).normalized()
+		var remaining: float = n["streaming"]["remaining"]
+		var swell := clampf(remaining / 120.0, 0.25, 1.0)
+		mi.position = n["pos"] + d * (Rules.EXIT_R - 0.6) + Vector3(0, 0.12, 0)
+		var pulse := 1.0 + 0.08 * sin(sim.time * 5.0)
+		mi.scale = Vector3(1.4 + 1.2 * swell, 1.0, 1.0 + 0.9 * swell) * pulse
 
 
 func _draw_transit_skirmishes(sim: Sim, seen: Dictionary) -> void:

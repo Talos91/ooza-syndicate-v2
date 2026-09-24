@@ -1,93 +1,101 @@
 extends Node3D
-## Ooze Syndicate 2.0 prototype: Two Piers (starter map 1).
-## Drag from one of your nodes to any node to send; the buttons set 25/50/75/100 %.
+## Ooze Syndicate 2.0 - Alpha 12. World, camera, input and orchestration; the interface lives in
+## hud.gd, in-world effects in fx.gd, hordes in horde_view.gd, rules in sim.gd.
+## Drag from one of your nodes to any node to send; tap a node to inspect; double-tap your own node
+## to upgrade (Alpha 11 convention); the inspector offers costed actions and the relay's switch.
 ## Command-line user args (after `--`):
-##   --map=res://maps/004-two-piers.json   map to load
+##   --map=res://maps/004-two-piers.json   map to load (skips the title screen)
 ##   --demo                                 both seats played by the AI
+##   --ai=Casual|Standard|Veteran           AI level (title screen picks it otherwise)
 ##   --shots=4,12,25 --out=<dir>            save screenshots at those match times, then quit
 ##   --window=2340x1080                      size the window like a phone (landscape) for testing
-##   --mobile                                force the phone quality profile on desktop
-##   --scenario=fight|rear|queue             stage a contact on the deck between nodes 1 and 0 and
-##                                           zoom the camera onto it (no AI) - for looking at fights
-## Phones are the target: iPhone 15/16 (~2556x1179) and Galaxy S2x/A5x (~2340x1080), ~19.5:9 landscape.
+##   --mobile                               force the phone quality profile on desktop
+##   --scenario=fight|rear|queue             stage a contact on the deck between nodes 1 and 0
+##   --seed=N                               deterministic Last Stand method / chaos order
 
 const HUMAN := "A"
 var SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": "solar"}
-const FACTION_NAMES := ["null", "ember", "bloom", "vex", "solar"]   # player selector on the title screen
-## The starter seven (Docs STARTER-SEVEN.md), in build order. Only the 1v1 mode is wired up so
-## far; a map's other modes (2v2/3v3/FFA) are not selectable yet. Maps past Two Piers include
-## relay-controlled decks (switch/remote/rotation/retract) drawn and simulated as ordinary FIXED
-## open decks for now - the relay MECHANIC itself (the deck actually switching) is a follow-up.
+const FACTION_NAMES := ["vex", "null", "bloom", "ember", "solar"]
 const STARTER_MAPS := [
 	"res://maps/004-two-piers.json", "res://maps/007-long-span.json",
 	"res://maps/008-strait.json", "res://maps/010-first-switch.json",
 	"res://maps/011-remote-span.json", "res://maps/061-switchback-foundry.json",
 	"res://maps/047-trident-exchange.json",
 ]
+const PROVES := {
+	"004": "drag-to-send, capture, the horde line", "007": "bridge combat, tier reading, inward vs outward",
+	"008": "RETRACT: troops carried into the hub", "010": "SWITCH: the deck dissolves - troops fall",
+	"011": "REMOTE: the centre console swaps the diagonals", "061": "3-WAY ROTATION: troops ride the deck",
+	"047": "team layout, retract on both spine decks",
+}
+const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 
 var map: Dictionary
+var map_path := "res://maps/004-two-piers.json"
 var sim := Sim.new()
 var ais: Array = []
 var vis: Dictionary
 var hordes: HordeView
+var fx: Fx
+var hud: Hud
 var cam: Camera3D
 var cam_target := Vector3.ZERO
 var cam_dist := 90.0
 var cam_yaw := 0.0
 var fraction := 0.5
 var drag_from := -1
+var selected := -1
 var pan_from := Vector3.INF
 var drag_mesh := ImmediateMesh.new()
 var drag_line := MeshInstance3D.new()
-var hud_time: Label
-var hud_info: Label
-var end_panel: PanelContainer
+var route_label: Label3D
 var trace: Array = []
 var _trace_t := 0.0
 var shots: Array = []
 var shot_dir := ""
 var demo := false
-var scenario := ""                 # --scenario=: staged contact for looking at the fight visuals
+var ai_level := "Standard"
+var seed_value := -1
+var paused := false
+var scenario := ""
 var scenario_focus := Vector3.INF
 var scenario_zoom := 30.0
 var _scenario_done := false
 var mobile := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
 var window_size := Vector2i.ZERO
 var sun: DirectionalLight3D
-var touches := {}                  # touch index -> screen position (two-finger pinch / pan)
+var touches := {}
 var pinch_dist := 0.0
-var hud_root: Control
-var hud_top: HBoxContainer
-var hud_side: VBoxContainer
-var margins := Vector4(16, 12, 16, 12)       # left, top, right, bottom (safe area)
-var _fitted_size := Vector2.ZERO             # re-fit whenever the screen/canvas size changes
-var rotate_hint: Label
-var debug_button: Button
-var debug_panel: PanelContainer
-var hud_layer: CanvasLayer                    # for the build popup, positioned in screen space
-var build_popup: PanelContainer
-var build_popup_node := -1
-var collapsing := {}                          # node id -> true once its Last Stand fall has started
-var toast_label: Label                        # Alpha 11 convention: every tap gives feedback, never
-var _toast_time := 0.0                        # a silent no-op (Daniele: "I click and nothing happens")
-var _tap_node := -1                           # manual double-tap detection (Alpha 11 convention:
-var _tap_time := 0.0                          # single tap = build popup, double tap = upgrade) -
-var _press_pos := Vector2.ZERO                # engine double_click proved unreliable on Web export
+var margins := Vector4(16, 12, 16, 12)
+var _fitted_size := Vector2.ZERO
+var _tap_node := -1
+var _tap_time := 0.0
+var _press_pos := Vector2.ZERO
+var _press_time := 0.0
 const DOUBLE_TAP_WINDOW := 0.35
 const TAP_PIXELS := 14.0
-var started := false                          # true once _start_map has built the world/HUD/sim -
-                                               # _process/_on_resized are no-ops before then (menu)
+var started := false
+var menu_layer: CanvasLayer
+static var relaunch := {}                     # survives a scene reload: Play again / Main menu
 
 
 func _ready() -> void:
-	var map_path := "res://maps/004-two-piers.json"
 	var map_explicit := false
+	if relaunch.has("faction"):
+		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
+		ai_level = relaunch.get("ai", ai_level)
+	if relaunch.has("map"):
+		map_path = relaunch["map"]
+		map_explicit = true
+	relaunch = {}
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--map="):
 			map_path = arg.substr(6)
 			map_explicit = true
 		elif arg == "--demo":
 			demo = true
+		elif arg.begins_with("--ai="):
+			ai_level = arg.substr(5)
 		elif arg.begins_with("--shots="):
 			for t in arg.substr(8).split(","):
 				shots.append(float(t))
@@ -100,66 +108,91 @@ func _ready() -> void:
 			mobile = true
 		elif arg.begins_with("--scenario="):
 			scenario = arg.substr(11)
-		elif arg.begins_with("--zoom="):                 # camera distance for a --scenario (default 30)
+		elif arg.begins_with("--zoom="):
 			scenario_zoom = float(arg.substr(7))
+		elif arg.begins_with("--seed="):
+			seed_value = int(arg.substr(7))
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
 	if map_explicit or demo or scenario != "" or not shots.is_empty():
-		_start_map(map_path)                          # automation (screenshots, --demo, --scenario, or
-	else:                                              # an explicit --map=): skip the menu entirely
-		_build_map_menu()                              # otherwise: let the player pick a starter map
+		_start_map(map_path)
+	else:
+		_build_map_menu()
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--menu-shot="):           # screenshot the title screen, then quit
+				var out := arg.substr(12)
+				for i in range(20):
+					await get_tree().process_frame
+				await RenderingServer.frame_post_draw
+				get_viewport().get_texture().get_image().save_png(out)
+				print("screenshot ", out)
+				get_tree().quit()
 
 
-func _start_map(map_path: String) -> void:
-	map = MapBuilder.load_map(map_path)
+func _start_map(path: String) -> void:
+	map_path = path
+	map = MapBuilder.load_map(path)
 	var seats := {}
 	for s in map["seats"]["1v1"]:
 		seats[int(s["node"])] = s["seat"]
-	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS)
+	sim = Sim.new()
+	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value)
 	_build_world()
 	vis = MapBuilder.build(self, sim)
 	if not vis["stretched"].is_empty():
 		push_warning("edges stretched to fit (not honest): %s" % [vis["stretched"]])
 	hordes = HordeView.new()
 	add_child(hordes)
+	fx = Fx.new()
+	add_child(fx)
+	fx.setup(self, sim, vis, hordes)
 	drag_line.mesh = drag_mesh
 	add_child(drag_line)
+	route_label = Label3D.new()
+	route_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	route_label.pixel_size = 0.018
+	route_label.font_size = 72
+	route_label.outline_size = 18
+	route_label.no_depth_test = true
+	route_label.modulate = Rules.seat_color(HUMAN)
+	route_label.visible = false
+	add_child(route_label)
 	for seat in seats.values():
 		if (seat != HUMAN or demo) and scenario == "":
-			ais.append(SeatAI.new(seat, 2.5 if seat != HUMAN else 3.1))
+			ais.append(SeatAI.new(seat, 2.5, ai_level))
 	if scenario != "":
 		_stage_scenario()
 	sim.captured.connect(_on_captured)
 	sim.finished.connect(_on_finished)
 	for n in sim.nodes:
+		vis[n["id"]]["model_key"] = MapBuilder.model_for(n)
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
-	_build_hud()
+	hud = Hud.new()
+	add_child(hud)
+	hud.setup(self)
 	_apply_quality()
 	get_viewport().size_changed.connect(_on_resized)
 	started = true
-	await get_tree().process_frame                   # let a --window resize land before fitting
+	paused = false
+	await get_tree().process_frame
 	_on_resized()
+	hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
 
 
-# ------------------------------------------------------------------ Alpha 11 look (Daniele,
-# 2026-09-25: "add all the part of interface that alpha 11 had... take away this ugly one") -
-# reused verbatim: the panel recipe and font from Game/Alpha 11/scripts/game.gd panel_style()/
-# button(), so the two share a family look. Scope note: this is the shared chrome (panels, buttons,
-# the font) plus a player/faction selector - not a full port of Alpha 11's whole HUD (inspector
-# layout, badges, toasts already have their own 2.0-appropriate versions built this session).
-const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
+func restart() -> void:
+	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "ai": ai_level}
+	get_tree().reload_current_scene()
 
 
+func to_menu() -> void:
+	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "ai": ai_level}
+	get_tree().reload_current_scene()
+
+
+# ------------------------------------------------------------------ title screen
 static func panel_style(color: Color = Color("276578")) -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = Color("17222bf5")
-	s.border_color = color
-	s.set_border_width_all(1)
-	s.corner_radius_top_left = 8
-	s.corner_radius_bottom_right = 8
-	s.set_content_margin_all(16)
-	return s
+	return Hud.panel_style(color)
 
 
 func style_button(b: Button, accent: Color, width: float = 130.0, height: float = 78.0) -> void:
@@ -171,88 +204,130 @@ func style_button(b: Button, accent: Color, width: float = 130.0, height: float 
 	pressed.bg_color = Color("147185")
 	b.add_theme_stylebox_override("pressed", pressed)
 	b.add_theme_stylebox_override("disabled", panel_style(Color("3a4650")))
-	var focus := panel_style(Color.WHITE)
-	focus.bg_color = Color(0, 0, 0, 0)
-	focus.set_border_width_all(2)
-	b.add_theme_stylebox_override("focus", focus)
 	b.add_theme_color_override("font_disabled_color", Color("a6b2bb"))
 
 
-func style_panel(p: Control, accent: Color = Color("276578")) -> void:
-	p.add_theme_stylebox_override("panel", panel_style(accent))
-
-
 func _build_map_menu() -> void:
-	## Title screen: pick one of the starter seven (Docs STARTER-SEVEN.md), in build order. Shown
-	## unless a map was named on the command line or this is an automated run (--demo/--scenario).
-	var layer := CanvasLayer.new()
-	add_child(layer)
+	## Title screen: faction (with blurb), AI level, then one of the starter seven with its map
+	## preview and what it proves (Docs STARTER-SEVEN.md).
+	menu_layer = CanvasLayer.new()
+	add_child(menu_layer)
 	var bg := ColorRect.new()
 	bg.color = Color(0.008, 0.01, 0.014)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	layer.add_child(bg)
+	menu_layer.add_child(bg)
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	menu_layer.add_child(scroll)
+	var centre := CenterContainer.new()
+	centre.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	centre.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(centre)
 	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_CENTER)
-	root.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	root.grow_vertical = Control.GROW_DIRECTION_BOTH
 	root.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_theme_constant_override("separation", 12)
-	layer.add_child(root)
-	var version := Label.new()
-	version.text = "v%s" % Rules.VERSION
-	version.add_theme_font_size_override("font_size", 14)
-	version.modulate = Color(1, 1, 1, 0.45)
-	version.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	version.position = Vector2(-52, -22)
-	layer.add_child(version)
+	root.add_theme_constant_override("separation", 10)
+	centre.add_child(root)
+	var logo := TextureRect.new()
+	logo.texture = load("res://assets/ui/Ooze-Syndicate-Logo.svg")
+	logo.custom_minimum_size = Vector2(0, 90)
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	root.add_child(logo)
 	var title := Label.new()
 	title.add_theme_font_override("font", UI_FONT)
-	title.text = "OOZE SYNDICATE 2.0 - THE STARTER SEVEN"
+	title.text = "OOZE SYNDICATE 2.0  ·  %s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION]
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 34)
+	title.add_theme_font_size_override("font_size", 30)
 	root.add_child(title)
-	var sub := Label.new()
-	sub.add_theme_font_override("font", UI_FONT)
-	sub.text = "Pick a faction, then a map (1v1). Maps past Two Piers hold their relay decks fixed open for now."
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.add_theme_font_size_override("font_size", 18)
-	sub.modulate = Color(1, 1, 1, 0.7)
-	root.add_child(sub)
+	var blurb := Label.new()
+	blurb.add_theme_font_override("font", UI_FONT)
+	blurb.text = Rules.FACTION_BLURB[SEAT_FACTIONS[HUMAN]]
+	blurb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	blurb.add_theme_font_size_override("font_size", 17)
+	blurb.modulate = Color(1, 1, 1, 0.75)
 	var faction_row := HBoxContainer.new()
 	faction_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	faction_row.add_theme_constant_override("separation", 10)
+	faction_row.add_theme_constant_override("separation", 8)
 	root.add_child(faction_row)
 	for faction in FACTION_NAMES:
 		var accent: Color = Rules.FACTIONS[faction][1]
 		var fb := Button.new()
-		fb.text = faction.capitalize()
-		style_button(fb, accent, 110, 56)
+		fb.text = faction.to_upper()
+		fb.icon = load("res://assets/ui/%s.svg" % faction)
+		fb.expand_icon = true
+		fb.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		style_button(fb, accent, 150, 58)
+		fb.add_theme_font_size_override("font_size", 20)
 		if faction == SEAT_FACTIONS[HUMAN]:
 			fb.add_theme_stylebox_override("normal", panel_style(accent))
 		fb.pressed.connect(func():
 			SEAT_FACTIONS[HUMAN] = faction
+			blurb.text = Rules.FACTION_BLURB[faction]
 			for c in faction_row.get_children():
 				(c as Button).add_theme_stylebox_override("normal", panel_style())
 			fb.add_theme_stylebox_override("normal", panel_style(accent)))
 		faction_row.add_child(fb)
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 10)
-	root.add_child(spacer)
-	for map_path in STARTER_MAPS:
-		var m := MapBuilder.load_map(map_path)
+	root.add_child(blurb)
+	var ai_row := HBoxContainer.new()
+	ai_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	ai_row.add_theme_constant_override("separation", 8)
+	root.add_child(ai_row)
+	var ai_label := Label.new()
+	ai_label.add_theme_font_override("font", UI_FONT)
+	ai_label.text = "OPPONENT "
+	ai_label.add_theme_font_size_override("font_size", 20)
+	ai_row.add_child(ai_label)
+	for level in Rules.AI_LEVELS.keys():
+		var lb := Button.new()
+		lb.text = level.to_upper()
+		style_button(lb, Color("2ee6ff"), 130, 50)
+		lb.add_theme_font_size_override("font_size", 18)
+		if level == ai_level:
+			lb.add_theme_stylebox_override("normal", panel_style(Color("2ee6ff")))
+		lb.pressed.connect(func():
+			ai_level = level
+			for c in ai_row.get_children():
+				if c is Button:
+					(c as Button).add_theme_stylebox_override("normal", panel_style())
+			lb.add_theme_stylebox_override("normal", panel_style(Color("2ee6ff"))))
+		ai_row.add_child(lb)
+	var grid := GridContainer.new()
+	grid.columns = 2 if get_viewport().get_visible_rect().size.x > 900 else 1
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 8)
+	root.add_child(grid)
+	for mp in STARTER_MAPS:
+		var m := MapBuilder.load_map(mp)
+		var relays := {}
+		for n in m["nodes"]:
+			if n.get("relay") != null:
+				relays[n["relay"]] = true
 		var b := Button.new()
-		b.text = "%s  %s   (%d nodes)" % [m.get("code", "?"), m.get("name", map_path), m["nodes"].size()]
-		style_button(b, Color("2ee6ff"), 460, 68)         # thumb-sized
-		b.add_theme_font_size_override("font_size", 24)
+		var code: String = m.get("code", "?")
+		b.text = "%s  %s\n%d nodes%s\n%s" % [code, str(m.get("name", mp)).replace("*", ""), m["nodes"].size(),
+				("  ·  " + "/".join(relays.keys())) if not relays.is_empty() else "", PROVES.get(code, "")]
+		b.icon = load(mp.replace("maps/", "assets/maps/").replace(".json", ".svg"))
+		b.expand_icon = true
+		b.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		style_button(b, Color("2ee6ff"), 470, 96)
+		b.add_theme_font_size_override("font_size", 17)
 		b.pressed.connect(func():
-			layer.queue_free()
-			_start_map(map_path))
-		root.add_child(b)
+			menu_layer.queue_free()
+			menu_layer = null
+			_start_map(mp))
+		grid.add_child(b)
+	var version := Label.new()
+	version.text = "v%s %s  ·  reload twice after a new publish (PWA cache)" % [Rules.VERSION, Rules.VERSION_NAME]
+	version.add_theme_font_size_override("font_size", 13)
+	version.modulate = Color(1, 1, 1, 0.45)
+	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	root.add_child(version)
 
 
+# ------------------------------------------------------------------ world
 func _apply_quality() -> void:
-	## Phone profile (GL Compatibility): no realtime shadows, 3D at 75 % resolution, no MSAA,
-	## 60 fps cap. Neon lights and glow carry the look; the HUD stays full resolution.
 	Engine.max_fps = 60
 	if mobile:
 		sun.shadow_enabled = false
@@ -262,49 +337,38 @@ func _apply_quality() -> void:
 
 
 func _on_resized() -> void:
-	if not started:                                   # nothing built yet (still at the map menu)
+	if not started:
 		return
 	var vp := get_viewport().get_visible_rect().size
 	_fitted_size = vp
 	_apply_safe_area()
+	hud.layout(vp, margins)
 	_fit_camera()
-	rotate_hint.visible = vp.y > vp.x                 # landscape game: ask portrait phones to rotate
-	rotate_hint.size = vp
 
 
 func _apply_safe_area() -> void:
-	## Keep the HUD clear of the notch / Dynamic Island / rounded corners on phones.
 	var vp := get_viewport().get_visible_rect().size
 	var left := 16.0
 	var right := 16.0
 	var top := 10.0
-	if OS.has_feature("mobile"):                      # native phone builds report real insets
+	if OS.has_feature("mobile"):
 		var screen := Vector2(DisplayServer.screen_get_size())
 		var safe := Rect2(DisplayServer.get_display_safe_area())
-		safe.position -= Vector2(DisplayServer.screen_get_position())   # desktop reports virtual-desktop coords
+		safe.position -= Vector2(DisplayServer.screen_get_position())
 		var k := vp.x / maxf(screen.x, 1.0)
 		left = maxf(safe.position.x * k, left)
 		right = maxf((screen.x - safe.end.x) * k, right)
 		top = maxf(safe.position.y * k, top)
-	if mobile:                                        # notch / rounded corners even without a reported inset
+	if mobile:
 		left = maxf(left, vp.x * 0.035)
 		right = maxf(right, vp.x * 0.035)
 	margins = Vector4(left, top, right, 12.0)
-	hud_top.position = Vector2(left, top)
-	if debug_button:                                  # bottom-left corner, panel opens above it
-		debug_button.position = Vector2(left, vp.y - 12.0 - debug_button.size.y)
-		debug_panel.size = debug_panel.get_combined_minimum_size()
-		debug_panel.position = Vector2(left, debug_button.position.y - 8.0 - debug_panel.size.y)
-	var side_size := hud_side.get_combined_minimum_size()
-	hud_side.size = side_size
-	hud_side.position = Vector2(vp.x - right - side_size.x, (vp.y - side_size.y) / 2.0)
 
 
-# ------------------------------------------------------------------ world
 func _build_world() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.008, 0.01, 0.014)          # the void
+	env.background_color = Color(0.008, 0.01, 0.014)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.45, 0.5, 0.6)
 	env.ambient_light_energy = 0.12
@@ -342,38 +406,66 @@ func _fit_camera() -> void:
 		hi = hi.max(n["pos"])
 	cam_target = (lo + hi) / 2.0
 	var ext := hi - lo
-	cam_yaw = PI / 2.0 if ext.z > ext.x else 0.0      # long axis across the landscape screen
-	# fit the map into the screen area LEFT of the send buttons, and centre it there
+	cam_yaw = PI / 2.0 if ext.z > ext.x else 0.0
+	# fit the map into the screen area left of the side panel and between the top bar and the
+	# ability dock, then centre it there
 	var vp := get_viewport().get_visible_rect().size
 	var half_h := tan(hfov_half(vp))
-	var panel := hud_side.size.x + margins.z + 20.0 if hud_side else 0.0
-	var free := clampf((vp.x - panel - margins.x) / vp.x, 0.5, 1.0)
-	var long_side := maxf(ext.x, ext.z) + 2.0 * Rules.R + 6.0     # whole platforms plus a margin
-	cam_dist = (long_side / 2.0) / (half_h * free) * 1.04
+	var half_v := tan(deg_to_rad(cam.fov) / 2.0)
+	var panel := hud.side_panel_width() + margins.z + 20.0 if hud else 0.0
+	var top_used := hud.top_used() if hud else 0.0
+	var bottom_used := hud.bottom_used() if hud else 0.0
+	var free_x := clampf((vp.x - panel - margins.x) / vp.x, 0.5, 1.0)
+	var free_y := clampf((vp.y - top_used - bottom_used) / vp.y, 0.4, 1.0)
+	var along := (ext.x if cam_yaw == 0.0 else ext.z) + 2.0 * Rules.R + 4.0      # screen-horizontal
+	var across := ((ext.z if cam_yaw == 0.0 else ext.x) + 2.0 * Rules.R + 2.0) * sin(deg_to_rad(55.0))
+	var dist_x := (along / 2.0) / (half_h * free_x)
+	var dist_y := (across / 2.0) / (half_v * free_y) * 0.9   # the far half foreshortens more than the near
+	cam_dist = maxf(dist_x, dist_y) * 1.02
 	_place_camera()
 	var screen_right := cam.global_transform.basis.x
 	var shift := cam_dist * half_h * ((panel - margins.x) / vp.x)
 	cam_target += screen_right * shift
-	if scenario_focus != Vector3.INF:                 # staged contact: look at that deck up close
+	var screen_up := Vector3(0, 0, -1).rotated(Vector3.UP, cam_yaw)            # map-plane direction that reads as "up"
+	var vshift := cam_dist * half_v * ((bottom_used - top_used) / vp.y) / sin(deg_to_rad(55.0))
+	cam_target += screen_up * vshift
+	if scenario_focus != Vector3.INF:
 		cam_target = scenario_focus
 		cam_dist = scenario_zoom
 	_place_camera()
 
 
 func _stage_scenario() -> void:
-	## Staged contacts on the S deck between nodes 1 and 0 (the sends go out in _process once the
-	## sim runs). fight: two lines meet head-on. rear: a slow A line is caught from behind by B.
-	## queue: a fast A line queues behind a slow friend.
-	sim.nodes[1]["owner"] = "A"
-	sim.nodes[1]["units"] = 160.0
-	sim.nodes[0]["owner"] = "B" if scenario == "fight" else "A"
-	sim.nodes[0]["units"] = 160.0
-	if scenario == "rear":                                # B's pursuer starts from node 3, behind node 1
-		sim.nodes[3]["owner"] = "B"
-		sim.nodes[3]["units"] = 200.0
+	## Staged situations for looking at one thing up close (no AI). fight/rear/queue: contacts on
+	## the deck between nodes 1 and 0 (Two Piers). build: A owns node 1 with units to spend
+	## (Strait: relay node -> cannon). switch: A's horde crosses node 1's switch deck on First Switch
+	## while A fires it. rotate: A rides the Switchback hub deck. inspect: opens node 1's inspector.
+	match scenario:
+		"build", "inspect":
+			sim.nodes[1]["owner"] = "A"
+			sim.nodes[1]["units"] = 300.0
+			scenario_focus = sim.nodes[1]["pos"]
+		"switch":
+			sim.nodes[1]["owner"] = "A"
+			sim.nodes[1]["units"] = 60.0
+			sim.nodes[5]["units"] = 200.0
+			scenario_focus = (sim.nodes[1]["pos"] + sim.nodes[0]["pos"]) / 2.0
+		"rotate":
+			sim.nodes[0]["owner"] = "A"
+			sim.nodes[1]["owner"] = "A"
+			sim.nodes[1]["units"] = 200.0
+			scenario_focus = sim.nodes[0]["pos"]
+		_:
+			sim.nodes[1]["owner"] = "A"
+			sim.nodes[1]["units"] = 160.0
+			sim.nodes[0]["owner"] = "B" if scenario == "fight" else "A"
+			sim.nodes[0]["units"] = 160.0
+			if scenario == "rear":
+				sim.nodes[3]["owner"] = "B"
+				sim.nodes[3]["units"] = 200.0
+			scenario_focus = (sim.nodes[1]["pos"] + sim.nodes[0]["pos"]) / 2.0
 	for n in sim.nodes:
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
-	scenario_focus = (sim.nodes[1]["pos"] + sim.nodes[0]["pos"]) / 2.0
 
 
 func _run_scenario() -> void:
@@ -386,10 +478,10 @@ func _run_scenario() -> void:
 			_scenario_done = true
 		"rear":
 			if sim.hordes.is_empty():
-				var slow := sim.send(1, 0, 0.5)            # a slow A line on its way to a friendly node
+				var slow := sim.send(1, 0, 0.5)
 				slow["speed"] = 0.2
 			elif sim.time > 2.5:
-				sim.send(3, 0, 1.0)                        # B's pursuer comes through node 1 behind it
+				sim.send(3, 0, 1.0)
 				_scenario_done = true
 		"queue":
 			if sim.hordes.is_empty():
@@ -397,6 +489,25 @@ func _run_scenario() -> void:
 				slow["speed"] = 0.25
 			elif sim.time > 2.0:
 				sim.send(1, 0, 1.0)
+				_scenario_done = true
+		"build":
+			sim.build_attachment(1, "cannon")
+			_scenario_done = true
+		"inspect":
+			selected = 1
+			hud.inspect(1, cam)
+			_scenario_done = true
+		"switch":
+			if sim.hordes.is_empty():
+				sim.send(5, 0, 1.0)
+			elif sim.time > 5.0:
+				sim.fire_relay(1)
+				_scenario_done = true
+		"rotate":
+			if sim.hordes.is_empty():
+				sim.send(1, 0, 1.0)
+			elif sim.time > 3.0:
+				sim.fire_relay(0)
 				_scenario_done = true
 		_:
 			_scenario_done = true
@@ -413,329 +524,104 @@ func _place_camera() -> void:
 	cam.look_at(cam_target, Vector3.UP)
 
 
-# ------------------------------------------------------------------ HUD
-func _build_hud() -> void:
-	var layer := CanvasLayer.new()
-	add_child(layer)
-	hud_layer = layer
-	hud_root = Control.new()                          # children placed by _apply_safe_area()
-	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(hud_root)
-	var area := hud_root
-	var top := HBoxContainer.new()
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	area.add_child(top)
-	hud_top = top
-	hud_time = Label.new()
-	hud_time.add_theme_font_size_override("font_size", 30)
-	top.add_child(hud_time)
-	hud_info = Label.new()
-	hud_info.add_theme_font_size_override("font_size", 22)
-	hud_info.text = "   %s - you are cyan - drag from your node" % map.get("name", "")
-	var version := Label.new()
-	version.text = "v%s" % Rules.VERSION
-	version.add_theme_font_size_override("font_size", 14)
-	version.modulate = Color(1, 1, 1, 0.45)
-	version.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	version.position = Vector2(-52, -22)
-	layer.add_child(version)
-	top.add_child(hud_info)
-	var side := VBoxContainer.new()
-	side.add_theme_constant_override("separation", 10)
-	area.add_child(side)
-	hud_side = side
-	_build_popup()
-	toast_label = Label.new()
-	toast_label.visible = false
-	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	toast_label.add_theme_font_size_override("font_size", 22)
-	toast_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
-	toast_label.add_theme_constant_override("shadow_offset_x", 2)
-	toast_label.add_theme_constant_override("shadow_offset_y", 2)
-	toast_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	toast_label.position.y = 60
-	layer.add_child(toast_label)
-	var group := ButtonGroup.new()
-	var accent: Color = Rules.SEATS[HUMAN]
-	for f in Rules.SEND_FRACTIONS:
-		var b := Button.new()
-		b.text = "%d%%" % int(f * 100)
-		b.toggle_mode = true
-		b.button_group = group
-		style_button(b, accent, 120, 78)              # ~9 mm tall on a 6" phone: thumb-sized
-		b.add_theme_font_size_override("font_size", 28)
-		var pressed_style := panel_style(accent)
-		pressed_style.bg_color = Color("147185")
-		b.add_theme_stylebox_override("pressed", pressed_style)
-		b.button_pressed = is_equal_approx(f, fraction)
-		b.pressed.connect(func(): fraction = f)
-		side.add_child(b)
-	_build_debug(area)
-	rotate_hint = Label.new()
-	rotate_hint.text = "Rotate your phone\nOoze Syndicate plays in landscape"
-	rotate_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rotate_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	rotate_hint.add_theme_font_size_override("font_size", 44)
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0.01, 0.012, 0.018, 0.94)
-	rotate_hint.add_theme_stylebox_override("normal", bg)
-	rotate_hint.visible = false
-	layer.add_child(rotate_hint)
-	end_panel = PanelContainer.new()
-	end_panel.visible = false
-	end_panel.anchor_left = 0.5
-	end_panel.anchor_right = 0.5
-	end_panel.anchor_top = 0.5
-	end_panel.anchor_bottom = 0.5
-	end_panel.offset_left = -220
-	end_panel.offset_top = -90
-	layer.add_child(end_panel)
-	var box := VBoxContainer.new()
-	end_panel.add_child(box)
-	var l := Label.new()
-	l.name = "Result"
-	l.add_theme_font_override("font", UI_FONT)
-	l.add_theme_font_size_override("font_size", 34)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.custom_minimum_size = Vector2(440, 0)
-	box.add_child(l)
-	style_panel(end_panel, accent)
-	var again := Button.new()
-	again.text = "Play again"
-	style_button(again, accent, 0, 60)
-	again.add_theme_font_size_override("font_size", 26)
-	again.pressed.connect(func(): get_tree().reload_current_scene())
-	box.add_child(again)
-
-
-func _build_popup() -> void:
-	## Alpha 11 convention (Daniele, 2026-09-25): single-tap an owned node with an empty attachment
-	## slot to open this popup and choose Cannon or Forge; double-tap upgrades whatever is already
-	## there (vat, or a built cannon's tier) - see _unhandled_input and sim.upgrade_structure.
-	## Styled as a ring like Alpha 11's inspector, and every tap gives a toast either way - never a
-	## silent no-op.
-	build_popup = PanelContainer.new()
-	build_popup.visible = false
-	var ring := StyleBoxFlat.new()
-	ring.bg_color = Color(0.05, 0.09, 0.13, 0.92)
-	ring.border_color = Color(0.4, 0.85, 1.0, 0.6)
-	ring.set_border_width_all(2)
-	ring.set_corner_radius_all(28)
-	ring.content_margin_left = 10
-	ring.content_margin_right = 10
-	ring.content_margin_top = 8
-	ring.content_margin_bottom = 8
-	build_popup.add_theme_stylebox_override("panel", ring)
-	hud_layer.add_child(build_popup)
-	var box := HBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	build_popup.add_child(box)
-	for kind in ["cannon", "forge"]:
-		var b := Button.new()
-		b.name = kind
-		b.text = kind.capitalize()
-		style_button(b, Color("2ee6ff"), 110, 64)
-		b.add_theme_font_size_override("font_size", 20)
-		b.pressed.connect(func():
-			sim.build_attachment(build_popup_node, kind)
-			toast("%s construction started - %d s" % [kind.capitalize(), int(Rules.BUILD_SECONDS)])
-			_close_build_popup())
-		box.add_child(b)
-	var sw := Button.new()                             # GAME-RULES sec8: "fire the switch" - the
-	sw.name = "switch"                                  # relay's own control, separate from its
-	sw.text = "Switch"                                  # attachment slot (Daniele: "there are no
-	style_button(sw, Color("ffd23f"), 110, 64)           # touch controls for relays")
-	sw.add_theme_font_size_override("font_size", 20)
-	sw.pressed.connect(func():
-		if sim.fire_relay(build_popup_node):
-			toast("Relay fired - next state in %d s" % int(Rules.RELAY_FIRE_COOLDOWN))
-		else:
-			toast("Relay still on cooldown")
-		_close_build_popup())
-	box.add_child(sw)
-
-
-func _open_build_popup(node_id: int) -> void:
-	var n: Dictionary = sim.nodes[node_id]
-	var offers := []
-	for kind in ["cannon", "forge"]:
-		if kind in n["buildable"] and n["attachment"] == "":
-			offers.append(kind)
-	if n["attachment"] != "" and n["relay"] == "":
-		toast("Double-tap to upgrade - already built here")
-		_close_build_popup()
-		return
-	if offers.is_empty() and n["relay"] == "":
-		toast("Nothing buildable on this node")
-		_close_build_popup()
-		return
-	build_popup_node = node_id
-	for kind in ["cannon", "forge"]:
-		(build_popup.get_node("HBoxContainer/" + kind) as Button).visible = kind in offers
-	var sw_btn := build_popup.get_node("HBoxContainer/switch") as Button
-	sw_btn.visible = n["relay"] != ""
-	sw_btn.disabled = n["relay_cd"] > 0.0
-	sw_btn.text = "Switch" if n["relay_cd"] <= 0.0 else "Switch\n(%ds)" % int(ceil(n["relay_cd"]))
-	build_popup.size = build_popup.get_combined_minimum_size()
-	var p := cam.unproject_position(n["pos"] + Vector3(0, Rules.R + 2.0, 0))
-	build_popup.position = p - build_popup.size / 2.0
-	build_popup.visible = true
-
-
-func _close_build_popup() -> void:
-	build_popup_node = -1
-	build_popup.visible = false
-
-
-func _collapse_node(node_id: int) -> void:
-	## Last Stand destruction (Daniele, 2026-09-25): the platform and every bridge it still has
-	## don't just vanish - they fall away, a rudimentary stand-in for the design's waterfall-of-ooze
-	## fall (Models/2.0/build_horde_patches_2_0.py has the real art board; not wired into Godot yet).
-	collapsing[node_id] = true
-	(vis[node_id]["label"] as Label3D).visible = false
-	var falling: Array = vis[node_id]["parts"].duplicate()
-	for i in range(sim.edges.size()):
-		if sim.edges[i]["a"] == node_id or sim.edges[i]["b"] == node_id:
-			falling.append_array(vis["edge_decks"].get(i, []))
-	var tw := create_tween()
-	tw.set_parallel(true)
-	for p in falling:
-		var node3d := p as Node3D
-		var spin := Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * 1.4
-		tw.tween_property(node3d, "position:y", node3d.position.y - 22.0, 1.3).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-		tw.tween_property(node3d, "rotation", node3d.rotation + spin, 1.3).set_ease(Tween.EASE_IN)
-	tw.chain().tween_callback(func():
-		for p in falling:
-			(p as Node3D).visible = false)
-
-
-func toast(msg: String) -> void:
-	## Alpha 11 convention: every tap gives visible feedback, success or not.
-	toast_label.text = msg
-	toast_label.visible = true
-	_toast_time = 2.5
-
-
-func _build_debug(area: Control) -> void:
-	## Debug controls for playtests (Daniele, 2026-09-25). Live sliders, thumb-sized, bottom-left.
-	## 1. blob speed on decks vs on platforms (PLAYTEST-NOTES 5).
-	debug_button = Button.new()
-	debug_button.text = "Debug"
-	debug_button.toggle_mode = true
-	style_button(debug_button, Color("2ee6ff"), 120, 60)
-	debug_button.add_theme_font_size_override("font_size", 24)
-	debug_button.size = debug_button.custom_minimum_size
-	area.add_child(debug_button)
-	debug_panel = PanelContainer.new()
-	debug_panel.visible = false
-	style_panel(debug_panel, Color("2ee6ff"))
-	area.add_child(debug_panel)
-	debug_button.toggled.connect(func(on: bool): debug_panel.visible = on)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
-	debug_panel.add_child(box)
-	var title := Label.new()
-	title.text = "Debug - live, resets on reload"
-	title.add_theme_font_size_override("font_size", 20)
-	box.add_child(title)
-	# wide ranges on purpose (Daniele, 2026-09-25): a real debug tool needs room past "reasonable" -
-	# platform speed in particular must go BELOW 1x deck speed (platforms slower than bridges),
-	# not just above it, to test PLAYTEST-NOTES 5 properly.
-	var deck := _debug_slider(box, "Deck speed", 0.2, 30.0, 0.1, Rules.deck_speed, "%.1f m/s",
-			func(v: float): Rules.deck_speed = v)
-	var node := _debug_slider(box, "Platform speed", 0.1, 30.0, 0.05, Rules.node_speed_mult, "x%.2f deck",
-			func(v: float): Rules.node_speed_mult = v)
-	var door := _debug_slider(box, "Door rate", 1.0, 500.0, 1.0, Rules.door_rate, "%.0f units/s",
-			func(v: float): Rules.door_rate = v)
-	var nfight := _debug_slider(box, "Platform fight", 0.05, 20.0, 0.05, Rules.node_fight_mult, "x%.2f rate",
-			func(v: float): Rules.node_fight_mult = v)
-	var reset := Button.new()
-	reset.text = "Reset to rules"
-	reset.custom_minimum_size = Vector2(0, 48)
-	reset.add_theme_font_size_override("font_size", 20)
-	reset.pressed.connect(func():
-		deck.value = Rules.DECK_SPEED_DEFAULT
-		node.value = Rules.NODE_SPEED_MULT_DEFAULT
-		door.value = Rules.DOOR_RATE_DEFAULT
-		nfight.value = 1.0)
-	box.add_child(reset)
-
-
-func _debug_slider(box: Control, text: String, lo: float, hi: float, step: float, value: float,
-		fmt: String, apply: Callable) -> HSlider:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	box.add_child(row)
-	var label := Label.new()
-	label.text = text
-	label.custom_minimum_size = Vector2(170, 0)
-	label.add_theme_font_size_override("font_size", 20)
-	row.add_child(label)
-	var slider := HSlider.new()
-	slider.min_value = lo
-	slider.max_value = hi
-	slider.step = step
-	slider.value = value
-	slider.custom_minimum_size = Vector2(260, 44)              # fat enough for a thumb
-	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(slider)
-	var out := Label.new()
-	out.text = fmt % value
-	out.custom_minimum_size = Vector2(110, 0)
-	out.add_theme_font_size_override("font_size", 20)
-	row.add_child(out)
-	slider.value_changed.connect(func(v: float):
-		apply.call(v)
-		out.text = fmt % v)
-	return slider
+# ------------------------------------------------------------------ node actions (HUD -> sim)
+func node_action(method: String, id: int) -> bool:
+	## Every tap gives feedback (Alpha 11): what happened, or why it couldn't.
+	var n: Dictionary = sim.nodes[id]
+	var ok := false
+	match method:
+		"switch":
+			ok = sim.fire_relay(id)
+			if ok:
+				hud.toast("Relay fired - switching in %d s, then %d s cooldown" % [int(Rules.RELAY_WARNING), int(Rules.RELAY_COOLDOWN)])
+			else:
+				hud.toast("Relay on cooldown" if n["relay_cd"] > 0.0 else "Relay is already switching")
+		"upgrade":
+			var cost := sim.upgrade_cost(n)
+			ok = sim.upgrade_structure(id)
+			if ok:
+				hud.toast("Upgrade started - %d units, %d s" % [cost, int(Rules.BUILD_SECONDS)])
+			elif n["build_kind"] != "":
+				hud.toast("Construction already in progress")
+			elif n["attachment"] == "cannon" and n["cannon_tier"] >= 3:
+				hud.toast("Cannon is already at max tier")
+			elif n["attachment"] == "forge":
+				hud.toast("A forge has no further tier")
+			elif n["tier"] >= 4:
+				hud.toast("Vat is already at max tier")
+			elif n["units"] < cost:
+				hud.toast("Upgrade needs %d units (%d here)" % [cost, int(n["units"])])
+			else:
+				hud.toast("Nothing to upgrade here")
+		"build_cannon", "build_forge":
+			var kind := method.substr(6)
+			var cost: int = Rules.CANNON_COST[1] if kind == "cannon" else Rules.FORGE_COST
+			ok = sim.build_attachment(id, kind)
+			if ok:
+				hud.toast("%s construction started - %d units, %d s" % [kind.capitalize(), cost, int(Rules.BUILD_SECONDS)])
+			elif n["build_kind"] != "":
+				hud.toast("Construction already in progress")
+			elif n["swap_cd"] > 0.0:
+				hud.toast("Attachment swap ready in %d s" % int(ceil(n["swap_cd"])))
+			elif n["units"] < cost:
+				hud.toast("%s needs %d units (%d here)" % [kind.capitalize(), cost, int(n["units"])])
+			else:
+				hud.toast("Can't build a %s here" % kind)
+		"restore":
+			ok = sim.restore_vat(id)
+			hud.toast("Restoring the vat - %d s" % int(Rules.BUILD_SECONDS) if ok else "Can't restore the vat now")
+	return ok
 
 
 # ------------------------------------------------------------------ loop
 func _process(delta: float) -> void:
-	if not started:                                   # still at the map menu - nothing to simulate
+	if not started:
 		return
-	if get_viewport().get_visible_rect().size != _fitted_size:   # browsers resize the canvas late
+	if get_viewport().get_visible_rect().size != _fitted_size:
 		_on_resized()
 	var dt := minf(delta, 0.05)
-	for ai in ais:
-		ai.think(sim, dt)
-	if scenario != "":
-		_run_scenario()
-	sim.step(dt)
+	if not paused:
+		for ai in ais:
+			ai.think(sim, dt)
+		if scenario != "":
+			_run_scenario()
+		sim.step(dt)
 	hordes.sync(sim, HUMAN)
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]
-		var label: Label3D = entry["label"]
-		var owner: String = n["owner"]
-		label.modulate = Rules.SEATS[owner] if owner != "" else Rules.NEUTRAL
-		label.text = "" if owner != "" and owner != HUMAN else str(int(n["units"]))   # no numbers on enemy nodes
-		if n["relay"] == "" and entry["vat_tier"] != n["tier"]:
-			MapBuilder.set_vat_tier(self, entry, n["tier"], owner)
-		if entry["attachment"] != n["attachment"] or entry.get("cannon_tier", 1) != n["cannon_tier"]:
-			MapBuilder.set_attachment(self, entry, n["attachment"], maxi(n["cannon_tier"], 1), n["pos"], owner)
-		if sim.collapsed.get(n["id"], false) and not collapsing.has(n["id"]):
-			_collapse_node(n["id"])
-	if build_popup_node >= 0:
-		var bn: Dictionary = sim.nodes[build_popup_node]
-		if bn["attachment"] != "" or bn["owner"] != HUMAN:
-			_close_build_popup()                          # captured, or the choice was already made
-		else:
-			var p := cam.unproject_position(bn["pos"] + Vector3(0, Rules.R + 2.0, 0))
-			build_popup.position = p - build_popup.size / 2.0
-	for edge_i in vis["edge_decks"]:                  # relay cycling: the deck itself vanishes while
-		var open := sim.is_edge_open(edge_i)          # "closed", so a switch/rotation/retract is SEEN
-		for deck in vis["edge_decks"][edge_i]:
-			(deck as Node3D).visible = open
-	hud_time.text = "%d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
-	if _toast_time > 0.0:
-		_toast_time -= dt
-		if _toast_time <= 0.0:
-			toast_label.visible = false
+		if sim.collapsed.get(n["id"], false):
+			continue
+		var model := MapBuilder.model_for(n)
+		if entry["model_key"] != model:
+			MapBuilder.set_centre_model(self, entry, model, n["pos"], n["owner"])
+	for ev in sim.fx_events:
+		fx.handle(ev)
+		match ev["type"]:
+			"last_stand":
+				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
+						"chaos": "nodes fall in a hidden order - your home last"}
+				hud.show_banner("LAST STAND - %s\n%s" % [str(ev["method"]).to_upper(), how.get(ev["method"], "")], 5.0)
+			"collapse_warning":
+				var n: Dictionary = sim.nodes[ev["node"]]
+				if n["owner"] == HUMAN:
+					hud.toast("Your node %d falls in %d s - get out!" % [ev["node"], int(Rules.LAST_STAND_WARNING)])
+			"shield_break":
+				var n: Dictionary = sim.nodes[ev["node"]]
+				if n["owner"] == HUMAN:
+					hud.toast("Shield broken at node %d - the bond is down until it regenerates" % ev["node"])
+			"relay_tick":
+				var n: Dictionary = sim.nodes[ev["node"]]
+				if n["owner"] == HUMAN:
+					hud.toast("Relay %d switches now" % ev["node"])
+	sim.fx_events.clear()
+	fx.selected = selected if drag_from < 0 else drag_from
+	fx.sync(dt)
+	hud.sync(dt, cam)
 	_trace_t += dt
 	if _trace_t >= 2.0:
 		_trace_t = 0.0
 		var sample := {"t": sim.time}
-		for s in ["A", "B"]:
+		for s in sim.factions.keys():
 			sample[s] = sim.seat_strength(s)
 		trace.append(sample)
 	if not shots.is_empty() and sim.time >= shots[0]:
@@ -755,21 +641,27 @@ func _take_shot(t: float, last: bool) -> void:
 
 func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
+	if new_owner == HUMAN:
+		hud.toast("Node %d captured" % node_id)
+	elif _old == HUMAN:
+		hud.toast("Node %d lost to seat %s" % [node_id, new_owner])
 
 
 func _on_finished(winner: String) -> void:
 	var path := Telemetry.save(sim, map.get("code", ""), trace)
 	print("match over, winner ", winner, " - telemetry ", path)
-	(end_panel.get_node("VBoxContainer/Result") as Label).text = \
-			("You win!" if winner == HUMAN else "Seat %s wins" % winner) + "\n%d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
-	end_panel.visible = true
+	hud.close_inspector()
+	hud.show_end(winner)
+	if not shots.is_empty():                              # automated run: the match ended before the
+		var t: float = shots[-1]                          # last shot time - take it now and quit
+		shots.clear()
+		_take_shot(t, true)
 
 
 # ------------------------------------------------------------------ input
 func _unhandled_input(event: InputEvent) -> void:
-	if not started:                                   # still at the map menu - no world/camera yet
+	if not started or paused:
 		return
-	# two fingers: pinch to zoom, move together to pan (a second finger cancels a send-drag)
 	if event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
 		if st.pressed:
@@ -780,6 +672,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			drag_from = -1
 			pan_from = Vector3.INF
 			drag_mesh.clear_surfaces()
+			route_label.visible = false
 			var p: Array = touches.values()
 			pinch_dist = (p[0] as Vector2).distance_to(p[1])
 		return
@@ -807,53 +700,59 @@ func _unhandled_input(event: InputEvent) -> void:
 			cam_dist = clampf(cam_dist * (0.9 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1.1), 25.0, 300.0)
 			_place_camera()
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
+			if hud.pointer_over_ui(mb.position):
+				return
 			var hit := _ground(mb.position)
 			if mb.pressed:
-				var n := _node_at(hit)
-				if n >= 0 and sim.nodes[n]["owner"] == HUMAN:
-					var now := Time.get_ticks_msec() / 1000.0
-					if n == _tap_node and now - _tap_time < DOUBLE_TAP_WINDOW:
-						# double-tap (Alpha 11): upgrade whatever is already there, own timing since
-						# the engine's mb.double_click proved unreliable on the Web export
-						var nn: Dictionary = sim.nodes[n]
-						if sim.upgrade_structure(n):
-							toast("Upgrade started - %d s" % int(Rules.BUILD_SECONDS))
-						elif nn["build_kind"] != "":
-							toast("Construction already in progress")
-						elif nn["attachment"] == "cannon" and nn["cannon_tier"] >= 3:
-							toast("Cannon is already at max tier")
-						elif nn["attachment"] == "forge":
-							toast("Forge has no further upgrade")
-						elif nn["tier"] >= 4:
-							toast("Vat is already at max tier")
-						else:
-							toast("Nothing to upgrade here")
-						_close_build_popup()
+				var n := _node_at(hit, mb.position)
+				_press_pos = mb.position
+				_press_time = Time.get_ticks_msec() / 1000.0
+				if n >= 0:
+					if sim.nodes[n]["owner"] == HUMAN and n == _tap_node and _press_time - _tap_time < DOUBLE_TAP_WINDOW:
+						hud.close_inspector()
+						node_action("upgrade", n)               # double-tap (Alpha 11): upgrade what's there
 						_tap_node = -1
 						return
-					_tap_time = now
+					_tap_time = _press_time
 					_tap_node = n
-					_press_pos = mb.position
-					drag_from = n
+					if sim.nodes[n]["owner"] == HUMAN:
+						drag_from = n
+					else:
+						selected = n
 				else:
-					_close_build_popup()
+					hud.close_inspector()
+					selected = -1
 					pan_from = hit
 			else:
 				if drag_from >= 0:
-					var target := _node_at(hit)
-					if target >= 0 and target != drag_from:
-						sim.send(drag_from, target, fraction)
-						_close_build_popup()
-					elif target == drag_from and (mb.position - _press_pos).length() < TAP_PIXELS:
-						# single tap, no drag (Alpha 11): open the build popup on this node
-						_open_build_popup(drag_from)
+					var target := _node_at(hit, mb.position)
+					var moved := (mb.position - _press_pos).length() >= TAP_PIXELS
+					if target >= 0 and target != drag_from and moved:
+						var count := int(floorf(sim.nodes[drag_from]["units"] * fraction))
+						var h := sim.send(drag_from, target, fraction)
+						if h.is_empty():
+							hud.toast("No route to that node" if count > 0 else "No units to send")
+						else:
+							hud.toast("Sending %d units to node %d" % [count, target])
+							fx._pulse(sim.nodes[target]["pos"], Rules.seat_color(HUMAN), Rules.R, 0.6)
+						hud.close_inspector()
+						selected = drag_from
+					elif not moved:
+						selected = drag_from
+						hud.inspect(drag_from, cam)               # single tap: the ring inspector
+				else:
+					var target := _node_at(hit, mb.position)
+					if target >= 0 and (mb.position - _press_pos).length() < TAP_PIXELS:
+						selected = target
+						hud.inspect(target, cam)
 				drag_from = -1
 				pan_from = Vector3.INF
 				drag_mesh.clear_surfaces()
+				route_label.visible = false
 	elif event is InputEventMouseMotion:
 		var hit := _ground((event as InputEventMouseMotion).position)
 		if drag_from >= 0:
-			_draw_drag(sim.nodes[drag_from]["pos"], hit)
+			_draw_drag(drag_from, hit, (event as InputEventMouseMotion).position)
 		elif pan_from != Vector3.INF:
 			cam_target += pan_from - hit
 			_place_camera()
@@ -870,23 +769,72 @@ func _ground(screen: Vector2) -> Vector3:
 	return o + d * (-o.y / d.y)
 
 
-func _node_at(p: Vector3) -> int:
+func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
+	if screen.x >= 0.0 and hud:
+		var b := hud.badge_at(screen)
+		if b >= 0:
+			return b
 	if p == Vector3.INF:
 		return -1
 	for n in sim.nodes:
-		if (n["pos"] as Vector3).distance_to(p) <= Rules.R + 1.0:
+		if sim.collapsed.get(n["id"], false):
+			continue
+		if (n["pos"] as Vector3).distance_to(p) <= Rules.R + (2.5 if mobile else 1.0):
 			return n["id"]
 	return -1
 
 
-func _draw_drag(a: Vector3, b: Vector3) -> void:
+func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
+	## The send preview follows the actual route along the decks (not a straight line), with an
+	## arrowhead at the target and the count + travel time at the cursor (Alpha 11's route label).
 	drag_mesh.clear_surfaces()
+	route_label.visible = false
 	if b == Vector3.INF:
 		return
-	drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, Mats.line(HUMAN))
+	var a: Vector3 = sim.nodes[from]["pos"]
+	var target := _node_at(b, screen)
 	var up := Vector3(0, 1.0, 0)
-	for k in range(-2, 3):                            # a few parallel lines read as a thick stroke
-		var off := (b - a).cross(Vector3.UP).normalized() * 0.08 * k
-		drag_mesh.surface_add_vertex(a + up + off)
-		drag_mesh.surface_add_vertex(b + up + off)
-	drag_mesh.surface_end()
+	var mat := Mats.line(HUMAN)
+	var count := int(floorf(sim.nodes[from]["units"] * fraction))
+	if target >= 0 and target != from:
+		var route := sim.find_route(from, target)
+		if route.is_empty():
+			drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, Mats.glow(Rules.state_color("warn")))
+			drag_mesh.surface_add_vertex(a + up)
+			drag_mesh.surface_add_vertex(sim.nodes[target]["pos"] + up)
+			drag_mesh.surface_end()
+			route_label.text = "NO ROUTE"
+			route_label.position = sim.nodes[target]["pos"] + Vector3(0, 6, 0)
+			route_label.visible = true
+			return
+		var path := sim.build_path(route)
+		var pts: PackedVector3Array = path["pts"]
+		var seconds := 0.0
+		for i in range(route.size() - 1):
+			seconds += sim.edges[sim._edge_index(route[i], route[i + 1])]["modules"] * Rules.MODULE_SECONDS + 1.0
+		drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, mat)
+		for k in range(-1, 2):
+			for i in range(pts.size() - 1):
+				var d := (pts[i + 1] - pts[i]).normalized()
+				var off := d.cross(Vector3.UP) * 0.12 * k
+				drag_mesh.surface_add_vertex(pts[i] + up + off)
+				drag_mesh.surface_add_vertex(pts[i + 1] + up + off)
+		var tip: Vector3 = pts[-1] + up
+		var dir := (pts[-1] - pts[-2]).normalized()
+		var side := dir.cross(Vector3.UP)
+		for s in [-1.0, 1.0]:
+			drag_mesh.surface_add_vertex(tip)
+			drag_mesh.surface_add_vertex(tip - dir * 1.6 + side * 0.9 * s)
+		drag_mesh.surface_end()
+		var tn: Dictionary = sim.nodes[target]
+		var verb := "reinforce" if tn["owner"] == HUMAN else ("attack" if tn["owner"] != "" else "take")
+		route_label.text = "%s · %d units · %d s" % [verb.to_upper(), count, int(round(seconds))]
+		route_label.position = tn["pos"] + Vector3(0, 6.5, 0)
+		route_label.visible = true
+	else:
+		drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, mat)
+		for k in range(-1, 2):
+			var off := (b - a).cross(Vector3.UP).normalized() * 0.1 * k
+			drag_mesh.surface_add_vertex(a + up + off)
+			drag_mesh.surface_add_vertex(b + up + off)
+		drag_mesh.surface_end()

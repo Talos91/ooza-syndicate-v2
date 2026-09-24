@@ -1,5 +1,95 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.12.0 "Alpha 12" - 2026-09-25
+
+The "bring it back to something we can call an alpha" pass (Daniele: "implement all mechanics, all
+controls, all UX/UI... otherwise we don't know if our game choices are bad or not"). Everything
+designed so far is now in the build; textures and better models are the only thing deliberately
+left for later.
+
+### Mechanics
+- **The shield bond is the goo trail, not the bridge** (Daniele's correction of v0.6's reading):
+  two adjacent nodes of one player are bonded while BOTH shields are up - the deck between them is
+  covered in goo. Breaking a shield drops the bond until the shield regenerates to full; passage
+  through that node is free meanwhile. No bridge is ever destroyed by a shield break any more
+  (that was what left nodes isolated by the time Last Stand started).
+- **Relays for real** (GAME-RULES sec8). Firing a relay starts a 3 s warning (the tower's symbol
+  and the deck's lights blink to the next state's colour, a ghost of the next deck appears, the
+  ring on the platform fills), then the tick moves the deck over 1.4 s and applies the per-kind
+  troop fate, then 15 s cooldown. Rotation: the turntable and its deck pivot to the next pier pair
+  and every horde on the deck RIDES it, re-routed from where it now points. Retract: the deck
+  slides into its gate and everything on it is carried into the relay's node (own troops come home,
+  enemies land as an early assault on the platform). Switch and remote: the deck dissolves and
+  everything on it FALLS (a fall loss, no combat credit); the next state's deck assembles. Remote's
+  console at the centre controls the diagonal decks elsewhere (lit conduits show which). Capturing a
+  relay during its warning cancels the pending switch. Only NEW routes see a relay's state; a deck
+  mid-motion is closed to routing.
+- **Real Last Stand** (GAME-RULES sec10). Starts at 2:00 (kept, per Daniele). The method is
+  hidden until then and picked from the map's eligible list (inward / outward / chaos, seeded),
+  then the whole drop order is revealed on the badges (#1, #2... and FINAL). Every node gets a 10 s
+  warning (red ring, threatened decks flash, countdown on its badge and in the status line), then
+  it falls: the platform tumbles, its decks break into the kit's fragment pieces, goo pours over
+  the rim, and everything on the node or its decks dies - garrison, siege and every horde portion
+  there (they tumble into the void). The final node never drops. A seat whose last node falls is
+  eliminated on the spot. Wave interval is per map (12-30 s) so the collapse ends well before the
+  7:00 safety net.
+- **Combat: contact anywhere, to the death** (Daniele: "whenever an enemy crosses the hitbox of a
+  unit they fight... units crossing each other on a platform without a fight"). Contact detection
+  is now geometric via a spatial hash over every patch of every line, on decks, piers and platform
+  arcs alike: a head within one deck-width of any enemy patch engages it (frontline if the heads
+  face each other, rear otherwise) and the fight lasts until one side is gone. Friendly queueing
+  works the same way. A horde crossing an enemy platform whose shield is up slows to deck speed
+  while it pays the shield toll, so the fight at the platform is visible.
+- **Alpha 11 costs and logic for every structure** (Daniele: "start from the logic of Alpha 11...
+  upgrades seem free"). Vat upgrades cost 50/100/150 units paid from the vat (Alpha 11's 10/20/30
+  x5), cannon 75 to build then 125/175 per tier (15/25/35 x5), forge 100 (20 x5). Caps 150/200/
+  400/800 and production 5/8/12/17.5 per second are Alpha 11's x5. A cannon bursts for 2 s killing
+  up to 50/125/200 bodies (10/25/40 x5), then recharges 4/2.4/1.6 s AFTER the burst, with a beam
+  and impact flash. A forge gives +50 % attack to everything its owner's troops deal (Alpha 11's
+  +50 on the 100 scale); mixed garrisons weight it by population. Relay nodes have no vat and
+  produce nothing (GAME-RULES sec6) - their garrison must be fed. Attachment swaps (cannon <->
+  forge, vat -> cannon/forge on a final) are a 10 s rebuild with a 10 s cooldown; RESTORE VAT is
+  free. Construction is visible: the new structure grows out of the socket under a turning build
+  ring, with a progress bar on the badge and in the inspector.
+- **AI**: three levels (Casual / Standard / Veteran) picked on the title screen - only thinking
+  rate, attack margin and relay use differ, no cheats. Relays are fired to drop or redirect enemy
+  hordes on the decks they control, to pull them in only when the garrison can take them, or to
+  open routes - never on a blind timer. It evacuates a node under Last Stand warning and pays the
+  same build costs.
+
+### Interface (Alpha 11's, in full)
+- Title screen: logo, faction picker with emblem and blurb, opponent level, the starter seven as
+  cards with their map preview, node count, relay kind and what each one proves.
+- Top bar with emblem, your total, timer, rivals and the strength bar; PAUSE with resume / restart /
+  main menu; Last Stand countdown and status line.
+- Side command panel (100/75/50/25, slide to pick) with the selected vat's send count.
+- Node badges: count (never on an enemy node - seat letter only), tier or attachment, relay kind +
+  state + cooldown, build countdown, shield bar (turns red while down), build bar, Last Stand drop
+  order. Badges are tap targets.
+- Tap any node for the ring inspector: owner, structure, units/cap, production, shield, relay
+  state -> next state and readiness, cannon status, build progress, swap cooldown - with costed
+  actions (UPGRADE T{n}, CANNON, FORGE, RESTORE VAT, SWITCH) that disable when unaffordable, on
+  cooldown or under construction. Double-tap your own node still upgrades (Alpha 11 convention).
+- Drag preview follows the real route along the decks with an arrowhead and a label (TAKE /
+  ATTACK / REINFORCE · units · seconds); "NO ROUTE" in red when there is none. Every action toasts
+  what happened or why it couldn't.
+- Ability dock with the three Ooze Factory slots present but disabled ("coming soon") until the
+  2.0 skill pools are approved. Results panel with captures, combat and fall losses, Last Stand
+  method; play again / main menu. Debug panel gains a forge-bonus slider and prints FPS to the
+  console every 5 s while open.
+
+### In-world animation
+- Selection ring, capture pulse, shield dome over the river (height = shield strength, flashes
+  when hit, red pulse when broken, pulse when back up), exit puddle at the tank bottoms while an
+  order drains out, owner-coloured deck lights on held corridors, state-coloured lights on relay
+  decks and towers, relay towers on their rim ledge in the widest free gap (retract gate straddles
+  the rim where its deck enters), switch piers on switched decks, remote conduits.
+
+### Tests
+- 139 headless checks (was 55): costs, swaps, restore, relay warning/tick/fates per kind, remote
+  control, the shield bond, contact on a neutral platform, Last Stand method/order/warning/drop/
+  elimination, AI vs AI on all seven maps with relay fires and falls.
+
 ## 0.8.0 - 2026-09-25
 
 - **Relays are player-fired, not automatic** (Daniele: "there are no touch controls for relays...
@@ -16,9 +106,7 @@
 - **Alpha 11 look and a player/faction selector** (Daniele: "add all the part of interface that
   alpha 11 had... take away this ugly one"). Reused Alpha 11's actual panel/button recipe and font
   (Rajdhani-SemiBold) across the title screen and HUD's buttons and panels. Added a faction picker
-  to the title screen (previously hardcoded to "null"). Scope note: this is the shared chrome, not
-  a full port of Alpha 11's whole HUD (inspector layout, badges, toasts already have their own
-  2.0-appropriate versions from earlier this session).
+  to the title screen (previously hardcoded to "null").
 
 Versioned from **2026-09-25** (Daniele: "start versioning and have it in the interface and a
 changelog"). The version shows bottom-right in the HUD and on the title screen. Numbering is
@@ -30,17 +118,12 @@ See `docs/BUILD-LOG.md` for the full narrative record and design rationale behin
 - **Relay housings, for real.** Relay nodes now show their actual modelled tower per kind
   (`Relay_Rotation_Tower`, `Relay_Retract`, `Relay_Switch_Hub`, `Relay_Remote`) on a rim-mounted
   ledge (`Relay_Mount`), with `Socket_Attachment` in the middle instead of a vat (GAME-RULES sec6:
-  a relay node has no vat) - previously every node, including relays, rendered as a plain platform
-  with a placeholder T1 vat. Rotation hubs also use `Platform_Rotation` instead of the standard
+  a relay node has no vat). Rotation hubs also use `Platform_Rotation` instead of the standard
   platform. `retracts` and remote-state (`m1`/`m2`) decks use their own `Deck_Retract`/`Deck_Remote`
   models instead of the generic deck module.
 - **Toast feedback on every tap** (Alpha 11 convention): tapping an owned node always says
-  something - what got built, why an upgrade can't happen yet, or that there's nothing to build
-  here - instead of silently doing nothing. Fixes the "I click and nothing happens" report, which
-  was two real gaps: relay nodes had no attachment socket to click at all, and a tap that found
-  nothing eligible gave no feedback either way.
-- The build popup is now styled as a ring (rounded panel, cyan border) closer to Alpha 11's
-  circular inspector, instead of a plain rectangle.
+  something instead of silently doing nothing.
+- The build popup is styled as a ring closer to Alpha 11's circular inspector.
 - Versioning: this file, plus the version number in the HUD and the title screen.
 
 ## 0.6.0 - 2026-09-25
@@ -49,8 +132,8 @@ See `docs/BUILD-LOG.md` for the full narrative record and design rationale behin
   ENEMY-owned node - a neutral one is a free glide-through.
 - The shield: every owned node has a shield worth 20% of its current garrison, regenerating from
   "excess minions" over time. A transiting force fights the shield, never the real garrison -
-  only an actual arrival ever touches that. If the shield breaks, the specific deck the attacker
-  used is destroyed for good ("the bond with the other node disappears").
+  only an actual arrival ever touches that. (The "bond breaks" reading of this version - a deck
+  destroyed - was wrong; corrected in 0.12.0.)
 
 ## 0.5.0 - 2026-09-25
 

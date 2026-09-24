@@ -5,6 +5,12 @@ extends RefCounted
 ## giving it its honest length (Rules.span). Exact for trees such as Two Piers; for maps with
 ## cycles an edge that closes a loop keeps whatever length results and its modules are stretched
 ## (flagged in `stretched`) - the roster rewrite fixes those maps (OPEN-QUESTIONS.md).
+##
+## Relay nodes (BUILDING-PIECES.md B, Daniele 2026-09-24): the attachment socket sits in the
+## middle like a vat; the relay's own tower stands on Relay_Mount, a ledge bolted outside the rim
+## in the widest free gap between piers; the retract housing is the gate the deck slides into,
+## straddling the rim where that deck enters. State colours: a relay-controlled deck's edge lights
+## carry its state's colour, the tower's symbol (OS_State) glows in the current state's colour.
 
 const KIT := "res://assets/kit/%s.glb"
 static var _scenes := {}
@@ -57,46 +63,74 @@ static func put(parent: Node3D, name: String, pos: Vector3, heading := 0.0, stre
 
 const RELAY_HOUSING := {"rotation": "Relay_Rotation_Tower", "retract": "Relay_Retract",
 		"switch": "Relay_Switch_Hub", "remote": "Relay_Remote"}
+const MOUNT_DIST := 7.15             # the tower's centre on the Relay_Mount ledge (kit: 4.6..9.63 m)
+
+
+static func widest_gap_dir(pos: Vector3, neighbours: Array) -> Vector3:
+	## Unit vector into the widest angular gap between this node's piers (where the ledge goes).
+	if neighbours.is_empty():
+		return Vector3.FORWARD
+	var angles := []
+	for p in neighbours:
+		angles.append(atan2((p as Vector3).z - pos.z, (p as Vector3).x - pos.x))
+	angles.sort()
+	var best := 0.0
+	var best_gap := -1.0
+	for i in range(angles.size()):
+		var a0: float = angles[i]
+		var a1: float = angles[(i + 1) % angles.size()] + (TAU if i == angles.size() - 1 else 0.0)
+		if a1 - a0 > best_gap:
+			best_gap = a1 - a0
+			best = (a0 + a1) / 2.0
+	return Vector3(cos(best), 0.0, sin(best))
 
 
 static func build(parent: Node3D, sim: Sim) -> Dictionary:
-	## Returns node id -> {"parts": [Node3D], "label": Label3D, "vat_node", "vat_tier",
-	## "attachment_node", "attachment"}, "stretched": [edge index] and "edge_decks": edge index ->
-	## [Node3D] (the relay-controlled ones - see RelayView/relay cycling visibility).
-	var vis := {"stretched": [], "edge_decks": {}}
-	var centre := Vector3.ZERO
-	for n in sim.nodes:
-		if n["center"]:
-			centre = n["pos"]
+	## Returns node id -> {"parts": [Node3D], "platform", "vat_node", "vat_tier", "attachment",
+	## "cannon_tier", "housing", "state_parts": [MeshInstance3D], "mount_dir"}, plus "stretched":
+	## [edge index], "edge_decks": edge -> [Node3D], "edge_base": edge -> [Transform3D],
+	## "edge_piers": edge -> [Node3D, Node3D], "conduits": edge -> MeshInstance3D.
+	var vis := {"stretched": [], "edge_decks": {}, "edge_base": {}, "edge_piers": {}, "conduits": {}}
 	for n in sim.nodes:
 		var parts: Array = []
 		var relay: String = n["relay"]
-		parts.append(put(parent, "Platform_Rotation" if relay == "rotation" else "Platform_Standard", n["pos"]))
+		var platform := put(parent, "Platform_Rotation" if relay == "rotation" else "Platform_Standard", n["pos"])
+		parts.append(platform)
 		var vat_node: Node3D
+		var housing: Node3D = null
+		var mount_dir := Vector3.FORWARD
+		var state_parts := []
 		if relay != "":
-			# a relay node has NO vat (GAME-RULES sec6: centreHasNoVat): its housing is a FIXED
-			# structure (never swaps, unlike a vat) - Daniele: the Blender kit's rim-ledge mount
-			# didn't come across straight, so this centres it instead (guaranteed not to float or
-			# clip). The attachment SOCKET is the separate swappable centre slot a cannon/forge
-			# later replaces, same as on a final node.
-			var out: Vector3 = (n["pos"] - centre)
-			out = out.normalized() if out.length() > 0.5 else Vector3.FORWARD
-			parts.append(put(parent, RELAY_HOUSING.get(relay, "Relay_Mount"), n["pos"], Rules.heading(out)))
+			var neighbours := []
+			for link in sim.adj[n["id"]]:
+				neighbours.append(sim.nodes[link[0]]["pos"])
+			if relay == "retract":
+				# the gate straddles the rim where the retracting deck enters
+				var far := -1
+				for i in sim.controlled_edges(n["id"]):
+					far = sim._other_end(i, n["id"])
+				var d: Vector3 = (sim.nodes[far]["pos"] - n["pos"]).normalized() if far >= 0 else Vector3.FORWARD
+				housing = put(parent, "Relay_Retract", n["pos"], Rules.heading(d))
+				mount_dir = d
+			else:
+				mount_dir = widest_gap_dir(n["pos"], neighbours)
+				parts.append(put(parent, "Relay_Mount", n["pos"], Rules.heading(mount_dir)))
+				housing = put(parent, RELAY_HOUSING[relay], n["pos"] + mount_dir * MOUNT_DIST, Rules.heading(-mount_dir))
+			parts.append(housing)
+			for mi in housing.find_children("*", "MeshInstance3D", true, false):
+				var mesh := (mi as MeshInstance3D).mesh
+				for s in range(mesh.get_surface_count()):
+					var m := mesh.surface_get_material(s)
+					if m and m.resource_name.begins_with("OS_State"):
+						state_parts.append([mi, s])
 			vat_node = put(parent, "Socket_Attachment", n["pos"])
 		else:
 			vat_node = put(parent, "Vat_T%d" % n["tier"], n["pos"])
 		parts.append(vat_node)
-		var label := Label3D.new()
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.pixel_size = 0.02
-		label.font_size = 96
-		label.outline_size = 24
-		label.no_depth_test = true
-		label.position = n["pos"] + Vector3(0, 10.5, 0)
-		parent.add_child(label)
-		vis[n["id"]] = {"parts": parts, "label": label, "vat_node": vat_node,
-				"vat_tier": -1 if relay != "" else n["tier"],   # -1: never swap a relay's socket for a vat
-				"attachment_node": null, "attachment": "", "cannon_tier": 0}
+		vis[n["id"]] = {"parts": parts, "platform": platform, "vat_node": vat_node,
+				"vat_tier": -1 if relay != "" else n["tier"], "model_key": "",
+				"attachment_node": null, "attachment": "", "cannon_tier": 0, "housing": housing,
+				"state_parts": state_parts, "mount_dir": mount_dir}
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		var pa: Vector3 = sim.nodes[e["a"]]["pos"]
@@ -106,57 +140,95 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		var f: float = gap / (e["modules"] * Rules.S)
 		if absf(f - 1.0) > 0.02:
 			vis["stretched"].append(i)
-		var pier_a := put(parent, "Pier_Connector", pa, Rules.heading(d))
-		var pier_b := put(parent, "Pier_Connector", pb, Rules.heading(-d))
+		var ctrl: int = sim.edge_controller.get(i, -1)
+		var switched: bool = e["state"].begins_with("s")
+		var pier_a := put(parent, "Pier_Switch" if switched and ctrl == e["a"] else "Pier_Connector", pa, Rules.heading(d))
+		var pier_b := put(parent, "Pier_Switch" if switched and ctrl == e["b"] else "Pier_Connector", pb, Rules.heading(-d))
 		vis[e["a"]]["parts"].append(pier_a)
 		vis[e["b"]]["parts"].append(pier_b)
-		var piece := "Deck_Retract" if e["retracts"] else ("Deck_Remote" if e["state"].begins_with("m") else "Deck_S")
+		vis["edge_piers"][i] = [pier_a, pier_b]
+		var piece_name := "Deck_Retract" if e["retracts"] else ("Deck_Remote" if e["state"].begins_with("m") else "Deck_S")
 		var deck_nodes: Array = []
+		var base: Array = []
+		var state_key: String = "retract" if e["retracts"] else e["state"]
 		for k in range(e["modules"]):
-			deck_nodes.append(put(parent, piece, pa + d * (Rules.R + Rules.PIER + k * Rules.S * f),
-					Rules.heading(d), f))
-		vis["edge_decks"][i] = deck_nodes                  # main.gd toggles these against
-                                                            # Sim.is_edge_open (relay cycling AND a
-                                                            # shield-broken bond, on ANY edge)
+			var deck := put(parent, piece_name, pa + d * (Rules.R + Rules.PIER + k * Rules.S * f), Rules.heading(d), f)
+			if state_key != "":
+				set_lights(deck, Mats.light_color(Rules.state_color(state_key)))
+			deck_nodes.append(deck)
+			base.append(deck.transform)
+		vis["edge_decks"][i] = deck_nodes
+		vis["edge_base"][i] = base
+		if e["state"].begins_with("m") and ctrl >= 0:  # remote: a lit conduit from the console to its deck
+			var c: Vector3 = sim.nodes[ctrl]["pos"] + vis[ctrl]["mount_dir"] * MOUNT_DIST
+			var mid := (pa + pb) / 2.0
+			var conduit := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = Vector3(1.0, 0.12, 0.22)
+			conduit.mesh = box
+			conduit.material_override = Mats.light_color(Rules.state_color(e["state"]))
+			parent.add_child(conduit)
+			var v := mid - c
+			conduit.position = (c + mid) / 2.0 + Vector3(0, 0.55, 0)
+			conduit.rotation = Vector3(0, Rules.heading(v.normalized()), 0)
+			conduit.scale = Vector3(v.length(), 1.0, 1.0)
+			vis["conduits"][i] = conduit
 	return vis
 
 
-static func set_vat_tier(parent: Node3D, entry: Dictionary, tier: int, seat: String) -> void:
-	## Swap a node's vat model for its new tier (upgrade_vat, Rules.BUILD_SECONDS after the tap).
-	if entry["vat_tier"] == tier:
-		return
-	(entry["parts"] as Array).erase(entry["vat_node"])
-	(entry["vat_node"] as Node).queue_free()
-	var vat_node := put(parent, "Vat_T%d" % tier, (entry["label"] as Label3D).position - Vector3(0, 10.5, 0))
-	entry["parts"].append(vat_node)
-	entry["vat_node"] = vat_node
-	entry["vat_tier"] = tier
-	apply_owner(entry["parts"], seat)
+static func set_lights(node: Node3D, mat: Material) -> void:
+	## Override every OS_Light surface of a piece (deck edge lights in a state colour, or null).
+	for mi in node.find_children("*", "MeshInstance3D", true, false):
+		var mesh := (mi as MeshInstance3D).mesh
+		for s in range(mesh.get_surface_count()):
+			var m := mesh.surface_get_material(s)
+			if m and m.resource_name.begins_with("OS_Light"):
+				mi.set_surface_override_material(s, mat)
 
 
-static func set_attachment(parent: Node3D, entry: Dictionary, kind: String, tier: int, pos: Vector3, seat: String) -> void:
-	## A built cannon or forge REPLACES whatever sits in the centre slot (the vat, or a relay's
-	## empty socket) at the exact same spot - GAME-RULES sec6: a node's attachment is one slot, not
-	## an extra piece bolted on the side (that offset placement was the misalignment Daniele found).
-	## kind "" restores an empty Socket_Attachment. `tier` only matters for a cannon (T1-T3).
-	if entry["attachment"] == kind and (kind != "cannon" or entry.get("cannon_tier", 1) == tier):
-		return
+static func set_state_color(entry: Dictionary, c: Color) -> void:
+	for pair in entry["state_parts"]:
+		(pair[0] as MeshInstance3D).set_surface_override_material(pair[1], Mats.light_color(c))
+
+
+static func model_for(n: Dictionary) -> String:
+	## Which centre-slot model a node shows right now - the build TARGET while a build runs (Alpha
+	## 11 shows the new structure growing out of the socket), otherwise what stands there.
+	if n["build_kind"] != "" and not n["build_target"].is_empty():
+		var t: Dictionary = n["build_target"]
+		if t["kind"] == "vat":
+			return "Vat_T%d" % t["tier"]
+		return "Cannon_T%d" % t["tier"] if t["kind"] == "cannon" else "Forge"
+	if n["attachment"] == "cannon":
+		return "Cannon_T%d" % maxi(n["cannon_tier"], 1)
+	if n["attachment"] == "forge":
+		return "Forge"
+	if n["relay"] != "":
+		return "Socket_Attachment"
+	return "Vat_T%d" % n["tier"]
+
+
+static func set_centre_model(parent: Node3D, entry: Dictionary, model: String, pos: Vector3, seat: String) -> Node3D:
+	## Swap the node's centre slot (vat / socket / cannon / forge) for `model` at the exact same
+	## spot - GAME-RULES sec6: one slot, never an extra piece bolted on the side. Returns the node.
+	if entry["model_key"] == model:
+		return entry["vat_node"]
 	if entry["vat_node"]:
 		(entry["parts"] as Array).erase(entry["vat_node"])
 		(entry["vat_node"] as Node).queue_free()
-	var piece := "Socket_Attachment" if kind == "" else ("Cannon_T%d" % tier if kind == "cannon" else "Forge")
-	var node := put(parent, piece, pos)
+	var node := put(parent, model, pos)
 	entry["parts"].append(node)
 	entry["vat_node"] = node
-	entry["attachment_node"] = node
-	entry["attachment"] = kind
-	entry["cannon_tier"] = tier
+	entry["model_key"] = model
 	apply_owner(entry["parts"], seat)
+	return node
 
 
 static func apply_owner(parts: Array, seat: String) -> void:
 	## Structure = model, ownership = material: swap the lights and the vat ooze per surface.
 	for p in parts:
+		if not is_instance_valid(p):
+			continue
 		for mi in (p as Node).find_children("*", "MeshInstance3D", true, false):
 			var mesh := (mi as MeshInstance3D).mesh
 			for s in range(mesh.get_surface_count()):

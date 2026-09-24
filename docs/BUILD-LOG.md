@@ -155,9 +155,66 @@ A 100-unit horde ≈ 43 k polygons.
 
 ## 5. The Godot prototype
 
-Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven.
+Godot 4.6.1 · GL Compatibility · all seven starter maps.
 
-### What plays
+### Alpha 12 (v0.12.0, 2026-09-25 night) - everything designed, in one build
+
+Daniele's brief after playing v0.8.0: "the game is currently a massive step back in functionality
+vs Alpha 11... all menus are missing... the complete lack of animation, HUD, UX/UI makes it
+unplayable and hard to decide if mechanics are good or not... implement all mechanics, all
+controls, all UX/UI; only textures or better models can wait." His answers to the open items:
+the shield bond is the **goo trail, not the bridge**; Last Stand at **2:00 seems ok**; relays were
+"almost all broken, isolating nodes, no falling animation"; Last Stand "units don't fall, nodes
+don't fall"; costs "seem random, upgrades are free - start from Alpha 11's logic"; mobile test
+"do it"; and combat was still "crooked: units crossing each other on a platform without a fight".
+
+What changed (details per item in PLAYTEST-NOTES 26-35, the list in CHANGELOG 0.12.0):
+
+- **Sim** (`sim.gd`, largely rewritten): `bonded(edge)` = both ends one owner and both shields up
+  (the corridor goo); `shield_up` false from a break until regenerated (free passage meanwhile);
+  no `broken_edges` any more. Relays: `fire_relay` -> `relay_phase` "warning" (3 s) -> "moving"
+  (1.4 s: hordes on the closing decks get a `ride` transform applied inside `Sim.sample`, so
+  contacts, cannons and the view all agree) -> `_relay_apply` per kind (`_rotate_horde` re-routes
+  from the new pier keeping the deck fraction; `_cut_range` with fate "carry" or "fall" removes the
+  on-deck portion, re-routes what was left behind, and emits `fx_events`). Remote's controller is
+  the console node anywhere on the map. Last Stand: `_start_last_stand` picks the method with a
+  seeded RNG from the map's list, builds the order (inward: far first; outward: near first with
+  the outward final; chaos: shuffled, homes last), `last_stand_warn_node`/`_warn_t` for the 10 s
+  warning, `_drop_node` kills garrison/siege/horde portions and eliminates a seat with no node
+  left. Contact: `_detect_contacts` is a spatial hash (cell 3 m) over every patch of every line -
+  a head within `CONTACT_R` of an enemy patch engages (frontline if heads oppose, else rear), a
+  friend's body ahead blocks. `_crossing_shield` slows a horde to deck speed on a shielded enemy
+  platform. Structures: costs paid from the node (`VAT_COST`, `CANNON_COST`, `FORGE_COST`),
+  `build_target` for the view, `swap_cd`, `restore_vat`, cannon burst window (`cannon_burst`,
+  `cannon_kill_left`, `cannon_target`), `forge_of(seat)` as a dealt-damage multiplier with
+  population weighting in node fights; relay nodes produce nothing. `fx_events` is drained by
+  main every frame.
+- **AI** (`seat_ai.gd`): `Rules.AI_LEVELS` (Casual / Standard / Veteran: think period, attack
+  margin, relay use); relays fired only to drop/redirect enemies on the controlled decks, to pull
+  them in when the garrison can take them (retract), or when the next state reaches more of the
+  map; evacuates a warned node; pays build costs and keeps a reserve.
+- **View**: `map_builder.gd` puts relay towers on `Relay_Mount` in the widest free gap between
+  piers (retract gate straddles the rim where its deck enters), `Pier_Switch` on switched decks,
+  remote conduits, state-coloured `OS_Light` on relay decks and `OS_State` on towers, base
+  transforms for deck motion; `fx.gd` (new) does construction (target model scaled by progress
+  under a turning build ring), capture/shield/build pulses, shield domes, cannon beams, relay
+  warning (blink + ghost decks + platform arc), relay motion (turntable rotation, retract slide,
+  dissolve/assemble), Last Stand warning ring + flashing decks, and the falls (node parts, deck
+  fragments `Deck_S_Frag_*`, ring waterfall particles, horde patch copies tumbling); `hud.gd`
+  (new) is Alpha 11's interface ported (see CHANGELOG); `horde_view.gd` corridors use `bonded`,
+  plus exit puddles; `main.gd` is title screen + world + camera (fits the map between the HUD
+  bands) + input + orchestration, with `--ai=`, `--seed=`, `--menu-shot=`, and scenarios
+  `build`/`inspect`/`switch`/`rotate` for close-ups.
+- **Tests**: 139 checks; new ones cover costs/swaps/restore, warning->tick->fate for switch,
+  retract and rotation, remote control, the bond, contact on a neutral platform, Last Stand
+  method/order/warning/drop/elimination and outward-only-where-authored, AI vs AI on all seven.
+
+Verified by screenshots (desktop 1600x740 and a phone-shaped window): title screen, match HUD,
+inspector, construction, switch dissolve with the on-deck portion falling, rotation ride, Last
+Stand reveal/warning/collapse. Real-phone touch and frame rate remain unmeasured - the desktop
+browser sends mouse events even in phone emulation.
+
+### What plays (v0.8.0 record, superseded in detail by Alpha 12 above)
 - **All seven starter maps** (pass of 2026-09-25, PLAYTEST-NOTES 11): a title screen lists them in
   build order; pick one to play it exactly like Two Piers. Relay-controlled and retract decks are
   drawn/simulated as ordinary fixed open decks (the real per-map relay art/behaviour is later).
@@ -254,8 +311,10 @@ builds carry the panel; it is not a player feature.
 | `scripts/horde_view.gd` | hordes as long patch lines; fight look (eased shrink, meniscus, shoves, splash); platform rivers |
 | `scripts/mats.gd`, `shaders/creature.gdshader` | seat materials, creature shader |
 | `scripts/seat_ai.gd`, `scripts/telemetry.gd` | opponent (routing + structures), match log |
-| `scripts/main.gd` | world, camera, input (drag to send, double-tap to build), HUD, map-select menu, phone profile, demo/screenshot mode |
-| `tests/test_sim.gd` | 46 headless rules checks — all passing |
+| `scripts/hud.gd` | (Alpha 12) the interface: top bar, pause, side panel, badges, ring inspector, dock, toasts, results, debug |
+| `scripts/fx.gd` | (Alpha 12) in-world effects: construction, shield dome, cannon beam, relay warning/motion, Last Stand warning and falls |
+| `scripts/main.gd` | title screen, world, camera, input (drag to send, tap to inspect, double-tap to upgrade), orchestration, demo/screenshot/scenario modes |
+| `tests/test_sim.gd` | 139 headless rules checks — all passing |
 
 AI vs AI on Two Piers now lasts **~1-1.5 minutes** with all seven starter maps' AI-vs-AI matches
 verified to finish (relay cycling + rudimentary Last Stand keep any map from turtling forever).
@@ -275,7 +334,10 @@ verified to finish (relay cycling + rudimentary Last Stand keep any map from tur
 | Web build | no-threads templates (Safari-safe), mobile texture compression, PWA (Add to Home Screen) |
 
 Checked in desktop emulation at phone sizes. **Real-device frame rate and touch feel are still to
-be measured.**
+be measured** (Alpha 12 re-checked the layout in a phone-shaped window and the published build in
+the desktop app's browser at a phone viewport; the Debug panel prints FPS to the console every 5 s
+so a phone's browser console can report it - but that browser sends mouse events even in phone
+emulation, so touch itself is untested from here).
 
 ---
 
@@ -324,9 +386,12 @@ From `PLAYTEST-NOTES.md` (Daniele's first demo):
 5. ~~Vat upgrades~~ — done 2026-09-25, alongside cannon/forge (see §5 "Structures"); all seven
    starter maps are playable via the title screen with rudimentary relay cycling and Last Stand so
    every match resolves. Real-phone test is still open.
-6. Next: the real per-map relay behaviour and art (rotation tower, switch hub, remote conduit),
-   real Last Stand (per-map method choice, hidden reveal, falls), attachment swap/cooldown, cannon
-   T2/T3, forge's mixed-garrison weighting, then a real-phone test.
+6. ~~The real per-map relay behaviour and art, real Last Stand, attachment swap/cooldown, cannon
+   T2/T3, forge's mixed-garrison weighting~~ — all done in Alpha 12 (v0.12.0, see §5).
+7. **After Alpha 12:** Daniele's phone playtest (touch feel, frame rate); his answers to the new
+   OPEN-QUESTIONS items (bond as mechanic or visual, forge defence half, cannon numbers, Last
+   Stand 2:00 vs 3:00, rotation-into-the-void maps); bake the Debug-panel speeds into `rules.gd`;
+   abilities once the skill pools are approved; team modes; the texture/model pass.
 
 ---
 

@@ -225,9 +225,65 @@ the existing deck/platform speed ones - open `Debug` bottom-left. Reset to rules
     versions from earlier passes) - flagging this as a deliberate scope call given everything else
     in this session, not an oversight.
 
-## Known gaps in this slice (not playtest findings)
+## 2026-09-25 - Daniele, seventh pass: "bring us back to something we can call an alpha" (Alpha 12)
 
-- Real per-map relay behaviour (rotation/switch/remote/retract art and consequences), abilities,
-  real Last Stand (method choice, hidden reveal, "everything on a falling node/deck dies"),
-  multiplayer, attachment swap/cooldown, cannon T2/T3, forge's mixed-garrison population weighting.
-- Army numbers in `scripts/rules.gd` are placeholders (army scale and base caps are open questions).
+Daniele's answers to the v0.8.0 open items, and the brief: "full implementation of everything we
+already created... the complete lack of animation, HUD, UX/UI makes it unplayable and hard to
+decide if mechanics are good or not... only thing I can save on is textures or better models".
+
+26. **The bond is the goo trail, not the bridge.** "2 vats form a bond when both have the shield
+    active; when active the road becomes covered in goo; if one of the two loses a shield the path
+    is gone." *Done:* `Sim.bonded(edge)` - both ends one owner AND both shields up - drives the
+    corridor goo; a broken shield (`shield_up = false`) drops the bond until the shield regenerates
+    to full, and passage through that node is free meanwhile. `broken_edges` and the deck
+    destruction are gone entirely (they were what left nodes isolated by the Last Stand).
+27. **Last Stand at 2:00 "seems ok".** Kept at 2:00 (`Rules.LAST_STAND_TIME`); GAME-RULES sec10's
+    3:00 stays the design value until Daniele locks one.
+28. **Relays "almost all broken... isolated nodes... no falling animation".** *Done:* the real
+    per-kind behaviour (GAME-RULES sec8) with a 3 s warning, visible deck motion and the troop
+    fate: rotation pivots the turntable + deck and hordes ride it (re-routed from the new pier),
+    retract slides the deck into its gate and carries everything on it into the node, switch and
+    remote dissolve the deck and drop everything on it (fall losses, patches tumbling, droplets).
+    Remote's console controls its far-away decks via lit conduits. Capture during the warning
+    cancels the switch. AI fires relays only when it gains from it.
+29. **Last Stand "units don't fall, nodes don't fall, nothing happens".** *Done:* per-map method
+    (inward / outward / chaos from the JSON's `methods`, seeded, hidden until 2:00), the order
+    revealed on badges (#n / FINAL), a 10 s warning ring with flashing decks and a countdown,
+    then the platform tumbles, decks break into `Deck_S_Frag_*` pieces, goo pours over the rim,
+    and garrison + siege + every horde portion on the node or its decks die. Losing your last
+    node = elimination.
+30. **Costs "seem random, upgrades are free" - start from Alpha 11.** *Done:* Alpha 11's logic x5
+    (`Rules.SCALE`): vat 50/100/150 paid from the vat, cannon 75 then 125/175, forge 100, caps
+    150/200/400/800, production 5/8/12/17.5, cannon 2 s bursts of 50/125/200 bodies with recharge
+    after (4/2.4/1.6 s), forge +50 % attack (Alpha 11's +50 on the 100 scale; the "defense" half
+    of GAME-RULES sec6 is NOT applied - flagged in OPEN-QUESTIONS). Swaps: 10 s rebuild + 10 s
+    cooldown; RESTORE VAT free. Relay nodes produce nothing (no vat).
+31. **Mobile touch / on-phone performance: "do it".** *Partly:* the web build was exercised in
+    the desktop app's browser at a phone-shaped viewport (see BUILD-LOG §6) and the Debug panel
+    now prints FPS to the console. **Not done, cannot be done from here:** touch on a real phone
+    and a real-device frame rate - the built-in browser delivers mouse events even in phone
+    emulation. Daniele's own phone test remains the only real measurement.
+32. **"Movement and combat still crooked... enemy units crossing each other on a platform without
+    a fight... a unit crossing an enemy should always start a combat to death."** *Done:* contact
+    is geometric (spatial hash over every patch of every line, anywhere on the board); a head
+    within `Rules.CONTACT_R` of any enemy patch engages, and the pair fights until one is gone.
+    A horde crossing a shielded enemy platform slows to deck speed so the toll fight is visible.
+33. **"No building animations for construction nor anything."** *Done:* the new structure grows
+    out of the socket under a turning yellow build ring (Alpha 11's scale-up), badge + inspector
+    progress bars, a pulse when done; capture pulses; shield dome with hit flash / break / return;
+    cannon beam + impact flash; relay warning blink + next-deck ghost + cooldown ring; exit puddle
+    while an order drains; falls for nodes, decks and hordes.
+34. **"All menus are missing... all past interface."** *Done:* Alpha 11's interface in full - see
+    CHANGELOG 0.12.0 "Interface". Still open by design: the ability dock is present but disabled
+    (skill pools unapproved), no multiplayer/team UI (2v2/3v3/FFA modes not built).
+35. **"Nothing is finalized regarding speed on the board or exit of units from towers."** Left as
+    Debug-panel sliders with the same defaults (deck 2 m/s, platform x6, door 48/s) - the numbers
+    to bake into `rules.gd` are still Daniele's call from play.
+
+## Known gaps after Alpha 12 (not playtest findings)
+
+- Abilities / Ooze Factory (pending SKILLS-2.0-DRAFT approval), team modes and multiplayer,
+  overpasses, Big Drop and Production Halt variants, the rotation "into the void" fall case (none
+  of the starter seven has one), textures and the model detail pass.
+- Army numbers are Alpha 11 x5 and provisional; the T4 role and the 1x baseline remain open.
+- Real-phone touch feel and frame rate are unmeasured.

@@ -1,66 +1,83 @@
-# Ooze Syndicate 2.0
+# Ooze Syndicate 2.0 - Alpha 12
 
 Fresh Godot 4.6 project (GL Compatibility - browser and phone first) for the 2.0 bridge-network
 game. Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project folder
 (`H:\My Drive\PROJECTS\Ooze Syndicate`). Alpha 11 lives separately in `Game/Alpha 11`.
 
-## The starter seven
+## What Alpha 12 is
 
-A title screen lets you pick a faction, then one of the seven starter maps in build order (or skip
-both with `--map=res://maps/<file>.json`). Every map is built from its roster JSON with the Blender
-kit, at honest lengths (1 deck module = 4 m = 2 s; piers count as part of the platform). A captured
-relay's owner fires its switch by tapping it (15 s cooldown; rudimentary - the real per-map relay
-art/behaviour beyond that isn't built) - the deck itself visibly appears/disappears as it cycles. A
-rudimentary Last Stand starts at 2:00 and collapses the rim inward (platforms and bridges fall away)
-so no match is eternal, with a 7:00 safety net if it still somehow is.
-- Drag from one of your nodes to any node to send; side buttons set 25 / 50 / 75 / 100 %.
-- Hordes are long lines of patches (goo + creatures) that leave the vat only as the door reveals
-  them (still-inside units stay orderable), flow along the decks, curve AROUND the centre structure
-  of every node they pass, and land on the destination's platform from whichever pier they came by.
-- **The whole platform is the node.** A ring of goo rivers the tower, owned or split by whoever is
-  fighting there; a besieged platform's garrison is beaten down where it stands, then the node
-  flips and the survivors become the new garrison. Own nodes: reinforce.
-- **No free glide through an enemy node** (a neutral one is a free glide). Every hostile waypoint
-  on a route - not just the final target - fights whoever's passing through, but only its
-  regenerating **shield** (SHIELD_FRACTION of the garrison), never the real garrison: only an
-  arrival can capture. Break the shield and that one deck is destroyed for good.
-- Opposing hordes meeting on a deck stop at a frontline and fight.
-- Owned vats produce up to their cap. Single-tap an owned node with an empty attachment slot to
-  choose Cannon (bursts enemy hordes in range, bypassing fight math) or Forge (owner takes less
-  damage everywhere) where the map allows it; double-tap upgrades whatever's already there - the
-  vat, or a built cannon's tier (T1-T3) - Alpha 11's tap convention, with a toast on every tap.
-  Seat B+ is a simple AI with the same options, no cheats.
-- Ownership = material: seat-colour lights, vat ooze, goo; creature body hue = seat, race = accent.
-  Relay nodes show their real modelled tower (rotation/retract/switch/remote).
-- Per-match telemetry JSON in `user://telemetry/`.
+Every mechanic and every piece of interface designed so far, in one build, so the game's choices
+can finally be judged (Daniele, 2026-09-25). Textures and better models are deliberately later.
 
-All tunable numbers are in `scripts/rules.gd`; army numbers there are PROVISIONAL placeholders.
-Not in this slice yet: real per-map relay art/behaviour beyond open-closed, abilities, real Last
-Stand (method choice, hidden reveal), attachment swap/cooldown, cannon T2/T3 stat balance,
-multiplayer, pinch-zoom on touch, real-phone testing.
+- **Title screen**: faction (emblem + blurb), opponent level (Casual / Standard / Veteran), then
+  one of the starter seven as a card with its map preview and what it proves.
+- **Sending**: drag from your node to any node; 100 / 75 / 50 / 25 % on the side panel (slide a
+  finger across them); the preview follows the real route along the decks with an arrowhead and
+  TAKE / ATTACK / REINFORCE · units · seconds. Hordes are long lines of goo + creatures that leave
+  the vat only as the door reveals them (a puddle swells at the tank bottoms meanwhile), flow along
+  the decks, curve around every tower they pass and land on the destination's platform.
+- **The whole platform is the node.** A ring of goo rivers the tower; arrivals fight the garrison
+  there and the node flips when it falls. Own nodes: reinforce.
+- **Contact anywhere, to the death.** A horde's head touching any part of an enemy line - on a
+  deck, a pier or a platform arc - starts a fight that ends when one side is gone (frontline if
+  the heads face each other, rear attack otherwise). Friends queue behind friends.
+- **The shield and the bond.** An owned node's shield is 20 % of its garrison, regenerating. A
+  force passing through an enemy node fights the shield (slowed to deck speed while it does), never
+  the garrison; if the shield breaks, passage is free until it regenerates to full. Two adjacent
+  nodes of one player are **bonded** while both shields are up: the deck between them is covered
+  in their goo. A broken shield drops the bond - the goo trail, not the bridge.
+- **Structures, Alpha 11 logic x5.** Tap a node for the ring inspector; double-tap your own node to
+  upgrade. Vat T1-T4 (50 / 100 / 150 units, paid from the vat, 10 s build, the new tier grows out
+  of the socket under a build ring). Relay and final nodes take a **cannon** (75, then 125 / 175
+  per tier: a 2 s beam burst kills up to 50 / 125 / 200 bodies, recharge 4 / 2.4 / 1.6 s after)
+  or a **forge** (100, single tier, +50 % attack for everything you deal). Swaps are a 10 s rebuild
+  with a 10 s cooldown; RESTORE VAT is free. Relay nodes have no vat: their garrison must be fed.
+- **Relays** (rotation ↻, retract ⇤, switch ⇄, remote ⌁): tap yours, press SWITCH. 3 s warning
+  (lights and symbol blink to the next state's colour, a ghost of the next deck appears), the deck
+  moves, 15 s cooldown. Rotation: the turntable pivots and troops ride the deck. Retract: the deck
+  slides into the gate and troops on it are carried into that node (enemies as an early assault).
+  Switch / remote: the deck dissolves and troops on it fall. Capturing a relay during its warning
+  cancels the switch.
+- **Last Stand** at 2:00: the method (inward / outward / chaos, from the map's list) is hidden
+  until then, then the drop order shows on every badge. 10 s warning per node (red ring, flashing
+  decks, countdown), then the platform and its decks fall - fragments, a waterfall of goo - and
+  everything on them dies. The final never falls; a seat that loses its last node is out. 7:00
+  safety net if it still isn't decided.
+- **HUD** (Alpha 11's): top bar with emblem, your total, timer, rivals and strength bar; PAUSE
+  (resume / restart / menu); badges with count (never on enemy nodes), tier or attachment, relay
+  state and cooldown, build and shield bars; toasts on every action; results with stats. The
+  ability dock's three slots are present but disabled until the 2.0 skill pools are approved.
+- Per-match telemetry JSON in `user://telemetry/` (sends, captures, relay fires, falls, Last Stand).
+
+All tunable numbers are in `scripts/rules.gd`. Army numbers follow Alpha 11 x5 and are PROVISIONAL.
+Not in Alpha 12: abilities (pending approval), multiplayer / team modes, overpasses, Big Drop and
+Production Halt variants, real-phone measurement (see below), textures.
 
 ## Play the current build
 
 **https://talos91.github.io/ooza-syndicate-v2/** - the web export of `main`, published to the `gh-pages`
 branch after every pass that changes play or looks (see `docs/BUILD-LOG.md` §10). Phone: open in
 Safari/Chrome, landscape. **After a new publish, reload twice**: the PWA service worker serves the
-cached build first and fetches the new one in the background (the top-left clock restarting at 0:00
-with the new feature visible tells you it landed).
+cached build first and fetches the new one in the background (the version bottom-right tells you
+which build you have).
 
-**Debug panel** (bottom-left `Debug` button, live, resets on reload, wide ranges): deck speed
-(0.2-30 m/s), platform speed (0.1-30x deck - can go slower than the deck, not just faster), door
-rate (1-500 units/s) and platform fight (0.05-20x combat rate) sliders, plus Reset to rules.
+**Debug panel** (bottom-left `Debug` button, live, resets on reload, wide ranges): deck speed,
+platform speed, door rate, platform fight rate and forge bonus sliders, Reset to rules, and an FPS
+line printed to the browser console every 5 s while it is open.
 
 ## Run
 
 ```
-Godot_v4.6.1-stable_win64.exe --path .                          # play: pick a map from the title screen
-Godot_v4.6.1-stable_win64.exe --path . -- --map=res://maps/008-strait.json   # play one map directly
-Godot_v4.6.1-stable_win64.exe --path . -- --demo                # AI vs AI, skips the title screen
+Godot_v4.6.1-stable_win64.exe --path .                          # play: title screen
+Godot_v4.6.1-stable_win64.exe --path . -- --map=res://maps/008-strait.json --ai=Veteran
+Godot_v4.6.1-stable_win64.exe --path . -- --demo --seed=3       # AI vs AI, skips the title screen
 Godot_v4.6.1-stable_win64.exe --path . -- --demo --shots=9,24 --out=C:/tmp
+Godot_v4.6.1-stable_win64.exe --path . -- --map=res://maps/010-first-switch.json --scenario=switch --zoom=40
 Godot_v4.6.1-stable_win64_console.exe --headless --path . --script res://tests/test_sim.gd
 ```
 
+Scenarios (`--scenario=`): `fight`, `rear`, `queue` (Two Piers deck contacts), `build` and
+`inspect` (Strait, node 1), `switch` (First Switch), `rotate` (Switchback Foundry).
 Godot is in `Tools/Godot` of the project folder.
 
 See **docs/BUILD-LOG.md** for the full record of what was built and every decision taken.
@@ -69,13 +86,16 @@ See **docs/BUILD-LOG.md** for the full record of what was built and every decisi
 
 | Path | What |
 |---|---|
-| `scripts/rules.gd` | every number: kit sizes, speeds, caps, production, combat, colours, relay/Last Stand/structure timings |
-| `scripts/sim.gd` | rules and state, no visuals (routes, paths, production, capture, frontlines, relay cycling, Last Stand, structures) |
-| `scripts/map_builder.gd` | honest layout from map JSON, kit placement, ownership materials, vat-tier/attachment swap |
-| `scripts/horde_view.gd` | hordes as patch chains |
-| `scripts/mats.gd`, `shaders/creature.gdshader` | seat materials, creature hue shift + race rim |
-| `scripts/seat_ai.gd`, `scripts/telemetry.gd` | opponent (routing + structures), match log |
-| `scripts/main.gd` | world, camera, input (drag to send, double-tap to build), HUD, map-select title screen, demo/screenshot mode |
-| `assets/kit`, `assets/horde` | GLBs exported from `Models/2.0/OozeKit-2.0.blend` and `OozeHordePatches-2.0.blend` |
-| `maps/` | the starter seven (copies of the roster JSON) - all seven playable |
-| `tests/test_sim.gd` | headless rules checks |
+| `scripts/rules.gd` | every number: kit sizes, speeds, caps, costs, combat, colours, relay/Last Stand/structure timings |
+| `scripts/sim.gd` | rules and state, no visuals (routes, paths, production, capture, contacts, shield bond, relays with warning/tick/fates, Last Stand, structures) |
+| `scripts/seat_ai.gd` | opponent levels; hazard-aware relay use; cost-aware building |
+| `scripts/map_builder.gd` | honest layout from map JSON, kit placement, ownership materials, state colours, relay ledges, conduits |
+| `scripts/horde_view.gd` | hordes as patch chains, fight look, rivers, bond corridors, exit puddles |
+| `scripts/fx.gd` | in-world effects: construction, shield dome, cannon beam, relay warning/motion, Last Stand warning and falls |
+| `scripts/hud.gd` | the interface: top bar, pause, side panel, badges, inspector, dock, toasts, results, debug |
+| `scripts/main.gd` | title screen, world, camera, input (drag / tap / double-tap / pan / pinch), orchestration |
+| `scripts/mats.gd`, `shaders/creature.gdshader` | seat materials, state colours, effect materials, creature shader |
+| `scripts/telemetry.gd` | match log |
+| `assets/kit`, `assets/horde`, `assets/maps`, `assets/ui` | GLBs from the Blender kit and patches, map preview SVGs, emblems and logo |
+| `maps/` | the starter seven (copies of the roster JSON) |
+| `tests/test_sim.gd` | 139 headless rules checks |
