@@ -35,8 +35,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"units": float(Rules.HOME_UNITS if owner != "" else Rules.NEUTRAL_UNITS[tier]),
 			"category": n["category"], "center": n["center"],
 			"streaming": {},        # {hid, remaining}: the one order the door is emitting
-			"siege": {},            # seat -> units on the platform fighting the garrison
+			"siege": {},            # seat -> units on the platform fighting the garrison (arrived)
 			"siege_dir": {},        # seat -> unit vector from the tower to where they landed
+			"transit": {},          # seat -> {"units", "hordes": [Horde]}: passing-through this frame
 			"node_loss": {},        # seat -> units/s lost on this platform last step (view)
 		})
 		adj[id] = []
@@ -110,6 +111,7 @@ func _new_horde(owner: String, units: float, route: Array) -> Dictionary:
 		"ordered": units, "start_units": units, "streaming": true,
 		"route": route, "target": route[-1],
 		"pts": path["pts"], "cum": path["cum"], "fast": path["fast"], "spans": path["spans"],
+		"node_spans": path["node_spans"],
 		"L": path["cum"][-1], "s": 0.0, "state": "move", "speed": 1.0, "blocked": false,
 	}
 	_next_id += 1
@@ -117,11 +119,14 @@ func _new_horde(owner: String, units: float, route: Array) -> Dictionary:
 
 
 func build_path(route: Array) -> Dictionary:
-	## Centre line a horde follows: out of the tank bottoms, along each deck, AROUND the centre
-	## structure of every node it passes, and in through the destination's door.
+	## Centre line a horde follows: out of the tank bottoms, along each deck, onto the platform of
+	## EVERY node it passes (an order passing through a node always counts as passing through it -
+	## Daniele, 2026-09-25: no free glide past a contested or hostile waypoint), and onto the
+	## destination's platform at the end.
 	var pts := []                                   # plain Arrays: lambdas capture them by reference
 	var fast := []                                  # 1 = node/pier segment (fast), 0 = deck
 	var spans := []                                 # {edge, s0, s1, forward}
+	var node_spans := []                            # {node, s0, s1}: intermediate nodes only
 	var add := func(p: Vector3, is_fast: bool) -> void:
 		pts.append(p)
 		fast.append(1 if is_fast else 0)
@@ -138,6 +143,7 @@ func build_path(route: Array) -> Dictionary:
 		add.call(b["pos"] - d * (Rules.R + Rules.PIER), true)
 		var ei := _edge_index(route[i], route[i + 1])
 		spans.append({"edge": ei, "s0": s0, "s1": _length(pts), "forward": edges[ei]["a"] == route[i]})
+		var node_s0 := _length(pts)                 # b's platform starts here for every route node
 		add.call(b["pos"] - d * (Rules.R - 0.5), true)
 		var a_in := atan2(-d.z, -d.x)               # direction from b's centre back toward a
 		var a_out: float
@@ -147,6 +153,7 @@ func build_path(route: Array) -> Dictionary:
 			for p in _arc(b["pos"], a_in, a_out, Rules.ARC_R):
 				add.call(p, true)
 			add.call(b["pos"] + d2 * (Rules.R - 0.5), true)
+			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		else:
 			# destination: straight onto the platform from this side, up to the tower's footprint -
 			# the whole platform is the node, every side is an entrance
@@ -154,7 +161,8 @@ func build_path(route: Array) -> Dictionary:
 	var cum := PackedFloat32Array([0.0])
 	for k in range(1, pts.size()):
 		cum.append(cum[k - 1] + (pts[k] as Vector3).distance_to(pts[k - 1]))
-	return {"pts": PackedVector3Array(pts), "cum": cum, "fast": PackedByteArray(fast), "spans": spans}
+	return {"pts": PackedVector3Array(pts), "cum": cum, "fast": PackedByteArray(fast), "spans": spans,
+			"node_spans": node_spans}
 
 
 func _arc(c: Vector3, a0: float, a1: float, r: float) -> Array:
@@ -251,7 +259,9 @@ func step(dt: float) -> void:
 			_arrive(nodes[h["target"]], h, x)
 			if h["units"] <= 0.0 and not h["streaming"]:
 				dead.append(h)
-	_node_fights(dt)
+	for h in _node_fights(dt):
+		if h not in dead:
+			dead.append(h)
 	for h in hordes:                                  # apply combat losses simultaneously
 		h["loss_rate"] = 0.0                          # units/s lost this step (drives the view's shrink and splash)
 		if h.has("pending_loss"):
@@ -412,51 +422,115 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 		n["siege_dir"][owner] = ((landing - n["pos"]) as Vector3).normalized()
 
 
-func _node_fights(dt: float) -> void:
-	## Units on a platform fight the garrison (and each other) at the frontline rates; when the
-	## garrison is beaten down and one attacker is left, the node flips to it with those units.
+func _register_transit() -> void:
+	## An order passing through a node always counts as passing through that node (Daniele,
+	## 2026-09-25): no free glide past a contested or hostile waypoint. Every node a horde's line
+	## currently overlaps - not just its final target - counts its present units as an attacking
+	## force this frame, UNLESS that node is already the horde's owner (a friendly waypoint is a
+	## pure pass-through, matching GAME-RULES §6: troops passing through don't count against cap).
+	## Transient: rebuilt fresh every step, never carried over by itself (see _node_fights).
+	for n in nodes:
+		n["transit"] = {}
+	for h in hordes:
+		if h["state"] == "absorb":
+			continue
+		for ns in h["node_spans"]:
+			var n: Dictionary = nodes[ns["node"]]
+			if n["owner"] == h["owner"]:
+				continue
+			var head_s: float = h["s"]
+			var tail_s: float = head_s - chain_length(h)
+			if head_s < ns["s0"] or tail_s > ns["s1"]:
+				continue
+			var t: Dictionary = n["transit"].get(h["owner"], {"units": 0.0, "hordes": []})
+			t["units"] += h["units"]
+			(t["hordes"] as Array).append(h)
+			n["transit"][h["owner"]] = t
+
+
+func _node_fights(dt: float) -> Array:
+	## Units on a platform fight the garrison (and each other) at the frontline rates, whether they
+	## arrived (persistent siege) or are merely passing through this frame (transit). When the
+	## garrison is beaten down and one side is left, the node flips to it; a transiting horde that
+	## captures a node this way ends its journey there, becoming the new garrison. Returns hordes
+	## whose whole transiting force was wiped out before it could pass (destroyed en route).
+	_register_transit()
+	var destroyed := []
 	for n in nodes:
 		n["node_loss"] = {}
-		if n["siege"].is_empty():
+		var seats := {}
+		for k in n["siege"]:
+			seats[k] = true
+		for k in n["transit"]:
+			seats[k] = true
+		if seats.is_empty():
 			continue
 		var mult: float = Rules.node_fight_mult
+		var force := {}                              # seat -> arrived + transiting units this frame
+		for k in seats:
+			force[k] = n["siege"].get(k, 0.0) + n["transit"].get(k, {}).get("units", 0.0)
 		var total_att := 0.0
-		for k in n["siege"]:
-			total_att += n["siege"][k]
+		for k in force:
+			total_att += force[k]
 		var loss := {}
 		var g_loss := 0.0
-		for k in n["siege"]:
-			var enemy: float = n["units"] + total_att - n["siege"][k]
+		for k in force:
+			var enemy: float = n["units"] + total_att - force[k]
 			if enemy <= 0.0:
 				continue
 			loss[k] = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * enemy) * dt * mult
 			if n["units"] > 0.0:
-				g_loss += (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * n["siege"][k]) * dt * mult
+				g_loss += (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * force[k]) * dt * mult
 		for k in loss:
-			var before: float = n["siege"][k]
-			n["siege"][k] = maxf(0.0, before - loss[k])
-			combat_losses[k] = combat_losses.get(k, 0.0) + before - n["siege"][k]
-			n["node_loss"][k] = (before - n["siege"][k]) / maxf(dt, 0.0001)
-			if n["siege"][k] <= 0.0:
-				n["siege"].erase(k)
-				n["siege_dir"].erase(k)
+			var actual: float = minf(loss[k], force[k])
+			n["node_loss"][k] = actual / maxf(dt, 0.0001)
+			combat_losses[k] = combat_losses.get(k, 0.0) + actual
+			var persistent: float = n["siege"].get(k, 0.0)     # spend against arrivals first...
+			var take_persistent: float = minf(persistent, actual)
+			if take_persistent > 0.0:
+				n["siege"][k] = persistent - take_persistent
+				if n["siege"][k] <= 0.0:
+					n["siege"].erase(k)
+					n["siege_dir"].erase(k)
+			var remaining: float = actual - take_persistent     # ...then against transiting hordes
+			if remaining > 0.0 and n["transit"].has(k):
+				var tt: Dictionary = n["transit"][k]
+				var tt_units: float = maxf(tt["units"], 0.0001)
+				for hh in tt["hordes"]:
+					hh["units"] = maxf(0.0, hh["units"] - (hh["units"] / tt_units) * remaining)
+					if hh["units"] <= 0.0 and hh not in destroyed:
+						destroyed.append(hh)
+						events.append({"t": time, "type": "horde_destroyed", "seat": hh["owner"], "units": hh["start_units"]})
+				tt["units"] = maxf(0.0, tt_units - remaining)
 		if g_loss > 0.0:
 			var before_g: float = n["units"]
 			n["units"] = maxf(0.0, before_g - g_loss)
 			if n["owner"] != "":
 				combat_losses[n["owner"]] = combat_losses.get(n["owner"], 0.0) + before_g - n["units"]
 				n["node_loss"][n["owner"]] = (before_g - n["units"]) / maxf(dt, 0.0001)
-		if n["units"] <= 0.0 and n["siege"].size() == 1:
-			var old: String = n["owner"]
-			var winner_seat: String = n["siege"].keys()[0]
-			if not n["streaming"].is_empty():
-				_end_streaming(n, "lost")
-			n["owner"] = winner_seat
-			n["units"] = n["siege"][winner_seat]
-			n["siege"] = {}
-			n["siege_dir"] = {}
-			events.append({"t": time, "type": "capture", "node": n["id"], "seat": winner_seat, "from": old})
-			captured.emit(n["id"], winner_seat, old)
+		if n["units"] <= 0.0:
+			# capture needs an ARRIVAL, not just transit: a horde merely passing through can grind
+			# the garrison down to nothing (real combat, real losses, can even wipe the transiting
+			# force out first) but doesn't stop to hold the place - it isn't its order's target, so
+			# it fights on through with whatever it has left, and the drained node stays open for
+			# whoever actually arrives there next (Daniele, 2026-09-25: this is what keeps note 8's
+			# rear-attack/reinforcement routes from being hijacked into conquering a waypoint)
+			var present := {}
+			for k in n["siege"]:
+				if n["siege"][k] > 0.0:
+					present[k] = true
+			if present.size() == 1:
+				var old: String = n["owner"]
+				var winner_seat: String = present.keys()[0]
+				if not n["streaming"].is_empty():
+					_end_streaming(n, "lost")
+				n["owner"] = winner_seat
+				n["units"] = n["siege"][winner_seat]
+				n["siege"] = {}
+				n["siege_dir"] = {}
+				events.append({"t": time, "type": "capture", "node": n["id"], "seat": winner_seat, "from": old})
+				captured.emit(n["id"], winner_seat, old)
+	return destroyed
 
 
 func _check_end() -> void:

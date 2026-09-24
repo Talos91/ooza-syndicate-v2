@@ -15,6 +15,10 @@ game. Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project fo
 - **The whole platform is the node.** A ring of goo rivers the tower, owned or split by whoever is
   fighting there; a besieged platform's garrison is beaten down where it stands, then the node
   flips and the survivors become the new garrison. Own nodes: reinforce.
+- **No free glide through a node.** Every waypoint on a route - not just the final target - fights
+  whoever is currently passing through it, at the same rates as a real siege. Only an arrival can
+  capture a node, though: grinding a waypoint's garrison to zero while merely passing through
+  leaves it undefended but still owned by whoever held it.
 - Opposing hordes meeting on a deck stop at a frontline and fight.
 - Owned vats produce up to their cap. Seat B is a simple AI.
 - Ownership = material: seat-colour lights, vat ooze, goo; creature body hue = seat, race = accent.

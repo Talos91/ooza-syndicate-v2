@@ -93,6 +93,45 @@ func _init() -> void:
 	check(sim7.nodes[1]["owner"] == "A" and sim7.combat_losses.get("B", 0.0) > 30.0,
 			"the garrison is beaten down on the platform and the node flips (B lost %.0f)" % sim7.combat_losses.get("B", 0.0))
 
+	# an order passing through a node always counts as passing through that node (Daniele,
+	# 2026-09-25): a hostile waypoint on the route (3 -> 1 -> 0 -> 2 -> 4 for a send 3 -> 4) is not
+	# a free glide - it fights the garrison there while it overlaps the platform.
+	var sim8 := Sim.new()
+	sim8.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"})
+	sim8.nodes[0]["owner"] = "A"                       # friendly waypoints either side of the contest
+	sim8.nodes[2]["owner"] = "A"
+	sim8.nodes[1]["owner"] = "B"
+	sim8.nodes[1]["units"] = 15.0                     # weak waypoint: grinds down but the order lives
+	sim8.nodes[3]["units"] = 900.0                     # large enough to outlast the waypoint AND
+	sim8.send(3, 4, 1.0)                               # still overwhelm node 4's home production
+	var drained := false
+	var t8 := 0.0
+	while t8 < 90.0 and sim8.nodes[4]["owner"] != "A":
+		sim8.step(0.05)
+		t8 += 0.05
+		if sim8.nodes[1]["units"] <= 0.0:
+			drained = true
+	check(drained, "passing through a weak enemy waypoint grinds its garrison down")
+	check(sim8.nodes[1]["owner"] == "B", "but the waypoint is NOT captured by passing through - only an arrival captures")
+	check(sim8.nodes[4]["owner"] == "A", "the surviving force fights on through and still takes its real destination")
+
+	var sim9 := Sim.new()
+	sim9.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"})
+	sim9.nodes[1]["owner"] = "B"
+	sim9.nodes[1]["units"] = 500.0                     # strong waypoint: the order dies there
+	sim9.nodes[3]["units"] = 60.0
+	var h9 := sim9.send(3, 4, 1.0)
+	var wiped := false
+	var t9 := 0.0
+	while t9 < 30.0 and not wiped:
+		sim9.step(0.05)
+		t9 += 0.05
+		wiped = not (h9 in sim9.hordes)
+	check(wiped, "a weak order can be wiped out entirely at a hostile waypoint before reaching its destination")
+	check(sim9.nodes[4]["owner"] == "B", "the real destination was never touched - the order died at the waypoint")
+	check(sim9.events.any(func(e): return e["type"] == "horde_destroyed" and e["seat"] == "A"),
+			"a horde_destroyed event is recorded for the order lost in transit")
+
 	# two opposing hordes on the same deck meet at a frontline
 	var sim3 := Sim.new()
 	sim3.setup(map, pos, {1: "A", 0: "B"}, {"A": "null", "B": "ember"})

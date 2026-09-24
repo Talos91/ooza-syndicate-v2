@@ -177,6 +177,14 @@ Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven
   door reveals at `Rules.door_rate` units/s; units not yet revealed stay in the vat's count and are
   still orderable - a new send re-spends the vat's current total, cutting the old order down to
   whatever already left.
+- **No free glide through a node** (pass of 2026-09-25, PLAYTEST-NOTES 10): a route's intermediate
+  waypoints are not scenery - every node a horde's line currently overlaps, not just its final
+  target, counts its present units as an attacking force there, fought at the same rates as a real
+  siege. A weak waypoint costs the passing force some losses; a strong one can wipe it out before
+  it reaches its destination. Only an actual arrival captures a node, though - transit combat alone
+  can grind a garrison to zero without flipping ownership (design call: the alternative let an
+  unrelated order, e.g. a rear-attack pursuer, get hijacked into conquering a waypoint instead of
+  reaching its real target). Friendly waypoints are a pure pass-through, matching GAME-RULES §6.
 - **Blob fights read as blob fights** (pass of 2026-09-25): the drawn line trails the real count by a
   fraction of a second and recedes from the contact as it loses units, thinning as it empties; every
   contact grows a goo **meniscus** (two lobes of the two owners' goo joined by a hot seam; one colour
@@ -200,7 +208,7 @@ builds carry the panel; it is not a player feature.
 | File | Role |
 |---|---|
 | `scripts/rules.gd` | every number (kit sizes, speeds, caps, production, combat, colours) |
-| `scripts/sim.gd` | rules and state, no visuals; nodes now carry `streaming`/`siege`/`siege_dir` |
+| `scripts/sim.gd` | rules and state, no visuals; nodes carry `streaming`/`siege`/`siege_dir`/`transit` |
 | `scripts/map_builder.gd` | honest layout, kit placement, ownership materials |
 | `scripts/horde_view.gd` | hordes as long patch lines; fight look (eased shrink, meniscus, shoves, splash); platform rivers |
 | `scripts/mats.gd`, `shaders/creature.gdshader` | seat materials, creature shader |

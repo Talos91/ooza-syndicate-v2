@@ -71,6 +71,25 @@
 **Debug panel additions:** Door rate (units/s) and Platform fight (x combat rate) sliders, next to
 the existing deck/platform speed ones - open `Debug` bottom-left. Reset to rules restores all four.
 
+## 2026-09-25 - Daniele, third pass: no free glide through a node
+
+10. **An order passing through a node always counts as passing through that node.** A route from
+    A to C via waypoint B should not glide past B for free regardless of who holds it - B's
+    garrison (or whoever else is passing through at the same time) gets to fight it.
+    *Done (2026-09-25):* every node on a route - not just the final target - now has an arc window
+    (`node_spans`) where the passing horde's CURRENT units count as an attacking force at that
+    node, fought with the same rate math as a real siege (`Rules.node_fight_mult` applies here
+    too). A weak waypoint just grinds down some of the passing force (real losses, real risk); a
+    strong one can wipe the passing force out entirely before it reaches its destination.
+    **Design call, open for correction:** transit does NOT capture the node - only an actual
+    arrival (an order whose target that node is) can flip it, even if transit combat alone grinds
+    the garrison to zero (it sits at 0, still owned, open to whoever arrives next). I chose this
+    after the alternative (transit captures too) hijacked unrelated orders - e.g. a rear-attack
+    pursuer ending up conquering a waypoint instead of ever reaching its target - which felt like
+    a surprising, un-asked-for side effect. Friendly waypoints (owned by the horde's own seat) are
+    a pure pass-through, no fight, matching GAME-RULES §6 ("troops passing through don't count").
+    Two new rules tests cover both outcomes (grind-and-continue, wiped-out-en-route).
+
 ## Known gaps in this slice (not playtest findings)
 
 - Vat upgrades, cannons/forges in play, relays, abilities, Last Stand, multiplayer.
