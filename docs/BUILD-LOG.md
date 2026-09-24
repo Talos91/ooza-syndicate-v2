@@ -420,9 +420,13 @@ Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res:
 # 1. commit + push main; 2. export; 3. replace the orphan gh-pages branch with build/web (Pages source =
 #    gh-pages, root, set 2026-09-25); 4. wait until index.pck answers 200 on the link (~1 min).
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --export-release "Web" build/web/index.html
+git worktree prune && git branch -D gh-pages     # the previous publish leaves a LOCAL gh-pages branch behind:
+                                                 # without this the orphan checkout fails ("branch already exists")
 git worktree add --detach /tmp/ghpages && cd /tmp/ghpages && git checkout --orphan gh-pages && git rm -rqf .
 cp "Game/2.0/build/web/"index.* . && rm -f *.import && touch .nojekyll
 git add -A && git commit -m "Playtest build: <what changed> (source main <sha>)" && git push -f origin gh-pages
+cd "Game/2.0" && git worktree remove --force /tmp/ghpages && git branch -D gh-pages
+# verify: curl -sI https://talos91.github.io/ooza-syndicate-v2/index.pck | grep -i content-length  == size of build/web/index.pck
 
 # web build for the phone, then serve it on the local network
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --export-release "Web" build/web/index.html
