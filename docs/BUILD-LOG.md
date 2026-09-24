@@ -273,6 +273,15 @@ Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --scenario=rear --sho
 # rules tests
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_sim.gd
 
+# PUBLISH THE PLAYTEST BUILD - do this after every pass that changes play or looks (Daniele, 2026-09-25),
+# then send the link:  https://talos91.github.io/ooza-syndicate-v2/
+# 1. commit + push main; 2. export; 3. replace the orphan gh-pages branch with build/web (Pages source =
+#    gh-pages, root, set 2026-09-25); 4. wait until index.pck answers 200 on the link (~1 min).
+Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --export-release "Web" build/web/index.html
+git worktree add --detach /tmp/ghpages && cd /tmp/ghpages && git checkout --orphan gh-pages && git rm -rqf .
+cp "Game/2.0/build/web/"index.* . && rm -f *.import && touch .nojekyll
+git add -A && git commit -m "Playtest build: <what changed> (source main <sha>)" && git push -f origin gh-pages
+
 # web build for the phone, then serve it on the local network
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --export-release "Web" build/web/index.html
 python -m http.server 8060 --bind 0.0.0.0     # from Game/2.0/build/web; open http://<pc-ip>:8060 on the phone

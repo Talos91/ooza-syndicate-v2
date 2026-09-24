@@ -22,6 +22,12 @@ All tunable numbers are in `scripts/rules.gd`; army numbers there are PROVISIONA
 Not in this slice yet: relays, vat upgrades, cannons/forges in play, abilities, Last Stand,
 multiplayer, pinch-zoom on touch.
 
+## Play the current build
+
+**https://talos91.github.io/ooza-syndicate-v2/** - the web export of `main`, published to the `gh-pages`
+branch after every pass that changes play or looks (see `docs/BUILD-LOG.md` §10). Phone: open in
+Safari/Chrome, landscape; hard-reload after a new publish.
+
 ## Run
 
 ```
