@@ -49,12 +49,14 @@ func think(sim: Sim, dt: float) -> void:
 
 func _build(sim: Sim) -> void:
 	## Structure parity for AI vs AI (no economy/combat cheats): opportunistically upgrade a
-	## flush home vat, and build one forge (a standing combat bonus) then cannons at any other
-	## node that offers them and doesn't have one yet.
+	## flush home vat (or a built cannon's tier), build one forge (a standing combat bonus) then
+	## cannons at any other node that offers them and doesn't have one yet.
 	for n in sim.nodes:
 		if n["owner"] != seat or n["build_kind"] != "":
 			continue
-		if n["units"] >= Rules.CAPS[n["tier"]] * 0.9 and sim.upgrade_vat(n["id"]):
+		if n["attachment"] == "cannon" and n["cannon_tier"] < 3 and sim.upgrade_structure(n["id"]):
+			return
+		if n["attachment"] == "" and n["units"] >= Rules.CAPS[n["tier"]] * 0.9 and sim.upgrade_vat(n["id"]):
 			return
 	var has_forge := false
 	for n in sim.nodes:

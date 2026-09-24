@@ -178,6 +178,16 @@ Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven
 - **Debug panel ranges widened a lot, platform speed can go below deck speed** (same pass -
   Daniele: "increase the limits... by a lot... platform filling speed lower than deck speed"): deck
   speed 0.2-30 m/s, platform speed 0.1-30x deck, door rate 1-500 units/s, platform fight 0.05-20x.
+- **Switch feedback, Alpha 11 tap convention, corridor goo** (pass of 2026-09-25, PLAYTEST-NOTES
+  15-19): a relay-controlled or retracting deck now visibly disappears while closed and reappears
+  while open, so cycling is something you SEE. Replaced the unreliable engine double-click with a
+  manual tap timer and the Alpha 11 interaction: single-tap an empty attachment slot opens a
+  Cannon/Forge popup; double-tap upgrades whatever's there (vat, or a cannon's tier T1-T3). A
+  transiting fight at an intermediate node now gets the same meniscus/splash as an arrival siege,
+  anchored to the platform's rim, so it reads as combat AT the platform instead of generic
+  corridor attrition. A deck between two of your own nodes is covered in your goo. Last Stand moved
+  to 2:00 (was 3:00). Confirmed already-working: blobs always fight when they cross (deck contact
+  has no gap), a platform's goo river counts as a blob, and several attackers can share one target.
 - Map built from `maps/004-two-piers.json` with the kit GLBs, at **honest lengths**.
 - **Drag** from your node to any node to send; **25 / 50 / 75 / 100 %** buttons.
 - Routes along the deck network (fastest by deck time).

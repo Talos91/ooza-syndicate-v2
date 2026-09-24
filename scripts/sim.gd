@@ -50,9 +50,10 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"transit": {},          # seat -> {"units", "hordes": [Horde]}: passing-through this frame
 			"node_loss": {},        # seat -> units/s lost on this platform last step (view)
 			"buildable": n.get("buildable", []),   # what the owner may place here (roster JSON)
-			"attachment": "",       # "" / "cannon" / "forge" - single tier each for now
+			"attachment": "",       # "" / "cannon" / "forge"
+			"cannon_tier": 0,       # 1-3 once a cannon is built; double-tap upgrades it (Alpha 11)
 			"build_kind": "",       # "" / "vat" / "cannon" / "forge": what build_timer completes
-			"build_timer": 0.0,     # seconds left on a vat upgrade or attachment build
+			"build_timer": 0.0,     # seconds left on a vat/cannon upgrade or a fresh attachment build
 			"cannon_cd": 0.0,       # seconds to the node's cannon's next burst
 		})
 		adj[id] = []
@@ -119,10 +120,10 @@ func upgrade_vat(node_id: int) -> bool:
 
 
 func build_attachment(node_id: int, kind: String) -> bool:
-	## Start building a cannon or forge in the node's attachment socket (single tier each, for now;
-	## GAME-RULES sec6's swap/cooldown rules and cannon T2/T3 are a follow-up).
+	## Start building a cannon or forge in the node's attachment socket (GAME-RULES sec6's
+	## swap/cooldown rules are a follow-up - this only builds into an EMPTY slot).
 	var n: Dictionary = nodes[node_id]
-	if n["owner"] == "" or n["build_kind"] != "" or n["attachment"] == kind or not (kind in n["buildable"]):
+	if n["owner"] == "" or n["build_kind"] != "" or n["attachment"] != "" or not (kind in n["buildable"]):
 		return false
 	n["build_kind"] = kind
 	n["build_timer"] = Rules.BUILD_SECONDS
@@ -130,11 +131,28 @@ func build_attachment(node_id: int, kind: String) -> bool:
 	return true
 
 
+func upgrade_structure(node_id: int) -> bool:
+	## Alpha 11 convention (Daniele, 2026-09-25): double-tap upgrades whatever is already there - the
+	## vat, or a built cannon's tier (T1->T2->T3). A forge is single-tier (GAME-RULES sec6): nothing
+	## to upgrade, so this falls back to the vat if the node also allows one.
+	var n: Dictionary = nodes[node_id]
+	if n["owner"] == "" or n["build_kind"] != "":
+		return false
+	if n["attachment"] == "cannon" and n["cannon_tier"] < 3:
+		n["build_kind"] = "cannon"
+		n["build_timer"] = Rules.BUILD_SECONDS
+		events.append({"t": time, "type": "build_start", "node": node_id, "seat": n["owner"], "kind": "cannon"})
+		return true
+	if n["attachment"] == "":
+		return upgrade_vat(node_id)
+	return false
+
+
 func _step_structures(dt: float) -> void:
-	## Vat upgrades and attachment builds complete after Rules.BUILD_SECONDS; a built cannon fires
-	## a burst every Rules.CANNON_PERIOD, killing up to Rules.CANNON_KILL units of any enemy horde
-	## within Rules.CANNON_RANGE outright (GAME-RULES sec6: "cannon body kills bypass HP" - Alpha
-	## 11 precedent). Rudimentary: single tier each, no build/attachment cost yet.
+	## Vat/cannon upgrades and fresh attachment builds complete after Rules.BUILD_SECONDS; a built
+	## cannon fires a burst every CANNON_STATS[tier].period, killing up to .kill units of any enemy
+	## horde within Rules.CANNON_RANGE outright (GAME-RULES sec6: "cannon body kills bypass HP" -
+	## Alpha 11 precedent).
 	for n in nodes:
 		if n["owner"] == "" or n["build_kind"] == "":
 			continue
@@ -144,8 +162,12 @@ func _step_structures(dt: float) -> void:
 			n["build_kind"] = ""
 			if kind == "vat":
 				n["tier"] = mini(n["tier"] + 1, 4)
+			elif kind == "cannon" and n["attachment"] == "cannon":
+				n["cannon_tier"] = mini(n["cannon_tier"] + 1, 3)   # upgrading an existing cannon
 			else:
-				n["attachment"] = kind
+				n["attachment"] = kind                             # a fresh attachment
+				if kind == "cannon":
+					n["cannon_tier"] = 1
 			events.append({"t": time, "type": "build_done", "node": n["id"], "seat": n["owner"], "kind": kind})
 	for n in nodes:
 		if n["owner"] == "" or n["attachment"] != "cannon":
@@ -153,7 +175,8 @@ func _step_structures(dt: float) -> void:
 		n["cannon_cd"] -= dt
 		if n["cannon_cd"] > 0.0:
 			continue
-		n["cannon_cd"] = Rules.CANNON_PERIOD
+		var stats: Dictionary = Rules.CANNON_STATS[n["cannon_tier"]]
+		n["cannon_cd"] = stats["period"]
 		var hit := false
 		var killed := []
 		for h in hordes:
@@ -162,7 +185,7 @@ func _step_structures(dt: float) -> void:
 			var p: Vector3 = sample(h, h["s"])[0]
 			if (p - (n["pos"] as Vector3)).length() > Rules.CANNON_RANGE:
 				continue
-			var kill: float = minf(Rules.CANNON_KILL, h["units"])
+			var kill: float = minf(stats["kill"], h["units"])
 			h["units"] -= kill
 			combat_losses[h["owner"]] = combat_losses.get(h["owner"], 0.0) + kill
 			hit = true
@@ -191,6 +214,11 @@ func _forge_mult(seat: String) -> float:
 		if n["owner"] == seat and n["attachment"] == "forge":
 			return 1.0 - Rules.forge_bonus
 	return 1.0
+
+
+func is_edge_open(edge_index: int) -> bool:
+	## Public wrapper for the view: is this deck currently open (relay cycling / retract)?
+	return _edge_open(edges[edge_index])
 
 
 func _edge_open(e: Dictionary) -> bool:

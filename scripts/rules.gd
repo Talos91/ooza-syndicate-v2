@@ -48,7 +48,8 @@ static var node_fight_mult: float = 1.0                # live-tunable: x combat 
 # authoring (fixed state order, warnings, ride/fall/carry consequences, hidden Last Stand method,
 # waves per map) is a separate later pass; this is the minimum that makes every starter map END.
 const RELAY_PERIOD := 18.0           # GAME-RULES sec8: 3 s warning + 15 s cooldown, no warning phase here
-const LAST_STAND_TIME := 180.0       # GAME-RULES sec10: Last Stand starts at 3:00
+const LAST_STAND_TIME := 120.0       # Daniele, 2026-09-25: moved earlier than GAME-RULES sec10's
+                                      # 3:00 for this rudimentary pass, to keep matches shorter
 const LAST_STAND_WAVE := 14.0        # seconds between collapse waves; always "inward" (rim first) here
 const MATCH_HARD_END := 420.0        # 7:00 safety net: still undecided -> stronger seat wins outright
 
@@ -61,10 +62,11 @@ const HOME_TIER := 2
 # structures and their functions"). Real costs, tiers and swap rules (GAME-RULES sec6) wait on the
 # army-scale/vat-cap decision (BUILD-LOG open questions); this is enough to make every modelled
 # piece (Vat_T1-4, Cannon_T1-3, Forge) functional, not just decorative, on any starter map.
-const BUILD_SECONDS := 10.0          # vat upgrade or attachment build time (GAME-RULES sec6)
+const BUILD_SECONDS := 10.0          # vat upgrade or attachment build/upgrade time (GAME-RULES sec6)
 const CANNON_RANGE := 10.0           # metres from the node's centre a burst reaches
-const CANNON_PERIOD := 4.0           # seconds between bursts (T1 rate; T2/T3 are a follow-up)
-const CANNON_KILL := 10.0            # units a burst kills outright, bypassing HP/fight math
+# T1->T2->T3, double-tap to upgrade (Alpha 11 convention) - rudimentary rate/kill scaling
+const CANNON_STATS := {1: {"period": 4.0, "kill": 10.0}, 2: {"period": 3.0, "kill": 16.0},
+		3: {"period": 2.0, "kill": 25.0}}
 static var forge_bonus: float = 0.15 # live-tunable: a forge's attack/defence bonus for its owner
 const HOME_UNITS := 80
 const NEUTRAL_UNITS := {1: 30, 2: 60, 3: 120, 4: 200}

@@ -57,8 +57,9 @@ static func put(parent: Node3D, name: String, pos: Vector3, heading := 0.0, stre
 
 static func build(parent: Node3D, sim: Sim) -> Dictionary:
 	## Returns node id -> {"parts": [Node3D], "label": Label3D, "vat_node", "vat_tier",
-	## "attachment_node", "attachment"} and "stretched": [edge index].
-	var vis := {"stretched": []}
+	## "attachment_node", "attachment"}, "stretched": [edge index] and "edge_decks": edge index ->
+	## [Node3D] (the relay-controlled ones - see RelayView/relay cycling visibility).
+	var vis := {"stretched": [], "edge_decks": {}}
 	for n in sim.nodes:
 		var parts: Array = []
 		parts.append(put(parent, "Platform_Standard", n["pos"]))
@@ -87,8 +88,12 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		var pier_b := put(parent, "Pier_Connector", pb, Rules.heading(-d))
 		vis[e["a"]]["parts"].append(pier_a)
 		vis[e["b"]]["parts"].append(pier_b)
+		var deck_nodes: Array = []
 		for k in range(e["modules"]):
-			put(parent, "Deck_S", pa + d * (Rules.R + Rules.PIER + k * Rules.S * f), Rules.heading(d), f)
+			deck_nodes.append(put(parent, "Deck_S", pa + d * (Rules.R + Rules.PIER + k * Rules.S * f),
+					Rules.heading(d), f))
+		if e["state"] != "" or e["retracts"]:              # relay-controlled: main.gd toggles these
+			vis["edge_decks"][i] = deck_nodes
 	return vis
 
 

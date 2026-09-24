@@ -142,6 +142,38 @@ the existing deck/platform speed ones - open `Debug` bottom-left. Reset to rules
     platform speed 0.1-30x deck (was floored at 1x - now testable as SLOWER than the deck, the
     actual open question in note 5), door rate 1-500 units/s, platform fight 0.05-20x.
 
+## 2026-09-25 - Daniele, fifth pass: switch feedback, Alpha 11 tap convention, corridor goo
+
+15. **"I don't see switch implemented yet" / cannon-forge doesn't work.** Two real gaps: relay
+    cycling had no visual feedback (a deck's open/closed state never showed - a "switch" changing
+    nothing you could see isn't implemented as far as the player can tell), and the double-tap
+    build/upgrade gesture relied on the engine's `double_click`, which proved unreliable (at least
+    on the Web export).
+    *Done:* a relay-controlled or `retracts` deck now actually **disappears while closed and
+    reappears while open** - the switch/rotation/retract is now something you SEE, not just a
+    routing change (`vis["edge_decks"]`, synced every frame against `Sim.is_edge_open`). Replaced
+    engine double-click with a manual tap timer, and switched the whole interaction to the **Alpha
+    11 convention**: single-tap an owned node with an empty attachment slot to open a small popup
+    and choose Cannon or Forge; double-tap upgrades whatever's already there - the vat, or a built
+    cannon's tier (T1->T2->T3, GAME-RULES sec6). A forge is single-tier, nothing to upgrade. AI has
+    the same options via `Sim.upgrade_structure`.
+16. **"Not fun that on corridors they fight while not on the platform."** The fight itself was
+    always happening at the right place (an intermediate node's platform, per PLAYTEST-NOTES 10),
+    but a passing-through fight got none of the visual treatment an arrival siege gets, so it read
+    as generic attrition somewhere along the corridor instead of combat AT the platform.
+    *Done:* a transiting engagement now gets the same goo meniscus/splash as everything else,
+    anchored to the platform's rim (not wherever the horde's long tail happens to be).
+17. **"If two platforms owned by a player are adjacent, the corridor should be covered in goo."**
+    *Done:* a deck between two of your own nodes now shows a strip of your goo along its whole
+    length - a held corridor reads as safely yours, the same way a held platform's river does.
+18. **Blobs always fight when they cross, including the base's surrounding blob.** Confirmed this
+    is already how it works: deck contact detection fights any overlapping enemy segment (no gap),
+    a platform's goo river IS a blob for this purpose (arrival siege and transit both engage it),
+    and several attacking hordes can be engaged with the same enemy force at once (a shared
+    platform's `siege`/`transit` totals combine per seat; a deck horde can be fighting front and
+    rear simultaneously) - see `sim.gd _node_fights`/`_detect_contacts`. No change needed there.
+19. **Last Stand moved to 2:00** (was 3:00) to keep matches shorter for this rudimentary pass.
+
 ## Known gaps in this slice (not playtest findings)
 
 - Real per-map relay behaviour (rotation/switch/remote/retract art and consequences), abilities,

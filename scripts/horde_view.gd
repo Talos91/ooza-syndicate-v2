@@ -44,6 +44,8 @@ var textures := {}    # faction -> creature Texture2D
 var pools := {}       # horde id -> {"patches": [MeshInstance3D], "label": Label3D, "vis": float, "phase": float}
 var contacts := {}    # contact key -> {"root", "lobes", "seam", "splash", "seats"}
 var rivers := {}      # node id -> {"patches": [MeshInstance3D], "vis": float}
+var corridors := {}   # edge index -> MeshInstance3D: goo covering a deck between two owned nodes
+var _corridor_mesh: BoxMesh
 var _last_time := -1.0
 var _lobe_mesh: SphereMesh
 var _drop_meshes := {}   # seat -> SphereMesh with the seat's goo
@@ -55,6 +57,8 @@ func _ready() -> void:
 	_lobe_mesh.height = 2.0
 	_lobe_mesh.radial_segments = 18
 	_lobe_mesh.rings = 9
+	_corridor_mesh = BoxMesh.new()
+	_corridor_mesh.size = Vector3(1.0, 0.08, 1.0)
 
 
 func load_faction(faction: String) -> void:
@@ -112,6 +116,8 @@ func sync(sim: Sim, viewer: String) -> void:
 			pools.erase(id)
 	var seen := _sync_contacts(sim, by_id)
 	_draw_rivers(sim, seen, dt)
+	_draw_transit_skirmishes(sim, seen)
+	_draw_corridors(sim)
 	for key in contacts.keys():
 		if not seen.has(key):
 			contacts[key]["root"].queue_free()
@@ -278,6 +284,60 @@ func _sync_contacts(sim: Sim, by_id: Dictionary) -> Dictionary:
 			_place_contact(key, mid, pa[1], [h["owner"], h["owner"]], [0.0, 0.0], sim.time)
 			seen[key] = true
 	return seen
+
+
+func _draw_corridors(sim: Sim) -> void:
+	## "If two platforms owned by a player are adjacent, the corridor is covered in goo"
+	## (Daniele, 2026-09-25): a held deck between two of your own nodes reads as safely yours,
+	## the same way a held platform's river does.
+	for i in range(sim.edges.size()):
+		var e: Dictionary = sim.edges[i]
+		var a: Dictionary = sim.nodes[e["a"]]
+		var b: Dictionary = sim.nodes[e["b"]]
+		var owner: String = a["owner"]
+		var held: bool = owner != "" and owner == b["owner"]
+		if not held:
+			if corridors.has(i):
+				(corridors[i] as MeshInstance3D).visible = false
+			continue
+		if not corridors.has(i):
+			var mi := MeshInstance3D.new()
+			mi.mesh = _corridor_mesh
+			add_child(mi)
+			corridors[i] = mi
+		var mi: MeshInstance3D = corridors[i]
+		mi.visible = true
+		mi.material_override = Mats.goo(owner)
+		var pa: Vector3 = a["pos"]
+		var pb: Vector3 = b["pos"]
+		var mid := (pa + pb) / 2.0
+		var full_len: float = pa.distance_to(pb)
+		var len: float = maxf(full_len - 2.0 * Rules.R, 1.0)     # between the two rims, not through them
+		mi.position = mid + Vector3(0, 0.06, 0)
+		mi.rotation = Vector3(0, Rules.heading((pb - pa).normalized()), 0)
+		mi.scale = Vector3(len, 1.0, Rules.W * 0.92)
+
+
+func _draw_transit_skirmishes(sim: Sim, seen: Dictionary) -> void:
+	## An order passing through a node fights right there (sim.gd _register_transit) - show it AT
+	## the platform (on the river's rim), not wherever the long line's tail happens to be, so it
+	## never reads as "fighting in the corridor" (Daniele, 2026-09-25).
+	for n in sim.nodes:
+		if n["transit"].is_empty():
+			continue
+		for seat in n["transit"]:
+			var info: Dictionary = n["transit"][seat]
+			if (info["hordes"] as Array).is_empty():
+				continue
+			var h: Dictionary = info["hordes"][0]
+			var head: Vector3 = Sim.sample(h, h["s"])[0]
+			var dir: Vector3 = ((head - (n["pos"] as Vector3)) as Vector3)
+			dir = dir.normalized() if dir.length() > 0.01 else Vector3.FORWARD
+			var spot: Vector3 = (n["pos"] as Vector3) + dir * Rules.RIVER_R
+			var key := "tr%d_%s" % [n["id"], seat]
+			_place_contact(key, spot, dir, [seat, n["owner"]],
+					[n["node_loss"].get(seat, 0.0), n["node_loss"].get(n["owner"], 0.0)], sim.time)
+			seen[key] = true
 
 
 # ------------------------------------------------------------------ rivers: the platform is the node

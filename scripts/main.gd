@@ -63,8 +63,14 @@ var _fitted_size := Vector2.ZERO             # re-fit whenever the screen/canvas
 var rotate_hint: Label
 var debug_button: Button
 var debug_panel: PanelContainer
-var build_mode := ""                          # "" (vat upgrade) / "cannon" / "forge": what a
-                                               # double-tap on an owned node does (see _double_tap)
+var hud_layer: CanvasLayer                    # for the build popup, positioned in screen space
+var build_popup: PanelContainer
+var build_popup_node := -1
+var _tap_node := -1                           # manual double-tap detection (Alpha 11 convention:
+var _tap_time := 0.0                          # single tap = build popup, double tap = upgrade) -
+var _press_pos := Vector2.ZERO                # engine double_click proved unreliable on Web export
+const DOUBLE_TAP_WINDOW := 0.35
+const TAP_PIXELS := 14.0
 var started := false                          # true once _start_map has built the world/HUD/sim -
                                                # _process/_on_resized are no-ops before then (menu)
 
@@ -341,6 +347,7 @@ func _place_camera() -> void:
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
+	hud_layer = layer
 	hud_root = Control.new()                          # children placed by _apply_safe_area()
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(hud_root)
@@ -360,7 +367,7 @@ func _build_hud() -> void:
 	side.add_theme_constant_override("separation", 10)
 	area.add_child(side)
 	hud_side = side
-	_build_structure_buttons(side)
+	_build_popup()
 	var group := ButtonGroup.new()
 	for f in Rules.SEND_FRACTIONS:
 		var b := Button.new()
@@ -408,41 +415,49 @@ func _build_hud() -> void:
 	box.add_child(again)
 
 
-func _build_structure_buttons(side: VBoxContainer) -> void:
-	## Double-tap one of your own nodes to act on it: by default, upgrade its vat (GAME-RULES sec6,
-	## 10 s build). Toggle Cannon/Forge here first to double-tap-build one of those instead
-	## (single tier each; only where the map's roster JSON allows it - Daniele, 2026-09-25).
-	var group := ButtonGroup.new()
-	var upgrade := Button.new()
-	upgrade.text = "Upgrade\n(vat)"
-	upgrade.toggle_mode = true
-	upgrade.button_pressed = true
-	upgrade.button_group = group
-	upgrade.custom_minimum_size = Vector2(120, 64)
-	upgrade.add_theme_font_size_override("font_size", 18)
-	upgrade.pressed.connect(func(): build_mode = "")
-	side.add_child(upgrade)
+func _build_popup() -> void:
+	## Alpha 11 convention (Daniele, 2026-09-25): single-tap an owned node with an empty attachment
+	## slot to open this popup and choose Cannon or Forge; double-tap upgrades whatever is already
+	## there (vat, or a built cannon's tier) - see _unhandled_input and sim.upgrade_structure.
+	build_popup = PanelContainer.new()
+	build_popup.visible = false
+	hud_layer.add_child(build_popup)
+	var box := HBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	build_popup.add_child(box)
 	for kind in ["cannon", "forge"]:
 		var b := Button.new()
+		b.name = kind
 		b.text = kind.capitalize()
-		b.toggle_mode = true
-		b.button_group = group
-		b.custom_minimum_size = Vector2(120, 64)
-		b.add_theme_font_size_override("font_size", 18)
-		b.pressed.connect(func(): build_mode = kind)
-		side.add_child(b)
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 6)
-	side.add_child(spacer)
+		b.custom_minimum_size = Vector2(110, 64)
+		b.add_theme_font_size_override("font_size", 20)
+		b.pressed.connect(func():
+			sim.build_attachment(build_popup_node, kind)
+			_close_build_popup())
+		box.add_child(b)
 
 
-func _double_tap(node_id: int) -> void:
-	## Double-tap on an owned node: upgrade its vat, or build the selected attachment (see
-	## _build_structure_buttons). Silently does nothing where the map doesn't allow it.
-	if build_mode == "":
-		sim.upgrade_vat(node_id)
-	else:
-		sim.build_attachment(node_id, build_mode)
+func _open_build_popup(node_id: int) -> void:
+	var n: Dictionary = sim.nodes[node_id]
+	var offers := []
+	for kind in ["cannon", "forge"]:
+		if kind in n["buildable"]:
+			offers.append(kind)
+	if n["attachment"] != "" or offers.is_empty():
+		_close_build_popup()
+		return
+	build_popup_node = node_id
+	for kind in ["cannon", "forge"]:
+		(build_popup.get_node("HBoxContainer/" + kind) as Button).visible = kind in offers
+	build_popup.size = build_popup.get_combined_minimum_size()
+	var p := cam.unproject_position(n["pos"] + Vector3(0, Rules.R + 2.0, 0))
+	build_popup.position = p - build_popup.size / 2.0
+	build_popup.visible = true
+
+
+func _close_build_popup() -> void:
+	build_popup_node = -1
+	build_popup.visible = false
 
 
 func _build_debug(area: Control) -> void:
@@ -541,6 +556,17 @@ func _process(delta: float) -> void:
 			MapBuilder.set_vat_tier(self, entry, n["tier"], owner)
 		if entry["attachment"] != n["attachment"]:
 			MapBuilder.set_attachment(self, entry, n["attachment"], n["pos"], owner)
+	if build_popup_node >= 0:
+		var bn: Dictionary = sim.nodes[build_popup_node]
+		if bn["attachment"] != "" or bn["owner"] != HUMAN:
+			_close_build_popup()                          # captured, or the choice was already made
+		else:
+			var p := cam.unproject_position(bn["pos"] + Vector3(0, Rules.R + 2.0, 0))
+			build_popup.position = p - build_popup.size / 2.0
+	for edge_i in vis["edge_decks"]:                  # relay cycling: the deck itself vanishes while
+		var open := sim.is_edge_open(edge_i)          # "closed", so a switch/rotation/retract is SEEN
+		for deck in vis["edge_decks"][edge_i]:
+			(deck as Node3D).visible = open
 	hud_time.text = "%d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
 	_trace_t += dt
 	if _trace_t >= 2.0:
@@ -621,18 +647,31 @@ func _unhandled_input(event: InputEvent) -> void:
 			var hit := _ground(mb.position)
 			if mb.pressed:
 				var n := _node_at(hit)
-				if n >= 0 and sim.nodes[n]["owner"] == HUMAN and mb.double_click:
-					_double_tap(n)
-					return
 				if n >= 0 and sim.nodes[n]["owner"] == HUMAN:
+					var now := Time.get_ticks_msec() / 1000.0
+					if n == _tap_node and now - _tap_time < DOUBLE_TAP_WINDOW:
+						# double-tap (Alpha 11): upgrade whatever is already there, own timing since
+						# the engine's mb.double_click proved unreliable on the Web export
+						sim.upgrade_structure(n)
+						_close_build_popup()
+						_tap_node = -1
+						return
+					_tap_time = now
+					_tap_node = n
+					_press_pos = mb.position
 					drag_from = n
 				else:
+					_close_build_popup()
 					pan_from = hit
 			else:
 				if drag_from >= 0:
 					var target := _node_at(hit)
 					if target >= 0 and target != drag_from:
 						sim.send(drag_from, target, fraction)
+						_close_build_popup()
+					elif target == drag_from and (mb.position - _press_pos).length() < TAP_PIXELS:
+						# single tap, no drag (Alpha 11): open the build popup on this node
+						_open_build_popup(drag_from)
 				drag_from = -1
 				pan_from = Vector3.INF
 				drag_mesh.clear_surfaces()

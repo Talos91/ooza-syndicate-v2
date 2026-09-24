@@ -272,5 +272,45 @@ func _init() -> void:
 	check(absf(sim11._forge_mult("A") - (1.0 - Rules.forge_bonus)) < 0.001, "a forge reduces its owner's incoming damage")
 	check(is_equal_approx(sim11._forge_mult("B"), 1.0), "and only its owner's")
 
+	# Alpha 11 convention (Daniele, 2026-09-25): double-tap upgrades whatever is already built -
+	# the vat, or a cannon's tier; a forge has nothing to upgrade.
+	var sim12 := Sim.new()
+	sim12.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"})
+	sim12.nodes[1]["owner"] = "A"
+	sim12.build_attachment(1, "cannon")
+	while sim12.nodes[1]["build_kind"] != "":
+		sim12.step(0.5)
+	check(sim12.nodes[1]["cannon_tier"] == 1, "a fresh cannon starts at T1")
+	check(sim12.upgrade_structure(1), "double-tap upgrades the built cannon, not the vat")
+	while sim12.nodes[1]["build_kind"] != "":
+		sim12.step(0.5)
+	check(sim12.nodes[1]["cannon_tier"] == 2, "the cannon reaches T2")
+	check(sim12.upgrade_structure(5), "double-tap upgrades the vat where there's no attachment")
+	check(sim12.nodes[5]["build_kind"] == "vat", "(node 5 has no attachment, only a vat)")
+
+	# relay cycling (Daniele: "i don't see switch implemented" - it must be visibly closable):
+	# First Switch's hub decks actually go unusable for new routes over time.
+	var sw_map := MapBuilder.load_map("res://maps/010-first-switch.json")
+	var sw_pos := MapBuilder.layout(sw_map)
+	var sim13 := Sim.new()
+	sim13.setup(sw_map, sw_pos, {}, {})
+	var relay_edges := []
+	for i in range(sim13.edges.size()):
+		if sim13.edges[i]["state"] != "":
+			relay_edges.append(i)
+	check(not relay_edges.is_empty(), "First Switch has at least one relay-state edge")
+	var saw_open := false
+	var saw_closed := false
+	var t13 := 0.0
+	while t13 < Rules.RELAY_PERIOD * 2.5 and not (saw_open and saw_closed):
+		sim13.step(1.0)
+		t13 += 1.0
+		for i in relay_edges:
+			if sim13.is_edge_open(i):
+				saw_open = true
+			else:
+				saw_closed = true
+	check(saw_open and saw_closed, "a relay edge is open at some point and closed at another (it cycles)")
+
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
