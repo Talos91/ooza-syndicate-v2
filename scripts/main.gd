@@ -51,6 +51,8 @@ var hud_side: VBoxContainer
 var margins := Vector4(16, 12, 16, 12)       # left, top, right, bottom (safe area)
 var _fitted_size := Vector2.ZERO             # re-fit whenever the screen/canvas size changes
 var rotate_hint: Label
+var debug_button: Button
+var debug_panel: PanelContainer
 
 
 func _ready() -> void:
@@ -145,6 +147,10 @@ func _apply_safe_area() -> void:
 		right = maxf(right, vp.x * 0.035)
 	margins = Vector4(left, top, right, 12.0)
 	hud_top.position = Vector2(left, top)
+	if debug_button:                                  # bottom-left corner, panel opens above it
+		debug_button.position = Vector2(left, vp.y - 12.0 - debug_button.size.y)
+		debug_panel.size = debug_panel.get_combined_minimum_size()
+		debug_panel.position = Vector2(left, debug_button.position.y - 8.0 - debug_panel.size.y)
 	var side_size := hud_side.get_combined_minimum_size()
 	hud_side.size = side_size
 	hud_side.position = Vector2(vp.x - right - side_size.x, (vp.y - side_size.y) / 2.0)
@@ -297,6 +303,7 @@ func _build_hud() -> void:
 		b.button_pressed = is_equal_approx(f, fraction)
 		b.pressed.connect(func(): fraction = f)
 		side.add_child(b)
+	_build_debug(area)
 	rotate_hint = Label.new()
 	rotate_hint.text = "Rotate your phone\nOoze Syndicate plays in landscape"
 	rotate_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -330,6 +337,70 @@ func _build_hud() -> void:
 	again.add_theme_font_size_override("font_size", 26)
 	again.pressed.connect(func(): get_tree().reload_current_scene())
 	box.add_child(again)
+
+
+func _build_debug(area: Control) -> void:
+	## Debug controls for playtests (Daniele, 2026-09-25). Live sliders, thumb-sized, bottom-left.
+	## 1. blob speed on decks vs on platforms (PLAYTEST-NOTES 5).
+	debug_button = Button.new()
+	debug_button.text = "Debug"
+	debug_button.toggle_mode = true
+	debug_button.custom_minimum_size = Vector2(120, 60)
+	debug_button.add_theme_font_size_override("font_size", 24)
+	debug_button.size = debug_button.custom_minimum_size
+	area.add_child(debug_button)
+	debug_panel = PanelContainer.new()
+	debug_panel.visible = false
+	area.add_child(debug_panel)
+	debug_button.toggled.connect(func(on: bool): debug_panel.visible = on)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	debug_panel.add_child(box)
+	var title := Label.new()
+	title.text = "Debug - live, resets on reload"
+	title.add_theme_font_size_override("font_size", 20)
+	box.add_child(title)
+	var deck := _debug_slider(box, "Deck speed", 1.0, 8.0, 0.1, Rules.deck_speed, "%.1f m/s",
+			func(v: float): Rules.deck_speed = v)
+	var node := _debug_slider(box, "Platform speed", 1.0, 10.0, 0.1, Rules.node_speed_mult, "x%.1f deck",
+			func(v: float): Rules.node_speed_mult = v)
+	var reset := Button.new()
+	reset.text = "Reset to rules"
+	reset.custom_minimum_size = Vector2(0, 48)
+	reset.add_theme_font_size_override("font_size", 20)
+	reset.pressed.connect(func():
+		deck.value = Rules.DECK_SPEED_DEFAULT
+		node.value = Rules.NODE_SPEED_MULT_DEFAULT)
+	box.add_child(reset)
+
+
+func _debug_slider(box: Control, text: String, lo: float, hi: float, step: float, value: float,
+		fmt: String, apply: Callable) -> HSlider:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	box.add_child(row)
+	var label := Label.new()
+	label.text = text
+	label.custom_minimum_size = Vector2(170, 0)
+	label.add_theme_font_size_override("font_size", 20)
+	row.add_child(label)
+	var slider := HSlider.new()
+	slider.min_value = lo
+	slider.max_value = hi
+	slider.step = step
+	slider.value = value
+	slider.custom_minimum_size = Vector2(260, 44)              # fat enough for a thumb
+	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(slider)
+	var out := Label.new()
+	out.text = fmt % value
+	out.custom_minimum_size = Vector2(110, 0)
+	out.add_theme_font_size_override("font_size", 20)
+	row.add_child(out)
+	slider.value_changed.connect(func(v: float):
+		apply.call(v)
+		out.text = fmt % v)
+	return slider
 
 
 # ------------------------------------------------------------------ loop

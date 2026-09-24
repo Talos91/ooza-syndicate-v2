@@ -202,7 +202,7 @@ func step(dt: float) -> void:
 	for h in hordes:
 		if h["state"] == "move" and not h.get("blocked", false):
 			var fast_here: bool = sample(h, h["s"])[2]
-			h["s"] += Rules.DECK_SPEED * h.get("speed", 1.0) * (Rules.NODE_SPEED_MULT if fast_here else 1.0) * dt
+			h["s"] += Rules.deck_speed * h.get("speed", 1.0) * (Rules.node_speed_mult if fast_here else 1.0) * dt
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
 				h["state"] = "absorb"
@@ -220,7 +220,7 @@ func step(dt: float) -> void:
 			# the line keeps pouring in through the door: units enter as fast as the tail advances
 			var len := chain_length(h)
 			var tail_fast: bool = sample(h, h["L"] - len)[2]
-			var tail_speed := Rules.DECK_SPEED * (Rules.NODE_SPEED_MULT if tail_fast else 1.0)
+			var tail_speed := Rules.deck_speed * (Rules.node_speed_mult if tail_fast else 1.0)
 			var rate: float = tail_speed * h["units"] / maxf(len, 0.5)
 			var x := minf(h["units"], maxf(rate, 4.0) * dt)
 			h["units"] -= x

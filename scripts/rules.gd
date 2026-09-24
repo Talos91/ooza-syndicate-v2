@@ -14,8 +14,11 @@ const SOCKET_Z := 0.06
 # movement: travel time counts deck modules only (1 module = 2 s); platforms and piers are
 # part of the node, crossed quickly
 const MODULE_SECONDS := 2.0
-const DECK_SPEED := S / MODULE_SECONDS
-const NODE_SPEED_MULT := 6.0         # a node crossing (pier, arc round the structure, door) ~1-1.5 s
+const DECK_SPEED_DEFAULT := S / MODULE_SECONDS
+const NODE_SPEED_MULT_DEFAULT := 6.0 # a node crossing (pier, arc round the structure, door) ~1-1.5 s
+# live-tunable from the in-game Debug panel (PLAYTEST-NOTES 5: platform speed vs bridge speed)
+static var deck_speed: float = DECK_SPEED_DEFAULT          # m/s along a deck
+static var node_speed_mult: float = NODE_SPEED_MULT_DEFAULT # x deck speed on platforms, piers, doors
 const ARC_R := 3.8                   # hordes flow around a node's centre structure at this radius
 const DOOR := Vector3(0.0, 0.0, 1.7) # vat door, local to the node (Blender -Y = Godot +Z)
 const EXIT_R := 2.2                  # hordes leave from the tank bottoms
