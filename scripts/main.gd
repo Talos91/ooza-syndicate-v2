@@ -5,6 +5,9 @@ extends Node3D
 ##   --map=res://maps/004-two-piers.json   map to load
 ##   --demo                                 both seats played by the AI
 ##   --shots=4,12,25 --out=<dir>            save screenshots at those match times, then quit
+##   --window=2340x1080                      size the window like a phone (landscape) for testing
+##   --mobile                                force the phone quality profile on desktop
+## Phones are the target: iPhone 15/16 (~2556x1179) and Galaxy S2x/A5x (~2340x1080), ~19.5:9 landscape.
 
 const HUMAN := "A"
 const SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": "solar"}
@@ -31,6 +34,17 @@ var _trace_t := 0.0
 var shots: Array = []
 var shot_dir := ""
 var demo := false
+var mobile := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
+var window_size := Vector2i.ZERO
+var sun: DirectionalLight3D
+var touches := {}                  # touch index -> screen position (two-finger pinch / pan)
+var pinch_dist := 0.0
+var hud_root: Control
+var hud_top: HBoxContainer
+var hud_side: VBoxContainer
+var margins := Vector4(16, 12, 16, 12)       # left, top, right, bottom (safe area)
+var _fitted_size := Vector2.ZERO             # re-fit whenever the screen/canvas size changes
+var rotate_hint: Label
 
 
 func _ready() -> void:
@@ -45,6 +59,14 @@ func _ready() -> void:
 				shots.append(float(t))
 		elif arg.begins_with("--out="):
 			shot_dir = arg.substr(6)
+		elif arg.begins_with("--window="):
+			var wh := arg.substr(9).split("x")
+			window_size = Vector2i(int(wh[0]), int(wh[1]))
+		elif arg == "--mobile":
+			mobile = true
+	if window_size != Vector2i.ZERO:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_size(window_size)
 	map = MapBuilder.load_map(map_path)
 	var seats := {}
 	for s in map["seats"]["1v1"]:
@@ -66,7 +88,54 @@ func _ready() -> void:
 	for n in sim.nodes:
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
 	_build_hud()
+	_apply_quality()
+	get_viewport().size_changed.connect(_on_resized)
+	await get_tree().process_frame                   # let a --window resize land before fitting
+	_on_resized()
+
+
+func _apply_quality() -> void:
+	## Phone profile (GL Compatibility): no realtime shadows, 3D at 75 % resolution, no MSAA,
+	## 60 fps cap. Neon lights and glow carry the look; the HUD stays full resolution.
+	Engine.max_fps = 60
+	if mobile:
+		sun.shadow_enabled = false
+		get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+		get_viewport().scaling_3d_scale = 0.75
+		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
+
+
+func _on_resized() -> void:
+	var vp := get_viewport().get_visible_rect().size
+	_fitted_size = vp
+	_apply_safe_area()
 	_fit_camera()
+	rotate_hint.visible = vp.y > vp.x                 # landscape game: ask portrait phones to rotate
+	rotate_hint.size = vp
+
+
+func _apply_safe_area() -> void:
+	## Keep the HUD clear of the notch / Dynamic Island / rounded corners on phones.
+	var vp := get_viewport().get_visible_rect().size
+	var left := 16.0
+	var right := 16.0
+	var top := 10.0
+	if OS.has_feature("mobile"):                      # native phone builds report real insets
+		var screen := Vector2(DisplayServer.screen_get_size())
+		var safe := Rect2(DisplayServer.get_display_safe_area())
+		safe.position -= Vector2(DisplayServer.screen_get_position())   # desktop reports virtual-desktop coords
+		var k := vp.x / maxf(screen.x, 1.0)
+		left = maxf(safe.position.x * k, left)
+		right = maxf((screen.x - safe.end.x) * k, right)
+		top = maxf(safe.position.y * k, top)
+	if mobile:                                        # notch / rounded corners even without a reported inset
+		left = maxf(left, vp.x * 0.035)
+		right = maxf(right, vp.x * 0.035)
+	margins = Vector4(left, top, right, 12.0)
+	hud_top.position = Vector2(left, top)
+	var side_size := hud_side.get_combined_minimum_size()
+	hud_side.size = side_size
+	hud_side.position = Vector2(vp.x - right - side_size.x, (vp.y - side_size.y) / 2.0)
 
 
 # ------------------------------------------------------------------ world
@@ -86,7 +155,7 @@ func _build_world() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
-	var sun := DirectionalLight3D.new()
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, 35, 0)
 	sun.light_energy = 1.0
 	sun.shadow_enabled = true
@@ -112,11 +181,22 @@ func _fit_camera() -> void:
 	cam_target = (lo + hi) / 2.0
 	var ext := hi - lo
 	cam_yaw = PI / 2.0 if ext.z > ext.x else 0.0      # long axis across the landscape screen
+	# fit the map into the screen area LEFT of the send buttons, and centre it there
 	var vp := get_viewport().get_visible_rect().size
-	var hfov := 2.0 * atan(tan(deg_to_rad(cam.fov) / 2.0) * vp.x / vp.y)
-	var long_side := maxf(ext.x, ext.z) + 2.0 * Rules.R + 8.0     # whole platforms plus a margin
-	cam_dist = (long_side / 2.0) / tan(hfov / 2.0) * 1.08
+	var half_h := tan(hfov_half(vp))
+	var panel := hud_side.size.x + margins.z + 20.0 if hud_side else 0.0
+	var free := clampf((vp.x - panel - margins.x) / vp.x, 0.5, 1.0)
+	var long_side := maxf(ext.x, ext.z) + 2.0 * Rules.R + 6.0     # whole platforms plus a margin
+	cam_dist = (long_side / 2.0) / (half_h * free) * 1.04
 	_place_camera()
+	var screen_right := cam.global_transform.basis.x
+	var shift := cam_dist * half_h * ((panel - margins.x) / vp.x)
+	cam_target += screen_right * shift
+	_place_camera()
+
+
+func hfov_half(vp: Vector2) -> float:
+	return atan(tan(deg_to_rad(cam.fov) / 2.0) * vp.x / vp.y)
 
 
 func _place_camera() -> void:
@@ -130,35 +210,46 @@ func _place_camera() -> void:
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
+	hud_root = Control.new()                          # children placed by _apply_safe_area()
+	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(hud_root)
+	var area := hud_root
 	var top := HBoxContainer.new()
-	top.position = Vector2(16, 12)
-	layer.add_child(top)
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	area.add_child(top)
+	hud_top = top
 	hud_time = Label.new()
-	hud_time.add_theme_font_size_override("font_size", 28)
+	hud_time.add_theme_font_size_override("font_size", 30)
 	top.add_child(hud_time)
 	hud_info = Label.new()
-	hud_info.add_theme_font_size_override("font_size", 20)
-	hud_info.text = "   Two Piers  -  you are seat A (cyan)  -  drag from your node to send"
+	hud_info.add_theme_font_size_override("font_size", 22)
+	hud_info.text = "   Two Piers - you are cyan - drag from your node"
 	top.add_child(hud_info)
 	var side := VBoxContainer.new()
-	side.anchor_left = 1.0
-	side.anchor_right = 1.0
-	side.anchor_top = 0.5
-	side.anchor_bottom = 0.5
-	side.offset_left = -130
-	side.offset_top = -150
-	layer.add_child(side)
+	side.add_theme_constant_override("separation", 10)
+	area.add_child(side)
+	hud_side = side
 	var group := ButtonGroup.new()
 	for f in Rules.SEND_FRACTIONS:
 		var b := Button.new()
 		b.text = "%d%%" % int(f * 100)
 		b.toggle_mode = true
 		b.button_group = group
-		b.custom_minimum_size = Vector2(110, 64)
-		b.add_theme_font_size_override("font_size", 26)
+		b.custom_minimum_size = Vector2(120, 78)      # ~9 mm tall on a 6" phone: thumb-sized
+		b.add_theme_font_size_override("font_size", 28)
 		b.button_pressed = is_equal_approx(f, fraction)
 		b.pressed.connect(func(): fraction = f)
 		side.add_child(b)
+	rotate_hint = Label.new()
+	rotate_hint.text = "Rotate your phone\nOoze Syndicate plays in landscape"
+	rotate_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rotate_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	rotate_hint.add_theme_font_size_override("font_size", 44)
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.01, 0.012, 0.018, 0.94)
+	rotate_hint.add_theme_stylebox_override("normal", bg)
+	rotate_hint.visible = false
+	layer.add_child(rotate_hint)
 	end_panel = PanelContainer.new()
 	end_panel.visible = false
 	end_panel.anchor_left = 0.5
@@ -186,6 +277,8 @@ func _build_hud() -> void:
 
 # ------------------------------------------------------------------ loop
 func _process(delta: float) -> void:
+	if get_viewport().get_visible_rect().size != _fitted_size:   # browsers resize the canvas late
+		_on_resized()
 	var dt := minf(delta, 0.05)
 	for ai in ais:
 		ai.think(sim, dt)
@@ -233,6 +326,38 @@ func _on_finished(winner: String) -> void:
 
 # ------------------------------------------------------------------ input
 func _unhandled_input(event: InputEvent) -> void:
+	# two fingers: pinch to zoom, move together to pan (a second finger cancels a send-drag)
+	if event is InputEventScreenTouch:
+		var st := event as InputEventScreenTouch
+		if st.pressed:
+			touches[st.index] = st.position
+		else:
+			touches.erase(st.index)
+		if touches.size() == 2:
+			drag_from = -1
+			pan_from = Vector3.INF
+			drag_mesh.clear_surfaces()
+			var p: Array = touches.values()
+			pinch_dist = (p[0] as Vector2).distance_to(p[1])
+		return
+	if event is InputEventScreenDrag and touches.size() == 2:
+		var sd := event as InputEventScreenDrag
+		var before: Array = touches.values()
+		var mid_before: Vector2 = (before[0] + before[1]) / 2.0
+		touches[sd.index] = sd.position
+		var p: Array = touches.values()
+		var d := (p[0] as Vector2).distance_to(p[1])
+		if pinch_dist > 0.0 and d > 0.0:
+			cam_dist = clampf(cam_dist * pinch_dist / d, 25.0, 300.0)
+		pinch_dist = d
+		var g0 := _ground(mid_before)
+		var g1 := _ground((p[0] + p[1]) / 2.0)
+		if g0 != Vector3.INF and g1 != Vector3.INF:
+			cam_target += g0 - g1
+		_place_camera()
+		return
+	if touches.size() >= 2:
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:

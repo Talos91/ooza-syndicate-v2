@@ -1,0 +1,21 @@
+# Playtest notes
+
+## 2026-09-25 - Daniele, first Two Piers demo (to do next)
+
+1. **Fight losses must show on the blob.** When hordes fight, the blob shrinks in step with the
+   losses - not just numbers on screen.
+2. **Structures need entrances on every side** (all four cardinal sides, or at least top and bottom),
+   so hordes don't all detour to one door.
+3. **Blobs that reach each other merge**, at least visually: e.g. a bumper / meniscus of goo at the
+   contact so two chains read as one mass, even if the sim keeps them separate.
+4. **The blob must be longer** - it is a blob fight, not a small unit. (Today one patch = 60 units,
+   so small sends are one short patch.)
+5. **Platform speed is too fast compared with bridge speed.** (Today nodes are crossed at 6x deck
+   speed so travel time counts decks only - needs another way to keep the timing honest, e.g. a
+   shorter visual path across the node, or a lower multiplier with deck speeds re-tuned.)
+6. **A proper frontline animation** for bridge fights - the current stop-and-count looks bad.
+
+## Known gaps in this slice (not playtest findings)
+
+- Vat upgrades, cannons/forges in play, relays, abilities, Last Stand, multiplayer.
+- Army numbers in `scripts/rules.gd` are placeholders (army scale and base caps are open questions).
