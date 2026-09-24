@@ -8,8 +8,12 @@
    so hordes don't all detour to one door.
 3. **Blobs that reach each other merge**, at least visually: e.g. a bumper / meniscus of goo at the
    contact so two chains read as one mass, even if the sim keeps them separate.
-4. **The blob must be longer** - it is a blob fight, not a small unit. (Today one patch = 60 units,
-   so small sends are one short patch.)
+4. **The blob must be longer** - it is a blob fight, not a small unit.
+   *Done (2026-09-25):* sends stream out of the vat as one long line, length = size (0.25 m per unit,
+   40 m cap, then thicker), pour in over time on arrival, shrink with losses (also covers note 1's
+   "shrink with losses" in a first form), thicken where they pile up, taper at the tail. Two head
+   patches full detail, the body light. Design pillar written into GAME-RULES §5: length is the count,
+   no Mushroom Wars endgame chaos, and a long line on its way tells you to split the next send.
 5. **Platform speed is too fast compared with bridge speed.** (Today nodes are crossed at 6x deck
    speed so travel time counts decks only - needs another way to keep the timing honest, e.g. a
    shorter visual path across the node, or a lower multiplier with deck speeds re-tuned.)

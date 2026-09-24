@@ -20,10 +20,14 @@ const ARC_R := 3.8                   # hordes flow around a node's centre struct
 const DOOR := Vector3(0.0, 0.0, 1.7) # vat door, local to the node (Blender -Y = Godot +Z)
 const EXIT_R := 2.2                  # hordes leave from the tank bottoms
 
-# horde rendering
-const UNITS_PER_PATCH := 60
+# hordes are LONG: a send streams out of the vat as one line whose length reads as its size at a
+# glance (Mushroom Wars' horde feeling without its endgame chaos). PROVISIONAL density.
+const METRES_PER_UNIT := 0.25        # 100 units = a 25 m line
+const MAX_CHAIN := 40.0              # beyond this a horde gets thicker, not longer
+const MAX_THICKEN := 0.35
 const PATCH_SPACING := 1.8
-const MAX_PATCHES := 40
+const MAX_PATCHES := 24              # 40 m / 1.8 m + head
+const UNITS_PER_PATCH := 60          # legacy: only the capture drain estimate below uses it
 
 # economy - PROVISIONAL (~5x the 12/48/120 placeholder caps)
 const CAPS := {1: 60, 2: 240, 3: 600, 4: 1000}

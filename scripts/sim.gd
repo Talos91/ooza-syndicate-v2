@@ -216,8 +216,12 @@ func step(dt: float) -> void:
 		b["pending_loss"] = b.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * a["units"]) * dt
 	for h in hordes:
 		if h["state"] == "absorb":
-			var rate := Rules.UNITS_PER_PATCH * Rules.DECK_SPEED * Rules.NODE_SPEED_MULT / Rules.PATCH_SPACING
-			var x := minf(h["units"], rate * dt)
+			# the line keeps pouring in through the door: units enter as fast as the tail advances
+			var len := chain_length(h)
+			var tail_fast: bool = sample(h, h["L"] - len)[2]
+			var tail_speed := Rules.DECK_SPEED * (Rules.NODE_SPEED_MULT if tail_fast else 1.0)
+			var rate: float = tail_speed * h["units"] / maxf(len, 0.5)
+			var x := minf(h["units"], maxf(rate, 4.0) * dt)
 			h["units"] -= x
 			_arrive(nodes[h["target"]], h["owner"], x)
 			if h["units"] <= 0.0:
@@ -249,10 +253,15 @@ func step(dt: float) -> void:
 	_check_end()
 
 
+static func full_length(units: float) -> float:
+	## Length of a horde's line once it has fully left its vat.
+	return clampf(units * Rules.METRES_PER_UNIT, 1.0, Rules.MAX_CHAIN)
+
+
 static func chain_length(h: Dictionary) -> float:
-	## How much deck a horde occupies behind its head (matches HordeView's patch count).
-	var n := clampi(ceili(h["units"] / Rules.UNITS_PER_PATCH), 1, Rules.MAX_PATCHES)
-	return (n - 1) * Rules.PATCH_SPACING + 1.0
+	## Deck a horde occupies behind its head. While it is still streaming out of its vat the tail is
+	## at the source, so the line is only as long as the head has travelled.
+	return minf(full_length(h["units"]), maxf(h["s"], 1.0))
 
 
 func _detect_contacts() -> void:
