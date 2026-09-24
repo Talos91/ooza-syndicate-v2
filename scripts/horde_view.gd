@@ -43,6 +43,7 @@ var meshes := {}      # faction -> kind -> Mesh
 var textures := {}    # faction -> creature Texture2D
 var pools := {}       # horde id -> {"patches": [MeshInstance3D], "label": Label3D, "vis": float, "phase": float}
 var contacts := {}    # contact key -> {"root", "lobes", "seam", "splash", "seats"}
+var rivers := {}      # node id -> {"patches": [MeshInstance3D], "vis": float}
 var _last_time := -1.0
 var _lobe_mesh: SphereMesh
 var _drop_meshes := {}   # seat -> SphereMesh with the seat's goo
@@ -109,7 +110,12 @@ func sync(sim: Sim, viewer: String) -> void:
 				p.queue_free()
 			pools[id]["label"].queue_free()
 			pools.erase(id)
-	_sync_contacts(sim, by_id)
+	var seen := _sync_contacts(sim, by_id)
+	_draw_rivers(sim, seen, dt)
+	for key in contacts.keys():
+		if not seen.has(key):
+			contacts[key]["root"].queue_free()
+			contacts.erase(key)
 
 
 func _role(roles: Dictionary, id: int) -> Dictionary:
@@ -221,7 +227,12 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 	var label: Label3D = pool["label"]
 	var head: Vector3 = Sim.sample(h, h["s"])[0]
 	label.position = head + Vector3(0, 3.0, 0)
-	label.text = str(int(h["units"])) if h["owner"] == viewer else ""
+	if h["owner"] != viewer:
+		label.text = ""
+	elif h["streaming"]:                              # out + still inside the vat (re-orderable)
+		label.text = "%d +%d" % [int(h["units"]), int(h["ordered"] - h["units"])]
+	else:
+		label.text = str(int(h["units"]))
 
 
 static func _shove(t: float) -> Array:
@@ -237,7 +248,8 @@ static func _shove(t: float) -> Array:
 
 
 # ------------------------------------------------------------------ contacts
-func _sync_contacts(sim: Sim, by_id: Dictionary) -> void:
+func _sync_contacts(sim: Sim, by_id: Dictionary) -> Dictionary:
+	## Places a meniscus at every deck contact; returns the contact keys in use this frame.
 	var seen := {}
 	for key in sim.fight_info:
 		var info: Dictionary = sim.fight_info[key]
@@ -265,10 +277,92 @@ func _sync_contacts(sim: Sim, by_id: Dictionary) -> void:
 				mid = (pa[0] as Vector3) + (pa[1] as Vector3) * 0.9
 			_place_contact(key, mid, pa[1], [h["owner"], h["owner"]], [0.0, 0.0], sim.time)
 			seen[key] = true
-	for key in contacts.keys():
-		if not seen.has(key):
-			contacts[key]["root"].queue_free()
-			contacts.erase(key)
+	return seen
+
+
+# ------------------------------------------------------------------ rivers: the platform is the node
+func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
+	## Each platform carries a ring of goo around its tower: the owner's river, sized by how full
+	## the vat is. Units fighting on the platform (siege) take a share of the ring centred on the
+	## side they landed from, with a meniscus and splash at each seam (Daniele, 2026-09-25).
+	for n in sim.nodes:
+		var id: int = n["id"]
+		if not rivers.has(id):
+			var arr := []
+			for i in range(Rules.RIVER_SLOTS):
+				var mi := MeshInstance3D.new()
+				add_child(mi)
+				arr.append(mi)
+			rivers[id] = {"patches": arr, "seat": [], "vis": 0.0}
+		var r: Dictionary = rivers[id]
+		var total: float = n["units"]
+		for k in n["siege"]:
+			total += n["siege"][k]
+		var vis: float = r["vis"]
+		vis += (total - vis) * minf(1.0, EASE * 0.6 * dt)
+		r["vis"] = vis
+		var arr: Array = r["patches"]
+		if vis < 1.0:
+			for mi in arr:
+				mi.visible = false
+			continue
+		# slot ownership: attackers get their share centred where they landed, the owner the rest
+		var slots := []
+		slots.resize(Rules.RIVER_SLOTS)
+		slots.fill(n["owner"])
+		var faces_in := []
+		faces_in.resize(Rules.RIVER_SLOTS)
+		faces_in.fill(false)
+		for k in n["siege"]:
+			var share: float = n["siege"][k] / maxf(total, 0.001)
+			var count := clampi(int(round(share * Rules.RIVER_SLOTS)), 1, Rules.RIVER_SLOTS)
+			var d: Vector3 = n["siege_dir"][k]
+			var centre := int(round(fposmod(atan2(d.z, d.x), TAU) / TAU * Rules.RIVER_SLOTS))
+			for j in range(count):
+				var idx := posmod(centre - count / 2 + j, Rules.RIVER_SLOTS)
+				slots[idx] = k
+				faces_in[idx] = true
+		var fill := clampf(total / float(Rules.CAPS[n["tier"]]), 0.0, 1.0)
+		var sc := lerpf(0.4, 1.0, sqrt(fill))
+		var contested: bool = not n["siege"].is_empty()
+		for i in range(Rules.RIVER_SLOTS):
+			var mi: MeshInstance3D = arr[i]
+			var seat: String = slots[i]
+			var faction: String = sim.factions.get(seat, "null")
+			load_faction(faction)
+			var kind: String = ["body_a_lod1", "body_b_lod1", "body_c_lod1"][i % 3]
+			var mesh: Mesh = meshes[faction][kind]
+			if mi.mesh != mesh or mi.get_meta("seat", "?") != seat:
+				mi.mesh = mesh
+				mi.set_meta("seat", seat)
+				for sidx in range(mesh.get_surface_count()):
+					var m := mesh.surface_get_material(sidx) as BaseMaterial3D
+					var is_creature := m != null and m.albedo_texture != null
+					mi.set_surface_override_material(sidx, Mats.creature(faction, seat, textures[faction])
+							if is_creature else Mats.goo(seat))
+			mi.visible = true
+			var a := TAU * i / Rules.RIVER_SLOTS
+			var radial := Vector3(cos(a), 0.0, sin(a))
+			var pos: Vector3 = n["pos"] + radial * Rules.RIVER_R
+			var fwd := -radial if faces_in[i] else Vector3(-sin(a), 0.0, cos(a))
+			var s := sc
+			if contested:                              # the whole platform seethes
+				pos += radial * 0.18 * sin(sim.time * 6.0 + i * 1.3)
+				s *= 1.0 + 0.08 * sin(sim.time * 7.0 + i * 2.1)
+			mi.position = pos
+			mi.rotation = Vector3(0.0, Rules.heading(fwd), 0.0)
+			mi.scale = Vector3(s * 0.85, s * 0.9, s)
+			# seam with the next slot: meniscus + splash between the two owners
+			var nxt: String = slots[(i + 1) % Rules.RIVER_SLOTS]
+			if nxt != seat:
+				var key := "n%d_%d" % [id, i]
+				var a2 := TAU * (i + 0.5) / Rules.RIVER_SLOTS
+				var spos: Vector3 = n["pos"] + Vector3(cos(a2), 0.0, sin(a2)) * Rules.RIVER_R
+				var sfwd := Vector3(-sin(a2), 0.0, cos(a2))
+				_place_contact(key, spos, sfwd, [seat, nxt],
+						[n["node_loss"].get(seat, 0.0), n["node_loss"].get(nxt, 0.0)], sim.time)
+				(contacts[key]["root"] as Node3D).scale = Vector3.ONE * (0.6 + 0.4 * sc)
+				seen[key] = true
 
 
 func _place_contact(key: String, pos: Vector3, fwd: Vector3, seats: Array, losses: Array, time: float) -> void:

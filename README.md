@@ -9,10 +9,12 @@ game. Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project fo
 - Map built from `maps/004-two-piers.json` with the Blender kit, at honest lengths
   (1 deck module = 4 m = 2 s; piers count as part of the platform).
 - Drag from one of your nodes to any node to send; side buttons set 25 / 50 / 75 / 100 %.
-- Hordes are chains of patches (goo + creatures, one patch per 60 units) that leave from the tank
-  bottoms, flow along the decks, curve AROUND the centre structure of every node they pass and
-  squeeze in through the destination's door.
-- Neutral and enemy nodes: the garrison is beaten down, then the node flips. Own nodes: reinforce.
+- Hordes are long lines of patches (goo + creatures) that leave the vat only as the door reveals
+  them (still-inside units stay orderable), flow along the decks, curve AROUND the centre structure
+  of every node they pass, and land on the destination's platform from whichever pier they came by.
+- **The whole platform is the node.** A ring of goo rivers the tower, owned or split by whoever is
+  fighting there; a besieged platform's garrison is beaten down where it stands, then the node
+  flips and the survivors become the new garrison. Own nodes: reinforce.
 - Opposing hordes meeting on a deck stop at a frontline and fight.
 - Owned vats produce up to their cap. Seat B is a simple AI.
 - Ownership = material: seat-colour lights, vat ooze, goo; creature body hue = seat, race = accent.
@@ -30,8 +32,8 @@ Safari/Chrome, landscape. **After a new publish, reload twice**: the PWA service
 cached build first and fetches the new one in the background (the top-left clock restarting at 0:00
 with the new feature visible tells you it landed).
 
-**Debug panel** (bottom-left `Debug` button, live, resets on reload): deck speed (m/s) and platform
-speed (x deck) sliders - for PLAYTEST-NOTES 5 - plus Reset to rules.
+**Debug panel** (bottom-left `Debug` button, live, resets on reload): deck speed (m/s), platform
+speed (x deck), door rate (units/s) and platform fight (x combat rate) sliders, plus Reset to rules.
 
 ## Run
 

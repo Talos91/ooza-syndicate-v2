@@ -1,6 +1,7 @@
 extends SceneTree
 ## Headless rules check:  Godot --headless --path . --script res://tests/test_sim.gd
-## Exit code 0 = all passed.
+## Exit code 0 = all passed. Checks Rules.deck_speed/node_speed_mult/door_rate/node_fight_mult at
+## their defaults - reset them first if a previous run left the static vars changed.
 
 var failures := 0
 
@@ -28,7 +29,24 @@ func _init() -> void:
 
 	# a send to the neighbouring neutral node captures it
 	var h := sim.send(3, 1, 1.0)
-	check(not h.is_empty() and h["units"] == 80.0, "send 100% of 80")
+	check(not h.is_empty() and h["ordered"] == 80.0 and h["units"] == 0.0, "send 100% of 80: ordered 80, none out yet")
+	check(sim.nodes[3]["units"] == 80.0, "the units stay in the vat until the door emits them")
+	sim.step(0.5)
+	# 0.5 s at the 48 units/s door rate = 24 out; the vat also produces a couple units meanwhile
+	check(absf(h["units"] - 24.0) < 0.5, "after 0.5 s at 48 units/s: 24 out (got %.1f)" % h["units"])
+	var still_inside: float = sim.nodes[3]["units"]
+	check(absf(still_inside - 56.0) < 3.0, "~56 still inside, plus production (got %.1f)" % still_inside)
+	# a new order takes over the part still inside
+	var h_b := sim.send(3, 4, 0.5)
+	check(not h.get("streaming", true) and absf(h["ordered"] - 24.0) < 0.5, "the previous order is cut to what is out")
+	check(absf(h_b["ordered"] - floorf(still_inside * 0.5)) < 0.1, "the new order counts the units still inside (half of %.1f)" % still_inside)
+	check(sim.nodes[3]["streaming"]["hid"] == h_b["id"], "the door now emits the new order")
+	# put things back for the capture check: cancel the new order (nothing out) and finish the first
+	sim.hordes.erase(h_b)
+	sim.nodes[3]["units"] += h_b["ordered"]            # the cancelled order's units return to the vat
+	sim.nodes[3]["streaming"] = {"hid": h["id"], "remaining": sim.nodes[3]["units"]}
+	h["streaming"] = true
+	h["ordered"] = h["units"] + sim.nodes[3]["units"]
 	var path_len: float = h["L"]
 	check(path_len > Rules.span(2) - 2.0 * Rules.R, "path length %.1f m" % path_len)
 	var t := 0.0
@@ -38,7 +56,11 @@ func _init() -> void:
 	check(sim.nodes[1]["owner"] == "A", "neutral node 1 captured by A after %.1f s" % t)
 	while not sim.hordes.is_empty():
 		sim.step(0.05)
-	check(absf(sim.nodes[1]["units"] - (80.0 - 30.0)) < 8.0, "after the whole horde is in, garrison ~50 (got %.1f)" % sim.nodes[1]["units"])
+	# platform fights are rate-based, not a 1-for-1 subtraction: an 80-unit order against a 30-unit
+	# neutral garrison mostly survives (the garrison melts fast once enough attackers have landed)
+	var g: float = sim.nodes[1]["units"]
+	check(g > 40.0 and g < 90.0, "after the whole horde is in, garrison = survivors of the platform fight (got %.1f)" % g)
+	check(sim.nodes[1]["siege"].is_empty(), "no siege left on the captured platform")
 
 	# travel time: an M deck is 4 s at base speed, nodes crossed fast
 	var sim2 := Sim.new()
@@ -49,6 +71,27 @@ func _init() -> void:
 		sim2.step(0.02)
 		arrive += 0.02
 	check(arrive > 4.0 and arrive < 6.0, "M deck crossing takes %.2f s (4 s deck + <2 s node time)" % arrive)
+	var land: Vector3 = h2["pts"][-1]
+	check(absf((land - sim2.nodes[1]["pos"]).length() - Rules.ARC_R) < 0.01 and
+			(land - sim2.nodes[1]["pos"]).normalized().dot((sim2.nodes[3]["pos"] - sim2.nodes[1]["pos"]).normalized()) > 0.99,
+			"the line lands on the platform from the side it arrives by, up to the tower's footprint")
+
+	# a besieged platform: attackers sit on it and fight the garrison; the node flips when it falls
+	var sim7 := Sim.new()
+	sim7.setup(map, pos, {3: "A", 1: "B"}, {"A": "null", "B": "ember"})
+	sim7.nodes[3]["units"] = 200.0
+	sim7.nodes[1]["units"] = 40.0
+	sim7.send(3, 1, 1.0)
+	var sieged := false
+	var t7 := 0.0
+	while t7 < 30.0 and sim7.nodes[1]["owner"] != "A":
+		sim7.step(0.05)
+		t7 += 0.05
+		if sim7.nodes[1]["siege"].get("A", 0.0) > 0.0 and sim7.nodes[1]["owner"] == "B":
+			sieged = true
+	check(sieged, "arriving units sit on the enemy platform as a siege while the garrison stands")
+	check(sim7.nodes[1]["owner"] == "A" and sim7.combat_losses.get("B", 0.0) > 30.0,
+			"the garrison is beaten down on the platform and the node flips (B lost %.0f)" % sim7.combat_losses.get("B", 0.0))
 
 	# two opposing hordes on the same deck meet at a frontline
 	var sim3 := Sim.new()

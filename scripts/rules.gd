@@ -20,8 +20,12 @@ const NODE_SPEED_MULT_DEFAULT := 6.0 # a node crossing (pier, arc round the stru
 static var deck_speed: float = DECK_SPEED_DEFAULT          # m/s along a deck
 static var node_speed_mult: float = NODE_SPEED_MULT_DEFAULT # x deck speed on platforms, piers, doors
 const ARC_R := 3.8                   # hordes flow around a node's centre structure at this radius
-const DOOR := Vector3(0.0, 0.0, 1.7) # vat door, local to the node (Blender -Y = Godot +Z)
-const EXIT_R := 2.2                  # hordes leave from the tank bottoms
+const EXIT_R := 2.2                  # hordes leave from the tank bottoms (sends start at the tower)
+# THE WHOLE PLATFORM IS THE NODE (Daniele, 2026-09-25): entrances on every side - an arriving horde
+# lands on the platform from whichever pier it came by and pours onto it up to the tower's footprint
+# (ARC_R). Its units then sit on the platform ("siege") and fight the garrison there.
+const RIVER_R := 4.4                 # the goo river around the tower sits at this radius
+const RIVER_SLOTS := 14              # patches in the river ring
 
 # hordes are LONG: a send streams out of the vat as one line whose length reads as its size at a
 # glance (Mushroom Wars' horde feeling without its endgame chaos). PROVISIONAL density.
@@ -31,6 +35,13 @@ const MAX_THICKEN := 0.35
 const PATCH_SPACING := 1.8
 const MAX_PATCHES := 24              # 40 m / 1.8 m + head
 const UNITS_PER_PATCH := 60          # legacy: only the capture drain estimate below uses it
+
+# UNITS LEAVE THE VAT ONLY AS THEY BECOME BLOB (Daniele, 2026-09-25): a send is an order; the door
+# emits units into the line at DOOR_RATE. Units still inside stay in the vat's count and can be
+# re-ordered - a new send takes over the previous order's not-yet-emitted part.
+const DOOR_RATE_DEFAULT := DECK_SPEED_DEFAULT * NODE_SPEED_MULT_DEFAULT / METRES_PER_UNIT   # 48 units/s: the tail stays at the door
+static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug panel)
+static var node_fight_mult: float = 1.0                # live-tunable: x combat rates on a platform
 
 # economy - PROVISIONAL (~5x the 12/48/120 placeholder caps)
 const CAPS := {1: 60, 2: 240, 3: 600, 4: 1000}
@@ -56,6 +67,10 @@ const FACTIONS := {
 	"bloom": [0.236, Color("#6fff2a")], "ember": [0.085, Color("#ff3b1f")],
 	"solar": [0.12, Color("#ffbe19")],
 }
+
+
+static func seat_color(seat: String) -> Color:
+	return SEATS.get(seat, NEUTRAL)
 
 
 static func span(modules: int) -> float:

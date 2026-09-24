@@ -364,13 +364,19 @@ func _build_debug(area: Control) -> void:
 			func(v: float): Rules.deck_speed = v)
 	var node := _debug_slider(box, "Platform speed", 1.0, 10.0, 0.1, Rules.node_speed_mult, "x%.1f deck",
 			func(v: float): Rules.node_speed_mult = v)
+	var door := _debug_slider(box, "Door rate", 4.0, 120.0, 1.0, Rules.door_rate, "%.0f units/s",
+			func(v: float): Rules.door_rate = v)
+	var nfight := _debug_slider(box, "Platform fight", 0.2, 4.0, 0.1, Rules.node_fight_mult, "x%.1f rate",
+			func(v: float): Rules.node_fight_mult = v)
 	var reset := Button.new()
 	reset.text = "Reset to rules"
 	reset.custom_minimum_size = Vector2(0, 48)
 	reset.add_theme_font_size_override("font_size", 20)
 	reset.pressed.connect(func():
 		deck.value = Rules.DECK_SPEED_DEFAULT
-		node.value = Rules.NODE_SPEED_MULT_DEFAULT)
+		node.value = Rules.NODE_SPEED_MULT_DEFAULT
+		door.value = Rules.DOOR_RATE_DEFAULT
+		nfight.value = 1.0)
 	box.add_child(reset)
 
 

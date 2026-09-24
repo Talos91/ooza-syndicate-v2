@@ -10,7 +10,7 @@ static func light(seat: String) -> StandardMaterial3D:
 	var key := "light_" + seat
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
-		var c: Color = Rules.SEATS[seat]
+		var c: Color = Rules.seat_color(seat)
 		m.albedo_color = c
 		m.emission_enabled = true
 		m.emission = c
@@ -23,7 +23,7 @@ static func ooze(seat: String) -> StandardMaterial3D:
 	var key := "ooze_" + seat
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
-		var c: Color = Rules.SEATS[seat]
+		var c: Color = Rules.seat_color(seat)
 		m.albedo_color = c * 0.6
 		m.roughness = 0.2
 		m.emission_enabled = true
@@ -37,7 +37,7 @@ static func goo(seat: String) -> StandardMaterial3D:
 	var key := "goo_" + seat
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
-		var c: Color = Rules.SEATS[seat]
+		var c: Color = Rules.seat_color(seat)
 		m.albedo_color = Color(c.r * 0.55, c.g * 0.55, c.b * 0.55)
 		m.roughness = 0.1
 		m.clearcoat_enabled = true
@@ -56,7 +56,7 @@ static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMat
 		var m := ShaderMaterial.new()
 		m.shader = CREATURE_SHADER
 		m.set_shader_parameter("albedo_tex", tex)
-		var seat_hue: float = (Rules.SEATS[seat] as Color).h
+		var seat_hue: float = Rules.seat_color(seat).h
 		m.set_shader_parameter("hue_shift", fposmod(seat_hue - Rules.FACTIONS[faction][0], 1.0))
 		m.set_shader_parameter("accent", Rules.FACTIONS[faction][1])
 		_cache[key] = m

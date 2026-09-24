@@ -167,6 +167,16 @@ Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven
 - Paths leave from the tank bottoms, curve **around** every node's structure, enter through the door.
 - **Capture**: the garrison is beaten down, then the node flips; own nodes are reinforced.
 - **Contact from any direction** on a deck: frontline, rear attack, friendly queue; several fights at once.
+- **The whole platform is the node** (pass of 2026-09-25, PLAYTEST-NOTES 9): arriving hordes spread
+  onto the platform from whichever pier they came by, up to the tower's footprint, instead of
+  funnelling through one door point. A besieged platform splits into each side's share of a goo
+  **river** ringing the tower, seamed with the fight's meniscus/splash where shares meet; the node
+  flips when the garrison falls, survivors become the new garrison. Sends still start their
+  animation at the tower and flow out through the ring toward whichever pier leads to the target.
+- **Units leave the vat only as they become blob** (same pass, note 8): a send is an order the vat's
+  door reveals at `Rules.door_rate` units/s; units not yet revealed stay in the vat's count and are
+  still orderable - a new send re-spends the vat's current total, cutting the old order down to
+  whatever already left.
 - **Blob fights read as blob fights** (pass of 2026-09-25): the drawn line trails the real count by a
   fraction of a second and recedes from the contact as it loses units, thinning as it empties; every
   contact grows a goo **meniscus** (two lobes of the two owners' goo joined by a hot seam; one colour
@@ -179,19 +189,20 @@ Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven
 - **Telemetry** per match (duration, sends, captures, deciding event, winner-was-behind, losses)
   → `user://telemetry/`.
 
-### Debug panel (2026-09-25)
+### Debug panel (2026-09-25, growing)
 Bottom-left `Debug` button opens live sliders for playtests, thumb-sized, reset on reload:
-deck speed (m/s) and platform speed (x deck) - `Rules.deck_speed` / `Rules.node_speed_mult` are
-static vars for this - plus "Reset to rules". Add further debug controls here (`_build_debug` in
-`main.gd`). Playtest builds carry the panel; it is not a player feature.
+deck speed (m/s), platform speed (x deck), door rate (units/s), platform fight (x combat rate) -
+`Rules.deck_speed` / `node_speed_mult` / `door_rate` / `node_fight_mult` are static vars for this -
+plus "Reset to rules". Add further debug controls here (`_build_debug` in `main.gd`). Playtest
+builds carry the panel; it is not a player feature.
 
 ### Code map
 | File | Role |
 |---|---|
 | `scripts/rules.gd` | every number (kit sizes, speeds, caps, production, combat, colours) |
-| `scripts/sim.gd` | rules and state, no visuals |
+| `scripts/sim.gd` | rules and state, no visuals; nodes now carry `streaming`/`siege`/`siege_dir` |
 | `scripts/map_builder.gd` | honest layout, kit placement, ownership materials |
-| `scripts/horde_view.gd` | hordes as long patch lines; fight look (eased shrink, meniscus, shoves, splash) |
+| `scripts/horde_view.gd` | hordes as long patch lines; fight look (eased shrink, meniscus, shoves, splash); platform rivers |
 | `scripts/mats.gd`, `shaders/creature.gdshader` | seat materials, creature shader |
 | `scripts/seat_ai.gd`, `scripts/telemetry.gd` | opponent, match log |
 | `scripts/main.gd` | world, camera, input, HUD, phone profile, demo/screenshot mode |
@@ -255,8 +266,11 @@ From `PLAYTEST-NOTES.md` (Daniele's first demo):
 1. ~~**Blob fight pass**~~ — done 2026-09-25 (eased shrink, goo meniscus, shoving frontline with
    splash, rear-contact visual; see §5). Left for a later animation pass: creature poses in the
    fight (leaping, biting) and a creature death effect, not only goo.
-2. **Entrances on every side** of structures, and horde blocking on platforms.
+2. ~~**Entrances on every side, horde blocking on platforms**~~ — done 2026-09-25 as "the whole
+   platform is the node" (see §5); a Debug-panel slider tunes the platform fight rate.
 3. **Platform speed vs bridge speed** — node crossings look too fast next to decks.
+   Debug-panel sliders for both speeds now let this be tuned live in play (2026-09-25); still open
+   is which values to bake into `rules.gd`.
 4. Animation and effects work in general (the mechanic works; the motion needs love).
 5. Then: vat upgrades, real-phone test, **map 2 — Long Span** (bridge combat, Last Stand inward vs outward).
 

@@ -34,6 +34,10 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"id": id, "pos": positions[id], "owner": owner, "tier": tier,
 			"units": float(Rules.HOME_UNITS if owner != "" else Rules.NEUTRAL_UNITS[tier]),
 			"category": n["category"], "center": n["center"],
+			"streaming": {},        # {hid, remaining}: the one order the door is emitting
+			"siege": {},            # seat -> units on the platform fighting the garrison
+			"siege_dir": {},        # seat -> unit vector from the tower to where they landed
+			"node_loss": {},        # seat -> units/s lost on this platform last step (view)
 		})
 		adj[id] = []
 	for e in map["edges"]:
@@ -49,6 +53,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 # ------------------------------------------------------------------ orders
 func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 	## Order a send; returns the new horde or {} if the order is not possible.
+	## Units leave the vat only as the door emits them into the line (Rules.door_rate); until then
+	## they stay in the vat's count and are still the player's to order. A new send takes over the
+	## previous order's not-yet-emitted part (Daniele, 2026-09-25).
 	var src: Dictionary = nodes[from_id]
 	if over or from_id == to_id or src["owner"] == "":
 		return {}
@@ -58,9 +65,11 @@ func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 	var route := find_route(from_id, to_id)
 	if route.size() < 2:
 		return {}
-	src["units"] -= count
+	if not src["streaming"].is_empty():
+		_end_streaming(src, "superseded")
 	var h := _new_horde(src["owner"], count, route)
 	hordes.append(h)
+	src["streaming"] = {"hid": h["id"], "remaining": count}
 	events.append({"t": time, "type": "send", "seat": h["owner"], "from": from_id, "to": to_id, "units": count})
 	horde_spawned.emit(h)
 	return h
@@ -96,8 +105,10 @@ func find_route(from_id: int, to_id: int) -> Array:
 func _new_horde(owner: String, units: float, route: Array) -> Dictionary:
 	var path := build_path(route)
 	var h := {
-		"id": _next_id, "owner": owner, "faction": factions.get(owner, "null"), "units": units,
-		"start_units": units, "route": route, "target": route[-1],
+		"id": _next_id, "owner": owner, "faction": factions.get(owner, "null"),
+		"units": 0.0,                                 # units OUT of the vat (the line); grows as the door emits
+		"ordered": units, "start_units": units, "streaming": true,
+		"route": route, "target": route[-1],
 		"pts": path["pts"], "cum": path["cum"], "fast": path["fast"], "spans": path["spans"],
 		"L": path["cum"][-1], "s": 0.0, "state": "move", "speed": 1.0, "blocked": false,
 	}
@@ -137,12 +148,9 @@ func build_path(route: Array) -> Dictionary:
 				add.call(p, true)
 			add.call(b["pos"] + d2 * (Rules.R - 0.5), true)
 		else:
-			var door: Vector3 = b["pos"] + Rules.DOOR
-			a_out = atan2(Rules.DOOR.z, Rules.DOOR.x)
-			for p in _arc(b["pos"], a_in, a_out, Rules.ARC_R):
-				add.call(p, true)
-			add.call(door + Vector3(0, 0, 0.9), true)
-			add.call(door, true)
+			# destination: straight onto the platform from this side, up to the tower's footprint -
+			# the whole platform is the node, every side is an entrance
+			add.call(b["pos"] - d * Rules.ARC_R, true)
 	var cum := PackedFloat32Array([0.0])
 	for k in range(1, pts.size()):
 		cum.append(cum[k - 1] + (pts[k] as Vector3).distance_to(pts[k - 1]))
@@ -199,10 +207,26 @@ func step(dt: float) -> void:
 	for n in nodes:                                   # production, up to the vat cap
 		if n["owner"] != "" and n["units"] < Rules.CAPS[n["tier"]]:
 			n["units"] = minf(Rules.CAPS[n["tier"]], n["units"] + Rules.PROD[n["tier"]] * dt)
+	for n in nodes:                                   # the door emits the current order into its line
+		if n["streaming"].is_empty():
+			continue
+		var h := _horde(n["streaming"]["hid"])
+		if h.is_empty() or h["owner"] != n["owner"]:
+			_end_streaming(n, "lost")
+			continue
+		var x: float = minf(n["streaming"]["remaining"], minf(Rules.door_rate * dt, n["units"]))
+		n["units"] -= x
+		h["units"] += x
+		n["streaming"]["remaining"] -= x
+		if n["streaming"]["remaining"] <= 0.001 or n["units"] <= 0.0:
+			_end_streaming(n, "done")
 	for h in hordes:
 		if h["state"] == "move" and not h.get("blocked", false):
 			var fast_here: bool = sample(h, h["s"])[2]
-			h["s"] += Rules.deck_speed * h.get("speed", 1.0) * (Rules.node_speed_mult if fast_here else 1.0) * dt
+			var ds: float = Rules.deck_speed * h.get("speed", 1.0) * (Rules.node_speed_mult if fast_here else 1.0) * dt
+			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
+				ds = minf(ds, Rules.door_rate * Rules.METRES_PER_UNIT * dt)
+			h["s"] += ds
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
 				h["state"] = "absorb"
@@ -224,9 +248,10 @@ func step(dt: float) -> void:
 			var rate: float = tail_speed * h["units"] / maxf(len, 0.5)
 			var x := minf(h["units"], maxf(rate, 4.0) * dt)
 			h["units"] -= x
-			_arrive(nodes[h["target"]], h["owner"], x)
-			if h["units"] <= 0.0:
+			_arrive(nodes[h["target"]], h, x)
+			if h["units"] <= 0.0 and not h["streaming"]:
 				dead.append(h)
+	_node_fights(dt)
 	for h in hordes:                                  # apply combat losses simultaneously
 		h["loss_rate"] = 0.0                          # units/s lost this step (drives the view's shrink and splash)
 		if h.has("pending_loss"):
@@ -239,6 +264,10 @@ func step(dt: float) -> void:
 				dead.append(h)
 				events.append({"t": time, "type": "horde_destroyed", "seat": h["owner"], "units": h["start_units"]})
 	for h in dead:
+		if h in hordes and h["streaming"]:            # the rest of the order never left: it stays in the vat
+			var src: Dictionary = nodes[h["route"][0]]
+			if src["streaming"].get("hid", -1) == h["id"]:
+				_end_streaming(src, "destroyed")
 		if h in hordes:
 			hordes.erase(h)
 			horde_removed.emit(h)
@@ -349,18 +378,85 @@ func _horde(id: int) -> Dictionary:
 	return {}
 
 
-func _arrive(n: Dictionary, owner: String, x: float) -> void:
-	## Own node: reinforce. Neutral or enemy: the garrison is beaten down, then the node flips (§5).
+func _end_streaming(n: Dictionary, why: String) -> void:
+	## The door stops emitting this order. Whatever never left stays in the vat. A horde with
+	## nothing out yet disappears; one already out on the deck becomes a finished order of what left.
+	var st: Dictionary = n["streaming"]
+	n["streaming"] = {}
+	if st.is_empty():
+		return
+	var h := _horde(st["hid"])
+	if h.is_empty():
+		return
+	h["streaming"] = false
+	h["ordered"] = h["units"]
+	h["start_units"] = maxf(h["units"], 1.0)
+	if why != "done":
+		events.append({"t": time, "type": "order_" + why, "seat": h["owner"], "left_inside": st["remaining"]})
+	if h["units"] <= 0.0:
+		hordes.erase(h)
+		horde_removed.emit(h)
+
+
+func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
+	## The line pours onto the platform. Own node: reinforce the garrison. Otherwise the units sit
+	## on the platform as a siege and fight the garrison there (see _node_fights); the whole
+	## platform is the node.
+	var owner: String = h["owner"]
 	if n["owner"] == owner:
 		n["units"] += x
 		return
-	n["units"] -= x
-	if n["units"] < 0.0:
-		var old: String = n["owner"]
-		n["owner"] = owner
-		n["units"] = -n["units"]
-		events.append({"t": time, "type": "capture", "node": n["id"], "seat": owner, "from": old})
-		captured.emit(n["id"], owner, old)
+	n["siege"][owner] = n["siege"].get(owner, 0.0) + x
+	if not n["siege_dir"].has(owner):
+		var landing: Vector3 = sample(h, h["L"] - 2.0)[0]
+		n["siege_dir"][owner] = ((landing - n["pos"]) as Vector3).normalized()
+
+
+func _node_fights(dt: float) -> void:
+	## Units on a platform fight the garrison (and each other) at the frontline rates; when the
+	## garrison is beaten down and one attacker is left, the node flips to it with those units.
+	for n in nodes:
+		n["node_loss"] = {}
+		if n["siege"].is_empty():
+			continue
+		var mult: float = Rules.node_fight_mult
+		var total_att := 0.0
+		for k in n["siege"]:
+			total_att += n["siege"][k]
+		var loss := {}
+		var g_loss := 0.0
+		for k in n["siege"]:
+			var enemy: float = n["units"] + total_att - n["siege"][k]
+			if enemy <= 0.0:
+				continue
+			loss[k] = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * enemy) * dt * mult
+			if n["units"] > 0.0:
+				g_loss += (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * n["siege"][k]) * dt * mult
+		for k in loss:
+			var before: float = n["siege"][k]
+			n["siege"][k] = maxf(0.0, before - loss[k])
+			combat_losses[k] = combat_losses.get(k, 0.0) + before - n["siege"][k]
+			n["node_loss"][k] = (before - n["siege"][k]) / maxf(dt, 0.0001)
+			if n["siege"][k] <= 0.0:
+				n["siege"].erase(k)
+				n["siege_dir"].erase(k)
+		if g_loss > 0.0:
+			var before_g: float = n["units"]
+			n["units"] = maxf(0.0, before_g - g_loss)
+			if n["owner"] != "":
+				combat_losses[n["owner"]] = combat_losses.get(n["owner"], 0.0) + before_g - n["units"]
+				n["node_loss"][n["owner"]] = (before_g - n["units"]) / maxf(dt, 0.0001)
+		if n["units"] <= 0.0 and n["siege"].size() == 1:
+			var old: String = n["owner"]
+			var winner_seat: String = n["siege"].keys()[0]
+			if not n["streaming"].is_empty():
+				_end_streaming(n, "lost")
+			n["owner"] = winner_seat
+			n["units"] = n["siege"][winner_seat]
+			n["siege"] = {}
+			n["siege_dir"] = {}
+			events.append({"t": time, "type": "capture", "node": n["id"], "seat": winner_seat, "from": old})
+			captured.emit(n["id"], winner_seat, old)
 
 
 func _check_end() -> void:
@@ -368,6 +464,8 @@ func _check_end() -> void:
 	for n in nodes:
 		if n["owner"] != "":
 			alive[n["owner"]] = true
+		for k in n["siege"]:
+			alive[k] = true
 	for h in hordes:
 		alive[h["owner"]] = true
 	if alive.size() <= 1 and time > 1.0:
@@ -382,6 +480,7 @@ func seat_strength(seat: String) -> float:
 	for n in nodes:
 		if n["owner"] == seat:
 			total += n["units"]
+		total += n["siege"].get(seat, 0.0)
 	for h in hordes:
 		if h["owner"] == seat:
 			total += h["units"]

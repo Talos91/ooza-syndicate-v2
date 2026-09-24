@@ -41,6 +41,36 @@
    *Rear-contact visual done (2026-09-25):* the caught horde's tail is squashed and shoved forward,
    the meniscus and splash sit between the pursuer's head and that tail.
 
+## 2026-09-25 - Daniele, second pass: door timing and the platform as the node
+
+8. **Units leave the vat only as they become blob.** Sending doesn't instantly move a whole order
+   out - it stays queued at the door, revealed at a rate, and units not yet emitted are still the
+   vat's and still orderable: a new send re-counts the vat's current total (streamed part cut away
+   from the old order) rather than double-spending.
+   *Done (2026-09-25):* a node's `streaming` field holds the one order the door is emitting
+   (`Rules.door_rate` units/s, default 48 = the old fixed door speed so nothing regresses at
+   defaults); `send()` cuts a live order down to what already left and starts a fresh one from the
+   vat's current count. Your own horde's label shows `out +still-inside` while it streams.
+9. **Structures need entrances on every side, and the platform is the node.** Instead of a single
+   door, treat the whole platform as the node: an arriving horde lands from whichever pier it
+   travelled and spreads onto the platform up to the tower - contact happens there, not at one
+   point. If contested, the platform fills in the fight's ratio, the attacker's share centred on
+   the side it arrived from; the "hit box" for anyone attacking is the tower itself, with the ring
+   between tower and rim being where the fight actually happens (this also gives you a natural
+   place for a defence-vs-attack order concept later). Sends leaving a tower start their animation
+   at the tower and flow out through this ring on whichever side leads to the target.
+   *Done (2026-09-25):* replaces the old goo-emitting door entirely (note 2 was expanded into this,
+   note 7's blocking-on-platforms is now this too - closes the previous "still to do"). Every
+   platform draws a ring of goo patches around its tower (`Rules.RIVER_R`/`RIVER_SLOTS`), coloured
+   by owner and scaled by how full the vat/siege total is; a besieged platform splits the ring by
+   each side's share, seamed with the same meniscus/splash as a deck fight; when the garrison falls
+   the node flips and the survivors become the new garrison. Sim: `node.siege` (seat -> units
+   fighting there), `node.siege_dir` (the side each attacker landed from), `node.node_loss` (view
+   hook). Not yet done: a distinct defend/attack order at a node (today arrival = automatic siege).
+
+**Debug panel additions:** Door rate (units/s) and Platform fight (x combat rate) sliders, next to
+the existing deck/platform speed ones - open `Debug` bottom-left. Reset to rules restores all four.
+
 ## Known gaps in this slice (not playtest findings)
 
 - Vat upgrades, cannons/forges in play, relays, abilities, Last Stand, multiplayer.

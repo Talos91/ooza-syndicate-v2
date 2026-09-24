@@ -24,7 +24,9 @@ func think(sim: Sim, dt: float) -> void:
 	var en_route := {}
 	for h in sim.hordes:
 		if h["owner"] == seat:
-			en_route[h["target"]] = en_route.get(h["target"], 0.0) + h["units"]
+			en_route[h["target"]] = en_route.get(h["target"], 0.0) + h["ordered"]
+	for n in sim.nodes:                               # units already fighting on that platform
+		en_route[n["id"]] = en_route.get(n["id"], 0.0) + n["siege"].get(seat, 0.0)
 	for src in mine:
 		var best := -1
 		var best_score := INF
