@@ -65,6 +65,8 @@ var debug_button: Button
 var debug_panel: PanelContainer
 var build_mode := ""                          # "" (vat upgrade) / "cannon" / "forge": what a
                                                # double-tap on an owned node does (see _double_tap)
+var started := false                          # true once _start_map has built the world/HUD/sim -
+                                               # _process/_on_resized are no-ops before then (menu)
 
 
 func _ready() -> void:
@@ -125,6 +127,7 @@ func _start_map(map_path: String) -> void:
 	_build_hud()
 	_apply_quality()
 	get_viewport().size_changed.connect(_on_resized)
+	started = true
 	await get_tree().process_frame                   # let a --window resize land before fitting
 	_on_resized()
 
@@ -183,6 +186,8 @@ func _apply_quality() -> void:
 
 
 func _on_resized() -> void:
+	if not started:                                   # nothing built yet (still at the map menu)
+		return
 	var vp := get_viewport().get_visible_rect().size
 	_fitted_size = vp
 	_apply_safe_area()
@@ -515,6 +520,8 @@ func _debug_slider(box: Control, text: String, lo: float, hi: float, step: float
 
 # ------------------------------------------------------------------ loop
 func _process(delta: float) -> void:
+	if not started:                                   # still at the map menu - nothing to simulate
+		return
 	if get_viewport().get_visible_rect().size != _fitted_size:   # browsers resize the canvas late
 		_on_resized()
 	var dt := minf(delta, 0.05)
@@ -571,6 +578,8 @@ func _on_finished(winner: String) -> void:
 
 # ------------------------------------------------------------------ input
 func _unhandled_input(event: InputEvent) -> void:
+	if not started:                                   # still at the map menu - no world/camera yet
+		return
 	# two fingers: pinch to zoom, move together to pan (a second finger cancels a send-drag)
 	if event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
