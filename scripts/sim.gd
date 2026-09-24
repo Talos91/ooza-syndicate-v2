@@ -19,6 +19,7 @@ var winner := ""
 var events: Array = []         # telemetry: {t, type, ...}
 var combat_losses: Dictionary = {}   # seat -> units lost in frontline combat
 var fall_losses: Dictionary = {}     # seat -> units lost to falls (relays come later)
+var fights: Array = []               # [horde id, horde id] contact pairs (frontline or rear)
 var _next_id := 1
 
 
@@ -97,7 +98,7 @@ func _new_horde(owner: String, units: float, route: Array) -> Dictionary:
 		"id": _next_id, "owner": owner, "faction": factions.get(owner, "null"), "units": units,
 		"start_units": units, "route": route, "target": route[-1],
 		"pts": path["pts"], "cum": path["cum"], "fast": path["fast"], "spans": path["spans"],
-		"L": path["cum"][-1], "s": 0.0, "state": "move", "foe": 0,
+		"L": path["cum"][-1], "s": 0.0, "state": "move", "speed": 1.0, "blocked": false,
 	}
 	_next_id += 1
 	return h
@@ -198,23 +199,23 @@ func step(dt: float) -> void:
 		if n["owner"] != "" and n["units"] < Rules.CAPS[n["tier"]]:
 			n["units"] = minf(Rules.CAPS[n["tier"]], n["units"] + Rules.PROD[n["tier"]] * dt)
 	for h in hordes:
-		if h["state"] == "move":
+		if h["state"] == "move" and not h.get("blocked", false):
 			var fast_here: bool = sample(h, h["s"])[2]
-			h["s"] += Rules.DECK_SPEED * (Rules.NODE_SPEED_MULT if fast_here else 1.0) * dt
+			h["s"] += Rules.DECK_SPEED * h.get("speed", 1.0) * (Rules.NODE_SPEED_MULT if fast_here else 1.0) * dt
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
 				h["state"] = "absorb"
-	_detect_frontlines()
+	_detect_contacts()
 	var dead := []
+	for pair in fights:                               # every contact pair trades losses
+		var a := _horde(pair[0])
+		var b := _horde(pair[1])
+		if a.is_empty() or b.is_empty():
+			continue
+		a["pending_loss"] = a.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * b["units"]) * dt
+		b["pending_loss"] = b.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * a["units"]) * dt
 	for h in hordes:
-		if h["state"] == "fight":
-			var foe := _horde(h["foe"])
-			if foe.is_empty():
-				h["state"] = "move"
-				continue
-			var loss: float = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * foe["units"]) * dt
-			h["pending_loss"] = h.get("pending_loss", 0.0) + loss
-		elif h["state"] == "absorb":
+		if h["state"] == "absorb":
 			var rate := Rules.UNITS_PER_PATCH * Rules.DECK_SPEED * Rules.NODE_SPEED_MULT / Rules.PATCH_SPACING
 			var x := minf(h["units"], rate * dt)
 			h["units"] -= x
@@ -234,44 +235,85 @@ func step(dt: float) -> void:
 		if h in hordes:
 			hordes.erase(h)
 			horde_removed.emit(h)
-	for h in hordes:                                  # survivors of a finished fight march on
-		if h["state"] == "fight" and _horde(h["foe"]).is_empty():
+	var alive := {}
+	for h in hordes:
+		alive[h["id"]] = true
+	fights = fights.filter(func(p): return alive.has(p[0]) and alive.has(p[1]))
+	var fighting := {}
+	for p in fights:
+		fighting[p[0]] = true
+		fighting[p[1]] = true
+	for h in hordes:                                  # no contact left: march on
+		if h["state"] == "fight" and not fighting.has(h["id"]):
 			h["state"] = "move"
-			h["foe"] = 0
 	_check_end()
 
 
-func _detect_frontlines() -> void:
-	## Opposing hordes whose heads meet on the same deck stop at a frontline and fight (§5).
-	for i in range(hordes.size()):
-		var a: Dictionary = hordes[i]
-		if a["state"] != "move":
-			continue
-		var ea := _current_span(a)
-		if ea.is_empty():
-			continue
-		for j in range(hordes.size()):
-			var b: Dictionary = hordes[j]
-			if i == j or b["owner"] == a["owner"] or b["state"] == "absorb":
-				continue
-			var eb := _current_span(b)
-			if eb.is_empty() or eb["edge"] != ea["edge"] or eb["forward"] == ea["forward"]:
-				continue
-			var pa: Vector3 = sample(a, a["s"])[0]
-			var pb: Vector3 = sample(b, b["s"])[0]
-			if pa.distance_to(pb) <= Rules.FRONT_CONTACT or _passed(a, b, ea, eb):
-				a["state"] = "fight"
-				b["state"] = "fight"
-				a["foe"] = b["id"]
-				b["foe"] = a["id"]
-				events.append({"t": time, "type": "frontline", "seats": [a["owner"], b["owner"]]})
+static func chain_length(h: Dictionary) -> float:
+	## How much deck a horde occupies behind its head (matches HordeView's patch count).
+	var n := clampi(ceili(h["units"] / Rules.UNITS_PER_PATCH), 1, Rules.MAX_PATCHES)
+	return (n - 1) * Rules.PATCH_SPACING + 1.0
 
 
-func _passed(a: Dictionary, b: Dictionary, ea: Dictionary, eb: Dictionary) -> bool:
-	## Heads crossed within one step (both progress fractions along the deck sum past 1).
-	var fa: float = (a["s"] - ea["s0"]) / maxf(ea["s1"] - ea["s0"], 0.001)
-	var fb: float = (b["s"] - eb["s0"]) / maxf(eb["s1"] - eb["s0"], 0.001)
-	return fa + fb >= 1.0
+func _detect_contacts() -> void:
+	## Hordes are blobs that block the deck, so contact happens from any direction (Daniele):
+	##  enemy ahead, coming toward us  -> frontline
+	##  enemy ahead, going our way     -> we hit its rear (it may be stuck, slower or queued)
+	##  friend ahead, going our way    -> we queue at its tail (no passing through)
+	##  friend coming toward us        -> squeeze past
+	## A horde can be in several fights at once (front and rear). Same combat rates for a rear
+	## attack - a rear-attack bonus is an open question.
+	var occ := {}                                     # edge -> [{h, head, tail, dir, on, len}]
+	for h in hordes:
+		h["blocked"] = false
+		if h["state"] == "absorb":
+			continue
+		var head_s: float = h["s"]
+		var tail_s: float = head_s - chain_length(h)
+		for sp in h["spans"]:
+			if head_s < sp["s0"] or tail_s > sp["s1"]:
+				continue
+			var span_len: float = maxf(sp["s1"] - sp["s0"], 0.001)
+			var dir := 1 if sp["forward"] else -1
+			var fh := clampf((head_s - sp["s0"]) / span_len, 0.0, 1.0)
+			var ft := clampf((tail_s - sp["s0"]) / span_len, 0.0, 1.0)
+			if not occ.has(sp["edge"]):
+				occ[sp["edge"]] = []
+			occ[sp["edge"]].append({                  # edge coordinate: 0 at edge.a, 1 at edge.b
+				"h": h, "dir": dir, "len": span_len, "on": head_s <= sp["s1"],
+				"head": fh if dir == 1 else 1.0 - fh, "tail": ft if dir == 1 else 1.0 - ft,
+			})
+	for edge in occ:
+		var list: Array = occ[edge]
+		for x in list:
+			if not x["on"]:
+				continue                              # contact is made by a head on this deck
+			var eps: float = Rules.FRONT_CONTACT / x["len"]
+			for y in list:
+				if x["h"] == y["h"]:
+					continue
+				var lo := minf(y["head"], y["tail"])
+				var hi := maxf(y["head"], y["tail"])
+				var near: float = lo if x["dir"] == 1 else hi
+				var far: float = hi if x["dir"] == 1 else lo
+				var gap: float = (near - x["head"]) * x["dir"]
+				var ahead: float = (far - x["head"]) * x["dir"]
+				if ahead <= 0.0 or gap > eps:
+					continue
+				if x["h"]["owner"] != y["h"]["owner"]:
+					_engage(x["h"], y["h"], "frontline" if x["dir"] != y["dir"] else "rear")
+				elif x["dir"] == y["dir"]:
+					x["h"]["blocked"] = true
+
+
+func _engage(a: Dictionary, b: Dictionary, kind: String) -> void:
+	var pair := [mini(a["id"], b["id"]), maxi(a["id"], b["id"])]
+	if pair in fights:
+		return
+	fights.append(pair)
+	a["state"] = "fight"
+	b["state"] = "fight"
+	events.append({"t": time, "type": kind, "seats": [a["owner"], b["owner"]]})
 
 
 func _current_span(h: Dictionary) -> Dictionary:

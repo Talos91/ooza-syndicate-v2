@@ -67,6 +67,45 @@ func _init() -> void:
 	check(sim3.hordes.size() <= 1, "one side survives the frontline")
 	check(sim3.combat_losses.size() == 2, "both sides lost units in combat")
 
+	# rear attack: an enemy catching up from behind hits the slower horde's tail
+	var sim5 := Sim.new()
+	sim5.setup(map, pos, {1: "A", 3: "B"}, {"A": "null", "B": "ember"})
+	sim5.nodes[1]["units"] = 120.0
+	sim5.nodes[3]["units"] = 200.0
+	var slow := sim5.send(1, 0, 1.0)
+	slow["speed"] = 0.2                                # e.g. slowed - it will be caught
+	sim5.send(3, 0, 1.0)
+	var rear := false
+	for k in range(600):
+		sim5.step(0.05)
+		if sim5.events.any(func(e): return e["type"] == "rear"):
+			rear = true
+			break
+	check(rear, "enemy catching up from behind makes a rear attack")
+	check(sim5.fights.size() == 1 and slow["state"] == "fight", "the caught horde is fighting its pursuer")
+
+	# friendly queue: a faster friend behind cannot pass through, it waits at the tail
+	var sim6 := Sim.new()
+	sim6.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"})
+	sim6.nodes[3]["units"] = 240.0
+	var front := sim6.send(3, 1, 0.5)
+	front["speed"] = 0.25
+	while front["s"] < front["spans"][0]["s0"] + 3.0:  # the slow one is out on the deck first
+		sim6.step(0.05)
+	var behind := sim6.send(3, 1, 1.0)
+	var queued := false
+	var overtook := false
+	for k in range(400):
+		sim6.step(0.05)
+		if behind.get("blocked", false):
+			queued = true
+		var deck: Dictionary = behind["spans"][0]
+		var on_deck: bool = behind["s"] >= deck["s0"] and behind["s"] <= deck["s1"]
+		if on_deck and front in sim6.hordes and behind["s"] > front["s"]:
+			overtook = true
+	check(queued, "friendly horde queues behind a slower friend on the same deck")
+	check(not overtook, "and never passes through it on the deck (platforms: next pass)")
+
 	# AI vs AI finishes a match
 	var sim4 := Sim.new()
 	sim4.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"})

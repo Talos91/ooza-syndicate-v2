@@ -14,6 +14,11 @@
    speed so travel time counts decks only - needs another way to keep the timing honest, e.g. a
    shorter visual path across the node, or a lower multiplier with deck speeds re-tuned.)
 6. **A proper frontline animation** for bridge fights - the current stop-and-count looks bad.
+7. **Attack from behind, not only frontal** - a horde on a bridge is a blob that blocks it.
+   *Done in the sim (2026-09-25):* contact from any direction on a deck - frontline (enemy coming
+   toward), rear attack (enemy catching up from behind), friendly queue (no passing through a friend
+   going the same way; friends going opposite ways squeeze past). A horde can fight front and rear at
+   once. Still to do: the same blocking on platforms, and a visual for rear contact.
 
 ## Known gaps in this slice (not playtest findings)
 
