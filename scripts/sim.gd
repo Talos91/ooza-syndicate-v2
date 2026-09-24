@@ -45,6 +45,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"id": id, "pos": positions[id], "owner": owner, "tier": tier,
 			"units": float(Rules.HOME_UNITS if owner != "" else Rules.NEUTRAL_UNITS[tier]),
 			"category": n["category"], "center": n["center"],
+			"relay": n["relay"] if n.get("relay") != null else "",  # "" / retract / switch / remote / rotation
 			"streaming": {},        # {hid, remaining}: the one order the door is emitting
 			"siege": {},            # seat -> units on the platform fighting the garrison (arrived)
 			"siege_dir": {},        # seat -> unit vector from the tower to where they landed

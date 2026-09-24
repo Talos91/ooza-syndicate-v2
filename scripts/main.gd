@@ -66,6 +66,8 @@ var debug_panel: PanelContainer
 var hud_layer: CanvasLayer                    # for the build popup, positioned in screen space
 var build_popup: PanelContainer
 var build_popup_node := -1
+var toast_label: Label                        # Alpha 11 convention: every tap gives feedback, never
+var _toast_time := 0.0                        # a silent no-op (Daniele: "I click and nothing happens")
 var _tap_node := -1                           # manual double-tap detection (Alpha 11 convention:
 var _tap_time := 0.0                          # single tap = build popup, double tap = upgrade) -
 var _press_pos := Vector2.ZERO                # engine double_click proved unreliable on Web export
@@ -154,6 +156,13 @@ func _build_map_menu() -> void:
 	root.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_theme_constant_override("separation", 12)
 	layer.add_child(root)
+	var version := Label.new()
+	version.text = "v%s" % Rules.VERSION
+	version.add_theme_font_size_override("font_size", 14)
+	version.modulate = Color(1, 1, 1, 0.45)
+	version.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	version.position = Vector2(-52, -22)
+	layer.add_child(version)
 	var title := Label.new()
 	title.text = "Ooze Syndicate 2.0 - the starter seven"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -362,12 +371,29 @@ func _build_hud() -> void:
 	hud_info = Label.new()
 	hud_info.add_theme_font_size_override("font_size", 22)
 	hud_info.text = "   %s - you are cyan - drag from your node" % map.get("name", "")
+	var version := Label.new()
+	version.text = "v%s" % Rules.VERSION
+	version.add_theme_font_size_override("font_size", 14)
+	version.modulate = Color(1, 1, 1, 0.45)
+	version.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	version.position = Vector2(-52, -22)
+	layer.add_child(version)
 	top.add_child(hud_info)
 	var side := VBoxContainer.new()
 	side.add_theme_constant_override("separation", 10)
 	area.add_child(side)
 	hud_side = side
 	_build_popup()
+	toast_label = Label.new()
+	toast_label.visible = false
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_label.add_theme_font_size_override("font_size", 22)
+	toast_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
+	toast_label.add_theme_constant_override("shadow_offset_x", 2)
+	toast_label.add_theme_constant_override("shadow_offset_y", 2)
+	toast_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	toast_label.position.y = 60
+	layer.add_child(toast_label)
 	var group := ButtonGroup.new()
 	for f in Rules.SEND_FRACTIONS:
 		var b := Button.new()
@@ -419,8 +445,20 @@ func _build_popup() -> void:
 	## Alpha 11 convention (Daniele, 2026-09-25): single-tap an owned node with an empty attachment
 	## slot to open this popup and choose Cannon or Forge; double-tap upgrades whatever is already
 	## there (vat, or a built cannon's tier) - see _unhandled_input and sim.upgrade_structure.
+	## Styled as a ring like Alpha 11's inspector, and every tap gives a toast either way - never a
+	## silent no-op.
 	build_popup = PanelContainer.new()
 	build_popup.visible = false
+	var ring := StyleBoxFlat.new()
+	ring.bg_color = Color(0.05, 0.09, 0.13, 0.92)
+	ring.border_color = Color(0.4, 0.85, 1.0, 0.6)
+	ring.set_border_width_all(2)
+	ring.set_corner_radius_all(28)
+	ring.content_margin_left = 10
+	ring.content_margin_right = 10
+	ring.content_margin_top = 8
+	ring.content_margin_bottom = 8
+	build_popup.add_theme_stylebox_override("panel", ring)
 	hud_layer.add_child(build_popup)
 	var box := HBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
@@ -433,17 +471,23 @@ func _build_popup() -> void:
 		b.add_theme_font_size_override("font_size", 20)
 		b.pressed.connect(func():
 			sim.build_attachment(build_popup_node, kind)
+			toast("%s construction started - %d s" % [kind.capitalize(), int(Rules.BUILD_SECONDS)])
 			_close_build_popup())
 		box.add_child(b)
 
 
 func _open_build_popup(node_id: int) -> void:
 	var n: Dictionary = sim.nodes[node_id]
+	if n["attachment"] != "":
+		toast("Double-tap to upgrade - already built here")
+		_close_build_popup()
+		return
 	var offers := []
 	for kind in ["cannon", "forge"]:
 		if kind in n["buildable"]:
 			offers.append(kind)
-	if n["attachment"] != "" or offers.is_empty():
+	if offers.is_empty():
+		toast("Nothing buildable on this node")
 		_close_build_popup()
 		return
 	build_popup_node = node_id
@@ -458,6 +502,13 @@ func _open_build_popup(node_id: int) -> void:
 func _close_build_popup() -> void:
 	build_popup_node = -1
 	build_popup.visible = false
+
+
+func toast(msg: String) -> void:
+	## Alpha 11 convention: every tap gives visible feedback, success or not.
+	toast_label.text = msg
+	toast_label.visible = true
+	_toast_time = 2.5
 
 
 func _build_debug(area: Control) -> void:
@@ -552,7 +603,7 @@ func _process(delta: float) -> void:
 		var owner: String = n["owner"]
 		label.modulate = Rules.SEATS[owner] if owner != "" else Rules.NEUTRAL
 		label.text = "" if owner != "" and owner != HUMAN else str(int(n["units"]))   # no numbers on enemy nodes
-		if entry["vat_tier"] != n["tier"]:
+		if n["relay"] == "" and entry["vat_tier"] != n["tier"]:
 			MapBuilder.set_vat_tier(self, entry, n["tier"], owner)
 		if entry["attachment"] != n["attachment"]:
 			MapBuilder.set_attachment(self, entry, n["attachment"], n["pos"], owner)
@@ -568,6 +619,10 @@ func _process(delta: float) -> void:
 		for deck in vis["edge_decks"][edge_i]:
 			(deck as Node3D).visible = open
 	hud_time.text = "%d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
+	if _toast_time > 0.0:
+		_toast_time -= dt
+		if _toast_time <= 0.0:
+			toast_label.visible = false
 	_trace_t += dt
 	if _trace_t >= 2.0:
 		_trace_t = 0.0
@@ -652,7 +707,19 @@ func _unhandled_input(event: InputEvent) -> void:
 					if n == _tap_node and now - _tap_time < DOUBLE_TAP_WINDOW:
 						# double-tap (Alpha 11): upgrade whatever is already there, own timing since
 						# the engine's mb.double_click proved unreliable on the Web export
-						sim.upgrade_structure(n)
+						var nn: Dictionary = sim.nodes[n]
+						if sim.upgrade_structure(n):
+							toast("Upgrade started - %d s" % int(Rules.BUILD_SECONDS))
+						elif nn["build_kind"] != "":
+							toast("Construction already in progress")
+						elif nn["attachment"] == "cannon" and nn["cannon_tier"] >= 3:
+							toast("Cannon is already at max tier")
+						elif nn["attachment"] == "forge":
+							toast("Forge has no further upgrade")
+						elif nn["tier"] >= 4:
+							toast("Vat is already at max tier")
+						else:
+							toast("Nothing to upgrade here")
 						_close_build_popup()
 						_tap_node = -1
 						return

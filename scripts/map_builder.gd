@@ -55,15 +55,37 @@ static func put(parent: Node3D, name: String, pos: Vector3, heading := 0.0, stre
 	return n
 
 
+const RELAY_HOUSING := {"rotation": "Relay_Rotation_Tower", "retract": "Relay_Retract",
+		"switch": "Relay_Switch_Hub", "remote": "Relay_Remote"}
+
+
 static func build(parent: Node3D, sim: Sim) -> Dictionary:
 	## Returns node id -> {"parts": [Node3D], "label": Label3D, "vat_node", "vat_tier",
 	## "attachment_node", "attachment"}, "stretched": [edge index] and "edge_decks": edge index ->
 	## [Node3D] (the relay-controlled ones - see RelayView/relay cycling visibility).
 	var vis := {"stretched": [], "edge_decks": {}}
+	var centre := Vector3.ZERO
+	for n in sim.nodes:
+		if n["center"]:
+			centre = n["pos"]
 	for n in sim.nodes:
 		var parts: Array = []
-		parts.append(put(parent, "Platform_Standard", n["pos"]))
-		var vat_node := put(parent, "Vat_T%d" % n["tier"], n["pos"])
+		var relay: String = n["relay"]
+		parts.append(put(parent, "Platform_Rotation" if relay == "rotation" else "Platform_Standard", n["pos"]))
+		var vat_node: Node3D
+		if relay != "":
+			# a relay node has NO vat (GAME-RULES sec6: centreHasNoVat) - the housing (map-fixed,
+			# ledge-mounted toward the rim) plus the attachment socket in the middle, like a vat
+			var out: Vector3 = (n["pos"] - centre)
+			out = out.normalized() if out.length() > 0.5 else Vector3.FORWARD
+			var mount := put(parent, "Relay_Mount", n["pos"], Rules.heading(out))
+			parts.append(mount)
+			var housing := put(parent, RELAY_HOUSING.get(relay, "Relay_Mount"),
+					n["pos"] + out * (Rules.R * 0.75), Rules.heading(-out))
+			parts.append(housing)
+			vat_node = put(parent, "Socket_Attachment", n["pos"])
+		else:
+			vat_node = put(parent, "Vat_T%d" % n["tier"], n["pos"])
 		parts.append(vat_node)
 		var label := Label3D.new()
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -73,7 +95,8 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		label.no_depth_test = true
 		label.position = n["pos"] + Vector3(0, 10.5, 0)
 		parent.add_child(label)
-		vis[n["id"]] = {"parts": parts, "label": label, "vat_node": vat_node, "vat_tier": n["tier"],
+		vis[n["id"]] = {"parts": parts, "label": label, "vat_node": vat_node,
+				"vat_tier": -1 if relay != "" else n["tier"],   # -1: never swap a relay's socket for a vat
 				"attachment_node": null, "attachment": ""}
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
@@ -88,9 +111,10 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		var pier_b := put(parent, "Pier_Connector", pb, Rules.heading(-d))
 		vis[e["a"]]["parts"].append(pier_a)
 		vis[e["b"]]["parts"].append(pier_b)
+		var piece := "Deck_Retract" if e["retracts"] else ("Deck_Remote" if e["state"].begins_with("m") else "Deck_S")
 		var deck_nodes: Array = []
 		for k in range(e["modules"]):
-			deck_nodes.append(put(parent, "Deck_S", pa + d * (Rules.R + Rules.PIER + k * Rules.S * f),
+			deck_nodes.append(put(parent, piece, pa + d * (Rules.R + Rules.PIER + k * Rules.S * f),
 					Rules.heading(d), f))
 		vis["edge_decks"][i] = deck_nodes                  # main.gd toggles these against
                                                             # Sim.is_edge_open (relay cycling AND a

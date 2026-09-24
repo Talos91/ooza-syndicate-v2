@@ -4,6 +4,10 @@ extends RefCounted
 ## Kit sizes match Models/2.0/build_kit_2_0.py. Army numbers are PROVISIONAL placeholders
 ## (PARAMETERS.md: army scale and vat caps are open questions) - change here only.
 
+# Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
+# it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
+const VERSION := "0.7.0"
+
 # kit geometry (metres)
 const R := 6.0                       # platform radius
 const PIER := 1.6                    # connector length beyond the rim
