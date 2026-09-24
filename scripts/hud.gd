@@ -694,14 +694,14 @@ func _build_debug() -> void:
 			func(v: float): Rules.door_rate = v)
 	var nfight := _debug_slider(box, "Platform fight", 0.05, 20.0, 0.05, Rules.node_fight_mult, "x%.2f rate",
 			func(v: float): Rules.node_fight_mult = v)
-	var forge := _debug_slider(box, "Forge bonus", 0.0, 2.0, 0.05, Rules.forge_bonus, "+%.0f%% attack",
-			func(v: float): Rules.forge_bonus = v)
+	var forge := _debug_slider(box, "Forge bonus", 0.0, 200.0, 5.0, Rules.forge_bonus * 100.0, "+%.0f%% attack",
+			func(v: float): Rules.forge_bonus = v / 100.0)
 	var reset := button("Reset to rules", func():
 		deck.value = Rules.DECK_SPEED_DEFAULT
 		node.value = Rules.NODE_SPEED_MULT_DEFAULT
 		door.value = Rules.DOOR_RATE_DEFAULT
 		nfight.value = 1.0
-		forge.value = 0.5, 0, 44, 18)
+		forge.value = 50.0, 0, 44, 18)
 	box.add_child(reset)
 
 
