@@ -1,0 +1,419 @@
+{
+ "id": 47,
+ "code": "047",
+ "name": "Trident Exchange*",
+ "tier": "mid",
+ "family": "islands",
+ "modes": [
+  "1v1",
+  "2v2",
+  "3v3",
+  "FFA4"
+ ],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 50,
+   "y": 50,
+   "center": true,
+   "relay": null,
+   "pillar": false,
+   "category": "final",
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 26,
+   "y": 50,
+   "center": false,
+   "relay": "retract",
+   "pillar": false,
+   "category": "relay",
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 74,
+   "y": 50,
+   "center": false,
+   "relay": "retract",
+   "pillar": false,
+   "category": "relay",
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 50,
+   "y": 18,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "final",
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 50,
+   "y": 82,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 14.5,
+   "y": 58,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 26,
+   "y": 64,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 37.5,
+   "y": 58,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 8,
+   "x": 85.5,
+   "y": 58,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 9,
+   "x": 74,
+   "y": 64,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 10,
+   "x": 62.5,
+   "y": 58,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 1,
+   "to": 5,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 7,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 8,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 9,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 10,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 5,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 8,
+   "to": 9,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 6,
+   "to": 7,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 9,
+   "to": 10,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 0,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": true
+  },
+  {
+   "from": 2,
+   "to": 0,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": true
+  },
+  {
+   "from": 3,
+   "to": 0,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 0,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 3,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 4,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 4,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 3,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  }
+ ],
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 6,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 9,
+    "team": 1
+   }
+  ],
+  "2v2": [
+   {
+    "seat": "A",
+    "node": 5,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 7,
+    "team": 0
+   },
+   {
+    "seat": "C",
+    "node": 8,
+    "team": 1
+   },
+   {
+    "seat": "D",
+    "node": 10,
+    "team": 1
+   }
+  ],
+  "3v3": [
+   {
+    "seat": "A",
+    "node": 5,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 6,
+    "team": 0
+   },
+   {
+    "seat": "C",
+    "node": 7,
+    "team": 0
+   },
+   {
+    "seat": "D",
+    "node": 8,
+    "team": 1
+   },
+   {
+    "seat": "E",
+    "node": 9,
+    "team": 1
+   },
+   {
+    "seat": "F",
+    "node": 10,
+    "team": 1
+   }
+  ],
+  "FFA4": [
+   {
+    "seat": "A",
+    "node": 5,
+    "team": null
+   },
+   {
+    "seat": "B",
+    "node": 7,
+    "team": null
+   },
+   {
+    "seat": "C",
+    "node": 8,
+    "team": null
+   },
+   {
+    "seat": "D",
+    "node": 10,
+    "team": null
+   }
+  ]
+ },
+ "lastStand": {
+  "methods": [
+   "inward",
+   "outward",
+   "chaos"
+  ],
+  "inwardFinal": 0,
+  "outwardFinal": 3
+ },
+ "note": null,
+ "symmetryCheck": true,
+ "centreHasNoVat": false
+}

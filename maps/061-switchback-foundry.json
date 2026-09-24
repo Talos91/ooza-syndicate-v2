@@ -1,0 +1,430 @@
+{
+ "id": 61,
+ "code": "061",
+ "name": "Switchback Foundry*",
+ "tier": "complex",
+ "family": "ring",
+ "modes": [
+  "1v1",
+  "FFA3"
+ ],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 50,
+   "y": 50,
+   "center": true,
+   "relay": "rotation",
+   "pillar": false,
+   "category": "relay",
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 50,
+   "y": 36,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 62.1,
+   "y": 43,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 62.1,
+   "y": 57,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 50,
+   "y": 64,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 37.9,
+   "y": 57,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 37.9,
+   "y": 43,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 50,
+   "y": 8,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 8,
+   "x": 86.4,
+   "y": 29,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 9,
+   "x": 86.4,
+   "y": 71,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 10,
+   "x": 50,
+   "y": 92,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 11,
+   "x": 13.6,
+   "y": 71,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 12,
+   "x": 13.6,
+   "y": 29,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 0,
+   "to": 1,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": "r1",
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 7,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": "r2",
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 8,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": "r3",
+   "retracts": false
+  },
+  {
+   "from": 3,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 3,
+   "to": 9,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": "r1",
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 5,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 10,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 5,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": "r2",
+   "retracts": false
+  },
+  {
+   "from": 5,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 5,
+   "to": 11,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": "r3",
+   "retracts": false
+  },
+  {
+   "from": 6,
+   "to": 1,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 6,
+   "to": 12,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 7,
+   "to": 8,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 8,
+   "to": 9,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 9,
+   "to": 10,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 10,
+   "to": 11,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 11,
+   "to": 12,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 12,
+   "to": 7,
+   "tier": "L",
+   "seconds": 6,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  }
+ ],
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 7,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 10,
+    "team": 1
+   }
+  ],
+  "FFA3": [
+   {
+    "seat": "A",
+    "node": 7,
+    "team": null
+   },
+   {
+    "seat": "B",
+    "node": 9,
+    "team": null
+   },
+   {
+    "seat": "C",
+    "node": 11,
+    "team": null
+   }
+  ]
+ },
+ "lastStand": {
+  "methods": [
+   "inward",
+   "chaos"
+  ],
+  "inwardFinal": 0,
+  "outwardFinal": null
+ },
+ "note": null,
+ "symmetryCheck": true,
+ "centreHasNoVat": true
+}

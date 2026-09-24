@@ -1,0 +1,137 @@
+{
+ "id": 4,
+ "code": "004",
+ "name": "Two Piers",
+ "tier": "simple",
+ "family": "ring",
+ "modes": [
+  "1v1"
+ ],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 50,
+   "y": 50,
+   "center": true,
+   "relay": null,
+   "pillar": false,
+   "category": "final",
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 50,
+   "y": 36,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 50,
+   "y": 64,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 50,
+   "y": 8,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 50,
+   "y": 92,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 0,
+   "to": 1,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 4,
+   "tier": "M",
+   "seconds": 4,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  }
+ ],
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 3,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 4,
+    "team": 1
+   }
+  ]
+ },
+ "lastStand": {
+  "methods": [
+   "inward",
+   "chaos"
+  ],
+  "inwardFinal": 0,
+  "outwardFinal": null
+ },
+ "note": null,
+ "symmetryCheck": true,
+ "centreHasNoVat": false
+}
