@@ -6,12 +6,13 @@ game. Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project fo
 
 ## The starter seven
 
-A title screen lists all seven starter maps in build order; pick one to play (or skip it with
-`--map=res://maps/<file>.json`). Every map is built from its roster JSON with the Blender kit, at
-honest lengths (1 deck module = 4 m = 2 s; piers count as part of the platform). Relay-controlled
-and retract decks cycle open/closed together every 18 s (rudimentary - the real per-map relay art
-and behaviour isn't built); a rudimentary Last Stand starts at 3:00 and collapses the rim inward so
-no match is eternal, with a 7:00 safety net if it still somehow is.
+A title screen lets you pick a faction, then one of the seven starter maps in build order (or skip
+both with `--map=res://maps/<file>.json`). Every map is built from its roster JSON with the Blender
+kit, at honest lengths (1 deck module = 4 m = 2 s; piers count as part of the platform). A captured
+relay's owner fires its switch by tapping it (15 s cooldown; rudimentary - the real per-map relay
+art/behaviour beyond that isn't built) - the deck itself visibly appears/disappears as it cycles. A
+rudimentary Last Stand starts at 2:00 and collapses the rim inward (platforms and bridges fall away)
+so no match is eternal, with a 7:00 safety net if it still somehow is.
 - Drag from one of your nodes to any node to send; side buttons set 25 / 50 / 75 / 100 %.
 - Hordes are long lines of patches (goo + creatures) that leave the vat only as the door reveals
   them (still-inside units stay orderable), flow along the decks, curve AROUND the centre structure
@@ -19,21 +20,24 @@ no match is eternal, with a 7:00 safety net if it still somehow is.
 - **The whole platform is the node.** A ring of goo rivers the tower, owned or split by whoever is
   fighting there; a besieged platform's garrison is beaten down where it stands, then the node
   flips and the survivors become the new garrison. Own nodes: reinforce.
-- **No free glide through a node.** Every waypoint on a route - not just the final target - fights
-  whoever is currently passing through it, at the same rates as a real siege. Only an arrival can
-  capture a node, though: grinding a waypoint's garrison to zero while merely passing through
-  leaves it undefended but still owned by whoever held it.
+- **No free glide through an enemy node** (a neutral one is a free glide). Every hostile waypoint
+  on a route - not just the final target - fights whoever's passing through, but only its
+  regenerating **shield** (SHIELD_FRACTION of the garrison), never the real garrison: only an
+  arrival can capture. Break the shield and that one deck is destroyed for good.
 - Opposing hordes meeting on a deck stop at a frontline and fight.
-- Owned vats produce up to their cap; double-tap an owned node to upgrade its vat, or build a
-  cannon (bursts enemy hordes in range, bypassing fight math) or forge (owner takes less damage
-  everywhere) where the map allows it - pick which with the Upgrade/Cannon/Forge buttons. Seat B+
-  is a simple AI with the same options, no cheats.
+- Owned vats produce up to their cap. Single-tap an owned node with an empty attachment slot to
+  choose Cannon (bursts enemy hordes in range, bypassing fight math) or Forge (owner takes less
+  damage everywhere) where the map allows it; double-tap upgrades whatever's already there - the
+  vat, or a built cannon's tier (T1-T3) - Alpha 11's tap convention, with a toast on every tap.
+  Seat B+ is a simple AI with the same options, no cheats.
 - Ownership = material: seat-colour lights, vat ooze, goo; creature body hue = seat, race = accent.
+  Relay nodes show their real modelled tower (rotation/retract/switch/remote).
 - Per-match telemetry JSON in `user://telemetry/`.
 
 All tunable numbers are in `scripts/rules.gd`; army numbers there are PROVISIONAL placeholders.
-Not in this slice yet: real per-map relay art/behaviour, abilities, real Last Stand (method choice,
-hidden reveal, falls), attachment swap/cooldown, cannon T2/T3, multiplayer, pinch-zoom on touch.
+Not in this slice yet: real per-map relay art/behaviour beyond open-closed, abilities, real Last
+Stand (method choice, hidden reveal), attachment swap/cooldown, cannon T2/T3 stat balance,
+multiplayer, pinch-zoom on touch, real-phone testing.
 
 ## Play the current build
 
