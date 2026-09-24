@@ -188,6 +188,15 @@ Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven
   corridor attrition. A deck between two of your own nodes is covered in your goo. Last Stand moved
   to 2:00 (was 3:00). Confirmed already-working: blobs always fight when they cross (deck contact
   has no gap), a platform's goo river counts as a blob, and several attackers can share one target.
+- **Neutral is a free glide; enemy nodes get a regenerating shield instead of a wall** (same day,
+  PLAYTEST-NOTES 20-21): transit fighting only triggers at an ENEMY-owned node now (a neutral one
+  is untouched, matching "neutral don't count"). And rather than a transiting force fighting the
+  real garrison, it fights a **shield** worth `Rules.SHIELD_FRACTION` (20%) of the garrison,
+  regenerating at `Rules.SHIELD_REGEN` units/s - the garrison itself is now ONLY ever touched by an
+  actual arrival. If the shield breaks, the specific deck the attacker used is destroyed for good
+  (`Sim.broken_edges`, excluded from routing, hidden in play) - "the bond with the other node
+  disappears." Which bond breaks was ambiguous in the request; documented the reading taken
+  (the one approach deck in use, not every connection) as a flag for Daniele to correct.
 - Map built from `maps/004-two-piers.json` with the kit GLBs, at **honest lengths**.
 - **Drag** from your node to any node to send; **25 / 50 / 75 / 100 %** buttons.
 - Routes along the deck network (fastest by deck time).

@@ -173,6 +173,30 @@ the existing deck/platform speed ones - open `Debug` bottom-left. Reset to rules
     platform's `siege`/`transit` totals combine per seat; a deck horde can be fighting front and
     rear simultaneously) - see `sim.gd _node_fights`/`_detect_contacts`. No change needed there.
 19. **Last Stand moved to 2:00** (was 3:00) to keep matches shorter for this rudimentary pass.
+20. **"Make sure enemies can't pass a platform without automatically attacking the tower if
+    occupied - neutral don't count."** *Done:* transit fighting (note 10) now only triggers at an
+    ENEMY-owned node; a neutral one is a free glide-through (it has no shield either - see note 21).
+21. **The shield idea: allow passing through, but the goo ring is a toll, not a wall.** Daniele:
+    "we allow passing through the tower, but the outside goo (the ring) counts as a percentage of
+    what is inside (20%) - to pass through the attacker needs to clear that, then can go on. Think
+    of it like a shield that regenerates with excess minions; if broken, the bond with the other
+    node disappears."
+    *Done, with one reading I chose where the request was ambiguous:* every owned node has a
+    **shield** worth `Rules.SHIELD_FRACTION` (20%) of its CURRENT garrison, regenerating at
+    `Rules.SHIELD_REGEN` units/s whenever below that cap. A transiting force now fights the shield,
+    never the real garrison directly - only an actual ARRIVAL still touches the garrison itself
+    (note 10's "only an arrival captures" still holds, now for an even stronger reason: transit
+    can't even dent the garrison any more). The garrison still fires back at the transiting force
+    exactly as before, so a strong node is still lethal to weak passers-through. If the shield hits
+    zero, the bond breaks: **my reading of "the bond with the other node"** is the ONE deck the
+    attacking force is using right now to approach - not every connection the node has - and that
+    deck is destroyed outright (`Sim.broken_edges`, excluded from all future routing, and the deck
+    model itself disappears in play, same visual as a closed relay deck but permanent). An
+    already-moving horde isn't stopped by its own bond-breaking; it continues on its precomputed
+    path. **Flag for Daniele:** if "the bond" was meant to mean something else - every edge the
+    node has, the edge toward its OWN home, or a repairable state rather than permanent - say so
+    and I'll adjust; this is the most literal reading of "the bond with the OTHER node" I could
+    make without more specifics.
 
 ## Known gaps in this slice (not playtest findings)
 

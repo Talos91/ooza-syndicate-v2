@@ -23,6 +23,7 @@ var fights: Array = []               # [horde id, horde id] contact pairs (front
 var fight_info: Dictionary = {}      # "lo:hi" -> {kind: "frontline"/"rear", attacker: horde id} (for the view)
 var relay_groups: Dictionary = {}    # "r"/"s"/"m" -> [sorted state keys]: rudimentary relay cycling
 var collapsed: Dictionary = {}       # node id -> true once dropped by the rudimentary Last Stand
+var broken_edges: Dictionary = {}    # edge index -> true: a shield broke, its bond severed for good
 var last_stand_active := false
 var last_stand_order: Array = []     # node ids, farthest-from-centre first (inward collapse only)
 var last_stand_next := 0
@@ -55,6 +56,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"build_kind": "",       # "" / "vat" / "cannon" / "forge": what build_timer completes
 			"build_timer": 0.0,     # seconds left on a vat/cannon upgrade or a fresh attachment build
 			"cannon_cd": 0.0,       # seconds to the node's cannon's next burst
+			"shield": Rules.SHIELD_FRACTION * (Rules.HOME_UNITS if owner != "" else Rules.NEUTRAL_UNITS[tier]),
 		})
 		adj[id] = []
 	for e in map["edges"]:
@@ -217,8 +219,8 @@ func _forge_mult(seat: String) -> float:
 
 
 func is_edge_open(edge_index: int) -> bool:
-	## Public wrapper for the view: is this deck currently open (relay cycling / retract)?
-	return _edge_open(edges[edge_index])
+	## Public wrapper for the view: is this deck currently open (relay cycling / retract / shield)?
+	return not broken_edges.get(edge_index, false) and _edge_open(edges[edge_index])
 
 
 func _edge_open(e: Dictionary) -> bool:
@@ -250,7 +252,7 @@ func find_route(from_id: int, to_id: int) -> Array:
 			break
 		for link in adj[cur]:
 			var nb: int = link[0]
-			if collapsed.get(nb, false) or not _edge_open(edges[link[1]]):
+			if collapsed.get(nb, false) or broken_edges.get(link[1], false) or not _edge_open(edges[link[1]]):
 				continue
 			var cost: float = dist[cur] + edges[link[1]]["modules"] * Rules.MODULE_SECONDS + 1.0
 			if not dist.has(nb) or cost < dist[nb]:
@@ -384,6 +386,9 @@ func step(dt: float) -> void:
 	for n in nodes:                                   # production, up to the vat cap
 		if n["owner"] != "" and n["units"] < Rules.CAPS[n["tier"]]:
 			n["units"] = minf(Rules.CAPS[n["tier"]], n["units"] + Rules.PROD[n["tier"]] * dt)
+		if n["owner"] != "":                           # the shield: SHIELD_FRACTION of the garrison,
+			var cap: float = Rules.SHIELD_FRACTION * n["units"]   # regenerating "from excess minions"
+			n["shield"] = minf(cap, n["shield"] + Rules.SHIELD_REGEN * dt) if n["shield"] < cap else cap
 	_step_structures(dt)
 	for n in nodes:                                   # the door emits the current order into its line
 		if n["streaming"].is_empty():
@@ -594,27 +599,31 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 
 func _register_transit() -> void:
 	## An order passing through a node always counts as passing through that node (Daniele,
-	## 2026-09-25): no free glide past a contested or hostile waypoint. Every node a horde's line
-	## currently overlaps - not just its final target - counts its present units as an attacking
-	## force this frame, UNLESS that node is already the horde's owner (a friendly waypoint is a
-	## pure pass-through, matching GAME-RULES §6: troops passing through don't count against cap).
+	## 2026-09-25): no free glide past a HOSTILE waypoint - every node a horde's line currently
+	## overlaps, not just its final target, counts its present units as an attacking force there,
+	## UNLESS that node is the horde's own (a friendly waypoint is a pure pass-through, matching
+	## GAME-RULES §6) OR the node is neutral (Daniele: "make sure enemies can't pass a platform
+	## without automatically attacking the tower if occupied - neutral don't count"; only an
+	## enemy-OWNED node forces the fight, an unclaimed one is a free glide-through).
 	## Transient: rebuilt fresh every step, never carried over by itself (see _node_fights).
 	for n in nodes:
 		n["transit"] = {}
 	for h in hordes:
 		if h["state"] == "absorb":
 			continue
-		for ns in h["node_spans"]:
+		for idx in range(h["node_spans"].size()):
+			var ns: Dictionary = h["node_spans"][idx]
 			var n: Dictionary = nodes[ns["node"]]
-			if n["owner"] == h["owner"]:
+			if n["owner"] == h["owner"] or n["owner"] == "":
 				continue
 			var head_s: float = h["s"]
 			var tail_s: float = head_s - chain_length(h)
 			if head_s < ns["s0"] or tail_s > ns["s1"]:
 				continue
-			var t: Dictionary = n["transit"].get(h["owner"], {"units": 0.0, "hordes": []})
+			var t: Dictionary = n["transit"].get(h["owner"], {"units": 0.0, "hordes": [], "edges": []})
 			t["units"] += h["units"]
 			(t["hordes"] as Array).append(h)
+			(t["edges"] as Array).append(h["spans"][idx]["edge"])   # the deck it used to get here
 			n["transit"][h["owner"]] = t
 
 
@@ -643,14 +652,19 @@ func _node_fights(dt: float) -> Array:
 		for k in force:
 			total_att += force[k]
 		var loss := {}
-		var g_loss := 0.0
-		for k in force:
-			var enemy: float = n["units"] + total_att - force[k]
-			if enemy <= 0.0:
+		var g_loss_units := 0.0                       # arrivals (siege) fight the real garrison
+		var g_loss_shield := 0.0                      # transit fights the shield instead (Daniele,
+		for k in force:                                # 2026-09-25: "allow passing through, but the
+			var enemy: float = n["units"] + total_att - force[k]   # goo ring is a shield worth a
+			if enemy <= 0.0:                                       # % of what's inside")
 				continue
 			loss[k] = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * enemy) * dt * mult * _forge_mult(k)
-			if n["units"] > 0.0:
-				g_loss += (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * force[k]) * dt * mult * _forge_mult(n["owner"])
+			if n["units"] > 0.0 and force[k] > 0.0:
+				var rate: float = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * force[k]) * dt * mult * _forge_mult(n["owner"])
+				var siege_part: float = n["siege"].get(k, 0.0)
+				var transit_part: float = n["transit"].get(k, {}).get("units", 0.0)
+				g_loss_units += rate * (siege_part / force[k])
+				g_loss_shield += rate * (transit_part / force[k])
 		for k in loss:
 			var actual: float = minf(loss[k], force[k])
 			n["node_loss"][k] = actual / maxf(dt, 0.0001)
@@ -672,12 +686,23 @@ func _node_fights(dt: float) -> Array:
 						destroyed.append(hh)
 						events.append({"t": time, "type": "horde_destroyed", "seat": hh["owner"], "units": hh["start_units"]})
 				tt["units"] = maxf(0.0, tt_units - remaining)
-		if g_loss > 0.0:
+		if g_loss_units > 0.0:                         # arrivals damage the real garrison, as before
 			var before_g: float = n["units"]
-			n["units"] = maxf(0.0, before_g - g_loss)
+			n["units"] = maxf(0.0, before_g - g_loss_units)
 			if n["owner"] != "":
 				combat_losses[n["owner"]] = combat_losses.get(n["owner"], 0.0) + before_g - n["units"]
 				n["node_loss"][n["owner"]] = (before_g - n["units"]) / maxf(dt, 0.0001)
+		if g_loss_shield > 0.0:                        # transit only ever fights the shield
+			var before_s: float = n["shield"]
+			n["shield"] = maxf(0.0, before_s - g_loss_shield)
+			if before_s > 0.0 and n["shield"] <= 0.0:
+				# shield broken: "the bond with the other node disappears" - sever the approach
+				# deck(s) currently in use, for every seat whose transiting force broke it
+				for k in n["transit"]:
+					for edge_i in n["transit"][k]["edges"]:
+						if not broken_edges.get(edge_i, false):
+							broken_edges[edge_i] = true
+							events.append({"t": time, "type": "bond_broken", "node": n["id"], "edge": edge_i, "seat": k})
 		if n["units"] <= 0.0:
 			# capture needs an ARRIVAL, not just transit: a horde merely passing through can grind
 			# the garrison down to nothing (real combat, real losses, can even wipe the transiting

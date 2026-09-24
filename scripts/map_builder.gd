@@ -92,8 +92,9 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		for k in range(e["modules"]):
 			deck_nodes.append(put(parent, "Deck_S", pa + d * (Rules.R + Rules.PIER + k * Rules.S * f),
 					Rules.heading(d), f))
-		if e["state"] != "" or e["retracts"]:              # relay-controlled: main.gd toggles these
-			vis["edge_decks"][i] = deck_nodes
+		vis["edge_decks"][i] = deck_nodes                  # main.gd toggles these against
+                                                            # Sim.is_edge_open (relay cycling AND a
+                                                            # shield-broken bond, on ANY edge)
 	return vis
 
 

@@ -95,24 +95,28 @@ func _init() -> void:
 
 	# an order passing through a node always counts as passing through that node (Daniele,
 	# 2026-09-25): a hostile waypoint on the route (3 -> 1 -> 0 -> 2 -> 4 for a send 3 -> 4) is not
-	# a free glide - it fights the garrison there while it overlaps the platform.
+	# a free glide. Passing through is ALLOWED, but the goo ring is a shield worth SHIELD_FRACTION
+	# of the garrison - a transiting force fights the shield, never the real garrison (Daniele: "the
+	# outside goo counts as a percentage of what's inside... to pass through the attacker needs to
+	# clear that"); if the shield breaks, the specific deck it used is destroyed for good ("the bond
+	# with the other node disappears").
 	var sim8 := Sim.new()
 	sim8.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"})
 	sim8.nodes[0]["owner"] = "A"                       # friendly waypoints either side of the contest
 	sim8.nodes[2]["owner"] = "A"
 	sim8.nodes[1]["owner"] = "B"
-	sim8.nodes[1]["units"] = 15.0                     # weak waypoint: grinds down but the order lives
-	sim8.nodes[3]["units"] = 900.0                     # large enough to outlast the waypoint AND
+	sim8.nodes[1]["units"] = 15.0                      # weak waypoint: its tiny shield breaks fast
+	sim8.nodes[3]["units"] = 900.0                     # large enough to overwhelm node 4's production
+	var route8: Array = sim8.find_route(3, 1)
+	var entry_edge8: int = sim8._edge_index(route8[-2], route8[-1])
 	sim8.send(3, 4, 1.0)                               # still overwhelm node 4's home production
-	var drained := false
 	var t8 := 0.0
 	while t8 < 90.0 and sim8.nodes[4]["owner"] != "A":
 		sim8.step(0.05)
 		t8 += 0.05
-		if sim8.nodes[1]["units"] <= 0.0:
-			drained = true
-	check(drained, "passing through a weak enemy waypoint grinds its garrison down")
-	check(sim8.nodes[1]["owner"] == "B", "but the waypoint is NOT captured by passing through - only an arrival captures")
+	check(sim8.broken_edges.get(entry_edge8, false), "passing through breaks a weak waypoint's shield - the deck it used is severed")
+	check(sim8.nodes[1]["units"] >= 15.0, "but the real garrison behind the shield is never reduced by transit (only grown by its own production)")
+	check(sim8.nodes[1]["owner"] == "B", "and the waypoint is NOT captured by passing through - only an arrival captures")
 	check(sim8.nodes[4]["owner"] == "A", "the surviving force fights on through and still takes its real destination")
 
 	var sim9 := Sim.new()
@@ -131,6 +135,25 @@ func _init() -> void:
 	check(sim9.nodes[4]["owner"] == "B", "the real destination was never touched - the order died at the waypoint")
 	check(sim9.events.any(func(e): return e["type"] == "horde_destroyed" and e["seat"] == "A"),
 			"a horde_destroyed event is recorded for the order lost in transit")
+
+	# "make sure enemies can't pass a platform without automatically attacking the tower if
+	# occupied - neutral don't count" (Daniele, 2026-09-25): only an ENEMY-owned waypoint forces a
+	# fight in transit; an unclaimed (neutral) one is a free glide-through.
+	var sim9b := Sim.new()
+	sim9b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"})
+	sim9b.nodes[0]["owner"] = "A"
+	sim9b.nodes[2]["owner"] = "A"                      # node 1 stays neutral (its roster default)
+	sim9b.nodes[3]["units"] = 900.0                    # enough to also take node 4's home outright
+	var units_before: float = sim9b.nodes[1]["units"]
+	sim9b.send(3, 4, 1.0)
+	var t9b := 0.0
+	while t9b < 90.0 and sim9b.nodes[4]["owner"] != "A":
+		sim9b.step(0.05)
+		t9b += 0.05
+	check(t9b < 90.0, "capture happened within the loop's budget (t=%.0fs)" % t9b)
+	check(sim9b.nodes[1]["owner"] == "" and absf(sim9b.nodes[1]["units"] - units_before) < 0.5,
+			"a neutral waypoint is a free glide - untouched by a passing order")
+	check(sim9b.nodes[4]["owner"] == "A", "and the order reaches its real destination unharmed by it")
 
 	# two opposing hordes on the same deck meet at a frontline
 	var sim3 := Sim.new()

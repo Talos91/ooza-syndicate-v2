@@ -68,6 +68,17 @@ const CANNON_RANGE := 10.0           # metres from the node's centre a burst rea
 const CANNON_STATS := {1: {"period": 4.0, "kill": 10.0}, 2: {"period": 3.0, "kill": 16.0},
 		3: {"period": 2.0, "kill": 25.0}}
 static var forge_bonus: float = 0.15 # live-tunable: a forge's attack/defence bonus for its owner
+
+# SHIELD (Daniele, 2026-09-25): passing through an enemy node is now allowed - the goo RING around
+# the tower (not the tower/garrison itself) is a shield worth SHIELD_FRACTION of the current
+# garrison, regenerating from "excess minions" while below that cap. A transiting force fights the
+# shield, not the real garrison (only an actual arrival ever touches that); the garrison still
+# fires back at the transiting force as before. If the shield breaks, the specific deck the
+# attacker is using to approach is destroyed outright ("the bond with the other node disappears") -
+# rudimentary reading: the ONE edge on the attacker's route immediately before this node, not every
+# edge the node has. Neutral nodes have no shield (already a free glide - see _register_transit).
+const SHIELD_FRACTION := 0.2
+const SHIELD_REGEN := 3.0            # units/s, whenever the shield is below its cap
 const HOME_UNITS := 80
 const NEUTRAL_UNITS := {1: 30, 2: 60, 3: 120, 4: 200}
 const SEND_FRACTIONS := [0.25, 0.5, 0.75, 1.0]
