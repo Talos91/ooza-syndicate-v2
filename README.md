@@ -33,6 +33,8 @@ Godot_v4.6.1-stable_win64_console.exe --headless --path . --script res://tests/t
 
 Godot is in `Tools/Godot` of the project folder.
 
+See **docs/BUILD-LOG.md** for the full record of what was built and every decision taken.
+
 ## Layout
 
 | Path | What |
