@@ -158,6 +158,26 @@ A 100-unit horde ≈ 43 k polygons.
 Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven.
 
 ### What plays
+- **All seven starter maps** (pass of 2026-09-25, PLAYTEST-NOTES 11): a title screen lists them in
+  build order; pick one to play it exactly like Two Piers. Relay-controlled and retract decks are
+  drawn/simulated as ordinary fixed open decks (the real per-map relay art/behaviour is later).
+  `--map=` on the command line (or `--demo`/`--scenario`/`--shots=`) skips the menu as before.
+- **Rudimentary relay cycling and Last Stand** (same pass, PLAYTEST-NOTES 12 - "without them the
+  game is eternal, test with the real maps even if rudimentary", Daniele): every relay state prefix
+  (rotation/switch/remote) on a map cycles together every `Rules.RELAY_PERIOD` (18 s); a `retracts`
+  deck toggles open/closed on the same period - only fresh pathfinding respects this, an in-flight
+  horde keeps going. Last Stand starts at 3:00, always the "inward" method, one rim node dropped
+  every 14 s, centre never dropped; a 7:00 safety net decides the match outright by total strength
+  if it still hasn't ended by conquest. Also fixed: a node whose garrison falls under simultaneous
+  arrival sieges from BOTH seats used to stay captureless forever - now the stronger side takes it.
+- **Structures** (same pass, PLAYTEST-NOTES 13 - "implement all we have already model wise... all
+  structures and their functions"): vat upgrade (T1-T4, 10 s build), a single-tier cannon (bursts
+  10 units off an enemy horde within 10 m every 4 s, bypassing fight math) and forge (owner takes
+  15% less damage everywhere). Double-tap an owned node to act on it; the Upgrade/Cannon/Forge
+  buttons (side HUD) pick which. AI has the same options, no cheats.
+- **Debug panel ranges widened a lot, platform speed can go below deck speed** (same pass -
+  Daniele: "increase the limits... by a lot... platform filling speed lower than deck speed"): deck
+  speed 0.2-30 m/s, platform speed 0.1-30x deck, door rate 1-500 units/s, platform fight 0.05-20x.
 - Map built from `maps/004-two-piers.json` with the kit GLBs, at **honest lengths**.
 - **Drag** from your node to any node to send; **25 / 50 / 75 / 100 %** buttons.
 - Routes along the deck network (fastest by deck time).
@@ -198,8 +218,10 @@ Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven
   → `user://telemetry/`.
 
 ### Debug panel (2026-09-25, growing)
-Bottom-left `Debug` button opens live sliders for playtests, thumb-sized, reset on reload:
-deck speed (m/s), platform speed (x deck), door rate (units/s), platform fight (x combat rate) -
+Bottom-left `Debug` button opens live sliders for playtests, thumb-sized, reset on reload, WIDE
+ranges on purpose (a real debug tool needs room past "reasonable" - Daniele, 2026-09-25): deck
+speed (0.2-30 m/s), platform speed (0.1-30x deck - can go BELOW 1x, i.e. slower than the deck, not
+just faster), door rate (1-500 units/s), platform fight (0.05-20x combat rate) -
 `Rules.deck_speed` / `node_speed_mult` / `door_rate` / `node_fight_mult` are static vars for this -
 plus "Reset to rules". Add further debug controls here (`_build_debug` in `main.gd`). Playtest
 builds carry the panel; it is not a player feature.
@@ -207,17 +229,17 @@ builds carry the panel; it is not a player feature.
 ### Code map
 | File | Role |
 |---|---|
-| `scripts/rules.gd` | every number (kit sizes, speeds, caps, production, combat, colours) |
-| `scripts/sim.gd` | rules and state, no visuals; nodes carry `streaming`/`siege`/`siege_dir`/`transit` |
-| `scripts/map_builder.gd` | honest layout, kit placement, ownership materials |
+| `scripts/rules.gd` | every number (kit sizes, speeds, caps, production, combat, colours, relay/Last Stand/structure timings) |
+| `scripts/sim.gd` | rules and state, no visuals; nodes carry `streaming`/`siege`/`siege_dir`/`transit`/`attachment`/`build_kind`; relay cycling, Last Stand, cannon/forge/vat upgrade |
+| `scripts/map_builder.gd` | honest layout, kit placement, ownership materials, vat-tier/attachment model swap |
 | `scripts/horde_view.gd` | hordes as long patch lines; fight look (eased shrink, meniscus, shoves, splash); platform rivers |
 | `scripts/mats.gd`, `shaders/creature.gdshader` | seat materials, creature shader |
-| `scripts/seat_ai.gd`, `scripts/telemetry.gd` | opponent, match log |
-| `scripts/main.gd` | world, camera, input, HUD, phone profile, demo/screenshot mode |
-| `tests/test_sim.gd` | 21 headless rules checks — all passing |
+| `scripts/seat_ai.gd`, `scripts/telemetry.gd` | opponent (routing + structures), match log |
+| `scripts/main.gd` | world, camera, input (drag to send, double-tap to build), HUD, map-select menu, phone profile, demo/screenshot mode |
+| `tests/test_sim.gd` | 46 headless rules checks — all passing |
 
-AI vs AI on Two Piers now lasts **~4 minutes** (it was ~1.5 before hordes streamed) — inside the
-2–4 minute target.
+AI vs AI on Two Piers now lasts **~1-1.5 minutes** with all seven starter maps' AI-vs-AI matches
+verified to finish (relay cycling + rudimentary Last Stand keep any map from turtling forever).
 
 ---
 
@@ -280,18 +302,26 @@ From `PLAYTEST-NOTES.md` (Daniele's first demo):
    Debug-panel sliders for both speeds now let this be tuned live in play (2026-09-25); still open
    is which values to bake into `rules.gd`.
 4. Animation and effects work in general (the mechanic works; the motion needs love).
-5. Then: vat upgrades, real-phone test, **map 2 — Long Span** (bridge combat, Last Stand inward vs outward).
+5. ~~Vat upgrades~~ — done 2026-09-25, alongside cannon/forge (see §5 "Structures"); all seven
+   starter maps are playable via the title screen with rudimentary relay cycling and Last Stand so
+   every match resolves. Real-phone test is still open.
+6. Next: the real per-map relay behaviour and art (rotation tower, switch hub, remote conduit),
+   real Last Stand (per-map method choice, hidden reveal, falls), attachment swap/cooldown, cannon
+   T2/T3, forge's mixed-garrison weighting, then a real-phone test.
 
 ---
 
 ## 10. How to run things
 
 ```bash
-# play (Godot is in Tools/Godot of the project folder)
+# play (Godot is in Tools/Godot of the project folder) - opens the starter-seven title screen
 Godot_v4.6.1-stable_win64.exe --path "Game/2.0"
 
-# AI vs AI, phone-shaped, with screenshots
-Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --demo --mobile --window=2340x1080 --shots=12,28 --out=C:/tmp
+# play one map directly, skipping the title screen
+Godot_v4.6.1-stable_win64.exe --path "Game/2.0" -- --map=res://maps/008-strait.json
+
+# AI vs AI, phone-shaped, with screenshots (also skips the title screen)
+Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --map=res://maps/008-strait.json --demo --mobile --window=2340x1080 --shots=12,28 --out=C:/tmp
 
 # stage a contact on the deck between nodes 1 and 0 and look at it up close (no AI):
 #   fight = head-on frontline, rear = a slow line caught from behind, queue = friend behind friend

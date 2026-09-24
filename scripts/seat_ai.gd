@@ -19,6 +19,7 @@ func think(sim: Sim, dt: float) -> void:
 	if _t < period or sim.over:
 		return
 	_t = 0.0
+	_build(sim)
 	var mine := sim.nodes.filter(func(n): return n["owner"] == seat and n["units"] >= 25.0)
 	mine.sort_custom(func(a, b): return a["units"] > b["units"])
 	var en_route := {}
@@ -43,4 +44,28 @@ func think(sim: Sim, dt: float) -> void:
 				best_score = score
 		if best >= 0:
 			sim.send(src["id"], best, 0.75)
+			return
+
+
+func _build(sim: Sim) -> void:
+	## Structure parity for AI vs AI (no economy/combat cheats): opportunistically upgrade a
+	## flush home vat, and build one forge (a standing combat bonus) then cannons at any other
+	## node that offers them and doesn't have one yet.
+	for n in sim.nodes:
+		if n["owner"] != seat or n["build_kind"] != "":
+			continue
+		if n["units"] >= Rules.CAPS[n["tier"]] * 0.9 and sim.upgrade_vat(n["id"]):
+			return
+	var has_forge := false
+	for n in sim.nodes:
+		if n["owner"] == seat and n["attachment"] == "forge":
+			has_forge = true
+	for n in sim.nodes:
+		if n["owner"] != seat or n["build_kind"] != "" or n["attachment"] != "":
+			continue
+		if not has_forge and "forge" in n["buildable"]:
+			sim.build_attachment(n["id"], "forge")
+			return
+		if "cannon" in n["buildable"]:
+			sim.build_attachment(n["id"], "cannon")
 			return

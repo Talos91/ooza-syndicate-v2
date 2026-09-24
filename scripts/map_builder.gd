@@ -56,12 +56,14 @@ static func put(parent: Node3D, name: String, pos: Vector3, heading := 0.0, stre
 
 
 static func build(parent: Node3D, sim: Sim) -> Dictionary:
-	## Returns node id -> {"parts": [Node3D], "label": Label3D} and "stretched": [edge index].
+	## Returns node id -> {"parts": [Node3D], "label": Label3D, "vat_node", "vat_tier",
+	## "attachment_node", "attachment"} and "stretched": [edge index].
 	var vis := {"stretched": []}
 	for n in sim.nodes:
 		var parts: Array = []
 		parts.append(put(parent, "Platform_Standard", n["pos"]))
-		parts.append(put(parent, "Vat_T%d" % n["tier"], n["pos"]))
+		var vat_node := put(parent, "Vat_T%d" % n["tier"], n["pos"])
+		parts.append(vat_node)
 		var label := Label3D.new()
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		label.pixel_size = 0.02
@@ -70,7 +72,8 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		label.no_depth_test = true
 		label.position = n["pos"] + Vector3(0, 10.5, 0)
 		parent.add_child(label)
-		vis[n["id"]] = {"parts": parts, "label": label}
+		vis[n["id"]] = {"parts": parts, "label": label, "vat_node": vat_node, "vat_tier": n["tier"],
+				"attachment_node": null, "attachment": ""}
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		var pa: Vector3 = sim.nodes[e["a"]]["pos"]
@@ -87,6 +90,38 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		for k in range(e["modules"]):
 			put(parent, "Deck_S", pa + d * (Rules.R + Rules.PIER + k * Rules.S * f), Rules.heading(d), f)
 	return vis
+
+
+static func set_vat_tier(parent: Node3D, entry: Dictionary, tier: int, seat: String) -> void:
+	## Swap a node's vat model for its new tier (upgrade_vat, Rules.BUILD_SECONDS after the tap).
+	if entry["vat_tier"] == tier:
+		return
+	(entry["parts"] as Array).erase(entry["vat_node"])
+	(entry["vat_node"] as Node).queue_free()
+	var vat_node := put(parent, "Vat_T%d" % tier, (entry["label"] as Label3D).position - Vector3(0, 10.5, 0))
+	entry["parts"].append(vat_node)
+	entry["vat_node"] = vat_node
+	entry["vat_tier"] = tier
+	apply_owner(entry["parts"], seat)
+
+
+static func set_attachment(parent: Node3D, entry: Dictionary, kind: String, pos: Vector3, seat: String) -> void:
+	## Show a built cannon or forge next to the vat (single tier each - build_attachment). kind ""
+	## clears it. A rudimentary placement: offset from the vat, not the authored attachment socket.
+	if entry["attachment"] == kind:
+		return
+	if entry["attachment_node"]:
+		(entry["parts"] as Array).erase(entry["attachment_node"])
+		(entry["attachment_node"] as Node).queue_free()
+		entry["attachment_node"] = null
+	entry["attachment"] = kind
+	if kind == "":
+		return
+	var piece := "Cannon_T1" if kind == "cannon" else "Forge"
+	var node := put(parent, piece, pos + Vector3(0, 0, Rules.R * 0.55))
+	entry["parts"].append(node)
+	entry["attachment_node"] = node
+	apply_owner(entry["parts"], seat)
 
 
 static func apply_owner(parts: Array, seat: String) -> void:

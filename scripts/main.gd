@@ -13,6 +13,16 @@ extends Node3D
 
 const HUMAN := "A"
 const SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": "solar"}
+## The starter seven (Docs STARTER-SEVEN.md), in build order. Only the 1v1 mode is wired up so
+## far; a map's other modes (2v2/3v3/FFA) are not selectable yet. Maps past Two Piers include
+## relay-controlled decks (switch/remote/rotation/retract) drawn and simulated as ordinary FIXED
+## open decks for now - the relay MECHANIC itself (the deck actually switching) is a follow-up.
+const STARTER_MAPS := [
+	"res://maps/004-two-piers.json", "res://maps/007-long-span.json",
+	"res://maps/008-strait.json", "res://maps/010-first-switch.json",
+	"res://maps/011-remote-span.json", "res://maps/061-switchback-foundry.json",
+	"res://maps/047-trident-exchange.json",
+]
 
 var map: Dictionary
 var sim := Sim.new()
@@ -53,13 +63,17 @@ var _fitted_size := Vector2.ZERO             # re-fit whenever the screen/canvas
 var rotate_hint: Label
 var debug_button: Button
 var debug_panel: PanelContainer
+var build_mode := ""                          # "" (vat upgrade) / "cannon" / "forge": what a
+                                               # double-tap on an owned node does (see _double_tap)
 
 
 func _ready() -> void:
 	var map_path := "res://maps/004-two-piers.json"
+	var map_explicit := false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--map="):
 			map_path = arg.substr(6)
+			map_explicit = true
 		elif arg == "--demo":
 			demo = true
 		elif arg.begins_with("--shots="):
@@ -79,6 +93,13 @@ func _ready() -> void:
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
+	if map_explicit or demo or scenario != "" or not shots.is_empty():
+		_start_map(map_path)                          # automation (screenshots, --demo, --scenario, or
+	else:                                              # an explicit --map=): skip the menu entirely
+		_build_map_menu()                              # otherwise: let the player pick a starter map
+
+
+func _start_map(map_path: String) -> void:
 	map = MapBuilder.load_map(map_path)
 	var seats := {}
 	for s in map["seats"]["1v1"]:
@@ -106,6 +127,48 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_on_resized)
 	await get_tree().process_frame                   # let a --window resize land before fitting
 	_on_resized()
+
+
+func _build_map_menu() -> void:
+	## Title screen: pick one of the starter seven (Docs STARTER-SEVEN.md), in build order. Shown
+	## unless a map was named on the command line or this is an automated run (--demo/--scenario).
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	var bg := ColorRect.new()
+	bg.color = Color(0.008, 0.01, 0.014)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(bg)
+	var root := VBoxContainer.new()
+	root.set_anchors_preset(Control.PRESET_CENTER)
+	root.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	root.grow_vertical = Control.GROW_DIRECTION_BOTH
+	root.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.add_theme_constant_override("separation", 12)
+	layer.add_child(root)
+	var title := Label.new()
+	title.text = "Ooze Syndicate 2.0 - the starter seven"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 34)
+	root.add_child(title)
+	var sub := Label.new()
+	sub.text = "Pick a map (1v1, you are cyan). Maps past Two Piers hold their relay decks fixed open for now."
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 18)
+	sub.modulate = Color(1, 1, 1, 0.7)
+	root.add_child(sub)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 10)
+	root.add_child(spacer)
+	for map_path in STARTER_MAPS:
+		var m := MapBuilder.load_map(map_path)
+		var b := Button.new()
+		b.text = "%s  %s   (%d nodes)" % [m.get("code", "?"), m.get("name", map_path), m["nodes"].size()]
+		b.custom_minimum_size = Vector2(460, 68)         # thumb-sized
+		b.add_theme_font_size_override("font_size", 24)
+		b.pressed.connect(func():
+			layer.queue_free()
+			_start_map(map_path))
+		root.add_child(b)
 
 
 func _apply_quality() -> void:
@@ -286,12 +349,13 @@ func _build_hud() -> void:
 	top.add_child(hud_time)
 	hud_info = Label.new()
 	hud_info.add_theme_font_size_override("font_size", 22)
-	hud_info.text = "   Two Piers - you are cyan - drag from your node"
+	hud_info.text = "   %s - you are cyan - drag from your node" % map.get("name", "")
 	top.add_child(hud_info)
 	var side := VBoxContainer.new()
 	side.add_theme_constant_override("separation", 10)
 	area.add_child(side)
 	hud_side = side
+	_build_structure_buttons(side)
 	var group := ButtonGroup.new()
 	for f in Rules.SEND_FRACTIONS:
 		var b := Button.new()
@@ -339,6 +403,43 @@ func _build_hud() -> void:
 	box.add_child(again)
 
 
+func _build_structure_buttons(side: VBoxContainer) -> void:
+	## Double-tap one of your own nodes to act on it: by default, upgrade its vat (GAME-RULES sec6,
+	## 10 s build). Toggle Cannon/Forge here first to double-tap-build one of those instead
+	## (single tier each; only where the map's roster JSON allows it - Daniele, 2026-09-25).
+	var group := ButtonGroup.new()
+	var upgrade := Button.new()
+	upgrade.text = "Upgrade\n(vat)"
+	upgrade.toggle_mode = true
+	upgrade.button_pressed = true
+	upgrade.button_group = group
+	upgrade.custom_minimum_size = Vector2(120, 64)
+	upgrade.add_theme_font_size_override("font_size", 18)
+	upgrade.pressed.connect(func(): build_mode = "")
+	side.add_child(upgrade)
+	for kind in ["cannon", "forge"]:
+		var b := Button.new()
+		b.text = kind.capitalize()
+		b.toggle_mode = true
+		b.button_group = group
+		b.custom_minimum_size = Vector2(120, 64)
+		b.add_theme_font_size_override("font_size", 18)
+		b.pressed.connect(func(): build_mode = kind)
+		side.add_child(b)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 6)
+	side.add_child(spacer)
+
+
+func _double_tap(node_id: int) -> void:
+	## Double-tap on an owned node: upgrade its vat, or build the selected attachment (see
+	## _build_structure_buttons). Silently does nothing where the map doesn't allow it.
+	if build_mode == "":
+		sim.upgrade_vat(node_id)
+	else:
+		sim.build_attachment(node_id, build_mode)
+
+
 func _build_debug(area: Control) -> void:
 	## Debug controls for playtests (Daniele, 2026-09-25). Live sliders, thumb-sized, bottom-left.
 	## 1. blob speed on decks vs on platforms (PLAYTEST-NOTES 5).
@@ -360,13 +461,16 @@ func _build_debug(area: Control) -> void:
 	title.text = "Debug - live, resets on reload"
 	title.add_theme_font_size_override("font_size", 20)
 	box.add_child(title)
-	var deck := _debug_slider(box, "Deck speed", 1.0, 8.0, 0.1, Rules.deck_speed, "%.1f m/s",
+	# wide ranges on purpose (Daniele, 2026-09-25): a real debug tool needs room past "reasonable" -
+	# platform speed in particular must go BELOW 1x deck speed (platforms slower than bridges),
+	# not just above it, to test PLAYTEST-NOTES 5 properly.
+	var deck := _debug_slider(box, "Deck speed", 0.2, 30.0, 0.1, Rules.deck_speed, "%.1f m/s",
 			func(v: float): Rules.deck_speed = v)
-	var node := _debug_slider(box, "Platform speed", 1.0, 10.0, 0.1, Rules.node_speed_mult, "x%.1f deck",
+	var node := _debug_slider(box, "Platform speed", 0.1, 30.0, 0.05, Rules.node_speed_mult, "x%.2f deck",
 			func(v: float): Rules.node_speed_mult = v)
-	var door := _debug_slider(box, "Door rate", 4.0, 120.0, 1.0, Rules.door_rate, "%.0f units/s",
+	var door := _debug_slider(box, "Door rate", 1.0, 500.0, 1.0, Rules.door_rate, "%.0f units/s",
 			func(v: float): Rules.door_rate = v)
-	var nfight := _debug_slider(box, "Platform fight", 0.2, 4.0, 0.1, Rules.node_fight_mult, "x%.1f rate",
+	var nfight := _debug_slider(box, "Platform fight", 0.05, 20.0, 0.05, Rules.node_fight_mult, "x%.2f rate",
 			func(v: float): Rules.node_fight_mult = v)
 	var reset := Button.new()
 	reset.text = "Reset to rules"
@@ -421,10 +525,15 @@ func _process(delta: float) -> void:
 	sim.step(dt)
 	hordes.sync(sim, HUMAN)
 	for n in sim.nodes:
-		var label: Label3D = vis[n["id"]]["label"]
+		var entry: Dictionary = vis[n["id"]]
+		var label: Label3D = entry["label"]
 		var owner: String = n["owner"]
 		label.modulate = Rules.SEATS[owner] if owner != "" else Rules.NEUTRAL
 		label.text = "" if owner != "" and owner != HUMAN else str(int(n["units"]))   # no numbers on enemy nodes
+		if entry["vat_tier"] != n["tier"]:
+			MapBuilder.set_vat_tier(self, entry, n["tier"], owner)
+		if entry["attachment"] != n["attachment"]:
+			MapBuilder.set_attachment(self, entry, n["attachment"], n["pos"], owner)
 	hud_time.text = "%d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
 	_trace_t += dt
 	if _trace_t >= 2.0:
@@ -503,6 +612,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			var hit := _ground(mb.position)
 			if mb.pressed:
 				var n := _node_at(hit)
+				if n >= 0 and sim.nodes[n]["owner"] == HUMAN and mb.double_click:
+					_double_tap(n)
+					return
 				if n >= 0 and sim.nodes[n]["owner"] == HUMAN:
 					drag_from = n
 				else:

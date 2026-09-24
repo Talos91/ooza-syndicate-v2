@@ -203,5 +203,74 @@ func _init() -> void:
 			sim4.events.filter(func(e): return e["type"] == "capture").size()])
 	check(sim4.events.filter(func(e): return e["type"] == "capture").size() >= 3, "AIs capture nodes")
 
+	# the starter seven (Docs STARTER-SEVEN.md): every map lays out fully connected from its centre
+	# and plays an AI vs AI match to completion - not a check of any map's own relay mechanic (none
+	# is built yet; their relay decks are fixed open, see sim.gd setup()), just that the map itself
+	# is a sound, playable graph.
+	var starter := ["res://maps/004-two-piers.json", "res://maps/007-long-span.json",
+			"res://maps/008-strait.json", "res://maps/010-first-switch.json",
+			"res://maps/011-remote-span.json", "res://maps/061-switchback-foundry.json",
+			"res://maps/047-trident-exchange.json"]
+	for map_path in starter:
+		var sm := MapBuilder.load_map(map_path)
+		var spos := MapBuilder.layout(sm)
+		check(spos.size() == sm["nodes"].size(), "%s: every node reachable from the centre (%d/%d)" %
+				[sm["code"], spos.size(), sm["nodes"].size()])
+		var s_seats := {}
+		for s in sm["seats"]["1v1"]:
+			s_seats[int(s["node"])] = s["seat"]
+		check(s_seats.size() == 2, "%s: 1v1 has exactly two seats" % sm["code"])
+		var ssim := Sim.new()
+		ssim.setup(sm, spos, s_seats, {"A": "null", "B": "ember"})
+		var sa := SeatAI.new("A", 2.0)
+		var sb := SeatAI.new("B", 2.3)
+		var ssteps := 0
+		while not ssim.over and ssteps < 20 * 60 * 8:
+			sa.think(ssim, 0.1)
+			sb.think(ssim, 0.1)
+			ssim.step(0.1)
+			ssteps += 1
+		check(ssim.over, "%s: AI vs AI finishes within 8 simulated minutes (t=%.0fs)" % [sm["code"], ssim.time])
+
+	# structures (Daniele, 2026-09-25): vat upgrade, cannon, forge - rudimentary but functional.
+	# Two Piers has no cannon/forge buildable node, so use Strait (relay nodes offer both).
+	var st_map := MapBuilder.load_map("res://maps/008-strait.json")
+	var st_pos := MapBuilder.layout(st_map)
+	var sim10 := Sim.new()
+	sim10.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"})
+	check(sim10.nodes[5]["tier"] == 2, "home vat starts at T2")
+	check(sim10.upgrade_vat(5), "vat upgrade starts")
+	check(not sim10.upgrade_vat(5), "can't start a second upgrade while one is running")
+	while sim10.nodes[5]["build_kind"] != "":
+		sim10.step(0.5)
+	check(sim10.nodes[5]["tier"] == 3, "vat upgrade completes to T3 after Rules.BUILD_SECONDS")
+	check(not sim10.build_attachment(5, "cannon"), "a normal node's buildable list has no cannon/forge")
+	sim10.nodes[1]["owner"] = "A"                     # node 1: relay, buildable cannon/forge
+	check(sim10.build_attachment(1, "cannon"), "a relay node's buildable list accepts a cannon")
+	while sim10.nodes[1]["build_kind"] != "":
+		sim10.step(0.5)
+	check(sim10.nodes[1]["attachment"] == "cannon", "the cannon finishes building")
+	var enemy := sim10.send(6, 5, 1.0)                 # any live enemy horde; positioned by hand below
+	var pos1: Vector3 = sim10.nodes[1]["pos"]
+	enemy["pts"] = PackedVector3Array([pos1, pos1])    # drop it right on the cannon's node
+	enemy["cum"] = PackedFloat32Array([0.0, 1.0])
+	enemy["fast"] = PackedByteArray([1, 1])
+	enemy["s"] = 0.5
+	enemy["units"] = 50.0                              # units are 0 right after send() (door not emitted yet)
+	sim10.nodes[1]["cannon_cd"] = 0.0
+	var loss_before: float = sim10.combat_losses.get("B", 0.0)
+	sim10.step(0.1)
+	check(sim10.combat_losses.get("B", 0.0) > loss_before, "a built cannon bursts an enemy horde in range, bypassing normal fight math")
+
+	var sim11 := Sim.new()
+	sim11.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"})
+	sim11.nodes[1]["owner"] = "A"
+	sim11.build_attachment(1, "forge")
+	while sim11.nodes[1]["build_kind"] != "":
+		sim11.step(0.5)
+	check(sim11.nodes[1]["attachment"] == "forge", "the forge finishes building")
+	check(absf(sim11._forge_mult("A") - (1.0 - Rules.forge_bonus)) < 0.001, "a forge reduces its owner's incoming damage")
+	check(is_equal_approx(sim11._forge_mult("B"), 1.0), "and only its owner's")
+
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)

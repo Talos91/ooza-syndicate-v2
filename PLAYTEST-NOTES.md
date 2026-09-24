@@ -90,7 +90,61 @@ the existing deck/platform speed ones - open `Debug` bottom-left. Reset to rules
     a pure pass-through, no fight, matching GAME-RULES §6 ("troops passing through don't count").
     Two new rules tests cover both outcomes (grind-and-continue, wiped-out-en-route).
 
+## 2026-09-25 - Daniele, fourth pass: all seven maps, rudimentary relay/Last Stand, structures
+
+11. **All seven starter maps, playable.** *Done:* a title screen (shown unless a map is named on
+    the command line, or this is an automated run) lists the starter seven in build order; picking
+    one loads it exactly like Two Piers did. Every map lays out fully connected and an AI vs AI
+    match on each one finishes (headless rules tests). Relay-controlled decks and retract decks are
+    drawn and simulated as ordinary FIXED open decks for now - the true relay ART/behaviour per map
+    (a rotation tower, a switch hub, a lit remote conduit) is not built; every node just gets the
+    ordinary platform + vat placeholder.
+12. **"Without rotation/Last Stand the game is eternal - test with the real maps even if
+    rudimentary" (Daniele).** Confirmed on Strait (the shared central node became a permanent 0-unit
+    stalemate neither side could ever capture) before this pass.
+    *Done:* two RUDIMENTARY systems so every map actually resolves:
+    - **Relay cycling.** Every distinct relay state prefix on a map (rotation r/switch s/remote m)
+      cycles through its states together every `Rules.RELAY_PERIOD` (18 s: GAME-RULES sec8's 3 s
+      warning + 15 s cooldown, no warning phase modelled); a `retracts` deck toggles open/closed on
+      the same period. Only NEW pathfinding respects this; a horde already committed to a route
+      keeps moving even if its deck later "closes" - no warning, no fall, no carry.
+    - **Last Stand.** Starts at 3:00 (GAME-RULES sec10), always the "inward" method regardless of
+      what the map lists (rim collapses first, one node every 14 s, the centre is never dropped).
+      A dropped node's units/siege/attachments/build vanish and it's excluded from all future
+      routing - it just goes away, it doesn't take troops on it down too (a real per-map method
+      choice, the hidden reveal and "everything on a falling node/deck dies" are a later pass).
+    - **Safety net.** If a match is still undecided at 7:00, the stronger seat (by total strength)
+      wins outright - conquest should always decide it before then; this exists for automated
+      testing and to guarantee no match is truly eternal.
+    - Also fixed a real bug the Strait stalemate exposed: a node whose garrison falls while BOTH
+      seats have simultaneous arrival sieges on it (both cheaply grinding a shared hub) used to stay
+      captureless forever (my "transit can't capture" rule from the previous pass only checked for
+      exactly one attacker present); now the side holding more ground there right now takes it.
+13. **Structures now do something** (Daniele: "implement all we have already model wise... all
+    structures and their functions"). Vat_T1-4, Cannon_T1-3 and Forge were modelled but inert.
+    *Done, rudimentary (real costs/tiers/swap rules wait on the army-scale decision):*
+    - **Vat upgrade** (T1->T4, GAME-RULES sec6's 10 s build, no unit cost yet).
+    - **Cannon** (single tier only so far): every 4 s bursts up to 10 units off any enemy horde
+      within 10 m, a direct kill bypassing normal fight math (matches Alpha 11's "cannon body kills
+      bypass HP").
+    - **Forge** (single tier): its owner takes 15 % less damage everywhere (deck fights, node
+      sieges, transit fights) - the "attack" half of GAME-RULES sec6's bonus is folded into this one
+      defensive multiplier for now rather than implemented as a separate knob.
+    - Double-tap one of your own nodes to act on it: the new Upgrade/Cannon/Forge buttons (top of
+      the side HUD) pick what a double-tap does; it silently does nothing where the map's roster
+      JSON doesn't allow that structure there. The AI has the same options (no cheats): it upgrades
+      a flush vat, builds one forge, then cannons wherever it can.
+    - The 3D model swaps live (vat tier, cannon/forge appearing) - seen working via the sim
+      (headless tests) and the vat-tier swap in play; a longer session is needed to see the AI
+      actually place a cannon/forge model on screen, not yet specifically watched for.
+14. **Debug panel: wider ranges, platform speed can go below deck speed** (Daniele: "increase the
+    limits... by a lot... platform filling speed lower than deck speed"). Deck speed 0.2-30 m/s,
+    platform speed 0.1-30x deck (was floored at 1x - now testable as SLOWER than the deck, the
+    actual open question in note 5), door rate 1-500 units/s, platform fight 0.05-20x.
+
 ## Known gaps in this slice (not playtest findings)
 
-- Vat upgrades, cannons/forges in play, relays, abilities, Last Stand, multiplayer.
+- Real per-map relay behaviour (rotation/switch/remote/retract art and consequences), abilities,
+  real Last Stand (method choice, hidden reveal, "everything on a falling node/deck dies"),
+  multiplayer, attachment swap/cooldown, cannon T2/T3, forge's mixed-garrison population weighting.
 - Army numbers in `scripts/rules.gd` are placeholders (army scale and base caps are open questions).
