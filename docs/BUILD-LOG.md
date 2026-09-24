@@ -167,6 +167,13 @@ Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven
 - Paths leave from the tank bottoms, curve **around** every node's structure, enter through the door.
 - **Capture**: the garrison is beaten down, then the node flips; own nodes are reinforced.
 - **Contact from any direction** on a deck: frontline, rear attack, friendly queue; several fights at once.
+- **Blob fights read as blob fights** (pass of 2026-09-25): the drawn line trails the real count by a
+  fraction of a second and recedes from the contact as it loses units, thinning as it empties; every
+  contact grows a goo **meniscus** (two lobes of the two owners' goo joined by a hot seam; one colour
+  for a friendly queue) so the lines merge into one mass; the patch in contact is **squashed** (board
+  case 5), the front of the line **shoves** (rock back, lunge), a pressure ripple runs down the line,
+  and goo **splashes** off the seam in proportion to each side's loss rate. A rear attack does the same
+  to the caught horde's tail.
 - Production up to the vat cap · simple AI opponent · count badges (never on enemy nodes).
 - **Ownership = material** at runtime; creature hue-shift + race-rim shader.
 - **Telemetry** per match (duration, sends, captures, deciding event, winner-was-behind, losses)
@@ -178,7 +185,7 @@ Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven
 | `scripts/rules.gd` | every number (kit sizes, speeds, caps, production, combat, colours) |
 | `scripts/sim.gd` | rules and state, no visuals |
 | `scripts/map_builder.gd` | honest layout, kit placement, ownership materials |
-| `scripts/horde_view.gd` | hordes as long patch lines |
+| `scripts/horde_view.gd` | hordes as long patch lines; fight look (eased shrink, meniscus, shoves, splash) |
 | `scripts/mats.gd`, `shaders/creature.gdshader` | seat materials, creature shader |
 | `scripts/seat_ai.gd`, `scripts/telemetry.gd` | opponent, match log |
 | `scripts/main.gd` | world, camera, input, HUD, phone profile, demo/screenshot mode |
@@ -239,8 +246,9 @@ Tracked in `05 Handoff/OPEN-QUESTIONS.md`; the ones that matter next:
 
 From `PLAYTEST-NOTES.md` (Daniele's first demo):
 
-1. **Blob fight pass** — shrink-with-losses animation, visual **merge** where blobs meet (a goo
-   "bumper"), a proper **frontline animation**, and the visual for rear contact.
+1. ~~**Blob fight pass**~~ — done 2026-09-25 (eased shrink, goo meniscus, shoving frontline with
+   splash, rear-contact visual; see §5). Left for a later animation pass: creature poses in the
+   fight (leaping, biting) and a creature death effect, not only goo.
 2. **Entrances on every side** of structures, and horde blocking on platforms.
 3. **Platform speed vs bridge speed** — node crossings look too fast next to decks.
 4. Animation and effects work in general (the mechanic works; the motion needs love).
@@ -256,6 +264,11 @@ Godot_v4.6.1-stable_win64.exe --path "Game/2.0"
 
 # AI vs AI, phone-shaped, with screenshots
 Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --demo --mobile --window=2340x1080 --shots=12,28 --out=C:/tmp
+
+# stage a contact on the deck between nodes 1 and 0 and look at it up close (no AI):
+#   fight = head-on frontline, rear = a slow line caught from behind, queue = friend behind friend
+Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --scenario=fight --zoom=13 --window=1600x740
+Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --scenario=rear --shots=9,11,13 --out=C:/tmp
 
 # rules tests
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_sim.gd

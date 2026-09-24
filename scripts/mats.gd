@@ -63,6 +63,19 @@ static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMat
 	return _cache[key]
 
 
+static func seam() -> StandardMaterial3D:
+	## The hot line where two hordes' goo meets at a frontline.
+	if not _cache.has("seam"):
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color(1.0, 1.0, 1.0)
+		m.roughness = 0.05
+		m.emission_enabled = true
+		m.emission = Color(1.0, 0.98, 0.9)
+		m.emission_energy_multiplier = 2.4
+		_cache["seam"] = m
+	return _cache["seam"]
+
+
 static func line(seat: String) -> StandardMaterial3D:
 	var key := "line_" + seat
 	if not _cache.has(key):

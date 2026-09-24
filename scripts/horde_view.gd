@@ -6,13 +6,54 @@ extends Node3D
 ## units, thickens where it piles up behind a frontline or a queue, and tapers at the tail.
 ## The two head patches carry full-detail creatures (faces); the body uses the light copies.
 ## Goo = seat colour; creatures = seat hue + race accent.
+##
+## Fights (Blender behaviour board case 5 - frontline squash and splash; PLAYTEST-NOTES 1, 3, 6, 7):
+##  - the drawn count follows the real one with a short lag, so the line visibly recedes with its
+##    losses (from the contact end: the head stays put, the tail comes forward) and thins a little;
+##  - every contact gets a goo MENISCUS: two lobes of the two owners' goo joined by a hot seam,
+##    so the chains read as one mass where they meet (a friendly queue gets a single-colour bumper);
+##  - the patch in contact is squashed (0.7 along, 1.35 up, 1.12 across) and the front of the line
+##    rocks back and lunges into the contact in shoves, with a pressure ripple down the whole line
+##    and a little sideways jostle; goo splashes off the seam in proportion to each side's losses.
+##  A rear attack uses the same pieces on the caught horde's tail.
 
 const KINDS := ["head", "body_a", "body_b", "body_c", "tail",
 		"body_a_lod1", "body_b_lod1", "body_c_lod1", "tail_lod1"]
 const DETAILED := 2                  # patches from the head that keep full-detail creatures
+
+# fight look (kit local axes: x along travel, y up, z across the deck)
+const SQUASH := Vector3(0.7, 1.35, 1.12)        # patch pressed into an enemy
+const QUEUE_SQUASH := Vector3(0.86, 1.12, 1.06) # patch pressed into a friend's tail
+const SHOVE_HZ := 2.2                # shoves per second at a frontline
+const SHOVE_AMP := 0.3               # metres the head rocks back before it lunges
+const SHOVE_REACH := 4               # patches from the contact that take part in a shove
+const SHOVE_LAG := 0.06              # seconds per patch: the shove travels up from behind
+const SURGE_AMP := 0.09              # pressure ripple along a jammed line (metres)
+const SURGE_WAVELEN := 3.2           # patches per ripple
+const JOSTLE := 0.07                 # sideways jitter near the contact (metres)
+const EASE := 7.0                    # 1/s: how quickly the drawn count catches up with losses
+const THIN := 0.18                   # a horde down to nothing is drawn this much thinner
+const MENISCUS := Vector3(0.75, 0.9, 1.5)       # bumper lobe half-sizes: along, up, across (bulges
+const MENISCUS_OFFSET := 0.38        # above the 0.3 m goo film and past the deck edge, so it reads)
+const MENISCUS_PULSE := 0.08
+const SPLASH_AMOUNT := 40            # droplets per side
+const SPLASH_FULL_RATE := 40.0       # units/s lost that saturates a side's splash
+
 var meshes := {}      # faction -> kind -> Mesh
 var textures := {}    # faction -> creature Texture2D
-var pools := {}       # horde id -> {"patches": [MeshInstance3D], "label": Label3D}
+var pools := {}       # horde id -> {"patches": [MeshInstance3D], "label": Label3D, "vis": float, "phase": float}
+var contacts := {}    # contact key -> {"root", "lobes", "seam", "splash", "seats"}
+var _last_time := -1.0
+var _lobe_mesh: SphereMesh
+var _drop_meshes := {}   # seat -> SphereMesh with the seat's goo
+
+
+func _ready() -> void:
+	_lobe_mesh = SphereMesh.new()
+	_lobe_mesh.radius = 1.0
+	_lobe_mesh.height = 2.0
+	_lobe_mesh.radial_segments = 18
+	_lobe_mesh.rings = 9
 
 
 func load_faction(faction: String) -> void:
@@ -34,19 +75,51 @@ func load_faction(faction: String) -> void:
 
 
 func sync(sim: Sim, viewer: String) -> void:
+	var dt := 0.0 if _last_time < 0.0 else maxf(sim.time - _last_time, 0.0)
+	_last_time = sim.time
+	var by_id := {}
+	for h in sim.hordes:
+		by_id[h["id"]] = h
+	# which end of each horde is in contact, and with what
+	var roles := {}
+	for key in sim.fight_info:
+		var info: Dictionary = sim.fight_info[key]
+		var ids: PackedStringArray = key.split(":")
+		var a := int(ids[0])
+		var b := int(ids[1])
+		if not (by_id.has(a) and by_id.has(b)):
+			continue
+		var other: int = b if info["attacker"] == a else a
+		if info["kind"] == "frontline":
+			_role(roles, a)["front"] = true
+			_role(roles, b)["front"] = true
+		else:
+			_role(roles, info["attacker"])["front"] = true
+			_role(roles, other)["rear"] = true
+	for h in sim.hordes:
+		if h.has("blocked_by"):
+			_role(roles, h["id"])["queue"] = true
 	var alive := {}
 	for h in sim.hordes:
 		alive[h["id"]] = true
-		_draw(h, viewer)
+		_draw(h, viewer, roles.get(h["id"], {}), sim.time, dt)
 	for id in pools.keys():
 		if not alive.has(id):
 			for p in pools[id]["patches"]:
 				p.queue_free()
 			pools[id]["label"].queue_free()
 			pools.erase(id)
+	_sync_contacts(sim, by_id)
 
 
-func _draw(h: Dictionary, viewer: String) -> void:
+func _role(roles: Dictionary, id: int) -> Dictionary:
+	if not roles.has(id):
+		roles[id] = {}
+	return roles[id]
+
+
+# ------------------------------------------------------------------ the line
+func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: float) -> void:
 	var faction: String = h["faction"]
 	load_faction(faction)
 	if not pools.has(h["id"]):
@@ -58,16 +131,30 @@ func _draw(h: Dictionary, viewer: String) -> void:
 		label.no_depth_test = true
 		label.modulate = Rules.SEATS[h["owner"]]
 		add_child(label)
-		pools[h["id"]] = {"patches": [], "label": label}
+		pools[h["id"]] = {"patches": [], "label": label, "vis": float(h["units"]), "phase": fposmod(h["id"] * 0.37, 1.0)}
 	var pool: Dictionary = pools[h["id"]]
-	var length := Sim.chain_length(h)
+	# the drawn count trails the real one a little, so losses read as the line receding, not popping
+	var vis: float = pool["vis"]
+	if h["units"] > vis:
+		vis = h["units"]
+	else:
+		vis += (h["units"] - vis) * minf(1.0, EASE * dt)
+	pool["vis"] = vis
+	var full := Sim.full_length(vis)
+	var length := minf(full, maxf(h["s"], 1.0))
 	var n := clampi(int(length / Rules.PATCH_SPACING) + 1, 1, Rules.MAX_PATCHES)
 	var rest := length - (n - 1) * Rules.PATCH_SPACING       # fraction of the last patch
-	var full := Sim.full_length(h["units"])
 	var pile := clampf(full / maxf(length, 1.0), 1.0, 1.5)    # jammed behind a frontline/queue
-	var big := clampf((h["units"] * Rules.METRES_PER_UNIT - Rules.MAX_CHAIN) / Rules.MAX_CHAIN,
-			0.0, Rules.MAX_THICKEN)
-	var thick := pile * (1.0 + big)
+	var big := clampf((vis * Rules.METRES_PER_UNIT - Rules.MAX_CHAIN) / Rules.MAX_CHAIN, 0.0, Rules.MAX_THICKEN)
+	var thin := 1.0 - THIN * (1.0 - clampf(vis / maxf(h["start_units"], 1.0), 0.0, 1.0))
+	var thick := pile * (1.0 + big) * thin
+	var front: bool = role.get("front", false)
+	var rear: bool = role.get("rear", false)
+	var queue: bool = role.get("queue", false)
+	var blocked: bool = h.get("blocked", false)
+	var agitated: bool = front or rear or queue or blocked
+	var phase: float = pool["phase"]
+	var t: float = time + phase / SHOVE_HZ
 	var arr: Array = pool["patches"]
 	while arr.size() < n:
 		var mi := MeshInstance3D.new()
@@ -91,23 +178,168 @@ func _draw(h: Dictionary, viewer: String) -> void:
 				mi.set_surface_override_material(sidx, Mats.creature(faction, h["owner"], textures[faction])
 						if is_creature else Mats.goo(h["owner"]))
 		mi.visible = true
-		var smp := Sim.sample(h, s)
+		# motion at a contact: shoves from the contact end, a ripple down the line, sideways jostle
+		var along := 0.0
+		var side := 0.0
+		var slam := 0.0
+		if agitated:
+			along += SURGE_AMP * sin(TAU * (t * SHOVE_HZ * 0.5 - float(i) / SURGE_WAVELEN))
+			var k := -1                                # patches from the contact end
+			if front or queue:
+				k = i
+			elif rear:
+				k = n - 1 - i
+			if k >= 0 and k < SHOVE_REACH:
+				var env := 1.0 - float(k) / SHOVE_REACH
+				var shove := _shove(t - k * SHOVE_LAG)
+				along += (SHOVE_AMP * (0.5 if queue and not (front or rear) else 1.0)) * env * shove[0]
+				slam = env * shove[1]
+				side = JOSTLE * env * sin(t * 9.0 + i * 1.7)
+				if rear and not front:
+					along = -along                     # a tail is shoved backwards, toward its head
+		var smp := Sim.sample(h, s + along)
 		var fwd: Vector3 = smp[1]
-		mi.position = smp[0]
+		mi.position = smp[0] + fwd.cross(Vector3.UP) * side
 		mi.rotation = Vector3(0.0, Rules.heading(fwd), 0.0)
 		var sc := 1.0
 		var from_tail := n - 1 - i
 		if n >= 4 and from_tail < 3:                   # the line tapers off at the tail
 			sc = [0.55, 0.75, 0.9][from_tail]
 		if i == n - 1 and n > 1:
-			sc *= clampf(0.4 + rest / Rules.PATCH_SPACING, 0.4, 1.0)   # grows/shrinks smoothly
+			sc *= clampf(0.3 + rest / Rules.PATCH_SPACING, 0.3, 1.0)   # grows/shrinks smoothly
 		if h["state"] == "absorb" and i == 0:
 			sc = 0.45                                  # squeezing in through the door
 		elif s < 2.0:
 			sc *= 0.5 + 0.25 * s                       # emerging from the tank bottoms
-		var t := thick if i > 0 else lerpf(1.0, thick, 0.5)
-		mi.scale = Vector3(sc, sc * t, sc * t)
+		var tk := thick if i > 0 else lerpf(1.0, thick, 0.5)
+		var scale := Vector3(sc, sc * tk, sc * tk)
+		if (front and i == 0) or (rear and i == n - 1):
+			scale *= Vector3.ONE.lerp(SQUASH, 0.7 + 0.3 * slam)   # pressed into the enemy, harder on the slam
+		elif queue and i == 0:
+			scale *= QUEUE_SQUASH
+		mi.scale = scale
 	var label: Label3D = pool["label"]
 	var head: Vector3 = Sim.sample(h, h["s"])[0]
 	label.position = head + Vector3(0, 3.0, 0)
 	label.text = str(int(h["units"])) if h["owner"] == viewer else ""
+
+
+static func _shove(t: float) -> Array:
+	## [offset (-1..+0.15), slam (0..1)] of one shove cycle: rock back for 70 % of the period, then
+	## slam forward into the contact.
+	var w := fposmod(t * SHOVE_HZ, 1.0)
+	if w < 0.7:
+		var u := w / 0.7
+		return [-smoothstep(0.0, 1.0, u), 0.0]
+	var v := (w - 0.7) / 0.3
+	var slam := sin(v * PI)
+	return [lerpf(-1.0, 0.15, smoothstep(0.0, 1.0, minf(v * 1.6, 1.0))), slam]
+
+
+# ------------------------------------------------------------------ contacts
+func _sync_contacts(sim: Sim, by_id: Dictionary) -> void:
+	var seen := {}
+	for key in sim.fight_info:
+		var info: Dictionary = sim.fight_info[key]
+		var ids: PackedStringArray = key.split(":")
+		var a := int(ids[0])
+		var b := int(ids[1])
+		if not (by_id.has(a) and by_id.has(b)):
+			continue
+		var att: Dictionary = by_id[info["attacker"]]
+		var oth: Dictionary = by_id[b if info["attacker"] == a else a]
+		var pa := Sim.sample(att, att["s"])
+		var pb := Sim.sample(oth, oth["s"]) if info["kind"] == "frontline" \
+				else Sim.sample(oth, oth["s"] - Sim.chain_length(oth))
+		_place_contact(key, ((pa[0] as Vector3) + (pb[0] as Vector3)) / 2.0, pa[1], [att["owner"], oth["owner"]],
+				[att.get("loss_rate", 0.0), oth.get("loss_rate", 0.0)], sim.time)
+		seen[key] = true
+	for h in sim.hordes:                                  # friendly queue: one bumper joins the two lines
+		if h.has("blocked_by") and by_id.has(h["blocked_by"]):
+			var friend: Dictionary = by_id[h["blocked_by"]]
+			var key := "q%d" % h["id"]
+			var pa := Sim.sample(h, h["s"])
+			var pb := Sim.sample(friend, friend["s"] - Sim.chain_length(friend))
+			var mid := ((pa[0] as Vector3) + (pb[0] as Vector3)) / 2.0
+			if (pa[0] as Vector3).distance_to(pb[0]) > Rules.PATCH_SPACING * 1.5:
+				mid = (pa[0] as Vector3) + (pa[1] as Vector3) * 0.9
+			_place_contact(key, mid, pa[1], [h["owner"], h["owner"]], [0.0, 0.0], sim.time)
+			seen[key] = true
+	for key in contacts.keys():
+		if not seen.has(key):
+			contacts[key]["root"].queue_free()
+			contacts.erase(key)
+
+
+func _place_contact(key: String, pos: Vector3, fwd: Vector3, seats: Array, losses: Array, time: float) -> void:
+	var fight: bool = seats[0] != seats[1]
+	if not contacts.has(key):
+		var root := Node3D.new()
+		add_child(root)
+		var c := {"root": root, "lobes": [], "seam": null, "splash": [], "seats": seats}
+		for k in range(2):                                # attacker's lobe behind the seam, the other's ahead
+			var lobe := MeshInstance3D.new()
+			lobe.mesh = _lobe_mesh
+			lobe.material_override = Mats.goo(seats[k])
+			lobe.position = Vector3((-1.0 if k == 0 else 1.0) * MENISCUS_OFFSET, 0.0, 0.0)
+			root.add_child(lobe)
+			c["lobes"].append(lobe)
+		if fight:
+			var seam := MeshInstance3D.new()
+			seam.mesh = _lobe_mesh
+			seam.material_override = Mats.seam()
+			root.add_child(seam)
+			c["seam"] = seam
+			for k in range(2):
+				var p := _splash(seats[k], -1.0 if k == 0 else 1.0)
+				root.add_child(p)
+				c["splash"].append(p)
+		contacts[key] = c
+	var c: Dictionary = contacts[key]
+	var root: Node3D = c["root"]
+	root.position = pos + Vector3(0.0, 0.1, 0.0)      # lobes sit on the deck, bulging above the goo film
+	root.rotation = Vector3(0.0, Rules.heading(fwd), 0.0)
+	var pulse := 1.0 + MENISCUS_PULSE * sin(TAU * SHOVE_HZ * time)
+	var lobes: Array = c["lobes"]
+	for k in range(2):
+		var pk := 1.0 + MENISCUS_PULSE * sin(TAU * SHOVE_HZ * time + (0.0 if k == 0 else PI))
+		(lobes[k] as MeshInstance3D).scale = MENISCUS * Vector3(pk, pk, 1.0) * (1.0 if fight else 0.8)
+	if c["seam"]:
+		(c["seam"] as MeshInstance3D).scale = Vector3(0.14, MENISCUS.y * 1.08 * pulse, MENISCUS.z * 1.05)
+	var splash: Array = c["splash"]
+	for k in range(splash.size()):
+		var p := splash[k] as CPUParticles3D
+		var rate: float = losses[k]
+		var ratio := clampf(rate / SPLASH_FULL_RATE, 0.15, 1.0)   # heavier losses: bigger, livelier drops
+		p.emitting = rate > 0.5
+		p.speed_scale = 0.7 + 0.5 * ratio
+		p.scale_amount_max = 0.7 + 0.9 * ratio
+
+
+func _splash(seat: String, back: float) -> CPUParticles3D:
+	## Goo droplets thrown off the seam back over the side that is losing them.
+	var p := CPUParticles3D.new()
+	if not _drop_meshes.has(seat):
+		var m := SphereMesh.new()
+		m.radius = 0.17
+		m.height = 0.34
+		m.radial_segments = 8
+		m.rings = 4
+		m.material = Mats.goo(seat)
+		_drop_meshes[seat] = m
+	p.mesh = _drop_meshes[seat]
+	p.amount = SPLASH_AMOUNT
+	p.lifetime = 0.9
+	p.local_coords = true
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 0.5
+	p.position = Vector3(0.0, MENISCUS.y * 0.8, 0.0)
+	p.direction = Vector3(back * 0.7, 1.0, 0.0)
+	p.spread = 50.0
+	p.initial_velocity_min = 3.0
+	p.initial_velocity_max = 6.5
+	p.gravity = Vector3(0.0, -9.8, 0.0)
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.4
+	p.emitting = false
+	return p

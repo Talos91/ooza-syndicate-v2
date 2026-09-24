@@ -20,6 +20,7 @@ var events: Array = []         # telemetry: {t, type, ...}
 var combat_losses: Dictionary = {}   # seat -> units lost in frontline combat
 var fall_losses: Dictionary = {}     # seat -> units lost to falls (relays come later)
 var fights: Array = []               # [horde id, horde id] contact pairs (frontline or rear)
+var fight_info: Dictionary = {}      # "lo:hi" -> {kind: "frontline"/"rear", attacker: horde id} (for the view)
 var _next_id := 1
 
 
@@ -227,10 +228,12 @@ func step(dt: float) -> void:
 			if h["units"] <= 0.0:
 				dead.append(h)
 	for h in hordes:                                  # apply combat losses simultaneously
+		h["loss_rate"] = 0.0                          # units/s lost this step (drives the view's shrink and splash)
 		if h.has("pending_loss"):
 			var before: float = h["units"]
 			h["units"] = maxf(0.0, h["units"] - h["pending_loss"])
 			combat_losses[h["owner"]] = combat_losses.get(h["owner"], 0.0) + before - h["units"]
+			h["loss_rate"] = (before - h["units"]) / maxf(dt, 0.0001)
 			h.erase("pending_loss")
 			if h["units"] <= 0.0:
 				dead.append(h)
@@ -243,6 +246,10 @@ func step(dt: float) -> void:
 	for h in hordes:
 		alive[h["id"]] = true
 	fights = fights.filter(func(p): return alive.has(p[0]) and alive.has(p[1]))
+	for key in fight_info.keys():
+		var ids: PackedStringArray = key.split(":")
+		if not (alive.has(int(ids[0])) and alive.has(int(ids[1]))):
+			fight_info.erase(key)
 	var fighting := {}
 	for p in fights:
 		fighting[p[0]] = true
@@ -275,6 +282,7 @@ func _detect_contacts() -> void:
 	var occ := {}                                     # edge -> [{h, head, tail, dir, on, len}]
 	for h in hordes:
 		h["blocked"] = false
+		h.erase("blocked_by")
 		if h["state"] == "absorb":
 			continue
 		var head_s: float = h["s"]
@@ -313,6 +321,7 @@ func _detect_contacts() -> void:
 					_engage(x["h"], y["h"], "frontline" if x["dir"] != y["dir"] else "rear")
 				elif x["dir"] == y["dir"]:
 					x["h"]["blocked"] = true
+					x["h"]["blocked_by"] = y["h"]["id"]   # queued at this friend's tail
 
 
 func _engage(a: Dictionary, b: Dictionary, kind: String) -> void:
@@ -320,6 +329,7 @@ func _engage(a: Dictionary, b: Dictionary, kind: String) -> void:
 	if pair in fights:
 		return
 	fights.append(pair)
+	fight_info["%d:%d" % [pair[0], pair[1]]] = {"kind": kind, "attacker": a["id"]}   # a's head made the contact
 	a["state"] = "fight"
 	b["state"] = "fight"
 	events.append({"t": time, "type": kind, "seats": [a["owner"], b["owner"]]})

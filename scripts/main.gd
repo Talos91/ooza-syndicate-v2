@@ -7,6 +7,8 @@ extends Node3D
 ##   --shots=4,12,25 --out=<dir>            save screenshots at those match times, then quit
 ##   --window=2340x1080                      size the window like a phone (landscape) for testing
 ##   --mobile                                force the phone quality profile on desktop
+##   --scenario=fight|rear|queue             stage a contact on the deck between nodes 1 and 0 and
+##                                           zoom the camera onto it (no AI) - for looking at fights
 ## Phones are the target: iPhone 15/16 (~2556x1179) and Galaxy S2x/A5x (~2340x1080), ~19.5:9 landscape.
 
 const HUMAN := "A"
@@ -34,6 +36,10 @@ var _trace_t := 0.0
 var shots: Array = []
 var shot_dir := ""
 var demo := false
+var scenario := ""                 # --scenario=: staged contact for looking at the fight visuals
+var scenario_focus := Vector3.INF
+var scenario_zoom := 30.0
+var _scenario_done := false
 var mobile := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
 var window_size := Vector2i.ZERO
 var sun: DirectionalLight3D
@@ -64,6 +70,10 @@ func _ready() -> void:
 			window_size = Vector2i(int(wh[0]), int(wh[1]))
 		elif arg == "--mobile":
 			mobile = true
+		elif arg.begins_with("--scenario="):
+			scenario = arg.substr(11)
+		elif arg.begins_with("--zoom="):                 # camera distance for a --scenario (default 30)
+			scenario_zoom = float(arg.substr(7))
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
@@ -81,8 +91,10 @@ func _ready() -> void:
 	drag_line.mesh = drag_mesh
 	add_child(drag_line)
 	for seat in seats.values():
-		if seat != HUMAN or demo:
+		if (seat != HUMAN or demo) and scenario == "":
 			ais.append(SeatAI.new(seat, 2.5 if seat != HUMAN else 3.1))
+	if scenario != "":
+		_stage_scenario()
 	sim.captured.connect(_on_captured)
 	sim.finished.connect(_on_finished)
 	for n in sim.nodes:
@@ -192,7 +204,52 @@ func _fit_camera() -> void:
 	var screen_right := cam.global_transform.basis.x
 	var shift := cam_dist * half_h * ((panel - margins.x) / vp.x)
 	cam_target += screen_right * shift
+	if scenario_focus != Vector3.INF:                 # staged contact: look at that deck up close
+		cam_target = scenario_focus
+		cam_dist = scenario_zoom
 	_place_camera()
+
+
+func _stage_scenario() -> void:
+	## Staged contacts on the S deck between nodes 1 and 0 (the sends go out in _process once the
+	## sim runs). fight: two lines meet head-on. rear: a slow A line is caught from behind by B.
+	## queue: a fast A line queues behind a slow friend.
+	sim.nodes[1]["owner"] = "A"
+	sim.nodes[1]["units"] = 160.0
+	sim.nodes[0]["owner"] = "B" if scenario == "fight" else "A"
+	sim.nodes[0]["units"] = 160.0
+	if scenario == "rear":                                # B's pursuer starts from node 3, behind node 1
+		sim.nodes[3]["owner"] = "B"
+		sim.nodes[3]["units"] = 200.0
+	for n in sim.nodes:
+		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
+	scenario_focus = (sim.nodes[1]["pos"] + sim.nodes[0]["pos"]) / 2.0
+
+
+func _run_scenario() -> void:
+	if _scenario_done or sim.time < 0.3:
+		return
+	match scenario:
+		"fight":
+			sim.send(1, 0, 1.0)
+			sim.send(0, 1, 1.0)
+			_scenario_done = true
+		"rear":
+			if sim.hordes.is_empty():
+				var slow := sim.send(1, 0, 0.5)            # a slow A line on its way to a friendly node
+				slow["speed"] = 0.2
+			elif sim.time > 2.5:
+				sim.send(3, 0, 1.0)                        # B's pursuer comes through node 1 behind it
+				_scenario_done = true
+		"queue":
+			if sim.hordes.is_empty():
+				var slow := sim.send(1, 0, 0.3)
+				slow["speed"] = 0.25
+			elif sim.time > 2.0:
+				sim.send(1, 0, 1.0)
+				_scenario_done = true
+		_:
+			_scenario_done = true
 
 
 func hfov_half(vp: Vector2) -> float:
@@ -282,6 +339,8 @@ func _process(delta: float) -> void:
 	var dt := minf(delta, 0.05)
 	for ai in ais:
 		ai.think(sim, dt)
+	if scenario != "":
+		_run_scenario()
 	sim.step(dt)
 	hordes.sync(sim, HUMAN)
 	for n in sim.nodes:
