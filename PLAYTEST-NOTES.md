@@ -198,6 +198,33 @@ the existing deck/platform speed ones - open `Debug` bottom-left. Reset to rules
     and I'll adjust; this is the most literal reading of "the bond with the OTHER node" I could
     make without more specifics.
 
+## 2026-09-25 - Daniele, sixth pass: relays are player-fired, alignment, Alpha 11 look
+
+22. **"There are no touch controls for relays... how do I switch them?"** Relays cycled on a blind
+    timer with no player input at all - a real miss (GAME-RULES sec8 explicitly lists "fire the
+    switch" as part of a node's control surface). *Done:* owning a relay lets you tap it and press
+    Switch to advance it, 15 s cooldown, added to the same popup Cannon/Forge already use. AI does
+    the same. `Sim.fire_relay(node_id)`.
+23. **"The structures on the relays are all fucked up and not aligned properly... why not using
+    their tower models?"** Two related bugs from the previous pass's rushed relay-housing work:
+    the tower was offset toward a guessed rim-ledge position/rotation that didn't match the
+    Blender kit's authoring, and a built cannon/forge floated beside the vat slot instead of
+    replacing it. *Done:* housing centred on the node (simpler, guaranteed not to float); a built
+    attachment now replaces the centre slot exactly, matching GAME-RULES sec6 (one slot: vat, or
+    cannon, or forge - never more than one at once, now actually enforced in `upgrade_vat` too).
+24. **"Last Stand works but the platform and connected bridges need to disappear using the
+    destruction animation."** A collapsed node just sat there unchanged before - the Last Stand
+    mechanic worked in the sim but was invisible. *Done:* a rudimentary fall (sink + tumble, ~1.3s)
+    for the platform and every bridge still attached to it.
+25. **"Add all the part of interface that Alpha 11 had... take away this ugly one" + a player
+    selector.** *Done, scoped:* reused Alpha 11's actual panel/button styling (dark translucent
+    panel, coloured border, angular corner radius) and its Rajdhani-SemiBold font across the title
+    screen and the HUD's buttons/panels, replacing default Godot chrome. Added a faction picker to
+    the title screen (previously hardcoded). **Not done:** a full port of Alpha 11's whole
+    interface (its inspector layout, badges, toast styling already have their own 2.0-shaped
+    versions from earlier passes) - flagging this as a deliberate scope call given everything else
+    in this session, not an oversight.
+
 ## Known gaps in this slice (not playtest findings)
 
 - Real per-map relay behaviour (rotation/switch/remote/retract art and consequences), abilities,

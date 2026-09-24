@@ -12,7 +12,8 @@ extends Node3D
 ## Phones are the target: iPhone 15/16 (~2556x1179) and Galaxy S2x/A5x (~2340x1080), ~19.5:9 landscape.
 
 const HUMAN := "A"
-const SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": "solar"}
+var SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": "solar"}
+const FACTION_NAMES := ["null", "ember", "bloom", "vex", "solar"]   # player selector on the title screen
 ## The starter seven (Docs STARTER-SEVEN.md), in build order. Only the 1v1 mode is wired up so
 ## far; a map's other modes (2v2/3v3/FFA) are not selectable yet. Maps past Two Piers include
 ## relay-controlled decks (switch/remote/rotation/retract) drawn and simulated as ordinary FIXED
@@ -66,6 +67,7 @@ var debug_panel: PanelContainer
 var hud_layer: CanvasLayer                    # for the build popup, positioned in screen space
 var build_popup: PanelContainer
 var build_popup_node := -1
+var collapsing := {}                          # node id -> true once its Last Stand fall has started
 var toast_label: Label                        # Alpha 11 convention: every tap gives feedback, never
 var _toast_time := 0.0                        # a silent no-op (Daniele: "I click and nothing happens")
 var _tap_node := -1                           # manual double-tap detection (Alpha 11 convention:
@@ -140,6 +142,46 @@ func _start_map(map_path: String) -> void:
 	_on_resized()
 
 
+# ------------------------------------------------------------------ Alpha 11 look (Daniele,
+# 2026-09-25: "add all the part of interface that alpha 11 had... take away this ugly one") -
+# reused verbatim: the panel recipe and font from Game/Alpha 11/scripts/game.gd panel_style()/
+# button(), so the two share a family look. Scope note: this is the shared chrome (panels, buttons,
+# the font) plus a player/faction selector - not a full port of Alpha 11's whole HUD (inspector
+# layout, badges, toasts already have their own 2.0-appropriate versions built this session).
+const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
+
+
+static func panel_style(color: Color = Color("276578")) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color("17222bf5")
+	s.border_color = color
+	s.set_border_width_all(1)
+	s.corner_radius_top_left = 8
+	s.corner_radius_bottom_right = 8
+	s.set_content_margin_all(16)
+	return s
+
+
+func style_button(b: Button, accent: Color, width: float = 130.0, height: float = 78.0) -> void:
+	b.add_theme_font_override("font", UI_FONT)
+	b.custom_minimum_size = Vector2(width, height)
+	b.add_theme_stylebox_override("normal", panel_style())
+	b.add_theme_stylebox_override("hover", panel_style(accent))
+	var pressed := panel_style(Color("00ddf2"))
+	pressed.bg_color = Color("147185")
+	b.add_theme_stylebox_override("pressed", pressed)
+	b.add_theme_stylebox_override("disabled", panel_style(Color("3a4650")))
+	var focus := panel_style(Color.WHITE)
+	focus.bg_color = Color(0, 0, 0, 0)
+	focus.set_border_width_all(2)
+	b.add_theme_stylebox_override("focus", focus)
+	b.add_theme_color_override("font_disabled_color", Color("a6b2bb"))
+
+
+func style_panel(p: Control, accent: Color = Color("276578")) -> void:
+	p.add_theme_stylebox_override("panel", panel_style(accent))
+
+
 func _build_map_menu() -> void:
 	## Title screen: pick one of the starter seven (Docs STARTER-SEVEN.md), in build order. Shown
 	## unless a map was named on the command line or this is an automated run (--demo/--scenario).
@@ -164,16 +206,35 @@ func _build_map_menu() -> void:
 	version.position = Vector2(-52, -22)
 	layer.add_child(version)
 	var title := Label.new()
-	title.text = "Ooze Syndicate 2.0 - the starter seven"
+	title.add_theme_font_override("font", UI_FONT)
+	title.text = "OOZE SYNDICATE 2.0 - THE STARTER SEVEN"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 34)
 	root.add_child(title)
 	var sub := Label.new()
-	sub.text = "Pick a map (1v1, you are cyan). Maps past Two Piers hold their relay decks fixed open for now."
+	sub.add_theme_font_override("font", UI_FONT)
+	sub.text = "Pick a faction, then a map (1v1). Maps past Two Piers hold their relay decks fixed open for now."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.add_theme_font_size_override("font_size", 18)
 	sub.modulate = Color(1, 1, 1, 0.7)
 	root.add_child(sub)
+	var faction_row := HBoxContainer.new()
+	faction_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	faction_row.add_theme_constant_override("separation", 10)
+	root.add_child(faction_row)
+	for faction in FACTION_NAMES:
+		var accent: Color = Rules.FACTIONS[faction][1]
+		var fb := Button.new()
+		fb.text = faction.capitalize()
+		style_button(fb, accent, 110, 56)
+		if faction == SEAT_FACTIONS[HUMAN]:
+			fb.add_theme_stylebox_override("normal", panel_style(accent))
+		fb.pressed.connect(func():
+			SEAT_FACTIONS[HUMAN] = faction
+			for c in faction_row.get_children():
+				(c as Button).add_theme_stylebox_override("normal", panel_style())
+			fb.add_theme_stylebox_override("normal", panel_style(accent)))
+		faction_row.add_child(fb)
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 10)
 	root.add_child(spacer)
@@ -181,7 +242,7 @@ func _build_map_menu() -> void:
 		var m := MapBuilder.load_map(map_path)
 		var b := Button.new()
 		b.text = "%s  %s   (%d nodes)" % [m.get("code", "?"), m.get("name", map_path), m["nodes"].size()]
-		b.custom_minimum_size = Vector2(460, 68)         # thumb-sized
+		style_button(b, Color("2ee6ff"), 460, 68)         # thumb-sized
 		b.add_theme_font_size_override("font_size", 24)
 		b.pressed.connect(func():
 			layer.queue_free()
@@ -395,13 +456,17 @@ func _build_hud() -> void:
 	toast_label.position.y = 60
 	layer.add_child(toast_label)
 	var group := ButtonGroup.new()
+	var accent: Color = Rules.SEATS[HUMAN]
 	for f in Rules.SEND_FRACTIONS:
 		var b := Button.new()
 		b.text = "%d%%" % int(f * 100)
 		b.toggle_mode = true
 		b.button_group = group
-		b.custom_minimum_size = Vector2(120, 78)      # ~9 mm tall on a 6" phone: thumb-sized
+		style_button(b, accent, 120, 78)              # ~9 mm tall on a 6" phone: thumb-sized
 		b.add_theme_font_size_override("font_size", 28)
+		var pressed_style := panel_style(accent)
+		pressed_style.bg_color = Color("147185")
+		b.add_theme_stylebox_override("pressed", pressed_style)
 		b.button_pressed = is_equal_approx(f, fraction)
 		b.pressed.connect(func(): fraction = f)
 		side.add_child(b)
@@ -429,13 +494,15 @@ func _build_hud() -> void:
 	end_panel.add_child(box)
 	var l := Label.new()
 	l.name = "Result"
+	l.add_theme_font_override("font", UI_FONT)
 	l.add_theme_font_size_override("font_size", 34)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.custom_minimum_size = Vector2(440, 0)
 	box.add_child(l)
+	style_panel(end_panel, accent)
 	var again := Button.new()
 	again.text = "Play again"
-	again.custom_minimum_size = Vector2(0, 60)
+	style_button(again, accent, 0, 60)
 	again.add_theme_font_size_override("font_size", 26)
 	again.pressed.connect(func(): get_tree().reload_current_scene())
 	box.add_child(again)
@@ -467,32 +534,48 @@ func _build_popup() -> void:
 		var b := Button.new()
 		b.name = kind
 		b.text = kind.capitalize()
-		b.custom_minimum_size = Vector2(110, 64)
+		style_button(b, Color("2ee6ff"), 110, 64)
 		b.add_theme_font_size_override("font_size", 20)
 		b.pressed.connect(func():
 			sim.build_attachment(build_popup_node, kind)
 			toast("%s construction started - %d s" % [kind.capitalize(), int(Rules.BUILD_SECONDS)])
 			_close_build_popup())
 		box.add_child(b)
+	var sw := Button.new()                             # GAME-RULES sec8: "fire the switch" - the
+	sw.name = "switch"                                  # relay's own control, separate from its
+	sw.text = "Switch"                                  # attachment slot (Daniele: "there are no
+	style_button(sw, Color("ffd23f"), 110, 64)           # touch controls for relays")
+	sw.add_theme_font_size_override("font_size", 20)
+	sw.pressed.connect(func():
+		if sim.fire_relay(build_popup_node):
+			toast("Relay fired - next state in %d s" % int(Rules.RELAY_FIRE_COOLDOWN))
+		else:
+			toast("Relay still on cooldown")
+		_close_build_popup())
+	box.add_child(sw)
 
 
 func _open_build_popup(node_id: int) -> void:
 	var n: Dictionary = sim.nodes[node_id]
-	if n["attachment"] != "":
+	var offers := []
+	for kind in ["cannon", "forge"]:
+		if kind in n["buildable"] and n["attachment"] == "":
+			offers.append(kind)
+	if n["attachment"] != "" and n["relay"] == "":
 		toast("Double-tap to upgrade - already built here")
 		_close_build_popup()
 		return
-	var offers := []
-	for kind in ["cannon", "forge"]:
-		if kind in n["buildable"]:
-			offers.append(kind)
-	if offers.is_empty():
+	if offers.is_empty() and n["relay"] == "":
 		toast("Nothing buildable on this node")
 		_close_build_popup()
 		return
 	build_popup_node = node_id
 	for kind in ["cannon", "forge"]:
 		(build_popup.get_node("HBoxContainer/" + kind) as Button).visible = kind in offers
+	var sw_btn := build_popup.get_node("HBoxContainer/switch") as Button
+	sw_btn.visible = n["relay"] != ""
+	sw_btn.disabled = n["relay_cd"] > 0.0
+	sw_btn.text = "Switch" if n["relay_cd"] <= 0.0 else "Switch\n(%ds)" % int(ceil(n["relay_cd"]))
 	build_popup.size = build_popup.get_combined_minimum_size()
 	var p := cam.unproject_position(n["pos"] + Vector3(0, Rules.R + 2.0, 0))
 	build_popup.position = p - build_popup.size / 2.0
@@ -502,6 +585,28 @@ func _open_build_popup(node_id: int) -> void:
 func _close_build_popup() -> void:
 	build_popup_node = -1
 	build_popup.visible = false
+
+
+func _collapse_node(node_id: int) -> void:
+	## Last Stand destruction (Daniele, 2026-09-25): the platform and every bridge it still has
+	## don't just vanish - they fall away, a rudimentary stand-in for the design's waterfall-of-ooze
+	## fall (Models/2.0/build_horde_patches_2_0.py has the real art board; not wired into Godot yet).
+	collapsing[node_id] = true
+	(vis[node_id]["label"] as Label3D).visible = false
+	var falling: Array = vis[node_id]["parts"].duplicate()
+	for i in range(sim.edges.size()):
+		if sim.edges[i]["a"] == node_id or sim.edges[i]["b"] == node_id:
+			falling.append_array(vis["edge_decks"].get(i, []))
+	var tw := create_tween()
+	tw.set_parallel(true)
+	for p in falling:
+		var node3d := p as Node3D
+		var spin := Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * 1.4
+		tw.tween_property(node3d, "position:y", node3d.position.y - 22.0, 1.3).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(node3d, "rotation", node3d.rotation + spin, 1.3).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(func():
+		for p in falling:
+			(p as Node3D).visible = false)
 
 
 func toast(msg: String) -> void:
@@ -517,12 +622,13 @@ func _build_debug(area: Control) -> void:
 	debug_button = Button.new()
 	debug_button.text = "Debug"
 	debug_button.toggle_mode = true
-	debug_button.custom_minimum_size = Vector2(120, 60)
+	style_button(debug_button, Color("2ee6ff"), 120, 60)
 	debug_button.add_theme_font_size_override("font_size", 24)
 	debug_button.size = debug_button.custom_minimum_size
 	area.add_child(debug_button)
 	debug_panel = PanelContainer.new()
 	debug_panel.visible = false
+	style_panel(debug_panel, Color("2ee6ff"))
 	area.add_child(debug_panel)
 	debug_button.toggled.connect(func(on: bool): debug_panel.visible = on)
 	var box := VBoxContainer.new()
@@ -605,8 +711,10 @@ func _process(delta: float) -> void:
 		label.text = "" if owner != "" and owner != HUMAN else str(int(n["units"]))   # no numbers on enemy nodes
 		if n["relay"] == "" and entry["vat_tier"] != n["tier"]:
 			MapBuilder.set_vat_tier(self, entry, n["tier"], owner)
-		if entry["attachment"] != n["attachment"]:
-			MapBuilder.set_attachment(self, entry, n["attachment"], n["pos"], owner)
+		if entry["attachment"] != n["attachment"] or entry.get("cannon_tier", 1) != n["cannon_tier"]:
+			MapBuilder.set_attachment(self, entry, n["attachment"], maxi(n["cannon_tier"], 1), n["pos"], owner)
+		if sim.collapsed.get(n["id"], false) and not collapsing.has(n["id"]):
+			_collapse_node(n["id"])
 	if build_popup_node >= 0:
 		var bn: Dictionary = sim.nodes[build_popup_node]
 		if bn["attachment"] != "" or bn["owner"] != HUMAN:

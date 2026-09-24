@@ -1,5 +1,25 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.8.0 - 2026-09-25
+
+- **Relays are player-fired, not automatic** (Daniele: "there are no touch controls for relays...
+  how do I switch them?" - GAME-RULES sec8: "on relays - fire the switch"). Owning a relay lets you
+  tap it and press Switch to advance it to its next state, 15 s cooldown between fires; an
+  unclaimed relay sits at its first authored state. The AI fires its own relays too.
+- **Relay/attachment alignment fixed** (Daniele: "the structures on the relays are all fucked up").
+  The relay housing is now centred on the node instead of guessed at a rim-ledge offset that didn't
+  come across from the Blender kit's authoring; a built cannon or forge now REPLACES the centre
+  slot (vat or socket) at the exact same spot instead of floating beside it.
+- **Last Stand destruction animation.** A collapsed node's platform and every bridge it still has
+  now fall away (sink and tumble) instead of silently vanishing - a rudimentary stand-in for the
+  design's waterfall-of-ooze fall.
+- **Alpha 11 look and a player/faction selector** (Daniele: "add all the part of interface that
+  alpha 11 had... take away this ugly one"). Reused Alpha 11's actual panel/button recipe and font
+  (Rajdhani-SemiBold) across the title screen and HUD's buttons and panels. Added a faction picker
+  to the title screen (previously hardcoded to "null"). Scope note: this is the shared chrome, not
+  a full port of Alpha 11's whole HUD (inspector layout, badges, toasts already have their own
+  2.0-appropriate versions from earlier this session).
+
 Versioned from **2026-09-25** (Daniele: "start versioning and have it in the interface and a
 changelog"). The version shows bottom-right in the HUD and on the title screen. Numbering is
 retroactive for the same-day passes before this file existed - each one bumps the minor number.

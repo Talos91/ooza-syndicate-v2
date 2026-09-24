@@ -48,9 +48,13 @@ func think(sim: Sim, dt: float) -> void:
 
 
 func _build(sim: Sim) -> void:
-	## Structure parity for AI vs AI (no economy/combat cheats): opportunistically upgrade a
-	## flush home vat (or a built cannon's tier), build one forge (a standing combat bonus) then
-	## cannons at any other node that offers them and doesn't have one yet.
+	## Structure parity for AI vs AI (no economy/combat cheats): fires an owned relay whenever it's
+	## off cooldown (GAME-RULES sec8), opportunistically upgrades a flush home vat (or a built
+	## cannon's tier), builds one forge (a standing combat bonus) then cannons at any other node
+	## that offers them and doesn't have one yet.
+	for n in sim.nodes:
+		if n["owner"] == seat and n["relay"] != "":
+			sim.fire_relay(n["id"])
 	for n in sim.nodes:
 		if n["owner"] != seat or n["build_kind"] != "":
 			continue

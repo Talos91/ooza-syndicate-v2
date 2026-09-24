@@ -6,7 +6,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.7.0"
+const VERSION := "0.8.0"
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius
@@ -51,7 +51,7 @@ static var node_fight_mult: float = 1.0                # live-tunable: x combat 
 # and Last Stand the game is eternal - test with the real maps even if rudimental"). Real per-map
 # authoring (fixed state order, warnings, ride/fall/carry consequences, hidden Last Stand method,
 # waves per map) is a separate later pass; this is the minimum that makes every starter map END.
-const RELAY_PERIOD := 18.0           # GAME-RULES sec8: 3 s warning + 15 s cooldown, no warning phase here
+const RELAY_FIRE_COOLDOWN := 15.0    # GAME-RULES sec8: 15 s cooldown between fires (no 3 s warning yet)
 const LAST_STAND_TIME := 120.0       # Daniele, 2026-09-25: moved earlier than GAME-RULES sec10's
                                       # 3:00 for this rudimentary pass, to keep matches shorter
 const LAST_STAND_WAVE := 14.0        # seconds between collapse waves; always "inward" (rim first) here

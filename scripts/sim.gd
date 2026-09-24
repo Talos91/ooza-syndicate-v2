@@ -22,6 +22,7 @@ var fall_losses: Dictionary = {}     # seat -> units lost to falls (relays come 
 var fights: Array = []               # [horde id, horde id] contact pairs (frontline or rear)
 var fight_info: Dictionary = {}      # "lo:hi" -> {kind: "frontline"/"rear", attacker: horde id} (for the view)
 var relay_groups: Dictionary = {}    # "r"/"s"/"m" -> [sorted state keys]: rudimentary relay cycling
+var edge_controller: Dictionary = {} # edge index -> node id that fires it (-1 if none found)
 var collapsed: Dictionary = {}       # node id -> true once dropped by the rudimentary Last Stand
 var broken_edges: Dictionary = {}    # edge index -> true: a shield broke, its bond severed for good
 var last_stand_active := false
@@ -58,15 +59,19 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"build_timer": 0.0,     # seconds left on a vat/cannon upgrade or a fresh attachment build
 			"cannon_cd": 0.0,       # seconds to the node's cannon's next burst
 			"shield": Rules.SHIELD_FRACTION * (Rules.HOME_UNITS if owner != "" else Rules.NEUTRAL_UNITS[tier]),
+			"relay_index": 0,       # current position in this relay's own state cycle (0 = its first
+			"relay_cd": 0.0,        # state); retract uses 0/1 as extended/retracted. Cooldown to fire again
 		})
 		adj[id] = []
+	var prefix_kind := {"r": "rotation", "s": "switch", "m": "remote"}
 	for e in map["edges"]:
-		# RUDIMENTARY relay cycling (Daniele, 2026-09-25): a relay-controlled deck's real behaviour
-		# (fixed state order with warning, ride/fall/carry consequences) isn't built - here every
-		# distinct state PREFIX on the map (r/rotation, s/switch, m/remote) cycles through its states
-		# together every Rules.RELAY_PERIOD seconds, and a `retracts` deck toggles open/closed on
-		# the same period, purely so a route can go around a currently-closed deck. Without this
-		# every map past Two Piers would have gaps where those decks belong.
+		# Relays are PLAYER-FIRED, not automatic (Daniele, 2026-09-25 - GAME-RULES sec8: "the
+		# complete control surface on a node is... on relays, fire the switch"; "there are no touch
+		# controls for relays... how do I switch them?"). Owning a relay node lets its owner call
+		# fire_relay() to advance it to its next state, Rules.RELAY_FIRE_COOLDOWN between fires
+		# (~GAME-RULES's 3 s warning + 15 s cooldown, no warning phase modelled). An UNCLAIMED relay
+		# sits at its first authored state until captured. real fixed state order/warning/ride-or-
+		# fall consequences are still a follow-up; this is enough for it to be a real lever to pull.
 		var mods: int = {"S": 1, "M": 2, "L": 3}[e["tier"]]
 		var st: String = e["state"] if e.get("state") != null else ""     # JSON stores "state": null
 		edges.append({"a": int(e["from"]), "b": int(e["to"]), "modules": mods,
@@ -82,6 +87,16 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 				relay_groups[prefix].append(st)
 	for k in relay_groups:
 		(relay_groups[k] as Array).sort()
+	for i in range(edges.size()):                    # which relay node governs each relay-controlled edge
+		var e: Dictionary = edges[i]
+		if e["state"] == "" and not e["retracts"]:
+			continue
+		var want: String = "retract" if e["retracts"] else prefix_kind[e["state"].substr(0, 1)]
+		var ctrl := -1
+		for end in [e["a"], e["b"]]:
+			if nodes[end]["relay"] == want:
+				ctrl = end
+		edge_controller[i] = ctrl
 
 
 # ------------------------------------------------------------------ orders
@@ -114,8 +129,9 @@ func upgrade_vat(node_id: int) -> bool:
 	## Start a vat upgrade (T1->T2->T3->T4), Rules.BUILD_SECONDS to complete (GAME-RULES sec6).
 	## Rudimentary: no unit/resource cost yet (army scale is still an open question).
 	var n: Dictionary = nodes[node_id]
-	if n["owner"] == "" or n["build_kind"] != "" or n["tier"] >= 4 or not ("vat" in n["buildable"]):
-		return false
+	if n["owner"] == "" or n["build_kind"] != "" or n["tier"] >= 4 or n["attachment"] != "" \
+			or not ("vat" in n["buildable"]):
+		return false                                  # mutually exclusive with a built cannon/forge
 	n["build_kind"] = "vat"
 	n["build_timer"] = Rules.BUILD_SECONDS
 	events.append({"t": time, "type": "build_start", "node": node_id, "seat": n["owner"], "kind": "vat"})
@@ -220,22 +236,46 @@ func _forge_mult(seat: String) -> float:
 
 
 func is_edge_open(edge_index: int) -> bool:
-	## Public wrapper for the view: is this deck currently open (relay cycling / retract / shield)?
-	return not broken_edges.get(edge_index, false) and _edge_open(edges[edge_index])
+	## Public wrapper for the view: is this deck currently open (relay state / retract / shield)?
+	return not broken_edges.get(edge_index, false) and _edge_open(edge_index)
 
 
-func _edge_open(e: Dictionary) -> bool:
-	## Rudimentary relay cycling (see setup()): is this deck currently usable for a NEW route?
-	## A horde already committed to a route keeps moving regardless - only fresh pathfinding sees this.
-	if e["retracts"]:
-		return int(time / Rules.RELAY_PERIOD) % 2 == 0
-	var st: String = e["state"]
-	if st == "":
+func _edge_open(edge_index: int) -> bool:
+	## Player-fired relay state (see setup()/fire_relay()): is this deck currently usable for a
+	## NEW route? A horde already committed to a route keeps moving regardless - only fresh
+	## pathfinding sees this. An unclaimed relay sits at its first state (index 0) until captured.
+	var e: Dictionary = edges[edge_index]
+	if not e["retracts"] and e["state"] == "":
 		return true
-	var grp: Array = relay_groups.get(st.substr(0, 1), [])
+	var ctrl: int = edge_controller.get(edge_index, -1)
+	var index := 0
+	if ctrl >= 0 and nodes[ctrl]["owner"] != "":
+		index = nodes[ctrl]["relay_index"]
+	if e["retracts"]:
+		return index == 0
+	var grp: Array = relay_groups.get(e["state"].substr(0, 1), [])
 	if grp.is_empty():
 		return true
-	return grp[int(time / Rules.RELAY_PERIOD) % grp.size()] == st
+	return grp[index % grp.size()] == e["state"]
+
+
+func fire_relay(node_id: int) -> bool:
+	## The owner's control over their relay (GAME-RULES sec8: "fire the switch") - advances it to
+	## its next state (retract: toggles extended/retracted), Rules.RELAY_FIRE_COOLDOWN between fires.
+	var n: Dictionary = nodes[node_id]
+	if n["owner"] == "" or n["relay"] == "" or n["relay_cd"] > 0.0:
+		return false
+	if n["relay"] == "retract":
+		n["relay_index"] = 1 - n["relay_index"]
+	else:
+		var prefix: String = {"rotation": "r", "switch": "s", "remote": "m"}[n["relay"]]
+		var grp: Array = relay_groups.get(prefix, [])
+		if grp.is_empty():
+			return false
+		n["relay_index"] = (n["relay_index"] + 1) % grp.size()
+	n["relay_cd"] = Rules.RELAY_FIRE_COOLDOWN
+	events.append({"t": time, "type": "relay_fired", "node": node_id, "seat": n["owner"], "index": n["relay_index"]})
+	return true
 
 
 func find_route(from_id: int, to_id: int) -> Array:
@@ -253,7 +293,7 @@ func find_route(from_id: int, to_id: int) -> Array:
 			break
 		for link in adj[cur]:
 			var nb: int = link[0]
-			if collapsed.get(nb, false) or broken_edges.get(link[1], false) or not _edge_open(edges[link[1]]):
+			if collapsed.get(nb, false) or broken_edges.get(link[1], false) or not _edge_open(link[1]):
 				continue
 			var cost: float = dist[cur] + edges[link[1]]["modules"] * Rules.MODULE_SECONDS + 1.0
 			if not dist.has(nb) or cost < dist[nb]:
@@ -390,6 +430,8 @@ func step(dt: float) -> void:
 		if n["owner"] != "":                           # the shield: SHIELD_FRACTION of the garrison,
 			var cap: float = Rules.SHIELD_FRACTION * n["units"]   # regenerating "from excess minions"
 			n["shield"] = minf(cap, n["shield"] + Rules.SHIELD_REGEN * dt) if n["shield"] < cap else cap
+		if n["relay_cd"] > 0.0:
+			n["relay_cd"] = maxf(0.0, n["relay_cd"] - dt)
 	_step_structures(dt)
 	for n in nodes:                                   # the door emits the current order into its line
 		if n["streaming"].is_empty():

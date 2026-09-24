@@ -74,15 +74,14 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		parts.append(put(parent, "Platform_Rotation" if relay == "rotation" else "Platform_Standard", n["pos"]))
 		var vat_node: Node3D
 		if relay != "":
-			# a relay node has NO vat (GAME-RULES sec6: centreHasNoVat) - the housing (map-fixed,
-			# ledge-mounted toward the rim) plus the attachment socket in the middle, like a vat
+			# a relay node has NO vat (GAME-RULES sec6: centreHasNoVat): its housing is a FIXED
+			# structure (never swaps, unlike a vat) - Daniele: the Blender kit's rim-ledge mount
+			# didn't come across straight, so this centres it instead (guaranteed not to float or
+			# clip). The attachment SOCKET is the separate swappable centre slot a cannon/forge
+			# later replaces, same as on a final node.
 			var out: Vector3 = (n["pos"] - centre)
 			out = out.normalized() if out.length() > 0.5 else Vector3.FORWARD
-			var mount := put(parent, "Relay_Mount", n["pos"], Rules.heading(out))
-			parts.append(mount)
-			var housing := put(parent, RELAY_HOUSING.get(relay, "Relay_Mount"),
-					n["pos"] + out * (Rules.R * 0.75), Rules.heading(-out))
-			parts.append(housing)
+			parts.append(put(parent, RELAY_HOUSING.get(relay, "Relay_Mount"), n["pos"], Rules.heading(out)))
 			vat_node = put(parent, "Socket_Attachment", n["pos"])
 		else:
 			vat_node = put(parent, "Vat_T%d" % n["tier"], n["pos"])
@@ -97,7 +96,7 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		parent.add_child(label)
 		vis[n["id"]] = {"parts": parts, "label": label, "vat_node": vat_node,
 				"vat_tier": -1 if relay != "" else n["tier"],   # -1: never swap a relay's socket for a vat
-				"attachment_node": null, "attachment": ""}
+				"attachment_node": null, "attachment": "", "cannon_tier": 0}
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		var pa: Vector3 = sim.nodes[e["a"]]["pos"]
@@ -135,22 +134,23 @@ static func set_vat_tier(parent: Node3D, entry: Dictionary, tier: int, seat: Str
 	apply_owner(entry["parts"], seat)
 
 
-static func set_attachment(parent: Node3D, entry: Dictionary, kind: String, pos: Vector3, seat: String) -> void:
-	## Show a built cannon or forge next to the vat (single tier each - build_attachment). kind ""
-	## clears it. A rudimentary placement: offset from the vat, not the authored attachment socket.
-	if entry["attachment"] == kind:
+static func set_attachment(parent: Node3D, entry: Dictionary, kind: String, tier: int, pos: Vector3, seat: String) -> void:
+	## A built cannon or forge REPLACES whatever sits in the centre slot (the vat, or a relay's
+	## empty socket) at the exact same spot - GAME-RULES sec6: a node's attachment is one slot, not
+	## an extra piece bolted on the side (that offset placement was the misalignment Daniele found).
+	## kind "" restores an empty Socket_Attachment. `tier` only matters for a cannon (T1-T3).
+	if entry["attachment"] == kind and (kind != "cannon" or entry.get("cannon_tier", 1) == tier):
 		return
-	if entry["attachment_node"]:
-		(entry["parts"] as Array).erase(entry["attachment_node"])
-		(entry["attachment_node"] as Node).queue_free()
-		entry["attachment_node"] = null
-	entry["attachment"] = kind
-	if kind == "":
-		return
-	var piece := "Cannon_T1" if kind == "cannon" else "Forge"
-	var node := put(parent, piece, pos + Vector3(0, 0, Rules.R * 0.55))
+	if entry["vat_node"]:
+		(entry["parts"] as Array).erase(entry["vat_node"])
+		(entry["vat_node"] as Node).queue_free()
+	var piece := "Socket_Attachment" if kind == "" else ("Cannon_T%d" % tier if kind == "cannon" else "Forge")
+	var node := put(parent, piece, pos)
 	entry["parts"].append(node)
+	entry["vat_node"] = node
 	entry["attachment_node"] = node
+	entry["attachment"] = kind
+	entry["cannon_tier"] = tier
 	apply_owner(entry["parts"], seat)
 
 

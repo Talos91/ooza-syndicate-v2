@@ -311,29 +311,34 @@ func _init() -> void:
 	check(sim12.upgrade_structure(5), "double-tap upgrades the vat where there's no attachment")
 	check(sim12.nodes[5]["build_kind"] == "vat", "(node 5 has no attachment, only a vat)")
 
-	# relay cycling (Daniele: "i don't see switch implemented" - it must be visibly closable):
-	# First Switch's hub decks actually go unusable for new routes over time.
+	# relays are PLAYER-FIRED (Daniele: "there are no touch controls for relays... how do I switch
+	# them?" - GAME-RULES sec8: "on relays - fire the switch"). An unclaimed relay sits at its
+	# first state; its owner can fire it to advance, with a cooldown; a non-owner cannot.
 	var sw_map := MapBuilder.load_map("res://maps/010-first-switch.json")
 	var sw_pos := MapBuilder.layout(sw_map)
 	var sim13 := Sim.new()
 	sim13.setup(sw_map, sw_pos, {}, {})
+	sim13.nodes[3]["owner"] = "B"                      # a second seat so the match doesn't instantly "end"
 	var relay_edges := []
 	for i in range(sim13.edges.size()):
 		if sim13.edges[i]["state"] != "":
 			relay_edges.append(i)
 	check(not relay_edges.is_empty(), "First Switch has at least one relay-state edge")
-	var saw_open := false
-	var saw_closed := false
+	# node 1 (not 0, which is the final centre here) is a switch relay
+	var edges_1 := relay_edges.filter(func(i): return sim13.edges[i]["a"] == 1 or sim13.edges[i]["b"] == 1)
+	var s1_open := edges_1.filter(func(i): return sim13.edges[i]["state"] == "s1").all(func(i): return sim13.is_edge_open(i))
+	check(s1_open, "an unclaimed relay sits at its first authored state")
+	check(not sim13.fire_relay(1), "nobody can fire an unclaimed relay")
+	sim13.nodes[1]["owner"] = "A"
+	check(sim13.fire_relay(1), "the owner can fire it")
+	check(not sim13.fire_relay(1), "but not again immediately - it's on cooldown")
+	var s2_open := edges_1.filter(func(i): return sim13.edges[i]["state"] == "s2").all(func(i): return sim13.is_edge_open(i))
+	check(s2_open, "firing it advanced it to the next state")
 	var t13 := 0.0
-	while t13 < Rules.RELAY_PERIOD * 2.5 and not (saw_open and saw_closed):
-		sim13.step(1.0)
-		t13 += 1.0
-		for i in relay_edges:
-			if sim13.is_edge_open(i):
-				saw_open = true
-			else:
-				saw_closed = true
-	check(saw_open and saw_closed, "a relay edge is open at some point and closed at another (it cycles)")
+	while t13 < Rules.RELAY_FIRE_COOLDOWN + 1.0:
+		sim13.step(0.5)
+		t13 += 0.5
+	check(sim13.fire_relay(1), "the cooldown expires and it can be fired again")
 
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
