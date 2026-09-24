@@ -23,6 +23,9 @@
 5. **Platform speed is too fast compared with bridge speed.** (Today nodes are crossed at 6x deck
    speed so travel time counts decks only - needs another way to keep the timing honest, e.g. a
    shorter visual path across the node, or a lower multiplier with deck speeds re-tuned.)
+   *Tooling (2026-09-25):* the in-game Debug panel (bottom-left) has live sliders for deck speed and
+   platform speed, so the right ratio can be found in play; tell me the values and they go into
+   `rules.gd`. Note the sim's travel-time promise (1 module = 2 s) only holds at the defaults.
 6. **A proper frontline animation** for bridge fights - the current stop-and-count looks bad.
    *First pass (2026-09-25):* the patch in contact is squashed (0.7 along, 1.35 up, 1.12 across, as
    on the Blender board), the front four patches rock back and lunge into the contact in shoves

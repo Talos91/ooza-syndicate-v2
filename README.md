@@ -26,7 +26,12 @@ multiplayer, pinch-zoom on touch.
 
 **https://talos91.github.io/ooza-syndicate-v2/** - the web export of `main`, published to the `gh-pages`
 branch after every pass that changes play or looks (see `docs/BUILD-LOG.md` §10). Phone: open in
-Safari/Chrome, landscape; hard-reload after a new publish.
+Safari/Chrome, landscape. **After a new publish, reload twice**: the PWA service worker serves the
+cached build first and fetches the new one in the background (the top-left clock restarting at 0:00
+with the new feature visible tells you it landed).
+
+**Debug panel** (bottom-left `Debug` button, live, resets on reload): deck speed (m/s) and platform
+speed (x deck) sliders - for PLAYTEST-NOTES 5 - plus Reset to rules.
 
 ## Run
 

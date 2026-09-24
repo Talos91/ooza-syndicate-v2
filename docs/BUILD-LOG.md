@@ -179,6 +179,12 @@ Godot 4.6.1 · GL Compatibility · **Two Piers**, the first of the starter seven
 - **Telemetry** per match (duration, sends, captures, deciding event, winner-was-behind, losses)
   → `user://telemetry/`.
 
+### Debug panel (2026-09-25)
+Bottom-left `Debug` button opens live sliders for playtests, thumb-sized, reset on reload:
+deck speed (m/s) and platform speed (x deck) - `Rules.deck_speed` / `Rules.node_speed_mult` are
+static vars for this - plus "Reset to rules". Add further debug controls here (`_build_debug` in
+`main.gd`). Playtest builds carry the panel; it is not a player feature.
+
 ### Code map
 | File | Role |
 |---|---|
