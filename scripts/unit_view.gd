@@ -14,7 +14,7 @@ const UNIT_SIZE := 1.3               # metres across a creature (readable at ful
 const ACROSS := 3                    # Alpha 11's default formation
 const ROW := 1.35                    # metres between rows
 const LANE := 0.95                   # metres between the columns
-const MAX_PER_HORDE := 60
+const MAX_PER_HORDE := 200           # Alpha 11 drew every body
 const MODEL_YAW := PI / 2.0          # the models face +Z; the path heading is kit +X
 # ALPHA 11'S TROOP ANIMATION (game.gd draw loop + unit.gdshader, Daniele Alpha 16: "animations matching
 # Alpha 11"): every body hops on an 8 rad/s wave with its own phase (j * 0.618 + order * 0.137), only
@@ -110,39 +110,40 @@ func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob :
 
 
 func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
-	## A column of models from the head back along the path, ACROSS abreast.
+	## Alpha 11's column (simulation.gd formation_sample): one body every 12 px (0.93 m); body j's lane is
+	## j % 3; lanes open from single file over the first and last 85 px (6.6 m) of the route, so a
+	## send files out of the door, spreads three across on the bridge and files back in at the target;
+	## each body faces its own way along the route. Arriving bodies keep walking in at their spacing.
 	var n := clampi(int(ceil(shown_units)), 1, MAX_PER_HORDE)
-	var rows := int(ceil(float(n) / ACROSS))
+	var gap := Rules.BRAWL_SPACING
+	var L: float = h["L"]
+	var head: float = h["s"]
+	if h["state"] == "absorb":                     # the tail walks on; the front has gone in
+		head = L - Sim.chain_length(h) + (n - 1) * gap
 	var soft: float = SOFTNESS.get(h["faction"], 1.0)
-	var to_cam := Vector3(0, 0, 1).rotated(Vector3.UP, Rules.view_yaw)   # the camera sits this way
+	var to_cam := Rules.front_dir()
 	var screen_right := Vector3(1, 0, 0).rotated(Vector3.UP, Rules.view_yaw)
-	# rows spread over the line's real length (Alpha 11: one body every departure interval), so a
-	# column arriving at a node walks straight in through the door instead of bunching outside it
-	var row_gap: float = maxf(ROW, Sim.chain_length(h) / maxf(rows, 1))
-	# arriving (absorb): the head is at the door; every row keeps WALKING at deck speed and vanishes
-	# into the tower as it reaches it (Alpha 11: bodies walk straight in) - never a standing queue
-	var walk := 0.0
-	if h["state"] == "absorb":
-		walk = fposmod(time * Rules.move_speed(), row_gap)
-	for r in range(rows + (1 if walk > 0.0 else 0)):
-		var s: float = h["s"] - r * row_gap + walk
-		if s > h["L"]:
-			continue                                  # this row is through the door
-		if s < 0.0:
+	for j in range(n):
+		var dist := head - j * gap
+		if dist < 0.0:
 			break
-		var smp := Sim.sample(h, s)
+		var lanes := ACROSS
+		var col := j % lanes
+		var expansion := clampf(minf(dist, L - dist) / Rules.BRAWL_EXPAND, 0.0, 1.0)
+		var travel := dist + col * gap * expansion
+		if travel > L:
+			continue                                  # through the door
+		var smp := Sim.sample(h, travel)
 		var fwd: Vector3 = smp[1]
 		var side := fwd.cross(Vector3.UP).normalized()
-		var in_row := mini(ACROSS, n - r * ACROSS)
+		var row_size := mini(lanes, n - int(j / lanes) * lanes)
+		var lateral := (col - (row_size - 1) * 0.5) * LANE * expansion
 		var facing: float = 1.0 if fwd.dot(screen_right) >= 0.0 else -1.0
 		var yaw := Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing))
-		for c in range(in_row):
-			var off := (c - (in_row - 1) / 2.0) * LANE
-			var j := r * ACROSS + c
-			var phase := fmod(j * 0.618 + float(h["id"]) * 0.137, 1.0)
-			var wave := sin(time * WAVE + phase * TAU)
-			add_unit(h["faction"], h["owner"], (smp[0] as Vector3) + side * off, yaw,
-					maxf(0.0, wave) * HOP, wave * ROLL, wave * SQUASH * soft)
+		var phase := fmod(j * 0.618 + float(h["id"]) * 0.137, 1.0)
+		var wave := sin(time * WAVE + phase * TAU)
+		add_unit(h["faction"], h["owner"], (smp[0] as Vector3) + side * lateral, yaw,
+				maxf(0.0, wave) * HOP, wave * ROLL, wave * SQUASH * soft)
 
 
 func flush() -> void:

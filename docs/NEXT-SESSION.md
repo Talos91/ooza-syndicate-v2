@@ -1,6 +1,6 @@
 # Next session - start here
 
-State at the end of the 2026-09-25 sessions: **v0.16.1 "Alpha 16"** (online rooms, Alpha 11 Brawl feel, player colours), source on `main`,
+State at the end of the 2026-09-25 sessions: **v0.16.2 "Alpha 16"** (online rooms, Alpha 11 Brawl feel, player colours, self-updating build), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: this file,
 `README.md`, the top of `CHANGELOG.md` (0.12.0 to 0.16.0), `PLAYTEST-NOTES.md` notes 26-71, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
@@ -59,7 +59,7 @@ Still open on multiplayer:
 ## Gotchas
 
 - New `class_name` scripts need `Godot --headless --import --path .` before they resolve.
-- The PWA cache serves stale builds; in the in-app browser clear it with
+- Since 0.16.2 `web/update.js` swaps in a new build by itself. If an old one still sticks, in the in-app browser clear it with
   `navigator.serviceWorker.getRegistrations()` + `caches.keys()` via the JS tool.
 - `git branch -D gh-pages` locally before recreating the orphan branch (see BUILD-LOG §10).
 - No system Python on this PC; use Godot headless scripts for data work.

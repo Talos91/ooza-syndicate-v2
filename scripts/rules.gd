@@ -6,7 +6,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.16.1"
+const VERSION := "0.16.2"
 const VERSION_NAME := "Alpha 16"
 
 # kit geometry (metres)
@@ -63,6 +63,17 @@ static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug pan
 # unit. Exit = entrance = 9.6 shown units/s (x SCALE internally). SIEGE keeps its own tunables.
 const BRAWL_SPEED := 8.9                                   # m/s on decks and platforms alike
 const BRAWL_DOOR_RATE := 115.0 / 12.0 * 5.0               # internal units/s out of the door (and in)
+# Alpha 11's route (simulation.gd route/arc): out of the vat's FRONT (the side facing the camera),
+# round the platform on its route ring to the bridge, and at the target round the ring back to the
+# front and in. Its ring is 122 px (~ the platform edge); here 4.8 m inside the 6 m platform.
+const BRAWL_RING := 4.8
+const BRAWL_SPACING := 12.0 * 21.9 / 284.0                # 0.93 m between bodies (Alpha 11: 12 px)
+const BRAWL_EXPAND := 85.0 * 21.9 / 284.0                 # 6.6 m: columns widen from single file (85 px)
+
+
+static func front_dir() -> Vector3:
+	## The side of every platform that faces the camera (every structure faces the viewer).
+	return Vector3(0, 0, 1).rotated(Vector3.UP, view_yaw)
 
 
 static func move_speed() -> float:
@@ -107,6 +118,10 @@ const GOO_PUSH := 0.67
 # LOW DETAIL (Debug panel): fewer river patches, no shield rings, half the horde patches - to test
 # whether the build is what makes a machine "run like crazy" (Daniele, Alpha 13 playtest).
 static var low_detail: bool = false
+# HIDE ENEMY COUNTS (Daniele, Alpha 16: a toggle in the options and Debug). On: no unit numbers on any
+# enemy node, in either mode (badges show the seat letter). Off: BRAWL shows every count as Alpha 11
+# did; SIEGE never shows enemy numbers (an identity rule of 2.0).
+static var hide_enemy_counts: bool = false
 
 # CONTACT (Alpha 12, Daniele: "whenever an enemy crosses the hitbox of a unit they fight... a unit
 # crossing an enemy unit should always start a combat to death"): contact is geometric, anywhere -

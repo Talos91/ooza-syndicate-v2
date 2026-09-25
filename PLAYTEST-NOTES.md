@@ -420,3 +420,8 @@ decide if mechanics are good or not... only thing I can save on is textures or b
     overlay gate with CLOSE (needs Daniele's phone to confirm).
 80. **Map selection doesn't scroll with the finger on mobile.** *Done:* swipe scroll (needs the phone).
 81. **Next alpha: redo all maps and change the Last Stand mechanic.** *Open* - waiting for the brief.
+82. **Browser cache still shows Alpha 14.** *Done (0.16.2):* `web/update.js` swaps in new builds.
+83. **Badges way too big, covering bases; they must float in the void next to a node, much smaller.** *Done.*
+84. **Toggle to hide enemy node unit counts, in options and Debug.** *Done.*
+85. **Brawl still doesn't feel like Alpha 11, entering and exiting.** *Done:* Alpha 11's front-door
+    route round the platform ring and its single-file-to-three-across column. Needs Daniele's feel check.

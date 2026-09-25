@@ -256,13 +256,18 @@ func show_options() -> void:
 		Rules.last_stand = not Rules.last_stand
 		show_options())
 	lsb.add_theme_font_size_override("font_size", int(round(20 * K)))
-	label_at("PERFORMANCE", P(60, 440), 30)
+	var hec := nav_button("ENEMY COUNTS: %s" % ("HIDDEN  -  no unit numbers on enemy nodes, in either mode" if Rules.hide_enemy_counts else "SHOWN IN BRAWL  -  as Alpha 11 (SIEGE always hides them)"),
+			P(60, 422), P(950, 44), func():
+		Rules.hide_enemy_counts = not Rules.hide_enemy_counts
+		show_options())
+	hec.add_theme_font_size_override("font_size", int(round(19 * K)))
+	label_at("PERFORMANCE", P(60, 482), 30)
 	var det := nav_button("DETAIL: %s" % ("FULL" if not Rules.low_detail else "LOW  -  fewer horde and river patches"),
-			P(60, 492), P(950, 64), func():
+			P(60, 526), P(950, 60), func():
 		Rules.low_detail = not Rules.low_detail
 		show_options())
 	det.add_theme_font_size_override("font_size", int(round(22 * K)))
-	label_at("Low detail halves the horde and river patches - use it if the game makes your machine run hot.", P(60, 566), 18, Color("b8ced6"))
+	label_at("Low detail halves the horde and river patches - use it if the game makes your machine run hot.", P(60, 596), 18, Color("b8ced6"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_main)
 
 

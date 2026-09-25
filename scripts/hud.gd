@@ -64,8 +64,9 @@ static func panel_style(color: Color = Color("276578")) -> StyleBoxFlat:
 static func badge_style(color: Color) -> StyleBoxFlat:
 	var s := panel_style(color)
 	s.bg_color = Color("101419")
-	s.set_corner_radius_all(32)
-	s.set_content_margin_all(4)
+	s.set_corner_radius_all(14)
+	s.set_content_margin_all(2)
+	s.set_border_width_all(1)
 	return s
 
 
@@ -132,23 +133,23 @@ func setup(m: Node3D) -> void:
 	for n in sim.nodes:
 		var badge := PanelContainer.new()
 		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		badge.custom_minimum_size = Vector2(62, 38) * ui_scale
+		badge.custom_minimum_size = Vector2(30, 22) * ui_scale
 		var column := VBoxContainer.new()
 		column.add_theme_constant_override("separation", 0)
 		column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		badge.add_child(column)
-		var l := text_label("", 28)
+		var l := text_label("", 16)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.add_theme_constant_override("outline_size", 4)
+		l.add_theme_constant_override("outline_size", 3)
 		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 		column.add_child(l)
-		var sub := text_label("", 13, Color("c8e6ee"))
+		var sub := text_label("", 9, Color("c8e6ee"))
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		column.add_child(sub)
 		var emblem := TextureRect.new()                 # classic: Alpha 11's faction emblem under the count
 		emblem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		emblem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		emblem.custom_minimum_size = Vector2(22, 18) * ui_scale
+		emblem.custom_minimum_size = Vector2(12, 10) * ui_scale
 		emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		emblem.visible = false
 		column.add_child(emblem)
@@ -444,7 +445,7 @@ func _badges(cam: Camera3D) -> void:
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
 		var classic := not Rules.bridge_combat
-		if owner == "" or sim.allied(owner, human) or classic:   # classic = Alpha 11: every node shows its count
+		if owner == "" or sim.allied(owner, human) or (classic and not Rules.hide_enemy_counts):   # Brawl = Alpha 11: every count, unless hidden
 			label.text = str(Rules.shown(n["units"]))
 		else:
 			label.text = owner                            # no numbers on enemy nodes: seat letter only
@@ -493,13 +494,15 @@ func _badges(cam: Camera3D) -> void:
 		build_bar.value = 100.0 * Sim.build_progress(n)
 		# hanging from the platform's near rim: clearly that node's, never over the vat (Alpha 14
 		# playtest: "hard to read where unit counts are")
-		var anchor: Vector3 = badge_anchor(n)
-		if cam.is_position_behind(anchor):
-			panel.visible = false
-			continue
-		var p := cam.unproject_position(anchor)
 		panel.size = panel.get_combined_minimum_size()
-		panel.position = p - panel.size / 2.0
+	var key := "%s|%s" % [str(get_viewport().get_visible_rect().size), str(cam.global_transform)]
+	if key != _layout_key:
+		_layout_key = key
+		_layout_badges(cam)
+	for n in sim.nodes:
+		var panel: Control = badges[n["id"]]["panel"]
+		if panel.visible and _badge_screen.has(n["id"]):
+			panel.position = (_badge_screen[n["id"]] as Vector2) - panel.size / 2.0
 
 
 # ------------------------------------------------------------------ inspector (Alpha 11 ring)
@@ -801,6 +804,16 @@ func _build_debug() -> void:
 		bridge_text.call()
 		toast("Mode: %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL")))
 	box.add_child(bridge)
+	var hide := button("", Callable(), 0, 44, 18)
+	var hide_text := func(): hide.text = "Enemy counts: %s" % ("HIDDEN" if Rules.hide_enemy_counts or Rules.bridge_combat else "SHOWN") + (" (Siege always hides)" if Rules.bridge_combat and not Rules.hide_enemy_counts else "")
+	hide_text.call()
+	hide.pressed.connect(func():
+		Rules.hide_enemy_counts = not Rules.hide_enemy_counts
+		hide_text.call()
+		for bid in badges:
+			badges[bid]["owner"] = "?")
+	hide.disabled = main.online                      # online: the host's room setting
+	box.add_child(hide)
 	var low := button("", Callable(), 0, 44, 18)
 	var low_text := func(): low.text = "Detail: %s" % ("LOW (fewer horde and river patches)" if Rules.low_detail else "FULL")
 	low_text.call()
@@ -843,6 +856,64 @@ func _debug_slider(box: Control, text: String, lo: float, hi: float, step: float
 
 
 var _badge_dirs := {}
+var _badge_screen := {}                 # node id -> badge centre on screen (fixed camera: laid out once)
+var _layout_key := ""
+
+
+func _layout_badges(cam: Camera3D) -> void:
+	## Every badge floats in the void beside its own node (Daniele, Alpha 16: "UI should always float
+	## in the void next to a node"): candidate spots all round the platform's drawn rim are scored
+	## against every platform, every deck and the badges already placed, on screen, at the badge's
+	## real size; the one that covers nothing wins, the near side and the shortest reach break ties.
+	var vp := get_viewport().get_visible_rect().size
+	var plat := {}                                        # id -> [centre, radius] on screen
+	for n in sim.nodes:
+		var c := cam.unproject_position(n["pos"])
+		var r := 0.0
+		for k in range(8):
+			var a := TAU * k / 8.0
+			r = maxf(r, cam.unproject_position((n["pos"] as Vector3) + Vector3(cos(a), 0, sin(a)) * Rules.R).distance_to(c))
+		plat[n["id"]] = [c, r]
+	var decks := []                                       # [a, b, half width] on screen
+	for e in sim.edges:
+		var pa: Vector3 = sim.nodes[e["a"]]["pos"]
+		var pb: Vector3 = sim.nodes[e["b"]]["pos"]
+		var mid := (pa + pb) / 2.0
+		var side := ((pb - pa) as Vector3).cross(Vector3.UP).normalized()
+		var hw := cam.unproject_position(mid + side * Rules.W * 0.5).distance_to(cam.unproject_position(mid))
+		decks.append([cam.unproject_position(pa), cam.unproject_position(pb), hw])
+	_badge_screen = {}
+	var placed := []                                      # [centre, radius]
+	var down := Vector2(0, 1)
+	for n in sim.nodes:
+		var id: int = n["id"]
+		var panel: Control = badges[id]["panel"]
+		var sz: Vector2 = panel.get_combined_minimum_size()
+		var rb: float = maxf(maxf(sz.x, sz.y) * 0.5, 15.0 * ui_scale) + 2.0
+		var c: Vector2 = plat[id][0]
+		var best: Vector2 = c + down * (float(plat[id][1]) + rb)
+		var best_score := INF
+		for k in range(24):
+			var a := TAU * k / 24.0
+			var rim: Vector2 = cam.unproject_position((n["pos"] as Vector3) + Vector3(cos(a), 0, sin(a)) * Rules.R)
+			var dir: Vector2 = (rim - c).normalized() if rim.distance_to(c) > 0.5 else down
+			for reach in [3.0, 10.0, 22.0]:
+				var p: Vector2 = rim + dir * (rb + reach)
+				var cover := 0.0
+				for pid in plat:
+					cover += maxf(0.0, rb + plat[pid][1] - p.distance_to(plat[pid][0]))
+				for d in decks:
+					var q: Vector2 = Geometry2D.get_closest_point_to_segment(p, d[0], d[1])
+					cover += maxf(0.0, rb + d[2] - p.distance_to(q))
+				for o in placed:
+					cover += 2.0 * maxf(0.0, rb + o[1] + 2.0 - p.distance_to(o[0]))
+				var off := maxf(0.0, rb - p.x) + maxf(0.0, p.x + rb - vp.x) + maxf(0.0, rb - p.y) + maxf(0.0, p.y + rb - vp.y)
+				var score: float = cover * 10.0 + off * 20.0 + reach * 0.4 - dir.dot(down) * 3.0
+				if score < best_score:
+					best_score = score
+					best = p
+		_badge_screen[id] = best
+		placed.append([best, rb])
 
 
 func badge_anchor(n: Dictionary) -> Vector3:

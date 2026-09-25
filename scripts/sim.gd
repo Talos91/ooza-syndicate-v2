@@ -756,7 +756,15 @@ func build_path(route: Array) -> Dictionary:
 		fast.append(1 if is_fast else 0)
 	var a: Dictionary = nodes[route[0]]
 	var d := (nodes[route[1]]["pos"] - a["pos"]).normalized() as Vector3
-	add.call(a["pos"] + d * Rules.EXIT_R, true)
+	var brawl := not Rules.bridge_combat
+	var front := Rules.front_dir()
+	var a_front := atan2(front.z, front.x)
+	if brawl:                                       # Alpha 11: out of the front door, round the ring to the bridge
+		add.call(a["pos"] + front * Rules.EXIT_R, true)
+		for p in _arc(a["pos"], a_front, atan2(d.z, d.x), Rules.BRAWL_RING):
+			add.call(p, true)
+	else:
+		add.call(a["pos"] + d * Rules.EXIT_R, true)
 	add.call(a["pos"] + d * (Rules.R - 0.5), true)
 	for i in range(route.size() - 1):
 		a = nodes[route[i]]
@@ -777,14 +785,19 @@ func build_path(route: Array) -> Dictionary:
 		if i + 1 < route.size() - 1:
 			var d2 := (nodes[route[i + 2]]["pos"] - b["pos"]).normalized() as Vector3
 			a_out = atan2(d2.z, d2.x)
-			for p in _arc(b["pos"], a_in, a_out, Rules.ARC_R):
+			for p in _arc(b["pos"], a_in, a_out, Rules.BRAWL_RING if brawl else Rules.ARC_R):
 				add.call(p, true)
 			add.call(b["pos"] + d2 * (Rules.R - 0.5), true)
 			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		else:
 			# destination: straight onto the platform from this side, up to the tower's footprint -
 			# the whole platform is the node, every side is an entrance
-			add.call(b["pos"] - d * Rules.ARC_R, true)
+			if brawl:                                   # Alpha 11: round the ring to the front door, then in
+				for p in _arc(b["pos"], a_in, a_front, Rules.BRAWL_RING):
+					add.call(p, true)
+				add.call(b["pos"] + front * Rules.EXIT_R, true)
+			else:
+				add.call(b["pos"] - d * Rules.ARC_R, true)
 	var cum := PackedFloat32Array([0.0])
 	for k in range(1, pts.size()):
 		cum.append(cum[k - 1] + (pts[k] as Vector3).distance_to(pts[k - 1]))

@@ -1,5 +1,26 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.16.2 - 2026-09-25
+
+- **Brawl enters and exits like Alpha 11** (Daniele: "the same exact feeling, also entering and
+  exiting"). Alpha 11's route: out of the vat's front (the side facing the camera), round the platform
+  on its route ring to the bridge, and at the target round the ring back to the front and in; waypoints
+  are rounded on the same ring. Alpha 11's column: one body every 0.93 m (its 12 px), lane = body
+  index % 3, single file near both ends of the route and spreading to three across over 6.6 m (its
+  85 px), every body facing its own way; arriving bodies keep walking in at their spacing. Every body
+  is drawn (up to 200 per send, was 60).
+- **Badges much smaller and always in the void beside their node** (Daniele: "UI way too big and keeps
+  covering the bases"): about half the size, and each is placed on screen at its real size in the spot
+  round its platform that covers no platform, deck or other badge.
+- **HIDE ENEMY COUNTS** toggle in OPTIONS and Debug: no unit numbers on enemy nodes in either mode.
+  Off, BRAWL shows every count as Alpha 11 did; SIEGE always hides them. Online the host's setting
+  applies to everyone.
+- **New builds arrive by themselves** (Daniele: "cache in browser still reads Alpha 14"). Godot's
+  service worker serves the cached game first and a new build waited until every tab of the game was
+  closed. `web/update.js` now checks for a new build on every load (and every 10 minutes) and makes it
+  take over and reload the page. One last time, an old copy must be cleared by hand (close every tab of
+  the game, or clear the site's data); after that every publish shows up on the next load.
+
 ## 0.16.1 - 2026-09-25 (Daniele's Alpha 16 feedback)
 
 **Online**

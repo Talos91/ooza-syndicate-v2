@@ -405,7 +405,8 @@ func launch_round() -> void:
 			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill,
 			"rules": {"bridge_combat": siege, "last_stand": last_stand, "deck_speed": Rules.deck_speed,
 					"node_speed_mult": Rules.node_speed_mult, "door_rate": Rules.door_rate,
-					"node_fight_mult": Rules.node_fight_mult, "forge_bonus": Rules.forge_bonus}}
+					"node_fight_mult": Rules.node_fight_mult, "forge_bonus": Rules.forge_bonus,
+					"hide_enemy_counts": Rules.hide_enemy_counts}}
 	_broadcast("launch", info)
 	_launch(info)
 
@@ -426,6 +427,7 @@ func _launch(info: Dictionary) -> void:
 	Rules.door_rate = float(r["door_rate"])
 	Rules.node_fight_mult = float(r["node_fight_mult"])
 	Rules.forge_bonus = float(r["forge_bonus"])
+	Rules.hide_enemy_counts = bool(r.get("hide_enemy_counts", false))   # the host's option, the same for all
 	ai_fill = str(info.get("ai_fill", ""))
 	active = true
 	started = false
