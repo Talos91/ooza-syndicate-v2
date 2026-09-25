@@ -478,3 +478,5 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 102. **Maps 4.1 (partial): "remove old ones and start implement these".** *Done (0.18.1):* maps 4.0 removed from the
      game; the 18 maps of 4.1 baked at 1 m per unit with honest decks (4.1 / 8.3 / 12.4 m); tap targets 44-67 pt
      at 58-66 degrees; deck-length check added to test_maps4.
+103. **Maps 4.2: "implement them and replace the old ones, then push to live".** *Done (0.18.2):* 20 compact
+     maps at the kit's sizes, no plazas, Alpha 11 arena scale; all bake clean; camera 58 degrees, taps 45-66 pt.

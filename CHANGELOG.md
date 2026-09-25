@@ -1,5 +1,22 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.2 "Alpha 18" - 2026-09-26 (maps 4.2: 20 compact maps at the kit's sizes)
+
+**Maps 4.2 replace maps 4.1** (References/Ooze Syndicate maps 4.2): 20 compact maps drawn in metres at
+the kit's sizes, sized like the Alpha 11 arenas (Orbital Nexus, Aurora Concourse, Switchback Foundry,
+Trident Exchange), **no plazas** - a pocket is home + two neutrals, each one short deck away.
+- Baked at 1 m per unit (`Models/2.0/build_maps_4_2_review.py`, `export_maps_4_2_game.py`): all 20 clean -
+  no clashes, no decks over platforms, every deck within 1.5 m of its tier's honest 4 / 8 / 12 m.
+- Maps: T-01, T-02; brawl B-01..B-05; siege S-01..S-05; core C-01..C-05; debug D-01..D-03. Modes 1v1,
+  FFA 3 (B-03, S-03, C-03), FFA 4 (B-04, S-04, C-04) and 2v2 (B-04, S-04, B-05, S-05, C-05). No 5- or
+  6-seat maps (they do not fit 160 x 80 at real size), so FFA 5, 3v3 and 2v2v2 have no maps for now.
+- Camera 58 degrees on every map: every node's tap target 45-66 pt on an 844 pt phone, nothing overflows,
+  no badge collides (phone-fit probe).
+- Tests: test_sim, test_net, test_maps4 (2,378 checks), test_map_pool, test_ai_curve - all pass. Curve vs
+  Standard on these 6 duel maps: Training 8 %, Casual 33 %, Standard 50 %, Veteran 92 %, Expert 75 %
+  (Expert below Veteran on this small set - watch in play); FFA 4 seat A draws 25 % of attacks (even 33 %).
+  Not tried on a real phone.
+
 ## 0.18.1 "Alpha 18" - 2026-09-25 (maps 4.1 at the kit's sizes, partial pack)
 
 **Maps 4.1 replace maps 4.0** (Daniele, after the phone check: "the bridge should be like 1/3 of now";
