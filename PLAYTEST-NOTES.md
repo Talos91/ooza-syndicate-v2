@@ -346,6 +346,21 @@ decide if mechanics are good or not... only thing I can save on is textures or b
     Candidates: a clearer head, a direction cue along the line, stronger seat colour on the goo
     and less on the creatures, a contact marker on the target's badge.
 
+## 2026-09-25 - Daniele, Alpha 14 brief: two modes, teams, colours
+
+50. **Bridge-fight mode as a tug-of-war, plus a recall order.** *Done:* `Sim._tug_of_war`, `Sim.recall`
+    (tap your own line), AI `_retreats`. See CHANGELOG 0.14.0.
+51. **Bridge-fight mode rules:** always-on goo corridors, enemies on your goo slower and weaker in
+    the tug, transit fights the real garrison (no hidden shield), capture drains the corridor, the
+    tower ring means "mine". *Done* - the shield pool is removed from sim, effects and HUD.
+52. **Classic mode (bridge combat off) with Alpha 11 unit models instead of goo.** *Done:*
+    `scripts/unit_view.gd`.
+53. **2v2 and FFA up to 5, faction colour selection.** *Done:* MODE and YOUR COLOUR rows on setup,
+    `Sim.teams` / `allied()`, `Rules.assign_colors`, four roster maps added.
+54. **"Add a server for multiplayer via Vercel."** *Not done - needs Daniele's decision.* Vercel
+    functions are short-lived HTTP handlers and cannot hold the long-lived WebSocket connections a
+    realtime match needs. See OPEN-QUESTIONS for the options.
+
 ## Known gaps after Alpha 13 (not playtest findings)
 
 - Abilities / Ooze Factory (pending SKILLS-2.0-DRAFT approval), team modes and multiplayer,
