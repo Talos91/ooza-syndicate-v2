@@ -32,7 +32,11 @@ var _backdrop: TextureRect
 func setup(m: Node3D) -> void:
 	main = m
 	_backdrop = TextureRect.new()                     # full-screen art behind the scaled page
-	_backdrop.texture = load("res://assets/art/ui-main.png")
+	var art: Texture2D = load("res://assets/art/ui-main.png")
+	var clean := AtlasTexture.new()                   # the art's right part: its left edge has Alpha 11's
+	clean.atlas = art                                 # buttons baked in, which peeked out on wide screens
+	clean.region = Rect2(Vector2(art.get_size()) * Vector2(0.36, 0.0), Vector2(art.get_size()) * Vector2(0.64, 1.0))
+	_backdrop.texture = clean
 	_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)

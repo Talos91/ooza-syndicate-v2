@@ -1,5 +1,10 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.14.4 - 2026-09-25
+
+- The menu's full-screen backdrop uses the clean part of the art: on wide phone screens the old
+  Alpha 11 buttons baked into the art's left edge were peeking out beside the page.
+
 ## 0.14.3 - 2026-09-25
 
 - Fixed: the inspector's UPGRADE / CANNON / FORGE buttons printed the raw internal price (150 for a
