@@ -1,6 +1,6 @@
 # Next session - start here
 
-State at the end of the 2026-09-25 sessions: **v0.18.2 "Alpha 18"** (maps 4.2 - 20 compact maps at the kit's sizes -, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
+State at the end of the 2026-09-26 sessions: **v0.18.3 "Alpha 18"** (maps 4.2 - 20 compact maps at the kit's sizes - plus the four main Alpha 11 maps A-01..A-04, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md` (project root - the whole game as built), this file,
 `README.md`, the top of `CHANGELOG.md` (0.17.0 to 0.18.0), `PLAYTEST-NOTES.md` notes 90-100, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
@@ -29,7 +29,23 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
   below Veteran (92 %) - a small sample; watch it in play before retuning.
 - Next pack: same steps (new builder / exporter copy for the pack path, bake, `--import`, LODs off in any
   new `.glb.import`, `test_maps4`, phone-fit probe -> `scripts/map_camera.gd`, full suites, publish).
-  Maps 4.1 (0.18.1, 18 maps) and 4.0 (0.18.0) are in git history and `References/`.
+  Maps 4.1 (0.18.1, 18 maps) and 4.0 (0.18.0) are in git history and `References/`. A new pack's exporter
+  copy must keep reading the classics folder (below), or the A- maps drop out of the next bake.
+
+## Alpha 11 classics A-01..A-04 - built in 0.18.3
+
+- Daniele: "pick up the main 4 map of the alpha 11, aurora trident and the other 2". Alpha 11's own layouts
+  (`Game/Alpha 11/assets/arenas/{orbital-nexus,switchback-foundry,aurora-concourse,trident-exchange}.json`; the
+  4.2 maps with those names are new layouts) redrawn at the kit's sizes in a derived pack,
+  `References/Ooze Syndicate maps 4.2 - Alpha 11 classics` (README there): `generator/classics.py` builds the
+  JSONs from written-out positions (plain Python); `generator/embed.py` (numpy, Blender's Python) is how the
+  positions were fitted (`embed.py final` re-derives them). Pool group "A", right after the tutorials.
+- `export_maps_4_2_game.py` bakes the 4.2 pack and then this folder; `-- --only=A-` bakes just the classics.
+  Thumbnails: the pack's SVGs rendered by Edge headless (960 x 540), downscaled to 512 x 288 into
+  `assets/maps4/thumbs/A-0N.png` (4.2 schematic style).
+- Seats fair by travel time (Switchback: not symmetric, tiers chosen so both seats see the same distances);
+  no relays, no plazas; Orbital's hub keeps Alpha 11's eight bridges. Open questions (relay retrofits from
+  MAP-DESIGN-GUIDE §10, duplicate names with 4.2, modes, any-vat cannons, centre tiers): OPEN-QUESTIONS 2026-09-26.
 
 ## Alpha 18 (2026-09-25): maps 4.0, per-map camera, optimization pass - built
 

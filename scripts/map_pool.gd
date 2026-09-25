@@ -1,10 +1,11 @@
 class_name MapPool
-## Every playable map: maps 4.1 (References/Ooze Syndicate maps 4.1 (partial), the landscape phone pack at
-## the kit's sizes, baked for the game by Models/2.0/export_maps_4_1_game.py into maps4/): every map baked into maps4/ except WITHHELD,
+## Every playable map: maps 4.2 (References/Ooze Syndicate maps 4.2, compact maps at the kit's sizes) and the
+## Alpha 11 classics (A-, References/Ooze Syndicate maps 4.2 - Alpha 11 classics), baked for the game by
+## Models/2.0/export_maps_4_2_game.py into maps4/: every map baked into maps4/ except WITHHELD,
 ## ordered by code prefix (GROUP_ORDER; D = debug maps), each by code; on a phone also without PHONE_UNFIT. The 2.0 roster in maps/ is
 ## archive: only the rules tests still load it.
 
-const GROUP_ORDER := ["T", "C", "B", "S", "X", "D"]    # D = debug / test maps (the pack's debug/ folder)
+const GROUP_ORDER := ["T", "A", "C", "B", "S", "X", "D"]    # A = Alpha 11 classics; D = debug / test maps
 const DIR := "res://maps4"
 static var dir := DIR                                   # tests/test_net.gd points it at the legacy roster
 # Baked but kept out of the pool (OPEN-QUESTIONS): none on maps 4.1 so far (maps 4.0 withheld B-30 for deck

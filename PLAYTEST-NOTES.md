@@ -480,3 +480,8 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      at 58-66 degrees; deck-length check added to test_maps4.
 103. **Maps 4.2: "implement them and replace the old ones, then push to live".** *Done (0.18.2):* 20 compact
      maps at the kit's sizes, no plazas, Alpha 11 arena scale; all bake clean; camera 58 degrees, taps 45-66 pt.
+104. **"Pick up the main 4 map of the alpha 11, aurora trident and the other 2".** *Done (0.18.3):* A-01 Orbital
+     Nexus, A-02 Switchback Foundry, A-03 Aurora Concourse, A-04 Trident Exchange - Alpha 11's own layouts (the
+     4.2 maps of those names are new layouts), redrawn at the kit's sizes with honest decks, fair seats, no
+     relays; all bake clean, taps 56-88 pt at 58 degrees. Open: relays from the design guide's retrofit plan,
+     the duplicate names, Alpha 11's any-vat cannons (OPEN-QUESTIONS 2026-09-26).

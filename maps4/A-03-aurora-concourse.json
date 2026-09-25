@@ -1,0 +1,752 @@
+{
+ "code": "A-03",
+ "name": "Aurora Concourse",
+ "group": "alpha 11",
+ "players": "mix",
+ "playersLabel": "1v1 / 2v2 / FFA 4",
+ "combatMode": "both",
+ "family": "lattice",
+ "modes": [
+  "1v1",
+  "2v2",
+  "FFA4"
+ ],
+ "symmetry": "mirror left/right + top/bottom",
+ "frame": {
+  "width": 160,
+  "height": 80,
+  "units": "metres",
+  "aspect": "2:1 landscape",
+  "panning": false,
+  "nodeRadius": 6,
+  "pier": 1.6,
+  "deckModule": 4,
+  "deckCentreDistance": {
+   "S": 19.2,
+   "M": 23.2,
+   "L": 27.2
+  },
+  "tolerance": 1,
+  "minNodeGap": 15,
+  "version": "4.2"
+ },
+ "minEnemyHomeHops": 2,
+ "centreSpawn": false,
+ "plazas": [],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 52.85,
+   "y": 26.39,
+   "plaza": null,
+   "socket": null,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 80.0,
+   "y": 26.3,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "strategic",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 107.15,
+   "y": 26.39,
+   "plaza": null,
+   "socket": null,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 66.45,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 93.55,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 52.85,
+   "y": 53.61,
+   "plaza": null,
+   "socket": null,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 80.0,
+   "y": 53.7,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "strategic",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 107.15,
+   "y": 53.61,
+   "plaza": null,
+   "socket": null,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 0,
+   "to": 1,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 12.0,
+   "centreDistance": 27.15,
+   "nominal": 27.2
+  },
+  {
+   "from": 1,
+   "to": 2,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 12.0,
+   "centreDistance": 27.15,
+   "nominal": 27.2
+  },
+  {
+   "from": 0,
+   "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.24,
+   "nominal": 19.2
+  },
+  {
+   "from": 1,
+   "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.27,
+   "nominal": 19.2
+  },
+  {
+   "from": 1,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.27,
+   "nominal": 19.2
+  },
+  {
+   "from": 2,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.24,
+   "nominal": 19.2
+  },
+  {
+   "from": 3,
+   "to": 4,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 12.0,
+   "centreDistance": 27.1,
+   "nominal": 27.2
+  },
+  {
+   "from": 3,
+   "to": 5,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.24,
+   "nominal": 19.2
+  },
+  {
+   "from": 3,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.27,
+   "nominal": 19.2
+  },
+  {
+   "from": 4,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.27,
+   "nominal": 19.2
+  },
+  {
+   "from": 4,
+   "to": 7,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.24,
+   "nominal": 19.2
+  },
+  {
+   "from": 5,
+   "to": 6,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 12.0,
+   "centreDistance": 27.15,
+   "nominal": 27.2
+  },
+  {
+   "from": 6,
+   "to": 7,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 12.0,
+   "centreDistance": 27.15,
+   "nominal": 27.2
+  }
+ ],
+ "rings": {
+  "count": 3,
+  "boundaries": [
+   10.2,
+   16.5
+  ],
+  "aspect": 2.0,
+  "shape": "ellipse"
+ },
+ "lastStand": {
+  "methods": [
+   "inward"
+  ],
+  "orders": {
+   "inward": [
+    2,
+    1,
+    0
+   ]
+  }
+ },
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 7,
+    "team": 1
+   }
+  ],
+  "2v2": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 2,
+    "team": 1
+   },
+   {
+    "seat": "C",
+    "node": 5,
+    "team": 0
+   },
+   {
+    "seat": "D",
+    "node": 7,
+    "team": 1
+   }
+  ],
+  "FFA4": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": null
+   },
+   {
+    "seat": "B",
+    "node": 2,
+    "team": null
+   },
+   {
+    "seat": "C",
+    "node": 5,
+    "team": null
+   },
+   {
+    "seat": "D",
+    "node": 7,
+    "team": null
+   }
+  ]
+ },
+ "note": "Alpha 11's Aurora Concourse at the kit's sizes: two rows of three joined by a lattice through the middle pair. 1v1 corner against opposite corner; 2v2 left against right; FFA 4 from the corners. Last Stand inward only (the rows meet only through the middle pair).",
+ "geometricSymmetry": true,
+ "origin": "Game/Alpha 11/assets/arenas/aurora-concourse.json (Alpha 11), redrawn at the 2.0 kit's sizes",
+ "thumbnail": "thumbnails/A-03-aurora-concourse.svg",
+ "layout": {
+  "K": 1.0,
+  "nodes": {
+   "0": [
+    -27.15,
+    -13.61
+   ],
+   "1": [
+    0.0,
+    -13.7
+   ],
+   "2": [
+    27.15,
+    -13.61
+   ],
+   "3": [
+    -13.55,
+    0.0
+   ],
+   "4": [
+    13.55,
+    0.0
+   ],
+   "5": [
+    -27.15,
+    13.61
+   ],
+   "6": [
+    0.0,
+    13.7
+   ],
+   "7": [
+    27.15,
+    13.61
+   ]
+  },
+  "plazas": {},
+  "edges": [
+   {
+    "A": [
+     -21.1832,
+     -14.2402
+    ],
+    "B": [
+     -5.9102,
+     -14.734
+    ],
+    "L": 15.281,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -4.177,
+    "lean1": 11.775,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     5.9102,
+     -14.734
+    ],
+    "B": [
+     21.1832,
+     -14.2402
+    ],
+    "L": 15.281,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -11.775,
+    "lean1": 4.177,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -23.3627,
+     -8.9564
+    ],
+    "B": [
+     -17.7911,
+     -4.2442
+    ],
+    "L": 7.2971,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 10.637,
+    "lean1": 4.798,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -3.4046,
+     -8.7595
+    ],
+    "B": [
+     -10.2074,
+     -4.9826
+    ],
+    "L": 7.781,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -26.39,
+    "lean1": -27.106,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     3.4046,
+     -8.7595
+    ],
+    "B": [
+     10.2074,
+     -4.9826
+    ],
+    "L": 7.781,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 26.39,
+    "lean1": 27.106,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     23.3627,
+     -8.9564
+    ],
+    "B": [
+     17.7911,
+     -4.2442
+    ],
+    "L": 7.2971,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -10.637,
+    "lean1": -4.798,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -7.55,
+     -0.0003
+    ],
+    "B": [
+     7.55,
+     -0.0003
+    ],
+    "L": 15.1,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.003,
+    "lean1": 0.003,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -17.7911,
+     4.2442
+    ],
+    "B": [
+     -23.3729,
+     8.9481
+    ],
+    "L": 7.2995,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -4.899,
+    "lean1": -10.863,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -10.2077,
+     4.9828
+    ],
+    "B": [
+     -3.5309,
+     8.8489
+    ],
+    "L": 7.7154,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 26.075,
+    "lean1": 23.878,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     10.2077,
+     4.9828
+    ],
+    "B": [
+     3.5309,
+     8.8489
+    ],
+    "L": 7.7154,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -26.075,
+    "lean1": -23.878,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     17.7911,
+     4.2442
+    ],
+    "B": [
+     23.3729,
+     8.9481
+    ],
+    "L": 7.2995,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 4.899,
+    "lean1": 10.863,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -21.1846,
+     14.2532
+    ],
+    "B": [
+     -5.9349,
+     14.5812
+    ],
+    "L": 15.2532,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 4.922,
+    "lean1": -9.678,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     5.9349,
+     14.5812
+    ],
+    "B": [
+     21.1846,
+     14.2532
+    ],
+    "L": 15.2532,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 9.678,
+    "lean1": -4.922,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   }
+  ],
+  "relays": {},
+  "glb": "",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": [],
+   "docks": 0,
+   "off_length": []
+  }
+ }
+}

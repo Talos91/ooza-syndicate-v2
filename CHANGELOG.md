@@ -1,5 +1,31 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.3 "Alpha 18" - 2026-09-26 (the four main Alpha 11 maps, at the kit's sizes)
+
+**Alpha 11's four main arenas are back** (Daniele: "pick up the main 4 map of the alpha 11, aurora trident
+and the other 2"): A-01 Orbital Nexus, A-02 Switchback Foundry, A-03 Aurora Concourse, A-04 Trident
+Exchange - Alpha 11's own layouts (same nodes, same bridges, same arrangement; maps 4.2 only reuses the
+names), listed right after the tutorials as the "Alpha 11" group.
+- Redrawn at the kit's sizes in the maps 4.2 format (`References/Ooze Syndicate maps 4.2 - Alpha 11
+  classics`, a derived pack: `generator/classics.py`, positions fitted by `generator/embed.py`): every bridge
+  an honest S / M / L deck, symmetric where Alpha 11 was (Orbital and Aurora four ways, Trident left/right),
+  no relays or plazas (Alpha 11 had none). Footprints 54 x 38, 56 x 31, 54 x 27 and 84 x 51 m.
+- Modes (seats fair by travel time): Orbital Nexus 1v1 (left vs right, Alpha 11's own duel seats) / 2v2 /
+  FFA 4 (the diagonals); Switchback Foundry 1v1 (not symmetric, as in Alpha 11: tiers give both seats the same
+  distance to every node); Aurora Concourse 1v1 (opposite corners) / 2v2 / FFA 4; Trident Exchange 1v1 (outer
+  corners) / 2v2 (left island vs right island). Combat: SIEGE and BRAWL.
+- 4.2 rules where Alpha 11 had none: neutral tiers by distance (almost all T1, as in Alpha 11), a strategic
+  centre on each map (Orbital's hub was Alpha 11's central objective), Last Stand rings with safe orders
+  only (Aurora: inward only - its rows meet only through the middle pair).
+- Baked by `Models/2.0/export_maps_4_2_game.py`, which now also reads the classics folder (`-- --only=A-`
+  bakes just these): all four clean - no clashes, no decks over platforms, decks 4.0-4.6 / 8.0 /
+  11.6-12.1 m, piers within 27 degrees; Orbital's hub keeps its eight bridges. Menu thumbnails in the 4.2
+  schematic style. Camera 58 degrees (phone taps 56-88 pt, nothing overflows, no badge collides).
+- Tests: test_sim, test_net, test_maps4 (2,761 checks, 24 maps), test_map_pool (24 maps; the classics in
+  SIEGE and BRAWL), test_ai_curve (8 / 33 / 50 / 92 / 75 % - its maps are unchanged) - all pass; every
+  classic mode (1v1, 2v2, FFA 4) also played AI vs AI to the end in both combat modes. Not tried on a
+  real phone.
+
 ## 0.18.2 "Alpha 18" - 2026-09-26 (maps 4.2: 20 compact maps at the kit's sizes)
 
 **Maps 4.2 replace maps 4.1** (References/Ooze Syndicate maps 4.2): 20 compact maps drawn in metres at

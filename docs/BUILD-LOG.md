@@ -416,7 +416,9 @@ Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --scenario=rear --sho
 
 # MAPS 4.2 (0.18.2, current): drawn in metres at the kit's sizes - bake at 1 m per unit:
 "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --python Models/2.0/export_maps_4_2_game.py
-# (maps 4.1, 0.18.1: export_maps_4_1_game.py)
+# (also bakes the Alpha 11 classics A-01..A-04 from References/Ooze Syndicate maps 4.2 - Alpha 11 classics;
+#  append  -- --only=A-  to bake only maps whose file starts with those codes; maps 4.1, 0.18.1: export_maps_4_1_game.py)
+# classics pack after an edit to its generator: python "References/Ooze Syndicate maps 4.2 - Alpha 11 classics/generator/classics.py"
 # (then the same import / LOD / test / probe steps as below). Maps 4.0 (0.18.0, superseded):
 # bake the Blender layout for the game after any change to the pack
 # (References/Ooze Syndicate maps 4.0, its debug/ maps) or to Models/2.0/build_maps_4_0_review.py, then test.

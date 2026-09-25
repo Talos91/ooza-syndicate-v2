@@ -1,4 +1,4 @@
-# Ooze Syndicate 2.0 - Alpha 18 (v0.18.2)
+# Ooze Syndicate 2.0 - Alpha 18 (v0.18.3)
 
 Godot 4.6 project (GL Compatibility - browser and phone first) for the 2.0 bridge-network game.
 Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project folder
