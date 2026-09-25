@@ -113,6 +113,7 @@ func _fake_main(s: Sim) -> Node3D:
 
 
 func _run() -> void:
+	MapPool.dir = "res://maps"                     # the legacy roster offers every mode, whatever pack ships
 	# ---------------------------------------------------------------- lobby, every mode
 	for mode in ["1v1", "FFA3", "FFA4", "FFA5", "2v2"]:
 		_open_room(mode)

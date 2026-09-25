@@ -1,5 +1,28 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.1 "Alpha 18" - 2026-09-25 (maps 4.1 at the kit's sizes, partial pack)
+
+**Maps 4.1 replace maps 4.0** (Daniele, after the phone check: "the bridge should be like 1/3 of now";
+decks on 4.0 were 3.6x the kit's honest length). The new pack (References/Ooze Syndicate maps 4.1
+(partial)) is drawn in metres at the kit's own sizes: platform radius 6, pier 1.6, deck module 4, honest
+centre distances 19.2 / 23.2 / 27.2, at least 15 m between node centres.
+- Baked at **1 m per map unit** - nothing stretched (`Models/2.0/build_maps_4_1_review.py`,
+  `export_maps_4_1_game.py`; plaza templates read off the maps). Decks now measure 4.1 / 8.3 / 12.4 m
+  (S / M / L median; honest 4 / 8 / 12; 4.0 had 6.9 / 28.8 / 44.2). Maps span ~130 x 55 m.
+- **18 maps so far**: T-01..T-05, B-01..B-05, B-07, X-01, X-03, X-04 and debug D-01, D-02, D-05, D-07 (the
+  pack's generator failed B-06 and B-08; the core and siege groups are still to come). Only X-01 offers
+  FFA 4 / 2v2 for now; every other map is 1v1.
+- All 18 bake clean (no clashes, no decks over platforms, no docks needed). `test_maps4` now also checks
+  that every ground deck keeps its tier's honest length (fails past 2.5 m; D-07 and T-05 each have one
+  short deck off by 2.8 / 1.6 m - reported).
+- **Camera**: each map from 58 degrees (most) to 66: every node's tap target is now 44-67 pt on an 844 pt
+  phone (Apple's 44 pt guideline met on every map; 4.0 reached 33), nothing overflows, no badge collides.
+- `tests/test_net.gd` no longer depends on the shipped pack (it points the pool at the legacy roster,
+  which offers every mode).
+- Tests: test_sim, test_net, test_maps4 (2,477 checks), test_map_pool, test_ai_curve (Training 0 %,
+  Casual 25 %, Standard 50 %, Veteran 50 %, Expert 92 % vs Standard; FFA 4 seat A 19 % of attacks) - all
+  pass. Not tried on a real phone yet.
+
 ## 0.18.0 "Alpha 18" - 2026-09-25 (maps 4.0 for phones, per-map camera, optimization pass)
 
 **Maps 4.0 replace maps 3.0** (Daniele: "the maps are waaaay too big for mobile"; References/Ooze

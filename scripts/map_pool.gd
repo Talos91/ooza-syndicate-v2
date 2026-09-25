@@ -1,28 +1,26 @@
 class_name MapPool
-## Every playable map: maps 4.0 (References/Ooze Syndicate maps 4.0, landscape phone pack, baked for the
-## game by Models/2.0/export_maps_4_0_game.py into maps4/): every map baked into maps4/ except WITHHELD,
+## Every playable map: maps 4.1 (References/Ooze Syndicate maps 4.1 (partial), the landscape phone pack at
+## the kit's sizes, baked for the game by Models/2.0/export_maps_4_1_game.py into maps4/): every map baked into maps4/ except WITHHELD,
 ## ordered by code prefix (GROUP_ORDER; D = debug maps), each by code; on a phone also without PHONE_UNFIT. The 2.0 roster in maps/ is
 ## archive: only the rules tests still load it.
 
 const GROUP_ORDER := ["T", "C", "B", "S", "X", "D"]    # D = debug / test maps (the pack's debug/ folder)
 const DIR := "res://maps4"
-# Baked but kept out of the pool (OPEN-QUESTIONS, maps 4.0): B-30 Sable Halo keeps 24 deck clashes at every
-# scale the planner tried (1.4-3.0 m per unit); D-08 Ring Bench (41 nodes) is not phone-fit - its smallest
-# node tap target stays at 27 pt even from 74 degrees (phone-fit probe; the rest reach 33 pt). Both go back
-# to the pack for a fix.
-const WITHHELD := ["B-30", "D-08"]
+static var dir := DIR                                   # tests/test_net.gd points it at the legacy roster
+# Baked but kept out of the pool (OPEN-QUESTIONS): none on maps 4.1 so far (maps 4.0 withheld B-30 for deck
+# clashes and D-08 for 27 pt tap targets; neither is in the 4.1 partial pack).
+const WITHHELD: Array[String] = []
 # Not on phones (Daniele, Alpha 18: "if some map is not good for mobile still flag them and remove them"):
-# the 3v3 / 2v2v2 maps - 31 nodes on a round board that uses a third of a phone's width; the pack itself
-# says "tablet recommended". They pass the probe (taps 34-36 pt, nothing overflows) but up to five badges
-# touch a neighbour's platform. Tablets and desktop keep them.
-const PHONE_UNFIT := ["B-27", "B-28", "B-29", "C-27", "C-28", "C-29", "C-30", "S-27", "S-28", "S-29", "S-30", "D-09"]
+# maps the phone-fit probe (tests/phone_fit.tscn) finds crowded on a phone; tablets and desktop keep them.
+# Maps 4.0 listed its 3v3 / 2v2v2 maps here; the 4.1 partial pack has none, and every 4.1 map passes.
+const PHONE_UNFIT: Array[String] = []
 static var phone := false                               # set by main at startup: a phone-sized screen
 
 
 static func all() -> Array:
 	var out: Array = []
-	for f in DirAccess.get_files_at(DIR):
-		var path: String = DIR + "/" + f.trim_suffix(".remap")
+	for f in DirAccess.get_files_at(dir):
+		var path: String = dir + "/" + f.trim_suffix(".remap")
 		var code := path.get_file().substr(0, 4)
 		if path.ends_with(".json") and not path in out and not code in WITHHELD and not (phone and code in PHONE_UNFIT):
 			out.append(path)

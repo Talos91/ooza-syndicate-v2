@@ -1,0 +1,526 @@
+{
+ "code": "D-02",
+ "name": "Frontline Box",
+ "group": "debug",
+ "players": "versus",
+ "playersLabel": "1v1",
+ "combatMode": "both",
+ "family": "debug",
+ "modes": [
+  "1v1"
+ ],
+ "symmetry": "rotation x1",
+ "frame": {
+  "width": 160,
+  "height": 80,
+  "units": "metres",
+  "aspect": "2:1 landscape",
+  "panning": false,
+  "nodeRadius": 6,
+  "pier": 1.6,
+  "deckModule": 4,
+  "deckCentreDistance": {
+   "S": 19.2,
+   "M": 23.2,
+   "L": 27.2
+  },
+  "tolerance": 1,
+  "minNodeGap": 15
+ },
+ "minEnemyHomeHops": 0,
+ "centreSpawn": false,
+ "plazas": [
+  {
+   "id": 0,
+   "size": "OL",
+   "shape": "oval",
+   "cx": 58.1,
+   "cy": 40.0,
+   "rot": 90.2,
+   "rx": 29.5,
+   "ry": 14.5,
+   "sockets": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ]
+  },
+  {
+   "id": 1,
+   "size": "OL",
+   "shape": "oval",
+   "cx": 101.9,
+   "cy": 40.0,
+   "rot": 89.8,
+   "rx": 29.5,
+   "ry": 14.5,
+   "sockets": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 65.69,
+   "y": 17.53,
+   "plaza": 0,
+   "socket": 0,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 3,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 65.63,
+   "y": 32.53,
+   "plaza": 0,
+   "socket": 1,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 65.57,
+   "y": 47.53,
+   "plaza": 0,
+   "socket": 2,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 65.5,
+   "y": 62.53,
+   "plaza": 0,
+   "socket": 3,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 50.69,
+   "y": 17.47,
+   "plaza": 0,
+   "socket": 4,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 50.63,
+   "y": 32.47,
+   "plaza": 0,
+   "socket": 5,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 50.57,
+   "y": 47.47,
+   "plaza": 0,
+   "socket": 6,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 50.5,
+   "y": 62.47,
+   "plaza": 0,
+   "socket": 7,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 8,
+   "x": 109.31,
+   "y": 17.47,
+   "plaza": 1,
+   "socket": 0,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 9,
+   "x": 109.37,
+   "y": 32.47,
+   "plaza": 1,
+   "socket": 1,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 10,
+   "x": 109.43,
+   "y": 47.47,
+   "plaza": 1,
+   "socket": 2,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 11,
+   "x": 109.5,
+   "y": 62.47,
+   "plaza": 1,
+   "socket": 3,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 12,
+   "x": 94.31,
+   "y": 17.53,
+   "plaza": 1,
+   "socket": 4,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 3,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 13,
+   "x": 94.37,
+   "y": 32.53,
+   "plaza": 1,
+   "socket": 5,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 14,
+   "x": 94.43,
+   "y": 47.53,
+   "plaza": 1,
+   "socket": 6,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 15,
+   "x": 94.5,
+   "y": 62.53,
+   "plaza": 1,
+   "socket": 7,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 1,
+   "to": 13,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 12.0,
+   "centreDistance": 28.74,
+   "nominal": 28.24
+  }
+ ],
+ "rings": {
+  "count": 1,
+  "boundaries": [],
+  "aspect": 2.0
+ },
+ "lastStand": {
+  "methods": [],
+  "orders": {}
+ },
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 6,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 10,
+    "team": 1
+   }
+  ]
+ },
+ "note": "One long deck between two big oval garrisons: bridge-fight resolution, frontline movement, reinforcing into an ongoing fight, throughput at 5x.",
+ "geometricSymmetry": false,
+ "ringsMerged": false,
+ "tiersFrom40": 1.0,
+ "thumbnail": "thumbnails/D-02-frontline-box.png",
+ "layout": {
+  "K": 1.0,
+  "nodes": {
+   "0": [
+    -14.31,
+    -22.47
+   ],
+   "1": [
+    -14.37,
+    -7.47
+   ],
+   "2": [
+    -14.43,
+    7.53
+   ],
+   "3": [
+    -14.5,
+    22.53
+   ],
+   "4": [
+    -29.31,
+    -22.53
+   ],
+   "5": [
+    -29.37,
+    -7.53
+   ],
+   "6": [
+    -29.43,
+    7.47
+   ],
+   "7": [
+    -29.5,
+    22.47
+   ],
+   "8": [
+    29.31,
+    -22.53
+   ],
+   "9": [
+    29.37,
+    -7.53
+   ],
+   "10": [
+    29.43,
+    7.47
+   ],
+   "11": [
+    29.5,
+    22.47
+   ],
+   "12": [
+    14.31,
+    -22.47
+   ],
+   "13": [
+    14.37,
+    -7.47
+   ],
+   "14": [
+    14.43,
+    7.53
+   ],
+   "15": [
+    14.5,
+    22.53
+   ]
+  },
+  "plazas": {
+   "0": {
+    "c": [
+     -21.9,
+     0.0
+    ],
+    "ax": 29.5,
+    "ay": 14.5,
+    "phi": 1.5742869852988852,
+    "size": "OL"
+   },
+   "1": {
+    "c": [
+     21.9,
+     0.0
+    ],
+    "ax": 29.5,
+    "ay": 14.5,
+    "phi": 1.567305668290908,
+    "size": "OL"
+   }
+  },
+  "edges": [
+   {
+    "A": [
+     -7.8527,
+     -7.47
+    ],
+    "B": [
+     7.8527,
+     -7.47
+    ],
+    "L": 15.7055,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -7.182,
+    "lean1": 7.182,
+    "plaza0": true,
+    "plaza1": true,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   }
+  ],
+  "relays": {},
+  "glb": "res://assets/maps4/D-02.glb",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": [],
+   "docks": 0,
+   "off_length": []
+  }
+ }
+}

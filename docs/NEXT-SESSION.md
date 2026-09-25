@@ -1,6 +1,6 @@
 # Next session - start here
 
-State at the end of the 2026-09-25 sessions: **v0.18.0 "Alpha 18"** (maps 4.0 for phones, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
+State at the end of the 2026-09-25 sessions: **v0.18.1 "Alpha 18"** (maps 4.1 at the kit's sizes - 18 maps of a partial pack -, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md` (project root - the whole game as built), this file,
 `README.md`, the top of `CHANGELOG.md` (0.17.0 to 0.18.0), `PLAYTEST-NOTES.md` notes 90-100, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
@@ -17,15 +17,22 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
-## Next: maps 4.1 at the kit's sizes (Daniele, 2026-09-25 - waiting for the pack)
+## Maps 4.1 (partial) - built in 0.18.1; waiting for the rest of the pack
 
-On the phone Alpha 18's maps were still far too big: decks came out 6.9 / 28.8 / 44.2 m (S / M / L median)
-against the kit's honest 4 / 8 / 12 m (PLAYTEST-NOTES 101). Daniele chose to regenerate the pack at the
-kit's sizes: 1 unit = 1 m, platform R 6, pier 1.6, deck module 4, S / M / L centre-to-centre 19.2 / 23.2 /
-27.2, >= 15 between node centres (plaza sockets included), 160 x 80 frame. When it arrives: new builder copy
-(pack path, its plaza templates, K 1.0), bake, **add a test_maps check that every non-dock deck is within
-~1 m of its tier's honest length** (that check would have caught this), then the phone-fit probe for the
-camera table, the full suites, publish.
+- `References/Ooze Syndicate maps 4.1 (partial)`: 18 maps drawn in metres at the kit's sizes. Baked by
+  `Models/2.0/export_maps_4_1_game.py` (builder `build_maps_4_1_review.py`, K 1.0, plaza templates read off
+  the maps) into `maps4/` + `assets/maps4/` (the folder keeps its 4.x name; maps 4.0 are in git history).
+  Files are named by code only (`maps4/T-01.json`). Decks 4.1 / 8.3 / 12.4 m median (honest 4 / 8 / 12).
+- Still to come from the pack: B-06, B-08 (generator: "no embedding"), the whole core (C) and siege (S)
+  groups, more FFA / team maps (only X-01 offers FFA 4 / 2v2), any debug maps beyond D-01/02/05/07. B-02,
+  B-03 and T-05 came out without geometric symmetry (status.log `sym=False`) - ask whether that is fair.
+- When the rest arrives: drop it into the same folder (or a new one and point the builder's PACK and the
+  exporter's PACK_DIR at it), bake, `--import`, set LODs / shadow meshes off in the new `.glb.import`
+  files, `test_maps4` (now also checks honest deck lengths), the phone-fit probe (rule: from 58 degrees,
+  lowest angle with every tap >= 44 pt, no overflow, no badge collision) -> `scripts/map_camera.gd`, the
+  full suites, publish.
+- `MapPool.WITHHELD` and `PHONE_UNFIT` are empty on 4.1 (every map passes). `MapPool.dir` is a static
+  var so `tests/test_net.gd` can point the pool at the legacy roster.
 
 ## Alpha 18 (2026-09-25): maps 4.0, per-map camera, optimization pass - built
 

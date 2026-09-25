@@ -6,7 +6,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.18.0"
+const VERSION := "0.18.1"
 const VERSION_NAME := "Alpha 18"
 
 # kit geometry (metres)
@@ -108,9 +108,9 @@ static var last_stand: bool = true
 # CAMERA (Daniele, Alpha 14 playtest: "map size should be fixed, no zoom... too vertical"; "vats and
 # buildings should all face the viewer on every map"). The camera is fitted once per screen size,
 # never zoomed or panned; VIEW_YAW is set per map before it is built so every structure faces it.
-const CAM_PITCH := 66.0              # degrees above the horizon for a map MapCamera doesn't list (Alpha 14: 42,
+const CAM_PITCH := 58.0              # degrees above the horizon for a map MapCamera doesn't list (Alpha 14: 42,
                                      # "too vertical" at 55 on the deep maps 3.0; Alpha 18, maps 4.0: "a bit more
-                                     # from the top" - each map gets its own pitch, 50-74, see MapCamera)
+                                     # from the top" - each map gets its own pitch, 58-66 on maps 4.1, see MapCamera)
 static var view_yaw := 0.0
 # TUG-OF-WAR (bridge-combat mode): the front slides toward the weaker side at up to this fraction of
 # deck speed (total dominance); 2:1 odds move it at a third of that.

@@ -1,5 +1,5 @@
 extends SceneTree
-## Maps 4.0 check:  Godot --headless --path . --script res://tests/test_maps4.gd
+## Maps 4.x check (maps4/ holds maps 4.1):  Godot --headless --path . --script res://tests/test_maps4.gd
 ## Exit code 0 = all passed. For every map of the pool:
 ## - layout (re-checked here in game coordinates, independently of the Blender builder): deck edges
 ##   at least 0.3 m apart wherever two decks are at the same height, no deck over a foreign platform
@@ -82,6 +82,12 @@ func _layout(m: Dictionary, path: String) -> void:
 					"%s: dock %d runs straight from the plaza to the node's rim" % [code, k])
 		else:
 			check(float(g["L"]) - float(g["p0"]) - float(g["p1"]) >= 0.0, "%s: deck %d leaves room for its piers" % [code, k])
+			if float(g["h"]) == 0.0:                   # maps 4.1: a ground deck keeps its tier's honest length (Alpha 18:
+				var honest: float = Rules.S * {"S": 1, "M": 2, "L": 3}[m["edges"][k]["tier"]]   # maps 4.0 ran 3.6x long)
+				var off := absf(float(g["L"]) - float(g["p0"]) - float(g["p1"]) - honest)
+				check(debug or off <= 2.5, "%s: deck %d is its tier's honest %.0f m (off by %.1f m)" % [code, k, honest, off])
+				if off > 1.5:
+					print("WARN  %s: deck %d is %.1f m off its honest %.0f m (pack drawing)" % [code, k, off, honest])
 		var lean := maxf(absf(float(g["lean0"])), absf(float(g["lean1"])))
 		check(lean <= 100.0, "%s: deck %d piers within 100 degrees (the kit clamps to 80)" % [code, k])
 		if lean > 82.5:
@@ -313,7 +319,8 @@ func _heights() -> void:
 
 func _run() -> void:
 	var pool := MapPool.all()
-	check(pool.size() == 109 - MapPool.WITHHELD.size(), "maps 4.0: 100 maps + 9 debug maps in the pool, minus the withheld (%d)" % pool.size())
+	var baked := Array(DirAccess.get_files_at(MapPool.DIR)).filter(func(f): return f.trim_suffix(".remap").ends_with(".json")).size()
+	check(pool.size() == baked - MapPool.WITHHELD.size() and pool.size() > 0, "every baked map is in the pool except the withheld (%d of %d)" % [pool.size(), baked])
 	for path in pool:
 		var m := MapBuilder.load_map(path)
 		check(m.has("layout"), "%s: baked layout present" % path)

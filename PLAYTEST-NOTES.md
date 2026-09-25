@@ -475,3 +475,6 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      (Daniele): regenerate the pack at the kit's sizes** ("maps 4.1": 1 unit = 1 m, platform R 6, pier
      1.6, module 4, S / M / L centre-to-centre 19.2 / 23.2 / 27.2, >= 15 between node centres, 160 x 80
      frame); the game bakes it at 1 m per unit with no stretching. Next bake adds a deck-length check.
+102. **Maps 4.1 (partial): "remove old ones and start implement these".** *Done (0.18.1):* maps 4.0 removed from the
+     game; the 18 maps of 4.1 baked at 1 m per unit with honest decks (4.1 / 8.3 / 12.4 m); tap targets 44-67 pt
+     at 58-66 degrees; deck-length check added to test_maps4.

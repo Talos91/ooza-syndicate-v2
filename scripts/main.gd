@@ -4,7 +4,7 @@ extends Node3D
 ## Drag from one of your nodes to any node to send; tap a node to inspect; double-tap your own node
 ## to upgrade (Alpha 11 convention); the inspector offers costed actions and the relay's switch.
 ## Command-line user args (after `--`):
-##   --map=res://maps4/T-01-first-steps.json  map to load (skips the title screen)
+##   --map=res://maps4/T-01.json  map to load (skips the title screen)
 ##   --mode=1v1|2v2|3v3|2v2v2|FFA3|FFA4|FFA5  match mode (the map's first mode if it lacks this one)
 ##   --demo                                 every seat played by the AI
 ##   --ai=Training|Casual|Standard|Veteran|Expert  AI level (Rules.AI_LEVELS; the menu picks it otherwise)
@@ -25,7 +25,7 @@ var SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": 
 const FACTION_NAMES := ["vex", "null", "bloom", "ember", "solar"]
 
 var map: Dictionary
-var map_path := "res://maps4/T-01-first-steps.json"
+var map_path := "res://maps4/T-01.json"
 var sim := Sim.new()
 var ais: Array = []
 var vis: Dictionary
