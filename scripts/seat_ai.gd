@@ -12,7 +12,8 @@ extends RefCounted
 ## left alone for the first `grace` seconds; the plan is drawn from the best `choice` plans.
 ## Relays (Daniele: "use switches properly"): level 1 fires when enemies are on a deck it can drop or
 ## pull in and none of its own are; level 2 fires ahead, for the lines that will be on the deck when it
-## moves (RELAY_WARNING later); level 3 also opens a shorter route to where it wants to go.
+## moves (RELAY_WARNING later); level 3 also opens a shorter route to where it wants to go. A rotation
+## flings everyone on its deck (0.18.3): fired only for the kill, never with its own lines on it.
 
 var seat: String
 var level := "Standard"
@@ -288,6 +289,39 @@ func _on_decks(sim: Sim, edges: Array, ahead: float) -> Array:
 	return [enemy, own]
 
 
+func _fling_toll(sim: Sim, edges: Array, ahead: float) -> Array:
+	## [enemy units, own or allied units] that a rotation turning `ahead` seconds from now would
+	## fling: only the part of each line that is on these decks then.
+	var enemy := 0.0
+	var own := 0.0
+	for h in sim.hordes:
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		var shift: float = v * ahead if h["state"] == "move" and not h.get("blocked", false) else 0.0
+		var head: float = minf(h["s"] + shift, h["L"])
+		var length := Sim.chain_length(h)
+		var on := 0.0
+		for sp in h["spans"]:
+			if sp["edge"] in edges:
+				on += maxf(0.0, minf(head, sp["s1"]) - maxf(head - length, sp["s0"]))
+		if on <= 0.0:
+			continue
+		var units: float = h["units"] * clampf(on / maxf(length, 0.001), 0.0, 1.0)
+		if h["owner"] == seat or sim.allied(h["owner"], seat):
+			own += units
+		else:
+			enemy += units
+	return [enemy, own]
+
+
+func _fling_cost(sim: Sim, edges: Array) -> float:
+	## Own and allied units a rotation fired now would cost: on the deck now, at the tick
+	## (RELAY_WARNING), or walking onto it during the turn (they walk off the lip into the void).
+	var cost := 0.0
+	for ahead in [0.0, Rules.RELAY_WARNING, Rules.RELAY_WARNING + Rules.RELAY_MOVE]:
+		cost = maxf(cost, _fling_toll(sim, edges, ahead)[1])
+	return cost
+
+
 func _relays(sim: Sim) -> void:
 	var lvl := int(cfg["relays"])
 	for n in sim.nodes:
@@ -295,6 +329,16 @@ func _relays(sim: Sim) -> void:
 			continue
 		var closing := _closing(sim, n)
 		if closing.is_empty():
+			continue
+		if n["relay"] == "rotation":
+			# Daniele (0.18.3): the turn flings every body on the deck into the void, the owner's own
+			# too. Fire for the kill at the tick (level 2+: where the lines will be RELAY_WARNING from
+			# now), only if it kills more enemy than it costs, and never with an own or allied body on
+			# the deck at any point until the turn is over.
+			var kill: float = _fling_toll(sim, closing, Rules.RELAY_WARNING if lvl >= 2 else 0.0)[0]
+			var cost := _fling_cost(sim, closing)
+			if kill >= 2.0 * Rules.SCALE and cost <= 0.5 and kill > cost:
+				sim.fire_relay(n["id"])
 			continue
 		var now := _on_decks(sim, closing, 0.0)
 		var later := _on_decks(sim, closing, Rules.RELAY_WARNING + Rules.RELAY_MOVE * 0.5) if lvl >= 2 else now
@@ -319,6 +363,8 @@ func _open_route(sim: Sim, plan: Dictionary) -> bool:
 		var closing := _closing(sim, n)
 		if _on_decks(sim, closing, Rules.RELAY_WARNING)[1] > 0.5:
 			continue
+		if n["relay"] == "rotation" and _fling_cost(sim, closing) > 0.5:
+			continue                                      # the turn would fling its own lines
 		var keep: int = n["relay_index"]
 		n["relay_index"] = sim.relay_next_index(n)
 		var alt := sim.find_route(src, dst)

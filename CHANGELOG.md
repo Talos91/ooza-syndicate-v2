@@ -1,5 +1,35 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.4 "Alpha 18" - 2026-09-26 (rotating decks fling, ring by ring falls, camera closes in, emblems)
+
+- **A rotating deck shakes its lines into the void** (Daniele: "when a rotating bridge turns all units that
+  are on it are shaken down into the void as if the fall due to centrifugal power"). Every line on a
+  turning deck - any owner, the relay owner's own included - is flung outward and sideways off the deck
+  and tumbles down (SIEGE goo, BRAWL Alpha 11 creature bodies); counted as fall losses; toast "N units
+  flung off the turning deck". Retract, switch and remote relays are unchanged. The AI fires a rotation
+  when it kills more enemy than it costs, never with its own or allied lines on the deck. BRAWL plain
+  falls now drop creature bodies too, instead of goo.
+- **A Last Stand ring falls platform by platform** (Daniele: "don't make all outward rings fall at the same
+  time but one after the other, 5 s distance from each, following the rule we set for falling bridges").
+  After the ring's 10 s warning its platforms drop one every 5 s, in an order that never leaves another
+  platform cut off (relays last, the far side first); each badge counts down to its own drop; the next
+  ring waits for the last drop. test_maps4 checks the map stays connected after every single drop.
+- **The camera closes in as the Last Stand eats the map** (Daniele: "if the borders are gone have the camera
+  zoom in to make it more epic"): 1 s after a platform falls the view eases (1.5 s) onto what is left,
+  never wider than the start and at most 2.5x closer; guests zoom too.
+- **Owner emblems instead of seat letters** (Daniele: "don't use A B and C but use emblems in the color of the
+  owner"): badges that hide a count show the owner's faction emblem in the owner's colour; the inspector
+  header, and toasts that name a player, show the emblem and faction name in that colour.
+- **BRAWL 20 % slower again** (Daniele: "deck speed on brawl should be a bit slower ... reduce by 20% brawl
+  unit movement speed"): 5.7 m/s on decks and platforms (Alpha 11's speed less 20 % twice); spacing
+  follows.
+- **BRAWL door entry is orderly** (Daniele: "units entering the building ... as if violently shaking toward
+  the door"): every body keeps its place, lane and step for the whole trip, walks on at the marching pace
+  into the door and turns smoothly round corners (measured: 0 frame-to-frame jumps, was 316; 0 heading
+  snaps, was 100).
+- Tests: test_sim, test_net, test_maps4 (2,796 checks), test_map_pool, test_ai_curve - all pass (curve on
+  maps 4.2 + the classics: 8 / 33 / 50 / 92 / 83 %). Not tried on a real phone or in a live online room.
+
 ## 0.18.3 "Alpha 18" - 2026-09-26 (the four main Alpha 11 maps, at the kit's sizes)
 
 **Alpha 11's four main arenas are back** (Daniele: "pick up the main 4 map of the alpha 11, aurora trident

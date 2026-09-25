@@ -258,7 +258,18 @@ func _last_stand(m: Dictionary) -> void:
 			var ok_relays := true
 			var ok_conn := true
 			var k := 0
+			var ok_steps := true
 			for w in sim.last_stand_waves:
+				sim.collapsed = gone.duplicate()             # 0.18.4: a ring falls platform by platform - every
+				var step_gone := gone.duplicate()           # single drop keeps the rest connected
+				var seq: Array = sim._drop_sequence(w)
+				if seq.size() != (w as Array).size():
+					ok_steps = false
+				for id in seq:
+					step_gone[id] = true
+					if not _connected(sim, step_gone):
+						ok_steps = false
+				sim.collapsed = {}
 				while k < order.size() - 1 and not (w as Array).any(func(id): return sim.nodes[id]["ring"] == int(order[k]) and sim.nodes[id]["relay"] == ""):
 					fallen_rings[int(order[k])] = true      # a ring may have gone entirely with an earlier wave
 					k += 1
@@ -289,6 +300,7 @@ func _last_stand(m: Dictionary) -> void:
 			check(ok_rings, "%s: the last ring (%d) never falls" % [tag, keep_ring])
 			check(ok_relays, "%s: relays fall only after all their rings" % tag)
 			check(ok_conn, "%s: the surviving map stays connected after every wave" % tag)
+			check(ok_steps, "%s: every single platform drop keeps the rest connected" % tag)
 			var survivors := sim.nodes.filter(func(n): return not gone.get(n["id"], false))
 			check(not survivors.is_empty() and survivors.all(func(n): return sim.last_stand_keep.has(n["id"]) or n["relay"] != ""),
 					"%s: at the end only the last ring (and relays tied to it) remains" % tag)
@@ -317,6 +329,39 @@ func _heights() -> void:
 			return
 
 
+func _drop_timing() -> void:
+	## 0.18.4: after the ring's 10 s warning its platforms drop one at a time, LAST_STAND_DROP_GAP apart.
+	for path in MapPool.all():
+		var m := MapBuilder.load_map(path)
+		if (m["lastStand"].get("methods", []) as Array).is_empty():
+			continue
+		var md: String = m["modes"][0]
+		var seats := {}
+		for st in m["seats"][md]:
+			seats[int(st["node"])] = st["seat"]
+		var sim := Sim.new()
+		sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 1)
+		sim._start_rings()
+		if sim.last_stand_waves.is_empty() or (sim.last_stand_waves[0] as Array).size() < 2:
+			continue
+		var warned_at := sim.time
+		var drops := []
+		var seen := {}
+		while sim.time < warned_at + 60.0 and drops.size() < 3:
+			sim._step_rings(0.1)
+			sim.time += 0.1
+			for id in sim.collapsed:
+				if not seen.has(id):
+					seen[id] = true
+					drops.append([id, sim.time])
+		check(drops.size() >= 2 and absf(float(drops[0][1]) - warned_at - Rules.LAST_STAND_WARNING) < 0.25,
+				"%s: the ring's first platform drops after the %d s warning" % [m["code"], int(Rules.LAST_STAND_WARNING)])
+		if drops.size() >= 2:
+			check(absf(float(drops[1][1]) - float(drops[0][1]) - Rules.LAST_STAND_DROP_GAP) < 0.25,
+					"%s: the next platform drops %d s later, not with it (%.1f s)" % [m["code"], int(Rules.LAST_STAND_DROP_GAP), float(drops[1][1]) - float(drops[0][1])])
+		return
+
+
 func _run() -> void:
 	var pool := MapPool.all()
 	var baked := Array(DirAccess.get_files_at(MapPool.DIR)).filter(func(f): return f.trim_suffix(".remap").ends_with(".json")).size()
@@ -331,5 +376,6 @@ func _run() -> void:
 		_seats(m)
 		_last_stand(m)
 	_heights()
+	_drop_timing()
 	print("\n%d checks - %s" % [checks, "ALL PASSED (0 failed)" if failures == 0 else "%d FAILED" % failures])
 	quit(1 if failures > 0 else 0)

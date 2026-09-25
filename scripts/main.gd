@@ -39,6 +39,16 @@ var cam_dist := 90.0
 var cam_pitch: float = Rules.CAM_PITCH              # degrees above the horizon: MapCamera's per-map pitch
 var pitch_forced := false                          # --pitch=N (or the phone-fit probe) overrides it
 var cam_yaw := 0.0
+var _start_fit := []                              # [cam_target, cam_dist] of the whole-map fit (_fit_camera)
+var _gone_seen := 0                               # Last Stand: nodes collapsed at the last check
+var _gone_wait := 0.0                             # seconds left before the camera re-fits (the fall plays first)
+var _fit_gone := 0                                # collapsed count the camera is fitted to (0 = the whole map)
+var _zoom_from := []
+var _zoom_to := []
+var _zoom_t := -1.0                               # 0..1 through the ease, < 0 when still
+const COLLAPSE_ZOOM_DELAY := 1.0                  # the platforms' fall first (fx._collapse, ~1.5 s)
+const COLLAPSE_ZOOM_SECONDS := 1.5
+const COLLAPSE_ZOOM_MAX := 2.5                    # never closer than 1/2.5 of the start distance
 var fraction := 0.5
 var drag_from := -1
 var selected := -1
@@ -401,14 +411,33 @@ func _fit_camera() -> void:
 	## Fits the whole map - every platform rim and the badge hanging under it - inside the screen area
 	## the HUD leaves free (right of the send panel, below the top bar, above the bottom strip), by
 	## projecting those points and correcting distance and aim until they fit (Alpha 14 playtest:
-	## "the HUD should never overlap a corridor or a platform"). Fixed from then on: no zoom or pan.
+	## "the HUD should never overlap a corridor or a platform"). Fixed from then on: no player zoom or
+	## pan; only the Last Stand closes in on the nodes still standing (_collapse_zoom).
+	cam_yaw = Rules.view_yaw
+	_start_fit = _fit_nodes(sim.nodes)
+	cam_target = _start_fit[0]
+	cam_dist = _start_fit[1]
+	if _fit_gone > 0 and scenario_focus == Vector3.INF:   # resized after a Last Stand zoom: keep the survivors framed
+		var fit := _survivor_fit()
+		cam_target = fit[0]
+		cam_dist = fit[1]
+		_zoom_t = -1.0
+	if scenario_focus != Vector3.INF:
+		cam_target = scenario_focus
+		cam_dist = scenario_zoom
+	_place_camera()
+
+
+func _fit_nodes(nodes: Array) -> Array:
+	## The fit of _fit_camera for a set of nodes: [cam_target, cam_dist] at the current pitch and yaw.
+	## It moves the camera to measure, then puts it back where it was.
+	var keep := [cam_target, cam_dist]
 	var lo := Vector3(INF, 0, INF)
 	var hi := Vector3(-INF, 0, -INF)
-	for n in sim.nodes:
+	for n in nodes:
 		lo = lo.min(n["pos"])
 		hi = hi.max(n["pos"])
 	cam_target = (lo + hi) / 2.0
-	cam_yaw = Rules.view_yaw
 	var vp := get_viewport().get_visible_rect().size
 	var use_hud: bool = hud != null and thumb_path == ""
 	var left: float = (hud.side_panel.position.x + hud.side_panel_width() + 14.0) if use_hud else 8.0
@@ -417,7 +446,7 @@ func _fit_camera() -> void:
 	var right: float = vp.x - (margins.z + hud.pause_button.size.x + 12.0 if use_hud else 8.0)   # PAUSE and Debug column
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
 	var pts := []
-	for n in sim.nodes:
+	for n in nodes:
 		var p: Vector3 = n["pos"]
 		for k in range(12):
 			var a := TAU * k / 12.0
@@ -446,10 +475,56 @@ func _fit_camera() -> void:
 		var g1 := _ground(vp / 2.0 - miss)
 		if g0 != Vector3.INF and g1 != Vector3.INF:
 			cam_target += (g1 - g0) * 0.8
-	if scenario_focus != Vector3.INF:
-		cam_target = scenario_focus
-		cam_dist = scenario_zoom
+	var fit := [cam_target, cam_dist]
+	cam_target = keep[0]
+	cam_dist = keep[1]
 	_place_camera()
+	return fit
+
+
+func _survivor_fit() -> Array:
+	## The fit for the nodes the Last Stand has not dropped: never wider than the start fit, never
+	## closer than COLLAPSE_ZOOM_MAX times it.
+	var alive := sim.nodes.filter(func(n): return not sim.collapsed.get(n["id"], false))
+	if alive.is_empty():
+		return _start_fit
+	var fit := _fit_nodes(alive)
+	if fit[1] >= _start_fit[1]:
+		return _start_fit
+	fit[1] = maxf(fit[1], _start_fit[1] / COLLAPSE_ZOOM_MAX)
+	return fit
+
+
+func _collapse_zoom(dt: float) -> void:
+	## Daniele: "if the borders are gone have the camera zoom in to make it more epic". After each
+	## Last Stand wave, once the fall has played, the camera eases in on the surviving nodes at the
+	## same pitch and yaw. Read from the Sim's collapsed set every frame (not the fx events), so
+	## online guests, who apply the host's snapshots, close in too. Staged scenarios and thumbnails keep
+	## their camera.
+	if scenario_focus != Vector3.INF or thumb_path != "" or _start_fit.is_empty():
+		return
+	var gone := 0
+	for n in sim.nodes:
+		if sim.collapsed.get(n["id"], false):
+			gone += 1
+	if gone != _gone_seen:                            # a new wave fell: wait for its fall, then re-fit
+		_gone_seen = gone
+		_gone_wait = COLLAPSE_ZOOM_DELAY
+	if _gone_wait > 0.0:
+		_gone_wait -= dt
+		if _gone_wait <= 0.0 and gone > 0 and gone != _fit_gone:
+			_fit_gone = gone
+			_zoom_from = [cam_target, cam_dist]
+			_zoom_to = _survivor_fit()
+			_zoom_t = 0.0
+	if _zoom_t >= 0.0:
+		_zoom_t = minf(_zoom_t + dt / COLLAPSE_ZOOM_SECONDS, 1.0)
+		var k := ease(_zoom_t, -2.0)                  # ease in and out
+		cam_target = (_zoom_from[0] as Vector3).lerp(_zoom_to[0], k)
+		cam_dist = lerpf(_zoom_from[1], _zoom_to[1], k)
+		_place_camera()                               # hud.sync re-lays the badges on the new transform
+		if _zoom_t >= 1.0:
+			_zoom_t = -1.0
 
 
 func _stage_scenario() -> void:
@@ -661,12 +736,19 @@ func _process(delta: float) -> void:
 			"collapse_warning":
 				var n: Dictionary = sim.nodes[ev["node"]]
 				if n["owner"] == HUMAN:
-					hud.toast("Your node %d falls in %d s - get out!" % [ev["node"], int(Rules.LAST_STAND_WARNING)])
+					var left: float = sim.drop_in(ev["node"]) if sim.v3 else Rules.LAST_STAND_WARNING
+					hud.toast("Your node %d falls in %d s - get out!" % [ev["node"], int(ceil(left))])
 			"relay_tick":
 				var n: Dictionary = sim.nodes[ev["node"]]
 				if n["owner"] == HUMAN:
 					hud.toast("Relay %d switches now" % ev["node"])
+			"fling":                                  # a turning deck threw a line into the void (units already shown scale)
+				var ours := sim.allied(str(ev["seat"]), HUMAN)
+				var flung := int(ev["units"])
+				if flung > 0:                         # a sliver under half a shown unit still counts, but gets no toast
+					hud.toast("%d unit%s flung off the turning deck" % [flung, "" if flung == 1 else "s"], "warn" if ours else "good")
 	sim.fx_events.clear()
+	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
 	fx.sync(dt)
 	hud.sync(dt, cam)

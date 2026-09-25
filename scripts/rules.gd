@@ -6,7 +6,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.18.3"
+const VERSION := "0.18.4"
 const VERSION_NAME := "Alpha 18"
 
 # kit geometry (metres)
@@ -61,8 +61,9 @@ static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug pan
 # Its mean hop is 284 px centre to centre; 2.0's is 21.9 m over the 99 maps (1.68 modules), so one
 # Alpha 11 px = 0.077 m: 115 px/s = 8.9 m/s, the same 2.5 s per hop, and 12 px = 0.93 m per shown
 # unit. Exit = entrance = 9.6 shown units/s (x SCALE internally). SIEGE keeps its own tunables.
-# (Those figures predate Alpha 17's -20 %: now 7.1 m/s, ~3.1 s per hop, ~0.74 m per shown unit.)
-const BRAWL_SPEED := 8.9 * 0.8                             # m/s, decks and platforms alike (Daniele, Alpha 17: "20% slower")
+# (Those figures predate Alpha 17's and Alpha 18's -20 % each: now 5.7 m/s, ~0.59 m per shown unit.)
+const BRAWL_SPEED := 8.9 * 0.8 * 0.8                       # m/s, decks and platforms alike (Daniele, Alpha 17: "20% slower";
+                                                           # 0.18.4: "deck speed on brawl a bit slower ... reduce by 20%")
 const BRAWL_DOOR_RATE := 115.0 / 12.0 * 5.0               # internal units/s out of the door (and in)
 # Alpha 11's route (simulation.gd route/arc): out of the vat's FRONT (the side facing the camera),
 # round the platform on its route ring to the bridge, and at the target round the ring back to the
@@ -136,11 +137,12 @@ const CONTACT_R := 2.1               # metres: about one deck width across, one 
 const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
 
 # RELAYS (GAME-RULES sec8): player-fired; 3 s warning previews the outcome, then the authoritative
-# tick applies the per-kind troop fate over RELAY_MOVE seconds of visible motion (rotation pivots,
-# retract slides in, switch/remote dissolve), then RELAY_COOLDOWN before the next fire.
+# tick applies the per-kind troop fate over RELAY_MOVE seconds of visible motion (rotation pivots and
+# flings every line on its turning decks into the void, retract slides in, switch/remote dissolve),
+# then RELAY_COOLDOWN before the next fire.
 const RELAY_WARNING := 3.0
 const RELAY_COOLDOWN := 5.0        # Daniele (Alpha 13 playtest): "relay cooldown I'd set at 5 s"
-const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves; hordes on it ride
+const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves; retract/switch/remote riders ride, a rotation flings
 
 # LAST STAND (GAME-RULES sec10; Daniele 2026-09-25: 2:00 "seems ok" for now, not 3:00). The method
 # (inward / outward / chaos, from the map's eligible list) is hidden until the start, then the
@@ -151,6 +153,10 @@ const LAST_STAND_TIME := 120.0
 const LAST_STAND_WARNING := 10.0
 const LAST_STAND_WAVE_MIN := 12.0
 const LAST_STAND_WAVE_MAX := 30.0
+# A ring falls platform by platform (Daniele, 0.18.4: "don't make all outward rings fall at the same time but one
+# after the other, 5 s distance from each, following the rule we set for falling bridges"): after the ring's
+# 10 s warning its platforms drop one every LAST_STAND_DROP_GAP s, never leaving the rest of the map cut off.
+const LAST_STAND_DROP_GAP := 5.0
 const MATCH_HARD_END := 420.0        # 7:00 safety net: still undecided -> stronger seat wins outright
 
 # economy - Alpha 11 logic x SCALE (Daniele, Alpha 12: "start from the logic of Alpha 11... upgrades

@@ -664,7 +664,7 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 			"collapsed": s.collapsed, "eliminated": s.eliminated,
 			"ls": [s.last_stand_active, s.last_stand_method, s.last_stand_order, s.last_stand_final,
 					s.last_stand_next, s.last_stand_warn_node, s.last_stand_warn_t, s.last_stand_wave, s._next_wave_at,
-					s.last_stand_waves, s.last_stand_keep, s.last_stand_warn],
+					s.last_stand_waves, s.last_stand_keep, s.last_stand_warn, s.last_stand_queue],
 			"losses": [s.combat_losses, s.fall_losses]}
 	if s.over:
 		snap["events"] = s.events                    # the end screen's captures count
@@ -742,6 +742,8 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 		s.last_stand_waves = ls[9]
 		s.last_stand_keep = ls[10]
 		s.last_stand_warn = ls[11]
+	if ls.size() > 12:                                # 0.18.4: the ring's drop queue
+		s.last_stand_queue = ls[12]
 	s.combat_losses = snap["losses"][0]
 	s.fall_losses = snap["losses"][1]
 	for c in changes:

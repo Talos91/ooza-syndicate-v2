@@ -41,7 +41,8 @@ var _ring_orders: Dictionary = {}    # maps 3.0: method -> ring order (chaos: [o
 var last_stand_final := -1
 var last_stand_next := 0
 var last_stand_warn_node := -1       # node under its 10 s warning (-1: none)
-var last_stand_warn_t := 0.0
+var last_stand_warn_t := 0.0         # seconds to the next drop (the ring's warning, then the gap between drops)
+var last_stand_queue: Array = []     # the warned ring's platforms still to drop, in drop order (0.18.4)
 var last_stand_wave := 20.0
 var _next_wave_at := 0.0
 var rng := RandomNumberGenerator.new()
@@ -494,8 +495,8 @@ func _step_relays(dt: float) -> void:
 
 
 func _relay_begin_move(n: Dictionary) -> void:
-	## The authoritative tick: the state changes, the affected decks start moving, every horde on
-	## them rides (frozen in place, carried by the deck's motion) until the motion ends.
+	## The authoritative tick: the state changes, the affected decks start moving; a turning deck
+	## flings every horde on it into the void (_relay_fling), on the others they ride (_relay_board).
 	var old_index: int = n["relay_index"]
 	var new_index: int = n["relay_pending"]
 	var closing := []
@@ -527,12 +528,24 @@ func _relay_begin_move(n: Dictionary) -> void:
 				pairs[c] = best
 				delta = best_d
 	n["relay_anim"] = {"delta": delta, "closing": closing, "opening": opening, "pairs": pairs, "progress": 0.0}
+	if n["relay"] == "rotation":
+		_relay_fling(n, closing, delta)                   # nobody rides a turning deck: it shakes them off
+	else:
+		_relay_board(n, closing)
+	n["relay_phase"] = "moving"
+	n["relay_t"] = Rules.RELAY_MOVE
+	events.append({"t": time, "type": "relay_tick", "node": n["id"], "seat": n["owner"], "index": new_index})
+	fx_events.append({"type": "relay_tick", "node": n["id"]})
+
+
+func _relay_board(n: Dictionary, closing: Array) -> void:
+	## Retract / switch / remote: every horde on a closing deck rides it (frozen in place, carried by
+	## the deck's motion) until the motion ends and _relay_apply gives it the kind's fate.
 	for h in hordes:                                      # riders: any horde overlapping a closing deck
 		for sp in h["spans"]:                             # (an arriving horde's tail counts too)
 			if sp["edge"] in closing and _overlap(h, sp["s0"], sp["s1"]) > 0.0:
 				var ride := {"s0": sp["s0"], "s1": sp["s1"], "edge": sp["edge"], "kind": n["relay"],
-						"centre": n["pos"], "angle": 0.0, "shift": Vector3.ZERO, "sink": 0.0, "node": n["id"],
-						"prev_state": h["state"]}
+						"shift": Vector3.ZERO, "sink": 0.0, "node": n["id"], "prev_state": h["state"]}
 				if n["relay"] == "retract":
 					var far: int = _other_end(sp["edge"], n["id"])
 					ride["dir"] = ((n["pos"] - nodes[far]["pos"]) as Vector3).normalized()
@@ -540,10 +553,36 @@ func _relay_begin_move(n: Dictionary) -> void:
 				h["ride"] = ride
 				h["state"] = "ride"
 				break
-	n["relay_phase"] = "moving"
-	n["relay_t"] = Rules.RELAY_MOVE
-	events.append({"t": time, "type": "relay_tick", "node": n["id"], "seat": n["owner"], "index": new_index})
-	fx_events.append({"type": "relay_tick", "node": n["id"]})
+
+
+func _relay_fling(n: Dictionary, closing: Array, delta: float) -> void:
+	## Rotation (Daniele, 0.18.3: "when a rotating bridge turns all units that are on it are shaken
+	## down into the void as if the fall due to centrifugal power"): the moment the deck starts to
+	## turn, every line with bodies on it - any owner, the relay owner's own included - loses them
+	## to the void, a fall loss exactly like walking off a missing deck. A line only partly on it
+	## keeps the rest: that part is behind a deck that is gone (re-routed from the pier before it
+	## when the head was on the deck, as a dissolved switch deck leaves it). One "fling" fx per line:
+	## the view throws the bodies outward and sideways, the HUD counts them (shown units).
+	var turn := signf(delta) if delta != 0.0 else 1.0
+	for h in hordes.duplicate():
+		var ranges := []
+		for sp in h["spans"]:
+			if sp["edge"] in closing and _overlap(h, sp["s0"], sp["s1"]) > 0.0:
+				ranges.append([sp["s0"], sp["s1"]])
+		if ranges.is_empty():
+			continue
+		# tail-side deck first: cutting it only pulls the tail up, so the next range stays valid, and
+		# only the last range can hold the head (the one cut that may re-route what is left)
+		ranges.sort_custom(func(x, y): return x[0] < y[0])
+		var seat: String = h["owner"]
+		var faction: String = h["faction"]
+		var acc := {"pts": [], "units": 0.0}
+		for r in ranges:
+			_cut_range(h, r[0], r[1], "fall", -1, true, acc)
+		if acc["units"] <= 0.0:
+			continue
+		fx_events.append({"type": "fling", "node": n["id"], "seat": seat, "units": Rules.shown(acc["units"]),
+				"faction": faction, "pts": acc["pts"], "centre": n["pos"], "turn": turn})
 
 
 func _relay_update_riders(n: Dictionary, progress: float) -> void:
@@ -554,8 +593,6 @@ func _relay_update_riders(n: Dictionary, progress: float) -> void:
 			continue
 		var r: Dictionary = h["ride"]
 		match r["kind"]:
-			"rotation":
-				r["angle"] = n["relay_anim"]["delta"] * eased
 			"retract":
 				r["shift"] = r["dir"] * r["len"] * eased
 			_:
@@ -563,8 +600,8 @@ func _relay_update_riders(n: Dictionary, progress: float) -> void:
 
 
 func _relay_apply(n: Dictionary) -> void:
-	## Motion over: apply the per-kind troop fate (GAME-RULES sec8) to every rider.
-	var anim: Dictionary = n["relay_anim"]
+	## Motion over: apply the per-kind troop fate (GAME-RULES sec8) to every rider (a rotation has
+	## none: _relay_fling shook its deck clear when it started to turn).
 	var riders := []
 	for h in hordes:
 		if h.has("ride") and h["ride"]["node"] == n["id"]:
@@ -574,10 +611,6 @@ func _relay_apply(n: Dictionary) -> void:
 		h.erase("ride")
 		h["state"] = "absorb" if r["prev_state"] == "absorb" and h["s"] >= h["L"] else "move"
 		match n["relay"]:
-			"rotation":                                   # ride the deck to the new pier, same order
-				var o: int = anim["pairs"].get(r["edge"], -1)
-				if o >= 0:
-					_rotate_horde(h, r["edge"], o, n["id"])
 			"retract":                                    # carried into the relay's node
 				_cut_range(h, r["s0"], r["s1"], "carry", n["id"])
 			_:                                            # switch / remote: fall
@@ -586,40 +619,6 @@ func _relay_apply(n: Dictionary) -> void:
 	n["relay_phase"] = ""
 	n["relay_cd"] = Rules.RELAY_COOLDOWN
 	fx_events.append({"type": "relay_done", "node": n["id"]})
-
-
-func _rotate_horde(h: Dictionary, closing: int, opening: int, hub: int) -> void:
-	## The pier the deck came from is replaced by the one it now points at; the horde keeps its
-	## place on the deck and its order (re-routed from wherever the deck now leads).
-	var a: int = _other_end(closing, hub)
-	var b: int = _other_end(opening, hub)
-	var sp := {}
-	var si := -1
-	for i in range(h["spans"].size()):
-		if h["spans"][i]["edge"] == closing:
-			sp = h["spans"][i]
-			si = i
-	if sp.is_empty():
-		return
-	var from_node: int = h["route"][si]
-	var to_node: int = h["route"][si + 1]
-	var new_from: int = b if from_node == a else from_node
-	var new_to: int = b if to_node == a else to_node
-	var u := clampf((h["s"] - sp["s0"]) / maxf(sp["s1"] - sp["s0"], 0.001), 0.0, 1.0)
-	var rest := find_route(new_to, h["target"]) if new_to != h["target"] else [new_to]
-	var route := [new_from, new_to]
-	if rest.size() > 1:
-		route.append_array(rest.slice(1))
-	else:
-		h["target"] = new_to
-	if h["streaming"]:
-		var src: Dictionary = nodes[h["route"][0]]
-		if src["streaming"].get("hid", -1) == h["id"]:
-			_end_streaming(src, "rotated")
-	_set_route(h, route)
-	var nsp: Dictionary = h["spans"][0]
-	h["s"] = nsp["s0"] + u * (nsp["s1"] - nsp["s0"])
-	events.append({"t": time, "type": "rode", "seat": h["owner"], "units": h["units"]})
 
 
 func _set_route(h: Dictionary, route: Array) -> void:
@@ -650,10 +649,12 @@ func _overlap(h: Dictionary, s0: float, s1: float) -> float:
 	return maxf(0.0, minf(head, s1) - maxf(tail, s0))
 
 
-func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: int, reroute := true) -> void:
+func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: int, reroute := true, fling = null) -> void:
 	## Units of the horde inside [s0, s1] of its path are lost (fate "fall") or carried into a node
 	## (fate "carry"). If the head itself was inside, whatever is left behind the range is re-routed
-	## from the node before it; if nothing is left, the horde is gone.
+	## from the node before it; if nothing is left, the horde is gone. `fling` (a {pts, units}
+	## Dictionary, rotation relays): the fall is counted the same, but its points and units go there
+	## for one "fling" fx per line instead of a "fall" fx.
 	if not (h in hordes):
 		return
 	var len := chain_length(h)
@@ -673,8 +674,13 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 		while k <= on:
 			pts.append(sample(h, minf(h["s"], s1) - k)[0])
 			k += Rules.PATCH_SPACING
-		fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on})
-		events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on})
+		if fling is Dictionary:
+			(fling["pts"] as Array).append_array(pts)
+			fling["units"] += units_on
+			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on, "why": "fling"})
+		else:
+			fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on})
+			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on})
 	elif fate == "carry" and carry_node >= 0:
 		var n: Dictionary = nodes[carry_node]
 		if allied(n["owner"], h["owner"]):
@@ -1017,7 +1023,7 @@ static func overpass_at(h: Dictionary, s: float, edge_list: Array) -> int:
 
 static func sample(h: Dictionary, s: float) -> Array:
 	## [position, unit tangent, is_fast] at arc length s along a horde's path, including the
-	## motion of a deck it is riding (rotation pivot, retract pull, dissolve drop).
+	## motion of a deck it is riding (retract pull, dissolve drop; nobody rides a rotation).
 	var cum: PackedFloat32Array = h["cum"]
 	var pts: PackedVector3Array = h["pts"]
 	s = clampf(s, 0.0, cum[-1])
@@ -1037,10 +1043,6 @@ static func sample(h: Dictionary, s: float) -> Array:
 		var r: Dictionary = h["ride"]
 		if s >= r["s0"] - 0.01 and s <= r["s1"] + 0.01:
 			match r["kind"]:
-				"rotation":
-					var c: Vector3 = r["centre"]
-					pos = c + (pos - c).rotated(Vector3.UP, -r["angle"])
-					fwd = fwd.rotated(Vector3.UP, -r["angle"])
 				"retract":
 					pos += r["shift"]
 				_:
@@ -1174,8 +1176,9 @@ func _check_missing_decks() -> void:
 				continue                                  # the line doesn't touch this deck
 			var ei: int = sp["edge"]
 			var ctrl: int = edge_controller.get(ei, -1)
-			if ctrl >= 0 and ei in nodes[ctrl]["moving_edges"]:
-				continue                                  # mid-motion: the tick decides its fate
+			if ctrl >= 0 and ei in nodes[ctrl]["moving_edges"] and nodes[ctrl]["relay"] != "rotation":
+				continue                                  # mid-motion: the tick decides its fate (a turning deck
+				                                          # flung its lines at the tick: it is gone right away)
 			if is_edge_open(ei):
 				continue
 			if h["streaming"]:
@@ -1848,21 +1851,81 @@ func _warn_wave() -> void:
 		if not collapsed.get(id, false):
 			last_stand_warn[id] = true
 			fx_events.append({"type": "collapse_warning", "node": id})
-	last_stand_warn_node = last_stand_warn.keys()[0] if not last_stand_warn.is_empty() else -1
+	last_stand_queue = _drop_sequence(last_stand_warn.keys())
+	last_stand_warn_node = last_stand_queue[0] if not last_stand_queue.is_empty() else -1
 	last_stand_warn_t = Rules.LAST_STAND_WARNING
-	events.append({"t": time, "type": "collapse_warning", "nodes": last_stand_warn.keys()})
+	events.append({"t": time, "type": "collapse_warning", "nodes": last_stand_queue.duplicate()})
 	last_stand_next += 1
 
 
+func _drop_sequence(wave: Array) -> Array:
+	## The order a ring's platforms fall in, one at a time (0.18.4): each drop is a platform whose loss
+	## leaves every other standing platform connected over fixed decks (the rule for falling bridges -
+	## never an island), relays after the ring's other platforms, the farthest from the last ring first.
+	var gone := collapsed.duplicate()
+	var left: Array = wave.duplicate()
+	var depth := _keep_depth()
+	var out := []
+	while not left.is_empty():
+		var best := -1
+		var best_score := -INF
+		for id in left:
+			var trial := gone.duplicate()
+			trial[id] = true
+			var score: float = depth.get(id, 0) * 10.0 - (1000.0 if nodes[id]["relay"] != "" else 0.0)
+			if not _islands(trial).is_empty():
+				score -= 100000.0                          # would strand another platform: only as a last resort
+			if score > best_score or (score == best_score and id < best):
+				best_score = score
+				best = id
+		out.append(best)
+		left.erase(best)
+		gone[best] = true
+	return out
+
+
+func _keep_depth() -> Dictionary:
+	## Hops from the last ring (the one that never falls) over fixed decks: the Last Stand collapses
+	## from the far side toward it.
+	var dist := {}
+	var open := []
+	for id in last_stand_keep:
+		dist[id] = 0
+		open.append(id)
+	while not open.is_empty():
+		var cur: int = open.pop_front()
+		for link in adj[cur]:
+			var e: Dictionary = edges[link[1]]
+			if e["state"] != "" or e["retracts"] or dist.has(link[0]):
+				continue
+			dist[link[0]] = dist[cur] + 1
+			open.append(link[0])
+	return dist
+
+
+func drop_in(id: int) -> float:
+	## Seconds until a warned platform drops (its place in the ring's queue), or -1.
+	var k := last_stand_queue.find(id)
+	return last_stand_warn_t + k * Rules.LAST_STAND_DROP_GAP if k >= 0 else -1.0
+
+
 func _step_rings(dt: float) -> void:
-	if not last_stand_warn.is_empty():
+	if not last_stand_queue.is_empty():
 		last_stand_warn_t -= dt
 		if last_stand_warn_t <= 0.0:
-			for id in last_stand_warn.keys():
-				if not collapsed.get(id, false):
-					_drop_node(id)
-			last_stand_warn = {}
-			last_stand_warn_node = -1
+			var id: int = last_stand_queue.pop_front()
+			last_stand_warn.erase(id)
+			if not collapsed.get(id, false):
+				_drop_node(id)
+			while not last_stand_queue.is_empty() and collapsed.get(last_stand_queue[0], false):
+				last_stand_warn.erase(last_stand_queue.pop_front())   # taken by an earlier cut
+			if last_stand_queue.is_empty():
+				last_stand_warn = {}
+				last_stand_warn_node = -1
+				_next_wave_at = maxf(_next_wave_at, time + Rules.LAST_STAND_DROP_GAP)   # the next ring waits
+			else:
+				last_stand_warn_node = last_stand_queue[0]
+				last_stand_warn_t = Rules.LAST_STAND_DROP_GAP
 	elif last_stand_next < last_stand_waves.size() and time >= _next_wave_at:
 		_next_wave_at += last_stand_wave
 		_warn_wave()

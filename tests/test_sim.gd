@@ -393,27 +393,93 @@ func _init() -> void:
 			"the retract pulled A's units straight onto B's platform as an early assault")
 	check(not sim15.is_edge_open(deck15["edge"]), "the retracted deck is gone until fired again")
 
-	# rotation (Switchback Foundry): the deck pivots and its troops RIDE it, same order
+	# rotation (Switchback Foundry; Daniele, 0.18.3: "when a rotating bridge turns all units that are on
+	# it are shaken down into the void as if the fall due to centrifugal power"): when the deck starts
+	# to turn every body on it is flung off - any owner, the relay owner's own included - as a fall loss
 	var rot_map := MapBuilder.load_map("res://maps/061-switchback-foundry.json")
 	var rot_pos := MapBuilder.layout(rot_map)
 	var sim16 := Sim.new()
 	sim16.setup(rot_map, rot_pos, {7: "A", 10: "B"}, {"A": "null", "B": "ember"}, 1)
 	sim16.nodes[0]["owner"] = "A"
 	sim16.nodes[1]["owner"] = "A"
-	sim16.nodes[1]["units"] = 200.0
+	sim16.nodes[1]["units"] = 12.0                    # a short line that fits on the deck
 	var r16 := sim16.find_route(1, 0)
 	check(r16 == [1, 0], "with r1 the hub deck links node 1 to the centre")
 	var h16 := sim16.send(1, 0, 1.0)
 	var deck16: Dictionary = h16["spans"][0]
-	run_until(sim16, func(): return h16["s"] > deck16["s0"] + 2.0, 30.0)
-	check(h16 in sim16.hordes and h16["s"] > deck16["s0"], "A's horde is on the rotating deck")
+	run_until(sim16, func(): return not h16["streaming"] and h16["s"] - Sim.chain_length(h16) > deck16["s0"] + 0.3, 30.0)
+	check(h16 in sim16.hordes and h16["s"] < deck16["s1"] and h16["s"] - Sim.chain_length(h16) > deck16["s0"],
+			"A's whole line is on the rotating deck")
+	var a16: float = h16["units"]
+	sim16.fx_events.clear()
 	sim16.fire_relay(0)
-	run_until(sim16, func(): return sim16.nodes[0]["relay_phase"] == "moving", 5.0)
-	check(h16["state"] == "ride" and h16.has("ride"), "during the pivot the horde rides the deck")
+	sim16.nodes[0]["relay_t"] = 0.0                   # skip the warning: the line must still be on the deck at the tick
+	sim16.step(0.02)
+	check(sim16.nodes[0]["relay_phase"] == "moving", "the deck starts to turn")
+	check(not (h16 in sim16.hordes), "the relay owner's own line on the turning deck is gone: flung off")
+	check(absf(sim16.fall_losses.get("A", 0.0) - a16) < 0.01, "all of it counts as a fall loss (%.1f of %.1f)" % [sim16.fall_losses.get("A", 0.0), a16])
+	var fl16 := sim16.fx_events.filter(func(e): return e["type"] == "fling")
+	check(fl16.size() == 1 and fl16[0]["node"] == 0 and fl16[0]["seat"] == "A" and fl16[0]["units"] == Rules.shown(a16),
+			"one fling fx for the HUD: node, owner of the flung units, shown units (%s)" % str(fl16.map(func(e): return [e["node"], e["seat"], e["units"]])))
+	check(not sim16.fx_events.any(func(e): return e["type"] == "fall"), "flung, not the plain fall visual")
+	check(sim16.events.any(func(e): return e["type"] == "fall" and e.get("why", "") == "fling"), "the fall event is recorded (no combat credit)")
+	check(not sim16.hordes.any(func(x): return x.has("ride")), "nobody rides a rotation")
 	run_until(sim16, func(): return sim16.nodes[0]["relay_phase"] == "", 5.0)
-	check(h16 in sim16.hordes and not h16.has("ride"), "after the pivot it is still alive and free")
-	check(h16["route"][0] == 2 or h16["route"][0] == 6, "and now stands on the deck to the pier it was rotated to (route from %s)" % str(h16["route"][0]))
-	check(sim16.fall_losses.get("A", 0.0) == 0.0, "nothing fell: the new state points at a pier, not the void")
+	check(sim16.nodes[0]["relay_phase"] == "" and sim16.nodes[0]["relay_cd"] > 0.0, "the turn ends and the cooldown runs as before")
+	# an enemy line partly on the deck loses only the part on it; the rest is behind a deck that is gone
+	var sim16b := Sim.new()
+	sim16b.setup(rot_map, rot_pos, {7: "A", 10: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim16b.nodes[0]["owner"] = "A"
+	sim16b.nodes[0]["units"] = 50.0
+	sim16b.nodes[1]["owner"] = "B"
+	sim16b.nodes[1]["units"] = 200.0
+	var h16b := sim16b.send(1, 0, 1.0)                # B attacks A's relay over its turning deck
+	var deck16b: Dictionary = h16b["spans"][0]
+	run_until(sim16b, func(): return h16b["s"] > deck16b["s0"] + 3.0, 30.0)
+	var tail16b: float = h16b["s"] - Sim.chain_length(h16b)
+	check(tail16b < deck16b["s0"], "B's line is only partly on the deck (tail %.1f m before it)" % (deck16b["s0"] - tail16b))
+	var b16: float = h16b["units"]
+	var on16b: float = b16 * (h16b["s"] - deck16b["s0"]) / Sim.chain_length(h16b)
+	sim16b.fire_relay(0)
+	sim16b.nodes[0]["relay_t"] = 0.0
+	sim16b.step(0.02)
+	var lost16b: float = sim16b.fall_losses.get("B", 0.0)
+	check(absf(lost16b - on16b) < 0.5 * on16b + 1.0, "the enemy loses the part on the deck (%.1f, expected about %.1f of %.1f)" % [lost16b, on16b, b16])
+	check(lost16b < b16 - 1.0 and (h16b in sim16b.hordes or sim16b.nodes[1]["units"] > 0.0), "the rest survives behind the deck")
+	check(sim16b.fx_events.filter(func(e): return e["type"] == "fling" and e["seat"] == "B").size() == 1, "one fling fx for B's line")
+	# the relay kinds that do not turn keep their fate: switch falls (plain fall fx), retract carries
+	check(sim14.fx_events.any(func(e): return e["type"] == "fall") and not sim14.fx_events.any(func(e): return e["type"] == "fling"),
+			"a switch deck still drops its troops with the plain fall")
+	check(not sim15.fx_events.any(func(e): return e["type"] == "fling"), "a retract still carries, nobody is flung")
+	# AI: a rotation is lethal now - it fires for the kill, never with its own line on the deck
+	var sim16c := Sim.new()
+	sim16c.setup(rot_map, rot_pos, {7: "A", 10: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim16c.nodes[0]["owner"] = "A"
+	sim16c.nodes[0]["units"] = 80.0
+	sim16c.nodes[1]["owner"] = "B"
+	sim16c.nodes[1]["units"] = 60.0
+	var h16c := sim16c.send(1, 0, 1.0)
+	run_until(sim16c, func(): return not h16c["streaming"] and h16c["s"] - Sim.chain_length(h16c) > h16c["spans"][0]["s0"], 30.0)
+	SeatAI.new("A", 2.0, "Standard").think(sim16c, 10.0)
+	check(sim16c.nodes[0]["relay_phase"] == "warning", "the AI fires its rotation when an enemy line is on the deck")
+	var sim16d := Sim.new()
+	sim16d.setup(rot_map, rot_pos, {7: "A", 10: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim16d.nodes[0]["owner"] = "A"
+	sim16d.nodes[1]["owner"] = "A"
+	sim16d.nodes[1]["units"] = 12.0
+	sim16d.nodes[4]["owner"] = "B"
+	sim16d.nodes[4]["units"] = 12.0
+	var h16d := sim16d.send(1, 0, 1.0)                # A's own line on deck 1-0, B's on deck 4-0: both turn
+	var e16d := sim16d.send(4, 0, 1.0)
+	run_until(sim16d, func(): return not e16d["streaming"] and e16d["s"] - Sim.chain_length(e16d) > e16d["spans"][0]["s0"] + 0.3, 30.0)
+	var both16d: bool = h16d in sim16d.hordes and e16d in sim16d.hordes and h16d["s"] > h16d["spans"][0]["s0"] \
+			and h16d["s"] < h16d["spans"][0]["s1"] and e16d["s"] < e16d["spans"][0]["s1"]
+	check(both16d, "A's own line and B's line are both on decks the rotation turns")
+	SeatAI.new("A", 2.0, "Standard").think(sim16d, 10.0)
+	check(sim16d.nodes[0]["relay_phase"] == "", "...and the AI never fires it while its own line is on it")
+	sim16d.hordes.erase(h16d)
+	SeatAI.new("A", 2.0, "Standard").think(sim16d, 10.0)
+	check(sim16d.nodes[0]["relay_phase"] == "warning", "(with its own line gone it fires for the kill)")
 
 	# remote (Remote Span): the centre console controls the diagonal decks elsewhere
 	var rem_map := MapBuilder.load_map("res://maps/011-remote-span.json")
@@ -749,7 +815,7 @@ func _init() -> void:
 
 	# ---------------------------------------------------------------- Alpha 16: Brawl moves like Alpha 11
 	Rules.bridge_combat = false
-	check(is_equal_approx(Rules.move_speed(), 8.9 * 0.8) and Rules.platform_mult() == 1.0, "BRAWL: 7.1 m/s on decks and platforms alike (Alpha 11 speed less 20 %)")
+	check(is_equal_approx(Rules.move_speed(), 8.9 * 0.8 * 0.8) and Rules.platform_mult() == 1.0, "BRAWL: 5.7 m/s on decks and platforms alike (Alpha 11 speed less 20 % twice)")
 	check(absf(Rules.exit_rate() - 47.9167) < 0.01, "BRAWL: 9.6 shown units/s out of the door (Alpha 11: one every 12 px)")
 	var bmap := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var bsim := Sim.new()

@@ -17,6 +17,22 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
+## 0.18.4 (2026-09-26): rotation fling, ring by ring falls, Last Stand zoom, emblems, BRAWL pace
+
+- Rotation relays fling riders (Sim._relay_fling -> fx "fling" -> Fx._fling_horde; main.gd toast;
+  SeatAI rotation branch with _fling_toll / _fling_cost). Retract / switch / remote still ride
+  (Sim._relay_board). BRAWL plain falls use creature bodies (Fx._fall_horde BRAWL branch).
+- Last Stand: Sim._drop_sequence orders a ring's platforms (never an island, relays last, far side first),
+  Sim.last_stand_queue + drop_in(id); Rules.LAST_STAND_DROP_GAP 5 s; snapshots carry the queue (ls[12]).
+- Camera: main._fit_nodes / _survivor_fit / _collapse_zoom (COLLAPSE_ZOOM_DELAY 1 s, _SECONDS 1.5 s,
+  _MAX 2.5 - the 2.5x limit is the agent's choice, confirm with Daniele).
+- HUD: Hud.emblem_texture (mipmapped SVG copies), owner emblems replace seat letters in badges, inspector
+  and toasts (regex _SEAT_WORD). Check the web build's emblems on a phone (readback fallback).
+- BRAWL: Rules.BRAWL_SPEED 8.9 * 0.8 * 0.8 (5.7 m/s); UnitView pour-in (_pour per horde, BEND 1 m chord
+  headings, eased facing).
+- Open for Daniele: should the part of a line behind a flung / vanished deck stay on its pier (split the
+  line) instead of walking off the lip (today, as for switch and Last Stand decks)?
+
 ## Maps 4.2 - built in 0.18.2 (current)
 
 - `References/Ooze Syndicate maps 4.2`: 20 compact maps in metres at the kit's sizes, no plazas, Alpha 11

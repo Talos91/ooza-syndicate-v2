@@ -30,6 +30,7 @@ const SOFTNESS := {"ember": 0.4, "solar": 0.4}
 # of the route a body shrinks and dips into the doorway, and a body leaving grows out of it the same
 # way, so a column pours in and out instead of popping.
 const DOOR := 1.6
+const BEND := 1.0                    # metres either side a body reads its heading over (corners)
 
 var _mesh := {}                      # faction -> Mesh
 var _tex := {}                       # faction -> albedo Texture2D
@@ -38,6 +39,8 @@ var _mm := {}                        # "faction|seat" -> MultiMeshInstance3D
 var _xf := {}                        # "faction|seat" -> [Transform3D] this frame
 var _disc: MultiMeshInstance3D
 var _discs: Array = []               # [[Transform3D, Color]] this frame
+var _pour := {}                      # horde id -> {"L", "head", "t", "count"} while its column walks in
+var _seen := {}                      # horde ids drawn this frame (the rest are dropped from _pour)
 
 
 func _ready() -> void:
@@ -99,6 +102,7 @@ func begin() -> void:
 	for k in _xf:
 		(_xf[k] as Array).clear()
 	_discs.clear()
+	_seen.clear()
 
 
 func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob := 0.0, roll := 0.0, squeeze := 0.0, size := 1.0) -> void:
@@ -119,16 +123,40 @@ func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
 	## j % 3; lanes open from single file over the first and last 85 px (6.6 m) of the route, so a
 	## send files out of the door, spreads three across on the bridge and files back in at the target;
 	## each body faces its own way along the route. Arriving bodies keep walking in at their spacing.
+	## Every body keeps ONE identity for the whole trip (Daniele, Alpha 18: "on brawl units entering
+	## the building still feels a bit strange as if the units were violently shaking toward the door
+	## instead of orderly entering"): body i is the i-th out of the door and walks at head - i * gap
+	## with its own lane and hop phase from start to finish. While the column pours in, the head walks
+	## on past the door at the marching pace instead of being recounted from the units left - that
+	## recount re-numbered every body each time one went in, so the whole column swapped lanes and hop
+	## phase and lurched a gap forward about ten times a second.
 	var n := clampi(int(ceil(shown_units)), 1, MAX_PER_HORDE)
 	var gap := Rules.BRAWL_SPACING
 	var L: float = h["L"]
 	var head: float = h["s"]
-	if h["state"] == "absorb":                     # the tail walks on; the front has gone in
-		head = L - Sim.chain_length(h) + (n - 1) * gap
+	var count := n                                 # bodies out of the door so far (the front ones may be in)
+	var id: int = h["id"]
+	_seen[id] = true
+	if h["state"] == "absorb":                     # the front has reached the door: the column walks on in
+		var w: Dictionary = _pour.get(id, {})
+		if w.is_empty() or w["L"] != L or time < w["t"] - 1.0:
+			w = {"L": L, "head": L, "t": time, "count": n}
+			_pour[id] = w
+		w["head"] += Rules.move_speed() * maxf(time - w["t"], 0.0)   # a guest's clock may step back to a snapshot:
+		w["t"] = maxf(w["t"], time)                                   # hold still until it catches up
+		head = w["head"]
+		var inside := maxi(int(ceil((head - L) / gap)), 0)
+		if h["streaming"]:                         # the door still emits: new bodies file out behind
+			w["count"] = maxi(w["count"], mini(int(head / gap) + 1, inside + n))
+		w["count"] = mini(w["count"], inside + n + 1)   # losses on the way in thin the tail, not the front
+		count = w["count"]
+	else:
+		_pour.erase(id)
 	var soft: float = SOFTNESS.get(h["faction"], 1.0)
 	var to_cam := Rules.front_dir()
 	var screen_right := Vector3(1, 0, 0).rotated(Vector3.UP, Rules.view_yaw)
-	for j in range(n):
+	var first := clampi(int(ceil((head - L) / gap)), 0, count)   # the ones before it are through the door
+	for j in range(first, mini(count, first + MAX_PER_HORDE)):
 		var dist := head - j * gap
 		if dist < 0.0:
 			break
@@ -140,19 +168,27 @@ func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
 			continue                                  # through the door
 		var door := smoothstep(0.0, 1.0, clampf(minf(travel, L - travel) / DOOR, 0.0, 1.0))
 		var smp := Sim.sample(h, travel)
-		var fwd: Vector3 = smp[1]
+		# the heading over the metre either side, not the polyline segment's: where the bridge meets the
+		# platform ring (and round the ring's segments) the side lanes swing round the corner instead of
+		# stepping sideways, and a body turns from one three-quarter view to the other over a stride
+		var fwd: Vector3 = (Sim.sample(h, travel + BEND)[0] as Vector3) - (Sim.sample(h, travel - BEND)[0] as Vector3)
+		fwd.y = 0.0
+		fwd = fwd.normalized() if fwd.length() > 0.001 else (smp[1] as Vector3)
 		var side := fwd.cross(Vector3.UP).normalized()
-		var row_size := mini(lanes, n - int(j / lanes) * lanes)
+		var row_size := mini(lanes, count - int(j / lanes) * lanes)
 		var lateral := (col - (row_size - 1) * 0.5) * LANE * expansion
-		var facing: float = 1.0 if fwd.dot(screen_right) >= 0.0 else -1.0
+		var facing := clampf(fwd.dot(screen_right) * 2.0, -1.0, 1.0)
 		var yaw := Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing))
-		var phase := fmod(j * 0.618 + float(h["id"]) * 0.137, 1.0)
+		var phase := fmod(j * 0.618 + float(id) * 0.137, 1.0)
 		var wave := sin(time * WAVE + phase * TAU)
 		add_unit(h["faction"], h["owner"], (smp[0] as Vector3) + side * lateral * door + Vector3.DOWN * 0.35 * (1.0 - door), yaw,
 				maxf(0.0, wave) * HOP * door, wave * ROLL, wave * SQUASH * soft, lerpf(0.12, 1.0, door))
 
 
 func flush() -> void:
+	for id in _pour.keys():
+		if not _seen.has(id):
+			_pour.erase(id)
 	for k in _mm:
 		var arr: Array = _xf[k]
 		var mm: MultiMesh = (_mm[k] as MultiMeshInstance3D).multimesh

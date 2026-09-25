@@ -4,7 +4,8 @@ extends Node3D
 ## turning build ring), capture pulses, cannon beams, relay warnings (blinking state lights + a ghost
 ## of the next deck), relay motion (rotation pivots the turntable and its decks, retract slides the
 ## deck into its gate, switch/remote dissolve and assemble), the Last Stand warning ring and the falls
-## (platform, deck fragments, waterfall of goo, hordes tumbling into the void), the selection ring,
+## (platform, deck fragments, waterfall of goo, hordes tumbling into the void, lines flung off a
+## turning rotation deck), the selection ring,
 ## owner-coloured deck lights (SIEGE) and Alpha 11's half-bridge neon trims (BRAWL).
 
 var sim: Sim
@@ -28,6 +29,9 @@ var _collapsed := {}
 var _lights_classic := false  # the mode the deck lights were last laid out for (true = BRAWL)
 var _pulses: Array = []     # transient rings: {mesh, t, dur, color}
 var _frag_names := ["girder_l", "girder_r", "plate_a", "plate_b", "plate_c", "truss"]
+var _body := {}             # faction -> [Mesh, scale to UnitView.UNIT_SIZE, albedo Texture2D]: BRAWL fling bodies
+var _body_mat := {}         # "faction|seat" -> Material (UnitView's creature look)
+var _fall_debt := {}        # seat -> shown units lost to BRAWL falls not yet drawn as a body
 
 
 func setup(w: Node3D, s: Sim, v: Dictionary, hv: HordeView) -> void:
@@ -80,6 +84,8 @@ func handle(ev: Dictionary) -> void:
 			_restore_edges(n)
 		"fall":
 			_fall_horde(ev)
+		"fling":
+			_fling_horde(ev)
 		"collapse":
 			_collapse(ev["node"], str(ev.get("from", "")))
 
@@ -296,7 +302,8 @@ func _last_stand_warning(n: Dictionary) -> void:
 	var ring: MeshInstance3D = _warn_rings[id]
 	ring.visible = warned
 	if warned:
-		var blink := 0.5 + 0.5 * sin(sim.time * (4.0 + 12.0 * (1.0 - sim.last_stand_warn_t / Rules.LAST_STAND_WARNING)))
+		var left: float = sim.drop_in(id) if sim.v3 else sim.last_stand_warn_t   # 0.18.4: each platform counts to its own drop
+		var blink := 0.5 + 0.5 * sin(sim.time * (4.0 + 12.0 * (1.0 - clampf(left / Rules.LAST_STAND_WARNING, 0.0, 1.0))))
 		ring.position = n["pos"] + Vector3(0, 0.3, 0)
 		ring.scale = Vector3.ONE * (Rules.R + 0.9)
 		ring.transparency = 0.2 + 0.5 * blink
@@ -398,11 +405,27 @@ func _decks() -> void:
 # ------------------------------------------------------------------ falls
 func _fall_horde(ev: Dictionary) -> void:
 	## Units lost to a fall tumble into the void as goo patches (waterfall board: the sheet at the
-	## lip thins into strands and drops - here the patches tilt, drop and trail droplets).
+	## lip thins into strands and drops - here the patches tilt, drop and trail droplets). BRAWL has no
+	## goo: its Alpha 11 bodies tumble down instead, one per shown unit (a line pouring off a lip loses
+	## fractions of a unit per step: they add up per seat until a whole body drops).
 	var faction: String = ev["faction"]
+	var seat: String = ev["seat"]
+	if not Rules.bridge_combat:
+		var debt: float = _fall_debt.get(seat, 0.0) + Rules.shown_f(float(ev.get("units", 0.0)))
+		var n := mini(int(debt), FLING_MAX_BODIES)
+		_fall_debt[seat] = debt - int(debt)
+		for b in _spawn_bodies(faction, seat, ev["pts"], n):
+			var mi: MeshInstance3D = b[0]
+			var tw := create_tween()
+			tw.set_parallel(true)
+			var spin := Vector3(randf_range(-2.5, 2.5), randf_range(-1.0, 1.0), randf_range(-2.5, 2.5))
+			tw.tween_property(mi, "position", (b[1] as Vector3) + Vector3(randf_range(-1.5, 1.5), -FLING_DROP, randf_range(-1.5, 1.5)), 1.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+			tw.tween_property(mi, "rotation", mi.rotation + spin, 1.4)
+			tw.tween_property(mi, "scale", mi.scale * 0.7, 1.4)
+			tw.chain().tween_callback(mi.queue_free)
+		return
 	hordes.load_faction(faction)
 	var mesh: Mesh = hordes.meshes[faction].get("body_a_lod1", null)
-	var seat: String = ev["seat"]
 	for p in ev["pts"]:
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
@@ -428,6 +451,168 @@ func _fall_horde(ev: Dictionary) -> void:
 		drops.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 		drops.emission_sphere_radius = 1.2
 	add_child(drops)
+
+
+# Rotation relays (Daniele, 0.18.3: "when a rotating bridge turns all units that are on it are shaken
+# down into the void as if the fall due to centrifugal power"): every body is thrown off the deck -
+# outward, away from the pivot along the deck, plus a sideways kick the way the deck turns - arcs up a
+# little, tumbles and drops FLING_DROP m into the void over FLING_TIME s.
+const FLING_TIME := 1.3
+const FLING_DROP := 26.0             # as deep as a fall (_fall_horde)
+const FLING_OUT := 8.0               # m/s outward; grows with the distance from the pivot (centrifugal)
+const FLING_SIDE := 6.5              # m/s sideways, the way the deck turns
+const FLING_UP := 3.5                # m/s up: the shake throws them before they drop
+const FLING_MAX_BODIES := 120        # BRAWL: one Alpha 11 body per shown unit, up to this
+
+
+func _fling_horde(ev: Dictionary) -> void:
+	## SIEGE flings the line's goo patches (and a spray of droplets), BRAWL flings Alpha 11 creature
+	## bodies - one per shown unit, three across like UnitView's column - never goo.
+	var pts: Array = ev.get("pts", [])
+	if pts.is_empty():
+		return
+	var faction: String = ev["faction"]
+	var seat: String = ev["seat"]
+	var centre: Vector3 = ev["centre"]
+	var turn: float = ev.get("turn", 1.0)
+	if Rules.bridge_combat:
+		hordes.load_faction(faction)
+		var mesh: Mesh = hordes.meshes[faction].get("body_a_lod1", null)
+		for p in pts:
+			var mi := MeshInstance3D.new()
+			mi.mesh = mesh
+			if mesh:
+				for s in range(mesh.get_surface_count()):
+					var m := mesh.surface_get_material(s) as BaseMaterial3D
+					var is_creature := m != null and m.albedo_texture != null
+					mi.set_surface_override_material(s, Mats.creature(faction, seat, hordes.textures[faction])
+							if is_creature else Mats.goo(seat))
+			mi.rotation.y = randf() * TAU
+			add_child(mi)
+			_fling_body(mi, p, centre, turn, Vector3(0.6, 1.3, 0.6))
+		var spray := _waterfall(seat, 0.9, 1.2)
+		spray.position = pts[0]
+		spray.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		spray.emission_sphere_radius = 1.2
+		var out: Vector3 = ((pts[0] as Vector3) - centre) * Vector3(1, 0, 1)
+		spray.direction = (out.normalized() + Vector3(0, 0.6, 0)) if out.length() > 0.01 else Vector3.UP
+		spray.spread = 40.0
+		spray.initial_velocity_min = 3.0
+		spray.initial_velocity_max = 7.0
+		add_child(spray)
+		return
+	for b in _spawn_bodies(faction, seat, pts, clampi(int(ev.get("units", 1)), 1, FLING_MAX_BODIES)):
+		_fling_body(b[0], b[1], centre, turn, (b[0] as MeshInstance3D).scale * 0.7)
+
+
+func _spawn_bodies(faction: String, seat: String, pts: Array, n: int) -> Array:
+	## BRAWL: n Alpha 11 bodies laid along the lost stretch three across, as UnitView draws a column
+	## (owner-coloured creature, UnitView's glow). Returns [[MeshInstance3D, start position]].
+	var out := []
+	var body := _body_for(faction)
+	if body.is_empty() or pts.is_empty() or n <= 0:
+		return out
+	var mat := _body_mat_for(faction, seat, body[2])
+	var line := _polyline(pts)
+	var rows := int(ceil(n / float(UnitView.ACROSS)))
+	for j in range(n):
+		var row := int(j / float(UnitView.ACROSS))
+		var col := j % UnitView.ACROSS
+		var at := _along(line, 0.0 if rows <= 1 else float(row) / float(rows - 1))
+		var side: Vector3 = (at[1] as Vector3).cross(Vector3.UP).normalized()
+		var row_size := mini(UnitView.ACROSS, n - row * UnitView.ACROSS)
+		var p: Vector3 = (at[0] as Vector3) + side * (col - (row_size - 1) * 0.5) * UnitView.LANE + Vector3(0, 0.08, 0)
+		var mi := MeshInstance3D.new()
+		mi.mesh = body[0]
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.scale = Vector3.ONE * float(body[1])
+		mi.rotation.y = Rules.heading(Rules.front_dir()) + UnitView.MODEL_YAW + randf_range(-0.5, 0.5)
+		mi.position = p
+		add_child(mi)
+		out.append([mi, p])
+	return out
+
+
+func _fling_body(mi: MeshInstance3D, p: Vector3, centre: Vector3, turn: float, end_scale: Vector3) -> void:
+	## One flung body: a ballistic arc (outward + sideways + a little up, then gravity to FLING_DROP m
+	## below at FLING_TIME) with a tumble. The deck turns by -angle about UP (_relay_motion), so a
+	## point on it moves along -turn * (UP x r).
+	var r := (p - centre) * Vector3(1, 0, 1)
+	var radius := r.length()
+	var out := r / radius if radius > 0.01 else Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized()
+	var kick := Vector3.UP.cross(out) * -turn
+	var reach := clampf(radius / 12.0, 0.6, 2.0)        # farther from the pivot = thrown harder
+	var vel := out * FLING_OUT * reach * randf_range(0.8, 1.2) + kick * FLING_SIDE * reach * randf_range(0.7, 1.3) \
+			+ Vector3(randf_range(-0.8, 0.8), 0, randf_range(-0.8, 0.8))
+	var up := FLING_UP * randf_range(0.7, 1.3)
+	var g := 2.0 * (FLING_DROP + up * FLING_TIME) / (FLING_TIME * FLING_TIME)
+	var start_rot := mi.rotation
+	var spin := Vector3(randf_range(-7.0, 7.0), randf_range(-4.0, 4.0), randf_range(-7.0, 7.0))
+	var start_scale := mi.scale
+	mi.position = p
+	var tw := create_tween()
+	tw.tween_interval(randf_range(0.0, 0.18))           # shaken off, not launched as one block
+	tw.tween_method(func(t: float):
+		if is_instance_valid(mi):
+			mi.position = p + vel * t + Vector3(0, up * t - 0.5 * g * t * t, 0)
+			mi.rotation = start_rot + spin * t
+			mi.scale = start_scale.lerp(end_scale, t / FLING_TIME), 0.0, FLING_TIME, FLING_TIME)
+	tw.tween_callback(mi.queue_free)
+
+
+func _body_for(faction: String) -> Array:
+	## The approved Alpha 11 unit model (assets/units/<faction>.glb, loaded as UnitView loads it).
+	if not _body.has(faction):
+		_body[faction] = []
+		var scene: PackedScene = load("res://assets/units/%s.glb" % faction) if Rules.FACTIONS.has(faction) else null
+		if scene:
+			var root: Node = scene.instantiate()
+			for mi in root.find_children("*", "MeshInstance3D", true, false):
+				var mesh: Mesh = (mi as MeshInstance3D).mesh
+				var aabb := mesh.get_aabb()
+				var src := mesh.surface_get_material(0) as BaseMaterial3D
+				_body[faction] = [mesh, UnitView.UNIT_SIZE / maxf(maxf(aabb.size.x, aabb.size.z), 0.001),
+						src.albedo_texture if src else null]
+				break
+			root.free()
+	return _body[faction]
+
+
+func _body_mat_for(faction: String, seat: String, tex: Texture2D) -> Material:
+	var key := "%s|%s" % [faction, seat]
+	if not _body_mat.has(key):
+		if tex:
+			var m: ShaderMaterial = (Mats.creature(faction, seat, tex) as ShaderMaterial).duplicate()
+			m.set_shader_parameter("self_glow", 0.45)      # UnitView's column look
+			_body_mat[key] = m
+		else:
+			_body_mat[key] = Mats.goo(seat)
+	return _body_mat[key]
+
+
+static func _polyline(pts: Array) -> Array:
+	## [points, cumulative lengths] of the flung stretch.
+	var cum := [0.0]
+	for i in range(1, pts.size()):
+		cum.append(float(cum[-1]) + (pts[i] as Vector3).distance_to(pts[i - 1]))
+	return [pts, cum]
+
+
+static func _along(line: Array, u: float) -> Array:
+	## [position, unit direction] at fraction u of the polyline.
+	var pts: Array = line[0]
+	var cum: Array = line[1]
+	if pts.size() < 2 or float(cum[-1]) <= 0.001:
+		return [pts[0], Vector3.RIGHT]
+	var d: float = u * float(cum[-1])
+	for i in range(1, pts.size()):
+		if d <= float(cum[i]) or i == pts.size() - 1:
+			var a: Vector3 = pts[i - 1]
+			var b: Vector3 = pts[i]
+			var seg: float = maxf(float(cum[i]) - float(cum[i - 1]), 0.001)
+			return [a.lerp(b, clampf((d - float(cum[i - 1])) / seg, 0.0, 1.0)), (b - a).normalized()]
+	return [pts[-1], Vector3.RIGHT]
 
 
 func _waterfall(seat: String, radius: float, seconds: float) -> CPUParticles3D:

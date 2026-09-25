@@ -2,8 +2,9 @@ class_name Hud
 extends CanvasLayer
 ## The match interface (2.0): Alpha 11's chrome and layout brought over in full - top bar (emblem,
 ## your total, timer, rivals, strength bar), pause menu, side send panel with the fractions and the
-## selected vat's count, node badges floating beside their nodes (count - the seat letter instead on
-## enemy nodes in SIEGE or when enemy counts are hidden -, emblem, tier, relay state, build bar), the
+## selected vat's count, node badges floating beside their nodes (count - the owner's emblem in the
+## owner's colour instead on enemy nodes in SIEGE or when enemy counts are hidden -, emblem, tier,
+## relay state, build bar), the
 ## ring inspector with costed actions, a hidden ability dock (slots waiting on the 2.0 skill pools),
 ## toasts, the Last Stand banner, status line and drop order, the results panel with match stats,
 ## and the debug panel.
@@ -30,6 +31,9 @@ var badges := {}                     # node id -> {panel, label, sub, emblem, bu
 var inspector: Control
 var inspector_id := -1
 var inspector_label: Label
+var inspector_emblem: TextureRect       # the header: owner's emblem + faction name in the owner's colour
+var inspector_who: Label
+var inspector_first: Label
 var inspector_progress: ProgressBar
 var inspector_actions: Array = []
 var notices: VBoxContainer
@@ -75,6 +79,8 @@ static func badge_style(color: Color) -> StyleBoxFlat:
 
 
 const EMBLEM_TINT := preload("res://shaders/emblem_tint.gdshader")
+const BADGE_EMBLEM := Vector2(12, 10)          # under a BRAWL count (Alpha 11)
+const BADGE_EMBLEM_OWNER := Vector2(20, 20)    # in place of a hidden count: about the count's own height
 
 
 static func tint_emblem(rect: TextureRect, color: Color) -> void:
@@ -83,6 +89,59 @@ static func tint_emblem(rect: TextureRect, color: Color) -> void:
 	m.set_shader_parameter("tint", color)
 	rect.material = m
 	rect.modulate = Color.WHITE
+
+
+static var _emblem_cache := {}
+
+
+static func emblem_texture(faction: String) -> Texture2D:
+	## A faction emblem for the HUD's small spots (badges, inspector, toasts). The SVGs are 200 px and
+	## imported without mipmaps, so drawn at ~20 px their thin strokes broke up: a mipmapped copy is
+	## made once per faction (the imported texture itself if its image can't be read back).
+	if _emblem_cache.has(faction):
+		return _emblem_cache[faction]
+	var path := "res://assets/ui/%s.svg" % faction
+	var tex: Texture2D = load(path if ResourceLoader.exists(path) else "res://assets/ui/null.svg")
+	var out: Texture2D = tex
+	var img: Image = tex.get_image() if tex else null
+	if img and not img.is_empty():
+		img = img.duplicate()
+		if img.is_compressed():
+			img.decompress()
+		img.convert(Image.FORMAT_RGBA8)
+		img.fix_alpha_edges()                          # no dark fringe in the smaller mip levels
+		img.generate_mipmaps()
+		# the thin-stroke emblems (NULL, VEX) averaged down to a faint haze at badge size: the coverage
+		# of the small levels (50 px and below) is lifted so their strokes keep reading as lines
+		var lut := PackedByteArray()
+		lut.resize(256)
+		for a in range(256):
+			lut[a] = int(round(255.0 * pow(a / 255.0, 0.5)))
+		var data := img.get_data()
+		var from := img.get_mipmap_offset(mini(2, img.get_mipmap_count()))
+		for i in range(from + 3, data.size(), 4):
+			data[i] = lut[data[i]]
+		img = Image.create_from_data(img.get_width(), img.get_height(), true, Image.FORMAT_RGBA8, data)
+		out = ImageTexture.create_from_image(img)
+	_emblem_cache[faction] = out
+	return out
+
+
+func seat_emblem(seat: String, size_px: Vector2) -> TextureRect:
+	## Daniele: "don't use A B and C but use emblems in the color of the owner; the emblem identifies
+	## their chosen race" - the owner's faction emblem, tinted in the owner's seat colour.
+	var r := TextureRect.new()
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	r.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	r.custom_minimum_size = size_px * ui_scale
+	r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if seat != "":
+		r.set_meta("seat", seat)
+		r.texture = emblem_texture(str(sim.factions.get(seat, "null")))
+		tint_emblem(r, Rules.seat_color(seat))
+	return r
 
 
 func text_label(text: String, size_value: int = 20, color: Color = Color.WHITE) -> Label:
@@ -153,12 +212,8 @@ func setup(m: Node3D) -> void:
 		var sub := text_label("", 9, Color("c8e6ee"))
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		column.add_child(sub)
-		var emblem := TextureRect.new()                 # classic: Alpha 11's faction emblem under the count
-		emblem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		emblem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		emblem.custom_minimum_size = Vector2(12, 10) * ui_scale
-		emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		emblem.visible = false
+		var emblem := seat_emblem("", BADGE_EMBLEM)     # classic: Alpha 11's faction emblem under the count;
+		emblem.visible = false                          # the owner's emblem in the count's place where it is hidden
 		column.add_child(emblem)
 		var sb_bg := StyleBoxFlat.new()
 		sb_bg.bg_color = Color(0, 0, 0, 0.5)
@@ -419,7 +474,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		var next := ""
 		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
 		if sim.v3 and not sim.last_stand_warn.is_empty():
-			next = "RING %d FALLS IN %d s (%d nodes)" % [sim.last_stand_next, int(ceil(sim.last_stand_warn_t)), sim.last_stand_warn.size()]
+			next = "RING %d FALLING · next platform in %d s (%d left)" % [sim.last_stand_next, int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
 		elif sim.last_stand_warn_node >= 0:
 			next = "NODE %d FALLS IN %d s" % [sim.last_stand_warn_node, int(ceil(sim.last_stand_warn_t))]
 		elif sim.last_stand_next < pending:
@@ -474,15 +529,20 @@ func _badges(cam: Camera3D) -> void:
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
 		var classic := not Rules.bridge_combat
-		if owner == "" or sim.allied(owner, human) or (classic and not Rules.hide_enemy_counts):   # Brawl = Alpha 11: every count, unless hidden
+		var masked := not (owner == "" or sim.allied(owner, human) or (classic and not Rules.hide_enemy_counts))   # Brawl = Alpha 11: every count, unless hidden
+		label.visible = not masked
+		if not masked:
 			label.text = str(Rules.shown(n["units"]))
-		else:
-			label.text = owner                            # no numbers on enemy nodes: seat letter only
+		# no numbers on enemy nodes: the owner's emblem in the owner's colour stands in the count's place
+		# (Daniele: "don't use A B and C but use emblems in the color of the owner")
 		var emb: TextureRect = b["emblem"]
-		emb.visible = classic and owner != ""
+		emb.visible = owner != "" and (classic or masked)
+		emb.custom_minimum_size = (BADGE_EMBLEM_OWNER if masked else BADGE_EMBLEM) * ui_scale
+		if emb.get_index() != (0 if masked else 2):       # the count's row when it stands in for it, else under the tier
+			emb.get_parent().move_child(emb, 0 if masked else 2)
 		if emb.visible and emb.get_meta("f", "") != sim.factions.get(owner, ""):
 			emb.set_meta("f", sim.factions.get(owner, ""))
-			emb.texture = load("res://assets/ui/%s.svg" % sim.factions.get(owner, "null"))
+			emb.texture = emblem_texture(str(sim.factions.get(owner, "null")))
 		if emb.visible and emb.get_meta("seat", "") != owner:
 			emb.set_meta("seat", owner)
 			tint_emblem(emb, Rules.seat_color(owner))
@@ -510,7 +570,7 @@ func _badges(cam: Camera3D) -> void:
 			elif sim.is_final(n["id"]):
 				parts.append("FINAL")
 		if sim.is_warned(n["id"]):
-			parts.append("FALLS %d" % int(ceil(sim.last_stand_warn_t)))
+			parts.append("FALLS %d" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t)))
 		sub.text = " ".join(parts)
 		var build_bar: ProgressBar = b["build"]
 		build_bar.visible = n["build_kind"] != ""
@@ -563,10 +623,26 @@ func inspect(id: int, cam: Camera3D) -> void:
 	info_style.set_content_margin_all(8)
 	info_bg.add_theme_stylebox_override("panel", info_style)
 	inspector.add_child(info_bg)
+	var info_box := VBoxContainer.new()
+	info_box.add_theme_constant_override("separation", 0)
+	info_box.custom_minimum_size = Vector2(364, 0) * ui_scale
+	info_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_bg.add_child(info_box)
+	var head := HBoxContainer.new()                   # [emblem] FACTION · first line: the owner, no seat letter
+	head.alignment = BoxContainer.ALIGNMENT_CENTER
+	head.add_theme_constant_override("separation", int(5 * ui_scale))
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_box.add_child(head)
+	inspector_emblem = seat_emblem("", Vector2(20, 20))
+	head.add_child(inspector_emblem)
+	inspector_who = text_label("", 16, Color("c8e6ee"))
+	head.add_child(inspector_who)
+	inspector_first = text_label("", 16, Color("c8e6ee"))
+	head.add_child(inspector_first)
 	inspector_label = text_label("", 16, Color("c8e6ee"))
-	inspector_label.custom_minimum_size = Vector2(364, 0) * ui_scale
+	inspector_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspector_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	info_bg.add_child(inspector_label)
+	info_box.add_child(inspector_label)
 	inspector_progress = ProgressBar.new()
 	inspector_progress.position = Vector2(-130, 82) * ui_scale
 	inspector_progress.size = Vector2(260, 12) * ui_scale
@@ -624,15 +700,23 @@ func _refresh_inspector(cam: Camera3D) -> void:
 	var p := cam.unproject_position(n["pos"] + Vector3(0, 2.0, 0))
 	inspector.position = Vector2(clampf(p.x, 250 * ui_scale, vp.x - 250 * ui_scale), clampf(p.y, 200 * ui_scale, vp.y - 200 * ui_scale))
 	var owner: String = n["owner"]
-	var who := "NEUTRAL" if owner == "" else ("SEAT %s · %s" % [owner, str(sim.factions.get(owner, "")).to_upper()])
+	# the header names the owner by emblem and faction in the owner's colour (Daniele: "don't use A B
+	# and C but use emblems in the color of the owner")
+	inspector_emblem.visible = owner != ""
+	if owner != "" and inspector_emblem.get_meta("seat", "") != owner:
+		inspector_emblem.set_meta("seat", owner)
+		inspector_emblem.texture = emblem_texture(str(sim.factions.get(owner, "null")))
+		tint_emblem(inspector_emblem, Rules.seat_color(owner))
+	inspector_who.text = "NEUTRAL" if owner == "" else str(sim.factions.get(owner, "")).to_upper()
+	inspector_who.add_theme_color_override("font_color", Color("c8e6ee") if owner == "" else Rules.seat_color(owner))
 	var lines := []
 	if owner != "" and owner != human:
-		lines.append("%s · population hidden" % who)
+		lines.append("population hidden")
 		lines.append(_structure_line(n))
 	else:
 		var what := _structure_line(n)
 		var units := "%d / %d units" % [Rules.shown(n["units"]), Rules.shown(Rules.CAPS[n["tier"]])] if Sim.has_vat(n) else "%d units" % Rules.shown(n["units"])
-		lines.append("%s · %s · %s" % [who, what, units])
+		lines.append("%s · %s" % [what, units])
 		if owner != "":
 			# Alpha 11's status line: production, and what a double-tap upgrade costs
 			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) else "no vat - garrison must be fed"
@@ -667,7 +751,9 @@ func _refresh_inspector(cam: Camera3D) -> void:
 	if sim.last_stand_active:
 		var k := sim.drop_order_of(n["id"])
 		lines.append("LAST STAND: %s" % ((("falls in wave %d" if sim.v3 else "drop #%d") % k) if k > 0 else ("THE %s - never falls" % ("LAST RING" if sim.v3 else "FINAL") if sim.is_final(n["id"]) else "")))
+	inspector_first.text = "· " + str(lines.pop_front())
 	inspector_label.text = "\n".join(lines)
+	inspector_label.visible = not lines.is_empty()
 	inspector_progress.visible = n["build_kind"] != ""
 	inspector_progress.value = Sim.build_progress(n) * 100.0
 	for a in inspector_actions:
@@ -703,6 +789,7 @@ const NOTICE_HOLD := 3.0
 const NOTICE_MAX := 3
 const WARN_WORDS := ["lost", "falls", "get out", "can't", "Can't", "No ", "needs", "refused", "rejected", "on cooldown",
 		"swap ready", "Not your", "Too many", "already", "max tier", "no further", "Nothing", "missing", "Waiting"]
+static var _SEAT_WORD := RegEx.create_from_string("(?i)\\bseat ([A-F])\\b(?: \\([^)]*\\))?")   # "seat B", "seat A (NULL)"
 const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade started", "construction started", "Restoring", "Relay fired"]
 
 
@@ -740,9 +827,29 @@ func toast(msg: String, kind := "") -> void:
 	bar.custom_minimum_size = Vector2(5, 30) * ui_scale
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(bar)
-	var l := text_label(msg, 18, Color("e6f4f8"))
-	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(l)
+	# a line naming a player ("lost to seat B", "Seat C reconnected", "you are seat A (NULL)") names
+	# them by emblem and faction in their colour instead (Daniele: "don't use A B and C")
+	var named := _SEAT_WORD.search(msg)
+	var seat := named.get_string(1).to_upper() if named else ""
+	if seat != "" and sim.factions.has(seat):
+		row.add_child(seat_emblem(seat, Vector2(24, 24)))
+		var rt := RichTextLabel.new()
+		rt.bbcode_enabled = true
+		rt.fit_content = true
+		rt.autowrap_mode = TextServer.AUTOWRAP_OFF
+		rt.scroll_active = false
+		rt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		rt.add_theme_font_override("normal_font", UI_FONT)
+		rt.add_theme_font_size_override("normal_font_size", int(18 * ui_scale))
+		rt.add_theme_color_override("default_color", Color("e6f4f8"))
+		rt.text = "%s[color=#%s]%s[/color]%s" % [msg.substr(0, named.get_start()).replace("[", "[lb]"),
+				Rules.seat_color(seat).to_html(false), str(sim.factions[seat]).to_upper(), msg.substr(named.get_end()).replace("[", "[lb]")]
+		row.add_child(rt)
+	else:
+		var l := text_label(msg, 18, Color("e6f4f8"))
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		row.add_child(l)
 	p.set_meta("text", msg)
 	p.set_meta("t", 0.0)
 	p.modulate.a = 0.0

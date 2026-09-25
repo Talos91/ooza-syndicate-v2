@@ -485,3 +485,18 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      4.2 maps of those names are new layouts), redrawn at the kit's sizes with honest decks, fair seats, no
      relays; all bake clean, taps 56-88 pt at 58 degrees. Open: relays from the design guide's retrofit plan,
      the duplicate names, Alpha 11's any-vat cannons (OPEN-QUESTIONS 2026-09-26).
+
+## 2026-09-26 - Daniele, 0.18.4 brief
+
+105. **"When a rotating bridge turns all units that are on it are shaken down into the void (centrifugal)."**
+     *Done:* rotation flings every line on its turning decks off into the void; animation, toast, AI.
+106. **"Deck speed on brawl a bit slower ... reduce by 20% brawl unit movement speed."** *Done:* 5.7 m/s.
+107. **"If the borders are gone have the camera zoom in to make it more epic."** *Done:* the view eases onto
+     the survivors after each Last Stand drop.
+108. **"On brawl units entering the building ... violently shaking toward the door instead of orderly
+     entering."** *Done:* stable body identities, continuous pour-in, smooth corners.
+109. **"Don't use A B and C but use emblems in the color of the owner; the emblem identifies their race."**
+     *Done:* badges, inspector and toasts.
+110. **"Don't make all outward rings fall at the same time but one after the other, 5 s apart, following the
+     rule for falling bridges."** *Done:* platforms drop one by one, 5 s apart, never leaving an island.
+
