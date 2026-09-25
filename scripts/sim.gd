@@ -1288,10 +1288,41 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 	if allied(n["owner"], owner):                      # own or an ally's node: reinforce it
 		n["units"] += x
 		return
+	if not Rules.bridge_combat:
+		_land_classic(n, owner, x)
+		return
 	n["siege"][owner] = n["siege"].get(owner, 0.0) + x
 	if not n["siege_dir"].has(owner):
 		var landing: Vector3 = sample(h, h["L"] - 2.0)[0]
 		n["siege_dir"][owner] = ((landing - n["pos"]) as Vector3).normalized()
+
+
+func _land_classic(n: Dictionary, seat: String, x: float) -> void:
+	## CLASSIC MODE (bridge combat OFF) = Alpha 11's core rule (Daniele: "exactly the core rule of
+	## Alpha 11"; "units wait outside - they should just go in"). Each unit is resolved the moment it
+	## reaches the target (Alpha 11 simulation.gd land()): it trades blows with the garrison until one
+	## of them is gone - an attacker kills attack / (health x garrison) defenders before dying, and takes
+	## the defender's attack / its own health per exchange. At baseline that is one-for-one. When the
+	## garrison reaches zero the survivors take the node. Nothing sits outside as a siege.
+	var att: float = attack_of(seat)
+	var hp_att: float = stat(seat, "health")
+	var d_seat: String = n["owner"]
+	var kill_per: float = att / (stat(d_seat, "health") * stat(d_seat, "garrison"))   # defenders per exchange
+	var cost_per: float = (attack_of(d_seat) if d_seat != "" else 1.0) / hp_att          # attacker per exchange
+	var ratio: float = kill_per / maxf(cost_per, 0.0001)                                  # defenders killed per attacker
+	var garrison: float = n["units"]
+	var killed: float = minf(garrison, x * ratio)
+	var spent: float = minf(x, killed / maxf(ratio, 0.0001))
+	n["units"] = garrison - killed
+	combat_losses[seat] = combat_losses.get(seat, 0.0) + spent
+	if d_seat != "":
+		combat_losses[d_seat] = combat_losses.get(d_seat, 0.0) + killed
+	var left: float = x - spent
+	if n["units"] <= 0.0001 and left > 0.0001:
+		var old: String = n["owner"]
+		_capture(n, seat, left)
+		events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old})
+		captured.emit(n["id"], seat, old)
 
 
 func _register_transit() -> void:
@@ -1300,6 +1331,8 @@ func _register_transit() -> void:
 	## (Alpha 14) no hidden shield: a passing force fights the garrison itself, the badge number.
 	for n in nodes:
 		n["transit"] = {}
+	if not Rules.bridge_combat:                        # classic (Alpha 11): waypoints are free
+		return
 	for h in hordes:
 		if h["state"] == "absorb":
 			continue
@@ -1417,6 +1450,13 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 		n["relay_t"] = 0.0
 	n["build_kind"] = ""                               # construction is cancelled by capture
 	n["build_target"] = {}
+	# conquest costs a tier (Daniele: "if a vat or tower is conquered it gets downgraded one tier,
+	# minimum 1") - both modes. A forge is single-tier and is kept as it is.
+	if n["owner"] != "" and n["owner"] != seat:
+		if n["attachment"] == "cannon":
+			n["cannon_tier"] = maxi(1, n["cannon_tier"] - 1)
+		elif Sim.has_vat(n):
+			n["tier"] = maxi(1, n["tier"] - 1)
 	n["owner"] = seat
 	n["units"] = garrison
 	n["siege"] = {}
@@ -1456,6 +1496,8 @@ func _step_last_stand(dt: float) -> void:
 	if over:
 		return
 	if not last_stand_active:
+		if not Rules.last_stand:
+			return
 		if time < Rules.LAST_STAND_TIME:
 			return
 		_start_last_stand()

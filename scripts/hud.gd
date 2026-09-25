@@ -132,6 +132,13 @@ func setup(m: Node3D) -> void:
 		var sub := text_label("", 13, Color("c8e6ee"))
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		column.add_child(sub)
+		var emblem := TextureRect.new()                 # classic: Alpha 11's faction emblem under the count
+		emblem.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		emblem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		emblem.custom_minimum_size = Vector2(22, 18) * ui_scale
+		emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		emblem.visible = false
+		column.add_child(emblem)
 		var shield_bar := ProgressBar.new()
 		shield_bar.show_percentage = false
 		shield_bar.custom_minimum_size = Vector2(0, 4 * ui_scale)
@@ -153,7 +160,7 @@ func setup(m: Node3D) -> void:
 		build_bar.add_theme_stylebox_override("background", sb_bg)
 		column.add_child(build_bar)
 		root.add_child(badge)
-		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "shield": shield_bar, "build": build_bar, "owner": "?"}
+		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "shield": shield_bar, "build": build_bar, "owner": "?"}
 	# top bar: emblem, your total, timer, rivals, strength bar (Alpha 11's score header)
 	top_panel = PanelContainer.new()
 	style_panel(top_panel, accent)
@@ -187,6 +194,7 @@ func setup(m: Node3D) -> void:
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(status_label)
 	pause_button = button("PAUSE", pause_menu, 100)
+	UiSkin.button(pause_button, main.SEAT_FACTIONS[human])
 	root.add_child(pause_button)
 	# side command panel (Alpha 11: 100/75/50/25 + the selected vat's count)
 	side_panel = PanelContainer.new()
@@ -204,6 +212,10 @@ func setup(m: Node3D) -> void:
 		b.toggle_mode = true
 		b.button_group = group
 		b.button_pressed = is_equal_approx(f, main.fraction)
+		UiSkin.button(b, main.SEAT_FACTIONS[human])         # Alpha 11's kit buttons
+		var sel := UiSkin.box("Buttons/%s/primary-default" % UiSkin.faction(main.SEAT_FACTIONS[human]))
+		b.add_theme_stylebox_override("pressed", sel)
+		b.add_theme_color_override("font_pressed_color", Color("08141c"))
 		b.pressed.connect(func(): main.fraction = f)
 		b.gui_input.connect(func(event):                  # slide a finger over the buttons to pick
 			if (event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT) or event is InputEventScreenDrag:
@@ -226,6 +238,7 @@ func setup(m: Node3D) -> void:
 	dock = HBoxContainer.new()
 	dock.add_theme_constant_override("separation", 8)
 	root.add_child(dock)
+	dock.visible = false                              # no abilities in 2.0 yet: an empty dock only covered the map
 	for slot in ["ACTIVE", "MAP", "ULTIMATE"]:
 		var b := button("%s\nCOMING SOON" % slot, Callable(), 150 if not mobile else 130, 60 if not mobile else 48, 15 if not mobile else 12)
 		b.disabled = true
@@ -292,9 +305,9 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	banner.size = Vector2(vp.x, 120)
 	banner.position = Vector2(0, vp.y * 0.28)
 	if debug_button:
-		debug_button.position = Vector2(vp.x - m.z - debug_button.size.x, vp.y - m.w - 22 * ui_scale - 8 - debug_button.size.y)
+		debug_button.position = Vector2(vp.x - m.z - debug_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # under PAUSE, off the map
 		debug_panel.size = debug_panel.get_combined_minimum_size()
-		debug_panel.position = Vector2(vp.x - m.z - debug_panel.size.x, debug_button.position.y - 8.0 - debug_panel.size.y)
+		debug_panel.position = Vector2(vp.x - m.z - debug_panel.size.x, debug_button.position.y + debug_button.size.y + 8.0)
 	rotate_hint.size = vp
 	rotate_hint.visible = vp.y > vp.x
 	for p in [end_panel, pause_panel]:
@@ -311,7 +324,7 @@ func top_used() -> float:
 
 
 func bottom_used() -> float:
-	return margins.w + (dock.size.y if dock else 0.0) * (1.0 if not mobile else 0.5) + (30.0 if not mobile else 0.0) + 46.0 * ui_scale   # room for the badge under the lowest rim
+	return margins.w + 30.0 * ui_scale                   # the map title and hint line (badges are fitted by the camera)
 
 
 func pointer_over_ui(p: Vector2) -> bool:
@@ -408,10 +421,18 @@ func _badges(cam: Camera3D) -> void:
 			(b["label"] as Label).add_theme_color_override("font_color", col if owner != "" else Color("d8e0e8"))
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
-		if owner == "" or sim.allied(owner, human):          # you and your team see the number
+		var classic := not Rules.bridge_combat
+		if owner == "" or sim.allied(owner, human) or classic:   # classic = Alpha 11: every node shows its count
 			label.text = str(Rules.shown(n["units"]))
 		else:
 			label.text = owner                            # no numbers on enemy nodes: seat letter only
+		var emb: TextureRect = b["emblem"]
+		emb.visible = classic and owner != ""
+		if emb.visible and emb.get_meta("f", "") != sim.factions.get(owner, ""):
+			emb.set_meta("f", sim.factions.get(owner, ""))
+			emb.texture = load("res://assets/ui/%s.svg" % sim.factions.get(owner, "null"))
+			emb.modulate = Rules.seat_color(owner)
+		(b["sub"] as Label).visible = not classic or n["build_kind"] != "" or sim.last_stand_active
 		var parts := []
 		if n["relay"] != "":
 			var st := sim.relay_state_key(n, n["relay_index"])
@@ -426,11 +447,6 @@ func _badges(cam: Camera3D) -> void:
 			parts.append("FORGE")
 		else:
 			parts.append("T%d" % n["tier"])
-			if not Rules.bridge_combat and owner != "" and sim.allied(owner, human) and n["build_kind"] == "":
-				# CLASSIC: Alpha 11's numbers on the badge - production and the upgrade price
-				parts.append("+%.1f/s" % Rules.shown_f(sim.production(n)))
-				if n["tier"] < 4:
-					parts.append("UP %d" % Rules.shown(Sim.vat_cost(n)))
 		if n["build_kind"] != "":
 			parts.append("BUILD %ds" % int(ceil(n["build_timer"])))
 		if order_shown:
@@ -453,14 +469,13 @@ func _badges(cam: Camera3D) -> void:
 		build_bar.value = 100.0 * Sim.build_progress(n)
 		# hanging from the platform's near rim: clearly that node's, never over the vat (Alpha 14
 		# playtest: "hard to read where unit counts are")
-		var down := Vector3(0, 0, 1).rotated(Vector3.UP, main.cam_yaw)
-		var anchor: Vector3 = n["pos"] + down * (Rules.R - 0.4) + Vector3(0, 0.2, 0)
+		var anchor: Vector3 = badge_anchor(n)
 		if cam.is_position_behind(anchor):
 			panel.visible = false
 			continue
 		var p := cam.unproject_position(anchor)
 		panel.size = panel.get_combined_minimum_size()
-		panel.position = p - Vector2(panel.size.x / 2.0, panel.size.y * 0.25)
+		panel.position = p - panel.size / 2.0
 
 
 # ------------------------------------------------------------------ inspector (Alpha 11 ring)
@@ -652,8 +667,11 @@ func pause_menu() -> void:
 	main.paused = true
 	_fill_overlay(pause_panel, "PAUSED", "%s · %02d:%02d" % [str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
 			[["RESUME", func(): main.paused = false; pause_panel.visible = false],
-			["BRIDGE COMBAT: %s" % ("ON (Alpha 12)" if Rules.bridge_combat else "OFF (Alpha 11)"), func():
+			["MODE: %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL"), func():
 				Rules.bridge_combat = not Rules.bridge_combat
+				pause_menu()],
+			["LAST STAND: %s" % ("ON" if Rules.last_stand else "OFF"), func():
+				Rules.last_stand = not Rules.last_stand
 				pause_menu()],
 			["RESTART", main.restart], ["MAIN MENU", main.to_menu]])
 	pause_panel.visible = true
@@ -721,12 +739,12 @@ func _build_debug() -> void:
 	var forge := _debug_slider(box, "Forge bonus", 0.0, 200.0, 5.0, Rules.forge_bonus * 100.0, "+%.0f%% attack",
 			func(v: float): Rules.forge_bonus = v / 100.0)
 	var bridge := button("", Callable(), 0, 44, 18)
-	var bridge_text := func(): bridge.text = "Bridge combat: %s" % ("ON (Alpha 12)" if Rules.bridge_combat else "OFF (Alpha 11 - pass through, fight at nodes)")
+	var bridge_text := func(): bridge.text = "Mode: %s" % ("SIEGE (fights on bridges)" if Rules.bridge_combat else "BRAWL (Alpha 11 - pass through, fight at nodes)")
 	bridge_text.call()
 	bridge.pressed.connect(func():
 		Rules.bridge_combat = not Rules.bridge_combat
 		bridge_text.call()
-		toast("Bridge combat %s" % ("ON" if Rules.bridge_combat else "OFF")))
+		toast("Mode: %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL")))
 	box.add_child(bridge)
 	var low := button("", Callable(), 0, 44, 18)
 	var low_text := func(): low.text = "Detail: %s" % ("LOW (fewer horde and river patches)" if Rules.low_detail else "FULL")
@@ -767,3 +785,31 @@ func _debug_slider(box: Control, text: String, lo: float, hi: float, step: float
 		apply.call(v)
 		out.text = fmt % v)
 	return slider
+
+
+var _badge_dirs := {}
+
+
+func badge_anchor(n: Dictionary) -> Vector3:
+	## Where a node's badge sits: just outside its platform, in the gap furthest from any of its
+	## bridges, leaning toward the viewer (Daniele: "HUD should always be placed in areas beyond the
+	## platform, not overlapping a corridor or a platform"). Computed once per node.
+	var id: int = n["id"]
+	if not _badge_dirs.has(id):
+		var toward_viewer := Vector3(0, 0, 1).rotated(Vector3.UP, Rules.view_yaw)
+		var decks := []
+		for link in sim.adj[id]:
+			decks.append(((sim.nodes[link[0]]["pos"] - n["pos"]) as Vector3).normalized())
+		var best := toward_viewer
+		var best_score := -INF
+		for k in range(16):
+			var d := toward_viewer.rotated(Vector3.UP, TAU * k / 16.0)
+			var gap := PI
+			for dd in decks:
+				gap = minf(gap, d.angle_to(dd))
+			var score := gap + 0.35 * d.dot(toward_viewer)      # clear of bridges first, then near side
+			if score > best_score:
+				best_score = score
+				best = d
+		_badge_dirs[id] = best
+	return n["pos"] + (_badge_dirs[id] as Vector3) * (Rules.R + 2.3) + Vector3(0, 0.3, 0)

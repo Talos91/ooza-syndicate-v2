@@ -130,7 +130,7 @@ func _ready() -> void:
 			scenario_zoom = float(arg.substr(7))
 		elif arg.begins_with("--mode="):
 			mode = arg.substr(7)
-		elif arg == "--classic":                     # bridge combat OFF: the classic unit-model look
+		elif arg == "--classic" or arg == "--brawl":  # BRAWL mode (bridge combat off, Alpha 11 rules)
 			Rules.bridge_combat = false
 		elif arg.begins_with("--seed="):
 			seed_value = int(arg.substr(7))
@@ -356,36 +356,49 @@ func _build_world() -> void:
 
 
 func _fit_camera() -> void:
+	## Fits the whole map - every platform rim and the badge hanging under it - inside the screen area
+	## the HUD leaves free (right of the send panel, below the top bar, above the bottom strip), by
+	## projecting those points and correcting distance and aim until they fit (Alpha 14 playtest:
+	## "the HUD should never overlap a corridor or a platform"). Fixed from then on: no zoom or pan.
 	var lo := Vector3(INF, 0, INF)
 	var hi := Vector3(-INF, 0, -INF)
 	for n in sim.nodes:
 		lo = lo.min(n["pos"])
 		hi = hi.max(n["pos"])
 	cam_target = (lo + hi) / 2.0
-	var ext := hi - lo
 	cam_yaw = Rules.view_yaw
-	# fit the map into the screen area left of the side panel and between the top bar and the
-	# ability dock, then centre it there
 	var vp := get_viewport().get_visible_rect().size
-	var half_h := tan(hfov_half(vp))
-	var half_v := tan(deg_to_rad(cam.fov) / 2.0)
-	var panel := hud.side_panel_width() + margins.x + 20.0 if hud and thumb_path == "" else 0.0   # the send panel sits on the left
-	var top_used := hud.top_used() if hud and thumb_path == "" else 0.0
-	var bottom_used := hud.bottom_used() if hud and thumb_path == "" else 0.0
-	var free_x := clampf((vp.x - panel - margins.z) / vp.x, 0.5, 1.0)
-	var free_y := clampf((vp.y - top_used - bottom_used) / vp.y, 0.4, 1.0)
-	var along := (ext.x if cam_yaw == 0.0 else ext.z) + 2.0 * Rules.R + 4.0      # screen-horizontal
-	var across := ((ext.z if cam_yaw == 0.0 else ext.x) + 2.0 * Rules.R + 2.0) * sin(deg_to_rad(Rules.CAM_PITCH))
-	var dist_x := (along / 2.0) / (half_h * free_x)
-	var dist_y := (across / 2.0) / (half_v * free_y) * 0.9   # the far half foreshortens more than the near
-	cam_dist = maxf(dist_x, dist_y) * 1.14                 # perspective: the near side is wider at 42 degrees
-	_place_camera()
-	var screen_right := cam.global_transform.basis.x
-	var shift := cam_dist * half_h * ((panel - margins.z) / vp.x)
-	cam_target -= screen_right * shift                  # centre the map in the space right of the panel
-	var screen_up := Vector3(0, 0, -1).rotated(Vector3.UP, cam_yaw)            # map-plane direction that reads as "up"
-	var vshift := cam_dist * half_v * ((bottom_used - top_used) / vp.y) / sin(deg_to_rad(Rules.CAM_PITCH))
-	cam_target += screen_up * vshift
+	var use_hud: bool = hud != null and thumb_path == ""
+	var left: float = (hud.side_panel.position.x + hud.side_panel_width() + 14.0) if use_hud else 8.0
+	var top: float = hud.top_used() if use_hud else 8.0
+	var bottom: float = vp.y - (hud.bottom_used() if use_hud else 8.0)
+	var right: float = vp.x - (margins.z + hud.pause_button.size.x + 12.0 if use_hud else 8.0)   # PAUSE and Debug column
+	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
+	var pts := []
+	var down := Vector3(0, 0, 1).rotated(Vector3.UP, cam_yaw)
+	for n in sim.nodes:
+		var p: Vector3 = n["pos"]
+		for k in range(12):
+			var a := TAU * k / 12.0
+			pts.append(p + Vector3(cos(a), 0.0, sin(a)) * (Rules.R + 1.0))
+		pts.append(p + Vector3(0, 7.5, 0))                    # the top of the tallest tower
+		if use_hud:
+			var ba: Vector3 = hud.badge_anchor(n)            # room for the badge beside the platform
+			pts.append(ba + Vector3(0, 0, 0))
+			pts.append(ba + (ba - p).normalized() * 2.0)
+	cam_dist = 120.0
+	for it in range(24):
+		_place_camera()
+		var box := Rect2(cam.unproject_position(pts[0]), Vector2.ZERO)
+		for q in pts:
+			box = box.expand(cam.unproject_position(q))
+		var k := maxf(box.size.x / free.size.x, box.size.y / free.size.y)
+		cam_dist *= lerpf(1.0, k, 0.8)
+		var miss := free.get_center() - box.get_center()   # screen offset to move the map by
+		var g0 := _ground(vp / 2.0)
+		var g1 := _ground(vp / 2.0 - miss)
+		if g0 != Vector3.INF and g1 != Vector3.INF:
+			cam_target += (g1 - g0) * 0.8
 	if scenario_focus != Vector3.INF:
 		cam_target = scenario_focus
 		cam_dist = scenario_zoom

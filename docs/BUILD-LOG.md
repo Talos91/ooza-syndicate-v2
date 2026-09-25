@@ -155,7 +155,9 @@ A 100-unit horde ≈ 43 k polygons.
 
 ## 5. The Godot prototype
 
-Godot 4.6.1 · GL Compatibility · all seven starter maps.
+Godot 4.6.1 · GL Compatibility. **Current state: v0.15.0 "Alpha 15" - see README.md, CHANGELOG.md and
+docs/NEXT-SESSION.md** (two modes SIEGE and BRAWL, 99 maps, teams and FFA, Alpha 11 menu and HUD).
+The sections below record how it got there.
 
 ### Alpha 12 (v0.12.0, 2026-09-25 night) - everything designed, in one build
 
@@ -423,7 +425,7 @@ Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --export-rele
 git worktree prune && git branch -D gh-pages     # the previous publish leaves a LOCAL gh-pages branch behind:
                                                  # without this the orphan checkout fails ("branch already exists")
 git worktree add --detach /tmp/ghpages && cd /tmp/ghpages && git checkout --orphan gh-pages && git rm -rqf .
-cp "Game/2.0/build/web/"index.* . && rm -f *.import && touch .nojekyll
+cp "Game/2.0/build/web/"index.* . && cp "Game/2.0/web/"peer*.js . && rm -f *.import && touch .nojekyll   # web/ = PeerJS (Alpha 15)
 git add -A && git commit -m "Playtest build: <what changed> (source main <sha>)" && git push -f origin gh-pages
 cd "Game/2.0" && git worktree remove --force /tmp/ghpages && git branch -D gh-pages
 # verify: curl -sI https://talos91.github.io/ooza-syndicate-v2/index.pck | grep -i content-length  == size of build/web/index.pck

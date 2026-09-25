@@ -102,8 +102,18 @@ func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
 	var n := clampi(int(ceil(shown_units)), 1, MAX_PER_HORDE)
 	var rows := int(ceil(float(n) / ACROSS))
 	var fighting: bool = h["state"] == "fight"
-	for r in range(rows):
-		var s: float = h["s"] - r * ROW
+	# rows spread over the line's real length (Alpha 11: one body every departure interval), so a
+	# column arriving at a node walks straight in through the door instead of bunching outside it
+	var row_gap: float = maxf(ROW, Sim.chain_length(h) / maxf(rows, 1))
+	# arriving (absorb): the head is at the door; every row keeps WALKING at deck speed and vanishes
+	# into the tower as it reaches it (Alpha 11: bodies walk straight in) - never a standing queue
+	var walk := 0.0
+	if h["state"] == "absorb":
+		walk = fposmod(time * Rules.deck_speed, row_gap)
+	for r in range(rows + (1 if walk > 0.0 else 0)):
+		var s: float = h["s"] - r * row_gap + walk
+		if s > h["L"]:
+			continue                                  # this row is through the door
 		if s < 0.0:
 			break
 		var smp := Sim.sample(h, s)

@@ -1,5 +1,37 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.15.0 "Alpha 15" - 2026-09-25 (Brawl and Siege)
+
+**Two named modes** (Daniele: "new name for the mode selector is Brawl and Siege"). SIEGE = the goo
+hordes that fight on bridges (tug-of-war, recall, corridors). BRAWL = Alpha 11's core rules. The
+switch is on 03 SETUP (MODE / SIEGE or BRAWL), on OPTIONS, in the pause menu and in Debug. The
+player-count row on setup is now called PLAYERS.
+
+**Brawl = Alpha 11, exactly** (Daniele: "I want exactly the core rule of Alpha 11 in the no bridge
+fight mode")
+- Each arriving unit is resolved the moment it reaches the node, as Alpha 11's `land()`: it trades
+  blows with the garrison (attack / health / garrison stats, one-for-one at baseline) and the
+  survivors take the node. No siege, nobody waiting outside; waypoints are free; lines pass each
+  other on bridges.
+- Units walk straight in through the door and vanish (they no longer stand queued at the entrance).
+- Alpha 11's half-bridge neon: each half of a bridge glows in the colour of the node it touches,
+  neutral halves amber.
+- Alpha 11 badges: a round badge with the count and the owner's faction emblem, counts on every node
+  (as Alpha 11 did). Kit buttons for SEND and PAUSE.
+
+**Both modes**
+- **Conquest costs a tier**: a conquered vat or cannon drops one tier (minimum 1). Neutral captures
+  and forges are unaffected.
+- **LAST STAND ON / OFF** toggle on setup, OPTIONS and the pause menu (off: no collapse; the 7:00
+  safety net still ends a stalled match).
+- **HUD never covers the map**: the camera now projects every platform rim and badge and fits them
+  inside the area the HUD leaves free. Badges sit just outside each platform in the gap furthest from
+  its bridges. The empty ability dock is hidden until abilities exist; Debug sits under PAUSE.
+
+**Multiplayer groundwork**: PeerJS 1.5.5 and Alpha 11's transport shim are in `web/` and loaded by
+the page (room prefix `ooze20-`, up to 5 guests). The Godot side (lobby, host authority, snapshots)
+is NOT built yet - next session.
+
 ## 0.14.5 - 2026-09-25
 
 - **Overpasses where decks cross.** The roster leaves many crossings unmarked (24 maps, including

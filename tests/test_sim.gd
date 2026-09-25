@@ -596,8 +596,49 @@ func _init() -> void:
 			break
 	check(escaped or (losing in sim30.hordes and losing["state"] == "move"), "the retreating line keeps moving under pressure")
 
+	# CLASSIC = Alpha 11's landing rule: each arriving unit is resolved at once, one-for-one at
+	# baseline; nothing waits outside as a siege; survivors take the node
+	Rules.bridge_combat = false
+	var sim32 := Sim.new()
+	sim32.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
+	sim32.nodes[1]["units"] = 20.0
+	sim32._land_classic(sim32.nodes[1], "A", 12.0)
+	check(sim32.nodes[1]["owner"] == "" and absf(sim32.nodes[1]["units"] - 8.0) < 0.01 and sim32.nodes[1]["siege"].is_empty(),
+			"classic: 12 attackers kill 12 of 20 defenders one-for-one and leave no siege")
+	sim32._land_classic(sim32.nodes[1], "A", 18.0)
+	check(sim32.nodes[1]["owner"] == "A" and absf(sim32.nodes[1]["units"] - 10.0) < 0.01, "classic: the next 18 kill the last 8 and 10 take the node")
+	sim32.nodes[3]["units"] = 300.0                    # the centre holds 120
+	var hc := sim32.send(3, 0, 1.0)
+	run_until(sim32, func(): return not (hc in sim32.hordes), 40.0)
+	check(sim32.nodes[0]["owner"] == "A" and sim32.nodes[0]["siege"].is_empty(), "classic: a send walks in and takes the node, never besieging it")
+	Rules.bridge_combat = true
+
 	# bridge combat toggle (Daniele): OFF = Alpha 11 - hordes pass each other on decks, fights only
 	# at nodes; ON = Alpha 12
+	# conquest downgrades a vat or cannon one tier (minimum 1); neutral captures don't
+	var sim34 := Sim.new()
+	sim34.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
+	sim34.nodes[4]["tier"] = 3
+	sim34._capture(sim34.nodes[4], "A", 10.0)
+	check(sim34.nodes[4]["tier"] == 2, "a conquered T3 vat drops to T2")
+	sim34.nodes[1]["tier"] = 1
+	sim34.nodes[1]["owner"] = "B"
+	sim34._capture(sim34.nodes[1], "A", 10.0)
+	check(sim34.nodes[1]["tier"] == 1, "a T1 vat stays T1")
+	sim34.nodes[0]["tier"] = 3
+	sim34._capture(sim34.nodes[0], "A", 10.0)
+	check(sim34.nodes[0]["tier"] == 3, "taking a neutral node costs no tier")
+
+	# Last Stand toggle: off = no collapse ever starts
+	Rules.last_stand = false
+	var sim33 := Sim.new()
+	sim33.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
+	sim33.time = Rules.LAST_STAND_TIME + 1.0
+	for k in range(40):
+		sim33.step(0.5)
+	check(not sim33.last_stand_active and sim33.collapsed.is_empty(), "Last Stand OFF: nothing collapses")
+	Rules.last_stand = true
+
 	Rules.bridge_combat = false
 	var sim27 := Sim.new()
 	sim27.setup(map, pos, {1: "A", 0: "B"}, {"A": "null", "B": "ember"}, 1)

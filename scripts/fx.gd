@@ -110,6 +110,7 @@ func sync(dt: float) -> void:
 		_last_stand_warning(n)
 		_cannon(n, entry)
 	_decks()
+	_half_trims()
 	_sel_ring.visible = selected >= 0 and not sim.collapsed.get(selected, false)
 	if _sel_ring.visible:
 		var n: Dictionary = sim.nodes[selected]
@@ -388,6 +389,8 @@ func _decks() -> void:
 		var open := sim.is_edge_open(i)
 		for d in vis["edge_decks"][i]:
 			(d as Node3D).visible = open
+		if not Rules.bridge_combat:
+			continue                                      # classic: _half_trims owns the lights
 		if sim.last_stand_warn_node == e["a"] or sim.last_stand_warn_node == e["b"]:
 			continue                                      # _last_stand_warning flashes these
 		if e["state"] != "" or e["retracts"]:             # relay decks keep their state colour
@@ -518,3 +521,59 @@ func _collapse(node_id: int) -> void:
 		for p in falling:
 			if is_instance_valid(p):
 				(p as Node3D).visible = false)
+
+
+# ------------------------------------------------------------------ classic: Alpha 11 half-bridge neon
+var _trims := {}             # edge -> [MeshInstance3D x4]: two edges x two halves
+var _trim_mesh: BoxMesh
+const NEUTRAL_TRIM := Color("ffad51")   # Alpha 11's neutral bridge trim
+
+
+func _half_trims() -> void:
+	## CLASSIC MODE (Daniele: "bridges need to follow Alpha 11's idea of neon lighting up half the
+	## bridge connected to a node"): every deck carries two neon strips along its edges; the half
+	## nearest each node glows in that node's owner colour (neutral amber), like Alpha 11's
+	## bridge_trims. The kit's own deck lights are dimmed while this is on.
+	var on := not Rules.bridge_combat
+	if _trim_mesh == null:
+		_trim_mesh = BoxMesh.new()
+		_trim_mesh.size = Vector3(1.0, 0.07, 0.14)
+	for i in range(sim.edges.size()):
+		var e: Dictionary = sim.edges[i]
+		var show: bool = on and not _collapsed.has(i) and sim.is_edge_open(i)
+		if not _trims.has(i):
+			if not show:
+				continue
+			var arr := []
+			for k in range(4):
+				var mi := MeshInstance3D.new()
+				mi.mesh = _trim_mesh
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				add_child(mi)
+				arr.append(mi)
+			_trims[i] = arr
+			for d in vis["edge_decks"][i]:
+				MapBuilder.set_lights(d, Mats.light_color(Color(0.12, 0.14, 0.16), "trim_off"))
+		var parts: Array = _trims[i]
+		for mi in parts:
+			(mi as MeshInstance3D).visible = show
+		if not show:
+			continue
+		var line: Array = [sim.nodes[e["a"]]["pos"]] + sim.deck_points(i, e["a"]) + [sim.nodes[e["b"]]["pos"]]
+		var pa: Vector3 = line[1] if line.size() > 2 else line[0]
+		var pb: Vector3 = line[-2] if line.size() > 2 else line[-1]
+		var mid := (pa + pb) / 2.0
+		var halves := [[pa, mid, sim.nodes[e["a"]]["owner"]], [mid, pb, sim.nodes[e["b"]]["owner"]]]
+		for h in range(2):
+			var p0: Vector3 = halves[h][0]
+			var p1: Vector3 = halves[h][1]
+			var owner: String = halves[h][2]
+			var col: Color = Rules.seat_color(owner) if owner != "" else NEUTRAL_TRIM
+			var dir := (p1 - p0)
+			var x := dir.normalized()
+			var side := x.cross(Vector3.UP).normalized()
+			for s in range(2):
+				var mi: MeshInstance3D = parts[h * 2 + s]
+				mi.material_override = Mats.light_color(col)
+				mi.position = (p0 + p1) / 2.0 + side * (Rules.W * 0.42) * (1 if s == 0 else -1) + Vector3(0, 0.1, 0)
+				mi.basis = Basis(x * maxf(dir.length() - 0.3, 0.1), Vector3.UP, side)

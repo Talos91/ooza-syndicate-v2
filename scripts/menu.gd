@@ -235,21 +235,26 @@ func show_options() -> void:
 	clear_page("city")
 	header(0)
 	label_at("OPTIONS", P(40, 107), 43)
-	frame(P(35, 174), P(1000, 500))
+	frame(P(35, 174), P(1000, 540))
 	label_at("MATCH RULES", P(60, 195), 30)
-	var bc := nav_button("BRIDGE COMBAT: %s" % ("ON  -  Alpha 12: hordes fight wherever they meet" if Rules.bridge_combat else "OFF  -  Alpha 11: hordes pass each other, fights only at nodes"),
+	var bc := nav_button("MODE: %s" % ("SIEGE  -  hordes fight wherever they meet, tug-of-war fronts" if Rules.bridge_combat else "BRAWL  -  Alpha 11: units pass each other, fights only at nodes"),
 			P(60, 250), P(950, 70), func():
 		Rules.bridge_combat = not Rules.bridge_combat
 		show_options())
 	bc.add_theme_font_size_override("font_size", int(round(22 * K)))
-	label_at("Not sure combat on bridges is fun? Try both. Also in the pause menu and the Debug panel.", P(60, 330), 18, Color("b8ced6"))
-	label_at("PERFORMANCE", P(60, 395), 30)
+	label_at("Two modes that play differently: SIEGE and BRAWL. Also in the pause menu and the Debug panel.", P(60, 330), 18, Color("b8ced6"))
+	var lsb := nav_button("LAST STAND: %s" % ("ON  -  the map collapses from 2:00" if Rules.last_stand else "OFF  -  no collapse; the 7:00 safety net still ends a stalled match"),
+			P(60, 362), P(950, 50), func():
+		Rules.last_stand = not Rules.last_stand
+		show_options())
+	lsb.add_theme_font_size_override("font_size", int(round(20 * K)))
+	label_at("PERFORMANCE", P(60, 440), 30)
 	var det := nav_button("DETAIL: %s" % ("FULL" if not Rules.low_detail else "LOW  -  fewer horde and river patches"),
-			P(60, 450), P(950, 70), func():
+			P(60, 492), P(950, 64), func():
 		Rules.low_detail = not Rules.low_detail
 		show_options())
 	det.add_theme_font_size_override("font_size", int(round(22 * K)))
-	label_at("Low detail halves the horde and river patches - use it if the game makes your machine run hot.", P(60, 530), 18, Color("b8ced6"))
+	label_at("Low detail halves the horde and river patches - use it if the game makes your machine run hot.", P(60, 566), 18, Color("b8ced6"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_main)
 
 
@@ -421,7 +426,7 @@ func show_setup() -> void:
 	var modes := _modes_of(_selected_map())
 	if not mode in modes:
 		mode = modes[0]
-	label_at("MODE", P(58, 652), 20, Color("aac3cd"))
+	label_at("PLAYERS", P(58, 652), 20, Color("aac3cd"))
 	for i in range(modes.size()):
 		var md: String = modes[i]
 		var mb := nav_button(MODE_NAMES.get(md, md), P(150 + i * 140, 642), P(132, 48), func():
@@ -464,10 +469,13 @@ func show_setup() -> void:
 			ai_level = lv
 			show_setup(), lv == ai_level)
 		b.add_theme_font_size_override("font_size", int(round(18 * K)))
-	nav_button("BRIDGE COMBAT / %s" % ("ON" if Rules.bridge_combat else "OFF"), P(1058, 746), P(552, 60), func():
+	nav_button("MODE / %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL"), P(1058, 746), P(272, 60), func():
 		Rules.bridge_combat = not Rules.bridge_combat
 		show_setup())
-	label_at("ON = Alpha 12 (fight wherever they meet)   OFF = Alpha 11 (fight only at nodes)", P(1062, 812), 14, Color("7795a4"))
+	nav_button("LAST STAND / %s" % ("ON" if Rules.last_stand else "OFF"), P(1338, 746), P(272, 60), func():
+		Rules.last_stand = not Rules.last_stand
+		show_setup())
+	label_at("SIEGE = goo hordes that fight on bridges.  BRAWL = Alpha 11 rules.  Last Stand OFF = no collapse.", P(1062, 812), 14, Color("7795a4"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_maps)
 	nav_button("DEPLOY", P(1280, 866), P(352, 58), deploy, true)
 

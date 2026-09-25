@@ -378,6 +378,22 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 62. **Vats and buildings face the viewer on every map.** *Done.*
 63. **Vat upgrade info said 150.** *Done (0.14.3):* the inspector buttons now use the display scale.
 
+## 2026-09-25 - Daniele, Alpha 15 pass (v0.14.5 - v0.15.0)
+
+64. **Home screen: background on top of a background.** *Done:* one full-screen backdrop.
+65. **Trident Exchange and other maps: crossings with no overpass.** *Done:* every crossing pair
+    gets one deck raised on load (24 roster maps had unmarked crossings; roster files untouched).
+66. **Inward Last Stand always drops the same node first.** *Done:* same-ring nodes shuffle (seeded).
+67. **Send controls on the left.** *Done* (Alpha 11 layout); Debug under PAUSE.
+68. **No-bridge mode = exactly Alpha 11's core rules; units just go in; half-bridge neon; Alpha 11
+    HUD.** *Done:* Brawl landing (`Sim._land_classic`), walking-in columns, half-bridge trims, round
+    badges with emblems and counts on every node, kit buttons.
+69. **Last Stand on/off toggle; conquest downgrades a vat or tower one tier (min 1).** *Done.*
+70. **HUD must never overlap corridors or platforms; mode names Brawl and Siege.** *Done:* projection
+    camera fit, badges outside platforms, empty dock hidden; MODE / SIEGE or BRAWL.
+71. **Multiplayer: start with Alpha 11's peer-to-peer, Neon/Vercel later.** *Started:* transport in
+    `web/`; Godot networking is the next session (docs/NEXT-SESSION.md).
+
 ## Known gaps after Alpha 13 (not playtest findings)
 
 - Abilities / Ooze Factory (pending SKILLS-2.0-DRAFT approval), team modes and multiplayer,

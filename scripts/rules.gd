@@ -6,8 +6,8 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.14.5"
-const VERSION_NAME := "Alpha 14"
+const VERSION := "0.15.0"
+const VERSION_NAME := "Alpha 15"
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius
@@ -58,6 +58,9 @@ static var node_fight_mult: float = 1.0                # live-tunable: x combat 
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
 # queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
 static var bridge_combat: bool = true
+# LAST STAND toggle (Daniele: "add a toggle for Last Stand on or off in the match settings").
+# Off: no collapse; the 7:00 safety net still ends a stalled match by strength.
+static var last_stand: bool = true
 # CAMERA (Daniele, Alpha 14 playtest: "map size should be fixed, no zoom... too vertical"; "vats and
 # buildings should all face the viewer on every map"). The camera is fitted once per screen size,
 # never zoomed or panned; VIEW_YAW is set per map before it is built so every structure faces it.
