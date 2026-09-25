@@ -1,14 +1,14 @@
 # Next session - start here
 
-State at the end of the 2026-09-25 marathon session: **v0.15.0 "Alpha 15"**, source on `main`,
+State at the end of the 2026-09-25 sessions: **v0.16.0 "Alpha 16"** (online rooms), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: this file,
-`README.md`, the top of `CHANGELOG.md` (0.12.0 to 0.15.0), `PLAYTEST-NOTES.md` notes 26-70, then the
+`README.md`, the top of `CHANGELOG.md` (0.12.0 to 0.16.0), `PLAYTEST-NOTES.md` notes 26-71, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
 
 ## Standing rules (Daniele)
 
 - **Publish after every pass** that changes play or looks: commit + push `main`, export Web, copy
-  `web/*.js` into `build/web`, replace the `gh-pages` branch (recipe in `docs/BUILD-LOG.md` §10),
+  `web/*.js` (PeerJS, transport, room-ui, chat-ui) into `build/web`, replace the `gh-pages` branch (recipe in `docs/BUILD-LOG.md` §10),
   verify the live `index.pck` size matches, hand back the link. Bump `Rules.VERSION` every publish.
 - **Every mechanic ships with its animation, HUD readout and control** in the same pass. Only
   textures and better models may wait.
@@ -17,26 +17,22 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
-## Next priority: multiplayer (Daniele: "let's start using Alpha 11 peer to peer")
+## Multiplayer: built in Alpha 16 (PeerJS peer-to-peer, Alpha 11's approach)
 
-Plan agreed: **PeerJS peer-to-peer now**, Vercel + Neon later (Vercel for site / room list /
-sign-in functions, Neon Postgres for accounts, match history, leaderboards, telemetry). Vercel cannot
-relay a live match itself (no long-lived WebSockets).
+`scripts/net.gd` (autoload `Net`) + `web/peer-transport.js`, `web/room-ui.js` (code field),
+`web/chat-ui.js` (chat panel). MAIN -> ONLINE -> CREATE / JOIN -> lobby -> DEPLOY by host. The host's
+`Sim` is the only simulation: guests call `main.node_action` -> `Net.order` -> host `Net._execute` ->
+`main.perform(seat, ...)` (the same checks and feedback lines as offline); the host streams
+`Net.snapshot()` ~10 Hz and `Net.push_effects()`; guests `Net.apply_snapshot()` (fires `captured` /
+`finished` like a local Sim) and `Net.predict()` between updates. Tests: `tests/test_net.gd`; two
+players on one PC: `tests/duo.html` (BUILD-LOG sec10). Main's `HUMAN` is now a variable (your seat).
 
-Done: `web/peerjs.min.js` (1.5.5) and `web/peer-transport.js` (Alpha 11's shim, prefix `ooze20-`, up
-to 5 guests) are loaded by the page (`export_presets.cfg` head_include).
-
-To build (port `Game/Alpha 11/scripts/network.gd`, the P2P half):
-1. `scripts/net.gd` autoload: host/join via `JavaScriptBridge.get_interface("OozePeer")`, 4-letter
-   room codes, roster (seat, faction, team), lobby publish, host-assigned seats, version check,
-   rate limits, loading barrier, round epochs, rematch, chat (256 chars, 50 history).
-2. Host authority: the host's `Sim` is the only simulation. Guests send commands (send, recall,
-   upgrade, build, switch, restore) validated by the host; the host broadcasts compressed snapshots
-   (nodes, hordes, relay/Last Stand state) ~10 Hz; guests render snapshots with light prediction.
-3. Menu: enable ONLINE on MAIN -> CREATE ROOM / JOIN (code) -> lobby (players, faction, mode,
-   map, SIEGE/BRAWL, Last Stand) -> DEPLOY by host.
-4. Guest departure returns others to the lobby; host departure closes the room (Alpha 11 rules).
-5. Test with two browser tabs; do not claim cross-network or phone validation.
+Still open on multiplayer:
+- Real separate-network and phone tests (Daniele). No relay (TURN) server: strict networks fail.
+- A host tab in the background freezes the match; 8 s later guests are dropped (Alpha 11 rule).
+- Not built: seat swapping in the lobby, AI filling empty seats, spectators, reconnect.
+- Later: Vercel (site, room list, sign-in functions) + Neon Postgres (accounts, match history,
+  leaderboards, telemetry). Vercel cannot relay a live match itself (no long-lived WebSockets).
 
 ## Other open work
 
@@ -58,3 +54,7 @@ To build (port `Game/Alpha 11/scripts/network.gd`, the P2P half):
 - `git branch -D gh-pages` locally before recreating the orphan branch (see BUILD-LOG §10).
 - No system Python on this PC; use Godot headless scripts for data work.
 - Files merged from other sessions may have CRLF endings - normalise before perl/sed edits.
+- Autoloads are not global names inside `--script` test files: tests reach `Net` through an instance
+  (`load("res://scripts/net.gd").new()`), never the `Net` identifier.
+- In the in-app browser only the front tab runs its game loop; test two players with `tests/duo.html`
+  (both iframes visible), and hover before clicking - Godot buttons need a mouse move first.

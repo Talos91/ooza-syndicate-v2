@@ -13,7 +13,8 @@ extends Node3D
 ##   --scenario=fight|rear|queue             stage a contact on the deck between nodes 1 and 0
 ##   --seed=N                               deterministic Last Stand method / chaos order
 
-const HUMAN := "A"
+var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
+var online := false                               # this match is a peer-to-peer room (Net)
 var SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": "solar"}
 const FACTION_NAMES := ["vex", "null", "bloom", "ember", "solar"]
 const STARTER_MAPS := [
@@ -95,6 +96,9 @@ func _ready() -> void:
 	if FullscreenGate.needed():                        # phones play fullscreen (Alpha 14 playtest)
 		add_child(FullscreenGate.new())
 	Engine.max_fps = 60                                # never spin faster than the screen (menu included)
+	if Net.online():                                   # a room launched (or relaunched) a round
+		_start_online()
+		return
 	if relaunch.has("faction"):
 		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
 		ai_level = relaunch.get("ai", ai_level)
@@ -146,6 +150,10 @@ func _ready() -> void:
 		menu_layer = Menu.new()
 		add_child(menu_layer)
 		(menu_layer as Menu).setup(self)
+		if Net.in_room():                              # back from a round, or a player left: the lobby
+			(menu_layer as Menu).show_lobby()
+		elif Net.status != "":                         # the room closed: say why on the ONLINE page
+			(menu_layer as Menu).show_online()
 		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--menu-page="):            # screenshot helper: open a menu page
 				(menu_layer as Menu).call("show_" + arg.substr(12))
@@ -171,14 +179,15 @@ func _start_map(path: String) -> void:
 		seats[int(s["node"])] = s["seat"]
 		if mode in ["2v2", "3v3"] and s.get("team") != null:
 			teams[s["seat"]] = int(s["team"])
-	if not HUMAN in seats.values():                    # FFA maps may seat A elsewhere; A is always you
+	if not HUMAN in seats.values() and not online:     # FFA maps may seat A elsewhere; A is always you
 		var first: int = seats.keys()[0]
 		seats[first] = HUMAN
-	var pool := FACTION_NAMES.filter(func(f): return f != SEAT_FACTIONS[HUMAN] and f != SEAT_FACTIONS["B"])
-	pool.shuffle()
-	for seat in ["C", "D", "E", "F"]:                 # extra AI seats get the factions not yet taken
-		if not pool.is_empty():
-			SEAT_FACTIONS[seat] = pool.pop_front()
+	if not online:                                     # online: every seat's faction comes from the room
+		var pool := FACTION_NAMES.filter(func(f): return f != SEAT_FACTIONS[HUMAN] and f != SEAT_FACTIONS["B"])
+		pool.shuffle()
+		for seat in ["C", "D", "E", "F"]:             # extra AI seats get the factions not yet taken
+			if not pool.is_empty():
+				SEAT_FACTIONS[seat] = pool.pop_front()
 	Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
 	sim = Sim.new()
 	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams)
@@ -209,7 +218,7 @@ func _start_map(path: String) -> void:
 	route_label.visible = false
 	add_child(route_label)
 	for seat in seats.values():
-		if (seat != HUMAN or demo) and scenario == "":
+		if (seat != HUMAN or demo) and scenario == "" and not online:
 			ais.append(SeatAI.new(seat, 2.5, ai_level))
 	if scenario != "":
 		_stage_scenario()
@@ -239,7 +248,11 @@ func _start_map(path: String) -> void:
 		return
 	await get_tree().process_frame
 	_on_resized()
-	hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
+	if online:
+		hud.toast("ROOM %s · ROUND %d · you are seat %s (%s) - waiting for every player to load" % [
+				Net.room_code, Net.match_round, HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
+	else:
+		hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
 
 
 func start_match(path: String, faction: String, rival_faction: String, level: String, match_mode := "1v1", colour := "A") -> void:
@@ -256,12 +269,35 @@ func start_match(path: String, faction: String, rival_faction: String, level: St
 	_start_map(path)
 
 
+func _start_online() -> void:
+	## A room's round (Net): every seat is a player, no AI. The host steps the Sim; guests build the
+	## same world from the same seed and render the host's snapshots.
+	var info: Dictionary = Net.match_info
+	online = true
+	mode = str(info["mode"])
+	seed_value = int(info["seed"])
+	color_choice = Net.colour
+	for seat in info["players"]:
+		SEAT_FACTIONS[seat] = info["players"][seat]
+	HUMAN = Net.local_seat()
+	_start_map(str(info["map"]))
+	Net.world_ready(sim, self)
+	Net.order_feedback.connect(_on_order_feedback)
+
+
+func _on_order_feedback(msg: String) -> void:
+	if hud:
+		hud.toast(msg)
+
+
 func restart() -> void:
 	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice}
 	get_tree().reload_current_scene()
 
 
 func to_menu() -> void:
+	if online:                                         # LEAVE ROOM: the room closes for us
+		Net.leave()
 	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice}
 	get_tree().reload_current_scene()
 
@@ -495,52 +531,83 @@ func _place_camera() -> void:
 
 
 # ------------------------------------------------------------------ node actions (HUD -> sim)
-func node_action(method: String, id: int) -> bool:
-	## Every tap gives feedback (Alpha 11): what happened, or why it couldn't.
+func node_action(method: String, id: int, args := {}) -> bool:
+	## Every tap gives feedback (Alpha 11): what happened, or why it couldn't. Online guests send the
+	## order to the host, which runs perform() for their seat and answers with the same line.
+	if online and not Net.started:
+		hud.toast("Waiting for every player to load")
+		return false
+	if online and not Net.is_host():
+		Net.order(method, id, args)
+		return true
+	var r := perform(HUMAN, method, id, args)
+	if str(r[1]) != "":
+		hud.toast(r[1])
+	return r[0]
+
+
+func perform(seat: String, method: String, id: int, args := {}) -> Array:
+	## One player's order, checked for that seat: [accepted, feedback line]. The host runs guests'
+	## orders through here too (Net._execute), so ownership is always checked against the Sim.
+	if method == "recall":
+		var h := sim._horde(id)
+		if h.is_empty() or h["owner"] != seat:
+			return [false, "That line can't turn back now"]
+		var units: float = h["units"]
+		if sim.recall(id):
+			return [true, "Recalled - %d units turning back" % Rules.shown(units)]
+		return [false, "That line can't turn back now"]
+	if id < 0 or id >= sim.nodes.size() or sim.collapsed.get(id, false) or sim.over:
+		return [false, ""]
 	var n: Dictionary = sim.nodes[id]
-	var ok := false
+	if n["owner"] != seat:
+		return [false, "Not your node"]
 	match method:
+		"send":
+			var to: int = int(args.get("to", -1))
+			var f: float = clampf(float(args.get("fraction", 0.5)), 0.0, 1.0)
+			if to < 0 or to >= sim.nodes.size() or to == id:
+				return [false, ""]
+			var count := int(floorf(n["units"] * f))
+			if sim.send(id, to, f).is_empty():
+				return [false, "No route to that node" if count > 0 else "No units to send"]
+			return [true, "Sending %d units to node %d" % [Rules.shown(count), to]]
 		"switch":
-			ok = sim.fire_relay(id)
-			if ok:
-				hud.toast("Relay fired - switching in %d s, then %d s cooldown" % [int(Rules.RELAY_WARNING), int(Rules.RELAY_COOLDOWN)])
-			else:
-				hud.toast("Relay on cooldown" if n["relay_cd"] > 0.0 else "Relay is already switching")
+			if sim.fire_relay(id):
+				return [true, "Relay fired - switching in %d s, then %d s cooldown" % [int(Rules.RELAY_WARNING), int(Rules.RELAY_COOLDOWN)]]
+			return [false, "Relay on cooldown" if n["relay_cd"] > 0.0 else "Relay is already switching"]
 		"upgrade":
 			var cost := sim.upgrade_cost(n)
-			ok = sim.upgrade_structure(id)
-			if ok:
-				hud.toast("Upgrade started - %d units, %d s" % [Rules.shown(cost), int(Rules.BUILD_SECONDS)])
+			if sim.upgrade_structure(id):
+				return [true, "Upgrade started - %d units, %d s" % [Rules.shown(cost), int(Rules.BUILD_SECONDS)]]
 			elif n["build_kind"] != "":
-				hud.toast("Construction already in progress")
+				return [false, "Construction already in progress"]
 			elif n["attachment"] == "cannon" and n["cannon_tier"] >= 3:
-				hud.toast("Cannon is already at max tier")
+				return [false, "Cannon is already at max tier"]
 			elif n["attachment"] == "forge":
-				hud.toast("A forge has no further tier")
+				return [false, "A forge has no further tier"]
 			elif n["tier"] >= 4:
-				hud.toast("Vat is already at max tier")
+				return [false, "Vat is already at max tier"]
 			elif n["units"] < cost:
-				hud.toast("Upgrade needs %d units (%d here)" % [Rules.shown(cost), Rules.shown(n["units"])])
-			else:
-				hud.toast("Nothing to upgrade here")
+				return [false, "Upgrade needs %d units (%d here)" % [Rules.shown(cost), Rules.shown(n["units"])]]
+			return [false, "Nothing to upgrade here"]
 		"build_cannon", "build_forge":
 			var kind := method.substr(6)
 			var cost: int = Rules.CANNON_COST[1] if kind == "cannon" else Rules.FORGE_COST
-			ok = sim.build_attachment(id, kind)
-			if ok:
-				hud.toast("%s construction started - %d units, %d s" % [kind.capitalize(), Rules.shown(cost), int(Rules.BUILD_SECONDS)])
+			if sim.build_attachment(id, kind):
+				return [true, "%s construction started - %d units, %d s" % [kind.capitalize(), Rules.shown(cost), int(Rules.BUILD_SECONDS)]]
 			elif n["build_kind"] != "":
-				hud.toast("Construction already in progress")
+				return [false, "Construction already in progress"]
 			elif n["swap_cd"] > 0.0:
-				hud.toast("Attachment swap ready in %d s" % int(ceil(n["swap_cd"])))
+				return [false, "Attachment swap ready in %d s" % int(ceil(n["swap_cd"]))]
 			elif n["units"] < cost:
-				hud.toast("%s needs %d units (%d here)" % [kind.capitalize(), Rules.shown(cost), Rules.shown(n["units"])])
-			else:
-				hud.toast("Can't build a %s here" % kind)
+				return [false, "%s needs %d units (%d here)" % [kind.capitalize(), Rules.shown(cost), Rules.shown(n["units"])]]
+			return [false, "Can't build a %s here" % kind]
 		"restore":
-			ok = sim.restore_vat(id)
-			hud.toast("Restoring the vat - %d s" % int(Rules.BUILD_SECONDS) if ok else "Can't restore the vat now")
-	return ok
+			if sim.restore_vat(id):
+				return [true, "Restoring the vat - %d s" % int(Rules.BUILD_SECONDS)]
+			return [false, "Can't restore the vat now"]
+	return [false, ""]
 
 
 # ------------------------------------------------------------------ loop
@@ -553,7 +620,10 @@ func _process(delta: float) -> void:
 		_on_resized()
 	var dt := minf(delta, 0.05)
 	_flush_inspect()
-	if not paused:
+	if online:                                    # the host's Sim is the only simulation (Net)
+		if Net.is_host() and Net.started:
+			sim.step(dt)
+	elif not paused:
 		for ai in ais:
 			ai.think(sim, dt)
 		if scenario != "":
@@ -567,6 +637,8 @@ func _process(delta: float) -> void:
 		var model := MapBuilder.model_for(n)
 		if entry["model_key"] != model:
 			MapBuilder.set_centre_model(self, entry, model, n["pos"], n["owner"])
+	if online:
+		Net.push_effects(sim.fx_events)              # host: the guests see the same bursts and falls
 	for ev in sim.fx_events:
 		fx.handle(ev)
 		match ev["type"]:
@@ -684,10 +756,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					selected = -1
 					var own := _horde_at(hit)
 					if not own.is_empty():                       # tap one of your lines: RECALL it
-						if sim.recall(own["id"]):
-							hud.toast("Recalled - %d units turning back" % Rules.shown(own["units"]))
-						else:
-							hud.toast("That line can't turn back now")
+						node_action("recall", own["id"])
 						return
 					pan_from = Vector3.INF                        # fixed camera: no pan
 			else:
@@ -701,12 +770,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					var target := _node_at(hit, mb.position)
 					var moved := (mb.position - _press_pos).length() >= TAP_PIXELS
 					if target >= 0 and target != drag_from and moved:
-						var count := int(floorf(sim.nodes[drag_from]["units"] * fraction))
-						var h := sim.send(drag_from, target, fraction)
-						if h.is_empty():
-							hud.toast("No route to that node" if count > 0 else "No units to send")
-						else:
-							hud.toast("Sending %d units to node %d" % [Rules.shown(count), target])
+						if node_action("send", drag_from, {"to": target, "fraction": fraction}):
 							fx._pulse(sim.nodes[target]["pos"], Rules.seat_color(HUMAN), Rules.R, 0.6)
 						hud.close_inspector()
 						selected = drag_from

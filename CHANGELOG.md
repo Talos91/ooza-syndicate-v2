@@ -1,5 +1,40 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.16.0 "Alpha 16" - 2026-09-25 (online rooms)
+
+**Peer-to-peer multiplayer** (Daniele: "let's start using Alpha 11 peer to peer"). Alpha 11's PeerJS
+rooms, ported to 2.0 (`scripts/net.gd`, autoload `Net`, from `Game/Alpha 11/scripts/network.gd`).
+- **MAIN -> ONLINE**: pick your faction, CREATE ROOM (you host) or JOIN ROOM (the host's
+  four-character code, typed in a native browser field so phone keyboards paste and copy).
+- **Lobby**: seats A-E in join order (host-assigned), each player's faction, open seats; the host picks
+  PLAYERS (FFA 2 / 3 / 4 / 5 or 2 V 2), the map (only maps that offer that mode), SIEGE / BRAWL and
+  LAST STAND; everyone picks their own view colour. SHARE CODE, CHAT, LEAVE ROOM; DEPLOY opens for the
+  host when every seat is filled.
+- **The host's game is the match.** Guests send their orders (send, recall, upgrade, cannon, forge,
+  restore, relay switch); the host checks the seat owns the node or line, the numbers are sane, the
+  round is current and the rate is under 20 a second, runs it, and answers with the same line the
+  offline game toasts ("Sending 16 units to node 2", "Upgrade needs 30 units"). The host sends the
+  state ~10 times a second (paths only when they change, a full keyframe every second) plus the
+  one-off effects (bursts, falls, relay ticks, collapses); guests keep lines moving between updates.
+- **Alpha 11 room rules**: version check (a stale cached build is refused), everyone loads before
+  the clock starts, round numbers keep old orders out, REMATCH on the results screen (needs every
+  player, fresh match, same room and chat), a guest leaving mid-match returns everyone to the lobby,
+  the host leaving closes the room, 8 s without the host ends it. The pause menu online does not
+  pause (RESUME / LEAVE ROOM); Debug is hidden online.
+- **Chat**: CHAT button in the lobby and under PAUSE (with an unread count); 256 characters, 50
+  messages, 5 per 10 s, sender stamped by the host as seat + faction, shown as plain text; kept
+  between rounds, cleared on leaving; never pauses.
+- Fixed while here: in team modes the results screen said DEFEAT to the winner's team-mate.
+
+Tested: `tests/test_net.gd` (76 checks: every mode fills, seats, version and full-room refusals,
+the loading barrier, host validation, snapshots and paths, captures, effects, chat limits, rematch,
+departures) and two game instances side by side in the in-app browser (create, join, lobby, chat,
+deploy, guest orders, captures, a guest leaving). Not tested: separate networks, phones, 3-5 real
+players, a full match to the rematch in the browser.
+
+Known limits (as Alpha 11): no relay server (some networks cannot connect directly), no host
+migration, and a host tab in the background freezes the match for everyone.
+
 ## 0.15.0 "Alpha 15" - 2026-09-25 (Brawl and Siege)
 
 **Two named modes** (Daniele: "new name for the mode selector is Brawl and Siege"). SIEGE = the goo

@@ -41,6 +41,8 @@ var end_panel: PanelContainer
 var pause_panel: PanelContainer
 var rotate_hint: Label
 var debug_button: Button
+var chat_button: Button
+var _chat_poll := 0.0
 var debug_panel: PanelContainer
 var margins := Vector4(16, 12, 16, 12)
 var _last_fps_print := 0.0
@@ -308,6 +310,8 @@ func layout(vp: Vector2, m: Vector4) -> void:
 		debug_button.position = Vector2(vp.x - m.z - debug_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # under PAUSE, off the map
 		debug_panel.size = debug_panel.get_combined_minimum_size()
 		debug_panel.position = Vector2(vp.x - m.z - debug_panel.size.x, debug_button.position.y + debug_button.size.y + 8.0)
+	if chat_button:
+		chat_button.position = Vector2(vp.x - m.z - chat_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # Debug's slot (hidden online)
 	rotate_hint.size = vp
 	rotate_hint.visible = vp.y > vp.x
 	for p in [end_panel, pause_panel]:
@@ -328,7 +332,7 @@ func bottom_used() -> float:
 
 
 func pointer_over_ui(p: Vector2) -> bool:
-	for c in [top_panel, pause_button, side_panel, dock, debug_button]:
+	for c in [top_panel, pause_button, side_panel, dock, debug_button, chat_button]:
 		if c and c.visible and c.get_global_rect().has_point(p):
 			return true
 	if debug_panel and debug_panel.visible and debug_panel.get_global_rect().has_point(p):
@@ -353,6 +357,12 @@ func badge_at(p: Vector2) -> int:
 
 # ------------------------------------------------------------------ per frame
 func sync(dt: float, cam: Camera3D) -> void:
+	if main.online:
+		_chat_poll -= dt
+		if _chat_poll <= 0.0:
+			_chat_poll = 0.5
+			var n := Net.chat_unread()
+			chat_button.text = "Chat (%d)" % n if n > 0 else "Chat"
 	var total := sim.seat_strength(human)
 	var rivals := 0.0
 	for seat in sim.factions.keys():
@@ -664,6 +674,13 @@ func show_banner(msg: String, seconds := 4.0) -> void:
 func pause_menu() -> void:
 	if end_panel.visible:
 		return
+	if main.online:                                   # a room never pauses (Alpha 11): the menu only
+		_fill_overlay(pause_panel, "ROOM %s" % Net.room_code, "%s · %02d:%02d · the match keeps running" % [
+				str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
+				[["RESUME", func(): pause_panel.visible = false], ["LEAVE ROOM", main.to_menu]])
+		pause_panel.visible = true
+		layout(root.get_viewport_rect().size, margins)
+		return
 	main.paused = true
 	_fill_overlay(pause_panel, "PAUSED", "%s · %02d:%02d" % [str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
 			[["RESUME", func(): main.paused = false; pause_panel.visible = false],
@@ -678,16 +695,35 @@ func pause_menu() -> void:
 	layout(root.get_viewport_rect().size, margins)
 
 
+var _end_winner := ""
+
+
+func _on_rematch_changed() -> void:
+	if end_panel.visible:
+		show_end(_end_winner)
+
+
 func show_end(winner: String) -> void:
+	_end_winner = winner
 	main.paused = true
-	var title := "VICTORY" if winner == human else ("DEFEAT" if winner != "" else "DRAW")
+	var title := "VICTORY" if sim.allied(winner, human) else ("DEFEAT" if winner != "" else "DRAW")   # team modes: allies win together
 	var a_lost: float = sim.combat_losses.get(human, 0.0)
 	var a_fell: float = sim.fall_losses.get(human, 0.0)
 	var captures := sim.events.filter(func(e): return e["type"] == "capture" and e["seat"] == human).size()
 	var body := "%s · %02d:%02d\ncaptures %d   ·   lost in combat %d   ·   lost to falls %d\n%s" % [
 			str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60, captures, Rules.shown(a_lost), Rules.shown(a_fell),
 			("Last Stand: %s" % sim.last_stand_method.to_upper()) if sim.last_stand_active else "decided before the Last Stand"]
-	_fill_overlay(end_panel, title, body, [["PLAY AGAIN", main.restart], ["MAIN MENU", main.to_menu]])
+	if main.online:
+		var votes: int = Net.rematch_votes.size()
+		var mine: bool = Net.rematch_votes.has(Net.local_id())
+		body += "
+REMATCH: %d / %d ready%s" % [votes, Net.roster.size(), " - waiting for the others" if mine else ""]
+		_fill_overlay(end_panel, title, body, [["REMATCH" if not mine else "REMATCH - READY", func(): Net.request_rematch()],
+				["LEAVE ROOM", main.to_menu]])
+		if not Net.rematch_changed.is_connected(_on_rematch_changed):
+			Net.rematch_changed.connect(_on_rematch_changed)
+	else:
+		_fill_overlay(end_panel, title, body, [["PLAY AGAIN", main.restart], ["MAIN MENU", main.to_menu]])
 	end_panel.visible = true
 	pause_panel.visible = false
 	layout(root.get_viewport_rect().size, margins)
@@ -719,6 +755,11 @@ func _build_debug() -> void:
 	debug_button.toggle_mode = true
 	debug_button.size = debug_button.custom_minimum_size
 	root.add_child(debug_button)
+	debug_button.visible = not main.online           # online: the rules are the host's, not live-tunable
+	chat_button = button("Chat", func(): Net.open_chat(), 110, 50 if not mobile else 70, 20)   # online: the room chat
+	chat_button.size = chat_button.custom_minimum_size
+	chat_button.visible = main.online
+	root.add_child(chat_button)
 	debug_panel = PanelContainer.new()
 	debug_panel.visible = false
 	style_panel(debug_panel, Color("2ee6ff"))

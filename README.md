@@ -1,4 +1,4 @@
-# Ooze Syndicate 2.0 - Alpha 15 (v0.15.0)
+# Ooze Syndicate 2.0 - Alpha 16 (v0.16.0)
 
 Godot 4.6 project (GL Compatibility - browser and phone first) for the 2.0 bridge-network game.
 Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project folder
@@ -6,7 +6,7 @@ Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project folder
 
 **Start here next session:** `docs/NEXT-SESSION.md` (state, open work, the standing rules).
 
-## What Alpha 15 is
+## What Alpha 16 is
 
 Two modes that look and play differently, picked on the setup page (MODE / SIEGE or BRAWL):
 
@@ -41,8 +41,12 @@ Shared by both:
 - **Fixed camera** (no zoom/pan, 42 degrees), fitted so the HUD never covers the map; every
   structure faces the viewer. **Phones play fullscreen** (Android button / iPhone Add to Home Screen).
 - Deck and platform speed 5 m/s, door 48 units/s.
+- **Online rooms** (Alpha 16, browser build): MAIN -> ONLINE -> CREATE ROOM or JOIN ROOM (four-character
+  code). Alpha 11's PeerJS peer-to-peer rooms: 2-5 player FFA or 2v2, a lobby where the host picks map,
+  PLAYERS, SIEGE/BRAWL and Last Stand, host-authoritative play (guests' orders are validated by the
+  host, state streams back ~10 Hz), rematch in the same room, chat. Keep the host's tab in front.
 
-Not in yet: **multiplayer** (PeerJS transport is in `web/`, the Godot side is next), abilities
+Not in yet: accounts / room list / stats (Vercel + Neon, later), a relay server for strict networks, abilities
 (skill pools unapproved), team "eject", textures and the blob-model readability redo.
 
 ## Play
@@ -61,6 +65,7 @@ Godot_v4.6.1-stable_win64.exe --path . -- --menu-page=setup --menu-shot=C:/tmp/s
 Godot_v4.6.1-stable_win64.exe --path . -- --map=res://maps/004-two-piers.json --thumb=C:/tmp/004.png
 Godot_v4.6.1-stable_win64_console.exe --headless --path . --script res://tests/test_sim.gd
 Godot_v4.6.1-stable_win64_console.exe --headless --path . --script res://tests/test_map_pool.gd
+Godot_v4.6.1-stable_win64_console.exe --headless --path . --script res://tests/test_net.gd
 ```
 
 Flags: `--brawl` (or `--classic`), `--mode=1v1|2v2|3v3|FFA3|FFA4|FFA5`, `--ai=Casual|Standard|Veteran`,
@@ -83,5 +88,6 @@ Godot is in `Tools/Godot` of the project folder. Publishing steps: `docs/BUILD-L
 | `scripts/menu.gd`, `neon_panel.gd`, `ui_skin.gd` | Alpha 11's front menu and kit |
 | `scripts/fullscreen_gate.gd` | phone fullscreen requirement |
 | `scripts/main.gd` | world, camera fit, input, orchestration, command-line flags |
-| `web/` | PeerJS + transport shim, copied into `build/web` at publish |
-| `tests/test_sim.gd`, `tests/test_map_pool.gd` | 200+ rules checks; every map plays to the end |
+| `scripts/net.gd` | online rooms (autoload `Net`): lobby, seats, host validation, snapshots, rematch, chat |
+| `web/` | PeerJS, transport shim, room-code field, chat panel - copied into `build/web` at publish |
+| `tests/test_sim.gd`, `tests/test_map_pool.gd`, `tests/test_net.gd` | 200+ rules checks; every map plays to the end; 76 room/netcode checks |

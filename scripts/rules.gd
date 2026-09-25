@@ -6,8 +6,8 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.15.0"
-const VERSION_NAME := "Alpha 15"
+const VERSION := "0.16.0"
+const VERSION_NAME := "Alpha 16"
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius

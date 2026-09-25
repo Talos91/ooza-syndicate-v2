@@ -416,6 +416,11 @@ Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --scenario=rear --sho
 
 # rules tests
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_sim.gd
+Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_net.gd   # rooms, validation, snapshots, chat
+
+# two players on one PC (Alpha 16): cp tests/duo.html build/web, serve build/web, open /duo.html: two
+# iframes side by side (both visible, so both game loops run; a background tab freezes its game).
+# duo.html is a local test page - never publish it.
 
 # PUBLISH THE PLAYTEST BUILD - do this after every pass that changes play or looks (Daniele, 2026-09-25),
 # then send the link:  https://talos91.github.io/ooza-syndicate-v2/
@@ -425,7 +430,7 @@ Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --export-rele
 git worktree prune && git branch -D gh-pages     # the previous publish leaves a LOCAL gh-pages branch behind:
                                                  # without this the orphan checkout fails ("branch already exists")
 git worktree add --detach /tmp/ghpages && cd /tmp/ghpages && git checkout --orphan gh-pages && git rm -rqf .
-cp "Game/2.0/build/web/"index.* . && cp "Game/2.0/web/"peer*.js . && rm -f *.import && touch .nojekyll   # web/ = PeerJS (Alpha 15)
+cp "Game/2.0/build/web/"index.* . && cp "Game/2.0/web/"*.js "Game/2.0/web/"*.txt . && rm -f *.import && touch .nojekyll   # web/ = PeerJS, room code field, chat (Alpha 16)
 git add -A && git commit -m "Playtest build: <what changed> (source main <sha>)" && git push -f origin gh-pages
 cd "Game/2.0" && git worktree remove --force /tmp/ghpages && git branch -D gh-pages
 # verify: curl -sI https://talos91.github.io/ooza-syndicate-v2/index.pck | grep -i content-length  == size of build/web/index.pck

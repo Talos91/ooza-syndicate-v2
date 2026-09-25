@@ -391,8 +391,9 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 69. **Last Stand on/off toggle; conquest downgrades a vat or tower one tier (min 1).** *Done.*
 70. **HUD must never overlap corridors or platforms; mode names Brawl and Siege.** *Done:* projection
     camera fit, badges outside platforms, empty dock hidden; MODE / SIEGE or BRAWL.
-71. **Multiplayer: start with Alpha 11's peer-to-peer, Neon/Vercel later.** *Started:* transport in
-    `web/`; Godot networking is the next session (docs/NEXT-SESSION.md).
+71. **Multiplayer: start with Alpha 11's peer-to-peer, Neon/Vercel later.** *Done (0.16.0):* ONLINE rooms,
+    lobby, host-authoritative play, rematch, chat (`scripts/net.gd`). Neon/Vercel still later. Only
+    tested with two browser instances on one PC - separate networks and phones are Daniele's test.
 
 ## Known gaps after Alpha 13 (not playtest findings)
 

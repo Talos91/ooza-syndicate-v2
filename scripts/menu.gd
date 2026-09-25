@@ -6,7 +6,9 @@ extends CanvasLayer
 ## - Alpha 11 laid out on a 1672x941 canvas, ours is 1280x720, so everything is scaled by K.
 ## MAIN -> 01 FACTION (portrait / stats + trait / abilities / faction tabs) -> 02 BATTLEFIELD
 ## (3D thumbnails + preview) -> 03 SETUP (your faction, rival, difficulty, bridge combat) -> DEPLOY.
-## OPTIONS holds the match switches (bridge combat, detail). TUTORIAL / ONLINE are not in 2.0 yet.
+## OPTIONS holds the match switches (bridge combat, detail). ONLINE -> CREATE ROOM / JOIN ROOM ->
+## the room lobby (players, faction, map, PLAYERS, SIEGE/BRAWL, Last Stand) -> DEPLOY by the host
+## (Net, peer-to-peer). TUTORIAL is not in 2.0 yet.
 
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
@@ -27,6 +29,9 @@ const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E"
 var maps: Array = []
 var _is_main := false
 var _backdrop: TextureRect
+var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
+var _chat_btn: Button
+var _chat_t := 0.0
 
 
 func setup(m: Node3D) -> void:
@@ -45,12 +50,15 @@ func setup(m: Node3D) -> void:
 	add_child(_backdrop)
 	get_viewport().size_changed.connect(_fit)
 	faction = m.SEAT_FACTIONS[m.HUMAN]
+	if Net.in_room() or Net.status != "":             # back from a room: keep the faction you played
+		faction = Net.preferred_faction
 	ai_level = m.ai_level
 	map_path = m.map_path
 	mode = m.mode
 	colour = m.color_choice
 	for mp in MapPool.all():
 		maps.append({"path": mp, "data": MapBuilder.load_map(mp)})
+	Net.lobby_changed.connect(_on_net_changed)
 	show_main()
 
 
@@ -71,6 +79,7 @@ func clear_page(art: String) -> void:
 	add_child(content)
 	_fit()
 	_is_main = art == "ui-main"
+	_page = ""
 	# one background only: the full-screen backdrop (Alpha 14 playtest: "background on top of a
 	# background" - the page used to draw its own copy of the art, misaligned on taller screens)
 	if _backdrop:
@@ -225,9 +234,7 @@ func show_main() -> void:
 	var tut := nav_button("TUTORIAL", P(80, 745), P(212, 64), func(): pass)
 	tut.disabled = true
 	tut.tooltip_text = "Not in 2.0 yet"
-	var online := nav_button("ONLINE", P(307, 745), P(213, 64), func(): pass)
-	online.disabled = true
-	online.tooltip_text = "Not in 2.0 yet"
+	nav_button("ONLINE", P(307, 745), P(213, 64), show_online)
 	label_at("%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], P(66, 843), 19, Color("839da9"))
 
 
@@ -495,6 +502,206 @@ func deploy() -> void:
 		var others := FACTIONS.filter(func(f): return f != faction)
 		r = others[randi() % others.size()]
 	main.start_match(map_path, faction, r, ai_level, mode, colour)
+
+
+# ------------------------------------------------------------------ online (Net, peer-to-peer rooms)
+func show_online() -> void:
+	## ONLINE: pick your faction, then CREATE ROOM (you host) or JOIN ROOM (the host's code).
+	clear_page("city")
+	_page = "online"
+	header(0)
+	label_at("PLAY WITH FRIENDS", P(40, 107), 43)
+	frame(P(35, 174), P(1600, 640))
+	label_at("PRIVATE PEER-TO-PEER ROOMS  ·  HOSTED BY ONE PLAYER'S BROWSER", P(60, 196), 24, color())
+	var about := label_at("Create a room and share its four-character code; everyone opens this same link. Keep the host's tab open and in front - the host's game runs the match. Free-for-all for 2 to 5 players, or 2 v 2. Rematch reuses the room; chat stays between rounds.",
+			P(60, 245), 20, Color("bbd1db"))
+	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	about.custom_minimum_size = Vector2(1540 * K, 0)
+	about.size = Vector2(1540 * K, 0)
+	label_at("YOUR FACTION", P(60, 372), 20, Color("aac3cd"))
+	_faction_row(P(60, 405), P(300, 64))
+	var web := OS.has_feature("web")
+	var create := nav_button("CREATE ROOM", P(60, 520), P(560, 92), func():
+		Net.host_room(faction)
+		show_lobby(), true)
+	create.disabled = not web
+	var join := nav_button("JOIN ROOM", P(640, 520), P(560, 92), _open_code)
+	join.disabled = not web
+	var msg := Net.status if Net.status != "" else ("Some networks block direct connections (there is no relay server yet); if joining fails, try another network." if web
+			else "Online rooms run in the browser build: open https://talos91.github.io/ooza-syndicate-v2/")
+	var st := label_at(msg, P(60, 650), 20, Color("ffd15c") if Net.status != "" else Color("adc7d2"))
+	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	st.custom_minimum_size = Vector2(1540 * K, 0)
+	st.size = Vector2(1540 * K, 0)
+	nav_button("BACK", P(40, 866), P(230, 58), func():
+		Net.status = ""
+		show_main())
+
+
+func _faction_row(pos: Vector2, dims: Vector2) -> void:
+	for i in range(FACTIONS.size()):
+		var f: String = FACTIONS[i]
+		var b := nav_button("VIRIDIAN" if f == "bloom" else f.to_upper(), pos + Vector2(i * (dims.x + 12 * K), 0), dims, func():
+			faction = f
+			main.SEAT_FACTIONS[main.HUMAN] = f
+			Net.set_faction(f)
+			if _page == "lobby":
+				show_lobby()
+			else:
+				show_online(), f == faction)
+		b.add_theme_font_size_override("font_size", int(round(20 * K)))
+		if f != faction:
+			b.add_theme_color_override("font_color", Rules.FACTIONS[f][1])
+
+
+func show_lobby() -> void:
+	## The room: who is in which seat, the host's match settings, DEPLOY when every seat is filled.
+	if not Net.in_room():
+		show_online()
+		return
+	clear_page("city")
+	_page = "lobby"
+	header(0)
+	if Net.roster.has(Net.local_id()):
+		faction = str(Net.roster[Net.local_id()]["faction"])
+	var host := Net.is_host()
+	label_at("ROOM %s" % (Net.room_code if Net.room_code != "" else "...."), P(40, 100), 52)
+	var copy := nav_button("SHARE CODE", P(420, 110), P(230, 52), _share_code)
+	copy.disabled = Net.room_code == ""
+	var chat := nav_button("CHAT (%d)" % Net.chat_unread() if Net.chat_unread() > 0 else "CHAT", P(668, 110), P(180, 52), Net.open_chat)
+	chat.disabled = not Net.connected
+	_chat_btn = chat
+	var st := label_at(Net.status, P(868, 122), 18, Color("adc7d2"))
+	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	st.custom_minimum_size = Vector2(770 * K, 0)
+	st.size = Vector2(770 * K, 0)
+	# players
+	frame(P(35, 188), P(800, 640))
+	label_at("PLAYERS  %d / %d" % [Net.roster.size(), Net.slots()], P(58, 205), 28)
+	var by_slot := {}
+	for id in Net.roster:
+		by_slot[int(Net.roster[id]["slot"])] = int(id)
+	for i in range(Net.slots()):
+		var y := 258 + i * 76
+		frame(P(58, y), P(754, 68), "row")
+		var seat: String = Net.SEATS[i]
+		label_at(seat, P(78, y + 12), 34, Rules.SEATS.get(seat, Color.WHITE))
+		var team := Net.team_of_slot(i)
+		if team >= 0:
+			label_at("TEAM %d" % (team + 1), P(640, y + 22), 18, Color("aac3cd"))
+		if by_slot.has(i):
+			var id: int = by_slot[i]
+			var f: String = str(Net.roster[id]["faction"])
+			label_at("VIRIDIAN BLOOM" if f == "bloom" else NAMES[f].replace("\n", " "), P(136, y + 18), 24, Rules.FACTIONS[f][1])
+			var tags := ("HOST" if id == 1 else "") + ("  ·  YOU" if id == Net.local_id() else "")
+			label_at(tags.trim_prefix("  ·  "), P(470, y + 22), 18, Color("ffd15c"))
+		else:
+			label_at("open seat - waiting for a player", P(136, y + 22), 18, Color("7795a4"))
+	label_at("YOUR FACTION", P(58, 652), 20, Color("aac3cd"))
+	_faction_row(P(58, 686), P(143, 54))
+	label_at("Seats go in join order. Same factions are allowed; every seat has its own colour.", P(58, 760), 15, Color("7795a4"))
+	# match settings (host decides)
+	map_path = Net.map_path
+	frame(P(855, 188), P(780, 640))
+	label_at("MATCH" + ("" if host else "  ·  the host decides"), P(878, 205), 28)
+	map_preview(P(876, 250), P(738, 290))
+	label_at(str(_selected_map().get("name", "")).replace("*", "").to_upper(), P(878, 552), 26)
+	var prev := nav_button("<", P(1440, 548), P(80, 48), func(): _step_map(-1))
+	var next := nav_button(">", P(1534, 548), P(80, 48), func(): _step_map(1))
+	prev.disabled = not host
+	next.disabled = not host
+	label_at("PLAYERS", P(878, 622), 20, Color("aac3cd"))
+	for i in range(Net.MODES.size()):
+		var md: String = Net.MODES[i]
+		var mb := nav_button(Net.MODE_LABELS[md], P(990 + i * 126, 612), P(118, 48), func():
+			Net.set_mode(md)
+			show_lobby(), md == Net.mode)
+		mb.add_theme_font_size_override("font_size", int(round(17 * K)))
+		mb.disabled = not host or Net.roster.size() > Net.SLOTS[md]
+	var sb := nav_button("MODE / %s" % ("SIEGE" if Net.siege else "BRAWL"), P(878, 680), P(360, 56), func():
+		Net.toggle_siege()
+		show_lobby())
+	sb.disabled = not host
+	var lb := nav_button("LAST STAND / %s" % ("ON" if Net.last_stand else "OFF"), P(1254, 680), P(360, 56), func():
+		Net.toggle_last_stand()
+		show_lobby())
+	lb.disabled = not host
+	var ckeys := COLOUR_NAMES.keys()
+	var cb := nav_button("YOUR COLOUR / %s" % COLOUR_NAMES[Net.colour], P(878, 750), P(360, 50), func():
+		Net.colour = ckeys[(ckeys.find(Net.colour) + 1) % ckeys.size()]
+		show_lobby())
+	cb.add_theme_font_size_override("font_size", int(round(18 * K)))
+	cb.add_theme_color_override("font_color", Rules.FACTIONS[faction][1] if Net.colour == "faction" else Rules.SEATS[Net.colour])
+	label_at("How you see yourself; others pick their own.", P(1254, 765), 15, Color("7795a4"))
+	nav_button("LEAVE ROOM", P(40, 866), P(260, 58), func():
+		Net.leave()
+		show_online())
+	if host:
+		var go := nav_button("DEPLOY", P(1280, 866), P(352, 58), func(): Net.start_match(), true)
+		go.disabled = not Net.can_start()
+		if not Net.can_start():
+			label_at("DEPLOY opens when every seat is filled", P(930, 884), 17, Color("adc7d2"))
+	else:
+		label_at("The host deploys when every seat is filled", P(1180, 884), 19, Color("adc7d2"))
+
+
+func _step_map(d: int) -> void:
+	var pool: Array = Net.maps_for(Net.mode)
+	if pool.is_empty():
+		return
+	var i := pool.find(Net.map_path)
+	Net.set_map(pool[posmod(i + d, pool.size())])
+	show_lobby()
+
+
+func _on_net_changed() -> void:
+	if _page == "lobby" or (_page == "online" and Net.in_room()):
+		show_lobby()
+	elif _page == "online":
+		show_online()
+
+
+func _open_code() -> void:
+	if OS.has_feature("web"):
+		var ui = JavaScriptBridge.get_interface("OozeRoom")
+		if ui != null:
+			ui.openCode("")
+
+
+func _share_code() -> void:
+	if OS.has_feature("web"):
+		var ui = JavaScriptBridge.get_interface("OozeRoom")
+		if ui != null:
+			ui.shareCode(Net.room_code)
+	else:
+		DisplayServer.clipboard_set(Net.room_code)
+
+
+func _process(dt: float) -> void:
+	## The room code comes from the native DOM field (phone keyboards: web/room-ui.js, Alpha 11's).
+	if _page == "lobby" and is_instance_valid(_chat_btn):   # unread count on the lobby CHAT button
+		_chat_t -= dt
+		if _chat_t <= 0.0:
+			_chat_t = 0.5
+			var n := Net.chat_unread()
+			_chat_btn.text = "CHAT (%d)" % n if n > 0 else "CHAT"
+			_chat_btn.disabled = not Net.connected
+	if not OS.has_feature("web") or _page != "online":
+		return
+	var ui = JavaScriptBridge.get_interface("OozeRoom")
+	if ui == null:
+		return
+	var code := str(ui.takeCode())
+	if code.length() == 4:
+		Net.join_room(code, faction)
+		show_lobby()
+
+
+func _exit_tree() -> void:
+	if OS.has_feature("web"):
+		var ui = JavaScriptBridge.get_interface("OozeRoom")
+		if ui != null:
+			ui.closeCode()
 
 
 func _fit() -> void:
