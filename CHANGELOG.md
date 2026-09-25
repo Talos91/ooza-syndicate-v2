@@ -1,5 +1,14 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.13.2 - 2026-09-25 (Daniele's numbers)
+
+- Deck speed 5 m/s (was 2), platform speed = deck speed (was x6), relay cooldown 5 s (was 15).
+  The door rate follows the speed (20 units/s). The Debug panel's Reset to rules uses the new
+  defaults. (Daniele: "relay cooldown 5 s, deck speed 5 m/s... deck and platform speed need to
+  match, no point in it being different".)
+- Noted for the next pass: the blob model needs a readability redo - enemy attacks are harder to
+  scan than in Alpha 11 (PLAYTEST-NOTES 49).
+
 ## 0.13.1 - 2026-09-25 (Daniele: "I want the damn menu as for Alpha 11")
 
 - **The front menu is Alpha 11's, page for page**: its backdrop art, neon-cut frames, per-faction

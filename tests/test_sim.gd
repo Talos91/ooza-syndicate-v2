@@ -40,11 +40,12 @@ func _init() -> void:
 	check(not h.is_empty() and h["ordered"] == 80.0 and h["units"] == 0.0, "send 100% of 80: ordered 80, none out yet")
 	check(sim.nodes[3]["units"] == 80.0, "the units stay in the vat until the door emits them")
 	sim.step(0.5)
-	check(absf(h["units"] - 24.0) < 0.5, "after 0.5 s at 48 units/s: 24 out (got %.1f)" % h["units"])
+	var out_expect: float = Rules.door_rate * 0.5
+	check(absf(h["units"] - out_expect) < 0.5, "after 0.5 s at %.0f units/s: %.0f out (got %.1f)" % [Rules.door_rate, out_expect, h["units"]])
 	var still_inside: float = sim.nodes[3]["units"]
-	check(absf(still_inside - 56.0) < 5.0, "~56 still inside, plus production (got %.1f)" % still_inside)
+	check(absf(still_inside - (80.0 - out_expect)) < 5.0, "~%.0f still inside, plus production (got %.1f)" % [80.0 - out_expect, still_inside])
 	var h_b := sim.send(3, 4, 0.5)
-	check(not h.get("streaming", true) and absf(h["ordered"] - 24.0) < 0.5, "the previous order is cut to what is out")
+	check(not h.get("streaming", true) and absf(h["ordered"] - out_expect) < 0.5, "the previous order is cut to what is out")
 	check(absf(h_b["ordered"] - floorf(still_inside * 0.5)) < 0.1, "the new order counts the units still inside (half of %.1f)" % still_inside)
 	check(sim.nodes[3]["streaming"]["hid"] == h_b["id"], "the door now emits the new order")
 	sim.hordes.erase(h_b)
@@ -65,7 +66,7 @@ func _init() -> void:
 	sim2.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
 	var h2 := sim2.send(3, 1, 0.5)
 	var arrive := run_until(sim2, func(): return h2["state"] != "move", 30.0, 0.02)
-	check(arrive > 4.0 and arrive < 6.0, "M deck crossing takes %.2f s (4 s deck + <2 s node time)" % arrive)
+	check(arrive > 2.5 and arrive < 5.5, "M deck crossing takes %.2f s at %.0f m/s, platforms at the same speed" % [arrive, Rules.deck_speed])
 	var land: Vector3 = h2["pts"][-1]
 	check(absf((land - sim2.nodes[1]["pos"]).length() - Rules.ARC_R) < 0.01,
 			"the line lands on the platform from the side it arrives by, up to the tower's footprint")

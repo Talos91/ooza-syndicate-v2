@@ -335,6 +335,17 @@ decide if mechanics are good or not... only thing I can save on is textures or b
     runs hot, OPTIONS -> DETAIL: LOW (half the patches) tells us whether it is the build; the
     Debug FPS line prints draw calls to the browser console for a report.
 
+48. **"Deck speed at default 5 m/s, relay cooldown 5 s, deck speed and platform speed need to
+    match."** (v0.13.2) *Done:* `DECK_SPEED_DEFAULT` 5.0, `NODE_SPEED_MULT_DEFAULT` 1.0,
+    `RELAY_COOLDOWN` 5.0 (the door rate follows: 20 units/s keeps the tail at the door). Note for
+    the design package: at 5 m/s one 4 m module is 0.8 s, not the rules' 2 s - PARAMETERS still
+    says 2 s per module; Daniele to lock the new value.
+49. **"We need to redo the blob model... it is hard now to scan enemy units attacking vs
+    before."** Open - next pass. The horde patches (`Models/2.0/build_horde_patches_2_0.py`) need
+    a readability redo: enemy lines must be scannable at a glance (which line is attacking what).
+    Candidates: a clearer head, a direction cue along the line, stronger seat colour on the goo
+    and less on the creatures, a contact marker on the target's badge.
+
 ## Known gaps after Alpha 13 (not playtest findings)
 
 - Abilities / Ooze Factory (pending SKILLS-2.0-DRAFT approval), team modes and multiplayer,

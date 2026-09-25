@@ -6,7 +6,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.13.1"
+const VERSION := "0.13.2"
 const VERSION_NAME := "Alpha 13"
 
 # kit geometry (metres)
@@ -18,9 +18,11 @@ const SOCKET_Z := 0.06
 
 # movement: travel time counts deck modules only (1 module = 2 s); platforms and piers are
 # part of the node, crossed quickly
-const MODULE_SECONDS := 2.0
-const DECK_SPEED_DEFAULT := S / MODULE_SECONDS
-const NODE_SPEED_MULT_DEFAULT := 6.0 # a node crossing (pier, arc round the structure, door) ~1-1.5 s
+const MODULE_SECONDS := 2.0          # routing cost per module only (relative); real speed below
+# Daniele (Alpha 13 playtest): "deck speed at default 5 m/s... deck speed and platform speed need to
+# match, no point in it being different". Was 2 m/s on decks, x6 on platforms.
+const DECK_SPEED_DEFAULT := 5.0
+const NODE_SPEED_MULT_DEFAULT := 1.0
 # live-tunable from the in-game Debug panel (PLAYTEST-NOTES 5: platform speed vs bridge speed)
 static var deck_speed: float = DECK_SPEED_DEFAULT          # m/s along a deck
 static var node_speed_mult: float = NODE_SPEED_MULT_DEFAULT # x deck speed on platforms, piers, doors
@@ -44,7 +46,7 @@ const UNITS_PER_PATCH := 60          # legacy: only the capture drain estimate b
 # UNITS LEAVE THE VAT ONLY AS THEY BECOME BLOB (Daniele, 2026-09-25): a send is an order; the door
 # emits units into the line at DOOR_RATE. Units still inside stay in the vat's count and can be
 # re-ordered - a new send takes over the previous order's not-yet-emitted part.
-const DOOR_RATE_DEFAULT := DECK_SPEED_DEFAULT * NODE_SPEED_MULT_DEFAULT / METRES_PER_UNIT   # 48 units/s: the tail stays at the door
+const DOOR_RATE_DEFAULT := DECK_SPEED_DEFAULT * NODE_SPEED_MULT_DEFAULT / METRES_PER_UNIT   # tail stays at the door (20 units/s at 5 m/s)
 static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug panel)
 static var node_fight_mult: float = 1.0                # live-tunable: x combat rates on a platform
 # BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
@@ -66,7 +68,7 @@ const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
 # tick applies the per-kind troop fate over RELAY_MOVE seconds of visible motion (rotation pivots,
 # retract slides in, switch/remote dissolve), then RELAY_COOLDOWN before the next fire.
 const RELAY_WARNING := 3.0
-const RELAY_COOLDOWN := 15.0
+const RELAY_COOLDOWN := 5.0        # Daniele (Alpha 13 playtest): "relay cooldown I'd set at 5 s"
 const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves; hordes on it ride
 
 # LAST STAND (GAME-RULES sec10; Daniele 2026-09-25: 2:00 "seems ok" for now, not 3:00). The method
