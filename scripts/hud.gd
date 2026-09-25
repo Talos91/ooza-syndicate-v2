@@ -528,7 +528,9 @@ func _inspector_actions(n: Dictionary) -> void:
 
 
 func _add_action(title: String, cost: int, method: String, id: int) -> void:
-	var text := title + ("\n%d UNITS" % cost if cost > 0 else ("\nFREE" if method == "restore" else "\n15 s CD"))
+	# prices shown at Alpha 11 scale like every other number (Alpha 14 playtest: "upgrade info still
+	# says 150") - the button used to print the raw internal cost
+	var text := title + ("\n%d UNITS" % Rules.shown(cost) if cost > 0 else ("\nFREE" if method == "restore" else "\n%d s CD" % int(Rules.RELAY_COOLDOWN)))
 	var b := button(text, func():
 		if main.node_action(method, id):
 			close_inspector()

@@ -1,5 +1,12 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.14.3 - 2026-09-25
+
+- Fixed: the inspector's UPGRADE / CANNON / FORGE buttons printed the raw internal price (150 for a
+  T3 vat) instead of the Alpha 11-scale one (30) everything else shows. The SWITCH button now says
+  the real 5 s relay cooldown instead of a stale 15 s. (Daniele: "the info for upgrades of vat are
+  wrong, still say 150".)
+
 ## 0.14.2 - 2026-09-25 (Daniele's mobile and readability fixes)
 
 - **Phones play fullscreen.** In a phone browser a gate covers the game until it is fullscreen:
