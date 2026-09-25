@@ -402,3 +402,21 @@ decide if mechanics are good or not... only thing I can save on is textures or b
   of the starter seven has one), textures and the model detail pass.
 - Army numbers are Alpha 11 x5 and provisional; the T4 role and the 1x baseline remain open.
 - Real-phone touch feel and frame rate are unmeasured.
+
+## 2026-09-25 - Daniele, Alpha 16 feedback (v0.16.1)
+
+72. **Empty seats filled by AI, as a setting.** *Done:* lobby EMPTY SEATS (players only / AI level).
+73. **10 s grace; a reconnect button; a rematch button after victory/loss.** *Done:* 10 s host
+    grace, dropped players keep their seat and RECONNECT from the ONLINE page, REMATCH on results.
+74. **Brawl: Alpha 11's exit, entrance, deck and platform speed - the feel exactly the same.**
+    *Done:* 8.9 m/s everywhere (Alpha 11's 115 px/s at 2.0's map scale), 9.6 units/s out and in.
+75. **Recall only in Siege.** *Done.*
+76. **Siege: the goo round a base shrank and looks worse; it was nice covering the platform.** *Done:*
+    two rings to the rim, near full size at any count.
+77. **Brawl animations matching Alpha 11.** *Done:* Alpha 11's hop, roll, squash and three-quarter facing.
+78. **2v2 / FFA: everyone looks the same; teams need distinct hues, FFA very different colours; emblems
+    in the player's colour.** *Done:* new FFA hue order and team families, tinted emblems.
+79. **Android: fullscreen prompt stays after going fullscreen and can't be left.** *Done:* native
+    overlay gate with CLOSE (needs Daniele's phone to confirm).
+80. **Map selection doesn't scroll with the finger on mobile.** *Done:* swipe scroll (needs the phone).
+81. **Next alpha: redo all maps and change the Last Stand mechanic.** *Open* - waiting for the brief.

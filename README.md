@@ -1,4 +1,4 @@
-# Ooze Syndicate 2.0 - Alpha 16 (v0.16.0)
+# Ooze Syndicate 2.0 - Alpha 16 (v0.16.1)
 
 Godot 4.6 project (GL Compatibility - browser and phone first) for the 2.0 bridge-network game.
 Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project folder
@@ -17,7 +17,8 @@ Two modes that look and play differently, picked on the setup page (MODE / SIEGE
   arrival captures. Arrivals besiege the platform and fight the garrison there.
 - **BRAWL** - Alpha 11's core rules. Columns of the approved creature models, three across. Each
   unit is resolved the moment it reaches the target node (Alpha 11 `land()`, one-for-one at
-  baseline). Waypoints are free, lines pass each other. Half-bridge neon and round count badges
+  baseline). Waypoints are free, lines pass each other. Alpha 11's movement and animation: 8.9 m/s on
+  decks and platforms, 9.6 units/s out and in, the Alpha 11 hop. No recall. Half-bridge neon and round count badges
   with faction emblems, as in Alpha 11.
 
 Shared by both:
@@ -43,8 +44,8 @@ Shared by both:
 - Deck and platform speed 5 m/s, door 48 units/s.
 - **Online rooms** (Alpha 16, browser build): MAIN -> ONLINE -> CREATE ROOM or JOIN ROOM (four-character
   code). Alpha 11's PeerJS peer-to-peer rooms: 2-5 player FFA or 2v2, a lobby where the host picks map,
-  PLAYERS, SIEGE/BRAWL and Last Stand, host-authoritative play (guests' orders are validated by the
-  host, state streams back ~10 Hz), rematch in the same room, chat. Keep the host's tab in front.
+  PLAYERS, SIEGE/BRAWL, Last Stand and EMPTY SEATS (AI), host-authoritative play (guests' orders are validated by the
+  host, state streams back ~10 Hz), rematch in the same room, RECONNECT into your seat, chat. Keep the host's tab in front.
 
 Not in yet: accounts / room list / stats (Vercel + Neon, later), a relay server for strict networks, abilities
 (skill pools unapproved), team "eject", textures and the blob-model readability redo.

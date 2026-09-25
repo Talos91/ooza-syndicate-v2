@@ -1,5 +1,49 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.16.1 - 2026-09-25 (Daniele's Alpha 16 feedback)
+
+**Online**
+- **EMPTY SEATS** lobby setting (host): PLAYERS ONLY, or AI CASUAL / STANDARD / VETERAN. With AI on,
+  DEPLOY opens with any number of players and the AI plays the empty seats (the host runs it).
+- **RECONNECT**: a player who drops mid-match keeps their seat - the match goes on, everyone is told,
+  and with EMPTY SEATS on the AI plays that seat meanwhile. Their ONLINE page shows RECONNECT <code>
+  (also after reloading the tab); it puts them back into the same seat in the running match, with a
+  secret per-player token so nobody else can take it. Guests now wait **10 s** for a silent host.
+- **REMATCH** on the results screen (online: needs every connected player; offline: renamed from
+  PLAY AGAIN). A player still missing at the rematch is replaced by the AI, or - without AI - the room
+  goes back to the lobby.
+
+**BRAWL feels like Alpha 11**
+- Units move at Alpha 11's speed, the same on decks and platforms: 115 px/s -> **8.9 m/s** (Alpha 11's
+  mean hop is 284 px, 2.0's 21.9 m, so the same ~2.5 s per hop). They leave one every 12 px (9.6 shown
+  units/s) and **enter at that same rate**, in columns as long as the send (no length cap). SIEGE keeps
+  its own speeds.
+- Alpha 11's troop animation: 8 rad/s hop with a phase per body (only upward), a +-0.07 roll,
+  11 % squash-and-stretch (Ember and Solar softer), bodies turned three-quarters to the camera toward
+  where they're going instead of along the path.
+- **No RECALL in Brawl** (tap, AI and the hint); it stays in SIEGE.
+
+**SIEGE**: the goo covers the whole platform again - a second ring out to the rim, and a low vat only
+thins it slightly (it was shrinking to 40 %).
+
+**Colours**: FFA seats take far-apart hues (red, green, blue, gold, purple, cyan, rose) with at least
+0.12 of hue between any two; team modes give each team a family - cyan + green (+ blue) against
+red + gold (+ rose) - so every player is still a different hue. **Emblems take the player's colour**
+(badges and the top bar) instead of their faction colour.
+
+**Phones**: the fullscreen gate is now a native page overlay (`web/fullscreen-gate.js`): PLAY
+FULLSCREEN asks inside the real tap, a page already covering the screen counts as fullscreen, and
+CLOSE / "continue in the browser" dismiss it for the tab (Alpha 15's stayed up after going
+fullscreen and could not be closed). **Map selection scrolls with a finger swipe** (Alpha 11's touch
+scroll; a swipe never picks a map, and picking keeps your place in the list).
+
+Tested: test_sim 210 checks (new: Brawl speed / exit = entrance rate / no recall, FFA and 2v2 hue
+separation), test_net 93 (new: EMPTY SEATS, a drop holds the seat, wrong token refused, reconnect
+into the running round, rematch with AI or back to the lobby), every map to the end; browser (two
+instances): EMPTY SEATS lobby -> FFA 3 with an AI seat, a guest dropping (AI takes over) and
+RECONNECT into the same seat; phone emulation: the gate overlay and CLOSE. Not tested: the swipe
+(browser emulation sends mouse, not touch) and a real phone.
+
 ## 0.16.0 "Alpha 16" - 2026-09-25 (online rooms)
 
 **Peer-to-peer multiplayer** (Daniele: "let's start using Alpha 11 peer to peer"). Alpha 11's PeerJS

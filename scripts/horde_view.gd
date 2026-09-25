@@ -441,7 +441,7 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 		var id: int = n["id"]
 		if not rivers.has(id):
 			var arr := []
-			for i in range(Rules.RIVER_SLOTS):
+			for i in range(Rules.RIVER_SLOTS * 2):         # inner ring by the tower + outer ring to the rim
 				var mi := MeshInstance3D.new()
 				add_child(mi)
 				arr.append(mi)
@@ -479,11 +479,18 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 				slots[idx] = k
 				faces_in[idx] = true
 		var fill := clampf(total / float(Rules.CAPS[n["tier"]]), 0.0, 1.0)
-		var sc := lerpf(0.4, 1.0, sqrt(fill))
+		# the goo covers the whole platform whatever the count (Daniele, Alpha 16: "was nice when it
+		# covered all of the platform"); a low vat only thins it a little - the badge carries the number
+		var sc := lerpf(0.85, 1.0, sqrt(fill))
 		var contested: bool = not n["siege"].is_empty()
-		for i in range(Rules.RIVER_SLOTS):
-			var mi: MeshInstance3D = arr[i]
-			if Rules.low_detail and i % 2 == 1:
+		for j in range(Rules.RIVER_SLOTS * 2):
+			var mi: MeshInstance3D = arr[j]
+			var outer := j >= Rules.RIVER_SLOTS
+			var i := j % Rules.RIVER_SLOTS
+			if Rules.low_detail and (i % 2 == 1 or outer):
+				mi.visible = false
+				continue
+			if outer and classic:
 				mi.visible = false
 				continue
 			var seat: String = slots[i]
@@ -509,9 +516,9 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 					mi.set_surface_override_material(sidx, Mats.creature(faction, seat, textures[faction])
 							if is_creature else Mats.goo(seat))
 			mi.visible = true
-			var a := TAU * i / Rules.RIVER_SLOTS
+			var a := TAU * (i + (0.5 if outer else 0.0)) / Rules.RIVER_SLOTS
 			var radial := Vector3(cos(a), 0.0, sin(a))
-			var pos: Vector3 = n["pos"] + radial * Rules.RIVER_R
+			var pos: Vector3 = n["pos"] + radial * (Rules.RIVER_OUTER_R if outer else Rules.RIVER_R)
 			var fwd := -radial if faces_in[i] else Vector3(-sin(a), 0.0, cos(a))
 			var s := sc
 			if contested:                              # the whole platform seethes
@@ -522,7 +529,7 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 			mi.scale = Vector3(s * 0.85, s * 0.9, s)
 			# seam with the next slot: meniscus + splash between the two owners
 			var nxt: String = slots[(i + 1) % Rules.RIVER_SLOTS]
-			if nxt != seat:
+			if nxt != seat and not outer:
 				var key := "n%d_%d" % [id, i]
 				var a2 := TAU * (i + 0.5) / Rules.RIVER_SLOTS
 				var spos: Vector3 = n["pos"] + Vector3(cos(a2), 0.0, sin(a2)) * Rules.RIVER_R

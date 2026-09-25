@@ -898,7 +898,7 @@ func step(dt: float) -> void:
 		if h.is_empty() or h["owner"] != n["owner"]:
 			_end_streaming(n, "lost")
 			continue
-		var x: float = minf(n["streaming"]["remaining"], minf(Rules.door_rate * dt, n["units"]))
+		var x: float = minf(n["streaming"]["remaining"], minf(Rules.exit_rate() * dt, n["units"]))
 		n["units"] -= x
 		h["units"] += x
 		n["streaming"]["remaining"] -= x
@@ -908,12 +908,12 @@ func step(dt: float) -> void:
 	for h in hordes:
 		if h["state"] == "move" and not h.get("blocked", false):
 			var fast_here: bool = sample(h, h["s"])[2]
-			var mult: float = Rules.node_speed_mult if fast_here else 1.0
+			var mult: float = Rules.platform_mult() if fast_here else 1.0
 			if Rules.bridge_combat and on_enemy_goo(h):
 				mult *= Rules.GOO_SLOW                    # enemy goo: slower (home advantage)
-			var ds: float = Rules.deck_speed * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
+			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
-				ds = minf(ds, Rules.door_rate * Rules.METRES_PER_UNIT * dt)
+				ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * dt)
 			h["s"] += ds
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
@@ -933,7 +933,7 @@ func step(dt: float) -> void:
 			# the line keeps pouring in through the door: units enter as fast as the tail advances
 			var len := chain_length(h)
 			var tail_fast: bool = sample(h, h["L"] - len)[2]
-			var tail_speed := Rules.deck_speed * (Rules.node_speed_mult if tail_fast else 1.0)
+			var tail_speed := Rules.move_speed() * (Rules.platform_mult() if tail_fast else 1.0)
 			var rate: float = tail_speed * h["units"] / maxf(len, 0.5)
 			var x := minf(h["units"], maxf(rate, 4.0) * dt)
 			h["units"] -= x
@@ -1029,7 +1029,7 @@ func _current_span(h: Dictionary) -> Dictionary:
 
 static func full_length(units: float) -> float:
 	## Length of a horde's line once it has fully left its vat.
-	return clampf(units * Rules.METRES_PER_UNIT, 1.0, Rules.MAX_CHAIN)
+	return clampf(units * Rules.metres_per_unit(), 1.0, Rules.max_chain())
 
 
 static func chain_length(h: Dictionary) -> float:
@@ -1168,6 +1168,8 @@ func recall(hid: int) -> bool:
 	## the vat leaves. It keeps moving even while an enemy is on it - a pursuer still trades losses
 	## with its tail - so a retreat under pressure costs, but it gets out. A horde that has only
 	## just left pours straight back in.
+	if not Rules.bridge_combat:                       # BRAWL is Alpha 11: an order, once sent, is committed
+		return false
 	var h := _horde(hid)
 	if h.is_empty() or h["state"] == "absorb" or h.get("retreat", false) or h.has("ride"):
 		return false

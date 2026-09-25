@@ -16,6 +16,17 @@ const ROW := 1.35                    # metres between rows
 const LANE := 0.95                   # metres between the columns
 const MAX_PER_HORDE := 60
 const MODEL_YAW := PI / 2.0          # the models face +Z; the path heading is kit +X
+# ALPHA 11'S TROOP ANIMATION (game.gd draw loop + unit.gdshader, Daniele Alpha 16: "animations matching
+# Alpha 11"): every body hops on an 8 rad/s wave with its own phase (j * 0.618 + order * 0.137), only
+# upward, rolls +-0.07 rad on the same wave, squashes and stretches 11 % (40 % of that for Ember and
+# Solar), and faces the camera three-quarters (0.65 rad) toward the side it is travelling - it never
+# turns its back along the path.
+const WAVE := 8.0
+const HOP := 0.087 * UNIT_SIZE       # Alpha 11: 0.052 on a 0.6-unit body
+const ROLL := 0.07
+const SQUASH := 0.11
+const TURN := 0.65
+const SOFTNESS := {"ember": 0.4, "solar": 0.4}
 
 var _mesh := {}                      # faction -> Mesh
 var _tex := {}                       # faction -> albedo Texture2D
@@ -87,12 +98,13 @@ func begin() -> void:
 	_discs.clear()
 
 
-func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob := 0.0) -> void:
+func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob := 0.0, roll := 0.0, squeeze := 0.0) -> void:
 	if not _mesh.has(faction):
 		return
 	_instance(faction, seat)
 	var s: float = _scale[faction]
-	var basis := Basis(Vector3.UP, heading + MODEL_YAW).scaled(Vector3.ONE * s)
+	var basis := Basis(Vector3.UP, heading + MODEL_YAW) * Basis(Vector3(0, 0, 1), roll) \
+			* Basis.from_scale(Vector3(1.0 + squeeze * 0.6, 1.0 - squeeze, 1.0 + squeeze * 0.45) * s)
 	(_xf["%s|%s" % [faction, seat]] as Array).append(Transform3D(basis, pos + Vector3(0, 0.08 + bob, 0)))
 	_discs.append([Transform3D(Basis(), pos + Vector3(0, 0.05, 0)), Rules.seat_color(seat)])
 
@@ -101,7 +113,9 @@ func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
 	## A column of models from the head back along the path, ACROSS abreast.
 	var n := clampi(int(ceil(shown_units)), 1, MAX_PER_HORDE)
 	var rows := int(ceil(float(n) / ACROSS))
-	var fighting: bool = h["state"] == "fight"
+	var soft: float = SOFTNESS.get(h["faction"], 1.0)
+	var to_cam := Vector3(0, 0, 1).rotated(Vector3.UP, Rules.view_yaw)   # the camera sits this way
+	var screen_right := Vector3(1, 0, 0).rotated(Vector3.UP, Rules.view_yaw)
 	# rows spread over the line's real length (Alpha 11: one body every departure interval), so a
 	# column arriving at a node walks straight in through the door instead of bunching outside it
 	var row_gap: float = maxf(ROW, Sim.chain_length(h) / maxf(rows, 1))
@@ -109,7 +123,7 @@ func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
 	# into the tower as it reaches it (Alpha 11: bodies walk straight in) - never a standing queue
 	var walk := 0.0
 	if h["state"] == "absorb":
-		walk = fposmod(time * Rules.deck_speed, row_gap)
+		walk = fposmod(time * Rules.move_speed(), row_gap)
 	for r in range(rows + (1 if walk > 0.0 else 0)):
 		var s: float = h["s"] - r * row_gap + walk
 		if s > h["L"]:
@@ -120,10 +134,15 @@ func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
 		var fwd: Vector3 = smp[1]
 		var side := fwd.cross(Vector3.UP).normalized()
 		var in_row := mini(ACROSS, n - r * ACROSS)
+		var facing: float = 1.0 if fwd.dot(screen_right) >= 0.0 else -1.0
+		var yaw := Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing))
 		for c in range(in_row):
 			var off := (c - (in_row - 1) / 2.0) * LANE
-			var hop := absf(sin(time * 9.0 + r * 0.9 + c * 1.7)) * (0.18 if not fighting else 0.3)
-			add_unit(h["faction"], h["owner"], (smp[0] as Vector3) + side * off, Rules.heading(fwd), hop)
+			var j := r * ACROSS + c
+			var phase := fmod(j * 0.618 + float(h["id"]) * 0.137, 1.0)
+			var wave := sin(time * WAVE + phase * TAU)
+			add_unit(h["faction"], h["owner"], (smp[0] as Vector3) + side * off, yaw,
+					maxf(0.0, wave) * HOP, wave * ROLL, wave * SQUASH * soft)
 
 
 func flush() -> void:

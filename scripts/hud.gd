@@ -69,6 +69,17 @@ static func badge_style(color: Color) -> StyleBoxFlat:
 	return s
 
 
+const EMBLEM_TINT := preload("res://shaders/emblem_tint.gdshader")
+
+
+static func tint_emblem(rect: TextureRect, color: Color) -> void:
+	var m := ShaderMaterial.new()
+	m.shader = EMBLEM_TINT
+	m.set_shader_parameter("tint", color)
+	rect.material = m
+	rect.modulate = Color.WHITE
+
+
 func text_label(text: String, size_value: int = 20, color: Color = Color.WHITE) -> Label:
 	var l := Label.new()
 	l.text = text
@@ -175,6 +186,7 @@ func setup(m: Node3D) -> void:
 	stack.add_child(row)
 	var icon := TextureRect.new()
 	icon.texture = load("res://assets/ui/%s.svg" % main.SEAT_FACTIONS[human])
+	tint_emblem(icon, Rules.seat_color(human))           # your emblem in your colour
 	icon.custom_minimum_size = Vector2(34, 34) * ui_scale
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -231,7 +243,7 @@ func setup(m: Node3D) -> void:
 	# bottom: map title, hint, ability dock, version
 	map_title = text_label(str(main.map.get("name", "")).to_upper(), 20)
 	root.add_child(map_title)
-	hint = text_label("Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade  ·  Tap your line to RECALL it", 14, Color("d0dceb"))
+	hint = text_label("Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade" + ("  ·  Tap your line to RECALL it" if Rules.bridge_combat else ""), 14, Color("d0dceb"))
 	hint.add_theme_color_override("font_shadow_color", Color.BLACK)
 	hint.add_theme_constant_override("shadow_offset_x", 2)
 	hint.add_theme_constant_override("shadow_offset_y", 2)
@@ -441,7 +453,9 @@ func _badges(cam: Camera3D) -> void:
 		if emb.visible and emb.get_meta("f", "") != sim.factions.get(owner, ""):
 			emb.set_meta("f", sim.factions.get(owner, ""))
 			emb.texture = load("res://assets/ui/%s.svg" % sim.factions.get(owner, "null"))
-			emb.modulate = Rules.seat_color(owner)
+		if emb.visible and emb.get_meta("seat", "") != owner:
+			emb.set_meta("seat", owner)
+			tint_emblem(emb, Rules.seat_color(owner))
 		(b["sub"] as Label).visible = not classic or n["build_kind"] != "" or sim.last_stand_active
 		var parts := []
 		if n["relay"] != "":
@@ -717,13 +731,13 @@ func show_end(winner: String) -> void:
 		var votes: int = Net.rematch_votes.size()
 		var mine: bool = Net.rematch_votes.has(Net.local_id())
 		body += "
-REMATCH: %d / %d ready%s" % [votes, Net.roster.size(), " - waiting for the others" if mine else ""]
+REMATCH: %d / %d ready%s" % [votes, Net.present_ids().size(), " - waiting for the others" if mine else ""]
 		_fill_overlay(end_panel, title, body, [["REMATCH" if not mine else "REMATCH - READY", func(): Net.request_rematch()],
 				["LEAVE ROOM", main.to_menu]])
 		if not Net.rematch_changed.is_connected(_on_rematch_changed):
 			Net.rematch_changed.connect(_on_rematch_changed)
 	else:
-		_fill_overlay(end_panel, title, body, [["PLAY AGAIN", main.restart], ["MAIN MENU", main.to_menu]])
+		_fill_overlay(end_panel, title, body, [["REMATCH", main.restart], ["MAIN MENU", main.to_menu]])
 	end_panel.visible = true
 	pause_panel.visible = false
 	layout(root.get_viewport_rect().size, margins)

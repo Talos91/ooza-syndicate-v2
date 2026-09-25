@@ -751,5 +751,47 @@ func _init() -> void:
 		check(ssim.over, "%s: AI vs AI finishes within 8 simulated minutes (t=%.0fs)" % [sm["code"], ssim.time])
 		check(caps >= 2, "%s: AIs capture nodes" % sm["code"])
 
+	# ---------------------------------------------------------------- Alpha 16: Brawl moves like Alpha 11
+	Rules.bridge_combat = false
+	check(is_equal_approx(Rules.move_speed(), 8.9) and Rules.platform_mult() == 1.0, "BRAWL: 8.9 m/s on decks and platforms alike (Alpha 11: 115 px/s everywhere)")
+	check(absf(Rules.exit_rate() - 47.9167) < 0.01, "BRAWL: 9.6 shown units/s out of the door (Alpha 11: one every 12 px)")
+	var bmap := MapBuilder.load_map("res://maps/004-two-piers.json")
+	var bsim := Sim.new()
+	bsim.setup(bmap, MapBuilder.layout(bmap), {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
+	bsim.nodes[3]["units"] = 400.0
+	var bh := bsim.send(3, 1, 1.0)
+	var t_in := -1.0
+	var t_done := -1.0
+	var before: float = bsim.nodes[1]["units"]
+	var bt := 0.0
+	while bt < 40.0 and t_done < 0.0:
+		bsim.step(0.02)
+		bt += 0.02
+		if t_in < 0.0 and (bsim.nodes[1]["owner"] == "A" or bsim.nodes[1]["units"] != before):
+			t_in = bt
+		if t_in >= 0.0 and not bsim.hordes.any(func(x): return x["id"] == bh["id"]):
+			t_done = bt
+	var enter_rate := 400.0 / maxf(t_done - t_in, 0.01)
+	print("      brawl: first arrival %.2f s, 400 units poured in over %.2f s (%.1f/s)" % [t_in, t_done - t_in, enter_rate])
+	check(absf(enter_rate - Rules.exit_rate()) / Rules.exit_rate() < 0.1, "BRAWL: units enter at the rate they left (Alpha 11 spacing)")
+	var bh2 := bsim.send(4, 2, 1.0)
+	bsim.step(0.5)
+	check(not bsim.recall(bh2["id"]), "BRAWL: no RECALL - it is SIEGE only")
+	Rules.bridge_combat = true
+
+	# ---------------------------------------------------------------- Alpha 16: colours read per player
+	Rules.assign_colors(["A", "B", "C", "D"], {"A": "null", "B": "null", "C": "null", "D": "null"}, "A", "A", {})
+	var cols := ["A", "B", "C", "D"].map(func(s): return Rules.seat_color(s))
+	var min_gap := 1.0
+	for i in range(cols.size()):
+		for j in range(i + 1, cols.size()):
+			min_gap = minf(min_gap, Rules._hue_gap(cols[i], cols[j]))
+	check(min_gap > 0.12, "FFA4: every player a clearly different hue (closest %.2f)" % min_gap)
+	Rules.assign_colors(["A", "B", "C", "D"], {"A": "null", "B": "null", "C": "null", "D": "null"}, "A", "A", {"A": 0, "B": 0, "C": 1, "D": 1})
+	var ta := Rules._hue_gap(Rules.seat_color("A"), Rules.seat_color("B"))
+	var tc := Rules._hue_gap(Rules.seat_color("C"), Rules.seat_color("D"))
+	check(ta > 0.12 and tc > 0.12, "2v2: team-mates have different hues too (%.2f / %.2f)" % [ta, tc])
+	check(Rules._hue_gap(Rules.seat_color("A"), Rules.seat_color("C")) > 0.2, "2v2: the other team is another colour family")
+
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)

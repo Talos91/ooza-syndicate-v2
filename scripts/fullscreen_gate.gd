@@ -18,7 +18,11 @@ var _check_t := 0.0
 
 
 static func needed() -> bool:
-	return OS.has_feature("web") and (OS.has_feature("web_android") or OS.has_feature("web_ios"))
+	## Alpha 16: the page's native gate (web/fullscreen-gate.js) does this job; this in-game one is
+	## only a fallback if that script is missing.
+	if not (OS.has_feature("web") and (OS.has_feature("web_android") or OS.has_feature("web_ios"))):
+		return false
+	return JavaScriptBridge.eval("!!window.OozeGate", true) != true
 
 
 func _ready() -> void:

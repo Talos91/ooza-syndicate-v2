@@ -6,7 +6,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.16.0"
+const VERSION := "0.16.1"
 const VERSION_NAME := "Alpha 16"
 
 # kit geometry (metres)
@@ -37,6 +37,7 @@ const EXIT_R := 2.2                  # hordes leave from the tank bottoms (sends
 # (ARC_R). Its units then sit on the platform ("siege") and fight the garrison there.
 const RIVER_R := 4.4                 # the goo river around the tower sits at this radius
 const RIVER_SLOTS := 14              # patches in the river ring
+const RIVER_OUTER_R := 5.35          # second ring out to the rim: the goo covers the whole platform (Alpha 16)
 
 # hordes are LONG: a send streams out of the vat as one line whose length reads as its size at a
 # glance (Mushroom Wars' horde feeling without its endgame chaos). PROVISIONAL density.
@@ -53,6 +54,36 @@ const UNITS_PER_PATCH := 60          # legacy: only the capture drain estimate b
 const DOOR_RATE_DEFAULT := 48.0      # units/s out of the door - kept at the Alpha 12 throughput when
                                       # deck and platform speeds were unified (it was derived from them)
 static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug panel)
+
+# BRAWL MOVES LIKE ALPHA 11 (Daniele, Alpha 16: "same exit and entrance speed and deck and platform
+# speed of units as Alpha 11 ... the feel exactly the same"). Alpha 11: 115 px/s everywhere (no
+# platform difference), one unit leaves every 12 px (0.104 s), each lands on arrival at that spacing.
+# Its mean hop is 284 px centre to centre; 2.0's is 21.9 m over the 99 maps (1.68 modules), so one
+# Alpha 11 px = 0.077 m: 115 px/s = 8.9 m/s, the same 2.5 s per hop, and 12 px = 0.93 m per shown
+# unit. Exit = entrance = 9.6 shown units/s (x SCALE internally). SIEGE keeps its own tunables.
+const BRAWL_SPEED := 8.9                                   # m/s on decks and platforms alike
+const BRAWL_DOOR_RATE := 115.0 / 12.0 * 5.0               # internal units/s out of the door (and in)
+
+
+static func move_speed() -> float:
+	return deck_speed if bridge_combat else BRAWL_SPEED
+
+
+static func platform_mult() -> float:
+	return node_speed_mult if bridge_combat else 1.0
+
+
+static func exit_rate() -> float:
+	return door_rate if bridge_combat else BRAWL_DOOR_RATE
+
+
+static func metres_per_unit() -> float:
+	## Line density: SIEGE's blob length, or Alpha 11's column spacing (speed / rate).
+	return METRES_PER_UNIT if bridge_combat else BRAWL_SPEED / BRAWL_DOOR_RATE
+
+
+static func max_chain() -> float:
+	return MAX_CHAIN if bridge_combat else 100000.0     # Alpha 11 columns are as long as the send
 static var node_fight_mult: float = 1.0                # live-tunable: x combat rates on a platform
 # BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
@@ -224,42 +255,66 @@ static func seat_color(seat: String) -> Color:
 	return seat_colors.get(seat, SEATS.get(seat, NEUTRAL))
 
 
+# Player colours, Alpha 16 (Daniele: "in 2v2 and team matches the hue must be very recognisable from
+# one player to another, and in FFA the colours very different - green, red, blue, purple"). FFA: each
+# seat takes the next far-apart hue. Teams: each team is one family (cool / warm) and every player in
+# it still has a clearly different hue, so you read both "which team" and "which player".
+const HUES := {
+	"red": Color("#ff4545"), "green": Color("#6dff4a"), "blue": Color("#4a78ff"), "gold": Color("#ffd23f"),
+	"purple": Color("#b36bff"), "cyan": Color("#2ee6ff"), "rose": Color("#ff5ab8"), "orange": Color("#ff9a2e"),
+}
+const FFA_ORDER := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]
+const TEAM_FAMILIES := [["cyan", "green", "blue"], ["red", "gold", "rose"]]   # 2v2: cyan+green vs red+gold
+
+
+static func _hue_gap(a: Color, b: Color) -> float:
+	var d := absf(a.h - b.h)
+	return minf(d, 1.0 - d)
+
+
 static func assign_colors(seats: Array, factions: Dictionary, human: String, choice: String, teams: Dictionary) -> void:
 	## choice: a palette key ("A".."F") for your colour, or "faction".
 	seat_colors = {}
-	var used := []
 	var mine: Color = FACTIONS[factions.get(human, "null")][1] if choice == "faction" else SEATS.get(choice, SEATS["A"])
 	if not teams.is_empty():
-		var hues := {teams.get(human, 0): mine}
-		for k in PALETTE:
-			var c: Color = SEATS[k]
-			if absf(c.h - mine.h) < 0.06:
-				continue
-			for s in seats:
-				if not hues.has(teams.get(s, 0)):
-					hues[teams.get(s, 0)] = c
-					break
+		# your team takes the family closest to your pick (your pick first), the other team the other
+		var cool := TEAM_FAMILIES[0].map(func(k): return HUES[k])
+		var warm := TEAM_FAMILIES[1].map(func(k): return HUES[k])
+		var near_cool: float = cool.map(func(c): return _hue_gap(c, mine)).min()
+		var near_warm: float = warm.map(func(c): return _hue_gap(c, mine)).min()
+		var own: Array = cool if near_cool <= near_warm else warm
+		var other: Array = warm if own == cool else cool
+		own = [mine] + own.filter(func(c): return _hue_gap(c, mine) > 0.07)
+		var family := {teams.get(human, 0): own}
+		for s in seats:
+			if not family.has(teams.get(s, 0)):
+				family[teams.get(s, 0)] = other
 		var count := {}
 		for s in ([human] + seats.filter(func(x): return x != human)):
 			var t = teams.get(s, 0)
-			var base: Color = hues.get(t, SEATS["B"])
+			var list: Array = family.get(t, other)
 			var i: int = count.get(t, 0)
-			seat_colors[s] = base if i == 0 else base.darkened(0.3 + 0.1 * i)   # light, dark shades
+			seat_colors[s] = list[i % list.size()] if i < list.size() else (list[i % list.size()] as Color).darkened(0.35)
 			count[t] = i + 1
 		return
+	var used := [mine]
 	seat_colors[human] = mine
-	used.append(mine)
 	for s in seats:
 		if s == human:
 			continue
-		var c: Color = SEATS["B"]
-		if choice == "faction":
-			c = FACTIONS[factions.get(s, "null")][1]
-		if choice != "faction" or used.any(func(u): return absf(u.h - c.h) < 0.06):
-			for k in PALETTE:
-				if not used.any(func(u): return absf(u.h - (SEATS[k] as Color).h) < 0.06):
-					c = SEATS[k]
+		var c: Color = HUES["red"]
+		var want: Color = FACTIONS[factions.get(s, "null")][1] if choice == "faction" else Color(0, 0, 0, 0)
+		if choice == "faction" and used.all(func(u): return _hue_gap(u, want) > 0.07):
+			c = want
+		else:
+			var picked := false
+			for k in FFA_ORDER:
+				if used.all(func(u): return _hue_gap(u, HUES[k]) > 0.12):
+					c = HUES[k]
+					picked = true
 					break
+			if not picked:
+				c = (HUES[FFA_ORDER[used.size() % FFA_ORDER.size()]] as Color).darkened(0.35)
 		seat_colors[s] = c
 		used.append(c)
 

@@ -283,6 +283,18 @@ func _start_online() -> void:
 	_start_map(str(info["map"]))
 	Net.world_ready(sim, self)
 	Net.order_feedback.connect(_on_order_feedback)
+	if Net.is_host():                                  # EMPTY SEATS and dropped players: the AI plays them
+		_sync_online_ais()
+		Net.seats_changed.connect(_sync_online_ais)
+
+
+func _sync_online_ais() -> void:
+	var seats: Dictionary = Net.ai_seats()
+	ais = ais.filter(func(ai): return seats.has(ai.seat))
+	var have := ais.map(func(ai): return ai.seat)
+	for seat in seats:
+		if not seat in have and sim.factions.has(seat):
+			ais.append(SeatAI.new(seat, 2.5, seats[seat]))
 
 
 func _on_order_feedback(msg: String) -> void:
@@ -622,6 +634,8 @@ func _process(delta: float) -> void:
 	_flush_inspect()
 	if online:                                    # the host's Sim is the only simulation (Net)
 		if Net.is_host() and Net.started:
+			for ai in ais:
+				ai.think(sim, dt)
 			sim.step(dt)
 	elif not paused:
 		for ai in ais:
@@ -754,7 +768,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					hud.close_inspector()
 					selected = -1
-					var own := _horde_at(hit)
+					var own := _horde_at(hit) if Rules.bridge_combat else {}   # RECALL is SIEGE only (Alpha 16)
 					if not own.is_empty():                       # tap one of your lines: RECALL it
 						node_action("recall", own["id"])
 						return

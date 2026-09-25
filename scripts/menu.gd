@@ -30,6 +30,7 @@ var maps: Array = []
 var _is_main := false
 var _backdrop: TextureRect
 var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
+var _map_scroll := 0
 var _chat_btn: Button
 var _chat_t := 0.0
 
@@ -347,7 +348,9 @@ func show_maps() -> void:
 	header(2)
 	label_at("CHOOSE YOUR BATTLEFIELD", P(40, 107), 43)
 	frame(P(35, 174), P(975, 641))
-	var scroll := ScrollContainer.new()
+	var scroll := TouchScroll.new()                    # finger swipes scroll the grid (phones)
+	var keep := _map_scroll                           # picking a map rebuilds the page: stay where you were
+	get_tree().process_frame.connect(func(): if is_instance_valid(scroll): scroll.scroll_vertical = keep, CONNECT_ONE_SHOT)
 	scroll.position = P(52, 193)
 	scroll.size = P(940, 600)
 	content.add_child(scroll)
@@ -361,6 +364,9 @@ func show_maps() -> void:
 		var mp: String = entry["path"]
 		var code: String = m.get("code", "")
 		var b := button("", func():
+			if scroll.was_drag():                     # that was a swipe, not a pick
+				return
+			_map_scroll = scroll.scroll_vertical
 			map_path = mp
 			show_maps(), 451 * K)
 		b.custom_minimum_size = P(451, 272)
@@ -527,6 +533,11 @@ func show_online() -> void:
 	create.disabled = not web
 	var join := nav_button("JOIN ROOM", P(640, 520), P(560, 92), _open_code)
 	join.disabled = not web
+	if not Net.rejoin.is_empty():                     # dropped out of a room: back into the same seat
+		var rc := nav_button("RECONNECT  %s" % str(Net.rejoin["code"]), P(1220, 520), P(380, 92), func():
+			Net.reconnect()
+			show_lobby(), true)
+		rc.disabled = not web
 	var msg := Net.status if Net.status != "" else ("Some networks block direct connections (there is no relay server yet); if joining fails, try another network." if web
 			else "Online rooms run in the browser build: open https://talos91.github.io/ooza-syndicate-v2/")
 	var st := label_at(msg, P(60, 650), 20, Color("ffd15c") if Net.status != "" else Color("adc7d2"))
@@ -593,10 +604,10 @@ func show_lobby() -> void:
 			var id: int = by_slot[i]
 			var f: String = str(Net.roster[id]["faction"])
 			label_at("VIRIDIAN BLOOM" if f == "bloom" else NAMES[f].replace("\n", " "), P(136, y + 18), 24, Rules.FACTIONS[f][1])
-			var tags := ("HOST" if id == 1 else "") + ("  ·  YOU" if id == Net.local_id() else "")
+			var tags := ("HOST" if id == 1 else "") + ("  ·  YOU" if id == Net.local_id() else "") + ("  ·  RECONNECTING" if Net.is_away(id) else "")
 			label_at(tags.trim_prefix("  ·  "), P(470, y + 22), 18, Color("ffd15c"))
 		else:
-			label_at("open seat - waiting for a player", P(136, y + 22), 18, Color("7795a4"))
+			label_at("AI  ·  %s  (or a player who joins)" % Net.ai_fill.to_upper() if Net.ai_fill != "" else "open seat - waiting for a player", P(136, y + 22), 18, Color("7795a4"))
 	label_at("YOUR FACTION", P(58, 652), 20, Color("aac3cd"))
 	_faction_row(P(58, 686), P(143, 54))
 	label_at("Seats go in join order. Same factions are allowed; every seat has its own colour.", P(58, 760), 15, Color("7795a4"))
@@ -632,7 +643,11 @@ func show_lobby() -> void:
 		show_lobby())
 	cb.add_theme_font_size_override("font_size", int(round(18 * K)))
 	cb.add_theme_color_override("font_color", Rules.FACTIONS[faction][1] if Net.colour == "faction" else Rules.SEATS[Net.colour])
-	label_at("How you see yourself; others pick their own.", P(1254, 765), 15, Color("7795a4"))
+	var ab := nav_button("EMPTY SEATS / %s" % ("AI " + Net.ai_fill.to_upper() if Net.ai_fill != "" else "PLAYERS ONLY"), P(1254, 750), P(360, 50), func():
+		Net.set_ai_fill(Net.AI_FILL[(Net.AI_FILL.find(Net.ai_fill) + 1) % Net.AI_FILL.size()])
+		show_lobby())
+	ab.add_theme_font_size_override("font_size", int(round(17 * K)))
+	ab.disabled = not host
 	nav_button("LEAVE ROOM", P(40, 866), P(260, 58), func():
 		Net.leave()
 		show_online())
@@ -640,9 +655,9 @@ func show_lobby() -> void:
 		var go := nav_button("DEPLOY", P(1280, 866), P(352, 58), func(): Net.start_match(), true)
 		go.disabled = not Net.can_start()
 		if not Net.can_start():
-			label_at("DEPLOY opens when every seat is filled", P(930, 884), 17, Color("adc7d2"))
+			label_at("DEPLOY opens when every seat is filled (or EMPTY SEATS: AI)", P(820, 884), 17, Color("adc7d2"))
 	else:
-		label_at("The host deploys when every seat is filled", P(1180, 884), 19, Color("adc7d2"))
+		label_at("The host deploys when ready", P(1300, 884), 19, Color("adc7d2"))
 
 
 func _step_map(d: int) -> void:

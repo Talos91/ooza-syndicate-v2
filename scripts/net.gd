@@ -16,6 +16,7 @@ signal lobby_changed
 signal rematch_changed
 signal order_feedback(message: String)
 signal connection_error(message: String)
+signal seats_changed                               # host: which seats the AI plays changed
 
 const VERSION_TAG := "ooze20-net-1"               # plus Rules.VERSION: guests must match the host exactly
 const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2"]
@@ -30,6 +31,8 @@ const PATH_RESEND := 1.0                           # a changed path rides along 
 const MAX_PACKET := 8 * 1024 * 1024
 const CHAT_MAX := 256
 const CHAT_HISTORY := 50
+const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
+const AI_FILL := ["", "Casual", "Standard", "Veteran"]   # EMPTY SEATS setting: off or the AI level
 
 var bridge                                         # window.OozePeer (or a test double)
 var hosting := false
@@ -59,6 +62,10 @@ var match_info := {}                               # the launch packet of the cu
 var sim: Sim                                       # set by main when the world is built
 var main: Node                                     # the match scene (host runs orders through it)
 var no_reload := false                             # tests: launch without reloading the scene
+var ai_fill := ""                                  # host setting: "" = every seat needs a player, else the AI level for empty seats
+var rejoin := {}                                   # guest: {code, token, faction} to RECONNECT to a dropped room
+var _tokens := {}                                  # host: player id -> secret rejoin token (never broadcast)
+var _fresh := false                                # guest: the first snapshot of a round (a rejoin catches up)
 # pacing / limits
 var _snap_clock := 0.0
 var _snap_count := 0
@@ -131,7 +138,34 @@ func team_of_slot(slot: int) -> int:
 
 
 func can_start() -> bool:
-	return hosting and connected and not active and roster.size() == slots() and map_offers(map_path, mode)
+	var full := roster.size() == slots() or (ai_fill != "" and roster.size() >= 1)
+	return hosting and connected and not active and full and map_offers(map_path, mode)
+
+
+func is_away(id: int) -> bool:
+	return roster.has(id) and bool(roster[id].get("away", false))
+
+
+func present_ids() -> Array:
+	## Players still connected (a dropped player keeps their seat mid-match until they RECONNECT).
+	return roster.keys().filter(func(id): return not is_away(int(id)))
+
+
+func ai_seats() -> Dictionary:
+	## Host: seat -> AI level for every seat the AI plays now: empty seats filled at launch, and
+	## (with EMPTY SEATS on) the seat of a player who dropped, until they reconnect.
+	var out: Dictionary = (match_info.get("ai", {}) as Dictionary).duplicate()
+	if ai_fill != "":
+		for id in roster:
+			if is_away(int(id)):
+				out[seat_of(int(id))] = ai_fill
+	return out
+
+
+func set_ai_fill(level: String) -> void:
+	if hosting and not active and level in AI_FILL:
+		ai_fill = level
+		publish_lobby()
 
 
 func map_data(path: String) -> Dictionary:
@@ -158,8 +192,15 @@ func join_room(code: String, faction: String) -> Error:
 	return _start(false, faction, code)
 
 
+func reconnect() -> Error:
+	## RECONNECT: rejoin the room we dropped out of, into the same seat (the host holds it).
+	if rejoin.is_empty():
+		return ERR_UNAVAILABLE
+	return _start(false, str(rejoin["faction"]), str(rejoin["code"]))
+
+
 func _start(host: bool, faction: String, code: String) -> Error:
-	leave()
+	leave(false)
 	if not OS.has_feature("web"):
 		status = "Online rooms run in the browser build (the playtest link)."
 		lobby_changed.emit()
@@ -182,7 +223,10 @@ func _start(host: bool, faction: String, code: String) -> Error:
 	return OK
 
 
-func leave() -> void:
+func leave(forget := true) -> void:
+	## forget = false keeps the RECONNECT details (a dropped connection, not LEAVE ROOM).
+	if forget:
+		_save_rejoin({})
 	if OS.has_feature("web"):
 		var ui = JavaScriptBridge.get_interface("OozeChat")
 		if ui != null:
@@ -218,7 +262,7 @@ func leave() -> void:
 
 func fail(message: String) -> void:
 	var was_playing := active
-	leave()
+	leave(false)
 	status = message
 	connection_error.emit(message)
 	lobby_changed.emit()
@@ -277,11 +321,17 @@ func _reseat() -> void:
 
 func publish_lobby() -> void:
 	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path, "siege": siege,
-			"last_stand": last_stand, "round": match_round})
+			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill})
 	lobby_changed.emit()
 
 
 func _register(remote: String, id: int, p: Dictionary) -> void:
+	var token := str(p.get("token", ""))
+	if token != "" and str(p.get("version", "")) == version():
+		for old in roster:
+			if is_away(int(old)) and _tokens.get(old, "") == token:
+				_reclaim(remote, int(old))
+				return
 	if active or roster.has(id) or roster.size() >= slots() or str(p.get("version", "")) != version():
 		_send(remote, "rejected", "Room full, match already started, or a different game version (reload the page).")
 		return
@@ -293,9 +343,37 @@ func _register(remote: String, id: int, p: Dictionary) -> void:
 		slot += 1
 	var f := str(p.get("faction", ""))
 	roster[id] = {"faction": f if f in FACTIONS else FACTIONS[slot % FACTIONS.size()], "slot": slot}
-	_send(remote, "identity", id)
+	_tokens[id] = _new_token()
+	_send(remote, "identity", {"id": id, "token": _tokens[id]})
 	_send(remote, "chat_history", chat_history)
 	publish_lobby()
+
+
+func _reclaim(remote: String, id: int) -> void:
+	## A dropped player is back: same id, same seat; mid-match they get the round and catch up.
+	links[remote] = id
+	roster[id].erase("away")
+	_send(remote, "identity", {"id": id, "token": _tokens[id]})
+	_send(remote, "chat_history", chat_history)
+	if active:
+		match_info["roster"] = roster
+		_send(remote, "launch", match_info)
+	_notice("Seat %s reconnected" % seat_of(id))
+	seats_changed.emit()
+	publish_lobby()
+
+
+func _new_token() -> String:
+	var b := PackedByteArray()
+	for i in range(12):
+		b.append(randi() % 256)
+	return Marshalls.raw_to_base64(b)
+
+
+func _notice(message: String) -> void:
+	## Host: a line every player sees as a toast (drops, reconnects).
+	_broadcast("notice", message)
+	order_feedback.emit(message)
 
 
 func version() -> String:
@@ -309,11 +387,22 @@ func start_match() -> void:
 
 
 func launch_round() -> void:
+	for id in roster.keys():                          # a new round: anyone still away has left
+		if is_away(int(id)):
+			roster.erase(id)
+			_tokens.erase(id)
+	_reseat()
 	var players := {}
 	for id in roster:
 		players[seat_of(id)] = roster[id]["faction"]
+	var ai := {}
+	if ai_fill != "":
+		for slot in range(roster.size(), slots()):     # EMPTY SEATS: the AI plays them
+			var free := FACTIONS.filter(func(f): return not f in players.values())
+			players[SEATS[slot]] = free[randi() % free.size()] if not free.is_empty() else FACTIONS[randi() % FACTIONS.size()]
+			ai[SEATS[slot]] = ai_fill
 	var info := {"round": match_round + 1, "map": map_path, "mode": mode, "seed": randi() % 100000,
-			"players": players, "roster": roster,
+			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill,
 			"rules": {"bridge_combat": siege, "last_stand": last_stand, "deck_speed": Rules.deck_speed,
 					"node_speed_mult": Rules.node_speed_mult, "door_rate": Rules.door_rate,
 					"node_fight_mult": Rules.node_fight_mult, "forge_bonus": Rules.forge_bonus}}
@@ -337,9 +426,11 @@ func _launch(info: Dictionary) -> void:
 	Rules.door_rate = float(r["door_rate"])
 	Rules.node_fight_mult = float(r["node_fight_mult"])
 	Rules.forge_bonus = float(r["forge_bonus"])
+	ai_fill = str(info.get("ai_fill", ""))
 	active = true
 	started = false
 	finished = false
+	_fresh = true
 	ready_peers = {}
 	rematch_votes = {}
 	_order_limits = {}
@@ -366,9 +457,22 @@ func mark_ready(id: int) -> void:
 	if not active or not roster.has(id):
 		return
 	ready_peers[id] = true
-	if ready_peers.size() == roster.size() and not started:
-		_broadcast("begin", {"round": match_round})
-		_begin()
+	if started:                                        # a reconnected player caught up
+		for remote in links:
+			if links[remote] == id:
+				_send(remote, "begin", {"round": match_round})
+		return
+	_check_barrier()
+
+
+func _check_barrier() -> void:
+	if not active or started:
+		return
+	for id in present_ids():
+		if not ready_peers.has(id):
+			return
+	_broadcast("begin", {"round": match_round})
+	_begin()
 
 
 func _begin() -> void:
@@ -379,18 +483,31 @@ func _begin() -> void:
 func peer_left(id: int) -> void:
 	if not hosting or not roster.has(id):
 		return
+	if active:                                         # mid-match: hold the seat for a RECONNECT
+		roster[id]["away"] = true
+		rematch_votes.erase(id)
+		ready_peers.erase(id)
+		_notice("Seat %s lost connection - they can RECONNECT%s" % [seat_of(id), " (the AI plays it meanwhile)" if ai_fill != "" else ""])
+		seats_changed.emit()
+		_check_barrier()
+		publish_lobby()
+		_check_rematch()
+		return
 	roster.erase(id)
+	_tokens.erase(id)
 	rematch_votes.erase(id)
 	ready_peers.erase(id)
 	_reseat()
-	if active:
-		var msg := "A player left. Invite someone with the same room code."
-		_broadcast("room_reset", msg)
-		return_to_room(msg)
 	publish_lobby()
 
 
 func return_to_room(message: String) -> void:
+	if hosting:                                        # back in the lobby: dropped players are gone
+		for id in roster.keys():
+			if is_away(int(id)):
+				roster.erase(id)
+				_tokens.erase(id)
+		_reseat()
 	active = false
 	started = false
 	finished = false
@@ -463,8 +580,21 @@ func accept_rematch(id: int) -> void:
 	rematch_votes[id] = true
 	_broadcast("rematch_votes", {"round": match_round, "votes": rematch_votes})
 	rematch_changed.emit()
-	if roster.size() == slots() and rematch_votes.size() == roster.size():
+	_check_rematch()
+
+
+func _check_rematch() -> void:
+	if not hosting or not active or not finished:
+		return
+	var present := present_ids()
+	if present.is_empty() or present.any(func(id): return not rematch_votes.has(id)):
+		return
+	if present.size() == slots() or ai_fill != "":
 		launch_round()
+	else:                                              # a seat is empty and no AI may take it
+		var msg := "A player is missing - back to the lobby. Invite someone with the same code."
+		_broadcast("room_reset", msg)
+		return_to_room(msg)
 
 
 # ------------------------------------------------------------------ snapshots
@@ -595,12 +725,12 @@ static func predict(s: Sim, dt: float) -> void:
 	for h in s.hordes:
 		if h["state"] != "move" or h.get("blocked", false):
 			continue
-		var mult: float = Rules.node_speed_mult if Sim.sample(h, h["s"])[2] else 1.0
+		var mult: float = Rules.platform_mult() if Sim.sample(h, h["s"])[2] else 1.0
 		if Rules.bridge_combat and s.on_enemy_goo(h):
 			mult *= Rules.GOO_SLOW
-		var ds: float = Rules.deck_speed * h.get("speed", 1.0) * s.stat(h["owner"], "speed") * mult * dt
+		var ds: float = Rules.move_speed() * h.get("speed", 1.0) * s.stat(h["owner"], "speed") * mult * dt
 		if h["streaming"]:
-			ds = minf(ds, Rules.door_rate * Rules.METRES_PER_UNIT * dt)
+			ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * dt)
 		h["s"] = minf(h["s"] + ds, h["L"])
 
 
@@ -631,8 +761,8 @@ func _process(dt: float) -> void:
 		_since_snapshot += minf(dt, 0.25)            # a tab back from the background: one huge frame
 		if _since_snapshot < 0.35 and not sim.over:
 			predict(sim, minf(dt, 0.05))
-		if _since_snapshot > 8.0:
-			fail("The host stopped responding. The room is closed.")
+		if _since_snapshot > HOST_GRACE:
+			fail("The host stopped responding for %d s. RECONNECT to try the room again." % int(HOST_GRACE))
 
 
 func _poll(dt: float) -> void:
@@ -651,14 +781,18 @@ func _poll(dt: float) -> void:
 				lobby_changed.emit()
 			"connection":
 				if hosting:
-					if links.size() >= slots() - 1 or active:
+					var held := roster.keys().any(func(id): return is_away(int(id)))
+					if links.size() >= slots() - 1 or (active and not held):   # mid-match: only to reclaim a held seat
 						bridge.closePeer(event["peer"])
 						continue
 					links[event["peer"]] = next_peer
 					next_peer += 1
 				else:
 					remote_host = str(event["peer"])
-					_send_to_host({"op": "register", "version": version(), "faction": preferred_faction})
+					var reg := {"op": "register", "version": version(), "faction": preferred_faction}
+					if not rejoin.is_empty() and str(rejoin["code"]) == room_code:
+						reg["token"] = rejoin["token"]
+					_send_to_host(reg)
 			"data":
 				if hosting:
 					_host_receive(str(event["peer"]), str(event["data"]))
@@ -737,7 +871,13 @@ func _guest_receive(raw: String) -> void:
 	var data = bytes_to_var(bytes)
 	match str(envelope.get("kind", "")):
 		"identity":
-			assigned_id = int(data)
+			if data is Dictionary:
+				assigned_id = int(data["id"])
+				_save_rejoin({"code": room_code, "token": str(data["token"]), "faction": preferred_faction})
+			else:
+				assigned_id = int(data)
+		"notice":
+			order_feedback.emit(str(data))
 		"lobby":
 			if not data is Dictionary:
 				return
@@ -746,6 +886,7 @@ func _guest_receive(raw: String) -> void:
 			map_path = str(data["map"])
 			siege = bool(data["siege"])
 			last_stand = bool(data["last_stand"])
+			ai_fill = str(data.get("ai_fill", ""))
 			connected = true
 			status = "ROOM %s - waiting for the host to deploy" % room_code
 			lobby_changed.emit()
@@ -759,6 +900,10 @@ func _guest_receive(raw: String) -> void:
 			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null and active:
 				apply_snapshot(sim, data)
 				_since_snapshot = 0.0
+				if _fresh:                            # joined late (RECONNECT): drop the nodes that already fell
+					_fresh = false
+					for id in sim.collapsed:
+						sim.fx_events.append({"type": "collapse", "node": id})
 				if sim.over:
 					finished = true
 		"effects":
@@ -779,7 +924,24 @@ func _guest_receive(raw: String) -> void:
 		"chat_error":
 			_chat_error(str(data))
 		"rejected":
+			_save_rejoin({})                          # that room will not take us back
 			fail(str(data))
+
+
+# ------------------------------------------------------------------ rejoin details
+func _ready() -> void:
+	if OS.has_feature("web"):                          # a reloaded tab can still RECONNECT
+		var raw = JavaScriptBridge.eval("sessionStorage.getItem('ooze20-rejoin') || ''", true)
+		var d = JSON.parse_string(str(raw)) if str(raw) != "" else null
+		if d is Dictionary and d.has("code") and d.has("token") and d.has("faction"):
+			rejoin = d
+
+
+func _save_rejoin(d: Dictionary) -> void:
+	rejoin = d
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("sessionStorage.setItem('ooze20-rejoin', %s)" % JSON.stringify(JSON.stringify(d)) if not d.is_empty()
+				else "sessionStorage.removeItem('ooze20-rejoin')", true)
 
 
 # ------------------------------------------------------------------ transport

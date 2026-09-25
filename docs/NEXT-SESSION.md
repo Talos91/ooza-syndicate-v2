@@ -1,6 +1,6 @@
 # Next session - start here
 
-State at the end of the 2026-09-25 sessions: **v0.16.0 "Alpha 16"** (online rooms), source on `main`,
+State at the end of the 2026-09-25 sessions: **v0.16.1 "Alpha 16"** (online rooms, Alpha 11 Brawl feel, player colours), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: this file,
 `README.md`, the top of `CHANGELOG.md` (0.12.0 to 0.16.0), `PLAYTEST-NOTES.md` notes 26-71, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
@@ -17,6 +17,15 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
+## NEXT ALPHA (Alpha 17) - Daniele, 2026-09-25: "we are going to redo all maps and change the Last Stand
+mechanic". Get his new Last Stand rules and the map brief before coding. Where it lives now: maps in
+`maps/` (copies of the roster `maps-100.json`, generated - never hand-edit geometry; the generator is
+the roster HTML in the design package), `scripts/map_pool.gd` (the pool), `scripts/map_builder.gd`
+(layout, overpasses, relays), Last Stand in `scripts/sim.gd` (`_step_last_stand`, `_start_last_stand`,
+`_collapse_order`, `_drop_node`) with the HUD status line in `hud.gd` and effects in `fx.gd`;
+menu thumbnails `assets/map-thumbnails/` (`--thumb=`). Online needs nothing map-specific: maps list
+their seats per mode (`seats`) and the lobby offers any map with the chosen mode.
+
 ## Multiplayer: built in Alpha 16 (PeerJS peer-to-peer, Alpha 11's approach)
 
 `scripts/net.gd` (autoload `Net`) + `web/peer-transport.js`, `web/room-ui.js` (code field),
@@ -29,8 +38,9 @@ players on one PC: `tests/duo.html` (BUILD-LOG sec10). Main's `HUMAN` is now a v
 
 Still open on multiplayer:
 - Real separate-network and phone tests (Daniele). No relay (TURN) server: strict networks fail.
-- A host tab in the background freezes the match; 8 s later guests are dropped (Alpha 11 rule).
-- Not built: seat swapping in the lobby, AI filling empty seats, spectators, reconnect.
+- A host tab in the background freezes the match; 10 s later guests drop (they can RECONNECT).
+- Built in 0.16.1: EMPTY SEATS (AI), RECONNECT into a held seat, 10 s host grace, REMATCH.
+- Not built: seat swapping in the lobby, spectators.
 - Later: Vercel (site, room list, sign-in functions) + Neon Postgres (accounts, match history,
   leaderboards, telemetry). Vercel cannot relay a live match itself (no long-lived WebSockets).
 

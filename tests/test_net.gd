@@ -260,34 +260,106 @@ func _run() -> void:
 	_to_host("g1", {"op": "order", "round": 1, "action": "send", "a": home_b, "args": {"to": target, "fraction": 1.0}})
 	check(not ("feedback" in _kinds_to("g1")), "orders from the old round are ignored")
 
-	# ---------------------------------------------------------------- departures
+	# ---------------------------------------------------------------- a drop mid-match holds the seat
 	var hs2 := _build_sim(host.match_info)
 	host.world_ready(hs2, _fake_main(hs2))
 	g.world_ready(_build_sim(g.match_info), null)
 	_deliver()
 	check(host.started, "round 2 begins")
-	host.peer_left(g.assigned_id)
+	check(not g.rejoin.is_empty() and str(g.rejoin["code"]) == "AB7K", "the guest keeps its RECONNECT details")
+	var gid: int = g.assigned_id
+	var notes := []
+	host.order_feedback.connect(func(m): notes.append(m))
+	host.links.erase("g1")
+	host.peer_left(gid)
+	check(host.active and host.started and host.roster.has(gid) and host.is_away(gid), "a guest dropping mid-match keeps the seat; the match goes on")
+	check(notes.any(func(m): return "RECONNECT" in m), "the others are told the seat can reconnect")
+	g.fail("The host stopped responding for 10 s. RECONNECT to try the room again.")
+	check(not g.in_room() and not g.rejoin.is_empty(), "a dropped guest can still RECONNECT")
+	check(g.HOST_GRACE == 10.0, "guests wait 10 s for a silent host")
+	# reconnect with a wrong token: refused (the match is running)
+	var thief := _join("thief", "vex")
 	_deliver()
-	check(not host.active and host.roster.size() == 1 and host.in_room(), "a guest leaving mid-match returns the host to the lobby")
+	check(thief.bridge == null and host.is_away(gid), "a stranger cannot take the held seat")
+	guests.erase("thief")
+	# the real reconnect
+	var r2 := _new_net()
+	r2.remote_host = "host"
+	r2.room_code = "AB7K"
+	r2.rejoin = g.rejoin
+	r2.preferred_faction = "solar"
+	guests["g1b"] = r2
+	host.links["g1b"] = host.next_peer
+	host.next_peer += 1
+	_to_host("g1b", {"op": "register", "version": host.version(), "faction": "solar", "token": g.rejoin["token"]})
+	_deliver()
+	check(host.links["g1b"] == gid and not host.is_away(gid) and r2.assigned_id == gid, "RECONNECT: same id, same seat")
+	check(r2.active and r2.match_round == host.match_round, "the reconnected guest receives the running round")
+	r2.world_ready(_build_sim(r2.match_info), null)
+	_deliver()
+	check(r2.started, "the reconnected guest joins the running clock")
+	host._process(0.2)
+	_deliver()
+	check(r2.sim.time > 0.0 or r2.sim.hordes.size() >= 0, "snapshots reach the reconnected guest")
+
+	# ---------------------------------------------------------------- EMPTY SEATS: AI
 	_open_room("FFA3")
-	var q1 := _join("g1")
-	var q2 := _join("g2")
+	var a1 := _join("g1")
+	_deliver()
+	check(not host.can_start(), "FFA3 with two players: no deploy while EMPTY SEATS is off")
+	host.set_ai_fill("Casual")
+	_deliver()
+	check(host.can_start() and a1.ai_fill == "Casual", "EMPTY SEATS: AI - deploy opens; guests see the setting")
+	host.start_match()
+	_deliver()
+	check(host.match_info["players"].size() == 3 and host.match_info["ai"] == {"C": "Casual"}, "the AI takes seat C")
+	check(host.ai_seats() == {"C": "Casual"}, "host runs an AI for seat C")
+	var hs4 := _build_sim(host.match_info)
+	check(hs4.factions.size() == 3, "the round has three seats")
+	host.world_ready(hs4, _fake_main(hs4))
+	a1.world_ready(_build_sim(a1.match_info), null)
+	_deliver()
+	host.links.erase("g1")
+	host.peer_left(2)
+	check(host.ai_seats().has("B") and host.ai_seats()["B"] == "Casual", "with EMPTY SEATS on, the AI covers a dropped player")
+	hs4.over = true
+	hs4.winner = "A"
+	host._process(0.2)
+	host.request_rematch()
+	check(host.match_round == 2 and host.roster.size() == 1 and host.match_info["ai"].size() == 2, "rematch: the dropped player's seat goes to the AI")
+
+	# ---------------------------------------------------------------- without AI: rematch returns to the lobby
+	_open_room("1v1")
+	var b1 := _join("g1")
 	_deliver()
 	host.start_match()
 	_deliver()
-	var hs3 := _build_sim(host.match_info)
-	host.world_ready(hs3, _fake_main(hs3))
-	q1.world_ready(_build_sim(q1.match_info), null)
-	q2.world_ready(_build_sim(q2.match_info), null)
+	var hs5 := _build_sim(host.match_info)
+	host.world_ready(hs5, _fake_main(hs5))
+	b1.world_ready(_build_sim(b1.match_info), null)
 	_deliver()
-	check(host.started and q2.started, "FFA3 round begins for three")
+	host.links.erase("g1")
+	host.peer_left(2)
+	check(host.ai_seats().is_empty(), "EMPTY SEATS off: a dropped seat stands idle")
+	hs5.over = true
+	hs5.winner = "A"
+	host._process(0.2)
+	host.request_rematch()
+	check(not host.active and host.roster.size() == 1 and host.in_room(), "rematch with a missing player and no AI: back to the lobby")
+
+	# ---------------------------------------------------------------- lobby departures, host departure
+	_open_room("FFA3")
+	_join("g1")
+	_join("g2")
+	_deliver()
 	host.peer_left(2)
 	_deliver()
-	check(not q2.active and q2.in_room() and q2.roster.size() == 2, "the other players are sent back to the lobby too")
 	check(host.roster.size() == 2 and host.seat_of(3) == "B", "seats repack after a lobby departure")
 	var gg: Node = guests["g2"]
 	gg.fail("The host left or the connection was lost. The room is closed.")
 	check(not gg.in_room() and gg.status.begins_with("The host left"), "host departure closes the room for a guest")
+	gg.leave()
+	check(gg.rejoin.is_empty(), "LEAVE ROOM forgets the RECONNECT details")
 
 	print("\nALL PASSED (0 failed)" if failures == 0 else "\n%d FAILED" % failures)
 	quit(1 if failures > 0 else 0)

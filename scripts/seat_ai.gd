@@ -32,7 +32,8 @@ func think(sim: Sim, dt: float) -> void:
 	_t = 0.0
 	if use_relays:
 		_relays(sim)
-		_retreats(sim)
+		if Rules.bridge_combat:                        # RECALL is SIEGE only
+			_retreats(sim)
 	_build(sim)
 	var mine := sim.nodes.filter(func(n): return n["owner"] == seat and n["units"] >= 25.0)
 	mine.sort_custom(func(a, b): return a["units"] > b["units"])
