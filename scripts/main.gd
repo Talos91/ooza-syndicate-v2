@@ -879,9 +879,8 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 			return
 		var path := sim.build_path(route)
 		var pts: PackedVector3Array = path["pts"]
-		var seconds := 0.0
-		for i in range(route.size() - 1):
-			seconds += sim.edges[sim._edge_index(route[i], route[i + 1])]["modules"] * Rules.MODULE_SECONDS + 1.0
+		# the real walk: path length at the constant speed, the owner's faction speed included
+		var seconds: float = float(path["cum"][-1]) / maxf(Rules.move_speed() * sim.stat(HUMAN, "speed"), 0.1)
 		drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, mat)
 		for k in range(-1, 2):
 			for i in range(pts.size() - 1):

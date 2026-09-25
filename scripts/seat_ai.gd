@@ -82,7 +82,7 @@ func _incoming(sim: Sim, node_id: int, hostile: bool) -> float:
 func _travel(sim: Sim, route: Array) -> float:
 	var t := 0.0
 	for i in range(route.size() - 1):
-		t += sim.edges[sim._edge_index(route[i], route[i + 1])]["modules"] * Rules.MODULE_SECONDS + 1.0
+		t += sim.edge_cost(sim._edge_index(route[i], route[i + 1])) + 1.0
 	return t
 
 

@@ -728,6 +728,17 @@ func _kill_horde(h: Dictionary, why: String) -> void:
 
 
 # ------------------------------------------------------------------ routing
+func edge_cost(ei: int) -> float:
+	## Seconds to cross a link. maps 3.0: its drawn length at the constant speed (plaza links: socket to
+	## socket); legacy maps: the tier's modules.
+	var e: Dictionary = edges[ei]
+	if not v3:
+		return e["modules"] * Rules.MODULE_SECONDS
+	if e["plaza"]:
+		return (nodes[e["a"]]["pos"] as Vector3).distance_to(nodes[e["b"]]["pos"]) / Rules.move_speed()
+	return float(e["geo"]["L"]) / Rules.move_speed()
+
+
 func find_route(from_id: int, to_id: int) -> Array:
 	## Fastest route by deck travel time (Dijkstra; each node crossed costs a little). Skips
 	## closed relay decks and nodes dropped by the Last Stand collapse.
@@ -745,7 +756,7 @@ func find_route(from_id: int, to_id: int) -> Array:
 			var nb: int = link[0]
 			if collapsed.get(nb, false) or not _edge_open(link[1]):
 				continue
-			var cost: float = dist[cur] + edges[link[1]]["modules"] * Rules.MODULE_SECONDS + 1.0
+			var cost: float = dist[cur] + edge_cost(link[1]) + 1.0
 			if not dist.has(nb) or cost < dist[nb]:
 				dist[nb] = cost
 				prev[nb] = cur
@@ -819,17 +830,6 @@ func deck_line(ei: int) -> Array:
 	return [pa + dir * Rules.R] + deck_points(ei, e["a"]) + [pb - dir * Rules.R]
 
 
-static func pace_byte(visual: float, modules: int) -> int:
-	## maps 3.0 decks are drawn longer than their tier (3 m per map unit); a line crosses one in the
-	## time its true-size modules take, so the path carries a speed factor: byte v >= 2 = v / 16.
-	var pace: float = visual / maxf(modules * Rules.S, 0.1)
-	return clampi(roundi(pace * 16.0), 2, 255)
-
-
-static func pace_of(v: int) -> float:
-	return float(v) / 16.0 if v >= 2 else 1.0
-
-
 func _build_path3(route: Array) -> Dictionary:
 	## maps 3.0: out of the node (SIEGE: toward the exit; BRAWL: Alpha 11's front door round the ring),
 	## to the deck's baked rim exit, along the pier, up / down the baked ramps, across, and at every
@@ -861,13 +861,9 @@ func _build_path3(route: Array) -> Dictionary:
 		var e: Dictionary = edges[ei]
 		var s0 := _length(pts)
 		if not e["plaza"]:
-			var deck := deck_points(ei, route[i])
-			var visual := 0.0
-			for k in range(deck.size() - 1):
-				visual += (deck[k] as Vector3).distance_to(deck[k + 1])
-			var pace := pace_byte(visual, e["modules"])
+			var deck := deck_points(ei, route[i])     # one speed everywhere (Daniele: "units speed is always constant")
 			for k in range(deck.size()):
-				add.call(deck[k], pace if k < deck.size() - 1 else 1)
+				add.call(deck[k], 0 if k < deck.size() - 1 else 1)
 		var ex_in := exit_of(ei, route[i + 1])
 		add.call(ex_in, 1)
 		spans.append({"edge": ei, "s0": s0, "s1": _length(pts), "forward": e["a"] == route[i]})
@@ -1067,7 +1063,7 @@ static func sample(h: Dictionary, s: float) -> Array:
 					pos += r["shift"]
 				_:
 					pos.y -= r["sink"]
-	return [pos, fwd, h["fast"][lo] == 1, pace_of(h["fast"][lo])]
+	return [pos, fwd, h["fast"][lo] == 1]
 
 
 # ------------------------------------------------------------------ simulation step
@@ -1107,7 +1103,7 @@ func step(dt: float) -> void:
 			var mult: float = Rules.platform_mult() if fast_here else 1.0
 			if Rules.bridge_combat and on_enemy_goo(h):
 				mult *= Rules.GOO_SLOW                    # enemy goo: slower (home advantage)
-			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * float(here[3]) * dt
+			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
 				ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * dt)
 			h["s"] += ds
@@ -1129,7 +1125,7 @@ func step(dt: float) -> void:
 			# the line keeps pouring in through the door: units enter as fast as the tail advances
 			var len := chain_length(h)
 			var tail := sample(h, h["L"] - len)
-			var tail_speed: float = Rules.move_speed() * (Rules.platform_mult() if tail[2] else 1.0) * float(tail[3])
+			var tail_speed: float = Rules.move_speed() * (Rules.platform_mult() if tail[2] else 1.0)
 			var rate: float = tail_speed * h["units"] / maxf(len, 0.5)
 			var x := minf(h["units"], maxf(rate, 4.0) * dt)
 			h["units"] -= x

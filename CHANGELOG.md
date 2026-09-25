@@ -1,5 +1,11 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.17.1 - 2026-09-25
+
+- **Units keep one constant speed everywhere** (Daniele: "units accelerate on long bridges - speed is
+  always constant"). 0.17.0 sped lines up on decks drawn longer than their tier so every deck kept its
+  tier's time; that factor is gone. A longer bridge now simply takes longer to cross.
+
 ## 0.17.0 "Alpha 17" - 2026-09-25 (maps 3.0, ring Last Stand, five-level AI)
 
 **Maps 3.0 replace the 2.0 roster** (References/Ooze Syndicate maps 3.0, 100 maps: tutorial, core,
@@ -17,9 +23,7 @@ listed last in the map list for testing.
 - **Plazas**: every socket of a plaza reaches every other across the plate (free movement, travel by
   distance); a plaza's plate falls with its last socket.
 - **Lines only meet on the same height** (decks at 0 / +4 / -4 / +8; paths climb the ramps).
-- **Honest time**: decks are drawn longer than their tier at 3 m per unit, so a line crosses a deck in
-  the time its true-size modules took (the pack's tier stays the gameplay) - hops keep the pace they
-  had, in SIEGE and in BRAWL.
+- (0.17.1: the deck-time factor this release shipped was removed - one constant speed everywhere.)
 - Nodes use the pack's neutral tiers and structures (T1 pocket nodes, T2-T4 farther out, strategic T4
   nodes and centres that may start with a cannon or forge); new modes 3v3 and 2v2v2 (offline and in
   online rooms, up to six players).
