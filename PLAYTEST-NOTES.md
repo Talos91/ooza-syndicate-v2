@@ -464,3 +464,14 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      *Done:* audit of every script (112 findings, 110 confirmed, 95 safe - all applied and reviewed);
      draw calls -40 % on 1v1 maps and -67 % on the six-seat stress map at the same view; shield leftovers
      and other dead code removed; bugs fixed (see CHANGELOG 0.18.0). Before / after renders identical.
+
+## 2026-09-25 - Daniele, Alpha 18 phone check (v0.18.0 live)
+
+101. **"All maps are still waaay too big ... the bridge should be like 1/3 of now, game is unplayable."**
+     Measured: baked decks were 6.9 / 28.8 / 44.2 m (median, S / M / L) against the kit's honest 4 / 8 /
+     12 m - M and L about 3.6x too long. Cause: maps 4.0 draw a deck module as 12 units but nodes only
+     ~9 units apart, so no uniform scale fits both the 12 m platforms and short decks; the scale was
+     chosen for clearance only and deck length was never checked against the kit (my miss). **Decided
+     (Daniele): regenerate the pack at the kit's sizes** ("maps 4.1": 1 unit = 1 m, platform R 6, pier
+     1.6, module 4, S / M / L centre-to-centre 19.2 / 23.2 / 27.2, >= 15 between node centres, 160 x 80
+     frame); the game bakes it at 1 m per unit with no stretching. Next bake adds a deck-length check.
