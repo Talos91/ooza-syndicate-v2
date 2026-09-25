@@ -343,8 +343,8 @@ func sync(dt: float, cam: Camera3D) -> void:
 	for seat in sim.factions.keys():
 		if seat != human:
 			rivals += sim.seat_strength(seat)
-	stats_label.text = "%s  %03d    %02d:%02d    RIVALS  %03d" % [str(main.SEAT_FACTIONS[human]).to_upper(), int(total),
-			int(sim.time) / 60, int(sim.time) % 60, int(rivals)]
+	stats_label.text = "%s  %03d    %02d:%02d    RIVALS  %03d" % [str(main.SEAT_FACTIONS[human]).to_upper(), Rules.shown(total),
+			int(sim.time) / 60, int(sim.time) % 60, Rules.shown(rivals)]
 	for seat in score_sections:
 		var count := sim.seat_strength(seat)
 		score_sections[seat].visible = count > 0.0
@@ -364,7 +364,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		status_label.text = ""
 	var source: int = main.drag_from if main.drag_from >= 0 else main.selected
 	if source >= 0 and sim.nodes[source]["owner"] == human:
-		count_label.text = "%d / %d" % [int(floorf(sim.nodes[source]["units"] * main.fraction)), int(sim.nodes[source]["units"])]
+		count_label.text = "%d / %d" % [Rules.shown(floorf(sim.nodes[source]["units"] * main.fraction)), Rules.shown(sim.nodes[source]["units"])]
 	else:
 		count_label.text = "DRAG A VAT"
 	_badges(cam)
@@ -405,7 +405,7 @@ func _badges(cam: Camera3D) -> void:
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
 		if owner == "" or owner == human:
-			label.text = str(int(n["units"]))
+			label.text = str(Rules.shown(n["units"]))
 		else:
 			label.text = owner                            # no numbers on enemy nodes: seat letter only
 		var parts := []
@@ -444,7 +444,7 @@ func _badges(cam: Camera3D) -> void:
 		build_bar.value = 100.0 * Sim.build_progress(n)
 		# below the platform's near rim, never over the vat (Daniele: "the UX covers the whole vat")
 		var down := Vector3(0, 0, 1).rotated(Vector3.UP, main.cam_yaw)
-		var anchor: Vector3 = n["pos"] + down * (Rules.R + 0.6)
+		var anchor: Vector3 = n["pos"] + down * (Rules.R + 1.2) - Vector3(0, 2.0, 0)   # under the rim, below the deck plane
 		if cam.is_position_behind(anchor):
 			panel.visible = false
 			continue
@@ -551,12 +551,12 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		lines.append(_structure_line(n))
 	else:
 		var what := _structure_line(n)
-		var units := "%d / %d units" % [int(n["units"]), Rules.CAPS[n["tier"]]] if Sim.has_vat(n) else "%d units" % int(n["units"])
+		var units := "%d / %d units" % [Rules.shown(n["units"]), Rules.shown(Rules.CAPS[n["tier"]])] if Sim.has_vat(n) else "%d units" % Rules.shown(n["units"])
 		lines.append("%s · %s · %s" % [who, what, units])
 		if owner != "":
-			var status := "%.1f / s production" % sim.production(n) if Sim.has_vat(n) else "no vat - garrison must be fed"
+			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) else "no vat - garrison must be fed"
 			var cap: float = maxf(Rules.SHIELD_FRACTION * n["units"], 0.001)
-			status += " | shield %d/%d %s" % [int(n["shield"]), int(cap), "UP" if n["shield_up"] else "DOWN"]
+			status += " | shield %d/%d %s" % [Rules.shown(n["shield"]), Rules.shown(cap), "UP" if n["shield_up"] else "DOWN"]
 			lines.append(status)
 	if n["relay"] != "":
 		var states := sim.relay_states(n)
@@ -645,7 +645,7 @@ func show_end(winner: String) -> void:
 	var a_fell: float = sim.fall_losses.get(human, 0.0)
 	var captures := sim.events.filter(func(e): return e["type"] == "capture" and e["seat"] == human).size()
 	var body := "%s · %02d:%02d\ncaptures %d   ·   lost in combat %d   ·   lost to falls %d\n%s" % [
-			str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60, captures, int(a_lost), int(a_fell),
+			str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60, captures, Rules.shown(a_lost), Rules.shown(a_fell),
 			("Last Stand: %s" % sim.last_stand_method.to_upper()) if sim.last_stand_active else "decided before the Last Stand"]
 	_fill_overlay(end_panel, title, body, [["PLAY AGAIN", main.restart], ["MAIN MENU", main.to_menu]])
 	end_panel.visible = true
@@ -698,6 +698,14 @@ func _build_debug() -> void:
 			func(v: float): Rules.node_fight_mult = v)
 	var forge := _debug_slider(box, "Forge bonus", 0.0, 200.0, 5.0, Rules.forge_bonus * 100.0, "+%.0f%% attack",
 			func(v: float): Rules.forge_bonus = v / 100.0)
+	var bridge := button("", Callable(), 0, 44, 18)
+	var bridge_text := func(): bridge.text = "Bridge combat: %s" % ("ON (Alpha 12)" if Rules.bridge_combat else "OFF (Alpha 11 - pass through, fight at nodes)")
+	bridge_text.call()
+	bridge.pressed.connect(func():
+		Rules.bridge_combat = not Rules.bridge_combat
+		bridge_text.call()
+		toast("Bridge combat %s" % ("ON" if Rules.bridge_combat else "OFF")))
+	box.add_child(bridge)
 	var reset := button("Reset to rules", func():
 		deck.value = Rules.DECK_SPEED_DEFAULT
 		node.value = Rules.NODE_SPEED_MULT_DEFAULT

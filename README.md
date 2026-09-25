@@ -1,16 +1,22 @@
-# Ooze Syndicate 2.0 - Alpha 12
+# Ooze Syndicate 2.0 - Alpha 13
 
 Fresh Godot 4.6 project (GL Compatibility - browser and phone first) for the 2.0 bridge-network
 game. Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project folder
 (`H:\My Drive\PROJECTS\Ooze Syndicate`). Alpha 11 lives separately in `Game/Alpha 11`.
 
-## What Alpha 12 is
+## What Alpha 13 is
 
 Every mechanic and every piece of interface designed so far, in one build, so the game's choices
 can finally be judged (Daniele, 2026-09-25). Textures and better models are deliberately later.
 
-- **Title screen**: faction (emblem + blurb), opponent level (Casual / Standard / Veteran), then
-  one of the starter seven as a card with its map preview and what it proves.
+- **Front menu** (Alpha 11's): NEW GAME -> 01 FACTION (illustrated portrait, stats, persistent
+  trait, the three Ooze Factory slots, faction tabs) -> 02 BATTLEFIELD (the starter seven with
+  previews and what each proves) -> 03 SETUP (rival faction, random or chosen; Casual / Standard /
+  Veteran) -> DEPLOY. Factions differ in stats (Alpha 11's leans: VEX faster / weaker garrison,
+  Bloom more production / slower, Ember harder-hitting / less production, Solar tougher / slower).
+- **Numbers on screen** are Alpha 11's (caps 30/40/80/160, upgrades 10/20/30, cannon 15/25/35,
+  forge 20): the sim runs at five times that so the hordes stay long, and every displayed count is
+  divided by `Rules.SCALE`.
 - **Sending**: drag from your node to any node; 100 / 75 / 50 / 25 % on the side panel (slide a
   finger across them); the preview follows the real route along the decks with an arrowhead and
   TAKE / ATTACK / REINFORCE · units · seconds. Hordes are long lines of goo + creatures that leave
@@ -32,6 +38,8 @@ can finally be judged (Daniele, 2026-09-25). Textures and better models are deli
   per tier: a 2 s beam burst kills up to 50 / 125 / 200 bodies, recharge 4 / 2.4 / 1.6 s after)
   or a **forge** (100, single tier, +50 % attack for everything you deal). Swaps are a 10 s rebuild
   with a 10 s cooldown; RESTORE VAT is free. Relay nodes have no vat: their garrison must be fed.
+- **A missing deck is the void.** Units ordered across a deck that was retracted, switched away or
+  dropped after the order walk off the pier and fall.
 - **Relays** (rotation ↻, retract ⇤, switch ⇄, remote ⌁): tap yours, press SWITCH. 3 s warning
   (lights and symbol blink to the next state's colour, a ghost of the next deck appears), the deck
   moves, 15 s cooldown. Rotation: the turntable pivots and troops ride the deck. Retract: the deck
@@ -50,7 +58,7 @@ can finally be judged (Daniele, 2026-09-25). Textures and better models are deli
 - Per-match telemetry JSON in `user://telemetry/` (sends, captures, relay fires, falls, Last Stand).
 
 All tunable numbers are in `scripts/rules.gd`. Army numbers follow Alpha 11 x5 and are PROVISIONAL.
-Not in Alpha 12: abilities (pending approval), multiplayer / team modes, overpasses, Big Drop and
+Not in Alpha 13: abilities (pending approval), multiplayer / team modes, overpasses, Big Drop and
 Production Halt variants, real-phone measurement (see below), textures.
 
 ## Play the current build

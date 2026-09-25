@@ -84,6 +84,8 @@ func _ready() -> void:
 	if relaunch.has("faction"):
 		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
 		ai_level = relaunch.get("ai", ai_level)
+		if relaunch.has("rival"):
+			SEAT_FACTIONS["B"] = relaunch["rival"]
 	if relaunch.has("map"):
 		map_path = relaunch["map"]
 		map_explicit = true
@@ -118,7 +120,12 @@ func _ready() -> void:
 	if map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
 	else:
-		_build_map_menu()
+		menu_layer = Menu.new()
+		add_child(menu_layer)
+		(menu_layer as Menu).setup(self)
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--menu-page="):            # screenshot helper: open a menu page
+				(menu_layer as Menu).call("show_" + arg.substr(12))
 		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--menu-shot="):           # screenshot the title screen, then quit
 				var out := arg.substr(12)
@@ -180,13 +187,25 @@ func _start_map(path: String) -> void:
 	hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
 
 
+func start_match(path: String, faction: String, rival_faction: String, level: String) -> void:
+	## Entry from the front menu (Menu.deploy): your faction (seat A), the rival's (seat B), the
+	## AI level and the map. Ownership colour stays the seat's (GAME-RULES sec2).
+	SEAT_FACTIONS[HUMAN] = faction
+	SEAT_FACTIONS["B"] = rival_faction
+	ai_level = level
+	if menu_layer:
+		menu_layer.queue_free()
+		menu_layer = null
+	_start_map(path)
+
+
 func restart() -> void:
-	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "ai": ai_level}
+	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level}
 	get_tree().reload_current_scene()
 
 
 func to_menu() -> void:
-	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "ai": ai_level}
+	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level}
 	get_tree().reload_current_scene()
 
 
@@ -205,125 +224,6 @@ func style_button(b: Button, accent: Color, width: float = 130.0, height: float 
 	b.add_theme_stylebox_override("pressed", pressed)
 	b.add_theme_stylebox_override("disabled", panel_style(Color("3a4650")))
 	b.add_theme_color_override("font_disabled_color", Color("a6b2bb"))
-
-
-func _build_map_menu() -> void:
-	## Title screen: faction (with blurb), AI level, then one of the starter seven with its map
-	## preview and what it proves (Docs STARTER-SEVEN.md).
-	menu_layer = CanvasLayer.new()
-	add_child(menu_layer)
-	var bg := ColorRect.new()
-	bg.color = Color(0.008, 0.01, 0.014)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	menu_layer.add_child(bg)
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	menu_layer.add_child(scroll)
-	var centre := CenterContainer.new()
-	centre.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	centre.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(centre)
-	var root := VBoxContainer.new()
-	root.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_theme_constant_override("separation", 10)
-	centre.add_child(root)
-	var logo := TextureRect.new()
-	logo.texture = load("res://assets/ui/Ooze-Syndicate-Logo.svg")
-	logo.custom_minimum_size = Vector2(0, 90)
-	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	root.add_child(logo)
-	var title := Label.new()
-	title.add_theme_font_override("font", UI_FONT)
-	title.text = "OOZE SYNDICATE 2.0  ·  %s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION]
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 30)
-	root.add_child(title)
-	var blurb := Label.new()
-	blurb.add_theme_font_override("font", UI_FONT)
-	blurb.text = Rules.FACTION_BLURB[SEAT_FACTIONS[HUMAN]]
-	blurb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	blurb.add_theme_font_size_override("font_size", 17)
-	blurb.modulate = Color(1, 1, 1, 0.75)
-	var faction_row := HBoxContainer.new()
-	faction_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	faction_row.add_theme_constant_override("separation", 8)
-	root.add_child(faction_row)
-	for faction in FACTION_NAMES:
-		var accent: Color = Rules.FACTIONS[faction][1]
-		var fb := Button.new()
-		fb.text = faction.to_upper()
-		fb.icon = load("res://assets/ui/%s.svg" % faction)
-		fb.expand_icon = true
-		fb.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		style_button(fb, accent, 150, 58)
-		fb.add_theme_font_size_override("font_size", 20)
-		if faction == SEAT_FACTIONS[HUMAN]:
-			fb.add_theme_stylebox_override("normal", panel_style(accent))
-		fb.pressed.connect(func():
-			SEAT_FACTIONS[HUMAN] = faction
-			blurb.text = Rules.FACTION_BLURB[faction]
-			for c in faction_row.get_children():
-				(c as Button).add_theme_stylebox_override("normal", panel_style())
-			fb.add_theme_stylebox_override("normal", panel_style(accent)))
-		faction_row.add_child(fb)
-	root.add_child(blurb)
-	var ai_row := HBoxContainer.new()
-	ai_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	ai_row.add_theme_constant_override("separation", 8)
-	root.add_child(ai_row)
-	var ai_label := Label.new()
-	ai_label.add_theme_font_override("font", UI_FONT)
-	ai_label.text = "OPPONENT "
-	ai_label.add_theme_font_size_override("font_size", 20)
-	ai_row.add_child(ai_label)
-	for level in Rules.AI_LEVELS.keys():
-		var lb := Button.new()
-		lb.text = level.to_upper()
-		style_button(lb, Color("2ee6ff"), 130, 50)
-		lb.add_theme_font_size_override("font_size", 18)
-		if level == ai_level:
-			lb.add_theme_stylebox_override("normal", panel_style(Color("2ee6ff")))
-		lb.pressed.connect(func():
-			ai_level = level
-			for c in ai_row.get_children():
-				if c is Button:
-					(c as Button).add_theme_stylebox_override("normal", panel_style())
-			lb.add_theme_stylebox_override("normal", panel_style(Color("2ee6ff"))))
-		ai_row.add_child(lb)
-	var grid := GridContainer.new()
-	grid.columns = 2 if get_viewport().get_visible_rect().size.x > 900 else 1
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 8)
-	root.add_child(grid)
-	for mp in STARTER_MAPS:
-		var m := MapBuilder.load_map(mp)
-		var relays := {}
-		for n in m["nodes"]:
-			if n.get("relay") != null:
-				relays[n["relay"]] = true
-		var b := Button.new()
-		var code: String = m.get("code", "?")
-		b.text = "%s  %s\n%d nodes%s\n%s" % [code, str(m.get("name", mp)).replace("*", ""), m["nodes"].size(),
-				("  ·  " + "/".join(relays.keys())) if not relays.is_empty() else "", PROVES.get(code, "")]
-		b.icon = load(mp.replace("maps/", "assets/maps/").replace(".json", ".svg"))
-		b.expand_icon = true
-		b.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		style_button(b, Color("2ee6ff"), 470, 96)
-		b.add_theme_font_size_override("font_size", 17)
-		b.pressed.connect(func():
-			menu_layer.queue_free()
-			menu_layer = null
-			_start_map(mp))
-		grid.add_child(b)
-	var version := Label.new()
-	version.text = "v%s %s  ·  reload twice after a new publish (PWA cache)" % [Rules.VERSION, Rules.VERSION_NAME]
-	version.add_theme_font_size_override("font_size", 13)
-	version.modulate = Color(1, 1, 1, 0.45)
-	version.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(version)
 
 
 # ------------------------------------------------------------------ world
@@ -540,7 +440,7 @@ func node_action(method: String, id: int) -> bool:
 			var cost := sim.upgrade_cost(n)
 			ok = sim.upgrade_structure(id)
 			if ok:
-				hud.toast("Upgrade started - %d units, %d s" % [cost, int(Rules.BUILD_SECONDS)])
+				hud.toast("Upgrade started - %d units, %d s" % [Rules.shown(cost), int(Rules.BUILD_SECONDS)])
 			elif n["build_kind"] != "":
 				hud.toast("Construction already in progress")
 			elif n["attachment"] == "cannon" and n["cannon_tier"] >= 3:
@@ -550,7 +450,7 @@ func node_action(method: String, id: int) -> bool:
 			elif n["tier"] >= 4:
 				hud.toast("Vat is already at max tier")
 			elif n["units"] < cost:
-				hud.toast("Upgrade needs %d units (%d here)" % [cost, int(n["units"])])
+				hud.toast("Upgrade needs %d units (%d here)" % [Rules.shown(cost), Rules.shown(n["units"])])
 			else:
 				hud.toast("Nothing to upgrade here")
 		"build_cannon", "build_forge":
@@ -558,13 +458,13 @@ func node_action(method: String, id: int) -> bool:
 			var cost: int = Rules.CANNON_COST[1] if kind == "cannon" else Rules.FORGE_COST
 			ok = sim.build_attachment(id, kind)
 			if ok:
-				hud.toast("%s construction started - %d units, %d s" % [kind.capitalize(), cost, int(Rules.BUILD_SECONDS)])
+				hud.toast("%s construction started - %d units, %d s" % [kind.capitalize(), Rules.shown(cost), int(Rules.BUILD_SECONDS)])
 			elif n["build_kind"] != "":
 				hud.toast("Construction already in progress")
 			elif n["swap_cd"] > 0.0:
 				hud.toast("Attachment swap ready in %d s" % int(ceil(n["swap_cd"])))
 			elif n["units"] < cost:
-				hud.toast("%s needs %d units (%d here)" % [kind.capitalize(), cost, int(n["units"])])
+				hud.toast("%s needs %d units (%d here)" % [kind.capitalize(), Rules.shown(cost), Rules.shown(n["units"])])
 			else:
 				hud.toast("Can't build a %s here" % kind)
 		"restore":
@@ -733,7 +633,7 @@ func _unhandled_input(event: InputEvent) -> void:
 						if h.is_empty():
 							hud.toast("No route to that node" if count > 0 else "No units to send")
 						else:
-							hud.toast("Sending %d units to node %d" % [count, target])
+							hud.toast("Sending %d units to node %d" % [Rules.shown(count), target])
 							fx._pulse(sim.nodes[target]["pos"], Rules.seat_color(HUMAN), Rules.R, 0.6)
 						hud.close_inspector()
 						selected = drag_from
@@ -828,7 +728,7 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 		drag_mesh.surface_end()
 		var tn: Dictionary = sim.nodes[target]
 		var verb := "reinforce" if tn["owner"] == HUMAN else ("attack" if tn["owner"] != "" else "take")
-		route_label.text = "%s · %d units · %d s" % [verb.to_upper(), count, int(round(seconds))]
+		route_label.text = "%s · %d units · %d s" % [verb.to_upper(), Rules.shown(count), int(round(seconds))]
 		route_label.position = tn["pos"] + Vector3(0, 6.5, 0)
 		route_label.visible = true
 	else:

@@ -1,5 +1,38 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.13.0 "Alpha 13" - 2026-09-25 (Daniele: "fix and implement all the above, this will be alpha 13")
+
+- **Factions now play differently.** Alpha 11's stat profiles are in the 2.0 sim (`Rules.FACTION_STATS`,
+  GAME-RULES sec3 leans): VEX travels 15 % faster with a 10 % weaker garrison; Viridian Bloom
+  produces 15 % more and moves 10 % slower; Ember Maw hits 15 % harder and produces 10 % less;
+  Solar Shells take 10 % less damage, hold a 5 % stronger garrison, move and produce 10 % slower;
+  NULL is baseline. Ownership colour stays the seat's (A cyan, B green) per GAME-RULES sec2 -
+  faction is shape, stats and accent. (Daniele: "why have we not introduced all the factions?")
+- **Alpha 11's front menu, ported**: MAIN (logo, NEW GAME, QUICK MATCH, FULLSCREEN/QUIT) ->
+  01 FACTION (illustrated portrait left, stats + persistent trait middle, the three Ooze Factory
+  ability slots right with the faction's ultimate from the rules, illustrated faction tabs below)
+  -> 02 BATTLEFIELD (the starter seven with previews, relay kinds, what each proves, Last Stand
+  methods) -> 03 SETUP (your faction card, the rival's faction - random or chosen - and the AI
+  level) -> DEPLOY. Play again / main menu keep your choices. (Daniele: "why didn't we introduce
+  the rest of the UX/UI, main menu, race selection?")
+- **Numbers on screen are Alpha 11's again.** The sim keeps Alpha 12's army scale (hordes stay
+  long) but every number the player sees is divided by 5: caps read 30 / 40 / 80 / 160, upgrades
+  10 / 20 / 30, cannon 15 / 25 / 35, forge 20, production 1.0 / 1.6 / 2.4 / 3.5 per second.
+  (Daniele: "big numbers don't look good".)
+- **A missing deck is the void.** Units ordered across a deck that has been retracted, switched
+  away or dropped since the order was given now walk off the pier and fall, pouring off at deck
+  speed, instead of re-routing (v0.12.1's reading) or crossing thin air (v0.12.0). (Daniele: "even
+  if a bridge got retracted, enemy units with the order to cross it still crossed it instead of
+  falling in the void".)
+- **Bridge combat toggle** on the setup page and in the Debug panel: ON = Alpha 12 (hordes fight
+  wherever they meet, queue behind friends), OFF = Alpha 11 (hordes pass each other, fights only
+  at nodes). (Daniele: "not sure combat on bridges is fun, I wanna try with and without".)
+- Fixed: a fallen platform's goo river stayed floating in the void (Trident Exchange screenshot).
+  Note: a relay node reading 0 is alive but empty - it has no vat, so a spent garrison stays at 0
+  until fed; a retracted deck is gone by design, not fallen.
+- Badges moved further out: below the rim and under the deck plane, never over a tower.
+- Tests: 158 checks.
+
 ## 0.12.1 - 2026-09-25 (Daniele's first Alpha 12 playtest)
 
 - **No horde crosses a deck that is gone.** A route is computed when the order is given; if a deck

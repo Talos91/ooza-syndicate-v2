@@ -237,9 +237,9 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 	if h["owner"] != viewer:
 		label.text = ""
 	elif h["streaming"]:                              # out + still inside the vat (re-orderable)
-		label.text = "%d +%d" % [int(h["units"]), int(h["ordered"] - h["units"])]
+		label.text = "%d +%d" % [Rules.shown(h["units"]), Rules.shown(h["ordered"] - h["units"])]
 	else:
-		label.text = str(int(h["units"]))
+		label.text = str(Rules.shown(h["units"]))
 
 
 static func _shove(t: float) -> Array:
@@ -397,6 +397,10 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 				arr.append(mi)
 			rivers[id] = {"patches": arr, "seat": [], "vis": 0.0}
 		var r: Dictionary = rivers[id]
+		if sim.collapsed.get(id, false):                 # a fallen platform takes its river with it
+			for mi in r["patches"]:
+				mi.visible = false
+			continue
 		var total: float = n["units"]
 		for k in n["siege"]:
 			total += n["siege"][k]

@@ -6,8 +6,8 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.12.1"
-const VERSION_NAME := "Alpha 12"
+const VERSION := "0.13.0"
+const VERSION_NAME := "Alpha 13"
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius
@@ -47,6 +47,10 @@ const UNITS_PER_PATCH := 60          # legacy: only the capture drain estimate b
 const DOOR_RATE_DEFAULT := DECK_SPEED_DEFAULT * NODE_SPEED_MULT_DEFAULT / METRES_PER_UNIT   # 48 units/s: the tail stays at the door
 static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug panel)
 static var node_fight_mult: float = 1.0                # live-tunable: x combat rates on a platform
+# BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
+# it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
+# queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
+static var bridge_combat: bool = true
 
 # CONTACT (Alpha 12, Daniele: "whenever an enemy crosses the hitbox of a unit they fight... a unit
 # crossing an enemy unit should always start a combat to death"): contact is geometric, anywhere -
@@ -131,6 +135,28 @@ const FACTIONS := {
 	"bloom": [0.236, Color("#6fff2a")], "ember": [0.085, Color("#ff3b1f")],
 	"solar": [0.12, Color("#ffbe19")],
 }
+# FACTION STAT PROFILES - Alpha 11's provisional tuning (faction_balance.gd), the GAME-RULES sec3
+# leans: one readable strength, one readable weakness each. speed = travel speed, health = damage
+# a horde takes (divides it), attack = damage dealt, production = vat output, garrison = damage a
+# garrison takes (divides it). Baseline 1.0 everywhere.
+const FACTION_STATS := {
+	"vex": {"speed": 1.15, "garrison": 0.90},
+	"null": {},
+	"bloom": {"speed": 0.90, "production": 1.15},
+	"ember": {"attack": 1.15, "production": 0.90},
+	"solar": {"health": 1.10, "garrison": 1.05, "speed": 0.90, "production": 0.90},
+}
+const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA CARTEL"], "bloom": ["VIRIDIAN", "BLOOM"],
+		"ember": ["EMBER", "MAW"], "solar": ["SOLAR", "SHELLS"]}
+const FACTION_TAGLINES := {"vex": "ADAPT. CONNECT. REDIRECT.", "null": "SAME SIGNAL. DIFFERENT TRUTH.",
+		"bloom": "A WILDER TOMORROW.", "ember": "PRESSURE BREEDS PROGRESS.", "solar": "HOLD THE LIGHT."}
+const FACTION_TRAITS := {"vex": ["Efficient routing", "Faster travel on owned connections."],
+		"null": ["Obscured intel", "Hide precise counts from enemies."],
+		"bloom": ["Biomass recovery", "Recover a portion of nearby losses."],
+		"ember": ["Siege pressure", "Pressure defended structures."],
+		"solar": ["Connected defense", "Protect connected friendly nodes."]}
+const FACTION_ULTIMATE := {"vex": ["Route Hack", "the route and relay specialist"], "null": ["Echo Split", "decoys, disruption of enemy control"],
+		"bloom": ["Spore Bloom", "growth"], "ember": ["Core Meltdown", "siege"], "solar": ["Relay Aegis", "protecting a crossing"]}
 const FACTION_BLURB := {
 	"vex": "VEX Bioengineers - mobility and routes. Faster, weaker garrison.",
 	"null": "NULL Data Cartel - deception and disruption. Near baseline.",
@@ -145,6 +171,21 @@ const AI_LEVELS := {
 	"Standard": {"period": 2.5, "margin": 1.15, "relays": true},
 	"Veteran": {"period": 1.6, "margin": 1.0, "relays": true},
 }
+
+
+# NUMBERS ON SCREEN (Daniele, Alpha 12 playtest: "big numbers don't look good - back to what Alpha 11
+# had, with Alpha 12's amount of troops"): the sim runs at SCALE x Alpha 11 so hordes stay long, but
+# every number the player sees is divided by SCALE - caps read 30/40/80/160, upgrades 10/20/30.
+static func shown(units: float) -> int:
+	return int(round(units / SCALE))
+
+
+static func shown_f(units: float) -> float:
+	return units / SCALE
+
+
+static func stat(faction: String, key: String) -> float:
+	return float(FACTION_STATS.get(faction, {}).get(key, 1.0))
 
 
 static func seat_color(seat: String) -> Color:

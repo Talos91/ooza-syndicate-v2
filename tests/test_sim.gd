@@ -457,9 +457,9 @@ func _init() -> void:
 		if h21 in sim21.hordes and h21["route"].has(0) and h21["s"] > dead_span["s0"] + 1.5:
 			crossed[0] = true
 		return not (h21 in sim21.hordes), 60.0)
-	check(not crossed[0], "a horde never walks onto the fallen node's deck")
-	check(sim21.fall_losses.get("B", 0.0) == 0.0, "nothing fell: it stopped at the pier instead")
-	check(sim21.nodes[2]["siege"].get("B", 0.0) > 0.0 or sim21.nodes[2]["owner"] == "B", "with no route left it stays at node 2")
+	check(not crossed[0], "a horde never crosses the fallen node's deck")
+	check(sim21.fall_losses.get("B", 0.0) > 100.0, "it walked off the pier into the void instead (B lost %.0f)" % sim21.fall_losses.get("B", 0.0))
+	check(not (h21 in sim21.hordes), "nothing of it reached the other side")
 	# the drop order never cuts the map into islands; chaos falls back to inward where "homes last"
 	# and connectivity cannot both hold (Two Piers is a line)
 	var never_chaos := true
@@ -505,6 +505,41 @@ func _init() -> void:
 			check(s24.last_stand_order.find(7) >= half and s24.last_stand_order.find(10) >= half,
 					"chaos keeps the homes out of the first half of the order (seed %d)" % seed_value)
 	check(chaos_seen, "chaos is still possible on a ring map like Switchback Foundry")
+
+	# faction stat profiles (Alpha 11's leans, GAME-RULES sec3): VEX travels faster, Bloom produces
+	# more, Ember hits harder, Solar takes less
+	check(absf(Rules.stat("vex", "speed") - 1.15) < 0.001 and Rules.stat("null", "speed") == 1.0, "VEX is 15 % faster, NULL baseline")
+	var sim25 := Sim.new()
+	sim25.setup(map, pos, {3: "A", 4: "B"}, {"A": "vex", "B": "null"}, 1)
+	var sim25b := Sim.new()
+	sim25b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
+	var hv := sim25.send(3, 1, 0.5)
+	var hn := sim25b.send(3, 1, 0.5)
+	var tv := run_until(sim25, func(): return hv["state"] != "move", 30.0, 0.02)
+	var tn := run_until(sim25b, func(): return hn["state"] != "move", 30.0, 0.02)
+	check(tv < tn, "a VEX horde arrives before a NULL one on the same deck (%.2f vs %.2f s)" % [tv, tn])
+	var sim26 := Sim.new()
+	sim26.setup(map, pos, {3: "A", 4: "B"}, {"A": "bloom", "B": "ember"}, 1)
+	check(absf(sim26.production(sim26.nodes[3]) - Rules.PROD[2] * 1.15) < 0.001, "Bloom's home produces 15 % more")
+	check(absf(sim26.production(sim26.nodes[4]) - Rules.PROD[2] * 0.9) < 0.001, "Ember's home produces 10 % less")
+	check(absf(sim26.attack_of("B") - 1.15) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 15 % more damage")
+
+	# bridge combat toggle (Daniele): OFF = Alpha 11 - hordes pass each other on decks, fights only
+	# at nodes; ON = Alpha 12
+	Rules.bridge_combat = false
+	var sim27 := Sim.new()
+	sim27.setup(map, pos, {1: "A", 0: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim27.nodes[1]["units"] = 100.0
+	sim27.nodes[0]["units"] = 100.0
+	sim27.send(1, 0, 1.0)
+	sim27.send(0, 1, 1.0)
+	for k in range(200):
+		sim27.step(0.05)
+	check(sim27.fights.is_empty() and sim27.events.filter(func(e): return e["type"] == "frontline").is_empty(),
+			"with bridge combat OFF two hordes pass each other on the deck")
+	check(sim27.nodes[1]["siege"].get("B", 0.0) > 0.0 or sim27.nodes[0]["siege"].get("A", 0.0) > 0.0 or sim27.nodes[1]["owner"] == "B" or sim27.nodes[0]["owner"] == "A",
+			"...and fight at the nodes instead")
+	Rules.bridge_combat = true
 
 	# outward is only offered on maps that author an outward final
 	var seen_methods := {}

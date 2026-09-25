@@ -174,7 +174,7 @@ static func build_progress(n: Dictionary) -> float:
 
 
 func production(n: Dictionary) -> float:
-	return Rules.PROD[n["tier"]] if n["owner"] != "" and has_vat(n) else 0.0
+	return Rules.PROD[n["tier"]] * stat(n["owner"], "production") if n["owner"] != "" and has_vat(n) else 0.0
 
 
 func upgrade_vat(node_id: int) -> bool:
@@ -333,13 +333,23 @@ func _hordes_in_range(n: Dictionary) -> Array:
 
 
 func forge_of(seat: String) -> float:
-	## Damage multiplier for everything this seat's troops deal (Alpha 11: +50 attack on 100).
+	## Forge multiplier for everything this seat's troops deal (Alpha 11: +50 attack on 100).
 	if seat == "":
 		return 1.0
 	for n in nodes:
 		if n["owner"] == seat and n["attachment"] == "forge":
 			return 1.0 + Rules.forge_bonus
 	return 1.0
+
+
+func stat(seat: String, key: String) -> float:
+	## The seat's faction stat (Rules.FACTION_STATS): speed, health, attack, production, garrison.
+	return Rules.stat(factions.get(seat, "null"), key) if seat != "" else 1.0
+
+
+func attack_of(seat: String) -> float:
+	## Damage dealt: faction attack x forge.
+	return stat(seat, "attack") * forge_of(seat)
 
 
 func has_forge(seat: String) -> bool:
@@ -593,7 +603,7 @@ func _overlap(h: Dictionary, s0: float, s1: float) -> float:
 	return maxf(0.0, minf(head, s1) - maxf(tail, s0))
 
 
-func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: int) -> void:
+func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: int, reroute := true) -> void:
 	## Units of the horde inside [s0, s1] of its path are lost (fate "fall") or carried into a node
 	## (fate "carry"). If the head itself was inside, whatever is left behind the range is re-routed
 	## from the node before it; if nothing is left, the horde is gone.
@@ -631,7 +641,7 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 	if h["units"] < 1.0:
 		_kill_horde(h, fate)
 		return
-	if h["s"] >= s0 and h["s"] <= s1:                    # the head was inside: what's left is behind it
+	if reroute and h["s"] >= s0 and h["s"] <= s1:        # the head was inside: what's left is behind it
 		var from_node := _node_before(h, s0)
 		if from_node < 0 or collapsed.get(from_node, false):
 			_kill_horde(h, fate)
@@ -841,7 +851,7 @@ func step(dt: float) -> void:
 		return
 	for n in nodes:                                   # production (vat nodes only), up to the cap
 		if n["owner"] != "" and has_vat(n) and n["units"] < Rules.CAPS[n["tier"]]:
-			n["units"] = minf(Rules.CAPS[n["tier"]], n["units"] + Rules.PROD[n["tier"]] * dt)
+			n["units"] = minf(Rules.CAPS[n["tier"]], n["units"] + production(n) * dt)
 		n["shield_loss"] = 0.0
 		if n["owner"] != "":                           # the shield: SHIELD_FRACTION of the garrison,
 			var cap: float = Rules.SHIELD_FRACTION * n["units"]   # regenerating "from excess minions"
@@ -876,7 +886,7 @@ func step(dt: float) -> void:
 			var mult: float = Rules.node_speed_mult if fast_here else 1.0
 			if fast_here and _crossing_shield(h):
 				mult = 1.0                                # paying the shield toll: no fast glide
-			var ds: float = Rules.deck_speed * h.get("speed", 1.0) * mult * dt
+			var ds: float = Rules.deck_speed * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
 				ds = minf(ds, Rules.door_rate * Rules.METRES_PER_UNIT * dt)
 			h["s"] += ds
@@ -890,8 +900,8 @@ func step(dt: float) -> void:
 		var b := _horde(pair[1])
 		if a.is_empty() or b.is_empty():
 			continue
-		a["pending_loss"] = a.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * b["units"]) * dt * forge_of(b["owner"])
-		b["pending_loss"] = b.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * a["units"]) * dt * forge_of(a["owner"])
+		a["pending_loss"] = a.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * b["units"]) * dt * attack_of(b["owner"]) / stat(a["owner"], "health")
+		b["pending_loss"] = b.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * a["units"]) * dt * attack_of(a["owner"]) / stat(b["owner"], "health")
 	for h in hordes:
 		if h["state"] == "absorb":
 			# the line keeps pouring in through the door: units enter as fast as the tail advances
@@ -950,8 +960,7 @@ func _check_missing_decks() -> void:
 	## A horde never walks across a deck that is no longer there (Daniele, Alpha 12 playtest: "the
 	## enemy crossed a bridge even if there was no bridge"). A route is computed when the order is
 	## given; if a deck on it has since closed (relay) or fallen (Last Stand), the horde reaching that
-	## pier re-routes from the node it stands on - or arrives there if no route is left. Anything
-	## already out on the missing deck falls.
+	## pier walks off it into the void (Daniele: "instead of falling in the void" - they fall).
 	for h in hordes.duplicate():
 		if not (h in hordes) or h["state"] == "absorb" or h.has("ride"):
 			continue
@@ -964,30 +973,17 @@ func _check_missing_decks() -> void:
 			continue                                      # mid-motion: the tick decides its fate
 		if is_edge_open(ei):
 			continue
-		if h["s"] - sp["s0"] > 1.0:                       # already out on it: that part is gone
-			_cut_range(h, sp["s0"], sp["s1"], "fall", -1)
-			continue
-		var from_node: int = _node_before(h, sp["s0"])
-		if collapsed.get(from_node, false):
-			_cut_range(h, 0.0, h["L"], "fall", -1)
-			continue
+		# Daniele (Alpha 12 playtest): units ordered across a deck that is no longer there walk off
+		# the pier and FALL - they do not turn back. The head keeps moving; whatever is over the
+		# gap each step is lost, so the line pours into the void at deck speed.
 		if h["streaming"]:
 			var src: Dictionary = nodes[h["route"][0]]
 			if src["streaming"].get("hid", -1) == h["id"]:
-				_end_streaming(src, "rerouted")
-		if not (h in hordes):
-			continue
-		var route := find_route(from_node, h["target"])
-		if route.size() < 2:
-			_arrive(nodes[from_node], h, h["units"])
-			h["units"] = 0.0
-			_kill_horde(h, "absorbed")
-			continue
-		var keep := chain_length(h)
-		_set_route(h, route)
-		h["s"] = minf(keep, h["spans"][0]["s0"])
-		h["ordered"] = h["units"]
-		events.append({"t": time, "type": "rerouted", "seat": h["owner"], "node": from_node})
+				_end_streaming(src, "void")
+		if h in hordes:
+			_cut_range(h, sp["s0"], sp["s1"], "fall", -1, false)
+			if h in hordes:
+				h["s"] = sp["s0"]                     # the head stays at the lip; the next step pours more
 
 
 func _current_span(h: Dictionary) -> Dictionary:
@@ -1022,6 +1018,11 @@ func _detect_contacts() -> void:
 	## a spatial hash; a horde's HEAD within Rules.CONTACT_R of an enemy patch engages it (frontline
 	## if the two heads face each other, rear if it caught the enemy's body or tail); a friend's
 	## body ahead going the same way blocks (queue, no passing through).
+	if not Rules.bridge_combat:                      # Alpha 11 mode: no fights or queues in transit
+		for h in hordes:
+			h["blocked"] = false
+			h.erase("blocked_by")
+		return
 	var grid := {}
 	var cell := Rules.CONTACT_CELL
 	for h in hordes:
@@ -1170,21 +1171,22 @@ func _node_fights(dt: float) -> Array:
 		for k in seats:
 			force[k] = n["siege"].get(k, 0.0) + n["transit"].get(k, {}).get("units", 0.0)
 		var total_att := 0.0
-		var total_att_w := 0.0                        # forge-weighted, for the damage they deal
+		var total_att_w := 0.0                        # attack-weighted, for the damage they deal
 		for k in force:
 			total_att += force[k]
-			total_att_w += force[k] * forge_of(k)
+			total_att_w += force[k] * attack_of(k)
 		var loss := {}
 		var g_loss_units := 0.0                       # arrivals (siege) fight the real garrison
 		var g_loss_shield := 0.0                      # transit fights the shield instead
-		var g_forge := forge_of(n["owner"])
+		var g_attack := attack_of(n["owner"])
+		var g_tough := stat(n["owner"], "garrison")   # garrison strength: damage the garrison takes
 		for k in force:
-			var enemy: float = n["units"] * g_forge + total_att_w - force[k] * forge_of(k)
+			var enemy: float = n["units"] * g_attack + total_att_w - force[k] * attack_of(k)
 			if enemy <= 0.0:
 				continue
-			loss[k] = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * enemy) * dt * mult
+			loss[k] = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * enemy) * dt * mult / stat(k, "health")
 			if n["units"] > 0.0 and force[k] > 0.0:
-				var rate: float = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * force[k]) * dt * mult * forge_of(k)
+				var rate: float = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * force[k]) * dt * mult * attack_of(k) / g_tough
 				var siege_part: float = n["siege"].get(k, 0.0)
 				var transit_part: float = n["transit"].get(k, {}).get("units", 0.0)
 				g_loss_units += rate * (siege_part / force[k])

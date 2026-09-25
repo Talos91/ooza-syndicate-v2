@@ -295,7 +295,34 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 38. **"The UX covers the whole vat and can't see what's going on."** *Done:* badges sit below the
     platform's near rim, smaller; the inspector ring has no fill.
 
-## Known gaps after Alpha 12 (not playtest findings)
+39. **"Why have we not introduced all the factions and different colours? Why not the rest of the
+    UX/UI like main menu, race selection?"** (Alpha 13) Both were my scope cuts, not blockers. *Done:*
+    Alpha 11's faction stat profiles now drive speed, health, attack, production and garrison in
+    the 2.0 sim; the rival's faction is chosen (or random) on the setup page; Alpha 11's full
+    front menu is ported with its portraits, stats/trait/abilities composition and faction tabs.
+    Colours: ownership stays seat colour by the 2.0 rules (A cyan, B green); the faction shows in
+    creature shape, accent and stats. Say so if you want faction colour back as ownership.
+40. **"Chaos should NEVER leave nodes alone."** Rule since v0.12.1: no drop may leave a surviving
+    node without a physical path to the final, for every method. The screenshot showing it was the
+    cached v0.12.0 build (badges still on the towers give it away) - reload twice.
+
+41. **"Big numbers don't look good - back to what Alpha 11 had, with Alpha 12's amount of
+    troops."** *Done:* `Rules.shown()` divides every displayed count by `SCALE` (5); the sim and
+    the horde length are unchanged.
+42. **"Even if a bridge got retracted, enemy units with the order to cross it still crossed it
+    instead of falling in the void."** *Done:* a horde reaching the pier of a missing deck
+    (retracted, switched away, fallen) walks off and falls, pouring off at deck speed. Replaces
+    v0.12.1's re-route reading.
+
+43. **"Add a toggle: combat like Alpha 11 or like Alpha 12 (combat on bridges) - I wanna try with and
+    without."** *Done:* `Rules.bridge_combat`, on the setup page and in the Debug panel. OFF = hordes
+    pass each other on decks and fight only at nodes (Alpha 11); ON = Alpha 12.
+44. **Trident Exchange: "platform not fully falling, relays showing as if they fell but not
+    falling."** The floating goo rings were the rivers of collapsed nodes - fixed. The relay nodes
+    reading 0 are alive but empty (no vat, garrison spent) and a retracted deck is gone by design;
+    say so if you want relay nodes to read differently.
+
+## Known gaps after Alpha 13 (not playtest findings)
 
 - Abilities / Ooze Factory (pending SKILLS-2.0-DRAFT approval), team modes and multiplayer,
   overpasses, Big Drop and Production Halt variants, the rotation "into the void" fall case (none
