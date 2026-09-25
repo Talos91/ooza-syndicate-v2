@@ -322,6 +322,19 @@ decide if mechanics are good or not... only thing I can save on is textures or b
     reading 0 are alive but empty (no vat, garrison spent) and a retracted deck is gone by design;
     say so if you want relay nodes to read differently.
 
+45. **"I want the damn menu as for Alpha 11."** (v0.13.1) *Done:* Alpha 11's `front_menu.gd`
+    ported with its art, kit, frames and coordinates - see CHANGELOG 0.13.1. The battlefield page
+    shows rendered 3D thumbnails of the seven maps.
+46. **"Where is the toggle for the mode?"** It is on 03 SETUP (BRIDGE COMBAT / ON-OFF, where Alpha
+    11 had ABILITIES), on the OPTIONS page, in the pause menu and in the Debug panel.
+47. **"The latest version is making my PC run like crazy - is it that or something else?"**
+    Measured: 60 fps capped, ~1,900 draw calls and ~1.9 M triangles per frame on the 13-node map
+    at full detail; the load is the horde and river patches, not the interface. Two Alpha 12
+    additions were pure cost and are fixed in v0.13.1: the menu ran uncapped (now 60 fps
+    everywhere) and the shield domes were 13 big translucent spheres (now flat rings). If it still
+    runs hot, OPTIONS -> DETAIL: LOW (half the patches) tells us whether it is the build; the
+    Debug FPS line prints draw calls to the browser console for a report.
+
 ## Known gaps after Alpha 13 (not playtest findings)
 
 - Abilities / Ooze Factory (pending SKILLS-2.0-DRAFT approval), team modes and multiplayer,

@@ -158,28 +158,23 @@ func _shield(n: Dictionary, _entry: Dictionary) -> void:
 	var id: int = n["id"]
 	if not _domes.has(id):
 		var mi := MeshInstance3D.new()
-		var sphere := SphereMesh.new()
-		sphere.radius = 1.0
-		sphere.height = 2.0
-		sphere.radial_segments = 24
-		sphere.rings = 10
-		mi.mesh = sphere
+		mi.mesh = _ring_mesh                          # a flat ring, not a dome: no fill-rate cost
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		_domes[id] = mi
 	var dome: MeshInstance3D = _domes[id]
 	var owner: String = n["owner"]
-	if owner == "" or sim.collapsed.get(id, false) or n["units"] <= 0.0:
+	if owner == "" or sim.collapsed.get(id, false) or n["units"] <= 0.0 or Rules.low_detail:
 		dome.visible = false
 		return
 	var cap: float = maxf(Rules.SHIELD_FRACTION * n["units"], 0.001)
 	var ratio := clampf(n["shield"] / cap, 0.0, 1.0)
 	dome.visible = n["shield_up"] or ratio > 0.05
 	dome.material_override = Mats.shield(owner)
-	var r := Rules.RIVER_R + 1.1
-	var h := lerpf(0.25, 0.62, ratio)
-	dome.position = n["pos"] + Vector3(0, 0.2, 0)
-	dome.scale = Vector3(r, r * h, r)
+	var r := Rules.RIVER_R + 1.3
+	dome.position = n["pos"] + Vector3(0, 0.35 + 0.9 * ratio, 0)
+	dome.scale = Vector3(r, 0.5 + 2.5 * ratio, r)
+	dome.rotation.y += 0.01
 	var hit: float = clampf(n["shield_loss"] / 30.0, 0.0, 1.0)
 	dome.transparency = (0.55 if n["shield_up"] else 0.85) - 0.4 * hit + 0.05 * sin(sim.time * 3.0)
 

@@ -1,5 +1,24 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.13.1 - 2026-09-25 (Daniele: "I want the damn menu as for Alpha 11")
+
+- **The front menu is Alpha 11's, page for page**: its backdrop art, neon-cut frames, per-faction
+  kit buttons, stepper strip, wordmark and Russo One headings, at Alpha 11's own coordinates
+  (scaled from its 1672x941 canvas). MAIN (NEW GAME / OPTIONS / FULLSCREEN or QUIT; TUTORIAL and
+  ONLINE greyed out - not in 2.0 yet) -> 01 FACTION -> 02 BATTLEFIELD with real 3D thumbnails of
+  the starter seven (`assets/map-thumbnails`, rendered by `--thumb=`) -> 03 SETUP (your faction,
+  rival, difficulty, BRIDGE COMBAT where Alpha 11 had ABILITIES ON/OFF) -> DEPLOY.
+- **OPTIONS page** with the match switches: bridge combat (also in the pause menu and Debug) and
+  DETAIL full/low.
+- **Performance**: the frame rate is capped at 60 everywhere (the menu used to spin uncapped);
+  the shield is a flat ring instead of a translucent dome (13 large alpha spheres were pure
+  fill-rate); DETAIL: LOW halves horde and river patches and hides the shield rings; the Debug
+  FPS line now also prints draw calls and triangles for the browser console. Measured on the dev
+  PC: 60 fps, ~1,900 draw calls / ~1.9 M triangles per frame on Switchback Foundry at full
+  detail - the hordes and rivers, not the interface. If a machine still "runs like crazy",
+  OPTIONS -> DETAIL: LOW is the test.
+- `--perf` prints frame timing every 3 s; `--menu-page=` opens a menu page for screenshots.
+
 ## 0.13.0 "Alpha 13" - 2026-09-25 (Daniele: "fix and implement all the above, this will be alpha 13")
 
 - **Factions now play differently.** Alpha 11's stat profiles are in the 2.0 sim (`Rules.FACTION_STATS`,

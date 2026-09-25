@@ -75,12 +75,14 @@ var _press_time := 0.0
 const DOUBLE_TAP_WINDOW := 0.35
 const TAP_PIXELS := 14.0
 var started := false
+var thumb_path := ""
 var menu_layer: CanvasLayer
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
 
 
 func _ready() -> void:
 	var map_explicit := false
+	Engine.max_fps = 60                                # never spin faster than the screen (menu included)
 	if relaunch.has("faction"):
 		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
 		ai_level = relaunch.get("ai", ai_level)
@@ -114,6 +116,9 @@ func _ready() -> void:
 			scenario_zoom = float(arg.substr(7))
 		elif arg.begins_with("--seed="):
 			seed_value = int(arg.substr(7))
+		elif arg.begins_with("--thumb="):              # map thumbnail for the menu: no HUD, first frame
+			thumb_path = arg.substr(8)
+			map_explicit = true
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
@@ -182,6 +187,18 @@ func _start_map(path: String) -> void:
 	get_viewport().size_changed.connect(_on_resized)
 	started = true
 	paused = false
+	if thumb_path != "":
+		hud.root.visible = false
+		for i in range(40):                           # let the rivers ease in
+			await get_tree().process_frame
+		paused = true
+		for i in range(8):
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(thumb_path)
+		print("thumbnail ", thumb_path)
+		get_tree().quit()
+		return
 	await get_tree().process_frame
 	_on_resized()
 	hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
@@ -312,9 +329,9 @@ func _fit_camera() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	var half_h := tan(hfov_half(vp))
 	var half_v := tan(deg_to_rad(cam.fov) / 2.0)
-	var panel := hud.side_panel_width() + margins.z + 20.0 if hud else 0.0
-	var top_used := hud.top_used() if hud else 0.0
-	var bottom_used := hud.bottom_used() if hud else 0.0
+	var panel := hud.side_panel_width() + margins.z + 20.0 if hud and thumb_path == "" else 0.0
+	var top_used := hud.top_used() if hud and thumb_path == "" else 0.0
+	var bottom_used := hud.bottom_used() if hud and thumb_path == "" else 0.0
 	var free_x := clampf((vp.x - panel - margins.x) / vp.x, 0.5, 1.0)
 	var free_y := clampf((vp.y - top_used - bottom_used) / vp.y, 0.4, 1.0)
 	var along := (ext.x if cam_yaw == 0.0 else ext.z) + 2.0 * Rules.R + 4.0      # screen-horizontal
@@ -475,6 +492,8 @@ func node_action(method: String, id: int) -> bool:
 
 # ------------------------------------------------------------------ loop
 func _process(delta: float) -> void:
+	if "--perf" in OS.get_cmdline_user_args():
+		_perf(delta)
 	if not started:
 		return
 	if get_viewport().get_visible_rect().size != _fitted_size:
@@ -738,3 +757,19 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 			drag_mesh.surface_add_vertex(a + up + off)
 			drag_mesh.surface_add_vertex(b + up + off)
 		drag_mesh.surface_end()
+
+
+var _perf_t := 0.0
+func _perf(dt: float) -> void:
+	## --perf: print frame timing every 3 s (process / physics / draw calls / objects) to find hogs.
+	_perf_t += dt
+	if _perf_t < 3.0:
+		return
+	_perf_t = 0.0
+	print("PERF fps=%d process=%.2fms physics=%.2fms nav=%.2fms objects=%d draw=%d prims=%d" % [
+			Engine.get_frames_per_second(), Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+			Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+			Performance.get_monitor(Performance.TIME_NAVIGATION_PROCESS) * 1000.0,
+			Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+			Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)])

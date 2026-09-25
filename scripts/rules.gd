@@ -6,7 +6,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.13.0"
+const VERSION := "0.13.1"
 const VERSION_NAME := "Alpha 13"
 
 # kit geometry (metres)
@@ -51,6 +51,9 @@ static var node_fight_mult: float = 1.0                # live-tunable: x combat 
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
 # queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
 static var bridge_combat: bool = true
+# LOW DETAIL (Debug panel): fewer river patches, no shield rings, half the horde patches - to test
+# whether the build is what makes a machine "run like crazy" (Daniele, Alpha 13 playtest).
+static var low_detail: bool = false
 
 # CONTACT (Alpha 12, Daniele: "whenever an enemy crosses the hitbox of a unit they fight... a unit
 # crossing an enemy unit should always start a combat to death"): contact is geometric, anywhere -

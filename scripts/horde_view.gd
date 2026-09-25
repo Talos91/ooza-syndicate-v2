@@ -433,6 +433,9 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 		var contested: bool = not n["siege"].is_empty()
 		for i in range(Rules.RIVER_SLOTS):
 			var mi: MeshInstance3D = arr[i]
+			if Rules.low_detail and i % 2 == 1:
+				mi.visible = false
+				continue
 			var seat: String = slots[i]
 			var faction: String = sim.factions.get(seat, "null")
 			load_faction(faction)

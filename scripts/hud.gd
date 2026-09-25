@@ -381,7 +381,9 @@ func sync(dt: float, cam: Camera3D) -> void:
 	_last_fps_print += dt
 	if debug_panel.visible and _last_fps_print > 5.0:
 		_last_fps_print = 0.0
-		print("FPS %d  hordes %d  t=%.0f" % [Engine.get_frames_per_second(), sim.hordes.size(), sim.time])
+		print("FPS %d  draw calls %d  triangles %d  hordes %d  t=%.0f" % [Engine.get_frames_per_second(),
+				Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+				Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME), sim.hordes.size(), sim.time])
 
 
 func _badges(cam: Camera3D) -> void:
@@ -633,6 +635,9 @@ func pause_menu() -> void:
 	main.paused = true
 	_fill_overlay(pause_panel, "PAUSED", "%s · %02d:%02d" % [str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
 			[["RESUME", func(): main.paused = false; pause_panel.visible = false],
+			["BRIDGE COMBAT: %s" % ("ON (Alpha 12)" if Rules.bridge_combat else "OFF (Alpha 11)"), func():
+				Rules.bridge_combat = not Rules.bridge_combat
+				pause_menu()],
 			["RESTART", main.restart], ["MAIN MENU", main.to_menu]])
 	pause_panel.visible = true
 	layout(root.get_viewport_rect().size, margins)
@@ -706,6 +711,13 @@ func _build_debug() -> void:
 		bridge_text.call()
 		toast("Bridge combat %s" % ("ON" if Rules.bridge_combat else "OFF")))
 	box.add_child(bridge)
+	var low := button("", Callable(), 0, 44, 18)
+	var low_text := func(): low.text = "Detail: %s" % ("LOW (fewer patches, no shield rings)" if Rules.low_detail else "FULL")
+	low_text.call()
+	low.pressed.connect(func():
+		Rules.low_detail = not Rules.low_detail
+		low_text.call())
+	box.add_child(low)
 	var reset := button("Reset to rules", func():
 		deck.value = Rules.DECK_SPEED_DEFAULT
 		node.value = Rules.NODE_SPEED_MULT_DEFAULT

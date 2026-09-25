@@ -1,24 +1,27 @@
 class_name Menu
 extends CanvasLayer
-## Alpha 11's front menu, ported (Daniele: "why didn't we introduce the rest of the UX/UI, main menu,
-## race selection?"): MAIN -> 01 FACTION (illustrated portrait left, stats + persistent trait in
-## the middle, abilities right, illustrated faction tabs below - the supplied composition) ->
-## 02 BATTLEFIELD (the starter seven with previews) -> 03 SETUP (your faction, rival faction,
-## difficulty) -> DEPLOY. Built from Alpha 11's actual portrait art and icon kit (assets/art,
-## assets/icons) and the shared panel/button recipe.
+## Alpha 11's front menu, ported page for page (Daniele: "I want the damn menu as for Alpha 11"):
+## the same backdrop art (assets/art/ui-main.png), neon-cut frames (neon_panel.gd), ui-kit buttons
+## per faction (ui_skin.gd), stepper strip, wordmark, Russo One headings, and the same coordinates
+## - Alpha 11 laid out on a 1672x941 canvas, ours is 1280x720, so everything is scaled by K.
+## MAIN -> 01 FACTION (portrait / stats + trait / abilities / faction tabs) -> 02 BATTLEFIELD
+## (3D thumbnails + preview) -> 03 SETUP (your faction, rival, difficulty, bridge combat) -> DEPLOY.
+## OPTIONS holds the match switches (bridge combat, detail). TUTORIAL / ONLINE are not in 2.0 yet.
 
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
+const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
-const W := 1280.0
-const H := 720.0
+const K := 1280.0 / 1672.0
+const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "VIRIDIAN\nBLOOM", "ember": "EMBER\nMAW", "solar": "SOLAR\nSHELLS"}
 
 var main: Node3D
-var page: Control
+var content: Control
 var faction := "null"
 var rival := "random"
 var map_path := "res://maps/004-two-piers.json"
 var ai_level := "Standard"
-var maps: Array = []                 # [{path, data}]
+var maps: Array = []
+var _is_main := false
 
 
 func setup(m: Node3D) -> void:
@@ -28,273 +31,337 @@ func setup(m: Node3D) -> void:
 	map_path = m.map_path
 	for mp in m.STARTER_MAPS:
 		maps.append({"path": mp, "data": MapBuilder.load_map(mp)})
-	var bg := ColorRect.new()
-	bg.color = Color(0.008, 0.01, 0.014)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-	page = Control.new()
-	page.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(page)
 	show_main()
 
 
-# ------------------------------------------------------------------ widgets
-func clear() -> void:
-	for c in page.get_children():
-		c.queue_free()
+static func P(x: float, y: float) -> Vector2:
+	return Vector2(x, y) * K
 
 
-func label_at(text: String, pos: Vector2, size: int = 20, color: Color = Color.WHITE, width := 0.0) -> Label:
+func color() -> Color:
+	return Color("18dae8") if _is_main else Rules.FACTIONS[faction][1]
+
+
+# ------------------------------------------------------------------ Alpha 11's widgets
+func clear_page(art: String) -> void:
+	if is_instance_valid(content):
+		remove_child(content)
+		content.queue_free()
+	content = Control.new()
+	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(content)
+	_is_main = art == "ui-main"
+	if art == "ui-main":
+		picture("res://assets/art/ui-main.png", Vector2.ZERO, P(1672, 941))
+	else:
+		atlas_picture("res://assets/art/ui-main.png", Rect2(0.36, 0, 0.64, 1), Vector2.ZERO, P(1672, 941))
+		var shade := ColorRect.new()
+		shade.color = Color(0, 0.015, 0.025, 0.25)
+		shade.size = P(1672, 941)
+		shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_child(shade)
+
+
+func text_label(text: String, size_value: int = 20, col: Color = Color.WHITE) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_override("font", UI_FONT)
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", color)
-	l.position = pos
+	l.add_theme_font_override("font", HEAD_FONT if size_value >= 24 else UI_FONT)
+	l.add_theme_font_size_override("font_size", int(round(size_value * K)))
+	l.add_theme_color_override("font_color", col)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if width > 0.0:
-		l.custom_minimum_size.x = width
-		l.size.x = width
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	page.add_child(l)
 	return l
 
 
-func frame(pos: Vector2, dims: Vector2, color: Color = Color("276578")) -> Panel:
-	var p := Panel.new()
-	p.position = pos
-	p.size = dims
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_theme_stylebox_override("panel", Hud.panel_style(color))
-	page.add_child(p)
-	return p
+func label_at(text: String, pos: Vector2, size_value: int = 20, col: Color = Color.WHITE) -> Label:
+	var l := text_label(text, size_value, col)
+	l.position = pos
+	content.add_child(l)
+	return l
 
 
-func nav(text: String, pos: Vector2, dims: Vector2, call: Callable, primary := false, font := 20) -> Button:
+func button(text: String, call: Callable, width: float = 130.0) -> Button:
 	var b := Button.new()
-	b.text = text
-	b.position = pos
-	b.custom_minimum_size = dims
-	b.size = dims
 	b.add_theme_font_override("font", UI_FONT)
-	b.add_theme_font_size_override("font_size", font)
-	var accent := Rules.FACTIONS[faction][1] as Color
-	b.add_theme_stylebox_override("normal", Hud.panel_style(accent if primary else Color("276578")))
-	b.add_theme_stylebox_override("hover", Hud.panel_style(accent))
+	b.text = text
+	b.custom_minimum_size = Vector2(width, 52.0 * K)
+	b.add_theme_stylebox_override("normal", Hud.panel_style())
+	b.add_theme_stylebox_override("hover", Hud.panel_style(color()))
 	var pressed := Hud.panel_style(Color("00ddf2"))
 	pressed.bg_color = Color("147185")
 	b.add_theme_stylebox_override("pressed", pressed)
-	b.add_theme_stylebox_override("disabled", Hud.panel_style(Color("3a4650")))
+	b.add_theme_color_override("font_disabled_color", Color("a6b2bb"))
+	b.add_theme_font_size_override("font_size", int(round(19 * K)))
 	b.pressed.connect(func(): call.call_deferred())
-	page.add_child(b)
+	UiSkin.button(b, faction)
 	return b
 
 
-func picture(tex: Texture2D, pos: Vector2, dims: Vector2, region := Rect2()) -> TextureRect:
+func nav_button(text: String, pos: Vector2, dims: Vector2, call: Callable, primary := false) -> Button:
+	var b := button(text, call, dims.x)
+	b.position = pos
+	b.custom_minimum_size = dims
+	b.size = dims
+	b.add_theme_font_size_override("font_size", int(round(25 * K)))
+	UiSkin.button(b, "vex" if _is_main else faction, primary)
+	content.add_child(b)
+	return b
+
+
+func neon_panel(pos: Vector2, dims: Vector2, accent: Color, glow: bool, fill: Color) -> Control:
+	var p := NeonPanel.new()
+	p.position = pos
+	p.size = dims
+	p.accent = accent
+	p.glowing = glow
+	p.fill = fill
+	return p
+
+
+func frame(pos: Vector2, dims: Vector2, skin := "Panels/panel-large") -> Control:
+	var p := neon_panel(pos, dims, color(), false, Color("030c12ec") if skin != "row" else Color("020a10e8"))
+	content.add_child(p)
+	return p
+
+
+func picture(path: String, pos: Vector2, dims: Vector2) -> TextureRect:
+	if not ResourceLoader.exists(path):
+		return null
 	var p := TextureRect.new()
-	if region.size != Vector2.ZERO:
-		var atlas := AtlasTexture.new()
-		atlas.atlas = tex
-		atlas.region = Rect2(region.position * Vector2(tex.get_size()), region.size * Vector2(tex.get_size()))
-		atlas.filter_clip = true
-		p.texture = atlas
-	else:
-		p.texture = tex
+	p.texture = load(path)
+	p.position = pos
+	p.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	p.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED if path.ends_with(".svg") else TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(p)
+	p.size = dims
+	p.set_deferred("size", dims)                      # Alpha 11 gotcha: size set before enter-tree is reset
+	return p
+
+
+func atlas_picture(path: String, region: Rect2, pos: Vector2, dims: Vector2) -> TextureRect:
+	var texture: Texture2D = load(path)
+	var atlas := AtlasTexture.new()
+	atlas.atlas = texture
+	atlas.region = Rect2(region.position * Vector2(texture.get_size()), region.size * Vector2(texture.get_size()))
+	atlas.filter_clip = true
+	var p := TextureRect.new()
+	p.texture = atlas
 	p.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	p.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	p.position = pos
-	p.size = dims
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	page.add_child(p)
+	content.add_child(p)
+	p.size = dims
+	p.set_deferred("size", dims)
 	return p
 
 
 func portrait(f: String, pos: Vector2, dims: Vector2) -> TextureRect:
-	## Alpha 11's cinematic illustrated portraits (assets/art), same atlas regions as its menu.
 	if f == "vex":
-		return picture(load("res://assets/art/ui-faction.png"), pos, dims, Rect2(0.02, 0.092, 0.333, 0.54))
-	return picture(load("res://assets/art/%s.png" % f), pos, dims, Rect2(0.43, 0.035, 0.54, 0.86))
+		return atlas_picture("res://assets/art/ui-faction.png", Rect2(0.02, 0.092, 0.333, 0.54), pos, dims)
+	return atlas_picture("res://assets/art/%s.png" % f, Rect2(0.43, 0.035, 0.54, 0.86), pos, dims)
 
 
-func icon(name: String, pos: Vector2, dims: Vector2, color: Color) -> void:
-	var tex: Texture2D = load("res://assets/icons/%s.png" % name)
-	var glow := picture(tex, pos - Vector2(4, 4), dims + Vector2(8, 8))
-	glow.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	glow.modulate = Color(color, 0.25)
-	var i := picture(tex, pos, dims)
-	i.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	i.modulate = color
+func neon_icon(icon_name: String, pos: Vector2, dims: Vector2, col: Color) -> void:
+	var path := "res://assets/icons/%s.png" % icon_name
+	if not ResourceLoader.exists(path):
+		return
+	for spread in [8.0, 4.0]:
+		var glow := atlas_picture(path, Rect2(0, 0, 1, 1), pos - Vector2.ONE * spread / 2.0, dims + Vector2.ONE * spread)
+		glow.modulate = Color(col, 0.23)
+	var icon := atlas_picture(path, Rect2(0, 0, 1, 1), pos, dims)
+	icon.modulate = col
 
 
 func header(step: int) -> void:
-	var logo := picture(load("res://assets/ui/Ooze-Syndicate-Logo.svg"), Vector2(24, 10), Vector2(150, 44))
-	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	var steps := ["01  FACTION", "02  BATTLEFIELD", "03  SETUP"]
-	var accent := Rules.FACTIONS[faction][1] as Color
-	for i in range(3):
-		var on := i + 1 == step
-		var p := frame(Vector2(430 + i * 150, 14), Vector2(144, 36), accent if on else Color("276578"))
-		if on:
-			(p.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color(accent, 0.25)
-		label_at(steps[i], Vector2(444 + i * 150, 20), 17, Color.WHITE if on else Color("839da9"))
-	label_at("v%s  %s" % [Rules.VERSION, Rules.VERSION_NAME], Vector2(1120, 22), 15, Color("839da9"))
+	picture("res://assets/ui/Ooze-Syndicate-Wordmark.svg", P(35, 10), P(172, 64))
+	if step > 0:
+		picture("res://assets/ui-kit/Navigation/stepper-%d.png" % step, P(565, 20), P(620, 59))
+	label_at("v%s  %s" % [Rules.VERSION, Rules.VERSION_NAME], P(1480, 34), 16, Color("839da9"))
+
+
+func map_preview(pos: Vector2, dims: Vector2) -> void:
+	var code: String = _selected_map().get("code", "")
+	if not picture("res://assets/map-thumbnails/%s.png" % code, pos, dims):
+		var svg := picture(map_path.replace("maps/", "assets/maps/").replace(".json", ".svg"), pos, dims)
+		if svg:
+			svg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 
 
 # ------------------------------------------------------------------ pages
 func show_main() -> void:
-	clear()
-	frame(Vector2(340, 70), Vector2(600, 580))
-	var logo := picture(load("res://assets/ui/Ooze-Syndicate-Logo.svg"), Vector2(380, 95), Vector2(520, 200))
-	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	label_at("OOZE SYNDICATE 2.0  ·  %s" % Rules.VERSION_NAME.to_upper(), Vector2(380, 300), 26, Color("b8ced6"), 520).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	nav("NEW GAME", Vector2(420, 350), Vector2(440, 74), show_factions, true, 32)
-	nav("QUICK MATCH", Vector2(420, 438), Vector2(440, 56), func():
-		rival = "random"
-		deploy(), false, 24)
-	nav("FULLSCREEN" if OS.has_feature("web") else "QUIT", Vector2(420, 508), Vector2(440, 56), func():
+	clear_page("ui-main")
+	var mask := ColorRect.new()                      # the supplied scene keeps its baked controls
+	mask.color = Color("030c12")                     # under an opaque live panel, as in Alpha 11
+	mask.size = P(585, 941)
+	mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(mask)
+	frame(P(28, 47), P(550, 840))
+	picture("res://assets/ui/Ooze-Syndicate-Logo.svg", P(59, 94), P(520, 293))
+	var start := nav_button("NEW GAME", P(80, 407), P(440, 98), show_factions, true)
+	start.add_theme_font_size_override("font_size", int(round(37 * K)))
+	nav_button("OPTIONS", P(80, 532), P(440, 82), show_options).add_theme_font_size_override("font_size", int(round(32 * K)))
+	nav_button("FULLSCREEN" if OS.has_feature("web") else "QUIT", P(80, 639), P(440, 82), func():
 		if OS.has_feature("web"):
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		else:
-			get_tree().quit(), false, 24)
-	label_at("v%s  ·  reload twice after a new publish (PWA cache)" % Rules.VERSION, Vector2(380, 600), 15, Color("839da9"), 520).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			get_tree().quit()).add_theme_font_size_override("font_size", int(round(32 * K)))
+	var tut := nav_button("TUTORIAL", P(80, 745), P(212, 64), func(): pass)
+	tut.disabled = true
+	tut.tooltip_text = "Not in 2.0 yet"
+	var online := nav_button("ONLINE", P(307, 745), P(213, 64), func(): pass)
+	online.disabled = true
+	online.tooltip_text = "Not in 2.0 yet"
+	label_at("%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], P(66, 843), 19, Color("839da9"))
+
+
+func show_options() -> void:
+	clear_page("city")
+	header(0)
+	label_at("OPTIONS", P(40, 107), 43)
+	frame(P(35, 174), P(1000, 500))
+	label_at("MATCH RULES", P(60, 195), 30)
+	var bc := nav_button("BRIDGE COMBAT: %s" % ("ON  -  Alpha 12: hordes fight wherever they meet" if Rules.bridge_combat else "OFF  -  Alpha 11: hordes pass each other, fights only at nodes"),
+			P(60, 250), P(950, 70), func():
+		Rules.bridge_combat = not Rules.bridge_combat
+		show_options())
+	bc.add_theme_font_size_override("font_size", int(round(22 * K)))
+	label_at("Not sure combat on bridges is fun? Try both. Also in the pause menu and the Debug panel.", P(60, 330), 18, Color("b8ced6"))
+	label_at("PERFORMANCE", P(60, 395), 30)
+	var det := nav_button("DETAIL: %s" % ("FULL" if not Rules.low_detail else "LOW  -  fewer patches, no shield rings"),
+			P(60, 450), P(950, 70), func():
+		Rules.low_detail = not Rules.low_detail
+		show_options())
+	det.add_theme_font_size_override("font_size", int(round(22 * K)))
+	label_at("Low detail halves the horde and river patches - use it if the game makes your machine run hot.", P(60, 530), 18, Color("b8ced6"))
+	nav_button("BACK", P(40, 866), P(230, 58), show_main)
 
 
 func show_factions() -> void:
-	clear()
+	clear_page(faction)
 	header(1)
-	var color := Rules.FACTIONS[faction][1] as Color
-	var names: Array = Rules.FACTION_NAMES[faction]
-	# portrait, left
-	frame(Vector2(20, 62), Vector2(392, 480))
-	portrait(faction, Vector2(24, 66), Vector2(384, 340))
-	label_at(names[0], Vector2(24, 410), 46, Color.WHITE, 384).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label_at(names[1], Vector2(24, 462), 22, color, 384).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label_at(Rules.FACTION_TAGLINES[faction], Vector2(24, 494), 15, Color("b8ced6"), 384).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# stats + trait, middle
-	frame(Vector2(428, 62), Vector2(400, 300))
-	label_at("FACTION STATS", Vector2(446, 72), 24)
+	var col := color()
+	frame(P(28, 78), P(572, 636))
+	portrait(faction, P(31, 81), P(566, 513))
+	var name_label := label_at(NAMES[faction].split("\n")[0], P(50, 593), 52)
+	name_label.size.x = 528 * K
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sub_label := label_at(NAMES[faction].split("\n")[1], P(50, 651), 25, col)
+	sub_label.size.x = 528 * K
+	sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var tagline := label_at(Rules.FACTION_TAGLINES[faction], P(50, 686), 16, Color("b8ced6"))
+	tagline.size.x = 528 * K
+	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	frame(P(614, 134), P(469, 390))
+	label_at("FACTION STATS", P(636, 150), 30)
 	var rows := [["speed", "SPEED", "FASTER", "SLOWER"], ["health", "HEALTH", "TOUGHER", "FRAGILE"],
 			["attack", "ATTACK", "STRONGER", "WEAKER"], ["production", "PRODUCTION SPEED", "FASTER", "SLOWER"],
 			["garrison", "GARRISON STRENGTH", "STRONGER", "WEAKER"]]
 	for i in range(rows.size()):
 		var row: Array = rows[i]
-		var y := 108 + i * 48
-		frame(Vector2(444, y), Vector2(368, 42), Color("1e3d4a"))
-		icon(row[0], Vector2(454, y + 8), Vector2(26, 26), color)
-		label_at(row[1], Vector2(492, y + 10), 17)
-		var v := Rules.stat(faction, row[0])
-		var rating: String = row[2] if v > 1.001 else (row[3] if v < 0.999 else "BASELINE")
-		var rc := color if v > 1.001 else (Color("ffb12b") if v < 0.999 else Color("9cb2bf"))
-		label_at("%d%%" % roundi(v * 100.0), Vector2(680, y + 10), 16, Color("9cb2bf"))
-		label_at(rating, Vector2(730, y + 10), 16, rc)
-	frame(Vector2(428, 372), Vector2(400, 170))
-	label_at("PERSISTENT TRAIT", Vector2(446, 382), 20)
-	icon("efficient_routing", Vector2(450, 424), Vector2(54, 54), color)
-	label_at(str(Rules.FACTION_TRAITS[faction][0]).to_upper(), Vector2(518, 420), 22)
-	label_at(Rules.FACTION_TRAITS[faction][1], Vector2(518, 452), 16, Color("bed0da"), 290)
-	label_at("COMING SOON", Vector2(700, 514), 13, Color("7795a4"))
-	# abilities, right (the Ooze Factory's three slots - GAME-RULES sec9; pools pending approval)
-	frame(Vector2(844, 62), Vector2(416, 480))
-	label_at("ABILITIES", Vector2(862, 72), 24)
-	label_at("OOZE FACTORY: 3 SLOTS", Vector2(1080, 80), 14, color)
-	var slots := [["ACTIVE SKILL", "One regular skill from the %s pool." % names[0]],
-			["MAP SKILL", "A network ability: temporary deck, destroy a section, hack a relay..."],
-			["ULTIMATE - %s" % str(Rules.FACTION_ULTIMATE[faction][0]).to_upper(), "Charges over ~120 s; %s." % Rules.FACTION_ULTIMATE[faction][1]]]
+		var y := 201 + i * 61
+		frame(P(635, y), P(428, 57), "row")
+		neon_icon(row[0], P(652, y + 10), P(34, 34), col)
+		label_at(row[1], P(703, y + 17), 19)
+		var value := Rules.stat(faction, row[0])
+		var rating: String = row[2] if value > 1.001 else (row[3] if value < 0.999 else "BASELINE")
+		label_at(rating, P(943, y + 17), 18, col if value > 1.001 else (Color("ffb12b") if value < 0.999 else Color("9cb2bf")))
+		label_at(str(roundi(value * 100)) + "%", P(876, y + 17), 18, Color("9cb2bf"))
+	frame(P(614, 534), P(469, 180))
+	label_at("PERSISTENT TRAIT", P(636, 548), 22)
+	neon_icon("efficient_routing", P(642, 602), P(62, 62), col)
+	label_at(str(Rules.FACTION_TRAITS[faction][0]).to_upper(), P(719, 596), 24)
+	label_at(Rules.FACTION_TRAITS[faction][1], P(719, 632), 18, Color("bed0da"))
+	label_at("COMING SOON", P(924, 685), 15, Color("7795a4"))
+	frame(P(1095, 134), P(550, 580))
+	label_at("ABILITIES", P(1118, 152), 30)
+	label_at("OOZE FACTORY: 3 SLOTS", P(1400, 161), 16, col)
+	var names: Array = Rules.FACTION_NAMES[faction]
+	var slots := [["ACTIVE SKILL", "One regular skill from the %s pool." % names[0], "attack"],
+			["MAP SKILL", "A network ability: temporary deck, destroy a section, hack a relay.", "efficient_routing"],
+			[str(Rules.FACTION_ULTIMATE[faction][0]).to_upper(), "Ultimate, charges over ~120 s: %s." % Rules.FACTION_ULTIMATE[faction][1], "speed"]]
 	for i in range(3):
-		var y := 112 + i * 132
-		frame(Vector2(860, y), Vector2(384, 118), Color("1e3d4a"))
-		icon(["attack", "efficient_routing", "speed"][i], Vector2(874, y + 30), Vector2(54, 54), color)
-		label_at(slots[i][0], Vector2(944, y + 14), 21)
-		label_at(slots[i][1], Vector2(944, y + 46), 15, Color("c5d2da"), 290)
-		label_at("ULTIMATE / 120 s" if i == 2 else "COMING SOON", Vector2(1120, y + 96), 12, Color("ffd15c") if i == 2 else Color("7795a4"))
-	# illustrated faction tabs
-	for i in range(FACTIONS.size()):
-		var f: String = FACTIONS[i]
-		var pos := Vector2(20 + i * 250, 556)
-		var chosen := f == faction
-		var fc := Rules.FACTIONS[f][1] as Color
-		var b := nav("", pos, Vector2(240, 82), func():
-			faction = f
-			main.SEAT_FACTIONS[main.HUMAN] = f
-			show_factions(), chosen)
-		portrait(f, pos + Vector2(5, 5), Vector2(80, 72))
-		label_at(Rules.FACTION_NAMES[f][0], pos + Vector2(96, 14), 22, fc if chosen else Color.WHITE)
-		label_at(Rules.FACTION_NAMES[f][1], pos + Vector2(96, 44), 14, fc)
-		if chosen:
-			icon("check", pos + Vector2(210, 8), Vector2(20, 20), fc)
-	nav("BACK", Vector2(20, 654), Vector2(180, 48), show_main)
-	nav("NEXT: BATTLEFIELD", Vector2(940, 654), Vector2(320, 48), show_maps, true)
+		var y := 200 + i * 165
+		frame(P(1117, y), P(507, 150), "row")
+		neon_icon(slots[i][2], P(1134, y + 40), P(64, 64), col)
+		label_at(slots[i][0], P(1217, y + 18), 24)
+		var desc := label_at(slots[i][1], P(1217, y + 60), 20, Color("c5d2da"))
+		desc.custom_minimum_size = P(382, 70)
+		desc.size = P(382, 70)
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		if i == 2:
+			label_at("ULTIMATE / 120s", P(1500, y + 126), 13, Color("ffd15c"))
+		else:
+			label_at("COMING SOON", P(1500, y + 126), 13, Color("7795a4"))
+	for i in range(5):
+		faction_tab(FACTIONS[i], P(34 + i * 324, 745), P(312, 101))
+	nav_button("BACK", P(40, 866), P(230, 58), show_main)
+	nav_button("NEXT: BATTLEFIELD", P(1280, 866), P(352, 58), show_maps, true)
+
+
+func faction_tab(f: String, pos: Vector2, dims: Vector2) -> void:
+	nav_button("", pos, dims, func():
+		faction = f
+		main.SEAT_FACTIONS[main.HUMAN] = f
+		show_factions())
+	portrait(f, pos + P(6, 6), P(104, 89))
+	var chosen := f == faction
+	var fc: Color = Rules.FACTIONS[f][1]
+	label_at("VIRIDIAN" if f == "bloom" else f.to_upper(), pos + P(122, 20), 24, fc if chosen else Color.WHITE)
+	label_at(NAMES[f].split("\n")[1], pos + P(122, 54), 17, fc)
+	content.add_child(neon_panel(pos, dims, fc, chosen, Color(0, 0, 0, 0)))
+	if chosen:
+		neon_icon("check", pos + P(279, 9), P(21, 21), fc)
 
 
 func show_maps() -> void:
-	clear()
+	clear_page("city")
 	header(2)
-	var color := Rules.FACTIONS[faction][1] as Color
-	label_at("CHOOSE YOUR BATTLEFIELD", Vector2(24, 62), 30)
-	frame(Vector2(20, 104), Vector2(760, 540))
+	label_at("CHOOSE YOUR BATTLEFIELD", P(40, 107), 43)
+	frame(P(35, 174), P(975, 641))
 	var scroll := ScrollContainer.new()
-	scroll.position = Vector2(30, 114)
-	scroll.size = Vector2(740, 520)
-	page.add_child(scroll)
+	scroll.position = P(52, 193)
+	scroll.size = P(940, 600)
+	content.add_child(scroll)
 	var grid := GridContainer.new()
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 10)
-	grid.add_theme_constant_override("v_separation", 10)
+	grid.add_theme_constant_override("h_separation", int(16 * K))
+	grid.add_theme_constant_override("v_separation", int(16 * K))
 	scroll.add_child(grid)
 	for entry in maps:
 		var m: Dictionary = entry["data"]
 		var mp: String = entry["path"]
-		var chosen: bool = mp == map_path
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(360, 118)
-		b.add_theme_stylebox_override("normal", Hud.panel_style(color if chosen else Color("276578")))
-		b.add_theme_stylebox_override("hover", Hud.panel_style(color))
-		b.add_theme_stylebox_override("pressed", Hud.panel_style(color))
-		b.pressed.connect(func():
+		var code: String = m.get("code", "")
+		var b := button("", func():
 			map_path = mp
-			show_maps())
+			show_maps(), 451 * K)
+		b.custom_minimum_size = P(451, 272)
 		grid.add_child(b)
 		var tex := TextureRect.new()
-		tex.texture = load(mp.replace("maps/", "assets/maps/").replace(".json", ".svg"))
-		tex.position = Vector2(8, 8)
-		tex.custom_minimum_size = Vector2(100, 100)
-		tex.size = Vector2(100, 100)
-		b.clip_contents = true
+		var thumb := "res://assets/map-thumbnails/%s.png" % code
+		tex.texture = load(thumb) if ResourceLoader.exists(thumb) else load(mp.replace("maps/", "assets/maps/").replace(".json", ".svg"))
+		tex.position = P(8, 8)
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(tex)
-		var cap := Label.new()
-		cap.add_theme_font_override("font", UI_FONT)
-		cap.add_theme_font_size_override("font_size", 20)
-		cap.text = "%s  %s" % [m.get("code", "?"), str(m.get("name", "")).replace("*", "")]
-		cap.position = Vector2(126, 14)
-		cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		b.add_child(cap)
-		var sub := Label.new()
-		sub.add_theme_font_override("font", UI_FONT)
-		sub.add_theme_font_size_override("font_size", 14)
-		sub.add_theme_color_override("font_color", Color("abc1cd"))
-		sub.text = "%d nodes%s\n%s" % [m["nodes"].size(), _relay_kinds(m), main.PROVES.get(m.get("code", ""), "")]
-		sub.position = Vector2(126, 46)
-		sub.custom_minimum_size.x = 224
-		sub.size.x = 224
-		sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		b.add_child(sub)
-	# preview, right
+		tex.size = P(435, 211)
+		tex.set_deferred("size", P(435, 211))
+		var caption := text_label("%s  %s" % [code, str(m.get("name", "")).replace("*", "").to_upper()], 23)
+		caption.position = P(17, 230)
+		b.add_child(caption)
+		var edge := neon_panel(Vector2.ZERO, P(451, 272), color(), mp == map_path, Color(0, 0, 0, 0))
+		b.add_child(edge)
+	frame(P(1030, 174), P(603, 641))
+	map_preview(P(1046, 193), P(571, 414))
 	var sel := _selected_map()
-	frame(Vector2(796, 104), Vector2(464, 540))
-	var prev := picture(load(map_path.replace("maps/", "assets/maps/").replace(".json", ".svg")), Vector2(836, 118), Vector2(384, 300))
-	prev.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	label_at(str(sel.get("name", "")).replace("*", "").to_upper(), Vector2(812, 430), 28)
-	label_at("1v1  ·  %d NODES%s" % [sel["nodes"].size(), _relay_kinds(sel).to_upper()], Vector2(812, 470), 18, color)
-	label_at(main.PROVES.get(sel.get("code", ""), ""), Vector2(812, 500), 16, Color("abc1cd"), 430)
-	var ls: Dictionary = sel.get("lastStand", {})
-	label_at("LAST STAND at %d:%02d  ·  methods: %s" % [int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(ls.get("methods", []))],
-			Vector2(812, 560), 15, Color("ffb0b0"), 430)
-	nav("BACK", Vector2(20, 654), Vector2(180, 48), show_factions)
-	nav("NEXT: MATCH SETUP", Vector2(940, 654), Vector2(320, 48), show_setup, true)
+	label_at(str(sel.get("name", "")).replace("*", "").to_upper(), P(1052, 631), 31)
+	label_at("CONQUEST    /    1v1    /    %d NODES%s" % [sel["nodes"].size(), _relay_kinds(sel).to_upper()], P(1053, 683), 23, color())
+	label_at("%s\nLast Stand at %d:%02d - methods: %s" % [main.PROVES.get(sel.get("code", ""), ""),
+			int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(sel.get("lastStand", {}).get("methods", []))],
+			P(1053, 736), 22, Color("abc1cd"))
+	nav_button("BACK", P(40, 866), P(230, 58), show_factions)
+	nav_button("NEXT: MATCH SETUP", P(1280, 866), P(352, 58), show_setup, true)
 
 
 func _relay_kinds(m: Dictionary) -> String:
@@ -302,7 +369,7 @@ func _relay_kinds(m: Dictionary) -> String:
 	for n in m["nodes"]:
 		if n.get("relay") != null:
 			kinds[n["relay"]] = true
-	return "  ·  " + "/".join(kinds.keys()) if not kinds.is_empty() else ""
+	return "    /    " + " + ".join(kinds.keys()) if not kinds.is_empty() else ""
 
 
 func _selected_map() -> Dictionary:
@@ -313,60 +380,53 @@ func _selected_map() -> Dictionary:
 
 
 func show_setup() -> void:
-	clear()
+	clear_page("city")
 	header(3)
-	var color := Rules.FACTIONS[faction][1] as Color
-	label_at("READY TO DEPLOY", Vector2(24, 62), 30)
-	var sel := _selected_map()
-	frame(Vector2(20, 104), Vector2(600, 540))
-	label_at(str(sel.get("name", "")).replace("*", "").to_upper(), Vector2(40, 118), 24)
-	nav("CHANGE MAP", Vector2(450, 114), Vector2(150, 40), show_maps, false, 16)
-	var prev := picture(load(map_path.replace("maps/", "assets/maps/").replace(".json", ".svg")), Vector2(60, 160), Vector2(520, 460))
-	prev.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	frame(Vector2(636, 104), Vector2(624, 540))
-	label_at("YOUR FACTION  ·  SEAT A  (cyan)", Vector2(656, 116), 16, Color("aac3cd"))
-	_summary_card(faction, Vector2(656, 140), Vector2(584, 96), true)
-	label_at("RIVAL  ·  SEAT B  (green)", Vector2(656, 250), 16, Color("aac3cd"))
+	label_at("READY TO DEPLOY", P(40, 108), 51)
+	frame(P(35, 188), P(982, 630))
+	label_at(str(_selected_map().get("name", "")).replace("*", "").to_upper(), P(58, 207), 28)
+	nav_button("CHANGE MAP", P(810, 206), P(184, 48), show_maps)
+	map_preview(P(53, 277), P(946, 516))
+	frame(P(1037, 188), P(595, 630))
+	label_at("YOUR FACTION  ·  SEAT A", P(1059, 208), 20, Color("aac3cd"))
+	summary_card(faction, P(1058, 240), P(552, 130), true)
+	label_at("RIVAL  ·  SEAT B", P(1059, 389), 20, Color("aac3cd"))
+	if rival != "random":
+		summary_card(rival, P(1058, 422), P(552, 121), false)
+	else:
+		frame(P(1058, 422), P(552, 121), "row")
+		label_at("RANDOM RIVAL", P(1080, 445), 30, Color("adc7d2"))
+		label_at("picked when you deploy", P(1082, 495), 18, Color("adc7d2"))
 	var choices := ["random"] + FACTIONS
 	for i in range(choices.size()):
 		var f: String = choices[i]
-		var on := f == rival
-		var fc: Color = Rules.FACTIONS[f][1] if f != "random" else Color("00ddf2")
-		var b := nav(f.to_upper(), Vector2(656 + i * 98, 278), Vector2(92, 44), func():
+		var b := nav_button(("ANY" if f == "random" else ("VIRIDIAN" if f == "bloom" else f.to_upper())), P(1058 + i * 93, 556), P(88, 49), func():
 			rival = f
-			show_setup(), on, 15)
-		if on:
-			b.add_theme_stylebox_override("normal", Hud.panel_style(fc))
-	var rf := rival if rival != "random" else "?"
-	if rf != "?":
-		_summary_card(rf, Vector2(656, 332), Vector2(584, 84), false)
-	else:
-		frame(Vector2(656, 332), Vector2(584, 84), Color("1e3d4a"))
-		label_at("RANDOM RIVAL - picked when you deploy", Vector2(676, 360), 20, Color("adc7d2"))
-	label_at("DIFFICULTY", Vector2(656, 430), 16, Color("aac3cd"))
+			show_setup(), rival == f)
+		b.add_theme_font_size_override("font_size", int(round(16 * K)))
+	label_at("DIFFICULTY", P(1059, 620), 20, Color("aac3cd"))
 	var levels: Array = Rules.AI_LEVELS.keys()
 	for i in range(levels.size()):
 		var lv: String = levels[i]
-		var b := nav(lv.to_upper(), Vector2(656 + i * 150, 458), Vector2(140, 48), func():
+		var b := nav_button(lv.to_upper(), P(1058 + i * 186, 653), P(178, 59), func():
 			ai_level = lv
-			show_setup(), lv == ai_level, 17)
-	label_at("Same costs, same slots, no cheats - only how often it thinks, its attack margin and whether it uses relays as weapons.", Vector2(656, 514), 13, Color("aac3cd"), 584)
-	nav("BRIDGE COMBAT: %s" % ("ON  (Alpha 12 - hordes fight wherever they meet)" if Rules.bridge_combat else "OFF  (Alpha 11 - they pass, fight only at nodes)"),
-			Vector2(656, 556), Vector2(584, 44), func():
+			show_setup(), lv == ai_level)
+		b.add_theme_font_size_override("font_size", int(round(18 * K)))
+	nav_button("BRIDGE COMBAT / %s" % ("ON" if Rules.bridge_combat else "OFF"), P(1058, 746), P(552, 60), func():
 		Rules.bridge_combat = not Rules.bridge_combat
-		show_setup(), false, 15)
-	label_at("Ownership colour = seat (A cyan, B green); faction = shape, stats and accent (GAME-RULES sec2).", Vector2(656, 610), 12, Color("7795a4"), 584)
-	nav("BACK", Vector2(20, 654), Vector2(180, 48), show_maps)
-	nav("DEPLOY", Vector2(940, 654), Vector2(320, 48), deploy, true, 24)
+		show_setup())
+	label_at("ON = Alpha 12 (fight wherever they meet)   OFF = Alpha 11 (fight only at nodes)", P(1062, 812), 14, Color("7795a4"))
+	nav_button("BACK", P(40, 866), P(230, 58), show_maps)
+	nav_button("DEPLOY", P(1280, 866), P(352, 58), deploy, true)
 
 
-func _summary_card(f: String, pos: Vector2, dims: Vector2, change: bool) -> void:
-	frame(pos, dims, Color("1e3d4a"))
-	portrait(f, pos + Vector2(6, 6), Vector2(120, dims.y - 12))
-	label_at(Rules.FACTION_NAMES[f][0], pos + Vector2(140, 14), 28, Rules.FACTIONS[f][1])
-	label_at(Rules.FACTION_NAMES[f][1], pos + Vector2(142, 50), 16, Color("adc7d2"))
+func summary_card(f: String, pos: Vector2, dims: Vector2, change: bool) -> void:
+	frame(pos, dims, "row")
+	portrait(f, pos + P(6, 6), Vector2(146 * K, dims.y - 12 * K))
+	label_at("VIRIDIAN" if f == "bloom" else f.to_upper(), pos + P(174, 23), 34, Rules.FACTIONS[f][1])
+	label_at(NAMES[f].split("\n")[1], pos + P(177, 70), 20, Color("adc7d2"))
 	if change:
-		nav("CHANGE", pos + Vector2(dims.x - 120, dims.y - 46), Vector2(108, 36), show_factions, false, 15)
+		nav_button("CHANGE", pos + Vector2(dims.x - 148 * K, dims.y - 50 * K), P(132, 42), show_factions).add_theme_font_size_override("font_size", int(round(19 * K)))
 
 
 func deploy() -> void:
