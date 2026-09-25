@@ -1,8 +1,8 @@
 # Next session - start here
 
-State at the end of the 2026-09-25 sessions: **v0.17.0 "Alpha 17"** (maps 3.0 + debug maps, ring Last Stand, five-level AI; on top of Alpha 16: online rooms, visual pass), source on `main`,
-published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: this file,
-`README.md`, the top of `CHANGELOG.md` (0.12.0 to 0.16.0), `PLAYTEST-NOTES.md` notes 26-71, then the
+State at the end of the 2026-09-25 sessions: **v0.17.1 "Alpha 17"** (maps 3.0 + debug maps, ring Last Stand, five-level AI, constant unit speed; on top of Alpha 16: online rooms, visual pass), source on `main`,
+published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md` (project root - the whole game as built), this file,
+`README.md`, the top of `CHANGELOG.md` (0.16.0 to 0.17.1), `PLAYTEST-NOTES.md` notes 72-95, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
 
 ## Standing rules (Daniele)
@@ -16,6 +16,40 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - **BRAWL must be exactly Alpha 11's core rules**; SIEGE is where 2.0 experiments live.
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
+
+## Queued, in this order (Daniele, 2026-09-25)
+
+1. **Alpha 18 - new map pack.** Daniele: "the maps are waaaay too big for mobile". He is generating
+   a new pack to replace maps 3.0; wait for it, then bake and implement it the same way (builder ->
+   `export_maps_3_0_game.py` -> `maps3/`, `test_maps3`, `test_map_pool`). Measured sizes (fitted
+   span = the larger of width and height scaled to 836x470, platforms R 6 m):
+
+   | Set | Maps | Fitted span (median / min / max) | Platform width on screen |
+   |---|---|---|---|
+   | maps 3.0 (`maps3`, K 3 m/unit) | 109 | 401 / 179 / 502 m | 2.4-4.9 % (median ~2.9 %, ~24 px of 836) |
+   | older 2.0 roster (`maps`, before maps 3.0) | 100 | 134 / 21 / 186 m | median ~9 % (~75 px) |
+
+   So maps 3.0 are about 3x the older roster. Plaza sockets sit ~5.2 units (15.6 m) apart, so
+   simply lowering K would overlap platforms (diameter 12 m): the size has to come from the layout.
+   At constant speed, bigger maps also mean longer marches.
+2. **Optimization pass** (after Alpha 18): stray code, stale comments, errors, smoothness - keep
+   the look. Findings so far:
+   - Bug: `Rules.TEAM_FAMILIES` has two families; 2v2v2 has three teams, so two teams share the
+     warm family. Add a third family (e.g. violet/magenta/lilac) and a `test_sim` check.
+   - Dead or stale: shield code (Rules `SHIELD_*`, `fx._shield`, hud shield bar - check whether any
+     rule still sets `shield_up`), `Rules.OVERPASS_H` / `_deck_points` legacy overpass path,
+     `MODULE_SECONDS` (legacy routing only), `UNITS_PER_PATCH`, `main.STARTER_MAPS` / `PROVES`,
+     `Net.NODE_SKIP` "center", "Alpha 12" headers in main/fx/hud/mats/sim.
+   - The other session's uncommitted kit pieces (`assets/kit/Park_*`, `Plaza_*`, `Pier_Park*`,
+     `Pier_Plaza_*`) still sit untracked; keep them out of the export (temporary exclude_filter)
+     or ask Daniele whether to delete them.
+   - Frame cost (`--perf`, desktop, 1280x720, `--demo`): C-05 1v1 60 fps, ~1,700 draw calls,
+     1.2 M primitives, ~1,000 nodes; D-09 stress 3v3 55-59 fps, ~6,550 draw calls, 2.2 M
+     primitives, ~3,700 nodes. Draw calls are the target for phones (mesh merging / MultiMesh for
+     repeated kit pieces, residents and badges; check the vat liquid transparency and detail
+     textures on the mobile profile). No errors or warnings in either run.
+   - Command: `Godot_v4.6.1-stable_win64_console.exe --path . -- --map=res://maps3/D-09-stress-test.json --mode=3v3 --demo --seed=3 --shots=60 --out=<dir> --perf --window=1280x720`
+   Then tests, version bump, publish.
 
 ## Alpha 17 (2026-09-25): maps 3.0, ring Last Stand, five-level AI - built
 
