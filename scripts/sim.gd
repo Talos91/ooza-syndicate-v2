@@ -1527,7 +1527,7 @@ func _collapse_order(method: String, centre: Vector3) -> Array:
 	var pref := remaining.duplicate()
 	match method:
 		"outward":
-			pref.sort_custom(func(a, b): return nodes[a]["pos"].distance_to(centre) < nodes[b]["pos"].distance_to(centre))
+			pref = _ring_order(pref, centre, false)
 		"chaos":
 			for i in range(pref.size() - 1, 0, -1):
 				var j := rng.randi_range(0, i)
@@ -1535,7 +1535,7 @@ func _collapse_order(method: String, centre: Vector3) -> Array:
 				pref[i] = pref[j]
 				pref[j] = tmp
 		_:
-			pref.sort_custom(func(a, b): return nodes[a]["pos"].distance_to(centre) > nodes[b]["pos"].distance_to(centre))
+			pref = _ring_order(pref, centre, true)
 	var order := []
 	var gone := collapsed.duplicate()
 	while not remaining.is_empty():
@@ -1730,3 +1730,29 @@ func allied(a: String, b: String) -> bool:
 	if a == b:
 		return true
 	return teams.has(a) and teams.has(b) and teams[a] == teams[b]
+
+
+func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
+	## Inward / outward order by distance from the centre, but nodes on the same ring (within 4 m -
+	## symmetric maps have many) come in a seeded random order, so the first node to fall differs
+	## from match to match (Daniele, Alpha 14 playtest: "it's always the same node falling first").
+	var rings := {}
+	for id in ids:
+		var key := int(round(nodes[id]["pos"].distance_to(centre) / 4.0))
+		if not rings.has(key):
+			rings[key] = []
+		rings[key].append(id)
+	var keys := rings.keys()
+	keys.sort()
+	if far_first:
+		keys.reverse()
+	var out := []
+	for k in keys:
+		var ring: Array = rings[k]
+		for i in range(ring.size() - 1, 0, -1):
+			var j := rng.randi_range(0, i)
+			var tmp = ring[i]
+			ring[i] = ring[j]
+			ring[j] = tmp
+		out.append_array(ring)
+	return out

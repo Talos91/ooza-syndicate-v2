@@ -1,5 +1,17 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.14.5 - 2026-09-25
+
+- **Overpasses where decks cross.** The roster leaves many crossings unmarked (24 maps, including
+  Trident Exchange and the other maps Daniele flagged). On load, every pair of crossing decks now gets
+  one raised as an overpass - a fixed deck in preference to a relay deck, the longer if both. No
+  crossing on any of the 99 maps is left flat. The roster files are not edited.
+- **Last Stand varies**: inward and outward orders shuffle the nodes that sit on the same ring, so the
+  first node to fall changes from match to match (seeded, still never cutting the map).
+- **Send controls on the left**, Alpha 11 style; Debug moved bottom-right; the camera frames the
+  map in the space right of the panel with more margin.
+- **Menu: one background**, full screen; the page no longer draws a second copy of the art.
+
 ## 0.14.4 - 2026-09-25
 
 - The menu's full-screen backdrop uses the clean part of the art: on wide phone screens the old

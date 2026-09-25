@@ -71,15 +71,10 @@ func clear_page(art: String) -> void:
 	add_child(content)
 	_fit()
 	_is_main = art == "ui-main"
-	if art == "ui-main":
-		picture("res://assets/art/ui-main.png", Vector2.ZERO, P(1672, 941))
-	else:
-		atlas_picture("res://assets/art/ui-main.png", Rect2(0.36, 0, 0.64, 1), Vector2.ZERO, P(1672, 941))
-		var shade := ColorRect.new()
-		shade.color = Color(0, 0.015, 0.025, 0.25)
-		shade.size = P(1672, 941)
-		shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		content.add_child(shade)
+	# one background only: the full-screen backdrop (Alpha 14 playtest: "background on top of a
+	# background" - the page used to draw its own copy of the art, misaligned on taller screens)
+	if _backdrop:
+		_backdrop.modulate = Color(0.95, 0.95, 0.95) if _is_main else Color(0.62, 0.68, 0.74)
 
 
 func text_label(text: String, size_value: int = 20, col: Color = Color.WHITE) -> Label:
@@ -211,9 +206,10 @@ func map_preview(pos: Vector2, dims: Vector2) -> void:
 # ------------------------------------------------------------------ pages
 func show_main() -> void:
 	clear_page("ui-main")
-	var mask := ColorRect.new()                      # the supplied scene keeps its baked controls
-	mask.color = Color("030c12")                     # under an opaque live panel, as in Alpha 11
-	mask.size = P(585, 941)
+	var mask := ColorRect.new()                      # the dark left column, full screen height
+	mask.color = Color("030c12")
+	mask.position = Vector2(-3000, -3000)
+	mask.size = Vector2(3000, 6000) + Vector2(P(585, 0).x, 0)
 	mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(mask)
 	frame(P(28, 47), P(550, 840))

@@ -277,9 +277,9 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	pause_button.position = Vector2(vp.x - m.z - pause_button.size.x, m.y)
 	side_panel.size = side_panel.get_combined_minimum_size()
 	var side_y := (vp.y - side_panel.size.y) / 2.0
-	var pause_bottom := pause_button.position.y + pause_button.size.y + 8.0
-	side_y = maxf(side_y, pause_bottom)                 # never under the pause button (phones)
-	side_panel.position = Vector2(vp.x - m.z - side_panel.size.x, side_y)
+	var top_bottom := top_panel.position.y + top_panel.size.y + 34.0   # below the top bar and status line
+	side_y = maxf(side_y, top_bottom)
+	side_panel.position = Vector2(m.x, side_y)          # send controls on the LEFT, like Alpha 11 (Daniele)
 	map_title.position = Vector2(m.x + 8, vp.y - m.w - 30 * ui_scale)
 	hint.size = Vector2(vp.x * 0.5, 20)
 	hint.position = Vector2(vp.x * 0.5 - hint.size.x / 2.0, vp.y - m.w - 18)
@@ -292,9 +292,9 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	banner.size = Vector2(vp.x, 120)
 	banner.position = Vector2(0, vp.y * 0.28)
 	if debug_button:
-		debug_button.position = Vector2(m.x, vp.y - m.w - 30 * ui_scale - 8 - debug_button.size.y)
+		debug_button.position = Vector2(vp.x - m.z - debug_button.size.x, vp.y - m.w - 22 * ui_scale - 8 - debug_button.size.y)
 		debug_panel.size = debug_panel.get_combined_minimum_size()
-		debug_panel.position = Vector2(m.x, debug_button.position.y - 8.0 - debug_panel.size.y)
+		debug_panel.position = Vector2(vp.x - m.z - debug_panel.size.x, debug_button.position.y - 8.0 - debug_panel.size.y)
 	rotate_hint.size = vp
 	rotate_hint.visible = vp.y > vp.x
 	for p in [end_panel, pause_panel]:

@@ -369,20 +369,20 @@ func _fit_camera() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	var half_h := tan(hfov_half(vp))
 	var half_v := tan(deg_to_rad(cam.fov) / 2.0)
-	var panel := hud.side_panel_width() + margins.z + 20.0 if hud and thumb_path == "" else 0.0
+	var panel := hud.side_panel_width() + margins.x + 20.0 if hud and thumb_path == "" else 0.0   # the send panel sits on the left
 	var top_used := hud.top_used() if hud and thumb_path == "" else 0.0
 	var bottom_used := hud.bottom_used() if hud and thumb_path == "" else 0.0
-	var free_x := clampf((vp.x - panel - margins.x) / vp.x, 0.5, 1.0)
+	var free_x := clampf((vp.x - panel - margins.z) / vp.x, 0.5, 1.0)
 	var free_y := clampf((vp.y - top_used - bottom_used) / vp.y, 0.4, 1.0)
 	var along := (ext.x if cam_yaw == 0.0 else ext.z) + 2.0 * Rules.R + 4.0      # screen-horizontal
 	var across := ((ext.z if cam_yaw == 0.0 else ext.x) + 2.0 * Rules.R + 2.0) * sin(deg_to_rad(Rules.CAM_PITCH))
 	var dist_x := (along / 2.0) / (half_h * free_x)
 	var dist_y := (across / 2.0) / (half_v * free_y) * 0.9   # the far half foreshortens more than the near
-	cam_dist = maxf(dist_x, dist_y) * 1.02
+	cam_dist = maxf(dist_x, dist_y) * 1.14                 # perspective: the near side is wider at 42 degrees
 	_place_camera()
 	var screen_right := cam.global_transform.basis.x
-	var shift := cam_dist * half_h * ((panel - margins.x) / vp.x)
-	cam_target += screen_right * shift
+	var shift := cam_dist * half_h * ((panel - margins.z) / vp.x)
+	cam_target -= screen_right * shift                  # centre the map in the space right of the panel
 	var screen_up := Vector3(0, 0, -1).rotated(Vector3.UP, cam_yaw)            # map-plane direction that reads as "up"
 	var vshift := cam_dist * half_v * ((bottom_used - top_used) / vp.y) / sin(deg_to_rad(Rules.CAM_PITCH))
 	cam_target += screen_up * vshift

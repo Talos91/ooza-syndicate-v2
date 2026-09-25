@@ -42,7 +42,68 @@ static func layout(map: Dictionary) -> Dictionary:
 			var d: Vector3 = (schem[other] - schem[cur]).normalized()
 			pos[other] = pos[cur] + d * Rules.span(mods)
 			queue.append(other)
+	mark_crossings(map, pos)
 	return pos
+
+
+static func mark_crossings(map: Dictionary, pos: Dictionary) -> void:
+	## Decks that cross must be overpasses (GAME-RULES sec7: "overpasses cross at different heights
+	## without joining; only a modelled junction allows a turn"). The roster leaves some crossings
+	## unmarked (24 maps, e.g. Trident Exchange 6-7 x 1-4 - Daniele: "no overpass"), so on load each
+	## crossing pair gets one deck raised: the longer one that isn't relay-controlled. The roster
+	## files are not edited (OPEN-QUESTIONS). A deck already marked covers every crossing it has.
+	var es: Array = map["edges"]
+	for i in range(es.size()):
+		for j in range(i + 1, es.size()):
+			var e: Dictionary = es[i]
+			var g: Dictionary = es[j]
+			var ids := [int(e["from"]), int(e["to"]), int(g["from"]), int(g["to"])]
+			if ids[0] in [ids[2], ids[3]] or ids[1] in [ids[2], ids[3]]:
+				continue
+			if not (pos.has(ids[0]) and pos.has(ids[1]) and pos.has(ids[2]) and pos.has(ids[3])):
+				continue
+			if e.get("overpass", false) or g.get("overpass", false):
+				continue
+			var a := Vector2(pos[ids[0]].x, pos[ids[0]].z)
+			var b := Vector2(pos[ids[1]].x, pos[ids[1]].z)
+			var c := Vector2(pos[ids[2]].x, pos[ids[2]].z)
+			var d := Vector2(pos[ids[3]].x, pos[ids[3]].z)
+			var r := b - a
+			var s := d - c
+			var den := r.cross(s)
+			if absf(den) < 1e-6:
+				continue
+			var t := (c - a).cross(s) / den
+			var u := (c - a).cross(r) / den
+			if t <= 0.02 or t >= 0.98 or u <= 0.02 or u >= 0.98:
+				continue
+			var can_e := _can_raise(e)
+			var can_g := _can_raise(g)
+			var pick: Dictionary = {}
+			if can_e and can_g:
+				var fe: bool = e.get("state") == null and not e.get("retracts", false)
+				var fg: bool = g.get("state") == null and not g.get("retracts", false)
+				if fe != fg:
+					pick = e if fe else g
+				else:
+					pick = e if _mods(e) >= _mods(g) else g
+			elif can_e:
+				pick = e
+			elif can_g:
+				pick = g
+			if not pick.is_empty():
+				pick["overpass"] = true
+				pick["overpass_auto"] = true
+
+
+static func _mods(e: Dictionary) -> int:
+	return {"S": 1, "M": 2, "L": 3}[e["tier"]]
+
+
+static func _can_raise(e: Dictionary) -> bool:
+	## An overpass needs a ramp up and a ramp down (2+ modules). Relay decks may be raised too (their
+	## ramps carry the state lights), but a fixed deck is preferred when both could go up.
+	return _mods(e) >= 2
 
 
 static func piece(name: String) -> Node3D:
@@ -151,7 +212,7 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		var deck_nodes: Array = []
 		var base: Array = []
 		var state_key: String = "retract" if e["retracts"] else e["state"]
-		var over: bool = e["overpass"] and e["modules"] >= 2 and state_key == ""
+		var over: bool = e["overpass"] and e["modules"] >= 2
 		for k in range(e["modules"]):
 			var deck: Node3D
 			if over and k == e["modules"] - 1:           # overpass: ramp down, laid from the far end
