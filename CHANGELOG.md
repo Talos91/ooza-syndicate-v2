@@ -1,5 +1,11 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.16.3 - 2026-09-25
+
+- The self-update also catches a new build that finished installing before the page started listening
+  (checked every 2 s for 30 s after load). Verified in the browser: an old copy swapped itself for the
+  new one and reloaded.
+
 ## 0.16.2 - 2026-09-25
 
 - **Brawl enters and exits like Alpha 11** (Daniele: "the same exact feeling, also entering and

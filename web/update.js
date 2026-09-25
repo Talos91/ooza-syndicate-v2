@@ -17,7 +17,10 @@
     if (nw.state === 'installed' && navigator.serviceWorker.controller) kick(nw);
    });
   });
+  if (reg.installing) reg.installing.addEventListener('statechange', () => { if (reg.waiting && navigator.serviceWorker.controller) kick(reg.waiting); });
   reg.update().catch(() => {});
+  let tries = 0;                                  // the new worker may install before we listen
+  const poll = setInterval(() => { if (reg.waiting && navigator.serviceWorker.controller) kick(reg.waiting); if (kicked || ++tries > 15) clearInterval(poll); }, 2000);
  }
  addEventListener('load', () => navigator.serviceWorker.getRegistration().then(watch).catch(() => {}));
  setInterval(() => navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {}), 10 * 60 * 1000);
