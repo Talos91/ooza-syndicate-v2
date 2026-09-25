@@ -361,6 +361,23 @@ decide if mechanics are good or not... only thing I can save on is textures or b
     functions are short-lived HTTP handlers and cannot hold the long-lived WebSocket connections a
     realtime match needs. See OPEN-QUESTIONS for the options.
 
+## 2026-09-25 - Daniele, mobile and readability pass (v0.14.2 - v0.14.4)
+
+55. **Phones: interface shrunk to the left, mandate fullscreen.** *Done:* the menu scales and
+    centres on any screen shape; `scripts/fullscreen_gate.gd` requires fullscreen (Android button,
+    iPhone Add to Home Screen; the PWA opens fullscreen). Verified in the browser at a 2.17:1
+    viewport; real-phone test still Daniele's.
+56. **Classic: same-faction players share a colour.** *Done:* units take the owner's colour.
+57. **Unit counts hard to read.** *Done:* badges hang from each platform's near rim, bigger count.
+58. **Relay decks: units still don't consistently fall.** *Done:* every deck a line overlaps is
+    checked, including tails and lines that walked on mid-motion.
+59. **Double-tap upgrade still shows the upgrade interface.** *Done:* the inspector opens only after
+    the double-tap window, and the second release is swallowed.
+60. **Classic: Alpha 11 stats; no units loitering round the vat.** *Done.*
+61. **Fixed map size, no zoom, less vertical camera.** *Done:* no zoom or pan, pitch 42 degrees.
+62. **Vats and buildings face the viewer on every map.** *Done.*
+63. **Vat upgrade info said 150.** *Done (0.14.3):* the inspector buttons now use the display scale.
+
 ## Known gaps after Alpha 13 (not playtest findings)
 
 - Abilities / Ooze Factory (pending SKILLS-2.0-DRAFT approval), team modes and multiplayer,
