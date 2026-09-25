@@ -34,6 +34,11 @@ var eliminated: Dictionary = {}      # seat -> true once the collapse took its l
 var last_stand_active := false
 var last_stand_method := ""          # hidden until it starts, then revealed with the whole order
 var last_stand_order: Array = []     # node ids in drop order (the final is never in it)
+var last_stand_waves: Array = []     # maps 3.0: [[node ids]] - one ring per wave (plus relays / islands)
+var last_stand_keep: Dictionary = {} # maps 3.0: node id -> true for the last ring (never falls)
+var last_stand_warn: Dictionary = {} # node id -> true while under the 10 s warning
+var v3 := false                      # a maps 3.0 map (baked layout, rings, plazas)
+var _ring_orders: Dictionary = {}    # maps 3.0: method -> ring order (chaos: [orders])
 var last_stand_final := -1
 var last_stand_next := 0
 var last_stand_warn_node := -1       # node under its 10 s warning (-1: none)
@@ -53,6 +58,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 	teams = seat_teams
 	rng.seed = seed_value if seed_value >= 0 else int(Time.get_unix_time_from_system()) % 100000
 	_map_last_stand = map.get("lastStand", {})
+	v3 = map.has("layout")
+	if v3:
+		_ring_orders = _map_last_stand.get("orders", {})
 	for n in map["nodes"]:
 		var id: int = n["id"]
 		var owner: String = seats.get(id, "")
@@ -61,12 +69,16 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		var relay: String = n["relay"] if n.get("relay") != null else ""
 		# a relay node has no vat (GAME-RULES sec6, centreHasNoVat): it is a modest neutral
 		# waypoint that must be fed from elsewhere, never a fortress at the map's centre
+		var neutral = n.get("neutral") if v3 else null
 		var tier := Rules.HOME_TIER if owner != "" \
-				else (3 if (n["category"] == "final" or n["center"]) and relay == "" else 1)
+				else (clampi(int(neutral["tier"]), 1, 4) if neutral is Dictionary \
+				else (1 if v3 else (3 if (n["category"] == "final" or n.get("center", false)) and relay == "" else 1)))
 		var units := float(Rules.HOME_UNITS if owner != "" else Rules.NEUTRAL_UNITS[tier])
 		nodes.append({
 			"id": id, "pos": positions[id], "owner": owner, "tier": tier, "units": units,
-			"category": n["category"], "center": n["center"], "relay": relay,
+			"category": n.get("category", "normal"), "center": n.get("center", false), "relay": relay,
+			"ring": int(n.get("ring", 0)) if n.get("ring") != null else 0,
+			"plaza": int(n["plaza"]) if n.get("plaza") != null else -1,
 			"streaming": {},        # {hid, remaining}: the one order the door is emitting
 			"siege": {},            # seat -> units on the platform fighting the garrison (arrived)
 			"siege_dir": {},        # seat -> unit vector from the tower to where they landed
@@ -95,11 +107,22 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"moving_edges": [],     # edges in motion this moment (closed to new routes)
 		})
 		adj[id] = []
-	for e in map["edges"]:
+		if v3 and owner == "" and neutral is Dictionary and str(neutral.get("structure", "vat")) in ["cannon", "forge"]:
+			var nd: Dictionary = nodes[-1]                # maps 3.0 strategic / relay nodes may start armed
+			nd["attachment"] = neutral["structure"]
+			nd["cannon_tier"] = clampi(tier - 1, 1, 3) if neutral["structure"] == "cannon" else 0
+	var geo: Array = map["layout"]["edges"] if v3 else []
+	for ek in range(map["edges"].size()):
+		var e: Dictionary = map["edges"][ek]
 		var mods: int = {"S": 1, "M": 2, "L": 3}[e["tier"]]
 		var st: String = e["state"] if e.get("state") != null else ""     # JSON stores "state": null
+		var retracts: bool = e.get("retracts", false) == true or st == "ret"   # maps 3.0 spells a retract "ret"
+		if st == "ret":
+			st = ""
 		edges.append({"a": int(e["from"]), "b": int(e["to"]), "modules": mods,
-				"state": st, "retracts": e.get("retracts", false), "overpass": e.get("overpass", false)})
+				"state": st, "retracts": retracts, "overpass": e.get("overpass", false) == true,
+				"geo": geo[ek] if v3 else {}, "plaza": false,
+				"relay_node": int(e["relay"]) if v3 and e.get("relay") != null else -1})
 		var i := edges.size() - 1
 		adj[int(e["from"])].append([int(e["to"]), i])
 		adj[int(e["to"])].append([int(e["from"]), i])
@@ -109,12 +132,31 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 				relay_groups[prefix] = []
 			if st not in relay_groups[prefix]:
 				relay_groups[prefix].append(st)
+	if v3:                                            # maps 3.0 plazas: every socket reaches every other
+		var by_plaza := {}
+		for n in nodes:
+			if n["plaza"] >= 0:
+				if not by_plaza.has(n["plaza"]):
+					by_plaza[n["plaza"]] = []
+				by_plaza[n["plaza"]].append(n["id"])
+		for pid in by_plaza:
+			var ids: Array = by_plaza[pid]
+			for x in range(ids.size()):
+				for y in range(x + 1, ids.size()):
+					edges.append({"a": ids[x], "b": ids[y], "modules": 0, "state": "", "retracts": false,
+							"overpass": false, "geo": {}, "plaza": true, "relay_node": -1})
+					var pi := edges.size() - 1
+					adj[ids[x]].append([ids[y], pi])
+					adj[ids[y]].append([ids[x], pi])
 	for k in relay_groups:
 		(relay_groups[k] as Array).sort()
 	var prefix_kind := {"r": "rotation", "s": "switch", "m": "remote"}
 	for i in range(edges.size()):                    # which relay node governs each relay-controlled edge
 		var e: Dictionary = edges[i]
 		if e["state"] == "" and not e["retracts"]:
+			continue
+		if v3 and e["relay_node"] >= 0:                 # maps 3.0 names the controlling relay
+			edge_controller[i] = e["relay_node"]
 			continue
 		var want: String = "retract" if e["retracts"] else prefix_kind[e["state"].substr(0, 1)]
 		var ctrl := -1
@@ -160,7 +202,8 @@ func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 	var h := _new_horde(src["owner"], count, route)
 	hordes.append(h)
 	src["streaming"] = {"hid": h["id"], "remaining": count}
-	events.append({"t": time, "type": "send", "seat": h["owner"], "from": from_id, "to": to_id, "units": count})
+	events.append({"t": time, "type": "send", "seat": h["owner"], "from": from_id, "to": to_id, "units": count,
+			"target_owner": nodes[to_id]["owner"]})
 	horde_spawned.emit(h)
 	return h
 
@@ -744,6 +787,113 @@ func _new_horde(owner: String, units: float, route: Array) -> Dictionary:
 
 
 func build_path(route: Array) -> Dictionary:
+	if v3:
+		return _build_path3(route)
+	return _build_path_legacy(route)
+
+
+func exit_of(ei: int, node_id: int) -> Vector3:
+	## maps 3.0: where edge ei leaves node_id's footprint (the baked rim exit); plaza links leave a
+	## socket at the tower's footprint toward the other socket.
+	var e: Dictionary = edges[ei]
+	if e["plaza"]:
+		var o: Vector3 = nodes[_other_end(ei, node_id)]["pos"]
+		var p: Vector3 = nodes[node_id]["pos"]
+		return p + (o - p).normalized() * Rules.ARC_R
+	var g: Dictionary = e["geo"]
+	var q: Array = g["A"] if e["a"] == node_id else g["B"]
+	return Vector3(q[0], 0.0, q[1])
+
+
+func deck_line(ei: int) -> Array:
+	## A deck's centre line rim to rim, a to b, with its ramps (views: goo corridors, trims).
+	## Plaza links have no deck: [].
+	var e: Dictionary = edges[ei]
+	if e.get("plaza", false):
+		return []
+	if v3:
+		return [exit_of(ei, e["a"])] + deck_points(ei, e["a"]) + [exit_of(ei, e["b"])]
+	var pa: Vector3 = nodes[e["a"]]["pos"]
+	var pb: Vector3 = nodes[e["b"]]["pos"]
+	var dir := (pb - pa).normalized()
+	return [pa + dir * Rules.R] + deck_points(ei, e["a"]) + [pb - dir * Rules.R]
+
+
+static func pace_byte(visual: float, modules: int) -> int:
+	## maps 3.0 decks are drawn longer than their tier (3 m per map unit); a line crosses one in the
+	## time its true-size modules take, so the path carries a speed factor: byte v >= 2 = v / 16.
+	var pace: float = visual / maxf(modules * Rules.S, 0.1)
+	return clampi(roundi(pace * 16.0), 2, 255)
+
+
+static func pace_of(v: int) -> float:
+	return float(v) / 16.0 if v >= 2 else 1.0
+
+
+func _build_path3(route: Array) -> Dictionary:
+	## maps 3.0: out of the node (SIEGE: toward the exit; BRAWL: Alpha 11's front door round the ring),
+	## to the deck's baked rim exit, along the pier, up / down the baked ramps, across, and at every
+	## node on the way round its tower to the next exit; plaza links cross the plate socket to socket.
+	var pts := []
+	var fast := []
+	var spans := []
+	var node_spans := []
+	var add := func(p: Vector3, f: int) -> void:
+		pts.append(p)
+		fast.append(f)
+	var brawl := not Rules.bridge_combat
+	var front := Rules.front_dir()
+	var a_front := atan2(front.z, front.x)
+	var ring: float = Rules.BRAWL_RING if brawl else Rules.ARC_R
+	var a0: Dictionary = nodes[route[0]]
+	var ex0 := exit_of(_edge_index(route[0], route[1]), route[0])
+	var d0 := ((ex0 - a0["pos"]) as Vector3).normalized()
+	if brawl:
+		add.call(a0["pos"] + front * Rules.EXIT_R, 1)
+		for p in _arc(a0["pos"], a_front, atan2(d0.z, d0.x), ring):
+			add.call(p, 1)
+	else:
+		add.call(a0["pos"] + d0 * Rules.EXIT_R, 1)
+	add.call(ex0, 1)
+	for i in range(route.size() - 1):
+		var b: Dictionary = nodes[route[i + 1]]
+		var ei := _edge_index(route[i], route[i + 1])
+		var e: Dictionary = edges[ei]
+		var s0 := _length(pts)
+		if not e["plaza"]:
+			var deck := deck_points(ei, route[i])
+			var visual := 0.0
+			for k in range(deck.size() - 1):
+				visual += (deck[k] as Vector3).distance_to(deck[k + 1])
+			var pace := pace_byte(visual, e["modules"])
+			for k in range(deck.size()):
+				add.call(deck[k], pace if k < deck.size() - 1 else 1)
+		var ex_in := exit_of(ei, route[i + 1])
+		add.call(ex_in, 1)
+		spans.append({"edge": ei, "s0": s0, "s1": _length(pts), "forward": e["a"] == route[i]})
+		var node_s0 := _length(pts)
+		var din := ((ex_in - b["pos"]) as Vector3).normalized()
+		if i + 1 < route.size() - 1:
+			var ex_out := exit_of(_edge_index(route[i + 1], route[i + 2]), route[i + 1])
+			var dout := ((ex_out - b["pos"]) as Vector3).normalized()
+			for p in _arc(b["pos"], atan2(din.z, din.x), atan2(dout.z, dout.x), ring):
+				add.call(p, 1)
+			add.call(ex_out, 1)
+			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
+		elif brawl:                                   # Alpha 11: round the ring to the front door, then in
+			for p in _arc(b["pos"], atan2(din.z, din.x), a_front, ring):
+				add.call(p, 1)
+			add.call(b["pos"] + front * Rules.EXIT_R, 1)
+		else:                                         # onto the platform up to the tower's footprint
+			add.call(b["pos"] + din * Rules.ARC_R, 1)
+	var cum := PackedFloat32Array([0.0])
+	for k in range(1, pts.size()):
+		cum.append(cum[k - 1] + (pts[k] as Vector3).distance_to(pts[k - 1]))
+	return {"pts": PackedVector3Array(pts), "cum": cum, "fast": PackedByteArray(fast), "spans": spans,
+			"node_spans": node_spans}
+
+
+func _build_path_legacy(route: Array) -> Dictionary:
 	## Centre line a horde follows: out of the tank bottoms, along each deck, onto the platform of
 	## EVERY node it passes (an order passing through a node always counts as passing through it),
 	## and onto the destination's platform at the end.
@@ -830,6 +980,33 @@ func _edge_index(x: int, y: int) -> int:
 
 
 func deck_points(ei: int, from_id: int) -> Array:
+	if v3:
+		return _deck_points3(ei, from_id)
+	return _deck_points_legacy(ei, from_id)
+
+
+func _deck_points3(ei: int, from_id: int) -> Array:
+	## maps 3.0: pier end to pier end along the baked exits, up the ramp to the planner's height
+	## (+4 / +8 overpass, -4 underpass), flat, and down - the pieces MapBuilder lays for it.
+	var e: Dictionary = edges[ei]
+	if e["plaza"]:
+		return [exit_of(ei, from_id), exit_of(ei, _other_end(ei, from_id))]
+	var g: Dictionary = e["geo"]
+	var A := Vector3(g["A"][0], 0.0, g["A"][1])
+	var B := Vector3(g["B"][0], 0.0, g["B"][1])
+	var u := (B - A).normalized()
+	var h: float = g["h"]
+	var out := [A + u * float(g["p0"])]
+	if h != 0.0:
+		out.append(A + u * (float(g["p0"]) + float(g["r0"])) + Vector3.UP * h)
+		out.append(B - u * (float(g["p1"]) + float(g["r1"])) + Vector3.UP * h)
+	out.append(B - u * float(g["p1"]))
+	if from_id != e["a"]:
+		out.reverse()
+	return out
+
+
+func _deck_points_legacy(ei: int, from_id: int) -> Array:
 	## A deck's centre line from its pier end at from_id to the far pier end. An overpass rises
 	## OVERPASS_H over its first module, runs raised, and comes down over its last - the same shape
 	## as the kit's Deck_Overpass_Ramp / Span / Ramp that MapBuilder lays for it.
@@ -845,6 +1022,11 @@ func deck_points(ei: int, from_id: int) -> Array:
 			out.append(p0.lerp(p1, float(k) / e["modules"]) + Vector3.UP * Rules.OVERPASS_H)
 	out.append(p1)
 	return out
+
+
+static func level_of(p: Vector3) -> int:
+	## maps 3.0: "lines only meet on the same height" - decks sit at 0, +4, -4 or +8 m (ramps between).
+	return roundi(p.y / 3.0)
 
 
 static func overpass_at(h: Dictionary, s: float, edge_list: Array) -> int:
@@ -885,7 +1067,7 @@ static func sample(h: Dictionary, s: float) -> Array:
 					pos += r["shift"]
 				_:
 					pos.y -= r["sink"]
-	return [pos, fwd, h["fast"][lo] == 1]
+	return [pos, fwd, h["fast"][lo] == 1, pace_of(h["fast"][lo])]
 
 
 # ------------------------------------------------------------------ simulation step
@@ -920,11 +1102,12 @@ func step(dt: float) -> void:
 	_check_missing_decks()
 	for h in hordes:
 		if h["state"] == "move" and not h.get("blocked", false):
-			var fast_here: bool = sample(h, h["s"])[2]
+			var here := sample(h, h["s"])
+			var fast_here: bool = here[2]
 			var mult: float = Rules.platform_mult() if fast_here else 1.0
 			if Rules.bridge_combat and on_enemy_goo(h):
 				mult *= Rules.GOO_SLOW                    # enemy goo: slower (home advantage)
-			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
+			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * float(here[3]) * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
 				ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * dt)
 			h["s"] += ds
@@ -945,8 +1128,8 @@ func step(dt: float) -> void:
 		if h["state"] == "absorb":
 			# the line keeps pouring in through the door: units enter as fast as the tail advances
 			var len := chain_length(h)
-			var tail_fast: bool = sample(h, h["L"] - len)[2]
-			var tail_speed := Rules.move_speed() * (Rules.platform_mult() if tail_fast else 1.0)
+			var tail := sample(h, h["L"] - len)
+			var tail_speed: float = Rules.move_speed() * (Rules.platform_mult() if tail[2] else 1.0) * float(tail[3])
 			var rate: float = tail_speed * h["units"] / maxf(len, 0.5)
 			var x := minf(h["units"], maxf(rate, 4.0) * dt)
 			h["units"] -= x
@@ -1094,14 +1277,14 @@ func _detect_contacts_inner() -> void:
 			var key := Vector2i(floori(p.x / cell), floori(p.z / cell))
 			if not grid.has(key):
 				grid[key] = []
-			grid[key].append([h, k, p, smp[1], overpass_at(h, s, edges)])
+			grid[key].append([h, k, p, smp[1], level_of(p) if v3 else overpass_at(h, s, edges)])
 	for h in hordes:
 		if h["state"] == "absorb" or h["state"] == "ride" or h["units"] <= 0.0:
 			continue
 		var smp := sample(h, h["s"])
 		var p: Vector3 = smp[0]
 		var fwd: Vector3 = smp[1]
-		var over := overpass_at(h, h["s"], edges)   # an overpass line only meets lines on that same deck
+		var over := level_of(p) if v3 else overpass_at(h, h["s"], edges)   # lines only meet on the same height
 		var key := Vector2i(floori(p.x / cell), floori(p.z / cell))
 		var best_friend := {}
 		var best_d := INF
@@ -1515,7 +1698,12 @@ func _step_last_stand(dt: float) -> void:
 			return
 		if time < Rules.LAST_STAND_TIME:
 			return
+		if v3 and ((_map_last_stand.get("methods", []) as Array).is_empty()):
+			return                                        # maps 3.0 tutorials have no Last Stand
 		_start_last_stand()
+		return
+	if v3:
+		_step_rings(dt)
 		return
 	if last_stand_warn_node >= 0:
 		last_stand_warn_t -= dt
@@ -1532,6 +1720,186 @@ func _step_last_stand(dt: float) -> void:
 
 
 func _start_last_stand() -> void:
+	if v3:
+		_start_rings()
+		return
+	_start_last_stand_legacy()
+
+
+# ---------------------------------------------------------------- maps 3.0: ring Last Stand
+# Daniele, Alpha 17: "Last Stand no longer works with a designated first and last node but with the
+# rings designed on the maps; a relay only falls when all its connecting rings already fell (it skips
+# the rule until the others have gone); and Last Stand NEVER leaves platforms unconnected -
+# especially important for chaos." Each wave drops one whole ring in the order of the revealed method
+# (the map's orders; chaos: one of its connected orders); the order's last ring never falls; a relay
+# waits until every ring it links to has fallen; anything a wave would cut off from the surviving map
+# (fixed decks and plaza links only - never counting on a relay deck) falls with that wave.
+func _start_rings() -> void:
+	last_stand_active = true
+	var methods: Array = (_map_last_stand.get("methods", []) as Array).filter(func(m): return _ring_orders.has(m))
+	if methods.is_empty():                             # the map has no Last Stand (maps 3.0 tutorials)
+		last_stand_waves = []
+		last_stand_method = ""
+		return
+	last_stand_method = methods[rng.randi_range(0, methods.size() - 1)]
+	var order: Array = []
+	if last_stand_method == "chaos":
+		var all: Array = _ring_orders.get("chaos", [])
+		order = all[rng.randi_range(0, all.size() - 1)] if not all.is_empty() else []
+	else:
+		order = _ring_orders.get(last_stand_method, [])
+	if order.is_empty():                                 # a map without orders: rings from the outside in
+		var rs := {}
+		for n in nodes:
+			rs[n["ring"]] = true
+		order = rs.keys()
+		order.sort()
+		order.reverse()
+		last_stand_method = "inward"
+	var keep_ring: int = int(order[-1])
+	last_stand_keep = {}
+	for n in nodes:
+		if n["ring"] == keep_ring:
+			last_stand_keep[n["id"]] = true
+	last_stand_final = last_stand_keep.keys()[0] if not last_stand_keep.is_empty() else -1
+	last_stand_waves = _plan_waves(order)
+	last_stand_order = []
+	for w in last_stand_waves:
+		last_stand_order.append_array(w)
+	last_stand_next = 0
+	last_stand_wave = clampf((Rules.MATCH_HARD_END - 90.0 - Rules.LAST_STAND_TIME) / maxf(last_stand_waves.size(), 1.0),
+			Rules.LAST_STAND_WAVE_MIN, Rules.LAST_STAND_WAVE_MAX)
+	events.append({"t": time, "type": "last_stand", "method": last_stand_method, "order": order.duplicate(),
+			"waves": last_stand_waves.duplicate(true)})
+	fx_events.append({"type": "last_stand", "method": last_stand_method})
+	_next_wave_at = time + last_stand_wave
+	_warn_wave()                                          # the first warning starts with the reveal
+
+
+func _plan_waves(order: Array) -> Array:
+	## The whole collapse, planned at the reveal so the badges can show it: ring by ring, relays held
+	## back until every ring they link to has gone, and nothing ever left as an island.
+	var gone := collapsed.duplicate()
+	var fallen_rings := {}
+	var waves := []
+	var held := []                                        # relays waiting for their rings
+	for k in range(order.size() - 1):
+		var r: int = int(order[k])
+		fallen_rings[r] = true
+		var wave := []
+		for n in nodes:
+			if gone.get(n["id"], false) or last_stand_keep.has(n["id"]):
+				continue
+			if n["ring"] == r:
+				if n["relay"] != "":
+					if not n["id"] in held:
+						held.append(n["id"])
+				else:
+					wave.append(n["id"])
+		for id in held.duplicate():                        # a relay goes once all its rings have fallen
+			var ready := true
+			for link in adj[id]:
+				var nb: Dictionary = nodes[link[0]]
+				if not fallen_rings.has(nb["ring"]) and not gone.get(nb["id"], false) and not nb["id"] in wave:
+					ready = false
+			if ready:
+				wave.append(id)
+				held.erase(id)
+		for id in wave:
+			gone[id] = true
+		for id in _islands(gone):                          # never leave a platform unconnected
+			if not id in wave:
+				wave.append(id)
+				gone[id] = true
+				held.erase(id)
+		if not wave.is_empty():
+			waves.append(wave)
+	return waves
+
+
+func _islands(gone: Dictionary) -> Array:
+	## Surviving nodes cut off from the surviving map's main part (the one holding the most of the last
+	## ring, then the most nodes), over fixed decks and plaza links only.
+	var comp := {}
+	var groups := []
+	for n in nodes:
+		var id: int = n["id"]
+		if gone.get(id, false) or comp.has(id):
+			continue
+		var g := [id]
+		comp[id] = groups.size()
+		var open := [id]
+		while not open.is_empty():
+			var cur: int = open.pop_front()
+			for link in adj[cur]:
+				var e: Dictionary = edges[link[1]]
+				if e["state"] != "" or e["retracts"]:
+					continue                              # a relay deck may be switched away
+				var nb: int = link[0]
+				if gone.get(nb, false) or comp.has(nb):
+					continue
+				comp[nb] = groups.size()
+				g.append(nb)
+				open.append(nb)
+		groups.append(g)
+	if groups.size() <= 1:
+		return []
+	var best := 0
+	var best_score := -1
+	for gi in range(groups.size()):
+		var keep_n := 0
+		for id in groups[gi]:
+			if last_stand_keep.has(id):
+				keep_n += 1
+		var score: int = keep_n * 1000 + (groups[gi] as Array).size()
+		if score > best_score:
+			best_score = score
+			best = gi
+	var out := []
+	for gi in range(groups.size()):
+		if gi != best:
+			out.append_array(groups[gi])
+	return out
+
+
+func _warn_wave() -> void:
+	last_stand_warn = {}
+	last_stand_warn_node = -1
+	if last_stand_next >= last_stand_waves.size():
+		return
+	for id in last_stand_waves[last_stand_next]:
+		if not collapsed.get(id, false):
+			last_stand_warn[id] = true
+			fx_events.append({"type": "collapse_warning", "node": id})
+	last_stand_warn_node = last_stand_warn.keys()[0] if not last_stand_warn.is_empty() else -1
+	last_stand_warn_t = Rules.LAST_STAND_WARNING
+	events.append({"t": time, "type": "collapse_warning", "nodes": last_stand_warn.keys()})
+	last_stand_next += 1
+
+
+func _step_rings(dt: float) -> void:
+	if not last_stand_warn.is_empty():
+		last_stand_warn_t -= dt
+		if last_stand_warn_t <= 0.0:
+			for id in last_stand_warn.keys():
+				if not collapsed.get(id, false):
+					_drop_node(id)
+			last_stand_warn = {}
+			last_stand_warn_node = -1
+	elif last_stand_next < last_stand_waves.size() and time >= _next_wave_at:
+		_next_wave_at += last_stand_wave
+		_warn_wave()
+
+
+func is_warned(id: int) -> bool:
+	return last_stand_warn.has(id) if v3 else last_stand_warn_node == id
+
+
+func is_final(id: int) -> bool:
+	return last_stand_keep.has(id) if v3 else id == last_stand_final
+
+
+func _start_last_stand_legacy() -> void:
 	## The hidden method is revealed with the whole order. inward: rim first, the centre final
 	## survives; outward: centre first, the map's outward final survives; chaos: a seeded random
 	## order (home nodes never before the end), the inward final survives.
@@ -1648,7 +2016,13 @@ func _connected_to(root: int, gone: Dictionary) -> bool:
 
 func drop_order_of(node_id: int) -> int:
 	## 1-based position in the revealed drop order, 0 if not in it (final, or not revealed yet).
+	## maps 3.0: the wave the node falls in.
 	if not last_stand_active:
+		return 0
+	if v3:
+		for w in range(last_stand_waves.size()):
+			if node_id in last_stand_waves[w]:
+				return w + 1
 		return 0
 	var i := last_stand_order.find(node_id)
 	return i + 1 if i >= 0 else 0

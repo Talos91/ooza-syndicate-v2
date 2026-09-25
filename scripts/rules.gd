@@ -6,8 +6,8 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.16.4"
-const VERSION_NAME := "Alpha 16"
+const VERSION := "0.17.0"
+const VERSION_NAME := "Alpha 17"
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius
@@ -61,13 +61,13 @@ static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug pan
 # Its mean hop is 284 px centre to centre; 2.0's is 21.9 m over the 99 maps (1.68 modules), so one
 # Alpha 11 px = 0.077 m: 115 px/s = 8.9 m/s, the same 2.5 s per hop, and 12 px = 0.93 m per shown
 # unit. Exit = entrance = 9.6 shown units/s (x SCALE internally). SIEGE keeps its own tunables.
-const BRAWL_SPEED := 8.9                                   # m/s on decks and platforms alike
+const BRAWL_SPEED := 8.9 * 0.8                             # m/s, decks and platforms alike (Daniele, Alpha 17: "20% slower")
 const BRAWL_DOOR_RATE := 115.0 / 12.0 * 5.0               # internal units/s out of the door (and in)
 # Alpha 11's route (simulation.gd route/arc): out of the vat's FRONT (the side facing the camera),
 # round the platform on its route ring to the bridge, and at the target round the ring back to the
 # front and in. Its ring is 122 px (~ the platform edge); here 4.8 m inside the 6 m platform.
 const BRAWL_RING := 4.8
-const BRAWL_SPACING := 12.0 * 21.9 / 284.0                # 0.93 m between bodies (Alpha 11: 12 px)
+const BRAWL_SPACING := BRAWL_SPEED / BRAWL_DOOR_RATE * 5.0   # metres between bodies: speed / Alpha 11 rate
 const BRAWL_EXPAND := 85.0 * 21.9 / 284.0                 # 6.6 m: columns widen from single file (85 px)
 
 
@@ -235,12 +235,24 @@ const FACTION_BLURB := {
 	"ember": "Ember Maw - siege. Stronger attack, slower production.",
 	"solar": "Solar Shells - defense. More HP and defense, slower to move and produce.",
 }
-# AI levels (Alpha 11 had five; three here - no economy or combat cheats, only how often it thinks
-# and how much margin it wants before attacking)
+# AI levels - Alpha 11's five (ai_balance.gd PROFILES, Daniele Alpha 17: "5 levels of difficulty with
+# scaling aggressiveness"). Identical economy and combat at every level: only reaction time, how many
+# nodes join an attack, how wrong its garrison estimates are and how often they refresh, the grace
+# before it attacks players, the gap between offensives, how far ahead it forecasts growth, how
+# randomly it picks among its best plans, how often it invests, the margin it wants, and relays:
+# 0 never, 1 reacts to enemies on its decks, 2 also fires ahead (where lines will be when the deck
+# moves), 3 also opens shorter routes to its targets.
 const AI_LEVELS := {
-	"Casual": {"period": 4.0, "margin": 1.5, "relays": false},
-	"Standard": {"period": 2.5, "margin": 1.15, "relays": true},
-	"Veteran": {"period": 1.6, "margin": 1.0, "relays": true},
+	"Training": {"period": 5.0, "coordination": 1, "error": 0.40, "observe": 10.0, "grace": 75.0, "attack_gap": 22.0,
+			"forecast": 0.0, "choice": 4, "invest": 26.0, "margin": 1.5, "relays": 0},
+	"Casual": {"period": 4.0, "coordination": 1, "error": 0.32, "observe": 8.0, "grace": 50.0, "attack_gap": 17.0,
+			"forecast": 0.2, "choice": 3, "invest": 22.0, "margin": 1.35, "relays": 0},
+	"Standard": {"period": 2.5, "coordination": 2, "error": 0.27, "observe": 7.0, "grace": 45.0, "attack_gap": 15.0,
+			"forecast": 0.4, "choice": 3, "invest": 18.0, "margin": 1.2, "relays": 1},
+	"Veteran": {"period": 1.8, "coordination": 2, "error": 0.18, "observe": 4.0, "grace": 20.0, "attack_gap": 9.0,
+			"forecast": 0.6, "choice": 2, "invest": 15.0, "margin": 1.1, "relays": 2},
+	"Expert": {"period": 1.3, "coordination": 3, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
+			"forecast": 0.75, "choice": 2, "invest": 12.0, "margin": 1.05, "relays": 3},
 }
 
 

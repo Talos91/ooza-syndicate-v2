@@ -1,0 +1,562 @@
+{
+ "code": "D-06",
+ "name": "Overpass Stack",
+ "group": "debug",
+ "players": "versus",
+ "playersLabel": "1v1",
+ "combatMode": "both",
+ "family": "debug",
+ "modes": [
+  "1v1"
+ ],
+ "symmetry": "rotational x1",
+ "minEnemyHomeHops": 0,
+ "centreSpawn": false,
+ "noDirectHomeAttack": false,
+ "plazas": [],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 30.0,
+   "y": 50.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 70.0,
+   "y": 50.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 36.0,
+   "y": 34.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 64.0,
+   "y": 66.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 36.0,
+   "y": 66.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 64.0,
+   "y": 34.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 44.0,
+   "y": 22.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 56.0,
+   "y": 22.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 0,
+   "to": 1,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 3,
+   "tier": "L",
+   "seconds": 6,
+   "level": 1,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 5,
+   "tier": "L",
+   "seconds": 6,
+   "level": 2,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 5,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 6,
+   "to": 7,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 7,
+   "to": 5,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  }
+ ],
+ "rings": {
+  "count": 1,
+  "boundaries": []
+ },
+ "lastStand": {
+  "methods": [],
+  "orders": {}
+ },
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 1,
+    "team": 1
+   }
+  ]
+ },
+ "note": "Three decks cross at one point on ground, level 1 and level 2. Test height readability, shadows, tap targeting on stacked decks and that no junction is formed.",
+ "thumbnail": "debug/thumbnails/D-06-overpass-stack.png",
+ "layout": {
+  "K": 3.0,
+  "nodes": {
+   "0": [
+    -60.0,
+    0.0
+   ],
+   "1": [
+    60.0,
+    0.0
+   ],
+   "2": [
+    -42.0,
+    -48.0
+   ],
+   "3": [
+    42.0,
+    48.0
+   ],
+   "4": [
+    -42.0,
+    48.0
+   ],
+   "5": [
+    42.0,
+    -48.0
+   ],
+   "6": [
+    -18.0,
+    -84.0
+   ],
+   "7": [
+    18.0,
+    -84.0
+   ]
+  },
+  "plazas": {},
+  "edges": [
+   {
+    "A": [
+     -54.0,
+     -0.0
+    ],
+    "B": [
+     54.0,
+     -0.0
+    ],
+    "L": 108.0,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -38.049,
+     -43.4846
+    ],
+    "B": [
+     38.3514,
+     43.2368
+    ],
+    "L": 115.5752,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.194,
+    "lean1": 3.928,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 4.0,
+    "r0": 10.0,
+    "r1": 10.0
+   },
+   {
+    "A": [
+     -38.3514,
+     43.2368
+    ],
+    "B": [
+     38.049,
+     -43.4846
+    ],
+    "L": 115.5752,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -3.928,
+    "lean1": -0.194,
+    "plaza0": false,
+    "plaza1": false,
+    "h": -4.0,
+    "r0": 10.0,
+    "r1": 10.0
+   },
+   {
+    "A": [
+     -57.8933,
+     -5.618
+    ],
+    "B": [
+     -44.1067,
+     -42.382
+    ],
+    "L": 39.2641,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -57.8933,
+     5.618
+    ],
+    "B": [
+     -44.1067,
+     42.382
+    ],
+    "L": 39.2641,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.0,
+    "lean1": -0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     57.8933,
+     5.618
+    ],
+    "B": [
+     44.1067,
+     42.382
+    ],
+    "L": 39.2641,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     57.8933,
+     -5.618
+    ],
+    "B": [
+     44.1067,
+     -42.382
+    ],
+    "L": 39.2641,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.0,
+    "lean1": -0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -38.6718,
+     -52.9923
+    ],
+    "B": [
+     -21.3282,
+     -79.0077
+    ],
+    "L": 31.2667,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -12.0,
+     -84.0
+    ],
+    "B": [
+     12.0,
+     -84.0
+    ],
+    "L": 24.0,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     21.3282,
+     -79.0077
+    ],
+    "B": [
+     38.6718,
+     -52.9923
+    ],
+    "L": 31.2667,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.0,
+    "lean1": -0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -36.0128,
+     48.3908
+    ],
+    "B": [
+     36.0128,
+     48.3908
+    ],
+    "L": 72.0256,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 3.734,
+    "lean1": -3.734,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   }
+  ],
+  "relays": {},
+  "glb": "",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": []
+  }
+ }
+}

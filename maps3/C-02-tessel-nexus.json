@@ -1,0 +1,814 @@
+{
+ "code": "C-02",
+ "name": "Tessel Nexus",
+ "group": "core",
+ "players": "versus",
+ "playersLabel": "1v1",
+ "combatMode": "both",
+ "family": "wheel",
+ "modes": [
+  "1v1"
+ ],
+ "symmetry": "rotational x2",
+ "minEnemyHomeHops": 2,
+ "centreSpawn": false,
+ "noDirectHomeAttack": false,
+ "plazas": [
+  {
+   "id": 0,
+   "size": "M",
+   "shape": "round",
+   "cx": 79.1,
+   "cy": 50.0,
+   "rot": 0.0,
+   "rx": 8.0,
+   "ry": 8.0,
+   "sockets": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  {
+   "id": 1,
+   "size": "M",
+   "shape": "round",
+   "cx": 20.9,
+   "cy": 50.0,
+   "rot": 180.0,
+   "rx": 8.0,
+   "ry": 8.0,
+   "sockets": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 50.0,
+   "y": 50.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "strategic",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 4,
+    "structure": "forge"
+   },
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 84.3,
+   "y": 50.0,
+   "plaza": 0,
+   "socket": 0,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 79.1,
+   "y": 55.2,
+   "plaza": 0,
+   "socket": 1,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 73.9,
+   "y": 50.0,
+   "plaza": 0,
+   "socket": 2,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 79.1,
+   "y": 44.8,
+   "plaza": 0,
+   "socket": 3,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 79.1,
+   "y": 50.0,
+   "plaza": 0,
+   "socket": 4,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 64.23,
+   "y": 50.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 50.0,
+   "y": 72.57,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": null,
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 8,
+   "x": 15.7,
+   "y": 50.0,
+   "plaza": 1,
+   "socket": 0,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 9,
+   "x": 20.9,
+   "y": 44.8,
+   "plaza": 1,
+   "socket": 1,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 10,
+   "x": 26.1,
+   "y": 50.0,
+   "plaza": 1,
+   "socket": 2,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 11,
+   "x": 20.9,
+   "y": 55.2,
+   "plaza": 1,
+   "socket": 3,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 12,
+   "x": 20.9,
+   "y": 50.0,
+   "plaza": 1,
+   "socket": 4,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 13,
+   "x": 35.77,
+   "y": 50.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 14,
+   "x": 50.0,
+   "y": 27.43,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": null,
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 3,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "level": 1,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 6,
+   "to": 0,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 7,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 14,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 7,
+   "to": 6,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": "ret",
+   "relay": 7,
+   "retracts": true
+  },
+  {
+   "from": 2,
+   "to": 14,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 10,
+   "to": 13,
+   "tier": "S",
+   "seconds": 2,
+   "level": 1,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 13,
+   "to": 0,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 9,
+   "to": 14,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 11,
+   "to": 7,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 14,
+   "to": 13,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": "ret",
+   "relay": 14,
+   "retracts": true
+  },
+  {
+   "from": 9,
+   "to": 7,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  }
+ ],
+ "rings": {
+  "count": 2,
+  "boundaries": [
+   18.4
+  ]
+ },
+ "lastStand": {
+  "methods": [
+   "inward",
+   "outward"
+  ],
+  "orders": {
+   "inward": [
+    1,
+    0
+   ],
+   "outward": [
+    0,
+    1
+   ]
+  }
+ },
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 1,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 8,
+    "team": 1
+   }
+  ]
+ },
+ "note": null,
+ "thumbnail": "thumbnails/C-02-tessel-nexus.png",
+ "layout": {
+  "K": 3.0,
+  "nodes": {
+   "0": [
+    0.0,
+    0.0
+   ],
+   "1": [
+    102.9,
+    0.0
+   ],
+   "2": [
+    87.3,
+    15.6
+   ],
+   "3": [
+    71.7,
+    0.0
+   ],
+   "4": [
+    87.3,
+    -15.6
+   ],
+   "5": [
+    87.3,
+    0.0
+   ],
+   "6": [
+    42.69,
+    0.0
+   ],
+   "7": [
+    0.0,
+    67.71
+   ],
+   "8": [
+    -102.9,
+    0.0
+   ],
+   "9": [
+    -87.3,
+    -15.6
+   ],
+   "10": [
+    -71.7,
+    0.0
+   ],
+   "11": [
+    -87.3,
+    15.6
+   ],
+   "12": [
+    -87.3,
+    0.0
+   ],
+   "13": [
+    -42.69,
+    0.0
+   ],
+   "14": [
+    0.0,
+    -67.71
+   ]
+  },
+  "plazas": {
+   "0": {
+    "c": [
+     87.3,
+     0.0
+    ],
+    "ax": 24.0,
+    "ay": 24.0,
+    "phi": 0.0,
+    "size": "M"
+   },
+   "1": {
+    "c": [
+     -87.3,
+     0.0
+    ],
+    "ax": 24.0,
+    "ay": 24.0,
+    "phi": 3.141592653589793,
+    "size": "M"
+   }
+  },
+  "edges": [
+   {
+    "A": [
+     63.3001,
+     0.0256
+    ],
+    "B": [
+     48.69,
+     -0.0
+    ],
+    "L": 14.6101,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.162,
+    "lean1": -0.1,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     36.69,
+     -0.0
+    ],
+    "B": [
+     6.0,
+     -0.0
+    ],
+    "L": 30.69,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     77.0662,
+     21.7085
+    ],
+    "B": [
+     5.931,
+     68.6167
+    ],
+    "L": 85.2091,
+    "p0": 1.9291,
+    "p1": 2.0609,
+    "lean0": -31.358,
+    "lean1": 42.093,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     77.0662,
+     -21.7085
+    ],
+    "B": [
+     5.5307,
+     -70.0361
+    ],
+    "L": 86.3301,
+    "p0": 1.9043,
+    "p1": 2.7075,
+    "lean0": 30.718,
+    "lean1": -56.852,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     2.9402,
+     62.4798
+    ],
+    "B": [
+     39.49,
+     5.0754
+    ],
+    "L": 68.0526,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -3.143,
+    "lean1": -0.255,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     64.1924,
+     -6.4829
+    ],
+    "B": [
+     2.9389,
+     -62.4791
+    ],
+    "L": 82.9913,
+    "p0": 1.7565,
+    "p1": 1.6,
+    "lean0": -26.761,
+    "lean1": 18.238,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -63.3001,
+     -0.0232
+    ],
+    "B": [
+     -48.69,
+     -0.0
+    ],
+    "L": 14.6101,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.146,
+    "lean1": -0.091,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -36.69,
+     -0.0
+    ],
+    "B": [
+     -6.0,
+     -0.0
+    ],
+    "L": 30.69,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -77.0662,
+     -21.7085
+    ],
+    "B": [
+     -5.9311,
+     -68.6164
+    ],
+    "L": 85.2089,
+    "p0": 1.9291,
+    "p1": 2.0608,
+    "lean0": -31.358,
+    "lean1": 42.09,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -77.0662,
+     21.7085
+    ],
+    "B": [
+     -5.5306,
+     70.0364
+    ],
+    "L": 86.3304,
+    "p0": 1.9042,
+    "p1": 2.7078,
+    "lean0": 30.718,
+    "lean1": -56.856,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -2.9401,
+     -62.4798
+    ],
+    "B": [
+     -39.49,
+     -5.0754
+    ],
+    "L": 68.0526,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -3.144,
+    "lean1": -0.255,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -64.1917,
+     6.4806
+    ],
+    "B": [
+     -2.9389,
+     62.4791
+    ],
+    "L": 82.9924,
+    "p0": 1.7567,
+    "p1": 1.6,
+    "lean0": -26.768,
+    "lean1": 18.237,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   }
+  ],
+  "relays": {},
+  "glb": "res://assets/maps3/C-02.glb",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": []
+  }
+ }
+}

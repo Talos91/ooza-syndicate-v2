@@ -24,7 +24,7 @@ var map_path := "res://maps/004-two-piers.json"
 var ai_level := "Standard"
 var mode := "1v1"
 var colour := "A"
-const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5"}
+const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5"}
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
@@ -59,6 +59,8 @@ func setup(m: Node3D) -> void:
 	colour = m.color_choice
 	for mp in MapPool.all():
 		maps.append({"path": mp, "data": MapBuilder.load_map(mp)})
+	if not maps.any(func(x): return x["path"] == map_path):
+		map_path = maps[0]["path"]                     # maps 3.0: the old roster is archive
 	Net.lobby_changed.connect(_on_net_changed)
 	show_main()
 
@@ -207,7 +209,7 @@ func header(step: int) -> void:
 
 func map_preview(pos: Vector2, dims: Vector2) -> void:
 	var code: String = _selected_map().get("code", "")
-	if not picture("res://assets/map-thumbnails/%s.png" % code, pos, dims):
+	if not picture(MapPool.thumb(code), pos, dims) and not picture("res://assets/map-thumbnails/%s.png" % code, pos, dims):
 		var svg := picture(map_path.replace("maps/", "assets/maps/").replace(".json", ".svg"), pos, dims)
 		if svg:
 			svg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -377,7 +379,7 @@ func show_maps() -> void:
 		b.custom_minimum_size = P(451, 272)
 		grid.add_child(b)
 		var tex := TextureRect.new()
-		var thumb := "res://assets/map-thumbnails/%s.png" % code
+		var thumb := MapPool.thumb(code) if ResourceLoader.exists(MapPool.thumb(code)) else "res://assets/map-thumbnails/%s.png" % code
 		tex.texture = load(thumb) if ResourceLoader.exists(thumb) else load(mp.replace("maps/", "assets/maps/").replace(".json", ".svg"))
 		tex.position = P(8, 8)
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -396,9 +398,10 @@ func show_maps() -> void:
 	var sel := _selected_map()
 	label_at(str(sel.get("name", "")).replace("*", "").to_upper(), P(1052, 631), 31)
 	label_at("%s    /    %d NODES%s" % [" · ".join(_modes_of(sel).map(func(x): return MODE_NAMES.get(x, x))), sel["nodes"].size(), _relay_kinds(sel).to_upper()], P(1053, 683), 23, color())
-	label_at("%s\nLast Stand at %d:%02d - methods: %s" % [main.PROVES.get(sel.get("code", ""), _map_blurb(sel)),
-			int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(sel.get("lastStand", {}).get("methods", []))],
-			P(1053, 736), 22, Color("abc1cd"))
+	var ls_methods: Array = sel.get("lastStand", {}).get("methods", [])
+	var ls_line: String = "No Last Stand on this map" if ls_methods.is_empty() else "Last Stand at %d:%02d - methods: %s" % [
+			int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(ls_methods)]
+	label_at("%s\n%s" % [main.PROVES.get(sel.get("code", ""), _map_blurb(sel)), ls_line], P(1053, 736), 22, Color("abc1cd"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_factions)
 	nav_button("NEXT: MATCH SETUP", P(1280, 866), P(352, 58), show_setup, true)
 
@@ -413,7 +416,7 @@ func _relay_kinds(m: Dictionary) -> String:
 
 func _modes_of(m: Dictionary) -> Array:
 	var out := []
-	for k in ["1v1", "2v2", "3v3", "FFA3", "FFA4", "FFA5"]:
+	for k in ["1v1", "2v2", "3v3", "2v2v2", "FFA3", "FFA4", "FFA5"]:
 		if m.get("seats", {}).has(k):
 			out.append(k)
 	return out if not out.is_empty() else ["1v1"]
@@ -421,6 +424,10 @@ func _modes_of(m: Dictionary) -> Array:
 
 func _map_blurb(m: Dictionary) -> String:
 	## Roster maps have no "proves" line: tier, layout family and overpass count instead.
+	if m.has("layout"):                               # maps 3.0: group, family, seats, raised decks, rings
+		var raised: int = (m["layout"]["edges"] as Array).filter(func(e): return float(e["h"]) != 0.0).size()
+		return "%s · %s · %s · %d rings%s" % [str(m.get("group", "")).capitalize(), m.get("family", ""), m.get("playersLabel", ""),
+				int(m.get("rings", {}).get("count", 1)), ", %d raised decks" % raised if raised > 0 else ""]
 	var overs: int = m["edges"].filter(func(e): return e.get("overpass", false)).size()
 	return "%s map, %s layout%s" % [str(m.get("tier", "")).capitalize(), m.get("family", ""),
 			", %d overpass%s" % [overs, "es" if overs > 1 else ""] if overs > 0 else ""]
@@ -483,10 +490,10 @@ func show_setup() -> void:
 	var levels: Array = Rules.AI_LEVELS.keys()
 	for i in range(levels.size()):
 		var lv: String = levels[i]
-		var b := nav_button(lv.to_upper(), P(1058 + i * 186, 653), P(178, 59), func():
+		var b := nav_button(lv.to_upper(), P(1058 + i * 111, 653), P(105, 59), func():   # Alpha 11's five levels
 			ai_level = lv
 			show_setup(), lv == ai_level)
-		b.add_theme_font_size_override("font_size", int(round(18 * K)))
+		b.add_theme_font_size_override("font_size", int(round(14 * K)))
 	nav_button("MODE / %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL"), P(1058, 746), P(272, 60), func():
 		Rules.bridge_combat = not Rules.bridge_combat
 		show_setup())
@@ -629,10 +636,10 @@ func show_lobby() -> void:
 	label_at("PLAYERS", P(878, 622), 20, Color("aac3cd"))
 	for i in range(Net.MODES.size()):
 		var md: String = Net.MODES[i]
-		var mb := nav_button(Net.MODE_LABELS[md], P(990 + i * 126, 612), P(118, 48), func():
+		var mb := nav_button(Net.MODE_LABELS[md], P(962 + i * 96, 612), P(90, 48), func():
 			Net.set_mode(md)
 			show_lobby(), md == Net.mode)
-		mb.add_theme_font_size_override("font_size", int(round(17 * K)))
+		mb.add_theme_font_size_override("font_size", int(round(15 * K)))
 		mb.disabled = not host or Net.roster.size() > Net.SLOTS[md]
 	var sb := nav_button("MODE / %s" % ("SIEGE" if Net.siege else "BRAWL"), P(878, 680), P(360, 56), func():
 		Net.toggle_siege()

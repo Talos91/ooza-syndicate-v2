@@ -37,7 +37,7 @@ const PROVES := {
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 
 var map: Dictionary
-var map_path := "res://maps/004-two-piers.json"
+var map_path := "res://maps3/T-01-first-steps.json"
 var sim := Sim.new()
 var ais: Array = []
 var vis: Dictionary
@@ -178,7 +178,7 @@ func _start_map(path: String) -> void:
 	var teams := {}
 	for s in map["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
-		if mode in ["2v2", "3v3"] and s.get("team") != null:
+		if mode in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
 			teams[s["seat"]] = int(s["team"])
 	if not HUMAN in seats.values() and not online:     # FFA maps may seat A elsewhere; A is always you
 		var first: int = seats.keys()[0]
@@ -199,7 +199,7 @@ func _start_map(path: String) -> void:
 		hi = hi.max(n["pos"])
 	Rules.view_yaw = PI / 2.0 if (hi - lo).z > (hi - lo).x else 0.0
 	_build_world()
-	vis = MapBuilder.build(self, sim)
+	vis = MapBuilder.build3(self, sim, map) if map.has("layout") else MapBuilder.build(self, sim)
 	if not vis["stretched"].is_empty():
 		push_warning("edges stretched to fit (not honest): %s" % [vis["stretched"]])
 	hordes = HordeView.new()
@@ -443,6 +443,12 @@ func _fit_camera() -> void:
 			var a := TAU * k / 12.0
 			pts.append(p + Vector3(cos(a), 0.0, sin(a)) * (Rules.R + 1.0))
 		pts.append(p + Vector3(0, 7.5, 0))                    # the top of the tallest tower
+		if n["plaza"] >= 0:                                     # maps 3.0 plazas reach past their sockets
+			var pl: Dictionary = map["layout"]["plazas"][str(n["plaza"])]
+			for k in range(16):
+				var a := TAU * k / 16.0
+				var q := Vector2(float(pl["ax"]) * cos(a), float(pl["ay"]) * sin(a)).rotated(float(pl["phi"]))
+				pts.append(Vector3(float(pl["c"][0]) + q.x, 0.0, float(pl["c"][1]) + q.y))
 		if use_hud:
 			var ba: Vector3 = hud.badge_anchor(n)            # room for the badge beside the platform
 			pts.append(ba + Vector3(0, 0, 0))

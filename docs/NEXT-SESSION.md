@@ -1,6 +1,6 @@
 # Next session - start here
 
-State at the end of the 2026-09-25 sessions: **v0.16.4 "Alpha 16"** (online rooms, Alpha 11 Brawl feel, player colours, self-updating build, visual pass: sky, lighting, living vats, notifications), source on `main`,
+State at the end of the 2026-09-25 sessions: **v0.17.0 "Alpha 17"** (maps 3.0 + debug maps, ring Last Stand, five-level AI; on top of Alpha 16: online rooms, visual pass), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: this file,
 `README.md`, the top of `CHANGELOG.md` (0.12.0 to 0.16.0), `PLAYTEST-NOTES.md` notes 26-71, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
@@ -17,14 +17,18 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
-## NEXT ALPHA (Alpha 17) - Daniele, 2026-09-25: "we are going to redo all maps and change the Last Stand
-mechanic". Get his new Last Stand rules and the map brief before coding. Where it lives now: maps in
-`maps/` (copies of the roster `maps-100.json`, generated - never hand-edit geometry; the generator is
-the roster HTML in the design package), `scripts/map_pool.gd` (the pool), `scripts/map_builder.gd`
-(layout, overpasses, relays), Last Stand in `scripts/sim.gd` (`_step_last_stand`, `_start_last_stand`,
-`_collapse_order`, `_drop_node`) with the HUD status line in `hud.gd` and effects in `fx.gd`;
-menu thumbnails `assets/map-thumbnails/` (`--thumb=`). Online needs nothing map-specific: maps list
-their seats per mode (`seats`) and the lobby offers any map with the chosen mode.
+## Alpha 17 (2026-09-25): maps 3.0, ring Last Stand, five-level AI - built
+
+- Maps: `Models/2.0/export_maps_3_0_game.py` bakes the approved layout (run it headless in Blender
+  5.2 after any change to the pack or to `build_maps_3_0_review.py`; BUILD-LOG sec10), then
+  `tests/test_maps3.gd` must pass. The game never re-plans: `MapBuilder.build3` only places pieces,
+  `Sim._build_path3` / `_deck_points3` follow the baked exits and heights.
+- Last Stand: `Sim._start_rings` / `_plan_waves` / `_islands` / `_step_rings`.
+- AI: `scripts/seat_ai.gd` (Alpha 11 loop) + `Rules.AI_LEVELS`; `tests/test_ai_curve.gd`.
+- Open (maps handoff): homes start T2 (game) vs T1 (pack); The Knot has two levels in the data (README
+  says three); plaza sockets ~0.5 module apart; retract housings / switch emitters are radial pieces on
+  angled exits; D-04 keeps one planner clash. The big maps render small at 3 m per unit - check on a
+  phone. Last Stand starts at 2:00 (pack README says 3:00).
 
 ## Multiplayer: built in Alpha 16 (PeerJS peer-to-peer, Alpha 11's approach)
 

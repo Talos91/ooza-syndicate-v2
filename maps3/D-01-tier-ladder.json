@@ -1,0 +1,502 @@
+{
+ "code": "D-01",
+ "name": "Tier Ladder",
+ "group": "debug",
+ "players": "versus",
+ "playersLabel": "1v1",
+ "combatMode": "both",
+ "family": "debug",
+ "modes": [
+  "1v1"
+ ],
+ "symmetry": "rotational x1",
+ "minEnemyHomeHops": 0,
+ "centreSpawn": false,
+ "noDirectHomeAttack": false,
+ "plazas": [],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 18.0,
+   "y": 50.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 82.0,
+   "y": 50.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 44.0,
+   "y": 28.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 3,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 56.0,
+   "y": 28.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 3,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 38.0,
+   "y": 50.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 62.0,
+   "y": 50.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 32.0,
+   "y": 72.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 68.0,
+   "y": 72.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 0,
+   "to": 2,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 4,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 6,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 3,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 5,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 1,
+   "to": 7,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 5,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 6,
+   "to": 7,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  }
+ ],
+ "rings": {
+  "count": 1,
+  "boundaries": []
+ },
+ "lastStand": {
+  "methods": [],
+  "orders": {}
+ },
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 1,
+    "team": 1
+   }
+  ]
+ },
+ "note": "Three parallel lanes: top is one short deck (2 s), middle one medium (4 s), bottom one long (6 s). Time a column on each; check squad spacing and the 3 s warning ratio.",
+ "thumbnail": "debug/thumbnails/D-01-tier-ladder.png",
+ "layout": {
+  "K": 3.0,
+  "nodes": {
+   "0": [
+    -96.0,
+    0.0
+   ],
+   "1": [
+    96.0,
+    0.0
+   ],
+   "2": [
+    -18.0,
+    -66.0
+   ],
+   "3": [
+    18.0,
+    -66.0
+   ],
+   "4": [
+    -36.0,
+    0.0
+   ],
+   "5": [
+    36.0,
+    0.0
+   ],
+   "6": [
+    -54.0,
+    66.0
+   ],
+   "7": [
+    54.0,
+    66.0
+   ]
+  },
+  "plazas": {},
+  "edges": [
+   {
+    "A": [
+     -92.2505,
+     -4.6841
+    ],
+    "B": [
+     -22.5803,
+     -62.1244
+    ],
+    "L": 90.2958,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -11.819,
+    "lean1": -0.732,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -90.0333,
+     0.6312
+    ],
+    "B": [
+     -42.0,
+     -0.0
+    ],
+    "L": 48.0375,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 6.791,
+    "lean1": 0.753,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -93.2367,
+     5.3258
+    ],
+    "B": [
+     -57.2212,
+     60.938
+    ],
+    "L": 66.2559,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 5.505,
+    "lean1": 0.457,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     92.2505,
+     -4.6841
+    ],
+    "B": [
+     22.5803,
+     -62.1244
+    ],
+    "L": 90.2958,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 11.819,
+    "lean1": 0.732,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     90.0333,
+     0.6312
+    ],
+    "B": [
+     42.0,
+     -0.0
+    ],
+    "L": 48.0375,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -6.791,
+    "lean1": -0.753,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     93.2367,
+     5.3258
+    ],
+    "B": [
+     57.2212,
+     60.938
+    ],
+    "L": 66.2559,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -5.505,
+    "lean1": -0.457,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -12.0,
+     -66.0
+    ],
+    "B": [
+     12.0,
+     -66.0
+    ],
+    "L": 24.0,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -30.0,
+     -0.0
+    ],
+    "B": [
+     30.0,
+     -0.0
+    ],
+    "L": 60.0,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   },
+   {
+    "A": [
+     -48.0,
+     66.0
+    ],
+    "B": [
+     48.0,
+     66.0
+    ],
+    "L": 96.0,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0
+   }
+  ],
+  "relays": {},
+  "glb": "",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": []
+  }
+ }
+}

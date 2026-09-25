@@ -1,27 +1,25 @@
 class_name MapPool
-## Every playable map: the starter seven first (teaching order), then the rest of the 100-map roster
-## by code. Files are split from Docs/.../02 Maps/roster/maps-100.json - all 100 since Alpha 14
-## (team and FFA seats exist now; a map without 1v1 seats opens in its first mode).
+## Every playable map: maps 3.0 (References/Ooze Syndicate maps 3.0, baked for the game by
+## Models/2.0/export_maps_3_0_game.py into maps3/), 100 maps - tutorials first, then core (both
+## modes), brawl, siege and the crazy ones, each by code. The 2.0 roster in maps/ is archive: only the
+## rules tests still load it.
 
-const STARTER := [
-	"res://maps/004-two-piers.json", "res://maps/007-long-span.json",
-	"res://maps/008-strait.json", "res://maps/010-first-switch.json",
-	"res://maps/011-remote-span.json", "res://maps/061-switchback-foundry.json",
-	"res://maps/047-trident-exchange.json",
-]
-
-
-# Roster data errors, left out until the roster generator fixes them (never hand-edit roster geometry -
-# AGENT-BRIEF): 030 Aurelia Siding's centre node 4 has no decks at all, so nothing can reach it.
-const BROKEN := ["res://maps/030-aurelia-siding.json"]
+const GROUP_ORDER := ["T", "C", "B", "S", "X", "D"]    # D = debug / test maps (References/Ooze Syndicate debug maps)
+const DIR := "res://maps3"
 
 
 static func all() -> Array:
-	var out: Array = STARTER.duplicate()
-	var rest: Array = []
-	for f in DirAccess.get_files_at("res://maps"):
-		var path: String = "res://maps/" + f.trim_suffix(".remap")
-		if path.ends_with(".json") and not path in out and not path in rest and not path in BROKEN:
-			rest.append(path)
-	rest.sort()
-	return out + rest
+	var out: Array = []
+	for f in DirAccess.get_files_at(DIR):
+		var path: String = DIR + "/" + f.trim_suffix(".remap")
+		if path.ends_with(".json") and not path in out:
+			out.append(path)
+	out.sort_custom(func(a, b):
+		var ga := GROUP_ORDER.find(a.get_file().substr(0, 1))
+		var gb := GROUP_ORDER.find(b.get_file().substr(0, 1))
+		return ga < gb if ga != gb else a < b)
+	return out
+
+
+static func thumb(code: String) -> String:
+	return "res://assets/maps3/thumbs/%s.png" % code

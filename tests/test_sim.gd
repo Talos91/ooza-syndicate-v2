@@ -753,7 +753,7 @@ func _init() -> void:
 
 	# ---------------------------------------------------------------- Alpha 16: Brawl moves like Alpha 11
 	Rules.bridge_combat = false
-	check(is_equal_approx(Rules.move_speed(), 8.9) and Rules.platform_mult() == 1.0, "BRAWL: 8.9 m/s on decks and platforms alike (Alpha 11: 115 px/s everywhere)")
+	check(is_equal_approx(Rules.move_speed(), 8.9 * 0.8) and Rules.platform_mult() == 1.0, "BRAWL: 7.1 m/s on decks and platforms alike (Alpha 11 speed less 20 %)")
 	check(absf(Rules.exit_rate() - 47.9167) < 0.01, "BRAWL: 9.6 shown units/s out of the door (Alpha 11: one every 12 px)")
 	var bmap := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var bsim := Sim.new()

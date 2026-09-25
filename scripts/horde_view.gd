@@ -329,7 +329,9 @@ func _draw_corridors(sim: Sim) -> void:
 		var pa: Vector3 = a["pos"]
 		var pb: Vector3 = b["pos"]
 		var dir := (pb - pa).normalized()
-		var line: Array = [pa + dir * Rules.R] + sim.deck_points(i, e["a"]) + [pb - dir * Rules.R]
+		var line: Array = sim.deck_line(i)
+		if line.is_empty():
+			continue                                      # maps 3.0 plaza link: no deck to coat
 		if not corridors.has(i):
 			var made := []
 			for k in range(line.size() - 1):

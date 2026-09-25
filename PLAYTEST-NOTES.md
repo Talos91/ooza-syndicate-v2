@@ -432,3 +432,15 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 87. **Better notifications in the UI style.** *Done:* framed, colour-coded, stacked, animated.
 88. **Better lighting and textures.** *Done:* violet ambient, warm key, rim light; surface detail.
 89. **Vats fill by units; Alpha 11's creatures in the liquid, animated.** *Done:* liquid gauge + residents.
+
+## 2026-09-25 - Daniele, Alpha 17 brief (v0.17.0)
+
+90. **Integrate maps 3.0 (100 maps) in the approved Blender layout.** *Done:* baked by
+    `Models/2.0/export_maps_3_0_game.py`, placed by `MapBuilder.build3`, verified by `tests/test_maps3.gd`.
+91. **Debug maps D-01..D-09 for testing.** *Done:* same pipeline, last in the map list.
+92. **Last Stand: ring logic, relays fall only after their rings, never unconnected platforms.** *Done.*
+93. **Brawl units 20 % slower.** *Done* (7.1 m/s).
+94. **Brawl: units entering a building clip.** *Done:* bodies shrink and dip into the door, and grow out.
+95. **AI: use switches properly; the curve is brutal and all AIs gang up on the human; Alpha 11's five
+    levels with scaling aggressiveness.** *Done:* Alpha 11's loop and profiles, rival adjustment, relay
+    rules; measured curve 10 / 15 / 50 / 90 / 95 % vs Standard, seat A 30 % of FFA attacks.

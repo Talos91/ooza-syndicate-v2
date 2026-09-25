@@ -66,8 +66,21 @@ func _init() -> void:
 		var s_teams := {}
 		for s in sm["seats"][md]:
 			s_seats[int(s["node"])] = s["seat"]
-			if md in ["2v2", "3v3"] and s.get("team") != null:
+			if md in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
 				s_teams[s["seat"]] = int(s["team"])
+		# maps 3.0 say which combat mode they are built for: brawl, siege, or both (played in each)
+		var cm: String = str(sm.get("combatMode", "siege"))
+		for siege_mode in ([true, false] if cm in ["both", "mixed"] else [cm != "brawl"]):
+			Rules.bridge_combat = siege_mode
+			_play(sm, spos, s_seats, s_teams, md)
+		Rules.bridge_combat = true
+
+	_check_overpass()
+	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
+	quit(1 if failures else 0)
+
+
+func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, s_teams: Dictionary, md: String) -> void:
 		var ssim := Sim.new()
 		ssim.setup(sm, spos, s_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 5, s_teams)
 		var s_ais := []
@@ -81,11 +94,8 @@ func _init() -> void:
 			ssteps += 1
 		var caps := ssim.events.filter(func(e): return e["type"] == "capture").size()
 		var fires := ssim.events.filter(func(e): return e["type"] == "relay_fired").size()
-		print("      %s %-24s %-4s over=%s winner=%s at %.0f s, captures=%d relay fires=%d" % [sm["code"],
-				str(sm["name"]), md, ssim.over, ssim.winner, ssim.time, caps, fires])
-		check(ssim.over, "%s: AI vs AI finishes within 8 simulated minutes (t=%.0fs)" % [sm["code"], ssim.time])
-		check(caps >= 2, "%s: AIs capture nodes (%d)" % [sm["code"], caps])
-
-	_check_overpass()
-	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
-	quit(1 if failures else 0)
+		var tag: String = "SIEGE" if Rules.bridge_combat else "BRAWL"
+		print("      %s %-24s %-5s %-5s over=%s winner=%s at %.0f s, captures=%d relay fires=%d" % [sm["code"],
+				str(sm["name"]), md, tag, ssim.over, ssim.winner, ssim.time, caps, fires])
+		check(ssim.over, "%s %s: AI vs AI finishes within 8 simulated minutes (t=%.0fs)" % [sm["code"], tag, ssim.time])
+		check(caps >= 2, "%s %s: AIs capture nodes (%d)" % [sm["code"], tag, caps])

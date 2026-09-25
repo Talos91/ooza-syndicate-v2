@@ -301,7 +301,7 @@ func _build_arc(mesh: ImmediateMesh, r0: float, r1: float, frac: float) -> void:
 
 func _last_stand_warning(n: Dictionary) -> void:
 	var id: int = n["id"]
-	var warned: bool = sim.last_stand_warn_node == id
+	var warned: bool = sim.is_warned(id)
 	if not _warn_rings.has(id):
 		if not warned:
 			return
@@ -391,7 +391,7 @@ func _decks() -> void:
 			(d as Node3D).visible = open
 		if not Rules.bridge_combat:
 			continue                                      # classic: _half_trims owns the lights
-		if sim.last_stand_warn_node == e["a"] or sim.last_stand_warn_node == e["b"]:
+		if sim.is_warned(e["a"]) or sim.is_warned(e["b"]):
 			continue                                      # _last_stand_warning flashes these
 		if e["state"] != "" or e["retracts"]:             # relay decks keep their state colour
 			if _edge_light.get(i, "?") != "state":
@@ -503,6 +503,10 @@ func _collapse(node_id: int) -> void:
 				for frag in _frag_names:                  # the module breaks into its fall pieces
 					var piece := MapBuilder.put(world, "Deck_S_Frag_" + frag, deck.position, deck.rotation.y, deck.scale.x)
 					falling.append(piece)
+	for pid in vis.get("plazas", {}):                  # maps 3.0: a plaza goes when its last socket goes
+		var pz: Dictionary = vis["plazas"][pid]
+		if node_id in pz["members"] and pz["node"] and (pz["members"] as Array).all(func(m): return sim.collapsed.get(m, false)):
+			falling.append(pz["node"])
 	var wf := _waterfall(n["owner"] if n["owner"] != "" else "", Rules.R, 1.8)
 	wf.amount = 220
 	wf.position = n["pos"] + Vector3(0, 0.2, 0)
@@ -559,7 +563,11 @@ func _half_trims() -> void:
 			(mi as MeshInstance3D).visible = show
 		if not show:
 			continue
-		var line: Array = [sim.nodes[e["a"]]["pos"]] + sim.deck_points(i, e["a"]) + [sim.nodes[e["b"]]["pos"]]
+		var line: Array = sim.deck_line(i)
+		if line.is_empty():
+			continue
+		if not sim.v3:                                    # legacy: trims run centre to centre
+			line = [sim.nodes[e["a"]]["pos"]] + sim.deck_points(i, e["a"]) + [sim.nodes[e["b"]]["pos"]]
 		var pa: Vector3 = line[1] if line.size() > 2 else line[0]
 		var pb: Vector3 = line[-2] if line.size() > 2 else line[-1]
 		var mid := (pa + pb) / 2.0

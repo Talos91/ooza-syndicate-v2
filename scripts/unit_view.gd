@@ -27,6 +27,10 @@ const ROLL := 0.07
 const SQUASH := 0.11
 const TURN := 0.65
 const SOFTNESS := {"ember": 0.4, "solar": 0.4}
+# Through the door (Daniele, Alpha 17: "units entering the building just clip"): over the last DOOR m
+# of the route a body shrinks and dips into the doorway, and a body leaving grows out of it the same
+# way, so a column pours in and out instead of popping.
+const DOOR := 1.6
 
 var _mesh := {}                      # faction -> Mesh
 var _tex := {}                       # faction -> albedo Texture2D
@@ -98,15 +102,15 @@ func begin() -> void:
 	_discs.clear()
 
 
-func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob := 0.0, roll := 0.0, squeeze := 0.0) -> void:
+func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob := 0.0, roll := 0.0, squeeze := 0.0, size := 1.0) -> void:
 	if not _mesh.has(faction):
 		return
 	_instance(faction, seat)
-	var s: float = _scale[faction]
+	var s: float = _scale[faction] * size
 	var basis := Basis(Vector3.UP, heading + MODEL_YAW) * Basis(Vector3(0, 0, 1), roll) \
 			* Basis.from_scale(Vector3(1.0 + squeeze * 0.6, 1.0 - squeeze, 1.0 + squeeze * 0.45) * s)
 	(_xf["%s|%s" % [faction, seat]] as Array).append(Transform3D(basis, pos + Vector3(0, 0.08 + bob, 0)))
-	_discs.append([Transform3D(Basis(), pos + Vector3(0, 0.05, 0)), Rules.seat_color(seat)])
+	_discs.append([Transform3D(Basis().scaled(Vector3.ONE * size), pos + Vector3(0, 0.05, 0)), Rules.seat_color(seat)])   # the disc goes in with its body
 
 
 func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
@@ -133,6 +137,7 @@ func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
 		var travel := dist + col * gap * expansion
 		if travel > L:
 			continue                                  # through the door
+		var door := smoothstep(0.0, 1.0, clampf(minf(travel, L - travel) / DOOR, 0.0, 1.0))
 		var smp := Sim.sample(h, travel)
 		var fwd: Vector3 = smp[1]
 		var side := fwd.cross(Vector3.UP).normalized()
@@ -142,8 +147,8 @@ func add_horde(h: Dictionary, shown_units: float, time: float) -> void:
 		var yaw := Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing))
 		var phase := fmod(j * 0.618 + float(h["id"]) * 0.137, 1.0)
 		var wave := sin(time * WAVE + phase * TAU)
-		add_unit(h["faction"], h["owner"], (smp[0] as Vector3) + side * lateral, yaw,
-				maxf(0.0, wave) * HOP, wave * ROLL, wave * SQUASH * soft)
+		add_unit(h["faction"], h["owner"], (smp[0] as Vector3) + side * lateral * door + Vector3.DOWN * 0.35 * (1.0 - door), yaw,
+				maxf(0.0, wave) * HOP * door, wave * ROLL, wave * SQUASH * soft, lerpf(0.12, 1.0, door))
 
 
 func flush() -> void:

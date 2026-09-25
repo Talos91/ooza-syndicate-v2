@@ -1,5 +1,61 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.17.0 "Alpha 17" - 2026-09-25 (maps 3.0, ring Last Stand, five-level AI)
+
+**Maps 3.0 replace the 2.0 roster** (References/Ooze Syndicate maps 3.0, 100 maps: tutorial, core,
+brawl, siege, crazy) plus the **nine debug maps** D-01..D-09 (References/Ooze Syndicate debug maps),
+listed last in the map list for testing.
+- The approved Blender layout (Models/2.0/build_maps_3_0_review.py) is baked, not re-planned:
+  `Models/2.0/export_maps_3_0_game.py` runs the builder's own planner headless in Blender and writes
+  `maps3/<map>.json` (the pack's map + node / plaza positions, each bridge's rim exits, pier leans and
+  lengths, deck heights 0 / +4 / -4 / +8 and ramps, relay mounts, verification) and
+  `assets/maps3/<code>.glb` (the map's plazas and exact-cut plaza piers). 3 m per map unit.
+- The game places the kit from that: platforms, angled piers (Pier_Angled_00..80, mirrored for
+  negative leans, _Switch where a switch fires), ground decks tiled from near-true 4 m modules, high
+  overpasses and underpasses with their ramps, relay towers on the clearest rim ledge or on the socket
+  (12 relays; their structure slot then stands in front of the tower), retract gates, remote conduits.
+- **Plazas**: every socket of a plaza reaches every other across the plate (free movement, travel by
+  distance); a plaza's plate falls with its last socket.
+- **Lines only meet on the same height** (decks at 0 / +4 / -4 / +8; paths climb the ramps).
+- **Honest time**: decks are drawn longer than their tier at 3 m per unit, so a line crosses a deck in
+  the time its true-size modules took (the pack's tier stays the gameplay) - hops keep the pace they
+  had, in SIEGE and in BRAWL.
+- Nodes use the pack's neutral tiers and structures (T1 pocket nodes, T2-T4 farther out, strategic T4
+  nodes and centres that may start with a cannon or forge); new modes 3v3 and 2v2v2 (offline and in
+  online rooms, up to six players).
+- Test `tests/test_maps3.gd` (11,599 checks) re-checks the baked layout in game coordinates: deck
+  edges at least 0.3 m apart wherever two decks share a height, no deck over a foreign platform or
+  plaza unless raised, no bridge too short, piers within 80 degrees, the builder's verification clean,
+  every plaza plate and pier present; seats per mode and team; the Last Stand rules; the heights.
+  D-04 keeps one deck clash the approved planner leaves (a raised L deck over a retracting half-deck
+  with no room for its ramps); the test reports it and requires the game to see exactly that one.
+
+**Last Stand - ring logic** (Daniele): no designated first and last node any more. Each wave drops a
+whole ring, in the order of the revealed method (inward / outward from the map, chaos = one of the
+map's connected orders); the order's last ring never falls and conquest decides there. A relay only
+falls once every ring it connects to has fallen. The collapse NEVER leaves a platform unconnected:
+anything a wave would cut off from the surviving map (over fixed decks and plaza links only) falls
+with that wave. Badges show the wave (R1, R2...), the inspector "falls in wave N" / "THE LAST RING",
+the status line "RING N FALLS IN 10 s (k nodes)". Tutorials T-01..T-04 have no Last Stand (the pack
+gives them no method).
+
+**AI - Alpha 11's five levels** (Training, Casual, Standard, Veteran, Expert) with its decision loop:
+defend threatened nodes first, invest once per level interval, one offensive per attack gap planned
+from up to 1 / 1 / 2 / 2 / 3 nodes against a garrison it estimates (error 40 % .. 12 %, refreshed
+10 s .. 3 s, growth forecast 0 .. 75 %), a grace before it attacks players (75 s .. 12 s), and a pick
+among its best 4 .. 2 plans. **No ganging up on the human**: Alpha 11's rival adjustment (its own
+border first, answer whoever attacks it, contain the strongest, avoid a node someone else is already
+attacking). **Relays used properly**: never fired onto its own lines; Standard reacts to enemies on
+a deck it can drop or pull in (a retract only if its garrison can take them); Veteran and Expert fire
+ahead, for the lines that will be on the deck when it moves; Expert also opens a shorter route to its
+target. Measured (`tests/test_ai_curve.gd`, each level vs a fixed Standard on 10 maps x 2 seats):
+Training 10 %, Casual 15 %, Standard 50 %, Veteran 90 %, Expert 95 %; in FFA 4 seat A draws 30 % of
+the attacks on players (even share 33 %).
+
+**BRAWL**: units 20 % slower (7.1 m/s; still the same speed on decks and platforms, exit and entrance
+at Alpha 11's rate, so columns are a little denser). Bodies now shrink and dip into the door over
+their last 1.6 m, and grow out of it when they leave, instead of clipping in.
+
 ## 0.16.4 - 2026-09-25 (visual pass, while the new maps are modelled)
 
 Daniele: "a background (what we had in Alpha 1 is a good start), better notifications in the same

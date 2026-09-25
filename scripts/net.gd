@@ -19,10 +19,11 @@ signal connection_error(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
 const VERSION_TAG := "ooze20-net-1"               # plus Rules.VERSION: guests must match the host exactly
-const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2"]
-const MODE_LABELS := {"1v1": "FFA 2", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2"}
-const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4}
-const SEATS := ["A", "B", "C", "D", "E"]
+const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
+const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
+const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
+const TEAM_MODES := ["2v2", "3v3", "2v2v2"]
+const SEATS := ["A", "B", "C", "D", "E", "F"]
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "restore", "switch"]
 const SNAPSHOT_EVERY := 0.1
@@ -32,7 +33,7 @@ const MAX_PACKET := 8 * 1024 * 1024
 const CHAT_MAX := 256
 const CHAT_HISTORY := 50
 const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
-const AI_FILL := ["", "Casual", "Standard", "Veteran"]   # EMPTY SEATS setting: off or the AI level
+const AI_FILL := ["", "Training", "Casual", "Standard", "Veteran", "Expert"]   # EMPTY SEATS setting: off or the AI level
 
 var bridge                                         # window.OozePeer (or a test double)
 var hosting := false
@@ -48,7 +49,7 @@ var preferred_faction := "null"
 var colour := "A"                                  # your own view colour (local, like offline)
 # room settings (host decides; guests receive them with the lobby)
 var mode := "1v1"
-var map_path := "res://maps/004-two-piers.json"
+var map_path := ""                                   # set from the map pool when a room opens
 var siege := true
 var last_stand := true
 # match state
@@ -127,10 +128,10 @@ func label_of(id: int) -> String:
 
 
 func team_of_slot(slot: int) -> int:
-	## 2v2: seats A+B against C+D (the roster maps' team layout); FFA: everyone alone (-1).
-	if mode != "2v2":
+	## Team modes take the map's teams (2v2 A+B vs C+D, 3v3, 2v2v2); FFA: everyone alone (-1).
+	if not mode in TEAM_MODES:
 		return -1
-	var seats: Array = map_data(map_path).get("seats", {}).get("2v2", [])
+	var seats: Array = map_data(map_path).get("seats", {}).get(mode, [])
 	for s in seats:
 		if s["seat"] == SEATS[slot] and s.get("team") != null:
 			return int(s["team"])
@@ -215,7 +216,7 @@ func _start(host: bool, faction: String, code: String) -> Error:
 	_elapsed = 0.0
 	if host:
 		roster = {1: {"faction": faction, "slot": 0}}
-		if not map_offers(map_path, mode):
+		if not map_offers(map_path, mode) or not map_path in MapPool.all():
 			map_path = maps_for(mode)[0]
 	bridge.start(host, code.strip_edges().to_upper())
 	status = "Connecting to the room service..."
@@ -646,7 +647,8 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 			"nodes": nodes, "hordes": hs, "fights": s.fights, "fight_info": s.fight_info,
 			"collapsed": s.collapsed, "eliminated": s.eliminated,
 			"ls": [s.last_stand_active, s.last_stand_method, s.last_stand_order, s.last_stand_final,
-					s.last_stand_next, s.last_stand_warn_node, s.last_stand_warn_t, s.last_stand_wave, s._next_wave_at],
+					s.last_stand_next, s.last_stand_warn_node, s.last_stand_warn_t, s.last_stand_wave, s._next_wave_at,
+					s.last_stand_waves, s.last_stand_keep, s.last_stand_warn],
 			"losses": [s.combat_losses, s.fall_losses]}
 	if s.over:
 		snap["events"] = s.events                    # the end screen's captures count
@@ -709,6 +711,10 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 	s.last_stand_warn_t = ls[6]
 	s.last_stand_wave = ls[7]
 	s._next_wave_at = ls[8]
+	if ls.size() > 11:                                # maps 3.0 ring waves
+		s.last_stand_waves = ls[9]
+		s.last_stand_keep = ls[10]
+		s.last_stand_warn = ls[11]
 	s.combat_losses = snap["losses"][0]
 	s.fall_losses = snap["losses"][1]
 	for c in changes:

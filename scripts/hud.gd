@@ -389,12 +389,15 @@ func sync(dt: float, cam: Camera3D) -> void:
 		score_sections[seat].size_flags_stretch_ratio = maxf(1.0, count)
 	if sim.last_stand_active:
 		var next := ""
-		if sim.last_stand_warn_node >= 0:
+		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
+		if sim.v3 and not sim.last_stand_warn.is_empty():
+			next = "RING %d FALLS IN %d s (%d nodes)" % [sim.last_stand_next, int(ceil(sim.last_stand_warn_t)), sim.last_stand_warn.size()]
+		elif sim.last_stand_warn_node >= 0:
 			next = "NODE %d FALLS IN %d s" % [sim.last_stand_warn_node, int(ceil(sim.last_stand_warn_t))]
-		elif sim.last_stand_next < sim.last_stand_order.size():
+		elif sim.last_stand_next < pending:
 			next = "next drop in %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
 		else:
-			next = "the final node stands - conquest decides"
+			next = ("the last ring stands" if sim.v3 else "the final node stands") + " - conquest decides"
 		status_label.text = "LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), next]
 	elif sim.time > Rules.LAST_STAND_TIME - 15.0:
 		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
@@ -431,11 +434,11 @@ func _badges(cam: Camera3D) -> void:
 			continue
 		panel.visible = true
 		var owner: String = n["owner"]
-		var key := owner + ("*" if n["id"] == sim.last_stand_warn_node else "")
+		var key := owner + ("*" if sim.is_warned(n["id"]) else "")
 		if b["owner"] != key:
 			b["owner"] = key
 			var col := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
-			if n["id"] == sim.last_stand_warn_node:
+			if sim.is_warned(n["id"]):
 				col = Rules.state_color("warn")
 			panel.add_theme_stylebox_override("panel", badge_style(col))
 			(b["label"] as Label).add_theme_color_override("font_color", col if owner != "" else Color("d8e0e8"))
@@ -474,10 +477,10 @@ func _badges(cam: Camera3D) -> void:
 		if order_shown:
 			var k := sim.drop_order_of(n["id"])
 			if k > 0:
-				parts.append("#%d" % k)
-			elif n["id"] == sim.last_stand_final:
+				parts.append(("R%d" if sim.v3 else "#%d") % k)
+			elif sim.is_final(n["id"]):
 				parts.append("FINAL")
-		if n["id"] == sim.last_stand_warn_node:
+		if sim.is_warned(n["id"]):
 			parts.append("FALLS %d" % int(ceil(sim.last_stand_warn_t)))
 		sub.text = " ".join(parts)
 		var shield_bar: ProgressBar = b["shield"]
@@ -638,7 +641,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		lines.append("attachment swap in %.0f s" % ceil(n["swap_cd"]))
 	if sim.last_stand_active:
 		var k := sim.drop_order_of(n["id"])
-		lines.append("LAST STAND: %s" % ("drop #%d" % k if k > 0 else ("THE FINAL - never falls" if n["id"] == sim.last_stand_final else "")))
+		lines.append("LAST STAND: %s" % ((("falls in wave %d" if sim.v3 else "drop #%d") % k) if k > 0 else ("THE %s - never falls" % ("LAST RING" if sim.v3 else "FINAL") if sim.is_final(n["id"]) else "")))
 	inspector_label.text = "\n".join(lines)
 	inspector_progress.visible = n["build_kind"] != ""
 	inspector_progress.value = Sim.build_progress(n) * 100.0

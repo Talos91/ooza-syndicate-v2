@@ -21,12 +21,14 @@ static func load_map(path: String) -> Dictionary:
 
 
 static func layout(map: Dictionary) -> Dictionary:
+	if map.has("layout"):                             # maps 3.0: the baked, approved layout
+		return layout3(map)
 	var schem := {}
 	for n in map["nodes"]:
 		schem[int(n["id"])] = Vector3(n["x"], 0.0, n["y"])
 	var root := 0
 	for n in map["nodes"]:
-		if n["center"]:
+		if n.get("center", false):
 			root = int(n["id"])
 	var pos := {root: Vector3.ZERO}
 	var queue := [root]
@@ -284,6 +286,7 @@ static func set_centre_model(parent: Node3D, entry: Dictionary, model: String, p
 	## spot - GAME-RULES sec6: one slot, never an extra piece bolted on the side. Returns the node.
 	if entry["model_key"] == model:
 		return entry["vat_node"]
+	pos = entry.get("centre", pos)                    # maps 3.0: beside a relay tower that holds the socket
 	if entry["vat_node"]:
 		(entry["parts"] as Array).erase(entry["vat_node"])
 		(entry["vat_node"] as Node).queue_free()
@@ -311,3 +314,179 @@ static func apply_owner(parts: Array, seat: String) -> void:
 					if mi.has_meta("vat_liquid"):             # a living liquid (Scenery) colours itself
 						continue
 					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else null)
+
+
+# ---------------------------------------------------------------- maps 3.0 (baked layout)
+# Maps 3.0 (References/Ooze Syndicate maps 3.0) come with the approved Blender builder's layout baked
+# per map (Models/2.0/export_maps_3_0_game.py -> maps3/*.json + assets/maps3/<code>.glb): 3 m per map
+# unit, each bridge on its own rim exit, angled piers (Pier_Angled_00..80, mirrored for negative
+# leans; plazas get exact cuts in the map's GLB), deck heights 0 / +4 / -4 / +8 from the clearance
+# planner, ramps between the pier and the first crossing, relay towers on the clearest rim ledge or on
+# the socket. This only places pieces; it never re-plans.
+const OVER_H := 4.0                  # Deck_Overpass_High rise per level (builder OVER_H)
+const UNDER_BASE := 2.4              # Deck_Underpass depth as modelled (builder base)
+
+
+static func layout3(map: Dictionary) -> Dictionary:
+	var pos := {}
+	var nodes: Dictionary = map["layout"]["nodes"]
+	for k in nodes:
+		pos[int(k)] = Vector3(nodes[k][0], 0.0, nodes[k][1])
+	return pos
+
+
+static func angled_pier(parent: Node3D, exit: Vector3, dir: Vector3, lean: float, switched: bool) -> Node3D:
+	var step := clampi(roundi(absf(lean) / 5.0) * 5, 0, 80)
+	var n := put(parent, "Pier_Angled_%02d%s" % [step, "_Switch" if switched else ""], exit, Rules.heading(dir))
+	if lean < 0.0:
+		n.scale = Vector3(1.0, 1.0, -1.0)          # negative lean: the piece mirrored across its deck axis
+	return n
+
+
+static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
+	var lay: Dictionary = map["layout"]
+	var vis := {"stretched": [], "edge_decks": {}, "edge_base": {}, "edge_piers": {}, "conduits": {}, "plazas": {}}
+	var glb_nodes := {}
+	if str(lay.get("glb", "")) != "" and ResourceLoader.exists(lay["glb"]):
+		var inst: Node3D = (load(lay["glb"]) as PackedScene).instantiate()
+		parent.add_child(inst)
+		Mats.apply_detail(inst)
+		for c in inst.find_children("*", "Node3D", true, false):
+			glb_nodes[String(c.name)] = c
+	for pid in lay.get("plazas", {}):
+		var members := []
+		for n in sim.nodes:
+			if n["plaza"] == int(pid):
+				members.append(n["id"])
+		vis["plazas"][int(pid)] = {"node": glb_nodes.get("Plaza_%s" % pid), "members": members}
+	var relays: Dictionary = lay.get("relays", {})
+	for n in sim.nodes:
+		var id: int = n["id"]
+		var parts: Array = []
+		var relay: String = n["relay"]
+		var on_plaza: bool = n["plaza"] >= 0
+		var platform: Node3D = null
+		if not on_plaza:
+			platform = put(parent, "Platform_Rotation" if relay == "rotation" else "Platform_Standard", n["pos"])
+			parts.append(platform)
+		var housing: Node3D = null
+		var mount_dir := Vector3.FORWARD
+		var tower_on_socket := false
+		var state_parts := []
+		if relay != "" and relay != "retract":
+			var mount = relays.get(str(id), {}).get("mount")
+			if mount is Array:
+				mount_dir = Vector3(mount[0], 0.0, mount[1]).normalized()
+				parts.append(put(parent, "Relay_Mount", n["pos"], Rules.heading(mount_dir)))
+				housing = put(parent, RELAY_HOUSING[relay], n["pos"] + mount_dir * MOUNT_DIST, Rules.heading(-mount_dir))
+			else:                                      # no clear ledge (or a plaza): the tower holds the socket
+				housing = put(parent, RELAY_HOUSING[relay], n["pos"], Rules.view_yaw)
+				tower_on_socket = true
+			parts.append(housing)
+		var centre := n["pos"] as Vector3
+		if tower_on_socket:                            # the centre slot moves in front of the tower
+			centre += Rules.front_dir() * 3.4
+		var vat_node := put(parent, model_for(n), centre, Rules.view_yaw)
+		parts.append(vat_node)
+		vis[id] = {"parts": parts, "platform": platform, "vat_node": vat_node,
+				"vat_tier": -1 if relay != "" else n["tier"], "model_key": model_for(n),
+				"attachment_node": null, "attachment": "", "cannon_tier": 0, "housing": housing,
+				"state_parts": state_parts, "mount_dir": mount_dir, "centre": centre}
+	for i in range(sim.edges.size()):
+		var e: Dictionary = sim.edges[i]
+		if e["plaza"]:
+			vis["edge_decks"][i] = []
+			vis["edge_base"][i] = []
+			vis["edge_piers"][i] = []
+			continue
+		var g: Dictionary = e["geo"]
+		var A := Vector3(g["A"][0], 0.0, g["A"][1])
+		var B := Vector3(g["B"][0], 0.0, g["B"][1])
+		var d := (B - A).normalized()
+		var L: float = g["L"]
+		var p0: float = g["p0"]
+		var p1: float = g["p1"]
+		var ctrl: int = sim.edge_controller.get(i, -1)
+		var st: String = e["state"]
+		var piers := []
+		for end in range(2):
+			var nid: int = e["a"] if end == 0 else e["b"]
+			var exit := A if end == 0 else B
+			var dir := d if end == 0 else -d
+			var p_len: float = p0 if end == 0 else p1
+			var pier: Node3D
+			if bool(g["plaza%d" % end]):
+				pier = glb_nodes.get("PlazaPier_%d_%d" % [i, end])
+			else:
+				pier = angled_pier(parent, exit, dir, float(g["lean%d" % end]), st.begins_with("s") and ctrl == nid)
+			if pier:
+				vis[nid]["parts"].append(pier)
+				piers.append(pier)
+			if e["retracts"] and ctrl == nid:           # the gate the deck slides into, at the rim
+				var gate := put(parent, "Relay_Retract", exit + dir * (p_len - Rules.PIER) - dir * Rules.R, Rules.heading(dir))
+				vis[nid]["housing"] = gate
+				vis[nid]["parts"].append(gate)
+		vis["edge_piers"][i] = piers
+		var state_key: String = "retract" if e["retracts"] else st
+		var s0 := A + d * p0
+		var s1 := B - d * p1
+		var gap := L - p0 - p1
+		var h: float = g["h"]
+		var decks: Array = []
+		if gap >= 0.5:
+			if h == 0.0:
+				var nmod := maxi(1, roundi(gap / Rules.S))
+				var f := gap / (nmod * Rules.S)
+				var piece_name := "Deck_Retract" if e["retracts"] else ("Deck_Remote" if st.begins_with("m") else "Deck_S")
+				for k in range(nmod):
+					decks.append(put(parent, piece_name, s0 + d * (k * Rules.S * f), Rules.heading(d), f))
+			else:
+				var r0: float = g["r0"]
+				var r1: float = g["r1"]
+				var ramp := "Deck_Overpass_High_Ramp" if h > 0.0 else "Deck_Underpass_Ramp"
+				var span := "Deck_Overpass_High_Span" if h > 0.0 else "Deck_Underpass_Span"
+				var base := OVER_H if h > 0.0 else UNDER_BASE
+				var zs := absf(h) / base
+				var up := put(parent, ramp, s0, Rules.heading(d), r0 / Rules.S)
+				up.scale.y = zs
+				var down := put(parent, ramp, s1, Rules.heading(-d), r1 / Rules.S)
+				down.scale.y = zs
+				decks.append(up)
+				var flat := gap - r0 - r1
+				if flat > 0.05:
+					var nmod := maxi(1, roundi(flat / Rules.S))
+					for k in range(nmod):
+						var sp := put(parent, span, s0 + d * (r0 + k * flat / nmod), Rules.heading(d), flat / (nmod * Rules.S))
+						sp.position.y = h - base if h > 0.0 else h + base
+						decks.append(sp)
+				decks.append(down)
+		if state_key != "":
+			for dk in decks:
+				set_lights(dk, Mats.light_color(Rules.state_color(state_key)))
+		vis["edge_decks"][i] = decks
+		vis["edge_base"][i] = decks.map(func(x): return (x as Node3D).transform)
+		if st.begins_with("m") and ctrl >= 0:          # remote: a lit conduit from the console to its deck
+			var c: Vector3 = sim.nodes[ctrl]["pos"] + vis[ctrl]["mount_dir"] * (MOUNT_DIST if relays.get(str(ctrl), {}).get("mount") is Array else 0.0)
+			var mid := (A + B) / 2.0
+			var conduit := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = Vector3(1.0, 0.12, 0.22)
+			conduit.mesh = box
+			conduit.material_override = Mats.light_color(Rules.state_color(st))
+			parent.add_child(conduit)
+			var v := mid - c
+			conduit.position = (c + mid) / 2.0 + Vector3(0, 0.55, 0)
+			conduit.rotation = Vector3(0, Rules.heading(v.normalized()), 0)
+			conduit.scale = Vector3(v.length(), 1.0, 1.0)
+			vis["conduits"][i] = conduit
+	for n in sim.nodes:                               # relay symbols (OS_State) on the housings
+		var hs: Node3D = vis[n["id"]]["housing"]
+		if hs == null:
+			continue
+		for mi in hs.find_children("*", "MeshInstance3D", true, false):
+			var mesh := (mi as MeshInstance3D).mesh
+			for s in range(mesh.get_surface_count()):
+				var m := mesh.surface_get_material(s)
+				if m and m.resource_name.begins_with("OS_State"):
+					(vis[n["id"]]["state_parts"] as Array).append([mi, s])
+	return vis
