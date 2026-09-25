@@ -1,5 +1,22 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.14.1 - 2026-09-25 (merged maps-overpass: the whole roster, overpasses, multiplayer map prep)
+
+- **Merged the `maps-overpass` branch** (another session's commit bd1f527) into Alpha 14. Its
+  "Unreleased" notes are kept below. Combined where both changed the same code: goo corridors are
+  segmented and follow overpass ramps (branch) and are always on, pour in and drain out (Alpha 14);
+  the contact scan keeps Alpha 14's tug-of-war and recall and the branch's overpass rule (a line on
+  an overpass only meets lines on the same deck). The battlefield page lists every map and shows
+  its modes.
+- **All 100 roster maps**, not only the 1v1 ones: the 17 the branch left out are in, since team and
+  FFA seats exist now. 3v3 joins the mode list. 15 of them had 1v1 seats after all (the branch
+  filtered on the roster's `modes` field, the seats say otherwise). Maps without a preview SVG got a
+  rendered 3D thumbnail.
+- **One map held back:** 030 Aurelia Siding. The roster gives its centre node no decks, so it can't
+  be reached; logged in OPEN-QUESTIONS rather than hand-edited. The pool plays 99 maps.
+- `tests/test_map_pool.gd` plays each map in its own mode (1v1, else its first team/FFA mode) with
+  one AI per seat.
+
 ## 0.14.0 "Alpha 14" - 2026-09-25 (two modes that look and feel different, teams and FFA)
 
 **Bridge-fight mode (BRIDGE COMBAT ON)**
@@ -39,6 +56,24 @@
   to 20 as a side effect, so sends trickled out and arrived too thin to take anything.
 - Tests: 180 checks, including tug-of-war, recall mid-fight, corridors and drain, home advantage,
   2v2 reinforcement and AI matches in 2v2 and on both FFA5 maps.
+### From the maps-overpass branch (was "Unreleased")
+
+- **83 maps in the pool** (was the starter seven): every map in the 100-map roster whose modes list
+  1v1, split from `Docs/.../02 Maps/roster/maps-100.json` into `maps/NNN-name.json` with a preview
+  SVG in `assets/maps/` in the starter seven's style. `scripts/map_pool.gd` lists them (starter
+  seven first, then by code); the battlefield page scrolls through all of them and describes
+  roster maps by tier, layout family and overpass count. Left out until 2.0 has team/FFA seats: the
+  17 maps without 1v1 in their modes (001-003, 025-030, 036, 037, 062, 092, 094-097). New maps
+  show the SVG, not a 3D thumbnail (`--thumb=` renders can follow).
+- **Overpass bridges are real** (GAME-RULES sec 7: "cross at different heights without joining"):
+  an overpass deck is laid from the kit's `Deck_Overpass_Ramp` + `Deck_Overpass_Span` (on pylons) +
+  ramp down, rising `Rules.OVERPASS_H` = 2.6 m (the kit's OVER_H). Hordes climb the ramp and run
+  raised (`Sim.deck_points`); a line on an overpass only meets lines on that same deck, so the
+  horde passing under it no longer fights or queues through the bridge above. The shield-bond goo
+  follows the ramps. 16 pool maps have overpasses (044, 045, 049, 054, 055, 065, 066, 073, 074,
+  076, 079, 081-083, 086, 100).
+- `tests/test_map_pool.gd`: every pool map lays out fully and finishes an AI vs AI match with
+  captures; on Oberon Keep a horde over and an enemy horde under pass the same spot without engaging.
 
 ## 0.13.2 - 2026-09-25 (Daniele's numbers)
 

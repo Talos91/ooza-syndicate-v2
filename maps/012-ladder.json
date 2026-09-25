@@ -1,245 +1,245 @@
 {
- "centreHasNoVat": false,
- "code": "012",
- "edges": [
-  {
-   "from": 0.0,
-   "overpass": false,
-   "retracts": false,
-   "seconds": 4.0,
-   "state": null,
-   "tier": "M",
-   "to": 1.0
-  },
-  {
-   "from": 3.0,
-   "overpass": false,
-   "retracts": false,
-   "seconds": 4.0,
-   "state": null,
-   "tier": "M",
-   "to": 4.0
-  },
-  {
-   "from": 1.0,
-   "overpass": false,
-   "retracts": false,
-   "seconds": 4.0,
-   "state": null,
-   "tier": "M",
-   "to": 2.0
-  },
-  {
-   "from": 4.0,
-   "overpass": false,
-   "retracts": false,
-   "seconds": 4.0,
-   "state": null,
-   "tier": "M",
-   "to": 5.0
-  },
-  {
-   "from": 0.0,
-   "overpass": false,
-   "retracts": false,
-   "seconds": 6.0,
-   "state": null,
-   "tier": "L",
-   "to": 3.0
-  },
-  {
-   "from": 1.0,
-   "overpass": false,
-   "retracts": false,
-   "seconds": 2.0,
-   "state": null,
-   "tier": "S",
-   "to": 6.0
-  },
-  {
-   "from": 6.0,
-   "overpass": false,
-   "retracts": false,
-   "seconds": 2.0,
-   "state": null,
-   "tier": "S",
-   "to": 4.0
-  },
-  {
-   "from": 2.0,
-   "overpass": false,
-   "retracts": false,
-   "seconds": 6.0,
-   "state": null,
-   "tier": "L",
-   "to": 5.0
-  }
- ],
- "family": "ladder",
  "id": 12.0,
- "lastStand": {
-  "inwardFinal": 6.0,
-  "methods": [
-   "inward",
-   "outward"
-  ],
-  "outwardFinal": 4.0
- },
+ "code": "012",
+ "name": "Ladder",
+ "tier": "simple",
+ "family": "ladder",
  "modes": [
   "1v1",
   "2v2",
   "FFA4"
  ],
- "name": "Ladder",
  "nodes": [
   {
-   "buildable": [
-    "vat"
-   ],
-   "category": "normal",
-   "center": false,
    "id": 0.0,
-   "pillar": false,
-   "relay": null,
    "x": 32.0,
-   "y": 29.0
-  },
-  {
+   "y": 29.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
    "buildable": [
     "vat"
-   ],
-   "category": "normal",
-   "center": false,
+   ]
+  },
+  {
    "id": 1.0,
-   "pillar": false,
-   "relay": null,
    "x": 50.0,
-   "y": 43.0
-  },
-  {
+   "y": 43.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
    "buildable": [
     "vat"
-   ],
-   "category": "normal",
-   "center": false,
+   ]
+  },
+  {
    "id": 2.0,
-   "pillar": false,
-   "relay": null,
    "x": 68.0,
-   "y": 29.0
-  },
-  {
+   "y": 29.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
    "buildable": [
     "vat"
-   ],
-   "category": "normal",
-   "center": false,
+   ]
+  },
+  {
    "id": 3.0,
-   "pillar": false,
-   "relay": null,
    "x": 32.0,
-   "y": 71.0
-  },
-  {
-   "buildable": [
-    "vat",
-    "cannon",
-    "forge"
-   ],
-   "category": "final",
+   "y": 71.0,
    "center": false,
-   "id": 4.0,
-   "pillar": false,
    "relay": null,
-   "x": 50.0,
-   "y": 57.0
-  },
-  {
+   "pillar": false,
+   "category": "normal",
    "buildable": [
     "vat"
-   ],
-   "category": "normal",
-   "center": false,
-   "id": 5.0,
-   "pillar": false,
-   "relay": null,
-   "x": 68.0,
-   "y": 71.0
+   ]
   },
   {
+   "id": 4.0,
+   "x": 50.0,
+   "y": 57.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "final",
    "buildable": [
     "vat",
     "cannon",
     "forge"
-   ],
-   "category": "final",
-   "center": true,
-   "id": 6.0,
-   "pillar": false,
+   ]
+  },
+  {
+   "id": 5.0,
+   "x": 68.0,
+   "y": 71.0,
+   "center": false,
    "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6.0,
    "x": 50.0,
-   "y": 50.0
+   "y": 50.0,
+   "center": true,
+   "relay": null,
+   "pillar": false,
+   "category": "final",
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
   }
  ],
- "note": null,
+ "edges": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "tier": "M",
+   "seconds": 4.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 3.0,
+   "to": 4.0,
+   "tier": "M",
+   "seconds": 4.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1.0,
+   "to": 2.0,
+   "tier": "M",
+   "seconds": 4.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 4.0,
+   "to": 5.0,
+   "tier": "M",
+   "seconds": 4.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 0.0,
+   "to": 3.0,
+   "tier": "L",
+   "seconds": 6.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1.0,
+   "to": 6.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 6.0,
+   "to": 4.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2.0,
+   "to": 5.0,
+   "tier": "L",
+   "seconds": 6.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  }
+ ],
  "seats": {
   "1v1": [
    {
-    "node": 0.0,
     "seat": "A",
+    "node": 0.0,
     "team": 0.0
    },
    {
-    "node": 2.0,
     "seat": "B",
+    "node": 2.0,
     "team": 1.0
    }
   ],
   "2v2": [
    {
-    "node": 0.0,
     "seat": "A",
+    "node": 0.0,
     "team": 0.0
    },
    {
-    "node": 3.0,
     "seat": "B",
+    "node": 3.0,
     "team": 0.0
    },
    {
-    "node": 2.0,
     "seat": "C",
+    "node": 2.0,
     "team": 1.0
    },
    {
-    "node": 5.0,
     "seat": "D",
+    "node": 5.0,
     "team": 1.0
    }
   ],
   "FFA4": [
    {
-    "node": 0.0,
     "seat": "A",
+    "node": 0.0,
     "team": null
    },
    {
-    "node": 2.0,
     "seat": "B",
+    "node": 2.0,
     "team": null
    },
    {
-    "node": 5.0,
     "seat": "C",
+    "node": 5.0,
     "team": null
    },
    {
-    "node": 3.0,
     "seat": "D",
+    "node": 3.0,
     "team": null
    }
   ]
  },
+ "lastStand": {
+  "methods": [
+   "inward",
+   "outward"
+  ],
+  "inwardFinal": 6.0,
+  "outwardFinal": 4.0
+ },
+ "note": null,
  "symmetryCheck": true,
- "tier": "simple"
+ "centreHasNoVat": false
 }

@@ -99,7 +99,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		var mods: int = {"S": 1, "M": 2, "L": 3}[e["tier"]]
 		var st: String = e["state"] if e.get("state") != null else ""     # JSON stores "state": null
 		edges.append({"a": int(e["from"]), "b": int(e["to"]), "modules": mods,
-				"state": st, "retracts": e.get("retracts", false)})
+				"state": st, "retracts": e.get("retracts", false), "overpass": e.get("overpass", false)})
 		var i := edges.size() - 1
 		adj[int(e["from"])].append([int(e["to"]), i])
 		adj[int(e["to"])].append([int(e["from"]), i])
@@ -762,10 +762,13 @@ func build_path(route: Array) -> Dictionary:
 		a = nodes[route[i]]
 		var b: Dictionary = nodes[route[i + 1]]
 		d = (b["pos"] - a["pos"]).normalized()
-		add.call(a["pos"] + d * (Rules.R + Rules.PIER), false)
-		var s0 := _length(pts)
-		add.call(b["pos"] - d * (Rules.R + Rules.PIER), true)
 		var ei := _edge_index(route[i], route[i + 1])
+		var deck := deck_points(ei, route[i])
+		add.call(deck[0], false)
+		var s0 := _length(pts)
+		for k in range(1, deck.size() - 1):
+			add.call(deck[k], false)                 # overpass: up the ramp, along the raised span
+		add.call(deck[-1], true)
 		spans.append({"edge": ei, "s0": s0, "s1": _length(pts), "forward": edges[ei]["a"] == route[i]})
 		var node_s0 := _length(pts)                 # b's platform starts here for every route node
 		add.call(b["pos"] - d * (Rules.R - 0.5), true)
@@ -810,6 +813,32 @@ func _edge_index(x: int, y: int) -> int:
 	for link in adj[x]:
 		if link[0] == y:
 			return link[1]
+	return -1
+
+
+func deck_points(ei: int, from_id: int) -> Array:
+	## A deck's centre line from its pier end at from_id to the far pier end. An overpass rises
+	## OVERPASS_H over its first module, runs raised, and comes down over its last - the same shape
+	## as the kit's Deck_Overpass_Ramp / Span / Ramp that MapBuilder lays for it.
+	var e: Dictionary = edges[ei]
+	var pa: Vector3 = nodes[from_id]["pos"]
+	var pb: Vector3 = nodes[_other_end(ei, from_id)]["pos"]
+	var d := (pb - pa).normalized()
+	var p0 := pa + d * (Rules.R + Rules.PIER)
+	var p1 := pb - d * (Rules.R + Rules.PIER)
+	var out := [p0]
+	if e["overpass"] and e["modules"] >= 2 and e["state"] == "" and not e["retracts"]:
+		for k in range(1, e["modules"]):
+			out.append(p0.lerp(p1, float(k) / e["modules"]) + Vector3.UP * Rules.OVERPASS_H)
+	out.append(p1)
+	return out
+
+
+static func overpass_at(h: Dictionary, s: float, edge_list: Array) -> int:
+	## The overpass edge a horde's line is on at arc length s, or -1 (any other deck, pier, platform).
+	for sp in h["spans"]:
+		if s >= sp["s0"] and s <= sp["s1"]:
+			return sp["edge"] if edge_list[sp["edge"]]["overpass"] else -1
 	return -1
 
 
@@ -1045,13 +1074,14 @@ func _detect_contacts_inner() -> void:
 			var key := Vector2i(floori(p.x / cell), floori(p.z / cell))
 			if not grid.has(key):
 				grid[key] = []
-			grid[key].append([h, k, p, smp[1]])
+			grid[key].append([h, k, p, smp[1], overpass_at(h, s, edges)])
 	for h in hordes:
 		if h["state"] == "absorb" or h["state"] == "ride" or h["units"] <= 0.0:
 			continue
 		var smp := sample(h, h["s"])
 		var p: Vector3 = smp[0]
 		var fwd: Vector3 = smp[1]
+		var over := overpass_at(h, h["s"], edges)   # an overpass line only meets lines on that same deck
 		var key := Vector2i(floori(p.x / cell), floori(p.z / cell))
 		var best_friend := {}
 		var best_d := INF
@@ -1060,7 +1090,7 @@ func _detect_contacts_inner() -> void:
 				var list: Array = grid.get(key + Vector2i(dx, dz), [])
 				for y in list:
 					var other: Dictionary = y[0]
-					if other["id"] == h["id"]:
+					if other["id"] == h["id"] or y[4] != over:
 						continue
 					var d: float = p.distance_to(y[2])
 					if d > Rules.CONTACT_R:

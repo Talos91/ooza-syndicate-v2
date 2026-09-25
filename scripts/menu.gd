@@ -22,7 +22,7 @@ var map_path := "res://maps/004-two-piers.json"
 var ai_level := "Standard"
 var mode := "1v1"
 var colour := "A"
-const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5"}
+const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5"}
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
@@ -35,7 +35,7 @@ func setup(m: Node3D) -> void:
 	map_path = m.map_path
 	mode = m.mode
 	colour = m.color_choice
-	for mp in m.STARTER_MAPS:
+	for mp in MapPool.all():
 		maps.append({"path": mp, "data": MapBuilder.load_map(mp)})
 	show_main()
 
@@ -363,7 +363,7 @@ func show_maps() -> void:
 	var sel := _selected_map()
 	label_at(str(sel.get("name", "")).replace("*", "").to_upper(), P(1052, 631), 31)
 	label_at("%s    /    %d NODES%s" % [" · ".join(_modes_of(sel).map(func(x): return MODE_NAMES.get(x, x))), sel["nodes"].size(), _relay_kinds(sel).to_upper()], P(1053, 683), 23, color())
-	label_at("%s\nLast Stand at %d:%02d - methods: %s" % [main.PROVES.get(sel.get("code", ""), ""),
+	label_at("%s\nLast Stand at %d:%02d - methods: %s" % [main.PROVES.get(sel.get("code", ""), _map_blurb(sel)),
 			int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(sel.get("lastStand", {}).get("methods", []))],
 			P(1053, 736), 22, Color("abc1cd"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_factions)
@@ -380,10 +380,17 @@ func _relay_kinds(m: Dictionary) -> String:
 
 func _modes_of(m: Dictionary) -> Array:
 	var out := []
-	for k in ["1v1", "2v2", "FFA3", "FFA4", "FFA5"]:
+	for k in ["1v1", "2v2", "3v3", "FFA3", "FFA4", "FFA5"]:
 		if m.get("seats", {}).has(k):
 			out.append(k)
 	return out if not out.is_empty() else ["1v1"]
+
+
+func _map_blurb(m: Dictionary) -> String:
+	## Roster maps have no "proves" line: tier, layout family and overpass count instead.
+	var overs: int = m["edges"].filter(func(e): return e.get("overpass", false)).size()
+	return "%s map, %s layout%s" % [str(m.get("tier", "")).capitalize(), m.get("family", ""),
+			", %d overpass%s" % [overs, "es" if overs > 1 else ""] if overs > 0 else ""]
 
 
 func _selected_map() -> Dictionary:

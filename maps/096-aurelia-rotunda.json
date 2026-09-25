@@ -1,0 +1,322 @@
+{
+ "centreHasNoVat": true,
+ "code": "096",
+ "edges": [
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 1.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 2.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 6.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 2.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 3.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 7.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 3.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 4.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 8.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 4.0
+  },
+  {
+   "from": 4.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 5.0
+  },
+  {
+   "from": 4.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 9.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 5.0
+  },
+  {
+   "from": 5.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 1.0
+  },
+  {
+   "from": 5.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 10.0
+  }
+ ],
+ "family": "ring",
+ "id": 96.0,
+ "lastStand": {
+  "inwardFinal": 0.0,
+  "methods": [
+   "inward",
+   "chaos"
+  ],
+  "outwardFinal": null
+ },
+ "modes": [
+  "FFA5"
+ ],
+ "name": "Aurelia Rotunda",
+ "nodes": [
+  {
+   "buildable": [
+    "cannon",
+    "forge"
+   ],
+   "category": "relay",
+   "center": true,
+   "id": 0.0,
+   "pillar": false,
+   "relay": "remote",
+   "x": 50.0,
+   "y": 50.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 1.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 36.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 2.0,
+   "pillar": false,
+   "relay": null,
+   "x": 63.3,
+   "y": 45.7
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 3.0,
+   "pillar": false,
+   "relay": null,
+   "x": 58.2,
+   "y": 61.3
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 4.0,
+   "pillar": false,
+   "relay": null,
+   "x": 41.8,
+   "y": 61.3
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 5.0,
+   "pillar": false,
+   "relay": null,
+   "x": 36.7,
+   "y": 45.7
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 6.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 8.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 7.0,
+   "pillar": false,
+   "relay": null,
+   "x": 89.9,
+   "y": 37.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 8.0,
+   "pillar": false,
+   "relay": null,
+   "x": 74.7,
+   "y": 84.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 9.0,
+   "pillar": false,
+   "relay": null,
+   "x": 25.3,
+   "y": 84.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 10.0,
+   "pillar": false,
+   "relay": null,
+   "x": 10.1,
+   "y": 37.0
+  }
+ ],
+ "note": "5-seat hub; remote centre (2-way rotation would be unfair at five seats)",
+ "seats": {
+  "FFA5": [
+   {
+    "node": 6.0,
+    "seat": "A",
+    "team": null
+   },
+   {
+    "node": 7.0,
+    "seat": "B",
+    "team": null
+   },
+   {
+    "node": 8.0,
+    "seat": "C",
+    "team": null
+   },
+   {
+    "node": 9.0,
+    "seat": "D",
+    "team": null
+   },
+   {
+    "node": 10.0,
+    "seat": "E",
+    "team": null
+   }
+  ]
+ },
+ "symmetryCheck": true,
+ "tier": "special"
+}

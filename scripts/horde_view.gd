@@ -44,7 +44,8 @@ var textures := {}    # faction -> creature Texture2D
 var pools := {}       # horde id -> {"patches": [MeshInstance3D], "label": Label3D, "vis": float, "phase": float}
 var contacts := {}    # contact key -> {"root", "lobes", "seam", "splash", "seats"}
 var rivers := {}      # node id -> {"patches": [MeshInstance3D], "vis": float}
-var corridors := {}   # edge index -> MeshInstance3D: goo covering a deck between two owned nodes
+var corridors := {}   # edge index -> [MeshInstance3D] per deck segment: goo covering a deck between two owned nodes
+var corridor_state := {}   # edge index -> {fill, anchor, owner}: corridors pour in and drain out
 var _corridor_mesh: BoxMesh
 var _last_time := -1.0
 var _lobe_mesh: SphereMesh
@@ -302,49 +303,70 @@ func _sync_contacts(sim: Sim, by_id: Dictionary) -> Dictionary:
 func _draw_corridors(sim: Sim) -> void:
 	## GOO CORRIDORS (Daniele, Alpha 14): always on between any two adjacent nodes one player owns
 	## (Sim.bonded); enemies on them are slower and lose the tug-of-war push. Capture either end and
-	## the corridor DRAINS - the goo sinks and pulls back toward the end still held over ~1 s -
-	## so breaking a link is a clear goal with a visible payoff. New corridors pour in the same way.
+	## the corridor DRAINS - the goo pulls back toward the end still held over ~1 s - so breaking a
+	## link is a clear goal with a visible payoff. New corridors pour in the same way. The goo follows
+	## the deck rim to rim, up the ramps and along the raised span of an overpass (maps-overpass).
 	var dt := get_process_delta_time()
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		var a: Dictionary = sim.nodes[e["a"]]
 		var b: Dictionary = sim.nodes[e["b"]]
 		var held: bool = sim.bonded(i) and not classic
-		if not corridors.has(i):
+		var st: Dictionary = corridor_state.get(i, {})
+		if st.is_empty():
 			if not held:
 				continue
-			var mi := MeshInstance3D.new()
-			mi.mesh = _corridor_mesh
-			add_child(mi)
-			corridors[i] = mi
-			mi.set_meta("fill", 0.0)
-			mi.set_meta("anchor", 0.5)
-		var mi: MeshInstance3D = corridors[i]
-		var fill: float = mi.get_meta("fill", 0.0)
+			st = {"fill": 0.0, "anchor": 0.5, "owner": a["owner"]}
+			corridor_state[i] = st
 		if held:
-			mi.set_meta("owner", a["owner"])
-			mi.set_meta("anchor", 0.5)
-		elif fill > 0.0 and mi.get_meta("anchor", 0.5) == 0.5:
-			# drain toward whichever end is still held by the corridor's owner (or the middle)
-			var o: String = mi.get_meta("owner", "")
-			mi.set_meta("anchor", 0.0 if a["owner"] == o else (1.0 if b["owner"] == o else 0.49))
-		fill = move_toward(fill, 1.0 if held else 0.0, dt * (1.5 if held else 1.0))
-		mi.set_meta("fill", fill)
-		mi.visible = fill > 0.01
-		if not mi.visible:
-			continue
-		mi.material_override = Mats.goo(mi.get_meta("owner", a["owner"]))
+			st["owner"] = a["owner"]
+			st["anchor"] = 0.5
+		elif st["fill"] > 0.0 and st["anchor"] == 0.5:
+			# drain toward whichever end the corridor's owner still holds (or the middle)
+			var o: String = st["owner"]
+			st["anchor"] = 0.0 if a["owner"] == o else (1.0 if b["owner"] == o else 0.49)
+		st["fill"] = move_toward(st["fill"], 1.0 if held else 0.0, dt * (1.5 if held else 1.0))
 		var pa: Vector3 = a["pos"]
 		var pb: Vector3 = b["pos"]
 		var dir := (pb - pa).normalized()
-		var full_len: float = maxf(pa.distance_to(pb) - 2.0 * Rules.R, 1.0)   # rim to rim
-		var anchor: float = mi.get_meta("anchor", 0.5)
-		var len := full_len * fill
-		var start := pa + dir * Rules.R
-		var centre: Vector3 = start + dir * (anchor * full_len + (0.5 - anchor) * len)
-		mi.position = centre + Vector3(0, 0.06 - 0.12 * (1.0 - fill) * (0.0 if held else 1.0), 0)
-		mi.rotation = Vector3(0, Rules.heading(dir), 0)
-		mi.scale = Vector3(len, 1.0, Rules.W * 0.92 * lerpf(0.6, 1.0, fill))
+		var line: Array = [pa + dir * Rules.R] + sim.deck_points(i, e["a"]) + [pb - dir * Rules.R]
+		if not corridors.has(i):
+			var made := []
+			for k in range(line.size() - 1):
+				var mi := MeshInstance3D.new()
+				mi.mesh = _corridor_mesh
+				add_child(mi)
+				made.append(mi)
+			corridors[i] = made
+		var parts: Array = corridors[i]
+		var cum := [0.0]
+		for k in range(1, line.size()):
+			cum.append(cum[k - 1] + (line[k] as Vector3).distance_to(line[k - 1]))
+		var total: float = cum[-1]
+		var fill: float = st["fill"]
+		var cover := total * fill
+		var c0: float = st["anchor"] * (total - cover)       # the covered stretch along the deck
+		var c1: float = c0 + cover
+		var sink := 0.12 * (1.0 - fill) * (0.0 if held else 1.0)
+		for k in range(parts.size()):
+			var mi: MeshInstance3D = parts[k]
+			var s0: float = maxf(cum[k], c0)
+			var s1: float = minf(cum[k + 1], c1)
+			if fill <= 0.01 or s1 - s0 <= 0.01:
+				mi.visible = false
+				continue
+			var p0: Vector3 = line[k]
+			var p1: Vector3 = line[k + 1]
+			var seg_len: float = maxf(cum[k + 1] - cum[k], 0.001)
+			var q0: Vector3 = p0.lerp(p1, (s0 - cum[k]) / seg_len)
+			var q1: Vector3 = p0.lerp(p1, (s1 - cum[k]) / seg_len)
+			var seg := q1 - q0
+			mi.visible = true
+			mi.material_override = Mats.goo(st["owner"])
+			mi.position = (q0 + q1) / 2.0 + Vector3(0, 0.06 - sink, 0)
+			var x := seg.normalized()
+			var z := x.cross(Vector3.UP).normalized()
+			mi.basis = Basis(x * maxf(seg.length(), 0.01), z.cross(x), z * Rules.W * 0.92 * lerpf(0.6, 1.0, fill))
 
 
 var puddles := {}     # node id -> MeshInstance3D: the pool at the tank bottoms while an order drains out

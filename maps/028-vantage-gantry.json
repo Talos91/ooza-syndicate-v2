@@ -1,0 +1,251 @@
+{
+ "centreHasNoVat": false,
+ "code": "028",
+ "edges": [
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 1.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 4.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 2.0
+  },
+  {
+   "from": 4.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 5.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 3.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": "s1",
+   "tier": "S",
+   "to": 6.0
+  },
+  {
+   "from": 6.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 4.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 5.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": "s2",
+   "tier": "M",
+   "to": 3.0
+  }
+ ],
+ "family": "ladder",
+ "id": 28.0,
+ "lastStand": {
+  "inwardFinal": 6.0,
+  "methods": [
+   "inward",
+   "chaos"
+  ],
+  "outwardFinal": null
+ },
+ "modes": [
+  "2v2"
+ ],
+ "name": "Vantage Gantry",
+ "nodes": [
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 0.0,
+   "pillar": false,
+   "relay": null,
+   "x": 32.0,
+   "y": 29.0
+  },
+  {
+   "buildable": [
+    "cannon",
+    "forge"
+   ],
+   "category": "relay",
+   "center": false,
+   "id": 1.0,
+   "pillar": false,
+   "relay": "switch",
+   "x": 50.0,
+   "y": 43.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 2.0,
+   "pillar": false,
+   "relay": null,
+   "x": 68.0,
+   "y": 29.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 3.0,
+   "pillar": false,
+   "relay": null,
+   "x": 32.0,
+   "y": 71.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 4.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 57.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 5.0,
+   "pillar": false,
+   "relay": null,
+   "x": 68.0,
+   "y": 71.0
+  },
+  {
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ],
+   "category": "final",
+   "center": true,
+   "id": 6.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 50.0
+  }
+ ],
+ "note": null,
+ "seats": {
+  "1v1": [
+   {
+    "node": 0.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 2.0,
+    "seat": "B",
+    "team": 1.0
+   }
+  ],
+  "2v2": [
+   {
+    "node": 0.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 3.0,
+    "seat": "B",
+    "team": 0.0
+   },
+   {
+    "node": 2.0,
+    "seat": "C",
+    "team": 1.0
+   },
+   {
+    "node": 5.0,
+    "seat": "D",
+    "team": 1.0
+   }
+  ],
+  "FFA4": [
+   {
+    "node": 0.0,
+    "seat": "A",
+    "team": null
+   },
+   {
+    "node": 2.0,
+    "seat": "B",
+    "team": null
+   },
+   {
+    "node": 5.0,
+    "seat": "C",
+    "team": null
+   },
+   {
+    "node": 3.0,
+    "seat": "D",
+    "team": null
+   }
+  ]
+ },
+ "symmetryCheck": true,
+ "tier": "simple"
+}

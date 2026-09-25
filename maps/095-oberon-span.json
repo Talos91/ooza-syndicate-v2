@@ -1,0 +1,473 @@
+{
+ "centreHasNoVat": true,
+ "code": "095",
+ "edges": [
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 5.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 6.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 7.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 8.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 9.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 10.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 11.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 12.0
+  },
+  {
+   "from": 5.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 6.0
+  },
+  {
+   "from": 9.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 10.0
+  },
+  {
+   "from": 6.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 7.0
+  },
+  {
+   "from": 10.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 11.0
+  },
+  {
+   "from": 7.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 8.0
+  },
+  {
+   "from": 11.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 12.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": "r1",
+   "tier": "M",
+   "to": 0.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": "r1",
+   "tier": "M",
+   "to": 0.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": "r2",
+   "tier": "M",
+   "to": 0.0
+  },
+  {
+   "from": 4.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": "r2",
+   "tier": "M",
+   "to": 0.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 3.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 4.0
+  },
+  {
+   "from": 1.0,
+   "overpass": true,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 4.0
+  },
+  {
+   "from": 2.0,
+   "overpass": true,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 3.0
+  }
+ ],
+ "family": "islands",
+ "id": 95.0,
+ "lastStand": {
+  "inwardFinal": 0.0,
+  "methods": [
+   "inward",
+   "outward",
+   "chaos"
+  ],
+  "outwardFinal": 3.0
+ },
+ "modes": [
+  "3v3"
+ ],
+ "name": "Oberon Span",
+ "nodes": [
+  {
+   "buildable": [
+    "cannon",
+    "forge"
+   ],
+   "category": "relay",
+   "center": true,
+   "id": 0.0,
+   "pillar": false,
+   "relay": "rotation",
+   "x": 50.0,
+   "y": 50.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 1.0,
+   "pillar": false,
+   "relay": null,
+   "x": 26.0,
+   "y": 50.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 2.0,
+   "pillar": false,
+   "relay": null,
+   "x": 74.0,
+   "y": 50.0
+  },
+  {
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ],
+   "category": "final",
+   "center": false,
+   "id": 3.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 18.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 4.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 82.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 5.0,
+   "pillar": false,
+   "relay": null,
+   "x": 12.1,
+   "y": 51.8
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 6.0,
+   "pillar": false,
+   "relay": null,
+   "x": 19.5,
+   "y": 62.4
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 7.0,
+   "pillar": false,
+   "relay": null,
+   "x": 32.5,
+   "y": 62.4
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 8.0,
+   "pillar": false,
+   "relay": null,
+   "x": 39.9,
+   "y": 51.8
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 9.0,
+   "pillar": false,
+   "relay": null,
+   "x": 87.9,
+   "y": 51.8
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 10.0,
+   "pillar": false,
+   "relay": null,
+   "x": 80.5,
+   "y": 62.4
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 11.0,
+   "pillar": false,
+   "relay": null,
+   "x": 67.5,
+   "y": 62.4
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 12.0,
+   "pillar": false,
+   "relay": null,
+   "x": 60.1,
+   "y": 51.8
+  }
+ ],
+ "note": "3v3 rotary centre; overpass diagonals",
+ "seats": {
+  "1v1": [
+   {
+    "node": 6.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 10.0,
+    "seat": "B",
+    "team": 1.0
+   }
+  ],
+  "2v2": [
+   {
+    "node": 5.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 8.0,
+    "seat": "B",
+    "team": 0.0
+   },
+   {
+    "node": 9.0,
+    "seat": "C",
+    "team": 1.0
+   },
+   {
+    "node": 12.0,
+    "seat": "D",
+    "team": 1.0
+   }
+  ],
+  "3v3": [
+   {
+    "node": 5.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 6.0,
+    "seat": "B",
+    "team": 0.0
+   },
+   {
+    "node": 8.0,
+    "seat": "C",
+    "team": 0.0
+   },
+   {
+    "node": 9.0,
+    "seat": "D",
+    "team": 1.0
+   },
+   {
+    "node": 10.0,
+    "seat": "E",
+    "team": 1.0
+   },
+   {
+    "node": 12.0,
+    "seat": "F",
+    "team": 1.0
+   }
+  ],
+  "FFA4": [
+   {
+    "node": 5.0,
+    "seat": "A",
+    "team": null
+   },
+   {
+    "node": 8.0,
+    "seat": "B",
+    "team": null
+   },
+   {
+    "node": 9.0,
+    "seat": "C",
+    "team": null
+   },
+   {
+    "node": 12.0,
+    "seat": "D",
+    "team": null
+   }
+  ]
+ },
+ "symmetryCheck": true,
+ "tier": "special"
+}

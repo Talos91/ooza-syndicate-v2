@@ -1,0 +1,138 @@
+{
+ "id": 5.0,
+ "code": "005",
+ "name": "Carousel",
+ "tier": "simple",
+ "family": "ring",
+ "modes": [
+  "1v1"
+ ],
+ "nodes": [
+  {
+   "id": 0.0,
+   "x": 50.0,
+   "y": 50.0,
+   "center": true,
+   "relay": null,
+   "pillar": false,
+   "category": "final",
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 1.0,
+   "x": 50.0,
+   "y": 36.0,
+   "center": false,
+   "relay": "retract",
+   "pillar": false,
+   "category": "relay",
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 2.0,
+   "x": 50.0,
+   "y": 64.0,
+   "center": false,
+   "relay": "retract",
+   "pillar": false,
+   "category": "relay",
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 3.0,
+   "x": 50.0,
+   "y": 8.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4.0,
+   "x": 50.0,
+   "y": 92.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1.0,
+   "to": 3.0,
+   "tier": "M",
+   "seconds": 4.0,
+   "overpass": false,
+   "state": null,
+   "retracts": true
+  },
+  {
+   "from": 0.0,
+   "to": 2.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2.0,
+   "to": 4.0,
+   "tier": "M",
+   "seconds": 4.0,
+   "overpass": false,
+   "state": null,
+   "retracts": true
+  }
+ ],
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 3.0,
+    "team": 0.0
+   },
+   {
+    "seat": "B",
+    "node": 4.0,
+    "team": 1.0
+   }
+  ]
+ },
+ "lastStand": {
+  "methods": [
+   "inward"
+  ],
+  "inwardFinal": 0.0,
+  "outwardFinal": null
+ },
+ "note": null,
+ "symmetryCheck": true,
+ "centreHasNoVat": false
+}

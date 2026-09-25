@@ -1,0 +1,668 @@
+{
+ "centreHasNoVat": true,
+ "code": "092",
+ "edges": [
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 1.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 5.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 2.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 6.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 3.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 7.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 4.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 8.0
+  },
+  {
+   "from": 4.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 9.0
+  },
+  {
+   "from": 5.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 6.0
+  },
+  {
+   "from": 5.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 10.0
+  },
+  {
+   "from": 6.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 7.0
+  },
+  {
+   "from": 6.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 11.0
+  },
+  {
+   "from": 7.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 8.0
+  },
+  {
+   "from": 7.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 12.0
+  },
+  {
+   "from": 8.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 9.0
+  },
+  {
+   "from": 8.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 13.0
+  },
+  {
+   "from": 9.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 14.0
+  },
+  {
+   "from": 10.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 11.0
+  },
+  {
+   "from": 10.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 15.0
+  },
+  {
+   "from": 11.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 12.0
+  },
+  {
+   "from": 11.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 16.0
+  },
+  {
+   "from": 12.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 13.0
+  },
+  {
+   "from": 12.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 17.0
+  },
+  {
+   "from": 13.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 14.0
+  },
+  {
+   "from": 13.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 18.0
+  },
+  {
+   "from": 14.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 19.0
+  },
+  {
+   "from": 15.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 16.0
+  },
+  {
+   "from": 16.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 17.0
+  },
+  {
+   "from": 17.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 18.0
+  },
+  {
+   "from": 18.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 19.0
+  },
+  {
+   "from": 7.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 20.0
+  },
+  {
+   "from": 12.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 20.0
+  },
+  {
+   "from": 6.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 20.0
+  },
+  {
+   "from": 8.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 20.0
+  },
+  {
+   "from": 0.0,
+   "overpass": true,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": "m1",
+   "tier": "L",
+   "to": 19.0
+  },
+  {
+   "from": 4.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": "m2",
+   "tier": "L",
+   "to": 15.0
+  }
+ ],
+ "family": "yard",
+ "id": 92.0,
+ "lastStand": {
+  "inwardFinal": 20.0,
+  "methods": [
+   "big drop → inward"
+  ],
+  "outwardFinal": null
+ },
+ "modes": [
+  "2v2"
+ ],
+ "name": "Scrapyard",
+ "nodes": [
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 0.0,
+   "pillar": false,
+   "relay": null,
+   "x": 8.0,
+   "y": 8.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 1.0,
+   "pillar": false,
+   "relay": null,
+   "x": 29.0,
+   "y": 8.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 2.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 8.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 3.0,
+   "pillar": false,
+   "relay": null,
+   "x": 71.0,
+   "y": 8.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 4.0,
+   "pillar": false,
+   "relay": null,
+   "x": 92.0,
+   "y": 8.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 5.0,
+   "pillar": false,
+   "relay": null,
+   "x": 8.0,
+   "y": 36.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 6.0,
+   "pillar": true,
+   "relay": null,
+   "x": 29.0,
+   "y": 36.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 7.0,
+   "pillar": true,
+   "relay": null,
+   "x": 50.0,
+   "y": 36.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 8.0,
+   "pillar": true,
+   "relay": null,
+   "x": 71.0,
+   "y": 36.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 9.0,
+   "pillar": false,
+   "relay": null,
+   "x": 92.0,
+   "y": 36.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 10.0,
+   "pillar": false,
+   "relay": null,
+   "x": 8.0,
+   "y": 64.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 11.0,
+   "pillar": false,
+   "relay": null,
+   "x": 29.0,
+   "y": 64.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 12.0,
+   "pillar": true,
+   "relay": null,
+   "x": 50.0,
+   "y": 64.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 13.0,
+   "pillar": false,
+   "relay": null,
+   "x": 71.0,
+   "y": 64.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 14.0,
+   "pillar": false,
+   "relay": null,
+   "x": 92.0,
+   "y": 64.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 15.0,
+   "pillar": false,
+   "relay": null,
+   "x": 8.0,
+   "y": 92.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 16.0,
+   "pillar": false,
+   "relay": null,
+   "x": 29.0,
+   "y": 92.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 17.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 92.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 18.0,
+   "pillar": false,
+   "relay": null,
+   "x": 71.0,
+   "y": 92.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 19.0,
+   "pillar": false,
+   "relay": null,
+   "x": 92.0,
+   "y": 92.0
+  },
+  {
+   "buildable": [
+    "cannon",
+    "forge"
+   ],
+   "category": "relay",
+   "center": true,
+   "id": 20.0,
+   "pillar": false,
+   "relay": "remote",
+   "x": 50.0,
+   "y": 50.0
+  }
+ ],
+ "note": "Big Drop with pillars; remote hub swaps the diagonals",
+ "seats": {
+  "1v1": [
+   {
+    "node": 0.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 19.0,
+    "seat": "B",
+    "team": 1.0
+   }
+  ],
+  "2v2": [
+   {
+    "node": 0.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 15.0,
+    "seat": "B",
+    "team": 0.0
+   },
+   {
+    "node": 4.0,
+    "seat": "C",
+    "team": 1.0
+   },
+   {
+    "node": 19.0,
+    "seat": "D",
+    "team": 1.0
+   }
+  ],
+  "FFA4": [
+   {
+    "node": 0.0,
+    "seat": "A",
+    "team": null
+   },
+   {
+    "node": 4.0,
+    "seat": "B",
+    "team": null
+   },
+   {
+    "node": 19.0,
+    "seat": "C",
+    "team": null
+   },
+   {
+    "node": 15.0,
+    "seat": "D",
+    "team": null
+   }
+  ]
+ },
+ "symmetryCheck": true,
+ "tier": "special"
+}

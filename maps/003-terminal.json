@@ -1,0 +1,213 @@
+{
+ "centreHasNoVat": false,
+ "code": "003",
+ "edges": [
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 1.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 2.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": true,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 4.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 2.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 3.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": true,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 5.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 3.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 1.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": true,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 6.0
+  }
+ ],
+ "family": "ring",
+ "id": 3.0,
+ "lastStand": {
+  "inwardFinal": 0.0,
+  "methods": [
+   "inward"
+  ],
+  "outwardFinal": null
+ },
+ "modes": [
+  "FFA3"
+ ],
+ "name": "Terminal",
+ "nodes": [
+  {
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ],
+   "category": "final",
+   "center": true,
+   "id": 0.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 50.0
+  },
+  {
+   "buildable": [
+    "cannon",
+    "forge"
+   ],
+   "category": "relay",
+   "center": false,
+   "id": 1.0,
+   "pillar": false,
+   "relay": "retract",
+   "x": 50.0,
+   "y": 36.0
+  },
+  {
+   "buildable": [
+    "cannon",
+    "forge"
+   ],
+   "category": "relay",
+   "center": false,
+   "id": 2.0,
+   "pillar": false,
+   "relay": "retract",
+   "x": 62.1,
+   "y": 57.0
+  },
+  {
+   "buildable": [
+    "cannon",
+    "forge"
+   ],
+   "category": "relay",
+   "center": false,
+   "id": 3.0,
+   "pillar": false,
+   "relay": "retract",
+   "x": 37.9,
+   "y": 57.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 4.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 8.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 5.0,
+   "pillar": false,
+   "relay": null,
+   "x": 86.4,
+   "y": 71.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 6.0,
+   "pillar": false,
+   "relay": null,
+   "x": 13.6,
+   "y": 71.0
+  }
+ ],
+ "note": null,
+ "seats": {
+  "FFA3": [
+   {
+    "node": 4.0,
+    "seat": "A",
+    "team": null
+   },
+   {
+    "node": 5.0,
+    "seat": "B",
+    "team": null
+   },
+   {
+    "node": 6.0,
+    "seat": "C",
+    "team": null
+   }
+  ]
+ },
+ "symmetryCheck": true,
+ "tier": "simple"
+}

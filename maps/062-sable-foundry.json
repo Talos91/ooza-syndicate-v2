@@ -1,0 +1,456 @@
+{
+ "centreHasNoVat": true,
+ "code": "062",
+ "edges": [
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": "r1",
+   "tier": "S",
+   "to": 1.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 2.0
+  },
+  {
+   "from": 1.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 7.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": "r2",
+   "tier": "S",
+   "to": 2.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 3.0
+  },
+  {
+   "from": 2.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 8.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": "r3",
+   "tier": "S",
+   "to": 3.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 4.0
+  },
+  {
+   "from": 3.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 9.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": "r1",
+   "tier": "S",
+   "to": 4.0
+  },
+  {
+   "from": 4.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 5.0
+  },
+  {
+   "from": 4.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 10.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": "r2",
+   "tier": "S",
+   "to": 5.0
+  },
+  {
+   "from": 5.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 6.0
+  },
+  {
+   "from": 5.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 11.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": "r3",
+   "tier": "S",
+   "to": 6.0
+  },
+  {
+   "from": 6.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 1.0
+  },
+  {
+   "from": 6.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 4.0,
+   "state": null,
+   "tier": "M",
+   "to": 12.0
+  },
+  {
+   "from": 7.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 8.0
+  },
+  {
+   "from": 8.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 9.0
+  },
+  {
+   "from": 9.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 10.0
+  },
+  {
+   "from": 10.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 11.0
+  },
+  {
+   "from": 11.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 12.0
+  },
+  {
+   "from": 12.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 7.0
+  },
+  {
+   "from": 7.0,
+   "overpass": true,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 9.0
+  },
+  {
+   "from": 9.0,
+   "overpass": true,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 11.0
+  },
+  {
+   "from": 11.0,
+   "overpass": true,
+   "retracts": false,
+   "seconds": 6.0,
+   "state": null,
+   "tier": "L",
+   "to": 7.0
+  }
+ ],
+ "family": "ring",
+ "id": 62.0,
+ "lastStand": {
+  "inwardFinal": 0.0,
+  "methods": [
+   "inward",
+   "chaos"
+  ],
+  "outwardFinal": null
+ },
+ "modes": [
+  "FFA3"
+ ],
+ "name": "Sable Foundry",
+ "nodes": [
+  {
+   "buildable": [
+    "cannon",
+    "forge"
+   ],
+   "category": "relay",
+   "center": true,
+   "id": 0.0,
+   "pillar": false,
+   "relay": "rotation",
+   "x": 50.0,
+   "y": 50.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 1.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 36.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 2.0,
+   "pillar": false,
+   "relay": null,
+   "x": 62.1,
+   "y": 43.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 3.0,
+   "pillar": false,
+   "relay": null,
+   "x": 62.1,
+   "y": 57.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 4.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 64.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 5.0,
+   "pillar": false,
+   "relay": null,
+   "x": 37.9,
+   "y": 57.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 6.0,
+   "pillar": false,
+   "relay": null,
+   "x": 37.9,
+   "y": 43.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 7.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 8.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 8.0,
+   "pillar": false,
+   "relay": null,
+   "x": 86.4,
+   "y": 29.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 9.0,
+   "pillar": false,
+   "relay": null,
+   "x": 86.4,
+   "y": 71.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 10.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 92.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 11.0,
+   "pillar": false,
+   "relay": null,
+   "x": 13.6,
+   "y": 71.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 12.0,
+   "pillar": false,
+   "relay": null,
+   "x": 13.6,
+   "y": 29.0
+  }
+ ],
+ "note": null,
+ "seats": {
+  "1v1": [
+   {
+    "node": 7.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 10.0,
+    "seat": "B",
+    "team": 1.0
+   }
+  ],
+  "FFA3": [
+   {
+    "node": 7.0,
+    "seat": "A",
+    "team": null
+   },
+   {
+    "node": 9.0,
+    "seat": "B",
+    "team": null
+   },
+   {
+    "node": 11.0,
+    "seat": "C",
+    "team": null
+   }
+  ]
+ },
+ "symmetryCheck": true,
+ "tier": "complex"
+}
