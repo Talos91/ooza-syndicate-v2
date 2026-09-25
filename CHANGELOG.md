@@ -1,5 +1,31 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.16.4 - 2026-09-25 (visual pass, while the new maps are modelled)
+
+Daniele: "a background (what we had in Alpha 1 is a good start), better notifications in the same
+style as the rest of the UI, better lighting, better textures; the vats were supposed to fill their
+liquids based on how many units are inside, and the liquids in Alpha 11 contained small creatures
+with a small animation."
+- **Sky**: the cloud city with its planet (`assets/art/city-background.png`, Alpha 1's palette without
+  its baked-in arena) behind every match, drifting slowly, darker at the edges and behind the board so
+  the map still reads first (`shaders/backdrop.gdshader`, `scripts/scenery.gd`).
+- **Lighting**: violet ambient from that sky, a warm key light, a cool violet fill and a back rim
+  light that lifts the platform edges off the background.
+- **Vat liquid is the unit gauge**: every tank's liquid fills to garrison / cap, easing up and down;
+  a wobbling, glowing surface, sparse rising bubbles, and it churns while the node builds or is under
+  attack. Translucent, in the owner's colour (grey when neutral) (`shaders/vat_liquid.gdshader`).
+- **Residents**: small creatures of the owner's faction float in each tank (Alpha 11's tank
+  residents) - one or two per tank as it fills (one on phones / low detail), bobbing, circling and
+  breathing under the surface; they change on capture.
+- **Surface detail**: the kit's flat colours get world-space detail - soft cell seams and wear on
+  plates, a brushed grain on dark metal and steel (phones skip the normal maps).
+- **Notifications** in the UI's own frame: a panel with a colour bar (info cyan, good news in your
+  colour, builds gold, warnings red), up to three stacked under the top bar, popping in and fading
+  out; a repeated line refreshes instead of stacking. The Last Stand banner is framed the same way.
+
+Tested: rules / net / map-pool suites pass; desktop renders (Strait, Two Piers close-ups, Brawl) and
+the web build in the browser. Not measured: frame rate on a real phone with the transparent liquids.
+
 ## 0.16.3 - 2026-09-25
 
 - The self-update also catches a new build that finished installing before the page started listening

@@ -1,6 +1,6 @@
 # Next session - start here
 
-State at the end of the 2026-09-25 sessions: **v0.16.3 "Alpha 16"** (online rooms, Alpha 11 Brawl feel, player colours, self-updating build), source on `main`,
+State at the end of the 2026-09-25 sessions: **v0.16.4 "Alpha 16"** (online rooms, Alpha 11 Brawl feel, player colours, self-updating build, visual pass: sky, lighting, living vats, notifications), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: this file,
 `README.md`, the top of `CHANGELOG.md` (0.12.0 to 0.16.0), `PLAYTEST-NOTES.md` notes 26-71, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.

@@ -148,3 +148,69 @@ static func ghost(c: Color) -> StandardMaterial3D:
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		_cache[key] = m
 	return _cache[key]
+
+
+# ------------------------------------------------------------------ Alpha 16 surface detail
+const DETAILED := {"OS_Plate": "plate", "OS_Dark": "grain", "OS_Steel": "grain", "OS_Recess": "grain"}
+
+
+static func detail(orig: Material) -> Material:
+	## The kit's flat colours get world-space surface detail (Alpha 16 visual pass: "better textures"):
+	## deck and platform plates get cell seams and wear, dark metal and steel a brushed grain. Same
+	## base colours, metal and roughness; the texture only varies them. Phones skip the normal map.
+	var base := orig as StandardMaterial3D
+	if base == null or not DETAILED.has(base.resource_name):
+		return orig
+	var key := "detail_" + base.resource_name
+	if _cache.has(key):
+		return _cache[key]
+	var kind: String = DETAILED[base.resource_name]
+	var m := base.duplicate() as StandardMaterial3D
+	var noise := FastNoiseLite.new()
+	noise.seed = 7
+	if kind == "plate":
+		noise.noise_type = FastNoiseLite.TYPE_CELLULAR
+		noise.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
+		noise.frequency = 0.012
+	else:
+		noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+		noise.frequency = 0.02
+		noise.fractal_octaves = 4
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.84, 0.84, 0.87) if kind == "plate" else Color(0.8, 0.8, 0.83))
+	ramp.set_color(1, Color(1.0, 1.0, 1.0))
+	var tex := NoiseTexture2D.new()
+	tex.width = 256
+	tex.height = 256
+	tex.seamless = true
+	tex.noise = noise
+	tex.color_ramp = ramp
+	m.albedo_texture = tex
+	m.roughness_texture = tex
+	m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
+	var phone := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
+	if not phone and not Rules.low_detail:
+		var ntex := NoiseTexture2D.new()
+		ntex.width = 256
+		ntex.height = 256
+		ntex.seamless = true
+		ntex.as_normal_map = true
+		ntex.bump_strength = 2.5 if kind == "plate" else 1.5
+		ntex.noise = noise
+		m.normal_enabled = true
+		m.normal_texture = ntex
+		m.normal_scale = 0.35 if kind == "plate" else 0.25
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = true
+	m.uv1_scale = Vector3.ONE * (0.2 if kind == "plate" else 0.45)
+	_cache[key] = m
+	return m
+
+
+static func apply_detail(node: Node) -> void:
+	for mi in node.find_children("*", "MeshInstance3D", true, false):
+		var mesh := (mi as MeshInstance3D).mesh
+		for s in range(mesh.get_surface_count()):
+			var src := mesh.surface_get_material(s)
+			if src and DETAILED.has(src.resource_name) and (mi as MeshInstance3D).get_surface_override_material(s) == null:
+				(mi as MeshInstance3D).set_surface_override_material(s, detail(src))

@@ -43,6 +43,7 @@ var ais: Array = []
 var vis: Dictionary
 var hordes: HordeView
 var fx: Fx
+var scenery: Scenery
 var hud: Hud
 var cam: Camera3D
 var cam_target := Vector3.ZERO
@@ -203,6 +204,9 @@ func _start_map(path: String) -> void:
 		push_warning("edges stretched to fit (not honest): %s" % [vis["stretched"]])
 	hordes = HordeView.new()
 	add_child(hordes)
+	scenery = Scenery.new()
+	add_child(scenery)
+	scenery.setup(self, sim, vis)
 	fx = Fx.new()
 	add_child(fx)
 	fx.setup(self, sim, vis, hordes)
@@ -371,12 +375,15 @@ func _apply_safe_area() -> void:
 
 
 func _build_world() -> void:
+	# Alpha 16 visual pass: the cloud-city sky behind the arena (Scenery's canvas layer) and light that
+	# belongs to it - violet ambient from the sky, a warm key, a cool violet fill and a back rim that
+	# lifts the platform edges off the brighter background.
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.008, 0.01, 0.014)
+	env.background_mode = Environment.BG_CANVAS
+	env.background_canvas_max_layer = -10
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.45, 0.5, 0.6)
-	env.ambient_light_energy = 0.12
+	env.ambient_light_color = Color(0.58, 0.54, 0.78)
+	env.ambient_light_energy = 0.3
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 0.9
 	env.glow_enabled = true
@@ -388,14 +395,20 @@ func _build_world() -> void:
 	add_child(we)
 	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, 35, 0)
-	sun.light_energy = 1.0
+	sun.light_energy = 1.1
+	sun.light_color = Color(1.0, 0.94, 0.86)
 	sun.shadow_enabled = true
 	add_child(sun)
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-60, -145, 0)
-	fill.light_energy = 0.35
-	fill.light_color = Color(0.6, 0.75, 1.0)
+	fill.light_energy = 0.45
+	fill.light_color = Color(0.62, 0.58, 1.0)
 	add_child(fill)
+	var rim := DirectionalLight3D.new()                # from behind the board, toward the camera
+	rim.rotation_degrees = Vector3(-18, 180.0 + rad_to_deg(Rules.view_yaw), 0)
+	rim.light_energy = 0.55
+	rim.light_color = Color(0.7, 0.62, 1.0)
+	add_child(rim)
 	cam = Camera3D.new()
 	cam.fov = 42.0
 	cam.far = 2000.0
@@ -651,6 +664,7 @@ func _process(delta: float) -> void:
 		var model := MapBuilder.model_for(n)
 		if entry["model_key"] != model:
 			MapBuilder.set_centre_model(self, entry, model, n["pos"], n["owner"])
+	scenery.sync(dt)
 	if online:
 		Net.push_effects(sim.fx_events)              # host: the guests see the same bursts and falls
 	for ev in sim.fx_events:

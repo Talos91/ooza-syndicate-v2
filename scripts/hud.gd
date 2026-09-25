@@ -29,8 +29,7 @@ var inspector_id := -1
 var inspector_label: Label
 var inspector_progress: ProgressBar
 var inspector_actions: Array = []
-var toast_label: Label
-var _toast_time := 0.0
+var notices: VBoxContainer
 var banner: Label
 var _banner_time := 0.0
 var status_label: Label                # Last Stand status under the top bar
@@ -261,19 +260,20 @@ func setup(m: Node3D) -> void:
 		dock.add_child(b)
 	version_label = text_label("v%s  %s" % [Rules.VERSION, Rules.VERSION_NAME], 14, Color(1, 1, 1, 0.5))
 	root.add_child(version_label)
-	toast_label = text_label("", 22, Color("a9e9f8"))
-	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	toast_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
-	toast_label.add_theme_constant_override("shadow_offset_x", 2)
-	toast_label.add_theme_constant_override("shadow_offset_y", 2)
-	toast_label.visible = false
-	root.add_child(toast_label)
+	notices = VBoxContainer.new()                     # Alpha 16: styled notification stack
+	notices.add_theme_constant_override("separation", int(6 * ui_scale))
+	notices.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(notices)
 	banner = text_label("", 44, Color("ffd6d6"))
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	banner.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
 	banner.add_theme_constant_override("shadow_offset_x", 3)
 	banner.add_theme_constant_override("shadow_offset_y", 3)
 	banner.visible = false
+	var bs := panel_style(Rules.state_color("warn"))    # the Last Stand banner in the UI's own frame
+	bs.set_border_width_all(2)
+	bs.set_content_margin_all(18 * ui_scale)
+	banner.add_theme_stylebox_override("normal", bs)
 	root.add_child(banner)
 	_build_debug()
 	rotate_hint = text_label("Rotate your phone\nOoze Syndicate plays in landscape", 44)
@@ -315,10 +315,10 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	dock.position = Vector2(vp.x * 0.5 - dock.size.x / 2.0, vp.y - m.w - dock.size.y - (26 if not mobile else 8))
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
-	toast_label.size = Vector2(vp.x * 0.6, 34)
-	toast_label.position = Vector2(vp.x * 0.2, m.y + top_panel.size.y + 36)
-	banner.size = Vector2(vp.x, 120)
-	banner.position = Vector2(0, vp.y * 0.28)
+	notices.size = Vector2(vp.x * 0.56, 0)
+	notices.position = Vector2(vp.x * 0.22, m.y + top_panel.size.y + 14 * ui_scale)
+	banner.size = banner.get_combined_minimum_size()
+	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	if debug_button:
 		debug_button.position = Vector2(vp.x - m.z - debug_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # under PAUSE, off the map
 		debug_panel.size = debug_panel.get_combined_minimum_size()
@@ -407,10 +407,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		count_label.text = "DRAG A VAT"
 	_badges(cam)
 	_refresh_inspector(cam)
-	if _toast_time > 0.0:
-		_toast_time -= dt
-		if _toast_time <= 0.0:
-			toast_label.visible = false
+	_sync_notices(dt)
 	if _banner_time > 0.0:
 		_banner_time -= dt
 		banner.modulate.a = clampf(_banner_time / 1.5, 0.0, 1.0)
@@ -674,15 +671,80 @@ func close_inspector() -> void:
 
 
 # ------------------------------------------------------------------ messages
-func toast(msg: String) -> void:
-	toast_label.text = msg
-	toast_label.visible = true
-	_toast_time = 2.8
+const NOTICE_HOLD := 3.0
+const NOTICE_MAX := 3
+const WARN_WORDS := ["lost", "falls", "get out", "can't", "No ", "needs", "refused", "rejected", "cooldown",
+		"Not your", "Too many", "already", "max tier", "no further", "Nothing", "missing", "Waiting"]
+const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade started", "construction started", "Restoring", "Relay fired"]
+
+
+func toast(msg: String, kind := "") -> void:
+	## Alpha 16: notifications in the UI's own panel style (Daniele: "better notifications, the same
+	## style as the rest of the UI"): a framed line with a colour bar - info cyan, good news in your
+	## colour, builds gold, warnings red - sliding in under the top bar, three at most, fading out.
+	if kind == "":
+		kind = "info"
+		for w in WARN_WORDS:
+			if w in msg:
+				kind = "warn"
+		if kind == "info":
+			for w in GOOD_WORDS:
+				if w in msg:
+					kind = "build" if ("started" in w or "Restoring" in w) else "good"
+	var col: Color = {"warn": Rules.state_color("warn"), "good": Rules.seat_color(human), "build": Rules.state_color("build")}.get(kind, Color("7fe9f5"))
+	for c in notices.get_children():                 # the same line again: refresh it, don't stack
+		if c.get_meta("text", "") == msg and not c.is_queued_for_deletion():
+			c.set_meta("t", 0.0)
+			return
+	var p := PanelContainer.new()
+	var st := panel_style(col)
+	st.set_content_margin_all(0)
+	st.content_margin_right = 14 * ui_scale
+	p.add_theme_stylebox_override("panel", st)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", int(10 * ui_scale))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(row)
+	var bar := ColorRect.new()
+	bar.color = col
+	bar.custom_minimum_size = Vector2(5, 30) * ui_scale
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(bar)
+	var l := text_label(msg, 18, Color("e6f4f8"))
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(l)
+	p.set_meta("text", msg)
+	p.set_meta("t", 0.0)
+	p.modulate.a = 0.0
+	notices.add_child(p)
+	while notices.get_child_count() > NOTICE_MAX:
+		var old := notices.get_child(0)
+		notices.remove_child(old)
+		old.queue_free()
+
+
+func _sync_notices(dt: float) -> void:
+	for c in notices.get_children():
+		var t: float = float(c.get_meta("t", 0.0)) + dt
+		c.set_meta("t", t)
+		var a := minf(t / 0.18, 1.0) * clampf((NOTICE_HOLD + 0.45 - t) / 0.45, 0.0, 1.0)
+		(c as Control).modulate.a = a
+		(c as Control).pivot_offset = (c as Control).size / 2.0
+		(c as Control).scale = Vector2.ONE * lerpf(0.92, 1.0, minf(t / 0.18, 1.0))   # pops in
+		if t > NOTICE_HOLD + 0.45:
+			notices.remove_child(c)
+			c.queue_free()
 
 
 func show_banner(msg: String, seconds := 4.0) -> void:
 	banner.text = msg
 	banner.visible = true
+	banner.size = Vector2.ZERO                        # re-fit the frame to the new text, centred
+	banner.size = banner.get_combined_minimum_size()
+	var vp := root.get_viewport_rect().size
+	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	banner.modulate.a = 1.0
 	_banner_time = seconds
 

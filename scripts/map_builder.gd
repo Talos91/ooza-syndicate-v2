@@ -109,7 +109,9 @@ static func _can_raise(e: Dictionary) -> bool:
 static func piece(name: String) -> Node3D:
 	if not _scenes.has(name):
 		_scenes[name] = load(KIT % name)
-	return (_scenes[name] as PackedScene).instantiate()
+	var node: Node3D = (_scenes[name] as PackedScene).instantiate()
+	Mats.apply_detail(node)                         # Alpha 16: surface detail on the flat kit colours
+	return node
 
 
 static func put(parent: Node3D, name: String, pos: Vector3, heading := 0.0, stretch := 1.0) -> Node3D:
@@ -306,4 +308,6 @@ static func apply_owner(parts: Array, seat: String) -> void:
 				if name.begins_with("OS_Light"):
 					mi.set_surface_override_material(s, Mats.light(seat) if seat != "" else null)
 				elif name.begins_with("OS_Ooze"):
+					if mi.has_meta("vat_liquid"):             # a living liquid (Scenery) colours itself
+						continue
 					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else null)

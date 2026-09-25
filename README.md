@@ -1,4 +1,4 @@
-# Ooze Syndicate 2.0 - Alpha 16 (v0.16.3)
+# Ooze Syndicate 2.0 - Alpha 16 (v0.16.4)
 
 Godot 4.6 project (GL Compatibility - browser and phone first) for the 2.0 bridge-network game.
 Design authority: `Docs/Game Design/Ooze Syndicate 2.0/` in the project folder
@@ -90,5 +90,6 @@ Godot is in `Tools/Godot` of the project folder. Publishing steps: `docs/BUILD-L
 | `scripts/fullscreen_gate.gd` | phone fullscreen requirement |
 | `scripts/main.gd` | world, camera fit, input, orchestration, command-line flags |
 | `scripts/net.gd` | online rooms (autoload `Net`): lobby, seats, host validation, snapshots, rematch, chat |
+| `scripts/scenery.gd` | sky backdrop, vat liquid levels and tank residents (Alpha 16 visual pass) |
 | `web/` | PeerJS, transport shim, room-code field, chat panel - copied into `build/web` at publish |
 | `tests/test_sim.gd`, `tests/test_map_pool.gd`, `tests/test_net.gd` | 200+ rules checks; every map plays to the end; 76 room/netcode checks |

@@ -425,3 +425,10 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 84. **Toggle to hide enemy node unit counts, in options and Debug.** *Done.*
 85. **Brawl still doesn't feel like Alpha 11, entering and exiting.** *Done:* Alpha 11's front-door
     route round the platform ring and its single-file-to-three-across column. Needs Daniele's feel check.
+
+## 2026-09-25 - Daniele, visual pass brief (v0.16.4)
+
+86. **Background like Alpha 1.** *Done:* the cloud-city sky, drifting, vignetted.
+87. **Better notifications in the UI style.** *Done:* framed, colour-coded, stacked, animated.
+88. **Better lighting and textures.** *Done:* violet ambient, warm key, rim light; surface detail.
+89. **Vats fill by units; Alpha 11's creatures in the liquid, animated.** *Done:* liquid gauge + residents.
