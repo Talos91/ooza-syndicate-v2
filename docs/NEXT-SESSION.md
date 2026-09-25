@@ -1,8 +1,8 @@
 # Next session - start here
 
-State at the end of the 2026-09-25 sessions: **v0.17.1 "Alpha 17"** (maps 3.0 + debug maps, ring Last Stand, five-level AI, constant unit speed; on top of Alpha 16: online rooms, visual pass), source on `main`,
+State at the end of the 2026-09-25 sessions: **v0.18.0 "Alpha 18"** (maps 4.0 for phones, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md` (project root - the whole game as built), this file,
-`README.md`, the top of `CHANGELOG.md` (0.16.0 to 0.17.1), `PLAYTEST-NOTES.md` notes 72-95, then the
+`README.md`, the top of `CHANGELOG.md` (0.17.0 to 0.18.0), `PLAYTEST-NOTES.md` notes 90-100, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
 
 ## Standing rules (Daniele)
@@ -17,41 +17,38 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
-## Queued, in this order (Daniele, 2026-09-25)
+## Alpha 18 (2026-09-25): maps 4.0, per-map camera, optimization pass - built
 
-1. **Alpha 18 - new map pack.** Daniele: "the maps are waaaay too big for mobile". He is generating
-   a new pack to replace maps 3.0; wait for it, then bake and implement it the same way (builder ->
-   `export_maps_3_0_game.py` -> `maps3/`, `test_maps3`, `test_map_pool`). Measured sizes (fitted
-   span = the larger of width and height scaled to 836x470, platforms R 6 m):
+- **Maps 4.0** (`References/Ooze Syndicate maps 4.0`, 160 x 80 frame): `Models/2.0/build_maps_4_0_review.py`
+  (the 3.0 builder with the 4.0 frame, gen4 plaza templates and K 1.7) + `export_maps_4_0_game.py` (adds
+  docks) -> `maps4/`, `assets/maps4/`. After a bake: `Godot --headless --import`, re-apply
+  `generate_lods=false` / `create_shadow_meshes=false` in the new `assets/maps4/*.glb.import` (then
+  reimport), `tests/test_maps4.gd`, `test_map_pool`, and the phone-fit probe (below).
+- **K sweep** (`clashes / over-platform`, 109 maps): 1.4: 67/110, 1.5: 61/31, 1.6: 35/23, 1.7: 25/13
+  (only B-30 and D-04), 1.8+: B-19 gains clashes. Steep piers (> 80 degrees) persist even at 3.0 on the
+  ring maps: a layout property, clamped by the kit.
+- **Pool**: `MapPool.WITHHELD` = B-30 (24 clashes), D-08 (not phone-fit); `MapPool.PHONE_UNFIT` = the
+  3v3 / 2v2v2 maps, hidden when `MapPool.phone` (phone profile + short screen side < 600 CSS px).
+- **Camera**: `scripts/map_camera.gd` (generated table, per-map pitch), `main.cam_pitch`,
+  `--pitch=N` (sets `pitch_forced`). **Phone-fit probe**: run windowed as a scene (the Net autoload is
+  needed): `Godot_v4.6.1-stable_win64_console.exe --path . --resolution 1266x585 res://tests/phone_fit.tscn -- out=<file> pitches=auto`
+  (or `pitches=50,54,...` to sweep; `maps=C-05,...` to filter). Rule used: lowest pitch with the
+  smallest tap >= 33 pt (844 pt wide phone), no badge over the HUD / screen edge, no badge collisions,
+  then fewest badges touching a neighbour's platform. Final: 107 maps, 0 overflow, 0 collisions, min tap
+  33.0 pt, 34 badge-touches-platform (FFA 5 / 3v3).
+- **Optimization pass**: audit + fixes by two workflows (8 reviewers + skeptics; 7 file-disjoint fix
+  groups, an integrator, 7 reviewers). Audit table and every applied change: CHANGELOG 0.18.0. Deferred
+  (need Daniele or a measured pass): MultiMesh for moving horde patches (perf-05), AI route caching
+  (ai-04), menu map-summary cache (main-06), host signalling reconnect (net-02), shadows (the sun's
+  100 m shadow range is still out of reach at 1.7 m per unit; if a future pack brings the camera closer,
+  goo should stop casting), phone lighting (sun.shadow_enabled off on phones changes the look slightly).
+- Frame cost now (desktop, 1280x720, `--perf`, pitch 42 for comparison): C-05 SIEGE ~1,125 draw calls,
+  D-09 3v3 ~1,147 (were 1,875 and 3,525 on maps 4.0 before the pass).
+- The other session's uncommitted kit pieces (`assets/kit/Park_*`, `Plaza_*`, `Pier_Park*`,
+  `Pier_Plaza_*`) are still untracked: add them to `exclude_filter` for the export only (as every
+  publish since 0.17.0 has), never commit them for that session.
 
-   | Set | Maps | Fitted span (median / min / max) | Platform width on screen |
-   |---|---|---|---|
-   | maps 3.0 (`maps3`, K 3 m/unit) | 109 | 401 / 179 / 502 m | 2.4-4.9 % (median ~2.9 %, ~24 px of 836) |
-   | older 2.0 roster (`maps`, before maps 3.0) | 100 | 134 / 21 / 186 m | median ~9 % (~75 px) |
-
-   So maps 3.0 are about 3x the older roster. Plaza sockets sit ~5.2 units (15.6 m) apart, so
-   simply lowering K would overlap platforms (diameter 12 m): the size has to come from the layout.
-   At constant speed, bigger maps also mean longer marches.
-2. **Optimization pass** (after Alpha 18): stray code, stale comments, errors, smoothness - keep
-   the look. Findings so far:
-   - Bug: `Rules.TEAM_FAMILIES` has two families; 2v2v2 has three teams, so two teams share the
-     warm family. Add a third family (e.g. violet/magenta/lilac) and a `test_sim` check.
-   - Dead or stale: shield code (Rules `SHIELD_*`, `fx._shield`, hud shield bar - check whether any
-     rule still sets `shield_up`), `Rules.OVERPASS_H` / `_deck_points` legacy overpass path,
-     `MODULE_SECONDS` (legacy routing only), `UNITS_PER_PATCH`, `main.STARTER_MAPS` / `PROVES`,
-     `Net.NODE_SKIP` "center", "Alpha 12" headers in main/fx/hud/mats/sim.
-   - The other session's uncommitted kit pieces (`assets/kit/Park_*`, `Plaza_*`, `Pier_Park*`,
-     `Pier_Plaza_*`) still sit untracked; keep them out of the export (temporary exclude_filter)
-     or ask Daniele whether to delete them.
-   - Frame cost (`--perf`, desktop, 1280x720, `--demo`): C-05 1v1 60 fps, ~1,700 draw calls,
-     1.2 M primitives, ~1,000 nodes; D-09 stress 3v3 55-59 fps, ~6,550 draw calls, 2.2 M
-     primitives, ~3,700 nodes. Draw calls are the target for phones (mesh merging / MultiMesh for
-     repeated kit pieces, residents and badges; check the vat liquid transparency and detail
-     textures on the mobile profile). No errors or warnings in either run.
-   - Command: `Godot_v4.6.1-stable_win64_console.exe --path . -- --map=res://maps3/D-09-stress-test.json --mode=3v3 --demo --seed=3 --shots=60 --out=<dir> --perf --window=1280x720`
-   Then tests, version bump, publish.
-
-## Alpha 17 (2026-09-25): maps 3.0, ring Last Stand, five-level AI - built
+## Alpha 17 (2026-09-25): maps 3.0 (superseded by 4.0), ring Last Stand, five-level AI - built
 
 - Maps: `Models/2.0/export_maps_3_0_game.py` bakes the approved layout (run it headless in Blender
   5.2 after any change to the pack or to `build_maps_3_0_review.py`; BUILD-LOG sec10), then

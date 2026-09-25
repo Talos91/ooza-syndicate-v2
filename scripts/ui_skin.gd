@@ -1,8 +1,6 @@
 class_name UiSkin
 extends RefCounted
 const ROOT="res://assets/ui-kit/"
-static func kit_button(b:Button,k:String="vex",primary:bool=false)->void:
- button(b,k,primary)
 static func faction(k:String)->String:return "viridian" if k=="bloom" else k
 static func box(path:String,margin:int=20)->StyleBoxTexture:
  var s=StyleBoxTexture.new();s.texture=load(ROOT+path+".png")

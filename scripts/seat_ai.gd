@@ -23,10 +23,12 @@ var _clock := 0.0
 var _attack_after := 0.0
 var _invest_after := 0.0
 var _memory := {}                          # node id -> {"units", "next"}
+var _busy := {}                            # node id -> true once it ordered a send this think
 var rng := RandomNumberGenerator.new()
 
 
 func _init(s: String, think_every := 2.5, lvl := "") -> void:
+	## think_every is used only when no level is given; a level's own period (Rules.AI_LEVELS) always wins.
 	seat = s
 	level = lvl if Rules.AI_LEVELS.has(lvl) else "Standard"
 	cfg = Rules.AI_LEVELS[level]
@@ -41,6 +43,7 @@ func think(sim: Sim, dt: float) -> void:
 	if _t < period or sim.over or sim.eliminated.has(seat):
 		return
 	_t = 0.0
+	_busy = {}      # a send supersedes the node's earlier order: one order per node per think
 	if int(cfg["relays"]) > 0:
 		_relays(sim)
 	if Rules.bridge_combat and int(cfg["relays"]) > 0:   # RECALL is SIEGE only
@@ -113,7 +116,8 @@ func _evacuate(sim: Sim) -> void:
 		if sim.is_warned(doomed["id"]) and doomed["owner"] == seat and doomed["units"] >= 5.0:
 			var target := _nearest_safe(sim, doomed["id"])
 			if target >= 0:
-				sim.send(doomed["id"], target, 1.0)
+				if not sim.send(doomed["id"], target, 1.0).is_empty():
+					_busy[doomed["id"]] = true
 
 
 func _nearest_safe(sim: Sim, from_id: int) -> int:
@@ -135,6 +139,8 @@ func _nearest_safe(sim: Sim, from_id: int) -> int:
 # ------------------------------------------------------------------ defence first
 func _defend(sim: Sim) -> void:
 	for target in _mine(sim):
+		if sim.is_warned(target["id"]):
+			continue                                      # units sent there die with it
 		var threat := _incoming(sim, target["id"], true)
 		for k in target["siege"]:
 			if not sim.allied(k, seat):
@@ -144,16 +150,19 @@ func _defend(sim: Sim) -> void:
 		var need: float = threat * 1.1 + 4.0 * Rules.SCALE - target["units"] - _incoming(sim, target["id"], false)
 		if need <= 0.0:
 			continue
-		var donors := _mine(sim).filter(func(n): return n["id"] != target["id"] and n["build_kind"] == "")
+		var donors := _mine(sim).filter(func(n): return n["id"] != target["id"] and n["build_kind"] == "" and not _busy.has(n["id"]))
 		donors.sort_custom(func(a, b): return (a["pos"] as Vector3).distance_to(target["pos"]) < (b["pos"] as Vector3).distance_to(target["pos"]))
 		for donor in donors:
 			if need <= 0.0:
 				break
+			if _busy.has(donor["id"]):
+				continue                                  # already sent to an earlier target this think
 			var spare: float = donor["units"] - _reserve(sim, donor)
 			if spare < 2.0 * Rules.SCALE or sim.find_route(donor["id"], target["id"]).is_empty():
 				continue
 			var frac := clampf(minf(need, spare) / maxf(donor["units"], 1.0), 0.1, 1.0)
 			if not sim.send(donor["id"], target["id"], frac).is_empty():
+				_busy[donor["id"]] = true
 				need -= donor["units"] * frac
 
 
@@ -196,7 +205,7 @@ func _attack(sim: Sim) -> void:
 			continue                                      # early game: take neutrals, leave players be
 		var donors := []
 		for donor in owned:
-			if donor["build_kind"] != "":
+			if donor["build_kind"] != "" or _busy.has(donor["id"]):
 				continue
 			var available: float = donor["units"] - _reserve(sim, donor)
 			if available < 4.0 * Rules.SCALE:
@@ -244,6 +253,7 @@ func _attack(sim: Sim) -> void:
 		var portion := 0.5 if need <= avail * 0.5 else (0.75 if need <= avail * 0.75 else 1.0)
 		var frac := clampf(avail * portion / maxf(d["node"]["units"], 1.0), 0.1, 1.0)
 		if not sim.send(d["node"]["id"], plan["target"]["id"], frac).is_empty():
+			_busy[d["node"]["id"]] = true
 			need -= d["node"]["units"] * frac
 		if need <= 0.0:
 			break
@@ -328,23 +338,24 @@ func _retreats(sim: Sim) -> void:
 		if a.is_empty() or b.is_empty():
 			continue
 		var mine := a if a["owner"] == seat else (b if b["owner"] == seat else {})
-		if mine.is_empty():
-			continue
+		if mine.is_empty() or mine.get("retreat", false) or mine.has("ride") or mine["state"] == "absorb":
+			continue                                      # recall() refuses these: try the next fight
 		var theirs := b if mine == a else a
 		if sim.power_of(mine) < 0.4 * sim.power_of(theirs) and mine["units"] > 15.0:
-			sim.recall(mine["id"])
-			return
+			if sim.recall(mine["id"]):
+				return
 
 
 # ------------------------------------------------------------------ investment
 func _build(sim: Sim) -> void:
 	## Same costs and slots as the player. One investment per `invest` seconds, never on a node
-	## under attack: upgrades, a forge once it has three vats, cannons on free relay slots.
+	## under attack or about to drop in the Last Stand: upgrades, a forge once it has three vats,
+	## cannons on free relay slots.
 	if sim.time < _invest_after:
 		return
 	var owned := _mine(sim)
 	for n in owned:
-		if n["build_kind"] != "" or _incoming(sim, n["id"], true) > 0.0:
+		if n["build_kind"] != "" or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue
 		var reserve := _reserve(sim, n) + 4.0 * Rules.SCALE
 		if n["attachment"] == "cannon" and n["cannon_tier"] < 3 \
@@ -354,7 +365,7 @@ func _build(sim: Sim) -> void:
 	var vats := owned.filter(func(n): return Sim.has_vat(n))
 	vats.sort_custom(func(a, b): return a["tier"] < b["tier"] if a["tier"] != b["tier"] else a["units"] > b["units"])
 	for n in vats:
-		if n["build_kind"] != "" or n["tier"] >= 4 or _incoming(sim, n["id"], true) > 0.0:
+		if n["build_kind"] != "" or n["tier"] >= 4 or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue
 		if n["units"] >= Sim.vat_cost(n) + _reserve(sim, n) + 4.0 * Rules.SCALE and n["units"] >= Rules.CAPS[n["tier"]] * 0.6 \
 				and sim.upgrade_vat(n["id"]):
@@ -362,7 +373,8 @@ func _build(sim: Sim) -> void:
 			return
 	var has_forge := sim.has_forge(seat)
 	for n in owned:
-		if n["build_kind"] != "" or n["attachment"] != "" or n["relay"] == "":
+		if n["build_kind"] != "" or n["attachment"] != "" or n["relay"] == "" \
+				or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue                                      # only empty relay slots: never give up a vat
 		if not has_forge and vats.size() >= 3 and "forge" in n["buildable"] and n["units"] >= Rules.FORGE_COST + 10.0:
 			sim.build_attachment(n["id"], "forge")

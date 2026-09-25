@@ -1,13 +1,17 @@
 class_name Hud
 extends CanvasLayer
-## The match interface (Alpha 12): Alpha 11's chrome and layout brought over in full - top bar
-## (emblem, your total, timer, rivals, strength bar), pause menu, side command panel with the send
-## fractions and the selected vat's count, node badges (count, tier, relay state, build and shield
-## bars; never a number on an enemy node), the ring inspector with costed actions, ability dock
-## (slots present, disabled until the 2.0 skill pools are approved), toasts, the Last Stand banner
-## and drop-order numbers, the results panel with match stats, and the debug panel.
+## The match interface (2.0): Alpha 11's chrome and layout brought over in full - top bar (emblem,
+## your total, timer, rivals, strength bar), pause menu, side send panel with the fractions and the
+## selected vat's count, node badges floating beside their nodes (count - the seat letter instead on
+## enemy nodes in SIEGE or when enemy counts are hidden -, emblem, tier, relay state, build bar), the
+## ring inspector with costed actions, a hidden ability dock (slots waiting on the 2.0 skill pools),
+## toasts, the Last Stand banner, status line and drop order, the results panel with match stats,
+## and the debug panel.
 
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
+# Alpha 18: the relay symbols (Rules.RELAY_GLYPH) are not in Rajdhani, and a browser has no system font to
+# fall back on (they drew as empty boxes on the web build): DejaVu Sans Mono supplies them.
+const SYMBOL_FONT := preload("res://assets/fonts/DejaVuSansMono.woff2")
 
 var main: Node3D
 var sim: Sim
@@ -22,8 +26,7 @@ var pause_button: Button
 var side_panel: PanelContainer
 var side_box: VBoxContainer
 var count_label: Label
-var fraction_buttons: Array = []
-var badges := {}                     # node id -> {panel, label, sub, shield, build, owner}
+var badges := {}                     # node id -> {panel, label, sub, emblem, build, owner}
 var inspector: Control
 var inspector_id := -1
 var inspector_label: Label
@@ -43,6 +46,8 @@ var debug_button: Button
 var chat_button: Button
 var _chat_poll := 0.0
 var debug_panel: PanelContainer
+var _bridge_text := Callable()          # Debug panel text refreshers (see _refresh_mode_texts)
+var _hide_text := Callable()
 var margins := Vector4(16, 12, 16, 12)
 var _last_fps_print := 0.0
 var version_label: Label
@@ -118,6 +123,9 @@ func style_panel(p: Control, accent: Color = Color("276578")) -> void:
 
 # ------------------------------------------------------------------ build
 func setup(m: Node3D) -> void:
+	var ui_font: FontFile = UI_FONT                        # shared resource: every HUD label gets the fallback
+	if ui_font.fallbacks.is_empty():
+		ui_font.fallbacks = [SYMBOL_FONT]
 	main = m
 	sim = m.sim
 	mobile = m.mobile
@@ -152,17 +160,8 @@ func setup(m: Node3D) -> void:
 		emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		emblem.visible = false
 		column.add_child(emblem)
-		var shield_bar := ProgressBar.new()
-		shield_bar.show_percentage = false
-		shield_bar.custom_minimum_size = Vector2(0, 4 * ui_scale)
-		shield_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var sb_fill := StyleBoxFlat.new()
-		sb_fill.bg_color = Rules.seat_color(human)
-		shield_bar.add_theme_stylebox_override("fill", sb_fill)
 		var sb_bg := StyleBoxFlat.new()
 		sb_bg.bg_color = Color(0, 0, 0, 0.5)
-		shield_bar.add_theme_stylebox_override("background", sb_bg)
-		column.add_child(shield_bar)
 		var build_bar := ProgressBar.new()
 		build_bar.show_percentage = false
 		build_bar.custom_minimum_size = Vector2(0, 4 * ui_scale)
@@ -173,7 +172,7 @@ func setup(m: Node3D) -> void:
 		build_bar.add_theme_stylebox_override("background", sb_bg)
 		column.add_child(build_bar)
 		root.add_child(badge)
-		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "shield": shield_bar, "build": build_bar, "owner": "?"}
+		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "build": build_bar, "owner": "?"}
 	# top bar: emblem, your total, timer, rivals, strength bar (Alpha 11's score header)
 	top_panel = PanelContainer.new()
 	style_panel(top_panel, accent)
@@ -236,14 +235,13 @@ func setup(m: Node3D) -> void:
 				b.button_pressed = true
 				main.fraction = f)
 		side_box.add_child(b)
-		fraction_buttons.append(b)
 	count_label = text_label("DRAG A VAT", 14, accent)
 	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	side_box.add_child(count_label)
 	# bottom: map title, hint, ability dock, version
 	map_title = text_label(str(main.map.get("name", "")).to_upper(), 20)
 	root.add_child(map_title)
-	hint = text_label("Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade" + ("  ·  Tap your line to RECALL it" if Rules.bridge_combat else ""), 14, Color("d0dceb"))
+	hint = text_label(_hint_text(), 14, Color("d0dceb"))
 	hint.add_theme_color_override("font_shadow_color", Color.BLACK)
 	hint.add_theme_constant_override("shadow_offset_x", 2)
 	hint.add_theme_constant_override("shadow_offset_y", 2)
@@ -292,6 +290,20 @@ func setup(m: Node3D) -> void:
 	pause_panel.visible = false
 	style_panel(pause_panel, accent)
 	root.add_child(pause_panel)
+
+
+func _hint_text() -> String:
+	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade" + ("  ·  Tap your line to RECALL it" if Rules.bridge_combat else "")
+
+
+func _refresh_mode_texts() -> void:
+	## The texts that depend on SIEGE/BRAWL, rebuilt when the mode is switched mid-match (pause menu
+	## or Debug): the hint line (RECALL is SIEGE-only) and the Debug mode and enemy-count buttons.
+	hint.text = _hint_text()
+	if _bridge_text.is_valid():
+		_bridge_text.call()
+	if _hide_text.is_valid():
+		_hide_text.call()
 
 
 func layout(vp: Vector2, m: Vector4) -> void:
@@ -360,12 +372,25 @@ func pointer_over_ui(p: Vector2) -> bool:
 
 
 func badge_at(p: Vector2) -> int:
-	## Alpha 11: badges are explicit, unobstructed selection targets.
+	## Alpha 11: badges are explicit, unobstructed selection targets. A direct hit wins; otherwise the
+	## nearest badge whose grown (thumb-sized on mobile) rect holds the point, so overlapping grown
+	## rects of neighbouring badges never pick the wrong node.
+	var pad := 20.0 if mobile else 4.0
+	var best := -1
+	var best_d := INF
 	for id in badges:
 		var panel: Control = badges[id]["panel"]
-		if panel.visible and panel.get_global_rect().grow(20 if mobile else 4).has_point(p):
+		if not panel.visible:
+			continue
+		var r := panel.get_global_rect()
+		if r.has_point(p):
 			return id
-	return -1
+		if r.grow(pad).has_point(p):
+			var d := Vector2(maxf(maxf(r.position.x - p.x, p.x - r.end.x), 0.0), maxf(maxf(r.position.y - p.y, p.y - r.end.y), 0.0)).length()
+			if d < best_d:
+				best_d = d
+				best = id
+	return best
 
 
 # ------------------------------------------------------------------ per frame
@@ -376,15 +401,18 @@ func sync(dt: float, cam: Camera3D) -> void:
 			_chat_poll = 0.5
 			var n := Net.chat_unread()
 			chat_button.text = "Chat (%d)" % n if n > 0 else "Chat"
-	var total := sim.seat_strength(human)
+	var strength := {}                                # one walk per seat per frame
+	for seat in sim.factions.keys():
+		strength[seat] = sim.seat_strength(seat)
+	var total: float = strength[human] if strength.has(human) else sim.seat_strength(human)
 	var rivals := 0.0
 	for seat in sim.factions.keys():
 		if not sim.allied(seat, human):
-			rivals += sim.seat_strength(seat)
+			rivals += strength[seat]
 	stats_label.text = "%s  %03d    %02d:%02d    RIVALS  %03d" % [str(main.SEAT_FACTIONS[human]).to_upper(), Rules.shown(total),
 			int(sim.time) / 60, int(sim.time) % 60, Rules.shown(rivals)]
 	for seat in score_sections:
-		var count := sim.seat_strength(seat)
+		var count: float = strength[seat]
 		score_sections[seat].visible = count > 0.0
 		score_sections[seat].size_flags_stretch_ratio = maxf(1.0, count)
 	if sim.last_stand_active:
@@ -399,7 +427,8 @@ func sync(dt: float, cam: Camera3D) -> void:
 		else:
 			next = ("the last ring stands" if sim.v3 else "the final node stands") + " - conquest decides"
 		status_label.text = "LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), next]
-	elif sim.time > Rules.LAST_STAND_TIME - 15.0:
+	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
+		# mirrors sim._step_last_stand: no countdown when the Last Stand is off, over, or the map has none
 		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
 	else:
 		status_label.text = ""
@@ -483,21 +512,16 @@ func _badges(cam: Camera3D) -> void:
 		if sim.is_warned(n["id"]):
 			parts.append("FALLS %d" % int(ceil(sim.last_stand_warn_t)))
 		sub.text = " ".join(parts)
-		var shield_bar: ProgressBar = b["shield"]
-		shield_bar.visible = false                        # Alpha 14: the shield pool is gone
-		if owner != "":
-			var cap: float = maxf(Rules.SHIELD_FRACTION * n["units"], 0.001)
-			shield_bar.value = 100.0 * clampf(n["shield"] / cap, 0.0, 1.0)
-			(shield_bar.get_theme_stylebox("fill") as StyleBoxFlat).bg_color = Rules.seat_color(owner) if n["shield_up"] else Rules.state_color("warn")
 		var build_bar: ProgressBar = b["build"]
 		build_bar.visible = n["build_kind"] != ""
 		build_bar.value = 100.0 * Sim.build_progress(n)
-		# hanging from the platform's near rim: clearly that node's, never over the vat (Alpha 14
-		# playtest: "hard to read where unit counts are")
+		# the badge's size follows its text; its screen spot comes from _layout_badges
 		panel.size = panel.get_combined_minimum_size()
-	var key := "%s|%s" % [str(get_viewport().get_visible_rect().size), str(cam.global_transform)]
-	if key != _layout_key:
-		_layout_key = key
+	var vp := get_viewport().get_visible_rect().size
+	var xf := cam.global_transform
+	if vp != _layout_vp or xf != _layout_xf:
+		_layout_vp = vp
+		_layout_xf = xf
 		_layout_badges(cam)
 	for n in sim.nodes:
 		var panel: Control = badges[n["id"]]["panel"]
@@ -525,8 +549,10 @@ func inspect(id: int, cam: Camera3D) -> void:
 	style.bg_color = Color(0.09, 0.13, 0.17, 0.0)     # a ring only: the vat stays visible
 	ring.add_theme_stylebox_override("panel", style)
 	inspector.add_child(ring)
-	var close := button("X", close_inspector, 64, 52 if not mobile else 80)
-	close.position = Vector2(100, 70) * ui_scale
+	var close_h := 52.0 if not mobile else 80.0
+	var close := button("X", close_inspector, 64, close_h)
+	close.position = Vector2(84, -68.0 - close_h) * ui_scale     # Alpha 18: top right of the ring, between the
+	                                                             # top and right actions (the info panel covered it)
 	inspector.add_child(close)
 	inspector.set_meta("close", close)
 	var info_bg := PanelContainer.new()
@@ -620,7 +646,6 @@ func _refresh_inspector(cam: Camera3D) -> void:
 					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0),
 					roundi(sim.stat(owner, "speed") * 100.0)])
 	if n["relay"] != "":
-		var states := sim.relay_states(n)
 		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
 		var nxt := sim.relay_state_key(n, sim.relay_next_index(n)).to_upper()
 		var rs := "%s relay %s -> %s" % [n["relay"].to_upper(), cur, nxt]
@@ -650,7 +675,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		var disabled: bool = n["build_kind"] != "" or owner != human or n["units"] < a["cost"]
 		if a["method"] == "switch":
 			disabled = n["relay_cd"] > 0.0 or n["relay_phase"] != ""
-		elif a["method"] in ["build_cannon", "build_forge", "restore"] and n["swap_cd"] > 0.0 and (n["attachment"] != "" or a["method"] == "restore"):
+		elif a["method"] in ["build_cannon", "build_forge", "restore"] and n["swap_cd"] > 0.0 and (n["attachment"] != "" or (n["relay"] == "" and n["tier"] > 0) or a["method"] == "restore"):   # sim.build_attachment's swap test
 			disabled = true
 		b.disabled = disabled
 
@@ -676,8 +701,8 @@ func close_inspector() -> void:
 # ------------------------------------------------------------------ messages
 const NOTICE_HOLD := 3.0
 const NOTICE_MAX := 3
-const WARN_WORDS := ["lost", "falls", "get out", "can't", "No ", "needs", "refused", "rejected", "cooldown",
-		"Not your", "Too many", "already", "max tier", "no further", "Nothing", "missing", "Waiting"]
+const WARN_WORDS := ["lost", "falls", "get out", "can't", "Can't", "No ", "needs", "refused", "rejected", "on cooldown",
+		"swap ready", "Not your", "Too many", "already", "max tier", "no further", "Nothing", "missing", "Waiting"]
 const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade started", "construction started", "Restoring", "Relay fired"]
 
 
@@ -768,6 +793,7 @@ func pause_menu() -> void:
 			[["RESUME", func(): main.paused = false; pause_panel.visible = false],
 			["MODE: %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL"), func():
 				Rules.bridge_combat = not Rules.bridge_combat
+				_refresh_mode_texts()
 				pause_menu()],
 			["LAST STAND: %s" % ("ON" if Rules.last_stand else "OFF"), func():
 				Rules.last_stand = not Rules.last_stand
@@ -831,7 +857,7 @@ func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: 
 
 # ------------------------------------------------------------------ debug panel
 func _build_debug() -> void:
-	## Debug controls for playtests (Daniele, 2026-09-25): live sliders, thumb-sized, bottom-left,
+	## Debug controls for playtests (Daniele, 2026-09-25): live sliders, thumb-sized, top-right under PAUSE,
 	## wide ranges on purpose. Also prints FPS to the console every 5 s while open.
 	debug_button = button("Debug", Callable(), 110, 50 if not mobile else 70, 20)
 	debug_button.toggle_mode = true
@@ -864,14 +890,16 @@ func _build_debug() -> void:
 	var bridge := button("", Callable(), 0, 44, 18)
 	var bridge_text := func(): bridge.text = "Mode: %s" % ("SIEGE (fights on bridges)" if Rules.bridge_combat else "BRAWL (Alpha 11 - pass through, fight at nodes)")
 	bridge_text.call()
+	_bridge_text = bridge_text
 	bridge.pressed.connect(func():
 		Rules.bridge_combat = not Rules.bridge_combat
-		bridge_text.call()
+		_refresh_mode_texts()
 		toast("Mode: %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL")))
 	box.add_child(bridge)
 	var hide := button("", Callable(), 0, 44, 18)
 	var hide_text := func(): hide.text = "Enemy counts: %s" % ("HIDDEN" if Rules.hide_enemy_counts or Rules.bridge_combat else "SHOWN") + (" (Siege always hides)" if Rules.bridge_combat and not Rules.hide_enemy_counts else "")
 	hide_text.call()
+	_hide_text = hide_text
 	hide.pressed.connect(func():
 		Rules.hide_enemy_counts = not Rules.hide_enemy_counts
 		hide_text.call()
@@ -880,7 +908,7 @@ func _build_debug() -> void:
 	hide.disabled = main.online                      # online: the host's room setting
 	box.add_child(hide)
 	var low := button("", Callable(), 0, 44, 18)
-	var low_text := func(): low.text = "Detail: %s" % ("LOW (fewer horde and river patches)" if Rules.low_detail else "FULL")
+	var low_text := func(): low.text = "Detail: %s" % ("LOW (fewer river patches and vat residents)" if Rules.low_detail else "FULL")
 	low_text.call()
 	low.pressed.connect(func():
 		Rules.low_detail = not Rules.low_detail
@@ -890,8 +918,8 @@ func _build_debug() -> void:
 		deck.value = Rules.DECK_SPEED_DEFAULT
 		node.value = Rules.NODE_SPEED_MULT_DEFAULT
 		door.value = Rules.DOOR_RATE_DEFAULT
-		nfight.value = 1.0
-		forge.value = 50.0, 0, 44, 18)
+		nfight.value = Rules.NODE_FIGHT_MULT_DEFAULT
+		forge.value = Rules.FORGE_BONUS_DEFAULT * 100.0, 0, 44, 18)
 	box.add_child(reset)
 
 
@@ -922,7 +950,8 @@ func _debug_slider(box: Control, text: String, lo: float, hi: float, step: float
 
 var _badge_dirs := {}
 var _badge_screen := {}                 # node id -> badge centre on screen (fixed camera: laid out once)
-var _layout_key := ""
+var _layout_vp := Vector2(-1, -1)       # viewport size and camera of the last layout (-1: none yet)
+var _layout_xf := Transform3D()
 
 
 func _layout_badges(cam: Camera3D) -> void:
@@ -930,6 +959,9 @@ func _layout_badges(cam: Camera3D) -> void:
 	## in the void next to a node"): candidate spots all round the platform's drawn rim are scored
 	## against every platform, every deck and the badges already placed, on screen, at the badge's
 	## real size; the one that covers nothing wins, the near side and the shortest reach break ties.
+	## Alpha 18 (Daniele: "make sure ... nothing overflows" on phones): the top and bottom bands, the
+	## send panel and the right-hand buttons count as off-screen, and a badge that still touches one is
+	## slid clear of it (_clear_of).
 	var vp := get_viewport().get_visible_rect().size
 	var plat := {}                                        # id -> [centre, radius] on screen
 	for n in sim.nodes:
@@ -950,6 +982,10 @@ func _layout_badges(cam: Camera3D) -> void:
 	_badge_screen = {}
 	var placed := []                                      # [centre, radius]
 	var down := Vector2(0, 1)
+	var blocked := [Rect2(0, 0, vp.x, top_used()), Rect2(0, vp.y - bottom_used(), vp.x, bottom_used())]
+	for c in [side_panel, pause_button, debug_button, chat_button, dock]:   # Alpha 18: never under the HUD
+		if c and c.visible:
+			blocked.append((c as Control).get_global_rect().grow(4.0))
 	for n in sim.nodes:
 		var id: int = n["id"]
 		var panel: Control = badges[id]["panel"]
@@ -973,18 +1009,43 @@ func _layout_badges(cam: Camera3D) -> void:
 				for o in placed:
 					cover += 2.0 * maxf(0.0, rb + o[1] + 2.0 - p.distance_to(o[0]))
 				var off := maxf(0.0, rb - p.x) + maxf(0.0, p.x + rb - vp.x) + maxf(0.0, rb - p.y) + maxf(0.0, p.y + rb - vp.y)
+				var box := Rect2(p - sz * 0.5, sz)
+				for b in blocked:
+					if box.intersects(b):
+						var over := box.intersection(b)
+						off += minf(over.size.x, over.size.y) + 8.0
 				var score: float = cover * 10.0 + off * 20.0 + reach * 0.4 - dir.dot(down) * 3.0
 				if score < best_score:
 					best_score = score
 					best = p
+		if Rect2(Vector2.ZERO, vp).has_point(c):          # a node off screen (close-up) keeps its spot
+			best = _clear_of(best, sz, blocked, vp)
 		_badge_screen[id] = best
 		placed.append([best, rb])
 
 
+func _clear_of(p: Vector2, sz: Vector2, blocked: Array, vp: Vector2) -> Vector2:
+	## Last resort when every spot round the rim touches the HUD or the screen edge: slide the badge
+	## the shortest way out of each HUD panel it still overlaps, then back inside the screen.
+	for b in blocked:
+		var box := Rect2(p - sz * 0.5, sz)
+		if not box.intersects(b):
+			continue
+		var r: Rect2 = b
+		var dx := (r.end.x - box.position.x) if p.x > r.get_center().x else (r.position.x - box.end.x)
+		var dy := (r.end.y - box.position.y) if p.y > r.get_center().y else (r.position.y - box.end.y)
+		if absf(dx) < absf(dy):
+			p.x += dx
+		else:
+			p.y += dy
+	return Vector2(clampf(p.x, sz.x * 0.5 + 2.0, vp.x - sz.x * 0.5 - 2.0), clampf(p.y, sz.y * 0.5 + 2.0, vp.y - sz.y * 0.5 - 2.0))
+
+
 func badge_anchor(n: Dictionary) -> Vector3:
-	## Where a node's badge sits: just outside its platform, in the gap furthest from any of its
-	## bridges, leaning toward the viewer (Daniele: "HUD should always be placed in areas beyond the
-	## platform, not overlapping a corridor or a platform"). Computed once per node.
+	## A 3D estimate of the badge's spot, used only so main._fit_camera leaves room for it; the badge
+	## itself is placed on screen by _layout_badges. Just outside the platform, in the gap furthest
+	## from any of its bridges, leaning toward the viewer (Daniele: "HUD should always be placed in
+	## areas beyond the platform, not overlapping a corridor or a platform"). Computed once per node.
 	var id: int = n["id"]
 	if not _badge_dirs.has(id):
 		var toward_viewer := Vector3(0, 0, 1).rotated(Vector3.UP, Rules.view_yaw)

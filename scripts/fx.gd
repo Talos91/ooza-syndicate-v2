@@ -1,12 +1,11 @@
 class_name Fx
 extends Node3D
-## In-world animation and effects (Alpha 12 - Daniele: "the complete lack of animation, HUD, UX/UI
-## makes it unplayable"): construction (the new structure grows out of the socket under a
-## turning build ring), capture pulses, the shield dome and its break, cannon beams, relay
-## warnings (blinking state lights + a ghost of the next deck), relay motion (rotation pivots
-## the turntable and its decks, retract slides the deck into its gate, switch/remote dissolve and
-## assemble), the Last Stand warning ring and the falls (platform, deck fragments, waterfall of
-## goo, hordes tumbling into the void), plus the selection ring and owner-coloured deck lights.
+## In-world animation and effects: construction (the new structure grows out of the socket under a
+## turning build ring), capture pulses, cannon beams, relay warnings (blinking state lights + a ghost
+## of the next deck), relay motion (rotation pivots the turntable and its decks, retract slides the
+## deck into its gate, switch/remote dissolve and assemble), the Last Stand warning ring and the falls
+## (platform, deck fragments, waterfall of goo, hordes tumbling into the void), the selection ring,
+## owner-coloured deck lights (SIEGE) and Alpha 11's half-bridge neon trims (BRAWL).
 
 var sim: Sim
 var vis: Dictionary
@@ -16,16 +15,17 @@ var selected := -1
 var _sel_ring: MeshInstance3D
 var _ring_mesh: TorusMesh
 var _thin_ring: TorusMesh
-var _domes := {}            # node id -> MeshInstance3D
 var _build_rings := {}      # node id -> MeshInstance3D
 var _warn_rings := {}       # node id -> MeshInstance3D (Last Stand)
 var _cool_arcs := {}        # node id -> MeshInstance3D (relay cooldown / warning)
+var _arc_built := {}        # node id -> [frac, colour] the arc was last built with
 var _beams := {}            # node id -> {"beam", "flash"}
 var _ghosts := {}           # edge -> [Node3D]
 var _plat_angle := {}       # node id -> accumulated turntable angle
 var _edge_light := {}       # edge -> owner key currently applied
 var _state_color := {}      # node id -> state key applied
 var _collapsed := {}
+var _lights_classic := false  # the mode the deck lights were last laid out for (true = BRAWL)
 var _pulses: Array = []     # transient rings: {mesh, t, dur, color}
 var _frag_names := ["girder_l", "girder_r", "plate_a", "plate_b", "plate_c", "truss"]
 
@@ -73,12 +73,6 @@ func handle(ev: Dictionary) -> void:
 		"build_done":
 			var n: Dictionary = sim.nodes[ev["node"]]
 			_pulse(n["pos"], Rules.state_color("build"), 4.0, 0.6)
-		"shield_break":
-			var n: Dictionary = sim.nodes[ev["node"]]
-			_pulse(n["pos"], Rules.state_color("warn"), Rules.RIVER_R + 1.0, 0.7)
-		"shield_up":
-			var n: Dictionary = sim.nodes[ev["node"]]
-			_pulse(n["pos"], Rules.seat_color(n["owner"]), Rules.RIVER_R, 0.5)
 		"relay_done":
 			var n: Dictionary = sim.nodes[ev["node"]]
 			if n["relay"] == "rotation":
@@ -87,7 +81,7 @@ func handle(ev: Dictionary) -> void:
 		"fall":
 			_fall_horde(ev)
 		"collapse":
-			_collapse(ev["node"])
+			_collapse(ev["node"], str(ev.get("from", "")))
 
 
 func _pulse(pos: Vector3, color: Color, radius: float, dur: float) -> void:
@@ -102,10 +96,20 @@ func _pulse(pos: Vector3, color: Color, radius: float, dur: float) -> void:
 
 # ------------------------------------------------------------------ per frame
 func sync(dt: float) -> void:
+	var classic := not Rules.bridge_combat
+	if classic != _lights_classic:                    # SIEGE/BRAWL switched (pause menu, Debug panel)
+		_lights_classic = classic
+		_edge_light.clear()                           # SIEGE: _decks re-applies owner/state lights
+		if classic:
+			for i in _trims:
+				for d in vis["edge_decks"][i]:
+					MapBuilder.set_lights(d, Mats.light_color(TRIM_OFF, "trim_off"))
+			for i in vis["edge_piers"]:
+				for p in vis["edge_piers"][i]:
+					MapBuilder.set_lights(p, null)      # piers as in a pure BRAWL match
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]
 		_construction(n, entry, dt)
-		pass                                          # Alpha 14: no shield pool, no shield ring
 		_relay(n, entry)
 		_last_stand_warning(n)
 		_cannon(n, entry)
@@ -155,31 +159,6 @@ func _construction(n: Dictionary, entry: Dictionary, dt: float) -> void:
 			(_build_rings[n["id"]] as MeshInstance3D).visible = false
 
 
-func _shield(n: Dictionary, _entry: Dictionary) -> void:
-	var id: int = n["id"]
-	if not _domes.has(id):
-		var mi := MeshInstance3D.new()
-		mi.mesh = _ring_mesh                          # a flat ring, not a dome: no fill-rate cost
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mi)
-		_domes[id] = mi
-	var dome: MeshInstance3D = _domes[id]
-	var owner: String = n["owner"]
-	if owner == "" or sim.collapsed.get(id, false) or n["units"] <= 0.0 or Rules.low_detail:
-		dome.visible = false
-		return
-	var cap: float = maxf(Rules.SHIELD_FRACTION * n["units"], 0.001)
-	var ratio := clampf(n["shield"] / cap, 0.0, 1.0)
-	dome.visible = n["shield_up"] or ratio > 0.05
-	dome.material_override = Mats.shield(owner)
-	var r := Rules.RIVER_R + 1.3
-	dome.position = n["pos"] + Vector3(0, 0.35 + 0.9 * ratio, 0)
-	dome.scale = Vector3(r, 0.5 + 2.5 * ratio, r)
-	dome.rotation.y += 0.01
-	var hit: float = clampf(n["shield_loss"] / 30.0, 0.0, 1.0)
-	dome.transparency = (0.55 if n["shield_up"] else 0.85) - 0.4 * hit + 0.05 * sin(sim.time * 3.0)
-
-
 func _relay(n: Dictionary, entry: Dictionary) -> void:
 	if n["relay"] == "":
 		return
@@ -215,9 +194,12 @@ func _relay(n: Dictionary, entry: Dictionary) -> void:
 		frac = 1.0 - n["relay_cd"] / Rules.RELAY_COOLDOWN
 	arc.visible = n["owner"] != "" and not sim.collapsed.get(id, false)
 	if arc.visible:
-		arc.material_override = Mats.glow(arc_col, 0.9)
 		arc.position = n["pos"] + Vector3(0, 0.3, 0)
-		_build_arc(arc.mesh as ImmediateMesh, Rules.R - 1.0, Rules.R - 0.45, frac)
+		var built := [frac, arc_col]
+		if _arc_built.get(id, []) != built:           # idle relays keep their mesh: no rebuild per frame
+			_arc_built[id] = built
+			arc.material_override = Mats.glow(arc_col, 0.9)
+			_build_arc(arc.mesh as ImmediateMesh, Rules.R - 1.0, Rules.R - 0.45, frac)
 	# ghosts of the next state during the warning, motion of the decks during the tick
 	for i in sim.controlled_edges(id):
 		var ghost_on := false
@@ -238,7 +220,8 @@ func _relay_motion(n: Dictionary, entry: Dictionary) -> void:
 		"rotation":
 			var delta: float = anim.get("delta", 0.0)
 			var angle := delta * eased
-			(entry["platform"] as Node3D).rotation.y = -(_plat_angle.get(n["id"], 0.0) + angle)
+			if entry["platform"] != null:                 # a plaza socket has no turntable
+				(entry["platform"] as Node3D).rotation.y = -(_plat_angle.get(n["id"], 0.0) + angle)
 			for i in anim["closing"]:
 				var decks: Array = vis["edge_decks"][i]
 				for k in range(decks.size()):
@@ -278,7 +261,7 @@ func _relay_motion(n: Dictionary, entry: Dictionary) -> void:
 
 func _restore_edges(n: Dictionary) -> void:
 	var anim: Dictionary = n["relay_anim"]
-	if n["relay"] == "rotation":
+	if n["relay"] == "rotation" and vis[n["id"]]["platform"] != null:
 		(vis[n["id"]]["platform"] as Node3D).rotation.y = -_plat_angle.get(n["id"], 0.0)
 	for i in anim.get("closing", []) + anim.get("opening", []):
 		var decks: Array = vis["edge_decks"][i]
@@ -319,7 +302,8 @@ func _last_stand_warning(n: Dictionary) -> void:
 		ring.transparency = 0.2 + 0.5 * blink
 		for link in sim.adj[id]:                        # threatened decks flash red
 			var edge_i: int = link[1]
-			var mat: Material = Mats.light_color(Rules.state_color("warn")) if blink > 0.5 else null
+			var off: Material = null if Rules.bridge_combat else Mats.light_color(TRIM_OFF, "trim_off")
+			var mat: Material = Mats.light_color(Rules.state_color("warn")) if blink > 0.5 else off
 			if _edge_light.get(edge_i, "") != "warn%d" % int(blink > 0.5):
 				_edge_light[edge_i] = "warn%d" % int(blink > 0.5)
 				for d in vis["edge_decks"][edge_i]:
@@ -390,7 +374,7 @@ func _decks() -> void:
 		for d in vis["edge_decks"][i]:
 			(d as Node3D).visible = open
 		if not Rules.bridge_combat:
-			continue                                      # classic: _half_trims owns the lights
+			continue                                      # BRAWL: _half_trims owns the lights
 		if sim.is_warned(e["a"]) or sim.is_warned(e["b"]):
 			continue                                      # _last_stand_warning flashes these
 		if e["state"] != "" or e["retracts"]:             # relay decks keep their state colour
@@ -453,7 +437,7 @@ func _waterfall(seat: String, radius: float, seconds: float) -> CPUParticles3D:
 	m.height = 0.44
 	m.radial_segments = 6
 	m.rings = 3
-	m.material = Mats.goo(seat if seat != "" else "A")
+	m.material = Mats.goo(seat)                       # "" = neutral goo, like a neutral river
 	p.mesh = m
 	p.amount = 90
 	p.lifetime = 1.6
@@ -477,12 +461,13 @@ func _waterfall(seat: String, radius: float, seconds: float) -> CPUParticles3D:
 	return p
 
 
-func _collapse(node_id: int) -> void:
+func _collapse(node_id: int, from := "") -> void:
 	## Last Stand destruction: the platform and every deck it still has fall away; decks break into
 	## the kit's fragment pieces, goo pours over the rim all the way round (waterfall board E).
+	## `from` is the owner before the drop (the sim has already cleared it): the goo's colour.
 	var n: Dictionary = sim.nodes[node_id]
 	var falling: Array = vis[node_id]["parts"].duplicate()
-	for key in ["build_rings", "warn_rings", "domes", "cool_arcs"]:
+	for key in ["build_rings", "warn_rings", "cool_arcs"]:
 		var dict: Dictionary = get(("_" + key))
 		if dict.has(node_id):
 			(dict[node_id] as Node3D).visible = false
@@ -507,7 +492,7 @@ func _collapse(node_id: int) -> void:
 		var pz: Dictionary = vis["plazas"][pid]
 		if node_id in pz["members"] and pz["node"] and (pz["members"] as Array).all(func(m): return sim.collapsed.get(m, false)):
 			falling.append(pz["node"])
-	var wf := _waterfall(n["owner"] if n["owner"] != "" else "", Rules.R, 1.8)
+	var wf := _waterfall(from, Rules.R, 1.8)
 	wf.amount = 220
 	wf.position = n["pos"] + Vector3(0, 0.2, 0)
 	add_child(wf)
@@ -527,14 +512,16 @@ func _collapse(node_id: int) -> void:
 				(p as Node3D).visible = false)
 
 
-# ------------------------------------------------------------------ classic: Alpha 11 half-bridge neon
+# ------------------------------------------------------------------ BRAWL: Alpha 11 half-bridge neon
 var _trims := {}             # edge -> [MeshInstance3D x4]: two edges x two halves
+var _trim_key := {}          # edge -> "show|owner_a|owner_b" last applied
 var _trim_mesh: BoxMesh
 const NEUTRAL_TRIM := Color("ffad51")   # Alpha 11's neutral bridge trim
+const TRIM_OFF := Color(0.12, 0.14, 0.16)   # the kit's deck lights, dimmed under the trims
 
 
 func _half_trims() -> void:
-	## CLASSIC MODE (Daniele: "bridges need to follow Alpha 11's idea of neon lighting up half the
+	## BRAWL (Daniele: "bridges need to follow Alpha 11's idea of neon lighting up half the
 	## bridge connected to a node"): every deck carries two neon strips along its edges; the half
 	## nearest each node glows in that node's owner colour (neutral amber), like Alpha 11's
 	## bridge_trims. The kit's own deck lights are dimmed while this is on.
@@ -557,7 +544,11 @@ func _half_trims() -> void:
 				arr.append(mi)
 			_trims[i] = arr
 			for d in vis["edge_decks"][i]:
-				MapBuilder.set_lights(d, Mats.light_color(Color(0.12, 0.14, 0.16), "trim_off"))
+				MapBuilder.set_lights(d, Mats.light_color(TRIM_OFF, "trim_off"))
+		var key := "%s|%s|%s" % [show, sim.nodes[e["a"]]["owner"], sim.nodes[e["b"]]["owner"]]
+		if _trim_key.get(i, "") == key:
+			continue                                      # geometry is static: only show/owners change it
+		_trim_key[i] = key
 		var parts: Array = _trims[i]
 		for mi in parts:
 			(mi as MeshInstance3D).visible = show

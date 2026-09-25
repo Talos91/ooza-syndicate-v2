@@ -59,7 +59,6 @@ func _init() -> void:
 	var g: float = sim.nodes[1]["units"]
 	check(g > 40.0 and g < 130.0, "after the whole horde is in, garrison = survivors of the platform fight + production (got %.1f)" % g)
 	check(sim.nodes[1]["siege"].is_empty(), "no siege left on the captured platform")
-	check(not sim.nodes[1]["shield_up"] or sim.nodes[1]["shield"] >= 0.0, "a captured node starts with its shield down")
 
 	# travel time: an M deck is 4 s at base speed, nodes crossed fast
 	var sim2 := Sim.new()
@@ -132,7 +131,6 @@ func _init() -> void:
 	sim9.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
 	sim9.nodes[1]["owner"] = "B"
 	sim9.nodes[1]["units"] = 500.0                     # strong waypoint: the order dies there
-	sim9.nodes[1]["shield"] = 100.0
 	sim9.nodes[3]["units"] = 60.0
 	var h9 := sim9.send(3, 4, 1.0)
 	run_until(sim9, func(): return not (h9 in sim9.hordes), 30.0)
@@ -383,8 +381,6 @@ func _init() -> void:
 	sim15.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
 	sim15.nodes[1]["owner"] = "B"
 	sim15.nodes[1]["units"] = 30.0
-	sim15.nodes[1]["shield"] = 0.0
-	sim15.nodes[1]["shield_up"] = false
 	sim15.nodes[0]["owner"] = "A"
 	sim15.nodes[0]["units"] = 200.0
 	var h15 := sim15.send(0, 5, 1.0)                  # A: 0 -> 1 (retract deck) -> 5
@@ -792,6 +788,56 @@ func _init() -> void:
 	var tc := Rules._hue_gap(Rules.seat_color("C"), Rules.seat_color("D"))
 	check(ta > 0.12 and tc > 0.12, "2v2: team-mates have different hues too (%.2f / %.2f)" % [ta, tc])
 	check(Rules._hue_gap(Rules.seat_color("A"), Rules.seat_color("C")) > 0.2, "2v2: the other team is another colour family")
+	# 2v2v2: three teams, three families (cool / warm / violet) - two opposing teams never share a colour
+	var six := ["A", "B", "C", "D", "E", "F"]
+	var t3 := {"A": 0, "B": 0, "C": 1, "D": 1, "E": 2, "F": 2}
+	var fam_of := func(c: Color) -> int:
+		var best := 0
+		var best_gap := 1.0
+		for fi in range(Rules.TEAM_FAMILIES_3.size()):
+			for k in Rules.TEAM_FAMILIES_3[fi]:
+				var fg := Rules._hue_gap(c, Rules.HUES[k])
+				if fg < best_gap:
+					best_gap = fg
+					best = fi
+		return best
+	for pick in ["A", "B", "C", "D", "E", "F", "faction"]:
+		Rules.assign_colors(six, {"A": "null", "B": "null", "C": "null", "D": "null", "E": "null", "F": "null"}, "A", pick, t3)
+		var c3 := {}
+		var html := {}
+		for s in six:
+			c3[s] = Rules.seat_color(s)
+			html[(c3[s] as Color).to_html()] = true
+		check(html.size() == 6, "2v2v2 pick %s: six distinct colours" % pick)
+		var opp_gap := 1.0
+		for i in range(six.size()):
+			for j in range(i + 1, six.size()):
+				if t3[six[i]] != t3[six[j]]:
+					opp_gap = minf(opp_gap, Rules._hue_gap(c3[six[i]], c3[six[j]]))
+		check(opp_gap > 0.07, "2v2v2 pick %s: no two opposing players share a hue (closest %.3f)" % [pick, opp_gap])
+		var mates := [Rules._hue_gap(c3["A"], c3["B"]), Rules._hue_gap(c3["C"], c3["D"]), Rules._hue_gap(c3["E"], c3["F"])]
+		check(mates.min() > 0.12, "2v2v2 pick %s: team-mates differ (%.2f / %.2f / %.2f)" % [pick, mates[0], mates[1], mates[2]])
+		var fams := {}
+		for pair in [["A", "B"], ["C", "D"], ["E", "F"]]:
+			var fa: int = fam_of.call(c3[pair[0]])
+			if fa == fam_of.call(c3[pair[1]]):
+				fams[fa] = true
+		check(fams.size() == 3, "2v2v2 pick %s: each team reads as one family, three distinct families" % pick)
+
+	# ---------------------------------------------------------------- AI: one order per vat per think
+	# (a send supersedes the node's earlier order, and units leave only as the door emits them)
+	var aim := MapBuilder.load_map("res://maps/004-two-piers.json")
+	var aisim := Sim.new()
+	aisim.setup(aim, MapBuilder.layout(aim), {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	for tid in [0, 1]:                                 # two threatened nodes of A, too weak to donate
+		aisim.nodes[tid]["owner"] = "A"
+		aisim.nodes[tid]["units"] = 5.0
+		aisim.nodes[tid]["siege"] = {"B": 100.0}
+	aisim.nodes[3]["units"] = 400.0                    # one strong donor
+	SeatAI.new("A", 2.0, "Standard").think(aisim, 10.0)
+	var from_d := aisim.hordes.filter(func(x): return x["route"][0] == 3)
+	check(from_d.size() == 1 and from_d[0]["streaming"] and from_d[0]["target"] == 0,
+			"AI never cancels its own order in the same think (one order from the donor, still streaming to the first target)")
 
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)

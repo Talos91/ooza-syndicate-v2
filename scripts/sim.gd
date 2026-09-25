@@ -2,13 +2,11 @@ class_name Sim
 extends RefCounted
 ## Game state and rules, no visuals. Deterministic for a given sequence of sends, time steps and
 ## seed. Rules: Docs/Game Design/Ooze Syndicate 2.0/01 Rules/GAME-RULES.md (§5 hordes, §6 nodes,
-## §7 bridges, §8 relays, §10 Last Stand). Alpha 12 (2026-09-25): real relays, real Last Stand,
-## geometric contact everywhere, Alpha 11 costs. Alpha 14: tug-of-war fronts, recall, always-on goo
-## corridors with a home advantage, transit fights the real garrison (the shield pool is gone).
+## §7 bridges, §8 relays, §10 Last Stand). Baked map layouts and plazas, ring Last Stand,
+## geometric contact everywhere, tug-of-war fronts, recall (SIEGE only), always-on goo corridors with
+## a home advantage, transit fights the real garrison; BRAWL (bridge_combat off) lands Alpha 11 style.
 
 signal captured(node_id: int, new_owner: String, old_owner: String)
-signal horde_spawned(h: Dictionary)
-signal horde_removed(h: Dictionary)
 signal finished(winner: String)
 
 var nodes: Array = []          # see setup()
@@ -29,6 +27,7 @@ var fights: Array = []               # [horde id, horde id] contact pairs - a fi
 var fight_info: Dictionary = {}      # "lo:hi" -> {kind: "frontline"/"rear", attacker: horde id} (for the view)
 var relay_groups: Dictionary = {}    # "r"/"s"/"m" -> [sorted state keys]
 var edge_controller: Dictionary = {} # edge index -> relay node id that fires it (-1 if none)
+var _ctrl_edges: Dictionary = {}     # relay node id -> [edge indices] it fires (filled once in setup; read-only)
 var collapsed: Dictionary = {}       # node id -> true once dropped by the Last Stand
 var eliminated: Dictionary = {}      # seat -> true once the collapse took its last node
 var last_stand_active := false
@@ -95,9 +94,6 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"cannon_burst": 0.0,    # seconds left in the current burst (0 = not firing)
 			"cannon_kill_left": 0.0,
 			"cannon_target": Vector3.ZERO,
-			"shield": Rules.SHIELD_FRACTION * units,
-			"shield_up": true,      # false from a break until fully regenerated (free passage meanwhile)
-			"shield_loss": 0.0,     # units/s the shield lost last step (view flash)
 			"relay_index": 0,       # current position in this relay's state cycle (retract: 0 out / 1 in)
 			"relay_pending": 0,     # the state a fired relay is moving to
 			"relay_phase": "",      # "" / "warning" / "moving"
@@ -169,17 +165,19 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 					ctrl = n["id"]
 					break
 		edge_controller[i] = ctrl
+	_ctrl_edges = {}
+	for i in edge_controller:                        # per-relay lists, ascending edge order (read-only)
+		if not _ctrl_edges.has(edge_controller[i]):
+			_ctrl_edges[edge_controller[i]] = []
+		_ctrl_edges[edge_controller[i]].append(i)
 
 
 var _map_last_stand: Dictionary = {}
 
 
 func controlled_edges(node_id: int) -> Array:
-	var out := []
-	for i in edge_controller:
-		if edge_controller[i] == node_id:
-			out.append(i)
-	return out
+	## The edges this relay fires. Cached at setup; callers must not modify the returned array.
+	return _ctrl_edges.get(node_id, [])
 
 
 # ------------------------------------------------------------------ orders
@@ -204,7 +202,6 @@ func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 	src["streaming"] = {"hid": h["id"], "remaining": count}
 	events.append({"t": time, "type": "send", "seat": h["owner"], "from": from_id, "to": to_id, "units": count,
 			"target_owner": nodes[to_id]["owner"]})
-	horde_spawned.emit(h)
 	return h
 
 
@@ -420,7 +417,7 @@ func relay_state_key(n: Dictionary, index: int) -> String:
 	if states.is_empty():
 		return ""
 	var k: String = states[index % states.size()]
-	return "retract" if n["relay"] == "retract" and k == "retract" else k
+	return k
 
 
 func relay_next_index(n: Dictionary) -> int:
@@ -723,7 +720,6 @@ func _kill_horde(h: Dictionary, why: String) -> void:
 			_end_streaming(src, "destroyed")
 	if h in hordes:
 		hordes.erase(h)
-		horde_removed.emit(h)
 		events.append({"t": time, "type": "horde_destroyed", "seat": h["owner"], "units": h["start_units"], "why": why})
 
 
@@ -768,20 +764,6 @@ func find_route(from_id: int, to_id: int) -> Array:
 	while route[0] != from_id:
 		route.push_front(prev[route[0]])
 	return route
-
-
-func reachable_from(node_id: int) -> int:
-	var seen := {node_id: true}
-	var open := [node_id]
-	while not open.is_empty():
-		var cur: int = open.pop_front()
-		for link in adj[cur]:
-			var nb: int = link[0]
-			if seen.has(nb) or collapsed.get(nb, false) or not _edge_open(link[1]):
-				continue
-			seen[nb] = true
-			open.append(nb)
-	return seen.size()
 
 
 # ------------------------------------------------------------------ path geometry
@@ -1079,7 +1061,6 @@ func step(dt: float) -> void:
 	for n in nodes:                                   # production (vat nodes only), up to the cap
 		if n["owner"] != "" and has_vat(n) and n["units"] < Rules.CAPS[n["tier"]]:
 			n["units"] = minf(Rules.CAPS[n["tier"]], n["units"] + production(n) * dt)
-		n["shield"] = 0.0                              # Alpha 14: no hidden shield pool any more
 	_step_relays(dt)
 	_step_structures(dt)
 	for n in nodes:                                   # the door emits the current order into its line
@@ -1153,7 +1134,6 @@ func step(dt: float) -> void:
 				_end_streaming(src, "destroyed")
 		if h in hordes:
 			hordes.erase(h)
-			horde_removed.emit(h)
 	var alive := {}
 	for h in hordes:
 		alive[h["id"]] = true
@@ -1187,7 +1167,7 @@ func _check_missing_decks() -> void:
 			continue
 		var head: float = h["s"]
 		var tail: float = head - chain_length(h)
-		for sp in h["spans"].duplicate():
+		for sp in h["spans"]:
 			if not (h in hordes):
 				break
 			if head < sp["s0"] or tail > sp["s1"]:
@@ -1345,7 +1325,6 @@ func _tug_of_war(dt: float) -> void:
 			var s: float = v if att == a else -v            # >0: the attacker is winning
 			_shift(att, s)
 			_shift(oth, s)
-		info["push"] = v / maxf(dt, 0.0001)                 # m/s the front moves this step (view)
 
 
 func _shift(h: Dictionary, ds: float) -> void:
@@ -1434,12 +1413,17 @@ var _contact_now := {}                            # pair keys in contact this st
 
 
 func _engage(a: Dictionary, b: Dictionary, kind: String) -> void:
-	var pair := [mini(a["id"], b["id"]), maxi(a["id"], b["id"])]
-	_contact_now["%d:%d" % [pair[0], pair[1]]] = true
+	var lo := mini(a["id"], b["id"])
+	var hi := maxi(a["id"], b["id"])
+	var key := "%d:%d" % [lo, hi]
+	if _contact_now.has(key):                     # already engaged this step (the first call decided it)
+		return
+	_contact_now[key] = true
+	var pair := [lo, hi]
 	if pair in fights:
 		return
 	fights.append(pair)
-	fight_info["%d:%d" % [pair[0], pair[1]]] = {"kind": kind, "attacker": a["id"]}   # a's head made the contact
+	fight_info[key] = {"kind": kind, "attacker": a["id"]}   # a's head made the contact
 	if a["state"] != "ride" and not a.get("retreat", false):
 		a["state"] = "fight"
 	if b["state"] != "ride" and not b.get("retreat", false):
@@ -1471,7 +1455,6 @@ func _end_streaming(n: Dictionary, why: String) -> void:
 		events.append({"t": time, "type": "order_" + why, "seat": h["owner"], "left_inside": st["remaining"]})
 	if h["units"] <= 0.0:
 		hordes.erase(h)
-		horde_removed.emit(h)
 
 
 func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
@@ -1520,9 +1503,9 @@ func _land_classic(n: Dictionary, seat: String, x: float) -> void:
 
 
 func _register_transit() -> void:
-	## An order passing through a node always counts as passing through that node - unless the
-	## node is the horde's own (pure pass-through, GAME-RULES §6), neutral (a free glide), or its
-	## (Alpha 14) no hidden shield: a passing force fights the garrison itself, the badge number.
+	## An order passing through a node always counts as passing through it, unless the node is the
+	## horde's own or an ally's (pure pass-through, GAME-RULES §6) or neutral (a free glide). There
+	## is no hidden shield: a passing force fights the garrison itself. BRAWL: waypoints are free.
 	for n in nodes:
 		n["transit"] = {}
 	if not Rules.bridge_combat:                        # classic (Alpha 11): waypoints are free
@@ -1547,9 +1530,9 @@ func _register_transit() -> void:
 
 func _node_fights(dt: float) -> Array:
 	## Units on a platform fight the garrison (and each other) at the frontline rates, whether they
-	## arrived (persistent siege - fights the real garrison) or are passing through this frame
-	## (transit - fights the SHIELD only). When the garrison is beaten down the node flips to the
-	## strongest arrived side. Returns hordes wiped out en route.
+	## arrived (persistent siege) or are passing through this frame (transit); both fight the real
+	## garrison. When the garrison is beaten down the node flips to the strongest arrived side
+	## (transit alone never captures). Returns hordes wiped out en route.
 	_register_transit()
 	var destroyed := []
 	for n in nodes:
@@ -1655,8 +1638,6 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 	n["units"] = garrison
 	n["siege"] = {}
 	n["siege_dir"] = {}
-	n["shield"] = 0.0
-	n["shield_up"] = false
 	fx_events.append({"type": "capture", "node": n["id"], "seat": seat})
 
 
@@ -2027,8 +2008,10 @@ func drop_order_of(node_id: int) -> int:
 func _drop_node(id: int) -> void:
 	## Everything on a falling node or its decks dies (GAME-RULES sec10): garrison, siege, every
 	## horde portion on the platform or on a deck attached to it. The attachment goes with it.
-	collapsed[id] = true
 	var n: Dictionary = nodes[id]
+	if n["relay_phase"] == "moving":
+		_relay_apply(n)                     # finish the tick: riders get their per-kind fate, the view restores the decks
+	collapsed[id] = true
 	var old: String = n["owner"]
 	if not n["streaming"].is_empty():
 		_end_streaming(n, "collapsed")
@@ -2062,19 +2045,20 @@ func _drop_node(id: int) -> void:
 			if ns["node"] == id:
 				lo = minf(lo, ns["s0"])
 				hi = maxf(hi, ns["s1"])
+		var sps: Array = h["spans"]                   # empty after a recall that never left the plaza
 		if h["target"] == id:
-			lo = minf(lo, h["spans"][-1]["s1"])
+			lo = minf(lo, sps[-1]["s1"] if not sps.is_empty() else 0.0)
 			hi = maxf(hi, h["L"])
 		if h["route"][0] == id:
 			lo = 0.0
-			hi = maxf(hi, h["spans"][0]["s0"])
+			hi = maxf(hi, sps[0]["s0"] if not sps.is_empty() else h["L"])
 		if lo <= hi:
 			h.erase("ride")
 			if h["state"] == "ride":
 				h["state"] = "move"
 			_cut_range(h, lo, hi, "fall", -1)
 	events.append({"t": time, "type": "collapse", "node": id, "from": old})
-	fx_events.append({"type": "collapse", "node": id})
+	fx_events.append({"type": "collapse", "node": id, "from": old})   # the view pours the old owner's goo
 	for seat in factions.keys():                        # losing your last node to the collapse = defeat
 		if eliminated.has(seat):
 			continue
@@ -2095,15 +2079,23 @@ func _drop_node(id: int) -> void:
 
 
 func _force_end() -> void:
-	## Safety net: still undecided at 7:00 -> the stronger seat wins outright.
+	## Safety net: still undecided at 7:00 -> the stronger side (team) wins outright; its strongest
+	## seat is named the winner. Without teams every seat is its own side.
 	over = true
+	var side_total := {}
+	var side_seat := {}
+	for s in factions.keys():
+		var side = teams.get(s, s)
+		var v := seat_strength(s)
+		side_total[side] = side_total.get(side, 0.0) + v
+		if not side_seat.has(side) or v > seat_strength(side_seat[side]):
+			side_seat[side] = s
 	var best := ""
 	var best_v := -1.0
-	for s in factions.keys():
-		var v := seat_strength(s)
-		if v > best_v:
-			best_v = v
-			best = s
+	for side in side_total:
+		if side_total[side] > best_v:
+			best_v = side_total[side]
+			best = side_seat[side]
 	winner = best
 	events.append({"t": time, "type": "end", "winner": winner, "forced": true})
 	finished.emit(winner)
@@ -2140,14 +2132,6 @@ func seat_strength(seat: String) -> float:
 		if h["owner"] == seat:
 			total += h["units"]
 	return total
-
-
-func seat_nodes(seat: String) -> int:
-	var c := 0
-	for n in nodes:
-		if n["owner"] == seat:
-			c += 1
-	return c
 
 
 func allied(a: String, b: String) -> bool:

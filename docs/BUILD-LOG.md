@@ -414,17 +414,26 @@ Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --map=res://maps/008-
 Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --scenario=fight --zoom=13 --window=1600x740
 Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" -- --scenario=rear --shots=9,11,13 --out=C:/tmp
 
-# MAPS 3.0 (Alpha 17): bake the approved Blender layout for the game after any change to the pack
-# (References/Ooze Syndicate maps 3.0, debug maps) or to Models/2.0/build_maps_3_0_review.py, then test:
-"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --python Models/2.0/export_maps_3_0_game.py
+# MAPS 4.0 (Alpha 18): bake the Blender layout for the game after any change to the pack
+# (References/Ooze Syndicate maps 4.0, its debug/ maps) or to Models/2.0/build_maps_4_0_review.py, then test.
+# (Maps 3.0, Alpha 17: export_maps_3_0_game.py -> maps3/, no longer in the game; kept for history.)
+"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --python Models/2.0/export_maps_4_0_game.py
 Godot_v4.6.1-stable_win64_console.exe --headless --import --path "Game/2.0"
-Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_maps3.gd
+#   new GLBs: set meshes/generate_lods=false and meshes/create_shadow_meshes=false in assets/maps4/*.glb.import,
+#   delete their .godot/imported/<name>.glb-* files and --import again (keeps the pack under GitHub's 100 MB)
+Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_maps4.gd
+# then re-pick the per-map camera pitch (scripts/map_camera.gd) with the phone-fit probe - windowed, as a scene
+# (the Net autoload must exist); pitches=auto measures the current table, pitches=50,54,.. sweeps:
+Godot_v4.6.1-stable_win64_console.exe --path "Game/2.0" --resolution 1266x585 res://tests/phone_fit.tscn -- out=C:/tmp/phonefit.txt pitches=50,54,58,62,66,70,74
 # Export note: while another session has uncommitted kit pieces in assets/kit (Park_*, Plaza_*, ...),
 # exclude them for the export only so the pack stays ~60 MB (never commit them for that session).
 
 # rules tests
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_sim.gd
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_net.gd   # rooms, validation, snapshots, chat
+Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_map_pool.gd   # every pooled map to the end (~3-10 min)
+Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res://tests/test_ai_curve.gd   # the five levels vs Standard (~2-4 min)
+# frame cost: add --perf to any windowed run (a PERF line every 3 s: fps, draw calls, primitives, objects)
 
 # two players on one PC (Alpha 16): cp tests/duo.html build/web, serve build/web, open /duo.html: two
 # iframes side by side (both visible, so both game loops run; a background tab freezes its game).

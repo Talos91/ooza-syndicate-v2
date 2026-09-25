@@ -23,11 +23,13 @@ static func save(sim: Sim, map_code: String, strength_trace: Array) -> String:
 		"map": map_code, "duration_s": snappedf(sim.time, 0.1), "winner": sim.winner,
 		"winner_was_behind": behind, "sends": sends, "captures": captures,
 		"deciding_event": last_capture, "units_lost_combat": sim.combat_losses,
-		"units_lost_falls": sim.fall_losses, "last_stand_reached": sim.time >= 180.0,
+		"units_lost_falls": sim.fall_losses, "last_stand_reached": sim.last_stand_active,
 		"events": sim.events,
 	}
 	DirAccess.make_dir_recursive_absolute("user://telemetry")
 	var path := "user://telemetry/match_%d.json" % Time.get_unix_time_from_system()
 	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:                                   # user:// not writable (private browser storage, read-only profile)
+		return ""
 	f.store_string(JSON.stringify(record, "  "))
 	return ProjectSettings.globalize_path(path)

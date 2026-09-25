@@ -1,0 +1,993 @@
+{
+ "code": "S-15",
+ "name": "Halcyon Barricade",
+ "group": "siege",
+ "players": "ffa",
+ "playersLabel": "FFA 3",
+ "combatMode": "siege",
+ "family": "front",
+ "modes": [
+  "FFA3"
+ ],
+ "symmetry": "rotation x3",
+ "frame": {
+  "width": 160.0,
+  "height": 80.0,
+  "aspect": "2:1 landscape",
+  "panning": false,
+  "moduleUnits": 12.0,
+  "minNodeGap": 9.0
+ },
+ "minEnemyHomeHops": 4,
+ "centreSpawn": false,
+ "plazas": [
+  {
+   "id": 0,
+   "size": "S",
+   "shape": "round",
+   "cx": 106.0,
+   "cy": 40.0,
+   "rot": 0.0,
+   "rx": 10.0,
+   "ry": 10.0,
+   "sockets": [
+    0,
+    1,
+    2
+   ]
+  },
+  {
+   "id": 1,
+   "size": "S",
+   "shape": "round",
+   "cx": 67.0,
+   "cy": 62.52,
+   "rot": 120.0,
+   "rx": 10.0,
+   "ry": 10.0,
+   "sockets": [
+    0,
+    1,
+    2
+   ]
+  },
+  {
+   "id": 2,
+   "size": "S",
+   "shape": "round",
+   "cx": 67.0,
+   "cy": 17.48,
+   "rot": 240.0,
+   "rx": 10.0,
+   "ry": 10.0,
+   "sockets": [
+    0,
+    1,
+    2
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 111.6,
+   "y": 40.0,
+   "plaza": 0,
+   "socket": 0,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 103.2,
+   "y": 44.85,
+   "plaza": 0,
+   "socket": 1,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 103.2,
+   "y": 35.15,
+   "plaza": 0,
+   "socket": 2,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 80.0,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "strategic",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 4,
+    "structure": "forge"
+   },
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 93.0,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 90.5,
+   "y": 58.19,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 64.2,
+   "y": 67.37,
+   "plaza": 1,
+   "socket": 0,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 64.2,
+   "y": 57.67,
+   "plaza": 1,
+   "socket": 1,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 8,
+   "x": 72.6,
+   "y": 62.52,
+   "plaza": 1,
+   "socket": 2,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 9,
+   "x": 73.5,
+   "y": 51.26,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 10,
+   "x": 59.0,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 11,
+   "x": 64.2,
+   "y": 12.63,
+   "plaza": 2,
+   "socket": 0,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 12,
+   "x": 72.6,
+   "y": 17.48,
+   "plaza": 2,
+   "socket": 1,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 13,
+   "x": 64.2,
+   "y": 22.33,
+   "plaza": 2,
+   "socket": 2,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 14,
+   "x": 73.5,
+   "y": 28.74,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 15,
+   "x": 90.5,
+   "y": 21.81,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 1,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 5,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 15,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 5,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 7,
+   "to": 9,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 8,
+   "to": 9,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 9,
+   "to": 10,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 9,
+   "to": 5,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 10,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 12,
+   "to": 14,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 13,
+   "to": 14,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 14,
+   "to": 15,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 14,
+   "to": 10,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 15,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  }
+ ],
+ "rings": {
+  "count": 3,
+  "boundaries": [
+   6.5,
+   23.5
+  ],
+  "aspect": 1.0,
+  "shape": "circle"
+ },
+ "lastStand": {
+  "methods": [
+   "inward",
+   "chaos"
+  ],
+  "orders": {
+   "inward": [
+    2,
+    1,
+    0
+   ],
+   "chaos": [
+    [
+     0,
+     2,
+     1
+    ],
+    [
+     2,
+     0,
+     1
+    ],
+    [
+     2,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "seats": {
+  "FFA3": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": null
+   },
+   {
+    "seat": "B",
+    "node": 6,
+    "team": null
+   },
+   {
+    "seat": "C",
+    "node": 11,
+    "team": null
+   }
+  ]
+ },
+ "note": null,
+ "thumbnail": "thumbnails/S-15-halcyon-barricade.png",
+ "layout": {
+  "K": 1.7,
+  "nodes": {
+   "0": [
+    53.72,
+    0.0
+   ],
+   "1": [
+    39.44,
+    8.245
+   ],
+   "2": [
+    39.44,
+    -8.245
+   ],
+   "3": [
+    0.0,
+    0.0
+   ],
+   "4": [
+    22.1,
+    0.0
+   ],
+   "5": [
+    17.85,
+    30.923
+   ],
+   "6": [
+    -26.86,
+    46.529
+   ],
+   "7": [
+    -26.86,
+    30.039
+   ],
+   "8": [
+    -12.58,
+    38.284
+   ],
+   "9": [
+    -11.05,
+    19.142
+   ],
+   "10": [
+    -35.7,
+    0.0
+   ],
+   "11": [
+    -26.86,
+    -46.529
+   ],
+   "12": [
+    -12.58,
+    -38.284
+   ],
+   "13": [
+    -26.86,
+    -30.039
+   ],
+   "14": [
+    -11.05,
+    -19.142
+   ],
+   "15": [
+    17.85,
+    -30.923
+   ]
+  },
+  "plazas": {
+   "0": {
+    "c": [
+     44.2,
+     0.0
+    ],
+    "ax": 17.0,
+    "ay": 17.0,
+    "phi": 0.0,
+    "size": "S"
+   },
+   "1": {
+    "c": [
+     -22.1,
+     38.284
+    ],
+    "ax": 17.0,
+    "ay": 17.0,
+    "phi": 2.0943951023931953,
+    "size": "S"
+   },
+   "2": {
+    "c": [
+     -22.1,
+     -38.284
+    ],
+    "ax": 17.0,
+    "ay": 17.0,
+    "phi": 4.1887902047863905,
+    "size": "S"
+   }
+  },
+  "edges": [
+   {
+    "A": [
+     27.7343,
+     4.2286
+    ],
+    "B": [
+     26.6859,
+     3.8689
+    ],
+    "L": 1.1084,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     27.7343,
+     -4.2286
+    ],
+    "B": [
+     26.686,
+     -3.8689
+    ],
+    "L": 1.1084,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     19.0595,
+     5.1725
+    ],
+    "B": [
+     22.4337,
+     27.0514
+    ],
+    "L": 22.1375,
+    "p0": 1.9527,
+    "p1": 2.7963,
+    "lean0": 39.215,
+    "lean1": 58.581,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     19.0594,
+     -5.1725
+    ],
+    "B": [
+     22.437,
+     -27.0553
+    ],
+    "L": 22.1419,
+    "p0": 1.9529,
+    "p1": 2.7992,
+    "lean0": -39.222,
+    "lean1": -58.636,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     14.71,
+     25.8102
+    ],
+    "B": [
+     2.9996,
+     5.1964
+    ],
+    "L": 23.7079,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -1.955,
+    "lean1": -0.395,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -17.6523,
+     21.8761
+    ],
+    "B": [
+     -16.7343,
+     21.0623
+    ],
+    "L": 1.2268,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     -10.2082,
+     26.1355
+    ],
+    "B": [
+     -9.996,
+     25.0487
+    ],
+    "L": 1.1074,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     -14.0182,
+     13.9277
+    ],
+    "B": [
+     -34.6413,
+     5.9058
+    ],
+    "L": 22.1283,
+    "p0": 1.9483,
+    "p1": 2.7964,
+    "lean0": 39.095,
+    "lean1": 58.582,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -5.0523,
+     18.9783
+    ],
+    "B": [
+     12.1518,
+     32.8019
+    ],
+    "L": 22.0698,
+    "p0": 1.9946,
+    "p1": 2.7166,
+    "lean0": -40.346,
+    "lean1": -57.032,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -29.7021,
+     -0.1596
+    ],
+    "B": [
+     -6.0,
+     -0.0
+    ],
+    "L": 23.7027,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -1.91,
+    "lean1": -0.386,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -10.2089,
+     -26.1348
+    ],
+    "B": [
+     -9.997,
+     -25.0488
+    ],
+    "L": 1.1065,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     -17.5299,
+     -21.9098
+    ],
+    "B": [
+     -16.693,
+     -21.1806
+    ],
+    "L": 1.11,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     -5.0502,
+     -19.1055
+    ],
+    "B": [
+     12.1546,
+     -32.8102
+    ],
+    "L": 21.9959,
+    "p0": 1.9407,
+    "p1": 2.7085,
+    "lean0": 38.888,
+    "lean1": 56.872,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -14.0207,
+     -13.9291
+    ],
+    "B": [
+     -34.4845,
+     -5.8755
+    ],
+    "L": 21.9916,
+    "p0": 1.9389,
+    "p1": 2.7064,
+    "lean0": -38.84,
+    "lean1": -56.83,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     14.7131,
+     -25.8083
+    ],
+    "B": [
+     2.9996,
+     -5.1964
+    ],
+    "L": 23.7078,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 1.912,
+    "lean1": 0.386,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   }
+  ],
+  "relays": {},
+  "glb": "res://assets/maps4/S-15.glb",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": [],
+   "docks": 6
+  }
+ }
+}

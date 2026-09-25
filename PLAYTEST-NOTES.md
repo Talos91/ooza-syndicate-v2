@@ -444,3 +444,23 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 95. **AI: use switches properly; the curve is brutal and all AIs gang up on the human; Alpha 11's five
     levels with scaling aggressiveness.** *Done:* Alpha 11's loop and profiles, rival adjustment, relay
     rules; measured curve 10 / 15 / 50 / 90 / 95 % vs Standard, seat A 30 % of FFA attacks.
+96. **Units accelerate on long bridges - speed is always constant.** *Done (0.17.1):* no deck pace factor.
+
+## 2026-09-25 - Daniele, Alpha 18 brief (v0.18.0)
+
+97. **"The maps are waaaay too big for mobile."** *Done:* maps 4.0 (Daniele's new landscape pack, 160 x 80
+    frame, max ~21 nodes for 2v2) baked at 1.7 m per unit; a platform spans 5.2 % of the screen width on
+    the median map (was 2.9 %). Pocket hops too short for piers are docks.
+98. **"Make it a bit more from the top so there's more bird's-eye view, run some test."** *Done:* renders
+    at 42 / 50 / 58 / 66 degrees compared; the camera is now 50-74 degrees (most 62-70).
+99. **"Different maps might want different camera angle; make sure all nodes and their functions are
+    clickable on mobile and that nothing overflows; if some map is not good for mobile flag and remove
+    it."** *Done:* the phone-fit probe (`tests/phone_fit.tscn`) measured every map at seven angles on an
+    844 x 390 pt phone; each map got its own pitch (`scripts/map_camera.gd`): smallest tap target >= 33 pt,
+    no node or badge off screen or under the HUD, no badge collisions. Badges now avoid the HUD; the
+    inspector's X is no longer covered. Flagged and removed: D-08 (27 pt at best) and B-30 (deck clashes)
+    everywhere; the 3v3 / 2v2v2 maps on phones (crowded; the pack says tablet). Relay symbols fixed on web.
+100. **Optimization pass: no stray code, nothing that makes no sense, no errors, smooth, same look.**
+     *Done:* audit of every script (112 findings, 110 confirmed, 95 safe - all applied and reviewed);
+     draw calls -40 % on 1v1 maps and -67 % on the six-seat stress map at the same view; shield leftovers
+     and other dead code removed; bugs fixed (see CHANGELOG 0.18.0). Before / after renders identical.

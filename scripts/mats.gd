@@ -1,7 +1,8 @@
 class_name Mats
 extends RefCounted
 ## Shared, cached materials: seat lights and vat ooze for the kit, goo and creatures for hordes,
-## state colours for relays, and the Alpha 12 effect materials (shield, rings, beams, construction).
+## state colours for relays, the effect materials (rings, beams, construction, relay ghosts) and the
+## kit surface detail (detail/apply_detail).
 
 static var _cache := {}
 const CREATURE_SHADER := preload("res://shaders/creature.gdshader")
@@ -112,24 +113,6 @@ static func glow(c: Color, alpha := 1.0, unshaded := true, key := "") -> Standar
 	return _cache[key]
 
 
-static func shield(seat: String) -> StandardMaterial3D:
-	## The regenerating shield: a translucent dome of the owner's goo colour over the river.
-	var key := "shield_" + Rules.seat_color(seat).to_html()
-	if not _cache.has(key):
-		var c: Color = Rules.seat_color(seat)
-		var m := StandardMaterial3D.new()
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		m.albedo_color = Color(c.r, c.g, c.b, 0.16)
-		m.emission_enabled = true
-		m.emission = c
-		m.emission_energy_multiplier = 0.7
-		m.roughness = 0.05
-		m.cull_mode = BaseMaterial3D.CULL_FRONT           # the far wall only: reads as a dome, not a blob
-		m.no_depth_test = false
-		_cache[key] = m
-	return _cache[key]
-
-
 static func construction() -> StandardMaterial3D:
 	## The build state: the kit's construction yellow, pulsing (see Fx).
 	return glow(Rules.state_color("build"), 0.85, true, "construction")
@@ -157,54 +140,68 @@ const DETAILED := {"OS_Plate": "plate", "OS_Dark": "grain", "OS_Steel": "grain",
 static func detail(orig: Material) -> Material:
 	## The kit's flat colours get world-space surface detail (Alpha 16 visual pass: "better textures"):
 	## deck and platform plates get cell seams and wear, dark metal and steel a brushed grain. Same
-	## base colours, metal and roughness; the texture only varies them. Phones skip the normal map.
+	## base colours, metal and roughness; the texture only varies them. Phones and LOW detail skip the
+	## normal map (the cache is keyed by that choice, so a Detail toggle applies at the next map build).
 	var base := orig as StandardMaterial3D
 	if base == null or not DETAILED.has(base.resource_name):
 		return orig
-	var key := "detail_" + base.resource_name
+	var phone := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
+	var normals := not phone and not Rules.low_detail
+	var key := "detail_%s_%d" % [base.resource_name, int(normals)]
 	if _cache.has(key):
 		return _cache[key]
 	var kind: String = DETAILED[base.resource_name]
 	var m := base.duplicate() as StandardMaterial3D
-	var noise := FastNoiseLite.new()
-	noise.seed = 7
-	if kind == "plate":
-		noise.noise_type = FastNoiseLite.TYPE_CELLULAR
-		noise.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
-		noise.frequency = 0.012
-	else:
-		noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-		noise.frequency = 0.02
-		noise.fractal_octaves = 4
-	var ramp := Gradient.new()
-	ramp.set_color(0, Color(0.84, 0.84, 0.87) if kind == "plate" else Color(0.8, 0.8, 0.83))
-	ramp.set_color(1, Color(1.0, 1.0, 1.0))
-	var tex := NoiseTexture2D.new()
-	tex.width = 256
-	tex.height = 256
-	tex.seamless = true
-	tex.noise = noise
-	tex.color_ramp = ramp
-	m.albedo_texture = tex
-	m.roughness_texture = tex
+	var tx := _detail_textures(kind, normals)
+	m.albedo_texture = tx[0]
+	m.roughness_texture = tx[0]
 	m.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
-	var phone := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
-	if not phone and not Rules.low_detail:
-		var ntex := NoiseTexture2D.new()
-		ntex.width = 256
-		ntex.height = 256
-		ntex.seamless = true
-		ntex.as_normal_map = true
-		ntex.bump_strength = 2.5 if kind == "plate" else 1.5
-		ntex.noise = noise
+	if tx[1] != null:
 		m.normal_enabled = true
-		m.normal_texture = ntex
+		m.normal_texture = tx[1]
 		m.normal_scale = 0.35 if kind == "plate" else 0.25
 	m.uv1_triplanar = true
 	m.uv1_world_triplanar = true
 	m.uv1_scale = Vector3.ONE * (0.2 if kind == "plate" else 0.45)
 	_cache[key] = m
 	return m
+
+
+static func _detail_textures(kind: String, normals: bool) -> Array:
+	## [albedo/roughness noise, normal map or null] per detail kind: the three grain materials share
+	## one set (same seed and settings, so the pixels are identical).
+	var key := "dtex_%s_%d" % [kind, int(normals)]
+	if not _cache.has(key):
+		var noise := FastNoiseLite.new()
+		noise.seed = 7
+		if kind == "plate":
+			noise.noise_type = FastNoiseLite.TYPE_CELLULAR
+			noise.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
+			noise.frequency = 0.012
+		else:
+			noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+			noise.frequency = 0.02
+			noise.fractal_octaves = 4
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(0.84, 0.84, 0.87) if kind == "plate" else Color(0.8, 0.8, 0.83))
+		ramp.set_color(1, Color(1.0, 1.0, 1.0))
+		var tex := NoiseTexture2D.new()
+		tex.width = 256
+		tex.height = 256
+		tex.seamless = true
+		tex.noise = noise
+		tex.color_ramp = ramp
+		var ntex: NoiseTexture2D = null
+		if normals:
+			ntex = NoiseTexture2D.new()
+			ntex.width = 256
+			ntex.height = 256
+			ntex.seamless = true
+			ntex.as_normal_map = true
+			ntex.bump_strength = 2.5 if kind == "plate" else 1.5
+			ntex.noise = noise
+		_cache[key] = [tex, ntex]
+	return _cache[key]
 
 
 static func apply_detail(node: Node) -> void:

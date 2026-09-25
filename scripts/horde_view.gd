@@ -38,14 +38,17 @@ const MENISCUS_OFFSET := 0.38        # above the 0.3 m goo film and past the dec
 const MENISCUS_PULSE := 0.08
 const SPLASH_AMOUNT := 40            # droplets per side
 const SPLASH_FULL_RATE := 40.0       # units/s lost that saturates a side's splash
+const RIVER_SHAPE := Vector3(0.85, 0.9, 1.0)    # a river patch's proportions (along, up, across) at scale 1
 
 var meshes := {}      # faction -> kind -> Mesh
 var textures := {}    # faction -> creature Texture2D
 var pools := {}       # horde id -> {"patches": [MeshInstance3D], "label": Label3D, "vis": float, "phase": float}
 var contacts := {}    # contact key -> {"root", "lobes", "seam", "splash", "seats"}
-var rivers := {}      # node id -> {"patches": [MeshInstance3D], "vis": float}
+var rivers := {}      # node id -> {"mm": {"faction|seat|kind": MultiMeshInstance3D}, "vis": float, "sig": String}
+var _river_meshes := {}   # "faction|seat|kind" -> Mesh: a copy of the patch with the seat's materials and RIVER_SHAPE baked in
 var corridors := {}   # edge index -> [MeshInstance3D] per deck segment: goo covering a deck between two owned nodes
 var corridor_state := {}   # edge index -> {fill, anchor, owner}: corridors pour in and drain out
+var _lines := {}      # edge index -> [line, cum]: deck centre lines never move during a match
 var _corridor_mesh: BoxMesh
 var _last_time := -1.0
 var _lobe_mesh: SphereMesh
@@ -178,7 +181,7 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 	var phase: float = pool["phase"]
 	var t: float = time + phase / SHOVE_HZ
 	var arr: Array = pool["patches"]
-	while arr.size() < n:
+	while not classic and arr.size() < n:           # BRAWL draws unit models, never these patches
 		var mi := MeshInstance3D.new()
 		add_child(mi)
 		arr.append(mi)
@@ -326,10 +329,17 @@ func _draw_corridors(sim: Sim) -> void:
 			var o: String = st["owner"]
 			st["anchor"] = 0.0 if a["owner"] == o else (1.0 if b["owner"] == o else 0.49)
 		st["fill"] = move_toward(st["fill"], 1.0 if held else 0.0, dt * (1.5 if held else 1.0))
-		var pa: Vector3 = a["pos"]
-		var pb: Vector3 = b["pos"]
-		var dir := (pb - pa).normalized()
-		var line: Array = sim.deck_line(i)
+		if st["fill"] <= 0.01:                            # drained: nothing to lay
+			for mi in corridors.get(i, []):
+				(mi as MeshInstance3D).visible = false
+			continue
+		if not _lines.has(i):
+			var l: Array = sim.deck_line(i)
+			var cm := [0.0]
+			for k in range(1, l.size()):
+				cm.append(cm[k - 1] + (l[k] as Vector3).distance_to(l[k - 1]))
+			_lines[i] = [l, cm]
+		var line: Array = _lines[i][0]
 		if line.is_empty():
 			continue                                      # maps 3.0 plaza link: no deck to coat
 		if not corridors.has(i):
@@ -341,15 +351,14 @@ func _draw_corridors(sim: Sim) -> void:
 				made.append(mi)
 			corridors[i] = made
 		var parts: Array = corridors[i]
-		var cum := [0.0]
-		for k in range(1, line.size()):
-			cum.append(cum[k - 1] + (line[k] as Vector3).distance_to(line[k - 1]))
+		var cum: Array = _lines[i][1]
 		var total: float = cum[-1]
 		var fill: float = st["fill"]
 		var cover := total * fill
 		var c0: float = st["anchor"] * (total - cover)       # the covered stretch along the deck
 		var c1: float = c0 + cover
 		var sink := 0.12 * (1.0 - fill) * (0.0 if held else 1.0)
+		var mat := Mats.goo(st["owner"])
 		for k in range(parts.size()):
 			var mi: MeshInstance3D = parts[k]
 			var s0: float = maxf(cum[k], c0)
@@ -364,7 +373,8 @@ func _draw_corridors(sim: Sim) -> void:
 			var q1: Vector3 = p0.lerp(p1, (s1 - cum[k]) / seg_len)
 			var seg := q1 - q0
 			mi.visible = true
-			mi.material_override = Mats.goo(st["owner"])
+			if mi.material_override != mat:
+				mi.material_override = mat
 			mi.position = (q0 + q1) / 2.0 + Vector3(0, 0.06 - sink, 0)
 			var x := seg.normalized()
 			var z := x.cross(Vector3.UP).normalized()
@@ -439,19 +449,17 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 	## Each platform carries a ring of goo around its tower: the owner's river, sized by how full
 	## the vat is. Units fighting on the platform (siege) take a share of the ring centred on the
 	## side they landed from, with a meniscus and splash at each seam (Daniele, 2026-09-25).
+	## The ring (inner ring by the tower + outer ring to the rim) is drawn with one MultiMesh per
+	## (faction, seat, patch kind) on each platform, not one node per patch: the rings were half of
+	## all draw calls. A quiet platform (no siege, same owner, mode and detail, fill within 1/4000 of
+	## a patch's size) keeps last frame's instances and skips the slot loop.
 	for n in sim.nodes:
 		var id: int = n["id"]
 		if not rivers.has(id):
-			var arr := []
-			for i in range(Rules.RIVER_SLOTS * 2):         # inner ring by the tower + outer ring to the rim
-				var mi := MeshInstance3D.new()
-				add_child(mi)
-				arr.append(mi)
-			rivers[id] = {"patches": arr, "seat": [], "vis": 0.0}
+			rivers[id] = {"mm": {}, "vis": 0.0}
 		var r: Dictionary = rivers[id]
 		if sim.collapsed.get(id, false):                 # a fallen platform takes its river with it
-			for mi in r["patches"]:
-				mi.visible = false
+			_hide_river(r)
 			continue
 		var total: float = n["units"]
 		for k in n["siege"]:
@@ -459,11 +467,21 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 		var vis: float = r["vis"]
 		vis += (total - vis) * minf(1.0, EASE * 0.6 * dt)
 		r["vis"] = vis
-		var arr: Array = r["patches"]
 		if vis < 1.0:
-			for mi in arr:
-				mi.visible = false
+			_hide_river(r)
 			continue
+		var fill := clampf(total / float(Rules.CAPS[n["tier"]]), 0.0, 1.0)
+		# the goo covers the whole platform whatever the count (Daniele, Alpha 16: "was nice when it
+		# covered all of the platform"); a low vat only thins it a little - the badge carries the number
+		var sc := lerpf(0.85, 1.0, sqrt(fill))
+		var contested: bool = not n["siege"].is_empty()
+		if contested:
+			r.erase("sig")                              # a siege redraws every frame (seethe, attacker slots, seams)
+		else:
+			var sig := "%s|%d|%s|%s" % [n["owner"], roundi(sc * 4000.0), str(classic), str(Rules.low_detail)]
+			if r.get("sig", "") == sig:
+				continue                                  # quiet platform: nothing on its ring changed
+			r["sig"] = sig
 		# slot ownership: attackers get their share centred where they landed, the owner the rest
 		var slots := []
 		slots.resize(Rules.RIVER_SLOTS)
@@ -480,44 +498,26 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 				var idx := posmod(centre - count / 2 + j, Rules.RIVER_SLOTS)
 				slots[idx] = k
 				faces_in[idx] = true
-		var fill := clampf(total / float(Rules.CAPS[n["tier"]]), 0.0, 1.0)
-		# the goo covers the whole platform whatever the count (Daniele, Alpha 16: "was nice when it
-		# covered all of the platform"); a low vat only thins it a little - the badge carries the number
-		var sc := lerpf(0.85, 1.0, sqrt(fill))
-		var contested: bool = not n["siege"].is_empty()
+		var xfs := {}                                     # "faction|seat|kind" -> [Transform3D] this frame
 		for j in range(Rules.RIVER_SLOTS * 2):
-			var mi: MeshInstance3D = arr[j]
 			var outer := j >= Rules.RIVER_SLOTS
 			var i := j % Rules.RIVER_SLOTS
 			if Rules.low_detail and (i % 2 == 1 or outer):
-				mi.visible = false
 				continue
 			if outer and classic:
-				mi.visible = false
 				continue
 			var seat: String = slots[i]
 			var faction: String = sim.factions.get(seat, "null")
 			if classic:                                # a ring of creatures, no goo
-				mi.visible = false
 				if seat == "" or seat == n["owner"] or not faces_in[i]:
 					continue                              # no loitering garrison: only attackers on the platform show
 				var ua := TAU * i / Rules.RIVER_SLOTS
 				var ur := Vector3(cos(ua), 0.0, sin(ua))
 				var bob := absf(sin(sim.time * (8.0 if contested else 2.0) + i)) * (0.25 if contested else 0.05)
-				units.add_unit(faction, seat, n["pos"] + ur * Rules.RIVER_R, Rules.heading(-ur if faces_in[i] else ur), bob)
+				units.add_unit(faction, seat, n["pos"] + ur * Rules.RIVER_R, Rules.heading(-ur), bob)
 				continue
 			load_faction(faction)
 			var kind: String = ["body_a_lod1", "body_b_lod1", "body_c_lod1"][i % 3]
-			var mesh: Mesh = meshes[faction][kind]
-			if mi.mesh != mesh or mi.get_meta("seat", "?") != seat:
-				mi.mesh = mesh
-				mi.set_meta("seat", seat)
-				for sidx in range(mesh.get_surface_count()):
-					var m := mesh.surface_get_material(sidx) as BaseMaterial3D
-					var is_creature := m != null and m.albedo_texture != null
-					mi.set_surface_override_material(sidx, Mats.creature(faction, seat, textures[faction])
-							if is_creature else Mats.goo(seat))
-			mi.visible = true
 			var a := TAU * (i + (0.5 if outer else 0.0)) / Rules.RIVER_SLOTS
 			var radial := Vector3(cos(a), 0.0, sin(a))
 			var pos: Vector3 = n["pos"] + radial * (Rules.RIVER_OUTER_R if outer else Rules.RIVER_R)
@@ -526,9 +526,9 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 			if contested:                              # the whole platform seethes
 				pos += radial * 0.18 * sin(sim.time * 6.0 + i * 1.3)
 				s *= 1.0 + 0.08 * sin(sim.time * 7.0 + i * 2.1)
-			mi.position = pos
-			mi.rotation = Vector3(0.0, Rules.heading(fwd), 0.0)
-			mi.scale = Vector3(s * 0.85, s * 0.9, s)
+			# rotation (0, heading, 0) and scale s * RIVER_SHAPE, the shape part baked into the mesh
+			(xfs.get_or_add("%s|%s|%s" % [faction, seat, kind], []) as Array).append(
+					Transform3D(Basis(Vector3.UP, Rules.heading(fwd)) * Basis.from_scale(Vector3.ONE * s), pos))
 			# seam with the next slot: meniscus + splash between the two owners
 			var nxt: String = slots[(i + 1) % Rules.RIVER_SLOTS]
 			if nxt != seat and not outer:
@@ -540,10 +540,102 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 						[n["node_loss"].get(seat, 0.0), n["node_loss"].get(nxt, 0.0)], sim.time)
 				(contacts[key]["root"] as Node3D).scale = Vector3.ONE * (0.6 + 0.4 * sc)
 				seen[key] = true
+		for key in xfs:
+			var mm := _river_mmi(r, n["pos"], key).multimesh
+			var xf: Array = xfs[key]
+			for q in range(xf.size()):
+				mm.set_instance_transform(q, xf[q])
+			mm.visible_instance_count = xf.size()
+		for key in r["mm"]:
+			if not xfs.has(key):
+				(r["mm"][key] as MultiMeshInstance3D).multimesh.visible_instance_count = 0
+
+
+func _hide_river(r: Dictionary) -> void:
+	for key in r["mm"]:
+		(r["mm"][key] as MultiMeshInstance3D).multimesh.visible_instance_count = 0
+	r.erase("sig")                                        # redraw in full when the ring comes back
+
+
+func _river_mmi(r: Dictionary, centre: Vector3, key: String) -> MultiMeshInstance3D:
+	## The platform's MultiMesh for one "faction|seat|kind", made on first use.
+	if not r["mm"].has(key):
+		var parts := key.split("|")
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = _river_mesh(parts[0], parts[1], parts[2])
+		mm.instance_count = Rules.RIVER_SLOTS * 2
+		for q in range(mm.instance_count):
+			mm.set_instance_transform(q, Transform3D(Basis(), centre))   # keeps the bounds on the platform
+		mm.visible_instance_count = 0
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		add_child(mmi)
+		r["mm"][key] = mmi
+	return r["mm"][key]
+
+
+func _river_mesh(faction: String, seat: String, kind: String) -> Mesh:
+	## A copy of the patch mesh with the seat's goo and creature materials on its surfaces (a MultiMesh
+	## has no per-surface overrides) and the ring patch's RIVER_SHAPE baked in. A MultiMesh transforms
+	## normals by the instance matrix itself, so a non-uniform instance scale would shift the goo
+	## highlights and the creature rim; baked here with the inverse scale on the normals (what a
+	## MeshInstance3D does), the instances only carry a uniform scale and light exactly as before.
+	## The source mesh stays untouched: the horde lines and fx use it.
+	var key := "%s|%s|%s" % [faction, seat, kind]
+	if not _river_meshes.has(key):
+		var src: Mesh = meshes[faction][kind]
+		var inv := Vector3.ONE / RIVER_SHAPE
+		var m := ArrayMesh.new()
+		for sidx in range(src.get_surface_count()):
+			var arrays := src.surface_get_arrays(sidx)
+			var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			for q in range(v.size()):
+				v[q] = v[q] * RIVER_SHAPE
+			arrays[Mesh.ARRAY_VERTEX] = v
+			if arrays[Mesh.ARRAY_NORMAL] != null:
+				var nr: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+				for q in range(nr.size()):
+					nr[q] = (nr[q] * inv).normalized()
+				arrays[Mesh.ARRAY_NORMAL] = nr
+			if arrays[Mesh.ARRAY_TANGENT] != null:          # Godot moves tangents with the normal matrix too
+				var tg: PackedFloat32Array = arrays[Mesh.ARRAY_TANGENT]
+				for q in range(0, tg.size(), 4):
+					var t := (Vector3(tg[q], tg[q + 1], tg[q + 2]) * inv).normalized()
+					tg[q] = t.x
+					tg[q + 1] = t.y
+					tg[q + 2] = t.z
+				arrays[Mesh.ARRAY_TANGENT] = tg
+			var lods := {}                                  # keep the imported LODs
+			var sd := RenderingServer.mesh_get_surface(src.get_rid(), sidx)
+			var wide: bool = (sd["index_data"] as PackedByteArray).size() > int(sd["index_count"]) * 2   # 32-bit indices
+			for l in sd.get("lods", []):
+				var bytes: PackedByteArray = l["index_data"]
+				var idx := PackedInt32Array()
+				if wide:
+					idx = bytes.to_int32_array()
+				else:
+					idx.resize(bytes.size() / 2)
+					for q in range(idx.size()):
+						idx[q] = bytes.decode_u16(q * 2)
+				lods[l["edge_length"]] = idx
+			# stored uncompressed: a MultiMesh shades the imported (compressed) creature surface
+			# differently from a MeshInstance3D; uncompressed it matches the old patches exactly
+			m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], lods)
+			var sm := src.surface_get_material(sidx) as BaseMaterial3D
+			var is_creature := sm != null and sm.albedo_texture != null
+			m.surface_set_material(sidx, Mats.creature(faction, seat, textures[faction]) if is_creature else Mats.goo(seat))
+		_river_meshes[key] = m
+	return _river_meshes[key]
 
 
 func _place_contact(key: String, pos: Vector3, fwd: Vector3, seats: Array, losses: Array, time: float) -> void:
 	var fight: bool = seats[0] != seats[1]
+	if contacts.has(key) and contacts[key]["seats"] != seats:
+		var old_root := contacts[key]["root"] as Node3D
+		old_root.visible = false                         # the sides changed: rebuild in the new colours
+		old_root.queue_free()
+		contacts.erase(key)
 	if not contacts.has(key):
 		var root := Node3D.new()
 		add_child(root)

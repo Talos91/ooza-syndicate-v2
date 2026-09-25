@@ -2,20 +2,22 @@ extends Node
 ## Ooze Syndicate 2.0 - peer-to-peer rooms (autoload "Net"). Alpha 11's PeerJS approach, ported from
 ## Game/Alpha 11/scripts/network.gd (the P2P half) to 2.0's seats, maps and Sim:
 ## - the browser transport is web/peer-transport.js (window.OozePeer, room prefix "ooze20-");
-## - four-character room codes, 2-5 player free-for-all and 2v2, host-assigned seats (join order);
+## - four-character room codes, 2-6 players: free-for-all (1v1, FFA 3-5) and teams (2v2, 3v3, 2v2v2),
+##   host-assigned seats (join order);
 ## - the HOST's Sim is the only simulation. Guests send orders (send, recall, upgrade, build, switch,
 ##   restore); the host validates ownership, rate-limits and answers every order with the same
 ##   feedback line the offline game toasts. The host broadcasts compressed snapshots ~10 Hz plus the
 ##   view's effect events; guests render snapshots with light prediction (lines keep moving);
 ## - version check, all-player loading barrier, round epochs, rematch (everyone accepts, fresh
 ##   simulation, same room), chat (256 chars, 50 messages, rate limits, host-assigned sender);
-## - a guest leaving mid-match returns everyone to the lobby; the host leaving closes the room.
+## - a guest dropping mid-match keeps the seat for RECONNECT (the AI plays it when EMPTY SEATS is on);
+##   the host leaving closes the room;
+## - window.oozeBusy (set_busy) tells web/update.js not to reload for a new build during a room.
 ## No host migration, no TURN relay: some networks cannot connect directly.
 
 signal lobby_changed
 signal rematch_changed
 signal order_feedback(message: String)
-signal connection_error(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
 const VERSION_TAG := "ooze20-net-1"               # plus Rules.VERSION: guests must match the host exactly
@@ -113,13 +115,6 @@ func local_seat() -> String:
 	return seat_of(local_id())
 
 
-func id_of_seat(seat: String) -> int:
-	for id in roster:
-		if seat_of(id) == seat:
-			return int(id)
-	return -1
-
-
 func label_of(id: int) -> String:
 	## Chat and lobby name: the seat letter and faction (host-assigned, never typed by the player).
 	if not roster.has(id):
@@ -211,13 +206,18 @@ func _start(host: bool, faction: String, code: String) -> Error:
 		status = "PeerJS is unavailable. Reload the page."
 		lobby_changed.emit()
 		return ERR_UNAVAILABLE
+	set_busy(true)                                     # a room is open: a new build waits for the menu
 	hosting = host
 	preferred_faction = faction
 	_elapsed = 0.0
 	if host:
 		roster = {1: {"faction": faction, "slot": 0}}
 		if not map_offers(map_path, mode) or not map_path in MapPool.all():
-			map_path = maps_for(mode)[0]
+			var pool := maps_for(mode)
+			if pool.is_empty():
+				mode = "1v1"
+				pool = maps_for(mode)
+			map_path = pool[0] if not pool.is_empty() else ""
 	bridge.start(host, code.strip_edges().to_upper())
 	status = "Connecting to the room service..."
 	lobby_changed.emit()
@@ -258,14 +258,25 @@ func leave(forget := true) -> void:
 	_order_limits = {}
 	_packet_limits = {}
 	_path_seen = {}
+	sim = null
+	main = null
+	_tokens = {}
+	_fresh = false
 	status = ""
+	set_busy(false)
+
+
+func set_busy(b: bool) -> void:
+	## Web only: window.oozeBusy makes web/update.js hold a new build's reload while a match or a room
+	## is on (Net._start / leave; main sets it for every match and clears it on the menu).
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("window.oozeBusy=%s" % ("true" if b else "false"), true)
 
 
 func fail(message: String) -> void:
 	var was_playing := active
 	leave(false)
 	status = message
-	connection_error.emit(message)
 	lobby_changed.emit()
 	if was_playing and not no_reload:                 # back to the front menu, which shows the reason
 		get_tree().reload_current_scene()
@@ -275,9 +286,12 @@ func fail(message: String) -> void:
 func set_mode(m: String) -> void:
 	if not hosting or active or not m in MODES or roster.size() > SLOTS[m]:
 		return
+	var pool := maps_for(m)
+	if pool.is_empty():                                # no map seats this mode: keep the current one
+		return
 	mode = m
 	if not map_offers(map_path, mode):
-		map_path = maps_for(mode)[0]
+		map_path = pool[0]
 	_reseat()
 	publish_lobby()
 
@@ -461,6 +475,7 @@ func mark_ready(id: int) -> void:
 		return
 	ready_peers[id] = true
 	if started:                                        # a reconnected player caught up
+		_snap_count = 0                                # the next snapshot is a keyframe: the returning guest gets every path
 		for remote in links:
 			if links[remote] == id:
 				_send(remote, "begin", {"round": match_round})
@@ -511,6 +526,7 @@ func return_to_room(message: String) -> void:
 				roster.erase(id)
 				_tokens.erase(id)
 		_reseat()
+		publish_lobby()                                # the guests get the repacked seats
 	active = false
 	started = false
 	finished = false
@@ -596,8 +612,8 @@ func _check_rematch() -> void:
 		launch_round()
 	else:                                              # a seat is empty and no AI may take it
 		var msg := "A player is missing - back to the lobby. Invite someone with the same code."
-		_broadcast("room_reset", msg)
-		return_to_room(msg)
+		return_to_room(msg)                            # publishes the repacked lobby first...
+		_broadcast("room_reset", msg)                  # ...so the guests keep this reason as their status
 
 
 # ------------------------------------------------------------------ snapshots
@@ -668,6 +684,17 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 			if not prev.is_empty() and prev.get("_pk", "") == h["_pk"]:
 				for k in PATH_FIELDS:
 					h[k] = prev[k]
+			elif (h["route"] as Array).size() < 2:     # a line recalled before its first deck: no path to build
+				if not prev.is_empty():
+					for k in PATH_FIELDS:
+						h[k] = prev[k]
+				else:
+					var p0: Vector3 = s.nodes[int(h["route"][0])]["pos"]
+					h["pts"] = PackedVector3Array([p0])
+					h["cum"] = PackedFloat32Array([0.0])
+					h["fast"] = PackedByteArray([1])
+					h["spans"] = []
+					h["node_spans"] = []
 			else:                                     # missed it: rebuild from the route until a keyframe
 				var path := s.build_path(h["route"])
 				h["pts"] = path["pts"]
@@ -744,7 +771,7 @@ static func predict(s: Sim, dt: float) -> void:
 
 func push_effects(events: Array) -> void:
 	## Host: the view's one-off effects (bursts, falls, relay ticks, collapses) for the guests.
-	if hosting and online() and not events.is_empty():
+	if hosting and online() and not events.is_empty() and _has_guests():
 		_broadcast("effects", {"round": match_round, "events": events})
 
 
@@ -758,11 +785,13 @@ func _process(dt: float) -> void:
 		return
 	if hosting:
 		_snap_clock += dt
-		if _snap_clock >= SNAPSHOT_EVERY or (sim.over and not finished):
+		var every := SNAPSHOT_EVERY if not finished else 1.0   # the end screen: frozen state; a slow resend covers a dropped packet
+		if _snap_clock >= every or (sim.over and not finished):
 			_snap_clock = 0.0
 			_snap_count += 1
-			var packet := var_to_bytes(snapshot(sim, _snap_count % KEYFRAME_EVERY == 1)).compress(FileAccess.COMPRESSION_DEFLATE)
-			_broadcast_raw("state", packet)
+			if _has_guests():                          # alone with the AI: nobody to send to
+				var packet := var_to_bytes(snapshot(sim, _snap_count % KEYFRAME_EVERY == 1)).compress(FileAccess.COMPRESSION_DEFLATE)
+				_broadcast_raw("state", packet)
 			if sim.over:
 				finished = true
 	else:
@@ -813,7 +842,7 @@ func _poll(dt: float) -> void:
 					if id >= 0:
 						peer_left(id)
 				else:
-					fail("The host left or the connection was lost. The room is closed.")
+					fail("The host left or the connection was lost. The room is closed." if connected else "The room did not let us in: it is full or its match already started.")
 			"error":
 				fail(str(event.get("message", "Connection failed.")))
 			"signalling-lost":
@@ -882,8 +911,6 @@ func _guest_receive(raw: String) -> void:
 			if data is Dictionary:
 				assigned_id = int(data["id"])
 				_save_rejoin({"code": room_code, "token": str(data["token"]), "faction": preferred_faction})
-			else:
-				assigned_id = int(data)
 		"notice":
 			order_feedback.emit(str(data))
 		"lobby":
@@ -939,8 +966,9 @@ func _guest_receive(raw: String) -> void:
 # ------------------------------------------------------------------ rejoin details
 func _ready() -> void:
 	if OS.has_feature("web"):                          # a reloaded tab can still RECONNECT
-		var raw = JavaScriptBridge.eval("sessionStorage.getItem('ooze20-rejoin') || ''", true)
-		var d = JSON.parse_string(str(raw)) if str(raw) != "" else null
+		var raw = JavaScriptBridge.eval("(()=>{try{return sessionStorage.getItem('ooze20-rejoin')||''}catch(e){return ''}})()", true)
+		var text := str(raw) if raw != null else ""   # blocked site storage: nothing to rejoin
+		var d = JSON.parse_string(text) if text != "" else null
 		if d is Dictionary and d.has("code") and d.has("token") and d.has("faction"):
 			rejoin = d
 
@@ -948,8 +976,8 @@ func _ready() -> void:
 func _save_rejoin(d: Dictionary) -> void:
 	rejoin = d
 	if OS.has_feature("web"):
-		JavaScriptBridge.eval("sessionStorage.setItem('ooze20-rejoin', %s)" % JSON.stringify(JSON.stringify(d)) if not d.is_empty()
-				else "sessionStorage.removeItem('ooze20-rejoin')", true)
+		JavaScriptBridge.eval("try{sessionStorage.setItem('ooze20-rejoin', %s)}catch(e){}" % JSON.stringify(JSON.stringify(d)) if not d.is_empty()
+				else "try{sessionStorage.removeItem('ooze20-rejoin')}catch(e){}", true)
 
 
 # ------------------------------------------------------------------ transport
@@ -975,6 +1003,14 @@ func _broadcast_raw(kind: String, packed: PackedByteArray) -> void:
 			bridge.send(remote, envelope)
 
 
+func _has_guests() -> bool:
+	## Host: is any connected guest still seated (the same test _broadcast_raw sends by)?
+	for remote in links:
+		if roster.has(links[remote]):
+			return true
+	return false
+
+
 func _send_to_host(packet: Dictionary) -> void:
 	if bridge != null and remote_host != "":
 		bridge.send(remote_host, JSON.stringify(packet))
@@ -992,7 +1028,7 @@ func send_chat(message: String) -> void:
 
 
 func accept_chat(id: int, message: String) -> bool:
-	## Host only: clean the text, rate-limit (5 per 10 s, 0.7 s apart), stamp the sender's seat.
+	## Host only: clean the text, rate-limit (5 per 10 s, 0.7 s apart), stamp the sender's id and seat.
 	if not roster.has(id):
 		return false
 	var clean := ""
@@ -1010,7 +1046,7 @@ func accept_chat(id: int, message: String) -> bool:
 	recent.append(now)
 	_chat_limits[id] = recent
 	chat_serial += 1
-	chat_history.append({"id": chat_serial, "who": label_of(id), "seat": seat_of(id), "text": clean})
+	chat_history.append({"id": chat_serial, "pid": id, "who": label_of(id), "seat": seat_of(id), "text": clean})
 	if chat_history.size() > CHAT_HISTORY:
 		chat_history.pop_front()
 	_broadcast("chat_history", chat_history)
@@ -1031,7 +1067,7 @@ func _poll_chat_ui(dt: float) -> void:
 	if not message.is_empty():
 		send_chat(message)
 	if _chat_revision != chat_serial or _chat_connected != connected:
-		ui.sync(connected, JSON.stringify(chat_history), local_seat())
+		ui.sync(connected, JSON.stringify(chat_history), str(local_id()))   # "You" by player id: seats repack
 		_chat_revision = chat_serial
 		_chat_connected = connected
 

@@ -2,11 +2,17 @@
    cached game first, and a new build's worker waits until every tab of the game is closed - so phones
    and installed apps kept showing an old alpha. This asks for the new worker on every load and, once
    it is installed, tells it to take over ('update' is handled by Godot's own worker: skipWaiting,
-   claim, reload the page). */
+   claim, reload the page), unless a match or a room is on: then it waits until the game is back on
+   the menu. */
 (()=>{
  if (!('serviceWorker' in navigator)) return;
- let kicked = false;
- const kick = w => { if (w && !kicked) { kicked = true; w.postMessage('update'); } };
+ let kicked = false, pending = null;
+ // The game sets window.oozeBusy while a match or an online room is on (Net.set_busy): a reload
+ // then would end the match (and close the room for everyone if this is the host), so the new
+ // worker waits for the menu.
+ const busy = () => { try { return !!window.oozeBusy; } catch (e) { return false; } };
+ const kick = w => { if (!w || kicked) return; if (busy()) { pending = w; return; } kicked = true; w.postMessage('update'); };
+ setInterval(() => { if (pending && !busy()) kick(pending); }, 5000);
  function watch(reg) {
   if (!reg) return;
   if (reg.waiting && navigator.serviceWorker.controller) kick(reg.waiting);

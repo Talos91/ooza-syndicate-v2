@@ -1,0 +1,1080 @@
+{
+ "code": "S-13",
+ "name": "Oberon Redoubt",
+ "group": "siege",
+ "players": "ffa",
+ "playersLabel": "FFA 3",
+ "combatMode": "siege",
+ "family": "front",
+ "modes": [
+  "FFA3"
+ ],
+ "symmetry": "rotation x3",
+ "frame": {
+  "width": 160.0,
+  "height": 80.0,
+  "aspect": "2:1 landscape",
+  "panning": false,
+  "moduleUnits": 12.0,
+  "minNodeGap": 9.0
+ },
+ "minEnemyHomeHops": 4,
+ "centreSpawn": false,
+ "plazas": [
+  {
+   "id": 0,
+   "size": "S",
+   "shape": "round",
+   "cx": 106.0,
+   "cy": 40.0,
+   "rot": 0.0,
+   "rx": 10.0,
+   "ry": 10.0,
+   "sockets": [
+    0,
+    1,
+    2
+   ]
+  },
+  {
+   "id": 1,
+   "size": "S",
+   "shape": "round",
+   "cx": 67.0,
+   "cy": 62.52,
+   "rot": 120.0,
+   "rx": 10.0,
+   "ry": 10.0,
+   "sockets": [
+    0,
+    1,
+    2
+   ]
+  },
+  {
+   "id": 2,
+   "size": "S",
+   "shape": "round",
+   "cx": 67.0,
+   "cy": 17.48,
+   "rot": 240.0,
+   "rx": 10.0,
+   "ry": 10.0,
+   "sockets": [
+    0,
+    1,
+    2
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 111.6,
+   "y": 40.0,
+   "plaza": 0,
+   "socket": 0,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 103.2,
+   "y": 44.85,
+   "plaza": 0,
+   "socket": 1,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 103.2,
+   "y": 35.15,
+   "plaza": 0,
+   "socket": 2,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 80.0,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "strategic",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 4,
+    "structure": "cannon"
+   },
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 93.0,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 90.5,
+   "y": 58.19,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": null,
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 64.2,
+   "y": 67.37,
+   "plaza": 1,
+   "socket": 0,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 64.2,
+   "y": 57.67,
+   "plaza": 1,
+   "socket": 1,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 8,
+   "x": 72.6,
+   "y": 62.52,
+   "plaza": 1,
+   "socket": 2,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 9,
+   "x": 73.5,
+   "y": 51.26,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 10,
+   "x": 59.0,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": null,
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 11,
+   "x": 64.2,
+   "y": 12.63,
+   "plaza": 2,
+   "socket": 0,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 12,
+   "x": 72.6,
+   "y": 17.48,
+   "plaza": 2,
+   "socket": 1,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 13,
+   "x": 64.2,
+   "y": 22.33,
+   "plaza": 2,
+   "socket": 2,
+   "ring": 2,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 14,
+   "x": 73.5,
+   "y": 28.74,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 15,
+   "x": 90.5,
+   "y": 21.81,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": null,
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 1,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 5,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 15,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 5,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 5,
+   "to": 1,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": "ret",
+   "relay": 5,
+   "retracts": true
+  },
+  {
+   "from": 7,
+   "to": 9,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 8,
+   "to": 9,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 9,
+   "to": 10,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 9,
+   "to": 5,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 10,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 10,
+   "to": 7,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": "ret",
+   "relay": 10,
+   "retracts": true
+  },
+  {
+   "from": 12,
+   "to": 14,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 13,
+   "to": 14,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 14,
+   "to": 15,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 14,
+   "to": 10,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 15,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 15,
+   "to": 12,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": "ret",
+   "relay": 15,
+   "retracts": true
+  }
+ ],
+ "rings": {
+  "count": 3,
+  "boundaries": [
+   6.5,
+   23.5
+  ],
+  "aspect": 1.0,
+  "shape": "circle"
+ },
+ "lastStand": {
+  "methods": [
+   "inward",
+   "chaos"
+  ],
+  "orders": {
+   "inward": [
+    2,
+    1,
+    0
+   ],
+   "chaos": [
+    [
+     0,
+     2,
+     1
+    ],
+    [
+     2,
+     0,
+     1
+    ],
+    [
+     2,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "seats": {
+  "FFA3": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": null
+   },
+   {
+    "seat": "B",
+    "node": 6,
+    "team": null
+   },
+   {
+    "seat": "C",
+    "node": 11,
+    "team": null
+   }
+  ]
+ },
+ "note": null,
+ "thumbnail": "thumbnails/S-13-oberon-redoubt.png",
+ "layout": {
+  "K": 1.7,
+  "nodes": {
+   "0": [
+    53.72,
+    0.0
+   ],
+   "1": [
+    39.44,
+    8.245
+   ],
+   "2": [
+    39.44,
+    -8.245
+   ],
+   "3": [
+    0.0,
+    0.0
+   ],
+   "4": [
+    22.1,
+    0.0
+   ],
+   "5": [
+    17.85,
+    30.923
+   ],
+   "6": [
+    -26.86,
+    46.529
+   ],
+   "7": [
+    -26.86,
+    30.039
+   ],
+   "8": [
+    -12.58,
+    38.284
+   ],
+   "9": [
+    -11.05,
+    19.142
+   ],
+   "10": [
+    -35.7,
+    0.0
+   ],
+   "11": [
+    -26.86,
+    -46.529
+   ],
+   "12": [
+    -12.58,
+    -38.284
+   ],
+   "13": [
+    -26.86,
+    -30.039
+   ],
+   "14": [
+    -11.05,
+    -19.142
+   ],
+   "15": [
+    17.85,
+    -30.923
+   ]
+  },
+  "plazas": {
+   "0": {
+    "c": [
+     44.2,
+     0.0
+    ],
+    "ax": 17.0,
+    "ay": 17.0,
+    "phi": 0.0,
+    "size": "S"
+   },
+   "1": {
+    "c": [
+     -22.1,
+     38.284
+    ],
+    "ax": 17.0,
+    "ay": 17.0,
+    "phi": 2.0943951023931953,
+    "size": "S"
+   },
+   "2": {
+    "c": [
+     -22.1,
+     -38.284
+    ],
+    "ax": 17.0,
+    "ay": 17.0,
+    "phi": 4.1887902047863905,
+    "size": "S"
+   }
+  },
+  "edges": [
+   {
+    "A": [
+     27.846,
+     4.6417
+    ],
+    "B": [
+     26.3941,
+     4.1905
+    ],
+    "L": 1.5204,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     27.7288,
+     -4.2071
+    ],
+    "B": [
+     26.6999,
+     -3.8523
+    ],
+    "L": 1.0883,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     19.1153,
+     5.2049
+    ],
+    "B": [
+     19.711,
+     25.2189
+    ],
+    "L": 20.0229,
+    "p0": 1.6834,
+    "p1": 1.6,
+    "lean0": 31.536,
+    "lean1": 19.775,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     18.7287,
+     -4.9632
+    ],
+    "B": [
+     23.5289,
+     -28.9865
+    ],
+    "L": 24.4981,
+    "p0": 2.1948,
+    "p1": 4.4604,
+    "lean0": -45.486,
+    "lean1": -82.47,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     13.8924,
+     26.4133
+    ],
+    "B": [
+     2.9996,
+     5.1964
+    ],
+    "L": 23.8498,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -14.093,
+    "lean1": -2.819,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     23.5356,
+     32.8395
+    ],
+    "B": [
+     35.0972,
+     14.3574
+    ],
+    "L": 21.8004,
+    "p0": 3.9626,
+    "p1": 1.6,
+    "lean0": 76.6,
+    "lean1": 0.347,
+    "plaza0": false,
+    "plaza1": true,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -18.0552,
+     21.7722
+    ],
+    "B": [
+     -16.8579,
+     20.6481
+    ],
+    "L": 1.6423,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     -10.2245,
+     26.1196
+    ],
+    "B": [
+     -10.0179,
+     25.0525
+    ],
+    "L": 1.0869,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     -14.0761,
+     13.9611
+    ],
+    "B": [
+     -31.6903,
+     4.4634
+    ],
+    "L": 20.0116,
+    "p0": 1.6781,
+    "p1": 1.6,
+    "lean0": 31.378,
+    "lean1": 19.731,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -5.0754,
+     18.5913
+    ],
+    "B": [
+     13.3791,
+     34.9243
+    ],
+    "L": 24.6442,
+    "p0": 2.2477,
+    "p1": 4.5395,
+    "lean0": -46.776,
+    "lean1": -83.338,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -29.8156,
+     -1.172
+    ],
+    "B": [
+     -6.0,
+     -0.0
+    ],
+    "L": 23.8445,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -14.081,
+    "lean1": -2.817,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -40.202,
+     3.9662
+    ],
+    "B": [
+     -29.9827,
+     23.2222
+    ],
+    "L": 21.7997,
+    "p0": 3.9607,
+    "p1": 1.6,
+    "lean0": 76.576,
+    "lean1": 0.33,
+    "plaza0": false,
+    "plaza1": true,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -9.83,
+     -26.5176
+    ],
+    "B": [
+     -9.4583,
+     -24.927
+    ],
+    "L": 1.6335,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     -17.5065,
+     -21.9164
+    ],
+    "B": [
+     -16.6849,
+     -21.2029
+    ],
+    "L": 1.0881,
+    "p0": 0.0,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": true,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": true
+   },
+   {
+    "A": [
+     -5.0501,
+     -19.1711
+    ],
+    "B": [
+     11.9944,
+     -29.6149
+    ],
+    "L": 19.9897,
+    "p0": 1.6728,
+    "p1": 1.6,
+    "lean0": 31.22,
+    "lean1": 18.905,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -13.5668,
+     -13.6954
+    ],
+    "B": [
+     -36.929,
+     -5.8727
+    ],
+    "L": 24.6371,
+    "p0": 2.2439,
+    "p1": 4.5366,
+    "lean0": -46.686,
+    "lean1": -83.307,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     15.8583,
+     -25.2633
+    ],
+    "B": [
+     2.9996,
+     -5.1964
+    ],
+    "L": 23.8333,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -13.264,
+    "lean1": -2.656,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     16.599,
+     -36.7911
+    ],
+    "B": [
+     -5.1148,
+     -37.5783
+    ],
+    "L": 21.7281,
+    "p0": 3.9067,
+    "p1": 1.6,
+    "lean0": 75.89,
+    "lean1": 0.303,
+    "plaza0": false,
+    "plaza1": true,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   }
+  ],
+  "relays": {},
+  "glb": "res://assets/maps4/S-13.glb",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": [],
+   "docks": 6
+  }
+ }
+}

@@ -6,8 +6,8 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.17.1"
-const VERSION_NAME := "Alpha 17"
+const VERSION := "0.18.0"
+const VERSION_NAME := "Alpha 18"
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius
@@ -17,17 +17,18 @@ const W := 2.8                       # deck width
 # OVERPASS (GAME-RULES sec 7: "overpasses cross at different heights without joining"): an L deck
 # built as ramp up + raised span on pylons + ramp down (kit Deck_Overpass_*, OVER_H in
 # build_kit_2_0.py). Hordes follow the rise; a line on an overpass never touches another deck's line.
+# legacy maps/ only - maps 3.0 use MapBuilder.OVER_H levels
 const OVERPASS_H := 2.6
-const SOCKET_Z := 0.06
 
-# movement: travel time counts deck modules only (1 module = 2 s); platforms and piers are
-# part of the node, crossed quickly
+# legacy maps/ routing cost per deck module (Sim.edge_cost, non-v3 only); maps 3.0 route by
+# drawn length / move_speed()
 const MODULE_SECONDS := 2.0          # routing cost per module only (relative); real speed below
 # Daniele (Alpha 13 playtest): "deck speed at default 5 m/s... deck speed and platform speed need to
 # match, no point in it being different". Was 2 m/s on decks, x6 on platforms.
 const DECK_SPEED_DEFAULT := 5.0
 const NODE_SPEED_MULT_DEFAULT := 1.0
 # live-tunable from the in-game Debug panel (PLAYTEST-NOTES 5: platform speed vs bridge speed)
+# - SIEGE only (BRAWL uses BRAWL_SPEED)
 static var deck_speed: float = DECK_SPEED_DEFAULT          # m/s along a deck
 static var node_speed_mult: float = NODE_SPEED_MULT_DEFAULT # x deck speed on platforms, piers, doors
 const ARC_R := 3.8                   # hordes flow around a node's centre structure at this radius
@@ -46,14 +47,13 @@ const MAX_CHAIN := 40.0              # beyond this a horde gets thicker, not lon
 const MAX_THICKEN := 0.35
 const PATCH_SPACING := 1.8
 const MAX_PATCHES := 24              # 40 m / 1.8 m + head
-const UNITS_PER_PATCH := 60          # legacy: only the capture drain estimate below uses it
 
 # UNITS LEAVE THE VAT ONLY AS THEY BECOME BLOB (Daniele, 2026-09-25): a send is an order; the door
 # emits units into the line at DOOR_RATE. Units still inside stay in the vat's count and can be
 # re-ordered - a new send takes over the previous order's not-yet-emitted part.
 const DOOR_RATE_DEFAULT := 48.0      # units/s out of the door - kept at the Alpha 12 throughput when
                                       # deck and platform speeds were unified (it was derived from them)
-static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug panel)
+static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug panel) - SIEGE only (BRAWL uses BRAWL_DOOR_RATE)
 
 # BRAWL MOVES LIKE ALPHA 11 (Daniele, Alpha 16: "same exit and entrance speed and deck and platform
 # speed of units as Alpha 11 ... the feel exactly the same"). Alpha 11: 115 px/s everywhere (no
@@ -61,6 +61,7 @@ static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug pan
 # Its mean hop is 284 px centre to centre; 2.0's is 21.9 m over the 99 maps (1.68 modules), so one
 # Alpha 11 px = 0.077 m: 115 px/s = 8.9 m/s, the same 2.5 s per hop, and 12 px = 0.93 m per shown
 # unit. Exit = entrance = 9.6 shown units/s (x SCALE internally). SIEGE keeps its own tunables.
+# (Those figures predate Alpha 17's -20 %: now 7.1 m/s, ~3.1 s per hop, ~0.74 m per shown unit.)
 const BRAWL_SPEED := 8.9 * 0.8                             # m/s, decks and platforms alike (Daniele, Alpha 17: "20% slower")
 const BRAWL_DOOR_RATE := 115.0 / 12.0 * 5.0               # internal units/s out of the door (and in)
 # Alpha 11's route (simulation.gd route/arc): out of the vat's FRONT (the side facing the camera),
@@ -95,7 +96,8 @@ static func metres_per_unit() -> float:
 
 static func max_chain() -> float:
 	return MAX_CHAIN if bridge_combat else 100000.0     # Alpha 11 columns are as long as the send
-static var node_fight_mult: float = 1.0                # live-tunable: x combat rates on a platform
+const NODE_FIGHT_MULT_DEFAULT := 1.0
+static var node_fight_mult: float = NODE_FIGHT_MULT_DEFAULT   # live-tunable: x combat rates on a platform
 # BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
 # queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
@@ -106,7 +108,9 @@ static var last_stand: bool = true
 # CAMERA (Daniele, Alpha 14 playtest: "map size should be fixed, no zoom... too vertical"; "vats and
 # buildings should all face the viewer on every map"). The camera is fitted once per screen size,
 # never zoomed or panned; VIEW_YAW is set per map before it is built so every structure faces it.
-const CAM_PITCH := 42.0              # degrees above the horizon (was 55)
+const CAM_PITCH := 66.0              # degrees above the horizon for a map MapCamera doesn't list (Alpha 14: 42,
+                                     # "too vertical" at 55 on the deep maps 3.0; Alpha 18, maps 4.0: "a bit more
+                                     # from the top" - each map gets its own pitch, 50-74, see MapCamera)
 static var view_yaw := 0.0
 # TUG-OF-WAR (bridge-combat mode): the front slides toward the weaker side at up to this fraction of
 # deck speed (total dominance); 2:1 odds move it at a third of that.
@@ -115,8 +119,9 @@ const TUG_SPEED := 0.35
 # of its speed and pushes at GOO_PUSH of its weight in a tug-of-war.
 const GOO_SLOW := 0.7
 const GOO_PUSH := 0.67
-# LOW DETAIL (Debug panel): fewer river patches, no shield rings, half the horde patches - to test
-# whether the build is what makes a machine "run like crazy" (Daniele, Alpha 13 playtest).
+# LOW DETAIL (Debug panel / options): half the river ring and no outer ring, one resident per tank,
+# no surface normal maps (for materials built after it is set) - to test whether the build is what
+# makes a machine "run like crazy" (Daniele, Alpha 13 playtest).
 static var low_detail: bool = false
 # HIDE ENEMY COUNTS (Daniele, Alpha 16: a toggle in the options and Debug). On: no unit numbers on any
 # enemy node, in either mode (badges show the seat letter). Off: BRAWL shows every count as Alpha 11
@@ -168,20 +173,11 @@ const CANNON_STATS := {1: {"recharge": 4.0, "kill": 50.0}, 2: {"recharge": 2.4, 
 const CANNON_BURST := 2.0
 # Alpha 11 forge: strongest completed forge adds +50 on the 100 attack scale (+0.5 displayed attack)
 # - a +50 % damage bonus to everything its owner's troops deal. Single tier in 2.0 (GAME-RULES
-# sec6); a mixed allied garrison defends at the population-weighted average (Sim.forge_of).
-static var forge_bonus: float = 0.5  # live-tunable
+# sec6); it applies to everything the owner deals while it owns any forge (Sim.forge_of).
+const FORGE_BONUS_DEFAULT := 0.5
+static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable
 const HOME_UNITS := 80
 const NEUTRAL_UNITS := {1: 30, 2: 60, 3: 120, 4: 200}
-const SEND_FRACTIONS := [0.25, 0.5, 0.75, 1.0]
-
-# SHIELD (Daniele, 2026-09-25 / Alpha 12 clarification): passing through an enemy node is allowed -
-# the goo RING around the tower is a shield worth SHIELD_FRACTION of the garrison; a transiting
-# force fights the shield, never the garrison (only an arrival touches that), while the garrison
-# fires back. Breaking it does NOT destroy any bridge: the BOND is the goo trail between two of a
-# player's adjacent nodes - shown only while BOTH shields are up - and it disappears when either
-# shield breaks. A broken shield is DOWN (free passage) until it has regenerated to full.
-const SHIELD_FRACTION := 0.2
-const SHIELD_REGEN := 3.0            # units/s, whenever the shield is below its cap
 
 # frontline combat - PROVISIONAL: each side loses BASE + K * enemy units per second
 const FIGHT_RATE_BASE := 12.0
@@ -228,13 +224,6 @@ const FACTION_TRAITS := {"vex": ["Efficient routing", "Faster travel on owned co
 		"solar": ["Connected defense", "Protect connected friendly nodes."]}
 const FACTION_ULTIMATE := {"vex": ["Route Hack", "the route and relay specialist"], "null": ["Echo Split", "decoys, disruption of enemy control"],
 		"bloom": ["Spore Bloom", "growth"], "ember": ["Core Meltdown", "siege"], "solar": ["Relay Aegis", "protecting a crossing"]}
-const FACTION_BLURB := {
-	"vex": "VEX Bioengineers - mobility and routes. Faster, weaker garrison.",
-	"null": "NULL Data Cartel - deception and disruption. Near baseline.",
-	"bloom": "Viridian Bloom - growth. Faster production, slower movement.",
-	"ember": "Ember Maw - siege. Stronger attack, slower production.",
-	"solar": "Solar Shells - defense. More HP and defense, slower to move and produce.",
-}
 # AI levels - Alpha 11's five (ai_balance.gd PROFILES, Daniele Alpha 17: "5 levels of difficulty with
 # scaling aggressiveness"). Identical economy and combat at every level: only reaction time, how many
 # nodes join an attack, how wrong its garrison estimates are and how often they refresh, the grace
@@ -275,7 +264,6 @@ static func stat(faction: String, key: String) -> float:
 # Filled by assign_colors() at match start: your pick, the rest from the palette; "faction" mode uses
 # each seat's faction colour (Alpha 11 style); team modes give each team one hue, light and dark.
 static var seat_colors: Dictionary = SEATS.duplicate()
-const PALETTE := ["A", "B", "C", "D", "E", "F"]        # cyan, green, purple, red, gold, rose
 
 
 static func seat_color(seat: String) -> Color:
@@ -284,14 +272,16 @@ static func seat_color(seat: String) -> Color:
 
 # Player colours, Alpha 16 (Daniele: "in 2v2 and team matches the hue must be very recognisable from
 # one player to another, and in FFA the colours very different - green, red, blue, purple"). FFA: each
-# seat takes the next far-apart hue. Teams: each team is one family (cool / warm) and every player in
-# it still has a clearly different hue, so you read both "which team" and "which player".
+# seat takes the next far-apart hue. Teams: each team is one family (cool / warm; in three-team modes
+# cool, warm and violet) and every player in it still has a clearly different hue, so you read both
+# "which team" and "which player".
 const HUES := {
 	"red": Color("#ff4545"), "green": Color("#6dff4a"), "blue": Color("#4a78ff"), "gold": Color("#ffd23f"),
 	"purple": Color("#b36bff"), "cyan": Color("#2ee6ff"), "rose": Color("#ff5ab8"), "orange": Color("#ff9a2e"),
 }
 const FFA_ORDER := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]
 const TEAM_FAMILIES := [["cyan", "green", "blue"], ["red", "gold", "rose"]]   # 2v2: cyan+green vs red+gold
+const TEAM_FAMILIES_3 := [["cyan", "green", "blue"], ["red", "gold", "orange"], ["purple", "rose"]]   # three-team modes (2v2v2)
 
 
 static func _hue_gap(a: Color, b: Color) -> float:
@@ -304,22 +294,35 @@ static func assign_colors(seats: Array, factions: Dictionary, human: String, cho
 	seat_colors = {}
 	var mine: Color = FACTIONS[factions.get(human, "null")][1] if choice == "faction" else SEATS.get(choice, SEATS["A"])
 	if not teams.is_empty():
-		# your team takes the family closest to your pick (your pick first), the other team the other
-		var cool := TEAM_FAMILIES[0].map(func(k): return HUES[k])
-		var warm := TEAM_FAMILIES[1].map(func(k): return HUES[k])
-		var near_cool: float = cool.map(func(c): return _hue_gap(c, mine)).min()
-		var near_warm: float = warm.map(func(c): return _hue_gap(c, mine)).min()
-		var own: Array = cool if near_cool <= near_warm else warm
-		var other: Array = warm if own == cool else cool
-		own = [mine] + own.filter(func(c): return _hue_gap(c, mine) > 0.07)
+		# your team takes the family closest to your pick (your pick first), every other team one of the
+		# remaining families in seat order (a tie keeps the first family, as before)
+		var team_ids := []
+		for s in seats:
+			if not (teams.get(s, 0) in team_ids):
+				team_ids.append(teams.get(s, 0))
+		var fams: Array = (TEAM_FAMILIES if team_ids.size() <= 2 else TEAM_FAMILIES_3).map(func(f): return f.map(func(k): return HUES[k]))
+		var best := 0
+		var best_gap: float = fams[0].map(func(c): return _hue_gap(c, mine)).min()
+		for i in range(1, fams.size()):
+			var g: float = fams[i].map(func(c): return _hue_gap(c, mine)).min()
+			if g < best_gap:
+				best_gap = g
+				best = i
+		var rest := []
+		for i in range(fams.size()):
+			if i != best:
+				rest.append(fams[i])
+		var own: Array = [mine] + fams[best].filter(func(c): return _hue_gap(c, mine) > 0.07)
 		var family := {teams.get(human, 0): own}
+		var r := 0
 		for s in seats:
 			if not family.has(teams.get(s, 0)):
-				family[teams.get(s, 0)] = other
+				family[teams.get(s, 0)] = rest[r % rest.size()]
+				r += 1
 		var count := {}
 		for s in ([human] + seats.filter(func(x): return x != human)):
 			var t = teams.get(s, 0)
-			var list: Array = family.get(t, other)
+			var list: Array = family.get(t, rest[0])
 			var i: int = count.get(t, 0)
 			seat_colors[s] = list[i % list.size()] if i < list.size() else (list[i % list.size()] as Color).darkened(0.35)
 			count[t] = i + 1

@@ -56,7 +56,6 @@
   panel.hidden = skipped || isFull();
  }
  for (const ev of ['fullscreenchange', 'webkitfullscreenchange', 'resize', 'orientationchange']) addEventListener(ev, update);
- document.addEventListener('fullscreenchange', update);
  document.addEventListener('DOMContentLoaded', update);
  setInterval(update, 1000);
  window.OozeGate = {update, isFull};

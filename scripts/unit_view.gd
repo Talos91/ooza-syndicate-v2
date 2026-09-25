@@ -1,6 +1,6 @@
 class_name UnitView
 extends Node3D
-## CLASSIC MODE look (Daniele, Alpha 14: "for the non-bridge-fight mode remove the ooze goo and go
+## BRAWL mode look (Daniele, Alpha 14: "for the non-bridge-fight mode remove the ooze goo and go
 ## back to actually sending models of units like we did in Alpha 11 - two distinct modes that look
 ## and feel different"). Every send is a column of the approved faction creature models
 ## (assets/units/<faction>.glb, Alpha 11's own meshes, unmodified), three across like Alpha 11's
@@ -12,7 +12,6 @@ extends Node3D
 
 const UNIT_SIZE := 1.3               # metres across a creature (readable at full-map zoom)
 const ACROSS := 3                    # Alpha 11's default formation
-const ROW := 1.35                    # metres between rows
 const LANE := 0.95                   # metres between the columns
 const MAX_PER_HORDE := 200           # Alpha 11 drew every body
 const MODEL_YAW := PI / 2.0          # the models face +Z; the path heading is kit +X
@@ -105,11 +104,13 @@ func begin() -> void:
 func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob := 0.0, roll := 0.0, squeeze := 0.0, size := 1.0) -> void:
 	if not _mesh.has(faction):
 		return
-	_instance(faction, seat)
+	var key := "%s|%s" % [faction, seat]
+	if not _mm.has(key):
+		_instance(faction, seat)
 	var s: float = _scale[faction] * size
 	var basis := Basis(Vector3.UP, heading + MODEL_YAW) * Basis(Vector3(0, 0, 1), roll) \
 			* Basis.from_scale(Vector3(1.0 + squeeze * 0.6, 1.0 - squeeze, 1.0 + squeeze * 0.45) * s)
-	(_xf["%s|%s" % [faction, seat]] as Array).append(Transform3D(basis, pos + Vector3(0, 0.08 + bob, 0)))
+	(_xf[key] as Array).append(Transform3D(basis, pos + Vector3(0, 0.08 + bob, 0)))
 	_discs.append([Transform3D(Basis().scaled(Vector3.ONE * size), pos + Vector3(0, 0.05, 0)), Rules.seat_color(seat)])   # the disc goes in with its body
 
 
@@ -155,11 +156,15 @@ func flush() -> void:
 	for k in _mm:
 		var arr: Array = _xf[k]
 		var mm: MultiMesh = (_mm[k] as MultiMeshInstance3D).multimesh
+		if arr.size() > mm.instance_count:            # grow rather than drop bodies (every transform is rewritten below)
+			mm.instance_count = nearest_po2(arr.size())
 		var count := mini(arr.size(), mm.instance_count)
 		for i in range(count):
 			mm.set_instance_transform(i, arr[i])
 		mm.visible_instance_count = count
 	var dm := _disc.multimesh
+	if _discs.size() > dm.instance_count:
+		dm.instance_count = nearest_po2(_discs.size())
 	var dc := mini(_discs.size(), dm.instance_count)
 	for i in range(dc):
 		dm.set_instance_transform(i, _discs[i][0])

@@ -1,43 +1,31 @@
 extends Node3D
-## Ooze Syndicate 2.0 - Alpha 12. World, camera, input and orchestration; the interface lives in
-## hud.gd, in-world effects in fx.gd, hordes in horde_view.gd, rules in sim.gd.
+## Ooze Syndicate 2.0 (version: Rules.VERSION / VERSION_NAME). World, camera, input and orchestration;
+## the interface lives in hud.gd, in-world effects in fx.gd, hordes in horde_view.gd, rules in sim.gd.
 ## Drag from one of your nodes to any node to send; tap a node to inspect; double-tap your own node
 ## to upgrade (Alpha 11 convention); the inspector offers costed actions and the relay's switch.
 ## Command-line user args (after `--`):
-##   --map=res://maps/004-two-piers.json   map to load (skips the title screen)
-##   --demo                                 both seats played by the AI
-##   --ai=Casual|Standard|Veteran           AI level (title screen picks it otherwise)
+##   --map=res://maps4/T-01-first-steps.json  map to load (skips the title screen)
+##   --mode=1v1|2v2|3v3|2v2v2|FFA3|FFA4|FFA5  match mode (the map's first mode if it lacks this one)
+##   --demo                                 every seat played by the AI
+##   --ai=Training|Casual|Standard|Veteran|Expert  AI level (Rules.AI_LEVELS; the menu picks it otherwise)
+##   --brawl (alias --classic)              BRAWL: bridge combat off, Alpha 11 rules
+##   --seed=N                               deterministic Last Stand method / chaos order
 ##   --shots=4,12,25 --out=<dir>            save screenshots at those match times, then quit
+##   --perf                                 print frame timing every 3 s
 ##   --window=2340x1080                      size the window like a phone (landscape) for testing
 ##   --mobile                               force the phone quality profile on desktop
-##   --scenario=fight|rear|queue             stage a contact on the deck between nodes 1 and 0
-##   --seed=N                               deterministic Last Stand method / chaos order
+##   --pitch=58                              camera pitch in degrees above the horizon (MapCamera's per-map pitch otherwise)
+##   --thumb=<png>                          render the map's menu thumbnail (no HUD), then quit
+##   --menu-page=<page> --menu-shot=<png>   open a menu page / screenshot the menu, then quit
+##   --scenario=fight|rear|queue|build|inspect|switch|rotate --zoom=N  stage one situation up close
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is a peer-to-peer room (Net)
 var SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": "solar"}
 const FACTION_NAMES := ["vex", "null", "bloom", "ember", "solar"]
-const STARTER_MAPS := [
-	"res://maps/004-two-piers.json", "res://maps/007-long-span.json",
-	"res://maps/008-strait.json", "res://maps/010-first-switch.json",
-	"res://maps/011-remote-span.json", "res://maps/061-switchback-foundry.json",
-	"res://maps/047-trident-exchange.json",
-	# roster maps for the team and FFA modes (Alpha 14)
-	"res://maps/012-ladder.json", "res://maps/016-concourse.json",
-	"res://maps/036-khepri-carousel.json", "res://maps/037-aurelia-orbital.json",
-]
-const PROVES := {
-	"004": "drag-to-send, capture, the horde line", "007": "bridge combat, tier reading, inward vs outward",
-	"008": "RETRACT: troops carried into the hub", "010": "SWITCH: the deck dissolves - troops fall",
-	"011": "REMOTE: the centre console swaps the diagonals", "061": "3-WAY ROTATION: troops ride the deck",
-	"047": "team layout, retract on both spine decks",
-	"012": "2v2 / FFA4: a plain ladder", "016": "2v2 / FFA4: a nine-node concourse",
-	"036": "FFA 5: five seats round a carousel", "037": "FFA 5: five retract relays on an orbital ring",
-}
-const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 
 var map: Dictionary
-var map_path := "res://maps3/T-01-first-steps.json"
+var map_path := "res://maps4/T-01-first-steps.json"
 var sim := Sim.new()
 var ais: Array = []
 var vis: Dictionary
@@ -48,13 +36,14 @@ var hud: Hud
 var cam: Camera3D
 var cam_target := Vector3.ZERO
 var cam_dist := 90.0
+var cam_pitch: float = Rules.CAM_PITCH              # degrees above the horizon: MapCamera's per-map pitch
+var pitch_forced := false                          # --pitch=N (or the phone-fit probe) overrides it
 var cam_yaw := 0.0
 var fraction := 0.5
 var drag_from := -1
 var selected := -1
-var pan_from := Vector3.INF
 var drag_mesh := ImmediateMesh.new()
-var drag_line := MeshInstance3D.new()
+var drag_line: MeshInstance3D                     # made in _start_map: a menu-only run never parents it
 var route_label: Label3D
 var trace: Array = []
 var _trace_t := 0.0
@@ -72,7 +61,6 @@ var mobile := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.ha
 var window_size := Vector2i.ZERO
 var sun: DirectionalLight3D
 var touches := {}
-var pinch_dist := 0.0
 var margins := Vector4(16, 12, 16, 12)
 var _fitted_size := Vector2.ZERO
 var _tap_node := -1
@@ -83,10 +71,11 @@ const DOUBLE_TAP_WINDOW := 0.35
 const TAP_PIXELS := 14.0
 var started := false
 var thumb_path := ""
+var perf_on := "--perf" in OS.get_cmdline_user_args()   # debug flag, read once
 var _pending_inspect := -1                    # single tap: inspector opens after the double-tap window
 var _pending_at := 0.0
 var _swallow_release := false
-var mode := "1v1"                             # 1v1 / 2v2 / FFA3 / FFA4 / FFA5 (the map's seats key)
+var mode := "1v1"                             # 1v1 / 2v2 / 3v3 / 2v2v2 / FFA3-5 (the map's seats key)
 var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
@@ -129,6 +118,9 @@ func _ready() -> void:
 			window_size = Vector2i(int(wh[0]), int(wh[1]))
 		elif arg == "--mobile":
 			mobile = true
+		elif arg.begins_with("--pitch="):
+			cam_pitch = float(arg.substr(8))
+			pitch_forced = true
 		elif arg.begins_with("--scenario="):
 			scenario = arg.substr(11)
 		elif arg.begins_with("--zoom="):
@@ -142,12 +134,15 @@ func _ready() -> void:
 		elif arg.begins_with("--thumb="):              # map thumbnail for the menu: no HUD, first frame
 			thumb_path = arg.substr(8)
 			map_explicit = true
+	MapPool.phone = MapPool.phone_screen(mobile)       # Alpha 18: phones get the phone-fit maps only
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
 	if map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
 	else:
+		if not Net.in_room():                          # the menu, no room: a new build may reload the page
+			Net.set_busy(false)
 		menu_layer = Menu.new()
 		add_child(menu_layer)
 		(menu_layer as Menu).setup(self)
@@ -170,8 +165,11 @@ func _ready() -> void:
 
 
 func _start_map(path: String) -> void:
+	Net.set_busy(true)                                 # a match is on: a new build waits for the menu (web)
 	map_path = path
 	map = MapBuilder.load_map(path)
+	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
+		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")))
 	if not map["seats"].has(mode):                     # this map doesn't offer the mode: its first one
 		mode = "1v1" if map["seats"].has("1v1") else map["seats"].keys()[0]
 	var seats := {}
@@ -210,6 +208,7 @@ func _start_map(path: String) -> void:
 	fx = Fx.new()
 	add_child(fx)
 	fx.setup(self, sim, vis, hordes)
+	drag_line = MeshInstance3D.new()
 	drag_line.mesh = drag_mesh
 	add_child(drag_line)
 	route_label = Label3D.new()
@@ -274,8 +273,8 @@ func start_match(path: String, faction: String, rival_faction: String, level: St
 
 
 func _start_online() -> void:
-	## A room's round (Net): every seat is a player, no AI. The host steps the Sim; guests build the
-	## same world from the same seed and render the host's snapshots.
+	## A room's round (Net): players, plus the AI in empty or dropped seats (host only). The host
+	## steps the Sim; guests build the same world from the same seed and render the host's snapshots.
 	var info: Dictionary = Net.match_info
 	online = true
 	mode = str(info["mode"])
@@ -318,26 +317,8 @@ func to_menu() -> void:
 	get_tree().reload_current_scene()
 
 
-# ------------------------------------------------------------------ title screen
-static func panel_style(color: Color = Color("276578")) -> StyleBoxFlat:
-	return Hud.panel_style(color)
-
-
-func style_button(b: Button, accent: Color, width: float = 130.0, height: float = 78.0) -> void:
-	b.add_theme_font_override("font", UI_FONT)
-	b.custom_minimum_size = Vector2(width, height)
-	b.add_theme_stylebox_override("normal", panel_style())
-	b.add_theme_stylebox_override("hover", panel_style(accent))
-	var pressed := panel_style(Color("00ddf2"))
-	pressed.bg_color = Color("147185")
-	b.add_theme_stylebox_override("pressed", pressed)
-	b.add_theme_stylebox_override("disabled", panel_style(Color("3a4650")))
-	b.add_theme_color_override("font_disabled_color", Color("a6b2bb"))
-
-
 # ------------------------------------------------------------------ world
 func _apply_quality() -> void:
-	Engine.max_fps = 60
 	if mobile:
 		sun.shadow_enabled = false
 		get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
@@ -436,7 +417,6 @@ func _fit_camera() -> void:
 	var right: float = vp.x - (margins.z + hud.pause_button.size.x + 12.0 if use_hud else 8.0)   # PAUSE and Debug column
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
 	var pts := []
-	var down := Vector3(0, 0, 1).rotated(Vector3.UP, cam_yaw)
 	for n in sim.nodes:
 		var p: Vector3 = n["pos"]
 		for k in range(12):
@@ -451,7 +431,7 @@ func _fit_camera() -> void:
 				pts.append(Vector3(float(pl["c"][0]) + q.x, 0.0, float(pl["c"][1]) + q.y))
 		if use_hud:
 			var ba: Vector3 = hud.badge_anchor(n)            # room for the badge beside the platform
-			pts.append(ba + Vector3(0, 0, 0))
+			pts.append(ba)
 			pts.append(ba + (ba - p).normalized() * 2.0)
 	cam_dist = 120.0
 	for it in range(24):
@@ -477,6 +457,8 @@ func _stage_scenario() -> void:
 	## the deck between nodes 1 and 0 (Two Piers). build: A owns node 1 with units to spend
 	## (Strait: relay node -> cannon). switch: A's horde crosses node 1's switch deck on First Switch
 	## while A fires it. rotate: A rides the Switchback hub deck. inspect: opens node 1's inspector.
+	## The node indices assume the legacy maps: pass --map=res://maps/004-two-piers.json (fight/rear/
+	## queue/inspect), 008-strait (build), 010-first-switch (switch), 061-switchback-foundry (rotate).
 	match scenario:
 		"build", "inspect":
 			sim.nodes[1]["owner"] = "A"
@@ -550,12 +532,8 @@ func _run_scenario() -> void:
 			_scenario_done = true
 
 
-func hfov_half(vp: Vector2) -> float:
-	return atan(tan(deg_to_rad(cam.fov) / 2.0) * vp.x / vp.y)
-
-
 func _place_camera() -> void:
-	var pitch := deg_to_rad(Rules.CAM_PITCH)
+	var pitch := deg_to_rad(cam_pitch)
 	var back := Vector3(0, sin(pitch), cos(pitch)).rotated(Vector3.UP, cam_yaw)
 	cam.position = cam_target + back * cam_dist
 	cam.look_at(cam_target, Vector3.UP)
@@ -643,7 +621,7 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 
 # ------------------------------------------------------------------ loop
 func _process(delta: float) -> void:
-	if "--perf" in OS.get_cmdline_user_args():
+	if perf_on:
 		_perf(delta)
 	if not started:
 		return
@@ -684,10 +662,6 @@ func _process(delta: float) -> void:
 				var n: Dictionary = sim.nodes[ev["node"]]
 				if n["owner"] == HUMAN:
 					hud.toast("Your node %d falls in %d s - get out!" % [ev["node"], int(Rules.LAST_STAND_WARNING)])
-			"shield_break":
-				var n: Dictionary = sim.nodes[ev["node"]]
-				if n["owner"] == HUMAN:
-					hud.toast("Shield broken at node %d - the bond is down until it regenerates" % ev["node"])
 			"relay_tick":
 				var n: Dictionary = sim.nodes[ev["node"]]
 				if n["owner"] == HUMAN:
@@ -739,7 +713,15 @@ func _on_finished(winner: String) -> void:
 
 # ------------------------------------------------------------------ input
 func _unhandled_input(event: InputEvent) -> void:
-	if not started or paused:
+	if not started:
+		return
+	if paused:                                    # pause menu / end panel: drop any gesture in flight
+		if event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
+			touches.erase((event as InputEventScreenTouch).index)
+		if event is InputEventMouseButton and not (event as InputEventMouseButton).pressed:
+			_swallow_release = false                  # a double-tap's release: never swallow the next one
+		if drag_from >= 0:
+			_end_drag()
 		return
 	if event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
@@ -748,23 +730,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			touches.erase(st.index)
 		if touches.size() == 2:
-			drag_from = -1
-			pan_from = Vector3.INF
-			drag_mesh.clear_surfaces()
-			route_label.visible = false
-			var p: Array = touches.values()
-			pinch_dist = (p[0] as Vector2).distance_to(p[1])
+			_end_drag()
 		return
 	if event is InputEventScreenDrag and touches.size() == 2:
 		return                                        # fixed camera: no pinch zoom or two-finger pan
 	if touches.size() >= 2:
 		return
-	if event is InputEventMouseButton:
+	if event is InputEventMouseButton:                # fixed camera: the wheel does nothing
 		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			pass                                      # fixed camera: no zoom
-		elif mb.button_index == MOUSE_BUTTON_LEFT:
+		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if hud.pointer_over_ui(mb.position):
+				if not mb.pressed:                      # a drag released on the HUD is cancelled, never left hanging
+					_swallow_release = false
+					_end_drag()
 				return
 			var hit := _ground(mb.position)
 			if mb.pressed:
@@ -792,17 +770,16 @@ func _unhandled_input(event: InputEvent) -> void:
 					if not own.is_empty():                       # tap one of your lines: RECALL it
 						node_action("recall", own["id"])
 						return
-					pan_from = Vector3.INF                        # fixed camera: no pan
 			else:
 				if _swallow_release:
 					_swallow_release = false
-					drag_from = -1
-					drag_mesh.clear_surfaces()
-					route_label.visible = false
+					_end_drag()
 					return
 				if drag_from >= 0:
 					var target := _node_at(hit, mb.position)
 					var moved := (mb.position - _press_pos).length() >= TAP_PIXELS
+					if moved and target != drag_from:
+						_tap_node = -1                     # Alpha 11 (game.gd:723): a drag never arms the double-tap
 					if target >= 0 and target != drag_from and moved:
 						if node_action("send", drag_from, {"to": target, "fraction": fraction}):
 							fx._pulse(sim.nodes[target]["pos"], Rules.seat_color(HUMAN), Rules.R, 0.6)
@@ -816,19 +793,18 @@ func _unhandled_input(event: InputEvent) -> void:
 					if target >= 0 and (mb.position - _press_pos).length() < TAP_PIXELS:
 						selected = target
 						_queue_inspect(target)
-				drag_from = -1
-				pan_from = Vector3.INF
-				drag_mesh.clear_surfaces()
-				route_label.visible = false
+				_end_drag()
 	elif event is InputEventMouseMotion:
 		var hit := _ground((event as InputEventMouseMotion).position)
 		if drag_from >= 0:
 			_draw_drag(drag_from, hit, (event as InputEventMouseMotion).position)
-		elif pan_from != Vector3.INF:
-			cam_target += pan_from - hit
-			_place_camera()
-	elif event is InputEventMagnifyGesture:
-		pass                                          # fixed camera: no zoom
+
+
+func _end_drag() -> void:
+	## Clears the send gesture: no source node, no preview line, no route label.
+	drag_from = -1
+	drag_mesh.clear_surfaces()
+	route_label.visible = false
 
 
 func _ground(screen: Vector2) -> Vector3:
@@ -957,4 +933,5 @@ func _flush_inspect() -> void:
 	if _pending_inspect >= 0 and Time.get_ticks_msec() / 1000.0 - _pending_at >= DOUBLE_TAP_WINDOW:
 		var id := _pending_inspect
 		_pending_inspect = -1
-		hud.inspect(id, cam)
+		if not paused and not sim.over:           # Alpha 11 game.gd:588: never over the pause or end panel
+			hud.inspect(id, cam)

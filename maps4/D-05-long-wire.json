@@ -1,0 +1,589 @@
+{
+ "code": "D-05",
+ "name": "Long Wire",
+ "group": "debug",
+ "players": "versus",
+ "playersLabel": "1v1",
+ "combatMode": "both",
+ "family": "debug",
+ "modes": [
+  "1v1"
+ ],
+ "symmetry": "rotation x1",
+ "frame": {
+  "width": 160.0,
+  "height": 80.0,
+  "aspect": "2:1 landscape",
+  "panning": false,
+  "moduleUnits": 12.0,
+  "minNodeGap": 9.0
+ },
+ "minEnemyHomeHops": 0,
+ "centreSpawn": false,
+ "plazas": [],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 34.0,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 126.0,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 60.0,
+   "y": 18.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 100.0,
+   "y": 18.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 60.0,
+   "y": 62.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 100.0,
+   "y": 62.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 80.0,
+   "y": 73.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "strategic",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 4,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 80.0,
+   "y": 7.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "relay",
+   "relay": "remote",
+   "home": false,
+   "neutral": null,
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 0,
+   "to": 2,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 7,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 7,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 3,
+   "to": 1,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 0,
+   "to": 4,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 5,
+   "to": 1,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 6,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 6,
+   "to": 5,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 3,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false
+  },
+  {
+   "from": 4,
+   "to": 5,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": "m1",
+   "relay": 7,
+   "retracts": false
+  },
+  {
+   "from": 2,
+   "to": 4,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": "m2",
+   "relay": 7,
+   "retracts": false
+  }
+ ],
+ "rings": {
+  "count": 1,
+  "boundaries": [],
+  "aspect": 2.0
+ },
+ "lastStand": {
+  "methods": [],
+  "orders": {}
+ },
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 1,
+    "team": 1
+   }
+  ]
+ },
+ "note": "A remote at the top edge controls two decks at the bottom. Test conduit readability across the screen and the warning on a deck far from its relay.",
+ "thumbnail": "debug/thumbnails/D-05-long-wire.png",
+ "layout": {
+  "K": 1.7,
+  "nodes": {
+   "0": [
+    -78.2,
+    0.0
+   ],
+   "1": [
+    78.2,
+    0.0
+   ],
+   "2": [
+    -34.0,
+    -37.4
+   ],
+   "3": [
+    34.0,
+    -37.4
+   ],
+   "4": [
+    -34.0,
+    37.4
+   ],
+   "5": [
+    34.0,
+    37.4
+   ],
+   "6": [
+    0.0,
+    56.1
+   ],
+   "7": [
+    0.0,
+    -56.1
+   ]
+  },
+  "plazas": {},
+  "edges": [
+   {
+    "A": [
+     -73.6197,
+     -3.8756
+    ],
+    "B": [
+     -38.7927,
+     -33.7903
+    ],
+    "L": 45.9109,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.425,
+    "lean1": 3.676,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -29.6843,
+     -41.5683
+    ],
+    "B": [
+     -5.2572,
+     -53.2085
+    ],
+    "L": 27.0587,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -18.525,
+    "lean1": -3.332,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     5.2572,
+     -53.2085
+    ],
+    "B": [
+     29.6843,
+     -41.5683
+    ],
+    "L": 27.0587,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 3.332,
+    "lean1": 18.525,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     38.5803,
+     -33.5244
+    ],
+    "B": [
+     73.6197,
+     -3.8756
+    ],
+    "L": 45.9,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.0,
+    "lean1": -0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -73.6197,
+     3.8756
+    ],
+    "B": [
+     -38.7927,
+     33.7903
+    ],
+    "L": 45.9109,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.425,
+    "lean1": -3.676,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     38.5803,
+     33.5244
+    ],
+    "B": [
+     73.6197,
+     3.8756
+    ],
+    "L": 45.9,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -29.6843,
+     41.5683
+    ],
+    "B": [
+     -5.2572,
+     53.2085
+    ],
+    "L": 27.0587,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 18.525,
+    "lean1": 3.332,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     5.2572,
+     53.2085
+    ],
+    "B": [
+     29.6843,
+     41.5683
+    ],
+    "L": 27.0587,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -3.332,
+    "lean1": -18.525,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -28.2098,
+     -35.8276
+    ],
+    "B": [
+     28.2098,
+     -35.8276
+    ],
+    "L": 56.4195,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 15.193,
+    "lean1": -15.193,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -28.2098,
+     35.8276
+    ],
+    "B": [
+     28.2098,
+     35.8276
+    ],
+    "L": 56.4195,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -15.193,
+    "lean1": 15.193,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -33.6597,
+     -31.4097
+    ],
+    "B": [
+     -33.6597,
+     31.4097
+    ],
+    "L": 62.8194,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -3.251,
+    "lean1": 3.251,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   }
+  ],
+  "relays": {
+   "7": {
+    "mount": [
+     0.0349,
+     -0.9994
+    ]
+   }
+  },
+  "glb": "",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": [],
+   "docks": 0
+  }
+ }
+}

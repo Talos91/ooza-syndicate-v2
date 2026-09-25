@@ -24,6 +24,7 @@ var backdrop: CanvasLayer
 var _vats := {}                      # node id -> record (see _bind)
 static var _tanks := {}              # model key -> {"tanks": [{c, r, y0, y1}], "y0", "y1", "surface"}
 var _mesh := {}                      # faction -> creature Mesh
+var _res_mat := {}                   # "faction|owner" -> resident ShaderMaterial (seat colours fixed per match)
 var _tex := {}
 var _scale := {}
 
@@ -100,7 +101,9 @@ static func tank_info(vat_mesh: Mesh, key: String) -> Dictionary:
 func _bind(id: int, entry: Dictionary) -> Dictionary:
 	## A vat model appeared (map build, upgrade, restore): give its liquid its own material.
 	var vn: Node3D = entry["vat_node"]
-	var rec := {"vat_node": vn, "mi": null, "mat": null, "info": {}, "fill": -1.0, "residents": [], "resident_key": ""}
+	var rec := {"vat_node": vn, "mi": null, "mat": null, "info": {}, "fill": -1.0, "residents": [],
+			"res_faction": "", "res_owner": "", "res_n": -1,
+			"last_level": INF, "last_col": null, "last_agit": -1.0}   # last values sent to the shader
 	for mi in vn.find_children("*", "MeshInstance3D", true, false):
 		var info := tank_info((mi as MeshInstance3D).mesh, entry["model_key"])
 		if info["surface"] < 0 or (info["tanks"] as Array).is_empty():
@@ -145,9 +148,16 @@ func sync(dt: float) -> void:
 		var owner: String = n["owner"]
 		var col: Color = Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL * 0.55
 		var mat: ShaderMaterial = rec["mat"]
-		mat.set_shader_parameter("level", level)
-		mat.set_shader_parameter("liquid_color", col)
-		mat.set_shader_parameter("agitation", 1.0 if (n["build_kind"] != "" or not n["siege"].is_empty()) else 0.0)
+		if absf(level - float(rec["last_level"])) > 0.0005:   # uniforms only when they change
+			mat.set_shader_parameter("level", level)
+			rec["last_level"] = level
+		if rec["last_col"] != col:
+			mat.set_shader_parameter("liquid_color", col)
+			rec["last_col"] = col
+		var ag := 1.0 if (n["build_kind"] != "" or not n["siege"].is_empty()) else 0.0
+		if ag != float(rec["last_agit"]):
+			mat.set_shader_parameter("agitation", ag)
+			rec["last_agit"] = ag
 		_residents(rec, n, level, t)
 
 
@@ -160,13 +170,18 @@ func _residents(rec: Dictionary, n: Dictionary, level: float, t: float) -> void:
 		if Rules.low_detail or main.mobile:
 			per_tank = 1
 	var tanks: Array = rec["info"]["tanks"]
-	var key := "%s|%s|%d" % [faction, owner, per_tank]
-	if rec["resident_key"] != key:                    # capture or fill step: rebuild the residents
-		_clear_residents(rec)
-		rec["resident_key"] = key
+	if rec["res_faction"] != faction or rec["res_owner"] != owner or rec["res_n"] != per_tank:
+		_clear_residents(rec)                         # capture or fill step: rebuild the residents
+		rec["res_faction"] = faction
+		rec["res_owner"] = owner
+		rec["res_n"] = per_tank
 		if per_tank > 0:
-			var m: ShaderMaterial = (Mats.creature(faction, owner, _tex[faction]) as ShaderMaterial).duplicate()
-			m.set_shader_parameter("self_glow", 0.35)
+			var mk := faction + "|" + owner
+			if not _res_mat.has(mk):
+				var dm: ShaderMaterial = (Mats.creature(faction, owner, _tex[faction]) as ShaderMaterial).duplicate()
+				dm.set_shader_parameter("self_glow", 0.35)
+				_res_mat[mk] = dm
+			var m: ShaderMaterial = _res_mat[mk]
 			for ti in range(tanks.size()):
 				for k in range(per_tank):
 					var mi := MeshInstance3D.new()
@@ -178,6 +193,7 @@ func _residents(rec: Dictionary, n: Dictionary, level: float, t: float) -> void:
 	var vn: Node3D = rec["vat_node"]
 	var xf := vn.global_transform
 	var s: float = _scale.get(faction, 1.0)
+	var rb := xf.basis.orthonormalized()
 	for r in rec["residents"]:
 		var mi: MeshInstance3D = r[0]
 		var tank: Dictionary = tanks[r[1]]
@@ -192,7 +208,7 @@ func _residents(rec: Dictionary, n: Dictionary, level: float, t: float) -> void:
 		var local: Vector3 = tank["c"] + Vector3(cos(t * 0.55 + ph) * swirl, y, sin(t * 0.55 + ph) * swirl)
 		var squash := sin(t * 3.0 + ph) * 0.06        # Alpha 11: a slow breathing squash in the tank
 		var basis := Basis(Vector3.UP, t * 0.7 + ph) * Basis.from_scale(Vector3(1.0 + squash * 0.6, 1.0 - squash, 1.0 + squash * 0.45) * s)
-		mi.global_transform = Transform3D(xf.basis.orthonormalized() * basis, xf * local)
+		mi.global_transform = Transform3D(rb * basis, xf * local)
 
 
 func _clear_residents(rec: Dictionary) -> void:
@@ -200,4 +216,6 @@ func _clear_residents(rec: Dictionary) -> void:
 		if is_instance_valid(r[0]):
 			(r[0] as Node).queue_free()
 	(rec["residents"] as Array).clear()
-	rec["resident_key"] = ""
+	rec["res_faction"] = ""
+	rec["res_owner"] = ""
+	rec["res_n"] = -1

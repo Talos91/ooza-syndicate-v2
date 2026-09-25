@@ -1,5 +1,70 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.0 "Alpha 18" - 2026-09-25 (maps 4.0 for phones, per-map camera, optimization pass)
+
+**Maps 4.0 replace maps 3.0** (Daniele: "the maps are waaaay too big for mobile"; References/Ooze
+Syndicate maps 4.0: 100 maps + 9 debug maps on a 160 x 80 landscape frame, average 19.9 nodes).
+- Baked through the same pipeline: `Models/2.0/build_maps_4_0_review.py` (the approved 3.0 builder with
+  only the pack path, the 160 x 80 frame, the gen4 plaza templates and K changed) and
+  `Models/2.0/export_maps_4_0_game.py` -> `maps4/*.json` + `assets/maps4/<code>.glb`.
+- **1.7 m per map unit** (3.0: 3 m): the smallest scale the planner leaves clean on 106 of 109 maps
+  (sweep 1.4-3.0). A platform now spans 5.2 % of the screen width on the median map (Alpha 17: 2.9 %),
+  4.8-11 % across the pool, before the steeper camera adds to the depth axis.
+- **Docks**: a node set right in front of a home plaza left no room for two piers (the 3.0 planner bent
+  the piers back and lines zigzagged out into space and back). The hop is now a straight connector from
+  the plaza rim to the node's rim, or plain contact where the platform reaches the plaza - no stray pier
+  stubs (424 hops).
+- Withheld from the pool: **B-30** (24 deck clashes at every scale) and **D-08** (41 nodes, not
+  phone-fit: 27 pt tap targets at best). Piers steeper than the kit's 80 degrees on 7 ring maps are
+  clamped (reported by the test, invisible in renders).
+- **On phones** the 3v3 / 2v2v2 maps are not offered (the pack's "tablet recommended"; 31 nodes on a
+  round board use a third of a phone's width). Tablets and desktop keep them.
+- `tests/test_maps4.gd` (renamed from test_maps3) checks docks, steep piers, the withheld maps and two
+  map invariants (node ids, one edge per pair).
+
+**Camera: more from the top, per map** (Daniele: "a bit more from the top so there's more bird's-eye
+view ... different maps might want different camera angle ... make sure all nodes and their functions
+are clickable on mobile and that nothing overflows").
+- `scripts/map_camera.gd` gives every map its own pitch (50-74 degrees, most 62-70; was 42 for all):
+  the lowest angle at which its smallest tap target reaches 33 pt on an 844 x 390 pt phone with no badge
+  colliding or overflowing. Measured by the new phone-fit probe `tests/phone_fit.tscn` (run it again
+  after a map pack changes; `--pitch=N` overrides the table for tests).
+- Badges now treat the top bar, bottom strip, send panel and right-hand buttons as off-limits and slide
+  clear of them: 0 overflowing badges on 107 maps (was 1-4 on most maps).
+- The inspector's X is no longer hidden under its info panel (it sits at the ring's top right).
+- Relay symbols (↻ ⇤ ⇄ ⌁) drew as empty boxes in the browser: the HUD font now falls back to DejaVu
+  Sans Mono (bundled with its licence).
+
+**Optimization pass** (read-only audit of every script: 112 findings, 110 confirmed by a second
+reviewer, 95 judged safe; all safe ones applied, each reviewed again against its diff).
+- Frame cost at the same view (desktop): C-05 SIEGE 1,875 -> 1,125 draw calls and 1.31 M -> 0.78 M
+  primitives; D-09 3v3 3,525 -> 1,147 draw calls (815 at its own pitch). Godot's process-time monitor
+  swings 6-18 ms between identical runs here, so no CPU figure is claimed. SIEGE river rings are one
+  MultiMesh per platform and skip quiet platforms; BRAWL trims, relay arcs, goo corridors, vat liquids
+  and badges no longer rebuild every frame; surface-detail textures are shared.
+- Dead code removed: the shield mechanic (never read since Alpha 14: sim keys, badge bar, dome effect,
+  constants), unused Rules constants, legacy menu tables (STARTER_MAPS, PROVES), unused API and signals.
+  Stale comments and headers rewritten.
+- Bugs fixed: 2v2v2 gave two teams the same colour family (now three families); in team modes the 7:00
+  forced end goes to the **stronger team** (was the strongest single seat); a relay collapsing mid-motion
+  froze its riders; Last Stand collapse goo was always seat A's colour; recall on a plaza socket could
+  crash a collapse and a guest's path rebuild; drag released over the HUD stuck; a quick drag counted as
+  the first tap of a double-tap upgrade; the Last Stand countdown ran negative with Last Stand off;
+  'Relay fired' showed as a warning; CANNON / FORGE looked available during the swap cooldown; on six
+  maps a retract relay with two gates lit only one gate's symbol; BRAWL could silently drop bodies past
+  1,024 per seat.
+- AI: no longer cancels its own sends within one think, stops investing in nodes the Last Stand is
+  about to drop, keeps trying other recalls when one is refused, never builds on a relay slot under
+  attack. Curve vs Standard: Training 0 %, Casual 25 %, Standard 50 %, Veteran 60 %, Expert 90 %.
+- Online: a signalling blip no longer closes the host's room; a publish no longer reloads a tab in the
+  middle of a match or room (the new build waits for the menu); chat marks your messages by player,
+  not seat letter; a refused join says why; guests get a fresh lobby after a rematch with a missing
+  player; the host stops re-sending the end state 10 times a second and builds no snapshots with no
+  guest connected; the export no longer packs build/web.
+- Tests: test_sim, test_net, test_maps4 (17,441 checks), test_map_pool (every pooled map played to the
+  end by the AI), test_ai_curve - all pass. The online and auto-update changes are covered by test_net
+  and review only: not tried in a live two-player room, on a phone or across networks.
+
 ## 0.17.1 - 2026-09-25
 
 - **Units keep one constant speed everywhere** (Daniele: "units accelerate on long bridges - speed is

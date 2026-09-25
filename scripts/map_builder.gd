@@ -1,10 +1,10 @@
 class_name MapBuilder
 extends RefCounted
-## Lays a roster map out at honest lengths and builds it from the kit GLBs (assets/kit).
-## Layout: breadth-first from the centre node, keeping each edge's schematic direction and
-## giving it its honest length (Rules.span). Exact for trees such as Two Piers; for maps with
-## cycles an edge that closes a loop keeps whatever length results and its modules are stretched
-## (flagged in `stretched`) - the roster rewrite fixes those maps (OPEN-QUESTIONS.md).
+## Builds the arena from the kit GLBs (assets/kit). The game's maps (maps4/*.json +
+## assets/maps4/<code>.glb) carry a baked layout: layout3() reads it and build3() only places pieces
+## (see the baked layout section below). The archive roster in maps/ still goes through layout()
+## (breadth-first at honest lengths, mark_crossings) for the rules tests, and through build() for
+## the desktop --map dev path.
 ##
 ## Relay nodes (BUILDING-PIECES.md B, Daniele 2026-09-24): the attachment socket sits in the
 ## middle like a vat; the relay's own tower stands on Relay_Mount, a ledge bolted outside the rim
@@ -95,7 +95,6 @@ static func mark_crossings(map: Dictionary, pos: Dictionary) -> void:
 				pick = g
 			if not pick.is_empty():
 				pick["overpass"] = true
-				pick["overpass_auto"] = true
 
 
 static func _mods(e: Dictionary) -> int:
@@ -264,21 +263,26 @@ static func set_state_color(entry: Dictionary, c: Color) -> void:
 		(pair[0] as MeshInstance3D).set_surface_override_material(pair[1], Mats.light_color(c))
 
 
+const VAT_MODEL := ["", "Vat_T1", "Vat_T2", "Vat_T3", "Vat_T4"]            # by tier (1-4)
+const CANNON_MODEL := ["", "Cannon_T1", "Cannon_T2", "Cannon_T3"]          # by cannon tier (1-3)
+
+
 static func model_for(n: Dictionary) -> String:
 	## Which centre-slot model a node shows right now - the build TARGET while a build runs (Alpha
-	## 11 shows the new structure growing out of the socket), otherwise what stands there.
+	## 11 shows the new structure growing out of the socket), otherwise what stands there. Called
+	## per node per frame (main), so the names come from tables, not string formatting.
 	if n["build_kind"] != "" and not n["build_target"].is_empty():
 		var t: Dictionary = n["build_target"]
 		if t["kind"] == "vat":
-			return "Vat_T%d" % t["tier"]
-		return "Cannon_T%d" % t["tier"] if t["kind"] == "cannon" else "Forge"
+			return VAT_MODEL[t["tier"]]
+		return CANNON_MODEL[t["tier"]] if t["kind"] == "cannon" else "Forge"
 	if n["attachment"] == "cannon":
-		return "Cannon_T%d" % maxi(n["cannon_tier"], 1)
+		return CANNON_MODEL[maxi(n["cannon_tier"], 1)]
 	if n["attachment"] == "forge":
 		return "Forge"
 	if n["relay"] != "":
 		return "Socket_Attachment"
-	return "Vat_T%d" % n["tier"]
+	return VAT_MODEL[n["tier"]]
 
 
 static func set_centre_model(parent: Node3D, entry: Dictionary, model: String, pos: Vector3, seat: String) -> Node3D:
@@ -316,13 +320,14 @@ static func apply_owner(parts: Array, seat: String) -> void:
 					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else null)
 
 
-# ---------------------------------------------------------------- maps 3.0 (baked layout)
-# Maps 3.0 (References/Ooze Syndicate maps 3.0) come with the approved Blender builder's layout baked
-# per map (Models/2.0/export_maps_3_0_game.py -> maps3/*.json + assets/maps3/<code>.glb): 3 m per map
-# unit, each bridge on its own rim exit, angled piers (Pier_Angled_00..80, mirrored for negative
+# ---------------------------------------------------------------- baked layout (maps 3.0 / 4.0 pipeline)
+# Maps 4.0 (References/Ooze Syndicate maps 4.0, the landscape phone pack) come with the Blender builder's
+# layout baked per map (Models/2.0/export_maps_4_0_game.py -> maps4/*.json + assets/maps4/<code>.glb): 1.7 m
+# per map unit, each bridge on its own rim exit, angled piers (Pier_Angled_00..80, mirrored for negative
 # leans; plazas get exact cuts in the map's GLB), deck heights 0 / +4 / -4 / +8 from the clearance
 # planner, ramps between the pier and the first crossing, relay towers on the clearest rim ledge or on
-# the socket. This only places pieces; it never re-plans.
+# the socket; a pocket hop too short for two piers is a dock (one straight connector, or plain contact).
+# This only places pieces; it never re-plans.
 const OVER_H := 4.0                  # Deck_Overpass_High rise per level (builder OVER_H)
 const UNDER_BASE := 2.4              # Deck_Underpass depth as modelled (builder base)
 
@@ -391,7 +396,8 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 		vis[id] = {"parts": parts, "platform": platform, "vat_node": vat_node,
 				"vat_tier": -1 if relay != "" else n["tier"], "model_key": model_for(n),
 				"attachment_node": null, "attachment": "", "cannon_tier": 0, "housing": housing,
-				"state_parts": state_parts, "mount_dir": mount_dir, "centre": centre}
+				"state_parts": state_parts, "mount_dir": mount_dir, "centre": centre,
+				"state_hosts": [housing] if housing != null else []}   # every piece carrying an OS_State symbol
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		if e["plaza"]:
@@ -417,6 +423,8 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 			var pier: Node3D
 			if bool(g["plaza%d" % end]):
 				pier = glb_nodes.get("PlazaPier_%d_%d" % [i, end])
+			elif g.get("dock", false):                    # maps 4.0 dock: the connector meets the rim directly
+				pier = null
 			else:
 				pier = angled_pier(parent, exit, dir, float(g["lean%d" % end]), st.begins_with("s") and ctrl == nid)
 			if pier:
@@ -426,6 +434,7 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 				var gate := put(parent, "Relay_Retract", exit + dir * (p_len - Rules.PIER) - dir * Rules.R, Rules.heading(dir))
 				vis[nid]["housing"] = gate
 				vis[nid]["parts"].append(gate)
+				(vis[nid]["state_hosts"] as Array).append(gate)   # a relay may gate several decks
 		vis["edge_piers"][i] = piers
 		var state_key: String = "retract" if e["retracts"] else st
 		var s0 := A + d * p0
@@ -479,14 +488,12 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 			conduit.rotation = Vector3(0, Rules.heading(v.normalized()), 0)
 			conduit.scale = Vector3(v.length(), 1.0, 1.0)
 			vis["conduits"][i] = conduit
-	for n in sim.nodes:                               # relay symbols (OS_State) on the housings
-		var hs: Node3D = vis[n["id"]]["housing"]
-		if hs == null:
-			continue
-		for mi in hs.find_children("*", "MeshInstance3D", true, false):
-			var mesh := (mi as MeshInstance3D).mesh
-			for s in range(mesh.get_surface_count()):
-				var m := mesh.surface_get_material(s)
-				if m and m.resource_name.begins_with("OS_State"):
-					(vis[n["id"]]["state_parts"] as Array).append([mi, s])
+	for n in sim.nodes:                               # relay symbols (OS_State) on the housings and gates
+		for hs in vis[n["id"]]["state_hosts"]:
+			for mi in (hs as Node3D).find_children("*", "MeshInstance3D", true, false):
+				var mesh := (mi as MeshInstance3D).mesh
+				for s in range(mesh.get_surface_count()):
+					var m := mesh.surface_get_material(s)
+					if m and m.resource_name.begins_with("OS_State"):
+						(vis[n["id"]]["state_parts"] as Array).append([mi, s])
 	return vis

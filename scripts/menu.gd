@@ -5,8 +5,9 @@ extends CanvasLayer
 ## per faction (ui_skin.gd), stepper strip, wordmark, Russo One headings, and the same coordinates
 ## - Alpha 11 laid out on a 1672x941 canvas, ours is 1280x720, so everything is scaled by K.
 ## MAIN -> 01 FACTION (portrait / stats + trait / abilities / faction tabs) -> 02 BATTLEFIELD
-## (3D thumbnails + preview) -> 03 SETUP (your faction, rival, difficulty, bridge combat) -> DEPLOY.
-## OPTIONS holds the match switches (bridge combat, detail). ONLINE -> CREATE ROOM / JOIN ROOM ->
+## (3D thumbnails + preview) -> 03 SETUP (players, your colour, your faction, rival, difficulty,
+## SIEGE/BRAWL, Last Stand) -> DEPLOY. OPTIONS holds the match switches (SIEGE/BRAWL, Last Stand,
+## enemy counts, detail). ONLINE -> CREATE ROOM / JOIN ROOM ->
 ## the room lobby (players, faction, map, PLAYERS, SIEGE/BRAWL, Last Stand) -> DEPLOY by the host
 ## (Net, peer-to-peer). TUTORIAL is not in 2.0 yet.
 
@@ -20,7 +21,7 @@ var main: Node3D
 var content: Control
 var faction := "null"
 var rival := "random"
-var map_path := "res://maps/004-two-piers.json"
+var map_path := ""                                # setup() takes main's, or the pool's first map
 var ai_level := "Standard"
 var mode := "1v1"
 var colour := "A"
@@ -60,7 +61,7 @@ func setup(m: Node3D) -> void:
 	for mp in MapPool.all():
 		maps.append({"path": mp, "data": MapBuilder.load_map(mp)})
 	if not maps.any(func(x): return x["path"] == map_path):
-		map_path = maps[0]["path"]                     # maps 3.0: the old roster is archive
+		map_path = maps[0]["path"]                     # the pool is maps4/: the old roster is archive
 	Net.lobby_changed.connect(_on_net_changed)
 	show_main()
 
@@ -209,10 +210,7 @@ func header(step: int) -> void:
 
 func map_preview(pos: Vector2, dims: Vector2) -> void:
 	var code: String = _selected_map().get("code", "")
-	if not picture(MapPool.thumb(code), pos, dims) and not picture("res://assets/map-thumbnails/%s.png" % code, pos, dims):
-		var svg := picture(map_path.replace("maps/", "assets/maps/").replace(".json", ".svg"), pos, dims)
-		if svg:
-			svg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	picture(MapPool.thumb(code), pos, dims)
 
 
 # ------------------------------------------------------------------ pages
@@ -253,7 +251,8 @@ func show_options() -> void:
 		show_options())
 	bc.add_theme_font_size_override("font_size", int(round(22 * K)))
 	label_at("Two modes that play differently: SIEGE and BRAWL. Also in the pause menu and the Debug panel.", P(60, 330), 18, Color("b8ced6"))
-	var lsb := nav_button("LAST STAND: %s" % ("ON  -  the map collapses from 2:00" if Rules.last_stand else "OFF  -  no collapse; the 7:00 safety net still ends a stalled match"),
+	var lsb := nav_button("LAST STAND: %s" % (("ON  -  the map collapses from %d:%02d" % [int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60])
+			if Rules.last_stand else ("OFF  -  no collapse; the %d:%02d safety net still ends a stalled match" % [int(Rules.MATCH_HARD_END) / 60, int(Rules.MATCH_HARD_END) % 60])),
 			P(60, 362), P(950, 50), func():
 		Rules.last_stand = not Rules.last_stand
 		show_options())
@@ -264,12 +263,12 @@ func show_options() -> void:
 		show_options())
 	hec.add_theme_font_size_override("font_size", int(round(19 * K)))
 	label_at("PERFORMANCE", P(60, 482), 30)
-	var det := nav_button("DETAIL: %s" % ("FULL" if not Rules.low_detail else "LOW  -  fewer horde and river patches"),
+	var det := nav_button("DETAIL: %s" % ("FULL" if not Rules.low_detail else "LOW  -  fewer river patches and vat residents"),
 			P(60, 526), P(950, 60), func():
 		Rules.low_detail = not Rules.low_detail
 		show_options())
 	det.add_theme_font_size_override("font_size", int(round(22 * K)))
-	label_at("Low detail halves the horde and river patches - use it if the game makes your machine run hot.", P(60, 596), 18, Color("b8ced6"))
+	label_at("Low detail trims the river patches and vat residents - use it if the game makes your machine run hot.", P(60, 596), 18, Color("b8ced6"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_main)
 
 
@@ -379,8 +378,8 @@ func show_maps() -> void:
 		b.custom_minimum_size = P(451, 272)
 		grid.add_child(b)
 		var tex := TextureRect.new()
-		var thumb := MapPool.thumb(code) if ResourceLoader.exists(MapPool.thumb(code)) else "res://assets/map-thumbnails/%s.png" % code
-		tex.texture = load(thumb) if ResourceLoader.exists(thumb) else load(mp.replace("maps/", "assets/maps/").replace(".json", ".svg"))
+		var thumb := MapPool.thumb(code)
+		tex.texture = load(thumb) if ResourceLoader.exists(thumb) else null
 		tex.position = P(8, 8)
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
@@ -401,7 +400,7 @@ func show_maps() -> void:
 	var ls_methods: Array = sel.get("lastStand", {}).get("methods", [])
 	var ls_line: String = "No Last Stand on this map" if ls_methods.is_empty() else "Last Stand at %d:%02d - methods: %s" % [
 			int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(ls_methods)]
-	label_at("%s\n%s" % [main.PROVES.get(sel.get("code", ""), _map_blurb(sel)), ls_line], P(1053, 736), 22, Color("abc1cd"))
+	label_at("%s\n%s" % [_map_blurb(sel), ls_line], P(1053, 736), 22, Color("abc1cd"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_factions)
 	nav_button("NEXT: MATCH SETUP", P(1280, 866), P(352, 58), show_setup, true)
 
@@ -423,7 +422,8 @@ func _modes_of(m: Dictionary) -> Array:
 
 
 func _map_blurb(m: Dictionary) -> String:
-	## Roster maps have no "proves" line: tier, layout family and overpass count instead.
+	## maps 3.0/4.0: group, family, seats, rings and raised decks; legacy roster maps: tier, layout
+	## family and overpass count.
 	if m.has("layout"):                               # maps 3.0: group, family, seats, raised decks, rings
 		var raised: int = (m["layout"]["edges"] as Array).filter(func(e): return float(e["h"]) != 0.0).size()
 		return "%s · %s · %s · %d rings%s" % [str(m.get("group", "")).capitalize(), m.get("family", ""), m.get("playersLabel", ""),
@@ -640,7 +640,7 @@ func show_lobby() -> void:
 			Net.set_mode(md)
 			show_lobby(), md == Net.mode)
 		mb.add_theme_font_size_override("font_size", int(round(15 * K)))
-		mb.disabled = not host or Net.roster.size() > Net.SLOTS[md]
+		mb.disabled = not host or Net.roster.size() > Net.SLOTS[md] or Net.maps_for(md).is_empty()
 	var sb := nav_button("MODE / %s" % ("SIEGE" if Net.siege else "BRAWL"), P(878, 680), P(360, 56), func():
 		Net.toggle_siege()
 		show_lobby())
