@@ -32,6 +32,7 @@ func think(sim: Sim, dt: float) -> void:
 	_t = 0.0
 	if use_relays:
 		_relays(sim)
+		_retreats(sim)
 	_build(sim)
 	var mine := sim.nodes.filter(func(n): return n["owner"] == seat and n["units"] >= 25.0)
 	mine.sort_custom(func(a, b): return a["units"] > b["units"])
@@ -45,7 +46,7 @@ func think(sim: Sim, dt: float) -> void:
 		var best := -1
 		var best_score := INF
 		for n in sim.nodes:
-			if n["owner"] == seat or sim.collapsed.get(n["id"], false):
+			if sim.allied(n["owner"], seat) or sim.collapsed.get(n["id"], false):
 				continue
 			if sim.last_stand_active and (sim.last_stand_warn_node == n["id"] or _drops_soon(sim, n["id"])):
 				continue                                  # don't pour troops onto a node about to fall
@@ -90,6 +91,24 @@ func _nearest_safe(sim: Sim, from_id: int) -> int:
 			best_len = score
 			best = n["id"]
 	return best
+
+
+func _retreats(sim: Sim) -> void:
+	## Recall a line that is being shoved back and badly outnumbered at a contact (tug-of-war) -
+	## the mid-fight choice the player has too. Only while it still has something worth saving.
+	for key in sim.fight_info:
+		var ids: PackedStringArray = key.split(":")
+		var a := sim._horde(int(ids[0]))
+		var b := sim._horde(int(ids[1]))
+		if a.is_empty() or b.is_empty():
+			continue
+		var mine := a if a["owner"] == seat else (b if b["owner"] == seat else {})
+		if mine.is_empty():
+			continue
+		var theirs := b if mine == a else a
+		if sim.power_of(mine) < 0.4 * sim.power_of(theirs) and mine["units"] > 15.0:
+			sim.recall(mine["id"])
+			return
 
 
 func _relays(sim: Sim) -> void:

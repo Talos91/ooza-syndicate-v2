@@ -215,7 +215,7 @@ func setup(m: Node3D) -> void:
 	# bottom: map title, hint, ability dock, version
 	map_title = text_label(str(main.map.get("name", "")).to_upper(), 20)
 	root.add_child(map_title)
-	hint = text_label("Drag to send  ·  Tap to inspect  ·  Double-tap your node to upgrade  ·  Relay: tap + SWITCH", 14, Color("d0dceb"))
+	hint = text_label("Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade  ·  Tap your line to RECALL it", 14, Color("d0dceb"))
 	hint.add_theme_color_override("font_shadow_color", Color.BLACK)
 	hint.add_theme_constant_override("shadow_offset_x", 2)
 	hint.add_theme_constant_override("shadow_offset_y", 2)
@@ -341,7 +341,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 	var total := sim.seat_strength(human)
 	var rivals := 0.0
 	for seat in sim.factions.keys():
-		if seat != human:
+		if not sim.allied(seat, human):
 			rivals += sim.seat_strength(seat)
 	stats_label.text = "%s  %03d    %02d:%02d    RIVALS  %03d" % [str(main.SEAT_FACTIONS[human]).to_upper(), Rules.shown(total),
 			int(sim.time) / 60, int(sim.time) % 60, Rules.shown(rivals)]
@@ -406,7 +406,7 @@ func _badges(cam: Camera3D) -> void:
 			(b["label"] as Label).add_theme_color_override("font_color", col if owner != "" else Color("d8e0e8"))
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
-		if owner == "" or owner == human:
+		if owner == "" or sim.allied(owner, human):          # you and your team see the number
 			label.text = str(Rules.shown(n["units"]))
 		else:
 			label.text = owner                            # no numbers on enemy nodes: seat letter only
@@ -436,7 +436,7 @@ func _badges(cam: Camera3D) -> void:
 			parts.append("FALLS %d" % int(ceil(sim.last_stand_warn_t)))
 		sub.text = " ".join(parts)
 		var shield_bar: ProgressBar = b["shield"]
-		shield_bar.visible = owner != ""
+		shield_bar.visible = false                        # Alpha 14: the shield pool is gone
 		if owner != "":
 			var cap: float = maxf(Rules.SHIELD_FRACTION * n["units"], 0.001)
 			shield_bar.value = 100.0 * clampf(n["shield"] / cap, 0.0, 1.0)
@@ -558,7 +558,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		if owner != "":
 			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) else "no vat - garrison must be fed"
 			var cap: float = maxf(Rules.SHIELD_FRACTION * n["units"], 0.001)
-			status += " | shield %d/%d %s" % [Rules.shown(n["shield"]), Rules.shown(cap), "UP" if n["shield_up"] else "DOWN"]
+			status += " | passing enemies fight this garrison"
 			lines.append(status)
 	if n["relay"] != "":
 		var states := sim.relay_states(n)
@@ -712,7 +712,7 @@ func _build_debug() -> void:
 		toast("Bridge combat %s" % ("ON" if Rules.bridge_combat else "OFF")))
 	box.add_child(bridge)
 	var low := button("", Callable(), 0, 44, 18)
-	var low_text := func(): low.text = "Detail: %s" % ("LOW (fewer patches, no shield rings)" if Rules.low_detail else "FULL")
+	var low_text := func(): low.text = "Detail: %s" % ("LOW (fewer horde and river patches)" if Rules.low_detail else "FULL")
 	low_text.call()
 	low.pressed.connect(func():
 		Rules.low_detail = not Rules.low_detail

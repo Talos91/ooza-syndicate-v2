@@ -3,7 +3,8 @@ extends RefCounted
 ## Game state and rules, no visuals. Deterministic for a given sequence of sends, time steps and
 ## seed. Rules: Docs/Game Design/Ooze Syndicate 2.0/01 Rules/GAME-RULES.md (§5 hordes, §6 nodes,
 ## §7 bridges, §8 relays, §10 Last Stand). Alpha 12 (2026-09-25): real relays, real Last Stand,
-## geometric contact everywhere, Alpha 11 costs, the shield bond as a goo trail (not a bridge).
+## geometric contact everywhere, Alpha 11 costs. Alpha 14: tug-of-war fronts, recall, always-on goo
+## corridors with a home advantage, transit fights the real garrison (the shield pool is gone).
 
 signal captured(node_id: int, new_owner: String, old_owner: String)
 signal horde_spawned(h: Dictionary)
@@ -16,6 +17,7 @@ var adj: Dictionary = {}       # node id -> Array of [neighbour id, edge index]
 var hordes: Array = []         # see _new_horde()
 var factions: Dictionary = {}  # seat -> faction
 var homes: Dictionary = {}     # seat -> home node id
+var teams: Dictionary = {}     # seat -> team id (team modes only; empty = everyone for themselves)
 var time := 0.0
 var over := false
 var winner := ""
@@ -42,8 +44,13 @@ var rng := RandomNumberGenerator.new()
 var _next_id := 1
 
 
-func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1) -> void:
-	factions = seat_factions
+func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1, seat_teams: Dictionary = {}) -> void:
+	factions = {}
+	for id in seats:                                   # only seats actually in this match
+		factions[seats[id]] = seat_factions.get(seats[id], "null")
+	if factions.is_empty():
+		factions = seat_factions
+	teams = seat_teams
 	rng.seed = seed_value if seed_value >= 0 else int(Time.get_unix_time_from_system()) % 100000
 	_map_last_stand = map.get("lastStand", {})
 	for n in map["nodes"]:
@@ -324,7 +331,7 @@ func _step_structures(dt: float) -> void:
 func _hordes_in_range(n: Dictionary) -> Array:
 	var out := []
 	for h in hordes:
-		if h["owner"] == n["owner"] or h["units"] <= 0.0:
+		if allied(h["owner"], n["owner"]) or h["units"] <= 0.0:
 			continue
 		var p: Vector3 = sample(h, h["s"])[0]
 		if (p - (n["pos"] as Vector3)).length() <= Rules.CANNON_RANGE:
@@ -630,7 +637,7 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 		events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on})
 	elif fate == "carry" and carry_node >= 0:
 		var n: Dictionary = nodes[carry_node]
-		if n["owner"] == h["owner"]:
+		if allied(n["owner"], h["owner"]):
 			n["units"] += units_on
 		else:
 			n["siege"][h["owner"]] = n["siege"].get(h["owner"], 0.0) + units_on
@@ -852,18 +859,7 @@ func step(dt: float) -> void:
 	for n in nodes:                                   # production (vat nodes only), up to the cap
 		if n["owner"] != "" and has_vat(n) and n["units"] < Rules.CAPS[n["tier"]]:
 			n["units"] = minf(Rules.CAPS[n["tier"]], n["units"] + production(n) * dt)
-		n["shield_loss"] = 0.0
-		if n["owner"] != "":                           # the shield: SHIELD_FRACTION of the garrison,
-			var cap: float = Rules.SHIELD_FRACTION * n["units"]   # regenerating "from excess minions"
-			if n["shield"] < cap:
-				n["shield"] = minf(cap, n["shield"] + Rules.SHIELD_REGEN * dt)
-				if n["shield"] >= cap - 0.001 and not n["shield_up"]:
-					n["shield_up"] = true
-					fx_events.append({"type": "shield_up", "node": n["id"]})
-			else:
-				n["shield"] = cap
-				if not n["shield_up"]:
-					n["shield_up"] = true
+		n["shield"] = 0.0                              # Alpha 14: no hidden shield pool any more
 	_step_relays(dt)
 	_step_structures(dt)
 	for n in nodes:                                   # the door emits the current order into its line
@@ -884,8 +880,8 @@ func step(dt: float) -> void:
 		if h["state"] == "move" and not h.get("blocked", false):
 			var fast_here: bool = sample(h, h["s"])[2]
 			var mult: float = Rules.node_speed_mult if fast_here else 1.0
-			if fast_here and _crossing_shield(h):
-				mult = 1.0                                # paying the shield toll: no fast glide
+			if Rules.bridge_combat and on_enemy_goo(h):
+				mult *= Rules.GOO_SLOW                    # enemy goo: slower (home advantage)
 			var ds: float = Rules.deck_speed * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
 				ds = minf(ds, Rules.door_rate * Rules.METRES_PER_UNIT * dt)
@@ -902,6 +898,7 @@ func step(dt: float) -> void:
 			continue
 		a["pending_loss"] = a.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * b["units"]) * dt * attack_of(b["owner"]) / stat(a["owner"], "health")
 		b["pending_loss"] = b.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * a["units"]) * dt * attack_of(a["owner"]) / stat(b["owner"], "health")
+	_tug_of_war(dt)
 	for h in hordes:
 		if h["state"] == "absorb":
 			# the line keeps pouring in through the door: units enter as fast as the tail advances
@@ -951,7 +948,7 @@ func step(dt: float) -> void:
 	for h in hordes:                                  # no contact left: march on
 		if h["state"] == "fight" and not fighting.has(h["id"]):
 			h["state"] = "move"
-		elif h["state"] == "move" and fighting.has(h["id"]):
+		elif h["state"] == "move" and fighting.has(h["id"]) and not h.get("retreat", false):
 			h["state"] = "fight"
 	_check_end()
 
@@ -993,13 +990,6 @@ func _current_span(h: Dictionary) -> Dictionary:
 	return {}
 
 
-func _crossing_shield(h: Dictionary) -> bool:
-	for ns in h["node_spans"]:
-		if h["s"] >= ns["s0"] and h["s"] <= ns["s1"]:
-			var n: Dictionary = nodes[ns["node"]]
-			return n["owner"] != "" and n["owner"] != h["owner"] and n["shield_up"] and n["shield"] > 0.0
-	return false
-
 
 static func full_length(units: float) -> float:
 	## Length of a horde's line once it has fully left its vat.
@@ -1018,6 +1008,21 @@ func _detect_contacts() -> void:
 	## a spatial hash; a horde's HEAD within Rules.CONTACT_R of an enemy patch engages it (frontline
 	## if the two heads face each other, rear if it caught the enemy's body or tail); a friend's
 	## body ahead going the same way blocks (queue, no passing through).
+	_contact_now = {}
+	_detect_contacts_inner()
+	# fights are to the death, EXCEPT that a retreating horde breaks off once out of contact
+	for key in fight_info.keys():
+		if _contact_now.has(key):
+			continue
+		var ids: PackedStringArray = key.split(":")
+		var a := _horde(int(ids[0]))
+		var b := _horde(int(ids[1]))
+		if a.get("retreat", false) or b.get("retreat", false):
+			fight_info.erase(key)
+			fights = fights.filter(func(p): return not (p[0] == int(ids[0]) and p[1] == int(ids[1])))
+
+
+func _detect_contacts_inner() -> void:
 	if not Rules.bridge_combat:                      # Alpha 11 mode: no fights or queues in transit
 		for h in hordes:
 			h["blocked"] = false
@@ -1060,7 +1065,7 @@ func _detect_contacts() -> void:
 					var d: float = p.distance_to(y[2])
 					if d > Rules.CONTACT_R:
 						continue
-					if other["owner"] != h["owner"]:
+					if not allied(other["owner"], h["owner"]):
 						var kind := "frontline" if (y[1] == 0 and fwd.dot(y[3]) < 0.0) else "rear"
 						_engage(h, other, kind)
 					elif y[1] > 0 and fwd.dot(y[3]) > 0.3 and fwd.dot(y[2] - p) > 0.0 \
@@ -1072,15 +1077,141 @@ func _detect_contacts() -> void:
 			h["blocked_by"] = best_friend["id"]           # queued at this friend's tail
 
 
+func power_of(h: Dictionary) -> float:
+	## Fighting weight at a contact: units x attack (faction x forge) x health, and a line standing
+	## on enemy goo pushes at Rules.GOO_PUSH of that (the front slides toward it: home advantage).
+	var p: float = h["units"] * attack_of(h["owner"]) * stat(h["owner"], "health")
+	return p * (Rules.GOO_PUSH if Rules.bridge_combat and on_enemy_goo(h) else 1.0)
+
+
+func _tug_of_war(dt: float) -> void:
+	## TUG-OF-WAR (Daniele, Alpha 13 playtest - bridge-combat mode): the front no longer stands
+	## still while both blobs shrink; it SLIDES toward the weaker side at a speed set by the gap in
+	## numbers - Rules.TUG_SPEED x deck speed at total dominance, zero when even. Frontline: the
+	## stronger head advances, the weaker is shoved back along its own path. Rear attack: both move
+	## the same way (a stronger pursuer shoves the caught line forward; a stronger caught line
+	## shoves the pursuer back). A retreating horde moves under its own power and is never shoved;
+	## a riding horde (relay in motion) belongs to the deck. Pushing a fight onto a relay deck, then
+	## dropping or rotating it, is the big moment this is for.
+	for key in fight_info:
+		var info: Dictionary = fight_info[key]
+		var ids: PackedStringArray = key.split(":")
+		var a := _horde(int(ids[0]))
+		var b := _horde(int(ids[1]))
+		if a.is_empty() or b.is_empty():
+			continue
+		if a.get("retreat", false) or b.get("retreat", false) or a.has("ride") or b.has("ride"):
+			continue
+		var pa := power_of(a)
+		var pb := power_of(b)
+		if pa + pb <= 0.0:
+			continue
+		var v: float = Rules.TUG_SPEED * Rules.deck_speed * (pa - pb) / (pa + pb) * dt
+		if info["kind"] == "frontline":
+			_shift(a, v)
+			_shift(b, -v)
+		else:
+			var att := a if info["attacker"] == a["id"] else b
+			var oth := b if att == a else a
+			var s: float = v if att == a else -v            # >0: the attacker is winning
+			_shift(att, s)
+			_shift(oth, s)
+		info["push"] = v / maxf(dt, 0.0001)                 # m/s the front moves this step (view)
+
+
+func _shift(h: Dictionary, ds: float) -> void:
+	if h["state"] == "absorb":
+		return
+	h["s"] = clampf(h["s"] + ds, 1.0, h["L"])
+
+
+func recall(hid: int) -> bool:
+	## RECALL / RETREAT (Daniele: "one mid-fight choice, so committing troops isn't permanent"):
+	## the horde turns round and flows back the way it came to the node it left. Nothing still in
+	## the vat leaves. It keeps moving even while an enemy is on it - a pursuer still trades losses
+	## with its tail - so a retreat under pressure costs, but it gets out. A horde that has only
+	## just left pours straight back in.
+	var h := _horde(hid)
+	if h.is_empty() or h["state"] == "absorb" or h.get("retreat", false) or h.has("ride"):
+		return false
+	if h["streaming"]:
+		var src: Dictionary = nodes[h["route"][0]]
+		if src["streaming"].get("hid", -1) == h["id"]:
+			_end_streaming(src, "recalled")
+	if not (h in hordes):
+		return true
+	var old_s: float = h["s"]
+	var origin: int = h["route"][0]
+	if old_s < Rules.R + Rules.PIER:                        # still on its own platform: straight back in
+		_arrive(nodes[origin], h, h["units"])
+		h["units"] = 0.0
+		_kill_horde(h, "recalled")
+		events.append({"t": time, "type": "recall", "seat": h["owner"], "units": 0.0})
+		return true
+	var len := chain_length(h)
+	var cum: PackedFloat32Array = h["cum"]
+	var pts: PackedVector3Array = h["pts"]
+	var fast: PackedByteArray = h["fast"]
+	var back_pts := [sample(h, old_s)[0]]
+	var back_fast := [1 if sample(h, old_s)[2] else 0]
+	for k in range(cum.size() - 1, -1, -1):
+		if cum[k] < old_s:
+			back_pts.append(pts[k])
+			back_fast.append(fast[maxi(k - 1, 0)])
+	var m := 0
+	for sp in h["spans"]:
+		if sp["s0"] < old_s:
+			m += 1
+	var new_spans := []
+	for i in range(m - 1, -1, -1):
+		var sp: Dictionary = h["spans"][i]
+		new_spans.append({"edge": sp["edge"], "s0": old_s - minf(sp["s1"], old_s), "s1": old_s - sp["s0"], "forward": not sp["forward"]})
+	var new_ns := []
+	for i in range(h["node_spans"].size() - 1, -1, -1):
+		var ns: Dictionary = h["node_spans"][i]
+		if ns["s0"] < old_s:
+			new_ns.append({"node": ns["node"], "s0": old_s - minf(ns["s1"], old_s), "s1": old_s - ns["s0"]})
+	var new_route := []
+	for i in range(m, -1, -1):
+		new_route.append(h["route"][i])
+	var new_cum := PackedFloat32Array([0.0])
+	for k in range(1, back_pts.size()):
+		new_cum.append(new_cum[k - 1] + (back_pts[k] as Vector3).distance_to(back_pts[k - 1]))
+	h["pts"] = PackedVector3Array(back_pts)
+	h["cum"] = new_cum
+	h["fast"] = PackedByteArray(back_fast)
+	h["spans"] = new_spans
+	h["node_spans"] = new_ns
+	h["route"] = new_route
+	h["target"] = origin
+	h["L"] = new_cum[-1]
+	h["s"] = minf(len, h["L"])                              # the old tail is the new head
+	h["state"] = "move"
+	h["retreat"] = true
+	h["ordered"] = h["units"]
+	for key in fight_info.keys():                           # it breaks off its fights
+		var ids: PackedStringArray = key.split(":")
+		if int(ids[0]) == hid or int(ids[1]) == hid:
+			fight_info.erase(key)
+	fights = fights.filter(func(p): return p[0] != hid and p[1] != hid)
+	events.append({"t": time, "type": "recall", "seat": h["owner"], "units": h["units"]})
+	fx_events.append({"type": "recall", "hid": hid})
+	return true
+
+
+var _contact_now := {}                            # pair keys in contact this step
+
+
 func _engage(a: Dictionary, b: Dictionary, kind: String) -> void:
 	var pair := [mini(a["id"], b["id"]), maxi(a["id"], b["id"])]
+	_contact_now["%d:%d" % [pair[0], pair[1]]] = true
 	if pair in fights:
 		return
 	fights.append(pair)
 	fight_info["%d:%d" % [pair[0], pair[1]]] = {"kind": kind, "attacker": a["id"]}   # a's head made the contact
-	if a["state"] != "ride":
+	if a["state"] != "ride" and not a.get("retreat", false):
 		a["state"] = "fight"
-	if b["state"] != "ride":
+	if b["state"] != "ride" and not b.get("retreat", false):
 		b["state"] = "fight"
 	events.append({"t": time, "type": kind, "seats": [a["owner"], b["owner"]]})
 
@@ -1117,7 +1248,7 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 	## on the platform as a siege and fight the garrison there (see _node_fights); the whole
 	## platform is the node.
 	var owner: String = h["owner"]
-	if n["owner"] == owner:
+	if allied(n["owner"], owner):                      # own or an ally's node: reinforce it
 		n["units"] += x
 		return
 	n["siege"][owner] = n["siege"].get(owner, 0.0) + x
@@ -1129,7 +1260,7 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 func _register_transit() -> void:
 	## An order passing through a node always counts as passing through that node - unless the
 	## node is the horde's own (pure pass-through, GAME-RULES §6), neutral (a free glide), or its
-	## shield is DOWN (broken and still regenerating: the toll has been paid).
+	## (Alpha 14) no hidden shield: a passing force fights the garrison itself, the badge number.
 	for n in nodes:
 		n["transit"] = {}
 	for h in hordes:
@@ -1138,7 +1269,7 @@ func _register_transit() -> void:
 		for idx in range(h["node_spans"].size()):
 			var ns: Dictionary = h["node_spans"][idx]
 			var n: Dictionary = nodes[ns["node"]]
-			if n["owner"] == h["owner"] or n["owner"] == "" or not n["shield_up"]:
+			if allied(n["owner"], h["owner"]) or n["owner"] == "":
 				continue
 			var head_s: float = h["s"]
 			var tail_s: float = head_s - chain_length(h)
@@ -1177,20 +1308,24 @@ func _node_fights(dt: float) -> Array:
 			total_att_w += force[k] * attack_of(k)
 		var loss := {}
 		var g_loss_units := 0.0                       # arrivals (siege) fight the real garrison
-		var g_loss_shield := 0.0                      # transit fights the shield instead
 		var g_attack := attack_of(n["owner"])
 		var g_tough := stat(n["owner"], "garrison")   # garrison strength: damage the garrison takes
 		for k in force:
-			var enemy: float = n["units"] * g_attack + total_att_w - force[k] * attack_of(k)
+			# what k faces here: the garrison (unless allied) and every hostile seat on the platform
+			var enemy: float = 0.0 if allied(k, n["owner"]) else n["units"] * g_attack
+			for j in force:
+				if not allied(j, k):
+					enemy += force[j] * attack_of(j)
 			if enemy <= 0.0:
 				continue
-			loss[k] = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * enemy) * dt * mult / stat(k, "health")
-			if n["units"] > 0.0 and force[k] > 0.0:
+			# a near-empty garrison is a weak toll (Daniele, Alpha 14: "a weak one is easy to punch
+			# through"): the flat base rate fades in over the first 20 units of what it faces
+			loss[k] = (Rules.FIGHT_RATE_BASE * minf(1.0, enemy / 20.0) + Rules.FIGHT_RATE_K * enemy) * dt * mult / stat(k, "health")
+			if n["units"] > 0.0 and force[k] > 0.0 and not allied(k, n["owner"]):
 				var rate: float = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * force[k]) * dt * mult * attack_of(k) / g_tough
 				var siege_part: float = n["siege"].get(k, 0.0)
 				var transit_part: float = n["transit"].get(k, {}).get("units", 0.0)
-				g_loss_units += rate * (siege_part / force[k])
-				g_loss_shield += rate * (transit_part / force[k])
+				g_loss_units += rate * ((siege_part + transit_part) / force[k])   # transit fights the garrison too
 		for k in loss:
 			var actual: float = minf(loss[k], force[k])
 			n["node_loss"][k] = actual / maxf(dt, 0.0001)
@@ -1218,16 +1353,6 @@ func _node_fights(dt: float) -> Array:
 			if n["owner"] != "":
 				combat_losses[n["owner"]] = combat_losses.get(n["owner"], 0.0) + before_g - n["units"]
 				n["node_loss"][n["owner"]] = (before_g - n["units"]) / maxf(dt, 0.0001)
-		if g_loss_shield > 0.0:                        # transit only ever fights the shield
-			var before_s: float = n["shield"]
-			n["shield"] = maxf(0.0, before_s - g_loss_shield)
-			n["shield_loss"] = (before_s - n["shield"]) / maxf(dt, 0.0001)
-			if before_s > 0.0 and n["shield"] <= 0.0:
-				# shield broken: the bond (the goo trail to neighbours) is gone until it regenerates;
-				# the deck stays - Daniele (Alpha 12): "the goo trail, not the bridge"
-				n["shield_up"] = false
-				events.append({"t": time, "type": "shield_broken", "node": n["id"], "seat": n["owner"]})
-				fx_events.append({"type": "shield_break", "node": n["id"]})
 		if n["units"] <= 0.0:
 			# capture needs an ARRIVAL, not just transit; with several sides arrived at once the side
 			# holding more ground there right now takes it (Strait's shared hub used to stall forever)
@@ -1266,12 +1391,28 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 
 # ------------------------------------------------------------------ Last Stand (GAME-RULES sec10)
 func bonded(edge_index: int) -> bool:
-	## The goo trail between two of one player's adjacent nodes: only while BOTH shields are up.
+	## The goo corridor between two adjacent nodes of one player - always on (Daniele, Alpha 14:
+	## "goo corridors appear between any two adjacent nodes you own"). Capture either end and it
+	## drains (the view animates the drain).
 	var e: Dictionary = edges[edge_index]
 	var a: Dictionary = nodes[e["a"]]
 	var b: Dictionary = nodes[e["b"]]
-	return a["owner"] != "" and a["owner"] == b["owner"] and a["shield_up"] and b["shield_up"] \
-			and is_edge_open(edge_index)
+	return a["owner"] != "" and a["owner"] == b["owner"] and is_edge_open(edge_index)
+
+
+func goo_owner(edge_index: int) -> String:
+	## Whose goo covers this deck ("" = none).
+	return nodes[edges[edge_index]["a"]]["owner"] if bonded(edge_index) else ""
+
+
+func on_enemy_goo(h: Dictionary) -> bool:
+	## Is this horde's head on a deck covered in another player's goo? (Alpha 14 home advantage:
+	## enemies on your goo are slower and the tug-of-war front pushes toward them.)
+	var sp := _current_span(h)
+	if sp.is_empty():
+		return false
+	var g := goo_owner(sp["edge"])
+	return g != "" and not allied(g, h["owner"])
 
 
 func _step_last_stand(dt: float) -> void:
@@ -1515,9 +1656,12 @@ func _check_end() -> void:
 		alive[h["owner"]] = true
 	for s in eliminated:
 		alive.erase(s)
-	if alive.size() <= 1 and time > 1.0:
+	var sides := {}                                   # team modes: one side per team
+	for s in alive:
+		sides[teams.get(s, s)] = s
+	if sides.size() <= 1 and time > 1.0:
 		over = true
-		winner = alive.keys()[0] if alive.size() == 1 else ""
+		winner = sides.values()[0] if sides.size() == 1 else ""
 		events.append({"t": time, "type": "end", "winner": winner})
 		finished.emit(winner)
 
@@ -1540,3 +1684,12 @@ func seat_nodes(seat: String) -> int:
 		if n["owner"] == seat:
 			c += 1
 	return c
+
+
+func allied(a: String, b: String) -> bool:
+	## Same seat, or team-mates in a team mode (2v2). Neutral ("") is nobody's ally.
+	if a == "" or b == "":
+		return false
+	if a == b:
+		return true
+	return teams.has(a) and teams.has(b) and teams[a] == teams[b]

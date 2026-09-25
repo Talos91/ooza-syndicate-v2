@@ -105,7 +105,7 @@ func sync(dt: float) -> void:
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]
 		_construction(n, entry, dt)
-		_shield(n, entry)
+		pass                                          # Alpha 14: no shield pool, no shield ring
 		_relay(n, entry)
 		_last_stand_warning(n)
 		_cannon(n, entry)

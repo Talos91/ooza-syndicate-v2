@@ -20,6 +20,10 @@ var faction := "null"
 var rival := "random"
 var map_path := "res://maps/004-two-piers.json"
 var ai_level := "Standard"
+var mode := "1v1"
+var colour := "A"
+const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5"}
+const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
 
@@ -29,6 +33,8 @@ func setup(m: Node3D) -> void:
 	faction = m.SEAT_FACTIONS[m.HUMAN]
 	ai_level = m.ai_level
 	map_path = m.map_path
+	mode = m.mode
+	colour = m.color_choice
 	for mp in m.STARTER_MAPS:
 		maps.append({"path": mp, "data": MapBuilder.load_map(mp)})
 	show_main()
@@ -228,7 +234,7 @@ func show_options() -> void:
 	bc.add_theme_font_size_override("font_size", int(round(22 * K)))
 	label_at("Not sure combat on bridges is fun? Try both. Also in the pause menu and the Debug panel.", P(60, 330), 18, Color("b8ced6"))
 	label_at("PERFORMANCE", P(60, 395), 30)
-	var det := nav_button("DETAIL: %s" % ("FULL" if not Rules.low_detail else "LOW  -  fewer patches, no shield rings"),
+	var det := nav_button("DETAIL: %s" % ("FULL" if not Rules.low_detail else "LOW  -  fewer horde and river patches"),
 			P(60, 450), P(950, 70), func():
 		Rules.low_detail = not Rules.low_detail
 		show_options())
@@ -356,7 +362,7 @@ func show_maps() -> void:
 	map_preview(P(1046, 193), P(571, 414))
 	var sel := _selected_map()
 	label_at(str(sel.get("name", "")).replace("*", "").to_upper(), P(1052, 631), 31)
-	label_at("CONQUEST    /    1v1    /    %d NODES%s" % [sel["nodes"].size(), _relay_kinds(sel).to_upper()], P(1053, 683), 23, color())
+	label_at("%s    /    %d NODES%s" % [" · ".join(_modes_of(sel).map(func(x): return MODE_NAMES.get(x, x))), sel["nodes"].size(), _relay_kinds(sel).to_upper()], P(1053, 683), 23, color())
 	label_at("%s\nLast Stand at %d:%02d - methods: %s" % [main.PROVES.get(sel.get("code", ""), ""),
 			int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(sel.get("lastStand", {}).get("methods", []))],
 			P(1053, 736), 22, Color("abc1cd"))
@@ -370,6 +376,14 @@ func _relay_kinds(m: Dictionary) -> String:
 		if n.get("relay") != null:
 			kinds[n["relay"]] = true
 	return "    /    " + " + ".join(kinds.keys()) if not kinds.is_empty() else ""
+
+
+func _modes_of(m: Dictionary) -> Array:
+	var out := []
+	for k in ["1v1", "2v2", "FFA3", "FFA4", "FFA5"]:
+		if m.get("seats", {}).has(k):
+			out.append(k)
+	return out if not out.is_empty() else ["1v1"]
 
 
 func _selected_map() -> Dictionary:
@@ -386,7 +400,28 @@ func show_setup() -> void:
 	frame(P(35, 188), P(982, 630))
 	label_at(str(_selected_map().get("name", "")).replace("*", "").to_upper(), P(58, 207), 28)
 	nav_button("CHANGE MAP", P(810, 206), P(184, 48), show_maps)
-	map_preview(P(53, 277), P(946, 516))
+	map_preview(P(53, 277), P(946, 360))
+	var modes := _modes_of(_selected_map())
+	if not mode in modes:
+		mode = modes[0]
+	label_at("MODE", P(58, 652), 20, Color("aac3cd"))
+	for i in range(modes.size()):
+		var md: String = modes[i]
+		var mb := nav_button(MODE_NAMES.get(md, md), P(150 + i * 140, 642), P(132, 48), func():
+			mode = md
+			show_setup(), md == mode)
+		mb.add_theme_font_size_override("font_size", int(round(18 * K)))
+	label_at("YOUR COLOUR", P(58, 725), 20, Color("aac3cd"))
+	var keys := COLOUR_NAMES.keys()
+	for i in range(keys.size()):
+		var ck: String = keys[i]
+		var cc: Color = Rules.FACTIONS[faction][1] if ck == "faction" else Rules.SEATS[ck]
+		var cb := nav_button(COLOUR_NAMES[ck], P(210 + i * 112, 715), P(106, 48), func():
+			colour = ck
+			show_setup(), ck == colour)
+		cb.add_theme_font_size_override("font_size", int(round(15 * K)))
+		cb.add_theme_color_override("font_color", cc)
+	label_at("Team modes: one hue per team, light and dark. FACTION: every seat in its own faction colour (Alpha 11).", P(58, 778), 14, Color("7795a4"))
 	frame(P(1037, 188), P(595, 630))
 	label_at("YOUR FACTION  ·  SEAT A", P(1059, 208), 20, Color("aac3cd"))
 	summary_card(faction, P(1058, 240), P(552, 130), true)
@@ -395,7 +430,7 @@ func show_setup() -> void:
 		summary_card(rival, P(1058, 422), P(552, 121), false)
 	else:
 		frame(P(1058, 422), P(552, 121), "row")
-		label_at("RANDOM RIVAL", P(1080, 445), 30, Color("adc7d2"))
+		label_at("RANDOM RIVAL" if mode == "1v1" else "SEAT B + OTHER AI SEATS", P(1080, 445), 30, Color("adc7d2"))
 		label_at("picked when you deploy", P(1082, 495), 18, Color("adc7d2"))
 	var choices := ["random"] + FACTIONS
 	for i in range(choices.size()):
@@ -434,4 +469,4 @@ func deploy() -> void:
 	if r == "random":
 		var others := FACTIONS.filter(func(f): return f != faction)
 		r = others[randi() % others.size()]
-	main.start_match(map_path, faction, r, ai_level)
+	main.start_match(map_path, faction, r, ai_level, mode, colour)

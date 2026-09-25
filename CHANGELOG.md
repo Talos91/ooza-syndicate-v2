@@ -1,5 +1,45 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.14.0 "Alpha 14" - 2026-09-25 (two modes that look and feel different, teams and FFA)
+
+**Bridge-fight mode (BRIDGE COMBAT ON)**
+- **Tug-of-war fronts.** The front no longer stands still while both lines shrink: it slides
+  toward the weaker side at up to 35 % of deck speed, set by the gap in fighting weight (units x
+  attack x health). 2:1 odds move it at a third of that. Rear attacks push both lines the same way.
+  Pushing a fight onto a relay deck and then firing the relay is now the big play.
+- **Recall.** Tap one of your own lines to turn it round: it flows back the way it came to the node
+  it left, and anything still in the vat stays there. It keeps moving while an enemy is on it, so a
+  pursuer still trades losses with its tail: a retreat under pressure costs, but it gets out. The AI
+  recalls lines it is losing badly.
+- **Goo corridors are always on** between any two adjacent nodes one player owns. Enemies on your
+  goo move at 70 % speed and push at 67 % of their weight in a tug-of-war: a built-in home
+  advantage. Capture either end and the corridor drains back toward the end still held.
+- **No hidden shield pool.** Passing through an enemy node fights its garrison, the number on the
+  badge; only an arrival captures. A near-empty garrison is a weak toll: its flat base damage fades
+  in over its first 20 units. The goo ring round the tower stays and now just means "mine". The
+  shield ring, badge bar and inspector line are gone.
+
+**Classic mode (BRIDGE COMBAT OFF)**
+- No goo. Sends are columns of the approved faction creature models (Alpha 11's own meshes), three
+  across, one model per unit as the player counts them, each on a disc in its owner's colour.
+  Garrisons stand in a ring round the tower. Lines pass each other and fight only at nodes.
+
+**Modes and colours**
+- **2v2 and FFA 3 / 4 / 5.** MODE row on the setup page, offering only the modes the map supports.
+  Allies never fight each other, sending to an ally reinforces its node, and a team wins together;
+  you and your team see each other's counts. Added four roster maps: 012 Ladder and 016 Concourse
+  (1v1 / 2v2 / FFA4), 036 Khepri Carousel and 037 Aurelia Orbital (FFA5); Trident Exchange offers
+  2v2 and FFA4, Switchback Foundry FFA3. Extra AI seats get the factions not yet taken.
+- **Colour selection.** YOUR COLOUR row: cyan, green, purple, red, gold, rose, or FACTION (every
+  seat in its own faction colour, Alpha 11 style; a clash falls back to the palette). Team modes
+  give each team one hue, light and dark shades.
+
+**Fixes**
+- The door rate is pinned at 48 units/s. Unifying deck and platform speed in 0.13.2 had dropped it
+  to 20 as a side effect, so sends trickled out and arrived too thin to take anything.
+- Tests: 180 checks, including tug-of-war, recall mid-fight, corridors and drain, home advantage,
+  2v2 reinforcement and AI matches in 2v2 and on both FFA5 maps.
+
 ## 0.13.2 - 2026-09-25 (Daniele's numbers)
 
 - Deck speed 5 m/s (was 2), platform speed = deck speed (was x6), relay cooldown 5 s (was 15).

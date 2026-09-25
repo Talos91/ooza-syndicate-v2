@@ -6,8 +6,8 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.13.2"
-const VERSION_NAME := "Alpha 13"
+const VERSION := "0.14.0"
+const VERSION_NAME := "Alpha 14"
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius
@@ -46,13 +46,21 @@ const UNITS_PER_PATCH := 60          # legacy: only the capture drain estimate b
 # UNITS LEAVE THE VAT ONLY AS THEY BECOME BLOB (Daniele, 2026-09-25): a send is an order; the door
 # emits units into the line at DOOR_RATE. Units still inside stay in the vat's count and can be
 # re-ordered - a new send takes over the previous order's not-yet-emitted part.
-const DOOR_RATE_DEFAULT := DECK_SPEED_DEFAULT * NODE_SPEED_MULT_DEFAULT / METRES_PER_UNIT   # tail stays at the door (20 units/s at 5 m/s)
+const DOOR_RATE_DEFAULT := 48.0      # units/s out of the door - kept at the Alpha 12 throughput when
+                                      # deck and platform speeds were unified (it was derived from them)
 static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug panel)
 static var node_fight_mult: float = 1.0                # live-tunable: x combat rates on a platform
 # BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
 # queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
 static var bridge_combat: bool = true
+# TUG-OF-WAR (bridge-combat mode): the front slides toward the weaker side at up to this fraction of
+# deck speed (total dominance); 2:1 odds move it at a third of that.
+const TUG_SPEED := 0.35
+# GOO HOME ADVANTAGE (Daniele, Alpha 14): a horde on another player's goo corridor moves at GOO_SLOW
+# of its speed and pushes at GOO_PUSH of its weight in a tug-of-war.
+const GOO_SLOW := 0.7
+const GOO_PUSH := 0.67
 # LOW DETAIL (Debug panel): fewer river patches, no shield rings, half the horde patches - to test
 # whether the build is what makes a machine "run like crazy" (Daniele, Alpha 13 playtest).
 static var low_detail: bool = false
@@ -193,8 +201,55 @@ static func stat(faction: String, key: String) -> float:
 	return float(FACTION_STATS.get(faction, {}).get(key, 1.0))
 
 
+# SEAT COLOURS for the current match (Daniele, Alpha 14: "implement faction colour selection").
+# Filled by assign_colors() at match start: your pick, the rest from the palette; "faction" mode uses
+# each seat's faction colour (Alpha 11 style); team modes give each team one hue, light and dark.
+static var seat_colors: Dictionary = SEATS.duplicate()
+const PALETTE := ["A", "B", "C", "D", "E", "F"]        # cyan, green, purple, red, gold, rose
+
+
 static func seat_color(seat: String) -> Color:
-	return SEATS.get(seat, NEUTRAL)
+	return seat_colors.get(seat, SEATS.get(seat, NEUTRAL))
+
+
+static func assign_colors(seats: Array, factions: Dictionary, human: String, choice: String, teams: Dictionary) -> void:
+	## choice: a palette key ("A".."F") for your colour, or "faction".
+	seat_colors = {}
+	var used := []
+	var mine: Color = FACTIONS[factions.get(human, "null")][1] if choice == "faction" else SEATS.get(choice, SEATS["A"])
+	if not teams.is_empty():
+		var hues := {teams.get(human, 0): mine}
+		for k in PALETTE:
+			var c: Color = SEATS[k]
+			if absf(c.h - mine.h) < 0.06:
+				continue
+			for s in seats:
+				if not hues.has(teams.get(s, 0)):
+					hues[teams.get(s, 0)] = c
+					break
+		var count := {}
+		for s in ([human] + seats.filter(func(x): return x != human)):
+			var t = teams.get(s, 0)
+			var base: Color = hues.get(t, SEATS["B"])
+			var i: int = count.get(t, 0)
+			seat_colors[s] = base if i == 0 else base.darkened(0.3 + 0.1 * i)   # light, dark shades
+			count[t] = i + 1
+		return
+	seat_colors[human] = mine
+	used.append(mine)
+	for s in seats:
+		if s == human:
+			continue
+		var c: Color = SEATS["B"]
+		if choice == "faction":
+			c = FACTIONS[factions.get(s, "null")][1]
+		if choice != "faction" or used.any(func(u): return absf(u.h - c.h) < 0.06):
+			for k in PALETTE:
+				if not used.any(func(u): return absf(u.h - (SEATS[k] as Color).h) < 0.06):
+					c = SEATS[k]
+					break
+		seat_colors[s] = c
+		used.append(c)
 
 
 static func state_color(state: String) -> Color:

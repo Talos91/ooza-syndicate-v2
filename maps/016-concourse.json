@@ -1,0 +1,303 @@
+{
+ "centreHasNoVat": false,
+ "code": "016",
+ "edges": [
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 1.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 2.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 3.0
+  },
+  {
+   "from": 0.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 4.0
+  },
+  {
+   "from": 5.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 1.0
+  },
+  {
+   "from": 5.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 4.0
+  },
+  {
+   "from": 6.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 1.0
+  },
+  {
+   "from": 6.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 2.0
+  },
+  {
+   "from": 7.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 2.0
+  },
+  {
+   "from": 7.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 3.0
+  },
+  {
+   "from": 8.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 3.0
+  },
+  {
+   "from": 8.0,
+   "overpass": false,
+   "retracts": false,
+   "seconds": 2.0,
+   "state": null,
+   "tier": "S",
+   "to": 4.0
+  }
+ ],
+ "family": "lattice",
+ "id": 16.0,
+ "lastStand": {
+  "inwardFinal": 0.0,
+  "methods": [
+   "inward",
+   "chaos"
+  ],
+  "outwardFinal": null
+ },
+ "modes": [
+  "1v1",
+  "2v2",
+  "FFA4"
+ ],
+ "name": "Concourse",
+ "nodes": [
+  {
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ],
+   "category": "final",
+   "center": true,
+   "id": 0.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 50.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 1.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 36.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 2.0,
+   "pillar": false,
+   "relay": null,
+   "x": 64.0,
+   "y": 50.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 3.0,
+   "pillar": false,
+   "relay": null,
+   "x": 50.0,
+   "y": 64.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 4.0,
+   "pillar": false,
+   "relay": null,
+   "x": 36.0,
+   "y": 50.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 5.0,
+   "pillar": false,
+   "relay": null,
+   "x": 32.0,
+   "y": 32.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 6.0,
+   "pillar": false,
+   "relay": null,
+   "x": 68.0,
+   "y": 32.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 7.0,
+   "pillar": false,
+   "relay": null,
+   "x": 68.0,
+   "y": 68.0
+  },
+  {
+   "buildable": [
+    "vat"
+   ],
+   "category": "normal",
+   "center": false,
+   "id": 8.0,
+   "pillar": false,
+   "relay": null,
+   "x": 32.0,
+   "y": 68.0
+  }
+ ],
+ "note": null,
+ "seats": {
+  "1v1": [
+   {
+    "node": 5.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 7.0,
+    "seat": "B",
+    "team": 1.0
+   }
+  ],
+  "2v2": [
+   {
+    "node": 5.0,
+    "seat": "A",
+    "team": 0.0
+   },
+   {
+    "node": 8.0,
+    "seat": "B",
+    "team": 0.0
+   },
+   {
+    "node": 6.0,
+    "seat": "C",
+    "team": 1.0
+   },
+   {
+    "node": 7.0,
+    "seat": "D",
+    "team": 1.0
+   }
+  ],
+  "FFA4": [
+   {
+    "node": 5.0,
+    "seat": "A",
+    "team": null
+   },
+   {
+    "node": 6.0,
+    "seat": "B",
+    "team": null
+   },
+   {
+    "node": 7.0,
+    "seat": "C",
+    "team": null
+   },
+   {
+    "node": 8.0,
+    "seat": "D",
+    "team": null
+   }
+  ]
+ },
+ "symmetryCheck": true,
+ "tier": "simple"
+}

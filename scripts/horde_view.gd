@@ -49,6 +49,8 @@ var _corridor_mesh: BoxMesh
 var _last_time := -1.0
 var _lobe_mesh: SphereMesh
 var _drop_meshes := {}   # seat -> SphereMesh with the seat's goo
+var units: UnitView                  # classic mode (bridge combat OFF): Alpha 11 unit models
+var classic := false                # true this frame when drawing the classic unit look
 
 
 func _ready() -> void:
@@ -80,6 +82,11 @@ func load_faction(faction: String) -> void:
 
 
 func sync(sim: Sim, viewer: String) -> void:
+	classic = not Rules.bridge_combat
+	if units == null:
+		units = UnitView.new()
+		add_child(units)
+	units.begin()
 	var dt := 0.0 if _last_time < 0.0 else maxf(sim.time - _last_time, 0.0)
 	_last_time = sim.time
 	var by_id := {}
@@ -119,6 +126,7 @@ func sync(sim: Sim, viewer: String) -> void:
 	_draw_transit_skirmishes(sim, seen)
 	_draw_corridors(sim)
 	_draw_puddles(sim)
+	units.flush()
 	for key in contacts.keys():
 		if not seen.has(key):
 			contacts[key]["root"].queue_free()
@@ -142,7 +150,7 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 		label.font_size = 80
 		label.outline_size = 20
 		label.no_depth_test = true
-		label.modulate = Rules.SEATS[h["owner"]]
+		label.modulate = Rules.seat_color(h["owner"])
 		add_child(label)
 		pools[h["id"]] = {"patches": [], "label": label, "vis": float(h["units"]), "phase": fposmod(h["id"] * 0.37, 1.0)}
 	var pool: Dictionary = pools[h["id"]]
@@ -173,10 +181,12 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 		var mi := MeshInstance3D.new()
 		add_child(mi)
 		arr.append(mi)
+	if classic:
+		units.add_horde(h, Rules.shown_f(vis), time)
 	for i in range(arr.size()):
 		var mi: MeshInstance3D = arr[i]
 		var s: float = h["s"] - i * Rules.PATCH_SPACING
-		if i >= n or s < 0.0:
+		if i >= n or s < 0.0 or classic:
 			mi.visible = false
 			continue
 		var kind: String = "head" if i == 0 else ("tail" if i == n - 1 else KINDS[1 + (i % 3)])
@@ -236,6 +246,8 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 	label.position = head + Vector3(0, 3.0, 0)
 	if h["owner"] != viewer:
 		label.text = ""
+	elif h.get("retreat", false):
+		label.text = "%d  RETREAT" % Rules.shown(h["units"])
 	elif h["streaming"]:                              # out + still inside the vat (re-orderable)
 		label.text = "%d +%d" % [Rules.shown(h["units"]), Rules.shown(h["ordered"] - h["units"])]
 	else:
@@ -288,35 +300,51 @@ func _sync_contacts(sim: Sim, by_id: Dictionary) -> Dictionary:
 
 
 func _draw_corridors(sim: Sim) -> void:
-	## THE BOND (Daniele, Alpha 12): "two vats form a bond when both have the shield active - the
-	## road becomes covered in goo; if one of the two loses its shield the path is gone". A deck
-	## between two of your own nodes wears your goo only while BOTH shields are up (Sim.bonded).
+	## GOO CORRIDORS (Daniele, Alpha 14): always on between any two adjacent nodes one player owns
+	## (Sim.bonded); enemies on them are slower and lose the tug-of-war push. Capture either end and
+	## the corridor DRAINS - the goo sinks and pulls back toward the end still held over ~1 s -
+	## so breaking a link is a clear goal with a visible payoff. New corridors pour in the same way.
+	var dt := get_process_delta_time()
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		var a: Dictionary = sim.nodes[e["a"]]
 		var b: Dictionary = sim.nodes[e["b"]]
-		var owner: String = a["owner"]
-		var held: bool = sim.bonded(i)
-		if not held:
-			if corridors.has(i):
-				(corridors[i] as MeshInstance3D).visible = false
-			continue
+		var held: bool = sim.bonded(i) and not classic
 		if not corridors.has(i):
+			if not held:
+				continue
 			var mi := MeshInstance3D.new()
 			mi.mesh = _corridor_mesh
 			add_child(mi)
 			corridors[i] = mi
+			mi.set_meta("fill", 0.0)
+			mi.set_meta("anchor", 0.5)
 		var mi: MeshInstance3D = corridors[i]
-		mi.visible = true
-		mi.material_override = Mats.goo(owner)
+		var fill: float = mi.get_meta("fill", 0.0)
+		if held:
+			mi.set_meta("owner", a["owner"])
+			mi.set_meta("anchor", 0.5)
+		elif fill > 0.0 and mi.get_meta("anchor", 0.5) == 0.5:
+			# drain toward whichever end is still held by the corridor's owner (or the middle)
+			var o: String = mi.get_meta("owner", "")
+			mi.set_meta("anchor", 0.0 if a["owner"] == o else (1.0 if b["owner"] == o else 0.49))
+		fill = move_toward(fill, 1.0 if held else 0.0, dt * (1.5 if held else 1.0))
+		mi.set_meta("fill", fill)
+		mi.visible = fill > 0.01
+		if not mi.visible:
+			continue
+		mi.material_override = Mats.goo(mi.get_meta("owner", a["owner"]))
 		var pa: Vector3 = a["pos"]
 		var pb: Vector3 = b["pos"]
-		var mid := (pa + pb) / 2.0
-		var full_len: float = pa.distance_to(pb)
-		var len: float = maxf(full_len - 2.0 * Rules.R, 1.0)     # between the two rims, not through them
-		mi.position = mid + Vector3(0, 0.06, 0)
-		mi.rotation = Vector3(0, Rules.heading((pb - pa).normalized()), 0)
-		mi.scale = Vector3(len, 1.0, Rules.W * 0.92)
+		var dir := (pb - pa).normalized()
+		var full_len: float = maxf(pa.distance_to(pb) - 2.0 * Rules.R, 1.0)   # rim to rim
+		var anchor: float = mi.get_meta("anchor", 0.5)
+		var len := full_len * fill
+		var start := pa + dir * Rules.R
+		var centre: Vector3 = start + dir * (anchor * full_len + (0.5 - anchor) * len)
+		mi.position = centre + Vector3(0, 0.06 - 0.12 * (1.0 - fill) * (0.0 if held else 1.0), 0)
+		mi.rotation = Vector3(0, Rules.heading(dir), 0)
+		mi.scale = Vector3(len, 1.0, Rules.W * 0.92 * lerpf(0.6, 1.0, fill))
 
 
 var puddles := {}     # node id -> MeshInstance3D: the pool at the tank bottoms while an order drains out
@@ -334,7 +362,7 @@ func _draw_puddles(sim: Sim) -> void:
 		_puddle_mesh.radial_segments = 20
 	for n in sim.nodes:
 		var id: int = n["id"]
-		var streaming: bool = not n["streaming"].is_empty()
+		var streaming: bool = not n["streaming"].is_empty() and not classic
 		if not streaming:
 			if puddles.has(id):
 				(puddles[id] as MeshInstance3D).visible = false
@@ -438,6 +466,15 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 				continue
 			var seat: String = slots[i]
 			var faction: String = sim.factions.get(seat, "null")
+			if classic:                                # a ring of creatures, no goo
+				mi.visible = false
+				if seat == "" or float(i) / Rules.RIVER_SLOTS > fill + 0.08:
+					continue
+				var ua := TAU * i / Rules.RIVER_SLOTS
+				var ur := Vector3(cos(ua), 0.0, sin(ua))
+				var bob := absf(sin(sim.time * (8.0 if contested else 2.0) + i)) * (0.25 if contested else 0.05)
+				units.add_unit(faction, seat, n["pos"] + ur * Rules.RIVER_R, Rules.heading(-ur if faces_in[i] else ur), bob)
+				continue
 			load_faction(faction)
 			var kind: String = ["body_a_lod1", "body_b_lod1", "body_c_lod1"][i % 3]
 			var mesh: Mesh = meshes[faction][kind]
@@ -504,6 +541,10 @@ func _place_contact(key: String, pos: Vector3, fwd: Vector3, seats: Array, losse
 	root.rotation = Vector3(0.0, Rules.heading(fwd), 0.0)
 	var pulse := 1.0 + MENISCUS_PULSE * sin(TAU * SHOVE_HZ * time)
 	var lobes: Array = c["lobes"]
+	for lobe in lobes:
+		(lobe as Node3D).visible = not classic
+	if c["seam"]:
+		(c["seam"] as Node3D).visible = not classic
 	for k in range(2):
 		var pk := 1.0 + MENISCUS_PULSE * sin(TAU * SHOVE_HZ * time + (0.0 if k == 0 else PI))
 		(lobes[k] as MeshInstance3D).scale = MENISCUS * Vector3(pk, pk, 1.0) * (1.0 if fight else 0.8)

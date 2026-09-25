@@ -8,7 +8,7 @@ const CREATURE_SHADER := preload("res://shaders/creature.gdshader")
 
 
 static func light(seat: String) -> StandardMaterial3D:
-	return light_color(Rules.seat_color(seat), "light_" + seat)
+	return light_color(Rules.seat_color(seat), "light_" + Rules.seat_color(seat).to_html())
 
 
 static func light_color(c: Color, key := "") -> StandardMaterial3D:
@@ -26,7 +26,7 @@ static func light_color(c: Color, key := "") -> StandardMaterial3D:
 
 
 static func ooze(seat: String) -> StandardMaterial3D:
-	var key := "ooze_" + seat
+	var key := "ooze_" + Rules.seat_color(seat).to_html()
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
 		var c: Color = Rules.seat_color(seat)
@@ -40,7 +40,7 @@ static func ooze(seat: String) -> StandardMaterial3D:
 
 
 static func goo(seat: String) -> StandardMaterial3D:
-	var key := "goo_" + seat
+	var key := "goo_" + Rules.seat_color(seat).to_html()
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
 		var c: Color = Rules.seat_color(seat)
@@ -57,7 +57,7 @@ static func goo(seat: String) -> StandardMaterial3D:
 
 static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMaterial:
 	## Body hue = seat colour (hue-shifted texture), race colour as a rim accent (rules §5).
-	var key := "cr_%s_%s" % [faction, seat]
+	var key := "cr_%s_%s" % [faction, Rules.seat_color(seat).to_html()]
 	if not _cache.has(key):
 		var m := ShaderMaterial.new()
 		m.shader = CREATURE_SHADER
@@ -83,11 +83,11 @@ static func seam() -> StandardMaterial3D:
 
 
 static func line(seat: String) -> StandardMaterial3D:
-	var key := "line_" + seat
+	var key := "line_" + Rules.seat_color(seat).to_html()
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.albedo_color = Rules.SEATS[seat]
+		m.albedo_color = Rules.seat_color(seat)
 		m.no_depth_test = true
 		_cache[key] = m
 	return _cache[key]
@@ -114,7 +114,7 @@ static func glow(c: Color, alpha := 1.0, unshaded := true, key := "") -> Standar
 
 static func shield(seat: String) -> StandardMaterial3D:
 	## The regenerating shield: a translucent dome of the owner's goo colour over the river.
-	var key := "shield_" + seat
+	var key := "shield_" + Rules.seat_color(seat).to_html()
 	if not _cache.has(key):
 		var c: Color = Rules.seat_color(seat)
 		var m := StandardMaterial3D.new()

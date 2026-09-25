@@ -86,43 +86,47 @@ func _init() -> void:
 	check(sim7.nodes[1]["owner"] == "A" and sim7.combat_losses.get("B", 0.0) > 30.0,
 			"the garrison is beaten down on the platform and the node flips (B lost %.0f)" % sim7.combat_losses.get("B", 0.0))
 
-	# THE SHIELD BOND (Daniele, Alpha 12): a transiting force fights the shield of an enemy waypoint,
-	# never its garrison; breaking the shield destroys NO bridge - it drops the goo bond between that
-	# node and its neighbours until the shield regenerates, and passage is free meanwhile.
+	# ALPHA 14 CORRIDORS AND TRANSIT (Daniele): goo corridors always on between two adjacent nodes
+	# one player owns; passing through an enemy node fights its garrison (the badge number, no
+	# hidden pool) but only an arrival captures; capture either end and the corridor drains.
 	var sim8 := Sim.new()
 	sim8.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim8.nodes[0]["owner"] = "B"                       # B holds 1 and 0: a bonded pair
+	sim8.nodes[0]["owner"] = "B"                       # B holds 1 and 0: a corridor between them
 	sim8.nodes[2]["owner"] = "A"
 	sim8.nodes[1]["owner"] = "B"
-	sim8.nodes[1]["units"] = 15.0
-	sim8.nodes[1]["shield"] = 3.0
+	sim8.nodes[1]["units"] = 30.0
 	sim8.nodes[0]["units"] = 15.0
-	sim8.nodes[0]["shield"] = 3.0
 	sim8.nodes[3]["units"] = 900.0
 	var e10 := sim8._edge_index(1, 0)
-	check(sim8.bonded(e10), "two adjacent nodes of one owner with shields up are bonded (goo trail)")
+	check(sim8.bonded(e10) and sim8.goo_owner(e10) == "B", "two adjacent nodes of one owner share a goo corridor, always on")
 	sim8.send(3, 4, 1.0)
-	var broke := [false]
+	var g_dropped := [false]
 	run_until(sim8, func():
-		if not sim8.nodes[1]["shield_up"]:
-			broke[0] = true
+		if sim8.nodes[1]["owner"] == "B" and sim8.nodes[1]["units"] < 25.0:
+			g_dropped[0] = true
 		return sim8.nodes[4]["owner"] == "A", 90.0)
-	check(broke[0], "passing through breaks the weak waypoint's shield")
-	check(sim8.is_edge_open(sim8._edge_index(3, 1)), "...but no deck is destroyed (the bridge stays)")
-	check(sim8.events.any(func(e): return e["type"] == "shield_broken"), "a shield_broken event is recorded")
-	check(sim8.nodes[1]["units"] >= 15.0, "the real garrison behind the shield is never reduced by transit")
+	check(g_dropped[0], "passing through an enemy node fights its real garrison (no hidden shield)")
 	check(sim8.nodes[1]["owner"] == "B", "and the waypoint is NOT captured by passing through - only an arrival captures")
 	check(sim8.nodes[4]["owner"] == "A", "the surviving force fights on through and still takes its real destination")
+	check(sim8.is_edge_open(sim8._edge_index(3, 1)), "no deck is destroyed by passing through")
+	sim8._capture(sim8.nodes[0], "A", 10.0)
+	check(not sim8.bonded(e10), "capture either end and that corridor's goo drains")
+	# home advantage: a horde on enemy goo is slower and pushes at a disadvantage
 	var sim8b := Sim.new()
-	sim8b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim8b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
 	sim8b.nodes[1]["owner"] = "B"
 	sim8b.nodes[0]["owner"] = "B"
-	sim8b.nodes[1]["shield"] = 0.0
-	sim8b.nodes[1]["shield_up"] = false
-	check(not sim8b.bonded(sim8b._edge_index(1, 0)), "a node with its shield down has no bond with its neighbour")
-	sim8b.nodes[1]["units"] = 100.0
-	run_until(sim8b, func(): return sim8b.nodes[1]["shield_up"], 30.0)
-	check(sim8b.nodes[1]["shield_up"] and sim8b.bonded(sim8b._edge_index(1, 0)), "the shield regenerates to full and the bond returns")
+	sim8b.nodes[3]["units"] = 120.0
+	var hg := sim8b.send(3, 0, 1.0)                    # A crosses B's 1-0 corridor
+	var seen_goo := [false]
+	var p_goo := [0.0]
+	run_until(sim8b, func():
+		if sim8b.on_enemy_goo(hg) and hg["units"] > 10.0:
+			seen_goo[0] = true
+			p_goo[0] = sim8b.power_of(hg) / (hg["units"] * sim8b.attack_of("A"))
+		return seen_goo[0] or not (hg in sim8b.hordes), 30.0)
+	check(seen_goo[0], "a horde crossing an enemy corridor is on enemy goo")
+	check(absf(p_goo[0] - Rules.GOO_PUSH) < 0.01, "on enemy goo it pushes at %.2f of its weight in a tug-of-war" % Rules.GOO_PUSH)
 
 	var sim9 := Sim.new()
 	sim9.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
@@ -525,6 +529,55 @@ func _init() -> void:
 	check(absf(sim26.production(sim26.nodes[4]) - Rules.PROD[2] * 0.9) < 0.001, "Ember's home produces 10 % less")
 	check(absf(sim26.attack_of("B") - 1.15) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 15 % more damage")
 
+	# TUG-OF-WAR (Alpha 14): the front slides toward the weaker side
+	var sim28 := Sim.new()
+	sim28.setup(ls_map, ls_pos, {1: "A", 0: "B"}, {"A": "null", "B": "null"}, 1)
+	sim28.nodes[1]["units"] = 300.0
+	sim28.nodes[0]["units"] = 100.0
+	var strong := sim28.send(1, 0, 1.0)
+	var weak := sim28.send(0, 1, 1.0)
+	var contact_at := [-1.0, -1.0]
+	var pushed := [false]
+	for k in range(600):
+		sim28.step(0.05)
+		if not sim28.fights.is_empty() and contact_at[0] < 0.0 and weak in sim28.hordes:
+			contact_at = [strong["s"], weak["s"]]
+		elif contact_at[0] >= 0.0 and strong in sim28.hordes and weak in sim28.hordes:
+			if strong["s"] > contact_at[0] + 0.5 and weak["s"] < contact_at[1] - 0.5:
+				pushed[0] = true
+		if not (weak in sim28.hordes):
+			break
+	check(contact_at[0] >= 0.0, "the two lines meet on the M deck")
+	check(pushed[0], "the front slides: the stronger head advances and the weaker line is shoved back")
+	# RECALL: a horde turns round and flows back to the node it left
+	var sim29 := Sim.new()
+	sim29.setup(ls_map, ls_pos, {1: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim29.nodes[1]["units"] = 100.0
+	var h29 := sim29.send(1, 0, 1.0)                 # the M deck to the centre
+	run_until(sim29, func(): return h29["s"] > h29["spans"][0]["s0"] + 3.0, 20.0)
+	var carried: float = h29["units"]
+	var home_before: float = sim29.nodes[1]["units"]
+	check(sim29.recall(h29["id"]), "an own horde on a deck can be recalled")
+	check(h29["target"] == 1 and h29.get("retreat", false), "it now heads back to the node it left")
+	run_until(sim29, func(): return not (h29 in sim29.hordes), 20.0)
+	check(sim29.nodes[1]["units"] > home_before + carried * 0.9, "and pours back into it (%.0f -> %.0f)" % [home_before, sim29.nodes[1]["units"]])
+	check(sim29.nodes[0]["owner"] == "", "the old target was never reached")
+	var sim30 := Sim.new()                             # recall mid-fight: it breaks off and gets out
+	sim30.setup(ls_map, ls_pos, {1: "A", 0: "B"}, {"A": "null", "B": "null"}, 1)
+	sim30.nodes[1]["units"] = 100.0
+	sim30.nodes[0]["units"] = 300.0
+	var losing := sim30.send(1, 0, 1.0)
+	sim30.send(0, 1, 1.0)
+	run_until(sim30, func(): return not sim30.fights.is_empty(), 20.0)
+	check(sim30.recall(losing["id"]), "a horde can be recalled mid-fight")
+	var escaped := false
+	for k in range(400):
+		sim30.step(0.05)
+		if not (losing in sim30.hordes):
+			escaped = sim30.nodes[1]["owner"] == "A" and sim30.events.any(func(e): return e["type"] == "recall")
+			break
+	check(escaped or (losing in sim30.hordes and losing["state"] == "move"), "the retreating line keeps moving under pressure")
+
 	# bridge combat toggle (Daniele): OFF = Alpha 11 - hordes pass each other on decks, fights only
 	# at nodes; ON = Alpha 12
 	Rules.bridge_combat = false
@@ -541,6 +594,62 @@ func _init() -> void:
 	check(sim27.nodes[1]["siege"].get("B", 0.0) > 0.0 or sim27.nodes[0]["siege"].get("A", 0.0) > 0.0 or sim27.nodes[1]["owner"] == "B" or sim27.nodes[0]["owner"] == "A",
 			"...and fight at the nodes instead")
 	Rules.bridge_combat = true
+
+	# TEAM AND FFA MODES (Alpha 14): allies never fight each other, reinforce each other's nodes, and
+	# a team wins together; FFA up to five seats plays to the end
+	var tx_map := MapBuilder.load_map("res://maps/047-trident-exchange.json")
+	var tx_pos := MapBuilder.layout(tx_map)
+	var tseats := {}
+	var tteams := {}
+	for s in tx_map["seats"]["2v2"]:
+		tseats[int(s["node"])] = s["seat"]
+		tteams[s["seat"]] = int(s["team"])
+	var sim31 := Sim.new()
+	sim31.setup(tx_map, tx_pos, tseats, {"A": "null", "B": "vex", "C": "ember", "D": "solar"}, 2, tteams)
+	var ally: String = tteams.keys().filter(func(k): return k != "A" and tteams[k] == tteams["A"])[0]
+	check(sim31.allied("A", ally) and not sim31.allied("A", tteams.keys().filter(func(k): return tteams[k] != tteams["A"])[0]),
+			"2v2: A and %s are allies, the other team is not" % ally)
+	var ally_home: int = tseats.keys().filter(func(id): return tseats[id] == ally)[0]
+	var a_home: int = tseats.keys().filter(func(id): return tseats[id] == "A")[0]
+	var before_ally: float = sim31.nodes[ally_home]["units"]
+	sim31.nodes[a_home]["units"] = 100.0
+	var hally := sim31.send(a_home, ally_home, 1.0)
+	check(not hally.is_empty(), "A can send to an ally's node")
+	run_until(sim31, func(): return not (hally in sim31.hordes), 40.0)
+	check(sim31.nodes[ally_home]["owner"] == ally and sim31.nodes[ally_home]["units"] > before_ally + 50.0,
+			"sending to an ally reinforces it, never captures it")
+	var ais_t := []
+	for s in tseats.values():
+		ais_t.append(SeatAI.new(s, 2.0, "Standard"))
+	var steps_t := 0
+	while not sim31.over and steps_t < 20 * 60 * 8:
+		for ai in ais_t:
+			ai.think(sim31, 0.1)
+		sim31.step(0.1)
+		steps_t += 1
+	print("      2v2 047: over=%s winner=%s (team %s) at %.0f s" % [sim31.over, sim31.winner, str(tteams.get(sim31.winner, "?")), sim31.time])
+	check(sim31.over, "2v2 AI match on Trident Exchange finishes")
+	for code in ["036-khepri-carousel", "037-aurelia-orbital"]:
+		var fm := MapBuilder.load_map("res://maps/%s.json" % code)
+		var fpos := MapBuilder.layout(fm)
+		check(fpos.size() == fm["nodes"].size(), "%s lays out every node" % code)
+		var fseats := {}
+		for s in fm["seats"]["FFA5"]:
+			fseats[int(s["node"])] = s["seat"]
+		check(fseats.size() == 5, "%s seats five players" % code)
+		var fsim := Sim.new()
+		fsim.setup(fm, fpos, fseats, {"A": "null", "B": "vex", "C": "ember", "D": "solar", "E": "bloom"}, 3)
+		var fais := []
+		for s in fseats.values():
+			fais.append(SeatAI.new(s, 2.0, "Standard"))
+		var fsteps := 0
+		while not fsim.over and fsteps < 20 * 60 * 8:
+			for ai in fais:
+				ai.think(fsim, 0.1)
+			fsim.step(0.1)
+			fsteps += 1
+		print("      FFA5 %s: over=%s winner=%s at %.0f s" % [code, fsim.over, fsim.winner, fsim.time])
+		check(fsim.over, "FFA 5 AI match on %s finishes" % code)
 
 	# outward is only offered on maps that author an outward final
 	var seen_methods := {}

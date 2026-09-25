@@ -21,12 +21,17 @@ const STARTER_MAPS := [
 	"res://maps/008-strait.json", "res://maps/010-first-switch.json",
 	"res://maps/011-remote-span.json", "res://maps/061-switchback-foundry.json",
 	"res://maps/047-trident-exchange.json",
+	# roster maps for the team and FFA modes (Alpha 14)
+	"res://maps/012-ladder.json", "res://maps/016-concourse.json",
+	"res://maps/036-khepri-carousel.json", "res://maps/037-aurelia-orbital.json",
 ]
 const PROVES := {
 	"004": "drag-to-send, capture, the horde line", "007": "bridge combat, tier reading, inward vs outward",
 	"008": "RETRACT: troops carried into the hub", "010": "SWITCH: the deck dissolves - troops fall",
 	"011": "REMOTE: the centre console swaps the diagonals", "061": "3-WAY ROTATION: troops ride the deck",
 	"047": "team layout, retract on both spine decks",
+	"012": "2v2 / FFA4: a plain ladder", "016": "2v2 / FFA4: a nine-node concourse",
+	"036": "FFA 5: five seats round a carousel", "037": "FFA 5: five retract relays on an orbital ring",
 }
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 
@@ -76,6 +81,8 @@ const DOUBLE_TAP_WINDOW := 0.35
 const TAP_PIXELS := 14.0
 var started := false
 var thumb_path := ""
+var mode := "1v1"                             # 1v1 / 2v2 / FFA3 / FFA4 / FFA5 (the map's seats key)
+var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
 
@@ -88,6 +95,8 @@ func _ready() -> void:
 		ai_level = relaunch.get("ai", ai_level)
 		if relaunch.has("rival"):
 			SEAT_FACTIONS["B"] = relaunch["rival"]
+		mode = relaunch.get("mode", mode)
+		color_choice = relaunch.get("colour", color_choice)
 	if relaunch.has("map"):
 		map_path = relaunch["map"]
 		map_explicit = true
@@ -114,6 +123,10 @@ func _ready() -> void:
 			scenario = arg.substr(11)
 		elif arg.begins_with("--zoom="):
 			scenario_zoom = float(arg.substr(7))
+		elif arg.begins_with("--mode="):
+			mode = arg.substr(7)
+		elif arg == "--classic":                     # bridge combat OFF: the classic unit-model look
+			Rules.bridge_combat = false
 		elif arg.begins_with("--seed="):
 			seed_value = int(arg.substr(7))
 		elif arg.begins_with("--thumb="):              # map thumbnail for the menu: no HUD, first frame
@@ -145,11 +158,25 @@ func _ready() -> void:
 func _start_map(path: String) -> void:
 	map_path = path
 	map = MapBuilder.load_map(path)
+	if not map["seats"].has(mode):                     # this map doesn't offer the mode: its first one
+		mode = "1v1" if map["seats"].has("1v1") else map["seats"].keys()[0]
 	var seats := {}
-	for s in map["seats"]["1v1"]:
+	var teams := {}
+	for s in map["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
+		if mode in ["2v2", "3v3"] and s.get("team") != null:
+			teams[s["seat"]] = int(s["team"])
+	if not HUMAN in seats.values():                    # FFA maps may seat A elsewhere; A is always you
+		var first: int = seats.keys()[0]
+		seats[first] = HUMAN
+	var pool := FACTION_NAMES.filter(func(f): return f != SEAT_FACTIONS[HUMAN] and f != SEAT_FACTIONS["B"])
+	pool.shuffle()
+	for seat in ["C", "D", "E", "F"]:                 # extra AI seats get the factions not yet taken
+		if not pool.is_empty():
+			SEAT_FACTIONS[seat] = pool.pop_front()
+	Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
 	sim = Sim.new()
-	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value)
+	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams)
 	_build_world()
 	vis = MapBuilder.build(self, sim)
 	if not vis["stretched"].is_empty():
@@ -204,9 +231,11 @@ func _start_map(path: String) -> void:
 	hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
 
 
-func start_match(path: String, faction: String, rival_faction: String, level: String) -> void:
-	## Entry from the front menu (Menu.deploy): your faction (seat A), the rival's (seat B), the
-	## AI level and the map. Ownership colour stays the seat's (GAME-RULES sec2).
+func start_match(path: String, faction: String, rival_faction: String, level: String, match_mode := "1v1", colour := "A") -> void:
+	## Entry from the front menu (Menu.deploy): your faction (seat A), the rival's (seat B), the AI
+	## level, the map, the mode (1v1 / 2v2 / FFA3-5) and your colour.
+	mode = match_mode
+	color_choice = colour
 	SEAT_FACTIONS[HUMAN] = faction
 	SEAT_FACTIONS["B"] = rival_faction
 	ai_level = level
@@ -217,12 +246,12 @@ func start_match(path: String, faction: String, rival_faction: String, level: St
 
 
 func restart() -> void:
-	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level}
+	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice}
 	get_tree().reload_current_scene()
 
 
 func to_menu() -> void:
-	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level}
+	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice}
 	get_tree().reload_current_scene()
 
 
@@ -641,6 +670,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					hud.close_inspector()
 					selected = -1
+					var own := _horde_at(hit)
+					if not own.is_empty():                       # tap one of your lines: RECALL it
+						if sim.recall(own["id"]):
+							hud.toast("Recalled - %d units turning back" % Rules.shown(own["units"]))
+						else:
+							hud.toast("That line can't turn back now")
+						return
 					pan_from = hit
 			else:
 				if drag_from >= 0:
@@ -773,3 +809,24 @@ func _perf(dt: float) -> void:
 			Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
 			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 			Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)])
+
+
+func _horde_at(p: Vector3) -> Dictionary:
+	## The player's own horde whose line passes within reach of a ground point (recall target).
+	if p == Vector3.INF:
+		return {}
+	var best := {}
+	var best_d := 2.2 if not mobile else 3.2
+	for h in sim.hordes:
+		if h["owner"] != HUMAN or h["state"] == "absorb" or h.get("retreat", false):
+			continue
+		var len := Sim.chain_length(h)
+		var k := 0.0
+		while k <= len:
+			var q: Vector3 = Sim.sample(h, h["s"] - k)[0]
+			var d := Vector2(q.x - p.x, q.z - p.z).length()
+			if d < best_d:
+				best_d = d
+				best = h
+			k += 1.2
+	return best
