@@ -1,5 +1,24 @@
 # Ooze Syndicate 2.0 - changelog
 
+## Unreleased - 2026-09-25 (branch maps-overpass: full map pool + overpass bridges)
+
+- **83 maps in the pool** (was the starter seven): every map in the 100-map roster whose modes list
+  1v1, split from `Docs/.../02 Maps/roster/maps-100.json` into `maps/NNN-name.json` with a preview
+  SVG in `assets/maps/` in the starter seven's style. `scripts/map_pool.gd` lists them (starter
+  seven first, then by code); the battlefield page scrolls through all of them and describes
+  roster maps by tier, layout family and overpass count. Left out until 2.0 has team/FFA seats: the
+  17 maps without 1v1 in their modes (001-003, 025-030, 036, 037, 062, 092, 094-097). New maps
+  show the SVG, not a 3D thumbnail (`--thumb=` renders can follow).
+- **Overpass bridges are real** (GAME-RULES sec 7: "cross at different heights without joining"):
+  an overpass deck is laid from the kit's `Deck_Overpass_Ramp` + `Deck_Overpass_Span` (on pylons) +
+  ramp down, rising `Rules.OVERPASS_H` = 2.6 m (the kit's OVER_H). Hordes climb the ramp and run
+  raised (`Sim.deck_points`); a line on an overpass only meets lines on that same deck, so the
+  horde passing under it no longer fights or queues through the bridge above. The shield-bond goo
+  follows the ramps. 16 pool maps have overpasses (044, 045, 049, 054, 055, 065, 066, 073, 074,
+  076, 079, 081-083, 086, 100).
+- `tests/test_map_pool.gd`: every pool map lays out fully and finishes an AI vs AI match with
+  captures; on Oberon Keep a horde over and an enemy horde under pass the same spot without engaging.
+
 ## 0.13.2 - 2026-09-25 (Daniele's numbers)
 
 - Deck speed 5 m/s (was 2), platform speed = deck speed (was x6), relay cooldown 5 s (was 15).

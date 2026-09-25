@@ -151,8 +151,16 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		var deck_nodes: Array = []
 		var base: Array = []
 		var state_key: String = "retract" if e["retracts"] else e["state"]
+		var over: bool = e["overpass"] and e["modules"] >= 2 and state_key == ""
 		for k in range(e["modules"]):
-			var deck := put(parent, piece_name, pa + d * (Rules.R + Rules.PIER + k * Rules.S * f), Rules.heading(d), f)
+			var deck: Node3D
+			if over and k == e["modules"] - 1:           # overpass: ramp down, laid from the far end
+				deck = put(parent, "Deck_Overpass_Ramp", pb - d * (Rules.R + Rules.PIER), Rules.heading(-d), f)
+			elif over:                                   # ramp up, then the raised span on pylons
+				deck = put(parent, "Deck_Overpass_Ramp" if k == 0 else "Deck_Overpass_Span",
+						pa + d * (Rules.R + Rules.PIER + k * Rules.S * f), Rules.heading(d), f)
+			else:
+				deck = put(parent, piece_name, pa + d * (Rules.R + Rules.PIER + k * Rules.S * f), Rules.heading(d), f)
 			if state_key != "":
 				set_lights(deck, Mats.light_color(Rules.state_color(state_key)))
 			deck_nodes.append(deck)

@@ -29,7 +29,7 @@ func setup(m: Node3D) -> void:
 	faction = m.SEAT_FACTIONS[m.HUMAN]
 	ai_level = m.ai_level
 	map_path = m.map_path
-	for mp in m.STARTER_MAPS:
+	for mp in MapPool.all():
 		maps.append({"path": mp, "data": MapBuilder.load_map(mp)})
 	show_main()
 
@@ -357,7 +357,7 @@ func show_maps() -> void:
 	var sel := _selected_map()
 	label_at(str(sel.get("name", "")).replace("*", "").to_upper(), P(1052, 631), 31)
 	label_at("CONQUEST    /    1v1    /    %d NODES%s" % [sel["nodes"].size(), _relay_kinds(sel).to_upper()], P(1053, 683), 23, color())
-	label_at("%s\nLast Stand at %d:%02d - methods: %s" % [main.PROVES.get(sel.get("code", ""), ""),
+	label_at("%s\nLast Stand at %d:%02d - methods: %s" % [main.PROVES.get(sel.get("code", ""), _map_blurb(sel)),
 			int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(sel.get("lastStand", {}).get("methods", []))],
 			P(1053, 736), 22, Color("abc1cd"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_factions)
@@ -370,6 +370,13 @@ func _relay_kinds(m: Dictionary) -> String:
 		if n.get("relay") != null:
 			kinds[n["relay"]] = true
 	return "    /    " + " + ".join(kinds.keys()) if not kinds.is_empty() else ""
+
+
+func _map_blurb(m: Dictionary) -> String:
+	## Roster maps have no "proves" line: tier, layout family and overpass count instead.
+	var overs: int = m["edges"].filter(func(e): return e.get("overpass", false)).size()
+	return "%s map, %s layout%s" % [str(m.get("tier", "")).capitalize(), m.get("family", ""),
+			", %d overpass%s" % [overs, "es" if overs > 1 else ""] if overs > 0 else ""]
 
 
 func _selected_map() -> Dictionary:

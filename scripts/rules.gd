@@ -14,6 +14,10 @@ const R := 6.0                       # platform radius
 const PIER := 1.6                    # connector length beyond the rim
 const S := 4.0                       # one deck module (short bridge)
 const W := 2.8                       # deck width
+# OVERPASS (GAME-RULES sec 7: "overpasses cross at different heights without joining"): an L deck
+# built as ramp up + raised span on pylons + ramp down (kit Deck_Overpass_*, OVER_H in
+# build_kit_2_0.py). Hordes follow the rise; a line on an overpass never touches another deck's line.
+const OVERPASS_H := 2.6
 const SOCKET_Z := 0.06
 
 # movement: travel time counts deck modules only (1 module = 2 s); platforms and piers are

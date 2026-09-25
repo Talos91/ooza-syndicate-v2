@@ -1,0 +1,384 @@
+{
+ "id": 54.0,
+ "code": "054",
+ "name": "Corvid Trestle",
+ "tier": "mid",
+ "family": "ladder",
+ "modes": [
+  "1v1",
+  "2v2",
+  "FFA4"
+ ],
+ "nodes": [
+  {
+   "id": 0.0,
+   "x": 14.0,
+   "y": 29.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1.0,
+   "x": 32.0,
+   "y": 36.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2.0,
+   "x": 50.0,
+   "y": 43.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3.0,
+   "x": 68.0,
+   "y": 36.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4.0,
+   "x": 86.0,
+   "y": 29.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5.0,
+   "x": 14.0,
+   "y": 71.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6.0,
+   "x": 32.0,
+   "y": 64.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7.0,
+   "x": 50.0,
+   "y": 57.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "final",
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 8.0,
+   "x": 68.0,
+   "y": 64.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 9.0,
+   "x": 86.0,
+   "y": 71.0,
+   "center": false,
+   "relay": null,
+   "pillar": false,
+   "category": "normal",
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 10.0,
+   "x": 50.0,
+   "y": 50.0,
+   "center": true,
+   "relay": null,
+   "pillar": false,
+   "category": "final",
+   "buildable": [
+    "vat",
+    "cannon",
+    "forge"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 5.0,
+   "to": 6.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1.0,
+   "to": 2.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 6.0,
+   "to": 7.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2.0,
+   "to": 3.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 7.0,
+   "to": 8.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 3.0,
+   "to": 4.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 8.0,
+   "to": 9.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 0.0,
+   "to": 5.0,
+   "tier": "L",
+   "seconds": 6.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 1.0,
+   "to": 6.0,
+   "tier": "M",
+   "seconds": 4.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 2.0,
+   "to": 10.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 10.0,
+   "to": 7.0,
+   "tier": "S",
+   "seconds": 2.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 3.0,
+   "to": 8.0,
+   "tier": "M",
+   "seconds": 4.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 4.0,
+   "to": 9.0,
+   "tier": "L",
+   "seconds": 6.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 0.0,
+   "to": 6.0,
+   "tier": "L",
+   "seconds": 6.0,
+   "overpass": true,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 5.0,
+   "to": 1.0,
+   "tier": "L",
+   "seconds": 6.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 4.0,
+   "to": 8.0,
+   "tier": "L",
+   "seconds": 6.0,
+   "overpass": true,
+   "state": null,
+   "retracts": false
+  },
+  {
+   "from": 9.0,
+   "to": 3.0,
+   "tier": "L",
+   "seconds": 6.0,
+   "overpass": false,
+   "state": null,
+   "retracts": false
+  }
+ ],
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 0.0,
+    "team": 0.0
+   },
+   {
+    "seat": "B",
+    "node": 4.0,
+    "team": 1.0
+   }
+  ],
+  "2v2": [
+   {
+    "seat": "A",
+    "node": 0.0,
+    "team": 0.0
+   },
+   {
+    "seat": "B",
+    "node": 5.0,
+    "team": 0.0
+   },
+   {
+    "seat": "C",
+    "node": 4.0,
+    "team": 1.0
+   },
+   {
+    "seat": "D",
+    "node": 9.0,
+    "team": 1.0
+   }
+  ],
+  "FFA4": [
+   {
+    "seat": "A",
+    "node": 0.0,
+    "team": null
+   },
+   {
+    "seat": "B",
+    "node": 4.0,
+    "team": null
+   },
+   {
+    "seat": "C",
+    "node": 9.0,
+    "team": null
+   },
+   {
+    "seat": "D",
+    "node": 5.0,
+    "team": null
+   }
+  ]
+ },
+ "lastStand": {
+  "methods": [
+   "inward",
+   "outward",
+   "chaos"
+  ],
+  "inwardFinal": 10.0,
+  "outwardFinal": 7.0
+ },
+ "note": null,
+ "symmetryCheck": true,
+ "centreHasNoVat": false
+}

@@ -44,7 +44,7 @@ var textures := {}    # faction -> creature Texture2D
 var pools := {}       # horde id -> {"patches": [MeshInstance3D], "label": Label3D, "vis": float, "phase": float}
 var contacts := {}    # contact key -> {"root", "lobes", "seam", "splash", "seats"}
 var rivers := {}      # node id -> {"patches": [MeshInstance3D], "vis": float}
-var corridors := {}   # edge index -> MeshInstance3D: goo covering a deck between two owned nodes
+var corridors := {}   # edge index -> [MeshInstance3D] per deck segment: goo covering a deck between two owned nodes
 var _corridor_mesh: BoxMesh
 var _last_time := -1.0
 var _lobe_mesh: SphereMesh
@@ -291,6 +291,7 @@ func _draw_corridors(sim: Sim) -> void:
 	## THE BOND (Daniele, Alpha 12): "two vats form a bond when both have the shield active - the
 	## road becomes covered in goo; if one of the two loses its shield the path is gone". A deck
 	## between two of your own nodes wears your goo only while BOTH shields are up (Sim.bonded).
+	## The goo follows the deck rim to rim - up the ramps and along the raised span of an overpass.
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		var a: Dictionary = sim.nodes[e["a"]]
@@ -298,25 +299,33 @@ func _draw_corridors(sim: Sim) -> void:
 		var owner: String = a["owner"]
 		var held: bool = sim.bonded(i)
 		if not held:
-			if corridors.has(i):
-				(corridors[i] as MeshInstance3D).visible = false
+			for mi in corridors.get(i, []):
+				(mi as MeshInstance3D).visible = false
 			continue
-		if not corridors.has(i):
-			var mi := MeshInstance3D.new()
-			mi.mesh = _corridor_mesh
-			add_child(mi)
-			corridors[i] = mi
-		var mi: MeshInstance3D = corridors[i]
-		mi.visible = true
-		mi.material_override = Mats.goo(owner)
 		var pa: Vector3 = a["pos"]
 		var pb: Vector3 = b["pos"]
-		var mid := (pa + pb) / 2.0
-		var full_len: float = pa.distance_to(pb)
-		var len: float = maxf(full_len - 2.0 * Rules.R, 1.0)     # between the two rims, not through them
-		mi.position = mid + Vector3(0, 0.06, 0)
-		mi.rotation = Vector3(0, Rules.heading((pb - pa).normalized()), 0)
-		mi.scale = Vector3(len, 1.0, Rules.W * 0.92)
+		var dir := (pb - pa).normalized()
+		var line: Array = [pa + dir * Rules.R] + sim.deck_points(i, e["a"]) + [pb - dir * Rules.R]
+		if not corridors.has(i):
+			var parts := []
+			for k in range(line.size() - 1):
+				var mi := MeshInstance3D.new()
+				mi.mesh = _corridor_mesh
+				add_child(mi)
+				parts.append(mi)
+			corridors[i] = parts
+		var parts: Array = corridors[i]
+		for k in range(parts.size()):
+			var mi: MeshInstance3D = parts[k]
+			var p0: Vector3 = line[k]
+			var p1: Vector3 = line[k + 1]
+			var seg := p1 - p0
+			mi.visible = true
+			mi.material_override = Mats.goo(owner)
+			mi.position = (p0 + p1) / 2.0 + Vector3(0, 0.06, 0)
+			var x := seg.normalized()
+			var z := x.cross(Vector3.UP).normalized()
+			mi.basis = Basis(x * maxf(seg.length(), 0.01), z.cross(x), z * Rules.W * 0.92)
 
 
 var puddles := {}     # node id -> MeshInstance3D: the pool at the tank bottoms while an order drains out
