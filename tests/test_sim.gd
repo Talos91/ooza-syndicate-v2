@@ -360,6 +360,24 @@ func _init() -> void:
 	check(sim14.fall_losses.get("A", 0.0) > 0.0, "units on the dissolved deck fell (A lost %.0f of %.0f)" % [sim14.fall_losses.get("A", 0.0), a_before])
 	check(sim14.events.any(func(e): return e["type"] == "fall"), "a fall event is recorded (no combat credit)")
 
+	# a line that walks onto a switch deck WHILE it is dissolving, and a line whose head is past the
+	# deck when it goes, both lose what is on it (Daniele, Alpha 14: "they still don't consistently fall")
+	var sim14b := Sim.new()
+	sim14b.setup(sw_map, sw_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim14b.nodes[1]["owner"] = "B"
+	sim14b.nodes[1]["units"] = 1.0
+	sim14b.nodes[5]["units"] = 400.0
+	var late := sim14b.send(5, 0, 1.0)                 # 5 -> 1 -> 0 over node 1's s1 deck
+	var late_deck: Dictionary = late["spans"][1]
+	sim14b.fire_relay(1)
+	run_until(sim14b, func(): return sim14b.nodes[1]["relay_phase"] == "moving", 5.0)
+	run_until(sim14b, func(): return late["s"] > late_deck["s0"] + 0.5 or not (late in sim14b.hordes), 10.0)
+	run_until(sim14b, func(): return sim14b.nodes[1]["relay_phase"] == "", 5.0)
+	sim14b.step(0.05)
+	var crossed_late: bool = late in sim14b.hordes and late["route"].has(0) and late["s"] > late_deck["s1"] + 1.0
+	check(sim14b.fall_losses.get("A", 0.0) > 0.0, "a line that walked onto a deck mid-dissolve falls when the motion ends")
+	check(not crossed_late, "...and never reaches the far side over the missing deck")
+
 	# retract: troops on the deck are carried into the relay's node (enemies = early assault)
 	var sim15 := Sim.new()
 	sim15.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)

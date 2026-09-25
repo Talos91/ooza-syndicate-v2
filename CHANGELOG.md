@@ -1,5 +1,28 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.14.2 - 2026-09-25 (Daniele's mobile and readability fixes)
+
+- **Phones play fullscreen.** In a phone browser a gate covers the game until it is fullscreen:
+  Android gets a PLAY FULLSCREEN button (browsers only grant it from a tap) and landscape lock;
+  iPhone/iPad Safari shows the Add to Home Screen steps, and the home-screen app now opens
+  fullscreen and landscape. The gate comes back if you leave fullscreen; a small "continue in the
+  browser" link is the escape hatch if detection is wrong.
+- **The menu fits any screen shape**: it scales and centres instead of sitting at 1280x720 on the
+  left of a wider phone screen; the backdrop fills the whole screen. Ability text wraps in its box.
+- **Fixed camera**: no zoom or pan (pinch, wheel, trackpad, drag), lower angle (42 degrees, was
+  55). **Every vat, cannon, forge and socket faces the viewer** on every map.
+- **Relays and falls**: every deck a line overlaps is checked, not only the one under its head -
+  a tail still on a deck that dissolved, retracted or collapsed falls, and a line that walked onto
+  a deck mid-motion falls when the motion ends.
+- **Double-tap no longer flashes the inspector**: a single tap inspects only after the double-tap
+  window passes, and the release that ends a double tap is swallowed.
+- **Counts easier to read**: badges hang from each platform's near rim with a bigger outlined count;
+  horde labels are smaller.
+- **Classic mode**: unit models take their owner's colour (three players on one faction no longer
+  look alike); no garrison loitering round the vat, the platform neon shows the owner; badges carry
+  Alpha 11's numbers (production per second, upgrade price) and the inspector has Alpha 11's status
+  line (production, "Double-tap: N units" / MAX TIER, plus garrison / attack / speed).
+
 ## 0.14.1 - 2026-09-25 (merged maps-overpass: the whole roster, overpasses, multiplayer map prep)
 
 - **Merged the `maps-overpass` branch** (another session's commit bd1f527) into Alpha 14. Its

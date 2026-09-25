@@ -123,9 +123,9 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 					var m := mesh.surface_get_material(s)
 					if m and m.resource_name.begins_with("OS_State"):
 						state_parts.append([mi, s])
-			vat_node = put(parent, "Socket_Attachment", n["pos"])
+			vat_node = put(parent, "Socket_Attachment", n["pos"], Rules.view_yaw)
 		else:
-			vat_node = put(parent, "Vat_T%d" % n["tier"], n["pos"])
+			vat_node = put(parent, "Vat_T%d" % n["tier"], n["pos"], Rules.view_yaw)   # every structure faces the viewer
 		parts.append(vat_node)
 		vis[n["id"]] = {"parts": parts, "platform": platform, "vat_node": vat_node,
 				"vat_tier": -1 if relay != "" else n["tier"], "model_key": "",
@@ -224,7 +224,7 @@ static func set_centre_model(parent: Node3D, entry: Dictionary, model: String, p
 	if entry["vat_node"]:
 		(entry["parts"] as Array).erase(entry["vat_node"])
 		(entry["vat_node"] as Node).queue_free()
-	var node := put(parent, model, pos)
+	var node := put(parent, model, pos, Rules.view_yaw)
 	entry["parts"].append(node)
 	entry["vat_node"] = node
 	entry["model_key"] = model

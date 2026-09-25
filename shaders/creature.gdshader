@@ -7,6 +7,7 @@ uniform float hue_shift = 0.0;              // in turns
 uniform vec3 accent : source_color = vec3(1.0);
 uniform float rim_power = 4.0;
 uniform float rim_gain = 2.2;
+uniform float self_glow = 0.0;
 
 vec3 rgb2hsv(vec3 c) {
 	vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
@@ -26,7 +27,8 @@ void fragment() {
 	vec3 hsv = rgb2hsv(texture(albedo_tex, UV).rgb);
 	hsv.x = fract(hsv.x + hue_shift);
 	ALBEDO = hsv2rgb(hsv);
+	vec3 base = ALBEDO;
 	ROUGHNESS = 0.3;
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), rim_power);
-	EMISSION = accent * rim * rim_gain;
+	EMISSION = accent * rim * rim_gain + base * self_glow;   // self_glow: classic units read bright on a dark board
 }

@@ -6,7 +6,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.14.1"
+const VERSION := "0.14.2"
 const VERSION_NAME := "Alpha 14"
 
 # kit geometry (metres)
@@ -58,6 +58,11 @@ static var node_fight_mult: float = 1.0                # live-tunable: x combat 
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
 # queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
 static var bridge_combat: bool = true
+# CAMERA (Daniele, Alpha 14 playtest: "map size should be fixed, no zoom... too vertical"; "vats and
+# buildings should all face the viewer on every map"). The camera is fitted once per screen size,
+# never zoomed or panned; VIEW_YAW is set per map before it is built so every structure faces it.
+const CAM_PITCH := 42.0              # degrees above the horizon (was 55)
+static var view_yaw := 0.0
 # TUG-OF-WAR (bridge-combat mode): the front slides toward the weaker side at up to this fraction of
 # deck speed (total dominance); 2:1 odds move it at a third of that.
 const TUG_SPEED := 0.35

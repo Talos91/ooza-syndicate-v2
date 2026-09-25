@@ -26,10 +26,20 @@ const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "FFA3": "FF
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
+var _backdrop: TextureRect
 
 
 func setup(m: Node3D) -> void:
 	main = m
+	_backdrop = TextureRect.new()                     # full-screen art behind the scaled page
+	_backdrop.texture = load("res://assets/art/ui-main.png")
+	_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_backdrop.modulate = Color(0.55, 0.6, 0.65)
+	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_backdrop)
+	get_viewport().size_changed.connect(_fit)
 	faction = m.SEAT_FACTIONS[m.HUMAN]
 	ai_level = m.ai_level
 	map_path = m.map_path
@@ -54,8 +64,8 @@ func clear_page(art: String) -> void:
 		remove_child(content)
 		content.queue_free()
 	content = Control.new()
-	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(content)
+	_fit()
 	_is_main = art == "ui-main"
 	if art == "ui-main":
 		picture("res://assets/art/ui-main.png", Vector2.ZERO, P(1672, 941))
@@ -292,9 +302,9 @@ func show_factions() -> void:
 		neon_icon(slots[i][2], P(1134, y + 40), P(64, 64), col)
 		label_at(slots[i][0], P(1217, y + 18), 24)
 		var desc := label_at(slots[i][1], P(1217, y + 60), 20, Color("c5d2da"))
-		desc.custom_minimum_size = P(382, 70)
-		desc.size = P(382, 70)
-		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # wrap first, then fix the width
+		desc.custom_minimum_size = Vector2(382 * K, 0)
+		desc.size = Vector2(382 * K, 0)
 		if i == 2:
 			label_at("ULTIMATE / 120s", P(1500, y + 126), 13, Color("ffd15c"))
 		else:
@@ -477,3 +487,15 @@ func deploy() -> void:
 		var others := FACTIONS.filter(func(f): return f != faction)
 		r = others[randi() % others.size()]
 	main.start_match(map_path, faction, r, ai_level, mode, colour)
+
+
+func _fit() -> void:
+	## The page is laid out on a 1280x720 canvas; scale it to fit any screen shape and centre it
+	## (Alpha 14 playtest: "screen size varies and half the interface is shrunk to the left").
+	if not is_instance_valid(content):
+		return
+	var vp := get_viewport().get_visible_rect().size
+	var s := minf(vp.x / 1280.0, vp.y / 720.0)
+	content.size = Vector2(1280, 720)
+	content.scale = Vector2(s, s)
+	content.position = (vp - Vector2(1280, 720) * s) / 2.0

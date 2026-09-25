@@ -983,33 +983,40 @@ func step(dt: float) -> void:
 
 
 func _check_missing_decks() -> void:
-	## A horde never walks across a deck that is no longer there (Daniele, Alpha 12 playtest: "the
-	## enemy crossed a bridge even if there was no bridge"). A route is computed when the order is
-	## given; if a deck on it has since closed (relay) or fallen (Last Stand), the horde reaching that
-	## pier walks off it into the void (Daniele: "instead of falling in the void" - they fall).
+	## A horde never walks across a deck that is no longer there (Daniele, Alpha 12/14 playtests:
+	## "the enemy crossed a bridge even if there was no bridge"; "when units are crossing a bridge
+	## and the bridge changes they still don't consistently fall"). Every deck the line overlaps is
+	## checked each step - not only the one under its head - so a tail still on a deck that has
+	## dissolved, retracted or collapsed falls too, and a line that walked onto a deck while it was
+	## moving falls once the motion ends. A head reaching the lip of a missing deck walks off it:
+	## the line pours into the void at deck speed.
 	for h in hordes.duplicate():
-		if not (h in hordes) or h["state"] == "absorb" or h.has("ride"):
+		if not (h in hordes) or h.has("ride"):
 			continue
-		var sp := _current_span(h)
-		if sp.is_empty():
-			continue
-		var ei: int = sp["edge"]
-		var ctrl: int = edge_controller.get(ei, -1)
-		if ctrl >= 0 and ei in nodes[ctrl]["moving_edges"]:
-			continue                                      # mid-motion: the tick decides its fate
-		if is_edge_open(ei):
-			continue
-		# Daniele (Alpha 12 playtest): units ordered across a deck that is no longer there walk off
-		# the pier and FALL - they do not turn back. The head keeps moving; whatever is over the
-		# gap each step is lost, so the line pours into the void at deck speed.
-		if h["streaming"]:
-			var src: Dictionary = nodes[h["route"][0]]
-			if src["streaming"].get("hid", -1) == h["id"]:
-				_end_streaming(src, "void")
-		if h in hordes:
+		var head: float = h["s"]
+		var tail: float = head - chain_length(h)
+		for sp in h["spans"].duplicate():
+			if not (h in hordes):
+				break
+			if head < sp["s0"] or tail > sp["s1"]:
+				continue                                  # the line doesn't touch this deck
+			var ei: int = sp["edge"]
+			var ctrl: int = edge_controller.get(ei, -1)
+			if ctrl >= 0 and ei in nodes[ctrl]["moving_edges"]:
+				continue                                  # mid-motion: the tick decides its fate
+			if is_edge_open(ei):
+				continue
+			if h["streaming"]:
+				var src: Dictionary = nodes[h["route"][0]]
+				if src["streaming"].get("hid", -1) == h["id"]:
+					_end_streaming(src, "void")
+			if not (h in hordes):
+				break
+			var head_on: bool = head >= sp["s0"] and head <= sp["s1"]
 			_cut_range(h, sp["s0"], sp["s1"], "fall", -1, false)
-			if h in hordes:
-				h["s"] = sp["s0"]                     # the head stays at the lip; the next step pours more
+			if head_on and h in hordes:
+				h["s"] = sp["s0"]                         # the head stays at the lip; the next step pours more
+				h["state"] = "move"
 
 
 func _current_span(h: Dictionary) -> Dictionary:

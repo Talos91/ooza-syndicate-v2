@@ -81,6 +81,9 @@ const DOUBLE_TAP_WINDOW := 0.35
 const TAP_PIXELS := 14.0
 var started := false
 var thumb_path := ""
+var _pending_inspect := -1                    # single tap: inspector opens after the double-tap window
+var _pending_at := 0.0
+var _swallow_release := false
 var mode := "1v1"                             # 1v1 / 2v2 / FFA3 / FFA4 / FFA5 (the map's seats key)
 var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
@@ -89,6 +92,8 @@ static var relaunch := {}                     # survives a scene reload: Play ag
 
 func _ready() -> void:
 	var map_explicit := false
+	if FullscreenGate.needed():                        # phones play fullscreen (Alpha 14 playtest)
+		add_child(FullscreenGate.new())
 	Engine.max_fps = 60                                # never spin faster than the screen (menu included)
 	if relaunch.has("faction"):
 		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
@@ -177,6 +182,12 @@ func _start_map(path: String) -> void:
 	Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
 	sim = Sim.new()
 	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams)
+	var lo := Vector3(INF, 0, INF)                     # the camera looks along the map's short side
+	var hi := Vector3(-INF, 0, -INF)
+	for n in sim.nodes:
+		lo = lo.min(n["pos"])
+		hi = hi.max(n["pos"])
+	Rules.view_yaw = PI / 2.0 if (hi - lo).z > (hi - lo).x else 0.0
 	_build_world()
 	vis = MapBuilder.build(self, sim)
 	if not vis["stretched"].is_empty():
@@ -352,7 +363,7 @@ func _fit_camera() -> void:
 		hi = hi.max(n["pos"])
 	cam_target = (lo + hi) / 2.0
 	var ext := hi - lo
-	cam_yaw = PI / 2.0 if ext.z > ext.x else 0.0
+	cam_yaw = Rules.view_yaw
 	# fit the map into the screen area left of the side panel and between the top bar and the
 	# ability dock, then centre it there
 	var vp := get_viewport().get_visible_rect().size
@@ -364,7 +375,7 @@ func _fit_camera() -> void:
 	var free_x := clampf((vp.x - panel - margins.x) / vp.x, 0.5, 1.0)
 	var free_y := clampf((vp.y - top_used - bottom_used) / vp.y, 0.4, 1.0)
 	var along := (ext.x if cam_yaw == 0.0 else ext.z) + 2.0 * Rules.R + 4.0      # screen-horizontal
-	var across := ((ext.z if cam_yaw == 0.0 else ext.x) + 2.0 * Rules.R + 2.0) * sin(deg_to_rad(55.0))
+	var across := ((ext.z if cam_yaw == 0.0 else ext.x) + 2.0 * Rules.R + 2.0) * sin(deg_to_rad(Rules.CAM_PITCH))
 	var dist_x := (along / 2.0) / (half_h * free_x)
 	var dist_y := (across / 2.0) / (half_v * free_y) * 0.9   # the far half foreshortens more than the near
 	cam_dist = maxf(dist_x, dist_y) * 1.02
@@ -373,7 +384,7 @@ func _fit_camera() -> void:
 	var shift := cam_dist * half_h * ((panel - margins.x) / vp.x)
 	cam_target += screen_right * shift
 	var screen_up := Vector3(0, 0, -1).rotated(Vector3.UP, cam_yaw)            # map-plane direction that reads as "up"
-	var vshift := cam_dist * half_v * ((bottom_used - top_used) / vp.y) / sin(deg_to_rad(55.0))
+	var vshift := cam_dist * half_v * ((bottom_used - top_used) / vp.y) / sin(deg_to_rad(Rules.CAM_PITCH))
 	cam_target += screen_up * vshift
 	if scenario_focus != Vector3.INF:
 		cam_target = scenario_focus
@@ -464,7 +475,7 @@ func hfov_half(vp: Vector2) -> float:
 
 
 func _place_camera() -> void:
-	var pitch := deg_to_rad(55.0)
+	var pitch := deg_to_rad(Rules.CAM_PITCH)
 	var back := Vector3(0, sin(pitch), cos(pitch)).rotated(Vector3.UP, cam_yaw)
 	cam.position = cam_target + back * cam_dist
 	cam.look_at(cam_target, Vector3.UP)
@@ -528,6 +539,7 @@ func _process(delta: float) -> void:
 	if get_viewport().get_visible_rect().size != _fitted_size:
 		_on_resized()
 	var dt := minf(delta, 0.05)
+	_flush_inspect()
 	if not paused:
 		for ai in ais:
 			ai.think(sim, dt)
@@ -625,28 +637,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			pinch_dist = (p[0] as Vector2).distance_to(p[1])
 		return
 	if event is InputEventScreenDrag and touches.size() == 2:
-		var sd := event as InputEventScreenDrag
-		var before: Array = touches.values()
-		var mid_before: Vector2 = (before[0] + before[1]) / 2.0
-		touches[sd.index] = sd.position
-		var p: Array = touches.values()
-		var d := (p[0] as Vector2).distance_to(p[1])
-		if pinch_dist > 0.0 and d > 0.0:
-			cam_dist = clampf(cam_dist * pinch_dist / d, 25.0, 300.0)
-		pinch_dist = d
-		var g0 := _ground(mid_before)
-		var g1 := _ground((p[0] + p[1]) / 2.0)
-		if g0 != Vector3.INF and g1 != Vector3.INF:
-			cam_target += g0 - g1
-		_place_camera()
-		return
+		return                                        # fixed camera: no pinch zoom or two-finger pan
 	if touches.size() >= 2:
 		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			cam_dist = clampf(cam_dist * (0.9 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1.1), 25.0, 300.0)
-			_place_camera()
+			pass                                      # fixed camera: no zoom
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
 			if hud.pointer_over_ui(mb.position):
 				return
@@ -658,6 +655,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				if n >= 0:
 					if sim.nodes[n]["owner"] == HUMAN and n == _tap_node and _press_time - _tap_time < DOUBLE_TAP_WINDOW:
 						hud.close_inspector()
+						_pending_inspect = -1                   # the first tap's inspector never opens
+						_swallow_release = true                 # nor does this tap's release reopen it
 						node_action("upgrade", n)               # double-tap (Alpha 11): upgrade what's there
 						_tap_node = -1
 						return
@@ -677,8 +676,14 @@ func _unhandled_input(event: InputEvent) -> void:
 						else:
 							hud.toast("That line can't turn back now")
 						return
-					pan_from = hit
+					pan_from = Vector3.INF                        # fixed camera: no pan
 			else:
+				if _swallow_release:
+					_swallow_release = false
+					drag_from = -1
+					drag_mesh.clear_surfaces()
+					route_label.visible = false
+					return
 				if drag_from >= 0:
 					var target := _node_at(hit, mb.position)
 					var moved := (mb.position - _press_pos).length() >= TAP_PIXELS
@@ -694,12 +699,12 @@ func _unhandled_input(event: InputEvent) -> void:
 						selected = drag_from
 					elif not moved:
 						selected = drag_from
-						hud.inspect(drag_from, cam)               # single tap: the ring inspector
+						_queue_inspect(drag_from)                 # single tap: the ring inspector, once no second tap comes
 				else:
 					var target := _node_at(hit, mb.position)
 					if target >= 0 and (mb.position - _press_pos).length() < TAP_PIXELS:
 						selected = target
-						hud.inspect(target, cam)
+						_queue_inspect(target)
 				drag_from = -1
 				pan_from = Vector3.INF
 				drag_mesh.clear_surfaces()
@@ -712,8 +717,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			cam_target += pan_from - hit
 			_place_camera()
 	elif event is InputEventMagnifyGesture:
-		cam_dist = clampf(cam_dist / (event as InputEventMagnifyGesture).factor, 25.0, 300.0)
-		_place_camera()
+		pass                                          # fixed camera: no zoom
 
 
 func _ground(screen: Vector2) -> Vector3:
@@ -830,3 +834,17 @@ func _horde_at(p: Vector3) -> Dictionary:
 				best = h
 			k += 1.2
 	return best
+
+
+func _queue_inspect(id: int) -> void:
+	## Alpha 11: a single tap inspects only once it is clear no second tap is coming, so a
+	## double-tap upgrade never flashes the inspector open.
+	_pending_inspect = id
+	_pending_at = Time.get_ticks_msec() / 1000.0
+
+
+func _flush_inspect() -> void:
+	if _pending_inspect >= 0 and Time.get_ticks_msec() / 1000.0 - _pending_at >= DOUBLE_TAP_WINDOW:
+		var id := _pending_inspect
+		_pending_inspect = -1
+		hud.inspect(id, cam)

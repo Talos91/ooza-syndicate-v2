@@ -124,10 +124,12 @@ func setup(m: Node3D) -> void:
 		column.add_theme_constant_override("separation", 0)
 		column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		badge.add_child(column)
-		var l := text_label("", 22)
+		var l := text_label("", 28)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.add_theme_constant_override("outline_size", 4)
+		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 		column.add_child(l)
-		var sub := text_label("", 12, Color("c8e6ee"))
+		var sub := text_label("", 13, Color("c8e6ee"))
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		column.add_child(sub)
 		var shield_bar := ProgressBar.new()
@@ -424,6 +426,11 @@ func _badges(cam: Camera3D) -> void:
 			parts.append("FORGE")
 		else:
 			parts.append("T%d" % n["tier"])
+			if not Rules.bridge_combat and owner != "" and sim.allied(owner, human) and n["build_kind"] == "":
+				# CLASSIC: Alpha 11's numbers on the badge - production and the upgrade price
+				parts.append("+%.1f/s" % Rules.shown_f(sim.production(n)))
+				if n["tier"] < 4:
+					parts.append("UP %d" % Rules.shown(Sim.vat_cost(n)))
 		if n["build_kind"] != "":
 			parts.append("BUILD %ds" % int(ceil(n["build_timer"])))
 		if order_shown:
@@ -444,15 +451,16 @@ func _badges(cam: Camera3D) -> void:
 		var build_bar: ProgressBar = b["build"]
 		build_bar.visible = n["build_kind"] != ""
 		build_bar.value = 100.0 * Sim.build_progress(n)
-		# below the platform's near rim, never over the vat (Daniele: "the UX covers the whole vat")
+		# hanging from the platform's near rim: clearly that node's, never over the vat (Alpha 14
+		# playtest: "hard to read where unit counts are")
 		var down := Vector3(0, 0, 1).rotated(Vector3.UP, main.cam_yaw)
-		var anchor: Vector3 = n["pos"] + down * (Rules.R + 1.2) - Vector3(0, 2.0, 0)   # under the rim, below the deck plane
+		var anchor: Vector3 = n["pos"] + down * (Rules.R - 0.4) + Vector3(0, 0.2, 0)
 		if cam.is_position_behind(anchor):
 			panel.visible = false
 			continue
 		var p := cam.unproject_position(anchor)
 		panel.size = panel.get_combined_minimum_size()
-		panel.position = p - Vector2(panel.size.x / 2.0, -2.0)
+		panel.position = p - Vector2(panel.size.x / 2.0, panel.size.y * 0.25)
 
 
 # ------------------------------------------------------------------ inspector (Alpha 11 ring)
@@ -556,10 +564,17 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		var units := "%d / %d units" % [Rules.shown(n["units"]), Rules.shown(Rules.CAPS[n["tier"]])] if Sim.has_vat(n) else "%d units" % Rules.shown(n["units"])
 		lines.append("%s · %s · %s" % [who, what, units])
 		if owner != "":
+			# Alpha 11's status line: production, and what a double-tap upgrade costs
 			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) else "no vat - garrison must be fed"
-			var cap: float = maxf(Rules.SHIELD_FRACTION * n["units"], 0.001)
-			status += " | passing enemies fight this garrison"
+			var up := sim.upgrade_cost(n)
+			if owner == human and up > 0:
+				status += " | Double-tap: %d units" % Rules.shown(up)
+			elif owner == human and Sim.has_vat(n) and n["tier"] >= 4:
+				status += " | MAX TIER"
 			lines.append(status)
+			lines.append("garrison %s | attack %d%% | speed %d%%" % [
+					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0),
+					roundi(sim.stat(owner, "speed") * 100.0)])
 	if n["relay"] != "":
 		var states := sim.relay_states(n)
 		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()

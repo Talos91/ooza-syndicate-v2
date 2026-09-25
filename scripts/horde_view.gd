@@ -147,9 +147,9 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 	if not pools.has(h["id"]):
 		var label := Label3D.new()
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.pixel_size = 0.016
-		label.font_size = 80
-		label.outline_size = 20
+		label.pixel_size = 0.014
+		label.font_size = 56                           # smaller: the badge is the number to read
+		label.outline_size = 16
 		label.no_depth_test = true
 		label.modulate = Rules.seat_color(h["owner"])
 		add_child(label)
@@ -490,8 +490,8 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 			var faction: String = sim.factions.get(seat, "null")
 			if classic:                                # a ring of creatures, no goo
 				mi.visible = false
-				if seat == "" or float(i) / Rules.RIVER_SLOTS > fill + 0.08:
-					continue
+				if seat == "" or seat == n["owner"] or not faces_in[i]:
+					continue                              # no loitering garrison: only attackers on the platform show
 				var ua := TAU * i / Rules.RIVER_SLOTS
 				var ur := Vector3(cos(ua), 0.0, sin(ua))
 				var bob := absf(sin(sim.time * (8.0 if contested else 2.0) + i)) * (0.25 if contested else 0.05)
