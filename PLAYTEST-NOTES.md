@@ -280,6 +280,21 @@ decide if mechanics are good or not... only thing I can save on is textures or b
     Debug-panel sliders with the same defaults (deck 2 m/s, platform x6, door 48/s) - the numbers
     to bake into `rules.gd` are still Daniele's call from play.
 
+## 2026-09-25 - Daniele, first Alpha 12 playtest (v0.12.1)
+
+36. **"Enemy managed to cross a bridge even if there was no bridge."** Routes were fixed at order
+    time; a deck that fell or closed afterwards was still walked. *Done:* `Sim._check_missing_decks`
+    - reaching the pier of a missing deck re-routes from that node (or stops there), anything
+    already on it falls.
+37. **"The map got cut on chaos; chaos cannot activate on maps like Two Piers; we can't leave
+    isolated nodes."** *Done:* every drop order keeps the remaining map connected to the final;
+    chaos keeps homes as late as connectivity allows and is refused (inward instead) where a home
+    would have to fall in the first half - which is Two Piers and the other line/tree maps.
+    Design note in OPEN-QUESTIONS: rules §10's "home nodes never before the end" cannot hold
+    literally where homes are leaves.
+38. **"The UX covers the whole vat and can't see what's going on."** *Done:* badges sit below the
+    platform's near rim, smaller; the inspector ring has no fill.
+
 ## Known gaps after Alpha 12 (not playtest findings)
 
 - Abilities / Ooze Factory (pending SKILLS-2.0-DRAFT approval), team modes and multiplayer,

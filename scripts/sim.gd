@@ -869,6 +869,7 @@ func step(dt: float) -> void:
 		n["streaming"]["remaining"] -= x
 		if n["streaming"]["remaining"] <= 0.001 or n["units"] <= 0.0:
 			_end_streaming(n, "done")
+	_check_missing_decks()
 	for h in hordes:
 		if h["state"] == "move" and not h.get("blocked", false):
 			var fast_here: bool = sample(h, h["s"])[2]
@@ -943,6 +944,57 @@ func step(dt: float) -> void:
 		elif h["state"] == "move" and fighting.has(h["id"]):
 			h["state"] = "fight"
 	_check_end()
+
+
+func _check_missing_decks() -> void:
+	## A horde never walks across a deck that is no longer there (Daniele, Alpha 12 playtest: "the
+	## enemy crossed a bridge even if there was no bridge"). A route is computed when the order is
+	## given; if a deck on it has since closed (relay) or fallen (Last Stand), the horde reaching that
+	## pier re-routes from the node it stands on - or arrives there if no route is left. Anything
+	## already out on the missing deck falls.
+	for h in hordes.duplicate():
+		if not (h in hordes) or h["state"] == "absorb" or h.has("ride"):
+			continue
+		var sp := _current_span(h)
+		if sp.is_empty():
+			continue
+		var ei: int = sp["edge"]
+		var ctrl: int = edge_controller.get(ei, -1)
+		if ctrl >= 0 and ei in nodes[ctrl]["moving_edges"]:
+			continue                                      # mid-motion: the tick decides its fate
+		if is_edge_open(ei):
+			continue
+		if h["s"] - sp["s0"] > 1.0:                       # already out on it: that part is gone
+			_cut_range(h, sp["s0"], sp["s1"], "fall", -1)
+			continue
+		var from_node: int = _node_before(h, sp["s0"])
+		if collapsed.get(from_node, false):
+			_cut_range(h, 0.0, h["L"], "fall", -1)
+			continue
+		if h["streaming"]:
+			var src: Dictionary = nodes[h["route"][0]]
+			if src["streaming"].get("hid", -1) == h["id"]:
+				_end_streaming(src, "rerouted")
+		if not (h in hordes):
+			continue
+		var route := find_route(from_node, h["target"])
+		if route.size() < 2:
+			_arrive(nodes[from_node], h, h["units"])
+			h["units"] = 0.0
+			_kill_horde(h, "absorbed")
+			continue
+		var keep := chain_length(h)
+		_set_route(h, route)
+		h["s"] = minf(keep, h["spans"][0]["s0"])
+		h["ordered"] = h["units"]
+		events.append({"t": time, "type": "rerouted", "seat": h["owner"], "node": from_node})
+
+
+func _current_span(h: Dictionary) -> Dictionary:
+	for sp in h["spans"]:
+		if h["s"] >= sp["s0"] and h["s"] <= sp["s1"]:
+			return sp
+	return {}
 
 
 func _crossing_shield(h: Dictionary) -> bool:
@@ -1260,27 +1312,14 @@ func _start_last_stand() -> void:
 	for n in nodes:
 		if n["center"]:
 			centre = n["pos"]
-	var order := []
-	for n in nodes:
-		if n["id"] != last_stand_final and not collapsed.get(n["id"], false):
-			order.append(n["id"])
-	match last_stand_method:
-		"outward":
-			order.sort_custom(func(a, b): return nodes[a]["pos"].distance_to(centre) < nodes[b]["pos"].distance_to(centre))
-		"chaos":
-			for i in range(order.size() - 1, 0, -1):
-				var j := rng.randi_range(0, i)
-				var tmp = order[i]
-				order[i] = order[j]
-				order[j] = tmp
-			var late := []                                # home nodes never before the end
-			for id in order.duplicate():
-				if id in homes.values():
-					order.erase(id)
-					late.append(id)
-			order.append_array(late)
-		_:
-			order.sort_custom(func(a, b): return nodes[a]["pos"].distance_to(centre) > nodes[b]["pos"].distance_to(centre))
+	var order := _collapse_order(last_stand_method, centre)
+	if order.is_empty() and last_stand_method == "chaos":
+		# chaos would have to cut the map into islands or drop a home early (e.g. a line map like
+		# Two Piers) - Daniele: "chaos cannot activate on maps like Two Piers; we can't leave
+		# isolated nodes". Fall back to inward.
+		last_stand_method = "inward"
+		last_stand_final = inward_final
+		order = _collapse_order("inward", centre)
 	last_stand_order = order
 	last_stand_next = 0
 	last_stand_wave = clampf((Rules.MATCH_HARD_END - 90.0 - Rules.LAST_STAND_TIME) / maxf(order.size(), 1.0),
@@ -1294,6 +1333,80 @@ func _start_last_stand() -> void:
 		last_stand_warn_t = Rules.LAST_STAND_WARNING
 		events.append({"t": time, "type": "collapse_warning", "node": last_stand_warn_node})
 		fx_events.append({"type": "collapse_warning", "node": last_stand_warn_node})
+
+
+func _collapse_order(method: String, centre: Vector3) -> Array:
+	## Builds the drop order for a method so that NO drop ever cuts the remaining map into islands
+	## (every surviving node keeps a physical path to the final). Preference per method: inward =
+	## farthest from the centre first, outward = nearest first, chaos = seeded random with home
+	## nodes never before the end. Returns [] if the method cannot be honoured on this map.
+	var remaining := []
+	for n in nodes:
+		if n["id"] != last_stand_final and not collapsed.get(n["id"], false):
+			remaining.append(n["id"])
+	var pref := remaining.duplicate()
+	match method:
+		"outward":
+			pref.sort_custom(func(a, b): return nodes[a]["pos"].distance_to(centre) < nodes[b]["pos"].distance_to(centre))
+		"chaos":
+			for i in range(pref.size() - 1, 0, -1):
+				var j := rng.randi_range(0, i)
+				var tmp = pref[i]
+				pref[i] = pref[j]
+				pref[j] = tmp
+		_:
+			pref.sort_custom(func(a, b): return nodes[a]["pos"].distance_to(centre) > nodes[b]["pos"].distance_to(centre))
+	var order := []
+	var gone := collapsed.duplicate()
+	while not remaining.is_empty():
+		var pick := -1
+		for pass_homes in [false, true]:
+			if method != "chaos" and not pass_homes:
+				continue                                  # only chaos keeps homes for the end
+			for id in pref:
+				if not (id in remaining):
+					continue
+				if not pass_homes and id in homes.values():
+					continue
+				gone[id] = true
+				var ok := _connected_to(last_stand_final, gone)
+				gone.erase(id)
+				if ok:
+					pick = id
+					break
+			if pick >= 0:
+				break
+		if pick < 0:
+			return []
+		order.append(pick)
+		remaining.erase(pick)
+		gone[pick] = true
+	if method == "chaos":
+		# "home nodes never before the end" can't hold literally on maps whose homes are leaves;
+		# homes are kept as late as connectivity allows, and chaos is only offered where no home
+		# has to fall in the first half of the order (otherwise it is just inward with noise)
+		for k in range(order.size() / 2):
+			if order[k] in homes.values():
+				return []
+	return order
+
+
+func _connected_to(root: int, gone: Dictionary) -> bool:
+	## Every node not in `gone` can still reach `root` over physical decks (relay states ignored).
+	var seen := {root: true}
+	var open := [root]
+	while not open.is_empty():
+		var cur: int = open.pop_front()
+		for link in adj[cur]:
+			var nb: int = link[0]
+			if seen.has(nb) or gone.get(nb, false):
+				continue
+			seen[nb] = true
+			open.append(nb)
+	for n in nodes:
+		if not gone.get(n["id"], false) and not seen.has(n["id"]):
+			return false
+	return true
 
 
 func drop_order_of(node_id: int) -> int:

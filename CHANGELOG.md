@@ -1,5 +1,21 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.12.1 - 2026-09-25 (Daniele's first Alpha 12 playtest)
+
+- **No horde crosses a deck that is gone.** A route is computed when the order is given; if a deck
+  on it has closed (relay) or fallen (Last Stand) by the time the horde reaches that pier, it now
+  re-routes from the node it stands on, or stops there (reinforce / siege) when no route is left.
+  Anything already out on the missing deck falls. (Daniele: "the enemy crossed a bridge even if
+  there was no bridge".)
+- **The Last Stand never cuts the map into islands.** Every drop order (inward, outward, chaos) is
+  built so each surviving node keeps a physical path to the final. Chaos keeps home nodes as late
+  as connectivity allows and is only offered where no home would have to fall in the first half
+  of the order; otherwise it falls back to inward (so it never activates on Two Piers). (Daniele:
+  "the map got cut on chaos... we can't leave isolated nodes".)
+- **Badges moved below the platform rim** and shrunk; the inspector ring is a ring only - the vat
+  and its river stay visible. (Daniele: "the UX covers the whole vat".)
+- Tests: 150 checks.
+
 ## 0.12.0 "Alpha 12" - 2026-09-25
 
 The "bring it back to something we can call an alpha" pass (Daniele: "implement all mechanics, all

@@ -439,9 +439,74 @@ func _init() -> void:
 	run_until(sim19, func(): return sim19.over, 200.0, 0.5)
 	check(sim19.over and sim19.winner == "A", "with only its home, B is eliminated when the collapse takes it (winner %s at %.0f s)" % [sim19.winner, sim19.time])
 	check(sim19.eliminated.has("B"), "an elimination is recorded")
-	# outward is only offered on maps that author an outward final
 	var ls_map := MapBuilder.load_map("res://maps/007-long-span.json")
 	var ls_pos := MapBuilder.layout(ls_map)
+	# no horde ever crosses a deck that is gone (Daniele: "the enemy crossed a bridge even if there
+	# was no bridge"): a horde whose route runs over a fallen node's deck re-routes at the pier, or
+	# stops at that node when no route is left
+	var sim21 := Sim.new()
+	sim21.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim21.nodes[4]["units"] = 200.0
+	var h21 := sim21.send(4, 3, 1.0)                  # B: 4 -> 2 -> 0 -> 1 -> 3
+	run_until(sim21, func(): return h21["s"] > h21["spans"][0]["s0"] + 2.0, 20.0)
+	sim21.last_stand_final = 1
+	sim21._drop_node(0)                               # the centre falls while B is still on deck 4-2
+	var crossed := [false]
+	var dead_span: Dictionary = h21["spans"][1]
+	run_until(sim21, func():
+		if h21 in sim21.hordes and h21["route"].has(0) and h21["s"] > dead_span["s0"] + 1.5:
+			crossed[0] = true
+		return not (h21 in sim21.hordes), 60.0)
+	check(not crossed[0], "a horde never walks onto the fallen node's deck")
+	check(sim21.fall_losses.get("B", 0.0) == 0.0, "nothing fell: it stopped at the pier instead")
+	check(sim21.nodes[2]["siege"].get("B", 0.0) > 0.0 or sim21.nodes[2]["owner"] == "B", "with no route left it stays at node 2")
+	# the drop order never cuts the map into islands; chaos falls back to inward where "homes last"
+	# and connectivity cannot both hold (Two Piers is a line)
+	var never_chaos := true
+	for seed_value in range(10):
+		var s22 := Sim.new()
+		s22.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, seed_value)
+		s22.time = Rules.LAST_STAND_TIME
+		s22.step(0.1)
+		if s22.last_stand_method == "chaos":
+			never_chaos = false
+		var gone := {}
+		for id in s22.last_stand_order:
+			gone[id] = true
+			if not s22._connected_to(s22.last_stand_final, gone):
+				check(false, "Two Piers order isolates a node after dropping %d (seed %d)" % [id, seed_value])
+	check(never_chaos, "chaos never activates on Two Piers (falls back to inward)")
+	var chaos_seen := false
+	for seed_value in range(16):
+		var s23 := Sim.new()
+		s23.setup(ls_map, ls_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, seed_value)
+		s23.time = Rules.LAST_STAND_TIME
+		s23.step(0.1)
+		var gone := {}
+		var isolated := false
+		for id in s23.last_stand_order:
+			gone[id] = true
+			if not s23._connected_to(s23.last_stand_final, gone):
+				isolated = true
+		check(not isolated, "Long Span %s order (seed %d) never isolates a node" % [s23.last_stand_method, seed_value])
+	for seed_value in range(16):
+		var s24 := Sim.new()
+		s24.setup(rot_map, rot_pos, {7: "A", 10: "B"}, {"A": "null", "B": "ember"}, seed_value)
+		s24.time = Rules.LAST_STAND_TIME
+		s24.step(0.1)
+		var gone := {}
+		for id in s24.last_stand_order:
+			gone[id] = true
+			if not s24._connected_to(s24.last_stand_final, gone):
+				check(false, "Switchback %s order isolates a node (seed %d)" % [s24.last_stand_method, seed_value])
+		if s24.last_stand_method == "chaos":
+			chaos_seen = true
+			var half: int = s24.last_stand_order.size() / 2
+			check(s24.last_stand_order.find(7) >= half and s24.last_stand_order.find(10) >= half,
+					"chaos keeps the homes out of the first half of the order (seed %d)" % seed_value)
+	check(chaos_seen, "chaos is still possible on a ring map like Switchback Foundry")
+
+	# outward is only offered on maps that author an outward final
 	var seen_methods := {}
 	for seed_value in range(12):
 		var s20 := Sim.new()

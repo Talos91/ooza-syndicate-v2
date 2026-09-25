@@ -119,7 +119,7 @@ func setup(m: Node3D) -> void:
 	for n in sim.nodes:
 		var badge := PanelContainer.new()
 		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		badge.custom_minimum_size = Vector2(70, 44) * ui_scale
+		badge.custom_minimum_size = Vector2(62, 38) * ui_scale
 		var column := VBoxContainer.new()
 		column.add_theme_constant_override("separation", 0)
 		column.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -309,7 +309,7 @@ func top_used() -> float:
 
 
 func bottom_used() -> float:
-	return margins.w + (dock.size.y if dock else 0.0) * (1.0 if not mobile else 0.5) + (30.0 if not mobile else 0.0)
+	return margins.w + (dock.size.y if dock else 0.0) * (1.0 if not mobile else 0.5) + (30.0 if not mobile else 0.0) + 46.0 * ui_scale   # room for the badge under the lowest rim
 
 
 func pointer_over_ui(p: Vector2) -> bool:
@@ -442,13 +442,15 @@ func _badges(cam: Camera3D) -> void:
 		var build_bar: ProgressBar = b["build"]
 		build_bar.visible = n["build_kind"] != ""
 		build_bar.value = 100.0 * Sim.build_progress(n)
-		var top: Vector3 = n["pos"] + Vector3(0, 8.5, 0)
-		if cam.is_position_behind(top):
+		# below the platform's near rim, never over the vat (Daniele: "the UX covers the whole vat")
+		var down := Vector3(0, 0, 1).rotated(Vector3.UP, main.cam_yaw)
+		var anchor: Vector3 = n["pos"] + down * (Rules.R + 0.6)
+		if cam.is_position_behind(anchor):
 			panel.visible = false
 			continue
-		var p := cam.unproject_position(top)
+		var p := cam.unproject_position(anchor)
 		panel.size = panel.get_combined_minimum_size()
-		panel.position = p - Vector2(panel.size.x / 2.0, 0)
+		panel.position = p - Vector2(panel.size.x / 2.0, -2.0)
 
 
 # ------------------------------------------------------------------ inspector (Alpha 11 ring)
@@ -468,7 +470,7 @@ func inspect(id: int, cam: Camera3D) -> void:
 	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := panel_style(col)
 	style.set_corner_radius_all(int(76 * ui_scale))
-	style.bg_color = Color(0.09, 0.13, 0.17, 0.35)
+	style.bg_color = Color(0.09, 0.13, 0.17, 0.0)     # a ring only: the vat stays visible
 	ring.add_theme_stylebox_override("panel", style)
 	inspector.add_child(ring)
 	var close := button("X", close_inspector, 64, 52 if not mobile else 80)
