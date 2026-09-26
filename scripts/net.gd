@@ -3,7 +3,13 @@ extends Node
 ## Game/Alpha 11/scripts/network.gd (the P2P half) to 2.0's seats, maps and Sim:
 ## - the browser transport is web/peer-transport.js (window.OozePeer, room prefix "ooze20-");
 ## - four-character room codes, 2-6 players: free-for-all (1v1, FFA 3-5) and teams (2v2, 3v3, 2v2v2),
-##   host-assigned seats (join order);
+##   host-assigned seats (join order); in team modes every player can switch team in the lobby (JOIN
+##   TEAM, host-validated: a team never exceeds its seats; the host can move players too) and the team
+##   decides the seat the player gets at DEPLOY (Daniele, 0.18.7: "there should be so i can switch to my
+##   gf team");
+## - room colours (Daniele, 0.18.7: the same colours on every screen): every player picks a hue in the
+##   lobby, unique in the room, teammates in one hue family (Rules.colour_families); the host validates,
+##   and the launch carries the seat -> hue map (room_colours) that every browser renders;
 ## - the HOST's Sim is the only simulation. Guests send orders (send, recall, upgrade, build, switch,
 ##   restore); the host validates ownership, rate-limits and answers every order with the same
 ##   feedback line the offline game toasts. The host broadcasts compressed snapshots ~10 Hz plus the
@@ -20,7 +26,7 @@ signal rematch_changed
 signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
-const VERSION_TAG := "ooze20-net-1"               # plus Rules.VERSION: guests must match the host exactly
+const VERSION_TAG := "ooze20-net-2"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours)
 const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
 const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
 const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
@@ -42,13 +48,13 @@ var hosting := false
 var connected := false                             # host: room open; guest: in the lobby
 var room_code := ""
 var status := ""
-var roster := {}                                   # player id -> {"faction", "slot"}; host is 1
+var roster := {}                                   # player id -> {"faction", "slot", "colour"}; host is 1
 var links := {}                                    # host: remote peer string -> player id
 var next_peer := 2
 var remote_host := ""
 var assigned_id := 0                               # guest: the id the host gave us
 var preferred_faction := "null"
-var colour := "A"                                  # your own view colour (local, like offline)
+var colour := ""                                   # the hue you asked for (a Rules.HUES key; "" = the host picks one)
 # room settings (host decides; guests receive them with the lobby)
 var mode := "1v1"
 var map_path := ""                                   # set from the map pool when a room opens
@@ -133,6 +139,147 @@ func team_of_slot(slot: int) -> int:
 	return 0 if slot < 2 else 1
 
 
+func team_ids() -> Array:
+	## Team modes: the teams the room's map seats this mode in, in seat order (FFA: none).
+	var out := []
+	if mode in TEAM_MODES:
+		for slot in range(slots()):
+			if not team_of_slot(slot) in out:
+				out.append(team_of_slot(slot))
+	return out
+
+
+func team_of(id: int) -> int:
+	return team_of_slot(int(roster[id]["slot"])) if roster.has(id) else -1
+
+
+func free_slot_in(team: int) -> int:
+	## The first seat of `team` no player holds (-1: the team is full). A seat the AI would fill is free.
+	var taken := {}
+	for player in roster.values():
+		taken[int(player["slot"])] = true
+	for slot in range(slots()):
+		if not taken.has(slot) and team_of_slot(slot) == team:
+			return slot
+	return -1
+
+
+func colour_of(id: int) -> String:
+	return str(roster[id].get("colour", "")) if roster.has(id) else ""
+
+
+func families() -> Array:
+	## Team modes: the hue families the teams take (Rules.colour_families); FFA: none.
+	return Rules.colour_families(team_ids().size()) if mode in TEAM_MODES else []
+
+
+static func family_of(fams: Array, key: String) -> int:
+	for i in range(fams.size()):
+		if key in fams[i]:
+			return i
+	return -1
+
+
+func colour_allowed(id: int, key: String) -> bool:
+	## A hue is free for `id` when no other player has it and, in team modes, it belongs to a family no
+	## player of another team uses (teammates share one family; picking another free family moves your
+	## whole team to it - _fix_colours).
+	if not roster.has(id) or not Rules.HUES.has(key):
+		return false
+	var fams := families()
+	var fam := family_of(fams, key)
+	if mode in TEAM_MODES and fam < 0:
+		return false
+	for other in roster:
+		if int(other) == id:
+			continue
+		var c := colour_of(int(other))
+		if c == key or (fam >= 0 and team_of(int(other)) != team_of(id) and family_of(fams, c) == fam):
+			return false
+	return true
+
+
+func room_colours() -> Dictionary:
+	## Seat -> hue key for every seat of the mode: the players' picks, then the AI seats - FFA the next
+	## free hue (Rules.FFA_ORDER), teams a free hue of the team's family (an all-AI team takes a family
+	## nobody uses). The host sends it with the launch; every browser renders exactly this map.
+	var out := {}
+	var used := {}
+	for id in roster:
+		var c := colour_of(int(id))
+		if Rules.HUES.has(c) and not used.has(c):
+			out[seat_of(int(id))] = c
+			used[c] = true
+	var fams := families()
+	var team_fam := {}
+	var fam_used := {}
+	if not fams.is_empty():
+		for slot in range(slots()):                    # the players' teams keep their family
+			var f := family_of(fams, str(out.get(SEATS[slot], "")))
+			if f >= 0 and not team_fam.has(team_of_slot(slot)) and not fam_used.has(f):
+				team_fam[team_of_slot(slot)] = f
+				fam_used[f] = true
+		for slot in range(slots()):                    # an all-AI team: the first free family
+			var t := team_of_slot(slot)
+			for f in range(fams.size()):
+				if not team_fam.has(t) and not fam_used.has(f):
+					team_fam[t] = f
+					fam_used[f] = true
+	for slot in range(slots()):
+		if out.has(SEATS[slot]):
+			continue
+		var pool: Array = Rules.FFA_ORDER
+		if team_fam.has(team_of_slot(slot)):
+			pool = (fams[team_fam[team_of_slot(slot)]] as Array) + Rules.FFA_ORDER   # its family first
+		for k in pool:
+			if not used.has(k):
+				out[SEATS[slot]] = k
+				used[k] = true
+				break
+	return out
+
+
+func _fix_colours(first := -1, last := -1) -> void:
+	## Host: give every player a valid hue after any lobby change - unique; in team modes each team in one
+	## family (claimed by its first player in seat order whose hue is in a family still free; `first`
+	## goes before everyone, `last` after: a pick wins, a newcomer or a team switcher adapts).
+	var ids := roster.keys()
+	ids.sort_custom(func(a, b): return int(roster[a]["slot"]) < int(roster[b]["slot"]))
+	if roster.has(first):
+		ids.erase(first)
+		ids.push_front(first)
+	if roster.has(last):
+		ids.erase(last)
+		ids.push_back(last)
+	var used := {}
+	var fams := families()
+	var team_fam := {}
+	var fam_used := {}
+	for id in ids:
+		var f := family_of(fams, colour_of(int(id)))
+		if f >= 0 and not team_fam.has(team_of(int(id))) and not fam_used.has(f):
+			team_fam[team_of(int(id))] = f
+			fam_used[f] = true
+	for id in ids:
+		for f in range(fams.size()):
+			if not team_fam.has(team_of(int(id))) and not fam_used.has(f):
+				team_fam[team_of(int(id))] = f
+				fam_used[f] = true
+	for id in ids:
+		var c := colour_of(int(id))
+		var pool: Array = Rules.FFA_ORDER
+		if team_fam.has(team_of(int(id))):
+			pool = fams[team_fam[team_of(int(id))]]
+		if not c in pool or used.has(c):
+			c = ""
+			for k in pool + Rules.FFA_ORDER:
+				if not used.has(k):
+					c = k
+					break
+		roster[id]["colour"] = c
+		used[c] = true
+
+
 func can_start() -> bool:
 	var full := roster.size() == slots() or (ai_fill != "" and roster.size() >= 1)
 	return hosting and connected and not active and full and map_offers(map_path, mode)
@@ -211,13 +358,14 @@ func _start(host: bool, faction: String, code: String) -> Error:
 	preferred_faction = faction
 	_elapsed = 0.0
 	if host:
-		roster = {1: {"faction": faction, "slot": 0}}
+		roster = {1: {"faction": faction, "slot": 0, "colour": colour}}
 		if not map_offers(map_path, mode) or not map_path in MapPool.all():
 			var pool := maps_for(mode)
 			if pool.is_empty():
 				mode = "1v1"
 				pool = maps_for(mode)
 			map_path = pool[0] if not pool.is_empty() else ""
+		_fix_colours()
 	bridge.start(host, code.strip_edges().to_upper())
 	status = "Connecting to the room service..."
 	lobby_changed.emit()
@@ -289,16 +437,19 @@ func set_mode(m: String) -> void:
 	var pool := maps_for(m)
 	if pool.is_empty():                                # no map seats this mode: keep the current one
 		return
+	var before := _teams_now()                         # team modes: everyone keeps their team where it exists
 	mode = m
 	if not map_offers(map_path, mode):
 		map_path = pool[0]
-	_reseat()
+	_reseat(before)
 	publish_lobby()
 
 
 func set_map(path: String) -> void:
 	if hosting and not active and map_offers(path, mode):
+		var before := _teams_now()                     # another map may seat the teams differently
 		map_path = path
+		_reseat(before)
 		publish_lobby()
 
 
@@ -326,12 +477,96 @@ func set_faction(f: String) -> void:
 		_send_to_host({"op": "faction", "faction": f})
 
 
-func _reseat() -> void:
-	## Seats stay packed from A in join order (host-assigned).
+func set_colour(key: String) -> void:
+	## Your hue in the lobby: the host validates it (pick_colour) and publishes the room.
+	if active or not Rules.HUES.has(key):
+		return
+	colour = key
+	if hosting:
+		pick_colour(1, key)
+	else:
+		_send_to_host({"op": "colour", "colour": key})
+
+
+func pick_colour(id: int, key: String) -> bool:
+	if not hosting or active or not colour_allowed(id, key):
+		return false
+	roster[id]["colour"] = key
+	_fix_colours(id)                                   # the pick wins; teammates follow its family
+	publish_lobby()
+	return true
+
+
+func switch_team(team: int) -> void:
+	## JOIN TEAM in the lobby: the host validates it (move_to_team).
+	if active:
+		return
+	if hosting:
+		move_to_team(1, team)
+	else:
+		_send_to_host({"op": "team", "team": team})
+
+
+func move_to_team(id: int, team: int) -> bool:
+	## Host: a player (their own JOIN TEAM, or the host moving them) takes the first free seat of `team`;
+	## a full team takes nobody. Empty seats stay for the AI (EMPTY SEATS) or later players.
+	if not hosting or active or not mode in TEAM_MODES or not roster.has(id) or not team in team_ids() or team_of(id) == team:
+		return false
+	var slot := free_slot_in(team)
+	if slot < 0:
+		return false
+	roster[id]["slot"] = slot
+	_fix_colours(-1, id)                               # the newcomer takes the team's family
+	publish_lobby()
+	return true
+
+
+func _teams_now() -> Dictionary:
+	var out := {}
+	if mode in TEAM_MODES:
+		for id in roster:
+			out[id] = team_of(int(id))
+	return out
+
+
+func _reseat(teams := {}) -> void:
+	## FFA: seats stay packed from A in join order (host-assigned). Team modes: every player keeps their
+	## seat, or their team (`teams`: id -> team, taken before a mode or map change) in its first free
+	## seat; a player whose team is gone or full takes the first free seat. Colours follow.
 	var ids := roster.keys()
 	ids.sort_custom(func(a, b): return int(roster[a]["slot"]) < int(roster[b]["slot"]))
-	for i in range(ids.size()):
-		roster[ids[i]]["slot"] = i
+	if not mode in TEAM_MODES:
+		for i in range(ids.size()):
+			roster[ids[i]]["slot"] = i
+		_fix_colours()
+		return
+	var used := {}
+	var left := []
+	for id in ids:
+		var s := int(roster[id]["slot"])
+		var want := int(teams.get(id, team_of_slot(s) if s < slots() else -1))
+		if s < slots() and not used.has(s) and team_of_slot(s) == want:
+			used[s] = true
+		else:
+			left.append([id, want])
+	var still := []
+	for e in left:
+		var placed := false
+		for s in range(slots()):
+			if not used.has(s) and team_of_slot(s) == e[1]:
+				roster[e[0]]["slot"] = s
+				used[s] = true
+				placed = true
+				break
+		if not placed:
+			still.append(e[0])
+	for id in still:
+		for s in range(slots()):
+			if not used.has(s):
+				roster[id]["slot"] = s
+				used[s] = true
+				break
+	_fix_colours()
 
 
 func publish_lobby() -> void:
@@ -357,7 +592,11 @@ func _register(remote: String, id: int, p: Dictionary) -> void:
 	while slot in used:
 		slot += 1
 	var f := str(p.get("faction", ""))
-	roster[id] = {"faction": f if f in FACTIONS else FACTIONS[slot % FACTIONS.size()], "slot": slot}
+	roster[id] = {"faction": f if f in FACTIONS else FACTIONS[slot % FACTIONS.size()], "slot": slot, "colour": ""}
+	var want := str(p.get("colour", ""))
+	if colour_allowed(id, want):
+		roster[id]["colour"] = want
+	_fix_colours(-1, id)                               # a newcomer's hue gives way to the room's
 	_tokens[id] = _new_token()
 	_send(remote, "identity", {"id": id, "token": _tokens[id]})
 	_send(remote, "chat_history", chat_history)
@@ -412,12 +651,14 @@ func launch_round() -> void:
 		players[seat_of(id)] = roster[id]["faction"]
 	var ai := {}
 	if ai_fill != "":
-		for slot in range(roster.size(), slots()):     # EMPTY SEATS: the AI plays them
+		for slot in range(slots()):                    # EMPTY SEATS: the AI plays them (team modes: any seat)
+			if players.has(SEATS[slot]):
+				continue
 			var free := FACTIONS.filter(func(f): return not f in players.values())
 			players[SEATS[slot]] = free[randi() % free.size()] if not free.is_empty() else FACTIONS[randi() % FACTIONS.size()]
 			ai[SEATS[slot]] = ai_fill
 	var info := {"round": match_round + 1, "map": map_path, "mode": mode, "seed": randi() % 100000,
-			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill,
+			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(),
 			"rules": {"bridge_combat": siege, "last_stand": last_stand, "deck_speed": Rules.deck_speed,
 					"node_speed_mult": Rules.node_speed_mult, "door_rate": Rules.door_rate,
 					"node_fight_mult": Rules.node_fight_mult, "forge_bonus": Rules.forge_bonus,
@@ -828,7 +1069,7 @@ func _poll(dt: float) -> void:
 					next_peer += 1
 				else:
 					remote_host = str(event["peer"])
-					var reg := {"op": "register", "version": version(), "faction": preferred_faction}
+					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour}
 					if not rejoin.is_empty() and str(rejoin["code"]) == room_code:
 						reg["token"] = rejoin["token"]
 					_send_to_host(reg)
@@ -886,6 +1127,12 @@ func _host_receive(remote: String, raw: String) -> void:
 			if f in FACTIONS and not active:
 				roster[id]["faction"] = f
 				publish_lobby()
+		"colour":
+			if p.get("colour", null) is String and not active:
+				pick_colour(id, p["colour"])
+		"team":
+			if _is_int(p.get("team", null)) and not active:
+				move_to_team(id, int(p["team"]))
 		"rematch":
 			if _is_int(p.get("round", null)) and int(p["round"]) == match_round:
 				accept_rematch(id)

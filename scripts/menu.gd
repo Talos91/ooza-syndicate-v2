@@ -8,8 +8,8 @@ extends CanvasLayer
 ## (3D thumbnails + preview) -> 03 SETUP (players, your colour, your faction, rival, difficulty,
 ## SIEGE/BRAWL, Last Stand) -> DEPLOY. OPTIONS holds the match switches (SIEGE/BRAWL, Last Stand,
 ## enemy counts, detail). ONLINE -> CREATE ROOM / JOIN ROOM ->
-## the room lobby (players, faction, map, PLAYERS, SIEGE/BRAWL, Last Stand) -> DEPLOY by the host
-## (Net, peer-to-peer). TUTORIAL is not in 2.0 yet.
+## the room lobby (players, teams, faction, colour, map, PLAYERS, SIEGE/BRAWL, Last Stand) -> DEPLOY by
+## the host (Net, peer-to-peer). TUTORIAL is not in 2.0 yet.
 
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
@@ -40,6 +40,8 @@ const MAP_TYPES := ["all", "brawl", "siege", "core", "alpha 11", "training"]
 const MAP_TYPE_NAMES := {"all": "ALL", "brawl": "BRAWL", "siege": "SIEGE", "core": "CORE", "alpha 11": "ALPHA 11", "training": "TRAINING"}
 var _chat_btn: Button
 var _chat_t := 0.0
+var _move_pick := -1                               # host, team modes: the player picked to MOVE to a team
+const HUE_NAMES := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]   # Rules.HUES, lobby order
 
 
 func setup(m: Node3D) -> void:
@@ -650,31 +652,47 @@ func show_lobby() -> void:
 	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	st.custom_minimum_size = Vector2(770 * K, 0)
 	st.size = Vector2(770 * K, 0)
-	# players
+	# players (0.18.7, Daniele: "there should be so i can switch to my gf team"; every seat's colour is
+	# the same on every screen): team modes list the seats team by team, each team with its JOIN TEAM
+	# control (tall enough for a phone thumb); the host can pick a player's row and MOVE them
 	frame(P(35, 188), P(800, 640))
 	label_at("PLAYERS  %d / %d" % [Net.roster.size(), Net.slots()], P(58, 205), 28)
 	var by_slot := {}
 	for id in Net.roster:
 		by_slot[int(Net.roster[id]["slot"])] = int(id)
-	for i in range(Net.slots()):
-		var y := 258 + i * 76
-		frame(P(58, y), P(754, 68), "row")
-		var seat: String = Net.SEATS[i]
-		label_at(seat, P(78, y + 12), 34, Rules.SEATS.get(seat, Color.WHITE))
-		var team := Net.team_of_slot(i)
-		if team >= 0:
-			label_at("TEAM %d" % (team + 1), P(640, y + 22), 18, Color("aac3cd"))
-		if by_slot.has(i):
-			var id: int = by_slot[i]
-			var f: String = str(Net.roster[id]["faction"])
-			label_at("VIRIDIAN BLOOM" if f == "bloom" else NAMES[f].replace("\n", " "), P(136, y + 18), 24, Rules.FACTIONS[f][1])
-			var tags := ("HOST" if id == 1 else "") + ("  ·  YOU" if id == Net.local_id() else "") + ("  ·  RECONNECTING" if Net.is_away(id) else "")
-			label_at(tags.trim_prefix("  ·  "), P(470, y + 22), 18, Color("ffd15c"))
-		else:
-			label_at("AI  ·  %s  (or a player who joins)" % Net.ai_fill.to_upper() if Net.ai_fill != "" else "open seat - waiting for a player", P(136, y + 22), 18, Color("7795a4"))
-	label_at("YOUR FACTION", P(58, 652), 20, Color("aac3cd"))
-	_faction_row(P(58, 686), P(143, 54))
-	label_at("Seats go in join order. Same factions are allowed; every seat has its own colour.", P(58, 760), 15, Color("7795a4"))
+	if not Net.roster.has(_move_pick) or not host or _move_pick == Net.local_id():
+		_move_pick = -1
+	var colours := Net.room_colours()
+	var team_mode := Net.mode in Net.TEAM_MODES
+	var groups := []                                  # [team, [slots]] in seat order; FFA: one group
+	if team_mode:
+		for t in Net.team_ids():
+			groups.append([t, range(Net.slots()).filter(func(sl): return Net.team_of_slot(sl) == t)])
+	else:
+		groups.append([-1, range(Net.slots())])
+	var row_h: float = minf(76.0, floorf((384.0 - 10.0 * (groups.size() - 1)) / float(Net.slots())))
+	var row_w := 590.0 if team_mode else 754.0
+	var y := 252.0
+	for g in groups:
+		var top := y
+		for i in g[1]:
+			_lobby_row(i, by_slot.get(i, -1), colours, P(58, y), P(row_w, row_h - 8.0), host and team_mode)
+			y += row_h
+		if team_mode:
+			_team_button(int(g[0]), colours, P(660, top), P(152, y - top - 8.0))
+			y += 10.0
+	label_at("FACTION", P(58, 662), 18, Color("aac3cd"))
+	_faction_row(P(190, 646), P(114, 52))
+	label_at("COLOUR", P(58, 728), 18, Color("aac3cd"))
+	_colour_row(P(190, 712), P(74, 52))
+	var hint := "Every seat has one colour, the same on every screen. " + (("Teammates share a hue family (%s); a colour from a free family moves your team to it. " % " / ".join(
+			Net.families().map(func(f): return Rules.FAMILY_NAMES.get(f[0], "")))) if team_mode else "Seats go in join order. ")
+	if team_mode and host:
+		hint += "Host: tap a player, then MOVE on a team."
+	var hl := label_at(hint, P(58, 772), 14, Color("7795a4"))
+	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hl.custom_minimum_size = Vector2(760 * K, 0)
+	hl.size = Vector2(760 * K, 0)
 	# match settings (host decides)
 	map_path = Net.map_path
 	frame(P(855, 188), P(780, 640))
@@ -701,13 +719,7 @@ func show_lobby() -> void:
 		Net.toggle_last_stand()
 		show_lobby())
 	lb.disabled = not host
-	var ckeys := COLOUR_NAMES.keys()
-	var cb := nav_button("YOUR COLOUR / %s" % COLOUR_NAMES[Net.colour], P(878, 750), P(360, 50), func():
-		Net.colour = ckeys[(ckeys.find(Net.colour) + 1) % ckeys.size()]
-		show_lobby())
-	cb.add_theme_font_size_override("font_size", int(round(18 * K)))
-	cb.add_theme_color_override("font_color", Rules.FACTIONS[faction][1] if Net.colour == "faction" else Rules.SEATS[Net.colour])
-	var ab := nav_button("EMPTY SEATS / %s" % ("AI " + Net.ai_fill.to_upper() if Net.ai_fill != "" else "PLAYERS ONLY"), P(1254, 750), P(360, 50), func():
+	var ab := nav_button("EMPTY SEATS / %s" % ("AI " + Net.ai_fill.to_upper() if Net.ai_fill != "" else "PLAYERS ONLY"), P(878, 750), P(736, 50), func():
 		Net.set_ai_fill(Net.AI_FILL[(Net.AI_FILL.find(Net.ai_fill) + 1) % Net.AI_FILL.size()])
 		show_lobby())
 	ab.add_theme_font_size_override("font_size", int(round(17 * K)))
@@ -722,6 +734,81 @@ func show_lobby() -> void:
 			label_at("DEPLOY opens when every seat is filled (or EMPTY SEATS: AI)", P(820, 884), 17, Color("adc7d2"))
 	else:
 		label_at("The host deploys when ready", P(1300, 884), 19, Color("adc7d2"))
+
+
+func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector2, movable: bool) -> void:
+	## One seat of the room: its letter in the seat's colour (the room's colour, the same for everyone),
+	## the player's faction and colour, HOST / YOU. Host, team modes: a guest's row picks them to MOVE.
+	var seat: String = Net.SEATS[i]
+	var col: Color = Rules.HUES.get(str(colours.get(seat, "")), Rules.SEATS.get(seat, Color.WHITE))
+	if movable and id >= 0 and id != Net.local_id():
+		nav_button("", pos, dims, func():
+			_move_pick = -1 if _move_pick == id else id
+			show_lobby())
+	frame(pos, dims, "row")
+	if id == _move_pick and id >= 0:
+		content.add_child(neon_panel(pos, dims, col, true, Color(0, 0, 0, 0)))
+	var mid := pos.y + dims.y / 2.0
+	label_at(seat, Vector2(pos.x + 20 * K, mid - 22 * K), 34, col)
+	var sw := ColorRect.new()                         # the seat's colour as a swatch, named beside it
+	sw.color = col
+	sw.position = Vector2(pos.x + 64 * K, mid - 13 * K)
+	sw.size = P(10, 26)
+	sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(sw)
+	if id >= 0:
+		var f: String = str(Net.roster[id]["faction"])
+		label_at("VIRIDIAN BLOOM" if f == "bloom" else NAMES[f].replace("\n", " "), Vector2(pos.x + 84 * K, mid - 24 * K), 22, Rules.FACTIONS[f][1])
+		var tags := ("HOST" if id == 1 else "") + ("  ·  YOU" if id == Net.local_id() else "") + ("  ·  RECONNECTING" if Net.is_away(id) else "")
+		label_at(("%s  %s" % [str(colours.get(seat, "")).to_upper(), tags]).strip_edges(), Vector2(pos.x + 84 * K, mid + 2 * K), 16, Color("ffd15c"))
+	else:
+		label_at(("AI  ·  %s" % Net.ai_fill.to_upper()) if Net.ai_fill != "" else "open seat - waiting for a player", Vector2(pos.x + 84 * K, mid - 12 * K), 18, Color("7795a4"))
+
+
+func _team_button(t: int, colours: Dictionary, pos: Vector2, dims: Vector2) -> void:
+	## JOIN TEAM n (you), or MOVE X HERE (the host, with a player picked); a full team takes nobody.
+	var me := Net.local_id()
+	var who := _move_pick if _move_pick >= 0 else me
+	var here := Net.team_of(who) == t
+	var room := Net.free_slot_in(t) >= 0
+	var verb := ("YOUR TEAM" if who == me else "%s IS HERE" % Net.seat_of(who)) if here else (("JOIN" if who == me else "MOVE %s HERE" % Net.seat_of(who)) if room else "FULL")
+	var b := nav_button("TEAM %d\n%s" % [Net.team_ids().find(t) + 1, verb], pos, dims, func():
+		if who == me:
+			Net.switch_team(t)
+		else:
+			Net.move_to_team(who, t)
+		_move_pick = -1
+		show_lobby(), not here and room)
+	b.add_theme_font_size_override("font_size", int(round(19 * K)))
+	b.disabled = here or not room or Net.active
+	var first := -1
+	for sl in range(Net.slots()):
+		if Net.team_of_slot(sl) == t:
+			first = sl
+			break
+	if first >= 0:
+		b.add_theme_color_override("font_color", Rules.HUES.get(str(colours.get(Net.SEATS[first], "")), Color.WHITE))
+
+
+func _colour_row(pos: Vector2, dims: Vector2) -> void:
+	## Your colour: one chip per hue; taken hues (and, in team modes, another team's family) are off.
+	var me := Net.local_id()
+	var mine := Net.colour_of(me)
+	for i in range(HUE_NAMES.size()):
+		var k: String = HUE_NAMES[i]
+		var ok := Net.colour_allowed(me, k) or k == mine
+		var b := nav_button(k.to_upper(), pos + Vector2(i * (dims.x + 5 * K), 0), dims, func():
+			Net.set_colour(k)
+			show_lobby(), k == mine)
+		b.add_theme_font_size_override("font_size", int(round(14 * K)))
+		b.add_theme_color_override("font_color", Rules.HUES[k])
+		b.disabled = not ok or Net.active
+		var bar := ColorRect.new()                    # the hue itself under the name (dimmed when off)
+		bar.color = Rules.HUES[k] if ok else Color(Rules.HUES[k], 0.25)
+		bar.position = Vector2(8 * K, dims.y - 11 * K)
+		bar.size = Vector2(dims.x - 16 * K, 5 * K)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(bar)
 
 
 func _step_map(d: int) -> void:

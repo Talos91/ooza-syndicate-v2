@@ -288,6 +288,22 @@ const HUES := {
 const FFA_ORDER := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]
 const TEAM_FAMILIES := [["cyan", "green", "blue"], ["red", "gold", "rose"]]   # 2v2: cyan+green vs red+gold
 const TEAM_FAMILIES_3 := [["cyan", "green", "blue"], ["red", "gold", "orange"], ["purple", "rose"]]   # three-team modes (2v2v2)
+const FAMILY_NAMES := {"cyan": "COOL", "red": "WARM", "purple": "VIOLET"}   # a family by its first hue
+
+
+# ONLINE ROOM COLOURS (Daniele, 0.18.7: "my gf saw herself blue in her game and me i saw myself blue";
+# his decision: the same colours on every screen). Every player picks a hue (a HUES key) in the room
+# lobby, unique in the room; in team modes each team shares one family above and every teammate has a
+# different hue of it. The host sends the seat -> hue map with the launch (Net.room_colours) and every
+# browser applies it with use_colours, so nobody is recoloured on their own screen.
+static func colour_families(team_count: int) -> Array:
+	return TEAM_FAMILIES if team_count <= 2 else TEAM_FAMILIES_3
+
+
+static func use_colours(keys: Dictionary) -> void:
+	seat_colors = {}
+	for s in keys:
+		seat_colors[s] = HUES.get(str(keys[s]), SEATS.get(s, NEUTRAL))
 
 
 static func _hue_gap(a: Color, b: Color) -> float:
