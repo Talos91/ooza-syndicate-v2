@@ -347,7 +347,7 @@ func map_offers(path: String, m: String) -> bool:
 
 
 func maps_for(m: String) -> Array:
-	return MapPool.all().filter(func(p): return map_offers(p, m))
+	return MapPool.battlefield().filter(func(p): return map_offers(p, m))   # TUTORIAL: lesson maps never in a room
 
 
 # ------------------------------------------------------------------ room lifecycle
@@ -387,7 +387,7 @@ func _start(host: bool, faction: String, code: String) -> Error:
 	_elapsed = 0.0
 	if host:
 		roster = {1: {"faction": faction, "slot": 0, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}}
-		if not map_offers(map_path, mode) or not map_path in MapPool.all():
+		if not map_offers(map_path, mode) or not map_path in MapPool.battlefield():   # TUTORIAL: never a lesson map
 			var pool := maps_for(mode)
 			if pool.is_empty():
 				mode = "1v1"
