@@ -10,6 +10,7 @@ extends RefCounted
 
 static var path := "user://armies.cfg"             # tests point this elsewhere
 static var picks := {}                              # faction -> {"active": id, "map": id} (only valid ids)
+static var cosmetic_picks := {}                     # faction -> {family: id} (0.19.0; only valid ids)
 static var saved := true                           # false: the last save failed (no storage) - the menu says so
 static var _loaded := false
 
@@ -19,6 +20,7 @@ static func load_all() -> void:
 	## dropped, so a preset always falls back to the faction's default.
 	_loaded = true
 	picks = {}
+	cosmetic_picks = {}
 	var cf := ConfigFile.new()
 	if cf.load(path) != OK:                         # none yet, or no storage at all (private browsing)
 		return
@@ -30,6 +32,13 @@ static func load_all() -> void:
 				one[slot] = id
 		if not one.is_empty():
 			picks[f] = one
+		var cos := {}
+		for family in Cosmetics.OPTIONS:
+			var id := str(cf.get_value(f, "cosmetic_" + family, ""))
+			if id in (Cosmetics.OPTIONS[family] as Array):
+				cos[family] = id
+		if not cos.is_empty():
+			cosmetic_picks[f] = cos
 
 
 static func reload() -> void:
@@ -86,11 +95,42 @@ static func is_default(faction: String) -> bool:
 	return lo["active"] == d["active"] and lo["map"] == d["map"]
 
 
+# ------------------------------------------------------------------ cosmetics (0.19.0, ARMIES > COSMETICS)
+static func cosmetic_loadout_for(faction: String) -> Dictionary:
+	## Every family's pick for this faction, always all present, "default" filling in the rest.
+	_ensure()
+	var p: Dictionary = cosmetic_picks.get(faction, {})
+	var out := {}
+	for family in Cosmetics.OPTIONS:
+		out[family] = str(p.get(family, "default"))
+	return out
+
+
+static func set_cosmetic_pick(faction: String, family: String, id: String) -> bool:
+	_ensure()
+	if not Rules.FACTION_LOADOUT.has(faction) or not Cosmetics.OPTIONS.has(family) or not id in (Cosmetics.OPTIONS[family] as Array):
+		return false
+	var p: Dictionary = cosmetic_picks.get(faction, {})
+	p[family] = id
+	cosmetic_picks[faction] = p
+	return save_all()
+
+
+static func is_unlocked(_item: String) -> bool:
+	## Every vat variant, skin line and monster alt is unlocked while testing (Daniele, 2026-09-27); a
+	## faction vat by wins with that race and Graduate by finishing the tutorial come later - this stays
+	## the one place that check happens once there is something to check.
+	return true
+
+
 static func save_all() -> bool:
 	var cf := ConfigFile.new()
 	for f in picks:
 		for slot in picks[f]:
 			cf.set_value(f, slot, picks[f][slot])
+	for f in cosmetic_picks:
+		for family in cosmetic_picks[f]:
+			cf.set_value(f, "cosmetic_" + family, cosmetic_picks[f][family])
 	saved = cf.save(path) == OK
 	return saved
 
@@ -106,8 +146,11 @@ static func map_has_relays(m: Dictionary) -> bool:
 # ------------------------------------------------------------------ the room (menu -> Net)
 static func send_to(net: Node, f: String) -> void:
 	## Your preset for faction f becomes your room loadout: before JOIN / CREATE it rides in the register and
-	## the roster, in a room it goes to the host (Net.set_loadout). `net` is the Net autoload or a test's Net.
+	## the roster, in a room it goes to the host (Net.set_loadout). Your ARMIES > COSMETICS pick rides the
+	## same way (Net.set_cosmetic; spec I: "sends the local loadout in online player info"). `net` is the
+	## Net autoload or a test's Net.
 	net.set_loadout(loadout_for(f))
+	net.set_cosmetic(cosmetic_loadout_for(f))
 
 
 static func room_faction(net: Node, f: String) -> void:

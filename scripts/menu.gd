@@ -40,7 +40,8 @@ var _map_scroll := 0
 static var map_filter_mode := "all"
 static var map_filter_type := "all"
 const MAP_TYPES := ["all", "brawl", "siege", "core", "alpha 11", "training"]
-const MAP_TYPE_NAMES := {"all": "ALL", "brawl": "BRAWL", "siege": "SIEGE", "core": "CORE", "alpha 11": "ALPHA 11", "training": "TRAINING"}
+const MAP_TYPE_NAMES := {"all": "ALL", "brawl": "FAST", "siege": "FORTRESS", "core": "STANDARD", "alpha 11": "ALPHA 11", "training": "TRAINING"}
+# (0.19.0, Daniele: labels only - the pack groups (BRAWL / SIEGE / CORE) stay the same underneath)
 var _chat_btn: Button
 var _chat_t := 0.0
 var _move_pick := -1                               # host, team modes: the player picked to MOVE to a team
@@ -219,6 +220,25 @@ func nav_button(text: String, pos: Vector2, dims: Vector2, call: Callable, prima
 	b.add_theme_font_size_override("font_size", int(round(fsz(25) * K)))
 	UiSkin.button(b, "vex" if _is_main else skin(), primary)
 	content.add_child(b)
+	return b
+
+
+func hex_chip(pos: Vector2, dims: Vector2, fill: Color, wedges: Array, picked: bool, tip: String, call: Callable) -> HexChip:
+	## A colour-picker chip (0.19.0, Daniele: "the actual hexagon should be in full color... no words,
+	## border same color"): a solid hexagon (or, `wedges` non-empty, a FACTION-style split hexagon),
+	## border the same colour, no text; the picked chip gets a white ring + a slight scale-up (HexChip).
+	## `tip` is the chip's colour name, read out as its tooltip / accessible name for colour-blind players.
+	dims = Vector2(maxf(dims.x, _tap_min()), maxf(dims.y, _tap_min()))   # a square tap target, both axes
+	var b := HexChip.new()
+	b.custom_minimum_size = dims
+	b.size = dims
+	b.position = pos
+	b.fill = fill
+	b.wedges = wedges
+	b.tooltip_text = tip
+	b.pressed.connect(func(): call.call_deferred())
+	content.add_child(b)
+	b.picked = picked                                 # after add_child: picked's setter needs `size` set
 	return b
 
 
@@ -625,16 +645,17 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 		var pool: Array = row[3]
 		for i in range(pool.size()):
 			_skill_card(pool[i], slot, lo[slot] == pool[i], P(415 + i * 247, y + 32), P(234, 206), fc)
-	# foot: back, reset, the save state
+	# foot: back, cosmetics, reset, the save state
 	nav_button("BACK", P(40, foot_y()), P(230, 58), func(): _leave_armies())
-	var rs := nav_button("RESET %s TO DEFAULT" % ("VIRIDIAN" if _army == "bloom" else _army.to_upper()), P(290, foot_y()), P(420, 58), func():
+	nav_button("COSMETICS", P(290, foot_y()), P(230, 58), func(): show_cosmetics(_army))
+	var rs := nav_button("RESET %s TO DEFAULT" % ("VIRIDIAN" if _army == "bloom" else _army.to_upper()), P(540, foot_y()), P(420, 58), func():
 		ArmyPresets.reset(_army)
 		_preset_changed()
 		show_armies())
 	rs.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
 	rs.disabled = ArmyPresets.is_default(_army)
 	var note := "Saved on this device" if ArmyPresets.saved else "This browser keeps no storage: your picks last until the page closes"
-	label_at(note, P(740, foot_y() + 18.0), 18, Color("7795a4") if ArmyPresets.saved else Color("ffd15c"), false)
+	label_at(note, P(985, foot_y() + 18.0), 18, Color("7795a4") if ArmyPresets.saved else Color("ffd15c"), false)
 
 
 func _skill_card(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vector2, fc: Color) -> void:
@@ -674,6 +695,74 @@ func _leave_armies() -> void:
 	if Net.in_room():
 		ArmyPresets.send_to(Net, faction)
 	back.call()
+
+
+# ------------------------------------------------------------------ ARMIES > COSMETICS (0.19.0, spec E/I)
+const COSMETIC_FAMILIES := ["vat", "machingoon", "laser", "forge", "monster_hub", "monster"]
+const COSMETIC_FAMILY_LABEL := {"vat": "VAT LOOK", "machingoon": "MACHINGOON", "laser": "LASER",
+		"forge": "FORGE", "monster_hub": "MONSTER HUB", "monster": "MONSTER"}
+
+
+func show_cosmetics(f: String = "") -> void:
+	## A look per structure family, per faction (GAME-BIBLE sec17; Daniele, 2026-09-27): DEFAULT / the
+	## faction set / GRADUATE / the skin lines for vats, DEFAULT / SPITTER / PEPPERBOX for the
+	## Machingoon, and so on - saved in user://armies.cfg (ArmyPresets), applied at match start
+	## (main.gd's Cosmetics.set_loadout) and sent along with the skill loadout online (ArmyPresets.send_to).
+	## Every item is unlocked while testing (ArmyPresets.is_unlocked always true for now). The small
+	## preview is a placeholder swatch until the VIEWS session's models/thumbnails ship.
+	if f != "":
+		_army = f
+	if _army == "":
+		_army = faction
+	clear_page("city")
+	_page = "armies"
+	header(0)
+	var fc := color()
+	label_at("ARMIES", P(40, 104), 43)
+	label_at("COSMETICS  ·  a look per structure, per faction - all unlocked while testing", P(262, 122), 20, Color("abc1cd"))
+	for i in range(FACTIONS.size()):
+		var tf: String = FACTIONS[i]
+		var pos := P(35, 174 + i * 96)
+		var dims := P(362, 88)
+		var tc: Color = Rules.FACTIONS[tf][1]
+		nav_button("", pos, dims, func(): show_cosmetics(tf))
+		content.add_child(neon_panel(pos, dims, tc, tf == _army, Color("020a10e0") if tf != _army else Color("08202ae8")))
+		portrait(tf, pos + P(6, 4), P(76, 80))
+		label_at("VIRIDIAN" if tf == "bloom" else tf.to_upper(), pos + P(92, 8), 24, tc if tf == _army else Color.WHITE)
+		if tf == faction:
+			label_at("YOU", pos + P(306, 4), 15, Color("ffd15c"))
+	var lo := ArmyPresets.cosmetic_loadout_for(_army)
+	var y := 174.0
+	for family in COSMETIC_FAMILIES:
+		_cosmetic_row(family, str(lo.get(family, "default")), P(415, y), fc)
+		y += 88.0
+	nav_button("BACK TO SKILLS", P(40, foot_y()), P(280, 58), func(): show_armies(_army))
+	nav_button("BACK", P(340, foot_y()), P(200, 58), func(): _leave_armies())
+	var note := "Saved on this device" if ArmyPresets.saved else "This browser keeps no storage: your picks last until the page closes"
+	label_at(note, P(985, foot_y() + 18.0), 18, Color("7795a4") if ArmyPresets.saved else Color("ffd15c"), false)
+
+
+func _cosmetic_row(family: String, current: String, pos: Vector2, fc: Color) -> void:
+	var dims := P(1222, 76)
+	content.add_child(neon_panel(pos, dims, fc, false, Color("08131aE0")))
+	label_at(COSMETIC_FAMILY_LABEL.get(family, family.to_upper()), pos + P(20, 10), 19, Color.WHITE, false)
+	var options: Array = Cosmetics.OPTIONS.get(family, ["default"])
+	var idx := maxi(options.find(current), 0)
+	# a small placeholder swatch stands in for the real preview until VIEWS ships thumbnails / models
+	var swatch := ColorRect.new()
+	swatch.color = Color(fc, 0.35)
+	swatch.position = pos + P(20, 38)
+	swatch.size = P(46, 30)
+	content.add_child(swatch)
+	nav_button("<", pos + P(84, 38), P(42, 32), func():
+		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx - 1 + options.size()) % options.size()])
+		show_cosmetics())
+	var locked := not ArmyPresets.is_unlocked(current)
+	label_at(Cosmetics.label(family, current, _army) + (" (LOCKED)" if locked else ""), pos + P(140, 44),
+			19, Color("ffb12b") if locked else Color("dbe6ec"), false)
+	nav_button(">", pos + P(1090, 38), P(42, 32), func():
+		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx + 1) % options.size()])
+		show_cosmetics())
 
 
 func show_maps() -> void:
@@ -848,12 +937,11 @@ func show_setup() -> void:
 	var keys := COLOUR_NAMES.keys()
 	for i in range(keys.size()):
 		var ck: String = keys[i]
-		var cc: Color = Rules.FACTIONS[faction][1] if ck == "faction" else Rules.SEATS[ck]
-		var cb := stack_add(st, nav_button(COLOUR_NAMES[ck], P(175 + i * 112, y), P(106, col_h), func():
+		var wedges := FACTIONS.map(func(f): return Rules.FACTIONS[f][1]) if ck == "faction" else []
+		var cc: Color = Color.WHITE if ck == "faction" else Rules.SEATS[ck]
+		stack_add(st, hex_chip(P(175 + i * 112, y), P(col_h, col_h), cc, wedges, ck == colour, COLOUR_NAMES[ck], func():
 			colour = ck
-			show_setup(), ck == colour)) as Button
-		cb.add_theme_font_size_override("font_size", int(round(15 * K)))
-		cb.add_theme_color_override("font_color", cc)
+			show_setup()))
 	y += col_h + 16.0
 	if not mobile:                                    # the phone skips the recap to save room
 		stack_add(st, label_at("Team modes: one hue per team, light and dark. FACTION: every seat in its own faction colour (Alpha 11).", P(23, y), 14, Color("7795a4")))
@@ -1230,25 +1318,18 @@ func _team_button(t: int, colours: Dictionary, pos: Vector2, dims: Vector2) -> v
 
 
 func _colour_row(pos: Vector2, dims: Vector2) -> void:
-	## Your colour: one chip per hue; taken hues (and, in team modes, another team's family) are off.
+	## Your colour: one hexagon chip per hue, filled solid in its colour, border the same colour, no
+	## words (Daniele, 0.19.0); taken hues (and, in team modes, another team's family) are dimmed and
+	## disabled. The picked chip gets HexChip's white ring + scale-up.
 	var me := Net.local_id()
 	var mine := Net.colour_of(me)
 	for i in range(HUE_NAMES.size()):
 		var k: String = HUE_NAMES[i]
 		var ok := Net.colour_allowed(me, k) or k == mine
-		var b := nav_button(k.to_upper(), pos + Vector2(i * (dims.x + 5 * K), 0), dims, func():
+		var b := hex_chip(pos + Vector2(i * (dims.x + 5 * K), 0), dims, Rules.HUES[k], [], k == mine, k.to_upper(), func():
 			Net.set_colour(k)
-			show_lobby(), k == mine)
-		b.add_theme_font_size_override("font_size", int(round(14 * K)))
-		if k != mine:                                 # yours: the kit's selected style, white on the fill
-			b.add_theme_color_override("font_color", Rules.HUES[k])
+			show_lobby())
 		b.disabled = not ok or Net.active
-		var bar := ColorRect.new()                    # the hue itself under the name (dimmed when off)
-		bar.color = Rules.HUES[k] if ok else Color(Rules.HUES[k], 0.25)
-		bar.position = Vector2(8 * K, dims.y - 11 * K)
-		bar.size = Vector2(dims.x - 16 * K, 5 * K)
-		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		b.add_child(bar)
 
 
 func _step_map(d: int) -> void:
