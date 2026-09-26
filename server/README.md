@@ -7,9 +7,8 @@ Stage 2 (next): a headless Godot on the server hosts the match, so no player's d
 ## The box
 
 - Vultr, Singapore, `vhp-1c-1gb` (1 vCPU, 1 GB, NVMe, 2 TB traffic), Ubuntu 26.04 LTS, backups on.
-- IPv4 `45.32.126.20`, hostname `ooze-server`. SSH: `ssh -i ~/.ssh/ooze_server root@45.32.126.20`
-  (key on Daniele's PC; key-only login via `/etc/ssh/sshd_config.d/00-ooze.conf`, which must sort before
-  `50-cloud-init.conf`).
+- Access details (SSH key, login): Daniele / the server session - kept out of the repo. Key-only login via
+  `/etc/ssh/sshd_config.d/00-ooze.conf`, which must sort before `50-cloud-init.conf`.
 - ufw: 22, 80, 443 only. fail2ban, unattended-upgrades, 2 GB swap. Game files in `/opt/ooze` (user `ooze`).
 - Address until a domain exists: `45-32-126-20.sslip.io` (sslip.io resolves it to the IP; Caddy gets a
   Let's Encrypt certificate for it). The game connects to `wss://45-32-126-20.sslip.io/ooze`
@@ -26,8 +25,8 @@ Stage 2 (next): a headless Godot on the server hosts the match, so no player's d
 ## Update the relay
 
 ```bash
-scp -i ~/.ssh/ooze_server server/relay.py root@45.32.126.20:/opt/ooze/relay.py
-ssh -i ~/.ssh/ooze_server root@45.32.126.20 "systemctl restart ooze-relay && journalctl -u ooze-relay -n 5 --no-pager"
+scp server/relay.py <server>:/opt/ooze/relay.py
+ssh <server> "systemctl restart ooze-relay && journalctl -u ooze-relay -n 5 --no-pager"
 ```
 
 Restarting closes the open rooms, so do it between playtests.
