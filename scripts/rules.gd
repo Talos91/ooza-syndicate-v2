@@ -159,6 +159,17 @@ const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
 const RELAY_WARNING := 1.0          # Daniele (0.18.6): "bridge alert ... just 1 sec" (was 3 s)
 const RELAY_COOLDOWN := 5.0        # Daniele (Alpha 13 playtest): "relay cooldown I'd set at 5 s"
 const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves (its troops fell when it started)
+# AI relay sense (0.18.7 - Daniele: "the ai tends to avoid relay bridges all together and almost never
+# build structure on relays"). From Standard up (AI_LEVELS "relays" >= 1) an order crosses a relay deck
+# unless somebody hostile can change that deck before the whole line is over it (estimated crossing
+# x AI_RELAY_SLACK + AI_RELAY_PAD s, the door's emission included); a safe detour is taken when it costs
+# at most AI_RELAY_DETOUR s (or doubles the trip), otherwise the risky route is priced at AI_RELAY_RISK.
+const AI_RELAY_SLACK := 1.25
+const AI_RELAY_PAD := 1.0
+const AI_RELAY_DETOUR := 8.0
+const AI_RELAY_RISK := 14.0          # target-score penalty for a plan whose only route is at risk
+const AI_RELAY_VALUE := 10.0         # target-score bonus for a relay node (control of shortcuts), + its traffic
+const AI_RELAY_HOLD := 30.0          # sim units it keeps on a relay node it holds (6 shown): relays don't grow
 
 # LAST STAND (GAME-RULES sec10; Daniele 2026-09-25: 2:00 "seems ok" for now, not 3:00). The method
 # (inward / outward / chaos, from the map's eligible list) is hidden until the start, then the
