@@ -108,6 +108,10 @@ func begin() -> void:
 func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob := 0.0, roll := 0.0, squeeze := 0.0, size := 1.0) -> void:
 	if not _mesh.has(faction):
 		return
+	if ForgePulse.live:                              # a forge coming online: the body glows, hops and swells in its wave
+		var b := ForgePulse.boost(seat, pos)
+		bob += ForgePulse.HOP * b
+		size *= 1.0 + ForgePulse.SWELL * b
 	var key := "%s|%s" % [faction, seat]
 	if not _mm.has(key):
 		_instance(faction, seat)

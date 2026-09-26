@@ -830,8 +830,9 @@ func _refresh_inspector(cam: Camera3D) -> void:
 			elif owner == human and Sim.has_vat(n) and n["tier"] >= 4:
 				status += " | MAX TIER"
 			lines.append(status)
-			lines.append("garrison %s | attack %d%% | speed %d%%" % [
-					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0),
+			var forge: String = " (forge +%d%%)" % roundi(Rules.forge_bonus * 100.0) if sim.has_forge(owner) else ""   # attack_of includes it
+			lines.append("garrison %s | attack %d%%%s | speed %d%%" % [
+					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0), forge,
 					roundi(sim.stat(owner, "speed") * 100.0)])
 	if n["relay"] != "":
 		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()

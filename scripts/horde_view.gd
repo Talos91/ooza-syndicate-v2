@@ -245,6 +245,10 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 		elif queue and i == 0:
 			scale *= QUEUE_SQUASH
 		mi.scale = scale
+		if ForgePulse.live:                          # a forge coming online: the line glows, hops and swells in its wave
+			var fb := ForgePulse.boost(h["owner"], mi.position, 3.2)
+			mi.scale = scale * (1.0 + ForgePulse.SWELL * fb)
+			mi.position.y += ForgePulse.HOP * fb
 	var label: Label3D = pool["label"]
 	var head: Vector3 = Sim.sample(h, h["s"])[0]
 	label.position = head + Vector3(0, 3.0, 0)
@@ -475,7 +479,8 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 		# covered all of the platform"); a low vat only thins it a little - the badge carries the number
 		var sc := lerpf(0.85, 1.0, sqrt(fill))
 		var contested: bool = not n["siege"].is_empty()
-		if contested:
+		var forged := ForgePulse.live and ForgePulse.powering(n["owner"])   # the owner's forge wave: the ring swells
+		if contested or forged:
 			r.erase("sig")                              # a siege redraws every frame (seethe, attacker slots, seams)
 		else:
 			var sig := "%s|%d|%s|%s" % [n["owner"], roundi(sc * 4000.0), str(classic), str(Rules.low_detail)]
@@ -526,6 +531,10 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 			if contested:                              # the whole platform seethes
 				pos += radial * 0.18 * sin(sim.time * 6.0 + i * 1.3)
 				s *= 1.0 + 0.08 * sin(sim.time * 7.0 + i * 2.1)
+			if forged:
+				var fb := ForgePulse.boost(seat, pos, 0.0)
+				s *= 1.0 + ForgePulse.SWELL * fb
+				pos.y += ForgePulse.HOP * 0.6 * fb
 			# rotation (0, heading, 0) and scale s * RIVER_SHAPE, the shape part baked into the mesh
 			(xfs.get_or_add("%s|%s|%s" % [faction, seat, kind], []) as Array).append(
 					Transform3D(Basis(Vector3.UP, Rules.heading(fwd)) * Basis.from_scale(Vector3.ONE * s), pos))

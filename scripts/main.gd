@@ -33,6 +33,7 @@ var vis: Dictionary
 var hordes: HordeView
 var fx: Fx
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
+var forge_pulse: ForgePulse                        # a forge coming online: the owner's 2 s power-up wave
 var scenery: Scenery
 var hud: Hud
 var cam: Camera3D
@@ -230,6 +231,10 @@ func _start_map(path: String) -> void:
 	combat = CombatFx.new()
 	add_child(combat)
 	combat.setup(self, sim, vis, fx)
+	forge_pulse = ForgePulse.new()
+	add_child(forge_pulse)
+	forge_pulse.setup(sim, vis, combat)
+	forge_pulse.online.connect(_on_forge_online)
 	drag_line = MeshInstance3D.new()
 	drag_line.mesh = drag_mesh
 	add_child(drag_line)
@@ -778,6 +783,7 @@ func _process(delta: float) -> void:
 	fx.selected = selected if drag_from < 0 else drag_from
 	fx.sync(dt)
 	combat.sync(dt, cam)                          # after Fx: it scales the tier-down's rising model
+	forge_pulse.sync(dt, cam)                     # after both (it pumps the models) and the views (their glows)
 	hud.sync(dt, cam)
 	_trace_t += dt
 	if _trace_t >= 2.0:
@@ -807,6 +813,16 @@ func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 		hud.toast("Node %d captured" % node_id)
 	elif _old == HUMAN:
 		hud.toast("Node %d lost to seat %s" % [node_id, new_owner])
+
+
+func _on_forge_online(seat: String, _node_id: int, first: bool) -> void:
+	## ForgePulse: a forge just came online (built or captured). The toast names the owner by emblem and
+	## faction ("seat X" -> Hud._SEAT_WORD); good news in your colour for your side, red for a rival's.
+	var kind := "good" if sim.allied(seat, HUMAN) else "warn"
+	if first:
+		hud.toast("seat %s FORGE ONLINE: +%d%% attack" % [seat, roundi(Rules.forge_bonus * 100.0)], kind)
+	else:                                              # the bonus does not stack (Sim.forge_of)
+		hud.toast("seat %s FORGE ONLINE: attack bonus kept" % seat, kind)
 
 
 func _on_finished(winner: String) -> void:
