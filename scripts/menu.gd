@@ -136,7 +136,7 @@ func setup(m: Node3D) -> void:
 	map_path = m.map_path
 	mode = m.mode
 	colour = m.color_choice
-	for mp in MapPool.all():
+	for mp in MapPool.battlefield():
 		maps.append({"path": mp, "data": MapBuilder.load_map(mp)})
 	if not maps.any(func(x): return x["path"] == map_path):
 		map_path = maps[0]["path"]                     # the pool is maps4/: the old roster is archive

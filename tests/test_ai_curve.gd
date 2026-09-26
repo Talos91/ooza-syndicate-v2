@@ -53,7 +53,7 @@ func _run() -> void:
 	Rules.last_stand = false                       # decide by play, not by the collapse (the Very Last Stand still runs)
 	var cap := _arg_maps()
 	# ---------------------------------------------------------------- fairness in FFA
-	var ffa := MapPool.all().filter(func(p): return MapBuilder.load_map(p)["seats"].has("FFA4"))
+	var ffa := MapPool.battlefield().filter(func(p): return MapBuilder.load_map(p)["seats"].has("FFA4"))
 	var on_a := 0
 	var on_players := 0
 	var seats_n := 4
@@ -72,7 +72,7 @@ func _run() -> void:
 	check(on_players > (20 if cap <= 0 else 20 * cap / 8), "FFA4 AIs attack players (%d sends)" % on_players)
 	check(share <= 1.5 / (seats_n - 1), "seat A draws no more than 1.5x its share of the attacks (%.2f)" % share)
 	# ---------------------------------------------------------------- the curve
-	var duel := MapPool.all().filter(func(p):
+	var duel := MapPool.battlefield().filter(func(p):
 		var m := MapBuilder.load_map(p)
 		return m["seats"].has("1v1") and str(m["code"]).substr(0, 1) in ["B", "C", "S", "M"])
 	var games := duel.size() if cap <= 0 else mini(duel.size(), cap)

@@ -1,0 +1,489 @@
+{
+ "code": "T-04",
+ "name": "Vat Row",
+ "group": "tutorial",
+ "players": "versus",
+ "playersLabel": "1v1",
+ "combatMode": "brawl",
+ "family": "row",
+ "modes": [
+  "1v1"
+ ],
+ "symmetry": "mirror left/right",
+ "frame": {
+  "width": 160,
+  "height": 80,
+  "units": "metres",
+  "aspect": "2:1 landscape",
+  "panning": false,
+  "nodeRadius": 6,
+  "pier": 1.6,
+  "deckModule": 4,
+  "deckCentreDistance": {
+   "S": 19.2,
+   "M": 23.2,
+   "L": 27.2
+  },
+  "tolerance": 1,
+  "minNodeGap": 15,
+  "version": "4.2"
+ },
+ "minEnemyHomeHops": 2,
+ "centreSpawn": false,
+ "plazas": [],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 56.8,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat",
+    "machingoon"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 66.4,
+   "y": 23.37,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat",
+    "machingoon"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 47.2,
+   "y": 56.63,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat",
+    "machingoon"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 80.0,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "strategic",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 4,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 93.6,
+   "y": 23.37,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat",
+    "machingoon"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 112.8,
+   "y": 56.63,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat",
+    "machingoon"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 103.2,
+   "y": 40.0,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat",
+    "machingoon"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 0,
+   "to": 1,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.2,
+   "nominal": 19.2
+  },
+  {
+   "from": 0,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.2,
+   "nominal": 19.2
+  },
+  {
+   "from": 0,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 8.0,
+   "centreDistance": 23.2,
+   "nominal": 23.2
+  },
+  {
+   "from": 3,
+   "to": 6,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 8.0,
+   "centreDistance": 23.2,
+   "nominal": 23.2
+  },
+  {
+   "from": 6,
+   "to": 4,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.2,
+   "nominal": 19.2
+  },
+  {
+   "from": 6,
+   "to": 5,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.2,
+   "nominal": 19.2
+  },
+  {
+   "from": 1,
+   "to": 4,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 12.0,
+   "centreDistance": 27.2,
+   "nominal": 27.2
+  }
+ ],
+ "rings": {
+  "count": 2,
+  "boundaries": [
+   5.8
+  ],
+  "aspect": 2.0,
+  "shape": "ellipse"
+ },
+ "lastStand": {
+  "methods": [],
+  "orders": {}
+ },
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 6,
+    "team": 1
+   }
+  ]
+ },
+ "note": "L2 VATS, TIERS AND THE MACHINGOON. A's row N2 - H - N1 (short decks, one straight line) on the left; the special node SP (a neutral T4 vat, map-placed) in the middle, a medium deck from each home; B's mirrored row B1 - BH - B2 on the right. B's lane into N1 is the long top deck B1 - N1 (the Machingoon on N1 meets the scripted B line there). Names: H, N1 (Machingoon target), N2, SP (special T4), B1 (B's lane), B2, BH.",
+ "geometricSymmetry": true,
+ "lesson": "L2 VATS, TIERS AND THE MACHINGOON",
+ "lessonNames": {
+  "H": 0,
+  "N1": 1,
+  "N2": 2,
+  "SP": 3,
+  "B1": 4,
+  "B2": 5,
+  "BH": 6
+ },
+ "origin": "authored for the tutorial (Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-DESIGN.md sec3 L2, sec4), References/Ooze Syndicate maps 4.2 - tutorial/generator/tutorials.py",
+ "thumbnail": "thumbnails/T-04-vat-row.png",
+ "layout": {
+  "K": 1.0,
+  "nodes": {
+   "0": [
+    -23.2,
+    0.0
+   ],
+   "1": [
+    -13.6,
+    -16.63
+   ],
+   "2": [
+    -32.8,
+    16.63
+   ],
+   "3": [
+    0.0,
+    0.0
+   ],
+   "4": [
+    13.6,
+    -16.63
+   ],
+   "5": [
+    32.8,
+    16.63
+   ],
+   "6": [
+    23.2,
+    0.0
+   ]
+  },
+  "plazas": {},
+  "edges": [
+   {
+    "A": [
+     -20.2003,
+     -5.1963
+    ],
+    "B": [
+     -16.5997,
+     -11.4337
+    ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -26.1997,
+     5.1963
+    ],
+    "B": [
+     -29.8003,
+     11.4337
+    ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -17.2,
+     -0.0
+    ],
+    "B": [
+     -6.0,
+     -0.0
+    ],
+    "L": 11.2,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     6.0,
+     -0.0
+    ],
+    "B": [
+     17.2,
+     -0.0
+    ],
+    "L": 11.2,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     20.2003,
+     -5.1963
+    ],
+    "B": [
+     16.5997,
+     -11.4337
+    ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.0,
+    "lean1": -0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     26.1997,
+     5.1963
+    ],
+    "B": [
+     29.8003,
+     11.4337
+    ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": -0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -7.6,
+     -16.63
+    ],
+    "B": [
+     7.6,
+     -16.63
+    ],
+    "L": 15.2,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   }
+  ],
+  "relays": {},
+  "glb": "",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": [],
+   "docks": 0,
+   "off_length": []
+  }
+ }
+}

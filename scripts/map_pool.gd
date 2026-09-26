@@ -4,7 +4,10 @@ class_name MapPool
 ## M-21..M-40 / M-51..M-60, References/Ooze Syndicate maps 4.3 classic / 4.4 classic / 4.6 relay, Mushroom Wars style fields), baked for the game by
 ## Models/2.0/export_maps_4_2_game.py into maps4/: every map baked into maps4/ except WITHHELD,
 ## ordered by code prefix (GROUP_ORDER; D = debug maps), each by code; on a phone also without PHONE_UNFIT. The 2.0 roster in maps/ is
-## archive: only the rules tests still load it.
+## archive: only the rules tests still load it. `battlefield()` is `all()` minus TUTORIAL_ONLY: the list
+## the player actually picks from (02 BATTLEFIELD, REMATCH ON A RANDOM MAP) and test_map_pool /
+## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
+## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
 const GROUP_ORDER := ["T", "A", "M", "C", "B", "S", "X", "D"]   # A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay
                                                               # (Mushroom Wars style); D = debug / test maps
@@ -17,6 +20,11 @@ const WITHHELD: Array[String] = []
 # maps the phone-fit probe (tests/phone_fit.tscn) finds crowded on a phone; tablets and desktop keep them.
 # Maps 4.0 listed its 3v3 / 2v2v2 maps here; the 4.1 partial pack has none, and every 4.1 map passes.
 const PHONE_UNFIT: Array[String] = []
+# Teaching boards, not fair matches (the interactive tutorial, References/Ooze Syndicate maps 4.2 -
+# tutorial): never on 02 BATTLEFIELD, never a REMATCH ON A RANDOM MAP pick, never in test_map_pool /
+# test_ai_curve's pools. T-01 / T-02 (the older tutorial pair in the main maps 4.2 pack) are not listed
+# here and keep showing up as they always have.
+const TUTORIAL_ONLY: Array[String] = ["T-03", "T-04", "T-05", "T-06", "T-07", "T-08", "T-09", "T-10"]
 static var phone := false                               # set by main at startup: a phone-sized screen
 
 
@@ -32,6 +40,12 @@ static func all() -> Array:
 		var gb := GROUP_ORDER.find(b.get_file().substr(0, 1))
 		return ga < gb if ga != gb else a < b)
 	return out
+
+
+static func battlefield() -> Array:
+	## all() minus TUTORIAL_ONLY: what the player actually gets offered (02 BATTLEFIELD, REMATCH ON A
+	## RANDOM MAP) and what test_map_pool / test_ai_curve run their coverage over.
+	return all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY)
 
 
 static func phone_screen(mobile: bool) -> bool:

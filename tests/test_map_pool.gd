@@ -50,7 +50,7 @@ func _check_overpass() -> void:
 
 
 func _init() -> void:
-	var paths := MapPool.all()
+	var paths := MapPool.battlefield()
 	print("%d maps in the pool" % paths.size())
 	for map_path in paths:
 		var sm := MapBuilder.load_map(map_path)

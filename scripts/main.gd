@@ -422,7 +422,7 @@ func _random_rematch_map() -> Dictionary:
 	## mode that seats at least every human present, AI filling the rest (EMPTY SEATS).
 	var need := _human_count()
 	var candidates := []
-	for mp in MapPool.all():
+	for mp in MapPool.battlefield():
 		var m := MapBuilder.load_map(mp)
 		var md := _rematch_mode_for(m, need)
 		if md != "":
