@@ -108,6 +108,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		# map-placed T4 (it holds only its vat); common = every other vat node
 		var kind := "relay" if relay != "" else ("special" if str(n.get("category", "normal")) in ["strategic", "final"] \
 				or (owner == "" and tier >= 4) else "common")
+		if kind == "special" and owner == "":            # Daniele, 2026-09-27: a special node is always a T4 vat
+			tier = 4
+			units = float(Rules.NEUTRAL_UNITS[4])
 		nodes.append({
 			"id": id, "pos": positions[id], "owner": owner, "tier": tier, "units": units,
 			"category": n.get("category", "normal"), "center": n.get("center", false), "relay": relay,

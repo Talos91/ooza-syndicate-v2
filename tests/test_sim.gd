@@ -486,7 +486,7 @@ func _init() -> void:
 			"classic: 12 attackers kill 12 of 20 defenders one-for-one and leave no siege")
 	sim32._land_classic(sim32.nodes[1], "A", 18.0)
 	check(sim32.nodes[1]["owner"] == "A" and absf(sim32.nodes[1]["units"] - 10.0) < 0.01, "classic: the next 18 kill the last 8 and 10 take the node")
-	sim32.nodes[3]["units"] = 500.0                    # the centre (T3) holds 300
+	sim32.nodes[3]["units"] = 900.0                    # the centre (special: always T4) holds 500
 	var hc := sim32.send(3, 0, 1.0)
 	run_until(sim32, func(): return not (hc in sim32.hordes), 40.0)
 	check(sim32.nodes[0]["owner"] == "A" and sim32.nodes[0]["siege"].is_empty(), "classic: a send walks in and takes the node, never besieging it")
