@@ -44,6 +44,8 @@ extends CanvasLayer
 ##   set_first_launch(on: bool)   the forced first run: EXIT becomes SKIP TUTORIAL (signal skip_tutorial).
 ##   set_labels(dict)              the card's button words (keys skip_step / restart / exit / skip_tutorial).
 ##   ui_rects() -> Array           what the card and a completion screen cover (Hud counts them as UI).
+##   set_obstacles(points: Array)  screen points the card should rather not cover (every platform): among the
+##                                 corners clear of the target, the one covering the fewest wins.
 ##
 ## Signals
 ##   button_pressed(id: String)   "got_it" from the card's one button; "primary" / "secondary:<i>" from
@@ -372,6 +374,7 @@ var _has_dodge := false
 
 var _card_tween: Tween
 var _card_dest := Vector2(-1, -1)
+var _obstacles: Array = []
 var _reward := {}      # where the card is easing to (no new tween for the same corner)
 var _exit_button: Button
 var _skip_button: Button
@@ -653,6 +656,10 @@ func set_first_launch(on: bool) -> void:
 	set_labels({})
 
 
+func set_obstacles(points: Array) -> void:
+	_obstacles = points
+
+
 func set_finger_down(down: bool) -> void:
 	if is_instance_valid(_hand) and _hand.finger_down != down:
 		_hand.finger_down = down
@@ -896,6 +903,9 @@ func _position_card() -> void:
 		var score := center.distance_to(target_center)
 		if rect.intersects(target_bounds):
 			score -= 4000.0                # heavily discourage covering the target
+		for o in _obstacles:               # then the platforms: a corner over the map's empty sky wins
+			if rect.grow(10.0).has_point(o):
+				score -= 700.0
 		if score > best_score:
 			best_score = score
 			best_key = key

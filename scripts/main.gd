@@ -1483,6 +1483,11 @@ func _coach_sync() -> void:
 	if director.state == "complete":
 		pts = []
 		rects = []
+	var platforms := []                               # the card rather sits over empty sky than over a platform
+	for n in sim.nodes:
+		if not sim.collapsed.get(n["id"], false):
+			platforms.append(cam.unproject_position(n["pos"]))
+	coach.set_obstacles(platforms)
 	coach.spotlight(pts, radius, rects)
 	_tutorial_gesture()
 	coach.set_finger_down(not touches.is_empty() or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
