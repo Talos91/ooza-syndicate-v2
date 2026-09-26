@@ -414,40 +414,7 @@ func _apply_safe_area() -> void:
 
 
 func _build_world() -> void:
-	# Alpha 16 visual pass: the cloud-city sky behind the arena (Scenery's canvas layer) and light that
-	# belongs to it - violet ambient from the sky, a warm key, a cool violet fill and a back rim that
-	# lifts the platform edges off the brighter background.
-	var env := Environment.new()
-	env.background_mode = Environment.BG_CANVAS
-	env.background_canvas_max_layer = -10
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.58, 0.54, 0.78)
-	env.ambient_light_energy = 0.3
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 0.9
-	env.glow_enabled = true
-	env.glow_intensity = 0.9
-	env.glow_bloom = 0.08
-	env.glow_hdr_threshold = 0.9
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-	sun = DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-52, 35, 0)
-	sun.light_energy = 1.1
-	sun.light_color = Color(1.0, 0.94, 0.86)
-	sun.shadow_enabled = true
-	add_child(sun)
-	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-60, -145, 0)
-	fill.light_energy = 0.45
-	fill.light_color = Color(0.62, 0.58, 1.0)
-	add_child(fill)
-	var rim := DirectionalLight3D.new()                # from behind the board, toward the camera
-	rim.rotation_degrees = Vector3(-18, 180.0 + rad_to_deg(Rules.view_yaw), 0)
-	rim.light_energy = 0.55
-	rim.light_color = Color(0.7, 0.62, 1.0)
-	add_child(rim)
+	sun = Scenery.build_environment(self, mobile)      # sky light, lights, glow and fog (scenery.gd)
 	cam = Camera3D.new()
 	cam.fov = 42.0
 	cam.far = 2000.0
