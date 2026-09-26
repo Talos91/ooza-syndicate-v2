@@ -3231,7 +3231,7 @@ func _end_effect(e: Dictionary) -> void:
 
 
 func _settle_edge(ei: int, was_open: bool) -> void:
-	## An anchor ends: a relay deck no longer where its relay says goes now, with that relay's fate for riders.
+	## An anchor ends: a relay deck no longer where its relay says goes now; its riders fall (_settle).
 	var ctrl: int = edge_controller.get(ei, -1)
 	if ctrl < 0 or anchor_state(ei) != null:
 		return
@@ -3251,8 +3251,8 @@ func _settle_bypass(relay_id: int) -> void:
 
 
 func _settle(n: Dictionary, closing: Array) -> void:
-	## Bypass / Anchor over: the decks that go away give their riders the relay's normal outcome at once
-	## (rotation flings, retract carries in, switch / remote drop them).
+	## Bypass / Anchor over: the decks that go away drop everything on them at once (Daniele, 0.18.7: every
+	## relay kind drops its riders, no "carried in"; a rotation flings them as its turn does).
 	if n["relay"] == "rotation":
 		_relay_fling(n, closing, 0.0)
 	else:
@@ -3261,10 +3261,7 @@ func _settle(n: Dictionary, closing: Array) -> void:
 				if not (h in hordes):
 					break
 				if sp["edge"] in closing and _overlap(h, sp["s0"], sp["s1"]) > 0.0:
-					if n["relay"] == "retract":
-						_cut_range(h, sp["s0"], sp["s1"], "carry", n["id"], false)
-					else:
-						_cut_range(h, sp["s0"], sp["s1"], "fall", -1, false)
+					_cut_range(h, sp["s0"], sp["s1"], "fall", -1, false)
 	fx_events.append({"type": "relay_settle", "node": n["id"], "closing": closing})
 
 

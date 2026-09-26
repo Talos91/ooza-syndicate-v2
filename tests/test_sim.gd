@@ -1396,7 +1396,22 @@ func _skills_tests() -> void:
 		if e["id"] == "bypass":
 			e["t"] = 0.01
 	s.step(0.05)
-	check(not s.is_edge_open(2) and s.fall_losses.get("A", 0.0) > 0.0, "Bypass over: the deck that goes away drops its riders (switch fate)")
+	check(not s.is_edge_open(2) and s.fall_losses.get("A", 0.0) > 0.0, "Bypass over: the deck that goes away drops its riders")
+	var st := MapBuilder.load_map("res://maps/008-strait.json")         # retract relays 1 and 2
+	s = _mk(st, "null", "null", {"A": {"map": "bypass"}})
+	s.nodes[1]["owner"] = "B"
+	s.nodes[1]["units"] = 0.0
+	s.cast("A", "map", 1)
+	s.fire_relay(1)
+	s.nodes[5]["units"] = 300.0
+	var hr2 := s.send(5, 0, 1.0)
+	run_until(s, func(): return hr2["s"] > hr2["spans"][1]["s0"] + 3.0 and s.nodes[1]["relay_phase"] == "", 30.0)
+	for e in s.effects:
+		if e["id"] == "bypass":
+			e["t"] = 0.01
+	s.step(0.05)
+	check(not s.is_edge_open(2) and s.fall_losses.get("A", 0.0) > 0.0 and not s.events.any(func(e): return e["type"] == "carried"),
+			"a bypassed retract deck that goes away drops its riders too (0.18.7: no carrying in)")
 	# ---------------------------------------------------------------- Relay Hack: fire or jam an enemy / neutral relay
 	s = _mk(sw, "null", "null", {"A": {"map": "relay_hack"}})
 	s.nodes[1]["owner"] = "B"
