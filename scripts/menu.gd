@@ -253,7 +253,7 @@ func show_options() -> void:
 	clear_page("city")
 	header(0)
 	label_at("OPTIONS", P(40, 107), 43)
-	frame(P(35, 174), P(1000, 540))
+	frame(P(35, 174), P(1000, 600))
 	label_at("MATCH RULES", P(60, 195), 30)
 	var bc := nav_button("MODE: %s" % ("SIEGE  -  hordes fight wherever they meet, tug-of-war fronts" if Rules.bridge_combat else "BRAWL  -  Alpha 11: units pass each other, fights only at nodes"),
 			P(60, 250), P(950, 70), func():
@@ -279,8 +279,13 @@ func show_options() -> void:
 		show_options())
 	det.add_theme_font_size_override("font_size", int(round(22 * K)))
 	label_at("Low detail trims the river patches and vat residents - use it if the game makes your machine run hot.", P(60, 596), 18, Color("b8ced6"))
+	var ter := nav_button("TERRITORY: %s" % ("GOO  -  player-colour goo on owned ground, units in race colour (BRAWL)" if Rules.goo_territory else "NEON  -  owner-colour neon on decks and platform rims"),
+			P(60, 632), P(950, 56), func():
+		Rules.goo_territory = not Rules.goo_territory
+		show_options())
+	ter.add_theme_font_size_override("font_size", int(round(19 * K)))
 	var dbg := nav_button("DEBUG TOOLS: %s" % ("ON  -  the Debug button and live sliders in matches" if Rules.debug_tools else "OFF"),
-			P(60, 634), P(950, 50), func():
+			P(60, 698), P(950, 50), func():
 		Rules.debug_tools = not Rules.debug_tools
 		show_options())
 	dbg.add_theme_font_size_override("font_size", int(round(20 * K)))

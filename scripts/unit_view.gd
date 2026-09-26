@@ -9,6 +9,10 @@ extends Node3D
 ## on the same faction never look alike (Alpha 14 playtest), and stands on a disc in that colour.
 ## Garrisons don't loiter round the vat: the platform neon shows the owner. Drawn with one
 ## MultiMesh per faction x seat plus one for the discs, rebuilt every frame.
+## TERRITORY: GOO (Rules.goo_territory, 0.18.7 - the goo readability round 3, renders_r3 S1-S4, S9):
+## the body keeps its RACE colour (the approved texture, no hue shift) and the player colour moves to a
+## rim glow (the shader's rim with accent := seat colour, gain GOO_RIM_GAIN) - goo = player, body = race,
+## and two seats on one faction still read apart. No discs: the goo under the column is the owner.
 
 const UNIT_SIZE := 1.3               # metres across a creature (readable at full-map zoom)
 const ACROSS := 3                    # Alpha 11's default formation
@@ -30,6 +34,8 @@ const SOFTNESS := {"ember": 0.4, "solar": 0.4}
 # of the route a body shrinks and dips into the doorway, and a body leaving grows out of it the same
 # way, so a column pours in and out instead of popping.
 const DOOR := 1.6
+const GOO_RIM_GAIN := 4.0            # the experiment's S8/S9 player rim (race rim: the shader's 2.2)
+const GOO_SELF_GLOW := 0.2           # emission = rim + body * 0.2 (NEON: 0.45)
 const BEND := 1.0                    # metres either side a body reads its heading over (corners)
 
 var _mesh := {}                      # faction -> Mesh
@@ -41,6 +47,7 @@ var _disc: MultiMeshInstance3D
 var _discs: Array = []               # [[Transform3D, Color]] this frame
 var _pour := {}                      # horde id -> {"L", "head", "t", "count"} while its column walks in
 var _seen := {}                      # horde ids drawn this frame (the rest are dropped from _pour)
+var _goo := false                    # the look the materials carry (Rules.goo_look)
 
 
 func _ready() -> void:
@@ -90,7 +97,7 @@ func _instance(faction: String, seat: String) -> MultiMeshInstance3D:
 		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if _tex[faction]:
 			var m: ShaderMaterial = (Mats.creature(faction, seat, _tex[faction]) as ShaderMaterial).duplicate()
-			m.set_shader_parameter("self_glow", 0.45)
+			style(m, faction, seat, _goo)
 			inst.material_override = m
 		add_child(inst)
 		_mm[key] = inst
@@ -98,7 +105,25 @@ func _instance(faction: String, seat: String) -> MultiMeshInstance3D:
 	return _mm[key]
 
 
+static func style(m: ShaderMaterial, faction: String, seat: String, goo: bool) -> void:
+	## The column look on a copy of Mats.creature: NEON = body in the seat colour (hue shift), race rim,
+	## self glow 0.45 (today); GOO = body in the race colour, player-colour rim.
+	var seat_hue: float = Rules.seat_color(seat).h
+	m.set_shader_parameter("hue_shift", 0.0 if goo else fposmod(seat_hue - Rules.FACTIONS[faction][0], 1.0))
+	m.set_shader_parameter("accent", Rules.seat_color(seat) if goo else Rules.FACTIONS[faction][1])
+	m.set_shader_parameter("rim_gain", GOO_RIM_GAIN if goo else 2.2)
+	m.set_shader_parameter("self_glow", GOO_SELF_GLOW if goo else 0.45)
+
+
 func begin(now := -1.0) -> void:
+	if Rules.goo_look() != _goo:                  # TERRITORY switched (options, pause menu)
+		_goo = Rules.goo_look()
+		for k in _mm:
+			var parts: PackedStringArray = str(k).split("|")
+			var m := (_mm[k] as MultiMeshInstance3D).material_override as ShaderMaterial
+			if m:
+				style(m, parts[0], parts[1], _goo)
+		_disc.visible = not _goo
 	for k in _xf:
 		(_xf[k] as Array).clear()
 	for k in _blob_xf:

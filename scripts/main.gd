@@ -19,6 +19,9 @@ extends Node3D
 ##   --thumb=<png>                          render the map's menu thumbnail (no HUD), then quit
 ##   --menu-page=<page> --menu-shot=<png>   open a menu page / screenshot the menu, then quit
 ##   --scenario=fight|rear|queue|build|inspect|switch|rotate --zoom=N  stage one situation up close
+##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
+##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
+##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is a peer-to-peer room (Net)
@@ -72,6 +75,7 @@ var paused := false
 var scenario := ""
 var scenario_focus := Vector3.INF
 var scenario_zoom := 30.0
+var focus_node := -1                              # --focus=N: a close-up of node N in a normal match
 var _scenario_done := false
 var mobile := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
 var window_size := Vector2i.ZERO
@@ -147,6 +151,14 @@ func _ready() -> void:
 			Rules.bridge_combat = false
 		elif arg.begins_with("--seed="):
 			seed_value = int(arg.substr(7))
+		elif arg == "--goo":
+			Rules.goo_territory = true
+		elif arg.begins_with("--faction="):
+			SEAT_FACTIONS[HUMAN] = arg.substr(10)
+		elif arg.begins_with("--rival="):
+			SEAT_FACTIONS["B"] = arg.substr(8)
+		elif arg.begins_with("--focus="):
+			focus_node = int(arg.substr(8))
 		elif arg.begins_with("--thumb="):              # map thumbnail for the menu: no HUD, first frame
 			thumb_path = arg.substr(8)
 			map_explicit = true
@@ -253,6 +265,8 @@ func _start_map(path: String) -> void:
 			ais.append(SeatAI.new(seat, 2.5, ai_level))
 	if scenario != "":
 		_stage_scenario()
+	elif focus_node >= 0 and focus_node < sim.nodes.size():
+		scenario_focus = sim.nodes[focus_node]["pos"]
 	sim.captured.connect(_on_captured)
 	sim.finished.connect(_on_finished)
 	for n in sim.nodes:

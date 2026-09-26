@@ -1039,5 +1039,79 @@ func _init() -> void:
 		check(not kt._hit_head(ct, lh) and lh["units"] < lu0 and absf(lh["s"] - ls0) < 0.001,
 				"%s: a line leaving the tower is hit at its tail (head stays at %.1f m, %.1f -> %.1f units)" % [mode_k, ls0, lu0, lh["units"]])
 	Rules.bridge_combat = true
+	_goo_territory()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
+
+
+func _goo_territory() -> void:
+	## TERRITORY: GOO (0.18.7) is a pure view: the toggle only counts in BRAWL, the goo follows the
+	## owners (homes covered, neutral bare), a capture spreads and settles, a closed deck drops its goo,
+	## switching back to NEON hides every piece. No sim state is touched.
+	var was_goo := Rules.goo_territory
+	var was_bc := Rules.bridge_combat
+	Rules.goo_territory = true
+	Rules.bridge_combat = true
+	check(not Rules.goo_look(), "GOO territory is off in SIEGE (its hordes are goo already)")
+	Rules.bridge_combat = false
+	check(Rules.goo_look(), "GOO territory is on in BRAWL when the option is")
+	var map := MapBuilder.load_map("res://maps4/A-01-orbital-nexus.json")
+	var seats := {}
+	for s in map["seats"]["1v1"]:
+		seats[int(s["node"])] = s["seat"]
+	var gs := Sim.new()
+	gs.setup(map, MapBuilder.layout(map), seats, {"A": "null", "B": "ember"}, 3)
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var gvis := MapBuilder.build3(holder, gs, map)
+	var goo := GooTerritory.new()
+	holder.add_child(goo)
+	var collapsed_edges := {}
+	goo.setup(gs, gvis, collapsed_edges, false)
+	var before := JSON.stringify(gs.nodes)
+	goo.sync(0.05)
+	var home: int = seats.keys()[0]
+	var neutral := -1
+	for n in gs.nodes:
+		if n["owner"] == "" and goo._plat.has(n["id"]):
+			neutral = n["id"]
+			break
+	var home_mi: MeshInstance3D = goo._plat[home]["mi"]
+	check(goo.built and home_mi.visible and (home_mi.mesh as ArrayMesh).get_surface_count() == 1,
+			"GOO: the home platform is under goo from the first frame (%d vertices)" % (home_mi.mesh as ArrayMesh).surface_get_array_len(0))
+	check(neutral >= 0 and not (goo._plat[neutral]["mi"] as MeshInstance3D).visible, "GOO: a neutral platform stays bare")
+	var half_on := 0
+	var half_off := 0
+	for i in goo._half:
+		for h in range(2):
+			var p = goo._half[i][h]
+			if p == null:
+				continue
+			var nid: int = gs.edges[i]["a"] if h == 0 else gs.edges[i]["b"]
+			var owned: bool = gs.nodes[nid]["owner"] != "" and gs.is_edge_open(i)
+			if (p["mi"] as MeshInstance3D).visible == owned:
+				half_on += 1
+			else:
+				half_off += 1
+	check(half_off == 0 and half_on > 0, "GOO: every deck half follows its end's owner (%d right, %d wrong)" % [half_on, half_off])
+	check(JSON.stringify(gs.nodes) == before, "GOO touched no sim state (a pure view)")
+	gs.nodes[neutral]["owner"] = "B"
+	goo.sync(0.05)
+	var np: Dictionary = goo._plat[neutral]
+	check(np["t"] >= 0.0 and (np["mi"] as MeshInstance3D).visible and (np["mi"] as MeshInstance3D).material_override == np["anim"],
+			"GOO: a capture starts the spread on the platform's own animation material")
+	for k in range(40):
+		goo.sync(0.05)
+	check(np["t"] < 0.0 and np["drawn"] == "B" and (np["mi"] as MeshInstance3D).material_override == goo._steady_for("B"),
+			"GOO: the spread settles within 2 s on the shared seat material")
+	var shared := goo._steady_for("B") == goo._steady_for("B") and goo._steady.size() <= 2
+	check(shared, "GOO: one shared material per colour (%d)" % goo._steady.size())
+	Rules.goo_territory = false
+	goo.sync(0.05)
+	var any_visible := false
+	for p in goo._pieces():
+		any_visible = any_visible or (p["mi"] as MeshInstance3D).visible
+	check(not any_visible, "NEON again: no goo piece shows")
+	holder.queue_free()
+	Rules.goo_territory = was_goo
+	Rules.bridge_combat = was_bc
