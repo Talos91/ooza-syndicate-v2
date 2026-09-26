@@ -93,6 +93,18 @@ func _kinds_to(remote: String) -> Array:
 	return host.bridge.sent.filter(func(p): return p[0] == remote).map(func(p): return JSON.parse_string(p[1])["kind"])
 
 
+func _payloads(remote: String, kind: String) -> Array:
+	## The decoded data of every `kind` envelope the host sent to `remote` (not yet delivered).
+	var out := []
+	for p in host.bridge.sent:
+		if p[0] != remote:
+			continue
+		var env = JSON.parse_string(p[1])
+		if env["kind"] == kind:
+			out.append(bytes_to_var(Marshalls.base64_to_raw(env["data"]).decompress_dynamic(8 * 1024 * 1024, FileAccess.COMPRESSION_DEFLATE)))
+	return out
+
+
 func _build_sim(info: Dictionary) -> Sim:
 	## What main._start_online builds: the room's map, seats and seed, no AI.
 	var map := MapBuilder.load_map(info["map"])
@@ -103,7 +115,7 @@ func _build_sim(info: Dictionary) -> Sim:
 		if info["mode"] in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
 			teams[s["seat"]] = int(s["team"])
 	var s := Sim.new()
-	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), teams)
+	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), teams, info.get("loadouts", {}))
 	return s
 
 
@@ -157,8 +169,16 @@ func _run() -> void:
 
 	# ---------------------------------------------------------------- launch and the loading barrier
 	host.map_path = "res://maps/004-two-piers.json"
+	g.set_loadout({"active": "fortify", "map": "mire"})     # SKILLS 2.0: the guest's loadout rides in the roster
+	_to_host("g1", {"op": "loadout", "active": "nuke", "map": "mire"})
+	check(host.roster[g.assigned_id]["loadout"] == {"map": "mire"}, "an unknown skill id in a loadout is dropped")
+	g.set_loadout({"active": "fortify", "map": "mire"})
+	_deliver()
+	check(host.roster[g.assigned_id]["loadout"] == {"active": "fortify", "map": "mire"}, "a guest sets its loadout in the lobby")
 	host.start_match()
 	var info: Dictionary = host.match_info
+	check(info["loadouts"] == {"B": {"active": "fortify", "map": "mire"}} and info["rules"]["abilities_on"] == true,
+			"the launch carries the loadouts and ABILITIES ON")
 	check(host.active and int(info["round"]) == 1 and info["players"].size() == 2, "launch: round 1 with both players")
 	_deliver()
 	check(g.active and g.match_round == 1 and g.match_info["seed"] == info["seed"], "guest receives the launch (same seed)")
@@ -170,6 +190,8 @@ func _run() -> void:
 	_deliver()
 	check(host.started and g.started, "everyone loaded: the round begins on both")
 	check(hs.nodes.size() == gs.nodes.size() and hs.homes == gs.homes, "both browsers built the same map")
+	check(hs.loadouts["B"] == {"active": "fortify", "map": "mire", "ultimate": Rules.FACTION_ULTIMATE_ID[info["players"]["B"]]} and hs.loadouts == gs.loadouts,
+			"host and guest set up the same loadouts (a missing one = the faction default)")
 
 	# ---------------------------------------------------------------- orders, validated by the host
 	var home_b: int = hs.homes["B"]
@@ -287,6 +309,67 @@ func _run() -> void:
 	check(lit2.is_empty(), "a forge already standing when the view starts plays no pulse")
 	fp.free()
 	fp2.free()
+
+	# ---------------------------------------------------------------- SKILLS 2.0: cast orders, snapshots, Ghost Line privacy
+	host._order_limits = {}                          # (the test fires orders faster than any player)
+	host._packet_limits = {}
+	host.bridge.sent = []
+	_to_host("g1", {"op": "order", "round": 1, "action": "cast", "a": 0, "args": {"target": home_b}})
+	check(hs.cooldown("B", "active") > 30.0 and hs.effects_on("node", home_b).size() == 1, "a guest's cast order runs on the host (Fortify on B's home)")
+	check(_payloads("g1", "feedback") == ["Fortify cast"], "the host answers the cast with a feedback line")
+	host.bridge.sent = []
+	_to_host("g1", {"op": "order", "round": 1, "action": "cast", "a": 0, "args": {"target": home_b}})
+	check(str(_payloads("g1", "feedback")[0]).begins_with("Fortify ready in"), "a second cast on cooldown is refused with the reason")
+	var n_fx := hs.effects.size()
+	_to_host("g1", {"op": "order", "round": 1, "action": "cast", "a": 1, "args": {"target": 999}})
+	_to_host("g1", {"op": "order", "round": 1, "action": "cast", "a": 7, "args": {}})
+	_to_host("g1", {"op": "order", "round": 1, "action": "cast", "a": 1, "args": {"target": {"x": 1}}})
+	_to_host("g1", {"op": "order", "round": 1, "action": "cast", "a": 1, "args": {"target": [1, "drop table"]}})
+	_to_host("g1", {"op": "order", "round": 1, "action": "cast", "a": 2, "args": {}})
+	check(hs.effects.size() == n_fx and hs.cooldown("B", "map") == 0.0, "bad slot, bad targets, an uncharged ultimate: all refused")
+	var mire_deck: int = hs._edge_index(home_b, hs.adj[home_b][0][0])
+	_to_host("g1", {"op": "order", "round": 1, "action": "cast", "a": 1, "args": {"target": mire_deck}})
+	check(hs.effects_on("edge", mire_deck).size() == 1, "a map skill cast by edge index (Mire)")
+	var ks: Dictionary = host.snapshot(hs, true)
+	check(ks.has("skills") and (ks["skills"] as Array).size() == 5, "snapshots carry the skill state")
+	host.apply_snapshot(gs, ks)
+	check(gs.effects.size() == hs.effects.size() and gs.effects_on("node", home_b).size() == 1 and gs.effects_on("edge", mire_deck).size() == 1
+			and absf(gs.cooldown("B", "active") - hs.cooldown("B", "active")) < 0.001 and absf(gs.charge("A") - hs.charge("A")) < 0.0001,
+			"the guest sees the effects, cooldowns and charge")
+	# Ghost Lines: nobody but the owner learns which line is a decoy
+	host._order_limits = {}
+	host._packet_limits = {}
+	hs.loadouts["A"]["active"] = "ghost_line"
+	hs.loadouts["B"]["active"] = "ghost_line"
+	hs.skill_cd["B"]["active"] = 0.0
+	hs.nodes[home_a]["units"] = 200.0
+	hs.nodes[home_b]["units"] = 200.0
+	var rg: Array = host.main.perform("A", "cast", 0, {"target": [home_a, home_b]})
+	check(rg[0] and hs.hordes[-1].get("decoy", false), "the host casts a Ghost Line")
+	var ghost_a: int = hs.hordes[-1]["id"]
+	_to_host("g1", {"op": "order", "round": 1, "action": "cast", "a": 0, "args": {"target": [home_b, home_a]}})
+	var ghost_b: int = hs.hordes[-1]["id"]
+	check(ghost_b != ghost_a and hs.hordes[-1].get("decoy", false) and hs.hordes[-1]["owner"] == "B", "the guest casts one too")
+	host.bridge.sent = []
+	host._send_ghosts(true)
+	var gp: Array = _payloads("g1", "ghosts")
+	check(gp.size() == 1 and gp[0]["ids"] == [ghost_b], "the guest is told only about its own decoys")
+	var gsnap: Dictionary = host.snapshot(hs, true)
+	check((gsnap["hordes"] as Array).all(func(h): return not h.has("decoy") and not h.has("ghost_left")), "the broadcast snapshot never carries the decoy flag")
+	_deliver()
+	host.apply_snapshot(gs, gsnap)
+	g._mark_ghosts()
+	var ga: Dictionary = gs._horde(ghost_a)
+	var gb: Dictionary = gs._horde(ghost_b)
+	check(not ga.is_empty() and not ga.get("decoy", false) and gb.get("decoy", false) and Sim.is_ghost_for(gb, "B") and not Sim.is_ghost_for(ga, "B"),
+			"the guest draws its own ghost as a ghost and the host's as a real line")
+	host.bridge.sent = []
+	host.push_effects([{"type": "skill", "id": "ghost_line", "seat": "A", "private": "A"}, {"type": "skill", "id": "ghost_line", "seat": "B", "private": "B"},
+			{"type": "skill", "id": "fortify", "seat": "A"}])
+	_deliver()
+	var seen_fx := gs.fx_events.filter(func(e): return e.get("type", "") == "skill")
+	check(seen_fx.size() == 2 and not seen_fx.any(func(e): return e.get("private", "") == "A"), "private fx events reach their own seat only")
+	gs.fx_events.clear()
 
 	# ---------------------------------------------------------------- chat
 	check(host.accept_chat(1, "  hello <b>there</b>\u0007 "), "host chats")
@@ -419,6 +502,21 @@ func _run() -> void:
 	check(not gg.in_room() and gg.status.begins_with("The host left"), "host departure closes the room for a guest")
 	gg.leave()
 	check(gg.rejoin.is_empty(), "LEAVE ROOM forgets the RECONNECT details")
+
+	# ---------------------------------------------------------------- ABILITIES OFF (a room setting)
+	_open_room("1v1")
+	var ab := _join("g1")
+	_deliver()
+	host.toggle_abilities()
+	_deliver()
+	check(not host.abilities and not ab.abilities, "the host turns ABILITIES OFF; the guest sees it")
+	host.map_path = "res://maps/004-two-piers.json"
+	host.start_match()
+	_deliver()
+	var hs6 := _build_sim(host.match_info)
+	check(host.match_info["rules"]["abilities_on"] == false and not hs6.abilities_on and "off" in hs6.cast_check("A", "active", hs6.homes["A"]),
+			"ABILITIES OFF: nothing casts in that round")
+	Rules.abilities_on = true
 
 	_test_colours()
 	_test_teams()
