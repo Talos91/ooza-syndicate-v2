@@ -28,7 +28,6 @@ func check(cond: bool, what: String) -> void:
 
 
 func _initialize() -> void:
-	Rules.bridge_combat = true                      # these checks were written for SIEGE (the old default); BRAWL is the game's default since 0.18.7
 	Rules.abilities_on = true                       # skills ship off until their UI lands; the checks expect them on
 	_run.call_deferred()
 
@@ -183,6 +182,8 @@ func _run() -> void:
 	check(host.active and int(info["round"]) == 1 and info["players"].size() == 2, "launch: round 1 with both players")
 	_deliver()
 	check(g.active and g.match_round == 1 and g.match_info["seed"] == info["seed"], "guest receives the launch (same seed)")
+	check(info["rules"]["bridge_combat"] == false and not Rules.bridge_combat and not host.has_method("toggle_siege"),
+			"rooms play BRAWL: the launch says so and no room control switches SIEGE on (deactivated, 0.18.7)")
 	var hs := _build_sim(info)
 	var gs := _build_sim(g.match_info)
 	host.world_ready(hs, _fake_main(hs))

@@ -9,7 +9,7 @@ extends Node3D
 ##   --mode=1v1|2v2|3v3|2v2v2|FFA3|FFA4|FFA5  match mode (the map's first mode if it lacks this one)
 ##   --demo                                 every seat played by the AI
 ##   --ai=Training|Casual|Standard|Veteran|Expert  AI level (Rules.AI_LEVELS; the menu picks it otherwise)
-##   --brawl (alias --classic)              BRAWL: bridge combat off, Alpha 11 rules
+##   --brawl (alias --classic)              no-op: BRAWL is the only mode since 0.18.7 (SIEGE deactivated)
 ##   --seed=N                               deterministic Last Stand method / chaos order
 ##   --shots=4,12,25 --out=<dir>            save screenshots at those match times, then quit
 ##   --perf                                 print frame timing every 3 s
@@ -152,8 +152,8 @@ func _ready() -> void:
 			scenario_zoom = float(arg.substr(7))
 		elif arg.begins_with("--mode="):
 			mode = arg.substr(7)
-		elif arg == "--classic" or arg == "--brawl":  # BRAWL mode (bridge combat off, Alpha 11 rules)
-			Rules.bridge_combat = false
+		elif arg == "--classic" or arg == "--brawl":  # harmless: BRAWL is the only mode (0.18.7)
+			pass
 		elif arg.begins_with("--seed="):
 			seed_value = int(arg.substr(7))
 		elif arg == "--goo":

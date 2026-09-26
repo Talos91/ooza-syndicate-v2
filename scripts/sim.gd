@@ -5,6 +5,8 @@ extends RefCounted
 ## §7 bridges, §8 relays, §10 Last Stand). Baked map layouts and plazas, ring Last Stand,
 ## geometric contact everywhere, tug-of-war fronts, recall (SIEGE only), always-on goo corridors with
 ## a home advantage, transit fights the real garrison; BRAWL (bridge_combat off) lands Alpha 11 style.
+## SIEGE IS DEACTIVATED since 0.18.7 (Rules.SIEGE_ON): every `Rules.bridge_combat` branch here is dormant
+## and untested - BRAWL is the game. Kept, not removed, so SIEGE can be picked up again later.
 
 signal captured(node_id: int, new_owner: String, old_owner: String)
 signal finished(winner: String)

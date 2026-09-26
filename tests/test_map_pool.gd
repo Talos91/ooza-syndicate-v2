@@ -68,12 +68,8 @@ func _init() -> void:
 			s_seats[int(s["node"])] = s["seat"]
 			if md in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
 				s_teams[s["seat"]] = int(s["team"])
-		# maps 3.0 say which combat mode they are built for: brawl, siege, or both (played in each)
-		var cm: String = str(sm.get("combatMode", "siege"))
-		for siege_mode in ([true, false] if cm in ["both", "mixed"] else [cm != "brawl"]):
-			Rules.bridge_combat = siege_mode
-			_play(sm, spos, s_seats, s_teams, md)
-		Rules.bridge_combat = true
+		# every map plays BRAWL (0.18.7: SIEGE is deactivated - a map's "combatMode" no longer picks the mode)
+		_play(sm, spos, s_seats, s_teams, md)
 
 	_check_overpass()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
@@ -94,7 +90,7 @@ func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, s_teams: Dicti
 			ssteps += 1
 		var caps := ssim.events.filter(func(e): return e["type"] == "capture").size()
 		var fires := ssim.events.filter(func(e): return e["type"] == "relay_fired").size()
-		var tag: String = "SIEGE" if Rules.bridge_combat else "BRAWL"
+		var tag := "BRAWL"
 		print("      %s %-24s %-5s %-5s over=%s winner=%s at %.0f s, captures=%d relay fires=%d" % [sm["code"],
 				str(sm["name"]), md, tag, ssim.over, ssim.winner, ssim.time, caps, fires])
 		check(ssim.over, "%s %s: AI vs AI finishes within 8 simulated minutes (t=%.0fs)" % [sm["code"], tag, ssim.time])

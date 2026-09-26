@@ -21,7 +21,6 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 
 func _init() -> void:
-	Rules.bridge_combat = true                      # these checks were written for SIEGE (the old default); BRAWL is the game's default since 0.18.7
 	Rules.abilities_on = true                       # skills ship off until their UI lands; the checks expect them on
 	var map := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var pos := MapBuilder.layout(map)
@@ -42,8 +41,8 @@ func _init() -> void:
 	check(not h.is_empty() and h["ordered"] == 80.0 and h["units"] == 0.0, "send 100% of 80: ordered 80, none out yet")
 	check(sim.nodes[3]["units"] == 80.0, "the units stay in the vat until the door emits them")
 	sim.step(0.5)
-	var out_expect: float = Rules.door_rate * 0.5
-	check(absf(h["units"] - out_expect) < 0.5, "after 0.5 s at %.0f units/s: %.0f out (got %.1f)" % [Rules.door_rate, out_expect, h["units"]])
+	var out_expect: float = Rules.exit_rate() * 0.5
+	check(absf(h["units"] - out_expect) < 0.5, "after 0.5 s at %.0f units/s: %.0f out (got %.1f)" % [Rules.exit_rate(), out_expect, h["units"]])
 	var still_inside: float = sim.nodes[3]["units"]
 	check(absf(still_inside - (80.0 - out_expect)) < 5.0, "~%.0f still inside, plus production (got %.1f)" % [80.0 - out_expect, still_inside])
 	var h_b := sim.send(3, 4, 0.5)
@@ -59,173 +58,8 @@ func _init() -> void:
 	check(sim.nodes[1]["owner"] == "A", "neutral node 1 captured by A after %.1f s" % t)
 	run_until(sim, func(): return sim.hordes.is_empty(), 30.0)
 	var g: float = sim.nodes[1]["units"]
-	check(g > 40.0 and g < 130.0, "after the whole horde is in, garrison = survivors of the platform fight + production (got %.1f)" % g)
+	check(g > 40.0 and g < 130.0, "after the whole horde is in, garrison = survivors of the landing + production (got %.1f)" % g)
 	check(sim.nodes[1]["siege"].is_empty(), "no siege left on the captured platform")
-
-	# travel time: an M deck is 4 s at base speed, nodes crossed fast
-	var sim2 := Sim.new()
-	sim2.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
-	var h2 := sim2.send(3, 1, 0.5)
-	var arrive := run_until(sim2, func(): return h2["state"] != "move", 30.0, 0.02)
-	check(arrive > 2.5 and arrive < 5.5, "M deck crossing takes %.2f s at %.0f m/s, platforms at the same speed" % [arrive, Rules.deck_speed])
-	var land: Vector3 = h2["pts"][-1]
-	check(absf((land - sim2.nodes[1]["pos"]).length() - Rules.ARC_R) < 0.01,
-			"the line lands on the platform from the side it arrives by, up to the tower's footprint")
-
-	# a besieged platform: attackers sit on it and fight the garrison; the node flips when it falls
-	var sim7 := Sim.new()
-	sim7.setup(map, pos, {3: "A", 1: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim7.nodes[3]["units"] = 200.0
-	sim7.nodes[1]["units"] = 40.0
-	sim7.send(3, 1, 1.0)
-	var sieged := [false]
-	run_until(sim7, func():
-		if sim7.nodes[1]["siege"].get("A", 0.0) > 0.0 and sim7.nodes[1]["owner"] == "B":
-			sieged[0] = true
-		return sim7.nodes[1]["owner"] == "A", 30.0)
-	check(sieged[0], "arriving units sit on the enemy platform as a siege while the garrison stands")
-	check(sim7.nodes[1]["owner"] == "A" and sim7.combat_losses.get("B", 0.0) > 30.0,
-			"the garrison is beaten down on the platform and the node flips (B lost %.0f)" % sim7.combat_losses.get("B", 0.0))
-
-	# ALPHA 14 CORRIDORS AND TRANSIT (Daniele): goo corridors always on between two adjacent nodes
-	# one player owns; passing through an enemy node fights its garrison (the badge number, no
-	# hidden pool) but only an arrival captures; capture either end and the corridor drains.
-	var sim8 := Sim.new()
-	sim8.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim8.nodes[0]["owner"] = "B"                       # B holds 1 and 0: a corridor between them
-	sim8.nodes[2]["owner"] = "A"
-	sim8.nodes[1]["owner"] = "B"
-	sim8.nodes[1]["units"] = 30.0
-	sim8.nodes[0]["units"] = 15.0
-	sim8.nodes[3]["units"] = 900.0
-	var e10 := sim8._edge_index(1, 0)
-	check(sim8.bonded(e10) and sim8.goo_owner(e10) == "B", "two adjacent nodes of one owner share a goo corridor, always on")
-	sim8.send(3, 4, 1.0)
-	var g_dropped := [false]
-	run_until(sim8, func():
-		if sim8.nodes[1]["owner"] == "B" and sim8.nodes[1]["units"] < 25.0:
-			g_dropped[0] = true
-		return sim8.nodes[4]["owner"] == "A", 90.0)
-	check(g_dropped[0], "passing through an enemy node fights its real garrison (no hidden shield)")
-	check(sim8.nodes[1]["owner"] == "B", "and the waypoint is NOT captured by passing through - only an arrival captures")
-	check(sim8.nodes[4]["owner"] == "A", "the surviving force fights on through and still takes its real destination")
-	check(sim8.is_edge_open(sim8._edge_index(3, 1)), "no deck is destroyed by passing through")
-	sim8._capture(sim8.nodes[0], "A", 10.0)
-	check(not sim8.bonded(e10), "capture either end and that corridor's goo drains")
-	# home advantage: a horde on enemy goo is slower and pushes at a disadvantage
-	var sim8b := Sim.new()
-	sim8b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
-	sim8b.nodes[1]["owner"] = "B"
-	sim8b.nodes[0]["owner"] = "B"
-	sim8b.nodes[3]["units"] = 120.0
-	var hg := sim8b.send(3, 0, 1.0)                    # A crosses B's 1-0 corridor
-	var seen_goo := [false]
-	var p_goo := [0.0]
-	run_until(sim8b, func():
-		if sim8b.on_enemy_goo(hg) and hg["units"] > 10.0:
-			seen_goo[0] = true
-			p_goo[0] = sim8b.power_of(hg) / (hg["units"] * sim8b.attack_of("A"))
-		return seen_goo[0] or not (hg in sim8b.hordes), 30.0)
-	check(seen_goo[0], "a horde crossing an enemy corridor is on enemy goo")
-	check(absf(p_goo[0] - Rules.GOO_PUSH) < 0.01, "on enemy goo it pushes at %.2f of its weight in a tug-of-war" % Rules.GOO_PUSH)
-
-	var sim9 := Sim.new()
-	sim9.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim9.nodes[1]["owner"] = "B"
-	sim9.nodes[1]["units"] = 500.0                     # strong waypoint: the order dies there
-	sim9.nodes[3]["units"] = 60.0
-	var h9 := sim9.send(3, 4, 1.0)
-	run_until(sim9, func(): return not (h9 in sim9.hordes), 30.0)
-	check(not (h9 in sim9.hordes), "a weak order can be wiped out entirely at a hostile waypoint before reaching its destination")
-	check(sim9.nodes[4]["owner"] == "B", "the real destination was never touched - the order died at the waypoint")
-
-	# a neutral waypoint is a free glide
-	var sim9b := Sim.new()
-	sim9b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim9b.nodes[0]["owner"] = "A"
-	sim9b.nodes[2]["owner"] = "A"
-	sim9b.nodes[3]["units"] = 900.0
-	var units_before: float = sim9b.nodes[1]["units"]
-	sim9b.send(3, 4, 1.0)
-	var t9b := run_until(sim9b, func(): return sim9b.nodes[4]["owner"] == "A", 90.0)
-	check(t9b < 90.0, "capture happened within the loop's budget (t=%.0fs)" % t9b)
-	check(sim9b.nodes[1]["owner"] == "" and absf(sim9b.nodes[1]["units"] - units_before) < 0.5,
-			"a neutral waypoint is a free glide - untouched by a passing order")
-
-	# two opposing hordes on the same deck meet at a frontline and fight to the death
-	var sim3 := Sim.new()
-	sim3.setup(map, pos, {1: "A", 0: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim3.nodes[1]["units"] = 100.0
-	sim3.nodes[0]["units"] = 100.0
-	sim3.send(1, 0, 1.0)
-	sim3.send(0, 1, 0.5)
-	var fought := [false]
-	for k in range(400):
-		sim3.step(0.05)
-		for x in sim3.hordes:
-			if x["state"] == "fight":
-				fought[0] = true
-	check(fought[0], "frontline fight happens on the shared S deck")
-	check(sim3.hordes.size() <= 1, "one side survives the frontline")
-	check(sim3.combat_losses.size() == 2, "both sides lost units in combat")
-
-	# CONTACT ANYWHERE (Alpha 12): two enemy hordes crossing the same NEUTRAL platform (a free glide
-	# for the platform itself) still meet and fight there instead of passing through each other.
-	var sim3b := Sim.new()
-	sim3b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim3b.nodes[1]["owner"] = "A"
-	sim3b.nodes[2]["owner"] = "B"
-	sim3b.nodes[1]["units"] = 120.0
-	sim3b.nodes[2]["units"] = 120.0
-	sim3b.send(1, 2, 1.0)                              # both cross neutral node 0 at the same time
-	sim3b.send(2, 1, 1.0)
-	var met := [false]
-	for k in range(600):
-		sim3b.step(0.05)
-		if not sim3b.fights.is_empty():
-			met[0] = true
-			break
-	check(met[0], "enemy hordes crossing paths engage each other wherever they meet")
-	check(sim3b.events.any(func(e): return e["type"] == "frontline" or e["type"] == "rear"), "the contact is logged")
-
-	# rear attack: an enemy catching up from behind hits the slower horde's tail
-	var sim5 := Sim.new()
-	sim5.setup(map, pos, {1: "A", 3: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim5.nodes[1]["units"] = 120.0
-	sim5.nodes[3]["units"] = 200.0
-	var slow := sim5.send(1, 0, 1.0)
-	slow["speed"] = 0.2
-	sim5.send(3, 0, 1.0)
-	var rear := [false]
-	for k in range(600):
-		sim5.step(0.05)
-		if sim5.events.any(func(e): return e["type"] == "rear"):
-			rear[0] = true
-			break
-	check(rear[0], "enemy catching up from behind makes a rear attack")
-	check(sim5.fights.size() >= 1 and slow["state"] == "fight", "the caught horde is fighting its pursuer")
-
-	# friendly queue: a faster friend behind cannot pass through, it waits at the tail
-	var sim6 := Sim.new()
-	sim6.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim6.nodes[3]["units"] = 240.0
-	var front := sim6.send(3, 1, 0.5)
-	front["speed"] = 0.25
-	while front["s"] < front["spans"][0]["s0"] + 3.0:
-		sim6.step(0.05)
-	var behind := sim6.send(3, 1, 1.0)
-	var queued := false
-	var overtook := false
-	for k in range(400):
-		sim6.step(0.05)
-		if behind.get("blocked", false):
-			queued = true
-		var deck: Dictionary = behind["spans"][0]
-		var on_deck: bool = behind["s"] >= deck["s0"] and behind["s"] <= deck["s1"]
-		if on_deck and front in sim6.hordes and behind["s"] > front["s"]:
-			overtook = true
-	check(queued, "friendly horde queues behind a slower friend on the same deck")
-	check(not overtook, "and never passes through it")
 
 	# structures: Alpha 11 costs x SCALE, paid from the node; production only on vat nodes
 	var st_map := MapBuilder.load_map("res://maps/008-strait.json")
@@ -478,7 +312,10 @@ func _init() -> void:
 	sim16d.nodes[4]["units"] = 12.0
 	var h16d := sim16d.send(1, 0, 1.0)                # A's own line on deck 1-0, B's on deck 4-0: both turn
 	var e16d := sim16d.send(4, 0, 1.0)
-	run_until(sim16d, func(): return not e16d["streaming"] and e16d["s"] - Sim.chain_length(e16d) > e16d["spans"][0]["s0"] + 0.3, 30.0)
+	run_until(sim16d, func():
+		if h16d["s"] > h16d["spans"][0]["s0"] + 1.0:
+			h16d["speed"] = 0.0                            # held on its deck
+		return not e16d["streaming"] and e16d["s"] - Sim.chain_length(e16d) > e16d["spans"][0]["s0"] + 0.3, 30.0)
 	var both16d: bool = h16d in sim16d.hordes and e16d in sim16d.hordes and h16d["s"] > h16d["spans"][0]["s0"] \
 			and h16d["s"] < h16d["spans"][0]["s1"] and e16d["s"] < e16d["spans"][0]["s1"]
 	check(both16d, "A's own line and B's line are both on decks the rotation turns")
@@ -616,58 +453,8 @@ func _init() -> void:
 	check(absf(sim26.production(sim26.nodes[4]) - Rules.PROD[2] * 0.9) < 0.001, "Ember's home produces 10 % less")
 	check(absf(sim26.attack_of("B") - 1.15) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 15 % more damage")
 
-	# TUG-OF-WAR (Alpha 14): the front slides toward the weaker side
-	var sim28 := Sim.new()
-	sim28.setup(ls_map, ls_pos, {1: "A", 0: "B"}, {"A": "null", "B": "null"}, 1)
-	sim28.nodes[1]["units"] = 300.0
-	sim28.nodes[0]["units"] = 100.0
-	var strong := sim28.send(1, 0, 1.0)
-	var weak := sim28.send(0, 1, 1.0)
-	var contact_at := [-1.0, -1.0]
-	var pushed := [false]
-	for k in range(600):
-		sim28.step(0.05)
-		if not sim28.fights.is_empty() and contact_at[0] < 0.0 and weak in sim28.hordes:
-			contact_at = [strong["s"], weak["s"]]
-		elif contact_at[0] >= 0.0 and strong in sim28.hordes and weak in sim28.hordes:
-			if strong["s"] > contact_at[0] + 0.5 and weak["s"] < contact_at[1] - 0.5:
-				pushed[0] = true
-		if not (weak in sim28.hordes):
-			break
-	check(contact_at[0] >= 0.0, "the two lines meet on the M deck")
-	check(pushed[0], "the front slides: the stronger head advances and the weaker line is shoved back")
-	# RECALL: a horde turns round and flows back to the node it left
-	var sim29 := Sim.new()
-	sim29.setup(ls_map, ls_pos, {1: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim29.nodes[1]["units"] = 100.0
-	var h29 := sim29.send(1, 0, 1.0)                 # the M deck to the centre
-	run_until(sim29, func(): return h29["s"] > h29["spans"][0]["s0"] + 3.0, 20.0)
-	var carried: float = h29["units"]
-	var home_before: float = sim29.nodes[1]["units"]
-	check(sim29.recall(h29["id"]), "an own horde on a deck can be recalled")
-	check(h29["target"] == 1 and h29.get("retreat", false), "it now heads back to the node it left")
-	run_until(sim29, func(): return not (h29 in sim29.hordes), 20.0)
-	check(sim29.nodes[1]["units"] > home_before + carried * 0.9, "and pours back into it (%.0f -> %.0f)" % [home_before, sim29.nodes[1]["units"]])
-	check(sim29.nodes[0]["owner"] == "", "the old target was never reached")
-	var sim30 := Sim.new()                             # recall mid-fight: it breaks off and gets out
-	sim30.setup(ls_map, ls_pos, {1: "A", 0: "B"}, {"A": "null", "B": "null"}, 1)
-	sim30.nodes[1]["units"] = 100.0
-	sim30.nodes[0]["units"] = 300.0
-	var losing := sim30.send(1, 0, 1.0)
-	sim30.send(0, 1, 1.0)
-	run_until(sim30, func(): return not sim30.fights.is_empty(), 20.0)
-	check(sim30.recall(losing["id"]), "a horde can be recalled mid-fight")
-	var escaped := false
-	for k in range(400):
-		sim30.step(0.05)
-		if not (losing in sim30.hordes):
-			escaped = sim30.nodes[1]["owner"] == "A" and sim30.events.any(func(e): return e["type"] == "recall")
-			break
-	check(escaped or (losing in sim30.hordes and losing["state"] == "move"), "the retreating line keeps moving under pressure")
-
 	# CLASSIC = Alpha 11's landing rule: each arriving unit is resolved at once, one-for-one at
 	# baseline; nothing waits outside as a siege; survivors take the node
-	Rules.bridge_combat = false
 	var sim32 := Sim.new()
 	sim32.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
 	sim32.nodes[1]["units"] = 20.0
@@ -680,10 +467,7 @@ func _init() -> void:
 	var hc := sim32.send(3, 0, 1.0)
 	run_until(sim32, func(): return not (hc in sim32.hordes), 40.0)
 	check(sim32.nodes[0]["owner"] == "A" and sim32.nodes[0]["siege"].is_empty(), "classic: a send walks in and takes the node, never besieging it")
-	Rules.bridge_combat = true
 
-	# bridge combat toggle (Daniele): OFF = Alpha 11 - hordes pass each other on decks, fights only
-	# at nodes; ON = Alpha 12
 	# conquest downgrades a vat or cannon one tier (minimum 1); neutral captures don't
 	var sim34 := Sim.new()
 	sim34.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
@@ -708,7 +492,6 @@ func _init() -> void:
 	check(not sim33.last_stand_active and sim33.collapsed.is_empty(), "Last Stand OFF: nothing collapses")
 	Rules.last_stand = true
 
-	Rules.bridge_combat = false
 	var sim27 := Sim.new()
 	sim27.setup(map, pos, {1: "A", 0: "B"}, {"A": "null", "B": "ember"}, 1)
 	sim27.nodes[1]["units"] = 100.0
@@ -718,10 +501,9 @@ func _init() -> void:
 	for k in range(200):
 		sim27.step(0.05)
 	check(sim27.fights.is_empty() and sim27.events.filter(func(e): return e["type"] == "frontline").is_empty(),
-			"with bridge combat OFF two hordes pass each other on the deck")
+			"BRAWL: two hordes pass each other on the deck")
 	check(sim27.nodes[1]["siege"].get("B", 0.0) > 0.0 or sim27.nodes[0]["siege"].get("A", 0.0) > 0.0 or sim27.nodes[1]["owner"] == "B" or sim27.nodes[0]["owner"] == "A",
 			"...and fight at the nodes instead")
-	Rules.bridge_combat = true
 
 	# TEAM AND FFA MODES (Alpha 14): allies never fight each other, reinforce each other's nodes, and
 	# a team wins together; FFA up to five seats plays to the end
@@ -821,7 +603,8 @@ func _init() -> void:
 		check(caps >= 2, "%s: AIs capture nodes" % sm["code"])
 
 	# ---------------------------------------------------------------- Alpha 16: Brawl moves like Alpha 11
-	Rules.bridge_combat = false
+	Rules.bridge_combat = true                          # 0.18.7: SIEGE is deactivated - the switch is locked
+	check(not Rules.bridge_combat and not Rules.SIEGE_ON, "SIEGE is deactivated: nothing can switch bridge combat on")
 	check(is_equal_approx(Rules.move_speed(), 8.9 * 0.8 * 0.8) and Rules.platform_mult() == 1.0, "BRAWL: 5.7 m/s on decks and platforms alike (Alpha 11 speed less 20 % twice)")
 	check(absf(Rules.exit_rate() - 47.9167) < 0.01, "BRAWL: 9.6 shown units/s out of the door (Alpha 11: one every 12 px)")
 	var bmap := MapBuilder.load_map("res://maps/004-two-piers.json")
@@ -845,8 +628,7 @@ func _init() -> void:
 	check(absf(enter_rate - Rules.exit_rate()) / Rules.exit_rate() < 0.1, "BRAWL: units enter at the rate they left (Alpha 11 spacing)")
 	var bh2 := bsim.send(4, 2, 1.0)
 	bsim.step(0.5)
-	check(not bsim.recall(bh2["id"]), "BRAWL: no RECALL - it is SIEGE only")
-	Rules.bridge_combat = true
+	check(not bsim.recall(bh2["id"]), "BRAWL: no RECALL (an order, once sent, is committed - Alpha 11)")
 
 	# ---------------------------------------------------------------- Alpha 16: colours read per player
 	Rules.assign_colors(["A", "B", "C", "D"], {"A": "null", "B": "null", "C": "null", "D": "null"}, "A", "A", {})
@@ -975,10 +757,8 @@ func _init() -> void:
 			"the waterfall is one motion: the line walks off the lip (%d pour steps, %d whole-stretch falls)" % [pour_evs, chunk_evs])
 
 	# ---------------------------------------------------------------- 0.18.7: cannons kill where the laser hits
-	# (Daniele: "towers kills enemies blobs from the bottom instead of from the top") - both modes
-	for brawl_k in [true, false]:
-		Rules.bridge_combat = not brawl_k
-		var mode_k: String = "BRAWL" if brawl_k else "SIEGE"
+	# (Daniele: "towers kills enemies blobs from the bottom instead of from the top")
+	for mode_k in ["BRAWL"]:
 		for send_k in [400.0, 20.0]:                       # a line still streaming out, a finished one
 			var kc := Sim.new()
 			kc.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
@@ -1044,14 +824,11 @@ func _init() -> void:
 		kt.step(0.05)
 		check(not kt._hit_head(ct, lh) and lh["units"] < lu0 and absf(lh["s"] - ls0) < 0.001,
 				"%s: a line leaving the tower is hit at its tail (head stays at %.1f m, %.1f -> %.1f units)" % [mode_k, ls0, lu0, lh["units"]])
-	Rules.bridge_combat = true
 
 	# ---------------------------------------------------------------- 0.18.7: relays take the ground away
 	# (Daniele: "units on the bridge have 1 sec to clear the bridge then bye bye, this applies to all type of
-	# switch including the retract ... rotation bridge when it starts moving, all on it falls") - both modes
-	for brawl_r in [true, false]:
-		Rules.bridge_combat = not brawl_r
-		var mode_r: String = "BRAWL" if brawl_r else "SIEGE"
+	# switch including the retract ... rotation bridge when it starts moving, all on it falls")
+	for mode_r in ["BRAWL"]:
 		for c in [["retract", "res://maps4/M-08-neon-delta.json", 7, 1, 7], ["remote", "res://maps4/M-08-neon-delta.json", 4, 6, 7],
 				["switch", "res://maps/010-first-switch.json", 1, 5, 0], ["rotation", "res://maps/061-switchback-foundry.json", 0, 1, 0]]:
 			var kind: String = c[0]
@@ -1130,9 +907,10 @@ func _init() -> void:
 			run_until(ra, func(): return ra.nodes[c[2]]["relay_phase"] == "", 3.0, 0.02)
 			var open_end: bool = opening.all(func(i): return ra.is_edge_open(i))
 			check(closed_mid and open_end, "%s %s: an appearing deck is closed while it moves, walkable once the motion ends (%d decks)" % [mode_r, c[0], opening.size()])
-	Rules.bridge_combat = true                          # as the goo / skills checks below expect
 	_goo_territory()
 	_skills_tests()
+	if SIEGE_TESTS:
+		_siege_tests(map, pos)
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
 
@@ -1171,12 +949,8 @@ func _goo_territory() -> void:
 	## owners (homes covered, neutral bare), a capture spreads and settles, a closed deck drops its goo,
 	## switching back to NEON hides every piece. No sim state is touched.
 	var was_goo := Rules.goo_territory
-	var was_bc := Rules.bridge_combat
 	Rules.goo_territory = true
-	Rules.bridge_combat = true
-	check(not Rules.goo_look(), "GOO territory is off in SIEGE (its hordes are goo already)")
-	Rules.bridge_combat = false
-	check(Rules.goo_look(), "GOO territory is on in BRAWL when the option is")
+	check(Rules.goo_look(), "GOO territory is on when the option is")
 	var map := MapBuilder.load_map("res://maps4/A-01-orbital-nexus.json")
 	var seats := {}
 	for s in map["seats"]["1v1"]:
@@ -1236,7 +1010,6 @@ func _goo_territory() -> void:
 	check(not any_visible, "NEON again: no goo piece shows")
 	holder.queue_free()
 	Rules.goo_territory = was_goo
-	Rules.bridge_combat = was_bc
 
 
 # ------------------------------------------------------------------ SKILLS 2.0 (0.18.7)
@@ -1295,10 +1068,8 @@ func _skills_tests() -> void:
 	_steps(s, 35.1, 0.5)
 	check(s.can_cast("A", "active", 3), "the cooldown runs out")
 	check("charging" in s.cast_check("A", "ultimate", 3), "the ultimate waits for its charge")
-	# ---------------------------------------------------------------- Surge (both modes)
-	for brawl in [false, true]:
-		Rules.bridge_combat = not brawl
-		var tag := "BRAWL" if brawl else "SIEGE"
+	# ---------------------------------------------------------------- Surge
+	for tag in ["BRAWL"]:
 		s = _mk(tp, "null", "null", {"A": {"active": "surge"}})
 		s.nodes[3]["units"] = 150.0
 		var h := s.send(3, 0, 1.0)
@@ -1312,7 +1083,6 @@ func _skills_tests() -> void:
 		check(absf((h["s"] - a0) / plain - 1.5) < 0.05, tag + ": Surge = +50 %% speed (%.2f)" % ((h["s"] - a0) / plain))
 		_steps(s, 7.5)
 		check(s.effects_on("horde", h["id"]).is_empty(), tag + ": Surge ends after 8 s (or with the line)")
-	Rules.bridge_combat = true
 	# ---------------------------------------------------------------- Spore Burst
 	s = _mk(tp, "bloom", "null")
 	s.nodes[3]["units"] = 20.0
@@ -1327,30 +1097,15 @@ func _skills_tests() -> void:
 	s.nodes[3]["units"] = Rules.CAPS[s.nodes[3]["tier"]] - 1.0
 	_steps(s, 1.0)
 	check(s.nodes[3]["units"] <= Rules.CAPS[s.nodes[3]["tier"]], "Spore Burst stays within the cap")
-	# ---------------------------------------------------------------- Fortify: the garrison damage divisor, both modes
+	# ---------------------------------------------------------------- Fortify: the garrison damage divisor
 	s = _mk(tp, "null", "null", {"B": {"active": "fortify"}})
 	s.nodes[1]["owner"] = "B"
 	s.nodes[1]["units"] = 100.0
 	s.cast("B", "active", 1)
-	Rules.bridge_combat = false
 	s._land_classic(s.nodes[1], "A", 33.0)
 	check(absf(s.nodes[1]["units"] - (100.0 - 33.0 / 1.65)) < 0.01, "BRAWL: a fortified garrison loses 1.65x less (33 attackers kill %.1f)" % (100.0 - s.nodes[1]["units"]))
-	Rules.bridge_combat = true
-	var losses := []
-	for fort in [false, true]:
-		s = _mk(tp, "null", "null", {"B": {"active": "fortify"}})
-		s.nodes[1]["owner"] = "B"
-		s.nodes[1]["units"] = 400.0
-		s.nodes[1]["siege"]["A"] = 200.0
-		if fort:
-			s.cast("B", "active", 1)
-		s._node_fights(0.1)
-		losses.append(400.0 - s.nodes[1]["units"])
-	check(absf(losses[0] / losses[1] - 1.65) < 0.01, "SIEGE: the besieged garrison takes 1.65x less damage (%.2f)" % (losses[0] / losses[1]))
-	# ---------------------------------------------------------------- Scorch (both modes)
-	for brawl in [false, true]:
-		Rules.bridge_combat = not brawl
-		var tag := "BRAWL" if brawl else "SIEGE"
+	# ---------------------------------------------------------------- Scorch
+	for tag in ["BRAWL"]:
 		s = _mk(tp, "null", "ember")
 		s.nodes[3]["units"] = 300.0
 		var h := s.send(3, 0, 1.0)
@@ -1364,11 +1119,8 @@ func _skills_tests() -> void:
 		var ends := s.events.filter(func(e): return e["type"] == "skill_end" and e["id"] == "scorch")
 		check(not ends.is_empty() and absf(ends[-1]["kills"] - 10.0 * Rules.SCALE) < 0.5 and burnt >= 10.0 * Rules.SCALE - 0.5,
 				tag + ": Scorch burns enemy lines on the deck, at most 10 shown units (%.1f sim)" % (ends[-1]["kills"] if not ends.is_empty() else -1.0))
-	Rules.bridge_combat = true
-	# ---------------------------------------------------------------- Ghost Line (both modes)
-	for brawl in [false, true]:
-		Rules.bridge_combat = not brawl
-		var tag := "BRAWL" if brawl else "SIEGE"
+	# ---------------------------------------------------------------- Ghost Line
+	for tag in ["BRAWL"]:
 		s = _mk(tp, "null", "null")
 		s.nodes[3]["units"] = 200.0
 		var home_b: float = s.nodes[4]["units"]
@@ -1398,21 +1150,8 @@ func _skills_tests() -> void:
 		_steps(s, 1.0)
 		check(s.combat_losses.get("A", 0.0) == 0.0 and absf(s.charge("B") - s.time / Rules.ULT_CHARGE_TIME) < 0.001,
 				tag + ": its losses are not real and give no ultimate charge")
-		if not brawl:                                    # SIEGE: an enemy line touching it dissolves it
-			s = _mk(tp, "null", "null")
-			s.nodes[3]["units"] = 200.0
-			s.nodes[4]["units"] = 200.0
-			s.cast("A", "active", [3, 4])
-			g = s.hordes[-1]
-			var hb := s.send(4, 3, 1.0)
-			run_until(s, func(): return not (g in s.hordes), 30.0)
-			check(not (g in s.hordes) and s.fx_events.any(func(e): return e["type"] == "ghost_end" and e["why"] == "contact") and s.combat_losses.get("B", 0.0) == 0.0,
-					"SIEGE: an enemy line touching a Ghost Line dissolves it; nobody fights")
-	Rules.bridge_combat = true
-	# ---------------------------------------------------------------- Demolish (both modes): warning, waterfall, rebuild
-	for brawl in [false, true]:
-		Rules.bridge_combat = not brawl
-		var tag := "BRAWL" if brawl else "SIEGE"
+	# ---------------------------------------------------------------- Demolish: warning, waterfall, rebuild
+	for tag in ["BRAWL"]:
 		s = _mk(tp, "null", "ember")
 		var e10 := s._edge_index(1, 0)
 		s.nodes[3]["units"] = 300.0
@@ -1428,7 +1167,6 @@ func _skills_tests() -> void:
 				tag + ": the order across it keeps streaming off the lip (waterfall: %.0f fell)" % s.fall_losses.get("A", 0.0))
 		_steps(s, 12.2)
 		check(s.is_edge_open(e10) and not s.demolished.has(e10), tag + ": the deck rebuilds after 20 s")
-	Rules.bridge_combat = true
 	s = _mk(sw, "null", "ember")
 	check("relay" in s.cast_check("B", "map", 2), "Demolish refuses a relay deck")
 	s = _mk(tp, "null", "ember", {"A": {"map": "anchor"}})
@@ -1438,10 +1176,8 @@ func _skills_tests() -> void:
 	_steps(s, 3.5)
 	check(s.is_edge_open(e10b) and s.events.any(func(e): return e["type"] == "demolish_failed"), "Demolish fails on an anchored deck")
 	check("anchored" in s.cast_check("B", "map", e10b) or s.cooldown("B", "map") > 0.0, "and an anchored deck can't be demolished")
-	# ---------------------------------------------------------------- Mire (both modes; SIEGE: the stronger of Mire and goo, no stacking)
-	for brawl in [false, true]:
-		Rules.bridge_combat = not brawl
-		var tag := "BRAWL" if brawl else "SIEGE"
+	# ---------------------------------------------------------------- Mire
+	for tag in ["BRAWL"]:
 		s = _mk(tp, "null", "bloom")
 		s.nodes[3]["units"] = 150.0
 		var h := s.send(3, 0, 1.0)
@@ -1454,16 +1190,6 @@ func _skills_tests() -> void:
 		a0 = h["s"]
 		_steps(s, 0.5)
 		check(absf((h["s"] - a0) / plain - 0.6) < 0.03, tag + ": enemy lines 40 %% slower on it (%.2f)" % ((h["s"] - a0) / plain))
-	Rules.bridge_combat = true
-	s = _mk(tp, "null", "bloom")
-	s.nodes[1]["owner"] = "B"
-	s.nodes[0]["owner"] = "B"
-	s.nodes[3]["units"] = 300.0
-	var hg := s.send(3, 0, 1.0)
-	run_until(s, func(): return s.on_enemy_goo(hg) or not (hg in s.hordes), 30.0)
-	var goo_only := s.deck_slow(hg)
-	s.cast("B", "map", s._current_span(hg)["edge"])
-	check(absf(goo_only - Rules.GOO_SLOW) < 0.001 and absf(s.deck_slow(hg) - 0.6) < 0.001, "SIEGE: Mire on an enemy goo corridor: the stronger slow (0.6), not 0.7 x 0.6")
 	# ---------------------------------------------------------------- Anchor: relays can't move it, no fling, half cannon kills
 	s = _mk(sw, "null", "null", {"A": {"map": "anchor"}})
 	s.nodes[1]["owner"] = "B"
@@ -1622,10 +1348,8 @@ func _skills_tests() -> void:
 	s.step(0.1)
 	check(absf((s.nodes[3]["units"] - u0) / (Rules.PROD[2] * Rules.stat("bloom", "production") * 0.1) - 1.5) < 0.01, "under_attack: 1.5x")
 	Rules.SUPERBLOOM_MODE = "cap"
-	# ---------------------------------------------------------------- Core Meltdown (both modes)
-	for brawl in [false, true]:
-		Rules.bridge_combat = not brawl
-		var tag := "BRAWL" if brawl else "SIEGE"
+	# ---------------------------------------------------------------- Core Meltdown
+	for tag in ["BRAWL"]:
 		for garrison in [[40.0, 1], [400.0, 4]]:
 			s = _mk(tp, "ember", "null")
 			s.nodes[1]["owner"] = "B"
@@ -1651,7 +1375,6 @@ func _skills_tests() -> void:
 						tag + ": 25 %% sacrificed (%.0f), 3 defenders each (%.0f killed)" % [sac, kills])
 			s.step(0.05)
 			check(absf(s.charge("B") - charge_b - 0.05 / Rules.ULT_CHARGE_TIME) < 0.0001, tag + ": no charge from the meltdown")
-	Rules.bridge_combat = true
 	s = _mk(tp, "ember", "null")
 	s.nodes[3]["units"] = 1000.0
 	s.nodes[3]["tier"] = 4
@@ -1675,12 +1398,10 @@ func _skills_tests() -> void:
 			"the node and its own neighbours: 1.8x less garrison damage, +20 % production")
 	check(s.anchor_state(s._edge_index(1, 3)) == true and s.anchor_state(s._edge_index(1, 0)) == true and s.anchor_state(s._edge_index(0, 2)) == null,
 			"the decks between them are anchored")
-	Rules.bridge_combat = false
 	s.nodes[3]["units"] = 100.0
 	s._land_classic(s.nodes[3], "B", 18.0)
 	var aegis_kill := 18.0 / (Rules.stat("solar", "health") * Rules.stat("solar", "garrison") * 1.8)
 	check(absf(s.nodes[3]["units"] - (100.0 - aegis_kill)) < 0.01, "BRAWL: 18 attackers kill %.1f of a SOLAR Aegis garrison (1.8x less)" % aegis_kill)
-	Rules.bridge_combat = true
 	s = _mk(sw, "solar", "null", {"B": {"map": "relay_hack"}})
 	s.nodes[1]["owner"] = "A"
 	_charged(s, "A")
@@ -1738,3 +1459,246 @@ func _skills_tests() -> void:
 			s.step(0.1)
 		var n_casts: int = ais[0].casts + ais[1].casts
 		check(n_casts > 0, "AI %s casts skills in a match (%d casts in %.0f s)" % [lv, n_casts, s.time])
+
+
+# ---------------------------------------------------------------- SIEGE (deactivated since 0.18.7)
+# Daniele: "for tests and passes exclude siege, actually for now completely deactivate it". These are the
+# SIEGE-only checks (fights on decks, contact anywhere, rear attacks, queues, transit through enemy nodes,
+# goo corridors' slow and push, tug-of-war, recall, besieged platforms); they never run while SIEGE_TESTS is
+# false. To bring SIEGE back: Rules.SIEGE_ON = true, SIEGE_TESTS = true, and re-test everything.
+const SIEGE_TESTS := false
+
+
+func _siege_tests(map: Dictionary, pos: Dictionary) -> void:
+	Rules.bridge_combat = true                          # needs Rules.SIEGE_ON
+	var ls_map := MapBuilder.load_map("res://maps/007-long-span.json")
+	var ls_pos := MapBuilder.layout(ls_map)
+	# travel time: an M deck is 4 s at base speed, nodes crossed fast
+	var sim2 := Sim.new()
+	sim2.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	var h2 := sim2.send(3, 1, 0.5)
+	var arrive := run_until(sim2, func(): return h2["state"] != "move", 30.0, 0.02)
+	check(arrive > 2.5 and arrive < 5.5, "M deck crossing takes %.2f s at %.0f m/s, platforms at the same speed" % [arrive, Rules.deck_speed])
+	var land: Vector3 = h2["pts"][-1]
+	check(absf((land - sim2.nodes[1]["pos"]).length() - Rules.ARC_R) < 0.01,
+			"the line lands on the platform from the side it arrives by, up to the tower's footprint")
+
+	# a besieged platform: attackers sit on it and fight the garrison; the node flips when it falls
+	var sim7 := Sim.new()
+	sim7.setup(map, pos, {3: "A", 1: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim7.nodes[3]["units"] = 200.0
+	sim7.nodes[1]["units"] = 40.0
+	sim7.send(3, 1, 1.0)
+	var sieged := [false]
+	run_until(sim7, func():
+		if sim7.nodes[1]["siege"].get("A", 0.0) > 0.0 and sim7.nodes[1]["owner"] == "B":
+			sieged[0] = true
+		return sim7.nodes[1]["owner"] == "A", 30.0)
+	check(sieged[0], "arriving units sit on the enemy platform as a siege while the garrison stands")
+	check(sim7.nodes[1]["owner"] == "A" and sim7.combat_losses.get("B", 0.0) > 30.0,
+			"the garrison is beaten down on the platform and the node flips (B lost %.0f)" % sim7.combat_losses.get("B", 0.0))
+
+	# ALPHA 14 CORRIDORS AND TRANSIT (Daniele): goo corridors always on between two adjacent nodes
+	# one player owns; passing through an enemy node fights its garrison (the badge number, no
+	# hidden pool) but only an arrival captures; capture either end and the corridor drains.
+	var sim8 := Sim.new()
+	sim8.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim8.nodes[0]["owner"] = "B"                       # B holds 1 and 0: a corridor between them
+	sim8.nodes[2]["owner"] = "A"
+	sim8.nodes[1]["owner"] = "B"
+	sim8.nodes[1]["units"] = 30.0
+	sim8.nodes[0]["units"] = 15.0
+	sim8.nodes[3]["units"] = 900.0
+	var e10 := sim8._edge_index(1, 0)
+	check(sim8.bonded(e10) and sim8.goo_owner(e10) == "B", "two adjacent nodes of one owner share a goo corridor, always on")
+	sim8.send(3, 4, 1.0)
+	var g_dropped := [false]
+	run_until(sim8, func():
+		if sim8.nodes[1]["owner"] == "B" and sim8.nodes[1]["units"] < 25.0:
+			g_dropped[0] = true
+		return sim8.nodes[4]["owner"] == "A", 90.0)
+	check(g_dropped[0], "passing through an enemy node fights its real garrison (no hidden shield)")
+	check(sim8.nodes[1]["owner"] == "B", "and the waypoint is NOT captured by passing through - only an arrival captures")
+	check(sim8.nodes[4]["owner"] == "A", "the surviving force fights on through and still takes its real destination")
+	check(sim8.is_edge_open(sim8._edge_index(3, 1)), "no deck is destroyed by passing through")
+	sim8._capture(sim8.nodes[0], "A", 10.0)
+	check(not sim8.bonded(e10), "capture either end and that corridor's goo drains")
+	# home advantage: a horde on enemy goo is slower and pushes at a disadvantage
+	var sim8b := Sim.new()
+	sim8b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "null"}, 1)
+	sim8b.nodes[1]["owner"] = "B"
+	sim8b.nodes[0]["owner"] = "B"
+	sim8b.nodes[3]["units"] = 120.0
+	var hg := sim8b.send(3, 0, 1.0)                    # A crosses B's 1-0 corridor
+	var seen_goo := [false]
+	var p_goo := [0.0]
+	run_until(sim8b, func():
+		if sim8b.on_enemy_goo(hg) and hg["units"] > 10.0:
+			seen_goo[0] = true
+			p_goo[0] = sim8b.power_of(hg) / (hg["units"] * sim8b.attack_of("A"))
+		return seen_goo[0] or not (hg in sim8b.hordes), 30.0)
+	check(seen_goo[0], "a horde crossing an enemy corridor is on enemy goo")
+	check(absf(p_goo[0] - Rules.GOO_PUSH) < 0.01, "on enemy goo it pushes at %.2f of its weight in a tug-of-war" % Rules.GOO_PUSH)
+
+	var sim9 := Sim.new()
+	sim9.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim9.nodes[1]["owner"] = "B"
+	sim9.nodes[1]["units"] = 500.0                     # strong waypoint: the order dies there
+	sim9.nodes[3]["units"] = 60.0
+	var h9 := sim9.send(3, 4, 1.0)
+	run_until(sim9, func(): return not (h9 in sim9.hordes), 30.0)
+	check(not (h9 in sim9.hordes), "a weak order can be wiped out entirely at a hostile waypoint before reaching its destination")
+	check(sim9.nodes[4]["owner"] == "B", "the real destination was never touched - the order died at the waypoint")
+
+	# a neutral waypoint is a free glide
+	var sim9b := Sim.new()
+	sim9b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim9b.nodes[0]["owner"] = "A"
+	sim9b.nodes[2]["owner"] = "A"
+	sim9b.nodes[3]["units"] = 900.0
+	var units_before: float = sim9b.nodes[1]["units"]
+	sim9b.send(3, 4, 1.0)
+	var t9b := run_until(sim9b, func(): return sim9b.nodes[4]["owner"] == "A", 90.0)
+	check(t9b < 90.0, "capture happened within the loop's budget (t=%.0fs)" % t9b)
+	check(sim9b.nodes[1]["owner"] == "" and absf(sim9b.nodes[1]["units"] - units_before) < 0.5,
+			"a neutral waypoint is a free glide - untouched by a passing order")
+
+	# two opposing hordes on the same deck meet at a frontline and fight to the death
+	var sim3 := Sim.new()
+	sim3.setup(map, pos, {1: "A", 0: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim3.nodes[1]["units"] = 100.0
+	sim3.nodes[0]["units"] = 100.0
+	sim3.send(1, 0, 1.0)
+	sim3.send(0, 1, 0.5)
+	var fought := [false]
+	for k in range(400):
+		sim3.step(0.05)
+		for x in sim3.hordes:
+			if x["state"] == "fight":
+				fought[0] = true
+	check(fought[0], "frontline fight happens on the shared S deck")
+	check(sim3.hordes.size() <= 1, "one side survives the frontline")
+	check(sim3.combat_losses.size() == 2, "both sides lost units in combat")
+
+	# CONTACT ANYWHERE (Alpha 12): two enemy hordes crossing the same NEUTRAL platform (a free glide
+	# for the platform itself) still meet and fight there instead of passing through each other.
+	var sim3b := Sim.new()
+	sim3b.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim3b.nodes[1]["owner"] = "A"
+	sim3b.nodes[2]["owner"] = "B"
+	sim3b.nodes[1]["units"] = 120.0
+	sim3b.nodes[2]["units"] = 120.0
+	sim3b.send(1, 2, 1.0)                              # both cross neutral node 0 at the same time
+	sim3b.send(2, 1, 1.0)
+	var met := [false]
+	for k in range(600):
+		sim3b.step(0.05)
+		if not sim3b.fights.is_empty():
+			met[0] = true
+			break
+	check(met[0], "enemy hordes crossing paths engage each other wherever they meet")
+	check(sim3b.events.any(func(e): return e["type"] == "frontline" or e["type"] == "rear"), "the contact is logged")
+
+	# rear attack: an enemy catching up from behind hits the slower horde's tail
+	var sim5 := Sim.new()
+	sim5.setup(map, pos, {1: "A", 3: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim5.nodes[1]["units"] = 120.0
+	sim5.nodes[3]["units"] = 200.0
+	var slow := sim5.send(1, 0, 1.0)
+	slow["speed"] = 0.2
+	sim5.send(3, 0, 1.0)
+	var rear := [false]
+	for k in range(600):
+		sim5.step(0.05)
+		if sim5.events.any(func(e): return e["type"] == "rear"):
+			rear[0] = true
+			break
+	check(rear[0], "enemy catching up from behind makes a rear attack")
+	check(sim5.fights.size() >= 1 and slow["state"] == "fight", "the caught horde is fighting its pursuer")
+
+	# friendly queue: a faster friend behind cannot pass through, it waits at the tail
+	var sim6 := Sim.new()
+	sim6.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim6.nodes[3]["units"] = 240.0
+	var front := sim6.send(3, 1, 0.5)
+	front["speed"] = 0.25
+	while front["s"] < front["spans"][0]["s0"] + 3.0:
+		sim6.step(0.05)
+	var behind := sim6.send(3, 1, 1.0)
+	var queued := false
+	var overtook := false
+	for k in range(400):
+		sim6.step(0.05)
+		if behind.get("blocked", false):
+			queued = true
+		var deck: Dictionary = behind["spans"][0]
+		var on_deck: bool = behind["s"] >= deck["s0"] and behind["s"] <= deck["s1"]
+		if on_deck and front in sim6.hordes and behind["s"] > front["s"]:
+			overtook = true
+	check(queued, "friendly horde queues behind a slower friend on the same deck")
+	check(not overtook, "and never passes through it")
+
+	# TUG-OF-WAR (Alpha 14): the front slides toward the weaker side
+	var sim28 := Sim.new()
+	sim28.setup(ls_map, ls_pos, {1: "A", 0: "B"}, {"A": "null", "B": "null"}, 1)
+	sim28.nodes[1]["units"] = 300.0
+	sim28.nodes[0]["units"] = 100.0
+	var strong := sim28.send(1, 0, 1.0)
+	var weak := sim28.send(0, 1, 1.0)
+	var contact_at := [-1.0, -1.0]
+	var pushed := [false]
+	for k in range(600):
+		sim28.step(0.05)
+		if not sim28.fights.is_empty() and contact_at[0] < 0.0 and weak in sim28.hordes:
+			contact_at = [strong["s"], weak["s"]]
+		elif contact_at[0] >= 0.0 and strong in sim28.hordes and weak in sim28.hordes:
+			if strong["s"] > contact_at[0] + 0.5 and weak["s"] < contact_at[1] - 0.5:
+				pushed[0] = true
+		if not (weak in sim28.hordes):
+			break
+	check(contact_at[0] >= 0.0, "the two lines meet on the M deck")
+	check(pushed[0], "the front slides: the stronger head advances and the weaker line is shoved back")
+	# RECALL: a horde turns round and flows back to the node it left
+	var sim29 := Sim.new()
+	sim29.setup(ls_map, ls_pos, {1: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim29.nodes[1]["units"] = 100.0
+	var h29 := sim29.send(1, 0, 1.0)                 # the M deck to the centre
+	run_until(sim29, func(): return h29["s"] > h29["spans"][0]["s0"] + 3.0, 20.0)
+	var carried: float = h29["units"]
+	var home_before: float = sim29.nodes[1]["units"]
+	check(sim29.recall(h29["id"]), "an own horde on a deck can be recalled")
+	check(h29["target"] == 1 and h29.get("retreat", false), "it now heads back to the node it left")
+	run_until(sim29, func(): return not (h29 in sim29.hordes), 20.0)
+	check(sim29.nodes[1]["units"] > home_before + carried * 0.9, "and pours back into it (%.0f -> %.0f)" % [home_before, sim29.nodes[1]["units"]])
+	check(sim29.nodes[0]["owner"] == "", "the old target was never reached")
+	var sim30 := Sim.new()                             # recall mid-fight: it breaks off and gets out
+	sim30.setup(ls_map, ls_pos, {1: "A", 0: "B"}, {"A": "null", "B": "null"}, 1)
+	sim30.nodes[1]["units"] = 100.0
+	sim30.nodes[0]["units"] = 300.0
+	var losing := sim30.send(1, 0, 1.0)
+	sim30.send(0, 1, 1.0)
+	run_until(sim30, func(): return not sim30.fights.is_empty(), 20.0)
+	check(sim30.recall(losing["id"]), "a horde can be recalled mid-fight")
+	var escaped := false
+	for k in range(400):
+		sim30.step(0.05)
+		if not (losing in sim30.hordes):
+			escaped = sim30.nodes[1]["owner"] == "A" and sim30.events.any(func(e): return e["type"] == "recall")
+			break
+	check(escaped or (losing in sim30.hordes and losing["state"] == "move"), "the retreating line keeps moving under pressure")
+
+	# Fortify on a besieged platform
+	var s: Sim
+	var tp := map
+	var losses := []
+	for fort in [false, true]:
+		s = _mk(tp, "null", "null", {"B": {"active": "fortify"}})
+		s.nodes[1]["owner"] = "B"
+		s.nodes[1]["units"] = 400.0
+		s.nodes[1]["siege"]["A"] = 200.0
+		if fort:
+			s.cast("B", "active", 1)
+		s._node_fights(0.1)
+		losses.append(400.0 - s.nodes[1]["units"])
+	check(absf(losses[0] / losses[1] - 1.65) < 0.01, "SIEGE: the besieged garrison takes 1.65x less damage (%.2f)" % (losses[0] / losses[1]))
+	Rules.bridge_combat = false

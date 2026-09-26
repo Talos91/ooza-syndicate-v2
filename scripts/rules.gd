@@ -3,6 +3,12 @@ extends RefCounted
 ## Every tunable number of the prototype in one place.
 ## Kit sizes match Models/2.0/build_kit_2_0.py. Army numbers follow Alpha 11's logic scaled by
 ## SCALE (PARAMETERS.md: army scale ~5x; vat caps are still an open question) - change here only.
+##
+## SIEGE IS DEACTIVATED since 0.18.7 (Daniele: "for now completely deactivate it, i don't wanna waste
+## resources on a mode we are less and less keeping into consideration, if we will pick it up later we
+## will simply do, brawl is our game"). The game is BRAWL only: bridge_combat is locked false (SIEGE_ON),
+## no UI or flag can switch it, and the tests no longer cover SIEGE. Its numbers and code paths stay,
+## dormant and untested - re-enable with SIEGE_ON and expect to re-test everything.
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
@@ -102,8 +108,10 @@ static var node_fight_mult: float = NODE_FIGHT_MULT_DEFAULT   # live-tunable: x 
 # BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
 # queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
-static var bridge_combat: bool = false    # BRAWL by default (Daniele, 2026-09-26: "brawl is back as the main game mode
-                                          # and siege is just an abandoned test for now")
+const SIEGE_ON := false                   # 0.18.7: SIEGE deactivated - bridge_combat can't be switched on
+static var bridge_combat: bool = false:   # BRAWL (Daniele, 2026-09-26: "brawl is back as the main game mode
+	set(v):                               # and siege is just an abandoned test for now"); locked since 0.18.7
+		bridge_combat = v and SIEGE_ON
 # LAST STAND toggle (Daniele: "add a toggle for Last Stand on or off in the match settings").
 # Off: no collapse; the 7:00 safety net still ends a stalled match by strength.
 static var last_stand: bool = true
