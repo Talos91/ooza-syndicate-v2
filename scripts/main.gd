@@ -303,6 +303,8 @@ func _start_map(path: String) -> void:
 				Net.room_code, Net.match_round, HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
 	else:
 		hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
+	if hud.dock.visible and hud.dock.start_note() != "":   # a relay map skill swapped on a map with no relays
+		hud.toast(hud.dock.start_note(), "info")
 
 
 func start_match(path: String, faction: String, rival_faction: String, level: String, match_mode := "1v1", colour := "A", loadout := {}) -> void:
@@ -794,6 +796,8 @@ func _process(delta: float) -> void:
 	for ev in sim.fx_events:
 		fx.handle(ev)
 		match ev["type"]:
+			"skill":                                  # a rival's skill that touches you: a toast (SkillDock.on_event)
+				hud.skill_event(ev)
 			"last_stand":
 				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
 						"chaos": "nodes fall in a hidden order - your home last"}
@@ -902,6 +906,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				if not mb.pressed:                      # a drag released on the HUD is cancelled, never left hanging
 					_swallow_release = false
 					_end_drag()
+				return
+			if hud.dock.take_input(mb):                 # SKILLS 2.0: a slot is armed - this tap picks its target
 				return
 			var hit := _ground(mb.position)
 			if mb.pressed:

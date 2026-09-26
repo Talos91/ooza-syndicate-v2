@@ -22,7 +22,6 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 func _init() -> void:
 	Rules.bridge_combat = true                      # these checks were written for SIEGE (the old default); BRAWL is the game's default since 0.18.7
-	Rules.abilities_on = true                       # skills ship off until their UI lands; the checks expect them on
 	var map := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var pos := MapBuilder.layout(map)
 	check(pos.size() == 5, "Two Piers lays out 5 nodes")
@@ -1042,6 +1041,7 @@ func _init() -> void:
 	Rules.bridge_combat = true
 	_goo_territory()
 	_skills_tests()
+	_dock_tests()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
 
@@ -1618,3 +1618,106 @@ func _skills_tests() -> void:
 			s.step(0.1)
 		var n_casts: int = ais[0].casts + ais[1].casts
 		check(n_casts > 0, "AI %s casts skills in a match (%d casts in %.0f s)" % [lv, n_casts, s.time])
+
+
+# ------------------------------------------------------------------ SKILLS 2.0 dock (0.18.7): taps -> node_action("cast")
+class DockMain:
+	## main.gd's side of the dock: node_action runs the order like main.perform (offline) and records it.
+	extends RefCounted
+	var sim: Sim
+	var HUMAN := "A"
+	var fraction := 0.5
+	var paused := false
+	var online := false
+	var LOADOUTS := {}
+	var cam = null
+	var calls: Array = []
+	func node_action(method: String, id: int, args := {}) -> bool:
+		calls.append([method, id, args])
+		return method == "cast" and sim.cast(HUMAN, ["active", "map", "ultimate"][id], args.get("target", null))
+
+
+class DockHud:
+	extends RefCounted
+	var toasts: Array = []
+	func toast(msg: String, _kind := "") -> void:
+		toasts.append(msg)
+	func close_inspector() -> void:
+		pass
+
+
+func _dock(s: Sim, lo := {}) -> Array:
+	var fm := DockMain.new()
+	fm.sim = s
+	fm.LOADOUTS = lo
+	var fh := DockHud.new()
+	var d := SkillDock.new()
+	d.setup(fm, s, "A", 1.0, false, fh, null)
+	return [d, fm, fh]
+
+
+func _dock_tests() -> void:
+	var tp := MapBuilder.load_map("res://maps/004-two-piers.json")       # 3 - 1 - 0 - 2 - 4, no relays
+	var want := {"A": {"active": "surge", "map": "bypass"}}
+	var s := _mk(tp, "null", "ember", want, {3: "A", 4: "B"})
+	var r := _dock(s, want)
+	var d: SkillDock = r[0]
+	var fm: DockMain = r[1]
+	var fh: DockHud = r[2]
+	check(d.swapped == "bypass" and s.skill_id("A", "map") == "demolish" and "Demolish" in d.start_note(),
+			"dock: a relay preset on a map without relays shows the fallback (%s)" % d.start_note())
+	d.sync(0.1)
+	check((d.slots[0] as SkillDock.Slot).id == "surge" and (d.slots[0] as SkillDock.Slot).is_ready and not (d.slots[2] as SkillDock.Slot).is_ready,
+			"dock: slots show the loadout; active ready, ultimate charging")
+	d.press_slot(0)
+	check(d.armed == -1 and fm.calls.is_empty() and fh.toasts.size() == 1, "dock: Surge with no line to pick does not arm (toast: %s)" % str(fh.toasts))
+	var h := s.send(3, 1, 1.0)
+	s.step(0.5)
+	d.press_slot(0)
+	check(d.armed == 0 and h["id"] in d.cands, "dock: tapping the slot arms it; your line is a lit target")
+	d.pick(h["id"])
+	check(fm.calls.size() == 1 and fm.calls[0] == ["cast", 0, {"target": h["id"]}] and d.armed == -1 and s.cooldown("A", "active") > 0.0,
+			"dock: tapping the target casts through node_action(\"cast\", 0, {target})")
+	d.press_slot(1)
+	var armed_map := d.armed == 1 and not d.cands.is_empty()
+	d.press_slot(1)
+	check(armed_map and d.armed == -1 and fm.calls.size() == 1 and s.cooldown("A", "map") == 0.0, "dock: the slot tapped again cancels; nothing is spent")
+	d.press_slot(1)
+	d.pick(-5)
+	check(d.armed == 1 and fm.calls.size() == 1 and fh.toasts[-1] == "Pick a deck", "dock: a wrong target toasts cast_check's reason and stays armed")
+	var ei: int = d.cands[0]
+	d.pick(ei)
+	check(fm.calls[-1] == ["cast", 1, {"target": ei}] and s.effects_on("edge", ei).any(func(e): return e["id"] == "demolish"),
+			"dock: Demolish cast on a lit deck")
+	var n_calls := fm.calls.size()
+	d.press_slot(2)
+	check(fm.calls.size() == n_calls and d.armed == -1 and "charging" in fh.toasts[-1], "dock: a charging ultimate only says so (%s)" % fh.toasts[-1])
+	_charged(s, "A")
+	d.sync(0.1)
+	d.press_slot(2)
+	check(fm.calls.size() == n_calls + 1 and fm.calls[-1] == ["cast", 2, {"target": null}] and s.charge("A") < 1.0,
+			"dock: a no-target ultimate (Echo Split) casts on the tap")
+	# Ghost Line: the source, then the destination (the send fraction set in the panel)
+	var s2 := _mk(tp, "null", "ember", {"A": {"active": "ghost_line"}}, {3: "A", 4: "B"})
+	var r2 := _dock(s2, {})
+	var d2: SkillDock = r2[0]
+	var fm2: DockMain = r2[1]
+	fm2.fraction = 0.25
+	d2.press_slot(0)
+	d2.pick(3)
+	check(d2.armed == 0 and d2.src == 3 and fm2.calls.is_empty() and 4 in d2.cands, "dock: Ghost Line takes its source first, then lights destinations")
+	d2.pick(4)
+	check(fm2.calls.size() == 1 and fm2.calls[0][2]["target"] == [3, 4, 0.25] and s2.hordes.any(func(x): return x.get("decoy", false)),
+			"dock: ... then the destination casts [src, dst, fraction]")
+	# enemy casts: a toast when a rival's skill touches you; private events stay private
+	d.on_event({"type": "skill", "id": "scorch", "seat": "B", "slot": "active", "affects": ["A"]})
+	check("seat B cast SCORCH" in fh.toasts[-1], "dock: a rival's skill on you toasts (%s)" % fh.toasts[-1])
+	var nt := fh.toasts.size()
+	d.on_event({"type": "skill", "id": "ghost_line", "seat": "B", "slot": "active", "affects": ["A"], "private": "B"})
+	d.on_event({"type": "skill", "id": "mire", "seat": "B", "slot": "map", "affects": []})
+	d.on_event({"type": "skill", "id": "surge", "seat": "A", "slot": "active", "affects": ["A"]})
+	check(fh.toasts.size() == nt, "dock: no toast for another seat's private event, a cast that misses you, or your own")
+	for x in [d, d2]:
+		x.layer.free()
+		x.hint_panel.free()
+		x.free()

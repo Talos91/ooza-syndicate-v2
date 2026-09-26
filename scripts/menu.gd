@@ -10,6 +10,9 @@ extends CanvasLayer
 ## enemy counts, detail). ONLINE -> CREATE ROOM / JOIN ROOM ->
 ## the room lobby (players, teams, faction, colour, map, PLAYERS, SIEGE/BRAWL, Last Stand) -> DEPLOY by
 ## the host (Net, peer-to-peer). TUTORIAL is not in 2.0 yet.
+## ARMIES (0.18.7, SKILLS 2.0): the army presets - per faction its fixed ultimate plus 1 active and 1 map skill
+## picked from the shared pools (ArmyPresets, saved on the device). 01 FACTION shows the preset; 03 SETUP and
+## the lobby carry ABILITIES ON / OFF; DEPLOY and the room send your preset as the match loadout.
 
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
@@ -42,10 +45,13 @@ var _chat_btn: Button
 var _chat_t := 0.0
 var _move_pick := -1                               # host, team modes: the player picked to MOVE to a team
 const HUE_NAMES := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]   # Rules.HUES, lobby order
+var _army := ""                                    # ARMIES: the faction whose preset is open
+var _army_back := Callable()                       # ARMIES: the page it was opened from
 
 
 func setup(m: Node3D) -> void:
 	main = m
+	ArmyPresets.load_all()                            # the saved army presets (none, or no storage: the defaults)
 	_backdrop = TextureRect.new()                     # full-screen art behind the scaled page
 	var art: Texture2D = load("res://assets/art/ui-main.png")
 	var clean := AtlasTexture.new()                   # the art's right part: its left edge has Alpha 11's
@@ -79,7 +85,12 @@ static func P(x: float, y: float) -> Vector2:
 
 
 func color() -> Color:
-	return Color("18dae8") if _is_main else Rules.FACTIONS[faction][1]
+	return Color("18dae8") if _is_main else Rules.FACTIONS[skin()][1]
+
+
+func skin() -> String:
+	## The faction the page is dressed in: yours, or on ARMIES the faction whose preset is open.
+	return _army if _page == "armies" and _army != "" else faction
 
 
 # ------------------------------------------------------------------ Alpha 11's widgets
@@ -128,7 +139,7 @@ func button(text: String, call: Callable, width: float = 130.0) -> Button:
 	b.add_theme_color_override("font_disabled_color", Color("a6b2bb"))
 	b.add_theme_font_size_override("font_size", int(round(19 * K)))
 	b.pressed.connect(func(): call.call_deferred())
-	UiSkin.button(b, faction)
+	UiSkin.button(b, skin())
 	return b
 
 
@@ -138,7 +149,7 @@ func nav_button(text: String, pos: Vector2, dims: Vector2, call: Callable, prima
 	b.custom_minimum_size = dims
 	b.size = dims
 	b.add_theme_font_size_override("font_size", int(round(25 * K)))
-	UiSkin.button(b, "vex" if _is_main else faction, primary)
+	UiSkin.button(b, "vex" if _is_main else skin(), primary)
 	content.add_child(b)
 	return b
 
@@ -209,6 +220,41 @@ func neon_icon(icon_name: String, pos: Vector2, dims: Vector2, col: Color) -> vo
 	icon.modulate = col
 
 
+func skill_icon(id: String, pos: Vector2, dims: Vector2, col: Color, parent: Control = null) -> TextureRect:
+	## A skill's line icon (assets/ui/skills, ArmyPresets.icon) in a colour, with the neon glow of neon_icon.
+	var tex := ArmyPresets.icon(id)
+	if tex == null:
+		return null
+	var host := parent if parent != null else content
+	var out: TextureRect
+	for spread in [6.0, 0.0]:
+		var r := TextureRect.new()
+		r.texture = tex
+		r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		r.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		r.position = pos - Vector2.ONE * spread / 2.0
+		r.modulate = Color(col, 0.25) if spread > 0.0 else col
+		host.add_child(r)
+		r.size = dims + Vector2.ONE * spread
+		r.set_deferred("size", dims + Vector2.ONE * spread)
+		out = r
+	return out
+
+
+func loadout_icons(f: String, lo: Dictionary, pos: Vector2, icon: float, gap: float, has_relays := true) -> void:
+	## Three small icons - active, map, ultimate - of a loadout (the map skill a no-relay map swaps in, dimmed
+	## gold, when the preset's is a relay skill).
+	var eff := ArmyPresets.effective(f, lo, has_relays)
+	var fc: Color = Rules.FACTIONS[f][1]
+	var ids := [eff["active"], eff["map"], eff["ultimate"]]
+	for i in range(3):
+		var p := pos + Vector2(i * (icon + gap), 0)
+		content.add_child(neon_panel(p - Vector2.ONE * 3.0 * K, Vector2.ONE * (icon + 6.0 * K), fc if i < 2 else Color("ffd15c"), false, Color("020a10d8")))
+		skill_icon(ids[i], p + Vector2.ONE * icon * 0.1, Vector2.ONE * icon * 0.8, Color("ffd15c") if (i == 1 and eff["swapped"] != "") else fc)
+
+
 func header(step: int) -> void:
 	picture("res://assets/ui/Ooze-Syndicate-Wordmark.svg", P(35, 10), P(172, 64))
 	if step > 0:
@@ -236,12 +282,15 @@ func show_main() -> void:
 	picture("res://assets/ui/Ooze-Syndicate-Logo.svg", P(59, 94), P(520, 293))
 	var start := nav_button("NEW GAME", P(80, 407), P(440, 98), show_factions, true)
 	start.add_theme_font_size_override("font_size", int(round(37 * K)))
-	nav_button("OPTIONS", P(80, 532), P(440, 82), show_options).add_theme_font_size_override("font_size", int(round(32 * K)))
-	nav_button("FULLSCREEN" if OS.has_feature("web") else "QUIT", P(80, 639), P(440, 82), func():
+	# ARMIES (0.18.7, Daniele: "its own new menu item where you select what skill each of your factions will
+	# use"): its own row under NEW GAME; OPTIONS and FULLSCREEN / QUIT share the next one
+	nav_button("ARMIES", P(80, 532), P(440, 82), func(): show_armies(faction, show_main)).add_theme_font_size_override("font_size", int(round(32 * K)))
+	nav_button("OPTIONS", P(80, 639), P(212, 82), show_options).add_theme_font_size_override("font_size", int(round(28 * K)))
+	nav_button("FULLSCREEN" if OS.has_feature("web") else "QUIT", P(307, 639), P(213, 82), func():
 		if OS.has_feature("web"):
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		else:
-			get_tree().quit()).add_theme_font_size_override("font_size", int(round(32 * K)))
+			get_tree().quit()).add_theme_font_size_override("font_size", int(round(28 * K)))
 	var tut := nav_button("TUTORIAL", P(80, 745), P(212, 64), func(): pass)
 	tut.disabled = true
 	tut.tooltip_text = "Not in 2.0 yet"
@@ -328,26 +377,27 @@ func show_factions() -> void:
 	label_at(str(Rules.FACTION_TRAITS[faction][0]).to_upper(), P(719, 596), 24)
 	label_at(Rules.FACTION_TRAITS[faction][1], P(719, 632), 18, Color("bed0da"))
 	label_at("COMING SOON", P(924, 685), 15, Color("7795a4"))
+	# SKILLS 2.0: the faction's army preset (ARMIES) - each row opens ARMIES on this faction
 	frame(P(1095, 134), P(550, 580))
 	label_at("ABILITIES", P(1118, 152), 30)
-	label_at("OOZE FACTORY: 3 SLOTS", P(1400, 161), 16, col)
-	var names: Array = Rules.FACTION_NAMES[faction]
-	var slots := [["ACTIVE SKILL", "One regular skill from the %s pool." % names[0], "attack"],
-			["MAP SKILL", "A network ability: temporary deck, destroy a section, hack a relay.", "efficient_routing"],
-			[str(Rules.FACTION_ULTIMATE[faction][0]).to_upper(), "Ultimate, charges over ~120 s: %s." % Rules.FACTION_ULTIMATE[faction][1], "speed"]]
+	var edit := nav_button("EDIT IN ARMIES  ›", P(1392, 144), P(232, 50), func(): show_armies(faction, show_factions))
+	edit.add_theme_font_size_override("font_size", int(round(19 * K)))
+	var lo := ArmyPresets.loadout_for(faction)
+	var ids := [lo["active"], lo["map"], Rules.FACTION_ULTIMATE_ID[faction]]
+	var tags := ["ACTIVE SKILL  ·  ARMY PRESET", "MAP SKILL  ·  ARMY PRESET", "ULTIMATE  ·  %s ONLY" % str(Rules.FACTION_NAMES[faction][0])]
 	for i in range(3):
 		var y := 200 + i * 165
-		frame(P(1117, y), P(507, 150), "row")
-		neon_icon(slots[i][2], P(1134, y + 40), P(64, 64), col)
-		label_at(slots[i][0], P(1217, y + 18), 24)
-		var desc := label_at(slots[i][1], P(1217, y + 60), 20, Color("c5d2da"))
+		var id: String = ids[i]
+		nav_button("", P(1117, y), P(507, 150), func(): show_armies(faction, show_factions))
+		content.add_child(neon_panel(P(1117, y), P(507, 150), col, false, Color("020a10e8")))
+		skill_icon(id, P(1136, y + 33), P(84, 84), col)
+		label_at(tags[i], P(1238, y + 14), 16, Color(col, 0.9))
+		label_at(ArmyPresets.skill_name(id).to_upper(), P(1238, y + 36), 28)
+		var desc := label_at(ArmyPresets.line(id), P(1238, y + 80), 19, Color("c5d2da"))
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # wrap first, then fix the width
-		desc.custom_minimum_size = Vector2(382 * K, 0)
-		desc.size = Vector2(382 * K, 0)
-		if i == 2:
-			label_at("ULTIMATE / 120s", P(1500, y + 126), 13, Color("ffd15c"))
-		else:
-			label_at("COMING SOON", P(1500, y + 126), 13, Color("7795a4"))
+		desc.custom_minimum_size = Vector2(368 * K, 0)
+		desc.size = Vector2(368 * K, 0)
+		label_at(ArmyPresets.cd_text(id) + ("" if i == 2 else " CD"), P(1500, y + 16), 15, Color("ffd15c") if i == 2 else Color("9cb2bf"))
 	for i in range(5):
 		faction_tab(FACTIONS[i], P(34 + i * 324, 745), P(312, 101))
 	nav_button("BACK", P(40, 866), P(230, 58), show_main)
@@ -367,6 +417,115 @@ func faction_tab(f: String, pos: Vector2, dims: Vector2) -> void:
 	content.add_child(neon_panel(pos, dims, fc, chosen, Color(0, 0, 0, 0)))
 	if chosen:
 		neon_icon("check", pos + P(279, 9), P(21, 21), fc)
+
+
+# ------------------------------------------------------------------ ARMIES (army presets, SKILLS 2.0)
+func show_armies(f: String = "", back: Callable = Callable()) -> void:
+	## Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select what
+	## skill each of your factions will use, follow the skill file from faction ultimates and ability pool)".
+	## Left: the five factions (their preset's three icons). Right: the faction's ultimate (fixed), then the
+	## five active skills and the five map skills - tap a card to equip it. Saved on the device at once.
+	if f != "":
+		_army = f
+	if _army == "":
+		_army = faction
+	if back.is_valid():
+		_army_back = back
+	if not _army_back.is_valid():
+		_army_back = show_main
+	clear_page("city")
+	_page = "armies"
+	header(0)
+	var fc := color()
+	var lo := ArmyPresets.loadout_for(_army)
+	label_at("ARMIES", P(40, 104), 43)
+	label_at("ARMY PRESETS  ·  one active skill and one map skill per faction; the ultimate comes with the faction",
+			P(262, 122), 20, Color("abc1cd"))
+	# the factions, each with its preset's three icons
+	for i in range(FACTIONS.size()):
+		var tf: String = FACTIONS[i]
+		var pos := P(35, 174 + i * 128)
+		var dims := P(362, 118)
+		var tc: Color = Rules.FACTIONS[tf][1]
+		nav_button("", pos, dims, func(): show_armies(tf))
+		content.add_child(neon_panel(pos, dims, tc, tf == _army, Color("020a10e0") if tf != _army else Color("08202ae8")))
+		portrait(tf, pos + P(6, 6), P(100, 106))
+		label_at("VIRIDIAN" if tf == "bloom" else tf.to_upper(), pos + P(120, 10), 26, tc if tf == _army else Color.WHITE)
+		loadout_icons(tf, ArmyPresets.loadout_for(tf), pos + P(124, 56), 46.0 * K, 10.0 * K)
+		if tf == faction:
+			label_at("YOU", pos + P(306, 16), 15, Color("ffd15c"))
+	# the ultimate: fixed by the faction
+	var ult: String = Rules.FACTION_ULTIMATE_ID[_army]
+	var up := P(415, 174)
+	content.add_child(neon_panel(up, P(1222, 140), Color("ffd15c"), true, Color("0a1216ec")))
+	skill_icon(ult, up + P(22, 20), P(100, 100), Color("ffd15c"))
+	label_at("ULTIMATE  ·  %s ONLY  ·  FIXED" % str(Rules.FACTION_NAMES[_army][0]), up + P(146, 14), 18, Color("ffd15c"))
+	label_at(ArmyPresets.skill_name(ult).to_upper(), up + P(146, 36), 34)
+	var ud := label_at(str(Rules.SKILLS[ult]["desc"]), up + P(146, 84), 19, Color("c5d2da"))
+	ud.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ud.custom_minimum_size = Vector2(1050 * K, 0)
+	ud.size = Vector2(1050 * K, 0)
+	label_at("CHARGES IN ~%d s (AT LEAST %d s); ENEMY KILLS SPEED IT UP" % [int(Rules.ULT_CHARGE_TIME), int(Rules.ULT_MIN_TIME)], up + P(700, 16), 15, Color("9cb2bf"))
+	# the two pools
+	var rows := [["active", "ACTIVE SKILL  ·  PICK ONE", "combat skills, every map", Rules.ACTIVE_SKILLS, 326],
+			["map", "MAP SKILL  ·  PICK ONE", "network skills; relay skills need a map with relays", Rules.MAP_SKILLS, 576]]
+	for row in rows:
+		var slot: String = row[0]
+		var y: int = row[4]
+		label_at(row[1], P(415, y), 24)
+		label_at(row[2], P(790, y + 6), 17, Color("8fb3c2"))
+		var pool: Array = row[3]
+		for i in range(pool.size()):
+			_skill_card(pool[i], slot, lo[slot] == pool[i], P(415 + i * 247, y + 32), P(234, 206), fc)
+	# foot: back, reset, the save state
+	nav_button("BACK", P(40, 866), P(230, 58), func(): _leave_armies())
+	var rs := nav_button("RESET %s TO DEFAULT" % ("VIRIDIAN" if _army == "bloom" else _army.to_upper()), P(290, 866), P(420, 58), func():
+		ArmyPresets.reset(_army)
+		_preset_changed()
+		show_armies())
+	rs.add_theme_font_size_override("font_size", int(round(20 * K)))
+	rs.disabled = ArmyPresets.is_default(_army)
+	var note := "Saved on this device" if ArmyPresets.saved else "This browser keeps no storage: your picks last until the page closes"
+	label_at(note, P(740, 884), 18, Color("7795a4") if ArmyPresets.saved else Color("ffd15c"))
+
+
+func _skill_card(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vector2, fc: Color) -> void:
+	## One pool skill as a tap target: icon, cooldown, name, one line in shown numbers (the full sentence as
+	## its tooltip); the equipped one glows with a check.
+	var sk: Dictionary = Rules.SKILLS[id]
+	var b := nav_button("", pos, dims, func():
+		ArmyPresets.set_pick(_army, slot, id)
+		_preset_changed()
+		show_armies())
+	b.tooltip_text = str(sk["desc"])
+	content.add_child(neon_panel(pos, dims, fc, chosen, Color("08202aea") if chosen else Color("020a10e4")))
+	skill_icon(id, pos + P(16, 16), P(78, 78), fc if chosen else Color("c9dbe3"))
+	label_at("%d s CD" % int(sk["cd"]), pos + P(106, 18), 20, Color("9cb2bf"))
+	if chosen:
+		label_at("EQUIPPED", pos + P(106, 46), 17, fc)
+		neon_icon("check", pos + P(dims.x / K - 34, 12), P(20, 20), fc)
+	if sk.get("needs_relays", false):
+		label_at("NEEDS RELAYS", pos + P(106, 70), 15, Color("ffb12b"))
+	label_at(ArmyPresets.skill_name(id).to_upper(), pos + P(16, 104), 24, Color.WHITE if chosen else Color("dbe6ec"))
+	var d := label_at(ArmyPresets.line(id), pos + P(16, 138), 18, Color("c5d2da"))
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.custom_minimum_size = Vector2(dims.x - 32 * K, 0)
+	d.size = Vector2(dims.x - 32 * K, 0)
+
+
+func _preset_changed() -> void:
+	## In a room, your preset for the faction you play is your loadout: resend it.
+	if Net.in_room() and _army == faction:
+		ArmyPresets.send_to(Net, faction)
+
+
+func _leave_armies() -> void:
+	var back := _army_back
+	_army_back = Callable()
+	_army = ""
+	if Net.in_room():
+		ArmyPresets.send_to(Net, faction)
+	back.call()
 
 
 func show_maps() -> void:
@@ -561,13 +720,19 @@ func show_setup() -> void:
 			ai_level = lv
 			show_setup(), lv == ai_level)
 		b.add_theme_font_size_override("font_size", int(round(14 * K)))
-	nav_button("MODE / %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL"), P(1058, 746), P(272, 60), func():
+	var mdb := nav_button("MODE / %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL"), P(1058, 746), P(176, 60), func():
 		Rules.bridge_combat = not Rules.bridge_combat
 		show_setup())
-	nav_button("LAST STAND / %s" % ("ON" if Rules.last_stand else "OFF"), P(1338, 746), P(272, 60), func():
+	var lsb := nav_button("LAST STAND / %s" % ("ON" if Rules.last_stand else "OFF"), P(1242, 746), P(184, 60), func():
 		Rules.last_stand = not Rules.last_stand
 		show_setup())
-	label_at("SIEGE = goo hordes that fight on bridges.  BRAWL = Alpha 11 rules.  Last Stand OFF = no collapse.", P(1062, 812), 14, Color("7795a4"))
+	# SKILLS 2.0: ABILITIES ON / OFF (Alpha 11's match setting; default ON)
+	var abb := nav_button("ABILITIES / %s" % ("ON" if Rules.abilities_on else "OFF"), P(1434, 746), P(176, 60), func():
+		Rules.abilities_on = not Rules.abilities_on
+		show_setup(), Rules.abilities_on)
+	for b in [mdb, lsb, abb]:
+		b.add_theme_font_size_override("font_size", int(round(20 * K)))
+	label_at("BRAWL = Alpha 11 rules  ·  Last Stand OFF = no collapse  ·  ABILITIES OFF = no skills", P(1062, 812), 14, Color("7795a4"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_maps)
 	nav_button("DEPLOY", P(1280, 866), P(352, 58), deploy, true)
 
@@ -579,6 +744,16 @@ func summary_card(f: String, pos: Vector2, dims: Vector2, change: bool) -> void:
 	label_at(NAMES[f].split("\n")[1], pos + P(177, 70), 20, Color("adc7d2"))
 	if change:
 		nav_button("CHANGE", pos + Vector2(dims.x - 148 * K, dims.y - 50 * K), P(132, 42), show_factions).add_theme_font_size_override("font_size", int(round(19 * K)))
+		# your army preset on this map (a relay skill greyed to its fallback where the map has no relays); tap: ARMIES
+		var ip := pos + Vector2(dims.x - 162 * K, 12 * K)
+		var ab := nav_button("", ip - P(6, 4), P(160, 60), func(): show_armies(f, show_setup))
+		ab.tooltip_text = "Your army preset - tap to change it in ARMIES"
+		loadout_icons(f, ArmyPresets.loadout_for(f), ip, 42.0 * K, 8.0 * K, ArmyPresets.map_has_relays(_selected_map()))
+		var eff := ArmyPresets.effective(f, ArmyPresets.loadout_for(f), ArmyPresets.map_has_relays(_selected_map()))
+		if not Rules.abilities_on:
+			label_at("ABILITIES OFF", ip + P(0, 54), 13, Color("7795a4"))
+		elif eff["swapped"] != "":
+			label_at("NO RELAYS: %s" % ArmyPresets.skill_name(eff["map"]).to_upper(), ip + P(-14, 54), 13, Color("ffd15c"))
 
 
 func deploy() -> void:
@@ -586,7 +761,7 @@ func deploy() -> void:
 	if r == "random":
 		var others := FACTIONS.filter(func(f): return f != faction)
 		r = others[randi() % others.size()]
-	main.start_match(map_path, faction, r, ai_level, mode, colour)
+	main.start_match(map_path, faction, r, ai_level, mode, colour, ArmyPresets.loadout_for(faction))   # your ARMIES preset
 
 
 # ------------------------------------------------------------------ online (Net, peer-to-peer rooms)
@@ -607,6 +782,7 @@ func show_online() -> void:
 	_faction_row(P(60, 405), P(300, 64))
 	var web := OS.has_feature("web")
 	var create := nav_button("CREATE ROOM", P(60, 520), P(560, 92), func():
+		ArmyPresets.send_to(Net, faction)                     # your ARMIES preset rides in the roster
 		Net.host_room(faction)
 		show_lobby(), true)
 	create.disabled = not web
@@ -614,6 +790,7 @@ func show_online() -> void:
 	join.disabled = not web
 	if not Net.rejoin.is_empty():                     # dropped out of a room: back into the same seat
 		var rc := nav_button("RECONNECT  %s" % str(Net.rejoin["code"]), P(1220, 520), P(380, 92), func():
+			ArmyPresets.send_to(Net, str(Net.rejoin.get("faction", faction)))
 			Net.reconnect()
 			show_lobby(), true)
 		rc.disabled = not web
@@ -634,7 +811,7 @@ func _faction_row(pos: Vector2, dims: Vector2) -> void:
 		var b := nav_button("VIRIDIAN" if f == "bloom" else f.to_upper(), pos + Vector2(i * (dims.x + 12 * K), 0), dims, func():
 			faction = f
 			main.SEAT_FACTIONS[main.HUMAN] = f
-			Net.set_faction(f)
+			ArmyPresets.room_faction(Net, f)                          # the faction and its ARMIES preset
 			if _page == "lobby":
 				show_lobby()
 			else:
@@ -651,6 +828,7 @@ func show_lobby() -> void:
 		return
 	clear_page("city")
 	_page = "lobby"
+	map_path = Net.map_path                           # the rows' loadout icons read the room's map (relays)
 	header(0)
 	if Net.roster.has(Net.local_id()):
 		faction = str(Net.roster[Net.local_id()]["faction"])
@@ -661,10 +839,12 @@ func show_lobby() -> void:
 	var chat := nav_button("CHAT (%d)" % Net.chat_unread() if Net.chat_unread() > 0 else "CHAT", P(668, 110), P(180, 52), Net.open_chat)
 	chat.disabled = not Net.connected
 	_chat_btn = chat
-	var st := label_at(Net.status, P(868, 122), 18, Color("adc7d2"))
+	var army := nav_button("MY ARMY", P(866, 110), P(170, 52), func(): show_armies(faction, show_lobby))   # your preset = your loadout
+	army.disabled = Net.active
+	var st := label_at(Net.status, P(1054, 122), 18, Color("adc7d2"))
 	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	st.custom_minimum_size = Vector2(770 * K, 0)
-	st.size = Vector2(770 * K, 0)
+	st.custom_minimum_size = Vector2(584 * K, 0)
+	st.size = Vector2(584 * K, 0)
 	# players (0.18.7, Daniele: "there should be so i can switch to my gf team"; every seat's colour is
 	# the same on every screen): team modes list the seats team by team, each team with its JOIN TEAM
 	# control (tall enough for a phone thumb); the host can pick a player's row and MOVE them
@@ -724,14 +904,20 @@ func show_lobby() -> void:
 			show_lobby(), md == Net.mode)
 		mb.add_theme_font_size_override("font_size", int(round(15 * K)))
 		mb.disabled = not host or Net.roster.size() > Net.SLOTS[md] or Net.maps_for(md).is_empty()
-	var sb := nav_button("MODE / %s" % ("SIEGE" if Net.siege else "BRAWL"), P(878, 680), P(360, 56), func():
+	var sb := nav_button("MODE / %s" % ("SIEGE" if Net.siege else "BRAWL"), P(878, 680), P(236, 56), func():
 		Net.toggle_siege()
 		show_lobby())
 	sb.disabled = not host
-	var lb := nav_button("LAST STAND / %s" % ("ON" if Net.last_stand else "OFF"), P(1254, 680), P(360, 56), func():
+	var lb := nav_button("LAST STAND / %s" % ("ON" if Net.last_stand else "OFF"), P(1126, 680), P(244, 56), func():
 		Net.toggle_last_stand()
 		show_lobby())
 	lb.disabled = not host
+	var abl := nav_button("ABILITIES / %s" % ("ON" if Net.abilities else "OFF"), P(1382, 680), P(232, 56), func():   # SKILLS 2.0
+		ArmyPresets.room_toggle_abilities(Net)
+		show_lobby(), Net.abilities)
+	abl.disabled = not host
+	for b in [sb, lb, abl]:
+		b.add_theme_font_size_override("font_size", int(round(21 * K)))
 	var ab := nav_button("EMPTY SEATS / %s" % ("AI " + Net.ai_fill.to_upper() if Net.ai_fill != "" else "PLAYERS ONLY"), P(878, 750), P(736, 50), func():
 		Net.set_ai_fill(Net.AI_FILL[(Net.AI_FILL.find(Net.ai_fill) + 1) % Net.AI_FILL.size()])
 		show_lobby())
@@ -774,6 +960,19 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 		label_at("VIRIDIAN BLOOM" if f == "bloom" else NAMES[f].replace("\n", " "), Vector2(pos.x + 84 * K, mid - 24 * K), 22, Rules.FACTIONS[f][1])
 		var tags := ("HOST" if id == 1 else "") + ("  ·  YOU" if id == Net.local_id() else "") + ("  ·  RECONNECTING" if Net.is_away(id) else "")
 		label_at(("%s  %s" % [str(colours.get(seat, "")).to_upper(), tags]).strip_edges(), Vector2(pos.x + 84 * K, mid + 2 * K), 16, Color("ffd15c"))
+		# SKILLS 2.0: the player's loadout - active, map (the no-relay fallback on such a map), ultimate
+		var lo = Net.roster[id].get("loadout", {})
+		var ic := minf(44.0 * K, dims.y - 22.0 * K)
+		var gap := 7.0 * K
+		var lp := Vector2(pos.x + dims.x - 3.0 * ic - 2.0 * gap - 12.0 * K, mid - ic / 2.0)
+		loadout_icons(f, lo if lo is Dictionary else {}, lp, ic, gap, ArmyPresets.map_has_relays(_selected_map()))
+		if not Net.abilities:
+			var off := ColorRect.new()                    # ABILITIES OFF: the icons dimmed
+			off.color = Color(0.01, 0.04, 0.06, 0.62)
+			off.position = lp - Vector2.ONE * 3.0 * K
+			off.size = Vector2(3.0 * ic + 2.0 * gap + 6.0 * K, ic + 6.0 * K)
+			off.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			content.add_child(off)
 	else:
 		label_at(("AI  ·  %s" % Net.ai_fill.to_upper()) if Net.ai_fill != "" else "open seat - waiting for a player", Vector2(pos.x + 84 * K, mid - 12 * K), 18, Color("7795a4"))
 
@@ -878,6 +1077,7 @@ func _process(dt: float) -> void:
 		return
 	var code := str(ui.takeCode())
 	if code.length() == 4:
+		ArmyPresets.send_to(Net, faction)                         # the register carries your ARMIES preset
 		Net.join_room(code, faction)
 		show_lobby()
 
