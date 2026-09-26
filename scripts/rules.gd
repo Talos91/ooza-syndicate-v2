@@ -197,32 +197,34 @@ const MATCH_HARD_END := 420.0        # 7:00 safety net: still undecided -> stron
 # economy - Alpha 11 logic x SCALE (Daniele, Alpha 12: "start from the logic of Alpha 11... upgrades
 # are free" - they are not any more). Alpha 11: caps 30/40/80/160, upgrades 10/20/30 units paid from
 # the vat, cannon tiers 15/25/35, forge 20 (single tier here), 5 s builds (10 s here: PARAMETERS).
+# The economy numbers are static vars (0.18.7) so a balance preset or the balance probe can change
+# them (apply_balance below); these values are the default game and nothing changes them by default.
 const SCALE := 5.0
-const CAPS := {1: 150, 2: 200, 3: 400, 4: 800}       # Alpha 11 owned caps x5
-const PROD := {1: 5.0, 2: 8.0, 3: 12.0, 4: 17.5}     # Alpha 11 1.0/1.6/2.4/3.5 units/s x5
-const HOME_TIER := 2
-const VAT_COST := {1: 50, 2: 100, 3: 150}            # tier t -> t+1
-const CANNON_COST := {1: 75, 2: 125, 3: 175}         # build T1, then upgrade to T2, T3
-const FORGE_COST := 100
-const BUILD_SECONDS := 10.0          # vat upgrade or attachment build/upgrade time (GAME-RULES sec6)
-const SWAP_COOLDOWN := 10.0          # after an attachment swap completes, before the next swap
-const CANNON_RANGE := 12.0           # metres from the node's centre: covers its piers + first module
+static var CAPS := {1: 150, 2: 200, 3: 400, 4: 800}       # Alpha 11 owned caps x5
+static var PROD := {1: 5.0, 2: 8.0, 3: 12.0, 4: 17.5}     # Alpha 11 1.0/1.6/2.4/3.5 units/s x5
+static var HOME_TIER := 2
+static var VAT_COST := {1: 50, 2: 100, 3: 150}            # tier t -> t+1
+static var CANNON_COST := {1: 75, 2: 125, 3: 175}         # build T1, then upgrade to T2, T3
+static var FORGE_COST := 100
+static var BUILD_SECONDS := 10.0          # vat upgrade or attachment build/upgrade time (GAME-RULES sec6)
+static var SWAP_COOLDOWN := 10.0          # after an attachment swap completes, before the next swap
+static var CANNON_RANGE := 12.0           # metres from the node's centre: covers its piers + first module
 # Alpha 11 cannon: a burst lasts 2 s and kills at most 10/25/40 bodies (x5 here), recharge AFTER
 # the burst 4/2.4/1.6 s; body kills bypass fight math.
-const CANNON_STATS := {1: {"recharge": 4.0, "kill": 50.0}, 2: {"recharge": 2.4, "kill": 125.0},
+static var CANNON_STATS := {1: {"recharge": 4.0, "kill": 50.0}, 2: {"recharge": 2.4, "kill": 125.0},
 		3: {"recharge": 1.6, "kill": 200.0}}
-const CANNON_BURST := 2.0
+static var CANNON_BURST := 2.0
 # Alpha 11 forge: strongest completed forge adds +50 on the 100 attack scale (+0.5 displayed attack)
 # - a +50 % damage bonus to everything its owner's troops deal. Single tier in 2.0 (GAME-RULES
 # sec6); it applies to everything the owner deals while it owns any forge (Sim.forge_of).
 const FORGE_BONUS_DEFAULT := 0.5
 static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable
-const HOME_UNITS := 80
-const NEUTRAL_UNITS := {1: 30, 2: 60, 3: 120, 4: 200}
+static var HOME_UNITS := 80
+static var NEUTRAL_UNITS := {1: 30, 2: 60, 3: 120, 4: 200}
 
 # frontline combat - PROVISIONAL: each side loses BASE + K * enemy units per second
-const FIGHT_RATE_BASE := 12.0
-const FIGHT_RATE_K := 0.08
+static var FIGHT_RATE_BASE := 12.0
+static var FIGHT_RATE_K := 0.08
 
 const SEATS := {
 	"A": Color("#2ee6ff"), "B": Color("#7dff5a"), "C": Color("#b48cff"),
@@ -247,13 +249,109 @@ const FACTIONS := {
 # leans: one readable strength, one readable weakness each. speed = travel speed, health = damage
 # a horde takes (divides it), attack = damage dealt, production = vat output, garrison = damage a
 # garrison takes (divides it). Baseline 1.0 everywhere.
-const FACTION_STATS := {
+static var FACTION_STATS := {
 	"vex": {"speed": 1.15, "garrison": 0.90},
 	"null": {},
 	"bloom": {"speed": 0.90, "production": 1.15},
 	"ember": {"attack": 1.15, "production": 0.90},
 	"solar": {"health": 1.10, "garrison": 1.05, "speed": 0.90, "production": 0.90},
 }
+
+# BALANCE PRESETS (0.18.7 balance study - Daniele: "another thing we should revisit is balancing ... vat
+# power up cost, production speed etc we need to balance better"). A preset is a PROPOSAL: OFF by default
+# (BALANCE_PRESET ""), switched on only from the Debug panel or by tests/balance_probe.gd, and it travels
+# with an online room's rules. Values are internal units (shown x SCALE). Only BALANCE_KEYS can change.
+const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS", "VAT_COST", "CANNON_COST",
+		"FORGE_COST", "BUILD_SECONDS", "SWAP_COOLDOWN", "CANNON_RANGE", "CANNON_STATS", "CANNON_BURST",
+		"FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS", "forge_bonus"]
+const BALANCE_PRESETS := {
+	# b187 - the 0.18.7 proposal, measured on BRAWL (the main mode) with tests/balance_probe.gd:
+	# neutrals hold 12/16/32/64 shown (was 6/12/24/40: 40 % of their tier's cap, Alpha 11 held half) so a
+	# vat-upgrade opening and a neutral-grab opening win about as often (50 / 48 %, was 37 / 33 %);
+	# Ember, Bloom and Vex back within ~5 % of NULL (Ember was 67 %).
+	"b187": {
+		"NEUTRAL_UNITS": {1: 60, 2: 80, 3: 160, 4: 320},
+		"FACTION_STATS": {"ember": {"attack": 1.07}, "bloom": {"production": 1.05}, "vex": {"garrison": 0.95}},
+	},
+}
+static var BALANCE_PRESET := ""
+static var _balance_base := {}                 # the default numbers, captured before the first change
+
+
+static func apply_balance(preset: String, overrides: Dictionary = {}) -> void:
+	## Back to the default numbers, then the named preset ("" = none), then `overrides` on top (the
+	## balance probe's A/B cells). Dictionaries merge key by key (JSON "1" keys become tier ints), so
+	## {"VAT_COST": {"1": 75}} changes only T1's upgrade.
+	if _balance_base.is_empty():
+		for k in BALANCE_KEYS:
+			_balance_base[k] = _balance_get(k).duplicate(true) if _balance_get(k) is Dictionary else _balance_get(k)
+		_balance_base["forge_bonus"] = FORGE_BONUS_DEFAULT   # not whatever the Debug slider holds now
+	for k in BALANCE_KEYS:
+		_balance_set(k, _balance_base[k].duplicate(true) if _balance_base[k] is Dictionary else _balance_base[k])
+	BALANCE_PRESET = preset if BALANCE_PRESETS.has(preset) else ""
+	for layer in [BALANCE_PRESETS.get(BALANCE_PRESET, {}), overrides]:
+		for k in layer:
+			if k in BALANCE_KEYS:
+				_balance_set(k, _balance_merge(_balance_get(k), layer[k]))
+			else:
+				push_warning("Rules.apply_balance: %s is not a balance key" % k)
+
+
+static func _balance_merge(base, over):
+	if base is Dictionary and over is Dictionary:
+		var out: Dictionary = base.duplicate(true)
+		for k in over:
+			var key = int(k) if k is String and k.is_valid_int() and base.has(int(k)) else k
+			out[key] = _balance_merge(base.get(key), over[k]) if base.has(key) else over[k]
+		return out
+	if base is int and (over is float or over is int):
+		return int(round(over))
+	if base is float and (over is float or over is int):
+		return float(over)
+	return over
+
+
+static func _balance_get(k: String):
+	match k:
+		"CAPS": return CAPS
+		"PROD": return PROD
+		"HOME_TIER": return HOME_TIER
+		"HOME_UNITS": return HOME_UNITS
+		"NEUTRAL_UNITS": return NEUTRAL_UNITS
+		"VAT_COST": return VAT_COST
+		"CANNON_COST": return CANNON_COST
+		"FORGE_COST": return FORGE_COST
+		"BUILD_SECONDS": return BUILD_SECONDS
+		"SWAP_COOLDOWN": return SWAP_COOLDOWN
+		"CANNON_RANGE": return CANNON_RANGE
+		"CANNON_STATS": return CANNON_STATS
+		"CANNON_BURST": return CANNON_BURST
+		"FIGHT_RATE_BASE": return FIGHT_RATE_BASE
+		"FIGHT_RATE_K": return FIGHT_RATE_K
+		"FACTION_STATS": return FACTION_STATS
+		"forge_bonus": return forge_bonus
+	return null
+
+
+static func _balance_set(k: String, v) -> void:
+	match k:
+		"CAPS": CAPS = v
+		"PROD": PROD = v
+		"HOME_TIER": HOME_TIER = v
+		"HOME_UNITS": HOME_UNITS = v
+		"NEUTRAL_UNITS": NEUTRAL_UNITS = v
+		"VAT_COST": VAT_COST = v
+		"CANNON_COST": CANNON_COST = v
+		"FORGE_COST": FORGE_COST = v
+		"BUILD_SECONDS": BUILD_SECONDS = v
+		"SWAP_COOLDOWN": SWAP_COOLDOWN = v
+		"CANNON_RANGE": CANNON_RANGE = v
+		"CANNON_STATS": CANNON_STATS = v
+		"CANNON_BURST": CANNON_BURST = v
+		"FIGHT_RATE_BASE": FIGHT_RATE_BASE = v
+		"FIGHT_RATE_K": FIGHT_RATE_K = v
+		"FACTION_STATS": FACTION_STATS = v
+		"forge_bonus": forge_bonus = v
 const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA CARTEL"], "bloom": ["VIRIDIAN", "BLOOM"],
 		"ember": ["EMBER", "MAW"], "solar": ["SOLAR", "SHELLS"]}
 const FACTION_TAGLINES := {"vex": "ADAPT. CONNECT. REDIRECT.", "null": "SAME SIGNAL. DIFFERENT TRUTH.",

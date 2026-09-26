@@ -912,6 +912,28 @@ func _init() -> void:
 	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
+
+	# ---------------------------------------------------------------- 0.18.7: balance presets (off by default)
+	check(Rules.BALANCE_PRESET == "" and Rules.VAT_COST == {1: 50, 2: 100, 3: 150} and Rules.NEUTRAL_UNITS == {1: 30, 2: 60, 3: 120, 4: 200}
+			and Rules.CAPS == {1: 150, 2: 200, 3: 400, 4: 800} and Rules.BUILD_SECONDS == 10.0,
+			"the default game runs the default numbers (no balance preset)")
+	var base_vals := {}
+	for k in Rules.BALANCE_KEYS:
+		base_vals[k] = Rules._balance_get(k)
+	Rules.apply_balance("b187")
+	var preset_ok: bool = Rules.BALANCE_PRESET == "b187"
+	for k in Rules.BALANCE_PRESETS["b187"]:
+		preset_ok = preset_ok and Rules._balance_get(k) == Rules._balance_merge(base_vals[k], Rules.BALANCE_PRESETS["b187"][k])
+	check(preset_ok and not Rules.BALANCE_PRESETS["b187"].is_empty(), "the b187 preset applies its numbers")
+	Rules.apply_balance("")
+	var back_ok: bool = Rules.BALANCE_PRESET == ""
+	for k in Rules.BALANCE_KEYS:
+		back_ok = back_ok and Rules._balance_get(k) == base_vals[k]
+	check(back_ok, "switching the preset off restores every default number")
+	Rules.apply_balance("", {"VAT_COST": {"1": 75}, "BUILD_SECONDS": 5})
+	check(Rules.VAT_COST == {1: 75, 2: 100, 3: 150} and Rules.BUILD_SECONDS == 5.0 and typeof(Rules.VAT_COST[1]) == TYPE_INT,
+			"a probe override merges tier by tier and keeps the number types")
+	Rules.apply_balance("")
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
 

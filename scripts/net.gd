@@ -702,7 +702,7 @@ func launch_round() -> void:
 			"rules": {"bridge_combat": siege, "last_stand": last_stand, "abilities_on": abilities, "deck_speed": Rules.deck_speed,
 					"node_speed_mult": Rules.node_speed_mult, "door_rate": Rules.door_rate,
 					"node_fight_mult": Rules.node_fight_mult, "forge_bonus": Rules.forge_bonus,
-					"hide_enemy_counts": Rules.hide_enemy_counts}}
+					"hide_enemy_counts": Rules.hide_enemy_counts, "balance_preset": Rules.BALANCE_PRESET}}
 	_broadcast("launch", info)
 	_launch(info)
 
@@ -721,6 +721,7 @@ func _launch(info: Dictionary) -> void:
 	Rules.node_speed_mult = float(r["node_speed_mult"])
 	Rules.door_rate = float(r["door_rate"])
 	Rules.node_fight_mult = float(r["node_fight_mult"])
+	Rules.apply_balance(str(r.get("balance_preset", "")))   # the host's balance preset (0.18.7; "" = default numbers)
 	Rules.forge_bonus = float(r["forge_bonus"])
 	Rules.hide_enemy_counts = bool(r.get("hide_enemy_counts", false))   # the host's option, the same for all
 	abilities = bool(r.get("abilities_on", true))
