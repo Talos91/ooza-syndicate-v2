@@ -897,13 +897,13 @@ func _test_teams() -> void:
 # ---------------------------------------------------------------- SKILLS 2.0: ARMIES presets -> the room (lobby)
 func _test_presets() -> void:
 	ArmyPresets.path = "user://test_armies.cfg"
-	ArmyPresets.reload()
+	ArmyPresets.reload_presets()
 	for f in ["solar", "ember"]:
 		ArmyPresets.reset(f)
 	ArmyPresets.set_pick("solar", "active", "scorch")
 	ArmyPresets.set_pick("solar", "map", "anchor")
 	ArmyPresets.set_pick("ember", "map", "relay_hack")
-	ArmyPresets.reload()                                  # read back from the file
+	ArmyPresets.reload_presets()                                  # read back from the file
 	check(ArmyPresets.loadout_for("solar") == {"active": "scorch", "map": "anchor"} and ArmyPresets.loadout_for("vex") == {"active": "surge", "map": "relay_hack"},
 			"ARMIES presets save, load back, and default per faction")
 	_open_room("1v1")
@@ -942,4 +942,4 @@ func _test_presets() -> void:
 		ArmyPresets.reset(f)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(ArmyPresets.path))
 	ArmyPresets.path = "user://armies.cfg"
-	ArmyPresets.reload()
+	ArmyPresets.reload_presets()

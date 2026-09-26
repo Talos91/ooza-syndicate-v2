@@ -16,7 +16,7 @@ static var _loaded := false
 
 
 static func load_all() -> void:
-	## Reads the saved presets once (again after `path` changes: call reload()). Unknown or stale ids are
+	## Reads the saved presets once (again after `path` changes: call reload_presets()). Unknown or stale ids are
 	## dropped, so a preset always falls back to the faction's default.
 	_loaded = true
 	picks = {}
@@ -41,7 +41,8 @@ static func load_all() -> void:
 			cosmetic_picks[f] = cos
 
 
-static func reload() -> void:
+static func reload_presets() -> void:
+	## Re-read `path`. Not named reload(): ArmyPresets.reload() would call GDScript.reload() and reset `path`.
 	_loaded = false
 	load_all()
 
