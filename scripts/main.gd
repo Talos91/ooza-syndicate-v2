@@ -217,6 +217,8 @@ func _ready() -> void:
 			if arg.begins_with("--menu-filter="):          # screenshot helper: pre-set the BATTLEFIELD TYPE filter
 				Menu.map_filter_type = arg.substr(14)
 		if menu_open != "":                              # TUTORIAL: LESSONS / ARMIES / NEW GAME from a lesson
+			if menu_open == "cosmetics":                 # (COSMETICS' BACK returns through ARMIES)
+				(menu_layer as Menu).show_armies()
 			(menu_layer as Menu).call("show_" + menu_open)
 			menu_open = ""
 		for arg in OS.get_cmdline_user_args():
@@ -1409,7 +1411,10 @@ func start_tutorial(lesson_id: int, first := false, faction := "", colour := "")
 
 func _tutorial_setup() -> void:
 	## After the HUD: the reveal set, the coach overlay and its signals.
-	hud.reveal(director.reveal_keys(), _tutorial_new_keys())
+	if director.lesson_id == TutorialDirector.LESSON_COUNT:
+		hud.reveal_all()                              # the first match: the whole HUD, as in any match
+	else:
+		hud.reveal(director.reveal_keys(), _tutorial_new_keys())
 	coach = CoachOverlay.new()
 	coach.set_mobile(mobile)
 	coach.set_accent(Rules.seat_color(HUMAN))
