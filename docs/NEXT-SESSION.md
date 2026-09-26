@@ -18,45 +18,10 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
-## Roadmap AFTER the 0.18.7 / 0.18.8 work (Daniele, 2026-09-26: "notes for AFTER all of this completes")
+## Roadmap
 
-Daniele's list, in his order:
-1. Interactive tutorial.
-2. Skin wardrobe: all unlocked skins for vats, structures, etc.; GOO territory is the first cosmetic candidate.
-3. Daily and weekly challenges.
-4. Leaderboard.
-5. In-game free and premium currency, and how each is earned.
-6. Store.
-7. Campaign.
-8. Season pass.
-9. An actual server: today online is peer-to-peer (PeerJS), host runs the sim.
-
-Suggested additions (the agent's, for Daniele to accept or drop):
-- **Accounts:**
-  - player accounts, login and cloud save;
-  - a profile with XP / level, and match history.
-- **Matchmaking:** casual and ranked queues; a rating (Elo / Glicko) behind the leaderboard; bots to fill slow queues.
-- **Social:** friends, parties, invites, and a better room-code flow; reconnect; spectating and replays (the sim is deterministic enough to try).
-- **Trust:**
-  - server-authoritative matches and anti-cheat, needed once currency and ranked exist;
-  - chat moderation and report tools.
-- **Audio:** music and SFX. Deferred since the start; it needs Daniele's direction.
-- **Live ops:**
-  - telemetry dashboards and live tuning;
-  - A/B of balance presets;
-  - crash reporting;
-  - achievements, events, limited-time modes;
-  - a news / patch-notes screen.
-- **Platforms:** Android / iOS packaging (store builds, not just the web page); push notifications; a low-end phone profile.
-- **Legal and business:**
-  - privacy policy, terms, GDPR / COPPA, age rating;
-  - loot-box and gacha rules per country, if the store has random rewards;
-  - a payments provider;
-  - customer support.
-- **Reach:** localisation; accessibility, starting with a colour-blind palette (seat colours already matter a lot).
-- **Content pipeline:** a map editor or map-pack tooling for community maps.
-- Monetisation, currencies, store, season pass and audio are Daniele's calls (AGENTS.md: ask first). Design
-  docs go in `Docs/Game Design/Ooze Syndicate 2.0/` before any code.
+The plan after 0.18.7 / 0.18.8 (Daniele's to-do list from 2026-09-26, plus suggested additions, by area
+and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
 
 ## 0.18.6 (2026-09-26): waterfall, 3:00 Last Stand, neon, badges, combat effects, maps 4.4, filters
 
