@@ -16,7 +16,7 @@ extends HBoxContainer
 
 const SLOTS := ["active", "map", "ultimate"]
 const TAGS := ["ACTIVE", "MAP", "ULTIMATE"]
-const SLOT_SIZE := Vector2(196, 72)            # x ui_scale: 225 x 83 px on the phone profile = 44.9 pt tall
+const SLOT_SIZE := Vector2(196, 78)            # x ui_scale: 225 x 90 px on the phone profile = ~49 pt tall (was 72, 44.9 pt: another nudge, Daniele 0.18.8)
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const TAP_PIXELS := 14.0
