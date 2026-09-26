@@ -19,10 +19,16 @@ extends Node3D
 ##   --thumb=<png>                          render the map's menu thumbnail (no HUD), then quit
 ##   --menu-page=<page> --menu-shot=<png>   open a menu page / screenshot the menu, then quit
 ##   --scenario=fight|rear|queue|build|inspect|switch|rotate --zoom=N  stage one situation up close
+##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
+##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
+##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is a peer-to-peer room (Net)
 var SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": "solar"}
+# SKILLS 2.0 (0.18.7): seat -> {"active": id, "map": id} chosen in the ARMIES page (or the room); a seat
+# without one (every AI) gets its faction's Rules.FACTION_LOADOUT. The ultimate follows the faction.
+var LOADOUTS := {}
 const FACTION_NAMES := ["vex", "null", "bloom", "ember", "solar"]
 
 var map: Dictionary
@@ -72,6 +78,7 @@ var paused := false
 var scenario := ""
 var scenario_focus := Vector3.INF
 var scenario_zoom := 30.0
+var focus_node := -1                              # --focus=N: a close-up of node N in a normal match
 var _scenario_done := false
 var mobile := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
 var window_size := Vector2i.ZERO
@@ -108,6 +115,8 @@ func _ready() -> void:
 	if relaunch.has("faction"):
 		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
 		ai_level = relaunch.get("ai", ai_level)
+		if relaunch.get("loadout", {}) is Dictionary and not (relaunch.get("loadout", {}) as Dictionary).is_empty():
+			LOADOUTS[HUMAN] = relaunch["loadout"]
 		if relaunch.has("rival"):
 			SEAT_FACTIONS["B"] = relaunch["rival"]
 		mode = relaunch.get("mode", mode)
@@ -147,6 +156,14 @@ func _ready() -> void:
 			Rules.bridge_combat = false
 		elif arg.begins_with("--seed="):
 			seed_value = int(arg.substr(7))
+		elif arg == "--goo":
+			Rules.goo_territory = true
+		elif arg.begins_with("--faction="):
+			SEAT_FACTIONS[HUMAN] = arg.substr(10)
+		elif arg.begins_with("--rival="):
+			SEAT_FACTIONS["B"] = arg.substr(8)
+		elif arg.begins_with("--focus="):
+			focus_node = int(arg.substr(8))
 		elif arg.begins_with("--thumb="):              # map thumbnail for the menu: no HUD, first frame
 			thumb_path = arg.substr(8)
 			map_explicit = true
@@ -209,7 +226,7 @@ func _start_map(path: String) -> void:
 	else:
 		Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
 	sim = Sim.new()
-	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams)
+	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams, LOADOUTS)
 	var lo := Vector3(INF, 0, INF)                     # the camera looks along the map's short side
 	var hi := Vector3(-INF, 0, -INF)
 	for n in sim.nodes:
@@ -253,6 +270,8 @@ func _start_map(path: String) -> void:
 			ais.append(SeatAI.new(seat, 2.5, ai_level))
 	if scenario != "":
 		_stage_scenario()
+	elif focus_node >= 0 and focus_node < sim.nodes.size():
+		scenario_focus = sim.nodes[focus_node]["pos"]
 	sim.captured.connect(_on_captured)
 	sim.finished.connect(_on_finished)
 	for n in sim.nodes:
@@ -286,10 +305,12 @@ func _start_map(path: String) -> void:
 		hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
 
 
-func start_match(path: String, faction: String, rival_faction: String, level: String, match_mode := "1v1", colour := "A") -> void:
+func start_match(path: String, faction: String, rival_faction: String, level: String, match_mode := "1v1", colour := "A", loadout := {}) -> void:
 	## Entry from the front menu (Menu.deploy): your faction (seat A), the rival's (seat B), the AI
-	## level, the map, the mode (1v1 / 2v2 / FFA3-5) and your colour.
+	## level, the map, the mode (1v1 / 2v2 / FFA3-5), your colour and your skill loadout
+	## ({"active": id, "map": id}; empty = your faction's default).
 	mode = match_mode
+	LOADOUTS = {HUMAN: loadout} if not loadout.is_empty() else {}
 	color_choice = colour
 	SEAT_FACTIONS[HUMAN] = faction
 	SEAT_FACTIONS["B"] = rival_faction
@@ -309,6 +330,7 @@ func _start_online() -> void:
 	seed_value = int(info["seed"])
 	for seat in info["players"]:
 		SEAT_FACTIONS[seat] = info["players"][seat]
+	LOADOUTS = (info.get("loadouts", {}) as Dictionary).duplicate()   # every seat's, from the host
 	HUMAN = Net.local_seat()
 	_start_map(str(info["map"]))
 	Net.world_ready(sim, self)
@@ -333,14 +355,16 @@ func _on_order_feedback(msg: String) -> void:
 
 
 func restart() -> void:
-	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice}
+	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice,
+			"loadout": LOADOUTS.get(HUMAN, {})}
 	get_tree().reload_current_scene()
 
 
 func to_menu() -> void:
 	if online:                                         # LEAVE ROOM: the room closes for us
 		Net.leave()
-	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice}
+	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice,
+			"loadout": LOADOUTS.get(HUMAN, {})}
 	get_tree().reload_current_scene()
 
 
@@ -671,6 +695,15 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 		if sim.recall(id):
 			return [true, "Recalled - %d units turning back" % Rules.shown(units)]
 		return [false, "That line can't turn back now"]
+	if method == "cast":                               # SKILLS 2.0: id = slot index (0 active, 1 map, 2 ultimate)
+		var slot: String = ["active", "map", "ultimate"][id] if id >= 0 and id <= 2 else ""
+		var target = args.get("target", null)
+		var why := sim.cast_check(seat, slot, target) if slot != "" else "No such slot"
+		if why != "":
+			return [false, why]
+		var sid := sim.skill_id(seat, slot)
+		sim.cast(seat, slot, target)
+		return [true, "%s cast" % Rules.SKILLS[sid]["name"]]
 	if id < 0 or id >= sim.nodes.size() or sim.collapsed.get(id, false) or sim.over:
 		return [false, ""]
 	var n: Dictionary = sim.nodes[id]

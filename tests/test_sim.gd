@@ -22,6 +22,7 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 func _init() -> void:
 	Rules.bridge_combat = true                      # these checks were written for SIEGE (the old default); BRAWL is the game's default since 0.18.7
+	Rules.abilities_on = true                       # skills ship off until their UI lands; the checks expect them on
 	var map := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var pos := MapBuilder.layout(map)
 	check(pos.size() == 5, "Two Piers lays out 5 nodes")
@@ -1129,7 +1130,9 @@ func _init() -> void:
 			run_until(ra, func(): return ra.nodes[c[2]]["relay_phase"] == "", 3.0, 0.02)
 			var open_end: bool = opening.all(func(i): return ra.is_edge_open(i))
 			check(closed_mid and open_end, "%s %s: an appearing deck is closed while it moves, walkable once the motion ends (%d decks)" % [mode_r, c[0], opening.size()])
-	Rules.bridge_combat = false
+	Rules.bridge_combat = true                          # as the goo / skills checks below expect
+	_goo_territory()
+	_skills_tests()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
 
@@ -1161,3 +1164,577 @@ func _on_deck(h: Dictionary, sp: Dictionary) -> float:
 	var head: float = h["s"]
 	var tail: float = head - Sim.chain_length(h)
 	return maxf(0.0, minf(head, sp["s1"]) - maxf(tail, sp["s0"])) / maxf(Sim.chain_length(h), 0.001)
+
+
+func _goo_territory() -> void:
+	## TERRITORY: GOO (0.18.7) is a pure view: the toggle only counts in BRAWL, the goo follows the
+	## owners (homes covered, neutral bare), a capture spreads and settles, a closed deck drops its goo,
+	## switching back to NEON hides every piece. No sim state is touched.
+	var was_goo := Rules.goo_territory
+	var was_bc := Rules.bridge_combat
+	Rules.goo_territory = true
+	Rules.bridge_combat = true
+	check(not Rules.goo_look(), "GOO territory is off in SIEGE (its hordes are goo already)")
+	Rules.bridge_combat = false
+	check(Rules.goo_look(), "GOO territory is on in BRAWL when the option is")
+	var map := MapBuilder.load_map("res://maps4/A-01-orbital-nexus.json")
+	var seats := {}
+	for s in map["seats"]["1v1"]:
+		seats[int(s["node"])] = s["seat"]
+	var gs := Sim.new()
+	gs.setup(map, MapBuilder.layout(map), seats, {"A": "null", "B": "ember"}, 3)
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var gvis := MapBuilder.build3(holder, gs, map)
+	var goo := GooTerritory.new()
+	holder.add_child(goo)
+	var collapsed_edges := {}
+	goo.setup(gs, gvis, collapsed_edges, false)
+	var before := JSON.stringify(gs.nodes)
+	goo.sync(0.05)
+	var home: int = seats.keys()[0]
+	var neutral := -1
+	for n in gs.nodes:
+		if n["owner"] == "" and goo._plat.has(n["id"]):
+			neutral = n["id"]
+			break
+	var home_mi: MeshInstance3D = goo._plat[home]["mi"]
+	check(goo.built and home_mi.visible and (home_mi.mesh as ArrayMesh).get_surface_count() == 1,
+			"GOO: the home platform is under goo from the first frame (%d vertices)" % (home_mi.mesh as ArrayMesh).surface_get_array_len(0))
+	check(neutral >= 0 and not (goo._plat[neutral]["mi"] as MeshInstance3D).visible, "GOO: a neutral platform stays bare")
+	var half_on := 0
+	var half_off := 0
+	for i in goo._half:
+		for h in range(2):
+			var p = goo._half[i][h]
+			if p == null:
+				continue
+			var nid: int = gs.edges[i]["a"] if h == 0 else gs.edges[i]["b"]
+			var owned: bool = gs.nodes[nid]["owner"] != "" and gs.is_edge_open(i)
+			if (p["mi"] as MeshInstance3D).visible == owned:
+				half_on += 1
+			else:
+				half_off += 1
+	check(half_off == 0 and half_on > 0, "GOO: every deck half follows its end's owner (%d right, %d wrong)" % [half_on, half_off])
+	check(JSON.stringify(gs.nodes) == before, "GOO touched no sim state (a pure view)")
+	gs.nodes[neutral]["owner"] = "B"
+	goo.sync(0.05)
+	var np: Dictionary = goo._plat[neutral]
+	check(np["t"] >= 0.0 and (np["mi"] as MeshInstance3D).visible and (np["mi"] as MeshInstance3D).material_override == np["anim"],
+			"GOO: a capture starts the spread on the platform's own animation material")
+	for k in range(40):
+		goo.sync(0.05)
+	check(np["t"] < 0.0 and np["drawn"] == "B" and (np["mi"] as MeshInstance3D).material_override == goo._steady_for("B"),
+			"GOO: the spread settles within 2 s on the shared seat material")
+	var shared := goo._steady_for("B") == goo._steady_for("B") and goo._steady.size() <= 2
+	check(shared, "GOO: one shared material per colour (%d)" % goo._steady.size())
+	Rules.goo_territory = false
+	goo.sync(0.05)
+	var any_visible := false
+	for p in goo._pieces():
+		any_visible = any_visible or (p["mi"] as MeshInstance3D).visible
+	check(not any_visible, "NEON again: no goo piece shows")
+	holder.queue_free()
+	Rules.goo_territory = was_goo
+	Rules.bridge_combat = was_bc
+
+
+# ------------------------------------------------------------------ SKILLS 2.0 (0.18.7)
+func _mk(m: Dictionary, fa: String, fb: String, lo := {}, seats := {}) -> Sim:
+	var s := Sim.new()
+	var st: Dictionary = seats if not seats.is_empty() else {int(m["seats"]["1v1"][0]["node"]): "A", int(m["seats"]["1v1"][1]["node"]): "B"}
+	s.setup(m, MapBuilder.layout(m), st, {"A": fa, "B": fb}, 1, {}, lo)
+	return s
+
+
+func _steps(s: Sim, seconds: float, dt := 0.05) -> void:
+	var t := 0.0
+	while t < seconds - 0.0001:
+		s.step(dt)
+		t += dt
+
+
+func _charged(s: Sim, seat: String) -> void:
+	s.ult_charge[seat] = 1.0
+	s.ult_since[seat] = 100.0
+
+
+func _skills_tests() -> void:
+	var tp := MapBuilder.load_map("res://maps/004-two-piers.json")       # 3 - 1 - 0 - 2 - 4, no relays
+	var sw := MapBuilder.load_map("res://maps/010-first-switch.json")    # switch relays 1 and 2
+	var rot := MapBuilder.load_map("res://maps/061-switchback-foundry.json")   # rotation relay 0
+	# ---------------------------------------------------------------- the table
+	var ok := true
+	for id in Rules.SKILLS:
+		var sk: Dictionary = Rules.SKILLS[id]
+		ok = ok and sk.has("name") and sk.has("slot") and sk.has("cd") and sk.has("target") and sk.has("desc")
+		if sk["slot"] == "ultimate":
+			ok = ok and Rules.FACTION_ULTIMATE_ID[sk["faction"]] == id
+	check(ok and Rules.ACTIVE_SKILLS.size() == 5 and Rules.MAP_SKILLS.size() == 5 and Rules.FACTION_ULTIMATE_ID.size() == 5 and Rules.SKILLS.size() == 15,
+			"skills table: 5 active + 5 map + 5 ultimates, each with name, slot, cd, target and desc")
+	check(Rules.FACTION_ULTIMATE.values().map(func(v): return v[0]) == ["Rewire", "Echo Split", "Superbloom", "Core Meltdown", "Relay Aegis"],
+			"FACTION_ULTIMATE carries the approved names")
+	# ---------------------------------------------------------------- loadouts
+	var s := _mk(sw, "vex", "bloom", {"A": {"active": "scorch", "map": "anchor"}})
+	check(s.loadouts["A"] == {"active": "scorch", "map": "anchor", "ultimate": "rewire"}, "a chosen loadout; the ultimate follows the faction")
+	check(s.loadouts["B"] == {"active": "spore_burst", "map": "mire", "ultimate": "superbloom"}, "a seat without one gets its faction's default")
+	s = _mk(sw, "vex", "null", {"A": {"active": "nuke"}})
+	check(s.loadouts["A"]["active"] == "surge" and s.loadouts["A"]["map"] == "relay_hack", "unknown ids fall back to the default; relay skills kept on a relay map")
+	s = _mk(tp, "vex", "null", {"B": {"map": "relay_hack"}})
+	check(s.loadouts["A"]["map"] == "mire" and s.loadouts["B"]["map"] == "demolish", "no relays on the map: Relay Hack / Bypass become the faction's other map skill")
+	# ---------------------------------------------------------------- validation, cooldown, ABILITIES OFF
+	Rules.abilities_on = false
+	s = _mk(tp, "solar", "null")
+	check(not s.can_cast("A", "active", 3) and "off" in s.cast_check("A", "active", 3), "ABILITIES OFF: nothing casts")
+	Rules.abilities_on = true
+	s = _mk(tp, "solar", "null")
+	check(s.can_cast("A", "active", 3) and not s.can_cast("A", "active", 4) and not s.can_cast("A", "active", 99) and not s.can_cast("A", "banana", 3),
+			"Fortify: own node only (not the enemy's, not a bad id, not a bad slot)")
+	check(s.cast("A", "active", 3) and absf(s.cooldown("A", "active") - 35.0) < 0.001 and not s.can_cast("A", "active", 3), "a cast starts its 35 s cooldown")
+	check(s.fx_events.any(func(e): return e["type"] == "skill" and e["id"] == "fortify" and e["seat"] == "A"), "a cast pushes a skill fx event")
+	_steps(s, 35.1, 0.5)
+	check(s.can_cast("A", "active", 3), "the cooldown runs out")
+	check("charging" in s.cast_check("A", "ultimate", 3), "the ultimate waits for its charge")
+	# ---------------------------------------------------------------- Surge (both modes)
+	for brawl in [false, true]:
+		Rules.bridge_combat = not brawl
+		var tag := "BRAWL" if brawl else "SIEGE"
+		s = _mk(tp, "null", "null", {"A": {"active": "surge"}})
+		s.nodes[3]["units"] = 150.0
+		var h := s.send(3, 0, 1.0)
+		_steps(s, 1.5)
+		var a0: float = h["s"]
+		_steps(s, 1.0)
+		var plain: float = h["s"] - a0
+		check(s.cast("A", "active", h["id"]), tag + ": Surge on a moving line")
+		a0 = h["s"]
+		_steps(s, 1.0)
+		check(absf((h["s"] - a0) / plain - 1.5) < 0.05, tag + ": Surge = +50 %% speed (%.2f)" % ((h["s"] - a0) / plain))
+		_steps(s, 7.5)
+		check(s.effects_on("horde", h["id"]).is_empty(), tag + ": Surge ends after 8 s (or with the line)")
+	Rules.bridge_combat = true
+	# ---------------------------------------------------------------- Spore Burst
+	s = _mk(tp, "bloom", "null")
+	s.nodes[3]["units"] = 20.0
+	var u0: float = s.nodes[3]["units"]
+	_steps(s, 1.0)
+	var d0: float = s.nodes[3]["units"] - u0
+	check(not s.can_cast("A", "active", 4), "Spore Burst: not on an enemy vat")
+	check(s.cast("A", "active", 3), "Spore Burst on an own vat")
+	u0 = s.nodes[3]["units"]
+	_steps(s, 1.0)
+	check(absf((s.nodes[3]["units"] - u0) / d0 - 1.8) < 0.02, "Spore Burst: the vat produces 1.8x (%.2f)" % ((s.nodes[3]["units"] - u0) / d0))
+	s.nodes[3]["units"] = Rules.CAPS[s.nodes[3]["tier"]] - 1.0
+	_steps(s, 1.0)
+	check(s.nodes[3]["units"] <= Rules.CAPS[s.nodes[3]["tier"]], "Spore Burst stays within the cap")
+	# ---------------------------------------------------------------- Fortify: the garrison damage divisor, both modes
+	s = _mk(tp, "null", "null", {"B": {"active": "fortify"}})
+	s.nodes[1]["owner"] = "B"
+	s.nodes[1]["units"] = 100.0
+	s.cast("B", "active", 1)
+	Rules.bridge_combat = false
+	s._land_classic(s.nodes[1], "A", 33.0)
+	check(absf(s.nodes[1]["units"] - (100.0 - 33.0 / 1.65)) < 0.01, "BRAWL: a fortified garrison loses 1.65x less (33 attackers kill %.1f)" % (100.0 - s.nodes[1]["units"]))
+	Rules.bridge_combat = true
+	var losses := []
+	for fort in [false, true]:
+		s = _mk(tp, "null", "null", {"B": {"active": "fortify"}})
+		s.nodes[1]["owner"] = "B"
+		s.nodes[1]["units"] = 400.0
+		s.nodes[1]["siege"]["A"] = 200.0
+		if fort:
+			s.cast("B", "active", 1)
+		s._node_fights(0.1)
+		losses.append(400.0 - s.nodes[1]["units"])
+	check(absf(losses[0] / losses[1] - 1.65) < 0.01, "SIEGE: the besieged garrison takes 1.65x less damage (%.2f)" % (losses[0] / losses[1]))
+	# ---------------------------------------------------------------- Scorch (both modes)
+	for brawl in [false, true]:
+		Rules.bridge_combat = not brawl
+		var tag := "BRAWL" if brawl else "SIEGE"
+		s = _mk(tp, "null", "ember")
+		s.nodes[3]["units"] = 300.0
+		var h := s.send(3, 0, 1.0)
+		var deck: Dictionary = h["spans"][0]
+		var t := run_until(s, func(): return h["s"] > deck["s1"], 20.0)
+		var before: float = s.combat_losses.get("A", 0.0)
+		check(s.cast("B", "active", deck["edge"]), tag + ": Scorch on the deck under A's line")
+		check(s.events[-1].get("affects", []) == ["A"], tag + ": the cast names the seat it hits")
+		_steps(s, 5.2)
+		var burnt: float = s.combat_losses.get("A", 0.0) - before
+		var ends := s.events.filter(func(e): return e["type"] == "skill_end" and e["id"] == "scorch")
+		check(not ends.is_empty() and absf(ends[-1]["kills"] - 10.0 * Rules.SCALE) < 0.5 and burnt >= 10.0 * Rules.SCALE - 0.5,
+				tag + ": Scorch burns enemy lines on the deck, at most 10 shown units (%.1f sim)" % (ends[-1]["kills"] if not ends.is_empty() else -1.0))
+	Rules.bridge_combat = true
+	# ---------------------------------------------------------------- Ghost Line (both modes)
+	for brawl in [false, true]:
+		Rules.bridge_combat = not brawl
+		var tag := "BRAWL" if brawl else "SIEGE"
+		s = _mk(tp, "null", "null")
+		s.nodes[3]["units"] = 200.0
+		var home_b: float = s.nodes[4]["units"]
+		check(not s.can_cast("A", "active", [4, 3]) and not s.can_cast("A", "active", 3), tag + ": Ghost Line starts from an own node, with a destination")
+		check(s.cast("A", "active", [3, 4]), tag + ": Ghost Line cast 3 -> 4")
+		var g: Dictionary = s.hordes[-1]
+		var ev: Dictionary = s.fx_events.filter(func(e): return e["type"] == "skill")[-1]
+		check(g.get("decoy", false) and g["ordered"] == 100.0 and s.nodes[3]["units"] >= 200.0 and ev.get("private", "") == "A",
+				tag + ": a decoy of half the vat, no units spent, the cast event private to its owner")
+		_steps(s, 1.0)
+		check(g["units"] > 0.0 and g["streaming"] and s.seat_strength("A") < s.nodes[3]["units"] + 1.0,
+				tag + ": it streams out like a send but adds nothing to A's strength")
+		run_until(s, func(): return not (g in s.hordes), 40.0)
+		check(s.nodes[4]["owner"] == "B" and s.nodes[4]["units"] >= home_b and s.nodes[1]["owner"] == "" and s.combat_losses.get("B", 0.0) == 0.0,
+				tag + ": it lands and vanishes: nothing captured, no garrison hurt")
+		# cannons fire at it; no charge for decoy kills
+		s = _mk(tp, "null", "null")
+		s.nodes[3]["units"] = 200.0
+		s.nodes[1]["owner"] = "B"
+		s.nodes[1]["attachment"] = "cannon"
+		s.nodes[1]["cannon_tier"] = 1
+		s.nodes[1]["units"] = 30.0
+		s.cast("A", "active", [3, 4])
+		g = s.hordes[-1]
+		run_until(s, func(): return s.events.any(func(e): return e["type"] == "cannon_burst"), 20.0)
+		check(s.events.any(func(e): return e["type"] == "cannon_burst" and e["seat"] == "B"), tag + ": a Ghost Line triggers the cannons")
+		_steps(s, 1.0)
+		check(s.combat_losses.get("A", 0.0) == 0.0 and absf(s.charge("B") - s.time / Rules.ULT_CHARGE_TIME) < 0.001,
+				tag + ": its losses are not real and give no ultimate charge")
+		if not brawl:                                    # SIEGE: an enemy line touching it dissolves it
+			s = _mk(tp, "null", "null")
+			s.nodes[3]["units"] = 200.0
+			s.nodes[4]["units"] = 200.0
+			s.cast("A", "active", [3, 4])
+			g = s.hordes[-1]
+			var hb := s.send(4, 3, 1.0)
+			run_until(s, func(): return not (g in s.hordes), 30.0)
+			check(not (g in s.hordes) and s.fx_events.any(func(e): return e["type"] == "ghost_end" and e["why"] == "contact") and s.combat_losses.get("B", 0.0) == 0.0,
+					"SIEGE: an enemy line touching a Ghost Line dissolves it; nobody fights")
+	Rules.bridge_combat = true
+	# ---------------------------------------------------------------- Demolish (both modes): warning, waterfall, rebuild
+	for brawl in [false, true]:
+		Rules.bridge_combat = not brawl
+		var tag := "BRAWL" if brawl else "SIEGE"
+		s = _mk(tp, "null", "ember")
+		var e10 := s._edge_index(1, 0)
+		s.nodes[3]["units"] = 300.0
+		var h := s.send(3, 4, 1.0)
+		check(s.cast("B", "map", e10), tag + ": Demolish the 1-0 deck")
+		_steps(s, 2.9)
+		check(s.is_edge_open(e10), tag + ": during the 3 s warning the deck still stands")
+		_steps(s, 0.2)
+		check(not s.is_edge_open(e10) and s.demolished.has(e10) and s.fx_events.any(func(e): return e["type"] == "demolish"), tag + ": then it is gone")
+		check(s.find_route(3, 4).is_empty(), tag + ": no route crosses it")
+		_steps(s, 8.0)
+		check(s.fall_losses.get("A", 0.0) > 50.0 and (h in s.hordes and h["target"] == 4 or s.fall_losses.get("A", 0.0) > 250.0),
+				tag + ": the order across it keeps streaming off the lip (waterfall: %.0f fell)" % s.fall_losses.get("A", 0.0))
+		_steps(s, 12.2)
+		check(s.is_edge_open(e10) and not s.demolished.has(e10), tag + ": the deck rebuilds after 20 s")
+	Rules.bridge_combat = true
+	s = _mk(sw, "null", "ember")
+	check("relay" in s.cast_check("B", "map", 2), "Demolish refuses a relay deck")
+	s = _mk(tp, "null", "ember", {"A": {"map": "anchor"}})
+	var e10b := s._edge_index(1, 0)
+	s.cast("B", "map", e10b)
+	check(s.cast("A", "map", e10b), "Anchor the deck under a Demolish warning")
+	_steps(s, 3.5)
+	check(s.is_edge_open(e10b) and s.events.any(func(e): return e["type"] == "demolish_failed"), "Demolish fails on an anchored deck")
+	check("anchored" in s.cast_check("B", "map", e10b) or s.cooldown("B", "map") > 0.0, "and an anchored deck can't be demolished")
+	# ---------------------------------------------------------------- Mire (both modes; SIEGE: the stronger of Mire and goo, no stacking)
+	for brawl in [false, true]:
+		Rules.bridge_combat = not brawl
+		var tag := "BRAWL" if brawl else "SIEGE"
+		s = _mk(tp, "null", "bloom")
+		s.nodes[3]["units"] = 150.0
+		var h := s.send(3, 0, 1.0)
+		var deck: Dictionary = h["spans"][0]
+		run_until(s, func(): return h["s"] > deck["s0"] + 1.0, 20.0)
+		var a0: float = h["s"]
+		_steps(s, 0.5)
+		var plain: float = h["s"] - a0
+		check(s.cast("B", "map", deck["edge"]), tag + ": Mire on the deck under A's line")
+		a0 = h["s"]
+		_steps(s, 0.5)
+		check(absf((h["s"] - a0) / plain - 0.6) < 0.03, tag + ": enemy lines 40 %% slower on it (%.2f)" % ((h["s"] - a0) / plain))
+	Rules.bridge_combat = true
+	s = _mk(tp, "null", "bloom")
+	s.nodes[1]["owner"] = "B"
+	s.nodes[0]["owner"] = "B"
+	s.nodes[3]["units"] = 300.0
+	var hg := s.send(3, 0, 1.0)
+	run_until(s, func(): return s.on_enemy_goo(hg) or not (hg in s.hordes), 30.0)
+	var goo_only := s.deck_slow(hg)
+	s.cast("B", "map", s._current_span(hg)["edge"])
+	check(absf(goo_only - Rules.GOO_SLOW) < 0.001 and absf(s.deck_slow(hg) - 0.6) < 0.001, "SIEGE: Mire on an enemy goo corridor: the stronger slow (0.6), not 0.7 x 0.6")
+	# ---------------------------------------------------------------- Anchor: relays can't move it, no fling, half cannon kills
+	s = _mk(sw, "null", "null", {"A": {"map": "anchor"}})
+	s.nodes[1]["owner"] = "B"
+	check(s.cast("A", "map", 2), "Anchor a switch deck")
+	s.fire_relay(1)
+	_steps(s, Rules.RELAY_WARNING + Rules.RELAY_MOVE + 0.2)
+	check(s.nodes[1]["relay_index"] == 1 and s.is_edge_open(2) and s.is_edge_open(6), "the relay switches, but the anchored deck stays")
+	_steps(s, 10.0 - Rules.RELAY_WARNING - Rules.RELAY_MOVE)
+	check(not s.is_edge_open(2) and s.fx_events.any(func(e): return e["type"] == "relay_settle"), "when the anchor ends the relay's state applies")
+	s = _mk(rot, "null", "null", {"A": {"map": "anchor"}})
+	s.nodes[0]["owner"] = "B"
+	s.nodes[1]["owner"] = "A"
+	s.nodes[1]["units"] = 200.0
+	var hr := s.send(1, 4, 1.0)                        # 1 -> 0 -> 4 over two r1 decks
+	run_until(s, func(): return hr["s"] > hr["spans"][0]["s0"] + 2.0, 20.0)
+	s.cast("A", "map", hr["spans"][0]["edge"])
+	s.fire_relay(0)
+	s.nodes[0]["relay_t"] = 0.0
+	s.step(0.02)
+	check(hr in s.hordes and s.fall_losses.get("A", 0.0) == 0.0, "a rotation does not fling a line off an anchored deck")
+	var cannon_loss := []
+	for anchored in [false, true]:
+		s = _mk(tp, "null", "null", {"A": {"map": "anchor"}})
+		s.nodes[1]["owner"] = "B"
+		s.nodes[1]["attachment"] = "cannon"
+		s.nodes[1]["cannon_tier"] = 1
+		s.nodes[3]["units"] = 300.0
+		var hc := s.send(3, 1, 1.0)
+		s.nodes[3]["streaming"] = {}
+		hc["streaming"] = false
+		hc["units"] = 300.0
+		hc["s"] = hc["spans"][0]["s1"] - 1.0
+		if anchored:
+			s.cast("A", "map", hc["spans"][0]["edge"])
+		for k in range(60):
+			s._step_structures(0.05)
+		cannon_loss.append(300.0 - hc["units"])
+	check(absf(cannon_loss[0] - 50.0) < 0.5 and absf(cannon_loss[1] - 25.0) < 0.5, "Anchor: your lines on it take half the cannon kills (%.0f vs %.0f)" % [cannon_loss[1], cannon_loss[0]])
+	# ---------------------------------------------------------------- Bypass: both states for 8 s, then the normal outcome
+	s = _mk(sw, "null", "null", {"A": {"map": "bypass"}})
+	s.nodes[1]["owner"] = "B"
+	check(s.cast("A", "map", 1), "Bypass an enemy relay")
+	check(s.is_edge_open(2) and s.is_edge_open(6) and s.find_route(5, 3) == [5, 1, 3], "the relay holds both states: both decks stand, routes use either")
+	s.fire_relay(1)
+	s.nodes[5]["units"] = 300.0
+	var hb2 := s.send(5, 0, 1.0)
+	var ab: Dictionary = hb2["spans"][1]
+	run_until(s, func(): return hb2["s"] > ab["s0"] + 3.0 and s.nodes[1]["relay_phase"] == "", 30.0)
+	check(s.is_edge_open(2) and s.fall_losses.get("A", 0.0) == 0.0, "fired while bypassed, nothing moves and nobody falls")
+	for e in s.effects:
+		if e["id"] == "bypass":
+			e["t"] = 0.01
+	s.step(0.05)
+	check(not s.is_edge_open(2) and s.fall_losses.get("A", 0.0) > 0.0, "Bypass over: the deck that goes away drops its riders")
+	var st := MapBuilder.load_map("res://maps/008-strait.json")         # retract relays 1 and 2
+	s = _mk(st, "null", "null", {"A": {"map": "bypass"}})
+	s.nodes[1]["owner"] = "B"
+	s.nodes[1]["units"] = 0.0
+	s.cast("A", "map", 1)
+	s.fire_relay(1)
+	s.nodes[5]["units"] = 300.0
+	var hr2 := s.send(5, 0, 1.0)
+	run_until(s, func(): return hr2["s"] > hr2["spans"][1]["s0"] + 3.0 and s.nodes[1]["relay_phase"] == "", 30.0)
+	for e in s.effects:
+		if e["id"] == "bypass":
+			e["t"] = 0.01
+	s.step(0.05)
+	check(not s.is_edge_open(2) and s.fall_losses.get("A", 0.0) > 0.0 and not s.events.any(func(e): return e["type"] == "carried"),
+			"a bypassed retract deck that goes away drops its riders too (0.18.7: no carrying in)")
+	# ---------------------------------------------------------------- Relay Hack: fire or jam an enemy / neutral relay
+	s = _mk(sw, "null", "null", {"A": {"map": "relay_hack"}})
+	s.nodes[1]["owner"] = "B"
+	check(s.cast("A", "map", 1) and s.nodes[1]["relay_phase"] == "warning" and absf(s.nodes[1]["relay_t"] - Rules.RELAY_WARNING) < 0.001,
+			"Relay Hack fires an enemy relay with its normal warning")
+	s = _mk(sw, "null", "null", {"A": {"map": "relay_hack"}})
+	s.nodes[1]["owner"] = "B"
+	check(s.cast("A", "map", [1, "jam"]) and absf(s.nodes[1]["relay_cd"] - 10.0) < 0.001 and not s.fire_relay(1), "...or jams it: +10 s on its cooldown")
+	s = _mk(sw, "null", "null", {"A": {"map": "relay_hack"}})
+	check(s.cast("A", "map", 2), "Relay Hack fires a neutral relay")
+	_steps(s, Rules.RELAY_WARNING + Rules.RELAY_MOVE + 0.2)
+	check(not s.is_edge_open(3) and s.is_edge_open(7), "a hacked neutral relay really switches")
+	s = _mk(sw, "null", "null", {"A": {"map": "relay_hack"}})
+	s.nodes[1]["owner"] = "A"
+	check("enemy or neutral" in s.cast_check("A", "map", 1), "not on your own relay")
+	# ---------------------------------------------------------------- Rewire
+	s = _mk(sw, "vex", "null")
+	s.nodes[1]["owner"] = "B"
+	check("charging" in s.cast_check("A", "ultimate", null), "Rewire needs its charge")
+	_charged(s, "A")
+	s.nodes[5]["units"] = 200.0
+	var hv := s.send(5, 0, 1.0)
+	check(s.cast("A", "ultimate", null) and s.rewire_left("A") == 3 and absf(s.skill_speed(hv) - 1.5) < 0.001 and s.charge("A") == 0.0,
+			"Rewire: all own lines +50 % speed, 3 relay fires, the charge spent")
+	check(s.cast("A", "ultimate", 1) and s.nodes[1]["relay_phase"] == "warning" and s.rewire_left("A") == 2, "Rewire fires an enemy relay")
+	check(s.cast("A", "ultimate", 2) and s.rewire_left("A") == 1 and not s.can_cast("A", "ultimate", 2), "and a neutral one, each relay once")
+	_steps(s, 10.1)
+	check(s.rewire_left("A") == 0 and s.skill_speed(hv) == 1.0, "Rewire ends after 10 s")
+	# ---------------------------------------------------------------- Echo Split: up to 3 echoes; a landing jams the node
+	s = _mk(rot, "null", "null", {}, {7: "A", 10: "B"})
+	for id in [8, 9, 12]:
+		s.nodes[id]["owner"] = "A"
+		s.nodes[id]["units"] = 100.0
+	s.nodes[7]["units"] = 100.0
+	s.nodes[11]["owner"] = "B"
+	for id in [7, 8, 9, 12]:
+		s.send(id, 10, 1.0)
+	_steps(s, 1.0)
+	_charged(s, "A")
+	var n_before := s.hordes.size()
+	check(s.cast("A", "ultimate", null), "Echo Split with four lines on the move")
+	var echoes := s.hordes.filter(func(h): return h.get("echo", false))
+	check(echoes.size() == 3 and s.hordes.size() == n_before + 3 and echoes.all(func(h): return h["target"] == 11 and h.get("decoy", false)),
+			"at most 3 echoes, each a decoy toward another enemy node")
+	check(s.fx_events.any(func(e): return e["type"] == "ghosts" and e.get("private", "") == "A" and (e["hids"] as Array).size() == 3), "the echo ids go to their owner only")
+	s = _mk(tp, "null", "null")
+	s.nodes[2]["owner"] = "B"
+	s.nodes[2]["attachment"] = ""
+	var fake := {"id": 999, "owner": "A", "decoy": true, "echo": true}
+	s._decoy_arrive(s.nodes[2], fake)
+	check(s.is_disrupted(2) and s.production(s.nodes[2]) == 0.0, "an echo landing on an enemy node stops its vat")
+	s.nodes[4]["attachment"] = "cannon"
+	s.nodes[4]["cannon_tier"] = 1
+	s.nodes[3]["units"] = 200.0
+	var hx := s.send(3, 4, 1.0)
+	run_until(s, func(): return (Sim.sample(hx, hx["s"])[0] as Vector3).distance_to(s.nodes[4]["pos"]) < Rules.CANNON_RANGE + 4.0 or not (hx in s.hordes), 30.0)
+	s._decoy_arrive(s.nodes[4], {"id": 998, "owner": "A", "decoy": true, "echo": true})
+	run_until(s, func(): return (Sim.sample(hx, hx["s"])[0] as Vector3).distance_to(s.nodes[4]["pos"]) < Rules.CANNON_RANGE - 1.0 or not (hx in s.hordes), 30.0)
+	check(not s.events.any(func(e): return e["type"] == "cannon_burst"), "...and its cannon")
+	_steps(s, 8.0)
+	check(not s.is_disrupted(2), "the jam lasts 8 s")
+	# ---------------------------------------------------------------- Superbloom: "cap" (default) and "under_attack"
+	check(Rules.SUPERBLOOM_MODE == "cap", "Superbloom defaults to the cap variant (Daniele, 0.18.7)")
+	s = _mk(tp, "bloom", "null")
+	for id in [3, 1, 0]:
+		s.nodes[id]["owner"] = "A"
+		s.nodes[id]["tier"] = 4
+		s.nodes[id]["units"] = 0.0
+	_charged(s, "A")
+	var base: float = 3.0 * Rules.PROD[4] * Rules.stat("bloom", "production")
+	check(s.cast("A", "ultimate", null), "cap: castable with nothing under attack")
+	u0 = s.nodes[3]["units"] + s.nodes[1]["units"] + s.nodes[0]["units"]
+	s.step(0.1)
+	var g1: float = s.nodes[3]["units"] + s.nodes[1]["units"] + s.nodes[0]["units"] - u0
+	check(absf(g1 / (base * 0.1) - 1.5) < 0.01, "cap: every vat 1.5x (%.2f)" % (g1 / (base * 0.1)))
+	_steps(s, 12.0)
+	var total: float = s.nodes[3]["units"] + s.nodes[1]["units"] + s.nodes[0]["units"] - u0
+	check(absf(total - (base * 12.1 + 40.0 * Rules.SCALE)) < 1.0, "cap: the extra stops at 40 shown units (extra %.1f sim)" % (total - base * 12.1))
+	Rules.SUPERBLOOM_MODE = "under_attack"
+	s = _mk(tp, "bloom", "null")
+	_charged(s, "A")
+	check("under attack" in s.cast_check("A", "ultimate", null), "under_attack: refused while nothing is attacked")
+	s.nodes[4]["units"] = 100.0
+	s.send(4, 3, 1.0)
+	check(s.cast("A", "ultimate", null) and float(s.effects_on("seat", "A")[0]["left"]) < 0.0, "under_attack: castable once a line comes for you, no cap")
+	u0 = s.nodes[3]["units"]
+	s.step(0.1)
+	check(absf((s.nodes[3]["units"] - u0) / (Rules.PROD[2] * Rules.stat("bloom", "production") * 0.1) - 1.5) < 0.01, "under_attack: 1.5x")
+	Rules.SUPERBLOOM_MODE = "cap"
+	# ---------------------------------------------------------------- Core Meltdown (both modes)
+	for brawl in [false, true]:
+		Rules.bridge_combat = not brawl
+		var tag := "BRAWL" if brawl else "SIEGE"
+		for garrison in [[40.0, 1], [400.0, 4]]:
+			s = _mk(tp, "ember", "null")
+			s.nodes[1]["owner"] = "B"
+			s.nodes[1]["units"] = garrison[0]
+			s.nodes[1]["tier"] = garrison[1]
+			s.nodes[3]["units"] = 200.0
+			_charged(s, "A")
+			var h := s.send(3, 1, 1.0)
+			_steps(s, 0.5)
+			check("reaches its target" in s.cast_check("A", "ultimate", h["id"]), tag + ": Core Meltdown waits until the line is at its target")
+			run_until(s, func(): return float(h["L"]) - float(h["s"]) <= 12.0, 20.0)
+			var line: float = h["units"]
+			var g0: float = s.nodes[1]["units"]
+			var sac: float = maxf(line * 0.25, 20.0)
+			var kills: float = minf(sac * 3.0, 300.0)
+			var charge_b := s.charge("B")
+			check(s.cast("A", "ultimate", h["id"]), tag + ": Core Meltdown on the arriving line")
+			if g0 <= kills:
+				check(s.nodes[1]["owner"] == "A" and absf(s.nodes[1]["units"] - (line - sac)) < 0.5 and not (h in s.hordes),
+						tag + ": the garrison hits zero and the rest of the line (%.0f) captures" % (line - sac))
+			else:
+				check(s.nodes[1]["owner"] == "B" and absf(s.nodes[1]["units"] - (g0 - kills)) < 0.01 and absf(h["units"] - (line - sac)) < 0.01,
+						tag + ": 25 %% sacrificed (%.0f), 3 defenders each (%.0f killed)" % [sac, kills])
+			s.step(0.05)
+			check(absf(s.charge("B") - charge_b - 0.05 / Rules.ULT_CHARGE_TIME) < 0.0001, tag + ": no charge from the meltdown")
+	Rules.bridge_combat = true
+	s = _mk(tp, "ember", "null")
+	s.nodes[3]["units"] = 1000.0
+	s.nodes[3]["tier"] = 4
+	_charged(s, "A")
+	s.nodes[2]["owner"] = "B"
+	s.nodes[2]["units"] = 800.0
+	s.nodes[2]["tier"] = 4
+	var hm := s.send(3, 2, 1.0)
+	run_until(s, func(): return float(hm["L"]) - float(hm["s"]) <= 12.0, 30.0)
+	var gm: float = s.nodes[2]["units"]
+	var lm: float = hm["units"]
+	s.cast("A", "ultimate", hm["id"])
+	check(lm * 0.25 * 3.0 > 300.0 and absf(gm - s.nodes[2]["units"] - 300.0) < 0.01 and absf(lm - hm["units"] - lm * 0.25) < 0.01, "a big line: no cap on the sacrifice, 60 shown kills at most")
+	# ---------------------------------------------------------------- Relay Aegis
+	s = _mk(tp, "solar", "null")
+	for id in [1, 0]:
+		s.nodes[id]["owner"] = "A"
+	_charged(s, "A")
+	check(s.cast("A", "ultimate", 1), "Relay Aegis on node 1")
+	check(s.garrison_div(s.nodes[3]) == 1.8 and s.garrison_div(s.nodes[0]) == 1.8 and s.garrison_div(s.nodes[2]) == 1.0 and absf(s.prod_mult(s.nodes[1]) - 1.2) < 0.001,
+			"the node and its own neighbours: 1.8x less garrison damage, +20 % production")
+	check(s.anchor_state(s._edge_index(1, 3)) == true and s.anchor_state(s._edge_index(1, 0)) == true and s.anchor_state(s._edge_index(0, 2)) == null,
+			"the decks between them are anchored")
+	Rules.bridge_combat = false
+	s.nodes[3]["units"] = 100.0
+	s._land_classic(s.nodes[3], "B", 18.0)
+	var aegis_kill := 18.0 / (Rules.stat("solar", "health") * Rules.stat("solar", "garrison") * 1.8)
+	check(absf(s.nodes[3]["units"] - (100.0 - aegis_kill)) < 0.01, "BRAWL: 18 attackers kill %.1f of a SOLAR Aegis garrison (1.8x less)" % aegis_kill)
+	Rules.bridge_combat = true
+	s = _mk(sw, "solar", "null", {"B": {"map": "relay_hack"}})
+	s.nodes[1]["owner"] = "A"
+	_charged(s, "A")
+	s.cast("A", "ultimate", 5)
+	check(s.is_relay_locked(1) and not s.fire_relay(1) and "locked" in s.cast_check("B", "map", 1), "the relays among them are locked, for their owner and for a hacker")
+	_steps(s, 12.1)
+	check(not s.is_relay_locked(1) and s.effects.is_empty(), "Relay Aegis ends after 12 s")
+	# ---------------------------------------------------------------- ultimate charge: ~120 s, kills speed it, never under 90 s
+	s = _mk(tp, "null", "null")
+	_steps(s, 119.0, 0.5)
+	check(s.charge("A") < 1.0 and s.charge("A") > 0.98, "natural charge: not ready at 119 s")
+	_steps(s, 1.5, 0.5)
+	check(s.charge("A") >= 1.0, "ready at 120 s")
+	s = _mk(tp, "null", "null")
+	s._credit("A", "B", 10000.0)
+	s.step(0.5)
+	check(absf(s.charge("A") - 0.5 / Rules.ULT_MIN_TIME) < 0.0001, "enemy kills speed the charge, capped by the 90 s floor")
+	_steps(s, 88.5, 0.5)
+	s._credit("A", "B", 10000.0)
+	s.step(0.5)
+	check(s.charge("A") < 1.0, "never ready before 90 s (%.3f at 89.5 s)" % s.charge("A"))
+	_steps(s, 1.0, 0.5)
+	check(s.charge("A") >= 1.0, "ready at 90 s with enough kills")
+	s = _mk(tp, "null", "null", {}, {3: "A", 4: "B"})
+	s.teams = {"A": 0, "B": 0}
+	s._credit("A", "", 5000.0)                          # neutral
+	s._credit("A", "B", 5000.0)                         # an ally
+	s.step(0.5)
+	check(absf(s.charge("A") - 0.5 / Rules.ULT_CHARGE_TIME) < 0.0001, "no charge from neutrals or allies")
+	s = _mk(tp, "null", "null")
+	s.nodes[3]["units"] = 200.0
+	s.nodes[1]["owner"] = "B"
+	s.nodes[1]["units"] = 2000.0
+	s.nodes[1]["tier"] = 4
+	var hk := s.send(3, 1, 1.0)
+	run_until(s, func(): return not (hk in s.hordes), 30.0)
+	check(s.charge("B") > s.time / Rules.ULT_CHARGE_TIME + 0.001, "a garrison killing attackers charges its owner (%.3f vs %.3f natural)" % [s.charge("B"), s.time / Rules.ULT_CHARGE_TIME])
+	s = _mk(sw, "null", "null")
+	s.nodes[1]["owner"] = "B"
+	s.nodes[1]["units"] = 0.0                            # (no garrison to fight on the way: only the fall)
+	s.nodes[5]["units"] = 300.0
+	var hf := s.send(5, 0, 1.0)
+	run_until(s, func(): return hf["s"] > hf["spans"][1]["s0"] + 4.0, 30.0)
+	s.fire_relay(1)
+	run_until(s, func(): return s.nodes[1]["relay_phase"] == "", 8.0)
+	check(s.fall_losses.get("A", 0.0) > 0.0 and absf(s.charge("B") - s.time / Rules.ULT_CHARGE_TIME) < 0.001, "no charge from falls")
+	# ---------------------------------------------------------------- AI: every level casts in a match
+	for lv in Rules.AI_LEVELS:
+		var m4 := MapBuilder.load_map("res://maps4/M-08-neon-delta.json")
+		s = _mk(m4, "ember", "vex")
+		var ais := [SeatAI.new("A", 2.5, lv), SeatAI.new("B", 2.5, lv)]
+		while not s.over and s.time < 240.0:
+			for ai in ais:
+				ai.think(s, 0.1)
+			s.step(0.1)
+		var n_casts: int = ais[0].casts + ais[1].casts
+		check(n_casts > 0, "AI %s casts skills in a match (%d casts in %.0f s)" % [lv, n_casts, s.time])

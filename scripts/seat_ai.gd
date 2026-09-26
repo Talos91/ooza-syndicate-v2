@@ -14,6 +14,10 @@ extends RefCounted
 ## pull in and none of its own are; level 2 fires ahead, for the lines that will be on the deck when it
 ## moves (RELAY_WARNING later); level 3 also opens a shorter route to where it wants to go. A rotation
 ## flings everyone on its deck (0.18.3): fired only for the kill, never with its own lines on it.
+## Skills (0.18.7, "the AI must not be skill-less"): every think it may cast one of its loadout's skills
+## (its faction's Rules.FACTION_LOADOUT unless the match gave it another), at most one cast every
+## Rules.AI_SKILL_GAP[level] s, each on a cheap heuristic of what it can see (_skills). It never reads
+## another seat's decoy flag: a Ghost Line fools it as it fools a player.
 
 var seat: String
 var level := "Standard"
@@ -25,6 +29,8 @@ var _attack_after := 0.0
 var _invest_after := 0.0
 var _memory := {}                          # node id -> {"units", "next"}
 var _busy := {}                            # node id -> true once it ordered a send this think
+var _skill_after := 0.0                    # no cast before this match time (Rules.AI_SKILL_GAP)
+var casts := 0                             # skills cast this match (tests)
 var rng := RandomNumberGenerator.new()
 
 
@@ -47,6 +53,7 @@ func think(sim: Sim, dt: float) -> void:
 	_busy = {}      # a send supersedes the node's earlier order: one order per node per think
 	if int(cfg["relays"]) > 0:
 		_relays(sim)
+	_skills(sim)
 	if Rules.bridge_combat and int(cfg["relays"]) > 0:   # RECALL is SIEGE only
 		_retreats(sim)
 	if sim.last_stand_active:
@@ -427,4 +434,279 @@ func _build(sim: Sim) -> void:
 		if "cannon" in n["buildable"] and n["units"] >= Rules.CANNON_COST[1] + 10.0:
 			sim.build_attachment(n["id"], "cannon")
 			_invest_after = sim.time + float(cfg["invest"])
+			return
+
+
+# ------------------------------------------------------------------ skills (0.18.7)
+# One cheap heuristic per skill; `_pick` returns [target] or [] (nothing worth it now). The ultimate is
+# looked at first, then the active and the map skill; one cast per think, then Rules.AI_SKILL_GAP.
+func _skills(sim: Sim) -> void:
+	if not sim.abilities_on or sim.over:
+		return
+	if sim.skill_id(seat, "ultimate") == "rewire" and sim.rewire_left(seat) > 0:
+		_rewire_fires(sim)                            # Rewire running: its relay fires are free
+	if sim.time < _skill_after:
+		return
+	for slot in ["ultimate", "active", "map"]:
+		var id := sim.skill_id(seat, slot)
+		if id == "" or (slot == "ultimate" and (sim.charge(seat) < 1.0 or sim.rewire_left(seat) > 0)) \
+				or (slot != "ultimate" and sim.cooldown(seat, slot) > 0.0):
+			continue
+		var pick := _pick(sim, id)
+		if pick.is_empty():
+			continue
+		if sim.cast(seat, slot, pick[0]):
+			casts += 1
+			_skill_after = sim.time + float(Rules.AI_SKILL_GAP.get(level, 9.0))
+			return
+
+
+func _hostile(sim: Sim, owner: String) -> bool:
+	return owner != "" and not sim.allied(owner, seat)
+
+
+func _my_lines(sim: Sim) -> Array:
+	return sim.hordes.filter(func(h): return h["owner"] == seat and not h.get("decoy", false) and h["state"] != "absorb" \
+			and not h.get("retreat", false))
+
+
+func _threat(sim: Sim, n: Dictionary) -> float:
+	var threat := _incoming(sim, n["id"], true)
+	for k in n["siege"]:
+		if not sim.allied(k, seat):
+			threat += n["siege"][k]
+	return threat
+
+
+func _deck_units(sim: Sim, ei: int) -> Array:
+	## [hostile units, own or allied units] on deck ei now.
+	var hostile := 0.0
+	var own := 0.0
+	for h in sim.hordes:
+		var len := Sim.chain_length(h)
+		for sp in h["spans"]:
+			if sp["edge"] != ei:
+				continue
+			var on: float = maxf(0.0, minf(h["s"], sp["s1"]) - maxf(h["s"] - len, sp["s0"]))
+			if on > 0.0:
+				var u: float = h["units"] * clampf(on / maxf(len, 0.001), 0.0, 1.0)
+				if sim.allied(h["owner"], seat):
+					own += u
+				else:
+					hostile += u
+	return [hostile, own]
+
+
+func _own_route_uses(sim: Sim, ei: int) -> bool:
+	## Will one of its own (or allied) lines still cross deck ei?
+	for h in sim.hordes:
+		if not sim.allied(h["owner"], seat):
+			continue
+		for sp in h["spans"]:
+			if sp["edge"] == ei and sp["s1"] > h["s"] - Sim.chain_length(h):
+				return true
+	return false
+
+
+func _pick(sim: Sim, id: String) -> Array:
+	match id:
+		"surge":                                      # the biggest line still well short of its target
+			var best := {}
+			for h in _my_lines(sim):
+				if h["units"] >= 10.0 * Rules.SCALE and float(h["L"]) - float(h["s"]) > 15.0 \
+						and (best.is_empty() or h["units"] > best["units"]):
+					best = h
+			return [best["id"]] if not best.is_empty() else []
+		"spore_burst":                                # the most productive vat that has room to fill
+			var best := {}
+			for n in _mine(sim):
+				if Sim.has_vat(n) and n["units"] < Rules.CAPS[n["tier"]] * 0.6 and not sim.is_disrupted(n["id"]) \
+						and (best.is_empty() or n["tier"] > best["tier"]):
+					best = n
+			return [best["id"]] if not best.is_empty() else []
+		"fortify":                                    # a node under heavy attack
+			var best := {}
+			var best_t := 0.0
+			for n in _mine(sim):
+				var t := _threat(sim, n)
+				if t >= 10.0 * Rules.SCALE and t >= n["units"] * 0.5 and t > best_t and sim.garrison_div(n) <= 1.0:
+					best = n
+					best_t = t
+			return [best["id"]] if not best.is_empty() else []
+		"relay_aegis":                                # the same, preferring a node with own neighbours
+			var best := {}
+			var best_s := 0.0
+			for n in _mine(sim):
+				var t := _threat(sim, n)
+				if t < 12.0 * Rules.SCALE or t < n["units"] * 0.6 or sim.garrison_div(n) > 1.0:
+					continue
+				var s: float = t
+				for link in sim.adj[n["id"]]:
+					if sim.nodes[link[0]]["owner"] == seat:
+						s += 5.0 * Rules.SCALE
+				if s > best_s:
+					best = n
+					best_s = s
+			return [best["id"]] if not best.is_empty() else []
+		"scorch":                                     # the deck with the most enemy bodies on it
+			var best := -1
+			var best_u := 8.0 * Rules.SCALE
+			var seen := {}
+			for h in sim.hordes:
+				if not _hostile(sim, h["owner"]):
+					continue
+				for sp in h["spans"]:
+					if seen.has(sp["edge"]):
+						continue
+					seen[sp["edge"]] = true
+					var u: float = _deck_units(sim, sp["edge"])[0]
+					if u > best_u:
+						best_u = u
+						best = sp["edge"]
+			return [best] if best >= 0 else []
+		"mire":                                       # the deck under the biggest line coming for its nodes
+			var best := {}
+			for h in sim.hordes:
+				if not _hostile(sim, h["owner"]) or not sim.allied(sim.nodes[h["target"]]["owner"], seat) \
+						or h["units"] < 8.0 * Rules.SCALE or h["state"] != "move":
+					continue
+				if best.is_empty() or h["units"] > best["units"]:
+					best = h
+			if best.is_empty():
+				return []
+			var sp := sim._current_span(best)
+			return [sp["edge"]] if not sp.is_empty() else []
+		"demolish":                                   # a fixed deck an enemy line will reach in 3-8 s
+			for h in sim.hordes:
+				if not _hostile(sim, h["owner"]) or h["units"] < 10.0 * Rules.SCALE or h["state"] != "move":
+					continue
+				var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed")
+				for sp in h["spans"]:
+					var e: Dictionary = sim.edges[sp["edge"]]
+					if e["plaza"] or e["state"] != "" or e["retracts"] or sp["s0"] <= h["s"]:
+						continue
+					var eta: float = (sp["s0"] - h["s"]) / maxf(v, 0.1)
+					if eta >= Rules.SKILLS["demolish"]["warn"] and eta <= 8.0 and not _own_route_uses(sim, sp["edge"]) \
+							and sim.can_cast(seat, "map", sp["edge"]):
+						return [sp["edge"]]
+			return []
+		"anchor":                                     # save its own line from a Demolish, a relay or a cannon
+			for e in sim.effects:
+				if e["id"] == "demolish" and e.get("phase", "") == "warning" and not sim.allied(e["seat"], seat) \
+						and _own_route_uses(sim, e["target"]):
+					return [e["target"]]
+			for n in sim.nodes:
+				if n["relay"] == "" or n["relay_phase"] != "warning" or not _hostile(sim, n["owner"]):
+					continue
+				for ei in sim.controlled_edges(n["id"]):
+					if sim._edge_open(ei) and not sim._edge_open_at(ei, n["relay_pending"]) \
+							and _deck_units(sim, ei)[1] >= 5.0 * Rules.SCALE and sim.can_cast(seat, "map", ei):
+						return [ei]
+			for h in _my_lines(sim):
+				if h["units"] < 15.0 * Rules.SCALE:
+					continue
+				var sp := sim._current_span(h)
+				if sp.is_empty():
+					continue
+				for n in sim.nodes:
+					if n["attachment"] == "cannon" and _hostile(sim, n["owner"]) \
+							and (Sim.sample(h, h["s"])[0] as Vector3).distance_to(n["pos"]) <= Rules.CANNON_RANGE:
+						return [sp["edge"]]
+			return []
+		"bypass":                                     # a relay about to drop or fling its own lines
+			for n in sim.nodes:
+				if n["relay"] == "" or n["relay_phase"] != "warning":
+					continue
+				var own := 0.0
+				for ei in sim.controlled_edges(n["id"]):
+					if sim._edge_open(ei) and not sim._edge_open_at(ei, n["relay_pending"]):
+						own += _deck_units(sim, ei)[1]
+				if own >= 5.0 * Rules.SCALE and sim.can_cast(seat, "map", n["id"]):
+					return [n["id"]]
+			return []
+		"relay_hack":                                 # fire an enemy relay for the kill, or jam one that threatens it
+			for n in sim.nodes:
+				if n["relay"] == "" or (n["owner"] != "" and sim.allied(n["owner"], seat)):
+					continue
+				var closing := _closing(sim, n)
+				if closing.is_empty():
+					continue
+				var toll: Array = _fling_toll(sim, closing, Rules.RELAY_WARNING) if n["relay"] == "rotation" \
+						else _on_decks(sim, closing, Rules.RELAY_WARNING)
+				if toll[0] >= 6.0 * Rules.SCALE and toll[1] <= 0.5 and sim.can_cast(seat, "map", n["id"]):
+					return [n["id"]]
+				if _hostile(sim, n["owner"]) and toll[1] >= 8.0 * Rules.SCALE and sim.can_cast(seat, "map", [n["id"], "jam"]):
+					return [[n["id"], "jam"]]
+			return []
+		"ghost_line":                                 # a bluff at an armed enemy node (it draws the fire)
+			if sim.time < float(cfg["grace"]):
+				return []
+			var src := {}
+			for n in _mine(sim):
+				if n["units"] >= 12.0 * Rules.SCALE and not _drops_soon(sim, n["id"]) and (src.is_empty() or n["units"] > src["units"]):
+					src = n
+			if src.is_empty():
+				return []
+			var best := -1
+			var best_s := -INF
+			for n in sim.nodes:
+				if not _hostile(sim, n["owner"]) or sim.collapsed.get(n["id"], false):
+					continue
+				var s: float = -(n["pos"] as Vector3).distance_to(src["pos"]) + (40.0 if n["attachment"] == "cannon" else 0.0)
+				if s > best_s and sim.can_cast(seat, "active", [src["id"], n["id"]]):
+					best_s = s
+					best = n["id"]
+			return [[src["id"], best]] if best >= 0 else []
+		"echo_split":                                 # several of its lines on the move
+			var lines := _my_lines(sim).filter(func(h): return _hostile(sim, sim.nodes[h["target"]]["owner"]) or sim.nodes[h["target"]]["owner"] == "")
+			var total := 0.0
+			for h in lines:
+				total += h["units"]
+			return [null] if lines.size() >= 2 or total >= 25.0 * Rules.SCALE else []
+		"superbloom":                                 # several vats well below their cap
+			var low := 0
+			for n in _mine(sim):
+				if Sim.has_vat(n) and n["units"] < Rules.CAPS[n["tier"]] * 0.5:
+					low += 1
+			return [null] if low >= 3 or (low >= 2 and Rules.SUPERBLOOM_MODE == "under_attack") else []
+		"rewire":                                     # a relay kill is on, or a big push is under way
+			var kill := 0.0
+			for n in sim.nodes:
+				if n["relay"] != "" and n["relay_phase"] == "" and n["relay_cd"] <= 0.0:
+					var closing := _closing(sim, n)
+					if not closing.is_empty():
+						var toll: Array = _fling_toll(sim, closing, Rules.RELAY_WARNING)
+						if toll[1] <= 0.5:
+							kill += toll[0]
+			var push := 0.0
+			for h in _my_lines(sim):
+				push += h["units"]
+			return [null] if kill >= 8.0 * Rules.SCALE or push >= 30.0 * Rules.SCALE else []
+		"core_meltdown":                              # an arriving line the meltdown turns into a capture
+			var sk: Dictionary = Rules.SKILLS["core_meltdown"]
+			for h in _my_lines(sim) + sim.hordes.filter(func(x): return x["owner"] == seat and x["state"] == "absorb" and not x.get("decoy", false)):
+				if not sim.can_cast(seat, "ultimate", h["id"]):
+					continue
+				var n: Dictionary = sim.nodes[h["target"]]
+				var g := _estimate(sim, n) if n["owner"] != "" else float(n["units"])
+				var sac: float = minf(h["units"], maxf(h["units"] * float(sk["share"]), float(sk["min_shown"]) * Rules.SCALE))
+				var kills: float = minf(sac * float(sk["kills_per"]), float(sk["cap_shown"]) * Rules.SCALE)
+				if kills >= g or (h["units"] - sac > (g - kills) * 1.05 and h["units"] < g * 1.3):
+					return [h["id"]]
+			return []
+	return []
+
+
+func _rewire_fires(sim: Sim) -> void:
+	## While Rewire runs: fire any relay (enemy ones too) that drops or flings more enemy than own.
+	for n in sim.nodes:
+		if n["relay"] == "" or not sim.can_cast(seat, "ultimate", n["id"]):
+			continue
+		var closing := _closing(sim, n)
+		if closing.is_empty():
+			continue
+		var toll: Array = _fling_toll(sim, closing, Rules.RELAY_WARNING) if n["relay"] == "rotation" \
+				else _on_decks(sim, closing, Rules.RELAY_WARNING)
+		if toll[0] >= 4.0 * Rules.SCALE and toll[1] <= 0.5 and sim.cast(seat, "ultimate", n["id"]):
+			casts += 1
 			return
