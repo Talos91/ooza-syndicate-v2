@@ -58,6 +58,12 @@ var very_last_stand_gap := 0.0       # this match's current interval, derived fr
                                       # need no separate plumbing
 var rng := RandomNumberGenerator.new()
 var _next_id := 1
+var match_seed := 0                  # the setup seed (the 7:00 draw line is picked by it)
+# STRUCTURES 2.1 (0.18.10) - see the STRUCTURES 2.1 block before _setup_skills for the whole contract
+var monsters: Array = []             # live monsters, see launch_monster()
+var _next_monster := 1
+var draw_line := ""                  # 7:00 with a neutral last platform: the DRAW call-out (Rules.DRAW_LINES)
+var _forge_seats: Dictionary = {}    # seats holding a completed forge last step ("forge_lost" events)
 # SKILLS 2.0 (0.18.7) - see the "skills" section at the end of this file for the API
 var abilities_on := true             # Rules.abilities_on at setup (the match setting)
 var loadouts: Dictionary = {}        # seat -> {"active": id, "map": id, "ultimate": id}
@@ -80,6 +86,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		factions = seat_factions
 	teams = seat_teams
 	rng.seed = seed_value if seed_value >= 0 else int(Time.get_unix_time_from_system()) % 100000
+	match_seed = int(rng.seed)
 	_map_last_stand = map.get("lastStand", {})
 	v3 = map.has("layout")
 	if v3:
@@ -97,25 +104,36 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 				else (clampi(int(neutral["tier"]), 1, 4) if neutral is Dictionary \
 				else (1 if v3 else (3 if (n["category"] == "final" or n.get("center", false)) and relay == "" else 1)))
 		var units := float(Rules.HOME_UNITS if owner != "" else Rules.NEUTRAL_UNITS[tier])
+		# STRUCTURES 2.1 node kinds (Rules.NODE_BUILDS): a relay; special = a strategic / final node or a
+		# map-placed T4 (it holds only its vat); common = every other vat node
+		var kind := "relay" if relay != "" else ("special" if str(n.get("category", "normal")) in ["strategic", "final"] \
+				or (owner == "" and tier >= 4) else "common")
 		nodes.append({
 			"id": id, "pos": positions[id], "owner": owner, "tier": tier, "units": units,
 			"category": n.get("category", "normal"), "center": n.get("center", false), "relay": relay,
 			"ring": int(n.get("ring", 0)) if n.get("ring") != null else 0,
 			"plaza": int(n["plaza"]) if n.get("plaza") != null else -1,
+			"node_kind": kind,       # "common" / "relay" / "special" (fixed at setup)
 			"streaming": {},        # {hid, remaining}: the one order the door is emitting
 			"siege": {},            # seat -> units on the platform fighting the garrison (arrived)
 			"siege_dir": {},        # seat -> unit vector from the tower to where they landed
 			"transit": {},          # seat -> {"units", "hordes": [Horde]}: passing-through this frame
 			"node_loss": {},        # seat -> units/s lost on this platform last step (view)
-			"buildable": n.get("buildable", []),   # what the owner may place here (roster JSON)
-			"attachment": "",       # "" / "cannon" / "forge" (replaces the vat while present)
-			"cannon_tier": 0,       # 1-3 once a cannon is built; double-tap upgrades it (Alpha 11)
-			"build_kind": "",       # "" / "vat" / "cannon" / "forge" / "vat_restore": what completes
+			"buildable": (Rules.NODE_BUILDS[kind] as Array).duplicate(),   # what the owner may place here
+			"structure": "" if kind == "relay" else "vat",   # "vat" / "machingoon" / "laser" / "forge" / "monster_hub" / ""
+			"allies": {},           # seat -> allied troops stored here (GAME-RULES sec11; "units" is the owner's)
+			"arrivals": [],         # allied seats in the order their troops arrived (ownership tie-break)
+			"shot": {},             # laser / machingoon fire for the fx: {"t", "target_horde", "kills", "pos"}
+			"monster_ready_t": 0.0, # monster hub: match time from which its next monster may launch
+			"hub_monster": -1,      # monster hub: id of its monster still out (-1: none)
+			"attachment": "",       # LEGACY mirror of "structure" for views not yet on Structures 2.1 (_sync_legacy)
+			"cannon_tier": 0,       # LEGACY mirror (3 while a laser stands: the old cannon's strongest look)
+			"build_kind": "",       # "" / "vat" / "vat_restore" / "machingoon" / "laser" / "forge" / "monster_hub"
 			"build_timer": 0.0,     # seconds left on the current build
 			"build_target": {},     # {"kind", "tier"} the view shows growing while build_timer runs
-			"swap_cd": 0.0,         # seconds before the attachment may be swapped again
-			"cannon_cd": 0.0,       # seconds of recharge left after a burst
-			"cannon_burst": 0.0,    # seconds left in the current burst (0 = not firing)
+			"swap_cd": 0.0,         # seconds before the structure may be swapped again
+			"cannon_cd": 0.0,       # laser: seconds of recharge left after a burst (the cannon's code path)
+			"cannon_burst": 0.0,    # laser: seconds left in the current burst (0 = not firing)
 			"cannon_kill_left": 0.0,
 			"cannon_target": Vector3.ZERO,
 			"cannon_pull": {},      # horde id -> metres this burst has cut off its head (it stays the target)
@@ -128,10 +146,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"moving_edges": [],     # edges in motion this moment (closed to new routes)
 		})
 		adj[id] = []
-		if v3 and owner == "" and neutral is Dictionary and str(neutral.get("structure", "vat")) in ["cannon", "forge"]:
-			var nd: Dictionary = nodes[-1]                # maps 3.0 strategic / relay nodes may start armed
-			nd["attachment"] = neutral["structure"]
-			nd["cannon_tier"] = clampi(tier - 1, 1, 3) if neutral["structure"] == "cannon" else 0
+		if v3 and owner == "" and kind == "relay" and neutral is Dictionary and str(neutral.get("structure", "")) in ["cannon", "laser", "forge"]:
+			nodes[-1]["structure"] = "forge" if neutral["structure"] == "forge" else "laser"   # an armed relay (old cannons -> laser)
+		_sync_legacy(nodes[-1])
 	var geo: Array = map["layout"]["edges"] if v3 else []
 	for ek in range(map["edges"].size()):
 		var e: Dictionary = map["edges"][ek]
@@ -231,19 +248,29 @@ func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 	return h
 
 
-# ------------------------------------------------------------------ structures (Alpha 11 logic)
+# ------------------------------------------------------------------ structures 2.1 (0.18.10)
 static func has_vat(n: Dictionary) -> bool:
-	return n["relay"] == "" and n["attachment"] == ""
+	## A producing vat stands here (not a machingoon, not a relay structure).
+	return n["structure"] == "vat"
 
 
 static func vat_cost(n: Dictionary) -> int:
-	return Rules.VAT_COST.get(n["tier"], 0) if n["tier"] < 4 else 0
+	## The next vat upgrade's price (0: none - owned vats stop at T3, Rules.VAT_MAX_UPGRADE).
+	return Rules.VAT_COST.get(n["tier"], 0) if n["tier"] < Rules.VAT_MAX_UPGRADE else 0
 
 
 static func build_progress(n: Dictionary) -> float:
 	if n["build_kind"] == "":
 		return 1.0
 	return clampf(1.0 - n["build_timer"] / Rules.BUILD_SECONDS, 0.0, 1.0)
+
+
+static func _sync_legacy(n: Dictionary) -> void:
+	## Keeps the pre-2.1 "attachment" / "cannon_tier" fields readable for views not yet on "structure": a laser
+	## reads as the old T3 cannon, a forge as the forge, a monster hub as itself, anything else as "".
+	var st: String = n["structure"]
+	n["attachment"] = "cannon" if st == "laser" else (st if st in ["forge", "monster_hub"] else "")
+	n["cannon_tier"] = 3 if st == "laser" else 0
 
 
 func production(n: Dictionary) -> float:
@@ -255,71 +282,226 @@ func _base_production(n: Dictionary) -> float:
 	return Rules.PROD[n["tier"]] * stat(n["owner"], "production") if n["owner"] != "" and has_vat(n) else 0.0
 
 
-func upgrade_vat(node_id: int) -> bool:
-	## Start a vat upgrade (T1->T2->T3->T4), Rules.BUILD_SECONDS to complete (GAME-RULES sec6),
-	## paid in units from the vat (Alpha 11: 10/20/30, x SCALE).
+func node_cap(n: Dictionary) -> float:
+	## The node's capacity (its tier's cap): the halo tiers and the shared cap read it.
+	return float(Rules.CAPS.get(n["tier"], Rules.CAPS[1]))
+
+
+func allied_units(n: Dictionary, seat := "") -> float:
+	## Allied troops stored here: one seat's, or ("") everybody's.
+	if seat != "":
+		return float(n["allies"].get(seat, 0.0))
+	var t := 0.0
+	for k in n["allies"]:
+		t += float(n["allies"][k])
+	return t
+
+
+func garrison_total(n: Dictionary) -> float:
+	## Everything defending the node: the owner's troops plus every ally's stored troops (GAME-RULES sec11).
+	return float(n["units"]) + allied_units(n)
+
+
+func halo_tier(node_id: int, seat: String) -> int:
+	## Allied halo size for `seat`'s troops stored on this node (seat "" = all allies together): 0 none,
+	## 1 under 25 % of the node's cap, 2 from 25 to 75 %, 3 over 75 % (Daniele, 2026-09-27: "Cap share").
 	var n: Dictionary = nodes[node_id]
-	if n["owner"] == "" or n["build_kind"] != "" or n["tier"] >= 4 or not has_vat(n) \
-			or not ("vat" in n["buildable"]) or n["units"] < vat_cost(n):
-		return false
-	n["units"] -= vat_cost(n)
-	_start_build(n, "vat", {"kind": "vat", "tier": n["tier"] + 1})
-	return true
+	var u := allied_units(n, seat)
+	if u <= 0.0001:
+		return 0
+	var share := u / maxf(node_cap(n), 1.0)
+	return 1 if share < 0.25 else (2 if share <= 0.75 else 3)
 
 
-func build_attachment(node_id: int, kind: String) -> bool:
-	## Build a cannon or forge in the node's slot (GAME-RULES sec6). On a relay node the slot is
-	## empty; on a final node it REPLACES the vat (vat <-> cannon/forge swap); cannon <-> forge is a
-	## swap too. Swaps need the slot off its cooldown; everything is paid in units from the node.
-	var n: Dictionary = nodes[node_id]
-	if n["owner"] == "" or n["build_kind"] != "" or not (kind in n["buildable"]) or n["attachment"] == kind:
-		return false
-	var swapping: bool = n["attachment"] != "" or (n["relay"] == "" and n["tier"] > 0)
-	if swapping and n["swap_cd"] > 0.0:
-		return false
-	var cost: int = Rules.CANNON_COST[1] if kind == "cannon" else Rules.FORGE_COST
-	if n["units"] < cost:
-		return false
-	n["units"] -= cost
-	_start_build(n, kind, {"kind": kind, "tier": 1})
-	return true
+func build_cost(n: Dictionary, kind: String) -> int:
+	## What building `kind` here costs now (units from the node's garrison).
+	match kind:
+		"vat":
+			return 0                                     # a machingoon gives way to the vat again (Alpha 11 RESTORE: free)
+		"machingoon":
+			return Rules.MACHINGOON_COST[1]
+		"laser":
+			return Rules.LASER_COST
+		"forge":
+			return Rules.FORGE_COST
+		"monster_hub":
+			return Rules.MONSTER_HUB_COST
+	return 0
 
 
-func restore_vat(node_id: int) -> bool:
-	## A final node's attachment gives way to its vat again (Alpha 11: RESTORE VAT, free, a build).
-	var n: Dictionary = nodes[node_id]
-	if n["owner"] == "" or n["build_kind"] != "" or n["attachment"] == "" or n["relay"] != "" \
-			or not ("vat" in n["buildable"]) or n["swap_cd"] > 0.0:
-		return false
-	_start_build(n, "vat_restore", {"kind": "vat", "tier": n["tier"]})
-	return true
+func _node_open(node_id: int) -> bool:
+	return node_id >= 0 and node_id < nodes.size() and not collapsed.get(node_id, false) and not over
 
 
-func upgrade_structure(node_id: int) -> bool:
-	## Alpha 11 convention (Daniele, 2026-09-25): double-tap upgrades whatever is already there - the
-	## vat, or a built cannon's tier (T1->T2->T3, 25/35 x SCALE). A forge is single-tier.
-	var n: Dictionary = nodes[node_id]
-	if n["owner"] == "" or n["build_kind"] != "":
-		return false
-	if n["attachment"] == "cannon" and n["cannon_tier"] < 3:
-		var cost: int = Rules.CANNON_COST[n["cannon_tier"] + 1]
-		if n["units"] < cost:
-			return false
-		n["units"] -= cost
-		_start_build(n, "cannon", {"kind": "cannon", "tier": n["cannon_tier"] + 1})
-		return true
-	if n["attachment"] == "":
-		return upgrade_vat(node_id)
+func has_hub(seat: String) -> bool:
+	## Does this seat hold (or build) a monster hub? One per player.
+	for n in nodes:
+		if n["owner"] == seat and not collapsed.get(n["id"], false) \
+				and (n["structure"] == "monster_hub" or n["build_kind"] == "monster_hub"):
+			return true
 	return false
 
 
+const STRUCTURE_NAMES := {"vat": "Vat", "machingoon": "Machingoon", "laser": "Laser tower", "forge": "Forge",
+		"monster_hub": "Monster hub"}
+
+
+func can_build(node_id: int, seat: String, kind: String) -> String:
+	## "" if `seat` may build `kind` on this node now, else the refusal line for a toast. Kinds: "vat" (a
+	## machingoon back to its vat), "machingoon", "laser", "forge", "monster_hub", and "eject" (the team action).
+	if not _node_open(node_id):
+		return "That node is gone"
+	var n: Dictionary = nodes[node_id]
+	if n["owner"] != seat:
+		return "Not your node"
+	if kind == "eject":
+		return "" if allied_units(n) > 0.0001 else "No allied troops to eject here"
+	if n["build_kind"] != "":
+		return "Construction already in progress"
+	if not kind in STRUCTURE_NAMES:
+		return "Unknown structure"
+	if not kind in n["buildable"]:
+		match n["node_kind"]:
+			"relay":
+				return "A relay holds a Laser tower, a Forge or a Monster hub"
+			"special":
+				return "A special node holds only its vat"
+		return "A node holds a vat or a Machingoon"
+	if n["structure"] == kind:
+		return "A %s already stands here" % STRUCTURE_NAMES[kind]
+	if n["structure"] != "" and n["swap_cd"] > 0.0:
+		return "Swap ready in %d s" % int(ceil(n["swap_cd"]))
+	if kind == "monster_hub" and has_hub(seat):
+		return "One Monster hub per player - you already have one"
+	var cost := build_cost(n, kind)
+	if n["units"] < cost:
+		return "%s needs %d units (%d here)" % [STRUCTURE_NAMES[kind], Rules.shown(cost), Rules.shown(n["units"])]
+	return ""
+
+
+func build(node_id: int, seat: String, kind: String) -> bool:
+	## Start building `kind` (see can_build; "eject" runs EJECT at once). Paid from the node's garrison when
+	## it starts; completes after Rules.BUILD_SECONDS. A swap (vat <-> machingoon, or one relay structure for
+	## another) keeps the tier and starts Rules.SWAP_COOLDOWN when it completes.
+	if can_build(node_id, seat, kind) != "":
+		return false
+	if kind == "eject":
+		return eject(node_id, seat)
+	var n: Dictionary = nodes[node_id]
+	n["units"] -= build_cost(n, kind)
+	var build_kind := "vat_restore" if kind == "vat" else kind
+	var tier: int = n["tier"] if kind in ["vat", "machingoon"] else 1
+	_start_build(n, build_kind, {"kind": kind, "tier": tier})
+	return true
+
+
+func can_upgrade(node_id: int, seat: String) -> String:
+	## "" if the vat or machingoon here can go up a tier now, else the refusal line.
+	if not _node_open(node_id):
+		return "That node is gone"
+	var n: Dictionary = nodes[node_id]
+	if n["owner"] != seat:
+		return "Not your node"
+	if n["build_kind"] != "":
+		return "Construction already in progress"
+	var st: String = n["structure"]
+	if st == "vat":
+		if n["tier"] >= 4:
+			return "Vat is already at max tier"
+		if n["tier"] >= Rules.VAT_MAX_UPGRADE:
+			return "Vats stop at T3 - a T4 only stands where the map puts it"
+	elif st == "machingoon":
+		if n["tier"] >= 3:
+			return "Machingoon is already at max tier"
+	elif st == "":
+		return "Nothing to upgrade here"
+	else:
+		return "A %s has no further tier" % STRUCTURE_NAMES.get(st, st)
+	var cost := upgrade_cost(n)
+	if n["units"] < cost:
+		return "Upgrade needs %d units (%d here)" % [Rules.shown(cost), Rules.shown(n["units"])]
+	return ""
+
+
+func upgrade(node_id: int, seat: String) -> bool:
+	## The vat (T1 -> T2 -> T3) or the machingoon (T1 -> T2 -> T3) goes up a tier: paid now, Rules.BUILD_SECONDS.
+	if can_upgrade(node_id, seat) != "":
+		return false
+	var n: Dictionary = nodes[node_id]
+	n["units"] -= upgrade_cost(n)
+	_start_build(n, n["structure"], {"kind": n["structure"], "tier": n["tier"] + 1})
+	return true
+
+
 func upgrade_cost(n: Dictionary) -> int:
-	## What a double-tap would cost here right now (HUD).
-	if n["attachment"] == "cannon":
-		return Rules.CANNON_COST.get(n["cannon_tier"] + 1, 0) if n["cannon_tier"] < 3 else 0
-	if n["attachment"] == "":
+	## What the next tier costs here right now (HUD; 0 = no upgrade).
+	if n["structure"] == "machingoon":
+		return Rules.MACHINGOON_COST.get(n["tier"] + 1, 0) if n["tier"] < 3 else 0
+	if n["structure"] == "vat":
 		return vat_cost(n)
 	return 0
+
+
+func structure_order(seat: String, action: String, node_id: int, args := {}) -> Array:
+	## One structure order for `seat`, validated here: [accepted, feedback line] (main.perform can hand its
+	## structure orders - offline and guests' via Net - straight to this). action: "upgrade"; "build" (args
+	## "kind"); "launch_monster" (args "to"); "eject"; and the pre-2.1 names "build_cannon" (-> laser),
+	## "build_forge", "restore" (-> vat).
+	var kind := ""
+	match action:
+		"upgrade":
+			var why := can_upgrade(node_id, seat)
+			if why != "":
+				return [false, why]
+			var cost := upgrade_cost(nodes[node_id])
+			upgrade(node_id, seat)
+			return [true, "Upgrade started - %d units, %d s" % [Rules.shown(cost), int(Rules.BUILD_SECONDS)]]
+		"launch_monster":
+			var why := launch_monster(node_id, seat, int(args.get("to", -1)))
+			if why != "":
+				return [false, why]
+			return [true, "Monster launched - %d units, next in %d s" % [Rules.shown(Rules.MONSTER_COST), int(Rules.MONSTER_COOLDOWN)]]
+		"eject":
+			kind = "eject"
+		"build":
+			kind = str(args.get("kind", ""))
+		"build_cannon":
+			kind = "laser"
+		"build_forge":
+			kind = "forge"
+		"restore":
+			kind = "vat"
+		_:
+			return [false, ""]
+	var why2 := can_build(node_id, seat, kind)
+	if why2 != "":
+		return [false, why2]
+	var cost2 := build_cost(nodes[node_id], kind) if kind != "eject" else 0
+	build(node_id, seat, kind)
+	if kind == "eject":
+		return [true, "Allied troops ejected"]
+	return [true, "%s construction started - %d units, %d s" % [STRUCTURE_NAMES[kind], Rules.shown(cost2), int(Rules.BUILD_SECONDS)]]
+
+
+# pre-2.1 entry points (hud.gd / main.gd / tests/balance_*.gd still call them): thin wrappers
+func upgrade_vat(node_id: int) -> bool:
+	var n: Dictionary = nodes[node_id]
+	return n["structure"] == "vat" and upgrade(node_id, n["owner"])
+
+
+func build_attachment(node_id: int, kind: String) -> bool:
+	## "cannon" builds the laser tower now; "forge" the forge (relay nodes only).
+	return build(node_id, nodes[node_id]["owner"], "laser" if kind == "cannon" else kind)
+
+
+func restore_vat(node_id: int) -> bool:
+	## A machingoon gives way to its vat again (Structures 2.1: special nodes hold only their vat).
+	return build(node_id, nodes[node_id]["owner"], "vat")
+
+
+func upgrade_structure(node_id: int) -> bool:
+	## Alpha 11 double-tap: upgrades whatever is there (vat or machingoon).
+	return upgrade(node_id, nodes[node_id]["owner"])
 
 
 func _start_build(n: Dictionary, kind: String, target: Dictionary) -> void:
@@ -329,10 +511,34 @@ func _start_build(n: Dictionary, kind: String, target: Dictionary) -> void:
 	events.append({"t": time, "type": "build_start", "node": n["id"], "seat": n["owner"], "kind": kind})
 
 
+func _finish_build(n: Dictionary) -> void:
+	var kind: String = n["build_kind"]
+	var target: Dictionary = n["build_target"]
+	n["build_kind"] = ""
+	n["build_target"] = {}
+	if kind in ["vat", "machingoon"] and n["structure"] == kind:
+		n["tier"] = mini(int(target.get("tier", n["tier"] + 1)), 4)   # an upgrade
+	else:
+		var st: String = "vat" if kind == "vat_restore" else kind
+		if n["structure"] != "":                       # a swap
+			n["swap_cd"] = Rules.SWAP_COOLDOWN
+		n["structure"] = st
+		if st in ["vat", "machingoon"]:
+			n["tier"] = clampi(int(target.get("tier", n["tier"])), 1, 4)
+		n["cannon_cd"] = 0.0
+		n["cannon_burst"] = 0.0
+		n["shot"] = {}
+		if st == "monster_hub":
+			n["monster_ready_t"] = time + Rules.MONSTER_COOLDOWN   # charges from the hub's completion
+	_sync_legacy(n)
+	events.append({"t": time, "type": "build_done", "node": n["id"], "seat": n["owner"], "kind": kind})
+	fx_events.append({"type": "build_done", "node": n["id"]})
+
+
 func _step_structures(dt: float) -> void:
-	## Builds complete after Rules.BUILD_SECONDS. A built cannon bursts for CANNON_BURST seconds,
-	## killing up to CANNON_STATS[tier].kill units of enemy hordes within CANNON_RANGE outright
-	## (Alpha 11: body kills bypass HP), then recharges AFTER the burst.
+	## Builds complete after Rules.BUILD_SECONDS. A laser bursts for LASER_BURST s, killing up to LASER_KILL
+	## units of enemy lines within LASER_RANGE outright (Alpha 11: body kills bypass HP), then recharges AFTER
+	## the burst. A machingoon streams at the nearest enemy line in range, MACHINGOON_RATE[tier] kills/s.
 	for n in nodes:
 		if n["swap_cd"] > 0.0:
 			n["swap_cd"] = maxf(0.0, n["swap_cd"] - dt)
@@ -340,69 +546,88 @@ func _step_structures(dt: float) -> void:
 			continue
 		n["build_timer"] -= dt
 		if n["build_timer"] <= 0.0:
-			var kind: String = n["build_kind"]
-			n["build_kind"] = ""
-			n["build_target"] = {}
-			if kind == "vat":
-				n["tier"] = mini(n["tier"] + 1, 4)
-			elif kind == "vat_restore":
-				n["attachment"] = ""
-				n["cannon_tier"] = 0
-				n["swap_cd"] = Rules.SWAP_COOLDOWN
-			elif kind == "cannon" and n["attachment"] == "cannon":
-				n["cannon_tier"] = mini(n["cannon_tier"] + 1, 3)   # upgrading an existing cannon
-			else:
-				if n["attachment"] != "" or n["relay"] == "":       # a swap (cannon<->forge, vat->attachment)
-					n["swap_cd"] = Rules.SWAP_COOLDOWN
-				n["attachment"] = kind                             # a fresh attachment
-				n["cannon_tier"] = 1 if kind == "cannon" else 0
-				n["cannon_cd"] = 0.0
-				n["cannon_burst"] = 0.0
-			events.append({"t": time, "type": "build_done", "node": n["id"], "seat": n["owner"], "kind": kind})
-			fx_events.append({"type": "build_done", "node": n["id"]})
+			_finish_build(n)
 	for n in nodes:
-		if n["owner"] == "" or n["attachment"] != "cannon" or is_disrupted(n["id"]):
-			n["cannon_burst"] = 0.0                       # (an Echo Split echo jams a cannon: no burst, no recharge)
+		if n["structure"] == "machingoon":
+			_fire_machingoon(n, dt)
 			continue
-		var stats: Dictionary = Rules.CANNON_STATS[n["cannon_tier"]]
+		if n["owner"] == "" or n["structure"] != "laser" or is_disrupted(n["id"]):
+			n["cannon_burst"] = 0.0                       # (an Echo Split echo jams it: no burst, no recharge)
+			continue
 		if n["cannon_burst"] > 0.0:
-			var targets := _hordes_in_range(n, n["cannon_pull"])
+			var targets := _hordes_in_range(n, Rules.LASER_RANGE, n["cannon_pull"])
 			if targets.is_empty():
 				n["cannon_burst"] = 0.0
-				n["cannon_cd"] = stats["recharge"]
+				n["cannon_cd"] = Rules.LASER_RECHARGE
 				continue
-			var budget: float = minf(n["cannon_kill_left"], stats["kill"] / Rules.CANNON_BURST * dt)
+			var budget: float = minf(n["cannon_kill_left"], Rules.LASER_KILL / Rules.LASER_BURST * dt)
 			n["cannon_kill_left"] -= budget
 			var each: float = budget / targets.size()
+			var killed := 0.0
+			var first: int = targets[0]["id"]
 			for h in targets:
 				var kill: float = minf(each * _cannon_mult(h), h["units"])   # Anchor: half kills on the caster's lines
-				if _hit_head(n, h):
-					n["cannon_pull"][h["id"]] = n["cannon_pull"].get(h["id"], 0.0) + _cut_front(h, kill)
-				else:
-					h["units"] -= kill                          # the tail is nearer: the line shortens from it
-				if not h.get("decoy", false):                # a decoy draws the fire; its losses are not real
-					combat_losses[h["owner"]] = combat_losses.get(h["owner"], 0.0) + kill
-					_credit(n["owner"], h["owner"], kill)
-				if h["units"] <= 0.0:
-					_kill_horde(h, "cannon")
-			n["cannon_target"] = _hit_point(n, targets[0])
+				killed += kill
+				_structure_kill(n, h, kill, "cannon")
+			n["cannon_target"] = _hit_point(n, targets[0])     # (after the kill: the head it pulled back)
+			n["shot"] = {"t": time, "target_horde": first, "kills": killed, "pos": n["cannon_target"]}
 			n["cannon_burst"] -= dt
 			if n["cannon_burst"] <= 0.0 or n["cannon_kill_left"] <= 0.0:
 				n["cannon_burst"] = 0.0
-				n["cannon_cd"] = stats["recharge"]
+				n["cannon_cd"] = Rules.LASER_RECHARGE
 			continue
 		n["cannon_cd"] -= dt
 		if n["cannon_cd"] > 0.0:
 			continue
-		var in_range := _hordes_in_range(n)
+		var in_range := _hordes_in_range(n, Rules.LASER_RANGE)
 		if in_range.is_empty():
 			continue
-		n["cannon_burst"] = Rules.CANNON_BURST
-		n["cannon_kill_left"] = stats["kill"]
+		n["cannon_burst"] = Rules.LASER_BURST
+		n["cannon_kill_left"] = Rules.LASER_KILL
 		n["cannon_pull"] = {}
 		n["cannon_target"] = _hit_point(n, in_range[0])
 		events.append({"t": time, "type": "cannon_burst", "node": n["id"], "seat": n["owner"]})
 		fx_events.append({"type": "cannon", "node": n["id"]})
+
+
+func _fire_machingoon(n: Dictionary, dt: float) -> void:
+	## One stream at the nearest enemy line whose head is within MACHINGOON_RANGE: single target, good against
+	## trickles, weak against big blobs. Jammed by an Echo Split echo like a vat.
+	if n["owner"] == "" or is_disrupted(n["id"]):
+		return
+	var targets := _hordes_in_range(n, Rules.MACHINGOON_RANGE)
+	if targets.is_empty():
+		return
+	var c: Vector3 = n["pos"]
+	var best: Dictionary = targets[0]
+	var best_d := INF
+	for h in targets:
+		var d: float = (sample(h, h["s"])[0] as Vector3).distance_squared_to(c)
+		if d < best_d:
+			best_d = d
+			best = h
+	var kill: float = minf(float(Rules.MACHINGOON_RATE.get(n["tier"], Rules.MACHINGOON_RATE[1])) * dt, best["units"])
+	var at := _hit_point(n, best)
+	var hid: int = best["id"]
+	_structure_kill(n, best, kill, "machingoon")
+	n["shot"] = {"t": time, "target_horde": hid, "kills": kill, "pos": at}
+
+
+func _structure_kill(n: Dictionary, h: Dictionary, kill: float, why: String) -> void:
+	## Body kills from a laser or machingoon: they die at the end of the line nearest the node.
+	if kill <= 0.0:
+		return
+	if _hit_head(n, h):
+		var back := _cut_front(h, kill)
+		if n["structure"] == "laser":
+			n["cannon_pull"][h["id"]] = n["cannon_pull"].get(h["id"], 0.0) + back
+	else:
+		h["units"] -= kill                              # the tail is nearer: the line shortens from it
+	if not h.get("decoy", false):                    # a decoy draws the fire; its losses are not real
+		combat_losses[h["owner"]] = combat_losses.get(h["owner"], 0.0) + kill
+		_credit(n["owner"], h["owner"], kill)
+	if h["units"] <= 0.0:
+		_kill_horde(h, why)
 
 
 # CANNONS KILL WHERE THE LASER HITS (Daniele, 0.18.7: "towers kills enemies blobs from the bottom instead
@@ -444,28 +669,35 @@ func _cut_front(h: Dictionary, kill: float) -> float:
 	return back
 
 
-func _hordes_in_range(n: Dictionary, pull := {}) -> Array:
-	## Enemy lines whose head is within range. `pull` (a burst's horde id -> metres it cut off that
-	## head): a line the burst is mowing down from the front stays its target while the head it had
-	## is in range - the burst keeps its whole kill budget, as when it took the tail.
+func _hordes_in_range(n: Dictionary, reach: float, pull := {}) -> Array:
+	## Enemy lines whose head is within `reach` m of the node. `pull` (a burst's horde id -> metres it cut
+	## off that head): a line the burst is mowing down from the front stays its target while the head it
+	## had is in range - the burst keeps its whole kill budget, as when it took the tail.
 	var out := []
 	for h in hordes:
 		if allied(h["owner"], n["owner"]) or h["units"] <= 0.0:
 			continue
 		var p: Vector3 = sample(h, h["s"])[0]
-		if (p - (n["pos"] as Vector3)).length() <= Rules.CANNON_RANGE + pull.get(h["id"], 0.0):
+		if (p - (n["pos"] as Vector3)).length() <= reach + pull.get(h["id"], 0.0):
 			out.append(h)
 	return out
 
 
 func forge_of(seat: String) -> float:
-	## Forge multiplier for everything this seat's troops deal (Alpha 11: +50 attack on 100).
+	## Forge multiplier for everything this seat's troops deal (Alpha 11: +50 attack on 100). Only a
+	## completed forge counts; forges do not stack.
 	if seat == "":
 		return 1.0
 	for n in nodes:
-		if n["owner"] == seat and n["attachment"] == "forge":
+		if n["owner"] == seat and n["structure"] == "forge":
 			return 1.0 + Rules.forge_bonus
 	return 1.0
+
+
+func forge_defence(seat: String) -> float:
+	## The forge's defence half (0.18.10): while `seat` holds a completed forge every one of its garrisons
+	## takes damage / Rules.FORGE_DEFENCE (20 % less). 1.0 without a forge.
+	return Rules.FORGE_DEFENCE if has_forge(seat) else 1.0
 
 
 func stat(seat: String, key: String) -> float:
@@ -480,6 +712,20 @@ func attack_of(seat: String) -> float:
 
 func has_forge(seat: String) -> bool:
 	return forge_of(seat) > 1.0
+
+
+func _step_forges() -> void:
+	## "Forge lost" (0.18.10): a seat that held a completed forge last step and holds none now (captured,
+	## swapped away, collapsed) - the HUD toasts it and the view fades the forge glow.
+	var now := {}
+	for n in nodes:
+		if n["structure"] == "forge" and n["owner"] != "" and not collapsed.get(n["id"], false):
+			now[n["owner"]] = true
+	for seat in _forge_seats:
+		if not now.has(seat):
+			events.append({"t": time, "type": "forge_lost", "seat": seat})
+			fx_events.append({"type": "forge_lost", "seat": seat})
+	_forge_seats = now
 
 
 # ------------------------------------------------------------------ relays (GAME-RULES sec8)
@@ -1195,8 +1441,9 @@ func step(dt: float) -> void:
 		_force_end()
 	if over:
 		return
+	_check_handovers()                                # (an owner at zero hands over before producing again)
 	for n in nodes:                                   # production (vat nodes only), up to the cap
-		if n["owner"] != "" and has_vat(n) and n["units"] < Rules.CAPS[n["tier"]]:
+		if n["owner"] != "" and has_vat(n) and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11)
 			_produce(n, dt)
 		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and has_vat(n) and not collapsed.get(n["id"], false) and n["units"] < Rules.NEUTRAL_UNITS.get(n["tier"], 0):
 			n["units"] = minf(Rules.NEUTRAL_UNITS[n["tier"]], n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)
@@ -1217,6 +1464,7 @@ func step(dt: float) -> void:
 		if n["streaming"]["remaining"] <= 0.001 or n["units"] <= 0.0:
 			_end_streaming(n, "done")
 	_emit_decoys(dt)
+	_emit_ejects(dt)
 	_check_missing_decks()
 	for h in hordes:
 		if h["state"] == "move" and not h.get("blocked", false):
@@ -1232,6 +1480,7 @@ func step(dt: float) -> void:
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
 				h["state"] = "absorb"
+	_step_monsters(dt)
 	_detect_contacts()
 	_pop_decoys()
 	var dead := []
@@ -1299,6 +1548,8 @@ func step(dt: float) -> void:
 		elif h["state"] == "move" and fighting.has(h["id"]) and not h.get("retreat", false):
 			h["state"] = "fight"
 	_step_decoys()
+	_check_handovers()
+	_step_forges()
 	_step_charge(dt)
 	_check_end()
 
@@ -1615,15 +1866,18 @@ func _end_streaming(n: Dictionary, why: String) -> void:
 
 
 func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
-	## The line pours onto the platform. Own node: reinforce the garrison. Otherwise the units sit
-	## on the platform as a siege and fight the garrison there (see _node_fights); the whole
-	## platform is the node.
+	## The line pours onto the platform. Own node: reinforce the garrison. An ally's node: the troops are
+	## stored there and stay theirs (GAME-RULES sec11, "allies"). Otherwise the units sit on the platform as
+	## a siege and fight the garrison there (see _node_fights); the whole platform is the node.
 	var owner: String = h["owner"]
 	if h.get("decoy", false):                          # a Ghost Line pours in and vanishes (skills section)
 		_decoy_arrive(n, h)
 		return
-	if allied(n["owner"], owner):                      # own or an ally's node: reinforce it
+	if n["owner"] == owner:                            # own node: reinforce it
 		n["units"] += x
+		return
+	if allied(n["owner"], owner):                      # an ally's node: stored, still ours (arrivals may overfill)
+		_store_ally(n, owner, x)
 		return
 	if not Rules.bridge_combat:
 		_land_classic(n, owner, x)
@@ -1634,6 +1888,12 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 		n["siege_dir"][owner] = ((landing - n["pos"]) as Vector3).normalized()
 
 
+func _store_ally(n: Dictionary, seat: String, x: float) -> void:
+	n["allies"][seat] = float(n["allies"].get(seat, 0.0)) + x
+	if not seat in n["arrivals"]:
+		n["arrivals"].append(seat)                     # first to arrive wins an ownership tie
+
+
 func _land_classic(n: Dictionary, seat: String, x: float) -> void:
 	## CLASSIC MODE (bridge combat OFF) = Alpha 11's core rule (Daniele: "exactly the core rule of
 	## Alpha 11"; "units wait outside - they should just go in"). Each unit is resolved the moment it
@@ -1641,27 +1901,156 @@ func _land_classic(n: Dictionary, seat: String, x: float) -> void:
 	## of them is gone - an attacker kills attack / (health x garrison) defenders before dying, and takes
 	## the defender's attack / its own health per exchange. At baseline that is one-for-one. When the
 	## garrison reaches zero the survivors take the node. Nothing sits outside as a siege.
+	## Team modes (GAME-RULES sec11, 0.18.10): the attackers fight the whole garrison - the owner's troops
+	## and every ally's stored troops - whose stats mix by troop share; the losses split by troop ratio.
 	var att: float = attack_of(seat)
 	var hp_att: float = stat(seat, "health")
 	var d_seat: String = n["owner"]
-	var kill_per: float = att / (stat(d_seat, "health") * stat(d_seat, "garrison") * garrison_div(n))   # defenders per exchange (Fortify / Aegis divide it)
-	var cost_per: float = (attack_of(d_seat) if d_seat != "" else 1.0) / hp_att          # attacker per exchange
-	var ratio: float = kill_per / maxf(cost_per, 0.0001)                                  # defenders killed per attacker
-	var garrison: float = n["units"]
-	var killed: float = minf(garrison, x * ratio)
+	var total: float = garrison_total(n)
+	var tough := 0.0                                   # health x garrison stat, weighted by troop share
+	var d_att := 0.0                                   # defender attack, weighted by troop share
+	if total > 0.0001 and not n["allies"].is_empty():
+		var shares := {d_seat: float(n["units"])}
+		for k in n["allies"]:
+			shares[k] = float(n["allies"][k])
+		for k in shares:
+			var w: float = shares[k] / total
+			tough += w * stat(k, "health") * stat(k, "garrison")
+			d_att += w * (attack_of(k) if k != "" else 1.0)
+	else:
+		tough = stat(d_seat, "health") * stat(d_seat, "garrison")
+		d_att = attack_of(d_seat) if d_seat != "" else 1.0
+	var kill_per: float = att / (tough * garrison_div(n))                 # defenders per exchange (Fortify / Aegis / forge divide it)
+	var cost_per: float = d_att / hp_att                                  # attacker per exchange
+	var ratio: float = kill_per / maxf(cost_per, 0.0001)                  # defenders killed per attacker
+	var killed: float = minf(total, x * ratio)
 	var spent: float = minf(x, killed / maxf(ratio, 0.0001))
-	n["units"] = garrison - killed
-	combat_losses[seat] = combat_losses.get(seat, 0.0) + spent
+	var frac: float = killed / total if total > 0.0001 else 0.0
+	var own_killed: float = float(n["units"]) * frac
+	n["units"] = maxf(0.0, float(n["units"]) - own_killed)
 	if d_seat != "":
-		combat_losses[d_seat] = combat_losses.get(d_seat, 0.0) + killed
-	_credit(seat, d_seat, killed)
+		combat_losses[d_seat] = combat_losses.get(d_seat, 0.0) + own_killed
+	_credit(seat, d_seat, own_killed)
+	for k in n["allies"].keys():                       # the allies' share of the losses
+		var lost: float = float(n["allies"][k]) * frac
+		n["allies"][k] = float(n["allies"][k]) - lost
+		combat_losses[k] = combat_losses.get(k, 0.0) + lost
+		_credit(seat, k, lost)
+		if n["allies"][k] <= 0.0001:
+			_drop_ally(n, k)
+	combat_losses[seat] = combat_losses.get(seat, 0.0) + spent
 	_credit(d_seat, seat, spent)
 	var left: float = x - spent
-	if n["units"] <= 0.0001 and left > 0.0001:
+	if garrison_total(n) <= 0.0001 and left > 0.0001:
 		var old: String = n["owner"]
 		_capture(n, seat, left)
 		events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old})
 		captured.emit(n["id"], seat, old)
+
+
+func _drop_ally(n: Dictionary, seat: String) -> void:
+	n["allies"].erase(seat)
+	n["arrivals"].erase(seat)
+
+
+func _check_handovers() -> void:
+	## GAME-RULES sec11: when the owner's troops reach zero while allies remain stored there, the node passes
+	## to the ally with the largest garrison there; a tie goes to the ally whose troops arrived first. The
+	## tier and the structure stay (it is no conquest); the old owner's construction and order end.
+	for n in nodes:
+		if n["allies"].is_empty() or n["owner"] == "" or float(n["units"]) > 0.0001:
+			continue
+		var best := ""
+		for k in n["arrivals"]:                        # arrival order: the earlier wins a tie
+			if float(n["allies"].get(k, 0.0)) > 0.0001 and (best == "" or float(n["allies"][k]) > float(n["allies"][best]) + 0.0001):
+				best = k
+		for k in n["allies"]:                          # (anyone missing from the order, last)
+			if best == "" and float(n["allies"][k]) > 0.0001:
+				best = k
+		if best == "":
+			continue
+		var old: String = n["owner"]
+		if not n["streaming"].is_empty():
+			_end_streaming(n, "lost")
+		n["build_kind"] = ""
+		n["build_target"] = {}
+		n["owner"] = best
+		n["units"] = float(n["allies"][best])
+		_drop_ally(n, best)
+		_capture_effects(n, best)
+		events.append({"t": time, "type": "handover", "node": n["id"], "seat": best, "from": old})
+		fx_events.append({"type": "capture", "node": n["id"], "seat": best, "handover": true})
+		captured.emit(n["id"], best, old)
+
+
+func _emit_ejects(dt: float) -> void:
+	## EJECT lines stream out of the door at the door rate, taken from their seat's stored troops.
+	for h in hordes:
+		if float(h.get("eject_left", 0.0)) <= 0.0:
+			continue
+		var n: Dictionary = nodes[h["route"][0]]
+		var store: float = allied_units(n, h["owner"])
+		if collapsed.get(n["id"], false) or not allied(n["owner"], h["owner"]) or n["owner"] == h["owner"] or store <= 0.0:
+			_eject_done(h)
+			continue
+		var x: float = minf(minf(float(h["eject_left"]), Rules.exit_rate() * dt), store)
+		h["units"] += x
+		h["eject_left"] = float(h["eject_left"]) - x
+		n["allies"][h["owner"]] = store - x
+		if n["allies"][h["owner"]] <= 0.0001:
+			_drop_ally(n, h["owner"])
+		if float(h["eject_left"]) <= 0.001 or not n["allies"].has(h["owner"]):
+			_eject_done(h)
+
+
+func _eject_done(h: Dictionary) -> void:
+	h["eject_left"] = 0.0
+	if h["streaming"]:
+		h["streaming"] = false
+		h["ordered"] = h["units"]
+		h["start_units"] = maxf(h["units"], 1.0)
+	if h["units"] <= 0.0 and h in hordes:
+		hordes.erase(h)
+
+
+func eject(node_id: int, seat: String) -> bool:
+	## EJECT (GAME-RULES sec11): the owner sends every ally's stored troops out, each toward its owner's
+	## nearest own node by the fastest route. Allowed during warnings. A seat with no node to go to keeps its
+	## troops stored. Returns true if at least one line went out.
+	if not _node_open(node_id):
+		return false
+	var n: Dictionary = nodes[node_id]
+	if n["owner"] != seat or allied_units(n) <= 0.0001:
+		return false
+	var any := false
+	for k in n["arrivals"].duplicate() + n["allies"].keys():
+		var count: float = allied_units(n, k)
+		if count <= 0.0001 or hordes.any(func(x): return float(x.get("eject_left", 0.0)) > 0.0 and x["owner"] == k and x["route"][0] == node_id):
+			continue
+		var best: Array = []
+		var best_t := INF
+		for m in nodes:
+			if m["owner"] != k or m["id"] == node_id or collapsed.get(m["id"], false):
+				continue
+			var r := find_route(node_id, m["id"])
+			if r.size() < 2:
+				continue
+			var t := 0.0
+			for i in range(r.size() - 1):
+				t += edge_cost(_edge_index(r[i], r[i + 1])) + 1.0
+			if t < best_t:
+				best_t = t
+				best = r
+		if best.is_empty():
+			continue
+		var h := _new_horde(k, count, best)
+		h["eject_left"] = count
+		hordes.append(h)
+		any = true
+	if any:
+		events.append({"t": time, "type": "eject", "node": node_id, "seat": seat})
+		fx_events.append({"type": "eject", "node": node_id, "seat": seat})
+	return any
 
 
 func _register_transit() -> void:
@@ -1802,16 +2191,20 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 	n["build_kind"] = ""                               # construction is cancelled by capture
 	n["build_target"] = {}
 	# conquest costs a tier (Daniele: "if a vat or tower is conquered it gets downgraded one tier,
-	# minimum 1") - both modes. A forge is single-tier and is kept as it is.
+	# minimum 1") - both modes: a vat or a machingoon. The laser, forge and monster hub are single-tier and
+	# kept as they are; a T4 is never downgraded (Daniele, 2026-09-27: "Keeps T4").
 	if n["owner"] != "" and n["owner"] != seat:
-		if n["attachment"] == "cannon":
-			n["cannon_tier"] = maxi(1, n["cannon_tier"] - 1)
-		elif Sim.has_vat(n):
+		if n["structure"] in ["vat", "machingoon"] and n["tier"] < 4:
 			n["tier"] = maxi(1, n["tier"] - 1)
+		if n["structure"] == "monster_hub":
+			n["monster_ready_t"] = time + Rules.MONSTER_COOLDOWN   # the new owner's hub charges afresh
 	n["owner"] = seat
 	n["units"] = garrison
 	n["siege"] = {}
 	n["siege_dir"] = {}
+	n["allies"] = {}                                   # stored allied troops fell with the garrison
+	n["arrivals"] = []
+	_sync_legacy(n)
 	_capture_effects(n, seat)
 	fx_events.append({"type": "capture", "node": n["id"], "seat": seat})
 
@@ -2202,10 +2595,8 @@ func is_final(id: int) -> bool:
 # fields (last_stand_warn / last_stand_queue / last_stand_warn_node / last_stand_warn_t) so the
 # badges, the camera zoom, the fx and the net snapshot need no changes.
 func _step_very_last_stand(dt: float) -> void:
-	if over:
-		return
-	if not Rules.last_stand:
-		return
+	if over:                                          # (0.18.10: it runs with LAST STAND OFF too - Daniele,
+		return                                        # 2026-09-27: "Very Last Stand anyway")
 	if not very_last_stand_active:
 		if time < Rules.VERY_LAST_STAND_TIME:
 			return
@@ -2451,13 +2842,18 @@ func _drop_node(id: int) -> void:
 		fall_losses[old] = fall_losses.get(old, 0.0) + n["units"]
 	for k in n["siege"]:
 		fall_losses[k] = fall_losses.get(k, 0.0) + n["siege"][k]
+	for k in n["allies"]:                               # stored allied troops fall with it
+		fall_losses[k] = fall_losses.get(k, 0.0) + float(n["allies"][k])
 	n["owner"] = ""
 	n["units"] = 0.0
 	n["siege"] = {}
 	n["siege_dir"] = {}
 	n["transit"] = {}
-	n["attachment"] = ""
-	n["cannon_tier"] = 0
+	n["allies"] = {}
+	n["arrivals"] = []
+	n["structure"] = ""                                 # the structure goes with it
+	n["shot"] = {}
+	_sync_legacy(n)
 	n["build_kind"] = ""
 	n["build_target"] = {}
 	n["relay_phase"] = ""
@@ -2488,30 +2884,59 @@ func _drop_node(id: int) -> void:
 			_cut_range(h, lo, hi)
 	events.append({"t": time, "type": "collapse", "node": id, "from": old})
 	fx_events.append({"type": "collapse", "node": id, "from": old})   # the view pours the old owner's goo
-	for seat in factions.keys():                        # losing your last node to the collapse = defeat
-		if eliminated.has(seat):
-			continue
-		var owns := false
-		for m in nodes:
-			if m["owner"] == seat:
-				owns = true
-		if not owns:
+	for m in monsters:                                  # a monster on the platform or its decks falls
+		if m["state"] == "walking" and _monster_touches(m, id):
+			_monster_fall(m)
+	_check_eliminations()                               # LINES KEEP YOU ALIVE (0.18.10): no more line kill
+
+
+func _alive_seats() -> Dictionary:
+	## Seats with anything left on the board: a node, a line (not a decoy), a siege, stored allied troops or a
+	## monster out (Daniele, 2026-09-27: "Lines keep you alive" - collapse included).
+	var alive := {}
+	for n in nodes:
+		if n["owner"] != "":
+			alive[n["owner"]] = true
+		for k in n["siege"]:
+			alive[k] = true
+		for k in n["allies"]:
+			if float(n["allies"][k]) > 0.0001:
+				alive[k] = true
+	for h in hordes:
+		if not h.get("decoy", false):                 # a seat is never kept alive by a Ghost Line
+			alive[h["owner"]] = true
+	for m in monsters:
+		if m["state"] == "walking":
+			alive[m["seat"]] = true
+	return alive
+
+
+func _check_eliminations() -> void:
+	## A seat is out only when it has no nodes and no lines left (and no monster, no stored troops).
+	var alive := _alive_seats()
+	for seat in factions.keys():
+		if not eliminated.has(seat) and not alive.has(seat):
 			eliminated[seat] = true
-			for h in hordes.duplicate():
-				if h["owner"] == seat:
-					if not h.get("decoy", false):
-						fall_losses[seat] = fall_losses.get(seat, 0.0) + h["units"]
-					_kill_horde(h, "eliminated")
-			for m in nodes:
-				m["siege"].erase(seat)
-				m["siege_dir"].erase(seat)
 			events.append({"t": time, "type": "eliminated", "seat": seat})
 
 
 func _force_end() -> void:
-	## Safety net: still undecided at 7:00 -> the stronger side (team) wins outright; its strongest
-	## seat is named the winner. Without teams every seat is its own side.
+	## 7:00 (Daniele, 2026-09-27: "simply should follow the very last stand rule, team who owns last vat
+	## wins"): the side owning the last platform the Very Last Stand left wins, its owner named the winner. A
+	## still-neutral last platform is a DRAW with a call-out line (draw_line, Rules.DRAW_LINES, picked by the
+	## match seed). If several platforms somehow remain (the VLS could not finish), the strongest side (team
+	## total) wins; its strongest seat is named the winner.
 	over = true
+	var left := _vls_surviving()
+	if left.size() == 1:
+		winner = nodes[left[0]]["owner"]
+		if winner == "":
+			draw_line = str(Rules.DRAW_LINES[absi(match_seed) % Rules.DRAW_LINES.size()])
+			events.append({"t": time, "type": "draw", "line": draw_line})
+			fx_events.append({"type": "draw", "line": draw_line})
+		events.append({"t": time, "type": "end", "winner": winner, "forced": true, "draw": winner == ""})
+		finished.emit(winner)
+		return
 	var side_total := {}
 	var side_seat := {}
 	for s in factions.keys():
@@ -2532,15 +2957,9 @@ func _force_end() -> void:
 
 
 func _check_end() -> void:
-	var alive := {}
-	for n in nodes:
-		if n["owner"] != "":
-			alive[n["owner"]] = true
-		for k in n["siege"]:
-			alive[k] = true
-	for h in hordes:
-		if not h.get("decoy", false):                 # a seat is never kept alive by a Ghost Line
-			alive[h["owner"]] = true
+	if time > 1.0:
+		_check_eliminations()
+	var alive := _alive_seats()
 	for s in eliminated:
 		alive.erase(s)
 	var sides := {}                                   # team modes: one side per team
@@ -2559,6 +2978,7 @@ func seat_strength(seat: String) -> float:
 		if n["owner"] == seat:
 			total += n["units"]
 		total += n["siege"].get(seat, 0.0)
+		total += float(n["allies"].get(seat, 0.0))     # troops stored in an ally's node
 	for h in hordes:
 		if h["owner"] == seat and not h.get("decoy", false):
 			total += h["units"]
@@ -2598,6 +3018,319 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 			ring[j] = tmp
 		out.append_array(ring)
 	return out
+
+
+# ================================================================== STRUCTURES 2.1 + TEAMS (0.18.10)
+# Daniele, 2026-09-27 (GAME-BIBLE sec17, OPEN-QUESTIONS "Structures 2.1 numbers"; numbers in Rules).
+# PUBLIC API (HUD, main, Net, AI and tests use these; keep the names)
+#   can_build(node_id, seat, kind) -> String   "" = ok, else the refusal line. kinds: "vat" (a machingoon back
+#                                         to its vat), "machingoon", "laser", "forge", "monster_hub", "eject"
+#   build(node_id, seat, kind) -> bool    starts it (paid now, Rules.BUILD_SECONDS); "eject" runs EJECT at once
+#   can_upgrade(node_id, seat) -> String / upgrade(node_id, seat) -> bool / upgrade_cost(n) -> int
+#                                         vat T1 -> T3 (never T3 -> T4), machingoon T1 -> T3
+#   build_cost(n, kind) -> int            units a build of `kind` costs here
+#   structure_order(seat, action, node_id, args) -> [accepted, line]   "upgrade" | "build" {"kind"} |
+#                                         "launch_monster" {"to"} | "eject" (+ "build_cannon", "build_forge", "restore")
+#   launch_monster(hub_id, seat, target_id) -> String   "" = launched, else the refusal line
+#   monster_reach(hub_id) -> Array        node ids a monster from this hub may be sent to (<= MONSTER_REACH bridges)
+#   eject(node_id, seat) -> bool          the owner sends every ally's stored troops home
+#   halo_tier(node_id, seat) -> int       0..3 allied halo size by the seat's share of the node's cap ("" = all allies)
+#   allied_units(n, seat = "") / garrison_total(n) / node_cap(n) / has_hub(seat) / forge_defence(seat) / skill_div(n)
+#   has_vat(n) (static): a producing vat stands here
+#   pre-2.1 wrappers kept for old callers: upgrade_vat, build_attachment ("cannon" -> laser), restore_vat,
+#   upgrade_structure
+# NODE STATE (all in snapshots)
+#   "node_kind": "common" | "relay" | "special" (fixed at setup; special = strategic / final / map-placed T4)
+#   "structure": "vat" | "machingoon" | "laser" | "forge" | "monster_hub" | "" (a relay without a build, or collapsed)
+#   "tier": the vat's or machingoon's tier; "buildable": Rules.NODE_BUILDS[node_kind]
+#   "allies": {seat: units} allied troops stored here ("units" is the owner's own); "arrivals": [seat] their order
+#   "shot": {"t", "target_horde", "kills" (sim units this step), "pos"} the laser / machingoon's latest fire
+#   "monster_ready_t": match time from which the hub may launch; "hub_monster": its monster's id out (-1 none)
+#   "build_kind": "" | "vat" (upgrade) | "vat_restore" (machingoon -> vat) | "machingoon" | "laser" | "forge" |
+#       "monster_hub"; "build_target": {"kind", "tier"}; laser fire state in "cannon_cd" / "cannon_burst" /
+#       "cannon_target" (the old cannon's code path); LEGACY mirrors "attachment" / "cannon_tier" (_sync_legacy)
+#   monsters: [{"id", "seat", "faction", "hub", "target", "route" (node ids), "path" (edge indices), "pos" (Vector3),
+#       "dir" (Vector3), "edge" (edge index under it, -1 on a platform), "s", "L", "t" (s in the current state),
+#       "state": "walking" | "falling" | "done"}, plus its path arrays ("pts", "cum", "fast", "spans", "node_spans")
+#       so Sim.sample(m, s) works]. A "done" monster stays listed MONSTER_GONE s for the views, then goes.
+#   draw_line: the 7:00 DRAW call-out ("" unless the last platform was neutral)
+# EVENTS (sim.fx_events for the views, the same in sim.events with "t")
+#   {"type": "monster_launch", "id", "seat", "hub", "target", "path"}
+#   {"type": "monster_kick", "id", "seat", "seat_hit", "units" (sim units), "shown", "pos"} (+ a "fall" fx per line)
+#   {"type": "monster_take", "id", "seat", "node", "friendly": bool} (friendly: the node lost a tier)
+#   {"type": "monster_fall", "id", "seat", "pos"}
+#   {"type": "forge_lost", "seat"}   {"type": "eject", "node", "seat"}   {"type": "draw", "line"}
+#   {"type": "capture", "node", "seat", "handover": true} (fx) / {"type": "handover", "node", "seat", "from"} (events):
+#       the owner's troops reached zero and an ally took the node over (GAME-RULES sec11)
+const MONSTER_GONE := 0.5
+
+
+func monster_speed() -> float:
+	return Rules.move_speed() * Rules.MONSTER_SPEED
+
+
+func _bridges(route: Array) -> int:
+	## Bridges along a route (plaza links between sockets don't count).
+	var k := 0
+	for i in range(route.size() - 1):
+		if not edges[_edge_index(route[i], route[i + 1])]["plaza"]:
+			k += 1
+	return k
+
+
+func monster_reach(hub_id: int) -> Array:
+	## Every node a monster from this hub can be sent to now: up to Rules.MONSTER_REACH bridges along the
+	## fastest route (the route it would walk).
+	var out := []
+	if not _node_open(hub_id):
+		return out
+	for n in nodes:
+		var id: int = n["id"]
+		if id == hub_id or collapsed.get(id, false):
+			continue
+		var r := find_route(hub_id, id)
+		if r.size() >= 2 and _bridges(r) <= Rules.MONSTER_REACH:
+			out.append(id)
+	return out
+
+
+func _monster_of(id: int) -> Dictionary:
+	for m in monsters:
+		if m["id"] == id:
+			return m
+	return {}
+
+
+func launch_monster(hub_id: int, seat: String, target_id: int) -> String:
+	## Launch a monster from a completed hub `seat` owns toward `target_id` (see the STRUCTURES 2.1 block):
+	## costs Rules.MONSTER_COST of the hub's garrison and restarts its Rules.MONSTER_COOLDOWN; one monster per
+	## hub at a time. "" = launched, else the refusal line.
+	if not _node_open(hub_id):
+		return "That node is gone"
+	var n: Dictionary = nodes[hub_id]
+	if n["owner"] != seat:
+		return "Not your node"
+	if n["structure"] != "monster_hub":
+		return "No Monster hub here"
+	if not _monster_of(int(n["hub_monster"])).is_empty() and _monster_of(int(n["hub_monster"]))["state"] == "walking":
+		return "Its monster is still out"
+	if time < float(n["monster_ready_t"]):
+		return "Monster ready in %d s" % int(ceil(float(n["monster_ready_t"]) - time))
+	if n["units"] < Rules.MONSTER_COST:
+		return "A monster needs %d units (%d here)" % [Rules.shown(Rules.MONSTER_COST), Rules.shown(n["units"])]
+	if target_id == hub_id or not _node_open(target_id):
+		return "Pick a node in reach"
+	var route := find_route(hub_id, target_id)
+	if route.size() < 2:
+		return "No route there"
+	if _bridges(route) > Rules.MONSTER_REACH:
+		return "Out of reach - up to %d bridges" % Rules.MONSTER_REACH
+	n["units"] -= Rules.MONSTER_COST
+	n["monster_ready_t"] = time + Rules.MONSTER_COOLDOWN
+	var path := build_path(route)
+	var edge_list := []
+	for sp in path["spans"]:
+		edge_list.append(sp["edge"])
+	var m := {"id": _next_monster, "seat": seat, "faction": factions.get(seat, "null"), "hub": hub_id,
+			"target": target_id, "route": route, "path": edge_list, "s": 0.0, "L": float(path["cum"][-1]),
+			"pts": path["pts"], "cum": path["cum"], "fast": path["fast"], "spans": path["spans"],
+			"node_spans": path["node_spans"], "t": 0.0, "state": "walking", "edge": -1,
+			"pos": path["pts"][0], "dir": Vector3.FORWARD}
+	_next_monster += 1
+	_monster_place(m)
+	monsters.append(m)
+	n["hub_monster"] = m["id"]
+	var ev := {"type": "monster_launch", "id": m["id"], "seat": seat, "hub": hub_id, "target": target_id, "path": edge_list.duplicate()}
+	fx_events.append(ev)
+	var tev := ev.duplicate()
+	tev["t"] = time
+	events.append(tev)
+	return ""
+
+
+func _monster_place(m: Dictionary) -> void:
+	var smp := sample(m, m["s"])
+	m["pos"] = smp[0]
+	if (smp[1] as Vector3).length() > 0.01:
+		m["dir"] = smp[1]
+	m["edge"] = -1
+	for sp in m["spans"]:
+		if m["s"] >= sp["s0"] and m["s"] <= sp["s1"] and not edges[sp["edge"]]["plaza"]:
+			m["edge"] = sp["edge"]
+			break
+
+
+func _monster_node(m: Dictionary) -> int:
+	## The platform the monster stands on (-1 while it is on a deck).
+	if m["edge"] >= 0:
+		return -1
+	var spans: Array = m["spans"]
+	if spans.is_empty() or m["s"] < spans[0]["s0"]:
+		return m["route"][0]
+	if m["s"] > spans[-1]["s1"]:
+		return m["target"]
+	for ns in m["node_spans"]:
+		if m["s"] >= ns["s0"] and m["s"] <= ns["s1"]:
+			return ns["node"]
+	for sp in spans:                                   # a plaza link: the socket it left
+		if m["s"] >= sp["s0"] and m["s"] <= sp["s1"]:
+			return edges[sp["edge"]]["a"] if sp["forward"] else edges[sp["edge"]]["b"]
+	return m["target"]
+
+
+func _monster_touches(m: Dictionary, node_id: int) -> bool:
+	if m["edge"] >= 0:
+		var e: Dictionary = edges[m["edge"]]
+		return e["a"] == node_id or e["b"] == node_id
+	return _monster_node(m) == node_id
+
+
+func _step_monsters(dt: float) -> void:
+	## Monsters walk their route at monster_speed(); every body on the decks they walk is kicked off (friend
+	## or foe); the platforms on the way are passed untouched; only a fall kills one (the deck under it gone
+	## or moving - relays, Demolish, a missing deck - or the platform under it dropped).
+	for m in monsters.duplicate():
+		m["t"] = float(m["t"]) + dt
+		match m["state"]:
+			"falling":
+				if m["t"] >= Rules.MONSTER_FALL_TIME:
+					m["state"] = "done"
+					m["t"] = 0.0
+				continue
+			"done":
+				if m["t"] >= MONSTER_GONE:
+					monsters.erase(m)
+				continue
+		var s0: float = m["s"]
+		var s1: float = minf(s0 + monster_speed() * dt, m["L"])
+		m["s"] = s1
+		_monster_place(m)
+		if (m["edge"] >= 0 and not is_edge_open(m["edge"])) or (m["edge"] < 0 and collapsed.get(_monster_node(m), false)):
+			_monster_fall(m)
+			continue
+		_monster_sweep(m, s0 - Rules.MONSTER_R, s1 + Rules.MONSTER_R)
+		if s1 >= m["L"] - 0.001:
+			_monster_end(m)
+
+
+func _monster_sweep(m: Dictionary, lo: float, hi: float) -> void:
+	## Kick every body on the monster's decks inside its arc-length window [lo, hi] this step.
+	for msp in m["spans"]:
+		if edges[msp["edge"]]["plaza"] or hi < msp["s0"] or lo > msp["s1"]:
+			continue
+		var a := maxf(lo, msp["s0"])
+		var b := minf(hi, msp["s1"])
+		# deck coordinates from the edge's "a" end (every path spans a deck exit to exit, either way)
+		var u0: float = a - msp["s0"] if msp["forward"] else msp["s1"] - b
+		var u1: float = b - msp["s0"] if msp["forward"] else msp["s1"] - a
+		for h in hordes.duplicate():
+			if not (h in hordes):
+				continue
+			for hsp in h["spans"]:
+				if hsp["edge"] != msp["edge"]:
+					continue
+				var hlo: float = hsp["s0"] + u0 if hsp["forward"] else hsp["s1"] - u1
+				var hhi: float = hsp["s0"] + u1 if hsp["forward"] else hsp["s1"] - u0
+				_monster_kick(m, h, clampf(hlo, hsp["s0"], hsp["s1"]), clampf(hhi, hsp["s0"], hsp["s1"]))
+				break
+
+
+func _monster_kick(m: Dictionary, h: Dictionary, lo: float, hi: float) -> void:
+	## The bodies of line `h` inside [lo, hi] of its path are kicked off the deck: they fall (fall losses,
+	## a "fall" fx). The head is kicked back, a tail shortens, a middle cut splits the line (the front walks on).
+	if not (h in hordes) or h["units"] <= 0.0:
+		return
+	var head: float = h["s"]
+	var len := maxf(chain_length(h), 0.001)
+	var tail: float = head - len
+	var on := minf(head, hi) - maxf(tail, lo)
+	if on <= 0.0:
+		return
+	var units_on: float = minf(h["units"], h["units"] * on / len)
+	if units_on <= 0.0001:
+		return
+	var pts := []
+	var k := maxf(tail, lo)
+	while k <= minf(head, hi):
+		pts.append(sample(h, k)[0])
+		k += Rules.PATCH_SPACING
+	if pts.is_empty():
+		pts.append(m["pos"])
+	if head <= hi:                                     # the head walked into it: bodies die at the front
+		_cut_front(h, units_on)
+	elif tail >= lo:                                   # it took the tail
+		h["units"] -= units_on
+	else:                                              # the middle: the front part walks on as its own line
+		var total: float = h["units"]
+		_split_front(h, total * (head - hi) / len)
+		h["units"] = maxf(0.0, h["units"] - units_on)
+		h["fcut"] = h.get("fcut", 0.0) + maxf(0.0, h["s"] - lo)
+		h["s"] = lo
+	var decoy: bool = h.get("decoy", false)
+	if not decoy:
+		fall_losses[h["owner"]] = fall_losses.get(h["owner"], 0.0) + units_on
+		events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on, "why": "monster"})
+		events.append({"t": time, "type": "monster_kick", "id": m["id"], "seat": m["seat"], "seat_hit": h["owner"], "units": units_on})
+	fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on,
+			"hid": h["id"], "pour": false, "monster": m["id"], "shown": Rules.shown(units_on)})
+	fx_events.append({"type": "monster_kick", "id": m["id"], "seat": m["seat"], "seat_hit": h["owner"], "units": units_on,
+			"shown": Rules.shown(units_on), "pos": m["pos"]})
+	if h["units"] < 0.5:
+		var src: Dictionary = nodes[h["route"][0]]
+		if not (h["streaming"] and src["streaming"].get("hid", -1) == h["id"]):
+			_kill_horde(h, "monster")
+
+
+func _monster_fall(m: Dictionary) -> void:
+	m["state"] = "falling"
+	m["t"] = 0.0
+	_monster_gone(m)
+	fx_events.append({"type": "monster_fall", "id": m["id"], "seat": m["seat"], "pos": m["pos"]})
+	events.append({"t": time, "type": "monster_fall", "id": m["id"], "seat": m["seat"]})
+
+
+func _monster_gone(m: Dictionary) -> void:
+	var hub: Dictionary = nodes[m["hub"]]
+	if int(hub["hub_monster"]) == int(m["id"]):
+		hub["hub_monster"] = -1
+
+
+func _monster_end(m: Dictionary) -> void:
+	## The end node: an enemy's or a neutral one is taken empty - its garrison (and any stored allied troops)
+	## kicked off, conquest's tier rule applied (a T4 keeps its tier); a friendly one (own or an ally's) loses
+	## a tier instead (min 1, a T4 excepted) and keeps its troops. Then the monster is gone.
+	var n: Dictionary = nodes[m["target"]]
+	if collapsed.get(n["id"], false):
+		_monster_fall(m)
+		return
+	var seat: String = m["seat"]
+	var friendly: bool = n["owner"] != "" and allied(n["owner"], seat)
+	if friendly:
+		if n["structure"] in ["vat", "machingoon"] and n["tier"] < 4:
+			n["tier"] = maxi(1, n["tier"] - 1)
+	else:
+		var old: String = n["owner"]
+		var kicked := {old: float(n["units"])}
+		for k in n["allies"]:
+			kicked[k] = kicked.get(k, 0.0) + float(n["allies"][k])
+		for k in n["siege"]:
+			kicked[k] = kicked.get(k, 0.0) + float(n["siege"][k])
+		for k in kicked:
+			if kicked[k] <= 0.0001:
+				continue
+			if k != "":
+				fall_losses[k] = fall_losses.get(k, 0.0) + kicked[k]
+				events.append({"t": time, "type": "monster_kick", "id": m["id"], "seat": seat, "seat_hit": k, "units": kicked[k]})
+			fx_events.append({"type": "monster_kick", "id": m["id"], "seat": seat, "seat_hit": k, "units": kicked[k],
+					"shown": Rules.shown(kicked[k]), "pos": n["pos"]})
+		_capture(n, seat, 0.0)
+		events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old, "monster": true})
+		captured.emit(n["id"], seat, old)
+	fx_events.append({"type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly})
+	events.append({"t": time, "type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly})
+	m["state"] = "done"
+	m["t"] = 0.0
+	_monster_gone(m)
 
 
 # ================================================================== SKILLS 2.0 (0.18.7)
@@ -2805,7 +3538,15 @@ func is_disrupted(node_id: int) -> bool:
 
 
 func garrison_div(n: Dictionary) -> float:
-	## Fortify / Relay Aegis: the garrison takes this many times less damage (the strongest applies).
+	## The garrison takes this many times less damage: Fortify / Relay Aegis (the strongest applies) x the
+	## owner's forge defence half (0.18.10, Rules.FORGE_DEFENCE while it holds a completed forge).
+	if n["owner"] == "":
+		return 1.0
+	return skill_div(n) * forge_defence(n["owner"])
+
+
+func skill_div(n: Dictionary) -> float:
+	## Fortify / Relay Aegis alone (the strongest applies).
 	if _fx_node.is_empty() or n["owner"] == "":
 		return 1.0
 	var d := 1.0
@@ -2843,7 +3584,7 @@ func _prod_info(n: Dictionary) -> Array:
 func _produce(n: Dictionary, dt: float) -> void:
 	var base := _base_production(n)
 	var info := _prod_info(n)
-	var cap: float = Rules.CAPS[n["tier"]]
+	var cap: float = Rules.CAPS[n["tier"]] - allied_units(n)   # stored allied troops count against the cap
 	var before: float = n["units"]
 	var bloom = info[1]
 	var add: float = base * float(info[0]) * dt

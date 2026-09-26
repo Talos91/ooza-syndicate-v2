@@ -113,7 +113,7 @@ static var bridge_combat: bool = false:   # BRAWL (Daniele, 2026-09-26: "brawl i
 	set(v):                               # and siege is just an abandoned test for now"); locked since 0.18.7
 		bridge_combat = v and SIEGE_ON
 # LAST STAND toggle (Daniele: "add a toggle for Last Stand on or off in the match settings").
-# Off: no collapse; the 7:00 safety net still ends a stalled match by strength.
+# Off: no ring collapse; the Very Last Stand still runs at 6:00 and the 7:00 end still decides.
 static var last_stand: bool = true
 # CAMERA (Daniele, Alpha 14 playtest: "map size should be fixed, no zoom... too vertical"; "vats and
 # buildings should all face the viewer on every map"). The camera is fitted once per screen size,
@@ -177,7 +177,20 @@ const AI_RELAY_PAD := 1.0
 const AI_RELAY_DETOUR := 8.0
 const AI_RELAY_RISK := 14.0          # target-score penalty for a plan whose only route is at risk
 const AI_RELAY_VALUE := 10.0         # target-score bonus for a relay node (control of shortcuts), + its traffic
-const AI_RELAY_HOLD := 30.0          # sim units it keeps on a relay node it holds (6 shown): relays don't grow
+# (0.18.10: the fixed 6-unit relay garrison AI_RELAY_HOLD is gone - Daniele, 2026-09-27: relay nodes are held and
+# built on like any node; the AI garrisons them by threat like its other nodes, knowing they produce nothing.)
+# AI STRUCTURES 2.1 (0.18.10): a machingoon goes on a frontline common node that keeps taking small raids - at
+# least AI_TRICKLE_RAIDS hostile lines of at most AI_TRICKLE_UNITS sim units in the last AI_TRICKLE_WINDOW s - and
+# never on its home or its only vats (it needs AI_MACHINGOON_VATS vats). Monsters: Veteran / Expert launch at the
+# best target worth AI_MONSTER_VALUE sim units (garrison taken + hostile bodies kicked); the lower levels launch
+# rarely (AI_MONSTER_CHANCE per think with a ready hub) at any hostile node in reach. EJECT (team modes): only to
+# save stored allied troops from a node about to drop in the Last Stand.
+const AI_TRICKLE_UNITS := 100.0
+const AI_TRICKLE_RAIDS := 2
+const AI_TRICKLE_WINDOW := 60.0
+const AI_MACHINGOON_VATS := 4
+const AI_MONSTER_VALUE := 60.0
+const AI_MONSTER_CHANCE := {"Training": 0.05, "Casual": 0.08, "Standard": 0.12}
 
 # LAST STAND (GAME-RULES sec10; Daniele 2026-09-25: 2:00 "seems ok" for now, not 3:00). The method
 # (inward / outward / chaos, from the map's eligible list) is hidden until the start, then the
@@ -192,7 +205,17 @@ const LAST_STAND_WAVE_MAX := 30.0
 # after the other, 5 s distance from each, following the rule we set for falling bridges"): after the ring's
 # 10 s warning its platforms drop one every LAST_STAND_DROP_GAP s, never leaving the rest of the map cut off.
 const LAST_STAND_DROP_GAP := 5.0
-const MATCH_HARD_END := 420.0        # 7:00 safety net: still undecided -> stronger seat wins outright
+const MATCH_HARD_END := 420.0        # 7:00 end: the side owning the Very Last Stand's last platform wins (Sim._force_end)
+# 7:00 DRAW (Daniele, 2026-09-27: "I d say DRAW and we say something funny ... for no one to have it means they
+# didn t even tried ... we can kinda call them out"): a still-neutral last platform is a draw with one of these
+# call-out lines (picked by the match seed; Sim.draw_line, the {"type": "draw", "line"} event).
+const DRAW_LINES := [
+	"DRAW - nobody even tried for the last platform.",
+	"DRAW - the last vat sat there. Alone. Waiting.",
+	"DRAW - bold strategy: let the neutrals win.",
+	"DRAW - the neutrals held the last platform. Against everyone.",
+	"DRAW - seven minutes, and the last vat never met a single one of you.",
+]
 
 # VERY LAST STAND (Daniele, 0.18.9: "Very Last Stand: at 6 every 10 sec a node with 2 or 1
 # connection falls randomly until only 1 node is left"; a stalemate breaker for whatever the ring
@@ -203,7 +226,7 @@ const MATCH_HARD_END := 420.0        # 7:00 safety net: still undecided -> stron
 # number: it spreads the drops evenly so the last one lands exactly at MATCH_HARD_END. Tweak only
 # this start time for a shorter/longer window (Daniele: "only tweak if we want them to be 1 min or
 # 1.5 min").
-const VERY_LAST_STAND_TIME := 360.0
+const VERY_LAST_STAND_TIME := 360.0   # runs on every map, LAST STAND ON or OFF (Daniele, 2026-09-27: "Very Last Stand anyway")
 
 # economy - Alpha 11 logic x SCALE (Daniele, Alpha 12: "start from the logic of Alpha 11... upgrades
 # are free" - they are not any more). Alpha 11: caps 30/40/80/160, upgrades 10/20/30 units paid from
@@ -211,30 +234,80 @@ const VERY_LAST_STAND_TIME := 360.0
 # The economy numbers are static vars (0.18.7) so a balance preset or the balance probe can change
 # them (apply_balance below); these values are the default game and nothing changes them by default.
 const SCALE := 5.0
-static var CAPS := {1: 150, 2: 200, 3: 400, 4: 800}       # Alpha 11 owned caps x5
+# 0.18.10 (Daniele, 2026-09-27: "30 40 80 160 is good but i d change them slightly: 30/60/120/200"): owned
+# caps 30 / 60 / 120 / 200 shown; production unchanged.
+static var CAPS := {1: 150, 2: 300, 3: 600, 4: 1000}      # shown 30 / 60 / 120 / 200
 static var PROD := {1: 5.0, 2: 8.0, 3: 12.0, 4: 17.5}     # Alpha 11 1.0/1.6/2.4/3.5 units/s x5
 # NEUTRAL REGEN (Daniele, 0.18.9: "make neutral villages regenerate at the speed of their vat"): a chipped
 # neutral vat node grows back at its tier's PROD (no faction bonus), up to its starting garrison NEUTRAL_UNITS.
 const NEUTRAL_REGEN := true
-static var HOME_TIER := 2
-static var VAT_COST := {1: 50, 2: 100, 3: 150}            # tier t -> t+1
-static var CANNON_COST := {1: 75, 2: 125, 3: 175}         # build T1, then upgrade to T2, T3
-static var FORGE_COST := 100
-static var BUILD_SECONDS := 10.0          # vat upgrade or attachment build/upgrade time (GAME-RULES sec6)
-static var SWAP_COOLDOWN := 10.0          # after an attachment swap completes, before the next swap
-static var CANNON_RANGE := 12.0           # metres from the node's centre: covers its piers + first module
-# Alpha 11 cannon: a burst lasts 2 s and kills at most 10/25/40 bodies (x5 here), recharge AFTER
-# the burst 4/2.4/1.6 s; body kills bypass fight math.
-static var CANNON_STATS := {1: {"recharge": 4.0, "kill": 50.0}, 2: {"recharge": 2.4, "kill": 125.0},
-		3: {"recharge": 1.6, "kill": 200.0}}
-static var CANNON_BURST := 2.0
-# Alpha 11 forge: strongest completed forge adds +50 on the 100 attack scale (+0.5 displayed attack)
-# - a +50 % damage bonus to everything its owner's troops deal. Single tier in 2.0 (GAME-RULES
-# sec6); it applies to everything the owner deals while it owns any forge (Sim.forge_of).
+# HOMES (Daniele, 2026-09-27: "T1 like the packs", "they start at 1" - Alpha 11's start): T1 with 1 unit shown.
+static var HOME_TIER := 1
+static var HOME_UNITS := 5
+# OWNED VATS STOP AT T3 (Daniele, 2026-09-27: "Map-placed only"): no T3 -> T4 upgrade; a T4 exists only where a
+# map places it (special nodes), and conquest never downgrades it ("Keeps T4").
+const VAT_MAX_UPGRADE := 3
+static var VAT_COST := {1: 50, 2: 100, 3: 150}            # tier t -> t+1 (3 -> 4 is never offered)
+static var BUILD_SECONDS := 10.0          # every build / upgrade / swap takes this long (GAME-RULES sec6)
+static var SWAP_COOLDOWN := 10.0          # after a structure swap completes, before the next swap
+# STRUCTURES 2.1 (Daniele, 2026-09-27; OPEN-QUESTIONS "Structures 2.1 numbers"). What a node can hold:
+#   common (normal vat node): a vat T1-T3 OR a Machingoon T1-T3 in its place (swapping = a BUILD_SECONDS build,
+#       then SWAP_COOLDOWN; the tier carries over);
+#   relay: one of Laser tower / Forge / Monster hub (single tier, swappable like the old attachments);
+#   special (strategic nodes, T4 neutrals): only its vat (no machingoon, no relay structure).
+const NODE_BUILDS := {"common": ["vat", "machingoon"], "relay": ["laser", "forge", "monster_hub"], "special": ["vat"]}
+# MACHINGOON: a continuous goo stream at the nearest enemy line whose head is within MACHINGOON_RANGE of the node
+# centre, 2 / 3.5 / 5 kills/s shown; body kills bypass combat math like the laser; the node produces nothing
+# while it holds one (it keeps and can be reinforced its garrison). Build 15, upgrades 20 / 30 shown.
+static var MACHINGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then upgrade to T2, T3
+static var MACHINGOON_RATE := {1: 10.0, 2: 17.5, 3: 25.0} # kills/s (shown 2 / 3.5 / 5)
+static var MACHINGOON_RANGE := 10.0
+# LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
+# a LASER_BURST s burst killing at most LASER_KILL bodies split across the lines in range (the cannon's code
+# path), then LASER_RECHARGE s. ~8 kills/s shown, below the door's 9.6/s.
+static var LASER_COST := 200              # 40 shown
+static var LASER_KILL := 160.0            # 32 shown per burst
+static var LASER_BURST := 2.0
+static var LASER_RECHARGE := 2.0
+static var LASER_RANGE := 12.0            # metres from the node's centre: covers its piers + first module
+# FORGE: +50 % attack to everything its owner deals AND the defence half (Daniele, 2026-09-27: "Attack +
+# defence", "All garrisons -20 %"): while the owner holds a completed forge every one of its garrisons takes
+# 20 % less damage (incoming / FORGE_DEFENCE). Forges do not stack.
+static var FORGE_COST := 100              # 20 shown
+const FORGE_DEFENCE := 1.25
 const FORGE_BONUS_DEFAULT := 0.5
-static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable
-static var HOME_UNITS := 80
-static var NEUTRAL_UNITS := {1: 60, 2: 80, 3: 160, 4: 320}   # 12/16/32/64 shown (Daniele, 0.18.9: "ok on garrison"; was 6/12/24/40)
+static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable (Alpha 11: +50 on the 100 attack scale)
+# MONSTER HUB (one per player): a monster costs MONSTER_COST units of the hub's garrison, then MONSTER_COOLDOWN s
+# (charging from the hub's completion); it walks the fastest route to a node up to MONSTER_REACH bridges away at
+# MONSTER_SPEED of the BRAWL unit speed, kicks every unit on its decks off the bridge (friend or foe), passes
+# through the nodes on the way and takes the end node empty (a friendly end node loses a tier instead). Nothing
+# can shoot it; only a fall kills it.
+static var MONSTER_HUB_COST := 150        # 30 shown
+static var MONSTER_COST := 100            # 20 shown
+static var MONSTER_COOLDOWN := 90.0
+static var MONSTER_SPEED := 0.6           # x BRAWL_SPEED (~3.4 m/s)
+static var MONSTER_REACH := 3             # bridges (plaza links don't count)
+const MONSTER_R := 1.4                    # metres: the monster's reach along the deck (half a deck width)
+const MONSTER_FALL_TIME := 1.2            # seconds a falling monster tumbles before it is gone
+# LEGACY ALIASES (read-only, for scripts not yet on Structures 2.1 - tests/balance_probe.gd and old HUD
+# lines): the one-tier laser seen through the old cannon names. Nothing in the rules reads them.
+static var CANNON_COST := {1: 200, 2: 0, 3: 0}
+static var CANNON_STATS := {1: {"recharge": 2.0, "kill": 160.0}, 2: {"recharge": 2.0, "kill": 160.0},
+		3: {"recharge": 2.0, "kill": 160.0}}
+static var CANNON_BURST := 2.0
+static var CANNON_RANGE := 12.0
+# NEUTRAL GARRISONS = half their tier's cap (Daniele, 2026-09-27: "neutral start at half their tier cap and
+# refill up to that"): 15 / 30 / 60 / 100 shown, derived from CAPS (apply_balance re-derives them unless a
+# preset names its own NEUTRAL_UNITS).
+static var NEUTRAL_UNITS := neutral_from_caps(CAPS)
+
+
+static func neutral_from_caps(caps: Dictionary) -> Dictionary:
+	var out := {}
+	for t in caps:
+		out[t] = int(caps[t] / 2)
+	return out
+
 
 # frontline combat - PROVISIONAL: each side loses BASE + K * enemy units per second
 static var FIGHT_RATE_BASE := 12.0
@@ -275,15 +348,20 @@ static var FACTION_STATS := {
 # power up cost, production speed etc we need to balance better"). A preset is a PROPOSAL: OFF by default
 # (BALANCE_PRESET ""), switched on only from the Debug panel or by tests/balance_probe.gd, and it travels
 # with an online room's rules. Values are internal units (shown x SCALE). Only BALANCE_KEYS can change.
-const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS", "VAT_COST", "CANNON_COST",
-		"FORGE_COST", "BUILD_SECONDS", "SWAP_COOLDOWN", "CANNON_RANGE", "CANNON_STATS", "CANNON_BURST",
-		"FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS", "forge_bonus"]
+const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS", "VAT_COST", "BUILD_SECONDS",
+		"SWAP_COOLDOWN", "MACHINGOON_COST", "MACHINGOON_RATE", "MACHINGOON_RANGE", "LASER_COST", "LASER_KILL",
+		"LASER_BURST", "LASER_RECHARGE", "LASER_RANGE", "FORGE_COST", "MONSTER_HUB_COST", "MONSTER_COST",
+		"MONSTER_COOLDOWN", "MONSTER_SPEED", "MONSTER_REACH", "FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS",
+		"forge_bonus"]
 const BALANCE_PRESETS := {
 	# The 0.18.7 balance study (tests/balance_probe.gd, BRAWL) proposed b187: neutrals 12/16/32/64 shown, Ember
 	# attack 1.07, Bloom production 1.05, Vex garrison 0.95. Daniele (0.18.9) took the neutrals, set Ember and
-	# Bloom to 1.10 and kept Vex - those are the defaults above now. "legacy" restores the pre-0.18.9 numbers
-	# for comparison (Debug: Balance DEFAULT / LEGACY).
+	# Bloom to 1.10 and kept Vex. "legacy" restores the pre-0.18.9 numbers for comparison (Debug: Balance
+	# DEFAULT / LEGACY): caps 30/40/80/160, T2 homes with 16, neutrals 6/12/24/40 and the 1.15 faction leans.
 	"legacy": {
+		"CAPS": {1: 150, 2: 200, 3: 400, 4: 800},
+		"HOME_TIER": 2,
+		"HOME_UNITS": 80,
 		"NEUTRAL_UNITS": {1: 30, 2: 60, 3: 120, 4: 200},
 		"FACTION_STATS": {"ember": {"attack": 1.15}, "bloom": {"production": 1.15}},
 	},
@@ -295,7 +373,8 @@ static var _balance_base := {}                 # the default numbers, captured b
 static func apply_balance(preset: String, overrides: Dictionary = {}) -> void:
 	## Back to the default numbers, then the named preset ("" = none), then `overrides` on top (the
 	## balance probe's A/B cells). Dictionaries merge key by key (JSON "1" keys become tier ints), so
-	## {"VAT_COST": {"1": 75}} changes only T1's upgrade.
+	## {"VAT_COST": {"1": 75}} changes only T1's upgrade. NEUTRAL_UNITS follows CAPS (half of each tier's
+	## cap) unless the preset or the overrides name it.
 	if _balance_base.is_empty():
 		for k in BALANCE_KEYS:
 			_balance_base[k] = _balance_get(k).duplicate(true) if _balance_get(k) is Dictionary else _balance_get(k)
@@ -303,12 +382,16 @@ static func apply_balance(preset: String, overrides: Dictionary = {}) -> void:
 	for k in BALANCE_KEYS:
 		_balance_set(k, _balance_base[k].duplicate(true) if _balance_base[k] is Dictionary else _balance_base[k])
 	BALANCE_PRESET = preset if BALANCE_PRESETS.has(preset) else ""
+	var own_neutrals := false
 	for layer in [BALANCE_PRESETS.get(BALANCE_PRESET, {}), overrides]:
 		for k in layer:
 			if k in BALANCE_KEYS:
 				_balance_set(k, _balance_merge(_balance_get(k), layer[k]))
+				own_neutrals = own_neutrals or k == "NEUTRAL_UNITS"
 			else:
 				push_warning("Rules.apply_balance: %s is not a balance key" % k)
+	if not own_neutrals:
+		NEUTRAL_UNITS = neutral_from_caps(CAPS)
 
 
 static func _balance_merge(base, over):
@@ -333,13 +416,22 @@ static func _balance_get(k: String):
 		"HOME_UNITS": return HOME_UNITS
 		"NEUTRAL_UNITS": return NEUTRAL_UNITS
 		"VAT_COST": return VAT_COST
-		"CANNON_COST": return CANNON_COST
-		"FORGE_COST": return FORGE_COST
 		"BUILD_SECONDS": return BUILD_SECONDS
 		"SWAP_COOLDOWN": return SWAP_COOLDOWN
-		"CANNON_RANGE": return CANNON_RANGE
-		"CANNON_STATS": return CANNON_STATS
-		"CANNON_BURST": return CANNON_BURST
+		"MACHINGOON_COST": return MACHINGOON_COST
+		"MACHINGOON_RATE": return MACHINGOON_RATE
+		"MACHINGOON_RANGE": return MACHINGOON_RANGE
+		"LASER_COST": return LASER_COST
+		"LASER_KILL": return LASER_KILL
+		"LASER_BURST": return LASER_BURST
+		"LASER_RECHARGE": return LASER_RECHARGE
+		"LASER_RANGE": return LASER_RANGE
+		"FORGE_COST": return FORGE_COST
+		"MONSTER_HUB_COST": return MONSTER_HUB_COST
+		"MONSTER_COST": return MONSTER_COST
+		"MONSTER_COOLDOWN": return MONSTER_COOLDOWN
+		"MONSTER_SPEED": return MONSTER_SPEED
+		"MONSTER_REACH": return MONSTER_REACH
 		"FIGHT_RATE_BASE": return FIGHT_RATE_BASE
 		"FIGHT_RATE_K": return FIGHT_RATE_K
 		"FACTION_STATS": return FACTION_STATS
@@ -355,13 +447,22 @@ static func _balance_set(k: String, v) -> void:
 		"HOME_UNITS": HOME_UNITS = v
 		"NEUTRAL_UNITS": NEUTRAL_UNITS = v
 		"VAT_COST": VAT_COST = v
-		"CANNON_COST": CANNON_COST = v
-		"FORGE_COST": FORGE_COST = v
 		"BUILD_SECONDS": BUILD_SECONDS = v
 		"SWAP_COOLDOWN": SWAP_COOLDOWN = v
-		"CANNON_RANGE": CANNON_RANGE = v
-		"CANNON_STATS": CANNON_STATS = v
-		"CANNON_BURST": CANNON_BURST = v
+		"MACHINGOON_COST": MACHINGOON_COST = v
+		"MACHINGOON_RATE": MACHINGOON_RATE = v
+		"MACHINGOON_RANGE": MACHINGOON_RANGE = v
+		"LASER_COST": LASER_COST = v
+		"LASER_KILL": LASER_KILL = v
+		"LASER_BURST": LASER_BURST = v
+		"LASER_RECHARGE": LASER_RECHARGE = v
+		"LASER_RANGE": LASER_RANGE = v
+		"FORGE_COST": FORGE_COST = v
+		"MONSTER_HUB_COST": MONSTER_HUB_COST = v
+		"MONSTER_COST": MONSTER_COST = v
+		"MONSTER_COOLDOWN": MONSTER_COOLDOWN = v
+		"MONSTER_SPEED": MONSTER_SPEED = v
+		"MONSTER_REACH": MONSTER_REACH = v
 		"FIGHT_RATE_BASE": FIGHT_RATE_BASE = v
 		"FIGHT_RATE_K": FIGHT_RATE_K = v
 		"FACTION_STATS": FACTION_STATS = v
@@ -495,18 +596,20 @@ static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) ->
 # before it attacks players, the gap between offensives, how far ahead it forecasts growth, how
 # randomly it picks among its best plans, how often it invests, the margin it wants, and relays:
 # 0 never, 1 reacts to enemies on its decks, 2 also fires ahead (where lines will be when the deck
-# moves), 3 also opens shorter routes to its targets.
+# moves), 3 also opens shorter routes to its targets. intel (0.18.10, Daniele 2026-09-27: "Veteran + Expert only"):
+# 1 = its garrison estimates count the defender's forge (attack and the -20 % defence), Fortify / Aegis and faction
+# stats (health, garrison, attack); 0 keeps the blind spot (the defender's health only).
 const AI_LEVELS := {
 	"Training": {"period": 5.0, "coordination": 1, "error": 0.40, "observe": 10.0, "grace": 75.0, "attack_gap": 22.0,
-			"forecast": 0.0, "choice": 4, "invest": 26.0, "margin": 1.5, "relays": 0},
+			"forecast": 0.0, "choice": 4, "invest": 26.0, "margin": 1.5, "relays": 0, "intel": 0},
 	"Casual": {"period": 4.0, "coordination": 1, "error": 0.32, "observe": 8.0, "grace": 50.0, "attack_gap": 17.0,
-			"forecast": 0.2, "choice": 3, "invest": 22.0, "margin": 1.35, "relays": 0},
+			"forecast": 0.2, "choice": 3, "invest": 22.0, "margin": 1.35, "relays": 0, "intel": 0},
 	"Standard": {"period": 2.5, "coordination": 2, "error": 0.27, "observe": 7.0, "grace": 45.0, "attack_gap": 15.0,
-			"forecast": 0.4, "choice": 3, "invest": 18.0, "margin": 1.2, "relays": 1},
+			"forecast": 0.4, "choice": 3, "invest": 18.0, "margin": 1.2, "relays": 1, "intel": 0},
 	"Veteran": {"period": 1.8, "coordination": 2, "error": 0.18, "observe": 4.0, "grace": 20.0, "attack_gap": 9.0,
-			"forecast": 0.6, "choice": 2, "invest": 15.0, "margin": 1.1, "relays": 2},
+			"forecast": 0.6, "choice": 2, "invest": 15.0, "margin": 1.1, "relays": 2, "intel": 1},
 	"Expert": {"period": 1.3, "coordination": 3, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
-			"forecast": 0.75, "choice": 2, "invest": 12.0, "margin": 1.05, "relays": 3},
+			"forecast": 0.75, "choice": 2, "invest": 12.0, "margin": 1.05, "relays": 3, "intel": 1},
 }
 
 

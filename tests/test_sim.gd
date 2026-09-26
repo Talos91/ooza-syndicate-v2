@@ -35,7 +35,10 @@ func _init() -> void:
 	var route := sim.find_route(3, 4)
 	check(route == [3, 1, 0, 2, 4], "route home A -> home B passes 1, 0, 2")
 
-	# a send to the neighbouring neutral node captures it
+	# a send to the neighbouring neutral node captures it (the door numbers below assume 80 in the vat and the
+	# pre-0.18.10 12-unit neutral)
+	sim.nodes[3]["units"] = 80.0
+	sim.nodes[1]["units"] = 60.0
 	var h := sim.send(3, 1, 1.0)
 	check(not h.is_empty() and h["ordered"] == 80.0 and h["units"] == 0.0, "send 100% of 80: ordered 80, none out yet")
 	check(sim.nodes[3]["units"] == 80.0, "the units stay in the vat until the door emits them")
@@ -57,96 +60,116 @@ func _init() -> void:
 	check(sim.nodes[1]["owner"] == "A", "neutral node 1 captured by A after %.1f s" % t)
 	run_until(sim, func(): return sim.hordes.is_empty(), 30.0)
 	var g: float = sim.nodes[1]["units"]
-	check(g > 40.0 and g < 130.0, "after the whole horde is in, garrison = survivors of the landing + production (got %.1f)" % g)
+	check(g > 20.0 and g < 130.0, "after the whole horde is in, garrison = survivors of the landing + production (got %.1f)" % g)
 	check(sim.nodes[1]["siege"].is_empty(), "no siege left on the captured platform")
 
-	# structures: Alpha 11 costs x SCALE, paid from the node; production only on vat nodes
+	# structures 2.1 (0.18.10): Alpha 11 costs x SCALE, paid from the node; production only on vat nodes
 	var st_map := MapBuilder.load_map("res://maps/008-strait.json")
 	var st_pos := MapBuilder.layout(st_map)
 	var sim10 := Sim.new()
 	sim10.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
-	check(sim10.nodes[5]["tier"] == 2, "home vat starts at T2")
-	sim10.nodes[5]["units"] = 50.0
-	check(not sim10.upgrade_vat(5), "a T2 upgrade costs %d units - not affordable with 50" % Rules.VAT_COST[2])
-	sim10.nodes[5]["units"] = 120.0
-	check(sim10.upgrade_vat(5), "vat upgrade starts once affordable")
+	check(sim10.nodes[5]["tier"] == 1 and absf(sim10.nodes[5]["units"] - 5.0) < 0.01 and Rules.shown(sim10.nodes[5]["units"]) == 1,
+			"a home starts at T1 with 1 unit shown (0.18.10)")
+	check(Rules.CAPS == {1: 150, 2: 300, 3: 600, 4: 1000}, "owned caps 30 / 60 / 120 / 200 shown")
+	check(Rules.NEUTRAL_UNITS == {1: 75, 2: 150, 3: 300, 4: 500}, "neutral garrisons are half their tier's cap: 15 / 30 / 60 / 100 shown")
+	check(sim10.nodes[4]["owner"] == "" and absf(sim10.nodes[4]["units"] - 75.0) < 0.01, "a T1 neutral starts with 15 shown")
+	check(sim10.nodes[5]["node_kind"] == "common" and sim10.nodes[1]["node_kind"] == "relay" and sim10.nodes[3]["node_kind"] == "special",
+			"node kinds: common vat node, relay, special (final / strategic)")
+	check(sim10.nodes[5]["buildable"] == ["vat", "machingoon"] and sim10.nodes[1]["buildable"] == ["laser", "forge", "monster_hub"]
+			and sim10.nodes[3]["buildable"] == ["vat"], "each kind builds its own structures (Structures 2.1 table)")
+	check(sim10.nodes[1]["structure"] == "" and sim10.nodes[5]["structure"] == "vat", "a relay starts empty, a vat node with its vat")
+	sim10.nodes[5]["units"] = 40.0
+	check(sim10.can_upgrade(5, "A") != "" and not sim10.upgrade_vat(5), "a T1 upgrade costs %d units - not affordable with 40" % Rules.VAT_COST[1])
+	sim10.nodes[5]["units"] = 70.0
+	check(sim10.upgrade(5, "A"), "vat upgrade starts once affordable")
 	check(absf(sim10.nodes[5]["units"] - 20.0) < 0.01, "the cost is paid from the vat (Alpha 11 logic)")
-	check(not sim10.upgrade_vat(5), "can't start a second upgrade while one is running")
+	check(not sim10.upgrade(5, "A") and sim10.can_upgrade(5, "A") == "Construction already in progress", "can't start a second upgrade while one is running")
 	check(Sim.build_progress(sim10.nodes[5]) < 0.01, "build progress starts at 0")
 	while sim10.nodes[5]["build_kind"] != "":
 		sim10.step(0.5)
-	check(sim10.nodes[5]["tier"] == 3, "vat upgrade completes to T3 after Rules.BUILD_SECONDS")
-	check(not sim10.build_attachment(5, "cannon"), "a normal node's buildable list has no cannon/forge")
-	sim10.nodes[1]["owner"] = "A"                     # node 1: relay, buildable cannon/forge, no vat
+	check(sim10.nodes[5]["tier"] == 2, "vat upgrade completes to T2 after Rules.BUILD_SECONDS")
+	sim10.nodes[5]["tier"] = 3
+	sim10.nodes[5]["units"] = 500.0
+	check(not sim10.upgrade(5, "A") and sim10.can_upgrade(5, "A").begins_with("Vats stop at T3") and sim10.upgrade_cost(sim10.nodes[5]) == 0,
+			"no T3 -> T4 upgrade (T4 only where the map places it)")
+	check(sim10.can_build(5, "A", "laser") != "" and sim10.can_build(5, "A", "forge") != "", "a common node builds no relay structure")
+	check(sim10.can_build(1, "A", "laser") == "Not your node", "only the owner builds")
+	sim10.nodes[1]["owner"] = "A"                     # node 1: relay, no vat
 	var relay_units: float = sim10.nodes[1]["units"]
 	sim10.step(1.0)
 	check(absf(sim10.nodes[1]["units"] - relay_units) < 0.01, "a relay node has no vat: no production")
-	sim10.nodes[1]["units"] = 100.0
-	check(sim10.build_attachment(1, "cannon"), "a relay node's slot accepts a cannon it can pay for")
-	check(absf(sim10.nodes[1]["units"] - (100.0 - Rules.CANNON_COST[1])) < 0.01, "the cannon's cost is paid")
+	check(sim10.can_build(1, "A", "vat") != "" and sim10.can_build(1, "A", "machingoon") != "", "a relay builds no vat or machingoon")
+	sim10.nodes[1]["units"] = 220.0
+	check(sim10.build(1, "A", "laser"), "a relay accepts a laser tower it can pay for")
+	check(absf(sim10.nodes[1]["units"] - (220.0 - Rules.LASER_COST)) < 0.01 and Rules.LASER_COST == 200, "the laser's cost (40 shown) is paid")
 	while sim10.nodes[1]["build_kind"] != "":
 		sim10.step(0.5)
-	check(sim10.nodes[1]["attachment"] == "cannon", "the cannon finishes building")
-	var enemy := sim10.send(6, 5, 1.0)
-	var pos1: Vector3 = sim10.nodes[1]["pos"]
-	enemy["pts"] = PackedVector3Array([pos1, pos1])
-	enemy["cum"] = PackedFloat32Array([0.0, 1.0])
-	enemy["fast"] = PackedByteArray([1, 1])
-	enemy["s"] = 0.5
-	enemy["units"] = 50.0
-	sim10.nodes[1]["cannon_cd"] = 0.0
-	var loss_before: float = sim10.combat_losses.get("B", 0.0)
-	sim10.step(0.1)
-	sim10.step(0.1)
-	check(sim10.combat_losses.get("B", 0.0) > loss_before, "a built cannon bursts an enemy horde in range, bypassing normal fight math")
-	check(sim10.nodes[1]["cannon_burst"] > 0.0, "the burst lasts CANNON_BURST seconds, then recharges")
-	# swap: cannon -> forge needs the cooldown, pays the forge cost; restore only on a final's vat
+	check(sim10.nodes[1]["structure"] == "laser" and sim10.nodes[1]["attachment"] == "cannon", "the laser finishes building (legacy mirror: cannon)")
+	check(sim10.can_upgrade(1, "A") != "" and not sim10.upgrade_structure(1), "a laser has a single tier")
+	# swap: laser -> forge needs the cooldown, pays the forge cost
 	sim10.nodes[1]["units"] = 300.0
 	sim10.nodes[1]["swap_cd"] = 5.0
-	check(not sim10.build_attachment(1, "forge"), "an attachment swap waits for the swap cooldown")
+	check(not sim10.build(1, "A", "forge") and sim10.can_build(1, "A", "forge").begins_with("Swap ready"), "a structure swap waits for the swap cooldown")
 	sim10.nodes[1]["swap_cd"] = 0.0
-	check(sim10.build_attachment(1, "forge"), "cannon -> forge swap starts once off cooldown")
+	check(sim10.build_attachment(1, "forge"), "laser -> forge swap starts once off cooldown (old wrapper)")
 	while sim10.nodes[1]["build_kind"] != "":
 		sim10.step(0.5)
-	check(sim10.nodes[1]["attachment"] == "forge" and sim10.nodes[1]["swap_cd"] > 0.0, "the swap completes and starts the cooldown")
-	sim10.nodes[3]["owner"] = "A"                     # node 3: a final with a vat; buildable vat/cannon/forge
+	check(sim10.nodes[1]["structure"] == "forge" and sim10.nodes[1]["swap_cd"] > 0.0, "the swap completes and starts the cooldown")
+	# special node: only its vat
+	sim10.nodes[3]["owner"] = "A"
 	sim10.nodes[3]["units"] = 300.0
-	check(sim10.build_attachment(3, "cannon"), "a final node can replace its vat with a cannon")
-	while sim10.nodes[3]["build_kind"] != "":
+	check(sim10.can_build(3, "A", "machingoon") != "" and sim10.can_build(3, "A", "laser") != "" and not sim10.build_attachment(3, "cannon"),
+			"a special node holds only its vat (no machingoon, no laser, no forge)")
+	# machingoon on a common node: in place of the vat, keeps the tier, produces nothing
+	sim10.nodes[4]["owner"] = "A"
+	sim10.nodes[4]["tier"] = 2
+	sim10.nodes[4]["units"] = 100.0
+	check(sim10.build(4, "A", "machingoon"), "a common node builds a machingoon in place of its vat")
+	check(absf(sim10.nodes[4]["units"] - (100.0 - Rules.MACHINGOON_COST[1])) < 0.01 and Rules.MACHINGOON_COST == {1: 75, 2: 100, 3: 150},
+			"the machingoon costs 15 shown (upgrades 20 / 30)")
+	while sim10.nodes[4]["build_kind"] != "":
 		sim10.step(0.5)
-	check(not Sim.has_vat(sim10.nodes[3]) and sim10.production(sim10.nodes[3]) == 0.0, "...and then produces nothing")
-	sim10.nodes[3]["swap_cd"] = 0.0
-	check(sim10.restore_vat(3), "RESTORE VAT is offered on a final node")
-	while sim10.nodes[3]["build_kind"] != "":
+	check(sim10.nodes[4]["structure"] == "machingoon" and sim10.nodes[4]["tier"] == 2, "the vat became a machingoon, tier kept")
+	var u4: float = sim10.nodes[4]["units"]
+	sim10.step(1.0)
+	check(not Sim.has_vat(sim10.nodes[4]) and sim10.production(sim10.nodes[4]) == 0.0 and absf(sim10.nodes[4]["units"] - u4) < 0.01,
+			"...and the node produces nothing (it keeps its garrison)")
+	check(sim10.upgrade_cost(sim10.nodes[4]) == Rules.MACHINGOON_COST[3], "the next machingoon tier costs 30 shown")
+	sim10.nodes[4]["swap_cd"] = 0.0
+	check(sim10.restore_vat(4), "the machingoon can give way to the vat again (free)")
+	while sim10.nodes[4]["build_kind"] != "":
 		sim10.step(0.5)
-	check(Sim.has_vat(sim10.nodes[3]) and sim10.nodes[3]["tier"] == 3, "the vat comes back at its old tier")
+	check(Sim.has_vat(sim10.nodes[4]) and sim10.nodes[4]["tier"] == 2 and sim10.nodes[4]["swap_cd"] > 0.0, "the vat comes back at its tier, swap cooldown running")
 
 	var sim11 := Sim.new()
 	sim11.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
 	sim11.nodes[1]["owner"] = "A"
 	sim11.nodes[1]["units"] = 200.0
-	sim11.build_attachment(1, "forge")
+	sim11.build(1, "A", "forge")
 	while sim11.nodes[1]["build_kind"] != "":
 		sim11.step(0.5)
-	check(sim11.nodes[1]["attachment"] == "forge", "the forge finishes building")
+	check(sim11.nodes[1]["structure"] == "forge", "the forge finishes building")
 	check(absf(sim11.forge_of("A") - (1.0 + Rules.forge_bonus)) < 0.001, "a forge multiplies the damage its owner deals (Alpha 11 +50 attack)")
 	check(is_equal_approx(sim11.forge_of("B"), 1.0), "and only its owner's")
-
-	var sim12 := Sim.new()
-	sim12.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
-	sim12.nodes[1]["owner"] = "A"
-	sim12.nodes[1]["units"] = 500.0
-	sim12.build_attachment(1, "cannon")
-	while sim12.nodes[1]["build_kind"] != "":
-		sim12.step(0.5)
-	check(sim12.nodes[1]["cannon_tier"] == 1, "a fresh cannon starts at T1")
-	check(sim12.upgrade_cost(sim12.nodes[1]) == Rules.CANNON_COST[2], "the HUD cost of the next cannon tier")
-	check(sim12.upgrade_structure(1), "double-tap upgrades the built cannon, not the vat")
-	while sim12.nodes[1]["build_kind"] != "":
-		sim12.step(0.5)
-	check(sim12.nodes[1]["cannon_tier"] == 2, "the cannon reaches T2")
-	sim12.nodes[5]["units"] = 300.0
-	check(sim12.upgrade_structure(5), "double-tap upgrades the vat where there's no attachment")
+	check(absf(sim11.garrison_div(sim11.nodes[5]) - 1.25) < 0.001 and absf(sim11.garrison_div(sim11.nodes[6]) - 1.0) < 0.001,
+			"forge defence: every garrison of its owner takes 20 % less damage (div 1.25), nobody else's")
+	# the defence half in a landing: 100 null attackers into 100 of A's garrison, with and without the forge
+	for with_forge in [false, true]:
+		var sf := Sim.new()
+		sf.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "null"}, 1)
+		if with_forge:
+			sf.nodes[2]["owner"] = "A"
+			sf.nodes[2]["structure"] = "forge"
+		sf.nodes[5]["units"] = 100.0
+		sf._land_classic(sf.nodes[5], "B", 50.0)
+		var want: float = 50.0 / (1.25 * 1.5) if with_forge else 50.0   # the forge also adds +50 % to A's attack back
+		check(absf(sf.nodes[5]["units"] - (100.0 - want)) < 0.5, "%s: 50 attackers kill %.1f of the garrison (left %.1f)" % ["forge" if with_forge else "no forge", want, sf.nodes[5]["units"]])
+	sim11.fx_events.clear()
+	sim11._capture(sim11.nodes[1], "B", 10.0)
+	sim11.step(0.05)
+	check(sim11.fx_events.any(func(e): return e["type"] == "forge_lost" and e["seat"] == "A") and sim11.events.any(func(e): return e["type"] == "forge_lost"),
+			"losing the forge fires a forge_lost event for the HUD toast")
+	check(sim11.forge_of("B") > 1.0, "the forge works for its new owner")
 
 	# RELAYS (GAME-RULES sec8): player-fired, 3 s warning, then the tick applies the troop fate.
 	var sw_map := MapBuilder.load_map("res://maps/010-first-switch.json")
@@ -449,8 +472,8 @@ func _init() -> void:
 	check(tv < tn, "a VEX horde arrives before a NULL one on the same deck (%.2f vs %.2f s)" % [tv, tn])
 	var sim26 := Sim.new()
 	sim26.setup(map, pos, {3: "A", 4: "B"}, {"A": "bloom", "B": "ember"}, 1)
-	check(absf(sim26.production(sim26.nodes[3]) - Rules.PROD[2] * 1.10) < 0.001, "Bloom's home produces 10 % more (0.18.9: was 15 %)")
-	check(absf(sim26.production(sim26.nodes[4]) - Rules.PROD[2] * 0.9) < 0.001, "Ember's home produces 10 % less")
+	check(absf(sim26.production(sim26.nodes[3]) - Rules.PROD[1] * 1.10) < 0.001, "Bloom's home produces 10 % more (0.18.9: was 15 %)")
+	check(absf(sim26.production(sim26.nodes[4]) - Rules.PROD[1] * 0.9) < 0.001, "Ember's home produces 10 % less")
 	check(absf(sim26.attack_of("B") - 1.10) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 10 % more damage (0.18.9: was 15 %)")
 
 	# CLASSIC = Alpha 11's landing rule: each arriving unit is resolved at once, one-for-one at
@@ -463,7 +486,7 @@ func _init() -> void:
 			"classic: 12 attackers kill 12 of 20 defenders one-for-one and leave no siege")
 	sim32._land_classic(sim32.nodes[1], "A", 18.0)
 	check(sim32.nodes[1]["owner"] == "A" and absf(sim32.nodes[1]["units"] - 10.0) < 0.01, "classic: the next 18 kill the last 8 and 10 take the node")
-	sim32.nodes[3]["units"] = 300.0                    # the centre holds 120
+	sim32.nodes[3]["units"] = 500.0                    # the centre (T3) holds 300
 	var hc := sim32.send(3, 0, 1.0)
 	run_until(sim32, func(): return not (hc in sim32.hordes), 40.0)
 	check(sim32.nodes[0]["owner"] == "A" and sim32.nodes[0]["siege"].is_empty(), "classic: a send walks in and takes the node, never besieging it")
@@ -765,14 +788,13 @@ func _init() -> void:
 			var cn: Dictionary = kc.nodes[1]
 			cn["owner"] = "A"
 			cn["units"] = 50.0
-			cn["attachment"] = "cannon"
-			cn["cannon_tier"] = 3
+			cn["structure"] = "laser"
 			cn["cannon_cd"] = 99.0                         # held until the line is in place
 			kc.nodes[0]["owner"] = "B"
 			kc.nodes[0]["units"] = send_k
 			var kh := kc.send(0, 1, 1.0)                   # a line coming at the tower
 			var c1: Vector3 = cn["pos"]
-			run_until(kc, func(): return (Sim.sample(kh, kh["s"])[0] as Vector3).distance_to(c1) < Rules.CANNON_RANGE - 1.0, 10.0, 0.02)
+			run_until(kc, func(): return (Sim.sample(kh, kh["s"])[0] as Vector3).distance_to(c1) < Rules.LASER_RANGE - 1.0, 10.0, 0.02)
 			var what := "%s, %s line" % [mode_k, "streaming" if kh["streaming"] else "finished"]
 			check(kh["streaming"] == (send_k > 100.0) and kc._hit_head(cn, kh), "%s: a line coming at a tower is hit at its head" % what)
 			kh["speed"] = 0.0                              # hold it still: only the cannon moves it
@@ -802,7 +824,7 @@ func _init() -> void:
 			for i in range(40):
 				kc.step(0.05)
 			var burst_kill: float = kc.combat_losses.get("B", 0.0) - lost1 + budget_k
-			var want_k: float = Rules.CANNON_STATS[3]["kill"] if send_k > 100.0 else u0
+			var want_k: float = Rules.LASER_KILL if send_k > 100.0 else u0
 			check(absf(burst_kill - want_k) < 0.5 or (not (kh in kc.hordes) and burst_kill < want_k),
 					"%s: the whole burst kills its budget or the whole line, no more (%.1f of %.0f)" % [what, burst_kill, want_k])
 		# a line leaving the tower: the beam hits its tail, the head is untouched
@@ -814,8 +836,7 @@ func _init() -> void:
 		run_until(kt, func(): return not lh["streaming"], 5.0, 0.02)
 		var ct: Dictionary = kt.nodes[1]
 		ct["owner"] = "A"
-		ct["attachment"] = "cannon"
-		ct["cannon_tier"] = 3
+		ct["structure"] = "laser"
 		ct["cannon_cd"] = 0.0
 		lh["speed"] = 0.0
 		kt.step(0.02)
@@ -910,6 +931,7 @@ func _init() -> void:
 	_goo_territory()
 	_skills_tests()
 	_dock_tests()
+	_rules_0_18_10()
 	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
@@ -927,8 +949,8 @@ func _init() -> void:
 	check(absf(nn["units"] - full_nr) < 0.01, "...and stops at its starting garrison (%.0f)" % full_nr)
 
 	# ---------------------------------------------------------------- 0.18.7: balance presets (off by default)
-	check(Rules.BALANCE_PRESET == "" and Rules.VAT_COST == {1: 50, 2: 100, 3: 150} and Rules.NEUTRAL_UNITS == {1: 60, 2: 80, 3: 160, 4: 320}
-			and Rules.CAPS == {1: 150, 2: 200, 3: 400, 4: 800} and Rules.BUILD_SECONDS == 10.0,
+	check(Rules.BALANCE_PRESET == "" and Rules.VAT_COST == {1: 50, 2: 100, 3: 150} and Rules.NEUTRAL_UNITS == {1: 75, 2: 150, 3: 300, 4: 500}
+			and Rules.CAPS == {1: 150, 2: 300, 3: 600, 4: 1000} and Rules.BUILD_SECONDS == 10.0 and Rules.HOME_TIER == 1 and Rules.HOME_UNITS == 5,
 			"the default game runs the default numbers (no balance preset)")
 	var base_vals := {}
 	for k in Rules.BALANCE_KEYS:
@@ -938,6 +960,9 @@ func _init() -> void:
 	for k in Rules.BALANCE_PRESETS["legacy"]:
 		preset_ok = preset_ok and Rules._balance_get(k) == Rules._balance_merge(base_vals[k], Rules.BALANCE_PRESETS["legacy"][k])
 	check(preset_ok and not Rules.BALANCE_PRESETS["legacy"].is_empty(), "the legacy preset applies its numbers")
+	check(Rules.CAPS[2] == 200 and Rules.HOME_TIER == 2 and Rules.NEUTRAL_UNITS[1] == 30, "legacy restores the old caps, T2 homes and neutrals")
+	Rules.apply_balance("", {"CAPS": {"1": 200}})
+	check(Rules.NEUTRAL_UNITS[1] == 100 and Rules.NEUTRAL_UNITS[2] == 150, "neutral garrisons follow CAPS (half the tier's cap) unless a preset names them")
 	Rules.apply_balance("")
 	var back_ok: bool = Rules.BALANCE_PRESET == ""
 	for k in Rules.BALANCE_KEYS:
@@ -949,6 +974,298 @@ func _init() -> void:
 	Rules.apply_balance("")
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
+
+
+# ------------------------------------------------------------------ 0.18.10: rules, structures 2.1, teams, the end
+func _tp(seats := {3: "A", 4: "B"}, factions := {"A": "null", "B": "null"}, teams := {}) -> Sim:
+	## Two Piers (004): 3 - 1 - 0 (centre, T3) - 2 - 4, every link one deck.
+	var m := MapBuilder.load_map("res://maps/004-two-piers.json")
+	var s := Sim.new()
+	s.setup(m, MapBuilder.layout(m), seats, factions, 1, teams)
+	return s
+
+
+func _rules_0_18_10() -> void:
+	# ---------------------------------------------------------------- conquest: T4 keeps its tier, the rest lose one
+	var s := _tp()
+	for c in [[0, "vat", 4, 4], [1, "vat", 2, 1], [2, "machingoon", 3, 2]]:
+		var n: Dictionary = s.nodes[c[0]]
+		n["owner"] = "B"
+		n["structure"] = c[1]
+		n["tier"] = c[2]
+		n["units"] = 10.0
+		s._land_classic(n, "A", 40.0)
+		check(n["owner"] == "A" and n["tier"] == c[3] and n["structure"] == c[1],
+				"conquest: a %s T%d becomes T%d (a T4 keeps its tier, min 1)" % [c[1], c[2], c[3]])
+	# ---------------------------------------------------------------- machingoon: 2 / 3.5 / 5 kills a second, one line at a time
+	check(Rules.MACHINGOON_RATE == {1: 10.0, 2: 17.5, 3: 25.0} and Rules.MACHINGOON_RANGE == 10.0, "machingoon numbers: 2 / 3.5 / 5 kills/s shown, 10 m")
+	for tier in [1, 3]:
+		s = _tp()
+		var gn: Dictionary = s.nodes[1]
+		gn["owner"] = "A"
+		gn["structure"] = "machingoon"
+		gn["tier"] = tier
+		gn["units"] = 20.0
+		s.nodes[0]["owner"] = "B"
+		s.nodes[0]["units"] = 300.0
+		var hb := s.send(0, 3, 1.0)                   # B's line comes at the machingoon (0 -> 1 -> 3)
+		run_until(s, func(): return (Sim.sample(hb, hb["s"])[0] as Vector3).distance_to(gn["pos"]) < Rules.MACHINGOON_RANGE - 4.5, 20.0, 0.02)
+		hb["speed"] = 0.0
+		var l0: float = s.combat_losses.get("B", 0.0)
+		var u1: float = gn["units"]
+		for i in range(20):
+			s.step(0.05)
+		var killed: float = s.combat_losses.get("B", 0.0) - l0
+		check(absf(killed - Rules.MACHINGOON_RATE[tier]) < 0.3, "a T%d machingoon kills %.1f a second (%.2f)" % [tier, Rules.MACHINGOON_RATE[tier], killed])
+		check(int(gn["shot"].get("target_horde", -1)) == hb["id"] and float(gn["shot"]["kills"]) > 0.0, "its shot names the line it streams at (fx)")
+		check(absf(gn["units"] - u1) < 0.01, "the machingoon node produces nothing")
+	# ---------------------------------------------------------------- laser: 32 per 2 s burst, 2 s recharge, 12 m
+	check(Rules.LASER_KILL == 160.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
+			"laser numbers: 32 shown per 2 s burst, 2 s recharge, 12 m, cost 40")
+	s = _tp()
+	s.nodes[1]["owner"] = "A"
+	s.nodes[1]["structure"] = "laser"
+	s.nodes[0]["owner"] = "B"
+	s.nodes[0]["units"] = 600.0
+	var hl := s.send(0, 3, 1.0)
+	run_until(s, func(): return s.nodes[1]["cannon_burst"] > 0.0, 20.0, 0.02)
+	hl["speed"] = 0.0
+	var lb0: float = s.combat_losses.get("B", 0.0)
+	run_until(s, func(): return s.nodes[1]["cannon_burst"] <= 0.0, 5.0, 0.02)
+	check(absf(s.combat_losses.get("B", 0.0) - lb0 - Rules.LASER_KILL) < 3.0 and absf(s.nodes[1]["cannon_cd"] - Rules.LASER_RECHARGE) < 0.05,
+			"a burst kills up to 32 shown, then the laser recharges 2 s (%.1f)" % (s.combat_losses.get("B", 0.0) - lb0))
+	# ---------------------------------------------------------------- monster hub: one per player
+	var st_map := MapBuilder.load_map("res://maps/008-strait.json")
+	var sh := Sim.new()
+	sh.setup(st_map, MapBuilder.layout(st_map), {5: "A", 6: "B"}, {"A": "null", "B": "null"}, 1)
+	for id in [1, 2]:
+		sh.nodes[id]["owner"] = "A"
+		sh.nodes[id]["units"] = 400.0
+	check(sh.build(1, "A", "monster_hub") and Rules.MONSTER_HUB_COST == 150, "a relay builds a monster hub (30 shown)")
+	check(sh.can_build(2, "A", "monster_hub").begins_with("One Monster hub per player"), "a second hub is refused with a clear line (even while the first builds)")
+	while sh.nodes[1]["build_kind"] != "":
+		sh.step(0.5)
+	check(sh.nodes[1]["structure"] == "monster_hub" and absf(sh.nodes[1]["monster_ready_t"] - (sh.time + Rules.MONSTER_COOLDOWN)) < 0.6,
+			"the hub charges its first monster from its completion (90 s)")
+	check(sh.launch_monster(1, "A", 0).begins_with("Monster ready in"), "no monster before the charge")
+	check(not sh.build(2, "A", "monster_hub"), "still one hub per player once it stands")
+	# ---------------------------------------------------------------- monsters: reach, kick, pass-through, take
+	s = _tp()
+	var hub: Dictionary = s.nodes[3]
+	hub["structure"] = "monster_hub"                  # (staged on A's home: Two Piers has no relay)
+	hub["units"] = 300.0
+	check(s.monster_reach(3) == [0, 1, 2], "reach: every node up to 3 bridges (B's home is 4 away) (%s)" % str(s.monster_reach(3)))
+	check(s.launch_monster(3, "A", 4).begins_with("Out of reach"), "a node 4 bridges away is refused")
+	s.nodes[1]["owner"] = "B"                         # an intermediate enemy node...
+	s.nodes[1]["units"] = 50.0
+	var g0: float = s.nodes[0]["units"]               # ...and the neutral centre on the way
+	s.nodes[2]["owner"] = "B"
+	s.nodes[2]["tier"] = 2
+	s.nodes[2]["units"] = 80.0
+	s.nodes[4]["units"] = 200.0
+	var hk := s.send(4, 1, 1.0)                       # B's line walks 4-2-0-1: head-on into the monster
+	s.fx_events.clear()
+	check(s.launch_monster(3, "A", 2) == "", "A launches a monster at B's node 2 (3 bridges)")
+	check(absf(hub["units"] - (300.0 - Rules.MONSTER_COST)) < 0.01 and hub["hub_monster"] == s.monsters[0]["id"], "it costs 20 shown from the hub")
+	check(s.launch_monster(3, "A", 1) != "", "one monster per hub at a time")
+	var mo: Dictionary = s.monsters[0]
+	check(mo["state"] == "walking" and mo["path"].size() == 3 and s.fx_events.any(func(e): return e["type"] == "monster_launch"),
+			"it walks the fastest route (3 decks) and everyone gets the launch event")
+	var t_walk := run_until(s, func():
+		if hk in s.hordes and hk["s"] > hk["spans"][1]["s0"] + 1.0 and hk["s"] < hk["spans"][1]["s1"]:
+			hk["speed"] = 0.0                              # B's head waits on deck 2-0, where the monster comes
+		return mo["state"] != "walking", 60.0, 0.05)
+	check(s.fall_losses.get("B", 0.0) > 0.0 and s.events.any(func(e): return e["type"] == "monster_kick" and e["seat_hit"] == "B"),
+			"the monster kicks B's line off its decks (fell %.0f)" % s.fall_losses.get("B", 0.0))
+	check(s.fx_events.any(func(e): return e["type"] == "fall" and e.get("monster", -1) == mo["id"]), "kicked bodies fall (the fall fx)")
+	check(absf(s.nodes[0]["units"] - g0) < 0.01, "it passes the neutral centre untouched")
+	check(s.nodes[2]["owner"] == "A" and s.nodes[2]["units"] == 0.0 and s.nodes[2]["tier"] == 1,
+			"it takes the end node empty, a tier down (%s, %.0f units, T%d, %.0f s)" % [s.nodes[2]["owner"], s.nodes[2]["units"], s.nodes[2]["tier"], t_walk])
+	check(s.events.any(func(e): return e["type"] == "monster_take" and e["node"] == 2 and not e["friendly"]) and mo["state"] == "done", "then the monster is gone")
+	check(hub["hub_monster"] == -1 and t_walk > 10.0, "the hub is free again; it walked at 60 percent speed (%.0f s)" % t_walk)
+	_steps(s, 1.0)
+	check(s.monsters.is_empty(), "a done monster leaves the list")
+	# friendly end node: a tier down, troops stay; nothing shoots it
+	s = _tp()
+	s.nodes[3]["structure"] = "monster_hub"
+	s.nodes[3]["units"] = 300.0
+	s.nodes[1]["owner"] = "A"
+	s.nodes[1]["tier"] = 3
+	s.nodes[1]["units"] = 40.0
+	s.nodes[0]["owner"] = "B"
+	s.nodes[0]["structure"] = "vat"
+	s.launch_monster(3, "A", 1)
+	run_until(s, func(): return s.monsters.is_empty() or s.monsters[0]["state"] != "walking", 30.0)
+	check(s.nodes[1]["owner"] == "A" and s.nodes[1]["tier"] == 2 and s.nodes[1]["units"] >= 40.0, "a friendly end node loses a tier and keeps its troops")
+	# a fall kills it: its deck demolished under it
+	s = _tp()
+	s.nodes[3]["structure"] = "monster_hub"
+	s.nodes[3]["units"] = 300.0
+	s.nodes[1]["owner"] = "B"
+	s.nodes[1]["units"] = 0.0
+	s.nodes[0]["owner"] = "B"
+	s.launch_monster(3, "A", 0)
+	var mf: Dictionary = s.monsters[0]
+	run_until(s, func(): return mf["edge"] >= 0 and mf["edge"] == s._edge_index(1, 0), 30.0)
+	s.demolished[mf["edge"]] = 20.0
+	s.fx_events.clear()
+	s.step(0.05)
+	check(mf["state"] == "falling" and s.fx_events.any(func(e): return e["type"] == "monster_fall") and s.nodes[3]["hub_monster"] == -1,
+			"only a fall kills it: the deck under it goes and it falls")
+	_steps(s, Rules.MONSTER_FALL_TIME + 0.7)
+	check(s.monsters.is_empty() and s.nodes[0]["owner"] == "B", "it is gone and takes nothing")
+	# ---------------------------------------------------------------- teams (GAME-RULES sec11)
+	var ts := _tp({3: "A", 4: "B", 0: "C", 2: "D"}, {"A": "null", "B": "null", "C": "null", "D": "null"}, {"A": 0, "B": 0, "D": 0, "C": 1})
+	var tn: Dictionary = ts.nodes[3]
+	tn["units"] = 50.0
+	ts._arrive(tn, {"owner": "B"}, 40.0)
+	check(tn["units"] == 50.0 and tn["allies"] == {"B": 40.0} and tn["arrivals"] == ["B"], "an ally's reinforcement is stored there and stays theirs")
+	check(ts.halo_tier(3, "B") == 2 and ts.halo_tier(3, "D") == 0 and ts.halo_tier(3, "") == 2, "halo tier by share of the cap: 40 of 150 = 27 % -> tier 2")
+	tn["allies"]["B"] = 20.0
+	check(ts.halo_tier(3, "B") == 1, "under 25 % -> tier 1")
+	tn["allies"]["B"] = 120.0
+	check(ts.halo_tier(3, "B") == 3, "over 75 % -> tier 3")
+	tn["allies"]["B"] = 40.0
+	tn["units"] = 120.0
+	var u_before: float = tn["units"]
+	ts.step(0.5)
+	check(absf(tn["units"] - u_before) < 0.01 and ts.garrison_total(tn) > Rules.CAPS[1], "allied troops count against the cap: no production over it")
+	tn["units"] = 50.0
+	ts._land_classic(tn, "C", 60.0)
+	check(absf(tn["units"] - (50.0 - 60.0 * 50.0 / 90.0)) < 0.05 and absf(tn["allies"]["B"] - (40.0 - 60.0 * 40.0 / 90.0)) < 0.05 and tn["owner"] == "A",
+			"attackers fight the whole garrison; losses split by troop ratio (A %.1f, B %.1f)" % [tn["units"], tn["allies"]["B"]])
+	tn["units"] = 0.0
+	tn["allies"] = {"B": 20.0, "D": 30.0}
+	tn["arrivals"] = ["B", "D"]
+	var changes := []
+	ts.captured.connect(func(id, o, p): changes.append([id, o, p]))
+	ts.step(0.05)
+	check(tn["owner"] == "D" and absf(tn["units"] - 30.0) < 0.5 and tn["allies"].has("B") and not tn["allies"].has("D") and changes.has([3, "D", "A"]),
+			"the owner's troops at zero: the ally with the largest garrison takes the node")
+	tn["units"] = 0.0
+	tn["allies"] = {"A": 20.0, "B": 20.0}
+	tn["arrivals"] = ["B", "A"]
+	ts.step(0.05)
+	check(tn["owner"] == "B" and ts.events.any(func(e): return e["type"] == "handover"), "a tie goes to the ally whose troops arrived first")
+	# EJECT: every ally's stored troops go home by the fastest route
+	var en: Dictionary = ts.nodes[1]
+	en["owner"] = "A"
+	en["units"] = 30.0
+	en["allies"] = {"B": 40.0}
+	en["arrivals"] = ["B"]
+	check(ts.can_build(1, "D", "eject") == "Not your node" and ts.can_build(1, "A", "eject") == "", "only the owner may EJECT")
+	ts.fx_events.clear()
+	check(ts.build(1, "A", "eject"), "EJECT (kind \"eject\") sends the allied troops out")
+	var ej := ts.hordes.filter(func(h): return h["owner"] == "B" and h["route"][0] == 1)
+	check(ej.size() == 1 and ej[0]["target"] == tn["id"] and ts.fx_events.any(func(e): return e["type"] == "eject" and e["node"] == 1),
+			"...toward B's nearest own node (%s)" % str(ej.map(func(h): return h["route"])))
+	_steps(ts, 1.5)
+	check(en["allies"].is_empty() and en["arrivals"].is_empty() and ej[0]["units"] > 35.0 and en["units"] >= 30.0,
+			"the store empties into the line; the owner's troops stay (%s, line %.1f, owner %.1f)" % [str(en["allies"]), ej[0]["units"], en["units"]])
+	# ---------------------------------------------------------------- a fallen remote console freezes its decks
+	var rem_map := MapBuilder.load_map("res://maps/011-remote-span.json")
+	var rs := Sim.new()
+	rs.setup(rem_map, MapBuilder.layout(rem_map), {5: "A", 6: "B"}, {"A": "null", "B": "null"}, 1)
+	rs.nodes[0]["owner"] = "A"
+	rs.fire_relay(0)
+	run_until(rs, func(): return rs.nodes[0]["relay_phase"] == "", 8.0)
+	check(rs.find_route(1, 4).size() == 2, "(the console switched to m2)")
+	rs._drop_node(0)
+	rs.step(0.1)
+	check(rs.find_route(1, 4).size() == 2 and rs.find_route(1, 3).size() != 2, "a remote console that falls leaves its decks in their last state")
+	# ---------------------------------------------------------------- lines keep you alive
+	s = _tp()
+	s.nodes[4]["units"] = 100.0
+	var hv := s.send(4, 1, 1.0)
+	run_until(s, func(): return not hv["streaming"] and hv["s"] - Sim.chain_length(hv) > hv["spans"][0]["s1"] + 0.5, 20.0)
+	s._drop_node(4)
+	s.step(0.05)
+	check(hv in s.hordes and not s.eliminated.has("B") and not s.over, "B's last node falls, but its line on the move keeps it alive")
+	s._kill_horde(hv, "test")
+	s.step(0.05)
+	check(s.eliminated.has("B") and s.over and s.winner == "A", "no nodes and no lines: B is out")
+	# ---------------------------------------------------------------- 7:00: the last platform's owner wins; neutral -> DRAW
+	for who in ["A", ""]:
+		s = _tp()
+		for id in [0, 2, 3, 4]:
+			s.collapsed[id] = true
+		s.nodes[1]["owner"] = who
+		s.time = Rules.MATCH_HARD_END - 0.01
+		s.fx_events.clear()
+		s._force_end()
+		if who == "A":
+			check(s.over and s.winner == "A" and s.draw_line == "", "7:00: the side owning the last platform wins")
+		else:
+			check(s.over and s.winner == "" and s.draw_line in Rules.DRAW_LINES and s.fx_events.any(func(e): return e["type"] == "draw" and e["line"] == s.draw_line),
+					"7:00 with a neutral last platform: DRAW with a call-out (%s)" % s.draw_line)
+	# ---------------------------------------------------------------- AI (0.18.10)
+	s = _tp()
+	s.nodes[1]["owner"] = "B"
+	s.nodes[1]["units"] = 100.0
+	var vet := SeatAI.new("A", 2.0, "Veteran")
+	var std := SeatAI.new("A", 2.0, "Standard")
+	var plain_v := vet._attackers_for(s, s.nodes[1], 100.0)
+	var plain_s := std._attackers_for(s, s.nodes[1], 100.0)
+	s.nodes[2]["owner"] = "B"
+	s.nodes[2]["structure"] = "forge"                 # B holds a forge: +50 % attack, -20 % damage taken
+	var forge_v := vet._attackers_for(s, s.nodes[1], 100.0)
+	var forge_s := std._attackers_for(s, s.nodes[1], 100.0)
+	check(absf(plain_v - 100.0) < 0.01 and absf(forge_v - 100.0 * 1.25 * 1.5) < 0.01,
+			"Veteran counts the defender's forge (attack and defence): 100 -> %.0f attackers" % forge_v)
+	check(absf(forge_s - plain_s) < 0.01, "Standard keeps the blind spot (%.0f either way)" % forge_s)
+	# machingoon on a frontline vat that keeps taking small raids
+	s = _tp()
+	for id in [1, 0, 2]:
+		s.nodes[id]["owner"] = "A"
+		s.nodes[id]["structure"] = "vat"
+		s.nodes[id]["units"] = 120.0
+	s.nodes[0]["tier"] = 1
+	s.nodes[4]["units"] = 40.0
+	var ai_g := SeatAI.new("A", 2.0, "Veteran")
+	ai_g._raids[2] = [[s.time, 30.0], [s.time, 40.0]]  # two trickles at node 2 (next to B's home)
+	ai_g._build_machingoon(s, ai_g._mine(s), ai_g._mine(s).filter(func(n): return Sim.has_vat(n)))
+	check(s.nodes[2]["build_kind"] == "machingoon", "the AI puts a machingoon on the raided frontline vat (%s)" % s.nodes[2]["build_kind"])
+	check(s.nodes[1]["build_kind"] == "" and s.nodes[3]["build_kind"] == "", "...not on a quiet node nor its home")
+	# monsters: Veteran launches at a target worth it; never through its own line
+	for own_line in [false, true]:
+		s = _tp()
+		s.nodes[3]["structure"] = "monster_hub"
+		s.nodes[3]["units"] = 300.0
+		s.nodes[1]["owner"] = "A"
+		s.nodes[1]["units"] = 20.0
+		s.nodes[0]["owner"] = "B"
+		s.nodes[0]["units"] = 200.0                   # a big garrison a capture would kick off
+		if own_line:
+			s.nodes[1]["units"] = 200.0
+			var mine_l := s.send(1, 2, 1.0)           # A's own line on the monster's decks 1-0 / 0-2
+			run_until(s, func(): return mine_l["s"] > mine_l["spans"][0]["s0"] + 1.0, 20.0)
+		var ai_m := SeatAI.new("A", 2.0, "Veteran")
+		ai_m._monsters(s)
+		if own_line:
+			check(s.monsters.is_empty(), "...but never through its own line on the way")
+		else:
+			check(s.monsters.size() == 1 and s.monsters[0]["target"] == 0, "Veteran launches its monster at the big enemy garrison in reach")
+	# EJECT: only to save stored allied troops from a node about to drop
+	var te := _tp({3: "A", 4: "B"}, {"A": "null", "B": "null"}, {"A": 0, "B": 0})
+	te.nodes[1]["owner"] = "A"
+	te.nodes[1]["allies"] = {"B": 50.0}
+	te.nodes[1]["arrivals"] = ["B"]
+	var ai_e := SeatAI.new("A", 2.0, "Veteran")
+	ai_e._ejects(te)
+	check(not te.nodes[1]["allies"].is_empty() and te.hordes.is_empty(), "the AI leaves stored allied troops alone...")
+	te.last_stand_active = true
+	te.last_stand_warn_node = 1
+	ai_e._ejects(te)
+	check(te.hordes.size() == 1 and te.hordes[0]["owner"] == "B", "...and EJECTs them from a node about to drop")
+
+	Rules.last_stand = false
+	s = _tp()
+	s.nodes[3]["units"] = 100.0
+	s.nodes[4]["units"] = 100.0
+	s.time = Rules.VERY_LAST_STAND_TIME - 0.05
+	s.step(0.1)
+	check(s.very_last_stand_active and (not s.last_stand_warn.is_empty() or s.last_stand_warn_node >= 0), "the Very Last Stand runs at 6:00 with LAST STAND OFF")
+	Rules.last_stand = true
 
 
 func _ai_relays(mr: Dictionary, seats_r: Dictionary) -> void:
@@ -983,21 +1300,24 @@ func _ai_relays(mr: Dictionary, seats_r: Dictionary) -> void:
 		check(not h3.is_empty() and h3["route"] == [1, 7, 4], "%s: Veteran crosses a rival deck its relay cannot change before a short line is over it (%s)" % [tag, str(h3.get("route", []))])
 		var h3s := SeatAI.new("A", 2.0, "Standard")._send(s3, 1, 4, 20.0 / 300.0)
 		check(not h3s.is_empty() and h3s["route"] == [1, 6, 4], "%s: ...Standard (level 1) assumes a rival relay is always ready and goes round (%s)" % [tag, str(h3s.get("route", []))])
-	# it builds on a relay slot it holds: the slot costs no vat; a cannon on a relay at the front
+	# it builds on a relay slot it holds: the slot costs no vat; a laser on a relay at the front (0.18.10: no
+	# fixed relay garrison - it keeps what the threat around the relay asks)
 	var s4: Sim = fresh.call()
 	s4.nodes[1]["owner"] = ""
 	s4.nodes[0]["units"] = 10.0
 	s4.nodes[7]["owner"] = "A"
-	s4.nodes[7]["units"] = float(Rules.CANNON_COST[1]) + Rules.AI_RELAY_HOLD + 10.0
+	s4.nodes[7]["units"] = float(Rules.LASER_COST) + 20.0
 	s4.nodes[4]["owner"] = "B"                            # a rival next door
+	s4.nodes[4]["units"] = 20.0
 	SeatAI.new("A", 2.0, "Veteran")._build(s4)
-	check(s4.nodes[7]["build_kind"] == "cannon", "the AI builds a cannon on the front relay slot it holds, given the units (%s)" % s4.nodes[7]["build_kind"])
+	check(s4.nodes[7]["build_kind"] == "laser", "the AI builds a laser on the front relay slot it holds, given the units (%s)" % s4.nodes[7]["build_kind"])
 	# ...and, when the relay cannot pay for it (relays never grow), it sends a vat's spare units there first
 	var s5: Sim = fresh.call()
 	s5.nodes[0]["owner"] = ""                             # (no home vat to upgrade meanwhile)
 	s5.nodes[7]["owner"] = "A"
 	s5.nodes[7]["units"] = 10.0
 	s5.nodes[4]["owner"] = "B"
+	s5.nodes[4]["units"] = 20.0
 	var ai5 := SeatAI.new("A", 2.0, "Veteran")
 	ai5._build(s5)
 	var feed := s5.hordes.filter(func(x): return x["owner"] == "A" and x["target"] == 7)
@@ -1006,7 +1326,7 @@ func _ai_relays(mr: Dictionary, seats_r: Dictionary) -> void:
 		s5.step(0.1)
 	ai5._invest_after = 0.0
 	ai5._build(s5)
-	check(s5.nodes[7]["build_kind"] == "cannon" or s5.nodes[7]["attachment"] == "cannon", "...and the cannon goes up once the units are there (relay holds %.0f)" % s5.nodes[7]["units"])
+	check(s5.nodes[7]["build_kind"] == "laser" or s5.nodes[7]["structure"] == "laser", "...and the laser goes up once the units are there (relay holds %.0f)" % s5.nodes[7]["units"])
 	# firing: Veteran cuts a rival line routed over its deck before it gets there (it would pour off the
 	# lip), never while its own line still has to cross it
 	var s6: Sim = fresh.call()
@@ -1284,8 +1604,7 @@ func _skills_tests() -> void:
 		s = _mk(tp, "null", "null")
 		s.nodes[3]["units"] = 200.0
 		s.nodes[1]["owner"] = "B"
-		s.nodes[1]["attachment"] = "cannon"
-		s.nodes[1]["cannon_tier"] = 1
+		s.nodes[1]["structure"] = "laser"
 		s.nodes[1]["units"] = 30.0
 		s.cast("A", "active", [3, 4])
 		g = s.hordes[-1]
@@ -1358,8 +1677,7 @@ func _skills_tests() -> void:
 	for anchored in [false, true]:
 		s = _mk(tp, "null", "null", {"A": {"map": "anchor"}})
 		s.nodes[1]["owner"] = "B"
-		s.nodes[1]["attachment"] = "cannon"
-		s.nodes[1]["cannon_tier"] = 1
+		s.nodes[1]["structure"] = "laser"
 		s.nodes[3]["units"] = 300.0
 		var hc := s.send(3, 1, 1.0)
 		s.nodes[3]["streaming"] = {}
@@ -1371,7 +1689,7 @@ func _skills_tests() -> void:
 		for k in range(60):
 			s._step_structures(0.05)
 		cannon_loss.append(300.0 - hc["units"])
-	check(absf(cannon_loss[0] - 50.0) < 0.5 and absf(cannon_loss[1] - 25.0) < 0.5, "Anchor: your lines on it take half the cannon kills (%.0f vs %.0f)" % [cannon_loss[1], cannon_loss[0]])
+	check(absf(cannon_loss[0] - Rules.LASER_KILL) < 0.5 and absf(cannon_loss[1] - Rules.LASER_KILL * 0.5) < 0.5, "Anchor: your lines on it take half the laser kills (%.0f vs %.0f)" % [cannon_loss[1], cannon_loss[0]])
 	# ---------------------------------------------------------------- Bypass: both states for 8 s, then the normal outcome
 	s = _mk(sw, "null", "null", {"A": {"map": "bypass"}})
 	s.nodes[1]["owner"] = "B"
@@ -1450,17 +1768,16 @@ func _skills_tests() -> void:
 	check(s.fx_events.any(func(e): return e["type"] == "ghosts" and e.get("private", "") == "A" and (e["hids"] as Array).size() == 3), "the echo ids go to their owner only")
 	s = _mk(tp, "null", "null")
 	s.nodes[2]["owner"] = "B"
-	s.nodes[2]["attachment"] = ""
+	s.nodes[2]["structure"] = "vat"
 	var fake := {"id": 999, "owner": "A", "decoy": true, "echo": true}
 	s._decoy_arrive(s.nodes[2], fake)
 	check(s.is_disrupted(2) and s.production(s.nodes[2]) == 0.0, "an echo landing on an enemy node stops its vat")
-	s.nodes[4]["attachment"] = "cannon"
-	s.nodes[4]["cannon_tier"] = 1
+	s.nodes[4]["structure"] = "laser"
 	s.nodes[3]["units"] = 200.0
 	var hx := s.send(3, 4, 1.0)
-	run_until(s, func(): return (Sim.sample(hx, hx["s"])[0] as Vector3).distance_to(s.nodes[4]["pos"]) < Rules.CANNON_RANGE + 4.0 or not (hx in s.hordes), 30.0)
+	run_until(s, func(): return (Sim.sample(hx, hx["s"])[0] as Vector3).distance_to(s.nodes[4]["pos"]) < Rules.LASER_RANGE + 4.0 or not (hx in s.hordes), 30.0)
 	s._decoy_arrive(s.nodes[4], {"id": 998, "owner": "A", "decoy": true, "echo": true})
-	run_until(s, func(): return (Sim.sample(hx, hx["s"])[0] as Vector3).distance_to(s.nodes[4]["pos"]) < Rules.CANNON_RANGE - 1.0 or not (hx in s.hordes), 30.0)
+	run_until(s, func(): return (Sim.sample(hx, hx["s"])[0] as Vector3).distance_to(s.nodes[4]["pos"]) < Rules.LASER_RANGE - 1.0 or not (hx in s.hordes), 30.0)
 	check(not s.events.any(func(e): return e["type"] == "cannon_burst"), "...and its cannon")
 	_steps(s, 8.0)
 	check(not s.is_disrupted(2), "the jam lasts 8 s")
@@ -1490,7 +1807,7 @@ func _skills_tests() -> void:
 	check(s.cast("A", "ultimate", null) and float(s.effects_on("seat", "A")[0]["left"]) < 0.0, "under_attack: castable once a line comes for you, no cap")
 	u0 = s.nodes[3]["units"]
 	s.step(0.1)
-	check(absf((s.nodes[3]["units"] - u0) / (Rules.PROD[2] * Rules.stat("bloom", "production") * 0.1) - 1.5) < 0.01, "under_attack: 1.5x")
+	check(absf((s.nodes[3]["units"] - u0) / (Rules.PROD[1] * Rules.stat("bloom", "production") * 0.1) - 1.5) < 0.01, "under_attack: 1.5x")
 	Rules.SUPERBLOOM_MODE = "cap"
 	# ---------------------------------------------------------------- Core Meltdown
 	for tag in ["BRAWL"]:
