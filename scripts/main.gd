@@ -27,6 +27,7 @@ extends Node3D
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
+##   --tutorial=N                           start tutorial lesson N (1-9) straight away (screenshots, testing)
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is an online room (Net)
@@ -112,6 +113,11 @@ var color_choice := "A"                       # your ownership colour: palette k
 var menu_layer: CanvasLayer
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
 static var last_map_path := ""                 # MAIN MENU remembers the last map played (0.19.0)
+# --- TUTORIAL (TUTORIAL-DESIGN.md §8): the lesson director, its coach overlay, the half-speed clock ---
+var director: TutorialDirector = null            # a lesson is on (null: a normal match)
+var coach: CoachOverlay = null
+var _coach_version := -1
+static var menu_open := ""                       # after a relaunch: open this menu page instead of MAIN
 
 
 func _ready() -> void:
@@ -134,6 +140,9 @@ func _ready() -> void:
 	if relaunch.has("map"):
 		map_path = relaunch["map"]
 		map_explicit = true
+	var tut_id := int(relaunch.get("tutorial", 0))      # TUTORIAL: a lesson relaunched (NEXT / REPLAY / RESTART)
+	var tut_first := bool(relaunch.get("first", false))
+	menu_open = str(relaunch.get("menu", ""))
 	relaunch = {}
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--map="):
@@ -179,12 +188,19 @@ func _ready() -> void:
 		elif arg.begins_with("--thumb="):              # map thumbnail for the menu: no HUD, first frame
 			thumb_path = arg.substr(8)
 			map_explicit = true
+		elif arg.begins_with("--tutorial="):
+			tut_id = int(arg.substr(11))
 	MapPool.phone = MapPool.phone_screen(mobile)       # Alpha 18: phones get the phone-fit maps only
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
-	if map_explicit or demo or scenario != "" or not shots.is_empty():
+	if tut_id > 0 and not map_explicit:               # TUTORIAL: a lesson, straight in
+		start_tutorial(tut_id, tut_first)
+	elif map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
+	elif TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
+			or not Net.rejoin.is_empty()):
+		start_tutorial(1, true)                        # TUTORIAL §7: the first launch opens straight into L1
 	else:
 		if not map_explicit and last_map_path != "":   # MAIN MENU keeps the last map played (0.19.0)
 			map_path = last_map_path
@@ -200,6 +216,9 @@ func _ready() -> void:
 		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--menu-filter="):          # screenshot helper: pre-set the BATTLEFIELD TYPE filter
 				Menu.map_filter_type = arg.substr(14)
+		if menu_open != "":                              # TUTORIAL: LESSONS / ARMIES / NEW GAME from a lesson
+			(menu_layer as Menu).call("show_" + menu_open)
+			menu_open = ""
 		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--menu-page="):            # screenshot helper: open a menu page
 				(menu_layer as Menu).call("show_" + arg.substr(12))
@@ -287,9 +306,9 @@ func _start_map(path: String) -> void:
 	route_label.visible = false
 	add_child(route_label)
 	for seat in seats.values():
-		if (seat != HUMAN or demo) and scenario == "" and not online:
+		if (seat != HUMAN or demo) and scenario == "" and not online and director == null:   # (a lesson scripts its rival)
 			ais.append(SeatAI.new(seat, 2.5, ai_level))
-	if ff_to > 0.0 and not online and scenario == "":
+	if ff_to > 0.0 and not online and scenario == "" and director == null:
 		var ff_dt := 0.1                                # coarser than real frames (~0.05): still exact,
 		while sim.time < ff_to and not sim.over:         # much faster - only the end state is rendered
 			for ai in ais:
@@ -297,6 +316,8 @@ func _start_map(path: String) -> void:
 			sim.step(ff_dt)
 		sim.fx_events.clear()                           # the fast-forwarded bursts are stale by now
 		print("fast-forwarded to t=%.1f%s" % [sim.time, " (match already over)" if sim.over else ""])
+	if director:                                       # TUTORIAL: the lesson stages its board (tutorial.gd)
+		director.begin(sim, map, SEAT_FACTIONS[HUMAN])
 	if scenario != "":
 		_stage_scenario()
 	elif focus_node >= 0 and focus_node < sim.nodes.size():
@@ -317,6 +338,8 @@ func _start_map(path: String) -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
+	if director:
+		_tutorial_setup()
 	_apply_quality()
 	get_viewport().size_changed.connect(_on_resized)
 	started = true
@@ -338,7 +361,7 @@ func _start_map(path: String) -> void:
 	if online:
 		hud.toast("ROOM %s · ROUND %d · you are seat %s (%s) - waiting for every player to load" % [
 				Net.room_code, Net.match_round, HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
-	else:
+	elif director == null:                             # (a lesson's coach card says what to do)
 		hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
 	if hud.dock.visible and hud.dock.start_note() != "":   # a relay map skill swapped on a map with no relays
 		hud.toast(hud.dock.start_note(), "info")
@@ -394,6 +417,9 @@ func _on_order_feedback(msg: String) -> void:
 
 
 func restart() -> void:
+	if director:                                       # TUTORIAL: RESTART / TRY AGAIN restages the lesson
+		_tutorial_relaunch({"tutorial": director.lesson_id, "first": director.first_launch})
+		return
 	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice,
 			"loadout": LOADOUTS.get(HUMAN, {})}
 	get_tree().reload_current_scene()
@@ -449,6 +475,8 @@ func rematch_random() -> void:
 
 
 func to_menu() -> void:
+	if director:                                       # TUTORIAL §7: leaving a lesson marks the tutorial offered
+		TutorialDirector.mark_offered()
 	if online:                                         # LEAVE ROOM: the room closes for us
 		Net.leave()
 	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice,
@@ -821,7 +849,16 @@ func node_action(method: String, id: int, args := {}) -> bool:
 	if online and not Net.is_host():
 		Net.order(method, id, args)
 		return true
+	if director:                                       # TUTORIAL: an order that would wreck the lesson's staging
+		var why := director.allow(method, id, args)
+		if why != "":
+			director.say(why)
+			return false
 	var r := perform(HUMAN, method, id, args)
+	if director:
+		director.on_action(method, id, args, r[0])
+		if not r[0] and str(r[1]) != "" and not hud.shows("notices"):
+			director.say(str(r[1]))                   # before L3 the refusals speak on the coach card
 	if str(r[1]) != "":
 		hud.toast(r[1])
 	return r[0]
@@ -920,11 +957,14 @@ func _process(delta: float) -> void:
 				ai.think(sim, dt)
 			sim.step(dt)
 	elif not paused:
+		var sdt := dt
+		if director:                                   # TUTORIAL: the director first, then the Sim at its scale
+			sdt = _tutorial_step(dt)
 		for ai in ais:
-			ai.think(sim, dt)
+			ai.think(sim, sdt)
 		if scenario != "":
 			_run_scenario()
-		sim.step(dt)
+		sim.step(sdt)
 	hordes.sync(sim, HUMAN)
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]
@@ -954,6 +994,8 @@ func _process(delta: float) -> void:
 	if online:
 		Net.push_effects(sim.fx_events)              # host: the guests see the same bursts and falls
 	for ev in sim.fx_events:
+		if director:
+			director.on_event(ev)
 		fx.handle(ev)
 		skill_fx.handle(ev)
 		match ev["type"]:
@@ -1006,6 +1048,8 @@ func _process(delta: float) -> void:
 	skill_fx.sync(dt, cam)                        # after Fx: it hides a demolished deck, whose pieces fall here
 	forge_pulse.sync(dt, cam)                     # after both (it pumps the models) and the views (their glows)
 	hud.sync(dt, cam)
+	if director:
+		_coach_sync()
 	_trace_t += dt
 	if _trace_t >= 2.0:
 		_trace_t = 0.0
@@ -1050,6 +1094,8 @@ func _on_finished(winner: String) -> void:
 	var path := Telemetry.save(sim, map.get("code", ""), trace)
 	print("match over, winner ", winner, " - telemetry ", path)
 	hud.close_inspector()
+	if director:                                       # TUTORIAL: the lesson's completion screen replaces the results
+		return
 	hud.show_end(winner)
 	if not shots.is_empty():                              # automated run: the match ended before the
 		var t: float = shots[-1]                          # last shot time - take it now and quit
@@ -1111,7 +1157,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_press_pos = mb.position
 				_press_time = Time.get_ticks_msec() / 1000.0
 				if n >= 0:
-					if sim.nodes[n]["owner"] == HUMAN and n == _tap_node and _press_time - _tap_time < DOUBLE_TAP_WINDOW:
+					if sim.nodes[n]["owner"] == HUMAN and n == _tap_node and _press_time - _tap_time < DOUBLE_TAP_WINDOW \
+							and hud.shows("relay" if sim.nodes[n]["relay"] != "" else "upgrade"):   # (TUTORIAL: from L2 / L4)
 						hud.close_inspector()
 						_pending_inspect = -1                   # the first tap's inspector never opens
 						_swallow_release = true                 # nor does this tap's release reopen it
@@ -1327,3 +1374,244 @@ func _flush_inspect() -> void:
 		# empty radial menu appears"); enemy, neutral and allied nodes are read from their badges
 		if not paused and not sim.over and sim.nodes[id]["owner"] == HUMAN:   # Alpha 11 game.gd:588: never over the pause or end panel
 			hud.inspect(id, cam)
+
+
+# ================================================================== TUTORIAL (TUTORIAL-DESIGN.md §8)
+# The lesson hooks, all here: start_tutorial (like start_match), the director stepped before the Sim with its
+# time scale (half speed at a relay prompt), the coach overlay fed from the director each frame (card, spotlight,
+# hand, completion screens), and the ways out (NEXT / REPLAY / LESSONS / ARMIES / MAIN MENU / SKIP TUTORIAL).
+func start_tutorial(lesson_id: int, first := false, faction := "", colour := "") -> void:
+	## Entry from the TUTORIAL page, the first launch or a relaunch: lesson `lesson_id` on its map, your faction
+	## (the menu's last pick), your colour, a scripted rival (no SeatAI; the Training AI in the first match).
+	director = TutorialDirector.new(lesson_id)
+	director.first_launch = first
+	if faction != "":
+		SEAT_FACTIONS[HUMAN] = faction
+	if colour != "":
+		color_choice = colour
+	var mine: String = SEAT_FACTIONS[HUMAN]
+	for f in ["ember", "vex", "solar", "bloom", "null"]:   # a fixed rival faction, never your own
+		if f != mine:
+			SEAT_FACTIONS["B"] = f
+			break
+	mode = "1v1"
+	ai_level = str(director.L.get("ai", ai_level))
+	LOADOUTS = {HUMAN: director.loadout_for(mine, ArmyPresets.loadout_for(mine))}
+	fraction = director.fraction_start(fraction)
+	pitch_forced = false
+	if menu_layer:
+		menu_layer.queue_free()
+		menu_layer = null
+	var keep_last := last_map_path                    # a lesson map never becomes MAIN MENU's "last map"
+	_start_map(TutorialDirector.map_path_for(lesson_id))
+	last_map_path = keep_last
+
+
+func _tutorial_setup() -> void:
+	## After the HUD: the reveal set, the coach overlay and its signals.
+	hud.reveal(director.reveal_keys(), _tutorial_new_keys())
+	coach = CoachOverlay.new()
+	coach.set_mobile(mobile)
+	coach.set_accent(Rules.seat_color(HUMAN))
+	coach.set_first_launch(director.first_launch)
+	add_child(coach)
+	coach.set_labels({"skip_step": TutorialDirector.line("skip_step"), "restart": TutorialDirector.line("restart"),
+			"exit": TutorialDirector.line("exit"), "skip_tutorial": TutorialDirector.line("skip_tutorial")})
+	coach.button_pressed.connect(_on_coach_button)
+	coach.skip_step.connect(func(): director.skip_step())
+	coach.restart.connect(restart)
+	coach.exit.connect(to_lessons)
+	coach.skip_tutorial.connect(to_menu)               # SKIP TUTORIAL: MAIN, offered marked (to_menu)
+	director.completed.connect(_on_lesson_completed)
+	var step_seen := {"i": director.step_i}
+	director.changed.connect(func():                  # a step that adds HUD parts reveals them with a glow
+		if director.step_i != int(step_seen["i"]):
+			step_seen["i"] = director.step_i
+			var before := TutorialDirector.reveal_for(director.lesson_id, director.step_i - 1)
+			hud.reveal(director.reveal_keys(), director.reveal_keys().filter(func(k): return not k in before)))
+
+
+func _tutorial_new_keys() -> Array:
+	## The keys this lesson adds to the ones before it (they glow in at the start).
+	var before := TutorialDirector.reveal_for(director.lesson_id - 1, 99) if director.lesson_id > 1 else []
+	return director.reveal_keys().filter(func(k): return not k in before)
+
+
+func _tutorial_step(dt: float) -> float:
+	## One frame of the lesson: the UI state the steps read, the director, and the Sim's dt at its time scale.
+	director.ui_fraction = fraction
+	director.ui_inspector = hud.inspector_id
+	director.ui_armed = hud.dock.armed if hud.dock else -1
+	director.step(dt)
+	return dt * director.time_scale
+
+
+func _coach_sync() -> void:
+	## The coach overlay follows the director: the card when it changed; the spotlight, the hand, the dodge
+	## rects and the UI rects every frame (the camera moves in the Last Stand).
+	if coach == null or _start_fit.is_empty():        # (the camera is fitted on the second frame)
+		return
+	if director.version != _coach_version and director.state != "complete":
+		_coach_version = director.version
+		var c := director.card()
+		if c["visible"]:
+			coach.show_step(c["header"], c["text"], int(c["dots"]), int(c["dot"]), str(c["button"]))
+		else:
+			coach.hide_card()
+	var tg := director.target()
+	var pts := []
+	for id in tg["nodes"]:
+		pts.append(cam.unproject_position(sim.nodes[id]["pos"]))
+	for hid in tg["lines"]:
+		var h := sim._horde(int(hid))
+		if not h.is_empty():
+			pts.append(cam.unproject_position(Sim.sample(h, h["s"])[0]))
+	var rects := []
+	for key in tg["rects"]:
+		var r := _tutorial_rect(str(key))
+		if r.size != Vector2.ZERO:
+			rects.append(r.grow(4.0))
+	var radius: float = 30.0
+	if not sim.nodes.is_empty():
+		var c0: Vector3 = sim.nodes[0]["pos"]
+		radius = cam.unproject_position(c0).distance_to(cam.unproject_position(c0 + cam.global_transform.basis.x * Rules.R)) * 1.35
+	if director.state == "complete":
+		pts = []
+		rects = []
+	coach.spotlight(pts, radius, rects)
+	_tutorial_gesture()
+	coach.set_finger_down(not touches.is_empty() or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+	coach.set_dodge_rects(hud.top_panel.get_global_rect(), hud.side_panel.get_global_rect() if hud.side_panel.visible else Rect2(),
+			hud.dock.get_global_rect() if hud.dock.visible else Rect2(), hud.pause_button.get_global_rect())
+	hud.extra_ui_rects = coach.ui_rects()
+	if director.preview_relay >= 0 and hud.inspector_id == director.preview_relay and director.state == "running":
+		hud.overlay.hover_relay = director.preview_relay   # L4: the relay-outcome preview stays up while inspected
+
+
+func _tutorial_rect(key: String) -> Rect2:
+	## A coach rect key on screen: "send:0.25", "action:<NAME>" (Hud.action_rect), "dock:<slot>".
+	var parts := key.split(":", true, 1)
+	match parts[0]:
+		"send":
+			return hud.send_button_rect(float(parts[1]))
+		"action":
+			return hud.action_rect(parts[1])
+		"dock":
+			return hud.dock_slot_rect(int(parts[1]))
+	return Rect2()
+
+
+func _tutorial_gesture() -> void:
+	## The first of the step's gesture alternatives that can be drawn right now (a press needs its button on
+	## screen - otherwise the next alternative, e.g. the tap that opens the inspector).
+	for g in director.gesture():
+		var kind := str(g[0])
+		match kind:
+			"tap", "double_tap":
+				if int(g[1]) >= 0:
+					coach.gesture(kind, cam.unproject_position(sim.nodes[int(g[1])]["pos"]))
+					return
+			"drag":
+				var a := int(g[1])
+				var b := int(g[2])
+				if a >= 0 and b >= 0:
+					var route := sim.find_route(a, b)
+					var path := PackedVector2Array()
+					if route.size() >= 2:
+						for q in (sim.build_path(route)["pts"] as PackedVector3Array):
+							path.append(cam.unproject_position(q))
+					coach.gesture("drag", cam.unproject_position(sim.nodes[a]["pos"]), cam.unproject_position(sim.nodes[b]["pos"]), path)
+					return
+			"press":
+				var r := _tutorial_rect(str(g[1]))
+				if r.size != Vector2.ZERO:
+					coach.gesture("press", r.get_center())
+					return
+			"tap_line":
+				var h := sim._horde(int(g[1]))
+				if not h.is_empty():
+					coach.gesture("tap", cam.unproject_position(Sim.sample(h, maxf(h["s"] - 1.0, 0.0))[0]))
+					return
+			"tap_deck":
+				var line := sim.deck_line(int(g[1]))
+				if line.size() >= 2:
+					coach.gesture("tap", cam.unproject_position(((line[0] as Vector3) + (line[-1] as Vector3)) / 2.0))
+					return
+	coach.clear_gesture()
+
+
+func _on_coach_button(id: String) -> void:
+	if director.state == "complete":                   # a completion screen
+		var r := director.result
+		match id:
+			"primary":
+				if r.get("final", false):              # PLAY YOUR FIRST MATCH: NEW GAME, Casual preselected
+					_tutorial_leave({"ai": "Casual", "menu": "factions"})
+				else:
+					_tutorial_relaunch({"tutorial": int(r.get("next", 1))})
+			"secondary:0":
+				if r.get("final", false):              # ARMIES: put the Graduate vat on
+					_tutorial_leave({"menu": "cosmetics"})
+				else:
+					_tutorial_relaunch({"tutorial": director.lesson_id})   # REPLAY
+			"secondary:1":
+				if r.get("final", false):
+					_tutorial_leave({})                   # MAIN MENU
+				else:
+					to_lessons()
+		return
+	if director.state == "failed":                     # TRY AGAIN: the same board, fresh crews
+		restart()
+	elif director.L.get("match", false):
+		director.skip_step()                            # the first match's opening card
+	else:
+		director.press_button()
+
+
+func _on_lesson_completed(r: Dictionary) -> void:
+	## LESSON COMPLETE / TRAINING COMPLETE instead of the results screen (§6).
+	paused = true
+	hud.close_inspector()
+	_end_drag()
+	if coach == null:
+		return
+	coach.hide_card()
+	if r.get("final", false):
+		var lines := []
+		if r.get("relay_kill", false):
+			lines.append(TutorialDirector.final_kill_line(int(r.get("kill_units", 0))))
+		if r.get("graduate", false):
+			lines.append(TutorialDirector.line("final_reward"))
+			lines.append(TutorialDirector.line("final_reward_line"))
+		else:
+			lines.append(TutorialDirector.line("final_locked"))
+		coach.show_training_complete(TutorialDirector.line("final_title"), lines, TutorialDirector.line("final_play"),
+				[TutorialDirector.line("final_armies"), TutorialDirector.line("final_menu")],
+				{"unlocked": r.get("graduate", false), "title": "GRADUATE VAT", "faction": SEAT_FACTIONS[HUMAN]})
+	else:
+		var lines: Array = (r.get("lines", []) as Array).duplicate()
+		lines.append("%s · %d:%02d" % [str(r.get("title", "")), int(r.get("time", 0.0)) / 60, int(r.get("time", 0.0)) % 60])
+		coach.show_complete(TutorialDirector.line("lesson_complete"), lines, TutorialDirector.line("next"), [TutorialDirector.line("replay"), TutorialDirector.line("lessons")])
+	hud.extra_ui_rects = coach.ui_rects()
+
+
+func to_lessons() -> void:
+	## PAUSE > LESSONS, the card's EXIT, a completion screen's LESSONS: the TUTORIAL page.
+	_tutorial_leave({"menu": "tutorial"})
+
+
+func _tutorial_leave(extra: Dictionary) -> void:
+	TutorialDirector.mark_offered()
+	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "ai": ai_level if not extra.has("ai") else extra["ai"], "colour": color_choice,
+			"loadout": ArmyPresets.loadout_for(SEAT_FACTIONS[HUMAN])}
+	if extra.has("menu"):
+		relaunch["menu"] = extra["menu"]
+	if extra.has("ai"):
+		relaunch["ai"] = extra["ai"]
+	get_tree().reload_current_scene()
+
+
+func _tutorial_relaunch(extra: Dictionary) -> void:
+	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "colour": color_choice}
+	relaunch.merge(extra, true)
+	get_tree().reload_current_scene()
