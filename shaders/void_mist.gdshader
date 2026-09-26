@@ -19,10 +19,10 @@ void fragment() {
 	vec2 p = wpos.xz;
 	float a = texture(noise_tex, p * scale + wind * TIME).r;
 	float b = texture(noise_tex, p * scale * 2.3 - wind.yx * TIME * 1.7 + vec2(0.37, 0.61)).r;
-	float m = smoothstep(0.35, 0.95, a * 0.65 + b * 0.5);
+	float m = smoothstep(0.3, 1.05, a * 0.62 + b * 0.48);
 	vec2 e = abs(UV - 0.5) * 2.0;                                   // soft edges: never a visible quad border
 	float edge = (1.0 - smoothstep(0.55, 1.0, e.x)) * (1.0 - smoothstep(0.55, 1.0, e.y));
-	vec3 col = mix(mist_color.rgb, glow_color.rgb, smoothstep(0.7, 1.0, m) * 0.35);
+	vec3 col = mix(mist_color.rgb, glow_color.rgb, smoothstep(0.75, 1.0, m) * 0.18);
 	float alpha = m * density * edge;
 	// motes: one candidate per 3 m cell, a few percent lit, each blinking on its own phase
 	vec2 g = p / 3.0 + vec2(TIME * 0.05, TIME * 0.02);

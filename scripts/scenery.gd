@@ -14,13 +14,17 @@ extends Node3D
 const BACKDROP_SHADER := preload("res://shaders/backdrop.gdshader")
 const LIQUID_SHADER := preload("res://shaders/vat_liquid.gdshader")
 const VOID_SHADER := preload("res://shaders/void_mist.gdshader")
-# 0.18.7 look pass: the void under the arena - height fog swallows legs, pillars and pylons as they go
-# down, and drifting mist layers with motes sit between the platforms and the sky (make_void)
-const FOG_HEIGHT := -1.2             # fog starts just under the platform rims
-const FOG_HEIGHT_DENSITY := 0.085    # per metre below FOG_HEIGHT: ~25 % at the legs' feet, ~70 % at -15 m
-const FOG_COLOR := Color(0.3, 0.27, 0.5)
-const VOID_LAYERS := [[-13.0, 0.3, 0.012], [-34.0, 0.4, 0.007]]   # [height, peak alpha, noise scale]; the
-                                                                  # deep layer only at full detail off phones
+# 0.18.7 look pass - the abyss (Daniele: "since troops fall into the void, I'd suggest to add a fog or
+# any other trick to not have bridge / units or the pillars look like they just disappear / be
+# suspended"): height fog swallows everything below the lowest decks - pillars, pylons, falling bodies,
+# fragments and collapsing platforms - into ABYSS, the backdrop behind the board is hazed toward the same
+# colour so a fogged shape has no edge against it, and drifting mist sheets with motes sit in between
+# (make_void). Everything that falls is drawn until ~25 m down, where the fog is ~98 %.
+const ABYSS := Color(0.2, 0.17, 0.37)       # the void's colour: fog, backdrop haze and mist (sRGB)
+const FOG_HEIGHT := -5.6             # fog starts under the lowest deck level (-4 m decks, girders to -5.4)
+const FOG_HEIGHT_DENSITY := 0.2      # per metre below FOG_HEIGHT: ~60 % at -10 m, ~95 % at -20 m, ~98 % at -25 m
+const VOID_LAYERS := [[-9.0, 0.26, 0.010], [-21.0, 0.36, 0.006]]   # [height, peak alpha, noise scale]; the
+                                                                   # deep layer only at full detail off phones
 const RESIDENT_SIZE := 0.62          # metres across a resident (a tank is ~1.7 m wide)
 const MAX_PER_TANK := 2
 const EASE := 1.8                    # liquid level easing, 1/s
@@ -56,7 +60,7 @@ static func build_environment(parent: Node, _mobile: bool) -> DirectionalLight3D
 	env.glow_bloom = 0.08
 	env.glow_hdr_threshold = 0.9
 	env.fog_enabled = true                             # 0.18.7: height fog only (no distance haze on the board)
-	env.fog_light_color = FOG_COLOR
+	env.fog_light_color = ABYSS
 	env.fog_light_energy = 1.0
 	env.fog_density = 0.0
 	env.fog_height = FOG_HEIGHT
@@ -98,6 +102,7 @@ static func make_backdrop(parent: Node) -> CanvasLayer:
 	sky.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var mat := ShaderMaterial.new()
 	mat.shader = BACKDROP_SHADER
+	mat.set_shader_parameter("abyss", ABYSS)
 	sky.material = mat
 	layer.add_child(sky)
 	parent.add_child(layer)
@@ -127,6 +132,7 @@ static func make_void(parent: Node, centre: Vector3, extent: Vector2, full: bool
 		var mat := ShaderMaterial.new()
 		mat.shader = VOID_SHADER
 		mat.set_shader_parameter("noise_tex", tex)
+		mat.set_shader_parameter("mist_color", ABYSS.lightened(0.12))
 		mat.set_shader_parameter("density", layer[1])
 		mat.set_shader_parameter("scale", layer[2])
 		mat.set_shader_parameter("motes", 1.0 if i == 0 else 0.6)
