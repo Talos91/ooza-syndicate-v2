@@ -230,6 +230,26 @@ func _run() -> void:
 	host.push_effects([{"type": "cannon", "node": target}])
 	_deliver()
 	check(gs.fx_events.any(func(e): return e.get("type", "") == "cannon"), "host effects reach the guest's view queue")
+	# 0.18.7: the corner-cycle drop order is the host's; a guest (whatever its own seed) reads it from ls[12]
+	var lsm := MapBuilder.load_map("res://maps4/A-01-orbital-nexus.json")
+	var ls_seats := {}
+	for st in lsm["seats"]["FFA4"]:
+		ls_seats[int(st["node"])] = st["seat"]
+	var ls_host := Sim.new()
+	ls_host.setup(lsm, MapBuilder.layout(lsm), ls_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar"}, 2)
+	ls_host._map_last_stand = {"methods": ["inward"], "orders": {"inward": lsm["lastStand"]["orders"]["inward"]}}
+	ls_host._ring_orders = ls_host._map_last_stand["orders"]
+	ls_host.time = Rules.LAST_STAND_TIME
+	ls_host._start_rings()
+	var ls_guest := Sim.new()
+	ls_guest.setup(lsm, MapBuilder.layout(lsm), ls_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar"}, 5)
+	var ls_wire: PackedByteArray = var_to_bytes(host.snapshot(ls_host, true))   # the wire's encoding
+	host.apply_snapshot(ls_guest, bytes_to_var(ls_wire))
+	check(ls_host.last_stand_queue.size() >= 2 and ls_guest.last_stand_queue == ls_host.last_stand_queue
+			and ls_guest.drop_in(ls_host.last_stand_queue[1]) == ls_host.drop_in(ls_host.last_stand_queue[1]),
+			"the guest's drop queue and per-platform countdowns are the host's corner-cycle order")
+	check(ls_host.nearest_corner(ls_host.last_stand_queue[0]) != ls_host.nearest_corner(ls_host.last_stand_queue[1]),
+			"the ring's first two drops lie near different starting corners")
 
 	# ---------------------------------------------------------------- chat
 	check(host.accept_chat(1, "  hello <b>there</b>\u0007 "), "host chats")

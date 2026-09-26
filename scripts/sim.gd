@@ -44,6 +44,8 @@ var last_stand_warn_node := -1       # node under its 10 s warning (-1: none)
 var last_stand_warn_t := 0.0         # seconds to the next drop (the ring's warning, then the gap between drops)
 var last_stand_queue: Array = []     # the warned ring's platforms still to drop, in drop order (0.18.4)
 var last_stand_wave := 20.0
+var last_stand_corners: Array = []  # 0.18.7: home node ids of the match's seats in corner-cycle order
+var _ls_corner_k := 0                # the corner the next planned drop aims at (carries across rings)
 var _next_wave_at := 0.0
 var rng := RandomNumberGenerator.new()
 var _next_id := 1
@@ -1760,6 +1762,8 @@ func _start_rings() -> void:
 		if n["ring"] == keep_ring:
 			last_stand_keep[n["id"]] = true
 	last_stand_final = last_stand_keep.keys()[0] if not last_stand_keep.is_empty() else -1
+	last_stand_corners = _corner_cycle()                  # drawn after the method and order: same seed, same picks
+	_ls_corner_k = 0
 	last_stand_waves = _plan_waves(order)
 	last_stand_order = []
 	for w in last_stand_waves:
@@ -1876,30 +1880,107 @@ func _warn_wave() -> void:
 	last_stand_next += 1
 
 
+func _corner_cycle() -> Array:
+	## 0.18.7, Daniele: "last stand always starts from the same node - change the logic to start randomly
+	## from one of the starting corners then move to the opposite, then another then another and then
+	## back to the first until all nodes that are supposed to fall are gone; this makes it a bit more
+	## fair, otherwise the first player usually loses all his nodes all together with no reaction time".
+	## The corners are the home platforms of the seats in this match (a home that was taken or fell
+	## keeps its place as the corner). The first is drawn from the match's seeded rng; each next one is
+	## the unvisited corner farthest from the last visited (ties: farthest from all visited, then seat
+	## order), so 1v1 alternates the two homes and four corners go start, opposite, then the other two.
+	var seats := homes.keys()
+	seats.sort()
+	var left := []
+	for s in seats:
+		left.append(homes[s])
+	if left.is_empty():
+		return []
+	var cycle := [left[rng.randi_range(0, left.size() - 1)]]
+	left.erase(cycle[0])
+	while not left.is_empty():
+		var best: int = left[0]
+		var best_key := Vector2(-INF, -INF)
+		for id in left:
+			var sum := 0.0
+			for v in cycle:
+				sum += _flat_dist(id, v)
+			var key := Vector2(_flat_dist(id, cycle[-1]), sum)
+			if key.x > best_key.x + 0.01 or (absf(key.x - best_key.x) <= 0.01 and key.y > best_key.y + 0.01):
+				best_key = key
+				best = id
+		cycle.append(best)
+		left.erase(best)
+	return cycle
+
+
+func _flat_dist(a: int, b: int) -> float:
+	var pa: Vector3 = nodes[a]["pos"]
+	var pb: Vector3 = nodes[b]["pos"]
+	return Vector2(pa.x, pa.z).distance_to(Vector2(pb.x, pb.z))
+
+
 func _drop_sequence(wave: Array) -> Array:
 	## The order a ring's platforms fall in, one at a time (0.18.4): each drop is a platform whose loss
 	## leaves every other standing platform connected over fixed decks (the rule for falling bridges -
-	## never an island), relays after the ring's other platforms, the farthest from the last ring first.
+	## never an island), relays after the ring's other platforms. 0.18.7: each drop aims at the next
+	## corner of the cycle (_corner_cycle, carried across rings) and takes the safe platform closest to
+	## it, preferring one that is not on the previous drop's side (nearest the same corner) so no player
+	## loses two platforms in a row while another side still has a safe one; with no safe platform it
+	## takes the least unsafe closest and the cycle still moves on. Ties (and a match with no corners)
+	## fall back to the far side of the last ring first.
 	var gone := collapsed.duplicate()
 	var left: Array = wave.duplicate()
 	var depth := _keep_depth()
 	var out := []
+	var prev_side := -1
 	while not left.is_empty():
+		var corner: int = last_stand_corners[_ls_corner_k % last_stand_corners.size()] if not last_stand_corners.is_empty() else -1
 		var best := -1
-		var best_score := -INF
+		var best_tier := 99
+		var best_d := INF
+		var best_depth := -1
 		for id in left:
 			var trial := gone.duplicate()
 			trial[id] = true
-			var score: float = depth.get(id, 0) * 10.0 - (1000.0 if nodes[id]["relay"] != "" else 0.0)
+			var tier := 2 if nodes[id]["relay"] != "" else 0
 			if not _islands(trial).is_empty():
-				score -= 100000.0                          # would strand another platform: only as a last resort
-			if score > best_score or (score == best_score and id < best):
-				best_score = score
+				tier += 4                                  # would strand another platform: only as a last resort
+			if prev_side >= 0 and nearest_corner(id) == prev_side:
+				tier += 1                                  # the same side twice in a row: only if no other side can go
+			var d: float = _flat_dist(id, corner) if corner >= 0 else 0.0
+			var dep: int = depth.get(id, 0)
+			var better := tier < best_tier
+			if tier == best_tier:
+				if d < best_d - 0.01:
+					better = true
+				elif d <= best_d + 0.01:
+					better = dep > best_depth or (dep == best_depth and id < best)
+			if better:
+				best_tier = tier
+				best_d = d
+				best_depth = dep
 				best = id
 		out.append(best)
 		left.erase(best)
 		gone[best] = true
+		prev_side = nearest_corner(best)
+		if not last_stand_corners.is_empty():
+			_ls_corner_k = (_ls_corner_k + 1) % last_stand_corners.size()
 	return out
+
+
+func nearest_corner(id: int) -> int:
+	## The Last Stand corner (a home in last_stand_corners) a platform lies nearest to, ties to the
+	## earlier corner of the cycle; -1 with no corners.
+	var best := -1
+	var best_d := INF
+	for c in last_stand_corners:
+		var d := _flat_dist(id, c)
+		if d < best_d - 0.01:
+			best_d = d
+			best = c
+	return best
 
 
 func _keep_depth() -> Dictionary:
