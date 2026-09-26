@@ -108,9 +108,16 @@ static func _can_raise(e: Dictionary) -> bool:
 
 
 static func piece(name: String) -> Node3D:
-	if not _scenes.has(name):
-		_scenes[name] = load(KIT % name)
-	var node: Node3D = (_scenes[name] as PackedScene).instantiate()
+	var scene: PackedScene
+	if name.begins_with("skins/"):                  # 0.19.0 cosmetics: loaded on demand, never kept here
+		scene = Cosmetics.cached(name)
+		if scene == null:
+			scene = load(KIT % name) as PackedScene     # (a tier-down ghost of a skin already dropped)
+	else:
+		if not _scenes.has(name):
+			_scenes[name] = load(KIT % name)
+		scene = _scenes[name]
+	var node: Node3D = scene.instantiate()
 	Mats.apply_detail(node)                         # Alpha 16: surface detail on the flat kit colours
 	return node
 
@@ -154,10 +161,11 @@ static func platform_piece(n: Dictionary) -> String:
 	## the kit's pillar (Daniele, 0.18.7: "relay nodes and special nodes (like the king of the hill ones so the
 	## nodes that can build all structure) need to have the pillar we created on blender"). A rotation relay
 	## keeps its turning platform (its machinery is the relay).
+	## Structures 2.1 (0.19.0): the special nodes (strategic / final / map-placed T4) keep their pillar.
 	if n["relay"] == "rotation":
 		return "Platform_Rotation"
 	var b: Array = n.get("buildable", [])
-	if n["relay"] != "" or ("cannon" in b and "forge" in b and "vat" in b):
+	if n["relay"] != "" or n.get("node_kind", "") == "special" or ("cannon" in b and "forge" in b and "vat" in b):
 		return "Platform_Pillar"
 	return "Platform_Standard"
 
@@ -277,42 +285,155 @@ static func set_state_color(entry: Dictionary, c: Color) -> void:
 
 
 const VAT_MODEL := ["", "Vat_T1", "Vat_T2", "Vat_T3", "Vat_T4"]            # by tier (1-4)
-const CANNON_MODEL := ["", "Cannon_T1", "Cannon_T2", "Cannon_T3"]          # by cannon tier (1-3)
+const CANNON_MODEL := ["", "Laser", "Laser", "Laser"]                      # LEGACY: every cannon tier is the laser now
 
 
 static func model_for(n: Dictionary) -> String:
 	## Which centre-slot model a node shows right now - the build TARGET while a build runs (Alpha
-	## 11 shows the new structure growing out of the socket), otherwise what stands there. Called
-	## per node per frame (main), so the names come from tables, not string formatting.
+	## 11 shows the new structure growing out of the socket), otherwise what stands there. Structures
+	## 2.1 (0.19.0): a vat or a Machingoon (T1-T3) on a common node, a Laser tower / Forge / Monster hub
+	## (or the bare socket) on a relay, the T4 vat on a special node - each in the look its OWNER picked
+	## (Cosmetics.key_for: the default until a skin has loaded). Called per node per frame (main), so the
+	## names come from tables and caches, not string formatting.
+	var kind: String
+	var tier: int
 	if n["build_kind"] != "" and not n["build_target"].is_empty():
 		var t: Dictionary = n["build_target"]
-		if t["kind"] == "vat":
-			return VAT_MODEL[t["tier"]]
-		return CANNON_MODEL[t["tier"]] if t["kind"] == "cannon" else "Forge"
-	if n["attachment"] == "cannon":
-		return CANNON_MODEL[maxi(n["cannon_tier"], 1)]
-	if n["attachment"] == "forge":
-		return "Forge"
+		kind = t["kind"]
+		tier = int(t.get("tier", n["tier"]))
+		if kind == "cannon":
+			kind = "laser"
+	else:
+		kind = n.get("structure", "vat")
+		tier = n["tier"]
+	match kind:
+		"vat", "machingoon", "laser", "forge", "monster_hub":
+			return Cosmetics.key_for(kind, n["owner"], tier)
 	if n["relay"] != "":
 		return "Socket_Attachment"
-	return VAT_MODEL[n["tier"]]
+	return VAT_MODEL[clampi(tier, 1, 4)]
+
+
+static func centre_lift(model: String) -> Vector3:
+	## The laser looks stand on the relay's attachment socket (ATTACH_Z - SOCKET_Z up, Cosmetics.LIFT).
+	return Vector3(0, float(Cosmetics.points(model).get("lift", 0.0)), 0)
 
 
 static func set_centre_model(parent: Node3D, entry: Dictionary, model: String, pos: Vector3, seat: String) -> Node3D:
-	## Swap the node's centre slot (vat / socket / cannon / forge) for `model` at the exact same
-	## spot - GAME-RULES sec6: one slot, never an extra piece bolted on the side. Returns the node.
+	## Swap the node's centre slot (vat / socket / machingoon / laser / forge / hub) for `model` at the
+	## exact same spot - GAME-RULES sec6: one slot, never an extra piece bolted on the side. Returns the node.
 	if entry["model_key"] == model:
 		return entry["vat_node"]
 	pos = entry.get("centre", pos)                    # maps 3.0: beside a relay tower that holds the socket
 	if entry["vat_node"]:
 		(entry["parts"] as Array).erase(entry["vat_node"])
 		(entry["vat_node"] as Node).queue_free()
-	var node := put(parent, model, pos, Rules.view_yaw)
+	var node := put(parent, model, pos + centre_lift(model), Rules.view_yaw)
 	entry["parts"].append(node)
 	entry["vat_node"] = node
 	entry["model_key"] = model
 	apply_owner(entry["parts"], seat)
 	return node
+
+
+# ---------------------------------------------------------------- spinning barrels (0.19.0)
+static var _spin_split := {}         # "model|mesh id" -> [static ArrayMesh, spinner ArrayMesh, axis Vector2] (shared)
+
+
+static func split_spinner(turret: MeshInstance3D, model: String) -> MeshInstance3D:
+	## The Machingoon T3 and the Pepperbox turrets carry their barrel cluster inside the turret mesh.
+	## Split it off once per model (Cosmetics.points(model)["spin"]: every mesh island wholly within r of
+	## an axis parallel to +Z through (x, y), in front of z0) into a child MeshInstance3D centred on the
+	## axis, so the view can turn it about its local Z. Returns the spinner (null if the model has none).
+	var spec: Dictionary = Cosmetics.points(model).get("spin", {})
+	if spec.is_empty() or turret == null or turret.mesh == null:
+		return null
+	var ck := "%s|%d" % [model, turret.mesh.get_instance_id()]
+	if not _spin_split.has(ck):
+		_spin_split[ck] = _split_mesh(turret.mesh, spec["axis"], float(spec["r"]), float(spec["z0"]))
+	var pair: Array = _spin_split[ck]
+	if pair[1] == null:
+		return null
+	turret.mesh = pair[0]
+	var sp := MeshInstance3D.new()
+	sp.name = "Spinner"
+	sp.mesh = pair[1]
+	sp.position = Vector3((pair[2] as Vector2).x, (pair[2] as Vector2).y, 0.0)
+	turret.add_child(sp)
+	return sp
+
+
+static func _split_mesh(src: Mesh, axis: Vector2, r: float, z0: float) -> Array:
+	var keep := ArrayMesh.new()
+	var spin := ArrayMesh.new()
+	var moved := 0
+	for s in range(src.get_surface_count()):
+		var arr := src.surface_get_arrays(s)
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var ix := PackedInt32Array()
+		if arr[Mesh.ARRAY_INDEX] != null:
+			ix = arr[Mesh.ARRAY_INDEX]
+		else:
+			for i in range(v.size()):
+				ix.append(i)
+		# islands: vertices joined by triangles or by sharing a position (split normals / UV seams)
+		var parent := []                            # (an Array: packed arrays are values, _union must change it)
+		parent.resize(v.size())
+		for i in range(v.size()):
+			parent[i] = i
+		var at := {}
+		for i in range(v.size()):
+			var q := Vector3i(roundi(v[i].x * 2000.0), roundi(v[i].y * 2000.0), roundi(v[i].z * 2000.0))
+			if at.has(q):
+				_union(parent, i, at[q])
+			else:
+				at[q] = i
+		for k in range(0, ix.size() - 2, 3):
+			_union(parent, ix[k], ix[k + 1])
+			_union(parent, ix[k + 1], ix[k + 2])
+		var inside := {}
+		for i in range(v.size()):
+			var root := _find(parent, i)
+			var ok: bool = Vector2(v[i].x, v[i].y).distance_to(axis) <= r and v[i].z >= z0
+			inside[root] = ok and inside.get(root, true)
+		var a := PackedInt32Array()
+		var b := PackedInt32Array()
+		for k in range(0, ix.size() - 2, 3):
+			if inside.get(_find(parent, ix[k]), false):
+				b.append_array([ix[k], ix[k + 1], ix[k + 2]])
+			else:
+				a.append_array([ix[k], ix[k + 1], ix[k + 2]])
+		var mat := src.surface_get_material(s)
+		if not a.is_empty():
+			var aa := arr.duplicate()
+			aa[Mesh.ARRAY_INDEX] = a
+			keep.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, aa)
+			keep.surface_set_material(keep.get_surface_count() - 1, mat)
+		if not b.is_empty():
+			moved += b.size() / 3
+			var bb := arr.duplicate()
+			var off := PackedVector3Array(v)
+			for i in range(off.size()):
+				off[i] -= Vector3(axis.x, axis.y, 0.0)
+			bb[Mesh.ARRAY_VERTEX] = off
+			bb[Mesh.ARRAY_INDEX] = b
+			spin.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, bb)
+			spin.surface_set_material(spin.get_surface_count() - 1, mat)
+	return [keep, spin if moved > 0 else null, axis]
+
+
+static func _find(parent: Array, i: int) -> int:
+	while parent[i] != i:
+		parent[i] = parent[parent[i]]
+		i = parent[i]
+	return i
+
+
+static func _union(parent: Array, a: int, b: int) -> void:
+	var ra := _find(parent, a)
+	var rb := _find(parent, b)
+	if ra != rb:
+		parent[ra] = rb
 
 
 static func apply_owner(parts: Array, seat: String) -> void:
@@ -469,7 +590,7 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 		var centre := n["pos"] as Vector3
 		if tower_on_socket:                            # the centre slot moves in front of the tower
 			centre += Rules.front_dir() * 3.4
-		var vat_node := put(parent, model_for(n), centre, Rules.view_yaw)
+		var vat_node := put(parent, model_for(n), centre + centre_lift(model_for(n)), Rules.view_yaw)
 		parts.append(vat_node)
 		vis[id] = {"parts": parts, "platform": platform, "vat_node": vat_node,
 				"vat_tier": -1 if relay != "" else n["tier"], "model_key": model_for(n),

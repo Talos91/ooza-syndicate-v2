@@ -777,6 +777,21 @@ func _process(delta: float) -> void:
 			MapBuilder.set_centre_model(self, entry, model, n["pos"], n["owner"])
 			combat.after_swap(n, entry)
 	scenery.sync(dt)
+	# --- 0.19.0 views --- monsters and their hubs (MonsterView reads this frame's fx events before they are
+	# drained below), each seat's faction for Cosmetics, and the --stage=monster|guns|vats:<look> debug moments
+	var monster_view := get_node_or_null("MonsterView") as MonsterView
+	if monster_view == null:
+		Cosmetics.set_factions(sim.factions)
+		monster_view = MonsterView.new()
+		monster_view.name = "MonsterView"
+		add_child(monster_view)
+		monster_view.setup(self, sim, vis, combat)
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--stage=") and not online:
+				MonsterView.stage(self, arg.substr(8))
+	MonsterView.stage_tick(self)
+	monster_view.sync(dt, cam)
+	# --- end 0.19.0 views ---
 	if online:
 		Net.push_effects(sim.fx_events)              # host: the guests see the same bursts and falls
 	for ev in sim.fx_events:

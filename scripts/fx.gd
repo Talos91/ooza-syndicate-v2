@@ -7,7 +7,8 @@ extends Node3D
 ## (platform, deck fragments, waterfall of goo, hordes tumbling into the void, lines flung off a
 ## turning rotation deck), the selection ring,
 ## owner-coloured deck lights (SIEGE) and Alpha 11's half-bridge neon trims (BRAWL), pier stripes and
-## platform rims. The cannon laser, fights for a tower and tier-downs are combat_fx.gd.
+## platform rims. The cannon laser, fights for a tower and tier-downs are combat_fx.gd. Monsters (0.19.0) are
+## monster_view.gd; the bodies a monster kicks off its deck fly sideways into the void here (_kick_body).
 
 var sim: Sim
 var vis: Dictionary
@@ -383,6 +384,14 @@ func _fall_horde(ev: Dictionary) -> void:
 			for b in _spawn_bodies(faction, seat, ev["pts"], n):
 				_relay_body(b[0], b[1], int(ev["relay"]), int(ev["edge"]))
 			return
+		if ev.has("monster"):                             # 0.19.0: a monster kicked them off the deck, sideways
+			var pts: Array = ev["pts"]
+			var along: Vector3 = ((pts[-1] as Vector3) - (pts[0] as Vector3)) * Vector3(1, 0, 1) if pts.size() >= 2 else Vector3.ZERO
+			if along.length() < 0.01:
+				along = _monster_dir(int(ev["monster"]))
+			for b in _spawn_bodies(faction, seat, pts, n):
+				_kick_body(b[0], b[1], along.normalized())
+			return
 		for b in _spawn_bodies(faction, seat, ev["pts"], n):
 			var mi: MeshInstance3D = b[0]
 			var tw := create_tween()
@@ -459,6 +468,40 @@ func _relay_body(mi: MeshInstance3D, p: Vector3, relay: int, edge: int) -> void:
 		mi.position = p + drift * f + Vector3(0, ride - 0.5 * RELAY_G * f * f, 0)
 		mi.rotation = start_rot + spin * f
 		mi.scale = start_scale * (1.0 - 0.3 * clampf(f / 1.2, 0.0, 1.0)), 0.0, dur, dur)
+	tw.tween_callback(mi.queue_free)
+
+
+# MONSTER KICKS (Structures 2.1, 0.19.0): every body a monster meets on its deck is booted off the side -
+# a hard sideways kick (either side), a little up and along, a fast tumble, then the drop into the void.
+const KICK_SIDE := 9.0               # m/s off the deck's side
+const KICK_UP := 5.0                 # m/s up: booted, not pushed
+
+
+func _monster_dir(id: int) -> Vector3:
+	for m in sim.monsters:
+		if int(m["id"]) == id:
+			return (m.get("dir", Vector3.FORWARD) as Vector3) * Vector3(1, 0, 1)
+	return Vector3.FORWARD
+
+
+func _kick_body(mi: MeshInstance3D, p: Vector3, along: Vector3) -> void:
+	var side := along.cross(Vector3.UP).normalized() if along.length() > 0.01 else Vector3.RIGHT
+	if randf() < 0.5:
+		side = -side
+	var vel := side * KICK_SIDE * randf_range(0.75, 1.3) + along * randf_range(1.0, 4.0)
+	var up := KICK_UP * randf_range(0.8, 1.3)
+	var g := 2.0 * (FLING_DROP + up * FLING_TIME) / (FLING_TIME * FLING_TIME)
+	var start_rot := mi.rotation
+	var spin := Vector3(randf_range(-9.0, 9.0), randf_range(-5.0, 5.0), randf_range(-9.0, 9.0))
+	var start_scale := mi.scale
+	mi.position = p
+	var tw := create_tween()
+	tw.tween_interval(randf_range(0.0, 0.08))
+	tw.tween_method(func(t: float):
+		if is_instance_valid(mi):
+			mi.position = p + vel * t + Vector3(0, up * t - 0.5 * g * t * t, 0)
+			mi.rotation = start_rot + spin * t
+			mi.scale = start_scale * (1.0 - 0.3 * t / FLING_TIME), 0.0, FLING_TIME, FLING_TIME)
 	tw.tween_callback(mi.queue_free)
 
 

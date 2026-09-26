@@ -11,9 +11,14 @@ extends Node3D
 ## "laser needs to be made looking good, right now it's still default mode"): a shader beam with a hot
 ## white core and the owner's glow, energy scrolling toward the target, a muzzle flash at the cannon's
 ## top, an impact burst and a flickering scorch where it hits, charge-in and fade-out over the burst.
+## Structures 2.1 (0.19.0): the laser tower fires that beam from its crown's focal orb (the look's emitter,
+## Cosmetics.points); a Machingoon's turret yaws to the line it is shooting (n["shot"]), a goo stream arcs
+## from its muzzle to the target with a splash for every kill, and the T3 / Pepperbox barrel cluster spins
+## up while it fires.
 ## Everything is read from the Sim's state (lines pouring in, sieges, node losses, owners and tiers,
-## cannon bursts), so online guests, who apply the host's snapshots, see the same thing with no extra
-## traffic. One MultiMesh draws every spark; rings, beams and flares are made once per node and reused.
+## laser bursts, machingoon shots), so online guests, who apply the host's snapshots, see the same thing
+## with no extra traffic. One MultiMesh draws every spark; rings, beams and flares are made once per node
+## and reused.
 
 const BEAM_SHADER := preload("res://shaders/beam.gdshader")
 const SPARK_SHADER := preload("res://shaders/spark.gdshader")
@@ -40,6 +45,7 @@ var _frame := 0
 var top_limit := 0.0        # screen y the top bar and its toasts reach (main._on_resized): tier-down lines stay below it
 var _fights := {}           # node id -> {ring, mat, life, heat, rate, best, att, angle, share, frame}
 var _cannons := {}          # node id -> {beam, bmat, muzzle, mmat, hit, hmat, scorch, smat, on, t, fade, to, col}
+var _guns := {}             # node id -> machingoon view state (see _machingoons_step)
 var _tier_owner := {}       # node id -> owner last frame (tier-down detection)
 var _tier_level := {}       # node id -> vat / cannon tier last frame
 var _downs: Array = []      # running tier-downs: {node, t, ghost, ghost_mis, base_y, new, new_y, label, chev, ring, rmat}
@@ -101,6 +107,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 	_gather_fights(dt)
 	_update_fights(dt)
 	_cannons_step(dt, cam)
+	_machingoons_step(dt)
 	_tier_downs(dt, cam)
 	_update_sparks(dt)
 	for n in sim.nodes:                               # remembered for the next frame's tier-down check
@@ -272,8 +279,8 @@ func _clash(spot: Vector3, out: Vector3, att: Color, def: Color, rate: float, dt
 func _cannons_step(dt: float, cam: Camera3D) -> void:
 	for n in sim.nodes:
 		var id: int = n["id"]
-		var firing: bool = n["attachment"] == "cannon" and n["cannon_burst"] > 0.0 and n["owner"] != "" \
-				and not sim.collapsed.get(id, false)
+		var firing: bool = n.get("structure", "laser" if n["attachment"] == "cannon" else "") == "laser" \
+				and n["cannon_burst"] > 0.0 and n["owner"] != "" and not sim.collapsed.get(id, false)
 		if not _cannons.has(id):
 			if not firing:
 				continue
@@ -300,8 +307,8 @@ func _cannons_step(dt: float, cam: Camera3D) -> void:
 			for k in ["beam", "muzzle", "hit", "scorch"]:
 				(c[k] as Node3D).visible = false
 			continue
-		var tier: int = clampi(n["cannon_tier"], 1, 3)
-		var muzzle: Vector3 = n["pos"] + Vector3(0, MUZZLE_Y[tier], 0)
+		var tier := 3                                  # Structures 2.1: one laser tier, the old T3 beam
+		var muzzle: Vector3 = _emitter(n)
 		var to: Vector3 = c["to"]
 		var col: Color = c["col"]
 		var t: float = c["t"]
@@ -386,10 +393,166 @@ func _new_cannon() -> Dictionary:
 	return c
 
 
+func _emitter(n: Dictionary) -> Vector3:
+	## Where the laser beam starts: the look's focal orb (Cosmetics.points "emitter", socket lift added).
+	var entry: Dictionary = vis.get(n["id"], {})
+	var key := str(entry.get("model_key", "Laser"))
+	var pt: Dictionary = Cosmetics.points(key)
+	var base: Vector3 = entry.get("centre", n["pos"])
+	if pt.has("emitter"):
+		return base + (pt["emitter"] as Vector3) + Vector3(0, float(pt.get("lift", 0.0)), 0)
+	return base + Vector3(0, MUZZLE_Y[3], 0)
+
+
+# ------------------------------------------------------------------ machingoon (0.19.0)
+# A continuous goo stream at the nearest enemy line in range (Sim._fire_machingoon writes n["shot"] every
+# step it fires: {"t", "target_horde", "kills", "pos"}). The turret yaws to the target (it idles in a slow
+# sweep when nothing is in range), the stream is a thin goo ribbon plus arcing blobs from the muzzle (the
+# look's muzzles take turns), every whole shown kill splashes at the target, and a spinning barrel cluster
+# (Machingoon T3, the Pepperbox line) spins up while it fires.
+const GUN_HOLD := 0.3                    # s after the last shot the stream still reads as firing (guests' snapshots)
+const GUN_TURN := 9.0                    # turret yaw rate toward its target (1/s, exponential)
+const GUN_SPIN := 26.0                   # rad/s of the barrel cluster at full fire
+const STREAM_T := 0.28                   # s a goo blob flies from the muzzle to the target
+const STREAM_G := 16.0                   # its gravity (the spark MultiMesh's)
+const STREAM_RATE := 38.0                # blobs per second at full fire
+
+
+func _machingoons_step(dt: float) -> void:
+	var seen := {}
+	for n in sim.nodes:
+		var id: int = n["id"]
+		if n.get("structure", "") != "machingoon" or n["build_kind"] != "" or sim.collapsed.get(id, false):
+			continue
+		var entry: Dictionary = vis.get(id, {})
+		var vn = entry.get("vat_node")
+		if not is_instance_valid(vn):
+			continue
+		seen[id] = true
+		var g: Dictionary = _guns.get(id, {})
+		if g.is_empty() or g["vn"] != vn:
+			if not g.is_empty():
+				(g["beam"] as Node3D).queue_free()
+			g = _new_gun(vn as Node3D, str(entry.get("model_key", "")), n["owner"])
+			_guns[id] = g
+		var shot: Dictionary = n.get("shot", {})
+		var firing: bool = not shot.is_empty() and n["owner"] != "" and sim.time - float(shot.get("t", -99.0)) <= GUN_HOLD
+		var turret: Node3D = g["turret"]
+		var root := vn as Node3D
+		var to: Vector3 = (shot.get("pos", Vector3.ZERO) as Vector3) + Vector3(0, 0.7, 0)
+		var want: float = g["yaw"]
+		if firing:
+			var d: Vector3 = root.global_transform.basis.inverse() * (to - root.global_position)
+			if Vector2(d.x, d.z).length() > 0.3:
+				want = atan2(d.x, d.z)
+			g["idle"] = 0.0
+		else:
+			g["idle"] = float(g["idle"]) + dt
+			if float(g["idle"]) > 1.5:                   # nothing in range: a slow watchful sweep
+				want = 0.55 * sin(sim.time * 0.45 + float(id))
+		g["yaw"] = lerp_angle(float(g["yaw"]), want, minf(1.0, dt * GUN_TURN))
+		if turret:
+			turret.rotation.y = g["yaw"]
+		g["spin_v"] = lerpf(float(g["spin_v"]), GUN_SPIN if firing else 0.0, minf(1.0, dt * (4.0 if firing else 1.2)))
+		var sp: Node3D = g["spinner"]
+		if sp:
+			sp.rotation.z += float(g["spin_v"]) * dt
+		var beam: MeshInstance3D = g["beam"]
+		g["power"] = lerpf(float(g["power"]), 1.0 if firing else 0.0, minf(1.0, dt * (12.0 if firing else 6.0)))
+		if float(g["power"]) < 0.02:
+			beam.visible = false
+			continue
+		var muzzles: Array = g["muzzles"]
+		var mi: int = int(sim.time * 9.0) % maxi(muzzles.size(), 1)   # the barrels take turns
+		var local: Vector3 = muzzles[mi] if not muzzles.is_empty() else Vector3(0, 2.6, 2.5)
+		var from: Vector3 = (turret.global_transform if turret else root.global_transform) * local
+		if not firing:
+			to = g["to"]
+		g["to"] = to
+		var col := Rules.seat_color(n["owner"])
+		var goo: Color = col.lerp(Color(0.75, 1.0, 0.55), 0.18)
+		var bmat: ShaderMaterial = g["bmat"]
+		bmat.set_shader_parameter("p0", from)
+		bmat.set_shader_parameter("p1", to)
+		bmat.set_shader_parameter("color", goo)
+		bmat.set_shader_parameter("width", 0.6)
+		bmat.set_shader_parameter("power", 0.85 * float(g["power"]))
+		bmat.set_shader_parameter("seed", float(id) * 3.1)
+		beam.visible = true
+		if not firing:
+			continue
+		var detail := 0.5 if Rules.low_detail else 1.0
+		var vel := (to - from) / STREAM_T + Vector3(0, 0.5 * STREAM_G * STREAM_T, 0)
+		for i in range(_count(STREAM_RATE * detail * dt)):   # the goo arcs out of the barrel
+			var jit := Vector3(randf_range(-1, 1), randf_range(-0.5, 1), randf_range(-1, 1)) * 0.9
+			_spark(from, vel + jit, goo * 1.4, randf_range(0.34, 0.55), STREAM_T * randf_range(0.9, 1.15), STREAM_G)
+		if randf() < dt * 14.0:                          # muzzle spit
+			_spark(from, Vector3.ZERO, goo.lerp(Color.WHITE, 0.35) * 1.5, randf_range(0.7, 1.0), 0.08, 0.0)
+		# a splash for every whole shown kill (the shot's kills are sim units per step)
+		if float(shot.get("t", -1.0)) != float(g["last_t"]):
+			g["last_t"] = float(shot.get("t", -1.0))
+			g["debt"] = float(g["debt"]) + Rules.shown_f(float(shot.get("kills", 0.0)))
+		var victim := _horde_owner(int(shot.get("target_horde", -1)))
+		while float(g["debt"]) >= 1.0:
+			g["debt"] = float(g["debt"]) - 1.0
+			_splash(to, goo, Rules.seat_color(victim) if victim != "" else HOT, detail)
+		if randf() < dt * 20.0:                          # the stream hitting: a small constant spatter
+			var v := Vector3(randf_range(-1, 1), randf_range(0.6, 1.6), randf_range(-1, 1)).normalized() * randf_range(2.0, 4.5)
+			_spark(to, v, goo, randf_range(0.18, 0.3), randf_range(0.25, 0.45), 16.0)
+	for id in _guns.keys():                               # gone (swapped back to a vat, captured and rebuilt, fell)
+		if not seen.has(id):
+			(_guns[id]["beam"] as Node3D).queue_free()
+			_guns.erase(id)
+
+
+func _new_gun(vn: Node3D, key: String, owner: String) -> Dictionary:
+	var turret: Node3D = null
+	for c in vn.find_children("*_Turret", "Node3D", true, false):
+		turret = c
+		break
+	var spinner: Node3D = null
+	if turret is MeshInstance3D:
+		spinner = MapBuilder.split_spinner(turret as MeshInstance3D, key)
+		if spinner:                                      # the split surfaces take the detail and the owner's lights again
+			Mats.apply_detail(vn)
+			MapBuilder.apply_owner([vn], owner)
+	var beam := MeshInstance3D.new()
+	beam.mesh = _strip
+	var bmat := ShaderMaterial.new()
+	bmat.shader = BEAM_SHADER
+	beam.material_override = bmat
+	beam.custom_aabb = _BIG
+	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	beam.visible = false
+	add_child(beam)
+	return {"vn": vn, "turret": turret, "spinner": spinner, "muzzles": Cosmetics.points(key).get("muzzles", []),
+			"yaw": 0.0, "idle": 0.0, "spin_v": 0.0, "power": 0.0, "beam": beam, "bmat": bmat, "to": vn.global_position,
+			"last_t": -1.0, "debt": 0.0}
+
+
+func _horde_owner(hid: int) -> String:
+	for h in sim.hordes:
+		if h["id"] == hid:
+			return h["owner"]
+	return ""
+
+
+func _splash(at: Vector3, goo: Color, victim: Color, detail: float) -> void:
+	## One kill: a goo splat bursting out of the body it hit, in both colours, with a flash.
+	for i in range(int(9 * detail) + 3):
+		var a := randf() * TAU
+		var v := Vector3(cos(a), randf_range(0.7, 1.8), sin(a)).normalized() * randf_range(3.0, 7.5)
+		_spark(at + Vector3(randf_range(-0.3, 0.3), 0, randf_range(-0.3, 0.3)), v, (goo if randf() < 0.55 else victim) * 1.2,
+				randf_range(0.22, 0.4), randf_range(0.35, 0.6), 18.0)
+	_spark(at, Vector3.ZERO, goo.lerp(Color.WHITE, 0.4) * 1.5, randf_range(1.4, 1.9), 0.16, 0.0)
+
+
 # ------------------------------------------------------------------ conquest tier-down
 static func _level(n: Dictionary) -> int:
+	if n.get("structure", "") == "machingoon":         # a Machingoon loses a tier on conquest like a vat
+		return n["tier"]
 	if n["attachment"] == "cannon":
-		return n["cannon_tier"]
+		return 0 if n.has("structure") else n["cannon_tier"]   # the one-tier laser has no tier-down
 	return n["tier"] if Sim.has_vat(n) else 0
 
 
@@ -412,7 +575,7 @@ func before_swap(n: Dictionary, entry: Dictionary) -> void:
 	var old_key: String = entry.get("model_key", "")
 	var ghost: Node3D = null
 	if old_key != "":
-		ghost = MapBuilder.put(world, old_key, entry.get("centre", n["pos"]), Rules.view_yaw)
+		ghost = MapBuilder.put(world, old_key, (entry.get("centre", n["pos"]) as Vector3) + MapBuilder.centre_lift(old_key), Rules.view_yaw)
 		MapBuilder.apply_owner([ghost], was)
 	var mis := []
 	if ghost:

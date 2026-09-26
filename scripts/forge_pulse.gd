@@ -12,6 +12,11 @@ extends Node3D
 ## check, `if ForgePulse.live:`, and multiply in `ForgePulse.boost(seat, pos)`, 0 when nothing plays, so
 ## nothing looks different outside a pulse. Visuals are made once per node and reused; the unit glows
 ## are one MultiMesh refilled from preallocated arrays.
+## FORGE LOST (0.19.0, the sim's "forge_lost" event: the seat no longer holds any completed forge - the
+## +50 % attack and the -20 % damage taken are gone): the same wave runs the other way round in ash and
+## dying-ember red - the forge coughs out falling embers, each structure's flash dims and the model sags
+## instead of pumping, each unit's glow gutters out and the body sinks a little. Detected from the state
+## like the online pulse (every snapshot carries it), so guests see it too.
 
 signal online(seat: String, node_id: int, first: bool)   # main.gd: the toast
 
@@ -30,6 +35,8 @@ const SWELL := 0.3                # a unit's swell at the peak
 const FLASH_Y := 3.4              # m above the platform: the flash over a structure
 const MAX_GLOWS := 1024
 const MAX_PULSES := 4
+const ASH := Color(0.42, 0.13, 0.09)       # forge lost: the glow draining away
+const LOST_SAG := 0.35                     # a lost pulse's hit lowers units / pumps structures down by this share
 
 static var live := false          # a pulse is playing: the views' one check
 static var _me: ForgePulse
@@ -39,6 +46,7 @@ var vis: Dictionary
 var combat: Node3D                 # CombatFx: its spark MultiMesh throws the bursts (untyped: the headless tests load this without the HUD)
 var _pulses: Array = []            # {seat, node, origin, t, reach, col}
 var _forge_owner := {}             # node id -> the seat holding a finished forge there last frame ("" none)
+var _forge_seats := {}             # seat -> node id of one finished forge it held last frame (forge lost)
 var _primed := false
 var _last_time := -1.0
 var _cam: Camera3D
@@ -117,6 +125,7 @@ static func powering(seat: String) -> bool:
 func _boost(seat: String, pos: Vector3, glow: float) -> float:
 	var b := 0.0
 	var col := Color.WHITE
+	var lost := false
 	for p in _pulses:
 		if p["seat"] != seat:
 			continue
@@ -124,12 +133,13 @@ func _boost(seat: String, pos: Vector3, glow: float) -> float:
 		if k > b:
 			b = k
 			col = p["hot"]
+			lost = p.get("lost", false)
 	if b > 0.001 and glow > 0.0 and _gl_n < MAX_GLOWS:
 		_gl_pos[_gl_n] = pos + Vector3(0, glow * 0.3, 0)
-		_gl_col[_gl_n] = Color(col.r, col.g, col.b, minf(1.0, 1.3 * b))
-		_gl_size[_gl_n] = glow * (0.6 + 0.6 * b)
+		_gl_col[_gl_n] = Color(col.r, col.g, col.b, minf(1.0, (0.8 if lost else 1.3) * b))
+		_gl_size[_gl_n] = glow * ((0.9 - 0.4 * b) if lost else (0.6 + 0.6 * b))   # lost: the glow gutters out
 		_gl_n += 1
-	return b
+	return -LOST_SAG * b if lost else b
 
 
 static func _envelope(u: float) -> float:
@@ -186,6 +196,16 @@ func _detect() -> void:
 					first = false
 			_start(now, n, first)
 		_forge_owner[id] = now
+	# forge lost: a seat that held a finished forge last frame holds none now (built over, captured, collapsed)
+	var seats := {}
+	for id in _forge_owner:
+		if _forge_owner[id] != "":
+			seats[_forge_owner[id]] = id
+	if _primed and not jumped:
+		for seat in _forge_seats:
+			if not seats.has(seat):
+				_start_lost(seat, sim.nodes[_forge_seats[seat]])
+	_forge_seats = seats
 	_primed = true
 
 
@@ -218,6 +238,28 @@ func _start(seat: String, n: Dictionary, first: bool) -> void:
 	online.emit(seat, n["id"], first)
 
 
+func _start_lost(seat: String, n: Dictionary) -> void:
+	## The forge bonus is gone: the wave runs out in ash from where the last forge stood.
+	if _pulses.size() >= MAX_PULSES:
+		_pulses.pop_front()
+	var origin: Vector3 = n["pos"]
+	var reach := MIN_REACH
+	for m in sim.nodes:
+		if m["owner"] == seat and not sim.collapsed.get(m["id"], false):
+			reach = maxf(reach, Vector2(m["pos"].x - origin.x, m["pos"].z - origin.z).length())
+	var col := Rules.seat_color(seat)
+	_pulses.append({"seat": seat, "node": n["id"], "origin": origin, "t": 0.0, "reach": reach,
+			"col": col.lerp(ASH, 0.65), "hot": ASH.lerp(FORGE_HOT, 0.25), "lost": true})
+	live = true
+	if combat:                                        # the forge coughs out its last embers, falling
+		var top := origin + Vector3(0, 4.5, 0)
+		for i in range(26 if not Rules.low_detail else 13):
+			var a := randf() * TAU
+			var v := Vector3(cos(a), randf_range(0.2, 0.9), sin(a)).normalized()
+			combat._spark(top + Vector3(randf_range(-1, 1), randf_range(-1.0, 0.5), randf_range(-1, 1)),
+					v * randf_range(2.0, 5.0), (FORGE_HOT if randf() < 0.4 else ASH) * 1.1, randf_range(0.14, 0.3), randf_range(0.8, 1.4), 9.0)
+
+
 func _draw_waves() -> void:
 	for i in range(MAX_PULSES):
 		var w: Dictionary = _waves[i]
@@ -244,8 +286,9 @@ func _draw_waves() -> void:
 		edge.scale = Vector3(size, 1.0, size)
 		var emat: ShaderMaterial = w["emat"]
 		emat.set_shader_parameter("thickness", clampf(0.6 / (size * 0.5), 0.01, 0.2))
-		emat.set_shader_parameter("color", FORGE_HOT)
-		emat.set_shader_parameter("intensity", 1.2 * fade)
+		var lost: bool = p.get("lost", false)
+		emat.set_shader_parameter("color", ASH if lost else FORGE_HOT)
+		emat.set_shader_parameter("intensity", (0.8 if lost else 1.2) * fade)
 		var rsize := maxf(r - 1.6, 0.5) * 2.0 / 0.82
 		ring.visible = fade > 0.0
 		ring.position = origin + Vector3(0, 0.55, 0)
@@ -259,10 +302,10 @@ func _draw_waves() -> void:
 		core.visible = ig > 0.0
 		var up := origin + Vector3(0, 4.5, 0)
 		core.position = up + _to_cam(up) * 2.5
-		core.scale = Vector3.ONE * (9.0 + 10.0 * (1.0 - ig))
+		core.scale = Vector3.ONE * ((9.0 * ig + 2.0) if lost else (9.0 + 10.0 * (1.0 - ig)))   # lost: the flare shrinks away
 		var cmat: ShaderMaterial = w["cmat"]
-		cmat.set_shader_parameter("color", FORGE_HOT.lerp(col, 0.35))
-		cmat.set_shader_parameter("intensity", 1.6 * ig)
+		cmat.set_shader_parameter("color", ASH.lerp(FORGE_HOT, 0.4) if lost else FORGE_HOT.lerp(col, 0.35))
+		cmat.set_shader_parameter("intensity", (0.9 if lost else 1.6) * ig)
 		cmat.set_shader_parameter("spin", t * 1.5)
 
 
@@ -273,6 +316,7 @@ func _draw_structures() -> void:
 		var b := 0.0
 		var u := -1.0
 		var col := Color.WHITE
+		var lost := false
 		if live and n["owner"] != "" and not sim.collapsed.get(id, false):
 			for p in _pulses:
 				if p["seat"] != n["owner"]:
@@ -283,6 +327,7 @@ func _draw_structures() -> void:
 					b = pb
 					u = pu
 					col = p["col"]
+					lost = p.get("lost", false)
 		if u < 0.0 or u >= 1.0:
 			if _nodes.has(id):
 				var v0: Dictionary = _nodes[id]
@@ -293,6 +338,14 @@ func _draw_structures() -> void:
 		var v := _node_fx(id)
 		var entry: Dictionary = vis.get(id, {})
 		var centre: Vector3 = entry.get("centre", n["pos"])
+		if not v["hit"] and lost:                     # forge lost: a few embers drop off the structure
+			v["hit"] = true
+			if combat:
+				var etop := centre + Vector3(0, FLASH_Y, 0)
+				for i in range(6 if not Rules.low_detail else 3):
+					combat._spark(etop + Vector3(randf_range(-1, 1), randf_range(-1.0, 0.3), randf_range(-1, 1)),
+							Vector3(randf_range(-1, 1), randf_range(0.0, 1.0), randf_range(-1, 1)) * 2.0, (ASH if randf() < 0.6 else FORGE_HOT) * 1.1,
+							randf_range(0.12, 0.22), randf_range(0.6, 1.0), 9.0)
 		if not v["hit"]:                              # the wave arrives: sparks off the structure's top
 			v["hit"] = true
 			if combat:
@@ -308,15 +361,15 @@ func _draw_structures() -> void:
 		var model: Node3D = entry.get("vat_node")
 		if is_instance_valid(model):
 			var pump := sin(PI * clampf(u / 0.45, 0.0, 1.0)) - 0.3 * sin(PI * clampf((u - 0.45) / 0.35, 0.0, 1.0))
-			model.scale *= 1.0 + PUMP * pump
+			model.scale *= 1.0 + PUMP * pump * (-LOST_SAG if lost else 1.0)   # lost: it sags instead
 		var flash: MeshInstance3D = v["flash"]
 		flash.visible = b > 0.001
 		var fp := centre + Vector3(0, FLASH_Y, 0)
 		flash.position = fp + _to_cam(fp) * 3.0           # in front of the model, or the model hides it
 		flash.scale = Vector3.ONE * (4.0 + 3.5 * b)
 		var fmat: ShaderMaterial = v["fmat"]
-		fmat.set_shader_parameter("color", FORGE_HOT.lerp(col, 0.3))
-		fmat.set_shader_parameter("intensity", 1.0 * b)
+		fmat.set_shader_parameter("color", ASH.lerp(col, 0.3) if lost else FORGE_HOT.lerp(col, 0.3))
+		fmat.set_shader_parameter("intensity", (0.6 if lost else 1.0) * b)
 		fmat.set_shader_parameter("spin", u * 2.0 + float(id))
 		var ring: MeshInstance3D = v["ring"]          # a ring runs off the platform's rim
 		var rk := clampf(u / 0.7, 0.0, 1.0)
