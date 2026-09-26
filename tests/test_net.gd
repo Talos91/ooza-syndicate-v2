@@ -296,6 +296,7 @@ func _run() -> void:
 	_deliver()
 	check(host.links["g1b"] == gid and not host.is_away(gid) and r2.assigned_id == gid, "RECONNECT: same id, same seat")
 	check(r2.active and r2.match_round == host.match_round, "the reconnected guest receives the running round")
+	check(r2.match_info.get("colours", {}) == host.match_info["colours"] and host.match_info["colours"].size() == 2, "RECONNECT: the round's seat colours come back with it")
 	r2.world_ready(_build_sim(r2.match_info), null)
 	_deliver()
 	check(r2.started, "the reconnected guest joins the running clock")

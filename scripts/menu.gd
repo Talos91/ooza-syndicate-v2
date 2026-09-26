@@ -786,8 +786,13 @@ func _team_button(t: int, colours: Dictionary, pos: Vector2, dims: Vector2) -> v
 		if Net.team_of_slot(sl) == t:
 			first = sl
 			break
-	if first >= 0:
-		b.add_theme_color_override("font_color", Rules.HUES.get(str(colours.get(Net.SEATS[first], "")), Color.WHITE))
+	if first >= 0:                                    # the team's hue as a bar along the button's foot
+		var bar := ColorRect.new()
+		bar.color = Rules.HUES.get(str(colours.get(Net.SEATS[first], "")), Color.WHITE)
+		bar.position = Vector2(14 * K, dims.y - 16 * K)
+		bar.size = Vector2(dims.x - 28 * K, 6 * K)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(bar)
 
 
 func _colour_row(pos: Vector2, dims: Vector2) -> void:
@@ -801,7 +806,8 @@ func _colour_row(pos: Vector2, dims: Vector2) -> void:
 			Net.set_colour(k)
 			show_lobby(), k == mine)
 		b.add_theme_font_size_override("font_size", int(round(14 * K)))
-		b.add_theme_color_override("font_color", Rules.HUES[k])
+		if k != mine:                                 # yours: the kit's selected style, white on the fill
+			b.add_theme_color_override("font_color", Rules.HUES[k])
 		b.disabled = not ok or Net.active
 		var bar := ColorRect.new()                    # the hue itself under the name (dimmed when off)
 		bar.color = Rules.HUES[k] if ok else Color(Rules.HUES[k], 0.25)
