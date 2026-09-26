@@ -345,9 +345,7 @@ func _relays(sim: Sim) -> void:
 		var enemy: float = maxf(now[0], later[0]) if lvl >= 2 else now[0]
 		var own: float = maxf(now[1], later[1])
 		if enemy < 2.0 * Rules.SCALE or own > 0.5:        # never drop its own (or allied) lines
-			continue
-		if n["relay"] == "retract" and n["units"] < enemy * 1.3:
-			continue                                      # it would pull in more than the garrison holds
+			continue                                      # (0.18.7: a retract drops them too, it carries nobody in)
 		sim.fire_relay(n["id"])
 
 
@@ -384,7 +382,7 @@ func _retreats(sim: Sim) -> void:
 		if a.is_empty() or b.is_empty():
 			continue
 		var mine := a if a["owner"] == seat else (b if b["owner"] == seat else {})
-		if mine.is_empty() or mine.get("retreat", false) or mine.has("ride") or mine["state"] == "absorb":
+		if mine.is_empty() or mine.get("retreat", false) or mine["state"] == "absorb":
 			continue                                      # recall() refuses these: try the next fight
 		var theirs := b if mine == a else a
 		if sim.power_of(mine) < 0.4 * sim.power_of(theirs) and mine["units"] > 15.0:

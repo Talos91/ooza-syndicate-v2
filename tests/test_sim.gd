@@ -374,10 +374,11 @@ func _init() -> void:
 	run_until(sim14b, func(): return sim14b.nodes[1]["relay_phase"] == "", 5.0)
 	sim14b.step(0.05)
 	var crossed_late: bool = late in sim14b.hordes and late["route"].has(0) and late["s"] > late_deck["s1"] + 1.0
-	check(sim14b.fall_losses.get("A", 0.0) > 0.0, "a line that walked onto a deck mid-dissolve falls when the motion ends")
+	check(sim14b.fall_losses.get("A", 0.0) > 0.0, "a line that walks onto a dissolving deck falls off its lip")
 	check(not crossed_late, "...and never reaches the far side over the missing deck")
 
-	# retract: troops on the deck are carried into the relay's node (enemies = early assault)
+	# retract (0.18.7, Daniele: "it takes the ground away from under the feet, not pull the unit"): troops
+	# still on the deck when it starts to retract fall; nobody is carried into the relay's node
 	var sim15 := Sim.new()
 	sim15.setup(st_map, st_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
 	sim15.nodes[1]["owner"] = "B"
@@ -388,10 +389,13 @@ func _init() -> void:
 	var deck15: Dictionary = h15["spans"][0]
 	check(sim15.edges[deck15["edge"]]["retracts"], "the first deck of the route is the retracting one")
 	run_until(sim15, func(): return h15["s"] > deck15["s0"] + 4.0, 30.0)
+	h15["speed"] = 0.2                                # still on the deck when the motion starts
+	var b15: float = sim15.nodes[1]["units"]
 	sim15.fire_relay(1)
 	run_until(sim15, func(): return sim15.nodes[1]["relay_phase"] == "", 8.0)
-	check(sim15.nodes[1]["siege"].get("A", 0.0) > 0.0 or sim15.nodes[1]["owner"] == "A",
-			"the retract pulled A's units straight onto B's platform as an early assault")
+	check(sim15.fall_losses.get("A", 0.0) > 0.0 and sim15.nodes[1]["siege"].is_empty() and sim15.nodes[1]["owner"] == "B"
+			and sim15.nodes[1]["units"] <= b15 + 0.01, "the retract dropped A's units into the void - none landed on B's platform (fell %.0f)" % sim15.fall_losses.get("A", 0.0))
+	check(not sim15.events.any(func(e): return e["type"] == "carried"), "nothing is carried in")
 	check(not sim15.is_edge_open(deck15["edge"]), "the retracted deck is gone until fired again")
 
 	# rotation (Switchback Foundry; Daniele, 0.18.3: "when a rotating bridge turns all units that are on
@@ -423,8 +427,8 @@ func _init() -> void:
 	check(fl16.size() == 1 and fl16[0]["node"] == 0 and fl16[0]["seat"] == "A" and fl16[0]["units"] == Rules.shown(a16),
 			"one fling fx for the HUD: node, owner of the flung units, shown units (%s)" % str(fl16.map(func(e): return [e["node"], e["seat"], e["units"]])))
 	check(not sim16.fx_events.any(func(e): return e["type"] == "fall"), "flung, not the plain fall visual")
-	check(sim16.events.any(func(e): return e["type"] == "fall" and e.get("why", "") == "fling"), "the fall event is recorded (no combat credit)")
-	check(not sim16.hordes.any(func(x): return x.has("ride")), "nobody rides a rotation")
+	check(sim16.events.any(func(e): return e["type"] == "fall" and e.get("why", "") == "relay"), "the fall event is recorded (no combat credit)")
+	check(not sim16.hordes.any(func(x): return x.has("ride")), "nobody rides a deck")
 	run_until(sim16, func(): return sim16.nodes[0]["relay_phase"] == "", 5.0)
 	check(sim16.nodes[0]["relay_phase"] == "" and sim16.nodes[0]["relay_cd"] > 0.0, "the turn ends and the cooldown runs as before")
 	# an enemy line partly on the deck loses only the part on it; the rest is behind a deck that is gone
@@ -448,10 +452,11 @@ func _init() -> void:
 	check(absf(lost16b - on16b) < 0.5 * on16b + 1.0, "the enemy loses the part on the deck (%.1f, expected about %.1f of %.1f)" % [lost16b, on16b, b16])
 	check(lost16b < b16 - 1.0 and (h16b in sim16b.hordes or sim16b.nodes[1]["units"] > 0.0), "the rest survives behind the deck")
 	check(sim16b.fx_events.filter(func(e): return e["type"] == "fling" and e["seat"] == "B").size() == 1, "one fling fx for B's line")
-	# the relay kinds that do not turn keep their fate: switch falls (plain fall fx), retract carries
+	# the relay kinds that do not turn drop their troops straight down (plain fall fx), no fling
 	check(sim14.fx_events.any(func(e): return e["type"] == "fall") and not sim14.fx_events.any(func(e): return e["type"] == "fling"),
 			"a switch deck still drops its troops with the plain fall")
-	check(not sim15.fx_events.any(func(e): return e["type"] == "fling"), "a retract still carries, nobody is flung")
+	check(sim15.fx_events.any(func(e): return e["type"] == "fall" and e.get("relay", -1) == 1) and not sim15.fx_events.any(func(e): return e["type"] == "fling"),
+			"a retract drops its troops with the plain fall (the HUD toast names the relay), nobody is flung")
 	# AI: a rotation is lethal now - it fires for the kill, never with its own line on the deck
 	var sim16c := Sim.new()
 	sim16c.setup(rot_map, rot_pos, {7: "A", 10: "B"}, {"A": "null", "B": "ember"}, 1)
@@ -955,8 +960,8 @@ func _init() -> void:
 	for x in sw.events:
 		if x["type"] == "carried" and x["seat"] == "A":
 			carried_w += x["units"]
-	check(fired and not sw.is_edge_open(ew) and cut_ev.is_empty() and fell > 350.0 and carried_w + fell > 590.0,
-			"a retracted deck under an order: riders carried in, the vat keeps sending and the rest pours into the void (carried %.0f + fell %.0f of 600)" % [carried_w, fell])
+	check(fired and not sw.is_edge_open(ew) and cut_ev.is_empty() and carried_w == 0.0 and fell > 590.0,
+			"a retracted deck under an order: nobody carried in, the vat keeps sending and every unit pours into the void (fell %.0f of 600)" % fell)
 	var pour_evs := 0
 	var chunk_evs := 0
 	for x in sw.fx_events:
@@ -1039,5 +1044,120 @@ func _init() -> void:
 		check(not kt._hit_head(ct, lh) and lh["units"] < lu0 and absf(lh["s"] - ls0) < 0.001,
 				"%s: a line leaving the tower is hit at its tail (head stays at %.1f m, %.1f -> %.1f units)" % [mode_k, ls0, lu0, lh["units"]])
 	Rules.bridge_combat = true
+
+	# ---------------------------------------------------------------- 0.18.7: relays take the ground away
+	# (Daniele: "units on the bridge have 1 sec to clear the bridge then bye bye, this applies to all type of
+	# switch including the retract ... rotation bridge when it starts moving, all on it falls") - both modes
+	for brawl_r in [true, false]:
+		Rules.bridge_combat = not brawl_r
+		var mode_r: String = "BRAWL" if brawl_r else "SIEGE"
+		for c in [["retract", "res://maps4/M-08-neon-delta.json", 7, 1, 7], ["remote", "res://maps4/M-08-neon-delta.json", 4, 6, 7],
+				["switch", "res://maps/010-first-switch.json", 1, 5, 0], ["rotation", "res://maps/061-switchback-foundry.json", 0, 1, 0]]:
+			var kind: String = c[0]
+			var what := "%s %s" % [mode_r, kind]
+			# a short line wholly on the deck at the warning, near enough its far pier to clear it in 1 s: safe
+			var rs := _relay_sim(c[1], c[2], c[3])
+			rs.nodes[c[3]]["units"] = 12.0
+			var hs: Dictionary = rs.send(c[3], c[4], 1.0)
+			var dk: Dictionary = _relay_deck(rs, hs, c[2])
+			var reach: float = Rules.move_speed() * Rules.RELAY_WARNING * 0.75
+			run_until(rs, func(): return not (hs in rs.hordes) or (not hs["streaming"] and hs["s"] - Sim.chain_length(hs) > dk["s0"]
+					and hs["s"] - Sim.chain_length(hs) > dk["s1"] - reach), 30.0, 0.02)
+			var whole: bool = hs in rs.hordes and hs["s"] < dk["s1"] and hs["s"] - Sim.chain_length(hs) > dk["s0"]
+			var fired_r: bool = rs.fire_relay(c[2])
+			run_until(rs, func(): return rs.nodes[c[2]]["relay_phase"] == "moving", 3.0, 0.02)
+			rs.step(0.02)
+			check(whole and fired_r and rs.fall_losses.get("A", 0.0) == 0.0,
+					"%s: a line on the deck at the warning that clears it within %.0f s is safe (fell %.1f)" % [what, Rules.RELAY_WARNING, rs.fall_losses.get("A", 0.0)])
+			# a long line still on the deck when the motion starts: that part falls at once, the rest pours off the lip
+			var rl := _relay_sim(c[1], c[2], c[3])
+			rl.nodes[c[3]]["units"] = 400.0
+			var hl: Dictionary = rl.send(c[3], c[4], 1.0)
+			var dl: Dictionary = _relay_deck(rl, hl, c[2])
+			run_until(rl, func(): return hl["s"] > dl["s0"] + 1.0, 30.0, 0.02)
+			hl["speed"] = 0.05                             # its head stays on the deck through the warning
+			rl.fire_relay(c[2])
+			var carried0: float = rl.nodes[c[2]]["units"]
+			run_until(rl, func(): return rl.nodes[c[2]]["relay_phase"] == "moving", 3.0, 0.02)
+			rl.step(0.02)
+			var fell_tick: float = rl.fall_losses.get("A", 0.0)
+			check(fell_tick > 0.0 and not hl.has("ride") and hl in rl.hordes and absf(hl["s"] - dl["s0"]) < 0.05 and hl.get("pour", false),
+					"%s: the line on the deck at the motion's start falls at once (%.0f units), its head parked at the lip, nobody riding" % [what, fell_tick])
+			hl["speed"] = 1.0
+			for i in range(40):
+				rl.step(0.05)
+			check(rl.fall_losses.get("A", 0.0) > fell_tick + 20.0 and not rl.events.any(func(e): return e["type"] == "order_cut"),
+					"%s: the rest of the order keeps coming and pours off the lip (%.0f -> %.0f)" % [what, fell_tick, rl.fall_losses.get("A", 0.0)])
+			check(not rl.events.any(func(e): return e["type"] == "carried") and rl.nodes[c[2]]["siege"].is_empty()
+					and (kind != "retract" or rl.nodes[c[2]]["units"] <= carried0 + 0.01),
+					"%s: nothing is carried into the relay's node" % what)
+			# a line straddling the deck when it goes: the front past the far pier made it and walks on as its
+			# own line, the part behind pours off the lip, nothing walks over the gap
+			var rm := _relay_sim(c[1], c[2], c[3])
+			rm.nodes[c[3]]["units"] = 400.0
+			var hm: Dictionary = rm.send(c[3], c[4], 1.0)
+			var dm: Dictionary = _relay_deck(rm, hm, c[2])
+			run_until(rm, func(): return hm["s"] > dm["s1"] + 1.5, 30.0, 0.02)
+			rm.fire_relay(c[2])
+			rm.nodes[c[2]]["relay_t"] = 0.0
+			rm.step(0.02)
+			var fronts := rm.hordes.filter(func(x): return x["owner"] == "A" and x["id"] != hm["id"])
+			var front_ok: bool = fronts.size() == 1 and not fronts[0]["streaming"] and fronts[0]["s"] - Sim.chain_length(fronts[0]) >= dm["s1"] - 0.05
+			check(front_ok and hm in rm.hordes and absf(hm["s"] - dm["s0"]) < Rules.move_speed() * 0.03 and hm["streaming"],
+					"%s: a line straddling the deck splits - the front past the far pier walks on, the rest waits at the lip" % what)
+			if front_ok:
+				var fr: Dictionary = fronts[0]
+				run_until(rm, func(): return not (fr in rm.hordes), 15.0, 0.05)
+				check(not (fr in rm.hordes), "%s: ...and the front reaches its target" % what)
+		# an appearing deck is walkable only once the motion ends (switch s2, remote on, retract out again)
+		for c in [["switch", "res://maps/010-first-switch.json", 1], ["remote", "res://maps4/M-08-neon-delta.json", 4],
+				["retract", "res://maps4/M-08-neon-delta.json", 7]]:
+			var ra := _relay_sim(c[1], c[2], -1)
+			if c[0] != "switch":                           # first take the deck away, then bring it back
+				ra.fire_relay(c[2])
+				run_until(ra, func(): return ra.nodes[c[2]]["relay_phase"] == "" and ra.nodes[c[2]]["relay_cd"] <= 0.0, 20.0, 0.1)
+			var opening := []
+			for i in ra.controlled_edges(c[2]):
+				if not ra.is_edge_open(i) and ra._edge_open_at(i, ra.relay_next_index(ra.nodes[c[2]])):
+					opening.append(i)
+			ra.fire_relay(c[2])
+			run_until(ra, func(): return ra.nodes[c[2]]["relay_phase"] == "moving", 3.0, 0.02)
+			var closed_mid: bool = not opening.is_empty()
+			for i in opening:
+				var e: Dictionary = ra.edges[i]
+				closed_mid = closed_mid and not ra.is_edge_open(i) and not (ra.find_route(e["a"], e["b"]) == [e["a"], e["b"]])
+			run_until(ra, func(): return ra.nodes[c[2]]["relay_phase"] == "", 3.0, 0.02)
+			var open_end: bool = opening.all(func(i): return ra.is_edge_open(i))
+			check(closed_mid and open_end, "%s %s: an appearing deck is closed while it moves, walkable once the motion ends (%d decks)" % [mode_r, c[0], opening.size()])
+	Rules.bridge_combat = false
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
+
+
+
+func _relay_sim(path: String, relay: int, src: int) -> Sim:
+	## 0.18.7 relay tests: a map with A holding the relay (and the source); every other seat stays home.
+	var m := MapBuilder.load_map(path)
+	var seats := {}
+	for st in m["seats"]["1v1"]:
+		seats[int(st["node"])] = st["seat"]
+	var sim := Sim.new()
+	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, 1)
+	sim.nodes[relay]["owner"] = "A"
+	if src >= 0:
+		sim.nodes[src]["owner"] = "A"
+	return sim
+
+
+func _relay_deck(sim: Sim, h: Dictionary, relay: int) -> Dictionary:
+	## The span of the horde's route on a deck this relay fires.
+	for sp in h["spans"]:
+		if sp["edge"] in sim.controlled_edges(relay):
+			return sp
+	return {"s0": INF, "s1": INF, "edge": -1}
+
+
+func _on_deck(h: Dictionary, sp: Dictionary) -> float:
+	var head: float = h["s"]
+	var tail: float = head - Sim.chain_length(h)
+	return maxf(0.0, minf(head, sp["s1"]) - maxf(tail, sp["s0"])) / maxf(Sim.chain_length(h), 0.001)

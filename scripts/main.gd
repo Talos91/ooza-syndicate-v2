@@ -779,6 +779,12 @@ func _process(delta: float) -> void:
 				var flung := int(ev["units"])
 				if flung > 0:                         # a sliver under half a shown unit still counts, but gets no toast
 					hud.toast("%d unit%s flung off the turning deck" % [flung, "" if flung == 1 else "s"], "warn" if ours else "good")
+			"fall":                                   # 0.18.7: a retract / switch / remote took the deck from under a line
+				if ev.has("relay") and int(ev.get("shown", 0)) > 0:
+					var fell := int(ev["shown"])
+					var kind := str(sim.nodes[int(ev["relay"])]["relay"])
+					var what: String = {"retract": "the retracting deck", "switch": "the switched deck", "remote": "the switched-off deck"}.get(kind, "the deck")
+					hud.toast("%d unit%s fell with %s" % [fell, "" if fell == 1 else "s", what], "warn" if sim.allied(str(ev["seat"]), HUMAN) else "good")
 	sim.fx_events.clear()
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from

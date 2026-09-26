@@ -374,6 +374,10 @@ func _fall_horde(ev: Dictionary) -> void:
 		var debt: float = _fall_debt.get(seat, 0.0) + Rules.shown_f(float(ev.get("units", 0.0)))
 		var n := mini(int(debt), FLING_MAX_BODIES)
 		_fall_debt[seat] = debt - int(debt)
+		if ev.has("relay") and int(ev.get("edge", -1)) >= 0:
+			for b in _spawn_bodies(faction, seat, ev["pts"], n):
+				_relay_body(b[0], b[1], int(ev["relay"]), int(ev["edge"]))
+			return
 		for b in _spawn_bodies(faction, seat, ev["pts"], n):
 			var mi: MeshInstance3D = b[0]
 			var tw := create_tween()
@@ -411,6 +415,59 @@ func _fall_horde(ev: Dictionary) -> void:
 		drops.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 		drops.emission_sphere_radius = 1.2
 	add_child(drops)
+
+
+# RELAYS TAKE THE GROUND AWAY (Daniele, 0.18.7: "it takes the ground away from under the feet, not pull
+# the unit"): the sim drops every body on a going deck the moment its motion starts; the view lets each
+# BRAWL body stand until the ground under it has gone - a retracting deck slides out from under it, far
+# end first; a dissolving switch / remote deck sinks and thins, carrying it down a moment - then it drops
+# straight down with a tumble. Nobody is pulled toward the relay. (A turning deck flings: _fling_horde.)
+const RELAY_G := 30.0                # m/s2 once the ground is gone (the fall is as deep as FLING_DROP)
+
+
+func _relay_body(mi: MeshInstance3D, p: Vector3, relay: int, edge: int) -> void:
+	var n: Dictionary = sim.nodes[relay]
+	var t0 := randf_range(0.08, 0.3)                  # a dissolving deck crumbles under them a beat apart
+	if n["relay"] == "retract":                       # uncovered when the deck's far end has slid past it
+		var line: Array = sim.deck_line(edge)
+		var far: int = sim._other_end(edge, relay)
+		var far_end: Vector3 = line[0] if sim.edges[edge]["a"] == far else line[-1]
+		var dir: Vector3 = ((n["pos"] as Vector3) - (sim.nodes[far]["pos"] as Vector3)) * Vector3(1, 0, 1)
+		dir = dir.normalized()
+		var len: float = sim.edges[edge]["modules"] * Rules.S       # the slide _relay_motion plays
+		var v := clampf(((p - far_end) * Vector3(1, 0, 1)).dot(dir) / maxf(len, 0.01), 0.0, 1.0)
+		t0 = Rules.RELAY_MOVE * _unsmooth(v) + 0.04
+	var sinks: bool = n["relay"] != "retract"
+	var spin := Vector3(randf_range(-4.0, 4.0), randf_range(-1.5, 1.5), randf_range(-4.0, 4.0))
+	var drift := Vector3(randf_range(-0.6, 0.6), 0.0, randf_range(-0.6, 0.6))
+	var start_rot := mi.rotation
+	var start_scale := mi.scale
+	var dur := t0 + sqrt(2.0 * FLING_DROP / RELAY_G)
+	mi.position = p
+	var tw := create_tween()
+	tw.tween_method(func(t: float):
+		if not is_instance_valid(mi):
+			return
+		var k := smoothstep(0.0, 1.0, minf(t, t0) / Rules.RELAY_MOVE)
+		var ride := -6.0 * k * k if sinks else 0.0      # on the sinking deck (Fx._relay_motion's dissolve)
+		var f := maxf(t - t0, 0.0)
+		mi.position = p + drift * f + Vector3(0, ride - 0.5 * RELAY_G * f * f, 0)
+		mi.rotation = start_rot + spin * f
+		mi.scale = start_scale * (1.0 - 0.3 * clampf(f / 1.2, 0.0, 1.0)), 0.0, dur, dur)
+	tw.tween_callback(mi.queue_free)
+
+
+static func _unsmooth(v: float) -> float:
+	## The u with smoothstep(0, 1, u) == v (the deck's eased slide), by bisection.
+	var lo := 0.0
+	var hi := 1.0
+	for i in range(14):
+		var m := (lo + hi) * 0.5
+		if m * m * (3.0 - 2.0 * m) < v:
+			lo = m
+		else:
+			hi = m
+	return (lo + hi) * 0.5
 
 
 # Rotation relays (Daniele, 0.18.3: "when a rotating bridge turns all units that are on it are shaken

@@ -140,13 +140,15 @@ static var debug_tools: bool = false
 const CONTACT_R := 2.1               # metres: about one deck width across, one patch along
 const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
 
-# RELAYS (GAME-RULES sec8): player-fired; 3 s warning previews the outcome, then the authoritative
-# tick applies the per-kind troop fate over RELAY_MOVE seconds of visible motion (rotation pivots and
-# flings every line on its turning decks into the void, retract slides in, switch/remote dissolve),
-# then RELAY_COOLDOWN before the next fire.
+# RELAYS (GAME-RULES sec8): player-fired; the warning previews the outcome (the deck is still there and
+# walkable: lines on it have RELAY_WARNING s to clear it), then the authoritative tick takes the going
+# decks away at once - every body still on one falls, whatever the kind (Daniele, 0.18.7: "no bridge =
+# bridge down") - while RELAY_MOVE seconds of visible motion play (rotation pivots and flings, retract
+# slides in, switch/remote dissolve); an appearing deck is walkable once its motion ends; then
+# RELAY_COOLDOWN before the next fire.
 const RELAY_WARNING := 1.0          # Daniele (0.18.6): "bridge alert ... just 1 sec" (was 3 s)
 const RELAY_COOLDOWN := 5.0        # Daniele (Alpha 13 playtest): "relay cooldown I'd set at 5 s"
-const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves; retract/switch/remote riders ride, a rotation flings
+const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves (its troops fell when it started)
 
 # LAST STAND (GAME-RULES sec10; Daniele 2026-09-25: 2:00 "seems ok" for now, not 3:00). The method
 # (inward / outward / chaos, from the map's eligible list) is hidden until the start, then the
