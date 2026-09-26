@@ -534,13 +534,13 @@ func _run() -> void:
 	_open_room("1v1")
 	var bq := _join("g1")
 	_deliver()
-	Rules.apply_balance("b187")
+	Rules.apply_balance("legacy")
 	host.map_path = "res://maps/004-two-piers.json"
 	host.start_match()
-	check(host.match_info["rules"].get("balance_preset", "") == "b187", "the launch carries the host's balance preset")
+	check(host.match_info["rules"].get("balance_preset", "") == "legacy", "the launch carries the host's balance preset")
 	Rules.apply_balance("")                          # what the guest had on its own
 	_deliver()
-	check(bq.active and Rules.BALANCE_PRESET == "b187" and Rules.NEUTRAL_UNITS[1] == Rules.BALANCE_PRESETS["b187"]["NEUTRAL_UNITS"][1],
+	check(bq.active and Rules.BALANCE_PRESET == "legacy" and Rules.NEUTRAL_UNITS[1] == Rules.BALANCE_PRESETS["legacy"]["NEUTRAL_UNITS"][1],
 			"the guest plays the host's balance numbers")
 	Rules.apply_balance("")
 

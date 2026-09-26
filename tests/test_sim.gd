@@ -305,6 +305,7 @@ func _init() -> void:
 	var sim16d := Sim.new()
 	sim16d.setup(rot_map, rot_pos, {7: "A", 10: "B"}, {"A": "null", "B": "ember"}, 1)
 	sim16d.nodes[0]["owner"] = "A"
+	sim16d.nodes[0]["units"] = 30.0                     # pinned (0.18.9): fewer and the AI defends node 0 across the deck, more (the new neutral 60) and it attacks from it - either own order blocks the fire
 	sim16d.nodes[1]["owner"] = "A"
 	sim16d.nodes[1]["units"] = 12.0
 	sim16d.nodes[4]["owner"] = "B"
@@ -448,9 +449,9 @@ func _init() -> void:
 	check(tv < tn, "a VEX horde arrives before a NULL one on the same deck (%.2f vs %.2f s)" % [tv, tn])
 	var sim26 := Sim.new()
 	sim26.setup(map, pos, {3: "A", 4: "B"}, {"A": "bloom", "B": "ember"}, 1)
-	check(absf(sim26.production(sim26.nodes[3]) - Rules.PROD[2] * 1.15) < 0.001, "Bloom's home produces 15 % more")
+	check(absf(sim26.production(sim26.nodes[3]) - Rules.PROD[2] * 1.10) < 0.001, "Bloom's home produces 10 % more (0.18.9: was 15 %)")
 	check(absf(sim26.production(sim26.nodes[4]) - Rules.PROD[2] * 0.9) < 0.001, "Ember's home produces 10 % less")
-	check(absf(sim26.attack_of("B") - 1.15) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 15 % more damage")
+	check(absf(sim26.attack_of("B") - 1.10) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 10 % more damage (0.18.9: was 15 %)")
 
 	# CLASSIC = Alpha 11's landing rule: each arriving unit is resolved at once, one-for-one at
 	# baseline; nothing waits outside as a siege; survivors take the node
@@ -914,17 +915,17 @@ func _init() -> void:
 		_siege_tests(map, pos)
 
 	# ---------------------------------------------------------------- 0.18.7: balance presets (off by default)
-	check(Rules.BALANCE_PRESET == "" and Rules.VAT_COST == {1: 50, 2: 100, 3: 150} and Rules.NEUTRAL_UNITS == {1: 30, 2: 60, 3: 120, 4: 200}
+	check(Rules.BALANCE_PRESET == "" and Rules.VAT_COST == {1: 50, 2: 100, 3: 150} and Rules.NEUTRAL_UNITS == {1: 60, 2: 80, 3: 160, 4: 320}
 			and Rules.CAPS == {1: 150, 2: 200, 3: 400, 4: 800} and Rules.BUILD_SECONDS == 10.0,
 			"the default game runs the default numbers (no balance preset)")
 	var base_vals := {}
 	for k in Rules.BALANCE_KEYS:
 		base_vals[k] = Rules._balance_get(k)
-	Rules.apply_balance("b187")
-	var preset_ok: bool = Rules.BALANCE_PRESET == "b187"
-	for k in Rules.BALANCE_PRESETS["b187"]:
-		preset_ok = preset_ok and Rules._balance_get(k) == Rules._balance_merge(base_vals[k], Rules.BALANCE_PRESETS["b187"][k])
-	check(preset_ok and not Rules.BALANCE_PRESETS["b187"].is_empty(), "the b187 preset applies its numbers")
+	Rules.apply_balance("legacy")
+	var preset_ok: bool = Rules.BALANCE_PRESET == "legacy"
+	for k in Rules.BALANCE_PRESETS["legacy"]:
+		preset_ok = preset_ok and Rules._balance_get(k) == Rules._balance_merge(base_vals[k], Rules.BALANCE_PRESETS["legacy"][k])
+	check(preset_ok and not Rules.BALANCE_PRESETS["legacy"].is_empty(), "the legacy preset applies its numbers")
 	Rules.apply_balance("")
 	var back_ok: bool = Rules.BALANCE_PRESET == ""
 	for k in Rules.BALANCE_KEYS:

@@ -1115,17 +1115,17 @@ func _build_debug() -> void:
 		Rules.low_detail = not Rules.low_detail
 		low_text.call())
 	box.add_child(low)
-	# BALANCE PRESET (0.18.7 balance study): the default numbers or a proposal (Rules.BALANCE_PRESETS), live;
+	# BALANCE PRESET: the default numbers (Daniele's 0.18.9 pick) or the pre-0.18.9 "legacy" numbers (Rules.BALANCE_PRESETS), live;
 	# online it is the host's room setting (it travels with the room's rules)
 	var bal := button("", Callable(), 0, 44, 18)
-	var bal_text := func(): bal.text = "Balance: %s" % ("DEFAULT" if Rules.BALANCE_PRESET == "" else Rules.BALANCE_PRESET.to_upper() + " (proposal)")
+	var bal_text := func(): bal.text = "Balance: %s" % ("DEFAULT" if Rules.BALANCE_PRESET == "" else Rules.BALANCE_PRESET.to_upper() + " (pre-0.18.9 numbers)")
 	bal_text.call()
 	bal.pressed.connect(func():
 		var names: Array = [""] + Rules.BALANCE_PRESETS.keys()
 		Rules.apply_balance(names[(names.find(Rules.BALANCE_PRESET) + 1) % names.size()])
 		forge.value = Rules.forge_bonus * 100.0
 		bal_text.call()
-		toast("Balance: %s" % ("default numbers" if Rules.BALANCE_PRESET == "" else Rules.BALANCE_PRESET + " - a proposal, not approved") + "; neutral garrisons change from the next match"))
+		toast("Balance: %s" % ("default numbers" if Rules.BALANCE_PRESET == "" else Rules.BALANCE_PRESET + " - the pre-0.18.9 numbers, for comparison") + "; neutral garrisons change from the next match"))
 	bal.disabled = main.online
 	box.add_child(bal)
 	var reset := button("Reset to rules", func():

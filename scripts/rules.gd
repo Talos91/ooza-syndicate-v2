@@ -220,7 +220,7 @@ static var CANNON_BURST := 2.0
 const FORGE_BONUS_DEFAULT := 0.5
 static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable
 static var HOME_UNITS := 80
-static var NEUTRAL_UNITS := {1: 30, 2: 60, 3: 120, 4: 200}
+static var NEUTRAL_UNITS := {1: 60, 2: 80, 3: 160, 4: 320}   # 12/16/32/64 shown (Daniele, 0.18.9: "ok on garrison"; was 6/12/24/40)
 
 # frontline combat - PROVISIONAL: each side loses BASE + K * enemy units per second
 static var FIGHT_RATE_BASE := 12.0
@@ -252,8 +252,8 @@ const FACTIONS := {
 static var FACTION_STATS := {
 	"vex": {"speed": 1.15, "garrison": 0.90},
 	"null": {},
-	"bloom": {"speed": 0.90, "production": 1.15},
-	"ember": {"attack": 1.15, "production": 0.90},
+	"bloom": {"speed": 0.90, "production": 1.10},   # 1.15 -> 1.10 (Daniele, 0.18.9 balance)
+	"ember": {"attack": 1.10, "production": 0.90},   # 1.15 -> 1.10 (Daniele, 0.18.9 balance)
 	"solar": {"health": 1.10, "garrison": 1.05, "speed": 0.90, "production": 0.90},
 }
 
@@ -265,13 +265,13 @@ const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS
 		"FORGE_COST", "BUILD_SECONDS", "SWAP_COOLDOWN", "CANNON_RANGE", "CANNON_STATS", "CANNON_BURST",
 		"FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS", "forge_bonus"]
 const BALANCE_PRESETS := {
-	# b187 - the 0.18.7 proposal, measured on BRAWL (the main mode) with tests/balance_probe.gd:
-	# neutrals hold 12/16/32/64 shown (was 6/12/24/40: 40 % of their tier's cap, Alpha 11 held half) so a
-	# vat-upgrade opening and a neutral-grab opening win about as often (50 / 48 %, was 37 / 33 %);
-	# Ember, Bloom and Vex back within ~5 % of NULL (Ember was 67 %).
-	"b187": {
-		"NEUTRAL_UNITS": {1: 60, 2: 80, 3: 160, 4: 320},
-		"FACTION_STATS": {"ember": {"attack": 1.07}, "bloom": {"production": 1.05}, "vex": {"garrison": 0.95}},
+	# The 0.18.7 balance study (tests/balance_probe.gd, BRAWL) proposed b187: neutrals 12/16/32/64 shown, Ember
+	# attack 1.07, Bloom production 1.05, Vex garrison 0.95. Daniele (0.18.9) took the neutrals, set Ember and
+	# Bloom to 1.10 and kept Vex - those are the defaults above now. "legacy" restores the pre-0.18.9 numbers
+	# for comparison (Debug: Balance DEFAULT / LEGACY).
+	"legacy": {
+		"NEUTRAL_UNITS": {1: 30, 2: 60, 3: 120, 4: 200},
+		"FACTION_STATS": {"ember": {"attack": 1.15}, "bloom": {"production": 1.15}},
 	},
 }
 static var BALANCE_PRESET := ""
