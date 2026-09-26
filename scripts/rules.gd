@@ -194,6 +194,17 @@ const LAST_STAND_WAVE_MAX := 30.0
 const LAST_STAND_DROP_GAP := 5.0
 const MATCH_HARD_END := 420.0        # 7:00 safety net: still undecided -> stronger seat wins outright
 
+# VERY LAST STAND (Daniele, 0.18.9: "Very Last Stand: at 6 every 10 sec a node with 2 or 1
+# connection falls randomly until only 1 node is left"; a stalemate breaker for whatever the ring
+# Last Stand left standing, which used to stall matches to the 7:00 hard end (26% of Standard AI
+# matches). Follow-up: "whatever the number of nodes left, they drop one by one in the same time
+# span until one is left at 7; the time between falls is due to the number of nodes" - so the
+# interval is derived at 6:00 from how many platforms survive (Sim.very_last_stand_gap), not a fixed
+# number: it spreads the drops evenly so the last one lands exactly at MATCH_HARD_END. Tweak only
+# this start time for a shorter/longer window (Daniele: "only tweak if we want them to be 1 min or
+# 1.5 min").
+const VERY_LAST_STAND_TIME := 360.0
+
 # economy - Alpha 11 logic x SCALE (Daniele, Alpha 12: "start from the logic of Alpha 11... upgrades
 # are free" - they are not any more). Alpha 11: caps 30/40/80/160, upgrades 10/20/30 units paid from
 # the vat, cannon tiers 15/25/35, forge 20 (single tier here), 5 s builds (10 s here: PARAMETERS).

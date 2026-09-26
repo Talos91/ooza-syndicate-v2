@@ -12,6 +12,10 @@ extends Node3D
 ##   --brawl (alias --classic)              no-op: BRAWL is the only mode since 0.18.7 (SIEGE deactivated)
 ##   --seed=N                               deterministic Last Stand method / chaos order
 ##   --shots=4,12,25 --out=<dir>            save screenshots at those match times, then quit
+##   --ff=350                               step the sim headless-fast (no rendering) to this match
+##                                           time before playing on at 1x - for rendering a late-match
+##                                           moment (Last Stand, Very Last Stand) without sitting
+##                                           through real time; combine with --shots for a contact sheet
 ##   --perf                                 print frame timing every 3 s
 ##   --window=2340x1080                      size the window like a phone (landscape) for testing
 ##   --mobile                               force the phone quality profile on desktop
@@ -72,6 +76,7 @@ var trace: Array = []
 var _trace_t := 0.0
 var shots: Array = []
 var shot_dir := ""
+var ff_to := -1.0        # --ff=<seconds>: step the sim headless-fast to this match time before playing on
 var demo := false
 var ai_level := "Standard"
 var seed_value := -1
@@ -139,6 +144,8 @@ func _ready() -> void:
 				shots.append(float(t))
 		elif arg.begins_with("--out="):
 			shot_dir = arg.substr(6)
+		elif arg.begins_with("--ff="):
+			ff_to = float(arg.substr(5))
 		elif arg.begins_with("--window="):
 			var wh := arg.substr(9).split("x")
 			window_size = Vector2i(int(wh[0]), int(wh[1]))
@@ -272,6 +279,14 @@ func _start_map(path: String) -> void:
 	for seat in seats.values():
 		if (seat != HUMAN or demo) and scenario == "" and not online:
 			ais.append(SeatAI.new(seat, 2.5, ai_level))
+	if ff_to > 0.0 and not online and scenario == "":
+		var ff_dt := 0.1                                # coarser than real frames (~0.05): still exact,
+		while sim.time < ff_to and not sim.over:         # much faster - only the end state is rendered
+			for ai in ais:
+				ai.think(sim, ff_dt)
+			sim.step(ff_dt)
+		sim.fx_events.clear()                           # the fast-forwarded bursts are stale by now
+		print("fast-forwarded to t=%.1f%s" % [sim.time, " (match already over)" if sim.over else ""])
 	if scenario != "":
 		_stage_scenario()
 	elif focus_node >= 0 and focus_node < sim.nodes.size():
@@ -774,6 +789,8 @@ func _process(delta: float) -> void:
 				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
 						"chaos": "nodes fall in a hidden order - your home last"}
 				hud.show_banner("LAST STAND - %s\n%s" % [str(ev["method"]).to_upper(), how.get(ev["method"], "")], 5.0)
+			"very_last_stand":
+				hud.toast("VERY LAST STAND")
 			"collapse_warning":
 				var n: Dictionary = sim.nodes[ev["node"]]
 				if n["owner"] == HUMAN:
