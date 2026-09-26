@@ -281,7 +281,7 @@ static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable (Alpha 11: +
 # MONSTER HUB (one per player): a monster costs MONSTER_COST units of the hub's garrison, then MONSTER_COOLDOWN s
 # (charging from the hub's completion); it walks the fastest route to a node up to MONSTER_REACH bridges away at
 # MONSTER_SPEED of the BRAWL unit speed, kicks every unit on its decks off the bridge (friend or foe), passes
-# through the nodes on the way and takes the end node empty (a friendly end node loses a tier instead). Nothing
+# through the nodes on the way (their garrisons untouched; lines crossing those platforms are kicked too) and takes the end node empty (a friendly end node loses a tier instead). Nothing
 # can shoot it; only a fall kills it.
 static var MONSTER_HUB_COST := 150        # 30 shown
 static var MONSTER_COST := 100            # 20 shown
@@ -289,6 +289,7 @@ static var MONSTER_COOLDOWN := 40.0          # Daniele, 2026-09-27: "change char
 static var MONSTER_SPEED := 0.6           # x BRAWL_SPEED (~3.4 m/s)
 static var MONSTER_REACH := 3             # bridges (plaza links don't count)
 const MONSTER_R := 1.4                    # metres: the monster's reach along the deck (half a deck width)
+const MONSTER_PLATFORM_R := 2.0           # metres: on a platform it crosses, bodies of lines in transit this close to its path are kicked
 const MONSTER_FALL_TIME := 1.2            # seconds a falling monster tumbles before it is gone
 # LEGACY ALIASES (read-only, for scripts not yet on Structures 2.1 - tests/balance_probe.gd and old HUD
 # lines): the one-tier laser seen through the old cannon names. Nothing in the rules reads them.
@@ -352,7 +353,7 @@ static var FACTION_STATS := {
 const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS", "VAT_COST", "BUILD_SECONDS",
 		"SWAP_COOLDOWN", "MACHINGOON_COST", "MACHINGOON_RATE", "MACHINGOON_RANGE", "LASER_COST", "LASER_KILL",
 		"LASER_BURST", "LASER_RECHARGE", "LASER_RANGE", "FORGE_COST", "MONSTER_HUB_COST", "MONSTER_COST",
-		"MONSTER_COOLDOWN", "MONSTER_SPEED", "MONSTER_REACH", "FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS",
+		"MONSTER_COOLDOWN", "MONSTER_SPEED", "MONSTER_REACH", "VAT_RESTORE_COST", "FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS",
 		"forge_bonus"]
 const BALANCE_PRESETS := {
 	# The 0.18.7 balance study (tests/balance_probe.gd, BRAWL) proposed b187: neutrals 12/16/32/64 shown, Ember
@@ -433,6 +434,7 @@ static func _balance_get(k: String):
 		"MONSTER_COOLDOWN": return MONSTER_COOLDOWN
 		"MONSTER_SPEED": return MONSTER_SPEED
 		"MONSTER_REACH": return MONSTER_REACH
+		"VAT_RESTORE_COST": return VAT_RESTORE_COST
 		"FIGHT_RATE_BASE": return FIGHT_RATE_BASE
 		"FIGHT_RATE_K": return FIGHT_RATE_K
 		"FACTION_STATS": return FACTION_STATS
@@ -464,6 +466,7 @@ static func _balance_set(k: String, v) -> void:
 		"MONSTER_COOLDOWN": MONSTER_COOLDOWN = v
 		"MONSTER_SPEED": MONSTER_SPEED = v
 		"MONSTER_REACH": MONSTER_REACH = v
+		"VAT_RESTORE_COST": VAT_RESTORE_COST = v
 		"FIGHT_RATE_BASE": FIGHT_RATE_BASE = v
 		"FIGHT_RATE_K": FIGHT_RATE_K = v
 		"FACTION_STATS": FACTION_STATS = v

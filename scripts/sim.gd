@@ -609,7 +609,7 @@ func _fire_machingoon(n: Dictionary, dt: float) -> void:
 		if d < best_d:
 			best_d = d
 			best = h
-	var kill: float = minf(float(Rules.MACHINGOON_RATE.get(n["tier"], Rules.MACHINGOON_RATE[1])) * dt, best["units"])
+	var kill: float = minf(float(Rules.MACHINGOON_RATE.get(n["tier"], Rules.MACHINGOON_RATE[1])) * dt * _cannon_mult(best), best["units"])   # Anchor halves these too (Daniele, 2026-09-27)
 	var at := _hit_point(n, best)
 	var hid: int = best["id"]
 	_structure_kill(n, best, kill, "machingoon")
@@ -3059,7 +3059,8 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 #   draw_line: the 7:00 DRAW call-out ("" unless the last platform was neutral)
 # EVENTS (sim.fx_events for the views, the same in sim.events with "t")
 #   {"type": "monster_launch", "id", "seat", "hub", "target", "path"}
-#   {"type": "monster_kick", "id", "seat", "seat_hit", "units" (sim units), "shown", "pos"} (+ a "fall" fx per line)
+#   {"type": "monster_kick", "id", "seat", "seat_hit", "units" (sim units), "shown", "pos"} (+ a "fall" fx per line):
+#       bodies on its decks and bodies of lines in transit over the platforms it crosses (never a garrison there)
 #   {"type": "monster_take", "id", "seat", "node", "friendly": bool} (friendly: the node lost a tier)
 #   {"type": "monster_fall", "id", "seat", "pos"}
 #   {"type": "forge_lost", "seat"}   {"type": "eject", "node", "seat"}   {"type": "draw", "line"}
@@ -3190,8 +3191,9 @@ func _monster_touches(m: Dictionary, node_id: int) -> bool:
 
 func _step_monsters(dt: float) -> void:
 	## Monsters walk their route at monster_speed(); every body on the decks they walk is kicked off (friend
-	## or foe); the platforms on the way are passed untouched; only a fall kills one (the deck under it gone
-	## or moving - relays, Demolish, a missing deck - or the platform under it dropped).
+	## or foe), and so is every body of a line walking across a platform on the way (Daniele, 2026-09-27) -
+	## those platforms' garrisons and stored allied troops are never touched; only a fall kills one (the deck
+	## under it gone or moving - relays, Demolish, a missing deck - or the platform under it dropped).
 	for m in monsters.duplicate():
 		m["t"] = float(m["t"]) + dt
 		match m["state"]:
@@ -3212,6 +3214,7 @@ func _step_monsters(dt: float) -> void:
 			_monster_fall(m)
 			continue
 		_monster_sweep(m, s0 - Rules.MONSTER_R, s1 + Rules.MONSTER_R)
+		_monster_sweep_platforms(m, s0, s1)
 		if s1 >= m["L"] - 0.001:
 			_monster_end(m)
 
@@ -3236,6 +3239,47 @@ func _monster_sweep(m: Dictionary, lo: float, hi: float) -> void:
 				var hhi: float = hsp["s0"] + u1 if hsp["forward"] else hsp["s1"] - u0
 				_monster_kick(m, h, clampf(hlo, hsp["s0"], hsp["s1"]), clampf(hhi, hsp["s0"], hsp["s1"]))
 				break
+
+
+func _monster_sweep_platforms(m: Dictionary, s0: float, s1: float) -> void:
+	## On a platform it walks across (an intermediate node of its route), kick the bodies of every line in
+	## transit over that platform (the line's own crossing of it, friend or foe) within Rules.MONSTER_PLATFORM_R
+	## of the monster's path this step. Lines leaving or entering there, garrisons and stored troops are safe.
+	for mns in m["node_spans"]:
+		if s1 < mns["s0"] or s0 > mns["s1"]:
+			continue
+		var a: Vector3 = sample(m, maxf(s0, mns["s0"]))[0]
+		var b: Vector3 = sample(m, minf(s1, mns["s1"]))[0]
+		var r2: float = Rules.MONSTER_PLATFORM_R * Rules.MONSTER_PLATFORM_R
+		for h in hordes.duplicate():
+			if not (h in hordes):
+				continue
+			var head: float = h["s"]
+			var tail: float = head - chain_length(h)
+			for hns in h["node_spans"]:
+				if hns["node"] != mns["node"] or head < hns["s0"] or tail > hns["s1"]:
+					continue
+				var lo := INF
+				var hi := -INF
+				var k := maxf(tail, hns["s0"])
+				var end := minf(head, hns["s1"])
+				while true:                                # the stretch of its crossing the monster brushes
+					var p: Vector3 = sample(h, k)[0]
+					if _seg_dist2(p, a, b) <= r2:
+						lo = minf(lo, k)
+						hi = maxf(hi, k)
+					if k >= end:
+						break
+					k = minf(k + 0.25, end)
+				if lo <= hi:
+					_monster_kick(m, h, lo - 0.1, hi + 0.1)
+				break
+
+
+static func _seg_dist2(p: Vector3, a: Vector3, b: Vector3) -> float:
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.000001), 0.0, 1.0)
+	return p.distance_squared_to(a + ab * t)
 
 
 func _monster_kick(m: Dictionary, h: Dictionary, lo: float, hi: float) -> void:

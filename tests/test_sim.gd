@@ -115,9 +115,16 @@ func _init() -> void:
 	while sim10.nodes[1]["build_kind"] != "":
 		sim10.step(0.5)
 	check(sim10.nodes[1]["structure"] == "forge" and sim10.nodes[1]["swap_cd"] > 0.0, "the swap completes and starts the cooldown")
-	# special node: only its vat
+	# special node: only its vat, and always a T4 (Daniele, 2026-09-27)
+	check(sim10.nodes[3]["tier"] == 4 and sim10.nodes[0]["tier"] == 4 and absf(sim10.nodes[3]["units"] - Rules.NEUTRAL_UNITS[4]) < 0.01,
+			"a neutral special node is always a T4 vat with the T4 garrison (100 shown)")
 	sim10.nodes[3]["owner"] = "A"
 	sim10.nodes[3]["units"] = 300.0
+	check(sim10.can_upgrade(3, "A") == "Vat is already at max tier" and sim10.upgrade_cost(sim10.nodes[3]) == 0 and not sim10.upgrade(3, "A"),
+			"nothing above T4: a special node offers no upgrade")
+	sim10._capture(sim10.nodes[3], "B", 10.0)
+	check(sim10.nodes[3]["tier"] == 4, "...and conquest leaves it at T4")
+	sim10._capture(sim10.nodes[3], "A", 300.0)
 	check(sim10.can_build(3, "A", "machingoon") != "" and sim10.can_build(3, "A", "laser") != "" and not sim10.build_attachment(3, "cannon"),
 			"a special node holds only its vat (no machingoon, no laser, no forge)")
 	# machingoon on a common node: in place of the vat, keeps the tier, produces nothing
@@ -1085,6 +1092,32 @@ func _rules_0_18_10() -> void:
 	check(hub["hub_monster"] == -1 and t_walk > 10.0, "the hub is free again; it walked at 60 percent speed (%.0f s)" % t_walk)
 	_steps(s, 1.0)
 	check(s.monsters.is_empty(), "a done monster leaves the list")
+	# lines in transit over a platform it crosses are kicked too (friend or foe); that platform's garrison stays
+	s = _tp()
+	s.nodes[3]["structure"] = "monster_hub"
+	s.nodes[3]["units"] = 300.0
+	s.nodes[1]["owner"] = "A"
+	s.nodes[1]["units"] = 12.0
+	s.nodes[2]["owner"] = "B"
+	s.nodes[2]["units"] = 12.0
+	var g_centre: float = s.nodes[0]["units"]
+	var own_x := s.send(1, 2, 1.0)                    # A's short line crossing the centre (1 -> 0 -> 2)
+	var foe_x := s.send(2, 1, 1.0)                    # B's short line crossing it the other way
+	run_until(s, func():
+		for hx2 in [own_x, foe_x]:
+			var ns: Dictionary = hx2["node_spans"][0]
+			if not hx2["streaming"] and hx2["s"] - Sim.chain_length(hx2) > ns["s0"] + 1.0:
+				hx2["speed"] = 0.0                         # held on the centre's platform, in transit
+		return own_x["speed"] == 0.0 and foe_x["speed"] == 0.0, 20.0, 0.05)
+	check(own_x["s"] < own_x["node_spans"][0]["s1"] and foe_x["s"] < foe_x["node_spans"][0]["s1"], "(both lines are on the centre's platform, crossing it)")
+	s.launch_monster(3, "A", 2)
+	var mx: Dictionary = s.monsters[0]
+	run_until(s, func(): return mx["state"] != "walking" or mx["s"] > mx["node_spans"][1]["s1"], 40.0, 0.05)
+	check(s.fall_losses.get("A", 0.0) > 0.0 and s.events.any(func(e): return e["type"] == "monster_kick" and e["seat_hit"] == "A"),
+			"a friendly line crossing a platform on its route is kicked (A fell %.1f)" % s.fall_losses.get("A", 0.0))
+	check(s.fall_losses.get("B", 0.0) > 0.0 and s.events.any(func(e): return e["type"] == "monster_kick" and e["seat_hit"] == "B"),
+			"...and an enemy one (B fell %.1f)" % s.fall_losses.get("B", 0.0))
+	check(absf(s.nodes[0]["units"] - g_centre) < 0.01 and s.nodes[0]["owner"] == "", "the platform's garrison stays untouched")
 	# friendly end node: a tier down, troops stay; nothing shoots it
 	s = _tp()
 	s.nodes[3]["structure"] = "monster_hub"
@@ -1690,6 +1723,25 @@ func _skills_tests() -> void:
 			s._step_structures(0.05)
 		cannon_loss.append(300.0 - hc["units"])
 	check(absf(cannon_loss[0] - Rules.LASER_KILL) < 0.5 and absf(cannon_loss[1] - Rules.LASER_KILL * 0.5) < 0.5, "Anchor: your lines on it take half the laser kills (%.0f vs %.0f)" % [cannon_loss[1], cannon_loss[0]])
+	var gun_loss := []                                # ...and half the machingoon's (Daniele, 2026-09-27)
+	for anchored in [false, true]:
+		s = _mk(tp, "null", "null", {"A": {"map": "anchor"}})
+		s.nodes[1]["owner"] = "B"
+		s.nodes[1]["structure"] = "machingoon"
+		s.nodes[1]["tier"] = 1
+		s.nodes[3]["units"] = 300.0
+		var hg := s.send(3, 1, 1.0)
+		s.nodes[3]["streaming"] = {}
+		hg["streaming"] = false
+		hg["units"] = 300.0
+		hg["s"] = hg["spans"][0]["s1"] - 1.0
+		if anchored:
+			s.cast("A", "map", hg["spans"][0]["edge"])
+		for k in range(20):
+			s._step_structures(0.05)
+		gun_loss.append(300.0 - hg["units"])
+	check(absf(gun_loss[0] - Rules.MACHINGOON_RATE[1]) < 0.1 and absf(gun_loss[1] - Rules.MACHINGOON_RATE[1] * 0.5) < 0.1,
+			"Anchor: your lines on it take half the machingoon kills too (%.1f vs %.1f)" % [gun_loss[1], gun_loss[0]])
 	# ---------------------------------------------------------------- Bypass: both states for 8 s, then the normal outcome
 	s = _mk(sw, "null", "null", {"A": {"map": "bypass"}})
 	s.nodes[1]["owner"] = "B"

@@ -735,7 +735,7 @@ func _build_machingoon(sim: Sim, owned: Array, vats: Array) -> bool:
 
 func _slot_kind(sim: Sim, n: Dictionary) -> String:
 	## What goes in an empty relay slot: its one monster hub first (a relay with a rival or neutral node in a
-	## monster's reach, once it holds two vats - the first monster charges 90 s from the hub's completion, so an
+	## monster's reach, once it holds two vats - the first monster charges from the hub's completion (MONSTER_COOLDOWN), so an
 	## early hub is the one that gets used), then the forge (one per seat, once it holds three vats), else a laser.
 	var vats := _mine(sim).filter(func(x): return Sim.has_vat(x)).size()
 	if "monster_hub" in n["buildable"] and vats >= 2 and not sim.has_hub(seat) and _hub_front(sim, n):
