@@ -49,9 +49,21 @@ var _ls_corner_k := 0                # the corner the next planned drop aims at 
 var _next_wave_at := 0.0
 var rng := RandomNumberGenerator.new()
 var _next_id := 1
+# SKILLS 2.0 (0.18.7) - see the "skills" section at the end of this file for the API
+var abilities_on := true             # Rules.abilities_on at setup (the match setting)
+var loadouts: Dictionary = {}        # seat -> {"active": id, "map": id, "ultimate": id}
+var skill_cd: Dictionary = {}        # seat -> {"active": s, "map": s} seconds of cooldown left
+var ult_charge: Dictionary = {}      # seat -> 0..1 ultimate charge (1 = ready)
+var ult_since: Dictionary = {}       # seat -> seconds since the match start or the last ultimate
+var effects: Array = []              # active skill effects, see _add_effect()
+var demolished: Dictionary = {}      # edge index -> seconds until the demolished deck rebuilds
+var has_relays := false              # the map has at least one relay (Bypass / Relay Hack need one)
+var _kill_credit: Dictionary = {}    # seat -> enemy units killed this step (ultimate charge)
+var _fx_idx: Dictionary = {}         # "on:target" -> [effects] (rebuilt by _index_effects)
+var _popped: Array = []              # decoys that touched an enemy this step (they dissolve)
 
 
-func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1, seat_teams: Dictionary = {}) -> void:
+func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1, seat_teams: Dictionary = {}, seat_loadouts: Dictionary = {}) -> void:
 	factions = {}
 	for id in seats:                                   # only seats actually in this match
 		factions[seats[id]] = seat_factions.get(seats[id], "null")
@@ -174,6 +186,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		if not _ctrl_edges.has(edge_controller[i]):
 			_ctrl_edges[edge_controller[i]] = []
 		_ctrl_edges[edge_controller[i]].append(i)
+	_setup_skills(seat_loadouts)
 
 
 var _map_last_stand: Dictionary = {}
@@ -225,6 +238,11 @@ static func build_progress(n: Dictionary) -> float:
 
 
 func production(n: Dictionary) -> float:
+	## Units/s this vat makes now: tier x faction x skills (Spore Burst, Superbloom, Aegis; Echo jams it).
+	return _base_production(n) * prod_mult(n)
+
+
+func _base_production(n: Dictionary) -> float:
 	return Rules.PROD[n["tier"]] * stat(n["owner"], "production") if n["owner"] != "" and has_vat(n) else 0.0
 
 
@@ -334,8 +352,8 @@ func _step_structures(dt: float) -> void:
 			events.append({"t": time, "type": "build_done", "node": n["id"], "seat": n["owner"], "kind": kind})
 			fx_events.append({"type": "build_done", "node": n["id"]})
 	for n in nodes:
-		if n["owner"] == "" or n["attachment"] != "cannon":
-			n["cannon_burst"] = 0.0
+		if n["owner"] == "" or n["attachment"] != "cannon" or is_disrupted(n["id"]):
+			n["cannon_burst"] = 0.0                       # (an Echo Split echo jams a cannon: no burst, no recharge)
 			continue
 		var stats: Dictionary = Rules.CANNON_STATS[n["cannon_tier"]]
 		if n["cannon_burst"] > 0.0:
@@ -348,12 +366,14 @@ func _step_structures(dt: float) -> void:
 			n["cannon_kill_left"] -= budget
 			var each: float = budget / targets.size()
 			for h in targets:
-				var kill: float = minf(each, h["units"])
+				var kill: float = minf(each * _cannon_mult(h), h["units"])   # Anchor: half kills on the caster's lines
 				if _hit_head(n, h):
 					n["cannon_pull"][h["id"]] = n["cannon_pull"].get(h["id"], 0.0) + _cut_front(h, kill)
 				else:
 					h["units"] -= kill                          # the tail is nearer: the line shortens from it
-				combat_losses[h["owner"]] = combat_losses.get(h["owner"], 0.0) + kill
+				if not h.get("decoy", false):                # a decoy draws the fire; its losses are not real
+					combat_losses[h["owner"]] = combat_losses.get(h["owner"], 0.0) + kill
+					_credit(n["owner"], h["owner"], kill)
 				if h["units"] <= 0.0:
 					_kill_horde(h, "cannon")
 			n["cannon_target"] = _hit_point(n, targets[0])
@@ -504,6 +524,8 @@ func is_edge_open(edge_index: int) -> bool:
 
 
 func _edge_open(edge_index: int) -> bool:
+	if demolished.has(edge_index):                  # Demolish (0.18.7): the deck is gone until it rebuilds
+		return false
 	var e: Dictionary = edges[edge_index]
 	if not e["retracts"] and e["state"] == "":
 		return true
@@ -512,8 +534,14 @@ func _edge_open(edge_index: int) -> bool:
 	if ctrl >= 0:
 		if edge_index in nodes[ctrl]["moving_edges"]:
 			return false
-		if nodes[ctrl]["owner"] != "":
-			index = nodes[ctrl]["relay_index"]
+		var held = anchor_state(edge_index)          # Anchor / Relay Aegis: the deck stays as it was
+		if held != null:
+			return held
+		if is_bypassed(ctrl):                        # Bypass: the relay holds both states
+			return true
+		# a neutral relay sits at index 0 unless Relay Hack or Rewire fired it (0.18.7: it used to ignore
+		# the index while unowned, which was the same thing - nobody could fire it)
+		index = nodes[ctrl]["relay_index"]
 	return _edge_open_at(edge_index, index)
 
 
@@ -521,15 +549,22 @@ func fire_relay(node_id: int) -> bool:
 	## The owner's control over their relay (GAME-RULES sec8: "fire the switch"): starts the 3 s
 	## warning; the authoritative tick then moves the deck and applies the per-kind troop fate.
 	var n: Dictionary = nodes[node_id]
-	if n["owner"] == "" or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
+	if n["owner"] == "":
+		return false
+	return _fire_relay_by(n, n["owner"])
+
+
+func _fire_relay_by(n: Dictionary, seat: String) -> bool:
+	## Starts a relay's warning on behalf of `seat` (its owner, or a Relay Hack / Rewire caster).
+	if n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "" or is_relay_locked(n["id"]):
 		return false
 	if relay_states(n).is_empty():
 		return false
 	n["relay_pending"] = relay_next_index(n)
 	n["relay_phase"] = "warning"
 	n["relay_t"] = Rules.RELAY_WARNING
-	events.append({"t": time, "type": "relay_fired", "node": node_id, "seat": n["owner"], "index": n["relay_pending"]})
-	fx_events.append({"type": "relay_warning", "node": node_id})
+	events.append({"t": time, "type": "relay_fired", "node": n["id"], "seat": seat, "index": n["relay_pending"]})
+	fx_events.append({"type": "relay_warning", "node": n["id"]})
 	return true
 
 
@@ -560,6 +595,8 @@ func _relay_begin_move(n: Dictionary) -> void:
 	var closing := []
 	var opening := []
 	for i in controlled_edges(n["id"]):
+		if anchor_state(i) != null or is_bypassed(n["id"]):
+			continue                                      # Anchor / Aegis lock the deck; Bypass keeps both states
 		var was := _edge_open_at(i, old_index)
 		var now := _edge_open_at(i, new_index)
 		if was and not now:
@@ -677,7 +714,7 @@ func _relay_apply(n: Dictionary) -> void:
 				h.erase("ride")
 	n["moving_edges"] = []
 	n["relay_phase"] = ""
-	n["relay_cd"] = Rules.RELAY_COOLDOWN
+	n["relay_cd"] = Rules.RELAY_COOLDOWN + maxf(n["relay_cd"], 0.0)   # (0 unless Relay Hack jammed it meanwhile)
 	fx_events.append({"type": "relay_done", "node": n["id"]})
 
 
@@ -752,8 +789,10 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 		var src: Dictionary = nodes[h["route"][0]]
 		if src["streaming"].get("hid", -1) == h["id"]:
 			_end_streaming(src, "cut")
+	var decoy: bool = h.get("decoy", false)          # a Ghost Line / echo falls like a real line but loses nothing real
 	if fate == "fall":
-		fall_losses[h["owner"]] = fall_losses.get(h["owner"], 0.0) + units_on
+		if not decoy:
+			fall_losses[h["owner"]] = fall_losses.get(h["owner"], 0.0) + units_on
 		var pts := []
 		var k := 0.0
 		while k <= on:
@@ -762,11 +801,15 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 		if fling is Dictionary:
 			(fling["pts"] as Array).append_array(pts)
 			fling["units"] += units_on
-			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on, "why": "fling"})
+			if not decoy:
+				events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on, "why": "fling"})
 		else:
 			fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on,
 					"hid": h["id"], "pour": walked and survives})
-			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on})
+			if not decoy:
+				events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on})
+	elif fate == "carry" and carry_node >= 0 and decoy:
+		pass                                              # a decoy carried in simply vanishes
 	elif fate == "carry" and carry_node >= 0:
 		var n: Dictionary = nodes[carry_node]
 		if allied(n["owner"], h["owner"]):
@@ -785,7 +828,7 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 			h["pour_k"] = h["fcut"]                       # the stretch on the deck fell with it (Fx); the rest walks off
 		h["pour"] = true
 		h["pour_lip"] = s0
-	if pours and nodes[h["route"][0]]["streaming"].get("hid", -1) == h["id"]:
+	if pours and (decoy or nodes[h["route"][0]]["streaming"].get("hid", -1) == h["id"]):
 		h["units"] = maxf(h["units"], 0.0)                   # the vat is still feeding this line
 		return
 	if h["units"] < 1.0:
@@ -1159,9 +1202,10 @@ func step(dt: float) -> void:
 		return
 	for n in nodes:                                   # production (vat nodes only), up to the cap
 		if n["owner"] != "" and has_vat(n) and n["units"] < Rules.CAPS[n["tier"]]:
-			n["units"] = minf(Rules.CAPS[n["tier"]], n["units"] + production(n) * dt)
+			_produce(n, dt)
 	_step_relays(dt)
 	_step_structures(dt)
+	_step_skills(dt)
 	for n in nodes:                                   # the door emits the current order into its line
 		if n["streaming"].is_empty():
 			continue
@@ -1175,30 +1219,36 @@ func step(dt: float) -> void:
 		n["streaming"]["remaining"] -= x
 		if n["streaming"]["remaining"] <= 0.001 or n["units"] <= 0.0:
 			_end_streaming(n, "done")
+	_emit_decoys(dt)
 	_check_missing_decks()
 	for h in hordes:
 		if h["state"] == "move" and not h.get("blocked", false):
 			var here := sample(h, h["s"])
 			var fast_here: bool = here[2]
 			var mult: float = Rules.platform_mult() if fast_here else 1.0
-			if Rules.bridge_combat and on_enemy_goo(h):
-				mult *= Rules.GOO_SLOW                    # enemy goo: slower (home advantage)
+			var boost := skill_speed(h)                   # Surge / Rewire
+			mult *= deck_slow(h) * boost                  # enemy goo (home advantage) or Mire, the stronger
 			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
-				ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * dt)
+				ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * boost * dt)
 			h["s"] += ds
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
 				h["state"] = "absorb"
 	_detect_contacts()
+	_pop_decoys()
 	var dead := []
 	for pair in fights:                               # every contact pair trades losses, to the death
 		var a := _horde(pair[0])
 		var b := _horde(pair[1])
 		if a.is_empty() or b.is_empty():
 			continue
-		a["pending_loss"] = a.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * b["units"]) * dt * attack_of(b["owner"]) / stat(a["owner"], "health")
-		b["pending_loss"] = b.get("pending_loss", 0.0) + (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * a["units"]) * dt * attack_of(a["owner"]) / stat(b["owner"], "health")
+		var la: float = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * b["units"]) * dt * attack_of(b["owner"]) / stat(a["owner"], "health")
+		var lb: float = (Rules.FIGHT_RATE_BASE + Rules.FIGHT_RATE_K * a["units"]) * dt * attack_of(a["owner"]) / stat(b["owner"], "health")
+		a["pending_loss"] = a.get("pending_loss", 0.0) + la
+		b["pending_loss"] = b.get("pending_loss", 0.0) + lb
+		_blame(a, b["owner"], la)                     # who dealt it: the ultimate charge
+		_blame(b, a["owner"], lb)
 	_tug_of_war(dt)
 	for h in hordes:
 		if h["state"] == "absorb":
@@ -1222,6 +1272,7 @@ func step(dt: float) -> void:
 			h["units"] = maxf(0.0, h["units"] - h["pending_loss"])
 			combat_losses[h["owner"]] = combat_losses.get(h["owner"], 0.0) + before - h["units"]
 			h["loss_rate"] = (before - h["units"]) / maxf(dt, 0.0001)
+			_credit_blame(h, before - h["units"])
 			h.erase("pending_loss")
 			if h["units"] <= 0.0:
 				dead.append(h)
@@ -1250,6 +1301,8 @@ func step(dt: float) -> void:
 			h["state"] = "move"
 		elif h["state"] == "move" and fighting.has(h["id"]) and not h.get("retreat", false):
 			h["state"] = "fight"
+	_step_decoys()
+	_step_charge(dt)
 	_check_end()
 
 
@@ -1375,6 +1428,13 @@ func _detect_contacts_inner() -> void:
 					var d: float = p.distance_to(y[2])
 					if d > Rules.CONTACT_R:
 						continue
+					if h.get("decoy", false) or other.get("decoy", false):
+						# a Ghost Line never fights, blocks or queues: touched by an enemy line it dissolves
+						if not allied(other["owner"], h["owner"]):
+							for g in [h, other]:
+								if g.get("decoy", false) and not g in _popped:
+									_popped.append(g)
+						continue
 					if not allied(other["owner"], h["owner"]):
 						var kind := "frontline" if (y[1] == 0 and fwd.dot(y[3]) < 0.0) else "rear"
 						_engage(h, other, kind)
@@ -1445,6 +1505,8 @@ func recall(hid: int) -> bool:
 	var h := _horde(hid)
 	if h.is_empty() or h["state"] == "absorb" or h.get("retreat", false) or h.has("ride"):
 		return false
+	if h.get("decoy", false):                            # a recalled Ghost Line stops "emitting" too
+		_decoy_done_streaming(h)
 	if h["streaming"]:
 		var src: Dictionary = nodes[h["route"][0]]
 		if src["streaming"].get("hid", -1) == h["id"]:
@@ -1564,6 +1626,9 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 	## on the platform as a siege and fight the garrison there (see _node_fights); the whole
 	## platform is the node.
 	var owner: String = h["owner"]
+	if h.get("decoy", false):                          # a Ghost Line pours in and vanishes (skills section)
+		_decoy_arrive(n, h)
+		return
 	if allied(n["owner"], owner):                      # own or an ally's node: reinforce it
 		n["units"] += x
 		return
@@ -1586,7 +1651,7 @@ func _land_classic(n: Dictionary, seat: String, x: float) -> void:
 	var att: float = attack_of(seat)
 	var hp_att: float = stat(seat, "health")
 	var d_seat: String = n["owner"]
-	var kill_per: float = att / (stat(d_seat, "health") * stat(d_seat, "garrison"))   # defenders per exchange
+	var kill_per: float = att / (stat(d_seat, "health") * stat(d_seat, "garrison") * garrison_div(n))   # defenders per exchange (Fortify / Aegis divide it)
 	var cost_per: float = (attack_of(d_seat) if d_seat != "" else 1.0) / hp_att          # attacker per exchange
 	var ratio: float = kill_per / maxf(cost_per, 0.0001)                                  # defenders killed per attacker
 	var garrison: float = n["units"]
@@ -1596,6 +1661,8 @@ func _land_classic(n: Dictionary, seat: String, x: float) -> void:
 	combat_losses[seat] = combat_losses.get(seat, 0.0) + spent
 	if d_seat != "":
 		combat_losses[d_seat] = combat_losses.get(d_seat, 0.0) + killed
+	_credit(seat, d_seat, killed)
+	_credit(d_seat, seat, spent)
 	var left: float = x - spent
 	if n["units"] <= 0.0001 and left > 0.0001:
 		var old: String = n["owner"]
@@ -1613,7 +1680,7 @@ func _register_transit() -> void:
 	if not Rules.bridge_combat:                        # classic (Alpha 11): waypoints are free
 		return
 	for h in hordes:
-		if h["state"] == "absorb":
+		if h["state"] == "absorb" or h.get("decoy", false):   # a decoy never fights a garrison (_step_decoys)
 			continue
 		for idx in range(h["node_spans"].size()):
 			var ns: Dictionary = h["node_spans"][idx]
@@ -1658,15 +1725,22 @@ func _node_fights(dt: float) -> Array:
 		var loss := {}
 		var g_loss_units := 0.0                       # arrivals (siege) fight the real garrison
 		var g_attack := attack_of(n["owner"])
-		var g_tough := stat(n["owner"], "garrison")   # garrison strength: damage the garrison takes
+		var g_tough := stat(n["owner"], "garrison") * garrison_div(n)   # garrison strength: damage the garrison takes (Fortify / Aegis)
+		var blame := {}                               # k -> {seat: share of what k faces} (ultimate charge)
+		var g_from := {}                              # k -> garrison damage k dealt
 		for k in force:
 			# what k faces here: the garrison (unless allied) and every hostile seat on the platform
 			var enemy: float = 0.0 if allied(k, n["owner"]) else n["units"] * g_attack
+			var who := {n["owner"]: enemy}
 			for j in force:
 				if not allied(j, k):
 					enemy += force[j] * attack_of(j)
+					who[j] = who.get(j, 0.0) + force[j] * attack_of(j)
 			if enemy <= 0.0:
 				continue
+			for j in who:
+				who[j] = who[j] / enemy
+			blame[k] = who
 			# a near-empty garrison is a weak toll (Daniele, Alpha 14: "a weak one is easy to punch
 			# through"): the flat base rate fades in over the first 20 units of what it faces
 			loss[k] = (Rules.FIGHT_RATE_BASE * minf(1.0, enemy / 20.0) + Rules.FIGHT_RATE_K * enemy) * dt * mult / stat(k, "health")
@@ -1675,10 +1749,13 @@ func _node_fights(dt: float) -> Array:
 				var siege_part: float = n["siege"].get(k, 0.0)
 				var transit_part: float = n["transit"].get(k, {}).get("units", 0.0)
 				g_loss_units += rate * ((siege_part + transit_part) / force[k])   # transit fights the garrison too
+				g_from[k] = g_from.get(k, 0.0) + rate * ((siege_part + transit_part) / force[k])
 		for k in loss:
 			var actual: float = minf(loss[k], force[k])
 			n["node_loss"][k] = actual / maxf(dt, 0.0001)
 			combat_losses[k] = combat_losses.get(k, 0.0) + actual
+			for j in blame.get(k, {}):
+				_credit(j, k, actual * blame[k][j])
 			var persistent: float = n["siege"].get(k, 0.0)     # spend against arrivals first...
 			var take_persistent: float = minf(persistent, actual)
 			if take_persistent > 0.0:
@@ -1702,6 +1779,8 @@ func _node_fights(dt: float) -> Array:
 			if n["owner"] != "":
 				combat_losses[n["owner"]] = combat_losses.get(n["owner"], 0.0) + before_g - n["units"]
 				n["node_loss"][n["owner"]] = (before_g - n["units"]) / maxf(dt, 0.0001)
+				for k in g_from:
+					_credit(k, n["owner"], (before_g - n["units"]) * g_from[k] / g_loss_units)
 		if n["units"] <= 0.0:
 			# capture needs an ARRIVAL, not just transit; with several sides arrived at once the side
 			# holding more ground there right now takes it (Strait's shared hub used to stall forever)
@@ -1740,6 +1819,7 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 	n["units"] = garrison
 	n["siege"] = {}
 	n["siege_dir"] = {}
+	_capture_effects(n, seat)
 	fx_events.append({"type": "capture", "node": n["id"], "seat": seat})
 
 
@@ -2311,7 +2391,8 @@ func _drop_node(id: int) -> void:
 			eliminated[seat] = true
 			for h in hordes.duplicate():
 				if h["owner"] == seat:
-					fall_losses[seat] = fall_losses.get(seat, 0.0) + h["units"]
+					if not h.get("decoy", false):
+						fall_losses[seat] = fall_losses.get(seat, 0.0) + h["units"]
 					_kill_horde(h, "eliminated")
 			for m in nodes:
 				m["siege"].erase(seat)
@@ -2350,7 +2431,8 @@ func _check_end() -> void:
 		for k in n["siege"]:
 			alive[k] = true
 	for h in hordes:
-		alive[h["owner"]] = true
+		if not h.get("decoy", false):                 # a seat is never kept alive by a Ghost Line
+			alive[h["owner"]] = true
 	for s in eliminated:
 		alive.erase(s)
 	var sides := {}                                   # team modes: one side per team
@@ -2370,7 +2452,7 @@ func seat_strength(seat: String) -> float:
 			total += n["units"]
 		total += n["siege"].get(seat, 0.0)
 	for h in hordes:
-		if h["owner"] == seat:
+		if h["owner"] == seat and not h.get("decoy", false):
 			total += h["units"]
 	return total
 
@@ -2408,3 +2490,1014 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 			ring[j] = tmp
 		out.append_array(ring)
 	return out
+
+
+# ================================================================== SKILLS 2.0 (0.18.7)
+# Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select what
+# skill each of your factions will use, follow the skill file from faction ultimates and ability pool)".
+# Rules: SKILLS-2.0-DRAFT.md draft 2 (approved; ultimates = the sec5.2 rebalance). Numbers: Rules.SKILLS.
+# Every skill works in BRAWL and SIEGE. A seat's loadout is fixed at setup (faction -> ultimate, plus
+# one active and one map skill; missing -> Rules.FACTION_LOADOUT; a relay skill on a map without relays
+# -> the faction's "map_no_relays" skill).
+#
+# PUBLIC API (dock, targeting UI, AI and Net use only these; everything else here is internal)
+#   skill_id(seat, slot) -> String        slot: "active" | "map" | "ultimate"; "" if none
+#   cooldown(seat, slot) -> float         seconds left; ultimate: seconds of charge left (0 = ready)
+#   charge(seat) -> float                 ultimate charge 0..1 (1 = ready)
+#   rewire_left(seat) -> int              Rewire is running: relay fires left (then the ultimate slot fires relays)
+#   cast_check(seat, slot, target) -> String   "" = castable, else a short reason for a toast
+#   can_cast(seat, slot, target) -> bool
+#   cast(seat, slot, target) -> bool      validates (cast_check), applies, starts the cooldown / spends the charge
+#   targets_for(seat, slot) -> Array      every target cast_check accepts now (Ghost Line: its source nodes;
+#                                         a no-target skill: [null] when castable)
+#   effects_on(on, target) -> Array       active effects on "node" | "edge" | "horde" | "relay" | "seat"
+#   is_ghost_for(h, viewer) -> bool       draw this horde as a ghost for `viewer` (only its owner knows)
+#   node_under_attack(node_id, seat) -> bool   hostile units on its platform or a hostile line bound for it
+#   garrison_div(n), prod_mult(n), skill_speed(h), deck_slow(h), anchor_state(edge), is_bypassed(relay),
+#   is_relay_locked(relay), is_disrupted(node)   the rule lookups, for readouts
+# TARGET SHAPES (Rules.SKILLS[id].target)
+#   own_line: horde id  |  own_vat, own_node: node id  |  deck, fixed_deck: edge index  |  relay: node id
+#   enemy_relay: relay node id (fire) or [relay node id, "jam"] / [id, "fire"]
+#   vat_to_node: [source node id, destination node id] or [src, dst, fraction 0..1] (default SKILLS.ghost_line.fraction)
+#   none: null (anything). Rewire running: the ultimate slot takes a relay node id (any relay, once each).
+# STATE (all in snapshots)
+#   loadouts[seat] = {"active", "map", "ultimate"}; skill_cd[seat] = {"active": s, "map": s};
+#   ult_charge[seat] 0..1; ult_since[seat] s; demolished[edge] = s until it rebuilds;
+#   effects = [{"id": skill id, "seat": caster, "on": "node"|"edge"|"horde"|"relay"|"seat", "target": id or seat,
+#       "t": s left, "dur": s total, ...extras}]. Extras: scorch "left" (sim units it may still kill), "kills";
+#       demolish "phase" "warning" (3 s) / "down" (20 s); anchor and Aegis decks "open" (the frozen state);
+#       relay_hack "mode" "fire" / "jam"; rewire "fires" left, "fired" [relay ids]; superbloom "left" (extra
+#       sim units still allowed; -1 = uncapped); relay_aegis "center" (the node cast on); an Echo Split jam
+#       is {"id": "echo_split", "on": "node"}.
+#   Decoys (Ghost Line, echoes) are ordinary hordes with h["decoy"] = true (echoes also "echo"); they stream,
+#   move, fall, draw cannon fire and pour in like real lines, but never fight, block, capture or defend: an
+#   enemy line touching one or (SIEGE) a hostile waypoint dissolves it; landing ends it (an echo landing on an
+#   enemy node jams its vat and cannon). Net strips those keys from the broadcast snapshot and tells only
+#   the owner (a private "ghosts" packet). A decoy never sets its node's n["streaming"] (the SIEGE door
+#   puddle reads that): a view that wants the puddle for every line should draw it from h["streaming"].
+# FX EVENTS (sim.fx_events; a key "private": seat = only that seat may see it - Net forwards it to that seat
+# only, views must skip it unless it is theirs)
+#   {"type": "skill", "id", "seat", "slot", "target", "pos": Vector3, "affects": [seats hit]}   every cast
+#       (Ghost Line's is private and carries "hid"; a Rewire relay fire has "fire": relay id)
+#   {"type": "ghosts", "seat", "hids": [...], "private": seat}   Echo Split: which new lines are echoes
+#   {"type": "skill_end", "id", "seat", "on", "target"}          an effect ran out
+#   {"type": "demolish", "edge", "seat"} the deck goes | {"type": "deck_rebuilt", "edge"} |
+#   {"type": "demolish_failed", "edge", "seat"} (anchored at the end of the warning)
+#   {"type": "relay_settle", "node", "closing": [edges]}          Bypass / Anchor ended: those decks go now
+#   {"type": "meltdown", "node", "seat", "hid", "sacrificed", "killed" (shown units), "captured": bool}
+#   {"type": "disrupt", "node", "seat"} an echo jammed a node | {"type": "ghost_end", "hid", "seat", "why"}
+# EVENTS (sim.events, telemetry): {"type": "skill", "id", "seat", "slot", "target", "affects"},
+#   {"type": "skill_end", "id", "seat", "kills" (sim units, Scorch)}, {"type": "meltdown", ...}.
+
+func _setup_skills(seat_loadouts: Dictionary) -> void:
+	abilities_on = Rules.abilities_on
+	has_relays = false
+	for n in nodes:
+		if n["relay"] != "" and not relay_states(n).is_empty():
+			has_relays = true
+	loadouts = {}
+	skill_cd = {}
+	ult_charge = {}
+	ult_since = {}
+	effects = []
+	demolished = {}
+	_kill_credit = {}
+	_index_effects()
+	for seat in factions:
+		var f: String = factions[seat]
+		var want = seat_loadouts.get(seat, {})
+		if not want is Dictionary:
+			want = {}
+		var lo := {"active": Rules.skill_slot_id(f, want, "active"), "map": Rules.skill_slot_id(f, want, "map"),
+				"ultimate": Rules.skill_slot_id(f, want, "ultimate")}
+		if not has_relays and Rules.SKILLS[lo["map"]].get("needs_relays", false):
+			lo["map"] = str(Rules.FACTION_LOADOUT.get(f, Rules.FACTION_LOADOUT["null"])["map_no_relays"])
+		loadouts[seat] = lo
+		skill_cd[seat] = {"active": 0.0, "map": 0.0}
+		ult_charge[seat] = 0.0
+		ult_since[seat] = 0.0
+
+
+# ------------------------------------------------------------------ queries
+func skill_id(seat: String, slot: String) -> String:
+	return str(loadouts.get(seat, {}).get(slot, ""))
+
+
+func cooldown(seat: String, slot: String) -> float:
+	if slot == "ultimate":
+		var c := charge(seat)
+		if c >= 1.0:
+			return 0.0
+		return maxf((1.0 - c) * Rules.ULT_CHARGE_TIME, Rules.ULT_MIN_TIME - float(ult_since.get(seat, 0.0)))
+	return float(skill_cd.get(seat, {}).get(slot, 0.0))
+
+
+func charge(seat: String) -> float:
+	return float(ult_charge.get(seat, 0.0))
+
+
+func rewire_left(seat: String) -> int:
+	for e in _fx_seat.get(seat, []):
+		if e["id"] == "rewire":
+			return int(e["fires"])
+	return 0
+
+
+func effects_on(on: String, target) -> Array:
+	match on:
+		"node":
+			return _fx_node.get(target, [])
+		"edge":
+			return _fx_edge.get(target, [])
+		"horde":
+			return _fx_horde.get(target, [])
+		"relay":
+			return _fx_relay.get(target, [])
+		"seat":
+			return _fx_seat.get(target, [])
+	return []
+
+
+static func is_ghost_for(h: Dictionary, viewer: String) -> bool:
+	return h.get("decoy", false) and h["owner"] == viewer
+
+
+func node_under_attack(node_id: int, seat: String) -> bool:
+	var n: Dictionary = nodes[node_id]
+	for k in n["siege"]:
+		if n["siege"][k] > 0.0 and not allied(k, seat):
+			return true
+	for k in n["transit"]:
+		if not allied(k, seat):
+			return true
+	for h in hordes:                                   # (a Ghost Line counts: nobody can tell it apart)
+		if h["target"] == node_id and not allied(h["owner"], seat) and not h.get("retreat", false):
+			return true
+	return false
+
+
+# effect lookups used by the rules (cheap: the index dicts are empty when nothing is active)
+var _fx_node: Dictionary = {}
+var _fx_edge: Dictionary = {}
+var _fx_horde: Dictionary = {}
+var _fx_relay: Dictionary = {}
+var _fx_seat: Dictionary = {}
+
+
+func _index_effects() -> void:
+	_fx_node = {}
+	_fx_edge = {}
+	_fx_horde = {}
+	_fx_relay = {}
+	_fx_seat = {}
+	for e in effects:
+		var d: Dictionary = {"node": _fx_node, "edge": _fx_edge, "horde": _fx_horde, "relay": _fx_relay, "seat": _fx_seat}.get(e["on"], {})
+		var k = e["target"]
+		if not d.has(k):
+			d[k] = []
+		d[k].append(e)
+
+
+func anchor_state(ei: int):
+	## The frozen presence of an anchored deck (Anchor, Relay Aegis), or null when it is not anchored.
+	if _fx_edge.is_empty() or not _fx_edge.has(ei):
+		return null
+	for e in _fx_edge[ei]:
+		if e.has("open"):
+			return e["open"]
+	return null
+
+
+func is_bypassed(relay_id: int) -> bool:
+	if _fx_relay.is_empty():
+		return false
+	for e in _fx_relay.get(relay_id, []):
+		if e["id"] == "bypass":
+			return true
+	return false
+
+
+func is_relay_locked(relay_id: int) -> bool:
+	## Relay Aegis locks the relays among its nodes: nobody can fire them (nor hack them) while it lasts.
+	if _fx_node.is_empty():
+		return false
+	for e in _fx_node.get(relay_id, []):
+		if e["id"] == "relay_aegis":
+			return true
+	return false
+
+
+func is_disrupted(node_id: int) -> bool:
+	if _fx_node.is_empty():
+		return false
+	for e in _fx_node.get(node_id, []):
+		if e["id"] == "echo_split":
+			return true
+	return false
+
+
+func garrison_div(n: Dictionary) -> float:
+	## Fortify / Relay Aegis: the garrison takes this many times less damage (the strongest applies).
+	if _fx_node.is_empty() or n["owner"] == "":
+		return 1.0
+	var d := 1.0
+	for e in _fx_node.get(n["id"], []):
+		if e.has("div") and allied(e["seat"], n["owner"]):
+			d = maxf(d, float(e["div"]))
+	return d
+
+
+func prod_mult(n: Dictionary) -> float:
+	return _prod_info(n)[0]
+
+
+func _prod_info(n: Dictionary) -> Array:
+	## [production multiplier, the Superbloom effect it comes from or null]: Spore Burst, Superbloom and
+	## Relay Aegis do not stack (the strongest applies); an Echo Split jam stops the vat.
+	if n["owner"] == "" or (_fx_node.is_empty() and _fx_seat.is_empty()):
+		return [1.0, null]
+	if is_disrupted(n["id"]):
+		return [0.0, null]
+	var m := 1.0
+	for e in _fx_node.get(n["id"], []):
+		if e["id"] == "spore_burst" and e["seat"] == n["owner"]:
+			m = maxf(m, float(e["mult"]))
+		elif e["id"] == "relay_aegis" and allied(e["seat"], n["owner"]):
+			m = maxf(m, float(e["prod"]))
+	var bloom = null
+	for e in _fx_seat.get(n["owner"], []):
+		if e["id"] == "superbloom" and float(e["left"]) != 0.0 and float(e["mult"]) > m:
+			m = float(e["mult"])
+			bloom = e
+	return [m, bloom]
+
+
+func _produce(n: Dictionary, dt: float) -> void:
+	var base := _base_production(n)
+	var info := _prod_info(n)
+	var cap: float = Rules.CAPS[n["tier"]]
+	var before: float = n["units"]
+	var bloom = info[1]
+	var add: float = base * float(info[0]) * dt
+	if bloom != null and float(bloom["left"]) > 0.0:      # Superbloom "cap": at most `left` extra units in all
+		var extra: float = minf(add - base * dt, float(bloom["left"]))
+		add = base * dt + extra
+	n["units"] = minf(cap, before + add)
+	if bloom != null and float(bloom["left"]) > 0.0:
+		bloom["left"] = maxf(0.0, float(bloom["left"]) - maxf(0.0, n["units"] - before - base * dt))
+
+
+func skill_speed(h: Dictionary) -> float:
+	## Surge / Rewire speed multiplier (they do not stack).
+	var m := 1.0
+	if not _fx_horde.is_empty():
+		for e in _fx_horde.get(h["id"], []):
+			if e["id"] == "surge":
+				m = maxf(m, float(e["mult"]))
+	if not _fx_seat.is_empty():
+		for e in _fx_seat.get(h["owner"], []):
+			if e["id"] == "rewire":
+				m = maxf(m, float(e["mult"]))
+	return m
+
+
+func deck_slow(h: Dictionary) -> float:
+	## Speed factor of the deck under the head: SIEGE enemy goo (Rules.GOO_SLOW) or an enemy Mire; with both,
+	## the stronger slow applies (no stacking; draft sec4, Daniele 0.18.7).
+	var goo := Rules.bridge_combat
+	if not goo and _fx_edge.is_empty():
+		return 1.0
+	var sp := _current_span(h)
+	if sp.is_empty():
+		return 1.0
+	var slow := 1.0
+	if goo:
+		var g := goo_owner(sp["edge"])
+		if g != "" and not allied(g, h["owner"]):
+			slow = Rules.GOO_SLOW
+	for e in _fx_edge.get(sp["edge"], []):
+		if e["id"] == "mire" and not allied(e["seat"], h["owner"]):
+			slow = minf(slow, float(e["slow"]))
+	return slow
+
+
+func _cannon_mult(h: Dictionary) -> float:
+	## Anchor (and Aegis decks): the caster's lines on it take half the cannon kills.
+	if _fx_edge.is_empty():
+		return 1.0
+	var sp := _current_span(h)
+	if sp.is_empty():
+		return 1.0
+	for e in _fx_edge.get(sp["edge"], []):
+		if e.has("open") and allied(e["seat"], h["owner"]):
+			return float(Rules.SKILLS["anchor"]["cannon_mult"])
+	return 1.0
+
+
+# ------------------------------------------------------------------ ultimate charge
+func _credit(killer: String, victim: String, units: float) -> void:
+	## An enemy combat kill (troops, garrison, cannon, Scorch) speeds the killer's ultimate. Neutrals,
+	## allies, decoys, sacrifices, ultimate kills and falls never reach here.
+	if killer == "" or victim == "" or units <= 0.0 or allied(killer, victim):
+		return
+	_kill_credit[killer] = _kill_credit.get(killer, 0.0) + units
+
+
+func _blame(h: Dictionary, seat: String, amount: float) -> void:
+	var b: Dictionary = h.get("blame", {})
+	b[seat] = b.get(seat, 0.0) + amount
+	h["blame"] = b
+
+
+func _credit_blame(h: Dictionary, actual: float) -> void:
+	var b: Dictionary = h.get("blame", {})
+	h.erase("blame")
+	var total := 0.0
+	for s in b:
+		total += b[s]
+	if total <= 0.0:
+		return
+	for s in b:
+		_credit(s, h["owner"], actual * b[s] / total)
+
+
+func _step_charge(dt: float) -> void:
+	for seat in ult_charge:
+		if eliminated.has(seat):
+			continue
+		ult_since[seat] = float(ult_since[seat]) + dt
+		var gain: float = dt / Rules.ULT_CHARGE_TIME \
+				+ Rules.shown_f(_kill_credit.get(seat, 0.0)) * Rules.ULT_KILL_SECONDS / Rules.ULT_CHARGE_TIME
+		ult_charge[seat] = minf(minf(1.0, float(ult_charge[seat]) + gain), float(ult_since[seat]) / Rules.ULT_MIN_TIME)
+	_kill_credit = {}
+
+
+# ------------------------------------------------------------------ casting
+func can_cast(seat: String, slot: String, target = null) -> bool:
+	return cast_check(seat, slot, target) == ""
+
+
+func cast_check(seat: String, slot: String, target = null) -> String:
+	if over:
+		return "The match is over"
+	if not abilities_on:
+		return "Abilities are off in this match"
+	if not loadouts.has(seat) or eliminated.has(seat):
+		return "No skills for this seat"
+	if not slot in ["active", "map", "ultimate"]:
+		return "No such slot"
+	var id := skill_id(seat, slot)
+	if not Rules.SKILLS.has(id):
+		return "No skill in that slot"
+	var sk: Dictionary = Rules.SKILLS[id]
+	if slot == "ultimate":
+		if id == "rewire" and rewire_left(seat) > 0:
+			return _check_rewire_fire(seat, target)
+		if charge(seat) < 1.0:
+			return "%s charging - %d %%" % [sk["name"], int(charge(seat) * 100.0)]
+	elif cooldown(seat, slot) > 0.0:
+		return "%s ready in %d s" % [sk["name"], int(ceil(cooldown(seat, slot)))]
+	if sk.get("needs_relays", false) and not has_relays:
+		return "No relays on this map"
+	return _target_check(seat, id, target)
+
+
+static func _as_int(v) -> int:
+	if v is int:
+		return v
+	if v is float and is_finite(v) and v == floorf(v):
+		return int(v)
+	return -999999
+
+
+func _node_ok(id: int) -> bool:
+	return id >= 0 and id < nodes.size() and not collapsed.get(id, false)
+
+
+func _deck_ok(ei: int) -> bool:
+	if ei < 0 or ei >= edges.size():
+		return false
+	var e: Dictionary = edges[ei]
+	return not e["plaza"] and not collapsed.get(e["a"], false) and not collapsed.get(e["b"], false)
+
+
+func _deck_moving(ei: int) -> bool:
+	var ctrl: int = edge_controller.get(ei, -1)
+	return ctrl >= 0 and ei in nodes[ctrl]["moving_edges"]
+
+
+func _relay_target(target) -> Array:
+	## [relay node id, mode] from a relay target (id, [id], [id, "jam"|"fire"]).
+	if target is Array and not (target as Array).is_empty():
+		var mode := str(target[1]) if (target as Array).size() > 1 and target[1] is String else "fire"
+		return [_as_int(target[0]), mode]
+	return [_as_int(target), "fire"]
+
+
+func _target_check(seat: String, id: String, target) -> String:
+	var sk: Dictionary = Rules.SKILLS[id]
+	match id:
+		"surge":
+			var h := _horde(_as_int(target))
+			if h.is_empty() or h["owner"] != seat:
+				return "Pick one of your lines"
+			if h["state"] == "absorb":
+				return "That line has already arrived"
+		"core_meltdown":
+			var h := _horde(_as_int(target))
+			if h.is_empty() or h["owner"] != seat or h.get("decoy", false):
+				return "Pick one of your attacking lines"
+			var n: Dictionary = nodes[h["target"]]
+			if allied(n["owner"], seat) or collapsed.get(n["id"], false) or h.get("retreat", false):
+				return "That line is not attacking"
+			if h["state"] != "absorb" and float(h["L"]) - float(h["s"]) > float(sk["range"]):
+				return "Wait until the line reaches its target"
+			if h["units"] < float(sk["min_shown"]) * Rules.SCALE:
+				return "The line needs at least %d units" % int(sk["min_shown"])
+		"spore_burst":
+			var i := _as_int(target)
+			if not _node_ok(i) or nodes[i]["owner"] != seat or not has_vat(nodes[i]):
+				return "Pick one of your vats"
+		"fortify", "relay_aegis":
+			var i := _as_int(target)
+			if not _node_ok(i) or nodes[i]["owner"] != seat:
+				return "Pick one of your nodes"
+		"scorch", "mire":
+			if not _deck_ok(_as_int(target)):
+				return "Pick a deck"
+		"anchor":
+			var ei := _as_int(target)
+			if not _deck_ok(ei):
+				return "Pick a deck"
+			if demolished.has(ei):
+				return "That deck is gone"
+			if _deck_moving(ei):
+				return "That deck is moving"
+		"demolish":
+			var ei := _as_int(target)
+			if not _deck_ok(ei):
+				return "Pick a deck"
+			var e: Dictionary = edges[ei]
+			if e["state"] != "" or e["retracts"]:
+				return "Pick a deck no relay moves"
+			if demolished.has(ei) or effects_on("edge", ei).any(func(x): return x["id"] == "demolish"):
+				return "That deck is already coming down"
+			if anchor_state(ei) != null:
+				return "That deck is anchored"
+		"bypass":
+			var i := _as_int(target)
+			if not _node_ok(i) or nodes[i]["relay"] == "" or relay_states(nodes[i]).is_empty():
+				return "Pick a relay"
+			if nodes[i]["relay_phase"] == "moving":
+				return "That relay is moving"
+			if is_relay_locked(i):
+				return "That relay is locked"
+			if is_bypassed(i):
+				return "That relay is already bypassed"
+		"relay_hack":
+			var rt := _relay_target(target)
+			var i: int = rt[0]
+			if not _node_ok(i) or nodes[i]["relay"] == "" or relay_states(nodes[i]).is_empty():
+				return "Pick a relay"
+			if nodes[i]["owner"] != "" and allied(nodes[i]["owner"], seat):
+				return "Pick an enemy or neutral relay"
+			if is_relay_locked(i):
+				return "That relay is locked"
+			if rt[1] == "fire":
+				if nodes[i]["relay_phase"] != "":
+					return "That relay is already switching"
+				if nodes[i]["relay_cd"] > 0.0:
+					return "That relay is on cooldown - jam it instead"
+			elif rt[1] != "jam":
+				return "Fire or jam"
+		"ghost_line":
+			if not target is Array or (target as Array).size() < 2:
+				return "Pick a source and a destination"
+			var src := _as_int(target[0])
+			var dst := _as_int(target[1])
+			if not _node_ok(src) or nodes[src]["owner"] != seat:
+				return "Start from one of your nodes"
+			if not _node_ok(dst) or dst == src:
+				return "Pick a destination"
+			if floorf(nodes[src]["units"] * _ghost_fraction(target)) < 1.0:
+				return "No units to copy"
+			if find_route(src, dst).size() < 2:
+				return "No route to that node"
+		"echo_split":
+			if _echo_plan(seat).is_empty():
+				return "Echo Split needs your lines on the move"
+		"superbloom":
+			if Rules.SUPERBLOOM_MODE == "under_attack" and not nodes.any(func(n): return n["owner"] == seat and node_under_attack(n["id"], seat)):
+				return "Superbloom needs one of your nodes under attack"
+	return ""
+
+
+func _ghost_fraction(target) -> float:
+	if target is Array and (target as Array).size() > 2 and (target[2] is float or target[2] is int):
+		return clampf(float(target[2]), 0.01, 1.0)
+	return float(Rules.SKILLS["ghost_line"]["fraction"])
+
+
+func _check_rewire_fire(seat: String, target) -> String:
+	var i := _as_int(target)
+	if not _node_ok(i) or nodes[i]["relay"] == "" or relay_states(nodes[i]).is_empty():
+		return "Rewire: pick a relay to fire"
+	for e in _fx_seat.get(seat, []):
+		if e["id"] == "rewire" and i in e["fired"]:
+			return "Rewire already fired that relay"
+	if is_relay_locked(i):
+		return "That relay is locked"
+	if nodes[i]["relay_phase"] != "":
+		return "That relay is already switching"
+	if nodes[i]["relay_cd"] > 0.0:
+		return "That relay is on cooldown"
+	return ""
+
+
+func cast(seat: String, slot: String, target = null) -> bool:
+	## A player's (or the AI's) cast: validated by cast_check, then applied at once. Returns false and
+	## changes nothing when it is not possible.
+	if cast_check(seat, slot, target) != "":
+		return false
+	var id := skill_id(seat, slot)
+	var sk: Dictionary = Rules.SKILLS[id]
+	var ev := {"type": "skill", "id": id, "seat": seat, "slot": slot, "target": target}
+	if slot == "ultimate" and id == "rewire" and rewire_left(seat) > 0:
+		var r := _as_int(target)
+		for e in _fx_seat.get(seat, []):
+			if e["id"] == "rewire":
+				e["fires"] = int(e["fires"]) - 1
+				(e["fired"] as Array).append(r)
+		_fire_relay_by(nodes[r], seat)
+		ev["fire"] = r
+		ev["pos"] = nodes[r]["pos"]
+		ev["affects"] = _hostile_list(seat, [nodes[r]["owner"]])
+		_cast_done(ev)
+		return true
+	ev["pos"] = _target_pos(sk["target"], target, seat)
+	ev["affects"] = []
+	match id:
+		"surge":
+			var hid := _as_int(target)
+			_drop_effects("horde", hid, "surge")
+			_add_effect(id, seat, "horde", hid, sk["dur"], {"mult": sk["mult"]})
+		"spore_burst":
+			_drop_effects("node", _as_int(target), id)
+			_add_effect(id, seat, "node", _as_int(target), sk["dur"], {"mult": sk["mult"]})
+		"fortify":
+			_drop_effects("node", _as_int(target), id)
+			_add_effect(id, seat, "node", _as_int(target), sk["dur"], {"div": sk["div"]})
+		"scorch":
+			var ei := _as_int(target)
+			_add_effect(id, seat, "edge", ei, sk["dur"], {"left": float(sk["cap_shown"]) * Rules.SCALE, "kills": 0.0})
+			ev["affects"] = _deck_seats(seat, ei)
+		"mire":
+			var ei := _as_int(target)
+			_drop_effects("edge", ei, id)
+			_add_effect(id, seat, "edge", ei, sk["dur"], {"slow": sk["slow"]})
+			ev["affects"] = _deck_seats(seat, ei)
+		"anchor":
+			var ei := _as_int(target)
+			var held = anchor_state(ei)
+			_add_effect(id, seat, "edge", ei, sk["dur"], {"open": held if held != null else _edge_open(ei), "cannon_mult": sk["cannon_mult"]})
+		"demolish":
+			var ei := _as_int(target)
+			_add_effect(id, seat, "edge", ei, sk["warn"], {"phase": "warning"})
+			ev["affects"] = _deck_seats(seat, ei)
+		"bypass":
+			_add_effect(id, seat, "relay", _as_int(target), sk["dur"])
+			ev["affects"] = _hostile_list(seat, [nodes[_as_int(target)]["owner"]])
+		"relay_hack":
+			var rt := _relay_target(target)
+			var n: Dictionary = nodes[rt[0]]
+			if rt[1] == "jam":
+				n["relay_cd"] = maxf(n["relay_cd"], 0.0) + float(sk["jam"])
+				_add_effect(id, seat, "relay", n["id"], n["relay_cd"], {"mode": "jam"})
+			else:
+				_fire_relay_by(n, seat)
+				_add_effect(id, seat, "relay", n["id"], Rules.RELAY_WARNING, {"mode": "fire"})
+			ev["affects"] = _hostile_list(seat, [n["owner"]])
+		"ghost_line":
+			var src := _as_int(target[0])
+			var count := floorf(nodes[src]["units"] * _ghost_fraction(target))
+			var g := _spawn_decoy(seat, src, _as_int(target[1]), count, false)
+			ev["hid"] = g.get("id", -1)
+			ev["private"] = seat                         # nobody else may learn it is a ghost
+		"echo_split":
+			var hids := []
+			for p in _echo_plan(seat):
+				var g := _spawn_decoy(seat, p[0], p[1], p[2], true)
+				if not g.is_empty():
+					hids.append(g["id"])
+			ev["count"] = hids.size()
+			ev["affects"] = _hostile_list(seat, factions.keys())
+			fx_events.append({"type": "ghosts", "seat": seat, "hids": hids, "private": seat})
+		"rewire":
+			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "fires": int(sk["fires"]), "fired": []})
+			ev["affects"] = _hostile_list(seat, factions.keys())
+		"superbloom":
+			var left: float = float(sk["cap_shown"]) * Rules.SCALE if Rules.SUPERBLOOM_MODE == "cap" else -1.0
+			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "left": left})
+		"core_meltdown":
+			var hm := _horde(_as_int(target))
+			ev["affects"] = _hostile_list(seat, [nodes[hm["target"]]["owner"]])
+			_meltdown(seat, hm)
+		"relay_aegis":
+			_aegis(seat, _as_int(target))
+	if slot == "ultimate":
+		ult_charge[seat] = 0.0
+		ult_since[seat] = 0.0
+	else:
+		skill_cd[seat][slot] = float(sk["cd"])
+	_cast_done(ev)
+	return true
+
+
+func _cast_done(ev: Dictionary) -> void:
+	fx_events.append(ev)
+	var tel := ev.duplicate()
+	tel.erase("pos")
+	tel["t"] = time
+	events.append(tel)
+
+
+func targets_for(seat: String, slot: String) -> Array:
+	## Every target cast_check accepts right now, for the targeting UI (call it on a tap, not per frame).
+	var id := skill_id(seat, slot)
+	if not Rules.SKILLS.has(id):
+		return []
+	var kind: String = Rules.SKILLS[id]["target"]
+	if slot == "ultimate" and id == "rewire" and rewire_left(seat) > 0:
+		kind = "relay"
+	var cands := []
+	match kind:
+		"own_line":
+			for h in hordes:
+				if h["owner"] == seat:
+					cands.append(h["id"])
+		"own_vat", "own_node":
+			for n in nodes:
+				if n["owner"] == seat:
+					cands.append(n["id"])
+		"deck", "fixed_deck":
+			cands = range(edges.size())
+		"relay", "enemy_relay":
+			for n in nodes:
+				if n["relay"] != "":
+					cands.append(n["id"])
+		"vat_to_node":
+			var out := []
+			if cast_check(seat, slot, [-1, -1]) == "Start from one of your nodes":   # slot ready: list the sources
+				for n in nodes:
+					if n["owner"] == seat and not collapsed.get(n["id"], false) and floorf(n["units"] * _ghost_fraction(null)) >= 1.0:
+						out.append(n["id"])
+			return out
+		_:
+			return [null] if cast_check(seat, slot, null) == "" else []
+	if kind == "enemy_relay":                         # fire where it can, else offer the jam
+		var out := []
+		for c in cands:
+			if cast_check(seat, slot, c) == "":
+				out.append(c)
+			elif cast_check(seat, slot, [c, "jam"]) == "":
+				out.append([c, "jam"])
+		return out
+	return cands.filter(func(t): return cast_check(seat, slot, t) == "")
+
+
+# ------------------------------------------------------------------ effects over time
+func _add_effect(id: String, seat: String, on: String, target, dur: float, extra := {}) -> Dictionary:
+	var e := {"id": id, "seat": seat, "on": on, "target": target, "t": float(dur), "dur": float(dur)}
+	e.merge(extra)
+	effects.append(e)
+	_index_effects()
+	return e
+
+
+func _drop_effects(on: String, target, id: String) -> void:
+	## A recast on the same target refreshes the effect instead of stacking it.
+	var before := effects.size()
+	effects = effects.filter(func(e): return not (e["on"] == on and e["target"] == target and e["id"] == id))
+	if effects.size() != before:
+		_index_effects()
+
+
+func _step_skills(dt: float) -> void:
+	for seat in skill_cd:
+		var cd: Dictionary = skill_cd[seat]
+		for k in cd:
+			if cd[k] > 0.0:
+				cd[k] = maxf(0.0, cd[k] - dt)
+	if effects.is_empty():
+		return
+	var ended := []
+	for e in effects:
+		e["t"] = float(e["t"]) - dt
+		if e["id"] == "scorch":
+			_burn(e, dt)
+		if e["id"] == "demolish" and e.get("phase", "") == "down":
+			demolished[e["target"]] = maxf(float(e["t"]), 0.0)
+		if float(e["t"]) <= 0.0 or (e["on"] == "horde" and _horde(e["target"]).is_empty()):
+			ended.append(e)
+	for e in ended:
+		_end_effect(e)
+
+
+func _end_effect(e: Dictionary) -> void:
+	effects = effects.filter(func(x): return not is_same(x, e))
+	_index_effects()
+	fx_events.append({"type": "skill_end", "id": e["id"], "seat": e["seat"], "on": e["on"], "target": e["target"]})
+	events.append({"t": time, "type": "skill_end", "id": e["id"], "seat": e["seat"], "kills": e.get("kills", 0.0)})
+	match e["id"]:
+		"demolish":
+			var ei: int = e["target"]
+			if e.get("phase", "") == "warning":
+				if anchor_state(ei) != null or not _deck_ok(ei):
+					fx_events.append({"type": "demolish_failed", "edge": ei, "seat": e["seat"]})
+					events.append({"t": time, "type": "demolish_failed", "edge": ei, "seat": e["seat"]})
+				else:                                     # the deck is gone: lines on it and ordered across it pour off (0.18.6 waterfall)
+					var down: float = Rules.SKILLS["demolish"]["down"]
+					demolished[ei] = down
+					_add_effect("demolish", e["seat"], "edge", ei, down, {"phase": "down"})
+					fx_events.append({"type": "demolish", "edge": ei, "seat": e["seat"]})
+			else:
+				demolished.erase(ei)
+				fx_events.append({"type": "deck_rebuilt", "edge": ei})
+		"anchor", "relay_aegis":
+			if e["on"] == "edge":
+				_settle_edge(e["target"], bool(e["open"]))
+		"bypass":
+			_settle_bypass(e["target"])
+
+
+func _settle_edge(ei: int, was_open: bool) -> void:
+	## An anchor ends: a relay deck no longer where its relay says goes now, with that relay's fate for riders.
+	var ctrl: int = edge_controller.get(ei, -1)
+	if ctrl < 0 or anchor_state(ei) != null:
+		return
+	if was_open and not _edge_open(ei):
+		_settle(nodes[ctrl], [ei])
+
+
+func _settle_bypass(relay_id: int) -> void:
+	var n: Dictionary = nodes[relay_id]
+	var closing := []
+	for i in controlled_edges(relay_id):
+		if anchor_state(i) == null and not i in n["moving_edges"] and not _edge_open(i) and not collapsed.get(edges[i]["a"], false) \
+				and not collapsed.get(edges[i]["b"], false):
+			closing.append(i)
+	if not closing.is_empty():
+		_settle(n, closing)
+
+
+func _settle(n: Dictionary, closing: Array) -> void:
+	## Bypass / Anchor over: the decks that go away give their riders the relay's normal outcome at once
+	## (rotation flings, retract carries in, switch / remote drop them).
+	if n["relay"] == "rotation":
+		_relay_fling(n, closing, 0.0)
+	else:
+		for h in hordes.duplicate():
+			for sp in h["spans"]:
+				if not (h in hordes):
+					break
+				if sp["edge"] in closing and _overlap(h, sp["s0"], sp["s1"]) > 0.0:
+					if n["relay"] == "retract":
+						_cut_range(h, sp["s0"], sp["s1"], "carry", n["id"], false)
+					else:
+						_cut_range(h, sp["s0"], sp["s1"], "fall", -1, false)
+	fx_events.append({"type": "relay_settle", "node": n["id"], "closing": closing})
+
+
+func _burn(e: Dictionary, dt: float) -> void:
+	## Scorch: every enemy line on the deck loses `rate` of the units it has on it per second, up to the
+	## cast's total (Alpha 11: 25 HP/s per unit, 1000 HP).
+	var ei: int = e["target"]
+	var rate: float = Rules.SKILLS["scorch"]["rate"]
+	for h in hordes.duplicate():
+		if float(e["left"]) <= 0.0:
+			return
+		if allied(h["owner"], e["seat"]) or h["units"] <= 0.0:
+			continue
+		var on := 0.0
+		for sp in h["spans"]:
+			if sp["edge"] == ei:
+				on += _overlap(h, sp["s0"], sp["s1"])
+		if on <= 0.0:
+			continue
+		var units_on: float = h["units"] * clampf(on / maxf(chain_length(h), 0.001), 0.0, 1.0)
+		var loss: float = minf(minf(rate * units_on * dt / stat(h["owner"], "health"), float(e["left"])), h["units"])
+		e["left"] = float(e["left"]) - loss
+		h["units"] -= loss
+		if not h.get("decoy", false):
+			combat_losses[h["owner"]] = combat_losses.get(h["owner"], 0.0) + loss
+			_credit(e["seat"], h["owner"], loss)
+			e["kills"] = float(e["kills"]) + loss
+		if h["units"] <= 0.0 and not h["streaming"]:
+			_kill_horde(h, "scorch")
+
+
+func _capture_effects(n: Dictionary, seat: String) -> void:
+	## A node changes hands: the old owner's protection on it ends; an echo jam ends if its caster's side took it.
+	if _fx_node.is_empty() or not _fx_node.has(n["id"]):
+		return
+	var id: int = n["id"]
+	effects = effects.filter(func(e):
+		if e["on"] != "node" or e["target"] != id:
+			return true
+		if e["id"] in ["spore_burst", "fortify", "relay_aegis"]:
+			return allied(e["seat"], seat)
+		if e["id"] == "echo_split":
+			return not allied(e["seat"], seat)
+		return true)
+	_index_effects()
+
+
+# ------------------------------------------------------------------ skill effects that act at once
+func _meltdown(seat: String, h: Dictionary) -> void:
+	## Core Meltdown (sec5.2): sacrifice share of the line (at least min_shown, no upper cap); each unit
+	## sacrificed kills kills_per defenders (cap_shown at most; Fortify / Aegis divide it); a garrison at zero
+	## -> the rest of the line (and its siege there) captures. No charge from any of it.
+	var sk: Dictionary = Rules.SKILLS["core_meltdown"]
+	var n: Dictionary = nodes[h["target"]]
+	var sac: float = minf(h["units"], maxf(h["units"] * float(sk["share"]), float(sk["min_shown"]) * Rules.SCALE))
+	h["units"] -= sac
+	combat_losses[seat] = combat_losses.get(seat, 0.0) + sac
+	var kills: float = minf(minf(sac * float(sk["kills_per"]), float(sk["cap_shown"]) * Rules.SCALE) / garrison_div(n), n["units"])
+	n["units"] -= kills
+	if n["owner"] != "":
+		combat_losses[n["owner"]] = combat_losses.get(n["owner"], 0.0) + kills
+	var took := false
+	if n["units"] <= 0.0001:
+		n["units"] = 0.0
+		var rest: float = h["units"] + n["siege"].get(seat, 0.0)
+		if rest > 0.0:
+			if h["streaming"]:
+				_end_streaming(nodes[h["route"][0]], "done")    # what never left stays in the vat
+			hordes.erase(h)
+			var old: String = n["owner"]
+			_capture(n, seat, rest)
+			events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old})
+			captured.emit(n["id"], seat, old)
+			took = true
+	if not took and h["units"] <= 0.0 and h in hordes:
+		_kill_horde(h, "meltdown")
+	fx_events.append({"type": "meltdown", "node": n["id"], "seat": seat, "hid": h["id"], "sacrificed": Rules.shown(sac),
+			"killed": Rules.shown(kills), "captured": took})
+	events.append({"t": time, "type": "meltdown", "node": n["id"], "seat": seat, "sacrificed": sac, "killed": kills, "captured": took})
+
+
+func _aegis(seat: String, id: int) -> void:
+	## Relay Aegis: the node and its adjacent own nodes (over open decks) are shielded and produce more; the
+	## decks between them are anchored and the relays among them locked, for `dur` seconds.
+	var sk: Dictionary = Rules.SKILLS["relay_aegis"]
+	var group := [id]
+	for link in adj[id]:
+		var nb: int = link[0]
+		if nodes[nb]["owner"] == seat and not collapsed.get(nb, false) and is_edge_open(link[1]) and not nb in group:
+			group.append(nb)
+	for g in group:
+		_drop_effects("node", g, "relay_aegis")
+		_add_effect("relay_aegis", seat, "node", g, sk["dur"], {"div": sk["div"], "prod": sk["prod"], "center": id})
+	for ei in range(edges.size()):
+		var e: Dictionary = edges[ei]
+		if e["plaza"] or not (e["a"] in group and e["b"] in group) or _deck_moving(ei):
+			continue
+		var held = anchor_state(ei)
+		_add_effect("relay_aegis", seat, "edge", ei, sk["dur"], {"open": held if held != null else _edge_open(ei), "center": id})
+
+
+# ------------------------------------------------------------------ decoys (Ghost Line, Echo Split)
+func _spawn_decoy(seat: String, src: int, dst: int, count: float, echo: bool) -> Dictionary:
+	var route := find_route(src, dst)
+	if route.size() < 2 or count < 1.0:
+		return {}
+	var h := _new_horde(seat, count, route)            # looks like any send: streams out, same fields
+	h["decoy"] = true
+	h["ghost_left"] = count
+	if echo:
+		h["echo"] = true
+	hordes.append(h)
+	return h
+
+
+func _echo_plan(seat: String) -> Array:
+	## [[source, destination, units]] for Echo Split: the biggest own lines on the move (echoes at most), each
+	## echoed from its own source toward the enemy node nearest its target (another route).
+	var lines := hordes.filter(func(h): return h["owner"] == seat and not h.get("decoy", false) and h["state"] in ["move", "fight"] \
+			and not h.get("retreat", false) and h["units"] >= 1.0)
+	lines.sort_custom(func(a, b): return a["units"] > b["units"])
+	var out := []
+	for h in lines:
+		if out.size() >= int(Rules.SKILLS["echo_split"]["echoes"]):
+			break
+		var src: int = h["route"][0]
+		if nodes[src]["owner"] != seat or collapsed.get(src, false):
+			continue
+		var tp: Vector3 = nodes[h["target"]]["pos"]
+		var cands := nodes.filter(func(n): return n["id"] != h["target"] and n["id"] != src and not collapsed.get(n["id"], false) \
+				and n["owner"] != "" and not allied(n["owner"], seat))
+		cands.sort_custom(func(a, b): return (a["pos"] as Vector3).distance_to(tp) < (b["pos"] as Vector3).distance_to(tp))
+		for n in cands:
+			if find_route(src, n["id"]).size() >= 2:
+				out.append([src, n["id"], floorf(h["units"])])
+				break
+	return out
+
+
+func _emit_decoys(dt: float) -> void:
+	## A decoy streams out of its vat at the door rate like a real order (without touching the vat).
+	for h in hordes:
+		if not h.get("decoy", false) or float(h.get("ghost_left", 0.0)) <= 0.0:
+			continue
+		var src: Dictionary = nodes[h["route"][0]]
+		if src["owner"] != h["owner"] or collapsed.get(src["id"], false):
+			_decoy_done_streaming(h)
+			continue
+		var x: float = minf(h["ghost_left"], Rules.exit_rate() * dt)
+		h["units"] += x
+		h["ghost_left"] -= x
+		if h["ghost_left"] <= 0.001:
+			_decoy_done_streaming(h)
+
+
+func _decoy_done_streaming(h: Dictionary) -> void:
+	h["ghost_left"] = 0.0
+	if h["streaming"]:
+		h["streaming"] = false
+		h["ordered"] = h["units"]
+		h["start_units"] = maxf(h["units"], 1.0)
+
+
+func _decoy_arrive(n: Dictionary, h: Dictionary) -> void:
+	## A decoy pours in and vanishes: nothing reinforces, nothing attacks. An echo landing on an enemy node
+	## jams its vat and cannon (Echo Split's payload, Alpha 11 Hostile Takeover).
+	if h.get("landed", false):
+		return
+	h["landed"] = true
+	if h.get("echo", false) and n["owner"] != "" and not allied(n["owner"], h["owner"]) and not collapsed.get(n["id"], false):
+		_drop_effects("node", n["id"], "echo_split")
+		_add_effect("echo_split", h["owner"], "node", n["id"], Rules.SKILLS["echo_split"]["disrupt"])
+		fx_events.append({"type": "disrupt", "node": n["id"], "seat": h["owner"]})
+		events.append({"t": time, "type": "disrupt", "node": n["id"], "seat": h["owner"], "victim": n["owner"]})
+	fx_events.append({"type": "ghost_end", "hid": h["id"], "seat": h["owner"], "why": "landed", "node": n["id"]})
+
+
+func _step_decoys() -> void:
+	## SIEGE: a decoy reaching a hostile waypoint's platform dissolves (it never fights a garrison).
+	if Rules.bridge_combat:
+		for h in hordes:
+			if not h.get("decoy", false) or h["state"] == "absorb":
+				continue
+			for ns in h["node_spans"]:
+				var n: Dictionary = nodes[ns["node"]]
+				if h["s"] >= ns["s0"] and h["s"] <= ns["s1"] and n["owner"] != "" and not allied(n["owner"], h["owner"]):
+					if not h in _popped:
+						_popped.append(h)
+					break
+	_pop_decoys()
+
+
+func _pop_decoys() -> void:
+	for g in _popped:
+		if g in hordes:
+			fx_events.append({"type": "ghost_end", "hid": g["id"], "seat": g["owner"], "why": "contact"})
+			_kill_horde(g, "ghost")
+	_popped = []
+
+
+# ------------------------------------------------------------------ helpers for events
+func _hostile_list(seat: String, seats: Array) -> Array:
+	var out := []
+	for s in seats:
+		if str(s) != "" and not allied(str(s), seat) and not str(s) in out:
+			out.append(str(s))
+	return out
+
+
+func _deck_seats(seat: String, ei: int) -> Array:
+	## Hostile seats a deck skill touches: the owners of its ends and of the lines on it.
+	var seats := [nodes[edges[ei]["a"]]["owner"], nodes[edges[ei]["b"]]["owner"]]
+	for h in hordes:
+		for sp in h["spans"]:
+			if sp["edge"] == ei and _overlap(h, sp["s0"], sp["s1"]) > 0.0:
+				seats.append(h["owner"])
+				break
+	return _hostile_list(seat, seats)
+
+
+func _target_pos(kind: String, target, seat: String) -> Vector3:
+	match kind:
+		"own_line":
+			var h := _horde(_as_int(target))
+			return sample(h, h["s"])[0] if not h.is_empty() else Vector3.ZERO
+		"deck", "fixed_deck":
+			var line := deck_line(_as_int(target))
+			return (line[0] as Vector3).lerp(line[-1], 0.5) if not line.is_empty() else Vector3.ZERO
+		"vat_to_node":
+			return nodes[_as_int(target[0])]["pos"]
+		"enemy_relay":
+			return nodes[_relay_target(target)[0]]["pos"]
+		"none":
+			return nodes[homes[seat]]["pos"] if homes.has(seat) else Vector3.ZERO
+	var i := _as_int(target)
+	return nodes[i]["pos"] if i >= 0 and i < nodes.size() else Vector3.ZERO

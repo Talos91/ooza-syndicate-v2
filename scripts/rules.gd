@@ -242,8 +242,119 @@ const FACTION_TRAITS := {"vex": ["Efficient routing", "Faster travel on owned co
 		"bloom": ["Biomass recovery", "Recover a portion of nearby losses."],
 		"ember": ["Siege pressure", "Pressure defended structures."],
 		"solar": ["Connected defense", "Protect connected friendly nodes."]}
-const FACTION_ULTIMATE := {"vex": ["Route Hack", "the route and relay specialist"], "null": ["Echo Split", "decoys, disruption of enemy control"],
-		"bloom": ["Spore Bloom", "growth"], "ember": ["Core Meltdown", "siege"], "solar": ["Relay Aegis", "protecting a crossing"]}
+# the approved ultimates (SKILLS-2.0-DRAFT sec5 / sec5.2, Daniele 2026-09-26); [name, one short line]
+const FACTION_ULTIMATE := {"vex": ["Rewire", "all lines faster, fire any 3 relays on the map"],
+		"null": ["Echo Split", "moving lines spawn decoy echoes that jam enemy nodes"],
+		"bloom": ["Superbloom", "every vat produces 1.5x for 12 s"],
+		"ember": ["Core Meltdown", "sacrifice part of an attacking line to gut the garrison"],
+		"solar": ["Relay Aegis", "a node and its neighbours shielded, their decks locked"]}
+
+# ------------------------------------------------------------------ SKILLS 2.0 (0.18.7)
+# Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select
+# what skill each of your factions will use, follow the skill file from faction ultimates and ability
+# pool)". Source: Docs/Game Design/Ooze Syndicate 2.0/01 Rules/SKILLS-2.0-DRAFT.md (draft 2, approved):
+# 5 shared active skills + 5 shared map skills + one ultimate per faction. A loadout = the faction
+# (fixes the ultimate) + 1 active + 1 map skill; everything unlocked for now.
+# UNITS: the draft's numbers are SHOWN (Alpha 11 scale). Keys ending in "_shown" hold shown units; the
+# Sim multiplies them by SCALE (sim units = shown x 5, as Rules.shown divides by 5). Seconds, speed and
+# damage multipliers are scale-free. Every value is provisional (draft sec5.2: measure, then retune).
+# "target" kinds (what the dock asks the player to tap):
+#   own_line    one of your lines (horde id)            own_vat   one of your vat nodes (node id)
+#   own_node    one of your nodes (node id)             deck      any deck, relay decks too (edge index)
+#   fixed_deck  a deck no relay moves (edge index)      relay     any relay node (node id)
+#   enemy_relay an enemy or neutral relay (node id)     vat_to_node [source node id, destination node id]
+#   none        no target (cast at once)
+const SKILLS := {
+	# ---- active pool (combat), every map
+	"surge": {"name": "Surge", "slot": "active", "cd": 28.0, "target": "own_line",
+			"desc": "One of your lines moves 50 % faster for 8 s.", "mult": 1.5, "dur": 8.0},
+	"spore_burst": {"name": "Spore Burst", "slot": "active", "cd": 35.0, "target": "own_vat",
+			"desc": "One vat produces 1.8x for 10 s, within its cap.", "mult": 1.8, "dur": 10.0},
+	"fortify": {"name": "Fortify", "slot": "active", "cd": 35.0, "target": "own_node",
+			"desc": "One node's garrison takes 1.65x less damage for 10 s.", "div": 1.65, "dur": 10.0},
+	# Alpha 11 Scorch: 25 HP/s per unit caught (100 HP a unit), at most 1000 HP (10 units) per cast
+	"scorch": {"name": "Scorch", "slot": "active", "cd": 32.0, "target": "deck",
+			"desc": "A deck burns for 5 s: enemy lines on it lose units (up to 10).", "dur": 5.0,
+			"rate": 0.25, "cap_shown": 10.0},
+	# the decoy's length is the send fraction of the source vat (the fraction the player has set); no units spent
+	"ghost_line": {"name": "Ghost Line", "slot": "active", "cd": 32.0, "target": "vat_to_node",
+			"desc": "A decoy line that looks real and draws cannon fire, but never fights.", "fraction": 0.5},
+	# ---- map pool (network skills)
+	"demolish": {"name": "Demolish", "slot": "map", "cd": 60.0, "target": "fixed_deck",
+			"desc": "A deck collapses after 3 s; lines pour off it; it rebuilds after 20 s.", "warn": 3.0, "down": 20.0},
+	# speed x0.6 = 40 % slower; in SIEGE the stronger of this and the goo corridor slow applies (no stacking)
+	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
+			"desc": "Enemy lines on one deck are 40 % slower for 8 s.", "slow": 0.6, "dur": 8.0},
+	"anchor": {"name": "Anchor", "slot": "map", "cd": 45.0, "target": "deck",
+			"desc": "A deck is locked for 10 s: no relay moves it, Demolish fails, half cannon kills on your lines.",
+			"dur": 10.0, "cannon_mult": 0.5},
+	"bypass": {"name": "Bypass", "slot": "map", "cd": 45.0, "target": "relay", "needs_relays": true,
+			"desc": "A relay holds both of its states for 8 s.", "dur": 8.0},
+	# target: the relay id fires it once (its normal warning); [relay id, "jam"] adds `jam` s to its cooldown
+	"relay_hack": {"name": "Relay Hack", "slot": "map", "cd": 45.0, "target": "enemy_relay", "needs_relays": true,
+			"desc": "Fire an enemy or neutral relay once, or jam it (+10 s cooldown).", "jam": 10.0},
+	# ---- ultimates (one per faction; "cd" is the natural charge time, see ULT_CHARGE_TIME)
+	# Rewire: while it lasts, the ultimate slot fires any relay once (target = relay id), `fires` at most
+	"rewire": {"name": "Rewire", "slot": "ultimate", "faction": "vex", "cd": 120.0, "target": "none",
+			"desc": "10 s: all your lines +50 % speed; fire up to 3 relays anywhere, enemy ones too.",
+			"dur": 10.0, "mult": 1.5, "fires": 3},
+	"echo_split": {"name": "Echo Split", "slot": "ultimate", "faction": "null", "cd": 120.0, "target": "none",
+			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat and cannon for 8 s.",
+			"echoes": 3, "disrupt": 8.0},
+	# Daniele (0.18.7): "i don't like that super bloom can be casted only under attack but i like the cap"
+	"superbloom": {"name": "Superbloom", "slot": "ultimate", "faction": "bloom", "cd": 120.0, "target": "none",
+			"desc": "Every vat produces 1.5x for 12 s (at most 40 extra units).", "mult": 1.5, "dur": 12.0, "cap_shown": 40.0},
+	# sacrifice `share` of the line (at least min_shown, no upper cap), kills_per defenders each (at most
+	# cap_shown); a garrison at zero -> the rest of the line captures. The line must be attacking: headed for
+	# a node that isn't yours or an ally's, and within `range` metres of it (or pouring in).
+	"core_meltdown": {"name": "Core Meltdown", "slot": "ultimate", "faction": "ember", "cd": 120.0, "target": "own_line",
+			"desc": "Sacrifice 25 % of an arriving line: 3 defenders die per unit; a garrison at zero is captured.",
+			"share": 0.25, "min_shown": 4.0, "kills_per": 3.0, "cap_shown": 60.0, "range": 12.0},
+	# the node + its adjacent own nodes: garrison damage / div, production x prod, the decks between them anchored
+	# and any relay among them locked (nobody can fire it)
+	"relay_aegis": {"name": "Relay Aegis", "slot": "ultimate", "faction": "solar", "cd": 120.0, "target": "own_node",
+			"desc": "A node and its neighbours: 1.8x less garrison damage, +20 % production, decks locked, 12 s.",
+			"div": 1.8, "dur": 12.0, "prod": 1.2},
+}
+const ACTIVE_SKILLS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line"]
+const MAP_SKILLS := ["demolish", "mire", "anchor", "bypass", "relay_hack"]
+const FACTION_ULTIMATE_ID := {"vex": "rewire", "null": "echo_split", "bloom": "superbloom", "ember": "core_meltdown", "solar": "relay_aegis"}
+# default loadouts per faction - a seat without a chosen loadout (and every AI seat) gets its faction's;
+# between them the five cover every shared skill. "map_no_relays" replaces a relay skill on a map without
+# relays (the Ooze Factory greys Bypass / Relay Hack out there, draft sec4).
+const FACTION_LOADOUT := {
+	"vex": {"active": "surge", "map": "relay_hack", "map_no_relays": "mire"},
+	"null": {"active": "ghost_line", "map": "bypass", "map_no_relays": "demolish"},
+	"bloom": {"active": "spore_burst", "map": "mire", "map_no_relays": "mire"},
+	"ember": {"active": "scorch", "map": "demolish", "map_no_relays": "demolish"},
+	"solar": {"active": "fortify", "map": "anchor", "map_no_relays": "anchor"},
+}
+# ULTIMATE CHARGE (draft sec1, locked): ~120 s of natural charge; enemy combat kills speed it up, but a
+# charge never completes sooner than ULT_MIN_TIME after the match start or the last cast. No charge from
+# neutrals, friendly fire, sacrifices, decoys, ultimate kills or falls. Each SHOWN enemy unit your troops,
+# cannons or Scorch kill adds ULT_KILL_SECONDS of charge.
+const ULT_CHARGE_TIME := 120.0
+const ULT_MIN_TIME := 90.0
+const ULT_KILL_SECONDS := 0.3
+# Superbloom variant (Daniele, 0.18.7, "cap" chosen): "cap" = castable any time, extra production capped
+# at SKILLS.superbloom.cap_shown; "under_attack" = no cap, castable only while one of your nodes is under
+# attack (a hostile line headed for it, or hostile units on its platform).
+static var SUPERBLOOM_MODE := "cap"
+# ABILITIES ON/OFF (draft sec1, Alpha 11's match setting): default ON in both modes. Off: nothing casts.
+static var abilities_on := true
+# AI casting rhythm: the least time between two of its casts, per level (it also only looks at its skills
+# when it thinks, every Rules.AI_LEVELS period)
+const AI_SKILL_GAP := {"Training": 24.0, "Casual": 16.0, "Standard": 9.0, "Veteran": 6.0, "Expert": 4.0}
+
+
+static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) -> String:
+	## The skill id in `slot` ("active" / "map" / "ultimate") of a loadout for this faction.
+	if slot == "ultimate":
+		return FACTION_ULTIMATE_ID.get(faction, "echo_split")
+	var d: Dictionary = FACTION_LOADOUT.get(faction, FACTION_LOADOUT["null"])
+	var id := str(loadout.get(slot, d[slot]))
+	var pool: Array = ACTIVE_SKILLS if slot == "active" else MAP_SKILLS
+	return id if id in pool else str(d[slot])
 # AI levels - Alpha 11's five (ai_balance.gd PROFILES, Daniele Alpha 17: "5 levels of difficulty with
 # scaling aggressiveness"). Identical economy and combat at every level: only reaction time, how many
 # nodes join an attack, how wrong its garrison estimates are and how often they refresh, the grace
