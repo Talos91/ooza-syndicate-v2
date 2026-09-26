@@ -50,6 +50,8 @@ var last_stand_corners: Array = []  # 0.18.7: home node ids of the match's seats
 var _ls_corner_k := 0                # the corner the next planned drop aims at (carries across rings)
 var _next_wave_at := 0.0
 var very_last_stand_active := false  # 0.18.9: the post-ring stalemate breaker (Rules.VERY_LAST_STAND_TIME)
+var vls_enabled := true              # TUTORIAL: false keeps the Very Last Stand off (every lesson but L7 / the first match)
+var vls_gap_override := -1.0         # TUTORIAL: > 0 fixes the Very Last Stand's interval (start_very_last_stand_now)
 var very_last_stand_gap := 0.0       # this match's current interval, derived from the survivor count
                                       # and the time left to Rules.MATCH_HARD_END (Daniele: "the time
                                       # between falls is due to the number of nodes") - reuses
@@ -2601,7 +2603,7 @@ func _step_very_last_stand(dt: float) -> void:
 	if over:                                          # (0.18.10: it runs with LAST STAND OFF too - Daniele,
 		return                                        # 2026-09-27: "Very Last Stand anyway")
 	if not very_last_stand_active:
-		if time < Rules.VERY_LAST_STAND_TIME:
+		if time < Rules.VERY_LAST_STAND_TIME or not vls_enabled:
 			return
 		_start_very_last_stand()
 		return
@@ -2616,6 +2618,24 @@ func _start_very_last_stand() -> void:
 	events.append({"t": time, "type": "very_last_stand"})
 	fx_events.append({"type": "very_last_stand"})
 	_vls_queue_next()
+
+
+# ---------------------------------------------------------- TUTORIAL (L7): start the collapses on cue
+func start_last_stand_now() -> void:
+	## The Last Stand at once - the real reveal (fx "last_stand": the banner), rings, warnings and drops -
+	## instead of at Rules.LAST_STAND_TIME. A map without Last Stand methods reveals nothing, as at 3:00.
+	if last_stand_active or over:
+		return
+	_start_last_stand()
+
+
+func start_very_last_stand_now(gap := -1.0) -> void:
+	## The Very Last Stand at once; `gap` > 0 fixes the seconds between drops (else the usual derived gap).
+	if very_last_stand_active or over:
+		return
+	vls_enabled = true
+	vls_gap_override = gap
+	_start_very_last_stand()
 
 
 func _vls_surviving() -> Array:
@@ -2682,7 +2702,7 @@ func _vls_queue_next() -> void:
 		last_stand_warn = {}
 		last_stand_queue = []
 		return
-	very_last_stand_gap = (Rules.MATCH_HARD_END - time) / float(survivors.size() - 1)
+	very_last_stand_gap = vls_gap_override if vls_gap_override > 0.0 else (Rules.MATCH_HARD_END - time) / float(survivors.size() - 1)
 	var gone := collapsed.duplicate()
 	var id := _vls_pick(gone)
 	var batch := [id]

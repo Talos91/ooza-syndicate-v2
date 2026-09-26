@@ -1,0 +1,537 @@
+extends SceneTree
+## Headless tutorial check:  Godot --headless --path . --script res://tests/test_tutorial.gd  [-- maps=<dir>]
+## Exit code 0 = all passed. TUTORIAL-DESIGN.md §9: every lesson is staged on its baked map and each step's
+## correct action is played through the same Sim calls the controls use (send, upgrade_structure,
+## structure_order, fire_relay, cast - what main.perform runs), stepping at 0.05 s until the step passes; it must
+## pass within its budget and the next step must start. One negative check per lesson (doing nothing / the
+## wrong thing does not pass a doing-step). L4 / L9: the scripted push is on the relay deck when the prompt
+## fires, half speed is asked for only while it is there, and firing drops the expected share. L7: the collapse
+## starts at the staged time, evacuating keeps A alive, the Very Last Stand reaches one platform. Reveal sets
+## are cumulative; progress + the Graduate unlock round-trip on temp paths; the first-launch rule. Everything is
+## staged directly - no whole matches (L9 starts from a staged mid-match board).
+## `maps=<dir>` points the lesson maps at another folder of baked maps (default res://maps4).
+
+const DT := 0.05
+var failures := 0
+
+
+func check(cond: bool, what: String) -> void:
+	print(("PASS  " if cond else "FAIL  ") + what)
+	if not cond:
+		failures += 1
+
+
+func _init() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("maps="):
+			TutorialDirector.map_dir = a.substr(5)
+	TutorialDirector.path = "user://test_tutorial_progress.cfg"
+	ArmyPresets.path = "user://test_tutorial_armies.cfg"
+	_wipe()
+	TutorialDirector.reload_progress()
+	ArmyPresets._loaded = false
+	ArmyPresets.load_all()
+	Rules.abilities_on = true
+	Rules.last_stand = true
+	test_reveal()
+	test_progress()
+	test_l1()
+	test_l2()
+	test_l3()
+	test_l4()
+	test_l5()
+	test_l6()
+	test_l7()
+	for f in ["null", "vex", "bloom", "ember", "solar"]:
+		test_l8(f)
+	test_l9()
+	_wipe()
+	print("\n%s: %d failure(s)" % ["OK" if failures == 0 else "FAILED", failures])
+	quit(1 if failures > 0 else 0)
+
+
+func _wipe() -> void:
+	for p in [TutorialDirector.path, ArmyPresets.path]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+
+
+# ------------------------------------------------------------------ harness
+func make(id: int, faction := "null") -> Array:
+	## [director, sim]: the lesson's map, seats and loadout exactly as main.start_tutorial builds them.
+	var d := TutorialDirector.new(id)
+	var map := MapBuilder.load_map(TutorialDirector.map_path_for(id))
+	var seats := {}
+	for s in map["seats"]["1v1"]:
+		seats[int(s["node"])] = s["seat"]
+	var lo := d.loadout_for(faction, ArmyPresets.loadout_for(faction))
+	var sim := Sim.new()
+	sim.setup(map, MapBuilder.layout(map), seats, {"A": faction, "B": "ember"}, 7, {}, {"A": lo})
+	d.ui_fraction = d.fraction_start(0.5)
+	d.begin(sim, map, faction)
+	return [d, sim]
+
+
+func tick(d: TutorialDirector, sim: Sim) -> void:
+	## One frame as main runs it: the director, the Sim at the director's time scale, the fx events.
+	d.step(DT)
+	sim.step(DT * d.time_scale)
+	for ev in sim.fx_events:
+		d.on_event(ev)
+	sim.fx_events.clear()
+
+
+func play(d: TutorialDirector, sim: Sim, key: String, act: Callable, budget := -1.0) -> bool:
+	## Play step `key` with `act.call(t)` every frame until the next step starts (or the lesson completes);
+	## checks it happened within the step's budget.
+	var st: Dictionary = d.L["steps"][d.step_i]
+	check(str(st["key"]) == key, "L%d: step '%s' is the current step" % [d.lesson_id, key])
+	var lim: float = budget if budget > 0.0 else float(st.get("budget", 5.0)) + TutorialDirector.INTERLUDE + 0.5
+	var k := d.step_i
+	var t := 0.0
+	while d.step_i == k and d.state in ["running", "interlude"] and t < lim:
+		act.call(t)
+		tick(d, sim)
+		t += DT
+	var ok := d.step_i != k or d.state == "complete"
+	check(ok, "L%d step '%s' passes within %.0f s (took %.1f s, state %s)" % [d.lesson_id, key, lim, t, d.state])
+	return ok
+
+
+func wait(_t: float) -> void:
+	pass
+
+
+func first(t: float) -> bool:
+	return t < DT * 0.5
+
+
+func deck_metres(sim: Sim, hid: int, relay: int) -> float:
+	var h := sim._horde(hid)
+	if h.is_empty():
+		return 0.0
+	var head: float = h["s"]
+	var tail: float = head - Sim.chain_length(h)
+	var m := 0.0
+	for sp in h["spans"]:
+		if sp["edge"] in sim.controlled_edges(relay) and sim.is_edge_open(sp["edge"]):
+			m += maxf(0.0, minf(head, sp["s1"]) - maxf(tail, sp["s0"]))
+	return m
+
+
+# ------------------------------------------------------------------ reveal sets
+func test_reveal() -> void:
+	var before := TutorialDirector.REVEAL_BASE.duplicate()
+	for l in TutorialDirector.LESSONS:
+		var id := int(l["id"])
+		var got := TutorialDirector.reveal_for(id, 0)
+		if id == TutorialDirector.LESSON_COUNT:
+			check(got.size() == TutorialDirector.ALL_KEYS.size(), "reveal L9: everything (%d keys)" % got.size())
+			continue
+		var want := before.duplicate()
+		for k in l.get("reveal", []) + (l["steps"][0] as Dictionary).get("reveal", []):
+			if not k in want:
+				want.append(k)
+		check(_same(got, want), "reveal L%d step 1 = the lessons before it + its own start keys %s" % [id, str(got)])
+		for k in ["halos", "eject"]:
+			check(not k in got, "reveal L%d: no team part '%s' in a 1v1 lesson" % [id, k])
+		var last := TutorialDirector.reveal_for(id, (l["steps"] as Array).size() - 1)
+		for k in before:
+			check(k in last, "reveal L%d keeps '%s' from the lessons before" % [id, k])
+		before = last
+	check("send_panel" in TutorialDirector.reveal_for(1, 2) and not "send_panel" in TutorialDirector.reveal_for(1, 1),
+			"reveal: the SEND panel appears at L1 step 3, not before")
+	check("dock" in TutorialDirector.reveal_for(8, 0) and not "dock" in TutorialDirector.reveal_for(7, 3), "reveal: the dock appears in L8")
+	check("danger" in TutorialDirector.reveal_for(7, 0) and not "danger" in TutorialDirector.reveal_for(6, 7), "reveal: danger marks from L7")
+	check("relay" in TutorialDirector.reveal_for(4, 0) and not "relay" in TutorialDirector.reveal_for(3, 4), "reveal: the relay cue from L4")
+
+
+func _same(a: Array, b: Array) -> bool:
+	if a.size() != b.size():
+		return false
+	for k in a:
+		if not k in b:
+			return false
+	return true
+
+
+# ------------------------------------------------------------------ progress, unlock, first launch
+func test_progress() -> void:
+	_wipe()
+	TutorialDirector.reload_progress()
+	check(TutorialDirector.done_count() == 0 and not TutorialDirector.offered, "progress: a fresh device has nothing done, nothing offered")
+	check(TutorialDirector.first_launch_due(PackedStringArray(), false), "first launch: no `offered` key -> straight into L1")
+	for flag in ["--map=res://maps4/T-01-first-steps.json", "--scenario=hud19", "--stage=monster", "--thumb=x.png", "--shots=4", "--demo"]:
+		check(not TutorialDirector.first_launch_due(PackedStringArray([flag]), false), "first launch: never with %s" % flag)
+	check(not TutorialDirector.first_launch_due(PackedStringArray(), true), "first launch: never in an online room or a Net reconnect")
+	check(not ArmyPresets.is_unlocked("graduate") and ArmyPresets.is_unlocked("biopod") and ArmyPresets.is_unlocked("default"),
+			"unlock: the Graduate vat is locked until the tutorial is done, every other look stays unlocked")
+	ArmyPresets.set_cosmetic_pick("null", "vat", "graduate")
+	check(ArmyPresets.cosmetic_loadout_for("null")["vat"] == "default" and ArmyPresets.cosmetic_loadout_for("null", true)["vat"] == "graduate",
+			"unlock: a locked Graduate pick plays as the default vat, ARMIES still shows the pick")
+	TutorialDirector.mark_offered()
+	check(TutorialDirector.saved, "progress: saved to the temp path")
+	TutorialDirector.reload_progress()
+	check(TutorialDirector.offered and not TutorialDirector.first_launch_due(PackedStringArray(), false), "progress: `offered` round-trips; no second forced start")
+	for i in range(1, 9):
+		TutorialDirector.mark_complete(i)
+	TutorialDirector.reload_progress()
+	check(TutorialDirector.done_count() == 8 and TutorialDirector.first_unfinished() == 9 and not ArmyPresets.is_unlocked("graduate"),
+			"progress: 8 / 9 round-trips, CONTINUE = L9, Graduate still locked")
+	TutorialDirector.mark_complete(9, true)
+	TutorialDirector.reload_progress()
+	check(TutorialDirector.all_done() and TutorialDirector.relay_kill_done and ArmyPresets.is_unlocked("graduate"),
+			"progress: 9 / 9 + relay kill round-trip; the Graduate vat unlocks")
+	check(ArmyPresets.cosmetic_loadout_for("null")["vat"] == "graduate", "unlock: the Graduate pick plays once unlocked")
+	var cf := ConfigFile.new()
+	check(cf.load(TutorialDirector.path) == OK and int(cf.get_value("progress", "version", 0)) == TutorialDirector.PROGRESS_VERSION,
+			"progress: the file carries [progress] version")
+	_wipe()
+	TutorialDirector.reload_progress()
+	ArmyPresets._loaded = false
+	ArmyPresets.load_all()
+
+
+# ------------------------------------------------------------------ L1 SEND
+func test_l1() -> void:
+	var r := make(1)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	check(sim.nodes[n["H"]]["owner"] == "A" and Rules.shown(sim.nodes[n["H"]]["units"]) == 30, "L1 staged: A's home with 30")
+	check(d.gesture()[0][0] == "drag" and d.gesture()[0][1] == n["H"] and d.gesture()[0][2] == n["N1"], "L1: the hand drags H -> N1")
+	# negative: nothing happens, nothing passes
+	for i in range(int(20.0 / DT)):
+		tick(d, sim)
+	check(d.step_i == 0, "L1 negative: doing nothing never passes the drag step")
+	check(d.allow("send", n["H"], {"to": n["BH"]}) != "", "L1: sending the home at B is refused (Not yet)")
+	play(d, sim, "drag", func(t): if first(t): sim.send(n["H"], n["N1"], d.fraction_start(0.5)))
+	play(d, sim, "label", wait)
+	play(d, sim, "percent", func(t): if first(t): d.ui_fraction = 0.25)
+	play(d, sim, "send25", func(t): if first(t): check(not sim.send(n["H"], n["N2"], 0.25).is_empty(), "L1: a 25 % send goes"))
+	play(d, sim, "reinforce", func(t): if first(t): sim.send(n["N1"], n["H"], 0.5))
+	check(d.state == "complete" and TutorialDirector.is_done(1), "L1 complete and saved")
+
+
+# ------------------------------------------------------------------ L2 VATS
+func test_l2() -> void:
+	var r := make(2)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	for i in range(int(10.0 / DT)):
+		tick(d, sim)
+	check(d.step_i == 0, "L2 negative: no inspector, no pass")
+	play(d, sim, "inspect", func(t): d.ui_inspector = n["H"])
+	d.ui_inspector = -1
+	check(d.card()["text"].contains(str(Rules.shown(Rules.VAT_COST[1]))), "L2: the upgrade line names the cost from Rules")
+	play(d, sim, "upgrade", func(t): if first(t): check(sim.upgrade_structure(n["H"]), "L2: double-tap upgrade starts"))
+	play(d, sim, "build", wait)
+	play(d, sim, "t3", func(t): if sim.can_upgrade(n["H"], "A") == "": sim.upgrade_structure(n["H"]))
+	check(sim.nodes[n["H"]]["tier"] == 3, "L2: the vat reached T3")
+	play(d, sim, "machingoon", func(t): if first(t): check(sim.structure_order("A", "build", n["N1"], {"kind": "machingoon"})[0], "L2: MACHINGOON builds"))
+	var b_lost0: float = sim.combat_losses.get("B", 0.0)
+	play(d, sim, "watch", wait)
+	check(sim.nodes[n["N1"]]["owner"] == "A" and sim.combat_losses.get("B", 0.0) > b_lost0, "L2: the Machingoon held N1 and killed rival crews")
+	play(d, sim, "mg_upgrade", func(t): if first(t): check(sim.upgrade_structure(n["N1"]), "L2: the Machingoon upgrade starts"))
+	play(d, sim, "t4", func(t): if first(t): d.press_button())
+	check(d.state == "complete", "L2 complete")
+
+
+# ------------------------------------------------------------------ L3 THE ENEMY
+func test_l3() -> void:
+	var neg := make(3)
+	var dn: TutorialDirector = neg[0]
+	var sn: Sim = neg[1]
+	sn.send(dn.names["H"], dn.names["N2"], 0.5)                 # 12 against 15: too small
+	var said := false
+	for i in range(int(20.0 / DT)):
+		tick(dn, sn)
+		said = said or dn.card()["text"] == TutorialDirector.line("L3.too_small")
+	check(dn.step_i == 0 and sn.nodes[dn.names["N2"]]["owner"] == "", "L3 negative: a line smaller than the garrison does not take it")
+	check(said, "L3: the handler says 'Not enough. Try 75 %.'")
+	var r := make(3)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	check(d.card()["text"].contains(str(Rules.shown(Rules.NEUTRAL_UNITS[1]))), "L3: the neutral line names its garrison")
+	play(d, sim, "neutral", func(t): if first(t): sim.send(n["H"], n["N2"], 0.75))
+	play(d, sim, "trade", func(t): if first(t): d.press_button())
+	var b_line := {"seen": false}
+	play(d, sim, "defend", func(t):
+		if first(t):
+			b_line["seen"] = sim.hordes.any(func(h): return h["owner"] == "B" and int(h["target"]) == n["N1"])
+			sim.send(n["H"], n["N1"], 1.0))
+	check(b_line["seen"], "L3: the rival attack on N1 was launched")
+	check(sim.nodes[n["N1"]]["owner"] == "A", "L3: reinforcing held N1")
+	var tier0: int = sim.nodes[n["B1"]]["tier"]
+	var sent := {"at": -99.0}
+	play(d, sim, "attack", func(t):                            # gather, then hit back with both vats
+		var mine: float = sim.nodes[n["N1"]]["units"] + sim.nodes[n["H"]]["units"]
+		var busy := sim.hordes.any(func(h): return h["owner"] == "A")
+		if not busy and t - float(sent["at"]) > 3.0 and mine > sim.nodes[n["B1"]]["units"] + 12.0 * Rules.SCALE:
+			sent["at"] = t
+			sim.send(n["N1"], n["B1"], 1.0)
+			sim.send(n["H"], n["B1"], 1.0))
+	check(sim.nodes[n["B1"]]["tier"] == tier0 - 1, "L3: the captured vat dropped a tier (T%d -> T%d)" % [tier0, sim.nodes[n["B1"]]["tier"]])
+	play(d, sim, "alive", func(t): if first(t): d.press_button())
+	check(d.state == "complete", "L3 complete")
+
+
+# ------------------------------------------------------------------ L4 RELAYS
+func test_l4() -> void:
+	var r := make(4)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	var R: int = n["R"]
+	check(sim.nodes[R]["owner"] == "A" and sim.nodes[R]["relay"] == "rotation", "L4 staged: A holds the rotation relay")
+	check(d.preview_relay == R, "L4: the relay-outcome preview stays up on R")
+	for i in range(int(10.0 / DT)):
+		tick(d, sim)
+	check(d.step_i == 0, "L4 negative: no tap, no pass")
+	play(d, sim, "inspect", func(t): d.ui_inspector = R)
+	play(d, sim, "fire", func(t): if first(t): check(sim.fire_relay(R), "L4: double-tap fires the relay"))
+	play(d, sim, "warning", func(t): if first(t): d.press_button())
+	var st := {"fired": false, "on_ok": true, "half_ok": true, "pred": -1.0, "fling": -1}
+	var catch_step := func(t):
+		var hid := d.catch_line()
+		var on := hid >= 0 and deck_metres(sim, hid, R) > 0.3
+		if d.catch_prompt() != on:
+			st["on_ok"] = false
+		if (d.time_scale < 1.0) != d.catch_prompt():
+			st["half_ok"] = false
+		if not st["fired"] and hid >= 0 and deck_metres(sim, hid, R) >= 2.0:
+			st["fired"] = sim.fire_relay(R)
+		if sim.nodes[R]["relay_phase"] == "warning" and sim.nodes[R]["relay_t"] <= DT * d.time_scale + 0.001 and hid >= 0:
+			st["pred"] = deck_metres(sim, hid, R) / Rules.metres_per_unit()
+	var k := d.step_i
+	var t := 0.0
+	while d.step_i == k and t < 90.0:
+		d.step(DT)
+		catch_step.call(t)
+		sim.step(DT * d.time_scale)
+		for ev in sim.fx_events:
+			d.on_event(ev)
+			if ev["type"] == "fling" and ev["seat"] == "B":
+				st["fling"] = int(ev["units"])
+		sim.fx_events.clear()
+		t += DT
+	check(d.step_i == k + 1, "L4 'prompt' passes within 90 s (%.1f s)" % t)
+	check(st["on_ok"], "L4: the prompt shows exactly while the push is on the relay deck")
+	check(st["half_ok"], "L4: half speed only while the push is on the relay deck")
+	check(int(st["fling"]) >= 5, "L4: firing flings >= 5 rival units (%d)" % int(st["fling"]))
+	check(st["pred"] > 0.0 and absf(float(st["fling"]) - Rules.shown(st["pred"])) <= 2.0,
+			"L4: the fling is the share that was on the deck when it moved (%d vs %d)" % [int(st["fling"]), Rules.shown(st["pred"])])
+	play(d, sim, "waterfall", wait)
+	check(d.state == "complete", "L4 complete")
+	# a miss: nobody fires - three lines, then "Timing takes practice" and the step passes
+	var m := make(4)
+	var dm: TutorialDirector = m[0]
+	var sm: Sim = m[1]
+	dm.skip_step()
+	dm.skip_step()
+	dm.skip_step()
+	var tt := 0.0
+	while dm.step_i == 3 and tt < 120.0:
+		tick(dm, sm)
+		tt += DT
+	check(dm.step_i == 4 and sm.nodes[dm.names["R"]]["owner"] == "A", "L4 negative: three missed lines pass the step without a fling, R never falls (%.0f s)" % tt)
+
+
+# ------------------------------------------------------------------ L5 RELAY KINDS
+func test_l5() -> void:
+	var r := make(5)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	for i in range(int(8.0 / DT)):                             # negative: the line comes, nobody pulls
+		tick(d, sim)
+	check(d.step_i == 0, "L5 negative: the retract step does not pass on its own")
+	for key in ["retract", "switch", "remote"]:
+		var relay: int = n[{"retract": "RT", "switch": "SW", "remote": "RC"}[key]]
+		var st := {"fired": false}
+		play(d, sim, key, func(t):
+			var hid := d.catch_line()
+			if not st["fired"] and hid >= 0 and deck_metres(sim, hid, relay) >= 1.5:
+				st["fired"] = sim.fire_relay(relay))
+		check(st["fired"], "L5 %s: fired with the rival on its deck" % key)
+		var fell := 0
+		for ev in d._log:
+			if ev.get("type") == "fall" and ev.get("seat") == "B" and int(ev.get("relay", -1)) == relay:
+				fell += int(ev.get("shown", 0))
+		check(fell >= 1, "L5 %s: rival units fell with the deck (%d)" % [key, fell])
+	play(d, sim, "own", func(t): if first(t): d.press_button())
+	check(d.state == "complete", "L5 complete")
+
+
+# ------------------------------------------------------------------ L6 RELAY WORKS
+func test_l6() -> void:
+	var r := make(6)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	play(d, sim, "inspect", func(t): d.ui_inspector = n["R1"])
+	for i in range(int(12.0 / DT)):
+		tick(d, sim)
+	check(d.step_i == 1, "L6 negative: no LASER order, no laser step pass")
+	play(d, sim, "laser", func(t): if first(t): check(sim.structure_order("A", "build", n["R1"], {"kind": "laser"})[0], "L6: LASER builds"))
+	var lost0: float = sim.combat_losses.get("B", 0.0)
+	play(d, sim, "burst", wait)
+	check(sim.combat_losses.get("B", 0.0) - lost0 > 0.0 and sim.nodes[n["R1"]]["owner"] == "A", "L6: the laser burst killed rival crews, R1 held")
+	play(d, sim, "forge", func(t): if first(t): sim.structure_order("A", "build", n["R2"], {"kind": "forge"}))
+	check(sim.has_forge("A"), "L6: FORGE ONLINE (the attack and defence bonus)")
+	play(d, sim, "hub", func(t): if first(t): sim.structure_order("A", "build", n["R3"], {"kind": "monster_hub"}))
+	check(d.allow("launch_monster", n["R3"], {"to": n["M1"]}) != "" and d.allow("launch_monster", n["R3"], {"to": n["M2"]}) == "",
+			"L6: the monster goes to the lane's end (other targets: Not yet)")
+	check(n["M2"] in sim.monster_reach(n["R3"]), "L6: the lane's end is within the monster's reach")
+	play(d, sim, "send", func(t): if first(t): check(sim.structure_order("A", "launch_monster", n["R3"], {"to": n["M2"]})[0], "L6: the monster launches"))
+	play(d, sim, "take", wait)
+	var kicked := 0.0
+	for ev in d._log:
+		if ev.get("type") == "monster_kick" and ev.get("seat_hit") == "B":
+			kicked += float(ev["units"])
+	check(sim.nodes[n["M2"]]["owner"] == "A", "L6: the monster took the lane's end")
+	check(kicked > 0.0, "L6: the monster kicked rival crews off (%d)" % Rules.shown(kicked))
+	play(d, sim, "cooldown", func(t): if first(t): d.press_button())
+	check(d.state == "complete", "L6 complete")
+
+
+# ------------------------------------------------------------------ L7 LAST STAND
+func test_l7() -> void:
+	var r := make(7)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	check(d.allow("send", n["H"], {"to": n["BH"]}) != "", "L7: no attacks on the rival before the last platform")
+	play(d, sim, "reveal", func(t): if first(t): d.press_button())
+	var ls := {"at": -1.0}
+	play(d, sim, "evacuate", func(t):
+		if first(t):
+			sim.send(n["H"], n["I1"], 1.0)
+			sim.send(n["A1"], n["I2"], 1.0)
+			sim.send(n["A2"], n["I2"], 1.0)
+		if ls["at"] < 0.0 and sim.last_stand_active:
+			ls["at"] = d.lesson_t
+			for nm in ["H", "A1", "A2"]:
+				if sim.nodes[n[nm]]["owner"] == "A":
+					sim.send(n[nm], n["I1"], 1.0))
+	check(absf(float(ls["at"]) - float(d.L["last_stand_at"])) <= DT * 2.0, "L7: the Last Stand starts at the staged %.0f s (%.2f)" % [d.L["last_stand_at"], ls["at"]])
+	check(not sim.eliminated.has("A") and sim.nodes.any(func(x): return x["owner"] == "A" and not sim.collapsed.get(x["id"], false)),
+			"L7: evacuating to the centre kept A alive through the ring's fall")
+	play(d, sim, "vls", func(t): if first(t):
+		check(sim.very_last_stand_active and absf(sim.very_last_stand_gap - Rules.LAST_STAND_WARNING) < 0.01, "L7: the Very Last Stand runs at once, gap from the lesson table")
+		d.press_button())
+	if d.state != "complete":
+		play(d, sim, "hold", func(t):
+			for x in sim.nodes:                               # the player: off a warned platform, onto the next one
+				if x["owner"] == "A" and sim.is_warned(x["id"]) and x["units"] > 1.0:
+					for y in sim.nodes:
+						if y["id"] != x["id"] and not sim.collapsed.get(y["id"], false) and not sim.is_warned(y["id"]):
+							sim.send(x["id"], y["id"], 1.0)
+							break, 90.0)
+	check(d.state == "complete" and sim.winner == "A", "L7: VICTORY on the last platform")
+	# the Very Last Stand on its own: down to one platform (a 0.1 s gap, before the end check runs at 1 s)
+	var r2 := make(7)
+	var s2: Sim = r2[1]
+	s2.start_very_last_stand_now(0.1)
+	while s2.time < 0.98:
+		s2.step(DT)
+	var left := s2.nodes.filter(func(x): return not s2.collapsed.get(x["id"], false)).size()
+	check(left == 1, "L7: the Very Last Stand drops the survivors one by one to one platform (%d left)" % left)
+	var r3 := make(1)
+	check(not (r3[1] as Sim).vls_enabled, "the Very Last Stand stays off in the other lessons")
+
+
+# ------------------------------------------------------------------ L8 SKILLS
+func test_l8(faction: String) -> void:
+	var r := make(8, faction)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	check(sim.abilities_on and sim.skill_id("A", "active") == "surge" and sim.skill_id("A", "map") == "demolish",
+			"L8 (%s): abilities on, the fixed Surge + Demolish loadout" % faction)
+	for i in range(int(8.0 / DT)):
+		tick(d, sim)
+	check(d.step_i == 0, "L8 (%s) negative: no cast, no pass" % faction)
+	play(d, sim, "surge", func(t):
+		for h in sim.hordes:
+			if h["owner"] == "A" and sim.cast_check("A", "active", h["id"]) == "":
+				sim.cast("A", "active", h["id"])
+				break)
+	play(d, sim, "demolish", func(t):
+		for h in sim.hordes:
+			if h["owner"] != "B":
+				continue
+			for sp in h["spans"]:
+				if h["s"] >= sp["s0"] + 2.0 and h["s"] <= sp["s1"] and sim.cast_check("A", "map", sp["edge"]) == "":
+					sim.cast("A", "map", sp["edge"])
+					return)
+	play(d, sim, "ultimate", func(t):
+		var ts := sim.targets_for("A", "ultimate")
+		if not ts.is_empty():
+			sim.cast("A", "ultimate", ts[0]))
+	play(d, sim, "armies", func(t): if first(t): d.press_button())
+	check(d.state == "complete", "L8 (%s) complete" % faction)
+
+
+# ------------------------------------------------------------------ L9 FIRST MATCH (staged mid-match)
+func _stage_l9(d: TutorialDirector, sim: Sim) -> void:
+	var R: int = d.names["R"]
+	var a_side := [d.names["H"], 1, 2, 3, R]
+	var b_side := [d.names["BH"], 8, 9, 10]
+	for x in sim.nodes:
+		if x["id"] in a_side:
+			x["owner"] = "A"
+			x["units"] = 30.0 * Rules.SCALE
+		elif x["id"] in b_side:
+			x["owner"] = "B"
+			x["units"] = 25.0 * Rules.SCALE
+
+
+func test_l9() -> void:
+	var r := make(9)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var R: int = d.names["R"]
+	check(R >= 0 and sim.nodes[R]["relay"] != "", "L9: T-02's relay found without lesson names")
+	check(d.card()["visible"] and d.card()["text"] == TutorialDirector.line("L9.start"), "L9: the one opening card")
+	_stage_l9(d, sim)
+	var st := {"fired": false, "on_ok": true, "half_ok": true, "prompted": false}
+	var t := 0.0
+	while d.state != "complete" and t < 120.0:
+		d.step(DT)
+		var hid := d.catch_line()
+		var on := hid >= 0 and deck_metres(sim, hid, R) > 0.3 and str(d._match.get("phase", "")) == "push"
+		if d.catch_prompt() != on:
+			st["on_ok"] = false
+		if (d.time_scale < 1.0) != d.catch_prompt():
+			st["half_ok"] = false
+		if d.catch_prompt():
+			st["prompted"] = true
+		if not st["fired"] and on and deck_metres(sim, hid, R) >= 6.0:
+			st["fired"] = sim.fire_relay(R)
+		sim.step(DT * d.time_scale)
+		for ev in sim.fx_events:
+			d.on_event(ev)
+		sim.fx_events.clear()
+		t += DT
+	check(st["prompted"], "L9: the push reached the relay deck and the prompt fired")
+	check(st["on_ok"], "L9: the prompt shows exactly while the push is on the relay deck")
+	check(st["half_ok"], "L9: half speed only while the push is on the relay deck")
+	check(d.state == "complete" and bool(d.result.get("relay_kill", false)),
+			"L9: firing under the push is a RELAY KILL and ends the tutorial on the spot (%.0f s, %d crews)" % [t, int(d.result.get("kill_units", 0))])
+	check(d.result.get("final", false), "L9: the final (TRAINING COMPLETE) screen follows")
+	# a miss: the push crosses, the match goes on, nothing completes
+	var m := make(9)
+	var dm: TutorialDirector = m[0]
+	var sm: Sim = m[1]
+	_stage_l9(dm, sm)
+	var tt := 0.0
+	var pushed := false
+	while tt < 90.0 and str(dm._match.get("phase", "")) != "done":
+		tick(dm, sm)
+		pushed = pushed or str(dm._match.get("phase", "")) == "push"
+		tt += DT
+	check(pushed and str(dm._match.get("phase", "")) == "done" and dm.state != "complete",
+			"L9 negative: a missed push hands the match back, the lesson does not complete (%.0f s)" % tt)

@@ -97,13 +97,15 @@ static func is_default(faction: String) -> bool:
 
 
 # ------------------------------------------------------------------ cosmetics (0.19.0, ARMIES > COSMETICS)
-static func cosmetic_loadout_for(faction: String) -> Dictionary:
-	## Every family's pick for this faction, always all present, "default" filling in the rest.
+static func cosmetic_loadout_for(faction: String, raw := false) -> Dictionary:
+	## Every family's pick for this faction, always all present, "default" filling in the rest. `raw`: the picks
+	## as saved, locked ones included (the ARMIES page shows them as locked); otherwise what plays.
 	_ensure()
 	var p: Dictionary = cosmetic_picks.get(faction, {})
 	var out := {}
 	for family in Cosmetics.OPTIONS:
-		out[family] = str(p.get(family, "default"))
+		var id := str(p.get(family, "default"))
+		out[family] = id if raw or is_unlocked(id) else "default"   # a locked pick (the Graduate vat) plays as the default
 	return out
 
 
@@ -117,10 +119,13 @@ static func set_cosmetic_pick(faction: String, family: String, id: String) -> bo
 	return save_all()
 
 
-static func is_unlocked(_item: String) -> bool:
-	## Every vat variant, skin line and monster alt is unlocked while testing (Daniele, 2026-09-27); a
-	## faction vat by wins with that race and Graduate by finishing the tutorial come later - this stays
-	## the one place that check happens once there is something to check.
+static func is_unlocked(item: String) -> bool:
+	## Every vat variant, skin line and monster alt is unlocked while testing (Daniele, 2026-09-27), except the
+	## Graduate vat: it unlocks once all nine tutorial lessons are complete (TUTORIAL-DESIGN.md §7, saved locally
+	## in user://tutorial.cfg). A faction vat by wins with that race comes later - this stays the one place that
+	## check happens.
+	if item == "graduate":
+		return TutorialDirector.all_done()
 	return true
 
 
