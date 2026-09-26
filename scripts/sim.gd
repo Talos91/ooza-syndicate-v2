@@ -1190,6 +1190,8 @@ func step(dt: float) -> void:
 	for n in nodes:                                   # production (vat nodes only), up to the cap
 		if n["owner"] != "" and has_vat(n) and n["units"] < Rules.CAPS[n["tier"]]:
 			_produce(n, dt)
+		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and has_vat(n) and not collapsed.get(n["id"], false) and n["units"] < Rules.NEUTRAL_UNITS.get(n["tier"], 0):
+			n["units"] = minf(Rules.NEUTRAL_UNITS[n["tier"]], n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)
 	_step_relays(dt)
 	_step_structures(dt)
 	_step_skills(dt)

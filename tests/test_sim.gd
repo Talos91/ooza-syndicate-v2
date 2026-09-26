@@ -914,6 +914,18 @@ func _init() -> void:
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
 
+	# ---------------------------------------------------------------- 0.18.9: neutral villages regenerate at their vat's speed
+	var snr := Sim.new()
+	snr.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+	var nn: Dictionary = snr.nodes.filter(func(x): return x["owner"] == "" and snr.has_vat(x))[0]
+	var full_nr: float = Rules.NEUTRAL_UNITS[nn["tier"]]
+	nn["units"] = full_nr - 40.0
+	snr.step(0.5)
+	check(absf(nn["units"] - (full_nr - 40.0 + Rules.PROD[nn["tier"]] * 0.5)) < 0.01, "a chipped neutral village regrows at its tier's production rate (node %d tier %s units %.2f expected %.2f, has_vat %s)" % [nn["id"], str(nn["tier"]), nn["units"], full_nr - 4.0 + Rules.PROD[nn["tier"]] * 0.5, str(snr.has_vat(nn))])
+	for i in range(40):
+		snr.step(0.5)
+	check(absf(nn["units"] - full_nr) < 0.01, "...and stops at its starting garrison (%.0f)" % full_nr)
+
 	# ---------------------------------------------------------------- 0.18.7: balance presets (off by default)
 	check(Rules.BALANCE_PRESET == "" and Rules.VAT_COST == {1: 50, 2: 100, 3: 150} and Rules.NEUTRAL_UNITS == {1: 60, 2: 80, 3: 160, 4: 320}
 			and Rules.CAPS == {1: 150, 2: 200, 3: 400, 4: 800} and Rules.BUILD_SECONDS == 10.0,

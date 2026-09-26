@@ -202,6 +202,9 @@ const MATCH_HARD_END := 420.0        # 7:00 safety net: still undecided -> stron
 const SCALE := 5.0
 static var CAPS := {1: 150, 2: 200, 3: 400, 4: 800}       # Alpha 11 owned caps x5
 static var PROD := {1: 5.0, 2: 8.0, 3: 12.0, 4: 17.5}     # Alpha 11 1.0/1.6/2.4/3.5 units/s x5
+# NEUTRAL REGEN (Daniele, 0.18.9: "make neutral villages regenerate at the speed of their vat"): a chipped
+# neutral vat node grows back at its tier's PROD (no faction bonus), up to its starting garrison NEUTRAL_UNITS.
+const NEUTRAL_REGEN := true
 static var HOME_TIER := 2
 static var VAT_COST := {1: 50, 2: 100, 3: 150}            # tier t -> t+1
 static var CANNON_COST := {1: 75, 2: 125, 3: 175}         # build T1, then upgrade to T2, T3
