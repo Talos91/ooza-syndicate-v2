@@ -909,12 +909,121 @@ func _init() -> void:
 			check(closed_mid and open_end, "%s %s: an appearing deck is closed while it moves, walkable once the motion ends (%d decks)" % [mode_r, c[0], opening.size()])
 	_goo_territory()
 	_skills_tests()
+	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
 
 
+func _ai_relays(mr: Dictionary, seats_r: Dictionary) -> void:
+	## 0.18.7 (Daniele: "the ai tends to avoid relay bridges all together and almost never build structure
+	## on relays"). Neon Delta: 1 -> 4 is fastest over the retract deck 1-7 (relay 7), [1, 6, 4] a bit slower.
+	## BRAWL only (Daniele, 0.18.7: "brawl is our game" - SIEGE is deactivated).
+	var pos := MapBuilder.layout(mr)
+	var fresh := func() -> Sim:
+		var s := Sim.new()
+		s.setup(mr, pos, seats_r, {"A": "null", "B": "ember"}, 1)
+		s.nodes[1]["owner"] = "A"
+		s.nodes[1]["units"] = 300.0
+		s.nodes[1]["tier"] = 4
+		return s
+	for tag in ["BRAWL"]:
+		var s1: Sim = fresh.call()
+		s1.nodes[7]["owner"] = "A"                        # its own relay
+		var vet := SeatAI.new("A", 2.0, "Veteran")
+		var h1 := vet._send(s1, 1, 4, 0.3)
+		check(not h1.is_empty() and h1["route"] == [1, 7, 4], "%s: the AI crosses its own relay deck when it is the fastest way (%s)" % [tag, str(h1.get("route", []))])
+		var s2: Sim = fresh.call()
+		s2.nodes[7]["owner"] = "B"                        # a rival's relay, ready to fire
+		var h2 := SeatAI.new("A", 2.0, "Veteran")._send(s2, 1, 4, 0.3)
+		check(not h2.is_empty() and h2["route"] == [1, 6, 4], "%s: ...and goes round a deck a ready rival relay can retract in time (%s)" % [tag, str(h2.get("route", []))])
+		var h2t := SeatAI.new("A", 2.0, "Training")._send(fresh.call(), 1, 4, 0.3)
+		check(h2t["route"] == [1, 7, 4], "%s: (Training, level 0, keeps the plain fastest route)" % tag)
+		var s3: Sim = fresh.call()
+		s3.nodes[7]["owner"] = "B"                        # the rival's relay has just fired: moving, then cooldown
+		s3.nodes[7]["relay_phase"] = "moving"
+		s3.nodes[7]["relay_t"] = Rules.RELAY_MOVE
+		var h3 := SeatAI.new("A", 2.0, "Veteran")._send(s3, 1, 4, 20.0 / 300.0)
+		check(not h3.is_empty() and h3["route"] == [1, 7, 4], "%s: Veteran crosses a rival deck its relay cannot change before a short line is over it (%s)" % [tag, str(h3.get("route", []))])
+		var h3s := SeatAI.new("A", 2.0, "Standard")._send(s3, 1, 4, 20.0 / 300.0)
+		check(not h3s.is_empty() and h3s["route"] == [1, 6, 4], "%s: ...Standard (level 1) assumes a rival relay is always ready and goes round (%s)" % [tag, str(h3s.get("route", []))])
+	# it builds on a relay slot it holds: the slot costs no vat; a cannon on a relay at the front
+	var s4: Sim = fresh.call()
+	s4.nodes[1]["owner"] = ""
+	s4.nodes[0]["units"] = 10.0
+	s4.nodes[7]["owner"] = "A"
+	s4.nodes[7]["units"] = float(Rules.CANNON_COST[1]) + Rules.AI_RELAY_HOLD + 10.0
+	s4.nodes[4]["owner"] = "B"                            # a rival next door
+	SeatAI.new("A", 2.0, "Veteran")._build(s4)
+	check(s4.nodes[7]["build_kind"] == "cannon", "the AI builds a cannon on the front relay slot it holds, given the units (%s)" % s4.nodes[7]["build_kind"])
+	# ...and, when the relay cannot pay for it (relays never grow), it sends a vat's spare units there first
+	var s5: Sim = fresh.call()
+	s5.nodes[0]["owner"] = ""                             # (no home vat to upgrade meanwhile)
+	s5.nodes[7]["owner"] = "A"
+	s5.nodes[7]["units"] = 10.0
+	s5.nodes[4]["owner"] = "B"
+	var ai5 := SeatAI.new("A", 2.0, "Veteran")
+	ai5._build(s5)
+	var feed := s5.hordes.filter(func(x): return x["owner"] == "A" and x["target"] == 7)
+	check(feed.size() == 1 and s5.nodes[7]["build_kind"] == "", "a relay slot too poor to build is fed from a vat first (%d sends)" % feed.size())
+	for i in range(300):
+		s5.step(0.1)
+	ai5._invest_after = 0.0
+	ai5._build(s5)
+	check(s5.nodes[7]["build_kind"] == "cannon" or s5.nodes[7]["attachment"] == "cannon", "...and the cannon goes up once the units are there (relay holds %.0f)" % s5.nodes[7]["units"])
+	# firing: Veteran cuts a rival line routed over its deck before it gets there (it would pour off the
+	# lip), never while its own line still has to cross it
+	var s6: Sim = fresh.call()
+	s6.nodes[7]["owner"] = "A"
+	s6.nodes[7]["units"] = 200.0
+	s6.nodes[4]["owner"] = "B"
+	s6.nodes[4]["units"] = 300.0
+	var hb := s6.send(4, 1, 1.0)
+	check(hb["route"] == [4, 7, 1], "(the rival's order runs 4-7-1, over A's retract deck)")
+	s6.step(0.3)
+	var s6b: Sim = fresh.call()
+	s6b.nodes[7]["owner"] = "A"
+	s6b.nodes[7]["units"] = 200.0
+	s6b.nodes[4]["owner"] = "B"
+	s6b.nodes[4]["units"] = 300.0
+	s6b.send(4, 1, 1.0)
+	s6b.step(0.3)
+	SeatAI.new("A", 2.0, "Standard")._relays(s6b)
+	check(s6b.nodes[7]["relay_phase"] == "", "Standard fires only at a line already on its deck")
+	SeatAI.new("A", 2.0, "Veteran")._relays(s6)
+	check(s6.nodes[7]["relay_phase"] == "warning", "Veteran fires its relay to cut a rival order routed over its deck")
+	var s7: Sim = fresh.call()
+	s7.nodes[7]["owner"] = "A"
+	s7.nodes[7]["units"] = 200.0
+	s7.nodes[4]["owner"] = "B"
+	s7.nodes[4]["units"] = 300.0
+	s7.send(4, 1, 1.0)
+	s7.nodes[2]["owner"] = "A"
+	s7.nodes[2]["units"] = 200.0
+	s7.send(2, 7, 0.5)                                    # its own order still has deck 1-7 ahead
+	s7.step(0.3)
+	SeatAI.new("A", 2.0, "Veteran")._relays(s7)
+	check(s7.nodes[7]["relay_phase"] == "", "...but never while its own order still has to cross the deck (0.18.6 waterfall)")
+	# relay-fall rule (Daniele, 0.18.7): a retract drops its riders like a switch - the AI fires it at a
+	# rival line on the deck however small its own garrison (nothing is carried in any more), and the cut
+	# order never reaches its target. Checked without relying on the carry: holds under either rule.
+	var s8: Sim = fresh.call()
+	s8.nodes[7]["owner"] = "A"
+	s8.nodes[7]["units"] = 20.0
+	s8.nodes[4]["owner"] = "B"
+	s8.nodes[4]["units"] = 300.0
+	var h8 := s8.send(4, 1, 1.0)
+	var deck8: Dictionary = h8["spans"].filter(func(sp): return sp["edge"] == 5)[0]
+	run_until(s8, func(): return h8["s"] > deck8["s0"] + 2.0 or not (h8 in s8.hordes), 30.0)
+	var ai8 := SeatAI.new("A", 2.0, "Standard")
+	ai8._relays(s8)
+	check(s8.nodes[7]["relay_phase"] == "warning", "the AI fires its retract at a rival line on the deck even when it outnumbers the relay's garrison")
+	for i in range(300):
+		s8.step(0.1)
+	var b_lost: float = s8.fall_losses.get("B", 0.0) + s8.combat_losses.get("B", 0.0)
+	check(s8.nodes[1]["owner"] == "A" and s8.nodes[1]["siege"].get("B", 0.0) <= 0.0 and b_lost > 200.0,
+			"...and the order it cut never reaches its target (B lost %.0f of 300)" % b_lost)
 
 func _relay_sim(path: String, relay: int, src: int) -> Sim:
 	## 0.18.7 relay tests: a map with A holding the relay (and the source); every other seat stays home.

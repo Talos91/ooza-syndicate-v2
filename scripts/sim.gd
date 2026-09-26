@@ -876,9 +876,10 @@ func edge_cost(ei: int) -> float:
 	return float(e["geo"]["L"]) / Rules.move_speed()
 
 
-func find_route(from_id: int, to_id: int) -> Array:
+func find_route(from_id: int, to_id: int, avoid := {}) -> Array:
 	## Fastest route by deck travel time (Dijkstra; each node crossed costs a little). Skips
-	## closed relay decks and nodes dropped by the Last Stand collapse.
+	## closed relay decks and nodes dropped by the Last Stand collapse. `avoid` (edge index -> true):
+	## decks left out too (the AI's relay-aware routing, 0.18.7).
 	if collapsed.get(from_id, false) or collapsed.get(to_id, false):
 		return []
 	var dist := {from_id: 0.0}
@@ -891,7 +892,7 @@ func find_route(from_id: int, to_id: int) -> Array:
 			break
 		for link in adj[cur]:
 			var nb: int = link[0]
-			if collapsed.get(nb, false) or not _edge_open(link[1]):
+			if collapsed.get(nb, false) or not _edge_open(link[1]) or avoid.has(link[1]):
 				continue
 			var cost: float = dist[cur] + edge_cost(link[1]) + 1.0
 			if not dist.has(nb) or cost < dist[nb]:
