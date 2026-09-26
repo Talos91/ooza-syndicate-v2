@@ -686,6 +686,13 @@ func _stage_scenario() -> void:
 			sim.nodes[4]["owner"] = HUMAN
 			sim.nodes[4]["units"] = 260.0
 			scenario_focus = sim.nodes[1]["pos"]
+		"hud19b":
+			# 0.19.0 follow-up (double-tap SWITCH + its visibility pass): node 4's relay, ready at first
+			# (the SWITCH button's amber ring, the badge's ready glow / cue), then fired exactly as a
+			# double-tap now does (sim.fire_relay) to show the warning ring + the relay-outcome preview.
+			sim.nodes[4]["owner"] = HUMAN
+			sim.nodes[4]["units"] = 260.0
+			scenario_focus = sim.nodes[4]["pos"]
 		_:
 			sim.nodes[1]["owner"] = "A"
 			sim.nodes[1]["units"] = 160.0
@@ -781,6 +788,17 @@ func _run_scenario() -> void:
 					5:
 						sim.draw_line = str(Rules.DRAW_LINES[0])   # the results screen's DRAW call-out
 						hud.show_end("")
+				_fit_camera()
+		"hud19b":
+			var phase: int = mini(int(sim.time), 1)
+			if phase != _hud19_phase:
+				_hud19_phase = phase
+				match phase:
+					0:
+						hud.inspect(4, cam)                     # ready: the amber SWITCH ring, badge glow + cue
+					1:
+						sim.fire_relay(4)                        # exactly what double-tap now does (main.gd)
+						hud.inspect(4, cam)                      # re-synced: the warning ring + outcome preview
 				_fit_camera()
 		_:
 			_scenario_done = true
@@ -1097,7 +1115,10 @@ func _unhandled_input(event: InputEvent) -> void:
 						hud.close_inspector()
 						_pending_inspect = -1                   # the first tap's inspector never opens
 						_swallow_release = true                 # nor does this tap's release reopen it
-						node_action("upgrade", n)               # double-tap (Alpha 11): upgrade what's there
+						# double-tap (Alpha 11): upgrade what's there - a relay has no upgrade, so its
+						# double-tap fires SWITCH instead (Daniele, 0.19.0: "the relays switch is clicked
+						# by double tapping relays since we have no upgradable buildings there")
+						node_action("switch" if sim.nodes[n]["relay"] != "" else "upgrade", n)
 						_tap_node = -1
 						return
 					_tap_time = _press_time

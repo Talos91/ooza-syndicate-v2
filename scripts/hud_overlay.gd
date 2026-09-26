@@ -18,6 +18,11 @@ var human := "A"
 var ui_scale := 1.0
 var _t := 0.0
 var hover_relay := -1                 # set by Hud while the SWITCH action is hovered / held down
+var _relay_ready_prev := {}            # node id -> was it ready last frame (edge-detects "just became ready")
+var _relay_cue_count := {}             # node id -> how many times the "double-tap to switch" cue has shown
+var _relay_cue_t := {}                 # node id -> seconds left showing that cue
+const RELAY_CUE_MAX := 3               # only the first few times (Daniele's ask)
+const RELAY_CUE_SECONDS := 4.0
 
 
 const HALO_COLOR := Color("ffd76b")
@@ -37,6 +42,18 @@ func setup(m: Node3D, s: Sim, h: Hud, seat: String, scale_ui: float) -> void:
 
 func sync(dt: float) -> void:
 	_t += dt
+	for n in sim.nodes:
+		var id: int = n["id"]
+		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false):
+			continue
+		var ready: bool = n["relay_cd"] <= 0.0 and n["relay_phase"] == ""
+		var was: bool = _relay_ready_prev.get(id, false)
+		if ready and not was and int(_relay_cue_count.get(id, 0)) < RELAY_CUE_MAX:
+			_relay_cue_count[id] = int(_relay_cue_count.get(id, 0)) + 1
+			_relay_cue_t[id] = RELAY_CUE_SECONDS
+		_relay_ready_prev[id] = ready
+		if float(_relay_cue_t.get(id, 0.0)) > 0.0:
+			_relay_cue_t[id] = maxf(0.0, float(_relay_cue_t[id]) - dt)
 	queue_redraw()                    # cheap: a handful of arcs/lines - the danger symbols pulse continuously
 
 
@@ -45,6 +62,7 @@ func _draw() -> void:
 	if cam == null or sim == null:
 		return
 	_draw_halos(cam)
+	_draw_relay_cues(cam)
 	if main.monster_from >= 0:
 		_draw_monster_reach(cam, main.monster_from)
 	for id in _relay_preview_nodes():
@@ -94,6 +112,26 @@ func _draw_halos(cam: Camera3D) -> void:
 			continue
 		var ns := _node_screen(id, cam)
 		draw_arc(ns[0], float(ns[1]) + HALO_PAD[tier] * ui_scale, 0.0, TAU, 40, Color(HALO_COLOR, 0.8), HALO_WIDTH[tier] * ui_scale, true)
+
+
+# ------------------------------------------------------------------ relay badge cues (0.19.0, Daniele:
+# "add some visibility to the buttons / models of the relays")
+func _draw_relay_cues(cam: Camera3D) -> void:
+	for n in sim.nodes:
+		var id: int = n["id"]
+		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false):
+			continue
+		var ready: bool = n["relay_cd"] <= 0.0 and n["relay_phase"] == ""
+		var ns := _node_screen(id, cam)
+		if ready:                                      # a ready glow round the badge's spot (Hud.RELAY_ACCENT)
+			var a := 0.5 + 0.5 * sin(_t * 3.0)
+			draw_arc(ns[0], float(ns[1]) + 5.0 * ui_scale, 0.0, TAU, 32, Color(Hud.RELAY_ACCENT, 0.55 * a), 2.5 * ui_scale, true)
+		if float(_relay_cue_t.get(id, 0.0)) > 0.0:      # the first few times: spell it out
+			var txt := "DOUBLE-TAP TO SWITCH"
+			var f := int(13 * ui_scale)
+			var sz := Hud.UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
+			var p: Vector2 = ns[0] + Vector2(-sz.x / 2.0, -float(ns[1]) - 16.0 * ui_scale)
+			_label(p, txt, Hud.RELAY_ACCENT, 13)
 
 
 # ------------------------------------------------------------------ monster launch reach / drag

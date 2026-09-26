@@ -48,6 +48,7 @@ var dock: SkillDock
 var skill_targets: Control             # the dock's target highlights: over the badges, under the panels
 var overlay: HudOverlay                # 0.19.0: monster reach, halo rings, relay-outcome preview, danger symbols
 var action_buttons: Dictionary = {}    # stable action name -> the inspector's Button (tutorial spotlight, spec I)
+var switch_ring: Control                # 0.19.0: the SWITCH button's READY / cooldown ring (SwitchRing)
 var end_panel: PanelContainer
 var pause_panel: PanelContainer
 var rotate_hint: Label
@@ -371,7 +372,7 @@ func setup(m: Node3D) -> void:
 
 
 func _hint_text() -> String:
-	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
+	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: switch)" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
 
 
 func layout(vp: Vector2, m: Vector4) -> void:
@@ -774,6 +775,33 @@ func inspect(id: int, cam: Camera3D) -> void:
 
 const STRUCT_LABEL := {"vat": "VAT", "machingoon": "MACHINGOON", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
 const BUILD_LABEL := {"machingoon": "MACHINGOON", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
+                                         # buttons / models of the relays") - distinct from the seat colour
+
+
+class SwitchRing:
+	## A READY / cooldown ring drawn over the SWITCH button (a child Control, full rect, clicks pass
+	## through): the relay's own accent while ready or counting down, red while its 1 s warning runs.
+	extends Control
+	var accent := Color("ffb238")
+	var frac := 1.0            # 0..1 cooldown progress (1 = ready)
+	var warning := false
+	var ui_scale := 1.0
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var s := ui_scale
+		var c: Vector2 = size / 2.0
+		var r: float = minf(size.x, size.y) / 2.0 - 4.0 * s
+		draw_arc(c, r, 0.0, TAU, 40, Color(accent, 0.16), 5.0 * s, true)
+		if warning:
+			draw_arc(c, r, 0.0, TAU, 40, Rules.state_color("warn"), 3.5 * s, true)
+		elif frac >= 1.0:
+			draw_arc(c, r, 0.0, TAU, 40, Color(accent, 0.95), 3.5 * s, true)
+		elif frac > 0.0:
+			draw_arc(c, r, -PI / 2.0, -PI / 2.0 + TAU * frac, 40, Color(accent, 0.85), 3.5 * s, true)
 
 
 func _inspector_actions(n: Dictionary) -> void:
@@ -833,10 +861,18 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 		b.button_down.connect(func(): overlay.hover_relay = id)
 	var slots := [Vector2(-75, -175), Vector2(80, -60), Vector2(-230, -60), Vector2(80, 30), Vector2(-230, 30)]
 	b.position = slots[mini(inspector_actions.size(), slots.size() - 1)] * ui_scale
-	var style := panel_style(Rules.seat_color(human))
+	# SWITCH stands out (Daniele, 0.19.0: "add some visibility to the buttons / models of the relays"):
+	# its own accent colour plus a READY / cooldown ring (SwitchRing, updated in _refresh_inspector).
+	var style := panel_style(RELAY_ACCENT if method == "switch" else Rules.seat_color(human))
 	style.set_corner_radius_all(int(40 * ui_scale))
 	b.add_theme_stylebox_override("normal", style)
 	inspector.add_child(b)
+	if method == "switch":
+		switch_ring = SwitchRing.new()
+		switch_ring.ui_scale = ui_scale
+		switch_ring.set_anchors_preset(Control.PRESET_FULL_RECT)
+		switch_ring.accent = RELAY_ACCENT
+		b.add_child(switch_ring)
 	inspector_actions.append({"button": b, "cost": cost, "method": method, "name": name, "args": args})
 	action_buttons[name] = b
 
@@ -950,6 +986,11 @@ func _refresh_inspector(cam: Camera3D) -> void:
 			"switch":
 				why = "" if n["relay_cd"] <= 0.0 and n["relay_phase"] == "" else \
 						("Relay on cooldown" if n["relay_cd"] > 0.0 else "Relay is already switching")
+				if is_instance_valid(switch_ring):
+					var ring := switch_ring as SwitchRing
+					ring.warning = n["relay_phase"] == "warning"
+					ring.frac = 1.0 if n["relay_cd"] <= 0.0 else clampf(1.0 - float(n["relay_cd"]) / Rules.RELAY_COOLDOWN, 0.0, 1.0)
+					ring.queue_redraw()
 			"build":
 				why = sim.can_build(inspector_id, human, str((a["args"] as Dictionary).get("kind", "")))
 			"eject":
@@ -975,6 +1016,7 @@ func close_inspector() -> void:
 	inspector_id = -1
 	inspector_actions.clear()
 	action_buttons.clear()
+	switch_ring = null
 	if overlay:
 		overlay.hover_relay = -1
 
