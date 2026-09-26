@@ -382,7 +382,7 @@ func _relays(sim: Sim) -> void:
 		var enemy: float = cut[0] if lvl >= 2 else now[0]  # level 2+: the whole order it cuts pours away
 		var own: float = maxf(now[1], later[1])
 		if enemy < 2.0 * Rules.SCALE or own > 0.5:        # never drop its own (or allied) lines
-			continue
+			continue                                      # (0.18.7: a retract drops them too, it carries nobody in)
 		# 0.18.7 assumes the relay-fall rule (Daniele): when the motion starts everything still on a deck
 		# that goes away falls, retract included - nobody is carried into the relay node any more, so a
 		# retract is a kill tool like a switch and needs no garrison to take its riders in
@@ -603,7 +603,7 @@ func _retreats(sim: Sim) -> void:
 		if a.is_empty() or b.is_empty():
 			continue
 		var mine := a if a["owner"] == seat else (b if b["owner"] == seat else {})
-		if mine.is_empty() or mine.get("retreat", false) or mine.has("ride") or mine["state"] == "absorb":
+		if mine.is_empty() or mine.get("retreat", false) or mine["state"] == "absorb":
 			continue                                      # recall() refuses these: try the next fight
 		var theirs := b if mine == a else a
 		if sim.power_of(mine) < 0.4 * sim.power_of(theirs) and mine["units"] > 15.0:
