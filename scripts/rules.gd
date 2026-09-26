@@ -243,11 +243,11 @@ const FACTION_TRAITS := {"vex": ["Efficient routing", "Faster travel on owned co
 		"ember": ["Siege pressure", "Pressure defended structures."],
 		"solar": ["Connected defense", "Protect connected friendly nodes."]}
 # the approved ultimates (SKILLS-2.0-DRAFT sec5 / sec5.2, Daniele 2026-09-26); [name, one short line]
-const FACTION_ULTIMATE := {"vex": ["Rewire", "all lines faster, fire any 3 relays on the map"],
-		"null": ["Echo Split", "moving lines spawn decoy echoes that jam enemy nodes"],
-		"bloom": ["Superbloom", "every vat produces 1.5x for 12 s"],
-		"ember": ["Core Meltdown", "sacrifice part of an attacking line to gut the garrison"],
-		"solar": ["Relay Aegis", "a node and its neighbours shielded, their decks locked"]}
+const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
+		"null": ["Echo Split", "moving lines spawn jamming decoys"],
+		"bloom": ["Superbloom", "every vat 1.5x for 12 s"],
+		"ember": ["Core Meltdown", "sacrifice part of a line to gut a garrison"],
+		"solar": ["Relay Aegis", "a node and its neighbours shielded"]}
 
 # ------------------------------------------------------------------ SKILLS 2.0 (0.18.7)
 # Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select
