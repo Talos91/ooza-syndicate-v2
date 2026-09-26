@@ -37,6 +37,7 @@ const SLUDGE_SHADER := preload("res://shaders/skill_sludge.gdshader")
 const TINT_SHADER := preload("res://shaders/skill_tint.gdshader")
 const FLARE_SHADER := preload("res://shaders/flare.gdshader")
 const SPARK_SHADER := preload("res://shaders/spark.gdshader")
+const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")   # Hud.UI_FONT (not referenced: the headless tests load this without the HUD)
 
 const IDS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line", "demolish", "mire", "anchor", "bypass",
 		"relay_hack", "rewire", "echo_split", "superbloom", "core_meltdown", "relay_aegis"]
@@ -156,7 +157,7 @@ func setup(s: Sim, v: Dictionary, who: String) -> void:
 	sim = s
 	vis = v
 	viewer = who
-	_annulus = CombatFx._annulus_mesh(0.86, 72)
+	_annulus = _annulus_mesh(0.86, 72)
 	_wall = _wall_mesh(64)
 	_dome = _dome_mesh(48, 12)
 	_plane = PlaneMesh.new()
@@ -522,13 +523,13 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 			_mat(slot, "c").set_shader_parameter("color", SPORE.lerp(col, 0.3))
 			_mat(slot, "c").set_shader_parameter("intensity", (0.55 + 0.25 * sin(_t * 8.0)) * life)
 			_mat(slot, "c").set_shader_parameter("spin", _t * 0.7)
-			for k in range(CombatFx._count(60.0 * detail * life * dt)):       # spores bubbling up and over
+			for k in range(_count(60.0 * detail * life * dt)):       # spores bubbling up and over
 				var a := randf() * TAU
 				var r := randf_range(0.0, 2.2)
 				var d := Vector3(cos(a), 0.0, sin(a))
 				_spark(n["pos"] + d * r + up * randf_range(3.6, 5.2), d * randf_range(0.8, 2.6) + up * randf_range(2.5, 5.5),
 						SPORE.lerp(col, randf() * 0.4) * 1.5, randf_range(0.35, 0.6), randf_range(1.0, 1.7), -0.8)
-			for k in range(CombatFx._count(22.0 * detail * life * dt)):       # and spilling over the rim
+			for k in range(_count(22.0 * detail * life * dt)):       # and spilling over the rim
 				var a := randf() * TAU
 				var d := Vector3(cos(a), 0.0, sin(a))
 				_spark(n["pos"] + d * 2.0 + up * 4.4, d * randf_range(2.5, 4.5) + up * 2.0, col.lerp(SPORE, 0.4) * 1.3,
@@ -554,11 +555,11 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 			m.set_shader_parameter("fill", minf(1.0, age * 3.0))
 			m.set_shader_parameter("intensity", 0.65 * life)
 			var len: float = _line(ei)[2]
-			for k in range(CombatFx._count(len * 3.0 * detail * life * dt)):   # tongues of flame
+			for k in range(_count(len * 3.0 * detail * life * dt)):   # tongues of flame
 				_spark(_deck_at(ei, randf()) + Vector3(randf_range(-1.1, 1.1), 0.5, randf_range(-1.1, 1.1)),
 						Vector3(randf_range(-0.4, 0.4), randf_range(2.5, 4.0), randf_range(-0.4, 0.4)),
 						FIRE.lerp(col, 0.2) * 1.2, randf_range(0.6, 0.95), randf_range(0.35, 0.55), -2.0)
-			for k in range(CombatFx._count(len * 5.0 * detail * life * dt)):   # embers
+			for k in range(_count(len * 5.0 * detail * life * dt)):   # embers
 				_spark(_deck_at(ei, randf()) + Vector3(randf_range(-1.2, 1.2), 0.3, randf_range(-1.2, 1.2)),
 						Vector3(randf_range(-0.8, 0.8), randf_range(3.0, 6.5), randf_range(-0.8, 0.8)),
 						FIRE if randf() < 0.55 else (HOT if randf() < 0.6 else col), randf_range(0.18, 0.34), randf_range(0.45, 0.9), -1.5)
@@ -592,7 +593,7 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 				lab.modulate = warn.lerp(Color.WHITE, 0.15)
 				lab.modulate.a = blink * life
 				lab.outline_modulate.a = 0.95 * blink * life
-				for k in range(CombatFx._count((8.0 + 40.0 * heat) * detail * dt)):   # grit shaking off the deck
+				for k in range(_count((8.0 + 40.0 * heat) * detail * dt)):   # grit shaking off the deck
 					_spark(_deck_at(ei, randf()) + Vector3(randf_range(-1.4, 1.4), 0.2, randf_range(-1.4, 1.4)),
 							Vector3(randf_range(-0.5, 0.5), randf_range(0.5, 2.0), randf_range(-0.5, 0.5)),
 							warn.lerp(HOT, randf() * 0.6), randf_range(0.14, 0.26), randf_range(0.3, 0.6), 12.0)
@@ -604,7 +605,7 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 					_rebuild_pieces(ei, 1.0 - clampf(float(slot["tl"]) / REBUILD_T, 0.0, 1.0))
 				elif not _breaks.has(ei):
 					_hide_pieces(ei)
-				for k in range(CombatFx._count(3.0 * detail * dt)):   # embers on the broken ends
+				for k in range(_count(3.0 * detail * dt)):   # embers on the broken ends
 					var u := 0.02 if randf() < 0.5 else 0.98
 					_spark(_deck_at(ei, u) + up * 0.3, Vector3(randf_range(-1, 1), randf_range(0.5, 2.0), randf_range(-1, 1)),
 							FIRE.lerp(col, 0.4), randf_range(0.14, 0.24), randf_range(0.4, 0.8), 8.0)
@@ -617,7 +618,7 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 			m.set_shader_parameter("color", col)
 			m.set_shader_parameter("fill", minf(1.0, age * 2.5))
 			m.set_shader_parameter("intensity", life)
-			for k in range(CombatFx._count(_line(ei)[2] * 1.2 * detail * life * dt)):   # bubbles popping
+			for k in range(_count(_line(ei)[2] * 1.2 * detail * life * dt)):   # bubbles popping
 				_spark(_deck_at(ei, randf()) + Vector3(randf_range(-1.0, 1.0), 0.35, randf_range(-1.0, 1.0)),
 						Vector3(0.0, randf_range(0.6, 1.4), 0.0), col.lerp(SPORE, 0.3) * 0.8, randf_range(0.2, 0.34), randf_range(0.35, 0.6), 0.0)
 		"anchor":
@@ -909,7 +910,7 @@ func _streaks(h: Dictionary, col: Color, rate: float, dt: float) -> void:
 	if length <= 0.2 or h["state"] == "absorb":
 		return
 	var c := col.lerp(Color.WHITE, 0.3) * 1.6
-	for k in range(CombatFx._count(rate * clampf(length / 8.0, 0.4, 4.0) * dt)):
+	for k in range(_count(rate * clampf(length / 8.0, 0.4, 4.0) * dt)):
 		var smp := Sim.sample(h, h["s"] - randf() * length)
 		var fwd: Vector3 = smp[1]
 		fwd.y = 0.0
@@ -931,7 +932,7 @@ func _ghost_wisps(dt: float) -> void:
 		if length <= 0.2:
 			continue
 		var col := Rules.seat_color(h["owner"])
-		for k in range(CombatFx._count(10.0 * clampf(length / 8.0, 0.5, 3.0) * detail * dt)):
+		for k in range(_count(10.0 * clampf(length / 8.0, 0.5, 3.0) * detail * dt)):
 			var p: Vector3 = Sim.sample(h, h["s"] - randf() * length)[0]
 			_spark(p + Vector3(randf_range(-1.2, 1.2), randf_range(0.5, 1.6), randf_range(-1.2, 1.2)), Vector3(0.0, randf_range(0.6, 1.6), 0.0),
 					WISP.lerp(col, randf() * 0.4) * 0.8, randf_range(0.22, 0.4), randf_range(0.6, 1.0), -0.5)
@@ -956,7 +957,7 @@ func _scorch_victims(slot: Dictionary, e: Dictionary, ei: int, dt: float, detail
 			if b <= a:
 				continue
 			spots += 1
-			for k in range(CombatFx._count(22.0 * detail * dt * clampf((b - a) / 4.0, 0.5, 3.0))):
+			for k in range(_count(22.0 * detail * dt * clampf((b - a) / 4.0, 0.5, 3.0))):
 				var p: Vector3 = Sim.sample(h, randf_range(a, b))[0]
 				_spark(p + Vector3(randf_range(-1.0, 1.0), randf_range(0.6, 1.4), randf_range(-1.0, 1.0)), Vector3(0.0, randf_range(1.0, 2.5), 0.0),
 						SMOKE if randf() < 0.6 else FIRE, randf_range(0.3, 0.5), randf_range(0.5, 0.9), -0.6)
@@ -976,7 +977,7 @@ func _scorch_victims(slot: Dictionary, e: Dictionary, ei: int, dt: float, detail
 
 
 func _glitch_sparks(c: Vector3, col: Color, rate: float, dt: float) -> void:
-	for k in range(CombatFx._count(rate * dt)):
+	for k in range(_count(rate * dt)):
 		var a := randf() * TAU
 		var r := randf_range(1.2, Rules.R * 0.8)
 		_spark(c + Vector3(cos(a) * r, randf_range(0.5, 7.0), sin(a) * r), Vector3(randf_range(-9, 9), 0.0, randf_range(-9, 9)),
@@ -1046,7 +1047,7 @@ func _bloom(n: Dictionary, col: Color, life: float, dt: float, detail: float) ->
 	g.scale = Vector3.ONE * Rules.R * (2.2 + 0.15 * sin(_t * 3.0 + id))
 	(b["gmat"] as ShaderMaterial).set_shader_parameter("color", col.lerp(PETAL, 0.4))
 	(b["gmat"] as ShaderMaterial).set_shader_parameter("intensity", (1.5 + 0.4 * sin(_t * 5.0 + id)) * life)
-	for k in range(CombatFx._count(34.0 * detail * dt)):   # petals thrown off the vat, drifting down
+	for k in range(_count(34.0 * detail * dt)):   # petals thrown off the vat, drifting down
 		var a := randf() * TAU
 		var d := Vector3(cos(a), 0.0, sin(a))
 		_spark(n["pos"] + d * randf_range(0.5, 2.0) + Vector3(0, randf_range(4.0, 5.5), 0), d * randf_range(2.0, 4.5) + Vector3(0, randf_range(1.5, 3.5), 0),
@@ -1415,7 +1416,7 @@ func _step_tint(dt: float) -> void:
 
 func _new_label(size: int) -> Label3D:
 	var l := Label3D.new()
-	l.font = Hud.UI_FONT
+	l.font = UI_FONT
 	l.font_size = size
 	l.outline_size = int(size * 0.22)
 	l.outline_modulate = Color(0.02, 0.02, 0.05, 0.95)
@@ -1529,7 +1530,7 @@ static func _wall_mesh(segments: int) -> ArrayMesh:
 	for k in range(segments):
 		var b := k * 2
 		idx.append_array([b, b + 1, b + 2, b + 1, b + 3, b + 2])
-	return CombatFx._mesh(verts, uvs, idx)
+	return _mesh(verts, uvs, idx)
 
 
 static func _dome_mesh(segments: int, rings: int) -> ArrayMesh:
@@ -1548,4 +1549,39 @@ static func _dome_mesh(segments: int, rings: int) -> ArrayMesh:
 			var b := r * (segments + 1) + k
 			var c := b + segments + 1
 			idx.append_array([b, c, b + 1, b + 1, c, c + 1])
-	return CombatFx._mesh(verts, uvs, idx)
+	return _mesh(verts, uvs, idx)
+
+
+static func _count(x: float) -> int:
+	## A whole number of spawns this frame whose average is x (a rate times dt) - as CombatFx._count.
+	var whole := int(x)
+	return whole + (1 if randf() < x - whole else 0)
+
+
+static func _annulus_mesh(inner: float, segments: int) -> ArrayMesh:
+	## A flat ring, radius inner..1 in XZ; UV.x = angle / TAU, UV.y = 0 inside .. 1 outside (as CombatFx's).
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var idx := PackedInt32Array()
+	for k in range(segments + 1):
+		var a := TAU * k / segments
+		var d := Vector3(cos(a), 0.0, sin(a))
+		verts.append(d * inner)
+		uvs.append(Vector2(float(k) / segments, 0.0))
+		verts.append(d)
+		uvs.append(Vector2(float(k) / segments, 1.0))
+	for k in range(segments):
+		var b := k * 2
+		idx.append_array([b, b + 1, b + 2, b + 1, b + 3, b + 2])
+	return _mesh(verts, uvs, idx)
+
+
+static func _mesh(verts: PackedVector3Array, uvs: PackedVector2Array, idx: PackedInt32Array) -> ArrayMesh:
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m

@@ -520,9 +520,115 @@ func _run() -> void:
 			"ABILITIES OFF: nothing casts in that round")
 	Rules.abilities_on = true
 
+	_test_skill_fx()
 	_test_colours()
 	_test_teams()
 	print("\nALL PASSED (0 failed)" if failures == 0 else "\n%d FAILED" % failures)
+
+
+func _test_skill_fx() -> void:
+	## SkillFx (0.18.7): the in-world view of all 15 skills builds and runs without errors on the host's screen
+	## (seat A) and on a guest's (seat B: the host's snapshots and forwarded fx events, as Net sends them), in
+	## BRAWL on D-02 Relay Bench (every relay kind); a Ghost Line's cast reaches its owner's view only.
+	var map := MapBuilder.load_map("res://maps4/D-02-relay-bench.json")
+	var seats := {}
+	for st in map["seats"]["1v1"]:
+		seats[int(st["node"])] = st["seat"]
+	var factions := {"A": "vex", "B": "ember"}
+	var hs := Sim.new()
+	hs.setup(map, MapBuilder.layout(map), seats, factions, 7)
+	var gs := Sim.new()
+	gs.setup(map, MapBuilder.layout(map), seats, factions, 7)
+	var hw := Node3D.new()
+	root.add_child(hw)
+	var gw := Node3D.new()
+	root.add_child(gw)
+	var hfx := SkillFx.new()
+	hw.add_child(hfx)
+	hfx.setup(hs, MapBuilder.build3(hw, hs, map), "A")
+	var gfx := SkillFx.new()
+	gw.add_child(gfx)
+	gfx.setup(gs, MapBuilder.build3(gw, gs, map), "B")
+	for i in [0, 1, 2, 3]:
+		hs.nodes[i]["owner"] = "A"
+		hs.nodes[i]["units"] = 400.0
+	hs.nodes[4]["owner"] = "B"
+	hs.nodes[4]["units"] = 40.0
+	hs.nodes[8]["units"] = 400.0
+	var casts := {}
+	var cast := func(seat: String, slot: String, id: String, target) -> void:
+		hs.loadouts[seat][slot] = id
+		if slot == "ultimate":
+			hs.ult_charge[seat] = 1.0
+			hs.ult_since[seat] = 500.0
+		else:
+			hs.skill_cd[seat][slot] = 0.0
+		var why := hs.cast_check(seat, slot, target)
+		casts[id] = hs.cast(seat, slot, target)
+		if not casts[id]:
+			print("      (%s refused: %s)" % [id, why])
+	var line: Dictionary = hs.send(0, 3, 0.3)
+	hs.send(1, 3, 0.2)
+	var raid: Dictionary = hs.send(2, 4, 0.9)
+	var frame := func(dt: float) -> void:
+		hs.step(dt)
+		host.apply_snapshot(gs, host.snapshot(hs, true))
+		for h in gs.hordes:                          # what Net._mark_ghosts does for the guest's own decoys
+			if hs._horde(h["id"]).get("decoy", false) and h["owner"] == "B":
+				h["decoy"] = true
+		for ev in hs.fx_events:
+			hfx.handle(ev)
+			if not ev.has("private") or str(ev["private"]) == "B":   # Net.push_effects
+				gfx.handle(ev)
+		hs.fx_events.clear()
+		hfx.sync(dt, null)
+		gfx.sync(dt, null)
+	for k in range(5):
+		frame.call(0.1)
+	cast.call("A", "ultimate", "rewire", null)
+	cast.call("A", "ultimate", "rewire", 7)            # the ultimate slot fires a relay while Rewire runs
+	cast.call("A", "active", "surge", line["id"])
+	cast.call("A", "active", "spore_burst", 3)
+	cast.call("A", "active", "fortify", 1)
+	cast.call("A", "active", "scorch", 2)
+	cast.call("A", "active", "ghost_line", [0, 2])
+	cast.call("B", "active", "ghost_line", [8, 9])
+	cast.call("A", "map", "demolish", 4)
+	cast.call("A", "map", "mire", 13)
+	cast.call("A", "map", "anchor", 7)
+	cast.call("A", "map", "bypass", 5)
+	cast.call("A", "map", "relay_hack", [6, "jam"])
+	cast.call("A", "ultimate", "superbloom", null)
+	cast.call("A", "ultimate", "echo_split", null)
+	cast.call("A", "ultimate", "relay_aegis", 3)
+	for k in range(60):                                # the raid on B's node 4 comes in range: Core Meltdown
+		frame.call(0.1)
+		hs.loadouts["A"]["ultimate"] = "core_meltdown"
+		hs.ult_charge["A"] = 1.0
+		hs.ult_since["A"] = 500.0
+		if not casts.get("core_meltdown", false) and hs.cast_check("A", "ultimate", raid["id"]) == "":
+			cast.call("A", "ultimate", "core_meltdown", raid["id"])
+	var kids := hfx.get_child_count()
+	for k in range(240):                               # past Demolish's 3 s warning and 20 s down, and every effect's end
+		frame.call(0.1)
+	check(casts.values().all(func(ok): return ok) and casts.size() == 15, "every skill cast for the view check (%s)" % str(casts.keys().filter(func(k): return not casts[k])))
+	var missing := []
+	for id in Rules.SKILLS:
+		if int(hfx.stats.get("cast_" + id, 0)) < 1:
+			missing.append(id)
+	check(missing.is_empty(), "the host's view shows a cast moment for all 15 skills %s" % str(missing))
+	var lasting := ["surge", "spore_burst", "fortify", "scorch", "demolish", "mire", "anchor", "bypass", "relay_hack", "rewire",
+			"superbloom", "relay_aegis"]
+	var gone := lasting.filter(func(id): return int(gfx.stats.get("slot_" + id, 0)) < 1)
+	check(gone.is_empty(), "a guest draws every lasting effect from the snapshots %s" % str(gone))
+	check(int(gfx.stats.get("break", 0)) == 1 and int(gfx.stats.get("rebuild", 0)) == 1 and int(gfx.stats.get("meltdown", 0)) == 1
+			and int(gfx.stats.get("tint", 0)) >= 3, "a guest sees the deck break and rebuild, the meltdown and the ultimates' tint")
+	check(int(hfx.stats.get("cast_ghost_line", 0)) == 1 and int(gfx.stats.get("cast_ghost_line", 0)) == 1,
+			"each Ghost Line cast reaches its own caster's view only")
+	check(hs.effects.is_empty() and hfx.get_child_count() <= kids + 40, "every effect ended and the view reuses its pieces (%d -> %d nodes)" % [kids, hfx.get_child_count()])
+	check(SkillFx.ghost_shader().code.contains("ALPHA = ghost_alpha"), "the see-through creature shader for Ghost Lines builds")
+	hw.free()
+	gw.free()
 
 
 func _colours_of(n: Node) -> Dictionary:
