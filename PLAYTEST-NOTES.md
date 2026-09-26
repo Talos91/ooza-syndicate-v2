@@ -520,3 +520,33 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 121. **"Add in game filters for maps like 1v1 2v2 ffa etc."** *Done:* players and type filters on 02 BATTLEFIELD.
 122. **"The siege mode instead keeps being... boring and messy."** *Open:* to discuss after 0.18.6.
 
+## 2026-09-26 - Daniele, 0.18.7 brief (after playing 0.18.6 with his girlfriend)
+
+123. **"My gf saw herself blue and me too."** *Done:* room colours, the same on every screen.
+124. **"No way to change a player team."** *Done:* JOIN TEAM / host MOVE in the lobby.
+125. **"Towers kill enemy blobs from the bottom instead of from the top."** *Done:* kills at the beam's end.
+126. **"Time to add armies presets and skills."** *Done:* Skills 2.0, ARMIES menu, dock, effects.
+127. **"Goo instead of neons ... add it as a toggle."** *Done:* TERRITORY: NEON / GOO.
+128. **"Last Stand always starts from the same node ... start randomly from one of the corners, then the opposite."**
+     *Done:* the corner cycle.
+129. **"Balancing ... vat power up cost, production speed etc."** *Studied:* neutrals nearly free (payback 6-11 s vs
+     27-37 s for upgrades), Ember 68 % / Bloom 54-63 % / Vex 46 % vs NULL, 26 % of Standard matches reach 7:00.
+     Preset `b187` built, off; Daniele to decide (and Solar, and the stalemates).
+130. **"When a forge is created all units and structures get a 2 sec animation."** *Done.*
+131. **"The AI avoids relay bridges and never builds on relays."** *Done:* see the changelog numbers.
+132. **"Units stop near a collapsing bridge before jumping; make it seamless, +20 %."** *Done.*
+133. **"Vats hard to see, feel different from the map's theme; push the graphics further."** *In progress (0.18.8):*
+     vats, structures and environment, plus the depth fog.
+134. **"Units should drop down from the vats and join the horde."** *Done.*
+135. **"I shouldn't be able to click enemy vault - an empty radial menu appears."** *Done.*
+136. **"Relay nodes and special nodes need the pillar."** *Done.*
+137. **"Map thumbnails overflow."** *Done.*
+138. **"Pillars come from the void ... add a fog or another trick."** *In progress (0.18.8).*
+139. **"Brawl is our game; deactivate SIEGE, remove the mode selector."** *Done.*
+140. **"Hide the debug tools (options to reactivate)."** *Done.*
+141. **"Switch: no delay, units on the bridge have 1 s to clear it then bye bye; retract takes the ground away."**
+     *Done:* the relay fall rule.
+142. **"UI a bit small on mobile in certain parts; make it consistent, functional, cool, properly sized, modern."**
+     *Open (0.18.8).*
+143. **"Too many tokens for those few things."** *Noted:* fewer agents, tests once, one contact sheet (memory).
+

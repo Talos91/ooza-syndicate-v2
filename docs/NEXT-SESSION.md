@@ -1,6 +1,6 @@
 # Next session - start here
 
-State at the end of the 2026-09-26 sessions: **v0.18.6 "Alpha 18"** (maps 4.2 - 20 compact maps at the kit's sizes - plus the four main Alpha 11 maps A-01..A-04, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
+State at the end of the 2026-09-26 sessions: **v0.18.7 "Alpha 18"** (live; 0.18.8 in progress) (maps 4.2 - 20 compact maps at the kit's sizes - plus the four main Alpha 11 maps A-01..A-04, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md` (project root - the whole game as built), this file,
 `README.md`, the top of `CHANGELOG.md` (0.17.0 to 0.18.0), `PLAYTEST-NOTES.md` notes 90-100, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
@@ -22,6 +22,29 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 
 The plan after 0.18.7 / 0.18.8 (Daniele's to-do list from 2026-09-26, plus suggested additions, by area
 and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
+
+## 0.18.7 (2026-09-26): BRAWL only, relay fall rule, skills, lobby teams, maps 4.6 - LIVE; 0.18.8 in progress
+
+- Live at https://talos91.github.io/ooza-syndicate-v2/ from main 96a87bd (published early, before the docs).
+- Merged after the publish (on main, not yet live): skills-fx (every skill's effect, `scripts/skill_fx.gd`),
+  balance-study (`Rules.BALANCE_PRESETS`, `tests/balance_probe.gd`, preset `b187` off).
+- **0.18.8 to do:** merge `look-upgrade` (vats / structures / environment + depth fog; branch from the agent that
+  was finishing its tests), the mobile UI / UX pass (Daniele: "consistent, functional, cool, properly sized,
+  modern"; lobby chips and menu buttons ~21 pt on phones; the Debug panel needs scrolling), rerun the balance
+  headline cells with abilities ON, publish, vault entry (G:\My Drive\VAULTS\Talos Vault).
+- **Decisions waiting on Daniele:** balance preset b187 default or Debug-only; Solar garrison (1.05 / 1.02); the
+  26 % 7:00 stalemates at Standard; map-group labels BRAWL / SIEGE / CORE in the map filter (relabel FAST /
+  FORTRESS / STANDARD?); the AI's 6-unit relay garrison; every new forge plays the surge (yes today), losing one
+  plays nothing.
+- Code map: relays `Sim._relay_drop` / `_split_front` (no ride / carry code left); Last Stand corners
+  `Sim._corner_cycle` / `nearest_corner`; lobby `Net.pick_colour` / `switch_team` / `room_colours`; skills
+  `Rules.SKILLS`, the SKILLS section at the end of sim.gd, `ArmyPresets` (user://armies.cfg), `SkillDock`,
+  `SkillFx`; goo `GooTerritory` (+ shader); forge `ForgePulse`; AI relays `SeatAI._route` / `_risky_decks` /
+  `_build_relay_slot` (Rules.AI_RELAY_*); balance `Rules.apply_balance`.
+- **Git on Google Drive:** `.git/objects/a6` is locked by Drive (unreadable); commits and pushes work, gc / repack
+  fail. Fix: pause Drive sync, delete the folder (git recreates it). Stale worktree folders under the scratchpad
+  (wt-before-0187, wt-ai-relays-base) need deleting by hand.
+- Roadmap after 0.18.8: `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
 
 ## 0.18.6 (2026-09-26): waterfall, 3:00 Last Stand, neon, badges, combat effects, maps 4.4, filters
 
@@ -180,3 +203,5 @@ Still open on multiplayer:
   (`load("res://scripts/net.gd").new()`), never the `Net` identifier.
 - In the in-app browser only the front tab runs its game loop; test two players with `tests/duo.html`
   (both iframes visible), and hover before clicking - Godot buttons need a mouse move first.
+
+<!-- 0.18.7 docs -->

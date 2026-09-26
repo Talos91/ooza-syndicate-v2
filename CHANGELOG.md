@@ -1,5 +1,64 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.7 "Alpha 18" - 2026-09-26 (BRAWL only, relay fall rule, skills, lobby teams, maps 4.6, look and AI passes)
+
+Published live as a playable alpha before the pass was complete (Daniele: "push what is safe to push to a playable
+alpha now"); the look upgrade with the depth fog, the release docs and the mobile UI pass follow in 0.18.8.
+
+- **BRAWL is the game; SIEGE is deactivated** (Daniele: "brawl is our game ... completely deactivate it"). The mode
+  selector is gone from OPTIONS, SETUP, the lobby, the pause menu and Debug; rooms start in BRAWL (they defaulted
+  to SIEGE before); `Rules.bridge_combat` cannot be set true. The SIEGE code stays dormant and untested; the
+  tests run BRAWL only (test_map_pool and test_ai_curve take half the time).
+- **Relay fall rule** (Daniele: "no bridge = bridge down ... units on the bridge have 1 sec to clear the bridge then
+  bye bye, this applies to all types including the retract"): during the 1 s warning every deck is still walkable;
+  the moment its motion starts, everything on a deck that goes away falls - retract no longer carries anyone in,
+  rotation still flings. The rest of the order pours off the lip (waterfall). A line straddling a gone deck splits:
+  the part past it walks on as its own line. Toast "N units fell with the retracting / switched / switched-off deck".
+- **Last Stand drops rotate round the players' corners** (Daniele: "start randomly from one of the starting corners
+  then move to the opposite, then another ... until all nodes that are supposed to fall are gone"): the first corner
+  is seeded; then the opposite one, then the others, then back; the cycle carries across rings; never an island.
+- **Lobby: teams and colours** (Daniele saw both players as blue; "no way to change a player team"): every player
+  picks a room colour shown identically on every screen (team modes: one family per team, cool vs warm); JOIN TEAM
+  per team, the host can MOVE players; AI fills free seats. Protocol tag `ooze20-net-2`.
+- **Skills 2.0 shipped** (SKILLS-2.0-DRAFT approved): 5 active + 5 map skills shared by every faction, one ultimate
+  per faction (Rewire, Echo Split, Superbloom, Core Meltdown, Relay Aegis), the §5.2 rebalance; Superbloom = 1.5x for
+  12 s, capped at +40 (Daniele's pick); Demolish waterfalls in BRAWL; everything unlocked; ABILITIES ON/OFF in
+  SETUP and the lobby. **ARMIES** menu item: a saved preset per faction (active + map skill; the ultimate is fixed);
+  the faction page shows it. In-match **dock** (ACTIVE / MAP / ULTIMATE): tap a slot, valid targets light up, tap
+  one; keys 1/2/3; cooldown sweeps, ultimate charge ring; enemy-cast toasts. Every skill has its in-world effect
+  (hex shield, deck fire, sludge, clamps, Demolish crack / fall / rebuild, Aegis dome, Meltdown blast, ghost lines
+  only their owner sees translucent). The AI casts every skill; online casts are host-validated; ghost lines stay
+  private to their caster's client.
+- **Forge online surge** (Daniele: "when a forge is created all units and structures of that player should get a
+  2 sec animation"): a wave from the forge hits every owned structure and unit by distance; toast
+  "FORGE ONLINE: +50% attack"; the inspector shows the bonus.
+- **Cannons kill where the laser hits** (Daniele: "towers kill enemies blobs from the bottom instead of from the
+  top"): the front of an incoming line dies under the beam; the burst keeps its full kill, so the beam can reach up
+  to ~12 m past its range (Daniele: "fine for it to extend its line of sight").
+- **Waterfall pour is seamless** (Daniele: "the animation should be seamless and exaggerated ... +20%"): bodies walk
+  off the lip at marching pace and arc into the void; at most 1.2x the real losses are drawn.
+- **Units drop out of the vats** (Daniele: "goo monsters being dropped from the vats"): each unit spills over a tank
+  rim as a blob, splats, forms into its creature and runs to the door, in time with the real stream.
+- **TERRITORY: NEON / GOO** option (Daniele: "goo instead of neons ... add it as a toggle"): GOO covers owned
+  platforms and deck halves with goo in the player colour (meniscus, drips, bubbles), units in their race colour
+  with a player-colour rim; spreads on capture, recedes on loss, falls with the platform. NEON is unchanged.
+- **AI uses relays** (Daniele: "the AI tends to avoid relay bridges and almost never builds on relays"): routes judge
+  whether a rival relay can cut a deck in time, the AI never fires onto its own pending orders, re-opens its own
+  shortcuts, values relay nodes (keeps 6 units on them) and builds cannons / forges on relay slots. Relay-shortcut
+  use 42 -> 69 % (Standard), hazardous crossings 3 % -> 0.1 %. BRAWL curve vs Standard: 0 / 5 / 50 / 100 / 100 %.
+- **Maps 4.6 relay** (References/Ooze Syndicate maps 4.6 relay): M-51..M-60, relay-packed fields (5-6 relays), 74 maps.
+  All bake clean; phone taps 44-54 pt. **Pillars** under relay and strategic (all-structure) nodes (Daniele).
+- **Map thumbnails uncropped** (Daniele: "thumbnails often overflow"), in the grid, the preview and setup.
+- **Taps open the ring only on your own nodes** (Daniele: "an empty radial menu appears" on enemy vats).
+- **Debug tools hidden** behind OPTIONS > DEBUG TOOLS (Daniele: "we are past debug tools").
+- **Balance study** (Daniele: "vat power up cost, production speed etc we need to balance better"): the economy
+  numbers are now overridable; preset `b187` (OFF by default, Debug toggle) proposes neutral garrisons 12/16/32/64,
+  Ember attack 1.07, Bloom production 1.05, Vex garrison 0.95. Findings and the proposal: PLAYTEST-NOTES 129 and
+  `tests/balance_probe.gd`. Waiting for Daniele's decision.
+- Tests: test_sim, test_net, test_maps4 (11,038 checks), test_map_pool, test_ai_curve - all pass, BRAWL only.
+  Everything was checked on desktop and in phone emulation; the online lobby in two browsers on one PC; nothing on
+  a real phone or across networks.
+
 ## 0.18.6 "Alpha 18" - 2026-09-26 (waterfall, Last Stand at 3:00, neon connectors, fixed badges, fight / tier-down / laser, maps 4.4 classic, map filters)
 
 - **Waterfall** (Daniele: "if someone retract a bridge and your troops had order to go on said bridge they should
