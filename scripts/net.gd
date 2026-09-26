@@ -77,6 +77,7 @@ const siege := false                               # 0.18.7: SIEGE is deactivate
 var last_stand := true
 var abilities := true                              # ABILITIES ON/OFF (0.18.7: default on in both modes)
 var loadout := {}                                  # your own {"active", "map"} (empty = the faction's default)
+var cosmetic := {}                                 # your own COSMETICS pick {family: id} (0.19.0; empty = default)
 var own_ghosts := {}                               # guest: horde id -> true for our own decoys (host tells us only)
 var _ghosts_sent := {}                             # host: remote -> the ghost list last sent to it
 # match state
@@ -377,7 +378,7 @@ func _start(host: bool, faction: String, code: String) -> Error:
 	preferred_faction = faction
 	_elapsed = 0.0
 	if host:
-		roster = {1: {"faction": faction, "slot": 0, "colour": colour, "loadout": loadout}}
+		roster = {1: {"faction": faction, "slot": 0, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}}
 		if not map_offers(map_path, mode) or not map_path in MapPool.all():
 			var pool := maps_for(mode)
 			if pool.is_empty():
@@ -505,6 +506,32 @@ static func _clean_loadout(lo) -> Dictionary:
 			out["active"] = str(lo["active"])
 		if str(lo.get("map", "")) in Rules.MAP_SKILLS:
 			out["map"] = str(lo["map"])
+	return out
+
+
+# --- 0.19.0 cosmetics (HUD agent, spec I): the local ARMIES > COSMETICS pick rides in the roster like
+# the skill loadout, so every screen can call Cosmetics.set_loadout for a remote seat too. ---
+func set_cosmetic(c: Dictionary) -> void:
+	## Your COSMETICS pick for the next round: {family: id} (Cosmetics.OPTIONS).
+	var clean := _clean_cosmetic(c)
+	if active:
+		return
+	cosmetic = clean
+	if hosting:
+		if roster.has(1):
+			roster[1]["cosmetic"] = clean
+			publish_lobby()
+	else:
+		_send_to_host({"op": "cosmetic", "cosmetic": clean})
+
+
+static func _clean_cosmetic(c) -> Dictionary:
+	var out := {}
+	if c is Dictionary:
+		for family in Cosmetics.OPTIONS:
+			var id := str(c.get(family, ""))
+			if id in (Cosmetics.OPTIONS[family] as Array):
+				out[family] = id
 	return out
 
 
@@ -636,7 +663,7 @@ func _register(remote: String, id: int, p: Dictionary) -> void:
 		slot += 1
 	var f := str(p.get("faction", ""))
 	roster[id] = {"faction": f if f in FACTIONS else FACTIONS[slot % FACTIONS.size()], "slot": slot, "colour": "",
-			"loadout": _clean_loadout(p.get("loadout", {}))}
+			"loadout": _clean_loadout(p.get("loadout", {})), "cosmetic": _clean_cosmetic(p.get("cosmetic", {}))}
 	var want := str(p.get("colour", ""))
 	if colour_allowed(id, want):
 		roster[id]["colour"] = want
@@ -692,11 +719,15 @@ func launch_round() -> void:
 	_reseat()
 	var players := {}
 	var loadouts := {}                                 # players' picks; AI seats get their faction default in Sim.setup
+	var cosmetics := {}                                 # players' COSMETICS picks (0.19.0); AI seats: default
 	for id in roster:
 		players[seat_of(id)] = roster[id]["faction"]
 		var lo := _clean_loadout(roster[id].get("loadout", {}))
 		if not lo.is_empty():
 			loadouts[seat_of(id)] = lo
+		var co := _clean_cosmetic(roster[id].get("cosmetic", {}))
+		if not co.is_empty():
+			cosmetics[seat_of(id)] = co
 	var ai := {}
 	if ai_fill != "":
 		for slot in range(slots()):                    # EMPTY SEATS: the AI plays them (team modes: any seat)
@@ -707,6 +738,7 @@ func launch_round() -> void:
 			ai[SEATS[slot]] = ai_fill
 	var info := {"round": match_round + 1, "map": map_path, "mode": mode, "seed": randi() % 100000,
 			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(), "loadouts": loadouts,
+			"cosmetics": cosmetics,
 			"rules": {"bridge_combat": siege, "last_stand": last_stand, "abilities_on": abilities, "deck_speed": Rules.deck_speed,
 					"node_speed_mult": Rules.node_speed_mult, "door_rate": Rules.door_rate,
 					"node_fight_mult": Rules.node_fight_mult, "forge_bonus": Rules.forge_bonus,
@@ -1237,7 +1269,7 @@ func _poll(dt: float) -> void:
 					next_peer += 1
 				else:
 					remote_host = str(event["peer"])
-					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour, "loadout": loadout}
+					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}
 					if not rejoin.is_empty() and str(rejoin["code"]) == room_code:
 						reg["token"] = rejoin["token"]
 					_send_to_host(reg)
@@ -1304,6 +1336,10 @@ func _host_receive(remote: String, raw: String) -> void:
 		"loadout":
 			if not active:
 				roster[id]["loadout"] = _clean_loadout({"active": p.get("active", ""), "map": p.get("map", "")})
+				publish_lobby()
+		"cosmetic":                                    # 0.19.0: the local ARMIES > COSMETICS pick (HUD agent)
+			if not active:
+				roster[id]["cosmetic"] = _clean_cosmetic(p.get("cosmetic", {}))
 				publish_lobby()
 		"rematch":
 			if _is_int(p.get("round", null)) and int(p["round"]) == match_round:
