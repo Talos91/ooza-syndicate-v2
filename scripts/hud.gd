@@ -298,7 +298,7 @@ func setup(m: Node3D) -> void:
 	side_box.add_child(send_title)
 	var group := ButtonGroup.new()
 	for f in [1.0, 0.75, 0.5, 0.25]:
-		var b := button("%d%%" % int(f * 100), Callable(), 100, 66 if not mobile else 64, 26)
+		var b := button("%d%%" % int(f * 100), Callable(), 100, 66 if not mobile else 78, 26)   # 78: the phone-tuned default height (>= 44 pt), the send row was a touch under it
 		b.toggle_mode = true
 		b.button_group = group
 		b.button_pressed = is_equal_approx(f, main.fraction)
@@ -397,8 +397,12 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	if debug_button:
 		debug_button.position = Vector2(vp.x - m.z - debug_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # under PAUSE, off the map
-		debug_panel.size = debug_panel.get_combined_minimum_size()
-		debug_panel.position = Vector2(vp.x - m.z - debug_panel.size.x, debug_button.position.y + debug_button.size.y + 8.0)
+		var dp_y := debug_button.position.y + debug_button.size.y + 8.0
+		var dp_natural := debug_panel.get_combined_minimum_size()
+		# clamp to what's actually left on screen (phones: the panel used to run off the bottom) - the
+		# ScrollContainer in _build_debug() lets the panel be shorter than its buttons and scroll them
+		debug_panel.size = Vector2(dp_natural.x, minf(dp_natural.y, vp.y - dp_y - 10.0))
+		debug_panel.position = Vector2(vp.x - m.z - debug_panel.size.x, dp_y)
 	if chat_button:
 		chat_button.position = Vector2(vp.x - m.z - chat_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # Debug's slot (hidden online)
 	rotate_hint.size = vp
@@ -1066,7 +1070,7 @@ func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: 
 	var b := text_label(body, 18, Color("c8e6ee"))
 	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(b)
-	var tall := 80 if actions.size() <= 5 else 70     # six pause actions (TERRITORY) still fit a landscape phone
+	var tall := 80 if actions.size() <= 5 else 78     # six pause actions (TERRITORY) still fit a landscape phone; 78 keeps them >= 44 pt too
 	for a in actions:
 		var btn := button(a[0], a[1], 0, 56 if not mobile else tall, 22)
 		col.add_child(btn)
@@ -1076,13 +1080,13 @@ func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: 
 func _build_debug() -> void:
 	## Debug controls for playtests (Daniele, 2026-09-25): live sliders, thumb-sized, top-right under PAUSE,
 	## wide ranges on purpose. Also prints FPS to the console every 5 s while open.
-	debug_button = button("Debug", Callable(), 110, 50 if not mobile else 70, 20)
+	debug_button = button("Debug", Callable(), 110, 50 if not mobile else 78, 20)   # 78: matches the phone-tuned default height (>= 44 pt)
 	debug_button.toggle_mode = true
 	debug_button.size = debug_button.custom_minimum_size
 	root.add_child(debug_button)
 	debug_button.visible = not main.online and Rules.debug_tools   # online: the rules are the host's, not live-tunable;
 	                                                               # offline only when DEBUG TOOLS is on in OPTIONS (0.18.7)
-	chat_button = button("Chat", func(): Net.open_chat(), 110, 50 if not mobile else 70, 20)   # online: the room chat
+	chat_button = button("Chat", func(): Net.open_chat(), 110, 50 if not mobile else 78, 20)   # online: the room chat (78: >= 44 pt)
 	chat_button.size = chat_button.custom_minimum_size
 	chat_button.visible = main.online
 	root.add_child(chat_button)
@@ -1091,9 +1095,17 @@ func _build_debug() -> void:
 	style_panel(debug_panel, Color("2ee6ff"))
 	root.add_child(debug_panel)
 	debug_button.toggled.connect(func(on: bool): debug_panel.visible = on)
+	# the panel's own size is clamped to the screen in layout() (Daniele, 0.18.8: "the Debug panel's last
+	# button runs off the phone screen") - a ScrollContainer (Godot doesn't count its content against its
+	# own minimum size, unlike a bare VBoxContainer) lets that clamp actually take effect instead of the
+	# panel re-growing to fit every slider and button
+	var debug_scroll := ScrollContainer.new()
+	debug_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	debug_panel.add_child(debug_scroll)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
-	debug_panel.add_child(box)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	debug_scroll.add_child(box)
 	box.add_child(text_label("Debug - live, resets on reload", 20))
 	# (0.18.7: SIEGE is deactivated - its deck / platform / door / platform-fight tunables left the panel)
 	var forge := _debug_slider(box, "Forge bonus", 0.0, 200.0, 5.0, Rules.forge_bonus * 100.0, "+%.0f%% attack",
