@@ -266,10 +266,11 @@ const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS
 		"FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS", "forge_bonus"]
 const BALANCE_PRESETS := {
 	# b187 - the 0.18.7 proposal, measured on BRAWL (the main mode) with tests/balance_probe.gd:
-	# neutrals hold half their tier's cap, as in Alpha 11 (shown 15/20/40/80, was 6/12/24/40) so taking one
-	# is a decision next to an upgrade, not a free win; Ember, Bloom and Vex back within ~5 % of NULL.
+	# neutrals hold 12/16/32/64 shown (was 6/12/24/40: 40 % of their tier's cap, Alpha 11 held half) so a
+	# vat-upgrade opening and a neutral-grab opening win about as often (50 / 48 %, was 37 / 33 %);
+	# Ember, Bloom and Vex back within ~5 % of NULL (Ember was 67 %).
 	"b187": {
-		"NEUTRAL_UNITS": {1: 75, 2: 100, 3: 200, 4: 400},
+		"NEUTRAL_UNITS": {1: 60, 2: 80, 3: 160, 4: 320},
 		"FACTION_STATS": {"ember": {"attack": 1.07}, "bloom": {"production": 1.05}, "vex": {"garrison": 0.95}},
 	},
 }
