@@ -13,7 +13,8 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - **Every mechanic ships with its animation, HUD readout and control** in the same pass. Only
   textures and better models may wait.
 - **Start numbers from Alpha 11's logic**, shown to the player at Alpha 11 scale (`Rules.shown`).
-- **BRAWL must be exactly Alpha 11's core rules**; SIEGE is where 2.0 experiments live.
+- **BRAWL is the main game mode** (no longer frozen to Alpha 11; rule changes need Daniele's yes); **SIEGE is
+  paused** - keep it working, no new work (2026-09-26).
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
