@@ -221,6 +221,7 @@ func _start_map(path: String) -> void:
 	if not vis["stretched"].is_empty():
 		push_warning("edges stretched to fit (not honest): %s" % [vis["stretched"]])
 	hordes = HordeView.new()
+	hordes.vis = vis                                   # the vat models its lines drop out of
 	add_child(hordes)
 	scenery = Scenery.new()
 	add_child(scenery)

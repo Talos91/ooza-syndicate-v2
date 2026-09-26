@@ -957,5 +957,87 @@ func _init() -> void:
 			carried_w += x["units"]
 	check(fired and not sw.is_edge_open(ew) and cut_ev.is_empty() and fell > 350.0 and carried_w + fell > 590.0,
 			"a retracted deck under an order: riders carried in, the vat keeps sending and the rest pours into the void (carried %.0f + fell %.0f of 600)" % [carried_w, fell])
+	var pour_evs := 0
+	var chunk_evs := 0
+	for x in sw.fx_events:
+		if x["type"] == "fall":
+			if x.get("pour", false):
+				pour_evs += 1
+			else:
+				chunk_evs += 1
+	check(pour_evs > 20 and chunk_evs <= 3,
+			"the waterfall is one motion: the line walks off the lip (%d pour steps, %d whole-stretch falls)" % [pour_evs, chunk_evs])
+
+	# ---------------------------------------------------------------- 0.18.7: cannons kill where the laser hits
+	# (Daniele: "towers kills enemies blobs from the bottom instead of from the top") - both modes
+	for brawl_k in [true, false]:
+		Rules.bridge_combat = not brawl_k
+		var mode_k: String = "BRAWL" if brawl_k else "SIEGE"
+		for send_k in [400.0, 20.0]:                       # a line still streaming out, a finished one
+			var kc := Sim.new()
+			kc.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+			var cn: Dictionary = kc.nodes[1]
+			cn["owner"] = "A"
+			cn["units"] = 50.0
+			cn["attachment"] = "cannon"
+			cn["cannon_tier"] = 3
+			cn["cannon_cd"] = 99.0                         # held until the line is in place
+			kc.nodes[0]["owner"] = "B"
+			kc.nodes[0]["units"] = send_k
+			var kh := kc.send(0, 1, 1.0)                   # a line coming at the tower
+			var c1: Vector3 = cn["pos"]
+			run_until(kc, func(): return (Sim.sample(kh, kh["s"])[0] as Vector3).distance_to(c1) < Rules.CANNON_RANGE - 1.0, 10.0, 0.02)
+			var what := "%s, %s line" % [mode_k, "streaming" if kh["streaming"] else "finished"]
+			check(kh["streaming"] == (send_k > 100.0) and kc._hit_head(cn, kh), "%s: a line coming at a tower is hit at its head" % what)
+			kh["speed"] = 0.0                              # hold it still: only the cannon moves it
+			cn["cannon_cd"] = 0.0
+			kc.step(0.02)                                  # the burst starts
+			var u0: float = kh["units"]
+			var s0k: float = kh["s"]
+			var len0: float = Sim.chain_length(kh)
+			var left0: float = cn["cannon_kill_left"]
+			var lost0: float = kc.combat_losses.get("B", 0.0)
+			var emit0: float = kc.nodes[0]["streaming"].get("remaining", 0.0)
+			kc.step(0.1)
+			var emitted: float = emit0 - kc.nodes[0]["streaming"].get("remaining", 0.0)
+			var budget_k: float = left0 - cn["cannon_kill_left"]
+			var back_want: float = budget_k * len0 / u0 if len0 >= s0k - 0.001 else maxf(0.0, len0 - Sim.full_length(u0 - budget_k))
+			var tail0: float = s0k - len0
+			var tail1: float = kh["s"] - Sim.chain_length(kh)
+			check(absf((u0 + emitted - kh["units"]) - budget_k) < 0.01 and absf(kc.combat_losses.get("B", 0.0) - lost0 - budget_k) < 0.01
+					and budget_k > 0.0, "%s: a burst step kills exactly its budget (%.1f units)" % [what, budget_k])
+			check(absf((s0k - kh["s"]) - back_want) < 0.01 and absf(kh["fcut"] - back_want) < 0.01 and absf(tail1 - tail0) < 0.05,
+					"%s: the kill pulls the head back by the length it took (%.2f m) and leaves the tail where it was (%.2f -> %.2f)" % [what, s0k - kh["s"], tail0, tail1])
+			check(s0k - kh["s"] > 0.2 * budget_k * Rules.metres_per_unit(), "%s: the front bodies are the ones gone (head %.2f m back)" % [what, s0k - kh["s"]])
+			if kh["streaming"] or send_k > 100.0:
+				check(kh["streaming"] and kc.nodes[0]["streaming"].get("hid", -1) == kh["id"], "%s: a streaming line keeps streaming under fire" % what)
+			check((cn["cannon_target"] as Vector3).distance_to(Sim.sample(kh, kh["s"])[0]) < 0.01, "%s: the laser aims at the head it kills" % what)
+			var lost1: float = kc.combat_losses.get("B", 0.0)
+			for i in range(40):
+				kc.step(0.05)
+			var burst_kill: float = kc.combat_losses.get("B", 0.0) - lost1 + budget_k
+			var want_k: float = Rules.CANNON_STATS[3]["kill"] if send_k > 100.0 else u0
+			check(absf(burst_kill - want_k) < 0.5 or (not (kh in kc.hordes) and burst_kill < want_k),
+					"%s: the whole burst kills its budget or the whole line, no more (%.1f of %.0f)" % [what, burst_kill, want_k])
+		# a line leaving the tower: the beam hits its tail, the head is untouched
+		var kt := Sim.new()
+		kt.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+		kt.nodes[1]["owner"] = "B"
+		kt.nodes[1]["units"] = 30.0
+		var lh := kt.send(1, 0, 1.0)
+		run_until(kt, func(): return not lh["streaming"], 5.0, 0.02)
+		var ct: Dictionary = kt.nodes[1]
+		ct["owner"] = "A"
+		ct["attachment"] = "cannon"
+		ct["cannon_tier"] = 3
+		ct["cannon_cd"] = 0.0
+		lh["speed"] = 0.0
+		kt.step(0.02)
+		var ls0: float = lh["s"]
+		var lu0: float = lh["units"]
+		kt.step(0.05)
+		check(not kt._hit_head(ct, lh) and lh["units"] < lu0 and absf(lh["s"] - ls0) < 0.001,
+				"%s: a line leaving the tower is hit at its tail (head stays at %.1f m, %.1f -> %.1f units)" % [mode_k, ls0, lu0, lh["units"]])
+	Rules.bridge_combat = true
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)

@@ -1009,6 +1009,10 @@ static func predict(s: Sim, dt: float) -> void:
 		var ds: float = Rules.move_speed() * h.get("speed", 1.0) * s.stat(h["owner"], "speed") * mult * dt
 		if h["streaming"]:
 			ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * dt)
+		if h.get("pour", false):                    # walking off a lip: the head stays, the line pours on
+			h["fcut"] = float(h.get("fcut", 0.0)) + ds
+			h["units"] = maxf(0.0, h["units"] - ds / Rules.metres_per_unit())
+			continue
 		h["s"] = minf(h["s"] + ds, h["L"])
 
 

@@ -55,6 +55,8 @@ var _lobe_mesh: SphereMesh
 var _drop_meshes := {}   # seat -> SphereMesh with the seat's goo
 var units: UnitView                  # classic mode (bridge combat OFF): Alpha 11 unit models
 var classic := false                # true this frame when drawing the classic unit look
+var vis: Dictionary = {}             # MapBuilder's node entries (main): the vat models the drops come out of
+var _spouts := {}                    # node id -> {"vn", "spouts", "rims", "lands", "centre", "plat_y"} (see vat_drop)
 
 
 func _ready() -> void:
@@ -90,7 +92,7 @@ func sync(sim: Sim, viewer: String) -> void:
 	if units == null:
 		units = UnitView.new()
 		add_child(units)
-	units.begin()
+	units.begin(sim.time)
 	var dt := 0.0 if _last_time < 0.0 else maxf(sim.time - _last_time, 0.0)
 	_last_time = sim.time
 	var by_id := {}
@@ -118,13 +120,16 @@ func sync(sim: Sim, viewer: String) -> void:
 	var alive := {}
 	for h in sim.hordes:
 		alive[h["id"]] = true
-		_draw(h, viewer, roles.get(h["id"], {}), sim.time, dt)
+		_draw(h, viewer, roles.get(h["id"], {}), sim.time, dt, _drop_for(sim, h))
 	for id in pools.keys():
 		if not alive.has(id):
 			for p in pools[id]["patches"]:
 				p.queue_free()
 			pools[id]["label"].queue_free()
+			if pools[id].get("spray") != null:
+				(pools[id]["spray"] as Node).queue_free()
 			pools.erase(id)
+	_draw_fallers(sim.time)
 	var seen := _sync_contacts(sim, by_id)
 	_draw_rivers(sim, seen, dt)
 	_draw_transit_skirmishes(sim, seen)
@@ -144,7 +149,7 @@ func _role(roles: Dictionary, id: int) -> Dictionary:
 
 
 # ------------------------------------------------------------------ the line
-func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: float) -> void:
+func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: float, drop := {}) -> void:
 	var faction: String = h["faction"]
 	load_faction(faction)
 	if not pools.has(h["id"]):
@@ -156,10 +161,15 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 		label.no_depth_test = true
 		label.modulate = Rules.seat_color(h["owner"])
 		add_child(label)
-		pools[h["id"]] = {"patches": [], "label": label, "vis": float(h["units"]), "phase": fposmod(h["id"] * 0.37, 1.0)}
+		pools[h["id"]] = {"patches": [], "label": label, "vis": float(h["units"]), "phase": fposmod(h["id"] * 0.37, 1.0),
+				"fc": h.get("fcut", 0.0), "kp": -1, "L": h["L"], "spray": null}
 	var pool: Dictionary = pools[h["id"]]
-	# the drawn count trails the real one a little, so losses read as the line receding, not popping
+	# the drawn count trails the real one a little, so losses read as the line receding, not popping -
+	# except what was cut off its FRONT (0.18.7: a cannon hit at the head, walking off a lip): that is
+	# gone at once, or the tail would jump back while the head gave way
+	var fcut: float = h.get("fcut", 0.0)
 	var vis: float = pool["vis"]
+	vis -= maxf(fcut - float(pool["fc"]), 0.0) / Rules.metres_per_unit()
 	if h["units"] > vis:
 		vis = h["units"]
 	else:
@@ -167,8 +177,21 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 	pool["vis"] = vis
 	var full := Sim.full_length(vis)
 	var length := minf(full, maxf(h["s"], 1.0))
-	var n := clampi(int(length / Rules.PATCH_SPACING) + 1, 1, Rules.MAX_PATCHES)
-	var rest := length - (n - 1) * Rules.PATCH_SPACING       # fraction of the last patch
+	# the patches keep their places along the line as its front is cut off: patch k (counted from the
+	# line's first) sits at s + fcut - k * spacing; the ones past the head are gone (popped / fallen)
+	var sp_len := Rules.PATCH_SPACING
+	var k0 := maxi(int(ceil(fcut / sp_len - 0.0001)), 0)
+	var off := k0 * sp_len - fcut                             # 0..spacing: the head patch sits this far behind s
+	if fcut <= 0.0:
+		off = 0.0
+	var n := clampi(int(maxf(length - off, 0.0) / sp_len) + 1, 1, Rules.MAX_PATCHES)
+	var rest := length - off - (n - 1) * sp_len               # fraction of the last patch
+	if pool["L"] != h["L"] or fcut < float(pool["fc"]) - 1.0 or int(pool["kp"]) < 0:
+		pool["kp"] = k0                                       # a new path: nothing to drop
+		pool["L"] = h["L"]
+	pool["fc"] = fcut
+	if not classic:
+		_front_gone(h, pool, k0, time)
 	var pile := clampf(full / maxf(length, 1.0), 1.0, 1.5)    # jammed behind a frontline/queue
 	var big := clampf((vis * Rules.METRES_PER_UNIT - Rules.MAX_CHAIN) / Rules.MAX_CHAIN, 0.0, Rules.MAX_THICKEN)
 	var thin := 1.0 - THIN * (1.0 - clampf(vis / maxf(h["start_units"], 1.0), 0.0, 1.0))
@@ -181,19 +204,24 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 	var phase: float = pool["phase"]
 	var t: float = time + phase / SHOVE_HZ
 	var arr: Array = pool["patches"]
-	while not classic and arr.size() < n:           # BRAWL draws unit models, never these patches
+	var slots := SLOTS if k0 > 0 else n                   # patch k lives in slot k % SLOTS once the front is cut
+	while not classic and arr.size() < slots:        # BRAWL draws unit models, never these patches
 		var mi := MeshInstance3D.new()
 		add_child(mi)
 		arr.append(mi)
 	if classic:
-		units.add_horde(h, Rules.shown_f(vis), time)
-	for i in range(arr.size()):
-		var mi: MeshInstance3D = arr[i]
-		var s: float = h["s"] - i * Rules.PATCH_SPACING
+		units.add_horde(h, Rules.shown_f(vis), time, drop)
+	elif not drop.is_empty():
+		units.add_goo_drops(h["owner"], drop, Sim.sample(h, 0.0)[0], Rules.shown_f(h["ordered"] - float(drop["remaining"])),
+				Rules.shown_f(h["ordered"]))
+	for q in range(arr.size()):
+		var mi: MeshInstance3D = arr[q]
+		var i := posmod(q - k0, SLOTS) if k0 > 0 else q
+		var s: float = h["s"] - off - i * sp_len
 		if i >= n or s < 0.0 or classic:
 			mi.visible = false
 			continue
-		var kind: String = "head" if i == 0 else ("tail" if i == n - 1 else KINDS[1 + (i % 3)])
+		var kind: String = "head" if i == 0 else ("tail" if i == n - 1 else KINDS[1 + ((k0 + i) % 3)])
 		if i >= DETAILED and kind != "head":
 			kind += "_lod1"
 		var mesh: Mesh = meshes[faction][kind]
@@ -231,9 +259,9 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 		var sc := 1.0
 		var from_tail := n - 1 - i
 		if n >= 4 and from_tail < 3:                   # the line tapers off at the tail
-			sc = [0.55, 0.75, 0.9][from_tail]
+			sc = TAPER[from_tail]
 		if i == n - 1 and n > 1:
-			sc *= clampf(0.3 + rest / Rules.PATCH_SPACING, 0.3, 1.0)   # grows/shrinks smoothly
+			sc *= clampf(0.3 + rest / sp_len, 0.3, 1.0)   # grows/shrinks smoothly
 		if h["state"] == "absorb" and i == 0:
 			sc = 0.45                                  # squeezing in through the door
 		elif s < 2.0:
@@ -260,6 +288,266 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 		label.text = "%d +%d" % [Rules.shown(h["units"]), Rules.shown(h["ordered"] - h["units"])]
 	else:
 		label.text = str(Rules.shown(h["units"]))
+
+
+const SLOTS := Rules.MAX_PATCHES + 1  # patch pool slots of a line whose front has been cut
+const TAPER := [0.55, 0.75, 0.9]
+
+
+# ------------------------------------------------------------------ the front: cannon pops, the pour
+# 0.18.7 (Daniele: "towers kills enemies blobs from the bottom instead of from the top"; the waterfall
+# "should be seamless and exaggerates so it looks cooler (exaggeration still should be kept in the ratio
+# of the actual units lets say a +20%)"): a patch cut off the head pops where it was (a cannon hit) or
+# walks off the lip and falls with its momentum (a missing deck), one per patch that really went plus a
+# spray patch for every five (+20 % at most); droplets keep spraying off the lip while the line pours.
+const FALL_POOL := 64
+const FALL_T := 1.7
+const POUR_G := 19.0
+const POUR_HOP := 2.2
+const POP_T := 0.28
+var _fallers: Array = []             # [MeshInstance3D] pooled, reused
+var _fl_t := PackedFloat32Array()    # start time (-1 = free)
+var _fl_p := PackedVector3Array()
+var _fl_v := PackedVector3Array()
+var _fl_spin := PackedVector3Array()
+var _fl_mode := PackedByteArray()    # 1 pop, 2 fall
+var _fl_next := 0
+var falls_drawn := 0                 # patches sent off a lip, spray included (probes read these)
+var falls_real := 0
+var pops := 0
+
+
+func _front_gone(h: Dictionary, pool: Dictionary, k0: int, time: float) -> void:
+	## Patches kp..k0-1 have gone off the front since last frame.
+	var kp: int = pool["kp"]
+	if kp >= k0:
+		return
+	var pour: bool = h.get("pour", false) and h["state"] != "absorb"
+	var lip: float = h.get("pour_lip", -1.0)
+	var fall_from: float = float(h.get("pour_k", 0.0)) - 0.5 * Rules.PATCH_SPACING
+	var anchor: float = h["s"] + float(h.get("fcut", 0.0))
+	var steps := 0
+	while kp < k0 and steps < 12:
+		var at: float = anchor - kp * Rules.PATCH_SPACING
+		if pour:
+			if kp * Rules.PATCH_SPACING >= fall_from:
+				_spawn_patch(h, 2, lip, maxf(at - lip, 0.0), time, pool)
+		else:
+			_spawn_patch(h, 1, minf(at, h["L"]), 0.0, time, pool)
+		kp += 1
+		steps += 1
+	pool["kp"] = k0                                    # a big cut (a whole stretch) drops its tail end only
+	if pour:
+		_spray(h, pool, lip)
+	elif pool["spray"] != null:
+		(pool["spray"] as CPUParticles3D).emitting = false
+
+
+func _spawn_patch(h: Dictionary, mode: int, at: float, over: float, time: float, pool: Dictionary) -> void:
+	var faction: String = h["faction"]
+	load_faction(faction)
+	var mesh: Mesh = meshes[faction].get("body_a_lod1", null)
+	if mesh == null:
+		return
+	if _fallers.is_empty():                          # the pool, made once
+		_fl_t.resize(FALL_POOL)
+		_fl_p.resize(FALL_POOL)
+		_fl_v.resize(FALL_POOL)
+		_fl_spin.resize(FALL_POOL)
+		_fl_mode.resize(FALL_POOL)
+		for i in range(FALL_POOL):
+			var mi := MeshInstance3D.new()
+			mi.visible = false
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(mi)
+			_fallers.append(mi)
+			_fl_t[i] = -1.0
+	var smp := Sim.sample(h, at)
+	var fwd: Vector3 = smp[1]
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length() > 0.001 else Vector3(1, 0, 0)
+	var side := fwd.cross(Vector3.UP)
+	var n := 1
+	if mode == 2:
+		falls_real += 1
+		pool["fr"] = int(pool.get("fr", 0)) + 1
+		if float(pool.get("fs", 0) + 1) <= UnitView.POUR_EXTRA * float(pool["fr"]) + 0.0001:
+			pool["fs"] = int(pool.get("fs", 0)) + 1  # the +20 % spray: one per five real patches of this line
+			n = 2
+		falls_drawn += n
+	else:
+		pops += 1
+	for c in range(n):
+		var i := _fl_next
+		_fl_next = (_fl_next + 1) % FALL_POOL
+		var mi: MeshInstance3D = _fallers[i]
+		if mi.mesh != mesh or mi.get_meta("seat", "") != h["owner"]:
+			mi.mesh = mesh
+			mi.set_meta("seat", h["owner"])
+			for sidx in range(mesh.get_surface_count()):
+				var m := mesh.surface_get_material(sidx) as BaseMaterial3D
+				var is_creature := m != null and m.albedo_texture != null
+				mi.set_surface_override_material(sidx, Mats.creature(faction, h["owner"], textures[faction])
+						if is_creature else Mats.goo(h["owner"]))
+		var r1 := UnitView._rnd(h["id"] + c * 17, int(at * 10.0))
+		var r2 := UnitView._rnd(int(at * 10.0) + c, h["id"])
+		_fl_p[i] = (smp[0] as Vector3) + side * (r1 - 0.5) * (0.4 + 1.2 * c)
+		_fl_mode[i] = mode
+		if mode == 1:
+			_fl_v[i] = Vector3.ZERO
+			_fl_t[i] = time
+			_fl_spin[i] = Vector3(0.0, Rules.heading(fwd), 0.0)
+		else:
+			var v := Rules.move_speed()
+			_fl_v[i] = fwd * v * lerpf(0.95, 1.2, r1) * (0.85 if c > 0 else 1.0) + side * (r2 - 0.5) * 2.6 \
+					+ Vector3.UP * POUR_HOP * (1.3 if c > 0 else 1.0)
+			_fl_t[i] = time - clampf(over, 0.0, 2.0) / v - 0.06 * c
+			_fl_spin[i] = Vector3((r1 - 0.3) * 5.0, Rules.heading(fwd), (r2 - 0.5) * 5.0)
+
+
+func _draw_fallers(time: float) -> void:
+	for i in range(_fallers.size()):
+		var mi: MeshInstance3D = _fallers[i]
+		if _fl_t[i] < -0.5 and not mi.visible:
+			continue
+		var age := time - _fl_t[i]
+		var mode := _fl_mode[i]
+		if _fl_t[i] < -0.5 or age > (POP_T if mode == 1 else FALL_T) or classic:
+			mi.visible = false
+			_fl_t[i] = -1.0
+			continue
+		if age < 0.0:
+			mi.visible = false
+			continue
+		mi.visible = true
+		var sp: Vector3 = _fl_spin[i]
+		if mode == 1:                                  # pop: the patch bursts - swells flat, then is gone
+			var k := age / POP_T
+			var sw := (1.0 + 0.6 * sin(minf(k * 2.2, 1.0) * PI * 0.5)) * (1.0 - smoothstep(0.4, 1.0, k))
+			mi.position = _fl_p[i] + Vector3.UP * 0.25 * k
+			mi.rotation = Vector3(0.0, sp.y, 0.0)
+			mi.scale = Vector3(1.25, 0.7, 1.35) * maxf(sw, 0.01)
+		else:
+			var v: Vector3 = _fl_v[i]
+			mi.position = _fl_p[i] + Vector3(v.x, 0.0, v.z) * age + Vector3.UP * (v.y * age - 0.5 * POUR_G * age * age)
+			mi.rotation = Vector3(sp.x * age, sp.y, sp.z * age)
+			var st := 1.0 + 0.5 * clampf(age / 0.6, 0.0, 1.0)            # the goo stretches as it drops
+			mi.scale = Vector3(1.0 / st, st, 1.0 / st) * (1.0 - 0.4 * smoothstep(FALL_T * 0.6, FALL_T, age))
+
+
+func _spray(h: Dictionary, pool: Dictionary, lip: float) -> void:
+	## Goo droplets off the lip while the line pours (one emitter per pouring line, made once).
+	if pool["spray"] == null:
+		var p := _splash(h["owner"], 0.0)
+		p.local_coords = false
+		p.amount = 24
+		p.lifetime = 1.1
+		p.spread = 28.0
+		p.initial_velocity_min = 2.5
+		p.initial_velocity_max = 5.0
+		p.gravity = Vector3(0.0, -POUR_G, 0.0)
+		add_child(p)
+		pool["spray"] = p
+	var sp: CPUParticles3D = pool["spray"]
+	var smp := Sim.sample(h, lip)
+	var fwd: Vector3 = smp[1]
+	fwd.y = 0.0
+	sp.position = (smp[0] as Vector3) + Vector3(0, 0.25, 0)
+	sp.direction = (fwd.normalized() + Vector3(0, 0.35, 0)) if fwd.length() > 0.01 else Vector3.UP
+	sp.emitting = true
+
+
+# ------------------------------------------------------------------ out of the vats
+func _drop_for(sim: Sim, h: Dictionary) -> Dictionary:
+	## The vat a streaming line is still leaving, if its model can dispense (see vat_drop): its spouts
+	## plus what is still to come out of the door. {} = the line starts at the door as before.
+	if not h["streaming"]:
+		return NO_DROP
+	var src: Dictionary = sim.nodes[h["route"][0]]
+	if src["streaming"].get("hid", -1) != h["id"] or float(src["streaming"].get("remaining", 0.0)) <= 0.0:
+		return NO_DROP
+	var d := vat_drop(src)
+	if d.is_empty():
+		return NO_DROP
+	var remaining: float = src["streaming"]["remaining"]
+	d["remaining"] = remaining                       # the node's cached record: nothing allocated per frame
+	d["pending"] = int(ceil(Rules.shown_f(remaining)))
+	return d
+
+
+const NO_DROP := {}                  # (shared, read-only)
+const DROP_MODELS := ["Vat_T1", "Vat_T2", "Vat_T3"]  # T4 (its core is the vat) and relays: from the door
+
+
+func vat_drop(n: Dictionary) -> Dictionary:
+	## Where a vat drops its units from: the model's `Spout_0`, `Spout_1`, ... markers when it has them
+	## (the vat redesign), else the top of each tank found from its liquid (Scenery.tank_info), the
+	## blob overflowing the rim. {} while there is no vat to drop from - a relay, T4, a vat being built,
+	## or a model still rising after a tier-down.
+	var id: int = n["id"]
+	if vis.is_empty() or not vis.has(id) or n["build_kind"] != "":
+		return {}
+	var entry: Dictionary = vis[id]
+	var key := str(entry.get("model_key", ""))
+	var vn = entry.get("vat_node")
+	if not key in DROP_MODELS or not is_instance_valid(vn):
+		return {}
+	var node := vn as Node3D
+	var base: Vector3 = entry.get("centre", n["pos"])
+	if not node.visible or not node.scale.is_equal_approx(Vector3.ONE) or absf(node.position.y - base.y) > 0.02:
+		return {}
+	var c: Dictionary = _spouts.get(id, {})
+	if c.is_empty() or c["vn"] != vn:
+		c = {"vn": vn, "centre": node.global_position, "plat_y": (n["pos"] as Vector3).y}
+		var sp := PackedVector3Array()
+		var rims := PackedVector3Array()
+		var lands := PackedVector3Array()
+		var centre: Vector3 = c["centre"]
+		var marks := node.find_children("Spout_*", "Node3D", true, false)
+		if not marks.is_empty():
+			marks.sort_custom(func(a, b): return String(a.name).naturalnocasecmp_to(String(b.name)) < 0)
+			for m in marks:
+				var g: Vector3 = (m as Node3D).global_position
+				sp.append(g)
+				rims.append(g)                          # an outlet: it squeezes straight out
+				lands.append(_land(centre, g, float(c["plat_y"])))
+		else:
+			for mi in node.find_children("*", "MeshInstance3D", true, false):
+				var info := Scenery.tank_info((mi as MeshInstance3D).mesh, key)
+				if info["surface"] < 0:
+					continue
+				var xf: Transform3D = (mi as MeshInstance3D).global_transform
+				for t in info["tanks"]:
+					var tc: Vector3 = t["c"]
+					var top: Vector3 = xf * Vector3(tc.x, float(t["y1"]) + TANK_CAP, tc.z)
+					var rim: Vector3 = top + _out(centre, top) * (float(t["r"]) * 1.2 + 0.25)   # over the cap's edge
+					sp.append(top)
+					rims.append(rim)
+					lands.append(_land(centre, rim, float(c["plat_y"])))
+				break
+		c["spouts"] = sp
+		c["rims"] = rims
+		c["lands"] = lands
+		_spouts[id] = c
+	if (c["spouts"] as PackedVector3Array).is_empty():
+		return {}
+	return c
+
+
+const TANK_CAP := 0.95               # m from a tank's liquid top to the top of its cap (build_kit_2_0 vat_tank)
+
+
+static func _out(centre: Vector3, p: Vector3) -> Vector3:
+	## The way a blob leaves a tank: outward from the vat and toward the camera side (the door's side),
+	## so the drop reads in front of the tanks rather than behind them.
+	var out := p - centre
+	out.y = 0.0
+	out = out.normalized() if out.length() > 0.01 else Vector3.ZERO
+	return (out + Rules.front_dir() * 1.3).normalized()
+
+
+static func _land(centre: Vector3, rim: Vector3, plat_y: float) -> Vector3:
+	return Vector3(rim.x, plat_y + UnitView.BLOB_R * 0.3, rim.z) + _out(centre, rim) * UnitView.DROP_OUT
 
 
 static func _shove(t: float) -> Array:
