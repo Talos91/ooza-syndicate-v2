@@ -1,5 +1,87 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.19.0 "Alpha 19" - 2026-09-27 (Structures 2.1: Machingoon / Laser / Forge / Monster hub, team rules built, room relay server, cosmetics)
+
+Daniele's open-questions session (quotes in OPEN-QUESTIONS.md, summary in GAME-BIBLE §17) answered and built
+in the same pass; the tutorial waits for this to be live first.
+
+- **Vat caps 30/60/120/200 shown** (150/300/600/1000, production unchanged); **homes start T1 with 1 unit**
+  (Alpha 11's start); **neutrals at half their tier's cap** (15/30/60/100), regrowing to that. `legacy` preset
+  keeps the old numbers (Debug) for comparison.
+- **Owned vats stop at T3** (no T3 → T4 upgrade); **special nodes are always T4** from the start; conquest
+  never downgrades a T4; a vat or Machingoon still loses a tier on conquest (min 1).
+- **Structures 2.1** (Daniele: "there's something big coming"; models from the "Lane fight fun" session,
+  `Models/2.0/structures_2_1/`) replaces the old normal / relay / strategic build rules with **node kinds**:
+  common nodes build a **vat T1-T3 or a Machingoon T1-T3** in its place (swap keeps the tier); relay nodes
+  build one of **Laser tower / Forge / Monster hub** (single tier, no upgrades); special nodes only a T4 vat.
+  - **Machingoon**: a goo machine gun, build 15, upgrades 20/30, a continuous stream at the nearest enemy line
+    on its decks (2 / 3.5 / 5 kills/s, range 10 m); the node produces nothing while it holds one; back to a
+    vat costs 15 and keeps the tier.
+  - **Laser tower** replaces the three cannon tiers (Daniele: "give or take half way between current t2 and
+    t3"): one tier, cost 40, 2 s burst killing up to 32, 2 s recharge (~8 kills/s, below the 9.6/s door rate -
+    the old T3 was unbeatable).
+  - **Forge** now protects too: +50 % attack (unchanged) plus (Daniele: "yes forge protects") **20 % less
+    damage** on every one of the owner's garrisons (`FORGE_DEFENCE` 1.25); a captured forge node restarts its
+    charge ("start again on conquer" - a captured relay node is a fresh start, not a free bonus).
+  - **Monster hub**: cost 30, one per player; a monster costs 20 from the hub, **40 s** charge (Daniele
+    shortened it from 90 s: "change charge to 40 seconds"), moves at 60 % of unit speed, reaches 3 bridges
+    (plaza links don't count), kicks every line on its decks and every line crossing the platforms it passes
+    (friend or foe, garrisons and stored troops safe), takes the end node empty or drops a friendly one a
+    tier; only a fall kills it.
+  - **Minions**: the full-colour Alpha 1 models replace today's, slimmed to today's vertex counts.
+  - Fortify's **Anchor halves both** a Laser tower's and a Machingoon's kills; an Echo Split jam stops either.
+- **Team rules built** (GAME-RULES §11, Daniele: "Build §11"): an allied node's garrison is shared and counts
+  toward the cap; an attacker fights the whole shared garrison, losses split by ratio; ownership passes to the
+  ally with the largest garrison when the owner's troops hit zero (tie: first to arrive) via a `handover`
+  event that keeps the node's tier and structure but cancels the old owner's build; only the owner's **EJECT**
+  sends stored allied troops out, each to that ally's nearest node; allied **halo tiers** by share of the
+  node's cap (< 25 % / 25-75 % / > 75 %).
+- **Elimination**: "lines keep you alive" - a seat is out only with no nodes, no lines, no monster and no
+  stored troops left; the collapse no longer eliminates a seat outright.
+- **7:00 follows the Very Last Stand** (Daniele: "team who owns last vat wins"): the owner of the last standing
+  platform wins (team modes: the team); a still-neutral last platform is a **DRAW** with a seeded call-out
+  line; the Very Last Stand still runs at 6:00 even with LAST STAND OFF. A remote console that falls in the
+  collapse now freezes its decks in their last state instead of snapping to the first.
+- **Alpha 11 classics get relay retrofits and T3 centres**: Orbital's hub keeps no relay of its own (a special
+  node is never a relay) so its two short polar spokes get mirrored 1-way retracts; Switchback's node 4 gets a
+  1-way retract; Aurora's middle pair each get a remote toggling one local diagonal (mirrored) - Aurora also
+  gains outward and chaos; Trident's home lobes retract their own inner spine edge, its hub lobe keeps no
+  relay and loses chaos. All four strategic centres now play as T4 (special nodes are always T4).
+- **AI**: Veteran and Expert now count a defender's forge (attack and the new defence) and faction stats; the
+  fixed 6-unit relay garrison is gone - relay nodes are valued and built on like any other; the AI builds
+  Machingoons on raided frontline vats, Laser towers on relays, one Monster hub early, and launches monsters
+  by value (Veteran / Expert), never through its own lines. `test_ai_curve` widened to every B/C/S + M duel
+  map.
+- **Room relay server** (Alpha 20 stage 1, merged from the server session): rooms default to the room server
+  (`server/relay.py`, Vultr Singapore) via `RelayBridge` instead of PeerJS (`?relay=peerjs` still works); no
+  TURN-style connection limit any more; the host's own Sim still runs the match - stage 2 (a headless host on
+  the server) is next. `test_relay` (exit 2 = SKIP when the relay is unreachable).
+- **HUD**: inspector actions renamed per node kind (UPGRADE, MACHINGOON, VAT, LASER, FORGE, MONSTER HUB,
+  LAUNCH, EJECT, SWITCH); `hud_overlay.gd` adds a Monster hub reach ring, allied halos, and a **relay-outcome
+  preview** (vanishing decks dashed red, appearing decks ghosted, a turn arrow) while SWITCH is hovered/held or
+  during any relay warning (Daniele: "impossible right now to know in advance what a lot of the buttons do");
+  Last Stand's fall warning moves off the badge onto a **danger triangle** over the platform's rim instead
+  (Daniele: "a symbol of danger ... doesn't cover what's going on"); the Last Stand camera zoom loses its 2.5x
+  cap (Daniele: "no hard limit ... all eyes on winner"); team badges show total + each ally's share; new toasts
+  for monster launch, kick, forge lost (red, bonus fades) and handover.
+- **Relays are easier to use** (Daniele: "add some visibility to the buttons / models of the relays"):
+  **double-tapping an owned relay now fires its SWITCH** directly (no upgrade there needs the double-tap);
+  the SWITCH button carries an accent colour, the relay's kind symbol and a ready ring; relay badges show a
+  ready cue; relay towers glow when ready, dim while cooling down, and flash during the warning.
+- **Menus**: MAIN MENU remembers the last map played; REMATCH offers **a random other map** that covers at
+  least the human seat count; the DRAW results screen shows its call-out line; map filter TYPE relabelled
+  FAST / FORTRESS / STANDARD (was the pack group names BRAWL / SIEGE / CORE); **YOUR COLOUR** is now solid
+  hexagon chips with no text (`hex_chip.gd`), FACTION a 5-colour wedge, the pick ringed and scaled, the colour
+  name as tooltip; **ARMIES > COSMETICS** adds a look per structure family per faction.
+- **Views**: new models for Machingoon T1-3, Laser, Monster hub and monster per faction; 69 cosmetic skins
+  (`assets/kit/skins`) across vat, Machingoon, Laser, Forge and Monster hub families plus an alternate monster
+  per faction, all picked in ARMIES > COSMETICS; skins load lazily on a thread and, on web, from a separate
+  `skins.pck` downloaded the first time one is needed (confirm once it lands); `monster_view.gd` animates the
+  hub charge/launch, the kick and the fall; Machingoon turrets track and stream goo; a lost forge's surge
+  plays in reverse in ash (not rendered yet).
+- Tests: test_sim, test_net, test_map_pool, test_maps4, test_ai_curve, test_relay - all pass. Everything
+  checked headless and in desktop renders only; nothing on a real phone or across separate networks.
+
 ## 0.18.9 "Alpha 18" - 2026-09-26 (Very Last Stand, balance numbers, neutral regen, mobile UI pass)
 
 - **Very Last Stand** (Daniele's stalemate breaker): at 6:00 the surviving platforms fall one at a time - each pick

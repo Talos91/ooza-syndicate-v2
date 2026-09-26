@@ -1,9 +1,15 @@
 # Next session - start here
 
-State at the end of the 2026-09-26 sessions: **v0.18.9 "Alpha 18"** (live; Daniele is testing it - see docs/TO-TEST.md) (maps 4.2 - 20 compact maps at the kit's sizes - plus the four main Alpha 11 maps A-01..A-04, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
-published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md` (project root - the whole game as built), this file,
-`README.md`, `docs/TO-TEST.md` (Daniele's test results - start there), the top of `CHANGELOG.md` (0.18.6 to 0.18.9),
-`PLAYTEST-NOTES.md` notes 112-148, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`, the
+State as of publish today: **v0.19.0 "Alpha 19"** live - Structures 2.1 (Machingoon, Laser tower, Forge
+with a defence half, Monster hub), new vat caps and neutral garrisons, team rules built (GAME-RULES §11),
+"lines keep you alive" elimination, 7:00 follows the Very Last Stand with a DRAW call-out, Alpha 11
+classics get relay retrofits, the AI accounts for forges and values relays, rooms default to a room relay
+server (Alpha 20 stage 1) instead of PeerJS, relay switches double-tap and read more clearly, ARMIES
+cosmetics with 69 new skins - on top of 0.18.9's Very Last Stand, balance and mobile UI pass. Source on
+`main`, published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md`
+(project root - the whole game as built), this file,
+`README.md`, `docs/TO-TEST.md` (this session's checklist), the top of `CHANGELOG.md` (0.18.9 to 0.19.0),
+`PLAYTEST-NOTES.md` notes 149-163, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`, the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
 
 ## Standing rules (Daniele)
@@ -23,6 +29,47 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 
 The plan after 0.18.7 / 0.18.8 (Daniele's to-do list from 2026-09-26, plus suggested additions, by area
 and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
+
+## 0.19.0 (2026-09-27): Structures 2.1, team rules, room relay server, cosmetics - LIVE, published today
+
+Daniele's whole open-questions session (quotes in OPEN-QUESTIONS.md; summary GAME-BIBLE §17; PLAYTEST-NOTES
+149-163) built in one pass and merged with the server session's stage 1 relay work. Full detail: CHANGELOG.
+
+- **Rules** (`rules.gd`/`sim.gd`): `Rules.CAPS` 150/300/600/1000, `HOME_TIER`/`HOME_UNITS`, `NEUTRAL_UNITS`
+  (half-cap), `VAT_MAX_UPGRADE`, `NODE_BUILDS` (the node-kind table), `FORGE_DEFENCE`; Machingoon build/
+  upgrade/swap, the single-tier Laser (legacy `CANNON_*` constants kept internally), Monster hub / monster
+  (`Sim.launch_monster`, `_step_monster`, `monster_reach`, events `monster_launch/kick/take/fall`); teams
+  (`Sim._handover`, `halo_tier`, `allied_units`, `eject`); elimination now checks garrison + lines + monster +
+  stored troops; `Sim._force_end` follows the Very Last Stand owner, `Rules.DRAW_LINES` for a neutral finish;
+  a falling remote console freezes its decks. `legacy` balance preset covers the pre-0.19.0 numbers.
+- **AI** (`seat_ai.gd`): forge/faction accounting at Veteran+/Expert, no fixed relay garrison, Machingoon /
+  Laser / hub build heuristics, a monster-launch heuristic, EJECT just before a Last Stand drop;
+  `test_ai_curve` gains the M duel maps.
+- **Maps**: `References/.../Alpha 11 classics/generator/classics.py` gets relay retrofits + T3 centres,
+  re-baked, `test_maps4` green.
+- **Views**: `scripts/monster_view.gd` (new), `scripts/cosmetics.gd` (new, ARMIES skins), new Machingoon /
+  Laser / Monster hub / monster models and 69 skins in `assets/kit/skins`, minions swapped and slimmed.
+- **HUD**: `scripts/hud_overlay.gd` (new: hub reach ring, allied halos, relay-outcome preview, Last Stand
+  danger triangle), `scripts/hex_chip.gd` (new: YOUR COLOUR chips), `Hud.action_rect(name)` per-node-kind
+  actions, double-tapping an owned relay now fires SWITCH, relay visibility (accent colour, ready ring/cue,
+  tower glow/dim/flash), team badge shares, new toasts, MAIN MENU remembers the last map, REMATCH ON A
+  RANDOM MAP, map filter TYPE relabelled FAST / FORTRESS / STANDARD.
+- **Online**: `scripts/relay_bridge.gd` (new) + `Game/2.0/server/relay.py` (new, Alpha 20 stage 1, on the
+  Vultr Singapore VPS) - rooms default to the room relay server instead of PeerJS (`?relay=peerjs` still
+  works); protocol bumped to `ooze20-net-3` (build/launch_monster/eject orders, monsters + the draw line in
+  snapshots, cosmetic loadouts in player info); `tests/test_relay.gd` (new, exit 2 = SKIP when unreachable).
+- Tests: test_sim, test_net, test_map_pool, test_maps4, test_ai_curve, test_relay - all pass. Headless and
+  desktop renders only; nothing on a real phone or across separate networks.
+
+**What's next:**
+- The **tutorial session** builds the tutorial (`01 Rules/TUTORIAL-DESIGN.md`: 8 lessons + a first match, the
+  Graduate vat reward) now that 0.19.0 is live - this completes Alpha 19.
+- The **server session's stage 2**: move the match referee itself onto the server (a headless Godot host),
+  so no player's device has to stay in front.
+- A **map revision pass** (Daniele: "all current maps needs revision") - starts with M-01's relay housing
+  standing in front of its hub's gate.
+- A **measured performance pass** (not just browser emulation) - real-phone frame rate and touch feel are
+  still unvalidated.
 
 ## 0.18.9 (2026-09-26): Very Last Stand, balance, neutral regen, mobile UI - LIVE, end of the day
 
@@ -182,12 +229,24 @@ and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
 players on one PC: `tests/duo.html` (BUILD-LOG sec10). Main's `HUMAN` is now a variable (your seat).
 
 Still open on multiplayer:
-- Real separate-network and phone tests (Daniele). No relay (TURN) server: strict networks fail.
-- A host tab in the background freezes the match; 10 s later guests drop (they can RECONNECT).
+- Real separate-network and phone tests (Daniele). **0.19.0** now routes rooms through the relay server by
+  default, which should fix the old strict-network PeerJS failures - not yet confirmed on a real separate
+  network.
+- A host tab in the background still freezes the match (the host's own Sim is still the referee); 10 s later
+  guests drop (they can RECONNECT). Stage 2 below removes this.
 - Built in 0.16.1: EMPTY SEATS (AI), RECONNECT into a held seat, 10 s host grace, REMATCH.
 - Not built: seat swapping in the lobby, spectators.
-- Later: Vercel (site, room list, sign-in functions) + Neon Postgres (accounts, match history,
-  leaderboards, telemetry). Vercel cannot relay a live match itself (no long-lived WebSockets).
+- **Alpha 20, stage 1 merged (0.19.0):** the small always-on VPS (Vultr, Singapore - friends are in Asia) is
+  live as a **relay**: `Game/2.0/server/relay.py` forwards messages between a room's host and guests over
+  WebSockets (`scripts/relay_bridge.gd`), replacing PeerJS by default (`?relay=peerjs` still falls back to
+  it); no TURN-style connection limit any more. `tests/test_relay.gd` covers the path (exit 2 = SKIP when the
+  relay is unreachable). **Stage 2 (not built):** move the match referee itself onto the server - a headless
+  Godot host, so no player's device needs to stay in front; also a domain + Caddy TLS (today's address is
+  `sslip.io`, `server/README.md`). Access details: Daniele / the server session (not in the repo). Later:
+  **Supabase** for accounts (Google + Apple sign-in), friends, history and leaderboards (replaces the Vercel +
+  Neon idea; it can't run a match). Store path: web, then Android (Play closed test), then iOS (TestFlight).
+- Performance: the stutter on camera moves and falling nodes is client rendering, not the network - a measured
+  graphics pass (kit meshes, batching, cheaper fall fx, dynamic resolution on phones) is its own item.
 
 ## Other open work
 

@@ -559,3 +559,63 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 148. **"We spent a lot of tokens running simulations ... just start at 6 min."** *Noted:* stage the moment
      directly (`--ff`), never replay whole matches.
 
+## 2026-09-27 - Daniele, open-questions session (0.19.0)
+
+149. **"For now has been shelved so 30 40 80 160 is good but i'd change them slightly: 30/60/120/200."**
+     *Done (0.19.0):* new owned vat caps 30/60/120/200 shown; homes start T1 with 1 unit ("they start at
+     1"); neutrals start at half their tier's cap and refill up to that ("neutral start at half their
+     tier cap and refill up to that").
+150. **"Map-placed only"** (T4 upgrade or map-placed?); captured T4s **"Keeps T4."** *Done (0.19.0):*
+     owned vats stop at T3 (no T3 -> T4 upgrade); conquest never downgrades a T4.
+151. **"Attack + defence"** (forge); the defence half, **"All garrisons −20%."** *Done (0.19.0):* a
+     completed forge now also gives its owner's garrisons 20 % less damage, multiplying with Fortify /
+     Relay Aegis; cost and the +50 % attack unchanged.
+152. **"Build §11"** (team rules); halo tiers, **"Cap share; first to arrive."** *Done (0.19.0):*
+     GAME-RULES §11 built - shared garrisons, ownership passes to the ally with the largest garrison on
+     the owner hitting zero (tie: first to arrive), EJECT, halo tiers by share of the cap.
+153. **"Delay"** (does a relay lock cancel or only delay a pending switch?). *Confirmed as already
+     built (0.19.0):* Anchor / Relay Aegis delay a pending switch - the deck moves when the lock ends,
+     its riders fall.
+154. **"Freeze in last state"** (a remote console falling in the Last Stand). *Done (0.19.0):* its decks
+     freeze in their last state instead of snapping back to the first.
+155. **"Lines keep you alive."** *Done (0.19.0):* a seat is out only with no nodes, no lines, no monster
+     and no stored troops left - the collapse no longer eliminates a seat outright.
+156. **"Simply should follow the very last stand rule, team who owns last vat wins" ... "I'd say DRAW
+     and we say something funny ... for no one to have it means they didn't even tried ... we can kinda
+     call them out" ... "Very Last Stand anyway."** *Done (0.19.0):* 7:00 follows the Very Last Stand -
+     the owner of the last platform wins (team modes: the team); a still-neutral last platform is a
+     DRAW with a seeded call-out line; the Very Last Stand still runs at 6:00 with LAST STAND OFF.
+157. **"Relay retrofits, T3 centres"** (Alpha 11 classics). *Done (0.19.0):* Orbital, Switchback, Aurora
+     and Trident each get a relay fitted to their own graph (retracts and a remote); every strategic
+     centre now plays as T4 (special nodes are always T4).
+158. **"Why would they keep only 6? ... they can build tower or forge or other buildings on it ... it
+     is important to hold it ... they don't produce so ... next to be account"** (AI and relay nodes);
+     forge/faction accounting, **"Veteran + Expert only."** *Done (0.19.0):* the AI's fixed 6-unit relay
+     garrison is gone - relay nodes are valued and built on like any other; Veteran and Expert count a
+     defender's forge and faction stats in their garrison estimate.
+159. Structures 2.1 numbers: **"Instead of having 3 levels of laser tower we have only this one, we need
+     to adjust its power ... give or take half way between current t2 and t3"** (Laser tower);
+     **"Yes, as proposed"** (Machingoon); **"One per player"** (Monster hub); **"Agree as proposed"**
+     (monster); **"Up to 3 bridges"**; **"Only falls; node left empty"**; **"Swap, slimmed down"**
+     (minions). *Done (0.19.0):* Structures 2.1 built to spec - Machingoon, Laser tower, Monster hub +
+     monster, full-colour slimmed minions (GAME-BIBLE §4, §15).
+160. **"Cost price of a tier 1 vat which we never set ... maybe 15"** (Machingoon <-> vat swap cost);
+     **"Yes they can't move only eject"** (allied stored troops); **"Yes forge protects"**;
+     **"Yes start again on conquer, this make relay a keep"** (a captured hub restarts its charge);
+     **"Change charge to 40 seconds"** (was 90 s); **"Always T4"** (special nodes); **"Cancel it"** (a
+     handover cancels the old owner's build); **"Halves both"** (Anchor halves Laser and Machingoon
+     kills alike); **"Everyone, like on bridges"** (the monster kicks friend and foe on the platforms it
+     crosses too). *Done (0.19.0):* every one of these 0.19.0 rules-pass answers is built.
+161. **"Configurable per faction or global (this is another question i have no answer now)"**
+     (cosmetics); rejected recoloured skins - **"Just same skin with different texture, I want
+     completely different"** - and alt faction vats - **"No need for alt faction vat skins."**
+     *Done (0.19.0):* cosmetics built per faction for now, all unlocked while testing; 69 distinct-model
+     skins across the vat, Machingoon, Laser, Forge and Monster hub families plus one alternate monster
+     per faction - no recolours, no alt faction vats.
+162. **"The relays switch is clicked by double tapping relays, since we have no upgradable buildings
+     there that need that touch command."** *Done (0.19.0):* double-tapping an owned relay now fires
+     its SWITCH directly; double-tap on a common node is still UPGRADE.
+163. **"Add some visibility to the buttons / models of the relays."** *Done (0.19.0):* the SWITCH button
+     carries an accent colour, the relay's own kind symbol and a ready ring; relay badges show a ready
+     cue; relay towers glow when ready, dim while cooling down and flash during the warning.
+
