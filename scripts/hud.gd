@@ -46,6 +46,8 @@ var hint: Label
 var map_title: Label
 var dock: SkillDock
 var skill_targets: Control             # the dock's target highlights: over the badges, under the panels
+var overlay: HudOverlay                # 0.19.0: monster reach, halo rings, relay-outcome preview, danger symbols
+var action_buttons: Dictionary = {}    # stable action name -> the inspector's Button (tutorial spotlight, spec I)
 var end_panel: PanelContainer
 var pause_panel: PanelContainer
 var rotate_hint: Label
@@ -250,6 +252,9 @@ func setup(m: Node3D) -> void:
 				"count_w": 0.0, "sub_w": 0.0, "sub_small": false, "wide": false, "shape": "", "look": -1}
 	skill_targets = SkillDock.new_layer()
 	root.add_child(skill_targets)
+	overlay = HudOverlay.new()
+	root.add_child(overlay)
+	overlay.setup(main, sim, self, human, ui_scale)
 	# top bar: emblem, your total, timer, rivals, strength bar (Alpha 11's score header)
 	top_panel = PanelContainer.new()
 	style_panel(top_panel, accent)
@@ -512,6 +517,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 	else:
 		count_label.text = "DRAG A VAT"
 	_badges(cam)
+	overlay.sync(dt)
 	if dock.visible:
 		dock.sync(dt)
 	_refresh_inspector(cam)
@@ -537,14 +543,14 @@ func _badges(cam: Camera3D) -> void:
 		if sim.collapsed.get(n["id"], false):
 			panel.visible = false
 			continue
+		if sim.is_warned(n["id"]):                    # 0.19.0: the floating danger symbol replaces the badge
+			panel.visible = false                     # circle instead (HudOverlay._draw_danger_symbols)
+			continue
 		panel.visible = true
 		var owner: String = n["owner"]
-		var key := owner + ("*" if sim.is_warned(n["id"]) else "")
-		if b["owner"] != key:
-			b["owner"] = key
+		if b["owner"] != owner:
+			b["owner"] = owner
 			var col := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
-			if sim.is_warned(n["id"]):
-				col = Rules.state_color("warn")
 			panel.add_theme_stylebox_override("panel", badge_style(col))
 			(b["label"] as Label).add_theme_color_override("font_color", col if owner != "" else Color("d8e0e8"))
 		var label: Label = b["label"]
@@ -553,8 +559,10 @@ func _badges(cam: Camera3D) -> void:
 		var masked := not (owner == "" or sim.allied(owner, human) or (classic and not Rules.hide_enemy_counts))   # Brawl = Alpha 11: every count, unless hidden
 		label.visible = not masked
 		var inner := _badge_px.x - 2.0 * BADGE_PAD * ui_scale
+		var has_allies := sim.allied_units(n) > 0.0001   # GAME-RULES sec11: team members see total + own
 		if not masked:
-			b["count_w"] = _fit_text(label, str(Rules.shown(n["units"])), BADGE_COUNT_FONT, inner, b["count_w"])
+			var shown_units: float = sim.garrison_total(n) if has_allies else n["units"]
+			b["count_w"] = _fit_text(label, str(Rules.shown(shown_units)), BADGE_COUNT_FONT, inner, b["count_w"])
 		# no numbers on enemy nodes: the owner's emblem in the owner's colour stands in the count's place
 		# (Daniele: "don't use A B and C but use emblems in the color of the owner")
 		var emb: TextureRect = b["emblem"]
@@ -575,12 +583,17 @@ func _badges(cam: Camera3D) -> void:
 		if n["relay"] != "":
 			var st := sim.relay_state_key(n, n["relay_index"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + ("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper())
-		elif n["attachment"] == "cannon":
-			what = "CN%d" % n["cannon_tier"]
-		elif n["attachment"] == "forge":
-			what = "FRG"
+		elif n["structure"] == "machingoon":
+			what = "MGN%d" % n["tier"]
 		else:
 			what = "T%d" % n["tier"]
+		if has_allies and not masked:                       # GAME-RULES sec11: the total is shown above -
+			if owner == human:                               # this names the ally share / your own share of it
+				what += "+A%d" % Rules.shown(sim.allied_units(n))
+			else:
+				var mine := sim.allied_units(n, human)
+				if mine > 0.0001:
+					what += "+M%d" % Rules.shown(mine)
 		var clock := ""
 		var worst := ""                                     # the clock's widest form (see below)
 		if sim.is_warned(n["id"]):
@@ -759,39 +772,95 @@ func inspect(id: int, cam: Camera3D) -> void:
 	_refresh_inspector(cam)
 
 
+const STRUCT_LABEL := {"vat": "VAT", "machingoon": "MACHINGOON", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machingoon": "MACHINGOON", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+
+
 func _inspector_actions(n: Dictionary) -> void:
+	## Structures 2.1 (spec B): common - UPGRADE / MACHINGOON (or VAT to go back); relay - LASER / FORGE /
+	## MONSTER HUB (single tier) + SWITCH; special - T4 vat only, no swap; hub - LAUNCH; EJECT wherever
+	## allied troops are stored. Costs and disabled reasons come straight from the Sim (can_build /
+	## can_upgrade) in _refresh_inspector, so a greyed button always explains itself.
 	var id: int = n["id"]
-	var is_final: bool = n["relay"] == "" and ("cannon" in n["buildable"] or "forge" in n["buildable"])
 	if n["relay"] != "":
-		_add_action("SWITCH\n%s" % Rules.RELAY_GLYPH[n["relay"]], 0, "switch", id)
-	if Sim.has_vat(n):
+		_add_action("SWITCH", "SWITCH\n%s" % Rules.RELAY_GLYPH[n["relay"]], 0, "switch", id)
+		for kind in ["laser", "forge", "monster_hub"]:
+			if kind in n["buildable"] and n["structure"] != kind:
+				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})
+		if n["structure"] == "monster_hub":
+			_add_action("LAUNCH", "LAUNCH", Rules.MONSTER_COST, "launch_monster", id)
+	elif n["structure"] == "vat":
 		if n["tier"] < 4:
-			_add_action("UPGRADE T%d" % (n["tier"] + 1), Sim.vat_cost(n), "upgrade", id)
-	elif n["attachment"] == "cannon" and n["cannon_tier"] < 3:
-		_add_action("CANNON T%d" % (n["cannon_tier"] + 1), Rules.CANNON_COST[n["cannon_tier"] + 1], "upgrade", id)
-	for kind in ["cannon", "forge"]:
-		if kind in n["buildable"] and n["attachment"] != kind:
-			_add_action(kind.to_upper(), Rules.CANNON_COST[1] if kind == "cannon" else Rules.FORGE_COST, "build_" + kind, id)
-	if is_final and n["attachment"] != "":
-		_add_action("RESTORE VAT", 0, "restore", id)
+			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
+		if "machingoon" in n["buildable"]:
+			_add_action("MACHINGOON", "MACHINGOON", sim.build_cost(n, "machingoon"), "build", id, {"kind": "machingoon"})
+	elif n["structure"] == "machingoon":
+		if n["tier"] < 3:
+			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
+		_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
+	if sim.allied_units(n) > 0.0001:
+		_add_action("EJECT", "EJECT", 0, "eject", id)
 
 
-func _add_action(title: String, cost: int, method: String, id: int) -> void:
+func _add_action(name: String, title: String, cost: int, method: String, id: int, args := {}) -> void:
 	# prices shown at Alpha 11 scale like every other number (Alpha 14 playtest: "upgrade info still
-	# says 150") - the button used to print the raw internal cost
-	var text := title + ("\n%d UNITS" % Rules.shown(cost) if cost > 0 else ("\nFREE" if method == "restore" else "\n%d s CD" % int(Rules.RELAY_COOLDOWN)))
+	# says 150") - the button used to print the raw internal cost. `name` is the stable id the tutorial
+	# spotlights (action_rect(name); TUTORIAL-DESIGN.md sec11).
+	var suffix := ""
+	if method == "launch_monster":
+		suffix = "\n%d UNITS · DRAG" % Rules.shown(cost)
+	elif cost > 0:
+		suffix = "\n%d UNITS" % Rules.shown(cost)
+	elif method == "switch":
+		suffix = "\n%d s CD" % int(Rules.RELAY_COOLDOWN)
+	else:
+		suffix = "\nFREE"
+	var text := title + suffix
 	var b := button(text, func():
-		if main.node_action(method, id):
+		if method == "launch_monster":                    # arm: drag from the hub, or tap a highlighted node
+			main.monster_from = id
+			close_inspector()
+			return
+		if main.node_action(method, id, args):
 			close_inspector()
 		else:
 			_refresh_inspector(main.cam), 150, 82 if not mobile else 100, 16)
-	var slots := [Vector2(-75, -175), Vector2(80, -60), Vector2(-230, -60), Vector2(80, 30)]
+	if method == "switch":                                # relay-outcome preview while SWITCH is hovered / held
+		b.mouse_entered.connect(func(): overlay.hover_relay = id)
+		b.mouse_exited.connect(func():
+			if overlay.hover_relay == id:
+				overlay.hover_relay = -1)
+		b.button_down.connect(func(): overlay.hover_relay = id)
+	var slots := [Vector2(-75, -175), Vector2(80, -60), Vector2(-230, -60), Vector2(80, 30), Vector2(-230, 30)]
 	b.position = slots[mini(inspector_actions.size(), slots.size() - 1)] * ui_scale
 	var style := panel_style(Rules.seat_color(human))
 	style.set_corner_radius_all(int(40 * ui_scale))
 	b.add_theme_stylebox_override("normal", style)
 	inspector.add_child(b)
-	inspector_actions.append({"button": b, "cost": cost, "method": method})
+	inspector_actions.append({"button": b, "cost": cost, "method": method, "name": name, "args": args})
+	action_buttons[name] = b
+
+
+func action_rect(name: String) -> Rect2:
+	## Stable rect getter for the tutorial's spotlight (TUTORIAL-DESIGN.md sec11): valid only while that
+	## action's button is on screen (the inspector open on the right node kind). Empty otherwise.
+	if action_buttons.has(name) and is_instance_valid(action_buttons[name]):
+		return (action_buttons[name] as Control).get_global_rect()
+	return Rect2()
+
+
+func _monster_ready(n: Dictionary) -> String:
+	## "" if this hub may launch a monster right now, else the refusal line (mirrors Sim.launch_monster's
+	## own checks, read-only, for the LAUNCH button's disabled state and tooltip).
+	if int(n["hub_monster"]) >= 0:
+		for m in sim.monsters:
+			if m["id"] == n["hub_monster"] and m["state"] == "walking":
+				return "Its monster is still out"
+	if sim.time < float(n["monster_ready_t"]):
+		return "Monster ready in %d s" % int(ceil(float(n["monster_ready_t"]) - sim.time))
+	if n["units"] < Rules.MONSTER_COST:
+		return "A monster needs %d units (%d here)" % [Rules.shown(Rules.MONSTER_COST), Rules.shown(n["units"])]
+	return ""
 
 
 func _refresh_inspector(cam: Camera3D) -> void:
@@ -820,21 +889,28 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		lines.append(_structure_line(n))
 	else:
 		var what := _structure_line(n)
-		var units := "%d / %d units" % [Rules.shown(n["units"]), Rules.shown(Rules.CAPS[n["tier"]])] if Sim.has_vat(n) else "%d units" % Rules.shown(n["units"])
+		var units := "%d / %d units" % [Rules.shown(n["units"]), Rules.shown(sim.node_cap(n))]
 		lines.append("%s · %s" % [what, units])
 		if owner != "":
 			# Alpha 11's status line: production, and what a double-tap upgrade costs
-			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) else "no vat - garrison must be fed"
+			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) \
+					else ("no production - garrison must be fed" if n["structure"] == "machingoon" else "no vat here")
 			var up := sim.upgrade_cost(n)
 			if owner == human and up > 0:
 				status += " | Double-tap: %d units" % Rules.shown(up)
-			elif owner == human and Sim.has_vat(n) and n["tier"] >= 4:
+			elif owner == human and n["structure"] in ["vat", "machingoon"] and up <= 0:
 				status += " | MAX TIER"
 			lines.append(status)
 			var forge: String = " (forge +%d%%)" % roundi(Rules.forge_bonus * 100.0) if sim.has_forge(owner) else ""   # attack_of includes it
 			lines.append("garrison %s | attack %d%%%s | speed %d%%" % [
 					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0), forge,
 					roundi(sim.stat(owner, "speed") * 100.0)])
+			if n["structure"] == "forge":
+				# Forge readout (spec E): the attack half is in the line above (attack_of includes it)
+				lines.append("Forge: +%d%% attack, -%d%% damage taken" % [roundi(Rules.forge_bonus * 100.0), roundi((1.0 - 1.0 / Rules.FORGE_DEFENCE) * 100.0)])
+			if n["structure"] == "monster_hub":
+				var mr := _monster_ready(n)
+				lines.append("Monster hub: %s" % ("READY" if mr == "" else mr.to_upper()))
 	if n["relay"] != "":
 		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
 		var nxt := sim.relay_state_key(n, sim.relay_next_index(n)).to_upper()
@@ -848,8 +924,8 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		else:
 			rs += " | READY"
 		lines.append(rs)
-	if n["attachment"] == "cannon" and owner == human:
-		lines.append("cannon %s" % ("FIRING" if n["cannon_burst"] > 0.0 else ("READY" if n["cannon_cd"] <= 0.0 else "RECHARGING %.1f s" % n["cannon_cd"])))
+	if n["structure"] == "laser" and owner == human:
+		lines.append("laser %s" % ("FIRING" if n["cannon_burst"] > 0.0 else ("READY" if n["cannon_cd"] <= 0.0 else "RECHARGING %.1f s" % n["cannon_cd"])))
 	if n["build_kind"] != "":
 		lines.append("BUILDING %s · %.1f s" % [str(n["build_target"].get("kind", n["build_kind"])).to_upper(), n["build_timer"]])
 	if n["swap_cd"] > 0.0 and owner == human:
@@ -867,21 +943,28 @@ func _refresh_inspector(cam: Camera3D) -> void:
 	inspector_progress.value = Sim.build_progress(n) * 100.0
 	for a in inspector_actions:
 		var b: Button = a["button"]
-		var disabled: bool = n["build_kind"] != "" or owner != human or n["units"] < a["cost"]
-		if a["method"] == "switch":
-			disabled = n["relay_cd"] > 0.0 or n["relay_phase"] != ""
-		elif a["method"] in ["build_cannon", "build_forge", "restore"] and n["swap_cd"] > 0.0 and (n["attachment"] != "" or (n["relay"] == "" and n["tier"] > 0) or a["method"] == "restore"):   # sim.build_attachment's swap test
-			disabled = true
-		b.disabled = disabled
+		var why := ""
+		match str(a["method"]):
+			"upgrade":
+				why = sim.can_upgrade(inspector_id, human)
+			"switch":
+				why = "" if n["relay_cd"] <= 0.0 and n["relay_phase"] == "" else \
+						("Relay on cooldown" if n["relay_cd"] > 0.0 else "Relay is already switching")
+			"build":
+				why = sim.can_build(inspector_id, human, str((a["args"] as Dictionary).get("kind", "")))
+			"eject":
+				why = sim.can_build(inspector_id, human, "eject")
+			"launch_monster":
+				why = _monster_ready(n)
+		b.disabled = why != ""
+		b.tooltip_text = why
 
 
 func _structure_line(n: Dictionary) -> String:
 	if n["relay"] != "":
-		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % n["attachment"].to_upper() if n["attachment"] != "" else " (empty socket)")
-	if n["attachment"] == "cannon":
-		return "CANNON T%d" % n["cannon_tier"]
-	if n["attachment"] == "forge":
-		return "FORGE"
+		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
+	if n["structure"] == "machingoon":
+		return "MACHINGOON T%d" % n["tier"]
 	return "VAT T%d" % n["tier"]
 
 
@@ -891,6 +974,9 @@ func close_inspector() -> void:
 	inspector = null
 	inspector_id = -1
 	inspector_actions.clear()
+	action_buttons.clear()
+	if overlay:
+		overlay.hover_relay = -1
 
 
 # ------------------------------------------------------------------ messages
@@ -1047,17 +1133,19 @@ func show_end(winner: String) -> void:
 	var body := "%s · %02d:%02d\ncaptures %d   ·   lost in combat %d   ·   lost to falls %d\n%s" % [
 			str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60, captures, Rules.shown(a_lost), Rules.shown(a_fell),
 			("Last Stand: %s" % sim.last_stand_method.to_upper()) if sim.last_stand_active else "decided before the Last Stand"]
+	if title == "DRAW" and sim.draw_line != "":            # 7:00, a neutral last platform: the funny call-out (0.19.0)
+		body = str(sim.draw_line) + "\n" + body
 	if main.online:
 		var votes: int = Net.rematch_votes.size()
 		var mine: bool = Net.rematch_votes.has(Net.local_id())
 		body += "
 REMATCH: %d / %d ready%s" % [votes, Net.present_ids().size(), " - waiting for the others" if mine else ""]
-		_fill_overlay(end_panel, title, body, [["REMATCH" if not mine else "REMATCH - READY", func(): Net.request_rematch()],
+		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP" if not mine else "REMATCH - READY", func(): main.rematch_random()],
 				["LEAVE ROOM", main.to_menu]])
 		if not Net.rematch_changed.is_connected(_on_rematch_changed):
 			Net.rematch_changed.connect(_on_rematch_changed)
 	else:
-		_fill_overlay(end_panel, title, body, [["REMATCH", main.restart], ["MAIN MENU", main.to_menu]])
+		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP", main.rematch_random], ["MAIN MENU", main.to_menu]])
 	end_panel.visible = true
 	pause_panel.visible = false
 	layout(root.get_viewport_rect().size, margins)
