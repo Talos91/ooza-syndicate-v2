@@ -6,6 +6,8 @@ extends SceneTree
 ##   hostile sends aimed at players (at most 1.5x an even split).
 ## - Curve (Alpha 11's five levels): each level plays a fixed Standard AI on the same 1v1 maps; the
 ##   stronger the level, the more it wins, and Training never beats Standard more often than Expert.
+##   Maps: every maps 4.2 duel map (B-, C-, S-) plus every M duel map (0.18.10 - Daniele, 2026-09-27: "Widen the
+##   test"). A smoke run can cap it: `-- maps=2` plays only the first two duel maps (and a smaller FFA sample).
 
 const LEVELS := ["Training", "Casual", "Standard", "Veteran", "Expert"]
 var failures := 0
@@ -39,14 +41,23 @@ func _match(path: String, mode: String, levels: Dictionary, seed_value: int, lim
 	return sim
 
 
+func _arg_maps() -> int:
+	## `-- maps=N` (a smoke run): at most N duel maps; 0 = all.
+	for a in OS.get_cmdline_user_args():
+		if str(a).begins_with("maps="):
+			return int(str(a).substr(5))
+	return 0
+
+
 func _run() -> void:
-	Rules.last_stand = false                       # decide by play, not by the collapse
+	Rules.last_stand = false                       # decide by play, not by the collapse (the Very Last Stand still runs)
+	var cap := _arg_maps()
 	# ---------------------------------------------------------------- fairness in FFA
 	var ffa := MapPool.all().filter(func(p): return MapBuilder.load_map(p)["seats"].has("FFA4"))
 	var on_a := 0
 	var on_players := 0
 	var seats_n := 4
-	for i in range(mini(ffa.size(), 8)):
+	for i in range(mini(ffa.size(), 8 if cap <= 0 else cap)):
 		var sim := _match(ffa[i], "FFA4", {}, 11 + i, 240.0)
 		for e in sim.events:
 			if e["type"] != "send":
@@ -58,13 +69,14 @@ func _run() -> void:
 					on_a += 1
 	var share := float(on_a) / maxf(on_players, 1.0)
 	print("      FFA4: %d hostile sends at players, %d at seat A (share %.2f, even %.2f)" % [on_players, on_a, share, 1.0 / (seats_n - 1)])
-	check(on_players > 20, "FFA4 AIs attack players (%d sends)" % on_players)
+	check(on_players > (20 if cap <= 0 else 20 * cap / 8), "FFA4 AIs attack players (%d sends)" % on_players)
 	check(share <= 1.5 / (seats_n - 1), "seat A draws no more than 1.5x its share of the attacks (%.2f)" % share)
 	# ---------------------------------------------------------------- the curve
 	var duel := MapPool.all().filter(func(p):
 		var m := MapBuilder.load_map(p)
-		return m["seats"].has("1v1") and m.get("group", "") in ["core", "brawl", "siege"])
-	var games := mini(duel.size(), 10)
+		return m["seats"].has("1v1") and str(m["code"]).substr(0, 1) in ["B", "C", "S", "M"])
+	var games := duel.size() if cap <= 0 else mini(duel.size(), cap)
+	print("      curve on %d duel maps: %s" % [games, ", ".join(duel.slice(0, games).map(func(p): return p.get_file().substr(0, 4)))])
 	var wins := {}
 	for lv in LEVELS:
 		var w := 0.0

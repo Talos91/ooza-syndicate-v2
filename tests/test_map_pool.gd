@@ -90,8 +90,13 @@ func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, s_teams: Dicti
 			ssteps += 1
 		var caps := ssim.events.filter(func(e): return e["type"] == "capture").size()
 		var fires := ssim.events.filter(func(e): return e["type"] == "relay_fired").size()
+		var builds := {}                                   # structures 2.1 (0.18.10): what the AIs built and launched
+		for e in ssim.events:
+			if e["type"] == "build_start" and e["kind"] in ["machingoon", "laser", "forge", "monster_hub"]:
+				builds[e["kind"]] = builds.get(e["kind"], 0) + 1
+		var monsters := ssim.events.filter(func(e): return e["type"] == "monster_launch").size()
 		var tag := "BRAWL"
-		print("      %s %-24s %-5s %-5s over=%s winner=%s at %.0f s, captures=%d relay fires=%d" % [sm["code"],
-				str(sm["name"]), md, tag, ssim.over, ssim.winner, ssim.time, caps, fires])
+		print("      %s %-24s %-5s %-5s over=%s winner=%s at %.0f s, captures=%d relay fires=%d builds=%s monsters=%d" % [sm["code"],
+				str(sm["name"]), md, tag, ssim.over, ssim.winner, ssim.time, caps, fires, str(builds), monsters])
 		check(ssim.over, "%s %s: AI vs AI finishes within 8 simulated minutes (t=%.0fs)" % [sm["code"], tag, ssim.time])
 		check(caps >= 2, "%s %s: AIs capture nodes (%d)" % [sm["code"], tag, caps])
