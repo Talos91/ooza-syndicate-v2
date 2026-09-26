@@ -483,6 +483,122 @@ func _drop_timing() -> void:
 		return
 
 
+func _degree(sim: Sim, id: int, gone: Dictionary) -> int:
+	## Open decks from `id` to other surviving platforms (mirrors Sim._vls_open_links, kept local so
+	## this test doesn't depend on the private helper's exact name).
+	var c := 0
+	for link in sim.adj[id]:
+		var e: Dictionary = sim.edges[link[1]]
+		if e["state"] != "" or e["retracts"] or gone.get(link[0], false):
+			continue
+		c += 1
+	return c
+
+
+func _very_last_stand() -> void:
+	## Daniele (0.18.9): "Very Last Stand: at 6 every 10 sec a node with 2 or 1 connection falls
+	## randomly until only 1 node is left" - then "whatever the number of nodes left, they drop one by
+	## one in the same time span until one is left at 7; the time between falls is due to the number
+	## of nodes" (evenly spaced from 6:00, the last drop landing at MATCH_HARD_END). Runs the real
+	## collapse (ring Last Stand, then Very Last Stand) with no orders, on maps of different sizes
+	## plus a tutorial (no ring Last Stand at all), and checks it never stalls the map.
+	var maps := []
+	for path in MapPool.all():
+		maps.append(MapBuilder.load_map(path))
+	maps.sort_custom(func(a, b): return (a["nodes"] as Array).size() < (b["nodes"] as Array).size())
+	var picks: Array = []
+	for m in maps:
+		if (m["lastStand"].get("methods", []) as Array).is_empty():
+			picks.append(m)
+			break
+	for i in [0, maps.size() / 3, maps.size() * 2 / 3, maps.size() - 1]:
+		if not maps[i] in picks:
+			picks.append(maps[i])
+	for m in picks:
+		var code: String = m["code"]
+		var md: String = m["modes"][0]
+		var seats := {}
+		for s in m["seats"][md]:
+			seats[int(s["node"])] = s["seat"]
+		for seed in [1, 2]:
+			var sim := Sim.new()
+			sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, seed)
+			var tag := "%s seed %d" % [code, seed]
+			var started_at := -1.0
+			var expected_gap := 0.0
+			var last_drop_t := -1.0
+			var drops := 0
+			var ok_degree := true
+			var ok_conn := true
+			var ok_gap := true
+			var dt := 0.1
+			while sim.time < Rules.MATCH_HARD_END + 1.0:
+				var before: Dictionary = sim.collapsed.duplicate()
+				sim._step_last_stand(dt)
+				sim._step_very_last_stand(dt)
+				sim.time += dt
+				if sim.very_last_stand_active and started_at < 0.0:
+					started_at = sim.time
+					expected_gap = sim.very_last_stand_gap
+				for n in sim.nodes:
+					var id: int = n["id"]
+					if sim.collapsed.get(id, false) and not before.get(id, false):
+						if started_at >= 0.0:                     # a Very Last Stand drop (not the ring's)
+							drops += 1
+							if _degree(sim, id, before) > 2:
+								ok_degree = false
+							if not _connected(sim, sim.collapsed):
+								ok_conn = false
+							if last_drop_t >= 0.0 and expected_gap > 0.0 and absf(sim.time - last_drop_t - expected_gap) > 0.35:
+								ok_gap = false
+							last_drop_t = sim.time
+			check(started_at >= 0.0, "%s: Very Last Stand engages" % tag)
+			if started_at >= 0.0:
+				check(absf(started_at - Rules.VERY_LAST_STAND_TIME) < 0.15, "%s: it starts at 6:00 (%.1f s)" % [tag, started_at])
+				check(ok_degree, "%s: every dropped platform had 1-2 open connections when picked" % tag)
+				check(ok_conn, "%s: the map stays connected after every drop" % tag)
+				check(ok_gap, "%s: drops are evenly spaced (%.1f s apart)" % [tag, expected_gap])
+				var survivors := sim.nodes.filter(func(n): return not sim.collapsed.get(n["id"], false))
+				check(survivors.size() == 1, "%s: exactly one platform survives before the hard end (%d left)" % [tag, survivors.size()])
+				if drops > 0:
+					check(last_drop_t <= Rules.MATCH_HARD_END + 0.35, "%s: the last drop lands at the hard end, not after" % tag)
+	# seeded reproducibility: the same seed drops the same platforms at the same times
+	var m: Dictionary = picks[-1]
+	var md: String = m["modes"][0]
+	var seats := {}
+	for s in m["seats"][md]:
+		seats[int(s["node"])] = s["seat"]
+	var runs := []
+	for run in range(2):
+		var sim := Sim.new()
+		sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 3)
+		var order := []
+		while sim.time < Rules.MATCH_HARD_END + 1.0:
+			var before: Dictionary = sim.collapsed.duplicate()
+			sim._step_last_stand(0.1)
+			sim._step_very_last_stand(0.1)
+			sim.time += 0.1
+			for n in sim.nodes:
+				if sim.collapsed.get(n["id"], false) and not before.get(n["id"], false):
+					order.append(n["id"])
+		runs.append(order)
+	check(runs[0] == runs[1], "%s: the same seed drops the same platforms in the same order (reproducible)" % m["code"])
+	# a map already down to one surviving platform by 6:00 (the ring Last Stand's own keep ring, or a
+	# 1-node tutorial): Very Last Stand must do nothing rather than error on a (survivors-1) of zero.
+	var solo := Sim.new()
+	solo.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 1)
+	for n in solo.nodes:
+		if n["id"] != 0:
+			solo.collapsed[n["id"]] = true
+	solo.time = Rules.VERY_LAST_STAND_TIME
+	for i in range(50):
+		solo._step_very_last_stand(0.1)
+		solo.time += 0.1
+	var solo_left := solo.nodes.filter(func(n): return not solo.collapsed.get(n["id"], false))
+	check(solo_left.size() == 1 and solo.very_last_stand_gap == 0.0,
+			"%s: already down to one platform at 6:00 - Very Last Stand does nothing" % m["code"])
+
+
 func _run() -> void:
 	var pool := MapPool.all()
 	var baked := Array(DirAccess.get_files_at(MapPool.DIR)).filter(func(f): return f.trim_suffix(".remap").ends_with(".json")).size()
@@ -501,5 +617,6 @@ func _run() -> void:
 			int(_latest_end) / 60, int(_latest_end) % 60, _pairs_alt, _pairs])
 	_heights()
 	_drop_timing()
+	_very_last_stand()
 	print("\n%d checks - %s" % [checks, "ALL PASSED (0 failed)" if failures == 0 else "%d FAILED" % failures])
 	quit(1 if failures > 0 else 0)

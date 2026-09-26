@@ -486,7 +486,10 @@ func sync(dt: float, cam: Camera3D) -> void:
 		var count: float = strength[seat]
 		score_sections[seat].visible = count > 0.0
 		score_sections[seat].size_flags_stretch_ratio = maxf(1.0, count)
-	if sim.last_stand_active:
+	if sim.very_last_stand_active:
+		status_label.text = ("VERY LAST STAND · a platform falls every %d s" % int(round(sim.very_last_stand_gap))
+				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · one platform stands - conquest decides")
+	elif sim.last_stand_active:
 		var next := ""
 		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
 		if sim.v3 and not sim.last_stand_warn.is_empty():
@@ -851,7 +854,10 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		lines.append("BUILDING %s · %.1f s" % [str(n["build_target"].get("kind", n["build_kind"])).to_upper(), n["build_timer"]])
 	if n["swap_cd"] > 0.0 and owner == human:
 		lines.append("attachment swap in %.0f s" % ceil(n["swap_cd"]))
-	if sim.last_stand_active:
+	if sim.very_last_stand_active:
+		lines.append("VERY LAST STAND: %s" % ("THE LAST PLATFORM - conquest decides" if sim.very_last_stand_gap <= 0.0
+				else ("falls in %d s" % int(ceil(sim.drop_in(n["id"]))) if sim.is_warned(n["id"]) else "could fall next")))
+	elif sim.last_stand_active:
 		var k := sim.drop_order_of(n["id"])
 		lines.append("LAST STAND: %s" % ((("falls in wave %d" if sim.v3 else "drop #%d") % k) if k > 0 else ("THE %s - never falls" % ("LAST RING" if sim.v3 else "FINAL") if sim.is_final(n["id"]) else "")))
 	inspector_first.text = "· " + str(lines.pop_front())

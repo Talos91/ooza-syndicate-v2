@@ -49,6 +49,13 @@ var last_stand_wave := 20.0
 var last_stand_corners: Array = []  # 0.18.7: home node ids of the match's seats in corner-cycle order
 var _ls_corner_k := 0                # the corner the next planned drop aims at (carries across rings)
 var _next_wave_at := 0.0
+var very_last_stand_active := false  # 0.18.9: the post-ring stalemate breaker (Rules.VERY_LAST_STAND_TIME)
+var very_last_stand_gap := 0.0       # this match's current interval, derived from the survivor count
+                                      # and the time left to Rules.MATCH_HARD_END (Daniele: "the time
+                                      # between falls is due to the number of nodes") - reuses
+                                      # last_stand_warn / last_stand_queue / last_stand_warn_node /
+                                      # last_stand_warn_t so the badges, camera, fx and net snapshot
+                                      # need no separate plumbing
 var rng := RandomNumberGenerator.new()
 var _next_id := 1
 # SKILLS 2.0 (0.18.7) - see the "skills" section at the end of this file for the API
@@ -1183,6 +1190,7 @@ func step(dt: float) -> void:
 		return
 	time += dt
 	_step_last_stand(dt)
+	_step_very_last_stand(dt)
 	if time >= Rules.MATCH_HARD_END and not over:
 		_force_end()
 	if over:
@@ -2179,7 +2187,125 @@ func is_warned(id: int) -> bool:
 
 
 func is_final(id: int) -> bool:
+	if very_last_stand_active:
+		return false                                       # nothing is safe any more once it starts
 	return last_stand_keep.has(id) if v3 else id == last_stand_final
+
+
+# ---------------------------------------------------------- Very Last Stand (Daniele, 0.18.9)
+# "Very Last Stand: at 6 every 10 sec a node with 2 or 1 connection falls randomly until only 1 node
+# is left" - a stalemate breaker for whatever the ring Last Stand left standing (or, on a map with no
+# Last Stand at all, the whole map): the surviving ring can otherwise hold to the 7:00 hard end.
+# Follow-up: "whatever the number of nodes left, they drop one by one in the same time span until one
+# is left at 7; the time between falls is due to the number of nodes" - the interval is derived, not
+# fixed, so the last drop lands exactly at Rules.MATCH_HARD_END. It reuses the ring machinery's own
+# fields (last_stand_warn / last_stand_queue / last_stand_warn_node / last_stand_warn_t) so the
+# badges, the camera zoom, the fx and the net snapshot need no changes.
+func _step_very_last_stand(dt: float) -> void:
+	if over:
+		return
+	if not Rules.last_stand:
+		return
+	if not very_last_stand_active:
+		if time < Rules.VERY_LAST_STAND_TIME:
+			return
+		_start_very_last_stand()
+		return
+	if last_stand_warn_node >= 0 or _vls_surviving().size() <= 1:
+		return
+	_vls_queue_next()
+
+
+func _start_very_last_stand() -> void:
+	very_last_stand_active = true
+	last_stand_active = true             # a tutorial never ran the ring collapse: this is its Last Stand
+	events.append({"t": time, "type": "very_last_stand"})
+	fx_events.append({"type": "very_last_stand"})
+	_vls_queue_next()
+
+
+func _vls_surviving() -> Array:
+	var out := []
+	for n in nodes:
+		if not collapsed.get(n["id"], false):
+			out.append(n["id"])
+	return out
+
+
+func _vls_open_links(id: int, gone: Dictionary) -> int:
+	## Decks to other surviving platforms - a relay deck counts only while it is actually open.
+	var c := 0
+	for link in adj[id]:
+		var e: Dictionary = edges[link[1]]
+		if e["state"] != "" or e["retracts"] or gone.get(link[0], false):
+			continue
+		c += 1
+	return c
+
+
+func _vls_pick(gone: Dictionary) -> int:
+	## The next platform to fall: a random pick (seeded) among surviving platforms with 1 or 2 open
+	## connections whose drop leaves everyone else still connected; if every such platform would
+	## strand something, the least-stranding one (the island rule from _drop_sequence).
+	var survivors := []
+	for n in nodes:
+		if not gone.get(n["id"], false):
+			survivors.append(n["id"])
+	var candidates := []
+	for id in survivors:
+		if _vls_open_links(id, gone) <= 2:
+			candidates.append(id)
+	candidates.sort()
+	var safe := []
+	for id in candidates:
+		var trial := gone.duplicate()
+		trial[id] = true
+		if _islands(trial).is_empty():
+			safe.append(id)
+	if not safe.is_empty():
+		return safe[rng.randi_range(0, safe.size() - 1)]
+	var pool: Array = candidates if not candidates.is_empty() else survivors.duplicate()   # no 1-2-conn
+	pool.sort()                                                                            # platform at
+	var best_stranded := 999999                                                            # all: fall back
+	var ties := []                                                                         # to any survivor
+	for id in pool:
+		var trial := gone.duplicate()
+		trial[id] = true
+		var stranded: int = _islands(trial).size()
+		if stranded < best_stranded:
+			best_stranded = stranded
+			ties = [id]
+		elif stranded == best_stranded:
+			ties.append(id)
+	return ties[rng.randi_range(0, ties.size() - 1)]
+
+
+func _vls_queue_next() -> void:
+	var survivors := _vls_surviving()
+	if survivors.size() <= 1:
+		last_stand_warn_node = -1
+		last_stand_warn_t = 0.0
+		last_stand_warn = {}
+		last_stand_queue = []
+		return
+	very_last_stand_gap = (Rules.MATCH_HARD_END - time) / float(survivors.size() - 1)
+	var gone := collapsed.duplicate()
+	var id := _vls_pick(gone)
+	var batch := [id]
+	gone[id] = true
+	for extra in _islands(gone):            # this pick would strand others too (the rare fallback case)
+		if not extra in batch:
+			batch.append(extra)
+			gone[extra] = true
+	last_stand_warn = {}
+	for bid in batch:
+		last_stand_warn[bid] = true
+	last_stand_queue = batch
+	last_stand_warn_node = batch[0]
+	last_stand_warn_t = very_last_stand_gap
+	for bid in batch:
+		fx_events.append({"type": "collapse_warning", "node": bid})
+	events.append({"t": time, "type": "collapse_warning", "nodes": batch.duplicate(), "very_last_stand": true})
 
 
 func _start_last_stand_legacy() -> void:
