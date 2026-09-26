@@ -830,8 +830,9 @@ func _refresh_inspector(cam: Camera3D) -> void:
 			elif owner == human and Sim.has_vat(n) and n["tier"] >= 4:
 				status += " | MAX TIER"
 			lines.append(status)
-			lines.append("garrison %s | attack %d%% | speed %d%%" % [
-					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0),
+			var forge: String = " (forge +%d%%)" % roundi(Rules.forge_bonus * 100.0) if sim.has_forge(owner) else ""   # attack_of includes it
+			lines.append("garrison %s | attack %d%%%s | speed %d%%" % [
+					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0), forge,
 					roundi(sim.stat(owner, "speed") * 100.0)])
 	if n["relay"] != "":
 		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
@@ -995,7 +996,7 @@ func pause_menu() -> void:
 	if main.online:                                   # a room never pauses (Alpha 11): the menu only
 		_fill_overlay(pause_panel, "ROOM %s" % Net.room_code, "%s · %02d:%02d · the match keeps running" % [
 				str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
-				[["RESUME", func(): pause_panel.visible = false], ["LEAVE ROOM", main.to_menu]])
+				[["RESUME", func(): pause_panel.visible = false], _territory_action(), ["LEAVE ROOM", main.to_menu]])
 		pause_panel.visible = true
 		layout(root.get_viewport_rect().size, margins)
 		return
@@ -1009,9 +1010,17 @@ func pause_menu() -> void:
 			["LAST STAND: %s" % ("ON" if Rules.last_stand else "OFF"), func():
 				Rules.last_stand = not Rules.last_stand
 				pause_menu()],
+			_territory_action(),
 			["RESTART", main.restart], ["MAIN MENU", main.to_menu]])
 	pause_panel.visible = true
 	layout(root.get_viewport_rect().size, margins)
+
+
+func _territory_action() -> Array:
+	## TERRITORY: NEON / GOO (Rules.goo_territory) - a local look, so rooms offer it too.
+	return ["TERRITORY: %s" % ("GOO" if Rules.goo_territory else "NEON"), func():
+		Rules.goo_territory = not Rules.goo_territory
+		pause_menu()]
 
 
 var _end_winner := ""
@@ -1061,8 +1070,9 @@ func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: 
 	var b := text_label(body, 18, Color("c8e6ee"))
 	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(b)
+	var tall := 80 if actions.size() <= 5 else 70     # six pause actions (TERRITORY) still fit a landscape phone
 	for a in actions:
-		var btn := button(a[0], a[1], 0, 56 if not mobile else 80, 22)
+		var btn := button(a[0], a[1], 0, 56 if not mobile else tall, 22)
 		col.add_child(btn)
 
 
@@ -1074,7 +1084,8 @@ func _build_debug() -> void:
 	debug_button.toggle_mode = true
 	debug_button.size = debug_button.custom_minimum_size
 	root.add_child(debug_button)
-	debug_button.visible = not main.online           # online: the rules are the host's, not live-tunable
+	debug_button.visible = not main.online and Rules.debug_tools   # online: the rules are the host's, not live-tunable;
+	                                                               # offline only when DEBUG TOOLS is on in OPTIONS (0.18.7)
 	chat_button = button("Chat", func(): Net.open_chat(), 110, 50 if not mobile else 70, 20)   # online: the room chat
 	chat_button.size = chat_button.custom_minimum_size
 	chat_button.visible = main.online

@@ -21,6 +21,7 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 
 func _init() -> void:
+	Rules.bridge_combat = true                      # these checks were written for SIEGE (the old default); BRAWL is the game's default since 0.18.7
 	var map := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var pos := MapBuilder.layout(map)
 	check(pos.size() == 5, "Two Piers lays out 5 nodes")
@@ -956,5 +957,161 @@ func _init() -> void:
 			carried_w += x["units"]
 	check(fired and not sw.is_edge_open(ew) and cut_ev.is_empty() and fell > 350.0 and carried_w + fell > 590.0,
 			"a retracted deck under an order: riders carried in, the vat keeps sending and the rest pours into the void (carried %.0f + fell %.0f of 600)" % [carried_w, fell])
+	var pour_evs := 0
+	var chunk_evs := 0
+	for x in sw.fx_events:
+		if x["type"] == "fall":
+			if x.get("pour", false):
+				pour_evs += 1
+			else:
+				chunk_evs += 1
+	check(pour_evs > 20 and chunk_evs <= 3,
+			"the waterfall is one motion: the line walks off the lip (%d pour steps, %d whole-stretch falls)" % [pour_evs, chunk_evs])
+
+	# ---------------------------------------------------------------- 0.18.7: cannons kill where the laser hits
+	# (Daniele: "towers kills enemies blobs from the bottom instead of from the top") - both modes
+	for brawl_k in [true, false]:
+		Rules.bridge_combat = not brawl_k
+		var mode_k: String = "BRAWL" if brawl_k else "SIEGE"
+		for send_k in [400.0, 20.0]:                       # a line still streaming out, a finished one
+			var kc := Sim.new()
+			kc.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+			var cn: Dictionary = kc.nodes[1]
+			cn["owner"] = "A"
+			cn["units"] = 50.0
+			cn["attachment"] = "cannon"
+			cn["cannon_tier"] = 3
+			cn["cannon_cd"] = 99.0                         # held until the line is in place
+			kc.nodes[0]["owner"] = "B"
+			kc.nodes[0]["units"] = send_k
+			var kh := kc.send(0, 1, 1.0)                   # a line coming at the tower
+			var c1: Vector3 = cn["pos"]
+			run_until(kc, func(): return (Sim.sample(kh, kh["s"])[0] as Vector3).distance_to(c1) < Rules.CANNON_RANGE - 1.0, 10.0, 0.02)
+			var what := "%s, %s line" % [mode_k, "streaming" if kh["streaming"] else "finished"]
+			check(kh["streaming"] == (send_k > 100.0) and kc._hit_head(cn, kh), "%s: a line coming at a tower is hit at its head" % what)
+			kh["speed"] = 0.0                              # hold it still: only the cannon moves it
+			cn["cannon_cd"] = 0.0
+			kc.step(0.02)                                  # the burst starts
+			var u0: float = kh["units"]
+			var s0k: float = kh["s"]
+			var len0: float = Sim.chain_length(kh)
+			var left0: float = cn["cannon_kill_left"]
+			var lost0: float = kc.combat_losses.get("B", 0.0)
+			var emit0: float = kc.nodes[0]["streaming"].get("remaining", 0.0)
+			kc.step(0.1)
+			var emitted: float = emit0 - kc.nodes[0]["streaming"].get("remaining", 0.0)
+			var budget_k: float = left0 - cn["cannon_kill_left"]
+			var back_want: float = budget_k * len0 / u0 if len0 >= s0k - 0.001 else maxf(0.0, len0 - Sim.full_length(u0 - budget_k))
+			var tail0: float = s0k - len0
+			var tail1: float = kh["s"] - Sim.chain_length(kh)
+			check(absf((u0 + emitted - kh["units"]) - budget_k) < 0.01 and absf(kc.combat_losses.get("B", 0.0) - lost0 - budget_k) < 0.01
+					and budget_k > 0.0, "%s: a burst step kills exactly its budget (%.1f units)" % [what, budget_k])
+			check(absf((s0k - kh["s"]) - back_want) < 0.01 and absf(kh["fcut"] - back_want) < 0.01 and absf(tail1 - tail0) < 0.05,
+					"%s: the kill pulls the head back by the length it took (%.2f m) and leaves the tail where it was (%.2f -> %.2f)" % [what, s0k - kh["s"], tail0, tail1])
+			check(s0k - kh["s"] > 0.2 * budget_k * Rules.metres_per_unit(), "%s: the front bodies are the ones gone (head %.2f m back)" % [what, s0k - kh["s"]])
+			if kh["streaming"] or send_k > 100.0:
+				check(kh["streaming"] and kc.nodes[0]["streaming"].get("hid", -1) == kh["id"], "%s: a streaming line keeps streaming under fire" % what)
+			check((cn["cannon_target"] as Vector3).distance_to(Sim.sample(kh, kh["s"])[0]) < 0.01, "%s: the laser aims at the head it kills" % what)
+			var lost1: float = kc.combat_losses.get("B", 0.0)
+			for i in range(40):
+				kc.step(0.05)
+			var burst_kill: float = kc.combat_losses.get("B", 0.0) - lost1 + budget_k
+			var want_k: float = Rules.CANNON_STATS[3]["kill"] if send_k > 100.0 else u0
+			check(absf(burst_kill - want_k) < 0.5 or (not (kh in kc.hordes) and burst_kill < want_k),
+					"%s: the whole burst kills its budget or the whole line, no more (%.1f of %.0f)" % [what, burst_kill, want_k])
+		# a line leaving the tower: the beam hits its tail, the head is untouched
+		var kt := Sim.new()
+		kt.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
+		kt.nodes[1]["owner"] = "B"
+		kt.nodes[1]["units"] = 30.0
+		var lh := kt.send(1, 0, 1.0)
+		run_until(kt, func(): return not lh["streaming"], 5.0, 0.02)
+		var ct: Dictionary = kt.nodes[1]
+		ct["owner"] = "A"
+		ct["attachment"] = "cannon"
+		ct["cannon_tier"] = 3
+		ct["cannon_cd"] = 0.0
+		lh["speed"] = 0.0
+		kt.step(0.02)
+		var ls0: float = lh["s"]
+		var lu0: float = lh["units"]
+		kt.step(0.05)
+		check(not kt._hit_head(ct, lh) and lh["units"] < lu0 and absf(lh["s"] - ls0) < 0.001,
+				"%s: a line leaving the tower is hit at its tail (head stays at %.1f m, %.1f -> %.1f units)" % [mode_k, ls0, lu0, lh["units"]])
+	Rules.bridge_combat = true
+	_goo_territory()
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)
+
+
+func _goo_territory() -> void:
+	## TERRITORY: GOO (0.18.7) is a pure view: the toggle only counts in BRAWL, the goo follows the
+	## owners (homes covered, neutral bare), a capture spreads and settles, a closed deck drops its goo,
+	## switching back to NEON hides every piece. No sim state is touched.
+	var was_goo := Rules.goo_territory
+	var was_bc := Rules.bridge_combat
+	Rules.goo_territory = true
+	Rules.bridge_combat = true
+	check(not Rules.goo_look(), "GOO territory is off in SIEGE (its hordes are goo already)")
+	Rules.bridge_combat = false
+	check(Rules.goo_look(), "GOO territory is on in BRAWL when the option is")
+	var map := MapBuilder.load_map("res://maps4/A-01-orbital-nexus.json")
+	var seats := {}
+	for s in map["seats"]["1v1"]:
+		seats[int(s["node"])] = s["seat"]
+	var gs := Sim.new()
+	gs.setup(map, MapBuilder.layout(map), seats, {"A": "null", "B": "ember"}, 3)
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var gvis := MapBuilder.build3(holder, gs, map)
+	var goo := GooTerritory.new()
+	holder.add_child(goo)
+	var collapsed_edges := {}
+	goo.setup(gs, gvis, collapsed_edges, false)
+	var before := JSON.stringify(gs.nodes)
+	goo.sync(0.05)
+	var home: int = seats.keys()[0]
+	var neutral := -1
+	for n in gs.nodes:
+		if n["owner"] == "" and goo._plat.has(n["id"]):
+			neutral = n["id"]
+			break
+	var home_mi: MeshInstance3D = goo._plat[home]["mi"]
+	check(goo.built and home_mi.visible and (home_mi.mesh as ArrayMesh).get_surface_count() == 1,
+			"GOO: the home platform is under goo from the first frame (%d vertices)" % (home_mi.mesh as ArrayMesh).surface_get_array_len(0))
+	check(neutral >= 0 and not (goo._plat[neutral]["mi"] as MeshInstance3D).visible, "GOO: a neutral platform stays bare")
+	var half_on := 0
+	var half_off := 0
+	for i in goo._half:
+		for h in range(2):
+			var p = goo._half[i][h]
+			if p == null:
+				continue
+			var nid: int = gs.edges[i]["a"] if h == 0 else gs.edges[i]["b"]
+			var owned: bool = gs.nodes[nid]["owner"] != "" and gs.is_edge_open(i)
+			if (p["mi"] as MeshInstance3D).visible == owned:
+				half_on += 1
+			else:
+				half_off += 1
+	check(half_off == 0 and half_on > 0, "GOO: every deck half follows its end's owner (%d right, %d wrong)" % [half_on, half_off])
+	check(JSON.stringify(gs.nodes) == before, "GOO touched no sim state (a pure view)")
+	gs.nodes[neutral]["owner"] = "B"
+	goo.sync(0.05)
+	var np: Dictionary = goo._plat[neutral]
+	check(np["t"] >= 0.0 and (np["mi"] as MeshInstance3D).visible and (np["mi"] as MeshInstance3D).material_override == np["anim"],
+			"GOO: a capture starts the spread on the platform's own animation material")
+	for k in range(40):
+		goo.sync(0.05)
+	check(np["t"] < 0.0 and np["drawn"] == "B" and (np["mi"] as MeshInstance3D).material_override == goo._steady_for("B"),
+			"GOO: the spread settles within 2 s on the shared seat material")
+	var shared := goo._steady_for("B") == goo._steady_for("B") and goo._steady.size() <= 2
+	check(shared, "GOO: one shared material per colour (%d)" % goo._steady.size())
+	Rules.goo_territory = false
+	goo.sync(0.05)
+	var any_visible := false
+	for p in goo._pieces():
+		any_visible = any_visible or (p["mi"] as MeshInstance3D).visible
+	check(not any_visible, "NEON again: no goo piece shows")
+	holder.queue_free()
+	Rules.goo_territory = was_goo
+	Rules.bridge_combat = was_bc

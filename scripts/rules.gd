@@ -102,7 +102,8 @@ static var node_fight_mult: float = NODE_FIGHT_MULT_DEFAULT   # live-tunable: x 
 # BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
 # queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
-static var bridge_combat: bool = true
+static var bridge_combat: bool = false    # BRAWL by default (Daniele, 2026-09-26: "brawl is back as the main game mode
+                                          # and siege is just an abandoned test for now")
 # LAST STAND toggle (Daniele: "add a toggle for Last Stand on or off in the match settings").
 # Off: no collapse; the 7:00 safety net still ends a stalled match by strength.
 static var last_stand: bool = true
@@ -128,6 +129,19 @@ static var low_detail: bool = false
 # enemy node, in either mode (badges show the seat letter). Off: BRAWL shows every count as Alpha 11
 # did; SIEGE never shows enemy numbers (an identity rule of 2.0).
 static var hide_enemy_counts: bool = false
+# DEBUG TOOLS (Daniele, 0.18.7: "we are past debug tools ... you can hide them (in case we want to reactivate
+# them later maybe put in options)"): the in-match Debug button and panel, off unless switched on in OPTIONS.
+static var debug_tools: bool = false
+# TERRITORY LOOK (Daniele, 0.18.7: "the lane fight chat did some try with goo instead of neons, can you
+# try adding it so i can get the feel of it and add it as a toggle (could be a cosmetic later on)").
+# false = NEON (today's owner-colour neon trims, pier stripes and rims); true = GOO: owned platforms and
+# deck halves under goo in the player colour, units in their race colour with a player-colour rim
+# (GooTerritory, UnitView). BRAWL only - SIEGE's hordes are goo already and keep today's look. Pure view.
+static var goo_territory: bool = false
+
+
+static func goo_look() -> bool:
+	return goo_territory and not bridge_combat
 
 # CONTACT (Alpha 12, Daniele: "whenever an enemy crosses the hitbox of a unit they fight... a unit
 # crossing an enemy unit should always start a combat to death"): contact is geometric, anywhere -
@@ -288,6 +302,22 @@ const HUES := {
 const FFA_ORDER := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]
 const TEAM_FAMILIES := [["cyan", "green", "blue"], ["red", "gold", "rose"]]   # 2v2: cyan+green vs red+gold
 const TEAM_FAMILIES_3 := [["cyan", "green", "blue"], ["red", "gold", "orange"], ["purple", "rose"]]   # three-team modes (2v2v2)
+const FAMILY_NAMES := {"cyan": "COOL", "red": "WARM", "purple": "VIOLET"}   # a family by its first hue
+
+
+# ONLINE ROOM COLOURS (Daniele, 0.18.7: "my gf saw herself blue in her game and me i saw myself blue";
+# his decision: the same colours on every screen). Every player picks a hue (a HUES key) in the room
+# lobby, unique in the room; in team modes each team shares one family above and every teammate has a
+# different hue of it. The host sends the seat -> hue map with the launch (Net.room_colours) and every
+# browser applies it with use_colours, so nobody is recoloured on their own screen.
+static func colour_families(team_count: int) -> Array:
+	return TEAM_FAMILIES if team_count <= 2 else TEAM_FAMILIES_3
+
+
+static func use_colours(keys: Dictionary) -> void:
+	seat_colors = {}
+	for s in keys:
+		seat_colors[s] = HUES.get(str(keys[s]), SEATS.get(s, NEUTRAL))
 
 
 static func _hue_gap(a: Color, b: Color) -> float:

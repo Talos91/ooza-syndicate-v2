@@ -28,6 +28,7 @@ func check(cond: bool, what: String) -> void:
 
 
 func _initialize() -> void:
+	Rules.bridge_combat = true                      # these checks were written for SIEGE (the old default); BRAWL is the game's default since 0.18.7
 	_run.call_deferred()
 
 
@@ -99,7 +100,7 @@ func _build_sim(info: Dictionary) -> Sim:
 	var teams := {}
 	for s in map["seats"][info["mode"]]:
 		seats[int(s["node"])] = s["seat"]
-		if info["mode"] == "2v2" and s.get("team") != null:
+		if info["mode"] in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
 			teams[s["seat"]] = int(s["team"])
 	var s := Sim.new()
 	s.setup(map, MapBuilder.layout(map), seats, info["players"], int(info["seed"]), teams)
@@ -230,6 +231,62 @@ func _run() -> void:
 	host.push_effects([{"type": "cannon", "node": target}])
 	_deliver()
 	check(gs.fx_events.any(func(e): return e.get("type", "") == "cannon"), "host effects reach the guest's view queue")
+	# 0.18.7: the corner-cycle drop order is the host's; a guest (whatever its own seed) reads it from ls[12]
+	var lsm := MapBuilder.load_map("res://maps4/A-01-orbital-nexus.json")
+	var ls_seats := {}
+	for st in lsm["seats"]["FFA4"]:
+		ls_seats[int(st["node"])] = st["seat"]
+	var ls_host := Sim.new()
+	ls_host.setup(lsm, MapBuilder.layout(lsm), ls_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar"}, 2)
+	ls_host._map_last_stand = {"methods": ["inward"], "orders": {"inward": lsm["lastStand"]["orders"]["inward"]}}
+	ls_host._ring_orders = ls_host._map_last_stand["orders"]
+	ls_host.time = Rules.LAST_STAND_TIME
+	ls_host._start_rings()
+	var ls_guest := Sim.new()
+	ls_guest.setup(lsm, MapBuilder.layout(lsm), ls_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar"}, 5)
+	var ls_wire: PackedByteArray = var_to_bytes(host.snapshot(ls_host, true))   # the wire's encoding
+	host.apply_snapshot(ls_guest, bytes_to_var(ls_wire))
+	check(ls_host.last_stand_queue.size() >= 2 and ls_guest.last_stand_queue == ls_host.last_stand_queue
+			and ls_guest.drop_in(ls_host.last_stand_queue[1]) == ls_host.drop_in(ls_host.last_stand_queue[1]),
+			"the guest's drop queue and per-platform countdowns are the host's corner-cycle order")
+	check(ls_host.nearest_corner(ls_host.last_stand_queue[0]) != ls_host.nearest_corner(ls_host.last_stand_queue[1]),
+			"the ring's first two drops lie near different starting corners")
+	# a forge built on the host plays the guest's forge pulse from the snapshots alone (ForgePulse, view only)
+	var fp := ForgePulse.new()
+	root.add_child(fp)
+	fp.setup(gs, {}, null)
+	var lit := []
+	fp.online.connect(func(seat, id, first): lit.append([seat, id, first]))
+	fp.sync(0.05, null)                              # the first look only learns the board
+	hs.nodes[target]["buildable"] = ["forge"]        # (not in snapshots: the host decides what may be built)
+	hs.nodes[target]["units"] = 200.0
+	check(hs.build_attachment(target, "forge"), "host starts a forge")
+	var bt := 0.0
+	var early := false
+	while hs.nodes[target]["attachment"] != "forge" and bt < 20.0:
+		hs.step(0.1)
+		bt += 0.1
+		host.apply_snapshot(gs, host.snapshot(hs, false))
+		fp.sync(0.1, null)
+		if not lit.is_empty() and gs.nodes[target]["attachment"] != "forge":
+			early = true
+	check(not early, "no forge pulse while the forge is still building")
+	check(lit == [["B", target, true]] and ForgePulse.live, "guest: the forge completing starts its owner's pulse, once")
+	check(ForgePulse.boost("A", gs.nodes[target]["pos"]) == 0.0, "the pulse lifts only its owner's units")
+	for i in range(22):
+		host.apply_snapshot(gs, host.snapshot(hs, false))
+		fp.sync(0.1, null)
+	check(not ForgePulse.live and ForgePulse.boost("B", gs.nodes[target]["pos"]) == 0.0 and lit.size() == 1, "the pulse ends after 2 s and leaves the look untouched")
+	var fp2 := ForgePulse.new()                      # a guest joining with the forge already there: nothing plays
+	root.add_child(fp2)
+	fp2.setup(gs, {}, null)
+	var lit2 := []
+	fp2.online.connect(func(seat, id, first): lit2.append(seat))
+	fp2.sync(0.1, null)
+	fp2.sync(0.1, null)
+	check(lit2.is_empty(), "a forge already standing when the view starts plays no pulse")
+	fp.free()
+	fp2.free()
 
 	# ---------------------------------------------------------------- chat
 	check(host.accept_chat(1, "  hello <b>there</b>\u0007 "), "host chats")
@@ -296,6 +353,7 @@ func _run() -> void:
 	_deliver()
 	check(host.links["g1b"] == gid and not host.is_away(gid) and r2.assigned_id == gid, "RECONNECT: same id, same seat")
 	check(r2.active and r2.match_round == host.match_round, "the reconnected guest receives the running round")
+	check(r2.match_info.get("colours", {}) == host.match_info["colours"] and host.match_info["colours"].size() == 2, "RECONNECT: the round's seat colours come back with it")
 	r2.world_ready(_build_sim(r2.match_info), null)
 	_deliver()
 	check(r2.started, "the reconnected guest joins the running clock")
@@ -362,5 +420,202 @@ func _run() -> void:
 	gg.leave()
 	check(gg.rejoin.is_empty(), "LEAVE ROOM forgets the RECONNECT details")
 
+	_test_colours()
+	_test_teams()
 	print("\nALL PASSED (0 failed)" if failures == 0 else "\n%d FAILED" % failures)
+
+
+func _colours_of(n: Node) -> Dictionary:
+	var out := {}
+	for id in n.roster:
+		out[id] = n.roster[id]["colour"]
+	return out
+
+
+func _test_colours() -> void:
+	## 0.18.7 (Daniele: the same colours on every screen): lobby picks, unique, team families, the map
+	## in the launch, identical on host and guest.
+	# ---------------------------------------------------------------- FFA: unique picks
+	_open_room("FFA4")
+	host._fix_colours()
+	var c1 := _join("g1", "null")
+	var c2 := _join("g2", "ember")
+	var c3 := _join("g3", "bloom")
+	_deliver()
+	var cols := _colours_of(host).values()
+	check(cols.size() == 4 and cols.all(func(c): return Rules.HUES.has(c)) and _uniq(cols).size() == 4, "FFA: every player gets a distinct colour")
+	check(_colours_of(c1) == _colours_of(host) and _colours_of(c3) == _colours_of(host), "FFA: every guest sees the same colour list")
+	var taken: String = host.roster[1]["colour"]
+	_to_host("g1", {"op": "colour", "colour": taken})
+	_deliver()
+	check(host.roster[c1.assigned_id]["colour"] != taken, "a colour another player has is refused")
+	_to_host("g1", {"op": "colour", "colour": "tartan"})
+	_to_host("g1", {"op": "colour", "colour": 7})
+	check(Rules.HUES.has(str(host.roster[c1.assigned_id]["colour"])), "unknown colours are ignored")
+	var free: String = Rules.FFA_ORDER.filter(func(k): return not k in _colours_of(host).values())[0]
+	_to_host("g1", {"op": "colour", "colour": free})
+	_deliver()
+	check(host.roster[c1.assigned_id]["colour"] == free and c2.roster[c1.assigned_id]["colour"] == free, "a free colour is taken and every guest sees it")
+	var late := _new_net()                              # a newcomer asking for a taken colour gets another
+	late.remote_host = "host"
+	late.room_code = "AB7K"
+	guests["late"] = late
+	host.set_mode("FFA5")
+	host.links["late"] = host.next_peer
+	host.next_peer += 1
+	_to_host("late", {"op": "register", "version": host.version(), "faction": "solar", "colour": free})
+	_deliver()
+	check(late.assigned_id > 0 and host.roster[late.assigned_id]["colour"] != free and _uniq(_colours_of(host).values()).size() == 5, "a newcomer's taken colour gives way (still unique)")
+	host.set_colour("orange" if not "orange" in _colours_of(host).values() else "cyan")
+	check(host.roster[1]["colour"] in ["orange", "cyan"], "the host picks its own colour")
+	# ---------------------------------------------------------------- the launch carries the map, same on both
+	host.set_ai_fill("Casual")
+	host.set_mode("FFA5")
+	host.start_match()
+	_deliver()
+	var hc: Dictionary = host.match_info.get("colours", {})
+	check(hc.size() == 5 and _uniq(hc.values()).size() == 5, "launch: a colour for every seat, all different")
+	for id in host.roster:
+		check(hc[host.seat_of(id)] == host.roster[id]["colour"], "launch: seat %s keeps its player's pick" % host.seat_of(id))
+	check(c1.match_info["colours"] == hc and late.match_info["colours"] == hc, "every guest receives the same seat -> colour map")
+	Rules.use_colours(host.match_info["colours"])
+	var on_host := Rules.seat_colors.duplicate()
+	Rules.use_colours(c2.match_info["colours"])
+	check(Rules.seat_colors == on_host and Rules.seat_colors["A"] == Rules.HUES[hc["A"]], "host and guest render identical seat colours (no per-screen recolouring)")
+
+	# ---------------------------------------------------------------- team families
+	_open_room("2v2")
+	host.map_path = "res://maps4/A-01-orbital-nexus.json"   # A+C against B+D
+	host._fix_colours()
+	var t1 := _join("g1", "null")
+	_deliver()
+	check(host.team_of(1) != host.team_of(t1.assigned_id), "2v2 on A-01: the first guest (B) starts on the other team")
+	var fams: Array = host.families()
+	var hfam: int = host.family_of(fams, host.roster[1]["colour"])
+	var gfam: int = host.family_of(fams, host.roster[t1.assigned_id]["colour"])
+	check(hfam >= 0 and gfam >= 0 and hfam != gfam, "rival teams get different hue families")
+	var host_family_other: String = (fams[hfam] as Array).filter(func(k): return k != host.roster[1]["colour"])[0]
+	_to_host("g1", {"op": "colour", "colour": host_family_other})
+	_deliver()
+	check(host.family_of(fams, host.roster[t1.assigned_id]["colour"]) == gfam, "a hue of the other team's family is refused")
+	_to_host("g1", {"op": "colour", "colour": "purple"})
+	check(host.roster[t1.assigned_id]["colour"] != "purple", "a hue in no team family is refused in team modes")
+	# switch to the host's team: the colour follows the team's family
+	_to_host("g1", {"op": "team", "team": host.team_of(1)})
+	_deliver()
+	check(host.team_of(t1.assigned_id) == host.team_of(1), "the guest joined the host's team")
+	check(host.family_of(fams, host.roster[t1.assigned_id]["colour"]) == hfam and host.roster[t1.assigned_id]["colour"] != host.roster[1]["colour"], "teammates share the family with different hues")
+	# the host picks a hue of the free family: the whole team moves to it
+	var other_fam: Array = fams[1 - hfam]
+	host.set_colour(other_fam[0])
+	check(host.roster[1]["colour"] == other_fam[0] and host.roster[t1.assigned_id]["colour"] in other_fam and host.roster[t1.assigned_id]["colour"] != other_fam[0], "a pick from the free family moves the team to it")
+	host.set_ai_fill("Standard")
+	var rc: Dictionary = host.room_colours()
+	check(rc.size() == 4 and _uniq(rc.values()).size() == 4, "room colours: four seats, four hues")
+	var ok_fam := true
+	for sl in range(4):
+		var same_team: bool = host.team_of_slot(sl) == host.team_of(1)
+		ok_fam = ok_fam and (host.family_of(fams, rc[host.SEATS[sl]]) == (1 - hfam if same_team else hfam))
+	check(ok_fam, "the AI seats take their team's family (the AI team the other one)")
+	host.start_match()
+	_deliver()
+	check(t1.match_info["colours"] == host.match_info["colours"] and host.match_info["colours"] == rc, "2v2 launch: the same map on host and guest")
+
+
+func _uniq(a: Array) -> Dictionary:
+	var d := {}
+	for x in a:
+		d[x] = true
+	return d
+
+
+func _test_teams() -> void:
+	## 0.18.7 (Daniele: "there should be so i can switch to my gf team"): JOIN TEAM, host-validated.
+	_open_room("2v2")
+	host.map_path = "res://maps4/A-01-orbital-nexus.json"   # A+C against B+D: join order splits two players
+	host._fix_colours()
+	var gf := _join("gf", "bloom")
+	_deliver()
+	var gid: int = gf.assigned_id
+	check(gf.local_seat() == "B" and gf.team_of(gid) != gf.team_of(1), "on A-01 the guest joins seat B, the rival team")
+	gf.switch_team(gf.team_of(1))                           # the real guest call: an op to the host
+	_deliver()
+	check(host.seat_of(gid) == "C" and gf.local_seat() == "C" and host.team_of(gid) == host.team_of(1), "JOIN TEAM: the guest moves to seat C, the host's team")
+	_to_host("gf", {"op": "team", "team": 9})
+	_to_host("gf", {"op": "team", "team": "x"})
+	_to_host("gf", {"op": "team", "team": host.team_of(1)})
+	check(host.seat_of(gid) == "C", "unknown teams and a no-op switch are ignored")
+	var g3 := _join("g3", "ember")
+	_deliver()
+	check(host.seat_of(g3.assigned_id) == "B", "a newcomer takes the first free seat (B)")
+	var g4 := _join("g4", "vex")
+	_deliver()
+	check(host.seat_of(g4.assigned_id) == "D" and host.roster.size() == 4, "the fourth player takes seat D")
+	_to_host("g3", {"op": "team", "team": host.team_of(1)})
+	_deliver()
+	check(host.seat_of(g3.assigned_id) == "B" and host.team_of(g3.assigned_id) != host.team_of(1), "a full team takes nobody")
+	host.peer_left(g4.assigned_id)
+	_deliver()
+	check(host.seat_of(gid) == "C" and host.seat_of(g3.assigned_id) == "B", "team modes: a lobby departure keeps everyone's seat")
+	check(host.move_to_team(g3.assigned_id, host.team_of(1)) == false, "the host cannot overfill a team")
+	check(host.move_to_team(gid, host.team_of(g3.assigned_id)) and host.seat_of(gid) == "D", "the host moves a player to the other team")
+	check(host.move_to_team(gid, host.team_of(1)) and host.seat_of(gid) == "C", "and back")
+	host.peer_left(g3.assigned_id)
+	_deliver()
+	# deploy with EMPTY SEATS: AI - the humans play together, the AI fills B and D
+	host.set_ai_fill("Casual")
+	host.start_match()
+	_deliver()
+	var info: Dictionary = host.match_info
+	check(info["ai"] == {"B": "Casual", "D": "Casual"} and info["players"].size() == 4, "deploy: AI in the free seats B and D (not packed)")
+	check(gf.local_seat() == "C" and gf.match_info["roster"][gid]["slot"] == 2, "the guest's round seat is C")
+	var hs := _build_sim(info)
+	check(hs.allied("A", "C") and not hs.allied("A", "B") and not hs.allied("C", "D"), "the match seats both humans on the same side (allied lines, shared win)")
+	hs.winner = "C"
+	check(hs.allied(hs.winner, "A"), "a win by the guest's seat is the host's win too")
+	# mode and map changes re-validate the teams
+	_open_room("2v2")
+	host.map_path = "res://maps4/A-01-orbital-nexus.json"
+	host._fix_colours()
+	var m1 := _join("m1", "bloom")
+	_deliver()
+	host.move_to_team(m1.assigned_id, host.team_of(1))
+	check(host.seat_of(m1.assigned_id) == "C", "A-01: host A and guest C together")
+	host.set_map("res://maps4/B-05-trident-exchange.json")   # A+B against C+D
+	_deliver()
+	check(host.team_of(m1.assigned_id) == host.team_of(1) and host.seat_of(m1.assigned_id) == "B" and m1.local_seat() == "B", "a map with other team seats keeps the pair together (guest to B)")
+	host.set_mode("FFA3")
+	_deliver()
+	check(host.seat_of(1) == "A" and host.seat_of(m1.assigned_id) == "B" and m1.mode == "FFA3", "FFA: no teams, seats packed in seat order")
+	host.set_mode("3v3")
+	_deliver()
+	check(host.team_of(m1.assigned_id) == host.team_of(1) and host.map_path != "" and host.map_offers(host.map_path, "3v3"), "3v3: the pair stays on one team")
+	host.set_mode("2v2")
+	host.set_map("res://maps4/A-01-orbital-nexus.json")
+	_deliver()
+	check(host.team_of(m1.assigned_id) == host.team_of(1) and host.seat_of(m1.assigned_id) == "C", "back to 2v2 on A-01: still together (A + C)")
+	check(_uniq(_colours_of(host).values()).size() == 2 and host.family_of(host.families(), host.roster[1]["colour"]) == host.family_of(host.families(), host.roster[m1.assigned_id]["colour"]), "after every change the pair keeps one hue family, different hues")
+	# a smaller mode never overfills a team: three on one 3v3 team, then 2v2
+	_open_room("3v3")
+	host._fix_colours()
+	_join("p2", "bloom")
+	_join("p3", "ember")
+	_deliver()
+	check([1, 2, 3].all(func(id): return host.team_of(id) == host.team_of(1)), "3v3: three players on the first team")
+	host.set_mode("2v2")
+	_deliver()
+	var sizes := {}
+	for id in host.roster:
+		sizes[host.team_of(id)] = int(sizes.get(host.team_of(id), 0)) + 1
+	check(sizes.values().all(func(n): return n <= 2) and _uniq(host.roster.values().map(func(r): return r["slot"])).size() == 3, "3v3 -> 2v2: the third player moves to the other team (no team over two)")
+	check(guests["p3"].team_of(3) == host.team_of(3) and guests["p3"].local_seat() == host.seat_of(3), "the guests see the re-validated seats")
+	m1 = guests["p2"]
+	# FFA refuses team switches
+	host.set_mode("FFA3")
+	check(not host.move_to_team(m1.assigned_id, 1), "FFA: no team switching")
+	# the protocol refuses a guest built without team switching (same-build rooms only)
+	_join("old", "null", "ooze20-net-1/" + Rules.VERSION)
+	check("rejected" in _kinds_to("old"), "a guest on the previous room protocol is refused")
+	guests.erase("old")
+
 	quit(1 if failures > 0 else 0)

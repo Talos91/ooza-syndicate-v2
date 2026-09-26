@@ -149,6 +149,19 @@ static func widest_gap_dir(pos: Vector3, neighbours: Array) -> Vector3:
 	return Vector3(cos(best), 0.0, sin(best))
 
 
+static func platform_piece(n: Dictionary) -> String:
+	## Relay nodes and strategic nodes (those that can host every structure: vat, cannon, forge) stand on
+	## the kit's pillar (Daniele, 0.18.7: "relay nodes and special nodes (like the king of the hill ones so the
+	## nodes that can build all structure) need to have the pillar we created on blender"). A rotation relay
+	## keeps its turning platform (its machinery is the relay).
+	if n["relay"] == "rotation":
+		return "Platform_Rotation"
+	var b: Array = n.get("buildable", [])
+	if n["relay"] != "" or ("cannon" in b and "forge" in b and "vat" in b):
+		return "Platform_Pillar"
+	return "Platform_Standard"
+
+
 static func build(parent: Node3D, sim: Sim) -> Dictionary:
 	## Returns node id -> {"parts": [Node3D], "platform", "vat_node", "vat_tier", "attachment",
 	## "cannon_tier", "housing", "state_parts": [MeshInstance3D], "mount_dir"}, plus "stretched":
@@ -158,7 +171,7 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 	for n in sim.nodes:
 		var parts: Array = []
 		var relay: String = n["relay"]
-		var platform := put(parent, "Platform_Rotation" if relay == "rotation" else "Platform_Standard", n["pos"])
+		var platform := put(parent, platform_piece(n), n["pos"])
 		parts.append(platform)
 		var vat_node: Node3D
 		var housing: Node3D = null
@@ -437,7 +450,7 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 		var on_plaza: bool = n["plaza"] >= 0
 		var platform: Node3D = null
 		if not on_plaza:
-			platform = put(parent, "Platform_Rotation" if relay == "rotation" else "Platform_Standard", n["pos"])
+			platform = put(parent, platform_piece(n), n["pos"])
 			parts.append(platform)
 		var housing: Node3D = null
 		var mount_dir := Vector3.FORWARD
