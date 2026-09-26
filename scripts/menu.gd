@@ -255,23 +255,20 @@ func show_options() -> void:
 	label_at("OPTIONS", P(40, 107), 43)
 	frame(P(35, 174), P(1000, 600))
 	label_at("MATCH RULES", P(60, 195), 30)
-	var bc := nav_button("MODE: %s" % ("SIEGE  -  hordes fight wherever they meet, tug-of-war fronts" if Rules.bridge_combat else "BRAWL  -  Alpha 11: units pass each other, fights only at nodes"),
-			P(60, 250), P(950, 70), func():
-		Rules.bridge_combat = not Rules.bridge_combat
-		show_options())
-	bc.add_theme_font_size_override("font_size", int(round(22 * K)))
-	label_at("Two modes that play differently: SIEGE and BRAWL. Also in the pause menu and the Debug panel.", P(60, 330), 18, Color("b8ced6"))
+	# one game: BRAWL (Daniele, 0.18.7: "for now completely deactivate [SIEGE] ... brawl is our game (can
+	# also remove mode selector)") - no MODE switch here, in SETUP, the lobby, the pause menu or Debug
 	var lsb := nav_button("LAST STAND: %s" % (("ON  -  the map collapses from %d:%02d" % [int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60])
 			if Rules.last_stand else ("OFF  -  no collapse; the %d:%02d safety net still ends a stalled match" % [int(Rules.MATCH_HARD_END) / 60, int(Rules.MATCH_HARD_END) % 60])),
-			P(60, 362), P(950, 50), func():
+			P(60, 250), P(950, 66), func():
 		Rules.last_stand = not Rules.last_stand
 		show_options())
-	lsb.add_theme_font_size_override("font_size", int(round(20 * K)))
-	var hec := nav_button("ENEMY COUNTS: %s" % ("HIDDEN  -  no unit numbers on enemy nodes, in either mode" if Rules.hide_enemy_counts else "SHOWN IN BRAWL  -  as Alpha 11 (SIEGE always hides them)"),
-			P(60, 422), P(950, 44), func():
+	lsb.add_theme_font_size_override("font_size", int(round(21 * K)))
+	var hec := nav_button("ENEMY COUNTS: %s" % ("HIDDEN  -  no unit numbers on enemy nodes" if Rules.hide_enemy_counts else "SHOWN  -  every node's count, as in Alpha 11"),
+			P(60, 330), P(950, 60), func():
 		Rules.hide_enemy_counts = not Rules.hide_enemy_counts
 		show_options())
-	hec.add_theme_font_size_override("font_size", int(round(19 * K)))
+	hec.add_theme_font_size_override("font_size", int(round(21 * K)))
+	label_at("Last Stand: the map collapses ring by ring late in the match. Hidden counts make you scout.", P(60, 400), 18, Color("b8ced6"))
 	label_at("PERFORMANCE", P(60, 482), 30)
 	var det := nav_button("DETAIL: %s" % ("FULL" if not Rules.low_detail else "LOW  -  fewer river patches and vat residents"),
 			P(60, 526), P(950, 60), func():
@@ -279,7 +276,7 @@ func show_options() -> void:
 		show_options())
 	det.add_theme_font_size_override("font_size", int(round(22 * K)))
 	label_at("Low detail trims the river patches and vat residents - use it if the game makes your machine run hot.", P(60, 596), 18, Color("b8ced6"))
-	var ter := nav_button("TERRITORY: %s" % ("GOO  -  player-colour goo on owned ground, units in race colour (BRAWL)" if Rules.goo_territory else "NEON  -  owner-colour neon on decks and platform rims"),
+	var ter := nav_button("TERRITORY: %s" % ("GOO  -  player-colour goo on owned ground, units in race colour" if Rules.goo_territory else "NEON  -  owner-colour neon on decks and platform rims"),
 			P(60, 632), P(950, 56), func():
 		Rules.goo_territory = not Rules.goo_territory
 		show_options())
@@ -561,13 +558,10 @@ func show_setup() -> void:
 			ai_level = lv
 			show_setup(), lv == ai_level)
 		b.add_theme_font_size_override("font_size", int(round(14 * K)))
-	nav_button("MODE / %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL"), P(1058, 746), P(272, 60), func():
-		Rules.bridge_combat = not Rules.bridge_combat
-		show_setup())
-	nav_button("LAST STAND / %s" % ("ON" if Rules.last_stand else "OFF"), P(1338, 746), P(272, 60), func():
+	nav_button("LAST STAND / %s" % ("ON" if Rules.last_stand else "OFF"), P(1058, 728), P(552, 56), func():
 		Rules.last_stand = not Rules.last_stand
 		show_setup())
-	label_at("SIEGE = goo hordes that fight on bridges.  BRAWL = Alpha 11 rules.  Last Stand OFF = no collapse.", P(1062, 812), 14, Color("7795a4"))
+	label_at("Last Stand ON = the map collapses ring by ring late in the match.  OFF = no collapse.", P(1062, 792), 14, Color("7795a4"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_maps)
 	nav_button("DEPLOY", P(1280, 866), P(352, 58), deploy, true)
 
@@ -724,11 +718,7 @@ func show_lobby() -> void:
 			show_lobby(), md == Net.mode)
 		mb.add_theme_font_size_override("font_size", int(round(15 * K)))
 		mb.disabled = not host or Net.roster.size() > Net.SLOTS[md] or Net.maps_for(md).is_empty()
-	var sb := nav_button("MODE / %s" % ("SIEGE" if Net.siege else "BRAWL"), P(878, 680), P(360, 56), func():
-		Net.toggle_siege()
-		show_lobby())
-	sb.disabled = not host
-	var lb := nav_button("LAST STAND / %s" % ("ON" if Net.last_stand else "OFF"), P(1254, 680), P(360, 56), func():
+	var lb := nav_button("LAST STAND / %s" % ("ON" if Net.last_stand else "OFF"), P(878, 680), P(736, 56), func():
 		Net.toggle_last_stand()
 		show_lobby())
 	lb.disabled = not host

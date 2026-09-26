@@ -65,7 +65,7 @@ var colour := ""                                   # the hue you asked for (a Ru
 # room settings (host decides; guests receive them with the lobby)
 var mode := "1v1"
 var map_path := ""                                   # set from the map pool when a room opens
-var siege := true
+const siege := false                               # 0.18.7: SIEGE is deactivated - rooms play BRAWL (the wire fields stay, fixed)
 var last_stand := true
 var abilities := true                              # ABILITIES ON/OFF (0.18.7: default on in both modes)
 var loadout := {}                                  # your own {"active", "map"} (empty = the faction's default)
@@ -464,12 +464,6 @@ func set_map(path: String) -> void:
 		publish_lobby()
 
 
-func toggle_siege() -> void:
-	if hosting and not active:
-		siege = not siege
-		publish_lobby()
-
-
 func toggle_last_stand() -> void:
 	if hosting and not active:
 		last_stand = not last_stand
@@ -720,9 +714,8 @@ func _launch(info: Dictionary) -> void:
 	mode = str(info["mode"])
 	map_path = str(info["map"])
 	var r: Dictionary = info["rules"]
-	siege = bool(r["bridge_combat"])
-	last_stand = bool(r["last_stand"])
-	Rules.bridge_combat = siege
+	last_stand = bool(r["last_stand"])                 # (r["bridge_combat"] is always false: BRAWL only)
+	Rules.bridge_combat = false
 	Rules.last_stand = last_stand
 	Rules.deck_speed = float(r["deck_speed"])
 	Rules.node_speed_mult = float(r["node_speed_mult"])
@@ -1292,7 +1285,6 @@ func _guest_receive(raw: String) -> void:
 			roster = data["roster"]
 			mode = str(data["mode"])
 			map_path = str(data["map"])
-			siege = bool(data["siege"])
 			last_stand = bool(data["last_stand"])
 			ai_fill = str(data.get("ai_fill", ""))
 			abilities = bool(data.get("abilities", true))
