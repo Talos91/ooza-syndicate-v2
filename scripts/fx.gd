@@ -366,6 +366,8 @@ func _fall_horde(ev: Dictionary) -> void:
 	## lip thins into strands and drops - here the patches tilt, drop and trail droplets). BRAWL has no
 	## goo: its Alpha 11 bodies tumble down instead, one per shown unit (a line pouring off a lip loses
 	## fractions of a unit per step: they add up per seat until a whole body drops).
+	if ev.get("pour", false):
+		return                                            # walking off a lip: the line's own view drops them (0.18.7)
 	var faction: String = ev["faction"]
 	var seat: String = ev["seat"]
 	if not Rules.bridge_combat:

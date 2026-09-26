@@ -95,6 +95,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"cannon_burst": 0.0,    # seconds left in the current burst (0 = not firing)
 			"cannon_kill_left": 0.0,
 			"cannon_target": Vector3.ZERO,
+			"cannon_pull": {},      # horde id -> metres this burst has cut off its head (it stays the target)
 			"relay_index": 0,       # current position in this relay's state cycle (retract: 0 out / 1 in)
 			"relay_pending": 0,     # the state a fired relay is moving to
 			"relay_phase": "",      # "" / "warning" / "moving"
@@ -336,7 +337,7 @@ func _step_structures(dt: float) -> void:
 			continue
 		var stats: Dictionary = Rules.CANNON_STATS[n["cannon_tier"]]
 		if n["cannon_burst"] > 0.0:
-			var targets := _hordes_in_range(n)
+			var targets := _hordes_in_range(n, n["cannon_pull"])
 			if targets.is_empty():
 				n["cannon_burst"] = 0.0
 				n["cannon_cd"] = stats["recharge"]
@@ -346,11 +347,14 @@ func _step_structures(dt: float) -> void:
 			var each: float = budget / targets.size()
 			for h in targets:
 				var kill: float = minf(each, h["units"])
-				h["units"] -= kill
+				if _hit_head(n, h):
+					n["cannon_pull"][h["id"]] = n["cannon_pull"].get(h["id"], 0.0) + _cut_front(h, kill)
+				else:
+					h["units"] -= kill                          # the tail is nearer: the line shortens from it
 				combat_losses[h["owner"]] = combat_losses.get(h["owner"], 0.0) + kill
 				if h["units"] <= 0.0:
 					_kill_horde(h, "cannon")
-			n["cannon_target"] = sample(targets[0], targets[0]["s"])[0]
+			n["cannon_target"] = _hit_point(n, targets[0])
 			n["cannon_burst"] -= dt
 			if n["cannon_burst"] <= 0.0 or n["cannon_kill_left"] <= 0.0:
 				n["cannon_burst"] = 0.0
@@ -364,18 +368,61 @@ func _step_structures(dt: float) -> void:
 			continue
 		n["cannon_burst"] = Rules.CANNON_BURST
 		n["cannon_kill_left"] = stats["kill"]
-		n["cannon_target"] = sample(in_range[0], in_range[0]["s"])[0]
+		n["cannon_pull"] = {}
+		n["cannon_target"] = _hit_point(n, in_range[0])
 		events.append({"t": time, "type": "cannon_burst", "node": n["id"], "seat": n["owner"]})
 		fx_events.append({"type": "cannon", "node": n["id"]})
 
 
-func _hordes_in_range(n: Dictionary) -> Array:
+# CANNONS KILL WHERE THE LASER HITS (Daniele, 0.18.7: "towers kills enemies blobs from the bottom instead
+# of from the top"): the beam hits the end of the line nearest the tower - the head of a line coming at
+# it, the tail of one leaving it - and the bodies die at that end.
+func _hit_head(n: Dictionary, h: Dictionary) -> bool:
+	## Is the line's head the end nearest this tower (else its tail)?
+	var c: Vector3 = n["pos"]
+	var head: Vector3 = sample(h, h["s"])[0]
+	var tail: Vector3 = sample(h, h["s"] - chain_length(h))[0]
+	return head.distance_squared_to(c) <= tail.distance_squared_to(c) + 0.01
+
+
+func _hit_point(n: Dictionary, h: Dictionary) -> Vector3:
+	## Where the beam lands on this line: the end it kills from.
+	return sample(h, h["s"] if _hit_head(n, h) else h["s"] - chain_length(h))[0]
+
+
+func _cut_front(h: Dictionary, kill: float) -> float:
+	## `kill` units die at the head: the head pulls back by the length they took up and the tail stays
+	## where it is (streaming, fighting, riding and queued lines alike; a capped SIEGE line only thins).
+	## A line pouring in through a door keeps its head there - the ones at the door die instead of going
+	## in. h["fcut"] counts the metres of line taken off the front, so the view keeps every surviving
+	## body where it was and pops the front ones. Returns how far the head went back.
+	var before := chain_length(h)
+	var units_before: float = h["units"]
+	h["units"] -= kill
+	if h["state"] == "absorb":
+		h["fcut"] = h.get("fcut", 0.0) + maxf(0.0, before - chain_length(h))
+		return 0.0
+	var back: float
+	if before >= h["s"] - 0.001:                      # the tail is still at the door (a line pouring out
+		back = kill * before / maxf(units_before, 0.001)   # denser than it walks): what they took of it
+	else:
+		back = before - full_length(maxf(h["units"], 0.0))
+	back = clampf(back, 0.0, h["s"])
+	h["s"] -= back
+	h["fcut"] = h.get("fcut", 0.0) + back
+	return back
+
+
+func _hordes_in_range(n: Dictionary, pull := {}) -> Array:
+	## Enemy lines whose head is within range. `pull` (a burst's horde id -> metres it cut off that
+	## head): a line the burst is mowing down from the front stays its target while the head it had
+	## is in range - the burst keeps its whole kill budget, as when it took the tail.
 	var out := []
 	for h in hordes:
 		if allied(h["owner"], n["owner"]) or h["units"] <= 0.0:
 			continue
 		var p: Vector3 = sample(h, h["s"])[0]
-		if (p - (n["pos"] as Vector3)).length() <= Rules.CANNON_RANGE:
+		if (p - (n["pos"] as Vector3)).length() <= Rules.CANNON_RANGE + pull.get(h["id"], 0.0):
 			out.append(h)
 	return out
 
@@ -561,6 +608,7 @@ func _relay_board(n: Dictionary, closing: Array) -> void:
 					ride["len"] = edges[sp["edge"]]["modules"] * Rules.S
 				h["ride"] = ride
 				h["state"] = "ride"
+				h["pour"] = false
 				break
 
 
@@ -617,13 +665,14 @@ func _relay_apply(n: Dictionary) -> void:
 			riders.append(h)
 	for h in riders:
 		var r: Dictionary = h["ride"]
-		h.erase("ride")
 		h["state"] = "absorb" if r["prev_state"] == "absorb" and h["s"] >= h["L"] else "move"
 		match n["relay"]:
 			"retract":                                    # carried into the relay's node
+				h.erase("ride")
 				_cut_range(h, r["s0"], r["s1"], "carry", n["id"], false)
-			_:                                            # switch / remote: fall
-				_cut_range(h, r["s0"], r["s1"], "fall", -1, false)
+			_:                                            # switch / remote: fall - from where the dissolving
+				_cut_range(h, r["s0"], r["s1"], "fall", -1, false)   # deck had sunk them to (the view's riders)
+				h.erase("ride")
 	n["moving_edges"] = []
 	n["relay_phase"] = ""
 	n["relay_cd"] = Rules.RELAY_COOLDOWN
@@ -640,6 +689,15 @@ func _set_route(h: Dictionary, route: Array) -> void:
 	h["spans"] = path["spans"]
 	h["node_spans"] = path["node_spans"]
 	h["L"] = path["cum"][-1]
+	_reset_front(h)
+
+
+static func _reset_front(h: Dictionary) -> void:
+	## A new path: nothing cut off its front yet, not pouring (see _cut_front, _cut_range).
+	h["fcut"] = 0.0          # metres of line taken off the head (cannon hits, walking off a lip): view identity
+	h["pour"] = false        # the head is parked at the lip of a missing deck, the line walking off it
+	h["pour_lip"] = -1.0     # arc length of that lip
+	h["pour_k"] = 0.0        # fcut when the pour began: the view drops what walks off after it (Fx the rest)
 
 
 func _other_end(edge_index: int, node_id: int) -> int:
@@ -656,6 +714,9 @@ func _overlap(h: Dictionary, s0: float, s1: float) -> float:
 	var head: float = h["s"]
 	var tail: float = head - chain_length(h)
 	return maxf(0.0, minf(head, s1) - maxf(tail, s0))
+
+
+const POUR_STEP := 1.0               # m: a head at most this far past a lip walked off it this step (view only)
 
 
 func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: int, reroute := true, fling = null) -> void:
@@ -678,6 +739,13 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 	# hence... waterfall"): the vat keeps sending and whatever is behind the deck marches off its lip
 	var pours: bool = h["streaming"] and not reroute
 	var head_in: bool = h["s"] >= s0 and h["s"] <= s1
+	# THE POUR IS ONE MOTION (Daniele, 0.18.7: "the animation should be seamless and exaggerates so it looks
+	# cooler"): a head that just walked over the lip (or was parked there last step) is the line walking
+	# off it - the line's own view drops those bodies as they pass the lip (pour-tagged fall, no Fx
+	# bodies); anything bigger is a stretch that was on the deck when it went (Fx drops it where it was)
+	var walked: bool = not reroute and head_in and (h["s"] - s0 <= POUR_STEP \
+			or (h.get("pour_prev", false) and absf(float(h.get("pour_lip", -1.0)) - s0) < 0.01))
+	var survives: bool = pours or h["units"] - units_on >= 1.0
 	if h["streaming"] and not pours:
 		var src: Dictionary = nodes[h["route"][0]]
 		if src["streaming"].get("hid", -1) == h["id"]:
@@ -694,7 +762,8 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 			fling["units"] += units_on
 			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on, "why": "fling"})
 		else:
-			fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on})
+			fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on,
+					"hid": h["id"], "pour": walked and survives})
 			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on})
 	elif fate == "carry" and carry_node >= 0:
 		var n: Dictionary = nodes[carry_node]
@@ -707,8 +776,13 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 		events.append({"t": time, "type": "carried", "seat": h["owner"], "node": carry_node, "units": units_on})
 	h["units"] -= units_on
 	if not reroute and head_in:
+		h["fcut"] = h.get("fcut", 0.0) + maxf(0.0, h["s"] - s0)   # what walked off (view: the rest keeps its place)
 		h["s"] = s0                                       # the head waits at the lip; the next step pours more
 		h["state"] = "move"
+		if not walked:
+			h["pour_k"] = h["fcut"]                       # the stretch on the deck fell with it (Fx); the rest walks off
+		h["pour"] = true
+		h["pour_lip"] = s0
 	if pours and nodes[h["route"][0]]["streaming"].get("hid", -1) == h["id"]:
 		h["units"] = maxf(h["units"], 0.0)                   # the vat is still feeding this line
 		return
@@ -1188,6 +1262,8 @@ func _check_missing_decks() -> void:
 	for h in hordes.duplicate():
 		if not (h in hordes) or h.has("ride"):
 			continue
+		h["pour_prev"] = h.get("pour", false)             # parked at a lip last step (_cut_range: walking off)
+		h["pour"] = false
 		var head: float = h["s"]
 		var tail: float = head - chain_length(h)
 		for sp in h["spans"]:
@@ -1210,6 +1286,8 @@ func _check_missing_decks() -> void:
 			if head_on and h in hordes:
 				h["s"] = sp["s0"]                         # the head stays at the lip; the next step pours more
 				h["state"] = "move"
+				h["pour"] = true                          # (also when it did not move this step)
+				h["pour_lip"] = sp["s0"]
 
 
 func _current_span(h: Dictionary) -> Dictionary:
@@ -1419,6 +1497,7 @@ func recall(hid: int) -> bool:
 	h["s"] = minf(len, h["L"])                              # the old tail is the new head
 	h["state"] = "move"
 	h["retreat"] = true
+	_reset_front(h)
 	h["ordered"] = h["units"]
 	for key in fight_info.keys():                           # it breaks off its fights
 		var ids: PackedStringArray = key.split(":")
