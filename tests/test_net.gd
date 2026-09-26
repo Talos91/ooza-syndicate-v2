@@ -520,6 +520,20 @@ func _run() -> void:
 			"ABILITIES OFF: nothing casts in that round")
 	Rules.abilities_on = true
 
+	# ---------------------------------------------------------------- 0.18.7: the host's balance preset rides in the room rules
+	_open_room("1v1")
+	var bq := _join("g1")
+	_deliver()
+	Rules.apply_balance("b187")
+	host.map_path = "res://maps/004-two-piers.json"
+	host.start_match()
+	check(host.match_info["rules"].get("balance_preset", "") == "b187", "the launch carries the host's balance preset")
+	Rules.apply_balance("")                          # what the guest had on its own
+	_deliver()
+	check(bq.active and Rules.BALANCE_PRESET == "b187" and Rules.NEUTRAL_UNITS[1] == Rules.BALANCE_PRESETS["b187"]["NEUTRAL_UNITS"][1],
+			"the guest plays the host's balance numbers")
+	Rules.apply_balance("")
+
 	_test_colours()
 	_test_teams()
 	print("\nALL PASSED (0 failed)" if failures == 0 else "\n%d FAILED" % failures)

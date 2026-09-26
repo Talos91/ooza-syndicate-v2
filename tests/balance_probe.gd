@@ -77,6 +77,7 @@ func _apply() -> void:
 	Rules.apply_balance(preset, overrides)
 	Rules.bridge_combat = not brawl
 	Rules.last_stand = true
+	Rules.abilities_on = false                   # the game default (skills off until their UI ships)
 
 
 static func sh(units: float) -> float:

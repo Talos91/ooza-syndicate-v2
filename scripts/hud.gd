@@ -1113,7 +1113,7 @@ func _build_debug() -> void:
 		Rules.apply_balance(names[(names.find(Rules.BALANCE_PRESET) + 1) % names.size()])
 		forge.value = Rules.forge_bonus * 100.0
 		bal_text.call()
-		toast("Balance: %s" % ("default numbers" if Rules.BALANCE_PRESET == "" else Rules.BALANCE_PRESET + " - a proposal, not approved")))
+		toast("Balance: %s" % ("default numbers" if Rules.BALANCE_PRESET == "" else Rules.BALANCE_PRESET + " - a proposal, not approved") + "; neutral garrisons change from the next match"))
 	bal.disabled = main.online
 	box.add_child(bal)
 	var reset := button("Reset to rules", func():
