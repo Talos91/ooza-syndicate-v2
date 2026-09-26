@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.18.6"
+const VERSION := "0.18.7"
 const VERSION_NAME := "Alpha 18"
 
 # kit geometry (metres)
@@ -361,10 +361,9 @@ const ULT_KILL_SECONDS := 0.3
 # at SKILLS.superbloom.cap_shown; "under_attack" = no cap, castable only while one of your nodes is under
 # attack (a hostile line headed for it, or hostile units on its platform).
 static var SUPERBLOOM_MODE := "cap"
-# ABILITIES ON/OFF (draft sec1, Alpha 11's match setting). Off: nothing casts. Default OFF until the skill dock,
-# targeting and ARMIES menu ship (0.18.8) - the AI must not cast skills the player cannot answer; the tests
-# switch it on.
-static var abilities_on := false
+# ABILITIES ON/OFF (draft sec1, Alpha 11's match setting). Off: nothing casts. Default ON now that the skill
+# dock, targeting and ARMIES menu ship; the switch is in 03 SETUP (offline) and the room lobby (the host's).
+static var abilities_on := true
 # AI casting rhythm: the least time between two of its casts, per level (it also only looks at its skills
 # when it thinks, every Rules.AI_LEVELS period)
 const AI_SKILL_GAP := {"Training": 24.0, "Casual": 16.0, "Standard": 9.0, "Veteran": 6.0, "Expert": 4.0}

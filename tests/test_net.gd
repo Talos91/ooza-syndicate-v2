@@ -16,6 +16,15 @@ class FakeBridge:
 	func closePeer(remote) -> void: closed_peers.append(remote)
 	func poll() -> String: return "[]"
 
+class QueueBridge:
+	## A guest transport whose poll() hands over queued events (a "connection" makes the guest register).
+	extends FakeBridge
+	var queue: Array = []
+	func poll() -> String:
+		var r := JSON.stringify(queue)
+		queue = []
+		return r
+
 var failures := 0
 var host: Node
 var guests := {}                          # remote name -> guest Net
@@ -28,7 +37,6 @@ func check(cond: bool, what: String) -> void:
 
 
 func _initialize() -> void:
-	Rules.abilities_on = true                       # skills ship off until their UI lands; the checks expect them on
 	_run.call_deferred()
 
 
@@ -520,6 +528,7 @@ func _run() -> void:
 			"ABILITIES OFF: nothing casts in that round")
 	Rules.abilities_on = true
 
+	_test_presets()
 	_test_colours()
 	_test_teams()
 	print("\nALL PASSED (0 failed)" if failures == 0 else "\n%d FAILED" % failures)
@@ -719,3 +728,54 @@ func _test_teams() -> void:
 	guests.erase("old")
 
 	quit(1 if failures > 0 else 0)
+
+
+# ---------------------------------------------------------------- SKILLS 2.0: ARMIES presets -> the room (lobby)
+func _test_presets() -> void:
+	ArmyPresets.path = "user://test_armies.cfg"
+	ArmyPresets.reload()
+	for f in ["solar", "ember"]:
+		ArmyPresets.reset(f)
+	ArmyPresets.set_pick("solar", "active", "scorch")
+	ArmyPresets.set_pick("solar", "map", "anchor")
+	ArmyPresets.set_pick("ember", "map", "relay_hack")
+	ArmyPresets.reload()                                  # read back from the file
+	check(ArmyPresets.loadout_for("solar") == {"active": "scorch", "map": "anchor"} and ArmyPresets.loadout_for("vex") == {"active": "surge", "map": "relay_hack"},
+			"ARMIES presets save, load back, and default per faction")
+	_open_room("1v1")
+	var gp := _new_net()
+	gp.bridge = QueueBridge.new()
+	gp.room_code = "AB7K"
+	gp.preferred_faction = "solar"
+	guests["gp"] = gp
+	host.links["gp"] = host.next_peer
+	host.next_peer += 1
+	ArmyPresets.send_to(gp, "solar")                       # the menu, before JOIN ROOM connects
+	gp.bridge.queue = [{"type": "connection", "peer": "host"}]
+	gp._poll(0.1)                                          # connected: the guest registers (faction, colour, loadout)
+	_deliver()
+	var gid: int = gp.assigned_id
+	check(gid > 0 and host.roster[gid]["loadout"] == {"active": "scorch", "map": "anchor"},
+			"a guest's ARMIES preset reaches the host with the register (%s)" % str(host.roster.get(gid, {}).get("loadout", {})))
+	ArmyPresets.room_faction(gp, "ember")                  # the lobby's faction pick: faction + that preset
+	_deliver()
+	check(host.roster[gid]["faction"] == "ember" and host.roster[gid]["loadout"] == {"active": "scorch", "map": "relay_hack"},
+			"changing faction in the lobby sends that faction's preset")
+	ArmyPresets.send_to(host, "solar")                     # the host's own preset (CREATE ROOM)
+	check(host.roster[1]["loadout"] == {"active": "scorch", "map": "anchor"}, "the host's preset is its roster loadout")
+	ArmyPresets.room_toggle_abilities(host)                # the lobby's ABILITIES button (host)
+	_deliver()
+	check(not host.abilities and not gp.abilities, "ABILITIES OFF from the lobby reaches the guest")
+	host.map_path = "res://maps/010-first-switch.json"      # a map with relays: Relay Hack stays
+	host.start_match()
+	_deliver()
+	var info: Dictionary = host.match_info
+	check(info["rules"]["abilities_on"] == false and info["loadouts"].get("B", {}) == {"active": "scorch", "map": "relay_hack"}
+			and info["loadouts"].get("A", {}) == {"active": "scorch", "map": "anchor"},
+			"the launch carries both presets and ABILITIES OFF (%s)" % str(info["loadouts"]))
+	Rules.abilities_on = true
+	for f in ["solar", "ember"]:
+		ArmyPresets.reset(f)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ArmyPresets.path))
+	ArmyPresets.path = "user://armies.cfg"
+	ArmyPresets.reload()

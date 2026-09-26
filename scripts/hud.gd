@@ -5,7 +5,8 @@ extends CanvasLayer
 ## selected vat's count, node badges floating beside their nodes (count - the owner's emblem in the
 ## owner's colour instead on enemy nodes in SIEGE or when enemy counts are hidden -, emblem, tier,
 ## relay state, build bar), the
-## ring inspector with costed actions, a hidden ability dock (slots waiting on the 2.0 skill pools),
+## ring inspector with costed actions, the skill dock (SkillDock: ACTIVE / MAP / ULTIMATE when ABILITIES
+## are on; its target highlights sit on a layer over the badges, under the panels),
 ## toasts, the Last Stand banner, status line and drop order, the results panel with match stats,
 ## and the debug panel.
 
@@ -43,7 +44,8 @@ var _banner_time := 0.0
 var status_label: Label                # Last Stand status under the top bar
 var hint: Label
 var map_title: Label
-var dock: HBoxContainer
+var dock: SkillDock
+var skill_targets: Control             # the dock's target highlights: over the badges, under the panels
 var end_panel: PanelContainer
 var pause_panel: PanelContainer
 var rotate_hint: Label
@@ -246,6 +248,8 @@ func setup(m: Node3D) -> void:
 		root.add_child(badge)
 		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "build": build_bar, "owner": "?",
 				"count_w": 0.0, "sub_w": 0.0, "sub_small": false, "wide": false, "shape": "", "look": -1}
+	skill_targets = SkillDock.new_layer()
+	root.add_child(skill_targets)
 	# top bar: emblem, your total, timer, rivals, strength bar (Alpha 11's score header)
 	top_panel = PanelContainer.new()
 	style_panel(top_panel, accent)
@@ -320,15 +324,11 @@ func setup(m: Node3D) -> void:
 	hint.add_theme_constant_override("shadow_offset_y", 2)
 	hint.visible = not mobile
 	root.add_child(hint)
-	dock = HBoxContainer.new()
-	dock.add_theme_constant_override("separation", 8)
+	dock = SkillDock.new()                            # SKILLS 2.0: ACTIVE / MAP / ULTIMATE, only when abilities are on
 	root.add_child(dock)
-	dock.visible = false                              # no abilities in 2.0 yet: an empty dock only covered the map
-	for slot in ["ACTIVE", "MAP", "ULTIMATE"]:
-		var b := button("%s\nCOMING SOON" % slot, Callable(), 150 if not mobile else 130, 60 if not mobile else 48, 15 if not mobile else 12)
-		b.disabled = true
-		b.tooltip_text = "Ooze Factory slot - waiting on the 2.0 skill pools (SKILLS-2.0-DRAFT.md)"
-		dock.add_child(b)
+	dock.setup(main, sim, human, ui_scale, mobile, self, skill_targets)
+	dock.visible = sim.abilities_on
+	root.add_child(dock.hint_panel)
 	version_label = text_label("v%s  %s" % [Rules.VERSION, Rules.VERSION_NAME], 14, Color(1, 1, 1, 0.5))
 	root.add_child(version_label)
 	notices = VBoxContainer.new()                     # Alpha 16: styled notification stack
@@ -366,7 +366,7 @@ func setup(m: Node3D) -> void:
 
 
 func _hint_text() -> String:
-	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade"
+	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
 
 
 func layout(vp: Vector2, m: Vector4) -> void:
@@ -388,6 +388,7 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	hint.position = Vector2(vp.x * 0.5 - hint.size.x / 2.0, vp.y - m.w - 18)
 	dock.size = dock.get_combined_minimum_size()
 	dock.position = Vector2(vp.x * 0.5 - dock.size.x / 2.0, vp.y - m.w - dock.size.y - (26 if not mobile else 8))
+	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
 	notices.size = Vector2(vp.x * 0.56, 0)
@@ -416,7 +417,10 @@ func top_used() -> float:
 
 
 func bottom_used() -> float:
-	return margins.w + 30.0 * ui_scale                   # the map title and hint line (badges are fitted by the camera)
+	var used := margins.w + 30.0 * ui_scale              # the map title and hint line (badges are fitted by the camera)
+	if dock and dock.visible:                             # the skill dock never covers the map: the camera fits above it
+		used = maxf(used, root.get_viewport_rect().size.y - dock.position.y + 6.0)
+	return used
 
 
 func pointer_over_ui(p: Vector2) -> bool:
@@ -501,6 +505,8 @@ func sync(dt: float, cam: Camera3D) -> void:
 	else:
 		count_label.text = "DRAG A VAT"
 	_badges(cam)
+	if dock.visible:
+		dock.sync(dt)
 	_refresh_inspector(cam)
 	_sync_notices(dt)
 	if _banner_time > 0.0:
@@ -964,6 +970,12 @@ func _sync_notices(dt: float) -> void:
 		if t > NOTICE_HOLD + 0.45:
 			notices.remove_child(c)
 			c.queue_free()
+
+
+func skill_event(ev: Dictionary) -> void:
+	## main's fx loop: a skill was cast (SkillDock.on_event toasts a rival's cast that touches you).
+	if dock:
+		dock.on_event(ev)
 
 
 func show_banner(msg: String, seconds := 4.0) -> void:

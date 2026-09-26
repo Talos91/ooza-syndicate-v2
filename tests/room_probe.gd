@@ -7,6 +7,7 @@ extends Node
 ## states: teams-before (2v2 on A-01: the guest joined seat B, the rival team), teams-after (the guest took
 ## JOIN TEAM to the host's team and picked a colour), teams-move (host view: a guest row picked for MOVE),
 ## ffa (four players' colour picks), match (a 2v2 round, both humans on one team).
+## Every player brings an ARMIES loadout (SKILLS 2.0: the lobby rows show its three icons).
 ## Match: the host run plays --at seconds (AI on every seat), freezes, saves the launch + a keyframe
 ## snapshot (--save) and screenshots; the guest run (--load) gets that launch and snapshot from an
 ## in-process host over the loopback, so both screenshots show the same moment.
@@ -60,7 +61,8 @@ func _ready() -> void:
 	h.mode = "FFA4" if state == "ffa" else "2v2"
 	h.map_path = MAP_2V2 if h.mode == "2v2" else h.maps_for(h.mode)[0]
 	h.preferred_faction = "null"
-	h.roster = {1: {"faction": "null", "slot": 0, "colour": ""}}
+	h.loadout = {"active": "ghost_line", "map": "relay_hack"}
+	h.roster = {1: {"faction": "null", "slot": 0, "colour": "", "loadout": h.loadout}}
 	h._fix_colours()
 	var names := ["gf"] if state != "ffa" else ["gf", "p3", "p4"]
 	var factions := {"gf": "bloom", "p3": "ember", "p4": "solar"}
@@ -69,6 +71,7 @@ func _ready() -> void:
 		g.bridge = Loop.new(n, hub)
 		g.room_code = "K7QX"
 		g.preferred_faction = factions[n]
+		g.loadout = {"gf": {"active": "spore_burst", "map": "bypass"}, "p3": {"active": "scorch", "map": "demolish"}, "p4": {"active": "fortify", "map": "anchor"}}[n]
 		hub[n].queue.append({"type": "connection", "peer": "host"})
 		hub["host"].queue.append({"type": "connection", "peer": n})
 		await _frames(4)
