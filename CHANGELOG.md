@@ -1,5 +1,25 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.8 "Alpha 18" - 2026-09-26 (skills effects, look upgrade with the abyss fog, balance preset)
+
+- **Every skill draws its effect** (`scripts/skill_fx.gd`, from Sim state and fx events, so guests see them): hex
+  shield, deck fire with smouldering bodies, sludge, bolted rails and clamps, Demolish's glowing cracks / falling
+  pieces / rebuild, Bypass holograms, Relay Hack glitch and jam clamp, Rewire streaks, Echo Split's OFFLINE
+  static, Superbloom's +N / 40 counter, Core Meltdown's blast and CAPTURED, Relay Aegis domes; ultimates tint the
+  screen edge; ghost lines are translucent for their owner only.
+- **Look upgrade** (Daniele: "vats are hard to see ... feel different from the theme ... push the graphic further"):
+  vats on an owner-lit plinth ring with glass tanks tinted by owner, neon cap rings that count the tanks (T1 -> T4),
+  cannons / forge / relay housings in the same family; **the abyss** (Daniele: "pillars come from the void ... add
+  a fog"): height fog below the decks, a hazed backdrop and drifting mist, so pillars, falling bodies, deck
+  fragments and collapsing platforms fade out instead of ending mid-air. Vat models carry `Spout_*` markers for
+  the unit drops. Phone-fit: 74 maps, min tap 41 pt, no overflow. Frame cost within budget on desktop; not
+  measured on a real phone.
+- **Balance study** (Daniele: "vat power up cost, production speed etc"): the economy numbers are overridable
+  (`Rules.apply_balance`); preset `b187` proposes neutral garrisons 12/16/32/64, Ember attack 1.07, Bloom
+  production 1.05, Vex garrison 0.95 - OFF by default (Debug: Balance DEFAULT / B187); the harness is
+  `tests/balance_probe.gd`. Findings: PLAYTEST-NOTES 129; decisions: OPEN-QUESTIONS.
+- Tests: all five suites pass (BRAWL only). Desktop and phone emulation only.
+
 ## 0.18.7 "Alpha 18" - 2026-09-26 (BRAWL only, relay fall rule, skills, lobby teams, maps 4.6, look and AI passes)
 
 Published live as a playable alpha before the pass was complete (Daniele: "push what is safe to push to a playable
