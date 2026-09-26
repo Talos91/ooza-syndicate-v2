@@ -175,6 +175,18 @@ static func tank_info(vat_mesh: Mesh, key: String) -> Dictionary:
 	if _tanks.has(key):
 		return _tanks[key]
 	var info := {"tanks": [], "y0": 0.0, "y1": 1.0, "surface": -1}
+	var measured: Array = Cosmetics.points(key).get("tanks", [])
+	if not measured.is_empty():                        # 0.19.0 skin vats: tanks measured from the GLB (Cosmetics.TANKS)
+		for s in range(vat_mesh.get_surface_count()):
+			var m := vat_mesh.surface_get_material(s)
+			if m and m.resource_name.begins_with("OS_Ooze"):
+				info["surface"] = s
+				break
+		info["tanks"] = measured
+		info["y0"] = measured.map(func(t): return float(t["y0"])).min()
+		info["y1"] = measured.map(func(t): return float(t["y1"])).max()
+		_tanks[key] = info
+		return info
 	for s in range(vat_mesh.get_surface_count()):
 		var m := vat_mesh.surface_get_material(s)
 		if m and m.resource_name.begins_with("OS_Ooze"):
@@ -251,7 +263,7 @@ func sync(dt: float) -> void:
 		var id: int = n["id"]
 		var entry: Dictionary = vis[id]
 		var rec: Dictionary = _vats.get(id, {})
-		var is_vat: bool = str(entry.get("model_key", "")).begins_with("Vat_") and is_instance_valid(entry.get("vat_node"))
+		var is_vat: bool = Cosmetics.is_vat_key(str(entry.get("model_key", ""))) and is_instance_valid(entry.get("vat_node"))
 		if sim.collapsed.get(id, false) or not is_vat:
 			if not rec.is_empty():
 				_clear_residents(rec)

@@ -476,7 +476,8 @@ func _drop_for(sim: Sim, h: Dictionary) -> Dictionary:
 
 
 const NO_DROP := {}                  # (shared, read-only)
-const DROP_MODELS := ["Vat_T1", "Vat_T2", "Vat_T3"]  # T4 (its core is the vat) and relays: from the door
+# which models drop their units: Cosmetics.drops_from (vats T1-T3, default or skin, 0.19.0); T4 (its core is
+# the vat) and relays: from the door
 
 
 func vat_drop(n: Dictionary) -> Dictionary:
@@ -490,7 +491,7 @@ func vat_drop(n: Dictionary) -> Dictionary:
 	var entry: Dictionary = vis[id]
 	var key := str(entry.get("model_key", ""))
 	var vn = entry.get("vat_node")
-	if not key in DROP_MODELS or not is_instance_valid(vn):
+	if not Cosmetics.drops_from(key) or not is_instance_valid(vn):
 		return {}
 	var node := vn as Node3D
 	var base: Vector3 = entry.get("centre", n["pos"])

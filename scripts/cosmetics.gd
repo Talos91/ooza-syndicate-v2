@@ -23,6 +23,13 @@ extends RefCounted
 ## ResourceLoader threaded request and the default model meanwhile; once loaded the next ask returns it and
 ## the node swaps. A skin nobody asked for in UNUSED_FRAMES frames is dropped from the cache, so its scene is
 ## freed once the last node showing it is gone.
+## WEB: assets/kit/skins is not in index.pck (the "Web" preset excludes it); it ships as skins.pck beside it
+## (the "Web Skins" preset, BUILD-LOG sec10). The first skin a web player needs downloads skins.pck once from
+## the page's own folder (HTTPRequest -> user://skins.pck), ProjectSettings.load_resource_pack mounts it, then
+## the lazy threaded load runs as on desktop. Until then - and for good if the download fails - the default
+## model shows. Desktop and editor runs load the skins straight from res://.
+## Skin vats live like the default ones (Scenery's liquid and residents, HordeView's drops out of the tanks):
+## is_vat_key / drops_from say which models are vats, TANKS holds each skin vat's tanks.
 
 const FAMILIES := ["vat", "machingoon", "laser", "forge", "monster_hub", "monster"]
 const OPTIONS := {
@@ -48,6 +55,10 @@ static var _pending := {}            # skin key -> true while its threaded load 
 static var _asked := {}              # skin key -> last frame someone asked for it
 static var _failed := {}             # skin key -> true: missing file or failed load (the default stays)
 static var _last_prune := 0
+const SKINS_PACK := "skins.pck"
+const SKINS_FILE := "user://skins.pck"
+static var _pack := ""                # web: "" not asked yet / "loading" / "ready" / "failed"
+static var _http: HTTPRequest
 
 
 # ------------------------------------------------------------------ loadouts
@@ -214,6 +225,9 @@ static func _ready(key: String) -> bool:
 			_failed[key] = true
 		return false
 	if not ResourceLoader.exists(path):
+		if OS.has_feature("web") and _pack in ["", "loading"]:
+			_fetch_pack()                             # web: the skins come in skins.pck, asked for once
+			return false
 		_failed[key] = true                         # a file missing from the build: the default stays
 		return false
 	if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
@@ -229,6 +243,35 @@ static func _prune(frame: int) -> void:
 		if frame - int(_asked.get(key, 0)) > UNUSED_FRAMES:
 			_cache.erase(key)                         # freed once no node holds its meshes any more
 			_asked.erase(key)
+
+
+static func _fetch_pack() -> void:
+	## Web: download skins.pck from beside index.pck once and mount it (every failure: the defaults stay).
+	if _pack != "":
+		return
+	_pack = "loading"
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		_pack = "failed"
+		return
+	var url := str(JavaScriptBridge.eval("new URL('%s?v=%s', window.location.href).href" % [SKINS_PACK, Rules.VERSION], true))
+	_http = HTTPRequest.new()
+	_http.download_file = SKINS_FILE
+	tree.root.add_child(_http)
+	_http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
+		var ok := result == HTTPRequest.RESULT_SUCCESS and code == 200 and ProjectSettings.load_resource_pack(SKINS_FILE, false)
+		_pack = "ready" if ok else "failed"
+		print("Cosmetics: %s %s (result %d, HTTP %d)" % [SKINS_PACK, "loaded" if ok else "not available - default looks", result, code])
+		_http.queue_free()
+		_http = null)
+	print("Cosmetics: fetching ", url)
+	if _http.request(url) != OK:
+		_pack = "failed"
+
+
+static func pack_state() -> String:
+	## Debug / tests: the web skins pack's state ("" before any skin was needed).
+	return _pack
 
 
 static func loaded_skins() -> Array:
@@ -277,6 +320,72 @@ const POINTS := {
 
 
 static func points(model_name: String) -> Dictionary:
-	## Attach points of a model by name, with or without the "skins/" prefix ({} for a plain model).
+	## Attach points of a model by name, with or without the "skins/" prefix ({} for a plain model). A skin
+	## vat's entry carries "tanks": [{"c": Vector3 (x, 0, z), "r", "y0", "y1"}] (Scenery.tank_info's shape).
 	var name := model_name.trim_prefix("skins/")
+	if TANKS.has(name):
+		var d: Dictionary = POINTS.get(name, {}).duplicate()
+		d["tanks"] = (TANKS[name] as Array).map(func(t): return {"c": Vector3(t[0], 0.0, t[1]), "r": t[2], "y0": t[3], "y1": t[4]})
+		return d
 	return POINTS.get(name, {})
+
+
+static func is_vat_key(key: String) -> bool:
+	## A vat model (default or skin): it gets the living liquid and the residents (Scenery).
+	return key.begins_with("Vat_") or TANKS.has(key.trim_prefix("skins/"))
+
+
+static func drops_from(key: String) -> bool:
+	## A T1-T3 vat model (default or skin): its lines drop out of its tanks (HordeView.vat_drop). T4's core
+	## is the vat: its lines leave from the door.
+	return is_vat_key(key) and not key.ends_with("_T4")
+
+
+# Each skin vat's tanks, measured from its GLB's OS_Ooze mesh islands (stacked islands on one axis = one
+# column; honeycomb cells and goo sheets under r 0.38 left out): [x, z, r, y0, y1] in the model's Godot space.
+const TANKS := {
+	"BLOOM_Vat_T1": [[-2.00, 0.00, 0.62, 1.00, 2.42], [-0.00, -0.00, 0.66, 3.20, 4.52]],
+	"BLOOM_Vat_T2": [[-2.00, 0.00, 0.62, 1.00, 2.42], [-0.00, -0.00, 0.66, 4.60, 5.92], [2.00, 0.00, 0.62, 2.85, 4.27]],
+	"BLOOM_Vat_T3": [[-2.00, 0.00, 0.62, 1.10, 5.02], [-0.00, -0.00, 0.66, 5.90, 7.22], [2.00, 0.00, 0.62, 1.10, 5.02]],
+	"BLOOM_Vat_T4": [[-2.30, 0.00, 0.62, 1.85, 5.77], [-0.00, -0.00, 0.91, 1.10, 8.52], [2.30, 0.00, 0.62, 1.85, 5.77]],
+	"EMBER_Vat_T1": [[-2.10, 0.00, 0.60, 0.51, 2.61]],
+	"EMBER_Vat_T2": [[-2.10, 0.00, 0.60, 0.51, 2.61], [2.10, 0.00, 0.60, 2.36, 4.46]],
+	"EMBER_Vat_T3": [[-2.10, 0.00, 0.60, 0.61, 5.21], [2.10, 0.00, 0.60, 0.61, 5.21]],
+	"EMBER_Vat_T4": [[-2.35, 0.00, 0.60, 1.36, 5.96], [0.00, -0.03, 0.87, 1.66, 6.89], [2.35, 0.00, 0.60, 1.36, 5.96]],
+	"NULL_Vat_T1": [[-2.10, 0.00, 0.50, 1.17, 2.22]],
+	"NULL_Vat_T2": [[-2.10, 0.00, 0.50, 1.17, 2.22], [2.10, 0.00, 0.50, 3.01, 4.07]],
+	"NULL_Vat_T3": [[-2.10, 0.00, 0.50, 1.26, 4.82], [2.10, 0.00, 0.50, 1.26, 4.82]],
+	"NULL_Vat_T4": [[-2.40, 0.00, 0.50, 2.01, 5.57], [0.00, 0.00, 0.78, 0.70, 6.77], [2.40, 0.00, 0.50, 2.01, 5.57]],
+	"SOLAR_Vat_T1": [[-2.15, 0.00, 0.52, 1.21, 2.21], [0.00, 0.00, 0.40, 3.33, 4.13]],
+	"SOLAR_Vat_T2": [[-2.15, 0.00, 0.52, 1.21, 2.21], [0.00, 0.00, 0.40, 4.73, 5.53], [2.15, 0.00, 0.52, 3.06, 4.06]],
+	"SOLAR_Vat_T3": [[-2.15, 0.00, 0.52, 1.31, 4.81], [0.00, 0.00, 0.40, 6.03, 6.83], [2.15, 0.00, 0.52, 1.31, 4.81]],
+	"SOLAR_Vat_T4": [[-2.40, 0.00, 0.52, 2.06, 5.56], [0.00, 0.00, 0.92, 1.28, 8.13], [2.40, 0.00, 0.52, 2.06, 5.56]],
+	"Skin_BioPod_T1": [[-2.05, 0.00, 0.52, 1.13, 2.33], [0.00, -0.00, 0.55, 3.37, 4.59]],
+	"Skin_BioPod_T2": [[-2.05, 0.00, 0.52, 1.13, 2.33], [0.00, 0.00, 0.64, 4.75, 6.15], [2.05, 0.00, 0.52, 2.98, 4.18]],
+	"Skin_BioPod_T3": [[-2.05, 0.00, 0.52, 1.23, 4.93], [0.00, -0.00, 0.72, 6.02, 7.61], [2.05, 0.00, 0.52, 1.23, 4.93]],
+	"Skin_BioPod_T4": [[-2.35, 0.00, 0.52, 1.98, 5.68], [0.00, -0.00, 0.86, 1.96, 9.07], [2.35, 0.00, 0.52, 1.98, 5.68]],
+	"Skin_Crystal_T1": [[-2.05, 0.00, 0.40, 1.25, 2.20], [0.00, 0.00, 0.62, 0.66, 4.09]],
+	"Skin_Crystal_T2": [[-2.05, 0.00, 0.40, 1.25, 2.20], [0.00, 0.00, 0.62, 0.66, 5.49], [2.05, 0.00, 0.40, 3.11, 4.05]],
+	"Skin_Crystal_T3": [[-2.05, 0.00, 0.40, 1.36, 4.80], [0.00, 0.00, 0.62, 0.66, 6.79], [2.05, 0.00, 0.40, 1.36, 4.80]],
+	"Skin_Crystal_T4": [[-2.35, 0.00, 0.40, 2.11, 5.55], [0.00, 0.00, 0.78, 0.73, 8.10], [2.35, 0.00, 0.40, 2.11, 5.55]],
+	"Skin_Distillery_T1": [[-2.05, 0.00, 0.42, 1.21, 2.21]],
+	"Skin_Distillery_T2": [[-2.05, 0.00, 0.42, 1.21, 2.21], [2.05, 0.00, 0.42, 3.06, 4.06]],
+	"Skin_Distillery_T3": [[-2.05, 0.00, 0.42, 1.31, 4.81], [2.05, 0.00, 0.42, 1.31, 4.81]],
+	"Skin_Distillery_T4": [[-2.35, 0.00, 0.42, 2.06, 5.56], [0.00, 0.00, 0.70, 3.37, 7.02], [2.35, 0.00, 0.42, 2.06, 5.56]],
+	"Skin_Hive_T1": [[-2.05, 0.00, 0.45, 1.22, 2.16]],
+	"Skin_Hive_T2": [[-2.05, 0.00, 0.45, 1.22, 2.16], [2.05, 0.00, 0.45, 3.07, 4.01]],
+	"Skin_Hive_T3": [[-2.05, 0.00, 0.45, 1.31, 4.76], [2.05, 0.00, 0.45, 1.31, 4.76]],
+	"Skin_Hive_T4": [[-2.35, 0.00, 0.45, 2.07, 5.51], [0.00, 0.00, 0.74, 0.70, 6.82], [2.35, 0.00, 0.45, 2.07, 5.51]],
+	"Skin_Reactor_T1": [[-2.05, 0.00, 0.38, 1.28, 2.18], [0.00, -0.00, 0.77, 1.84, 3.38]],
+	"Skin_Reactor_T2": [[-2.05, 0.00, 0.38, 1.28, 2.18], [0.00, 0.00, 0.82, 2.56, 4.20], [2.05, 0.00, 0.38, 3.13, 4.03]],
+	"Skin_Reactor_T3": [[-2.05, 0.00, 0.38, 1.38, 4.78], [0.00, 0.00, 0.87, 1.96, 5.99], [2.05, 0.00, 0.38, 1.38, 4.78]],
+	"Skin_Reactor_T4": [[-2.35, 0.00, 0.38, 2.13, 5.53], [0.00, 0.00, 0.88, 1.71, 6.72], [2.35, 0.00, 0.38, 2.13, 5.53]],
+	"VEX_Vat_T1": [[-2.05, 0.00, 0.52, 1.24, 2.28]],
+	"VEX_Vat_T2": [[-2.05, 0.00, 0.52, 1.24, 2.28], [2.05, 0.00, 0.52, 3.09, 4.13]],
+	"VEX_Vat_T3": [[-2.05, 0.00, 0.52, 1.34, 4.89], [2.05, 0.00, 0.52, 1.34, 4.89]],
+	"VEX_Vat_T4": [[-2.35, 0.00, 0.52, 2.09, 5.64], [-0.22, 0.00, 0.67, 1.66, 6.72], [2.35, 0.00, 0.52, 2.09, 5.64]],
+	"Vat_Graduate_T1": [[-2.15, -0.00, 0.86, 0.92, 2.17]],
+	"Vat_Graduate_T2": [[-2.15, -0.00, 0.86, 0.92, 2.17], [2.15, 0.00, 0.86, 2.77, 4.02]],
+	"Vat_Graduate_T3": [[-2.20, -0.00, 0.86, 1.02, 4.77], [2.20, 0.00, 0.86, 1.02, 4.77]],
+	"Vat_Graduate_T4": [[-2.60, -0.00, 0.86, 1.77, 5.52], [0.00, 0.00, 0.95, 1.53, 6.53], [2.60, 0.00, 0.86, 1.77, 5.52]],
+}
