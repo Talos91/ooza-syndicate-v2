@@ -9,7 +9,7 @@ extends CanvasLayer
 ## SIEGE/BRAWL, Last Stand) -> DEPLOY. OPTIONS holds the match switches (SIEGE/BRAWL, Last Stand,
 ## enemy counts, detail). ONLINE -> CREATE ROOM / JOIN ROOM ->
 ## the room lobby (players, teams, faction, colour, map, PLAYERS, SIEGE/BRAWL, Last Stand) -> DEPLOY by
-## the host (Net, peer-to-peer). TUTORIAL is not in 2.0 yet.
+## the host (Net, through the room server). TUTORIAL is not in 2.0 yet.
 ## ARMIES (0.18.7, SKILLS 2.0): the army presets - per faction its fixed ultimate plus 1 active and 1 map skill
 ## picked from the shared pools (ArmyPresets, saved on the device). 01 FACTION shows the preset; 03 SETUP and
 ## the lobby carry ABILITIES ON / OFF; DEPLOY and the room send your preset as the match loadout.
@@ -943,7 +943,7 @@ func deploy() -> void:
 	main.start_match(map_path, faction, r, ai_level, mode, colour, ArmyPresets.loadout_for(faction))   # your ARMIES preset
 
 
-# ------------------------------------------------------------------ online (Net, peer-to-peer rooms)
+# ------------------------------------------------------------------ online (Net, rooms through the room server)
 func show_online() -> void:
 	## ONLINE: pick your faction, then CREATE ROOM (you host) or JOIN ROOM (the host's code).
 	clear_page("city")
@@ -951,7 +951,7 @@ func show_online() -> void:
 	header(0)
 	label_at("PLAY WITH FRIENDS", P(40, 107), 43)
 	frame(P(35, 174), P(1600, 640))
-	label_at("PRIVATE PEER-TO-PEER ROOMS  ·  HOSTED BY ONE PLAYER'S BROWSER", P(60, 196), 24, color())
+	label_at("PRIVATE ROOMS  ·  THROUGH THE OOZE ROOM SERVER", P(60, 196), 24, color())
 	var about := label_at("Create a room and share its four-character code; everyone opens this same link. Keep the host's tab open and in front - the host's game runs the match. Free-for-all for 2 to 5 players, or 2 v 2. Rematch reuses the room; chat stays between rounds.",
 			P(60, 245), 20, Color("bbd1db"))
 	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -973,7 +973,7 @@ func show_online() -> void:
 			Net.reconnect()
 			show_lobby(), true)
 		rc.disabled = not web
-	var msg := Net.status if Net.status != "" else ("Some networks block direct connections (there is no relay server yet); if joining fails, try another network." if web
+	var msg := Net.status if Net.status != "" else ("Rooms connect through the Ooze room server, so any network that reaches the internet can join. The host still runs the match: keep the host's game open and in front." if web
 			else "Online rooms run in the browser build: open https://talos91.github.io/ooza-syndicate-v2/")
 	var st := label_at(msg, P(60, 650), 20, Color("ffd15c") if Net.status != "" else Color("adc7d2"))
 	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
