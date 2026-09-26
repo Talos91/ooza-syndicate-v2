@@ -14,6 +14,14 @@ extends RefCounted
 ## pull in and none of its own are; level 2 fires ahead, for the lines that will be on the deck when it
 ## moves (RELAY_WARNING later); level 3 also opens a shorter route to where it wants to go. A rotation
 ## flings everyone on its deck (0.18.3): fired only for the kill, never with its own lines on it.
+## Relay sense (0.18.7, Daniele: "the ai tends to avoid relay bridges all together and almost never build
+## structure on relays"), level 1+: orders take the fastest route unless a hostile relay can change a deck
+## on it before the whole line is across (0.18.6 waterfall: the rest would pour off the lip) - level 1
+## assumes a hostile relay is always ready, level 2+ reads its cooldown and phase and who is about to
+## capture a neutral one; never fires while an own line still has to cross (level 2+ counts the whole
+## order it cuts, not only what is on the deck); keeps a garrison on the relays it holds, values them as
+## targets, feeds them and builds a cannon (a busy front relay) or the forge there - the slot costs no vat.
+## Level 2 opens routes too. Training and Casual (level 0) keep the plain behaviour.
 ## Skills (0.18.7, "the AI must not be skill-less"): every think it may cast one of its loadout's skills
 ## (its faction's Rules.FACTION_LOADOUT unless the match gave it another), at most one cast every
 ## Rules.AI_SKILL_GAP[level] s, each on a cheap heuristic of what it can see (_skills). It never reads
@@ -29,6 +37,8 @@ var _attack_after := 0.0
 var _invest_after := 0.0
 var _memory := {}                          # node id -> {"units", "next"}
 var _busy := {}                            # node id -> true once it ordered a send this think
+var _fed := {}                             # relay node id -> time until which units sent there are for its slot
+var _route_risky := false                  # set by _route: the route it returned is at risk from a relay
 var _skill_after := 0.0                    # no cast before this match time (Rules.AI_SKILL_GAP)
 var casts := 0                             # skills cast this match (tests)
 var rng := RandomNumberGenerator.new()
@@ -76,7 +86,7 @@ func _reserve(sim: Sim, n: Dictionary) -> float:
 		var o: Dictionary = sim.nodes[link[0]]
 		if o["owner"] != "" and not sim.allied(o["owner"], seat):
 			nearby = maxf(nearby, o["units"] * 0.15)
-	return nearby + (4.0 * Rules.SCALE if n["id"] == sim.homes.get(seat, -1) else 0.0)
+	return nearby + (4.0 * Rules.SCALE if n["id"] == sim.homes.get(seat, -1) else 0.0) + _relay_hold(sim, n)
 
 
 func _incoming(sim: Sim, node_id: int, hostile: bool) -> float:
@@ -124,7 +134,7 @@ func _evacuate(sim: Sim) -> void:
 		if sim.is_warned(doomed["id"]) and doomed["owner"] == seat and doomed["units"] >= 5.0:
 			var target := _nearest_safe(sim, doomed["id"])
 			if target >= 0:
-				if not sim.send(doomed["id"], target, 1.0).is_empty():
+				if not _send(sim, doomed["id"], target, 1.0).is_empty():
 					_busy[doomed["id"]] = true
 
 
@@ -166,10 +176,10 @@ func _defend(sim: Sim) -> void:
 			if _busy.has(donor["id"]):
 				continue                                  # already sent to an earlier target this think
 			var spare: float = donor["units"] - _reserve(sim, donor)
-			if spare < 2.0 * Rules.SCALE or sim.find_route(donor["id"], target["id"]).is_empty():
+			if spare < 2.0 * Rules.SCALE or _route(sim, donor["id"], target["id"], minf(need, spare)).is_empty():
 				continue
 			var frac := clampf(minf(need, spare) / maxf(donor["units"], 1.0), 0.1, 1.0)
-			if not sim.send(donor["id"], target["id"], frac).is_empty():
+			if not _send(sim, donor["id"], target["id"], frac).is_empty():
 				_busy[donor["id"]] = true
 				need -= donor["units"] * frac
 
@@ -218,10 +228,10 @@ func _attack(sim: Sim) -> void:
 			var available: float = donor["units"] - _reserve(sim, donor)
 			if available < 4.0 * Rules.SCALE:
 				continue
-			var route := sim.find_route(donor["id"], target["id"])
+			var route := _route(sim, donor["id"], target["id"], available)
 			if route.is_empty():
 				continue
-			donors.append({"node": donor, "available": available, "travel": _travel(sim, route)})
+			donors.append({"node": donor, "available": available, "travel": _travel(sim, route), "risky": _route_risky})
 		if donors.is_empty():
 			continue
 		donors.sort_custom(func(a, b): return a["travel"] < b["travel"])
@@ -244,7 +254,9 @@ func _attack(sim: Sim) -> void:
 			continue
 		var score: float = 70.0 + target["tier"] * 8.0 + (12.0 if target["category"] == "strategic" else 0.0) \
 				+ (18.0 if target["owner"] == "" else 0.0) - needed / Rules.SCALE * 0.6 - travel * 2.0
-		score += _rival_adjustment(sim, target)
+		score += _rival_adjustment(sim, target) + _relay_value(sim, target)
+		if donors.any(func(d): return d["risky"]):
+			score -= Rules.AI_RELAY_RISK                  # its only way in crosses a deck a rival can change
 		if sim.last_stand_active and sim.is_final(target["id"]):
 			score += 20.0                                 # the last ring is where the match is decided
 		plans.append({"target": target, "donors": donors, "needed": needed, "score": score})
@@ -252,7 +264,7 @@ func _attack(sim: Sim) -> void:
 		return
 	plans.sort_custom(func(a, b): return a["score"] > b["score"])
 	var plan: Dictionary = plans[rng.randi_range(0, mini(plans.size(), int(cfg["choice"])) - 1)]
-	if int(cfg["relays"]) >= 3 and _open_route(sim, plan):
+	if int(cfg["relays"]) >= 2 and _open_route(sim, plan):
 		return                                            # a shorter way opens first; send next time
 	_attack_after = sim.time + float(cfg["attack_gap"])
 	var need: float = plan["needed"]
@@ -260,7 +272,7 @@ func _attack(sim: Sim) -> void:
 		var avail: float = d["available"]
 		var portion := 0.5 if need <= avail * 0.5 else (0.75 if need <= avail * 0.75 else 1.0)
 		var frac := clampf(avail * portion / maxf(d["node"]["units"], 1.0), 0.1, 1.0)
-		if not sim.send(d["node"]["id"], plan["target"]["id"], frac).is_empty():
+		if not _send(sim, d["node"]["id"], plan["target"]["id"], frac).is_empty():
 			_busy[d["node"]["id"]] = true
 			need -= d["node"]["units"] * frac
 		if need <= 0.0:
@@ -273,6 +285,15 @@ func _closing(sim: Sim, n: Dictionary) -> Array:
 	var next_index: int = sim.relay_next_index(n)
 	for i in sim.controlled_edges(n["id"]):
 		if sim._edge_open_at(i, n["relay_index"]) and not sim._edge_open_at(i, next_index):
+			out.append(i)
+	return out
+
+
+func _opening(sim: Sim, n: Dictionary) -> Array:
+	var out := []
+	var next_index: int = sim.relay_next_index(n)
+	for i in sim.controlled_edges(n["id"]):
+		if not sim._edge_open_at(i, n["relay_index"]) and sim._edge_open_at(i, next_index):
 			out.append(i)
 	return out
 
@@ -336,50 +357,241 @@ func _relays(sim: Sim) -> void:
 			continue
 		var closing := _closing(sim, n)
 		if closing.is_empty():
+			# 0.18.7: a retract left in / a remote left off after a kill blocks its own shortcut - put
+			# the deck back, unless a rival order is still pouring off its lip (it would walk across)
+			if _cut_toll(sim, _opening(sim, n), 0.0)[0] <= 0.5:
+				sim.fire_relay(n["id"])
+			continue
+		# 0.18.7: with the 0.18.6 waterfall an own line routed across the deck is lost too, not only
+		# the part on it - never fire while an own or allied line still has to cross it at the tick
+		var cut := _cut_toll(sim, closing, Rules.RELAY_WARNING)
+		if cut[1] > 0.5:
 			continue
 		if n["relay"] == "rotation":
 			# Daniele (0.18.3): the turn flings every body on the deck into the void, the owner's own
 			# too. Fire for the kill at the tick (level 2+: where the lines will be RELAY_WARNING from
-			# now), only if it kills more enemy than it costs, and never with an own or allied body on
-			# the deck at any point until the turn is over.
-			var kill: float = _fling_toll(sim, closing, Rules.RELAY_WARNING if lvl >= 2 else 0.0)[0]
+			# now, and every hostile order it cuts), only if it kills more enemy than it costs, and never
+			# with an own or allied body on the deck at any point until the turn is over.
+			var kill: float = cut[0] if lvl >= 2 else _fling_toll(sim, closing, 0.0)[0]
 			var cost := _fling_cost(sim, closing)
 			if kill >= 2.0 * Rules.SCALE and cost <= 0.5 and kill > cost:
 				sim.fire_relay(n["id"])
 			continue
 		var now := _on_decks(sim, closing, 0.0)
 		var later := _on_decks(sim, closing, Rules.RELAY_WARNING + Rules.RELAY_MOVE * 0.5) if lvl >= 2 else now
-		var enemy: float = maxf(now[0], later[0]) if lvl >= 2 else now[0]
+		var enemy: float = cut[0] if lvl >= 2 else now[0]  # level 2+: the whole order it cuts pours away
 		var own: float = maxf(now[1], later[1])
 		if enemy < 2.0 * Rules.SCALE or own > 0.5:        # never drop its own (or allied) lines
-			continue
-		if n["relay"] == "retract" and n["units"] < enemy * 1.3:
-			continue                                      # it would pull in more than the garrison holds
+			continue                                      # (0.18.7: a retract drops them too, it carries nobody in)
+		# 0.18.7 assumes the relay-fall rule (Daniele): when the motion starts everything still on a deck
+		# that goes away falls, retract included - nobody is carried into the relay node any more, so a
+		# retract is a kill tool like a switch and needs no garrison to take its riders in
 		sim.fire_relay(n["id"])
 
 
 func _open_route(sim: Sim, plan: Dictionary) -> bool:
-	## Level 3: fire one of its relays if the next state gives the plan a faster route.
+	## Level 2+ (0.18.7; level 3 before): fire one of its relays if the next state gives the plan a
+	## faster route that no rival relay can take away before the line is across.
 	var src: int = plan["donors"][0]["node"]["id"]
 	var dst: int = plan["target"]["id"]
-	var base := sim.find_route(src, dst)
+	var units: float = plan["donors"][0]["available"]
+	var base := _route(sim, src, dst, units)
 	var t0 := _travel(sim, base) if not base.is_empty() else INF
+	if _route_risky:
+		t0 += Rules.AI_RELAY_DETOUR                   # a risky way in is worth replacing
 	for n in sim.nodes:
 		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
 			continue
 		var closing := _closing(sim, n)
-		if _on_decks(sim, closing, Rules.RELAY_WARNING)[1] > 0.5:
-			continue
+		if _cut_toll(sim, closing, Rules.RELAY_WARNING)[1] > 0.5:
+			continue                                      # an own line still has to cross a deck it closes
 		if n["relay"] == "rotation" and _fling_cost(sim, closing) > 0.5:
 			continue                                      # the turn would fling its own lines
 		var keep: int = n["relay_index"]
 		n["relay_index"] = sim.relay_next_index(n)
-		var alt := sim.find_route(src, dst)
+		var alt := _route(sim, src, dst, units)
+		var alt_risky := _route_risky
 		n["relay_index"] = keep
-		if not alt.is_empty() and _travel(sim, alt) < t0 - 3.0:
+		if not alt.is_empty() and not alt_risky and _travel(sim, alt) < t0 - 3.0:
 			sim.fire_relay(n["id"])
 			return true
 	return false
+
+
+func _cut_toll(sim: Sim, edges: Array, ahead: float) -> Array:
+	## [hostile units, own or allied units] a change of these decks at the tick `ahead` s from now
+	## costs (0.18.6 waterfall): every line whose route still has one of them to cross loses what has
+	## not passed it - the part on it falls (relay-fall rule, every kind), the rest pours off the lip -
+	## plus what its vat has still to send.
+	var enemy := 0.0
+	var own := 0.0
+	for h in sim.hordes:
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		var shift: float = v * ahead if h["state"] == "move" and not h.get("blocked", false) else 0.0
+		var head: float = minf(h["s"] + shift, h["L"])
+		var length := maxf(Sim.chain_length(h), 0.001)
+		var tail: float = head - length
+		var lost := 0.0
+		for sp in h["spans"]:                             # spans run along the path: the first deck not yet passed
+			if sp["edge"] in edges and tail < sp["s1"]:
+				lost = h["units"] if head < sp["s0"] else h["units"] * clampf((minf(head, sp["s1"]) - tail) / length, 0.0, 1.0)
+				if h["streaming"]:
+					var src: Dictionary = sim.nodes[h["route"][0]]
+					if src["streaming"].get("hid", -1) == h["id"]:
+						lost += float(src["streaming"]["remaining"])
+				break
+		if lost <= 0.0:
+			continue
+		if h["owner"] == seat or sim.allied(h["owner"], seat):
+			own += lost
+		else:
+			enemy += lost
+	return [enemy, own]
+
+
+# ------------------------------------------------------------------ relay-aware routing (0.18.7)
+func _send(sim: Sim, from_id: int, to_id: int, fraction: float) -> Dictionary:
+	## sim.send over _route: the order takes the fastest path no rival relay can cut before the line
+	## is across (the host's own find_route with those decks left out; the route travels in snapshots).
+	var route := _route(sim, from_id, to_id, floorf(sim.nodes[from_id]["units"] * fraction))
+	if route.size() < 2:
+		return {}
+	var h := sim.send(from_id, to_id, fraction)
+	if not h.is_empty() and h["route"] != route:
+		sim._set_route(h, route)
+	return h
+
+
+func _route(sim: Sim, from_id: int, to_id: int, units: float) -> Array:
+	## The fastest route, or (level 1+) the fastest one whose relay decks no rival can change before a
+	## line of `units` is across it - if that detour costs at most AI_RELAY_DETOUR s or doubles the
+	## trip. Otherwise the fastest route with _route_risky set (attack plans price it; defence and
+	## evacuation take it anyway). Level 0 routes like sim.send.
+	_route_risky = false
+	var route := sim.find_route(from_id, to_id)
+	if int(cfg["relays"]) <= 0 or route.size() < 2:
+		return route
+	var bad := _risky_decks(sim, route, units)
+	if bad.is_empty():
+		return route
+	var limit := maxf(_travel(sim, route) * 2.0, _travel(sim, route) + Rules.AI_RELAY_DETOUR)
+	var avoid := {}
+	for _pass in range(4):
+		for ei in bad:
+			avoid[ei] = true
+		var alt := sim.find_route(from_id, to_id, avoid)
+		if alt.size() < 2 or _travel(sim, alt) > limit:
+			break
+		bad = _risky_decks(sim, alt, units)
+		if bad.is_empty():
+			return alt
+	_route_risky = true
+	return route
+
+
+func _risky_decks(sim: Sim, route: Array, units: float) -> Array:
+	## Relay decks on this route that someone hostile can change before the line's tail is over them
+	## (the door emits `units` at Rules.exit_rate(); the crossing estimate gets AI_RELAY_SLACK/PAD).
+	## Assumes the relay-fall rule (0.18.7): the deck stays walkable through the 1 s warning and is lost
+	## the moment the motion starts (the tick) - whatever is on it falls, whatever is routed over it
+	## pours off the lip - so the line is safe only if its tail is across before the earliest tick.
+	## The controller's reaction time is taken as zero (the conservative reading: a player can fire the
+	## instant the line shows).
+	var out := []
+	var emit := maxf(units, 0.0) / maxf(Rules.exit_rate(), 0.1)
+	var t := 0.0
+	for i in range(route.size() - 1):
+		var ei := sim._edge_index(route[i], route[i + 1])
+		var cross := sim.edge_cost(ei) + 1.0
+		var c: int = sim.edge_controller.get(ei, -1)
+		if c >= 0 and _flip_at(sim, sim.nodes[c], ei) < (t + cross) * Rules.AI_RELAY_SLACK + Rules.AI_RELAY_PAD + emit:
+			out.append(ei)
+		t += cross
+	return out
+
+
+func _flip_at(sim: Sim, r: Dictionary, ei: int) -> float:
+	## Earliest seconds from now at which deck `ei` of relay `r` can be taken away by someone hostile
+	## (INF: nobody can). Its own or an ally's relay: only a fire already under way. Level 1 treats a
+	## rival relay as always ready; level 2+ reads its cooldown and phase, and a neutral relay that a
+	## rival line is about to capture.
+	var lvl := int(cfg["relays"])
+	var owner: String = r["owner"]
+	var states := sim.relay_states(r)
+	if states.is_empty():
+		return INF
+	if owner != "" and (owner == seat or sim.allied(owner, seat)):
+		if r["relay_phase"] == "warning" and not sim._edge_open_at(ei, r["relay_pending"]):
+			return r["relay_t"]
+		return INF
+	var tick := INF
+	var idx := sim.relay_next_index(r)
+	if owner == "":
+		if lvl < 2:
+			return INF
+		for h in sim.hordes:                             # a rival line about to take it
+			if h["target"] == r["id"] and not h.get("retreat", false) and not sim.allied(h["owner"], seat) \
+					and maxf(h["units"], h["ordered"]) > r["units"]:
+				var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed")
+				tick = minf(tick, (h["L"] - h["s"]) / maxf(v, 0.1) + Rules.RELAY_WARNING)
+		if tick == INF:
+			return INF
+	else:
+		match r["relay_phase"]:
+			"warning":
+				tick = r["relay_t"]
+				idx = r["relay_pending"]
+			"moving":
+				tick = r["relay_t"] + (Rules.RELAY_COOLDOWN if lvl >= 2 else 0.0) + Rules.RELAY_WARNING
+			_:
+				tick = (r["relay_cd"] if lvl >= 2 else 0.0) + Rules.RELAY_WARNING
+	var period := Rules.RELAY_WARNING + Rules.RELAY_MOVE + Rules.RELAY_COOLDOWN
+	for _k in range(states.size()):                      # the first fire that closes this deck
+		if not sim._edge_open_at(ei, idx):
+			return tick
+		tick += period
+		idx = (idx + 1) % states.size()
+	return INF
+
+
+func _deck_traffic(sim: Sim, n: Dictionary) -> float:
+	## Hostile units whose route still crosses one of this relay's decks or passes through it.
+	var decks := sim.controlled_edges(n["id"])
+	var amount := 0.0
+	for h in sim.hordes:
+		if h["owner"] == seat or sim.allied(h["owner"], seat):
+			continue
+		var tail: float = h["s"] - Sim.chain_length(h)
+		for sp in h["spans"]:
+			if sp["edge"] in decks and tail < sp["s1"]:
+				amount += maxf(h["units"], h["ordered"])
+				break
+	return amount
+
+
+func _relay_value(sim: Sim, target: Dictionary) -> float:
+	## Target-score bonus for a relay node (level 1+): control of the shortcuts, more for one with
+	## rival traffic over its decks, and (level 2+) for a rival's relay that can cut its own lines.
+	var lvl := int(cfg["relays"])
+	if lvl <= 0 or target["relay"] == "":
+		return 0.0
+	if lvl == 1:
+		return Rules.AI_RELAY_VALUE * 0.5
+	var v := Rules.AI_RELAY_VALUE + minf(10.0, _deck_traffic(sim, target) / Rules.SCALE * 0.3)
+	if target["owner"] != "":
+		v += 4.0
+	return v
+
+
+func _relay_hold(sim: Sim, n: Dictionary) -> float:
+	## Level 1+: a relay node never grows, so it keeps a garrison (AI_RELAY_HOLD) and, while units are
+	## on their way for its slot, the price of that build too.
+	if n["relay"] == "" or int(cfg["relays"]) <= 0:
+		return 0.0
+	var hold := Rules.AI_RELAY_HOLD
+	if float(_fed.get(n["id"], -1.0)) > _clock and n["attachment"] == "" and n["build_kind"] == "":
+		hold += float(Rules.FORGE_COST if _slot_kind(sim, n) == "forge" else Rules.CANNON_COST[1])
+	return hold
 
 
 func _retreats(sim: Sim) -> void:
@@ -391,7 +603,7 @@ func _retreats(sim: Sim) -> void:
 		if a.is_empty() or b.is_empty():
 			continue
 		var mine := a if a["owner"] == seat else (b if b["owner"] == seat else {})
-		if mine.is_empty() or mine.get("retreat", false) or mine.has("ride") or mine["state"] == "absorb":
+		if mine.is_empty() or mine.get("retreat", false) or mine["state"] == "absorb":
 			continue                                      # recall() refuses these: try the next fight
 		var theirs := b if mine == a else a
 		if sim.power_of(mine) < 0.4 * sim.power_of(theirs) and mine["units"] > 15.0:
@@ -416,6 +628,10 @@ func _build(sim: Sim) -> void:
 			_invest_after = sim.time + float(cfg["invest"])
 			return
 	var vats := owned.filter(func(n): return Sim.has_vat(n))
+	if int(cfg["relays"]) >= 2:                           # level 2+: a busy front relay's cannon comes first
+		if _build_relay_slot(sim, owned, true):
+			return
+		_feed_relay_slot(sim, owned, vats, 8.0)
 	vats.sort_custom(func(a, b): return a["tier"] < b["tier"] if a["tier"] != b["tier"] else a["units"] > b["units"])
 	for n in vats:
 		if n["build_kind"] != "" or n["tier"] >= 4 or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
@@ -424,19 +640,110 @@ func _build(sim: Sim) -> void:
 				and sim.upgrade_vat(n["id"]):
 			_invest_after = sim.time + float(cfg["invest"])
 			return
-	var has_forge := sim.has_forge(seat)
+	if _build_relay_slot(sim, owned, false):
+		return
+	if int(cfg["relays"]) >= 1:
+		_feed_relay_slot(sim, owned, vats, 5.0)
+
+
+func _slot_kind(sim: Sim, n: Dictionary) -> String:
+	## What goes in an empty relay slot: the forge (one per seat, once it holds three vats), else a cannon.
+	if not sim.has_forge(seat) and "forge" in n["buildable"] \
+			and _mine(sim).filter(func(x): return Sim.has_vat(x)).size() >= 3:
+		return "forge"
+	return "cannon" if "cannon" in n["buildable"] else ""
+
+
+func _slot_value(sim: Sim, n: Dictionary, kind: String) -> float:
+	## How much a structure on this relay slot is worth. Level 0: any slot alike. Level 1+: the forge
+	## 10; a cannon 1 (it still guards the node), +5 on the border, + rival traffic over its decks
+	## (0.18.7: "a cannon on a relay node guarding a busy deck"). Only slots worth 5+ get fed.
+	if int(cfg["relays"]) <= 0 or kind == "forge":
+		return 10.0
+	var v := 1.0 + minf(10.0, _deck_traffic(sim, n) / Rules.SCALE * 0.5)
+	for link in sim.adj[n["id"]]:
+		var o: String = sim.nodes[link[0]]["owner"]
+		if o != "" and not sim.allied(o, seat):
+			v += 5.0
+			break
+	return v
+
+
+func _build_relay_slot(sim: Sim, owned: Array, busy_only: bool) -> bool:
+	## Build on an empty relay slot it can pay for (Same costs as the player; the slot costs no vat),
+	## keeping the relay's garrison. busy_only: only a slot worth 8+ (a busy front relay).
+	var best := {}
+	var best_v := 0.0
 	for n in owned:
 		if n["build_kind"] != "" or n["attachment"] != "" or n["relay"] == "" \
 				or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue                                      # only empty relay slots: never give up a vat
-		if not has_forge and vats.size() >= 3 and "forge" in n["buildable"] and n["units"] >= Rules.FORGE_COST + 10.0:
-			sim.build_attachment(n["id"], "forge")
-			_invest_after = sim.time + float(cfg["invest"])
-			return
-		if "cannon" in n["buildable"] and n["units"] >= Rules.CANNON_COST[1] + 10.0:
-			sim.build_attachment(n["id"], "cannon")
-			_invest_after = sim.time + float(cfg["invest"])
-			return
+		var kind := _slot_kind(sim, n)
+		if kind == "":
+			continue
+		var keep: float = Rules.AI_RELAY_HOLD if int(cfg["relays"]) >= 1 else 10.0
+		if kind == "forge" and n["units"] < Rules.FORGE_COST + keep and int(cfg["relays"]) <= 0 and "cannon" in n["buildable"]:
+			kind = "cannon"                               # level 0: whatever it can pay for now
+		var cost: float = Rules.FORGE_COST if kind == "forge" else Rules.CANNON_COST[1]
+		var v := _slot_value(sim, n, kind)
+		if kind == "cannon" and v >= 5.0:
+			keep = 10.0                                   # a front cannon guards its own relay
+		if n["units"] < cost + keep or v <= 0.0 or (busy_only and v < 8.0):
+			continue
+		if v > best_v:
+			best_v = v
+			best = {"node": n, "kind": kind}
+	if best.is_empty() or not sim.build_attachment(best["node"]["id"], best["kind"]):
+		return false
+	_fed.erase(best["node"]["id"])
+	_invest_after = sim.time + float(cfg["invest"])
+	return true
+
+
+func _feed_relay_slot(sim: Sim, owned: Array, vats: Array, worth: float) -> void:
+	## Level 1+: a relay never grows, so a player sends it the price of its structure first. One relay
+	## at a time: the best-valued empty slot worth `worth`+, fed from the nearest vat that can spare it.
+	for id in _fed.keys():
+		if float(_fed[id]) > _clock and sim.nodes[id]["owner"] == seat and sim.nodes[id]["attachment"] == "":
+			return                                        # still on its way
+	var best := {}
+	var best_v := 0.0
+	for n in owned:
+		if n["build_kind"] != "" or n["attachment"] != "" or n["relay"] == "" \
+				or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
+			continue
+		var kind := _slot_kind(sim, n)
+		var v := _slot_value(sim, n, kind) if kind != "" else 0.0
+		if v >= worth and v > best_v:
+			best_v = v
+			best = {"node": n, "kind": kind}
+	if best.is_empty():
+		return
+	var slot: Dictionary = best["node"]
+	var cost: float = Rules.FORGE_COST if best["kind"] == "forge" else Rules.CANNON_COST[1]
+	var need: float = cost + Rules.AI_RELAY_HOLD + 2.0 * Rules.SCALE - slot["units"] - _incoming(sim, slot["id"], false)
+	if need <= 0.0:
+		return
+	var pick := {}
+	var pick_t := INF
+	for d in vats:
+		if _busy.has(d["id"]) or d["build_kind"] != "" or _incoming(sim, d["id"], true) > 0.0:
+			continue
+		if d["units"] - _reserve(sim, d) - 4.0 * Rules.SCALE < need:
+			continue
+		var route := _route(sim, d["id"], slot["id"], need)
+		if route.is_empty() or _route_risky:
+			continue
+		var t := _travel(sim, route)
+		if t < pick_t:
+			pick_t = t
+			pick = d
+	if pick.is_empty():
+		return
+	var frac := clampf(need * 1.1 / maxf(pick["units"], 1.0), 0.05, 1.0)
+	if not _send(sim, pick["id"], slot["id"], frac).is_empty():
+		_busy[pick["id"]] = true
+		_fed[slot["id"]] = _clock + pick_t + 12.0
 
 
 # ------------------------------------------------------------------ skills (0.18.7)

@@ -18,7 +18,6 @@ func check(cond: bool, what: String) -> void:
 
 
 func _initialize() -> void:
-	Rules.bridge_combat = true                      # these checks were written for SIEGE (the old default); BRAWL is the game's default since 0.18.7
 	_run.call_deferred()
 
 

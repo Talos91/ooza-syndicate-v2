@@ -9,7 +9,7 @@ extends Node3D
 ##   --mode=1v1|2v2|3v3|2v2v2|FFA3|FFA4|FFA5  match mode (the map's first mode if it lacks this one)
 ##   --demo                                 every seat played by the AI
 ##   --ai=Training|Casual|Standard|Veteran|Expert  AI level (Rules.AI_LEVELS; the menu picks it otherwise)
-##   --brawl (alias --classic)              BRAWL: bridge combat off, Alpha 11 rules
+##   --brawl (alias --classic)              no-op: BRAWL is the only mode since 0.18.7 (SIEGE deactivated)
 ##   --seed=N                               deterministic Last Stand method / chaos order
 ##   --shots=4,12,25 --out=<dir>            save screenshots at those match times, then quit
 ##   --perf                                 print frame timing every 3 s
@@ -152,8 +152,8 @@ func _ready() -> void:
 			scenario_zoom = float(arg.substr(7))
 		elif arg.begins_with("--mode="):
 			mode = arg.substr(7)
-		elif arg == "--classic" or arg == "--brawl":  # BRAWL mode (bridge combat off, Alpha 11 rules)
-			Rules.bridge_combat = false
+		elif arg == "--classic" or arg == "--brawl":  # harmless: BRAWL is the only mode (0.18.7)
+			pass
 		elif arg.begins_with("--seed="):
 			seed_value = int(arg.substr(7))
 		elif arg == "--goo":
@@ -779,6 +779,12 @@ func _process(delta: float) -> void:
 				var flung := int(ev["units"])
 				if flung > 0:                         # a sliver under half a shown unit still counts, but gets no toast
 					hud.toast("%d unit%s flung off the turning deck" % [flung, "" if flung == 1 else "s"], "warn" if ours else "good")
+			"fall":                                   # 0.18.7: a retract / switch / remote took the deck from under a line
+				if ev.has("relay") and int(ev.get("shown", 0)) > 0:
+					var fell := int(ev["shown"])
+					var kind := str(sim.nodes[int(ev["relay"])]["relay"])
+					var what: String = {"retract": "the retracting deck", "switch": "the switched deck", "remote": "the switched-off deck"}.get(kind, "the deck")
+					hud.toast("%d unit%s fell with %s" % [fell, "" if fell == 1 else "s", what], "warn" if sim.allied(str(ev["seat"]), HUMAN) else "good")
 	sim.fx_events.clear()
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
