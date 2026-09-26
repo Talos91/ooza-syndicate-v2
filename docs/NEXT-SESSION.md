@@ -2,7 +2,8 @@
 
 State at the end of the 2026-09-26 sessions: **v0.18.9 "Alpha 18"** (live; Daniele is testing it - see docs/TO-TEST.md) (maps 4.2 - 20 compact maps at the kit's sizes - plus the four main Alpha 11 maps A-01..A-04, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md` (project root - the whole game as built), this file,
-`README.md`, the top of `CHANGELOG.md` (0.17.0 to 0.18.0), `PLAYTEST-NOTES.md` notes 90-100, then the
+`README.md`, `docs/TO-TEST.md` (Daniele's test results - start there), the top of `CHANGELOG.md` (0.18.6 to 0.18.9),
+`PLAYTEST-NOTES.md` notes 112-148, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`, the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
 
 ## Standing rules (Daniele)
