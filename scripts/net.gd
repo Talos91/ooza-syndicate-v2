@@ -19,6 +19,13 @@ extends Node
 ## - a guest dropping mid-match keeps the seat for RECONNECT (the AI plays it when EMPTY SEATS is on);
 ##   the host leaving closes the room;
 ## - window.oozeBusy (set_busy) tells web/update.js not to reload for a new build during a room.
+## SKILLS 2.0 (0.18.7): a cast is an order like a send - order("cast", slot index 0/1/2, {"target": t}) - the
+## host validates it with Sim.cast_check and answers with the feedback line. Loadouts ride in the roster
+## (set_loadout; a missing one = the faction's default) and the launch packet ("loadouts": seat -> {active,
+## map}); ABILITIES ON/OFF is a room setting (toggle_abilities, launch "rules" "abilities_on"). Snapshots
+## carry the skill state (effects, cooldowns, charge, demolished decks). Ghost Lines stay secret: the
+## broadcast snapshot strips the decoy keys (SECRET_HORDE) and each guest gets a private "ghosts" packet
+## listing only its own decoys; fx events marked "private" go to that seat only.
 ## No host migration, no TURN relay: some networks cannot connect directly.
 
 signal lobby_changed
@@ -33,7 +40,7 @@ const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "
 const TEAM_MODES := ["2v2", "3v3", "2v2v2"]
 const SEATS := ["A", "B", "C", "D", "E", "F"]
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
-const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "restore", "switch"]
+const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "restore", "switch", "cast"]
 const SNAPSHOT_EVERY := 0.1
 const KEYFRAME_EVERY := 10                         # every 10th snapshot carries every horde's path
 const PATH_RESEND := 1.0                           # a changed path rides along for this many seconds
@@ -60,6 +67,10 @@ var mode := "1v1"
 var map_path := ""                                   # set from the map pool when a room opens
 var siege := true
 var last_stand := true
+var abilities := true                              # ABILITIES ON/OFF (0.18.7: default on in both modes)
+var loadout := {}                                  # your own {"active", "map"} (empty = the faction's default)
+var own_ghosts := {}                               # guest: horde id -> true for our own decoys (host tells us only)
+var _ghosts_sent := {}                             # host: remote -> the ghost list last sent to it
 # match state
 var match_round := 0
 var active := false                                # a match is loaded or playing
@@ -358,7 +369,7 @@ func _start(host: bool, faction: String, code: String) -> Error:
 	preferred_faction = faction
 	_elapsed = 0.0
 	if host:
-		roster = {1: {"faction": faction, "slot": 0, "colour": colour}}
+		roster = {1: {"faction": faction, "slot": 0, "colour": colour, "loadout": loadout}}
 		if not map_offers(map_path, mode) or not map_path in MapPool.all():
 			var pool := maps_for(mode)
 			if pool.is_empty():
@@ -463,6 +474,36 @@ func toggle_last_stand() -> void:
 	if hosting and not active:
 		last_stand = not last_stand
 		publish_lobby()
+
+
+func toggle_abilities() -> void:
+	if hosting and not active:
+		abilities = not abilities
+		publish_lobby()
+
+
+func set_loadout(lo: Dictionary) -> void:
+	## Your skill loadout for the next round: {"active": id, "map": id} (Rules.ACTIVE_SKILLS / MAP_SKILLS).
+	var clean := _clean_loadout(lo)
+	if active:
+		return
+	loadout = clean
+	if hosting:
+		if roster.has(1):
+			roster[1]["loadout"] = clean
+			publish_lobby()
+	else:
+		_send_to_host({"op": "loadout", "active": clean.get("active", ""), "map": clean.get("map", "")})
+
+
+static func _clean_loadout(lo) -> Dictionary:
+	var out := {}
+	if lo is Dictionary:
+		if str(lo.get("active", "")) in Rules.ACTIVE_SKILLS:
+			out["active"] = str(lo["active"])
+		if str(lo.get("map", "")) in Rules.MAP_SKILLS:
+			out["map"] = str(lo["map"])
+	return out
 
 
 func set_faction(f: String) -> void:
@@ -571,7 +612,7 @@ func _reseat(teams := {}) -> void:
 
 func publish_lobby() -> void:
 	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path, "siege": siege,
-			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill})
+			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities})
 	lobby_changed.emit()
 
 
@@ -592,7 +633,8 @@ func _register(remote: String, id: int, p: Dictionary) -> void:
 	while slot in used:
 		slot += 1
 	var f := str(p.get("faction", ""))
-	roster[id] = {"faction": f if f in FACTIONS else FACTIONS[slot % FACTIONS.size()], "slot": slot, "colour": ""}
+	roster[id] = {"faction": f if f in FACTIONS else FACTIONS[slot % FACTIONS.size()], "slot": slot, "colour": "",
+			"loadout": _clean_loadout(p.get("loadout", {}))}
 	var want := str(p.get("colour", ""))
 	if colour_allowed(id, want):
 		roster[id]["colour"] = want
@@ -647,8 +689,12 @@ func launch_round() -> void:
 			_tokens.erase(id)
 	_reseat()
 	var players := {}
+	var loadouts := {}                                 # players' picks; AI seats get their faction default in Sim.setup
 	for id in roster:
 		players[seat_of(id)] = roster[id]["faction"]
+		var lo := _clean_loadout(roster[id].get("loadout", {}))
+		if not lo.is_empty():
+			loadouts[seat_of(id)] = lo
 	var ai := {}
 	if ai_fill != "":
 		for slot in range(slots()):                    # EMPTY SEATS: the AI plays them (team modes: any seat)
@@ -658,8 +704,8 @@ func launch_round() -> void:
 			players[SEATS[slot]] = free[randi() % free.size()] if not free.is_empty() else FACTIONS[randi() % FACTIONS.size()]
 			ai[SEATS[slot]] = ai_fill
 	var info := {"round": match_round + 1, "map": map_path, "mode": mode, "seed": randi() % 100000,
-			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(),
-			"rules": {"bridge_combat": siege, "last_stand": last_stand, "deck_speed": Rules.deck_speed,
+			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(), "loadouts": loadouts,
+			"rules": {"bridge_combat": siege, "last_stand": last_stand, "abilities_on": abilities, "deck_speed": Rules.deck_speed,
 					"node_speed_mult": Rules.node_speed_mult, "door_rate": Rules.door_rate,
 					"node_fight_mult": Rules.node_fight_mult, "forge_bonus": Rules.forge_bonus,
 					"hide_enemy_counts": Rules.hide_enemy_counts}}
@@ -684,6 +730,10 @@ func _launch(info: Dictionary) -> void:
 	Rules.node_fight_mult = float(r["node_fight_mult"])
 	Rules.forge_bonus = float(r["forge_bonus"])
 	Rules.hide_enemy_counts = bool(r.get("hide_enemy_counts", false))   # the host's option, the same for all
+	abilities = bool(r.get("abilities_on", true))
+	Rules.abilities_on = abilities
+	own_ghosts = {}
+	_ghosts_sent = {}
 	ai_fill = str(info.get("ai_fill", ""))
 	active = true
 	started = false
@@ -810,6 +860,13 @@ func _execute(id: int, p: Dictionary) -> Array:
 	if not action is String or not action in ACTIONS or not _is_int(a) or not args is Dictionary or args.size() > 2:
 		return [false, "Order rejected"]
 	var clean := {}
+	if action == "cast":                               # a = slot index; the host's Sim checks the rest
+		if int(a) < 0 or int(a) > 2:
+			return [false, "Order rejected"]
+		var t = clean_target(args.get("target", null))
+		if t is bool:
+			return [false, "Order rejected"]
+		clean = {"target": t}
 	if action == "send":
 		if not _is_int(args.get("to", null)) or not (args.get("fraction", null) is float or args.get("fraction", null) is int):
 			return [false, "Order rejected"]
@@ -818,6 +875,28 @@ func _execute(id: int, p: Dictionary) -> Array:
 			return [false, "Order rejected"]
 		clean = {"to": int(args["to"]), "fraction": f}
 	return main.perform(seat_of(id), action, int(a), clean)
+
+
+static func clean_target(t):
+	## A cast target off the wire: null, an int id, or a short array of ints / a fraction / "jam" / "fire".
+	## Anything else -> false (rejected).
+	if t == null:
+		return null
+	if _is_int(t):
+		return int(t)
+	if t is Array and (t as Array).size() >= 1 and (t as Array).size() <= 3:
+		var out := []
+		for x in t:
+			if _is_int(x):
+				out.append(int(x))
+			elif x is float and is_finite(x) and x > 0.0 and x <= 1.0:
+				out.append(float(x))
+			elif x is String and x in ["jam", "fire"]:
+				out.append(x)
+			else:
+				return false
+		return out
+	return false
 
 
 static func _is_int(v) -> bool:
@@ -864,6 +943,7 @@ static func path_key(h: Dictionary) -> String:
 
 
 const PATH_FIELDS := ["pts", "cum", "fast", "spans", "node_spans"]
+const SECRET_HORDE := ["decoy", "echo", "ghost_left", "landed", "blame"]   # never broadcast (the Ghost Line bluff)
 const NODE_SKIP := ["pos", "transit", "category", "center", "relay", "buildable", "id"]
 
 
@@ -893,7 +973,7 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 		var send_path: bool = keyframe or s.time - float(seen[1]) < PATH_RESEND
 		var d := {"_pk": key}
 		for k in h:
-			if send_path or not k in PATH_FIELDS:
+			if (send_path or not k in PATH_FIELDS) and not k in SECRET_HORDE:
 				d[k] = h[k]
 		hs.append(d)
 		alive[h["id"]] = true
@@ -906,7 +986,8 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 			"ls": [s.last_stand_active, s.last_stand_method, s.last_stand_order, s.last_stand_final,
 					s.last_stand_next, s.last_stand_warn_node, s.last_stand_warn_t, s.last_stand_wave, s._next_wave_at,
 					s.last_stand_waves, s.last_stand_keep, s.last_stand_warn, s.last_stand_queue],
-			"losses": [s.combat_losses, s.fall_losses]}
+			"losses": [s.combat_losses, s.fall_losses],
+			"skills": [s.effects, s.demolished, s.skill_cd, s.ult_charge, s.ult_since]}
 	if s.over:
 		snap["events"] = s.events                    # the end screen's captures count
 	return snap
@@ -987,6 +1068,14 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 		s.last_stand_queue = ls[12]
 	s.combat_losses = snap["losses"][0]
 	s.fall_losses = snap["losses"][1]
+	if snap.has("skills"):                            # SKILLS 2.0: effects, demolished decks, cooldowns, charge
+		var sk: Array = snap["skills"]
+		s.effects = sk[0]
+		s.demolished = sk[1]
+		s.skill_cd = sk[2]
+		s.ult_charge = sk[3]
+		s.ult_since = sk[4]
+		s._index_effects()
 	for c in changes:
 		s.captured.emit(c[0], c[1], c[2])
 	if snap.has("events"):
@@ -1004,11 +1093,11 @@ static func predict(s: Sim, dt: float) -> void:
 		if h["state"] != "move" or h.get("blocked", false):
 			continue
 		var mult: float = Rules.platform_mult() if Sim.sample(h, h["s"])[2] else 1.0
-		if Rules.bridge_combat and s.on_enemy_goo(h):
-			mult *= Rules.GOO_SLOW
+		var boost := s.skill_speed(h)                 # Surge / Rewire
+		mult *= s.deck_slow(h) * boost                # enemy goo or Mire, the stronger
 		var ds: float = Rules.move_speed() * h.get("speed", 1.0) * s.stat(h["owner"], "speed") * mult * dt
 		if h["streaming"]:
-			ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * dt)
+			ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * boost * dt)
 		if h.get("pour", false):                    # walking off a lip: the head stays, the line pours on
 			h["fcut"] = float(h.get("fcut", 0.0)) + ds
 			h["units"] = maxf(0.0, h["units"] - ds / Rules.metres_per_unit())
@@ -1017,9 +1106,35 @@ static func predict(s: Sim, dt: float) -> void:
 
 
 func push_effects(events: Array) -> void:
-	## Host: the view's one-off effects (bursts, falls, relay ticks, collapses) for the guests.
-	if hosting and online() and not events.is_empty() and _has_guests():
-		_broadcast("effects", {"round": match_round, "events": events})
+	## Host: the view's one-off effects (bursts, falls, relay ticks, collapses) for the guests. An event
+	## with a "private" seat goes to that seat's guest only (Ghost Line casts, Echo Split's echo list).
+	if not (hosting and online() and not events.is_empty() and _has_guests()):
+		return
+	var public := events.filter(func(e): return not (e as Dictionary).has("private"))
+	if not public.is_empty():
+		_broadcast("effects", {"round": match_round, "events": public})
+	for e in events:
+		if (e as Dictionary).has("private"):
+			for remote in links:
+				if roster.has(links[remote]) and seat_of(links[remote]) == str(e["private"]):
+					_send(remote, "effects", {"round": match_round, "events": [e]})
+
+
+func _send_ghosts(keyframe: bool) -> void:
+	## Host: each guest learns which lines are ITS decoys (never anyone else's), when that changes.
+	var by_seat := {}
+	for h in sim.hordes:
+		if h.get("decoy", false):
+			if not by_seat.has(h["owner"]):
+				by_seat[h["owner"]] = []
+			by_seat[h["owner"]].append(h["id"])
+	for remote in links:
+		if not roster.has(links[remote]):
+			continue
+		var ids: Array = by_seat.get(seat_of(links[remote]), [])
+		if keyframe or _ghosts_sent.get(remote, []) != ids:
+			_ghosts_sent[remote] = ids
+			_send(remote, "ghosts", {"round": match_round, "ids": ids})
 
 
 # ------------------------------------------------------------------ loop
@@ -1039,6 +1154,7 @@ func _process(dt: float) -> void:
 			if _has_guests():                          # alone with the AI: nobody to send to
 				var packet := var_to_bytes(snapshot(sim, _snap_count % KEYFRAME_EVERY == 1)).compress(FileAccess.COMPRESSION_DEFLATE)
 				_broadcast_raw("state", packet)
+				_send_ghosts(_snap_count % KEYFRAME_EVERY == 1)
 			if sim.over:
 				finished = true
 	else:
@@ -1073,7 +1189,7 @@ func _poll(dt: float) -> void:
 					next_peer += 1
 				else:
 					remote_host = str(event["peer"])
-					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour}
+					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour, "loadout": loadout}
 					if not rejoin.is_empty() and str(rejoin["code"]) == room_code:
 						reg["token"] = rejoin["token"]
 					_send_to_host(reg)
@@ -1137,6 +1253,10 @@ func _host_receive(remote: String, raw: String) -> void:
 		"team":
 			if _is_int(p.get("team", null)) and not active:
 				move_to_team(id, int(p["team"]))
+		"loadout":
+			if not active:
+				roster[id]["loadout"] = _clean_loadout({"active": p.get("active", ""), "map": p.get("map", "")})
+				publish_lobby()
 		"rematch":
 			if _is_int(p.get("round", null)) and int(p["round"]) == match_round:
 				accept_rematch(id)
@@ -1175,6 +1295,7 @@ func _guest_receive(raw: String) -> void:
 			siege = bool(data["siege"])
 			last_stand = bool(data["last_stand"])
 			ai_fill = str(data.get("ai_fill", ""))
+			abilities = bool(data.get("abilities", true))
 			connected = true
 			status = "ROOM %s - waiting for the host to deploy" % room_code
 			lobby_changed.emit()
@@ -1187,6 +1308,7 @@ func _guest_receive(raw: String) -> void:
 		"state":
 			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null and active:
 				apply_snapshot(sim, data)
+				_mark_ghosts()
 				_since_snapshot = 0.0
 				if _fresh:                            # joined late (RECONNECT): drop the nodes that already fell
 					_fresh = false
@@ -1197,6 +1319,12 @@ func _guest_receive(raw: String) -> void:
 		"effects":
 			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null:
 				sim.fx_events.append_array(data["events"])
+		"ghosts":
+			if data is Dictionary and int(data.get("round", -1)) == match_round:
+				own_ghosts = {}
+				for i in data.get("ids", []):
+					own_ghosts[int(i)] = true
+				_mark_ghosts()
 		"feedback":
 			order_feedback.emit(str(data))
 		"rematch_votes":
@@ -1214,6 +1342,15 @@ func _guest_receive(raw: String) -> void:
 		"rejected":
 			_save_rejoin({})                          # that room will not take us back
 			fail(str(data))
+
+
+func _mark_ghosts() -> void:
+	## Guest: put the decoy flag back on our own Ghost Lines (the broadcast snapshot never carries it).
+	if sim == null:
+		return
+	for h in sim.hordes:
+		if own_ghosts.has(int(h["id"])):
+			h["decoy"] = true
 
 
 # ------------------------------------------------------------------ rejoin details
