@@ -1046,7 +1046,7 @@ func _rules_0_18_10() -> void:
 	while sh.nodes[1]["build_kind"] != "":
 		sh.step(0.5)
 	check(sh.nodes[1]["structure"] == "monster_hub" and absf(sh.nodes[1]["monster_ready_t"] - (sh.time + Rules.MONSTER_COOLDOWN)) < 0.6,
-			"the hub charges its first monster from its completion (90 s)")
+			"the hub charges its first monster from its completion (MONSTER_COOLDOWN)")
 	check(sh.launch_monster(1, "A", 0).begins_with("Monster ready in"), "no monster before the charge")
 	check(not sh.build(2, "A", "monster_hub"), "still one hub per player once it stands")
 	# ---------------------------------------------------------------- monsters: reach, kick, pass-through, take

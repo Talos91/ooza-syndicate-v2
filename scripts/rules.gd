@@ -260,6 +260,7 @@ const NODE_BUILDS := {"common": ["vat", "machingoon"], "relay": ["laser", "forge
 # centre, 2 / 3.5 / 5 kills/s shown; body kills bypass combat math like the laser; the node produces nothing
 # while it holds one (it keeps and can be reinforced its garrison). Build 15, upgrades 20 / 30 shown.
 static var MACHINGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then upgrade to T2, T3
+static var VAT_RESTORE_COST := 75         # machingoon -> vat, 15 shown (Daniele, 2026-09-27: "cost price of a tier 1 vat ... maybe 15")
 static var MACHINGOON_RATE := {1: 10.0, 2: 17.5, 3: 25.0} # kills/s (shown 2 / 3.5 / 5)
 static var MACHINGOON_RANGE := 10.0
 # LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
@@ -284,7 +285,7 @@ static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable (Alpha 11: +
 # can shoot it; only a fall kills it.
 static var MONSTER_HUB_COST := 150        # 30 shown
 static var MONSTER_COST := 100            # 20 shown
-static var MONSTER_COOLDOWN := 90.0
+static var MONSTER_COOLDOWN := 40.0          # Daniele, 2026-09-27: "change charge to 40 seconds" (was 90)
 static var MONSTER_SPEED := 0.6           # x BRAWL_SPEED (~3.4 m/s)
 static var MONSTER_REACH := 3             # bridges (plaza links don't count)
 const MONSTER_R := 1.4                    # metres: the monster's reach along the deck (half a deck width)

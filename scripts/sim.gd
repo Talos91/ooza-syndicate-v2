@@ -317,7 +317,7 @@ func build_cost(n: Dictionary, kind: String) -> int:
 	## What building `kind` here costs now (units from the node's garrison).
 	match kind:
 		"vat":
-			return 0                                     # a machingoon gives way to the vat again (Alpha 11 RESTORE: free)
+			return Rules.VAT_RESTORE_COST                # a machingoon gives way to the vat again (15 shown, Daniele 2026-09-27)
 		"machingoon":
 			return Rules.MACHINGOON_COST[1]
 		"laser":
