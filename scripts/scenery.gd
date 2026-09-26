@@ -19,10 +19,10 @@ const VOID_SHADER := preload("res://shaders/void_mist.gdshader")
 # suspended"): height fog swallows everything below the lowest decks - pillars, pylons, falling bodies,
 # fragments and collapsing platforms - into ABYSS, the backdrop behind the board is hazed toward the same
 # colour so a fogged shape has no edge against it, and drifting mist sheets with motes sit in between
-# (make_void). Everything that falls is drawn until ~25 m down, where the fog is ~98 %.
+# (make_void). Everything that falls is drawn until ~20-26 m down, where the fog is 97-99 %.
 const ABYSS := Color(0.2, 0.17, 0.37)       # the void's colour: fog, backdrop haze and mist (sRGB)
 const FOG_HEIGHT := -5.6             # fog starts under the lowest deck level (-4 m decks, girders to -5.4)
-const FOG_HEIGHT_DENSITY := 0.2      # per metre below FOG_HEIGHT: ~60 % at -10 m, ~95 % at -20 m, ~98 % at -25 m
+const FOG_HEIGHT_DENSITY := 0.24     # per metre below FOG_HEIGHT: ~67 % at -10 m, ~93 % at -17 m, ~99 % at -25 m
 const VOID_LAYERS := [[-9.0, 0.26, 0.010], [-21.0, 0.36, 0.006]]   # [height, peak alpha, noise scale]; the
                                                                    # deep layer only at full detail off phones
 const RESIDENT_SIZE := 0.62          # metres across a resident (a tank is ~1.7 m wide)
