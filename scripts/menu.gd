@@ -9,7 +9,8 @@ extends CanvasLayer
 ## SIEGE/BRAWL, Last Stand) -> DEPLOY. OPTIONS holds the match switches (SIEGE/BRAWL, Last Stand,
 ## enemy counts, detail). ONLINE -> CREATE ROOM / JOIN ROOM ->
 ## the room lobby (players, teams, faction, colour, map, PLAYERS, SIEGE/BRAWL, Last Stand) -> DEPLOY by
-## the host (Net, through the room server). TUTORIAL is not in 2.0 yet.
+## the host (Net, through the room server). TUTORIAL (TUTORIAL-DESIGN.md §7): the nine lesson rows
+## (TutorialPage, TutorialDirector's table and progress), CONTINUE = the first lesson not done.
 ## ARMIES (0.18.7, SKILLS 2.0): the army presets - per faction its fixed ultimate plus 1 active and 1 map skill
 ## picked from the shared pools (ArmyPresets, saved on the device). 01 FACTION shows the preset; 03 SETUP and
 ## the lobby carry ABILITIES ON / OFF; DEPLOY and the room send your preset as the match loadout.
@@ -48,6 +49,7 @@ var _move_pick := -1                               # host, team modes: the playe
 const HUE_NAMES := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]   # Rules.HUES, lobby order
 var _army := ""                                    # ARMIES: the faction whose preset is open
 var _army_back := Callable()                       # ARMIES: the page it was opened from
+var _tut_page: TutorialPage                        # TUTORIAL: the lesson page (its own canvas, over the backdrop)
 
 # Phone sizing (Daniele, 0.18.8: "quite small on mobile in certain parts"): every tappable control
 # reaches Apple's 44 pt guideline and every label a readable size on a landscape phone (844 x 390 pt -
@@ -162,6 +164,9 @@ func clear_page(art: String) -> void:
 	if is_instance_valid(content):
 		remove_child(content)
 		content.queue_free()
+	if is_instance_valid(_tut_page):
+		_tut_page.queue_free()
+		_tut_page = null
 	content = Control.new()
 	add_child(content)
 	_fit()
@@ -431,9 +436,9 @@ func show_main() -> void:
 			get_tree().quit()).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
 	y += h3 + GAP
 	var h4 := rh(64)
-	var tut := nav_button("TUTORIAL", P(80, y), P(212, h4), func(): pass)
-	tut.disabled = true
-	tut.tooltip_text = "Not in 2.0 yet"
+	# TUTORIAL (§7): live, reading "TUTORIAL n/9" until every lesson is done
+	var tut_text := "TUTORIAL" if TutorialDirector.all_done() else "TUTORIAL %d/%d" % [TutorialDirector.done_count(), TutorialDirector.LESSON_COUNT]
+	nav_button(tut_text, P(80, y), P(212, h4), show_tutorial)
 	nav_button("ONLINE", P(307, y), P(213, h4), show_online)
 	y += h4 + 16.0
 	label_at("%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], P(66, y), 19, Color("839da9"))
@@ -584,6 +589,29 @@ func faction_tab(f: String, pos: Vector2, dims: Vector2) -> void:
 		neon_icon("check", pos + P(279, 9), P(21, 21), fc)
 
 
+# ------------------------------------------------------------------ TUTORIAL (TUTORIAL-DESIGN.md §7)
+func show_tutorial() -> void:
+	## The TRAINING page: nine lesson rows (any order, a tick when done), CONTINUE = the first lesson not done,
+	## BACK. A lesson starts with the faction and colour picked here last (NEW GAME's picks).
+	clear_page("city")
+	_page = "tutorial"
+	_tut_page = TutorialPage.new()
+	_tut_page.standalone_backdrop = false             # the menu's own backdrop shows through
+	_tut_page.set_faction(faction)
+	_tut_page.set_mobile(mobile)
+	_tut_page.set_lessons(TutorialDirector.lesson_rows())
+	_tut_page.set_progress_note("" if TutorialDirector.saved else TutorialDirector.line("no_storage"))
+	_tut_page.continue_pressed.connect(func(): _start_lesson(TutorialDirector.first_unfinished()))
+	_tut_page.lesson_pressed.connect(_start_lesson)
+	_tut_page.back_pressed.connect(show_main)
+	add_child(_tut_page)
+
+
+func _start_lesson(id: int) -> void:
+	main.SEAT_FACTIONS[main.HUMAN] = faction
+	main.start_tutorial(id, false, faction, colour)
+
+
 # ------------------------------------------------------------------ ARMIES (army presets, SKILLS 2.0)
 func show_armies(f: String = "", back: Callable = Callable()) -> void:
 	## Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select what
@@ -719,7 +747,8 @@ func show_cosmetics(f: String = "") -> void:
 	header(0)
 	var fc := color()
 	label_at("ARMIES", P(40, 104), 43)
-	label_at("COSMETICS  ·  a look per structure, per faction - all unlocked while testing", P(262, 122), 20, Color("abc1cd"))
+	label_at("COSMETICS  ·  a look per structure, per faction - all unlocked while testing, the Graduate vat by finishing the tutorial",
+			P(262, 122), 20, Color("abc1cd"))
 	for i in range(FACTIONS.size()):
 		var tf: String = FACTIONS[i]
 		var pos := P(35, 174 + i * 96)
@@ -731,7 +760,7 @@ func show_cosmetics(f: String = "") -> void:
 		label_at("VIRIDIAN" if tf == "bloom" else tf.to_upper(), pos + P(92, 8), 24, tc if tf == _army else Color.WHITE)
 		if tf == faction:
 			label_at("YOU", pos + P(306, 4), 15, Color("ffd15c"))
-	var lo := ArmyPresets.cosmetic_loadout_for(_army)
+	var lo := ArmyPresets.cosmetic_loadout_for(_army, true)   # the picks as saved: a locked one shows as locked
 	var y := 174.0
 	for family in COSMETIC_FAMILIES:
 		_cosmetic_row(family, str(lo.get(family, "default")), P(415, y), fc)
@@ -758,7 +787,7 @@ func _cosmetic_row(family: String, current: String, pos: Vector2, fc: Color) -> 
 		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx - 1 + options.size()) % options.size()])
 		show_cosmetics())
 	var locked := not ArmyPresets.is_unlocked(current)
-	label_at(Cosmetics.label(family, current, _army) + (" (LOCKED)" if locked else ""), pos + P(140, 44),
+	label_at(Cosmetics.label(family, current, _army) + ((" (LOCKED - %s)" % TutorialDirector.line("locked_cosmetic").to_upper()) if locked else ""), pos + P(140, 44),
 			19, Color("ffb12b") if locked else Color("dbe6ec"), false)
 	nav_button(">", pos + P(1090, 38), P(42, 32), func():
 		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx + 1) % options.size()])
