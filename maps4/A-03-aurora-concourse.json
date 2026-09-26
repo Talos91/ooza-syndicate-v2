@@ -60,7 +60,7 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
+    "tier": 3,
     "structure": "vat"
    },
    "buildable": [
@@ -91,15 +91,13 @@
    "plaza": null,
    "socket": null,
    "ring": 0,
-   "category": "normal",
-   "relay": null,
+   "category": "relay",
+   "relay": "remote",
    "home": false,
-   "neutral": {
-    "tier": 1,
-    "structure": "vat"
-   },
+   "neutral": null,
    "buildable": [
-    "vat"
+    "cannon",
+    "forge"
    ]
   },
   {
@@ -109,15 +107,13 @@
    "plaza": null,
    "socket": null,
    "ring": 0,
-   "category": "normal",
-   "relay": null,
+   "category": "relay",
+   "relay": "remote",
    "home": false,
-   "neutral": {
-    "tier": 1,
-    "structure": "vat"
-   },
+   "neutral": null,
    "buildable": [
-    "vat"
+    "cannon",
+    "forge"
    ]
   },
   {
@@ -146,7 +142,7 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
+    "tier": 3,
     "structure": "vat"
    },
    "buildable": [
@@ -217,8 +213,8 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
+   "state": "m1",
+   "relay": 3,
    "retracts": false,
    "deckMetres": 4.0,
    "centreDistance": 19.27,
@@ -295,8 +291,8 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
+   "state": "m1",
+   "relay": 4,
    "retracts": false,
    "deckMetres": 4.0,
    "centreDistance": 19.27,
@@ -353,13 +349,52 @@
  },
  "lastStand": {
   "methods": [
-   "inward"
+   "inward",
+   "outward",
+   "chaos"
   ],
   "orders": {
    "inward": [
     2,
     1,
     0
+   ],
+   "outward": [
+    0,
+    1,
+    2
+   ],
+   "chaos": [
+    [
+     0,
+     1,
+     2
+    ],
+    [
+     0,
+     2,
+     1
+    ],
+    [
+     1,
+     0,
+     2
+    ],
+    [
+     1,
+     2,
+     0
+    ],
+    [
+     2,
+     0,
+     1
+    ],
+    [
+     2,
+     1,
+     0
+    ]
    ]
   }
  },
@@ -421,10 +456,10 @@
    }
   ]
  },
- "note": "Alpha 11's Aurora Concourse at the kit's sizes: two rows of three joined by a lattice through the middle pair. 1v1 corner against opposite corner; 2v2 left against right; FFA 4 from the corners. Last Stand inward only (the rows meet only through the middle pair).",
+ "note": "Alpha 11's Aurora Concourse at the kit's sizes: two rows of three joined by a lattice through the middle pair. 1v1 corner against opposite corner; 2v2 left against right; FFA 4 from the corners (the top/bottom mid platforms are strategic T3 vats). Last Stand inward only (the rows meet only through the middle pair). 0.18.10 relay retrofit (MAP-DESIGN-GUIDE sec10 wants 'the lattice diagonals become overpasses', but Alpha 11's Aurora graph has no crossing decks to lift - the 'diagonals' (middle pair to the row platforms) all meet at a shared vertex, never cross in the plane, and every one of them touches either a home or a strategic centre except the four that touch nodes 1/6, whose own orbit under the map's mirror symmetry is a single set of 4 - no fair 2-way split of just those four exists): closest fair equivalent is a pair of remote consoles at the middle pair (3, 4, mirrored left/right), each toggling its own two local lattice diagonals (to 1 and to 6) together, so the diagonal lattice still appears and disappears, just from a console instead of an overpass. Checked numerically for 1v1/2v2/FFA4, both global relay configurations.",
  "geometricSymmetry": true,
  "origin": "Game/Alpha 11/assets/arenas/aurora-concourse.json (Alpha 11), redrawn at the 2.0 kit's sizes",
- "thumbnail": "thumbnails/A-03-aurora-concourse.svg",
+ "thumbnail": "thumbnails/A-03-aurora-concourse.png",
  "layout": {
   "K": 1.0,
   "nodes": {
@@ -737,14 +772,24 @@
     "dock": false
    }
   ],
-  "relays": {},
+  "relays": {
+   "3": {
+    "mount": null
+   },
+   "4": {
+    "mount": null
+   }
+  },
   "glb": "",
   "verify": {
    "clashes": 0,
    "over_platform": 0,
    "short": 0,
    "ledge_hits": 0,
-   "tower_on_socket": [],
+   "tower_on_socket": [
+    3,
+    4
+   ],
    "docks": 0,
    "off_length": []
   }

@@ -76,7 +76,7 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
+    "tier": 3,
     "structure": "vat"
    },
    "buildable": [
@@ -110,15 +110,13 @@
    "plaza": null,
    "socket": null,
    "ring": 1,
-   "category": "normal",
-   "relay": null,
+   "category": "relay",
+   "relay": "retract",
    "home": false,
-   "neutral": {
-    "tier": 3,
-    "structure": "vat"
-   },
+   "neutral": null,
    "buildable": [
-    "vat"
+    "cannon",
+    "forge"
    ]
   },
   {
@@ -214,9 +212,9 @@
    "tier": "L",
    "seconds": 6,
    "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
+   "state": "ret",
+   "relay": 4,
+   "retracts": true,
    "deckMetres": 12.0,
    "centreDistance": 27.18,
    "nominal": 27.2
@@ -312,10 +310,10 @@
    }
   ]
  },
- "note": "Alpha 11's Switchback Foundry at the kit's sizes: the zigzag top run, the long bottom run and the two diagonals. Not symmetric (as in Alpha 11); the deck tiers give seats A and B the same travel distance to every node, and the middle platform is equally far from both.",
+ "note": "Alpha 11's Switchback Foundry at the kit's sizes: the zigzag top run, the long bottom run and the two diagonals. Not symmetric (as in Alpha 11); the deck tiers give seats A and B the same travel distance to every node, and the middle platform (a strategic T3 vat) is equally far from both. 0.18.10 relay retrofit (MAP-DESIGN-GUIDE sec10 wants 'the inner X becomes a 3-way rotary', but Alpha 11's Switchback has no inner X and no node with 3 equal-tier links free of a home or the strategic centre - node 4, the only candidate, has 3 links total, one of them locked to home A, leaving a single free link and no room for even a 2-way rotary or switch): closest fair equivalent is a 1-way retract on node 4's link to node 1, an honest 2-way relay that fits this map's Simple tier (<=1 relay, 2-way) exactly. Checked numerically for both seats, both retract states.",
  "geometricSymmetry": false,
  "origin": "Game/Alpha 11/assets/arenas/switchback-foundry.json (Alpha 11), redrawn at the 2.0 kit's sizes",
- "thumbnail": "thumbnails/A-02-switchback-foundry.svg",
+ "thumbnail": "thumbnails/A-02-switchback-foundry.png",
  "layout": {
   "K": 1.0,
   "nodes": {

@@ -56,15 +56,13 @@
    "plaza": null,
    "socket": null,
    "ring": 1,
-   "category": "normal",
-   "relay": null,
+   "category": "relay",
+   "relay": "retract",
    "home": false,
-   "neutral": {
-    "tier": 1,
-    "structure": "vat"
-   },
+   "neutral": null,
    "buildable": [
-    "vat"
+    "cannon",
+    "forge"
    ]
   },
   {
@@ -108,7 +106,7 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
+    "tier": 3,
     "structure": "vat"
    },
    "buildable": [
@@ -154,15 +152,13 @@
    "plaza": null,
    "socket": null,
    "ring": 1,
-   "category": "normal",
-   "relay": null,
+   "category": "relay",
+   "relay": "retract",
    "home": false,
-   "neutral": {
-    "tier": 1,
-    "structure": "vat"
-   },
+   "neutral": null,
    "buildable": [
-    "vat"
+    "cannon",
+    "forge"
    ]
   },
   {
@@ -240,9 +236,9 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
+   "state": "ret",
+   "relay": 1,
+   "retracts": true,
    "deckMetres": 4.0,
    "centreDistance": 19.21,
    "nominal": 19.2
@@ -331,9 +327,9 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
+   "state": "ret",
+   "relay": 7,
+   "retracts": true,
    "deckMetres": 4.0,
    "centreDistance": 19.21,
    "nominal": 19.2
@@ -473,10 +469,10 @@
    }
   ]
  },
- "note": "Alpha 11's Orbital Nexus at the kit's sizes: a hub with eight bridges (Alpha 11's central objective, now a strategic vat) inside a ring of eight. 1v1 left against right; 2v2 and FFA 4 from the four diagonal platforms.",
+ "note": "Alpha 11's Orbital Nexus at the kit's sizes: a hub with eight bridges (Alpha 11's central objective, a strategic T3 vat) inside a ring of eight. 1v1 left against right; 2v2 and FFA 4 from the four diagonal platforms. 0.18.10 relay retrofit (MAP-DESIGN-GUIDE sec10 wants 'a rotary hub opening its spokes', but the hub itself must stay a T3 vat - relay nodes never carry a vat - and its only non-home neighbours (1, 7) have just 3 links each, too few to spare 2 for a rotation's fixed minimum: a true rotary is not buildable here. Closest fair equivalent: the hub's two short polar spokes (to 1 and 7) each become a 1-way retract, fired from the ring side, mirrored top/bottom - the hub keeps opening and closing spokes, just its axis pair instead of the whole ring at once.",
  "geometricSymmetry": true,
  "origin": "Game/Alpha 11/assets/arenas/orbital-nexus.json (Alpha 11), redrawn at the 2.0 kit's sizes",
- "thumbnail": "thumbnails/A-01-orbital-nexus.svg",
+ "thumbnail": "thumbnails/A-01-orbital-nexus.png",
  "layout": {
   "K": 1.0,
   "nodes": {

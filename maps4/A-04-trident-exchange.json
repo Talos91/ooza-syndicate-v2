@@ -70,15 +70,13 @@
    "plaza": null,
    "socket": null,
    "ring": 1,
-   "category": "normal",
-   "relay": null,
+   "category": "relay",
+   "relay": "retract",
    "home": false,
-   "neutral": {
-    "tier": 1,
-    "structure": "vat"
-   },
+   "neutral": null,
    "buildable": [
-    "vat"
+    "cannon",
+    "forge"
    ]
   },
   {
@@ -121,15 +119,13 @@
    "plaza": null,
    "socket": null,
    "ring": 1,
-   "category": "normal",
-   "relay": null,
+   "category": "relay",
+   "relay": "retract",
    "home": false,
-   "neutral": {
-    "tier": 1,
-    "structure": "vat"
-   },
+   "neutral": null,
    "buildable": [
-    "vat"
+    "cannon",
+    "forge"
    ]
   },
   {
@@ -288,9 +284,9 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
+   "state": "ret",
+   "relay": 2,
+   "retracts": true,
    "deckMetres": 4.0,
    "centreDistance": 19.2,
    "nominal": 19.2
@@ -340,9 +336,9 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
+   "state": "ret",
+   "relay": 5,
+   "retracts": true,
    "deckMetres": 4.0,
    "centreDistance": 19.2,
    "nominal": 19.2
@@ -450,31 +446,13 @@
  },
  "lastStand": {
   "methods": [
-   "inward",
-   "chaos"
+   "inward"
   ],
   "orders": {
    "inward": [
     2,
     1,
     0
-   ],
-   "chaos": [
-    [
-     0,
-     2,
-     1
-    ],
-    [
-     2,
-     0,
-     1
-    ],
-    [
-     2,
-     1,
-     0
-    ]
    ]
   }
  },
@@ -514,10 +492,10 @@
    }
   ]
  },
- "note": "Alpha 11's Trident Exchange at the kit's sizes: three diamond islands, one long bridge between the top two and short links down to the bottom one. 1v1 from the two outer corners; 2v2 left island against right island.",
+ "note": "Alpha 11's Trident Exchange at the kit's sizes: three diamond islands, one long bridge between the top two and short links down to the bottom one (its axis nodes, 9 and 11, are strategic T3 vats). 1v1 from the two outer corners; 2v2 left island against right island. 0.18.10 relay retrofit (MAP-DESIGN-GUIDE sec10: 'each lobe retracts its spine half-deck'): the three inter-island bridges are the map's only connective tissue (a triangle over the three islands), so at most one of them can ever be gated without splitting an island off entirely - the bottom island's own two spine nodes (9, 11) sit at exactly degree 2 with no link to spare either, so the hub island cannot host a retract at all. Closest fair equivalent: each of the two home lobes retracts its own inner back edge instead (2-3 on the left, 5-7 on the right, mirrored left/right) - literally the deck that lies between that lobe's two gateways to the rest of the map, i.e. its spine half-deck, while every inter-island bridge stays fixed so the map can never be split. The bottom (hub) lobe keeps no relay of its own; documented as a deviation from a literal 'each of the three lobes' reading.",
  "geometricSymmetry": true,
  "origin": "Game/Alpha 11/assets/arenas/trident-exchange.json (Alpha 11), redrawn at the 2.0 kit's sizes",
- "thumbnail": "thumbnails/A-04-trident-exchange.svg",
+ "thumbnail": "thumbnails/A-04-trident-exchange.png",
  "layout": {
   "K": 1.0,
   "nodes": {
