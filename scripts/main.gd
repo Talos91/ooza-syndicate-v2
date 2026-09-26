@@ -22,6 +22,7 @@ extends Node3D
 ##   --pitch=58                              camera pitch in degrees above the horizon (MapCamera's per-map pitch otherwise)
 ##   --thumb=<png>                          render the map's menu thumbnail (no HUD), then quit
 ##   --menu-page=<page> --menu-shot=<png>   open a menu page / screenshot the menu, then quit
+##   --menu-filter=brawl                     screenshot helper: pre-set the BATTLEFIELD TYPE filter chip
 ##   --scenario=fight|rear|queue|build|inspect|switch|rotate --zoom=N  stage one situation up close
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
@@ -63,12 +64,13 @@ var _zoom_to := []
 var _zoom_t := -1.0                               # 0..1 through the ease, < 0 when still
 const COLLAPSE_ZOOM_DELAY := 1.0                  # the platforms' fall first (fx._collapse, ~1.5 s)
 const COLLAPSE_ZOOM_SECONDS := 1.5
-const COLLAPSE_ZOOM_MAX := 2.5                    # never closer than 1/2.5 of the start distance
 const COLLAPSE_PITCH_DROP := 14.0                 # degrees the pitch lowers by once almost every node has fallen
 const COLLAPSE_PITCH_MIN := 44.0                  # never flatter than this
 var fraction := 0.5
 var drag_from := -1
 var selected := -1
+var monster_from := -1                            # Structures 2.1: a hub's LAUNCH is armed - drag, or tap
+                                                   # a highlighted node in sim.monster_reach(monster_from)
 var drag_mesh := ImmediateMesh.new()
 var drag_line: MeshInstance3D                     # made in _start_map: a menu-only run never parents it
 var route_label: Label3D
@@ -86,6 +88,7 @@ var scenario_focus := Vector3.INF
 var scenario_zoom := 30.0
 var focus_node := -1                              # --focus=N: a close-up of node N in a normal match
 var _scenario_done := false
+var _hud19_phase := -1                            # --scenario=hud19: the contact sheet's timed phases
 var mobile := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
 var window_size := Vector2i.ZERO
 var sun: DirectionalLight3D
@@ -108,6 +111,7 @@ var mode := "1v1"                             # 1v1 / 2v2 / 3v3 / 2v2v2 / FFA3-5
 var color_choice := "A"                       # your ownership colour: palette key or "faction"
 var menu_layer: CanvasLayer
 static var relaunch := {}                     # survives a scene reload: Play again / Main menu
+static var last_map_path := ""                 # MAIN MENU remembers the last map played (0.19.0)
 
 
 func _ready() -> void:
@@ -182,6 +186,8 @@ func _ready() -> void:
 	if map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
 	else:
+		if not map_explicit and last_map_path != "":   # MAIN MENU keeps the last map played (0.19.0)
+			map_path = last_map_path
 		if not Net.in_room():                          # the menu, no room: a new build may reload the page
 			Net.set_busy(false)
 		menu_layer = Menu.new()
@@ -191,6 +197,9 @@ func _ready() -> void:
 			(menu_layer as Menu).show_lobby()
 		elif Net.status != "":                         # the room closed: say why on the ONLINE page
 			(menu_layer as Menu).show_online()
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--menu-filter="):          # screenshot helper: pre-set the BATTLEFIELD TYPE filter
+				Menu.map_filter_type = arg.substr(14)
 		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--menu-page="):            # screenshot helper: open a menu page
 				(menu_layer as Menu).call("show_" + arg.substr(12))
@@ -208,6 +217,7 @@ func _ready() -> void:
 func _start_map(path: String) -> void:
 	Net.set_busy(true)                                 # a match is on: a new build waits for the menu (web)
 	map_path = path
+	last_map_path = path                               # MAIN MENU remembers it (0.19.0)
 	map = MapBuilder.load_map(path)
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
 		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")))
@@ -296,6 +306,14 @@ func _start_map(path: String) -> void:
 	for n in sim.nodes:
 		vis[n["id"]]["model_key"] = MapBuilder.model_for(n)
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
+	# --- 0.19.0 cosmetics (HUD agent, spec E/I): each seat's structure look, applied once. Offline:
+	# your ARMIES pick for your seat, every other seat (AI) the default. Online: every seat's pick came
+	# from the host's launch packet (net.gd's "cosmetics", built from each player's roster "cosmetic" -
+	# empty for an AI-filled seat), so this same loop on every client covers remote seats too.
+	var net_cosmetics: Dictionary = Net.match_info.get("cosmetics", {}) if online else {}
+	for seat in seats.values():
+		var co: Dictionary = ArmyPresets.cosmetic_loadout_for(SEAT_FACTIONS[HUMAN]) if (seat == HUMAN and not online) else net_cosmetics.get(seat, {})
+		Cosmetics.set_loadout(seat, co)
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
@@ -379,6 +397,55 @@ func restart() -> void:
 	relaunch = {"map": map_path, "faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice,
 			"loadout": LOADOUTS.get(HUMAN, {})}
 	get_tree().reload_current_scene()
+
+
+func _human_count() -> int:
+	## Offline: just you. Online: everyone actually present (EMPTY SEATS fills the rest with AI).
+	return Net.present_ids().size() if online else 1
+
+
+func _rematch_mode_for(m: Dictionary, need: int) -> String:
+	## The map's mode that best fits `need` humans (the fewest seats that still covers everyone,
+	## AI filling any left over) - "" if none of its modes seats that many.
+	var best := ""
+	var best_n := 1000000
+	for md in (m.get("seats", {}) as Dictionary).keys():
+		var n: int = (m["seats"][md] as Array).size()
+		if n >= need and n < best_n:
+			best = md
+			best_n = n
+	return best
+
+
+func _random_rematch_map() -> Dictionary:
+	## REMATCH ON A RANDOM MAP (Daniele, 0.19.0): any map fits an offline 1-human game; online, a
+	## mode that seats at least every human present, AI filling the rest (EMPTY SEATS).
+	var need := _human_count()
+	var candidates := []
+	for mp in MapPool.all():
+		var m := MapBuilder.load_map(mp)
+		var md := _rematch_mode_for(m, need)
+		if md != "":
+			candidates.append({"map": mp, "mode": md})
+	if candidates.is_empty():                           # never happens (every map seats at least 1v1), but be safe
+		return {"map": map_path, "mode": mode}
+	return candidates[randi() % candidates.size()]
+
+
+func rematch_random() -> void:
+	## The results screen's REMATCH ON A RANDOM MAP: same settings otherwise. Online: only the host
+	## picks (Net.request_rematch()'s vote-then-launch still runs the same way for everyone else).
+	if online:
+		if Net.is_host():
+			var pick := _random_rematch_map()
+			Net.map_path = str(pick["map"])
+			Net.mode = str(pick["mode"])
+		Net.request_rematch()
+		return
+	var pick := _random_rematch_map()
+	map_path = str(pick["map"])
+	mode = str(pick["mode"])
+	restart()
 
 
 func to_menu() -> void:
@@ -521,7 +588,8 @@ func _survivor_fit() -> Array:
 	## "the camera axis could benefit of being a bit lower, right now is maybe a bit too vertical when less
 	## nodes are present" - the pitch lowers as the map shrinks, lerp(map pitch, max(44, map pitch - 14),
 	## 1 - survivors / nodes), and the survivors are fitted at that pitch: never wider than the start
-	## distance, never closer than 1 / COLLAPSE_ZOOM_MAX of it.
+	## distance (Daniele, 0.19.0: "all eyes on winner" - the zoom cap is gone: it closes in until the
+	## survivors fill the view, however few are left), never wider than the start distance.
 	var alive := sim.nodes.filter(func(n): return not sim.collapsed.get(n["id"], false))
 	if alive.is_empty():
 		return [_start_fit[0], _start_fit[1], _base_pitch]
@@ -531,7 +599,7 @@ func _survivor_fit() -> Array:
 	cam_pitch = pitch                                 # _fit_nodes measures at the current pitch
 	var fit := _fit_nodes(alive)
 	cam_pitch = keep
-	fit[1] = clampf(fit[1], _start_fit[1] / COLLAPSE_ZOOM_MAX, _start_fit[1])
+	fit[1] = minf(fit[1], _start_fit[1])
 	return [fit[0], fit[1], pitch]
 
 
@@ -591,6 +659,33 @@ func _stage_scenario() -> void:
 			sim.nodes[1]["owner"] = "A"
 			sim.nodes[1]["units"] = 200.0
 			scenario_focus = sim.nodes[0]["pos"]
+		"hud19draw":
+			# 0.19.0 HUD contact sheet: the DRAW results screen alone (sim.draw_line), staged at once -
+			# no timing race with a pause mid-match (see "hud19"'s own note on that).
+			sim.draw_line = str(Rules.DRAW_LINES[0])
+		"hud19":
+			# 0.19.0 HUD contact sheet (--map=res://maps4/A-02-switchback-foundry.json): 7 nodes, one
+			# relay (node 4, "retract"), one strategic centre (node 2) - every node kind's inspector,
+			# LAUNCH's reach highlight, the relay-outcome preview, a faked Last Stand warning and the
+			# DRAW screen, timed by _run_scenario (no AI, no real time needed).
+			sim.nodes[0]["owner"] = HUMAN
+			sim.nodes[0]["units"] = 120.0
+			sim.nodes[1]["owner"] = HUMAN
+			sim.nodes[1]["units"] = 200.0
+			sim.nodes[1]["structure"] = "vat"
+			sim.nodes[1]["tier"] = 2
+			sim.nodes[3]["owner"] = HUMAN
+			sim.nodes[3]["units"] = 90.0
+			sim.nodes[3]["structure"] = "machingoon"
+			sim.nodes[3]["tier"] = 2
+			sim.nodes[3]["allies"]["B"] = 40.0                # a staged ally share: halo ring + EJECT + "total + own"
+			sim.nodes[3]["arrivals"] = ["B"]
+			sim.nodes[2]["owner"] = HUMAN
+			sim.nodes[2]["units"] = 300.0
+			sim.nodes[2]["tier"] = 4                          # special: T4 vat only
+			sim.nodes[4]["owner"] = HUMAN
+			sim.nodes[4]["units"] = 260.0
+			scenario_focus = sim.nodes[1]["pos"]
 		_:
 			sim.nodes[1]["owner"] = "A"
 			sim.nodes[1]["units"] = 160.0
@@ -605,6 +700,13 @@ func _stage_scenario() -> void:
 
 
 func _run_scenario() -> void:
+	if scenario == "hud19draw":
+		# no sim.time gate: show_end() pauses the match (freezes sim.time) - waiting for a later
+		# threshold would never arrive, so this fires on the very first tick instead.
+		if not _scenario_done:
+			_scenario_done = true
+			hud.show_end("")
+		return
 	if _scenario_done or sim.time < 0.3:
 		return
 	match scenario:
@@ -645,6 +747,41 @@ func _run_scenario() -> void:
 			elif sim.time > 3.0:
 				sim.fire_relay(0)
 				_scenario_done = true
+		"hud19":
+			var phase: int = mini(int(sim.time), 5)
+			if phase != _hud19_phase:
+				_hud19_phase = phase
+				hud.overlay.hover_relay = -1
+				monster_from = -1
+				match phase:
+					0:
+						hud.inspect(1, cam)                    # common: VAT (UPGRADE / MACHINGOON)
+						scenario_focus = sim.nodes[1]["pos"]
+					1:
+						sim.nodes[4]["structure"] = ""          # relay: empty socket (SWITCH / LASER / FORGE / MONSTER HUB)
+						hud.inspect(4, cam)
+						hud.overlay.hover_relay = 4             # relay-outcome preview: SWITCH held
+						scenario_focus = sim.nodes[4]["pos"]
+					2:
+						hud.inspect(2, cam)                    # special: T4 vat only
+						scenario_focus = sim.nodes[2]["pos"]
+					3:
+						sim.nodes[4]["structure"] = "monster_hub"
+						sim.nodes[4]["monster_ready_t"] = 0.0
+						hud.inspect(4, cam)
+						monster_from = 4                        # LAUNCH armed: the reach ring highlight
+						scenario_focus = sim.nodes[4]["pos"]
+					4:
+						hud.close_inspector()                  # Last Stand danger symbol (faked: no real timer run)
+						sim.last_stand_active = true
+						sim.last_stand_warn[3] = true
+						sim.last_stand_queue = [3]
+						sim.last_stand_warn_t = 6.0
+						scenario_focus = sim.nodes[3]["pos"]
+					5:
+						sim.draw_line = str(Rules.DRAW_LINES[0])   # the results screen's DRAW call-out
+						hud.show_end("")
+				_fit_camera()
 		_:
 			_scenario_done = true
 
@@ -742,6 +879,10 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 			if sim.restore_vat(id):
 				return [true, "Restoring the vat - %d s" % int(Rules.BUILD_SECONDS)]
 			return [false, "Can't restore the vat now"]
+		"build", "launch_monster", "eject":
+			# Structures 2.1 (0.19.0): offline runs the order straight through the Sim, checked and
+			# reported exactly like net.gd already does for guests (Net._execute -> sim.structure_order).
+			return sim.structure_order(seat, method, id, args)
 	return [false, ""]
 
 
@@ -826,6 +967,19 @@ func _process(delta: float) -> void:
 					var kind := str(sim.nodes[int(ev["relay"])]["relay"])
 					var what: String = {"retract": "the retracting deck", "switch": "the switched deck", "remote": "the switched-off deck"}.get(kind, "the deck")
 					hud.toast("%d unit%s fell with %s" % [fell, "" if fell == 1 else "s", what], "warn" if sim.allied(str(ev["seat"]), HUMAN) else "good")
+			"monster_launch":                          # Structures 2.1: everyone sees the launch (the route lights red)
+				hud.toast("seat %s launched a monster" % ev["seat"], "good" if sim.allied(str(ev["seat"]), HUMAN) else "warn")
+			"monster_kick":                            # only your own lines' losses are worth a toast
+				if str(ev.get("seat_hit", "")) == HUMAN:
+					var kicked := int(ev.get("shown", 0))
+					if kicked > 0:
+						hud.toast("A monster kicked %d unit%s off the bridge" % [kicked, "" if kicked == 1 else "s"], "warn")
+			"forge_lost":                              # red toast (spec E): the bonus is gone
+				if str(ev.get("seat", "")) == HUMAN:
+					hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
+			"eject":                                   # the ejecting owner already gets node_action's own toast;
+				if str(ev.get("seat", "")) != HUMAN and sim.allied(str(ev.get("seat", "")), HUMAN):
+					hud.toast("Your stored troops were sent home from node %d" % ev["node"], "info")
 	sim.fx_events.clear()
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
@@ -921,6 +1075,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			if hud.dock.take_input(mb):                 # SKILLS 2.0: a slot is armed - this tap picks its target
 				return
 			var hit := _ground(mb.position)
+			if monster_from >= 0:                       # LAUNCH armed: drag from the hub, or tap a reachable node
+				if mb.pressed:
+					_press_pos = mb.position
+					_press_time = Time.get_ticks_msec() / 1000.0
+				else:
+					var target := _node_at(hit, mb.position)
+					var hub := monster_from
+					monster_from = -1
+					if target >= 0 and target != hub:
+						node_action("launch_monster", hub, {"to": target})
+					drag_mesh.clear_surfaces()
+					route_label.visible = false
+				return
 			if mb.pressed:
 				var n := _node_at(hit, mb.position)
 				_press_pos = mb.position
@@ -974,11 +1141,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		var hit := _ground((event as InputEventMouseMotion).position)
 		if drag_from >= 0:
 			_draw_drag(drag_from, hit, (event as InputEventMouseMotion).position)
+		elif monster_from >= 0:
+			_draw_monster_drag(monster_from, hit)
 
 
 func _end_drag() -> void:
-	## Clears the send gesture: no source node, no preview line, no route label.
+	## Clears the send gesture (and a Monster hub's armed LAUNCH): no source node, no preview line, no
+	## route label.
 	drag_from = -1
+	monster_from = -1
 	drag_mesh.clear_surfaces()
 	route_label.visible = false
 
@@ -1059,6 +1230,28 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 			drag_mesh.surface_add_vertex(a + up + off)
 			drag_mesh.surface_add_vertex(b + up + off)
 		drag_mesh.surface_end()
+
+
+func _draw_monster_drag(hub: int, hit: Vector3) -> void:
+	## Structures 2.1: LAUNCH armed - the reach ring is HudOverlay's job; this is just the aim line,
+	## coloured by whether the node under the cursor is in sim.monster_reach(hub).
+	drag_mesh.clear_surfaces()
+	route_label.visible = false
+	if hit == Vector3.INF:
+		return
+	var a: Vector3 = sim.nodes[hub]["pos"]
+	var target := _node_at(hit)
+	var ok := target in sim.monster_reach(hub)
+	var up := Vector3(0, 1.0, 0)
+	var mat := Mats.glow(Rules.seat_color(HUMAN) if ok else Rules.state_color("warn"))
+	drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, mat)
+	drag_mesh.surface_add_vertex(a + up)
+	drag_mesh.surface_add_vertex((sim.nodes[target]["pos"] if target >= 0 else hit) + up)
+	drag_mesh.surface_end()
+	if target >= 0 and target != hub:
+		route_label.text = "SEND MONSTER" if ok else "OUT OF REACH"
+		route_label.position = sim.nodes[target]["pos"] + Vector3(0, 6, 0)
+		route_label.visible = true
 
 
 var _perf_t := 0.0
