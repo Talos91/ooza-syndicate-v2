@@ -6,6 +6,7 @@ extends RefCounted
 
 static var _cache := {}
 const CREATURE_SHADER := preload("res://shaders/creature.gdshader")
+const GLASS_SHADER := preload("res://shaders/kit_glass.gdshader")
 
 
 static func light(seat: String) -> StandardMaterial3D:
@@ -133,8 +134,21 @@ static func ghost(c: Color) -> StandardMaterial3D:
 	return _cache[key]
 
 
+static func glass(c: Color) -> ShaderMaterial:
+	## 0.18.7 kit glass (shaders/kit_glass.gdshader): clear body, lit rim, tinted - the vats' tanks take
+	## their owner's colour (Scenery), every other glass the neutral light (apply_detail).
+	var key := "glass_" + c.to_html()
+	if not _cache.has(key):
+		var m := ShaderMaterial.new()
+		m.shader = GLASS_SHADER
+		m.set_shader_parameter("tint", c)
+		_cache[key] = m
+	return _cache[key]
+
+
 # ------------------------------------------------------------------ Alpha 16 surface detail
-const DETAILED := {"OS_Plate": "plate", "OS_Dark": "grain", "OS_Steel": "grain", "OS_Recess": "grain"}
+# OS_Shell: the 0.18.7 structure housings (vats, cannons, forge, relay housings) - brushed like steel
+const DETAILED := {"OS_Plate": "plate", "OS_Dark": "grain", "OS_Steel": "grain", "OS_Recess": "grain", "OS_Shell": "grain"}
 
 
 static func detail(orig: Material) -> Material:
@@ -209,5 +223,9 @@ static func apply_detail(node: Node) -> void:
 		var mesh := (mi as MeshInstance3D).mesh
 		for s in range(mesh.get_surface_count()):
 			var src := mesh.surface_get_material(s)
-			if src and DETAILED.has(src.resource_name) and (mi as MeshInstance3D).get_surface_override_material(s) == null:
+			if src == null or (mi as MeshInstance3D).get_surface_override_material(s) != null:
+				continue
+			if DETAILED.has(src.resource_name):
 				(mi as MeshInstance3D).set_surface_override_material(s, detail(src))
+			elif src.resource_name == "OS_Glass":           # 0.18.7: lit-rim glass instead of a grey film
+				(mi as MeshInstance3D).set_surface_override_material(s, glass(Rules.NEUTRAL))
