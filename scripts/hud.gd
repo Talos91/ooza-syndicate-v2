@@ -1074,7 +1074,8 @@ func _build_debug() -> void:
 	debug_button.toggle_mode = true
 	debug_button.size = debug_button.custom_minimum_size
 	root.add_child(debug_button)
-	debug_button.visible = not main.online           # online: the rules are the host's, not live-tunable
+	debug_button.visible = not main.online and Rules.debug_tools   # online: the rules are the host's, not live-tunable;
+	                                                               # offline only when DEBUG TOOLS is on in OPTIONS (0.18.7)
 	chat_button = button("Chat", func(): Net.open_chat(), 110, 50 if not mobile else 70, 20)   # online: the room chat
 	chat_button.size = chat_button.custom_minimum_size
 	chat_button.visible = main.online

@@ -102,7 +102,8 @@ static var node_fight_mult: float = NODE_FIGHT_MULT_DEFAULT   # live-tunable: x 
 # BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
 # queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
-static var bridge_combat: bool = true
+static var bridge_combat: bool = false    # BRAWL by default (Daniele, 2026-09-26: "brawl is back as the main game mode
+                                          # and siege is just an abandoned test for now")
 # LAST STAND toggle (Daniele: "add a toggle for Last Stand on or off in the match settings").
 # Off: no collapse; the 7:00 safety net still ends a stalled match by strength.
 static var last_stand: bool = true
@@ -128,6 +129,9 @@ static var low_detail: bool = false
 # enemy node, in either mode (badges show the seat letter). Off: BRAWL shows every count as Alpha 11
 # did; SIEGE never shows enemy numbers (an identity rule of 2.0).
 static var hide_enemy_counts: bool = false
+# DEBUG TOOLS (Daniele, 0.18.7: "we are past debug tools ... you can hide them (in case we want to reactivate
+# them later maybe put in options)"): the in-match Debug button and panel, off unless switched on in OPTIONS.
+static var debug_tools: bool = false
 
 # CONTACT (Alpha 12, Daniele: "whenever an enemy crosses the hitbox of a unit they fight... a unit
 # crossing an enemy unit should always start a combat to death"): contact is geometric, anywhere -

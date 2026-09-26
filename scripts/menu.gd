@@ -279,6 +279,11 @@ func show_options() -> void:
 		show_options())
 	det.add_theme_font_size_override("font_size", int(round(22 * K)))
 	label_at("Low detail trims the river patches and vat residents - use it if the game makes your machine run hot.", P(60, 596), 18, Color("b8ced6"))
+	var dbg := nav_button("DEBUG TOOLS: %s" % ("ON  -  the Debug button and live sliders in matches" if Rules.debug_tools else "OFF"),
+			P(60, 634), P(950, 50), func():
+		Rules.debug_tools = not Rules.debug_tools
+		show_options())
+	dbg.add_theme_font_size_override("font_size", int(round(20 * K)))
 	nav_button("BACK", P(40, 866), P(230, 58), show_main)
 
 

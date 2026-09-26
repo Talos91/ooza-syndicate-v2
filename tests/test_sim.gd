@@ -21,6 +21,7 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 
 func _init() -> void:
+	Rules.bridge_combat = true                      # these checks were written for SIEGE (the old default); BRAWL is the game's default since 0.18.7
 	var map := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var pos := MapBuilder.layout(map)
 	check(pos.size() == 5, "Two Piers lays out 5 nodes")
