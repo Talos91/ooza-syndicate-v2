@@ -216,7 +216,9 @@ func header(step: int) -> void:
 
 func map_preview(pos: Vector2, dims: Vector2) -> void:
 	var code: String = _selected_map().get("code", "")
-	picture(MapPool.thumb(code), pos, dims)
+	var p := picture(MapPool.thumb(code), pos, dims)
+	if p != null:
+		p.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED     # the whole map, letterboxed, never cropped
 
 
 # ------------------------------------------------------------------ pages
@@ -408,7 +410,8 @@ func show_maps() -> void:
 		tex.texture = load(thumb) if ResourceLoader.exists(thumb) else null
 		tex.position = P(8, 8)
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED   # the whole map, never cropped (Daniele, 0.18.7:
+		                                                         # "thumbnail of maps often overflow and can't be seen in full")
 		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(tex)
 		tex.size = P(435, 211)

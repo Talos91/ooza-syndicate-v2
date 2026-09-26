@@ -1,9 +1,9 @@
 class_name MapCamera
-## Camera pitch per map (maps 4.2, the Alpha 11 classics and maps 4.3 / 4.4 classic), in degrees above the horizon: from 58 (bird's-eye, Daniele Alpha 18: "a bit
+## Camera pitch per map (maps 4.2, the Alpha 11 classics, maps 4.3 / 4.4 classic and 4.6 relay), in degrees above the horizon: from 58 (bird's-eye, Daniele Alpha 18: "a bit
 ## more from the top") up to the lowest angle at which the smallest node tap target reaches 44 pt (Apple's
 ## guideline) on a landscape phone (844 x 390 pt) with no badge overflowing or colliding. From the phone-fit
 ## probe (tests/phone_fit.tscn) - rerun it and regenerate this table after a map pack changes. On maps 4.2
-## every map already reaches 45-66 pt at 58 degrees; the Alpha 11 classics A-01..A-04 56-88 pt; maps 4.4 classic M-21..M-40 44-54 pt.
+## every map already reaches 45-66 pt at 58 degrees; the Alpha 11 classics A-01..A-04 56-88 pt; maps 4.4 classic M-21..M-40 44-54 pt; maps 4.6 relay M-51..M-60 44-54 pt.
 const PITCH := {
 	"A-01": 58.0,
 	"A-02": 58.0,
@@ -62,6 +62,16 @@ const PITCH := {
 	"M-38": 58.0,
 	"M-39": 58.0,
 	"M-40": 58.0,
+	"M-51": 58.0,
+	"M-52": 58.0,
+	"M-53": 58.0,
+	"M-54": 58.0,
+	"M-55": 58.0,
+	"M-56": 58.0,
+	"M-57": 58.0,
+	"M-58": 58.0,
+	"M-59": 58.0,
+	"M-60": 58.0,
 	"S-01": 58.0,
 	"S-02": 58.0,
 	"S-03": 58.0,
