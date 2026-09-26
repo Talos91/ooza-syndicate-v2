@@ -1,7 +1,7 @@
 extends Node
-## Ooze Syndicate 2.0 - peer-to-peer rooms (autoload "Net"). Alpha 11's PeerJS approach, ported from
+## Ooze Syndicate 2.0 - online rooms (autoload "Net"). Began as Alpha 11's PeerJS approach, ported from
 ## Game/Alpha 11/scripts/network.gd (the P2P half) to 2.0's seats, maps and Sim:
-## - the browser transport is web/peer-transport.js (window.OozePeer, room prefix "ooze20-");
+## - the transport is RelayBridge (the room server, see ROOM SERVER below); ?relay=peerjs keeps web/peer-transport.js;
 ## - four-character room codes, 2-6 players: free-for-all (1v1, FFA 3-5) and teams (2v2, 3v3, 2v2v2),
 ##   host-assigned seats (join order); in team modes every player can switch team in the lobby (JOIN
 ##   TEAM, host-validated: a team never exceeds its seats; the host can move players too) and the team
@@ -31,7 +31,9 @@ extends Node
 ## host's Sim (Sim.structure_order: the same feedback line offline). Snapshots carry the new node fields (they
 ## ride with every node key: "structure", "allies", "arrivals", "shot", "monster_ready_t", "hub_monster"), the
 ## monsters and the 7:00 draw line ("structs"). Protocol ooze20-net-3.
-## No host migration, no TURN relay: some networks cannot connect directly.
+## ROOM SERVER (Alpha 20 stage 1): the transport is RelayBridge -> server/relay.py (one WebSocket per player,
+## the server forwards strings), so strict networks work; ?relay=peerjs falls back to the PeerJS rooms. The
+## room's creator still hosts the Sim (stage 2 moves it onto the server). No host migration.
 
 signal lobby_changed
 signal rematch_changed
@@ -56,6 +58,7 @@ const MAX_PACKET := 8 * 1024 * 1024
 const CHAT_MAX := 256
 const CHAT_HISTORY := 50
 const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
+const RELAY_URL := "wss://45-32-126-20.sslip.io/ooze"   # server/relay.py behind Caddy on the Vultr box (Alpha 20)
 const AI_FILL := ["", "Training", "Casual", "Standard", "Veteran", "Expert"]   # EMPTY SEATS setting: off or the AI level
 
 var bridge                                         # window.OozePeer (or a test double)
@@ -91,6 +94,7 @@ var match_info := {}                               # the launch packet of the cu
 var sim: Sim                                       # set by main when the world is built
 var main: Node                                     # the match scene (host runs orders through it)
 var no_reload := false                             # tests: launch without reloading the scene
+var allow_native := false                          # tests: rooms outside the browser build (the relay works natively)
 var ai_fill := ""                                  # host setting: "" = every seat needs a player, else the AI level for empty seats
 var rejoin := {}                                   # guest: {code, token, faction} to RECONNECT to a dropped room
 var _tokens := {}                                  # host: player id -> secret rejoin token (never broadcast)
@@ -364,15 +368,19 @@ func reconnect() -> Error:
 
 func _start(host: bool, faction: String, code: String) -> Error:
 	leave(false)
-	if not OS.has_feature("web"):
+	if not OS.has_feature("web") and not allow_native:
 		status = "Online rooms run in the browser build (the playtest link)."
 		lobby_changed.emit()
 		return ERR_UNAVAILABLE
-	bridge = JavaScriptBridge.get_interface("OozePeer")
-	if bridge == null:
-		status = "PeerJS is unavailable. Reload the page."
-		lobby_changed.emit()
-		return ERR_UNAVAILABLE
+	var relay := relay_url()
+	if relay == "peerjs":                              # ?relay=peerjs: the old browser-to-browser rooms
+		bridge = JavaScriptBridge.get_interface("OozePeer") if OS.has_feature("web") else null
+		if bridge == null:
+			status = "PeerJS is unavailable. Reload the page."
+			lobby_changed.emit()
+			return ERR_UNAVAILABLE
+	else:
+		bridge = RelayBridge.new(relay)
 	set_busy(true)                                     # a room is open: a new build waits for the menu
 	hosting = host
 	preferred_faction = faction
@@ -390,6 +398,21 @@ func _start(host: bool, faction: String, code: String) -> Error:
 	status = "Connecting to the room service..."
 	lobby_changed.emit()
 	return OK
+
+
+func relay_url() -> String:
+	## The room server (Alpha 20): RELAY_URL, or ?relay=<ws(s) url | peerjs> on the page / --relay=<url> on the
+	## command line (local tests).
+	var pick := ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--relay="):
+			pick = arg.substr(8)
+	if pick == "" and OS.has_feature("web"):
+		var q = JavaScriptBridge.eval("new URLSearchParams(location.search).get('relay')||''", true)
+		pick = str(q) if q != null else ""
+	if pick == "peerjs" or pick.begins_with("ws://") or pick.begins_with("wss://"):
+		return pick
+	return RELAY_URL
 
 
 func leave(forget := true) -> void:
@@ -1293,7 +1316,7 @@ func _poll(dt: float) -> void:
 					status = "Room service disconnected. Players already here can stay; new joins need a new room."
 					lobby_changed.emit()
 	if bridge != null and not connected and _elapsed > 30.0:
-		fail("Could not reach the room. Try another network; some networks block direct connections.")
+		fail("Could not reach the room. Check your connection and try again.")
 
 
 func _host_receive(remote: String, raw: String) -> void:

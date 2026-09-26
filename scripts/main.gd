@@ -29,7 +29,7 @@ extends Node3D
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
-var online := false                               # this match is a peer-to-peer room (Net)
+var online := false                               # this match is an online room (Net)
 var SEAT_FACTIONS := {"A": "null", "B": "ember", "C": "bloom", "D": "vex", "E": "solar"}
 # SKILLS 2.0 (0.18.7): seat -> {"active": id, "map": id} chosen in the ARMIES page (or the room); a seat
 # without one (every AI) gets its faction's Rules.FACTION_LOADOUT. The ultimate follows the faction.
