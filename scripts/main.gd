@@ -203,7 +203,10 @@ func _start_map(path: String) -> void:
 		for seat in ["C", "D", "E", "F"]:             # extra AI seats get the factions not yet taken
 			if not pool.is_empty():
 				SEAT_FACTIONS[seat] = pool.pop_front()
-	Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
+	if online and Net.match_info.get("colours") is Dictionary:   # a room: the host's seat colours, the same on every screen
+		Rules.use_colours(Net.match_info["colours"])
+	else:
+		Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
 	sim = Sim.new()
 	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams)
 	var lo := Vector3(INF, 0, INF)                     # the camera looks along the map's short side
@@ -298,7 +301,6 @@ func _start_online() -> void:
 	online = true
 	mode = str(info["mode"])
 	seed_value = int(info["seed"])
-	color_choice = Net.colour
 	for seat in info["players"]:
 		SEAT_FACTIONS[seat] = info["players"][seat]
 	HUMAN = Net.local_seat()
