@@ -549,4 +549,13 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 142. **"UI a bit small on mobile in certain parts; make it consistent, functional, cool, properly sized, modern."**
      *Open (0.18.8).*
 143. **"Too many tokens for those few things."** *Noted:* fewer agents, tests once, one contact sheet (memory).
+144. **"b187: ok on garrison, Ember at 1.10, Bloom at 1.10, keep Vex; Solar as is."** *Done (0.18.9).*
+145. **"Give NULL a power like 1 unit per village for each relay use (or put it in the idea file)."** *Parked:*
+     FUTURE-IDEAS §5.
+146. **Stalemates: "Very Last Stand: at 6 every ... a node with 2 or 1 connection falls randomly until only 1 node
+     is left" - "they drop one by one in the same time span until one is left at 7".** *Done (0.18.9).* The
+     three-new-nodes alternative is parked (FUTURE-IDEAS §5).
+147. **"Make neutral villages regenerate at the speed of their vat."** *Done (0.18.9).*
+148. **"We spent a lot of tokens running simulations ... just start at 6 min."** *Noted:* stage the moment
+     directly (`--ff`), never replay whole matches.
 

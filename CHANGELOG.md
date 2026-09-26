@@ -1,5 +1,21 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.9 "Alpha 18" - 2026-09-26 (Very Last Stand, balance numbers, neutral regen, mobile UI pass)
+
+- **Very Last Stand** (Daniele's stalemate breaker): at 6:00 the surviving platforms fall one at a time - each pick
+  a random platform with 1-2 open connections, never leaving an island - spaced evenly so the last drop lands at
+  7:00 with one platform left ("the time between falls is due to the number of nodes"). Every map, tutorials
+  included. Status line "VERY LAST STAND · a platform falls every N s", toast at 6:00, badge countdowns.
+  Alternative A (three new nodes at 6:00) is parked in FUTURE-IDEAS §5.
+- **Balance** (Daniele): neutral garrisons 12/16/32/64 shown (was 6/12/24/40), Ember attack 1.10 and Bloom
+  production 1.10 (were 1.15), Vex and Solar unchanged. The old numbers stay as Debug > Balance LEGACY.
+- **Neutral villages regenerate** at their tier's vat production, up to their starting garrison (Daniele).
+- **Mobile UI pass** (Daniele: "consistent, functional, cool, properly sized ... modern"): every menu button and
+  chip grows to 44 pt on a phone through one size rule, text to >= 12.5 pt, tall pages scroll, the Debug panel
+  scrolls, dock slots ~49 pt, bottom buttons stay on screen.
+- `--ff=<seconds>` flag: fast-forward a windowed run to a match time (late-match checks without replaying).
+- Tests: all five suites pass (test_maps4 11,109 checks). Desktop and phone emulation only.
+
 ## 0.18.8 "Alpha 18" - 2026-09-26 (skills effects, look upgrade with the abyss fog, balance preset)
 
 - **Every skill draws its effect** (`scripts/skill_fx.gd`, from Sim state and fx events, so guests see them): hex

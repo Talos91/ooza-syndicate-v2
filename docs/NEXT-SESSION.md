@@ -1,6 +1,6 @@
 # Next session - start here
 
-State at the end of the 2026-09-26 sessions: **v0.18.8 "Alpha 18"** (live; the mobile UI pass is the last 0.18.x item) (maps 4.2 - 20 compact maps at the kit's sizes - plus the four main Alpha 11 maps A-01..A-04, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
+State at the end of the 2026-09-26 sessions: **v0.18.9 "Alpha 18"** (live; Daniele is testing it - see docs/TO-TEST.md) (maps 4.2 - 20 compact maps at the kit's sizes - plus the four main Alpha 11 maps A-01..A-04, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md` (project root - the whole game as built), this file,
 `README.md`, the top of `CHANGELOG.md` (0.17.0 to 0.18.0), `PLAYTEST-NOTES.md` notes 90-100, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
@@ -22,6 +22,16 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 
 The plan after 0.18.7 / 0.18.8 (Daniele's to-do list from 2026-09-26, plus suggested additions, by area
 and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
+
+## 0.18.9 (2026-09-26): Very Last Stand, balance, neutral regen, mobile UI - LIVE, end of the day
+
+- Very Last Stand: `Sim._step_very_last_stand` / `_vls_pick` / `_vls_queue_next` (reuses the Last Stand queue,
+  badges, fx and snapshots; `ls[]` gained two fields). `Rules.VERY_LAST_STAND_TIME` 360.
+- Balance defaults changed (NEUTRAL_UNITS, FACTION_STATS ember / bloom); `Rules.BALANCE_PRESETS["legacy"]` holds the
+  old numbers. `Rules.NEUTRAL_REGEN`. UI: `Menu._pt_factor / tap / rh / fsz`, `stack_*` scrolling rows.
+- **Next session starts from `docs/TO-TEST.md`** (Daniele's test results), then OPEN-QUESTIONS, then ROADMAP.md.
+- Known leftovers: ARMIES 10-card grid keeps desktop text on phones (needs a redesign); the SETUP / lobby summary
+  card's CHANGE button is small; `.git/objects/a6` locked by Google Drive (quit Drive, delete, restart).
 
 ## 0.18.7 (2026-09-26): BRAWL only, relay fall rule, skills, lobby teams, maps 4.6 - LIVE; 0.18.8 in progress
 
