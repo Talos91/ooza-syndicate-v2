@@ -11,7 +11,8 @@ extends SceneTree
 ## - seats: every mode the map lists has its seats, the right count and (team modes) the right teams;
 ## - Last Stand (Daniele, Alpha 17): waves drop whole rings in the method's order, the order's last
 ##   ring never falls, a relay falls only once every ring it links to has fallen, and after every
-##   wave the surviving map is one connected piece over fixed decks and plaza links;
+##   wave the surviving map is one connected piece over fixed decks and plaza links; 0.18.7: the drops
+##   cycle the starting corners from a seeded random one (opposite next), in every mode and method;
 ## - heights: a path over a raised deck climbs to it, and lines only meet on the same height.
 
 const DECK_HW := 1.74                   # real deck half-width (builder D_PHYS)
@@ -306,6 +307,126 @@ func _last_stand(m: Dictionary) -> void:
 					"%s: at the end only the last ring (and relays tied to it) remains" % tag)
 
 
+func _side(sim: Sim, id: int) -> int:
+	## The corner (a home in the match's corner cycle) a platform is nearest to; ties go to the earlier corner.
+	var best := -1
+	var best_d := INF
+	for c in sim.last_stand_corners:
+		var d := sim._flat_dist(id, c)
+		if d < best_d - 0.01:
+			best_d = d
+			best = c
+	return best
+
+
+func _corners(m: Dictionary) -> void:
+	## 0.18.7 (Daniele): the collapse starts at a random starting corner, then the opposite one, then the
+	## others, and back - one platform per corner in turn. For every mode, method (and chaos order) and
+	## seeds 1..8, the real collapse is run from the reveal to its last drop: (a) every drop keeps the rest
+	## connected, (b) two drops in a row lie nearer different corners whenever the ring has platforms
+	## near several corners and one on another side could fall safely, (c) the first corner and the first drop are not always the same
+	## across the seeds, (d) the collapse ends before the hard end.
+	var code: String = m["code"]
+	var methods: Array = m["lastStand"].get("methods", [])
+	if methods.is_empty():
+		return
+	for md in m["modes"]:
+		var seats := {}
+		for s in m["seats"][md]:
+			seats[int(s["node"])] = s["seat"]
+		for method in methods:
+			var orders: Array = [m["lastStand"]["orders"][method]] if method != "chaos" else m["lastStand"]["orders"]["chaos"]
+			for oi in range(orders.size()):
+				var tag := "%s %s %s#%d" % [code, md, method, oi]
+				var starts := {}
+				var first_sides := {}
+				var first_spread := false
+				var ok_conn := true
+				var ok_alt := true
+				var ok_corners := true
+				var alt_miss := ""
+				var latest := 0.0
+				var drops_any := false
+				for seed in range(1, 9):
+					var sim := Sim.new()
+					sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, seed)
+					sim._map_last_stand = {"methods": [method], "orders": {method: orders[oi] if method != "chaos" else [orders[oi]]}}
+					sim._ring_orders = sim._map_last_stand["orders"]
+					sim.time = Rules.LAST_STAND_TIME
+					sim._start_rings()
+					var homes := sim.homes.values()
+					homes.sort()
+					var cyc := sim.last_stand_corners.duplicate()
+					cyc.sort()
+					if cyc != homes:
+						ok_corners = false
+					if sim.last_stand_corners.size() >= 2:          # the second corner is the one farthest from the first
+						var c0: int = sim.last_stand_corners[0]
+						for c in sim.last_stand_corners:
+							if sim._flat_dist(c0, c) > sim._flat_dist(c0, sim.last_stand_corners[1]) + 0.01:
+								ok_corners = false
+					if sim.last_stand_waves.is_empty():
+						continue
+					drops_any = true
+					starts[sim.last_stand_corners[0]] = true
+					var ring_count := 0
+					var seen := {}
+					var guard := 0
+					while (not sim.last_stand_queue.is_empty() or sim.last_stand_next < sim.last_stand_waves.size()) and guard < 4000:
+						guard += 1
+						if ring_count < sim.last_stand_next:        # a ring was just warned: its queue is the real order
+							ring_count = sim.last_stand_next
+							var q: Array = sim.last_stand_queue
+							var sides := {}
+							for id in q:
+								if sim.nodes[id]["relay"] == "":
+									sides[_side(sim, id)] = true
+							if ring_count == 1 and not q.is_empty():
+								first_sides[_side(sim, q[0])] = true
+								first_spread = first_spread or sides.size() >= 2
+							var down := sim.collapsed.duplicate()
+							for i in range(q.size() - 1):            # consecutive drops: another side whenever one can go
+								down[q[i]] = true
+								if sides.size() < 2 or sim.nodes[q[i + 1]]["relay"] != "" or _side(sim, q[i]) != _side(sim, q[i + 1]):
+									continue
+								for x in q.slice(i + 1):
+									if sim.nodes[x]["relay"] != "" or _side(sim, x) == _side(sim, q[i]):
+										continue
+									var trial := down.duplicate()
+									trial[x] = true
+									if _connected(sim, trial):
+										ok_alt = false
+										alt_miss = "seed %d ring %d: %d then %d, both nearest %d, while %d could go" % [seed, ring_count, q[i], q[i + 1], _side(sim, q[i]), x]
+										break
+							if q.size() >= 2 and sides.size() >= 2:
+								_pairs += 1
+								if _side(sim, q[0]) != _side(sim, q[1]):
+									_pairs_alt += 1
+						sim.time += 0.25
+						sim._step_rings(0.25)
+						for id in sim.collapsed:
+							if not seen.has(id):
+								seen[id] = true
+								latest = maxf(latest, sim.time)
+								if not _connected(sim, sim.collapsed):
+									ok_conn = false
+				if not drops_any:
+					continue
+				check(ok_corners, "%s: the corners are the match's homes, the second the farthest from the first" % tag)
+				check(ok_conn, "%s: every drop of the corner cycle keeps the rest connected" % tag)
+				check(ok_alt, "%s: consecutive drops of a ring alternate corners whenever another side can fall (%s)" % [tag, alt_miss])
+				check(starts.size() >= 2, "%s: across seeds 1..8 the collapse does not always start at the same corner %s" % [tag, str(starts.keys())])
+				if first_spread:
+					check(first_sides.size() >= 2, "%s: across seeds 1..8 the first drop is not always nearest the same corner %s" % [tag, str(first_sides.keys())])
+				check(latest < Rules.MATCH_HARD_END, "%s: the collapse ends before the hard end (%.0f s)" % [tag, latest])
+				_latest_end = maxf(_latest_end, latest)
+
+
+var _latest_end := 0.0
+var _pairs := 0          # rings (all runs) with platforms near several corners
+var _pairs_alt := 0      # ... whose first two drops lie nearer different corners
+
+
 func _heights() -> void:
 	## A raised deck crossing a ground deck: paths follow the height and the two lines never meet.
 	for path in MapPool.all():
@@ -375,6 +496,9 @@ func _run() -> void:
 		_invariants(m)
 		_seats(m)
 		_last_stand(m)
+		_corners(m)
+	print("Last Stand corner cycle: the latest collapse ends at %d:%02d; %d of %d multi-corner rings open on two sides (the rest: only one side could fall safely)" % [
+			int(_latest_end) / 60, int(_latest_end) % 60, _pairs_alt, _pairs])
 	_heights()
 	_drop_timing()
 	print("\n%d checks - %s" % [checks, "ALL PASSED (0 failed)" if failures == 0 else "%d FAILED" % failures])
