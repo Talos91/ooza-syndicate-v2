@@ -9,6 +9,10 @@ extends CanvasLayer
 ## are on; its target highlights sit on a layer over the badges, under the panels),
 ## toasts, the Last Stand banner, status line and drop order, the results panel with match stats,
 ## and the debug panel.
+## TUTORIAL (TUTORIAL-DESIGN.md §6, reveal as you go): reveal(keys) hides every part a lesson has not reached
+## yet (TutorialDirector.ALL_KEYS) - by not showing it, never by disabling a control; outside the tutorial
+## nothing is gated. Rect getters for the coach's spotlight: action_rect, send_button_rect, badge_rect,
+## dock_slot_rect; extra_ui_rects (the coach card) count as UI for pointer_over_ui.
 
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 # Alpha 18: the relay symbols (Rules.RELAY_GLYPH) are not in Rajdhani, and a browser has no system font to
@@ -60,6 +64,10 @@ var margins := Vector4(16, 12, 16, 12)
 var _last_fps_print := 0.0
 var version_label: Label
 var ui_scale := 1.0
+# --- TUTORIAL reveal set (TUTORIAL-DESIGN.md §6) ---
+var gated := false                     # a lesson is on: only `revealed` keys show
+var revealed := {}                     # key -> true
+var extra_ui_rects: Array = []         # the coach card / completion screen: taps there never reach the map
 
 
 static func panel_style(color: Color = Color("276578")) -> StyleBoxFlat:
@@ -439,6 +447,9 @@ func pointer_over_ui(p: Vector2) -> bool:
 			return true
 	if debug_panel and debug_panel.visible and debug_panel.get_global_rect().has_point(p):
 		return true
+	for r in extra_ui_rects:                          # TUTORIAL: the coach card / completion screen
+		if (r as Rect2).has_point(p):
+			return true
 	if is_instance_valid(inspector):
 		for a in inspector_actions:
 			if (a["button"] as Button).get_global_rect().has_point(p):
@@ -486,13 +497,18 @@ func sync(dt: float, cam: Camera3D) -> void:
 	for seat in sim.factions.keys():
 		if not sim.allied(seat, human):
 			rivals += strength[seat]
-	stats_label.text = "%s  %03d    %02d:%02d    RIVALS  %03d" % [str(main.SEAT_FACTIONS[human]).to_upper(), Rules.shown(total),
-			int(sim.time) / 60, int(sim.time) % 60, Rules.shown(rivals)]
+	if shows("strength"):
+		stats_label.text = "%s  %03d    %02d:%02d    RIVALS  %03d" % [str(main.SEAT_FACTIONS[human]).to_upper(), Rules.shown(total),
+				int(sim.time) / 60, int(sim.time) % 60, Rules.shown(rivals)]
+	else:                                             # TUTORIAL L1-L2: your emblem and the clock only (§6)
+		stats_label.text = "%02d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
 	for seat in score_sections:
 		var count: float = strength[seat]
 		score_sections[seat].visible = count > 0.0
 		score_sections[seat].size_flags_stretch_ratio = maxf(1.0, count)
-	if sim.very_last_stand_active:
+	if not shows("status_line"):
+		status_label.text = ""
+	elif sim.very_last_stand_active:
 		status_label.text = ("VERY LAST STAND · a platform falls every %d s" % int(round(sim.very_last_stand_gap))
 				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · one platform stands - conquest decides")
 	elif sim.last_stand_active:
@@ -557,7 +573,7 @@ func _badges(cam: Camera3D) -> void:
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
 		var classic := not Rules.bridge_combat
-		var masked := not (owner == "" or sim.allied(owner, human) or (classic and not Rules.hide_enemy_counts))   # Brawl = Alpha 11: every count, unless hidden
+		var masked := not (owner == "" or sim.allied(owner, human) or (classic and not Rules.hide_enemy_counts and shows("rival_counts")))   # Brawl = Alpha 11: every count, unless hidden (TUTORIAL: from L3)
 		label.visible = not masked
 		var inner := _badge_px.x - 2.0 * BADGE_PAD * ui_scale
 		var has_allies := sim.allied_units(n) > 0.0001   # GAME-RULES sec11: team members see total + own
@@ -583,7 +599,7 @@ func _badges(cam: Camera3D) -> void:
 		var what := ""
 		if n["relay"] != "":
 			var st := sim.relay_state_key(n, n["relay_index"])
-			what = Rules.RELAY_GLYPH[n["relay"]] + ("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper())
+			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
 		elif n["structure"] == "machingoon":
 			what = "MGN%d" % n["tier"]
 		else:
@@ -810,23 +826,26 @@ func _inspector_actions(n: Dictionary) -> void:
 	## allied troops are stored. Costs and disabled reasons come straight from the Sim (can_build /
 	## can_upgrade) in _refresh_inspector, so a greyed button always explains itself.
 	var id: int = n["id"]
+	# (TUTORIAL: each action shows once its lesson is reached - shows(); outside the tutorial, always)
 	if n["relay"] != "":
-		_add_action("SWITCH", "SWITCH\n%s" % Rules.RELAY_GLYPH[n["relay"]], 0, "switch", id)
+		if shows("relay"):
+			_add_action("SWITCH", "SWITCH\n%s" % Rules.RELAY_GLYPH[n["relay"]], 0, "switch", id)
 		for kind in ["laser", "forge", "monster_hub"]:
-			if kind in n["buildable"] and n["structure"] != kind:
+			if kind in n["buildable"] and n["structure"] != kind and shows("relay_build"):
 				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})
-		if n["structure"] == "monster_hub":
+		if n["structure"] == "monster_hub" and shows("monster"):
 			_add_action("LAUNCH", "LAUNCH", Rules.MONSTER_COST, "launch_monster", id)
 	elif n["structure"] == "vat":
-		if n["tier"] < 4:
+		if n["tier"] < 4 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
-		if "machingoon" in n["buildable"]:
+		if "machingoon" in n["buildable"] and shows("machingoon"):
 			_add_action("MACHINGOON", "MACHINGOON", sim.build_cost(n, "machingoon"), "build", id, {"kind": "machingoon"})
 	elif n["structure"] == "machingoon":
-		if n["tier"] < 3:
+		if n["tier"] < 3 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
-		_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
-	if sim.allied_units(n) > 0.0001:
+		if shows("machingoon"):
+			_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
+	if sim.allied_units(n) > 0.0001 and shows("eject"):
 		_add_action("EJECT", "EJECT", 0, "eject", id)
 
 
@@ -885,6 +904,67 @@ func action_rect(name: String) -> Rect2:
 	return Rect2()
 
 
+func send_button_rect(fraction: float) -> Rect2:
+	## The SEND panel's button for `fraction` (1.0 / 0.75 / 0.5 / 0.25), for the tutorial's spotlight.
+	for c in side_box.get_children():
+		if c is Button and (c as Button).text == "%d%%" % int(round(fraction * 100.0)):
+			return (c as Control).get_global_rect() if side_panel.visible else Rect2()
+	return Rect2()
+
+
+func badge_rect(id: int) -> Rect2:
+	if badges.has(id) and (badges[id]["panel"] as Control).visible:
+		return (badges[id]["panel"] as Control).get_global_rect()
+	return Rect2()
+
+
+func dock_slot_rect(i: int) -> Rect2:
+	if dock and dock.visible and i >= 0 and i < dock.slots.size():
+		return (dock.slots[i] as Control).get_global_rect()
+	return Rect2()
+
+
+# ------------------------------------------------------------------ TUTORIAL: reveal as you go (§6)
+func shows(key: String) -> bool:
+	## Is this HUD part on screen? Always, outside a lesson.
+	return not gated or revealed.has(key)
+
+
+func reveal(keys: Array, glow: Array = []) -> void:
+	## A lesson's reveal set (TutorialDirector.reveal_for): everything else hides. `glow`: the keys this lesson
+	## or step adds - those parts appear with a short glow-in.
+	gated = true
+	revealed = {}
+	for k in keys:
+		revealed[str(k)] = true
+	_apply_reveal()
+	for k in glow:
+		var c: Control = {"send_panel": side_panel, "strength": top_panel, "dock": dock, "status_line": status_label,
+				"notices": notices}.get(str(k), null)
+		if c and c.visible:
+			c.modulate = Color(2.2, 2.2, 2.2, 0.0)
+			create_tween().set_trans(Tween.TRANS_SINE).tween_property(c, "modulate", Color.WHITE, 0.6)
+	for id in badges:                                 # badges re-dress (counts, relay state)
+		badges[id]["owner"] = "?"
+		badges[id]["shape"] = ""
+
+
+func reveal_all() -> void:
+	gated = false
+	revealed = {}
+	_apply_reveal()
+
+
+func _apply_reveal() -> void:
+	side_panel.visible = shows("send_panel")
+	strength_bar.visible = shows("strength")
+	dock.visible = sim.abilities_on and shows("dock")
+	hint.visible = not mobile and not gated
+	notices.visible = shows("notices")
+	if is_instance_valid(inspector) and inspector_id >= 0:
+		inspect(inspector_id, main.cam)
+
+
 func _monster_ready(n: Dictionary) -> String:
 	## "" if this hub may launch a monster right now, else the refusal line (mirrors Sim.launch_monster's
 	## own checks, read-only, for the LAUNCH button's disabled state and tooltip).
@@ -932,22 +1012,22 @@ func _refresh_inspector(cam: Camera3D) -> void:
 			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) \
 					else ("no production - garrison must be fed" if n["structure"] == "machingoon" else "no vat here")
 			var up := sim.upgrade_cost(n)
-			if owner == human and up > 0:
+			if owner == human and up > 0 and shows("upgrade"):
 				status += " | Double-tap: %d units" % Rules.shown(up)
-			elif owner == human and n["structure"] in ["vat", "machingoon"] and up <= 0:
+			elif owner == human and n["structure"] in ["vat", "machingoon"] and up <= 0 and shows("upgrade"):
 				status += " | MAX TIER"
 			lines.append(status)
 			var forge: String = " (forge +%d%%)" % roundi(Rules.forge_bonus * 100.0) if sim.has_forge(owner) else ""   # attack_of includes it
 			lines.append("garrison %s | attack %d%%%s | speed %d%%" % [
 					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0), forge,
 					roundi(sim.stat(owner, "speed") * 100.0)])
-			if n["structure"] == "forge":
+			if n["structure"] == "forge" and shows("forge_readout"):
 				# Forge readout (spec E): the attack half is in the line above (attack_of includes it)
 				lines.append("Forge: +%d%% attack, -%d%% damage taken" % [roundi(Rules.forge_bonus * 100.0), roundi((1.0 - 1.0 / Rules.FORGE_DEFENCE) * 100.0)])
-			if n["structure"] == "monster_hub":
+			if n["structure"] == "monster_hub" and shows("monster"):
 				var mr := _monster_ready(n)
 				lines.append("Monster hub: %s" % ("READY" if mr == "" else mr.to_upper()))
-	if n["relay"] != "":
+	if n["relay"] != "" and shows("relay"):
 		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
 		var nxt := sim.relay_state_key(n, sim.relay_next_index(n)).to_upper()
 		var rs := "%s relay %s -> %s" % [n["relay"].to_upper(), cur, nxt]
@@ -1034,6 +1114,8 @@ func toast(msg: String, kind := "") -> void:
 	## Alpha 16: notifications in the UI's own panel style (Daniele: "better notifications, the same
 	## style as the rest of the UI"): a framed line with a colour bar - info cyan, good news in your
 	## colour, builds gold, warnings red - sliding in under the top bar, three at most, fading out.
+	if not shows("notices"):                          # TUTORIAL: notifications appear in L3 (main hands the
+		return                                        # refusal lines to the coach card before that)
 	if kind == "":
 		kind = "info"
 		for w in WARN_WORDS:
@@ -1139,6 +1221,14 @@ func pause_menu() -> void:
 		layout(root.get_viewport_rect().size, margins)
 		return
 	main.paused = true
+	if main.get("director") != null:                  # TUTORIAL: PAUSE keeps working and gains LESSONS (§6)
+		_fill_overlay(pause_panel, "PAUSED", "%s · %02d:%02d" % [str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
+				[["RESUME", func(): main.paused = false; pause_panel.visible = false],
+				[TutorialDirector.line("paused_lessons"), main.to_lessons], _territory_action(),
+				["RESTART", main.restart], ["MAIN MENU", main.to_menu]])
+		pause_panel.visible = true
+		layout(root.get_viewport_rect().size, margins)
+		return
 	_fill_overlay(pause_panel, "PAUSED", "%s · %02d:%02d" % [str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
 			[["RESUME", func(): main.paused = false; pause_panel.visible = false],
 			["LAST STAND: %s" % ("ON" if Rules.last_stand else "OFF"), func():

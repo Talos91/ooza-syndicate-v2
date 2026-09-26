@@ -59,15 +59,20 @@ func sync(dt: float) -> void:
 
 func _draw() -> void:
 	var cam: Camera3D = main.cam
-	if cam == null or sim == null:
-		return
-	_draw_halos(cam)
-	_draw_relay_cues(cam)
-	if main.monster_from >= 0:
+	if cam == null or sim == null or (main._start_fit as Array).is_empty():   # (not before the camera's first fit:
+		return                                                               # a tutorial owns a relay from frame 1)
+	# (TUTORIAL: each part draws once its lesson is reached - Hud.shows(); outside the tutorial, always)
+	if hud.shows("halos"):
+		_draw_halos(cam)
+	if hud.shows("relay"):
+		_draw_relay_cues(cam)
+	if main.monster_from >= 0 and hud.shows("monster"):
 		_draw_monster_reach(cam, main.monster_from)
-	for id in _relay_preview_nodes():
-		_draw_relay_preview(cam, id)
-	_draw_danger_symbols(cam)
+	if hud.shows("relay"):
+		for id in _relay_preview_nodes():
+			_draw_relay_preview(cam, id)
+	if hud.shows("danger"):
+		_draw_danger_symbols(cam)
 
 
 # ------------------------------------------------------------------ shared helpers (SkillDock's pattern)
