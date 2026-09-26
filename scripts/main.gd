@@ -1040,5 +1040,7 @@ func _flush_inspect() -> void:
 	if _pending_inspect >= 0 and Time.get_ticks_msec() / 1000.0 - _pending_at >= DOUBLE_TAP_WINDOW:
 		var id := _pending_inspect
 		_pending_inspect = -1
-		if not paused and not sim.over:           # Alpha 11 game.gd:588: never over the pause or end panel
+		# only your own nodes open the ring (Daniele, 0.18.7: "i shouldn't be able to click enemy vault ... an
+		# empty radial menu appears"); enemy, neutral and allied nodes are read from their badges
+		if not paused and not sim.over and sim.nodes[id]["owner"] == HUMAN:   # Alpha 11 game.gd:588: never over the pause or end panel
 			hud.inspect(id, cam)
