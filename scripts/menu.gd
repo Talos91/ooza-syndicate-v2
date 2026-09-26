@@ -32,6 +32,12 @@ var _is_main := false
 var _backdrop: TextureRect
 var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
 var _map_scroll := 0
+# map filters on 02 BATTLEFIELD (Daniele, 0.18.6: "add in game filters for maps like 1v1 2v2 ffa etc"): players
+# (a mode the map offers) and type (the map's group); static, so they survive a trip through the match
+static var map_filter_mode := "all"
+static var map_filter_type := "all"
+const MAP_TYPES := ["all", "brawl", "siege", "core", "alpha 11", "training"]
+const MAP_TYPE_NAMES := {"all": "ALL", "brawl": "BRAWL", "siege": "SIEGE", "core": "CORE", "alpha 11": "ALPHA 11", "training": "TRAINING"}
 var _chat_btn: Button
 var _chat_t := 0.0
 
@@ -354,18 +360,38 @@ func show_maps() -> void:
 	header(2)
 	label_at("CHOOSE YOUR BATTLEFIELD", P(40, 107), 43)
 	frame(P(35, 174), P(975, 641))
+	var shown := _filtered_maps()
+	if not shown.is_empty() and not shown.any(func(e): return e["path"] == map_path):
+		map_path = shown[0]["path"]                    # back on the page with filters set: pick a shown map
+	if map_filter_mode != "all" and not shown.is_empty():
+		mode = map_filter_mode                         # filtered by players: set up that mode
+	label_at("%d OF %d MAPS" % [shown.size(), maps.size()], P(780, 122), 20, Color("8fb3c2"))
+	var modes_all := _pool_modes()
+	var chip_w: float = minf(104.0, (560.0 - 8.0 * modes_all.size()) / float(modes_all.size() + 1))
+	var x := 52.0
+	for md in ["all"] + modes_all:
+		var md_now: String = md
+		nav_button("ALL" if md == "all" else MODE_NAMES.get(md, md), P(x, 188), P(chip_w, 52), func():
+			map_filter_mode = md_now
+			_refilter(), md == map_filter_mode)
+		x += chip_w + 8.0
+	nav_button("TYPE: %s" % MAP_TYPE_NAMES[map_filter_type], P(752, 188), P(240, 52), func():
+		map_filter_type = MAP_TYPES[(MAP_TYPES.find(map_filter_type) + 1) % MAP_TYPES.size()]
+		_refilter(), map_filter_type != "all")
+	if shown.is_empty():
+		label_at("No map matches these filters.", P(70, 290), 24, Color("abc1cd"))
 	var scroll := TouchScroll.new()                    # finger swipes scroll the grid (phones)
 	var keep := _map_scroll                           # picking a map rebuilds the page: stay where you were
 	get_tree().process_frame.connect(func(): if is_instance_valid(scroll): scroll.scroll_vertical = keep, CONNECT_ONE_SHOT)
-	scroll.position = P(52, 193)
-	scroll.size = P(940, 600)
+	scroll.position = P(52, 258)
+	scroll.size = P(940, 542)
 	content.add_child(scroll)
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", int(16 * K))
 	grid.add_theme_constant_override("v_separation", int(16 * K))
 	scroll.add_child(grid)
-	for entry in maps:
+	for entry in shown:
 		var m: Dictionary = entry["data"]
 		var mp: String = entry["path"]
 		var code: String = m.get("code", "")
@@ -403,6 +429,32 @@ func show_maps() -> void:
 	label_at("%s\n%s" % [_map_blurb(sel), ls_line], P(1053, 736), 22, Color("abc1cd"))
 	nav_button("BACK", P(40, 866), P(230, 58), show_factions)
 	nav_button("NEXT: MATCH SETUP", P(1280, 866), P(352, 58), show_setup, true)
+
+
+func _map_type(m: Dictionary) -> String:
+	var g := str(m.get("group", "")).to_lower()
+	return "training" if g in ["tutorial", "debug"] else g
+
+
+func _filtered_maps() -> Array:
+	return maps.filter(func(e):
+		var m: Dictionary = e["data"]
+		return (map_filter_mode == "all" or map_filter_mode in _modes_of(m)) 				and (map_filter_type == "all" or _map_type(m) == map_filter_type))
+
+
+func _pool_modes() -> Array:
+	## The modes some map in the pool offers, in MODE_NAMES order (no chip for a mode no map has).
+	var have := {}
+	for e in maps:
+		for md in _modes_of(e["data"]):
+			have[md] = true
+	return ["1v1", "2v2", "3v3", "2v2v2", "FFA3", "FFA4", "FFA5"].filter(func(md): return have.has(md))
+
+
+func _refilter() -> void:
+	## A filter changed: back to the top of the grid.
+	_map_scroll = 0
+	show_maps()                                       # which picks a shown map and the filtered mode
 
 
 func _relay_kinds(m: Dictionary) -> String:

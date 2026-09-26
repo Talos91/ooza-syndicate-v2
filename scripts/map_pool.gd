@@ -1,12 +1,12 @@
 class_name MapPool
 ## Every playable map: maps 4.2 (References/Ooze Syndicate maps 4.2, compact maps at the kit's sizes) and the
-## Alpha 11 classics (A-, References/Ooze Syndicate maps 4.2 - Alpha 11 classics) and maps 4.3 classic (M-, References/
-## Ooze Syndicate maps 4.3 classic, Mushroom Wars style fields), baked for the game by
+## Alpha 11 classics (A-, References/Ooze Syndicate maps 4.2 - Alpha 11 classics) and maps 4.3 / 4.4 classic (M-01..M-20 /
+## M-21..M-40, References/Ooze Syndicate maps 4.3 classic / 4.4 classic, Mushroom Wars style fields), baked for the game by
 ## Models/2.0/export_maps_4_2_game.py into maps4/: every map baked into maps4/ except WITHHELD,
 ## ordered by code prefix (GROUP_ORDER; D = debug maps), each by code; on a phone also without PHONE_UNFIT. The 2.0 roster in maps/ is
 ## archive: only the rules tests still load it.
 
-const GROUP_ORDER := ["T", "A", "M", "C", "B", "S", "X", "D"]   # A = Alpha 11 classics; M = maps 4.3 classic
+const GROUP_ORDER := ["T", "A", "M", "C", "B", "S", "X", "D"]   # A = Alpha 11 classics; M = maps 4.3 / 4.4 classic
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
 static var dir := DIR                                   # tests/test_net.gd points it at the legacy roster

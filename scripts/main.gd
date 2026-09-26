@@ -1,6 +1,7 @@
 extends Node3D
 ## Ooze Syndicate 2.0 (version: Rules.VERSION / VERSION_NAME). World, camera, input and orchestration;
-## the interface lives in hud.gd, in-world effects in fx.gd, hordes in horde_view.gd, rules in sim.gd.
+## the interface lives in hud.gd, in-world effects in fx.gd (fights, tier-downs and the cannon laser in
+## combat_fx.gd), hordes in horde_view.gd, rules in sim.gd.
 ## Drag from one of your nodes to any node to send; tap a node to inspect; double-tap your own node
 ## to upgrade (Alpha 11 convention); the inspector offers costed actions and the relay's switch.
 ## Command-line user args (after `--`):
@@ -31,12 +32,14 @@ var ais: Array = []
 var vis: Dictionary
 var hordes: HordeView
 var fx: Fx
+var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var scenery: Scenery
 var hud: Hud
 var cam: Camera3D
 var cam_target := Vector3.ZERO
 var cam_dist := 90.0
 var cam_pitch: float = Rules.CAM_PITCH              # degrees above the horizon: MapCamera's per-map pitch
+var _base_pitch: float = Rules.CAM_PITCH            # the start view's pitch (the Last Stand zoom lowers cam_pitch)
 var pitch_forced := false                          # --pitch=N (or the phone-fit probe) overrides it
 var cam_yaw := 0.0
 var _start_fit := []                              # [cam_target, cam_dist] of the whole-map fit (_fit_camera)
@@ -49,6 +52,8 @@ var _zoom_t := -1.0                               # 0..1 through the ease, < 0 w
 const COLLAPSE_ZOOM_DELAY := 1.0                  # the platforms' fall first (fx._collapse, ~1.5 s)
 const COLLAPSE_ZOOM_SECONDS := 1.5
 const COLLAPSE_ZOOM_MAX := 2.5                    # never closer than 1/2.5 of the start distance
+const COLLAPSE_PITCH_DROP := 14.0                 # degrees the pitch lowers by once almost every node has fallen
+const COLLAPSE_PITCH_MIN := 44.0                  # never flatter than this
 var fraction := 0.5
 var drag_from := -1
 var selected := -1
@@ -180,6 +185,7 @@ func _start_map(path: String) -> void:
 	map = MapBuilder.load_map(path)
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
 		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")))
+	_base_pitch = cam_pitch
 	if not map["seats"].has(mode):                     # this map doesn't offer the mode: its first one
 		mode = "1v1" if map["seats"].has("1v1") else map["seats"].keys()[0]
 	var seats := {}
@@ -218,6 +224,9 @@ func _start_map(path: String) -> void:
 	fx = Fx.new()
 	add_child(fx)
 	fx.setup(self, sim, vis, hordes)
+	combat = CombatFx.new()
+	add_child(combat)
+	combat.setup(self, sim, vis, fx)
 	drag_line = MeshInstance3D.new()
 	drag_line.mesh = drag_mesh
 	add_child(drag_line)
@@ -343,6 +352,7 @@ func _on_resized() -> void:
 	_fitted_size = vp
 	_apply_safe_area()
 	hud.layout(vp, margins)
+	combat.top_limit = hud.top_used() + 3.0 * 38.0 * hud.ui_scale   # the top bar and up to three toasts
 	_fit_camera()
 
 
@@ -414,6 +424,9 @@ func _fit_camera() -> void:
 	## "the HUD should never overlap a corridor or a platform"). Fixed from then on: no player zoom or
 	## pan; only the Last Stand closes in on the nodes still standing (_collapse_zoom).
 	cam_yaw = Rules.view_yaw
+	if _fit_gone == 0 and _zoom_t < 0.0:              # no Last Stand zoom yet: cam_pitch is the start view's
+		_base_pitch = cam_pitch                       # (a probe may have set it after _start_map)
+	cam_pitch = _base_pitch                           # the start view stays exactly as it was
 	_start_fit = _fit_nodes(sim.nodes)
 	cam_target = _start_fit[0]
 	cam_dist = _start_fit[1]
@@ -421,6 +434,7 @@ func _fit_camera() -> void:
 		var fit := _survivor_fit()
 		cam_target = fit[0]
 		cam_dist = fit[1]
+		cam_pitch = fit[2]
 		_zoom_t = -1.0
 	if scenario_focus != Vector3.INF:
 		cam_target = scenario_focus
@@ -483,22 +497,29 @@ func _fit_nodes(nodes: Array) -> Array:
 
 
 func _survivor_fit() -> Array:
-	## The fit for the nodes the Last Stand has not dropped: never wider than the start fit, never
-	## closer than COLLAPSE_ZOOM_MAX times it.
+	## [cam_target, cam_dist, cam_pitch] for the nodes the Last Stand has not dropped. Daniele (0.18.6):
+	## "the camera axis could benefit of being a bit lower, right now is maybe a bit too vertical when less
+	## nodes are present" - the pitch lowers as the map shrinks, lerp(map pitch, max(44, map pitch - 14),
+	## 1 - survivors / nodes), and the survivors are fitted at that pitch: never wider than the start
+	## distance, never closer than 1 / COLLAPSE_ZOOM_MAX of it.
 	var alive := sim.nodes.filter(func(n): return not sim.collapsed.get(n["id"], false))
 	if alive.is_empty():
-		return _start_fit
+		return [_start_fit[0], _start_fit[1], _base_pitch]
+	var gone := 1.0 - float(alive.size()) / float(maxi(sim.nodes.size(), 1))
+	var pitch := lerpf(_base_pitch, maxf(COLLAPSE_PITCH_MIN, _base_pitch - COLLAPSE_PITCH_DROP), gone)
+	var keep := cam_pitch
+	cam_pitch = pitch                                 # _fit_nodes measures at the current pitch
 	var fit := _fit_nodes(alive)
-	if fit[1] >= _start_fit[1]:
-		return _start_fit
-	fit[1] = maxf(fit[1], _start_fit[1] / COLLAPSE_ZOOM_MAX)
-	return fit
+	cam_pitch = keep
+	fit[1] = clampf(fit[1], _start_fit[1] / COLLAPSE_ZOOM_MAX, _start_fit[1])
+	return [fit[0], fit[1], pitch]
 
 
 func _collapse_zoom(dt: float) -> void:
 	## Daniele: "if the borders are gone have the camera zoom in to make it more epic". After each
-	## Last Stand wave, once the fall has played, the camera eases in on the surviving nodes at the
-	## same pitch and yaw. Read from the Sim's collapsed set every frame (not the fx events), so
+	## Last Stand wave, once the fall has played, the camera eases in on the surviving nodes, same yaw,
+	## the pitch lowering as fewer nodes remain (_survivor_fit). Read from the Sim's collapsed set every
+	## frame (not the fx events), so
 	## online guests, who apply the host's snapshots, close in too. Staged scenarios and thumbnails keep
 	## their camera.
 	if scenario_focus != Vector3.INF or thumb_path != "" or _start_fit.is_empty():
@@ -514,7 +535,7 @@ func _collapse_zoom(dt: float) -> void:
 		_gone_wait -= dt
 		if _gone_wait <= 0.0 and gone > 0 and gone != _fit_gone:
 			_fit_gone = gone
-			_zoom_from = [cam_target, cam_dist]
+			_zoom_from = [cam_target, cam_dist, cam_pitch]
 			_zoom_to = _survivor_fit()
 			_zoom_t = 0.0
 	if _zoom_t >= 0.0:
@@ -522,6 +543,7 @@ func _collapse_zoom(dt: float) -> void:
 		var k := ease(_zoom_t, -2.0)                  # ease in and out
 		cam_target = (_zoom_from[0] as Vector3).lerp(_zoom_to[0], k)
 		cam_dist = lerpf(_zoom_from[1], _zoom_to[1], k)
+		cam_pitch = lerpf(_zoom_from[2], _zoom_to[2], k)   # the pitch lowers with the same ease
 		_place_camera()                               # hud.sync re-lays the badges on the new transform
 		if _zoom_t >= 1.0:
 			_zoom_t = -1.0
@@ -722,7 +744,9 @@ func _process(delta: float) -> void:
 			continue
 		var model := MapBuilder.model_for(n)
 		if entry["model_key"] != model:
+			combat.before_swap(n, entry)              # a conquest's tier-down keeps a ghost of the old tier
 			MapBuilder.set_centre_model(self, entry, model, n["pos"], n["owner"])
+			combat.after_swap(n, entry)
 	scenery.sync(dt)
 	if online:
 		Net.push_effects(sim.fx_events)              # host: the guests see the same bursts and falls
@@ -751,6 +775,7 @@ func _process(delta: float) -> void:
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
 	fx.sync(dt)
+	combat.sync(dt, cam)                          # after Fx: it scales the tier-down's rising model
 	hud.sync(dt, cam)
 	_trace_t += dt
 	if _trace_t >= 2.0:

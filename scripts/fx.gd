@@ -1,12 +1,13 @@
 class_name Fx
 extends Node3D
 ## In-world animation and effects: construction (the new structure grows out of the socket under a
-## turning build ring), capture pulses, cannon beams, relay warnings (blinking state lights + a ghost
+## turning build ring), capture pulses, relay warnings (blinking state lights + a ghost
 ## of the next deck), relay motion (rotation pivots the turntable and its decks, retract slides the
 ## deck into its gate, switch/remote dissolve and assemble), the Last Stand warning ring and the falls
 ## (platform, deck fragments, waterfall of goo, hordes tumbling into the void, lines flung off a
 ## turning rotation deck), the selection ring,
-## owner-coloured deck lights (SIEGE) and Alpha 11's half-bridge neon trims (BRAWL).
+## owner-coloured deck lights (SIEGE) and Alpha 11's half-bridge neon trims (BRAWL), pier stripes and
+## platform rims. The cannon laser, fights for a tower and tier-downs are combat_fx.gd.
 
 var sim: Sim
 var vis: Dictionary
@@ -20,7 +21,6 @@ var _build_rings := {}      # node id -> MeshInstance3D
 var _warn_rings := {}       # node id -> MeshInstance3D (Last Stand)
 var _cool_arcs := {}        # node id -> MeshInstance3D (relay cooldown / warning)
 var _arc_built := {}        # node id -> [frac, colour] the arc was last built with
-var _beams := {}            # node id -> {"beam", "flash"}
 var _ghosts := {}           # edge -> [Node3D]
 var _plat_angle := {}       # node id -> accumulated turntable angle
 var _edge_light := {}       # edge -> owner key currently applied
@@ -102,10 +102,14 @@ func _pulse(pos: Vector3, color: Color, radius: float, dur: float) -> void:
 
 # ------------------------------------------------------------------ per frame
 func sync(dt: float) -> void:
+	if not _neon_built:
+		_build_neon()
 	var classic := not Rules.bridge_combat
 	if classic != _lights_classic:                    # SIEGE/BRAWL switched (pause menu, Debug panel)
 		_lights_classic = classic
 		_edge_light.clear()                           # SIEGE: _decks re-applies owner/state lights
+		_pier_key.clear()                             # _neon re-colours the pier stripes and rims
+		_rim_key.clear()
 		if classic:
 			for i in _trims:
 				for d in vis["edge_decks"][i]:
@@ -118,9 +122,10 @@ func sync(dt: float) -> void:
 		_construction(n, entry, dt)
 		_relay(n, entry)
 		_last_stand_warning(n)
-		_cannon(n, entry)
+		# the cannon laser is CombatFx._cannons_step (combat_fx.gd), which replaced the old cylinder beam
 	_decks()
 	_half_trims()
+	_neon()
 	_sel_ring.visible = selected >= 0 and not sim.collapsed.get(selected, false)
 	if _sel_ring.visible:
 		var n: Dictionary = sim.nodes[selected]
@@ -315,53 +320,6 @@ func _last_stand_warning(n: Dictionary) -> void:
 				_edge_light[edge_i] = "warn%d" % int(blink > 0.5)
 				for d in vis["edge_decks"][edge_i]:
 					MapBuilder.set_lights(d, mat)
-
-
-func _cannon(n: Dictionary, _entry: Dictionary) -> void:
-	var id: int = n["id"]
-	var firing: bool = n["attachment"] == "cannon" and n["cannon_burst"] > 0.0 and n["owner"] != ""
-	if not _beams.has(id):
-		if not firing:
-			return
-		var beam := MeshInstance3D.new()
-		var cyl := CylinderMesh.new()
-		cyl.top_radius = 0.16
-		cyl.bottom_radius = 0.16
-		cyl.height = 1.0
-		cyl.radial_segments = 8
-		beam.mesh = cyl
-		beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(beam)
-		var flash := MeshInstance3D.new()
-		var sph := SphereMesh.new()
-		sph.radius = 1.0
-		sph.height = 2.0
-		sph.radial_segments = 12
-		sph.rings = 6
-		flash.mesh = sph
-		flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(flash)
-		_beams[id] = {"beam": beam, "flash": flash}
-	var b: Dictionary = _beams[id]
-	(b["beam"] as MeshInstance3D).visible = firing
-	(b["flash"] as MeshInstance3D).visible = firing
-	if not firing:
-		return
-	var col := Rules.seat_color(n["owner"])
-	var from: Vector3 = n["pos"] + Vector3(0, 4.3 + 0.35 * n["cannon_tier"], 0)
-	var to: Vector3 = n["cannon_target"] + Vector3(0, 0.6, 0)
-	var beam: MeshInstance3D = b["beam"]
-	beam.material_override = Mats.glow(col.lerp(Color.WHITE, 0.5), 0.9)
-	var v := to - from
-	beam.position = (from + to) / 2.0
-	beam.scale = Vector3(1.0 + 0.4 * sin(sim.time * 40.0), v.length(), 1.0 + 0.4 * sin(sim.time * 40.0))
-	if v.length() > 0.01:
-		beam.look_at(to, Vector3.UP if absf(v.normalized().y) < 0.99 else Vector3.FORWARD)
-		beam.rotate_object_local(Vector3.RIGHT, PI / 2.0)
-	var flash: MeshInstance3D = b["flash"]
-	flash.material_override = Mats.glow(col.lerp(Color.WHITE, 0.6), 0.55)
-	flash.position = to
-	flash.scale = Vector3.ONE * (1.2 + 0.6 * absf(sin(sim.time * 25.0)))
 
 
 func _decks() -> void:
@@ -652,6 +610,12 @@ func _collapse(node_id: int, from := "") -> void:
 	## `from` is the owner before the drop (the sim has already cleared it): the goo's colour.
 	var n: Dictionary = sim.nodes[node_id]
 	var falling: Array = vis[node_id]["parts"].duplicate()
+	if _rims.has(node_id):                             # its neon goes down with the platform and piers
+		falling.append(_rims[node_id])
+	for i in _pier_neon:
+		for end in range(2):
+			if _pier_neon[i][end] != null and sim.edges[i]["b" if end == 1 else "a"] == node_id:
+				falling.append(_pier_neon[i][end])
 	for key in ["build_rings", "warn_rings", "cool_arcs"]:
 		var dict: Dictionary = get(("_" + key))
 		if dict.has(node_id):
@@ -697,67 +661,309 @@ func _collapse(node_id: int, from := "") -> void:
 				(p as Node3D).visible = false)
 
 
-# ------------------------------------------------------------------ BRAWL: Alpha 11 half-bridge neon
-var _trims := {}             # edge -> [MeshInstance3D x4]: two edges x two halves
-var _trim_key := {}          # edge -> "show|owner_a|owner_b" last applied
-var _trim_mesh: BoxMesh
+# ------------------------------------------------------------------ neon: half-bridge trims, pier stripes, rims
+# BRAWL (Daniele: "bridges need to follow Alpha 11's idea of neon lighting up half the bridge connected
+# to a node"): every deck carries two neon strips along its edges; the half nearest each node glows in
+# that node's owner colour (neutral amber), like Alpha 11's bridge_trims, and the kit's own deck lights
+# are dimmed. Daniele (0.18.5): "sockets miss the neon stripe on top like normal bridge (please add),
+# same neon stripe should be added at the edge of nodes for consistent look" - the strips continue over
+# every pier to the platform, where a rim stripe runs round the edge of the platform in the node's
+# colour and opens at each pier mouth (and at a relay ledge or gate), so a bridge's strips turn into
+# the rim. SIEGE keeps its kit deck lights: the rims show there too (owner colour, the kit light when
+# neutral) and the pier stripes follow the deck lights' colour (_decks / _last_stand_warning).
+# Geometry is static and built once: one mesh per deck half (both strips, ramps included), per pier
+# (both strips) and per platform rim; only materials (shared, per colour) and visibility change.
+var _trims := {}             # edge -> [deck half a, deck half b] MeshInstance3D (null: no deck)
+var _trim_state := {}        # edge -> [show, owner_a, owner_b] last applied
+var _pier_neon := {}         # edge -> [pier a, pier b] MeshInstance3D (null: no pier stripe there)
+var _pier_key := {}          # edge * 2 + end -> colour key last applied
+var _rims := {}              # node id -> MeshInstance3D
+var _rim_key := {}           # node id -> owner last applied
+var _neon_built := false
+var _kit_light: Material     # the kit's own OS_Light (SIEGE's neutral deck light)
 const NEUTRAL_TRIM := Color("ffad51")   # Alpha 11's neutral bridge trim
 const TRIM_OFF := Color(0.12, 0.14, 0.16)   # the kit's deck lights, dimmed under the trims
+const TRIM_Y := 0.1                  # strip centre above the deck plate
+const TRIM_HW := 0.07                # half width (0.14 m strip)
+const TRIM_HH := 0.035               # half height (0.07 m)
+const TRIM_MID_GAP := 0.15           # each half stops this short of the middle (Alpha 11's split)
+const RIM_R := 5.75                  # rim stripe radius: the dark band between the plate ring and the edge
+const LEDGE_HW := 2.45               # Relay_Mount / Relay_Retract half width (kit 2.35 / 2.375) + clearance
+const SIEGE_PIER_STRIPES := true
+
+
+func _trim_off() -> float:
+	return Rules.W * 0.42            # strip offset from the deck centre line
+
+
+func _build_neon() -> void:
+	_neon_built = true
+	var off := _trim_off()
+	for n in sim.nodes:
+		var pf = vis[n["id"]]["platform"]
+		if pf != null and _kit_light == null:
+			for mi in (pf as Node3D).find_children("*", "MeshInstance3D", true, false):
+				var mesh := (mi as MeshInstance3D).mesh
+				for s in range(mesh.get_surface_count()):
+					var m := mesh.surface_get_material(s)
+					if m and m.resource_name.begins_with("OS_Light"):
+						_kit_light = m
+	var gaps := {}                                    # node id -> [[start angle, arc length]]
+	for i in range(sim.edges.size()):
+		var e: Dictionary = sim.edges[i]
+		var line: Array = sim.deck_line(i)
+		if line.size() < 4:
+			continue
+		# deck halves: split the deck (pier end to pier end, ramps included) at half its length
+		var deck: Array = line.slice(1, line.size() - 1)
+		var total := 0.0
+		for k in range(1, deck.size()):
+			total += (deck[k] as Vector3).distance_to(deck[k - 1])
+		var plan: Vector3 = ((line[-1] as Vector3) - (line[0] as Vector3)) * Vector3(1, 0, 1)
+		var side := plan.normalized().cross(Vector3.UP).normalized()
+		var halves := [null, null]
+		if total > 2.0 * TRIM_MID_GAP + 0.1:
+			for h in range(2):
+				var st := SurfaceTool.new()
+				st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				var a0 := 0.0 if h == 0 else total / 2.0 + TRIM_MID_GAP
+				var a1 := total / 2.0 - TRIM_MID_GAP if h == 0 else total
+				var run := 0.0
+				for k in range(1, deck.size()):
+					var p: Vector3 = deck[k - 1]
+					var q: Vector3 = deck[k]
+					var seg := p.distance_to(q)
+					var lo := maxf(a0, run)
+					var hi := minf(a1, run + seg)
+					if hi - lo > 0.01:
+						var u0 := p.lerp(q, (lo - run) / seg)
+						var u1 := p.lerp(q, (hi - run) / seg)
+						for sgn in [1.0, -1.0]:
+							var o: Vector3 = side * off * sgn + Vector3(0, TRIM_Y, 0)
+							_bar(st, u0 + o, u1 + o, side)
+					run += seg
+				halves[h] = _neon_mesh(st, Vector3.ZERO)
+		_trims[i] = halves
+		# pier stripes: from the rim stripe along the pier to the deck, at the same offsets
+		var piers := [null, null]
+		for end in range(2):
+			var nid: int = e["a"] if end == 0 else e["b"]
+			var n: Dictionary = sim.nodes[nid]
+			if n["plaza"] >= 0 or vis[nid]["platform"] == null:
+				continue
+			var c: Vector3 = n["pos"]
+			var x: Vector3 = line[0] if end == 0 else line[-1]
+			var d_end: Vector3 = line[1] if end == 0 else line[-2]
+			var u := (d_end - x) * Vector3(1, 0, 1)
+			var reach := u.length()
+			u = u.normalized() if reach > 0.001 else (plan.normalized() * (1.0 if end == 0 else -1.0))
+			var sd := u.cross(Vector3.UP).normalized()
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			var any := false
+			var ang := []
+			for sgn in [1.0, -1.0]:
+				var t0 := _rim_cross(c, x, u, off * sgn)
+				var q0: Vector3 = x + sd * off * sgn + u * t0
+				ang.append(atan2(q0.z - c.z, q0.x - c.x))
+				if reach - (t0 - TRIM_HW) > 0.05:
+					var y := Vector3(0, TRIM_Y, 0)
+					_bar(st, q0 - u * TRIM_HW + y - c, x + sd * off * sgn + u * reach + y - c, sd)
+					any = true
+			if not gaps.has(nid):
+				gaps[nid] = []
+			gaps[nid].append(_gap(ang[0], ang[1]))
+			if any:
+				piers[end] = _neon_mesh(st, c)
+		_pier_neon[i] = piers
+	for n in sim.nodes:                               # relay ledges and retract gates straddle the rim too
+		var id: int = n["id"]
+		if vis[id]["platform"] == null:
+			continue
+		var c: Vector3 = n["pos"]
+		for p in vis[id]["parts"]:
+			if not is_instance_valid(p):
+				continue
+			var path := (p as Node).scene_file_path
+			if path.ends_with("/Relay_Mount.glb") or path.ends_with("/Relay_Retract.glb"):
+				var ax: Vector3 = ((p as Node3D).transform.basis.x * Vector3(1, 0, 1)).normalized()
+				var o: Vector3 = (p as Node3D).position
+				var sd := ax.cross(Vector3.UP).normalized()
+				var q1 := o + sd * LEDGE_HW + ax * _rim_cross(c, o, ax, LEDGE_HW)
+				var q2 := o - sd * LEDGE_HW + ax * _rim_cross(c, o, ax, -LEDGE_HW)
+				if not gaps.has(id):
+					gaps[id] = []
+				gaps[id].append(_gap(atan2(q1.z - c.z, q1.x - c.x), atan2(q2.z - c.z, q2.x - c.x)))
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for arc in _arcs(gaps.get(id, [])):
+			_rim_arc(st, arc[0], arc[1], arc[2])
+		_rims[id] = _neon_mesh(st, c)
+
+
+func _neon_mesh(st: SurfaceTool, at: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = at
+	mi.visible = false
+	add_child(mi)
+	return mi
+
+
+static func _rim_cross(c: Vector3, origin: Vector3, axis: Vector3, off: float) -> float:
+	## Along the line origin + side * off + axis * t (plan), the t where it leaves the rim stripe's
+	## circle (the far root); 0 when it misses.
+	var w := (origin + axis.cross(Vector3.UP).normalized() * off - c) * Vector3(1, 0, 1)
+	var b := w.dot(axis)
+	var disc := b * b - (w.dot(w) - RIM_R * RIM_R)
+	return -b + sqrt(disc) if disc >= 0.0 else 0.0
+
+
+static func _gap(a: float, b: float) -> Array:
+	## The short arc between two angles: [start in 0..TAU, length].
+	var d := wrapf(b - a, -PI, PI)
+	return [fposmod(a if d >= 0.0 else b, TAU), absf(d)]
+
+
+static func _arcs(gaps: Array) -> Array:
+	## The rim's lit arcs between its gaps: [[start, end, closed]] (closed: one full ring, no ends).
+	if gaps.is_empty():
+		return [[0.0, TAU, true]]
+	gaps.sort_custom(func(x, y): return x[0] < y[0])
+	var merged := []
+	for g in gaps:
+		var s: float = g[0]
+		var e: float = g[0] + g[1]
+		if not merged.is_empty() and s <= merged[-1][1]:
+			merged[-1][1] = maxf(merged[-1][1], e)
+		else:
+			merged.append([s, e])
+	while merged.size() > 1 and merged[-1][1] - TAU >= merged[0][0]:   # the last gap wraps over the first
+		merged[0] = [merged[-1][0] - TAU, maxf(merged[0][1], merged[-1][1] - TAU)]
+		merged.pop_back()
+	var out := []
+	for k in range(merged.size()):
+		var a0: float = merged[k][1]
+		var a1: float = merged[(k + 1) % merged.size()][0] + (TAU if k == merged.size() - 1 else 0.0)
+		if a1 - a0 > 0.02:
+			out.append([a0, a1, false])
+	return out
+
+
+static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3) -> void:
+	## One face; Godot's front faces wind clockwise seen from outside, whatever order a-d come in.
+	st.set_normal(n)
+	var flip := (b - a).cross(c - a).dot(n) > 0.0
+	st.add_vertex(a)
+	st.add_vertex(c if flip else b)
+	st.add_vertex(b if flip else c)
+	st.add_vertex(a)
+	st.add_vertex(d if flip else c)
+	st.add_vertex(c if flip else d)
+
+
+static func _bar(st: SurfaceTool, p0: Vector3, p1: Vector3, side: Vector3) -> void:
+	## A neon strip from p0 to p1 (centre line), TRIM_HW wide along `side`, TRIM_HH high; no bottom.
+	var x := (p1 - p0).normalized()
+	var up := side.cross(x).normalized()
+	var s := side * TRIM_HW
+	var u := up * TRIM_HH
+	_quad(st, p0 - s + u, p0 + s + u, p1 + s + u, p1 - s + u, up)
+	_quad(st, p0 + s - u, p1 + s - u, p1 + s + u, p0 + s + u, side)
+	_quad(st, p0 - s - u, p0 - s + u, p1 - s + u, p1 - s - u, -side)
+	_quad(st, p0 - s - u, p0 + s - u, p0 + s + u, p0 - s + u, -x)
+	_quad(st, p1 - s - u, p1 - s + u, p1 + s + u, p1 + s - u, x)
+
+
+static func _rim_arc(st: SurfaceTool, a0: float, a1: float, closed: bool) -> void:
+	## The rim stripe from angle a0 to a1 round the platform centre (local), same profile as a strip.
+	var steps := maxi(2, int(ceil((a1 - a0) / (TAU / 96.0))))
+	var r0 := RIM_R - TRIM_HW
+	var r1 := RIM_R + TRIM_HW
+	var lo := Vector3(0, TRIM_Y - TRIM_HH, 0)
+	var hi := Vector3(0, TRIM_Y + TRIM_HH, 0)
+	for k in range(steps):
+		var t0 := a0 + (a1 - a0) * k / steps
+		var t1 := a0 + (a1 - a0) * (k + 1) / steps
+		var v0 := Vector3(cos(t0), 0.0, sin(t0))
+		var v1 := Vector3(cos(t1), 0.0, sin(t1))
+		var vm := (v0 + v1).normalized()
+		_quad(st, v0 * r0 + hi, v0 * r1 + hi, v1 * r1 + hi, v1 * r0 + hi, Vector3.UP)
+		_quad(st, v0 * r1 + lo, v1 * r1 + lo, v1 * r1 + hi, v0 * r1 + hi, vm)
+		_quad(st, v0 * r0 + lo, v0 * r0 + hi, v1 * r0 + hi, v1 * r0 + lo, -vm)
+	if not closed:
+		for t in [a0, a1]:
+			var v := Vector3(cos(t), 0.0, sin(t))
+			var tg := Vector3(-v.z, 0.0, v.x) * (-1.0 if t == a0 else 1.0)
+			_quad(st, v * r0 + lo, v * r1 + lo, v * r1 + hi, v * r0 + hi, tg)
+
+
+func _brawl_color(owner: String) -> Color:
+	return Rules.seat_color(owner) if owner != "" else NEUTRAL_TRIM
 
 
 func _half_trims() -> void:
-	## BRAWL (Daniele: "bridges need to follow Alpha 11's idea of neon lighting up half the
-	## bridge connected to a node"): every deck carries two neon strips along its edges; the half
-	## nearest each node glows in that node's owner colour (neutral amber), like Alpha 11's
-	## bridge_trims. The kit's own deck lights are dimmed while this is on.
+	## BRAWL deck halves: shown while the deck is open, each half in its end's owner colour.
 	var on := not Rules.bridge_combat
-	if _trim_mesh == null:
-		_trim_mesh = BoxMesh.new()
-		_trim_mesh.size = Vector3(1.0, 0.07, 0.14)
-	for i in range(sim.edges.size()):
+	for i in _trims:
 		var e: Dictionary = sim.edges[i]
 		var show: bool = on and not _collapsed.has(i) and sim.is_edge_open(i)
-		if not _trims.has(i):
-			if not show:
-				continue
-			var arr := []
-			for k in range(4):
-				var mi := MeshInstance3D.new()
-				mi.mesh = _trim_mesh
-				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				add_child(mi)
-				arr.append(mi)
-			_trims[i] = arr
-			for d in vis["edge_decks"][i]:
-				MapBuilder.set_lights(d, Mats.light_color(TRIM_OFF, "trim_off"))
-		var key := "%s|%s|%s" % [show, sim.nodes[e["a"]]["owner"], sim.nodes[e["b"]]["owner"]]
-		if _trim_key.get(i, "") == key:
+		var oa: String = sim.nodes[e["a"]]["owner"]
+		var ob: String = sim.nodes[e["b"]]["owner"]
+		var last: Array = _trim_state.get(i, [])
+		if not last.is_empty() and last[0] == show and last[1] == oa and last[2] == ob:
 			continue                                      # geometry is static: only show/owners change it
-		_trim_key[i] = key
-		var parts: Array = _trims[i]
-		for mi in parts:
-			(mi as MeshInstance3D).visible = show
-		if not show:
-			continue
-		var line: Array = sim.deck_line(i)
-		if line.is_empty():
-			continue
-		if not sim.v3:                                    # legacy: trims run centre to centre
-			line = [sim.nodes[e["a"]]["pos"]] + sim.deck_points(i, e["a"]) + [sim.nodes[e["b"]]["pos"]]
-		var pa: Vector3 = line[1] if line.size() > 2 else line[0]
-		var pb: Vector3 = line[-2] if line.size() > 2 else line[-1]
-		var mid := (pa + pb) / 2.0
-		var halves := [[pa, mid, sim.nodes[e["a"]]["owner"]], [mid, pb, sim.nodes[e["b"]]["owner"]]]
+		_trim_state[i] = [show, oa, ob]
 		for h in range(2):
-			var p0: Vector3 = halves[h][0]
-			var p1: Vector3 = halves[h][1]
-			var owner: String = halves[h][2]
-			var col: Color = Rules.seat_color(owner) if owner != "" else NEUTRAL_TRIM
-			var dir := (p1 - p0)
-			var x := dir.normalized()
-			var side := x.cross(Vector3.UP).normalized()
-			for s in range(2):
-				var mi: MeshInstance3D = parts[h * 2 + s]
-				mi.material_override = Mats.light_color(col)
-				mi.position = (p0 + p1) / 2.0 + side * (Rules.W * 0.42) * (1 if s == 0 else -1) + Vector3(0, 0.1, 0)
-				mi.basis = Basis(x * maxf(dir.length() - 0.3, 0.1), Vector3.UP, side)
+			var mi = _trims[i][h]
+			if mi == null:
+				continue
+			(mi as MeshInstance3D).visible = show
+			if show:
+				(mi as MeshInstance3D).material_override = Mats.light_color(_brawl_color(oa if h == 0 else ob))
+
+
+func _neon() -> void:
+	## Pier stripes and platform rims (see the section note): BRAWL in the end node's owner colour,
+	## SIEGE the pier follows its deck's lights and the rim the owner. A dropped node's stripes fall
+	## with it (_collapse): they are left alone from then on.
+	var brawl := not Rules.bridge_combat
+	for i in _pier_neon:
+		var e: Dictionary = sim.edges[i]
+		for end in range(2):
+			var mi = _pier_neon[i][end]
+			var nid: int = e["a"] if end == 0 else e["b"]
+			if mi == null or sim.collapsed.get(nid, false):
+				continue
+			var key: String = sim.nodes[nid]["owner"] if brawl else _edge_light.get(i, "")
+			if _pier_key.get(i * 2 + end, "?") == key:
+				continue
+			_pier_key[i * 2 + end] = key
+			(mi as MeshInstance3D).visible = brawl or SIEGE_PIER_STRIPES
+			(mi as MeshInstance3D).material_override = Mats.light_color(_brawl_color(key)) if brawl else _siege_light(i, key)
+	for id in _rims:
+		if sim.collapsed.get(id, false):
+			continue
+		var owner: String = sim.nodes[id]["owner"]
+		if _rim_key.get(id, "?") == owner:
+			continue
+		_rim_key[id] = owner
+		var mi: MeshInstance3D = _rims[id]
+		mi.visible = true
+		if brawl:
+			mi.material_override = Mats.light_color(_brawl_color(owner))
+		else:
+			mi.material_override = Mats.light(owner) if owner != "" else _kit_light
+
+
+func _siege_light(i: int, key: String) -> Material:
+	## The material SIEGE's deck lights carry for _edge_light key `key` (_decks, _last_stand_warning).
+	var e: Dictionary = sim.edges[i]
+	if key == "state":
+		return Mats.light_color(Rules.state_color("retract" if e["retracts"] else e["state"]))
+	if key == "warn1":
+		return Mats.light_color(Rules.state_color("warn"))
+	if key == "" or key == "warn0":
+		return _kit_light
+	return Mats.light(key)

@@ -905,5 +905,56 @@ func _init() -> void:
 	check(from_d.size() == 1 and from_d[0]["streaming"] and from_d[0]["target"] == 0,
 			"AI never cancels its own order in the same think (one order from the donor, still streaming to the first target)")
 
+	# ---------------------------------------------------------------- 0.18.6: a one-deck remote toggles
+	var mr := MapBuilder.load_map("res://maps4/M-08-neon-delta.json")
+	var seats_r := {}
+	for st in mr["seats"]["1v1"]:
+		seats_r[int(st["node"])] = st["seat"]
+	var sr := Sim.new()
+	sr.setup(mr, MapBuilder.layout(mr), seats_r, {"A": "null", "B": "ember"}, 1)
+	sr.nodes[4]["owner"] = "A"
+	var open0 := sr.is_edge_open(11)
+	sr.fire_relay(4)
+	for i in range(int((Rules.RELAY_WARNING + Rules.RELAY_MOVE + 0.5) / 0.1)):
+		sr.step(0.1)
+	check(open0 and not sr.is_edge_open(11), "a remote driving a single deck switches it off (Neon Delta)")
+	for i in range(int(Rules.RELAY_COOLDOWN / 0.1) + 2):
+		sr.step(0.1)
+	sr.fire_relay(4)
+	for i in range(int((Rules.RELAY_WARNING + Rules.RELAY_MOVE + 0.5) / 0.1)):
+		sr.step(0.1)
+	check(sr.is_edge_open(11), "... and back on")
+
+	# ---------------------------------------------------------------- 0.18.6: waterfall
+	# an order across a deck that retracts is still obeyed: the vat keeps sending and every unit pours
+	# into the void (Daniele: "they should go even if the bridge is no longer there hence... waterfall")
+	var sw := Sim.new()
+	sw.setup(mr, MapBuilder.layout(mr), seats_r, {"A": "null", "B": "ember"}, 1)
+	var ew := -1
+	for i in range(sw.edges.size()):
+		var e: Dictionary = sw.edges[i]
+		if [int(e["a"]), int(e["b"])] in [[1, 7], [7, 1]]:
+			ew = i
+	var cw: int = sw.edge_controller.get(ew, -1)
+	sw.nodes[1]["owner"] = "A"
+	sw.nodes[1]["units"] = 600.0
+	sw.nodes[7]["owner"] = "B"
+	sw.nodes[7]["units"] = 5000.0
+	if cw >= 0:
+		sw.nodes[cw]["owner"] = "B"
+	sw.send(1, 7, 1.0)
+	for i in range(20):
+		sw.step(0.1)
+	var fired := cw >= 0 and sw.fire_relay(cw)
+	for i in range(400):
+		sw.step(0.1)
+	var cut_ev := sw.events.filter(func(x): return x["type"] == "order_cut")
+	var fell: float = sw.fall_losses.get("A", 0.0)
+	var carried_w: float = 0.0
+	for x in sw.events:
+		if x["type"] == "carried" and x["seat"] == "A":
+			carried_w += x["units"]
+	check(fired and not sw.is_edge_open(ew) and cut_ev.is_empty() and fell > 350.0 and carried_w + fell > 590.0,
+			"a retracted deck under an order: riders carried in, the vat keeps sending and the rest pours into the void (carried %.0f + fell %.0f of 600)" % [carried_w, fell])
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)

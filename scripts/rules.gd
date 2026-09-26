@@ -6,7 +6,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.18.5"
+const VERSION := "0.18.6"
 const VERSION_NAME := "Alpha 18"
 
 # kit geometry (metres)
@@ -140,7 +140,7 @@ const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
 # tick applies the per-kind troop fate over RELAY_MOVE seconds of visible motion (rotation pivots and
 # flings every line on its turning decks into the void, retract slides in, switch/remote dissolve),
 # then RELAY_COOLDOWN before the next fire.
-const RELAY_WARNING := 3.0
+const RELAY_WARNING := 1.0          # Daniele (0.18.6): "bridge alert ... just 1 sec" (was 3 s)
 const RELAY_COOLDOWN := 5.0        # Daniele (Alpha 13 playtest): "relay cooldown I'd set at 5 s"
 const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves; retract/switch/remote riders ride, a rotation flings
 
@@ -149,7 +149,7 @@ const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves;
 # whole order is revealed; every node gets a 10 s warning before it falls; everything on a falling
 # node or its decks dies. The final node is never dropped. Wave interval per map so the collapse
 # is over well before the hard end.
-const LAST_STAND_TIME := 120.0
+const LAST_STAND_TIME := 180.0       # Daniele (0.18.6): "last stand reset to be starting at 3 m" (was 2:00)
 const LAST_STAND_WARNING := 10.0
 const LAST_STAND_WAVE_MIN := 12.0
 const LAST_STAND_WAVE_MAX := 30.0

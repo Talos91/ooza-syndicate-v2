@@ -27,7 +27,8 @@ var pause_button: Button
 var side_panel: PanelContainer
 var side_box: VBoxContainer
 var count_label: Label
-var badges := {}                     # node id -> {panel, label, sub, emblem, build, owner}
+var badges := {}                     # node id -> {panel, label, sub, emblem, build, owner, count_w, sub_w, look}
+var _badge_px := Vector2.ZERO        # the one badge size on this screen (BADGE_SIZE x ui_scale)
 var inspector: Control
 var inspector_id := -1
 var inspector_label: Label
@@ -70,17 +71,25 @@ static func panel_style(color: Color = Color("276578")) -> StyleBoxFlat:
 
 
 static func badge_style(color: Color) -> StyleBoxFlat:
-	var s := panel_style(color)
-	s.bg_color = Color("101419")
-	s.set_corner_radius_all(14)
-	s.set_content_margin_all(2)
+	## Alpha 19 (Daniele: "make them a bit transparent so they don't overpower the look of what's near
+	## them"): a see-through box and a softer rim; the text keeps its black outline, so it stays crisp.
+	var s := panel_style(Color(color, 0.8))
+	s.bg_color = Color(0.063, 0.078, 0.098, 0.42)
+	s.set_corner_radius_all(9)
+	s.set_content_margin_all(0)
 	s.set_border_width_all(1)
 	return s
 
 
 const EMBLEM_TINT := preload("res://shaders/emblem_tint.gdshader")
 const BADGE_EMBLEM := Vector2(12, 10)          # under a BRAWL count (Alpha 11)
-const BADGE_EMBLEM_OWNER := Vector2(20, 20)    # in place of a hidden count: about the count's own height
+const BADGE_EMBLEM_OWNER := Vector2(18, 18)    # in place of a hidden count: about the count's own height
+# Alpha 19: every node badge is one fixed box (x ui_scale) sized for its largest normal content - a
+# 3-digit count over an emblem and a short sub line; longer text steps its font down, then clips.
+const BADGE_SIZE := Vector2(44, 33)
+const BADGE_COUNT_FONT := 16
+const BADGE_SUB_FONT := 9
+const BADGE_PAD := 3.0                         # side margin inside the box
 
 
 static func tint_emblem(rect: TextureRect, color: Color) -> void:
@@ -195,39 +204,50 @@ func setup(m: Node3D) -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
 	var accent := Rules.seat_color(human)
-	# badges first (under everything else)
+	# badges first (under everything else). Alpha 19 (Daniele: "they all look different size - we should
+	# make them have fixed size and have their inside content never get out of the box boundaries"):
+	# one fixed box per ui_scale, its parts placed by hand (_place_badge) and clipped to it.
+	_badge_px = (BADGE_SIZE * ui_scale).round()
+	var sb_bg := StyleBoxFlat.new()                         # shared by every build bar
+	sb_bg.bg_color = Color(0, 0, 0, 0.55)
+	var bb_fill := StyleBoxFlat.new()
+	bb_fill.bg_color = Rules.state_color("build")
 	for n in sim.nodes:
-		var badge := PanelContainer.new()
+		var badge := Panel.new()
 		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		badge.custom_minimum_size = Vector2(30, 22) * ui_scale
-		var column := VBoxContainer.new()
-		column.add_theme_constant_override("separation", 0)
-		column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		badge.add_child(column)
-		var l := text_label("", 16)
+		badge.clip_contents = true
+		badge.custom_minimum_size = _badge_px
+		badge.size = _badge_px
+		var l := text_label("", BADGE_COUNT_FONT)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		l.clip_text = true
 		l.add_theme_constant_override("outline_size", 3)
 		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-		column.add_child(l)
-		var sub := text_label("", 9, Color("c8e6ee"))
+		badge.add_child(l)
+		var sub := text_label("", BADGE_SUB_FONT, Color("c8e6ee"))
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		column.add_child(sub)
+		sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		sub.clip_text = true
+		sub.add_theme_constant_override("outline_size", 2)  # crisp on the see-through box
+		sub.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		badge.add_child(sub)
 		var emblem := seat_emblem("", BADGE_EMBLEM)     # classic: Alpha 11's faction emblem under the count;
 		emblem.visible = false                          # the owner's emblem in the count's place where it is hidden
-		column.add_child(emblem)
-		var sb_bg := StyleBoxFlat.new()
-		sb_bg.bg_color = Color(0, 0, 0, 0.5)
+		badge.add_child(emblem)
 		var build_bar := ProgressBar.new()
 		build_bar.show_percentage = false
-		build_bar.custom_minimum_size = Vector2(0, 4 * ui_scale)
+		build_bar.custom_minimum_size = Vector2.ZERO
 		build_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var bb_fill := StyleBoxFlat.new()
-		bb_fill.bg_color = Rules.state_color("build")
 		build_bar.add_theme_stylebox_override("fill", bb_fill)
 		build_bar.add_theme_stylebox_override("background", sb_bg)
-		column.add_child(build_bar)
+		var inset := 7.0 * ui_scale                     # clear of the rounded corners
+		build_bar.position = Vector2(inset, _badge_px.y - 4.0 * ui_scale)
+		build_bar.size = Vector2(_badge_px.x - 2.0 * inset, 2.0 * ui_scale)
+		badge.add_child(build_bar)
 		root.add_child(badge)
-		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "build": build_bar, "owner": "?"}
+		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "build": build_bar, "owner": "?",
+				"count_w": 0.0, "sub_w": 0.0, "sub_small": false, "wide": false, "shape": "", "look": -1}
 	# top bar: emblem, your total, timer, rivals, strength bar (Alpha 11's score header)
 	top_panel = PanelContainer.new()
 	style_panel(top_panel, accent)
@@ -531,52 +551,79 @@ func _badges(cam: Camera3D) -> void:
 		var classic := not Rules.bridge_combat
 		var masked := not (owner == "" or sim.allied(owner, human) or (classic and not Rules.hide_enemy_counts))   # Brawl = Alpha 11: every count, unless hidden
 		label.visible = not masked
+		var inner := _badge_px.x - 2.0 * BADGE_PAD * ui_scale
 		if not masked:
-			label.text = str(Rules.shown(n["units"]))
+			b["count_w"] = _fit_text(label, str(Rules.shown(n["units"])), BADGE_COUNT_FONT, inner, b["count_w"])
 		# no numbers on enemy nodes: the owner's emblem in the owner's colour stands in the count's place
 		# (Daniele: "don't use A B and C but use emblems in the color of the owner")
 		var emb: TextureRect = b["emblem"]
-		emb.visible = owner != "" and (classic or masked)
-		emb.custom_minimum_size = (BADGE_EMBLEM_OWNER if masked else BADGE_EMBLEM) * ui_scale
-		if emb.get_index() != (0 if masked else 2):       # the count's row when it stands in for it, else under the tier
-			emb.get_parent().move_child(emb, 0 if masked else 2)
-		if emb.visible and emb.get_meta("f", "") != sim.factions.get(owner, ""):
+		var show_emb := owner != "" and (classic or masked)
+		if show_emb and emb.get_meta("f", "") != sim.factions.get(owner, ""):
 			emb.set_meta("f", sim.factions.get(owner, ""))
 			emb.texture = emblem_texture(str(sim.factions.get(owner, "null")))
-		if emb.visible and emb.get_meta("seat", "") != owner:
+		if show_emb and emb.get_meta("seat", "") != owner:
 			emb.set_meta("seat", owner)
 			tint_emblem(emb, Rules.seat_color(owner))
-		(b["sub"] as Label).visible = not classic or n["build_kind"] != "" or sim.last_stand_active
-		var parts := []
+		sub.visible = not classic or n["build_kind"] != "" or sim.last_stand_active
+		# Alpha 19 (Daniele: "some text is too long, like the word FINAL isn't necessary"): two compact
+		# tags at most - what the node is (relay glyph + state, CN3 cannon, FRG forge, T2 tier) and the
+		# one clock that matters most: the falling countdown (a down triangle), the relay's !n switch
+		# warning, the build's seconds (over its bar), your relay's ns cooldown, else the Last Stand
+		# drop ring (R2 / #2). The node that never falls shows nothing extra: the banner says it.
+		var what := ""
 		if n["relay"] != "":
 			var st := sim.relay_state_key(n, n["relay_index"])
-			parts.append("%s %s" % [Rules.RELAY_GLYPH[n["relay"]], st.to_upper()])
-			if n["relay_phase"] == "warning":
-				parts.append("!%d" % int(ceil(n["relay_t"])))
-			elif n["relay_cd"] > 0.0 and owner == human:
-				parts.append("%ds" % int(ceil(n["relay_cd"])))
+			what = Rules.RELAY_GLYPH[n["relay"]] + ("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper())
 		elif n["attachment"] == "cannon":
-			parts.append("CANNON T%d" % n["cannon_tier"])
+			what = "CN%d" % n["cannon_tier"]
 		elif n["attachment"] == "forge":
-			parts.append("FORGE")
+			what = "FRG"
 		else:
-			parts.append("T%d" % n["tier"])
-		if n["build_kind"] != "":
-			parts.append("BUILD %ds" % int(ceil(n["build_timer"])))
-		if order_shown:
+			what = "T%d" % n["tier"]
+		var clock := ""
+		var worst := ""                                     # the clock's widest form (see below)
+		if sim.is_warned(n["id"]):
+			clock = "▼%d" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t))
+			worst = "▼88"
+		elif n["relay"] != "" and n["relay_phase"] == "warning":
+			clock = "!%d" % int(ceil(n["relay_t"]))
+			worst = "!8"
+		elif n["build_kind"] != "":
+			clock = "%ds" % int(ceil(n["build_timer"]))
+			worst = "88s"
+		elif n["relay"] != "" and n["relay_cd"] > 0.0 and owner == human:
+			clock = "%ds" % int(ceil(n["relay_cd"]))
+			worst = "88s"
+		elif order_shown:
 			var k := sim.drop_order_of(n["id"])
 			if k > 0:
-				parts.append(("R%d" if sim.v3 else "#%d") % k)
-			elif sim.is_final(n["id"]):
-				parts.append("FINAL")
-		if sim.is_warned(n["id"]):
-			parts.append("FALLS %d" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t)))
-		sub.text = " ".join(parts)
+				clock = ("R%d" if sim.v3 else "#%d") % k
+				worst = clock
+		var small := show_emb and not masked               # Alpha 11's emblem shares the sub line
+		if sub.visible:
+			# a sub line that would drop under 8 pt beside the emblem takes the whole row instead (the
+			# owner still reads from the rim colour). Judged on the clock's widest form, so a countdown
+			# does not make the emblem come and go as its digits change.
+			var shape := what + (" " + worst if worst != "" else "")
+			if shape != b["shape"] or small != b["sub_small"]:
+				b["shape"] = shape
+				b["sub_small"] = small
+				b["wide"] = small and _fit_size(shape, BADGE_SUB_FONT, inner - (BADGE_EMBLEM.x + 2.0) * ui_scale - 2.0).x < int(8 * ui_scale)
+				sub.text = ""                                 # re-measure in the new room
+			if b["wide"]:
+				small = false
+			var room := inner - ((BADGE_EMBLEM.x + 2.0) * ui_scale if small else 0.0)
+			b["sub_w"] = _fit_text(sub, what + (" " + clock if clock != "" else ""), BADGE_SUB_FONT, room, b["sub_w"])
+		emb.visible = show_emb and (masked or small)
 		var build_bar: ProgressBar = b["build"]
 		build_bar.visible = n["build_kind"] != ""
-		build_bar.value = 100.0 * Sim.build_progress(n)
-		# the badge's size follows its text; its screen spot comes from _layout_badges
-		panel.size = panel.get_combined_minimum_size()
+		if build_bar.visible:
+			build_bar.value = 100.0 * Sim.build_progress(n)
+		# the box never changes size; its parts move only when what it shows changes
+		var look := (1 if masked else 0) | (2 if emb.visible else 0) | (4 if sub.visible else 0) | (int(b["sub_w"]) << 3)
+		if look != b["look"]:
+			b["look"] = look
+			_place_badge(b, masked, small)
 	var vp := get_viewport().get_visible_rect().size
 	var xf := cam.global_transform
 	if vp != _layout_vp or xf != _layout_xf:
@@ -586,7 +633,64 @@ func _badges(cam: Camera3D) -> void:
 	for n in sim.nodes:
 		var panel: Control = badges[n["id"]]["panel"]
 		if panel.visible and _badge_screen.has(n["id"]):
-			panel.position = (_badge_screen[n["id"]] as Vector2) - panel.size / 2.0
+			panel.position = ((_badge_screen[n["id"]] as Vector2) - _badge_px / 2.0).round()
+
+
+func _fit_text(l: Label, text: String, base: int, width: float, drawn: float) -> float:
+	## Daniele: "have their inside content never get out of the box boundaries": a text too wide for
+	## the badge steps its font down (to 60 % at most), and whatever is still wider is clipped by the
+	## label. Measured only when the text changes; returns the drawn width.
+	if l.text == text:
+		return drawn
+	l.text = text
+	var fit := _fit_size(text, base, width - float(l.get_theme_constant("outline_size")))
+	if l.get_theme_font_size("font_size") != int(fit.x):
+		l.add_theme_font_size_override("font_size", int(fit.x))
+	return minf(fit.y + float(l.get_theme_constant("outline_size")), width)
+
+
+func _fit_size(text: String, base: int, width: float) -> Vector2:
+	## The largest font size (base x ui_scale down to 60 % of it) whose text fits the width: (size, width).
+	var size := int(base * ui_scale)
+	var least := maxi(int(round(base * ui_scale * 0.6)), 6)
+	var w := UI_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	while w > width and size > least:
+		size -= 1
+		w = UI_FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	return Vector2(size, w)
+
+
+func _place_badge(b: Dictionary, masked: bool, small: bool) -> void:
+	## The fixed badge's layout: the count (or, where it is hidden, the owner's emblem) on top, the
+	## sub line under it with Alpha 11's small emblem at its left in BRAWL, the build bar along the
+	## bottom edge. With no sub line the top row sits in the middle of the box.
+	var s := ui_scale
+	var box := _badge_px
+	var label: Label = b["label"]
+	var sub: Label = b["sub"]
+	var emb: TextureRect = b["emblem"]
+	var row2 := sub.visible or small
+	var top_y := (12.5 if row2 else 16.0) * s                # centre of the count row
+	var low_y := 23.5 * s                                    # centre of the sub line
+	var pad := BADGE_PAD * s
+	# each label is as tall as its full-size font line, so a stepped-down font stays centred in it
+	var lh := UI_FONT.get_height(int(BADGE_COUNT_FONT * s)) + 3.0
+	label.size = Vector2(box.x - 2.0 * pad, lh)
+	label.position = Vector2(pad, top_y - lh / 2.0)
+	var esz := (BADGE_EMBLEM_OWNER if masked else BADGE_EMBLEM) * s
+	emb.custom_minimum_size = esz
+	emb.size = esz
+	var sub_w: float = b["sub_w"] if sub.visible else 0.0
+	if masked:
+		emb.position = Vector2((box.x - esz.x) / 2.0, top_y - esz.y / 2.0).round()
+	var gap := 2.0 * s if sub_w > 0.0 else 0.0
+	var x0 := (box.x - sub_w - ((esz.x + gap) if small else 0.0)) / 2.0
+	if small:
+		emb.position = Vector2(x0, low_y - esz.y / 2.0).round()
+		x0 += esz.x + gap
+	var sh := UI_FONT.get_height(int(BADGE_SUB_FONT * s)) + 2.0
+	sub.size = Vector2(sub_w, sh)
+	sub.position = Vector2(x0, low_y - sh / 2.0)
 
 
 # ------------------------------------------------------------------ inspector (Alpha 11 ring)

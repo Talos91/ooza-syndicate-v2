@@ -344,8 +344,73 @@ static func angled_pier(parent: Node3D, exit: Vector3, dir: Vector3, lean: float
 	var step := clampi(roundi(absf(lean) / 5.0) * 5, 0, 80)
 	var n := put(parent, "Pier_Angled_%02d%s" % [step, "_Switch" if switched else ""], exit, Rules.heading(dir))
 	if lean < 0.0:
-		n.scale = Vector3(1.0, 1.0, -1.0)          # negative lean: the piece mirrored across its deck axis
+		mirror_z(n)                                # negative lean: the piece mirrored across its deck axis
 	return n
+
+
+static var _mirrored := {}           # kit Mesh -> its copy mirrored across local z (built once, shared)
+const MIRROR_Z := Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, -1)), Vector3.ZERO)
+
+
+static func mirror_z(node: Node3D) -> void:
+	## Mirror a placed kit piece across its local z (deck) axis WITHOUT a negative scale. Daniele
+	## (0.18.5): "remains a problem a few dark socket connectors" - those were the negative-lean piers,
+	## mirrored with scale z = -1: the kit materials are double-sided, and on a mirrored instance the
+	## GL Compatibility renderer takes the top faces for back faces and flips their normals down, so
+	## the deck plate went almost black. Instead every mesh below the piece is swapped for a mirrored
+	## copy (z negated, normals and tangents mirrored, triangles re-wound) and every child transform is
+	## conjugated by the mirror, so the piece keeps a proper transform and lights like its neighbours.
+	for c in [node] + node.find_children("*", "Node3D", true, false):
+		var n3 := c as Node3D
+		if n3 != node:                             # the root keeps its placement
+			n3.transform = MIRROR_Z * n3.transform * MIRROR_Z
+		if n3 is MeshInstance3D and (n3 as MeshInstance3D).mesh != null:
+			var mi := n3 as MeshInstance3D
+			var src := mi.mesh
+			if not _mirrored.has(src):
+				_mirrored[src] = _mirror_mesh(src)
+			mi.mesh = _mirrored[src]
+			for s in range(mi.get_surface_override_material_count()):
+				mi.set_surface_override_material(s, null)
+	Mats.apply_detail(node)                        # the detail overrides, on the new surfaces
+
+
+static func _mirror_mesh(src: Mesh) -> ArrayMesh:
+	var out := ArrayMesh.new()
+	for s in range(src.get_surface_count()):
+		var arr := src.surface_get_arrays(s)
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		for k in range(v.size()):
+			v[k] = v[k] * Vector3(1, 1, -1)
+		arr[Mesh.ARRAY_VERTEX] = v
+		if arr[Mesh.ARRAY_NORMAL] != null:
+			var nr: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+			for k in range(nr.size()):
+				nr[k] = nr[k] * Vector3(1, 1, -1)
+			arr[Mesh.ARRAY_NORMAL] = nr
+		if arr[Mesh.ARRAY_TANGENT] != null:            # xyzw: mirror the tangent, flip the binormal sign
+			var tg: PackedFloat32Array = arr[Mesh.ARRAY_TANGENT]
+			for k in range(0, tg.size(), 4):
+				tg[k + 2] = -tg[k + 2]
+				tg[k + 3] = -tg[k + 3]
+			arr[Mesh.ARRAY_TANGENT] = tg
+		if arr[Mesh.ARRAY_INDEX] != null:              # a mirror turns the winding: swap two corners
+			var ix: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+			for k in range(0, ix.size() - 2, 3):
+				var t := ix[k + 1]
+				ix[k + 1] = ix[k + 2]
+				ix[k + 2] = t
+			arr[Mesh.ARRAY_INDEX] = ix
+		else:                                          # unindexed: index it in the swapped order
+			var ix := PackedInt32Array()
+			for k in range(0, v.size() - 2, 3):
+				ix.append_array([k, k + 2, k + 1])
+			arr[Mesh.ARRAY_INDEX] = ix
+		out.add_surface_from_arrays(src.surface_get_primitive_type(s), arr)
+		out.surface_set_material(s, src.surface_get_material(s))
+		if src is ArrayMesh:
+			out.surface_set_name(s, (src as ArrayMesh).surface_get_name(s))
+	return out
 
 
 static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:

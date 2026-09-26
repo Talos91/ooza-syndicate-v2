@@ -1,9 +1,9 @@
 class_name MapCamera
-## Camera pitch per map (maps 4.2, the Alpha 11 classics and maps 4.3 classic), in degrees above the horizon: from 58 (bird's-eye, Daniele Alpha 18: "a bit
+## Camera pitch per map (maps 4.2, the Alpha 11 classics and maps 4.3 / 4.4 classic), in degrees above the horizon: from 58 (bird's-eye, Daniele Alpha 18: "a bit
 ## more from the top") up to the lowest angle at which the smallest node tap target reaches 44 pt (Apple's
 ## guideline) on a landscape phone (844 x 390 pt) with no badge overflowing or colliding. From the phone-fit
 ## probe (tests/phone_fit.tscn) - rerun it and regenerate this table after a map pack changes. On maps 4.2
-## every map already reaches 45-66 pt at 58 degrees; the Alpha 11 classics A-01..A-04 56-88 pt.
+## every map already reaches 45-66 pt at 58 degrees; the Alpha 11 classics A-01..A-04 56-88 pt; maps 4.4 classic M-21..M-40 44-54 pt.
 const PITCH := {
 	"A-01": 58.0,
 	"A-02": 58.0,
@@ -22,13 +22,6 @@ const PITCH := {
 	"D-01": 58.0,
 	"D-02": 58.0,
 	"D-03": 58.0,
-	"S-01": 58.0,
-	"S-02": 58.0,
-	"S-03": 58.0,
-	"S-04": 58.0,
-	"S-05": 58.0,
-	"T-01": 58.0,
-	"T-02": 58.0,
 	"M-01": 58.0,
 	"M-02": 58.0,
 	"M-03": 58.0,
@@ -49,6 +42,33 @@ const PITCH := {
 	"M-18": 58.0,
 	"M-19": 58.0,
 	"M-20": 58.0,
+	"M-21": 58.0,
+	"M-22": 58.0,
+	"M-23": 58.0,
+	"M-24": 58.0,
+	"M-25": 58.0,
+	"M-26": 58.0,
+	"M-27": 58.0,
+	"M-28": 58.0,
+	"M-29": 58.0,
+	"M-30": 58.0,
+	"M-31": 58.0,
+	"M-32": 58.0,
+	"M-33": 58.0,
+	"M-34": 58.0,
+	"M-35": 58.0,
+	"M-36": 58.0,
+	"M-37": 58.0,
+	"M-38": 58.0,
+	"M-39": 58.0,
+	"M-40": 58.0,
+	"S-01": 58.0,
+	"S-02": 58.0,
+	"S-03": 58.0,
+	"S-04": 58.0,
+	"S-05": 58.0,
+	"T-01": 58.0,
+	"T-02": 58.0,
 }
 
 

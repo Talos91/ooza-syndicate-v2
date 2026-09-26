@@ -501,3 +501,22 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      rule for falling bridges."** *Done:* platforms drop one by one, 5 s apart, never leaving an island.
 111. **Maps 4.3 classic (20 Mushroom Wars style maps).** *Done (0.18.5):* added as the M group, all clean,
      camera 58 degrees, taps 45-54 pt.
+
+## 2026-09-26 - Daniele, 0.18.6 brief
+
+112. **"A few dark socket connectors; sockets miss the neon stripe on top like normal bridge; same stripe at the
+     edge of nodes."** *Done:* mirrored piers lit correctly; neon on every pier and a rim on every platform.
+113. **"HUD a bit transparent ... the word final isn't necessary ... fixed size ... never out of the box."**
+     *Done:* fixed translucent badges, text fitted and clipped, FINAL gone.
+114. **"Camera axis a bit lower when less nodes are present."** *Done:* the Last Stand zoom lowers the pitch.
+115. **"An animation for when 2 teams are fighting for a tower and when a tower is conquered and its tier is
+     lowered by 1."** *Done:* contest ring and sparks; tier-down sink / rise with a "T3 -> T2" label.
+116. **"Laser needs to be made looking good."** *Done:* ribbon laser with core, glow, muzzle flash and impact.
+117. **"Last stand reset to be starting at 3 m, bridge alert just 1 sec."** *Done:* 3:00, 1 s warning.
+118. **"Neon Delta: the relay remote does nothing."** *Done:* one-state remotes toggle their decks.
+119. **"If someone retract a bridge ... they should go even if the bridge is no longer there hence....waterfall."**
+     *Done:* the order stands, the vat keeps sending, the line pours off the lip.
+120. **"More classic maps to add" (maps 4.4 classic).** *Done:* M-21..M-40, 64 maps.
+121. **"Add in game filters for maps like 1v1 2v2 ffa etc."** *Done:* players and type filters on 02 BATTLEFIELD.
+122. **"The siege mode instead keeps being... boring and messy."** *Open:* to discuss after 0.18.6.
+

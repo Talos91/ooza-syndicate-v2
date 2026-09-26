@@ -1,5 +1,43 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.6 "Alpha 18" - 2026-09-26 (waterfall, Last Stand at 3:00, neon connectors, fixed badges, fight / tier-down / laser, maps 4.4 classic, map filters)
+
+- **Waterfall** (Daniele: "if someone retract a bridge and your troops had order to go on said bridge they should
+  go even if the bridge is no longer there hence....waterfall"): an order across a deck that a relay takes away
+  (retract, switch, remote, rotation) or that is already gone is still obeyed - the vat keeps sending and every
+  unit behind the missing deck marches off its lip into the void (fall losses). Retract riders are still carried
+  into the relay node. Before, the order was cut and what was left re-routed.
+- **Last Stand starts at 3:00** (was 2:00) and the **relay warning is 1 s** (was 3 s) (Daniele: "last stand reset
+  to be starting at 3 m, bridge alert cooldown just 1 sec"). Every map's collapse still ends by 4:25.
+- **Remote fixed on Neon Delta** (Daniele: "the relay remote does nothing"): a remote or switch whose decks all
+  share one state now toggles them off and back on.
+- **Dark connectors fixed, neon on connectors and platform edges** (Daniele: "a few dark socket connectors, also
+  sockets miss the neon stripe on top like normal bridge ... same neon stripe at the edge of nodes"): mirrored
+  angled piers are real mirrored meshes (a negative-scale instance lit its top faces from below); every pier
+  carries the deck's two neon strips, and every platform a neon rim in the owner's colour that opens where the
+  strips arrive and falls with the platform.
+- **Badges: one fixed size, translucent, content always inside** (Daniele: "a bit transparent ... the word final
+  isn't necessary ... fixed size ... never get out of the box"): 44 x 33 (51 x 38 on phones), see-through fill,
+  text shrinks to fit and clips; sub line at most two tags (T2 / CN3 / FRG / relay state, then one timer: fall
+  countdown, relay warning, build or cooldown seconds, or the drop ring). FINAL is gone.
+- **Fight for a tower** (new): a contest ring round the platform (the attacker's arc from the side they came,
+  sized by strength), a hot glow where they clash, sparks, splats and flashes by the kill rate; BRAWL and SIEGE.
+- **Capture that lowers the tier** (new): the old model sinks and fades with a debris burst, the new tier rises,
+  and a "T3 -> T2" label with a falling chevron in the new owner's colour.
+- **Cannon laser** (Daniele: "laser needs to be made looking good"): a glowing ribbon beam with a white core,
+  owner-colour glow, pulses and tapered ends, muzzle flash, impact flare, sparks and scorch; muzzles at the real
+  dome heights.
+- **Camera lower as the map shrinks** (Daniele: "a bit too vertical when less nodes are present"): the Last Stand
+  zoom also lowers the pitch, down to 14 degrees below the map's (never under 44) as platforms fall.
+- **Maps 4.4 classic** (References/Ooze Syndicate maps 4.4 classic): M-21..M-40, 20 more Mushroom Wars style
+  maps (five relay-heavy), added to the M group - 64 maps. All bake clean; camera 58 degrees; phone taps 44-54 pt.
+- **Map filters** (Daniele: "add in game filters for maps like 1v1 2v2 ffa etc"): 02 BATTLEFIELD has a players
+  row (ALL, 1V1, 2V2, FFA 3, FFA 4 - the modes the pool has) and a TYPE button (ALL, BRAWL, SIEGE, CORE,
+  ALPHA 11, TRAINING), with an "N OF 64 MAPS" count; a players filter also sets up that mode.
+- Tests: test_sim, test_net, test_maps4 (8,854 checks), test_map_pool, test_ai_curve - all pass; phone-fit probe
+  on all 64 maps: nothing off screen, under the HUD or colliding. Checked on desktop and in phone emulation
+  only; not on a real phone.
+
 ## 0.18.5 "Alpha 18" - 2026-09-26 (maps 4.3 classic: 20 Mushroom Wars style maps added)
 
 - **Maps 4.3 classic added** (References/Ooze Syndicate maps 4.3 classic): M-01..M-20, open fields of scattered

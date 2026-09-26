@@ -1,6 +1,6 @@
 # Next session - start here
 
-State at the end of the 2026-09-26 sessions: **v0.18.3 "Alpha 18"** (maps 4.2 - 20 compact maps at the kit's sizes - plus the four main Alpha 11 maps A-01..A-04, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
+State at the end of the 2026-09-26 sessions: **v0.18.6 "Alpha 18"** (maps 4.2 - 20 compact maps at the kit's sizes - plus the four main Alpha 11 maps A-01..A-04, per-map camera, optimization pass; on top of Alpha 17: ring Last Stand, five-level AI; Alpha 16: online rooms, visual pass), source on `main`,
 published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md` (project root - the whole game as built), this file,
 `README.md`, the top of `CHANGELOG.md` (0.17.0 to 0.18.0), `PLAYTEST-NOTES.md` notes 90-100, then the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
@@ -16,6 +16,24 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - **BRAWL must be exactly Alpha 11's core rules**; SIEGE is where 2.0 experiments live.
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
+
+## 0.18.6 (2026-09-26): waterfall, 3:00 Last Stand, neon, badges, combat effects, maps 4.4, filters
+
+- Sim: `_cut_range(..., reroute=false)` (relays and missing decks) keeps the vat streaming and parks the head at the
+  lip, so `_check_missing_decks` pours the rest into the void; Last Stand drops still re-route (reroute true).
+  `_states_of(prefix)`: a one-state remote / switch group toggles on / off. Rules: RELAY_WARNING 1.0,
+  LAST_STAND_TIME 180 (every collapse ends by 4:25, 7:00 hard end).
+- Look: `MapBuilder.mirror_z` (real mirrored meshes for negative-lean piers - the dark connectors); Fx `_build_neon`
+  (deck halves, pier strips, platform rims; SIEGE pier stubs can be switched off with `SIEGE_PIER_STRIPES`);
+  new `scripts/combat_fx.gd` (CombatFx: contest rings, tier-down, cannon laser, all from Sim state, no net
+  traffic) + `shaders/beam|spark|flare|contest_ring.gdshader`; Hud fixed badges (`BADGE_SIZE`, `_place_badge`,
+  `_fit_text`); main.gd `_survivor_fit` lowers the pitch (COLLAPSE_PITCH_DROP 14, _MIN 44).
+- Maps 4.4 classic M-21..M-40 via `export_maps_4_2_game.py` (MW2_DIR); thumbs from the pack PNGs at 512 x 288.
+- Menu: `Menu.map_filter_mode` / `map_filter_type` (static), `_filtered_maps`, `_pool_modes`.
+- Open (not asked yet): the double ring on rotation platforms (kit ring + new rim); BRAWL Last Stand badges drop
+  the small emblem when the sub line is long; tier-down label covers a neighbour badge for ~2 s; HEAT_RATE
+  and spark rates are the agent's choice. Additive glow not yet looked at on a real phone.
+- Next: discuss SIEGE with Daniele ("boring and messy").
 
 ## 0.18.5 (2026-09-26): maps 4.3 classic added
 

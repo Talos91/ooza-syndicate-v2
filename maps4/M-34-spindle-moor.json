@@ -1,0 +1,1069 @@
+{
+ "code": "M-34",
+ "name": "Spindle Moor",
+ "group": "siege",
+ "players": "ffa",
+ "playersLabel": "FFA 3",
+ "combatMode": "siege",
+ "family": "classic",
+ "modes": [
+  "FFA3"
+ ],
+ "symmetry": "rotation x3",
+ "frame": {
+  "width": 160,
+  "height": 80,
+  "units": "metres",
+  "aspect": "2:1 landscape",
+  "panning": false,
+  "nodeRadius": 6,
+  "pier": 1.6,
+  "deckModule": 4,
+  "deckCentreDistance": {
+   "S": 19.2,
+   "M": 23.2,
+   "L": 27.2
+  },
+  "tolerance": 1,
+  "minNodeGap": 15,
+  "version": "4.4 classic"
+ },
+ "minEnemyHomeHops": 2,
+ "centreSpawn": false,
+ "plazas": [],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 111.26,
+   "y": 39.98,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 100.94,
+   "y": 56.76,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 101.23,
+   "y": 23.04,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 91.29,
+   "y": 39.82,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": null,
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 4,
+   "x": 64.39,
+   "y": 67.09,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 5,
+   "x": 55.02,
+   "y": 49.76,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 84.07,
+   "y": 66.86,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 7,
+   "x": 74.51,
+   "y": 49.87,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": null,
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  },
+  {
+   "id": 8,
+   "x": 64.35,
+   "y": 12.94,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 9,
+   "x": 84.04,
+   "y": 13.49,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 10,
+   "x": 54.7,
+   "y": 30.1,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 11,
+   "x": 74.2,
+   "y": 30.32,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": null,
+   "buildable": [
+    "cannon",
+    "forge"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 1,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.67,
+   "nominal": 19.2
+  },
+  {
+   "from": 3,
+   "to": 9,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": "ret",
+   "relay": 3,
+   "retracts": true,
+   "deckMetres": 12.0,
+   "centreDistance": 27.31,
+   "nominal": 27.2
+  },
+  {
+   "from": 3,
+   "to": 7,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.56,
+   "nominal": 19.2
+  },
+  {
+   "from": 0,
+   "to": 1,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.7,
+   "nominal": 19.2
+  },
+  {
+   "from": 0,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.68,
+   "nominal": 19.2
+  },
+  {
+   "from": 2,
+   "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.5,
+   "nominal": 19.2
+  },
+  {
+   "from": 1,
+   "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.49,
+   "nominal": 19.2
+  },
+  {
+   "from": 5,
+   "to": 10,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.67,
+   "nominal": 19.2
+  },
+  {
+   "from": 7,
+   "to": 1,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": "ret",
+   "relay": 7,
+   "retracts": true,
+   "deckMetres": 12.0,
+   "centreDistance": 27.32,
+   "nominal": 27.2
+  },
+  {
+   "from": 7,
+   "to": 11,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.56,
+   "nominal": 19.2
+  },
+  {
+   "from": 4,
+   "to": 5,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.7,
+   "nominal": 19.2
+  },
+  {
+   "from": 4,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.68,
+   "nominal": 19.2
+  },
+  {
+   "from": 6,
+   "to": 7,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.5,
+   "nominal": 19.2
+  },
+  {
+   "from": 5,
+   "to": 7,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.5,
+   "nominal": 19.2
+  },
+  {
+   "from": 9,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.66,
+   "nominal": 19.2
+  },
+  {
+   "from": 11,
+   "to": 5,
+   "tier": "L",
+   "seconds": 6,
+   "level": 0,
+   "state": "ret",
+   "relay": 11,
+   "retracts": true,
+   "deckMetres": 12.0,
+   "centreDistance": 27.31,
+   "nominal": 27.2
+  },
+  {
+   "from": 11,
+   "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.56,
+   "nominal": 19.2
+  },
+  {
+   "from": 8,
+   "to": 9,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.7,
+   "nominal": 19.2
+  },
+  {
+   "from": 8,
+   "to": 10,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.69,
+   "nominal": 19.2
+  },
+  {
+   "from": 10,
+   "to": 11,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.5,
+   "nominal": 19.2
+  },
+  {
+   "from": 9,
+   "to": 11,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 19.5,
+   "nominal": 19.2
+  }
+ ],
+ "rings": {
+  "count": 2,
+  "boundaries": [
+   12.9
+  ],
+  "aspect": 2.0,
+  "shape": "ellipse"
+ },
+ "lastStand": {
+  "methods": [
+   "inward",
+   "outward"
+  ],
+  "orders": {
+   "inward": [
+    1,
+    0
+   ],
+   "outward": [
+    0,
+    1
+   ]
+  }
+ },
+ "seats": {
+  "FFA3": [
+   {
+    "seat": "A",
+    "node": 0,
+    "team": null
+   },
+   {
+    "seat": "B",
+    "node": 4,
+    "team": null
+   },
+   {
+    "seat": "C",
+    "node": 8,
+    "team": null
+   }
+  ]
+ },
+ "note": "Classic field: scattered platforms, every neighbour linked, plus relays.",
+ "geometricSymmetry": false,
+ "ringsMerged": false,
+ "tiersFrom40": 1.0,
+ "relayHeavy": false,
+ "thumbnail": "thumbnails/M-34-spindle-moor.png",
+ "layout": {
+  "K": 1.0,
+  "nodes": {
+   "0": [
+    31.26,
+    -0.02
+   ],
+   "1": [
+    20.94,
+    16.76
+   ],
+   "2": [
+    21.23,
+    -16.96
+   ],
+   "3": [
+    11.29,
+    -0.18
+   ],
+   "4": [
+    -15.61,
+    27.09
+   ],
+   "5": [
+    -24.98,
+    9.76
+   ],
+   "6": [
+    4.07,
+    26.86
+   ],
+   "7": [
+    -5.49,
+    9.87
+   ],
+   "8": [
+    -15.65,
+    -27.06
+   ],
+   "9": [
+    4.04,
+    -26.51
+   ],
+   "10": [
+    -25.3,
+    -9.9
+   ],
+   "11": [
+    -5.8,
+    -9.68
+   ]
+  },
+  "plazas": {},
+  "edges": [
+   {
+    "A": [
+     17.5078,
+     21.6813
+    ],
+    "B": [
+     9.2179,
+     23.778
+    ],
+    "L": 8.5509,
+    "p0": 2.016,
+    "p1": 1.6,
+    "lean0": -40.914,
+    "lean1": -16.715,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     9.8816,
+     -6.0123
+    ],
+    "B": [
+     5.7626,
+     -20.7627
+    ],
+    "L": 15.3146,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 2.026,
+    "lean1": -1.083,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     6.428,
+     3.3357
+    ],
+    "B": [
+     -0.875,
+     6.0358
+    ],
+    "L": 7.7861,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -15.579,
+    "lean1": -19.43,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     28.1168,
+     5.0908
+    ],
+    "B": [
+     25.0935,
+     12.4301
+    ],
+    "L": 7.9377,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 9.204,
+    "lean1": 21.421,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     28.2031,
+     -5.1828
+    ],
+    "B": [
+     24.2869,
+     -11.7971
+    ],
+    "L": 7.6867,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     18.1721,
+     -11.7978
+    ],
+    "B": [
+     15.3488,
+     -4.5988
+    ],
+    "L": 7.7328,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 9.228,
+    "lean1": 21.155,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     19.244,
+     11.0047
+    ],
+    "B": [
+     14.2598,
+     5.0334
+    ],
+    "L": 7.7781,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 23.432,
+    "lean1": 10.183,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -27.5234,
+     4.3258
+    ],
+    "B": [
+     -25.2024,
+     -3.9008
+    ],
+    "L": 8.5477,
+    "p0": 2.0131,
+    "p1": 1.6,
+    "lean0": -40.837,
+    "lean1": -16.688,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     0.265,
+     11.567
+    ],
+    "B": [
+     15.102,
+     15.3753
+    ],
+    "L": 15.318,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 2.034,
+    "lean1": -1.052,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -6.1031,
+     3.9014
+    ],
+    "B": [
+     -4.787,
+     -3.7662
+    ],
+    "L": 7.7798,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -15.604,
+    "lean1": -19.459,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -18.4637,
+     21.8121
+    ],
+    "B": [
+     -23.3057,
+     15.5216
+    ],
+    "L": 7.9382,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 9.187,
+    "lean1": 21.383,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -9.6105,
+     27.0199
+    ],
+    "B": [
+     -1.9295,
+     26.9301
+    ],
+    "L": 7.6814,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -0.0,
+    "lean1": -0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     1.1277,
+     21.631
+    ],
+    "B": [
+     -3.6932,
+     15.5946
+    ],
+    "L": 7.7252,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 9.246,
+    "lean1": 21.186,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -19.1474,
+     11.1672
+    ],
+    "B": [
+     -11.4899,
+     9.8361
+    ],
+    "L": 7.7724,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 23.425,
+    "lean1": 10.184,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     10.0177,
+     -25.994
+    ],
+    "B": [
+     15.9851,
+     -19.8738
+    ],
+    "L": 8.5478,
+    "p0": 2.0113,
+    "p1": 1.6,
+    "lean0": -40.791,
+    "lean1": -16.67,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -10.1472,
+     -5.5446
+    ],
+    "B": [
+     -20.8631,
+     5.3953
+    ],
+    "L": 15.3138,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 2.023,
+    "lean1": -1.081,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -0.3246,
+     -7.2266
+    ],
+    "B": [
+     5.6618,
+     -2.2591
+    ],
+    "L": 7.779,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": -15.55,
+    "lean1": -19.412,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -9.6524,
+     -26.8925
+    ],
+    "B": [
+     -1.7874,
+     -27.9386
+    ],
+    "L": 7.9343,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 9.177,
+    "lean1": 21.352,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -18.591,
+     -21.8303
+    ],
+    "B": [
+     -22.359,
+     -15.1297
+    ],
+    "L": 7.6874,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -19.3004,
+     -9.8323
+    ],
+    "B": [
+     -11.6561,
+     -10.9863
+    ],
+    "L": 7.731,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 9.231,
+    "lean1": 21.159,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -0.0939,
+     -22.1613
+    ],
+    "B": [
+     -2.7716,
+     -14.8596
+    ],
+    "L": 7.7773,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 23.41,
+    "lean1": 10.174,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   }
+  ],
+  "relays": {},
+  "glb": "",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": [],
+   "docks": 0,
+   "off_length": []
+  }
+ }
+}

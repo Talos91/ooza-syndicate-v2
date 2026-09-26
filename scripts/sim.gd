@@ -410,7 +410,16 @@ func relay_states(n: Dictionary) -> Array:
 	if n["relay"] == "retract":
 		return ["out", "retract"]
 	var prefix: String = {"rotation": "r", "switch": "s", "remote": "m"}.get(n["relay"], "")
-	return relay_groups.get(prefix, [])
+	return _states_of(prefix)
+
+
+func _states_of(prefix: String) -> Array:
+	## A remote or switch whose decks all share one state toggles them on / off (0.18.6: the maps 4.3
+	## remotes each drive a single "m1" deck and did nothing when fired).
+	var grp: Array = relay_groups.get(prefix, [])
+	if grp.size() == 1 and prefix in ["m", "s"]:
+		return [grp[0], "off"]
+	return grp
 
 
 func relay_state_key(n: Dictionary, index: int) -> String:
@@ -430,7 +439,7 @@ func _edge_open_at(edge_index: int, index: int) -> bool:
 	var e: Dictionary = edges[edge_index]
 	if e["retracts"]:
 		return index == 0
-	var grp: Array = relay_groups.get(e["state"].substr(0, 1), [])
+	var grp: Array = _states_of(e["state"].substr(0, 1))
 	if grp.is_empty():
 		return true
 	return grp[index % grp.size()] == e["state"]
@@ -578,7 +587,7 @@ func _relay_fling(n: Dictionary, closing: Array, delta: float) -> void:
 		var faction: String = h["faction"]
 		var acc := {"pts": [], "units": 0.0}
 		for r in ranges:
-			_cut_range(h, r[0], r[1], "fall", -1, true, acc)
+			_cut_range(h, r[0], r[1], "fall", -1, false, acc)
 		if acc["units"] <= 0.0:
 			continue
 		fx_events.append({"type": "fling", "node": n["id"], "seat": seat, "units": Rules.shown(acc["units"]),
@@ -612,9 +621,9 @@ func _relay_apply(n: Dictionary) -> void:
 		h["state"] = "absorb" if r["prev_state"] == "absorb" and h["s"] >= h["L"] else "move"
 		match n["relay"]:
 			"retract":                                    # carried into the relay's node
-				_cut_range(h, r["s0"], r["s1"], "carry", n["id"])
+				_cut_range(h, r["s0"], r["s1"], "carry", n["id"], false)
 			_:                                            # switch / remote: fall
-				_cut_range(h, r["s0"], r["s1"], "fall", -1)
+				_cut_range(h, r["s0"], r["s1"], "fall", -1, false)
 	n["moving_edges"] = []
 	n["relay_phase"] = ""
 	n["relay_cd"] = Rules.RELAY_COOLDOWN
@@ -652,7 +661,8 @@ func _overlap(h: Dictionary, s0: float, s1: float) -> float:
 func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: int, reroute := true, fling = null) -> void:
 	## Units of the horde inside [s0, s1] of its path are lost (fate "fall") or carried into a node
 	## (fate "carry"). If the head itself was inside, whatever is left behind the range is re-routed
-	## from the node before it; if nothing is left, the horde is gone. `fling` (a {pts, units}
+	## from the node before it (reroute true, Last Stand drops) or walks on off the lip (reroute false,
+	## relays and missing decks: the order stands, 0.18.6); if nothing is left, the horde is gone. `fling` (a {pts, units}
 	## Dictionary, rotation relays): the fall is counted the same, but its points and units go there
 	## for one "fling" fx per line instead of a "fall" fx.
 	if not (h in hordes):
@@ -663,7 +673,12 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 		return
 	var frac := clampf(on / maxf(len, 0.001), 0.0, 1.0)
 	var units_on: float = h["units"] * frac
-	if h["streaming"]:
+	# reroute false: the deck is gone but the order stands (Daniele, 0.18.6: "if someone retract a bridge
+	# and your troops had order to go on said bridge they should go even if the bridge is no longer there
+	# hence... waterfall"): the vat keeps sending and whatever is behind the deck marches off its lip
+	var pours: bool = h["streaming"] and not reroute
+	var head_in: bool = h["s"] >= s0 and h["s"] <= s1
+	if h["streaming"] and not pours:
 		var src: Dictionary = nodes[h["route"][0]]
 		if src["streaming"].get("hid", -1) == h["id"]:
 			_end_streaming(src, "cut")
@@ -691,6 +706,12 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 				n["siege_dir"][h["owner"]] = ((sample(h, h["s"])[0] - n["pos"]) as Vector3).normalized()
 		events.append({"t": time, "type": "carried", "seat": h["owner"], "node": carry_node, "units": units_on})
 	h["units"] -= units_on
+	if not reroute and head_in:
+		h["s"] = s0                                       # the head waits at the lip; the next step pours more
+		h["state"] = "move"
+	if pours and nodes[h["route"][0]]["streaming"].get("hid", -1) == h["id"]:
+		h["units"] = maxf(h["units"], 0.0)                   # the vat is still feeding this line
+		return
 	if h["units"] < 1.0:
 		_kill_horde(h, fate)
 		return
@@ -1181,12 +1202,9 @@ func _check_missing_decks() -> void:
 				                                          # flung its lines at the tick: it is gone right away)
 			if is_edge_open(ei):
 				continue
-			if h["streaming"]:
-				var src: Dictionary = nodes[h["route"][0]]
-				if src["streaming"].get("hid", -1) == h["id"]:
-					_end_streaming(src, "void")
-			if not (h in hordes):
-				break
+			# the vat keeps sending: an order across a deck that has gone is still obeyed, every unit
+			# marches on and pours into the void (Daniele, 0.18.6: "they should go even if the bridge is
+			# no longer there hence... waterfall")
 			var head_on: bool = head >= sp["s0"] and head <= sp["s1"]
 			_cut_range(h, sp["s0"], sp["s1"], "fall", -1, false)
 			if head_on and h in hordes:
