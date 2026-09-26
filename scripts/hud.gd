@@ -1103,6 +1103,19 @@ func _build_debug() -> void:
 		Rules.low_detail = not Rules.low_detail
 		low_text.call())
 	box.add_child(low)
+	# BALANCE PRESET (0.18.7 balance study): the default numbers or a proposal (Rules.BALANCE_PRESETS), live;
+	# online it is the host's room setting (it travels with the room's rules)
+	var bal := button("", Callable(), 0, 44, 18)
+	var bal_text := func(): bal.text = "Balance: %s" % ("DEFAULT" if Rules.BALANCE_PRESET == "" else Rules.BALANCE_PRESET.to_upper() + " (proposal)")
+	bal_text.call()
+	bal.pressed.connect(func():
+		var names: Array = [""] + Rules.BALANCE_PRESETS.keys()
+		Rules.apply_balance(names[(names.find(Rules.BALANCE_PRESET) + 1) % names.size()])
+		forge.value = Rules.forge_bonus * 100.0
+		bal_text.call()
+		toast("Balance: %s" % ("default numbers" if Rules.BALANCE_PRESET == "" else Rules.BALANCE_PRESET + " - a proposal, not approved")))
+	bal.disabled = main.online
+	box.add_child(bal)
 	var reset := button("Reset to rules", func():
 		forge.value = Rules.FORGE_BONUS_DEFAULT * 100.0, 0, 44, 18)
 	box.add_child(reset)
