@@ -26,6 +26,7 @@ var _ghosts := {}           # edge -> [Node3D]
 var _plat_angle := {}       # node id -> accumulated turntable angle
 var _edge_light := {}       # edge -> owner key currently applied
 var _state_color := {}      # node id -> state key applied
+var _beacons := {}          # relay node id -> {label, mat, top}: the relay's big symbol and its own light material
 var _collapsed := {}
 var _lights_classic := false  # the mode the deck lights were last laid out for (true = BRAWL)
 var _pulses: Array = []     # transient rings: {mesh, t, dur, color}
@@ -190,7 +191,8 @@ func _relay(n: Dictionary, entry: Dictionary) -> void:
 		state_key = "warn%d" % int(blink)
 	if _state_color.get(id, "") != state_key:
 		_state_color[id] = state_key
-		MapBuilder.set_state_color(entry, col)
+		_relay_look(n, entry).get("mat").albedo_color = col   # (the tower's OS_State symbol: its own material)
+	_relay_beacon(n, entry, col, phase)
 	# cooldown / warning arc on the platform around the tower's ledge
 	if not _cool_arcs.has(id):
 		var mi := MeshInstance3D.new()
@@ -226,6 +228,93 @@ func _relay(n: Dictionary, entry: Dictionary) -> void:
 			(g as Node3D).visible = ghost_on and not _collapsed.has(i)
 	if phase == "moving":
 		_relay_motion(n, entry)
+
+
+# RELAY VISIBILITY (0.19.0, Daniele: "add some visibility to the buttons / models of the relays"; relays fire
+# by double-tap): the kind's symbol (Rules.RELAY_GLYPH) floats large over the tower in the current state's
+# colour, and the tower's own OS_State symbol gets a material of its own so it can breathe. An owned relay
+# ready to fire pulses slowly and brightly; cooling down (or locked by Anchor / Relay Aegis) it is dim; during
+# the warning the tower flashes with its deck. Emission and colour only - no lights, cheap on phones.
+const SYMBOL_FONT := preload("res://assets/fonts/DejaVuSansMono.woff2")   # Hud.SYMBOL_FONT (not via Hud: the headless tests load Fx)
+const BEACON_UP := 1.6               # m above the housing's top
+const BEACON_H := 4.2                # m tall glyph
+
+
+func _relay_look(n: Dictionary, entry: Dictionary) -> Dictionary:
+	var id: int = n["id"]
+	if _beacons.has(id):
+		return _beacons[id]
+	var mat := StandardMaterial3D.new()
+	mat.emission_enabled = true
+	mat.albedo_color = Rules.state_color(sim.relay_state_key(n, n["relay_index"]))
+	for pair in entry["state_parts"]:
+		(pair[0] as MeshInstance3D).set_surface_override_material(pair[1], mat)
+	var host: Node3D = entry.get("housing")
+	var top := (n["pos"] as Vector3) + Vector3(0, 7.0, 0)
+	if host:                                          # the housing's highest point (a retract gate is low)
+		var hi := -INF
+		for mi in host.find_children("*", "MeshInstance3D", true, false):
+			var box: AABB = (mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()
+			hi = maxf(hi, box.end.y)
+		top = Vector3(host.global_position.x, hi if hi > -INF else top.y, host.global_position.z)
+	var label := Label3D.new()
+	label.text = Rules.RELAY_GLYPH.get(n["relay"], "?")
+	label.font = SYMBOL_FONT
+	label.font_size = 128
+	label.pixel_size = BEACON_H / 128.0
+	label.outline_size = 26
+	label.outline_modulate = Color(0.02, 0.02, 0.05, 0.9)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.render_priority = 2
+	label.outline_render_priority = 1
+	label.position = top + Vector3(0, BEACON_UP, 0)
+	add_child(label)
+	_beacons[id] = {"label": label, "mat": mat, "top": label.position}
+	return _beacons[id]
+
+
+func _relay_beacon(n: Dictionary, entry: Dictionary, col: Color, phase: String) -> void:
+	var b := _relay_look(n, entry)
+	var label: Label3D = b["label"]
+	var mat: StandardMaterial3D = b["mat"]
+	var id: int = n["id"]
+	if sim.collapsed.get(id, false):
+		label.visible = false
+		return
+	label.visible = true
+	var owned: bool = n["owner"] != ""
+	var ready: bool = owned and phase == "" and n["relay_cd"] <= 0.0 and not sim.is_relay_locked(id)
+	var energy := 1.6
+	var alpha := 0.55
+	var size := 1.0
+	var c := col
+	if phase == "warning":                            # flashes with the deck (col already blinks in _relay)
+		var blink := int(sim.time * 5.0) % 2 == 0
+		energy = 7.0 if blink else 2.0
+		alpha = 1.0
+		size = 1.25 if blink else 1.1
+	elif phase == "moving":
+		energy = 5.0
+		alpha = 1.0
+		size = 1.15
+	elif ready:                                       # ready to fire: a slow bright breath
+		var k := 0.5 + 0.5 * sin(sim.time * 2.4 + float(id))
+		energy = 2.6 + 3.2 * k
+		alpha = 0.8 + 0.2 * k
+		size = 1.0 + 0.1 * k
+	elif owned:                                       # cooling down / locked: dim
+		energy = 0.9
+		alpha = 0.7
+		size = 0.9
+		c = col.lerp(Color(0.35, 0.35, 0.4), 0.45)
+	mat.albedo_color = c
+	mat.emission = c
+	mat.emission_energy_multiplier = energy
+	label.modulate = Color(c.r * (0.6 + 0.12 * energy), c.g * (0.6 + 0.12 * energy), c.b * (0.6 + 0.12 * energy), alpha)
+	label.outline_modulate.a = 0.9 * alpha
+	label.scale = Vector3.ONE * size
+	label.position = (b["top"] as Vector3) + Vector3(0, 0.25 * sin(sim.time * 1.3 + float(id)) if ready else 0.0, 0)
 
 
 func _relay_motion(n: Dictionary, entry: Dictionary) -> void:

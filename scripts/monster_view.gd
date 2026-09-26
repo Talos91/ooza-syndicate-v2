@@ -442,7 +442,9 @@ static func stage(main: Node, arg: String) -> void:
 	##                   line into its path
 	##   guns[:<k>]      seat A gets Machingoons T1, T2, T3 (tiers rotated by k) and a laser on its nearest
 	##                   nodes, B sends lines at them from a neighbour over an open deck
-	##   vats:<look>     every node takes seat A's vat look <look> (Cosmetics id), tiers 1-4 round the map
+	##   relays          seat A owns every relay, the first fires at 0.6 s (ready / warning / cooling looks)
+	##   vats:<look>     every free node becomes seat A's in vat look <look> (Cosmetics id), tiers 1-3 round the
+	##                   map, part-filled, and each sends a line out (the bodies drop out of the tanks)
 	var sim: Sim = main.get("sim")
 	var what := arg.split(":")[0]
 	var node := int(arg.split(":")[1]) if arg.contains(":") else -1
@@ -500,18 +502,34 @@ static func stage(main: Node, arg: String) -> void:
 						break
 			main.set_meta("stage_guns", pairs)
 			print("stage: guns at ", picks.slice(0, 4).map(func(x): return x["id"]), " lines ", pairs)
+		"relays":                                      # seat A owns every relay; the first one fires at 0.6 s
+			var rel := []
+			for n in sim.nodes:
+				if n["node_kind"] == "relay":
+					n["owner"] = "A"
+					n["units"] = 60.0
+					rel.append(n["id"])
+			main.set_meta("stage_relay", rel)
 		"vats":
 			var look := arg.split(":")[1] if arg.contains(":") else "faction"
 			var lo := Cosmetics.loadout("A")
 			lo["vat"] = look
 			Cosmetics.set_loadout("A", lo)
 			var k := 0
+			var sends := []                               # each vat sends a line out: the bodies drop out of its tanks
 			for n in sim.nodes:
 				if n["node_kind"] != "relay" and n["owner"] in ["", "A"]:
 					n["owner"] = "A"
 					if n["node_kind"] == "common":
 						n["tier"] = 1 + k % 3
+						n["units"] = float(Rules.CAPS[n["tier"]]) * (0.35 + 0.2 * (k % 3))
 						k += 1
+						for link in sim.adj[n["id"]]:
+							if sim.is_edge_open(link[1]):
+								sends.append([n["id"], link[0]])
+								break
+			main.set_meta("stage_guns", sends)
+			print("stage: vats ", look, " sends ", sends)
 	for n in sim.nodes:
 		MapBuilder.apply_owner(main.get("vis")[n["id"]]["parts"], n["owner"])
 
@@ -523,9 +541,13 @@ static func stage_tick(main: Node) -> void:
 		return
 	if main.has_meta("stage_guns"):
 		for pr in main.get_meta("stage_guns"):
-			var h := sim.send(pr[0], pr[1], 0.5)
-			print("stage: line ", pr, " route ", h.get("route", []))
+			sim.send(pr[0], pr[1], 0.5)
 		main.remove_meta("stage_guns")
+	if main.has_meta("stage_relay"):
+		var rel: Array = main.get_meta("stage_relay")
+		main.remove_meta("stage_relay")
+		if not rel.is_empty():
+			print("stage: relays ", rel, " firing ", rel[0], ": ", sim.fire_relay(rel[0]))
 	if not main.has_meta("stage_monster"):
 		return
 	var hub: int = main.get_meta("stage_monster")
