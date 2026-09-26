@@ -210,7 +210,7 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 		add_child(mi)
 		arr.append(mi)
 	if classic:
-		units.add_horde(h, Rules.shown_f(vis), time, drop)
+		units.add_horde(h, Rules.shown_f(vis), time, drop, Sim.is_ghost_for(h, viewer))   # your own Ghost Line: see-through
 	elif not drop.is_empty():
 		units.add_goo_drops(h["owner"], drop, Sim.sample(h, 0.0)[0], Rules.shown_f(h["ordered"] - float(drop["remaining"])),
 				Rules.shown_f(h["ordered"]))

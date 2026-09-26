@@ -48,6 +48,7 @@ var _discs: Array = []               # [[Transform3D, Color]] this frame
 var _pour := {}                      # horde id -> {"L", "head", "t", "count"} while its column walks in
 var _seen := {}                      # horde ids drawn this frame (the rest are dropped from _pour)
 var _goo := false                    # the look the materials carry (Rules.goo_look)
+var _ghost := false                  # add_horde is drawing its owner's Ghost Line (SkillFx.ghost_alpha, 0.18.7)
 
 
 func _ready() -> void:
@@ -84,8 +85,8 @@ func _ready() -> void:
 	add_child(_disc)
 
 
-func _instance(faction: String, seat: String) -> MultiMeshInstance3D:
-	var key := "%s|%s" % [faction, seat]
+func _instance(faction: String, seat: String, ghost := false) -> MultiMeshInstance3D:
+	var key := "%s|%s" % [faction, seat] + ("|g" if ghost else "")
 	if not _mm.has(key):
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -96,7 +97,13 @@ func _instance(faction: String, seat: String) -> MultiMeshInstance3D:
 		inst.multimesh = mm
 		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		if _tex[faction]:
-			var m: ShaderMaterial = (Mats.creature(faction, seat, _tex[faction]) as ShaderMaterial).duplicate()
+			var m: ShaderMaterial
+			if ghost:                                    # the creature look, see-through (SkillFx.ghost_shader)
+				m = ShaderMaterial.new()
+				m.shader = SkillFx.ghost_shader()
+				m.set_shader_parameter("albedo_tex", _tex[faction])
+			else:
+				m = (Mats.creature(faction, seat, _tex[faction]) as ShaderMaterial).duplicate()
 			style(m, faction, seat, _goo)
 			inst.material_override = m
 		add_child(inst)
@@ -142,16 +149,18 @@ func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob :
 		bob += ForgePulse.HOP * b
 		size *= 1.0 + ForgePulse.SWELL * b
 	var key := "%s|%s" % [faction, seat]
+	if _ghost:                                       # Skills 2.0: its owner sees a Ghost Line see-through
+		key += "|g"
 	if not _mm.has(key):
-		_instance(faction, seat)
+		_instance(faction, seat, _ghost)
 	var s: float = _scale[faction] * size
 	var basis := Basis(Vector3.UP, heading + MODEL_YAW) * Basis(Vector3(0, 0, 1), roll) \
 			* Basis.from_scale(Vector3(1.0 + squeeze * 0.6, 1.0 - squeeze, 1.0 + squeeze * 0.45) * s)
 	(_xf[key] as Array).append(Transform3D(basis, pos + Vector3(0, 0.08 + bob, 0)))
-	_discs.append([Transform3D(Basis().scaled(Vector3.ONE * size), pos + Vector3(0, 0.05, 0)), Rules.seat_color(seat)])   # the disc goes in with its body
+	_discs.append([Transform3D(Basis().scaled(Vector3.ONE * size), pos + Vector3(0, 0.05, 0)), Rules.seat_color(seat) * (0.35 if _ghost else 1.0)])   # the disc goes in with its body
 
 
-func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}) -> void:
+func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost := false) -> void:
 	## Alpha 11's column (simulation.gd formation_sample): one body every 12 px (0.93 m); body j's lane is
 	## j % 3; lanes open from single file over the first and last 85 px (6.6 m) of the route, so a
 	## send files out of the door, spreads three across on the bridge and files back in at the target;
@@ -168,6 +177,7 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}) -> vo
 	## front ones and nobody else moves: a cannon's kills pop under the beam, a line walking off a
 	## missing deck keeps marching and each body tumbles off the lip in turn (_spawn). `drop` (HordeView,
 	## a line leaving a vat): its next bodies are dropped out of the vat's tanks and run to the door.
+	_ghost = ghost
 	var n := clampi(int(ceil(shown_units)), 1, MAX_PER_HORDE)
 	var gap := Rules.BRAWL_SPACING
 	var L: float = h["L"]
@@ -272,6 +282,7 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}) -> vo
 	tr["mask"] = mask
 	if dropping and h["streaming"]:
 		_drop_bodies(h, drop, head, count, time)
+	_ghost = false
 
 
 # ------------------------------------------------------------------ out of the vat's tanks
@@ -568,6 +579,10 @@ func flush() -> void:
 		for i in range(count):
 			mm.set_instance_transform(i, arr[i])
 		mm.visible_instance_count = count
+		if str(k).ends_with("|g"):                 # a Ghost Line column breathes and flickers
+			var gm := (_mm[k] as MultiMeshInstance3D).material_override as ShaderMaterial
+			if gm:
+				gm.set_shader_parameter("ghost_alpha", 1.0 - SkillFx.ghost_alpha(_now, str(k).hash() % 97))
 	var dm := _disc.multimesh
 	if _discs.size() > dm.instance_count:
 		dm.instance_count = nearest_po2(_discs.size())

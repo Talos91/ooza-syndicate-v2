@@ -40,6 +40,7 @@ var hordes: HordeView
 var fx: Fx
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var forge_pulse: ForgePulse                        # a forge coming online: the owner's 2 s power-up wave
+var skill_fx: SkillFx                              # Skills 2.0 in the world: every cast, lasting effect and end
 var scenery: Scenery
 var hud: Hud
 var cam: Camera3D
@@ -253,6 +254,9 @@ func _start_map(path: String) -> void:
 	add_child(forge_pulse)
 	forge_pulse.setup(sim, vis, combat)
 	forge_pulse.online.connect(_on_forge_online)
+	skill_fx = SkillFx.new()
+	add_child(skill_fx)
+	skill_fx.setup(sim, vis, HUMAN)
 	drag_line = MeshInstance3D.new()
 	drag_line.mesh = drag_mesh
 	add_child(drag_line)
@@ -793,6 +797,7 @@ func _process(delta: float) -> void:
 		Net.push_effects(sim.fx_events)              # host: the guests see the same bursts and falls
 	for ev in sim.fx_events:
 		fx.handle(ev)
+		skill_fx.handle(ev)
 		match ev["type"]:
 			"last_stand":
 				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
@@ -817,6 +822,7 @@ func _process(delta: float) -> void:
 	fx.selected = selected if drag_from < 0 else drag_from
 	fx.sync(dt)
 	combat.sync(dt, cam)                          # after Fx: it scales the tier-down's rising model
+	skill_fx.sync(dt, cam)                        # after Fx: it hides a demolished deck, whose pieces fall here
 	forge_pulse.sync(dt, cam)                     # after both (it pumps the models) and the views (their glows)
 	hud.sync(dt, cam)
 	_trace_t += dt
