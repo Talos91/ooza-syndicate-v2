@@ -5,6 +5,8 @@ extends RefCounted
 ## §7 bridges, §8 relays, §10 Last Stand). Baked map layouts and plazas, ring Last Stand,
 ## geometric contact everywhere, tug-of-war fronts, recall (SIEGE only), always-on goo corridors with
 ## a home advantage, transit fights the real garrison; BRAWL (bridge_combat off) lands Alpha 11 style.
+## SIEGE IS DEACTIVATED since 0.18.7 (Rules.SIEGE_ON): every `Rules.bridge_combat` branch here is dormant
+## and untested - BRAWL is the game. Kept, not removed, so SIEGE can be picked up again later.
 
 signal captured(node_id: int, new_owner: String, old_owner: String)
 signal finished(winner: String)
@@ -581,15 +583,14 @@ func _step_relays(dt: float) -> void:
 					_relay_begin_move(n)
 			"moving":
 				n["relay_t"] -= dt
-				var progress := clampf(1.0 - n["relay_t"] / Rules.RELAY_MOVE, 0.0, 1.0)
-				_relay_update_riders(n, progress)
+				n["relay_anim"]["progress"] = clampf(1.0 - n["relay_t"] / Rules.RELAY_MOVE, 0.0, 1.0)   # the view's deck motion
 				if n["relay_t"] <= 0.0:
 					_relay_apply(n)
 
 
 func _relay_begin_move(n: Dictionary) -> void:
-	## The authoritative tick: the state changes, the affected decks start moving; a turning deck
-	## flings every horde on it into the void (_relay_fling), on the others they ride (_relay_board).
+	## The authoritative tick: the state changes, the affected decks start moving, and every deck that is
+	## going away is gone for the troops right now (_relay_drop): whatever is on it falls.
 	var old_index: int = n["relay_index"]
 	var new_index: int = n["relay_pending"]
 	var closing := []
@@ -623,95 +624,58 @@ func _relay_begin_move(n: Dictionary) -> void:
 				pairs[c] = best
 				delta = best_d
 	n["relay_anim"] = {"delta": delta, "closing": closing, "opening": opening, "pairs": pairs, "progress": 0.0}
-	if n["relay"] == "rotation":
-		_relay_fling(n, closing, delta)                   # nobody rides a turning deck: it shakes them off
-	else:
-		_relay_board(n, closing)
+	_relay_drop(n, closing, delta)
 	n["relay_phase"] = "moving"
 	n["relay_t"] = Rules.RELAY_MOVE
 	events.append({"t": time, "type": "relay_tick", "node": n["id"], "seat": n["owner"], "index": new_index})
 	fx_events.append({"type": "relay_tick", "node": n["id"]})
 
 
-func _relay_board(n: Dictionary, closing: Array) -> void:
-	## Retract / switch / remote: every horde on a closing deck rides it (frozen in place, carried by
-	## the deck's motion) until the motion ends and _relay_apply gives it the kind's fate.
-	for h in hordes:                                      # riders: any horde overlapping a closing deck
-		for sp in h["spans"]:                             # (an arriving horde's tail counts too)
-			if sp["edge"] in closing and _overlap(h, sp["s0"], sp["s1"]) > 0.0:
-				var ride := {"s0": sp["s0"], "s1": sp["s1"], "edge": sp["edge"], "kind": n["relay"],
-						"shift": Vector3.ZERO, "sink": 0.0, "node": n["id"], "prev_state": h["state"]}
-				if n["relay"] == "retract":
-					var far: int = _other_end(sp["edge"], n["id"])
-					ride["dir"] = ((n["pos"] - nodes[far]["pos"]) as Vector3).normalized()
-					ride["len"] = edges[sp["edge"]]["modules"] * Rules.S
-				h["ride"] = ride
-				h["state"] = "ride"
-				h["pour"] = false
-				break
-
-
-func _relay_fling(n: Dictionary, closing: Array, delta: float) -> void:
-	## Rotation (Daniele, 0.18.3: "when a rotating bridge turns all units that are on it are shaken
-	## down into the void as if the fall due to centrifugal power"): the moment the deck starts to
-	## turn, every line with bodies on it - any owner, the relay owner's own included - loses them
-	## to the void, a fall loss exactly like walking off a missing deck. A line only partly on it
-	## keeps the rest: that part is behind a deck that is gone (re-routed from the pier before it
-	## when the head was on the deck, as a dissolved switch deck leaves it). One "fling" fx per line:
-	## the view throws the bodies outward and sideways, the HUD counts them (shown units).
+# RELAYS TAKE THE GROUND AWAY (Daniele, 0.18.7, replacing the per-kind troop fates: "when a switch happens
+# units start to fall, no delay, no bridge = bridge down but until the bridge is there they can still try
+# to reach the end, as per the rule, so since now switch activation is 1 sec, units on the bridge have 1 sec
+# to clear the bridge then bye bye, this applies to all type of switch including the retract (currently
+# retract brings unit to the retraction point while the idea is instead that it takes the ground away from
+# under the feet, not pull the unit). other bridges are more straightforward: bridge there ok walk, bridge
+# not there fall. rotation bridge when it starts moving, all on it falls"). During the warning the deck is
+# there and walkable; the moment its motion starts it is gone for the troops, whatever the kind.
+func _relay_drop(n: Dictionary, closing: Array, delta: float) -> void:
+	## The motion starts: every line with bodies on a deck going away - any owner, the relay owner's own
+	## included - loses them to the void, a fall loss exactly like walking off a missing deck. A line only
+	## partly on it keeps the rest: the part behind the lip keeps its order and walks off it (the
+	## waterfall, _check_missing_decks), the part already past the far pier made it. One fx per line:
+	## a turning deck flings the bodies outward and sideways ("fling", Daniele 0.18.3: "shaken down into
+	## the void as if the fall due to centrifugal power"); the other kinds drop them straight down where
+	## they stand ("fall"). Both carry the node and the shown units for the HUD toast.
 	var turn := signf(delta) if delta != 0.0 else 1.0
 	for h in hordes.duplicate():
 		var ranges := []
 		for sp in h["spans"]:
 			if sp["edge"] in closing and _overlap(h, sp["s0"], sp["s1"]) > 0.0:
-				ranges.append([sp["s0"], sp["s1"]])
+				ranges.append([sp["s0"], sp["s1"], sp["edge"]])
 		if ranges.is_empty():
 			continue
 		# tail-side deck first: cutting it only pulls the tail up, so the next range stays valid, and
-		# only the last range can hold the head (the one cut that may re-route what is left)
+		# only the last range can hold the head (the one cut that parks it at the lip)
 		ranges.sort_custom(func(x, y): return x[0] < y[0])
 		var seat: String = h["owner"]
 		var faction: String = h["faction"]
 		var acc := {"pts": [], "units": 0.0}
 		for r in ranges:
-			_cut_range(h, r[0], r[1], "fall", -1, false, acc)
+			_cut_range(h, r[0], r[1], false, acc)
 		if acc["units"] <= 0.0:
 			continue
-		fx_events.append({"type": "fling", "node": n["id"], "seat": seat, "units": Rules.shown(acc["units"]),
-				"faction": faction, "pts": acc["pts"], "centre": n["pos"], "turn": turn})
-
-
-func _relay_update_riders(n: Dictionary, progress: float) -> void:
-	n["relay_anim"]["progress"] = progress
-	var eased := smoothstep(0.0, 1.0, progress)
-	for h in hordes:
-		if not h.has("ride") or h["ride"]["node"] != n["id"]:
-			continue
-		var r: Dictionary = h["ride"]
-		match r["kind"]:
-			"retract":
-				r["shift"] = r["dir"] * r["len"] * eased
-			_:
-				r["sink"] = 6.0 * progress * progress      # the deck dissolves under it: it drops
+		if n["relay"] == "rotation":
+			fx_events.append({"type": "fling", "node": n["id"], "seat": seat, "units": Rules.shown(acc["units"]),
+					"faction": faction, "pts": acc["pts"], "centre": n["pos"], "turn": turn})
+		else:
+			fx_events.append({"type": "fall", "seat": seat, "faction": faction, "pts": acc["pts"], "units": acc["units"],
+					"hid": h["id"], "pour": false, "relay": n["id"], "edge": ranges[0][2], "shown": Rules.shown(acc["units"])})
 
 
 func _relay_apply(n: Dictionary) -> void:
-	## Motion over: apply the per-kind troop fate (GAME-RULES sec8) to every rider (a rotation has
-	## none: _relay_fling shook its deck clear when it started to turn).
-	var riders := []
-	for h in hordes:
-		if h.has("ride") and h["ride"]["node"] == n["id"]:
-			riders.append(h)
-	for h in riders:
-		var r: Dictionary = h["ride"]
-		h["state"] = "absorb" if r["prev_state"] == "absorb" and h["s"] >= h["L"] else "move"
-		match n["relay"]:
-			"retract":                                    # carried into the relay's node
-				h.erase("ride")
-				_cut_range(h, r["s0"], r["s1"], "carry", n["id"], false)
-			_:                                            # switch / remote: fall - from where the dissolving
-				_cut_range(h, r["s0"], r["s1"], "fall", -1, false)   # deck had sunk them to (the view's riders)
-				h.erase("ride")
+	## Motion over: the new state's decks become walkable (they were closed while moving) and the
+	## cooldown starts. The troops' fate was settled when the motion began (_relay_drop).
 	n["moving_edges"] = []
 	n["relay_phase"] = ""
 	n["relay_cd"] = Rules.RELAY_COOLDOWN + maxf(n["relay_cd"], 0.0)   # (0 unless Relay Hack jammed it meanwhile)
@@ -758,13 +722,13 @@ func _overlap(h: Dictionary, s0: float, s1: float) -> float:
 const POUR_STEP := 1.0               # m: a head at most this far past a lip walked off it this step (view only)
 
 
-func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: int, reroute := true, fling = null) -> void:
-	## Units of the horde inside [s0, s1] of its path are lost (fate "fall") or carried into a node
-	## (fate "carry"). If the head itself was inside, whatever is left behind the range is re-routed
-	## from the node before it (reroute true, Last Stand drops) or walks on off the lip (reroute false,
-	## relays and missing decks: the order stands, 0.18.6); if nothing is left, the horde is gone. `fling` (a {pts, units}
-	## Dictionary, rotation relays): the fall is counted the same, but its points and units go there
-	## for one "fling" fx per line instead of a "fall" fx.
+func _cut_range(h: Dictionary, s0: float, s1: float, reroute := true, fling = null) -> void:
+	## Units of the horde inside [s0, s1] of its path fall into the void. If the head itself was inside,
+	## whatever is left behind the range is re-routed from the node before it (reroute true, Last Stand
+	## drops) or walks on off the lip (reroute false, relays and missing decks: the order stands, 0.18.6);
+	## if nothing is left, the horde is gone. `fling` (a {pts, units} Dictionary, relays): the fall is
+	## counted the same, but its points and units go there for one fx per line (_relay_drop) instead of
+	## a "fall" fx here. (0.18.7: a relay never carries troops into its node any more - the carry fate is gone.)
 	if not (h in hordes):
 		return
 	var len := chain_length(h)
@@ -782,7 +746,7 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 	# cooler"): a head that just walked over the lip (or was parked there last step) is the line walking
 	# off it - the line's own view drops those bodies as they pass the lip (pour-tagged fall, no Fx
 	# bodies); anything bigger is a stretch that was on the deck when it went (Fx drops it where it was)
-	var walked: bool = not reroute and head_in and (h["s"] - s0 <= POUR_STEP \
+	var walked: bool = not reroute and head_in and not (fling is Dictionary) and (h["s"] - s0 <= POUR_STEP \
 			or (h.get("pour_prev", false) and absf(float(h.get("pour_lip", -1.0)) - s0) < 0.01))
 	var survives: bool = pours or h["units"] - units_on >= 1.0
 	if h["streaming"] and not pours:
@@ -790,36 +754,27 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 		if src["streaming"].get("hid", -1) == h["id"]:
 			_end_streaming(src, "cut")
 	var decoy: bool = h.get("decoy", false)          # a Ghost Line / echo falls like a real line but loses nothing real
-	if fate == "fall":
+	if not decoy:
+		fall_losses[h["owner"]] = fall_losses.get(h["owner"], 0.0) + units_on
+	var pts := []
+	var k := 0.0
+	while k <= on:
+		pts.append(sample(h, minf(h["s"], s1) - k)[0])
+		k += Rules.PATCH_SPACING
+	if fling is Dictionary:
+		(fling["pts"] as Array).append_array(pts)
+		fling["units"] += units_on
 		if not decoy:
-			fall_losses[h["owner"]] = fall_losses.get(h["owner"], 0.0) + units_on
-		var pts := []
-		var k := 0.0
-		while k <= on:
-			pts.append(sample(h, minf(h["s"], s1) - k)[0])
-			k += Rules.PATCH_SPACING
-		if fling is Dictionary:
-			(fling["pts"] as Array).append_array(pts)
-			fling["units"] += units_on
-			if not decoy:
-				events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on, "why": "fling"})
-		else:
-			fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on,
-					"hid": h["id"], "pour": walked and survives})
-			if not decoy:
-				events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on})
-	elif fate == "carry" and carry_node >= 0 and decoy:
-		pass                                              # a decoy carried in simply vanishes
-	elif fate == "carry" and carry_node >= 0:
-		var n: Dictionary = nodes[carry_node]
-		if allied(n["owner"], h["owner"]):
-			n["units"] += units_on
-		else:
-			n["siege"][h["owner"]] = n["siege"].get(h["owner"], 0.0) + units_on
-			if not n["siege_dir"].has(h["owner"]):
-				n["siege_dir"][h["owner"]] = ((sample(h, h["s"])[0] - n["pos"]) as Vector3).normalized()
-		events.append({"t": time, "type": "carried", "seat": h["owner"], "node": carry_node, "units": units_on})
+			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on, "why": "relay"})
+	else:
+		fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on,
+				"hid": h["id"], "pour": walked and survives})
+		if not decoy:
+			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on})
 	h["units"] -= units_on
+	if not reroute and not head_in and h["s"] > s1 and h["s"] - len < s0:
+		_split_front(h, (h["units"] + units_on) * (h["s"] - s1) / maxf(len, 0.001))   # the deck went from under its middle
+		head_in = true
 	if not reroute and head_in:
 		h["fcut"] = h.get("fcut", 0.0) + maxf(0.0, h["s"] - s0)   # what walked off (view: the rest keeps its place)
 		h["s"] = s0                                       # the head waits at the lip; the next step pours more
@@ -832,12 +787,12 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 		h["units"] = maxf(h["units"], 0.0)                   # the vat is still feeding this line
 		return
 	if h["units"] < 1.0:
-		_kill_horde(h, fate)
+		_kill_horde(h, "fall")
 		return
 	if reroute and h["s"] >= s0 and h["s"] <= s1:        # the head was inside: what's left is behind it
 		var from_node := _node_before(h, s0)
 		if from_node < 0 or collapsed.get(from_node, false):
-			_kill_horde(h, fate)
+			_kill_horde(h, "fall")
 			return
 		var route := find_route(from_node, h["target"])
 		if route.size() < 2:                              # nowhere to go: it stays where it is
@@ -848,6 +803,46 @@ func _cut_range(h: Dictionary, s0: float, s1: float, fate: String, carry_node: i
 		_set_route(h, route)
 		h["s"] = minf(chain_length(h), h["spans"][0]["s0"])
 		h["ordered"] = h["units"]
+
+
+func _split_front(h: Dictionary, units_front: float) -> void:
+	## A deck vanished under the middle of a line (0.18.7): the `units_front` past its far pier made it and
+	## walk on as a finished line of their own; `h` keeps the part behind the lip (and the vat's order, if
+	## any), its head brought back to the lip by _cut_range.
+	if units_front < 0.5:
+		return
+	var f: Dictionary = h.duplicate()                 # same path (the packed arrays are shared copy-on-write)
+	f["id"] = _next_id
+	_next_id += 1
+	f["units"] = units_front
+	f["ordered"] = units_front
+	f["start_units"] = maxf(units_front, 1.0)
+	f["streaming"] = false
+	f["fcut"] = 0.0
+	f["pour"] = false
+	f["pour_lip"] = -1.0
+	f["pour_k"] = 0.0
+	f.erase("pending_loss")
+	h["units"] = maxf(0.0, h["units"] - units_front)
+	hordes.append(f)
+	# its fights were at the head, which is the new line now
+	var hid: int = h["id"]
+	for pair in fights:
+		for q in range(2):
+			if pair[q] == hid:
+				pair[q] = f["id"]
+		pair.sort()
+	for key in fight_info.keys():
+		var ids: PackedStringArray = key.split(":")
+		if int(ids[0]) != hid and int(ids[1]) != hid:
+			continue
+		var info: Dictionary = fight_info[key]
+		fight_info.erase(key)
+		var other: int = int(ids[1]) if int(ids[0]) == hid else int(ids[0])
+		if info["attacker"] == hid:
+			info["attacker"] = f["id"]
+		fight_info["%d:%d" % [mini(other, f["id"]), maxi(other, f["id"])]] = info
+	events.append({"t": time, "type": "line_split", "seat": h["owner"], "units": units_front})
 
 
 func _node_before(h: Dictionary, s: float) -> int:
@@ -881,9 +876,10 @@ func edge_cost(ei: int) -> float:
 	return float(e["geo"]["L"]) / Rules.move_speed()
 
 
-func find_route(from_id: int, to_id: int) -> Array:
+func find_route(from_id: int, to_id: int, avoid := {}) -> Array:
 	## Fastest route by deck travel time (Dijkstra; each node crossed costs a little). Skips
-	## closed relay decks and nodes dropped by the Last Stand collapse.
+	## closed relay decks and nodes dropped by the Last Stand collapse. `avoid` (edge index -> true):
+	## decks left out too (the AI's relay-aware routing, 0.18.7).
 	if collapsed.get(from_id, false) or collapsed.get(to_id, false):
 		return []
 	var dist := {from_id: 0.0}
@@ -896,7 +892,7 @@ func find_route(from_id: int, to_id: int) -> Array:
 			break
 		for link in adj[cur]:
 			var nb: int = link[0]
-			if collapsed.get(nb, false) or not _edge_open(link[1]):
+			if collapsed.get(nb, false) or not _edge_open(link[1]) or avoid.has(link[1]):
 				continue
 			var cost: float = dist[cur] + edge_cost(link[1]) + 1.0
 			if not dist.has(nb) or cost < dist[nb]:
@@ -1162,8 +1158,7 @@ static func overpass_at(h: Dictionary, s: float, edge_list: Array) -> int:
 
 
 static func sample(h: Dictionary, s: float) -> Array:
-	## [position, unit tangent, is_fast] at arc length s along a horde's path, including the
-	## motion of a deck it is riding (retract pull, dissolve drop; nobody rides a rotation).
+	## [position, unit tangent, is_fast] at arc length s along a horde's path.
 	var cum: PackedFloat32Array = h["cum"]
 	var pts: PackedVector3Array = h["pts"]
 	s = clampf(s, 0.0, cum[-1])
@@ -1179,14 +1174,6 @@ static func sample(h: Dictionary, s: float) -> Array:
 	var t := (s - cum[lo]) / seg
 	var pos := pts[lo].lerp(pts[hi], t)
 	var fwd := (pts[hi] - pts[lo]).normalized()
-	if h.has("ride"):
-		var r: Dictionary = h["ride"]
-		if s >= r["s0"] - 0.01 and s <= r["s1"] + 0.01:
-			match r["kind"]:
-				"retract":
-					pos += r["shift"]
-				_:
-					pos.y -= r["sink"]
 	return [pos, fwd, h["fast"][lo] == 1]
 
 
@@ -1315,7 +1302,7 @@ func _check_missing_decks() -> void:
 	## moving falls once the motion ends. A head reaching the lip of a missing deck walks off it:
 	## the line pours into the void at deck speed.
 	for h in hordes.duplicate():
-		if not (h in hordes) or h.has("ride"):
+		if not (h in hordes):
 			continue
 		h["pour_prev"] = h.get("pour", false)             # parked at a lip last step (_cut_range: walking off)
 		h["pour"] = false
@@ -1327,17 +1314,13 @@ func _check_missing_decks() -> void:
 			if head < sp["s0"] or tail > sp["s1"]:
 				continue                                  # the line doesn't touch this deck
 			var ei: int = sp["edge"]
-			var ctrl: int = edge_controller.get(ei, -1)
-			if ctrl >= 0 and ei in nodes[ctrl]["moving_edges"] and nodes[ctrl]["relay"] != "rotation":
-				continue                                  # mid-motion: the tick decides its fate (a turning deck
-				                                          # flung its lines at the tick: it is gone right away)
-			if is_edge_open(ei):
+			if is_edge_open(ei):                          # a deck in motion is not (0.18.7): going or not yet there
 				continue
 			# the vat keeps sending: an order across a deck that has gone is still obeyed, every unit
 			# marches on and pours into the void (Daniele, 0.18.6: "they should go even if the bridge is
 			# no longer there hence... waterfall")
 			var head_on: bool = head >= sp["s0"] and head <= sp["s1"]
-			_cut_range(h, sp["s0"], sp["s1"], "fall", -1, false)
+			_cut_range(h, sp["s0"], sp["s1"], false)
 			if head_on and h in hordes:
 				h["s"] = sp["s0"]                         # the head stays at the lip; the next step pours more
 				h["state"] = "move"
@@ -1409,7 +1392,7 @@ func _detect_contacts_inner() -> void:
 				grid[key] = []
 			grid[key].append([h, k, p, smp[1], level_of(p) if v3 else overpass_at(h, s, edges)])
 	for h in hordes:
-		if h["state"] == "absorb" or h["state"] == "ride" or h["units"] <= 0.0:
+		if h["state"] == "absorb" or h["units"] <= 0.0:
 			continue
 		var smp := sample(h, h["s"])
 		var p: Vector3 = smp[0]
@@ -1470,7 +1453,7 @@ func _tug_of_war(dt: float) -> void:
 		var b := _horde(int(ids[1]))
 		if a.is_empty() or b.is_empty():
 			continue
-		if a.get("retreat", false) or b.get("retreat", false) or a.has("ride") or b.has("ride"):
+		if a.get("retreat", false) or b.get("retreat", false):
 			continue
 		var pa := power_of(a)
 		var pb := power_of(b)
@@ -1503,7 +1486,7 @@ func recall(hid: int) -> bool:
 	if not Rules.bridge_combat:                       # BRAWL is Alpha 11: an order, once sent, is committed
 		return false
 	var h := _horde(hid)
-	if h.is_empty() or h["state"] == "absorb" or h.get("retreat", false) or h.has("ride"):
+	if h.is_empty() or h["state"] == "absorb" or h.get("retreat", false):
 		return false
 	if h.get("decoy", false):                            # a recalled Ghost Line stops "emitting" too
 		_decoy_done_streaming(h)
@@ -1588,9 +1571,9 @@ func _engage(a: Dictionary, b: Dictionary, kind: String) -> void:
 		return
 	fights.append(pair)
 	fight_info[key] = {"kind": kind, "attacker": a["id"]}   # a's head made the contact
-	if a["state"] != "ride" and not a.get("retreat", false):
+	if not a.get("retreat", false):
 		a["state"] = "fight"
-	if b["state"] != "ride" and not b.get("retreat", false):
+	if not b.get("retreat", false):
 		b["state"] = "fight"
 	events.append({"t": time, "type": kind, "seats": [a["owner"], b["owner"]]})
 
@@ -2331,7 +2314,7 @@ func _drop_node(id: int) -> void:
 	## horde portion on the platform or on a deck attached to it. The attachment goes with it.
 	var n: Dictionary = nodes[id]
 	if n["relay_phase"] == "moving":
-		_relay_apply(n)                     # finish the tick: riders get their per-kind fate, the view restores the decks
+		_relay_apply(n)                     # finish the tick: the view restores the decks
 	collapsed[id] = true
 	var old: String = n["owner"]
 	if not n["streaming"].is_empty():
@@ -2374,10 +2357,7 @@ func _drop_node(id: int) -> void:
 			lo = 0.0
 			hi = maxf(hi, sps[0]["s0"] if not sps.is_empty() else h["L"])
 		if lo <= hi:
-			h.erase("ride")
-			if h["state"] == "ride":
-				h["state"] = "move"
-			_cut_range(h, lo, hi, "fall", -1)
+			_cut_range(h, lo, hi)
 	events.append({"t": time, "type": "collapse", "node": id, "from": old})
 	fx_events.append({"type": "collapse", "node": id, "from": old})   # the view pours the old owner's goo
 	for seat in factions.keys():                        # losing your last node to the collapse = defeat
@@ -3253,15 +3233,7 @@ func _settle_bypass(relay_id: int) -> void:
 func _settle(n: Dictionary, closing: Array) -> void:
 	## Bypass / Anchor over: the decks that go away drop everything on them at once (Daniele, 0.18.7: every
 	## relay kind drops its riders, no "carried in"; a rotation flings them as its turn does).
-	if n["relay"] == "rotation":
-		_relay_fling(n, closing, 0.0)
-	else:
-		for h in hordes.duplicate():
-			for sp in h["spans"]:
-				if not (h in hordes):
-					break
-				if sp["edge"] in closing and _overlap(h, sp["s0"], sp["s1"]) > 0.0:
-					_cut_range(h, sp["s0"], sp["s1"], "fall", -1, false)
+	_relay_drop(n, closing, 0.0)                          # the same fate as a relay's own tick
 	fx_events.append({"type": "relay_settle", "node": n["id"], "closing": closing})
 
 

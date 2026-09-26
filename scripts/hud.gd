@@ -53,8 +53,6 @@ var debug_button: Button
 var chat_button: Button
 var _chat_poll := 0.0
 var debug_panel: PanelContainer
-var _bridge_text := Callable()          # Debug panel text refreshers (see _refresh_mode_texts)
-var _hide_text := Callable()
 var margins := Vector4(16, 12, 16, 12)
 var _last_fps_print := 0.0
 var version_label: Label
@@ -368,17 +366,7 @@ func setup(m: Node3D) -> void:
 
 
 func _hint_text() -> String:
-	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade" + ("  ·  Tap your line to RECALL it" if Rules.bridge_combat else "") + ("  ·  1 2 3: skills" if sim.abilities_on else "")
-
-
-func _refresh_mode_texts() -> void:
-	## The texts that depend on SIEGE/BRAWL, rebuilt when the mode is switched mid-match (pause menu
-	## or Debug): the hint line (RECALL is SIEGE-only) and the Debug mode and enemy-count buttons.
-	hint.text = _hint_text()
-	if _bridge_text.is_valid():
-		_bridge_text.call()
-	if _hide_text.is_valid():
-		_hide_text.call()
+	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap your node to upgrade" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
 
 
 func layout(vp: Vector2, m: Vector4) -> void:
@@ -1015,10 +1003,6 @@ func pause_menu() -> void:
 	main.paused = true
 	_fill_overlay(pause_panel, "PAUSED", "%s · %02d:%02d" % [str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
 			[["RESUME", func(): main.paused = false; pause_panel.visible = false],
-			["MODE: %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL"), func():
-				Rules.bridge_combat = not Rules.bridge_combat
-				_refresh_mode_texts()
-				pause_menu()],
 			["LAST STAND: %s" % ("ON" if Rules.last_stand else "OFF"), func():
 				Rules.last_stand = not Rules.last_stand
 				pause_menu()],
@@ -1111,29 +1095,12 @@ func _build_debug() -> void:
 	box.add_theme_constant_override("separation", 6)
 	debug_panel.add_child(box)
 	box.add_child(text_label("Debug - live, resets on reload", 20))
-	var deck := _debug_slider(box, "Deck speed", 0.2, 30.0, 0.1, Rules.deck_speed, "%.1f m/s",
-			func(v: float): Rules.deck_speed = v)
-	var node := _debug_slider(box, "Platform speed", 0.1, 30.0, 0.05, Rules.node_speed_mult, "x%.2f deck",
-			func(v: float): Rules.node_speed_mult = v)
-	var door := _debug_slider(box, "Door rate", 1.0, 500.0, 1.0, Rules.door_rate, "%.0f units/s",
-			func(v: float): Rules.door_rate = v)
-	var nfight := _debug_slider(box, "Platform fight", 0.05, 20.0, 0.05, Rules.node_fight_mult, "x%.2f rate",
-			func(v: float): Rules.node_fight_mult = v)
+	# (0.18.7: SIEGE is deactivated - its deck / platform / door / platform-fight tunables left the panel)
 	var forge := _debug_slider(box, "Forge bonus", 0.0, 200.0, 5.0, Rules.forge_bonus * 100.0, "+%.0f%% attack",
 			func(v: float): Rules.forge_bonus = v / 100.0)
-	var bridge := button("", Callable(), 0, 44, 18)
-	var bridge_text := func(): bridge.text = "Mode: %s" % ("SIEGE (fights on bridges)" if Rules.bridge_combat else "BRAWL (Alpha 11 - pass through, fight at nodes)")
-	bridge_text.call()
-	_bridge_text = bridge_text
-	bridge.pressed.connect(func():
-		Rules.bridge_combat = not Rules.bridge_combat
-		_refresh_mode_texts()
-		toast("Mode: %s" % ("SIEGE" if Rules.bridge_combat else "BRAWL")))
-	box.add_child(bridge)
 	var hide := button("", Callable(), 0, 44, 18)
-	var hide_text := func(): hide.text = "Enemy counts: %s" % ("HIDDEN" if Rules.hide_enemy_counts or Rules.bridge_combat else "SHOWN") + (" (Siege always hides)" if Rules.bridge_combat and not Rules.hide_enemy_counts else "")
+	var hide_text := func(): hide.text = "Enemy counts: %s" % ("HIDDEN" if Rules.hide_enemy_counts else "SHOWN")
 	hide_text.call()
-	_hide_text = hide_text
 	hide.pressed.connect(func():
 		Rules.hide_enemy_counts = not Rules.hide_enemy_counts
 		hide_text.call()
@@ -1149,10 +1116,6 @@ func _build_debug() -> void:
 		low_text.call())
 	box.add_child(low)
 	var reset := button("Reset to rules", func():
-		deck.value = Rules.DECK_SPEED_DEFAULT
-		node.value = Rules.NODE_SPEED_MULT_DEFAULT
-		door.value = Rules.DOOR_RATE_DEFAULT
-		nfight.value = Rules.NODE_FIGHT_MULT_DEFAULT
 		forge.value = Rules.FORGE_BONUS_DEFAULT * 100.0, 0, 44, 18)
 	box.add_child(reset)
 

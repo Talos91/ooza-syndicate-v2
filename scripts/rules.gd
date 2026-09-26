@@ -3,6 +3,12 @@ extends RefCounted
 ## Every tunable number of the prototype in one place.
 ## Kit sizes match Models/2.0/build_kit_2_0.py. Army numbers follow Alpha 11's logic scaled by
 ## SCALE (PARAMETERS.md: army scale ~5x; vat caps are still an open question) - change here only.
+##
+## SIEGE IS DEACTIVATED since 0.18.7 (Daniele: "for now completely deactivate it, i don't wanna waste
+## resources on a mode we are less and less keeping into consideration, if we will pick it up later we
+## will simply do, brawl is our game"). The game is BRAWL only: bridge_combat is locked false (SIEGE_ON),
+## no UI or flag can switch it, and the tests no longer cover SIEGE. Its numbers and code paths stay,
+## dormant and untested - re-enable with SIEGE_ON and expect to re-test everything.
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
@@ -102,8 +108,10 @@ static var node_fight_mult: float = NODE_FIGHT_MULT_DEFAULT   # live-tunable: x 
 # BRIDGE COMBAT toggle (Daniele: "combat like Alpha 11 or like Alpha 12 - combat on bridges, not sure
 # it's fun, I wanna try with and without"). true = Alpha 12: hordes fight wherever they meet and
 # queue behind friends; false = Alpha 11: hordes pass each other and only fight at nodes.
-static var bridge_combat: bool = false    # BRAWL by default (Daniele, 2026-09-26: "brawl is back as the main game mode
-                                          # and siege is just an abandoned test for now")
+const SIEGE_ON := false                   # 0.18.7: SIEGE deactivated - bridge_combat can't be switched on
+static var bridge_combat: bool = false:   # BRAWL (Daniele, 2026-09-26: "brawl is back as the main game mode
+	set(v):                               # and siege is just an abandoned test for now"); locked since 0.18.7
+		bridge_combat = v and SIEGE_ON
 # LAST STAND toggle (Daniele: "add a toggle for Last Stand on or off in the match settings").
 # Off: no collapse; the 7:00 safety net still ends a stalled match by strength.
 static var last_stand: bool = true
@@ -150,13 +158,26 @@ static func goo_look() -> bool:
 const CONTACT_R := 2.1               # metres: about one deck width across, one patch along
 const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
 
-# RELAYS (GAME-RULES sec8): player-fired; 3 s warning previews the outcome, then the authoritative
-# tick applies the per-kind troop fate over RELAY_MOVE seconds of visible motion (rotation pivots and
-# flings every line on its turning decks into the void, retract slides in, switch/remote dissolve),
-# then RELAY_COOLDOWN before the next fire.
+# RELAYS (GAME-RULES sec8): player-fired; the warning previews the outcome (the deck is still there and
+# walkable: lines on it have RELAY_WARNING s to clear it), then the authoritative tick takes the going
+# decks away at once - every body still on one falls, whatever the kind (Daniele, 0.18.7: "no bridge =
+# bridge down") - while RELAY_MOVE seconds of visible motion play (rotation pivots and flings, retract
+# slides in, switch/remote dissolve); an appearing deck is walkable once its motion ends; then
+# RELAY_COOLDOWN before the next fire.
 const RELAY_WARNING := 1.0          # Daniele (0.18.6): "bridge alert ... just 1 sec" (was 3 s)
 const RELAY_COOLDOWN := 5.0        # Daniele (Alpha 13 playtest): "relay cooldown I'd set at 5 s"
-const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves; retract/switch/remote riders ride, a rotation flings
+const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves (its troops fell when it started)
+# AI relay sense (0.18.7 - Daniele: "the ai tends to avoid relay bridges all together and almost never
+# build structure on relays"). From Standard up (AI_LEVELS "relays" >= 1) an order crosses a relay deck
+# unless somebody hostile can change that deck before the whole line is over it (estimated crossing
+# x AI_RELAY_SLACK + AI_RELAY_PAD s, the door's emission included); a safe detour is taken when it costs
+# at most AI_RELAY_DETOUR s (or doubles the trip), otherwise the risky route is priced at AI_RELAY_RISK.
+const AI_RELAY_SLACK := 1.25
+const AI_RELAY_PAD := 1.0
+const AI_RELAY_DETOUR := 8.0
+const AI_RELAY_RISK := 14.0          # target-score penalty for a plan whose only route is at risk
+const AI_RELAY_VALUE := 10.0         # target-score bonus for a relay node (control of shortcuts), + its traffic
+const AI_RELAY_HOLD := 30.0          # sim units it keeps on a relay node it holds (6 shown): relays don't grow
 
 # LAST STAND (GAME-RULES sec10; Daniele 2026-09-25: 2:00 "seems ok" for now, not 3:00). The method
 # (inward / outward / chaos, from the map's eligible list) is hidden until the start, then the

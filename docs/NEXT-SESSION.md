@@ -18,6 +18,11 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
+## Roadmap
+
+The plan after 0.18.7 / 0.18.8 (Daniele's to-do list from 2026-09-26, plus suggested additions, by area
+and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
+
 ## 0.18.6 (2026-09-26): waterfall, 3:00 Last Stand, neon, badges, combat effects, maps 4.4, filters
 
 - Sim: `_cut_range(..., reroute=false)` (relays and missing decks) keeps the vat streaming and parks the head at the
