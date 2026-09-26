@@ -17,6 +17,13 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 - Ask before assuming what to work on; Daniele drives from his own playtests.
 - Reference the design package; never hand-edit roster geometry (`maps-100.json`).
 
+## 0.18.5 (2026-09-26): maps 4.3 classic added
+
+- M-01..M-20 (References/Ooze Syndicate maps 4.3 classic) baked with maps 4.2 and the Alpha 11 classics by
+  `Models/2.0/export_maps_4_2_game.py` (MW_DIR). Pool: 44 maps (T, A, M, C, B, S, D groups). The re-bake
+  only changes the classics' `thumbnail` metadata field (svg -> png); keep the committed classics if you
+  re-bake (`git checkout -- maps4/A-*.json`) unless their pack changed.
+
 ## 0.18.4 (2026-09-26): rotation fling, ring by ring falls, Last Stand zoom, emblems, BRAWL pace
 
 - Rotation relays fling riders (Sim._relay_fling -> fx "fling" -> Fx._fling_horde; main.gd toast;

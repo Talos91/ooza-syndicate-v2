@@ -1,5 +1,19 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.18.5 "Alpha 18" - 2026-09-26 (maps 4.3 classic: 20 Mushroom Wars style maps added)
+
+- **Maps 4.3 classic added** (References/Ooze Syndicate maps 4.3 classic): M-01..M-20, open fields of scattered
+  platforms with every neighbour linked, homes at the screen edges and one or two relays each - the original
+  Mushroom Wars feel - at the kit's sizes (decks 4 / 8 / 12 m). 8 x 1v1, 3 x 2v2, 5 x FFA 4 (three also 2v2),
+  4 x FFA 3; brawl, siege and core groups. Listed after the Alpha 11 classics as the "M" group; maps 4.2 and
+  the classics stay.
+- Baked by `Models/2.0/export_maps_4_2_game.py`, which now also reads the 4.3 classic folder: all 44 maps
+  clean (no clashes, every deck within 1.5 m of its tier's length). Camera 58 degrees; phone tap targets
+  45-54 pt, nothing overflows.
+- Tests: test_sim, test_net, test_maps4 (5,846 checks), test_map_pool, test_ai_curve - all pass. Curve vs
+  Standard over the larger pool: Training 0 %, Casual 20 %, Standard 50 %, Veteran 85 %, Expert 95 %;
+  FFA 4 seat A draws 29 % of attacks (even 33 %). Not tried on a real phone.
+
 ## 0.18.4 "Alpha 18" - 2026-09-26 (rotating decks fling, ring by ring falls, camera closes in, emblems)
 
 - **A rotating deck shakes its lines into the void** (Daniele: "when a rotating bridge turns all units that

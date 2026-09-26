@@ -499,4 +499,5 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      *Done:* badges, inspector and toasts.
 110. **"Don't make all outward rings fall at the same time but one after the other, 5 s apart, following the
      rule for falling bridges."** *Done:* platforms drop one by one, 5 s apart, never leaving an island.
-
+111. **Maps 4.3 classic (20 Mushroom Wars style maps).** *Done (0.18.5):* added as the M group, all clean,
+     camera 58 degrees, taps 45-54 pt.
