@@ -19,9 +19,15 @@ extends RefCounted
 ## on it before the whole line is across (0.18.6 waterfall: the rest would pour off the lip) - level 1
 ## assumes a hostile relay is always ready, level 2+ reads its cooldown and phase and who is about to
 ## capture a neutral one; never fires while an own line still has to cross (level 2+ counts the whole
-## order it cuts, not only what is on the deck); keeps a garrison on the relays it holds, values them as
-## targets, feeds them and builds a cannon (a busy front relay) or the forge there - the slot costs no vat.
-## Level 2 opens routes too. Training and Casual (level 0) keep the plain behaviour.
+## order it cuts, not only what is on the deck); values relays as targets, feeds them and builds a laser (a
+## busy front relay), the forge or its monster hub there - the slot costs no vat. Level 2 opens routes too.
+## Training and Casual (level 0) keep the plain behaviour.
+## Structures 2.1 (0.18.10): relay nodes are garrisoned by threat like any node (no fixed relay garrison) and
+## valued knowing they produce nothing; a machingoon goes on a frontline common node that keeps taking small
+## raids; one monster hub per seat, and monsters: Veteran / Expert launch at targets whose capture or whose
+## kicked enemy lines are worth it (never through their own lines), the lower levels rarely. In team modes it
+## EJECTs stored allied troops from a node about to drop. Veteran / Expert (intel 1) count the defender's forge
+## (attack and defence), Fortify / Aegis and faction stats in their garrison estimates.
 ## Skills (0.18.7, "the AI must not be skill-less"): every think it may cast one of its loadout's skills
 ## (its faction's Rules.FACTION_LOADOUT unless the match gave it another), at most one cast every
 ## Rules.AI_SKILL_GAP[level] s, each on a cheap heuristic of what it can see (_skills). It never reads
@@ -40,6 +46,8 @@ var _busy := {}                            # node id -> true once it ordered a s
 var _fed := {}                             # relay node id -> time until which units sent there are for its slot
 var _route_risky := false                  # set by _route: the route it returned is at risk from a relay
 var _skill_after := 0.0                    # no cast before this match time (Rules.AI_SKILL_GAP)
+var _raids := {}                           # own node id -> [[time, sim units]] hostile lines that came at it
+var _raid_seen := {}                       # horde ids already noted
 var casts := 0                             # skills cast this match (tests)
 var rng := RandomNumberGenerator.new()
 
@@ -64,12 +72,15 @@ func think(sim: Sim, dt: float) -> void:
 	if int(cfg["relays"]) > 0:
 		_relays(sim)
 	_skills(sim)
+	_note_raids(sim)
 	if Rules.bridge_combat and int(cfg["relays"]) > 0:   # RECALL is SIEGE only
 		_retreats(sim)
 	if sim.last_stand_active:
 		_evacuate(sim)
+		_ejects(sim)
 	_defend(sim)
 	_build(sim)
+	_monsters(sim)
 	if sim.time >= _attack_after:
 		_attack(sim)
 
@@ -86,7 +97,7 @@ func _reserve(sim: Sim, n: Dictionary) -> float:
 		var o: Dictionary = sim.nodes[link[0]]
 		if o["owner"] != "" and not sim.allied(o["owner"], seat):
 			nearby = maxf(nearby, o["units"] * 0.15)
-	return nearby + (4.0 * Rules.SCALE if n["id"] == sim.homes.get(seat, -1) else 0.0) + _relay_hold(sim, n)
+	return nearby + (4.0 * Rules.SCALE if n["id"] == sim.homes.get(seat, -1) else 0.0) + _slot_hold(sim, n)
 
 
 func _incoming(sim: Sim, node_id: int, hostile: bool) -> float:
@@ -111,7 +122,7 @@ func _estimate(sim: Sim, n: Dictionary) -> float:
 	## What it believes the garrison is: rounded, off by up to `error`, refreshed every `observe` s.
 	var mem: Dictionary = _memory.get(n["id"], {})
 	if mem.is_empty() or _clock >= float(mem["next"]):
-		mem = {"units": maxf(0.0, float(n["units"]) * (1.0 + rng.randf_range(-cfg["error"], cfg["error"]))), "next": _clock + float(cfg["observe"])}
+		mem = {"units": maxf(0.0, sim.garrison_total(n) * (1.0 + rng.randf_range(-cfg["error"], cfg["error"]))), "next": _clock + float(cfg["observe"])}
 		_memory[n["id"]] = mem
 	return mem["units"]
 
@@ -247,12 +258,14 @@ func _attack(sim: Sim) -> void:
 		if target["owner"] != "" and Sim.has_vat(target):
 			growth = sim.production(target) * travel * float(cfg["forecast"])
 		var defenders := minf(estimate + growth, maxf(estimate, float(Rules.CAPS[target["tier"]])))
-		var defence: float = sim.stat(target["owner"], "health") if target["owner"] != "" else 1.0
-		var needed: float = (defenders + 3.0 * Rules.SCALE) * float(cfg["margin"]) * defence / maxf(sim.attack_of(seat), 0.1) \
+		var needed: float = _attackers_for(sim, target, defenders + 3.0 * Rules.SCALE) * float(cfg["margin"]) \
 				- _incoming(sim, target["id"], false)
 		if needed <= 0.0 or available < needed:
 			continue
-		var score: float = 70.0 + target["tier"] * 8.0 + (12.0 if target["category"] == "strategic" else 0.0) \
+		# what the node is worth: its production (a relay - or a laser / forge / hub node - makes nothing: its
+		# value is the shortcut, _relay_value), plus a special node's bonus and a neutral's
+		var worth: float = target["tier"] * 8.0 if target["structure"] in ["vat", "machingoon"] else 0.0
+		var score: float = 70.0 + worth + (12.0 if target["category"] == "strategic" else 0.0) \
 				+ (18.0 if target["owner"] == "" else 0.0) - needed / Rules.SCALE * 0.6 - travel * 2.0
 		score += _rival_adjustment(sim, target) + _relay_value(sim, target)
 		if donors.any(func(d): return d["risky"]):
@@ -277,6 +290,20 @@ func _attack(sim: Sim) -> void:
 			need -= d["node"]["units"] * frac
 		if need <= 0.0:
 			break
+
+
+func _attackers_for(sim: Sim, target: Dictionary, defenders: float) -> float:
+	## Attackers it thinks it needs to beat `defenders` there (BRAWL landing: Sim._land_classic). intel 1
+	## (Veteran, Expert): the defender's forge (its attack bonus and the -20 % defence), Fortify / Aegis and the
+	## faction's health, garrison and attack; intel 0 keeps the old blind spot - only the defender's health
+	## against its own attack (it under-sends against forge owners).
+	var o: String = target["owner"]
+	if o == "":
+		return defenders / maxf(sim.attack_of(seat), 0.1)
+	if int(cfg.get("intel", 0)) >= 1:
+		var tough: float = sim.stat(o, "health") * sim.stat(o, "garrison") * sim.garrison_div(target)
+		return defenders * tough * sim.attack_of(o) / maxf(sim.attack_of(seat) * sim.stat(seat, "health"), 0.1)
+	return defenders * sim.stat(o, "health") / maxf(sim.attack_of(seat), 0.1)
 
 
 # ------------------------------------------------------------------ relays
@@ -583,15 +610,15 @@ func _relay_value(sim: Sim, target: Dictionary) -> float:
 	return v
 
 
-func _relay_hold(sim: Sim, n: Dictionary) -> float:
-	## Level 1+: a relay node never grows, so it keeps a garrison (AI_RELAY_HOLD) and, while units are
-	## on their way for its slot, the price of that build too.
+func _slot_hold(sim: Sim, n: Dictionary) -> float:
+	## Level 1+: while units are on their way to an empty relay slot for its structure, it keeps that price
+	## there (0.18.10: no fixed relay garrison any more - relays are garrisoned by threat like any node).
 	if n["relay"] == "" or int(cfg["relays"]) <= 0:
 		return 0.0
-	var hold := Rules.AI_RELAY_HOLD
-	if float(_fed.get(n["id"], -1.0)) > _clock and n["attachment"] == "" and n["build_kind"] == "":
-		hold += float(Rules.FORGE_COST if _slot_kind(sim, n) == "forge" else Rules.CANNON_COST[1])
-	return hold
+	if float(_fed.get(n["id"], -1.0)) > _clock and n["structure"] == "" and n["build_kind"] == "":
+		var kind := _slot_kind(sim, n)
+		return float(sim.build_cost(n, kind)) if kind != "" else 0.0
+	return 0.0
 
 
 func _retreats(sim: Sim) -> void:
@@ -613,9 +640,9 @@ func _retreats(sim: Sim) -> void:
 
 # ------------------------------------------------------------------ investment
 func _build(sim: Sim) -> void:
-	## Same costs and slots as the player. One investment per `invest` seconds, never on a node
-	## under attack or about to drop in the Last Stand: upgrades, a forge once it has three vats,
-	## cannons on free relay slots.
+	## Same costs and slots as the player. One investment per `invest` seconds, never on a node under
+	## attack or about to drop in the Last Stand: machingoon upgrades, vat upgrades (T3 at most), the forge
+	## once it has three vats, a monster hub, lasers on free relay slots, a machingoon on a raided frontline.
 	if sim.time < _invest_after:
 		return
 	var owned := _mine(sim)
@@ -623,21 +650,23 @@ func _build(sim: Sim) -> void:
 		if n["build_kind"] != "" or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue
 		var reserve := _reserve(sim, n) + 4.0 * Rules.SCALE
-		if n["attachment"] == "cannon" and n["cannon_tier"] < 3 \
-				and n["units"] >= Rules.CANNON_COST[n["cannon_tier"] + 1] + reserve and sim.upgrade_structure(n["id"]):
+		if n["structure"] == "machingoon" and n["tier"] < 3 \
+				and n["units"] >= sim.upgrade_cost(n) + reserve and sim.upgrade(n["id"], seat):
 			_invest_after = sim.time + float(cfg["invest"])
 			return
 	var vats := owned.filter(func(n): return Sim.has_vat(n))
-	if int(cfg["relays"]) >= 2:                           # level 2+: a busy front relay's cannon comes first
+	if int(cfg["relays"]) >= 2:                           # level 2+: a busy front relay's laser comes first
 		if _build_relay_slot(sim, owned, true):
 			return
 		_feed_relay_slot(sim, owned, vats, 8.0)
+	if int(cfg["relays"]) >= 1 and _build_machingoon(sim, owned, vats):
+		return
 	vats.sort_custom(func(a, b): return a["tier"] < b["tier"] if a["tier"] != b["tier"] else a["units"] > b["units"])
 	for n in vats:
-		if n["build_kind"] != "" or n["tier"] >= 4 or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
+		if n["build_kind"] != "" or Sim.vat_cost(n) <= 0 or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue
 		if n["units"] >= Sim.vat_cost(n) + _reserve(sim, n) + 4.0 * Rules.SCALE and n["units"] >= Rules.CAPS[n["tier"]] * 0.6 \
-				and sim.upgrade_vat(n["id"]):
+				and sim.upgrade(n["id"], seat):
 			_invest_after = sim.time + float(cfg["invest"])
 			return
 	if _build_relay_slot(sim, owned, false):
@@ -646,19 +675,90 @@ func _build(sim: Sim) -> void:
 		_feed_relay_slot(sim, owned, vats, 5.0)
 
 
+func _note_raids(sim: Sim) -> void:
+	## Remember the hostile lines that came at its nodes (size and time): a node that keeps taking small raids
+	## is where a machingoon pays (single target, good against trickles).
+	for h in sim.hordes:
+		if _raid_seen.has(h["id"]) or not _hostile(sim, h["owner"]) or h.get("retreat", false):
+			continue
+		var to: Dictionary = sim.nodes[h["target"]]
+		if to["owner"] != seat:
+			continue
+		_raid_seen[h["id"]] = true
+		if not _raids.has(to["id"]):
+			_raids[to["id"]] = []
+		_raids[to["id"]].append([sim.time, maxf(float(h["units"]), float(h["ordered"]))])
+	for id in _raids.keys():
+		_raids[id] = (_raids[id] as Array).filter(func(r): return sim.time - float(r[0]) <= Rules.AI_TRICKLE_WINDOW)
+	if _raid_seen.size() > 400:
+		_raid_seen = {}
+
+
+func _trickled(n: Dictionary) -> bool:
+	var small := 0
+	for r in _raids.get(n["id"], []):
+		if float(r[1]) <= Rules.AI_TRICKLE_UNITS:
+			small += 1
+	return small >= Rules.AI_TRICKLE_RAIDS
+
+
+func _build_machingoon(sim: Sim, owned: Array, vats: Array) -> bool:
+	## A machingoon in place of the vat on a frontline common node that keeps taking small raids - never on
+	## its home or when it would leave fewer than AI_MACHINGOON_VATS - 1 vats, one at a time per three vats.
+	if vats.size() < Rules.AI_MACHINGOON_VATS:
+		return false
+	var guns := owned.filter(func(n): return n["structure"] == "machingoon" or n["build_kind"] == "machingoon").size()
+	if guns >= int(vats.size() / 3):
+		return false
+	var best := {}
+	var best_v := 0.0
+	for n in vats:
+		if n["id"] == sim.homes.get(seat, -1) or n["build_kind"] != "" or _drops_soon(sim, n["id"]) \
+				or sim.can_build(n["id"], seat, "machingoon") != "" or not _trickled(n):
+			continue
+		var front := false
+		for link in sim.adj[n["id"]]:
+			if _hostile(sim, sim.nodes[link[0]]["owner"]):
+				front = true
+				break
+		if not front or n["units"] < sim.build_cost(n, "machingoon") + _reserve(sim, n):
+			continue
+		var v: float = (_raids.get(n["id"], []) as Array).size() - n["tier"] * 0.5
+		if best.is_empty() or v > best_v:
+			best = n
+			best_v = v
+	if best.is_empty() or not sim.build(best["id"], seat, "machingoon"):
+		return false
+	_invest_after = sim.time + float(cfg["invest"])
+	return true
+
+
 func _slot_kind(sim: Sim, n: Dictionary) -> String:
-	## What goes in an empty relay slot: the forge (one per seat, once it holds three vats), else a cannon.
-	if not sim.has_forge(seat) and "forge" in n["buildable"] \
-			and _mine(sim).filter(func(x): return Sim.has_vat(x)).size() >= 3:
+	## What goes in an empty relay slot: its one monster hub first (a relay with a rival or neutral node in a
+	## monster's reach, once it holds two vats - the first monster charges 90 s from the hub's completion, so an
+	## early hub is the one that gets used), then the forge (one per seat, once it holds three vats), else a laser.
+	var vats := _mine(sim).filter(func(x): return Sim.has_vat(x)).size()
+	if "monster_hub" in n["buildable"] and vats >= 2 and not sim.has_hub(seat) and _hub_front(sim, n):
+		return "monster_hub"
+	if not sim.has_forge(seat) and "forge" in n["buildable"] and vats >= 3 \
+			and not _mine(sim).any(func(x): return x["build_kind"] == "forge"):
 		return "forge"
-	return "cannon" if "cannon" in n["buildable"] else ""
+	return "laser" if "laser" in n["buildable"] else ""
+
+
+func _hub_front(sim: Sim, n: Dictionary) -> bool:
+	## A rival or neutral node within a monster's reach of this relay (routes as they stand now).
+	for id in sim.monster_reach(n["id"]):
+		if not sim.allied(sim.nodes[id]["owner"], seat):
+			return true
+	return false
 
 
 func _slot_value(sim: Sim, n: Dictionary, kind: String) -> float:
-	## How much a structure on this relay slot is worth. Level 0: any slot alike. Level 1+: the forge
-	## 10; a cannon 1 (it still guards the node), +5 on the border, + rival traffic over its decks
+	## How much a structure on this relay slot is worth. Level 0: any slot alike. Level 1+: the forge and the
+	## monster hub 10; a laser 1 (it still guards the node), +5 on the border, + rival traffic over its decks
 	## (0.18.7: "a cannon on a relay node guarding a busy deck"). Only slots worth 5+ get fed.
-	if int(cfg["relays"]) <= 0 or kind == "forge":
+	if int(cfg["relays"]) <= 0 or kind in ["forge", "monster_hub"]:
 		return 10.0
 	var v := 1.0 + minf(10.0, _deck_traffic(sim, n) / Rules.SCALE * 0.5)
 	for link in sim.adj[n["id"]]:
@@ -670,30 +770,27 @@ func _slot_value(sim: Sim, n: Dictionary, kind: String) -> float:
 
 
 func _build_relay_slot(sim: Sim, owned: Array, busy_only: bool) -> bool:
-	## Build on an empty relay slot it can pay for (Same costs as the player; the slot costs no vat),
-	## keeping the relay's garrison. busy_only: only a slot worth 8+ (a busy front relay).
+	## Build on an empty relay slot it can pay for (same costs as the player; the slot costs no vat), keeping
+	## what the threat around it asks (_reserve). busy_only: only a slot worth 8+ (a busy front relay).
 	var best := {}
 	var best_v := 0.0
 	for n in owned:
-		if n["build_kind"] != "" or n["attachment"] != "" or n["relay"] == "" \
+		if n["build_kind"] != "" or n["structure"] != "" or n["relay"] == "" \
 				or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue                                      # only empty relay slots: never give up a vat
 		var kind := _slot_kind(sim, n)
 		if kind == "":
 			continue
-		var keep: float = Rules.AI_RELAY_HOLD if int(cfg["relays"]) >= 1 else 10.0
-		if kind == "forge" and n["units"] < Rules.FORGE_COST + keep and int(cfg["relays"]) <= 0 and "cannon" in n["buildable"]:
-			kind = "cannon"                               # level 0: whatever it can pay for now
-		var cost: float = Rules.FORGE_COST if kind == "forge" else Rules.CANNON_COST[1]
+		var keep: float = _reserve(sim, n) - _slot_hold(sim, n) if int(cfg["relays"]) >= 1 else 10.0
+		if kind != "laser" and n["units"] < sim.build_cost(n, kind) + keep and int(cfg["relays"]) <= 0 and "laser" in n["buildable"]:
+			kind = "laser"                                # level 0: whatever it can pay for now
 		var v := _slot_value(sim, n, kind)
-		if kind == "cannon" and v >= 5.0:
-			keep = 10.0                                   # a front cannon guards its own relay
-		if n["units"] < cost + keep or v <= 0.0 or (busy_only and v < 8.0):
+		if n["units"] < sim.build_cost(n, kind) + keep or v <= 0.0 or (busy_only and v < 8.0):
 			continue
 		if v > best_v:
 			best_v = v
 			best = {"node": n, "kind": kind}
-	if best.is_empty() or not sim.build_attachment(best["node"]["id"], best["kind"]):
+	if best.is_empty() or not sim.build(best["node"]["id"], seat, best["kind"]):
 		return false
 	_fed.erase(best["node"]["id"])
 	_invest_after = sim.time + float(cfg["invest"])
@@ -704,12 +801,12 @@ func _feed_relay_slot(sim: Sim, owned: Array, vats: Array, worth: float) -> void
 	## Level 1+: a relay never grows, so a player sends it the price of its structure first. One relay
 	## at a time: the best-valued empty slot worth `worth`+, fed from the nearest vat that can spare it.
 	for id in _fed.keys():
-		if float(_fed[id]) > _clock and sim.nodes[id]["owner"] == seat and sim.nodes[id]["attachment"] == "":
+		if float(_fed[id]) > _clock and sim.nodes[id]["owner"] == seat and sim.nodes[id]["structure"] == "":
 			return                                        # still on its way
 	var best := {}
 	var best_v := 0.0
 	for n in owned:
-		if n["build_kind"] != "" or n["attachment"] != "" or n["relay"] == "" \
+		if n["build_kind"] != "" or n["structure"] != "" or n["relay"] == "" \
 				or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue
 		var kind := _slot_kind(sim, n)
@@ -720,8 +817,7 @@ func _feed_relay_slot(sim: Sim, owned: Array, vats: Array, worth: float) -> void
 	if best.is_empty():
 		return
 	var slot: Dictionary = best["node"]
-	var cost: float = Rules.FORGE_COST if best["kind"] == "forge" else Rules.CANNON_COST[1]
-	var need: float = cost + Rules.AI_RELAY_HOLD + 2.0 * Rules.SCALE - slot["units"] - _incoming(sim, slot["id"], false)
+	var need: float = sim.build_cost(slot, best["kind"]) + _reserve(sim, slot) + 2.0 * Rules.SCALE - slot["units"] - _incoming(sim, slot["id"], false)
 	if need <= 0.0:
 		return
 	var pick := {}
@@ -744,6 +840,105 @@ func _feed_relay_slot(sim: Sim, owned: Array, vats: Array, worth: float) -> void
 	if not _send(sim, pick["id"], slot["id"], frac).is_empty():
 		_busy[pick["id"]] = true
 		_fed[slot["id"]] = _clock + pick_t + 12.0
+
+
+# ------------------------------------------------------------------ monsters and EJECT (0.18.10)
+func _monsters(sim: Sim) -> void:
+	## Launch from a ready hub. Veteran / Expert (intel 1): the target in reach worth the most - the garrison a
+	## capture kicks off (and the node, if it can reinforce it) plus the hostile bodies on the decks it walks -
+	## if worth AI_MONSTER_VALUE, never over a deck its own or an allied line is on or will cross, never over a
+	## deck a rival relay can change on the way. Lower levels: now and then (AI_MONSTER_CHANCE), any hostile or
+	## neutral node in reach.
+	for hub in _mine(sim):
+		if hub["structure"] != "monster_hub" or int(hub["hub_monster"]) >= 0 or _drops_soon(sim, hub["id"]):
+			continue
+		if hub["units"] < Rules.MONSTER_COST + _reserve(sim, hub):
+			if sim.time >= float(hub["monster_ready_t"]) - 20.0:
+				_feed_hub(sim, hub)                        # a relay never grows: send the monster's price first
+			continue
+		if sim.time < float(hub["monster_ready_t"]):
+			continue
+		var reach := sim.monster_reach(hub["id"])
+		if int(cfg.get("intel", 0)) <= 0:
+			if rng.randf() > float(Rules.AI_MONSTER_CHANCE.get(level, 0.1)):
+				continue
+			var cands := reach.filter(func(id): return not sim.allied(sim.nodes[id]["owner"], seat) and not _drops_soon(sim, id))
+			if not cands.is_empty():
+				sim.launch_monster(hub["id"], seat, cands[rng.randi_range(0, cands.size() - 1)])
+			continue
+		var best := -1
+		var best_v := Rules.AI_MONSTER_VALUE
+		for id in reach:
+			var t: Dictionary = sim.nodes[id]
+			if (t["owner"] != "" and sim.allied(t["owner"], seat)) or _drops_soon(sim, id):
+				continue                                  # a friendly end node only loses a tier
+			var route := sim.find_route(hub["id"], id)
+			if route.size() < 2 or not _risky_decks(sim, route, 0.0).is_empty():
+				continue
+			var kick := 0.0
+			var own := 0.0
+			for i in range(route.size() - 1):
+				var ei := sim._edge_index(route[i], route[i + 1])
+				var du := _deck_units(sim, ei)
+				kick += du[0]
+				own += du[1]
+				if _own_route_uses(sim, ei):
+					own += 1.0 * Rules.SCALE
+			if own > 0.5:
+				continue                                  # never through its own (or an ally's) lines
+			var v := kick + sim.garrison_total(t) * (1.0 if t["owner"] != "" else 0.6)
+			if t["owner"] != "" and _incoming(sim, id, false) + _nearby_spare(sim, id) > 4.0 * Rules.SCALE:
+				v += 8.0 * Rules.SCALE + t["tier"] * 4.0 * Rules.SCALE   # it can hold what it takes
+			if v > best_v:
+				best_v = v
+				best = id
+		if best >= 0:
+			sim.launch_monster(hub["id"], seat, best)
+
+
+func _feed_hub(sim: Sim, hub: Dictionary) -> void:
+	## Send a monster's price to the hub from the nearest vat that can spare it (one feed at a time).
+	if float(_fed.get(hub["id"], -1.0)) > _clock:
+		return
+	var need: float = Rules.MONSTER_COST + _reserve(sim, hub) + 2.0 * Rules.SCALE - hub["units"] - _incoming(sim, hub["id"], false)
+	if need <= 0.0:
+		return
+	var pick := {}
+	var pick_t := INF
+	for d in _mine(sim):
+		if not Sim.has_vat(d) or _busy.has(d["id"]) or d["build_kind"] != "" or _incoming(sim, d["id"], true) > 0.0 \
+				or d["units"] - _reserve(sim, d) - 4.0 * Rules.SCALE < need:
+			continue
+		var route := _route(sim, d["id"], hub["id"], need)
+		if route.is_empty() or _route_risky:
+			continue
+		var t := _travel(sim, route)
+		if t < pick_t:
+			pick_t = t
+			pick = d
+	if pick.is_empty():
+		return
+	if not _send(sim, pick["id"], hub["id"], clampf(need * 1.1 / maxf(pick["units"], 1.0), 0.05, 1.0)).is_empty():
+		_busy[pick["id"]] = true
+		_fed[hub["id"]] = _clock + pick_t + 12.0
+
+
+func _nearby_spare(sim: Sim, node_id: int) -> float:
+	## Units its adjacent nodes could spare now (to follow a monster into the node it took).
+	var spare := 0.0
+	for link in sim.adj[node_id]:
+		var n: Dictionary = sim.nodes[link[0]]
+		if n["owner"] == seat and not sim.collapsed.get(n["id"], false):
+			spare += maxf(0.0, n["units"] - _reserve(sim, n))
+	return spare
+
+
+func _ejects(sim: Sim) -> void:
+	## Team modes, rarely: EJECT the allied troops stored on one of its nodes that is about to drop in the Last
+	## Stand (they would fall with it).
+	for n in _mine(sim):
+		if not n["allies"].is_empty() and sim.is_warned(n["id"]) and sim.can_build(n["id"], seat, "eject") == "":
+			sim.build(n["id"], seat, "eject")
 
 
 # ------------------------------------------------------------------ skills (0.18.7)
@@ -838,7 +1033,7 @@ func _pick(sim: Sim, id: String) -> Array:
 			var best_t := 0.0
 			for n in _mine(sim):
 				var t := _threat(sim, n)
-				if t >= 10.0 * Rules.SCALE and t >= n["units"] * 0.5 and t > best_t and sim.garrison_div(n) <= 1.0:
+				if t >= 10.0 * Rules.SCALE and t >= n["units"] * 0.5 and t > best_t and sim.skill_div(n) <= 1.0:
 					best = n
 					best_t = t
 			return [best["id"]] if not best.is_empty() else []
@@ -847,7 +1042,7 @@ func _pick(sim: Sim, id: String) -> Array:
 			var best_s := 0.0
 			for n in _mine(sim):
 				var t := _threat(sim, n)
-				if t < 12.0 * Rules.SCALE or t < n["units"] * 0.6 or sim.garrison_div(n) > 1.0:
+				if t < 12.0 * Rules.SCALE or t < n["units"] * 0.6 or sim.skill_div(n) > 1.0:
 					continue
 				var s: float = t
 				for link in sim.adj[n["id"]]:
@@ -899,7 +1094,7 @@ func _pick(sim: Sim, id: String) -> Array:
 							and sim.can_cast(seat, "map", sp["edge"]):
 						return [sp["edge"]]
 			return []
-		"anchor":                                     # save its own line from a Demolish, a relay or a cannon
+		"anchor":                                     # save its own line from a Demolish, a relay or a laser
 			for e in sim.effects:
 				if e["id"] == "demolish" and e.get("phase", "") == "warning" and not sim.allied(e["seat"], seat) \
 						and _own_route_uses(sim, e["target"]):
@@ -918,8 +1113,8 @@ func _pick(sim: Sim, id: String) -> Array:
 				if sp.is_empty():
 					continue
 				for n in sim.nodes:
-					if n["attachment"] == "cannon" and _hostile(sim, n["owner"]) \
-							and (Sim.sample(h, h["s"])[0] as Vector3).distance_to(n["pos"]) <= Rules.CANNON_RANGE:
+					if n["structure"] == "laser" and _hostile(sim, n["owner"]) \
+							and (Sim.sample(h, h["s"])[0] as Vector3).distance_to(n["pos"]) <= Rules.LASER_RANGE:
 						return [sp["edge"]]
 			return []
 		"bypass":                                     # a relay about to drop or fling its own lines
@@ -961,7 +1156,7 @@ func _pick(sim: Sim, id: String) -> Array:
 			for n in sim.nodes:
 				if not _hostile(sim, n["owner"]) or sim.collapsed.get(n["id"], false):
 					continue
-				var s: float = -(n["pos"] as Vector3).distance_to(src["pos"]) + (40.0 if n["attachment"] == "cannon" else 0.0)
+				var s: float = -(n["pos"] as Vector3).distance_to(src["pos"]) + (40.0 if n["structure"] in ["laser", "machingoon"] else 0.0)
 				if s > best_s and sim.can_cast(seat, "active", [src["id"], n["id"]]):
 					best_s = s
 					best = n["id"]
