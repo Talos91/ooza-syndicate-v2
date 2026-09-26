@@ -1,6 +1,6 @@
 # Next session - start here
 
-State as of publish today: **v0.19.0 "Alpha 19"** live - Structures 2.1 (Machingoon, Laser tower, Forge
+State as of publish today: **v0.19.1 "Alpha 19"** live - the interactive tutorial (below), on top of 0.19.0: Structures 2.1 (Machingoon, Laser tower, Forge
 with a defence half, Monster hub), new vat caps and neutral garrisons, team rules built (GAME-RULES §11),
 "lines keep you alive" elimination, 7:00 follows the Very Last Stand with a DRAW call-out, Alpha 11
 classics get relay retrofits, the AI accounts for forges and values relays, rooms default to a room relay
@@ -11,6 +11,23 @@ cosmetics with 69 new skins - on top of 0.18.9's Very Last Stand, balance and mo
 `README.md`, `docs/TO-TEST.md` (this session's checklist), the top of `CHANGELOG.md` (0.18.9 to 0.19.0),
 `PLAYTEST-NOTES.md` notes 149-163, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`, the
 design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
+
+## 0.19.1 (2026-09-27): the interactive tutorial - completes Alpha 19
+
+- Design: `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-DESIGN.md` (draft 3) + `TUTORIAL-SCRIPT.md`.
+  Code: `scripts/tutorial.gd` (TutorialDirector), `coach_overlay.gd`, `tutorial_page.gd`; hooks marked `TUTORIAL`
+  in main.gd, hud.gd, hud_overlay.gd, menu.gd, sim.gd (`start_last_stand_now`, `start_very_last_stand_now`,
+  `vls_enabled`), army_presets.gd (Graduate unlock), map_pool.gd (`TUTORIAL_ONLY`, `battlefield()`), net.gd.
+- Maps: T-03..T-10 from `References/Ooze Syndicate maps 4.2 - tutorial` (`generator/tutorials.py`), baked with
+  `export_maps_4_2_game.py -- --only=T-03,...,T-10 [--out=<worktree>]`. Node names per map in its `lessonNames`.
+- Try it: `--tutorial=N` opens lesson N; a fresh `user://tutorial.cfg` opens L1 on launch. `tests/coach_preview.tscn`
+  renders one shot per lesson. `tests/test_tutorial.gd` joins the suites.
+- Open for Daniele (OPEN-QUESTIONS, Tutorial): L7's Very Last Stand gap 10 s (not 4 s: a crew can't leave a warned
+  platform in 4 s); the Very Last Stand stays on in L9; relay kill = fling + waterfall >= 50 % of the push (a fling
+  alone can't reach half of a 40 m line on a 12 m deck); three new lines (final_locked, final_armies,
+  locked_cosmetic); Graduate vat art approval; toasts only from L3; the handler's name / portrait.
+- Known: `tests/test_net.gd` calls `ArmyPresets.reload()`, which resolves to GDScript's built-in `reload()` and
+  resets the static temp `path` - the test may touch the real `user://armies.cfg` (not fixed here).
 
 ## Standing rules (Daniele)
 

@@ -1,5 +1,30 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.19.1 "Alpha 19" - 2026-09-27 (the interactive tutorial)
+
+ROADMAP item 1, designed with Daniele in `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-DESIGN.md` (draft 3)
+and `TUTORIAL-SCRIPT.md` (every line), built once 0.19.0's rules were live ("Wait for all of it"). Completes Alpha 19.
+
+- **8 lessons + a first match**, each on the real game with the real HUD: L1 SEND, L2 VATS & MACHINGOON, L3 THE ENEMY,
+  L4 RELAYS (double-tap to fire, preview, the fling at half speed, the waterfall), L5 RELAY KINDS (retract, switch,
+  remote), L6 RELAY WORKS (Laser tower, Forge, Monster hub), L7 LAST STAND (+ the Very Last Stand), L8 SKILLS (fixed
+  Surge + Demolish + the faction ultimate), L9 FIRST MATCH on T-02 vs the Training AI that **ends with a scripted
+  relay kill** (the rival's big push across the relay deck, half speed, "FIRE THE RELAY!").
+- **TutorialDirector** (`scripts/tutorial.gd`): lesson table, staging, steps, scripted rival (no SeatAI but L9),
+  TRY AGAIN, half speed, progress in `user://tutorial.cfg`; one neutral Syndicate **handler** voice.
+- **Coach overlay** (`scripts/coach_overlay.gd`): coach card in the free corner, SVG pointing hand
+  (`assets/ui/tutorial/hand.svg`), spotlight, SKIP STEP / RESTART / EXIT, lesson and TRAINING COMPLETE screens.
+- **Reveal as you go** (Daniele's gating): HUD parts and actions stay hidden until their lesson (`Hud.reveal`).
+- **Menu**: TUTORIAL is live (`TUTORIAL n/9`), the TRAINING page (`scripts/tutorial_page.gd`); **first launch opens
+  straight into L1** with SKIP TUTORIAL (never on a map / test / online launch).
+- **Reward**: the **Graduate vat** unlocks in ARMIES' cosmetics once all nine are done (`ArmyPresets.is_unlocked`).
+- **Eight new lesson maps T-03..T-10**: a derived pack (`References/Ooze Syndicate maps 4.2 - tutorial`,
+  `generator/tutorials.py`) baked by `export_maps_4_2_game.py` (new `TUTORIAL_DIR` block and `--out`); camera 58
+  degrees (taps 62-74 pt); tutorial-only (`MapPool.TUTORIAL_ONLY` / `battlefield()`: never in BATTLEFIELD, rematch,
+  rooms or the AI pools). T-07 is the first map with a remote driving a deck pair (m1 / m2).
+- Sim: `start_last_stand_now()`, `start_very_last_stand_now(gap)`, `vls_enabled` (lessons only; no rule changes).
+- Tests: new `test_tutorial` (every lesson's steps reachable and detected, negatives, reveal, progress, first launch).
+
 ## 0.19.0 "Alpha 19" - 2026-09-27 (Structures 2.1: Machingoon / Laser / Forge / Monster hub, team rules built, room relay server, cosmetics)
 
 Daniele's open-questions session (quotes in OPEN-QUESTIONS.md, summary in GAME-BIBLE §17) answered and built

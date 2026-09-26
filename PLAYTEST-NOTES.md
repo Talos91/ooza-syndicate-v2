@@ -619,3 +619,17 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      carries an accent colour, the relay's own kind symbol and a ready ring; relay badges show a ready
      cue; relay towers glow when ready, dim while cooling down and flash during the warning.
 
+
+## 2026-09-27 - Daniele, the interactive tutorial (0.19.1)
+
+164. **Lessons: "8 + final match"**, **forced on first launch, skippable**, a **Syndicate handler** ("maybe a neutral one
+     would be better then if we want we do per faction later"), the first match **ends with a scripted relay kill**,
+     **new tutorial maps, one per lesson**, **half speed** at the relay prompt, a **fixed Surge + Demolish** loadout.
+     *Done (0.19.1):* TUTORIAL-DESIGN.md §3 / §10.
+165. **Gating: "certain actions/options are hidden until tutorial reach them ... skill appear only when the tutorial
+     reach there same goes for all parts and actions".** *Done (0.19.1):* `Hud.reveal` per lesson.
+166. **Reward: "unlock a cosmetic for completion of all tutorials and later when we will have it gates ranked online
+     play"**, then the **Graduate vat**. *Done (0.19.1):* the Graduate vat unlocks in ARMIES; the ranked gate waits for ranked.
+167. **"machinegoon go on vat lessons ... while monster laser (no more called cannon) and forge go with relays".**
+     *Done (0.19.1):* L2 and L6.
+168. **Keep the lesson maps numbered T-03..T-10** (T-01 / T-02 stay as they are).
