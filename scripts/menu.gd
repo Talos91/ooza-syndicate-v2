@@ -275,6 +275,11 @@ func show_options() -> void:
 		show_options())
 	det.add_theme_font_size_override("font_size", int(round(22 * K)))
 	label_at("Low detail trims the river patches and vat residents - use it if the game makes your machine run hot.", P(60, 596), 18, Color("b8ced6"))
+	var ter := nav_button("TERRITORY: %s" % ("GOO  -  player-colour goo on owned ground, units in race colour (BRAWL)" if Rules.goo_territory else "NEON  -  owner-colour neon on decks and platform rims"),
+			P(60, 632), P(950, 56), func():
+		Rules.goo_territory = not Rules.goo_territory
+		show_options())
+	ter.add_theme_font_size_override("font_size", int(round(19 * K)))
 	nav_button("BACK", P(40, 866), P(230, 58), show_main)
 
 

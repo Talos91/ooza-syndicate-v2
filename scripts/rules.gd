@@ -128,6 +128,16 @@ static var low_detail: bool = false
 # enemy node, in either mode (badges show the seat letter). Off: BRAWL shows every count as Alpha 11
 # did; SIEGE never shows enemy numbers (an identity rule of 2.0).
 static var hide_enemy_counts: bool = false
+# TERRITORY LOOK (Daniele, 0.18.7: "the lane fight chat did some try with goo instead of neons, can you
+# try adding it so i can get the feel of it and add it as a toggle (could be a cosmetic later on)").
+# false = NEON (today's owner-colour neon trims, pier stripes and rims); true = GOO: owned platforms and
+# deck halves under goo in the player colour, units in their race colour with a player-colour rim
+# (GooTerritory, UnitView). BRAWL only - SIEGE's hordes are goo already and keep today's look. Pure view.
+static var goo_territory: bool = false
+
+
+static func goo_look() -> bool:
+	return goo_territory and not bridge_combat
 
 # CONTACT (Alpha 12, Daniele: "whenever an enemy crosses the hitbox of a unit they fight... a unit
 # crossing an enemy unit should always start a combat to death"): contact is geometric, anywhere -

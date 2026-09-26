@@ -32,6 +32,7 @@ var _frag_names := ["girder_l", "girder_r", "plate_a", "plate_b", "plate_c", "tr
 var _body := {}             # faction -> [Mesh, scale to UnitView.UNIT_SIZE, albedo Texture2D]: BRAWL fling bodies
 var _body_mat := {}         # "faction|seat" -> Material (UnitView's creature look)
 var _fall_debt := {}        # seat -> shown units lost to BRAWL falls not yet drawn as a body
+var _goo: GooTerritory      # TERRITORY: GOO (Rules.goo_territory) - replaces the BRAWL neon below
 
 
 func setup(w: Node3D, s: Sim, v: Dictionary, hv: HordeView) -> void:
@@ -67,6 +68,9 @@ func setup(w: Node3D, s: Sim, v: Dictionary, hv: HordeView) -> void:
 			g.visible = false
 			arr.append(g)
 		_ghosts[i] = arr
+	_goo = GooTerritory.new()
+	add_child(_goo)
+	_goo.setup(sim, vis, _collapsed, bool(w.get("mobile")))
 
 
 # ------------------------------------------------------------------ events
@@ -126,6 +130,7 @@ func sync(dt: float) -> void:
 	_decks()
 	_half_trims()
 	_neon()
+	_goo.sync(dt)
 	_sel_ring.visible = selected >= 0 and not sim.collapsed.get(selected, false)
 	if _sel_ring.visible:
 		var n: Dictionary = sim.nodes[selected]
@@ -538,11 +543,12 @@ func _body_for(faction: String) -> Array:
 
 
 func _body_mat_for(faction: String, seat: String, tex: Texture2D) -> Material:
-	var key := "%s|%s" % [faction, seat]
+	var goo := Rules.goo_look()
+	var key := "%s|%s%s" % [faction, seat, "|goo" if goo else ""]
 	if not _body_mat.has(key):
 		if tex:
 			var m: ShaderMaterial = (Mats.creature(faction, seat, tex) as ShaderMaterial).duplicate()
-			m.set_shader_parameter("self_glow", 0.45)      # UnitView's column look
+			UnitView.style(m, faction, seat, goo)          # UnitView's column look (GOO: race colour, player rim)
 			_body_mat[key] = m
 		else:
 			_body_mat[key] = Mats.goo(seat)
@@ -637,6 +643,7 @@ func _collapse(node_id: int, from := "") -> void:
 				for frag in _frag_names:                  # the module breaks into its fall pieces
 					var piece := MapBuilder.put(world, "Deck_S_Frag_" + frag, deck.position, deck.rotation.y, deck.scale.x)
 					falling.append(piece)
+	falling.append_array(_goo.falling(node_id))       # TERRITORY: GOO - the goo drops with its platform and decks
 	for pid in vis.get("plazas", {}):                  # maps 3.0: a plaza goes when its last socket goes
 		var pz: Dictionary = vis["plazas"][pid]
 		if node_id in pz["members"] and pz["node"] and (pz["members"] as Array).all(func(m): return sim.collapsed.get(m, false)):
@@ -905,7 +912,7 @@ func _brawl_color(owner: String) -> Color:
 
 func _half_trims() -> void:
 	## BRAWL deck halves: shown while the deck is open, each half in its end's owner colour.
-	var on := not Rules.bridge_combat
+	var on := not Rules.bridge_combat and not Rules.goo_look()   # GOO: GooTerritory covers the halves
 	for i in _trims:
 		var e: Dictionary = sim.edges[i]
 		var show: bool = on and not _collapsed.has(i) and sim.is_edge_open(i)
@@ -929,6 +936,7 @@ func _neon() -> void:
 	## SIEGE the pier follows its deck's lights and the rim the owner. A dropped node's stripes fall
 	## with it (_collapse): they are left alone from then on.
 	var brawl := not Rules.bridge_combat
+	var goo := Rules.goo_look()                       # TERRITORY: GOO - no stripes or rims, GooTerritory instead
 	for i in _pier_neon:
 		var e: Dictionary = sim.edges[i]
 		for end in range(2):
@@ -937,20 +945,20 @@ func _neon() -> void:
 			if mi == null or sim.collapsed.get(nid, false):
 				continue
 			var key: String = sim.nodes[nid]["owner"] if brawl else _edge_light.get(i, "")
-			if _pier_key.get(i * 2 + end, "?") == key:
+			if _pier_key.get(i * 2 + end, "?") == key + ("|goo" if goo else ""):
 				continue
-			_pier_key[i * 2 + end] = key
-			(mi as MeshInstance3D).visible = brawl or SIEGE_PIER_STRIPES
+			_pier_key[i * 2 + end] = key + ("|goo" if goo else "")
+			(mi as MeshInstance3D).visible = (brawl or SIEGE_PIER_STRIPES) and not goo
 			(mi as MeshInstance3D).material_override = Mats.light_color(_brawl_color(key)) if brawl else _siege_light(i, key)
 	for id in _rims:
 		if sim.collapsed.get(id, false):
 			continue
 		var owner: String = sim.nodes[id]["owner"]
-		if _rim_key.get(id, "?") == owner:
+		if _rim_key.get(id, "?") == owner + ("|goo" if goo else ""):
 			continue
-		_rim_key[id] = owner
+		_rim_key[id] = owner + ("|goo" if goo else "")
 		var mi: MeshInstance3D = _rims[id]
-		mi.visible = true
+		mi.visible = not goo
 		if brawl:
 			mi.material_override = Mats.light_color(_brawl_color(owner))
 		else:
