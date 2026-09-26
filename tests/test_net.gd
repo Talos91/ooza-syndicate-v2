@@ -230,6 +230,42 @@ func _run() -> void:
 	host.push_effects([{"type": "cannon", "node": target}])
 	_deliver()
 	check(gs.fx_events.any(func(e): return e.get("type", "") == "cannon"), "host effects reach the guest's view queue")
+	# a forge built on the host plays the guest's forge pulse from the snapshots alone (ForgePulse, view only)
+	var fp := ForgePulse.new()
+	root.add_child(fp)
+	fp.setup(gs, {}, null)
+	var lit := []
+	fp.online.connect(func(seat, id, first): lit.append([seat, id, first]))
+	fp.sync(0.05, null)                              # the first look only learns the board
+	hs.nodes[target]["buildable"] = ["forge"]        # (not in snapshots: the host decides what may be built)
+	hs.nodes[target]["units"] = 200.0
+	check(hs.build_attachment(target, "forge"), "host starts a forge")
+	var bt := 0.0
+	var early := false
+	while hs.nodes[target]["attachment"] != "forge" and bt < 20.0:
+		hs.step(0.1)
+		bt += 0.1
+		host.apply_snapshot(gs, host.snapshot(hs, false))
+		fp.sync(0.1, null)
+		if not lit.is_empty() and gs.nodes[target]["attachment"] != "forge":
+			early = true
+	check(not early, "no forge pulse while the forge is still building")
+	check(lit == [["B", target, true]] and ForgePulse.live, "guest: the forge completing starts its owner's pulse, once")
+	check(ForgePulse.boost("A", gs.nodes[target]["pos"]) == 0.0, "the pulse lifts only its owner's units")
+	for i in range(22):
+		host.apply_snapshot(gs, host.snapshot(hs, false))
+		fp.sync(0.1, null)
+	check(not ForgePulse.live and ForgePulse.boost("B", gs.nodes[target]["pos"]) == 0.0 and lit.size() == 1, "the pulse ends after 2 s and leaves the look untouched")
+	var fp2 := ForgePulse.new()                      # a guest joining with the forge already there: nothing plays
+	root.add_child(fp2)
+	fp2.setup(gs, {}, null)
+	var lit2 := []
+	fp2.online.connect(func(seat, id, first): lit2.append(seat))
+	fp2.sync(0.1, null)
+	fp2.sync(0.1, null)
+	check(lit2.is_empty(), "a forge already standing when the view starts plays no pulse")
+	fp.free()
+	fp2.free()
 
 	# ---------------------------------------------------------------- chat
 	check(host.accept_chat(1, "  hello <b>there</b>\u0007 "), "host chats")
