@@ -207,6 +207,7 @@ func _run() -> void:
 	var home_b: int = hs.homes["B"]
 	var home_a: int = hs.homes["A"]
 	var target: int = hs.adj[home_b][0][0]
+	hs.nodes[home_b]["units"] = 200.0                # (0.18.10 homes start with 1 unit shown: enough to take the neighbour)
 	_to_host("g1", {"op": "order", "round": 1, "action": "send", "a": home_b, "args": {"to": target, "fraction": 1.0}})
 	check(hs.hordes.size() == 1 and hs.hordes[0]["owner"] == "B", "guest's send runs on the host for seat B")
 	check("feedback" in _kinds_to("g1"), "the host answers the order with a feedback line")
@@ -319,6 +320,49 @@ func _run() -> void:
 	check(lit2.is_empty(), "a forge already standing when the view starts plays no pulse")
 	fp.free()
 	fp2.free()
+
+	# ---------------------------------------------------------------- STRUCTURES 2.1 + TEAMS (0.18.10): orders and snapshots
+	check(host.VERSION_TAG == "ooze20-net-3", "the net protocol is bumped for structures 2.1 (ooze20-net-3)")
+	host._order_limits = {}
+	host._packet_limits = {}
+	host.bridge.sent = []
+	hs.nodes[home_b]["units"] = 300.0
+	_to_host("g1", {"op": "order", "round": 1, "action": "build", "a": home_b, "args": {"kind": "machingoon"}})
+	check(hs.nodes[home_b]["build_kind"] == "machingoon", "a guest's build order runs on the host (a machingoon on B's home)")
+	check(str(_payloads("g1", "feedback")[0]).begins_with("Machingoon construction started"), "...answered with the Sim's feedback line")
+	var g_id: int = g.assigned_id
+	check(host._execute(g_id, {"action": "build", "a": home_b, "args": {"kind": "nuke"}}) == [false, "Order rejected"]
+			and host._execute(g_id, {"action": "build", "a": home_b, "args": {"kind": 7}}) == [false, "Order rejected"],
+			"an unknown build kind is rejected")
+	check(not host._execute(g_id, {"action": "build", "a": home_a, "args": {"kind": "machingoon"}})[0], "a guest can't build on the host's node")
+	check(host._execute(g_id, {"action": "eject", "a": home_b, "args": {}}) == [false, "No allied troops to eject here"], "EJECT with no allied troops is refused with the reason")
+	hs.nodes[target]["structure"] = "monster_hub"     # (staged: B's captured neighbour holds a ready hub)
+	hs.nodes[target]["units"] = 300.0
+	hs.nodes[target]["monster_ready_t"] = 0.0
+	check(host._execute(g_id, {"action": "launch_monster", "a": target, "args": {"to": 1.5}}) == [false, "Order rejected"], "a monster order with a bad target is rejected")
+	var lm: Array = host._execute(g_id, {"action": "launch_monster", "a": target, "args": {"to": home_a}})
+	check(lm[0] and hs.monsters.size() == 1, "a guest's monster launch runs on the host (%s)" % str(lm))
+	hs.nodes[home_b]["allies"] = {"A": 25.0}          # (staged: stored allied troops travel too)
+	hs.nodes[home_b]["arrivals"] = ["A"]
+	hs.draw_line = "DRAW - test"
+	hs.step(0.1)
+	var ss: Dictionary = host.snapshot(hs, false)
+	check(ss.has("structs") and (ss["structs"] as Array).size() == 3, "snapshots carry the monsters and the draw line")
+	var sw: PackedByteArray = var_to_bytes(ss)
+	host.apply_snapshot(gs, bytes_to_var(sw))
+	check(gs.nodes[home_b]["build_kind"] == "machingoon" and gs.nodes[target]["structure"] == "monster_hub"
+			and gs.nodes[home_b]["allies"] == {"A": 25.0} and gs.nodes[home_b]["arrivals"] == ["A"]
+			and absf(float(gs.nodes[target]["monster_ready_t"]) - float(hs.nodes[target]["monster_ready_t"])) < 0.001,
+			"the guest sees the new node fields (structure, allies, arrivals, monster_ready_t)")
+	check(gs.monsters.size() == 1 and gs.monsters[0]["id"] == hs.monsters[0]["id"] and (gs.monsters[0]["pos"] as Vector3).distance_to(hs.monsters[0]["pos"]) < 0.01
+			and gs.draw_line == "DRAW - test", "the guest sees the monster where the host has it, and the draw line")
+	var mp0: float = gs.monsters[0]["s"]
+	host.predict(gs, 0.2)
+	check(float(gs.monsters[0]["s"]) > mp0, "prediction walks the monster between snapshots")
+	hs.monsters = []
+	hs.nodes[home_b]["allies"] = {}
+	hs.nodes[home_b]["arrivals"] = []
+	hs.draw_line = ""
 
 	# ---------------------------------------------------------------- SKILLS 2.0: cast orders, snapshots, Ghost Line privacy
 	host._order_limits = {}                          # (the test fires orders faster than any player)

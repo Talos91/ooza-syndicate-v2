@@ -26,6 +26,11 @@ extends Node
 ## carry the skill state (effects, cooldowns, charge, demolished decks). Ghost Lines stay secret: the
 ## broadcast snapshot strips the decoy keys (SECRET_HORDE) and each guest gets a private "ghosts" packet
 ## listing only its own decoys; fx events marked "private" go to that seat only.
+## STRUCTURES 2.1 + TEAMS (0.18.10): new orders "build" (args {"kind": vat / machingoon / laser / forge /
+## monster_hub}), "launch_monster" (a = the hub, args {"to": node}) and "eject" (a = the node), validated by the
+## host's Sim (Sim.structure_order: the same feedback line offline). Snapshots carry the new node fields (they
+## ride with every node key: "structure", "allies", "arrivals", "shot", "monster_ready_t", "hub_monster"), the
+## monsters and the 7:00 draw line ("structs"). Protocol ooze20-net-3.
 ## No host migration, no TURN relay: some networks cannot connect directly.
 
 signal lobby_changed
@@ -33,14 +38,17 @@ signal rematch_changed
 signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
-const VERSION_TAG := "ooze20-net-2"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours)
+const VERSION_TAG := "ooze20-net-3"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams)
 const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
 const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
 const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
 const TEAM_MODES := ["2v2", "3v3", "2v2v2"]
 const SEATS := ["A", "B", "C", "D", "E", "F"]
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
-const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "restore", "switch", "cast"]
+const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "restore", "switch", "cast",
+		"build", "launch_monster", "eject"]
+const STRUCTURE_ACTIONS := ["build", "launch_monster", "eject"]   # run through Sim.structure_order
+const BUILD_KINDS := ["vat", "machingoon", "laser", "forge", "monster_hub"]
 const SNAPSHOT_EVERY := 0.1
 const KEYFRAME_EVERY := 10                         # every 10th snapshot carries every horde's path
 const PATH_RESEND := 1.0                           # a changed path rides along for this many seconds
@@ -830,7 +838,8 @@ func order(action: String, a: int, args := {}) -> void:
 	if not online() or not started or finished:
 		return
 	if hosting:
-		var r: Array = main.perform(local_seat(), action, a, args)
+		var r: Array = sim.structure_order(local_seat(), action, a, args) if action in STRUCTURE_ACTIONS \
+				else main.perform(local_seat(), action, a, args)
 		order_feedback.emit(r[1])
 	else:
 		_send_to_host({"op": "order", "round": match_round, "action": action, "a": a, "args": args})
@@ -868,6 +877,18 @@ func _execute(id: int, p: Dictionary) -> Array:
 		if not is_finite(f) or f <= 0.0 or f > 1.0:
 			return [false, "Order rejected"]
 		clean = {"to": int(args["to"]), "fraction": f}
+	if action == "build":
+		if not args.get("kind", null) is String or not args["kind"] in BUILD_KINDS:
+			return [false, "Order rejected"]
+		clean = {"kind": str(args["kind"])}
+	if action == "launch_monster":
+		if not _is_int(args.get("to", null)):
+			return [false, "Order rejected"]
+		clean = {"to": int(args["to"])}
+	if action in STRUCTURE_ACTIONS:                    # the host's Sim validates ownership, costs and reach
+		if sim == null or int(a) < 0 or int(a) >= sim.nodes.size():
+			return [false, "Order rejected"]
+		return sim.structure_order(seat_of(id), action, int(a), clean)
 	return main.perform(seat_of(id), action, int(a), clean)
 
 
@@ -938,7 +959,7 @@ static func path_key(h: Dictionary) -> String:
 
 const PATH_FIELDS := ["pts", "cum", "fast", "spans", "node_spans"]
 const SECRET_HORDE := ["decoy", "echo", "ghost_left", "landed", "blame"]   # never broadcast (the Ghost Line bluff)
-const NODE_SKIP := ["pos", "transit", "category", "center", "relay", "buildable", "id"]
+const NODE_SKIP := ["pos", "transit", "category", "center", "relay", "buildable", "id", "node_kind"]
 
 
 func snapshot(s: Sim, keyframe: bool) -> Dictionary:
@@ -974,6 +995,13 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 	for id in _path_seen.keys():
 		if not alive.has(id):
 			_path_seen.erase(id)
+	var ms := []                                      # monsters: their path arrays only on keyframes (guests rebuild them)
+	for m in s.monsters:
+		var md := {}
+		for k in m:
+			if keyframe or not k in PATH_FIELDS:
+				md[k] = m[k]
+		ms.append(md)
 	var snap := {"round": match_round, "t": s.time, "over": s.over, "winner": s.winner, "next_id": s._next_id,
 			"nodes": nodes, "hordes": hs, "fights": s.fights, "fight_info": s.fight_info,
 			"collapsed": s.collapsed, "eliminated": s.eliminated,
@@ -982,7 +1010,8 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 					s.last_stand_waves, s.last_stand_keep, s.last_stand_warn, s.last_stand_queue,
 					s.very_last_stand_active, s.very_last_stand_gap],
 			"losses": [s.combat_losses, s.fall_losses],
-			"skills": [s.effects, s.demolished, s.skill_cd, s.ult_charge, s.ult_since]}
+			"skills": [s.effects, s.demolished, s.skill_cd, s.ult_charge, s.ult_since],
+			"structs": [ms, s._next_monster, s.draw_line]}
 	if s.over:
 		snap["events"] = s.events                    # the end screen's captures count
 	return snap
@@ -1032,6 +1061,9 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 		for k in d:
 			if k != "transit":
 				n[k] = d[k]
+		if not d.has("structure") and d.has("attachment"):   # a pre-2.1 host: its cannons read as lasers
+			n["structure"] = "laser" if d["attachment"] == "cannon" else (str(d["attachment"]) if d["attachment"] != "" \
+					else ("" if n["relay"] != "" else "vat"))
 		var tr := {}
 		for seat in d["transit"]:
 			var t: Dictionary = d["transit"][seat]
@@ -1074,6 +1106,20 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 		s.ult_charge = sk[3]
 		s.ult_since = sk[4]
 		s._index_effects()
+	if snap.has("structs"):                           # 0.18.10: monsters and the 7:00 draw line
+		var st: Array = snap["structs"]
+		var had := {}
+		for m in s.monsters:
+			had[m["id"]] = m
+		for m in st[0]:
+			if not m.has("pts"):                      # a lean snapshot: keep the path we have, or build it from the route
+				var prev: Dictionary = had.get(m["id"], {})
+				var path: Dictionary = prev if prev.has("pts") else s.build_path(m["route"])
+				for k in PATH_FIELDS:
+					m[k] = path[k]
+		s.monsters = st[0]
+		s._next_monster = int(st[1])
+		s.draw_line = str(st[2])
 	for c in changes:
 		s.captured.emit(c[0], c[1], c[2])
 	if snap.has("events"):
@@ -1101,6 +1147,10 @@ static func predict(s: Sim, dt: float) -> void:
 			h["units"] = maxf(0.0, h["units"] - ds / Rules.metres_per_unit())
 			continue
 		h["s"] = minf(h["s"] + ds, h["L"])
+	for m in s.monsters:                              # monsters keep walking between snapshots
+		if m["state"] == "walking" and m.has("cum"):
+			m["s"] = minf(float(m["s"]) + s.monster_speed() * dt, float(m["L"]))
+			m["pos"] = Sim.sample(m, m["s"])[0]
 
 
 func push_effects(events: Array) -> void:
