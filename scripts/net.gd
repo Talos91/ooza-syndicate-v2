@@ -47,6 +47,12 @@ extends Node
 ## through a small buffer (PLAYOUT_DELAY behind the newest), so bursty mobile data arrives evenly; lines keep moving
 ## up to EXTRAPOLATE seconds without news, and a correction glides in over BLEND seconds instead of snapping.
 ## Browser-hosted fallback rooms keep the 0.20.0 behaviour (10 Hz, applied on arrival).
+## ACCOUNTS (0.20.5, with Progression): the device sets `auth_token` (its Supabase access token; "" = signed out) and
+## sends it as "auth" in register. A server room's match host verifies it (GET /auth/v1/user) and keeps seat -> user id
+## on the host only (never broadcast). When a server room's round ends and a seat has a user id, the host POSTs the
+## signed MatchReport to the `match-result` edge function (retries, and the room stays open until it is sent). The
+## Supabase address, key and the signing secret come from the server's environment (OOZE_SUPABASE_URL / _KEY,
+## OOZE_MATCH_SECRET from /opt/ooze/secrets.env); browser-hosted rooms never report (unranked).
 
 signal lobby_changed
 signal rematch_changed
@@ -105,6 +111,7 @@ var last_stand := true
 var abilities := true                              # ABILITIES ON/OFF (0.18.7: default on in both modes)
 var loadout := {}                                  # your own {"active", "map"} (empty = the faction's default)
 var cosmetic := {}                                 # your own COSMETICS pick {family: id} (0.19.0; empty = default)
+var auth_token := ""                               # 0.20.5: your Supabase access token (Progression sets it; "" = a guest)
 var own_ghosts := {}                               # guest: horde id -> true for our own decoys (host tells us only)
 var _ghosts_sent := {}                             # host: remote -> the ghost list last sent to it
 # match state
@@ -126,6 +133,10 @@ var _creating := false                             # guest: our create request i
 var _server_room := ""                             # --room / --secret: the server room this match host serves
 var _server_secret := ""
 var _empty_t := 0.0                                # dedicated: seconds with nobody in the room
+var _users := {}                                   # dedicated: player id -> verified Supabase user id (host only)
+var _round_started_at := 0                         # dedicated: unix time the round began (the report's match_id)
+var _reported_round := -1
+var _report_pending := 0                           # reports still being sent (the room waits for them)
 var _ever_joined := false
 var ai_fill := ""                                  # host setting: "" = every seat needs a player, else the AI level for empty seats
 var rejoin := {}                                   # guest: {code, token, faction} to RECONNECT to a dropped room
@@ -846,6 +857,9 @@ func _register(remote: String, id: int, p: Dictionary) -> void:
 		roster[id]["colour"] = want
 	_fix_colours(-1, id)                               # a newcomer's hue gives way to the room's
 	_ever_joined = true
+	var auth = p.get("auth", "")
+	if dedicated and auth is String and auth != "" and (auth as String).length() < 3000:
+		_verify_auth(id, auth)
 	if dedicated and not roster.has(room_owner):            # a server room: the first player in runs it
 		room_owner = id
 	_tokens[id] = _new_token()
@@ -1011,6 +1025,7 @@ func _check_barrier() -> void:
 
 func _begin() -> void:
 	started = true
+	_round_started_at = int(Time.get_unix_time_from_system())
 	_since_snapshot = 0.0
 
 
@@ -1030,6 +1045,7 @@ func peer_left(id: int) -> void:
 		return
 	roster.erase(id)
 	_tokens.erase(id)
+	_users.erase(id)
 	rematch_votes.erase(id)
 	ready_peers.erase(id)
 	_reseat()
@@ -1356,6 +1372,73 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 		s.finished.emit(s.winner)
 
 
+func _verify_auth(id: int, token: String) -> void:
+	## Server room: who is this player? GET /auth/v1/user with their access token; a 200 maps the seat to the user id
+	## (guest accounts too), anything else leaves them a guest (plays, no rewards).
+	var url := OS.get_environment("OOZE_SUPABASE_URL")
+	var key := OS.get_environment("OOZE_SUPABASE_KEY")
+	if url == "" or key == "":
+		return
+	var req := HTTPRequest.new()
+	req.timeout = 10.0
+	add_child(req)
+	req.request_completed.connect(func(result, code, _h, body):
+		req.queue_free()
+		if result == HTTPRequest.RESULT_SUCCESS and code == 200 and roster.has(id):
+			var u = JSON.parse_string(body.get_string_from_utf8())
+			if u is Dictionary and str(u.get("id", "")) != "":
+				_users[id] = str(u["id"])
+				print("seat of player %d: account %s%s" % [id, str(u["id"]).left(8), " (guest)" if u.get("is_anonymous", false) else ""]))
+	if req.request(url + "/auth/v1/user", ["apikey: " + key, "Authorization: Bearer " + token]) != OK:
+		req.queue_free()
+
+
+func _report_round() -> void:
+	## Server room, a round just ended: the signed MatchReport, if any seat belongs to an account (Progression: a room
+	## with nobody signed in credits nobody, so it sends nothing).
+	var secret := OS.get_environment("OOZE_MATCH_SECRET")
+	var url := OS.get_environment("OOZE_SUPABASE_URL")
+	if secret == "" or url == "" or sim == null:
+		return
+	var users := {}
+	var left := {}
+	for id in roster:
+		var seat := seat_of(int(id))
+		if _users.has(id):
+			users[seat] = _users[id]
+		if is_away(int(id)):
+			left[seat] = true
+	if users.is_empty():
+		return
+	var body := JSON.stringify(MatchReport.payload(sim, match_info, users, left, _server_room, match_round, _round_started_at))
+	_report_pending += 1
+	_post_report(url + "/functions/v1/match-result", secret, body, 0)
+
+
+func _post_report(url: String, secret: String, body: String, attempt: int) -> void:
+	## Signed per attempt (the timestamp must be fresh); network errors and 5xx retry after 3 / 10 / 30 s.
+	var ts := int(Time.get_unix_time_from_system())
+	var req := HTTPRequest.new()
+	req.timeout = 15.0
+	add_child(req)
+	req.request_completed.connect(func(result, code, _h, resp):
+		req.queue_free()
+		var text: String = resp.get_string_from_utf8().left(200)
+		if result == HTTPRequest.RESULT_SUCCESS and code < 500:
+			print("match report %d: %s" % [code, text])
+			_report_pending -= 1
+		elif attempt < 3:
+			print("match report retry %d (%s %d)" % [attempt + 1, result, code])
+			get_tree().create_timer([3.0, 10.0, 30.0][attempt]).timeout.connect(func(): _post_report(url, secret, body, attempt + 1))
+		else:
+			print("match report given up (%s %d): %s" % [result, code, text])
+			_report_pending -= 1)
+	var headers := ["Content-Type: application/json", "x-ooze-ts: %d" % ts, "x-ooze-sig: " + MatchReport.sign(secret, ts, body)]
+	if req.request(url, headers, HTTPClient.METHOD_POST, body) != OK:
+		req.queue_free()
+		_report_pending -= 1
+
+
 func _smooth() -> bool:
 	## A guest in a server-hosted room (0.20.2 smoothing); fallback rooms keep the old apply-on-arrival.
 	return not hosting and room_owner > 1 and sim != null
@@ -1496,7 +1579,7 @@ func _process(dt: float) -> void:
 	_poll_chat_ui(dt)
 	if dedicated and bridge != null and connected:     # an empty server room closes itself
 		_empty_t = _empty_t + dt if present_ids().is_empty() else 0.0
-		if _empty_t > (DEDICATED_BOOT_IDLE if not _ever_joined else (DEDICATED_IDLE if active else DEDICATED_LOBBY_IDLE)):
+		if _report_pending == 0 and _empty_t > (DEDICATED_BOOT_IDLE if not _ever_joined else (DEDICATED_IDLE if active else DEDICATED_LOBBY_IDLE)):
 			fail("room empty")
 			return
 	if not active or not started or sim == null:
@@ -1515,6 +1598,9 @@ func _process(dt: float) -> void:
 				_send_ghosts(key)
 			if sim.over:
 				finished = true
+				if dedicated and _reported_round != match_round:
+					_reported_round = match_round
+					_report_round()
 	elif _smooth():
 		_since_snapshot += minf(dt, 0.25)            # arrivals (the host-silence check below)
 		var fdt := minf(dt, 0.25)
@@ -1558,6 +1644,8 @@ func _poll(dt: float) -> void:
 					_creating = false
 					remote_host = str(event["peer"])
 					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}
+					if auth_token != "":
+						reg["auth"] = auth_token          # 0.20.5: verified by a server room's host (not the reconnect "token")
 					if not rejoin.is_empty() and str(rejoin["code"]) == room_code:
 						reg["token"] = rejoin["token"]
 					_send_to_host(reg)

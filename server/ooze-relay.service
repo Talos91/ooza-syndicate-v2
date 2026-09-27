@@ -15,6 +15,11 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 ReadWritePaths=/opt/ooze/data /opt/ooze/logs
+# 0.20.5 accounts: match hosts verify players and sign match reports (Net._verify_auth / _report_round). The address and
+# the publishable key are public; the signing secret lives only in /opt/ooze/secrets.env (root:ooze 0640), never in the repo.
+Environment=OOZE_SUPABASE_URL=https://uqwxorxdnucrdgaqpjpp.supabase.co
+Environment=OOZE_SUPABASE_KEY=sb_publishable_3aX4T8IcNbI_BBg4wENMhA_3NNclYw2
+EnvironmentFile=-/opt/ooze/secrets.env
 # the relay plus up to --max-matches headless match hosts (~250-350 MB each on the 1 GB box, 2 GB swap)
 MemoryMax=900M
 
