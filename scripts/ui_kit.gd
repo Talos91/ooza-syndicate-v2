@@ -18,31 +18,34 @@ const ORDER := ["vex", "null", "bloom", "ember", "solar"]
 const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "VIRIDIAN / BLOOM",
 		"ember": "EMBER / MAW", "solar": "SOLAR / SHELLS"}
 const CFG := "user://ui.cfg"
+const K := 1280.0 / 1672.0                       # = Menu.K, Menu.MIN_TAP_PT, Menu.MIN_FONT_PT - copied so the pieces
+const MIN_TAP_PT := 44.0                          #   (and their tests) load without menu.gd and its autoloads
+const MIN_FONT_PT := 12.5
 
 
 static func accent(f: String) -> Color:
 	return Rules.FACTIONS[f][1] if Rules.FACTIONS.has(f) else CYAN
 
 
-static func pt(m: Menu) -> float:
+static func pt(m) -> float:
 	## One canvas unit in pt at the live fit (landscape-phone reference); 0.0 on desktop (no minimum).
-	var f := m._pt_factor()
-	return f / Menu.K if f > 0.0 else 0.0
+	var f: float = m._pt_factor()
+	return f / K if f > 0.0 else 0.0
 
 
-static func tap_h(m: Menu, h: float) -> float:
+static func tap_h(m, h: float) -> float:
 	## A tappable height in canvas units: `h`, or taller where a phone needs it for 44 pt.
 	var p := pt(m)
-	return maxf(h, Menu.MIN_TAP_PT / p) if p > 0.0 else h
+	return maxf(h, MIN_TAP_PT / p) if p > 0.0 else h
 
 
-static func px(m: Menu, size: float) -> int:
+static func px(m, size: float) -> int:
 	## A font size in canvas units, grown on phones to >= 12.5 pt.
 	var p := pt(m)
-	return int(round(maxf(size, Menu.MIN_FONT_PT / p) if p > 0.0 else size))
+	return int(round(maxf(size, MIN_FONT_PT / p) if p > 0.0 else size))
 
 
-static func label(m: Menu, text: String, size: float, col := INK, head := false, spacing := 0) -> Label:
+static func label(m, text: String, size: float, col := INK, head := false, spacing := 0) -> Label:
 	var l := Label.new()
 	l.text = text
 	var font: Font = HEAD if head else BODY
@@ -58,19 +61,19 @@ static func label(m: Menu, text: String, size: float, col := INK, head := false,
 	return l
 
 
-static func text_w(m: Menu, text: String, size: float, head := false) -> float:
+static func text_w(m, text: String, size: float, head := false) -> float:
 	## A one-line text's width at its (phone-grown) size - Label.get_minimum_size() is unreliable before the tree.
 	return (HEAD if head else BODY).get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px(m, size)).x
 
 
-static func text_h(m: Menu, text: String, size: float, width: float, head := false) -> float:
+static func text_h(m, text: String, size: float, width: float, head := false) -> float:
 	## A word-wrapped text's height inside `width` (for laying out before the label is in the tree).
 	var f: Font = HEAD if head else BODY
 	return f.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width, px(m, size), -1,
 			TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE).y
 
 
-static func flat_button(m: Menu, text: String, size: float, col := INK) -> Button:
+static func flat_button(m, text: String, size: float, col := INK) -> Button:
 	## A text-only button ("Continue campaign", "New here? Start training ->"): no frame, the accent on hover,
 	## still a full-height tap target on phones.
 	var b := Button.new()

@@ -8,12 +8,12 @@ signal tab_pressed(id: String)
 
 const TABS := [["home", "HOME"], ["play", "PLAY"], ["armies", "ARMIES"], ["campaign", "CAMPAIGN"]]
 
-var menu: Menu
+var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var active := ""
 var buttons := {}                                  # id -> Button (tests, Hud.action_rect-style lookups)
 
 
-static func make(m: Menu, p_active: String, f := "vex") -> NavBar:
+static func make(m, p_active: String, f := "vex") -> NavBar:
 	var n := NavBar.new()
 	n.menu = m
 	n.active = p_active
@@ -26,11 +26,11 @@ func bar_height() -> float:
 
 
 func _build(f: String) -> void:
-	var w := menu.content.size.x
+	var w: float = menu.content.size.x
 	var th := UiKit.tap_h(menu, 50.0)                 # a tab
 	var h := th + 10.0
 	size = Vector2(w, h)
-	position = Vector2(0, menu.content.size.y - h)
+	position = Vector2(0, float(menu.content.size.y) - h)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	var acc := UiKit.accent(f)
 	add_child(UiKit.rect(Vector2.ZERO, size, UiKit.BAR))

@@ -13,7 +13,7 @@ extends Control
 signal pressed
 signal unlock_pressed
 
-var menu: Menu
+var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var faction := "vex"
 var scroll: TouchScroll
 var art := ""
@@ -30,7 +30,7 @@ var buyable := false                               # a locked card that can be b
 var _dirty := false
 
 
-static func make(m: Menu, dims: Vector2, f := "vex", p_scroll: TouchScroll = null) -> FrameCard:
+static func make(m, dims: Vector2, f := "vex", p_scroll: TouchScroll = null) -> FrameCard:
 	var c := FrameCard.new()
 	c.menu = m
 	c.faction = f

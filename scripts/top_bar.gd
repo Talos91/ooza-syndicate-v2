@@ -9,14 +9,14 @@ signal help_pressed
 signal options_pressed
 signal profile_pressed
 
-var menu: Menu
+var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var _ring_c := Vector2.ZERO
 var _ring_r := 0.0
 var _ring_col := UiKit.CYAN
 var _level := 1
 
 
-static func make(m: Menu, crumb: String, f := "vex") -> TopBar:
+static func make(m, crumb: String, f := "vex") -> TopBar:
 	var t := TopBar.new()
 	t.menu = m
 	t._build(crumb, f)
@@ -28,7 +28,7 @@ func bar_height() -> float:
 
 
 func _build(crumb: String, f: String) -> void:
-	var w := menu.content.size.x
+	var w: float = menu.content.size.x
 	var q := UiKit.tap_h(menu, 46.0)                  # the square buttons, >= 44 pt on phones
 	var h := maxf(64.0, q + 8.0)
 	position = Vector2.ZERO
@@ -83,7 +83,7 @@ func _build(crumb: String, f: String) -> void:
 	var x := bx - 18.0                                # PROGRESSION: SCRAP and CHIPS, as on the old profile card
 	var p := UiKit.pt(menu)                           # the ticker sizes in pt: exact on phones, the old card's size on desktop
 	for cur in ["premium", "soft"]:
-		var t := RewardTicker.make(Progression.balance(cur), cur, func(n: float) -> float: return n / p if p > 0.0 else n * 0.62 * 1.6 * Menu.K)
+		var t := RewardTicker.make(Progression.balance(cur), cur, func(n: float) -> float: return n / p if p > 0.0 else n * 0.62 * 1.6 * UiKit.K)
 		t.sign = false
 		t.named = false
 		t.tooltip_text = Rules.CURRENCY_NAMES.get(cur, "")
