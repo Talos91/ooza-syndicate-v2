@@ -1150,16 +1150,22 @@ func _fill_complete(title: String, lines: Array, primary_text: String, secondary
 	for c in _complete_vb.get_children():
 		c.queue_free()
 	_complete_vb.add_child(_label(title, 30, Color("edf7fa")))
+	var first_line: Label = null
 	for line in lines:
 		var l := _label(str(line), _body_fsz(), Color("c8e6ee"))
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_complete_vb.add_child(l)
-	# TUTORIAL + PROGRESSION: "+140 SCRAP" counting up under the "done" lines, first completion only
+		if first_line == null:
+			first_line = l
+	# TUTORIAL + PROGRESSION: "+140 SCRAP" counting up under the "done" lines, first completion only; on TRAINING
+	# COMPLETE right after the first line (relay kill, +140 SCRAP, the 3rd-skill line, then the Graduate vat)
 	var ticker_h := 0.0
 	if _scrap > 0:
 		var t := RewardTicker.make(_scrap, "soft", func(n: float) -> float: return _pt(n) if mobile else n * 1.2)
 		t.fit()
 		_complete_vb.add_child(t)
+		if graduate and first_line != null:
+			_complete_vb.move_child(t, first_line.get_index() + 1)   # (the old card's freed children still count)
 		ticker_h = t.custom_minimum_size.y + 10.0
 		t.play.call_deferred()                            # in the tree already: start once the card is laid out
 	if graduate:
