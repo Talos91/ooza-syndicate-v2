@@ -1536,6 +1536,12 @@ func _coach_sync() -> void:
 		if not sim.collapsed.get(n["id"], false):
 			platforms.append(cam.unproject_position(n["pos"]))
 	coach.set_obstacles(platforms)
+	var avoid := []                                   # the banner and the toasts never sit under the card
+	if hud.banner.visible:
+		avoid.append(hud.banner.get_global_rect())
+	if hud.notices.get_child_count() > 0:
+		avoid.append(hud.notices.get_global_rect())
+	coach.set_avoid(avoid)
 	coach.spotlight(pts, radius, rects)
 	_tutorial_gesture()
 	_tutorial_label(tg.get("label", []))

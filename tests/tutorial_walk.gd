@@ -239,13 +239,10 @@ func _lesson(id: int) -> void:
 				_got_it()
 				await _frames(4)
 			"L7.hold":
-				await _play(func(t):
-					for x in sim.nodes:
-						if x["owner"] == "A" and sim.is_warned(x["id"]) and x["units"] > 1.0:
-							for y in sim.nodes:
-								if y["id"] != x["id"] and not sim.collapsed.get(y["id"], false) and not sim.is_warned(y["id"]):
-									m.node_action("send", x["id"], {"to": y["id"], "fraction": 1.0})
-									break)
+				await _play(func(t):                      # the player follows the hand: off the warned node
+					var mv := d._vls_move()
+					if not mv.is_empty() and not sim.hordes.any(func(h): return h["owner"] == "A" and int(h["route"][0]) == int(mv[0])):
+						m.node_action("send", int(mv[0]), {"to": int(mv[1]), "fraction": 1.0}))
 			"L8.surge":
 				await _secs(1.0)
 				m.hud.dock.press_slot(0)

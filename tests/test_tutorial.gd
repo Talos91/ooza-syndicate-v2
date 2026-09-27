@@ -44,6 +44,7 @@ func _init() -> void:
 	test_l5()
 	test_l6()
 	test_l7()
+	test_l7_seeds()
 	test_l8()
 	test_l9()
 	_wipe()
@@ -58,7 +59,7 @@ func _wipe() -> void:
 
 
 # ------------------------------------------------------------------ harness
-func make(id: int) -> Array:
+func make(id: int, seed_value := 7) -> Array:
 	## [director, sim]: the lesson's map, seats and loadout exactly as main.start_tutorial builds them (VEX, EMBER).
 	var d := TutorialDirector.new(id)
 	var map := MapBuilder.load_map(TutorialDirector.map_path_for(id))
@@ -67,7 +68,7 @@ func make(id: int) -> Array:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
 	sim.setup(map, MapBuilder.layout(map), seats, {"A": TutorialDirector.PLAYER_FACTION, "B": TutorialDirector.RIVAL_FACTION},
-			7, {}, {"A": d.loadout_for()})
+			seed_value, {}, {"A": d.loadout_for()})
 	d.ui_fraction = d.fraction_start(0.5)
 	d.begin(sim, map, TutorialDirector.PLAYER_FACTION)
 	return [d, sim]
@@ -485,7 +486,7 @@ func test_l7() -> void:
 	check(not sim.eliminated.has("A") and sim.nodes.any(func(x): return x["owner"] == "A" and not sim.collapsed.get(x["id"], false)),
 			"L7: evacuating to the centre kept A alive through the ring's fall")
 	play(d, sim, "vls", func(t): if first(t):
-		check(sim.very_last_stand_active and absf(sim.very_last_stand_gap - Rules.LAST_STAND_WARNING) < 0.01, "L7: the Very Last Stand runs at once, gap from the lesson table")
+		check(sim.very_last_stand_active and absf(sim.very_last_stand_gap - d.vls_gap()) < 0.01, "L7: the Very Last Stand runs at once, gap from the lesson table")
 		check(sim.time >= Rules.VERY_LAST_STAND_TIME - 0.01 and sim.time < Rules.VERY_LAST_STAND_TIME + 1.0, "L7: the clock reads %s at the Very Last Stand" % TutorialDirector._mmss(Rules.VERY_LAST_STAND_TIME))
 		check(sim.match_hard_end == INF, "L7: the 7:00 end can't cut the lesson short")
 		d.press_button())
@@ -508,6 +509,40 @@ func test_l7() -> void:
 	check(left == 1, "L7: the Very Last Stand drops the survivors one by one to one platform (%d left)" % left)
 	var r3 := make(1)
 	check(not (r3[1] as Sim).vls_enabled, "the Very Last Stand stays off in the other lessons")
+
+
+func test_l7_seeds() -> void:
+	## The Very Last Stand's picks are random: whichever node drops first, a player who evacuates to the centre
+	## and then follows the hand (off the warned node, onto the one that stays) wins.
+	var wins := 0
+	var seeds := [1, 2, 3, 4, 5, 6, 8, 9]
+	for sd in seeds:
+		var r := make(7, sd)
+		var d: TutorialDirector = r[0]
+		var sim: Sim = r[1]
+		var n: Dictionary = d.names
+		d.press_button()
+		tick(d, sim)
+		sim.send(n["H"], n["I1"], 1.0)
+		sim.send(n["A1"], n["I2"], 1.0)
+		sim.send(n["A2"], n["I2"], 1.0)
+		var t := 0.0
+		while d.state in ["running", "interlude"] and t < 200.0:
+			var key := str(d.L["steps"][d.step_i]["key"])
+			if key == "vls":
+				d.press_button()
+			if key == "evacuate":
+				for nm in ["H", "A1", "A2"]:
+					if sim.nodes[n[nm]]["owner"] == "A" and sim.nodes[n[nm]]["units"] > 2.0 * Rules.SCALE and sim.nodes[n[nm]]["streaming"].is_empty():
+						sim.send(n[nm], n["I2"], 1.0)
+			var mv := d._vls_move()
+			if not mv.is_empty() and sim.nodes[int(mv[0])]["streaming"].is_empty():
+				sim.send(int(mv[0]), int(mv[1]), 1.0)
+			tick(d, sim)
+			t += DT
+		if d.state == "complete" and sim.winner == "A":
+			wins += 1
+	check(wins == seeds.size(), "L7: the Very Last Stand is winnable on every seed (%d / %d, gap %.0f s)" % [wins, seeds.size(), TutorialDirector.new(7).vls_gap()])
 
 
 # ------------------------------------------------------------------ L8 SKILLS

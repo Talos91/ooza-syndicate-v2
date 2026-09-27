@@ -325,9 +325,9 @@ const LESSONS := [
 	# the Last Stand starts with the lesson (the clock jumps to {ls}, as the first line says); its first wave's
 	# countdown holds while that line is on screen ("hold_ls": the reveal step), then the ring falls
 	{"id": 7, "key": "L7", "map": "T-09-collapse-ring", "abilities": false, "vls": false, "last_stand_at": 0.0, "hold_ls": "reveal",
-		# the design's 4 s Very Last Stand gap leaves no time to move a garrison off a warned node (a 40-unit
-		# garrison needs ~4 s just to leave its door): the lesson uses the Last Stand's own warning instead
-		"vls_gap": "warning",
+		# the design's 4 s Very Last Stand gap leaves no time to move a garrison off a warned node (a 100-unit
+		# garrison needs ~10 s just to leave its door): the lesson uses the Last Stand's own warning + drop gap
+		"vls_gap": "warning+gap",
 		"stage": [["H", "A", 30], ["A1", "A", 30], ["A2", "A", 30], ["BH", "B", 8], ["B1", "B", 8], ["B2", "B", 8]],
 		"protect_rival_until": "hold",
 		"reveal": ["status_line", "danger"],
@@ -336,7 +336,7 @@ const LESSONS := [
 			{"key": "evacuate", "target": {"nodes": ["I1", "I2"]}, "gesture": [["drag", "H", "I1"]],
 				"pass": ["custom", "ring_down"], "fail": ["custom", "ring_lost"], "budget": 60.0},
 			{"key": "vls", "enter": ["vls"], "target": {"nodes": ["I1", "I2", "I3"]}, "read_only": true, "pass": ["won"]},
-			{"key": "hold", "target": {"nodes": ["I1", "I2", "I3"]}, "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
+			{"key": "hold", "target": {"nodes": ["I1", "I2", "I3"]}, "gesture": [["vls_move"]], "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
 		],
 		"done": ["L7.done1", "L7.done2"]},
 	{"id": 8, "key": "L8", "map": "T-10-long-decks", "abilities": true, "vls": false,
@@ -872,7 +872,7 @@ func _enter(st: Dictionary) -> void:
 			"vls":
 				_jump_clock(Rules.VERY_LAST_STAND_TIME)   # the clock reads {vls}
 				var gap = L.get("vls_gap", -1.0)
-				sim.start_very_last_stand_now(Rules.LAST_STAND_WARNING if str(gap) == "warning" else float(gap))
+				sim.start_very_last_stand_now(vls_gap())
 	_bump()
 
 
@@ -1611,6 +1611,10 @@ func gesture() -> Array:
 				out.append([kind, _id(str(g[1])), -1])
 			"drag":
 				out.append([kind, _id(str(g[1])), _id(str(g[2]))])
+			"vls_move":                               # L7: off your warned node, onto the one that stays
+				var mv := _vls_move()
+				if not mv.is_empty():
+					out.append(["drag", mv[0], mv[1]])
 			"press":
 				var k := str(g[1])
 				out.append([kind, "badge:%d" % _id(k.substr(6)) if k.begins_with("badge:") else k, -1])
@@ -1632,6 +1636,36 @@ func gesture() -> Array:
 					elif kind_t in ["own_node", "own_vat"]:
 						out.append(["tap", _id("H"), -1])
 	return out
+
+
+func vls_gap() -> float:
+	var gap = L.get("vls_gap", -1.0)
+	if str(gap) == "warning+gap":
+		return Rules.LAST_STAND_WARNING + Rules.LAST_STAND_DROP_GAP
+	return float(gap)
+
+
+func _vls_move() -> Array:
+	## [from, to]: your warned node with units and the nearest survivor that is not warned (yours first).
+	var from := -1
+	for n in sim.nodes:
+		if n["owner"] == HUMAN and sim.is_warned(n["id"]) and n["units"] >= Rules.SCALE and not sim.collapsed.get(n["id"], false):
+			from = n["id"]
+	if from < 0:
+		return []
+	var best := -1
+	var best_score := INF
+	for n in sim.nodes:
+		if n["id"] == from or sim.collapsed.get(n["id"], false) or sim.is_warned(n["id"]):
+			continue
+		var r := sim.find_route(from, n["id"])
+		if r.size() < 2:
+			continue
+		var score := float(r.size()) - (10.0 if n["owner"] == HUMAN else 0.0)
+		if score < best_score:
+			best_score = score
+			best = n["id"]
+	return [from, best] if best >= 0 else []
 
 
 func _a_line() -> int:

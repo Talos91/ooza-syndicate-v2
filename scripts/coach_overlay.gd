@@ -824,6 +824,14 @@ func _finish_typing() -> void:
 		_handler.talking = false
 
 
+var _avoid: Array = []
+
+
+func set_avoid(rects: Array) -> void:
+	## HUD parts the card must not cover while they show (the Last Stand banner, the toast stack).
+	_avoid = rects
+
+
 func set_obstacles(points: Array) -> void:
 	_obstacles = points
 
@@ -1068,7 +1076,6 @@ func _position_card() -> void:
 		br.y = dock_top - cs.y - MARGIN
 	var corners := {"tl": tl, "tr": tr, "bl": bl, "br": br}
 	var target_center := _target_center(vp)
-	var target_bounds := _target_bounds(vp)
 	var best_key := "br"
 	var best_score := -INF
 	for key in corners.keys():
@@ -1076,13 +1083,16 @@ func _position_card() -> void:
 		var rect := Rect2(pos, cs)
 		var center := rect.get_center()
 		var score := center.distance_to(target_center)
-		if rect.intersects(target_bounds):
-			score -= 4000.0                # heavily discourage covering the target
+		for a in _avoid:
+			if rect.intersects(a):
+				score -= 2500.0
+		if _covers_target(rect):
+			score -= 4000.0                # heavily discourage covering a target (each ring / rect, not their bounding box)
 		for o in _obstacles:               # then the nodes: a corner over the map's empty sky wins
 			if rect.grow(10.0).has_point(o):
 				score -= 700.0
-		if _card_dest.x >= 0.0 and pos.distance_to(_card_dest) < 1.0 and not rect.intersects(target_bounds):
-			score += 900.0                 # keep the corner it is in: no hop between steps unless the target needs it
+		if _card_dest.x >= 0.0 and pos.distance_to(_card_dest) < 1.0 and not _covers_target(rect):
+			score += 1600.0                # keep the corner it is in: no hop between steps unless the target needs it
 		if score > best_score:
 			best_score = score
 			best_key = key
@@ -1100,6 +1110,16 @@ func _position_card() -> void:
 		_card_tween = create_tween()
 		_card_tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 		_card_tween.tween_property(_card, "position", chosen, EASE_TIME)
+
+
+func _covers_target(rect: Rect2) -> bool:
+	for t in _targets_px:
+		if rect.grow(float(t["r"])).has_point(t["c"]):
+			return true
+	for r in _target_rects:
+		if rect.intersects(r):
+			return true
+	return false
 
 
 func _fill_complete(title: String, lines: Array, primary_text: String, secondary: Array, graduate: bool) -> void:

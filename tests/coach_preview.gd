@@ -17,7 +17,8 @@ extends Node
 ## progress file is never touched.
 ##
 ## Shots (saved to <out>/<tag>-<name>.png):
-##   L1 .. L9     each lesson at its first step (L1's drag hand, L2's inspect tap, ...)
+##   L0 .. L9     each lesson at its first step (the tour's hello, L1's drag hand, ...)
+##   (every step of every lesson: tests/tutorial_walk.tscn)
 ##   hand         a 2x close-up of the pointing hand from L1
 ##   first        L1 on the first launch: SKIP TUTORIAL on the card
 ##   complete     LESSON COMPLETE (L3's)
@@ -25,7 +26,7 @@ extends Node
 ##   page         the TUTORIAL page (3 / 9 done)
 
 const MAIN := "res://main.tscn"
-const SHOT_ORDER := ["L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "hand", "first", "complete", "final", "page"]
+const SHOT_ORDER := ["L0", "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "hand", "first", "complete", "final", "page"]
 const TAGS := ["phone", "desktop"]
 const PROGRESS := "user://coach_preview_tutorial.cfg"
 
@@ -64,7 +65,7 @@ func _run() -> void:
 	TutorialDirector._loaded = true
 	TutorialDirector.save_progress()
 	var only := []
-	for v in str(args.get("lessons", "1,2,3,4,5,6,7,8,9")).split(","):
+	for v in str(args.get("lessons", "0,1,2,3,4,5,6,7,8,9")).split(","):
 		only.append(int(v))
 	for i in only:
 		await _lesson_shot(out_dir, tag, i, false)
