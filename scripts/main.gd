@@ -580,6 +580,18 @@ func _apply_safe_area() -> void:
 	var left := 16.0
 	var right := 16.0
 	var top := 10.0
+	var bottom := 12.0
+	# Alpha 21 (iPhone 14 Pro home-screen app): on the web the safe-area insets come from the page (CSS env(),
+	# web/viewport-fix.js) - the notch / Dynamic Island side and the home indicator stay clear of the HUD
+	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
+		var js = JavaScriptBridge.eval("window.OozeViewport ? OozeViewport.safe().concat(OozeViewport.size()).join(',') : ''", true)
+		var f := str(js).split(",")
+		if f.size() == 6 and float(f[4]) > 0.0:
+			var kw := vp.x / float(f[4])                 # CSS px -> viewport units
+			left = maxf(float(f[0]) * kw, left)
+			top = maxf(float(f[1]) * kw, top)
+			right = maxf(float(f[2]) * kw, right)
+			bottom = maxf(float(f[3]) * kw, bottom)
 	if OS.has_feature("mobile"):
 		var screen := Vector2(DisplayServer.screen_get_size())
 		var safe := Rect2(DisplayServer.get_display_safe_area())
@@ -591,7 +603,7 @@ func _apply_safe_area() -> void:
 	if mobile:
 		left = maxf(left, vp.x * 0.035)
 		right = maxf(right, vp.x * 0.035)
-	margins = Vector4(left, top, right, 12.0)
+	margins = Vector4(left, top, right, bottom)
 
 
 func _build_world() -> void:
