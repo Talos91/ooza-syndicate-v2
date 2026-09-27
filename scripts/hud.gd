@@ -1433,8 +1433,8 @@ func pause_menu() -> void:
 	if end_panel.visible:
 		return
 	if main.online:                                   # a room never pauses (Alpha 11): the menu only
-		_fill_overlay(pause_panel, "ROOM %s" % Net.room_code, "%s · %02d:%02d · the match keeps running" % [
-				str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
+		_fill_overlay(pause_panel, "ROOM %s" % Net.room_code, "%s · %02d:%02d · the match keeps running\n%s" % [
+				str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60, Net.net_stats_line()],
 				[["RESUME", func(): pause_panel.visible = false], _territory_action(), ["LEAVE ROOM", main.to_menu]])
 		pause_panel.visible = true
 		layout(root.get_viewport_rect().size, margins)

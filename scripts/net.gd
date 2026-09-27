@@ -151,6 +151,14 @@ var _play_q: Array = []                            # server-room guest: ["state"
 var _play_t := -1.0                                # the host time the guest shows now (-1: not started)
 var _latest_t := 0.0                               # the newest snapshot's host time
 var _since_applied := 0.0                          # seconds since a snapshot was last shown
+# the PAUSE panel's connection line (net_stats_line): is a stutter the network or the device?
+var _arrivals: Array = []                          # guest: msec of the snapshots in the last 5 s
+var _freeze_n := 0                                 # guest: times this round the shown clock stood still >= 0.1 s
+var _freeze_s := 0.0
+var _freeze_run := 0.0
+var _last_clock := -1.0
+var _order_sent: Array = []                        # guest: msec of orders waiting for their feedback line
+var _rtt_ms := -1.0
 var _elapsed := 0.0
 var _path_seen := {}                               # host: horde id -> [path key, time it changed]
 var _order_limits := {}
@@ -988,6 +996,12 @@ func _launch(info: Dictionary) -> void:
 	_play_t = -1.0
 	_latest_t = 0.0
 	_since_applied = 0.0
+	_arrivals = []
+	_freeze_n = 0
+	_freeze_s = 0.0
+	_freeze_run = 0.0
+	_last_clock = -1.0
+	_order_sent = []
 	sim = null
 	if not no_reload:
 		get_tree().reload_current_scene()
@@ -1088,6 +1102,9 @@ func order(action: String, a: int, args := {}) -> void:
 		order_feedback.emit(r[1])
 	else:
 		_send_to_host({"op": "order", "round": match_round, "action": action, "a": a, "args": args})
+		_order_sent.append(Time.get_ticks_msec())
+		if _order_sent.size() > 20:
+			_order_sent.pop_front()
 
 
 func _execute(id: int, p: Dictionary) -> Array:
@@ -1453,6 +1470,36 @@ func _post_report(url: String, secret: String, body: String, attempt: int) -> vo
 		_report_pending -= 1
 
 
+func _track_freeze(dt: float) -> void:
+	## Guest: a freeze = the shown match clock standing still for 0.1 s or more while the round runs.
+	if finished or sim.over:
+		return
+	if sim.time <= _last_clock + 0.0001:
+		_freeze_run += dt
+	else:
+		if _freeze_run >= 0.1:
+			_freeze_n += 1
+			_freeze_s += _freeze_run
+		_freeze_run = 0.0
+	_last_clock = sim.time
+
+
+func net_stats_line() -> String:
+	## The PAUSE panel in an online round (Daniele: "some stutter here and there"): the device's frame rate, how
+	## many updates arrive a second, the freezes this round and the order round trip - a screenshot tells a slow
+	## phone (low fps) from a bad connection (few updates, freezes, a long round trip).
+	var fps := int(Engine.get_frames_per_second())
+	if hosting:
+		return "CONNECTION  %d fps  ·  this device hosts the room" % fps
+	var span := 5.0
+	if not _arrivals.is_empty():
+		span = clampf((Time.get_ticks_msec() - int(_arrivals[0])) / 1000.0, 1.0, 5.0)
+	var rate := _arrivals.size() / span
+	var rtt := ("%d ms" % int(_rtt_ms)) if _rtt_ms >= 0.0 else "- ms"
+	return "CONNECTION  %d fps  ·  %d updates/s  ·  %d freeze%s (%.1f s)  ·  round trip %s" % [
+			fps, int(round(rate)), _freeze_n, "" if _freeze_n == 1 else "s", _freeze_s, rtt]
+
+
 func _smooth() -> bool:
 	## A guest in a server-hosted room (0.20.2 smoothing); fallback rooms keep the old apply-on-arrival.
 	return not hosting and room_owner > 1 and sim != null
@@ -1622,12 +1669,14 @@ func _process(dt: float) -> void:
 		if _since_applied < EXTRAPOLATE and not sim.over:
 			predict(sim, minf(dt, 0.05))
 		blend(sim, minf(dt, 0.05))
+		_track_freeze(fdt)
 		if _since_snapshot > HOST_GRACE:
 			fail("The host stopped responding for %d s. RECONNECT to try the room again." % int(HOST_GRACE))
 	else:
 		_since_snapshot += minf(dt, 0.25)            # a tab back from the background: one huge frame
 		if _since_snapshot < 0.35 and not sim.over:
 			predict(sim, minf(dt, 0.05))
+		_track_freeze(minf(dt, 0.25))
 		if _since_snapshot > HOST_GRACE:
 			fail("The host stopped responding for %d s. RECONNECT to try the room again." % int(HOST_GRACE))
 
@@ -1790,6 +1839,10 @@ func _guest_receive(raw: String) -> void:
 		"state":
 			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null and active:
 				_since_snapshot = 0.0
+				var now_ms := Time.get_ticks_msec()
+				_arrivals.append(now_ms)
+				while not _arrivals.is_empty() and now_ms - int(_arrivals[0]) > 5000:
+					_arrivals.pop_front()
 				if _smooth() and not _fresh:           # server rooms: the playout buffer shows it on time
 					_latest_t = maxf(_latest_t, float(data.get("t", 0.0)))
 					_play_q.append(["state", data])
@@ -1808,6 +1861,12 @@ func _guest_receive(raw: String) -> void:
 					own_ghosts[int(i)] = true
 				_mark_ghosts()
 		"feedback":
+			var now := Time.get_ticks_msec()
+			while not _order_sent.is_empty() and now - int(_order_sent[0]) > 3000:   # unanswered orders are not a round trip
+				_order_sent.pop_front()
+			if not _order_sent.is_empty():
+				var rtt := float(now - int(_order_sent.pop_front()))
+				_rtt_ms = rtt if _rtt_ms < 0.0 else lerpf(_rtt_ms, rtt, 0.3)
 			order_feedback.emit(str(data))
 		"rematch_votes":
 			if data is Dictionary and int(data.get("round", -1)) == match_round:

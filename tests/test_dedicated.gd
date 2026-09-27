@@ -103,6 +103,9 @@ func _run() -> void:
 			mine = i
 	b.order("upgrade", mine)
 	check(await _wait(func(): return not feedback.is_empty(), 5.0), "an order is answered by the server: %s" % str(feedback))
+	var line: String = b.net_stats_line()              # the PAUSE panel's connection line
+	check(b._rtt_ms > 0.0 and b._arrivals.size() >= 10 and line.contains("updates/s") and line.contains("round trip"),
+			"the connection line has real numbers: " + line)
 
 	var t_before: float = sb.time
 	a.leave()                                          # the owner drops out mid-match
