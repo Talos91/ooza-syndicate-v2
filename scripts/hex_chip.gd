@@ -10,6 +10,9 @@ extends Button
 
 var fill := Color.WHITE                # a solid hue chip
 var wedges: Array = []                 # non-empty: a FACTION-style split hexagon instead (one Color per wedge)
+var emblem_faction := ""               # 0.19.2 spec H2: FACTION gets a recognisable face - the player's
+                                        # faction emblem in white, centred over the wedges
+static var _white_emblem_cache := {}
 var picked := false:
 	set(v):
 		picked = v
@@ -48,6 +51,11 @@ func _draw() -> void:
 	edge.append(pts[0])
 	var border: Color = fill if wedges.is_empty() else Color.WHITE
 	draw_polyline(edge, border if not dim else Color(0.4, 0.44, 0.47), 3.0, true)
+	if emblem_faction != "":
+		var tex := _white_emblem(emblem_faction)
+		if tex:
+			var isz := Vector2.ONE * r * 0.9
+			draw_texture_rect(tex, Rect2(c - isz / 2.0, isz), false, Color(1, 1, 1, 1.0 if not dim else 0.35))
 	if picked:
 		var ring := PackedVector2Array()
 		for k in range(6):
@@ -55,3 +63,29 @@ func _draw() -> void:
 			ring.append(c + Vector2(cos(a), sin(a)) * (r + 6.0))
 		ring.append(ring[0])
 		draw_polyline(ring, Color(1, 1, 1, 0.95), 3.5, true)
+
+
+static func _white_emblem(fac: String) -> Texture2D:
+	## A once-baked white silhouette of the faction emblem (same luminance-keeps-alpha/hue-replaced
+	## recipe as shaders/emblem_tint.gdshader, done on the CPU so a plain _draw() can use it).
+	if _white_emblem_cache.has(fac):
+		return _white_emblem_cache[fac]
+	var src: Texture2D = Hud.emblem_texture(fac)
+	var out: Texture2D = null
+	var img: Image = src.get_image() if src else null
+	if img and not img.is_empty():
+		img = img.duplicate()
+		if img.is_compressed():
+			img.decompress()
+		img.convert(Image.FORMAT_RGBA8)
+		var data := img.get_data()
+		for i in range(0, data.size(), 4):
+			var v: int = maxi(data[i], maxi(data[i + 1], data[i + 2]))
+			data[i] = 255
+			data[i + 1] = 255
+			data[i + 2] = 255
+			data[i + 3] = int(float(data[i + 3]) * float(v) / 255.0)
+		img = Image.create_from_data(img.get_width(), img.get_height(), false, Image.FORMAT_RGBA8, data)
+		out = ImageTexture.create_from_image(img)
+	_white_emblem_cache[fac] = out
+	return out
