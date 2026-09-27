@@ -30,9 +30,11 @@ static var unlocks := {}                          # item -> source
 static var factions := {}                         # faction -> {"plays", "wins", "vat_wins"}
 static var first_win_day := ""                    # the UTC day of the last first-win bonus
 static var challenges := {}                       # "daily" / "weekly" -> {"key", "list": [{id, target, progress, claimed, faction?}], "rerolled"}
+static var history: Array = []                    # MATCH HISTORY (0.20.5): the last HISTORY_KEEP finished matches, newest last
 static var _loaded := false
 
 const FACTION_IDS := ["vex", "null", "bloom", "ember", "solar"]
+const HISTORY_KEEP := 50
 const STRUCTURE_FAMILIES := ["machinegoon", "laser", "forge", "monster_hub"]
 
 
@@ -47,6 +49,7 @@ static func load_all() -> void:
 	factions = {}
 	first_win_day = ""
 	challenges = {}
+	history = []
 	var cf := ConfigFile.new()
 	if cf.load(path) != OK:                       # none yet, or no storage at all
 		return
@@ -62,6 +65,8 @@ static func load_all() -> void:
 		var d := _dict(cf.get_value("factions", f, {}))
 		if not d.is_empty():
 			factions[f] = {"plays": int(d.get("plays", 0)), "wins": int(d.get("wins", 0)), "vat_wins": int(d.get("vat_wins", 0))}
+	var hl = cf.get_value("history", "matches", [])
+	history = hl if hl is Array else []
 	for kind in ["daily", "weekly"]:
 		var ch := _dict(cf.get_value("challenges", kind, {}))
 		if ch.has("key") and ch.get("list") is Array:
@@ -87,6 +92,7 @@ static func save_all() -> bool:
 		cf.set_value("factions", f, factions[f])
 	for kind in challenges:
 		cf.set_value("challenges", kind, challenges[kind])
+	cf.set_value("history", "matches", history)
 	saved = cf.save(path) == OK
 	return saved
 
@@ -353,6 +359,62 @@ static func placements(sim: Sim, strength := {}) -> Dictionary:
 	return place
 
 
+static func history_entry(sim: Sim, seat: String, info := {}) -> Dictionary:
+	## One MATCH HISTORY line for this device's log: when, map, mode, online or not (room_key "ROOM-ROUND" joins it
+	## to the server's record), how long, the result, and every seat (faction, team, name or AI level, you).
+	## info: "map", "mode", "online", "room_key", "names" {seat: name}, "ai" {seat: level}.
+	var players := []
+	var names: Dictionary = info.get("names", {})
+	var ai: Dictionary = info.get("ai", {})
+	for s in sim.factions.keys():
+		players.append({"seat": s, "faction": str(sim.factions[s]), "team": sim.teams.get(s, null),
+				"name": str(names.get(s, "")), "ai_level": str(ai.get(s, "")), "is_me": s == seat,
+				"won": sim.winner != "" and (sim.winner == s or sim.allied(s, sim.winner))})
+	return {"t": _now(), "map": str(info.get("map", "")), "mode": str(info.get("mode", "")),
+			"online": bool(info.get("online", false)), "room_key": str(info.get("room_key", "")),
+			"duration_s": snappedf(sim.time, 0.1), "draw": sim.winner == "",
+			"won": sim.winner != "" and (sim.winner == seat or sim.allied(seat, sim.winner)), "players": players}
+
+
+static func merge_history(local: Array, online: Array) -> Array:
+	## One list, newest first: this device's log plus the server's rounds (Account.match_history), a round played here
+	## shown once (its local line, tagged ONLINE; the server's match_id starts with its room_key).
+	var here := {}
+	for h in local:
+		if str(h.get("room_key", "")) != "":
+			here[str(h["room_key"])] = true
+	var out := []
+	for h in local:
+		out.append(h)
+	for m in online:
+		var parts := str(m.get("match_id", "")).split("-")
+		var key := "%s-%s" % [parts[0], parts[1]] if parts.size() >= 2 else ""
+		if key != "" and here.has(key):
+			continue
+		out.append(_from_server(m))
+	out.sort_custom(func(a, b): return int(a.get("t", 0)) > int(b.get("t", 0)))
+	return out
+
+
+static func _from_server(m: Dictionary) -> Dictionary:
+	## A server round (my_matches) as a MATCH HISTORY line.
+	var players := []
+	var me_won := false
+	for s in m.get("seats", []):
+		if not s is Dictionary:
+			continue
+		players.append({"seat": str(s.get("seat", "")), "faction": str(s.get("faction", "")), "team": s.get("team"),
+				"name": str(s.get("name", "")) if s.get("name") != null else "", "ai_level": str(s.get("ai_level", "")) if s.get("ai_level") != null else "",
+				"is_me": bool(s.get("is_me", false)), "won": bool(s.get("won", false))})
+		if bool(s.get("is_me", false)):
+			me_won = bool(s.get("won", false))
+	var outcome: Dictionary = m.get("outcome", {}) if m.get("outcome") is Dictionary else {}
+	var t := int(Time.get_unix_time_from_datetime_string(str(m.get("started_at", "")).substr(0, 19)))
+	return {"t": t, "map": str(m.get("map", "")), "mode": str(m.get("mode", "")), "online": true,
+			"room_key": "", "duration_s": float(m.get("duration_s", 0.0)) if m.get("duration_s") != null else 0.0,
+			"draw": bool(outcome.get("draw", false)), "won": me_won, "players": players}
+
+
 static func full_pay(result: Dictionary) -> bool:
 	## Online, or the strongest AI is Veteran / Expert (Daniele: easy AI pays XP only).
 	return bool(result.get("online", false)) or str(result.get("ai_level", "")) in Rules.PROGRESSION["full_pay_ai"]
@@ -366,6 +428,10 @@ static func record_match(result: Dictionary) -> Dictionary:
 	var out := {"lines": [], "xp_before": xp, "xp_after": xp, "challenges": [], "unlocked": []}
 	if result.get("tutorial", false) or result.get("left_early", false):
 		return out
+	if result.get("history") is Dictionary:              # MATCH HISTORY: every finished match, paid or not
+		history.append(result["history"])
+		if history.size() > HISTORY_KEEP:
+			history = history.slice(history.size() - HISTORY_KEEP)
 	var lines: Array = out["lines"]
 	var P := Rules.PROGRESSION
 	var mission := bool(result.get("campaign", false))

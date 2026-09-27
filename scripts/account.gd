@@ -241,6 +241,18 @@ func leaderboard(board := "season_wins", lim := 50) -> Array:
 	return r["json"] if r["ok"] and r["json"] is Array else []
 
 
+func match_history(lim := 20, before := "") -> Array:
+	## MATCH HISTORY: this account's server-recorded rounds, newest first (before: an ISO time for the next page).
+	## [] when signed out or offline - the page then shows the device's own log only.
+	if not signed_in():
+		return []
+	var body := {"lim": lim}
+	if before != "":
+		body["before"] = before
+	var r := await _call("POST", "/rest/v1/rpc/my_matches", body, true)
+	return r["json"] if r["ok"] and r["json"] is Array else []
+
+
 # ------------------------------------------------------------------ cloud save
 static func pack_save() -> Dictionary:
 	## The device's progress: each save file's text as it is, plus the campaign's own copy when it exists.

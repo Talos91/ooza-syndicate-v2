@@ -39,6 +39,7 @@ func _init() -> void:
 	_saving()
 	_from_sim()
 	_ticker()
+	_history()
 	for p in [P1, P2]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 	print("test_progression: %s" % ("PASS" if failures == 0 else "%d FAILED" % failures))
@@ -293,6 +294,36 @@ func _from_sim() -> void:
 	pl = Progression.placements(sim, {"C": 500.0})
 	check(pl["A"] == 1 and pl["C"] == 2 and pl["B"] == 3 and pl["D"] == 4,
 			"FFA: winner, survivor, then the later out before the earlier: %s" % str(pl))
+
+
+func _history() -> void:
+	_fresh()
+	var sim := Sim.new()
+	sim.factions = {"A": "vex", "B": "ember"}
+	sim.winner = "A"
+	sim.time = 301.24
+	var e := Progression.history_entry(sim, "A", {"map": "M-07", "mode": "1v1", "online": true, "room_key": "AB12-3",
+			"names": {"A": "ME", "B": "RIVAL"}})
+	check(e["won"] and e["map"] == "M-07" and e["room_key"] == "AB12-3" and e["duration_s"] == 301.2 and e["players"].size() == 2
+			and e["players"][0]["is_me"], "a history line from the sim: %s" % str(e))
+	for i in Progression.HISTORY_KEEP + 5:
+		Progression.record_match({"faction": "vex", "won": false, "ai_level": "Casual", "stats": {},
+				"history": {"t": 1000 + i, "map": "T-%d" % i, "players": []}})
+	check(Progression.history.size() == Progression.HISTORY_KEEP and Progression.history[-1]["map"] == "T-%d" % (Progression.HISTORY_KEEP + 4),
+			"the log keeps the last %d, newest last" % Progression.HISTORY_KEEP)
+	Progression.record_match({"faction": "vex", "tutorial": true, "history": {"t": 1, "map": "LESSON"}})
+	check(Progression.history[-1]["map"] != "LESSON", "tutorial lessons are not logged")
+	Progression.reload_all()
+	check(Progression.history.size() == Progression.HISTORY_KEEP, "the log survives a reload")
+	var local := [{"t": 2000, "map": "M-07", "room_key": "AB12-3", "online": true}, {"t": 1500, "map": "A-01", "room_key": ""}]
+	var online := [{"match_id": "AB12-3-1790000000", "started_at": "2026-09-27T12:00:00+00:00", "map": "M-07", "seats": [], "outcome": {}},
+			{"match_id": "ZZ99-1-1790000001", "started_at": "2026-09-27T12:05:00+00:00", "map": "C-05", "mode": "2v2",
+			"seats": [{"seat": "A", "faction": "bloom", "is_me": true, "won": true, "name": "ME"}, {"seat": "B", "faction": "vex", "ai_level": "Expert"}]}]
+	var merged := Progression.merge_history(local, online)
+	check(merged.size() == 3, "a round played here shows once (%d lines)" % merged.size())
+	var other: Dictionary = merged.filter(func(h): return h["map"] == "C-05")[0]
+	check(other["online"] and other["won"] and other["players"][1]["ai_level"] == "Expert", "a server round from another device: %s" % str(other))
+	check(int(merged[0]["t"]) >= int(merged[1]["t"]) and int(merged[1]["t"]) >= int(merged[2]["t"]), "newest first")
 
 
 func _ticker() -> void:

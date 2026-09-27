@@ -87,6 +87,8 @@ func _live() -> void:
 	var r := await a._call("GET", "/rest/v1/cloud_saves?select=save,build&user_id=eq." + a.user_id, null, true)
 	check(r["ok"] and r["json"] is Array and (r["json"] as Array).size() == 1
 			and str(r["json"][0]["save"]["files"]["progress"]).contains("live:test"), "the cloud copy holds this device's progress")
+	var hist := await a.match_history()
+	check(hist is Array and hist.is_empty(), "MATCH HISTORY answers: a new account has no server rounds")
 	var board := await a.leaderboard()
 	check(board is Array, "the season board answers (%d rows)" % board.size())
 	var t := a.access_token
