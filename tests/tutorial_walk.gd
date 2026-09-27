@@ -157,10 +157,10 @@ func _lesson(id: int) -> void:
 				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("upgrade", _id("H")))
 			"L2.t3":
 				await _play(func(t): if sim.can_upgrade(_id("H"), "A") == "": m.node_action("upgrade", _id("H")))
-			"L2.machingoon":
+			"L2.machinegoon":
 				m.hud.inspect(_id("N1"), m.cam)
-				await _shot("machingoon-inspector")
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("build", _id("N1"), {"kind": "machingoon"}))
+				await _shot("machinegoon-inspector")
+				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("build", _id("N1"), {"kind": "machinegoon"}))
 			"L2.mg_upgrade":
 				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("upgrade", _id("N1")))
 			"L3.neutral":
