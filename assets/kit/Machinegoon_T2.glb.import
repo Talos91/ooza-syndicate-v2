@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://cw8fhxfimb50v"
-path="res://.godot/imported/Machinegoon_T2.glb-11c131718a41f9db1bd7cacb71b10e79.scn"
+path="res://.godot/imported/Machinegoon_T2.glb-f7062912120b0c86677a13068826a0d6.scn"
 
 [deps]
 
 source_file="res://assets/kit/Machinegoon_T2.glb"
-dest_files=["res://.godot/imported/Machinegoon_T2.glb-11c131718a41f9db1bd7cacb71b10e79.scn"]
+dest_files=["res://.godot/imported/Machinegoon_T2.glb-f7062912120b0c86677a13068826a0d6.scn"]
 
 [params]
 

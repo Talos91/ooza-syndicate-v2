@@ -31,8 +31,8 @@ Owner: the "Leaderboard, progression, and currency" session. Design: `Docs/Game 
 
 1. Authentication > Sign In / Providers: **Allow anonymous sign-ins** on (every player starts as a guest).
 2. Authentication > Sign In / Providers: **Allow manual linking** on (a guest adds an email or Google later).
-3. Authentication > URL Configuration: Site URL `https://talos91.github.io/ooza-syndicate-v2/`, and the same URL in
-   Redirect URLs (email links and Google sign-in come back to the game).
+3. Authentication > URL Configuration: Site URL `https://talos91.github.io/ooza-syndicate-v2/`; Redirect URLs: that URL
+   and the room server's test site `https://45-32-126-20.sslip.io/` (email links and Google sign-in come back to the game).
 4. Authentication > Providers > Google: a Google Cloud OAuth client (Web) - its client ID and secret, entered by Daniele.
 5. Edge Functions > Secrets: `OOZE_MATCH_SECRET` = the secret the server session generates (handed over by Daniele,
    never through chat or files).
