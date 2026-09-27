@@ -29,6 +29,10 @@ extends Node3D
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
 ##   --tutorial=N                           start tutorial lesson N (0 the tour, 1-9) straight away (screenshots, testing)
+##   --mission=vex:01                       CAMPAIGN: start that mission straight away (its briefing first)
+##   --campaign-all                         CAMPAIGN: every playable mission open (Campaign.all_open)
+##   --mission-start                        CAMPAIGN: skip the briefing (headless boot checks)
+##   --mission-shot=brief|hud|win|lose --out=<dir>   CAMPAIGN: screenshot that screen as mission_<shot>.png, then quit
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is an online room (Net)
@@ -121,6 +125,13 @@ var coach: CoachOverlay = null
 var menu_faction := ""                           # the player's own menu faction, kept while a lesson plays VEX
 var _coach_version := -1
 static var menu_open := ""                       # after a relaunch: open this menu page instead of MAIN
+# --- CAMPAIGN (CAMPAIGN-DESIGN.md §4 / §5): the mission director, its overlay, the menu settings kept for afterwards ---
+var mission: MissionDirector = null              # a campaign mission is on (null: not one)
+var mission_overlay: MissionOverlay = null
+var mission_menu_faction := ""                   # the player's own menu faction / AI level, back after the mission
+var mission_menu_ai := ""
+static var mission_arg_used := false             # --mission=<key> starts it once per run (a leave never loops back)
+# --- end CAMPAIGN ---
 
 
 func _ready() -> void:
@@ -128,6 +139,7 @@ func _ready() -> void:
 	if FullscreenGate.needed():                        # phones play fullscreen (Alpha 14 playtest)
 		add_child(FullscreenGate.new())
 	Engine.max_fps = Net.DEDICATED_FPS if Net.dedicated else 60   # never spin faster than the screen (menu included)
+	MissionDirector.restore_settings()                 # CAMPAIGN: a blind mission's HIDE ENEMY COUNTS goes back
 	if Net.online():                                   # a room launched (or relaunched) a round
 		_start_online()
 		return
@@ -148,6 +160,7 @@ func _ready() -> void:
 	var tut_id := int(relaunch.get("tutorial", -1))     # TUTORIAL: a lesson relaunched (NEXT / REPLAY / RESTART; 0 = the tour)
 	var tut_first := bool(relaunch.get("first", false))
 	menu_open = str(relaunch.get("menu", ""))
+	var mission_key := str(relaunch.get("mission", ""))   # CAMPAIGN: RETRY / NEXT MISSION
 	relaunch = {}
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--progress="):              # PROGRESSION screenshot helper: a scratch save, never the real one
@@ -205,6 +218,18 @@ func _ready() -> void:
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
+	# CAMPAIGN: a mission relaunched (RETRY / NEXT MISSION) or --mission=<key> goes straight in - checked before
+	# the tutorial's first launch, so a fresh profile never lands in the L0 tour instead
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--mission=") and not mission_arg_used:
+			mission_key = arg.substr(10)
+			mission_arg_used = true
+		elif arg == "--campaign-all":
+			Campaign.all_open = true
+	if mission_key != "":
+		start_mission(mission_key)
+		return
+	# --- end CAMPAIGN ---
 	if tut_id >= 0 and not map_explicit:              # TUTORIAL: a lesson, straight in
 		start_tutorial(tut_id, tut_first)
 	elif map_explicit or demo or scenario != "" or not shots.is_empty():
@@ -338,6 +363,8 @@ func _start_map(path: String) -> void:
 		print("fast-forwarded to t=%.1f%s" % [sim.time, " (match already over)" if sim.over else ""])
 	if director:                                       # TUTORIAL: the lesson stages its board (tutorial.gd)
 		director.begin(sim, map, SEAT_FACTIONS[HUMAN])
+	if mission:                                        # CAMPAIGN: the mission stages its board (mission_director.gd)
+		mission.begin(sim, map, HUMAN)
 	if scenario != "":
 		_stage_scenario()
 	elif focus_node >= 0 and focus_node < sim.nodes.size():
@@ -364,6 +391,8 @@ func _start_map(path: String) -> void:
 	get_viewport().size_changed.connect(_on_resized)
 	started = true
 	paused = false
+	if mission:                                        # CAMPAIGN: the briefing card, the match paused until START
+		_mission_setup()
 	if thumb_path != "":
 		hud.root.visible = false
 		for i in range(40):                           # let the rivers ease in
@@ -444,6 +473,9 @@ func _on_order_feedback(msg: String) -> void:
 
 
 func restart() -> void:
+	if mission:                                        # CAMPAIGN: RESTART / RETRY replays the mission
+		_mission_relaunch(mission.key)
+		return
 	if director:                                       # TUTORIAL: RESTART / TRY AGAIN restages the lesson
 		_tutorial_relaunch({"tutorial": director.lesson_id, "first": director.first_launch})
 		return
@@ -506,6 +538,9 @@ func rematch_random() -> void:
 
 
 func to_menu() -> void:
+	if mission:                                        # CAMPAIGN: leaving a mission returns to the campaign page
+		_mission_leave()
+		return
 	if director:                                       # TUTORIAL §7: leaving a lesson marks the tutorial offered
 		TutorialDirector.mark_offered()
 		SEAT_FACTIONS[HUMAN] = menu_faction            # (and the menu gets your own faction back)
@@ -603,6 +638,8 @@ func _fit_nodes(nodes: Array) -> Array:
 	var use_hud: bool = hud != null and thumb_path == ""
 	var left: float = (hud.side_panel.position.x + hud.side_panel_width() + 14.0) if use_hud else 8.0
 	var top: float = hud.top_used() if use_hud else 8.0
+	if use_hud and mission_overlay:                    # CAMPAIGN: the map fits under the objective strip too
+		top = maxf(top, mission_overlay.strip_bottom() + 6.0)
 	var bottom: float = vp.y - (hud.bottom_used() if use_hud else 8.0)
 	var right: float = vp.x - (margins.z + hud.pause_button.size.x + 12.0 if use_hud else 8.0)   # PAUSE and Debug column
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
@@ -929,6 +966,8 @@ func node_action(method: String, id: int, args := {}) -> bool:
 			director.say(why)
 			return false
 	var r := perform(HUMAN, method, id, args)
+	if mission:                                        # CAMPAIGN
+		mission.on_action(method, id, args, r[0])
 	if director:
 		director.on_action(method, id, args, r[0])
 		if not r[0] and str(r[1]) != "" and not hud.shows("notices"):
@@ -1039,6 +1078,8 @@ func _process(delta: float) -> void:
 		if scenario != "":
 			_run_scenario()
 		sim.step(sdt)
+		if mission:                                    # CAMPAIGN: the objective after the Sim's step
+			mission.step(sdt)
 	hordes.sync(sim, HUMAN)
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]
@@ -1070,6 +1111,8 @@ func _process(delta: float) -> void:
 	for ev in sim.fx_events:
 		if director:
 			director.on_event(ev)
+		if mission:                                   # CAMPAIGN
+			mission.on_event(ev)
 		fx.handle(ev)
 		skill_fx.handle(ev)
 		match ev["type"]:
@@ -1147,6 +1190,8 @@ func _take_shot(t: float, last: bool) -> void:
 
 
 func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
+	if mission:                                        # CAMPAIGN: a start node / vat / home lost
+		mission.on_captured(node_id, new_owner, _old)
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
 	if new_owner == HUMAN:
 		hud.toast("Node %d captured" % node_id)
@@ -1169,6 +1214,9 @@ func _on_finished(winner: String) -> void:
 	print("match over, winner ", winner, " - telemetry ", path)
 	hud.close_inspector()
 	if director:                                       # TUTORIAL: the lesson's completion screen replaces the results
+		return
+	if mission:                                        # CAMPAIGN: the mission's result screen replaces the results
+		mission.step(0.0)
 		return
 	_record_progress()                                 # PROGRESSION: XP / SCRAP / challenges, before the results show them
 	hud.show_end(winner)
@@ -1810,3 +1858,133 @@ func _input(event: InputEvent) -> void:
 	if coach.spotlit(mb.position):
 		get_viewport().set_input_as_handled()
 		director.press_button()
+
+
+# ================================================================== CAMPAIGN (CAMPAIGN-DESIGN.md §4 / §5)
+# The mission hooks, all here: start_mission (like start_tutorial), the director stepped after the Sim, the overlay
+# (briefing, objective strip, result screen), the result recorded through Campaign.record, and the ways out
+# (NEXT MISSION / RETRY / CAMPAIGN; the pause menu's RESTART / MAIN MENU go the same ways).
+func start_mission(key: String, colour := "") -> void:
+	## Entry from the campaign page or a relaunch: the mission's faction (seat A) against its rival's (a normal
+	## SeatAI at the mission's level - never `director`, that is the tutorial's), 1v1, your ARMIES loadout for
+	## that faction; the last map played stays MAIN MENU's. A mission that can't be played yet (no map, a system
+	## not built) goes back to the campaign page.
+	var m := Campaign.mission(key)
+	mission_menu_faction = str(SEAT_FACTIONS[HUMAN])
+	mission_menu_ai = ai_level
+	if colour != "":
+		color_choice = colour
+	if m.is_empty() or not Campaign.playable(m):
+		push_warning("mission %s is not playable in this build" % key)
+		mission = null
+		call_deferred("_mission_leave")
+		return
+	mission = MissionDirector.new(key)
+	show_out_panel = false                             # the result screen says it; no YOU'RE OUT on top
+	SEAT_FACTIONS[HUMAN] = str(m["faction"])
+	SEAT_FACTIONS["B"] = str(Campaign.rival_of(m).get("faction", "ember"))
+	mode = "1v1"
+	ai_level = str(m.get("ai", ai_level))
+	LOADOUTS = {HUMAN: ArmyPresets.loadout_for(SEAT_FACTIONS[HUMAN])}
+	if menu_layer:
+		menu_layer.queue_free()
+		menu_layer = null
+	var keep_last := last_map_path                     # a mission map never becomes MAIN MENU's "last map"
+	_start_map(str(m["map"]))
+	last_map_path = keep_last
+
+
+func _mission_setup() -> void:
+	## After the HUD: the whole HUD (a mission gates nothing), the overlay, the briefing (paused until START).
+	hud.reveal_all()
+	mission_overlay = MissionOverlay.new()
+	add_child(mission_overlay)
+	mission_overlay.setup(self, mission, mobile)
+	mission_overlay.start_pressed.connect(_mission_start)
+	mission_overlay.action.connect(_on_mission_action)
+	mission.completed.connect(_on_mission_completed)
+	print("mission %s on %s: %s vs %s (%s AI)" % [mission.key, map_path, SEAT_FACTIONS[HUMAN], SEAT_FACTIONS["B"], ai_level])
+	var shot := ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--mission-shot="):
+			shot = arg.substr(15)
+	if "--mission-start" in OS.get_cmdline_user_args() or shot in ["hud", "win", "lose"]:
+		mission_overlay.begin_match()
+		_mission_start()
+	else:
+		paused = true
+		mission_overlay.show_briefing()
+	if shot != "":
+		_mission_shot(shot)
+
+
+func _mission_start() -> void:
+	paused = false
+	mission.start()
+
+
+func _on_mission_completed(res: Dictionary) -> void:
+	## The mission is decided: the match stops, the run is recorded (best stars, the one-off SCRAP, unlocks), it
+	## also counts as a match for XP / challenges (Campaign.progress_match), and the result screen shows.
+	paused = true
+	hud.close_inspector()
+	_end_drag()
+	var summary := Campaign.record(mission.key, res)
+	Campaign.last_run = {"key": mission.key, "summary": summary}
+	var xp := Campaign.progress_match(sim, HUMAN, ai_level)
+	print("mission %s %s at %.1f s - %d star(s), optional %s, reward %s" % [mission.key, "won" if res["won"] else "lost",
+			float(res["time"]), int(res["stars"]), res["objective"], summary.get("reward", {}).get("state", "")])
+	mission_overlay.show_end(res, summary, xp)
+
+
+func _on_mission_action(id: String) -> void:
+	match id:
+		"next":
+			var nxt := str(Campaign.last_run.get("summary", {}).get("next", ""))
+			_mission_relaunch(nxt if nxt != "" else mission.key)
+		"retry":
+			_mission_relaunch(mission.key)
+		_:
+			_mission_leave()
+
+
+func _mission_relaunch(key: String) -> void:
+	relaunch = {"mission": key, "faction": mission_menu_faction, "colour": color_choice}
+	get_tree().reload_current_scene()
+
+
+func _mission_leave() -> void:
+	## CAMPAIGN / the pause menu's MAIN MENU: back to the campaign page (MAIN while this build's menu has none).
+	MissionDirector.restore_settings()
+	var f := mission_menu_faction if mission_menu_faction != "" else str(SEAT_FACTIONS[HUMAN])
+	relaunch = {"faction": f, "ai": mission_menu_ai if mission_menu_ai != "" else ai_level, "colour": color_choice,
+			"loadout": ArmyPresets.loadout_for(f)}
+	var menu_script := load("res://scripts/menu.gd") as Script
+	for mm in menu_script.get_script_method_list():
+		if str(mm.get("name", "")) == "show_campaign":
+			relaunch["menu"] = "campaign"
+			break
+	get_tree().reload_current_scene()
+
+
+func _mission_shot(what: String) -> void:
+	## --mission-shot=brief|hud|win|lose --out=<dir>: that screen, saved as mission_<what>.png, then quit. The
+	## result shots record into a scratch progress file, never the player's own.
+	if what in ["win", "lose"]:
+		Campaign.path = "user://campaign_shots.cfg"
+		Campaign.reset_progress()
+	var wait: float = {"brief": 1.0, "hud": 9.0, "win": 3.0, "lose": 3.0}.get(what, 1.0)
+	var t0 := Time.get_ticks_msec()
+	while (Time.get_ticks_msec() - t0) / 1000.0 < wait:
+		await get_tree().process_frame
+	if what in ["win", "lose"]:
+		mission.finish_now(what == "win", what == "win", false)
+		t0 = Time.get_ticks_msec()
+		while (Time.get_ticks_msec() - t0) / 1000.0 < MissionOverlay.END_LINE_SECONDS + 2.6:
+			await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var out := "%s/mission_%s.png" % [shot_dir if shot_dir != "" else OS.get_user_data_dir(), what]
+	get_viewport().get_texture().get_image().save_png(out)
+	print("screenshot ", out)
+	get_tree().quit()
+# --- end CAMPAIGN ---

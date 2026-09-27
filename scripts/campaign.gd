@@ -564,3 +564,22 @@ static func _unlock(item: String, source: String) -> bool:
 
 # ------------------------------------------------------------------ hand-over between a match and the campaign page
 static var last_run := {}                            # main.gd sets {key, summary} after a mission; the page plays it once
+
+
+# ------------------------------------------------------------------ CAMPAIGN in-match additions (mission_director.gd / main.gd)
+static func progress_match(sim, seat: String, ai_level: String) -> Dictionary:
+	## A mission also counts as a match for XP and challenges (no per-match SCRAP, no faction-vat win: the
+	## Progression session's contract). Progression may not be in this build: then nothing, {}.
+	## The result may carry lines, xp_before / xp_after, challenges (the result screen shows an XP line if any).
+	var p := _progression()
+	if p == null or not _has_static(p, "record_match") or not _has_static(p, "result_from_sim"):
+		return {}
+	var r = p.call("record_match", p.call("result_from_sim", sim, seat, {"campaign": true, "ai_level": ai_level}))
+	return r if r is Dictionary else {}
+
+
+static func _has_static(s: Script, method: String) -> bool:
+	for mm in s.get_script_method_list():
+		if str(mm.get("name", "")) == method:
+			return true
+	return false
