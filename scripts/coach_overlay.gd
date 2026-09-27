@@ -374,6 +374,7 @@ class GraduatePanel extends Control:
 	var _pivot: Node3D
 	var _tier := 2
 	var _tried := 0.0
+	var _cam: Camera3D
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -391,13 +392,14 @@ class GraduatePanel extends Control:
 		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 		holder.add_child(vp)
 		var cam := Camera3D.new()
+		_cam = cam
 		cam.fov = 32.0
 		cam.position = Vector3(0, 4.0, 12.5)
 		vp.add_child(cam)
 		cam.look_at_from_position(cam.position, Vector3(0, 2.2, 0), Vector3.UP)
 		var sun := DirectionalLight3D.new()
 		sun.rotation_degrees = Vector3(-38, 35, 0)
-		sun.light_energy = 1.5
+		sun.light_energy = 0.9
 		vp.add_child(sun)
 		var rim := OmniLight3D.new()
 		rim.position = Vector3(-4, 5, -4)
@@ -409,7 +411,7 @@ class GraduatePanel extends Control:
 		env.environment = Environment.new()
 		env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		env.environment.ambient_light_color = Color("ede3cf")
-		env.environment.ambient_light_energy = 0.6
+		env.environment.ambient_light_energy = 0.22   # the v2 ivory glows a little itself: more washed it out white
 		vp.add_child(env)
 		_pivot = Node3D.new()
 		vp.add_child(_pivot)
@@ -424,8 +426,29 @@ class GraduatePanel extends Control:
 				_tried = 0.25
 				var scene: PackedScene = Cosmetics.scene_for("vat", "graduate", faction, _tier)
 				if scene != null:
-					_pivot.add_child(scene.instantiate())
+					var vat := scene.instantiate()
+					_pivot.add_child(vat)
+					MapBuilder.apply_owner([vat], "A")       # your colour on its lights and tanks, as in a match (the tanks were black)
+					_frame(vat)
 					queue_redraw()
+
+	func _frame(vat: Node3D) -> void:
+		## Fit the whole vat (crown included) in the panel: centre it on the turntable and back the camera off to
+		## its bounding sphere (the model was cropped at the top at a fixed 12.5 m).
+		var box := AABB()
+		var first := true
+		for mi in vat.find_children("*", "MeshInstance3D", true, false):
+			var b: AABB = (mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()
+			box = b if first else box.merge(b)
+			first = false
+		if first or _cam == null:
+			return
+		var c := box.get_center()
+		vat.position -= Vector3(c.x, 0.0, c.z)
+		var r := box.size.length() * 0.5
+		var d := r / sin(deg_to_rad(_cam.fov * 0.5)) * 0.82
+		var look := Vector3(0.0, c.y, 0.0)
+		_cam.look_at_from_position(look + Vector3(0.0, 0.3, 1.0).normalized() * d, look, Vector3.UP)
 
 	func _draw() -> void:
 		var ivory := Color("ede3cf") if unlocked else Color("8a9098")
