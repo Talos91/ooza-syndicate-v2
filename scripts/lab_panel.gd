@@ -18,6 +18,7 @@ static var overlay := false                      # the rule overlay starts off (
 static var cam_pitch := 0.0
 static var cam_shift := 0.0
 static var cam_zoom := 1.0
+static var cam_pan := Vector2.ZERO                      # metres: x along the screen's right, y away from the camera
 
 
 static func adjust_camera(m: Node) -> void:
@@ -26,6 +27,10 @@ static func adjust_camera(m: Node) -> void:
 	if m.sim == null:
 		return
 	m.cam_dist *= cam_zoom
+	if cam_pan != Vector2.ZERO:                          # pan (two fingers / right mouse) when zoomed in
+		var f0 := Rules.front_dir()
+		var right := Vector3(-f0.z, 0.0, f0.x)
+		m.cam_target += right * cam_pan.x - f0 * cam_pan.y
 	if cam_shift != 0.0:
 		var lo := Vector3(INF, 0, INF)
 		var hi := Vector3(-INF, 0, -INF)
@@ -43,6 +48,11 @@ var box: VBoxContainer
 var info: Label
 var canvas: Control
 var entry := {}
+var cam_marker: Label
+var _touches := {}                                       # finger index -> position (pinch zoom / two-finger pan)
+var _pinch_d := 0.0
+var _pinch_mid := Vector2.ZERO
+var _rdrag := false
 # PERF readout (Architect, Alpha 21 optimization: "FPS avg + 1 % low over the last 5 s, frame time, draw calls,
 # primitives, objects, render scale / viewport, device pixel ratio ... a 60 s report to screenshot")
 static var perf_on := false
@@ -61,6 +71,18 @@ func _init(m: Node) -> void:
 
 func _ready() -> void:
 	entry = MapLab.entry_for(str(main.map.get("code", "")))
+	var looks := MapLab.skin_looks()                     # the lab's skins on every seat (models swap as they load)
+	if not looks.is_empty():
+		for mode in main.map.get("seats", {}):
+			for s in main.map["seats"][mode]:
+				Cosmetics.set_loadout(str(s["seat"]), looks)
+	cam_marker = Label.new()                             # always-on camera readout (Daniele: "a marker that tells me how much i inclined")
+	cam_marker.add_theme_font_size_override("font_size", 18)
+	cam_marker.add_theme_color_override("font_color", Color(0.75, 0.95, 1.0))
+	cam_marker.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	cam_marker.add_theme_constant_override("outline_size", 6)
+	cam_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(cam_marker)
 	canvas = Control.new()
 	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
 	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -289,6 +311,10 @@ func _start_report() -> void:
 func _process(delta: float) -> void:
 	_layout()
 	_perf_sample(delta)
+	cam_marker.text = "CAM  pitch %.0f deg  ·  zoom %.2f  ·  lower %+d %%  ·  pan %+.0f / %+.0f m" % [main._base_pitch, cam_zoom,
+			int(round(cam_shift * 100.0)), cam_pan.x, cam_pan.y]
+	var vps := get_viewport().get_visible_rect().size
+	cam_marker.position = Vector2(vps.x * 0.5 - 250.0, 84.0)                # under the timer, clear of the skill bar
 	if MapLab.big_vat and main.sim != null:
 		_big_vats()
 	if overlay:
@@ -366,17 +392,66 @@ func _cam(what: String, step: float) -> void:
 		"shift":
 			cam_shift = clampf(cam_shift + step, -0.5, 0.5)
 		"zoom":
-			cam_zoom = clampf(cam_zoom + step, 0.6, 1.6)
+			cam_zoom = clampf(cam_zoom + step, 0.3, 1.6)
 		"reset":
 			cam_pitch = 0.0
 			cam_shift = 0.0
 			cam_zoom = 1.0
+			cam_pan = Vector2.ZERO
 	main.pitch_forced = cam_pitch > 0.0
 	main._base_pitch = cam_pitch if cam_pitch > 0.0 else MapCamera.pitch_for(str(main.map.get("code", "")))
 	main.cam_pitch = main._base_pitch
 	main._fit_camera()
 	info.text = _size_text()
 
+
+func _input(event: InputEvent) -> void:
+	## Lab camera: mouse wheel / pinch zoom (0.3x - 1.6x of the fit), right-mouse drag or two-finger drag pans. Single
+	## touches and left clicks stay the game's (sending, inspecting).
+	if main.sim == null:
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		_zoom_by(0.92 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.087)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMagnifyGesture:
+		_zoom_by(1.0 / maxf(event.factor, 0.01))
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		_rdrag = event.pressed
+	elif event is InputEventMouseMotion and _rdrag:
+		_pan_by(event.relative)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventScreenTouch:
+		if event.pressed:
+			_touches[event.index] = event.position
+		else:
+			_touches.erase(event.index)
+		_pinch_d = 0.0
+	elif event is InputEventScreenDrag and _touches.size() >= 2 and _touches.has(event.index):
+		_touches[event.index] = event.position
+		var ks: Array = _touches.keys()
+		var a: Vector2 = _touches[ks[0]]
+		var b: Vector2 = _touches[ks[1]]
+		var d := a.distance_to(b)
+		var mid := (a + b) / 2.0
+		if _pinch_d > 0.0:
+			_zoom_by(_pinch_d / maxf(d, 1.0))
+			_pan_by(mid - _pinch_mid)
+		_pinch_d = d
+		_pinch_mid = mid
+		get_viewport().set_input_as_handled()
+
+
+func _zoom_by(k: float) -> void:
+	cam_zoom = clampf(cam_zoom * k, 0.3, 1.6)
+	main._fit_camera()
+
+
+func _pan_by(px: Vector2) -> void:
+	## Screen pixels -> metres at the current zoom (the map's width spans the screen at zoom 1).
+	var vp := get_viewport().get_visible_rect().size
+	var mpp: float = main.cam_dist * 1.2 / maxf(vp.x, 1.0)
+	cam_pan += Vector2(-px.x, px.y) * mpp
+	main._fit_camera()
 
 func _toggle() -> void:
 	panel.visible = not panel.visible

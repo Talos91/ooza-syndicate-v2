@@ -83,12 +83,26 @@ static func before_match(m: Node) -> void:
 	var variant: Dictionary = j.get("labVariant", {}) if j is Dictionary and j.get("labVariant") is Dictionary else {}
 	big_vat = variant.get("bigVat", false) == true
 	Sim.lab_direct = big_vat                            # units leave / enter at the rim (sim._build_path3)
+	map_skins = variant.get("skins", {}) if variant.get("skins") is Dictionary else {}
 	if LabPanel.cam_pitch > 0.0:                         # the LAB panel's camera trial carries over to the next map
 		m.cam_pitch = LabPanel.cam_pitch
 		m.pitch_forced = true
 
 
 static var big_vat := false                             # this lab map's vats fill the platform (LabPanel scales them)
+static var skin_pick := "MAP"                           # SKINS chips: MAP (the map's own labVariant.skins), DEFAULT, or a vat line
+static var map_skins := {}                              # this map's labVariant.skins (a look per Cosmetics family)
+const SKIN_CHIPS := ["MAP", "DEFAULT", "BIOPOD", "CRYSTAL", "DISTILLERY", "HIVE", "REACTOR", "GRADUATE", "FACTION"]
+
+
+static func skin_looks() -> Dictionary:
+	## The looks every seat gets in this lab match: the map's set, all default, or the map's set with this vat line.
+	if skin_pick == "DEFAULT":
+		return {}
+	var looks: Dictionary = map_skins.duplicate()
+	if skin_pick != "MAP":
+		looks["vat"] = skin_pick.to_lower()
+	return looks
 
 
 func _init(m: Node) -> void:
@@ -294,6 +308,16 @@ func _detail() -> void:
 	detail.add_child(_chips(modes, pick_mode, _set_mode))
 	detail.add_child(_label("AI LEVEL", 20, Color(0.55, 0.65, 0.72)))
 	detail.add_child(_chips(LEVELS, level, _set_level))
+	detail.add_child(_label("SKINS (every seat)", 20, Color(0.55, 0.65, 0.72)))
+	detail.add_child(_chips(SKIN_CHIPS, skin_pick, _set_skin))
+	var sk: Dictionary = e.get("skins", {}) if e.get("skins") is Dictionary else {}
+	if not sk.is_empty():
+		var parts := []
+		for f in sk:
+			parts.append("%s %s" % [f, sk[f]])
+		var sl := _label("this map's looks: " + ", ".join(parts), 18, Color(0.65, 0.74, 0.8))
+		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		detail.add_child(sl)
 	var go := HBoxContainer.new()
 	go.add_theme_constant_override("separation", 12)
 	var play := _button("PLAY", func(): _launch(false), 0, 30)
@@ -316,6 +340,11 @@ func _detail() -> void:
 
 func _set_mode(v: String) -> void:
 	pick_mode = v
+	_detail()
+
+
+func _set_skin(v: String) -> void:
+	skin_pick = v
 	_detail()
 
 
