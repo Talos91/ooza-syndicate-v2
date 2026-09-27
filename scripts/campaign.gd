@@ -1,0 +1,566 @@
+class_name Campaign
+extends RefCounted
+## The campaign: its data, progress, stars and rewards (Docs/Game Design/Ooze Syndicate 2.0/01 Rules/CAMPAIGN-DESIGN.md).
+## Daniele, 2026-09-27: the sinking city is the campaign map (districts = chapters, missions = nodes, the last chapter
+## descends under the city); dark comedy; linear with optional side nodes; one campaign per faction (VEX free, the other
+## four paid), finishing one unlocks that faction's vat; stars 1-3 are achievement only; 3 stars + the mission's optional
+## objective IN THE SAME RUN pays SCRAP once per mission; solo only.
+##
+## Static, like ArmyPresets / TutorialDirector: no Node, headless-testable (tests/test_campaign.gd).
+##   CAMPAIGNS / missions(faction) / mission(key) / district_of(key)   the data (key = "<faction>:<mission id>")
+##   is_open(key) / is_won(key) / next_open(faction) / owned(faction)   what the campaign map shows as playable
+##   stars_for(won, time, par, lost_start)                               the three star rules (§5)
+##   record(key, run) -> summary                                         a finished run: best stars, reward, unlocks
+##   pay_pending()                                                       replay recorded rewards into Progression
+##   reward_state(key) / stars_total(faction) / stars_max(faction)       readouts for the page and the result screen
+## Progress: user://campaign.cfg; `saved` false when the browser keeps no storage (the page says so).
+##
+## Rewards go through Progression (the "Leaderboard, progression, and currency" session; CAMPAIGN-DESIGN §5a):
+## Progression.grant(source, amount) is idempotent per source ("campaign:vex:04"), unlock(item, source) takes
+## "vat:faction:<faction>". Progression may not be in this build yet, so it is looked up at run time: without it
+## the reward and the unlock are recorded here and paid by pay_pending() once it exists.
+
+const PROGRESS_VERSION := 1
+const FACTION_ORDER := ["vex", "null", "bloom", "ember", "solar"]
+const FREE := ["vex"]                                # the free campaign (Daniele); the rest are paid, later
+const REWARD := {"main": 150, "duel": 200, "side": 200, "finale": 300}   # SCRAP, proposal (CAMPAIGN-DESIGN §5a)
+const HUMAN := "A"
+const RIVAL := "B"
+const HANDLER := "DR. VESK"                          # the tutorial's handler (TutorialDirector.HANDLER_NAME)
+
+## The rival executives (CAMPAIGN-DESIGN §1). Names are placeholders until Daniele names them (OPEN-QUESTIONS).
+const RIVALS := {
+	"foreman": {"name": "THE FOREMAN", "faction": "ember", "title": "EMBER dock foreman"},
+	"auditor": {"name": "THE AUDITOR", "faction": "null", "title": "NULL auditor (never seen)"},
+	"guru": {"name": "THE GURU", "faction": "bloom", "title": "BLOOM wellness guru"},
+	"compliance": {"name": "COMPLIANCE", "faction": "solar", "title": "SOLAR compliance officer"},
+	"maw": {"name": "THE MAW", "faction": "ember", "title": "EMBER Maw, chief executive"},
+}
+
+## One campaign per faction. Each district: its missions in play order (side missions right after the main
+## mission they hang off), a diorama layout for the campaign map (metres, x right / y toward the camera; "decor" =
+## platforms without a mission, city dressing) and the order its platforms drop when it is done.
+## A mission:
+##   id, title, story (one line on the card), type (takeover / relay_puzzle / hold / duel / blind / monster /
+##   collapse / mutator / beast), kind (main / side / duel / finale -> REWARD), parent (side missions: the main id),
+##   map (a baked map path; PLACEHOLDER maps until the new maps land - Game map builder), placeholder,
+##   par (seconds, the ★★ / ★★★ time), objective {kind, ...} (what wins), optional {kind, text, ...},
+##   ai (Rules.AI_LEVELS), rival (RIVALS key), stage {rival_units: shown units added to the rival's home},
+##   brief [[speaker, line], ...] (the briefing card), win_line, lose_line,
+##   needs (a system the game doesn't have yet - CAMPAIGN-DESIGN §7b; not playable until it lands), pos (diorama).
+const CAMPAIGNS := {
+	"vex": {
+		"title": "VEX BIOENGINEERS",
+		"tagline": "The city is sinking. The vats still turn a profit.",
+		"rival": "ember",
+		"districts": [
+			{
+				"id": "dockside", "name": "DOCKSIDE", "blurb": "District 1 - where the city loads its cargo, and loses it.",
+				"decor": [Vector2(-34, -14), Vector2(36, -16), Vector2(-40, 12), Vector2(42, 14)],
+				"missions": [
+					{"id": "01", "title": "HOSTILE TAKEOVER", "type": "takeover", "kind": "main",
+						"story": "EMBER is \"restructuring\" the docks with fire. Restructure them back.",
+						"map": "res://maps4/A-02-switchback-foundry.json", "placeholder": true, "par": 240.0,
+						"objective": {"kind": "conquest"}, "optional": {"kind": "no_vat_lost", "text": "Win without losing a vat"},
+						"ai": "Casual", "rival": "foreman", "stage": {},
+						"brief": [["handler", "Welcome to Dockside, commander. Our quarterly target: all of it."],
+							["rival", "These docks are mine. I've already set most of them on fire."]],
+						"win_line": "Docks acquired. I'll log the burnt bits as depreciation.",
+						"lose_line": "We've been restructured. Again, from the top.", "pos": Vector2(-22, 2)},
+					{"id": "02", "title": "MIND THE GAP", "type": "relay_puzzle", "kind": "main",
+						"story": "The loading cranes still work. Mostly as trapdoors.",
+						"map": "res://maps4/M-37-switchyard-sprawl.json", "placeholder": true, "par": 200.0,
+						"objective": {"kind": "drops", "n": 60, "limit": 300.0},
+						"optional": {"kind": "drops_fires", "n": 40, "fires": 3, "text": "Drop 40 units with 3 relay fires or fewer"},
+						"ai": "Casual", "rival": "foreman", "stage": {},
+						"brief": [["handler", "Relays move decks. Whatever is on the deck goes into the void."],
+							["handler", "Drop {n} of their units. HR calls it \"downsizing\"."]],
+						"win_line": "Downsizing complete. The void sends its thanks.",
+						"lose_line": "Too many of them made it across. Mind the gap next time.", "pos": Vector2(0, -8)},
+					{"id": "s1", "title": "OVERTIME", "type": "hold", "kind": "side", "parent": "02",
+						"story": "Hold the warehouse till the whistle. Unpaid, naturally.",
+						"map": "res://maps4/B-02-switchback-foundry.json", "placeholder": true, "par": 180.0,
+						"objective": {"kind": "survive", "t": 180.0},
+						"optional": {"kind": "machinegoon_t3", "text": "Have a T3 Machinegoon standing at the whistle"},
+						"ai": "Standard", "rival": "foreman", "stage": {"rival_units": 20},
+						"brief": [["handler", "EMBER wants the warehouse. Keep your home until {t}."],
+							["handler", "Overtime is voluntary. Volunteering is mandatory."]],
+						"win_line": "Whistle! Clock out. Clocking out is also unpaid.",
+						"lose_line": "The warehouse is EMBER's now. Their problem, frankly.", "pos": Vector2(2, 16)},
+					{"id": "03", "title": "THE FOREMAN", "type": "duel", "kind": "duel",
+						"story": "EMBER's dock foreman. Very angry. Very flammable.",
+						"map": "res://maps4/C-02-vantage-wire.json", "placeholder": true, "par": 300.0,
+						"objective": {"kind": "conquest"},
+						"optional": {"kind": "before_ultimate", "text": "Win before the Foreman casts his ultimate"},
+						"ai": "Standard", "rival": "foreman", "stage": {"rival_units": 15},
+						"brief": [["rival", "You took my docks. I'll take your everything. With fire."],
+							["handler", "He starts bigger. He also starts angrier. Use both."]],
+						"win_line": "The Foreman has been let go. Into the void, specifically.",
+						"lose_line": "He's still on fire and still winning. Try again.", "pos": Vector2(24, -2)},
+				],
+				"collapse": ["01", "s1", "02", "03"],
+			},
+			{
+				"id": "exchange", "name": "THE EXCHANGE", "blurb": "District 2 - the trading floor. It floods at every closing bell.",
+				"decor": [Vector2(-36, 16), Vector2(38, -14), Vector2(-8, -18), Vector2(40, 16)],
+				"missions": [
+					{"id": "04", "title": "MARKET CORRECTION", "type": "mutator", "kind": "main",
+						"story": "The trading floor floods at every closing bell. Trade faster.",
+						"map": "res://maps4/C-01-meridian-rotunda.json", "placeholder": true, "par": 270.0,
+						"objective": {"kind": "conquest"}, "optional": {"kind": "no_tide_loss", "text": "Lose no line to the tide"},
+						"ai": "Standard", "rival": "foreman", "stage": {}, "needs": "event deck: flooding tides",
+						"brief": [["handler", "Underpasses flood at every bell. Don't be on one."]],
+						"win_line": "Market corrected. Upwards, for once.", "lose_line": "Liquidated. Literally.", "pos": Vector2(-24, 4)},
+					{"id": "05", "title": "NOBODY SAW ANYTHING", "type": "blind", "kind": "main",
+						"story": "The NULL auditor is here. Nobody has ever seen the NULL auditor.",
+						"map": "res://maps4/M-25-mirror-moor.json", "placeholder": true, "par": 300.0,
+						"objective": {"kind": "conquest"}, "optional": {"kind": "no_skill", "skill": "ghost_line", "text": "Win without casting Ghost Line"},
+						"ai": "Standard", "rival": "auditor", "stage": {"hide_counts": true},
+						"brief": [["handler", "NULL hides their numbers. Count by eye, or guess confidently."],
+							["rival", "..."]],
+						"win_line": "Audit passed. Nobody saw anything. Especially them.", "lose_line": "The audit found a problem. It was us.",
+						"pos": Vector2(0, -10)},
+					{"id": "s2", "title": "SPECIAL DELIVERY", "type": "mutator", "kind": "side", "parent": "05",
+						"story": "Supply pods keep landing on the bridges. Finders keepers.",
+						"map": "res://maps4/M-22-coral-steps.json", "placeholder": true, "par": 240.0,
+						"objective": {"kind": "conquest"}, "optional": {"kind": "all_pods", "text": "Grab every pod"},
+						"ai": "Standard", "rival": "auditor", "stage": {}, "needs": "event deck: supply drops",
+						"brief": [["handler", "Pods on the decks. Grab them before NULL does."]],
+						"win_line": "Signed for. Every one.", "lose_line": "Return to sender.", "pos": Vector2(2, 14)},
+					{"id": "06", "title": "AGGRESSIVE GROWTH", "type": "monster", "kind": "main",
+						"story": "Break the BLOOM wellness retreat. Bring a monster. It's a retreat.",
+						"map": "res://maps4/M-01-meadow-array.json", "placeholder": true, "par": 300.0,
+						"objective": {"kind": "monster_take"}, "optional": {"kind": "monster_kicks", "n": 30, "text": "Your monster kicks 30+ units off the decks"},
+						"ai": "Standard", "rival": "guru", "stage": {},
+						"brief": [["rival", "Breathe in. Breathe out. Leave, please."],
+							["handler", "Build a Monster hub and take a node with its monster. Namaste."]],
+						"win_line": "Retreat closed. Everyone is very relaxed now. At the bottom.", "lose_line": "We've been composted.",
+						"pos": Vector2(24, 0)},
+				],
+				"collapse": ["04", "s2", "05", "06"],
+			},
+			{
+				"id": "oldtown", "name": "OLD TOWN", "blurb": "District 3 - the oldest platforms. They were never meant to last this long.",
+				"decor": [Vector2(-38, -12), Vector2(-6, 18), Vector2(38, 16), Vector2(36, -16)],
+				"missions": [
+					{"id": "07", "title": "LAST TRAIN OUT", "type": "collapse", "kind": "main",
+						"story": "Old Town drops from minute zero. Be on the last ring standing.",
+						"map": "res://maps4/C-01-meridian-rotunda.json", "placeholder": true, "par": 240.0,
+						"objective": {"kind": "outlast", "collapse_at": 20.0, "n": 40},
+						"optional": {"kind": "units_at_end", "n": 60, "text": "End with 60+ units"},
+						"ai": "Standard", "rival": "foreman", "stage": {},
+						"brief": [["handler", "The district is dropping ring by ring. Get to the last ring."],
+							["handler", "Win with {n}+ units still standing. Nobody gets a refund."]],
+						"win_line": "Made the train. It's also sinking, but slower.", "lose_line": "Missed the train. And the platform.",
+						"pos": Vector2(-24, -2)},
+					{"id": "s3", "title": "PET PROJECT", "type": "beast", "kind": "side", "parent": "07",
+						"story": "Something big escaped from the VEX labs. It's hungry. It's ours.",
+						"map": "res://maps4/M-06-spore-fields.json", "placeholder": true, "par": 300.0,
+						"objective": {"kind": "conquest"}, "optional": {"kind": "beast_eats", "n": 3, "text": "The beast eats 3 rival lines"},
+						"ai": "Standard", "rival": "guru", "stage": {}, "needs": "wandering neutral beast",
+						"brief": [["handler", "Our beast. Their problem. Lure it onto their lines."]],
+						"win_line": "Good boy.", "lose_line": "It ate us. We'll call that a feature.", "pos": Vector2(-4, 16)},
+					{"id": "08", "title": "COMPLIANCE", "type": "duel", "kind": "duel",
+						"story": "The SOLAR compliance officer locks everything. Unlock everything.",
+						"map": "res://maps4/M-27-cobalt-commons.json", "placeholder": true, "par": 330.0,
+						"objective": {"kind": "conquest"}, "optional": {"kind": "fires", "n": 5, "text": "Fire 5 relays"},
+						"ai": "Veteran", "rival": "compliance", "stage": {"rival_units": 15},
+						"brief": [["rival", "This takeover has not been approved. Please fill in form 7B."],
+							["handler", "Form 7B is on fire. Proceed."]],
+						"win_line": "Compliance has been... complied.", "lose_line": "Denied. Stamped. Filed. Us.", "pos": Vector2(22, -6)},
+				],
+				"collapse": ["07", "s3", "08"],
+			},
+			{
+				"id": "descent", "name": "THE DESCENT", "blurb": "Under the city. The void is closer than it looks.",
+				"descent": true,
+				"decor": [Vector2(-30, -10), Vector2(30, 10)],
+				"missions": [
+					{"id": "09", "title": "GOING DOWN", "type": "collapse", "kind": "main",
+						"story": "Hanging platforms under the city. Each layer shorter than the last.",
+						"map": "res://maps4/C-02-vantage-wire.json", "placeholder": true, "par": 270.0,
+						"objective": {"kind": "outlast", "collapse_at": 30.0, "n": 50},
+						"optional": {"kind": "no_skill", "skill": "demolish", "text": "Win without casting Demolish"},
+						"ai": "Veteran", "rival": "maw", "stage": {},
+						"brief": [["handler", "We're under the city now. Mind the gravity."]],
+						"win_line": "Still going down. Still winning.", "lose_line": "Went down. All the way.", "pos": Vector2(-14, -6)},
+					{"id": "10", "title": "ROOT CAUSE", "type": "duel", "kind": "finale",
+						"story": "Why the city sinks. Everyone's product is the problem. Especially ours.",
+						"map": "res://maps4/M-27-cobalt-commons.json", "placeholder": true, "par": 360.0,
+						"objective": {"kind": "conquest", "collapse_at": 90.0},
+						"optional": {"kind": "home_kept", "text": "Win without losing your home"},
+						"ai": "Expert", "rival": "maw", "stage": {"rival_units": 25},
+						"brief": [["handler", "Bad news: the vats have been eating the city's supports. All of them. Ours too."],
+							["rival", "Then there's only one vat left worth owning. Mine."],
+							["handler", "Good news: that's a very clear quarterly target."]],
+						"win_line": "The city is ours. What's left of it. Please mind the gap.",
+						"lose_line": "The Maw keeps the last vat. And the city. Briefly.", "pos": Vector2(14, 6)},
+				],
+				"collapse": [],
+			},
+		],
+	},
+	"null": {"title": "NULL DATA CARTEL", "tagline": "Coming later.", "rival": "solar", "districts": []},
+	"bloom": {"title": "VIRIDIAN BLOOM", "tagline": "Coming later.", "rival": "ember", "districts": []},
+	"ember": {"title": "EMBER MAW", "tagline": "Coming later.", "rival": "vex", "districts": []},
+	"solar": {"title": "SOLAR SHELLS", "tagline": "Coming later.", "rival": "null", "districts": []},
+}
+
+static var path := "user://campaign.cfg"             # tests point this elsewhere
+static var saved := true                             # false: the last save failed (no storage)
+static var all_open := false                         # --campaign-all / tests: every playable mission open
+static var progress := {}                            # key -> {stars, objective, won, best_time, plays, reward: "" / "earned" / "paid"}
+static var unlocks_pending := {}                     # item -> source, recorded until Progression exists
+static var seen := {}                                # "collapse:<district>" -> true once its drop has played
+static var _loaded := false
+static var _prog_script: Script = null
+static var _prog_checked := false
+
+
+# ------------------------------------------------------------------ data
+static func key_of(faction: String, id: String) -> String:
+	return "%s:%s" % [faction, id]
+
+
+static func faction_of(key: String) -> String:
+	return key.get_slice(":", 0)
+
+
+static func source_of(key: String) -> String:
+	## The one-off grant source (CAMPAIGN-DESIGN §5a): "campaign:vex:04".
+	return "campaign:" + key
+
+
+static func has_content(faction: String) -> bool:
+	return CAMPAIGNS.has(faction) and not (CAMPAIGNS[faction]["districts"] as Array).is_empty()
+
+
+static func districts(faction: String) -> Array:
+	return CAMPAIGNS[faction]["districts"] if CAMPAIGNS.has(faction) else []
+
+
+static func missions(faction: String) -> Array:
+	## Every mission of a campaign in play order, each a copy with "key", "faction", "district" added.
+	var out := []
+	for d in districts(faction):
+		for m in d["missions"]:
+			var c: Dictionary = (m as Dictionary).duplicate(true)
+			c["key"] = key_of(faction, str(m["id"]))
+			c["faction"] = faction
+			c["district"] = str(d["id"])
+			out.append(c)
+	return out
+
+
+static func main_missions(faction: String) -> Array:
+	return missions(faction).filter(func(m): return str(m["kind"]) != "side")
+
+
+static func mission(key: String) -> Dictionary:
+	for m in missions(faction_of(key)):
+		if str(m["key"]) == key:
+			return m
+	return {}
+
+
+static func district_of(key: String) -> Dictionary:
+	var id := str(mission(key).get("district", ""))
+	for d in districts(faction_of(key)):
+		if str(d["id"]) == id:
+			return d
+	return {}
+
+
+static func reward_for(m: Dictionary) -> int:
+	return int(REWARD.get(str(m.get("kind", "main")), REWARD["main"]))
+
+
+static func playable(m: Dictionary) -> bool:
+	## A mission needing a system the game doesn't have yet (CAMPAIGN-DESIGN §7b) shows as IN DEVELOPMENT.
+	return str(m.get("needs", "")) == "" and ResourceLoader.exists(str(m.get("map", "")))
+
+
+static func rival_of(m: Dictionary) -> Dictionary:
+	return RIVALS.get(str(m.get("rival", "")), {"name": "THE RIVAL", "faction": "ember", "title": ""})
+
+
+static func fill(line: String, m: Dictionary) -> String:
+	## A brief line's placeholders: {n} (objective / optional count), {t} (a clock time), {par}.
+	var o: Dictionary = m.get("objective", {})
+	var t := float(o.get("t", 0.0))
+	return line.replace("{n}", str(int(o.get("n", 0)))).replace("{t}", "%d:%02d" % [int(t) / 60, int(t) % 60]) \
+		.replace("{par}", "%d:%02d" % [int(m.get("par", 0.0)) / 60, int(m.get("par", 0.0)) % 60])
+
+
+static func objective_text(m: Dictionary) -> String:
+	## The objective line on the mission card and under the match clock.
+	var o: Dictionary = m.get("objective", {})
+	match str(o.get("kind", "conquest")):
+		"conquest":
+			return "Take every rival node"
+		"drops":
+			return "Drop %d rival units into the void" % int(o.get("n", 0))
+		"survive":
+			var t := float(o.get("t", 0.0))
+			return "Keep your home until %d:%02d" % [int(t) / 60, int(t) % 60]
+		"monster_take":
+			return "Take a node with your monster"
+		"outlast":
+			return "Win the collapse with %d+ units" % int(o.get("n", 0))
+	return "Win"
+
+
+# ------------------------------------------------------------------ progress
+static func load_all() -> void:
+	progress = {}
+	unlocks_pending = {}
+	seen = {}
+	_loaded = true
+	var cf := ConfigFile.new()
+	if cf.load(path) != OK:
+		return
+	for k in cf.get_section_keys("progress") if cf.has_section("progress") else []:
+		var v = cf.get_value("progress", k, {})
+		if v is Dictionary:
+			progress[str(k).replace("_", ":")] = v
+	for k in cf.get_section_keys("unlocks") if cf.has_section("unlocks") else []:
+		unlocks_pending[str(k).replace("|", ":")] = str(cf.get_value("unlocks", k, ""))
+	for k in cf.get_section_keys("seen") if cf.has_section("seen") else []:
+		seen[str(k).replace("|", ":")] = true
+
+
+static func reload_all() -> void:
+	_loaded = false
+	_ensure()
+
+
+static func save_all() -> bool:
+	var cf := ConfigFile.new()
+	cf.set_value("meta", "version", PROGRESS_VERSION)
+	for k in progress:
+		cf.set_value("progress", str(k).replace(":", "_"), progress[k])
+	for k in unlocks_pending:
+		cf.set_value("unlocks", str(k).replace(":", "|"), unlocks_pending[k])
+	for k in seen:
+		cf.set_value("seen", str(k).replace(":", "|"), true)
+	saved = cf.save(path) == OK
+	return saved
+
+
+static func _ensure() -> void:
+	if not _loaded:
+		load_all()
+
+
+static func record_of(key: String) -> Dictionary:
+	_ensure()
+	return progress.get(key, {})
+
+
+static func is_won(key: String) -> bool:
+	return bool(record_of(key).get("won", false))
+
+
+static func stars_of(key: String) -> int:
+	return int(record_of(key).get("stars", 0))
+
+
+static func owned(faction: String) -> bool:
+	## The free campaign, or a paid one bought (Progression unlock "campaign:<faction>", later) / testing.
+	if faction in FREE or all_open:
+		return true
+	var p := _progression()
+	return p != null and bool(p.call("is_unlocked", "campaign:" + faction))
+
+
+static func is_open(key: String) -> bool:
+	## Linear (Daniele): a main mission opens when the main before it is won; a side mission when its parent is.
+	var m := mission(key)
+	if m.is_empty() or not owned(faction_of(key)):
+		return false
+	if all_open:
+		return true
+	if str(m["kind"]) == "side":
+		return is_won(key_of(faction_of(key), str(m.get("parent", ""))))
+	var prev := ""
+	for mm in main_missions(faction_of(key)):
+		if str(mm["key"]) == key:
+			return prev == "" or is_won(prev)
+		prev = str(mm["key"])
+	return false
+
+
+static func next_open(faction: String) -> String:
+	## The first open, unwon main mission (the campaign's CONTINUE); "" when every main mission is won.
+	for m in main_missions(faction):
+		if is_open(str(m["key"])) and not is_won(str(m["key"])):
+			return str(m["key"])
+	return ""
+
+
+static func district_done(faction: String, district_id: String) -> bool:
+	for d in districts(faction):
+		if str(d["id"]) == district_id:
+			for m in d["missions"]:
+				if str(m["kind"]) != "side" and not is_won(key_of(faction, str(m["id"]))):
+					return false
+			return true
+	return false
+
+
+static func campaign_done(faction: String) -> bool:
+	var mains := main_missions(faction)
+	return not mains.is_empty() and is_won(str(mains[-1]["key"]))
+
+
+static func stars_total(faction: String) -> int:
+	var s := 0
+	for m in missions(faction):
+		s += stars_of(str(m["key"]))
+	return s
+
+
+static func stars_max(faction: String) -> int:
+	return missions(faction).size() * 3
+
+
+# ------------------------------------------------------------------ stars and rewards (§5)
+static func stars_for(won: bool, time: float, par: float, lost_start: bool) -> int:
+	## ★ win; ★★ win within par; ★★★ win within par without losing a node you started with.
+	if not won:
+		return 0
+	if time > par:
+		return 1
+	return 2 if lost_start else 3
+
+
+static func reward_state(key: String) -> String:
+	## "" (not earned), "earned" (3 stars + objective in one run, waiting for Progression), "paid".
+	var r := str(record_of(key).get("reward", ""))
+	if r == "earned":
+		var p := _progression()
+		if p != null and bool(p.call("has_granted", source_of(key))):
+			return "paid"
+	return r
+
+
+static func record(key: String, run: Dictionary) -> Dictionary:
+	## A finished run: {won: bool, time: float, stars: int, objective: bool}. Keeps the best stars / time, marks the
+	## one-off reward when THIS run had 3 stars and the optional objective (Daniele: same run), pays it through
+	## Progression when it is there, unlocks the faction vat when the campaign's last main mission is won.
+	## Returns {stars, best_stars, new_best, objective, reward: {amount, state: "paid" / "earned" / "taken" /
+	## "none"}, unlocked: [items], district_done: bool, campaign_done: bool, next: key or ""}.
+	_ensure()
+	var m := mission(key)
+	var rec: Dictionary = progress.get(key, {"stars": 0, "objective": false, "won": false, "best_time": 0.0,
+			"plays": 0, "reward": ""}).duplicate()
+	var won := bool(run.get("won", false))
+	var stars := int(run.get("stars", 0)) if won else 0
+	var obj := bool(run.get("objective", false)) and won
+	var old_stars := int(rec.get("stars", 0))
+	var was_won := bool(rec.get("won", false))
+	rec["plays"] = int(rec.get("plays", 0)) + 1
+	if won:
+		rec["won"] = true
+		var t := float(run.get("time", 0.0))
+		if float(rec.get("best_time", 0.0)) <= 0.0 or t < float(rec["best_time"]):
+			rec["best_time"] = t
+	rec["stars"] = maxi(old_stars, stars)
+	rec["objective"] = bool(rec.get("objective", false)) or obj
+	var amount := reward_for(m)
+	var reward := {"amount": amount, "state": "none"}
+	if stars == 3 and obj:
+		if str(rec.get("reward", "")) == "paid":
+			reward["state"] = "taken"                  # one-off (Daniele): a second perfect run pays nothing
+		else:
+			rec["reward"] = "earned"
+			reward["state"] = "earned"
+			if _grant(key, amount):
+				rec["reward"] = "paid"
+				reward["state"] = "paid"
+	progress[key] = rec
+	var f := faction_of(key)
+	var unlocked := []
+	var done := campaign_done(f)
+	if won and done and not was_won and str(m.get("kind", "")) != "side":
+		var item := "vat:faction:" + f
+		unlocked.append(item)
+		if not _unlock(item, "campaign:" + f):
+			unlocks_pending[item] = "campaign:" + f
+	save_all()
+	return {"stars": stars, "best_stars": int(rec["stars"]), "new_best": stars > old_stars, "objective": obj,
+		"reward": reward, "unlocked": unlocked, "district_done": won and district_done(f, str(m.get("district", ""))),
+		"first_win": won and not was_won, "campaign_done": done, "next": next_open(f)}
+
+
+static func pay_pending() -> int:
+	## Replays recorded rewards and unlocks into Progression once it exists (idempotent sources: safe to repeat).
+	## Returns how many were paid now.
+	_ensure()
+	if _progression() == null:
+		return 0
+	var n := 0
+	for key in progress:
+		if str(progress[key].get("reward", "")) == "earned":
+			if _grant(str(key), reward_for(mission(str(key)))) or bool(_progression().call("has_granted", source_of(str(key)))):
+				progress[key]["reward"] = "paid"
+				n += 1
+	for item in unlocks_pending.keys():
+		if _unlock(str(item), str(unlocks_pending[item])) or bool(_progression().call("is_unlocked", str(item))):
+			unlocks_pending.erase(item)
+	if n > 0 or unlocks_pending.is_empty():
+		save_all()
+	return n
+
+
+static func mark_seen(what: String) -> void:
+	_ensure()
+	seen[what] = true
+	save_all()
+
+
+static func was_seen(what: String) -> bool:
+	_ensure()
+	return seen.has(what)
+
+
+static func reset_progress() -> void:
+	## Debug / tests: forget every campaign record on this device (Progression's wallet is not touched).
+	progress = {}
+	unlocks_pending = {}
+	seen = {}
+	_loaded = true
+	save_all()
+
+
+# ------------------------------------------------------------------ Progression (looked up at run time)
+static func _progression() -> Script:
+	## Progression (scripts/progression.gd) when this build has it, else null. A plain lookup of the global class
+	## list, so this file compiles in builds without it.
+	if not _prog_checked:
+		_prog_checked = true
+		for c in ProjectSettings.get_global_class_list():
+			if str(c.get("class", "")) == "Progression":
+				_prog_script = load(str(c.get("path", ""))) as Script
+				break
+	return _prog_script
+
+
+static func use_progression(script: Script) -> void:
+	## Tests: point the bridge at a stand-in (or null to force "not in this build").
+	_prog_script = script
+	_prog_checked = true
+
+
+static func _grant(key: String, amount: int) -> bool:
+	var p := _progression()
+	return p != null and bool(p.call("grant", source_of(key), amount))
+
+
+static func _unlock(item: String, source: String) -> bool:
+	var p := _progression()
+	return p != null and bool(p.call("unlock", item, source))
+
+
+# ------------------------------------------------------------------ hand-over between a match and the campaign page
+static var last_run := {}                            # main.gd sets {key, summary} after a mission; the page plays it once
