@@ -61,18 +61,18 @@ const LINES := {
 	"L1.reinforce": "Drag between two of your own platforms to top one up.",
 	"L1.done1": "Drag from your platform to send crews.",
 	"L1.done2": "The SEND % sets how much goes.",
-	# L2 VATS, TIERS AND THE MACHINGOON
+	# L2 VATS, TIERS AND THE MACHINEGOON
 	"L2.title": "VATS",
 	"L2.inspect": "Vats breed crews up to their cap. Tap your vat to read it.",
 	"L2.upgrade": "Double-tap it to upgrade. Costs {cost}.",
 	"L2.build": "Building takes {secs} s. Watch the bar.",
 	"L2.t3": "Bigger tier, bigger cap, faster output. Take it to T3 - that's as far as you build.",
-	"L2.machingoon": "Any common platform can run a Machingoon instead of a vat. Put one on this one.",
+	"L2.machinegoon": "Any common platform can run a Machinegoon instead of a vat. Put one on this one.",
 	"L2.watch": "It guns down what comes at it, but breeds nothing. Watch.",
-	"L2.mg_upgrade": "Machingoons climb to T3 too. Upgrade it.",
+	"L2.mg_upgrade": "Machinegoons climb to T3 too. Upgrade it.",
 	"L2.t4": "That big one in the middle is a T4 vat. You take those - nobody builds them.",
 	"L2.done1": "Double-tap to upgrade a vat, up to T3.",
-	"L2.done2": "A Machingoon trades breeding for firepower.",
+	"L2.done2": "A Machinegoon trades breeding for firepower.",
 	# L3 NEUTRALS AND THE ENEMY
 	"L3.title": "THE ENEMY",
 	"L3.neutral": "Neutrals fight back with what the badge says: {garrison}. Send more than that.",
@@ -155,7 +155,7 @@ const LINES := {
 	"page_title": "TRAINING",
 	"page_sub": "Eight short lessons and a first match. Replay any of them.",
 	"continue": "CONTINUE", "back": "BACK",
-	"L1.goal": "Send crews and pick how many", "L2.goal": "Grow vats, build a Machingoon",
+	"L1.goal": "Send crews and pick how many", "L2.goal": "Grow vats, build a Machinegoon",
 	"L3.goal": "Take neutrals, beat a rival", "L4.goal": "Fire a relay under the rival",
 	"L5.goal": "Retract, switch, remote", "L6.goal": "Laser, forge, monster", "L7.goal": "Survive the Last Stand",
 	"L8.goal": "Cast your skills", "L9.goal": "Win your first match",
@@ -164,14 +164,14 @@ const LINES := {
 
 # ---------------------------------------------------------------- reveal as you go (design §6)
 # What a lesson has not reached yet is not on screen (Hud.reveal). Keys: map / badges / drag / clock (always, L1),
-# send_panel, upgrade (the inspector's UPGRADE line, "Double-tap: N units", the double-tap), machingoon (MACHINGOON
+# send_panel, upgrade (the inspector's UPGRADE line, "Double-tap: N units", the double-tap), machinegoon (MACHINEGOON
 # / VAT actions), rival_counts, strength (your total, RIVALS, the strength bar), notices (toasts), relay (the
 # double-tap fire, SWITCH, the relay line and outcome preview, the badge's relay state, ready glow and cue),
 # relay_build (LASER / FORGE / MONSTER HUB), forge_readout, monster (LAUNCH, the reach ring, the hub line),
 # status_line, danger (the floating Last Stand symbols), dock, and - only in L9, never in a 1v1 lesson - halos
 # and eject (the team parts).
 const REVEAL_BASE := ["map", "badges", "drag", "clock"]
-const ALL_KEYS := ["map", "badges", "drag", "clock", "send_panel", "upgrade", "machingoon", "rival_counts", "strength",
+const ALL_KEYS := ["map", "badges", "drag", "clock", "send_panel", "upgrade", "machinegoon", "rival_counts", "strength",
 		"notices", "relay", "relay_build", "forge_readout", "monster", "status_line", "danger", "dock", "halos", "eject"]
 
 # ---------------------------------------------------------------- the lessons (design §3)
@@ -197,15 +197,15 @@ const LESSONS := [
 		"done": ["L1.done1", "L1.done2"]},
 	{"id": 2, "key": "L2", "map": "T-04-vat-row", "abilities": false, "vls": false,
 		"stage": [["H", "A", 30], ["N1", "A", 45], ["N2", "A", 15], ["BH", "B", 30], ["B1", "B", 8]], "protect": ["BH", "B1", "B2"],
-		"reveal": ["upgrade", "machingoon"],
+		"reveal": ["upgrade", "machinegoon"],
 		"steps": [
 			{"key": "inspect", "target": {"nodes": ["H"]}, "gesture": [["tap", "H"]], "pass": ["inspect", "H"], "budget": 10.0},
 			{"key": "upgrade", "target": {"nodes": ["H"], "rects": ["action:UPGRADE"]}, "gesture": [["double_tap", "H"]],
 				"pass": ["build_started", "H"], "budget": 10.0},
 			{"key": "build", "target": {"nodes": ["H"]}, "pass": ["tier", "H", 2], "budget": 15.0},
 			{"key": "t3", "target": {"nodes": ["H"]}, "gesture": [["double_tap", "H"]], "pass": ["tier", "H", 3], "budget": 40.0},
-			{"key": "machingoon", "target": {"nodes": ["N1"], "rects": ["action:MACHINGOON"]},
-				"gesture": [["press", "action:MACHINGOON"], ["tap", "N1"]], "pass": ["built", "N1", "machingoon"], "budget": 20.0},
+			{"key": "machinegoon", "target": {"nodes": ["N1"], "rects": ["action:MACHINEGOON"]},
+				"gesture": [["press", "action:MACHINEGOON"], ["tap", "N1"]], "pass": ["built", "N1", "machinegoon"], "budget": 20.0},
 			{"key": "watch", "enter": ["b_send", "B1", "N1", 8], "target": {"nodes": ["N1"], "lines": "B"},
 				"pass": ["custom", "line_spent", "N1"], "fail": ["lost", "N1"], "budget": 30.0},
 			{"key": "mg_upgrade", "target": {"nodes": ["N1"], "rects": ["action:UPGRADE"]},
