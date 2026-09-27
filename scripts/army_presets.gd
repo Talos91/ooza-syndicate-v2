@@ -11,6 +11,8 @@ extends RefCounted
 static var path := "user://armies.cfg"             # tests point this elsewhere
 static var picks := {}                              # faction -> {"active": id, "map": id} (only valid ids)
 static var cosmetic_picks := {}                     # faction -> {family: id} (0.19.0; only valid ids)
+static var core_territory := "neon"                 # "neon" | "goo" (0.19.2): global, not per faction - the
+                                                     # ARMIES > COSMETICS > CORE pick that drives Rules.goo_territory
 static var saved := true                           # false: the last save failed (no storage) - the menu says so
 static var _loaded := false
 
@@ -23,7 +25,12 @@ static func load_all() -> void:
 	cosmetic_picks = {}
 	var cf := ConfigFile.new()
 	if cf.load(path) != OK:                         # none yet, or no storage at all (private browsing)
+		Rules.goo_territory = core_territory == "goo"
 		return
+	var t := str(cf.get_value("_core", "territory", core_territory))
+	core_territory = t if t in ["neon", "goo"] else "neon"
+	Rules.goo_territory = core_territory == "goo"    # 0.19.2: was a session-only Rules toggle in OPTIONS -
+	                                                  # nothing to migrate from (never persisted before)
 	for f in Rules.FACTION_LOADOUT:
 		var one := {}
 		for slot in ["active", "map"]:
@@ -119,6 +126,17 @@ static func set_cosmetic_pick(faction: String, family: String, id: String) -> bo
 	return save_all()
 
 
+static func set_core_territory(v: String) -> bool:
+	## CORE · ALL FACTIONS (0.19.2, Daniele: "goo/neon should be in the choice of cosmetic, as general core
+	## one maybe"): global, not per faction - drives Rules.goo_territory at once and saves like the other picks.
+	_ensure()
+	if not v in ["neon", "goo"]:
+		return false
+	core_territory = v
+	Rules.goo_territory = v == "goo"
+	return save_all()
+
+
 static func is_unlocked(item: String) -> bool:
 	## Every vat variant, skin line and monster alt is unlocked while testing (Daniele, 2026-09-27), except the
 	## Graduate vat: it unlocks once all nine tutorial lessons are complete (TUTORIAL-DESIGN.md §7, saved locally
@@ -137,6 +155,7 @@ static func save_all() -> bool:
 	for f in cosmetic_picks:
 		for family in cosmetic_picks[f]:
 			cf.set_value(f, "cosmetic_" + family, cosmetic_picks[f][family])
+	cf.set_value("_core", "territory", core_territory)
 	saved = cf.save(path) == OK
 	return saved
 
