@@ -87,7 +87,8 @@ const BLEND := 0.15                                # a snapshot's correction gli
 const BLEND_MAX := 6.0                             # ...unless it is bigger than this (sim metres): then it snaps
 const PLAYOUT_MAX := 40                            # queued snapshots beyond this are dropped (a tab back from the background)
 const PATH_RESEND := 1.0                           # a changed path rides along for this many seconds
-const MAX_PACKET := 8 * 1024 * 1024
+const MAX_PACKET := 1024 * 1024                   # 0.21.4: a packet, deflated or not (the largest keyframe measured: 81 KB raw /
+                                                   # 13 KB deflated, M-58 2v2 late game; net-1's JSON snapshots needed 8 MB)
 const CHAT_MAX := 256
 const CHAT_HISTORY := 50
 const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
@@ -918,10 +919,7 @@ func _reclaim(remote: String, id: int) -> void:
 
 
 func _new_token() -> String:
-	var b := PackedByteArray()
-	for i in range(12):
-		b.append(randi() % 256)
-	return Marshalls.raw_to_base64(b)
+	return Marshalls.raw_to_base64(Crypto.new().generate_random_bytes(12))   # 0.21.4: crypto-grade (was randi())
 
 
 func _notice(message: String) -> void:

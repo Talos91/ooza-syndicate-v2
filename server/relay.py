@@ -29,6 +29,7 @@ import json
 import logging
 import os
 import secrets
+import sys
 import time
 
 from websockets.asyncio.server import serve
@@ -37,9 +38,15 @@ from websockets.exceptions import ConnectionClosed
 ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # the codes PeerJS rooms used (no I, O, 0, 1)
 MAX_GUESTS = 5                                  # 6 seats: the host plus five
 MAX_ROOMS = 200
-MAX_PER_IP = 12                                 # open sockets from one address
+MAX_PER_IP = 64                                 # open sockets from one address (0.21.4: was 12; phones share carrier NAT)
 GUEST_MAX = 4096                                # a guest's packet (net.gd's host drops longer ones too)
-HOST_MAX = 8 * 1024 * 1024                      # a host's packet (net.gd MAX_PACKET)
+HOST_MAX = 1024 * 1024                          # a host's packet (net.gd MAX_PACKET; 0.21.4: was 8 MB)
+# 0.21.4 frame caps per socket, checked on the frame header before its payload is read (a bigger frame closes the socket
+# with 1009, nothing is buffered): the hello, then a guest's or a host's own limit.
+HELLO_FRAME = 64 * 1024
+GUEST_FRAME = 8 * 1024
+HOST_FRAME = HOST_MAX + 1024
+BOOT_NICE = 10                                  # a booting match host yields the CPU to the rooms playing (0.21.4)
 GUEST_RATE = 60                                 # packets per second before the relay drops a guest
 STATE_BACKLOG = 64 * 1024                       # skip a snapshot while this much is still queued to a guest
 HELLO_TIMEOUT = 10.0
@@ -98,6 +105,43 @@ async def refuse(ws, message, code=""):
         pass
 
 
+def frame_cap(ws, size):
+    """This socket's largest incoming frame from the next-but-one frame on: websockets takes max_size when it starts
+    reading a frame, and it already waits for the next one. The frame after the hello keeps HELLO_FRAME - a host's
+    first packets (identity, lobby, chat history) are small, the big ones (keyframes) come much later."""
+    protocol = getattr(ws, "protocol", None)
+    if protocol is None:
+        return
+    if hasattr(protocol, "max_message_size"):          # websockets >= 16 (a local test's pip install)
+        protocol.max_message_size = size
+    else:                                              # websockets 15 (Ubuntu's python3-websockets on the box)
+        protocol.max_size = size
+
+
+def boot_nice():
+    """The match host's child side, before exec: start niced, and inherit none of the relay's capabilities (the
+    service grants the relay CAP_SYS_NICE only to take a host back to normal priority once it runs)."""
+    try:
+        import ctypes
+        ctypes.CDLL(None, use_errno=True).prctl(47, 4, 0, 0, 0)     # PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL
+    except (OSError, AttributeError):
+        pass
+    try:
+        os.nice(BOOT_NICE)
+    except OSError:
+        pass
+
+
+def unnice(room):
+    """The match host is up: back to normal priority, like the hosts already playing."""
+    if room.proc is None or not hasattr(os, "setpriority"):
+        return
+    try:
+        os.setpriority(os.PRIO_PROCESS, room.proc.pid, 0)
+    except OSError as e:
+        log.info("room %s: match host stays niced (%s)", room.code, e)
+
+
 def backlog(ws):
     transport = getattr(ws, "transport", None)
     return transport.get_write_buffer_size() if transport is not None else 0
@@ -136,6 +180,7 @@ async def run_host(ws):
         return
     room = Room(code, ws)
     rooms[code] = room
+    frame_cap(ws, HOST_FRAME)
     log.info("room %s opened (%d rooms)", code, len(rooms))
     await say(ws, type="open", code=code)
     await host_loop(ws, room)
@@ -148,7 +193,9 @@ async def run_server_host(ws, code, secret):
         await refuse(ws, "Unknown room.")
         return
     room.host = ws
+    frame_cap(ws, HOST_FRAME)
     room.ready.set()
+    unnice(room)
     await say(ws, type="open", code=code)
     await host_loop(ws, room)
 
@@ -211,7 +258,8 @@ async def run_create(ws, version, ip, test=False):
         out = open(os.path.join(cfg.logs, "room-%s.log" % code), "wb")
     try:
         room.proc = await asyncio.create_subprocess_exec(*cmd, stdin=asyncio.subprocess.DEVNULL, stdout=out,
-                                                         stderr=asyncio.subprocess.STDOUT, env=env)
+                                                         stderr=asyncio.subprocess.STDOUT, env=env,
+                                                         preexec_fn=boot_nice if sys.platform.startswith("linux") else None)
     except OSError as e:
         log.warning("room %s: could not start the match host: %s", code, e)
         rooms.pop(code, None)
@@ -305,6 +353,7 @@ async def run_guest(ws, code):
     if len(room.guests) >= MAX_GUESTS + (1 if room.proc is not None else 0):   # a server host takes no seat
         await refuse(ws, "That room is full.")
         return
+    frame_cap(ws, GUEST_FRAME)
     room.serial += 1
     pid = "p%d" % room.serial
     room.guests[pid] = ws
@@ -383,7 +432,7 @@ async def main():
     global cfg
     args = cfg = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    async with serve(handler, args.host, args.port, max_size=HOST_MAX + 1024, ping_interval=20,
+    async with serve(handler, args.host, args.port, max_size=HELLO_FRAME, ping_interval=20,
                      ping_timeout=20, compression=None) as server:
         log.info("relay on %s:%d", args.host, args.port)
         asyncio.get_running_loop().create_task(reap_old_tests())

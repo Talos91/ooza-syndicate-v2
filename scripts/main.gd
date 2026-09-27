@@ -1266,8 +1266,9 @@ func _on_forge_online(seat: String, _node_id: int, first: bool) -> void:
 
 
 func _on_finished_server(winner: String) -> void:
-	## SERVER HOST (Alpha 21): the round's end on the room server - a log line and the telemetry file (no screen).
-	print("match over, winner ", winner, " - telemetry ", Telemetry.save(sim, map.get("code", ""), []))
+	## SERVER HOST (Alpha 21): the round's end on the room server - a line in the room log (no screen). 0.21.4: no
+	## telemetry file (nobody read them, they were never pruned, and rooms ending in the same second overwrote each other).
+	print("match over, winner ", winner, " after %.0f s" % sim.time)
 
 
 func _on_finished(winner: String) -> void:
