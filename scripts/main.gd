@@ -118,6 +118,7 @@ static var last_map_path := ""                 # MAIN MENU remembers the last ma
 # --- TUTORIAL (TUTORIAL-DESIGN.md §8): the lesson director, its coach overlay, the half-speed clock ---
 var director: TutorialDirector = null            # a lesson is on (null: a normal match)
 var coach: CoachOverlay = null
+var menu_faction := ""                           # the player's own menu faction, kept while a lesson plays VEX
 var _coach_version := -1
 static var menu_open := ""                       # after a relaunch: open this menu page instead of MAIN
 
@@ -202,7 +203,7 @@ func _ready() -> void:
 		_start_map(map_path)
 	elif TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
 			or not Net.rejoin.is_empty()):
-		start_tutorial(1, true)                        # TUTORIAL §7: the first launch opens straight into L1
+		start_tutorial(TutorialDirector.FIRST_ID, true)   # TUTORIAL §7: the first launch opens the tour (L0), then L1
 	else:
 		if not map_explicit and last_map_path != "":   # MAIN MENU keeps the last map played (0.19.0)
 			map_path = last_map_path
@@ -491,6 +492,7 @@ func rematch_random() -> void:
 func to_menu() -> void:
 	if director:                                       # TUTORIAL §7: leaving a lesson marks the tutorial offered
 		TutorialDirector.mark_offered()
+		SEAT_FACTIONS[HUMAN] = menu_faction            # (and the menu gets your own faction back)
 	if online:                                         # LEAVE ROOM: the room closes for us
 		Net.leave()
 	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice,
@@ -1419,22 +1421,19 @@ func _flush_inspect() -> void:
 # time scale (half speed at a relay prompt), the coach overlay fed from the director each frame (card, spotlight,
 # hand, completion screens), and the ways out (NEXT / REPLAY / LESSONS / ARMIES / MAIN MENU / SKIP TUTORIAL).
 func start_tutorial(lesson_id: int, first := false, faction := "", colour := "") -> void:
-	## Entry from the TUTORIAL page, the first launch or a relaunch: lesson `lesson_id` on its map, your faction
-	## (the menu's last pick), your colour, a scripted rival (no SeatAI; the Training AI in the first match).
+	## Entry from the TUTORIAL page, the first launch or a relaunch: lesson `lesson_id` on its map, your colour,
+	## VEX against EMBER (Daniele, 0.19.3: one faction for the whole tutorial - your menu faction is kept for
+	## afterwards), a scripted rival (no SeatAI; the Training AI in the first match).
 	director = TutorialDirector.new(lesson_id)
 	director.first_launch = first
-	if faction != "":
-		SEAT_FACTIONS[HUMAN] = faction
+	menu_faction = faction if faction != "" else str(SEAT_FACTIONS[HUMAN])
 	if colour != "":
 		color_choice = colour
-	var mine: String = SEAT_FACTIONS[HUMAN]
-	for f in ["ember", "vex", "solar", "bloom", "null"]:   # a fixed rival faction, never your own
-		if f != mine:
-			SEAT_FACTIONS["B"] = f
-			break
+	SEAT_FACTIONS[HUMAN] = TutorialDirector.PLAYER_FACTION
+	SEAT_FACTIONS["B"] = TutorialDirector.RIVAL_FACTION
 	mode = "1v1"
 	ai_level = str(director.L.get("ai", ai_level))
-	LOADOUTS = {HUMAN: director.loadout_for(mine, ArmyPresets.loadout_for(mine))}
+	LOADOUTS = {HUMAN: director.loadout_for()}
 	fraction = director.fraction_start(fraction)
 	pitch_forced = false
 	if menu_layer:
@@ -1447,8 +1446,8 @@ func start_tutorial(lesson_id: int, first := false, faction := "", colour := "")
 
 func _tutorial_setup() -> void:
 	## After the HUD: the reveal set, the coach overlay and its signals.
-	if director.lesson_id == TutorialDirector.LESSON_COUNT:
-		hud.reveal_all()                              # the first match: the whole HUD, as in any match
+	if director.lesson_id in [TutorialDirector.FIRST_ID, TutorialDirector.LESSON_COUNT]:
+		hud.reveal_all()                              # the tour and the first match: the whole HUD, as in any match
 	else:
 		hud.reveal(director.reveal_keys(), _tutorial_new_keys())
 	coach = CoachOverlay.new()
@@ -1464,9 +1463,10 @@ func _tutorial_setup() -> void:
 	coach.exit.connect(to_lessons)
 	coach.skip_tutorial.connect(to_menu)               # SKIP TUTORIAL: MAIN, offered marked (to_menu)
 	director.completed.connect(_on_lesson_completed)
+	director.handler.connect(coach.handler_mood)      # the handler hops on a pass, droops on a fail
 	var step_seen := {"i": director.step_i}
 	director.changed.connect(func():                  # a step that adds HUD parts reveals them with a glow
-		if director.step_i != int(step_seen["i"]):
+		if director.step_i != int(step_seen["i"]) and hud.gated:
 			step_seen["i"] = director.step_i
 			var before := TutorialDirector.reveal_for(director.lesson_id, director.step_i - 1)
 			hud.reveal(director.reveal_keys(), director.reveal_keys().filter(func(k): return not k in before)))
@@ -1499,10 +1499,19 @@ func _coach_sync() -> void:
 			coach.show_step(c["header"], c["text"], int(c["dots"]), int(c["dot"]), str(c["button"]))
 		else:
 			coach.hide_card()
+	var want := director.inspect_request()            # the tour opens the inspector on your home, then closes it
+	if want >= 0 and hud.inspector_id != want:
+		hud.inspect(want, cam)
+	elif want < 0 and director.is_tour() and hud.inspector_id >= 0:
+		hud.close_inspector()
 	var tg := director.target()
 	var pts := []
 	for id in tg["nodes"]:
 		pts.append(cam.unproject_position(sim.nodes[id]["pos"]))
+	for ei in tg.get("decks", []):
+		var dl := sim.deck_line(int(ei))
+		if dl.size() >= 2:
+			pts.append(cam.unproject_position(((dl[0] as Vector3) + (dl[-1] as Vector3)) / 2.0))
 	for hid in tg["lines"]:
 		var h := sim._horde(int(hid))
 		if not h.is_empty():
@@ -1515,7 +1524,8 @@ func _coach_sync() -> void:
 	var radius: float = 30.0
 	if not sim.nodes.is_empty():
 		var c0: Vector3 = sim.nodes[0]["pos"]
-		radius = cam.unproject_position(c0).distance_to(cam.unproject_position(c0 + cam.global_transform.basis.x * Rules.R)) * 1.35
+		radius = cam.unproject_position(c0).distance_to(cam.unproject_position(c0 + cam.global_transform.basis.x * Rules.R)) * 1.35 \
+				* float(tg.get("radius", 1.0))
 	if director.state == "complete":
 		pts = []
 		rects = []
@@ -1535,9 +1545,22 @@ func _coach_sync() -> void:
 
 
 func _tutorial_rect(key: String) -> Rect2:
-	## A coach rect key on screen: "send:0.25", "action:<NAME>" (Hud.action_rect), "dock:<slot>".
+	## A coach rect key on screen: "send:0.25", "action:<NAME>" (Hud.action_rect), "dock:<slot>", "badge:<id>",
+	## "send_panel", "top_bar", "dock", "inspector", "handler" (the creature beside the card).
 	var parts := key.split(":", true, 1)
 	match parts[0]:
+		"badge":
+			return hud.badge_rect(int(parts[1]))
+		"send_panel":
+			return hud.side_panel.get_global_rect() if hud.side_panel.visible else Rect2()
+		"top_bar":
+			return hud.top_panel.get_global_rect()
+		"dock":
+			return hud.dock.get_global_rect() if hud.dock.visible else Rect2()
+		"inspector":
+			return hud.inspector_rect()
+		"handler":
+			return coach.handler_rect() if coach else Rect2()
 		"send":
 			return hud.send_button_rect(float(parts[1]))
 		"action":
@@ -1615,7 +1638,10 @@ func _on_coach_button(id: String) -> void:
 
 
 func _on_lesson_completed(r: Dictionary) -> void:
-	## LESSON COMPLETE / TRAINING COMPLETE instead of the results screen (§6).
+	## LESSON COMPLETE / TRAINING COMPLETE instead of the results screen (§6). The tour goes straight on to L1.
+	if r.get("tour", false):
+		_tutorial_relaunch({"tutorial": 1, "first": director.first_launch})
+		return
 	paused = true
 	hud.close_inspector()
 	_end_drag()
@@ -1648,8 +1674,8 @@ func to_lessons() -> void:
 
 func _tutorial_leave(extra: Dictionary) -> void:
 	TutorialDirector.mark_offered()
-	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "ai": ai_level if not extra.has("ai") else extra["ai"], "colour": color_choice,
-			"loadout": ArmyPresets.loadout_for(SEAT_FACTIONS[HUMAN])}
+	relaunch = {"faction": menu_faction, "ai": ai_level if not extra.has("ai") else extra["ai"], "colour": color_choice,
+			"loadout": ArmyPresets.loadout_for(menu_faction)}
 	if extra.has("menu"):
 		relaunch["menu"] = extra["menu"]
 	if extra.has("ai"):
@@ -1658,6 +1684,22 @@ func _tutorial_leave(extra: Dictionary) -> void:
 
 
 func _tutorial_relaunch(extra: Dictionary) -> void:
-	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "colour": color_choice}
+	relaunch = {"faction": menu_faction, "colour": color_choice}
 	relaunch.merge(extra, true)
 	get_tree().reload_current_scene()
+
+
+func _input(event: InputEvent) -> void:
+	## The tour (L0): a tap on the spotlit element counts as NEXT - taken here, before the HUD or the map, so it
+	## never also arms a skill, sends or selects.
+	if director == null or coach == null or not director.is_tour() or paused:
+		return
+	var mb := event as InputEventMouseButton
+	if mb == null or not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	for r in hud.extra_ui_rects:                      # the card's own buttons stay the card's
+		if (r as Rect2).has_point(mb.position):
+			return
+	if coach.spotlit(mb.position):
+		get_viewport().set_input_as_handled()
+		director.press_button()

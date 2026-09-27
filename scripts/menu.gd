@@ -439,8 +439,8 @@ func show_main() -> void:
 			get_tree().quit()).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
 	y += h3 + GAP
 	var h4 := rh(64)
-	# TUTORIAL (§7): live, reading "TUTORIAL n/9" until every lesson is done
-	var tut_text := "TUTORIAL" if TutorialDirector.all_done() else "TUTORIAL %d/%d" % [TutorialDirector.done_count(), TutorialDirector.LESSON_COUNT]
+	# TUTORIAL (§7): live, reading "TUTORIAL n/10" (the tour, eight lessons, the first match) until all are done
+	var tut_text := "TUTORIAL" if TutorialDirector.done_count() >= TutorialDirector.TOTAL_LESSONS 			else "TUTORIAL %d/%d" % [TutorialDirector.done_count(), TutorialDirector.TOTAL_LESSONS]
 	nav_button(tut_text, P(80, y), P(212, h4), show_tutorial)
 	nav_button("ONLINE", P(307, y), P(213, h4), show_online)
 	y += h4 + 16.0

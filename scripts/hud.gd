@@ -1032,6 +1032,18 @@ func badge_rect(id: int) -> Rect2:
 	return Rect2()
 
 
+func inspector_rect() -> Rect2:
+	## What the open inspector covers on screen (its ring, info panel and actions); empty when closed.
+	if not is_instance_valid(inspector):
+		return Rect2()
+	var r := Rect2()
+	for c in inspector.get_children():
+		if c is Control and (c as Control).visible:
+			var g := (c as Control).get_global_rect()
+			r = g if r.size == Vector2.ZERO else r.merge(g)
+	return r
+
+
 func dock_slot_rect(i: int) -> Rect2:
 	if dock and dock.visible and i >= 0 and i < dock.slots.size():
 		return (dock.slots[i] as Control).get_global_rect()
