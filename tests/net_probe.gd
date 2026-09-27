@@ -173,6 +173,9 @@ func _run() -> void:
 	var big := jumps.filter(func(j): return j > 0.5).size()
 	print("jump per frame (m): ", _stats(jumps), "  spikes > 0.5 m: %d (%.1f / min)" % [big, big * 60.0 / seconds])
 	print("freeze: %.2f s total (%.1f %% of the time), longest %.2f s" % [freeze_total, 100.0 * freeze_total / seconds, freeze_long])
+	print("corrections (the guest's prediction vs the host, per line per snapshot): > 0.5 m: %d (%.1f / min), largest %.2f m, hard snaps %d" % [
+			b.corr_big, b.corr_big * 60.0 / seconds, b.corr_max, b.corr_snaps])
+	print("playout delay at the end: %.2f s" % b._delay)
 	a.leave()
 	b.leave()
 	await _wait(func(): return false, 1.0)
