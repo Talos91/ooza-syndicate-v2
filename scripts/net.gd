@@ -68,7 +68,9 @@ const CHAT_HISTORY := 50
 const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
 const RELAY_URL := "wss://45-32-126-20.sslip.io/ooze"   # server/relay.py behind Caddy on the Vultr box (Alpha 20)
 const DEDICATED_FPS := 30                          # the server's match host: a steady Sim step, no screen to draw
-const DEDICATED_IDLE := 90.0                       # an empty server room closes after this long (the first player: 45 s)
+const DEDICATED_IDLE := 90.0                       # a server match everyone dropped out of waits this long for a RECONNECT
+const DEDICATED_LOBBY_IDLE := 5.0                  # an empty server lobby closes (nobody can come back to a lobby seat)
+const DEDICATED_BOOT_IDLE := 20.0                  # the creator never arrived
 const FALLBACK_CODES := ["no-server", "version", "busy"]   # create refused: host in this browser instead
 const AI_FILL := ["", "Training", "Casual", "Standard", "Veteran", "Expert"]   # EMPTY SEATS setting: off or the AI level
 
@@ -1398,7 +1400,7 @@ func _process(dt: float) -> void:
 	_poll_chat_ui(dt)
 	if dedicated and bridge != null and connected:     # an empty server room closes itself
 		_empty_t = _empty_t + dt if present_ids().is_empty() else 0.0
-		if _empty_t > (DEDICATED_IDLE if _ever_joined else 45.0):
+		if _empty_t > (DEDICATED_BOOT_IDLE if not _ever_joined else (DEDICATED_IDLE if active else DEDICATED_LOBBY_IDLE)):
 			fail("room empty")
 			return
 	if not active or not started or sim == null:

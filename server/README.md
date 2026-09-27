@@ -7,7 +7,7 @@
   seat of its own, and the creator joins as the room owner who runs the lobby (`Net.room_owner`, `can_control`).
   No player's device hosts, so a phone in the background only drops its own seat (RECONNECT). If the server
   has no free match host (`--max-matches`) or runs another game version (`version.txt`), the game falls back
-  to hosting in the creator's browser, as in stage 1. An empty server room closes after 90 s.
+  to hosting in the creator's browser, as in stage 1. An empty server lobby closes after 5 s (0.20.1; 0.20.0: 90 s); a match everyone dropped out of waits 90 s for a RECONNECT.
 
 ## The box
 

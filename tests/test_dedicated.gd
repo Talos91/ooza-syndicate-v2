@@ -4,7 +4,7 @@ extends SceneTree
 ##   Godot --headless --path . --script res://tests/test_dedicated.gd -- --relay=ws://127.0.0.1:8765
 ## Exit 0 = all passed, 2 = no relay or no match server there (skipped). Covers: CREATE ROOM -> a server room
 ## with the creator as owner, a second player, owner-only lobby changes, DEPLOY, the loading barrier, snapshots
-## from the server's Sim, an order answered, the owner dropping (the next player runs the room).
+## from the server's Sim, an order answered, the owner dropping (the next player runs the room), an empty lobby closing.
 
 var failures := 0
 var feedback: Array = []
@@ -110,5 +110,17 @@ func _run() -> void:
 	check(await _wait(func(): return sb.time > t_before + 1.5, 8.0), "the match keeps running on the server without the owner")
 
 	b.leave()
+
+	var c := _net()                                    # an empty lobby frees its match host at once (0.20.1)
+	c.host_room("bloom")
+	var code := ""
+	if await _wait(func(): return c.connected and c.can_control(), 30.0):
+		code = c.room_code
+	c.leave()
+	await _wait(func(): return false, 8.0)             # DEDICATED_LOBBY_IDLE 5 s, then the relay drops the room
+	var d := _net()
+	d.join_room(code, "ember")
+	check(code != "" and await _wait(func(): return d.bridge == null and d.status.contains("not found"), 10.0),
+			"an empty lobby closes within seconds: " + d.status)
 	print("\n%s (%d failure%s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures, "" if failures == 1 else "s"])
 	quit(0 if failures == 0 else 1)
