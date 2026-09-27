@@ -750,3 +750,7 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      arms the guided send (it used to open the inspector).
 197. **Machinegoon "look way too small; make it look as big as the other structures but make sense"** (via Skin Designer), then
      "Yes, rebuild both" (Spitter, Pepperbox). *Done (0.20.3):* v2 models with low barrels at full scale.
+195. **A server room defaulted to T-01 "First Steps" - Daniele: "Hide T-01 / T-02 too".** *Done (0.20.4):* every T- map is
+     tutorial-only (`MapPool.TUTORIAL_ONLY`): never on 02 BATTLEFIELD, in rooms, rematches or the AI test pools; the menu /
+     room default is now A-01 Orbital Nexus; the tutorial's first match still loads T-02 by path.
+

@@ -39,7 +39,7 @@ var LOADOUTS := {}
 const FACTION_NAMES := ["vex", "null", "bloom", "ember", "solar"]
 
 var map: Dictionary
-var map_path := "res://maps4/T-01-first-steps.json"
+var map_path := "res://maps4/A-01-orbital-nexus.json"   # 0.20.4: the T- maps are tutorial-only (MapPool.TUTORIAL_ONLY)
 var sim := Sim.new()
 var ais: Array = []
 var vis: Dictionary
