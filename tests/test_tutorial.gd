@@ -231,7 +231,7 @@ func test_l0() -> void:
 	var d: TutorialDirector = r[0]
 	var sim: Sim = r[1]
 	check(sim.factions["A"] == "vex" and sim.factions["B"] == "ember", "the tutorial is VEX against EMBER")
-	check(d.card()["button"] == TutorialDirector.line("next_step") and d.header() == "HANDLER · THE CITY", "L0: a NEXT card, HANDLER · THE CITY")
+	check(d.card()["button"] == TutorialDirector.line("next_step") and d.header() == "DR. VESK · THE CITY", "L0: a NEXT card, DR. VESK · THE CITY")
 	var seen := []
 	while d.state == "running" and seen.size() < 20:
 		var st: Dictionary = d.L["steps"][d.step_i]

@@ -290,7 +290,7 @@ func show_splash(handler_line: String) -> void:
 	var h := 380.0
 	var pos := Vector2((CANVAS.x - w) / 2.0, (CANVAS.y - h) / 2.0)
 	_frame(pos, Vector2(w, h))
-	_label_at("HANDLER", pos + Vector2(40, 28), 16, Color("8fd8e6"))
+	_label_at(TutorialDirector.HANDLER_NAME, pos + Vector2(40, 28), 16, Color("8fd8e6"))
 	var line := _label(handler_line, 26, Color("edf7fa"))
 	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	line.position = pos + Vector2(40, 66)

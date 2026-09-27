@@ -28,6 +28,7 @@ signal completed(result: Dictionary)
 signal failed(line: String)
 signal handler(mood: String)                       # the on-screen handler: "happy" (a step passed) / "droop" (failed)
 
+const HANDLER_NAME := "DR. VESK"                    # the handler on the card (Daniele, 2026-09-27)
 const LESSON_COUNT := 9                            # the Graduate vat needs lessons 1..9 (the L0 tour is extra)
 const FIRST_ID := 0                                # L0 THE CITY, the tour
 const TOTAL_LESSONS := 10                          # 0..9 (the TUTORIAL n/10 count)
@@ -62,7 +63,7 @@ const LINES := {
 	"no_storage": "Progress isn't saved on this browser.",
 	# L0 THE CITY - what's what
 	"L0.title": "THE CITY",
-	"L0.hello": "I'm your handler. Quick tour of the city first, then we work.",
+	"L0.hello": "I'm Dr. Vesk, your handler. Quick tour of the city first, then we work.",
 	"L0.node": "This is a node. You win by taking nodes.",
 	"L0.home": "This one is your home. Your colour means it's yours.",
 	"L0.vat": "The tank on it is a vat. It breeds units, up to its cap.",
@@ -1505,10 +1506,10 @@ func _finish_in(text: String) -> void:
 # ================================================================ what the coach shows
 func header() -> String:
 	if lesson_id == FIRST_ID:
-		return "HANDLER · %s" % title_of(FIRST_ID)
+		return "%s · %s" % [HANDLER_NAME, title_of(FIRST_ID)]
 	if lesson_id == LESSON_COUNT:
-		return "HANDLER · FIRST MATCH"
-	return "HANDLER · LESSON %d / %d · %s" % [lesson_id, LESSON_COUNT - 1, title_of(lesson_id)]
+		return "%s · FIRST MATCH" % HANDLER_NAME
+	return "%s · LESSON %d / %d · %s" % [HANDLER_NAME, lesson_id, LESSON_COUNT - 1, title_of(lesson_id)]
 
 
 func card() -> Dictionary:

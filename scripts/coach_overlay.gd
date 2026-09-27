@@ -8,7 +8,7 @@ extends CanvasLayer
 ##
 ## Public API
 ##   show_step(header, text, dots, dot_index, button_text := "")
-##       The coach card. `header` e.g. "HANDLER · LESSON 3 / 8 · NEUTRALS"; `dots`/`dot_index` are the
+##       The coach card. `header` e.g. "DR. VESK · LESSON 3 / 8 · THE RIVAL"; `dots`/`dot_index` are the
 ##       step markers; `button_text` == "" for a doing-step (no GOT IT, just SKIP/RESTART/EXIT), any
 ##       other string shows it as the one allowed button (read-only steps: "GOT IT").
 ##   point_nodes(screen_points: Array[Vector2], radius: float)
@@ -689,7 +689,7 @@ func _build_card() -> void:
 	_header_emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_header_emblem.visible = false                         # (0.19.3: the handler creature is the card's face now)
 	head_row.add_child(_header_emblem)
-	_card_header = _label("HANDLER", _header_fsz(), Color("8fd8e6"))
+	_card_header = _label(TutorialDirector.HANDLER_NAME, _header_fsz(), Color("8fd8e6"))
 	_card_header.clip_text = true
 	_card_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head_row.add_child(_card_header)
