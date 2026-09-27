@@ -156,7 +156,7 @@ async def run_create(ws, version, ip):
     room.secret = secrets.token_urlsafe(18)
     rooms[code] = room
     cmd = [cfg.godot, "--headless"] + (["--main-pack", cfg.pck] if cfg.pck else ["--path", cfg.project]) + [
-        "--", "--dedicated", "--relay=ws://127.0.0.1:%d/ooze" % cfg.port, "--room=" + code, "--secret=" + room.secret]
+        "--", "--dedicated", "--relay=ws://127.0.0.1:%d/ooze" % cfg.port, "--room=" + code, "--secret=" + room.secret] + cfg.host_arg
     env = dict(os.environ, GODOT_SILENCE_ROOT_WARNING="1")
     if cfg.data:
         env["XDG_DATA_HOME"] = cfg.data
@@ -324,6 +324,7 @@ async def main():
     ap.add_argument("--max-matches", type=int, default=2)
     ap.add_argument("--data", default="", help="XDG_DATA_HOME for the match hosts (user://)")
     ap.add_argument("--logs", default="", help="a log file per server-hosted room")
+    ap.add_argument("--host-arg", action="append", default=[], help="tests: an extra argument for every match host (e.g. --match-end=20)")
     global cfg
     args = cfg = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")

@@ -89,6 +89,7 @@ const DEDICATED_IDLE := 90.0                       # a server match everyone dro
 const DEDICATED_LOBBY_IDLE := 5.0                  # an empty server lobby closes (nobody can come back to a lobby seat)
 const DEDICATED_BOOT_IDLE := 20.0                  # the creator never arrived
 const FALLBACK_CODES := ["no-server", "version", "busy"]   # create refused: host in this browser instead
+const REMATCH_AI := "Standard"                     # REMATCH ON A RANDOM MAP picked a bigger mode: the AI fills the extra seats
 const AI_FILL := ["", "Training", "Casual", "Standard", "Veteran", "Expert"]   # EMPTY SEATS setting: off or the AI level
 
 var bridge                                         # window.OozePeer (or a test double)
@@ -911,7 +912,8 @@ func start_match() -> void:
 		launch_round()
 
 
-func launch_round() -> void:
+func launch_round(fill := "") -> void:
+	## fill: the AI level for seats nobody holds when EMPTY SEATS is off (REMATCH ON A RANDOM MAP).
 	for id in roster.keys():                          # a new round: anyone still away has left
 		if is_away(int(id)):
 			roster.erase(id)
@@ -930,13 +932,14 @@ func launch_round() -> void:
 		if not co.is_empty():
 			cosmetics[seat_of(id)] = co
 	var ai := {}
-	if ai_fill != "":
+	var level := ai_fill if ai_fill != "" else fill
+	if level != "":
 		for slot in range(slots()):                    # EMPTY SEATS: the AI plays them (team modes: any seat)
 			if players.has(SEATS[slot]):
 				continue
 			var free := FACTIONS.filter(func(f): return not f in players.values())
 			players[SEATS[slot]] = free[randi() % free.size()] if not free.is_empty() else FACTIONS[randi() % FACTIONS.size()]
-			ai[SEATS[slot]] = ai_fill
+			ai[SEATS[slot]] = level
 	var info := {"round": match_round + 1, "map": map_path, "mode": mode, "seed": randi() % 100000,
 			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(), "loadouts": loadouts,
 			"cosmetics": cosmetics,
@@ -1170,6 +1173,15 @@ func request_rematch() -> void:
 		_send_to_host({"op": "rematch", "round": match_round})
 
 
+func rematch_status() -> Dictionary:
+	## For the results screen: {"mine": did I vote, "ready": [labels], "waiting": [labels]} over the players still here.
+	var ready := []
+	var waiting := []
+	for id in present_ids():
+		(ready if rematch_votes.has(id) else waiting).append(label_of(int(id)) + ("  (you)" if int(id) == local_id() else ""))
+	return {"mine": rematch_votes.has(local_id()), "ready": ready, "waiting": waiting}
+
+
 func accept_rematch(id: int) -> void:
 	if not active or not finished or not roster.has(id):
 		return
@@ -1187,6 +1199,8 @@ func _check_rematch() -> void:
 		return
 	if present.size() == slots() or ai_fill != "":
 		launch_round()
+	elif mode != str(match_info.get("mode", mode)):    # the random rematch map seats more than are here: the AI fills the
+		launch_round(REMATCH_AI)                        # rest (Daniele, 0.19.0: "AI fills the rest"; it used to send the room back to the lobby)
 	else:                                              # a seat is empty and no AI may take it
 		var msg := "A player is missing - back to the lobby. Invite someone with the same code."
 		return_to_room(msg)                            # publishes the repacked lobby first...

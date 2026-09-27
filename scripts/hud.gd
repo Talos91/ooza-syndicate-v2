@@ -1467,11 +1467,39 @@ func _territory_action() -> Array:
 
 
 var _end_winner := ""
+var _end_rematch: Label                           # online results: the rematch line, updated in place
+var _end_rematch_btn: Button
 
 
 func _on_rematch_changed() -> void:
-	if end_panel.visible:
+	## A vote arrived: refresh the rematch line and button only - rebuilding the panel replayed the rewards strip and
+	## read as the screen reloading (Daniele, 0.20.10 playtest).
+	if not end_panel.visible:
+		return
+	if is_instance_valid(_end_rematch) and is_instance_valid(_end_rematch_btn):
+		_rematch_texts()
+	else:
 		show_end(_end_winner)
+
+
+func _rematch_texts() -> void:
+	var st: Dictionary = Net.rematch_status()
+	var lines := []
+	for who in st["ready"]:
+		lines.append("%s  -  READY" % who)
+	for who in st["waiting"]:
+		lines.append("%s  -  not yet" % who)
+	var hint := ""
+	if st["mine"] and not (st["waiting"] as Array).is_empty():
+		hint = "YOU'RE READY - waiting for %s" % ", ".join(st["waiting"])
+	elif not st["mine"] and not (st["ready"] as Array).is_empty():
+		hint = "%s %s a rematch - tap REMATCH" % [", ".join(st["ready"]), "wants" if (st["ready"] as Array).size() == 1 else "want"]
+	elif not st["mine"]:
+		hint = "Tap REMATCH to play again - it starts when everyone here is ready"
+	_end_rematch.text = "REMATCH\n" + "\n".join(lines) + ("\n" + hint if hint != "" else "")
+	var picks := Net.is_host() or Net.can_control()   # the room owner picks the random map; the others just vote
+	_end_rematch_btn.text = "READY - WAITING" if st["mine"] else ("REMATCH ON A RANDOM MAP" if picks else "REMATCH")
+	_end_rematch_btn.disabled = st["mine"]
 
 
 func show_end(winner: String) -> void:
@@ -1488,12 +1516,14 @@ func show_end(winner: String) -> void:
 	if title == "DRAW" and sim.draw_line != "":            # 7:00, a neutral last platform: the funny call-out (0.19.0)
 		body = str(sim.draw_line) + "\n" + body
 	if main.online:
-		var votes: int = Net.rematch_votes.size()
-		var mine: bool = Net.rematch_votes.has(Net.local_id())
-		body += "
-REMATCH: %d / %d ready%s" % [votes, Net.present_ids().size(), " - waiting for the others" if mine else ""]
-		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP" if not mine else "REMATCH - READY", func(): main.rematch_random()],
+		var col := _fill_overlay(end_panel, title, body, [["REMATCH", func(): main.rematch_random()],
 				["LEAVE ROOM", main.to_menu]], _reward_strip())
+		_end_rematch = text_label("", 18, Color("ffd15c"))   # who is ready, what happens next (updated in place)
+		_end_rematch.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(_end_rematch)
+		col.move_child(_end_rematch, col.get_child_count() - 3)   # above the two buttons
+		_end_rematch_btn = col.get_child(col.get_child_count() - 2) as Button
+		_rematch_texts()
 		if not Net.rematch_changed.is_connected(_on_rematch_changed):
 			Net.rematch_changed.connect(_on_rematch_changed)
 	else:
@@ -1509,7 +1539,7 @@ func _reward_strip() -> Control:
 	return RewardStrip.make(r, ui_scale) if r is Dictionary and not (r as Dictionary).get("lines", []).is_empty() else null
 
 
-func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: Array, extra: Control = null) -> void:
+func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: Array, extra: Control = null) -> VBoxContainer:
 	for c in panel.get_children():
 		c.queue_free()
 	var col := VBoxContainer.new()
@@ -1528,6 +1558,7 @@ func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: 
 	for a in actions:
 		var btn := button(a[0], a[1], 0, 56 if not mobile else tall, 22)
 		col.add_child(btn)
+	return col
 
 
 # ------------------------------------------------------------------ debug panel

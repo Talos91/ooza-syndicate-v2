@@ -452,6 +452,9 @@ func _start_online() -> void:
 		seats.sort()
 		HUMAN = str(seats[0])
 	_start_map(str(info["map"]))
+	for arg in OS.get_cmdline_user_args():             # tests only (a local relay's --host-arg): a short server round
+		if Net.dedicated and arg.begins_with("--match-end="):
+			sim.match_hard_end = float(arg.substr(12))
 	Net.world_ready(sim, self)
 	Net.order_feedback.connect(_on_order_feedback)
 	if Net.is_host():                                  # EMPTY SEATS and dropped players: the AI plays them
