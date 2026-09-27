@@ -417,15 +417,11 @@ func _show_result() -> void:
 	var state := str(rw.get("state", "none"))
 	var reward_row := _hbox(6)
 	reward_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	var reward_label: Label = null
+	var ticker: RewardTicker = null
 	match state:
-		"paid":
-			var ticker := _dynamic_make("RewardTicker", [amount, "soft", u(15)])
-			if ticker:
-				reward_row.add_child(ticker)
-			else:
-				reward_label = _label("+0 SCRAP", 15, GOLD)
-				reward_row.add_child(reward_label)
+		"paid":                                    # the one-off SCRAP counts up after the stars (Progression's ticker)
+			ticker = RewardTicker.make(amount, "soft", func(n: float) -> float: return u(n))
+			reward_row.add_child(ticker)
 		"earned":
 			reward_row.add_child(_label("+%d SCRAP earned - paid when your wallet arrives" % amount, 13, GOLD))
 		"taken":
@@ -441,7 +437,7 @@ func _show_result() -> void:
 		col.add_child(ul)
 	var xp: Dictionary = _end.get("xp", {})
 	if not xp.is_empty():
-		var strip_ui := _dynamic_make("RewardStrip", [xp, hud.ui_scale if hud else 1.0])
+		var strip_ui := RewardStrip.make(xp, hud.ui_scale if hud else 1.0) if not (xp.get("lines", []) as Array).is_empty() else null
 		if strip_ui:
 			col.add_child(strip_ui)
 		else:
@@ -481,8 +477,8 @@ func _show_result() -> void:
 			tw.tween_property(g, "modulate", Color(1, 1, 1, 0.55), 0.2)
 		tw.parallel().tween_property(rl, "modulate", Color.WHITE, 0.2)
 		tw.tween_interval(STAR_GAP - 0.3)
-	if reward_label:
-		tw.tween_method(func(v: float): reward_label.text = "+%d SCRAP" % int(round(v)), 0.0, float(amount), 0.8)
+	if ticker:
+		tw.tween_callback(ticker.play)
 
 
 func _xp_text(xp: Dictionary) -> String:
@@ -492,16 +488,6 @@ func _xp_text(xp: Dictionary) -> String:
 	var gain := int(xp.get("xp_after", 0)) - int(xp.get("xp_before", 0))
 	return ("+%d XP" % gain) if gain > 0 else ""
 
-
-static func _dynamic_make(cls: String, args: Array) -> Control:
-	## A class from another session's pass (Progression's RewardTicker / RewardStrip), when this build has it.
-	for c in ProjectSettings.get_global_class_list():
-		if str(c.get("class", "")) == cls:
-			var s := load(str(c.get("path", ""))) as Script
-			if s:
-				var r = s.callv("make", args)
-				return r if r is Control else null
-	return null
 
 
 func _rebuild() -> void:

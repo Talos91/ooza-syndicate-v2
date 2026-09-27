@@ -17,8 +17,8 @@ extends RefCounted
 ##
 ## Rewards go through Progression (the "Leaderboard, progression, and currency" session; CAMPAIGN-DESIGN §5a):
 ## Progression.grant(source, amount) is idempotent per source ("campaign:vex:04"), unlock(item, source) takes
-## "vat:faction:<faction>". Progression may not be in this build yet, so it is looked up at run time: without it
-## the reward and the unlock are recorded here and paid by pay_pending() once it exists.
+## "vat:faction:<faction>". A reward that could not be paid (a failed save, a stand-in wallet in tests) stays
+## recorded here and pay_pending() pays it later.
 
 const PROGRESS_VERSION := 1
 const FACTION_ORDER := ["vex", "null", "bloom", "ember", "solar"]
@@ -536,21 +536,15 @@ static func reset_progress() -> void:
 	save_all()
 
 
-# ------------------------------------------------------------------ Progression (looked up at run time)
+# ------------------------------------------------------------------ Progression (0.20.1, scripts/progression.gd)
 static func _progression() -> Script:
-	## Progression (scripts/progression.gd) when this build has it, else null. A plain lookup of the global class
-	## list, so this file compiles in builds without it.
-	if not _prog_checked:
-		_prog_checked = true
-		for c in ProjectSettings.get_global_class_list():
-			if str(c.get("class", "")) == "Progression":
-				_prog_script = load(str(c.get("path", ""))) as Script
-				break
-	return _prog_script
+	## The wallet: Progression, or the tests' stand-in (use_progression) so a test never touches the player's
+	## progress.cfg.
+	return _prog_script if _prog_checked else Progression
 
 
 static func use_progression(script: Script) -> void:
-	## Tests: point the bridge at a stand-in (or null to force "not in this build").
+	## Tests: point the bridge at a stand-in wallet (or null: no wallet, rewards are only recorded).
 	_prog_script = script
 	_prog_checked = true
 
@@ -572,7 +566,7 @@ static var last_run := {}                            # main.gd sets {key, summar
 # ------------------------------------------------------------------ CAMPAIGN in-match additions (mission_director.gd / main.gd)
 static func progress_match(sim, seat: String, ai_level: String) -> Dictionary:
 	## A mission also counts as a match for XP and challenges (no per-match SCRAP, no faction-vat win: the
-	## Progression session's contract). Progression may not be in this build: then nothing, {}.
+	## Progression session's contract). {} with the tests' stand-in or no wallet.
 	## The result may carry lines, xp_before / xp_after, challenges (the result screen shows an XP line if any).
 	var p := _progression()
 	if p == null or not _has_static(p, "record_match") or not _has_static(p, "result_from_sim"):
