@@ -877,11 +877,18 @@ func show_account() -> void:
 	label_at("NAME", lp + P(28, y), 18, Color("8fb3c2"), false)
 	y += 28.0
 	if OS.has_feature("web"):
-		# the web build: Godot's LineEdit doesn't raise a phone keyboard (Daniele, 0.20.9: "rename doesn't allow for chat
-		# input"), so NAME and RENAME open a native HTML field (the room code's way) - see _open_name()
-		var nb := nav_button(a.player_name if a.player_name != "" else "-", lp + P(28, y), P(440, 58), func(): _open_name(a.player_name))
-		nb.disabled = not a.signed_in()
-		var rw := nav_button("RENAME", lp + P(490, y), P(240, 58), func(): _open_name(a.player_name))
+		# the web build: Godot's LineEdit doesn't raise a phone keyboard, and a field focused from Godot's own input
+		# handling doesn't either on Android (outside the tap's gesture - Daniele, 0.20.10: "keyboard still doesn't
+		# appear"). So the NAME box IS a native HTML <input> laid over it (_place_name_field): the tap lands on the DOM
+		# element itself and the phone raises its keyboard. RENAME (or Enter) saves what it holds.
+		var box := _line_edit(lp + P(28, y), P(440, 58), "", "")   # the frame the HTML field sits on (never typed into)
+		box.editable = false
+		box.focus_mode = Control.FOCUS_NONE
+		_name_box = box
+		_name_enabled = a.signed_in()
+		_name_value = a.player_name
+		_place_name_field.call_deferred()
+		var rw := nav_button("RENAME", lp + P(490, y), P(240, 58), func(): _rename_from_field())
 		rw.disabled = not a.signed_in()
 	else:
 		var nm := _line_edit(lp + P(28, y), P(440, 58), "3-16 letters or digits", a.player_name)
@@ -934,52 +941,71 @@ func show_account() -> void:
 		show_profile())
 
 
-# The web build's name field: a native DOM input (like web/room-ui.js's room code) so phone keyboards type into it;
-# defined here at runtime, so the export's script list stays as it is. The game polls takeName() on ACCOUNT.
+# The web build's name field: a native DOM <input> laid over ACCOUNT's NAME box (like web/room-ui.js's room code, the
+# player taps the DOM element itself, so Android / iOS raise the keyboard). Defined at runtime, so the export's script
+# list stays as it is. place() makes it or only moves it (a rebuild never steals focus from a field being typed in).
 const NAME_UI_JS := """(()=>{if(window.OozeName)return;let result='';
-const st=document.createElement('style');st.textContent=`#ooze-name{position:fixed;inset:0;z-index:1200;background:#031017ed;display:grid;place-items:center;padding:12px;box-sizing:border-box;touch-action:auto;font:20px system-ui;color:#e5fcff}#ooze-name form{width:min(460px,90vw);max-height:90dvh;overflow:auto;padding:20px;background:#081f2b;border:2px solid #13dbea;box-sizing:border-box}#ooze-name input{width:100%;box-sizing:border-box;font:700 28px system-ui;letter-spacing:2px;text-align:center;padding:12px;background:#020c12;color:white;border:2px solid #4e98ad;touch-action:auto;user-select:text;-webkit-user-select:text}#ooze-name button{min-height:48px;font:700 18px system-ui;padding:10px 20px;margin:12px 8px 0 0;color:#001720;background:#19dce8;border:0;touch-action:manipulation}#ooze-name p{font-size:16px;line-height:1.4}`;document.head.appendChild(st);
-function show(v){document.getElementById('ooze-name')?.remove();result='';const panel=document.createElement('div');panel.id='ooze-name';
-const form=document.createElement('form');const h=document.createElement('h2');h.textContent='Your name';
-const input=document.createElement('input');input.type='text';input.inputMode='text';input.autocomplete='off';input.autocapitalize='characters';input.spellcheck=false;input.maxLength=16;input.setAttribute('aria-label','Your name');input.value=v||'';
-input.addEventListener('input',()=>{input.value=input.value.toUpperCase().replace(/[^A-Z0-9 _-]/g,'').slice(0,16)});
-const note=document.createElement('p');note.textContent='3-16 letters, digits, space, - or _.';
-const ok=document.createElement('button');ok.type='submit';ok.textContent='Save';const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel';
-cancel.onclick=()=>{panel.remove();document.getElementById('canvas')?.focus()};
-form.onsubmit=e=>{e.preventDefault();const n=input.value.trim();if(/^[A-Z0-9 _-]{3,16}$/.test(n)){result=n;panel.remove();document.getElementById('canvas')?.focus()}else note.textContent='Names are 3-16 letters, digits, space, - or _.'};
-form.append(h,input,note,ok,cancel);panel.append(form);document.body.append(panel);input.focus();input.select()}
-window.OozeName={open:v=>show(v),take:()=>{const n=result;result='';return n},close:()=>document.getElementById('ooze-name')?.remove()};})()"""
+const st=document.createElement('style');st.textContent=`#ooze-name-input{position:fixed;z-index:1100;box-sizing:border-box;margin:0;padding:0 10px;background:#020c12;color:#fff;border:2px solid #4e98ad;font-family:system-ui;font-weight:700;letter-spacing:1px;text-align:center;touch-action:manipulation;user-select:text;-webkit-user-select:text;outline:none}#ooze-name-input:focus{border-color:#19dce8}#ooze-name-input:disabled{opacity:.55}`;document.head.appendChild(st);
+function place(fx,fy,fw,fh,v,on){const c=document.getElementById('canvas');if(!c)return;const b=c.getBoundingClientRect();let el=document.getElementById('ooze-name-input');
+if(!el){el=document.createElement('input');el.id='ooze-name-input';el.type='text';el.inputMode='text';el.enterKeyHint='done';el.autocomplete='off';el.autocapitalize='characters';el.spellcheck=false;el.maxLength=16;el.setAttribute('aria-label','Your name');el.value=v||'';
+el.addEventListener('input',()=>{const p=el.selectionStart;el.value=el.value.toUpperCase().replace(/[^A-Z0-9 _-]/g,'').slice(0,16);try{el.setSelectionRange(p,p)}catch(e){}});
+el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const n=el.value.trim();if(/^[A-Z0-9 _-]{3,16}$/.test(n)){result=n;el.blur()}}});
+el.addEventListener('pointerdown',e=>e.stopPropagation());document.body.appendChild(el)}
+el.disabled=!on;el.style.left=(b.left+fx*b.width)+'px';el.style.top=(b.top+fy*b.height)+'px';el.style.width=(fw*b.width)+'px';el.style.height=(fh*b.height)+'px';el.style.fontSize=Math.max(14,Math.round(fh*b.height*0.42))+'px'}
+window.OozeName={place:place,value:()=>(document.getElementById('ooze-name-input')?.value||'').trim(),take:()=>{const n=result;result='';return n},set:v=>{const el=document.getElementById('ooze-name-input');if(el)el.value=v},remove:()=>document.getElementById('ooze-name-input')?.remove()};})()"""
+
+var _name_box: Control = null                      # ACCOUNT's NAME frame the HTML field sits on (web)
+var _name_inline := false                          # the HTML field is on the page
+var _name_enabled := false
+var _name_value := ""
+var _name_t := 0.0
 
 
-func _open_name(current: String) -> void:
-	## Web: the native name field (raises the phone keyboard); _process() takes its answer and renames.
+func _place_name_field() -> void:
+	## Web: lay the HTML name field over the NAME frame (canvas fractions -> CSS px in the page), or move it there.
+	if not OS.has_feature("web") or _page != "account" or not is_instance_valid(_name_box):
+		return
 	JavaScriptBridge.eval(NAME_UI_JS, true)
-	var ui = JavaScriptBridge.get_interface("OozeName")
-	if ui != null:
-		_name_open = true
-		ui.open(current)
+	var t := _name_box.get_global_transform_with_canvas()
+	var r := Rect2(t.origin, _name_box.size * t.get_scale())
+	var vp := get_viewport().get_visible_rect().size
+	JavaScriptBridge.eval("window.OozeName&&OozeName.place(%f,%f,%f,%f,%s,%s)" % [r.position.x / vp.x, r.position.y / vp.y,
+			r.size.x / vp.x, r.size.y / vp.y, JSON.stringify(_name_value), "true" if _name_enabled else "false"], true)
+	_name_inline = true
 
 
-var _name_open := false                            # the native name field is up: _process() polls its answer
+func _rename_from_field() -> void:
+	var n := str(JavaScriptBridge.eval("window.OozeName?OozeName.value():''", true)).strip_edges().to_upper()
+	await _rename_to(n)
 
 
-func _poll_name() -> void:
-	if not _name_open:
-		return
-	var ui = JavaScriptBridge.get_interface("OozeName")
-	if ui == null:
-		return
-	if not bool(JavaScriptBridge.eval("!!document.getElementById('ooze-name')", true)):
-		_name_open = false                         # closed (Save or Cancel): one last take below, then stop polling
-	var n := str(ui.take())
-	if n == "":
-		return
+func _rename_to(n: String) -> void:
 	var a := _account()
 	if await a.rename(n):
 		_account_note = "Name saved: " + a.player_name
+		JavaScriptBridge.eval("window.OozeName&&OozeName.set(%s)" % JSON.stringify(a.player_name), true)
+		_name_value = a.player_name
 	else:
 		_account_note = a.last_error
 	if _page == "account":
 		show_account()
+
+
+func _poll_name(dt: float) -> void:
+	## Web, while the HTML name field is up: remove it off ACCOUNT, keep it on its frame, save on Enter.
+	if not _name_inline:
+		return
+	if _page != "account":
+		JavaScriptBridge.eval("window.OozeName&&OozeName.remove()", true)
+		_name_inline = false
+		return
+	_name_t -= dt
+	if _name_t <= 0.0:
+		_name_t = 0.4
+		_place_name_field()
+	var n := str(JavaScriptBridge.eval("window.OozeName?OozeName.take():''", true))
+	if n != "":
+		_rename_to(n)
 
 
 func show_leaderboard() -> void:
@@ -2094,8 +2120,8 @@ func _process(dt: float) -> void:
 			var n := Net.chat_unread()
 			_chat_btn.text = "CHAT (%d)" % n if n > 0 else "CHAT"
 			_chat_btn.disabled = not Net.connected
-	if OS.has_feature("web") and _page == "account":            # PROGRESSION: the native name field's answer
-		_poll_name()
+	if OS.has_feature("web"):                                  # PROGRESSION: the HTML name field (ACCOUNT)
+		_poll_name(dt)
 	if not OS.has_feature("web") or _page != "online":
 		return
 	var ui = JavaScriptBridge.get_interface("OozeRoom")
@@ -2113,10 +2139,8 @@ func _exit_tree() -> void:
 		var ui = JavaScriptBridge.get_interface("OozeRoom")
 		if ui != null:
 			ui.closeCode()
-		if _name_open:                                   # PROGRESSION: the name field, if it was open
-			var nu = JavaScriptBridge.get_interface("OozeName")
-			if nu != null:
-				nu.close()
+		if _name_inline:                                 # PROGRESSION: the HTML name field, if it is up
+			JavaScriptBridge.eval("window.OozeName&&OozeName.remove()", true)
 
 
 func _fit() -> void:

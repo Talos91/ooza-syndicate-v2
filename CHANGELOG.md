@@ -1,5 +1,18 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.11 "Alpha 20" - 2026-09-27 (the phone keyboard opens for the player name)
+
+- Daniele on 0.20.10: "keyboard still doesn't appear for player name" (Android). 0.20.10's field was focused from
+  Godot's input handling, outside the tap's user gesture, so Android kept the keyboard down. Now, in the web build, the
+  NAME box on ACCOUNT *is* a native HTML <input> laid over it while the page is open: the player's tap lands on the DOM
+  element itself and the phone raises its keyboard. RENAME (or Enter) saves it through the same set_name; the field
+  follows the box, never steals focus on a rebuild, and goes away when the page does. Desktop keeps the LineEdit.
+- A stored session the server refuses (expired / removed) now falls back to a new guest instead of staying offline
+  (found while testing; `test_account --live` covers it).
+- Checked in the in-app browser with touch emulation at 740 x 360 on a local export: after a tap the focused element is
+  the input itself (document.activeElement), typing + RENAME and typing + Enter renamed the guest, the field is removed
+  off ACCOUNT. Not tried on a real phone.
+
 ## 0.20.10 "Alpha 20" - 2026-09-27 (rename works on phones)
 
 - Daniele: "rename doesn't allow for chat input" / "fix the rename on my mobile, no keyboard opens to input" - Godot's

@@ -64,7 +64,8 @@ func start(auto_guest := true) -> void:
 	if not back.is_empty():
 		await _adopt(back)
 	elif refresh_token != "":
-		await refresh()
+		if not await refresh() and refresh_token == "" and auto_guest:
+			await sign_in_guest()                     # the stored session was refused (expired / removed): a new guest
 	elif auto_guest:
 		await sign_in_guest()
 	changed.emit()

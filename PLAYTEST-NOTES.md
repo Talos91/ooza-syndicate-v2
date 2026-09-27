@@ -810,3 +810,8 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 
 - "rename doesn't allow for chat input" / "fix the rename on my mobile, no keyboard opens to input" - *Done:* on the web
   NAME / RENAME open a native text field that raises the phone keyboard (checked in touch emulation, not on a real phone).
+
+## 2026-09-27 - Daniele, the name keyboard on Android (0.20.11)
+
+- "keyboard still doesn't appear for player name" - *Done:* the NAME box is a real HTML field the tap lands on (checked
+  in touch emulation, not on a real phone).

@@ -111,3 +111,12 @@ func _live() -> void:
 	check(await a.refresh() and a.user_id == first_id, "signing back into account 1")
 	check(Progression.has_granted("live:test") and not Progression.has_granted("device:two"),
 			"account 1's cloud progress replaced the device's (account wins)")
+	# a stored session the server refuses (expired / removed): start() falls back to a new guest, not offline
+	var old_id := a.user_id
+	a.access_token = ""
+	a.refresh_token = "refused-token"
+	a.user_id = old_id
+	a._save()
+	await a.start(true)
+	check(a.signed_in() and a.state == "guest" and a.user_id != old_id, "a refused session becomes a new guest (%s)" % a.user_id)
+	print("LIVE test user: ", a.user_id, "  (delete it afterwards)")
