@@ -222,6 +222,7 @@ func _init() -> void:
 	run_until(sim14, func(): return sim14.nodes[1]["relay_phase"] == "", 8.0)
 	check(sim14.fall_losses.get("A", 0.0) > 0.0, "units on the dissolved deck fell (A lost %.0f of %.0f)" % [sim14.fall_losses.get("A", 0.0), a_before])
 	check(sim14.events.any(func(e): return e["type"] == "fall"), "a fall event is recorded (no combat credit)")
+	check(sim14.events.any(func(e): return e["type"] == "fall" and e.get("why", "") == "relay" and e.get("by", "") == sim14.nodes[1]["owner"] 			and e.get("relay", -1) == 1), "the relay fall credits the seat that fired it (by) and names the relay (progression)")
 
 	# a line that walks onto a switch deck WHILE it is dissolving, and a line whose head is past the
 	# deck when it goes, both lose what is on it (Daniele, Alpha 14: "they still don't consistently fall")

@@ -848,6 +848,7 @@ func _fire_relay_by(n: Dictionary, seat: String) -> bool:
 	n["relay_pending"] = relay_next_index(n)
 	n["relay_phase"] = "warning"
 	n["relay_t"] = Rules.RELAY_WARNING
+	n["relay_by"] = seat                              # who fired it: its falls credit this seat (progression)
 	events.append({"t": time, "type": "relay_fired", "node": n["id"], "seat": seat, "index": n["relay_pending"]})
 	fx_events.append({"type": "relay_warning", "node": n["id"]})
 	return true
@@ -943,17 +944,18 @@ func _relay_drop(n: Dictionary, closing: Array, delta: float) -> void:
 		ranges.sort_custom(func(x, y): return x[0] < y[0])
 		var seat: String = h["owner"]
 		var faction: String = h["faction"]
-		var acc := {"pts": [], "units": 0.0}
+		var acc := {"pts": [], "units": 0.0, "by": str(n.get("relay_by", n["owner"])), "relay": n["id"]}
 		for r in ranges:
 			_cut_range(h, r[0], r[1], false, acc)
 		if acc["units"] <= 0.0:
 			continue
 		if n["relay"] == "rotation":
 			fx_events.append({"type": "fling", "node": n["id"], "seat": seat, "units": Rules.shown(acc["units"]),
-					"faction": faction, "pts": acc["pts"], "centre": n["pos"], "turn": turn})
+					"faction": faction, "pts": acc["pts"], "centre": n["pos"], "turn": turn, "by": acc["by"]})
 		else:
 			fx_events.append({"type": "fall", "seat": seat, "faction": faction, "pts": acc["pts"], "units": acc["units"],
-					"hid": h["id"], "pour": false, "relay": n["id"], "edge": ranges[0][2], "shown": Rules.shown(acc["units"])})
+					"hid": h["id"], "pour": false, "relay": n["id"], "edge": ranges[0][2], "shown": Rules.shown(acc["units"]),
+					"by": acc["by"]})
 
 
 func _relay_apply(n: Dictionary) -> void:
@@ -1048,7 +1050,8 @@ func _cut_range(h: Dictionary, s0: float, s1: float, reroute := true, fling = nu
 		(fling["pts"] as Array).append_array(pts)
 		fling["units"] += units_on
 		if not decoy:
-			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on, "why": "relay"})
+			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on, "why": "relay",
+					"by": fling.get("by", ""), "relay": fling.get("relay", -1)})   # by = the seat that fired it
 	else:
 		fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on,
 				"hid": h["id"], "pour": walked and survives})
