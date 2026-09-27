@@ -9,6 +9,11 @@
   has no free match host (`--max-matches`) or runs another game version (`version.txt`), the game falls back
   to hosting in the creator's browser, as in stage 1. An empty server lobby closes after 5 s (0.20.1; 0.20.0: 90 s); a match everyone dropped out of waits 90 s for a RECONNECT.
 
+- Protocol `ooze20-net-5` (0.21.3): the host's packets (snapshots, effects, answers) reach guests as binary
+  frames: host -> relay `[1][len][guest id][packet]`, relay -> guest `[2][4]host[packet]`; everything else stays JSON text.
+  relay.py forwards both, so it must be at least as new as the game (the binary-aware relay has run since the 0.21.2
+  deploy; the net-4 one is kept on the box as `/opt/ooze/relay.py.net4-backup`). A slow guest skips snapshots (backlog).
+
 ## The box
 
 - Vultr, Singapore, `vhp-1c-1gb` (1 vCPU, 1 GB, NVMe, 2 TB traffic), Ubuntu 26.04 LTS, backups on.
