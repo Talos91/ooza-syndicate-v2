@@ -42,6 +42,11 @@ extends Node
 ## player's device runs the match: a phone in the background just drops its own seat for a RECONNECT. When the
 ## server has no match host free, or runs another game version, the room falls back to the creator's browser
 ## as host (the stage-1 rooms). Protocol ooze20-net-4 ("owner" in the lobby packet, the owner's lobby ops).
+## SMOOTH SERVER ROOMS (0.20.2, Daniele: "it lags ... connection"): the server's match host runs at 40 fps and sends
+## 20 snapshots a second on an even clock (the remainder carries over). A guest in a server room plays them out
+## through a small buffer (PLAYOUT_DELAY behind the newest), so bursty mobile data arrives evenly; lines keep moving
+## up to EXTRAPOLATE seconds without news, and a correction glides in over BLEND seconds instead of snapping.
+## Browser-hosted fallback rooms keep the 0.20.0 behaviour (10 Hz, applied on arrival).
 
 signal lobby_changed
 signal rematch_changed
@@ -59,15 +64,21 @@ const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "r
 		"build", "launch_monster", "eject"]
 const STRUCTURE_ACTIONS := ["build", "launch_monster", "eject"]   # run through Sim.structure_order
 const BUILD_KINDS := ["vat", "machinegoon", "laser", "forge", "monster_hub"]
-const SNAPSHOT_EVERY := 0.1
-const KEYFRAME_EVERY := 10                         # every 10th snapshot carries every horde's path
+const SNAPSHOT_EVERY := 0.1                        # a browser host (fallback rooms)
+const SNAPSHOT_EVERY_SERVER := 0.05                # the server's match host (0.20.2: 20 Hz)
+const KEYFRAME_EVERY := 10                         # every 10th snapshot carries every horde's path (20th at 20 Hz: once a second)
+const PLAYOUT_DELAY := 0.12                        # server rooms: a guest shows the match this far behind the newest snapshot
+const EXTRAPOLATE := 0.5                           # lines keep moving this long after the last snapshot applied
+const BLEND := 0.15                                # a snapshot's correction glides in over this long...
+const BLEND_MAX := 6.0                             # ...unless it is bigger than this (sim metres): then it snaps
+const PLAYOUT_MAX := 40                            # queued snapshots beyond this are dropped (a tab back from the background)
 const PATH_RESEND := 1.0                           # a changed path rides along for this many seconds
 const MAX_PACKET := 8 * 1024 * 1024
 const CHAT_MAX := 256
 const CHAT_HISTORY := 50
 const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
 const RELAY_URL := "wss://45-32-126-20.sslip.io/ooze"   # server/relay.py behind Caddy on the Vultr box (Alpha 20)
-const DEDICATED_FPS := 30                          # the server's match host: a steady Sim step, no screen to draw
+const DEDICATED_FPS := 40                          # the server's match host: a steady Sim step, no screen to draw; 2 frames a snapshot
 const DEDICATED_IDLE := 90.0                       # a server match everyone dropped out of waits this long for a RECONNECT
 const DEDICATED_LOBBY_IDLE := 5.0                  # an empty server lobby closes (nobody can come back to a lobby seat)
 const DEDICATED_BOOT_IDLE := 20.0                  # the creator never arrived
@@ -124,6 +135,10 @@ var _fresh := false                                # guest: the first snapshot o
 var _snap_clock := 0.0
 var _snap_count := 0
 var _since_snapshot := 0.0
+var _play_q: Array = []                            # server-room guest: ["state" | "effects", data] waiting to be shown
+var _play_t := -1.0                                # the host time the guest shows now (-1: not started)
+var _latest_t := 0.0                               # the newest snapshot's host time
+var _since_applied := 0.0                          # seconds since a snapshot was last shown
 var _elapsed := 0.0
 var _path_seen := {}                               # host: horde id -> [path key, time it changed]
 var _order_limits := {}
@@ -952,6 +967,10 @@ func _launch(info: Dictionary) -> void:
 	_snap_clock = 0.0
 	_snap_count = 0
 	_since_snapshot = 0.0
+	_play_q = []
+	_play_t = -1.0
+	_latest_t = 0.0
+	_since_applied = 0.0
 	sim = null
 	if not no_reload:
 		get_tree().reload_current_scene()
@@ -1337,6 +1356,83 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 		s.finished.emit(s.winner)
 
 
+func _smooth() -> bool:
+	## A guest in a server-hosted room (0.20.2 smoothing); fallback rooms keep the old apply-on-arrival.
+	return not hosting and room_owner > 1 and sim != null
+
+
+func _apply_state(data: Dictionary) -> void:
+	## Show one snapshot. Server rooms: a line the snapshot moves by less than BLEND_MAX keeps its shown place and
+	## glides to the host's over BLEND (blend), and the shown clock never runs backwards by a little.
+	var shown := {}
+	if _smooth():
+		for h in sim.hordes:
+			shown[h["id"]] = [float(h["s"]), str(h.get("_pk", ""))]
+	var clock := sim.time
+	apply_snapshot(sim, data)
+	_mark_ghosts()
+	_since_applied = 0.0
+	if not shown.is_empty():
+		for h in sim.hordes:
+			var was = shown.get(h["id"], null)
+			if was != null and str(was[1]) == str(h.get("_pk", "")):
+				var d := float(h["s"]) - float(was[0])
+				if absf(d) < BLEND_MAX:
+					h["_corr"] = d
+					h["s"] = float(was[0])
+		if clock > sim.time and clock - sim.time < EXTRAPOLATE:
+			sim.time = clock
+	if _fresh:                                        # joined late (RECONNECT): drop the nodes that already fell
+		_fresh = false
+		for id in sim.collapsed:
+			sim.fx_events.append({"type": "collapse", "node": id})
+	if sim.over:
+		finished = true
+
+
+func _playout(dt: float) -> void:
+	## Server-room guest: release queued snapshots when the shown clock reaches them. The shown clock runs
+	## PLAYOUT_DELAY behind the newest snapshot, a little faster or slower (up to 10 %) to stay there; far off (the
+	## start, a long stall, a tab back) it jumps.
+	_since_applied += dt
+	if _play_q.is_empty():
+		if _play_t >= 0.0:
+			_play_t += dt
+		return
+	while _play_q.size() > PLAYOUT_MAX:                # far behind: the old snapshots are history (effects still play)
+		var old: Array = _play_q.pop_front()
+		if old[0] == "effects" and sim != null:
+			sim.fx_events.append_array(old[1]["events"])
+	var target := _latest_t - PLAYOUT_DELAY
+	if _play_t < 0.0 or absf(target - _play_t) > 0.5:
+		_play_t = target
+	else:
+		_play_t += dt * clampf(1.0 + (target - _play_t) * 2.0, 0.9, 1.1)
+	while not _play_q.is_empty():
+		var e: Array = _play_q[0]
+		if e[0] == "state" and float(e[1].get("t", 0.0)) > _play_t:
+			break
+		_play_q.pop_front()
+		if e[0] == "state":
+			_apply_state(e[1])
+		elif sim != null:
+			sim.fx_events.append_array(e[1]["events"])
+
+
+static func blend(s: Sim, dt: float) -> void:
+	## A snapshot's correction (Net._apply_state) glides in: a share each frame, all of it within ~BLEND.
+	var k := minf(1.0, dt / BLEND)
+	for h in s.hordes:
+		if h.has("_corr"):
+			var c := float(h["_corr"])
+			var step := c * k
+			h["s"] = clampf(float(h["s"]) + step, 0.0, float(h["L"]))
+			if absf(c - step) < 0.001:
+				h.erase("_corr")
+			else:
+				h["_corr"] = c - step
+
+
 static func predict(s: Sim, dt: float) -> void:
 	## Light prediction between snapshots: the clock runs and lines keep moving at their speed.
 	s.time += dt
@@ -1407,16 +1503,27 @@ func _process(dt: float) -> void:
 		return
 	if hosting:
 		_snap_clock += dt
-		var every := SNAPSHOT_EVERY if not finished else 1.0   # the end screen: frozen state; a slow resend covers a dropped packet
-		if _snap_clock >= every or (sim.over and not finished):
-			_snap_clock = 0.0
+		var rate := SNAPSHOT_EVERY_SERVER if dedicated else SNAPSHOT_EVERY
+		var every := rate if not finished else 1.0     # the end screen: frozen state; a slow resend covers a dropped packet
+		if _snap_clock >= every - 0.001 or (sim.over and not finished):
+			_snap_clock = minf(_snap_clock - every, every) if not finished else 0.0   # carry the remainder: an even cadence
 			_snap_count += 1
+			var key := _snap_count % int(round(KEYFRAME_EVERY * SNAPSHOT_EVERY / rate)) == 1
 			if _has_guests():                          # alone with the AI: nobody to send to
-				var packet := var_to_bytes(snapshot(sim, _snap_count % KEYFRAME_EVERY == 1)).compress(FileAccess.COMPRESSION_DEFLATE)
+				var packet := var_to_bytes(snapshot(sim, key)).compress(FileAccess.COMPRESSION_DEFLATE)
 				_broadcast_raw("state", packet)
-				_send_ghosts(_snap_count % KEYFRAME_EVERY == 1)
+				_send_ghosts(key)
 			if sim.over:
 				finished = true
+	elif _smooth():
+		_since_snapshot += minf(dt, 0.25)            # arrivals (the host-silence check below)
+		var fdt := minf(dt, 0.25)
+		_playout(fdt)
+		if _since_applied < EXTRAPOLATE and not sim.over:
+			predict(sim, minf(dt, 0.05))
+		blend(sim, minf(dt, 0.05))
+		if _since_snapshot > HOST_GRACE:
+			fail("The host stopped responding for %d s. RECONNECT to try the room again." % int(HOST_GRACE))
 	else:
 		_since_snapshot += minf(dt, 0.25)            # a tab back from the background: one huge frame
 		if _since_snapshot < 0.35 and not sim.over:
@@ -1580,18 +1687,18 @@ func _guest_receive(raw: String) -> void:
 				_begin()
 		"state":
 			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null and active:
-				apply_snapshot(sim, data)
-				_mark_ghosts()
 				_since_snapshot = 0.0
-				if _fresh:                            # joined late (RECONNECT): drop the nodes that already fell
-					_fresh = false
-					for id in sim.collapsed:
-						sim.fx_events.append({"type": "collapse", "node": id})
-				if sim.over:
-					finished = true
+				if _smooth() and not _fresh:           # server rooms: the playout buffer shows it on time
+					_latest_t = maxf(_latest_t, float(data.get("t", 0.0)))
+					_play_q.append(["state", data])
+				else:
+					_apply_state(data)
 		"effects":
 			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null:
-				sim.fx_events.append_array(data["events"])
+				if _smooth() and not _play_q.is_empty():   # after the snapshot it belongs to
+					_play_q.append(["effects", data])
+				else:
+					sim.fx_events.append_array(data["events"])
 		"ghosts":
 			if data is Dictionary and int(data.get("round", -1)) == match_round:
 				own_ghosts = {}
