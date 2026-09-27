@@ -984,6 +984,13 @@ func _init() -> void:
 
 
 # ------------------------------------------------------------------ 0.18.10: rules, structures 2.1, teams, the end
+func _uniq_count(a: Array) -> int:
+	var d := {}
+	for x in a:
+		d[x] = true
+	return d.size()
+
+
 func _tp(seats := {3: "A", 4: "B"}, factions := {"A": "null", "B": "null"}, teams := {}) -> Sim:
 	## Two Piers (004): 3 - 1 - 0 (centre, T3) - 2 - 4, every link one deck.
 	var m := MapBuilder.load_map("res://maps/004-two-piers.json")
@@ -1217,6 +1224,16 @@ func _rules_0_18_10() -> void:
 	s._kill_horde(hv, "test")
 	s.step(0.05)
 	check(s.eliminated.has("B") and s.over and s.winner == "A", "no nodes and no lines: B is out")
+	check(s.is_out("B") and not s.is_out("A") and s.fx_events.any(func(e): return e["type"] == "eliminated" and e["seat"] == "B"),
+			"Sim.is_out(seat) says so (and an eliminated fx event tells the HUD)")
+	# ---------------------------------------------------------------- 0.19.2: a faction per seat, "random" resolved per seat
+	var rf := Sim.resolve_factions({"A": "vex", "B": "random", "C": "random", "D": "ember", "E": "random"}, ["A", "B", "C", "D", "E"], 42)
+	check(rf["A"] == "vex" and rf["D"] == "ember" and rf.values().all(func(f): return Rules.FACTIONS.has(f)) and _uniq_count(rf.values()) == 5,
+			"each random seat gets its own faction, avoiding the ones already taken (%s)" % str(rf))
+	check(Sim.resolve_factions({"A": "vex", "B": "random", "C": "random", "D": "ember", "E": "random"}, ["A", "B", "C", "D", "E"], 42) == rf,
+			"...drawn from the match seed: host and guests resolve the same")
+	var sf := _tp({3: "A", 4: "B"}, {"A": "solar", "B": "random"})
+	check(sf.factions["A"] == "solar" and Rules.FACTIONS.has(sf.factions["B"]) and sf.factions["B"] != "solar", "Sim.setup resolves a random rival (B = %s)" % sf.factions["B"])
 	# ---------------------------------------------------------------- 7:00: the last platform's owner wins; neutral -> DRAW
 	for who in ["A", ""]:
 		s = _tp()
@@ -1514,7 +1531,14 @@ func _mk(m: Dictionary, fa: String, fb: String, lo := {}, seats := {}) -> Sim:
 	var s := Sim.new()
 	var st: Dictionary = seats if not seats.is_empty() else {int(m["seats"]["1v1"][0]["node"]): "A", int(m["seats"]["1v1"][1]["node"]): "B"}
 	s.setup(m, MapBuilder.layout(m), st, {"A": fa, "B": fb}, 1, {}, lo)
+	_ready_skills(s)
 	return s
+
+
+func _ready_skills(s: Sim) -> void:
+	## 0.19.2 skills start on their full cooldown; the skill tests stage them ready.
+	for seat in s.skill_cd:
+		s.skill_cd[seat] = {"active": 0.0, "map": 0.0}
 
 
 func _steps(s: Sim, seconds: float, dt := 0.05) -> void:
@@ -1544,6 +1568,16 @@ func _skills_tests() -> void:
 			"skills table: 5 active + 5 map + 5 ultimates, each with name, slot, cd, target and desc")
 	check(Rules.FACTION_ULTIMATE.values().map(func(v): return v[0]) == ["Rewire", "Echo Split", "Superbloom", "Core Meltdown", "Relay Aegis"],
 			"FACTION_ULTIMATE carries the approved names")
+	# ---------------------------------------------------------------- 0.19.2: skills start on their full cooldown
+	var fresh := Sim.new()
+	fresh.setup(tp, MapBuilder.layout(tp), {int(tp["seats"]["1v1"][0]["node"]): "A", int(tp["seats"]["1v1"][1]["node"]): "B"},
+			{"A": "bloom", "B": "ember"}, 1)
+	check(absf(fresh.cooldown("A", "active") - Rules.SKILLS["spore_burst"]["cd"]) < 0.001 and absf(fresh.cooldown("A", "map") - Rules.SKILLS["mire"]["cd"]) < 0.001
+			and absf(fresh.cooldown("B", "active") - Rules.SKILLS["scorch"]["cd"]) < 0.001 and not fresh.can_cast("A", "active", fresh.homes["A"]),
+			"every active and map skill starts on its full cooldown, as if just used")
+	check(fresh.charge("A") == 0.0 and "charging" in fresh.cast_check("A", "ultimate", null), "the ultimate still charges from 0")
+	_steps(fresh, Rules.SKILLS["spore_burst"]["cd"] + 0.1, 0.5)
+	check(fresh.can_cast("A", "active", fresh.homes["A"]), "...and is ready once its cooldown has run")
 	# ---------------------------------------------------------------- loadouts
 	var s := _mk(sw, "vex", "bloom", {"A": {"active": "scorch", "map": "anchor"}})
 	check(s.loadouts["A"] == {"active": "scorch", "map": "anchor", "ultimate": "rewire"}, "a chosen loadout; the ultimate follows the faction")
@@ -1577,9 +1611,20 @@ func _skills_tests() -> void:
 		check(s.cast("A", "active", h["id"]), tag + ": Surge on a moving line")
 		a0 = h["s"]
 		_steps(s, 1.0)
-		check(absf((h["s"] - a0) / plain - 1.5) < 0.05, tag + ": Surge = +50 %% speed (%.2f)" % ((h["s"] - a0) / plain))
+		check(absf((h["s"] - a0) / plain - 1.75) < 0.05, tag + ": Surge = +75 %% speed (%.2f)" % ((h["s"] - a0) / plain))
+		check(s.door_mult(h) == 2.0, tag + ": ...and its door rate doubles (Sim.door_mult)")
 		_steps(s, 7.5)
-		check(s.effects_on("horde", h["id"]).is_empty(), tag + ": Surge ends after 8 s (or with the line)")
+		check(s.effects_on("horde", h["id"]).is_empty() and s.door_mult(h) == 1.0, tag + ": Surge ends after 8 s (or with the line)")
+		# a surged line still streaming out: its units leave the door twice as fast
+		s = _mk(tp, "null", "null", {"A": {"active": "surge"}})
+		s.nodes[3]["units"] = 400.0
+		var hd := s.send(3, 0, 1.0)
+		_steps(s, 0.5)
+		s.cast("A", "active", hd["id"])
+		var out0: float = hd["units"]
+		_steps(s, 1.0)
+		check(absf((hd["units"] - out0) - 2.0 * Rules.exit_rate()) < 2.0 and hd["streaming"],
+				tag + ": a surged line streams out of its door at twice the rate (%.0f units in 1 s)" % (hd["units"] - out0))
 	# ---------------------------------------------------------------- Spore Burst
 	s = _mk(tp, "bloom", "null")
 	s.nodes[3]["units"] = 20.0
@@ -1653,8 +1698,8 @@ func _skills_tests() -> void:
 		s.nodes[3]["units"] = 300.0
 		var h := s.send(3, 4, 1.0)
 		check(s.cast("B", "map", e10), tag + ": Demolish the 1-0 deck")
-		_steps(s, 2.9)
-		check(s.is_edge_open(e10), tag + ": during the 3 s warning the deck still stands")
+		_steps(s, 1.4)
+		check(s.is_edge_open(e10) and Rules.SKILLS["demolish"]["warn"] == 1.5, tag + ": during the 1.5 s warning the deck still stands (0.19.2: was 3 s)")
 		_steps(s, 0.2)
 		check(not s.is_edge_open(e10) and s.demolished.has(e10) and s.fx_events.any(func(e): return e["type"] == "demolish"), tag + ": then it is gone")
 		check(s.find_route(3, 4).is_empty(), tag + ": no route crosses it")

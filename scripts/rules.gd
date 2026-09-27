@@ -504,8 +504,11 @@ const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
 #   none        no target (cast at once)
 const SKILLS := {
 	# ---- active pool (combat), every map
+	# 0.19.2 (Daniele, 2026-09-27): +75 % speed (was +50 %) and its units leave and enter doors twice as fast
+	# ("door": the door-rate multiplier, Sim.door_mult)
 	"surge": {"name": "Surge", "slot": "active", "cd": 28.0, "target": "own_line",
-			"desc": "One of your lines moves 50 % faster for 8 s.", "mult": 1.5, "dur": 8.0},
+			"desc": "One of your lines moves 75 % faster for 8 s, and pours out of and into doors twice as fast.",
+			"mult": 1.75, "door": 2.0, "dur": 8.0},
 	"spore_burst": {"name": "Spore Burst", "slot": "active", "cd": 35.0, "target": "own_vat",
 			"desc": "One vat produces 1.8x for 10 s, within its cap.", "mult": 1.8, "dur": 10.0},
 	"fortify": {"name": "Fortify", "slot": "active", "cd": 35.0, "target": "own_node",
@@ -519,7 +522,7 @@ const SKILLS := {
 			"desc": "A decoy line that looks real and draws cannon fire, but never fights.", "fraction": 0.5},
 	# ---- map pool (network skills)
 	"demolish": {"name": "Demolish", "slot": "map", "cd": 60.0, "target": "fixed_deck",
-			"desc": "A deck collapses after 3 s; lines pour off it; it rebuilds after 20 s.", "warn": 3.0, "down": 20.0},
+			"desc": "A deck collapses after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
 	# speed x0.6 = 40 % slower; in SIEGE the stronger of this and the goo corridor slow applies (no stacking)
 	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "Enemy lines on one deck are 40 % slower for 8 s.", "slow": 0.6, "dur": 8.0},
@@ -567,6 +570,10 @@ const FACTION_LOADOUT := {
 	"ember": {"active": "scorch", "map": "demolish", "map_no_relays": "demolish"},
 	"solar": {"active": "fortify", "map": "anchor", "map_no_relays": "anchor"},
 }
+# SKILLS START ON COOLDOWN (0.19.2, Daniele 2026-09-27: every active and map skill is on its full cooldown at the
+# match start "as if they just got used" - otherwise e.g. the production skill is overpowered at second 1). The
+# ultimate still charges from 0 (below).
+const SKILLS_START_ON_COOLDOWN := true
 # ULTIMATE CHARGE (draft sec1, locked): ~120 s of natural charge; enemy combat kills speed it up, but a
 # charge never completes sooner than ULT_MIN_TIME after the match start or the last cast. No charge from
 # neutrals, friendly fire, sacrifices, decoys, ultimate kills or falls. Each SHOWN enemy unit your troops,

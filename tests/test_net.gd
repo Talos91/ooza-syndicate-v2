@@ -359,12 +359,19 @@ func _run() -> void:
 	var mp0: float = gs.monsters[0]["s"]
 	host.predict(gs, 0.2)
 	check(float(gs.monsters[0]["s"]) > mp0, "prediction walks the monster between snapshots")
+	hs.eliminated["C"] = true                        # (staged) an out seat reads as out on the guest too (0.19.2 spectating)
+	host.apply_snapshot(gs, host.snapshot(hs, false))
+	check(gs.is_out("C") and not gs.is_out("B"), "Sim.is_out works from the host's snapshots")
+	hs.eliminated.erase("C")
 	hs.monsters = []
 	hs.nodes[home_b]["allies"] = {}
 	hs.nodes[home_b]["arrivals"] = []
 	hs.draw_line = ""
 
 	# ---------------------------------------------------------------- SKILLS 2.0: cast orders, snapshots, Ghost Line privacy
+	check(hs.cooldown("B", "active") > 0.0 or hs.time > 30.0, "(0.19.2: skills start on their cooldown)")
+	for seat in hs.skill_cd:                         # stage them ready for the order checks
+		hs.skill_cd[seat] = {"active": 0.0, "map": 0.0}
 	host._order_limits = {}                          # (the test fires orders faster than any player)
 	host._packet_limits = {}
 	host.bridge.sent = []

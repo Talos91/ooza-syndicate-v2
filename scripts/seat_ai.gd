@@ -1014,12 +1014,14 @@ func _own_route_uses(sim: Sim, ei: int) -> bool:
 
 func _pick(sim: Sim, id: String) -> Array:
 	match id:
-		"surge":                                      # the biggest line still well short of its target
+		"surge":                                      # the biggest line (with what its door still owes) well short of its target
 			var best := {}
+			var best_u := 0.0
 			for h in _my_lines(sim):
-				if h["units"] >= 10.0 * Rules.SCALE and float(h["L"]) - float(h["s"]) > 15.0 \
-						and (best.is_empty() or h["units"] > best["units"]):
+				var u: float = maxf(h["units"], h["ordered"]) if h["streaming"] else h["units"]   # 0.19.2: the door doubles too
+				if u >= 10.0 * Rules.SCALE and float(h["L"]) - float(h["s"]) > 15.0 and u > best_u:
 					best = h
+					best_u = u
 			return [best["id"]] if not best.is_empty() else []
 		"spore_burst":                                # the most productive vat that has room to fill
 			var best := {}

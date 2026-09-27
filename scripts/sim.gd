@@ -81,14 +81,10 @@ var _popped: Array = []              # decoys that touched an enemy this step (t
 
 
 func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1, seat_teams: Dictionary = {}, seat_loadouts: Dictionary = {}) -> void:
-	factions = {}
-	for id in seats:                                   # only seats actually in this match
-		factions[seats[id]] = seat_factions.get(seats[id], "null")
-	if factions.is_empty():
-		factions = seat_factions
 	teams = seat_teams
 	rng.seed = seed_value if seed_value >= 0 else int(Time.get_unix_time_from_system()) % 100000
 	match_seed = int(rng.seed)
+	factions = resolve_factions(seat_factions, seats.values() if not seats.is_empty() else seat_factions.keys(), match_seed)
 	_map_last_stand = map.get("lastStand", {})
 	v3 = map.has("layout")
 	if v3:
@@ -221,6 +217,31 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 
 
 var _map_last_stand: Dictionary = {}
+
+
+static func resolve_factions(wanted: Dictionary, seats: Array, seed_value: int) -> Dictionary:
+	## PER-SEAT FACTIONS (0.19.2): seat -> faction for these seats. `wanted[seat]` is a faction id (Rules.FACTIONS)
+	## or "random" (or missing / unknown): each random seat gets its own pick, preferring a faction no other seat
+	## has, drawn from `seed_value` (the match seed: host and guests resolve the same). Sim.setup runs this on
+	## its `seat_factions` argument; main may call it first (e.g. to colour seats by faction).
+	var out := {}
+	for seat in seats:
+		var f := str(wanted.get(seat, "random"))
+		if Rules.FACTIONS.has(f):
+			out[seat] = f
+	var pick := RandomNumberGenerator.new()
+	pick.seed = seed_value * 31 + 7
+	var names: Array = Rules.FACTIONS.keys()
+	names.sort()
+	var order := seats.duplicate()
+	order.sort()
+	for seat in order:
+		if out.has(seat):
+			continue
+		var free := names.filter(func(x): return not x in out.values())
+		var pool: Array = free if not free.is_empty() else names
+		out[seat] = pool[pick.randi_range(0, pool.size() - 1)]
+	return out
 
 
 func controlled_edges(node_id: int) -> Array:
@@ -1462,7 +1483,7 @@ func step(dt: float) -> void:
 		if h.is_empty() or h["owner"] != n["owner"]:
 			_end_streaming(n, "lost")
 			continue
-		var x: float = minf(n["streaming"]["remaining"], minf(Rules.exit_rate() * dt, n["units"]))
+		var x: float = minf(n["streaming"]["remaining"], minf(Rules.exit_rate() * door_mult(h) * dt, n["units"]))
 		n["units"] -= x
 		h["units"] += x
 		n["streaming"]["remaining"] -= x
@@ -1480,7 +1501,7 @@ func step(dt: float) -> void:
 			mult *= deck_slow(h) * boost                  # enemy goo (home advantage) or Mire, the stronger
 			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
-				ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * boost * dt)
+				ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * maxf(boost, door_mult(h)) * dt)
 			h["s"] += ds
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
@@ -1507,7 +1528,7 @@ func step(dt: float) -> void:
 			var len := chain_length(h)
 			var tail := sample(h, h["L"] - len)
 			var tail_speed: float = Rules.move_speed() * (Rules.platform_mult() if tail[2] else 1.0)
-			var rate: float = tail_speed * h["units"] / maxf(len, 0.5)
+			var rate: float = tail_speed * h["units"] / maxf(len, 0.5) * door_mult(h)   # Surge: pours in twice as fast
 			var x := minf(h["units"], maxf(rate, 4.0) * dt)
 			h["units"] -= x
 			_arrive(nodes[h["target"]], h, x)
@@ -2941,6 +2962,13 @@ func _check_eliminations() -> void:
 		if not eliminated.has(seat) and not alive.has(seat):
 			eliminated[seat] = true
 			events.append({"t": time, "type": "eliminated", "seat": seat})
+			fx_events.append({"type": "eliminated", "seat": seat})   # the HUD: YOU'RE OUT / a seat greys out
+
+
+func is_out(seat: String) -> bool:
+	## 0.19.2: this seat is out of the match (no nodes, no lines, no monster, no stored troops left) - the HUD
+	## offers SPECTATE / MAIN MENU. Guests read it from the host's snapshots ("eliminated"), so it works online.
+	return eliminated.has(seat)
 
 
 func _force_end() -> void:
@@ -3432,7 +3460,8 @@ func _monster_end(m: Dictionary) -> void:
 #   loadouts[seat] = {"active", "map", "ultimate"}; skill_cd[seat] = {"active": s, "map": s};
 #   ult_charge[seat] 0..1; ult_since[seat] s; demolished[edge] = s until it rebuilds;
 #   effects = [{"id": skill id, "seat": caster, "on": "node"|"edge"|"horde"|"relay"|"seat", "target": id or seat,
-#       "t": s left, "dur": s total, ...extras}]. Extras: scorch "left" (sim units it may still kill), "kills";
+#       "t": s left, "dur": s total, ...extras}]. Extras: surge "mult" (speed), "door" (door rate, 0.19.2 - door_mult);
+#       scorch "left" (sim units it may still kill), "kills";
 #       demolish "phase" "warning" (3 s) / "down" (20 s); anchor and Aegis decks "open" (the frozen state);
 #       relay_hack "mode" "fire" / "jam"; rewire "fires" left, "fired" [relay ids]; superbloom "left" (extra
 #       sim units still allowed; -1 = uncapped); relay_aegis "center" (the node cast on); an Echo Split jam
@@ -3482,6 +3511,9 @@ func _setup_skills(seat_loadouts: Dictionary) -> void:
 			lo["map"] = str(Rules.FACTION_LOADOUT.get(f, Rules.FACTION_LOADOUT["null"])["map_no_relays"])
 		loadouts[seat] = lo
 		skill_cd[seat] = {"active": 0.0, "map": 0.0}
+		if Rules.SKILLS_START_ON_COOLDOWN:            # 0.19.2: as if they had just been used
+			for slot in ["active", "map"]:
+				skill_cd[seat][slot] = float(Rules.SKILLS[lo[slot]]["cd"])
 		ult_charge[seat] = 0.0
 		ult_since[seat] = 0.0
 
@@ -3674,6 +3706,18 @@ func skill_speed(h: Dictionary) -> float:
 		for e in _fx_seat.get(h["owner"], []):
 			if e["id"] == "rewire":
 				m = maxf(m, float(e["mult"]))
+	return m
+
+
+func door_mult(h: Dictionary) -> float:
+	## Door-rate multiplier for this line (0.19.2 Surge: its units leave the source door and pour into the
+	## target twice as fast while it lasts; 1.0 otherwise). Views scale the pour-out / pour-in by it.
+	if _fx_horde.is_empty():
+		return 1.0
+	var m := 1.0
+	for e in _fx_horde.get(h["id"], []):
+		if e["id"] == "surge":
+			m = maxf(m, float(e.get("door", 1.0)))
 	return m
 
 
@@ -3956,7 +4000,7 @@ func cast(seat: String, slot: String, target = null) -> bool:
 		"surge":
 			var hid := _as_int(target)
 			_drop_effects("horde", hid, "surge")
-			_add_effect(id, seat, "horde", hid, sk["dur"], {"mult": sk["mult"]})
+			_add_effect(id, seat, "horde", hid, sk["dur"], {"mult": sk["mult"], "door": sk.get("door", 1.0)})
 		"spore_burst":
 			_drop_effects("node", _as_int(target), id)
 			_add_effect(id, seat, "node", _as_int(target), sk["dur"], {"mult": sk["mult"]})

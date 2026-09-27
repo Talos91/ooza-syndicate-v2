@@ -1196,7 +1196,7 @@ static func predict(s: Sim, dt: float) -> void:
 		mult *= s.deck_slow(h) * boost                # enemy goo or Mire, the stronger
 		var ds: float = Rules.move_speed() * h.get("speed", 1.0) * s.stat(h["owner"], "speed") * mult * dt
 		if h["streaming"]:
-			ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * boost * dt)
+			ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * maxf(boost, s.door_mult(h)) * dt)   # Surge: the door doubles too
 		if h.get("pour", false):                    # walking off a lip: the head stays, the line pours on
 			h["fcut"] = float(h.get("fcut", 0.0)) + ds
 			h["units"] = maxf(0.0, h["units"] - ds / Rules.metres_per_unit())
