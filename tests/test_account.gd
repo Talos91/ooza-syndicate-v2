@@ -89,6 +89,9 @@ func _live() -> void:
 			and str(r["json"][0]["save"]["files"]["progress"]).contains("live:test"), "the cloud copy holds this device's progress")
 	var hist := await a.match_history()
 	check(hist is Array and hist.is_empty(), "MATCH HISTORY answers: a new account has no server rounds")
+	var mine := await a.my_season_wins()
+	check(int(mine.get("wins", -1)) == 0 and mine.get("rank") == null and str(mine.get("name", "")) == a.player_name,
+			"YOU line: a new account has 0 wins, no rank (%s)" % str(mine))
 	var board := await a.leaderboard()
 	check(board is Array, "the season board answers (%d rows)" % board.size())
 	var t := a.access_token

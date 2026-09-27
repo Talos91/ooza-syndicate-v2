@@ -60,6 +60,8 @@ func _build(r: Dictionary, scale: float) -> void:
 
 static func _note(r: Dictionary) -> String:
 	var parts := []
+	if r.get("unranked", false):                      # 0.20.13: a browser-hosted room isn't recorded online
+		parts.append("UNRANKED - this room ran in a browser, so it doesn't count online")
 	for item in r.get("unlocked", []):
 		parts.append("%s VAT UNLOCKED" % str(item).get_slice(":", 2).to_upper())
 	var done: Array = r.get("challenges", [])
