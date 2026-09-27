@@ -346,8 +346,8 @@ const LESSONS := [
 			{"key": "reveal", "read_only": true},
 			{"key": "evacuate", "target": {"nodes": ["I1", "I2"], "senders": "mine"}, "gesture": [["drag", "H", "I1"]], "assist": ["I1", "I2"],
 				"pass": ["custom", "ring_down"], "fail": ["custom", "ring_lost"], "budget": 60.0},
-			{"key": "vls", "enter": ["vls"], "target": {"nodes": ["I1", "I2", "I3"]}, "read_only": true, "pass": ["won"]},
-			{"key": "hold", "target": {"nodes": ["I1", "I2", "I3"], "senders": "mine"}, "gesture": [["vls_move"]], "assist": ["I1", "I2", "I3"], "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
+			{"key": "vls", "enter": ["vls"], "target": {"nodes": ["I1", "I2", "I3"]}, "read_only": true, "pass": ["won"], "rival_cap": 5},
+			{"key": "hold", "target": {"nodes": ["I1", "I2", "I3"], "senders": "mine"}, "gesture": [["vls_move"]], "assist": ["I1", "I2", "I3"], "rival_cap": 5, "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
 		],
 		"done": ["L7.done1", "L7.done2"]},
 	{"id": 8, "key": "L8", "map": "T-10-long-decks", "abilities": true, "vls": false,
@@ -1117,6 +1117,11 @@ func _tick_step(st: Dictionary, _dt: float) -> void:
 		_tick_hint(st["hint"])
 	if st.has("assist"):
 		_tick_assist(st["assist"])
+	if st.has("rival_cap"):                           # L7's rival is scripted weak (§3): whatever node the Very Last
+		var cap := float(st["rival_cap"]) * Rules.SCALE   # Stand leaves it, any attack of yours can take it
+		for n in sim.nodes:
+			if n["owner"] == RIVAL:
+				n["units"] = minf(float(n["units"]), cap)
 	if st.has("supply") and not _catch.has("supplied"):
 		_catch["supplied"] = true                     # (the defend step: the reinforcing node can always cover the line)
 		var threat := 0.0

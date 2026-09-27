@@ -617,7 +617,7 @@ func test_l7_seeds() -> void:
 	## The Very Last Stand's picks are random: whichever node drops first, a player who evacuates to the centre
 	## and then follows the hand (off the warned node, onto the one that stays) wins.
 	var wins := 0
-	var seeds := [1, 2, 3, 4, 5, 6, 8, 9]
+	var seeds := [1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
 	for sd in seeds:
 		var r := make(7, sd)
 		var d: TutorialDirector = r[0]
