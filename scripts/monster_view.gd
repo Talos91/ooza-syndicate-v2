@@ -491,9 +491,9 @@ static func stage(main: Node, arg: String) -> void:
 	##   monster:<hub>   seat A builds a ready hub on relay node <hub> (or the first relay) and launches at once
 	##                   toward the node in reach with the most enemy / neutral bodies on the way, B sends a
 	##                   line into its path
-	##   guns[:<k>]      seat A gets Machingoons T1, T2, T3 (tiers rotated by k) and a laser on its nearest
+	##   guns[:<k>]      seat A gets Machinegoons T1, T2, T3 (tiers rotated by k) and a laser on its nearest
 	##                   nodes, B sends lines at them from a neighbour over an open deck
-	##   skins           seat A picks a non-default look for every family: vats, two Machingoons, laser, forge
+	##   skins           seat A picks a non-default look for every family: vats, two Machinegoons, laser, forge
 	##                   and a ready hub on its nearest relays; the monster launches at 2.6 s
 	##   relays          seat A owns every relay, the first fires at 0.6 s (ready / warning / cooling looks)
 	##   vats:<look>     every free node becomes seat A's in vat look <look> (Cosmetics id), tiers 1-3 round the
@@ -530,7 +530,7 @@ static func stage(main: Node, arg: String) -> void:
 				var n: Dictionary = picks[i]
 				n["owner"] = "A"
 				n["units"] = 60.0
-				n["structure"] = "machingoon"
+				n["structure"] = "machinegoon"
 				n["tier"] = (i + maxi(node, 0)) % 3 + 1          # guns:<k> rotates the tiers round the three nodes
 				Sim._sync_legacy(n)
 			for n in sim.nodes:
@@ -556,7 +556,7 @@ static func stage(main: Node, arg: String) -> void:
 			main.set_meta("stage_guns", pairs)
 			print("stage: guns at ", picks.slice(0, 4).map(func(x): return x["id"]), " lines ", pairs)
 		"skins":                                       # seat A in non-default looks everywhere (0.19.2 proof)
-			Cosmetics.set_loadout("A", {"vat": "reactor", "machingoon": "spitter", "laser": "tesla", "forge": "anvil",
+			Cosmetics.set_loadout("A", {"vat": "reactor", "machinegoon": "spitter", "laser": "tesla", "forge": "anvil",
 					"monster_hub": "pit", "monster": "alt"})
 			var home: int = sim.homes.get("A", 0)
 			var hp: Vector3 = sim.nodes[home]["pos"]
@@ -582,7 +582,7 @@ static func stage(main: Node, arg: String) -> void:
 					n["units"] = 60.0
 					n["tier"] = 2 + k % 2
 					if guns > 0:
-						n["structure"] = "machingoon"
+						n["structure"] = "machinegoon"
 						guns -= 1
 					Sim._sync_legacy(n)
 					k += 1

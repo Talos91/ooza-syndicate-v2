@@ -23,7 +23,7 @@ extends RefCounted
 ## busy front relay), the forge or its monster hub there - the slot costs no vat. Level 2 opens routes too.
 ## Training and Casual (level 0) keep the plain behaviour.
 ## Structures 2.1 (0.18.10): relay nodes are garrisoned by threat like any node (no fixed relay garrison) and
-## valued knowing they produce nothing; a machingoon goes on a frontline common node that keeps taking small
+## valued knowing they produce nothing; a machinegoon goes on a frontline common node that keeps taking small
 ## raids; one monster hub per seat, and monsters: Veteran / Expert launch at targets whose capture or whose
 ## kicked enemy lines are worth it (never through their own lines), the lower levels rarely. In team modes it
 ## EJECTs stored allied troops from a node about to drop. Veteran / Expert (intel 1) count the defender's forge
@@ -264,7 +264,7 @@ func _attack(sim: Sim) -> void:
 			continue
 		# what the node is worth: its production (a relay - or a laser / forge / hub node - makes nothing: its
 		# value is the shortcut, _relay_value), plus a special node's bonus and a neutral's
-		var worth: float = target["tier"] * 8.0 if target["structure"] in ["vat", "machingoon"] else 0.0
+		var worth: float = target["tier"] * 8.0 if target["structure"] in ["vat", "machinegoon"] else 0.0
 		var score: float = 70.0 + worth + (12.0 if target["category"] == "strategic" else 0.0) \
 				+ (18.0 if target["owner"] == "" else 0.0) - needed / Rules.SCALE * 0.6 - travel * 2.0
 		score += _rival_adjustment(sim, target) + _relay_value(sim, target)
@@ -641,8 +641,8 @@ func _retreats(sim: Sim) -> void:
 # ------------------------------------------------------------------ investment
 func _build(sim: Sim) -> void:
 	## Same costs and slots as the player. One investment per `invest` seconds, never on a node under
-	## attack or about to drop in the Last Stand: machingoon upgrades, vat upgrades (T3 at most), the forge
-	## once it has three vats, a monster hub, lasers on free relay slots, a machingoon on a raided frontline.
+	## attack or about to drop in the Last Stand: machinegoon upgrades, vat upgrades (T3 at most), the forge
+	## once it has three vats, a monster hub, lasers on free relay slots, a machinegoon on a raided frontline.
 	if sim.time < _invest_after:
 		return
 	var owned := _mine(sim)
@@ -650,7 +650,7 @@ func _build(sim: Sim) -> void:
 		if n["build_kind"] != "" or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue
 		var reserve := _reserve(sim, n) + 4.0 * Rules.SCALE
-		if n["structure"] == "machingoon" and n["tier"] < 3 \
+		if n["structure"] == "machinegoon" and n["tier"] < 3 \
 				and n["units"] >= sim.upgrade_cost(n) + reserve and sim.upgrade(n["id"], seat):
 			_invest_after = sim.time + float(cfg["invest"])
 			return
@@ -659,7 +659,7 @@ func _build(sim: Sim) -> void:
 		if _build_relay_slot(sim, owned, true):
 			return
 		_feed_relay_slot(sim, owned, vats, 8.0)
-	if int(cfg["relays"]) >= 1 and _build_machingoon(sim, owned, vats):
+	if int(cfg["relays"]) >= 1 and _build_machinegoon(sim, owned, vats):
 		return
 	vats.sort_custom(func(a, b): return a["tier"] < b["tier"] if a["tier"] != b["tier"] else a["units"] > b["units"])
 	for n in vats:
@@ -677,7 +677,7 @@ func _build(sim: Sim) -> void:
 
 func _note_raids(sim: Sim) -> void:
 	## Remember the hostile lines that came at its nodes (size and time): a node that keeps taking small raids
-	## is where a machingoon pays (single target, good against trickles).
+	## is where a machinegoon pays (single target, good against trickles).
 	for h in sim.hordes:
 		if _raid_seen.has(h["id"]) or not _hostile(sim, h["owner"]) or h.get("retreat", false):
 			continue
@@ -702,32 +702,32 @@ func _trickled(n: Dictionary) -> bool:
 	return small >= Rules.AI_TRICKLE_RAIDS
 
 
-func _build_machingoon(sim: Sim, owned: Array, vats: Array) -> bool:
-	## A machingoon in place of the vat on a frontline common node that keeps taking small raids - never on
-	## its home or when it would leave fewer than AI_MACHINGOON_VATS - 1 vats, one at a time per three vats.
-	if vats.size() < Rules.AI_MACHINGOON_VATS:
+func _build_machinegoon(sim: Sim, owned: Array, vats: Array) -> bool:
+	## A machinegoon in place of the vat on a frontline common node that keeps taking small raids - never on
+	## its home or when it would leave fewer than AI_MACHINEGOON_VATS - 1 vats, one at a time per three vats.
+	if vats.size() < Rules.AI_MACHINEGOON_VATS:
 		return false
-	var guns := owned.filter(func(n): return n["structure"] == "machingoon" or n["build_kind"] == "machingoon").size()
+	var guns := owned.filter(func(n): return n["structure"] == "machinegoon" or n["build_kind"] == "machinegoon").size()
 	if guns >= int(vats.size() / 3):
 		return false
 	var best := {}
 	var best_v := 0.0
 	for n in vats:
 		if n["id"] == sim.homes.get(seat, -1) or n["build_kind"] != "" or _drops_soon(sim, n["id"]) \
-				or sim.can_build(n["id"], seat, "machingoon") != "" or not _trickled(n):
+				or sim.can_build(n["id"], seat, "machinegoon") != "" or not _trickled(n):
 			continue
 		var front := false
 		for link in sim.adj[n["id"]]:
 			if _hostile(sim, sim.nodes[link[0]]["owner"]):
 				front = true
 				break
-		if not front or n["units"] < sim.build_cost(n, "machingoon") + _reserve(sim, n):
+		if not front or n["units"] < sim.build_cost(n, "machinegoon") + _reserve(sim, n):
 			continue
 		var v: float = (_raids.get(n["id"], []) as Array).size() - n["tier"] * 0.5
 		if best.is_empty() or v > best_v:
 			best = n
 			best_v = v
-	if best.is_empty() or not sim.build(best["id"], seat, "machingoon"):
+	if best.is_empty() or not sim.build(best["id"], seat, "machinegoon"):
 		return false
 	_invest_after = sim.time + float(cfg["invest"])
 	return true
@@ -1158,7 +1158,7 @@ func _pick(sim: Sim, id: String) -> Array:
 			for n in sim.nodes:
 				if not _hostile(sim, n["owner"]) or sim.collapsed.get(n["id"], false):
 					continue
-				var s: float = -(n["pos"] as Vector3).distance_to(src["pos"]) + (40.0 if n["structure"] in ["laser", "machingoon"] else 0.0)
+				var s: float = -(n["pos"] as Vector3).distance_to(src["pos"]) + (40.0 if n["structure"] in ["laser", "machinegoon"] else 0.0)
 				if s > best_s and sim.can_cast(seat, "active", [src["id"], n["id"]]):
 					best_s = s
 					best = n["id"]

@@ -5,7 +5,7 @@
 ROADMAP item 1, designed with Daniele in `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-DESIGN.md` (draft 3)
 and `TUTORIAL-SCRIPT.md` (every line), built once 0.19.0's rules were live ("Wait for all of it"). Completes Alpha 19.
 
-- **8 lessons + a first match**, each on the real game with the real HUD: L1 SEND, L2 VATS & MACHINGOON, L3 THE ENEMY,
+- **8 lessons + a first match**, each on the real game with the real HUD: L1 SEND, L2 VATS & MACHINEGOON, L3 THE ENEMY,
   L4 RELAYS (double-tap to fire, preview, the fling at half speed, the waterfall), L5 RELAY KINDS (retract, switch,
   remote), L6 RELAY WORKS (Laser tower, Forge, Monster hub), L7 LAST STAND (+ the Very Last Stand), L8 SKILLS (fixed
   Surge + Demolish + the faction ultimate), L9 FIRST MATCH on T-02 vs the Training AI that **ends with a scripted
@@ -25,7 +25,7 @@ and `TUTORIAL-SCRIPT.md` (every line), built once 0.19.0's rules were live ("Wai
 - Sim: `start_last_stand_now()`, `start_very_last_stand_now(gap)`, `vls_enabled` (lessons only; no rule changes).
 - Tests: new `test_tutorial` (every lesson's steps reachable and detected, negatives, reveal, progress, first launch).
 
-## 0.19.0 "Alpha 19" - 2026-09-27 (Structures 2.1: Machingoon / Laser / Forge / Monster hub, team rules built, room relay server, cosmetics)
+## 0.19.0 "Alpha 19" - 2026-09-27 (Structures 2.1: Machinegoon / Laser / Forge / Monster hub, team rules built, room relay server, cosmetics)
 
 Daniele's open-questions session (quotes in OPEN-QUESTIONS.md, summary in GAME-BIBLE §17) answered and built
 in the same pass; the tutorial waits for this to be live first.
@@ -34,12 +34,12 @@ in the same pass; the tutorial waits for this to be live first.
   (Alpha 11's start); **neutrals at half their tier's cap** (15/30/60/100), regrowing to that. `legacy` preset
   keeps the old numbers (Debug) for comparison.
 - **Owned vats stop at T3** (no T3 → T4 upgrade); **special nodes are always T4** from the start; conquest
-  never downgrades a T4; a vat or Machingoon still loses a tier on conquest (min 1).
+  never downgrades a T4; a vat or Machinegoon still loses a tier on conquest (min 1).
 - **Structures 2.1** (Daniele: "there's something big coming"; models from the "Lane fight fun" session,
   `Models/2.0/structures_2_1/`) replaces the old normal / relay / strategic build rules with **node kinds**:
-  common nodes build a **vat T1-T3 or a Machingoon T1-T3** in its place (swap keeps the tier); relay nodes
+  common nodes build a **vat T1-T3 or a Machinegoon T1-T3** in its place (swap keeps the tier); relay nodes
   build one of **Laser tower / Forge / Monster hub** (single tier, no upgrades); special nodes only a T4 vat.
-  - **Machingoon**: a goo machine gun, build 15, upgrades 20/30, a continuous stream at the nearest enemy line
+  - **Machinegoon**: a goo machine gun, build 15, upgrades 20/30, a continuous stream at the nearest enemy line
     on its decks (2 / 3.5 / 5 kills/s, range 10 m); the node produces nothing while it holds one; back to a
     vat costs 15 and keeps the tier.
   - **Laser tower** replaces the three cannon tiers (Daniele: "give or take half way between current t2 and
@@ -54,7 +54,7 @@ in the same pass; the tutorial waits for this to be live first.
     (friend or foe, garrisons and stored troops safe), takes the end node empty or drops a friendly one a
     tier; only a fall kills it.
   - **Minions**: the full-colour Alpha 1 models replace today's, slimmed to today's vertex counts.
-  - Fortify's **Anchor halves both** a Laser tower's and a Machingoon's kills; an Echo Split jam stops either.
+  - Fortify's **Anchor halves both** a Laser tower's and a Machinegoon's kills; an Echo Split jam stops either.
 - **Team rules built** (GAME-RULES §11, Daniele: "Build §11"): an allied node's garrison is shared and counts
   toward the cap; an attacker fights the whole shared garrison, losses split by ratio; ownership passes to the
   ally with the largest garrison when the owner's troops hit zero (tie: first to arrive) via a `handover`
@@ -74,14 +74,14 @@ in the same pass; the tutorial waits for this to be live first.
   relay and loses chaos. All four strategic centres now play as T4 (special nodes are always T4).
 - **AI**: Veteran and Expert now count a defender's forge (attack and the new defence) and faction stats; the
   fixed 6-unit relay garrison is gone - relay nodes are valued and built on like any other; the AI builds
-  Machingoons on raided frontline vats, Laser towers on relays, one Monster hub early, and launches monsters
+  Machinegoons on raided frontline vats, Laser towers on relays, one Monster hub early, and launches monsters
   by value (Veteran / Expert), never through its own lines. `test_ai_curve` widened to every B/C/S + M duel
   map.
 - **Room relay server** (Alpha 20 stage 1, merged from the server session): rooms default to the room server
   (`server/relay.py`, Vultr Singapore) via `RelayBridge` instead of PeerJS (`?relay=peerjs` still works); no
   TURN-style connection limit any more; the host's own Sim still runs the match - stage 2 (a headless host on
   the server) is next. `test_relay` (exit 2 = SKIP when the relay is unreachable).
-- **HUD**: inspector actions renamed per node kind (UPGRADE, MACHINGOON, VAT, LASER, FORGE, MONSTER HUB,
+- **HUD**: inspector actions renamed per node kind (UPGRADE, MACHINEGOON, VAT, LASER, FORGE, MONSTER HUB,
   LAUNCH, EJECT, SWITCH); `hud_overlay.gd` adds a Monster hub reach ring, allied halos, and a **relay-outcome
   preview** (vanishing decks dashed red, appearing decks ghosted, a turn arrow) while SWITCH is hovered/held or
   during any relay warning (Daniele: "impossible right now to know in advance what a lot of the buttons do");
@@ -98,11 +98,11 @@ in the same pass; the tutorial waits for this to be live first.
   FAST / FORTRESS / STANDARD (was the pack group names BRAWL / SIEGE / CORE); **YOUR COLOUR** is now solid
   hexagon chips with no text (`hex_chip.gd`), FACTION a 5-colour wedge, the pick ringed and scaled, the colour
   name as tooltip; **ARMIES > COSMETICS** adds a look per structure family per faction.
-- **Views**: new models for Machingoon T1-3, Laser, Monster hub and monster per faction; 69 cosmetic skins
-  (`assets/kit/skins`) across vat, Machingoon, Laser, Forge and Monster hub families plus an alternate monster
+- **Views**: new models for Machinegoon T1-3, Laser, Monster hub and monster per faction; 69 cosmetic skins
+  (`assets/kit/skins`) across vat, Machinegoon, Laser, Forge and Monster hub families plus an alternate monster
   per faction, all picked in ARMIES > COSMETICS; skins load lazily on a thread and, on web, from a separate
   `skins.pck` downloaded the first time one is needed (confirm once it lands); `monster_view.gd` animates the
-  hub charge/launch, the kick and the fall; Machingoon turrets track and stream goo; a lost forge's surge
+  hub charge/launch, the kick and the fall; Machinegoon turrets track and stream goo; a lost forge's surge
   plays in reverse in ash (not rendered yet).
 - Tests: test_sim, test_net, test_map_pool, test_maps4, test_ai_curve, test_relay - all pass. Everything
   checked headless and in desktop renders only; nothing on a real phone or across separate networks.

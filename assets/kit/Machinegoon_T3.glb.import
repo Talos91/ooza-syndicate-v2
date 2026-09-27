@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://dvi0le3t6j3yn"
-path="res://.godot/imported/Machingoon_T1.glb-d03e25809d72719cc6f9cb28d1a3cf29.scn"
+uid="uid://lddiu6rygmit"
+path="res://.godot/imported/Machinegoon_T3.glb-ba1e3dc1d74a9afab0e745c089cdc415.scn"
 
 [deps]
 
-source_file="res://assets/kit/Machingoon_T1.glb"
-dest_files=["res://.godot/imported/Machingoon_T1.glb-d03e25809d72719cc6f9cb28d1a3cf29.scn"]
+source_file="res://assets/kit/Machinegoon_T3.glb"
+dest_files=["res://.godot/imported/Machinegoon_T3.glb-ba1e3dc1d74a9afab0e745c089cdc415.scn"]
 
 [params]
 

@@ -595,22 +595,22 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      defender's forge and faction stats in their garrison estimate.
 159. Structures 2.1 numbers: **"Instead of having 3 levels of laser tower we have only this one, we need
      to adjust its power ... give or take half way between current t2 and t3"** (Laser tower);
-     **"Yes, as proposed"** (Machingoon); **"One per player"** (Monster hub); **"Agree as proposed"**
+     **"Yes, as proposed"** (Machinegoon); **"One per player"** (Monster hub); **"Agree as proposed"**
      (monster); **"Up to 3 bridges"**; **"Only falls; node left empty"**; **"Swap, slimmed down"**
-     (minions). *Done (0.19.0):* Structures 2.1 built to spec - Machingoon, Laser tower, Monster hub +
+     (minions). *Done (0.19.0):* Structures 2.1 built to spec - Machinegoon, Laser tower, Monster hub +
      monster, full-colour slimmed minions (GAME-BIBLE §4, §15).
-160. **"Cost price of a tier 1 vat which we never set ... maybe 15"** (Machingoon <-> vat swap cost);
+160. **"Cost price of a tier 1 vat which we never set ... maybe 15"** (Machinegoon <-> vat swap cost);
      **"Yes they can't move only eject"** (allied stored troops); **"Yes forge protects"**;
      **"Yes start again on conquer, this make relay a keep"** (a captured hub restarts its charge);
      **"Change charge to 40 seconds"** (was 90 s); **"Always T4"** (special nodes); **"Cancel it"** (a
-     handover cancels the old owner's build); **"Halves both"** (Anchor halves Laser and Machingoon
+     handover cancels the old owner's build); **"Halves both"** (Anchor halves Laser and Machinegoon
      kills alike); **"Everyone, like on bridges"** (the monster kicks friend and foe on the platforms it
      crosses too). *Done (0.19.0):* every one of these 0.19.0 rules-pass answers is built.
 161. **"Configurable per faction or global (this is another question i have no answer now)"**
      (cosmetics); rejected recoloured skins - **"Just same skin with different texture, I want
      completely different"** - and alt faction vats - **"No need for alt faction vat skins."**
      *Done (0.19.0):* cosmetics built per faction for now, all unlocked while testing; 69 distinct-model
-     skins across the vat, Machingoon, Laser, Forge and Monster hub families plus one alternate monster
+     skins across the vat, Machinegoon, Laser, Forge and Monster hub families plus one alternate monster
      per faction - no recolours, no alt faction vats.
 162. **"The relays switch is clicked by double tapping relays, since we have no upgradable buildings
      there that need that touch command."** *Done (0.19.0):* double-tapping an owned relay now fires

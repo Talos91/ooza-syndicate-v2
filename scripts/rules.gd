@@ -179,16 +179,16 @@ const AI_RELAY_RISK := 14.0          # target-score penalty for a plan whose onl
 const AI_RELAY_VALUE := 10.0         # target-score bonus for a relay node (control of shortcuts), + its traffic
 # (0.18.10: the fixed 6-unit relay garrison AI_RELAY_HOLD is gone - Daniele, 2026-09-27: relay nodes are held and
 # built on like any node; the AI garrisons them by threat like its other nodes, knowing they produce nothing.)
-# AI STRUCTURES 2.1 (0.18.10): a machingoon goes on a frontline common node that keeps taking small raids - at
+# AI STRUCTURES 2.1 (0.18.10): a machinegoon goes on a frontline common node that keeps taking small raids - at
 # least AI_TRICKLE_RAIDS hostile lines of at most AI_TRICKLE_UNITS sim units in the last AI_TRICKLE_WINDOW s - and
-# never on its home or its only vats (it needs AI_MACHINGOON_VATS vats). Monsters: Veteran / Expert launch at the
+# never on its home or its only vats (it needs AI_MACHINEGOON_VATS vats). Monsters: Veteran / Expert launch at the
 # best target worth AI_MONSTER_VALUE sim units (garrison taken + hostile bodies kicked); the lower levels launch
 # rarely (AI_MONSTER_CHANCE per think with a ready hub) at any hostile node in reach. EJECT (team modes): only to
 # save stored allied troops from a node about to drop in the Last Stand.
 const AI_TRICKLE_UNITS := 100.0
 const AI_TRICKLE_RAIDS := 2
 const AI_TRICKLE_WINDOW := 60.0
-const AI_MACHINGOON_VATS := 4
+const AI_MACHINEGOON_VATS := 4
 const AI_MONSTER_VALUE := 60.0
 const AI_MONSTER_CHANCE := {"Training": 0.05, "Casual": 0.08, "Standard": 0.12}
 
@@ -251,18 +251,18 @@ static var VAT_COST := {1: 50, 2: 100, 3: 150}            # tier t -> t+1 (3 -> 
 static var BUILD_SECONDS := 10.0          # every build / upgrade / swap takes this long (GAME-RULES sec6)
 static var SWAP_COOLDOWN := 10.0          # after a structure swap completes, before the next swap
 # STRUCTURES 2.1 (Daniele, 2026-09-27; OPEN-QUESTIONS "Structures 2.1 numbers"). What a node can hold:
-#   common (normal vat node): a vat T1-T3 OR a Machingoon T1-T3 in its place (swapping = a BUILD_SECONDS build,
+#   common (normal vat node): a vat T1-T3 OR a Machinegoon T1-T3 in its place (swapping = a BUILD_SECONDS build,
 #       then SWAP_COOLDOWN; the tier carries over);
 #   relay: one of Laser tower / Forge / Monster hub (single tier, swappable like the old attachments);
-#   special (strategic nodes, T4 neutrals): only its vat (no machingoon, no relay structure).
-const NODE_BUILDS := {"common": ["vat", "machingoon"], "relay": ["laser", "forge", "monster_hub"], "special": ["vat"]}
-# MACHINGOON: a continuous goo stream at the nearest enemy line whose head is within MACHINGOON_RANGE of the node
+#   special (strategic nodes, T4 neutrals): only its vat (no machinegoon, no relay structure).
+const NODE_BUILDS := {"common": ["vat", "machinegoon"], "relay": ["laser", "forge", "monster_hub"], "special": ["vat"]}
+# MACHINEGOON: a continuous goo stream at the nearest enemy line whose head is within MACHINEGOON_RANGE of the node
 # centre, 2 / 3.5 / 5 kills/s shown; body kills bypass combat math like the laser; the node produces nothing
 # while it holds one (it keeps and can be reinforced its garrison). Build 15, upgrades 20 / 30 shown.
-static var MACHINGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then upgrade to T2, T3
-static var VAT_RESTORE_COST := 75         # machingoon -> vat, 15 shown (Daniele, 2026-09-27: "cost price of a tier 1 vat ... maybe 15")
-static var MACHINGOON_RATE := {1: 10.0, 2: 17.5, 3: 25.0} # kills/s (shown 2 / 3.5 / 5)
-static var MACHINGOON_RANGE := 10.0
+static var MACHINEGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then upgrade to T2, T3
+static var VAT_RESTORE_COST := 75         # machinegoon -> vat, 15 shown (Daniele, 2026-09-27: "cost price of a tier 1 vat ... maybe 15")
+static var MACHINEGOON_RATE := {1: 10.0, 2: 17.5, 3: 25.0} # kills/s (shown 2 / 3.5 / 5)
+static var MACHINEGOON_RANGE := 10.0
 # LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
 # a LASER_BURST s burst killing at most LASER_KILL bodies split across the lines in range (the cannon's code
 # path), then LASER_RECHARGE s. ~8 kills/s shown, below the door's 9.6/s.
@@ -351,7 +351,7 @@ static var FACTION_STATS := {
 # (BALANCE_PRESET ""), switched on only from the Debug panel or by tests/balance_probe.gd, and it travels
 # with an online room's rules. Values are internal units (shown x SCALE). Only BALANCE_KEYS can change.
 const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS", "VAT_COST", "BUILD_SECONDS",
-		"SWAP_COOLDOWN", "MACHINGOON_COST", "MACHINGOON_RATE", "MACHINGOON_RANGE", "LASER_COST", "LASER_KILL",
+		"SWAP_COOLDOWN", "MACHINEGOON_COST", "MACHINEGOON_RATE", "MACHINEGOON_RANGE", "LASER_COST", "LASER_KILL",
 		"LASER_BURST", "LASER_RECHARGE", "LASER_RANGE", "FORGE_COST", "MONSTER_HUB_COST", "MONSTER_COST",
 		"MONSTER_COOLDOWN", "MONSTER_SPEED", "MONSTER_REACH", "VAT_RESTORE_COST", "FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS",
 		"forge_bonus"]
@@ -420,9 +420,9 @@ static func _balance_get(k: String):
 		"VAT_COST": return VAT_COST
 		"BUILD_SECONDS": return BUILD_SECONDS
 		"SWAP_COOLDOWN": return SWAP_COOLDOWN
-		"MACHINGOON_COST": return MACHINGOON_COST
-		"MACHINGOON_RATE": return MACHINGOON_RATE
-		"MACHINGOON_RANGE": return MACHINGOON_RANGE
+		"MACHINEGOON_COST": return MACHINEGOON_COST
+		"MACHINEGOON_RATE": return MACHINEGOON_RATE
+		"MACHINEGOON_RANGE": return MACHINEGOON_RANGE
 		"LASER_COST": return LASER_COST
 		"LASER_KILL": return LASER_KILL
 		"LASER_BURST": return LASER_BURST
@@ -452,9 +452,9 @@ static func _balance_set(k: String, v) -> void:
 		"VAT_COST": VAT_COST = v
 		"BUILD_SECONDS": BUILD_SECONDS = v
 		"SWAP_COOLDOWN": SWAP_COOLDOWN = v
-		"MACHINGOON_COST": MACHINGOON_COST = v
-		"MACHINGOON_RATE": MACHINGOON_RATE = v
-		"MACHINGOON_RANGE": MACHINGOON_RANGE = v
+		"MACHINEGOON_COST": MACHINEGOON_COST = v
+		"MACHINEGOON_RATE": MACHINEGOON_RATE = v
+		"MACHINEGOON_RANGE": MACHINEGOON_RANGE = v
 		"LASER_COST": LASER_COST = v
 		"LASER_KILL": LASER_KILL = v
 		"LASER_BURST": LASER_BURST = v
@@ -519,7 +519,7 @@ const SKILLS := {
 			"rate": 0.25, "cap_shown": 10.0},
 	# the decoy's length is the send fraction of the source vat (the fraction the player has set); no units spent
 	"ghost_line": {"name": "Ghost Line", "slot": "active", "cd": 32.0, "target": "vat_to_node",
-			"desc": "A decoy line that looks real and draws Laser tower and Machingoon fire, but never fights.", "fraction": 0.5},
+			"desc": "A decoy line that looks real and draws Laser tower and Machinegoon fire, but never fights.", "fraction": 0.5},
 	# ---- map pool (network skills)
 	"demolish": {"name": "Demolish", "slot": "map", "cd": 60.0, "target": "fixed_deck",
 			"desc": "A deck collapses after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
@@ -527,7 +527,7 @@ const SKILLS := {
 	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "Enemy lines on one deck are 40 % slower for 8 s.", "slow": 0.6, "dur": 8.0},
 	"anchor": {"name": "Anchor", "slot": "map", "cd": 45.0, "target": "deck",
-			"desc": "A deck is locked for 10 s: no relay moves it, Demolish fails, half the Laser tower and Machingoon kills on your lines.",
+			"desc": "A deck is locked for 10 s: no relay moves it, Demolish fails, half the Laser tower and Machinegoon kills on your lines.",
 			"dur": 10.0, "cannon_mult": 0.5},
 	"bypass": {"name": "Bypass", "slot": "map", "cd": 45.0, "target": "relay", "needs_relays": true,
 			"desc": "A relay holds both of its states for 8 s.", "dur": 8.0},
@@ -540,7 +540,7 @@ const SKILLS := {
 			"desc": "10 s: all your lines +50 % speed; fire up to 3 relays anywhere, enemy ones too.",
 			"dur": 10.0, "mult": 1.5, "fires": 3},
 	"echo_split": {"name": "Echo Split", "slot": "ultimate", "faction": "null", "cd": 120.0, "target": "none",
-			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat, Laser tower and Machingoon for 8 s.",
+			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat, Laser tower and Machinegoon for 8 s.",
 			"echoes": 3, "disrupt": 8.0},
 	# Daniele (0.18.7): "i don't like that super bloom can be casted only under attack but i like the cap"
 	"superbloom": {"name": "Superbloom", "slot": "ultimate", "faction": "bloom", "cd": 120.0, "target": "none",

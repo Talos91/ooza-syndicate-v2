@@ -121,15 +121,15 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"transit": {},          # seat -> {"units", "hordes": [Horde]}: passing-through this frame
 			"node_loss": {},        # seat -> units/s lost on this platform last step (view)
 			"buildable": (Rules.NODE_BUILDS[kind] as Array).duplicate(),   # what the owner may place here
-			"structure": "" if kind == "relay" else "vat",   # "vat" / "machingoon" / "laser" / "forge" / "monster_hub" / ""
+			"structure": "" if kind == "relay" else "vat",   # "vat" / "machinegoon" / "laser" / "forge" / "monster_hub" / ""
 			"allies": {},           # seat -> allied troops stored here (GAME-RULES sec11; "units" is the owner's)
 			"arrivals": [],         # allied seats in the order their troops arrived (ownership tie-break)
-			"shot": {},             # laser / machingoon fire for the fx: {"t", "target_horde", "kills", "pos"}
+			"shot": {},             # laser / machinegoon fire for the fx: {"t", "target_horde", "kills", "pos"}
 			"monster_ready_t": 0.0, # monster hub: match time from which its next monster may launch
 			"hub_monster": -1,      # monster hub: id of its monster still out (-1: none)
 			"attachment": "",       # LEGACY mirror of "structure" for views not yet on Structures 2.1 (_sync_legacy)
 			"cannon_tier": 0,       # LEGACY mirror (3 while a laser stands: the old cannon's strongest look)
-			"build_kind": "",       # "" / "vat" / "vat_restore" / "machingoon" / "laser" / "forge" / "monster_hub"
+			"build_kind": "",       # "" / "vat" / "vat_restore" / "machinegoon" / "laser" / "forge" / "monster_hub"
 			"build_timer": 0.0,     # seconds left on the current build
 			"build_target": {},     # {"kind", "tier"} the view shows growing while build_timer runs
 			"swap_cd": 0.0,         # seconds before the structure may be swapped again
@@ -276,7 +276,7 @@ func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 
 # ------------------------------------------------------------------ structures 2.1 (0.18.10)
 static func has_vat(n: Dictionary) -> bool:
-	## A producing vat stands here (not a machingoon, not a relay structure).
+	## A producing vat stands here (not a machinegoon, not a relay structure).
 	return n["structure"] == "vat"
 
 
@@ -343,9 +343,9 @@ func build_cost(n: Dictionary, kind: String) -> int:
 	## What building `kind` here costs now (units from the node's garrison).
 	match kind:
 		"vat":
-			return Rules.VAT_RESTORE_COST                # a machingoon gives way to the vat again (15 shown, Daniele 2026-09-27)
-		"machingoon":
-			return Rules.MACHINGOON_COST[1]
+			return Rules.VAT_RESTORE_COST                # a machinegoon gives way to the vat again (15 shown, Daniele 2026-09-27)
+		"machinegoon":
+			return Rules.MACHINEGOON_COST[1]
 		"laser":
 			return Rules.LASER_COST
 		"forge":
@@ -368,13 +368,15 @@ func has_hub(seat: String) -> bool:
 	return false
 
 
-const STRUCTURE_NAMES := {"vat": "Vat", "machingoon": "Machingoon", "laser": "Laser tower", "forge": "Forge",
+const STRUCTURE_NAMES := {"vat": "Vat", "machinegoon": "Machinegoon", "laser": "Laser tower", "forge": "Forge",
 		"monster_hub": "Monster hub"}
 
 
 func can_build(node_id: int, seat: String, kind: String) -> String:
 	## "" if `seat` may build `kind` on this node now, else the refusal line for a toast. Kinds: "vat" (a
-	## machingoon back to its vat), "machingoon", "laser", "forge", "monster_hub", and "eject" (the team action).
+	## machinegoon back to its vat), "machinegoon", "laser", "forge", "monster_hub", and "eject" (the team action).
+	if kind == "machingoon":                          # 0.19.2 spelling fix; old id accepted for one release
+		kind = "machinegoon"
 	if not _node_open(node_id):
 		return "That node is gone"
 	var n: Dictionary = nodes[node_id]
@@ -392,7 +394,7 @@ func can_build(node_id: int, seat: String, kind: String) -> String:
 				return "A relay holds a Laser tower, a Forge or a Monster hub"
 			"special":
 				return "A special node holds only its vat"
-		return "A node holds a vat or a Machingoon"
+		return "A node holds a vat or a Machinegoon"
 	if n["structure"] == kind:
 		return "A %s already stands here" % STRUCTURE_NAMES[kind]
 	if n["structure"] != "" and n["swap_cd"] > 0.0:
@@ -406,8 +408,10 @@ func can_build(node_id: int, seat: String, kind: String) -> String:
 
 
 func build(node_id: int, seat: String, kind: String) -> bool:
+	if kind == "machingoon":                          # 0.19.2 spelling alias (see can_build)
+		kind = "machinegoon"
 	## Start building `kind` (see can_build; "eject" runs EJECT at once). Paid from the node's garrison when
-	## it starts; completes after Rules.BUILD_SECONDS. A swap (vat <-> machingoon, or one relay structure for
+	## it starts; completes after Rules.BUILD_SECONDS. A swap (vat <-> machinegoon, or one relay structure for
 	## another) keeps the tier and starts Rules.SWAP_COOLDOWN when it completes.
 	if can_build(node_id, seat, kind) != "":
 		return false
@@ -416,13 +420,13 @@ func build(node_id: int, seat: String, kind: String) -> bool:
 	var n: Dictionary = nodes[node_id]
 	n["units"] -= build_cost(n, kind)
 	var build_kind := "vat_restore" if kind == "vat" else kind
-	var tier: int = n["tier"] if kind in ["vat", "machingoon"] else 1
+	var tier: int = n["tier"] if kind in ["vat", "machinegoon"] else 1
 	_start_build(n, build_kind, {"kind": kind, "tier": tier})
 	return true
 
 
 func can_upgrade(node_id: int, seat: String) -> String:
-	## "" if the vat or machingoon here can go up a tier now, else the refusal line.
+	## "" if the vat or machinegoon here can go up a tier now, else the refusal line.
 	if not _node_open(node_id):
 		return "That node is gone"
 	var n: Dictionary = nodes[node_id]
@@ -436,9 +440,9 @@ func can_upgrade(node_id: int, seat: String) -> String:
 			return "Vat is already at max tier"
 		if n["tier"] >= Rules.VAT_MAX_UPGRADE:
 			return "Vats stop at T3 - a T4 only stands where the map puts it"
-	elif st == "machingoon":
+	elif st == "machinegoon":
 		if n["tier"] >= 3:
-			return "Machingoon is already at max tier"
+			return "Machinegoon is already at max tier"
 	elif st == "":
 		return "Nothing to upgrade here"
 	else:
@@ -450,7 +454,7 @@ func can_upgrade(node_id: int, seat: String) -> String:
 
 
 func upgrade(node_id: int, seat: String) -> bool:
-	## The vat (T1 -> T2 -> T3) or the machingoon (T1 -> T2 -> T3) goes up a tier: paid now, Rules.BUILD_SECONDS.
+	## The vat (T1 -> T2 -> T3) or the machinegoon (T1 -> T2 -> T3) goes up a tier: paid now, Rules.BUILD_SECONDS.
 	if can_upgrade(node_id, seat) != "":
 		return false
 	var n: Dictionary = nodes[node_id]
@@ -461,8 +465,8 @@ func upgrade(node_id: int, seat: String) -> bool:
 
 func upgrade_cost(n: Dictionary) -> int:
 	## What the next tier costs here right now (HUD; 0 = no upgrade).
-	if n["structure"] == "machingoon":
-		return Rules.MACHINGOON_COST.get(n["tier"] + 1, 0) if n["tier"] < 3 else 0
+	if n["structure"] == "machinegoon":
+		return Rules.MACHINEGOON_COST.get(n["tier"] + 1, 0) if n["tier"] < 3 else 0
 	if n["structure"] == "vat":
 		return vat_cost(n)
 	return 0
@@ -521,12 +525,12 @@ func build_attachment(node_id: int, kind: String) -> bool:
 
 
 func restore_vat(node_id: int) -> bool:
-	## A machingoon gives way to its vat again (Structures 2.1: special nodes hold only their vat).
+	## A machinegoon gives way to its vat again (Structures 2.1: special nodes hold only their vat).
 	return build(node_id, nodes[node_id]["owner"], "vat")
 
 
 func upgrade_structure(node_id: int) -> bool:
-	## Alpha 11 double-tap: upgrades whatever is there (vat or machingoon).
+	## Alpha 11 double-tap: upgrades whatever is there (vat or machinegoon).
 	return upgrade(node_id, nodes[node_id]["owner"])
 
 
@@ -542,14 +546,14 @@ func _finish_build(n: Dictionary) -> void:
 	var target: Dictionary = n["build_target"]
 	n["build_kind"] = ""
 	n["build_target"] = {}
-	if kind in ["vat", "machingoon"] and n["structure"] == kind:
+	if kind in ["vat", "machinegoon"] and n["structure"] == kind:
 		n["tier"] = mini(int(target.get("tier", n["tier"] + 1)), 4)   # an upgrade
 	else:
 		var st: String = "vat" if kind == "vat_restore" else kind
 		if n["structure"] != "":                       # a swap
 			n["swap_cd"] = Rules.SWAP_COOLDOWN
 		n["structure"] = st
-		if st in ["vat", "machingoon"]:
+		if st in ["vat", "machinegoon"]:
 			n["tier"] = clampi(int(target.get("tier", n["tier"])), 1, 4)
 		n["cannon_cd"] = 0.0
 		n["cannon_burst"] = 0.0
@@ -564,7 +568,7 @@ func _finish_build(n: Dictionary) -> void:
 func _step_structures(dt: float) -> void:
 	## Builds complete after Rules.BUILD_SECONDS. A laser bursts for LASER_BURST s, killing up to LASER_KILL
 	## units of enemy lines within LASER_RANGE outright (Alpha 11: body kills bypass HP), then recharges AFTER
-	## the burst. A machingoon streams at the nearest enemy line in range, MACHINGOON_RATE[tier] kills/s.
+	## the burst. A machinegoon streams at the nearest enemy line in range, MACHINEGOON_RATE[tier] kills/s.
 	for n in nodes:
 		if n["swap_cd"] > 0.0:
 			n["swap_cd"] = maxf(0.0, n["swap_cd"] - dt)
@@ -574,8 +578,8 @@ func _step_structures(dt: float) -> void:
 		if n["build_timer"] <= 0.0:
 			_finish_build(n)
 	for n in nodes:
-		if n["structure"] == "machingoon":
-			_fire_machingoon(n, dt)
+		if n["structure"] == "machinegoon":
+			_fire_machinegoon(n, dt)
 			continue
 		if n["owner"] == "" or n["structure"] != "laser" or is_disrupted(n["id"]):
 			n["cannon_burst"] = 0.0                       # (an Echo Split echo jams it: no burst, no recharge)
@@ -616,12 +620,12 @@ func _step_structures(dt: float) -> void:
 		fx_events.append({"type": "cannon", "node": n["id"]})
 
 
-func _fire_machingoon(n: Dictionary, dt: float) -> void:
-	## One stream at the nearest enemy line whose head is within MACHINGOON_RANGE: single target, good against
+func _fire_machinegoon(n: Dictionary, dt: float) -> void:
+	## One stream at the nearest enemy line whose head is within MACHINEGOON_RANGE: single target, good against
 	## trickles, weak against big blobs. Jammed by an Echo Split echo like a vat.
 	if n["owner"] == "" or is_disrupted(n["id"]):
 		return
-	var targets := _hordes_in_range(n, Rules.MACHINGOON_RANGE)
+	var targets := _hordes_in_range(n, Rules.MACHINEGOON_RANGE)
 	if targets.is_empty():
 		return
 	var c: Vector3 = n["pos"]
@@ -632,15 +636,15 @@ func _fire_machingoon(n: Dictionary, dt: float) -> void:
 		if d < best_d:
 			best_d = d
 			best = h
-	var kill: float = minf(float(Rules.MACHINGOON_RATE.get(n["tier"], Rules.MACHINGOON_RATE[1])) * dt * _cannon_mult(best), best["units"])   # Anchor halves these too (Daniele, 2026-09-27)
+	var kill: float = minf(float(Rules.MACHINEGOON_RATE.get(n["tier"], Rules.MACHINEGOON_RATE[1])) * dt * _cannon_mult(best), best["units"])   # Anchor halves these too (Daniele, 2026-09-27)
 	var at := _hit_point(n, best)
 	var hid: int = best["id"]
-	_structure_kill(n, best, kill, "machingoon")
+	_structure_kill(n, best, kill, "machinegoon")
 	n["shot"] = {"t": time, "target_horde": hid, "kills": kill, "pos": at}
 
 
 func _structure_kill(n: Dictionary, h: Dictionary, kill: float, why: String) -> void:
-	## Body kills from a laser or machingoon: they die at the end of the line nearest the node.
+	## Body kills from a laser or machinegoon: they die at the end of the line nearest the node.
 	if kill <= 0.0:
 		return
 	if _hit_head(n, h):
@@ -2217,10 +2221,10 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 	n["build_kind"] = ""                               # construction is cancelled by capture
 	n["build_target"] = {}
 	# conquest costs a tier (Daniele: "if a vat or tower is conquered it gets downgraded one tier,
-	# minimum 1") - both modes: a vat or a machingoon. The laser, forge and monster hub are single-tier and
+	# minimum 1") - both modes: a vat or a machinegoon. The laser, forge and monster hub are single-tier and
 	# kept as they are; a T4 is never downgraded (Daniele, 2026-09-27: "Keeps T4").
 	if n["owner"] != "" and n["owner"] != seat:
-		if n["structure"] in ["vat", "machingoon"] and n["tier"] < 4:
+		if n["structure"] in ["vat", "machinegoon"] and n["tier"] < 4:
 			n["tier"] = maxi(1, n["tier"] - 1)
 		if n["structure"] == "monster_hub":
 			n["monster_ready_t"] = time + Rules.MONSTER_COOLDOWN   # the new owner's hub charges afresh
@@ -3074,11 +3078,11 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 # ================================================================== STRUCTURES 2.1 + TEAMS (0.18.10)
 # Daniele, 2026-09-27 (GAME-BIBLE sec17, OPEN-QUESTIONS "Structures 2.1 numbers"; numbers in Rules).
 # PUBLIC API (HUD, main, Net, AI and tests use these; keep the names)
-#   can_build(node_id, seat, kind) -> String   "" = ok, else the refusal line. kinds: "vat" (a machingoon back
-#                                         to its vat), "machingoon", "laser", "forge", "monster_hub", "eject"
+#   can_build(node_id, seat, kind) -> String   "" = ok, else the refusal line. kinds: "vat" (a machinegoon back
+#                                         to its vat), "machinegoon", "laser", "forge", "monster_hub", "eject"
 #   build(node_id, seat, kind) -> bool    starts it (paid now, Rules.BUILD_SECONDS); "eject" runs EJECT at once
 #   can_upgrade(node_id, seat) -> String / upgrade(node_id, seat) -> bool / upgrade_cost(n) -> int
-#                                         vat T1 -> T3 (never T3 -> T4), machingoon T1 -> T3
+#                                         vat T1 -> T3 (never T3 -> T4), machinegoon T1 -> T3
 #   build_cost(n, kind) -> int            units a build of `kind` costs here
 #   structure_order(seat, action, node_id, args) -> [accepted, line]   "upgrade" | "build" {"kind"} |
 #                                         "launch_monster" {"to"} | "eject" (+ "build_cannon", "build_forge", "restore")
@@ -3092,12 +3096,12 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 #   upgrade_structure
 # NODE STATE (all in snapshots)
 #   "node_kind": "common" | "relay" | "special" (fixed at setup; special = strategic / final / map-placed T4)
-#   "structure": "vat" | "machingoon" | "laser" | "forge" | "monster_hub" | "" (a relay without a build, or collapsed)
-#   "tier": the vat's or machingoon's tier; "buildable": Rules.NODE_BUILDS[node_kind]
+#   "structure": "vat" | "machinegoon" | "laser" | "forge" | "monster_hub" | "" (a relay without a build, or collapsed)
+#   "tier": the vat's or machinegoon's tier; "buildable": Rules.NODE_BUILDS[node_kind]
 #   "allies": {seat: units} allied troops stored here ("units" is the owner's own); "arrivals": [seat] their order
-#   "shot": {"t", "target_horde", "kills" (sim units this step), "pos"} the laser / machingoon's latest fire
+#   "shot": {"t", "target_horde", "kills" (sim units this step), "pos"} the laser / machinegoon's latest fire
 #   "monster_ready_t": match time from which the hub may launch; "hub_monster": its monster's id out (-1 none)
-#   "build_kind": "" | "vat" (upgrade) | "vat_restore" (machingoon -> vat) | "machingoon" | "laser" | "forge" |
+#   "build_kind": "" | "vat" (upgrade) | "vat_restore" (machinegoon -> vat) | "machinegoon" | "laser" | "forge" |
 #       "monster_hub"; "build_target": {"kind", "tier"}; laser fire state in "cannon_cd" / "cannon_burst" /
 #       "cannon_target" (the old cannon's code path); LEGACY mirrors "attachment" / "cannon_tier" (_sync_legacy)
 #   monsters: [{"id", "seat", "faction", "hub", "target", "route" (node ids), "path" (edge indices), "pos" (Vector3),
@@ -3401,7 +3405,7 @@ func _monster_end(m: Dictionary) -> void:
 	var seat: String = m["seat"]
 	var friendly: bool = n["owner"] != "" and allied(n["owner"], seat)
 	if friendly:
-		if n["structure"] in ["vat", "machingoon"] and n["tier"] < 4:
+		if n["structure"] in ["vat", "machinegoon"] and n["tier"] < 4:
 			n["tier"] = maxi(1, n["tier"] - 1)
 	else:
 		var old: String = n["owner"]

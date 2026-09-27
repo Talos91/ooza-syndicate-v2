@@ -718,7 +718,7 @@ func _stage_scenario() -> void:
 			sim.nodes[1]["tier"] = 2
 			sim.nodes[3]["owner"] = HUMAN
 			sim.nodes[3]["units"] = 90.0
-			sim.nodes[3]["structure"] = "machingoon"
+			sim.nodes[3]["structure"] = "machinegoon"
 			sim.nodes[3]["tier"] = 2
 			sim.nodes[3]["allies"]["B"] = 40.0                # a staged ally share: halo ring + EJECT + "total + own"
 			sim.nodes[3]["arrivals"] = ["B"]
@@ -809,7 +809,7 @@ func _run_scenario() -> void:
 				monster_from = -1
 				match phase:
 					0:
-						hud.inspect(1, cam)                    # common: VAT (UPGRADE / MACHINGOON)
+						hud.inspect(1, cam)                    # common: VAT (UPGRADE / MACHINEGOON)
 						scenario_focus = sim.nodes[1]["pos"]
 					1:
 						sim.nodes[4]["structure"] = ""          # relay: empty socket (SWITCH / LASER / FORGE / MONSTER HUB)

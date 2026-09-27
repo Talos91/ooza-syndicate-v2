@@ -26,7 +26,7 @@ extends Node
 ## carry the skill state (effects, cooldowns, charge, demolished decks). Ghost Lines stay secret: the
 ## broadcast snapshot strips the decoy keys (SECRET_HORDE) and each guest gets a private "ghosts" packet
 ## listing only its own decoys; fx events marked "private" go to that seat only.
-## STRUCTURES 2.1 + TEAMS (0.18.10): new orders "build" (args {"kind": vat / machingoon / laser / forge /
+## STRUCTURES 2.1 + TEAMS (0.18.10): new orders "build" (args {"kind": vat / machinegoon / laser / forge /
 ## monster_hub}), "launch_monster" (a = the hub, args {"to": node}) and "eject" (a = the node), validated by the
 ## host's Sim (Sim.structure_order: the same feedback line offline). Snapshots carry the new node fields (they
 ## ride with every node key: "structure", "allies", "arrivals", "shot", "monster_ready_t", "hub_monster"), the
@@ -50,7 +50,7 @@ const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "restore", "switch", "cast",
 		"build", "launch_monster", "eject"]
 const STRUCTURE_ACTIONS := ["build", "launch_monster", "eject"]   # run through Sim.structure_order
-const BUILD_KINDS := ["vat", "machingoon", "laser", "forge", "monster_hub"]
+const BUILD_KINDS := ["vat", "machinegoon", "laser", "forge", "monster_hub"]
 const SNAPSHOT_EVERY := 0.1
 const KEYFRAME_EVERY := 10                         # every 10th snapshot carries every horde's path
 const PATH_RESEND := 1.0                           # a changed path rides along for this many seconds

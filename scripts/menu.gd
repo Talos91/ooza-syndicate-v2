@@ -724,15 +724,15 @@ func _leave_armies() -> void:
 
 
 # ------------------------------------------------------------------ ARMIES > COSMETICS (0.19.0, spec E/I)
-const COSMETIC_FAMILIES := ["vat", "machingoon", "laser", "forge", "monster_hub", "monster"]
-const COSMETIC_FAMILY_LABEL := {"vat": "VAT LOOK", "machingoon": "MACHINGOON", "laser": "LASER",
+const COSMETIC_FAMILIES := ["vat", "machinegoon", "laser", "forge", "monster_hub", "monster"]
+const COSMETIC_FAMILY_LABEL := {"vat": "VAT LOOK", "machinegoon": "MACHINEGOON", "laser": "LASER",
 		"forge": "FORGE", "monster_hub": "MONSTER HUB", "monster": "MONSTER"}
 
 
 func show_cosmetics(f: String = "") -> void:
 	## A look per structure family, per faction (GAME-BIBLE sec17; Daniele, 2026-09-27): DEFAULT / the
 	## faction set / GRADUATE / the skin lines for vats, DEFAULT / SPITTER / PEPPERBOX for the
-	## Machingoon, and so on - saved in user://armies.cfg (ArmyPresets), applied at match start
+	## Machinegoon, and so on - saved in user://armies.cfg (ArmyPresets), applied at match start
 	## (main.gd's Cosmetics.set_loadout) and sent along with the skill loadout online (ArmyPresets.send_to).
 	## Every item is unlocked while testing (ArmyPresets.is_unlocked always true for now).
 	if f != "":

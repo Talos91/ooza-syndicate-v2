@@ -42,6 +42,8 @@ static func load_all() -> void:
 		var cos := {}
 		for family in Cosmetics.OPTIONS:
 			var id := str(cf.get_value(f, "cosmetic_" + family, ""))
+			if id == "" and family == "machinegoon":      # 0.19.2 spelling fix: read the old key once
+				id = str(cf.get_value(f, "cosmetic_machingoon", ""))
 			if id in (Cosmetics.OPTIONS[family] as Array):
 				cos[family] = id
 		if not cos.is_empty():

@@ -683,7 +683,7 @@ func _badges(cam: Camera3D) -> void:
 		if n["relay"] != "":
 			var st := sim.relay_state_key(n, n["relay_index"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
-		elif n["structure"] == "machingoon":
+		elif n["structure"] == "machinegoon":
 			what = "MGN%d" % n["tier"]
 		else:
 			what = "T%d" % n["tier"]
@@ -872,8 +872,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 	_refresh_inspector(cam)
 
 
-const STRUCT_LABEL := {"vat": "VAT", "machingoon": "MACHINGOON", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
-const BUILD_LABEL := {"machingoon": "MACHINGOON", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "MACHINEGOON", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machinegoon": "MACHINEGOON", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
 const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
                                          # buttons / models of the relays") - distinct from the seat colour
 
@@ -934,7 +934,7 @@ class SwitchRing:
 
 
 func _inspector_actions(n: Dictionary) -> void:
-	## Structures 2.1 (spec B): common - UPGRADE / MACHINGOON (or VAT to go back); relay - LASER / FORGE /
+	## Structures 2.1 (spec B): common - UPGRADE / MACHINEGOON (or VAT to go back); relay - LASER / FORGE /
 	## MONSTER HUB (single tier) + SWITCH; special - T4 vat only, no swap; hub - LAUNCH; EJECT wherever
 	## allied troops are stored. Costs and disabled reasons come straight from the Sim (can_build /
 	## can_upgrade) in _refresh_inspector, so a greyed button always explains itself.
@@ -951,12 +951,12 @@ func _inspector_actions(n: Dictionary) -> void:
 	elif n["structure"] == "vat":
 		if n["tier"] < 4 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
-		if "machingoon" in n["buildable"] and shows("machingoon"):
-			_add_action("MACHINGOON", "MACHINGOON", sim.build_cost(n, "machingoon"), "build", id, {"kind": "machingoon"})
-	elif n["structure"] == "machingoon":
+		if "machinegoon" in n["buildable"] and shows("machinegoon"):
+			_add_action("MACHINEGOON", "MACHINEGOON", sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
+	elif n["structure"] == "machinegoon":
 		if n["tier"] < 3 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
-		if shows("machingoon"):
+		if shows("machinegoon"):
 			_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
 	if sim.allied_units(n) > 0.0001 and shows("eject"):
 		_add_action("EJECT", "EJECT", 0, "eject", id)
@@ -1012,6 +1012,7 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 func action_rect(name: String) -> Rect2:
 	## Stable rect getter for the tutorial's spotlight (TUTORIAL-DESIGN.md sec11): valid only while that
 	## action's button is on screen (the inspector open on the right node kind). Empty otherwise.
+	name = name.replace("MACHINGOON", "MACHINEGOON")   # 0.19.2 spelling fix; old name accepted for one release
 	if action_buttons.has(name) and is_instance_valid(action_buttons[name]):
 		return (action_buttons[name] as Control).get_global_rect()
 	return Rect2()
@@ -1040,7 +1041,7 @@ func dock_slot_rect(i: int) -> Rect2:
 # ------------------------------------------------------------------ TUTORIAL: reveal as you go (§6)
 func shows(key: String) -> bool:
 	## Is this HUD part on screen? Always, outside a lesson.
-	return not gated or revealed.has(key)
+	return not gated or revealed.has(key.replace("machingoon", "machinegoon"))
 
 
 func reveal(keys: Array, glow: Array = []) -> void:
@@ -1048,6 +1049,8 @@ func reveal(keys: Array, glow: Array = []) -> void:
 	## or step adds - those parts appear with a short glow-in.
 	gated = true
 	revealed = {}
+	keys = keys.map(func(k): return str(k).replace("machingoon", "machinegoon"))   # 0.19.2 spelling alias
+	glow = glow.map(func(k): return str(k).replace("machingoon", "machinegoon"))
 	for k in keys:
 		revealed[str(k)] = true
 	_apply_reveal()
@@ -1184,11 +1187,11 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		if owner != "":
 			# Alpha 11's status line: production, and what a double-tap upgrade costs
 			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) \
-					else ("no production - garrison must be fed" if n["structure"] == "machingoon" else "no vat here")
+					else ("no production - garrison must be fed" if n["structure"] == "machinegoon" else "no vat here")
 			var up := sim.upgrade_cost(n)
 			if owner == human and up > 0 and shows("upgrade"):
 				status += " | Double-tap: %d units" % Rules.shown(up)
-			elif owner == human and n["structure"] in ["vat", "machingoon"] and up <= 0 and shows("upgrade"):
+			elif owner == human and n["structure"] in ["vat", "machinegoon"] and up <= 0 and shows("upgrade"):
 				status += " | MAX TIER"
 			lines.append(status)
 			var forge: String = " (forge +%d%%)" % roundi(Rules.forge_bonus * 100.0) if sim.has_forge(owner) else ""   # attack_of includes it
@@ -1258,8 +1261,8 @@ func _refresh_inspector(cam: Camera3D) -> void:
 func _structure_line(n: Dictionary) -> String:
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
-	if n["structure"] == "machingoon":
-		return "MACHINGOON T%d" % n["tier"]
+	if n["structure"] == "machinegoon":
+		return "MACHINEGOON T%d" % n["tier"]
 	return "VAT T%d" % n["tier"]
 
 

@@ -9,7 +9,7 @@ Live build: https://talos91.github.io/ooza-syndicate-v2/ (reload twice - PWA cac
 - [ ] **New vat caps** 30/60/120/200; homes start at T1 with 1 unit; neutrals start at half their tier's cap
       and regrow to it.
 - [ ] **Owned vats stop at T3** (no T3 -> T4 upgrade); a **special node is always T4**; conquest never
-      downgrades a T4; conquering a vat or Machingoon still drops it one tier.
+      downgrades a T4; conquering a vat or Machinegoon still drops it one tier.
 - [ ] **Forge** now protects too: the owner's garrisons take 20 % less damage on top of the +50 % attack.
 - [ ] **"Lines keep you alive"** - losing your last node no longer eliminates you if you still have a line, a
       monster or stored allied troops out.
@@ -23,14 +23,14 @@ Live build: https://talos91.github.io/ooza-syndicate-v2/ (reload twice - PWA cac
 - [ ] **Last Stand camera** has no zoom limit any more - it should keep closing in on the winner.
 
 ## Structures 2.1
-- [ ] **Machingoon** (common nodes, in place of the vat): builds T1-T3, streams goo at the nearest enemy line
+- [ ] **Machinegoon** (common nodes, in place of the vat): builds T1-T3, streams goo at the nearest enemy line
       on its decks, produces nothing while it holds one; swapping to/from a vat keeps the tier.
 - [ ] **Laser tower** (relay nodes, replaces the three cannon tiers): one tier, a 2 s burst then 2 s recharge
       - check it no longer out-kills a full door of reinforcements.
 - [ ] **Monster hub** (relay nodes, one per player): launch a monster by dragging from the hub; it should
       reach 3 bridges, kick every line off the decks and platforms it crosses (friend or foe), take an empty
       end node or drop a tier off a friendly one, and only die to a fall.
-- [ ] **Fortify's Anchor** halves both a Laser tower's and a Machingoon's kills; an Echo Split jam stops
+- [ ] **Fortify's Anchor** halves both a Laser tower's and a Machinegoon's kills; an Echo Split jam stops
       either.
 - [ ] **Relay controls**: double-tapping an owned relay fires its SWITCH directly (no more opening the
       inspector first); the SWITCH button, relay badges and relay towers should all read more clearly when
@@ -63,13 +63,13 @@ Live build: https://talos91.github.io/ooza-syndicate-v2/ (reload twice - PWA cac
 - [ ] Both players see the **same colours**; each picks their own in the lobby, plus their ARMIES cosmetics.
 - [ ] **JOIN TEAM** works: you and your girlfriend on one team in 2v2, AI filling the rest; try the new team
       rules (shared garrison, handover, EJECT) online.
-- [ ] Skills, Machingoon/Laser/Monster hub builds and monster launches by a guest all work; enemy-cast toasts
+- [ ] Skills, Machinegoon/Laser/Monster hub builds and monster launches by a guest all work; enemy-cast toasts
       appear.
 - [ ] The host tab still needs to stay in front - background it and confirm the match still freezes (stage 2
       of the server work fixes this, not built yet).
 
 ## Look
-- [ ] **New models**: Machingoon (three tiers), Laser tower, Monster hub and monster (one look per faction).
+- [ ] **New models**: Machinegoon (three tiers), Laser tower, Monster hub and monster (one look per faction).
 - [ ] **Cosmetics** (ARMIES > COSMETICS): pick a skin per structure family per faction; check it shows in
       your own match and to other players online.
 - [ ] **Skins on the web build**: the first time a skin is actually needed it should download its own

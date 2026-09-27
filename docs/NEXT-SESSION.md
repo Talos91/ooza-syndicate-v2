@@ -1,6 +1,6 @@
 # Next session - start here
 
-State as of publish today: **v0.19.1 "Alpha 19"** live - the interactive tutorial (below), on top of 0.19.0: Structures 2.1 (Machingoon, Laser tower, Forge
+State as of publish today: **v0.19.1 "Alpha 19"** live - the interactive tutorial (below), on top of 0.19.0: Structures 2.1 (Machinegoon, Laser tower, Forge
 with a defence half, Monster hub), new vat caps and neutral garrisons, team rules built (GAME-RULES §11),
 "lines keep you alive" elimination, 7:00 follows the Very Last Stand with a DRAW call-out, Alpha 11
 classics get relay retrofits, the AI accounts for forges and values relays, rooms default to a room relay
@@ -53,18 +53,18 @@ Daniele's whole open-questions session (quotes in OPEN-QUESTIONS.md; summary GAM
 149-163) built in one pass and merged with the server session's stage 1 relay work. Full detail: CHANGELOG.
 
 - **Rules** (`rules.gd`/`sim.gd`): `Rules.CAPS` 150/300/600/1000, `HOME_TIER`/`HOME_UNITS`, `NEUTRAL_UNITS`
-  (half-cap), `VAT_MAX_UPGRADE`, `NODE_BUILDS` (the node-kind table), `FORGE_DEFENCE`; Machingoon build/
+  (half-cap), `VAT_MAX_UPGRADE`, `NODE_BUILDS` (the node-kind table), `FORGE_DEFENCE`; Machinegoon build/
   upgrade/swap, the single-tier Laser (legacy `CANNON_*` constants kept internally), Monster hub / monster
   (`Sim.launch_monster`, `_step_monster`, `monster_reach`, events `monster_launch/kick/take/fall`); teams
   (`Sim._handover`, `halo_tier`, `allied_units`, `eject`); elimination now checks garrison + lines + monster +
   stored troops; `Sim._force_end` follows the Very Last Stand owner, `Rules.DRAW_LINES` for a neutral finish;
   a falling remote console freezes its decks. `legacy` balance preset covers the pre-0.19.0 numbers.
-- **AI** (`seat_ai.gd`): forge/faction accounting at Veteran+/Expert, no fixed relay garrison, Machingoon /
+- **AI** (`seat_ai.gd`): forge/faction accounting at Veteran+/Expert, no fixed relay garrison, Machinegoon /
   Laser / hub build heuristics, a monster-launch heuristic, EJECT just before a Last Stand drop;
   `test_ai_curve` gains the M duel maps.
 - **Maps**: `References/.../Alpha 11 classics/generator/classics.py` gets relay retrofits + T3 centres,
   re-baked, `test_maps4` green.
-- **Views**: `scripts/monster_view.gd` (new), `scripts/cosmetics.gd` (new, ARMIES skins), new Machingoon /
+- **Views**: `scripts/monster_view.gd` (new), `scripts/cosmetics.gd` (new, ARMIES skins), new Machinegoon /
   Laser / Monster hub / monster models and 69 skins in `assets/kit/skins`, minions swapped and slimmed.
 - **HUD**: `scripts/hud_overlay.gd` (new: hub reach ring, allied halos, relay-outcome preview, Last Stand
   danger triangle), `scripts/hex_chip.gd` (new: YOUR COLOUR chips), `Hud.action_rect(name)` per-node-kind

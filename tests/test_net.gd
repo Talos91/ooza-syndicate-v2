@@ -327,14 +327,14 @@ func _run() -> void:
 	host._packet_limits = {}
 	host.bridge.sent = []
 	hs.nodes[home_b]["units"] = 300.0
-	_to_host("g1", {"op": "order", "round": 1, "action": "build", "a": home_b, "args": {"kind": "machingoon"}})
-	check(hs.nodes[home_b]["build_kind"] == "machingoon", "a guest's build order runs on the host (a machingoon on B's home)")
-	check(str(_payloads("g1", "feedback")[0]).begins_with("Machingoon construction started"), "...answered with the Sim's feedback line")
+	_to_host("g1", {"op": "order", "round": 1, "action": "build", "a": home_b, "args": {"kind": "machinegoon"}})
+	check(hs.nodes[home_b]["build_kind"] == "machinegoon", "a guest's build order runs on the host (a machinegoon on B's home)")
+	check(str(_payloads("g1", "feedback")[0]).begins_with("Machinegoon construction started"), "...answered with the Sim's feedback line")
 	var g_id: int = g.assigned_id
 	check(host._execute(g_id, {"action": "build", "a": home_b, "args": {"kind": "nuke"}}) == [false, "Order rejected"]
 			and host._execute(g_id, {"action": "build", "a": home_b, "args": {"kind": 7}}) == [false, "Order rejected"],
 			"an unknown build kind is rejected")
-	check(not host._execute(g_id, {"action": "build", "a": home_a, "args": {"kind": "machingoon"}})[0], "a guest can't build on the host's node")
+	check(not host._execute(g_id, {"action": "build", "a": home_a, "args": {"kind": "machinegoon"}})[0], "a guest can't build on the host's node")
 	check(host._execute(g_id, {"action": "eject", "a": home_b, "args": {}}) == [false, "No allied troops to eject here"], "EJECT with no allied troops is refused with the reason")
 	hs.nodes[target]["structure"] = "monster_hub"     # (staged: B's captured neighbour holds a ready hub)
 	hs.nodes[target]["units"] = 300.0
@@ -350,7 +350,7 @@ func _run() -> void:
 	check(ss.has("structs") and (ss["structs"] as Array).size() == 3, "snapshots carry the monsters and the draw line")
 	var sw: PackedByteArray = var_to_bytes(ss)
 	host.apply_snapshot(gs, bytes_to_var(sw))
-	check(gs.nodes[home_b]["build_kind"] == "machingoon" and gs.nodes[target]["structure"] == "monster_hub"
+	check(gs.nodes[home_b]["build_kind"] == "machinegoon" and gs.nodes[target]["structure"] == "monster_hub"
 			and gs.nodes[home_b]["allies"] == {"A": 25.0} and gs.nodes[home_b]["arrivals"] == ["A"]
 			and absf(float(gs.nodes[target]["monster_ready_t"]) - float(hs.nodes[target]["monster_ready_t"])) < 0.001,
 			"the guest sees the new node fields (structure, allies, arrivals, monster_ready_t)")

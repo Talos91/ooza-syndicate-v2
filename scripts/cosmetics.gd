@@ -6,7 +6,7 @@ extends RefCounted
 ## capture swaps the model like a tier change does). Pure view: the rules never read it.
 ##
 ## CONTRACT (the HUD agent's ARMIES > COSMETICS page, main's per-seat apply and the room's player info):
-##   OPTIONS[family] -> Array of ids; families "vat", "machingoon", "laser", "forge", "monster_hub", "monster"
+##   OPTIONS[family] -> Array of ids; families "vat", "machinegoon", "laser", "forge", "monster_hub", "monster"
 ##   label(family, id, faction) -> String            "DEFAULT", "VEX", "GRADUATE", "SPITTER", "SKYRIG"...
 ##   set_loadout(seat, {family: id}) / loadout(seat) -> {family: id} (every family present, "default" if unset)
 ##   set_factions(sim.factions) at match start / faction_of(seat) (a monster hub, the monster and the
@@ -31,10 +31,10 @@ extends RefCounted
 ## Skin vats live like the default ones (Scenery's liquid and residents, HordeView's drops out of the tanks):
 ## is_vat_key / drops_from say which models are vats, TANKS holds each skin vat's tanks.
 
-const FAMILIES := ["vat", "machingoon", "laser", "forge", "monster_hub", "monster"]
+const FAMILIES := ["vat", "machinegoon", "laser", "forge", "monster_hub", "monster"]
 const OPTIONS := {
 	"vat": ["default", "faction", "graduate", "biopod", "crystal", "distillery", "hive", "reactor"],
-	"machingoon": ["default", "spitter", "pepperbox"],
+	"machinegoon": ["default", "spitter", "pepperbox"],
 	"laser": ["default", "obelisk", "tesla"],
 	"forge": ["default", "anvil", "heartforge"],
 	"monster_hub": ["default", "hatchery", "pit"],
@@ -127,9 +127,9 @@ static func model_key(family: String, id: String, faction: String, tier: int) ->
 					key = "Vat_T%d" % t
 				_:
 					key = "skins/Skin_%s_T%d" % [SKIN_LINE[id], t] if SKIN_LINE.has(id) else "Vat_T%d" % t
-		"machingoon":
+		"machinegoon":
 			t = clampi(t, 1, 3)
-			key = {"spitter": "skins/GooGun_T%d_Spitter" % t, "pepperbox": "skins/GooGun_T%d_Pepperbox" % t}.get(id, "Machingoon_T%d" % t)
+			key = {"spitter": "skins/GooGun_T%d_Spitter" % t, "pepperbox": "skins/GooGun_T%d_Pepperbox" % t}.get(id, "Machinegoon_T%d" % t)
 		"laser":
 			key = {"obelisk": "skins/Laser_Obelisk", "tesla": "skins/Laser_Tesla"}.get(id, "Laser")
 		"forge":
@@ -167,7 +167,7 @@ static func key_for(family: String, seat: String, tier: int) -> String:
 
 
 const _VAT := ["Vat_T1", "Vat_T1", "Vat_T2", "Vat_T3", "Vat_T4"]
-const _MG := ["Machingoon_T1", "Machingoon_T1", "Machingoon_T2", "Machingoon_T3", "Machingoon_T3"]
+const _MG := ["Machinegoon_T1", "Machinegoon_T1", "Machinegoon_T2", "Machinegoon_T3", "Machinegoon_T3"]
 const _HUB := {"vex": "MonsterVat_VEX", "null": "MonsterVat_NULL", "bloom": "MonsterVat_BLOOM", "ember": "MonsterVat_EMBER", "solar": "MonsterVat_SOLAR"}
 const _MONSTER := {"vex": "Monster_VEX", "null": "Monster_NULL", "bloom": "Monster_BLOOM", "ember": "Monster_EMBER", "solar": "Monster_SOLAR"}
 
@@ -176,7 +176,7 @@ static func default_key(family: String, faction: String, tier: int) -> String:
 	match family:
 		"vat":
 			return _VAT[clampi(tier, 0, 4)]
-		"machingoon":
+		"machinegoon":
 			return _MG[clampi(tier, 0, 4)]
 		"laser":
 			return "Laser"
@@ -293,9 +293,9 @@ static func loaded_skins() -> Array:
 # within r of it and in front of z0 turns, see MapBuilder.split_spinner). Gate pivots are read from the
 # model's own `*_Gate` node at run time (MonsterView); "gate" here is the fallback.
 const POINTS := {
-	"Machingoon_T1": {"muzzles": [Vector3(0, 2.72, 3.69)]},
-	"Machingoon_T2": {"muzzles": [Vector3(-0.39, 2.81, 4.42), Vector3(0.39, 2.81, 4.42)]},
-	"Machingoon_T3": {"muzzles": [Vector3(0, 2.92, 5.31)], "spin": {"axis": Vector2(0, 2.92), "r": 0.7, "z0": 1.3}},
+	"Machinegoon_T1": {"muzzles": [Vector3(0, 2.72, 3.69)]},
+	"Machinegoon_T2": {"muzzles": [Vector3(-0.39, 2.81, 4.42), Vector3(0.39, 2.81, 4.42)]},
+	"Machinegoon_T3": {"muzzles": [Vector3(0, 2.92, 5.31)], "spin": {"axis": Vector2(0, 2.92), "r": 0.7, "z0": 1.3}},
 	"GooGun_T1_Spitter": {"muzzles": [Vector3(0, 2.35, 1.89)]},
 	"GooGun_T2_Spitter": {"muzzles": [Vector3(-0.32, 2.40, 2.30), Vector3(0.32, 2.40, 2.30)]},
 	"GooGun_T3_Spitter": {"muzzles": [Vector3(0, 2.77, 2.87), Vector3(-0.34, 2.31, 2.87), Vector3(0.34, 2.31, 2.87)]},
@@ -337,8 +337,8 @@ static func points(model_name: String) -> Dictionary:
 	return POINTS.get(name, {})
 
 
-# MACHINGOON SIZE (0.19.2, Daniele on 0.19.1: "too big and when they shoot it looks weird as the enemies are
-# under them"): every Machingoon look is shown at MG_SCALE (about a vat's footprint) and sunk into its socket
+# MACHINEGOON SIZE (0.19.2, Daniele on 0.19.1: "too big and when they shoot it looks weird as the enemies are
+# under them"): every Machinegoon look is shown at MG_SCALE (about a vat's footprint) and sunk into its socket
 # so its highest muzzle sits MG_MUZZLE_Y above the deck - the stream arcs out onto the line's bodies instead of
 # pouring straight down. Applied to the model's children by MapBuilder.piece (the root keeps scale 1 for the
 # build / pump / tier-down animations); the muzzles above stay in model space (the view reads them through
@@ -349,7 +349,7 @@ const MG_LOOK_SCALE := {"Spitter": 1.45, "Pepperbox": 1.3}   # the skins are mod
 
 
 static func fit(model_name: String) -> Dictionary:
-	## {"scale", "drop"} for a model shown smaller than modelled (the Machingoon looks), {} otherwise.
+	## {"scale", "drop"} for a model shown smaller than modelled (the Machinegoon looks), {} otherwise.
 	var pt: Dictionary = POINTS.get(model_name.trim_prefix("skins/"), {})
 	if not pt.has("muzzles"):
 		return {}
@@ -478,11 +478,11 @@ class Preview extends SubViewportContainer:
 			_refresh()                                    # a skin that finished loading takes over
 
 	func _refresh() -> void:
-		var key := Cosmetics.model_key(family, id, faction, 2 if family in ["vat", "machingoon"] else 1)
+		var key := Cosmetics.model_key(family, id, faction, 2 if family in ["vat", "machinegoon"] else 1)
 		var show := key
 		if key.begins_with("skins/"):
 			if not Cosmetics._ready(key):
-				show = Cosmetics.model_key(family, "default", faction, 2 if family in ["vat", "machingoon"] else 1)
+				show = Cosmetics.model_key(family, "default", faction, 2 if family in ["vat", "machinegoon"] else 1)
 		if show == _key:
 			return
 		_key = show
