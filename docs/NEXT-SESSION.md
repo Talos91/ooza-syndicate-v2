@@ -1,6 +1,7 @@
 # Next session - start here
 
-State as of publish today: **v0.20.0 "Alpha 20"** - the room server hosts the matches (server-hosted rooms, the room
+State as of publish today: **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
+challenges, unlocks with the locks still off (below) - on top of **v0.20.0 "Alpha 20"** - the room server hosts the matches (server-hosted rooms, the room
 owner; below) - on top of **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
 interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish
 retuned, per-seat rival factions, a tappable monster-icon launch flow, a smaller Machinegoon with a
@@ -13,6 +14,28 @@ size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed ever
 `PLAYTEST-NOTES.md` notes 169-185, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
 (the session board), the design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and
 `05 Handoff/AGENT-BRIEF.md`.
+
+## 0.20.1 (2026-09-27): progression - SCRAP, SYNDICATE CHIPS, levels, challenges, unlocks
+
+- Design and Daniele's decisions: `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/PROGRESSION-DESIGN.md` (§0 decisions,
+  §7a the match-host report agreed with the server session, §9 numbers); open points: OPEN-QUESTIONS (Progression).
+  Owner: the "Leaderboard, progression, and currency" session.
+- Code: `scripts/progression.gd` (static, `user://progress.cfg`): `grant(source, amount, currency := "soft")` one-off
+  per source, `has_granted`, `unlock(item, source)`, `is_unlocked(item)` (ids `<family>:<id>[:faction]`, `skill:<id>`),
+  `spend(item, currency)`, `record_match(result)` / `result_from_sim(sim, seat, info)`, `seat_stats` / `placements`
+  (the match host's report will use these), challenges (`current_challenges`, `claim`, `reroll`, UTC day / week).
+  Views: `reward_ticker.gd` (count-up, used by the tutorial cards too), `reward_strip.gd` (results screen). Hooks:
+  main.gd `_record_progress` (not on Net.dedicated / headless / demo / scenario / ff / shots), hud.gd `_reward_strip`,
+  menu.gd PROGRESSION block (`_profile_card`, `show_profile`, `show_challenges`, `_buy_prompt`), army_presets.gd
+  (`is_unlocked` delegates; `loadout_for(f, raw)` falls back to Surge / Demolish for a locked skill), tutorial.gd /
+  coach_overlay.gd `# TUTORIAL + PROGRESSION`. Numbers: the PROGRESSION block at the end of rules.gd.
+- **Locks are off** (`Rules.UNLOCK_ALL_TESTING = true`); OPTIONS > TEST SWITCH · LOCKS previews them for a session.
+  Screenshots: `-- --progress=user://shot_progress.cfg --locks=on --menu-page=profile --menu-shot=<png>`.
+- Online rounds pay on the device until accounts exist. Next for this session: Supabase accounts (guest, then Play
+  Games / Game Center / a personal account), the `match-result` edge function the server session wires, then
+  leaderboards. Campaign missions: `record_match(result_from_sim(..., {"campaign": true}))` (XP + challenges only).
+- Open: OPEN-QUESTIONS Progression (8) account merge, (9) Supabase confirmed, (11) first leaderboards, (12) missions,
+  (13) online pay by AI level, (14) when locks go live.
 
 ## 0.20.0 "Alpha 20" (2026-09-27): server-hosted rooms (the server session)
 

@@ -1,5 +1,46 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.1 "Alpha 20" - 2026-09-27 (progression: SCRAP, SYNDICATE CHIPS, levels, challenges, unlocks)
+
+Daniele: the "Leaderboard, progression, and currency" session builds "currency in parallel". His decisions
+(01 Rules/PROGRESSION-DESIGN.md §0): offline first; a free currency **SCRAP** and a premium **SYNDICATE CHIPS**;
+SCRAP buys cosmetics and skills ("i d lower skill cost is mobile so i d say skill cost to 1250 scraps"), chips buy
+looks only and come in small amounts from weekly challenges and levels; Surge + Demolish free ("the 2 used in the
+tutorial"); every tutorial lesson pays SCRAP "so that a 3 skill can be unlocked once done tutorial"; 25 wins with a
+faction unlock its vat (online, or vs Veteran / Expert AI); easy AI pays XP only; resets at 00:00 UTC; "all open
+until lock switch".
+
+- **Rewards after every match.** A finished match pays XP and SCRAP (finish 20, win +20, first win of the UTC day
+  +100; XP 100 / 50 / 200); below Veteran AI it pays XP only. The results screen shows the lines, the SCRAP (and any
+  chips) counting up, the XP bar filling with a LEVEL UP flash, a challenge-done or faction-vat note. Each level pays
+  100 SCRAP, every 5th also 25 chips (level n needs 800 + 100 (n-1) XP). Online rounds pay on the device until
+  accounts exist; the dedicated match host never pays.
+- **MAIN:** a profile card top right (level, XP bar, SCRAP, CHIPS -> PROFILE) and CHALLENGES with what's ready to claim.
+- **PROFILE:** level and XP, both balances and where they come from, per faction played / won and the faction vat's
+  progress (x / 25 wins), "saved on this device".
+- **CHALLENGES:** 3 daily (reset 00:00 UTC) and 3 weekly (Monday), the same set for everyone each day; progress from
+  any finished match (not tutorial lessons), CLAIM counts the SCRAP up on the card, one daily REROLL a day. Pools in
+  `Rules.CHALLENGES` (captures, relay fires, relay drops, monster kicks, skills, wins as a faction / on relay maps /
+  without losing your home, 3 factions in a week).
+- **Unlocks** (`Progression.is_unlocked`, the one place; `ArmyPresets.is_unlocked` delegates): skills 1 250 SCRAP
+  (never chips), faction vats 4 000 SCRAP / 400 chips (or 25 wins, or the faction's campaign), vat skin lines
+  3 000 / 300, structure looks 1 500 / 150, monster alts 2 000 / 200. ARMIES shows a locked skill's price and opens an
+  UNLOCK sheet; COSMETICS rows get UNLOCK. A locked skill in a saved preset plays as Surge / Demolish (the player only;
+  AI seats keep their faction's). **Locks are off** (`Rules.UNLOCK_ALL_TESTING`): OPTIONS > TEST SWITCH · LOCKS
+  previews the locked game for the session.
+- **Tutorial:** lessons 1-9 pay 140 SCRAP each on their first completion (1 260 = a 3rd skill); the LESSON COMPLETE
+  card counts it up; TRAINING COMPLETE adds "Enough SCRAP for a 3rd skill - ARMIES". The tour pays nothing. The
+  Graduate vat is recorded in Progression once every lesson is done.
+- Code: new `scripts/progression.gd` (`user://progress.cfg`; grant / has_granted / unlock / spend / record_match /
+  seat_stats / placements - the last two are what the match host will report with, PROGRESSION-DESIGN §7a),
+  `scripts/reward_ticker.gd`, `scripts/reward_strip.gd`; the PROGRESSION block at the end of `rules.gd`; hooks in
+  main.gd, hud.gd, menu.gd, army_presets.gd, and `# TUTORIAL + PROGRESSION` hunks in tutorial.gd / coach_overlay.gd
+  (reviewed by the tutorial session). Campaign missions will count for XP and challenges only (their own reward pays).
+  Screenshot helpers `--progress=<file>` and `--locks=on`. Cosmetics' 3D preview skips a piece that isn't loaded.
+- Tests: new `tests/test_progression.gd` (wallet, levels, unlocks, match pay, faction vats, challenges, saving,
+  seat_stats / placements, the ticker); `test_tutorial` checks the lesson pay. All suites pass (list in the root
+  CHANGELOG). Desktop and phone-size renders only; nothing on a real phone.
+
 ## 0.20.0 "Alpha 20" - 2026-09-27 (the room server hosts the matches)
 
 Daniele: "we need to think about a real server also so i can have friends playing ... end goal is put on android

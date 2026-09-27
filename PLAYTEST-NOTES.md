@@ -709,3 +709,21 @@ decide if mechanics are good or not... only thing I can save on is textures or b
   (kit meshes, batching, cheaper fall effects, dynamic resolution on phones) is its own item (NEXT-SESSION).
 - Domain: waits for the game name (Daniele: "i need to decide game name before moving forward"); until then the
   server answers at 45-32-126-20.sslip.io.
+
+## 2026-09-27 - Daniele, progression and currency (0.20.1)
+
+- "Scrap and Syndicate Chips are my choices" - *Done:* SCRAP (free) and SYNDICATE CHIPS (premium), both shown from
+  day one (MAIN card, PROFILE, results).
+- "i like the reward you mentioned but i d lower skill cost is mobile so i d say skill cost to 1250 scraps" - *Done:*
+  a skill costs 1 250 SCRAP; the match rewards stay as proposed (PROGRESSION-DESIGN §9).
+- "premium currency we can award for weekly and progression but in small amounts" - *Done:* 10 chips per weekly
+  challenge, 25 every 5th level.
+- "agree on the all open until lock switch" - *Done:* `Rules.UNLOCK_ALL_TESTING` keeps everything open; OPTIONS > TEST
+  SWITCH · LOCKS previews the locked game for a session.
+- "start with 2 free skills and as a bonus for each tutorial map we give some scrap so that a 3 skill can be unlocked
+  once done tutorial" / "the 2 used in the tutorial surge and destroy bridge" - *Done:* Surge + Demolish free; lessons
+  1-9 pay 140 SCRAP each (1 260).
+- Faction vat by play: online + Veteran / Expert AI wins; easy AI pays XP only; resets 00:00 UTC - *Done* as chosen.
+- Sign-in: "their google play account or apple game account and maybe leave an option for those downloading via apk
+  or other way to connect with a personal account" - *Planned* (PROGRESSION-DESIGN §7): accounts come next, after this
+  offline-first release.

@@ -1,9 +1,25 @@
-# To test - v0.19.2 "Alpha 19" (Daniele, on the phone and with a second player)
+# To test - v0.20.1 "Alpha 20" (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop / phone-emulation renders only. Nothing was tried on a
 real phone or across two networks. Tick what works, note what doesn't; the next session starts from this file.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/ (reload twice - PWA cache).
+
+## 0.20.1 progression (SCRAP, SYNDICATE CHIPS, levels, challenges, unlocks)
+- [ ] **After a match** (vs Veteran or Expert): the results screen shows MATCH FINISHED · WIN · FIRST WIN OF THE DAY,
+      the SCRAP counting up, and the XP bar filling (a LEVEL UP flash when you cross a level). Vs Casual / Training it
+      should say "XP only".
+- [ ] **MAIN**: the card top right (LEVEL, XP bar, SCRAP, CHIPS) opens PROFILE; CHALLENGES under it says how many are
+      ready to claim.
+- [ ] **PROFILE**: your level, both balances, and each faction's PLAYED / WON with the vat bar (x / 25 wins).
+- [ ] **CHALLENGES**: play a few matches, watch the bars move, CLAIM one (the SCRAP counts up on the card), try one
+      REROLL on a daily. Do the challenges feel doable in a day / a week?
+- [ ] **Tutorial**: replay a lesson you haven't finished - LESSON COMPLETE should count up +140 SCRAP (a lesson
+      already finished pays nothing again).
+- [ ] **Locks preview**: OPTIONS > TEST SWITCH · LOCKS: ON, then ARMIES - locked skills show LOCKED and 1 250 SCRAP;
+      tap one for the UNLOCK sheet and buy it if you have the SCRAP. COSMETICS shows UNLOCK on locked looks. Switch it
+      back (or reload) and everything is open again. Tell us when the locks should go live for everyone.
+- [ ] **Numbers**: a skill costs 1 250 SCRAP; ~5 matches a day plus the dailies pays ~400. Does that pace feel right?
 
 ## 0.19.2 fixes (from your 0.19.1 playtest)
 - [ ] **D-11..D-16**: play each and tell us the largest map that still plays well on your phone.
