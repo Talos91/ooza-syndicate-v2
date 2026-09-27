@@ -741,7 +741,7 @@ func show_profile() -> void:
 	if acct.state == "linked":
 		note = "Progress saved on this device and in your account"
 	elif acct.state == "guest":
-		note = "Guest account: add an email to keep your progress on any device"
+		note = "Guest account: add Google (ACCOUNT) to keep your progress on any device"
 	_wrapped(note, lp + P(28, 560), 15, Color("7795a4") if Progression.saved else Color("ffd15c"), 500)
 
 
@@ -848,8 +848,9 @@ func _line_edit(pos: Vector2, dims: Vector2, placeholder: String, text := "") ->
 
 func show_account() -> void:
 	_last_show = show_account                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## ACCOUNT (Daniele: guest first; keep progress on any device with an email link or Google; a sign-in onto an
-	## account that already has progress keeps the account's). Optional: the game plays offline without it.
+	## ACCOUNT (Daniele: an automatic guest, then Google to keep progress on any device - no email: "its a game why
+	## would they want to do that"; a sign-in onto an account that already has progress keeps the account's). Guests are
+	## never asked to verify anything; the game plays offline without it.
 	var a := _account()
 	clear_page("city")
 	_page = "account"
@@ -865,7 +866,7 @@ func show_account() -> void:
 			status = "GUEST ACCOUNT  -  progress on this device, with a cloud copy"
 			col = Color("9cb2bf")
 		"linked":
-			status = "SIGNED IN  -  " + (a.email if a.email != "" else ", ".join(a.providers).to_upper())
+			status = "SIGNED IN WITH GOOGLE" + (("  -  " + a.email) if a.email != "" else "")
 			col = Color("6fff2a")
 		"signing_in":
 			status = "SIGNING IN ..."
@@ -885,59 +886,36 @@ func show_account() -> void:
 	rn.disabled = not a.signed_in()
 	nm.editable = a.signed_in()
 	y += hh + 22.0
+	var google_ok := OS.has_feature("web") and a.google_ready
 	if a.state == "guest":
 		label_at("KEEP YOUR PROGRESS ON ANY DEVICE", lp + P(28, y), 20, Color.WHITE, false)
 		y += 32.0
-		var em := _line_edit(lp + P(28, y), P(440, 58), "your email", "")
-		var sl := nav_button("SEND LINK", lp + P(490, y), P(240, 58), func():
-			if await a.add_email(em.text):
-				_account_note = "Check your inbox: the link keeps this account (and its progress) on any device."
-			else:
-				_account_note = a.last_error
-			show_account(), Account.EMAIL_LINKS)
-		sl.disabled = not Account.EMAIL_LINKS             # no dead buttons: off until the dashboard is set up
-		em.editable = Account.EMAIL_LINKS
-		y += hh + 12.0
 		var g := nav_button("ADD GOOGLE", lp + P(28, y), P(440, 58), func():
 			if not await a.google(true):
 				_account_note = a.last_error
-				show_account())
-		g.disabled = not (OS.has_feature("web") and a.google_ready)
+				show_account(), google_ok)
+		g.disabled = not google_ok
 		y += hh + 10.0
-		if not Account.EMAIL_LINKS or not a.google_ready:
-			_wrapped("COMING SOON: " + " and ".join(([] if Account.EMAIL_LINKS else ["email links"]) + ([] if a.google_ready else ["Google"]))
-					+ " - your progress is already kept in this guest account.", lp + P(28, y), 16, Color("ffd15c"), 700)
-			y += 44.0
-	if a.pending_email != "":
-		_wrapped("LINK SENT TO %s - open it to finish." % a.pending_email, lp + P(28, y), 18, Color("ffd15c"), 700)
-	# sign in with an account made elsewhere: its progress replaces this device's
+		_wrapped("Your progress is already kept in this guest account; Google keeps it on your other devices too.",
+				lp + P(28, y), 16, Color("7795a4"), 700)
+	# sign in with an account linked elsewhere: its progress replaces this device's
 	var rp := P(815, 174)
 	frame(rp, P(822, 600))
 	label_at("ALREADY HAVE AN ACCOUNT?", rp + P(28, 22), 22, Color.WHITE, false)
-	_wrapped("Sign in on this device with the email you linked. Its progress replaces this device's.", rp + P(28, 60), 18,
-			Color("c5d2da"), 760)
-	var ry := 118.0
-	var si := _line_edit(rp + P(28, ry), P(480, 58), "your email", a.email)
-	var ssl := nav_button("SEND SIGN-IN LINK", rp + P(530, ry), P(264, 58), func():
-		if await a.email_sign_in(si.text):
-			_account_note = "Check your inbox: open the link on this device to sign in."
-		else:
-			_account_note = a.last_error
-		show_account())
-	ssl.disabled = not Account.EMAIL_LINKS
-	si.editable = Account.EMAIL_LINKS
-	ry += hh + 12.0
+	_wrapped("Sign in with the Google account you linked on another device. Its progress replaces this device's.",
+			rp + P(28, 60), 18, Color("c5d2da"), 760)
+	var ry := 130.0
 	var gs := nav_button("SIGN IN WITH GOOGLE", rp + P(28, ry), P(480, 58), func():
 		if not await a.google(false):
 			_account_note = a.last_error
 			show_account())
-	gs.disabled = not (OS.has_feature("web") and a.google_ready)
+	gs.disabled = not google_ok
 	ry += hh + 10.0
-	if not Account.EMAIL_LINKS or not a.google_ready:
-		_wrapped("COMING SOON - sign-in links and Google are being set up.", rp + P(28, ry), 16, Color("ffd15c"), 760)
-		ry += 30.0
-	elif not OS.has_feature("web"):
+	if not OS.has_feature("web"):
 		_wrapped("Google sign-in works in the browser build.", rp + P(28, ry), 16, Color("7795a4"), 760)
+		ry += 30.0
+	elif not a.google_ready and a.state != "offline":
+		_wrapped("Google sign-in isn't available right now.", rp + P(28, ry), 16, Color("7795a4"), 760)
 		ry += 30.0
 	if _account_note != "":
 		_wrapped(_account_note, rp + P(28, ry + 10.0), 19, Color("ffd15c"), 760)

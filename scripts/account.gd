@@ -1,11 +1,12 @@
 class_name Account
 extends Node
-## ACCOUNTS (PROGRESSION-DESIGN §7; Daniele 2026-09-27: guest first, then an email link or Google on the web / APK;
+## ACCOUNTS (PROGRESSION-DESIGN §7; Daniele 2026-09-27: guest first, then Google on the web / APK;
 ## Play Games / Game Center with the store builds; a sign-in onto an account that already has progress keeps the
 ## account's). Supabase Auth + REST over HTTPRequest - no SDK. Optional: the game plays fully offline without it.
 ##
 ## - Every player gets a silent guest (anonymous) account the first time the game is online; it becomes permanent when
-##   they add an email (a link, no password) or Google.
+##   they add Google (Daniele, 2026-09-27: no email - "its a game why would they want to do that"; Sign in with Apple
+##   and native Google come with the iOS / Android builds). Guests are never asked to verify anything.
 ## - Cloud save: the device's own save files (Progression, ARMIES picks, the tutorial, the campaign) as they are, pushed
 ##   when one of them changes; restored on another device when that account signs in there ("account wins").
 ## - The session (refresh token) lives in user://account.cfg; Net.auth_token carries the access token into rooms, where
@@ -16,12 +17,9 @@ signal changed                                      # session, profile or state 
 
 const URL := "https://uqwxorxdnucrdgaqpjpp.supabase.co"
 const KEY := "sb_publishable_3aX4T8IcNbI_BBg4wENMhA_3NNclYw2"   # publishable: meant to ship in the client
-const SITE := "https://talos91.github.io/ooza-syndicate-v2/"     # where email links / Google come back (web)
+const SITE := "https://talos91.github.io/ooza-syndicate-v2/"     # where Google sign-in comes back (web)
 const REFRESH_EARLY := 600                          # refresh the access token 10 min before it expires
 const SAVE_CHECK := 20.0                            # seconds between "did a save file change?" checks
-# Email links need the dashboard's Site URL + Redirect URLs (supabase/README.md, switch 3): until Daniele has set them the
-# ACCOUNT page shows the email buttons disabled ("coming soon") instead of sending a link that lands nowhere.
-const EMAIL_LINKS := false
 
 static var path := "user://account.cfg"             # tests point this elsewhere
 static var enabled := true                          # false: never touch the network (tests, headless runs)
@@ -32,7 +30,6 @@ var expires_at := 0
 var user_id := ""
 var is_anonymous := true
 var email := ""
-var pending_email := ""                             # an email added, waiting for its link to be clicked
 var providers: Array = []
 var player_name := ""                             # the profile name (SLIME-xxxxx until renamed)
 var state := "offline"                              # offline | signing_in | guest | linked | error
@@ -57,7 +54,7 @@ static func get_instance() -> Account:
 
 # ------------------------------------------------------------------ start / session
 func start(auto_guest := true) -> void:
-	## Reads the stored session, adopts one coming back from an email link / Google (web: the page's #fragment),
+	## Reads the stored session, adopts one coming back from Google (web: the page's #fragment),
 	## refreshes it, or makes a guest account. Silent when offline: the game plays on.
 	if not enabled:
 		return
@@ -105,7 +102,7 @@ func refresh() -> bool:
 
 
 func _adopt(s: Dictionary) -> void:
-	## A session from sign-up, a refresh, or a redirect. When the account differs from the one this device had,
+	## A session from sign-up, a refresh, or a Google redirect. When the account differs from the one this device had,
 	## the account's cloud save replaces the device's progress (Daniele: "keep the account's").
 	var u: Dictionary = s.get("user", {}) if s.get("user") is Dictionary else {}
 	var before := user_id
@@ -127,7 +124,6 @@ func _read_user(u: Dictionary) -> void:
 	user_id = str(u.get("id", user_id))
 	is_anonymous = bool(u.get("is_anonymous", false))
 	email = str(u.get("email", ""))
-	pending_email = str(u.get("new_email", ""))
 	providers = []
 	for i in u.get("identities", []):
 		if i is Dictionary and not str(i.get("provider", "")) in providers:
@@ -155,28 +151,7 @@ func _process(dt: float) -> void:
 			push_save()
 
 
-# ------------------------------------------------------------------ linking (email link / Google)
-func add_email(address: String) -> bool:
-	## A guest keeps their progress on any device: Supabase emails a link; once clicked the account is permanent.
-	var r := await _call("PUT", "/auth/v1/user?redirect_to=" + SITE.uri_encode(), {"email": address.strip_edges()}, true)
-	if r["ok"]:
-		_read_user(r["json"])
-		pending_email = address.strip_edges()
-		changed.emit()
-		return true
-	_fail(r)
-	return false
-
-
-func email_sign_in(address: String) -> bool:
-	## Sign in on this device to an account that has an email (a link to click); its progress replaces this device's.
-	var r := await _call("POST", "/auth/v1/otp?redirect_to=" + SITE.uri_encode(), {"email": address.strip_edges(), "create_user": false}, false)
-	if r["ok"]:
-		return true
-	_fail(r)
-	return false
-
-
+# ------------------------------------------------------------------ linking (Google)
 func google(link := true) -> bool:
 	## Web only: leaves the page for Google and comes back signed in (link: add Google to this guest account).
 	if not OS.has_feature("web"):
@@ -198,7 +173,7 @@ func google(link := true) -> bool:
 
 
 func _redirect_session() -> Dictionary:
-	## Web: an email link or Google lands back on the page with the session in the #fragment; read it, then wipe it.
+	## Web: Google sign-in lands back on the page with the session in the #fragment; read it, then wipe it.
 	if not OS.has_feature("web") or not Engine.has_singleton("JavaScriptBridge"):
 		return {}
 	var h := str(JavaScriptBridge.eval("window.location.hash || ''", true))
