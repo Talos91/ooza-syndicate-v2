@@ -805,3 +805,8 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 
 - "if they sign in i'd like them not to have to verify email, its a game why would they want to do that for a mobile game,
   also later auth will be on app game and android game so this step is useless" - *Done:* ACCOUNT = guest + Google + rename.
+
+## 2026-09-27 - Daniele, rename on the phone (0.20.10)
+
+- "rename doesn't allow for chat input" / "fix the rename on my mobile, no keyboard opens to input" - *Done:* on the web
+  NAME / RENAME open a native text field that raises the phone keyboard (checked in touch emulation, not on a real phone).

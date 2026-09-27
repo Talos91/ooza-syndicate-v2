@@ -876,16 +876,26 @@ func show_account() -> void:
 	var y := 86.0
 	label_at("NAME", lp + P(28, y), 18, Color("8fb3c2"), false)
 	y += 28.0
-	var nm := _line_edit(lp + P(28, y), P(440, 58), "3-16 letters or digits", a.player_name)
-	var rn := nav_button("RENAME", lp + P(490, y), P(240, 58), func():
-		if await a.rename(nm.text):
-			_account_note = "Name saved: " + a.player_name
-		else:
-			_account_note = a.last_error
-		show_account())
-	rn.disabled = not a.signed_in()
-	nm.editable = a.signed_in()
+	if OS.has_feature("web"):
+		# the web build: Godot's LineEdit doesn't raise a phone keyboard (Daniele, 0.20.9: "rename doesn't allow for chat
+		# input"), so NAME and RENAME open a native HTML field (the room code's way) - see _open_name()
+		var nb := nav_button(a.player_name if a.player_name != "" else "-", lp + P(28, y), P(440, 58), func(): _open_name(a.player_name))
+		nb.disabled = not a.signed_in()
+		var rw := nav_button("RENAME", lp + P(490, y), P(240, 58), func(): _open_name(a.player_name))
+		rw.disabled = not a.signed_in()
+	else:
+		var nm := _line_edit(lp + P(28, y), P(440, 58), "3-16 letters or digits", a.player_name)
+		var rn := nav_button("RENAME", lp + P(490, y), P(240, 58), func():
+			if await a.rename(nm.text):
+				_account_note = "Name saved: " + a.player_name
+			else:
+				_account_note = a.last_error
+			show_account())
+		rn.disabled = not a.signed_in()
+		nm.editable = a.signed_in()
 	y += hh + 22.0
+	if OS.has_feature("web") and not a.google_ready and a.state != "offline":
+		a.check_google()                           # redraws through Account.changed when the answer differs
 	var google_ok := OS.has_feature("web") and a.google_ready
 	if a.state == "guest":
 		label_at("KEEP YOUR PROGRESS ON ANY DEVICE", lp + P(28, y), 20, Color.WHITE, false)
@@ -922,6 +932,54 @@ func show_account() -> void:
 	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
 		_account_note = ""
 		show_profile())
+
+
+# The web build's name field: a native DOM input (like web/room-ui.js's room code) so phone keyboards type into it;
+# defined here at runtime, so the export's script list stays as it is. The game polls takeName() on ACCOUNT.
+const NAME_UI_JS := """(()=>{if(window.OozeName)return;let result='';
+const st=document.createElement('style');st.textContent=`#ooze-name{position:fixed;inset:0;z-index:1200;background:#031017ed;display:grid;place-items:center;padding:12px;box-sizing:border-box;touch-action:auto;font:20px system-ui;color:#e5fcff}#ooze-name form{width:min(460px,90vw);max-height:90dvh;overflow:auto;padding:20px;background:#081f2b;border:2px solid #13dbea;box-sizing:border-box}#ooze-name input{width:100%;box-sizing:border-box;font:700 28px system-ui;letter-spacing:2px;text-align:center;padding:12px;background:#020c12;color:white;border:2px solid #4e98ad;touch-action:auto;user-select:text;-webkit-user-select:text}#ooze-name button{min-height:48px;font:700 18px system-ui;padding:10px 20px;margin:12px 8px 0 0;color:#001720;background:#19dce8;border:0;touch-action:manipulation}#ooze-name p{font-size:16px;line-height:1.4}`;document.head.appendChild(st);
+function show(v){document.getElementById('ooze-name')?.remove();result='';const panel=document.createElement('div');panel.id='ooze-name';
+const form=document.createElement('form');const h=document.createElement('h2');h.textContent='Your name';
+const input=document.createElement('input');input.type='text';input.inputMode='text';input.autocomplete='off';input.autocapitalize='characters';input.spellcheck=false;input.maxLength=16;input.setAttribute('aria-label','Your name');input.value=v||'';
+input.addEventListener('input',()=>{input.value=input.value.toUpperCase().replace(/[^A-Z0-9 _-]/g,'').slice(0,16)});
+const note=document.createElement('p');note.textContent='3-16 letters, digits, space, - or _.';
+const ok=document.createElement('button');ok.type='submit';ok.textContent='Save';const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel';
+cancel.onclick=()=>{panel.remove();document.getElementById('canvas')?.focus()};
+form.onsubmit=e=>{e.preventDefault();const n=input.value.trim();if(/^[A-Z0-9 _-]{3,16}$/.test(n)){result=n;panel.remove();document.getElementById('canvas')?.focus()}else note.textContent='Names are 3-16 letters, digits, space, - or _.'};
+form.append(h,input,note,ok,cancel);panel.append(form);document.body.append(panel);input.focus();input.select()}
+window.OozeName={open:v=>show(v),take:()=>{const n=result;result='';return n},close:()=>document.getElementById('ooze-name')?.remove()};})()"""
+
+
+func _open_name(current: String) -> void:
+	## Web: the native name field (raises the phone keyboard); _process() takes its answer and renames.
+	JavaScriptBridge.eval(NAME_UI_JS, true)
+	var ui = JavaScriptBridge.get_interface("OozeName")
+	if ui != null:
+		_name_open = true
+		ui.open(current)
+
+
+var _name_open := false                            # the native name field is up: _process() polls its answer
+
+
+func _poll_name() -> void:
+	if not _name_open:
+		return
+	var ui = JavaScriptBridge.get_interface("OozeName")
+	if ui == null:
+		return
+	if not bool(JavaScriptBridge.eval("!!document.getElementById('ooze-name')", true)):
+		_name_open = false                         # closed (Save or Cancel): one last take below, then stop polling
+	var n := str(ui.take())
+	if n == "":
+		return
+	var a := _account()
+	if await a.rename(n):
+		_account_note = "Name saved: " + a.player_name
+	else:
+		_account_note = a.last_error
+	if _page == "account":
+		show_account()
 
 
 func show_leaderboard() -> void:
@@ -2036,6 +2094,8 @@ func _process(dt: float) -> void:
 			var n := Net.chat_unread()
 			_chat_btn.text = "CHAT (%d)" % n if n > 0 else "CHAT"
 			_chat_btn.disabled = not Net.connected
+	if OS.has_feature("web") and _page == "account":            # PROGRESSION: the native name field's answer
+		_poll_name()
 	if not OS.has_feature("web") or _page != "online":
 		return
 	var ui = JavaScriptBridge.get_interface("OozeRoom")
@@ -2053,6 +2113,10 @@ func _exit_tree() -> void:
 		var ui = JavaScriptBridge.get_interface("OozeRoom")
 		if ui != null:
 			ui.closeCode()
+		if _name_open:                                   # PROGRESSION: the name field, if it was open
+			var nu = JavaScriptBridge.get_interface("OozeName")
+			if nu != null:
+				nu.close()
 
 
 func _fit() -> void:

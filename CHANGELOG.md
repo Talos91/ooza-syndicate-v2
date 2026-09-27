@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.10 "Alpha 20" - 2026-09-27 (rename works on phones)
+
+- Daniele: "rename doesn't allow for chat input" / "fix the rename on my mobile, no keyboard opens to input" - Godot's
+  LineEdit doesn't raise a phone keyboard in the web build. On the web, ACCOUNT's NAME and RENAME now open a native
+  HTML field (the room code's way: a DOM input, prefilled, upper case, 3-16 letters / digits / space / - / _, Save /
+  Cancel), defined at runtime by menu.gd so the export's script list is unchanged; the answer goes through the same
+  set_name. Desktop keeps the LineEdit. ACCOUNT also re-reads whether Google is on when it opens with Google off.
+- Checked in the in-app browser with touch emulation at 740 x 360 on a local web export: the field opens focused and
+  prefilled, typing + Save renamed the guest on Supabase. Not tried on a real phone.
+
 ## 0.20.9 "Alpha 20" - 2026-09-27 (the tutorial on the decluttered HUD)
 
 - Checked every lesson step against 0.20.6's HUD at phone size. The "+ CAPTURED" / "LOST" floaters are revealed from L1.

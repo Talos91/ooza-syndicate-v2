@@ -59,9 +59,7 @@ func start(auto_guest := true) -> void:
 	if not enabled:
 		return
 	_load()
-	var cfg := await _call("GET", "/auth/v1/settings", null, false)
-	if cfg["ok"] and cfg["json"] is Dictionary:
-		google_ready = bool((cfg["json"] as Dictionary).get("external", {}).get("google", false))
+	await check_google()
 	var back := _redirect_session()
 	if not back.is_empty():
 		await _adopt(back)
@@ -70,6 +68,24 @@ func start(auto_guest := true) -> void:
 	elif auto_guest:
 		await sign_in_guest()
 	changed.emit()
+
+
+var _google_checking := false
+
+
+func check_google() -> void:
+	## Is the project's Google provider on? (/auth/v1/settings) - at start, and again from ACCOUNT while it reads false
+	## (a first request can fail on a flaky start; the buttons must not stay off for the session).
+	if _google_checking or not enabled:
+		return
+	_google_checking = true
+	var cfg := await _call("GET", "/auth/v1/settings", null, false)
+	_google_checking = false
+	var was := google_ready
+	if cfg["ok"] and cfg["json"] is Dictionary:
+		google_ready = bool((cfg["json"] as Dictionary).get("external", {}).get("google", false))
+	if google_ready != was:
+		changed.emit()
 
 
 func signed_in() -> bool:
