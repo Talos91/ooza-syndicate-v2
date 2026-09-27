@@ -7,7 +7,7 @@ extends Node3D
 ## Nothing changes for the game code: every piece keeps its node, transform, visibility, overrides and
 ## place in `vis`; only its MeshInstance3D draws on no layer (layers = 0) while a MultiMesh slot draws it.
 ## - The fixed surfaces (plate, dark, steel, recess, shell) of a piece share one slot in the batch of its
-##   mesh + materials + map chunk (CHUNK: culling and the kit's automatic LODs work per chunk).
+##   mesh + materials + map cell (CHUNK: culling and the kit's automatic LODs work per cell).
 ## - Every other surface (lights, ooze, state symbols, glass, a vat's living liquid) has a slot in the batch
 ##   of its mesh, surface and CURRENT material (a unique material simply makes a batch of one).
 ## - Static pieces (platforms, piers, relay ledges, fixed decks) change only by recolouring (MapBuilder.
@@ -16,8 +16,9 @@ extends Node3D
 ## - Structures in the centre slot (vats, Machinegoons, lasers, forges, hubs, sockets and their skins) grow,
 ##   pump, aim and swap: they are polled each frame (transform, visibility, mesh, materials - a few dozen
 ##   pieces) and a freed one leaves its batches. MapBuilder.set_centre_model tracks the new one (track()).
-## Never batched: relay-controlled decks, rotating relay platforms, relay housings and gates, anything
-## with a material_override, skinned meshes or blend shapes.
+## - Relay pieces (housings, gates, controlled decks, turntable platforms) move only while a relay works:
+##   polled like the structures.
+## Never batched: anything with a material_override (ghosts), skinned meshes or blend shapes.
 
 const STATIC_KIT := ["Platform_", "Pier_", "Relay_Mount", "Deck_"]   # kit scenes batched as static pieces
 # low-poly pieces in many variants (17 pier leans, switch and mirrored copies, one or two of each on a map):
@@ -25,7 +26,8 @@ const STATIC_KIT := ["Platform_", "Pier_", "Relay_Mount", "Deck_"]   # kit scene
 const MERGED_KIT := ["Pier_", "Relay_Mount"]
 const FIXED := ["OS_Plate", "OS_Dark", "OS_Steel", "OS_Recess", "OS_Shell"]   # materials no game code swaps
 const STATIC_GROUP := -1
-const CHUNK := 96.0                     # batches split on a 96 m grid (per-chunk frustum culling and LOD)
+const CHUNK := 128.0                    # batches split into cells of at most this size over the map's bounds
+                                        # (per-cell frustum culling and LOD; most maps are one or two cells)
 
 static var current: MapBatch = null     # the live match's batcher (null: nothing is batched)
 static var disabled := false            # --no-batch (A/B measurements)
@@ -35,6 +37,8 @@ var _pieces := {}                       # MeshInstance3D instance id -> Piece
 var _by_root := {}                      # static root Node3D instance id -> [Piece]
 var _polled: Array = []                 # structure Pieces checked every frame
 var _dirty := {}                        # Merged batches to rebuild this frame
+var _lo := Vector2.ZERO                 # the map's plan bounds and cell size (chunk_of)
+var _cell := Vector2(CHUNK, CHUNK)
 
 
 class Batch:
@@ -134,21 +138,32 @@ static func build(main: Node3D) -> MapBatch:
 	current = b
 	var vis: Dictionary = main.get("vis")
 	var sim = main.get("sim")
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for n in sim.nodes:
+		var q := Vector2((n["pos"] as Vector3).x, (n["pos"] as Vector3).z)
+		lo = lo.min(q)
+		hi = hi.max(q)
+	var ext := (hi - lo).max(Vector2.ONE)
+	b._lo = lo
+	b._cell = Vector2(ext.x / ceilf(ext.x / CHUNK), ext.y / ceilf(ext.y / CHUNK))
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]
-		var skip := [entry.get("vat_node"), entry.get("housing"), entry.get("attachment_node")]
-		skip.append_array(entry.get("state_hosts", []))
+		var moving := [entry.get("vat_node"), entry.get("housing"), entry.get("attachment_node")]
+		moving.append_array(entry.get("state_hosts", []))
 		if n["relay"] == "rotation":                     # the turntable turns with its relay
-			skip.append(entry.get("platform"))
+			moving.append(entry.get("platform"))
 		for p in entry["parts"]:
-			if p != null and not p in skip:
+			if p != null and not p in moving:
 				b._track_static(p)
-		b._track_polled(entry.get("vat_node"))
+		for p in moving:
+			b._track_polled(p)
 	for i in range(sim.edges.size()):
-		if sim.edge_controller.has(i):                   # relay decks slide / swing / retract
-			continue
 		for d in vis["edge_decks"].get(i, []):
-			b._track_static(d)
+			if sim.edge_controller.has(i):               # relay decks slide / swing / retract
+				b._track_polled(d)
+			else:
+				b._track_static(d)
 	return b
 
 
@@ -182,7 +197,7 @@ func _new_pieces(root: Node3D) -> Array:
 		p.mesh = m.mesh
 		p.root = root
 		p.xform = m.global_transform
-		p.chunk = "@%d,%d" % [floori(p.xform.origin.x / CHUNK), floori(p.xform.origin.z / CHUNK)]
+		p.chunk = _chunk_of(p.xform.origin)
 		p.static_key = _static_key(m, p.chunk)
 		var file := root.scene_file_path.get_file()
 		p.merge = MERGED_KIT.any(func(pre): return file.begins_with(pre))
@@ -214,6 +229,10 @@ func _track_polled(root) -> void:
 		_polled.append(p)
 		if p.mi.is_visible_in_tree():
 			_attach(p)
+
+
+func _chunk_of(at: Vector3) -> String:
+	return "@%d,%d" % [clampi(floori((at.x - _lo.x) / _cell.x), 0, 64), clampi(floori((at.z - _lo.y) / _cell.y), 0, 64)]
 
 
 static func _fixed(mat: Material) -> bool:
@@ -437,6 +456,37 @@ static func stats() -> Dictionary:
 		inst += current._batches[k].items.size()
 	return {"batches": current._batches.size(), "instances": inst, "pieces": current._pieces.size(),
 			"polled": current._polled.size()}
+
+
+static func verify() -> Array:
+	## tests/perf_check: every tracked piece drawn exactly as its node says - attached while visible, each
+	## slot pointing back at it, its MultiMesh transform its node's, its batch material its surface's.
+	## Returns the mismatches (empty: consistent).
+	var bad := []
+	if current == null:
+		return bad
+	for id in current._pieces:
+		var p: Piece = current._pieces[id]
+		if not is_instance_valid(p.mi) or not is_instance_valid(p.root) or p.root.is_queued_for_deletion():
+			continue                                     # gone this frame: the next poll drops it
+		var name := "%s/%s" % [p.root.name, p.mi.name]
+		if p.attached != p.mi.is_visible_in_tree():
+			bad.append("%s attached=%s visible=%s" % [name, p.attached, p.mi.is_visible_in_tree()])
+			continue
+		if not p.attached:
+			continue
+		if p.mi.layers != 0:
+			bad.append("%s draws itself too" % name)
+		for g in p.slots:
+			var b = p.slots[g][0]
+			var i: int = p.slots[g][1]
+			if b.items[i][0] != p:
+				bad.append("%s slot %d/%d points elsewhere" % [name, g, i])
+			elif b is Batch and not (b as Batch).mm.get_instance_transform(i).is_equal_approx(p.mi.global_transform):
+				bad.append("%s slot %d at the wrong place" % [name, g])
+			if g >= 0 and _surface_mat(p.mi, g) != p.dyn.get(g):
+				bad.append("%s surface %d in the wrong colour" % [name, g])
+	return bad
 
 
 # ------------------------------------------------------------------ merged unique meshes (Fx's neon)

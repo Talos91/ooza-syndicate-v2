@@ -52,6 +52,8 @@ func _process(dt: float) -> void:
 				mm_inst += (n as MultiMeshInstance3D).multimesh.visible_instance_count if (n as MultiMeshInstance3D).multimesh.visible_instance_count >= 0 else (n as MultiMeshInstance3D).multimesh.instance_count
 	print("PROBE draw=%d prims=%d objects=%d nodes=%d fps=%d (max over the last 3 s)" % [d, p, o,
 			Performance.get_monitor(Performance.OBJECT_NODE_COUNT), Engine.get_frames_per_second()])
+	var bad := MapBatch.verify()
+	print("VERIFY %d mismatches %s" % [bad.size(), bad.slice(0, 5)])
 	var keys := census.keys()
 	keys.sort()
 	print("CENSUS ", ", ".join(keys.map(func(k): return "%s=%d" % [k, census[k]])), "  multimesh instances=", mm_inst, "  batch=", MapBatch.stats())
