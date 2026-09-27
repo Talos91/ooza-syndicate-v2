@@ -134,6 +134,7 @@ func _ready() -> void:
 
 # ---------------------------------------------------------------- download
 func _reload() -> void:
+	http.cancel_request()                                # RELOAD mid-download: start the queue over cleanly
 	status.text = "Loading maps from %s ..." % base
 	queue = ["index"]
 	http.request(base + "maps/index.json?t=%d" % Time.get_unix_time_from_system())
