@@ -1463,17 +1463,23 @@ func show_end(winner: String) -> void:
 		body += "
 REMATCH: %d / %d ready%s" % [votes, Net.present_ids().size(), " - waiting for the others" if mine else ""]
 		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP" if not mine else "REMATCH - READY", func(): main.rematch_random()],
-				["LEAVE ROOM", main.to_menu]])
+				["LEAVE ROOM", main.to_menu]], _reward_strip())
 		if not Net.rematch_changed.is_connected(_on_rematch_changed):
 			Net.rematch_changed.connect(_on_rematch_changed)
 	else:
-		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP", main.rematch_random], ["MAIN MENU", main.to_menu]])
+		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP", main.rematch_random], ["MAIN MENU", main.to_menu]], _reward_strip())
 	end_panel.visible = true
 	pause_panel.visible = false
 	layout(root.get_viewport_rect().size, margins)
 
 
-func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: Array) -> void:
+func _reward_strip() -> Control:
+	## PROGRESSION (0.20.1): what the match paid (main.rewards, set once at the match end), or nothing.
+	var r = main.get("rewards")
+	return RewardStrip.make(r, ui_scale) if r is Dictionary and not (r as Dictionary).get("lines", []).is_empty() else null
+
+
+func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: Array, extra: Control = null) -> void:
 	for c in panel.get_children():
 		c.queue_free()
 	var col := VBoxContainer.new()
@@ -1486,6 +1492,8 @@ func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: 
 	var b := text_label(body, 18, Color("c8e6ee"))
 	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(b)
+	if extra != null:                                 # PROGRESSION: the results screen's rewards strip
+		col.add_child(extra)
 	var tall := 80 if actions.size() <= 5 else 78     # six pause actions (TERRITORY) still fit a landscape phone; 78 keeps them >= 44 pt too
 	for a in actions:
 		var btn := button(a[0], a[1], 0, 56 if not mobile else tall, 22)

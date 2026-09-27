@@ -491,6 +491,7 @@ var _obstacles: Array = []
 var _handler: HandlerView
 var _typing := false
 var _typed := 0.0
+var _scrap := 0        # TUTORIAL + PROGRESSION: SCRAP the completion card counts up (0 = none)
 var _reward := {}      # where the card is easing to (no new tween for the same corner)
 var _exit_button: Button
 var _skip_button: Button
@@ -974,10 +975,11 @@ func clear_gesture() -> void:
 	_hand.visible = false
 
 
-func show_complete(title: String, lines: Array, primary_text: String, secondary: Array) -> void:
+func show_complete(title: String, lines: Array, primary_text: String, secondary: Array, scrap := 0) -> void:
 	_card.visible = false
 	_dim.visible = false
 	clear_gesture()
+	_scrap = scrap                                     # TUTORIAL + PROGRESSION
 	_fill_complete(title, lines, primary_text, secondary, false)
 	_complete.visible = true
 	_center_complete()
@@ -988,6 +990,7 @@ func show_training_complete(title: String, lines: Array, primary_text: String, s
 	_dim.visible = false
 	clear_gesture()
 	_reward = reward
+	_scrap = int(reward.get("scrap", 0))               # TUTORIAL + PROGRESSION
 	_fill_complete(title, lines, primary_text, secondary, true)
 	_complete.visible = true
 	_center_complete()
@@ -1151,6 +1154,14 @@ func _fill_complete(title: String, lines: Array, primary_text: String, secondary
 		var l := _label(str(line), _body_fsz(), Color("c8e6ee"))
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_complete_vb.add_child(l)
+	# TUTORIAL + PROGRESSION: "+140 SCRAP" counting up under the "done" lines, first completion only
+	var ticker_h := 0.0
+	if _scrap > 0:
+		var t := RewardTicker.make(_scrap, "soft", func(n: float) -> float: return _pt(n) if mobile else n * 1.2)
+		t.fit()
+		_complete_vb.add_child(t)
+		ticker_h = t.custom_minimum_size.y + 10.0
+		t.play.call_deferred()                            # in the tree already: start once the card is laid out
 	if graduate:
 		var slot := GraduatePanel.new()
 		slot.head_font = HEAD_FONT
@@ -1174,6 +1185,7 @@ func _fill_complete(title: String, lines: Array, primary_text: String, secondary
 		row.add_child(_make_button(str(secondary[idx]), func(): button_pressed.emit("secondary:%d" % idx)))
 	# a deterministic height, for the same reason _resize_card() avoids a live measurement
 	var h := 44.0 + float(lines.size()) * (_body_fsz() * 1.35 * 1.25) + _btn_h() + 60.0
+	h += ticker_h
 	if graduate:
 		h += (_pt(118.0) if mobile else 190.0) + 10.0
 	var w := _card_w() * (2.0 if mobile else 1.7)

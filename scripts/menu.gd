@@ -445,6 +445,7 @@ func show_main() -> void:
 	nav_button("ONLINE", P(307, y), P(213, h4), show_online)
 	y += h4 + 16.0
 	label_at("%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], P(66, y), 19, Color("839da9"))
+	_profile_card(P(1282, 36))                        # PROGRESSION: level, SCRAP, CHIPS -> PROFILE; CHALLENGES
 
 
 func show_options() -> void:
@@ -501,6 +502,13 @@ func show_options() -> void:
 		show_options())) as Button
 	dbg.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
 	y += h5 + 10.0
+	var h6 := rh(50)                                   # PROGRESSION: see the game as players will once the locks go live
+	var lk := stack_add(st, nav_button("LOCKS: %s" % ("OPEN  -  every skill and look unlocked while testing" if Progression.unlock_all
+			else "ON  -  skills and looks are earned or bought (this session)"), P(15, y), P(915, h6), func():
+		Progression.unlock_all = not Progression.unlock_all
+		show_options())) as Button
+	lk.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
+	y += h6 + 10.0
 	stack_close(st, y)
 	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
 
@@ -610,6 +618,212 @@ func _start_lesson(id: int) -> void:
 	main.start_tutorial(id, false, faction, colour)
 
 
+# ------------------------------------------------------------------ PROGRESSION (0.20.1, PROGRESSION-DESIGN §8)
+func _balance(amount: int, currency: String, pos: Vector2, pt_k: float, named := true) -> RewardTicker:
+	## A currency balance with its mark ("1 260 SCRAP"; named false: "1 260" + the mark), shown at once.
+	var t := RewardTicker.make(amount, currency, func(n: float) -> float: return n * pt_k)
+	t.sign = false
+	t.named = named
+	t.tooltip_text = Rules.CURRENCY_NAMES.get(currency, "")
+	t.position = pos
+	t.fit()
+	content.add_child(t)
+	t.play(true)
+	return t
+
+
+func _wrapped(text: String, pos: Vector2, size_value: int, col: Color, width: float) -> Label:
+	## A label that wraps inside `width` (canvas units) at its designed size (a dense box - see label_at()).
+	var l := label_at(text, pos, size_value, col, false)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(width * K, 0)
+	l.size = l.custom_minimum_size
+	return l
+
+
+func _bar(pos: Vector2, dims: Vector2, f: float, col: Color) -> void:
+	## A plain progress bar (XP, challenge progress, faction vat wins).
+	var bg := ColorRect.new()
+	bg.color = Color(0.02, 0.05, 0.07, 0.92)
+	bg.position = pos
+	bg.size = dims
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(bg)
+	var fill := ColorRect.new()
+	fill.color = col
+	fill.position = pos
+	fill.size = Vector2(dims.x * clampf(f, 0.0, 1.0), dims.y)
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(fill)
+
+
+func _profile_card(pos: Vector2) -> void:
+	## MAIN, top right: level, XP to the next, both balances - tap for PROFILE; CHALLENGES under it with what is
+	## ready to claim.
+	var dims := P(360, 132)
+	var lf := Progression.level_for(Progression.xp)
+	nav_button("", pos, dims, show_profile, false, false)
+	content.add_child(neon_panel(pos, dims, Color("18dae8"), false, Color("030c12ec")))
+	label_at("LEVEL %d" % int(lf["level"]), pos + P(18, 8), 30, Color.WHITE, false)
+	label_at("PROFILE", pos + P(260, 18), 16, Color("839da9"), false)
+	_bar(pos + P(18, 56), P(324, 10), float(lf["into"]) / maxf(1.0, float(lf["need"])), Color("5fd7ff"))
+	_balance(Progression.balance("soft"), "soft", pos + P(14, 80), 0.62 * K * 1.6, false)      # the marks name them
+	_balance(Progression.balance("premium"), "premium", pos + P(196, 80), 0.62 * K * 1.6, false)
+	var ready_n := Progression.claimable()
+	var cb := nav_button("CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else ""), pos + P(0, 146), P(360, 64),
+			show_challenges, ready_n > 0)
+	cb.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
+
+
+func show_profile() -> void:
+	## PROFILE: level and XP, both balances and where they come from, per faction plays / wins and the faction
+	## vat's progress (25 wins online or vs Veteran / Expert AI), and whether it is saved on this device.
+	clear_page("city")
+	_page = "profile"
+	header(0)
+	label_at("PROFILE", P(40, 104), 43)
+	label_at("LEVEL, SCRAP, CHIPS AND YOUR FACTIONS  ·  earned by playing", P(300, 122), 20, Color("abc1cd"))
+	var lf := Progression.level_for(Progression.xp)
+	var lp := P(35, 174)
+	frame(lp, P(560, 600))
+	label_at("LEVEL %d" % int(lf["level"]), lp + P(28, 20), 56)
+	_bar(lp + P(28, 108), P(500, 16), float(lf["into"]) / maxf(1.0, float(lf["need"])), Color("5fd7ff"))
+	label_at("%d / %d XP TO LEVEL %d" % [int(lf["into"]), int(lf["need"]), int(lf["level"]) + 1], lp + P(28, 132), 18, Color("9cb2bf"))
+	var PR := Rules.PROGRESSION
+	# the explanations wrap inside the frame at their designed size (a dense box - see label_at())
+	_wrapped("EVERY LEVEL +%d SCRAP  ·  EVERY %dTH ALSO +%d CHIPS" % [int(PR["level_soft"]), int(PR["level_premium_every"]),
+			int(PR["level_premium"])], lp + P(28, 162), 16, Color("7795a4"), 500)
+	_balance(Progression.balance("soft"), "soft", lp + P(24, 216), K * 1.6)
+	_wrapped("Matches (from Veteran AI up), challenges, the tutorial and the campaign. A skill costs %s." % Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false),
+			lp + P(28, 284), 17, Color("c5d2da"), 500)
+	_balance(Progression.balance("premium"), "premium", lp + P(24, 364), K * 1.6)
+	_wrapped("Weekly challenges and every %dth level; the store later. For looks only - never skills." % int(PR["level_premium_every"]),
+			lp + P(28, 432), 17, Color("c5d2da"), 500)
+	if Progression.unlock_all:
+		label_at("UNLOCKS OPEN WHILE TESTING (OPTIONS > LOCKS)", lp + P(28, 530), 16, Color("ffd15c"), false)
+	# factions
+	var fp := P(620, 174)
+	frame(fp, P(1017, 600))
+	label_at("FACTIONS", fp + P(24, 16), 28)
+	label_at("%d WINS WITH A FACTION UNLOCK ITS VAT  ·  ONLINE, OR VS VETERAN / EXPERT AI" % int(PR["faction_vat_wins"]),
+			fp + P(210, 26), 16, Color("8fb3c2"), false)
+	for i in range(FACTIONS.size()):
+		var f: String = FACTIONS[i]
+		var rp := fp + P(24, 70 + i * 104)
+		var fc: Color = Rules.FACTIONS[f][1]
+		var st := Progression.faction_stats(f)
+		portrait(f, rp, P(86, 92))
+		label_at("VIRIDIAN" if f == "bloom" else f.to_upper(), rp + P(104, 6), 26, fc, false)
+		label_at("PLAYED %d  ·  WON %d" % [int(st["plays"]), int(st["wins"])], rp + P(104, 44), 19, Color("dbe6ec"), false)
+		var need: int = PR["faction_vat_wins"]
+		var owned := Progression.owns("vat:faction:" + f)
+		_bar(rp + P(470, 30), P(360, 14), 1.0 if owned else float(st["vat_wins"]) / float(need), fc)
+		label_at("VAT UNLOCKED" if owned else "VAT  %d / %d WINS" % [int(st["vat_wins"]), need], rp + P(470, 54), 17,
+				fc if owned else Color("9cb2bf"), false)
+	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
+	nav_button("CHALLENGES", P(290, foot_y()), P(280, 58), show_challenges)
+	var note := "Progress saved on this device" if Progression.saved else "This browser keeps no storage: progress lasts until the page closes"
+	label_at(note, P(985, foot_y() + 18.0), 18, Color("7795a4") if Progression.saved else Color("ffd15c"), false)
+
+
+func show_challenges(just_claimed := "") -> void:
+	## CHALLENGES: three daily and three weekly (the same for everyone, reset 00:00 UTC / Monday), progress from any
+	## finished match (tutorial lessons excluded), CLAIM pays (the card counts it up), one daily REROLL a day.
+	clear_page("city")
+	_page = "challenges"
+	header(0)
+	label_at("CHALLENGES", P(40, 104), 43)
+	label_at("PLAY ANY MATCH TO PROGRESS  ·  CLAIM TO COLLECT", P(380, 122), 20, Color("abc1cd"))
+	for kind in ["daily", "weekly"]:
+		var x := 35.0 if kind == "daily" else 845.0
+		var cp := P(x, 174)
+		frame(cp, P(792, 600))
+		label_at(kind.to_upper(), cp + P(24, 16), 30)
+		label_at("RESETS IN " + Progression.duration_text(Progression.seconds_to_reset(kind)).to_upper(), cp + P(210, 28), 17,
+				Color("8fb3c2"), false)
+		var list := Progression.current_challenges(kind)
+		var rerolled: bool = Progression.challenges.get("daily", {}).get("rerolled", false)
+		for i in range(list.size()):
+			var c: Dictionary = list[i]
+			var rp := cp + P(24, 76 + i * 172)
+			content.add_child(neon_panel(rp, P(744, 158), color(), c["done"] and not c["claimed"], Color("08131ae8")))
+			label_at(str(c["text"]), rp + P(18, 12), 24, Color.WHITE if not c["claimed"] else Color("7795a4"), false)
+			_bar(rp + P(18, 60), P(440, 14), float(c["progress"]) / maxf(1.0, float(c["target"])), color())
+			label_at("%d / %d" % [int(c["progress"]), int(c["target"])], rp + P(470, 52), 19, Color("dbe6ec"), false)
+			var reward := "%s  ·  +%d XP" % [Progression.amount_text(int(c["soft"])), int(c["xp"])]
+			if int(c["premium"]) > 0:
+				reward += "  ·  " + Progression.amount_text(int(c["premium"]), "premium")
+			label_at(reward, rp + P(18, 94), 18, Color("e08a3a"), false)
+			var id: String = c["id"]
+			var k: String = kind
+			if c["claimed"]:
+				if id == just_claimed:               # the paid SCRAP counts up on the card it came from
+					var t := RewardTicker.make(int(c["soft"]), "soft", func(n: float) -> float: return n * K * 1.4)
+					t.position = rp + P(540, 96)
+					t.fit()
+					content.add_child(t)
+					t.play()
+				else:
+					label_at("CLAIMED", rp + P(600, 104), 19, Color("7795a4"), false)
+			elif c["done"]:
+				nav_button("CLAIM", rp + P(560, 88), P(166, 58), func():
+					if not Progression.claim(k, id).is_empty():
+						show_challenges(id), true)
+			elif kind == "daily" and not rerolled:
+				var rb := nav_button("REROLL", rp + P(560, 88), P(166, 58), func():
+					Progression.reroll(id)
+					show_challenges())
+				rb.add_theme_font_size_override("font_size", int(round(fsz(19) * K)))
+	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
+	nav_button("PROFILE", P(290, foot_y()), P(230, 58), show_profile)
+	label_at("One reroll a day, for a daily you would rather swap.", P(985, foot_y() + 18.0), 18, Color("7795a4"), false)
+
+
+func _buy_prompt(item: String, title: String, line: String, back: Callable) -> void:
+	## UNLOCK sheet over the page: the price in SCRAP (and in CHIPS when it is sold for them), what you have, CANCEL.
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.72)
+	dim.position = Vector2(-3000, -3000)
+	dim.size = Vector2(9000, 9000)
+	content.add_child(dim)
+	var pp := P(436, 250)
+	var pd := P(800, 440)
+	content.add_child(neon_panel(pp, pd, Color("ffd15c"), true, Color("0a1216f4")))
+	label_at("UNLOCK " + title, pp + P(32, 24), 34, Color.WHITE, false)
+	var d := label_at(line, pp + P(32, 84), 19, Color("c5d2da"), false)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.custom_minimum_size = Vector2(pd.x - 64 * K, 0)
+	d.size = d.custom_minimum_size
+	var price := Progression.price(item)
+	var y := 170.0
+	for cur in ["soft", "premium"]:
+		if not price.has(cur):
+			continue
+		var cost: int = price[cur]
+		var have := Progression.balance(cur)
+		var c: String = cur
+		var b := nav_button("BUY  ·  " + Progression.amount_text(cost, cur, false), pp + P(32, y), P(420, 66), func():
+			if Progression.spend(item, c):
+				back.call(), cur == "soft")
+		b.disabled = have < cost
+		label_at("YOU HAVE " + Progression.amount_text(have, cur, false) if have >= cost else "YOU HAVE %s - %s SHORT" % [
+				Progression.amount_text(have, cur, false), Progression.amount_text(cost - have, cur, false)],
+				pp + P(476, y + 22), 17, Color("9cb2bf") if have >= cost else Color("ffb12b"), false)
+		y += 86.0
+	nav_button("CANCEL", pp + P(32, 350), P(220, 60), back)
+
+
+func _cosmetic_path(family: String, id: String) -> String:
+	## A locked cosmetic's way in, for its row: the faction vat's wins, the tutorial for the Graduate vat.
+	var item := Progression.cosmetic_item(family, id, _army)
+	if item == "vat:graduate":
+		return TutorialDirector.line("locked_cosmetic").to_upper()
+	if family == "vat" and id == "faction":
+		return "%d / %d WINS AS %s, ITS CAMPAIGN, OR UNLOCK" % [int(Progression.faction_stats(_army)["vat_wins"]),
+				int(Rules.PROGRESSION["faction_vat_wins"]), "VIRIDIAN" if _army == "bloom" else _army.to_upper()]
+	return "UNLOCK WITH SCRAP OR CHIPS"
+
+
 # ------------------------------------------------------------------ ARMIES (army presets, SKILLS 2.0)
 func show_armies(f: String = "", back: Callable = Callable()) -> void:
 	## Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select what
@@ -688,7 +902,13 @@ func _skill_card(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vec
 	## One pool skill as a tap target: icon, cooldown, name, one line in shown numbers (the full sentence as
 	## its tooltip); the equipped one glows with a check.
 	var sk: Dictionary = Rules.SKILLS[id]
+	var locked := not Progression.is_unlocked("skill:" + id)   # PROGRESSION: tap a locked skill to unlock it
 	var b := nav_button("", pos, dims, func():
+		if locked:
+			_buy_prompt("skill:" + id, ArmyPresets.skill_name(id).to_upper(),
+					"Unlocks %s for every faction's loadout. Skills are earned with SCRAP only." % ArmyPresets.skill_name(id),
+					func(): show_armies())
+			return
 		ArmyPresets.set_pick(_army, slot, id)
 		_preset_changed()
 		show_armies())
@@ -699,7 +919,10 @@ func _skill_card(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vec
 	if chosen:
 		label_at("EQUIPPED", pos + P(106, 46), 17, fc, false)
 		neon_icon("check", pos + P(dims.x / K - 34, 12), P(20, 20), fc)
-	if sk.get("needs_relays", false):
+	if locked:
+		label_at("LOCKED", pos + P(106, 46), 17, Color("e08a3a"), false)
+		label_at(Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false), pos + P(106, 70), 15, Color("e08a3a"), false)
+	elif sk.get("needs_relays", false):
 		label_at("NEEDS RELAYS", pos + P(106, 70), 15, Color("ffb12b"), false)
 	label_at(ArmyPresets.skill_name(id).to_upper(), pos + P(16, 104), 24, Color.WHITE if chosen else Color("dbe6ec"), false)   # fixed card height - see label_at()
 	var d := label_at(ArmyPresets.line(id), pos + P(16, 138), 18, Color("c5d2da"), false)
@@ -746,7 +969,8 @@ func show_cosmetics(f: String = "") -> void:
 	header(0)
 	var fc := color()
 	label_at("ARMIES", P(40, 104), 43)
-	label_at("COSMETICS  ·  a look per structure, per faction - all unlocked while testing, the Graduate vat by finishing the tutorial",
+	label_at("COSMETICS  ·  a look per structure, per faction - " + ("all unlocked while testing, the Graduate vat by finishing the tutorial"
+			if Progression.unlock_all else "earn or unlock them; the Graduate vat by finishing the tutorial"),
 			P(262, 122), 20, Color("abc1cd"))
 	for i in range(FACTIONS.size()):
 		var tf: String = FACTIONS[i]
@@ -803,9 +1027,14 @@ func _cosmetic_row(family: String, current: String, pos: Vector2, fc: Color) -> 
 	nav_button("<", pos + P(122, 42), P(42, 32), func():
 		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx - 1 + options.size()) % options.size()])
 		show_cosmetics())
-	var locked := not ArmyPresets.is_unlocked(current)
-	label_at(Cosmetics.label(family, current, _army) + ((" (LOCKED - %s)" % TutorialDirector.line("locked_cosmetic").to_upper()) if locked else ""), pos + P(178, 48),
+	var locked := not ArmyPresets.is_unlocked(current, family, _army)
+	label_at(Cosmetics.label(family, current, _army) + ((" (LOCKED - %s)" % _cosmetic_path(family, current)) if locked else ""), pos + P(178, 48),
 			19, Color("ffb12b") if locked else Color("dbe6ec"), false)
+	var item := Progression.cosmetic_item(family, current, _army)   # PROGRESSION: UNLOCK where it can be bought
+	if locked and not Progression.price(item).is_empty():
+		nav_button("UNLOCK", pos + P(850, 38), P(190, 42), func():
+			_buy_prompt(item, Cosmetics.label(family, current, _army).to_upper(), "A look only: tier read, footprint and colour stay the same.",
+					func(): show_cosmetics()))
 	nav_button(">", pos + P(1090, 42), P(42, 32), func():
 		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx + 1) % options.size()])
 		show_cosmetics())

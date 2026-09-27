@@ -19,6 +19,8 @@ var amount := 0
 var currency := "soft"
 var duration := 0.9                                # seconds of counting; the pop after it is 0.25 s
 var pt: Callable
+var sign := true                                   # false: a balance ("1 260 SCRAP"), not a gain
+var named := true                                  # false: the number and its mark only ("1 260" + the nut)
 var _t := -1.0                                     # < 0: not playing
 var _shown := 0
 var _pop := 0.0
@@ -58,12 +60,22 @@ func _font_size() -> int:
 
 
 func _text() -> String:
-	return Progression.amount_text(_shown, currency)
+	return _fmt(_shown)
+
+
+func _fmt(v: int) -> String:
+	var t := Progression.amount_text(v, currency, sign)
+	return t if named else t.substr(0, t.rfind(" " + str(Rules.CURRENCY_SHORT.get(currency, ""))))
+
+
+func fit() -> void:
+	## Sizes the ticker now (before it is in the tree, so a parent can count its height).
+	_resize()
 
 
 func _resize() -> void:
 	var fs := _font_size()
-	var w := _p(H) + _p(8) + HEAD_FONT.get_string_size(Progression.amount_text(amount, currency), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var w := _p(H) + _p(8) + HEAD_FONT.get_string_size(_fmt(amount), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	custom_minimum_size = Vector2(minf(w + _p(6), _p(MAX_W)), _p(H))
 	size = custom_minimum_size
 

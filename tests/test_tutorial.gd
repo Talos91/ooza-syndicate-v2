@@ -27,6 +27,7 @@ func _init() -> void:
 			TutorialDirector.map_dir = a.substr(5)
 	TutorialDirector.path = "user://test_tutorial_progress.cfg"
 	ArmyPresets.path = "user://test_tutorial_armies.cfg"
+	Progression.path = "user://test_tutorial_progression.cfg"   # TUTORIAL + PROGRESSION: never the real wallet
 	_wipe()
 	TutorialDirector.reload_progress()
 	ArmyPresets._loaded = false
@@ -53,9 +54,10 @@ func _init() -> void:
 
 
 func _wipe() -> void:
-	for p in [TutorialDirector.path, ArmyPresets.path]:
+	for p in [TutorialDirector.path, ArmyPresets.path, Progression.path]:
 		if FileAccess.file_exists(p):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+	Progression.reload_all()
 
 
 # ------------------------------------------------------------------ harness
@@ -208,6 +210,11 @@ func test_progress() -> void:
 	check(TutorialDirector.offered and not TutorialDirector.first_launch_due(PackedStringArray(), false), "progress: `offered` round-trips; no second forced start")
 	for i in range(1, 9):
 		TutorialDirector.mark_complete(i)
+	var lesson_pay: int = Rules.PROGRESSION["tutorial_lesson"]
+	check(TutorialDirector.last_scrap == lesson_pay and Progression.balance() == 8 * lesson_pay,
+			"scrap: each first completion pays %d (%d after 8)" % [lesson_pay, Progression.balance()])
+	TutorialDirector.mark_complete(3)
+	check(TutorialDirector.last_scrap == 0 and Progression.balance() == 8 * lesson_pay, "scrap: a replay pays nothing")
 	TutorialDirector.reload_progress()
 	check(TutorialDirector.done_count() == 8 and TutorialDirector.first_unfinished() == 0 and not ArmyPresets.is_unlocked("graduate"),
 			"progress: 8 lessons round-trip, CONTINUE = the tour (L0), Graduate still locked")
@@ -215,7 +222,9 @@ func test_progress() -> void:
 	TutorialDirector.reload_progress()
 	check(TutorialDirector.all_done() and TutorialDirector.relay_kill_done and ArmyPresets.is_unlocked("graduate"),
 			"progress: lessons 1-9 + relay kill round-trip; the Graduate vat unlocks without the tour")
+	check(Progression.balance() == 9 * lesson_pay and Progression.third_skill_line() != "", "scrap: lesson 9 brings 1 260 - a 3rd skill")
 	TutorialDirector.mark_complete(0)
+	check(TutorialDirector.last_scrap == 0 and Progression.balance() == 9 * lesson_pay, "scrap: the tour (L0) pays nothing")
 	TutorialDirector.reload_progress()
 	check(TutorialDirector.done_count() == TutorialDirector.TOTAL_LESSONS, "progress: the tour counts toward n/10")
 	check(ArmyPresets.cosmetic_loadout_for("null")["vat"] == "graduate", "unlock: the Graduate pick plays once unlocked")

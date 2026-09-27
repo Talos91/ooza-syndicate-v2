@@ -61,12 +61,27 @@ static func _ensure() -> void:
 		load_all()
 
 
-static func loadout_for(faction: String) -> Dictionary:
+static func loadout_for(faction: String, raw := false) -> Dictionary:
 	## The preset for a faction: {"active": id, "map": id}, always both, always valid (defaults fill in).
+	## PROGRESSION (0.20.1): a skill the player hasn't unlocked plays as the free one of its slot (Surge / Demolish,
+	## Rules.PROGRESSION["free_skills"]); `raw` = the picks as saved. AI seats never come through here.
 	_ensure()
 	var d: Dictionary = Rules.FACTION_LOADOUT.get(faction, Rules.FACTION_LOADOUT["null"])
 	var p: Dictionary = picks.get(faction, {})
-	return {"active": str(p.get("active", d["active"])), "map": str(p.get("map", d["map"]))}
+	var lo := {"active": str(p.get("active", d["active"])), "map": str(p.get("map", d["map"]))}
+	if not raw:
+		for slot in ["active", "map"]:
+			if not Progression.is_unlocked("skill:" + lo[slot]):
+				lo[slot] = free_skill(slot)
+	return lo
+
+
+static func free_skill(slot: String) -> String:
+	## PROGRESSION: the slot's free skill (Surge for active, Demolish for map).
+	for id in Rules.PROGRESSION["free_skills"]:
+		if id in (Rules.ACTIVE_SKILLS if slot == "active" else Rules.MAP_SKILLS):
+			return id
+	return Rules.ACTIVE_SKILLS[0] if slot == "active" else Rules.MAP_SKILLS[0]
 
 
 static func effective(faction: String, lo: Dictionary, has_relays: bool) -> Dictionary:
@@ -114,7 +129,7 @@ static func cosmetic_loadout_for(faction: String, raw := false) -> Dictionary:
 	var out := {}
 	for family in Cosmetics.OPTIONS:
 		var id := str(p.get(family, "default"))
-		out[family] = id if raw or is_unlocked(id) else "default"   # a locked pick (the Graduate vat) plays as the default
+		out[family] = id if raw or is_unlocked(id, family, faction) else "default"   # a locked pick plays as the default
 	return out
 
 
@@ -139,14 +154,10 @@ static func set_core_territory(v: String) -> bool:
 	return save_all()
 
 
-static func is_unlocked(item: String) -> bool:
-	## Every vat variant, skin line and monster alt is unlocked while testing (Daniele, 2026-09-27), except the
-	## Graduate vat: it unlocks once all nine tutorial lessons are complete (TUTORIAL-DESIGN.md §7, saved locally
-	## in user://tutorial.cfg). A faction vat by wins with that race comes later - this stays the one place that
-	## check happens.
-	if item == "graduate":
-		return TutorialDirector.all_done()
-	return true
+static func is_unlocked(item: String, family := "vat", faction := "") -> bool:
+	## A cosmetic pick (Cosmetics.OPTIONS id of `family`) - PROGRESSION (0.20.1) asks Progression, the one place
+	## unlocks live (open while Rules.UNLOCK_ALL_TESTING; the Graduate vat by the tutorial either way).
+	return Progression.is_unlocked(Progression.cosmetic_item(family, item, faction))
 
 
 static func save_all() -> bool:

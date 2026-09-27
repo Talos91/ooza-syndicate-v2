@@ -413,6 +413,9 @@ static func save_progress() -> bool:
 	return saved
 
 
+static var last_scrap := 0                           # TUTORIAL + PROGRESSION: what the last mark_complete paid (0 = nothing)
+
+
 static func mark_complete(id: int, relay_kill := false) -> bool:
 	_ensure()
 	if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids:
@@ -420,6 +423,15 @@ static func mark_complete(id: int, relay_kill := false) -> bool:
 		completed_ids.sort()
 	offered = true
 	relay_kill_done = relay_kill_done or relay_kill
+	# TUTORIAL + PROGRESSION (Daniele, 2026-09-27): lessons 1-9 pay SCRAP on their first completion (enough for a 3rd
+	# skill by the end); the tour pays nothing. The Graduate vat is recorded in Progression once all are done.
+	last_scrap = 0
+	if id >= 1 and id <= LESSON_COUNT:                   # 1..9: FIRST_ID is the tour (0), which pays nothing
+		var amount: int = Rules.PROGRESSION["tutorial_lesson"]
+		if Progression.grant("tutorial:%d" % id, amount):
+			last_scrap = amount
+	if all_done():
+		Progression.unlock("vat:graduate", "tutorial")
 	return save_progress()
 
 
@@ -1033,6 +1045,7 @@ func _complete(relay_kill := false, kill_units := 0) -> void:
 	for k in L.get("done", []):
 		lines.append(line(str(k)))
 	result = {"id": lesson_id, "title": title_of(lesson_id), "lines": lines, "time": lesson_t, "relay_kill": relay_kill,
+			"scrap": last_scrap,                        # TUTORIAL + PROGRESSION
 			"kill_units": kill_units, "final": lesson_id == LESSON_COUNT, "graduate": all_done(), "tour": L.get("tour", false),
 			"next": lesson_id + 1 if lesson_id < LESSON_COUNT else -1, "won": sim.over and sim.allied(sim.winner, HUMAN)}
 	_bump()

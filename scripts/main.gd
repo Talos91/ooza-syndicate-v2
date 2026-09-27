@@ -150,6 +150,12 @@ func _ready() -> void:
 	menu_open = str(relaunch.get("menu", ""))
 	relaunch = {}
 	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--progress="):              # PROGRESSION screenshot helper: a scratch save, never the real one
+			Progression.path = arg.substr(11)
+			Progression.reload_all()
+		elif arg == "--locks=on":                        # PROGRESSION screenshot helper: the locks as players will see them
+			Progression.unlock_all = false
+	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--map="):
 			map_path = arg.substr(6)
 			map_explicit = true
@@ -1146,11 +1152,31 @@ func _on_finished(winner: String) -> void:
 	hud.close_inspector()
 	if director:                                       # TUTORIAL: the lesson's completion screen replaces the results
 		return
+	_record_progress()                                 # PROGRESSION: XP / SCRAP / challenges, before the results show them
 	hud.show_end(winner)
 	if not shots.is_empty():                              # automated run: the match ended before the
 		var t: float = shots[-1]                          # last shot time - take it now and quit
 		shots.clear()
 		_take_shot(t, true)
+
+
+# ------------------------------------------------------------------ PROGRESSION (0.20.1)
+var rewards := {}                                  # Progression.record_match's lines for the results screen ({} = none)
+
+
+func _record_progress() -> void:
+	## Pays this device's player for a finished match (PROGRESSION-DESIGN §1: offline first - online rooms are paid
+	## here too until accounts exist; then the server pays server-hosted rooms). Never on a headless run (the
+	## dedicated match host, tests), a demo / scenario / fast-forward / screenshot run, or a seat that isn't playing.
+	rewards = {}
+	if DisplayServer.get_name() == "headless" or demo or scenario != "" or ff_to > 0.0 or not shots.is_empty():
+		return
+	if not sim.factions.has(HUMAN):
+		return
+	var info := {"online": online, "ai_level": "" if online else ai_level}
+	rewards = Progression.record_match(Progression.result_from_sim(sim, HUMAN, info))
+	rewards["full_pay"] = Progression.full_pay(info)
+	rewards["ai_level"] = info["ai_level"]
 
 
 # ------------------------------------------------------------------ input
@@ -1702,6 +1728,9 @@ func _on_lesson_completed(r: Dictionary) -> void:
 		var lines := []
 		if r.get("relay_kill", false):
 			lines.append(TutorialDirector.final_kill_line(int(r.get("kill_units", 0))))
+		var third := Progression.third_skill_line()        # TUTORIAL + PROGRESSION: above the Graduate vat line
+		if third != "":
+			lines.append(third)
 		if r.get("graduate", false):
 			lines.append(TutorialDirector.line("final_reward"))
 			lines.append(TutorialDirector.line("final_reward_line"))
@@ -1709,11 +1738,13 @@ func _on_lesson_completed(r: Dictionary) -> void:
 			lines.append(TutorialDirector.line("final_locked"))
 		coach.show_training_complete(TutorialDirector.line("final_title"), lines, TutorialDirector.line("final_play"),
 				[TutorialDirector.line("final_armies"), TutorialDirector.line("final_menu")],
-				{"unlocked": r.get("graduate", false), "title": "GRADUATE VAT", "faction": SEAT_FACTIONS[HUMAN]})
+				{"unlocked": r.get("graduate", false), "title": "GRADUATE VAT", "faction": SEAT_FACTIONS[HUMAN],
+				"scrap": int(r.get("scrap", 0))})              # TUTORIAL + PROGRESSION
 	else:
 		var lines: Array = (r.get("lines", []) as Array).duplicate()
 		lines.append("%s · %d:%02d" % [str(r.get("title", "")), int(r.get("time", 0.0)) / 60, int(r.get("time", 0.0)) % 60])
-		coach.show_complete(TutorialDirector.line("lesson_complete"), lines, TutorialDirector.line("next"), [TutorialDirector.line("replay"), TutorialDirector.line("lessons")])
+		coach.show_complete(TutorialDirector.line("lesson_complete"), lines, TutorialDirector.line("next"), [TutorialDirector.line("replay"), TutorialDirector.line("lessons")],
+				int(r.get("scrap", 0)))                       # TUTORIAL + PROGRESSION
 	hud.extra_ui_rects = coach.ui_rects()
 
 

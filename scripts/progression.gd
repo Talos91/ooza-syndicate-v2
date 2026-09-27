@@ -170,6 +170,14 @@ static func owns(item: String) -> bool:
 	return r
 
 
+static func cosmetic_item(family: String, id: String, faction := "") -> String:
+	## An ARMIES > COSMETICS pick (Cosmetics.OPTIONS[family] id) as an unlock id: the faction set and the monster alt
+	## are per faction ("vat:faction:bloom", "monster:alt:bloom"), everything else is "<family>:<id>".
+	if family == "vat" and id == "faction" or family == "monster" and id == "alt":
+		return "%s:%s:%s" % [family, id, faction if faction != "" else "null"]
+	return "%s:%s" % [family, id]
+
+
 static func price(item: String) -> Dictionary:
 	## {"soft": n, "premium": m} for a buyable item ({} = not buyable: defaults, free skills, ultimates, Graduate, bad ids).
 	var p := item.split(":")
@@ -558,14 +566,32 @@ static func _progress_challenges(add: Dictionary) -> Array:
 
 
 # ------------------------------------------------------------------ texts
-static func amount_text(amount: int, currency := "soft") -> String:
-	## "+140 SCRAP" / "-1 250 SCRAP" (thin groups of three, the design docs' style).
+static func amount_text(amount: int, currency := "soft", sign := true) -> String:
+	## "+140 SCRAP" / "-1 250 SCRAP" (groups of three, the design docs' style); sign false: "1 250 SCRAP".
 	var s := str(absi(amount))
 	var g := ""
 	while s.length() > 3:
 		g = " " + s.substr(s.length() - 3) + g
 		s = s.substr(0, s.length() - 3)
-	return ("+" if amount >= 0 else "-") + s + g + " " + str(Rules.CURRENCY_SHORT.get(currency, currency.to_upper()))
+	return (("+" if amount >= 0 else "-") if sign else "") + s + g + " " + str(Rules.CURRENCY_SHORT.get(currency, currency.to_upper()))
+
+
+static func claimable() -> int:
+	## Finished, unclaimed challenges (the main menu's CHALLENGES badge).
+	var n := 0
+	for kind in ["daily", "weekly"]:
+		for c in current_challenges(kind):
+			if c["done"] and not c["claimed"]:
+				n += 1
+	return n
+
+
+static func duration_text(seconds: int) -> String:
+	## "13 h 20 min" / "3 d 14 h" (the CHALLENGES page's reset timers).
+	var m := int(seconds / 60.0)
+	if m >= 24 * 60:
+		return "%d d %d h" % [m / (24 * 60), (m / 60) % 24]
+	return "%d h %02d min" % [m / 60, m % 60] if m >= 60 else "%d min" % maxi(m, 1)
 
 
 static func third_skill_line() -> String:

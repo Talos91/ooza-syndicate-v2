@@ -47,6 +47,7 @@ func _run() -> void:
 	out_dir = str(args.get("out", "user://tutorial_walk"))
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	TutorialDirector.path = PROGRESS
+	Progression.path = "user://coach_preview_progression.cfg"   # TUTORIAL + PROGRESSION: never the real wallet
 	TutorialDirector.completed_ids = []
 	TutorialDirector.offered = true
 	TutorialDirector._loaded = true
