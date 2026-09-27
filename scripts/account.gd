@@ -234,6 +234,14 @@ func rename(new_name: String) -> bool:
 	return false
 
 
+func my_season_wins() -> Dictionary:
+	## LEADERBOARD's YOU line: {rank (null with no wins), name, wins} for this account; {} when signed out / offline.
+	if not signed_in():
+		return {}
+	var r := await _call("POST", "/rest/v1/rpc/my_season_wins", {}, true)
+	return r["json"][0] if r["ok"] and r["json"] is Array and not (r["json"] as Array).is_empty() else {}
+
+
 func leaderboard(board := "season_wins", lim := 50) -> Array:
 	## [{rank, name, wins, is_me}] - server-written results only (supabase/README.md). [] when offline.
 	var r := await _call("POST", "/rest/v1/rpc/leaderboard_" + board, {"lim": lim}, signed_in())

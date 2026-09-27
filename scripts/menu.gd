@@ -817,6 +817,7 @@ func _card_button(text: String, card_pos: Vector2, card_dims: Vector2, call: Cal
 # ------------------------------------------------------------------ PROGRESSION: ACCOUNT, LEADERBOARD, MATCH HISTORY (0.20.5)
 var _board_rows: Array = []                        # LEADERBOARD: the last answer
 var _board_state := "idle"                         # idle | loading | done | offline
+var _board_me := {}                                # LEADERBOARD: your own {rank, name, wins} when you're not in the list
 var _history_online: Array = []                    # MATCH HISTORY: server rounds loaded so far
 var _history_state := "idle"                       # idle | loading | done | offline
 var _history_more := true                          # the server may have older rounds
@@ -1169,6 +1170,15 @@ func show_leaderboard() -> void:
 					Color.WHITE, false))
 			stack_add(st, label_at("%d WINS" % int(row.get("wins", 0)), P(1320, ry + h * 0.2), 24, Color("6fff2a"), false))
 			ry += h + 8.0
+		if not _board_me.is_empty():                  # 0.20.13: YOU, when you're not on the list - a row like the rest
+			var h := rh(56)
+			var wins := int(_board_me.get("wins", 0))
+			stack_add(st, _placed(neon_panel(P(0, ry + 8.0), P(1560, h), Color("ffd15c"), true, Color("08202ae8"))))
+			stack_add(st, label_at("#%d" % int(_board_me.get("rank", 0)) if wins > 0 else "-", P(20, ry + 8.0 + h * 0.2), 24, Color("ffd15c"), false))
+			stack_add(st, label_at(str(_board_me.get("name", "")) + "  (YOU)" + ("" if wins > 0 else "  ·  win an online round vs a player"),
+					P(160, ry + 8.0 + h * 0.2), 24, Color.WHITE, false))
+			stack_add(st, label_at("%d WINS" % wins, P(1320, ry + 8.0 + h * 0.2), 24, Color("ffd15c"), false))
+			ry += h + 16.0
 		stack_close(st, ry * K)
 	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
 		_board_state = "idle"
@@ -1178,9 +1188,13 @@ func show_leaderboard() -> void:
 		show_leaderboard())
 
 
+
 func _load_board() -> void:
 	var rows := await _account().leaderboard("season_wins", 50)
 	_board_rows = rows
+	_board_me = {}
+	if not rows.any(func(r): return bool(r.get("is_me", false))):   # not on the list: say where you stand (0.20.13)
+		_board_me = await _account().my_season_wins()
 	_board_state = "done" if _account().state != "offline" or not rows.is_empty() else "offline"
 	if _page == "leaderboard":
 		show_leaderboard()

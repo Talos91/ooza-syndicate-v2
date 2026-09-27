@@ -1263,6 +1263,10 @@ func _record_progress() -> void:
 	result["history"] = Progression.history_entry(sim, HUMAN, _history_info())   # MATCH HISTORY (0.20.5)
 	rewards = Progression.record_match(result)
 	rewards["full_pay"] = Progression.full_pay(info)
+	# 0.20.13: a browser-hosted room (the server was busy or on another version) is never reported online - say so
+	# (Net.server_hosted() comes from the server session; until it exists nothing is claimed)
+	if online and Net.has_method("server_hosted") and not bool(Net.call("server_hosted")):
+		rewards["unranked"] = true
 	rewards["ai_level"] = info["ai_level"]
 
 
