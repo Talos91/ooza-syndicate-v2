@@ -884,6 +884,24 @@ func _run_scenario() -> void:
 								n["owner"] = ""
 						scenario_focus = Vector3.INF
 				_fit_camera()
+		"monlaunch":
+			# 0.20.1 (Daniele's online playtest: "i couldn't figure how to send the monster"): the fix in
+			# one sheet - phase 0 is the ready hub with its icon, untouched; phase 1 is the same tap that
+			# now arms LAUNCH directly (hud.is_ready_hub, main.gd's tap handler), reach ring and all.
+			var phase: int = mini(int(sim.time), 1)
+			if phase != _hud19_phase:
+				_hud19_phase = phase
+				match phase:
+					0:
+						sim.nodes[4]["owner"] = HUMAN
+						sim.nodes[4]["structure"] = "monster_hub"
+						sim.nodes[4]["units"] = 260.0
+						sim.nodes[4]["monster_ready_t"] = 0.0
+						scenario_focus = sim.nodes[4]["pos"]
+					1:
+						monster_from = 4                        # the tap: LAUNCH armed, reach ring + lit targets
+						scenario_focus = sim.nodes[4]["pos"]
+				_fit_camera()
 		_:
 			_scenario_done = true
 
@@ -1273,8 +1291,16 @@ func _unhandled_input(event: InputEvent) -> void:
 						hud.close_inspector()
 						selected = drag_from
 					elif not moved:
-						selected = drag_from
-						_queue_inspect(drag_from)                 # single tap: the ring inspector, once no second tap comes
+						if hud.is_ready_hub(drag_from):
+							# 0.20.1 (Daniele's online playtest: "tap IT - the hub / the monster on the hub -
+							# the guided send lights up every target"): a ready hub arms LAUNCH straight from
+							# the tap, no inspector detour; charging, the inspector still opens as usual.
+							hud.close_inspector()
+							monster_from = drag_from
+							hud.note_monster_hint()
+						else:
+							selected = drag_from
+							_queue_inspect(drag_from)                 # single tap: the ring inspector, once no second tap comes
 				else:
 					var target := _node_at(hit, mb.position)
 					if target >= 0 and (mb.position - _press_pos).length() < TAP_PIXELS:

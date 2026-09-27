@@ -364,9 +364,26 @@ func _run() -> void:
 	check(gs.is_out("C") and not gs.is_out("B"), "Sim.is_out works from the host's snapshots")
 	hs.eliminated.erase("C")
 	hs.monsters = []
+	hs.nodes[target]["hub_monster"] = -1              # (cleanup, matching hs.monsters = [] above)
+	hs.nodes[target]["monster_ready_t"] = 0.0          # (the earlier real launch put it on a ~40 s cooldown)
 	hs.nodes[home_b]["allies"] = {}
 	hs.nodes[home_b]["arrivals"] = []
 	hs.draw_line = ""
+	host.apply_snapshot(gs, host.snapshot(hs, false))  # re-sync the guest: the hub reads ready again
+	# 0.20.1 monster-launch fix (Daniele's online playtest, both players guests: "i couldn't figure how
+	# to send the monster" - the order already reached the host fine, per the checks above; the actual
+	# bug was the guest's own UI never arming the launch). A guest's Hud, built from nothing but its
+	# synced Sim, must see the same ready hub the host does.
+	# res://scripts/hud.gd is loaded at runtime (not as a static `Hud` reference) so this script's own
+	# compile doesn't force-reload hud.gd before the Net autoload is wired up - a static reference makes
+	# the GDScript compiler eagerly reload hud.gd as a dependency of test_net.gd's own class, too early
+	# for "Net" to resolve inside hud.gd's sync(), which breaks every use of Hud in this process for good.
+	var hud_probe: Node = load("res://scripts/hud.gd").new()
+	hud_probe.sim = gs
+	hud_probe.human = "B"
+	check(hud_probe.is_ready_hub(target), "a guest's Hud sees its own ready Monster hub as launchable")
+	check(not hud_probe.is_ready_hub(home_a), "...but not a node that isn't its own ready hub")
+	hud_probe.free()
 
 	# ---------------------------------------------------------------- SKILLS 2.0: cast orders, snapshots, Ghost Line privacy
 	check(hs.cooldown("B", "active") > 0.0 or hs.time > 30.0, "(0.19.2: skills start on their cooldown)")
