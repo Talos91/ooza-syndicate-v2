@@ -535,15 +535,13 @@ static func perf_stats() -> Dictionary:
 
 
 static func perf_event(where: String) -> bool:
-	## Sends the sample so far and starts a new one. The Architect's PerfProfile.match_stats() (after 0.21.1) rides in
-	## "extra" when this build has it.
+	## Sends the sample so far and starts a new one; the Architect's PerfProfile.match_stats() (playing time only,
+	## first second skipped) rides in "extra".
 	if _frames < 30:
 		return false
 	var d := perf_stats()
 	d["where"] = where
-	var pp = load("res://scripts/perf_profile.gd")    # match_stats() arrives after 0.21.1 - no hard dependency
-	if pp != null and pp.has_method("match_stats"):
-		d["extra"] = pp.call("match_stats")
+	d["extra"] = PerfProfile.match_stats()             # 0.21.4: the match's playing-time sample ({} off a match)
 	perf_reset()
 	_menu_t = 0.0
 	return event("perf", d)

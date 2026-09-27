@@ -161,6 +161,7 @@ func _perf() -> void:
 	check(st["frame_ms_p50"] == 16 and st["frame_ms_max"] == 120 and st["long_frames"] == 1,
 			"perf: p50 16 ms, max 120 ms, one long frame: %s" % str(st))
 	check(Telemetry.perf_event("match") and Telemetry.queue()[-1]["kind"] == "perf", "perf event queued")
+	check(Telemetry.queue()[-1]["data"].get("extra") is Dictionary, "PerfProfile.match_stats() rides in extra")
 	check(not Telemetry.perf_event("match"), "an empty sample sends nothing")
 
 
