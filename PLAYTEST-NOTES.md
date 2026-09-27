@@ -633,3 +633,55 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 167. **"machinegoon go on vat lessons ... while monster laser (no more called cannon) and forge go with relays".**
      *Done (0.19.1):* L2 and L6.
 168. **Keep the lesson maps numbered T-03..T-10** (T-01 / T-02 stay as they are).
+
+## 2026-09-27 - Daniele, 0.19.1 playtest (0.19.2)
+
+169. **"tutorial veeeeery unpolished and messy".** *-> tutorial session (0.19.3).*
+170. **"monster hub doesn't show area of attack ... sending of monster is not clear, i suggest when
+     monster ready ... an icon that appears on top of it and now you can select destination".**
+     *Done (0.19.2):* a pulsing icon over a ready hub; tap it to light the reach area (nodes within 3
+     decks), tap a lit node to launch; the reach also lights when the hub is selected; LAUNCH in the
+     inspector still works.
+171. **"machinegoon are i think too big and when they shoot it looks weird as the enemies are under
+     them".** *Done (0.19.2):* Machinegoon scaled to 0.65 (Spitter x1.45, Pepperbox x1.3), muzzle
+     raised to ~1.15 m above the deck so the stream arcs onto the line.
+172. **Last Stand lesson clock / one faction in the tutorial / last tutorial map eternal.**
+     *-> tutorial session (0.19.3).*
+173. **"your color the faction one is not clear what it represent".** *Done (0.19.2):* the FACTION
+     colour chip now shows the faction's emblem and a caption while picked.
+174. **"rivals ... I suggest to simply remove the option or allow to pick the enemy for each slot".**
+     *Done (0.19.2):* chosen - per-seat rival faction chips (default RANDOM, no duplicate factions
+     while any remain), replacing the single rival-faction picker (`Sim.resolve_factions`).
+175. **"difficulty buttons aren't spaced properly".** *Done (0.19.2):* the DIFFICULTY row is now
+     evenly spaced.
+176. **"skills needs to have their cooldown as if they just got used on game start".** *Done (0.19.2):*
+     every active and map skill starts a match on full cooldown (`Rules.SKILLS_START_ON_COOLDOWN`);
+     ultimates still charge from 0.
+177. **"destroy skill cooldown is too long switch to 1.5s".** *Done (0.19.2):* chosen - the reading is
+     Demolish's fall delay, not the skill's own cooldown: a Demolished deck now falls 1.5 s after the
+     cast (was 3 s).
+178. **"surge i think needs to increase the speed of troops moving and entering a structure more".**
+     *Done (0.19.2):* chosen - +75 % speed (was +50 %) and double door rate (`Sim.door_mult(h)`,
+     pour-in included).
+179. **"on mobile the shortcut in the top right of the skill shouldn't appear".** *Done (0.19.2):* the
+     1/2/3 keyboard-shortcut badge no longer shows on phones.
+180. **"the 3 skills should have their border in different color based on the type".** *Done (0.19.2):*
+     the dock's three slots are bordered and labelled by skill type (Okabe-Ito sky blue / green /
+     orange).
+181. **"top left HUD ... is not fixed it keeps moving also i think should be centered ... for
+     multiplayer you'd want to see what each player is doing, rethink it".** *Done (0.19.2):* the top
+     bar is rebuilt fixed and centred: the clock in the middle, one chip per seat with emblem +
+     strength (monospace digits), you first, out seats greyed, teammates grouped.
+182. **"the enemies destroyed me and i'm still able to see the match ... if you lose you can go back to
+     menu or keep spectating".** *Done (0.19.2):* a YOU'RE OUT panel offers SPECTATE / MAIN MENU
+     (online: LEAVE ROOM) instead of dropping a beaten player out of the match.
+183. **"skins don't look implemented and goo/neon should be in the choice of cosmetic (as general core
+     one maybe)".** *Done (0.19.2):* ARMIES cosmetic picks show a turning 3D preview; a new CORE · ALL
+     FACTIONS row holds TERRITORY NEON / GOO, moved out of OPTIONS.
+184. **Relay-free spelling: "its machinegoon correct and tell other session".** *Done (0.19.2):*
+     Machingoon -> Machinegoon replaced everywhere (ids, action names, Rules keys, kit files); old
+     spellings accepted for one release.
+185. **Tutorial vocabulary request (node, deck, units, line, drop).** *Done (0.19.2):* player-facing
+     text now says node / deck / Laser tower / Machinegoon consistently ("a node drops every N s",
+     "RING N DROPPING · next node in N s", "off the deck", "Out of reach - up to N decks", skill
+     texts).

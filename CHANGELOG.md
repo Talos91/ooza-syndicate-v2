@@ -1,5 +1,53 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.19.2 "Alpha 19" - 2026-09-27 (Daniele's 0.19.1 playtest)
+
+Daniele's first playtest of the interactive tutorial and 0.19.1's HUD (quotes in PLAYTEST-NOTES,
+GAME-BIBLE §17). Spelling fixed everywhere: **Machingoon -> Machinegoon** (Daniele: "its machinegoon
+correct and tell other session"); old spellings still accepted for one release (build kind,
+`Hud.action_rect`, reveal key, saved picks).
+
+- **Skills**: active + map skills now start a match on full cooldown (`Rules.SKILLS_START_ON_COOLDOWN`),
+  ultimates still charge from 0; **Demolish**'s fall delay 3 s -> **1.5 s** ("destroy skill cooldown is
+  too long switch to 1.5s"); **Surge** now +75 % speed *and* double door rate (`Sim.door_mult(h)`,
+  pour-in included) instead of +50 % speed alone ("surge ... needs to increase the speed of troops
+  moving and entering a structure more").
+- **Per-seat rival factions** (`Sim.resolve_factions`): SETUP now picks a rival per seat (default
+  RANDOM, no duplicates while factions remain) instead of one picker for the whole match ("simply
+  remove the option or allow to pick the enemy for each slot" - chosen: per seat).
+- **Monster hub**: a pulsing icon appears over a ready hub; tap it to light the **reach area** (every
+  node within 3 decks), then tap a node to launch - the reach also lights when the hub is selected;
+  LAUNCH in the inspector still works ("monster hub doesn't show area of attack ... i suggest when
+  monster ready ... an icon that appears on top of it and now you can select destination"). Look: a
+  ready hub's monster stands up and flexes, its pool glows and a ring rises; a charging hub's monster
+  stays crouched and dim.
+- **Machinegoon look**: scaled to 0.65 (Spitter x1.45, Pepperbox x1.3), muzzle raised to ~1.15 m above
+  the deck so its stream arcs onto the line instead of firing up from below it ("too big and when they
+  shoot it looks weird as the enemies are under them").
+- **Skins fixed on the web**: GitHub Pages serves `skins.pck` gzip-encoded and Godot was un-gzipping it
+  a second time (result code 8); `accept_gzip` off fixes it; a failed download now retries next match.
+  **ARMIES**: cosmetic picks show a turning 3D preview instead of a flat icon ("skins don't look
+  implemented"); BACK on COSMETICS works again; a new **CORE · ALL FACTIONS** row holds **TERRITORY
+  NEON / GOO**, moved out of OPTIONS since it's a look choice like any other skin ("goo/neon should be
+  in the choice of cosmetic"). **Graduate vat v2** (Skin Designer session): ivory body, brass bands, a
+  bigger crown, star-and-laurel crest - replaces the first pass's plain grey-lilac look.
+- **HUD**: the top bar is now fixed and centred (clock in the middle, one chip per seat with emblem +
+  strength, you first, out seats greyed, teammates grouped, monospace digits - "not fixed it keeps
+  moving also i think should be centered ... for multiplayer you'd want to see what each player is
+  doing"); a **YOU'RE OUT** panel (SPECTATE / MAIN MENU, online LEAVE ROOM) replaces dropping a beaten
+  player straight out of the match ("the enemies destroyed me and i'm still able to see the match ...
+  if you lose you can go back to menu or keep spectating"); the skill dock's three slots are now
+  bordered and labelled by skill type (Okabe-Ito sky blue / green / orange), no 1/2/3 shortcut badge on
+  phones; SETUP's DIFFICULTY row is evenly spaced; the FACTION colour chip shows the faction's emblem
+  and a caption while picked ("your color the faction one is not clear what it represent").
+- **Maps**: six debug size-test maps **D-11..D-16** (one shape at 94 / 121 / 148 / 175 / 202 m wide,
+  121 m tall; 1v1, no Last Stand, no relays) so Daniele can report the largest map that still plays
+  well on his phone (taps at pitch 58: 54.5 / 51.3 / 44.7 / 39.5 / 35.4 / 39.1 pt).
+- Tutorial: new reveal keys for the rebuilt HUD (`topbar`, `strength`, `monster_icon`, `out_panel`);
+  `main.show_out_panel`, `Hud.monster_icon_rect(hub_id)`.
+- All suites pass. Verified headless, desktop renders and a local gzip web run only - not on a real
+  phone.
+
 ## 0.19.1 "Alpha 19" - 2026-09-27 (the interactive tutorial)
 
 ROADMAP item 1, designed with Daniele in `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-DESIGN.md` (draft 3)

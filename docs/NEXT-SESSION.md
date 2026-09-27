@@ -1,16 +1,37 @@
 # Next session - start here
 
-State as of publish today: **v0.19.1 "Alpha 19"** live - the interactive tutorial (below), on top of 0.19.0: Structures 2.1 (Machinegoon, Laser tower, Forge
-with a defence half, Monster hub), new vat caps and neutral garrisons, team rules built (GAME-RULES §11),
-"lines keep you alive" elimination, 7:00 follows the Very Last Stand with a DRAW call-out, Alpha 11
-classics get relay retrofits, the AI accounts for forges and values relays, rooms default to a room relay
-server (Alpha 20 stage 1) instead of PeerJS, relay switches double-tap and read more clearly, ARMIES
-cosmetics with 69 new skins - on top of 0.18.9's Very Last Stand, balance and mobile UI pass. Source on
+State as of publish today: **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
+interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish
+retuned, per-seat rival factions, a tappable monster-icon launch flow, a smaller Machinegoon with a
+raised muzzle, skins fixed on the web, ARMIES 3D previews and TERRITORY moved in from OPTIONS, a
+rebuilt fixed/centred top bar with a YOU'RE OUT / spectate panel, coloured skill dock, six debug
+size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed everywhere. Source on
 `main`, published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md`
 (project root - the whole game as built), this file,
-`README.md`, `docs/TO-TEST.md` (this session's checklist), the top of `CHANGELOG.md` (0.18.9 to 0.19.0),
-`PLAYTEST-NOTES.md` notes 149-163, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`, the
-design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
+`README.md`, `docs/TO-TEST.md` (this session's checklist), the top of `CHANGELOG.md` (0.19.1 to 0.19.2),
+`PLAYTEST-NOTES.md` notes 169-185, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
+(the session board), the design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and
+`05 Handoff/AGENT-BRIEF.md`.
+
+## 0.19.2 (2026-09-27): Daniele's 0.19.1 playtest
+
+Quotes and per-item outcomes: `PLAYTEST-NOTES.md` 169-185; full detail: `CHANGELOG.md`. New names to know:
+`Sim.resolve_factions` (per-seat rival factions, seeded, no duplicates while any remain), `Sim.is_out(seat)`
+(the "lines keep you alive" elimination check, now also driving the YOU'RE OUT panel), `Sim.door_mult(h)`
+(Surge's door-rate multiplier at a hub), `Hud.monster_icon_rect(hub_id)` (the tappable monster-launch icon
+and its reach ring), new tutorial reveal keys (`topbar`, `strength`, `monster_icon`, `out_panel`),
+`main.show_out_panel` (SPECTATE / MAIN MENU / LEAVE ROOM after elimination), `Cosmetics.make_preview`
+(ARMIES' turning 3D preview), `ArmyPresets.core_territory` (TERRITORY NEON / GOO, moved from OPTIONS into
+ARMIES > COSMETICS's CORE · ALL FACTIONS row). All suites pass. Verified headless, desktop renders and a
+local gzip web run only - not on a real phone.
+
+**What's next** (board: `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`):
+- **0.19.3**: the tutorial rework (Interactive Tutorial session) - Daniele: "tutorial feels veeeeery
+  unpolished and messy".
+- **0.20.0**: server stage 2 (server session) - move the match referee itself onto the server.
+- **0.20.1**: progression, local first - currencies, store, challenges, unlocks (Leaderboard, progression, and currency session).
+- The **map revision pass** (Game map builder session; test maps live in its separate map-lab build).
+- **Campaign** Alpha 21-22 (Campaign session).
 
 ## 0.19.1 (2026-09-27): the interactive tutorial - completes Alpha 19
 
