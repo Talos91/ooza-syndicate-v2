@@ -55,6 +55,7 @@ func _run() -> void:
 	check(by.size() == 3 and by["A"]["user_id"] == "uuid-a" and by["C"]["user_id"] == null, "every seat, user ids only where verified")
 	check(by["C"]["ai_level"] == "Standard" and by["A"]["ai_level"] == null and by["B"]["ai_level"] == null, "ai_level for AI seats only")
 	check(by["A"]["left_early"] and not by["B"]["left_early"], "left_early")
+	check(by["B"]["won"] and not by["A"]["won"] and not by["C"]["won"], "won: only the winning seat")
 	check(by["B"]["placed"] == 1 and by["A"]["placed"] > 1 and by["C"]["placed"] > 1, "placed: the winner first")
 	var keys := ["captures", "sends", "void_drops", "relay_fires", "monster_launches", "monster_kicks", "nodes_lost", "home_lost",
 			"units_lost_combat", "units_lost_falls", "out_at_s"]

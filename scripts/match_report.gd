@@ -27,6 +27,7 @@ static func payload(sim: Sim, info: Dictionary, users: Dictionary, left: Diction
 				nodes_held += 1
 		seats.append({"seat": seat, "team": sim.teams.get(seat, null), "faction": str(sim.factions[seat]),
 				"user_id": users.get(seat, null), "ai_level": ai.get(seat, null), "left_early": bool(left.get(seat, false)),
+				"won": sim.winner != "" and (seat == sim.winner or sim.allied(seat, sim.winner)),
 				"placed": int(placed.get(seat, seat_list.size())), "final_strength": Rules.shown(float(strength[seat])),
 				"final_nodes": nodes_held, "stats": Progression.seat_stats(sim, seat)})
 	var rules: Dictionary = info.get("rules", {})
