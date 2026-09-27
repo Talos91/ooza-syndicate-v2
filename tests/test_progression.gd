@@ -178,7 +178,7 @@ func _challenges() -> void:
 	_fresh()
 	# make every current daily / weekly finishable by one big match
 	var big := {"faction": "vex", "won": true, "ai_level": "Expert", "relay_map": true,
-			"stats": {"captures": 200, "relay_fires": 200, "monster_kicked": 999, "skills": 99, "home_lost": false}}
+			"stats": {"captures": 200, "relay_fires": 200, "void_drops": 999, "monster_kicked": 999, "skills": 99, "home_lost": false}}
 	for kind in ["daily", "weekly"]:
 		Progression.current_challenges(kind)
 		for ch in Progression.challenges[kind]["list"]:
@@ -254,6 +254,7 @@ func _from_sim() -> void:
 		{"t": 200.0, "type": "collapse", "node": 2, "from": "B"},
 		{"t": 210.0, "type": "fall", "seat": "B", "units": Rules.SCALE * 30.0, "why": "relay", "by": "A", "relay": 9},
 		{"t": 211.0, "type": "fall", "seat": "A", "units": Rules.SCALE * 5.0, "why": "relay", "by": "A", "relay": 9},
+		{"t": 212.0, "type": "fall", "seat": "C", "units": Rules.SCALE * 7.0, "why": "relay", "by": "A", "relay": 9},
 		{"t": 250.0, "type": "eliminated", "seat": "D"},
 		{"t": 300.0, "type": "eliminated", "seat": "B"},
 		{"t": 20.0, "type": "monster_launch", "seat": "A", "id": 1},
@@ -262,7 +263,7 @@ func _from_sim() -> void:
 	check(sb["home_lost"] and sb["out_at_s"] == 300.0, "B's home fell in a collapse; out at 300 s: %s" % str(sb))
 	var sa := Progression.seat_stats(sim, "A")
 	check(sa["void_drops"] == 30 and sa["monster_launches"] == 1 and sa["monster_kicks"] == 1 and sa["out_at_s"] < 0.0,
-			"A dropped 30 enemy units (its own 5 don't count): %s" % str(sa))
+			"A dropped 30 enemy units (its own 5 and ally C's 7 don't count): %s" % str(sa))
 	var pl := Progression.placements(sim)
 	check(pl["A"] == 1 and pl["C"] == 1 and pl["B"] == 2 and pl["D"] == 2, "2v2: the teams place together: %s" % str(pl))
 	sim.teams = {}

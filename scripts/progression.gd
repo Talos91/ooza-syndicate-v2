@@ -268,7 +268,7 @@ static func result_from_sim(sim: Sim, seat: String, info := {}) -> Dictionary:
 static func seat_stats(sim: Sim, seat: String) -> Dictionary:
 	## One seat's counters from sim.events - the same function on the device (local rewards) and on the match host
 	## (the PROGRESSION-DESIGN §7a report), so both count alike. Unit counts at Alpha 11 scale (Rules.shown).
-	## void_drops: enemy units that fell off decks this seat's relays moved (needs the relay fall events' "by" field).
+	## void_drops: enemy units that fell off decks this seat's relays moved (the relay fall events' "by", main 62b342a).
 	var st := {"sends": 0, "captures": 0, "nodes_lost": 0, "home_lost": false, "relay_fires": 0, "void_drops": 0,
 			"monster_launches": 0, "monster_kicks": 0, "monster_kicked": 0, "skills": 0, "out_at_s": -1.0,
 			"units_lost_combat": Rules.shown(float(sim.combat_losses.get(seat, 0.0))),
@@ -292,8 +292,8 @@ static func seat_stats(sim: Sim, seat: String) -> Dictionary:
 				if e.get("seat") == seat:
 					st["relay_fires"] += 1
 			"fall":
-				if e.get("by") == seat and e.get("seat") != seat:
-					dropped += float(e.get("units", 0.0))
+				if e.get("by") == seat and not sim.allied(str(e.get("seat", "")), seat):   # enemies only: the firer's
+					dropped += float(e.get("units", 0.0))                                   # own / allies' lines fall too
 			"monster_launch":
 				if e.get("seat") == seat:
 					st["monster_launches"] += 1
@@ -406,6 +406,7 @@ static func match_stats(result: Dictionary) -> Dictionary:
 		"win_factions": str(result.get("faction", "")) if won else "",
 		"captures": int(st.get("captures", 0)), "relay_fires": int(st.get("relay_fires", 0)),
 		"monster_kicked": int(st.get("monster_kicked", 0)), "skills": int(st.get("skills", 0)),
+		"void_drops": int(st.get("void_drops", 0)),
 		"win_relay_map": 1 if won and result.get("relay_map", false) else 0,
 		"win_home_kept": 1 if won and not st.get("home_lost", false) else 0,
 	}
