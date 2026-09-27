@@ -1,8 +1,18 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.20.2 "Alpha 20" - 2026-09-27 (tutorial: the Graduate vat preview)
+## 0.20.2 "Alpha 20" - 2026-09-27 (menu fix on phones; tutorial fixes from Daniele's notes)
 
-- TRAINING COMPLETE's Graduate vat turntable now shows the vat in your colour (its tanks were black: the preview never
+- **Menu on phones (emergency, Daniele: "this is what my gf see"):** a menu page built in portrait or mid-rotation /
+  fullscreen switch kept giant NEW GAME / CHALLENGES buttons after the phone turned (tap heights and text sizes are
+  computed when a page is built; `_fit()` only rescaled). Every page now records the sizing it was built with and
+  `_fit()` rebuilds it when that moves by more than 10 %. Reproduced by building at 321x657 and rotating to 657x321.
+- **Tutorial (Daniele's notes):** "the focus only highlight the target but obscure the towers that needs to send" - every
+  send step now lights its sending nodes too (dim 55 % -> 42 %); "order might be short of a few troops ... can somewhat
+  break the tutorial" - a short landing tops up your best sender, freezes the target and says "Not enough units - send
+  again, use 100 %." (TRY AGAIN only for real losses); "relay map is too fast" - L4 / L5 / L9 drop to 0.25x about 2 s
+  before the rival line reaches the relay deck and hold it until you fire (18 s cap), rival lines in L4 / L5 walk at 0.7x.
+
+- **Graduate vat preview:** TRAINING COMPLETE's turntable now shows the vat in your colour (its tanks were black: the preview never
   got the owner materials), whole (framed to the model's bounds - the crown was cropped) and softly lit (the v2 ivory
   blew out white under the warm ambient). `CoachOverlay.GraduatePanel` only.
 - Also in main since 0.20.0 (tutorial hotfix 9d02082): the first coach card no longer hops between corners or shifts

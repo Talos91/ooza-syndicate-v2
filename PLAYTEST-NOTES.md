@@ -727,3 +727,15 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 - Sign-in: "their google play account or apple game account and maybe leave an option for those downloading via apk
   or other way to connect with a personal account" - *Planned* (PROGRESSION-DESIGN §7): accounts come next, after this
   offline-first release.
+
+## 2026-09-27 - Daniele, tutorial notes and a phone emergency (0.20.2)
+
+191. **"oftent the focus only highlight the target but obscure the towers that needs to send".** *Done (0.20.2):* send
+     steps light their sending nodes; dim 42 %.
+192. **"since sometimes order might be short of a few troops or the user might be mistake amount sent it can somewhat break
+     the tutorial".** *Done (0.20.2):* the director tops up and asks for a 100 % retry; TRY AGAIN only for real losses.
+193. **"relay map is too fast make the time slow when the user needs to activate the relay".** *Done (0.20.2):* 0.25x from
+     ~2 s before the deck, held until the fire; slower rival lines in L4 / L5.
+194. **"emergency this is what my gf see" (giant menu buttons on her phone).** *Done (0.20.2):* menu pages rebuild when a
+     resize changes the phone sizing (built in portrait / mid-rotation). Not yet confirmed on her phone.
+
