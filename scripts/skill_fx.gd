@@ -1076,6 +1076,7 @@ func _pieces_of(ei: int) -> Array:
 			continue
 		var src: Node3D = d
 		var g: Node3D = src.duplicate()
+		MapBatch.show_copy(g)                     # Alpha 21: a copy of a batched deck draws itself
 		add_child(g)
 		var xf: Transform3D = src.global_transform if src.is_inside_tree() else src.transform
 		g.transform = xf

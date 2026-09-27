@@ -41,8 +41,10 @@ void fragment() {
 	ALBEDO = c * mix(core * 0.55, core * 1.3, smoothstep(0.35, 0.7, COLOR.r));
 	ROUGHNESS = roughness;
 	SPECULAR = specular;
-	CLEARCOAT = clearcoat;
+#ifndef GOO_LITE
+	CLEARCOAT = clearcoat;                // (the LOW RES build skips the wet highlight: PerfProfile.goo_shader)
 	CLEARCOAT_ROUGHNESS = 0.03;
+#endif
 	float f = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), glow_power);
 	float wave = (1.0 - smoothstep(0.0, wave_width, abs(d - front))) * step(front, 9999.0);
 	EMISSION = c * (f * edge_glow + wave * wave_glow);

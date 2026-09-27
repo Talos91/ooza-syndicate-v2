@@ -508,6 +508,22 @@ func show_options() -> void:
 	if not mobile:
 		stack_add(st, label_at("Low detail trims the river patches and vat residents - use it if the game makes your machine run hot.", P(15, y), 18, Color("b8ced6")))
 		y += 34.0
+	# --- Alpha 21 OPT-RENDER: GRAPHICS AUTO / LOW RES / FULL and FPS AUTO / 30 / 60 (perf_profile.gd, user://settings.cfg) ---
+	var h4 := rh(60)
+	var gfx := stack_add(st, nav_button(PerfProfile.label(), P(15, y), P(600, h4), func():
+		PerfProfile.set_mode(PerfProfile.next_mode())
+		show_options())) as Button
+	gfx.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
+	var fpb := stack_add(st, nav_button(PerfProfile.fps_label(), P(627, y), P(303, h4), func():
+		PerfProfile.set_fps(PerfProfile.next_fps())
+		show_options())) as Button
+	fpb.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
+	fpb.disabled = PerfProfile.level() == "low"      # LOW RES stays at 30
+	y += h4 + 12.0
+	if not mobile:
+		stack_add(st, label_at("LOW RES: 30 fps, no glow or shadows, fewer effects and lighter models - only for weak phones. From the next match.", P(15, y), 18, Color("b8ced6")))
+		y += 34.0
+	# --- end OPT-RENDER ---
 	# TERRITORY moved to ARMIES > COSMETICS > CORE (0.19.2, Daniele: "goo/neon should be in the choice of
 	# cosmetic, as general core one maybe") - one place only, so it isn't duplicated here any more.
 	var h5 := rh(50)

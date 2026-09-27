@@ -75,7 +75,7 @@ func setup(w: Node3D, s: Sim, v: Dictionary, hv: HordeView) -> void:
 		_ghosts[i] = arr
 	_goo = GooTerritory.new()
 	add_child(_goo)
-	_goo.setup(sim, vis, _collapsed, bool(w.get("mobile")))
+	_goo.setup(sim, vis, _collapsed, bool(w.get("mobile")) or PerfProfile.level() == "low")   # Alpha 21: LOW RES goo as on phones
 
 
 # ------------------------------------------------------------------ events
@@ -135,6 +135,7 @@ func sync(dt: float) -> void:
 	_decks()
 	_half_trims()
 	_neon()
+	_neon_merge.sync()
 	_goo.sync(dt)
 	_sel_ring.visible = selected >= 0 and not sim.collapsed.get(selected, false)
 	if _sel_ring.visible:
@@ -880,6 +881,8 @@ func _collapse(node_id: int, from := "") -> void:
 	wf.amount = 220
 	wf.position = n["pos"] + Vector3(0, 0.2, 0)
 	add_child(wf)
+	MapBatch.release(falling)                          # Alpha 21: batched pieces and merged neon draw themselves to fall
+	_neon_merge.release(falling)
 	var tw := create_tween()
 	tw.set_parallel(true)
 	for p in falling:
@@ -915,6 +918,7 @@ var _pier_key := {}          # edge * 2 + end -> colour key last applied
 var _rims := {}              # node id -> MeshInstance3D
 var _rim_key := {}           # node id -> owner last applied
 var _neon_built := false
+var _neon_merge := MapBatch.Merge.new()   # Alpha 21: trims, stripes and rims drawn merged per colour (map_batch.gd)
 var _kit_light: Material     # the kit's own OS_Light (SIEGE's neutral deck light)
 const NEUTRAL_TRIM := Color("ffad51")   # Alpha 11's neutral bridge trim
 const TRIM_OFF := Color(0.12, 0.14, 0.16)   # the kit's deck lights, dimmed under the trims
@@ -1043,6 +1047,8 @@ func _neon_mesh(st: SurfaceTool, at: Vector3) -> MeshInstance3D:
 	mi.position = at
 	mi.visible = false
 	add_child(mi)
+	_neon_merge.host = self
+	_neon_merge.add(mi)
 	return mi
 
 
@@ -1150,6 +1156,7 @@ func _half_trims() -> void:
 		if not last.is_empty() and last[0] == show and last[1] == oa and last[2] == ob:
 			continue                                      # geometry is static: only show/owners change it
 		_trim_state[i] = [show, oa, ob]
+		_neon_merge.dirty = true
 		for h in range(2):
 			var mi = _trims[i][h]
 			if mi == null:
@@ -1176,6 +1183,7 @@ func _neon() -> void:
 			if _pier_key.get(i * 2 + end, "?") == key + ("|goo" if goo else ""):
 				continue
 			_pier_key[i * 2 + end] = key + ("|goo" if goo else "")
+			_neon_merge.dirty = true
 			(mi as MeshInstance3D).visible = (brawl or SIEGE_PIER_STRIPES) and not goo
 			(mi as MeshInstance3D).material_override = Mats.light_color(_brawl_color(key)) if brawl else _siege_light(i, key)
 	for id in _rims:
@@ -1185,6 +1193,7 @@ func _neon() -> void:
 		if _rim_key.get(id, "?") == owner + ("|goo" if goo else ""):
 			continue
 		_rim_key[id] = owner + ("|goo" if goo else "")
+		_neon_merge.dirty = true
 		var mi: MeshInstance3D = _rims[id]
 		mi.visible = not goo
 		if brawl:

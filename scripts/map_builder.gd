@@ -283,6 +283,7 @@ static func set_lights(node: Node3D, mat: Material) -> void:
 			var m := mesh.surface_get_material(s)
 			if m and m.resource_name.begins_with("OS_Light"):
 				mi.set_surface_override_material(s, mat)
+	MapBatch.refresh(node)                          # Alpha 21: a batched piece's light slots follow
 
 
 static func set_state_color(entry: Dictionary, c: Color) -> void:
@@ -339,6 +340,7 @@ static func set_centre_model(parent: Node3D, entry: Dictionary, model: String, p
 	entry["vat_node"] = node
 	entry["model_key"] = model
 	apply_owner(entry["parts"], seat)
+	MapBatch.track(node)                            # Alpha 21: the new structure is batched (map_batch.gd)
 	return node
 
 
@@ -458,6 +460,7 @@ static func apply_owner(parts: Array, seat: String) -> void:
 					if mi.has_meta("vat_liquid"):             # a living liquid (Scenery) colours itself
 						continue
 					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else null)
+		MapBatch.refresh(p)                             # Alpha 21: a batched piece's light / ooze slots follow
 
 
 # ---------------------------------------------------------------- baked layout (maps 3.0 / 4.0 pipeline)
