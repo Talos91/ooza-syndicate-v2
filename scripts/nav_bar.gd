@@ -35,27 +35,17 @@ func _build(f: String) -> void:
 	var acc := UiKit.accent(f)
 	add_child(UiKit.rect(Vector2.ZERO, size, UiKit.BAR))
 	add_child(UiKit.rect(Vector2.ZERO, Vector2(w, 1.0), Color(acc, 0.25)))
-	var tw := minf(160.0, (w - 40.0) / TABS.size())
+	var longest := 0.0                               # every tab as wide as the longest label needs (phones grow the text)
+	for t in TABS:
+		longest = maxf(longest, UiKit.text_w(menu, t[1], 15, true))
+	var tw := minf(maxf(150.0, longest + 48.0), (w - 40.0) / TABS.size())
 	var x0 := (w - tw * TABS.size()) / 2.0
 	for i in range(TABS.size()):
 		var id: String = TABS[i][0]
-		var on := id == active
-		var pos := Vector2(x0 + i * tw + 6.0, 5.0)
-		var dims := Vector2(tw - 12.0, th)
-		if on:                                        # the open tab: a lit panel with a bright foot line
-			var p := NeonPanel.new()
-			p.position = pos
-			p.size = dims
-			p.accent = acc
-			p.fill = Color(acc.darkened(0.8), 0.9)
-			p.cut = 8.0
-			add_child(p)
-			add_child(UiKit.rect(pos + Vector2(10, dims.y - 3.0), Vector2(dims.x - 20.0, 3.0), acc))
-		var b := UiKit.flat_button(menu, TABS[i][1], 16, UiKit.INK if on else UiKit.MUTED)
-		b.alignment = HORIZONTAL_ALIGNMENT_CENTER
-		b.add_theme_font_override("font", UiKit.HEAD)
-		b.position = pos
-		b.size = dims
-		b.pressed.connect(func(): tab_pressed.emit.call_deferred(id))
+		var b := UiKit.make_btn(menu, TABS[i][1], Vector2(tw - 12.0, th), func(): tab_pressed.emit(id),
+				"selected" if id == active else "tertiary", f, 15)
+		if id != active:
+			b.add_theme_color_override("font_color", UiKit.MUTED)
+		b.position = Vector2(x0 + i * tw + 6.0, (h - b.size.y) / 2.0)
 		add_child(b)
 		buttons[id] = b

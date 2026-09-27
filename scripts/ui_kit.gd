@@ -1,22 +1,45 @@
 class_name UiKit
 extends RefCounted
-## Alpha 21 UI pass (Daniele 2026-09-28: Mushroom Wars 2's structure, our neon cyber style): the theme and
-## phone sizing shared by the app shell (TopBar, NavBar), FrameCard and the shell pages (HOME, the campaign
-## hub, the versus screen). Sizes here are 1280x720 CANVAS units - what the shell pages lay out in - not
-## Alpha 11's raw units (menu.gd's P() / K); the phone minimums (44 pt taps, 12.5 pt text) come from
-## Menu's live viewport fit, so the shell keeps the same rules as every other page.
+## Alpha 21 UI pass - ONE visual language for every menu page (Daniele's screen system, 2026-09-28: "Alpha 20 UI
+## Expansion", used as direction, in our neon cyber style; SCREEN-SYSTEM.md's tokens below). Sizes are 1280x720
+## CANVAS units - what the shell pages lay out in - not Alpha 11's raw units (menu.gd's P() / K); the phone minimums
+## (44 pt taps, 12.5 pt text) come from Menu's live viewport fit, so every piece keeps the same rules on phones.
+##
+## The building blocks (each adds itself to the menu's page, `m.content`, and returns the node):
+##   btn(m, text, pos, dims, call, kind, f)    kind "primary" (solid accent, dark text - one per area) | "secondary"
+##                                             (dark, quiet frame) | "selected" (tinted fill, accent frame) | "tertiary"
+##   panel(m, pos, dims, f, selected)          an opaque clipped-corner surface under text
+##   title(m, x, y, kicker, headline, f)       the page's kicker ("03 / SETUP") + headline ("READY TO DEPLOY.")
+##   back_link(m, right_x, y, call)            "<- BACK", top right of a page (phones' subflows put it in the bar)
+##   row(m, pos, dims, num, title, sub, call, f, selected)   a numbered row with a chevron ("01  SCORCH / Active skill")
+##   chip(m, text, pos, call, f, selected)     a filter / tab chip, auto width
+##   stat(m, pos, value, caption)              "100%" over "Speed · Baseline"
+##   tag(m, text, pos, f)                      "EMBER / MAW" with the accent bar
+##   stars(m, n, of, pos, size)                filled gold / unfilled, plus the count
+##   bar(m, pos, dims, frac, f)                a progress bar
+##   hero(m, f, pos, dims)                     the faction's original character (transparent cutout)
+## Faction accents are UI colours (SCREEN-SYSTEM.md), separate from the match's ownership colours (Rules).
 
 const HEAD := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const BODY := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
-const INK := Color("edf7fa")
-const MUTED := Color("839da9")
-const DIM := Color("5b7582")
-const CYAN := Color("18dae8")
-const BAR := Color("030b11f4")                    # top / bottom bars
-const CARD := Color("06141cec")                   # card fill
+const BASE := Color("041016")                      # base surface
+const PANEL := Color("071820")                     # panel surface, opaque beneath text
+const INK := Color("e8f6fa")                       # primary text
+const MUTED := Color("a6bfca")                     # secondary text
+const DIM := Color("5f7a86")                       # captions, unavailable
+const FRAME := Color("255363")                     # quiet frame
+const CYAN := Color("14d3e4")                      # VEX / neutral action
+const STAR := Color("ffce68")                      # earned stars
+const BAR := Color("041016f2")                     # top / bottom bars
+const CARD := Color("071820f0")                    # card fill
+const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Color("a1eb39"),
+		"ember": Color("ff7c19"), "solar": Color("ffce58")}
 const ORDER := ["vex", "null", "bloom", "ember", "solar"]
+const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "VIRIDIAN", "ember": "EMBER", "solar": "SOLAR"}
+const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "BLOOM", "ember": "MAW", "solar": "SHELLS"}
 const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "VIRIDIAN / BLOOM",
 		"ember": "EMBER / MAW", "solar": "SOLAR / SHELLS"}
+const CUT := 10                                    # the standard corner cut
 const CFG := "user://ui.cfg"
 const K := 1280.0 / 1672.0                       # = Menu.K, Menu.MIN_TAP_PT, Menu.MIN_FONT_PT - copied so the pieces
 const MIN_TAP_PT := 44.0                          #   (and their tests) load without menu.gd and its autoloads
@@ -24,7 +47,7 @@ const MIN_FONT_PT := 12.5
 
 
 static func accent(f: String) -> Color:
-	return Rules.FACTIONS[f][1] if Rules.FACTIONS.has(f) else CYAN
+	return ACCENTS.get(f, CYAN)
 
 
 static func pt(m) -> float:
@@ -49,7 +72,7 @@ static func label(m, text: String, size: float, col := INK, head := false, spaci
 	var l := Label.new()
 	l.text = text
 	var font: Font = HEAD if head else BODY
-	if spacing != 0:                                 # the spaced-out kickers / breadcrumbs of the mockups
+	if spacing != 0:                                 # the spaced-out kickers / breadcrumbs
 		var fv := FontVariation.new()
 		fv.base_font = font
 		fv.spacing_glyph = spacing
@@ -73,23 +96,9 @@ static func text_h(m, text: String, size: float, width: float, head := false) ->
 			TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE).y
 
 
-static func flat_button(m, text: String, size: float, col := INK) -> Button:
-	## A text-only button ("Continue campaign", "New here? Start training ->"): no frame, the accent on hover,
-	## still a full-height tap target on phones.
-	var b := Button.new()
-	b.text = text
-	b.flat = true
-	b.focus_mode = Control.FOCUS_NONE
-	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	b.add_theme_font_override("font", BODY)
-	b.add_theme_font_size_override("font_size", px(m, size))
-	b.add_theme_color_override("font_color", col)
-	b.add_theme_color_override("font_hover_color", CYAN)
-	b.add_theme_color_override("font_pressed_color", CYAN)
-	var none := StyleBoxEmpty.new()
-	for s in ["normal", "hover", "pressed", "focus", "disabled"]:
-		b.add_theme_stylebox_override(s, none)
-	return b
+static func line_h(m, size: float, head := false) -> float:
+	## One line's height at a (phone-grown) size.
+	return (HEAD if head else BODY).get_height(px(m, size))
 
 
 static func rect(pos: Vector2, dims: Vector2, col: Color) -> ColorRect:
@@ -99,6 +108,242 @@ static func rect(pos: Vector2, dims: Vector2, col: Color) -> ColorRect:
 	r.size = dims
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return r
+
+
+static func add(m, node: Control, pos: Vector2) -> Control:
+	node.position = pos
+	m.content.add_child(node)
+	return node
+
+
+# ------------------------------------------------------------------ surfaces and buttons
+static func sb(fill: Color, border := Color(0, 0, 0, 0), bw := 0, cut := CUT, glow := Color(0, 0, 0, 0)) -> StyleBoxFlat:
+	## A clipped-corner box: StyleBoxFlat's corner_detail 1 turns each radius into a straight 45-degree cut.
+	var s := StyleBoxFlat.new()
+	s.bg_color = fill
+	s.set_corner_radius_all(cut)
+	s.corner_detail = 1
+	s.anti_aliasing = true
+	if bw > 0:
+		s.border_color = border
+		s.set_border_width_all(bw)
+	if glow.a > 0.0:
+		s.shadow_color = glow
+		s.shadow_size = 8
+	s.set_content_margin_all(10)
+	return s
+
+
+static func style_button(b: Button, kind: String, f := "vex") -> void:
+	var a := accent(f)
+	var normal: StyleBoxFlat
+	var hover: StyleBoxFlat
+	var pressed: StyleBoxFlat
+	var fc := INK
+	match kind:
+		"primary":                                    # solid accent, dark text, a soft glow of its own colour
+			normal = sb(a, a.lightened(0.25), 1, CUT, Color(a, 0.28))
+			hover = sb(a.lightened(0.12), a.lightened(0.4), 1, CUT, Color(a, 0.4))
+			pressed = sb(a.darkened(0.18), a, 1, CUT)
+			fc = BASE
+		"selected":                                   # tinted fill, accent frame (tabs, chips, picked tiles)
+			normal = sb(Color(a.darkened(0.72), 0.94), a, 2)
+			hover = sb(Color(a.darkened(0.62), 0.96), a.lightened(0.2), 2)
+			pressed = sb(Color(a.darkened(0.55), 0.96), a, 2)
+		"tertiary":                                   # text-led
+			normal = sb(Color(0, 0, 0, 0))
+			hover = sb(Color(a, 0.08))
+			pressed = sb(Color(a, 0.16))
+		_:                                            # secondary: dark surface, quiet frame, the accent on hover
+			normal = sb(Color(PANEL, 0.94), FRAME, 1)
+			hover = sb(Color(PANEL.lightened(0.05), 0.96), a, 1)
+			pressed = sb(Color(a.darkened(0.7), 0.96), a, 1)
+	b.add_theme_stylebox_override("normal", normal)
+	b.add_theme_stylebox_override("hover", hover)
+	b.add_theme_stylebox_override("pressed", pressed)
+	b.add_theme_stylebox_override("hover_pressed", pressed)
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.add_theme_stylebox_override("disabled", sb(Color(PANEL, 0.7), Color(FRAME, 0.5), 1))
+	b.add_theme_color_override("font_color", fc)
+	b.add_theme_color_override("font_hover_color", fc if kind == "primary" else (a if kind == "tertiary" else INK))
+	b.add_theme_color_override("font_pressed_color", fc if kind == "primary" else INK)
+	b.add_theme_color_override("font_hover_pressed_color", fc if kind == "primary" else INK)
+	b.add_theme_color_override("font_focus_color", fc)
+	b.add_theme_color_override("font_disabled_color", DIM)
+
+
+static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "secondary", f := "vex", size := 16.0) -> Button:
+	## A button, not yet placed: text in the display face, at least 44 pt tall on phones.
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_override("font", HEAD)
+	b.add_theme_font_size_override("font_size", px(m, size))
+	b.clip_text = true
+	style_button(b, kind, f)
+	dims.y = tap_h(m, dims.y)
+	b.custom_minimum_size = dims
+	b.size = dims
+	if call.is_valid():
+		b.pressed.connect(func(): call.call_deferred())
+	return b
+
+
+static func btn(m, text: String, pos: Vector2, dims: Vector2, call: Callable, kind := "secondary", f := "vex", size := 16.0) -> Button:
+	return add(m, make_btn(m, text, dims, call, kind, f, size), pos) as Button
+
+
+static func flat_button(m, text: String, size: float, col := INK) -> Button:
+	## A text-only button ("CONTINUE CAMPAIGN", "NEW HERE? START TRAINING ->"): no frame, still a full tap target.
+	var b := Button.new()
+	b.text = text
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.add_theme_font_override("font", HEAD)
+	b.add_theme_font_size_override("font_size", px(m, size))
+	b.add_theme_color_override("font_color", col)
+	b.add_theme_color_override("font_hover_color", CYAN)
+	b.add_theme_color_override("font_pressed_color", CYAN)
+	var none := StyleBoxEmpty.new()
+	for s in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+		b.add_theme_stylebox_override(s, none)
+	return b
+
+
+static func panel(m, pos: Vector2, dims: Vector2, f := "", selected := false, fill := CARD) -> Panel:
+	## An opaque surface: the quiet frame, or the accent (with a tinted fill) when `selected`.
+	var p := Panel.new()
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var a := accent(f)
+	p.add_theme_stylebox_override("panel", sb(Color(a.darkened(0.8), 0.95) if selected else fill, a if selected else FRAME, 2 if selected else 1))
+	p.size = dims
+	return add(m, p, pos) as Panel
+
+
+# ------------------------------------------------------------------ text blocks
+static func title(m, x: float, y: float, kicker: String, headline: String, f := "vex", size := 34.0) -> float:
+	## A page's kicker + headline; returns the y under them.
+	var k := label(m, kicker.to_upper(), 12, accent(f), true, 3)
+	add(m, k, Vector2(x, y))
+	y += k.get_minimum_size().y + 2.0
+	var h := label(m, headline.to_upper(), size, INK, true)
+	add(m, h, Vector2(x - 2.0, y))
+	return y + h.get_minimum_size().y
+
+
+static func back_link(m, right_x: float, y: float, call: Callable) -> Button:
+	var b := flat_button(m, "←  BACK", 15)
+	b.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var w := text_w(m, b.text, 15, true) + 20.0
+	b.size = Vector2(w, tap_h(m, 36.0))
+	b.pressed.connect(func(): call.call_deferred())
+	return add(m, b, Vector2(right_x - w, y)) as Button
+
+
+static func row(m, pos: Vector2, dims: Vector2, num: String, title_text: String, sub: String, call: Callable,
+		f := "vex", selected := false, chevron := true) -> Button:
+	## A numbered row: "01" in the accent, the title over a caption, a chevron; the whole row is the target.
+	dims.y = tap_h(m, dims.y)
+	var b := make_btn(m, "", dims, call, "selected" if selected else "secondary", f)
+	add(m, b, pos)
+	var x := 16.0
+	if num != "":
+		var n := label(m, num, 22, accent(f), true)
+		n.position = Vector2(x, (dims.y - n.get_minimum_size().y) / 2.0)
+		b.add_child(n)
+		x += text_w(m, num, 22, true) + 14.0
+	var t := label(m, title_text.to_upper(), 16, INK, true)
+	var s := label(m, sub, 13, MUTED)
+	var th := t.get_minimum_size().y + (s.get_minimum_size().y if sub != "" else 0.0)
+	t.position = Vector2(x, (dims.y - th) / 2.0)
+	t.clip_text = true
+	t.size = Vector2(dims.x - x - 36.0, t.get_minimum_size().y)
+	b.add_child(t)
+	if sub != "":
+		s.position = t.position + Vector2(0, t.get_minimum_size().y)
+		s.clip_text = true
+		s.size = Vector2(dims.x - x - 36.0, s.get_minimum_size().y)
+		b.add_child(s)
+	if chevron:
+		var c := label(m, "›", 22, MUTED)
+		c.position = Vector2(dims.x - 26.0, (dims.y - c.get_minimum_size().y) / 2.0)
+		b.add_child(c)
+	return b
+
+
+static func chip(m, text: String, pos: Vector2, call: Callable, f := "vex", selected := false, size := 14.0) -> Button:
+	var w := text_w(m, text.to_upper(), size, true) + 32.0
+	return btn(m, text.to_upper(), pos, Vector2(maxf(w, 56.0), 40.0), call, "selected" if selected else "secondary", f, size)
+
+
+static func stat(m, pos: Vector2, value: String, caption: String, col := INK) -> float:
+	## A value over its caption; returns the block's width.
+	var v := label(m, value, 22, col, true)
+	add(m, v, pos)
+	var c := label(m, caption, 12, MUTED)
+	add(m, c, pos + Vector2(0, v.get_minimum_size().y))
+	return maxf(text_w(m, value, 22, true), text_w(m, caption, 12))
+
+
+static func tag(m, text: String, pos: Vector2, f := "vex") -> Vector2:
+	## "EMBER / MAW": a dark plate with the accent bar on its left; returns its size.
+	var l := label(m, text.to_upper(), 14, INK, true, 2)
+	var dims := Vector2(text_w(m, text.to_upper(), 14, true) + text.length() * 2.0 + 30.0, l.get_minimum_size().y + 14.0)
+	m.content.add_child(rect(pos, dims, Color(BASE, 0.88)))
+	m.content.add_child(rect(pos, Vector2(3.0, dims.y), accent(f)))
+	add(m, l, pos + Vector2(16.0, 7.0))
+	return dims
+
+
+static func stars(m, n: int, of: int, pos: Vector2, size := 20.0, count := true) -> Label:
+	## Filled gold for earned, a dim outline for the rest - and the number, so it never rests on colour alone.
+	var s := "★".repeat(maxi(0, n)) + "☆".repeat(maxi(0, of - n)) + ("   %d / %d" % [n, of] if count else "")
+	var l := label(m, s, size, STAR if n > 0 else DIM)
+	return add(m, l, pos) as Label
+
+
+static func bar(m, pos: Vector2, dims: Vector2, frac: float, f := "vex") -> void:
+	m.content.add_child(rect(pos, dims, Color(FRAME, 0.6)))
+	m.content.add_child(rect(pos, Vector2(dims.x * clampf(frac, 0.0, 1.0), dims.y), accent(f)))
+
+
+# ------------------------------------------------------------------ art
+static func hero_path(f: String) -> String:
+	return "res://assets/art/ui/hero_%s.png" % (f if ACCENTS.has(f) else "vex")
+
+
+static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true) -> TextureRect:
+	## The faction's original character, standing in `dims` (tools/ui_art.py cut them from Alpha 12's references);
+	## a soft accent glow behind it.
+	if glow:
+		var g := TextureRect.new()
+		var grad := Gradient.new()
+		grad.set_color(0, Color(accent(f), 0.28))
+		grad.set_color(1, Color(accent(f), 0.0))
+		var gt := GradientTexture2D.new()
+		gt.gradient = grad
+		gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.55)
+		gt.fill_to = Vector2(0.5, 0.0)
+		g.texture = gt
+		g.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		g.size = dims * 1.3
+		add(m, g, pos - dims * 0.15)
+	var r := TextureRect.new()
+	r.texture = load(hero_path(f))
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.size = dims
+	return add(m, r, pos) as TextureRect
+
+
+static func background(f: String) -> Texture2D:
+	## The faction's environment plate (the pages' backdrop; Daniele will supply new wallpapers after this pass).
+	var p := "res://assets/art/ui/bg_%s.jpg" % (f if ACCENTS.has(f) else "vex")
+	return load(p) if ResourceLoader.exists(p) else null
 
 
 # ------------------------------------------------------------------ the last played faction (HOME's hero)
@@ -124,8 +369,8 @@ static func save_last_faction(f: String) -> bool:
 
 
 static func hero_art(f: String) -> Texture2D:
-	## The faction's scene with its creature on the right (assets/art/<faction>.png; VEX's is the MAIN art,
-	## minus its left edge where Alpha 11's buttons are baked in).
+	## The faction's full scene (assets/art/<faction>.png; VEX's is the old MAIN art minus its baked-in buttons) -
+	## FrameCard's default art.
 	if f == "vex":
 		var art: Texture2D = load("res://assets/art/ui-main.png")
 		var clean := AtlasTexture.new()

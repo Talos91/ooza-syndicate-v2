@@ -28,7 +28,8 @@ func _init() -> void:
 	UiKit.path = "user://no/such/dir/ui.cfg"
 	check(UiKit.last_faction() == "vex" and not UiKit.save_last_faction("null"), "no storage: VEX, and the save says no")
 	for f in UiKit.ORDER:
-		check(Rules.FACTIONS.has(f) and UiKit.accent(f) == Rules.FACTIONS[f][1], "accent of " + f)
+		check(Rules.FACTIONS.has(f) and UiKit.ACCENTS.has(f) and UiKit.accent(f) == UiKit.ACCENTS[f], "UI accent of " + f)
+		check(ResourceLoader.exists(UiKit.hero_path(f)) and UiKit.background(f) != null, "character cutout + environment of " + f)
 		check(UiKit.TAGS.has(f), "HOME tag of " + f)
 		check(UiKit.hero_art(f) != null, "hero art of " + f)
 	check(UiKit.accent("nope") == UiKit.CYAN, "an unknown faction's accent is the neon cyan")

@@ -46,6 +46,9 @@ var _shell := false
 var _built_w := 0.0                              # the shell page's canvas width when built (a rotation rebuilds it)
 var top_bar: TopBar
 var nav_bar: NavBar
+var shell_f := "vex"                             # the faction a shell page is dressed in (its accent, its backdrop)
+var shell_back := Callable()                     # the page's BACK (a subflow), or none (a top-level tab)
+var shell_slim := false                          # a phone subflow: BACK in the bar, no tab bar
 var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
 var _map_scroll := 0
 # map filters on 02 BATTLEFIELD (Daniele, 0.18.6: "add in game filters for maps like 1v1 2v2 ffa etc"): players
@@ -429,22 +432,60 @@ func map_preview(pos: Vector2, dims: Vector2) -> void:
 
 # ------------------------------------------------------------------ pages
 # ------------------------------------------------------------------ UI: the app shell (Alpha 21 UI pass)
-func shell_open(crumb: String, tab: String) -> Rect2:
-	## Clears to a shell page: TopBar (breadcrumb, balances, level -> PROFILE, "?" -> TRAINING for now) and
-	## NavBar (HOME / PLAY / ARMIES / CAMPAIGN, `tab` lit). Returns the free area between them, in canvas units.
+func shell_open(crumb: String, tab: String, back := Callable(), f := "") -> Rect2:
+	## Clears to a shell page (Alpha 21 UI pass): the faction's environment behind it, TopBar (breadcrumb,
+	## balances, level -> PROFILE, gear -> OPTIONS, "?" -> HELP) and NavBar (HOME / PLAY / ARMIES / CAMPAIGN,
+	## `tab` lit). A subflow (`back` given: faction, battlefield, setup, lobby...) on a phone is SLIM - BACK and the
+	## breadcrumb only, no tab bar (SCREEN-SYSTEM.md "Mobile layout"); on desktop it keeps the full shell and its
+	## title row carries the BACK link (page_title). Returns the free area in canvas units (full screen width).
 	clear_page("shell")
 	_page = tab
-	var f := UiKit.last_faction() if tab == "home" else faction
-	top_bar = TopBar.make(self, crumb, f)
-	top_bar.help_pressed.connect(show_tutorial)
-	top_bar.profile_pressed.connect(show_profile)
+	shell_f = f if f != "" else faction
+	shell_back = back
+	shell_slim = mobile and back.is_valid()
+	if _backdrop:
+		var bg := UiKit.background(shell_f)
+		if bg != null:
+			_backdrop.texture = bg
+		_backdrop.modulate = Color(0.55, 0.58, 0.62)
+	top_bar = TopBar.make(self, crumb, shell_f, shell_slim)
+	top_bar.help_pressed.connect(show_help)
 	top_bar.options_pressed.connect(show_options)
-	nav_bar = NavBar.make(self, tab, f)
-	nav_bar.tab_pressed.connect(_on_tab)
+	top_bar.profile_pressed.connect(show_profile)
+	top_bar.back_pressed.connect(func(): back.call_deferred())
 	content.add_child(top_bar)
-	content.add_child(nav_bar)
 	var y0 := top_bar.bar_height()
-	return Rect2(0, y0, content.size.x, nav_bar.position.y - y0)
+	var y1 := content.size.y
+	if not shell_slim:
+		nav_bar = NavBar.make(self, tab, shell_f)
+		nav_bar.tab_pressed.connect(_on_tab)
+		content.add_child(nav_bar)
+		y1 = nav_bar.position.y
+	return Rect2(0, y0, content.size.x, y1 - y0)
+
+
+func shell_x() -> float:
+	## The shell pages' side margin.
+	return maxf(26.0, content.size.x * 0.024)
+
+
+func page_title(area: Rect2, kicker: String, headline: String, size := 34.0) -> float:
+	## The page's kicker + headline at the top of `area`, and BACK at the right when the page has one and the bar
+	## doesn't; returns the y under the title (canvas units).
+	var x := shell_x()
+	var y := UiKit.title(self, x, area.position.y + (10.0 if shell_slim else 18.0), kicker, headline, shell_f,
+			size * (0.8 if shell_slim else 1.0))
+	if shell_back.is_valid() and not shell_slim:
+		UiKit.back_link(self, content.size.x - x, area.position.y + 20.0, shell_back)
+	return y + 14.0
+
+
+func shell_raise() -> void:
+	## Keeps the bars over anything a page drew after shell_open().
+	if is_instance_valid(top_bar):
+		content.move_child(top_bar, -1)
+	if is_instance_valid(nav_bar):
+		content.move_child(nav_bar, -1)
 
 
 func _on_tab(id: String) -> void:
@@ -460,33 +501,17 @@ func _on_tab(id: String) -> void:
 
 
 func _shell_add(c: Control, pos: Vector2) -> Control:
-	c.position = pos
-	content.add_child(c)
-	return c
-
-
-func _shell_button(text: String, pos: Vector2, dims: Vector2, call: Callable, f: String, primary := false) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_font_override("font", UiKit.HEAD)
-	b.add_theme_font_size_override("font_size", UiKit.px(self, 20 if primary else 15))
-	UiSkin.button(b, f, primary)
-	dims.y = UiKit.tap_h(self, dims.y)
-	b.custom_minimum_size = dims
-	b.size = dims
-	b.pressed.connect(func(): call.call_deferred())
-	return _shell_add(b, pos) as Button
+	return UiKit.add(self, c, pos)
 
 
 func _fade_left(area: Rect2, reach: float) -> void:
-	## A dark wash from the left edge, so HOME's text reads over the hero art.
+	## A dark wash from the left edge, so HOME's text reads over the environment.
 	var g := Gradient.new()
-	g.set_color(0, Color("030c12f0"))
-	g.set_color(1, Color("030c1200"))
+	g.set_color(0, Color(UiKit.BASE, 0.92))
+	g.set_color(1, Color(UiKit.BASE, 0.0))
 	var gt := GradientTexture2D.new()
 	gt.gradient = g
-	gt.fill_from = Vector2(0.35, 0)
+	gt.fill_from = Vector2(0.3, 0)
 	gt.fill_to = Vector2(1, 0)
 	var r := TextureRect.new()
 	r.texture = gt
@@ -498,118 +523,137 @@ func _fade_left(area: Rect2, reach: float) -> void:
 
 
 func show_main() -> void:
-	## HOME (Daniele's mockups 2026-09-28): the faction played last as the hero (its scene fills the screen, its
-	## creature on the right), the headline, PLAY (-> NEW GAME's faction step), CONTINUE CAMPAIGN, the training
-	## link while lessons remain; CHALLENGES top right; OPTIONS / FULLSCREEN and the version at the foot.
+	## HOME (Daniele's screen system 01): the faction played last - its environment behind, its original character
+	## on the right - the headline, PLAY (-> NEW GAME's faction step), CONTINUE CAMPAIGN, the training link while
+	## lessons remain; CHALLENGES top right; QUIT / FULLSCREEN and the version at the foot; the install guide.
 	_last_show = show_main                  # a resize that changes the phone sizing rebuilds it (_fit)
-	var area := shell_open("OOZE / HOME", "home")
-	_is_main = true
 	var hero := UiKit.last_faction()
-	var acc := UiKit.accent(hero)
+	var area := shell_open("OOZE / HOME", "home", Callable(), hero)
+	_is_main = true
 	if _backdrop:
-		_backdrop.texture = UiKit.hero_art(hero)
-		_backdrop.modulate = Color(0.9, 0.9, 0.9)
-	_fade_left(area, content.size.x * 0.62)
-	content.move_child(top_bar, -1)                    # the bars over the wash
-	content.move_child(nav_bar, -1)
-	var x := maxf(40.0, content.size.x * 0.04)
-	var kick := UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 14, acc, false, 3)
-	var head := UiKit.label(self, "THE CITY IS\nYOURS TO TAKE.", 60, UiKit.INK, true)
+		_backdrop.modulate = Color(0.7, 0.72, 0.76)
+	var acc := UiKit.accent(hero)
+	_fade_left(area, content.size.x * 0.6)
+	var x := shell_x() + 8.0
+	# the character, right of centre, over its glow; its tag under it
+	var hs := minf(area.size.y * 0.78, content.size.x * 0.3)
+	var hpos := Vector2(content.size.x * 0.66 - hs / 2.0, area.position.y + (area.size.y - hs) / 2.0 - 10.0)
+	UiKit.hero(self, hero, hpos, Vector2(hs, hs))
+	var tag_w := UiKit.text_w(self, UiKit.TAGS[hero], 14, true) + 60.0
+	UiKit.tag(self, UiKit.TAGS[hero], Vector2(content.size.x * 0.66 - tag_w / 2.0 + 30.0, area.end.y - UiKit.tap_h(self, 36.0) - 20.0), hero)
+	var kick := UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 13, acc, true, 3)
+	var head := UiKit.label(self, "THE CITY IS\nYOURS TO TAKE.", 56, UiKit.INK, true)
 	var sub := UiKit.label(self, "Pick your syndicate. Control the crossings.", 18, UiKit.MUTED)
-	var bh := UiKit.tap_h(self, 58.0)
+	var bh := UiKit.tap_h(self, 54.0)
 	var th := UiKit.tap_h(self, 36.0)
 	var tut_done := TutorialDirector.done_count() >= TutorialDirector.TOTAL_LESSONS
 	var stack_h := kick.get_minimum_size().y + 8.0 + head.get_minimum_size().y + 10.0 + sub.get_minimum_size().y \
-			+ 28.0 + bh + (8.0 + th if not tut_done else 0.0)
-	var free_h := area.size.y - th - 16.0              # the foot row (FULLSCREEN / version) keeps its own strip
+			+ 26.0 + bh + (8.0 + th if not tut_done else 0.0)
+	var free_h := area.size.y - th - 14.0              # the foot row (QUIT / version) keeps its own strip
 	var y := area.position.y + maxf(10.0, (free_h - stack_h) / 2.0)
 	_shell_add(kick, Vector2(x, y))
 	y += kick.get_minimum_size().y + 8.0
 	_shell_add(head, Vector2(x - 3.0, y))
 	y += head.get_minimum_size().y + 10.0
 	_shell_add(sub, Vector2(x, y))
-	y += sub.get_minimum_size().y + 28.0
-	_shell_button("PLAY", Vector2(x, y), Vector2(250, 58), show_factions, hero, true)
-	var cont := UiKit.flat_button(self, "CONTINUE CAMPAIGN", 18)
-	cont.add_theme_font_override("font", UiKit.HEAD)
-	cont.size = Vector2(cont.get_minimum_size().x + 24.0, bh)
+	y += sub.get_minimum_size().y + 26.0
+	UiKit.btn(self, "PLAY", Vector2(x, y), Vector2(230, 54), show_factions, "primary", hero, 20)
+	var cont := UiKit.flat_button(self, "CONTINUE CAMPAIGN", 16)
+	cont.size = Vector2(UiKit.text_w(self, cont.text, 16, true) + 28.0, bh)
 	cont.pressed.connect(func(): show_campaign.call_deferred())
-	_shell_add(cont, Vector2(x + 250.0 + 22.0, y))
+	_shell_add(cont, Vector2(x + 230.0 + 16.0, y))
 	y += bh + 8.0
 	if not tut_done:                                   # TUTORIAL (§7): "n / 10" until every lesson is done
 		var n := TutorialDirector.done_count()
 		var tl := UiKit.flat_button(self, "NEW HERE? START TRAINING  →" if n == 0
-				else "TRAINING %d / %d  →" % [n, TutorialDirector.TOTAL_LESSONS], 15)
-		tl.size = Vector2(tl.get_minimum_size().x + 12.0, th)
+				else "TRAINING %d / %d  →" % [n, TutorialDirector.TOTAL_LESSONS], 14)
+		tl.size = Vector2(UiKit.text_w(self, tl.text, 14, true) + 16.0, th)
 		tl.pressed.connect(func(): show_tutorial.call_deferred())
 		_shell_add(tl, Vector2(x, y))
-	# the hero's tag, under its creature
-	var tag := UiKit.label(self, UiKit.TAGS[hero], 15, UiKit.INK, true, 2)
-	var tag_w := tag.get_minimum_size().x + 28.0
-	var tag_h := tag.get_minimum_size().y + 14.0
-	var tag_pos := Vector2(content.size.x * 0.66 - tag_w / 2.0, area.end.y - tag_h - 22.0)
-	content.add_child(UiKit.rect(tag_pos, Vector2(tag_w, tag_h), Color("030c12d8")))
-	content.add_child(UiKit.rect(tag_pos, Vector2(3.0, tag_h), acc))
-	_shell_add(tag, tag_pos + Vector2(16.0, 7.0))
 	# PROGRESSION: CHALLENGES (what is ready to claim), top right under the bar
 	var ready_n := Progression.claimable()
-	var cw := 280.0
-	_shell_button("CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else ""),
-			Vector2(content.size.x - cw - x * 0.6, area.position.y + 16.0), Vector2(cw, 44), show_challenges, hero, ready_n > 0)
-	# the foot: FULLSCREEN (QUIT on desktop) and the version; OPTIONS is the top bar's gear
+	var ct := "CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else "")
+	var cw := UiKit.text_w(self, ct, 15, true) + 44.0
+	UiKit.btn(self, ct, Vector2(content.size.x - cw - shell_x(), area.position.y + 16.0), Vector2(cw, 42),
+			show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
+	# the foot: FULLSCREEN (QUIT on desktop) and the version
 	var fy := area.end.y - th - 6.0
-	var fb := UiKit.flat_button(self, "FULLSCREEN" if OS.has_feature("web") else "QUIT", 14, UiKit.MUTED)
-	fb.size = Vector2(UiKit.text_w(self, fb.text, 14) + 20.0, th)
+	var fb := UiKit.flat_button(self, "FULLSCREEN" if OS.has_feature("web") else "QUIT", 13, UiKit.MUTED)
+	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 20.0, th)
 	fb.pressed.connect(func():
 		if OS.has_feature("web"):
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		else:
 			get_tree().quit())
 	_shell_add(fb, Vector2(x - 10.0, fy))
-	var fx := x - 10.0 + fb.size.x + 8.0
 	var ver := UiKit.label(self, "%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], 12, UiKit.DIM)
-	_shell_add(ver, Vector2(fx + 8.0, fy + (th - ver.get_minimum_size().y) / 2.0))
+	_shell_add(ver, Vector2(x + fb.size.x + 4.0, fy + (th - ver.get_minimum_size().y) / 2.0))
+	shell_raise()
 	# 0.20.11: INSTALL THE GAME (web + phone browsers only, hidden once installed or dismissed), bottom right
 	if _install_available():
-		_install_button(Vector2(content.size.x - 300.0 - x * 0.6, area.end.y - UiKit.tap_h(self, 44.0) - 70.0))
+		_install_button(Vector2(content.size.x - 300.0 - shell_x(), area.end.y - UiKit.tap_h(self, 44.0) - 70.0))
 	if _install_guide_open:
 		_install_guide_panel()
 
 
 func show_play() -> void:
-	## PLAY: the ways into a match, one card each - VS AI (NEW GAME's faction -> battlefield -> setup), ONLINE
-	## rooms, TRAINING.
+	## PLAY (screen system 02; the hub stays cyan): three image-led choices - VS AI (primary; NEW GAME's faction ->
+	## battlefield -> setup), ONLINE ROOMS, TRAINING.
 	_last_show = show_play
-	var area := shell_open("OOZE / PLAY", "play")
-	if _backdrop:
-		_backdrop.modulate = Color(0.4, 0.44, 0.48)     # the cards carry the art; the page behind stays quiet
-	var x := maxf(40.0, content.size.x * 0.04)
-	var kick := UiKit.label(self, "PLAY", 14, UiKit.accent(faction), false, 3)
-	_shell_add(kick, Vector2(x, area.position.y + 18.0))
-	var head := UiKit.label(self, "PICK YOUR FIGHT.", 36, UiKit.INK, true)
-	_shell_add(head, Vector2(x, kick.position.y + kick.get_minimum_size().y + 4.0))
-	var top := head.position.y + head.get_minimum_size().y + 18.0
-	var gap := 18.0
+	var area := shell_open("OOZE / PLAY", "play", Callable(), "vex")
+	var x := shell_x()
+	var top := page_title(area, "PLAY", "PICK YOUR FIGHT.")
+	var gap := 16.0
 	var cw := (content.size.x - x * 2.0 - gap * 2.0) / 3.0
-	var ch := area.end.y - top - 22.0
+	var ch := area.end.y - top - 18.0
 	var done := TutorialDirector.done_count()
 	var cards := [
-		["CUSTOM MATCH", "VS AI", "Pick a faction, a battlefield and your rivals.", "", show_factions],
-		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/null.png", show_online],
+		["CUSTOM MATCH", "VS AI", "Pick a faction, a battlefield and your rivals.", "res://assets/art/ui/bg_vex.jpg", "vex", show_factions],
+		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/ui/bg_null.jpg", "null", show_online],
 		["LEARN THE CITY", "TRAINING", "%d / %d lessons done. Replay any lesson." % [done, TutorialDirector.TOTAL_LESSONS],
-				"res://assets/art/city-background.png", show_tutorial],
+				"res://assets/art/campaign/vex-01.jpg", "", show_tutorial],
 	]
 	for i in range(cards.size()):
-		var c := FrameCard.make(self, Vector2(cw, ch), faction)
+		var c := FrameCard.make(self, Vector2(cw, ch), "vex")
+		c.art_frac = 0.52
 		c.set_kicker(cards[i][0])
 		c.set_title(cards[i][1])
 		c.set_note(cards[i][2])
-		c.set_action("PLAY  →" if i == 0 else "OPEN")
-		c.set_state("next" if i == 0 else "open")
 		c.set_art(cards[i][3])
-		var go: Callable = cards[i][4]
+		c.set_hero(cards[i][4])
+		c.set_action("PLAY  →" if i == 0 else "OPEN")
+		c.set_selected(i == 0)
+		var go: Callable = cards[i][5]
 		c.pressed.connect(func(): go.call_deferred())
 		_shell_add(c, Vector2(x + i * (cw + gap), top))
+
+
+func show_help() -> void:
+	## HELP (screen system 24): the four things to know, and TRAINING.
+	_last_show = show_help
+	var area := shell_open("OOZE / HELP", _page if _page in ["home", "play", "armies", "campaign"] else "home", show_main)
+	var x := shell_x()
+	var y := page_title(area, "HELP", "OWN THE CROSSINGS.")
+	var gap := 14.0
+	var cw := (content.size.x - x * 2.0 - gap) / 2.0
+	var tips := [
+		["SEND UNITS", "Drag from your vat to a connected target. Pick 25 %, 50 %, 75 % or 100 % before sending."],
+		["INSPECT & UPGRADE", "Tap a node to inspect it. Use UPGRADE in its panel, or double-tap a node you own."],
+		["RELAYS", "Relays change the bridges. Check the next state before you fire one."],
+		["ABILITIES", "A ready ability has a bright frame. Tap it, then choose a valid target."],
+	]
+	var chh := minf(110.0, (area.end.y - y - UiKit.tap_h(self, 48.0) - 40.0) / 2.0 - gap)
+	for i in range(tips.size()):
+		var p := Vector2(x + (i % 2) * (cw + gap), y + (i / 2) * (chh + gap))
+		UiKit.panel(self, p, Vector2(cw, chh), shell_f)
+		_shell_add(UiKit.label(self, tips[i][0], 17, UiKit.accent(shell_f), true), p + Vector2(16, 14))
+		var l := UiKit.label(self, tips[i][1], 14, UiKit.MUTED)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size = Vector2(cw - 32.0, 0)
+		_shell_add(l, p + Vector2(16, 44))
+	var by := y + 2.0 * (chh + gap) + 8.0
+	_shell_add(UiKit.label(self, "Learn by doing.", 15, UiKit.MUTED), Vector2(x, by + 12.0))
+	UiKit.btn(self, "TRAINING  →", Vector2(content.size.x - x - 220.0, by), Vector2(220, 48), show_tutorial, "primary", shell_f, 16)
 
 
 func show_options() -> void:
