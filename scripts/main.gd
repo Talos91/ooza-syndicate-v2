@@ -922,6 +922,23 @@ func _run_scenario() -> void:
 								n["owner"] = ""
 						scenario_focus = Vector3.INF
 				_fit_camera()
+		"declutter":
+			# 0.20.6 (Daniele's HUD declutter notes): phase 0 is a quiet moment; phase 1 piles on every
+			# declutter case at once (two toasts, a capture floater, the Last Stand status line) to show
+			# they now share a small top-right corner and a node label instead of covering the map.
+			var phase: int = mini(int(sim.time), 1)
+			if phase != _hud19_phase:
+				_hud19_phase = phase
+				match phase:
+					1:
+						hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
+						hud.toast("Node 2 handed over to seat B", "warn")
+						fx.floater(sim.nodes[2]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
+						sim.last_stand_active = true
+						sim.last_stand_warn[3] = true
+						sim.last_stand_queue = [3]
+						sim.last_stand_warn_t = 6.0
+				_fit_camera()
 		"monlaunch":
 			# 0.20.1 (Daniele's online playtest: "i couldn't figure how to send the monster"): the fix in
 			# one sheet - phase 0 is the ready hub with its icon, untouched; phase 1 is the same tap that
