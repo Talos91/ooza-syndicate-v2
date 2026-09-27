@@ -200,6 +200,9 @@ func _ready() -> void:
 		start_tutorial(tut_id, tut_first)
 	elif map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
+	elif MapLab.on():                                 # MAP LAB build (branch map-lab): the lab screen, not the menu
+		Net.set_busy(false)
+		add_child(MapLab.new(self))
 	elif TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
 			or not Net.rejoin.is_empty()):
 		start_tutorial(1, true)                        # TUTORIAL §7: the first launch opens straight into L1
@@ -247,6 +250,8 @@ func _start_map(path: String) -> void:
 	Net.set_busy(true)                                 # a match is on: a new build waits for the menu (web)
 	map_path = path
 	last_map_path = path                               # MAIN MENU remembers it (0.19.0)
+	if MapLab.on():                                    # MAP LAB: WATCH (every seat AI) and the lab's AI level
+		MapLab.before_match(self)
 	map = MapBuilder.load_map(path)
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
 		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")))
@@ -327,6 +332,8 @@ func _start_map(path: String) -> void:
 			sim.step(ff_dt)
 		sim.fx_events.clear()                           # the fast-forwarded bursts are stale by now
 		print("fast-forwarded to t=%.1f%s" % [sim.time, " (match already over)" if sim.over else ""])
+	if MapLab.on() and thumb_path == "":             # MAP LAB: the in-match LAB tools
+		add_child(LabPanel.new(self))
 	if director:                                       # TUTORIAL: the lesson stages its board (tutorial.gd)
 		director.begin(sim, map, SEAT_FACTIONS[HUMAN])
 	if scenario != "":
