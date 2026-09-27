@@ -16,6 +16,9 @@ extends HBoxContainer
 
 const SLOTS := ["active", "map", "ultimate"]
 const TAGS := ["ACTIVE", "MAP", "ULTIMATE"]
+# 0.19.2 spec H5: each slot type gets its own border / label accent instead of sharing the seat colour -
+# three distinct, colour-blind-safe hues (Okabe-Ito: sky blue, bluish green, orange).
+const SLOT_ACCENT := [Color("56b4e9"), Color("009e73"), Color("e69f00")]
 const SLOT_SIZE := Vector2(196, 78)            # x ui_scale: 225 x 90 px on the phone profile = ~49 pt tall (was 72, 44.9 pt: another nudge, Daniele 0.18.8)
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
@@ -76,7 +79,7 @@ class Slot:
 		var s := dock.ui_scale
 		var w := size.x
 		var h := size.y
-		var col := dock.accent
+		var col: Color = SkillDock.SLOT_ACCENT[index]   # 0.19.2 spec H5: by slot type, not the seat colour
 		var armed := dock.armed == index
 		var ult := index == 2
 		var t := dock._t
