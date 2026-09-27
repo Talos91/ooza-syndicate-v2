@@ -11,7 +11,7 @@ const HARD := Color(1.0, 0.25, 0.25, 0.95)
 const SOFT := Color(1.0, 0.75, 0.2, 0.9)
 
 static var speed := 1
-static var overlay := true
+static var overlay := false                      # the rule overlay starts off (Daniele: "why maps have red circles?"): LAB > RULE OVERLAY
 # CAMERA trial (Daniele 2026-09-27: "the tall notification on top covers the platforms ... add a lab function to
 # play with camera axis"): pitch (0 = the map's own), the map shifted down the screen (fraction of the map's
 # depth; + = lower on screen, room under the top bar) and zoom (x the fit distance; > 1 = further away).
