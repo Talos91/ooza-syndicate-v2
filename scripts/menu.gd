@@ -734,12 +734,13 @@ func show_cosmetics(f: String = "") -> void:
 	## faction set / GRADUATE / the skin lines for vats, DEFAULT / SPITTER / PEPPERBOX for the
 	## Machingoon, and so on - saved in user://armies.cfg (ArmyPresets), applied at match start
 	## (main.gd's Cosmetics.set_loadout) and sent along with the skill loadout online (ArmyPresets.send_to).
-	## Every item is unlocked while testing (ArmyPresets.is_unlocked always true for now). The small
-	## preview is a placeholder swatch until the VIEWS session's models/thumbnails ship.
+	## Every item is unlocked while testing (ArmyPresets.is_unlocked always true for now).
 	if f != "":
 		_army = f
 	if _army == "":
 		_army = faction
+	if not _army_back.is_valid():                     # 0.19.2 spec H11: BACK did nothing reached directly
+		_army_back = show_main                         # (show_armies() sets this; a direct entry never did)
 	clear_page("city")
 	_page = "armies"
 	header(0)
@@ -764,7 +765,7 @@ func show_cosmetics(f: String = "") -> void:
 	y += 88.0
 	for family in COSMETIC_FAMILIES:
 		_cosmetic_row(family, str(lo.get(family, "default")), P(415, y), fc)
-		y += 88.0
+		y += 92.0
 	nav_button("BACK TO SKILLS", P(40, foot_y()), P(280, 58), func(): show_armies(_army))
 	nav_button("BACK", P(340, foot_y()), P(200, 58), func(): _leave_armies())
 	var note := "Saved on this device" if ArmyPresets.saved else "This browser keeps no storage: your picks last until the page closes"
@@ -791,24 +792,21 @@ func _core_row(pos: Vector2) -> void:
 
 
 func _cosmetic_row(family: String, current: String, pos: Vector2, fc: Color) -> void:
-	var dims := P(1222, 76)
+	var dims := P(1222, 84)
 	content.add_child(neon_panel(pos, dims, fc, false, Color("08131aE0")))
 	label_at(COSMETIC_FAMILY_LABEL.get(family, family.to_upper()), pos + P(20, 10), 19, Color.WHITE, false)
 	var options: Array = Cosmetics.OPTIONS.get(family, ["default"])
 	var idx := maxi(options.find(current), 0)
-	# a small placeholder swatch stands in for the real preview until VIEWS ships thumbnails / models
-	var swatch := ColorRect.new()
-	swatch.color = Color(fc, 0.35)
-	swatch.position = pos + P(20, 38)
-	swatch.size = P(46, 30)
-	content.add_child(swatch)
-	nav_button("<", pos + P(84, 38), P(42, 32), func():
+	var pv := Cosmetics.make_preview(family, current, _army, P(90, 60))   # 0.19.2 spec H10: a small turning
+	pv.position = pos + P(20, 8)                                          # 3D model instead of a colour swatch
+	content.add_child(pv)
+	nav_button("<", pos + P(122, 42), P(42, 32), func():
 		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx - 1 + options.size()) % options.size()])
 		show_cosmetics())
 	var locked := not ArmyPresets.is_unlocked(current)
-	label_at(Cosmetics.label(family, current, _army) + ((" (LOCKED - %s)" % TutorialDirector.line("locked_cosmetic").to_upper()) if locked else ""), pos + P(140, 44),
+	label_at(Cosmetics.label(family, current, _army) + ((" (LOCKED - %s)" % TutorialDirector.line("locked_cosmetic").to_upper()) if locked else ""), pos + P(178, 48),
 			19, Color("ffb12b") if locked else Color("dbe6ec"), false)
-	nav_button(">", pos + P(1090, 38), P(42, 32), func():
+	nav_button(">", pos + P(1090, 42), P(42, 32), func():
 		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx + 1) % options.size()])
 		show_cosmetics())
 
