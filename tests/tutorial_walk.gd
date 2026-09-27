@@ -148,8 +148,17 @@ func _lesson(id: int) -> void:
 				await _play(func(t): if not once.has(key): once[key] = true; _send("H", "N1", m.fraction))
 			"L1.percent":
 				await _play(func(t): m.fraction = 0.25)
-			"L1.send25":
-				await _play(func(t): if not once.has(key): once[key] = true; _send("H", "N2", 0.25))
+			"L1.send25":                                     # a deliberately short send first: the assist
+				m.sim.nodes[_id("H")]["units"] = 20.0 * Rules.SCALE
+				_send("H", "N2", 0.1)
+				Engine.time_scale = FAST
+				var ta := 0.0
+				while d.assist_retry().is_empty() and ta < 20.0:
+					await get_tree().process_frame
+					ta += get_process_delta_time()
+				await _shot("short-assist")
+				var rt := d.assist_retry()
+				await _play(func(t): if not once.has(key) and not rt.is_empty(): once[key] = true; m.node_action("send", int(rt[0]), {"to": int(rt[1]), "fraction": 1.0}))
 			"L1.reinforce":
 				await _play(func(t): if not once.has(key): once[key] = true; _send("N1", "H", 0.5))
 			"L2.inspect":
