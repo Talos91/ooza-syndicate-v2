@@ -781,4 +781,15 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 - MATCH HISTORY: "Yes, in 0.20.5" (via the Architect) - *Done:* PROFILE > HISTORY.
 206. **"make the text more fun dr dex is a bit flat".** *Done (0.20.6):* Dr. Vesk speaks in the campaign's dark-comedy house style
      (CAMPAIGN-DESIGN §1): the instruction first, then one short joke at most; 59 lines (TUTORIAL-SCRIPT draft 3).
+207. **"remove the number on top of units line - is not readable and makes noise; also too many notifications and many
+     notifications cover the map; all notifications should be top right and last stand notification shouldn't cover the
+     screen while player plays; also remove all notices of things like send and capture - better is in game text coming
+     out of the conquer place or smt like that - right now they distract too much and cover a lot of screen real
+     estate".** *Done (0.20.6, "HUD declutter"):* the moving Label3D over a horde's line is gone (node badges still show
+     counts); toasts moved to a small top-right column under the top bar and PAUSE, never over the map centre, capped at
+     2 and holding 1.8 s instead of 3; dropped the routine toasts for your own accepted orders, captures, VERY LAST
+     STAND / node-falls-in-Ns / relay-switches (the status line and the node's own danger symbols already show these),
+     and battle noise (fling/fall) - kept skill casts against you, a monster launched at you, forge lost, eject, a
+     silent handover, refusals and online events; captures/losses now play as a short rising "+ CAPTURED" / "LOST" label
+     at the node instead (tier-down's "T2 -> T1" already worked this way).
 
