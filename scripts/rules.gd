@@ -756,3 +756,62 @@ static func span(modules: int) -> float:
 static func heading(d: Vector3) -> float:
 	## Kit rotation.y for a piece whose local +X should point along d (kit authored in Blender).
 	return atan2(-d.z, d.x)
+
+
+# ================================================================ PROGRESSION (Leaderboard, progression, and currency session)
+# XP / level, the two currencies, unlock prices and the challenge pools (01 Rules/PROGRESSION-DESIGN.md §9;
+# Daniele 2026-09-27: SCRAP / SYNDICATE CHIPS, a skill costs 1 250 SCRAP, small chips from weeklies and levels,
+# Surge + Demolish free, 140 SCRAP per tutorial lesson, 25 wins for a faction vat, easy AI pays XP only, resets
+# 00:00 UTC). Scripts/progression.gd applies them; nothing here changes play.
+const CURRENCY_NAMES := {"soft": "SCRAP", "premium": "SYNDICATE CHIPS"}
+const CURRENCY_SHORT := {"soft": "SCRAP", "premium": "CHIPS"}
+# Everything unlocked while testing (Daniele, 2026-09-27: "all open until lock switch"). false = the locks are live.
+# The Graduate vat stays locked until the tutorial is done either way (TUTORIAL-DESIGN §7).
+const UNLOCK_ALL_TESTING := true
+const PROGRESSION := {
+	"finish_soft": 20, "finish_xp": 100,          # any finished match (not left early; tutorial lessons excluded)
+	"win_soft": 20, "win_xp": 50,                 # on top of finishing
+	"first_win_soft": 100, "first_win_xp": 200,   # the first win of the UTC day
+	"full_pay_ai": ["Veteran", "Expert"],         # vs AI below these a match pays XP only (no SCRAP); only these AI wins
+	                                              # count toward a faction vat (online wins always count)
+	"level_base": 800, "level_step": 100,         # level n -> n + 1 needs level_base + level_step * (n - 1) XP
+	"level_soft": 100,                            # every level-up
+	"level_premium_every": 5, "level_premium": 25, # every 5th level also pays a few chips
+	"daily_count": 3, "daily_soft": 50, "daily_xp": 150,
+	"weekly_count": 3, "weekly_soft": 250, "weekly_xp": 500, "weekly_premium": 10,
+	"tutorial_lesson": 140,                       # lessons 1-9, first completion: 9 x 140 = 1 260 = a 3rd skill
+	"faction_vat_wins": 25,
+	"free_skills": ["surge", "demolish"],         # the two the tutorial teaches; every other shared skill is bought
+	"ledger_keep": 200,                           # recent wallet entries kept on the device (the PROFILE history)
+}
+# Prices by item kind ({} or a missing currency = not sold for it). Skills never for chips (no power for money).
+const PRICES := {
+	"skill": {"soft": 1250},
+	"vat_faction": {"soft": 4000, "premium": 400},
+	"vat_line": {"soft": 3000, "premium": 300},    # Bio-Pod, Crystal, Distillery, Hive, Reactor (all tiers)
+	"structure": {"soft": 1500, "premium": 150},   # a Machinegoon / Laser / Forge / Monster hub look
+	"monster_alt": {"soft": 2000, "premium": 200},
+}
+# Challenge pools. stat: what a match adds (Progression.match_stats); target: how much; "faction": true = the text's
+# %s is a faction the day's seed picks (win_as). Texts use the tutorial's standard vocabulary (TUTORIAL-SCRIPT.md).
+const CHALLENGES := {
+	"daily": [
+		{"id": "finish3", "stat": "finish", "target": 3, "text": "Finish 3 matches"},
+		{"id": "win2", "stat": "win", "target": 2, "text": "Win 2 matches"},
+		{"id": "win_as", "stat": "win_as", "target": 1, "faction": true, "text": "Win a match as %s"},
+		{"id": "capture15", "stat": "captures", "target": 15, "text": "Capture 15 nodes"},
+		{"id": "fire5", "stat": "relay_fires", "target": 5, "text": "Fire relays 5 times"},
+		{"id": "kick40", "stat": "monster_kicked", "target": 40, "text": "Kick 40 enemy units off the decks with your monster"},
+		{"id": "skills8", "stat": "skills", "target": 8, "text": "Use 8 skills"},
+		{"id": "win_relay", "stat": "win_relay_map", "target": 1, "text": "Win on a map with relays"},
+		{"id": "win_home", "stat": "win_home_kept", "target": 1, "text": "Win without losing your home"},
+	],
+	"weekly": [
+		{"id": "win10", "stat": "win", "target": 10, "text": "Win 10 matches"},
+		{"id": "capture80", "stat": "captures", "target": 80, "text": "Capture 80 nodes"},
+		{"id": "fire30", "stat": "relay_fires", "target": 30, "text": "Fire relays 30 times"},
+		{"id": "kick250", "stat": "monster_kicked", "target": 250, "text": "Kick 250 enemy units off the decks with your monster"},
+		{"id": "factions3", "stat": "win_factions", "target": 3, "text": "Win with 3 different factions"},
+		{"id": "win_home5", "stat": "win_home_kept", "target": 5, "text": "Win 5 matches without losing your home"},
+	],
+}
