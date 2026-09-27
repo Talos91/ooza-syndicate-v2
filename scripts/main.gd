@@ -84,6 +84,7 @@ var demo := false
 var ai_level := "Standard"
 var seed_value := -1
 var paused := false
+var show_out_panel := true                        # 0.19.2 spec H7: the tutorial sets this false in lessons
 var scenario := ""
 var scenario_focus := Vector3.INF
 var scenario_zoom := 30.0
@@ -254,12 +255,13 @@ func _start_map(path: String) -> void:
 	if not HUMAN in seats.values() and not online:     # FFA maps may seat A elsewhere; A is always you
 		var first: int = seats.keys()[0]
 		seats[first] = HUMAN
-	if not online:                                     # online: every seat's faction comes from the room
-		var pool := FACTION_NAMES.filter(func(f): return f != SEAT_FACTIONS[HUMAN] and f != SEAT_FACTIONS["B"])
-		pool.shuffle()
-		for seat in ["C", "D", "E", "F"]:             # extra AI seats get the factions not yet taken
-			if not pool.is_empty():
-				SEAT_FACTIONS[seat] = pool.pop_front()
+	# 0.19.2 spec H3: every seat's faction is resolved the one canonical way (Sim.resolve_factions) -
+	# a concrete pick (yours, an online room's, a menu rival pick) stays; "random" (menu picks, AI-filled
+	# online seats) is drawn from the seed, so every client resolves it the same way. The seed is pinned
+	# to a concrete value first (sim.setup() would otherwise roll a different one for the same purpose).
+	if seed_value < 0:
+		seed_value = int(Time.get_unix_time_from_system()) % 100000
+	SEAT_FACTIONS = Sim.resolve_factions(SEAT_FACTIONS, seats.values(), seed_value)
 	if online and Net.match_info.get("colours") is Dictionary:   # a room: the host's seat colours, the same on every screen
 		Rules.use_colours(Net.match_info["colours"])
 	else:
@@ -369,15 +371,18 @@ func _start_map(path: String) -> void:
 		hud.toast(hud.dock.start_note(), "info")
 
 
-func start_match(path: String, faction: String, rival_faction: String, level: String, match_mode := "1v1", colour := "A", loadout := {}) -> void:
-	## Entry from the front menu (Menu.deploy): your faction (seat A), the rival's (seat B), the AI
-	## level, the map, the mode (1v1 / 2v2 / FFA3-5), your colour and your skill loadout
-	## ({"active": id, "map": id}; empty = your faction's default).
+func start_match(path: String, faction: String, seat_factions: Dictionary, level: String, match_mode := "1v1", colour := "A", loadout := {}) -> void:
+	## Entry from the front menu (Menu.deploy): your faction (seat A), every enemy seat's pick (0.19.2
+	## spec H3: Menu._seat_faction_picks - one rival-faction picker per seat, a faction id or "random";
+	## _start_map() resolves "random" through Sim.resolve_factions, the same way Sim.setup() would), the
+	## AI level, the map, the mode (1v1 / 2v2 / FFA3-5), your colour and your skill loadout ({"active":
+	## id, "map": id}; empty = the default).
 	mode = match_mode
 	LOADOUTS = {HUMAN: loadout} if not loadout.is_empty() else {}
 	color_choice = colour
 	SEAT_FACTIONS[HUMAN] = faction
-	SEAT_FACTIONS["B"] = rival_faction
+	for seat in seat_factions:
+		SEAT_FACTIONS[seat] = str(seat_factions[seat])
 	ai_level = level
 	if menu_layer:
 		menu_layer.queue_free()

@@ -66,8 +66,14 @@ func _draw() -> void:
 		_draw_halos(cam)
 	if hud.shows("relay"):
 		_draw_relay_cues(cam)
-	if main.monster_from >= 0 and hud.shows("monster"):
-		_draw_monster_reach(cam, main.monster_from)
+	if hud.shows("monster"):
+		var reach_hub: int = main.monster_from
+		if reach_hub < 0 and hud.inspector_id >= 0:            # 0.19.2 spec H1: also while the hub is selected
+			var isel: Dictionary = sim.nodes[hud.inspector_id]
+			if isel["owner"] == human and isel["structure"] == "monster_hub":
+				reach_hub = hud.inspector_id
+		if reach_hub >= 0:
+			_draw_monster_reach(cam, reach_hub)
 	if hud.shows("relay"):
 		for id in _relay_preview_nodes():
 			_draw_relay_preview(cam, id)

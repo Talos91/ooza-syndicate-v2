@@ -25,9 +25,10 @@ var mobile := false
 var human := "A"
 var root: Control
 var top_panel: PanelContainer
-var stats_label: Label
-var strength_bar: HBoxContainer
-var score_sections := {}
+var stats_label: Label                 # 0.19.2 spec H6: the clock, centred in the new top bar
+var top_left: HBoxContainer            # your side (you first, then teammates)
+var top_right: HBoxContainer           # every other team, grouped with a wider gap between groups
+var top_chips := {}                    # seat -> {panel, emblem, label}
 var pause_button: Button
 var side_panel: PanelContainer
 var side_box: VBoxContainer
@@ -55,6 +56,10 @@ var action_buttons: Dictionary = {}    # stable action name -> the inspector's B
 var switch_ring: Control                # 0.19.0: the SWITCH button's READY / cooldown ring (SwitchRing)
 var end_panel: PanelContainer
 var pause_panel: PanelContainer
+var out_panel: PanelContainer          # 0.19.2 spec H7: "YOU'RE OUT" - SPECTATE / MAIN MENU (online: LEAVE ROOM)
+var spectate_button: Button             # stays after SPECTATE: a small way back to the menu while watching
+var _out_shown := false                 # this match's panel has already been offered once
+var monster_icon: MonsterIcon           # 0.19.2 spec H1: floats above your ready hub; tap to arm LAUNCH
 var rotate_hint: Label
 var debug_button: Button
 var chat_button: Button
@@ -101,6 +106,13 @@ const BADGE_SIZE := Vector2(44, 33)
 const BADGE_COUNT_FONT := 16
 const BADGE_SUB_FONT := 9
 const BADGE_PAD := 3.0                         # side margin inside the box
+# 0.19.2 spec H6: the top bar's fixed sizes (fits 844 x 390 pt with up to 6 seats: 1 (you) + 5 rivals,
+# ~64 px a chip, well under half of 844 either side of the clock)
+const TOP_CHIP_W := 58.0
+const TOP_CHIP_H := 32.0
+const TOP_CHIP_GAP := 6.0
+const TOP_CLOCK_W := 78.0
+const TOP_EMBLEM := Vector2(16, 16)
 
 
 static func tint_emblem(rect: TextureRect, color: Color) -> void:
@@ -200,6 +212,57 @@ func style_panel(p: Control, accent: Color = Color("276578")) -> void:
 	p.add_theme_stylebox_override("panel", panel_style(accent))
 
 
+func _seat_groups() -> Array:
+	## [[you, your teammates...], [a rival team/seat], ...] (0.19.2 spec H6: "team modes group chips by
+	## team"; FFA - no sim.teams entries - puts every rival in its own singleton group).
+	var has_teams: bool = sim.teams.has(human)
+	var mine: int = int(sim.teams.get(human, -999))
+	var my_group := [human]
+	var others := {}
+	var order := []
+	for seat in sim.factions.keys():
+		if seat == human:
+			continue
+		if has_teams and int(sim.teams.get(seat, -998)) == mine:
+			my_group.append(seat)
+		else:
+			var key = sim.teams[seat] if sim.teams.has(seat) else seat
+			if not others.has(key):
+				others[key] = []
+				order.append(key)
+			others[key].append(seat)
+	var groups := [my_group]
+	for k in order:
+		groups.append(others[k])
+	return groups
+
+
+func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
+	var chip := PanelContainer.new()
+	chip.custom_minimum_size = Vector2(TOP_CHIP_W, TOP_CHIP_H) * ui_scale
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.05, 0.07, 0.09, 0.8 if mine else 0.62)
+	st.border_color = Rules.seat_color(seat)
+	st.set_border_width_all(int((2 if mine else 1) * ui_scale))
+	st.set_corner_radius_all(int(8 * ui_scale))
+	st.set_content_margin_all(2 * ui_scale)
+	chip.add_theme_stylebox_override("panel", st)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", int(4 * ui_scale))
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_child(row)
+	var emb := seat_emblem(seat, TOP_EMBLEM)
+	row.add_child(emb)
+	var lbl := text_label("000", 15)
+	lbl.add_theme_font_override("font", SYMBOL_FONT)      # monospace: the digits never shift the chip
+	lbl.custom_minimum_size = Vector2(28 * ui_scale, 0)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	row.add_child(lbl)
+	into.add_child(chip)
+	top_chips[seat] = {"panel": chip, "emblem": emb, "label": lbl}
+
+
 # ------------------------------------------------------------------ build
 func setup(m: Node3D) -> void:
 	var ui_font: FontFile = UI_FONT                        # shared resource: every HUD label gets the fallback
@@ -264,36 +327,40 @@ func setup(m: Node3D) -> void:
 	overlay = HudOverlay.new()
 	root.add_child(overlay)
 	overlay.setup(main, sim, self, human, ui_scale)
-	# top bar: emblem, your total, timer, rivals, strength bar (Alpha 11's score header)
+	# top bar (0.19.2 spec H6, Daniele: "not fixed, keeps moving ... should be centred ... for
+	# multiplayer you'd want to see what each player is doing, rethink it"): a fixed-width bar centred
+	# at the top - the clock in the middle (monospace, so it never shifts), one chip per seat either
+	# side (faction emblem in the seat colour + strength, also monospace), your own chip first and
+	# highlighted, team modes grouped with a wider gap between groups. TUTORIAL: "topbar" gates the
+	# whole bar, "strength" the chips alone (clock-only in the early lessons, as before).
 	top_panel = PanelContainer.new()
 	style_panel(top_panel, accent)
 	root.add_child(top_panel)
-	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override("separation", 4)
-	top_panel.add_child(stack)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 18)
-	stack.add_child(row)
-	var icon := TextureRect.new()
-	icon.texture = load("res://assets/ui/%s.svg" % main.SEAT_FACTIONS[human])
-	tint_emblem(icon, Rules.seat_color(human))           # your emblem in your colour
-	icon.custom_minimum_size = Vector2(34, 34) * ui_scale
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	row.add_child(icon)
-	stats_label = text_label("", 22)
-	row.add_child(stats_label)
-	strength_bar = HBoxContainer.new()
-	strength_bar.add_theme_constant_override("separation", 2)
-	strength_bar.custom_minimum_size.y = 8 * ui_scale
-	stack.add_child(strength_bar)
-	for seat in sim.factions.keys():
-		var segment := ColorRect.new()
-		segment.color = Rules.seat_color(seat)
-		segment.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		segment.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		strength_bar.add_child(segment)
-		score_sections[seat] = segment
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", int(10 * ui_scale))
+	top_panel.add_child(bar)
+	top_left = HBoxContainer.new()
+	top_left.add_theme_constant_override("separation", int(TOP_CHIP_GAP * ui_scale))
+	bar.add_child(top_left)
+	stats_label = text_label("00:00", 22)
+	stats_label.add_theme_font_override("font", SYMBOL_FONT)   # monospace digits: the clock never shifts
+	stats_label.custom_minimum_size = Vector2(TOP_CLOCK_W * ui_scale, 0)
+	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bar.add_child(stats_label)
+	top_right = HBoxContainer.new()
+	top_right.add_theme_constant_override("separation", int(TOP_CHIP_GAP * ui_scale))
+	bar.add_child(top_right)
+	var groups := _seat_groups()
+	for gi in range(groups.size()):
+		var g: Array = groups[gi]
+		var into := top_left if gi == 0 else top_right
+		if gi > 1:
+			var spacer := Control.new()                    # a wider gap between rival team groups
+			spacer.custom_minimum_size = Vector2(10 * ui_scale, 1)
+			spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			top_right.add_child(spacer)
+		for seat in g:
+			_build_top_chip(seat, into, seat == human)
 	status_label = text_label("", 18, Color("ffb0b0"))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(status_label)
@@ -377,19 +444,35 @@ func setup(m: Node3D) -> void:
 	pause_panel.visible = false
 	style_panel(pause_panel, accent)
 	root.add_child(pause_panel)
+	out_panel = PanelContainer.new()
+	out_panel.visible = false
+	style_panel(out_panel, Rules.state_color("warn"))
+	root.add_child(out_panel)
+	spectate_button = button("LEAVE ROOM" if main.online else "MAIN MENU", main.to_menu, 170, 48, 16)
+	spectate_button.visible = false
+	root.add_child(spectate_button)
+	monster_icon = MonsterIcon.new()
+	monster_icon.custom_minimum_size = Vector2(40, 40) * ui_scale
+	monster_icon.size = monster_icon.custom_minimum_size
+	monster_icon.ui_scale = ui_scale
+	monster_icon.visible = false
+	monster_icon.pressed.connect(func():
+		var hub := _human_hub_id()
+		main.monster_from = -1 if main.monster_from == hub else hub)
+	root.add_child(monster_icon)
 
 
 func _hint_text() -> String:
-	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: switch)" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
+	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: switch)  ·  Tap the hub icon to launch a monster" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
 
 
 func layout(vp: Vector2, m: Vector4) -> void:
 	margins = m
 	top_panel.size = top_panel.get_combined_minimum_size()
-	top_panel.position = Vector2(m.x, m.y)
-	status_label.size = Vector2(top_panel.size.x, 30)
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	status_label.position = Vector2(m.x + 4, m.y + top_panel.size.y + 2)
+	top_panel.position = Vector2((vp.x - top_panel.size.x) / 2.0, m.y)   # 0.19.2 spec H6: centred, not left-hung
+	status_label.size = Vector2(maxf(top_panel.size.x, 260 * ui_scale), 30)
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	status_label.position = Vector2((vp.x - status_label.size.x) / 2.0, m.y + top_panel.size.y + 2)
 	pause_button.size = pause_button.custom_minimum_size
 	pause_button.position = Vector2(vp.x - m.z - pause_button.size.x, m.y)
 	side_panel.size = side_panel.get_combined_minimum_size()
@@ -421,9 +504,11 @@ func layout(vp: Vector2, m: Vector4) -> void:
 		chat_button.position = Vector2(vp.x - m.z - chat_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # Debug's slot (hidden online)
 	rotate_hint.size = vp
 	rotate_hint.visible = vp.y > vp.x
-	for p in [end_panel, pause_panel]:
+	for p in [end_panel, pause_panel, out_panel]:
 		p.size = p.get_combined_minimum_size()
 		p.position = (vp - p.size) / 2.0
+	spectate_button.size = spectate_button.custom_minimum_size
+	spectate_button.position = Vector2(m.x, vp.y - m.w - spectate_button.size.y - 8.0)
 
 
 func side_panel_width() -> float:
@@ -442,7 +527,7 @@ func bottom_used() -> float:
 
 
 func pointer_over_ui(p: Vector2) -> bool:
-	for c in [top_panel, pause_button, side_panel, dock, debug_button, chat_button]:
+	for c in [top_panel, pause_button, side_panel, dock, debug_button, chat_button, monster_icon, spectate_button]:
 		if c and c.visible and c.get_global_rect().has_point(p):
 			return true
 	if debug_panel and debug_panel.visible and debug_panel.get_global_rect().has_point(p):
@@ -456,7 +541,7 @@ func pointer_over_ui(p: Vector2) -> bool:
 				return true
 		if inspector.has_meta("close") and (inspector.get_meta("close") as Button).get_global_rect().has_point(p):
 			return true
-	return end_panel.visible or pause_panel.visible
+	return end_panel.visible or pause_panel.visible or out_panel.visible
 
 
 func badge_at(p: Vector2) -> int:
@@ -489,23 +574,19 @@ func sync(dt: float, cam: Camera3D) -> void:
 			_chat_poll = 0.5
 			var n := Net.chat_unread()
 			chat_button.text = "Chat (%d)" % n if n > 0 else "Chat"
-	var strength := {}                                # one walk per seat per frame
-	for seat in sim.factions.keys():
-		strength[seat] = sim.seat_strength(seat)
-	var total: float = strength[human] if strength.has(human) else sim.seat_strength(human)
-	var rivals := 0.0
-	for seat in sim.factions.keys():
-		if not sim.allied(seat, human):
-			rivals += strength[seat]
-	if shows("strength"):
-		stats_label.text = "%s  %03d    %02d:%02d    RIVALS  %03d" % [str(main.SEAT_FACTIONS[human]).to_upper(), Rules.shown(total),
-				int(sim.time) / 60, int(sim.time) % 60, Rules.shown(rivals)]
-	else:                                             # TUTORIAL L1-L2: your emblem and the clock only (§6)
-		stats_label.text = "%02d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
-	for seat in score_sections:
-		var count: float = strength[seat]
-		score_sections[seat].visible = count > 0.0
-		score_sections[seat].size_flags_stretch_ratio = maxf(1.0, count)
+	# 0.19.2 spec H6: the clock, centred, never shifts; a chip per seat either side, eliminated seats
+	# greyed. "topbar" gates the whole bar, "strength" the chips alone (clock-only in early lessons).
+	top_panel.visible = shows("topbar")
+	stats_label.text = "%02d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
+	var show_chips := shows("strength")
+	top_left.visible = show_chips
+	top_right.visible = show_chips
+	if show_chips:
+		for seat in top_chips:
+			var c: Dictionary = top_chips[seat]
+			var out := _seat_out(seat)
+			(c["label"] as Label).text = "%03d" % Rules.shown(sim.seat_strength(seat))
+			(c["panel"] as Control).modulate = Color(1, 1, 1, 0.4) if out else Color.WHITE
 	if not shows("status_line"):
 		status_label.text = ""
 	elif sim.very_last_stand_active:
@@ -535,6 +616,8 @@ func sync(dt: float, cam: Camera3D) -> void:
 		count_label.text = "DRAG A VAT"
 	_badges(cam)
 	overlay.sync(dt)
+	_sync_monster_icon(cam)
+	_check_out()
 	if dock.visible:
 		dock.sync(dt)
 	_refresh_inspector(cam)
@@ -795,6 +878,36 @@ const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: 
                                          # buttons / models of the relays") - distinct from the seat colour
 
 
+class MonsterIcon:
+	## Floats above your Monster hub once it's ready (0.19.2 spec H1, Daniele: "sending of monster is not
+	## clear"): a pulsing disc with a simple "send" chevron. Tap arms LAUNCH (main.monster_from) exactly
+	## like the inspector's LAUNCH button - tap again (or elsewhere) cancels.
+	extends Button
+	var accent := Color.WHITE
+	var ui_scale := 1.0
+	var t := 0.0
+
+	func _init() -> void:
+		flat = true
+		text = ""
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var empty := StyleBoxEmpty.new()
+		for st in ["normal", "hover", "pressed", "focus", "disabled"]:
+			add_theme_stylebox_override(st, empty)
+
+	func _draw() -> void:
+		var s := ui_scale
+		var c: Vector2 = size / 2.0
+		var r: float = minf(size.x, size.y) / 2.0 - 3.0 * s
+		var pulse := 0.55 + 0.45 * sin(t * 4.0)
+		draw_circle(c, r + 6.0 * s, Color(accent, 0.22 * pulse))
+		draw_circle(c, r, Color(0.05, 0.07, 0.09, 0.92))
+		draw_arc(c, r, 0.0, TAU, 32, Color(accent, 0.95), 2.5 * s, true)
+		var h := r * 0.85
+		var pts := PackedVector2Array([c + Vector2(0, -h * 0.6), c + Vector2(-h * 0.55, h * 0.35), c + Vector2(h * 0.55, h * 0.35)])
+		draw_colored_polygon(pts, Color.WHITE)
+
+
 class SwitchRing:
 	## A READY / cooldown ring drawn over the SWITCH button (a child Control, full rect, clicks pass
 	## through): the relay's own accent while ready or counting down, red while its 1 s warning runs.
@@ -957,12 +1070,22 @@ func reveal_all() -> void:
 
 func _apply_reveal() -> void:
 	side_panel.visible = shows("send_panel")
-	strength_bar.visible = shows("strength")
+	top_panel.visible = shows("topbar")
+	top_left.visible = shows("strength")
+	top_right.visible = shows("strength")
 	dock.visible = sim.abilities_on and shows("dock")
 	hint.visible = not mobile and not gated
 	notices.visible = shows("notices")
 	if is_instance_valid(inspector) and inspector_id >= 0:
 		inspect(inspector_id, main.cam)
+
+
+func _seat_out(seat: String) -> bool:
+	## Sim.is_out(seat) once the SIM agent adds it (spec S5/H7: no nodes and no lines left); the
+	## eliminated set is the safe fallback until then.
+	if sim.has_method("is_out"):
+		return sim.is_out(seat)
+	return bool(sim.eliminated.get(seat, false))
 
 
 func _monster_ready(n: Dictionary) -> String:
@@ -977,6 +1100,57 @@ func _monster_ready(n: Dictionary) -> String:
 	if n["units"] < Rules.MONSTER_COST:
 		return "A monster needs %d units (%d here)" % [Rules.shown(Rules.MONSTER_COST), Rules.shown(n["units"])]
 	return ""
+
+
+func _human_hub_id() -> int:
+	## The node id of your Monster hub (Structures 2.1: one per player), -1 if you have none.
+	for n in sim.nodes:
+		if n["owner"] == human and n["structure"] == "monster_hub" and not sim.collapsed.get(n["id"], false):
+			return n["id"]
+	return -1
+
+
+func monster_icon_rect(hub_id: int) -> Rect2:
+	## Stable rect getter for the tutorial's spotlight (0.19.2 spec H1): valid only while the icon is
+	## actually showing for this hub (it is your ready hub, on screen, "monster_icon" revealed).
+	if monster_icon.visible and _human_hub_id() == hub_id:
+		return monster_icon.get_global_rect()
+	return Rect2()
+
+
+func _sync_monster_icon(cam: Camera3D) -> void:
+	var hub := _human_hub_id()
+	var ready := hub >= 0 and _monster_ready(sim.nodes[hub]) == "" and shows("monster_icon")
+	monster_icon.visible = ready
+	if not ready:
+		return
+	var n: Dictionary = sim.nodes[hub]
+	var p := cam.unproject_position((n["pos"] as Vector3) + Vector3(0, 5.5, 0))
+	monster_icon.position = p - monster_icon.size / 2.0
+	monster_icon.accent = Rules.seat_color(human)
+	monster_icon.t += 0.016
+	monster_icon.queue_redraw()
+
+
+# ------------------------------------------------------------------ 0.19.2 spec H7: YOU'RE OUT
+func _check_out() -> void:
+	if _out_shown or not main.get("show_out_panel"):
+		return
+	if _seat_out(human):
+		_out_shown = true
+		show_out_panel()
+
+
+func show_out_panel() -> void:
+	if not shows("out_panel"):
+		return
+	_fill_overlay(out_panel, "YOU'RE OUT", "Every node and line you had is gone - you can keep watching, or leave.",
+			[["SPECTATE", func():
+				out_panel.visible = false
+				spectate_button.visible = true],
+			["LEAVE ROOM" if main.online else "MAIN MENU", main.to_menu]])
+	out_panel.visible = true
+	layout(root.get_viewport_rect().size, margins)
 
 
 func _refresh_inspector(cam: Camera3D) -> void:
