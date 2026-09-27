@@ -453,6 +453,13 @@ func show_main() -> void:
 	y += h4 + 16.0
 	label_at("%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], P(66, y), 19, Color("839da9"))
 	_profile_card(P(1282, 36))                        # PROGRESSION: level, SCRAP, CHIPS -> PROFILE; CHALLENGES
+	# 0.20.11 (Daniele: "on the main screen a guide on how to add to home screen so new users can figure
+	# it" - chat and keyboards only work installed): bottom right, clear of the profile card above and
+	# the left column; web + phone browsers only, hidden once installed or dismissed.
+	if _install_available():
+		_install_button(P(1270, foot_y(56.0)))
+	if _install_guide_open:
+		_install_guide_panel()
 
 
 func show_options() -> void:
@@ -980,6 +987,125 @@ func _poll_name() -> void:
 		_account_note = a.last_error
 	if _page == "account":
 		show_account()
+
+
+# 0.20.11: "on the main screen a guide on how to [add to home screen] so new users can figure it" (Daniele -
+# chat and keyboards work properly only in the installed home-screen app). Web build only; the small JS
+# interface below detects display-mode: standalone / navigator.standalone, the platform from the user
+# agent, and captures `beforeinstallprompt` so Android Chrome can install directly instead of a menu hunt.
+const INSTALL_JS := """(()=>{if(window.OozeInstall)return;
+function standalone(){try{return window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}}
+function platform(){const ua=navigator.userAgent||'';if(/iPad|iPhone|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))return'ios';if(/Android/.test(ua))return'android';return'desktop'}
+let deferred=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e});
+let hidden=false;try{hidden=localStorage.getItem('ooze20-hide-install')==='1'}catch(e){}
+window.OozeInstall={standalone:()=>standalone(),platform:()=>platform(),canPrompt:()=>deferred!==null,
+hidden:()=>hidden,hide:()=>{hidden=true;try{localStorage.setItem('ooze20-hide-install','1')}catch(e){}},
+install:()=>{if(!deferred)return false;deferred.prompt();deferred=null;return true}};})()"""
+
+
+func _install_ui():
+	## null off the web build, or wherever JavaScriptBridge itself is missing (native builds).
+	if not OS.has_feature("web") or not Engine.has_singleton("JavaScriptBridge"):
+		return null
+	JavaScriptBridge.eval(INSTALL_JS, true)
+	return JavaScriptBridge.get_interface("OozeInstall")
+
+
+var _install_guide_open := false
+var _install_platform := ""                          # cached when the guide opens: "ios" | "android"
+
+
+func _install_available() -> bool:
+	## MAIN only: web build, phone browsers only (hidden on desktop), not already installed, not dismissed.
+	var ui = _install_ui()
+	if ui == null or bool(ui.standalone()) or bool(ui.hidden()):
+		return false
+	return str(ui.platform()) in ["ios", "android"]
+
+
+func _install_button(pos: Vector2) -> void:
+	var b := nav_button("INSTALL THE GAME", pos, P(380, 56), func():
+		var ui = _install_ui()
+		_install_platform = str(ui.platform()) if ui != null else "android"
+		_install_guide_open = true
+		show_main())
+	b.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
+
+
+func _share_glyph(pos: Vector2, size_value: float) -> Control:
+	## A small share-icon glyph for the iOS steps (Safari's Share button): a bordered box with an upward
+	## arrow - no new art asset, just the UI font's arrow glyph over a thin outline square.
+	var box := PanelContainer.new()
+	box.position = pos
+	box.custom_minimum_size = Vector2(size_value, size_value)
+	box.size = Vector2(size_value, size_value)
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0, 0, 0, 0)
+	st.border_width_left = 2
+	st.border_width_right = 2
+	st.border_width_top = 2
+	st.border_width_bottom = 2
+	st.border_color = Color("e6f4f8")
+	st.corner_radius_top_left = 4
+	st.corner_radius_top_right = 4
+	st.corner_radius_bottom_left = 4
+	st.corner_radius_bottom_right = 4
+	box.add_theme_stylebox_override("panel", st)
+	var l := Label.new()
+	l.text = "↑"
+	l.add_theme_font_override("font", UI_FONT)
+	l.add_theme_font_size_override("font_size", int(size_value * 0.7))
+	l.add_theme_color_override("font_color", Color("e6f4f8"))
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.add_child(l)
+	content.add_child(box)
+	return box
+
+
+func _install_guide_panel() -> void:
+	## MAIN's overlay (drawn last, so it sits on top): the right steps for this platform first, an
+	## "INSTALL NOW" direct prompt where Chrome offered one (beforeinstallprompt), and "don't show again"
+	## (localStorage, wrapped in try/catch on the JS side).
+	var ui = _install_ui()
+	if ui == null:                                    # shouldn't happen (the button that opens this needs it)
+		_install_guide_open = false
+		return
+	var pos := P(490, 210)
+	var dims := P(700, 420)
+	content.add_child(neon_panel(pos, dims, Color("18dae8"), true, Color("030c12f0")))
+	label_at("INSTALL THE GAME", pos + P(28, 20), 30, Color.WHITE, false)
+	_wrapped("Chat and the keyboard work properly only in the installed app.", pos + P(28, 58), 17, Color("839da9"), dims.x - 56.0)
+	var ios := _install_platform == "ios"
+	var y := 104.0
+	if ios:
+		_share_glyph(pos + P(28, y), 40.0)
+		_wrapped("1. In Safari's toolbar, tap the Share icon (a square with an arrow).", pos + P(84, y + 6.0), 19, Color("e6f4f8"), dims.x - 112.0)
+		y += 66.0
+		_wrapped("2. Scroll down and tap \"Add to Home Screen\".", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+		y += 46.0
+		_wrapped("3. Tap \"Add\" - the game then opens full-screen from your Home Screen.", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+	else:
+		_wrapped("1. Open Chrome's menu (the ⋮  in the top right).", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+		y += 46.0
+		_wrapped("2. Tap \"Add to Home screen\" or \"Install app\".", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+		y += 46.0
+		_wrapped("3. Confirm \"Install\" / \"Add\".", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+		y += 54.0
+		if bool(ui.canPrompt()):
+			nav_button("INSTALL NOW", pos + P(28, y), P(260, 58), func():
+				_install_ui().install()
+				_install_guide_open = false
+				show_main(), true)
+	nav_button("DON'T SHOW AGAIN", pos + P(28, dims.y - 78.0), P(300, 52), func():
+		_install_ui().hide()
+		_install_guide_open = false
+		show_main())
+	nav_button("CLOSE", pos + P(dims.x - 200.0, dims.y - 78.0), P(172, 52), func():
+		_install_guide_open = false
+		show_main())
 
 
 func show_leaderboard() -> void:
