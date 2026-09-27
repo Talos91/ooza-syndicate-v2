@@ -55,6 +55,19 @@ static var _goo_lite: Shader = null
 var main: Node3D
 var _batched := false
 var _applied_3d := false
+# per-match frame stats (Alpha 21, for Progression's telemetry `perf` event): sampled only while the match plays
+const STATS_SKIP := 1.0                 # s after the match starts left out (the batching / first-frame hitch)
+const LONG_FRAME_MS := 50.0             # a frame slower than this counts as a long frame (under 20 fps)
+const STATS_CAP := 60000                # samples kept (~16 min at 60 fps); later frames only feed max / long / fps
+var _frame_ms := PackedFloat32Array()
+var _draw_calls := PackedInt32Array()
+var _play_time := 0.0                   # s of play seen (including the skipped start)
+var _frames := 0
+var _ms_max := 0.0
+var _long := 0
+var _win_t := 0.0                       # the current 1 s window for fps_min
+var _win_n := 0
+var _fps_min := -1.0
 
 
 # ------------------------------------------------------------------ the settings
@@ -202,6 +215,58 @@ static func _apply_static() -> void:
 		_forced_low_detail = false
 
 
+static func match_stats() -> Dictionary:
+	## This match's frame stats so far ({} before any play or on a room server): frame time p50 / p95 / max (ms),
+	## fps average and the worst 1 s window, draw calls p95, the count of long frames (> LONG_FRAME_MS), the
+	## frames and seconds sampled and the GRAPHICS level. Only time spent playing counts (not menus, pauses or
+	## the result screen). Progression's telemetry reads it once per match.
+	if _live == null or _live._frames == 0:
+		return {}
+	return _live._stats()
+
+
+func _stats() -> Dictionary:
+	var ms := _frame_ms.duplicate()
+	ms.sort()
+	var dc := _draw_calls.duplicate()
+	dc.sort()
+	var sampled := 0.0
+	for v in _frame_ms:
+		sampled += v
+	return {"frame_ms_p50": _pct(ms, 0.5), "frame_ms_p95": _pct(ms, 0.95), "frame_ms_max": snappedf(_ms_max, 0.1),
+			"fps_avg": snappedf(ms.size() * 1000.0 / maxf(sampled, 1.0), 0.1),
+			"fps_min": snappedf(_fps_min if _fps_min >= 0.0 else ms.size() * 1000.0 / maxf(sampled, 1.0), 0.1),
+			"draw_calls_p95": int(_pct(dc, 0.95)), "long_frames": _long, "frames": _frames,
+			"seconds": snappedf(maxf(0.0, _play_time - STATS_SKIP), 0.1), "level": level()}
+
+
+static func _pct(sorted: Variant, q: float) -> float:
+	if sorted.size() == 0:
+		return 0.0
+	return snappedf(float(sorted[clampi(int(ceil(q * sorted.size())) - 1, 0, sorted.size() - 1)]), 0.1)
+
+
+func _sample(dt: float) -> void:
+	_play_time += dt
+	if _play_time < STATS_SKIP:
+		return
+	var ms := dt * 1000.0
+	_frames += 1
+	_ms_max = maxf(_ms_max, ms)
+	if ms > LONG_FRAME_MS:
+		_long += 1
+	if _frame_ms.size() < STATS_CAP:
+		_frame_ms.append(ms)
+		_draw_calls.append(int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)))
+	_win_t += dt
+	_win_n += 1
+	if _win_t >= 1.0:
+		var f := _win_n / _win_t
+		_fps_min = f if _fps_min < 0.0 else minf(_fps_min, f)
+		_win_t = 0.0
+		_win_n = 0
+
+
 # ------------------------------------------------------------------ main's hook
 static func apply(m: Node3D) -> void:
 	## main.gd, top of _ready (one marked line). A dedicated room server renders nothing: left alone.
@@ -240,7 +305,7 @@ func _cap_particles(n: Node) -> void:
 	p.amount = maxi(1, roundi(p.amount * float(PROFILES[level()]["particles"])))
 
 
-func _process(_dt: float) -> void:
+func _process(dt: float) -> void:
 	var started := bool(main.get("started"))
 	var p: Dictionary = PROFILES[level()]
 	if started and not _batched and main.get("vis") is Dictionary and main.get("sim") != null:
@@ -256,6 +321,8 @@ func _process(_dt: float) -> void:
 	var cap: int = mini(int(p["idle_fps"]), play) if idle else play
 	if Engine.max_fps != cap:
 		Engine.max_fps = cap
+	if not idle:
+		_sample(dt)
 
 
 func _apply_3d(p: Dictionary) -> void:
