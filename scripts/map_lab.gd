@@ -39,6 +39,27 @@ static func on() -> bool:
 	return ON
 
 
+static func web_fullscreen() -> bool:
+	if not OS.has_feature("web"):
+		return DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	return JavaScriptBridge.eval("!!(document.fullscreenElement || document.webkitFullscreenElement)", true) == true
+
+
+static func toggle_fullscreen() -> void:
+	## Fullscreen from a Godot button: the tap's user activation is still live when Godot handles it a frame
+	## later (Chrome / Android), so the browser grants requestFullscreen; the phone then locks landscape.
+	if not OS.has_feature("web"):
+		var full := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if full else DisplayServer.WINDOW_MODE_FULLSCREEN)
+		return
+	JavaScriptBridge.eval("""(() => { const d = document, el = d.documentElement;
+		if (d.fullscreenElement || d.webkitFullscreenElement) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); return; }
+		const req = el.requestFullscreen || el.webkitRequestFullscreen; if (!req) return;
+		const p = req.call(el, {navigationUI: 'hide'});
+		const lock = () => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} };
+		if (p && p.then) p.then(lock, () => {}); else lock(); })()""", true)
+
+
 static func entry_for(code: String) -> Dictionary:
 	if entries.is_empty() and FileAccess.file_exists(DIR + "/index.json"):
 		var j = JSON.parse_string(FileAccess.get_file_as_string(DIR + "/index.json"))
@@ -149,6 +170,7 @@ func _build_ui() -> void:
 	var title := _label("OOZE MAP LAB", 40, ACCENT)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
+	head.add_child(_button("FULLSCREEN", MapLab.toggle_fullscreen, 210))
 	head.add_child(_button("RELOAD", _reload, 150))
 	status = _label("", 22, Color(0.6, 0.7, 0.78))
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

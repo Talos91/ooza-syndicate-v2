@@ -1409,6 +1409,10 @@ func pause_menu() -> void:
 				Rules.last_stand = not Rules.last_stand
 				pause_menu()],
 			_territory_action(),
+			["FULLSCREEN: %s" % ("ON" if MapLab.web_fullscreen() else "OFF"), func():   # MAP LAB
+				MapLab.toggle_fullscreen()
+				pause_panel.visible = false
+				main.paused = false],
 			["RESTART", main.restart], ["MAIN MENU", main.to_menu]])
 	pause_panel.visible = true
 	layout(root.get_viewport_rect().size, margins)
