@@ -33,8 +33,10 @@ func _init() -> void:
 	ArmyPresets.load_all()
 	Rules.abilities_on = true
 	Rules.last_stand = true
+	test_lines()
 	test_reveal()
 	test_progress()
+	test_l0()
 	test_l1()
 	test_l2()
 	test_l3()
@@ -42,8 +44,7 @@ func _init() -> void:
 	test_l5()
 	test_l6()
 	test_l7()
-	for f in ["null", "vex", "bloom", "ember", "solar"]:
-		test_l8(f)
+	test_l8()
 	test_l9()
 	_wipe()
 	print("\n%s: %d failure(s)" % ["OK" if failures == 0 else "FAILED", failures])
@@ -57,18 +58,18 @@ func _wipe() -> void:
 
 
 # ------------------------------------------------------------------ harness
-func make(id: int, faction := "null") -> Array:
-	## [director, sim]: the lesson's map, seats and loadout exactly as main.start_tutorial builds them.
+func make(id: int) -> Array:
+	## [director, sim]: the lesson's map, seats and loadout exactly as main.start_tutorial builds them (VEX, EMBER).
 	var d := TutorialDirector.new(id)
 	var map := MapBuilder.load_map(TutorialDirector.map_path_for(id))
 	var seats := {}
 	for s in map["seats"]["1v1"]:
 		seats[int(s["node"])] = s["seat"]
-	var lo := d.loadout_for(faction, ArmyPresets.loadout_for(faction))
 	var sim := Sim.new()
-	sim.setup(map, MapBuilder.layout(map), seats, {"A": faction, "B": "ember"}, 7, {}, {"A": lo})
+	sim.setup(map, MapBuilder.layout(map), seats, {"A": TutorialDirector.PLAYER_FACTION, "B": TutorialDirector.RIVAL_FACTION},
+			7, {}, {"A": d.loadout_for()})
 	d.ui_fraction = d.fraction_start(0.5)
-	d.begin(sim, map, faction)
+	d.begin(sim, map, TutorialDirector.PLAYER_FACTION)
 	return [d, sim]
 
 
@@ -119,12 +120,39 @@ func deck_metres(sim: Sim, hid: int, relay: int) -> float:
 	return m
 
 
+# ------------------------------------------------------------------ the script's words (draft 2)
+func test_lines() -> void:
+	var banned := RegEx.create_from_string("(?i)\\b(platforms?|crews?|bridges?|batch|boss|cannons?)\\b")
+	var bad := []
+	var long := []
+	for k in TutorialDirector.LINES:
+		var t := str(TutorialDirector.LINES[k])
+		if banned.search(t):
+			bad.append(k)
+		var shown_t := RegEx.create_from_string("[{][a-z_0-9]+[}]").sub(t, "000000", true)   # a placeholder ~ 6 characters
+		if shown_t.length() > 90:
+			long.append(k)
+		if str(k).ends_with(".title") and t.length() > 18:
+			long.append(k)
+	check(bad.is_empty(), "lines: none of the banned words (platform, crew, bridge, batch, boss, cannon) %s" % str(bad))
+	check(long.is_empty(), "lines: <= 90 characters, titles <= 18 %s" % str(long))
+	for l in TutorialDirector.LESSONS:
+		for st in l["steps"]:
+			var key := "%s.%s" % [l["key"], st["key"]]
+			check(TutorialDirector.LINES.has(key), "lines: step %s has its line" % key)
+	check(TutorialDirector.lesson_rows().size() == TutorialDirector.TOTAL_LESSONS and TutorialDirector.lesson_rows()[0]["title"] == "THE CITY",
+			"the TRAINING page lists 10 rows, 0 THE CITY first")
+
+
 # ------------------------------------------------------------------ reveal sets
 func test_reveal() -> void:
 	var before := TutorialDirector.REVEAL_BASE.duplicate()
+	check(TutorialDirector.reveal_for(0, 0).size() == TutorialDirector.ALL_KEYS.size(), "reveal L0: the tour shows every HUD part")
 	for l in TutorialDirector.LESSONS:
 		var id := int(l["id"])
 		var got := TutorialDirector.reveal_for(id, 0)
+		if id == TutorialDirector.FIRST_ID:
+			continue
 		if id == TutorialDirector.LESSON_COUNT:
 			check(got.size() == TutorialDirector.ALL_KEYS.size(), "reveal L9: everything (%d keys)" % got.size())
 			continue
@@ -160,7 +188,8 @@ func test_progress() -> void:
 	_wipe()
 	TutorialDirector.reload_progress()
 	check(TutorialDirector.done_count() == 0 and not TutorialDirector.offered, "progress: a fresh device has nothing done, nothing offered")
-	check(TutorialDirector.first_launch_due(PackedStringArray(), false), "first launch: no `offered` key -> straight into L1")
+	check(TutorialDirector.first_launch_due(PackedStringArray(), false) and TutorialDirector.first_unfinished() == 0,
+			"first launch: no `offered` key -> straight into the tour (L0)")
 	for flag in ["--map=res://maps4/T-01-first-steps.json", "--scenario=hud19", "--stage=monster", "--thumb=x.png", "--shots=4", "--demo"]:
 		check(not TutorialDirector.first_launch_due(PackedStringArray([flag]), false), "first launch: never with %s" % flag)
 	check(not TutorialDirector.first_launch_due(PackedStringArray(), true), "first launch: never in an online room or a Net reconnect")
@@ -176,12 +205,15 @@ func test_progress() -> void:
 	for i in range(1, 9):
 		TutorialDirector.mark_complete(i)
 	TutorialDirector.reload_progress()
-	check(TutorialDirector.done_count() == 8 and TutorialDirector.first_unfinished() == 9 and not ArmyPresets.is_unlocked("graduate"),
-			"progress: 8 / 9 round-trips, CONTINUE = L9, Graduate still locked")
+	check(TutorialDirector.done_count() == 8 and TutorialDirector.first_unfinished() == 0 and not ArmyPresets.is_unlocked("graduate"),
+			"progress: 8 lessons round-trip, CONTINUE = the tour (L0), Graduate still locked")
 	TutorialDirector.mark_complete(9, true)
 	TutorialDirector.reload_progress()
 	check(TutorialDirector.all_done() and TutorialDirector.relay_kill_done and ArmyPresets.is_unlocked("graduate"),
-			"progress: 9 / 9 + relay kill round-trip; the Graduate vat unlocks")
+			"progress: lessons 1-9 + relay kill round-trip; the Graduate vat unlocks without the tour")
+	TutorialDirector.mark_complete(0)
+	TutorialDirector.reload_progress()
+	check(TutorialDirector.done_count() == TutorialDirector.TOTAL_LESSONS, "progress: the tour counts toward n/10")
 	check(ArmyPresets.cosmetic_loadout_for("null")["vat"] == "graduate", "unlock: the Graduate pick plays once unlocked")
 	var cf := ConfigFile.new()
 	check(cf.load(TutorialDirector.path) == OK and int(cf.get_value("progress", "version", 0)) == TutorialDirector.PROGRESS_VERSION,
@@ -190,6 +222,31 @@ func test_progress() -> void:
 	TutorialDirector.reload_progress()
 	ArmyPresets._loaded = false
 	ArmyPresets.load_all()
+
+
+# ------------------------------------------------------------------ L0 THE CITY
+func test_l0() -> void:
+	var r := make(0)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	check(sim.factions["A"] == "vex" and sim.factions["B"] == "ember", "the tutorial is VEX against EMBER")
+	check(d.card()["button"] == TutorialDirector.line("next_step") and d.header() == "HANDLER · THE CITY", "L0: a NEXT card, HANDLER · THE CITY")
+	var seen := []
+	while d.state == "running" and seen.size() < 20:
+		var st: Dictionary = d.L["steps"][d.step_i]
+		seen.append(st["key"])
+		if st["key"] == "inspector":
+			check(d.inspect_request() == d.names["H"], "L0: the inspector step opens the inspector on your home")
+		if st["key"] == "deck":
+			check((d.target()["decks"] as Array).size() == 1, "L0: the deck step spotlights one deck")
+		if st["key"] == "badge":
+			check(d.target()["rects"] == ["badge:%d" % d.names["H"]], "L0: the badge step spotlights your home's badge")
+		for i in range(10):
+			tick(d, sim)
+		d.press_button()
+		tick(d, sim)
+	check(seen.size() == 14 and d.state == "complete" and d.result.get("tour", false), "L0: 14 tour steps, then on to L1 (%s)" % str(seen))
+	check(TutorialDirector.is_done(0) and not TutorialDirector.all_done(), "L0 done does not unlock the Graduate vat")
 
 
 # ------------------------------------------------------------------ L1 SEND
@@ -417,10 +474,14 @@ func test_l7() -> void:
 				if sim.nodes[n[nm]]["owner"] == "A":
 					sim.send(n[nm], n["I1"], 1.0))
 	check(absf(float(ls["at"]) - float(d.L["last_stand_at"])) <= DT * 2.0, "L7: the Last Stand starts at the staged %.0f s (%.2f)" % [d.L["last_stand_at"], ls["at"]])
+	check(sim.events.any(func(e): return e["type"] == "last_stand" and absf(float(e["t"]) - Rules.LAST_STAND_TIME) < 0.01),
+			"L7: the clock reads %s when the Last Stand starts" % TutorialDirector._mmss(Rules.LAST_STAND_TIME))
 	check(not sim.eliminated.has("A") and sim.nodes.any(func(x): return x["owner"] == "A" and not sim.collapsed.get(x["id"], false)),
 			"L7: evacuating to the centre kept A alive through the ring's fall")
 	play(d, sim, "vls", func(t): if first(t):
 		check(sim.very_last_stand_active and absf(sim.very_last_stand_gap - Rules.LAST_STAND_WARNING) < 0.01, "L7: the Very Last Stand runs at once, gap from the lesson table")
+		check(sim.time >= Rules.VERY_LAST_STAND_TIME - 0.01 and sim.time < Rules.VERY_LAST_STAND_TIME + 1.0, "L7: the clock reads %s at the Very Last Stand" % TutorialDirector._mmss(Rules.VERY_LAST_STAND_TIME))
+		check(sim.match_hard_end == INF, "L7: the 7:00 end can't cut the lesson short")
 		d.press_button())
 	if d.state != "complete":
 		play(d, sim, "hold", func(t):
@@ -444,13 +505,15 @@ func test_l7() -> void:
 
 
 # ------------------------------------------------------------------ L8 SKILLS
-func test_l8(faction: String) -> void:
-	var r := make(8, faction)
+func test_l8() -> void:
+	var faction := "vex"
+	var r := make(8)
 	var d: TutorialDirector = r[0]
 	var sim: Sim = r[1]
 	var n: Dictionary = d.names
-	check(sim.abilities_on and sim.skill_id("A", "active") == "surge" and sim.skill_id("A", "map") == "demolish",
-			"L8 (%s): abilities on, the fixed Surge + Demolish loadout" % faction)
+	check(sim.abilities_on and sim.skill_id("A", "active") == "surge" and sim.skill_id("A", "map") == "demolish"
+			and sim.skill_id("A", "ultimate") == "rewire", "L8: abilities on, Surge + Demolish + VEX's Rewire")
+	check(sim.cooldown("A", "active") <= 0.0 and sim.cooldown("A", "map") <= 0.0, "L8: the skills stand ready")
 	for i in range(int(8.0 / DT)):
 		tick(d, sim)
 	check(d.step_i == 0, "L8 (%s) negative: no cast, no pass" % faction)
@@ -496,6 +559,24 @@ func test_l9() -> void:
 	var R: int = d.names["R"]
 	check(R >= 0 and sim.nodes[R]["relay"] != "", "L9: T-02's relay found without lesson names")
 	check(d.card()["visible"] and d.card()["text"] == TutorialDirector.line("L9.start"), "L9: the one opening card")
+	check(sim.skill_id("A", "active") == "surge" and sim.skill_id("A", "map") == "demolish", "L9: VEX with Surge + Demolish (not the ARMIES preset)")
+	var low_ok := true
+	for x in sim.nodes:
+		if x["owner"] == "" and Sim.has_vat(x) and Rules.shown(x["units"]) != int(TutorialDirector.L9_NEUTRALS[int(x["tier"])]):
+			low_ok = false
+	check(low_ok, "L9: the neutrals start low %s" % str(TutorialDirector.L9_NEUTRALS))
+	var probe := make(9)
+	var ps: Sim = probe[1]
+	for x in ps.nodes:
+		if x["owner"] == "" and Sim.has_vat(x):
+			x["units"] = 1.0
+	for i in range(int(60.0 / DT)):
+		ps.step(DT)
+	var capped := true
+	for x in ps.nodes:
+		if x["owner"] == "" and Sim.has_vat(x) and x["units"] > float(TutorialDirector.L9_NEUTRALS[int(x["tier"])]) * Rules.SCALE + 0.01:
+			capped = false
+	check(capped, "L9: a neutral regrows only to its staged garrison")
 	_stage_l9(d, sim)
 	var st := {"fired": false, "on_ok": true, "half_ok": true, "prompted": false}
 	var t := 0.0

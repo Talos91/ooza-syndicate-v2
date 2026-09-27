@@ -1,8 +1,9 @@
 class_name TutorialDirector
 extends RefCounted
 ## The interactive tutorial's lesson director (Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-DESIGN.md
-## draft 3, §3 lessons, §6 reveal-as-you-go, §7 progress, §8 shape). Eight short lessons and a first match,
-## each a real BRAWL match on a baked lesson map: the director STAGES the board (owners, units, tiers),
+## draft 3, §3 lessons, §6 reveal-as-you-go, §7 progress, §8 shape; TUTORIAL-SCRIPT.md draft 2). A tour of the city
+## (L0), eight short lessons and a first match, all played as VEX against EMBER, each a real BRAWL match on a baked
+## lesson map: the director STAGES the board (owners, units, tiers),
 ## SCRIPTS the rival (seat B: plain Sim.send / fire_relay calls - no SeatAI, except the Training AI of the
 ## first match), walks the player through the lesson's steps and says when a step passed, failed (TRY AGAIN)
 ## or the lesson is done. Every line the handler says is in LINES (TUTORIAL-SCRIPT.md), every number in them
@@ -25,8 +26,14 @@ extends RefCounted
 signal changed
 signal completed(result: Dictionary)
 signal failed(line: String)
+signal handler(mood: String)                       # the on-screen handler: "happy" (a step passed) / "droop" (failed)
 
-const LESSON_COUNT := 9
+const LESSON_COUNT := 9                            # the Graduate vat needs lessons 1..9 (the L0 tour is extra)
+const FIRST_ID := 0                                # L0 THE CITY, the tour
+const TOTAL_LESSONS := 10                          # 0..9 (the TUTORIAL n/10 count)
+const PLAYER_FACTION := "vex"                      # Daniele (0.19.3): VEX for the whole tutorial
+const RIVAL_FACTION := "ember"                     # ... and the rival is always EMBER
+const L9_NEUTRALS := {1: 10, 2: 15, 3: 25, 4: 40}  # the first match's neutral garrisons (shown), capped there
 const PROGRESS_VERSION := 1
 const HUMAN := "A"
 const RIVAL := "B"
@@ -38,140 +45,157 @@ const PUSH_KILL := 0.5               # L9: a relay kill = at least this share of
 const PUSH_LATEST := 150.0           # L9: 2:30 - the push goes even if A does not lead by then
 const HALF_SPEED := 0.5
 
-# ---------------------------------------------------------------- the handler's lines (TUTORIAL-SCRIPT.md)
-# One table, so per-faction voices or translations can replace it without touching the steps. Placeholders
-# ({cost}, {secs}, {garrison}, {ls}, {vls}, {hops}, {ult}, {skill1}, {skill2}, {ult_name}, {faction}, {n})
-# are filled from Rules and the live board by _fmt().
+# ---------------------------------------------------------------- the handler's lines (TUTORIAL-SCRIPT.md draft 2)
+# One table, so per-faction voices or translations can replace it without touching the steps. Every line uses the
+# script's standard vocabulary (node, your home, neutral node, the rival, units, line, deck, vat, tier, cap, badge,
+# SEND panel, inspector, relay, fire, drop, the structure names, skill / dock, Last Stand, danger mark). Placeholders
+# ({cost}, {secs}, {garrison}, {cap}, {ls}, {vls}, {hops}, {ult}, {skill1}, {skill2}, {ult_name}, {n}) are filled
+# from Rules and the live board by _fmt().
 const LINES := {
-	"got_it": "GOT IT", "skip_step": "SKIP STEP", "restart": "RESTART", "exit": "EXIT", "skip_tutorial": "SKIP TUTORIAL",
+	"got_it": "GOT IT", "next_step": "NEXT", "skip_step": "SKIP STEP", "restart": "RESTART", "exit": "EXIT",
+	"skip_tutorial": "SKIP TUTORIAL",
 	"not_yet": "Not yet. Follow the hand.",
-	"try_again_title": "TRY AGAIN", "try_again": "That went sideways. Same board, fresh crews.",
+	"try_again_title": "TRY AGAIN", "try_again": "That went wrong. Same board, fresh units.",
 	"idle_hint": "Still with me? Do what the hand shows.",
 	"paused_lessons": "LESSONS",
-	"first_launch_title": "WELCOME TO THE SYNDICATE",
-	"first_launch": "Fresh batch. Let's get you started - ten minutes, then the city's yours.",
-	"first_launch_start": "START",
 	"no_storage": "Progress isn't saved on this browser.",
+	# L0 THE CITY - what's what
+	"L0.title": "THE CITY",
+	"L0.hello": "I'm your handler. Quick tour of the city first, then we work.",
+	"L0.node": "This is a node. You win by taking nodes.",
+	"L0.home": "This one is your home. Your colour means it's yours.",
+	"L0.vat": "The tank on it is a vat. It breeds units, up to its cap.",
+	"L0.badge": "The badge shows the units on a node and its tier.",
+	"L0.neutral": "Grey nodes are neutral. Their badge shows what defends them.",
+	"L0.rival": "That colour is the rival - EMBER. Their home is over there.",
+	"L0.deck": "Nodes are joined by decks. Units walk the decks.",
+	"L0.relay": "This is a relay. It moves a deck - anything on it drops into the void.",
+	"L0.send": "The SEND panel sets how much of a node goes when you send.",
+	"L0.inspector": "Tap a node and its inspector opens: what it makes, what it can build.",
+	"L0.top": "Up top: your strength, the clock and the rival's strength.",
+	"L0.dock": "Down here, the dock: your skills. We get to those later.",
+	"L0.go": "That's the city. Let's send some units.",
 	# L1 SEND
 	"L1.title": "SEND",
-	"L1.drag": "Fresh batch, fresh start. Drag from your vat to the platform above.",
-	"L1.label": "The label tells you everything: TAKE, how many, how long. Let them walk.",
-	"L1.percent": "You don't have to send everything. Tap 25 %.",
-	"L1.send25": "A quarter's enough for the one below. Send it.",
-	"L1.reinforce": "Drag between two of your own platforms to top one up.",
-	"L1.done1": "Drag from your platform to send crews.",
-	"L1.done2": "The SEND % sets how much goes.",
-	# L2 VATS, TIERS AND THE MACHINEGOON
+	"L1.drag": "Drag from your home to the node above it.",
+	"L1.label": "The label says what happens: TAKE, how many units, how many seconds.",
+	"L1.percent": "You don't have to send everything. Tap 25 % on the SEND panel.",
+	"L1.send25": "A quarter of your home is enough for the node below. Send it.",
+	"L1.reinforce": "Drag between two of your nodes to move units to the one that needs them.",
+	"L1.done1": "Drag from your node to send units.",
+	"L1.done2": "The SEND panel sets how much goes.",
+	# L2 VATS AND THE MACHINGOON
 	"L2.title": "VATS",
-	"L2.inspect": "Vats breed crews up to their cap. Tap your vat to read it.",
-	"L2.upgrade": "Double-tap it to upgrade. Costs {cost}.",
-	"L2.build": "Building takes {secs} s. Watch the bar.",
-	"L2.t3": "Bigger tier, bigger cap, faster output. Take it to T3 - that's as far as you build.",
-	"L2.machinegoon": "Any common platform can run a Machinegoon instead of a vat. Put one on this one.",
-	"L2.watch": "It guns down what comes at it, but breeds nothing. Watch.",
-	"L2.mg_upgrade": "Machinegoons climb to T3 too. Upgrade it.",
-	"L2.t4": "That big one in the middle is a T4 vat. You take those - nobody builds them.",
-	"L2.done1": "Double-tap to upgrade a vat, up to T3.",
-	"L2.done2": "A Machinegoon trades breeding for firepower.",
-	# L3 NEUTRALS AND THE ENEMY
-	"L3.title": "THE ENEMY",
-	"L3.neutral": "Neutrals fight back with what the badge says: {garrison}. Send more than that.",
-	"L3.too_small": "Not enough. Try 75 %.",
-	"L3.trade": "Every crew that lands trades one for one. Bring more than they have.",
-	"L3.defend": "Rival crew incoming. Reinforce that platform before they land.",
-	"L3.held": "Held. Now it's your turn.",
-	"L3.attack": "Hit back. Take their vat - a captured vat drops a tier.",
-	"L3.alive": "The other crew is only out when it has no platforms and nobody on the move.",
-	"L3.done1": "Out-number a platform to take it.",
-	"L3.done2": "Reinforce before the enemy lands.",
+	"L2.inspect": "Tap your home. The inspector shows how fast its vat breeds and its cap.",
+	"L2.upgrade": "Double-tap your home to upgrade its vat to T2. Costs {cost} units.",
+	"L2.build": "Building takes {secs} s. Watch the bar on the badge.",
+	"L2.t3": "A higher tier breeds faster and holds more. Take it to T3 - the highest you can build.",
+	"L2.machingoon": "A node can hold a Machingoon instead of a vat. Build one on this node.",
+	"L2.watch": "A Machingoon shoots rival lines on its decks, but breeds nothing. Watch.",
+	"L2.mg_upgrade": "A Machingoon has tiers too. Upgrade it.",
+	"L2.t4": "That big node holds a T4 vat. Nobody builds T4 - you have to take it.",
+	"L2.done1": "Double-tap a node to upgrade its vat, up to T3.",
+	"L2.done2": "A Machingoon swaps breeding for firepower.",
+	# L3 THE RIVAL
+	"L3.title": "THE RIVAL",
+	"L3.neutral": "A neutral node defends with its badge count: {garrison}. Send more units than that.",
+	"L3.too_small": "Not enough units. Tap 75 % and send again.",
+	"L3.trade": "Each unit that lands kills one defender. Bring more than they have.",
+	"L3.defend": "The rival is sending a line at your node. Reinforce it before they land.",
+	"L3.held": "Held. Your turn.",
+	"L3.attack": "Take the rival's node. A vat you capture drops one tier.",
+	"L3.alive": "The rival is out when it has no nodes and no lines left.",
+	"L3.done1": "Send more units than a node holds to take it.",
+	"L3.done2": "Reinforce before the rival lands.",
 	# L4 RELAYS
 	"L4.title": "RELAYS",
-	"L4.inspect": "Relays rewire the map. Tap the relay - the preview shows where the deck goes.",
-	"L4.fire": "Double-tap the relay to fire it. The SWITCH button works too.",
-	"L4.warning": "One second of warning - the deck flashes but holds. Then it moves, and anything on it falls.",
-	"L4.prompt": "Now! Fire it!",
-	"L4.miss": "Too late - they're across. Here comes another.",
-	"L4.practice": "Timing takes practice. You'll get another shot.",
-	"L4.waterfall": "Their vat keeps pouring. The rest of the order walks off the lip.",
-	"L4.done1": "Double-tap a relay while the rival is on its deck.",
+	"L4.inspect": "Tap the relay. The preview shows where its deck will go.",
+	"L4.fire": "Double-tap the relay to fire it. The SWITCH button in the inspector works too.",
+	"L4.warning": "Firing gives one second of warning. Then the deck moves - anything on it drops.",
+	# not in TUTORIAL-SCRIPT draft 2 (for Daniele's review): the prompt step before the line reaches the deck
+	"L4.incoming": "A rival line is coming. Wait until it's on the relay's deck.",
+	"L4.prompt": "Their line is on the deck. Fire the relay now!",
+	"L4.miss": "Too late - they got across. Here comes another line.",
+	"L4.practice": "Timing takes practice. You'll get more chances.",
+	"L4.waterfall": "Their vat keeps sending. The rest of the line walks off the edge.",
+	"L4.done1": "Fire a relay while the rival's line is on its deck.",
 	"L4.done2": "One second of warning, then the drop.",
 	# L5 RELAY KINDS
 	"L5.title": "RELAY KINDS",
-	"L5.retract": "A retract pulls its deck in. The ground goes from under them. Pull it.",
-	"L5.switch": "A switch trades one deck for another. Catch them on the one that goes.",
-	"L5.remote": "A remote console moves decks far away. Follow the lit conduit, then fire.",
-	"L5.own": "Your own crews fall too. Check the preview before you pull.",
-	"L5.done1": "Retract, switch, remote: every moving deck drops its riders.",
+	"L5.retract": "A retract relay pulls its deck in. Fire it while their line is on it.",
+	"L5.switch": "A switch relay swaps one deck for another. Fire it while they're on the deck that goes.",
+	"L5.remote": "A remote relay moves decks far away - follow the lit wire. Fire it.",
+	"L5.own": "Your own lines drop too. Check the preview before you fire.",
+	"L5.done1": "Every relay kind drops what's on the deck it moves.",
 	"L5.done2": "Read the preview first.",
-	# L6 RELAY WORKS
-	"L6.title": "RELAY WORKS",
-	"L6.inspect": "A relay's slot holds one machine: a laser, a forge or a monster hub. Tap this relay.",
-	"L6.laser": "Build the LASER.",
-	"L6.burst": "It fires a burst at crews in range, then recharges.",
-	"L6.forge": "A FORGE on the next relay: harder hits and tougher garrisons for all your crews.",
-	"L6.hub": "The last one builds a MONSTER HUB. One per boss.",
-	"L6.send": "Send the monster, up to {hops} bridges out. It kicks every crew off the decks - yours too.",
-	"L6.take": "It takes the platform at the end. Only a fall stops it.",
-	"L6.fell": "Monsters fall like everything else. Pick the lane well.",
-	"L6.cooldown": "Long cooldown. Make it count.",
-	"L6.done1": "Laser, forge or monster hub: one machine per relay.",
-	"L6.done2": "Monsters clear a lane and take its end.",
+	# L6 RELAY STRUCTURES
+	"L6.title": "RELAY STRUCTURES",
+	"L6.inspect": "A relay node holds one structure: Laser tower, Forge or Monster hub. Tap this relay.",
+	"L6.laser": "Build the LASER TOWER.",
+	"L6.burst": "The Laser tower fires bursts at rival lines in range, then recharges.",
+	"L6.forge": "Build a FORGE on the next relay: your units hit harder and your nodes hold better.",
+	"L6.hub": "Build a MONSTER HUB on the last relay. You can have one.",
+	"L6.send": "Launch the monster at a node up to {hops} decks away. It kicks every line off its decks.",
+	"L6.take": "The monster takes the node at the end. Only a drop stops it.",
+	"L6.fell": "Monsters drop like everything else. Choose the route well.",
+	"L6.cooldown": "The hub needs time to grow the next monster. Make each one count.",
+	"L6.done1": "One structure per relay: Laser tower, Forge or Monster hub.",
+	"L6.done2": "A monster clears its route and takes the node at the end.",
 	# L7 LAST STAND
 	"L7.title": "LAST STAND",
-	"L7.reveal": "At {ls} the city starts dropping platforms, ring by ring. Watch the danger marks.",
-	"L7.evacuate": "Your ring goes first. Get your crews to the centre.",
-	"L7.lost": "Nobody made it. Move sooner next time.",
-	"L7.vls": "At {vls} the survivors drop one by one until one platform is left.",
-	"L7.hold": "Whoever holds that last platform wins. Be there.",
+	"L7.reveal": "It's {ls}: the Last Stand. Nodes fall ring by ring. Watch the danger marks.",
+	"L7.evacuate": "Your ring falls first. Move your units to the centre ring.",
+	"L7.lost": "Nobody made it out. Move sooner next time.",
+	"L7.vls": "It's {vls}: the Very Last Stand. The last nodes fall one by one.",
+	"L7.hold": "Whoever holds the last node wins. Be on it.",
 	"L7.done1": "Leave a ring before it falls.",
-	"L7.done2": "Hold the last platform to win.",
+	"L7.done2": "Hold the last node to win.",
 	# L8 SKILLS
 	"L8.title": "SKILLS",
-	"L8.surge": "Three skills. Tap {skill1}, then one of your crews on the move.",
-	"L8.demolish": "Map skills hit the board. {skill2} drops a deck a few seconds later. Find a busy one.",
-	"L8.ultimate": "Your ultimate, {ult_name}, charges in about {ult} minutes. This one's ready. Use it.",
-	"L8.armies": "Pick your skills for each faction in ARMIES, on the main menu.",
-	"L8.done1": "Tap a skill, then its target.",
-	"L8.done2": "Set your loadout in ARMIES.",
+	"L8.surge": "The dock holds three skills. Tap {skill1}, then one of your lines.",
+	"L8.demolish": "{skill2} is a map skill: it drops a deck a moment later. Use it on a busy deck.",
+	"L8.ultimate": "{ult_name} is VEX's ultimate. It charges in about {ult} minutes - this one's ready. Use it.",
+	"L8.armies": "You choose your skills for each faction in ARMIES, on the main menu.",
+	"L8.done1": "Tap a skill in the dock, then its target.",
+	"L8.done2": "Choose your skills in ARMIES.",
 	# L9 FIRST MATCH
 	"L9.title": "FIRST MATCH",
-	"L9.start": "Your turf now, boss. Take the neutrals, grow, and hold the relay in the middle.",
-	"L9.relay_taken": "That relay's yours. Keep an eye on who walks across it.",
-	"L9.push": "They're all coming across. FIRE THE RELAY!",
-	"L9.relay_kill": "Now that's how the Syndicate settles things.",
-	"L9.miss": "They made it over. Finish the job the long way.",
-	"L9.win": "Well played. The city's yours - for today.",
-	"L9.lose": "They had you this time. The next one's yours.",
+	"L9.start": "A real match now. Take neutral nodes, grow your vats, and hold the relay in the middle.",
+	"L9.relay_taken": "The relay is yours. Watch for rival lines on its decks.",
+	"L9.push": "Their whole army is on the relay deck. FIRE THE RELAY!",
+	"L9.relay_kill": "Straight into the void. That's how VEX works.",
+	"L9.miss": "They got across. Finish the match the long way.",
+	"L9.win": "Well played, commander. The city is yours.",
+	"L9.lose": "They took it this time. The next one's yours.",
 	# completion screens
 	"lesson_complete": "LESSON COMPLETE", "next": "NEXT LESSON", "replay": "REPLAY", "lessons": "LESSONS",
 	"final_title": "TRAINING COMPLETE",
-	"final_relay_kill": "RELAY KILL - {n} crews into the void.",
+	"final_relay_kill": "RELAY KILL - {n} units into the void.",
 	"final_reward": "GRADUATE VAT UNLOCKED",
-	"final_reward_line": "Ivory and brass, for crew leads who finished training. Put it on in ARMIES.",
-	# not in TUTORIAL-SCRIPT draft 1 (for Daniele's review): the final screen when a lesson was skipped
+	"final_reward_line": "Ivory and brass, for commanders who finished training. Put it on in ARMIES.",
 	"final_locked": "Finish every lesson to unlock the Graduate vat.",
-	"final_play": "PLAY YOUR FIRST MATCH", "final_menu": "MAIN MENU", "final_armies": "ARMIES",
+	"final_armies": "ARMIES", "locked_cosmetic": "Finish the tutorial",
+	"final_play": "PLAY YOUR FIRST MATCH", "final_menu": "MAIN MENU",
 	# the TUTORIAL page
 	"page_title": "TRAINING",
-	"page_sub": "Eight short lessons and a first match. Replay any of them.",
+	"page_sub": "A tour of the city, eight short lessons and a first match. Replay any of them.",
 	"continue": "CONTINUE", "back": "BACK",
-	"L1.goal": "Send crews and pick how many", "L2.goal": "Grow vats, build a Machinegoon",
-	"L3.goal": "Take neutrals, beat a rival", "L4.goal": "Fire a relay under the rival",
-	"L5.goal": "Retract, switch, remote", "L6.goal": "Laser, forge, monster", "L7.goal": "Survive the Last Stand",
-	"L8.goal": "Cast your skills", "L9.goal": "Win your first match",
-	"locked_cosmetic": "Finish the tutorial",
+	"L0.goal": "Learn what's what", "L1.goal": "Send units", "L2.goal": "Grow vats, build a Machingoon",
+	"L3.goal": "Take nodes, beat the rival", "L4.goal": "Fire a relay", "L5.goal": "Retract, switch, remote",
+	"L6.goal": "Laser tower, Forge, monster", "L7.goal": "Survive the Last Stand", "L8.goal": "Use your skills",
+	"L9.goal": "Win your first match",
 }
 
 # ---------------------------------------------------------------- reveal as you go (design §6)
 # What a lesson has not reached yet is not on screen (Hud.reveal). Keys: map / badges / drag / clock (always, L1),
-# send_panel, upgrade (the inspector's UPGRADE line, "Double-tap: N units", the double-tap), machinegoon (MACHINEGOON
+# send_panel, upgrade (the inspector's UPGRADE line, "Double-tap: N units", the double-tap), machingoon (MACHINGOON
 # / VAT actions), rival_counts, strength (your total, RIVALS, the strength bar), notices (toasts), relay (the
 # double-tap fire, SWITCH, the relay line and outcome preview, the badge's relay state, ready glow and cue),
 # relay_build (LASER / FORGE / MONSTER HUB), forge_readout, monster (LAUNCH, the reach ring, the hub line),
 # status_line, danger (the floating Last Stand symbols), dock, and - only in L9, never in a 1v1 lesson - halos
 # and eject (the team parts).
 const REVEAL_BASE := ["map", "badges", "drag", "clock"]
-const ALL_KEYS := ["map", "badges", "drag", "clock", "send_panel", "upgrade", "machinegoon", "rival_counts", "strength",
+const ALL_KEYS := ["map", "badges", "drag", "clock", "send_panel", "upgrade", "machingoon", "rival_counts", "strength",
 		"notices", "relay", "relay_build", "forge_readout", "monster", "status_line", "danger", "dock", "halos", "eject"]
 
 # ---------------------------------------------------------------- the lessons (design §3)
@@ -183,6 +207,26 @@ const ALL_KEYS := ["map", "badges", "drag", "clock", "send_panel", "upgrade", "m
 # fail / enter (ops, see _check_pass / _check_fail / _enter), read_only (a GOT IT card), budget (seconds the
 # headless test allows), catch (a scripted rival line the player drops with a relay, see _tick_catch).
 const LESSONS := [
+	{"id": 0, "key": "L0", "map": "T-06-pivot", "abilities": true, "vls": false, "tour": true,
+		"stage": [["H", "A", 20], ["BH", "B", 20]], "protect": ["BH"],
+		"reveal": [],
+		"steps": [
+			{"key": "hello", "target": {"rects": ["handler"]}, "read_only": true},
+			{"key": "node", "target": {"nodes": ["A2"]}, "gesture": [["tap", "A2"]], "read_only": true},
+			{"key": "home", "target": {"nodes": ["H"]}, "gesture": [["tap", "H"]], "read_only": true},
+			{"key": "vat", "target": {"nodes": ["H"], "radius": 0.55}, "gesture": [["tap", "H"]], "read_only": true},
+			{"key": "badge", "target": {"rects": ["badge:H"]}, "gesture": [["press", "badge:H"]], "read_only": true},
+			{"key": "neutral", "target": {"rects": ["badge:T"]}, "gesture": [["press", "badge:T"]], "read_only": true},
+			{"key": "rival", "target": {"nodes": ["BH"]}, "gesture": [["tap", "BH"]], "read_only": true},
+			{"key": "deck", "target": {"decks": [["H", "U"]]}, "read_only": true},
+			{"key": "relay", "target": {"nodes": ["R"]}, "gesture": [["tap", "R"]], "read_only": true},
+			{"key": "send", "target": {"rects": ["send_panel"]}, "gesture": [["press", "send:0.5"]], "read_only": true},
+			{"key": "inspector", "inspect": "H", "target": {"rects": ["inspector"]}, "read_only": true},
+			{"key": "top", "target": {"rects": ["top_bar"]}, "gesture": [["press", "top_bar"]], "read_only": true},
+			{"key": "dock", "target": {"rects": ["dock"]}, "gesture": [["press", "dock"]], "read_only": true},
+			{"key": "go", "read_only": true},
+		],
+		"done": []},
 	{"id": 1, "key": "L1", "map": "T-03-first-batch", "abilities": false, "vls": false, "fraction": 1.0,
 		"stage": [["H", "A", 30], ["BH", "B", 30]], "protect": ["BH"],
 		"reveal": ["map", "badges", "drag", "clock"],
@@ -197,15 +241,15 @@ const LESSONS := [
 		"done": ["L1.done1", "L1.done2"]},
 	{"id": 2, "key": "L2", "map": "T-04-vat-row", "abilities": false, "vls": false,
 		"stage": [["H", "A", 30], ["N1", "A", 45], ["N2", "A", 15], ["BH", "B", 30], ["B1", "B", 8]], "protect": ["BH", "B1", "B2"],
-		"reveal": ["upgrade", "machinegoon"],
+		"reveal": ["upgrade", "machingoon"],
 		"steps": [
 			{"key": "inspect", "target": {"nodes": ["H"]}, "gesture": [["tap", "H"]], "pass": ["inspect", "H"], "budget": 10.0},
 			{"key": "upgrade", "target": {"nodes": ["H"], "rects": ["action:UPGRADE"]}, "gesture": [["double_tap", "H"]],
 				"pass": ["build_started", "H"], "budget": 10.0},
 			{"key": "build", "target": {"nodes": ["H"]}, "pass": ["tier", "H", 2], "budget": 15.0},
 			{"key": "t3", "target": {"nodes": ["H"]}, "gesture": [["double_tap", "H"]], "pass": ["tier", "H", 3], "budget": 40.0},
-			{"key": "machinegoon", "target": {"nodes": ["N1"], "rects": ["action:MACHINEGOON"]},
-				"gesture": [["press", "action:MACHINEGOON"], ["tap", "N1"]], "pass": ["built", "N1", "machinegoon"], "budget": 20.0},
+			{"key": "machingoon", "target": {"nodes": ["N1"], "rects": ["action:MACHINGOON"]},
+				"gesture": [["press", "action:MACHINGOON"], ["tap", "N1"]], "pass": ["built", "N1", "machingoon"], "budget": 20.0},
 			{"key": "watch", "enter": ["b_send", "B1", "N1", 8], "target": {"nodes": ["N1"], "lines": "B"},
 				"pass": ["custom", "line_spent", "N1"], "fail": ["lost", "N1"], "budget": 30.0},
 			{"key": "mg_upgrade", "target": {"nodes": ["N1"], "rects": ["action:UPGRADE"]},
@@ -235,7 +279,7 @@ const LESSONS := [
 			{"key": "fire", "target": {"nodes": ["R"], "rects": ["action:SWITCH"]}, "gesture": [["double_tap", "R"]],
 				"pass": ["fired", "R"], "budget": 10.0},
 			{"key": "warning", "target": {"nodes": ["R"]}, "read_only": true, "restore": "R"},
-			{"key": "prompt", "target": {"nodes": ["R"], "lines": "B"},
+			{"key": "prompt", "target": {"nodes": ["R"], "lines": "B"}, "before": "L4.incoming",
 				"catch": {"relay": "R", "from": "B2", "to": "R", "shown": 20, "kind": "fling", "min": 5, "tries": 3, "half": true,
 					"miss": "L4.miss", "practice": "L4.practice"}, "budget": 90.0},
 			{"key": "waterfall", "target": {"nodes": ["R"]}, "pass": ["fall_or_time", 4.0], "budget": 6.0},
@@ -276,8 +320,8 @@ const LESSONS := [
 			{"key": "cooldown", "target": {"nodes": ["R3"]}, "read_only": true},
 		],
 		"done": ["L6.done1", "L6.done2"]},
-	{"id": 7, "key": "L7", "map": "T-09-collapse-ring", "abilities": false, "vls": true, "last_stand_at": 15.0,
-		# the design's 4 s Very Last Stand gap leaves no time to move a garrison off a warned platform (a 40-unit
+	{"id": 7, "key": "L7", "map": "T-09-collapse-ring", "abilities": false, "vls": false, "last_stand_at": 15.0,
+		# the design's 4 s Very Last Stand gap leaves no time to move a garrison off a warned node (a 40-unit
 		# garrison needs ~4 s just to leave its door): the lesson uses the Last Stand's own warning instead
 		"vls_gap": "warning",
 		"stage": [["H", "A", 30], ["A1", "A", 30], ["A2", "A", 30], ["BH", "B", 8], ["B1", "B", 8], ["B2", "B", 8]],
@@ -307,7 +351,8 @@ const LESSONS := [
 		],
 		"done": ["L8.done1", "L8.done2"]},
 	{"id": 9, "key": "L9", "map": "T-02-turning-tide", "abilities": true, "vls": true, "match": true, "ai": "Training",
-		"stage": [], "reveal": [],
+		"loadout": {"active": "surge", "map": "demolish"},   # the skills L8 just taught (VEX's ultimate: Rewire)
+		"stage": [], "neutrals": L9_NEUTRALS, "reveal": [],
 		"steps": [{"key": "start", "read_only": true}],
 		"done": []},
 ]
@@ -333,7 +378,7 @@ static func load_progress() -> void:
 		return
 	for v in cf.get_value("progress", "completed", []):
 		var id := int(v)
-		if id >= 1 and id <= LESSON_COUNT and not id in completed_ids:
+		if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids:
 			completed_ids.append(id)
 	completed_ids.sort()
 	offered = bool(cf.get_value("progress", "offered", false))
@@ -363,7 +408,7 @@ static func save_progress() -> bool:
 
 static func mark_complete(id: int, relay_kill := false) -> bool:
 	_ensure()
-	if id >= 1 and id <= LESSON_COUNT and not id in completed_ids:
+	if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids:
 		completed_ids.append(id)
 		completed_ids.sort()
 	offered = true
@@ -388,21 +433,25 @@ static func done_count() -> int:
 
 
 static func all_done() -> bool:
-	## Every lesson complete: the Graduate vat unlocks (ArmyPresets.is_unlocked("graduate")).
-	return done_count() >= LESSON_COUNT
+	## Lessons 1-9 complete (the L0 tour is not needed): the Graduate vat unlocks (ArmyPresets.is_unlocked).
+	_ensure()
+	for i in range(1, LESSON_COUNT + 1):
+		if not i in completed_ids:
+			return false
+	return true
 
 
 static func first_unfinished() -> int:
-	## CONTINUE: the first lesson not done yet (1 when every lesson is).
+	## CONTINUE: the first lesson not done yet, the tour included (L1 when every one is).
 	_ensure()
-	for i in range(1, LESSON_COUNT + 1):
+	for i in range(FIRST_ID, LESSON_COUNT + 1):
 		if not i in completed_ids:
 			return i
 	return 1
 
 
 static func first_launch_due(user_args: PackedStringArray, net_busy: bool) -> bool:
-	## §7: with no `offered` key the game opens straight into L1. Never for a launch with a map, scenario, stage,
+	## §7: with no `offered` key the game opens straight into the tour (L0), then L1. Never for a launch with a map, scenario, stage,
 	## thumbnail, screenshot or test flag, an online room or a pending Net reconnect (`net_busy`).
 	_ensure()
 	if offered or net_busy:
@@ -446,12 +495,15 @@ static func lesson_rows() -> Array:
 
 static func reveal_for(id: int, step_index := 0) -> Array:
 	## Every HUD key a lesson shows at that step: all of the lessons before it, then this lesson's own keys up
-	## to the step (a lesson replayed out of order reveals everything up to it, §7). The first match: all.
+	## to the step (a lesson replayed out of order reveals everything up to it, §7). The tour (L0) and the first
+	## match show everything; the tour is not part of the chain, so L1 hides it all again.
+	if id == FIRST_ID or id == LESSON_COUNT:
+		return ALL_KEYS.duplicate()
 	var keys := REVEAL_BASE.duplicate()
 	for l in LESSONS:
 		var lid := int(l["id"])
-		if lid == LESSON_COUNT and id == LESSON_COUNT:
-			return ALL_KEYS.duplicate()
+		if lid == FIRST_ID:
+			continue
 		if lid > id:
 			break
 		for k in l.get("reveal", []):
@@ -474,7 +526,7 @@ var sim: Sim
 var map: Dictionary
 var names := {}                                      # lesson name -> node id (the map's lessonNames)
 var first_launch := false                            # the forced first run: the card carries SKIP TUTORIAL
-var faction := "null"                                # the player's faction ({faction}, the ultimate)
+var faction := PLAYER_FACTION                        # the player's faction (VEX in the tutorial)
 var state := "running"                               # running / interlude / failed / complete
 var step_i := 0
 var step_t := 0.0
@@ -510,14 +562,15 @@ var _match := {}                                     # L9: {phase, muster, push,
 
 
 func _init(id := 1) -> void:
-	lesson_id = clampi(id, 1, LESSON_COUNT)
+	lesson_id = clampi(id, FIRST_ID, LESSON_COUNT)
 	L = lesson(lesson_id)
 
 
-func loadout_for(player_faction: String, preset: Dictionary) -> Dictionary:
-	## The skill loadout the lesson plays with: L8's fixed one (design D6), else the player's ARMIES preset.
-	faction = player_faction
-	return (L.get("loadout", preset) as Dictionary).duplicate()
+func loadout_for(_player_faction := "", _preset := {}) -> Dictionary:
+	## The skill loadout the lesson plays with: L8's and L9's fixed Surge + Demolish (+ VEX's Rewire), else VEX's
+	## default. Never the player's ARMIES preset: the whole tutorial is VEX (Daniele, 0.19.3).
+	faction = PLAYER_FACTION
+	return (L.get("loadout", {}) as Dictionary).duplicate()
 
 
 func fraction_start(current: float) -> float:
@@ -547,6 +600,10 @@ func begin(s: Sim, m: Dictionary, player_faction := "") -> void:
 				break
 	sim.abilities_on = bool(L.get("abilities", false))
 	sim.vls_enabled = bool(L.get("vls", true))
+	if not L.get("match", false):
+		sim.match_hard_end = INF                     # a lesson is never cut short by the 7:00 end
+	for seat in sim.skill_cd:                         # skills stand ready in a lesson (0.19.2 starts them on cooldown)
+		sim.skill_cd[seat] = {"active": 0.0, "map": 0.0}
 	_stage()
 	_ev_cursor = sim.events.size()
 	if L.get("match", false):
@@ -580,6 +637,12 @@ func _stage() -> void:
 			n["tier"] = int(e[3])
 		n["owner"] = str(e[1])
 		n["units"] = _units(e[2], n["tier"])
+	var low: Dictionary = L.get("neutrals", {})        # L9: T-02's neutrals start (and stay) low, so a match ends
+	if not low.is_empty():
+		for n in sim.nodes:
+			if n["owner"] == "" and Sim.has_vat(n) and low.has(int(n["tier"])):
+				n["units"] = float(low[int(n["tier"])]) * Rules.SCALE
+				n["regen_cap"] = n["units"]
 
 
 func _units(v, tier: int) -> float:
@@ -800,6 +863,7 @@ func _enter(st: Dictionary) -> void:
 				sim.ult_charge[HUMAN] = 1.0
 				sim.ult_since[HUMAN] = Rules.ULT_MIN_TIME
 			"vls":
+				_jump_clock(Rules.VERY_LAST_STAND_TIME)   # the clock reads {vls}
 				var gap = L.get("vls_gap", -1.0)
 				sim.start_very_last_stand_now(Rules.LAST_STAND_WARNING if str(gap) == "warning" else float(gap))
 	_bump()
@@ -909,6 +973,8 @@ func _custom_pass(what: String, op: Array) -> bool:
 
 
 func _pass_step(st: Dictionary) -> void:
+	if not st.get("read_only", false):
+		handler.emit("happy")
 	var dl := str(st.get("done_line", ""))
 	var last := step_i >= (L["steps"] as Array).size() - 1
 	if dl != "":
@@ -940,6 +1006,7 @@ func _fail(text: String) -> void:
 	time_scale = 1.0
 	fail_line = text
 	_bump()
+	handler.emit("droop")
 	failed.emit(text)
 
 
@@ -953,7 +1020,7 @@ func _complete(relay_kill := false, kill_units := 0) -> void:
 	for k in L.get("done", []):
 		lines.append(line(str(k)))
 	result = {"id": lesson_id, "title": title_of(lesson_id), "lines": lines, "time": lesson_t, "relay_kill": relay_kill,
-			"kill_units": kill_units, "final": lesson_id == LESSON_COUNT, "graduate": all_done(),
+			"kill_units": kill_units, "final": lesson_id == LESSON_COUNT, "graduate": all_done(), "tour": L.get("tour", false),
 			"next": lesson_id + 1 if lesson_id < LESSON_COUNT else -1, "won": sim.over and sim.allied(sim.winner, HUMAN)}
 	_bump()
 	completed.emit(result)
@@ -964,11 +1031,27 @@ func _tick_lesson(_dt: float) -> void:
 	var at := float(L.get("last_stand_at", -1.0))
 	if at >= 0.0 and not _ls_started and lesson_t >= at:
 		_ls_started = true
+		_jump_clock(Rules.LAST_STAND_TIME)            # the clock reads {ls} as the line says
 		_ls_strength = sim.seat_strength(HUMAN)
 		_ls_falls = float(sim.fall_losses.get(HUMAN, 0.0))
 		sim.start_last_stand_now()
 		_b_evacuate()
 		_bump()
+
+
+func _jump_clock(to: float) -> void:
+	## L7: the match clock jumps to the collapse's own time (so the HUD clock and the line agree); every time
+	## the director measures from moves with it.
+	var d := to - sim.time
+	if d <= 0.0:
+		return
+	sim.time = to
+	_last_order_t += d
+	_step_started += d
+	for ev in _log:
+		ev["t"] = float(ev.get("t", 0.0)) + d
+	if _catch.has("t0"):
+		_catch["t0"] = float(_catch["t0"]) + d
 
 
 func _tick_step(st: Dictionary, _dt: float) -> void:
@@ -1127,7 +1210,7 @@ func _b_send(from_name: String, to_name: String, shown: float) -> Dictionary:
 
 
 func _b_evacuate() -> void:
-	## L7: the weak rival pulls every crew off its falling ring onto the centre's far end (it never attacks).
+	## L7: the weak rival pulls every line of units off its falling ring onto the centre's far end (it never attacks).
 	var dest := _id("I3")
 	if dest < 0:
 		return
@@ -1229,7 +1312,7 @@ func _holds_node() -> bool:
 
 # ---------------------------------------------------------------- L9: the first match
 # A normal 1v1 against the Training AI with one scripted moment (§3): once you hold the relay and lead (at 2:30 at
-# the latest) the rival MUSTERS its crews on the node nearest the relay deck's near end, then commits one big PUSH
+# the latest) the rival MUSTERS its units on the node nearest the relay deck's near end, then commits one big PUSH
 # (>= 70 % of its units) across that deck. While the push is on the deck the game runs at half speed and the relay
 # is spotlit; losing >= 50 % of the push to the fall (the fling and the waterfall behind it) ends the tutorial on
 # the spot. A miss hands the match back to the AI; win or lose, the lesson completes.
@@ -1314,7 +1397,7 @@ func _start_muster(relay: int) -> void:
 			best = n["id"]
 	if best < 0:
 		return
-	for n in sim.nodes:                              # every other rival crew gathers there
+	for n in sim.nodes:                              # every other rival garrison gathers there
 		if n["owner"] == RIVAL and n["id"] != best and float(n["units"]) >= 3.0 * Rules.SCALE:
 			sim.send(n["id"], best, 1.0)
 	_match["phase"] = "muster"
@@ -1378,6 +1461,7 @@ func _tick_push(relay: int) -> void:
 		_match["kill_units"] = Rules.shown(lost)
 		_match["prompt"] = false
 		_match["phase"] = "done"
+		handler.emit("happy")
 		_finish_in(line("L9.relay_kill"))
 		return
 	var on := _on_relay_deck(hid, relay)
@@ -1409,6 +1493,8 @@ func _finish_in(text: String) -> void:
 
 # ================================================================ what the coach shows
 func header() -> String:
+	if lesson_id == FIRST_ID:
+		return "HANDLER · %s" % title_of(FIRST_ID)
 	if lesson_id == LESSON_COUNT:
 		return "HANDLER · FIRST MATCH"
 	return "HANDLER · LESSON %d / %d · %s" % [lesson_id, LESSON_COUNT - 1, title_of(lesson_id)]
@@ -1427,11 +1513,24 @@ func card() -> Dictionary:
 				"button": line("got_it") if not _match.get("card_done", false) and _note == "" and not catch_prompt() else ""}
 	var st := _step()
 	var text := _note if _note != "" else _fmt(line("%s.%s" % [L["key"], st["key"]]))
-	var c := st.get("catch", {}) as Dictionary
-	if not c.is_empty() and catch_prompt() and lesson_id == 4 and _note == "":
-		text = line("L4.prompt")
+	if st.has("before") and not catch_prompt() and _note == "":
+		text = line(str(st["before"]))              # the catch before its line reaches the deck
+	var button := ""
+	if st.get("read_only", false) and state == "running":
+		button = line("next_step") if L.get("tour", false) else line("got_it")
 	return {"visible": state != "complete", "header": header(), "text": text, "dots": steps.size(), "dot": step_i,
-			"button": line("got_it") if st.get("read_only", false) and state == "running" else ""}
+			"button": button}
+
+
+func is_tour() -> bool:
+	return bool(L.get("tour", false)) and state == "running"
+
+
+func inspect_request() -> int:
+	## The node the step wants the inspector open on (the tour's inspector step), -1 for none.
+	if state != "running":
+		return -1
+	return _id(str(_step().get("inspect", "")))
 
 
 func target() -> Dictionary:
@@ -1450,7 +1549,15 @@ func target() -> Dictionary:
 		var id := _id(str(nm))
 		if id >= 0 and not sim.collapsed.get(id, false):
 			out["nodes"].append(id)
-	out["rects"] = (t.get("rects", []) as Array).duplicate()
+	out["radius"] = float(t.get("radius", 1.0))
+	out["decks"] = []
+	for pair in t.get("decks", []):
+		var ei := sim._edge_index(_id(str(pair[0])), _id(str(pair[1])))
+		if ei >= 0:
+			out["decks"].append(ei)
+	for key in t.get("rects", []):                    # "badge:<name>" -> "badge:<node id>"
+		var k := str(key)
+		out["rects"].append("badge:%d" % _id(k.substr(6)) if k.begins_with("badge:") else k)
 	var who := str(t.get("lines", ""))
 	if who != "":
 		for h in sim.hordes:
@@ -1479,7 +1586,8 @@ func gesture() -> Array:
 			"drag":
 				out.append([kind, _id(str(g[1])), _id(str(g[2]))])
 			"press":
-				out.append([kind, str(g[1]), -1])
+				var k := str(g[1])
+				out.append([kind, "badge:%d" % _id(k.substr(6)) if k.begins_with("badge:") else k, -1])
 			"tap_line":                               # only once the dock slot is armed
 				if ui_armed == int(st.get("armed", -1)):
 					var hid := _a_line()
@@ -1531,6 +1639,7 @@ func _fmt(text: String) -> String:
 		"ls": _mmss(Rules.LAST_STAND_TIME), "vls": _mmss(Rules.VERY_LAST_STAND_TIME),
 		"hops": str(Rules.MONSTER_REACH),
 		"ult": str(roundi(Rules.ULT_CHARGE_TIME / 60.0)),
+		"cap": str(Rules.shown(Rules.CAPS[1])),
 		"faction": str(Rules.FACTION_NAMES.get(faction, [faction.to_upper()])[0]),
 		"skill1": ArmyPresets.skill_name(sim.skill_id(HUMAN, "active")),
 		"skill2": ArmyPresets.skill_name(sim.skill_id(HUMAN, "map")),
