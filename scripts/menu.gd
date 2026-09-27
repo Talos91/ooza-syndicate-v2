@@ -433,7 +433,9 @@ func show_main() -> void:
 	# ARMIES (0.18.7, Daniele: "its own new menu item where you select what skill each of your factions will
 	# use"): its own row under NEW GAME; OPTIONS and FULLSCREEN / QUIT share the next one
 	var h2 := rh(82)
-	nav_button("ARMIES", P(80, y), P(440, h2), func(): show_armies(faction, show_main)).add_theme_font_size_override("font_size", int(round(fsz(32) * K)))
+	# CAMPAIGN: the ARMIES row split into CAMPAIGN | ARMIES (same height and style; CAMPAIGN-DESIGN §3)
+	nav_button("CAMPAIGN", P(80, y), P(212, h2), show_campaign).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
+	nav_button("ARMIES", P(307, y), P(213, h2), func(): show_armies(faction, show_main)).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
 	y += h2 + GAP
 	var h3 := rh(82)
 	nav_button("OPTIONS", P(80, y), P(212, h3), show_options).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
@@ -832,6 +834,41 @@ func _cosmetic_path(family: String, id: String) -> String:
 		return "%d / %d WINS AS %s, ITS CAMPAIGN, OR UNLOCK" % [int(Progression.faction_stats(_army)["vat_wins"]),
 				int(Rules.PROGRESSION["faction_vat_wins"]), "VIRIDIAN" if _army == "bloom" else _army.to_upper()]
 	return "UNLOCK WITH SCRAP OR CHIPS"
+
+
+# ------------------------------------------------------------------ CAMPAIGN (CAMPAIGN-DESIGN.md §3)
+# CAMPAIGN: the campaign map page (CampaignPage, its own canvas and 3D diorama over the backdrop); also opened as
+# menu_open = "campaign" after a mission relaunch. Screenshot / test args: --campaign-all (every playable mission
+# open), --campaign-cfg=<path> (read progress from another file), --campaign-district=<id>, --campaign-card=<key>.
+var _camp_page: CampaignPage
+
+
+func show_campaign() -> void:
+	clear_page("city")
+	_page = "campaign"
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--campaign-all":
+			Campaign.all_open = true
+		elif arg.begins_with("--campaign-cfg="):
+			Campaign.path = arg.substr(15)
+	_camp_page = CampaignPage.new()
+	_camp_page.standalone_backdrop = false
+	_camp_page.set_faction(faction)
+	_camp_page.set_mobile(mobile)
+	_camp_page.back_pressed.connect(show_main)
+	_camp_page.play_pressed.connect(func(key: String):
+		if main.has_method("start_mission"):          # main.gd's mission launcher (the campaign session adds it)
+			main.call("start_mission", key, colour))
+	add_child(_camp_page)
+	content.tree_exiting.connect(_camp_page.queue_free)   # the next page's clear_page takes it away
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--campaign-district="):
+			var id := arg.substr(20)
+			for i in range(Campaign.districts(_camp_page.faction).size()):
+				if str(Campaign.districts(_camp_page.faction)[i]["id"]) == id:
+					_camp_page.show_district(i, false)
+		elif arg.begins_with("--campaign-card="):
+			_camp_page.open_card(arg.substr(16))
 
 
 # ------------------------------------------------------------------ ARMIES (army presets, SKILLS 2.0)
