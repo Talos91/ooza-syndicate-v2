@@ -1,9 +1,16 @@
-# To test - v0.20.5 "Alpha 20" (Daniele, on the phone and with a second player)
+# To test - v0.20.6 "Alpha 20" (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
+
+## 0.20.6 (HUD declutter)
+- [ ] **No number over moving lines**; node badges still show counts.
+- [ ] **Notifications** only top right, small, at most 2; none for your own sends or captures.
+- [ ] **Capture feedback**: "+ CAPTURED" / "LOST" rises from the node.
+- [ ] **Last Stand** line stays under the top bar and never covers the map.
+- [ ] **Dr. Vesk** in the tutorial reads funnier.
 
 ## 0.20.5 accounts (guest, email link, leaderboard, match history)
 - [ ] **ACCOUNT** (PROFILE > ACCOUNT): it should say GUEST ACCOUNT after a moment online. RENAME yourself.

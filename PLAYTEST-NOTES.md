@@ -779,6 +779,8 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 - First leaderboards: weekly challenge points + wins this season - *Done:* WINS THIS SEASON; weekly challenge points
   next (needs server-checked challenges).
 - MATCH HISTORY: "Yes, in 0.20.5" (via the Architect) - *Done:* PROFILE > HISTORY.
+205. **"the current structure node by node doesn t allow for much dynamic its likely you tend to go node by node and last stand often cuts relays usage making them always kinda useless end game if not for structure... we need to tackle that in the map maker but i love the map for the campaign looks cool".** *Decided (map rules N10 two lanes, N11 short corridors, N12 relays on the main routes, L05 a relay in the survivor ring; OPEN-QUESTIONS "Map dynamics"); applied at the map rebuild, Alpha 22-23.*
+
 206. **"make the text more fun dr dex is a bit flat".** *Done (0.20.6):* Dr. Vesk speaks in the campaign's dark-comedy house style
      (CAMPAIGN-DESIGN §1): the instruction first, then one short joke at most; 59 lines (TUTORIAL-SCRIPT draft 3).
 207. **"remove the number on top of units line - is not readable and makes noise; also too many notifications and many

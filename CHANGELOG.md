@@ -1,5 +1,17 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.6 "Alpha 20" - 2026-09-27 (HUD declutter; Dr. Vesk's voice)
+
+- **HUD declutter** (Daniele: "remove the number on top of units line ... too many notifications and many notifications
+  cover the map, all notification should be top right ... remove all notices of things like send and capture, better is in
+  game text coming out of the conquer place"): no count over moving lines (node badges keep theirs); toasts in one small
+  top-right column under the top bar / PAUSE, at most 2 visible, 1.8 s; no toast for accepted orders, captures, relay
+  switches, flings or falls - a capture now shows a short rising "+ CAPTURED" (your colour) / "LOST" (red) at the node
+  (`Fx.floater`, reveal key "floaters"); kept: skills against you, a monster launched at YOUR node, forge lost, eject,
+  handover, refusals, online events; the Last Stand status stays one compact line under the top bar (its repeating toasts dropped).
+- **Dr. Vesk is funnier** (Daniele: "make the text more fun dr dex is a bit flat"): 59 tutorial lines rewritten in the
+  campaign's dark-comedy style (instruction first, one short joke at most).
+
 ## 0.20.5 "Alpha 20" - 2026-09-27 (accounts: guest, email link / Google, cloud save, leaderboard, match history)
 
 Daniele: Supabase "yes, create it"; web / APK sign-in = guest + an email link + Google; a sign-in onto an account that
