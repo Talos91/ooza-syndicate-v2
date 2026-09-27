@@ -1,5 +1,20 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.1 "Alpha 21" - 2026-09-28 (optimization, part 2: models; server host; iPhone fullscreen)
+
+- **Light models on phones, full ones on desktop** (Daniele: "Phones only"): index.pck now carries the light kit (base
+  kit 331k -> 93k triangles, Skin Designer's phone rebuilds of the Machinegoon, monster hubs, monsters and every skin);
+  a desktop fetches the full originals once, on demand: hd.pck (base pieces, ~15 MB) and skins_hd.pck (skins, ~39 MB)
+  (`Cosmetics.kit_path`, `PerfProfile.hd()`). index.pck ~55 MB -> ~53 MB.
+- **Skins at the default vats' quality** (Skin Designer's quality pass): the five vat skin lines, Graduate, Machinegoon,
+  laser, forge and monster hub skins rebuilt with a plinth, lit tank caps and neon rings, in both the phone and HD sets.
+  Vat lines and laser skins stand 0.34 m higher, forge skins 0.56 m (tank columns and emitters follow).
+- **iPhone home-screen app fills the screen in landscape**: no more black band at the bottom (iOS reported the height
+  short by the status bar); the HUD stays inside the safe area (`web/viewport-fix.js`, `main._apply_safe_area`).
+- **Server** (server session): the room server's match host builds no world or HUD (host CPU about halved, room for 3
+  match slots); an adaptive playout buffer on guests (0.12-0.35 s after a stall, shown in the CONNECTION line);
+  deploy.sh checks every pack is in the build folder.
+
 ## 0.21.0 "Alpha 21" - 2026-09-28 (optimization, part 1: drawing)
 
 - **Draw far less** (Daniele: phone overheating, "lag still a major problem" with low fps in the PAUSE line): the static map

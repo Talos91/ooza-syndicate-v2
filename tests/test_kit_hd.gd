@@ -15,10 +15,8 @@ func check(cond: bool, what: String) -> void:
 
 
 func _init() -> void:
-	var was_phone := MapPool.phone
-
-	MapPool.phone = false                              # PerfProfile.hd() == true: desktop
-	check(PerfProfile.hd(), "PerfProfile.hd() true with MapPool.phone false")
+	PerfProfile.force_level("full")                    # PerfProfile.hd() == true: desktop / FULL
+	check(PerfProfile.hd(), "PerfProfile.hd() true on the full profile")
 	for key in Cosmetics.HD_DEFAULTS.keys():
 		var path := Cosmetics.kit_path(key)
 		check(path == Cosmetics.KIT_HD % key, "desktop: %s resolves to kit_hd" % key)
@@ -26,8 +24,8 @@ func _init() -> void:
 		var scene := load(path) as PackedScene
 		check(scene != null and scene.instantiate() != null, "desktop: %s instantiates" % key)
 
-	MapPool.phone = true                                # PerfProfile.hd() == false: phone
-	check(not PerfProfile.hd(), "PerfProfile.hd() false with MapPool.phone true")
+	PerfProfile.force_level("phone")                   # PerfProfile.hd() == false: phone
+	check(not PerfProfile.hd(), "PerfProfile.hd() false on the phone profile")
 	for key in Cosmetics.HD_DEFAULTS.keys():
 		var path := Cosmetics.kit_path(key)
 		check(path == Cosmetics.KIT % key, "phone: %s resolves to light kit" % key)
@@ -41,11 +39,11 @@ func _init() -> void:
 		"skins/Forge_Anvil", "skins/Laser_Tesla", "skins/Machinegoon_T2_Pepperbox",
 		"skins/MonsterHub_VEX_Pit", "skins/Monster_SOLAR_Eclipse"]
 	for key in sample:
-		MapPool.phone = false
+		PerfProfile.force_level("full")
 		var hd_path := Cosmetics.kit_path(key)
 		check(hd_path == Cosmetics.KIT_HD % key, "desktop: %s resolves to kit_hd/skins" % key)
 		check(ResourceLoader.exists(hd_path), "desktop: %s exists (%s)" % [key, hd_path])
-		MapPool.phone = true
+		PerfProfile.force_level("phone")
 		var light_path := Cosmetics.kit_path(key)
 		check(light_path == Cosmetics.KIT % key, "phone: %s resolves to skins.pck light" % key)
 		check(ResourceLoader.exists(light_path), "phone: %s exists (%s)" % [key, light_path])
@@ -56,6 +54,6 @@ func _init() -> void:
 			continue
 		check(FileAccess.file_exists("res://assets/kit_hd/skins/" + f), "kit_hd/skins has %s" % f)
 
-	MapPool.phone = was_phone
+	PerfProfile.force_level("")
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures > 0 else 0)

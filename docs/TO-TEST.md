@@ -5,6 +5,13 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.1 (light models on phones, quality skins, iPhone fullscreen, server host)
+- [ ] **iPhone home-screen app**: landscape fills the whole screen (no black band); HUD clear of the notch / home bar.
+- [ ] **Phone look**: the light models look right (vats, Machinegoon, monsters, skins); is the phone cooler than 0.21.0?
+- [ ] **Desktop**: models sharpen to the full ones a moment after a match starts (the HD packs load once).
+- [ ] **Skins**: the new quality skins (plinths, lit caps, neon rings) in ARMIES and in a match; vat drops leave the tanks.
+- [ ] **Online**: a server room with a stall - smoother catch-up, CONNECTION shows "buffer".
+
 ## 0.21.0 (optimization part 1)
 - [ ] **Phone heat / fps**: play a full match; is the phone cooler, is PAUSE's fps steadier (target 45)?
 - [ ] **Look**: same as before, sharper on the phone (no blocky edges).
