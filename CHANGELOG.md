@@ -1,5 +1,12 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.2 "Alpha 21" - 2026-09-28 (the monsters in their real colours)
+
+- **Monsters in colour**: the five race monsters and their alternates (Maneater / Titan / Monolith / Eclipse / Skyrig) had
+  shown grey since 0.19.0 - their colours live in a texture (the full-colour Alpha 1 minions) that the game's files lacked
+  (HD) or dropped at import (light). Both sets now carry Skin Designer's 512 px colour map (`*_tex512` folders; one JPEG,
+  no normal / metal maps) and the light import keeps it. Geometry unchanged.
+
 ## 0.21.1 "Alpha 21" - 2026-09-28 (optimization, part 2: models; server host; iPhone fullscreen)
 
 - **Light models on phones, full ones on desktop** (Daniele: "Phones only"): index.pck now carries the light kit (base
