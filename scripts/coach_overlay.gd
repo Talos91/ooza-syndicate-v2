@@ -92,7 +92,7 @@ const DRAG_HOLD_T := 0.25
 
 const SPOTLIGHT_SHADER := "
 shader_type canvas_item;
-uniform vec4 dim_color : source_color = vec4(0.008, 0.016, 0.024, 0.55);
+uniform vec4 dim_color : source_color = vec4(0.008, 0.016, 0.024, 0.42);   // 0.20.2: lighter, the map stays readable
 uniform vec4 ring_color : source_color = vec4(0.094, 0.855, 0.910, 1.0);
 uniform int num_c;
 uniform vec3 circles[8];
