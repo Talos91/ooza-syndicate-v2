@@ -492,8 +492,12 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
-	notices.size = Vector2(vp.x * 0.56, 0)
-	notices.position = Vector2(vp.x * 0.22, m.y + top_panel.size.y + 14 * ui_scale)
+	# 0.20.6 declutter (Daniele: "all notifications should be top right"): a small stack under whichever
+	# of the top bar / PAUSE reaches lower, right-aligned with PAUSE, never over the map centre.
+	var notice_w := minf(300.0 * ui_scale, vp.x * 0.4)
+	var notice_top := maxf(top_panel.position.y + top_panel.size.y, pause_button.position.y + pause_button.size.y) + 8 * ui_scale
+	notices.size = Vector2(notice_w, 0)
+	notices.position = Vector2(vp.x - m.z - notice_w, notice_top)
 	banner.size = banner.get_combined_minimum_size()
 	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	if debug_button:
@@ -1315,8 +1319,8 @@ func close_inspector() -> void:
 
 
 # ------------------------------------------------------------------ messages
-const NOTICE_HOLD := 3.0
-const NOTICE_MAX := 3
+const NOTICE_HOLD := 1.8    # 0.20.6 declutter (Daniele: "too many notifications"): shorter, and fewer reach the screen
+const NOTICE_MAX := 2
 const WARN_WORDS := ["lost", "falls", "get out", "can't", "Can't", "No ", "needs", "refused", "rejected", "on cooldown",
 		"swap ready", "Not your", "Too many", "already", "max tier", "no further", "Nothing", "missing", "Waiting"]
 static var _SEAT_WORD := RegEx.create_from_string("(?i)\\bseat ([A-F])\\b(?: \\([^)]*\\))?")   # "seat B", "seat A (NULL)"
@@ -1326,7 +1330,9 @@ const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade 
 func toast(msg: String, kind := "") -> void:
 	## Alpha 16: notifications in the UI's own panel style (Daniele: "better notifications, the same
 	## style as the rest of the UI"): a framed line with a colour bar - info cyan, good news in your
-	## colour, builds gold, warnings red - sliding in under the top bar, three at most, fading out.
+	## colour, builds gold, warnings red. 0.20.6 declutter (Daniele: "all notifications should be top
+	## right ... shouldn't cover the screen while player plays"): a small stack under the top bar and
+	## PAUSE, top-right, two at most, fading fast - never over the map centre.
 	if not shows("notices"):                          # TUTORIAL: notifications appear in L3 (main hands the
 		return                                        # refusal lines to the coach card before that)
 	if kind == "":
@@ -1346,17 +1352,17 @@ func toast(msg: String, kind := "") -> void:
 	var p := PanelContainer.new()
 	var st := panel_style(col)
 	st.set_content_margin_all(0)
-	st.content_margin_right = 14 * ui_scale
+	st.content_margin_right = 10 * ui_scale
 	p.add_theme_stylebox_override("panel", st)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	p.size_flags_horizontal = Control.SIZE_SHRINK_END   # right-aligned within the top-right stack
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", int(10 * ui_scale))
+	row.add_theme_constant_override("separation", int(7 * ui_scale))
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_child(row)
 	var bar := ColorRect.new()
 	bar.color = col
-	bar.custom_minimum_size = Vector2(5, 30) * ui_scale
+	bar.custom_minimum_size = Vector2(4, 20) * ui_scale
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(bar)
 	# a line naming a player ("lost to seat B", "Seat C reconnected", "you are seat A (NULL)") names
@@ -1364,7 +1370,7 @@ func toast(msg: String, kind := "") -> void:
 	var named := _SEAT_WORD.search(msg)
 	var seat := named.get_string(1).to_upper() if named else ""
 	if seat != "" and sim.factions.has(seat):
-		row.add_child(seat_emblem(seat, Vector2(24, 24)))
+		row.add_child(seat_emblem(seat, Vector2(16, 16)))
 		var rt := RichTextLabel.new()
 		rt.bbcode_enabled = true
 		rt.fit_content = true
@@ -1373,13 +1379,13 @@ func toast(msg: String, kind := "") -> void:
 		rt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		rt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		rt.add_theme_font_override("normal_font", UI_FONT)
-		rt.add_theme_font_size_override("normal_font_size", int(18 * ui_scale))
+		rt.add_theme_font_size_override("normal_font_size", int(14 * ui_scale))
 		rt.add_theme_color_override("default_color", Color("e6f4f8"))
 		rt.text = "%s[color=#%s]%s[/color]%s" % [msg.substr(0, named.get_start()).replace("[", "[lb]"),
 				Rules.seat_color(seat).to_html(false), str(sim.factions[seat]).to_upper(), msg.substr(named.get_end()).replace("[", "[lb]")]
 		row.add_child(rt)
 	else:
-		var l := text_label(msg, 18, Color("e6f4f8"))
+		var l := text_label(msg, 14, Color("e6f4f8"))
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row.add_child(l)
 	p.set_meta("text", msg)

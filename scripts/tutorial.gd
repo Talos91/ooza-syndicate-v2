@@ -198,12 +198,13 @@ const LINES := {
 # / VAT actions), rival_counts, strength (your total, RIVALS, the strength bar), notices (toasts), relay (the
 # double-tap fire, SWITCH, the relay line and outcome preview, the badge's relay state, ready glow and cue),
 # relay_build (LASER / FORGE / MONSTER HUB), forge_readout, monster (LAUNCH, the reach ring, the hub line),
-# status_line, danger (the floating Last Stand symbols), dock, and - only in L9, never in a 1v1 lesson - halos
-# and eject (the team parts).
+# status_line, danger (the floating Last Stand symbols), dock, floaters (0.20.6: the rising "+ CAPTURED" /
+# "LOST" node text), and - only in L9, never in a 1v1 lesson - halos and eject (the team parts).
 const REVEAL_BASE := ["map", "badges", "drag", "clock", "topbar"]   # topbar: 0.19.2's centred bar (the clock alone early on)
 const ALL_KEYS := ["map", "badges", "drag", "clock", "send_panel", "upgrade", "machinegoon", "rival_counts", "strength",
 		"notices", "relay", "relay_build", "forge_readout", "monster", "monster_icon", "status_line", "danger", "dock", "halos", "eject",
-		"out_panel"]                                   # (out_panel: the YOU'RE OUT panel - only in the tour and the first match)
+		"out_panel", "floaters"]                        # (out_panel: the YOU'RE OUT panel; floaters: 0.20.6's in-world
+                                                       # capture/loss text - only in the tour and the first match)
 
 # ---------------------------------------------------------------- the lessons (design §3)
 # stage: [name, owner, units, (tier)] - units in SHOWN numbers, or "garrison" (the tier's neutral garrison,

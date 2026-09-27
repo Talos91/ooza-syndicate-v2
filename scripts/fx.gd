@@ -35,6 +35,9 @@ var _body := {}             # faction -> [Mesh, scale to UnitView.UNIT_SIZE, alb
 var _body_mat := {}         # "faction|seat" -> Material (UnitView's creature look)
 var _fall_debt := {}        # seat -> shown units lost to BRAWL falls not yet drawn as a body
 var _goo: GooTerritory      # TERRITORY: GOO (Rules.goo_territory) - replaces the BRAWL neon below
+var _floaters: Array = []   # 0.20.6 declutter: {label, t, base} short in-world text (captures, losses)
+const FLOATER_MAX := 4      # a busy moment never stacks more than this at once
+const FLOATER_LIFE := 1.6
 
 
 func setup(w: Node3D, s: Sim, v: Dictionary, hv: HordeView) -> void:
@@ -149,6 +152,40 @@ func sync(dt: float) -> void:
 			continue
 		mi.scale = Vector3.ONE * lerpf(p["r"] * 0.4, p["r"] * 1.6, sqrt(k))
 		mi.transparency = k
+	for f in _floaters.duplicate():
+		f["t"] += dt
+		var t: float = f["t"]
+		var l: Label3D = f["label"]
+		if t >= FLOATER_LIFE:
+			l.queue_free()
+			_floaters.erase(f)
+			continue
+		l.position = (f["base"] as Vector3) + Vector3(0, 2.2 * (t / FLOATER_LIFE), 0)
+		l.modulate.a = 1.0 - smoothstep(FLOATER_LIFE - 0.4, FLOATER_LIFE, t)
+
+
+func floater(pos: Vector3, text: String, col: Color) -> void:
+	## 0.20.6 declutter (Daniele: "in game text coming out of the conquer place ... instead" of a toast
+	## covering the screen): a short label rising and fading at the node - capture / loss, for now.
+	if _floaters.size() >= FLOATER_MAX:
+		var old: Dictionary = _floaters.pop_front()
+		(old["label"] as Label3D).queue_free()
+	var l := Label3D.new()
+	l.text = text
+	l.font = Hud.UI_FONT
+	l.font_size = 72
+	l.outline_size = 16
+	l.outline_modulate = Color(0.02, 0.02, 0.05, 0.95)
+	l.modulate = col.lerp(Color.WHITE, 0.15)
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.no_depth_test = true
+	l.render_priority = 3
+	l.outline_render_priority = 2
+	l.pixel_size = 0.024
+	var base: Vector3 = pos + Vector3(0, 8.5, 0)
+	l.position = base
+	add_child(l)
+	_floaters.append({"label": l, "t": 0.0, "base": base})
 
 
 func _construction(n: Dictionary, entry: Dictionary, dt: float) -> void:

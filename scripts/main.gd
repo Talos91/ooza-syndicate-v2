@@ -973,7 +973,10 @@ func node_action(method: String, id: int, args := {}) -> bool:
 		director.on_action(method, id, args, r[0])
 		if not r[0] and str(r[1]) != "" and not hud.shows("notices"):
 			director.say(str(r[1]))                   # before L3 the refusals speak on the coach card
-	if str(r[1]) != "":
+	# 0.20.6 declutter (Daniele: "remove all notices of things like send... better is in game text"): an
+	# accepted order is routine (drag preview / node badges / floaters already show it); only a refusal
+	# needs a toast, since nothing else on screen explains why nothing happened.
+	if not r[0] and str(r[1]) != "":
 		hud.toast(r[1])
 	return r[0]
 
@@ -1123,30 +1126,15 @@ func _process(delta: float) -> void:
 				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
 						"chaos": "nodes fall in a hidden order - your home last"}
 				hud.show_banner("LAST STAND - %s\n%s" % [str(ev["method"]).to_upper(), how.get(ev["method"], "")], 5.0)
-			"very_last_stand":
-				hud.toast("VERY LAST STAND")
-			"collapse_warning":
-				var n: Dictionary = sim.nodes[ev["node"]]
-				if n["owner"] == HUMAN:
-					var left: float = sim.drop_in(ev["node"]) if sim.v3 else Rules.LAST_STAND_WARNING
-					hud.toast("Your node %d falls in %d s - get out!" % [ev["node"], int(ceil(left))])
-			"relay_tick":
-				var n: Dictionary = sim.nodes[ev["node"]]
-				if n["owner"] == HUMAN and director == null:   # (TUTORIAL: the card speaks; the director's own fires stay quiet)
-					hud.toast("Relay %d switches now" % ev["node"])
-			"fling":                                  # a turning deck threw a line into the void (units already shown scale)
-				var ours := sim.allied(str(ev["seat"]), HUMAN)
-				var flung := int(ev["units"])
-				if flung > 0:                         # a sliver under half a shown unit still counts, but gets no toast
-					hud.toast("%d unit%s flung off the turning deck" % [flung, "" if flung == 1 else "s"], "warn" if ours else "good")
-			"fall":                                   # 0.18.7: a retract / switch / remote took the deck from under a line
-				if ev.has("relay") and int(ev.get("shown", 0)) > 0:
-					var fell := int(ev["shown"])
-					var kind := str(sim.nodes[int(ev["relay"])]["relay"])
-					var what: String = {"retract": "the retracting deck", "switch": "the switched deck", "remote": "the switched-off deck"}.get(kind, "the deck")
-					hud.toast("%d unit%s fell with %s" % [fell, "" if fell == 1 else "s", what], "warn" if sim.allied(str(ev["seat"]), HUMAN) else "good")
-			"monster_launch":                          # Structures 2.1: everyone sees the launch (the route lights red)
-				hud.toast("seat %s launched a monster" % ev["seat"], "good" if sim.allied(str(ev["seat"]), HUMAN) else "warn")
+			# 0.20.6 declutter (Daniele: "too many notifications and many notifications cover the map...
+			# remove all notices of things like send and capture"): VERY LAST STAND repeats the status
+			# line (H5/top bar), the node's own falls are the danger symbols, and relay switches are
+			# visible on the relay itself - none of those need a toast of their own any more. "fling" /
+			# "fall" are ordinary battle noise already shown by the falling units themselves.
+			"monster_launch":                          # Structures 2.1: only a launch aimed at you is worth a toast
+				var to_you: bool = str(ev["seat"]) != HUMAN and sim.nodes[int(ev["target"])]["owner"] == HUMAN
+				if to_you:
+					hud.toast("seat %s launched a monster at you" % ev["seat"], "warn")
 			"monster_kick":                            # only your own lines' losses are worth a toast
 				if str(ev.get("seat_hit", "")) == HUMAN:
 					var kicked := int(ev.get("shown", 0))
@@ -1155,9 +1143,14 @@ func _process(delta: float) -> void:
 			"forge_lost":                              # red toast (spec E): the bonus is gone
 				if str(ev.get("seat", "")) == HUMAN:
 					hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
-			"eject":                                   # the ejecting owner already gets node_action's own toast;
+			"eject":                                   # your own eject is a routine order (no toast, see node_action);
 				if str(ev.get("seat", "")) != HUMAN and sim.allied(str(ev.get("seat", "")), HUMAN):
 					hud.toast("Your stored troops were sent home from node %d" % ev["node"], "info")
+			"handover":                                 # a silent production-only takeover (no fight to see it by)
+				if str(ev.get("seat", "")) == HUMAN:
+					hud.toast("Node %d handed over to you" % ev["node"], "good")
+				elif str(ev.get("from", "")) == HUMAN:
+					hud.toast("Node %d handed over to seat %s" % [ev["node"], ev["seat"]], "warn")
 	sim.fx_events.clear()
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
@@ -1194,10 +1187,15 @@ func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 	if mission:                                        # CAMPAIGN: a start node / vat / home lost
 		mission.on_captured(node_id, new_owner, _old)
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
+	# 0.20.6 declutter (Daniele: "remove all notices of things like send and capture - better is in game
+	# text coming out of the conquer place"): a fight is already visible on the node itself (fx.gd's
+	# capture pulse), so the toast becomes a short rising label there instead of covering the map.
+	if not hud.shows("floaters"):                       # TUTORIAL: the reveal set names when this is taught
+		return
 	if new_owner == HUMAN:
-		hud.toast("Node %d captured" % node_id)
+		fx.floater(sim.nodes[node_id]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
 	elif _old == HUMAN:
-		hud.toast("Node %d lost to seat %s" % [node_id, new_owner])
+		fx.floater(sim.nodes[node_id]["pos"], "LOST", Color("ff5b5b"))
 
 
 func _on_forge_online(seat: String, _node_id: int, first: bool) -> void:
