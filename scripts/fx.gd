@@ -154,10 +154,11 @@ func sync(dt: float) -> void:
 func _construction(n: Dictionary, entry: Dictionary, dt: float) -> void:
 	var building: bool = n["build_kind"] != "" and n["owner"] != ""
 	var model: Node3D = entry["vat_node"]
+	var one: Vector3 = entry.get("lab_scale", Vector3.ONE)   # MAP LAB bigVat: the vat's full size (LabPanel)
 	if building:
 		var p := smoothstep(0.0, 1.0, Sim.build_progress(n))
 		if model:
-			model.scale = Vector3.ONE * lerpf(0.12, 1.0, p)
+			model.scale = one * lerpf(0.12, 1.0, p)
 		if not _build_rings.has(n["id"]):
 			var mi := MeshInstance3D.new()
 			mi.mesh = _ring_mesh
@@ -171,8 +172,8 @@ func _construction(n: Dictionary, entry: Dictionary, dt: float) -> void:
 		ring.rotation.y += dt * 2.5
 		ring.transparency = 0.15 + 0.25 * sin(sim.time * 8.0)
 	else:
-		if model and model.scale != Vector3.ONE:
-			model.scale = Vector3.ONE
+		if model and model.scale != one:
+			model.scale = one
 		if _build_rings.has(n["id"]):
 			(_build_rings[n["id"]] as MeshInstance3D).visible = false
 

@@ -77,6 +77,13 @@ static func before_match(m: Node) -> void:
 	m.demo = watch
 	if level != "":
 		m.ai_level = level
+	var j = JSON.parse_string(FileAccess.get_file_as_string(m.map_path))
+	var variant: Dictionary = j.get("labVariant", {}) if j is Dictionary and j.get("labVariant") is Dictionary else {}
+	big_vat = variant.get("bigVat", false) == true
+	Sim.lab_direct = big_vat                            # units leave / enter at the rim (sim._build_path3)
+
+
+static var big_vat := false                             # this lab map's vats fill the platform (LabPanel scales them)
 
 
 func _init(m: Node) -> void:

@@ -11,6 +11,7 @@ extends RefCounted
 signal captured(node_id: int, new_owner: String, old_owner: String)
 signal finished(winner: String)
 
+static var lab_direct := false    # MAP LAB (branch map-lab) bigVat maps: units leave and enter at the deck's rim, no front door
 var nodes: Array = []          # see setup()
 var edges: Array = []          # {a, b, modules, state, retracts}
 var adj: Dictionary = {}       # node id -> Array of [neighbour id, edge index]
@@ -1244,10 +1245,12 @@ func _build_path3(route: Array) -> Dictionary:
 	var add := func(p: Vector3, f: int) -> void:
 		pts.append(p)
 		fast.append(f)
-	var brawl := not Rules.bridge_combat
+	var brawl := not Rules.bridge_combat and not lab_direct
 	var front := Rules.front_dir()
 	var a_front := atan2(front.z, front.x)
 	var ring: float = Rules.BRAWL_RING if brawl else Rules.ARC_R
+	if lab_direct:                                  # MAP LAB: round the big vat along the rim
+		ring = Rules.R - 0.5
 	var a0: Dictionary = nodes[route[0]]
 	var ex0 := exit_of(_edge_index(route[0], route[1]), route[0])
 	var d0 := ((ex0 - a0["pos"]) as Vector3).normalized()
@@ -1255,7 +1258,7 @@ func _build_path3(route: Array) -> Dictionary:
 		add.call(a0["pos"] + front * Rules.EXIT_R, 1)
 		for p in _arc(a0["pos"], a_front, atan2(d0.z, d0.x), ring):
 			add.call(p, 1)
-	else:
+	elif not lab_direct:
 		add.call(a0["pos"] + d0 * Rules.EXIT_R, 1)
 	add.call(ex0, 1)
 	for i in range(route.size() - 1):
@@ -1283,7 +1286,7 @@ func _build_path3(route: Array) -> Dictionary:
 			for p in _arc(b["pos"], atan2(din.z, din.x), a_front, ring):
 				add.call(p, 1)
 			add.call(b["pos"] + front * Rules.EXIT_R, 1)
-		else:                                         # onto the platform up to the tower's footprint
+		elif not lab_direct:                          # onto the platform up to the tower's footprint
 			add.call(b["pos"] + din * Rules.ARC_R, 1)
 	var cum := PackedFloat32Array([0.0])
 	for k in range(1, pts.size()):

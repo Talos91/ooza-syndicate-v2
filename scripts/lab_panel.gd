@@ -91,8 +91,46 @@ func _layout() -> void:
 	panel.position = Vector2(vp.x - panel.size.x - toggle.custom_minimum_size.x - 20, 110)
 
 
+var _vat_r := {}                                    # model key -> its footprint radius (m)
+
+
+func _big_vats() -> void:
+	## MAP LAB bigVat: every common / special node's centre model scaled to fill the platform (rim minus
+	## 0.4 m), height grown half as much so it doesn't wall off the view. Re-applied every frame: tier-ups
+	## and captures swap the model (MapBuilder.set_centre_model).
+	for n in main.sim.nodes:
+		if n["relay"] != "":
+			continue
+		var entry: Dictionary = main.vis[n["id"]]
+		var node: Node3D = entry.get("vat_node")
+		if node == null or not is_instance_valid(node):
+			continue
+		var key: String = entry.get("model_key", "")
+		if not _vat_r.has(key):
+			var box := AABB()
+			var first := true
+			var inv := node.global_transform.affine_inverse()
+			for mi in node.find_children("*", "MeshInstance3D", true, false):
+				var bb: AABB = inv * (mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()
+				box = bb if first else box.merge(bb)
+				first = false
+			var c := box.get_center()                  # node-local, at the model's current scale
+			var sc := node.scale
+			_vat_r[key] = [maxf(0.5, maxf(box.size.x * sc.x, box.size.z * sc.z) / 2.0 / maxf(sc.x, 0.001)),
+					Vector3(c.x * sc.x / maxf(sc.x, 0.001), 0.0, c.z * sc.z / maxf(sc.z, 0.001))]
+		var r: float = _vat_r[key][0]
+		var off: Vector3 = _vat_r[key][1]
+		var k: float = (Rules.R - 0.4) / r
+		entry["lab_scale"] = Vector3(k, 1.0 + (k - 1.0) * 0.5, k)   # fx.gd keeps it (its build grow / reset)
+		var rot := Basis(Vector3.UP, node.rotation.y)
+		var p: Vector3 = n["pos"] - rot * (off * k)      # the grown footprint centred on the platform
+		node.position = Vector3(p.x, node.position.y, p.z)
+
+
 func _process(delta: float) -> void:
 	_layout()
+	if MapLab.big_vat and main.sim != null:
+		_big_vats()
 	if overlay:
 		canvas.queue_redraw()
 	if panel.visible:
