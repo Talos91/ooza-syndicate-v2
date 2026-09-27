@@ -70,6 +70,7 @@ func _play_round(a: Node, b: Node, round_no: int) -> bool:
 
 func _run() -> void:
 	var a := _net()
+	a.test_room = true                             # a test room: real players may take its slot
 	a.host_room("vex")
 	if not await _wait(func(): return (a.connected and a.room_owner > 0) or a.hosting or a.bridge == null, 30.0) or a.hosting:
 		print("SKIP  no match server: ", a.status)

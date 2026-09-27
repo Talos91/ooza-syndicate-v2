@@ -130,6 +130,7 @@ var allow_native := false                          # tests: rooms outside the br
 var dedicated := false                             # this process is the room server's match host (--dedicated): no seat
 var room_owner := -1                                    # the player id who runs the lobby (browser host: 1; server room: the first in)
 var server_rooms := true                           # CREATE ROOM asks the server to host (false: this browser hosts)
+var test_room := false                             # tests: the room is a test - a real player's room may take its server slot
 var _creating := false                             # guest: our create request is on its way (a refusal falls back)
 var _server_room := ""                             # --room / --secret: the server room this match host serves
 var _server_secret := ""
@@ -472,7 +473,7 @@ func _start(host: bool, faction: String, code: String, create := false) -> Error
 			map_path = pool[0] if not pool.is_empty() else ""
 		_fix_colours()
 	if create:
-		bridge.start_with(false, {"op": "create", "version": version()})
+		bridge.start_with(false, {"op": "create", "version": version(), "test": test_room})
 	else:
 		bridge.start(host, code.strip_edges().to_upper())
 	status = "Connecting to the room service..."

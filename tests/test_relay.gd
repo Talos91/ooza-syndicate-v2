@@ -40,6 +40,7 @@ func _run() -> void:
 	var host := _net()
 	print("relay: ", host.relay_url())
 	host.server_rooms = false                          # these rooms are hosted by a player (stage 1; stage 2: test_dedicated)
+	host.test_room = true                             # a test room: real players may take its slot
 	host.host_room("null")
 	if not await _wait(func(): return host.room_code != "" or host.bridge == null):
 		print("SKIP  relay unreachable: ", host.status)
@@ -74,6 +75,7 @@ func _run() -> void:
 	check(await _wait(func(): return second.bridge == null), "the host leaving closes the room for guests: " + second.status)
 
 	var c := _net()                                    # CREATE ROOM: a server room, or (no match server) this game hosts
+	c.test_room = true                             # a test room: real players may take its slot
 	c.host_room("ember")
 	check(await _wait(func(): return c.connected and (c.hosting or c.can_control()), 30.0),
 			"CREATE ROOM works either way: %s" % ("fell back to hosting here" if c.hosting else "server-hosted room " + c.room_code))

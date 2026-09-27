@@ -43,6 +43,7 @@ HOST_MAX = 8 * 1024 * 1024                      # a host's packet (net.gd MAX_PA
 GUEST_RATE = 60                                 # packets per second before the relay drops a guest
 STATE_BACKLOG = 64 * 1024                       # skip a snapshot while this much is still queued to a guest
 HELLO_TIMEOUT = 10.0
+TEST_MAX_AGE = 600.0                            # a test room's match host is stopped after 10 min
 BOOT_TIMEOUT = 25.0                             # a server match host has this long to connect back (the game gives up at 30 s)
 
 cfg = None          # argparse namespace (main)
@@ -62,6 +63,7 @@ class Room:
         self.proc = None            # the headless Godot hosting this room (stage 2); host is None until it connects
         self.secret = ""
         self.ready = asyncio.Event()
+        self.test = False           # created by a test (Net.test_room): a real player's room may take its slot
 
 
 def server_matches():
@@ -139,7 +141,34 @@ async def run_server_host(ws, code, secret):
     await host_loop(ws, room)
 
 
-async def run_create(ws, version, ip):
+async def free_slot_for_real_room():
+    """All match hosts busy and a real player wants a room: stop the oldest test room's host (its guests hear the host
+    left) and wait for the slot. True when a slot is free."""
+    tests = sorted((r for r in rooms.values() if r.proc is not None and r.test), key=lambda r: r.created)
+    if not tests:
+        return False
+    victim = tests[0]
+    log.info("room %s: test room stopped for a real player's room", victim.code)
+    stop(victim)
+    for _ in range(50):
+        if server_matches() < cfg.max_matches:
+            return True
+        await asyncio.sleep(0.1)
+    return server_matches() < cfg.max_matches
+
+
+async def reap_old_tests():
+    """Test rooms never outlive TEST_MAX_AGE, whatever the test did."""
+    while True:
+        await asyncio.sleep(30)
+        now = time.time()
+        for r in list(rooms.values()):
+            if r.test and r.proc is not None and now - r.created > TEST_MAX_AGE:
+                log.info("room %s: test room past %d s - stopped", r.code, int(TEST_MAX_AGE))
+                stop(r)
+
+
+async def run_create(ws, version, ip, test=False):
     """A server-hosted room: start its match host, then let the creator in as the first guest."""
     if not cfg.godot or not os.path.exists(cfg.godot) or not (cfg.pck or cfg.project):
         await refuse(ws, "No match server here.", code="no-server")
@@ -149,10 +178,13 @@ async def run_create(ws, version, ip):
         await refuse(ws, "The server runs another game version.", code="version")
         return
     code = new_code()
+    if code is not None and server_matches() >= cfg.max_matches and not test:
+        await free_slot_for_real_room()                 # real players first: a test room gives its slot up
     if code is None or len(rooms) >= MAX_ROOMS or server_matches() >= cfg.max_matches:
         await refuse(ws, "The match server is busy.", code="busy")
         return
     room = Room(code, None)
+    room.test = test
     room.secret = secrets.token_urlsafe(18)
     rooms[code] = room
     pck = os.path.realpath(cfg.pck) if cfg.pck else ""   # the versioned pack current.pck points to now (deploys swap it)
@@ -176,7 +208,8 @@ async def run_create(ws, version, ip):
     finally:
         if out is not asyncio.subprocess.DEVNULL:
             out.close()
-    log.info("room %s: starting a server match host for %s (%d server matches)", code, ip, server_matches())
+    log.info("room %s: starting a server match host for %s (%d server matches)%s", code, ip, server_matches(),
+             " [test]" if test else "")
     asyncio.get_running_loop().create_task(reap(room))
     try:
         await asyncio.wait_for(room.ready.wait(), BOOT_TIMEOUT)
@@ -299,7 +332,7 @@ async def handler(ws):
         elif op == "host":
             await run_host(ws)
         elif op == "create":
-            await run_create(ws, str(msg.get("version", "")), ip)
+            await run_create(ws, str(msg.get("version", "")), ip, bool(msg.get("test", False)))
         elif op == "join":
             code = str(msg.get("code", "")).strip().upper()
             if len(code) == 4 and all(c in ALPHABET for c in code):
@@ -332,6 +365,7 @@ async def main():
     async with serve(handler, args.host, args.port, max_size=HOST_MAX + 1024, ping_interval=20,
                      ping_timeout=20, compression=None) as server:
         log.info("relay on %s:%d", args.host, args.port)
+        asyncio.get_running_loop().create_task(reap_old_tests())
         await server.serve_forever()
 
 

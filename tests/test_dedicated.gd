@@ -60,6 +60,7 @@ func _fake_main(s: Sim) -> Node3D:
 func _run() -> void:
 	var a := _net()
 	print("relay: ", a.relay_url())
+	a.test_room = true                             # a test room: real players may take its slot
 	a.host_room("null")
 	var up := await _wait(func(): return (a.connected and a.room_owner > 0) or a.hosting or a.bridge == null, 30.0)
 	if not up or a.hosting:
@@ -116,6 +117,7 @@ func _run() -> void:
 	b.leave()
 
 	var c := _net()                                    # an empty lobby frees its match host at once (0.20.1)
+	c.test_room = true                             # a test room: real players may take its slot
 	c.host_room("bloom")
 	var code := ""
 	if await _wait(func(): return c.connected and c.can_control(), 30.0):

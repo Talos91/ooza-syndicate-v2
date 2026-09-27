@@ -49,6 +49,7 @@ func _run() -> void:
 			token = FileAccess.get_file_as_string(arg.substr(12)).strip_edges()
 	var a := _net()
 	a.auth_token = token
+	a.test_room = true                             # a test room: real players may take its slot
 	a.host_room("vex")
 	if not await _wait(func(): return (a.connected and a.room_owner > 0) or a.hosting or a.bridge == null, 30.0) or a.hosting:
 		print("no server room: ", a.status)

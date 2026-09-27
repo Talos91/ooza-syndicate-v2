@@ -87,6 +87,7 @@ func _run() -> void:
 			want_mode = arg.substr(7)
 	var a := _net()
 	print("relay: ", a.relay_url())
+	a.test_room = true                             # a test room: real players may take its slot
 	a.host_room("null")
 	if not await _wait(func(): return (a.connected and a.room_owner > 0) or a.hosting or a.bridge == null, 30.0) or a.hosting:
 		print("no server room: ", a.status)
