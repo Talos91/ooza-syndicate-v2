@@ -42,7 +42,7 @@ const RIVER_SHAPE := Vector3(0.85, 0.9, 1.0)    # a river patch's proportions (a
 
 var meshes := {}      # faction -> kind -> Mesh
 var textures := {}    # faction -> creature Texture2D
-var pools := {}       # horde id -> {"patches": [MeshInstance3D], "label": Label3D, "vis": float, "phase": float}
+var pools := {}       # horde id -> {"patches": [MeshInstance3D], "vis": float, "phase": float}
 var contacts := {}    # contact key -> {"root", "lobes", "seam", "splash", "seats"}
 var rivers := {}      # node id -> {"mm": {"faction|seat|kind": MultiMeshInstance3D}, "vis": float, "sig": String}
 var _river_meshes := {}   # "faction|seat|kind" -> Mesh: a copy of the patch with the seat's materials and RIVER_SHAPE baked in
@@ -129,7 +129,6 @@ func sync(sim: Sim, viewer: String) -> void:
 		if not alive.has(id):
 			for p in pools[id]["patches"]:
 				p.queue_free()
-			pools[id]["label"].queue_free()
 			if pools[id].get("spray") != null:
 				(pools[id]["spray"] as Node).queue_free()
 			pools.erase(id)
@@ -157,15 +156,9 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 	var faction: String = h["faction"]
 	load_faction(faction)
 	if not pools.has(h["id"]):
-		var label := Label3D.new()
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.pixel_size = 0.014
-		label.font_size = 56                           # smaller: the badge is the number to read
-		label.outline_size = 16
-		label.no_depth_test = true
-		label.modulate = Rules.seat_color(h["owner"])
-		add_child(label)
-		pools[h["id"]] = {"patches": [], "label": label, "vis": float(h["units"]), "phase": fposmod(h["id"] * 0.37, 1.0),
+		# 0.20.6 declutter (Daniele: "remove the number on top of units line"): no Label3D any more -
+		# the node badges (hud.gd) still show counts.
+		pools[h["id"]] = {"patches": [], "vis": float(h["units"]), "phase": fposmod(h["id"] * 0.37, 1.0),
 				"fc": h.get("fcut", 0.0), "kp": -1, "L": h["L"], "spray": null}
 	var pool: Dictionary = pools[h["id"]]
 	# the drawn count trails the real one a little, so losses read as the line receding, not popping -
@@ -282,17 +275,8 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 			var fb := ForgePulse.boost(h["owner"], mi.position, 3.2)
 			mi.scale = scale * (1.0 + ForgePulse.SWELL * fb)
 			mi.position.y += ForgePulse.HOP * fb
-	var label: Label3D = pool["label"]
-	var head: Vector3 = Sim.sample(h, h["s"])[0]
-	label.position = head + Vector3(0, 3.0, 0)
-	if h["owner"] != viewer:
-		label.text = ""
-	elif h.get("retreat", false):
-		label.text = "%d  RETREAT" % Rules.shown(h["units"])
-	elif h["streaming"]:                              # out + still inside the vat (re-orderable)
-		label.text = "%d +%d" % [Rules.shown(h["units"]), Rules.shown(h["ordered"] - h["units"])]
-	else:
-		label.text = str(Rules.shown(h["units"]))
+	# 0.20.6 declutter (Daniele: "remove the number on top of units line - is not readable and makes
+	# noise"): the line no longer carries a moving-count label; the node badges (hud.gd) still count.
 
 
 const SLOTS := Rules.MAX_PATCHES + 1  # patch pool slots of a line whose front has been cut

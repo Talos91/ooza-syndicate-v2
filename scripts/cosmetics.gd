@@ -6,7 +6,7 @@ extends RefCounted
 ## capture swaps the model like a tier change does). Pure view: the rules never read it.
 ##
 ## CONTRACT (the HUD agent's ARMIES > COSMETICS page, main's per-seat apply and the room's player info):
-##   OPTIONS[family] -> Array of ids; families "vat", "machingoon", "laser", "forge", "monster_hub", "monster"
+##   OPTIONS[family] -> Array of ids; families "vat", "machinegoon", "laser", "forge", "monster_hub", "monster"
 ##   label(family, id, faction) -> String            "DEFAULT", "VEX", "GRADUATE", "SPITTER", "SKYRIG"...
 ##   set_loadout(seat, {family: id}) / loadout(seat) -> {family: id} (every family present, "default" if unset)
 ##   set_factions(sim.factions) at match start / faction_of(seat) (a monster hub, the monster and the
@@ -30,11 +30,24 @@ extends RefCounted
 ## model shows. Desktop and editor runs load the skins straight from res://.
 ## Skin vats live like the default ones (Scenery's liquid and residents, HordeView's drops out of the tanks):
 ## is_vat_key / drops_from say which models are vats, TANKS holds each skin vat's tanks.
+##
+## LIGHT / HD (Alpha 21 "Phones only", Daniele): assets/kit/ is the light set MapBuilder and this file
+## place by default (phone triangle budgets, OPT-MESH); assets/kit_hd/ carries today's full originals
+## under the same names, for the pieces that actually differ (HD_DEFAULTS below; every skin has both).
+## kit_path(key) is the one lookup MapBuilder.piece and this file's own loads go through: it answers
+## the light path unless PerfProfile.hd() wants HD *and* the HD copy is there to give - always true off
+## web (kit_hd ships in res:// on desktop/native), and on web only once its own on-demand pack has been
+## fetched (hd.pck for kit_hd/, skins_hd.pck for kit_hd/skins/ - the "Web HD" / "Web Skins HD" presets,
+## BUILD-LOG sec10), exactly the skins.pck dance below. Until then kit_path keeps answering light, so a
+## node shows light and swaps the moment its pack lands - the same "show the default meanwhile" contract
+## the skin cache already keeps, now doubled for quality: _ready()/cached() key a loaded skin by
+## "<kit key>#hd" when it is the HD copy, so a light load already in the cache is never mistaken for HD
+## and a later arrival of the HD pack is picked up on the next ask instead of being stuck on light.
 
-const FAMILIES := ["vat", "machingoon", "laser", "forge", "monster_hub", "monster"]
+const FAMILIES := ["vat", "machinegoon", "laser", "forge", "monster_hub", "monster"]
 const OPTIONS := {
 	"vat": ["default", "faction", "graduate", "biopod", "crystal", "distillery", "hive", "reactor"],
-	"machingoon": ["default", "spitter", "pepperbox"],
+	"machinegoon": ["default", "spitter", "pepperbox"],
 	"laser": ["default", "obelisk", "tesla"],
 	"forge": ["default", "anvil", "heartforge"],
 	"monster_hub": ["default", "hatchery", "pit"],
@@ -43,6 +56,25 @@ const OPTIONS := {
 const MONSTER_ALT := {"vex": "Skyrig", "null": "Monolith", "bloom": "Maneater", "ember": "Titan", "solar": "Eclipse"}
 const SKIN_LINE := {"biopod": "BioPod", "crystal": "Crystal", "distillery": "Distillery", "hive": "Hive", "reactor": "Reactor"}
 const KIT := "res://assets/kit/%s.glb"
+const KIT_HD := "res://assets/kit_hd/%s.glb"
+# Default (non-skin) kit keys with a distinct HD twin (the base kit OPT-MESH slimmed, plus the default
+# Machinegoon / monster hub / monster - Skin Designer's phone rebuilds replaced their assets/kit/ copies).
+# Every "skins/" key has one (Skin Designer covers all of them 1:1); those never need listing here.
+const HD_DEFAULTS := {
+	"Platform_Standard": true, "Platform_Pillar": true, "Platform_Rotation": true,
+	"Deck_Overpass_High_Ramp": true, "Deck_Overpass_High_Span": true, "Deck_Overpass_Ramp": true, "Deck_Overpass_Span": true,
+	"Deck_Retract": true, "Deck_S": true, "Deck_Underpass_Ramp": true, "Deck_Underpass_Span": true,
+	"Pier_Connector": true, "Pier_Eject": true, "Pier_Switch": true,
+	"Vat_T1": true, "Vat_T2": true, "Vat_T3": true, "Vat_T4": true,
+	"Cannon_T1": true, "Cannon_T2": true, "Cannon_T3": true, "Laser": true, "Forge": true,
+	"Relay_Remote": true, "Relay_Retract": true, "Relay_Rotation_Tower": true, "Relay_Switch_Hub": true,
+	"Machinegoon_T1": true, "Machinegoon_T2": true, "Machinegoon_T3": true,
+	"MonsterVat_BLOOM": true, "MonsterVat_EMBER": true, "MonsterVat_NULL": true, "MonsterVat_SOLAR": true, "MonsterVat_VEX": true,
+	"Monster_BLOOM": true, "Monster_EMBER": true, "Monster_NULL": true, "Monster_SOLAR": true, "Monster_VEX": true,
+}
+const HD_PACK_FILE := {"kit": "hd.pck", "skins": "skins_hd.pck"}
+static var _hd_pack := {"kit": "", "skins": ""}      # "" not asked yet / "loading" / "ready" / "failed"
+static var _hd_http := {"kit": null, "skins": null}
 const UNUSED_FRAMES := 600           # ~10 s at 60 fps without a single ask: the skin leaves the cache
 const LIFT := 0.56                   # ATTACH_Z - SOCKET_Z: the laser looks stand on a relay's attachment socket
 
@@ -127,9 +159,9 @@ static func model_key(family: String, id: String, faction: String, tier: int) ->
 					key = "Vat_T%d" % t
 				_:
 					key = "skins/Skin_%s_T%d" % [SKIN_LINE[id], t] if SKIN_LINE.has(id) else "Vat_T%d" % t
-		"machingoon":
+		"machinegoon":
 			t = clampi(t, 1, 3)
-			key = {"spitter": "skins/GooGun_T%d_Spitter" % t, "pepperbox": "skins/GooGun_T%d_Pepperbox" % t}.get(id, "Machingoon_T%d" % t)
+			key = {"spitter": "skins/Machinegoon_T%d_Spitter" % t, "pepperbox": "skins/Machinegoon_T%d_Pepperbox" % t}.get(id, "Machinegoon_T%d" % t)
 		"laser":
 			key = {"obelisk": "skins/Laser_Obelisk", "tesla": "skins/Laser_Tesla"}.get(id, "Laser")
 		"forge":
@@ -167,7 +199,7 @@ static func key_for(family: String, seat: String, tier: int) -> String:
 
 
 const _VAT := ["Vat_T1", "Vat_T1", "Vat_T2", "Vat_T3", "Vat_T4"]
-const _MG := ["Machingoon_T1", "Machingoon_T1", "Machingoon_T2", "Machingoon_T3", "Machingoon_T3"]
+const _MG := ["Machinegoon_T1", "Machinegoon_T1", "Machinegoon_T2", "Machinegoon_T3", "Machinegoon_T3"]
 const _HUB := {"vex": "MonsterVat_VEX", "null": "MonsterVat_NULL", "bloom": "MonsterVat_BLOOM", "ember": "MonsterVat_EMBER", "solar": "MonsterVat_SOLAR"}
 const _MONSTER := {"vex": "Monster_VEX", "null": "Monster_NULL", "bloom": "Monster_BLOOM", "ember": "Monster_EMBER", "solar": "Monster_SOLAR"}
 
@@ -176,7 +208,7 @@ static func default_key(family: String, faction: String, tier: int) -> String:
 	match family:
 		"vat":
 			return _VAT[clampi(tier, 0, 4)]
-		"machingoon":
+		"machinegoon":
 			return _MG[clampi(tier, 0, 4)]
 		"laser":
 			return "Laser"
@@ -192,51 +224,118 @@ static func default_key(family: String, faction: String, tier: int) -> String:
 static func scene_for(family: String, id: String, faction: String, tier: int) -> PackedScene:
 	var key := model_key(family, id, faction, tier)
 	if not key.begins_with("skins/"):
-		return load(KIT % key) as PackedScene
-	return _cache.get(key) if _ready(key) else null
+		return load(kit_path(key)) as PackedScene
+	return _cache.get(_cache_key(key)) if _ready(key) else null
 
 
 static func cached(key: String) -> PackedScene:
 	## MapBuilder.piece: the loaded scene of a skin key (null if it is not in the cache).
-	if _cache.has(key):
-		_asked[key] = Engine.get_process_frames()
-		return _cache[key]
+	var ck := _cache_key(key)
+	if _cache.has(ck):
+		_asked[ck] = Engine.get_process_frames()
+		return _cache[ck]
 	return null
 
 
+# ------------------------------------------------------------------ light / HD
+static func kit_path(key: String) -> String:
+	## The res:// path to load for a kit key ("Vat_T2", "skins/NULL_Vat_T2"): the HD twin when the
+	## profile wants it and it is there to give, else the light one everybody already ships. Kicks off
+	## the HD pack fetch on first ask (web only; a no-op elsewhere) so it is ready for next time - never
+	## blocks, the light model shows meanwhile, exactly like an unloaded skin.
+	if not PerfProfile.hd() or not _has_hd(key):
+		return KIT % key
+	var is_skin := key.begins_with("skins/")
+	if _hd_ready(is_skin):
+		return KIT_HD % key
+	_want_hd(is_skin)
+	return KIT % key
+
+
+static func _has_hd(key: String) -> bool:
+	return key.begins_with("skins/") or HD_DEFAULTS.has(key)
+
+
+static func _cache_key(key: String) -> String:
+	return key + "#hd" if kit_path(key) != (KIT % key) else key
+
+
+static func _hd_ready(is_skin: bool) -> bool:
+	if not OS.has_feature("web"):
+		return true                                  # native/editor: kit_hd ships in res://, always there
+	return _hd_pack[("skins" if is_skin else "kit")] == "ready"
+
+
+static func _want_hd(is_skin: bool) -> void:
+	if not OS.has_feature("web"):
+		return
+	var which := "skins" if is_skin else "kit"
+	if _hd_pack[which] != "":
+		return
+	_hd_pack[which] = "loading"
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		_hd_pack[which] = "failed"
+		return
+	var pack: String = HD_PACK_FILE[which]
+	var dest := "user://%s" % pack
+	var url := str(JavaScriptBridge.eval("new URL('%s?v=%s', window.location.href).href" % [pack, Rules.VERSION], true))
+	var http := HTTPRequest.new()
+	http.download_file = dest
+	http.accept_gzip = false                         # GitHub Pages gzips the .pck; never gunzip here (see _fetch_pack)
+	_hd_http[which] = http
+	tree.root.add_child(http)
+	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
+		var ok := result == HTTPRequest.RESULT_SUCCESS and code == 200 and ProjectSettings.load_resource_pack(dest, false)
+		_hd_pack[which] = "ready" if ok else "failed"
+		print("Cosmetics: %s %s (result %d, HTTP %d)" % [pack, "loaded" if ok else "not available - light stays", result, code])
+		(_hd_http[which] as HTTPRequest).queue_free()
+		_hd_http[which] = null)
+	print("Cosmetics: fetching ", url)
+	if http.request(url) != OK:
+		_hd_pack[which] = "failed"
+
+
+static func hd_pack_state(which: String) -> String:
+	## Debug / tests: the "kit" or "skins" HD pack's state ("" before any HD copy was needed).
+	return _hd_pack.get(which, "")
+
+
 static func _ready(key: String) -> bool:
+	var ck := _cache_key(key)
 	var frame := Engine.get_process_frames()
-	_asked[key] = frame
+	_asked[ck] = frame
 	if frame - _last_prune > 120:
 		_prune(frame)
-	if _cache.has(key):
+	if _cache.has(ck):
 		return true
-	if _failed.has(key):
+	if _failed.has(ck):
 		return false
-	var path := KIT % key
-	if _pending.has(key):
+	var path := kit_path(key)
+	var hd := ck != key
+	if _pending.has(ck):
 		var st := ResourceLoader.load_threaded_get_status(path)
 		if st == ResourceLoader.THREAD_LOAD_LOADED:
-			_pending.erase(key)
+			_pending.erase(ck)
 			var res := ResourceLoader.load_threaded_get(path) as PackedScene
 			if res:
-				_cache[key] = res
+				_cache[ck] = res
 				return true
-			_failed[key] = true
+			_failed[ck] = true
 		elif st != ResourceLoader.THREAD_LOAD_IN_PROGRESS:
-			_pending.erase(key)
-			_failed[key] = true
+			_pending.erase(ck)
+			_failed[ck] = true
 		return false
 	if not ResourceLoader.exists(path):
-		if OS.has_feature("web") and _pack in ["", "loading"]:
-			_fetch_pack()                             # web: the skins come in skins.pck, asked for once
+		if not hd and OS.has_feature("web") and _pack in ["", "loading"]:
+			_fetch_pack()                             # web: the light skins come in skins.pck, asked for once
 			return false
-		_failed[key] = true                         # a file missing from the build: the default stays
+		_failed[ck] = true                          # a file missing from the build: the default stays
 		return false
 	if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
-		_failed[key] = true
+		_failed[ck] = true
 		return false
-	_pending[key] = true
+	_pending[ck] = true
 	return false
 
 
@@ -293,18 +392,23 @@ static func loaded_skins() -> Array:
 # within r of it and in front of z0 turns, see MapBuilder.split_spinner). Gate pivots are read from the
 # model's own `*_Gate` node at run time (MonsterView); "gate" here is the fallback.
 const POINTS := {
-	"Machingoon_T1": {"muzzles": [Vector3(0, 2.72, 3.69)]},
-	"Machingoon_T2": {"muzzles": [Vector3(-0.39, 2.81, 4.42), Vector3(0.39, 2.81, 4.42)]},
-	"Machingoon_T3": {"muzzles": [Vector3(0, 2.92, 5.31)], "spin": {"axis": Vector2(0, 2.92), "r": 0.7, "z0": 1.3}},
-	"GooGun_T1_Spitter": {"muzzles": [Vector3(0, 2.35, 1.89)]},
-	"GooGun_T2_Spitter": {"muzzles": [Vector3(-0.32, 2.40, 2.30), Vector3(0.32, 2.40, 2.30)]},
-	"GooGun_T3_Spitter": {"muzzles": [Vector3(0, 2.77, 2.87), Vector3(-0.34, 2.31, 2.87), Vector3(0.34, 2.31, 2.87)]},
-	"GooGun_T1_Pepperbox": {"muzzles": [Vector3(0, 2.44, 2.03)], "spin": {"axis": Vector2(0, 2.44), "r": 0.34, "z0": 0.42}},
-	"GooGun_T2_Pepperbox": {"muzzles": [Vector3(0, 2.50, 2.45)], "spin": {"axis": Vector2(0, 2.50), "r": 0.44, "z0": 0.48}},
-	"GooGun_T3_Pepperbox": {"muzzles": [Vector3(0, 2.57, 2.97)], "spin": {"axis": Vector2(0, 2.57), "r": 0.54, "z0": 0.56}},
+	# 0.20.2 v2 (Models/2.0/structures_2_1/glb_machinegoon_v2): low barrels, built for full scale; T3's 6-barrel
+	# cluster (r 0.24) turns about +Z through (0, 1.34): its islands lie within 0.40 of the axis from z 1.08 on
+	"Machinegoon_T1": {"muzzles": [Vector3(0, 1.34, 2.65)]},
+	"Machinegoon_T2": {"muzzles": [Vector3(-0.32, 1.34, 2.75), Vector3(0.32, 1.34, 2.75)]},
+	"Machinegoon_T3": {"muzzles": [Vector3(0, 1.34, 2.90)], "spin": {"axis": Vector2(0, 1.34), "r": 0.40, "z0": 1.05}},
+	# the skins rebuilt on the v2 layout at full scale (0.20.2, glb_mg_skins_v2): every Pepperbox cluster spins
+	# (islands within r of the axis from z 0.9 on: barrels, bands and the breech drum)
+	"Machinegoon_T1_Spitter": {"muzzles": [Vector3(0, 1.34, 2.50)]},
+	"Machinegoon_T2_Spitter": {"muzzles": [Vector3(-0.30, 1.34, 2.60), Vector3(0.30, 1.34, 2.60)]},
+	"Machinegoon_T3_Spitter": {"muzzles": [Vector3(0, 1.34, 2.75), Vector3(-0.34, 1.34, 2.75), Vector3(0.34, 1.34, 2.75)]},
+	"Machinegoon_T1_Pepperbox": {"muzzles": [Vector3(0, 1.34, 2.55)], "spin": {"axis": Vector2(0, 1.34), "r": 0.36, "z0": 0.9}},
+	"Machinegoon_T2_Pepperbox": {"muzzles": [Vector3(0, 1.34, 2.65)], "spin": {"axis": Vector2(0, 1.34), "r": 0.43, "z0": 0.9}},
+	"Machinegoon_T3_Pepperbox": {"muzzles": [Vector3(0, 1.34, 2.80)], "spin": {"axis": Vector2(0, 1.34), "r": 0.49, "z0": 0.9}},
 	"Laser": {"emitter": Vector3(0, 7.85, 0), "lift": LIFT},
-	"Laser_Obelisk": {"emitter": Vector3(0, 7.51, 0), "lift": LIFT},
-	"Laser_Tesla": {"emitter": Vector3(0, 6.42, 0), "lift": LIFT},
+	# 0.21.1 quality pass: the laser skins stand on a 0.34 m plinth (emitters +0.34); the forge skins on 0.56 (no points)
+	"Laser_Obelisk": {"emitter": Vector3(0, 7.85, 0), "lift": LIFT},
+	"Laser_Tesla": {"emitter": Vector3(0, 6.76, 0), "lift": LIFT},
 	"Forge": {},
 	"Forge_Anvil": {},
 	"Forge_Heartforge": {},
@@ -337,26 +441,30 @@ static func points(model_name: String) -> Dictionary:
 	return POINTS.get(name, {})
 
 
-# MACHINGOON SIZE (0.19.2, Daniele on 0.19.1: "too big and when they shoot it looks weird as the enemies are
-# under them"): every Machingoon look is shown at MG_SCALE (about a vat's footprint) and sunk into its socket
-# so its highest muzzle sits MG_MUZZLE_Y above the deck - the stream arcs out onto the line's bodies instead of
-# pouring straight down. Applied to the model's children by MapBuilder.piece (the root keeps scale 1 for the
+# MACHINEGOON SIZE (0.19.2, Daniele on 0.19.1: "too big and when they shoot it looks weird as the enemies are
+# under them"; 0.20.2 on the 0.65 fix: "way too small; make it look as big as the other structures but make
+# sense"): the default look is the v2 model with LOW barrels, shown at full scale (muzzles 1.34 m over the
+# deck, no sink), and so are the Spitter / Pepperbox skins rebuilt on its layout. fit() stays for a future look
+# modelled at another size: MG_LOOK_SCALE[look] scales it and sinks it so its highest muzzle sits MG_MUZZLE_Y
+# above the deck. Applied to the model's children by MapBuilder.piece (the root keeps scale 1 for the
 # build / pump / tier-down animations); the muzzles above stay in model space (the view reads them through
 # the turret's global transform, so they follow the scale and the drop).
-const MG_SCALE := 0.65
 const MG_MUZZLE_Y := 1.15
-const MG_LOOK_SCALE := {"Spitter": 1.45, "Pepperbox": 1.3}   # the skins are modelled smaller: same footprint
+const MG_LOOK_SCALE := {}           # per look (the skin name); empty since 0.20.2: every look is built full-scale
 
 
 static func fit(model_name: String) -> Dictionary:
-	## {"scale", "drop"} for a model shown smaller than modelled (the Machingoon looks), {} otherwise.
+	## {"scale", "drop"} for a model shown smaller than modelled (the Machinegoon looks), {} otherwise.
 	var pt: Dictionary = POINTS.get(model_name.trim_prefix("skins/"), {})
 	if not pt.has("muzzles"):
 		return {}
 	var top := 0.0
 	for m in pt["muzzles"]:
 		top = maxf(top, (m as Vector3).y)
-	var k: float = MG_SCALE * float(MG_LOOK_SCALE.get(model_name.trim_prefix("skins/").get_slice("_", 2), 1.0))
+	var look := model_name.trim_prefix("skins/").get_slice("_", 2)
+	if not MG_LOOK_SCALE.has(look):
+		return {}                                     # the default v2 model: as modelled
+	var k: float = MG_LOOK_SCALE[look]
 	return {"scale": k, "drop": maxf(0.0, top * k - MG_MUZZLE_Y)}
 
 
@@ -371,7 +479,8 @@ static func drops_from(key: String) -> bool:
 	return is_vat_key(key) and not key.ends_with("_T4")
 
 
-# Each skin vat's tanks, measured from its GLB's OS_Ooze mesh islands (stacked islands on one axis = one
+# Each skin vat's tanks, measured from its GLB's OS_Ooze mesh islands (0.21.1: the quality-pass Skin_* lines
+# stand on a 0.34 m plinth - their columns +0.34; Skin Designer) (stacked islands on one axis = one
 # column; honeycomb cells and goo sheets under r 0.38 left out): [x, z, r, y0, y1] in the model's Godot space.
 const TANKS := {
 	"BLOOM_Vat_T1": [[-2.00, 0.00, 0.62, 1.00, 2.42], [-0.00, -0.00, 0.66, 3.20, 4.52]],
@@ -390,26 +499,26 @@ const TANKS := {
 	"SOLAR_Vat_T2": [[-2.15, 0.00, 0.52, 1.21, 2.21], [0.00, 0.00, 0.40, 4.73, 5.53], [2.15, 0.00, 0.52, 3.06, 4.06]],
 	"SOLAR_Vat_T3": [[-2.15, 0.00, 0.52, 1.31, 4.81], [0.00, 0.00, 0.40, 6.03, 6.83], [2.15, 0.00, 0.52, 1.31, 4.81]],
 	"SOLAR_Vat_T4": [[-2.40, 0.00, 0.52, 2.06, 5.56], [0.00, 0.00, 0.92, 1.28, 8.13], [2.40, 0.00, 0.52, 2.06, 5.56]],
-	"Skin_BioPod_T1": [[-2.05, 0.00, 0.52, 1.13, 2.33], [0.00, -0.00, 0.55, 3.37, 4.59]],
-	"Skin_BioPod_T2": [[-2.05, 0.00, 0.52, 1.13, 2.33], [0.00, 0.00, 0.64, 4.75, 6.15], [2.05, 0.00, 0.52, 2.98, 4.18]],
-	"Skin_BioPod_T3": [[-2.05, 0.00, 0.52, 1.23, 4.93], [0.00, -0.00, 0.72, 6.02, 7.61], [2.05, 0.00, 0.52, 1.23, 4.93]],
-	"Skin_BioPod_T4": [[-2.35, 0.00, 0.52, 1.98, 5.68], [0.00, -0.00, 0.86, 1.96, 9.07], [2.35, 0.00, 0.52, 1.98, 5.68]],
-	"Skin_Crystal_T1": [[-2.05, 0.00, 0.40, 1.25, 2.20], [0.00, 0.00, 0.62, 0.66, 4.09]],
-	"Skin_Crystal_T2": [[-2.05, 0.00, 0.40, 1.25, 2.20], [0.00, 0.00, 0.62, 0.66, 5.49], [2.05, 0.00, 0.40, 3.11, 4.05]],
-	"Skin_Crystal_T3": [[-2.05, 0.00, 0.40, 1.36, 4.80], [0.00, 0.00, 0.62, 0.66, 6.79], [2.05, 0.00, 0.40, 1.36, 4.80]],
-	"Skin_Crystal_T4": [[-2.35, 0.00, 0.40, 2.11, 5.55], [0.00, 0.00, 0.78, 0.73, 8.10], [2.35, 0.00, 0.40, 2.11, 5.55]],
-	"Skin_Distillery_T1": [[-2.05, 0.00, 0.42, 1.21, 2.21]],
-	"Skin_Distillery_T2": [[-2.05, 0.00, 0.42, 1.21, 2.21], [2.05, 0.00, 0.42, 3.06, 4.06]],
-	"Skin_Distillery_T3": [[-2.05, 0.00, 0.42, 1.31, 4.81], [2.05, 0.00, 0.42, 1.31, 4.81]],
-	"Skin_Distillery_T4": [[-2.35, 0.00, 0.42, 2.06, 5.56], [0.00, 0.00, 0.70, 3.37, 7.02], [2.35, 0.00, 0.42, 2.06, 5.56]],
-	"Skin_Hive_T1": [[-2.05, 0.00, 0.45, 1.22, 2.16]],
-	"Skin_Hive_T2": [[-2.05, 0.00, 0.45, 1.22, 2.16], [2.05, 0.00, 0.45, 3.07, 4.01]],
-	"Skin_Hive_T3": [[-2.05, 0.00, 0.45, 1.31, 4.76], [2.05, 0.00, 0.45, 1.31, 4.76]],
-	"Skin_Hive_T4": [[-2.35, 0.00, 0.45, 2.07, 5.51], [0.00, 0.00, 0.74, 0.70, 6.82], [2.35, 0.00, 0.45, 2.07, 5.51]],
-	"Skin_Reactor_T1": [[-2.05, 0.00, 0.38, 1.28, 2.18], [0.00, -0.00, 0.77, 1.84, 3.38]],
-	"Skin_Reactor_T2": [[-2.05, 0.00, 0.38, 1.28, 2.18], [0.00, 0.00, 0.82, 2.56, 4.20], [2.05, 0.00, 0.38, 3.13, 4.03]],
-	"Skin_Reactor_T3": [[-2.05, 0.00, 0.38, 1.38, 4.78], [0.00, 0.00, 0.87, 1.96, 5.99], [2.05, 0.00, 0.38, 1.38, 4.78]],
-	"Skin_Reactor_T4": [[-2.35, 0.00, 0.38, 2.13, 5.53], [0.00, 0.00, 0.88, 1.71, 6.72], [2.35, 0.00, 0.38, 2.13, 5.53]],
+	"Skin_BioPod_T1": [[-2.05, 0.00, 0.52, 1.47, 2.67], [0.00, -0.00, 0.55, 3.71, 4.93]],
+	"Skin_BioPod_T2": [[-2.05, 0.00, 0.52, 1.47, 2.67], [0.00, 0.00, 0.64, 5.09, 6.49], [2.05, 0.00, 0.52, 3.32, 4.52]],
+	"Skin_BioPod_T3": [[-2.05, 0.00, 0.52, 1.57, 5.27], [0.00, -0.00, 0.72, 6.36, 7.95], [2.05, 0.00, 0.52, 1.57, 5.27]],
+	"Skin_BioPod_T4": [[-2.35, 0.00, 0.52, 2.32, 6.02], [0.00, -0.00, 0.86, 2.30, 9.41], [2.35, 0.00, 0.52, 2.32, 6.02]],
+	"Skin_Crystal_T1": [[-2.05, 0.00, 0.40, 1.59, 2.54], [0.00, 0.00, 0.62, 1.00, 4.43]],
+	"Skin_Crystal_T2": [[-2.05, 0.00, 0.40, 1.59, 2.54], [0.00, 0.00, 0.62, 1.00, 5.83], [2.05, 0.00, 0.40, 3.45, 4.39]],
+	"Skin_Crystal_T3": [[-2.05, 0.00, 0.40, 1.70, 5.14], [0.00, 0.00, 0.62, 1.00, 7.13], [2.05, 0.00, 0.40, 1.70, 5.14]],
+	"Skin_Crystal_T4": [[-2.35, 0.00, 0.40, 2.45, 5.89], [0.00, 0.00, 0.78, 1.07, 8.44], [2.35, 0.00, 0.40, 2.45, 5.89]],
+	"Skin_Distillery_T1": [[-2.05, 0.00, 0.42, 1.55, 2.55]],
+	"Skin_Distillery_T2": [[-2.05, 0.00, 0.42, 1.55, 2.55], [2.05, 0.00, 0.42, 3.40, 4.40]],
+	"Skin_Distillery_T3": [[-2.05, 0.00, 0.42, 1.65, 5.15], [2.05, 0.00, 0.42, 1.65, 5.15]],
+	"Skin_Distillery_T4": [[-2.35, 0.00, 0.42, 2.40, 5.90], [0.00, 0.00, 0.70, 3.71, 7.36], [2.35, 0.00, 0.42, 2.40, 5.90]],
+	"Skin_Hive_T1": [[-2.05, 0.00, 0.45, 1.56, 2.50]],
+	"Skin_Hive_T2": [[-2.05, 0.00, 0.45, 1.56, 2.50], [2.05, 0.00, 0.45, 3.41, 4.35]],
+	"Skin_Hive_T3": [[-2.05, 0.00, 0.45, 1.65, 5.10], [2.05, 0.00, 0.45, 1.65, 5.10]],
+	"Skin_Hive_T4": [[-2.35, 0.00, 0.45, 2.41, 5.85], [0.00, 0.00, 0.74, 1.04, 7.16], [2.35, 0.00, 0.45, 2.41, 5.85]],
+	"Skin_Reactor_T1": [[-2.05, 0.00, 0.38, 1.62, 2.52], [0.00, -0.00, 0.77, 2.18, 3.72]],
+	"Skin_Reactor_T2": [[-2.05, 0.00, 0.38, 1.62, 2.52], [0.00, 0.00, 0.82, 2.90, 4.54], [2.05, 0.00, 0.38, 3.47, 4.37]],
+	"Skin_Reactor_T3": [[-2.05, 0.00, 0.38, 1.72, 5.12], [0.00, 0.00, 0.87, 2.30, 6.33], [2.05, 0.00, 0.38, 1.72, 5.12]],
+	"Skin_Reactor_T4": [[-2.35, 0.00, 0.38, 2.47, 5.87], [0.00, 0.00, 0.88, 2.05, 7.06], [2.35, 0.00, 0.38, 2.47, 5.87]],
 	"VEX_Vat_T1": [[-2.05, 0.00, 0.52, 1.24, 2.28]],
 	"VEX_Vat_T2": [[-2.05, 0.00, 0.52, 1.24, 2.28], [2.05, 0.00, 0.52, 3.09, 4.13]],
 	"VEX_Vat_T3": [[-2.05, 0.00, 0.52, 1.34, 4.89], [2.05, 0.00, 0.52, 1.34, 4.89]],
@@ -478,17 +587,19 @@ class Preview extends SubViewportContainer:
 			_refresh()                                    # a skin that finished loading takes over
 
 	func _refresh() -> void:
-		var key := Cosmetics.model_key(family, id, faction, 2 if family in ["vat", "machingoon"] else 1)
+		var key := Cosmetics.model_key(family, id, faction, 2 if family in ["vat", "machinegoon"] else 1)
 		var show := key
 		if key.begins_with("skins/"):
 			if not Cosmetics._ready(key):
-				show = Cosmetics.model_key(family, "default", faction, 2 if family in ["vat", "machingoon"] else 1)
+				show = Cosmetics.model_key(family, "default", faction, 2 if family in ["vat", "machinegoon"] else 1)
 		if show == _key:
+			return
+		var node := MapBuilder.piece(show)
+		if node == null:                                  # a scene freed mid-load (0.20.1): try again next refresh
 			return
 		_key = show
 		for c in _pivot.get_children():
 			c.queue_free()
-		var node := MapBuilder.piece(show)
 		_pivot.add_child(node)
 		var seat := "A"
 		if family == "monster":

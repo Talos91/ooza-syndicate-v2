@@ -92,7 +92,7 @@ func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, s_teams: Dicti
 		var fires := ssim.events.filter(func(e): return e["type"] == "relay_fired").size()
 		var builds := {}                                   # structures 2.1 (0.18.10): what the AIs built and launched
 		for e in ssim.events:
-			if e["type"] == "build_start" and e["kind"] in ["machingoon", "laser", "forge", "monster_hub"]:
+			if e["type"] == "build_start" and e["kind"] in ["machinegoon", "laser", "forge", "monster_hub"]:
 				builds[e["kind"]] = builds.get(e["kind"], 0) + 1
 		var monsters := ssim.events.filter(func(e): return e["type"] == "monster_launch").size()
 		var tag := "BRAWL"

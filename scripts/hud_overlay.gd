@@ -25,9 +25,8 @@ const RELAY_CUE_MAX := 3               # only the first few times (Daniele's ask
 const RELAY_CUE_SECONDS := 4.0
 
 
-const HALO_COLOR := Color("ffd76b")
-const HALO_WIDTH := [0.0, 2.0, 4.0, 6.0]
-const HALO_PAD := [0.0, 4.0, 9.0, 15.0]
+const HALO_WIDTH := [0.0, 3.0, 5.0, 7.0]   # 0.20.13: a touch thicker at tier 1 - it used to read as barely there
+const HALO_PAD := [0.0, 4.0, 10.0, 17.0]
 
 
 func setup(m: Node3D, s: Sim, h: Hud, seat: String, scale_ui: float) -> void:
@@ -114,15 +113,26 @@ func _label(at: Vector2, txt: String, col: Color, size_px: int) -> void:
 
 # ------------------------------------------------------------------ halos (allied troops stored here)
 func _draw_halos(cam: Camera3D) -> void:
+	## 0.20.13 (Daniele's 2v2 co-op playtest: "i sent troops to her node and except the count going up i
+	## couldn't see any other indicator"): one ring per seat with troops stored here, each in THAT seat's
+	## own colour (a single fixed gold ring never said whose troops they were, and read as barely there
+	## at tier 1) - stacked outward so more than one ally's rings don't just merge into one blob.
 	for n in sim.nodes:
 		var id: int = n["id"]
 		if sim.collapsed.get(id, false):
 			continue
-		var tier := sim.halo_tier(id, "")
-		if tier <= 0:
+		var allies: Dictionary = n.get("allies", {})
+		if allies.is_empty():
 			continue
 		var ns := _node_screen(id, cam)
-		draw_arc(ns[0], float(ns[1]) + HALO_PAD[tier] * ui_scale, 0.0, TAU, 40, Color(HALO_COLOR, 0.8), HALO_WIDTH[tier] * ui_scale, true)
+		var ring := 0
+		for seat in allies:
+			var tier := sim.halo_tier(id, str(seat))
+			if tier <= 0:
+				continue
+			draw_arc(ns[0], float(ns[1]) + (HALO_PAD[tier] + ring * 5.0) * ui_scale, 0.0, TAU, 40,
+					Color(Rules.seat_color(str(seat)), 0.85), HALO_WIDTH[tier] * ui_scale, true)
+			ring += 1
 
 
 # ------------------------------------------------------------------ relay badge cues (0.19.0, Daniele:

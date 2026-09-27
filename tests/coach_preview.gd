@@ -17,7 +17,8 @@ extends Node
 ## progress file is never touched.
 ##
 ## Shots (saved to <out>/<tag>-<name>.png):
-##   L1 .. L9     each lesson at its first step (L1's drag hand, L2's inspect tap, ...)
+##   L0 .. L9     each lesson at its first step (the tour's hello, L1's drag hand, ...)
+##   (every step of every lesson: tests/tutorial_walk.tscn)
 ##   hand         a 2x close-up of the pointing hand from L1
 ##   first        L1 on the first launch: SKIP TUTORIAL on the card
 ##   complete     LESSON COMPLETE (L3's)
@@ -25,7 +26,7 @@ extends Node
 ##   page         the TUTORIAL page (3 / 9 done)
 
 const MAIN := "res://main.tscn"
-const SHOT_ORDER := ["L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "hand", "first", "complete", "final", "page"]
+const SHOT_ORDER := ["L0", "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "hand", "first", "complete", "final", "page"]
 const TAGS := ["phone", "desktop"]
 const PROGRESS := "user://coach_preview_tutorial.cfg"
 
@@ -59,13 +60,17 @@ func _run() -> void:
 		return
 	var tag := str(args.get("tag", "shot"))
 	TutorialDirector.path = PROGRESS
+	Progression.path = "user://coach_preview_progression.cfg"   # TUTORIAL + PROGRESSION: never the real wallet
 	TutorialDirector.completed_ids = [1, 2, 3]
 	TutorialDirector.offered = true
 	TutorialDirector._loaded = true
 	TutorialDirector.save_progress()
 	var only := []
-	for v in str(args.get("lessons", "1,2,3,4,5,6,7,8,9")).split(","):
-		only.append(int(v))
+	for v in str(args.get("lessons", "0,1,2,3,4,5,6,7,8,9")).split(","):
+		if v != "none":                               # lessons=none: only the completion cards and the page
+			only.append(int(v))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Progression.path))   # TUTORIAL + PROGRESSION: a clean
+	Progression.reload_all()                                                      # scratch wallet for the cards
 	for i in only:
 		await _lesson_shot(out_dir, tag, i, false)
 	if 1 in only:
@@ -126,14 +131,17 @@ func _complete_shots(out_dir: String, tag: String) -> void:
 	var inst := _start({"tutorial": 3, "faction": "null", "colour": "A"})
 	await _frames(40)
 	inst._on_lesson_completed({"id": 3, "title": TutorialDirector.title_of(3), "time": 94.0, "final": false, "next": 4,
-			"lines": [TutorialDirector.line("L3.done1"), TutorialDirector.line("L3.done2")]})
-	await _frames(12)
+			"lines": [TutorialDirector.line("L3.done1"), TutorialDirector.line("L3.done2")],
+			"scrap": Rules.PROGRESSION["tutorial_lesson"]})   # TUTORIAL + PROGRESSION: the card's count-up
+	await _frames(70)                                 # the count-up (~1.2 s) has landed
 	await _shot(out_dir, "%s-complete" % tag)
 	inst.queue_free()
 	await _frames(6)
+	Progression.grant("preview:lessons", 9 * int(Rules.PROGRESSION["tutorial_lesson"]))   # the 3rd-skill line shows
 	var fin := _start({"tutorial": 9, "faction": "null", "colour": "A"})
 	await _frames(40)
-	fin._on_lesson_completed({"id": 9, "final": true, "relay_kill": true, "kill_units": 43, "graduate": true, "time": 170.0})
+	fin._on_lesson_completed({"id": 9, "final": true, "relay_kill": true, "kill_units": 43, "graduate": true, "time": 170.0,
+			"scrap": Rules.PROGRESSION["tutorial_lesson"]})
 	await _frames(90)                                 # the Graduate skin loads on a thread, then turns
 	await _shot(out_dir, "%s-final" % tag)
 	fin.queue_free()

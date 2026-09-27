@@ -5,6 +5,9 @@ extends RefCounted
 ## WebSocket to server/relay.py instead of PeerJS data channels, so every network that reaches the server can
 ## play and native builds (Android / iOS) can join too. The relay only forwards strings; the host's Sim still
 ## owns every rule. poll() returns the relay's events as a JSON string, exactly like OozePeer.poll().
+## 0.20.2: every snapshot is handed on (Net's playout buffer spaces them out), and a guest can simulate a bad
+## mobile link for tests: --netsim=<latency ms>,<jitter ms>,<stall every s>,<stall length s> on the command line or
+## ?netsim=... on the page (in order, like TCP: a stall holds everything behind it).
 
 const STATE_BACKLOG := 64 * 1024                   # skip a snapshot while this much is still queued (as PeerJS did)
 const CONNECT_TIMEOUT := 15.0
@@ -18,23 +21,43 @@ var opened := false                                # the socket reached OPEN
 var closing := false                               # we closed it ourselves
 var host := false
 var _since := 0
+var netsim := []                                   # [latency s, jitter s, stall every s, stall length s]; [] = off
+var _held: Array = []                              # netsim: [release msec, raw] in arrival order
+var _last_release := 0
 
 
 func _init(relay_url: String) -> void:
 	url = relay_url
+	var spec := ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--netsim="):
+			spec = arg.substr(9)
+	if spec == "" and OS.has_feature("web"):
+		var q = JavaScriptBridge.eval("new URLSearchParams(location.search).get('netsim')||''", true)
+		spec = str(q) if q != null else ""
+	var parts := spec.split(",")
+	if parts.size() == 4:
+		netsim = [float(parts[0]) / 1000.0, float(parts[1]) / 1000.0, float(parts[2]), float(parts[3])]
 
 
 func start(is_host: bool, code: String) -> void:
-	close()
-	host = is_host
-	if not host and not _valid_code(code):
+	if not is_host and not _valid_code(code):
+		close()
 		events.append({"type": "error", "message": "Enter the four-character room code."})
 		return
+	start_with(is_host, {"op": "host"} if is_host else {"op": "join", "code": code})
+
+
+func start_with(is_host: bool, first: Dictionary) -> void:
+	## Open the socket and send `first` once it is up: {"op": "create", "version"} asks for a server-hosted
+	## room (we join it as a guest), {"op": "host", "room", "secret"} is the server's own match host.
+	close()
+	host = is_host
 	ws = WebSocketPeer.new()
 	ws.inbound_buffer_size = 9 * 1024 * 1024       # a keyframe snapshot can be large (Net.MAX_PACKET 8 MB)
 	ws.outbound_buffer_size = 2 * 1024 * 1024
 	ws.max_queued_packets = 4096
-	hello = {"op": "host"} if host else {"op": "join", "code": code}
+	hello = first
 	opened = false
 	closing = false
 	_since = Time.get_ticks_msec()
@@ -52,13 +75,13 @@ func poll() -> String:
 				opened = true
 				ws.send_text(JSON.stringify(hello))
 			while ws.get_available_packet_count() > 0:
-				_take(ws.get_packet().get_string_from_utf8())
+				_arrive(ws.get_packet().get_string_from_utf8())
 		elif state == WebSocketPeer.STATE_CLOSING:
 			while ws.get_available_packet_count() > 0:  # the relay's last words arrive with its close
-				_take(ws.get_packet().get_string_from_utf8())
+				_arrive(ws.get_packet().get_string_from_utf8())
 		elif state == WebSocketPeer.STATE_CLOSED:
 			while ws.get_available_packet_count() > 0:  # the relay's last words (an error, "closed")
-				_take(ws.get_packet().get_string_from_utf8())
+				_arrive(ws.get_packet().get_string_from_utf8())
 			if not closing:
 				_lost()
 			ws = null
@@ -66,6 +89,9 @@ func poll() -> String:
 			ws.close()
 			ws = null
 			events.append({"type": "error", "message": "Could not reach the room server. Check your connection."})
+	var now := Time.get_ticks_msec()
+	while not _held.is_empty() and int(_held[0][0]) <= now:   # netsim: packets whose delay is over
+		_take(str(_held.pop_front()[1]))
 	var out := JSON.stringify(events)
 	events = []
 	return out
@@ -90,22 +116,29 @@ func close() -> void:
 		ws.close(1000, "left")
 	ws = null
 	events = []
+	_held = []
+
+
+func _arrive(raw: String) -> void:
+	if netsim.is_empty() or host:
+		_take(raw)
+		return
+	var now := Time.get_ticks_msec() / 1000.0
+	var at := now + float(netsim[0]) + randf() * float(netsim[1])
+	var every := float(netsim[2])
+	if every > 0.0 and fmod(now, every) < float(netsim[3]):   # inside a stall: held until it ends
+		at = maxf(at, now - fmod(now, every) + float(netsim[3]) + float(netsim[0]))
+	var ms := maxi(int(at * 1000.0), _last_release)    # in order, like TCP
+	_last_release = ms
+	_held.append([ms, raw])
 
 
 func _take(raw: String) -> void:
+	## Every packet goes on, snapshots included: Net's playout buffer (0.20.2) spaces out a burst instead of
+	## this dropping all but the newest.
 	var event = JSON.parse_string(raw)
-	if not event is Dictionary:
-		return
-	if str(event.get("type", "")) == "data":       # only the newest snapshot per sender matters (as OozePeer)
-		var data := str(event.get("data", ""))
-		if data.begins_with("{\"kind\":\"state\""):
-			for i in range(events.size()):
-				var e: Dictionary = events[i]
-				if str(e.get("type", "")) == "data" and e.get("peer") == event.get("peer") \
-						and str(e.get("data", "")).begins_with("{\"kind\":\"state\""):
-					events[i] = event
-					return
-	events.append(event)
+	if event is Dictionary:
+		events.append(event)
 
 
 func _lost() -> void:

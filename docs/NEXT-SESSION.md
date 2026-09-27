@@ -1,16 +1,147 @@
 # Next session - start here
 
-State as of publish today: **v0.19.1 "Alpha 19"** live - the interactive tutorial (below), on top of 0.19.0: Structures 2.1 (Machingoon, Laser tower, Forge
-with a defence half, Monster hub), new vat caps and neutral garrisons, team rules built (GAME-RULES §11),
-"lines keep you alive" elimination, 7:00 follows the Very Last Stand with a DRAW call-out, Alpha 11
-classics get relay retrofits, the AI accounts for forges and values relays, rooms default to a room relay
-server (Alpha 20 stage 1) instead of PeerJS, relay switches double-tap and read more clearly, ARMIES
-cosmetics with 69 new skins - on top of 0.18.9's Very Last Stand, balance and mobile UI pass. Source on
+State as of publish today: **v0.21.1 "Alpha 21"** - light models on phones / HD packs on desktop, quality skins, iPhone fullscreen, the server host draws nothing (below) - on top of **v0.21.0 "Alpha 21"** - optimization part 1 (below) - on top of **v0.20.13**; before that **v0.20.9 "Alpha 20"** - the tutorial checked on the decluttered HUD - on top of **v0.20.8** - ACCOUNT without email (guest + Google + rename) - on top of **v0.20.7** - the Google buttons on (web gzip fix) - on top of **v0.20.6 "Alpha 20"** - HUD declutter (no count over moving lines; toasts top right, max 2; capture floaters `Fx.floater`, reveal key "floaters"), Dr. Vesk's voice - on top of **v0.20.5 "Alpha 20"** - accounts (guest, Google, cloud save, WINS THIS SEASON, MATCH HISTORY; below) - on top of **v0.20.4 "Alpha 20"** - the campaign preview (VEX, the sinking city, placeholder maps; below) - on top of **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
+challenges, unlocks with the locks still off (below) - on top of **v0.20.0 "Alpha 20"** - the room server hosts the matches (server-hosted rooms, the room
+owner; below) - on top of **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
+interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish
+retuned, per-seat rival factions, a tappable monster-icon launch flow, a smaller Machinegoon with a
+raised muzzle, skins fixed on the web, ARMIES 3D previews and TERRITORY moved in from OPTIONS, a
+rebuilt fixed/centred top bar with a YOU'RE OUT / spectate panel, coloured skill dock, six debug
+size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed everywhere. Source on
 `main`, published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md`
 (project root - the whole game as built), this file,
-`README.md`, `docs/TO-TEST.md` (this session's checklist), the top of `CHANGELOG.md` (0.18.9 to 0.19.0),
-`PLAYTEST-NOTES.md` notes 149-163, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`, the
-design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handoff/AGENT-BRIEF.md`.
+`README.md`, `docs/TO-TEST.md` (this session's checklist), the top of `CHANGELOG.md` (0.20.0 to 0.20.9),
+`PLAYTEST-NOTES.md` notes 186-207 (2026-09-27), then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
+(the session board), the design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and
+`05 Handoff/AGENT-BRIEF.md`.
+
+## 0.21.0 - 0.21.1 (2026-09-28): Alpha 21 optimization - batching, phone profile, light / HD models
+
+- **0.21.0**: `MapBatch` (scripts/map_batch.gd) draws the static map through MultiMesh batches (A-01 592 -> 256 draw calls,
+  M-39 1,093 -> ~450); `PerfProfile` (scripts/perf_profile.gd; `PerfProfile.apply(self)` at the top of main._ready) sets
+  GRAPHICS AUTO / LOW RES / FULL and FPS AUTO / 30 / 60 (OPTIONS > PERFORMANCE); phones render at full resolution (the old
+  0.75 scale was upscaled unfiltered = blocky edges) with a 45 fps cap. `tests/perf_check.tscn` (windowed, timeout 240)
+  checks M-39's budgets from rules.gd.
+- **0.21.1**: `assets/kit/` is the LIGHT kit everywhere (index.pck); `assets/kit_hd/` holds the full originals, packed as
+  hd.pck ("Web HD") and skins_hd.pck ("Web Skins HD"), fetched on demand when `PerfProfile.hd()` (desktop / FULL);
+  `Cosmetics.kit_path(key)` is the one lookup (`tests/test_kit_hd.gd`). Publishing exports FOUR packs: index, skins, hd,
+  skins_hd (BUILD-LOG §10; server/deploy.sh refuses a build folder missing one). A new skin goes into BOTH skins folders and
+  BOTH skin presets. Skin Designer's quality-pass skins are in (kit/skins <- `*_q_phone`, kit_hd/skins <- `*_q`; Skin_*
+  tank columns and laser emitters +0.34 for the plinths). iPhone standalone landscape: `web/viewport-fix.js` +
+  `main._apply_safe_area`. Server: `Net.dedicated` hosts build no world (SERVER HOST blocks in main.gd), adaptive playout
+  buffer in net.gd.
+- **Next:** 0.21.2 = net5 (binary frames; relay deploy first). Alpha 21 left: code audit, telemetry (Progression; wants
+  per-match perf stats from PerfProfile), first sound (ask Daniele for the pack), HUD badge draw calls, vat liquid
+  per-instance material, download size.
+
+## 0.20.6 - 0.20.9 (2026-09-27): HUD declutter, Google on, no email, the tutorial on the new HUD
+
+- **0.20.6** (Architect's HUD agent): no count over moving lines; toasts in one small top-right column (max 2, 1.8 s);
+  captures show `Fx.floater` "+ CAPTURED" / "LOST" at the node (reveal key "floaters"); Dr. Vesk's 59 lines rewritten
+  (instruction first, one joke at most).
+- **0.20.7** (progression): `Account._call` turns Godot's gzip off on the web - the browser already decompressed
+  Supabase's replies, so /auth/v1/settings failed and the Google buttons stayed grey. Gotcha, same as the 0.19.2 skins
+  download: never decompress twice on the web.
+- **0.20.8** (progression; Daniele: "its a game why would they want to do that"): no email sign-in. ACCOUNT = automatic
+  guest + ADD GOOGLE / SIGN IN WITH GOOGLE + RENAME; the email code is removed. Apple (iOS) and native Google (Android)
+  come with the store builds (PROGRESSION-DESIGN §7). For Google while the Google app is in Testing mode, the account
+  must be under Audience > Test users.
+- **0.20.9** (tutorial): floaters from L1 step 1; the coach card sized to the line's wrapped height; L7's rival stays
+  scripted weak through the Very Last Stand (test_tutorial wins L7 on 16 of 16 seeds).
+- **Next:** Alpha 21 = optimization - Daniele measures first with the Map Lab's PERF REPORT (60 s) on D-17 on his phone
+  (desktop: ~1 900 draw calls a frame); then the Alpha 22-23 map rebuild (rulebook incl. N10 / N11 / N12 / L05,
+  junctions J-01..J-03 in the lab) and the full campaign. Online: a fresh signing secret before a public launch, a
+  domain, more match slots (2 today).
+
+## 0.20.5 (2026-09-27): accounts - guest, Google, cloud save, leaderboard, match history
+
+- Backend: `supabase/` (README: project ref, trust rule, the dashboard switches Daniele sets). Client: `scripts/account.gd`
+  (Account.get_instance(); `start()` from main.gd once per run; `Account.enabled = false` and `--no-account` keep it
+  off). Host: `net.gd` auth + `scripts/match_report.gd` (server session). Pages: menu.gd show_account /
+  show_leaderboard / show_history. `tests/test_account.gd -- --live` creates real anonymous users: delete them after
+  (SQL: `delete from auth.users where id = '<printed id>' and is_anonymous`).
+- Email sign-in was dropped in 0.20.8; Google is on since 0.20.7 (not yet clicked through by a session - it can't
+  enter account credentials). Next: the weekly challenge-points board (server-checked challenges), account deletion for the
+  store builds, Play Games / Game Center with the store builds.
+
+## 0.20.4 (2026-09-27): the campaign preview
+- Design and Daniele's decisions: `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/CAMPAIGN-DESIGN.md` (§0 decisions, §5a
+  the Progression interface, §7b the systems missions still need); open points: OPEN-QUESTIONS (Campaign). Owner: the
+  "Campaign and map ideas" session.
+- Code: `scripts/campaign.gd` (static data + progress `user://campaign.cfg`, stars_for, record -> summary, pay_pending,
+  `last_run` hand-over to the page), `scripts/mission_director.gd` (pure Sim logic like TutorialDirector: begin / step /
+  on_event / on_action / on_captured, objectives, stars, optional objectives), `scripts/mission_overlay.gd` (briefing,
+  objective strip, result screen), `scripts/campaign_page.gd` (the 3D diorama page). Hooks: `# CAMPAIGN:` blocks in
+  main.gd (`mission` beside the tutorial's `director`, which stays null in missions; `start_mission`; the relaunch key
+  "mission" checked before the first-launch tour; `_on_finished` routes a mission before `_record_progress`), menu.gd
+  (CAMPAIGN | ARMIES, `show_campaign`), hud.gd (the CAMPAIGN leave label).
+- Next: the mission maps from the Game map builder (briefs `02 Maps/campaign-vex-briefs/`, pack `References/Ooze
+  Syndicate maps - campaign VEX/`, the "campaign" rulebook profile) - switch each mission's `map` to its V- code; the
+  §7b systems (extraction node, event deck items, the beast, fog) each with Daniele's yes; the rival portraits.
+- Tests: test_campaign, test_mission (`--script`), test_campaign_page (a scene - hud.gd needs the Net autoload).
+
+## 0.20.1 (2026-09-27): progression - SCRAP, SYNDICATE CHIPS, levels, challenges, unlocks
+
+- Design and Daniele's decisions: `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/PROGRESSION-DESIGN.md` (§0 decisions,
+  §7a the match-host report agreed with the server session, §9 numbers); open points: OPEN-QUESTIONS (Progression).
+  Owner: the "Leaderboard, progression, and currency" session.
+- Code: `scripts/progression.gd` (static, `user://progress.cfg`): `grant(source, amount, currency := "soft")` one-off
+  per source, `has_granted`, `unlock(item, source)`, `is_unlocked(item)` (ids `<family>:<id>[:faction]`, `skill:<id>`),
+  `spend(item, currency)`, `record_match(result)` / `result_from_sim(sim, seat, info)`, `seat_stats` / `placements`
+  (the match host's report will use these), challenges (`current_challenges`, `claim`, `reroll`, UTC day / week).
+  Views: `reward_ticker.gd` (count-up, used by the tutorial cards too), `reward_strip.gd` (results screen). Hooks:
+  main.gd `_record_progress` (not on Net.dedicated / headless / demo / scenario / ff / shots), hud.gd `_reward_strip`,
+  menu.gd PROGRESSION block (`_profile_card`, `show_profile`, `show_challenges`, `_buy_prompt`), army_presets.gd
+  (`is_unlocked` delegates; `loadout_for(f, raw)` falls back to Surge / Demolish for a locked skill), tutorial.gd /
+  coach_overlay.gd `# TUTORIAL + PROGRESSION`. Numbers: the PROGRESSION block at the end of rules.gd.
+- **Locks are off** (`Rules.UNLOCK_ALL_TESTING = true`); OPTIONS > TEST SWITCH · LOCKS previews them for a session.
+  Screenshots: `-- --progress=user://shot_progress.cfg --locks=on --menu-page=profile --menu-shot=<png>`.
+- Online rounds pay on the device until accounts exist. Next for this session: Supabase accounts (guest, then Play
+  Games / Game Center / a personal account), the `match-result` edge function the server session wires, then
+  leaderboards. Campaign missions: `record_match(result_from_sim(..., {"campaign": true}))` (XP + challenges only).
+- Open: OPEN-QUESTIONS Progression (8) account merge, (9) Supabase confirmed, (11) first leaderboards, (12) missions,
+  (13) online pay by AI level, (14) when locks go live.
+
+## 0.20.0 "Alpha 20" (2026-09-27): server-hosted rooms (the server session)
+
+- CREATE ROOM -> `Net.host_room` sends {"op": "create"}; `server/relay.py` starts `godot --headless --main-pack
+  /opt/ooze/web/index.pck -- --dedicated --room --secret` (`Net.dedicated`: host with no seat, `main._ready` returns
+  right after the `Net.online()` check, before the tutorial's first-launch branch); the creator joins as a guest and is
+  `Net.room_owner`; `Net.can_control()` gates every lobby control (menu `show_lobby`), `_ask_owner` / `_owner_op` carry
+  them; `_pick_owner` hands the room on. Fallback codes no-server / version / busy -> `_fallback_host` (stage-1 room).
+- Publish: `server/deploy.sh` after the Web export + skins pack (BUILD-LOG sec10); `--relay` also updates relay.py.
+- Next on the server: the match host reports results to the progression session's `match-result` (PROGRESSION-DESIGN
+  sec7a: `Net.auth_token` -> "auth" in register, verify at join, HMAC-signed report, `Progression.seat_stats` /
+  `placements`) after 0.20.1; a domain once Daniele names the game; `--max-matches` 2 -> 3 after real use.
+
+## 0.19.3 (2026-09-27): the tutorial reworked (Daniele's 0.19.1 playtest)
+
+- TUTORIAL-SCRIPT draft 2 (one vocabulary), L0 THE CITY (T-06; `--tutorial=0`), Dr. Vesk (`TutorialDirector.HANDLER_NAME`,
+  the VEX creature in CoachOverlay's SubViewport), VEX vs EMBER in every lesson, L7 clock jumps, L9 capped neutrals
+  (`Sim` per-node `regen_cap`), `sim.match_hard_end` INF in lessons 0-8, `main.show_out_panel` false in lessons 0-8.
+- `tests/tutorial_walk.tscn` (windowed, `-- --mobile out=<dir> [lessons=..]`) plays every lesson and shoots every step.
+- Next on the tutorial: the Progression session adds the SCRAP hooks (140 per lesson 1-9, first completion) in its
+  `progression` branch after 0.20.0 - it sends the diff for review.
+
+## 0.19.2 (2026-09-27): Daniele's 0.19.1 playtest
+
+Quotes and per-item outcomes: `PLAYTEST-NOTES.md` 169-185; full detail: `CHANGELOG.md`. New names to know:
+`Sim.resolve_factions` (per-seat rival factions, seeded, no duplicates while any remain), `Sim.is_out(seat)`
+(the "lines keep you alive" elimination check, now also driving the YOU'RE OUT panel), `Sim.door_mult(h)`
+(Surge's door-rate multiplier at a hub), `Hud.monster_icon_rect(hub_id)` (the tappable monster-launch icon
+and its reach ring), new tutorial reveal keys (`topbar`, `strength`, `monster_icon`, `out_panel`),
+`main.show_out_panel` (SPECTATE / MAIN MENU / LEAVE ROOM after elimination), `Cosmetics.make_preview`
+(ARMIES' turning 3D preview), `ArmyPresets.core_territory` (TERRITORY NEON / GOO, moved from OPTIONS into
+ARMIES > COSMETICS's CORE · ALL FACTIONS row). All suites pass. Verified headless, desktop renders and a
+local gzip web run only - not on a real phone.
+
+**What's next** (board: `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`):
+- **0.19.3**: the tutorial rework (Interactive Tutorial session) - Daniele: "tutorial feels veeeeery
+  unpolished and messy".
+- **0.20.0**: server stage 2 (server session) - move the match referee itself onto the server.
+- **0.20.1**: progression, local first - currencies, store, challenges, unlocks (Leaderboard, progression, and currency session).
+- The **map revision pass** (Game map builder session; test maps live in its separate map-lab build).
+- **Campaign** Alpha 21-22 (Campaign session).
 
 ## 0.19.1 (2026-09-27): the interactive tutorial - completes Alpha 19
 
@@ -44,8 +175,9 @@ design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and `05 Handof
 
 ## Roadmap
 
-The plan after 0.18.7 / 0.18.8 (Daniele's to-do list from 2026-09-26, plus suggested additions, by area
-and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
+Alpha 20 is done (0.20.0-0.20.9). Next: **Alpha 21 = optimization** (phone heat, frame rate, battery), then
+**Alpha 22-23 = the new maps** and the full campaign. The whole plan (Daniele's to-do list from 2026-09-26, plus
+suggested additions, by area and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
 
 ## 0.19.0 (2026-09-27): Structures 2.1, team rules, room relay server, cosmetics - LIVE, published today
 
@@ -53,18 +185,18 @@ Daniele's whole open-questions session (quotes in OPEN-QUESTIONS.md; summary GAM
 149-163) built in one pass and merged with the server session's stage 1 relay work. Full detail: CHANGELOG.
 
 - **Rules** (`rules.gd`/`sim.gd`): `Rules.CAPS` 150/300/600/1000, `HOME_TIER`/`HOME_UNITS`, `NEUTRAL_UNITS`
-  (half-cap), `VAT_MAX_UPGRADE`, `NODE_BUILDS` (the node-kind table), `FORGE_DEFENCE`; Machingoon build/
+  (half-cap), `VAT_MAX_UPGRADE`, `NODE_BUILDS` (the node-kind table), `FORGE_DEFENCE`; Machinegoon build/
   upgrade/swap, the single-tier Laser (legacy `CANNON_*` constants kept internally), Monster hub / monster
   (`Sim.launch_monster`, `_step_monster`, `monster_reach`, events `monster_launch/kick/take/fall`); teams
   (`Sim._handover`, `halo_tier`, `allied_units`, `eject`); elimination now checks garrison + lines + monster +
   stored troops; `Sim._force_end` follows the Very Last Stand owner, `Rules.DRAW_LINES` for a neutral finish;
   a falling remote console freezes its decks. `legacy` balance preset covers the pre-0.19.0 numbers.
-- **AI** (`seat_ai.gd`): forge/faction accounting at Veteran+/Expert, no fixed relay garrison, Machingoon /
+- **AI** (`seat_ai.gd`): forge/faction accounting at Veteran+/Expert, no fixed relay garrison, Machinegoon /
   Laser / hub build heuristics, a monster-launch heuristic, EJECT just before a Last Stand drop;
   `test_ai_curve` gains the M duel maps.
 - **Maps**: `References/.../Alpha 11 classics/generator/classics.py` gets relay retrofits + T3 centres,
   re-baked, `test_maps4` green.
-- **Views**: `scripts/monster_view.gd` (new), `scripts/cosmetics.gd` (new, ARMIES skins), new Machingoon /
+- **Views**: `scripts/monster_view.gd` (new), `scripts/cosmetics.gd` (new, ARMIES skins), new Machinegoon /
   Laser / Monster hub / monster models and 69 skins in `assets/kit/skins`, minions swapped and slimmed.
 - **HUD**: `scripts/hud_overlay.gd` (new: hub reach ring, allied halos, relay-outcome preview, Last Stand
   danger triangle), `scripts/hex_chip.gd` (new: YOUR COLOUR chips), `Hud.action_rect(name)` per-node-kind
@@ -249,17 +381,18 @@ Still open on multiplayer:
 - Real separate-network and phone tests (Daniele). **0.19.0** now routes rooms through the relay server by
   default, which should fix the old strict-network PeerJS failures - not yet confirmed on a real separate
   network.
-- A host tab in the background still freezes the match (the host's own Sim is still the referee); 10 s later
-  guests drop (they can RECONNECT). Stage 2 below removes this.
+- **0.20.0 (stage 2):** rooms are hosted on the server, so a backgrounded phone only drops its own seat. Only the
+  fallback rooms (server full or on another version) are still hosted in the creator's browser, which must stay in
+  front.
 - Built in 0.16.1: EMPTY SEATS (AI), RECONNECT into a held seat, 10 s host grace, REMATCH.
 - Not built: seat swapping in the lobby, spectators.
 - **Alpha 20, stage 1 merged (0.19.0):** the small always-on VPS (Vultr, Singapore - friends are in Asia) is
   live as a **relay**: `Game/2.0/server/relay.py` forwards messages between a room's host and guests over
   WebSockets (`scripts/relay_bridge.gd`), replacing PeerJS by default (`?relay=peerjs` still falls back to
   it); no TURN-style connection limit any more. `tests/test_relay.gd` covers the path (exit 2 = SKIP when the
-  relay is unreachable). **Stage 2 (not built):** move the match referee itself onto the server - a headless
-  Godot host, so no player's device needs to stay in front; also a domain + Caddy TLS (today's address is
-  `sslip.io`, `server/README.md`). Access details: Daniele / the server session (not in the repo). Later:
+  relay is unreachable). **Stage 2 (0.20.0):** the match host is a headless copy of the game on the server (see
+  0.20.0 above; `tests/test_dedicated.gd`, 16 checks, local and live). Caddy TLS is live; a domain waits for the game
+  name (today's address is `sslip.io`, `server/README.md`). Access details: Daniele / the server session (not in the repo). Later:
   **Supabase** for accounts (Google + Apple sign-in), friends, history and leaderboards (replaces the Vercel +
   Neon idea; it can't run a match). Store path: web, then Android (Play closed test), then iOS (TestFlight).
 - Performance: the stutter on camera moves and falling nodes is client rendering, not the network - a measured

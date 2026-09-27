@@ -1,0 +1,27 @@
+[Unit]
+Description=Ooze Syndicate room server (relay + server-hosted matches)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ooze
+Group=ooze
+WorkingDirectory=/opt/ooze
+ExecStart=/usr/bin/python3 /opt/ooze/relay.py --host 127.0.0.1 --port 8765 --godot /opt/ooze/godot --pck /opt/ooze/current.pck --version-file /opt/ooze/web/version.txt --data /opt/ooze/data --logs /opt/ooze/logs --max-matches 2
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/ooze/data /opt/ooze/logs
+# 0.20.5 accounts: match hosts verify players and sign match reports (Net._verify_auth / _report_round). The address and
+# the publishable key are public; the signing secret lives only in /opt/ooze/secrets.env (root:ooze 0640), never in the repo.
+Environment=OOZE_SUPABASE_URL=https://uqwxorxdnucrdgaqpjpp.supabase.co
+Environment=OOZE_SUPABASE_KEY=sb_publishable_3aX4T8IcNbI_BBg4wENMhA_3NNclYw2
+EnvironmentFile=-/opt/ooze/secrets.env
+# the relay plus up to --max-matches headless match hosts (~250-350 MB each on the 1 GB box, 2 GB swap)
+MemoryMax=900M
+
+[Install]
+WantedBy=multi-user.target

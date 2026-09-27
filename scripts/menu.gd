@@ -36,6 +36,8 @@ const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
+var _last_show := Callable()                     # the page on screen (rebuilt when a resize changes the phone sizing)
+var _built_pt := 0.0                             # _pt_factor() the page was built with (0 while building)
 var _backdrop: TextureRect
 var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
 var _map_scroll := 0
@@ -170,9 +172,11 @@ func clear_page(art: String) -> void:
 	if is_instance_valid(_tut_page):
 		_tut_page.queue_free()
 		_tut_page = null
+	_built_pt = 0.0                                   # no rebuild check while this page is being built
 	content = Control.new()
 	add_child(content)
 	_fit()
+	_built_pt = _pt_factor()
 	_is_main = art == "ui-main"
 	_page = ""
 	# one background only: the full-screen backdrop (Alpha 14 playtest: "background on top of a
@@ -407,6 +411,7 @@ func map_preview(pos: Vector2, dims: Vector2) -> void:
 
 # ------------------------------------------------------------------ pages
 func show_main() -> void:
+	_last_show = show_main                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page("ui-main")
 	var mask := ColorRect.new()                      # the dark left column, full screen height
 	mask.color = Color("030c12")
@@ -428,7 +433,9 @@ func show_main() -> void:
 	# ARMIES (0.18.7, Daniele: "its own new menu item where you select what skill each of your factions will
 	# use"): its own row under NEW GAME; OPTIONS and FULLSCREEN / QUIT share the next one
 	var h2 := rh(82)
-	nav_button("ARMIES", P(80, y), P(440, h2), func(): show_armies(faction, show_main)).add_theme_font_size_override("font_size", int(round(fsz(32) * K)))
+	# CAMPAIGN: the ARMIES row split into CAMPAIGN | ARMIES (same height and style; CAMPAIGN-DESIGN §3)
+	nav_button("CAMPAIGN", P(80, y), P(212, h2), show_campaign).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
+	nav_button("ARMIES", P(307, y), P(213, h2), func(): show_armies(faction, show_main)).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
 	y += h2 + GAP
 	var h3 := rh(82)
 	nav_button("OPTIONS", P(80, y), P(212, h3), show_options).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
@@ -439,15 +446,24 @@ func show_main() -> void:
 			get_tree().quit()).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
 	y += h3 + GAP
 	var h4 := rh(64)
-	# TUTORIAL (§7): live, reading "TUTORIAL n/9" until every lesson is done
-	var tut_text := "TUTORIAL" if TutorialDirector.all_done() else "TUTORIAL %d/%d" % [TutorialDirector.done_count(), TutorialDirector.LESSON_COUNT]
+	# TUTORIAL (§7): live, reading "TUTORIAL n/10" (the tour, eight lessons, the first match) until all are done
+	var tut_text := "TUTORIAL" if TutorialDirector.done_count() >= TutorialDirector.TOTAL_LESSONS 			else "TUTORIAL %d/%d" % [TutorialDirector.done_count(), TutorialDirector.TOTAL_LESSONS]
 	nav_button(tut_text, P(80, y), P(212, h4), show_tutorial)
 	nav_button("ONLINE", P(307, y), P(213, h4), show_online)
 	y += h4 + 16.0
 	label_at("%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], P(66, y), 19, Color("839da9"))
+	_profile_card(P(1282, 36))                        # PROGRESSION: level, SCRAP, CHIPS -> PROFILE; CHALLENGES
+	# 0.20.11 (Daniele: "on the main screen a guide on how to add to home screen so new users can figure
+	# it" - chat and keyboards only work installed): bottom right, clear of the profile card above and
+	# the left column; web + phone browsers only, hidden once installed or dismissed.
+	if _install_available():
+		_install_button(P(1270, foot_y(56.0)))
+	if _install_guide_open:
+		_install_guide_panel()
 
 
 func show_options() -> void:
+	_last_show = show_options                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page("city")
 	header(0)
 	label_at("OPTIONS", P(40, 107), 43)
@@ -492,6 +508,22 @@ func show_options() -> void:
 	if not mobile:
 		stack_add(st, label_at("Low detail trims the river patches and vat residents - use it if the game makes your machine run hot.", P(15, y), 18, Color("b8ced6")))
 		y += 34.0
+	# --- Alpha 21 OPT-RENDER: GRAPHICS AUTO / LOW RES / FULL and FPS AUTO / 30 / 60 (perf_profile.gd, user://settings.cfg) ---
+	var h4 := rh(60)
+	var gfx := stack_add(st, nav_button(PerfProfile.label(), P(15, y), P(600, h4), func():
+		PerfProfile.set_mode(PerfProfile.next_mode())
+		show_options())) as Button
+	gfx.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
+	var fpb := stack_add(st, nav_button(PerfProfile.fps_label(), P(627, y), P(303, h4), func():
+		PerfProfile.set_fps(PerfProfile.next_fps())
+		show_options())) as Button
+	fpb.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
+	fpb.disabled = PerfProfile.level() == "low"      # LOW RES stays at 30
+	y += h4 + 12.0
+	if not mobile:
+		stack_add(st, label_at("LOW RES: 30 fps, no glow or shadows, fewer effects and lighter models - only for weak phones. From the next match.", P(15, y), 18, Color("b8ced6")))
+		y += 34.0
+	# --- end OPT-RENDER ---
 	# TERRITORY moved to ARMIES > COSMETICS > CORE (0.19.2, Daniele: "goo/neon should be in the choice of
 	# cosmetic, as general core one maybe") - one place only, so it isn't duplicated here any more.
 	var h5 := rh(50)
@@ -501,11 +533,19 @@ func show_options() -> void:
 		show_options())) as Button
 	dbg.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
 	y += h5 + 10.0
+	var h6 := rh(50)                                   # PROGRESSION: see the game as players will once the locks go live
+	var lk := stack_add(st, nav_button("TEST SWITCH  ·  LOCKS: %s" % ("OFF  -  everything unlocked (the testing default)" if Progression.unlock_all
+			else "ON  -  preview: skills and looks earned or bought (until the page closes)"), P(15, y), P(915, h6), func():
+		Progression.unlock_all = not Progression.unlock_all
+		show_options())) as Button
+	lk.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
+	y += h6 + 10.0
 	stack_close(st, y)
 	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
 
 
 func show_factions() -> void:
+	_last_show = show_factions                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page(faction)
 	header(1)
 	var col := color()
@@ -589,6 +629,7 @@ func faction_tab(f: String, pos: Vector2, dims: Vector2) -> void:
 
 # ------------------------------------------------------------------ TUTORIAL (TUTORIAL-DESIGN.md §7)
 func show_tutorial() -> void:
+	_last_show = show_tutorial                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## The TRAINING page: nine lesson rows (any order, a tick when done), CONTINUE = the first lesson not done,
 	## BACK. A lesson starts with the faction and colour picked here last (NEW GAME's picks).
 	clear_page("city")
@@ -610,8 +651,764 @@ func _start_lesson(id: int) -> void:
 	main.start_tutorial(id, false, faction, colour)
 
 
+# ------------------------------------------------------------------ PROGRESSION (0.20.1, PROGRESSION-DESIGN §8)
+func _balance(amount: int, currency: String, pos: Vector2, pt_k: float, named := true) -> RewardTicker:
+	## A currency balance with its mark ("1 260 SCRAP"; named false: "1 260" + the mark), shown at once.
+	var t := RewardTicker.make(amount, currency, func(n: float) -> float: return n * pt_k)
+	t.sign = false
+	t.named = named
+	t.tooltip_text = Rules.CURRENCY_NAMES.get(currency, "")
+	t.position = pos
+	t.fit()
+	content.add_child(t)
+	t.play(true)
+	return t
+
+
+func _wrapped(text: String, pos: Vector2, size_value: int, col: Color, width: float) -> Label:
+	## A label that wraps inside `width` (canvas units) at its designed size (a dense box - see label_at()).
+	var l := label_at(text, pos, size_value, col, false)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(width * K, 0)
+	l.size = l.custom_minimum_size
+	return l
+
+
+func _bar(pos: Vector2, dims: Vector2, f: float, col: Color) -> void:
+	## A plain progress bar (XP, challenge progress, faction vat wins).
+	var bg := ColorRect.new()
+	bg.color = Color(0.02, 0.05, 0.07, 0.92)
+	bg.position = pos
+	bg.size = dims
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(bg)
+	var fill := ColorRect.new()
+	fill.color = col
+	fill.position = pos
+	fill.size = Vector2(dims.x * clampf(f, 0.0, 1.0), dims.y)
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(fill)
+
+
+func _profile_card(pos: Vector2) -> void:
+	## MAIN, top right: level, XP to the next, both balances - tap for PROFILE; CHALLENGES under it with what is
+	## ready to claim.
+	var dims := P(360, 132)
+	var lf := Progression.level_for(Progression.xp)
+	nav_button("", pos, dims, show_profile, false, false)
+	content.add_child(neon_panel(pos, dims, Color("18dae8"), false, Color("030c12ec")))
+	label_at("LEVEL %d" % int(lf["level"]), pos + P(18, 8), 30, Color.WHITE, false)
+	label_at("PROFILE", pos + P(260, 18), 16, Color("839da9"), false)
+	_bar(pos + P(18, 56), P(324, 10), float(lf["into"]) / maxf(1.0, float(lf["need"])), Color("5fd7ff"))
+	_balance(Progression.balance("soft"), "soft", pos + P(14, 80), 0.62 * K * 1.6, false)      # the marks name them
+	_balance(Progression.balance("premium"), "premium", pos + P(196, 80), 0.62 * K * 1.6, false)
+	var ready_n := Progression.claimable()
+	var cb := nav_button("CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else ""), pos + P(0, 146), P(360, 64),
+			show_challenges, ready_n > 0)
+	cb.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
+
+
+func show_profile() -> void:
+	_last_show = show_profile                  # a resize that changes the phone sizing rebuilds it (_fit)
+	## PROFILE: level and XP, both balances and where they come from, per faction plays / wins and the faction
+	## vat's progress (25 wins online or vs Veteran / Expert AI), and whether it is saved on this device.
+	clear_page("city")
+	_page = "profile"
+	header(0)
+	label_at("PROFILE", P(40, 104), 43)
+	label_at("LEVEL, SCRAP, CHIPS AND YOUR FACTIONS  ·  earned by playing", P(300, 122), 20, Color("abc1cd"))
+	var lf := Progression.level_for(Progression.xp)
+	var lp := P(35, 174)
+	frame(lp, P(560, 600))
+	label_at("LEVEL %d" % int(lf["level"]), lp + P(28, 20), 56)
+	_bar(lp + P(28, 108), P(500, 16), float(lf["into"]) / maxf(1.0, float(lf["need"])), Color("5fd7ff"))
+	label_at("%d / %d XP TO LEVEL %d" % [int(lf["into"]), int(lf["need"]), int(lf["level"]) + 1], lp + P(28, 132), 18, Color("9cb2bf"))
+	var PR := Rules.PROGRESSION
+	# the explanations wrap inside the frame at their designed size (a dense box - see label_at())
+	_wrapped("EVERY LEVEL +%d SCRAP  ·  EVERY %dTH ALSO +%d CHIPS" % [int(PR["level_soft"]), int(PR["level_premium_every"]),
+			int(PR["level_premium"])], lp + P(28, 162), 16, Color("7795a4"), 500)
+	_balance(Progression.balance("soft"), "soft", lp + P(24, 216), K * 1.6)
+	_wrapped("Matches (from Veteran AI up), challenges, the tutorial and the campaign. A skill costs %s." % Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false),
+			lp + P(28, 284), 17, Color("c5d2da"), 500)
+	_balance(Progression.balance("premium"), "premium", lp + P(24, 364), K * 1.6)
+	_wrapped("Weekly challenges and every %dth level; the store later. For looks only - never skills." % int(PR["level_premium_every"]),
+			lp + P(28, 432), 17, Color("c5d2da"), 500)
+	if Progression.unlock_all:
+		label_at("UNLOCKS OPEN WHILE TESTING (OPTIONS > TEST SWITCH)", lp + P(28, 530), 16, Color("ffd15c"), false)
+	# factions
+	var fp := P(620, 174)
+	frame(fp, P(1017, 600))
+	label_at("FACTIONS", fp + P(24, 16), 28)
+	label_at("%d WINS WITH A FACTION UNLOCK ITS VAT  ·  ONLINE, OR VS VETERAN / EXPERT AI" % int(PR["faction_vat_wins"]),
+			fp + P(210, 26), 16, Color("8fb3c2"), false)
+	for i in range(FACTIONS.size()):
+		var f: String = FACTIONS[i]
+		var rp := fp + P(24, 70 + i * 104)
+		var fc: Color = Rules.FACTIONS[f][1]
+		var st := Progression.faction_stats(f)
+		portrait(f, rp, P(86, 92))
+		label_at("VIRIDIAN" if f == "bloom" else f.to_upper(), rp + P(104, 6), 26, fc, false)
+		label_at("PLAYED %d  ·  WON %d" % [int(st["plays"]), int(st["wins"])], rp + P(104, 44), 19, Color("dbe6ec"), false)
+		var need: int = PR["faction_vat_wins"]
+		var owned := Progression.owns("vat:faction:" + f)
+		_bar(rp + P(470, 30), P(360, 14), 1.0 if owned else float(st["vat_wins"]) / float(need), fc)
+		label_at("VAT UNLOCKED" if owned else "VAT  %d / %d WINS" % [int(st["vat_wins"]), need], rp + P(470, 54), 17,
+				fc if owned else Color("9cb2bf"), false)
+	nav_button("BACK", P(40, foot_y()), P(210, 58), show_main)
+	nav_button("CHALLENGES", P(265, foot_y()), P(270, 58), show_challenges)
+	nav_button("LEADERBOARD", P(550, foot_y()), P(290, 58), show_leaderboard)    # 0.20.5
+	nav_button("HISTORY", P(855, foot_y()), P(230, 58), show_history)
+	nav_button("ACCOUNT", P(1100, foot_y()), P(230, 58), show_account, _account().state == "guest")
+	var acct := _account()
+	var note := "Progress saved on this device" if Progression.saved else "This browser keeps no storage: progress lasts until the page closes"
+	if acct.state == "linked":
+		note = "Progress saved on this device and in your account"
+	elif acct.state == "guest":
+		note = "Guest account: add Google (ACCOUNT) to keep your progress on any device"
+	_wrapped(note, lp + P(28, 560), 15, Color("7795a4") if Progression.saved else Color("ffd15c"), 500)
+
+
+func show_challenges(just_claimed := "") -> void:
+	_last_show = func(): show_challenges()                  # a resize that changes the phone sizing rebuilds it (_fit)
+	## CHALLENGES: three daily and three weekly (the same for everyone, reset 00:00 UTC / Monday), progress from any
+	## finished match (tutorial lessons excluded), CLAIM pays (the card counts it up), one daily REROLL a day.
+	clear_page("city")
+	_page = "challenges"
+	header(0)
+	label_at("CHALLENGES", P(40, 104), 43)
+	label_at("PLAY ANY MATCH TO PROGRESS  ·  CLAIM TO COLLECT", P(380, 122), 20, Color("abc1cd"))
+	for kind in ["daily", "weekly"]:
+		var x := 35.0 if kind == "daily" else 845.0
+		var cp := P(x, 174)
+		frame(cp, P(792, 600))
+		label_at(kind.to_upper(), cp + P(24, 16), 30)
+		label_at("RESETS IN " + Progression.duration_text(Progression.seconds_to_reset(kind)).to_upper(), cp + P(210, 28), 17,
+				Color("8fb3c2"), false)
+		var list := Progression.current_challenges(kind)
+		var rerolled: bool = Progression.challenges.get("daily", {}).get("rerolled", false)
+		for i in range(list.size()):
+			var c: Dictionary = list[i]
+			var rp := cp + P(24, 76 + i * 172)
+			content.add_child(neon_panel(rp, P(744, 158), color(), c["done"] and not c["claimed"], Color("08131ae8")))
+			label_at(str(c["text"]), rp + P(18, 12), 24, Color.WHITE if not c["claimed"] else Color("7795a4"), false)
+			_bar(rp + P(18, 60), P(440, 14), float(c["progress"]) / maxf(1.0, float(c["target"])), color())
+			label_at("%d / %d" % [int(c["progress"]), int(c["target"])], rp + P(470, 52), 19, Color("dbe6ec"), false)
+			var reward := "%s  ·  +%d XP" % [Progression.amount_text(int(c["soft"])), int(c["xp"])]
+			if int(c["premium"]) > 0:
+				reward += "  ·  " + Progression.amount_text(int(c["premium"]), "premium")
+			label_at(reward, rp + P(18, 94), 18, Color("e08a3a"), false)
+			var id: String = c["id"]
+			var k: String = kind
+			if c["claimed"]:
+				if id == just_claimed:               # the paid SCRAP counts up on the card it came from
+					var t := RewardTicker.make(int(c["soft"]), "soft", func(n: float) -> float: return n * K * 1.4)
+					t.position = rp + P(540, 96)
+					t.fit()
+					content.add_child(t)
+					t.play()
+				else:
+					label_at("CLAIMED", rp + P(600, 104), 19, Color("7795a4"), false)
+			elif c["done"]:
+				_card_button("CLAIM", rp, P(744, 158), func():
+					if not Progression.claim(k, id).is_empty():
+						show_challenges(id), true)
+			elif kind == "daily" and not rerolled:
+				var rb := _card_button("REROLL", rp, P(744, 158), func():
+					Progression.reroll(id)
+					show_challenges())
+				rb.add_theme_font_size_override("font_size", int(round(fsz(19) * K)))
+	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
+	nav_button("PROFILE", P(290, foot_y()), P(230, 58), show_profile)
+	label_at("One reroll a day, for a daily you would rather swap.", P(985, foot_y() + 18.0), 18, Color("7795a4"), false)
+
+
+func _card_button(text: String, card_pos: Vector2, card_dims: Vector2, call: Callable, primary := false) -> Button:
+	## A card's action button in its bottom-right corner, inside the card at any phone size (0.20.5: REROLL grew
+	## past the card's edge on phones - tap() makes it taller there, so place it from its grown height).
+	var dims := tap(P(166, 58))
+	var pos := card_pos + card_dims - dims - P(14, 8)
+	return nav_button(text, pos, dims, call, primary, false)
+
+
+# ------------------------------------------------------------------ PROGRESSION: ACCOUNT, LEADERBOARD, MATCH HISTORY (0.20.5)
+var _board_rows: Array = []                        # LEADERBOARD: the last answer
+var _board_state := "idle"                         # idle | loading | done | offline
+var _board_me := {}                                # LEADERBOARD: your own {rank, name, wins} when you're not in the list
+var _history_online: Array = []                    # MATCH HISTORY: server rounds loaded so far
+var _history_state := "idle"                       # idle | loading | done | offline
+var _history_more := true                          # the server may have older rounds
+var _account_note := ""                            # ACCOUNT: what the last action did ("Check your inbox ...")
+var _account_hooked := false
+const MONTHS := ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
+
+func _account() -> Account:
+	var a := Account.get_instance()
+	if not _account_hooked:
+		_account_hooked = true
+		a.changed.connect(func():
+			if _page in ["account", "profile"] and _last_show.is_valid():
+				_last_show.call())
+	return a
+
+
+func _line_edit(pos: Vector2, dims: Vector2, placeholder: String, text := "") -> LineEdit:
+	## A text field in the menu's style (email, name); the phone's own keyboard opens on tap.
+	dims = tap(dims)
+	var e := LineEdit.new()
+	e.position = pos
+	e.size = dims
+	e.custom_minimum_size = dims
+	e.placeholder_text = placeholder
+	e.text = text
+	e.add_theme_font_override("font", UI_FONT)
+	e.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
+	e.add_theme_stylebox_override("normal", Hud.panel_style())
+	e.add_theme_stylebox_override("focus", Hud.panel_style(color()))
+	e.virtual_keyboard_enabled = true
+	content.add_child(e)
+	return e
+
+
+func show_account() -> void:
+	_last_show = show_account                  # a resize that changes the phone sizing rebuilds it (_fit)
+	## ACCOUNT (Daniele: an automatic guest, then Google to keep progress on any device - no email: "its a game why
+	## would they want to do that"; a sign-in onto an account that already has progress keeps the account's). Guests are
+	## never asked to verify anything; the game plays offline without it.
+	var a := _account()
+	clear_page("city")
+	_page = "account"
+	header(0)
+	label_at("ACCOUNT", P(40, 104), 43)
+	label_at("OPTIONAL  ·  the game plays offline without it", P(300, 122), 20, Color("abc1cd"))
+	var lp := P(35, 174)
+	frame(lp, P(760, 600))
+	var status := "OFFLINE  -  no connection; you play as a guest on this device"
+	var col := Color("ffd15c")
+	match a.state:
+		"guest":
+			status = "GUEST ACCOUNT  -  progress on this device, with a cloud copy"
+			col = Color("9cb2bf")
+		"linked":
+			status = "SIGNED IN WITH GOOGLE" + (("  -  " + a.email) if a.email != "" else "")
+			col = Color("6fff2a")
+		"signing_in":
+			status = "SIGNING IN ..."
+	_wrapped(status, lp + P(28, 22), 22, col, 700)
+	# rows advance by each control's grown height (rh / tap): on a phone the 44 pt fields are taller than designed
+	var hh := rh(58)
+	var y := 86.0
+	label_at("NAME", lp + P(28, y), 18, Color("8fb3c2"), false)
+	y += 28.0
+	if OS.has_feature("web"):
+		# the web build: Godot's LineEdit doesn't raise a phone keyboard, and a field focused from Godot's own input
+		# handling doesn't either on Android (outside the tap's gesture - Daniele, 0.20.10: "keyboard still doesn't
+		# appear"). So the NAME box IS a native HTML <input> laid over it (_place_name_field): the tap lands on the DOM
+		# element itself and the phone raises its keyboard. RENAME (or Enter) saves what it holds.
+		var box := _line_edit(lp + P(28, y), P(440, 58), "", "")   # the frame the HTML field sits on (never typed into)
+		box.editable = false
+		box.focus_mode = Control.FOCUS_NONE
+		_name_box = box
+		_name_enabled = a.signed_in()
+		_name_value = a.player_name
+		_place_name_field.call_deferred()
+		var rw := nav_button("RENAME", lp + P(490, y), P(240, 58), func(): _rename_from_field())
+		rw.disabled = not a.signed_in()
+	else:
+		var nm := _line_edit(lp + P(28, y), P(440, 58), "3-16 letters or digits", a.player_name)
+		var rn := nav_button("RENAME", lp + P(490, y), P(240, 58), func():
+			if await a.rename(nm.text):
+				_account_note = "Name saved: " + a.player_name
+			else:
+				_account_note = a.last_error
+			show_account())
+		rn.disabled = not a.signed_in()
+		nm.editable = a.signed_in()
+	y += hh + 22.0
+	if OS.has_feature("web") and not a.google_ready and a.state != "offline":
+		a.check_google()                           # redraws through Account.changed when the answer differs
+	var google_ok := OS.has_feature("web") and a.google_ready
+	if a.state == "guest":
+		label_at("KEEP YOUR PROGRESS ON ANY DEVICE", lp + P(28, y), 20, Color.WHITE, false)
+		y += 32.0
+		var g := nav_button("ADD GOOGLE", lp + P(28, y), P(440, 58), func():
+			if not await a.google(true):
+				_account_note = a.last_error
+				show_account(), google_ok)
+		g.disabled = not google_ok
+		y += hh + 10.0
+		_wrapped("Your progress is already kept in this guest account; Google keeps it on your other devices too.",
+				lp + P(28, y), 16, Color("7795a4"), 700)
+	# sign in with an account linked elsewhere: its progress replaces this device's
+	var rp := P(815, 174)
+	frame(rp, P(822, 600))
+	label_at("ALREADY HAVE AN ACCOUNT?", rp + P(28, 22), 22, Color.WHITE, false)
+	_wrapped("Sign in with the Google account you linked on another device. Its progress replaces this device's.",
+			rp + P(28, 60), 18, Color("c5d2da"), 760)
+	var ry := 130.0
+	var gs := nav_button("SIGN IN WITH GOOGLE", rp + P(28, ry), P(480, 58), func():
+		if not await a.google(false):
+			_account_note = a.last_error
+			show_account())
+	gs.disabled = not google_ok
+	ry += hh + 10.0
+	if not OS.has_feature("web"):
+		_wrapped("Google sign-in works in the browser build.", rp + P(28, ry), 16, Color("7795a4"), 760)
+		ry += 30.0
+	elif not a.google_ready and a.state != "offline":
+		_wrapped("Google sign-in isn't available right now.", rp + P(28, ry), 16, Color("7795a4"), 760)
+		ry += 30.0
+	if _account_note != "":
+		_wrapped(_account_note, rp + P(28, ry + 10.0), 19, Color("ffd15c"), 760)
+	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
+		_account_note = ""
+		show_profile())
+
+
+# The web build's name field: a native DOM <input> laid over ACCOUNT's NAME box (like web/room-ui.js's room code, the
+# player taps the DOM element itself, so Android / iOS raise the keyboard). Defined at runtime, so the export's script
+# list stays as it is. place() makes it or only moves it (a rebuild never steals focus from a field being typed in).
+const NAME_UI_JS := """(()=>{if(window.OozeName)return;let result='';
+const st=document.createElement('style');st.textContent=`#ooze-name-input{position:fixed;z-index:1100;box-sizing:border-box;margin:0;padding:0 10px;background:#020c12;color:#fff;border:2px solid #4e98ad;font-family:system-ui;font-weight:700;letter-spacing:1px;text-align:center;touch-action:manipulation;user-select:text;-webkit-user-select:text;outline:none}#ooze-name-input:focus{border-color:#19dce8}#ooze-name-input:disabled{opacity:.55}`;document.head.appendChild(st);
+function place(fx,fy,fw,fh,v,on){const c=document.getElementById('canvas');if(!c)return;const b=c.getBoundingClientRect();let el=document.getElementById('ooze-name-input');
+if(!el){el=document.createElement('input');el.id='ooze-name-input';el.type='text';el.inputMode='text';el.enterKeyHint='done';el.autocomplete='off';el.autocapitalize='characters';el.spellcheck=false;el.maxLength=16;el.setAttribute('aria-label','Your name');el.value=v||'';
+el.addEventListener('input',()=>{const p=el.selectionStart;el.value=el.value.toUpperCase().replace(/[^A-Z0-9 _-]/g,'').slice(0,16);try{el.setSelectionRange(p,p)}catch(e){}});
+el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const n=el.value.trim();if(/^[A-Z0-9 _-]{3,16}$/.test(n)){result=n;el.blur()}}});
+el.addEventListener('pointerdown',e=>e.stopPropagation());document.body.appendChild(el)}
+el.disabled=!on;el.style.left=(b.left+fx*b.width)+'px';el.style.top=(b.top+fy*b.height)+'px';el.style.width=(fw*b.width)+'px';el.style.height=(fh*b.height)+'px';el.style.fontSize=Math.max(14,Math.round(fh*b.height*0.42))+'px'}
+window.OozeName={place:place,value:()=>(document.getElementById('ooze-name-input')?.value||'').trim(),take:()=>{const n=result;result='';return n},set:v=>{const el=document.getElementById('ooze-name-input');if(el)el.value=v},remove:()=>document.getElementById('ooze-name-input')?.remove()};})()"""
+
+var _name_box: Control = null                      # ACCOUNT's NAME frame the HTML field sits on (web)
+var _name_inline := false                          # the HTML field is on the page
+var _name_enabled := false
+var _name_value := ""
+var _name_t := 0.0
+
+
+func _place_name_field() -> void:
+	## Web: lay the HTML name field over the NAME frame (canvas fractions -> CSS px in the page), or move it there.
+	if not OS.has_feature("web") or _page != "account" or not is_instance_valid(_name_box):
+		return
+	JavaScriptBridge.eval(NAME_UI_JS, true)
+	var t := _name_box.get_global_transform_with_canvas()
+	var r := Rect2(t.origin, _name_box.size * t.get_scale())
+	var vp := get_viewport().get_visible_rect().size
+	JavaScriptBridge.eval("window.OozeName&&OozeName.place(%f,%f,%f,%f,%s,%s)" % [r.position.x / vp.x, r.position.y / vp.y,
+			r.size.x / vp.x, r.size.y / vp.y, JSON.stringify(_name_value), "true" if _name_enabled else "false"], true)
+	_name_inline = true
+
+
+func _rename_from_field() -> void:
+	var n := str(JavaScriptBridge.eval("window.OozeName?OozeName.value():''", true)).strip_edges().to_upper()
+	await _rename_to(n)
+
+
+func _rename_to(n: String) -> void:
+	var a := _account()
+	if await a.rename(n):
+		_account_note = "Name saved: " + a.player_name
+		JavaScriptBridge.eval("window.OozeName&&OozeName.set(%s)" % JSON.stringify(a.player_name), true)
+		_name_value = a.player_name
+	else:
+		_account_note = a.last_error
+	if _page == "account":
+		show_account()
+
+
+func _poll_name(dt: float) -> void:
+	## Web, while the HTML name field is up: remove it off ACCOUNT, keep it on its frame, save on Enter.
+	if not _name_inline:
+		return
+	if _page != "account":
+		JavaScriptBridge.eval("window.OozeName&&OozeName.remove()", true)
+		_name_inline = false
+		return
+	_name_t -= dt
+	if _name_t <= 0.0:
+		_name_t = 0.4
+		_place_name_field()
+	var n := str(JavaScriptBridge.eval("window.OozeName?OozeName.take():''", true))
+	if n != "":
+		_rename_to(n)
+
+
+# 0.20.11: "on the main screen a guide on how to [add to home screen] so new users can figure it" (Daniele -
+# chat and keyboards work properly only in the installed home-screen app). Web build only; the small JS
+# interface below detects display-mode: standalone / navigator.standalone, the platform from the user
+# agent, and captures `beforeinstallprompt` so Android Chrome can install directly instead of a menu hunt.
+const INSTALL_JS := """(()=>{if(window.OozeInstall)return;
+function standalone(){try{return window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}}
+function platform(){const ua=navigator.userAgent||'';if(/iPad|iPhone|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))return'ios';if(/Android/.test(ua))return'android';return'desktop'}
+let deferred=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e});
+let hidden=false;try{hidden=localStorage.getItem('ooze20-hide-install')==='1'}catch(e){}
+window.OozeInstall={standalone:()=>standalone(),platform:()=>platform(),canPrompt:()=>deferred!==null,
+hidden:()=>hidden,hide:()=>{hidden=true;try{localStorage.setItem('ooze20-hide-install','1')}catch(e){}},
+install:()=>{if(!deferred)return false;deferred.prompt();deferred=null;return true}};})()"""
+
+
+func _install_ui():
+	## null off the web build, or wherever JavaScriptBridge itself is missing (native builds).
+	if not OS.has_feature("web") or not Engine.has_singleton("JavaScriptBridge"):
+		return null
+	JavaScriptBridge.eval(INSTALL_JS, true)
+	return JavaScriptBridge.get_interface("OozeInstall")
+
+
+var _install_guide_open := false
+var _install_platform := ""                          # cached when the guide opens: "ios" | "android"
+
+
+func _install_available() -> bool:
+	## MAIN only: web build, phone browsers only (hidden on desktop), not already installed, not dismissed.
+	var ui = _install_ui()
+	if ui == null or bool(ui.standalone()) or bool(ui.hidden()):
+		return false
+	return str(ui.platform()) in ["ios", "android"]
+
+
+func _install_button(pos: Vector2) -> void:
+	var b := nav_button("INSTALL THE GAME", pos, P(380, 56), func():
+		var ui = _install_ui()
+		_install_platform = str(ui.platform()) if ui != null else "android"
+		_install_guide_open = true
+		show_main())
+	b.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
+
+
+func _share_glyph(pos: Vector2, size_value: float) -> Control:
+	## A small share-icon glyph for the iOS steps (Safari's Share button): a bordered box with an upward
+	## arrow - no new art asset, just the UI font's arrow glyph over a thin outline square.
+	var box := PanelContainer.new()
+	box.position = pos
+	box.custom_minimum_size = Vector2(size_value, size_value)
+	box.size = Vector2(size_value, size_value)
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0, 0, 0, 0)
+	st.border_width_left = 2
+	st.border_width_right = 2
+	st.border_width_top = 2
+	st.border_width_bottom = 2
+	st.border_color = Color("e6f4f8")
+	st.corner_radius_top_left = 4
+	st.corner_radius_top_right = 4
+	st.corner_radius_bottom_left = 4
+	st.corner_radius_bottom_right = 4
+	box.add_theme_stylebox_override("panel", st)
+	var l := Label.new()
+	l.text = "↑"
+	l.add_theme_font_override("font", UI_FONT)
+	l.add_theme_font_size_override("font_size", int(size_value * 0.7))
+	l.add_theme_color_override("font_color", Color("e6f4f8"))
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.add_child(l)
+	content.add_child(box)
+	return box
+
+
+func _install_guide_panel() -> void:
+	## MAIN's overlay (drawn last, so it sits on top): the right steps for this platform first, an
+	## "INSTALL NOW" direct prompt where Chrome offered one (beforeinstallprompt), and "don't show again"
+	## (localStorage, wrapped in try/catch on the JS side).
+	var ui = _install_ui()
+	if ui == null:                                    # shouldn't happen (the button that opens this needs it)
+		_install_guide_open = false
+		return
+	var pos := P(490, 210)
+	var dims := P(700, 420)
+	content.add_child(neon_panel(pos, dims, Color("18dae8"), true, Color("030c12f0")))
+	label_at("INSTALL THE GAME", pos + P(28, 20), 30, Color.WHITE, false)
+	_wrapped("Chat and the keyboard work properly only in the installed app.", pos + P(28, 58), 17, Color("839da9"), dims.x - 56.0)
+	var ios := _install_platform == "ios"
+	var y := 104.0
+	if ios:
+		_share_glyph(pos + P(28, y), 40.0)
+		_wrapped("1. In Safari's toolbar, tap the Share icon (a square with an arrow).", pos + P(84, y + 6.0), 19, Color("e6f4f8"), dims.x - 112.0)
+		y += 66.0
+		_wrapped("2. Scroll down and tap \"Add to Home Screen\".", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+		y += 46.0
+		_wrapped("3. Tap \"Add\" - the game then opens full-screen from your Home Screen.", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+	else:
+		_wrapped("1. Open Chrome's menu (the ⋮  in the top right).", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+		y += 46.0
+		_wrapped("2. Tap \"Add to Home screen\" or \"Install app\".", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+		y += 46.0
+		_wrapped("3. Confirm \"Install\" / \"Add\".", pos + P(28, y), 19, Color("e6f4f8"), dims.x - 56.0)
+		y += 54.0
+		if bool(ui.canPrompt()):
+			nav_button("INSTALL NOW", pos + P(28, y), P(260, 58), func():
+				_install_ui().install()
+				_install_guide_open = false
+				show_main(), true)
+	nav_button("DON'T SHOW AGAIN", pos + P(28, dims.y - 78.0), P(300, 52), func():
+		_install_ui().hide()
+		_install_guide_open = false
+		show_main())
+	nav_button("CLOSE", pos + P(dims.x - 200.0, dims.y - 78.0), P(172, 52), func():
+		_install_guide_open = false
+		show_main())
+
+
+func show_leaderboard() -> void:
+	_last_show = show_leaderboard              # a resize that changes the phone sizing rebuilds it (_fit)
+	## LEADERBOARD: WINS THIS SEASON (the UTC month) - online wins in server rooms with two or more players,
+	## written by the server only. Reads it when opened; offline says so.
+	clear_page("city")
+	_page = "leaderboard"
+	header(0)
+	label_at("LEADERBOARD", P(40, 104), 43)
+	var now := Time.get_datetime_dict_from_system(true)
+	label_at("WINS THIS SEASON  ·  %s %d  ·  online, server rooms with 2+ players" % [MONTHS[int(now["month"]) - 1], int(now["year"])],
+			P(400, 122), 20, Color("abc1cd"))
+	var fp := P(35, 174)
+	frame(fp, P(1602, 600))
+	if _board_state == "idle":
+		_board_state = "loading"
+		_load_board()
+	if _board_state == "loading":
+		label_at("LOADING ...", fp + P(30, 30), 24, Color("9cb2bf"), false)
+	elif _board_state == "offline":
+		label_at("The leaderboard needs a connection.", fp + P(30, 30), 24, Color("ffd15c"), false)
+	elif _board_rows.is_empty():
+		_wrapped("No wins yet this season - win an online match against another player to open the board.", fp + P(30, 30),
+				24, Color("9cb2bf"), 1500)
+	else:
+		var st := stack_open(fp + P(16, 16), P(1570, 568))
+		var ry := 0.0
+		for row in _board_rows:
+			var me := bool(row.get("is_me", false))
+			var h := rh(56)
+			stack_add(st, _placed(neon_panel(P(0, ry), P(1560, h), color(), me, Color("08202ae8") if me else Color("020a10d8"))))
+			stack_add(st, label_at("#%d" % int(row.get("rank", 0)), P(20, ry + h * 0.2), 24, Color("ffd15c"), false))
+			stack_add(st, label_at(str(row.get("name", "")) + ("  (YOU)" if me else ""), P(160, ry + h * 0.2), 24,
+					Color.WHITE, false))
+			stack_add(st, label_at("%d WINS" % int(row.get("wins", 0)), P(1320, ry + h * 0.2), 24, Color("6fff2a"), false))
+			ry += h + 8.0
+		if not _board_me.is_empty():                  # 0.20.13: YOU, when you're not on the list - a row like the rest
+			var h := rh(56)
+			var wins := int(_board_me.get("wins", 0))
+			stack_add(st, _placed(neon_panel(P(0, ry + 8.0), P(1560, h), Color("ffd15c"), true, Color("08202ae8"))))
+			stack_add(st, label_at("#%d" % int(_board_me.get("rank", 0)) if wins > 0 else "-", P(20, ry + 8.0 + h * 0.2), 24, Color("ffd15c"), false))
+			stack_add(st, label_at(str(_board_me.get("name", "")) + "  (YOU)" + ("" if wins > 0 else "  ·  win an online round vs a player"),
+					P(160, ry + 8.0 + h * 0.2), 24, Color.WHITE, false))
+			stack_add(st, label_at("%d WINS" % wins, P(1320, ry + 8.0 + h * 0.2), 24, Color("ffd15c"), false))
+			ry += h + 16.0
+		stack_close(st, ry * K)
+	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
+		_board_state = "idle"
+		show_profile())
+	nav_button("REFRESH", P(290, foot_y()), P(230, 58), func():
+		_board_state = "idle"
+		show_leaderboard())
+
+
+
+func _load_board() -> void:
+	var rows := await _account().leaderboard("season_wins", 50)
+	_board_rows = rows
+	_board_me = {}
+	if not rows.any(func(r): return bool(r.get("is_me", false))):   # not on the list: say where you stand (0.20.13)
+		_board_me = await _account().my_season_wins()
+	_board_state = "done" if _account().state != "offline" or not rows.is_empty() else "offline"
+	if _page == "leaderboard":
+		show_leaderboard()
+
+
+func show_history() -> void:
+	_last_show = show_history                  # a resize that changes the phone sizing rebuilds it (_fit)
+	## MATCH HISTORY (Daniele, 0.20.5): your recent matches - this device's log (offline, AI, and online rounds played
+	## here) plus the server's record of your online rounds from other devices; newest first, ONLINE / OFFLINE tags.
+	var a := _account()
+	clear_page("city")
+	_page = "history"
+	header(0)
+	label_at("MATCH HISTORY", P(40, 104), 43)
+	label_at("YOUR RECENT MATCHES  ·  this device" + (" + your account's online rounds" if a.signed_in() else ""),
+			P(420, 122), 20, Color("abc1cd"))
+	if _history_state == "idle" and a.signed_in():
+		_history_state = "loading"
+		_load_history(false)
+	var list := Progression.merge_history(Progression.history, _history_online)
+	var fp := P(35, 174)
+	frame(fp, P(1602, 600))
+	if list.is_empty():
+		_wrapped("No matches yet - finish one and it shows here.", fp + P(30, 30), 24, Color("9cb2bf"), 1500)
+	else:
+		var names := _map_names()
+		var st := stack_open(fp + P(16, 16), P(1570, 568))
+		var ry := 0.0
+		for h in list:
+			var rowh := rh(92)
+			var won := bool(h.get("won", false))
+			var draw := bool(h.get("draw", false))
+			var res := "DRAW" if draw else ("WIN" if won else "LOSS")
+			var rc := Color("9cb2bf") if draw else (Color("6fff2a") if won else Color("ff5a4a"))
+			stack_add(st, _placed(neon_panel(P(0, ry), P(1560, rowh), rc.darkened(0.3), false, Color("020a10d8"))))
+			var online := bool(h.get("online", false))
+			stack_add(st, label_at("ONLINE" if online else "OFFLINE", P(16, ry + 8), 15, Color("5fd7ff") if online else Color("839da9"), false))
+			stack_add(st, label_at(_date_text(int(h.get("t", 0))), P(16, ry + 34), 17, Color("c5d2da"), false))
+			var code := str(h.get("map", ""))
+			stack_add(st, label_at(code + "  " + str(names.get(code, "")), P(220, ry + 8), 20, Color.WHITE, false))
+			var dur := int(h.get("duration_s", 0))
+			stack_add(st, label_at("%s  ·  %d:%02d" % [str(Menu.MODE_NAMES.get(str(h.get("mode", "")), str(h.get("mode", "")))), dur / 60, dur % 60],
+					P(220, ry + 40), 17, Color("9cb2bf"), false))
+			var px := 760.0
+			for p in h.get("players", []):
+				if not p is Dictionary:
+					continue
+				var f := str(p.get("faction", "null"))
+				var tex := Hud.emblem_texture(f) if Rules.FACTIONS.has(f) else null
+				if tex != null:
+					var ic := TextureRect.new()
+					ic.texture = tex
+					ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+					ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+					ic.position = P(px, ry + 10)
+					ic.size = P(34, 34)
+					ic.modulate = Rules.FACTIONS[f][1]
+					ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					content.add_child(ic)
+					stack_add(st, ic)
+				var who := "YOU" if bool(p.get("is_me", false)) and str(p.get("name", "")) == "" else str(p.get("name", ""))
+				if str(p.get("ai_level", "")) != "":
+					who = "AI" if str(p["ai_level"]) == "AI" else "AI " + str(p["ai_level"]).to_upper()
+				elif who == "":
+					who = "PLAYER"
+				stack_add(st, label_at(who, P(px - 10, ry + 50), 14, Color.WHITE if bool(p.get("is_me", false)) else Color("9cb2bf"), false))
+				px += 120.0
+			stack_add(st, label_at(res, P(1420, ry + 22), 28, rc, false))
+			ry += rowh + 8.0
+		stack_close(st, ry * K)
+	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
+		_history_state = "idle"
+		_history_online = []
+		show_profile())
+	if a.signed_in() and _history_more and not _history_online.is_empty():
+		nav_button("MORE", P(290, foot_y()), P(230, 58), func(): _load_history(true))
+	if _history_state == "loading":
+		label_at("LOADING ONLINE ROUNDS ...", P(985, foot_y() + 18.0), 18, Color("9cb2bf"), false)
+
+
+func _load_history(more: bool) -> void:
+	var before := ""
+	if more and not _history_online.is_empty():
+		before = str(_history_online[-1].get("started_at", ""))
+	var rows := await _account().match_history(20, before)
+	_history_online = (_history_online if more else []) + rows
+	_history_more = rows.size() >= 20
+	_history_state = "done"
+	if _page == "history":
+		show_history()
+
+
+func _placed(c: Control) -> Control:
+	## neon_panel() hands back an unparented panel; stack_add() moves nodes out of `content`.
+	content.add_child(c)
+	return c
+
+
+func _map_names() -> Dictionary:
+	## map code -> its name, from the pool's file names ("C-05-karth-carousel.json" -> "KARTH CAROUSEL").
+	var out := {}
+	for p in MapPool.all():
+		var f: String = p.get_file().get_basename()
+		out[f.substr(0, 4)] = f.substr(5).replace("-", " ").to_upper()
+	return out
+
+
+static func _date_text(t: int) -> String:
+	## "27 SEP 14:05" in the player's own time zone.
+	if t <= 0:
+		return ""
+	var d := Time.get_datetime_dict_from_unix_time(t + int(Time.get_time_zone_from_system().get("bias", 0)) * 60)
+	return "%d %s %02d:%02d" % [int(d["day"]), MONTHS[int(d["month"]) - 1], int(d["hour"]), int(d["minute"])]
+
+
+func _buy_prompt(item: String, title: String, line: String, back: Callable) -> void:
+	## UNLOCK sheet over the page: the price in SCRAP (and in CHIPS when it is sold for them), what you have, CANCEL.
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.72)
+	dim.position = Vector2(-3000, -3000)
+	dim.size = Vector2(9000, 9000)
+	content.add_child(dim)
+	var pp := P(436, 250)
+	var pd := P(800, 440)
+	content.add_child(neon_panel(pp, pd, Color("ffd15c"), true, Color("0a1216f4")))
+	label_at("UNLOCK " + title, pp + P(32, 24), 34, Color.WHITE, false)
+	var d := label_at(line, pp + P(32, 84), 19, Color("c5d2da"), false)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.custom_minimum_size = Vector2(pd.x - 64 * K, 0)
+	d.size = d.custom_minimum_size
+	var price := Progression.price(item)
+	var y := 170.0
+	for cur in ["soft", "premium"]:
+		if not price.has(cur):
+			continue
+		var cost: int = price[cur]
+		var have := Progression.balance(cur)
+		var c: String = cur
+		var b := nav_button("BUY  ·  " + Progression.amount_text(cost, cur, false), pp + P(32, y), P(420, 66), func():
+			if Progression.spend(item, c):
+				back.call(), cur == "soft")
+		b.disabled = have < cost
+		label_at("YOU HAVE " + Progression.amount_text(have, cur, false) if have >= cost else "YOU HAVE %s - %s SHORT" % [
+				Progression.amount_text(have, cur, false), Progression.amount_text(cost - have, cur, false)],
+				pp + P(476, y + 22), 17, Color("9cb2bf") if have >= cost else Color("ffb12b"), false)
+		y += 86.0
+	nav_button("CANCEL", pp + P(32, 350), P(220, 60), back)
+
+
+func _cosmetic_path(family: String, id: String) -> String:
+	## A locked cosmetic's way in, for its row: the faction vat's wins, the tutorial for the Graduate vat.
+	var item := Progression.cosmetic_item(family, id, _army)
+	if item == "vat:graduate":
+		return TutorialDirector.line("locked_cosmetic").to_upper()
+	if family == "vat" and id == "faction":
+		return "%d / %d WINS AS %s, ITS CAMPAIGN, OR UNLOCK" % [int(Progression.faction_stats(_army)["vat_wins"]),
+				int(Rules.PROGRESSION["faction_vat_wins"]), "VIRIDIAN" if _army == "bloom" else _army.to_upper()]
+	return "UNLOCK WITH SCRAP OR CHIPS"
+
+
+# ------------------------------------------------------------------ CAMPAIGN (CAMPAIGN-DESIGN.md §3)
+# CAMPAIGN: the campaign map page (CampaignPage, its own canvas and 3D diorama over the backdrop); also opened as
+# menu_open = "campaign" after a mission relaunch. Screenshot / test args: --campaign-all (every playable mission
+# open), --campaign-cfg=<path> (read progress from another file), --campaign-district=<id>, --campaign-card=<key>.
+var _camp_page: CampaignPage
+
+
+func show_campaign() -> void:
+	clear_page("city")
+	_page = "campaign"
+	for arg in OS.get_cmdline_user_args():
+		if arg == "--campaign-all":
+			Campaign.all_open = true
+		elif arg.begins_with("--campaign-cfg="):
+			Campaign.path = arg.substr(15)
+	_camp_page = CampaignPage.new()
+	_camp_page.standalone_backdrop = false
+	_camp_page.set_faction(faction)
+	_camp_page.set_mobile(mobile)
+	_camp_page.back_pressed.connect(show_main)
+	_camp_page.play_pressed.connect(func(key: String):
+		if main.has_method("start_mission"):          # main.gd's mission launcher (the campaign session adds it)
+			main.call("start_mission", key, colour))
+	add_child(_camp_page)
+	content.tree_exiting.connect(_camp_page.queue_free)   # the next page's clear_page takes it away
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--campaign-district="):
+			var id := arg.substr(20)
+			for i in range(Campaign.districts(_camp_page.faction).size()):
+				if str(Campaign.districts(_camp_page.faction)[i]["id"]) == id:
+					_camp_page.show_district(i, false)
+		elif arg.begins_with("--campaign-card="):
+			_camp_page.open_card(arg.substr(16))
+
+
 # ------------------------------------------------------------------ ARMIES (army presets, SKILLS 2.0)
 func show_armies(f: String = "", back: Callable = Callable()) -> void:
+	_last_show = func(): show_armies(f, back)                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select what
 	## skill each of your factions will use, follow the skill file from faction ultimates and ability pool)".
 	## Left: the five factions (their preset's three icons). Right: the faction's ultimate (fixed), then the
@@ -688,7 +1485,13 @@ func _skill_card(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vec
 	## One pool skill as a tap target: icon, cooldown, name, one line in shown numbers (the full sentence as
 	## its tooltip); the equipped one glows with a check.
 	var sk: Dictionary = Rules.SKILLS[id]
+	var locked := not Progression.is_unlocked("skill:" + id)   # PROGRESSION: tap a locked skill to unlock it
 	var b := nav_button("", pos, dims, func():
+		if locked:
+			_buy_prompt("skill:" + id, ArmyPresets.skill_name(id).to_upper(),
+					"Unlocks %s for every faction's loadout. Skills are earned with SCRAP only." % ArmyPresets.skill_name(id),
+					func(): show_armies())
+			return
 		ArmyPresets.set_pick(_army, slot, id)
 		_preset_changed()
 		show_armies())
@@ -699,7 +1502,10 @@ func _skill_card(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vec
 	if chosen:
 		label_at("EQUIPPED", pos + P(106, 46), 17, fc, false)
 		neon_icon("check", pos + P(dims.x / K - 34, 12), P(20, 20), fc)
-	if sk.get("needs_relays", false):
+	if locked:
+		label_at("LOCKED", pos + P(106, 46), 17, Color("e08a3a"), false)
+		label_at(Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false), pos + P(106, 70), 15, Color("e08a3a"), false)
+	elif sk.get("needs_relays", false):
 		label_at("NEEDS RELAYS", pos + P(106, 70), 15, Color("ffb12b"), false)
 	label_at(ArmyPresets.skill_name(id).to_upper(), pos + P(16, 104), 24, Color.WHITE if chosen else Color("dbe6ec"), false)   # fixed card height - see label_at()
 	var d := label_at(ArmyPresets.line(id), pos + P(16, 138), 18, Color("c5d2da"), false)
@@ -724,15 +1530,16 @@ func _leave_armies() -> void:
 
 
 # ------------------------------------------------------------------ ARMIES > COSMETICS (0.19.0, spec E/I)
-const COSMETIC_FAMILIES := ["vat", "machingoon", "laser", "forge", "monster_hub", "monster"]
-const COSMETIC_FAMILY_LABEL := {"vat": "VAT LOOK", "machingoon": "MACHINGOON", "laser": "LASER",
+const COSMETIC_FAMILIES := ["vat", "machinegoon", "laser", "forge", "monster_hub", "monster"]
+const COSMETIC_FAMILY_LABEL := {"vat": "VAT LOOK", "machinegoon": "MACHINEGOON", "laser": "LASER",
 		"forge": "FORGE", "monster_hub": "MONSTER HUB", "monster": "MONSTER"}
 
 
 func show_cosmetics(f: String = "") -> void:
+	_last_show = func(): show_cosmetics(f)                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## A look per structure family, per faction (GAME-BIBLE sec17; Daniele, 2026-09-27): DEFAULT / the
 	## faction set / GRADUATE / the skin lines for vats, DEFAULT / SPITTER / PEPPERBOX for the
-	## Machingoon, and so on - saved in user://armies.cfg (ArmyPresets), applied at match start
+	## Machinegoon, and so on - saved in user://armies.cfg (ArmyPresets), applied at match start
 	## (main.gd's Cosmetics.set_loadout) and sent along with the skill loadout online (ArmyPresets.send_to).
 	## Every item is unlocked while testing (ArmyPresets.is_unlocked always true for now).
 	if f != "":
@@ -746,7 +1553,8 @@ func show_cosmetics(f: String = "") -> void:
 	header(0)
 	var fc := color()
 	label_at("ARMIES", P(40, 104), 43)
-	label_at("COSMETICS  ·  a look per structure, per faction - all unlocked while testing, the Graduate vat by finishing the tutorial",
+	label_at("COSMETICS  ·  a look per structure, per faction - " + ("all unlocked while testing, the Graduate vat by finishing the tutorial"
+			if Progression.unlock_all else "earn or unlock them; the Graduate vat by finishing the tutorial"),
 			P(262, 122), 20, Color("abc1cd"))
 	for i in range(FACTIONS.size()):
 		var tf: String = FACTIONS[i]
@@ -803,15 +1611,21 @@ func _cosmetic_row(family: String, current: String, pos: Vector2, fc: Color) -> 
 	nav_button("<", pos + P(122, 42), P(42, 32), func():
 		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx - 1 + options.size()) % options.size()])
 		show_cosmetics())
-	var locked := not ArmyPresets.is_unlocked(current)
-	label_at(Cosmetics.label(family, current, _army) + ((" (LOCKED - %s)" % TutorialDirector.line("locked_cosmetic").to_upper()) if locked else ""), pos + P(178, 48),
+	var locked := not ArmyPresets.is_unlocked(current, family, _army)
+	label_at(Cosmetics.label(family, current, _army) + ((" (LOCKED - %s)" % _cosmetic_path(family, current)) if locked else ""), pos + P(178, 48),
 			19, Color("ffb12b") if locked else Color("dbe6ec"), false)
+	var item := Progression.cosmetic_item(family, current, _army)   # PROGRESSION: UNLOCK where it can be bought
+	if locked and not Progression.price(item).is_empty():
+		nav_button("UNLOCK", pos + P(850, 38), P(190, 42), func():
+			_buy_prompt(item, Cosmetics.label(family, current, _army).to_upper(), "A look only: tier read, footprint and colour stay the same.",
+					func(): show_cosmetics()), false, false)   # the row's own height (a dense row - see label_at())
 	nav_button(">", pos + P(1090, 42), P(42, 32), func():
 		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx + 1) % options.size()])
 		show_cosmetics())
 
 
 func show_maps() -> void:
+	_last_show = show_maps                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page("city")
 	header(2)
 	label_at("CHOOSE YOUR BATTLEFIELD", P(40, 107), 43)
@@ -964,6 +1778,7 @@ func _selected_map() -> Dictionary:
 
 
 func show_setup() -> void:
+	_last_show = show_setup                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page("city")
 	header(3)
 	label_at("READY TO DEPLOY", P(40, 108), 51)
@@ -1119,14 +1934,15 @@ func deploy() -> void:
 
 # ------------------------------------------------------------------ online (Net, rooms through the room server)
 func show_online() -> void:
+	_last_show = show_online                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## ONLINE: pick your faction, then CREATE ROOM (you host) or JOIN ROOM (the host's code).
 	clear_page("city")
 	_page = "online"
 	header(0)
 	label_at("PLAY WITH FRIENDS", P(40, 107), 43)
 	frame(P(35, 174), P(1600, 640))
-	label_at("PRIVATE ROOMS  ·  THROUGH THE OOZE ROOM SERVER", P(60, 196), 24, color())
-	var about := label_at("Create a room and share its four-character code; everyone opens this same link. Keep the host's tab open and in front - the host's game runs the match. Free-for-all for 2 to 5 players, or 2 v 2. Rematch reuses the room; chat stays between rounds.",
+	label_at("PRIVATE ROOMS  ·  HOSTED ON THE OOZE ROOM SERVER", P(60, 196), 24, color())
+	var about := label_at("Create a room and share its four-character code; everyone opens this same link. The room server runs the match, so a phone that locks or switches apps only drops its own seat - RECONNECT takes it back. The room's creator picks the map and settings. Free-for-all for 2 to 5 players, or teams. Rematch reuses the room; chat stays between rounds.",
 			P(60, 245), 20, Color("bbd1db"))
 	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	about.custom_minimum_size = Vector2(1540 * K, 0)
@@ -1147,7 +1963,7 @@ func show_online() -> void:
 			Net.reconnect()
 			show_lobby(), true)
 		rc.disabled = not web
-	var msg := Net.status if Net.status != "" else ("Rooms connect through the Ooze room server, so any network that reaches the internet can join. The host still runs the match: keep the host's game open and in front." if web
+	var msg := Net.status if Net.status != "" else ("Rooms run on the Ooze room server, so any network that reaches the internet can join. If the server is busy, the room's creator hosts it in their browser instead (keep that tab in front)." if web
 			else "Online rooms run in the browser build: open https://talos91.github.io/ooza-syndicate-v2/")
 	var st := label_at(msg, P(60, 650), 20, Color("ffd15c") if Net.status != "" else Color("adc7d2"))
 	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1175,6 +1991,7 @@ func _faction_row(pos: Vector2, dims: Vector2) -> void:
 
 
 func show_lobby() -> void:
+	_last_show = show_lobby                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## The room: who is in which seat, the host's match settings, DEPLOY when every seat is filled.
 	if not Net.in_room():
 		show_online()
@@ -1185,7 +2002,7 @@ func show_lobby() -> void:
 	header(0)
 	if Net.roster.has(Net.local_id()):
 		faction = str(Net.roster[Net.local_id()]["faction"])
-	var host := Net.is_host()
+	var host := Net.can_control()                     # the browser host, or a server room's owner (Alpha 20)
 	label_at("ROOM %s" % (Net.room_code if Net.room_code != "" else "...."), P(40, 100), 52)
 	var th := rh(52)
 	var copy := nav_button("SHARE CODE", P(420, 110), P(230, th), _share_code)
@@ -1353,7 +2170,7 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 	if id >= 0:
 		var f: String = str(Net.roster[id]["faction"])
 		label_at("VIRIDIAN BLOOM" if f == "bloom" else NAMES[f].replace("\n", " "), Vector2(pos.x + 84 * K, mid - 24 * K), 22, Rules.FACTIONS[f][1], false)
-		var tags := ("HOST" if id == 1 else "") + ("  ·  YOU" if id == Net.local_id() else "") + ("  ·  RECONNECTING" if Net.is_away(id) else "")
+		var tags := ("HOST" if id == Net.room_owner else "") + ("  ·  YOU" if id == Net.local_id() else "") + ("  ·  RECONNECTING" if Net.is_away(id) else "")
 		label_at(("%s  %s" % [str(colours.get(seat, "")).to_upper(), tags]).strip_edges(), Vector2(pos.x + 84 * K, mid + 2 * K), 16, Color("ffd15c"), false)
 		# SKILLS 2.0: the player's loadout - active, map (the no-relay fallback on such a map), ultimate
 		var lo = Net.roster[id].get("loadout", {})
@@ -1459,6 +2276,8 @@ func _process(dt: float) -> void:
 			var n := Net.chat_unread()
 			_chat_btn.text = "CHAT (%d)" % n if n > 0 else "CHAT"
 			_chat_btn.disabled = not Net.connected
+	if OS.has_feature("web"):                                  # PROGRESSION: the HTML name field (ACCOUNT)
+		_poll_name(dt)
 	if not OS.has_feature("web") or _page != "online":
 		return
 	var ui = JavaScriptBridge.get_interface("OozeRoom")
@@ -1476,6 +2295,8 @@ func _exit_tree() -> void:
 		var ui = JavaScriptBridge.get_interface("OozeRoom")
 		if ui != null:
 			ui.closeCode()
+		if _name_inline:                                 # PROGRESSION: the HTML name field, if it is up
+			JavaScriptBridge.eval("window.OozeName&&OozeName.remove()", true)
 
 
 func _fit() -> void:
@@ -1488,3 +2309,11 @@ func _fit() -> void:
 	content.size = Vector2(1280, 720)
 	content.scale = Vector2(s, s)
 	content.position = (vp - Vector2(1280, 720) * s) / 2.0
+	# A page's tap heights and text sizes (rh / tap / fsz) are computed from the screen when it is built: a page
+	# built in portrait, or mid-rotation / fullscreen switch, kept giant buttons after the phone turned (0.20.2,
+	# Daniele: "emergency this is what my gf see"). When the phone sizing moves by more than 10 %, rebuild it.
+	if _built_pt > 0.0 and _last_show.is_valid():
+		var f := _pt_factor()
+		if f > 0.0 and absf(f / _built_pt - 1.0) > 0.1:
+			_built_pt = 0.0
+			_last_show.call_deferred()

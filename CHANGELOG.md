@@ -1,11 +1,379 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.1 "Alpha 21" - 2026-09-28 (optimization, part 2: models; server host; iPhone fullscreen)
+
+- **Light models on phones, full ones on desktop** (Daniele: "Phones only"): index.pck now carries the light kit (base
+  kit 331k -> 93k triangles, Skin Designer's phone rebuilds of the Machinegoon, monster hubs, monsters and every skin);
+  a desktop fetches the full originals once, on demand: hd.pck (base pieces, ~15 MB) and skins_hd.pck (skins, ~39 MB)
+  (`Cosmetics.kit_path`, `PerfProfile.hd()`). index.pck ~55 MB -> ~53 MB.
+- **Skins at the default vats' quality** (Skin Designer's quality pass): the five vat skin lines, Graduate, Machinegoon,
+  laser, forge and monster hub skins rebuilt with a plinth, lit tank caps and neon rings, in both the phone and HD sets.
+  Vat lines and laser skins stand 0.34 m higher, forge skins 0.56 m (tank columns and emitters follow).
+- **iPhone home-screen app fills the screen in landscape**: no more black band at the bottom (iOS reported the height
+  short by the status bar); the HUD stays inside the safe area (`web/viewport-fix.js`, `main._apply_safe_area`).
+- **Server** (server session): the room server's match host builds no world or HUD (host CPU about halved, room for 3
+  match slots); an adaptive playout buffer on guests (0.12-0.35 s after a stall, shown in the CONNECTION line);
+  deploy.sh checks every pack is in the build folder.
+
+## 0.21.0 "Alpha 21" - 2026-09-28 (optimization, part 1: drawing)
+
+- **Draw far less** (Daniele: phone overheating, "lag still a major problem" with low fps in the PAUSE line): the static map
+  (platforms, fixed decks, piers, relay ledges, neon trims) is drawn through MultiMesh batches per mesh + material
+  (`MapBatch`, scripts/map_batch.gd); pieces keep their nodes, moving / falling / recoloured ones leave or move batches.
+  Phone profile, busy maps at 2:00: A-01 592 -> 256 draw calls, C-05 835 -> 310, M-37 972 -> 318, M-39 1,093 -> ~450;
+  primitives roughly halved. Desktop looks identical (mean pixel difference < 1/255).
+- **Sharper phones**: the 3D no longer renders at 75 % on phones (the renderer upscaled it without filtering: the blocky
+  "minecraft" edges); phones draw at full resolution with a 45 fps cap (30 in menus / paused).
+- **OPTIONS > PERFORMANCE**: GRAPHICS AUTO / LOW RES / FULL and FPS AUTO / 30 / 60 (`PerfProfile`, user://settings.cfg).
+  LOW RES: 30 fps, no shadows or glow, low detail, lite goo, fewer particles.
+- **Perf regression check**: tests/perf_check.tscn plays M-39 AI vs AI and checks draw calls / primitives / objects budgets.
+
+## 0.20.13 "Alpha 20" - 2026-09-28 (online co-op playtest fixes)
+
+- **Last Stand announcement no longer covers the screen** (Daniele: "last stand still fills the whole screen"): the 5 s
+  two-line banner in the centre is now a short toast; the status line and the per-node danger symbols carry the warning.
+- **Notifications top left** (Daniele: "notification in top right are impossible to see move to top left"): the stack sits
+  top left, past the SEND panel, larger (19 pt) and brighter.
+- **Ally halo** (Daniele: "i sent troops to her node and except the count going up i couldn't see any other indicator"): one
+  ring per contributing ally in that ally's own colour, thicker at every tier, and your "+N" share on her badge in your colour.
+- **Leaderboard**: a YOU row when you're not in the top 50 (rank, wins, or "win an online round vs a player").
+- **UNRANKED** in the lobby and on the results screen when a room runs in a browser (the fallback when the server's match
+  slots are full or on another version) - such rounds never count online (`Net.server_hosted()`).
+- **Server** (server session): each version's pack is kept on the server, so a deploy no longer breaks rooms mid-session
+  (the rematch after a deploy failed before); test rooms give their slot to real players; the host logs one seat summary per report.
+
+## 0.20.12 "Alpha 20" - 2026-09-27 (fairer Last Stand pacing; install guide; rematch fixed; connection readout)
+
+- **Last Stand pacing** (Daniele: "instead of a platform every 5 seconds, we do every 20 i think it makes it more fair" ->
+  "Aim for 20 s, fit the time"): the ring drop gap is fixed per map at the Last Stand start, as slow as the 3:00-6:00 window
+  allows, 20 s at most, never under 8 s (`Rules.LAST_STAND_DROP_GAP_MIN / _MAX`, `Sim.last_stand_gap`, `Sim._fit_gap`).
+  Across the pool: median 20 s, shortest 11.9 s (M-09); every collapse ends by 5:58. Badge countdowns and the status line
+  follow it; the AI leaves a warned node only when its own drop is near (`Rules.AI_EVAC_MARGIN`). Lessons can pin it
+  (`sim.ls_drop_gap_override`; L7 keeps 5 s). `Rules.LAST_STAND_DROP_GAP` 5 s stays as the lesson constant.
+- **INSTALL THE GAME** on MAIN (Daniele: "a guide on how to [add to home screen] so new users can figure it"): phone
+  browsers only, hidden in the installed app and on desktop; iPhone (Safari > Share > Add to Home Screen) or Android
+  (Chrome menu > Add to Home screen, or INSTALL NOW when Chrome offers it); DON'T SHOW AGAIN.
+- **Rematch** (Daniele: "it just looks like it reloads and says 1 player ready"; server session): a random-map rematch in a
+  bigger mode now fills the empty seats with the AI instead of sending everyone back to the lobby; the result panel updates in
+  place (no replayed rewards) and names who is ready ("YOU'RE READY - waiting for ...", "... wants a rematch - tap REMATCH").
+- **CONNECTION line** in PAUSE during online rounds: fps, updates per second, freezes this match and round trip, so stutter
+  can be told apart from the phone's frame rate.
+
+## 0.20.11 "Alpha 20" - 2026-09-27 (the phone keyboard opens for the player name)
+
+- Daniele on 0.20.10: "keyboard still doesn't appear for player name" (Android). 0.20.10's field was focused from
+  Godot's input handling, outside the tap's user gesture, so Android kept the keyboard down. Now, in the web build, the
+  NAME box on ACCOUNT *is* a native HTML <input> laid over it while the page is open: the player's tap lands on the DOM
+  element itself and the phone raises its keyboard. RENAME (or Enter) saves it through the same set_name; the field
+  follows the box, never steals focus on a rebuild, and goes away when the page does. Desktop keeps the LineEdit.
+- A stored session the server refuses (expired / removed) now falls back to a new guest instead of staying offline
+  (found while testing; `test_account --live` covers it).
+- Checked in the in-app browser with touch emulation at 740 x 360 on a local export: after a tap the focused element is
+  the input itself (document.activeElement), typing + RENAME and typing + Enter renamed the guest, the field is removed
+  off ACCOUNT. Not tried on a real phone.
+
+## 0.20.10 "Alpha 20" - 2026-09-27 (rename works on phones)
+
+- Daniele: "rename doesn't allow for chat input" / "fix the rename on my mobile, no keyboard opens to input" - Godot's
+  LineEdit doesn't raise a phone keyboard in the web build. On the web, ACCOUNT's NAME and RENAME now open a native
+  HTML field (the room code's way: a DOM input, prefilled, upper case, 3-16 letters / digits / space / - / _, Save /
+  Cancel), defined at runtime by menu.gd so the export's script list is unchanged; the answer goes through the same
+  set_name. Desktop keeps the LineEdit. ACCOUNT also re-reads whether Google is on when it opens with Google off.
+- Checked in the in-app browser with touch emulation at 740 x 360 on a local web export: the field opens focused and
+  prefilled, typing + Save renamed the guest on Supabase. Not tried on a real phone.
+
+## 0.20.9 "Alpha 20" - 2026-09-27 (the tutorial on the decluttered HUD)
+
+- Checked every lesson step against 0.20.6's HUD at phone size. The "+ CAPTURED" / "LOST" floaters are revealed from L1.
+- The coach card is sized to the line's measured wrapped height: some of Dr. Vesk's longer lines wrap to three lines on a
+  phone and the card was budgeted for two, so the buttons stay clear.
+- L7: the rival stays scripted weak through the Very Last Stand (its nodes capped at 5 shown). A random drop order could
+  leave its centre node as the last platform, too big to take in the 15 s gap; test_tutorial now wins L7 on 16 of 16 seeds.
+
+## 0.20.8 "Alpha 20" - 2026-09-27 (ACCOUNT without email)
+
+- Daniele: "if they sign in i'd like them not to have to verify email, its a game why would they want to do that for a
+  mobile game, also later auth will be on app game and android game so this step is useless". PROFILE > ACCOUNT is now
+  the automatic guest account, ADD GOOGLE / SIGN IN WITH GOOGLE (browser build) and RENAME - no email fields, nothing
+  to verify. The email functions are removed from `scripts/account.gd`. Sign in with Apple (iOS) and native Google
+  (Android) come with the store builds (PROGRESSION-DESIGN §7).
+
+## 0.20.7 "Alpha 20" - 2026-09-27 (Google sign-in buttons turn on)
+
+- Daniele set up the Google provider in Supabase, but on the live 0.20.5 / 0.20.6 web build ADD GOOGLE / SIGN IN WITH
+  GOOGLE stayed greyed: the game's read of Supabase's auth settings failed because Godot's HTTPRequest decompressed a
+  reply the browser had already decompressed (stream_peer_gzip error; the same trap as the 0.19.2 skins download).
+  `Account._call` now turns Godot's gzip off on the web, so every account call (settings, sign-in, cloud save,
+  leaderboard, match history) takes the browser's copy. Checked on a local web export in the in-app browser: both
+  Google buttons light up and ADD GOOGLE reaches Google's sign-in page (the sign-in itself not completed here). The
+  match host's own requests (net.gd) are native, not web, and unchanged. Email links stay off until confirmed.
+
+## 0.20.6 "Alpha 20" - 2026-09-27 (HUD declutter; Dr. Vesk's voice)
+
+- **HUD declutter** (Daniele: "remove the number on top of units line ... too many notifications and many notifications
+  cover the map, all notification should be top right ... remove all notices of things like send and capture, better is in
+  game text coming out of the conquer place"): no count over moving lines (node badges keep theirs); toasts in one small
+  top-right column under the top bar / PAUSE, at most 2 visible, 1.8 s; no toast for accepted orders, captures, relay
+  switches, flings or falls - a capture now shows a short rising "+ CAPTURED" (your colour) / "LOST" (red) at the node
+  (`Fx.floater`, reveal key "floaters"); kept: skills against you, a monster launched at YOUR node, forge lost, eject,
+  handover, refusals, online events; the Last Stand status stays one compact line under the top bar (its repeating toasts dropped).
+- **Dr. Vesk is funnier** (Daniele: "make the text more fun dr dex is a bit flat"): 59 tutorial lines rewritten in the
+  campaign's dark-comedy style (instruction first, one short joke at most).
+
+## 0.20.5 "Alpha 20" - 2026-09-27 (accounts: guest, email link / Google, cloud save, leaderboard, match history)
+
+Daniele: Supabase "yes, create it"; web / APK sign-in = guest + an email link + Google; a sign-in onto an account that
+already has progress keeps the account's; first leaderboards = weekly challenge points + wins this season; MATCH
+HISTORY "Yes, in 0.20.5". Built by the progression session (client + backend) and the server session (host side).
+
+- **Accounts, optional.** Every player gets a silent guest account the first time the game is online (offline play is
+  unchanged). PROFILE > ACCOUNT: rename (3-16 letters / digits), add an email (Supabase sends a link; once opened the
+  account is permanent), add Google (browser build), or sign in on this device with an account made elsewhere - its
+  progress replaces this device's. The session renews itself; `user://account.cfg` holds it.
+- **Cloud save.** The device's save files (progress, ARMIES picks, tutorial, campaign via Campaign.to_dict) go up when
+  one changes; a sign-in onto another account restores that account's copy (then Campaign.from_dict / pay_pending).
+- **Server-written results.** In a server room a player's token rides in the lobby register ("auth"); the match host
+  verifies it and, at the end of a round with any account seat, sends a signed report (HMAC) to the `match-result`
+  function. Guests without a token still play (no report when no seat has an account). The report carries every
+  seat's stats (Progression.seat_stats), place and win.
+- **LEADERBOARD:** WINS THIS SEASON (the UTC month) - online wins in server rooms with two or more human seats,
+  written by the server only (a room of AI can't farm it). The weekly challenge-points board needs server-checked
+  challenges and comes next.
+- **MATCH HISTORY:** PROFILE > HISTORY - the device's last 50 matches (offline, AI, and online rounds played here) plus
+  the account's server rounds from other devices, newest first, one line per round (ONLINE / OFFLINE, date, map,
+  mode, time, every seat's emblem + name or AI level, WIN / LOSS / DRAW), MORE loads older online rounds.
+- Fixes: daily REROLL / CLAIM buttons stay inside their card on phones; PROFILE's testing note says TEST SWITCH.
+- Backend (`supabase/`, project ooze-syndicate, Singapore, free plan): tables with RLS, `set_name`,
+  `leaderboard_season_wins`, `my_matches`, `ingest_match`, the `match-result` edge function (HMAC, idempotent,
+  `x-ooze-dry-run`). Client: new `scripts/account.gd`; `progression.gd` history + merge; menu.gd ACCOUNT /
+  LEADERBOARD / HISTORY; main.gd starts the account once per run (never on the match host, headless or screenshot
+  runs). Host: `net.gd` auth in register + verification, `scripts/match_report.gd`, deploy with `--relay`.
+- Tests: new `test_account` (offline; `-- --live` signs real guests in, renames, cloud save up / restore - "account
+  wins" - RLS, the board, history; its test users deleted after), `test_match_report`; test_progression gains the
+  history log. Live end-to-end on the VPS (a signed report from a real server round) passed. Desktop and phone-size
+  renders; the email link and Google were not clicked through yet.
+
+## 0.20.4 "Alpha 20" - 2026-09-27 (campaign preview: VEX, the sinking city, on placeholder maps)
+
+Daniele (CAMPAIGN-DESIGN.md §0): the sinking city is the campaign map (districts = chapters, missions = nodes, the last
+chapter descends under the city); dark comedy; linear with optional side nodes; one campaign per faction - VEX free,
+the others later / paid - and finishing one unlocks that faction's vat; stars 1-3 are achievement only, 3 stars + the
+mission's optional objective **in the same run** pays SCRAP **once per mission**; solo. "continue the part of your
+work you can do without the maps"; then "Yes, publish as preview". The full campaign lands with the new maps
+(Game map builder, Alpha 22-23); until then every mission plays on a **placeholder map** from the current pool.
+
+- **CAMPAIGN on MAIN** (the ARMIES row splits into CAMPAIGN | ARMIES). The campaign page is a 3D diorama of the
+  district built from the game's kit: missions are platforms (locked grey, open pulsing, won with your goo ring, the
+  vat growing a tier per star, star pips and a SCRAP mark), main missions joined in order by bridges, side missions
+  behind a relay. Faction tabs (VEX open, the others "LATER"), the stars total, CONTINUE, prev / next district (and
+  swipe), a mission card (story, rival, objective, optional objective, par, best time, stars, the reward line,
+  PLAY). Animations: the new bridge extends after a first win, the relay swings its deck to a side mission, a
+  finished district drops ring by ring into the void (tap to skip) and stays as a memorial, the Descent tips the
+  camera under the city.
+- **VEX campaign**, 4 districts - Dockside, The Exchange, Old Town, The Descent - 10 main + 3 side missions
+  (`scripts/campaign.gd`), briefed by Dr. Vesk and rival executives (the Foreman, the Auditor, the Guru, Compliance,
+  the Maw; names are placeholders). Playable now: 01 Hostile Takeover, 02 Mind the Gap, s1 Overtime, 03 The Foreman,
+  05 Nobody Saw Anything, 06 Aggressive Growth, 07 Last Train Out, 08 Compliance, 09 Going Down, 10 Root Cause.
+  **IN DEVELOPMENT** (they need systems the game doesn't have yet - the event deck's tides and supply drops, the
+  wandering beast): 04, s2, s3; they never block the chain.
+- **In a mission** (`scripts/mission_director.gd`, `scripts/mission_overlay.gd`): a briefing card (the match waits
+  for START), an objective line under the clock with live progress, a par clock and the optional objective with a
+  live tick / cross; objectives: take every rival node, drop N rival units with your relays, hold until a time, take
+  a node with your monster, win the collapse with N+ units (the collapse can start early). The rival is the normal
+  AI at the mission's level, with extra units at its home where the mission says.
+- **Result screen**: the mission's win / lose line, the three stars one by one with their rules (★ win, ★★ within
+  par, ★★★ within par keeping every node you started with), the optional objective, the reward (+150 / 200 / 300
+  SCRAP counting up, "already taken" after the first), the VEX vat unlock on the finale, the XP strip (a mission is a
+  match for XP and challenges - no per-match SCRAP), NEXT MISSION / RETRY / CAMPAIGN. PAUSE / YOU'RE OUT read CAMPAIGN
+  during a mission.
+- Progress on the device (`user://campaign.cfg`); rewards and the vat through `Progression.grant("campaign:vex:<id>")`
+  / `unlock("vat:faction:vex", "campaign:vex")`. Debug / shots: `--mission=<key>`, `--mission-shot=brief|hud|win|lose`,
+  `--campaign-all`, `--campaign-district=`, `--campaign-card=`, `--campaign-cfg=`.
+- Built conservatively (OPEN-QUESTIONS, Campaign): a hold mission is won at its time exactly; "lost a node" counts
+  captures, not Last Stand drops; Mind the Gap counts only your own relay drops and fails on a conquest short of the
+  drops; the collapse runs are "win the collapse with N+ units" until an extraction node exists; rewards 150 / 200 /
+  200 / 300 await Daniele's yes.
+- T-01 / T-02 are tutorial-only too: never on BATTLEFIELD, in rooms or rematches; the default map is A-01 Orbital
+  Nexus (Interactive Tutorial; Daniele: "Hide T-01 / T-02 too"; PLAYTEST-NOTES 198).
+- Tests: new test_campaign, test_mission, test_campaign_page (a scene: `res://tests/test_campaign_page.tscn`); all
+  12 suites pass headless. Desktop and phone-size renders only - nothing on a real phone.
+
+## 0.20.3 "Alpha 20" - 2026-09-27 (Daniele's first online playtest: smooth server rooms, monster launch, full-size Machinegoon)
+
+- **Smooth online movement** (Daniele: "it lags and this time wasn't graphic related but connection"; jerky movement on
+  Wi-Fi + mobile data; server session): the server host runs at 40 fps with 20 Hz snapshots on a carried clock (was ~10 Hz
+  at uneven 100 / 133 / 167 ms gaps); server-room guests play out through a 120 ms buffer, extrapolate up to 0.5 s and blend
+  corrections over 150 ms. Simulated mobile data (80 ms, 120 ms jitter, a 0.6 s stall every 6 s): frozen 10 % -> 1.2 % of
+  the time, jumps > 0.5 m 24 / min -> 0. Browser-hosted fallback rooms unchanged. `tests/net_probe.gd` measures it.
+- **Monster launch** (Daniele: "i couldn't figure how to send the monster ... when its ready to launch you click on it, the
+  guided send ... you click and it goes"): the cause was that tapping your own ready hub opened the inspector instead of
+  arming the launch. Now a tap on a ready hub, its monster or the icon arms the guided send (reach lit), a tap on a lit node
+  launches; `Hud.is_ready_hub()`, a first-time hint, a bigger icon (48 px); a charging hub still opens the inspector.
+  test_net checks it from a guest's synced state.
+- **Machinegoon v2** (Daniele: the 0.65 shrink looked "way too small; make it look as big as the other structures but make
+  sense"): Skin Designer's rebuild with LOW barrels shown at full scale (about a T2 vat); Spitter and Pepperbox rebuilt the same
+  way on Daniele's yes (`Machinegoon_T{n}_{Spitter,Pepperbox}.glb` in skins.pck; the old GooGun_* skins removed); every
+  Pepperbox tier spins its barrel cluster.
+
+## 0.20.2 "Alpha 20" - 2026-09-27 (menu fix on phones; tutorial fixes from Daniele's notes)
+
+- **Menu on phones (emergency, Daniele: "this is what my gf see"):** a menu page built in portrait or mid-rotation /
+  fullscreen switch kept giant NEW GAME / CHALLENGES buttons after the phone turned (tap heights and text sizes are
+  computed when a page is built; `_fit()` only rescaled). Every page now records the sizing it was built with and
+  `_fit()` rebuilds it when that moves by more than 10 %. Reproduced by building at 321x657 and rotating to 657x321.
+- **Tutorial (Daniele's notes):** "the focus only highlight the target but obscure the towers that needs to send" - every
+  send step now lights its sending nodes too (dim 55 % -> 42 %); "order might be short of a few troops ... can somewhat
+  break the tutorial" - a short landing tops up your best sender, freezes the target and says "Not enough units - send
+  again, use 100 %." (TRY AGAIN only for real losses); "relay map is too fast" - L4 / L5 / L9 drop to 0.25x about 2 s
+  before the rival line reaches the relay deck and hold it until you fire (18 s cap), rival lines in L4 / L5 walk at 0.7x.
+
+- **Graduate vat preview:** TRAINING COMPLETE's turntable now shows the vat in your colour (its tanks were black: the preview never
+  got the owner materials), whole (framed to the model's bounds - the crown was cropped) and softly lit (the v2 ivory
+  blew out white under the warm ambient). `CoachOverlay.GraduatePanel` only.
+- Also in main since 0.20.0 (tutorial hotfix 9d02082): the first coach card no longer hops between corners or shifts
+  its buttons while the line types in.
+
+## 0.20.1 "Alpha 20" - 2026-09-27 (progression: SCRAP, SYNDICATE CHIPS, levels, challenges, unlocks)
+
+Daniele: the "Leaderboard, progression, and currency" session builds "currency in parallel". His decisions
+(01 Rules/PROGRESSION-DESIGN.md §0): offline first; a free currency **SCRAP** and a premium **SYNDICATE CHIPS**;
+SCRAP buys cosmetics and skills ("i d lower skill cost is mobile so i d say skill cost to 1250 scraps"), chips buy
+looks only and come in small amounts from weekly challenges and levels; Surge + Demolish free ("the 2 used in the
+tutorial"); every tutorial lesson pays SCRAP "so that a 3 skill can be unlocked once done tutorial"; 25 wins with a
+faction unlock its vat (online, or vs Veteran / Expert AI); easy AI pays XP only; resets at 00:00 UTC; "all open
+until lock switch".
+
+- **Rewards after every match.** A finished match pays XP and SCRAP (finish 20, win +20, first win of the UTC day
+  +100; XP 100 / 50 / 200); below Veteran AI it pays XP only. The results screen shows the lines, the SCRAP (and any
+  chips) counting up, the XP bar filling with a LEVEL UP flash, a challenge-done or faction-vat note. Each level pays
+  100 SCRAP, every 5th also 25 chips (level n needs 800 + 100 (n-1) XP). Online rounds pay on the device until
+  accounts exist; the dedicated match host never pays.
+- **MAIN:** a profile card top right (level, XP bar, SCRAP, CHIPS -> PROFILE) and CHALLENGES with what's ready to claim.
+- **PROFILE:** level and XP, both balances and where they come from, per faction played / won and the faction vat's
+  progress (x / 25 wins), "saved on this device".
+- **CHALLENGES:** 3 daily (reset 00:00 UTC) and 3 weekly (Monday), the same set for everyone each day; progress from
+  any finished match (not tutorial lessons), CLAIM counts the SCRAP up on the card, one daily REROLL a day. Pools in
+  `Rules.CHALLENGES` (captures, relay fires, relay drops, monster kicks, skills, wins as a faction / on relay maps /
+  without losing your home, 3 factions in a week).
+- **Unlocks** (`Progression.is_unlocked`, the one place; `ArmyPresets.is_unlocked` delegates): skills 1 250 SCRAP
+  (never chips), faction vats 4 000 SCRAP / 400 chips (or 25 wins, or the faction's campaign), vat skin lines
+  3 000 / 300, structure looks 1 500 / 150, monster alts 2 000 / 200. ARMIES shows a locked skill's price and opens an
+  UNLOCK sheet; COSMETICS rows get UNLOCK. A locked skill in a saved preset plays as Surge / Demolish (the player only;
+  AI seats keep their faction's). **Locks are off** (`Rules.UNLOCK_ALL_TESTING`): OPTIONS > TEST SWITCH · LOCKS
+  previews the locked game for the session.
+- **Tutorial:** lessons 1-9 pay 140 SCRAP each on their first completion (1 260 = a 3rd skill); the LESSON COMPLETE
+  card counts it up; TRAINING COMPLETE adds "Enough SCRAP for a 3rd skill - ARMIES". The tour pays nothing. The
+  Graduate vat is recorded in Progression once every lesson is done.
+- Code: new `scripts/progression.gd` (`user://progress.cfg`; grant / has_granted / unlock / spend / record_match /
+  seat_stats / placements - the last two are what the match host will report with, PROGRESSION-DESIGN §7a),
+  `scripts/reward_ticker.gd`, `scripts/reward_strip.gd`; the PROGRESSION block at the end of `rules.gd`; hooks in
+  main.gd, hud.gd, menu.gd, army_presets.gd, and `# TUTORIAL + PROGRESSION` hunks in tutorial.gd / coach_overlay.gd
+  (reviewed by the tutorial session). Campaign missions will count for XP and challenges only (their own reward pays).
+  Screenshot helpers `--progress=<file>` and `--locks=on`. Cosmetics' 3D preview skips a piece that isn't loaded.
+- Tests: new `tests/test_progression.gd` (wallet, levels, unlocks, match pay, faction vats, challenges, saving,
+  seat_stats / placements, the ticker); `test_tutorial` checks the lesson pay. All suites pass (list in the root
+  CHANGELOG). Desktop and phone-size renders only; nothing on a real phone.
+
+## 0.20.0 "Alpha 20" - 2026-09-27 (the room server hosts the matches)
+
+Daniele: "we need to think about a real server also so i can have friends playing ... end goal is put on android
+and apple store". Stage 1 (0.19.0) put every room through the room server as a relay; **stage 2 moves the match
+itself onto the server**, so no player's device runs it.
+
+- **Server-hosted rooms.** CREATE ROOM asks the room server (Vultr, Singapore) for a room it hosts: it starts this
+  same build headless (`--dedicated`) as the room's match host, with no seat of its own, and the creator joins as
+  the first player. A phone that locks or switches apps now only drops its own seat (RECONNECT takes it back); the
+  match goes on for everyone else.
+- **The room owner** (the creator, marked HOST in the lobby) picks players, map, Last Stand, abilities and EMPTY
+  SEATS, moves players between teams, DEPLOYs and picks the random rematch map; everyone else sees "the host
+  decides". If the owner drops, the next player present runs the room.
+- **Fallback:** when the server has no free match host (two at a time for now) or runs another game version, the
+  room is hosted in the creator's browser as before (keep that tab in front). An empty server room closes after 90 s.
+- ONLINE page texts say where the match runs. Protocol **ooze20-net-4** (the owner's lobby changes, "owner" in the
+  lobby packet).
+- Server: `server/relay.py` starts and stops the match hosts, `server/ooze-relay.service`, `server/deploy.sh` (every
+  publish now also uploads the build to the server, BUILD-LOG sec10), `server/README.md`. Test link
+  https://45-32-126-20.sslip.io/ always runs the server's build.
+- Tests: new `tests/test_dedicated.gd` (16 checks: owner, second player, owner-only changes, DEPLOY, the server's Sim,
+  an order answered, the owner dropping) - passes against a local relay and the live server; `test_relay` also covers
+  CREATE ROOM's fallback. A real two-window browser match on the live server: owner has DEPLOY, the other player's
+  controls greyed, orders answered. The server's match host uses ~250 MB and a few % CPU in a 1v1. Not tested on real
+  phones or separate networks yet.
+
+## 0.19.3 "Alpha 19" - 2026-09-27 (the tutorial reworked after Daniele's 0.19.1 playtest)
+
+Daniele: "tutorial feels veeeeery unpolished and messy, also we need to standardize the language used and start it by
+naming what's what, also no trace of the handler just flat text". Script: `01 Rules/TUTORIAL-SCRIPT.md` draft 2.
+
+- **One vocabulary** in every line (node, your home, units, line, deck, badge, SEND panel, inspector, relay, fire, drop,
+  the structure names); a test rejects the banned words (platform, crew, bridge, batch, boss, cannon) and long lines.
+- **L0 THE CITY**: a new opening tour on T-06 that names every element with the whole HUD shown; the first launch opens it
+  (SKIP TUTORIAL kept); TRAINING shows n/10; the Graduate vat still needs lessons 1-9.
+- **The handler on screen: Dr. Vesk**, the game's own VEX creature beside the coach card (idle bob, talks while the line
+  types in, hops on a pass, droops on TRY AGAIN).
+- **VEX for the whole tutorial** (rival EMBER), L9 included (Surge + Demolish); your menu faction comes back afterwards.
+- **L7**: the clock reads 3:00 / 6:00 when the Last Stand / Very Last Stand start; Very Last Stand gap 15 s; the 7:00 end
+  can't cut a lesson short. **L9**: neutrals 10 / 15 / 25 / 40, no regrowth above (a per-node Sim `regen_cap`).
+- 0.19.2 wired in: the monster icon launch in L6, the new top bar in the reveal sets, YOU'RE OUT off in lessons (an
+  elimination is TRY AGAIN), skills staged ready in lessons, Machinegoon spelling, the Graduate vat v2 on the final screen.
+- Review of every step at phone size: L8 pointed at the wrong slot; the card sat on its target; inspectors lingered;
+  steps passed before their line showed; the L1 label step; stray relay toasts; lesson 0 read as "no lesson"; L7's clock.
+- Tests: test_tutorial extended (vocabulary, L0, L7 on 8 seeds, reveal keys); `tests/tutorial_walk.tscn` shoots every step.
+
+## 0.19.2 "Alpha 19" - 2026-09-27 (Daniele's 0.19.1 playtest)
+
+Daniele's first playtest of the interactive tutorial and 0.19.1's HUD (quotes in PLAYTEST-NOTES,
+GAME-BIBLE §17). Spelling fixed everywhere: **Machingoon -> Machinegoon** (Daniele: "its machinegoon
+correct and tell other session"); old spellings still accepted for one release (build kind,
+`Hud.action_rect`, reveal key, saved picks).
+
+- **Skills**: active + map skills now start a match on full cooldown (`Rules.SKILLS_START_ON_COOLDOWN`),
+  ultimates still charge from 0; **Demolish**'s fall delay 3 s -> **1.5 s** ("destroy skill cooldown is
+  too long switch to 1.5s"); **Surge** now +75 % speed *and* double door rate (`Sim.door_mult(h)`,
+  pour-in included) instead of +50 % speed alone ("surge ... needs to increase the speed of troops
+  moving and entering a structure more").
+- **Per-seat rival factions** (`Sim.resolve_factions`): SETUP now picks a rival per seat (default
+  RANDOM, no duplicates while factions remain) instead of one picker for the whole match ("simply
+  remove the option or allow to pick the enemy for each slot" - chosen: per seat).
+- **Monster hub**: a pulsing icon appears over a ready hub; tap it to light the **reach area** (every
+  node within 3 decks), then tap a node to launch - the reach also lights when the hub is selected;
+  LAUNCH in the inspector still works ("monster hub doesn't show area of attack ... i suggest when
+  monster ready ... an icon that appears on top of it and now you can select destination"). Look: a
+  ready hub's monster stands up and flexes, its pool glows and a ring rises; a charging hub's monster
+  stays crouched and dim.
+- **Machinegoon look**: scaled to 0.65 (Spitter x1.45, Pepperbox x1.3), muzzle raised to ~1.15 m above
+  the deck so its stream arcs onto the line instead of firing up from below it ("too big and when they
+  shoot it looks weird as the enemies are under them").
+- **Skins fixed on the web**: GitHub Pages serves `skins.pck` gzip-encoded and Godot was un-gzipping it
+  a second time (result code 8); `accept_gzip` off fixes it; a failed download now retries next match.
+  **ARMIES**: cosmetic picks show a turning 3D preview instead of a flat icon ("skins don't look
+  implemented"); BACK on COSMETICS works again; a new **CORE · ALL FACTIONS** row holds **TERRITORY
+  NEON / GOO**, moved out of OPTIONS since it's a look choice like any other skin ("goo/neon should be
+  in the choice of cosmetic"). **Graduate vat v2** (Skin Designer session): ivory body, brass bands, a
+  bigger crown, star-and-laurel crest - replaces the first pass's plain grey-lilac look.
+- **HUD**: the top bar is now fixed and centred (clock in the middle, one chip per seat with emblem +
+  strength, you first, out seats greyed, teammates grouped, monospace digits - "not fixed it keeps
+  moving also i think should be centered ... for multiplayer you'd want to see what each player is
+  doing"); a **YOU'RE OUT** panel (SPECTATE / MAIN MENU, online LEAVE ROOM) replaces dropping a beaten
+  player straight out of the match ("the enemies destroyed me and i'm still able to see the match ...
+  if you lose you can go back to menu or keep spectating"); the skill dock's three slots are now
+  bordered and labelled by skill type (Okabe-Ito sky blue / green / orange), no 1/2/3 shortcut badge on
+  phones; SETUP's DIFFICULTY row is evenly spaced; the FACTION colour chip shows the faction's emblem
+  and a caption while picked ("your color the faction one is not clear what it represent").
+- **Maps**: six debug size-test maps **D-11..D-16** (one shape at 94 / 121 / 148 / 175 / 202 m wide,
+  121 m tall; 1v1, no Last Stand, no relays) so Daniele can report the largest map that still plays
+  well on his phone (taps at pitch 58: 54.5 / 51.3 / 44.7 / 39.5 / 35.4 / 39.1 pt).
+- Tutorial: new reveal keys for the rebuilt HUD (`topbar`, `strength`, `monster_icon`, `out_panel`);
+  `main.show_out_panel`, `Hud.monster_icon_rect(hub_id)`.
+- All suites pass. Verified headless, desktop renders and a local gzip web run only - not on a real
+  phone.
+
 ## 0.19.1 "Alpha 19" - 2026-09-27 (the interactive tutorial)
 
 ROADMAP item 1, designed with Daniele in `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-DESIGN.md` (draft 3)
 and `TUTORIAL-SCRIPT.md` (every line), built once 0.19.0's rules were live ("Wait for all of it"). Completes Alpha 19.
 
-- **8 lessons + a first match**, each on the real game with the real HUD: L1 SEND, L2 VATS & MACHINGOON, L3 THE ENEMY,
+- **8 lessons + a first match**, each on the real game with the real HUD: L1 SEND, L2 VATS & MACHINEGOON, L3 THE ENEMY,
   L4 RELAYS (double-tap to fire, preview, the fling at half speed, the waterfall), L5 RELAY KINDS (retract, switch,
   remote), L6 RELAY WORKS (Laser tower, Forge, Monster hub), L7 LAST STAND (+ the Very Last Stand), L8 SKILLS (fixed
   Surge + Demolish + the faction ultimate), L9 FIRST MATCH on T-02 vs the Training AI that **ends with a scripted
@@ -25,7 +393,7 @@ and `TUTORIAL-SCRIPT.md` (every line), built once 0.19.0's rules were live ("Wai
 - Sim: `start_last_stand_now()`, `start_very_last_stand_now(gap)`, `vls_enabled` (lessons only; no rule changes).
 - Tests: new `test_tutorial` (every lesson's steps reachable and detected, negatives, reveal, progress, first launch).
 
-## 0.19.0 "Alpha 19" - 2026-09-27 (Structures 2.1: Machingoon / Laser / Forge / Monster hub, team rules built, room relay server, cosmetics)
+## 0.19.0 "Alpha 19" - 2026-09-27 (Structures 2.1: Machinegoon / Laser / Forge / Monster hub, team rules built, room relay server, cosmetics)
 
 Daniele's open-questions session (quotes in OPEN-QUESTIONS.md, summary in GAME-BIBLE §17) answered and built
 in the same pass; the tutorial waits for this to be live first.
@@ -34,12 +402,12 @@ in the same pass; the tutorial waits for this to be live first.
   (Alpha 11's start); **neutrals at half their tier's cap** (15/30/60/100), regrowing to that. `legacy` preset
   keeps the old numbers (Debug) for comparison.
 - **Owned vats stop at T3** (no T3 → T4 upgrade); **special nodes are always T4** from the start; conquest
-  never downgrades a T4; a vat or Machingoon still loses a tier on conquest (min 1).
+  never downgrades a T4; a vat or Machinegoon still loses a tier on conquest (min 1).
 - **Structures 2.1** (Daniele: "there's something big coming"; models from the "Lane fight fun" session,
   `Models/2.0/structures_2_1/`) replaces the old normal / relay / strategic build rules with **node kinds**:
-  common nodes build a **vat T1-T3 or a Machingoon T1-T3** in its place (swap keeps the tier); relay nodes
+  common nodes build a **vat T1-T3 or a Machinegoon T1-T3** in its place (swap keeps the tier); relay nodes
   build one of **Laser tower / Forge / Monster hub** (single tier, no upgrades); special nodes only a T4 vat.
-  - **Machingoon**: a goo machine gun, build 15, upgrades 20/30, a continuous stream at the nearest enemy line
+  - **Machinegoon**: a goo machine gun, build 15, upgrades 20/30, a continuous stream at the nearest enemy line
     on its decks (2 / 3.5 / 5 kills/s, range 10 m); the node produces nothing while it holds one; back to a
     vat costs 15 and keeps the tier.
   - **Laser tower** replaces the three cannon tiers (Daniele: "give or take half way between current t2 and
@@ -54,7 +422,7 @@ in the same pass; the tutorial waits for this to be live first.
     (friend or foe, garrisons and stored troops safe), takes the end node empty or drops a friendly one a
     tier; only a fall kills it.
   - **Minions**: the full-colour Alpha 1 models replace today's, slimmed to today's vertex counts.
-  - Fortify's **Anchor halves both** a Laser tower's and a Machingoon's kills; an Echo Split jam stops either.
+  - Fortify's **Anchor halves both** a Laser tower's and a Machinegoon's kills; an Echo Split jam stops either.
 - **Team rules built** (GAME-RULES §11, Daniele: "Build §11"): an allied node's garrison is shared and counts
   toward the cap; an attacker fights the whole shared garrison, losses split by ratio; ownership passes to the
   ally with the largest garrison when the owner's troops hit zero (tie: first to arrive) via a `handover`
@@ -74,14 +442,14 @@ in the same pass; the tutorial waits for this to be live first.
   relay and loses chaos. All four strategic centres now play as T4 (special nodes are always T4).
 - **AI**: Veteran and Expert now count a defender's forge (attack and the new defence) and faction stats; the
   fixed 6-unit relay garrison is gone - relay nodes are valued and built on like any other; the AI builds
-  Machingoons on raided frontline vats, Laser towers on relays, one Monster hub early, and launches monsters
+  Machinegoons on raided frontline vats, Laser towers on relays, one Monster hub early, and launches monsters
   by value (Veteran / Expert), never through its own lines. `test_ai_curve` widened to every B/C/S + M duel
   map.
 - **Room relay server** (Alpha 20 stage 1, merged from the server session): rooms default to the room server
   (`server/relay.py`, Vultr Singapore) via `RelayBridge` instead of PeerJS (`?relay=peerjs` still works); no
   TURN-style connection limit any more; the host's own Sim still runs the match - stage 2 (a headless host on
   the server) is next. `test_relay` (exit 2 = SKIP when the relay is unreachable).
-- **HUD**: inspector actions renamed per node kind (UPGRADE, MACHINGOON, VAT, LASER, FORGE, MONSTER HUB,
+- **HUD**: inspector actions renamed per node kind (UPGRADE, MACHINEGOON, VAT, LASER, FORGE, MONSTER HUB,
   LAUNCH, EJECT, SWITCH); `hud_overlay.gd` adds a Monster hub reach ring, allied halos, and a **relay-outcome
   preview** (vanishing decks dashed red, appearing decks ghosted, a turn arrow) while SWITCH is hovered/held or
   during any relay warning (Daniele: "impossible right now to know in advance what a lot of the buttons do");
@@ -98,11 +466,11 @@ in the same pass; the tutorial waits for this to be live first.
   FAST / FORTRESS / STANDARD (was the pack group names BRAWL / SIEGE / CORE); **YOUR COLOUR** is now solid
   hexagon chips with no text (`hex_chip.gd`), FACTION a 5-colour wedge, the pick ringed and scaled, the colour
   name as tooltip; **ARMIES > COSMETICS** adds a look per structure family per faction.
-- **Views**: new models for Machingoon T1-3, Laser, Monster hub and monster per faction; 69 cosmetic skins
-  (`assets/kit/skins`) across vat, Machingoon, Laser, Forge and Monster hub families plus an alternate monster
+- **Views**: new models for Machinegoon T1-3, Laser, Monster hub and monster per faction; 69 cosmetic skins
+  (`assets/kit/skins`) across vat, Machinegoon, Laser, Forge and Monster hub families plus an alternate monster
   per faction, all picked in ARMIES > COSMETICS; skins load lazily on a thread and, on web, from a separate
   `skins.pck` downloaded the first time one is needed (confirm once it lands); `monster_view.gd` animates the
-  hub charge/launch, the kick and the fall; Machingoon turrets track and stream goo; a lost forge's surge
+  hub charge/launch, the kick and the fall; Machinegoon turrets track and stream goo; a lost forge's surge
   plays in reverse in ash (not rendered yet).
 - Tests: test_sim, test_net, test_map_pool, test_maps4, test_ai_curve, test_relay - all pass. Everything
   checked headless and in desktop renders only; nothing on a real phone or across separate networks.

@@ -12,11 +12,11 @@ extends Node3D
 ## white core and the owner's glow, energy scrolling toward the target, a muzzle flash at the cannon's
 ## top, an impact burst and a flickering scorch where it hits, charge-in and fade-out over the burst.
 ## Structures 2.1 (0.19.0): the laser tower fires that beam from its crown's focal orb (the look's emitter,
-## Cosmetics.points); a Machingoon's turret yaws to the line it is shooting (n["shot"]), a goo stream arcs
+## Cosmetics.points); a Machinegoon's turret yaws to the line it is shooting (n["shot"]), a goo stream arcs
 ## from its muzzle to the target with a splash for every kill, and the T3 / Pepperbox barrel cluster spins
 ## up while it fires.
 ## Everything is read from the Sim's state (lines pouring in, sieges, node losses, owners and tiers,
-## laser bursts, machingoon shots), so online guests, who apply the host's snapshots, see the same thing
+## laser bursts, machinegoon shots), so online guests, who apply the host's snapshots, see the same thing
 ## with no extra traffic. One MultiMesh draws every spark; rings, beams and flares are made once per node
 ## and reused.
 
@@ -45,7 +45,7 @@ var _frame := 0
 var top_limit := 0.0        # screen y the top bar and its toasts reach (main._on_resized): tier-down lines stay below it
 var _fights := {}           # node id -> {ring, mat, life, heat, rate, best, att, angle, share, frame}
 var _cannons := {}          # node id -> {beam, bmat, muzzle, mmat, hit, hmat, scorch, smat, on, t, fade, to, col}
-var _guns := {}             # node id -> machingoon view state (see _machingoons_step)
+var _guns := {}             # node id -> machinegoon view state (see _machinegoons_step)
 var _tier_owner := {}       # node id -> owner last frame (tier-down detection)
 var _tier_level := {}       # node id -> vat / cannon tier last frame
 var _downs: Array = []      # running tier-downs: {node, t, ghost, ghost_mis, base_y, new, new_y, label, chev, ring, rmat}
@@ -107,7 +107,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 	_gather_fights(dt)
 	_update_fights(dt)
 	_cannons_step(dt, cam)
-	_machingoons_step(dt)
+	_machinegoons_step(dt)
 	_tier_downs(dt, cam)
 	_update_sparks(dt)
 	for n in sim.nodes:                               # remembered for the next frame's tier-down check
@@ -404,12 +404,12 @@ func _emitter(n: Dictionary) -> Vector3:
 	return base + Vector3(0, MUZZLE_Y[3], 0)
 
 
-# ------------------------------------------------------------------ machingoon (0.19.0)
-# A continuous goo stream at the nearest enemy line in range (Sim._fire_machingoon writes n["shot"] every
+# ------------------------------------------------------------------ machinegoon (0.19.0)
+# A continuous goo stream at the nearest enemy line in range (Sim._fire_machinegoon writes n["shot"] every
 # step it fires: {"t", "target_horde", "kills", "pos"}). The turret yaws to the target (it idles in a slow
 # sweep when nothing is in range), the stream is a thin goo ribbon plus arcing blobs from the muzzle (the
 # look's muzzles take turns), every whole shown kill splashes at the target, and a spinning barrel cluster
-# (Machingoon T3, the Pepperbox line) spins up while it fires.
+# (Machinegoon T3, the Pepperbox line) spins up while it fires.
 const GUN_HOLD := 0.3                    # s after the last shot the stream still reads as firing (guests' snapshots)
 const GUN_TURN := 9.0                    # turret yaw rate toward its target (1/s, exponential)
 const GUN_SPIN := 26.0                   # rad/s of the barrel cluster at full fire
@@ -418,11 +418,11 @@ const STREAM_G := 16.0                   # its gravity (the spark MultiMesh's)
 const STREAM_RATE := 38.0                # blobs per second at full fire
 
 
-func _machingoons_step(dt: float) -> void:
+func _machinegoons_step(dt: float) -> void:
 	var seen := {}
 	for n in sim.nodes:
 		var id: int = n["id"]
-		if n.get("structure", "") != "machingoon" or n["build_kind"] != "" or sim.collapsed.get(id, false):
+		if n.get("structure", "") != "machinegoon" or n["build_kind"] != "" or sim.collapsed.get(id, false):
 			continue
 		var entry: Dictionary = vis.get(id, {})
 		var vn = entry.get("vat_node")
@@ -549,7 +549,7 @@ func _splash(at: Vector3, goo: Color, victim: Color, detail: float) -> void:
 
 # ------------------------------------------------------------------ conquest tier-down
 static func _level(n: Dictionary) -> int:
-	if n.get("structure", "") == "machingoon":         # a Machingoon loses a tier on conquest like a vat
+	if n.get("structure", "") == "machinegoon":         # a Machinegoon loses a tier on conquest like a vat
 		return n["tier"]
 	if n["attachment"] == "cannon":
 		return 0 if n.has("structure") else n["cannon_tier"]   # the one-tier laser has no tier-down

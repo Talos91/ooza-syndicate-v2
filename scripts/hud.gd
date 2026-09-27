@@ -452,18 +452,22 @@ func setup(m: Node3D) -> void:
 	spectate_button.visible = false
 	root.add_child(spectate_button)
 	monster_icon = MonsterIcon.new()
-	monster_icon.custom_minimum_size = Vector2(40, 40) * ui_scale
+	monster_icon.custom_minimum_size = Vector2(48, 48) * ui_scale   # 0.20.1: >= the 44 pt tap minimum (was 40)
 	monster_icon.size = monster_icon.custom_minimum_size
 	monster_icon.ui_scale = ui_scale
 	monster_icon.visible = false
 	monster_icon.pressed.connect(func():
 		var hub := _human_hub_id()
-		main.monster_from = -1 if main.monster_from == hub else hub)
+		if main.monster_from == hub:
+			main.monster_from = -1
+		else:
+			main.monster_from = hub
+			note_monster_hint())
 	root.add_child(monster_icon)
 
 
 func _hint_text() -> String:
-	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: switch)  ·  Tap the hub icon to launch a monster" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
+	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: switch)  ·  Tap your ready monster to launch it" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
 
 
 func layout(vp: Vector2, m: Vector4) -> void:
@@ -488,8 +492,15 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
-	notices.size = Vector2(vp.x * 0.56, 0)
-	notices.position = Vector2(vp.x * 0.22, m.y + top_panel.size.y + 14 * ui_scale)
+	# 0.20.13 (Daniele's online co-op playtest: "notification in top right are impossible to see - move to
+	# top left"): a small stack under the top bar, left side - offset past the SEND panel's own column so
+	# it never overlaps it (side_panel is vertically centred, but on a short phone it's pinned right under
+	# the top bar too - the same spot this used to want).
+	var notice_w := minf(280.0 * ui_scale, vp.x * 0.34)
+	var notice_left := m.x + side_panel_width() + 14.0 * ui_scale
+	var notice_top := top_panel.position.y + top_panel.size.y + 8.0 * ui_scale
+	notices.size = Vector2(notice_w, 0)
+	notices.position = Vector2(notice_left, notice_top)
 	banner.size = banner.get_combined_minimum_size()
 	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	if debug_button:
@@ -683,17 +694,23 @@ func _badges(cam: Camera3D) -> void:
 		if n["relay"] != "":
 			var st := sim.relay_state_key(n, n["relay_index"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
-		elif n["structure"] == "machingoon":
+		elif n["structure"] == "machinegoon":
 			what = "MGN%d" % n["tier"]
 		else:
 			what = "T%d" % n["tier"]
+		# 0.20.13 (Daniele's 2v2 co-op playtest: "i sent troops to her node and except the count going up
+		# i couldn't see any other indicator"): your own share on an ally's node stands out in your own
+		# colour, not the sub-label's default light blue - reset every frame, or a stale override would
+		# bleed into a later node that has none.
+		sub.add_theme_color_override("font_color", Color("c8e6ee"))
 		if has_allies and not masked:                       # GAME-RULES sec11: the total is shown above -
 			if owner == human:                               # this names the ally share / your own share of it
 				what += "+A%d" % Rules.shown(sim.allied_units(n))
 			else:
 				var mine := sim.allied_units(n, human)
 				if mine > 0.0001:
-					what += "+M%d" % Rules.shown(mine)
+					what += " +%d" % Rules.shown(mine)
+					sub.add_theme_color_override("font_color", Rules.seat_color(human))
 		var clock := ""
 		var worst := ""                                     # the clock's widest form (see below)
 		if sim.is_warned(n["id"]):
@@ -872,8 +889,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 	_refresh_inspector(cam)
 
 
-const STRUCT_LABEL := {"vat": "VAT", "machingoon": "MACHINGOON", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
-const BUILD_LABEL := {"machingoon": "MACHINGOON", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "MACHINEGOON", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machinegoon": "MACHINEGOON", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
 const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
                                          # buttons / models of the relays") - distinct from the seat colour
 
@@ -934,7 +951,7 @@ class SwitchRing:
 
 
 func _inspector_actions(n: Dictionary) -> void:
-	## Structures 2.1 (spec B): common - UPGRADE / MACHINGOON (or VAT to go back); relay - LASER / FORGE /
+	## Structures 2.1 (spec B): common - UPGRADE / MACHINEGOON (or VAT to go back); relay - LASER / FORGE /
 	## MONSTER HUB (single tier) + SWITCH; special - T4 vat only, no swap; hub - LAUNCH; EJECT wherever
 	## allied troops are stored. Costs and disabled reasons come straight from the Sim (can_build /
 	## can_upgrade) in _refresh_inspector, so a greyed button always explains itself.
@@ -951,12 +968,12 @@ func _inspector_actions(n: Dictionary) -> void:
 	elif n["structure"] == "vat":
 		if n["tier"] < 4 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
-		if "machingoon" in n["buildable"] and shows("machingoon"):
-			_add_action("MACHINGOON", "MACHINGOON", sim.build_cost(n, "machingoon"), "build", id, {"kind": "machingoon"})
-	elif n["structure"] == "machingoon":
+		if "machinegoon" in n["buildable"] and shows("machinegoon"):
+			_add_action("MACHINEGOON", "MACHINEGOON", sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
+	elif n["structure"] == "machinegoon":
 		if n["tier"] < 3 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
-		if shows("machingoon"):
+		if shows("machinegoon"):
 			_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
 	if sim.allied_units(n) > 0.0001 and shows("eject"):
 		_add_action("EJECT", "EJECT", 0, "eject", id)
@@ -1012,6 +1029,7 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 func action_rect(name: String) -> Rect2:
 	## Stable rect getter for the tutorial's spotlight (TUTORIAL-DESIGN.md sec11): valid only while that
 	## action's button is on screen (the inspector open on the right node kind). Empty otherwise.
+	name = name.replace("MACHINGOON", "MACHINEGOON")   # 0.19.2 spelling fix; old name accepted for one release
 	if action_buttons.has(name) and is_instance_valid(action_buttons[name]):
 		return (action_buttons[name] as Control).get_global_rect()
 	return Rect2()
@@ -1031,6 +1049,18 @@ func badge_rect(id: int) -> Rect2:
 	return Rect2()
 
 
+func inspector_rect() -> Rect2:
+	## What the open inspector covers on screen (its ring, info panel and actions); empty when closed.
+	if not is_instance_valid(inspector):
+		return Rect2()
+	var r := Rect2()
+	for c in inspector.get_children():
+		if c is Control and (c as Control).visible:
+			var g := (c as Control).get_global_rect()
+			r = g if r.size == Vector2.ZERO else r.merge(g)
+	return r
+
+
 func dock_slot_rect(i: int) -> Rect2:
 	if dock and dock.visible and i >= 0 and i < dock.slots.size():
 		return (dock.slots[i] as Control).get_global_rect()
@@ -1040,7 +1070,7 @@ func dock_slot_rect(i: int) -> Rect2:
 # ------------------------------------------------------------------ TUTORIAL: reveal as you go (§6)
 func shows(key: String) -> bool:
 	## Is this HUD part on screen? Always, outside a lesson.
-	return not gated or revealed.has(key)
+	return not gated or revealed.has(key.replace("machingoon", "machinegoon"))
 
 
 func reveal(keys: Array, glow: Array = []) -> void:
@@ -1048,6 +1078,8 @@ func reveal(keys: Array, glow: Array = []) -> void:
 	## or step adds - those parts appear with a short glow-in.
 	gated = true
 	revealed = {}
+	keys = keys.map(func(k): return str(k).replace("machingoon", "machinegoon"))   # 0.19.2 spelling alias
+	glow = glow.map(func(k): return str(k).replace("machingoon", "machinegoon"))
 	for k in keys:
 		revealed[str(k)] = true
 	_apply_reveal()
@@ -1110,6 +1142,26 @@ func _human_hub_id() -> int:
 	return -1
 
 
+func is_ready_hub(node_id: int) -> bool:
+	## 0.20.1 (Daniele's online playtest: "i couldn't figure how to send the monster ... tap IT, the
+	## guided send lights up every target, tap a target, it goes"): true while node_id is YOUR Monster
+	## hub and it can launch right now - main.gd's tap handler arms LAUNCH straight from this instead of
+	## opening the inspector (which still opens while it's charging).
+	return node_id >= 0 and node_id == _human_hub_id() and _monster_ready(sim.nodes[node_id]) == ""
+
+
+static var _monster_hint_shown := false
+
+
+func note_monster_hint() -> void:
+	## A short first-time nudge (Daniele's ask) the first time LAUNCH is armed this session, from any of
+	## the three equivalent triggers (the hub, its monster, the icon).
+	if _monster_hint_shown:
+		return
+	_monster_hint_shown = true
+	toast("Tap your monster, then a lit node", "info")
+
+
 func monster_icon_rect(hub_id: int) -> Rect2:
 	## Stable rect getter for the tutorial's spotlight (0.19.2 spec H1): valid only while the icon is
 	## actually showing for this hub (it is your ready hub, on screen, "monster_icon" revealed).
@@ -1148,7 +1200,7 @@ func show_out_panel() -> void:
 			[["SPECTATE", func():
 				out_panel.visible = false
 				spectate_button.visible = true],
-			["LEAVE ROOM" if main.online else "MAIN MENU", main.to_menu]])
+			["LEAVE ROOM" if main.online else ("CAMPAIGN" if main.get("mission") != null else "MAIN MENU"), main.to_menu]])   # CAMPAIGN
 	out_panel.visible = true
 	layout(root.get_viewport_rect().size, margins)
 
@@ -1184,11 +1236,11 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		if owner != "":
 			# Alpha 11's status line: production, and what a double-tap upgrade costs
 			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) \
-					else ("no production - garrison must be fed" if n["structure"] == "machingoon" else "no vat here")
+					else ("no production - garrison must be fed" if n["structure"] == "machinegoon" else "no vat here")
 			var up := sim.upgrade_cost(n)
 			if owner == human and up > 0 and shows("upgrade"):
 				status += " | Double-tap: %d units" % Rules.shown(up)
-			elif owner == human and n["structure"] in ["vat", "machingoon"] and up <= 0 and shows("upgrade"):
+			elif owner == human and n["structure"] in ["vat", "machinegoon"] and up <= 0 and shows("upgrade"):
 				status += " | MAX TIER"
 			lines.append(status)
 			var forge: String = " (forge +%d%%)" % roundi(Rules.forge_bonus * 100.0) if sim.has_forge(owner) else ""   # attack_of includes it
@@ -1258,8 +1310,8 @@ func _refresh_inspector(cam: Camera3D) -> void:
 func _structure_line(n: Dictionary) -> String:
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
-	if n["structure"] == "machingoon":
-		return "MACHINGOON T%d" % n["tier"]
+	if n["structure"] == "machinegoon":
+		return "MACHINEGOON T%d" % n["tier"]
 	return "VAT T%d" % n["tier"]
 
 
@@ -1276,8 +1328,8 @@ func close_inspector() -> void:
 
 
 # ------------------------------------------------------------------ messages
-const NOTICE_HOLD := 3.0
-const NOTICE_MAX := 3
+const NOTICE_HOLD := 1.8    # 0.20.6 declutter (Daniele: "too many notifications"): shorter, and fewer reach the screen
+const NOTICE_MAX := 2
 const WARN_WORDS := ["lost", "falls", "get out", "can't", "Can't", "No ", "needs", "refused", "rejected", "on cooldown",
 		"swap ready", "Not your", "Too many", "already", "max tier", "no further", "Nothing", "missing", "Waiting"]
 static var _SEAT_WORD := RegEx.create_from_string("(?i)\\bseat ([A-F])\\b(?: \\([^)]*\\))?")   # "seat B", "seat A (NULL)"
@@ -1287,7 +1339,9 @@ const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade 
 func toast(msg: String, kind := "") -> void:
 	## Alpha 16: notifications in the UI's own panel style (Daniele: "better notifications, the same
 	## style as the rest of the UI"): a framed line with a colour bar - info cyan, good news in your
-	## colour, builds gold, warnings red - sliding in under the top bar, three at most, fading out.
+	## colour, builds gold, warnings red. 0.20.6 declutter: a small stack under the top bar, two at most,
+	## fading fast - never over the map centre. 0.20.13 (Daniele's playtest: "notification in top right
+	## are impossible to see - move to top left"): top-left now, clear of the SEND panel, larger text.
 	if not shows("notices"):                          # TUTORIAL: notifications appear in L3 (main hands the
 		return                                        # refusal lines to the coach card before that)
 	if kind == "":
@@ -1307,17 +1361,17 @@ func toast(msg: String, kind := "") -> void:
 	var p := PanelContainer.new()
 	var st := panel_style(col)
 	st.set_content_margin_all(0)
-	st.content_margin_right = 14 * ui_scale
+	st.content_margin_right = 12 * ui_scale
 	p.add_theme_stylebox_override("panel", st)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN   # left-aligned within the top-left stack
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", int(10 * ui_scale))
+	row.add_theme_constant_override("separation", int(8 * ui_scale))
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_child(row)
 	var bar := ColorRect.new()
 	bar.color = col
-	bar.custom_minimum_size = Vector2(5, 30) * ui_scale
+	bar.custom_minimum_size = Vector2(4, 26) * ui_scale
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(bar)
 	# a line naming a player ("lost to seat B", "Seat C reconnected", "you are seat A (NULL)") names
@@ -1325,7 +1379,7 @@ func toast(msg: String, kind := "") -> void:
 	var named := _SEAT_WORD.search(msg)
 	var seat := named.get_string(1).to_upper() if named else ""
 	if seat != "" and sim.factions.has(seat):
-		row.add_child(seat_emblem(seat, Vector2(24, 24)))
+		row.add_child(seat_emblem(seat, Vector2(20, 20)))
 		var rt := RichTextLabel.new()
 		rt.bbcode_enabled = true
 		rt.fit_content = true
@@ -1334,13 +1388,13 @@ func toast(msg: String, kind := "") -> void:
 		rt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		rt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		rt.add_theme_font_override("normal_font", UI_FONT)
-		rt.add_theme_font_size_override("normal_font_size", int(18 * ui_scale))
-		rt.add_theme_color_override("default_color", Color("e6f4f8"))
+		rt.add_theme_font_size_override("normal_font_size", int(19 * ui_scale))
+		rt.add_theme_color_override("default_color", Color("f2fbff"))
 		rt.text = "%s[color=#%s]%s[/color]%s" % [msg.substr(0, named.get_start()).replace("[", "[lb]"),
 				Rules.seat_color(seat).to_html(false), str(sim.factions[seat]).to_upper(), msg.substr(named.get_end()).replace("[", "[lb]")]
 		row.add_child(rt)
 	else:
-		var l := text_label(msg, 18, Color("e6f4f8"))
+		var l := text_label(msg, 19, Color("f2fbff"))
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row.add_child(l)
 	p.set_meta("text", msg)
@@ -1388,8 +1442,8 @@ func pause_menu() -> void:
 	if end_panel.visible:
 		return
 	if main.online:                                   # a room never pauses (Alpha 11): the menu only
-		_fill_overlay(pause_panel, "ROOM %s" % Net.room_code, "%s · %02d:%02d · the match keeps running" % [
-				str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
+		_fill_overlay(pause_panel, "ROOM %s" % Net.room_code, "%s · %02d:%02d · the match keeps running\n%s" % [
+				str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60, Net.net_stats_line()],
 				[["RESUME", func(): pause_panel.visible = false], _territory_action(), ["LEAVE ROOM", main.to_menu]])
 		pause_panel.visible = true
 		layout(root.get_viewport_rect().size, margins)
@@ -1413,7 +1467,7 @@ func pause_menu() -> void:
 				MapLab.toggle_fullscreen()
 				pause_panel.visible = false
 				main.paused = false],
-			["RESTART", main.restart], ["MAIN MENU", main.to_menu]])
+			["RESTART", main.restart], ["CAMPAIGN" if main.get("mission") != null else "MAIN MENU", main.to_menu]])   # CAMPAIGN: a mission leaves to its page
 	pause_panel.visible = true
 	layout(root.get_viewport_rect().size, margins)
 
@@ -1426,11 +1480,39 @@ func _territory_action() -> Array:
 
 
 var _end_winner := ""
+var _end_rematch: Label                           # online results: the rematch line, updated in place
+var _end_rematch_btn: Button
 
 
 func _on_rematch_changed() -> void:
-	if end_panel.visible:
+	## A vote arrived: refresh the rematch line and button only - rebuilding the panel replayed the rewards strip and
+	## read as the screen reloading (Daniele, 0.20.10 playtest).
+	if not end_panel.visible:
+		return
+	if is_instance_valid(_end_rematch) and is_instance_valid(_end_rematch_btn):
+		_rematch_texts()
+	else:
 		show_end(_end_winner)
+
+
+func _rematch_texts() -> void:
+	var st: Dictionary = Net.rematch_status()
+	var lines := []
+	for who in st["ready"]:
+		lines.append("%s  -  READY" % who)
+	for who in st["waiting"]:
+		lines.append("%s  -  not yet" % who)
+	var hint := ""
+	if st["mine"] and not (st["waiting"] as Array).is_empty():
+		hint = "YOU'RE READY - waiting for %s" % ", ".join(st["waiting"])
+	elif not st["mine"] and not (st["ready"] as Array).is_empty():
+		hint = "%s %s a rematch - tap REMATCH" % [", ".join(st["ready"]), "wants" if (st["ready"] as Array).size() == 1 else "want"]
+	elif not st["mine"]:
+		hint = "Tap REMATCH to play again - it starts when everyone here is ready"
+	_end_rematch.text = "REMATCH\n" + "\n".join(lines) + ("\n" + hint if hint != "" else "")
+	var picks := Net.is_host() or Net.can_control()   # the room owner picks the random map; the others just vote
+	_end_rematch_btn.text = "READY - WAITING" if st["mine"] else ("REMATCH ON A RANDOM MAP" if picks else "REMATCH")
+	_end_rematch_btn.disabled = st["mine"]
 
 
 func show_end(winner: String) -> void:
@@ -1447,22 +1529,30 @@ func show_end(winner: String) -> void:
 	if title == "DRAW" and sim.draw_line != "":            # 7:00, a neutral last platform: the funny call-out (0.19.0)
 		body = str(sim.draw_line) + "\n" + body
 	if main.online:
-		var votes: int = Net.rematch_votes.size()
-		var mine: bool = Net.rematch_votes.has(Net.local_id())
-		body += "
-REMATCH: %d / %d ready%s" % [votes, Net.present_ids().size(), " - waiting for the others" if mine else ""]
-		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP" if not mine else "REMATCH - READY", func(): main.rematch_random()],
-				["LEAVE ROOM", main.to_menu]])
+		var col := _fill_overlay(end_panel, title, body, [["REMATCH", func(): main.rematch_random()],
+				["LEAVE ROOM", main.to_menu]], _reward_strip())
+		_end_rematch = text_label("", 18, Color("ffd15c"))   # who is ready, what happens next (updated in place)
+		_end_rematch.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(_end_rematch)
+		col.move_child(_end_rematch, col.get_child_count() - 3)   # above the two buttons
+		_end_rematch_btn = col.get_child(col.get_child_count() - 2) as Button
+		_rematch_texts()
 		if not Net.rematch_changed.is_connected(_on_rematch_changed):
 			Net.rematch_changed.connect(_on_rematch_changed)
 	else:
-		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP", main.rematch_random], ["MAIN MENU", main.to_menu]])
+		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP", main.rematch_random], ["MAIN MENU", main.to_menu]], _reward_strip())
 	end_panel.visible = true
 	pause_panel.visible = false
 	layout(root.get_viewport_rect().size, margins)
 
 
-func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: Array) -> void:
+func _reward_strip() -> Control:
+	## PROGRESSION (0.20.1): what the match paid (main.rewards, set once at the match end), or nothing.
+	var r = main.get("rewards")
+	return RewardStrip.make(r, ui_scale) if r is Dictionary and not (r as Dictionary).get("lines", []).is_empty() else null
+
+
+func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: Array, extra: Control = null) -> VBoxContainer:
 	for c in panel.get_children():
 		c.queue_free()
 	var col := VBoxContainer.new()
@@ -1475,10 +1565,13 @@ func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: 
 	var b := text_label(body, 18, Color("c8e6ee"))
 	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(b)
+	if extra != null:                                 # PROGRESSION: the results screen's rewards strip
+		col.add_child(extra)
 	var tall := 80 if actions.size() <= 5 else 78     # six pause actions (TERRITORY) still fit a landscape phone; 78 keeps them >= 44 pt too
 	for a in actions:
 		var btn := button(a[0], a[1], 0, 56 if not mobile else tall, 22)
 		col.add_child(btn)
+	return col
 
 
 # ------------------------------------------------------------------ debug panel

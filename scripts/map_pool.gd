@@ -22,9 +22,10 @@ const WITHHELD: Array[String] = []
 const PHONE_UNFIT: Array[String] = []
 # Teaching boards, not fair matches (the interactive tutorial, References/Ooze Syndicate maps 4.2 -
 # tutorial): never on 02 BATTLEFIELD, never a REMATCH ON A RANDOM MAP pick, never in test_map_pool /
-# test_ai_curve's pools. T-01 / T-02 (the older tutorial pair in the main maps 4.2 pack) are not listed
-# here and keep showing up as they always have.
-const TUTORIAL_ONLY: Array[String] = ["T-03", "T-04", "T-05", "T-06", "T-07", "T-08", "T-09", "T-10"]
+# test_ai_curve's pools. T-01 / T-02 (the older tutorial pair in the main maps 4.2 pack) joined them in 0.20.4
+# (Daniele: "Hide T-01 / T-02 too" - a server room had defaulted to T-01); the tutorial's first match still
+# loads T-02 by path.
+const TUTORIAL_ONLY: Array[String] = ["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07", "T-08", "T-09", "T-10"]
 static var phone := false                               # set by main at startup: a phone-sized screen
 
 

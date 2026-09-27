@@ -8,7 +8,7 @@ extends CanvasLayer
 ##
 ## Public API
 ##   show_step(header, text, dots, dot_index, button_text := "")
-##       The coach card. `header` e.g. "HANDLER · LESSON 3 / 8 · NEUTRALS"; `dots`/`dot_index` are the
+##       The coach card. `header` e.g. "DR. VESK · LESSON 3 / 8 · THE RIVAL"; `dots`/`dot_index` are the
 ##       step markers; `button_text` == "" for a doing-step (no GOT IT, just SKIP/RESTART/EXIT), any
 ##       other string shows it as the one allowed button (read-only steps: "GOT IT").
 ##   point_nodes(screen_points: Array[Vector2], radius: float)
@@ -44,8 +44,12 @@ extends CanvasLayer
 ##   set_first_launch(on: bool)   the forced first run: EXIT becomes SKIP TUTORIAL (signal skip_tutorial).
 ##   set_labels(dict)              the card's button words (keys skip_step / restart / exit / skip_tutorial).
 ##   ui_rects() -> Array           what the card and a completion screen cover (Hud counts them as UI).
-##   set_obstacles(points: Array)  screen points the card should rather not cover (every platform): among the
+##   set_obstacles(points: Array)  screen points the card should rather not cover (every node): among the
 ##                                 corners clear of the target, the one covering the fewest wins.
+##   handler_mood(mood: String)    the handler creature: "happy" (a hop) / "droop" (a fail); it "talks" by itself
+##                                 while a line types in (~35 characters/s, a tap on the card shows it all).
+##   handler_rect() -> Rect2       where the creature is on screen.
+##   spotlit(p: Vector2) -> bool   is `p` inside the current spotlight (the tour takes a tap there as NEXT).
 ##
 ## Signals
 ##   button_pressed(id: String)   "got_it" from the card's one button; "primary" / "secondary:<i>" from
@@ -77,6 +81,8 @@ const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const HAND_TEX := preload("res://assets/ui/tutorial/hand.svg")
 const HAND_TIP := Vector2(40.5 / 100.0, 4.0 / 128.0)   # the fingertip in hand.svg (fraction of its 100 x 128 box)
 const HANDLER_EMBLEM := "res://assets/ui/Ooze-Syndicate-Logo.svg"
+const HANDLER_MODEL := "res://assets/units/vex.glb"      # the game's own VEX creature (UnitView, vat residents)
+const TYPE_RATE := 35.0                                  # characters per second of the typewriter
 
 const MARGIN := 18.0
 const EASE_TIME := 0.2
@@ -86,7 +92,7 @@ const DRAG_HOLD_T := 0.25
 
 const SPOTLIGHT_SHADER := "
 shader_type canvas_item;
-uniform vec4 dim_color : source_color = vec4(0.008, 0.016, 0.024, 0.55);
+uniform vec4 dim_color : source_color = vec4(0.008, 0.016, 0.024, 0.42);   // 0.20.2: lighter, the map stays readable
 uniform vec4 ring_color : source_color = vec4(0.094, 0.855, 0.910, 1.0);
 uniform int num_c;
 uniform vec3 circles[8];
@@ -249,6 +255,113 @@ class HandLayer extends Control:
 				_draw_hand_at(_path_along(pts, eased), alpha, 0.0)
 
 
+class HandlerView extends SubViewportContainer:
+	## The handler on screen (TUTORIAL-SCRIPT draft 2, Daniele: "no trace of the handler just flat text"): the game's
+	## own VEX creature in one small SubViewport of its own - its own light, a transparent background, rendered only
+	## while the card is on screen (UPDATE_WHEN_VISIBLE). Idle: a gentle bob and turn; talking (while the line types
+	## in): squash and stretch; a passed step: a happy hop; a fail: a droop.
+	var talking := false
+	var _vp: SubViewport
+	var _pivot: Node3D
+	var _t := 0.0
+	var _mood := ""
+	var _mood_t := 0.0
+
+	func _init() -> void:
+		stretch = true
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _ready() -> void:
+		_vp = SubViewport.new()
+		_vp.own_world_3d = true
+		_vp.transparent_bg = true
+		_vp.msaa_3d = Viewport.MSAA_DISABLED
+		_vp.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+		add_child(_vp)
+		var cam := Camera3D.new()
+		cam.fov = 28.0
+		_vp.add_child(cam)
+		cam.look_at_from_position(Vector3(0, 0.75, 3.4), Vector3(0, 0.5, 0), Vector3.UP)
+		var key := DirectionalLight3D.new()
+		key.rotation_degrees = Vector3(-35, 30, 0)
+		key.light_energy = 1.4
+		_vp.add_child(key)
+		var rim := OmniLight3D.new()
+		rim.position = Vector3(-1.2, 1.6, -1.0)
+		rim.light_color = Color("7fe9f5")
+		rim.light_energy = 2.0
+		rim.omni_range = 5.0
+		_vp.add_child(rim)
+		var env := WorldEnvironment.new()
+		env.environment = Environment.new()
+		env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.environment.ambient_light_color = Color("b8c8e0")
+		env.environment.ambient_light_energy = 0.7
+		_vp.add_child(env)
+		_pivot = Node3D.new()
+		_vp.add_child(_pivot)
+		var scene := load(HANDLER_MODEL) as PackedScene
+		if scene == null:
+			return
+		var body: Node3D = scene.instantiate()
+		_pivot.add_child(body)
+		var box := _bounds(body)                       # one metre tall, feet on the ground, centred
+		var k := 1.0 / maxf(box.size.y, 0.01)
+		body.scale = Vector3.ONE * k
+		body.position = -Vector3(box.get_center().x, box.position.y, box.get_center().z) * k
+
+	func _bounds(n: Node) -> AABB:
+		var box := AABB()
+		var first := true
+		for mi in n.find_children("*", "MeshInstance3D", true, false):
+			var m := mi as MeshInstance3D
+			var b: AABB = m.get_aabb()
+			var xf: Transform3D = (n as Node3D).global_transform.affine_inverse() * m.global_transform if m.is_inside_tree() else m.transform
+			b = xf * b
+			box = b if first else box.merge(b)
+			first = false
+		return box
+
+	func mood(kind: String) -> void:
+		_mood = kind
+		_mood_t = 0.0
+
+	func _process(delta: float) -> void:
+		if _pivot == null or not is_visible_in_tree():
+			return
+		_t += delta
+		var y := 0.03 * sin(_t * 2.2)                       # idle: a gentle bob and turn, three-quarter to the viewer
+		var yaw := 0.55 + 0.3 * sin(_t * 0.8)
+		var sx := 1.0
+		var sy := 1.0
+		var tilt := 0.0
+		if talking:                                         # talking: squash and stretch
+			var q := sin(_t * 17.0)
+			sy += 0.07 * q
+			sx -= 0.04 * q
+		if _mood != "":
+			_mood_t += delta
+			match _mood:
+				"happy":                                    # a hop with a spin
+					var k := _mood_t / 0.6
+					if k >= 1.0:
+						_mood = ""
+					else:
+						y += 0.32 * sin(PI * k)
+						yaw += TAU * k
+						sy *= 1.0 + 0.1 * sin(TAU * k)
+				"droop":                                    # sags and bows its head, then recovers
+					var d := minf(_mood_t / 0.4, 1.0) * clampf((2.4 - _mood_t) / 0.5, 0.0, 1.0)
+					sy *= 1.0 - 0.18 * d
+					sx *= 1.0 + 0.08 * d
+					tilt = 0.4 * d
+					if _mood_t > 2.4:
+						_mood = ""
+		_pivot.position = Vector3(0, y, 0)
+		_pivot.rotation = Vector3(tilt, yaw, 0)
+		_pivot.scale = Vector3(sx, sy, sx)
+
+
 class GraduatePanel extends Control:
 	## The Graduate vat's reveal (§6 / §7): the skin's model (Cosmetics, loaded on demand like every skin) on a
 	## slow turntable in an ivory and brass frame; a drawn silhouette stands in until the model is in (the web
@@ -261,6 +374,7 @@ class GraduatePanel extends Control:
 	var _pivot: Node3D
 	var _tier := 2
 	var _tried := 0.0
+	var _cam: Camera3D
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -278,13 +392,14 @@ class GraduatePanel extends Control:
 		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 		holder.add_child(vp)
 		var cam := Camera3D.new()
+		_cam = cam
 		cam.fov = 32.0
 		cam.position = Vector3(0, 4.0, 12.5)
 		vp.add_child(cam)
 		cam.look_at_from_position(cam.position, Vector3(0, 2.2, 0), Vector3.UP)
 		var sun := DirectionalLight3D.new()
 		sun.rotation_degrees = Vector3(-38, 35, 0)
-		sun.light_energy = 1.5
+		sun.light_energy = 0.9
 		vp.add_child(sun)
 		var rim := OmniLight3D.new()
 		rim.position = Vector3(-4, 5, -4)
@@ -296,7 +411,7 @@ class GraduatePanel extends Control:
 		env.environment = Environment.new()
 		env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		env.environment.ambient_light_color = Color("ede3cf")
-		env.environment.ambient_light_energy = 0.6
+		env.environment.ambient_light_energy = 0.22   # the v2 ivory glows a little itself: more washed it out white
 		vp.add_child(env)
 		_pivot = Node3D.new()
 		vp.add_child(_pivot)
@@ -311,8 +426,29 @@ class GraduatePanel extends Control:
 				_tried = 0.25
 				var scene: PackedScene = Cosmetics.scene_for("vat", "graduate", faction, _tier)
 				if scene != null:
-					_pivot.add_child(scene.instantiate())
+					var vat := scene.instantiate()
+					_pivot.add_child(vat)
+					MapBuilder.apply_owner([vat], "A")       # your colour on its lights and tanks, as in a match (the tanks were black)
+					_frame(vat)
 					queue_redraw()
+
+	func _frame(vat: Node3D) -> void:
+		## Fit the whole vat (crown included) in the panel: centre it on the turntable and back the camera off to
+		## its bounding sphere (the model was cropped at the top at a fixed 12.5 m).
+		var box := AABB()
+		var first := true
+		for mi in vat.find_children("*", "MeshInstance3D", true, false):
+			var b: AABB = (mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()
+			box = b if first else box.merge(b)
+			first = false
+		if first or _cam == null:
+			return
+		var c := box.get_center()
+		vat.position -= Vector3(c.x, 0.0, c.z)
+		var r := box.size.length() * 0.5
+		var d := r / sin(deg_to_rad(_cam.fov * 0.5)) * 0.82
+		var look := Vector3(0.0, c.y, 0.0)
+		_cam.look_at_from_position(look + Vector3(0.0, 0.3, 1.0).normalized() * d, look, Vector3.UP)
 
 	func _draw() -> void:
 		var ivory := Color("ede3cf") if unlocked else Color("8a9098")
@@ -375,6 +511,10 @@ var _has_dodge := false
 var _card_tween: Tween
 var _card_dest := Vector2(-1, -1)
 var _obstacles: Array = []
+var _handler: HandlerView
+var _typing := false
+var _typed := 0.0
+var _scrap := 0        # TUTORIAL + PROGRESSION: SCRAP the completion card counts up (0 = none)
 var _reward := {}      # where the card is easing to (no new tween for the same corner)
 var _exit_button: Button
 var _skip_button: Button
@@ -402,6 +542,13 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _typing:                                     # the line types in; the handler talks meanwhile
+		_typed += TYPE_RATE * delta
+		var total := _card_text.get_total_character_count()
+		if int(_typed) >= total:
+			_finish_typing()
+		else:
+			_card_text.visible_characters = int(_typed)
 	if _hand.kind != "":
 		_hand.t = fmod(_hand.t + delta, GESTURE_LOOP)
 		_hand.queue_redraw()
@@ -491,7 +638,14 @@ func _header_fsz() -> int:
 
 
 func _card_w() -> float:
-	return _pt(300.0) if mobile else 340.0     # "about 300 pt wide on phones" - TUTORIAL-DESIGN.md §6
+	## "about 300 pt wide on phones" (TUTORIAL-DESIGN.md §6) for the text, plus the handler's column at its left
+	return (_pt(300.0) if mobile else 340.0) + _handler_size().x + 8.0
+
+
+func _handler_size() -> Vector2:
+	## ~70 pt tall on phones.
+	var h := _pt(70.0) if mobile else 84.0
+	return Vector2(h * 0.78, h)
 
 
 func _dots_h() -> float:
@@ -529,11 +683,20 @@ func _build_card() -> void:
 	_card_bg = NeonPanel.new()
 	_card_bg.accent = accent
 	_card_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_card_bg.mouse_filter = Control.MOUSE_FILTER_STOP      # a tap on the card shows the whole line (and never
+	_card_bg.gui_input.connect(func(ev):                   # reaches the map)
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			_finish_typing())
 	_card.add_child(_card_bg)
+	_handler = HandlerView.new()                           # the handler, at the card's left
+	_handler.position = Vector2(10, 12)
+	_handler.size = _handler_size()
+	_card.add_child(_handler)
 	_card_vb = VBoxContainer.new()
 	_card_vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_card_vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card_vb.add_theme_constant_override("separation", 8)
-	_card_vb.offset_left = 18
+	_card_vb.offset_left = 18 + _handler_size().x
 	_card_vb.offset_top = 14
 	_card_vb.offset_right = -18
 	_card_vb.offset_bottom = -14
@@ -548,8 +711,9 @@ func _build_card() -> void:
 	_header_emblem.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_header_emblem.custom_minimum_size = Vector2(_header_fsz() * 2.2, _header_fsz() * 1.3)
 	_header_emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_header_emblem.visible = false                         # (0.19.3: the handler creature is the card's face now)
 	head_row.add_child(_header_emblem)
-	_card_header = _label("HANDLER", _header_fsz(), Color("8fd8e6"))
+	_card_header = _label(TutorialDirector.HANDLER_NAME, _header_fsz(), Color("8fd8e6"))
 	_card_header.clip_text = true
 	_card_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head_row.add_child(_card_header)
@@ -559,13 +723,17 @@ func _build_card() -> void:
 	_card_vb.add_child(_card_dots)
 	_card_text = _label("", _body_fsz(), Color("edf7fa"))
 	_card_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_card_text.visible_characters_behavior = TextServer.VC_CHARS_AFTER_SHAPING   # the typewriter never re-wraps: the
+		# layout (and the buttons under the text) is the full line's from the first frame (0.19.3 hotfix)
 	_card_vb.add_child(_card_text)
 	var button_row := HBoxContainer.new()
+	button_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card_vb.add_child(button_row)
 	_card_button = _make_button("GOT IT", func(): button_pressed.emit("got_it"))
 	_card_button.visible = false
 	button_row.add_child(_card_button)
 	_controls_row = HBoxContainer.new()
+	_controls_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_controls_row.add_theme_constant_override("separation", 6)
 	_card_vb.add_child(_controls_row)
 	_skip_button = _make_button("SKIP STEP", func(): skip_step.emit())
@@ -656,6 +824,40 @@ func set_first_launch(on: bool) -> void:
 	set_labels({})
 
 
+func handler_mood(mood: String) -> void:
+	if is_instance_valid(_handler):
+		_handler.mood(mood)
+
+
+func handler_rect() -> Rect2:
+	return _handler.get_global_rect() if is_instance_valid(_handler) and _card.visible else Rect2()
+
+
+func spotlit(p: Vector2) -> bool:
+	for t in _targets_px:
+		if (t["c"] as Vector2).distance_to(p) <= float(t["r"]):
+			return true
+	for r in _target_rects:
+		if (r as Rect2).grow(6.0).has_point(p):
+			return true
+	return false
+
+
+func _finish_typing() -> void:
+	_typing = false
+	_card_text.visible_characters = -1
+	if is_instance_valid(_handler):
+		_handler.talking = false
+
+
+var _avoid: Array = []
+
+
+func set_avoid(rects: Array) -> void:
+	## HUD parts the card must not cover while they show (the Last Stand banner, the toast stack).
+	_avoid = rects
+
+
 func set_obstacles(points: Array) -> void:
 	_obstacles = points
 
@@ -685,10 +887,17 @@ func hide_card() -> void:
 
 
 func show_step(header: String, text: String, dots: int, dot_index: int, button_text := "") -> void:
+	if not _card.visible and is_instance_valid(_handler):
+		_handler.mood("happy")                         # the handler greets as its card comes up
 	_complete.visible = false
 	_card.visible = true
 	_card_header.text = header
-	_card_text.text = text
+	if _card_text.text != text:                            # a new line types in; the handler talks
+		_card_text.text = text
+		_card_text.visible_characters = 0
+		_typed = 0.0
+		_typing = true
+		_handler.talking = true
 	_card_dots.count = dots
 	_card_dots.index = dot_index
 	_card_dots.accent = accent
@@ -789,10 +998,11 @@ func clear_gesture() -> void:
 	_hand.visible = false
 
 
-func show_complete(title: String, lines: Array, primary_text: String, secondary: Array) -> void:
+func show_complete(title: String, lines: Array, primary_text: String, secondary: Array, scrap := 0) -> void:
 	_card.visible = false
 	_dim.visible = false
 	clear_gesture()
+	_scrap = scrap                                     # TUTORIAL + PROGRESSION
 	_fill_complete(title, lines, primary_text, secondary, false)
 	_complete.visible = true
 	_center_complete()
@@ -803,6 +1013,7 @@ func show_training_complete(title: String, lines: Array, primary_text: String, s
 	_dim.visible = false
 	clear_gesture()
 	_reward = reward
+	_scrap = int(reward.get("scrap", 0))               # TUTORIAL + PROGRESSION
 	_fill_complete(title, lines, primary_text, secondary, true)
 	_complete.visible = true
 	_center_complete()
@@ -816,9 +1027,15 @@ func hide_complete() -> void:
 func _resize_card() -> void:
 	## A deterministic height (not a live container measurement: an autowrap Label's minimum size
 	## only settles after a layout pass, and the card must be right the same frame show_step() is
-	## called) - budgeted for the design's own cap of one or two short lines (§2.4, §6).
+	## called). 0.20.6: the line's own wrapped height, measured with the font (Dr. Vesk's longer lines wrap to
+	## three or four on a phone) - at least two lines, so short lines keep the card steady.
 	var w := _card_w()
-	var h := _header_fsz() * 1.3 + 8.0 + _dots_h() + 8.0 + _body_fsz() * 1.35 * 2.0 + 10.0 + _btn_h()
+	var text_w := w - (18.0 + _handler_size().x) - 18.0
+	var lines := 2
+	if is_instance_valid(_card_text) and _card_text.text != "":
+		var sz: Vector2 = UI_FONT.get_multiline_string_size(_card_text.text, HORIZONTAL_ALIGNMENT_LEFT, text_w - 4.0, _body_fsz())
+		lines = maxi(2, ceili(sz.y / maxf(UI_FONT.get_height(_body_fsz()), 1.0) - 0.05))
+	var h := _header_fsz() * 1.3 + 8.0 + _dots_h() + 8.0 + _body_fsz() * 1.35 * float(lines) + 10.0 + _btn_h()
 	if _card_button.visible:
 		h += _btn_h() + 8.0
 	h += 28.0 + 8.0 * 3.0             # the VBox's own separation (4 gaps) + top/bottom padding
@@ -839,14 +1056,23 @@ func _fallback_rect(which: String, vp: Vector2) -> Rect2:
 	return Rect2()
 
 
+func _place_rects() -> Array:
+	## The target rects the card must dodge: never the handler beside the card itself (L0's first step spotlights it -
+	## dodging its own creature made the card hop corner to corner every frame, unclickable; 0.19.3 hotfix).
+	var own := handler_rect()
+	if own.size == Vector2.ZERO:
+		return _target_rects
+	return _target_rects.filter(func(r): return not (r as Rect2).grow(4.0).intersects(own))
+
+
 func _target_center(vp: Vector2) -> Vector2:
 	if not _targets_px.is_empty():
 		var sum := Vector2.ZERO
 		for t in _targets_px:
 			sum += t["c"]
 		return sum / _targets_px.size()
-	if not _target_rects.is_empty():
-		var r: Rect2 = _target_rects[0]
+	if not _place_rects().is_empty():
+		var r: Rect2 = _place_rects()[0]
 		return r.get_center()
 	return vp / 2.0
 
@@ -856,7 +1082,7 @@ func _target_bounds(vp: Vector2) -> Rect2:
 	for t in _targets_px:
 		b = b.expand(t["c"] - Vector2.ONE * t["r"])
 		b = b.expand(t["c"] + Vector2.ONE * t["r"])
-	for r in _target_rects:
+	for r in _place_rects():
 		b = b.merge(r)
 	return b
 
@@ -893,7 +1119,6 @@ func _position_card() -> void:
 		br.y = dock_top - cs.y - MARGIN
 	var corners := {"tl": tl, "tr": tr, "bl": bl, "br": br}
 	var target_center := _target_center(vp)
-	var target_bounds := _target_bounds(vp)
 	var best_key := "br"
 	var best_score := -INF
 	for key in corners.keys():
@@ -901,11 +1126,15 @@ func _position_card() -> void:
 		var rect := Rect2(pos, cs)
 		var center := rect.get_center()
 		var score := center.distance_to(target_center)
-		if rect.intersects(target_bounds):
-			score -= 4000.0                # heavily discourage covering the target
-		for o in _obstacles:               # then the platforms: a corner over the map's empty sky wins
+		for a in _avoid:
+			if rect.intersects(a):
+				score -= 2500.0
+		score -= 4000.0 * _covered(rect)   # heavily discourage covering targets: each ring / rect counts (not their bounding box)
+		for o in _obstacles:               # then the nodes: a corner over the map's empty sky wins
 			if rect.grow(10.0).has_point(o):
 				score -= 700.0
+		if _card_dest.x >= 0.0 and pos.distance_to(_card_dest) < 1.0 and not _covers_target(rect):
+			score += 1600.0                # keep the corner it is in: no hop between steps unless the target needs it
 		if score > best_score:
 			best_score = score
 			best_key = key
@@ -925,14 +1154,49 @@ func _position_card() -> void:
 		_card_tween.tween_property(_card, "position", chosen, EASE_TIME)
 
 
+func _covered(rect: Rect2) -> int:
+	var k := 0
+	for t in _targets_px:
+		if rect.grow(float(t["r"]) * 0.8).has_point(t["c"]):
+			k += 1
+	for r in _place_rects():
+		if rect.intersects(r):
+			k += 1
+	return k
+
+
+func _covers_target(rect: Rect2) -> bool:
+	for t in _targets_px:
+		if rect.grow(float(t["r"])).has_point(t["c"]):
+			return true
+	for r in _place_rects():
+		if rect.intersects(r):
+			return true
+	return false
+
+
 func _fill_complete(title: String, lines: Array, primary_text: String, secondary: Array, graduate: bool) -> void:
 	for c in _complete_vb.get_children():
 		c.queue_free()
 	_complete_vb.add_child(_label(title, 30, Color("edf7fa")))
+	var first_line: Label = null
 	for line in lines:
 		var l := _label(str(line), _body_fsz(), Color("c8e6ee"))
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_complete_vb.add_child(l)
+		if first_line == null:
+			first_line = l
+	# TUTORIAL + PROGRESSION: "+140 SCRAP" counting up under the "done" lines, first completion only; on TRAINING
+	# COMPLETE right after the first line (relay kill, +140 SCRAP, the 3rd-skill line, then the Graduate vat)
+	var ticker_h := 0.0
+	if _scrap > 0:
+		var t := RewardTicker.make(_scrap, "soft", func(n: float) -> float: return _pt(n) if mobile else n * 1.2)
+		t.fit()
+		_complete_vb.add_child(t)
+		if graduate and first_line != null:
+			_complete_vb.move_child(t, first_line.get_index() + 1)   # (the old card's freed children still count)
+		ticker_h = t.custom_minimum_size.y + 10.0
+		t.play.call_deferred()                            # in the tree already: start once the card is laid out
 	if graduate:
 		var slot := GraduatePanel.new()
 		slot.head_font = HEAD_FONT
@@ -956,6 +1220,7 @@ func _fill_complete(title: String, lines: Array, primary_text: String, secondary
 		row.add_child(_make_button(str(secondary[idx]), func(): button_pressed.emit("secondary:%d" % idx)))
 	# a deterministic height, for the same reason _resize_card() avoids a live measurement
 	var h := 44.0 + float(lines.size()) * (_body_fsz() * 1.35 * 1.25) + _btn_h() + 60.0
+	h += ticker_h
 	if graduate:
 		h += (_pt(118.0) if mobile else 190.0) + 10.0
 	var w := _card_w() * (2.0 if mobile else 1.7)

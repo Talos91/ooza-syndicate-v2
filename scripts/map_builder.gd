@@ -12,8 +12,7 @@ extends RefCounted
 ## straddling the rim where that deck enters. State colours: a relay-controlled deck's edge lights
 ## carry its state's colour, the tower's symbol (OS_State) glows in the current state's colour.
 
-const KIT := "res://assets/kit/%s.glb"
-static var _scenes := {}
+static var _scenes := {}     # keyed by resolved path (Cosmetics.kit_path), not by kit key: see piece()
 
 
 static func load_map(path: String) -> Dictionary:
@@ -108,17 +107,20 @@ static func _can_raise(e: Dictionary) -> bool:
 
 
 static func piece(name: String) -> Node3D:
+	## Loads through Cosmetics.kit_path (light kit vs kit_hd, "Phones only" - Alpha 21): the path itself
+	## is the cache key, so a profile/HD-pack change mid-session never hands back the wrong quality.
 	var scene: PackedScene
 	if name.begins_with("skins/"):                  # 0.19.0 cosmetics: loaded on demand, never kept here
 		scene = Cosmetics.cached(name)
 		if scene == null:
-			scene = load(KIT % name) as PackedScene     # (a tier-down ghost of a skin already dropped)
+			scene = load(Cosmetics.kit_path(name)) as PackedScene   # (a tier-down ghost of a skin already dropped)
 	else:
-		if not _scenes.has(name):
-			_scenes[name] = load(KIT % name)
-		scene = _scenes[name]
+		var path := Cosmetics.kit_path(name)
+		if not _scenes.has(path):
+			_scenes[path] = load(path)
+		scene = _scenes[path]
 	var node: Node3D = scene.instantiate()
-	var fit := Cosmetics.fit(name)                  # 0.19.2: the Machingoon looks at a vat's size, sunk into the socket
+	var fit := Cosmetics.fit(name)                  # 0.19.2: the Machinegoon looks at a vat's size, sunk into the socket
 	if not fit.is_empty():
 		for c in node.get_children():
 			if c is Node3D:
@@ -283,6 +285,7 @@ static func set_lights(node: Node3D, mat: Material) -> void:
 			var m := mesh.surface_get_material(s)
 			if m and m.resource_name.begins_with("OS_Light"):
 				mi.set_surface_override_material(s, mat)
+	MapBatch.refresh(node)                          # Alpha 21: a batched piece's light slots follow
 
 
 static func set_state_color(entry: Dictionary, c: Color) -> void:
@@ -297,7 +300,7 @@ const CANNON_MODEL := ["", "Laser", "Laser", "Laser"]                      # LEG
 static func model_for(n: Dictionary) -> String:
 	## Which centre-slot model a node shows right now - the build TARGET while a build runs (Alpha
 	## 11 shows the new structure growing out of the socket), otherwise what stands there. Structures
-	## 2.1 (0.19.0): a vat or a Machingoon (T1-T3) on a common node, a Laser tower / Forge / Monster hub
+	## 2.1 (0.19.0): a vat or a Machinegoon (T1-T3) on a common node, a Laser tower / Forge / Monster hub
 	## (or the bare socket) on a relay, the T4 vat on a special node - each in the look its OWNER picked
 	## (Cosmetics.key_for: the default until a skin has loaded). Called per node per frame (main), so the
 	## names come from tables and caches, not string formatting.
@@ -315,7 +318,7 @@ static func model_for(n: Dictionary) -> String:
 		kind = n.get("structure", "vat")
 		tier = n["tier"]
 	match kind:
-		"vat", "machingoon", "laser", "forge", "monster_hub":
+		"vat", "machinegoon", "laser", "forge", "monster_hub":
 			return Cosmetics.key_for(kind, n["owner"], tier)
 	if n["relay"] != "":
 		return "Socket_Attachment"
@@ -328,7 +331,7 @@ static func centre_lift(model: String) -> Vector3:
 
 
 static func set_centre_model(parent: Node3D, entry: Dictionary, model: String, pos: Vector3, seat: String) -> Node3D:
-	## Swap the node's centre slot (vat / socket / machingoon / laser / forge / hub) for `model` at the
+	## Swap the node's centre slot (vat / socket / machinegoon / laser / forge / hub) for `model` at the
 	## exact same spot - GAME-RULES sec6: one slot, never an extra piece bolted on the side. Returns the node.
 	if entry["model_key"] == model:
 		return entry["vat_node"]
@@ -341,6 +344,7 @@ static func set_centre_model(parent: Node3D, entry: Dictionary, model: String, p
 	entry["vat_node"] = node
 	entry["model_key"] = model
 	apply_owner(entry["parts"], seat)
+	MapBatch.track(node)                            # Alpha 21: the new structure is batched (map_batch.gd)
 	return node
 
 
@@ -349,7 +353,7 @@ static var _spin_split := {}         # "model|mesh id" -> [static ArrayMesh, spi
 
 
 static func split_spinner(turret: MeshInstance3D, model: String) -> MeshInstance3D:
-	## The Machingoon T3 and the Pepperbox turrets carry their barrel cluster inside the turret mesh.
+	## The Machinegoon T3 and the Pepperbox turrets carry their barrel cluster inside the turret mesh.
 	## Split it off once per model (Cosmetics.points(model)["spin"]: every mesh island wholly within r of
 	## an axis parallel to +Z through (x, y), in front of z0) into a child MeshInstance3D centred on the
 	## axis, so the view can turn it about its local Z. Returns the spinner (null if the model has none).
@@ -460,6 +464,7 @@ static func apply_owner(parts: Array, seat: String) -> void:
 					if mi.has_meta("vat_liquid"):             # a living liquid (Scenery) colours itself
 						continue
 					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else null)
+		MapBatch.refresh(p)                             # Alpha 21: a batched piece's light / ooze slots follow
 
 
 # ---------------------------------------------------------------- baked layout (maps 3.0 / 4.0 pipeline)

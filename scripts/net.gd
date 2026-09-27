@@ -26,7 +26,7 @@ extends Node
 ## carry the skill state (effects, cooldowns, charge, demolished decks). Ghost Lines stay secret: the
 ## broadcast snapshot strips the decoy keys (SECRET_HORDE) and each guest gets a private "ghosts" packet
 ## listing only its own decoys; fx events marked "private" go to that seat only.
-## STRUCTURES 2.1 + TEAMS (0.18.10): new orders "build" (args {"kind": vat / machingoon / laser / forge /
+## STRUCTURES 2.1 + TEAMS (0.18.10): new orders "build" (args {"kind": vat / machinegoon / laser / forge /
 ## monster_hub}), "launch_monster" (a = the hub, args {"to": node}) and "eject" (a = the node), validated by the
 ## host's Sim (Sim.structure_order: the same feedback line offline). Snapshots carry the new node fields (they
 ## ride with every node key: "structure", "allies", "arrivals", "shot", "monster_ready_t", "hub_monster"), the
@@ -34,13 +34,32 @@ extends Node
 ## ROOM SERVER (Alpha 20 stage 1): the transport is RelayBridge -> server/relay.py (one WebSocket per player,
 ## the server forwards strings), so strict networks work; ?relay=peerjs falls back to the PeerJS rooms. The
 ## room's creator still hosts the Sim (stage 2 moves it onto the server). No host migration.
+## SERVER-HOSTED ROOMS (Alpha 20 stage 2): CREATE ROOM asks the room server for a room it hosts itself
+## (host_room -> {"op": "create"}); the server starts this same build headless with --dedicated, which runs
+## the room as host with NO seat of its own (roster ids start at 2), and the creator joins as the first guest.
+## The ROOM OWNER (Net.room_owner: the first player in, then the next one present if they drop) runs the lobby: the
+## lobby controls send {"op": "lobby", "fn", "arg"} and the host applies them only from the owner. So no
+## player's device runs the match: a phone in the background just drops its own seat for a RECONNECT. When the
+## server has no match host free, or runs another game version, the room falls back to the creator's browser
+## as host (the stage-1 rooms). Protocol ooze20-net-4 ("owner" in the lobby packet, the owner's lobby ops).
+## SMOOTH SERVER ROOMS (0.20.2, Daniele: "it lags ... connection"): the server's match host runs at 40 fps and sends
+## 20 snapshots a second on an even clock (the remainder carries over). A guest in a server room plays them out
+## through a small buffer (PLAYOUT_DELAY behind the newest), so bursty mobile data arrives evenly; lines keep moving
+## up to EXTRAPOLATE seconds without news, and a correction glides in over BLEND seconds instead of snapping.
+## Browser-hosted fallback rooms keep the 0.20.0 behaviour (10 Hz, applied on arrival).
+## ACCOUNTS (0.20.5, with Progression): the device sets `auth_token` (its Supabase access token; "" = signed out) and
+## sends it as "auth" in register. A server room's match host verifies it (GET /auth/v1/user) and keeps seat -> user id
+## on the host only (never broadcast). When a server room's round ends and a seat has a user id, the host POSTs the
+## signed MatchReport to the `match-result` edge function (retries, and the room stays open until it is sent). The
+## Supabase address, key and the signing secret come from the server's environment (OOZE_SUPABASE_URL / _KEY,
+## OOZE_MATCH_SECRET from /opt/ooze/secrets.env); browser-hosted rooms never report (unranked).
 
 signal lobby_changed
 signal rematch_changed
 signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
-const VERSION_TAG := "ooze20-net-3"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams)
+const VERSION_TAG := "ooze20-net-4"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner)
 const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
 const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
 const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
@@ -50,15 +69,30 @@ const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const ACTIONS := ["send", "recall", "upgrade", "build_cannon", "build_forge", "restore", "switch", "cast",
 		"build", "launch_monster", "eject"]
 const STRUCTURE_ACTIONS := ["build", "launch_monster", "eject"]   # run through Sim.structure_order
-const BUILD_KINDS := ["vat", "machingoon", "laser", "forge", "monster_hub"]
-const SNAPSHOT_EVERY := 0.1
-const KEYFRAME_EVERY := 10                         # every 10th snapshot carries every horde's path
+const BUILD_KINDS := ["vat", "machinegoon", "laser", "forge", "monster_hub"]
+const SNAPSHOT_EVERY := 0.1                        # a browser host (fallback rooms)
+const SNAPSHOT_EVERY_SERVER := 0.05                # the server's match host (0.20.2: 20 Hz)
+const KEYFRAME_EVERY := 10                         # every 10th snapshot carries every horde's path (20th at 20 Hz: once a second)
+const PLAYOUT_DELAY := 0.12                        # server rooms: a guest shows the match this far behind the newest snapshot...
+const PLAYOUT_DELAY_MAX := 0.35                    # ...up to this after a stall (Alpha 21: adaptive), easing back over PLAYOUT_EASE
+const PLAYOUT_EASE := 20.0                         # seconds from the max back to PLAYOUT_DELAY while updates arrive evenly
+const STALL := 0.25                                # an arrival gap this long is a stall (at 20 Hz a gap is 0.05 s)
+const EXTRAPOLATE := 0.5                           # lines keep moving this long after the last snapshot applied
+const BLEND := 0.15                                # a snapshot's correction glides in over this long...
+const BLEND_MAX := 6.0                             # ...unless it is bigger than this (sim metres): then it snaps
+const PLAYOUT_MAX := 40                            # queued snapshots beyond this are dropped (a tab back from the background)
 const PATH_RESEND := 1.0                           # a changed path rides along for this many seconds
 const MAX_PACKET := 8 * 1024 * 1024
 const CHAT_MAX := 256
 const CHAT_HISTORY := 50
 const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
 const RELAY_URL := "wss://45-32-126-20.sslip.io/ooze"   # server/relay.py behind Caddy on the Vultr box (Alpha 20)
+const DEDICATED_FPS := 40                          # the server's match host: a steady Sim step, no screen to draw; 2 frames a snapshot
+const DEDICATED_IDLE := 90.0                       # a server match everyone dropped out of waits this long for a RECONNECT
+const DEDICATED_LOBBY_IDLE := 5.0                  # an empty server lobby closes (nobody can come back to a lobby seat)
+const DEDICATED_BOOT_IDLE := 20.0                  # the creator never arrived
+const FALLBACK_CODES := ["no-server", "version", "busy"]   # create refused: host in this browser instead
+const REMATCH_AI := "Standard"                     # REMATCH ON A RANDOM MAP picked a bigger mode: the AI fills the extra seats
 const AI_FILL := ["", "Training", "Casual", "Standard", "Veteran", "Expert"]   # EMPTY SEATS setting: off or the AI level
 
 var bridge                                         # window.OozePeer (or a test double)
@@ -81,6 +115,7 @@ var last_stand := true
 var abilities := true                              # ABILITIES ON/OFF (0.18.7: default on in both modes)
 var loadout := {}                                  # your own {"active", "map"} (empty = the faction's default)
 var cosmetic := {}                                 # your own COSMETICS pick {family: id} (0.19.0; empty = default)
+var auth_token := ""                               # 0.20.5: your Supabase access token (Progression sets it; "" = a guest)
 var own_ghosts := {}                               # guest: horde id -> true for our own decoys (host tells us only)
 var _ghosts_sent := {}                             # host: remote -> the ghost list last sent to it
 # match state
@@ -95,6 +130,19 @@ var sim: Sim                                       # set by main when the world 
 var main: Node                                     # the match scene (host runs orders through it)
 var no_reload := false                             # tests: launch without reloading the scene
 var allow_native := false                          # tests: rooms outside the browser build (the relay works natively)
+var dedicated := false                             # this process is the room server's match host (--dedicated): no seat
+var room_owner := -1                                    # the player id who runs the lobby (browser host: 1; server room: the first in)
+var server_rooms := true                           # CREATE ROOM asks the server to host (false: this browser hosts)
+var test_room := false                             # tests: the room is a test - a real player's room may take its server slot
+var _creating := false                             # guest: our create request is on its way (a refusal falls back)
+var _server_room := ""                             # --room / --secret: the server room this match host serves
+var _server_secret := ""
+var _empty_t := 0.0                                # dedicated: seconds with nobody in the room
+var _users := {}                                   # dedicated: player id -> verified Supabase user id (host only)
+var _round_started_at := 0                         # dedicated: unix time the round began (the report's match_id)
+var _reported_round := -1
+var _report_pending := 0                           # reports still being sent (the room waits for them)
+var _ever_joined := false
 var ai_fill := ""                                  # host setting: "" = every seat needs a player, else the AI level for empty seats
 var rejoin := {}                                   # guest: {code, token, faction} to RECONNECT to a dropped room
 var _tokens := {}                                  # host: player id -> secret rejoin token (never broadcast)
@@ -103,6 +151,24 @@ var _fresh := false                                # guest: the first snapshot o
 var _snap_clock := 0.0
 var _snap_count := 0
 var _since_snapshot := 0.0
+var _play_q: Array = []                            # server-room guest: ["state" | "effects", data] waiting to be shown
+var _play_t := -1.0                                # the host time the guest shows now (-1: not started)
+var _latest_t := 0.0                               # the newest snapshot's host time
+var _since_applied := 0.0                          # seconds since a snapshot was last shown
+var _delay := PLAYOUT_DELAY                        # the playout delay now (adaptive, Alpha 21)
+var _calm := 0.0                                   # seconds since the last stall
+var _last_arrival := 0                             # msec of the last snapshot's arrival
+var corr_big := 0                                  # probe / CONNECTION: corrections > 0.5 m this round, the largest, hard snaps
+var corr_max := 0.0
+var corr_snaps := 0
+# the PAUSE panel's connection line (net_stats_line): is a stutter the network or the device?
+var _arrivals: Array = []                          # guest: msec of the snapshots in the last 5 s
+var _freeze_n := 0                                 # guest: times this round the shown clock stood still >= 0.1 s
+var _freeze_s := 0.0
+var _freeze_run := 0.0
+var _last_clock := -1.0
+var _order_sent: Array = []                        # guest: msec of orders waiting for their feedback line
+var _rtt_ms := -1.0
 var _elapsed := 0.0
 var _path_seen := {}                               # host: horde id -> [path key, time it changed]
 var _order_limits := {}
@@ -127,6 +193,20 @@ func online() -> bool:
 
 func is_host() -> bool:
 	return hosting
+
+
+func server_hosted() -> bool:
+	## This room runs on the room server (ranked: its rounds are reported); false in a browser-hosted fallback room and
+	## offline. True on every player's device (the owner is a player, never id 1) and on the match host itself.
+	return dedicated or (not hosting and bridge != null and room_owner > 1)
+
+
+func can_control() -> bool:
+	## The lobby's controls (mode, map, settings, MOVE, DEPLOY, the random rematch map): the browser host, or a
+	## server room's owner. The server's own match host decides nothing by itself.
+	if hosting:
+		return not dedicated
+	return assigned_id > 0 and room_owner == assigned_id
 
 
 func local_id() -> int:
@@ -306,7 +386,7 @@ func _fix_colours(first := -1, last := -1) -> void:
 
 func can_start() -> bool:
 	var full := roster.size() == slots() or (ai_fill != "" and roster.size() >= 1)
-	return hosting and connected and not active and full and map_offers(map_path, mode)
+	return (hosting or can_control()) and connected and not active and full and map_offers(map_path, mode)
 
 
 func is_away(id: int) -> bool:
@@ -330,6 +410,8 @@ func ai_seats() -> Dictionary:
 
 
 func set_ai_fill(level: String) -> void:
+	if _ask_owner("ai_fill", level):
+		return
 	if hosting and not active and level in AI_FILL:
 		ai_fill = level
 		publish_lobby()
@@ -352,6 +434,9 @@ func maps_for(m: String) -> Array:
 
 # ------------------------------------------------------------------ room lifecycle
 func host_room(faction: String) -> Error:
+	## CREATE ROOM: the room server hosts it (stage 2) unless it can't, or this is a PeerJS room.
+	if server_rooms and relay_url() != "peerjs":
+		return _start(false, faction, "", true)
 	return _start(true, faction, "")
 
 
@@ -366,7 +451,7 @@ func reconnect() -> Error:
 	return _start(false, str(rejoin["faction"]), str(rejoin["code"]))
 
 
-func _start(host: bool, faction: String, code: String) -> Error:
+func _start(host: bool, faction: String, code: String, create := false) -> Error:
 	leave(false)
 	if not OS.has_feature("web") and not allow_native:
 		status = "Online rooms run in the browser build (the playtest link)."
@@ -385,7 +470,9 @@ func _start(host: bool, faction: String, code: String) -> Error:
 	hosting = host
 	preferred_faction = faction
 	_elapsed = 0.0
+	_creating = create
 	if host:
+		room_owner = 1
 		roster = {1: {"faction": faction, "slot": 0, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}}
 		if not map_offers(map_path, mode) or not map_path in MapPool.battlefield():   # TUTORIAL: never a lesson map
 			var pool := maps_for(mode)
@@ -394,10 +481,35 @@ func _start(host: bool, faction: String, code: String) -> Error:
 				pool = maps_for(mode)
 			map_path = pool[0] if not pool.is_empty() else ""
 		_fix_colours()
-	bridge.start(host, code.strip_edges().to_upper())
+	if create:
+		bridge.start_with(false, {"op": "create", "version": version(), "test": test_room})
+	else:
+		bridge.start(host, code.strip_edges().to_upper())
 	status = "Connecting to the room service..."
 	lobby_changed.emit()
 	return OK
+
+
+func _start_dedicated() -> void:
+	## --dedicated: the room server started this build to host room --room; nobody plays here.
+	leave(false)
+	bridge = RelayBridge.new(relay_url())
+	hosting = true
+	room_owner = -1
+	roster = {}
+	var pool := maps_for(mode)
+	map_path = pool[0] if not pool.is_empty() else ""
+	bridge.start_with(true, {"op": "host", "room": _server_room, "secret": _server_secret})
+	status = "Match host for room %s" % _server_room
+	print("dedicated host for room ", _server_room, " (", version(), ")")
+
+
+func _fallback_host(why: String) -> void:
+	## The server could not host (no match host, another version, busy): this browser hosts, as in stage 1.
+	var f := preferred_faction
+	_start(true, f, "")
+	status = "The match server is %s - this browser hosts the room (UNRANKED: results don't count)" % ("busy" if why == "busy" else "unavailable")
+	lobby_changed.emit()
 
 
 func relay_url() -> String:
@@ -417,6 +529,8 @@ func relay_url() -> String:
 
 func leave(forget := true) -> void:
 	## forget = false keeps the RECONNECT details (a dropped connection, not LEAVE ROOM).
+	_creating = false
+	room_owner = -1
 	if forget:
 		_save_rejoin({})
 	if OS.has_feature("web"):
@@ -465,6 +579,10 @@ func set_busy(b: bool) -> void:
 
 
 func fail(message: String) -> void:
+	if dedicated:                                      # the server's match host: its room is gone
+		print("dedicated host stops: ", message)
+		get_tree().quit()
+		return
 	var was_playing := active
 	leave(false)
 	status = message
@@ -474,7 +592,69 @@ func fail(message: String) -> void:
 
 
 # ------------------------------------------------------------------ lobby (host decides)
+func _ask_owner(fn: String, arg = null) -> bool:
+	## Not the host: a room owner's lobby change goes to the server's match host; anyone else can't change it.
+	## true = handled here (the caller stops).
+	if hosting:
+		return false
+	if can_control() and not active:
+		_send_to_host({"op": "lobby", "fn": fn, "arg": arg})
+	return true
+
+
+func _owner_op(id: int, p: Dictionary) -> void:
+	## Host: a lobby change from the room owner (the same checks as the host's own buttons).
+	if id != room_owner:
+		return
+	var arg = p.get("arg", null)
+	match str(p.get("fn", "")):
+		"mode":
+			set_mode(str(arg))
+		"map":
+			if str(arg) in maps_for(mode):
+				set_map(str(arg))
+		"last_stand":
+			if arg is bool and arg != last_stand:
+				toggle_last_stand()
+		"abilities":
+			if arg is bool and arg != abilities:
+				toggle_abilities()
+		"ai_fill":
+			set_ai_fill(str(arg))
+		"move":
+			if arg is Array and (arg as Array).size() == 2 and _is_int(arg[0]) and _is_int(arg[1]):
+				move_to_team(int(arg[0]), int(arg[1]))
+		"start":
+			start_match()
+		"rematch_map":                                 # REMATCH ON A RANDOM MAP: the owner's pick, then their vote
+			if arg is Array and (arg as Array).size() == 2 and active and finished:
+				var m := str(arg[1])
+				if m in MODES and present_ids().size() <= SLOTS[m] and str(arg[0]) in maps_for(m):
+					map_path = str(arg[0])
+					mode = m
+				accept_rematch(id)
+
+
+func propose_rematch(path: String, m: String) -> void:
+	## A server room's owner: REMATCH ON A RANDOM MAP (the host applies the pick and counts the vote).
+	if not hosting and can_control() and active and finished:
+		_send_to_host({"op": "lobby", "fn": "rematch_map", "arg": [path, m]})
+
+
+func _pick_owner() -> void:
+	## A server room: the owner left (or dropped) - the longest-standing player still here runs the lobby.
+	if not dedicated or (roster.has(room_owner) and not is_away(room_owner)):
+		return
+	var ids := present_ids()
+	ids.sort()
+	room_owner = int(ids[0]) if not ids.is_empty() else -1
+	if room_owner > 0:
+		_notice("Seat %s now runs the room" % seat_of(room_owner))
+
+
 func set_mode(m: String) -> void:
+	if _ask_owner("mode", m):
+		return
 	if not hosting or active or not m in MODES or roster.size() > SLOTS[m]:
 		return
 	var pool := maps_for(m)
@@ -489,6 +669,8 @@ func set_mode(m: String) -> void:
 
 
 func set_map(path: String) -> void:
+	if _ask_owner("map", path):
+		return
 	if hosting and not active and map_offers(path, mode):
 		var before := _teams_now()                     # another map may seat the teams differently
 		map_path = path
@@ -497,12 +679,16 @@ func set_map(path: String) -> void:
 
 
 func toggle_last_stand() -> void:
+	if _ask_owner("last_stand", not last_stand):
+		return
 	if hosting and not active:
 		last_stand = not last_stand
 		publish_lobby()
 
 
 func toggle_abilities() -> void:
+	if _ask_owner("abilities", not abilities):
+		return
 	if hosting and not active:
 		abilities = not abilities
 		publish_lobby()
@@ -603,7 +789,11 @@ func switch_team(team: int) -> void:
 func move_to_team(id: int, team: int) -> bool:
 	## Host: a player (their own JOIN TEAM, or the host moving them) takes the first free seat of `team`;
 	## a full team takes nobody. Empty seats stay for the AI (EMPTY SEATS) or later players.
-	if not hosting or active or not mode in TEAM_MODES or not roster.has(id) or not team in team_ids() or team_of(id) == team:
+	if not hosting:
+		if id != assigned_id:                          # a server room's owner moving someone
+			_ask_owner("move", [id, team])
+		return false
+	if active or not mode in TEAM_MODES or not roster.has(id) or not team in team_ids() or team_of(id) == team:
 		return false
 	var slot := free_slot_in(team)
 	if slot < 0:
@@ -664,7 +854,7 @@ func _reseat(teams := {}) -> void:
 
 func publish_lobby() -> void:
 	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path, "siege": siege,
-			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities})
+			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities, "owner": room_owner})
 	lobby_changed.emit()
 
 
@@ -691,6 +881,12 @@ func _register(remote: String, id: int, p: Dictionary) -> void:
 	if colour_allowed(id, want):
 		roster[id]["colour"] = want
 	_fix_colours(-1, id)                               # a newcomer's hue gives way to the room's
+	_ever_joined = true
+	var auth = p.get("auth", "")
+	if dedicated and auth is String and auth != "" and (auth as String).length() < 3000:
+		_verify_auth(id, auth)
+	if dedicated and not roster.has(room_owner):            # a server room: the first player in runs it
+		room_owner = id
 	_tokens[id] = _new_token()
 	_send(remote, "identity", {"id": id, "token": _tokens[id]})
 	_send(remote, "chat_history", chat_history)
@@ -701,6 +897,8 @@ func _reclaim(remote: String, id: int) -> void:
 	## A dropped player is back: same id, same seat; mid-match they get the round and catch up.
 	links[remote] = id
 	roster[id].erase("away")
+	if dedicated and (not roster.has(room_owner) or is_away(room_owner)):
+		room_owner = id
 	_send(remote, "identity", {"id": id, "token": _tokens[id]})
 	_send(remote, "chat_history", chat_history)
 	if active:
@@ -730,16 +928,22 @@ func version() -> String:
 
 # ------------------------------------------------------------------ rounds
 func start_match() -> void:
+	if not hosting:
+		if can_start():
+			_ask_owner("start")
+		return
 	if can_start():
 		launch_round()
 
 
-func launch_round() -> void:
+func launch_round(fill := "") -> void:
+	## fill: the AI level for seats nobody holds when EMPTY SEATS is off (REMATCH ON A RANDOM MAP).
 	for id in roster.keys():                          # a new round: anyone still away has left
 		if is_away(int(id)):
 			roster.erase(id)
 			_tokens.erase(id)
 	_reseat()
+	_pick_owner()
 	var players := {}
 	var loadouts := {}                                 # players' picks; AI seats get their faction default in Sim.setup
 	var cosmetics := {}                                 # players' COSMETICS picks (0.19.0); AI seats: default
@@ -752,13 +956,14 @@ func launch_round() -> void:
 		if not co.is_empty():
 			cosmetics[seat_of(id)] = co
 	var ai := {}
-	if ai_fill != "":
+	var level := ai_fill if ai_fill != "" else fill
+	if level != "":
 		for slot in range(slots()):                    # EMPTY SEATS: the AI plays them (team modes: any seat)
 			if players.has(SEATS[slot]):
 				continue
 			var free := FACTIONS.filter(func(f): return not f in players.values())
 			players[SEATS[slot]] = free[randi() % free.size()] if not free.is_empty() else FACTIONS[randi() % FACTIONS.size()]
-			ai[SEATS[slot]] = ai_fill
+			ai[SEATS[slot]] = level
 	var info := {"round": match_round + 1, "map": map_path, "mode": mode, "seed": randi() % 100000,
 			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(), "loadouts": loadouts,
 			"cosmetics": cosmetics,
@@ -803,6 +1008,22 @@ func _launch(info: Dictionary) -> void:
 	_snap_clock = 0.0
 	_snap_count = 0
 	_since_snapshot = 0.0
+	_play_q = []
+	_play_t = -1.0
+	_latest_t = 0.0
+	_since_applied = 0.0
+	_arrivals = []
+	_delay = PLAYOUT_DELAY
+	_calm = 0.0
+	_last_arrival = 0
+	corr_big = 0
+	corr_max = 0.0
+	corr_snaps = 0
+	_freeze_n = 0
+	_freeze_s = 0.0
+	_freeze_run = 0.0
+	_last_clock = -1.0
+	_order_sent = []
 	sim = null
 	if not no_reload:
 		get_tree().reload_current_scene()
@@ -843,6 +1064,7 @@ func _check_barrier() -> void:
 
 func _begin() -> void:
 	started = true
+	_round_started_at = int(Time.get_unix_time_from_system())
 	_since_snapshot = 0.0
 
 
@@ -854,6 +1076,7 @@ func peer_left(id: int) -> void:
 		rematch_votes.erase(id)
 		ready_peers.erase(id)
 		_notice("Seat %s lost connection - they can RECONNECT%s" % [seat_of(id), " (the AI plays it meanwhile)" if ai_fill != "" else ""])
+		_pick_owner()
 		seats_changed.emit()
 		_check_barrier()
 		publish_lobby()
@@ -861,9 +1084,11 @@ func peer_left(id: int) -> void:
 		return
 	roster.erase(id)
 	_tokens.erase(id)
+	_users.erase(id)
 	rematch_votes.erase(id)
 	ready_peers.erase(id)
 	_reseat()
+	_pick_owner()
 	publish_lobby()
 
 
@@ -874,6 +1099,7 @@ func return_to_room(message: String) -> void:
 				roster.erase(id)
 				_tokens.erase(id)
 		_reseat()
+		_pick_owner()
 		publish_lobby()                                # the guests get the repacked seats
 	active = false
 	started = false
@@ -898,6 +1124,9 @@ func order(action: String, a: int, args := {}) -> void:
 		order_feedback.emit(r[1])
 	else:
 		_send_to_host({"op": "order", "round": match_round, "action": action, "a": a, "args": args})
+		_order_sent.append(Time.get_ticks_msec())
+		if _order_sent.size() > 20:
+			_order_sent.pop_front()
 
 
 func _execute(id: int, p: Dictionary) -> Array:
@@ -983,6 +1212,15 @@ func request_rematch() -> void:
 		_send_to_host({"op": "rematch", "round": match_round})
 
 
+func rematch_status() -> Dictionary:
+	## For the results screen: {"mine": did I vote, "ready": [labels], "waiting": [labels]} over the players still here.
+	var ready := []
+	var waiting := []
+	for id in present_ids():
+		(ready if rematch_votes.has(id) else waiting).append(label_of(int(id)) + ("  (you)" if int(id) == local_id() else ""))
+	return {"mine": rematch_votes.has(local_id()), "ready": ready, "waiting": waiting}
+
+
 func accept_rematch(id: int) -> void:
 	if not active or not finished or not roster.has(id):
 		return
@@ -1000,6 +1238,8 @@ func _check_rematch() -> void:
 		return
 	if present.size() == slots() or ai_fill != "":
 		launch_round()
+	elif mode != str(match_info.get("mode", mode)):    # the random rematch map seats more than are here: the AI fills the
+		launch_round(REMATCH_AI)                        # rest (Daniele, 0.19.0: "AI fills the rest"; it used to send the room back to the lobby)
 	else:                                              # a seat is empty and no AI may take it
 		var msg := "A player is missing - back to the lobby. Invite someone with the same code."
 		return_to_room(msg)                            # publishes the repacked lobby first...
@@ -1063,7 +1303,7 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 			"ls": [s.last_stand_active, s.last_stand_method, s.last_stand_order, s.last_stand_final,
 					s.last_stand_next, s.last_stand_warn_node, s.last_stand_warn_t, s.last_stand_wave, s._next_wave_at,
 					s.last_stand_waves, s.last_stand_keep, s.last_stand_warn, s.last_stand_queue,
-					s.very_last_stand_active, s.very_last_stand_gap],
+					s.very_last_stand_active, s.very_last_stand_gap, s.last_stand_gap],
 			"losses": [s.combat_losses, s.fall_losses],
 			"skills": [s.effects, s.demolished, s.skill_cd, s.ult_charge, s.ult_since],
 			"structs": [ms, s._next_monster, s.draw_line]}
@@ -1151,6 +1391,8 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 	if ls.size() > 14:                                # 0.18.9: Very Last Stand
 		s.very_last_stand_active = ls[13]
 		s.very_last_stand_gap = ls[14]
+	if ls.size() > 15:                                # 2026-09-27: the adaptive ring drop gap (drop_in countdowns)
+		s.last_stand_gap = ls[15]
 	s.combat_losses = snap["losses"][0]
 	s.fall_losses = snap["losses"][1]
 	if snap.has("skills"):                            # SKILLS 2.0: effects, demolished decks, cooldowns, charge
@@ -1183,6 +1425,196 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 		s.over = true
 		s.winner = str(snap["winner"])
 		s.finished.emit(s.winner)
+
+
+func _verify_auth(id: int, token: String) -> void:
+	## Server room: who is this player? GET /auth/v1/user with their access token; a 200 maps the seat to the user id
+	## (guest accounts too), anything else leaves them a guest (plays, no rewards).
+	var url := OS.get_environment("OOZE_SUPABASE_URL")
+	var key := OS.get_environment("OOZE_SUPABASE_KEY")
+	if url == "" or key == "":
+		return
+	var req := HTTPRequest.new()
+	req.timeout = 10.0
+	add_child(req)
+	req.request_completed.connect(func(result, code, _h, body):
+		req.queue_free()
+		if result == HTTPRequest.RESULT_SUCCESS and code == 200 and roster.has(id):
+			var u = JSON.parse_string(body.get_string_from_utf8())
+			if u is Dictionary and str(u.get("id", "")) != "":
+				_users[id] = str(u["id"])
+				print("seat of player %d: account %s%s" % [id, str(u["id"]).left(8), " (guest)" if u.get("is_anonymous", false) else ""]))
+	if req.request(url + "/auth/v1/user", ["apikey: " + key, "Authorization: Bearer " + token]) != OK:
+		req.queue_free()
+
+
+func _report_round() -> void:
+	## Server room, a round just ended: the signed MatchReport, if any seat belongs to an account (Progression: a room
+	## with nobody signed in credits nobody, so it sends nothing).
+	var secret := OS.get_environment("OOZE_MATCH_SECRET")
+	var url := OS.get_environment("OOZE_SUPABASE_URL")
+	if secret == "" or url == "" or sim == null:
+		return
+	var users := {}
+	var left := {}
+	for id in roster:
+		var seat := seat_of(int(id))
+		if _users.has(id):
+			users[seat] = _users[id]
+		if is_away(int(id)):
+			left[seat] = true
+	if users.is_empty():
+		print("round %d: no signed-in seat - not reported" % match_round)
+		return
+	var report := MatchReport.payload(sim, match_info, users, left, _server_room, match_round, _round_started_at)
+	var seats := []                                    # one line in the room log: who was reported, who won
+	for st in report["seats"]:
+		seats.append("%s %s%s%s" % [st["seat"], str(st["user_id"]).left(8) if st["user_id"] != null else ("AI" if st["ai_level"] != null else "guest"),
+				" won" if st["won"] else "", " left" if st["left_early"] else ""])
+	print("report %s %s: %s" % [report["match_id"], report["mode"], ", ".join(seats)])
+	var body := JSON.stringify(report)
+	_report_pending += 1
+	_post_report(url + "/functions/v1/match-result", secret, body, 0)
+
+
+func _post_report(url: String, secret: String, body: String, attempt: int) -> void:
+	## Signed per attempt (the timestamp must be fresh); network errors and 5xx retry after 3 / 10 / 30 s.
+	var ts := int(Time.get_unix_time_from_system())
+	var req := HTTPRequest.new()
+	req.timeout = 15.0
+	add_child(req)
+	req.request_completed.connect(func(result, code, _h, resp):
+		req.queue_free()
+		var text: String = resp.get_string_from_utf8().left(200)
+		if result == HTTPRequest.RESULT_SUCCESS and code < 500:
+			print("match report %d: %s" % [code, text])
+			_report_pending -= 1
+		elif attempt < 3:
+			print("match report retry %d (%s %d)" % [attempt + 1, result, code])
+			get_tree().create_timer([3.0, 10.0, 30.0][attempt]).timeout.connect(func(): _post_report(url, secret, body, attempt + 1))
+		else:
+			print("match report given up (%s %d): %s" % [result, code, text])
+			_report_pending -= 1)
+	var headers := ["Content-Type: application/json", "x-ooze-ts: %d" % ts, "x-ooze-sig: " + MatchReport.sign(secret, ts, body)]
+	if req.request(url, headers, HTTPClient.METHOD_POST, body) != OK:
+		req.queue_free()
+		_report_pending -= 1
+
+
+func _track_freeze(dt: float) -> void:
+	## Guest: a freeze = the shown match clock standing still for 0.1 s or more while the round runs.
+	if finished or sim.over:
+		return
+	if sim.time <= _last_clock + 0.0001:
+		_freeze_run += dt
+	else:
+		if _freeze_run >= 0.1:
+			_freeze_n += 1
+			_freeze_s += _freeze_run
+		_freeze_run = 0.0
+	_last_clock = sim.time
+
+
+func net_stats_line() -> String:
+	## The PAUSE panel in an online round (Daniele: "some stutter here and there"): the device's frame rate, how
+	## many updates arrive a second, the freezes this round and the order round trip - a screenshot tells a slow
+	## phone (low fps) from a bad connection (few updates, freezes, a long round trip).
+	var fps := int(Engine.get_frames_per_second())
+	if hosting:
+		return "CONNECTION  %d fps  ·  this device hosts the room" % fps
+	var span := 5.0
+	if not _arrivals.is_empty():
+		span = clampf((Time.get_ticks_msec() - int(_arrivals[0])) / 1000.0, 1.0, 5.0)
+	var rate := _arrivals.size() / span
+	var rtt := ("%d ms" % int(_rtt_ms)) if _rtt_ms >= 0.0 else "- ms"
+	var buf := ("  ·  buffer %.2f s" % _delay) if _smooth() else ""
+	return "CONNECTION  %d fps  ·  %d updates/s  ·  %d freeze%s (%.1f s)  ·  round trip %s%s" % [
+			fps, int(round(rate)), _freeze_n, "" if _freeze_n == 1 else "s", _freeze_s, rtt, buf]
+
+
+func _smooth() -> bool:
+	## A guest in a server-hosted room (0.20.2 smoothing); fallback rooms keep the old apply-on-arrival.
+	return not hosting and room_owner > 1 and sim != null
+
+
+func _apply_state(data: Dictionary) -> void:
+	## Show one snapshot. Server rooms: a line the snapshot moves by less than BLEND_MAX keeps its shown place and
+	## glides to the host's over BLEND (blend), and the shown clock never runs backwards by a little.
+	var shown := {}
+	if _smooth():
+		for h in sim.hordes:
+			shown[h["id"]] = [float(h["s"]), str(h.get("_pk", ""))]
+	var clock := sim.time
+	apply_snapshot(sim, data)
+	_mark_ghosts()
+	_since_applied = 0.0
+	if not shown.is_empty():
+		for h in sim.hordes:
+			var was = shown.get(h["id"], null)
+			if was != null and str(was[1]) == str(h.get("_pk", "")):
+				var d := float(h["s"]) - float(was[0])
+				if absf(d) > 0.5:
+					corr_big += 1
+				corr_max = maxf(corr_max, absf(d))
+				if absf(d) >= BLEND_MAX:
+					corr_snaps += 1
+				if absf(d) < BLEND_MAX:
+					h["_corr"] = d
+					h["s"] = float(was[0])
+		if clock > sim.time and clock - sim.time < EXTRAPOLATE:
+			sim.time = clock
+	if _fresh:                                        # joined late (RECONNECT): drop the nodes that already fell
+		_fresh = false
+		for id in sim.collapsed:
+			sim.fx_events.append({"type": "collapse", "node": id})
+	if sim.over:
+		finished = true
+
+
+func _playout(dt: float) -> void:
+	## Server-room guest: release queued snapshots when the shown clock reaches them. The shown clock runs
+	## PLAYOUT_DELAY behind the newest snapshot, a little faster or slower (up to 10 %) to stay there; far off (the
+	## start, a long stall, a tab back) it jumps.
+	_since_applied += dt
+	if _play_q.is_empty():
+		if _play_t >= 0.0:
+			_play_t += dt
+		return
+	while _play_q.size() > PLAYOUT_MAX:                # far behind: the old snapshots are history (effects still play)
+		var old: Array = _play_q.pop_front()
+		if old[0] == "effects" and sim != null:
+			sim.fx_events.append_array(old[1]["events"])
+	_calm += dt
+	if _calm > 5.0 and _delay > PLAYOUT_DELAY:         # steady for a while: ease back towards the short delay
+		_delay = maxf(PLAYOUT_DELAY, _delay - dt * (PLAYOUT_DELAY_MAX - PLAYOUT_DELAY) / PLAYOUT_EASE)
+	var target := _latest_t - _delay
+	if _play_t < 0.0 or absf(target - _play_t) > 0.5:
+		_play_t = target
+	else:
+		_play_t += dt * clampf(1.0 + (target - _play_t) * 2.0, 0.9, 1.1)
+	while not _play_q.is_empty():
+		var e: Array = _play_q[0]
+		if e[0] == "state" and float(e[1].get("t", 0.0)) > _play_t:
+			break
+		_play_q.pop_front()
+		if e[0] == "state":
+			_apply_state(e[1])
+		elif sim != null:
+			sim.fx_events.append_array(e[1]["events"])
+
+
+static func blend(s: Sim, dt: float) -> void:
+	## A snapshot's correction (Net._apply_state) glides in: a share each frame, all of it within ~BLEND.
+	var k := minf(1.0, dt / BLEND)
+	for h in s.hordes:
+		if h.has("_corr"):
+			var c := float(h["_corr"])
+			var step := c * k
+			h["s"] = clampf(float(h["s"]) + step, 0.0, float(h["L"]))
+			if absf(c - step) < 0.001:
+				h.erase("_corr")
+			else:
+				h["_corr"] = c - step
 
 
 static func predict(s: Sim, dt: float) -> void:
@@ -1246,24 +1678,45 @@ func _process(dt: float) -> void:
 		return
 	_poll(dt)
 	_poll_chat_ui(dt)
+	if dedicated and bridge != null and connected:     # an empty server room closes itself
+		_empty_t = _empty_t + dt if present_ids().is_empty() else 0.0
+		if _report_pending == 0 and _empty_t > (DEDICATED_BOOT_IDLE if not _ever_joined else (DEDICATED_IDLE if active else DEDICATED_LOBBY_IDLE)):
+			fail("room empty")
+			return
 	if not active or not started or sim == null:
 		return
 	if hosting:
 		_snap_clock += dt
-		var every := SNAPSHOT_EVERY if not finished else 1.0   # the end screen: frozen state; a slow resend covers a dropped packet
-		if _snap_clock >= every or (sim.over and not finished):
-			_snap_clock = 0.0
+		var rate := SNAPSHOT_EVERY_SERVER if dedicated else SNAPSHOT_EVERY
+		var every := rate if not finished else 1.0     # the end screen: frozen state; a slow resend covers a dropped packet
+		if _snap_clock >= every - 0.001 or (sim.over and not finished):
+			_snap_clock = minf(_snap_clock - every, every) if not finished else 0.0   # carry the remainder: an even cadence
 			_snap_count += 1
+			var key := _snap_count % int(round(KEYFRAME_EVERY * SNAPSHOT_EVERY / rate)) == 1
 			if _has_guests():                          # alone with the AI: nobody to send to
-				var packet := var_to_bytes(snapshot(sim, _snap_count % KEYFRAME_EVERY == 1)).compress(FileAccess.COMPRESSION_DEFLATE)
+				var packet := var_to_bytes(snapshot(sim, key)).compress(FileAccess.COMPRESSION_DEFLATE)
 				_broadcast_raw("state", packet)
-				_send_ghosts(_snap_count % KEYFRAME_EVERY == 1)
+				_send_ghosts(key)
 			if sim.over:
 				finished = true
+				if dedicated and _reported_round != match_round:
+					_reported_round = match_round
+					_report_round()
+	elif _smooth():
+		_since_snapshot += minf(dt, 0.25)            # arrivals (the host-silence check below)
+		var fdt := minf(dt, 0.25)
+		_playout(fdt)
+		if _since_applied < EXTRAPOLATE and not sim.over:
+			predict(sim, minf(dt, 0.05))
+		blend(sim, minf(dt, 0.05))
+		_track_freeze(fdt)
+		if _since_snapshot > HOST_GRACE:
+			fail("The host stopped responding for %d s. RECONNECT to try the room again." % int(HOST_GRACE))
 	else:
 		_since_snapshot += minf(dt, 0.25)            # a tab back from the background: one huge frame
 		if _since_snapshot < 0.35 and not sim.over:
 			predict(sim, minf(dt, 0.05))
+		_track_freeze(minf(dt, 0.25))
 		if _since_snapshot > HOST_GRACE:
 			fail("The host stopped responding for %d s. RECONNECT to try the room again." % int(HOST_GRACE))
 
@@ -1285,14 +1738,17 @@ func _poll(dt: float) -> void:
 			"connection":
 				if hosting:
 					var held := roster.keys().any(func(id): return is_away(int(id)))
-					if links.size() >= slots() - 1 or (active and not held):   # mid-match: only to reclaim a held seat
+					if links.size() >= slots() - (0 if dedicated else 1) or (active and not held):   # mid-match: only to reclaim a held seat (a server host takes no seat)
 						bridge.closePeer(event["peer"])
 						continue
 					links[event["peer"]] = next_peer
 					next_peer += 1
 				else:
+					_creating = false
 					remote_host = str(event["peer"])
 					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}
+					if auth_token != "":
+						reg["auth"] = auth_token          # 0.20.5: verified by a server room's host (not the reconnect "token")
 					if not rejoin.is_empty() and str(rejoin["code"]) == room_code:
 						reg["token"] = rejoin["token"]
 					_send_to_host(reg)
@@ -1310,6 +1766,11 @@ func _poll(dt: float) -> void:
 				else:
 					fail("The host left or the connection was lost. The room is closed." if connected else "The room did not let us in: it is full or its match already started.")
 			"error":
+				if _creating and str(event.get("code", "")) in FALLBACK_CODES:
+					_fallback_host.call_deferred(str(event.get("code", "")))
+					bridge.close()
+					bridge = null
+					return
 				fail(str(event.get("message", "Connection failed.")))
 			"signalling-lost":
 				if not active:
@@ -1360,6 +1821,9 @@ func _host_receive(remote: String, raw: String) -> void:
 			if not active:
 				roster[id]["loadout"] = _clean_loadout({"active": p.get("active", ""), "map": p.get("map", "")})
 				publish_lobby()
+		"lobby":                                       # a server room's owner runs the lobby (stage 2)
+			if not active or str(p.get("fn", "")) == "rematch_map":
+				_owner_op(id, p)
 		"cosmetic":                                    # 0.19.0: the local ARMIES > COSMETICS pick (HUD agent)
 			if not active:
 				roster[id]["cosmetic"] = _clean_cosmetic(p.get("cosmetic", {}))
@@ -1403,7 +1867,8 @@ func _guest_receive(raw: String) -> void:
 			ai_fill = str(data.get("ai_fill", ""))
 			abilities = bool(data.get("abilities", true))
 			connected = true
-			status = "ROOM %s - waiting for the host to deploy" % room_code
+			room_owner = int(data.get("owner", 1))
+			status = ("ROOM %s - you run this room: DEPLOY when ready" if can_control() else "ROOM %s - waiting for the host to deploy") % room_code
 			lobby_changed.emit()
 		"launch":
 			if data is Dictionary:
@@ -1413,18 +1878,26 @@ func _guest_receive(raw: String) -> void:
 				_begin()
 		"state":
 			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null and active:
-				apply_snapshot(sim, data)
-				_mark_ghosts()
 				_since_snapshot = 0.0
-				if _fresh:                            # joined late (RECONNECT): drop the nodes that already fell
-					_fresh = false
-					for id in sim.collapsed:
-						sim.fx_events.append({"type": "collapse", "node": id})
-				if sim.over:
-					finished = true
+				var now_ms := Time.get_ticks_msec()
+				if _last_arrival > 0 and (now_ms - _last_arrival) / 1000.0 > STALL:   # a stall: hold more in hand next time
+					_delay = clampf(maxf(_delay, (now_ms - _last_arrival) / 1000.0 * 0.5 + 0.1), PLAYOUT_DELAY, PLAYOUT_DELAY_MAX)
+					_calm = 0.0
+				_last_arrival = now_ms
+				_arrivals.append(now_ms)
+				while not _arrivals.is_empty() and now_ms - int(_arrivals[0]) > 5000:
+					_arrivals.pop_front()
+				if _smooth() and not _fresh:           # server rooms: the playout buffer shows it on time
+					_latest_t = maxf(_latest_t, float(data.get("t", 0.0)))
+					_play_q.append(["state", data])
+				else:
+					_apply_state(data)
 		"effects":
 			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null:
-				sim.fx_events.append_array(data["events"])
+				if _smooth() and not _play_q.is_empty():   # after the snapshot it belongs to
+					_play_q.append(["effects", data])
+				else:
+					sim.fx_events.append_array(data["events"])
 		"ghosts":
 			if data is Dictionary and int(data.get("round", -1)) == match_round:
 				own_ghosts = {}
@@ -1432,6 +1905,12 @@ func _guest_receive(raw: String) -> void:
 					own_ghosts[int(i)] = true
 				_mark_ghosts()
 		"feedback":
+			var now := Time.get_ticks_msec()
+			while not _order_sent.is_empty() and now - int(_order_sent[0]) > 3000:   # unanswered orders are not a round trip
+				_order_sent.pop_front()
+			if not _order_sent.is_empty():
+				var rtt := float(now - int(_order_sent.pop_front()))
+				_rtt_ms = rtt if _rtt_ms < 0.0 else lerpf(_rtt_ms, rtt, 0.3)
 			order_feedback.emit(str(data))
 		"rematch_votes":
 			if data is Dictionary and int(data.get("round", -1)) == match_round:
@@ -1461,6 +1940,17 @@ func _mark_ghosts() -> void:
 
 # ------------------------------------------------------------------ rejoin details
 func _ready() -> void:
+	for arg in OS.get_cmdline_user_args():             # the room server's match host (stage 2)
+		if arg == "--dedicated":
+			dedicated = true
+		elif arg.begins_with("--room="):
+			_server_room = arg.substr(7)
+		elif arg.begins_with("--secret="):
+			_server_secret = arg.substr(9)
+	if dedicated:
+		Engine.max_fps = DEDICATED_FPS
+		_start_dedicated.call_deferred()
+		return
 	if OS.has_feature("web"):                          # a reloaded tab can still RECONNECT
 		var raw = JavaScriptBridge.eval("(()=>{try{return sessionStorage.getItem('ooze20-rejoin')||''}catch(e){return ''}})()", true)
 		var text := str(raw) if raw != null else ""   # blocked site storage: nothing to rejoin

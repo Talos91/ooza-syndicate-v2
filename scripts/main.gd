@@ -28,7 +28,11 @@ extends Node3D
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
-##   --tutorial=N                           start tutorial lesson N (1-9) straight away (screenshots, testing)
+##   --tutorial=N                           start tutorial lesson N (0 the tour, 1-9) straight away (screenshots, testing)
+##   --mission=vex:01                       CAMPAIGN: start that mission straight away (its briefing first)
+##   --campaign-all                         CAMPAIGN: every playable mission open (Campaign.all_open)
+##   --mission-start                        CAMPAIGN: skip the briefing (headless boot checks)
+##   --mission-shot=brief|hud|win|lose --out=<dir>   CAMPAIGN: screenshot that screen as mission_<shot>.png, then quit
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is an online room (Net)
@@ -39,7 +43,7 @@ var LOADOUTS := {}
 const FACTION_NAMES := ["vex", "null", "bloom", "ember", "solar"]
 
 var map: Dictionary
-var map_path := "res://maps4/T-01-first-steps.json"
+var map_path := "res://maps4/A-01-orbital-nexus.json"   # 0.20.4: the T- maps are tutorial-only (MapPool.TUTORIAL_ONLY)
 var sim := Sim.new()
 var ais: Array = []
 var vis: Dictionary
@@ -118,17 +122,29 @@ static var last_map_path := ""                 # MAIN MENU remembers the last ma
 # --- TUTORIAL (TUTORIAL-DESIGN.md §8): the lesson director, its coach overlay, the half-speed clock ---
 var director: TutorialDirector = null            # a lesson is on (null: a normal match)
 var coach: CoachOverlay = null
+var menu_faction := ""                           # the player's own menu faction, kept while a lesson plays VEX
 var _coach_version := -1
 static var menu_open := ""                       # after a relaunch: open this menu page instead of MAIN
+# --- CAMPAIGN (CAMPAIGN-DESIGN.md §4 / §5): the mission director, its overlay, the menu settings kept for afterwards ---
+var mission: MissionDirector = null              # a campaign mission is on (null: not one)
+var mission_overlay: MissionOverlay = null
+var mission_menu_faction := ""                   # the player's own menu faction / AI level, back after the mission
+var mission_menu_ai := ""
+static var mission_arg_used := false             # --mission=<key> starts it once per run (a leave never loops back)
+# --- end CAMPAIGN ---
 
 
 func _ready() -> void:
 	var map_explicit := false
 	if FullscreenGate.needed():                        # phones play fullscreen (Alpha 14 playtest)
 		add_child(FullscreenGate.new())
-	Engine.max_fps = 60                                # never spin faster than the screen (menu included)
+	Engine.max_fps = Net.DEDICATED_FPS if Net.dedicated else 60   # never spin faster than the screen (menu included)
+	PerfProfile.apply(self)                            # Alpha 21 OPT-RENDER: graphics profile, fps cap, map batching (perf_profile.gd)
+	MissionDirector.restore_settings()                 # CAMPAIGN: a blind mission's HIDE ENEMY COUNTS goes back
 	if Net.online():                                   # a room launched (or relaunched) a round
 		_start_online()
+		return
+	if Net.dedicated:                                  # the room server's match host between rounds: no menu, no screen
 		return
 	if relaunch.has("faction"):
 		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
@@ -142,10 +158,17 @@ func _ready() -> void:
 	if relaunch.has("map"):
 		map_path = relaunch["map"]
 		map_explicit = true
-	var tut_id := int(relaunch.get("tutorial", 0))      # TUTORIAL: a lesson relaunched (NEXT / REPLAY / RESTART)
+	var tut_id := int(relaunch.get("tutorial", -1))     # TUTORIAL: a lesson relaunched (NEXT / REPLAY / RESTART; 0 = the tour)
 	var tut_first := bool(relaunch.get("first", false))
 	menu_open = str(relaunch.get("menu", ""))
+	var mission_key := str(relaunch.get("mission", ""))   # CAMPAIGN: RETRY / NEXT MISSION
 	relaunch = {}
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--progress="):              # PROGRESSION screenshot helper: a scratch save, never the real one
+			Progression.path = arg.substr(11)
+			Progression.reload_all()
+		elif arg == "--locks=on":                        # PROGRESSION screenshot helper: the locks as players will see them
+			Progression.unlock_all = false
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--map="):
 			map_path = arg.substr(6)
@@ -196,7 +219,19 @@ func _ready() -> void:
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
-	if tut_id > 0 and not map_explicit:               # TUTORIAL: a lesson, straight in
+	# CAMPAIGN: a mission relaunched (RETRY / NEXT MISSION) or --mission=<key> goes straight in - checked before
+	# the tutorial's first launch, so a fresh profile never lands in the L0 tour instead
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--mission=") and not mission_arg_used:
+			mission_key = arg.substr(10)
+			mission_arg_used = true
+		elif arg == "--campaign-all":
+			Campaign.all_open = true
+	if mission_key != "":
+		start_mission(mission_key)
+		return
+	# --- end CAMPAIGN ---
+	if tut_id >= 0 and not map_explicit:              # TUTORIAL: a lesson, straight in
 		start_tutorial(tut_id, tut_first)
 	elif map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
@@ -205,7 +240,7 @@ func _ready() -> void:
 		add_child(MapLab.new(self))
 	elif TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
 			or not Net.rejoin.is_empty()):
-		start_tutorial(1, true)                        # TUTORIAL §7: the first launch opens straight into L1
+		start_tutorial(TutorialDirector.FIRST_ID, true)   # TUTORIAL §7: the first launch opens the tour (L0), then L1
 	else:
 		if not map_explicit and last_map_path != "":   # MAIN MENU keeps the last map played (0.19.0)
 			map_path = last_map_path
@@ -214,6 +249,7 @@ func _ready() -> void:
 		menu_layer = Menu.new()
 		add_child(menu_layer)
 		(menu_layer as Menu).setup(self)
+		_start_account()                               # PROGRESSION: the guest / linked account, once per run
 		if Net.in_room():                              # back from a round, or a player left: the lobby
 			(menu_layer as Menu).show_lobby()
 		elif Net.status != "":                         # the room closed: say why on the ONLINE page
@@ -286,6 +322,15 @@ func _start_map(path: String) -> void:
 		lo = lo.min(n["pos"])
 		hi = hi.max(n["pos"])
 	Rules.view_yaw = PI / 2.0 if (hi - lo).z > (hi - lo).x else 0.0
+	# --- SERVER HOST (Alpha 21, the server session): the room server's match host runs the Sim, the AI and Net only.
+	# Nobody sees its screen, so no world, views, effects or HUD are built (_process has the matching block); the
+	# guests get everything from the Sim's snapshots and fx events. Keep this block whole when editing _start_map. ---
+	if Net.dedicated:
+		sim.finished.connect(_on_finished_server)
+		started = true
+		paused = false
+		return
+	# --- end SERVER HOST ---
 	_build_world()
 	vis = MapBuilder.build3(self, sim, map) if map.has("layout") else MapBuilder.build(self, sim)
 	if not vis["stretched"].is_empty():
@@ -336,6 +381,8 @@ func _start_map(path: String) -> void:
 		add_child(LabPanel.new(self))
 	if director:                                       # TUTORIAL: the lesson stages its board (tutorial.gd)
 		director.begin(sim, map, SEAT_FACTIONS[HUMAN])
+	if mission:                                        # CAMPAIGN: the mission stages its board (mission_director.gd)
+		mission.begin(sim, map, HUMAN)
 	if scenario != "":
 		_stage_scenario()
 	elif focus_node >= 0 and focus_node < sim.nodes.size():
@@ -362,6 +409,8 @@ func _start_map(path: String) -> void:
 	get_viewport().size_changed.connect(_on_resized)
 	started = true
 	paused = false
+	if mission:                                        # CAMPAIGN: the briefing card, the match paused until START
+		_mission_setup()
 	if thumb_path != "":
 		hud.root.visible = false
 		for i in range(40):                           # let the rivers ease in
@@ -415,7 +464,14 @@ func _start_online() -> void:
 		SEAT_FACTIONS[seat] = info["players"][seat]
 	LOADOUTS = (info.get("loadouts", {}) as Dictionary).duplicate()   # every seat's, from the host
 	HUMAN = Net.local_seat()
+	if Net.dedicated:                                  # the server's match host has no seat: view as the first one
+		var seats: Array = (info["players"] as Dictionary).keys()
+		seats.sort()
+		HUMAN = str(seats[0])
 	_start_map(str(info["map"]))
+	for arg in OS.get_cmdline_user_args():             # tests only (a local relay's --host-arg): a short server round
+		if Net.dedicated and arg.begins_with("--match-end="):
+			sim.match_hard_end = float(arg.substr(12))
 	Net.world_ready(sim, self)
 	Net.order_feedback.connect(_on_order_feedback)
 	if Net.is_host():                                  # EMPTY SEATS and dropped players: the AI plays them
@@ -438,6 +494,9 @@ func _on_order_feedback(msg: String) -> void:
 
 
 func restart() -> void:
+	if mission:                                        # CAMPAIGN: RESTART / RETRY replays the mission
+		_mission_relaunch(mission.key)
+		return
 	if director:                                       # TUTORIAL: RESTART / TRY AGAIN restages the lesson
 		_tutorial_relaunch({"tutorial": director.lesson_id, "first": director.first_launch})
 		return
@@ -487,6 +546,10 @@ func rematch_random() -> void:
 			var pick := _random_rematch_map()
 			Net.map_path = str(pick["map"])
 			Net.mode = str(pick["mode"])
+		elif Net.can_control():                        # a server room's owner: the host applies the pick (and the vote)
+			var pick := _random_rematch_map()
+			Net.propose_rematch(str(pick["map"]), str(pick["mode"]))
+			return
 		Net.request_rematch()
 		return
 	var pick := _random_rematch_map()
@@ -496,8 +559,12 @@ func rematch_random() -> void:
 
 
 func to_menu() -> void:
+	if mission:                                        # CAMPAIGN: leaving a mission returns to the campaign page
+		_mission_leave()
+		return
 	if director:                                       # TUTORIAL §7: leaving a lesson marks the tutorial offered
 		TutorialDirector.mark_offered()
+		SEAT_FACTIONS[HUMAN] = menu_faction            # (and the menu gets your own faction back)
 	if online:                                         # LEAVE ROOM: the room closes for us
 		Net.leave()
 	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice,
@@ -530,6 +597,18 @@ func _apply_safe_area() -> void:
 	var left := 16.0
 	var right := 16.0
 	var top := 10.0
+	var bottom := 12.0
+	# Alpha 21 (iPhone 14 Pro home-screen app): on the web the safe-area insets come from the page (CSS env(),
+	# web/viewport-fix.js) - the notch / Dynamic Island side and the home indicator stay clear of the HUD
+	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
+		var js = JavaScriptBridge.eval("window.OozeViewport ? OozeViewport.safe().concat(OozeViewport.size()).join(',') : ''", true)
+		var f := str(js).split(",")
+		if f.size() == 6 and float(f[4]) > 0.0:
+			var kw := vp.x / float(f[4])                 # CSS px -> viewport units
+			left = maxf(float(f[0]) * kw, left)
+			top = maxf(float(f[1]) * kw, top)
+			right = maxf(float(f[2]) * kw, right)
+			bottom = maxf(float(f[3]) * kw, bottom)
 	if OS.has_feature("mobile"):
 		var screen := Vector2(DisplayServer.screen_get_size())
 		var safe := Rect2(DisplayServer.get_display_safe_area())
@@ -541,7 +620,7 @@ func _apply_safe_area() -> void:
 	if mobile:
 		left = maxf(left, vp.x * 0.035)
 		right = maxf(right, vp.x * 0.035)
-	margins = Vector4(left, top, right, 12.0)
+	margins = Vector4(left, top, right, bottom)
 
 
 func _build_world() -> void:
@@ -594,6 +673,8 @@ func _fit_nodes(nodes: Array) -> Array:
 	var use_hud: bool = hud != null and thumb_path == ""
 	var left: float = (hud.side_panel.position.x + hud.side_panel_width() + 14.0) if use_hud else 8.0
 	var top: float = hud.top_used() if use_hud else 8.0
+	if use_hud and mission_overlay:                    # CAMPAIGN: the map fits under the objective strip too
+		top = maxf(top, mission_overlay.strip_bottom() + 6.0)
 	var bottom: float = vp.y - (hud.bottom_used() if use_hud else 8.0)
 	var right: float = vp.x - (margins.z + hud.pause_button.size.x + 12.0 if use_hud else 8.0)   # PAUSE and Debug column
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
@@ -727,7 +808,7 @@ func _stage_scenario() -> void:
 			sim.nodes[1]["tier"] = 2
 			sim.nodes[3]["owner"] = HUMAN
 			sim.nodes[3]["units"] = 90.0
-			sim.nodes[3]["structure"] = "machingoon"
+			sim.nodes[3]["structure"] = "machinegoon"
 			sim.nodes[3]["tier"] = 2
 			sim.nodes[3]["allies"]["B"] = 40.0                # a staged ally share: halo ring + EJECT + "total + own"
 			sim.nodes[3]["arrivals"] = ["B"]
@@ -818,7 +899,7 @@ func _run_scenario() -> void:
 				monster_from = -1
 				match phase:
 					0:
-						hud.inspect(1, cam)                    # common: VAT (UPGRADE / MACHINGOON)
+						hud.inspect(1, cam)                    # common: VAT (UPGRADE / MACHINEGOON)
 						scenario_focus = sim.nodes[1]["pos"]
 					1:
 						sim.nodes[4]["structure"] = ""          # relay: empty socket (SWITCH / LASER / FORGE / MONSTER HUB)
@@ -875,6 +956,41 @@ func _run_scenario() -> void:
 								n["owner"] = ""
 						scenario_focus = Vector3.INF
 				_fit_camera()
+		"declutter":
+			# 0.20.6 (Daniele's HUD declutter notes): phase 0 is a quiet moment; phase 1 piles on every
+			# declutter case at once (two toasts, a capture floater, the Last Stand status line) to show
+			# they now share a small top-right corner and a node label instead of covering the map.
+			var phase: int = mini(int(sim.time), 1)
+			if phase != _hud19_phase:
+				_hud19_phase = phase
+				match phase:
+					1:
+						hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
+						hud.toast("Node 2 handed over to seat B", "warn")
+						fx.floater(sim.nodes[2]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
+						sim.last_stand_active = true
+						sim.last_stand_warn[3] = true
+						sim.last_stand_queue = [3]
+						sim.last_stand_warn_t = 6.0
+				_fit_camera()
+		"monlaunch":
+			# 0.20.1 (Daniele's online playtest: "i couldn't figure how to send the monster"): the fix in
+			# one sheet - phase 0 is the ready hub with its icon, untouched; phase 1 is the same tap that
+			# now arms LAUNCH directly (hud.is_ready_hub, main.gd's tap handler), reach ring and all.
+			var phase: int = mini(int(sim.time), 1)
+			if phase != _hud19_phase:
+				_hud19_phase = phase
+				match phase:
+					0:
+						sim.nodes[4]["owner"] = HUMAN
+						sim.nodes[4]["structure"] = "monster_hub"
+						sim.nodes[4]["units"] = 260.0
+						sim.nodes[4]["monster_ready_t"] = 0.0
+						scenario_focus = sim.nodes[4]["pos"]
+					1:
+						monster_from = 4                        # the tap: LAUNCH armed, reach ring + lit targets
+						scenario_focus = sim.nodes[4]["pos"]
+				_fit_camera()
 		_:
 			_scenario_done = true
 
@@ -902,11 +1018,16 @@ func node_action(method: String, id: int, args := {}) -> bool:
 			director.say(why)
 			return false
 	var r := perform(HUMAN, method, id, args)
+	if mission:                                        # CAMPAIGN
+		mission.on_action(method, id, args, r[0])
 	if director:
 		director.on_action(method, id, args, r[0])
 		if not r[0] and str(r[1]) != "" and not hud.shows("notices"):
 			director.say(str(r[1]))                   # before L3 the refusals speak on the coach card
-	if str(r[1]) != "":
+	# 0.20.6 declutter (Daniele: "remove all notices of things like send... better is in game text"): an
+	# accepted order is routine (drag preview / node badges / floaters already show it); only a refusal
+	# needs a toast, since nothing else on screen explains why nothing happened.
+	if not r[0] and str(r[1]) != "":
 		hud.toast(r[1])
 	return r[0]
 
@@ -994,6 +1115,17 @@ func _process(delta: float) -> void:
 		_perf(delta)
 	if not started:
 		return
+	# --- SERVER HOST (Alpha 21): step the Sim and the AI, hand the fx events to the guests, draw nothing ---
+	if Net.dedicated:
+		if Net.is_host() and Net.started:
+			var ddt := minf(delta, 0.05)
+			for ai in ais:
+				ai.think(sim, ddt)
+			sim.step(ddt)
+		Net.push_effects(sim.fx_events)
+		sim.fx_events.clear()
+		return
+	# --- end SERVER HOST ---
 	if get_viewport().get_visible_rect().size != _fitted_size:
 		_on_resized()
 	var dt := minf(delta, 0.05)
@@ -1012,6 +1144,8 @@ func _process(delta: float) -> void:
 		if scenario != "":
 			_run_scenario()
 		sim.step(sdt)
+		if mission:                                    # CAMPAIGN: the objective after the Sim's step
+			mission.step(sdt)
 	hordes.sync(sim, HUMAN)
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]
@@ -1043,39 +1177,30 @@ func _process(delta: float) -> void:
 	for ev in sim.fx_events:
 		if director:
 			director.on_event(ev)
+		if mission:                                   # CAMPAIGN
+			mission.on_event(ev)
 		fx.handle(ev)
 		skill_fx.handle(ev)
 		match ev["type"]:
 			"skill":                                  # a rival's skill that touches you: a toast (SkillDock.on_event)
 				hud.skill_event(ev)
 			"last_stand":
+				# 0.20.13 (Daniele's online co-op playtest: "last stand still fills the whole screen"): this
+				# was the culprit - a 44 pt two-line banner held 5 s dead centre. The status line already
+				# says LAST STAND continuously right under the top bar, so the one-time announcement only
+				# needs a toast now; the per-node danger symbols still carry the actual warning.
 				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
 						"chaos": "nodes fall in a hidden order - your home last"}
-				hud.show_banner("LAST STAND - %s\n%s" % [str(ev["method"]).to_upper(), how.get(ev["method"], "")], 5.0)
-			"very_last_stand":
-				hud.toast("VERY LAST STAND")
-			"collapse_warning":
-				var n: Dictionary = sim.nodes[ev["node"]]
-				if n["owner"] == HUMAN:
-					var left: float = sim.drop_in(ev["node"]) if sim.v3 else Rules.LAST_STAND_WARNING
-					hud.toast("Your node %d falls in %d s - get out!" % [ev["node"], int(ceil(left))])
-			"relay_tick":
-				var n: Dictionary = sim.nodes[ev["node"]]
-				if n["owner"] == HUMAN:
-					hud.toast("Relay %d switches now" % ev["node"])
-			"fling":                                  # a turning deck threw a line into the void (units already shown scale)
-				var ours := sim.allied(str(ev["seat"]), HUMAN)
-				var flung := int(ev["units"])
-				if flung > 0:                         # a sliver under half a shown unit still counts, but gets no toast
-					hud.toast("%d unit%s flung off the turning deck" % [flung, "" if flung == 1 else "s"], "warn" if ours else "good")
-			"fall":                                   # 0.18.7: a retract / switch / remote took the deck from under a line
-				if ev.has("relay") and int(ev.get("shown", 0)) > 0:
-					var fell := int(ev["shown"])
-					var kind := str(sim.nodes[int(ev["relay"])]["relay"])
-					var what: String = {"retract": "the retracting deck", "switch": "the switched deck", "remote": "the switched-off deck"}.get(kind, "the deck")
-					hud.toast("%d unit%s fell with %s" % [fell, "" if fell == 1 else "s", what], "warn" if sim.allied(str(ev["seat"]), HUMAN) else "good")
-			"monster_launch":                          # Structures 2.1: everyone sees the launch (the route lights red)
-				hud.toast("seat %s launched a monster" % ev["seat"], "good" if sim.allied(str(ev["seat"]), HUMAN) else "warn")
+				hud.toast("LAST STAND - %s: %s" % [str(ev["method"]).to_upper(), how.get(ev["method"], "")], "warn")
+			# 0.20.6 declutter (Daniele: "too many notifications and many notifications cover the map...
+			# remove all notices of things like send and capture"): VERY LAST STAND repeats the status
+			# line (H5/top bar), the node's own falls are the danger symbols, and relay switches are
+			# visible on the relay itself - none of those need a toast of their own any more. "fling" /
+			# "fall" are ordinary battle noise already shown by the falling units themselves.
+			"monster_launch":                          # Structures 2.1: only a launch aimed at you is worth a toast
+				var to_you: bool = str(ev["seat"]) != HUMAN and sim.nodes[int(ev["target"])]["owner"] == HUMAN
+				if to_you:
+					hud.toast("seat %s launched a monster at you" % ev["seat"], "warn")
 			"monster_kick":                            # only your own lines' losses are worth a toast
 				if str(ev.get("seat_hit", "")) == HUMAN:
 					var kicked := int(ev.get("shown", 0))
@@ -1084,9 +1209,14 @@ func _process(delta: float) -> void:
 			"forge_lost":                              # red toast (spec E): the bonus is gone
 				if str(ev.get("seat", "")) == HUMAN:
 					hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
-			"eject":                                   # the ejecting owner already gets node_action's own toast;
+			"eject":                                   # your own eject is a routine order (no toast, see node_action);
 				if str(ev.get("seat", "")) != HUMAN and sim.allied(str(ev.get("seat", "")), HUMAN):
 					hud.toast("Your stored troops were sent home from node %d" % ev["node"], "info")
+			"handover":                                 # a silent production-only takeover (no fight to see it by)
+				if str(ev.get("seat", "")) == HUMAN:
+					hud.toast("Node %d handed over to you" % ev["node"], "good")
+				elif str(ev.get("from", "")) == HUMAN:
+					hud.toast("Node %d handed over to seat %s" % [ev["node"], ev["seat"]], "warn")
 	sim.fx_events.clear()
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
@@ -1120,11 +1250,18 @@ func _take_shot(t: float, last: bool) -> void:
 
 
 func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
+	if mission:                                        # CAMPAIGN: a start node / vat / home lost
+		mission.on_captured(node_id, new_owner, _old)
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
+	# 0.20.6 declutter (Daniele: "remove all notices of things like send and capture - better is in game
+	# text coming out of the conquer place"): a fight is already visible on the node itself (fx.gd's
+	# capture pulse), so the toast becomes a short rising label there instead of covering the map.
+	if not hud.shows("floaters"):                       # TUTORIAL: the reveal set names when this is taught
+		return
 	if new_owner == HUMAN:
-		hud.toast("Node %d captured" % node_id)
+		fx.floater(sim.nodes[node_id]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
 	elif _old == HUMAN:
-		hud.toast("Node %d lost to seat %s" % [node_id, new_owner])
+		fx.floater(sim.nodes[node_id]["pos"], "LOST", Color("ff5b5b"))
 
 
 func _on_forge_online(seat: String, _node_id: int, first: bool) -> void:
@@ -1137,17 +1274,88 @@ func _on_forge_online(seat: String, _node_id: int, first: bool) -> void:
 		hud.toast("seat %s FORGE ONLINE: attack bonus kept" % seat, kind)
 
 
+func _on_finished_server(winner: String) -> void:
+	## SERVER HOST (Alpha 21): the round's end on the room server - a log line and the telemetry file (no screen).
+	print("match over, winner ", winner, " - telemetry ", Telemetry.save(sim, map.get("code", ""), []))
+
+
 func _on_finished(winner: String) -> void:
 	var path := Telemetry.save(sim, map.get("code", ""), trace)
 	print("match over, winner ", winner, " - telemetry ", path)
 	hud.close_inspector()
 	if director:                                       # TUTORIAL: the lesson's completion screen replaces the results
 		return
+	if mission:                                        # CAMPAIGN: the mission's result screen replaces the results
+		mission.step(0.0)
+		return
+	_record_progress()                                 # PROGRESSION: XP / SCRAP / challenges, before the results show them
 	hud.show_end(winner)
 	if not shots.is_empty():                              # automated run: the match ended before the
 		var t: float = shots[-1]                          # last shot time - take it now and quit
 		shots.clear()
 		_take_shot(t, true)
+
+
+# ------------------------------------------------------------------ PROGRESSION (0.20.1)
+var rewards := {}                                  # Progression.record_match's lines for the results screen ({} = none)
+
+
+func _record_progress() -> void:
+	## Pays this device's player for a finished match (PROGRESSION-DESIGN §1: offline first - online rooms are paid
+	## here too until accounts exist; then the server pays server-hosted rooms). Never on a headless run (the
+	## dedicated match host, tests), a demo / scenario / fast-forward / screenshot run, or a seat that isn't playing.
+	rewards = {}
+	if Net.dedicated or DisplayServer.get_name() == "headless" or demo or scenario != "" or ff_to > 0.0 or not shots.is_empty():
+		return
+	if not sim.factions.has(HUMAN):
+		return
+	var info := {"online": online, "ai_level": "" if online else ai_level}
+	var result := Progression.result_from_sim(sim, HUMAN, info)
+	result["history"] = Progression.history_entry(sim, HUMAN, _history_info())   # MATCH HISTORY (0.20.5)
+	rewards = Progression.record_match(result)
+	rewards["full_pay"] = Progression.full_pay(info)
+	# 0.20.13: a browser-hosted room (the server was busy or on another version) is never reported online - say so
+	# (Net.server_hosted() comes from the server session; until it exists nothing is claimed)
+	if online and Net.has_method("server_hosted") and not bool(Net.call("server_hosted")):
+		rewards["unranked"] = true
+	rewards["ai_level"] = info["ai_level"]
+
+
+func _history_info() -> Dictionary:
+	## MATCH HISTORY: what this device knows of the match - the map, mode, room + round (joins the server's record),
+	## your name, and which seats were AI (offline: their level; online: the seats no player holds).
+	var you := "YOU"
+	var acct := Account.get_instance() if Account.enabled else null
+	if acct != null and acct.player_name != "":
+		you = acct.player_name
+	var ai := {}
+	if online:
+		var humans := []
+		for id in Net.roster:
+			humans.append(Net.seat_of(int(id)))
+		for s in sim.factions.keys():
+			if not s in humans:
+				ai[s] = "AI"
+	else:
+		for a in ais:
+			ai[a.seat] = a.level
+	return {"map": str(map.get("code", "")), "mode": mode, "online": online,
+			"room_key": "%s-%d" % [Net.room_code, Net.match_round] if online else "", "names": {HUMAN: you}, "ai": ai}
+
+
+static var _account_started := false
+
+
+func _start_account() -> void:
+	## Every player gets a silent guest account the first time the game is online (Daniele: guest first, link later);
+	## never on the match host, a headless run, a demo / scenario / screenshot run. Offline: nothing happens.
+	if _account_started or Net.dedicated or DisplayServer.get_name() == "headless" or demo or scenario != "" 			or not shots.is_empty() or not Account.enabled:
+		return
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--menu-shot=") or arg == "--no-account":
+			return
+	_account_started = true
+	Account.get_instance().start()
 
 
 # ------------------------------------------------------------------ input
@@ -1244,8 +1452,16 @@ func _unhandled_input(event: InputEvent) -> void:
 						hud.close_inspector()
 						selected = drag_from
 					elif not moved:
-						selected = drag_from
-						_queue_inspect(drag_from)                 # single tap: the ring inspector, once no second tap comes
+						if hud.is_ready_hub(drag_from):
+							# 0.20.1 (Daniele's online playtest: "tap IT - the hub / the monster on the hub -
+							# the guided send lights up every target"): a ready hub arms LAUNCH straight from
+							# the tap, no inspector detour; charging, the inspector still opens as usual.
+							hud.close_inspector()
+							monster_from = drag_from
+							hud.note_monster_hint()
+						else:
+							selected = drag_from
+							_queue_inspect(drag_from)                 # single tap: the ring inspector, once no second tap comes
 				else:
 					var target := _node_at(hit, mb.position)
 					if target >= 0 and (mb.position - _press_pos).length() < TAP_PIXELS:
@@ -1428,22 +1644,20 @@ func _flush_inspect() -> void:
 # time scale (half speed at a relay prompt), the coach overlay fed from the director each frame (card, spotlight,
 # hand, completion screens), and the ways out (NEXT / REPLAY / LESSONS / ARMIES / MAIN MENU / SKIP TUTORIAL).
 func start_tutorial(lesson_id: int, first := false, faction := "", colour := "") -> void:
-	## Entry from the TUTORIAL page, the first launch or a relaunch: lesson `lesson_id` on its map, your faction
-	## (the menu's last pick), your colour, a scripted rival (no SeatAI; the Training AI in the first match).
+	## Entry from the TUTORIAL page, the first launch or a relaunch: lesson `lesson_id` on its map, your colour,
+	## VEX against EMBER (Daniele, 0.19.3: one faction for the whole tutorial - your menu faction is kept for
+	## afterwards), a scripted rival (no SeatAI; the Training AI in the first match).
 	director = TutorialDirector.new(lesson_id)
 	director.first_launch = first
-	if faction != "":
-		SEAT_FACTIONS[HUMAN] = faction
+	show_out_panel = lesson_id == TutorialDirector.LESSON_COUNT   # no YOU'RE OUT in lessons 0-8: a TRY AGAIN instead
+	menu_faction = faction if faction != "" else str(SEAT_FACTIONS[HUMAN])
 	if colour != "":
 		color_choice = colour
-	var mine: String = SEAT_FACTIONS[HUMAN]
-	for f in ["ember", "vex", "solar", "bloom", "null"]:   # a fixed rival faction, never your own
-		if f != mine:
-			SEAT_FACTIONS["B"] = f
-			break
+	SEAT_FACTIONS[HUMAN] = TutorialDirector.PLAYER_FACTION
+	SEAT_FACTIONS["B"] = TutorialDirector.RIVAL_FACTION
 	mode = "1v1"
 	ai_level = str(director.L.get("ai", ai_level))
-	LOADOUTS = {HUMAN: director.loadout_for(mine, ArmyPresets.loadout_for(mine))}
+	LOADOUTS = {HUMAN: director.loadout_for()}
 	fraction = director.fraction_start(fraction)
 	pitch_forced = false
 	if menu_layer:
@@ -1456,8 +1670,8 @@ func start_tutorial(lesson_id: int, first := false, faction := "", colour := "")
 
 func _tutorial_setup() -> void:
 	## After the HUD: the reveal set, the coach overlay and its signals.
-	if director.lesson_id == TutorialDirector.LESSON_COUNT:
-		hud.reveal_all()                              # the first match: the whole HUD, as in any match
+	if director.lesson_id in [TutorialDirector.FIRST_ID, TutorialDirector.LESSON_COUNT]:
+		hud.reveal_all()                              # the tour and the first match: the whole HUD, as in any match
 	else:
 		hud.reveal(director.reveal_keys(), _tutorial_new_keys())
 	coach = CoachOverlay.new()
@@ -1473,9 +1687,12 @@ func _tutorial_setup() -> void:
 	coach.exit.connect(to_lessons)
 	coach.skip_tutorial.connect(to_menu)               # SKIP TUTORIAL: MAIN, offered marked (to_menu)
 	director.completed.connect(_on_lesson_completed)
+	director.handler.connect(coach.handler_mood)      # the handler hops on a pass, droops on a fail
 	var step_seen := {"i": director.step_i}
 	director.changed.connect(func():                  # a step that adds HUD parts reveals them with a glow
-		if director.step_i != int(step_seen["i"]):
+		if director.step_i != int(step_seen["i"]) and not director.uses_inspector():
+			hud.close_inspector()                     # an inspector from an earlier step never lingers over this one
+		if director.step_i != int(step_seen["i"]) and hud.gated:
 			step_seen["i"] = director.step_i
 			var before := TutorialDirector.reveal_for(director.lesson_id, director.step_i - 1)
 			hud.reveal(director.reveal_keys(), director.reveal_keys().filter(func(k): return not k in before)))
@@ -1492,6 +1709,7 @@ func _tutorial_step(dt: float) -> float:
 	director.ui_fraction = fraction
 	director.ui_inspector = hud.inspector_id
 	director.ui_armed = hud.dock.armed if hud.dock else -1
+	director.ui_monster_from = monster_from
 	director.step(dt)
 	return dt * director.time_scale
 
@@ -1508,10 +1726,19 @@ func _coach_sync() -> void:
 			coach.show_step(c["header"], c["text"], int(c["dots"]), int(c["dot"]), str(c["button"]))
 		else:
 			coach.hide_card()
+	var want := director.inspect_request()            # the tour opens the inspector on your home, then closes it
+	if want >= 0 and hud.inspector_id != want:
+		hud.inspect(want, cam)
+	elif want < 0 and director.is_tour() and hud.inspector_id >= 0:
+		hud.close_inspector()
 	var tg := director.target()
 	var pts := []
 	for id in tg["nodes"]:
 		pts.append(cam.unproject_position(sim.nodes[id]["pos"]))
+	for ei in tg.get("decks", []):
+		var dl := sim.deck_line(int(ei))
+		if dl.size() >= 2:
+			pts.append(cam.unproject_position(((dl[0] as Vector3) + (dl[-1] as Vector3)) / 2.0))
 	for hid in tg["lines"]:
 		var h := sim._horde(int(hid))
 		if not h.is_empty():
@@ -1524,7 +1751,8 @@ func _coach_sync() -> void:
 	var radius: float = 30.0
 	if not sim.nodes.is_empty():
 		var c0: Vector3 = sim.nodes[0]["pos"]
-		radius = cam.unproject_position(c0).distance_to(cam.unproject_position(c0 + cam.global_transform.basis.x * Rules.R)) * 1.35
+		radius = cam.unproject_position(c0).distance_to(cam.unproject_position(c0 + cam.global_transform.basis.x * Rules.R)) * 1.35 \
+				* float(tg.get("radius", 1.0))
 	if director.state == "complete":
 		pts = []
 		rects = []
@@ -1533,8 +1761,15 @@ func _coach_sync() -> void:
 		if not sim.collapsed.get(n["id"], false):
 			platforms.append(cam.unproject_position(n["pos"]))
 	coach.set_obstacles(platforms)
+	var avoid := []                                   # the banner and the toasts never sit under the card
+	if hud.banner.visible:
+		avoid.append(hud.banner.get_global_rect())
+	if hud.notices.get_child_count() > 0:
+		avoid.append(hud.notices.get_global_rect())
+	coach.set_avoid(avoid)
 	coach.spotlight(pts, radius, rects)
 	_tutorial_gesture()
+	_tutorial_label(tg.get("label", []))
 	coach.set_finger_down(not touches.is_empty() or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
 	coach.set_dodge_rects(hud.top_panel.get_global_rect(), hud.side_panel.get_global_rect() if hud.side_panel.visible else Rect2(),
 			hud.dock.get_global_rect() if hud.dock.visible else Rect2(), hud.pause_button.get_global_rect())
@@ -1543,10 +1778,52 @@ func _coach_sync() -> void:
 		hud.overlay.hover_relay = director.preview_relay   # L4: the relay-outcome preview stays up while inspected
 
 
+func _tutorial_label(pair: Array) -> void:
+	## L1's "label" step: the line walking there carries the drag preview's own label (TAKE · units · seconds),
+	## so the line the handler talks about is on screen.
+	if drag_from >= 0 or monster_from >= 0:
+		return
+	var show := false
+	if pair.size() == 2 and int(pair[1]) >= 0:
+		for h in sim.hordes:
+			if h["owner"] == HUMAN and int(h["target"]) == int(pair[1]):
+				var tn: Dictionary = sim.nodes[int(pair[1])]
+				var verb := "reinforce" if tn["owner"] == HUMAN else ("attack" if tn["owner"] != "" else "take")
+				var units: float = float(h["units"]) + float(sim.nodes[int(h["route"][0])]["streaming"].get("remaining", 0.0) if h["streaming"] else 0.0)
+				var secs := maxf(float(h["L"]) - float(h["s"]), 0.0) / maxf(Rules.move_speed() * sim.stat(HUMAN, "speed"), 0.1)
+				route_label.text = "%s · %d units · %d s" % [verb.to_upper(), Rules.shown(units), int(ceil(secs))]
+				route_label.position = tn["pos"] + Vector3(0, 6.5, 0)
+				show = true
+				break
+	if show or route_label.has_meta("tutorial"):
+		route_label.visible = show
+		if show:
+			route_label.set_meta("tutorial", true)
+		else:
+			route_label.remove_meta("tutorial")
+
+
 func _tutorial_rect(key: String) -> Rect2:
-	## A coach rect key on screen: "send:0.25", "action:<NAME>" (Hud.action_rect), "dock:<slot>".
+	## A coach rect key on screen: "send:0.25", "action:<NAME>" (Hud.action_rect), "dock:<slot>", "badge:<id>",
+	## "send_panel", "top_bar", "dock", "inspector", "handler" (the creature beside the card).
 	var parts := key.split(":", true, 1)
 	match parts[0]:
+		"badge":
+			return hud.badge_rect(int(parts[1]))
+		"monster_icon":                               # 0.19.2: the monster over your ready hub
+			return hud.monster_icon_rect(int(parts[1]))
+		"send_panel":
+			return hud.side_panel.get_global_rect() if hud.side_panel.visible else Rect2()
+		"top_bar":
+			return hud.top_panel.get_global_rect()
+		"dock":                                       # "dock" = the whole dock, "dock:<slot>" one slot
+			if parts.size() > 1:
+				return hud.dock_slot_rect(int(parts[1]))
+			return hud.dock.get_global_rect() if hud.dock.visible else Rect2()
+		"inspector":
+			return hud.inspector_rect()
+		"handler":
+			return coach.handler_rect() if coach else Rect2()
 		"send":
 			return hud.send_button_rect(float(parts[1]))
 		"action":
@@ -1624,7 +1901,10 @@ func _on_coach_button(id: String) -> void:
 
 
 func _on_lesson_completed(r: Dictionary) -> void:
-	## LESSON COMPLETE / TRAINING COMPLETE instead of the results screen (§6).
+	## LESSON COMPLETE / TRAINING COMPLETE instead of the results screen (§6). The tour goes straight on to L1.
+	if r.get("tour", false):
+		_tutorial_relaunch({"tutorial": 1, "first": director.first_launch})
+		return
 	paused = true
 	hud.close_inspector()
 	_end_drag()
@@ -1635,6 +1915,9 @@ func _on_lesson_completed(r: Dictionary) -> void:
 		var lines := []
 		if r.get("relay_kill", false):
 			lines.append(TutorialDirector.final_kill_line(int(r.get("kill_units", 0))))
+		var third := Progression.third_skill_line()        # TUTORIAL + PROGRESSION: above the Graduate vat line
+		if third != "":
+			lines.append(third)
 		if r.get("graduate", false):
 			lines.append(TutorialDirector.line("final_reward"))
 			lines.append(TutorialDirector.line("final_reward_line"))
@@ -1642,11 +1925,13 @@ func _on_lesson_completed(r: Dictionary) -> void:
 			lines.append(TutorialDirector.line("final_locked"))
 		coach.show_training_complete(TutorialDirector.line("final_title"), lines, TutorialDirector.line("final_play"),
 				[TutorialDirector.line("final_armies"), TutorialDirector.line("final_menu")],
-				{"unlocked": r.get("graduate", false), "title": "GRADUATE VAT", "faction": SEAT_FACTIONS[HUMAN]})
+				{"unlocked": r.get("graduate", false), "title": "GRADUATE VAT", "faction": SEAT_FACTIONS[HUMAN],
+				"scrap": int(r.get("scrap", 0))})              # TUTORIAL + PROGRESSION
 	else:
 		var lines: Array = (r.get("lines", []) as Array).duplicate()
 		lines.append("%s · %d:%02d" % [str(r.get("title", "")), int(r.get("time", 0.0)) / 60, int(r.get("time", 0.0)) % 60])
-		coach.show_complete(TutorialDirector.line("lesson_complete"), lines, TutorialDirector.line("next"), [TutorialDirector.line("replay"), TutorialDirector.line("lessons")])
+		coach.show_complete(TutorialDirector.line("lesson_complete"), lines, TutorialDirector.line("next"), [TutorialDirector.line("replay"), TutorialDirector.line("lessons")],
+				int(r.get("scrap", 0)))                       # TUTORIAL + PROGRESSION
 	hud.extra_ui_rects = coach.ui_rects()
 
 
@@ -1657,8 +1942,8 @@ func to_lessons() -> void:
 
 func _tutorial_leave(extra: Dictionary) -> void:
 	TutorialDirector.mark_offered()
-	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "ai": ai_level if not extra.has("ai") else extra["ai"], "colour": color_choice,
-			"loadout": ArmyPresets.loadout_for(SEAT_FACTIONS[HUMAN])}
+	relaunch = {"faction": menu_faction, "ai": ai_level if not extra.has("ai") else extra["ai"], "colour": color_choice,
+			"loadout": ArmyPresets.loadout_for(menu_faction)}
 	if extra.has("menu"):
 		relaunch["menu"] = extra["menu"]
 	if extra.has("ai"):
@@ -1667,6 +1952,154 @@ func _tutorial_leave(extra: Dictionary) -> void:
 
 
 func _tutorial_relaunch(extra: Dictionary) -> void:
-	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "colour": color_choice}
+	relaunch = {"faction": menu_faction, "colour": color_choice}
 	relaunch.merge(extra, true)
 	get_tree().reload_current_scene()
+
+
+func _input(event: InputEvent) -> void:
+	## The tour (L0): a tap on the spotlit element counts as NEXT - taken here, before the HUD or the map, so it
+	## never also arms a skill, sends or selects.
+	if director == null or coach == null or not director.is_tour() or paused:
+		return
+	var mb := event as InputEventMouseButton
+	if mb == null or not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	for r in hud.extra_ui_rects:                      # the card's own buttons stay the card's
+		if (r as Rect2).has_point(mb.position):
+			return
+	if coach.spotlit(mb.position):
+		get_viewport().set_input_as_handled()
+		director.press_button()
+
+
+# ================================================================== CAMPAIGN (CAMPAIGN-DESIGN.md §4 / §5)
+# The mission hooks, all here: start_mission (like start_tutorial), the director stepped after the Sim, the overlay
+# (briefing, objective strip, result screen), the result recorded through Campaign.record, and the ways out
+# (NEXT MISSION / RETRY / CAMPAIGN; the pause menu's RESTART / MAIN MENU go the same ways).
+func start_mission(key: String, colour := "") -> void:
+	## Entry from the campaign page or a relaunch: the mission's faction (seat A) against its rival's (a normal
+	## SeatAI at the mission's level - never `director`, that is the tutorial's), 1v1, your ARMIES loadout for
+	## that faction; the last map played stays MAIN MENU's. A mission that can't be played yet (no map, a system
+	## not built) goes back to the campaign page.
+	var m := Campaign.mission(key)
+	mission_menu_faction = str(SEAT_FACTIONS[HUMAN])
+	mission_menu_ai = ai_level
+	if colour != "":
+		color_choice = colour
+	if m.is_empty() or not Campaign.playable(m):
+		push_warning("mission %s is not playable in this build" % key)
+		mission = null
+		call_deferred("_mission_leave")
+		return
+	mission = MissionDirector.new(key)
+	show_out_panel = false                             # the result screen says it; no YOU'RE OUT on top
+	SEAT_FACTIONS[HUMAN] = str(m["faction"])
+	SEAT_FACTIONS["B"] = str(Campaign.rival_of(m).get("faction", "ember"))
+	mode = "1v1"
+	ai_level = str(m.get("ai", ai_level))
+	LOADOUTS = {HUMAN: ArmyPresets.loadout_for(SEAT_FACTIONS[HUMAN])}
+	if menu_layer:
+		menu_layer.queue_free()
+		menu_layer = null
+	var keep_last := last_map_path                     # a mission map never becomes MAIN MENU's "last map"
+	_start_map(str(m["map"]))
+	last_map_path = keep_last
+
+
+func _mission_setup() -> void:
+	## After the HUD: the whole HUD (a mission gates nothing), the overlay, the briefing (paused until START).
+	hud.reveal_all()
+	mission_overlay = MissionOverlay.new()
+	add_child(mission_overlay)
+	mission_overlay.setup(self, mission, mobile)
+	mission_overlay.start_pressed.connect(_mission_start)
+	mission_overlay.action.connect(_on_mission_action)
+	mission.completed.connect(_on_mission_completed)
+	print("mission %s on %s: %s vs %s (%s AI)" % [mission.key, map_path, SEAT_FACTIONS[HUMAN], SEAT_FACTIONS["B"], ai_level])
+	var shot := ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--mission-shot="):
+			shot = arg.substr(15)
+	if "--mission-start" in OS.get_cmdline_user_args() or shot in ["hud", "win", "lose"]:
+		mission_overlay.begin_match()
+		_mission_start()
+	else:
+		paused = true
+		mission_overlay.show_briefing()
+	if shot != "":
+		_mission_shot(shot)
+
+
+func _mission_start() -> void:
+	paused = false
+	mission.start()
+
+
+func _on_mission_completed(res: Dictionary) -> void:
+	## The mission is decided: the match stops, the run is recorded (best stars, the one-off SCRAP, unlocks), it
+	## also counts as a match for XP / challenges (Campaign.progress_match), and the result screen shows.
+	paused = true
+	hud.close_inspector()
+	_end_drag()
+	var summary := Campaign.record(mission.key, res)
+	Campaign.last_run = {"key": mission.key, "summary": summary}
+	var xp := Campaign.progress_match(sim, HUMAN, ai_level)
+	print("mission %s %s at %.1f s - %d star(s), optional %s, reward %s" % [mission.key, "won" if res["won"] else "lost",
+			float(res["time"]), int(res["stars"]), res["objective"], summary.get("reward", {}).get("state", "")])
+	mission_overlay.show_end(res, summary, xp)
+
+
+func _on_mission_action(id: String) -> void:
+	match id:
+		"next":
+			var nxt := str(Campaign.last_run.get("summary", {}).get("next", ""))
+			_mission_relaunch(nxt if nxt != "" else mission.key)
+		"retry":
+			_mission_relaunch(mission.key)
+		_:
+			_mission_leave()
+
+
+func _mission_relaunch(key: String) -> void:
+	relaunch = {"mission": key, "faction": mission_menu_faction, "colour": color_choice}
+	get_tree().reload_current_scene()
+
+
+func _mission_leave() -> void:
+	## CAMPAIGN / the pause menu's MAIN MENU: back to the campaign page (MAIN while this build's menu has none).
+	MissionDirector.restore_settings()
+	var f := mission_menu_faction if mission_menu_faction != "" else str(SEAT_FACTIONS[HUMAN])
+	relaunch = {"faction": f, "ai": mission_menu_ai if mission_menu_ai != "" else ai_level, "colour": color_choice,
+			"loadout": ArmyPresets.loadout_for(f)}
+	var menu_script := load("res://scripts/menu.gd") as Script
+	for mm in menu_script.get_script_method_list():
+		if str(mm.get("name", "")) == "show_campaign":
+			relaunch["menu"] = "campaign"
+			break
+	get_tree().reload_current_scene()
+
+
+func _mission_shot(what: String) -> void:
+	## --mission-shot=brief|hud|win|lose --out=<dir>: that screen, saved as mission_<what>.png, then quit. The
+	## result shots record into a scratch progress file, never the player's own.
+	if what in ["win", "lose"]:
+		Campaign.path = "user://campaign_shots.cfg"
+		Campaign.reset_progress()
+		Progression.path = "user://progress_shots.cfg"   # the XP / SCRAP of a shot never reaches the player's wallet
+		Progression.reload_all()
+	var wait: float = {"brief": 1.0, "hud": 9.0, "win": 3.0, "lose": 3.0}.get(what, 1.0)
+	var t0 := Time.get_ticks_msec()
+	while (Time.get_ticks_msec() - t0) / 1000.0 < wait:
+		await get_tree().process_frame
+	if what in ["win", "lose"]:
+		mission.finish_now(what == "win", what == "win", false)
+		t0 = Time.get_ticks_msec()
+		while (Time.get_ticks_msec() - t0) / 1000.0 < MissionOverlay.END_LINE_SECONDS + 2.6:
+			await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var out := "%s/mission_%s.png" % [shot_dir if shot_dir != "" else OS.get_user_data_dir(), what]
+	get_viewport().get_texture().get_image().save_png(out)
+	print("screenshot ", out)
+	get_tree().quit()
+# --- end CAMPAIGN ---

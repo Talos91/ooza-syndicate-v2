@@ -322,19 +322,19 @@ func _run() -> void:
 	fp2.free()
 
 	# ---------------------------------------------------------------- STRUCTURES 2.1 + TEAMS (0.18.10): orders and snapshots
-	check(host.VERSION_TAG == "ooze20-net-3", "the net protocol is bumped for structures 2.1 (ooze20-net-3)")
+	check(host.VERSION_TAG == "ooze20-net-4", "the net protocol is bumped for server-hosted rooms (ooze20-net-4; 3: structures 2.1)")
 	host._order_limits = {}
 	host._packet_limits = {}
 	host.bridge.sent = []
 	hs.nodes[home_b]["units"] = 300.0
-	_to_host("g1", {"op": "order", "round": 1, "action": "build", "a": home_b, "args": {"kind": "machingoon"}})
-	check(hs.nodes[home_b]["build_kind"] == "machingoon", "a guest's build order runs on the host (a machingoon on B's home)")
-	check(str(_payloads("g1", "feedback")[0]).begins_with("Machingoon construction started"), "...answered with the Sim's feedback line")
+	_to_host("g1", {"op": "order", "round": 1, "action": "build", "a": home_b, "args": {"kind": "machinegoon"}})
+	check(hs.nodes[home_b]["build_kind"] == "machinegoon", "a guest's build order runs on the host (a machinegoon on B's home)")
+	check(str(_payloads("g1", "feedback")[0]).begins_with("Machinegoon construction started"), "...answered with the Sim's feedback line")
 	var g_id: int = g.assigned_id
 	check(host._execute(g_id, {"action": "build", "a": home_b, "args": {"kind": "nuke"}}) == [false, "Order rejected"]
 			and host._execute(g_id, {"action": "build", "a": home_b, "args": {"kind": 7}}) == [false, "Order rejected"],
 			"an unknown build kind is rejected")
-	check(not host._execute(g_id, {"action": "build", "a": home_a, "args": {"kind": "machingoon"}})[0], "a guest can't build on the host's node")
+	check(not host._execute(g_id, {"action": "build", "a": home_a, "args": {"kind": "machinegoon"}})[0], "a guest can't build on the host's node")
 	check(host._execute(g_id, {"action": "eject", "a": home_b, "args": {}}) == [false, "No allied troops to eject here"], "EJECT with no allied troops is refused with the reason")
 	hs.nodes[target]["structure"] = "monster_hub"     # (staged: B's captured neighbour holds a ready hub)
 	hs.nodes[target]["units"] = 300.0
@@ -350,7 +350,7 @@ func _run() -> void:
 	check(ss.has("structs") and (ss["structs"] as Array).size() == 3, "snapshots carry the monsters and the draw line")
 	var sw: PackedByteArray = var_to_bytes(ss)
 	host.apply_snapshot(gs, bytes_to_var(sw))
-	check(gs.nodes[home_b]["build_kind"] == "machingoon" and gs.nodes[target]["structure"] == "monster_hub"
+	check(gs.nodes[home_b]["build_kind"] == "machinegoon" and gs.nodes[target]["structure"] == "monster_hub"
 			and gs.nodes[home_b]["allies"] == {"A": 25.0} and gs.nodes[home_b]["arrivals"] == ["A"]
 			and absf(float(gs.nodes[target]["monster_ready_t"]) - float(hs.nodes[target]["monster_ready_t"])) < 0.001,
 			"the guest sees the new node fields (structure, allies, arrivals, monster_ready_t)")
@@ -364,9 +364,26 @@ func _run() -> void:
 	check(gs.is_out("C") and not gs.is_out("B"), "Sim.is_out works from the host's snapshots")
 	hs.eliminated.erase("C")
 	hs.monsters = []
+	hs.nodes[target]["hub_monster"] = -1              # (cleanup, matching hs.monsters = [] above)
+	hs.nodes[target]["monster_ready_t"] = 0.0          # (the earlier real launch put it on a ~40 s cooldown)
 	hs.nodes[home_b]["allies"] = {}
 	hs.nodes[home_b]["arrivals"] = []
 	hs.draw_line = ""
+	host.apply_snapshot(gs, host.snapshot(hs, false))  # re-sync the guest: the hub reads ready again
+	# 0.20.1 monster-launch fix (Daniele's online playtest, both players guests: "i couldn't figure how
+	# to send the monster" - the order already reached the host fine, per the checks above; the actual
+	# bug was the guest's own UI never arming the launch). A guest's Hud, built from nothing but its
+	# synced Sim, must see the same ready hub the host does.
+	# res://scripts/hud.gd is loaded at runtime (not as a static `Hud` reference) so this script's own
+	# compile doesn't force-reload hud.gd before the Net autoload is wired up - a static reference makes
+	# the GDScript compiler eagerly reload hud.gd as a dependency of test_net.gd's own class, too early
+	# for "Net" to resolve inside hud.gd's sync(), which breaks every use of Hud in this process for good.
+	var hud_probe: Node = load("res://scripts/hud.gd").new()
+	hud_probe.sim = gs
+	hud_probe.human = "B"
+	check(hud_probe.is_ready_hub(target), "a guest's Hud sees its own ready Monster hub as launchable")
+	check(not hud_probe.is_ready_hub(home_a), "...but not a node that isn't its own ready hub")
+	hud_probe.free()
 
 	# ---------------------------------------------------------------- SKILLS 2.0: cast orders, snapshots, Ghost Line privacy
 	check(hs.cooldown("B", "active") > 0.0 or hs.time > 30.0, "(0.19.2: skills start on their cooldown)")

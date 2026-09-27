@@ -75,7 +75,7 @@ func _init() -> void:
 	check(sim10.nodes[4]["owner"] == "" and absf(sim10.nodes[4]["units"] - 75.0) < 0.01, "a T1 neutral starts with 15 shown")
 	check(sim10.nodes[5]["node_kind"] == "common" and sim10.nodes[1]["node_kind"] == "relay" and sim10.nodes[3]["node_kind"] == "special",
 			"node kinds: common vat node, relay, special (final / strategic)")
-	check(sim10.nodes[5]["buildable"] == ["vat", "machingoon"] and sim10.nodes[1]["buildable"] == ["laser", "forge", "monster_hub"]
+	check(sim10.nodes[5]["buildable"] == ["vat", "machinegoon"] and sim10.nodes[1]["buildable"] == ["laser", "forge", "monster_hub"]
 			and sim10.nodes[3]["buildable"] == ["vat"], "each kind builds its own structures (Structures 2.1 table)")
 	check(sim10.nodes[1]["structure"] == "" and sim10.nodes[5]["structure"] == "vat", "a relay starts empty, a vat node with its vat")
 	sim10.nodes[5]["units"] = 40.0
@@ -98,7 +98,7 @@ func _init() -> void:
 	var relay_units: float = sim10.nodes[1]["units"]
 	sim10.step(1.0)
 	check(absf(sim10.nodes[1]["units"] - relay_units) < 0.01, "a relay node has no vat: no production")
-	check(sim10.can_build(1, "A", "vat") != "" and sim10.can_build(1, "A", "machingoon") != "", "a relay builds no vat or machingoon")
+	check(sim10.can_build(1, "A", "vat") != "" and sim10.can_build(1, "A", "machinegoon") != "", "a relay builds no vat or machinegoon")
 	sim10.nodes[1]["units"] = 220.0
 	check(sim10.build(1, "A", "laser"), "a relay accepts a laser tower it can pay for")
 	check(absf(sim10.nodes[1]["units"] - (220.0 - Rules.LASER_COST)) < 0.01 and Rules.LASER_COST == 200, "the laser's cost (40 shown) is paid")
@@ -125,25 +125,25 @@ func _init() -> void:
 	sim10._capture(sim10.nodes[3], "B", 10.0)
 	check(sim10.nodes[3]["tier"] == 4, "...and conquest leaves it at T4")
 	sim10._capture(sim10.nodes[3], "A", 300.0)
-	check(sim10.can_build(3, "A", "machingoon") != "" and sim10.can_build(3, "A", "laser") != "" and not sim10.build_attachment(3, "cannon"),
-			"a special node holds only its vat (no machingoon, no laser, no forge)")
-	# machingoon on a common node: in place of the vat, keeps the tier, produces nothing
+	check(sim10.can_build(3, "A", "machinegoon") != "" and sim10.can_build(3, "A", "laser") != "" and not sim10.build_attachment(3, "cannon"),
+			"a special node holds only its vat (no machinegoon, no laser, no forge)")
+	# machinegoon on a common node: in place of the vat, keeps the tier, produces nothing
 	sim10.nodes[4]["owner"] = "A"
 	sim10.nodes[4]["tier"] = 2
 	sim10.nodes[4]["units"] = 100.0
-	check(sim10.build(4, "A", "machingoon"), "a common node builds a machingoon in place of its vat")
-	check(absf(sim10.nodes[4]["units"] - (100.0 - Rules.MACHINGOON_COST[1])) < 0.01 and Rules.MACHINGOON_COST == {1: 75, 2: 100, 3: 150},
-			"the machingoon costs 15 shown (upgrades 20 / 30)")
+	check(sim10.build(4, "A", "machinegoon"), "a common node builds a machinegoon in place of its vat")
+	check(absf(sim10.nodes[4]["units"] - (100.0 - Rules.MACHINEGOON_COST[1])) < 0.01 and Rules.MACHINEGOON_COST == {1: 75, 2: 100, 3: 150},
+			"the machinegoon costs 15 shown (upgrades 20 / 30)")
 	while sim10.nodes[4]["build_kind"] != "":
 		sim10.step(0.5)
-	check(sim10.nodes[4]["structure"] == "machingoon" and sim10.nodes[4]["tier"] == 2, "the vat became a machingoon, tier kept")
+	check(sim10.nodes[4]["structure"] == "machinegoon" and sim10.nodes[4]["tier"] == 2, "the vat became a machinegoon, tier kept")
 	var u4: float = sim10.nodes[4]["units"]
 	sim10.step(1.0)
 	check(not Sim.has_vat(sim10.nodes[4]) and sim10.production(sim10.nodes[4]) == 0.0 and absf(sim10.nodes[4]["units"] - u4) < 0.01,
 			"...and the node produces nothing (it keeps its garrison)")
-	check(sim10.upgrade_cost(sim10.nodes[4]) == Rules.MACHINGOON_COST[3], "the next machingoon tier costs 30 shown")
+	check(sim10.upgrade_cost(sim10.nodes[4]) == Rules.MACHINEGOON_COST[3], "the next machinegoon tier costs 30 shown")
 	sim10.nodes[4]["swap_cd"] = 0.0
-	check(sim10.restore_vat(4), "the machingoon can give way to the vat again (free)")
+	check(sim10.restore_vat(4), "the machinegoon can give way to the vat again (free)")
 	while sim10.nodes[4]["build_kind"] != "":
 		sim10.step(0.5)
 	check(Sim.has_vat(sim10.nodes[4]) and sim10.nodes[4]["tier"] == 2 and sim10.nodes[4]["swap_cd"] > 0.0, "the vat comes back at its tier, swap cooldown running")
@@ -222,6 +222,7 @@ func _init() -> void:
 	run_until(sim14, func(): return sim14.nodes[1]["relay_phase"] == "", 8.0)
 	check(sim14.fall_losses.get("A", 0.0) > 0.0, "units on the dissolved deck fell (A lost %.0f of %.0f)" % [sim14.fall_losses.get("A", 0.0), a_before])
 	check(sim14.events.any(func(e): return e["type"] == "fall"), "a fall event is recorded (no combat credit)")
+	check(sim14.events.any(func(e): return e["type"] == "fall" and e.get("why", "") == "relay" and e.get("by", "") == sim14.nodes[1]["owner"] 			and e.get("relay", -1) == 1), "the relay fall credits the seat that fired it (by) and names the relay (progression)")
 
 	# a line that walks onto a switch deck WHILE it is dissolving, and a line whose head is past the
 	# deck when it goes, both lose what is on it (Daniele, Alpha 14: "they still don't consistently fall")
@@ -939,6 +940,7 @@ func _init() -> void:
 	_skills_tests()
 	_dock_tests()
 	_rules_0_18_10()
+	_ls_pacing()
 	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
@@ -999,10 +1001,91 @@ func _tp(seats := {3: "A", 4: "B"}, factions := {"A": "null", "B": "null"}, team
 	return s
 
 
+# ------------------------------------------------------------------ 2026-09-27: the ring Last Stand's adaptive drop gap
+func _ls_run(path: String) -> Sim:
+	var m := MapBuilder.load_map(path)
+	var seats := {}
+	for st in m["seats"]["1v1"]:
+		seats[int(st["node"])] = st["seat"]
+	var s := Sim.new()
+	s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null"}, 1)
+	s.time = Rules.LAST_STAND_TIME
+	s.start_last_stand_now()
+	return s
+
+
+func _ls_pacing() -> void:
+	check(Rules.LAST_STAND_DROP_GAP_MAX == 20.0 and Rules.LAST_STAND_DROP_GAP_MIN == 8.0 and Rules.LAST_STAND_DROP_GAP == 5.0,
+			"ring drop gap: adaptive 8-20 s (the old 5 s constant stays for the tutorial)")
+	for c in [["res://maps4/M-03-drift-belt.json", "small"], ["res://maps4/M-09-shard-archipelago.json", "big"]]:
+		var path: String = c[0]
+		var m := MapBuilder.load_map(path)
+		if not m["seats"].has("1v1"):                  # (M-09 is a 2v2 map: seat its first mode)
+			var seats := {}
+			for st in m["seats"][m["seats"].keys()[0]]:
+				seats[int(st["node"])] = st["seat"]
+			var s0 := Sim.new()
+			s0.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null", "C": "null", "D": "null"}, 1)
+			s0.time = Rules.LAST_STAND_TIME
+			s0.start_last_stand_now()
+			_ls_check(s0, c[1])
+		else:
+			_ls_check(_ls_run(path), c[1])
+	check(Sim._fit_gap([range(30), range(30)], 180.0) == Rules.LAST_STAND_DROP_GAP_MIN, "a huge collapse never drops faster than 8 s (the rest goes to the Very Last Stand)")
+	var so := Sim.new()
+	var mo := MapBuilder.load_map("res://maps4/M-03-drift-belt.json")
+	var so_seats := {}
+	for st in mo["seats"]["1v1"]:
+		so_seats[int(st["node"])] = st["seat"]
+	so.setup(mo, MapBuilder.layout(mo), so_seats, {"A": "null", "B": "null"}, 1)
+	so.ls_drop_gap_override = Rules.LAST_STAND_DROP_GAP
+	so.time = Rules.LAST_STAND_TIME
+	so.start_last_stand_now()
+	check(so.last_stand_gap == 5.0, "TUTORIAL: ls_drop_gap_override pins the ring's gap (L7: 5 s)")
+	# the AI empties a warned ring platform only when its own drop is near
+	var se := _ls_run("res://maps4/M-03-drift-belt.json")
+	var late: int = se.last_stand_queue[-1]
+	se.nodes[late]["owner"] = "A"
+	se.nodes[late]["units"] = 100.0
+	var ai_ev := SeatAI.new("A", 2.0, "Veteran")
+	ai_ev._evacuate(se)
+	check(not se.hordes.any(func(h): return h["route"][0] == late), "the AI keeps a platform that falls late in the ring (drop in %.0f s)" % se.drop_in(late))
+	se.last_stand_queue = [late]
+	se.last_stand_warn_t = 4.0
+	ai_ev._evacuate(se)
+	check(se.hordes.any(func(h): return h["route"][0] == late), "...and evacuates it once its drop is near")
+
+
+func _ls_check(s: Sim, tag: String) -> void:
+	var g: float = s.last_stand_gap
+	if tag == "small":
+		check(g == Rules.LAST_STAND_DROP_GAP_MAX, "small map: the ring drops a platform every 20 s (%.1f)" % g)
+	else:
+		check(g < Rules.LAST_STAND_DROP_GAP_MAX and g >= Rules.LAST_STAND_DROP_GAP_MIN, "big map: a shorter gap, never under 8 s (%.1f)" % g)
+	# countdowns: every queued platform's drop_in matches when it really falls
+	var want := {}
+	for k in range(s.last_stand_queue.size()):
+		want[s.last_stand_queue[k]] = s.time + s.drop_in(s.last_stand_queue[k])
+	var off := 0.0
+	var islands_ok := true
+	while s.time < Rules.VERY_LAST_STAND_TIME - 0.05 and not (s.last_stand_queue.is_empty() and s.last_stand_next >= s.last_stand_waves.size()):
+		var before := s.collapsed.duplicate()
+		s._step_last_stand(0.05)
+		s.time += 0.05
+		for id in s.collapsed:
+			if not before.has(id) and want.has(id):
+				off = maxf(off, absf(s.time - want[id]))
+		islands_ok = islands_ok and s._islands(s.collapsed).is_empty()
+	check(off < 0.2 and not want.is_empty(), "%s map: each badge's countdown (drop_in) matches its drop (worst %.2f s)" % [tag, off])
+	check(s.last_stand_queue.is_empty() and s.last_stand_next >= s.last_stand_waves.size() and s.time < Rules.VERY_LAST_STAND_TIME,
+			"%s map: the whole ring collapse ends before the Very Last Stand (%.0f s)" % [tag, s.time])
+	check(islands_ok, "%s map: nothing is ever left cut off" % tag)
+
+
 func _rules_0_18_10() -> void:
 	# ---------------------------------------------------------------- conquest: T4 keeps its tier, the rest lose one
 	var s := _tp()
-	for c in [[0, "vat", 4, 4], [1, "vat", 2, 1], [2, "machingoon", 3, 2]]:
+	for c in [[0, "vat", 4, 4], [1, "vat", 2, 1], [2, "machinegoon", 3, 2]]:
 		var n: Dictionary = s.nodes[c[0]]
 		n["owner"] = "B"
 		n["structure"] = c[1]
@@ -1011,28 +1094,28 @@ func _rules_0_18_10() -> void:
 		s._land_classic(n, "A", 40.0)
 		check(n["owner"] == "A" and n["tier"] == c[3] and n["structure"] == c[1],
 				"conquest: a %s T%d becomes T%d (a T4 keeps its tier, min 1)" % [c[1], c[2], c[3]])
-	# ---------------------------------------------------------------- machingoon: 2 / 3.5 / 5 kills a second, one line at a time
-	check(Rules.MACHINGOON_RATE == {1: 10.0, 2: 17.5, 3: 25.0} and Rules.MACHINGOON_RANGE == 10.0, "machingoon numbers: 2 / 3.5 / 5 kills/s shown, 10 m")
+	# ---------------------------------------------------------------- machinegoon: 2 / 3.5 / 5 kills a second, one line at a time
+	check(Rules.MACHINEGOON_RATE == {1: 10.0, 2: 17.5, 3: 25.0} and Rules.MACHINEGOON_RANGE == 10.0, "machinegoon numbers: 2 / 3.5 / 5 kills/s shown, 10 m")
 	for tier in [1, 3]:
 		s = _tp()
 		var gn: Dictionary = s.nodes[1]
 		gn["owner"] = "A"
-		gn["structure"] = "machingoon"
+		gn["structure"] = "machinegoon"
 		gn["tier"] = tier
 		gn["units"] = 20.0
 		s.nodes[0]["owner"] = "B"
 		s.nodes[0]["units"] = 300.0
-		var hb := s.send(0, 3, 1.0)                   # B's line comes at the machingoon (0 -> 1 -> 3)
-		run_until(s, func(): return (Sim.sample(hb, hb["s"])[0] as Vector3).distance_to(gn["pos"]) < Rules.MACHINGOON_RANGE - 4.5, 20.0, 0.02)
+		var hb := s.send(0, 3, 1.0)                   # B's line comes at the machinegoon (0 -> 1 -> 3)
+		run_until(s, func(): return (Sim.sample(hb, hb["s"])[0] as Vector3).distance_to(gn["pos"]) < Rules.MACHINEGOON_RANGE - 4.5, 20.0, 0.02)
 		hb["speed"] = 0.0
 		var l0: float = s.combat_losses.get("B", 0.0)
 		var u1: float = gn["units"]
 		for i in range(20):
 			s.step(0.05)
 		var killed: float = s.combat_losses.get("B", 0.0) - l0
-		check(absf(killed - Rules.MACHINGOON_RATE[tier]) < 0.3, "a T%d machingoon kills %.1f a second (%.2f)" % [tier, Rules.MACHINGOON_RATE[tier], killed])
+		check(absf(killed - Rules.MACHINEGOON_RATE[tier]) < 0.3, "a T%d machinegoon kills %.1f a second (%.2f)" % [tier, Rules.MACHINEGOON_RATE[tier], killed])
 		check(int(gn["shot"].get("target_horde", -1)) == hb["id"] and float(gn["shot"]["kills"]) > 0.0, "its shot names the line it streams at (fx)")
-		check(absf(gn["units"] - u1) < 0.01, "the machingoon node produces nothing")
+		check(absf(gn["units"] - u1) < 0.01, "the machinegoon node produces nothing")
 	# ---------------------------------------------------------------- laser: 32 per 2 s burst, 2 s recharge, 12 m
 	check(Rules.LASER_KILL == 160.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
 			"laser numbers: 32 shown per 2 s burst, 2 s recharge, 12 m, cost 40")
@@ -1263,7 +1346,7 @@ func _rules_0_18_10() -> void:
 	check(absf(plain_v - 100.0) < 0.01 and absf(forge_v - 100.0 * 1.25 * 1.5) < 0.01,
 			"Veteran counts the defender's forge (attack and defence): 100 -> %.0f attackers" % forge_v)
 	check(absf(forge_s - plain_s) < 0.01, "Standard keeps the blind spot (%.0f either way)" % forge_s)
-	# machingoon on a frontline vat that keeps taking small raids
+	# machinegoon on a frontline vat that keeps taking small raids
 	s = _tp()
 	for id in [1, 0, 2]:
 		s.nodes[id]["owner"] = "A"
@@ -1273,8 +1356,8 @@ func _rules_0_18_10() -> void:
 	s.nodes[4]["units"] = 40.0
 	var ai_g := SeatAI.new("A", 2.0, "Veteran")
 	ai_g._raids[2] = [[s.time, 30.0], [s.time, 40.0]]  # two trickles at node 2 (next to B's home)
-	ai_g._build_machingoon(s, ai_g._mine(s), ai_g._mine(s).filter(func(n): return Sim.has_vat(n)))
-	check(s.nodes[2]["build_kind"] == "machingoon", "the AI puts a machingoon on the raided frontline vat (%s)" % s.nodes[2]["build_kind"])
+	ai_g._build_machinegoon(s, ai_g._mine(s), ai_g._mine(s).filter(func(n): return Sim.has_vat(n)))
+	check(s.nodes[2]["build_kind"] == "machinegoon", "the AI puts a machinegoon on the raided frontline vat (%s)" % s.nodes[2]["build_kind"])
 	check(s.nodes[1]["build_kind"] == "" and s.nodes[3]["build_kind"] == "", "...not on a quiet node nor its home")
 	# monsters: Veteran launches at a target worth it; never through its own line
 	for own_line in [false, true]:
@@ -1768,11 +1851,11 @@ func _skills_tests() -> void:
 			s._step_structures(0.05)
 		cannon_loss.append(300.0 - hc["units"])
 	check(absf(cannon_loss[0] - Rules.LASER_KILL) < 0.5 and absf(cannon_loss[1] - Rules.LASER_KILL * 0.5) < 0.5, "Anchor: your lines on it take half the laser kills (%.0f vs %.0f)" % [cannon_loss[1], cannon_loss[0]])
-	var gun_loss := []                                # ...and half the machingoon's (Daniele, 2026-09-27)
+	var gun_loss := []                                # ...and half the machinegoon's (Daniele, 2026-09-27)
 	for anchored in [false, true]:
 		s = _mk(tp, "null", "null", {"A": {"map": "anchor"}})
 		s.nodes[1]["owner"] = "B"
-		s.nodes[1]["structure"] = "machingoon"
+		s.nodes[1]["structure"] = "machinegoon"
 		s.nodes[1]["tier"] = 1
 		s.nodes[3]["units"] = 300.0
 		var hg := s.send(3, 1, 1.0)
@@ -1785,8 +1868,8 @@ func _skills_tests() -> void:
 		for k in range(20):
 			s._step_structures(0.05)
 		gun_loss.append(300.0 - hg["units"])
-	check(absf(gun_loss[0] - Rules.MACHINGOON_RATE[1]) < 0.1 and absf(gun_loss[1] - Rules.MACHINGOON_RATE[1] * 0.5) < 0.1,
-			"Anchor: your lines on it take half the machingoon kills too (%.1f vs %.1f)" % [gun_loss[1], gun_loss[0]])
+	check(absf(gun_loss[0] - Rules.MACHINEGOON_RATE[1]) < 0.1 and absf(gun_loss[1] - Rules.MACHINEGOON_RATE[1] * 0.5) < 0.1,
+			"Anchor: your lines on it take half the machinegoon kills too (%.1f vs %.1f)" % [gun_loss[1], gun_loss[0]])
 	# ---------------------------------------------------------------- Bypass: both states for 8 s, then the normal outcome
 	s = _mk(sw, "null", "null", {"A": {"map": "bypass"}})
 	s.nodes[1]["owner"] = "B"

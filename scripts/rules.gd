@@ -12,8 +12,8 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.19.1"
-const VERSION_NAME := "Alpha 19"
+const VERSION := "0.21.1"
+const VERSION_NAME := "Alpha 21"
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius
@@ -176,19 +176,20 @@ const AI_RELAY_SLACK := 1.25
 const AI_RELAY_PAD := 1.0
 const AI_RELAY_DETOUR := 8.0
 const AI_RELAY_RISK := 14.0          # target-score penalty for a plan whose only route is at risk
+const AI_EVAC_MARGIN := 6.0          # s: a warned ring platform empties when its drop is this much beyond trip + one think
 const AI_RELAY_VALUE := 10.0         # target-score bonus for a relay node (control of shortcuts), + its traffic
 # (0.18.10: the fixed 6-unit relay garrison AI_RELAY_HOLD is gone - Daniele, 2026-09-27: relay nodes are held and
 # built on like any node; the AI garrisons them by threat like its other nodes, knowing they produce nothing.)
-# AI STRUCTURES 2.1 (0.18.10): a machingoon goes on a frontline common node that keeps taking small raids - at
+# AI STRUCTURES 2.1 (0.18.10): a machinegoon goes on a frontline common node that keeps taking small raids - at
 # least AI_TRICKLE_RAIDS hostile lines of at most AI_TRICKLE_UNITS sim units in the last AI_TRICKLE_WINDOW s - and
-# never on its home or its only vats (it needs AI_MACHINGOON_VATS vats). Monsters: Veteran / Expert launch at the
+# never on its home or its only vats (it needs AI_MACHINEGOON_VATS vats). Monsters: Veteran / Expert launch at the
 # best target worth AI_MONSTER_VALUE sim units (garrison taken + hostile bodies kicked); the lower levels launch
 # rarely (AI_MONSTER_CHANCE per think with a ready hub) at any hostile node in reach. EJECT (team modes): only to
 # save stored allied troops from a node about to drop in the Last Stand.
 const AI_TRICKLE_UNITS := 100.0
 const AI_TRICKLE_RAIDS := 2
 const AI_TRICKLE_WINDOW := 60.0
-const AI_MACHINGOON_VATS := 4
+const AI_MACHINEGOON_VATS := 4
 const AI_MONSTER_VALUE := 60.0
 const AI_MONSTER_CHANCE := {"Training": 0.05, "Casual": 0.08, "Standard": 0.12}
 
@@ -202,9 +203,17 @@ const LAST_STAND_WARNING := 10.0
 const LAST_STAND_WAVE_MIN := 12.0
 const LAST_STAND_WAVE_MAX := 30.0
 # A ring falls platform by platform (Daniele, 0.18.4: "don't make all outward rings fall at the same time but one
-# after the other, 5 s distance from each, following the rule we set for falling bridges"): after the ring's
-# 10 s warning its platforms drop one every LAST_STAND_DROP_GAP s, never leaving the rest of the map cut off.
-const LAST_STAND_DROP_GAP := 5.0
+# after the other ... following the rule we set for falling bridges"): after the ring's 10 s warning its platforms
+# drop one at a time, never leaving the rest of the map cut off, the rings back to back.
+# ADAPTIVE GAP (Daniele, 2026-09-27: "instead of a platform every 5 seconds, we do every 20; I think it makes it
+# more fair" - "Aim for 20 s, fit the time"): the gap between drops is fixed per match at the Last Stand's start
+# (Sim.last_stand_gap) - as slow as possible up to LAST_STAND_DROP_GAP_MAX, never under _MIN, sized so every wave's
+# warning and drops end before the Very Last Stand (VERY_LAST_STAND_TIME). If even _MIN can't fit, _MIN it is and
+# the leftovers go to the Very Last Stand.
+const LAST_STAND_DROP_GAP_MAX := 20.0
+const LAST_STAND_DROP_GAP_MIN := 8.0
+const LAST_STAND_DROP_GAP := 5.0     # the old fixed ring gap - no longer the rule (see Sim.last_stand_gap); the
+                                     # tutorial's staged Very Last Stand (tutorial.gd vls_gap "warning+gap") reads it
 const MATCH_HARD_END := 420.0        # 7:00 end: the side owning the Very Last Stand's last platform wins (Sim._force_end)
 # 7:00 DRAW (Daniele, 2026-09-27: "I d say DRAW and we say something funny ... for no one to have it means they
 # didn t even tried ... we can kinda call them out"): a still-neutral last platform is a draw with one of these
@@ -251,18 +260,18 @@ static var VAT_COST := {1: 50, 2: 100, 3: 150}            # tier t -> t+1 (3 -> 
 static var BUILD_SECONDS := 10.0          # every build / upgrade / swap takes this long (GAME-RULES sec6)
 static var SWAP_COOLDOWN := 10.0          # after a structure swap completes, before the next swap
 # STRUCTURES 2.1 (Daniele, 2026-09-27; OPEN-QUESTIONS "Structures 2.1 numbers"). What a node can hold:
-#   common (normal vat node): a vat T1-T3 OR a Machingoon T1-T3 in its place (swapping = a BUILD_SECONDS build,
+#   common (normal vat node): a vat T1-T3 OR a Machinegoon T1-T3 in its place (swapping = a BUILD_SECONDS build,
 #       then SWAP_COOLDOWN; the tier carries over);
 #   relay: one of Laser tower / Forge / Monster hub (single tier, swappable like the old attachments);
-#   special (strategic nodes, T4 neutrals): only its vat (no machingoon, no relay structure).
-const NODE_BUILDS := {"common": ["vat", "machingoon"], "relay": ["laser", "forge", "monster_hub"], "special": ["vat"]}
-# MACHINGOON: a continuous goo stream at the nearest enemy line whose head is within MACHINGOON_RANGE of the node
+#   special (strategic nodes, T4 neutrals): only its vat (no machinegoon, no relay structure).
+const NODE_BUILDS := {"common": ["vat", "machinegoon"], "relay": ["laser", "forge", "monster_hub"], "special": ["vat"]}
+# MACHINEGOON: a continuous goo stream at the nearest enemy line whose head is within MACHINEGOON_RANGE of the node
 # centre, 2 / 3.5 / 5 kills/s shown; body kills bypass combat math like the laser; the node produces nothing
 # while it holds one (it keeps and can be reinforced its garrison). Build 15, upgrades 20 / 30 shown.
-static var MACHINGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then upgrade to T2, T3
-static var VAT_RESTORE_COST := 75         # machingoon -> vat, 15 shown (Daniele, 2026-09-27: "cost price of a tier 1 vat ... maybe 15")
-static var MACHINGOON_RATE := {1: 10.0, 2: 17.5, 3: 25.0} # kills/s (shown 2 / 3.5 / 5)
-static var MACHINGOON_RANGE := 10.0
+static var MACHINEGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then upgrade to T2, T3
+static var VAT_RESTORE_COST := 75         # machinegoon -> vat, 15 shown (Daniele, 2026-09-27: "cost price of a tier 1 vat ... maybe 15")
+static var MACHINEGOON_RATE := {1: 10.0, 2: 17.5, 3: 25.0} # kills/s (shown 2 / 3.5 / 5)
+static var MACHINEGOON_RANGE := 10.0
 # LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
 # a LASER_BURST s burst killing at most LASER_KILL bodies split across the lines in range (the cannon's code
 # path), then LASER_RECHARGE s. ~8 kills/s shown, below the door's 9.6/s.
@@ -351,7 +360,7 @@ static var FACTION_STATS := {
 # (BALANCE_PRESET ""), switched on only from the Debug panel or by tests/balance_probe.gd, and it travels
 # with an online room's rules. Values are internal units (shown x SCALE). Only BALANCE_KEYS can change.
 const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS", "VAT_COST", "BUILD_SECONDS",
-		"SWAP_COOLDOWN", "MACHINGOON_COST", "MACHINGOON_RATE", "MACHINGOON_RANGE", "LASER_COST", "LASER_KILL",
+		"SWAP_COOLDOWN", "MACHINEGOON_COST", "MACHINEGOON_RATE", "MACHINEGOON_RANGE", "LASER_COST", "LASER_KILL",
 		"LASER_BURST", "LASER_RECHARGE", "LASER_RANGE", "FORGE_COST", "MONSTER_HUB_COST", "MONSTER_COST",
 		"MONSTER_COOLDOWN", "MONSTER_SPEED", "MONSTER_REACH", "VAT_RESTORE_COST", "FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS",
 		"forge_bonus"]
@@ -420,9 +429,9 @@ static func _balance_get(k: String):
 		"VAT_COST": return VAT_COST
 		"BUILD_SECONDS": return BUILD_SECONDS
 		"SWAP_COOLDOWN": return SWAP_COOLDOWN
-		"MACHINGOON_COST": return MACHINGOON_COST
-		"MACHINGOON_RATE": return MACHINGOON_RATE
-		"MACHINGOON_RANGE": return MACHINGOON_RANGE
+		"MACHINEGOON_COST": return MACHINEGOON_COST
+		"MACHINEGOON_RATE": return MACHINEGOON_RATE
+		"MACHINEGOON_RANGE": return MACHINEGOON_RANGE
 		"LASER_COST": return LASER_COST
 		"LASER_KILL": return LASER_KILL
 		"LASER_BURST": return LASER_BURST
@@ -452,9 +461,9 @@ static func _balance_set(k: String, v) -> void:
 		"VAT_COST": VAT_COST = v
 		"BUILD_SECONDS": BUILD_SECONDS = v
 		"SWAP_COOLDOWN": SWAP_COOLDOWN = v
-		"MACHINGOON_COST": MACHINGOON_COST = v
-		"MACHINGOON_RATE": MACHINGOON_RATE = v
-		"MACHINGOON_RANGE": MACHINGOON_RANGE = v
+		"MACHINEGOON_COST": MACHINEGOON_COST = v
+		"MACHINEGOON_RATE": MACHINEGOON_RATE = v
+		"MACHINEGOON_RANGE": MACHINEGOON_RANGE = v
 		"LASER_COST": LASER_COST = v
 		"LASER_KILL": LASER_KILL = v
 		"LASER_BURST": LASER_BURST = v
@@ -519,7 +528,7 @@ const SKILLS := {
 			"rate": 0.25, "cap_shown": 10.0},
 	# the decoy's length is the send fraction of the source vat (the fraction the player has set); no units spent
 	"ghost_line": {"name": "Ghost Line", "slot": "active", "cd": 32.0, "target": "vat_to_node",
-			"desc": "A decoy line that looks real and draws Laser tower and Machingoon fire, but never fights.", "fraction": 0.5},
+			"desc": "A decoy line that looks real and draws Laser tower and Machinegoon fire, but never fights.", "fraction": 0.5},
 	# ---- map pool (network skills)
 	"demolish": {"name": "Demolish", "slot": "map", "cd": 60.0, "target": "fixed_deck",
 			"desc": "A deck collapses after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
@@ -527,7 +536,7 @@ const SKILLS := {
 	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "Enemy lines on one deck are 40 % slower for 8 s.", "slow": 0.6, "dur": 8.0},
 	"anchor": {"name": "Anchor", "slot": "map", "cd": 45.0, "target": "deck",
-			"desc": "A deck is locked for 10 s: no relay moves it, Demolish fails, half the Laser tower and Machingoon kills on your lines.",
+			"desc": "A deck is locked for 10 s: no relay moves it, Demolish fails, half the Laser tower and Machinegoon kills on your lines.",
 			"dur": 10.0, "cannon_mult": 0.5},
 	"bypass": {"name": "Bypass", "slot": "map", "cd": 45.0, "target": "relay", "needs_relays": true,
 			"desc": "A relay holds both of its states for 8 s.", "dur": 8.0},
@@ -540,7 +549,7 @@ const SKILLS := {
 			"desc": "10 s: all your lines +50 % speed; fire up to 3 relays anywhere, enemy ones too.",
 			"dur": 10.0, "mult": 1.5, "fires": 3},
 	"echo_split": {"name": "Echo Split", "slot": "ultimate", "faction": "null", "cd": 120.0, "target": "none",
-			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat, Laser tower and Machingoon for 8 s.",
+			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat, Laser tower and Machinegoon for 8 s.",
 			"echoes": 3, "disrupt": 8.0},
 	# Daniele (0.18.7): "i don't like that super bloom can be casted only under attack but i like the cap"
 	"superbloom": {"name": "Superbloom", "slot": "ultimate", "faction": "bloom", "cd": 120.0, "target": "none",
@@ -756,3 +765,79 @@ static func span(modules: int) -> float:
 static func heading(d: Vector3) -> float:
 	## Kit rotation.y for a piece whose local +X should point along d (kit authored in Blender).
 	return atan2(-d.z, d.x)
+
+
+# ================================================================ PROGRESSION (Leaderboard, progression, and currency session)
+# XP / level, the two currencies, unlock prices and the challenge pools (01 Rules/PROGRESSION-DESIGN.md §9;
+# Daniele 2026-09-27: SCRAP / SYNDICATE CHIPS, a skill costs 1 250 SCRAP, small chips from weeklies and levels,
+# Surge + Demolish free, 140 SCRAP per tutorial lesson, 25 wins for a faction vat, easy AI pays XP only, resets
+# 00:00 UTC). Scripts/progression.gd applies them; nothing here changes play.
+const CURRENCY_NAMES := {"soft": "SCRAP", "premium": "SYNDICATE CHIPS"}
+const CURRENCY_SHORT := {"soft": "SCRAP", "premium": "CHIPS"}
+# Everything unlocked while testing (Daniele, 2026-09-27: "all open until lock switch"). false = the locks are live.
+# The Graduate vat stays locked until the tutorial is done either way (TUTORIAL-DESIGN §7).
+const UNLOCK_ALL_TESTING := true
+const PROGRESSION := {
+	"finish_soft": 20, "finish_xp": 100,          # any finished match (not left early; tutorial lessons excluded)
+	"win_soft": 20, "win_xp": 50,                 # on top of finishing
+	"first_win_soft": 100, "first_win_xp": 200,   # the first win of the UTC day
+	"full_pay_ai": ["Veteran", "Expert"],         # vs AI below these a match pays XP only (no SCRAP); only these AI wins
+	                                              # count toward a faction vat (online wins always count)
+	"level_base": 800, "level_step": 100,         # level n -> n + 1 needs level_base + level_step * (n - 1) XP
+	"level_soft": 100,                            # every level-up
+	"level_premium_every": 5, "level_premium": 25, # every 5th level also pays a few chips
+	"daily_count": 3, "daily_soft": 50, "daily_xp": 150,
+	"weekly_count": 3, "weekly_soft": 250, "weekly_xp": 500, "weekly_premium": 10,
+	"tutorial_lesson": 140,                       # lessons 1-9, first completion: 9 x 140 = 1 260 = a 3rd skill
+	"faction_vat_wins": 25,
+	"free_skills": ["surge", "demolish"],         # the two the tutorial teaches; every other shared skill is bought
+	"ledger_keep": 200,                           # recent wallet entries kept on the device (the PROFILE history)
+}
+# Prices by item kind ({} or a missing currency = not sold for it). Skills never for chips (no power for money).
+const PRICES := {
+	"skill": {"soft": 1250},
+	"vat_faction": {"soft": 4000, "premium": 400},
+	"vat_line": {"soft": 3000, "premium": 300},    # Bio-Pod, Crystal, Distillery, Hive, Reactor (all tiers)
+	"structure": {"soft": 1500, "premium": 150},   # a Machinegoon / Laser / Forge / Monster hub look
+	"monster_alt": {"soft": 2000, "premium": 200},
+}
+# Challenge pools. stat: what a match adds (Progression.match_stats); target: how much; "faction": true = the text's
+# %s is a faction the day's seed picks (win_as). Texts use the tutorial's standard vocabulary (TUTORIAL-SCRIPT.md).
+const CHALLENGES := {
+	"daily": [
+		{"id": "finish3", "stat": "finish", "target": 3, "text": "Finish 3 matches"},
+		{"id": "win2", "stat": "win", "target": 2, "text": "Win 2 matches"},
+		{"id": "win_as", "stat": "win_as", "target": 1, "faction": true, "text": "Win a match as %s"},
+		{"id": "capture15", "stat": "captures", "target": 15, "text": "Capture 15 nodes"},
+		{"id": "fire5", "stat": "relay_fires", "target": 5, "text": "Fire relays 5 times"},
+		{"id": "drop40", "stat": "void_drops", "target": 40, "text": "Drop 40 enemy units into the void with relays"},
+		{"id": "kick40", "stat": "monster_kicked", "target": 40, "text": "Kick 40 enemy units off the decks with your monster"},
+		{"id": "skills8", "stat": "skills", "target": 8, "text": "Use 8 skills"},
+		{"id": "win_relay", "stat": "win_relay_map", "target": 1, "text": "Win on a map with relays"},
+		{"id": "win_home", "stat": "win_home_kept", "target": 1, "text": "Win without losing your home"},
+	],
+	"weekly": [
+		{"id": "win10", "stat": "win", "target": 10, "text": "Win 10 matches"},
+		{"id": "capture80", "stat": "captures", "target": 80, "text": "Capture 80 nodes"},
+		{"id": "fire30", "stat": "relay_fires", "target": 30, "text": "Fire relays 30 times"},
+		{"id": "drop250", "stat": "void_drops", "target": 250, "text": "Drop 250 enemy units into the void with relays"},
+		{"id": "kick250", "stat": "monster_kicked", "target": 250, "text": "Kick 250 enemy units off the decks with your monster"},
+		{"id": "factions3", "stat": "win_factions", "target": 3, "text": "Win with 3 different factions"},
+		{"id": "win_home5", "stat": "win_home_kept", "target": 5, "text": "Win 5 matches without losing your home"},
+	],
+}
+
+# --- Alpha 21 OPT-RENDER: render budget (tests/perf_check.tscn) ---
+# The heaviest real map (M-39: 18 nodes, 31 bridges, relays) at a busy moment (AI vs AI, fast-forwarded to
+# PERF_CHECK_FF, then PERF_CHECK_SECONDS of real play) in the PHONE profile at 1266x585 must stay under these
+# (the frame's draw calls / primitives / objects, 2D HUD included; max over the last 3 s). Before Alpha 21's
+# batching M-39 drew ~1,090 draw calls / 655 k primitives / 1,350 objects; batched ~440 / 347 k / 700, of which
+# the HUD is ~160 draw calls. The spec's targets (< 400 / < 300 k / < 800) need the lighter kit (OPT-MESH) for
+# the primitives and fewer HUD draw calls: lower these as those land.
+const PERF_CHECK_MAP := "res://maps4/M-39-circuit-warren.json"
+const PERF_CHECK_FF := 120.0
+const PERF_CHECK_SECONDS := 10.0
+const PERF_BUDGET_DRAW_CALLS := 500
+const PERF_BUDGET_PRIMITIVES := 400000
+const PERF_BUDGET_OBJECTS := 800
+# --- end OPT-RENDER ---

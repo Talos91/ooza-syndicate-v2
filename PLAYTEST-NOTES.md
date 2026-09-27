@@ -595,22 +595,22 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      defender's forge and faction stats in their garrison estimate.
 159. Structures 2.1 numbers: **"Instead of having 3 levels of laser tower we have only this one, we need
      to adjust its power ... give or take half way between current t2 and t3"** (Laser tower);
-     **"Yes, as proposed"** (Machingoon); **"One per player"** (Monster hub); **"Agree as proposed"**
+     **"Yes, as proposed"** (Machinegoon); **"One per player"** (Monster hub); **"Agree as proposed"**
      (monster); **"Up to 3 bridges"**; **"Only falls; node left empty"**; **"Swap, slimmed down"**
-     (minions). *Done (0.19.0):* Structures 2.1 built to spec - Machingoon, Laser tower, Monster hub +
+     (minions). *Done (0.19.0):* Structures 2.1 built to spec - Machinegoon, Laser tower, Monster hub +
      monster, full-colour slimmed minions (GAME-BIBLE §4, §15).
-160. **"Cost price of a tier 1 vat which we never set ... maybe 15"** (Machingoon <-> vat swap cost);
+160. **"Cost price of a tier 1 vat which we never set ... maybe 15"** (Machinegoon <-> vat swap cost);
      **"Yes they can't move only eject"** (allied stored troops); **"Yes forge protects"**;
      **"Yes start again on conquer, this make relay a keep"** (a captured hub restarts its charge);
      **"Change charge to 40 seconds"** (was 90 s); **"Always T4"** (special nodes); **"Cancel it"** (a
-     handover cancels the old owner's build); **"Halves both"** (Anchor halves Laser and Machingoon
+     handover cancels the old owner's build); **"Halves both"** (Anchor halves Laser and Machinegoon
      kills alike); **"Everyone, like on bridges"** (the monster kicks friend and foe on the platforms it
      crosses too). *Done (0.19.0):* every one of these 0.19.0 rules-pass answers is built.
 161. **"Configurable per faction or global (this is another question i have no answer now)"**
      (cosmetics); rejected recoloured skins - **"Just same skin with different texture, I want
      completely different"** - and alt faction vats - **"No need for alt faction vat skins."**
      *Done (0.19.0):* cosmetics built per faction for now, all unlocked while testing; 69 distinct-model
-     skins across the vat, Machingoon, Laser, Forge and Monster hub families plus one alternate monster
+     skins across the vat, Machinegoon, Laser, Forge and Monster hub families plus one alternate monster
      per faction - no recolours, no alt faction vats.
 162. **"The relays switch is clicked by double tapping relays, since we have no upgradable buildings
      there that need that touch command."** *Done (0.19.0):* double-tapping an owned relay now fires
@@ -633,3 +633,216 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 167. **"machinegoon go on vat lessons ... while monster laser (no more called cannon) and forge go with relays".**
      *Done (0.19.1):* L2 and L6.
 168. **Keep the lesson maps numbered T-03..T-10** (T-01 / T-02 stay as they are).
+
+## 2026-09-27 - Daniele, 0.19.1 playtest (0.19.2)
+
+169. **"tutorial veeeeery unpolished and messy".** *-> tutorial session (0.19.3).*
+170. **"monster hub doesn't show area of attack ... sending of monster is not clear, i suggest when
+     monster ready ... an icon that appears on top of it and now you can select destination".**
+     *Done (0.19.2):* a pulsing icon over a ready hub; tap it to light the reach area (nodes within 3
+     decks), tap a lit node to launch; the reach also lights when the hub is selected; LAUNCH in the
+     inspector still works.
+171. **"machinegoon are i think too big and when they shoot it looks weird as the enemies are under
+     them".** *Done (0.19.2):* Machinegoon scaled to 0.65 (Spitter x1.45, Pepperbox x1.3), muzzle
+     raised to ~1.15 m above the deck so the stream arcs onto the line.
+172. **Last Stand lesson clock / one faction in the tutorial / last tutorial map eternal.**
+     *-> tutorial session (0.19.3).*
+173. **"your color the faction one is not clear what it represent".** *Done (0.19.2):* the FACTION
+     colour chip now shows the faction's emblem and a caption while picked.
+174. **"rivals ... I suggest to simply remove the option or allow to pick the enemy for each slot".**
+     *Done (0.19.2):* chosen - per-seat rival faction chips (default RANDOM, no duplicate factions
+     while any remain), replacing the single rival-faction picker (`Sim.resolve_factions`).
+175. **"difficulty buttons aren't spaced properly".** *Done (0.19.2):* the DIFFICULTY row is now
+     evenly spaced.
+176. **"skills needs to have their cooldown as if they just got used on game start".** *Done (0.19.2):*
+     every active and map skill starts a match on full cooldown (`Rules.SKILLS_START_ON_COOLDOWN`);
+     ultimates still charge from 0.
+177. **"destroy skill cooldown is too long switch to 1.5s".** *Done (0.19.2):* chosen - the reading is
+     Demolish's fall delay, not the skill's own cooldown: a Demolished deck now falls 1.5 s after the
+     cast (was 3 s).
+178. **"surge i think needs to increase the speed of troops moving and entering a structure more".**
+     *Done (0.19.2):* chosen - +75 % speed (was +50 %) and double door rate (`Sim.door_mult(h)`,
+     pour-in included).
+179. **"on mobile the shortcut in the top right of the skill shouldn't appear".** *Done (0.19.2):* the
+     1/2/3 keyboard-shortcut badge no longer shows on phones.
+180. **"the 3 skills should have their border in different color based on the type".** *Done (0.19.2):*
+     the dock's three slots are bordered and labelled by skill type (Okabe-Ito sky blue / green /
+     orange).
+181. **"top left HUD ... is not fixed it keeps moving also i think should be centered ... for
+     multiplayer you'd want to see what each player is doing, rethink it".** *Done (0.19.2):* the top
+     bar is rebuilt fixed and centred: the clock in the middle, one chip per seat with emblem +
+     strength (monospace digits), you first, out seats greyed, teammates grouped.
+182. **"the enemies destroyed me and i'm still able to see the match ... if you lose you can go back to
+     menu or keep spectating".** *Done (0.19.2):* a YOU'RE OUT panel offers SPECTATE / MAIN MENU
+     (online: LEAVE ROOM) instead of dropping a beaten player out of the match.
+183. **"skins don't look implemented and goo/neon should be in the choice of cosmetic (as general core
+     one maybe)".** *Done (0.19.2):* ARMIES cosmetic picks show a turning 3D preview; a new CORE · ALL
+     FACTIONS row holds TERRITORY NEON / GOO, moved out of OPTIONS.
+184. **Relay-free spelling: "its machinegoon correct and tell other session".** *Done (0.19.2):*
+     Machingoon -> Machinegoon replaced everywhere (ids, action names, Rules keys, kit files); old
+     spellings accepted for one release.
+185. **Tutorial vocabulary request (node, deck, units, line, drop).** *Done (0.19.2):* player-facing
+     text now says node / deck / Laser tower / Machinegoon consistently ("a node drops every N s",
+     "RING N DROPPING · next node in N s", "off the deck", "Out of reach - up to N decks", skill
+     texts).
+
+## 2026-09-27 - Daniele, 0.19.1 tutorial playtest (0.19.3)
+
+186. **"tutorial feels veeeeery unpolished and messy, also we need to standardize the language used and start it by naming
+     what's what, also no trace of the handler just flat text".** *Done (0.19.3):* one vocabulary, L0 THE CITY, Dr. Vesk on
+     screen, every step reviewed at phone size.
+187. **The Last Stand lesson says 3:00 / 6:00 but the clock doesn't jump.** *Done (0.19.3):* the clock is set when each starts.
+188. **One faction for the whole tutorial ("I suggest using vex or bloom") - VEX.** *Done (0.19.3):* rival EMBER, L9 too.
+189. **The last map's neutrals were all at max (endless) and it switched faction.** *Done (0.19.3):* 10 / 15 / 25 / 40, capped; VEX.
+190. **Handler "Dr. Vesk"; L7 gap 15 s; L9 neutrals as proposed; the Graduate vat remodelled if not pleasing.** *Done (0.19.3):*
+     v2 by the Skin Designer (ivory, brass, crown, laurel crest).
+
+## 2026-09-27 - Daniele, a real server for friends (0.20.0)
+
+- "for this game ... we need to think about a real server also so i can have freinds playing.... end goal is put on
+  android and apple store soooo... something that works for that" - *Done in two stages:* 0.19.0 routes every room
+  through a room server (Vultr, Singapore: "my friends are in asia"); 0.20.0 moves the match onto that server
+  (a headless copy of the game per room, the creator is the room owner), so no phone hosts. Accounts, leaderboards and
+  currency: the "Leaderboard, progression, and currency" session (Supabase), with results written only by the server.
+- "will we be able to improve game performance having now a server? as i noticed before some slowing" - *Answered:*
+  mostly no; the stutter on camera moves and falling nodes is the device drawing the scene. A measured graphics pass
+  (kit meshes, batching, cheaper fall effects, dynamic resolution on phones) is its own item (NEXT-SESSION).
+- Domain: waits for the game name (Daniele: "i need to decide game name before moving forward"); until then the
+  server answers at 45-32-126-20.sslip.io.
+
+## 2026-09-27 - Daniele, progression and currency (0.20.1)
+
+- "Scrap and Syndicate Chips are my choices" - *Done:* SCRAP (free) and SYNDICATE CHIPS (premium), both shown from
+  day one (MAIN card, PROFILE, results).
+- "i like the reward you mentioned but i d lower skill cost is mobile so i d say skill cost to 1250 scraps" - *Done:*
+  a skill costs 1 250 SCRAP; the match rewards stay as proposed (PROGRESSION-DESIGN §9).
+- "premium currency we can award for weekly and progression but in small amounts" - *Done:* 10 chips per weekly
+  challenge, 25 every 5th level.
+- "agree on the all open until lock switch" - *Done:* `Rules.UNLOCK_ALL_TESTING` keeps everything open; OPTIONS > TEST
+  SWITCH · LOCKS previews the locked game for a session.
+- "start with 2 free skills and as a bonus for each tutorial map we give some scrap so that a 3 skill can be unlocked
+  once done tutorial" / "the 2 used in the tutorial surge and destroy bridge" - *Done:* Surge + Demolish free; lessons
+  1-9 pay 140 SCRAP each (1 260).
+- Faction vat by play: online + Veteran / Expert AI wins; easy AI pays XP only; resets 00:00 UTC - *Done* as chosen.
+- Sign-in: "their google play account or apple game account and maybe leave an option for those downloading via apk
+  or other way to connect with a personal account" - *Planned* (PROGRESSION-DESIGN §7): accounts come next, after this
+  offline-first release.
+
+## 2026-09-27 - Daniele, tutorial notes and a phone emergency (0.20.2)
+
+191. **"oftent the focus only highlight the target but obscure the towers that needs to send".** *Done (0.20.2):* send
+     steps light their sending nodes; dim 42 %.
+192. **"since sometimes order might be short of a few troops or the user might be mistake amount sent it can somewhat break
+     the tutorial".** *Done (0.20.2):* the director tops up and asks for a 100 % retry; TRY AGAIN only for real losses.
+193. **"relay map is too fast make the time slow when the user needs to activate the relay".** *Done (0.20.2):* 0.25x from
+     ~2 s before the deck, held until the fire; slower rival lines in L4 / L5.
+194. **"emergency this is what my gf see" (giant menu buttons on her phone).** *Done (0.20.2):* menu pages rebuild when a
+     resize changes the phone sizing (built in portrait / mid-rotation). Not yet confirmed on her phone.
+
+
+## 2026-09-27 - Daniele, first online playtest of 0.20.0 (0.20.3)
+
+195. **"it lags and this time wasn't graphic related but connection....how come?"** (jerky movement, Wi-Fi + mobile data).
+     *Done (0.20.3):* 20 Hz snapshots on an even clock, a 120 ms playout buffer, extrapolation and blended corrections in
+     server rooms (freezes 10 % -> 1.2 %, jumps -> 0 on simulated mobile data).
+196. **"i couldn't figure how to send the monster... when its ready to launch you click on it, the guided send (where you see
+     all targets lights up) and you click and it goes... done".** *Done (0.20.3):* tapping a ready hub / its monster / the icon
+     arms the guided send (it used to open the inspector).
+197. **Machinegoon "look way too small; make it look as big as the other structures but make sense"** (via Skin Designer), then
+     "Yes, rebuild both" (Spitter, Pepperbox). *Done (0.20.3):* v2 models with low barrels at full scale.
+198. **A server room defaulted to T-01 "First Steps" - Daniele: "Hide T-01 / T-02 too".** *Done (0.20.4):* every T- map is
+     tutorial-only (`MapPool.TUTORIAL_ONLY`): never on 02 BATTLEFIELD, in rooms, rematches or the AI test pools; the menu /
+     room default is now A-01 Orbital Nexus; the tutorial's first match still loads T-02 by path.
+
+## 2026-09-27 - Daniele, the campaign (0.20.4 preview)
+
+199. **"I like A + C"** (the city from above as the campaign map + the Descent under it), **"dark comedy"**, **"linear with
+     optional side nodes"**, **"for now no coop campaign"**. *Done (0.20.4 preview):* CAMPAIGN-DESIGN §0; the VEX campaign
+     on a 3D district map, 10 main + 3 side missions.
+200. **"one campaign per faction (with unlock of faction vats as bonus so we already have it)"** / **"second way to get them
+     either pay, play pvp or do the campaign"**. *Done (0.20.4):* finishing VEX unlocks the VEX vat through Progression,
+     beside the price and the 25 wins; the other factions show LATER.
+201. **"1 to 3 stars just for achievement but, if 3 stars + optional objective you get an amount of ingame currency"** /
+     **"yes same run"** / **"yes currency reward is one off per mission"**. *Done (0.20.4):* stars kept per mission; 150 /
+     200 / 300 SCRAP once, only for 3 stars + the objective in one run (sizes await his yes).
+202. **The finale twist (the vats have been eating the city's supports) - "actually sound cool"**. *Done (0.20.4):* 10 Root
+     Cause.
+203. **"try continuing the part of your work you can do without the maps"**. *Done (0.20.4):* everything but the mission maps,
+     which play on placeholder maps until the Game map builder builds them from `02 Maps/campaign-vex-briefs/` (Alpha 22-23).
+204. **Star rules: "yes but gotta see if make sense"**. *To test* on the phone (TO-TEST, 0.20.4).
+
+## 2026-09-27 - Daniele, accounts and match history (0.20.5)
+
+- Supabase: "Yes, create it (Recommended)" - *Done:* project ooze-syndicate (free, Singapore).
+- Sign-in: guest + email link + Google on web / APK - *Done* (Google waits for the dashboard provider).
+- "Keep the account's" when signing in on a device with its own progress - *Done* (tested live: account wins).
+- First leaderboards: weekly challenge points + wins this season - *Done:* WINS THIS SEASON; weekly challenge points
+  next (needs server-checked challenges).
+- MATCH HISTORY: "Yes, in 0.20.5" (via the Architect) - *Done:* PROFILE > HISTORY.
+205. **"the current structure node by node doesn t allow for much dynamic its likely you tend to go node by node and last stand often cuts relays usage making them always kinda useless end game if not for structure... we need to tackle that in the map maker but i love the map for the campaign looks cool".** *Decided (map rules N10 two lanes, N11 short corridors, N12 relays on the main routes, L05 a relay in the survivor ring; OPEN-QUESTIONS "Map dynamics"); applied at the map rebuild, Alpha 22-23.*
+
+206. **"make the text more fun dr dex is a bit flat".** *Done (0.20.6):* Dr. Vesk speaks in the campaign's dark-comedy house style
+     (CAMPAIGN-DESIGN §1): the instruction first, then one short joke at most; 59 lines (TUTORIAL-SCRIPT draft 3).
+207. **"remove the number on top of units line - is not readable and makes noise; also too many notifications and many
+     notifications cover the map; all notifications should be top right and last stand notification shouldn't cover the
+     screen while player plays; also remove all notices of things like send and capture - better is in game text coming
+     out of the conquer place or smt like that - right now they distract too much and cover a lot of screen real
+     estate".** *Done (0.20.6, "HUD declutter"):* the moving Label3D over a horde's line is gone (node badges still show
+     counts); toasts moved to a small top-right column under the top bar and PAUSE, never over the map centre, capped at
+     2 and holding 1.8 s instead of 3; dropped the routine toasts for your own accepted orders, captures, VERY LAST
+     STAND / node-falls-in-Ns / relay-switches (the status line and the node's own danger symbols already show these),
+     and battle noise (fling/fall) - kept skill casts against you, a monster launched at you, forge lost, eject, a
+     silent handover, refusals and online events; captures/losses now play as a short rising "+ CAPTURED" / "LOST" label
+     at the node instead (tier-down's "T2 -> T1" already worked this way).
+
+## 2026-09-27 - Daniele, Google sign-in set up (0.20.7)
+
+- Daniele (via the Architect): the Google OAuth consent screen, a Web client and the Supabase Google provider are done -
+  *Done:* 0.20.7 fixes the web build's gzip bug that kept the Google buttons greyed; a full Google sign-in waits for
+  Daniele (his account must be a Test user while the Google app is in Testing).
+
+## 2026-09-27 - Daniele, no email sign-in (0.20.8)
+
+- "if they sign in i'd like them not to have to verify email, its a game why would they want to do that for a mobile game,
+  also later auth will be on app game and android game so this step is useless" - *Done:* ACCOUNT = guest + Google + rename.
+
+## 2026-09-27 - Daniele, rename on the phone (0.20.10)
+
+- "rename doesn't allow for chat input" / "fix the rename on my mobile, no keyboard opens to input" - *Done:* on the web
+  NAME / RENAME open a native text field that raises the phone keyboard (checked in touch emulation, not on a real phone).
+
+## 2026-09-27 - Daniele, the name keyboard on Android (0.20.11)
+
+- "keyboard still doesn't appear for player name" - *Done:* the NAME box is a real HTML field the tap lands on (checked
+  in touch emulation, not on a real phone).
+
+## 2026-09-27 - Daniele, 0.20.10 / 0.20.11 notes (0.20.12)
+
+208. **"instead of a platform every 5 seconds, we do every 20 i think it makes it more fair"** -> "Aim for 20 s, fit the time".
+     *Done (0.20.12):* adaptive drop gap, 8-20 s, median 20 s across the pool.
+209. **"on the main screen a guide on how to do this [add to home screen] so new users can figure it"**. *Done (0.20.12):* INSTALL THE GAME.
+210. **Rematch "either wasn't working or interface is crooked as it just look like it reloads and say 1 player ready"**.
+     *Done (0.20.12):* AI fills a bigger rematch mode; the ready state names who is ready.
+211. **"some stutter here and there seems but manageable"**. *0.20.12:* a CONNECTION line in PAUSE to tell network stalls
+     from phone frame rate.
+
+## 2026-09-28 - Daniele, online co-op playtest of 0.20.11 / 0.20.12 (0.20.13)
+
+212. **"rematch works we tested"** - confirmed live (0.20.12).
+213. **"in coop play the halo of the building in the color of the ally wasn't working"** / "i sent troops to her node and except the
+     count going up i couldn't see any other indicator". *Done (0.20.13):* per-ally coloured rings, your share coloured on the badge.
+214. **"last stand still fills the whole screen"**. *Done (0.20.13):* the centre banner became a toast.
+215. **"notification in top right are impossible to see move to top left"**. *Done (0.20.13).*
+216. **"in our match last stand was still 5 sec"**. *Explained:* that room ran 0.20.11 (created before 0.20.12 reached the server).
+217. **"in leaderboard my gf doesn't appear even if we won a match playing online together"**. *Explained:* the co-op round ran in a
+     browser-hosted fallback room (both server slots were held by test rooms), unranked by design; now shown as UNRANKED, and test
+     rooms give way to real players.
+218. **"in coop play the ai sucks"** (the AI enemies are too easy). *Open:* waiting on Daniele's choice of approach.
+219. **"lag still a major problem"** - the PAUSE line showed low fps. *Alpha 21 optimization started.*
+
+## 2026-09-28 - Daniele, Alpha 21 (0.21.0)
+
+220. **"i see the graphic has become like minecraft ... i hope you are not reducing the graphic of the game"** (watching a test
+     window). *Done (0.21.0):* the default look is unchanged on desktop and sharper on phones (the old 75 % phone render scale was
+     the blocky cause); savings come from batching, not resolution. "Full resolution, check the heat".
+221. **Light models "Phones only"** - coming in the next Alpha 21 build (light set on phones, today's full models on desktop).
