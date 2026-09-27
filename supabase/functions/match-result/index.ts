@@ -5,6 +5,8 @@
 //   x-ooze-sig: lowercase hex of HMAC-SHA256(secret, x-ooze-ts + "." + raw request body)
 // Body: the §7a JSON ({match_id, build, map, mode, rules, started_at, duration_s, outcome, seats: [...]}).
 // Idempotent on match_id (a retried POST records nothing twice). Answers {ok, result: "recorded" | "duplicate"}.
+// x-ooze-dry-run: 1 checks the signature and the body the same way, writes nothing, answers result "dry-run"
+// (the room server's end-to-end check).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -53,6 +55,7 @@ Deno.serve(async (req: Request) => {
       !Array.isArray(report.seats) || report.seats.length > 8) {
     return json(400, { ok: false, error: "match_id and seats (at most 8) are required" });
   }
+  if (req.headers.get("x-ooze-dry-run") === "1") return json(200, { ok: true, result: "dry-run" });
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
     auth: { persistSession: false },
   });

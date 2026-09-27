@@ -23,7 +23,8 @@ Owner: the "Leaderboard, progression, and currency" session. Design: `Docs/Game 
 - `migrations/` - the SQL applied to the project, in order (keep this folder the same as the live project).
 - `functions/match-result/index.ts` - POST from the match host. Headers `x-ooze-ts` (unix seconds, +-60 s) and
   `x-ooze-sig` = hex HMAC-SHA256(`OOZE_MATCH_SECRET`, ts + "." + raw body). Idempotent on `match_id`. `verify_jwt` off
-  (its own auth). Answers 503 until the secret is set.
+  (its own auth). Answers 503 until the secret is set. `x-ooze-dry-run: 1` verifies the same way and writes nothing
+  (answers "dry-run") - for end-to-end checks.
 - RPCs: `set_name(new_name)`, `leaderboard_season_wins(lim)` (a season = the UTC calendar month for now),
   `ingest_match(r)` (service role only).
 
