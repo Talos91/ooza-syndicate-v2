@@ -827,6 +827,28 @@ const CHALLENGES := {
 	],
 }
 
+# --- PROGRESSION: telemetry, crash reports, privacy (01 Rules/TELEMETRY-PRIVACY-DESIGN.md; Alpha 21) ---
+# consent (Daniele, 2026-09-28): "opt_in_eu_uk" = the switch starts OFF for players in the EU / EEA / UK / Switzerland
+# (time zone / locale; unsure = EU) and ON elsewhere; "opt_out" = ON for everyone. Nothing leaves the device before the
+# privacy notice has been answered, and never while the switch is OFF.
+const TELEMETRY := {
+	"consent": "opt_in_eu_uk",
+	"queue_max": 200,           # events kept on the device (oldest dropped)
+	"batch": 50,                # events per upload (the telemetry function's limit)
+	"event_bytes": 2048,        # one event's JSON
+	"flush_s": 120.0,           # upload every 2 min (and at match end / back in the menu)
+	"crashes_per_run": 10,      # distinct crash reports one run may queue
+	"match_logs_kept": 20,      # user://telemetry/match_*.json kept on the device
+	"menu_perf_s": 60.0,        # phones: one menu perf event per minute in the menu
+	"long_frame_ms": 50,        # a frame this long counts as a long frame (heat / stutter proxy)
+	"retention_days": 60,       # shown in the notice; the purge is the database's (purge_telemetry)
+	"crash_retention_days": 90,
+	"contact": "privacy@ooze-syndicate.example",   # PLACEHOLDER until Daniele creates the game mailbox
+	"policy_url": "https://talos91.github.io/ooza-syndicate-v2/privacy.html",
+	"min_age": 13,
+}
+# --- end PROGRESSION: telemetry ---
+
 # --- Alpha 21 OPT-RENDER: render budget (tests/perf_check.tscn) ---
 # The heaviest real map (M-39: 18 nodes, 31 bridges, relays) at a busy moment (AI vs AI, fast-forwarded to
 # PERF_CHECK_FF, then PERF_CHECK_SECONDS of real play) in the PHONE profile at 1266x585 must stay under these

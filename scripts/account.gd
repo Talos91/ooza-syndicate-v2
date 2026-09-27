@@ -32,7 +32,7 @@ var is_anonymous := true
 var email := ""
 var providers: Array = []
 var player_name := ""                             # the profile name (SLIME-xxxxx until renamed)
-var state := "offline"                              # offline | signing_in | guest | linked | error
+var state := "offline"                              # offline | signing_in | guest | linked | error | deleted
 var google_ready := false                          # the project's Google provider is on (read from /auth/v1/settings)
 var last_error := ""
 var _save_hash := ""
@@ -156,6 +156,7 @@ func _share_token() -> void:
 
 
 func _process(dt: float) -> void:
+	Telemetry.tick(self, dt)                        # captured errors, the upload every 2 min (only when shared + signed in)
 	if not signed_in():
 		return
 	if expires_at - int(Time.get_unix_time_from_system()) < REFRESH_EARLY:
@@ -336,6 +337,31 @@ func _sync_save(switched: bool) -> void:
 		_save_hash = str(JSON.stringify(pack_save()).hash())
 	elif r["ok"]:
 		await push_save()
+
+
+# ------------------------------------------------------------------ DELETE ACCOUNT (TELEMETRY-PRIVACY-DESIGN §7, Alpha 21)
+func delete_account() -> bool:
+	## The delete-account function removes the auth user; the database cascades the profile, cloud save, faction stats
+	## and play data, and anonymises this account's match seats. Then this device forgets the session. Its local
+	## progress stays (Daniele, 2026-09-28); the next run online starts a new guest.
+	if not signed_in():
+		last_error = "not signed in"
+		changed.emit()
+		return false
+	var r := await _call("POST", "/functions/v1/delete-account", {"confirm": "DELETE"}, true)
+	if not r["ok"]:
+		_fail(r)
+		return false
+	Telemetry.drop_queue()                          # queued events belonged to the deleted account
+	player_name = ""
+	email = ""
+	providers = []
+	is_anonymous = true
+	_save_hash = ""
+	_clear()
+	state = "deleted"                               # ACCOUNT says so until the next run
+	changed.emit()
+	return true
 
 
 # ------------------------------------------------------------------ plumbing

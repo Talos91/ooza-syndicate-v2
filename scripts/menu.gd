@@ -526,6 +526,23 @@ func show_options() -> void:
 	# --- end OPT-RENDER ---
 	# TERRITORY moved to ARMIES > COSMETICS > CORE (0.19.2, Daniele: "goo/neon should be in the choice of
 	# cosmetic, as general core one maybe") - one place only, so it isn't duplicated here any more.
+	# --- PROGRESSION (Alpha 21): SHARE PLAY & CRASH DATA + the PRIVACY page (TELEMETRY-PRIVACY-DESIGN §6) ---
+	y += 20.0
+	stack_add(st, label_at("PRIVACY", P(15, y), 30))
+	y += 41.0
+	var hp := rh(60)
+	var shr := stack_add(st, nav_button(_share_label(), P(15, y), P(600, hp), func():
+		_toggle_share()
+		show_options())) as Button
+	shr.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
+	var prv := stack_add(st, nav_button("PRIVACY", P(627, y), P(303, hp), func(): show_privacy(show_options))) as Button
+	prv.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
+	y += hp + 12.0
+	if not mobile:
+		stack_add(st, label_at("Gameplay and performance numbers and crash reports, tied only to your game account id.", P(15, y), 18, Color("b8ced6")))
+		y += 34.0
+	y += 20.0
+	# --- end PROGRESSION ---
 	var h5 := rh(50)
 	var dbg := stack_add(st, nav_button("DEBUG TOOLS: %s" % ("ON  -  the Debug button and live sliders in matches" if Rules.debug_tools else "OFF"),
 			P(15, y), P(915, h5), func():
@@ -894,6 +911,9 @@ func show_account() -> void:
 			col = Color("6fff2a")
 		"signing_in":
 			status = "SIGNING IN ..."
+		"deleted":                                  # Alpha 21: DELETE ACCOUNT done
+			status = "ACCOUNT DELETED  -  this device keeps its progress; a new guest account starts next time"
+			col = Color("ffd15c")
 	_wrapped(status, lp + P(28, 22), 22, col, 700)
 	# rows advance by each control's grown height (rh / tap): on a phone the 44 pt fields are taller than designed
 	var hh := rh(58)
@@ -960,9 +980,93 @@ func show_account() -> void:
 		ry += 30.0
 	if _account_note != "":
 		_wrapped(_account_note, rp + P(28, ry + 10.0), 19, Color("ffd15c"), 760)
+		ry += 40.0
+	# --- Alpha 21: PRIVACY - the data switch, the PRIVACY page, DELETE ACCOUNT (TELEMETRY-PRIVACY-DESIGN §6-§7) ---
+	ry = maxf(ry + 20.0, 290.0)
+	label_at("PRIVACY", rp + P(28, ry), 22, Color.WHITE, false)
+	ry += 38.0
+	nav_button(_share_label(), rp + P(28, ry), P(766, 58), func():
+		_toggle_share()
+		show_account()).add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
+	ry += hh + 12.0
+	nav_button("PRIVACY", rp + P(28, ry), P(300, 58), func(): show_privacy(show_account))
+	var del := nav_button("DELETE ACCOUNT", rp + P(344, ry), P(450, 58), _delete_prompt)
+	del.disabled = not a.signed_in()
+	# --- end PRIVACY ---
 	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
 		_account_note = ""
 		show_profile())
+
+
+# ------------------------------------------------------------------ PROGRESSION: PRIVACY (Alpha 21)
+func _share_label() -> String:
+	return "SHARE PLAY & CRASH DATA: " + ("ON" if Telemetry.sharing() else "OFF")
+
+
+func _toggle_share() -> void:
+	Telemetry.choose(not Telemetry.sharing())
+	if Telemetry.sharing():
+		Telemetry.flush_soon()
+
+
+func show_privacy(back: Callable = Callable()) -> void:
+	## The full notice (the same text as privacy.html beside the game), the switch, BACK to where it was opened.
+	var ret: Callable = back if back.is_valid() else show_options
+	_last_show = func(): show_privacy(ret)
+	clear_page("city")
+	_page = "privacy"
+	header(0)
+	label_at("PRIVACY", P(40, 104), 43)
+	label_at("SHARE PLAY & CRASH DATA: " + ("ON" if Telemetry.sharing() else "OFF"), P(300, 122), 20,
+			Color("6fff2a") if Telemetry.sharing() else Color("ffd15c"))
+	frame(P(35, 174), P(1602, 600))
+	var st := stack_open(P(55, 190), P(1562, 566))
+	var y := 5.0
+	for para in Telemetry.privacy_text().split("
+
+"):
+		var heading: bool = para == para.to_upper()
+		var l := label_at(para, P(15, y), 24 if heading else 19, Color("19dce8") if heading else Color("c5d2da"))
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size = Vector2(1510 * K, 0)
+		l.size = l.custom_minimum_size
+		stack_add(st, l)
+		var fs := int(round(fsz(24 if heading else 19) * K))
+		var th := (HEAD_FONT if heading else UI_FONT).get_multiline_string_size(para, HORIZONTAL_ALIGNMENT_LEFT,
+				1510 * K, fs).y
+		y += th / K + (8.0 if heading else 22.0)
+	stack_close(st, y * K)
+	nav_button("BACK", P(40, foot_y()), P(230, 58), ret)
+	nav_button(_share_label(), P(290, foot_y()), P(600, 58), func():
+		_toggle_share()
+		show_privacy(ret))
+
+
+func _delete_prompt() -> void:
+	## DELETE ACCOUNT's confirm sheet over ACCOUNT: what goes, what stays, DELETE / CANCEL.
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.72)
+	dim.position = Vector2(-3000, -3000)
+	dim.size = Vector2(9000, 9000)
+	content.add_child(dim)
+	var pp := P(386, 230)
+	var pd := P(900, 480)
+	content.add_child(neon_panel(pp, pd, Color("ff5a4e"), true, Color("0a1216f4")))
+	label_at("DELETE ACCOUNT?", pp + P(32, 24), 34, Color.WHITE, false)
+	_wrapped("This deletes your account, cloud save, match history, leaderboard entries and shared play data. "
+			+ "It can't be undone. The progress saved on this device stays.", pp + P(32, 90), 21, Color("c5d2da"), 836)
+	var a := _account()
+	var busy := [false]
+	nav_button("DELETE", pp + P(32, 330), P(360, 66), func():
+		if busy[0]:
+			return
+		busy[0] = true
+		if await a.delete_account():
+			_account_note = "Account deleted."
+		else:
+			_account_note = "Not deleted: " + a.last_error
+		show_account())
+	nav_button("CANCEL", pp + P(420, 330), P(300, 66), show_account, true)
 
 
 # The web build's name field: a native DOM <input> laid over ACCOUNT's NAME box (like web/room-ui.js's room code, the

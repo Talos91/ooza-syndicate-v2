@@ -216,6 +216,7 @@ func _ready() -> void:
 		elif arg.begins_with("--tutorial="):
 			tut_id = int(arg.substr(11))
 	MapPool.phone = MapPool.phone_screen(mobile)       # Alpha 18: phones get the phone-fit maps only
+	_start_telemetry()                                 # PROGRESSION (Alpha 21): consent, crash hooks, the privacy notice
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
@@ -467,6 +468,8 @@ func _start_online() -> void:
 			sim.match_hard_end = float(arg.substr(12))
 	Net.world_ready(sim, self)
 	Net.order_feedback.connect(_on_order_feedback)
+	if not Net.dedicated:
+		Telemetry.funnel_once("first_online_round")    # PROGRESSION (Alpha 21): the funnel's online step
 	if Net.is_host():                                  # EMPTY SEATS and dropped players: the AI plays them
 		_sync_online_ais()
 		Net.seats_changed.connect(_sync_online_ais)
@@ -552,6 +555,9 @@ func rematch_random() -> void:
 
 
 func to_menu() -> void:
+	if started and not sim.over and director == null and mission == null:   # PROGRESSION (Alpha 21): left early
+		_telemetry_match(true)
+		Telemetry.perf_event("match")
 	if mission:                                        # CAMPAIGN: leaving a mission returns to the campaign page
 		_mission_leave()
 		return
@@ -1104,6 +1110,7 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 func _process(delta: float) -> void:
 	if perf_on:
 		_perf(delta)
+	Telemetry.frame(delta, started)                    # PROGRESSION (Alpha 21): frame times for the perf event
 	if not started:
 		return
 	# --- SERVER HOST (Alpha 21): step the Sim and the AI, hand the fx events to the guests, draw nothing ---
@@ -1274,6 +1281,8 @@ func _on_finished_server(winner: String) -> void:
 func _on_finished(winner: String) -> void:
 	var path := Telemetry.save(sim, map.get("code", ""), trace)
 	print("match over, winner ", winner, " - telemetry ", path)
+	Telemetry.perf_event("match")                      # PROGRESSION (Alpha 21): this match's frame times
+	Telemetry.flush_soon()
 	hud.close_inspector()
 	if director:                                       # TUTORIAL: the lesson's completion screen replaces the results
 		return
@@ -1311,6 +1320,7 @@ func _record_progress() -> void:
 	if online and Net.has_method("server_hosted") and not bool(Net.call("server_hosted")):
 		rewards["unranked"] = true
 	rewards["ai_level"] = info["ai_level"]
+	_telemetry_match(false)                            # PROGRESSION (Alpha 21): the shared match event
 
 
 func _history_info() -> Dictionary:
@@ -1333,6 +1343,45 @@ func _history_info() -> Dictionary:
 			ai[a.seat] = a.level
 	return {"map": str(map.get("code", "")), "mode": mode, "online": online,
 			"room_key": "%s-%d" % [Net.room_code, Net.match_round] if online else "", "names": {HUMAN: you}, "ai": ai}
+
+
+# --- PROGRESSION: telemetry (Alpha 21, 01 Rules/TELEMETRY-PRIVACY-DESIGN.md) ---
+func _start_telemetry() -> void:
+	## A player's device only: never the match host, a headless run, a demo / scenario / fast-forward / screenshot run.
+	## First launch: the privacy notice (once; over the tutorial's first card or the menu, under the fullscreen gate).
+	var args := OS.get_cmdline_user_args()
+	for arg in args:
+		if arg.begins_with("--region="):               # screenshot / test helper: the EU (opt-in) or elsewhere notice
+			Telemetry.force_region = arg.substr(9)
+	var shot_run := false
+	for arg in args:
+		if arg.begins_with("--menu-shot=") or arg.begins_with("--mission-shot=") or arg == "--no-telemetry":
+			shot_run = true
+	if "--privacy-preview" in args:                   # screenshot helper: the notice on scratch files, never the real ones
+		Telemetry.path = "user://privacy_preview.cfg"
+		Telemetry.queue_path = "user://privacy_preview_queue.json"
+		for p in [Telemetry.path, Telemetry.queue_path]:
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+		Telemetry.forget_all()
+		shot_run = false
+	if Net.dedicated or DisplayServer.get_name() == "headless" or demo or scenario != "" or ff_to > 0.0 \
+			or not shots.is_empty() or thumb_path != "" or shot_run:
+		Telemetry.enabled = false
+		return
+	Telemetry.install()
+	if Telemetry.notice_due() and get_node_or_null("PrivacyNotice") == null and not "--no-notice" in args:
+		var n := PrivacyNotice.new()
+		n.name = "PrivacyNotice"
+		add_child(n)
+
+
+func _telemetry_match(left_early: bool) -> void:
+	if not Telemetry.enabled or not sim.factions.has(HUMAN):
+		return
+	var hosted := online and Net.has_method("server_hosted") and bool(Net.call("server_hosted"))
+	Telemetry.match_event(sim, HUMAN, {"map": str(map.get("code", "")), "mode": mode, "online": online,
+			"server_hosted": hosted, "ai_level": "" if online else ai_level, "left_early": left_early})
+# --- end PROGRESSION: telemetry ---
 
 
 static var _account_started := false
@@ -1641,6 +1690,7 @@ func start_tutorial(lesson_id: int, first := false, faction := "", colour := "")
 	## afterwards), a scripted rival (no SeatAI; the Training AI in the first match).
 	director = TutorialDirector.new(lesson_id)
 	director.first_launch = first
+	Telemetry.funnel("lesson_start", str(lesson_id))   # PROGRESSION (Alpha 21): the tutorial funnel
 	show_out_panel = lesson_id == TutorialDirector.LESSON_COUNT   # no YOU'RE OUT in lessons 0-8: a TRY AGAIN instead
 	menu_faction = faction if faction != "" else str(SEAT_FACTIONS[HUMAN])
 	if colour != "":
@@ -1894,6 +1944,8 @@ func _on_coach_button(id: String) -> void:
 
 func _on_lesson_completed(r: Dictionary) -> void:
 	## LESSON COMPLETE / TRAINING COMPLETE instead of the results screen (§6). The tour goes straight on to L1.
+	Telemetry.funnel("lesson_done", str(director.lesson_id),   # PROGRESSION (Alpha 21): the tutorial funnel
+			{"seconds": int(r.get("time", sim.time))})
 	if r.get("tour", false):
 		_tutorial_relaunch({"tutorial": 1, "first": director.first_launch})
 		return
@@ -1985,6 +2037,7 @@ func start_mission(key: String, colour := "") -> void:
 		call_deferred("_mission_leave")
 		return
 	mission = MissionDirector.new(key)
+	Telemetry.funnel("mission_start", key)            # PROGRESSION (Alpha 21): the campaign funnel
 	show_out_panel = false                             # the result screen says it; no YOU'RE OUT on top
 	SEAT_FACTIONS[HUMAN] = str(m["faction"])
 	SEAT_FACTIONS["B"] = str(Campaign.rival_of(m).get("faction", "ember"))
@@ -2035,6 +2088,8 @@ func _on_mission_completed(res: Dictionary) -> void:
 	hud.close_inspector()
 	_end_drag()
 	var summary := Campaign.record(mission.key, res)
+	Telemetry.funnel("mission_done", mission.key, {"result": "win" if res["won"] else "loss",   # PROGRESSION (Alpha 21)
+			"stars": int(res["stars"]), "seconds": int(float(res["time"]))})
 	Campaign.last_run = {"key": mission.key, "summary": summary}
 	var xp := Campaign.progress_match(sim, HUMAN, ai_level)
 	print("mission %s %s at %.1f s - %d star(s), optional %s, reward %s" % [mission.key, "won" if res["won"] else "lost",
