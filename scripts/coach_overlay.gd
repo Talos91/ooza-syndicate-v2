@@ -1086,8 +1086,7 @@ func _position_card() -> void:
 		for a in _avoid:
 			if rect.intersects(a):
 				score -= 2500.0
-		if _covers_target(rect):
-			score -= 4000.0                # heavily discourage covering a target (each ring / rect, not their bounding box)
+		score -= 4000.0 * _covered(rect)   # heavily discourage covering targets: each ring / rect counts (not their bounding box)
 		for o in _obstacles:               # then the nodes: a corner over the map's empty sky wins
 			if rect.grow(10.0).has_point(o):
 				score -= 700.0
@@ -1110,6 +1109,17 @@ func _position_card() -> void:
 		_card_tween = create_tween()
 		_card_tween.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 		_card_tween.tween_property(_card, "position", chosen, EASE_TIME)
+
+
+func _covered(rect: Rect2) -> int:
+	var k := 0
+	for t in _targets_px:
+		if rect.grow(float(t["r"]) * 0.8).has_point(t["c"]):
+			k += 1
+	for r in _target_rects:
+		if rect.intersects(r):
+			k += 1
+	return k
 
 
 func _covers_target(rect: Rect2) -> bool:
