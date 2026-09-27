@@ -1034,7 +1034,7 @@ func _cosmetic_row(family: String, current: String, pos: Vector2, fc: Color) -> 
 	if locked and not Progression.price(item).is_empty():
 		nav_button("UNLOCK", pos + P(850, 38), P(190, 42), func():
 			_buy_prompt(item, Cosmetics.label(family, current, _army).to_upper(), "A look only: tier read, footprint and colour stay the same.",
-					func(): show_cosmetics()))
+					func(): show_cosmetics()), false, false)   # the row's own height (a dense row - see label_at())
 	nav_button(">", pos + P(1090, 42), P(42, 32), func():
 		ArmyPresets.set_cosmetic_pick(_army, family, options[(idx + 1) % options.size()])
 		show_cosmetics())
