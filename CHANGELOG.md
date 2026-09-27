@@ -1,5 +1,13 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.2 "Alpha 20" - 2026-09-27 (tutorial: the Graduate vat preview)
+
+- TRAINING COMPLETE's Graduate vat turntable now shows the vat in your colour (its tanks were black: the preview never
+  got the owner materials), whole (framed to the model's bounds - the crown was cropped) and softly lit (the v2 ivory
+  blew out white under the warm ambient). `CoachOverlay.GraduatePanel` only.
+- Also in main since 0.20.0 (tutorial hotfix 9d02082): the first coach card no longer hops between corners or shifts
+  its buttons while the line types in.
+
 ## 0.20.1 "Alpha 20" - 2026-09-27 (progression: SCRAP, SYNDICATE CHIPS, levels, challenges, unlocks)
 
 Daniele: the "Leaderboard, progression, and currency" session builds "currency in parallel". His decisions
