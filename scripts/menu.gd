@@ -526,23 +526,7 @@ func show_options() -> void:
 	# --- end OPT-RENDER ---
 	# TERRITORY moved to ARMIES > COSMETICS > CORE (0.19.2, Daniele: "goo/neon should be in the choice of
 	# cosmetic, as general core one maybe") - one place only, so it isn't duplicated here any more.
-	# --- PROGRESSION (Alpha 21): SHARE PLAY & CRASH DATA + the PRIVACY page (TELEMETRY-PRIVACY-DESIGN §6) ---
-	y += 20.0
-	stack_add(st, label_at("PRIVACY", P(15, y), 30))
-	y += 41.0
-	var hp := rh(60)
-	var shr := stack_add(st, nav_button(_share_label(), P(15, y), P(600, hp), func():
-		_toggle_share()
-		show_options())) as Button
-	shr.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
-	var prv := stack_add(st, nav_button("PRIVACY", P(627, y), P(303, hp), func(): show_privacy(show_options))) as Button
-	prv.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
-	y += hp + 12.0
-	if not mobile:
-		stack_add(st, label_at("Gameplay and performance numbers and crash reports, tied only to your game account id.", P(15, y), 18, Color("b8ced6")))
-		y += 34.0
-	y += 20.0
-	# --- end PROGRESSION ---
+	y = _privacy_rows_options(st, y)                  # PROGRESSION (Alpha 21): SHARE PLAY & CRASH DATA + PRIVACY
 	var h5 := rh(50)
 	var dbg := stack_add(st, nav_button("DEBUG TOOLS: %s" % ("ON  -  the Debug button and live sliders in matches" if Rules.debug_tools else "OFF"),
 			P(15, y), P(915, h5), func():
@@ -981,7 +965,35 @@ func show_account() -> void:
 	if _account_note != "":
 		_wrapped(_account_note, rp + P(28, ry + 10.0), 19, Color("ffd15c"), 760)
 		ry += 40.0
-	# --- Alpha 21: PRIVACY - the data switch, the PRIVACY page, DELETE ACCOUNT (TELEMETRY-PRIVACY-DESIGN §6-§7) ---
+	_privacy_rows_account(rp, ry, hh, a)               # PROGRESSION (Alpha 21): the switch, PRIVACY, DELETE ACCOUNT
+	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
+		_account_note = ""
+		show_profile())
+
+
+# ------------------------------------------------------------------ PROGRESSION: PRIVACY (Alpha 21)
+func _privacy_rows_options(st: Dictionary, y: float) -> float:
+	## OPTIONS' PRIVACY section (TELEMETRY-PRIVACY-DESIGN §6): the switch and the PRIVACY page; returns the next row's y.
+	y += 20.0
+	stack_add(st, label_at("PRIVACY", P(15, y), 30))
+	y += 41.0
+	var hp := rh(60)
+	var shr := stack_add(st, nav_button(_share_label(), P(15, y), P(600, hp), func():
+		_toggle_share()
+		show_options())) as Button
+	shr.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
+	var prv := stack_add(st, nav_button("PRIVACY", P(627, y), P(303, hp), func(): show_privacy(show_options))) as Button
+	prv.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
+	y += hp + 12.0
+	if not mobile:
+		stack_add(st, label_at("Gameplay and performance numbers and crash reports, tied only to your game account id.", P(15, y), 18, Color("b8ced6")))
+		y += 34.0
+	y += 20.0
+	return y
+
+
+func _privacy_rows_account(rp: Vector2, ry: float, hh: float, a: Account) -> void:
+	## ACCOUNT's PRIVACY rows under the Google sign-in (§6-§7): the switch, the PRIVACY page, DELETE ACCOUNT.
 	ry = maxf(ry + 20.0, 290.0)
 	label_at("PRIVACY", rp + P(28, ry), 22, Color.WHITE, false)
 	ry += 38.0
@@ -992,13 +1004,8 @@ func show_account() -> void:
 	nav_button("PRIVACY", rp + P(28, ry), P(300, 58), func(): show_privacy(show_account))
 	var del := nav_button("DELETE ACCOUNT", rp + P(344, ry), P(450, 58), _delete_prompt)
 	del.disabled = not a.signed_in()
-	# --- end PRIVACY ---
-	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
-		_account_note = ""
-		show_profile())
 
 
-# ------------------------------------------------------------------ PROGRESSION: PRIVACY (Alpha 21)
 func _share_label() -> String:
 	return "SHARE PLAY & CRASH DATA: " + ("ON" if Telemetry.sharing() else "OFF")
 
