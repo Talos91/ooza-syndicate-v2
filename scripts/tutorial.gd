@@ -587,6 +587,7 @@ var _ls_strength := 0.0
 var _ls_falls := 0.0
 var _dt := 0.0                                       # this frame's (real) dt: the slow-motion caps count real seconds
 var _assist := {}                                    # node id -> {"seen": {hid: true}, "frozen": units or -1, "from": id}
+var _assist_added := {}                              # node id -> units the assists added there (never a "fall loss")
 var _match := {}                                     # L9: {phase, muster, push, falls0, push_units, t, relay_taken}
 
 
@@ -1160,17 +1161,21 @@ func _tick_assist(names: Array) -> void:
 			continue
 		var need := float(tn["units"]) * 1.1 + ASSIST_MARGIN * Rules.SCALE
 		var best := -1
+		var best_doomed := true
 		var supply := 0.0
 		for n in sim.nodes:
 			if n["owner"] != HUMAN or sim.collapsed.get(n["id"], false) or sim.find_route(n["id"], t).size() < 2:
 				continue
 			supply += float(n["units"])
-			if best < 0 or n["units"] > sim.nodes[best]["units"]:
+			var doomed := _doomed(n["id"])              # (L7: never top up a node the collapse is about to take)
+			if best < 0 or (best_doomed and not doomed) or (doomed == best_doomed and n["units"] > sim.nodes[best]["units"]):
 				best = n["id"]
+				best_doomed = doomed
 		if best < 0:
 			continue
 		if landed_short or (supply < need and not a["topped"]):
 			var bn: Dictionary = sim.nodes[best]
+			_assist_added[best] = float(_assist_added.get(best, 0.0)) + maxf(need - float(bn["units"]), 0.0)
 			bn["units"] = maxf(float(bn["units"]), need)
 			a["frozen"] = float(tn["units"])
 			a["from"] = best
@@ -1178,6 +1183,13 @@ func _tick_assist(names: Array) -> void:
 			if landed_short:
 				say(line(str(_step().get("assist_line", "assist_short"))))
 				handler.emit("droop")
+
+
+func _doomed(id: int) -> bool:
+	## Warned by a collapse, or in the ring the Last Stand is taking now.
+	if sim.is_warned(id):
+		return true
+	return sim.last_stand_active and id in _ring_nodes()
 
 
 func assist_retry() -> Array:
@@ -1466,6 +1478,10 @@ func _ring_lost() -> String:
 	if not down:
 		return ""
 	var fell := float(sim.fall_losses.get(HUMAN, 0.0)) - _ls_falls
+	for id in _assist_added:                          # what an assist put on a node that then fell is not yours to lose
+		if sim.collapsed.get(id, false):
+			fell -= float(_assist_added[id])
+	fell = maxf(fell, 0.0)
 	if not _holds_node() or fell >= 0.5 * maxf(fell + sim.seat_strength(HUMAN), 1.0):
 		return line("L7.lost")
 	return ""
