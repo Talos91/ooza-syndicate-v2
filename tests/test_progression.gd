@@ -40,6 +40,9 @@ func _init() -> void:
 	_from_sim()
 	_ticker()
 	_history()
+	check(RewardStrip._note({"unranked": true, "full_pay": true}).begins_with("UNRANKED"),
+			"a browser-hosted room's results say UNRANKED")
+	check(not RewardStrip._note({"full_pay": true}).contains("UNRANKED"), "a server room's results don't")
 	for p in [P1, P2]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 	print("test_progression: %s" % ("PASS" if failures == 0 else "%d FAILED" % failures))
