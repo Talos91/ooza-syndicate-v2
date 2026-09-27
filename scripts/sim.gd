@@ -46,6 +46,8 @@ var last_stand_warn_node := -1       # node under its 10 s warning (-1: none)
 var last_stand_warn_t := 0.0         # seconds to the next drop (the ring's warning, then the gap between drops)
 var last_stand_queue: Array = []     # the warned ring's platforms still to drop, in drop order (0.18.4)
 var last_stand_wave := 20.0
+var last_stand_gap := Rules.LAST_STAND_DROP_GAP_MAX   # maps 3.0: s between a ring's drops, fixed at the start (_fit_gap)
+var ls_drop_gap_override := -1.0     # TUTORIAL: >= 0 forces the ring's drop gap (L7 pins Rules.LAST_STAND_DROP_GAP); -1 adaptive
 var last_stand_corners: Array = []  # 0.18.7: home node ids of the match's seats in corner-cycle order
 var _ls_corner_k := 0                # the corner the next planned drop aims at (carries across rings)
 var _next_wave_at := 0.0
@@ -2350,11 +2352,26 @@ func _start_rings() -> void:
 	last_stand_next = 0
 	last_stand_wave = clampf((Rules.MATCH_HARD_END - 90.0 - Rules.LAST_STAND_TIME) / maxf(last_stand_waves.size(), 1.0),
 			Rules.LAST_STAND_WAVE_MIN, Rules.LAST_STAND_WAVE_MAX)
+	last_stand_gap = ls_drop_gap_override if ls_drop_gap_override >= 0.0 else _fit_gap(last_stand_waves, Rules.VERY_LAST_STAND_TIME - time)
 	events.append({"t": time, "type": "last_stand", "method": last_stand_method, "order": order.duplicate(),
-			"waves": last_stand_waves.duplicate(true)})
+			"waves": last_stand_waves.duplicate(true), "gap": last_stand_gap})
 	fx_events.append({"type": "last_stand", "method": last_stand_method})
 	_next_wave_at = time + last_stand_wave
 	_warn_wave()                                          # the first warning starts with the reveal
+
+
+static func _fit_gap(waves: Array, window: float) -> float:
+	## The ring drop gap for this collapse: the rings go back to back, each a LAST_STAND_WARNING warning then
+	## its drops `gap` apart, the next ring's warning `gap` after the last drop - so the last platform falls
+	## warning x waves + gap x (drops - 1) after the start. As slow as fits in `window` (3 s spare), between
+	## Rules.LAST_STAND_DROP_GAP_MIN and _MAX (Daniele, 2026-09-27: "Aim for 20 s, fit the time").
+	var drops := 0
+	for w in waves:
+		drops += (w as Array).size()
+	if drops <= 1:
+		return Rules.LAST_STAND_DROP_GAP_MAX
+	var g: float = (window - 3.0 - Rules.LAST_STAND_WARNING * waves.size()) / float(drops - 1)
+	return clampf(g, Rules.LAST_STAND_DROP_GAP_MIN, Rules.LAST_STAND_DROP_GAP_MAX)
 
 
 func _plan_waves(order: Array) -> Array:
@@ -2584,7 +2601,7 @@ func _keep_depth() -> Dictionary:
 func drop_in(id: int) -> float:
 	## Seconds until a warned platform drops (its place in the ring's queue), or -1.
 	var k := last_stand_queue.find(id)
-	return last_stand_warn_t + k * Rules.LAST_STAND_DROP_GAP if k >= 0 else -1.0
+	return last_stand_warn_t + k * last_stand_gap if k >= 0 else -1.0
 
 
 func _step_rings(dt: float) -> void:
@@ -2600,10 +2617,10 @@ func _step_rings(dt: float) -> void:
 			if last_stand_queue.is_empty():
 				last_stand_warn = {}
 				last_stand_warn_node = -1
-				_next_wave_at = maxf(_next_wave_at, time + Rules.LAST_STAND_DROP_GAP)   # the next ring waits
+				_next_wave_at = time + last_stand_gap + minf(last_stand_warn_t, 0.0)   # the next ring's warning, one gap after the last drop
 			else:
 				last_stand_warn_node = last_stand_queue[0]
-				last_stand_warn_t = Rules.LAST_STAND_DROP_GAP
+				last_stand_warn_t += last_stand_gap           # (the step's overshoot carries: the countdowns stay exact)
 	elif last_stand_next < last_stand_waves.size() and time >= _next_wave_at:
 		_next_wave_at += last_stand_wave
 		_warn_wave()

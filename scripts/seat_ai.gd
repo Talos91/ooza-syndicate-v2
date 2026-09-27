@@ -141,10 +141,19 @@ func _drops_soon(sim: Sim, node_id: int) -> bool:
 
 # ------------------------------------------------------------------ Last Stand
 func _evacuate(sim: Sim) -> void:
-	for doomed in sim.nodes:                          # every node of the warned wave
+	## Every node of the warned wave empties toward the nearest safe node - on a maps 3.0 ring only once its own
+	## drop is near (2026-09-27: the adaptive gap spaces a ring's drops up to 20 s apart; Sim.drop_in is its
+	## countdown): when the trip, a think and a margin no longer fit before it falls. Until then it keeps working.
+	for doomed in sim.nodes:
 		if sim.is_warned(doomed["id"]) and doomed["owner"] == seat and doomed["units"] >= 5.0:
 			var target := _nearest_safe(sim, doomed["id"])
 			if target >= 0:
+				var left := sim.drop_in(doomed["id"]) if sim.v3 else -1.0
+				if left >= 0.0:
+					var route := sim.find_route(doomed["id"], target)
+					var trip := _travel(sim, route) if route.size() >= 2 else 0.0
+					if left > trip + period + Rules.AI_EVAC_MARGIN:
+						continue                              # not yet: it falls later in the ring
 				if not _send(sim, doomed["id"], target, 1.0).is_empty():
 					_busy[doomed["id"]] = true
 
