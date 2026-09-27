@@ -527,6 +527,30 @@ static func was_seen(what: String) -> bool:
 	return seen.has(what)
 
 
+static func to_dict() -> Dictionary:
+	## The whole campaign state as plain data, for the account's cloud save (Progression session, 0.20.5):
+	## {version, progress: {key: record}, unlocks_pending: {item: source}, seen: {flag: true}}.
+	_ensure()
+	return {"version": PROGRESS_VERSION, "progress": progress.duplicate(true),
+		"unlocks_pending": unlocks_pending.duplicate(), "seen": seen.duplicate()}
+
+
+static func from_dict(d: Dictionary) -> void:
+	## Replaces this device's campaign state with a cloud copy (the account wins) and saves it.
+	progress = {}
+	for k in d.get("progress", {}):
+		if d["progress"][k] is Dictionary:
+			progress[str(k)] = (d["progress"][k] as Dictionary).duplicate(true)
+	unlocks_pending = {}
+	for k in d.get("unlocks_pending", {}):
+		unlocks_pending[str(k)] = str(d["unlocks_pending"][k])
+	seen = {}
+	for k in d.get("seen", {}):
+		seen[str(k)] = true
+	_loaded = true
+	save_all()
+
+
 static func reset_progress() -> void:
 	## Debug / tests: forget every campaign record on this device (Progression's wallet is not touched).
 	progress = {}

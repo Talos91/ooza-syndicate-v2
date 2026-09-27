@@ -192,3 +192,14 @@ func _round_trip() -> void:
 	check(Campaign.was_seen("collapse:dockside"), "seen flags survive a reload")
 	check(is_equal_approx(float(Campaign.record_of("vex:02")["best_time"]), 120.0), "best time survives")
 	check(Campaign.saved, "the save worked")
+	# the cloud save's copy (to_dict / from_dict, the Progression session's accounts)
+	var d := Campaign.to_dict()
+	var copy: Dictionary = JSON.parse_string(JSON.stringify(d))     # through JSON, like the account's store
+	Campaign.reset_progress()
+	check(Campaign.stars_of("vex:01") == 0, "reset clears the device")
+	Campaign.from_dict(copy)
+	check(Campaign.stars_of("vex:01") == 3 and Campaign.stars_of("vex:02") == 2 and Campaign.is_open("vex:03")
+			and Campaign.reward_state("vex:01") == "earned" and Campaign.was_seen("collapse:dockside"),
+			"from_dict(to_dict()) through JSON restores stars, openings, rewards and seen flags")
+	Campaign.reload_all()
+	check(Campaign.stars_of("vex:02") == 2, "... and saves them")
