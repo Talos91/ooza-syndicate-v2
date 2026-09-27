@@ -498,7 +498,7 @@ func _fallback_host(why: String) -> void:
 	## The server could not host (no match host, another version, busy): this browser hosts, as in stage 1.
 	var f := preferred_faction
 	_start(true, f, "")
-	status = "The match server is %s - this browser hosts the room" % ("busy" if why == "busy" else "unavailable")
+	status = "The match server is %s - this browser hosts the room (UNRANKED: results don't count)" % ("busy" if why == "busy" else "unavailable")
 	lobby_changed.emit()
 
 
