@@ -699,6 +699,8 @@ func _build_card() -> void:
 	_card_vb.add_child(_card_dots)
 	_card_text = _label("", _body_fsz(), Color("edf7fa"))
 	_card_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_card_text.visible_characters_behavior = TextServer.VC_CHARS_AFTER_SHAPING   # the typewriter never re-wraps: the
+		# layout (and the buttons under the text) is the full line's from the first frame (0.19.3 hotfix)
 	_card_vb.add_child(_card_text)
 	var button_row := HBoxContainer.new()
 	button_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1022,14 +1024,23 @@ func _fallback_rect(which: String, vp: Vector2) -> Rect2:
 	return Rect2()
 
 
+func _place_rects() -> Array:
+	## The target rects the card must dodge: never the handler beside the card itself (L0's first step spotlights it -
+	## dodging its own creature made the card hop corner to corner every frame, unclickable; 0.19.3 hotfix).
+	var own := handler_rect()
+	if own.size == Vector2.ZERO:
+		return _target_rects
+	return _target_rects.filter(func(r): return not (r as Rect2).grow(4.0).intersects(own))
+
+
 func _target_center(vp: Vector2) -> Vector2:
 	if not _targets_px.is_empty():
 		var sum := Vector2.ZERO
 		for t in _targets_px:
 			sum += t["c"]
 		return sum / _targets_px.size()
-	if not _target_rects.is_empty():
-		var r: Rect2 = _target_rects[0]
+	if not _place_rects().is_empty():
+		var r: Rect2 = _place_rects()[0]
 		return r.get_center()
 	return vp / 2.0
 
@@ -1039,7 +1050,7 @@ func _target_bounds(vp: Vector2) -> Rect2:
 	for t in _targets_px:
 		b = b.expand(t["c"] - Vector2.ONE * t["r"])
 		b = b.expand(t["c"] + Vector2.ONE * t["r"])
-	for r in _target_rects:
+	for r in _place_rects():
 		b = b.merge(r)
 	return b
 
@@ -1116,7 +1127,7 @@ func _covered(rect: Rect2) -> int:
 	for t in _targets_px:
 		if rect.grow(float(t["r"]) * 0.8).has_point(t["c"]):
 			k += 1
-	for r in _target_rects:
+	for r in _place_rects():
 		if rect.intersects(r):
 			k += 1
 	return k
@@ -1126,7 +1137,7 @@ func _covers_target(rect: Rect2) -> bool:
 	for t in _targets_px:
 		if rect.grow(float(t["r"])).has_point(t["c"]):
 			return true
-	for r in _target_rects:
+	for r in _place_rects():
 		if rect.intersects(r):
 			return true
 	return false
