@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://uccso70yyplg"
-path="res://.godot/imported/GooGun_T3_Spitter.glb-9174d9135cb797f9b09583927576471f.scn"
+uid="uid://l454xfgoqesm"
+path="res://.godot/imported/Machinegoon_T1_Pepperbox.glb-26b6221895b06d9a82d7402d2db31566.scn"
 
 [deps]
 
-source_file="res://assets/kit/skins/GooGun_T3_Spitter.glb"
-dest_files=["res://.godot/imported/GooGun_T3_Spitter.glb-9174d9135cb797f9b09583927576471f.scn"]
+source_file="res://assets/kit/skins/Machinegoon_T1_Pepperbox.glb"
+dest_files=["res://.godot/imported/Machinegoon_T1_Pepperbox.glb-26b6221895b06d9a82d7402d2db31566.scn"]
 
 [params]
 
