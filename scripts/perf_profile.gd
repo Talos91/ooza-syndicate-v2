@@ -205,7 +205,8 @@ static func _apply_static() -> void:
 # ------------------------------------------------------------------ main's hook
 static func apply(m: Node3D) -> void:
 	## main.gd, top of _ready (one marked line). A dedicated room server renders nothing: left alone.
-	if Net.dedicated:
+	var net := m.get_node_or_null("/root/Net")         # (by path: the headless --script tests have no autoloads)
+	if net != null and bool(net.get("dedicated")):
 		return
 	_apply_static()
 	var node := PerfProfile.new()
