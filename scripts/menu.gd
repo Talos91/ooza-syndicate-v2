@@ -711,7 +711,7 @@ func show_profile() -> void:
 	_wrapped("Weekly challenges and every %dth level; the store later. For looks only - never skills." % int(PR["level_premium_every"]),
 			lp + P(28, 432), 17, Color("c5d2da"), 500)
 	if Progression.unlock_all:
-		label_at("UNLOCKS OPEN WHILE TESTING (OPTIONS > LOCKS)", lp + P(28, 530), 16, Color("ffd15c"), false)
+		label_at("UNLOCKS OPEN WHILE TESTING (OPTIONS > TEST SWITCH)", lp + P(28, 530), 16, Color("ffd15c"), false)
 	# factions
 	var fp := P(620, 174)
 	frame(fp, P(1017, 600))
@@ -731,10 +731,18 @@ func show_profile() -> void:
 		_bar(rp + P(470, 30), P(360, 14), 1.0 if owned else float(st["vat_wins"]) / float(need), fc)
 		label_at("VAT UNLOCKED" if owned else "VAT  %d / %d WINS" % [int(st["vat_wins"]), need], rp + P(470, 54), 17,
 				fc if owned else Color("9cb2bf"), false)
-	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
-	nav_button("CHALLENGES", P(290, foot_y()), P(280, 58), show_challenges)
+	nav_button("BACK", P(40, foot_y()), P(210, 58), show_main)
+	nav_button("CHALLENGES", P(265, foot_y()), P(270, 58), show_challenges)
+	nav_button("LEADERBOARD", P(550, foot_y()), P(290, 58), show_leaderboard)    # 0.20.5
+	nav_button("HISTORY", P(855, foot_y()), P(230, 58), show_history)
+	nav_button("ACCOUNT", P(1100, foot_y()), P(230, 58), show_account, _account().state == "guest")
+	var acct := _account()
 	var note := "Progress saved on this device" if Progression.saved else "This browser keeps no storage: progress lasts until the page closes"
-	label_at(note, P(985, foot_y() + 18.0), 18, Color("7795a4") if Progression.saved else Color("ffd15c"), false)
+	if acct.state == "linked":
+		note = "Progress saved on this device and in your account"
+	elif acct.state == "guest":
+		note = "Guest account: add an email to keep your progress on any device"
+	_wrapped(note, lp + P(28, 560), 15, Color("7795a4") if Progression.saved else Color("ffd15c"), 500)
 
 
 func show_challenges(just_claimed := "") -> void:
@@ -778,17 +786,315 @@ func show_challenges(just_claimed := "") -> void:
 				else:
 					label_at("CLAIMED", rp + P(600, 104), 19, Color("7795a4"), false)
 			elif c["done"]:
-				nav_button("CLAIM", rp + P(560, 88), P(166, 58), func():
+				_card_button("CLAIM", rp, P(744, 158), func():
 					if not Progression.claim(k, id).is_empty():
 						show_challenges(id), true)
 			elif kind == "daily" and not rerolled:
-				var rb := nav_button("REROLL", rp + P(560, 88), P(166, 58), func():
+				var rb := _card_button("REROLL", rp, P(744, 158), func():
 					Progression.reroll(id)
 					show_challenges())
 				rb.add_theme_font_size_override("font_size", int(round(fsz(19) * K)))
 	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
 	nav_button("PROFILE", P(290, foot_y()), P(230, 58), show_profile)
 	label_at("One reroll a day, for a daily you would rather swap.", P(985, foot_y() + 18.0), 18, Color("7795a4"), false)
+
+
+func _card_button(text: String, card_pos: Vector2, card_dims: Vector2, call: Callable, primary := false) -> Button:
+	## A card's action button in its bottom-right corner, inside the card at any phone size (0.20.5: REROLL grew
+	## past the card's edge on phones - tap() makes it taller there, so place it from its grown height).
+	var dims := tap(P(166, 58))
+	var pos := card_pos + card_dims - dims - P(14, 8)
+	return nav_button(text, pos, dims, call, primary, false)
+
+
+# ------------------------------------------------------------------ PROGRESSION: ACCOUNT, LEADERBOARD, MATCH HISTORY (0.20.5)
+var _board_rows: Array = []                        # LEADERBOARD: the last answer
+var _board_state := "idle"                         # idle | loading | done | offline
+var _history_online: Array = []                    # MATCH HISTORY: server rounds loaded so far
+var _history_state := "idle"                       # idle | loading | done | offline
+var _history_more := true                          # the server may have older rounds
+var _account_note := ""                            # ACCOUNT: what the last action did ("Check your inbox ...")
+var _account_hooked := false
+const MONTHS := ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+
+
+func _account() -> Account:
+	var a := Account.get_instance()
+	if not _account_hooked:
+		_account_hooked = true
+		a.changed.connect(func():
+			if _page in ["account", "profile"] and _last_show.is_valid():
+				_last_show.call())
+	return a
+
+
+func _line_edit(pos: Vector2, dims: Vector2, placeholder: String, text := "") -> LineEdit:
+	## A text field in the menu's style (email, name); the phone's own keyboard opens on tap.
+	dims = tap(dims)
+	var e := LineEdit.new()
+	e.position = pos
+	e.size = dims
+	e.custom_minimum_size = dims
+	e.placeholder_text = placeholder
+	e.text = text
+	e.add_theme_font_override("font", UI_FONT)
+	e.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
+	e.add_theme_stylebox_override("normal", Hud.panel_style())
+	e.add_theme_stylebox_override("focus", Hud.panel_style(color()))
+	e.virtual_keyboard_enabled = true
+	content.add_child(e)
+	return e
+
+
+func show_account() -> void:
+	_last_show = show_account                  # a resize that changes the phone sizing rebuilds it (_fit)
+	## ACCOUNT (Daniele: guest first; keep progress on any device with an email link or Google; a sign-in onto an
+	## account that already has progress keeps the account's). Optional: the game plays offline without it.
+	var a := _account()
+	clear_page("city")
+	_page = "account"
+	header(0)
+	label_at("ACCOUNT", P(40, 104), 43)
+	label_at("OPTIONAL  ·  the game plays offline without it", P(300, 122), 20, Color("abc1cd"))
+	var lp := P(35, 174)
+	frame(lp, P(760, 600))
+	var status := "OFFLINE  -  no connection; you play as a guest on this device"
+	var col := Color("ffd15c")
+	match a.state:
+		"guest":
+			status = "GUEST ACCOUNT  -  progress on this device, with a cloud copy"
+			col = Color("9cb2bf")
+		"linked":
+			status = "SIGNED IN  -  " + (a.email if a.email != "" else ", ".join(a.providers).to_upper())
+			col = Color("6fff2a")
+		"signing_in":
+			status = "SIGNING IN ..."
+	_wrapped(status, lp + P(28, 22), 22, col, 700)
+	# rows advance by each control's grown height (rh / tap): on a phone the 44 pt fields are taller than designed
+	var hh := rh(58)
+	var y := 86.0
+	label_at("NAME", lp + P(28, y), 18, Color("8fb3c2"), false)
+	y += 28.0
+	var nm := _line_edit(lp + P(28, y), P(440, 58), "3-16 letters or digits", a.player_name)
+	var rn := nav_button("RENAME", lp + P(490, y), P(240, 58), func():
+		if await a.rename(nm.text):
+			_account_note = "Name saved: " + a.player_name
+		else:
+			_account_note = a.last_error
+		show_account())
+	rn.disabled = not a.signed_in()
+	nm.editable = a.signed_in()
+	y += hh + 22.0
+	if a.state == "guest":
+		label_at("KEEP YOUR PROGRESS ON ANY DEVICE", lp + P(28, y), 20, Color.WHITE, false)
+		y += 32.0
+		var em := _line_edit(lp + P(28, y), P(440, 58), "your email", "")
+		nav_button("SEND LINK", lp + P(490, y), P(240, 58), func():
+			if await a.add_email(em.text):
+				_account_note = "Check your inbox: the link keeps this account (and its progress) on any device."
+			else:
+				_account_note = a.last_error
+			show_account(), true)
+		y += hh + 12.0
+		var g := nav_button("ADD GOOGLE", lp + P(28, y), P(440, 58), func():
+			if not await a.google(true):
+				_account_note = a.last_error
+				show_account())
+		g.disabled = not OS.has_feature("web")
+		y += hh + 16.0
+	if a.pending_email != "":
+		_wrapped("LINK SENT TO %s - open it to finish." % a.pending_email, lp + P(28, y), 18, Color("ffd15c"), 700)
+	# sign in with an account made elsewhere: its progress replaces this device's
+	var rp := P(815, 174)
+	frame(rp, P(822, 600))
+	label_at("ALREADY HAVE AN ACCOUNT?", rp + P(28, 22), 22, Color.WHITE, false)
+	_wrapped("Sign in on this device with the email you linked. Its progress replaces this device's.", rp + P(28, 60), 18,
+			Color("c5d2da"), 760)
+	var ry := 118.0
+	var si := _line_edit(rp + P(28, ry), P(480, 58), "your email", a.email)
+	nav_button("SEND SIGN-IN LINK", rp + P(530, ry), P(264, 58), func():
+		if await a.email_sign_in(si.text):
+			_account_note = "Check your inbox: open the link on this device to sign in."
+		else:
+			_account_note = a.last_error
+		show_account())
+	ry += hh + 12.0
+	var gs := nav_button("SIGN IN WITH GOOGLE", rp + P(28, ry), P(480, 58), func():
+		if not await a.google(false):
+			_account_note = a.last_error
+			show_account())
+	gs.disabled = not OS.has_feature("web")
+	ry += hh + 10.0
+	if not OS.has_feature("web"):
+		_wrapped("Google sign-in works in the browser build.", rp + P(28, ry), 16, Color("7795a4"), 760)
+		ry += 30.0
+	if _account_note != "":
+		_wrapped(_account_note, rp + P(28, ry + 10.0), 19, Color("ffd15c"), 760)
+	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
+		_account_note = ""
+		show_profile())
+
+
+func show_leaderboard() -> void:
+	_last_show = show_leaderboard              # a resize that changes the phone sizing rebuilds it (_fit)
+	## LEADERBOARD: WINS THIS SEASON (the UTC month) - online wins in server rooms with two or more players,
+	## written by the server only. Reads it when opened; offline says so.
+	clear_page("city")
+	_page = "leaderboard"
+	header(0)
+	label_at("LEADERBOARD", P(40, 104), 43)
+	var now := Time.get_datetime_dict_from_system(true)
+	label_at("WINS THIS SEASON  ·  %s %d  ·  online, server rooms with 2+ players" % [MONTHS[int(now["month"]) - 1], int(now["year"])],
+			P(400, 122), 20, Color("abc1cd"))
+	var fp := P(35, 174)
+	frame(fp, P(1602, 600))
+	if _board_state == "idle":
+		_board_state = "loading"
+		_load_board()
+	if _board_state == "loading":
+		label_at("LOADING ...", fp + P(30, 30), 24, Color("9cb2bf"), false)
+	elif _board_state == "offline":
+		label_at("The leaderboard needs a connection.", fp + P(30, 30), 24, Color("ffd15c"), false)
+	elif _board_rows.is_empty():
+		_wrapped("No wins yet this season - win an online match against another player to open the board.", fp + P(30, 30),
+				24, Color("9cb2bf"), 1500)
+	else:
+		var st := stack_open(fp + P(16, 16), P(1570, 568))
+		var ry := 0.0
+		for row in _board_rows:
+			var me := bool(row.get("is_me", false))
+			var h := rh(56)
+			stack_add(st, _placed(neon_panel(P(0, ry), P(1560, h), color(), me, Color("08202ae8") if me else Color("020a10d8"))))
+			stack_add(st, label_at("#%d" % int(row.get("rank", 0)), P(20, ry + h * 0.2), 24, Color("ffd15c"), false))
+			stack_add(st, label_at(str(row.get("name", "")) + ("  (YOU)" if me else ""), P(160, ry + h * 0.2), 24,
+					Color.WHITE, false))
+			stack_add(st, label_at("%d WINS" % int(row.get("wins", 0)), P(1320, ry + h * 0.2), 24, Color("6fff2a"), false))
+			ry += h + 8.0
+		stack_close(st, ry * K)
+	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
+		_board_state = "idle"
+		show_profile())
+	nav_button("REFRESH", P(290, foot_y()), P(230, 58), func():
+		_board_state = "idle"
+		show_leaderboard())
+
+
+func _load_board() -> void:
+	var rows := await _account().leaderboard("season_wins", 50)
+	_board_rows = rows
+	_board_state = "done" if _account().state != "offline" or not rows.is_empty() else "offline"
+	if _page == "leaderboard":
+		show_leaderboard()
+
+
+func show_history() -> void:
+	_last_show = show_history                  # a resize that changes the phone sizing rebuilds it (_fit)
+	## MATCH HISTORY (Daniele, 0.20.5): your recent matches - this device's log (offline, AI, and online rounds played
+	## here) plus the server's record of your online rounds from other devices; newest first, ONLINE / OFFLINE tags.
+	var a := _account()
+	clear_page("city")
+	_page = "history"
+	header(0)
+	label_at("MATCH HISTORY", P(40, 104), 43)
+	label_at("YOUR RECENT MATCHES  ·  this device" + (" + your account's online rounds" if a.signed_in() else ""),
+			P(420, 122), 20, Color("abc1cd"))
+	if _history_state == "idle" and a.signed_in():
+		_history_state = "loading"
+		_load_history(false)
+	var list := Progression.merge_history(Progression.history, _history_online)
+	var fp := P(35, 174)
+	frame(fp, P(1602, 600))
+	if list.is_empty():
+		_wrapped("No matches yet - finish one and it shows here.", fp + P(30, 30), 24, Color("9cb2bf"), 1500)
+	else:
+		var names := _map_names()
+		var st := stack_open(fp + P(16, 16), P(1570, 568))
+		var ry := 0.0
+		for h in list:
+			var rowh := rh(92)
+			var won := bool(h.get("won", false))
+			var draw := bool(h.get("draw", false))
+			var res := "DRAW" if draw else ("WIN" if won else "LOSS")
+			var rc := Color("9cb2bf") if draw else (Color("6fff2a") if won else Color("ff5a4a"))
+			stack_add(st, _placed(neon_panel(P(0, ry), P(1560, rowh), rc.darkened(0.3), false, Color("020a10d8"))))
+			var online := bool(h.get("online", false))
+			stack_add(st, label_at("ONLINE" if online else "OFFLINE", P(16, ry + 8), 15, Color("5fd7ff") if online else Color("839da9"), false))
+			stack_add(st, label_at(_date_text(int(h.get("t", 0))), P(16, ry + 34), 17, Color("c5d2da"), false))
+			var code := str(h.get("map", ""))
+			stack_add(st, label_at(code + "  " + str(names.get(code, "")), P(220, ry + 8), 20, Color.WHITE, false))
+			var dur := int(h.get("duration_s", 0))
+			stack_add(st, label_at("%s  ·  %d:%02d" % [str(Menu.MODE_NAMES.get(str(h.get("mode", "")), str(h.get("mode", "")))), dur / 60, dur % 60],
+					P(220, ry + 40), 17, Color("9cb2bf"), false))
+			var px := 760.0
+			for p in h.get("players", []):
+				if not p is Dictionary:
+					continue
+				var f := str(p.get("faction", "null"))
+				var tex := Hud.emblem_texture(f) if Rules.FACTIONS.has(f) else null
+				if tex != null:
+					var ic := TextureRect.new()
+					ic.texture = tex
+					ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+					ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+					ic.position = P(px, ry + 10)
+					ic.size = P(34, 34)
+					ic.modulate = Rules.FACTIONS[f][1]
+					ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					content.add_child(ic)
+					stack_add(st, ic)
+				var who := "YOU" if bool(p.get("is_me", false)) and str(p.get("name", "")) == "" else str(p.get("name", ""))
+				if str(p.get("ai_level", "")) != "":
+					who = "AI" if str(p["ai_level"]) == "AI" else "AI " + str(p["ai_level"]).to_upper()
+				elif who == "":
+					who = "PLAYER"
+				stack_add(st, label_at(who, P(px - 10, ry + 50), 14, Color.WHITE if bool(p.get("is_me", false)) else Color("9cb2bf"), false))
+				px += 120.0
+			stack_add(st, label_at(res, P(1420, ry + 22), 28, rc, false))
+			ry += rowh + 8.0
+		stack_close(st, ry * K)
+	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
+		_history_state = "idle"
+		_history_online = []
+		show_profile())
+	if a.signed_in() and _history_more and not _history_online.is_empty():
+		nav_button("MORE", P(290, foot_y()), P(230, 58), func(): _load_history(true))
+	if _history_state == "loading":
+		label_at("LOADING ONLINE ROUNDS ...", P(985, foot_y() + 18.0), 18, Color("9cb2bf"), false)
+
+
+func _load_history(more: bool) -> void:
+	var before := ""
+	if more and not _history_online.is_empty():
+		before = str(_history_online[-1].get("started_at", ""))
+	var rows := await _account().match_history(20, before)
+	_history_online = (_history_online if more else []) + rows
+	_history_more = rows.size() >= 20
+	_history_state = "done"
+	if _page == "history":
+		show_history()
+
+
+func _placed(c: Control) -> Control:
+	## neon_panel() hands back an unparented panel; stack_add() moves nodes out of `content`.
+	content.add_child(c)
+	return c
+
+
+func _map_names() -> Dictionary:
+	## map code -> its name, from the pool's file names ("C-05-karth-carousel.json" -> "KARTH CAROUSEL").
+	var out := {}
+	for p in MapPool.all():
+		var f: String = p.get_file().get_basename()
+		out[f.substr(0, 4)] = f.substr(5).replace("-", " ").to_upper()
+	return out
+
+
+static func _date_text(t: int) -> String:
+	## "27 SEP 14:05" in the player's own time zone.
+	if t <= 0:
+		return ""
+	var d := Time.get_datetime_dict_from_unix_time(t + int(Time.get_time_zone_from_system().get("bias", 0)) * 60)
+	return "%d %s %02d:%02d" % [int(d["day"]), MONTHS[int(d["month"]) - 1], int(d["hour"]), int(d["minute"])]
 
 
 func _buy_prompt(item: String, title: String, line: String, back: Callable) -> void:

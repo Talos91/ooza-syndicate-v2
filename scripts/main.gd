@@ -245,6 +245,7 @@ func _ready() -> void:
 		menu_layer = Menu.new()
 		add_child(menu_layer)
 		(menu_layer as Menu).setup(self)
+		_start_account()                               # PROGRESSION: the guest / linked account, once per run
 		if Net.in_room():                              # back from a round, or a player left: the lobby
 			(menu_layer as Menu).show_lobby()
 		elif Net.status != "":                         # the room closed: say why on the ONLINE page
@@ -1240,9 +1241,48 @@ func _record_progress() -> void:
 	if not sim.factions.has(HUMAN):
 		return
 	var info := {"online": online, "ai_level": "" if online else ai_level}
-	rewards = Progression.record_match(Progression.result_from_sim(sim, HUMAN, info))
+	var result := Progression.result_from_sim(sim, HUMAN, info)
+	result["history"] = Progression.history_entry(sim, HUMAN, _history_info())   # MATCH HISTORY (0.20.5)
+	rewards = Progression.record_match(result)
 	rewards["full_pay"] = Progression.full_pay(info)
 	rewards["ai_level"] = info["ai_level"]
+
+
+func _history_info() -> Dictionary:
+	## MATCH HISTORY: what this device knows of the match - the map, mode, room + round (joins the server's record),
+	## your name, and which seats were AI (offline: their level; online: the seats no player holds).
+	var you := "YOU"
+	var acct := Account.get_instance() if Account.enabled else null
+	if acct != null and acct.player_name != "":
+		you = acct.player_name
+	var ai := {}
+	if online:
+		var humans := []
+		for id in Net.roster:
+			humans.append(Net.seat_of(int(id)))
+		for s in sim.factions.keys():
+			if not s in humans:
+				ai[s] = "AI"
+	else:
+		for a in ais:
+			ai[a.seat] = a.level
+	return {"map": str(map.get("code", "")), "mode": mode, "online": online,
+			"room_key": "%s-%d" % [Net.room_code, Net.match_round] if online else "", "names": {HUMAN: you}, "ai": ai}
+
+
+static var _account_started := false
+
+
+func _start_account() -> void:
+	## Every player gets a silent guest account the first time the game is online (Daniele: guest first, link later);
+	## never on the match host, a headless run, a demo / scenario / screenshot run. Offline: nothing happens.
+	if _account_started or Net.dedicated or DisplayServer.get_name() == "headless" or demo or scenario != "" 			or not shots.is_empty() or not Account.enabled:
+		return
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--menu-shot=") or arg == "--no-account":
+			return
+	_account_started = true
+	Account.get_instance().start()
 
 
 # ------------------------------------------------------------------ input
