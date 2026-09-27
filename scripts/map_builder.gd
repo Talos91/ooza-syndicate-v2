@@ -12,8 +12,7 @@ extends RefCounted
 ## straddling the rim where that deck enters. State colours: a relay-controlled deck's edge lights
 ## carry its state's colour, the tower's symbol (OS_State) glows in the current state's colour.
 
-const KIT := "res://assets/kit/%s.glb"
-static var _scenes := {}
+static var _scenes := {}     # keyed by resolved path (Cosmetics.kit_path), not by kit key: see piece()
 
 
 static func load_map(path: String) -> Dictionary:
@@ -108,15 +107,18 @@ static func _can_raise(e: Dictionary) -> bool:
 
 
 static func piece(name: String) -> Node3D:
+	## Loads through Cosmetics.kit_path (light kit vs kit_hd, "Phones only" - Alpha 21): the path itself
+	## is the cache key, so a profile/HD-pack change mid-session never hands back the wrong quality.
 	var scene: PackedScene
 	if name.begins_with("skins/"):                  # 0.19.0 cosmetics: loaded on demand, never kept here
 		scene = Cosmetics.cached(name)
 		if scene == null:
-			scene = load(KIT % name) as PackedScene     # (a tier-down ghost of a skin already dropped)
+			scene = load(Cosmetics.kit_path(name)) as PackedScene   # (a tier-down ghost of a skin already dropped)
 	else:
-		if not _scenes.has(name):
-			_scenes[name] = load(KIT % name)
-		scene = _scenes[name]
+		var path := Cosmetics.kit_path(name)
+		if not _scenes.has(path):
+			_scenes[path] = load(path)
+		scene = _scenes[path]
 	var node: Node3D = scene.instantiate()
 	var fit := Cosmetics.fit(name)                  # 0.19.2: the Machinegoon looks at a vat's size, sunk into the socket
 	if not fit.is_empty():
