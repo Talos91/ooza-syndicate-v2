@@ -1169,7 +1169,7 @@ func _record_progress() -> void:
 	## here too until accounts exist; then the server pays server-hosted rooms). Never on a headless run (the
 	## dedicated match host, tests), a demo / scenario / fast-forward / screenshot run, or a seat that isn't playing.
 	rewards = {}
-	if DisplayServer.get_name() == "headless" or demo or scenario != "" or ff_to > 0.0 or not shots.is_empty():
+	if Net.dedicated or DisplayServer.get_name() == "headless" or demo or scenario != "" or ff_to > 0.0 or not shots.is_empty():
 		return
 	if not sim.factions.has(HUMAN):
 		return
