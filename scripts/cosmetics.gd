@@ -80,6 +80,9 @@ static func loadout(seat: String) -> Dictionary:
 static func set_factions(seat_factions: Dictionary) -> void:
 	_factions = seat_factions.duplicate()
 	_seat_keys = {}
+	if _pack == "failed":                            # a new match may try the skins pack again
+		_pack = ""
+		_failed = {}
 
 
 static func faction_of(seat: String) -> String:
@@ -257,6 +260,10 @@ static func _fetch_pack() -> void:
 	var url := str(JavaScriptBridge.eval("new URL('%s?v=%s', window.location.href).href" % [SKINS_PACK, Rules.VERSION], true))
 	_http = HTTPRequest.new()
 	_http.download_file = SKINS_FILE
+	# GitHub Pages serves the .pck gzip-encoded: the browser's fetch already inflates it, and HTTPRequest's own
+	# gunzip of the same (already plain) body failed with RESULT_BODY_DECOMPRESS_FAILED on the live 0.19.1
+	# ("skins don't look implemented"). Never gunzip here.
+	_http.accept_gzip = false
 	tree.root.add_child(_http)
 	_http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
 		var ok := result == HTTPRequest.RESULT_SUCCESS and code == 200 and ProjectSettings.load_resource_pack(SKINS_FILE, false)
@@ -330,6 +337,29 @@ static func points(model_name: String) -> Dictionary:
 	return POINTS.get(name, {})
 
 
+# MACHINGOON SIZE (0.19.2, Daniele on 0.19.1: "too big and when they shoot it looks weird as the enemies are
+# under them"): every Machingoon look is shown at MG_SCALE (about a vat's footprint) and sunk into its socket
+# so its highest muzzle sits MG_MUZZLE_Y above the deck - the stream arcs out onto the line's bodies instead of
+# pouring straight down. Applied to the model's children by MapBuilder.piece (the root keeps scale 1 for the
+# build / pump / tier-down animations); the muzzles above stay in model space (the view reads them through
+# the turret's global transform, so they follow the scale and the drop).
+const MG_SCALE := 0.65
+const MG_MUZZLE_Y := 1.15
+const MG_LOOK_SCALE := {"Spitter": 1.45, "Pepperbox": 1.3}   # the skins are modelled smaller: same footprint
+
+
+static func fit(model_name: String) -> Dictionary:
+	## {"scale", "drop"} for a model shown smaller than modelled (the Machingoon looks), {} otherwise.
+	var pt: Dictionary = POINTS.get(model_name.trim_prefix("skins/"), {})
+	if not pt.has("muzzles"):
+		return {}
+	var top := 0.0
+	for m in pt["muzzles"]:
+		top = maxf(top, (m as Vector3).y)
+	var k: float = MG_SCALE * float(MG_LOOK_SCALE.get(model_name.trim_prefix("skins/").get_slice("_", 2), 1.0))
+	return {"scale": k, "drop": maxf(0.0, top * k - MG_MUZZLE_Y)}
+
+
 static func is_vat_key(key: String) -> bool:
 	## A vat model (default or skin): it gets the living liquid and the residents (Scenery).
 	return key.begins_with("Vat_") or TANKS.has(key.trim_prefix("skins/"))
@@ -389,3 +419,99 @@ const TANKS := {
 	"Vat_Graduate_T3": [[-2.20, -0.00, 0.86, 1.02, 4.77], [2.20, 0.00, 0.86, 1.02, 4.77]],
 	"Vat_Graduate_T4": [[-2.60, -0.00, 0.86, 1.77, 5.52], [0.00, 0.00, 0.95, 1.53, 6.53], [2.60, 0.00, 0.86, 1.77, 5.52]],
 }
+
+
+# ------------------------------------------------------------------ ARMIES previews (0.19.2)
+static func make_preview(family: String, id: String, faction: String, size: Vector2) -> Control:
+	## A small turning 3D preview of one look for the ARMIES > COSMETICS rows (menu.gd): the model in its own
+	## world, lit, framed to fit, in the faction's colours. A skin shows the default model until it has loaded
+	## (on the web that fetches skins.pck, as a match would), then swaps. Free it with its row.
+	var p := Preview.new()
+	p.family = family
+	p.id = id
+	p.faction = faction
+	p.custom_minimum_size = size
+	p.size = size
+	return p
+
+
+class Preview extends SubViewportContainer:
+	var family := ""
+	var id := "default"
+	var faction := "null"
+	var _vp: SubViewport
+	var _pivot: Node3D
+	var _cam: Camera3D
+	var _key := ""
+	var _t := 0.0
+
+	func _ready() -> void:
+		stretch = true
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_vp = SubViewport.new()
+		_vp.own_world_3d = true
+		_vp.transparent_bg = true
+		_vp.msaa_3d = Viewport.MSAA_2X
+		add_child(_vp)
+		var env := WorldEnvironment.new()
+		env.environment = Environment.new()
+		env.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.environment.ambient_light_color = Color(0.55, 0.6, 0.75)
+		env.environment.ambient_light_energy = 0.8
+		env.environment.background_mode = Environment.BG_CLEAR_COLOR
+		_vp.add_child(env)
+		var sun := DirectionalLight3D.new()
+		sun.rotation = Vector3(deg_to_rad(-50), deg_to_rad(30), 0)
+		sun.light_energy = 1.3
+		_vp.add_child(sun)
+		_pivot = Node3D.new()
+		_vp.add_child(_pivot)
+		_cam = Camera3D.new()
+		_cam.fov = 32.0
+		_vp.add_child(_cam)
+		_refresh()
+
+	func _process(dt: float) -> void:
+		_t += dt
+		_pivot.rotation.y = 0.6 * sin(_t * 0.6) + 0.35
+		if Engine.get_process_frames() % 15 == 0:
+			_refresh()                                    # a skin that finished loading takes over
+
+	func _refresh() -> void:
+		var key := Cosmetics.model_key(family, id, faction, 2 if family in ["vat", "machingoon"] else 1)
+		var show := key
+		if key.begins_with("skins/"):
+			if not Cosmetics._ready(key):
+				show = Cosmetics.model_key(family, "default", faction, 2 if family in ["vat", "machingoon"] else 1)
+		if show == _key:
+			return
+		_key = show
+		for c in _pivot.get_children():
+			c.queue_free()
+		var node := MapBuilder.piece(show)
+		_pivot.add_child(node)
+		var seat := "A"
+		if family == "monster":
+			MonsterView.dress(node, faction, seat)
+		else:
+			MapBuilder.apply_owner([node], seat)
+		var lo := Vector3(INF, INF, INF)
+		var hi := -lo
+		for mi in node.find_children("*", "MeshInstance3D", true, false):
+			var box: AABB = (mi as MeshInstance3D).transform * (mi as MeshInstance3D).get_aabb()
+			var par := (mi as Node3D).get_parent()
+			while par != node and par is Node3D:
+				box = (par as Node3D).transform * box
+				par = par.get_parent()
+			lo = lo.min(box.position)
+			hi = hi.max(box.end)
+		if lo.x == INF:
+			return
+		var c := (lo + hi) / 2.0
+		node.position = -Vector3(c.x, lo.y, c.z)
+		var r := maxf((hi - lo).length() * 0.5, 0.5)
+		var d := r / tan(deg_to_rad(_cam.fov * 0.5)) * 1.1
+		var h := (hi.y - lo.y) * 0.5
+		_cam.position = Vector3(0, h + d * 0.45, d * 0.9)
+		_cam.look_at(Vector3(0, h, 0), Vector3.UP)
+

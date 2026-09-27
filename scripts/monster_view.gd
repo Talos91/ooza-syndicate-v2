@@ -4,9 +4,10 @@ extends Node3D
 ## driven only by the Sim's state - sim.monsters, each hub node's "structure" / "monster_ready_t" /
 ## "hub_monster" and the monster fx events - so online guests, who apply the host's snapshots (Net carries
 ## the monsters, their path is rebuilt from the route), see exactly the same thing.
-##   * A hub (MonsterVat_<RACE>, or the owner's Hatchery / Pit look) holds its next monster idling in the
-##     goo pool on the plinth: small while it charges, growing to full size as the cooldown runs out, then a
-##     restless hop when it is READY.
+##   * A hub (MonsterVat_<RACE>, or the owner's Hatchery / Pit look) holds its next monster crouched in the
+##     goo pool on the plinth: small while it charges, growing to full size as the cooldown runs out. READY
+##     (0.19.2): it stands up tall facing the viewer and flexes on a beat, the pool glows bright in the owner's
+##     colour and a ring rises off it (with the HUD's hub icon).
 ##   * Launch: the hub's gate (the model's `*_Gate` child) slides straight down between the jambs, the
 ##     monster walks down off its stand and out through the opening onto its route (the first metres play
 ##     a little faster so it catches up with the Sim's monster before the first deck), and the gate rises
@@ -44,7 +45,6 @@ var vis: Dictionary
 var combat: Node3D                   # CombatFx: its spark MultiMesh throws the bursts
 var _mons := {}                      # monster id -> {node, body, key, yaw, fall_t, fall_pos, done_t, route, ring}
 var _hubs := {}                      # node id -> {vn, gate, rest, k, idle, idle_key, launched_t}
-var _tex := {}                       # faction -> minion albedo Texture2D
 var _route_mat: StandardMaterial3D
 var _ring_mesh: TorusMesh
 
@@ -94,8 +94,10 @@ func _sync_hubs(dt: float) -> void:
 		seen[id] = true
 		var h: Dictionary = _hubs.get(id, {})
 		if h.is_empty() or h["vn"] != vn:
-			if not h.is_empty() and is_instance_valid(h["idle"]):
-				(h["idle"] as Node).queue_free()
+			if not h.is_empty():
+				for k in ["idle", "glow", "ring"]:
+					if is_instance_valid(h[k]):
+						(h[k] as Node).queue_free()
 			h = _new_hub(vn as Node3D, str(entry["model_key"]))
 			_hubs[id] = h
 		# the gate: down while its monster walks out, up again once it is clear
@@ -115,6 +117,10 @@ func _sync_hubs(dt: float) -> void:
 		var idle: Node3D = h["idle"]
 		var home := int(n["hub_monster"]) < 0 or m.is_empty()
 		idle.visible = home and n["owner"] != ""
+		var glow: MeshInstance3D = h["glow"]
+		var ring: MeshInstance3D = h["ring"]
+		glow.visible = false
+		ring.visible = false
 		if not idle.visible:
 			continue
 		var left: float = float(n["monster_ready_t"]) - sim.time
@@ -124,16 +130,38 @@ func _sync_hubs(dt: float) -> void:
 		var root := vn as Node3D
 		var stand: Vector3 = root.global_transform * (h["stand"] as Vector3)
 		var t := sim.time + float(id) * 0.37
-		var wave := sin(t * (WAVE if ready else 1.6))
-		var hop := maxf(0.0, wave) * HOP * (0.9 if ready else 0.15)
-		var sq := wave * SQUASH * (1.0 if ready else 0.5)
-		var yaw := Rules.heading(Rules.front_dir()) + PI / 2.0 + (0.35 * sin(t * 0.7) if ready else 0.0)
-		idle.global_transform = Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(1.0 + sq * 0.6, 1.0 - sq, 1.0 + sq * 0.45) * size * root.scale.y),
-				stand + Vector3(0, hop, 0))
+		var yaw := Rules.heading(Rules.front_dir()) + PI / 2.0
+		var col := Rules.seat_color(n["owner"])
+		if ready:
+			# READY (0.19.2, with the HUD's hub icon): it stands up tall facing you, flexes every beat, and the
+			# pool under it glows bright in its owner's colour, a ring rising off it
+			var beat := fmod(t, 1.4) / 1.4
+			var flex := sin(clampf(beat / 0.25, 0.0, 1.0) * PI)
+			var stretch := 0.12 * flex
+			idle.global_transform = Transform3D(Basis(Vector3.UP, yaw + 0.25 * sin(t * 0.9))
+					* Basis.from_scale(Vector3(1.0 - stretch * 0.4, 1.0 + stretch, 1.0 - stretch * 0.4) * 1.1 * root.scale.y),
+					stand + Vector3(0, 0.12 + 0.35 * flex, 0))
+			glow.visible = true
+			glow.position = stand + Vector3(0, 0.08, 0)
+			glow.scale = Vector3.ONE * (4.2 + 0.8 * sin(t * 3.0))
+			var gm: ShaderMaterial = glow.material_override
+			gm.set_shader_parameter("color", col.lerp(Color.WHITE, 0.25))
+			gm.set_shader_parameter("intensity", 1.5 + 0.7 * sin(t * 3.0))
+			ring.visible = true
+			ring.position = stand + Vector3(0, 0.1 + 2.4 * beat, 0)
+			ring.scale = Vector3.ONE * lerpf(1.2, 2.2, beat)
+			ring.transparency = beat
+			ring.material_override = Mats.glow(col, 0.9)
+		else:                                        # charging: crouched in the pool, breathing slowly
+			var wave := sin(t * 1.6)
+			var sq := wave * SQUASH * 0.5 + 0.12
+			idle.global_transform = Transform3D(Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(1.0 + sq * 0.6, 1.0 - sq, 1.0 + sq * 0.45) * size * root.scale.y),
+					stand + Vector3(0, maxf(0.0, wave) * HOP * 0.15, 0))
 	for id in _hubs.keys():
 		if not seen.has(id):
-			if is_instance_valid(_hubs[id]["idle"]):
-				(_hubs[id]["idle"] as Node).queue_free()
+			for k in ["idle", "glow", "ring"]:
+				if is_instance_valid(_hubs[id][k]):
+					(_hubs[id][k] as Node).queue_free()
 			_hubs.erase(id)
 
 
@@ -144,7 +172,23 @@ func _new_hub(vn: Node3D, key: String) -> Dictionary:
 		gate = c
 		break
 	var rest: Vector3 = gate.position if gate else pt.get("gate", Vector3(0, 0.31, 2.3))
-	return {"vn": vn, "gate": gate, "rest": rest, "k": 0.0, "idle": null, "idle_key": "",
+	var glow := MeshInstance3D.new()                  # the READY pool glow
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(1.0, 1.0)
+	glow.mesh = plane
+	var gm := ShaderMaterial.new()
+	gm.shader = FLARE_SHADER
+	gm.set_shader_parameter("mode", 1)
+	glow.material_override = gm
+	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	glow.visible = false
+	add_child(glow)
+	var ring := MeshInstance3D.new()                  # and the ring rising off it
+	ring.mesh = _ring_mesh
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring.visible = false
+	add_child(ring)
+	return {"vn": vn, "gate": gate, "rest": rest, "k": 0.0, "idle": null, "idle_key": "", "glow": glow, "ring": ring,
 			"stand": pt.get("stand", Vector3(0, 1.44, 0)), "gate_z": rest.z}
 
 
@@ -212,8 +256,16 @@ func _make_monster(key: String, seat: String) -> Node3D:
 	## the body (the minion mesh inside) the slimmed minion's texture with the column look.
 	var node := MapBuilder.piece(key)
 	add_child(node)
+	dress(node, sim.factions.get(seat, "null"), seat)
+	return node
+
+
+static var _tex := {}                # faction -> minion albedo Texture2D (shared with the ARMIES previews)
+
+
+static func dress(node: Node3D, faction: String, seat: String) -> void:
+	## Owner colours on a monster model (also Cosmetics' ARMIES preview): evolution LIGHT / OOZE, body = minion texture.
 	MapBuilder.apply_owner([node], seat)
-	var faction: String = sim.factions.get(seat, "null")
 	var tex := _tex_for(faction)
 	for mi in node.find_children("*", "MeshInstance3D", true, false):
 		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
@@ -222,10 +274,9 @@ func _make_monster(key: String, seat: String) -> Node3D:
 		var m: ShaderMaterial = (Mats.creature(faction, seat, tex) as ShaderMaterial).duplicate()
 		UnitView.style(m, faction, seat, Rules.goo_look())
 		(mi as MeshInstance3D).material_override = m
-	return node
 
 
-func _tex_for(faction: String) -> Texture2D:
+static func _tex_for(faction: String) -> Texture2D:
 	if not _tex.has(faction):
 		_tex[faction] = null
 		if Rules.FACTIONS.has(faction):
@@ -442,6 +493,8 @@ static func stage(main: Node, arg: String) -> void:
 	##                   line into its path
 	##   guns[:<k>]      seat A gets Machingoons T1, T2, T3 (tiers rotated by k) and a laser on its nearest
 	##                   nodes, B sends lines at them from a neighbour over an open deck
+	##   skins           seat A picks a non-default look for every family: vats, two Machingoons, laser, forge
+	##                   and a ready hub on its nearest relays; the monster launches at 2.6 s
 	##   relays          seat A owns every relay, the first fires at 0.6 s (ready / warning / cooling looks)
 	##   vats:<look>     every free node becomes seat A's in vat look <look> (Cosmetics id), tiers 1-3 round the
 	##                   map, part-filled, and each sends a line out (the bodies drop out of the tanks)
@@ -502,6 +555,38 @@ static func stage(main: Node, arg: String) -> void:
 						break
 			main.set_meta("stage_guns", pairs)
 			print("stage: guns at ", picks.slice(0, 4).map(func(x): return x["id"]), " lines ", pairs)
+		"skins":                                       # seat A in non-default looks everywhere (0.19.2 proof)
+			Cosmetics.set_loadout("A", {"vat": "reactor", "machingoon": "spitter", "laser": "tesla", "forge": "anvil",
+					"monster_hub": "pit", "monster": "alt"})
+			var home: int = sim.homes.get("A", 0)
+			var hp: Vector3 = sim.nodes[home]["pos"]
+			var by_d := sim.nodes.duplicate()
+			by_d.sort_custom(func(a, b): return (a["pos"] as Vector3).distance_to(hp) < (b["pos"] as Vector3).distance_to(hp))
+			var relays := ["laser", "forge", "monster_hub"]
+			var guns := 2
+			var k := 0
+			for n in by_d:
+				if n["owner"] not in ["", "A"]:
+					continue
+				if n["node_kind"] == "relay" and not relays.is_empty():
+					n["owner"] = "A"
+					n["units"] = 150.0
+					n["structure"] = relays.pop_front()
+					n["monster_ready_t"] = 0.0
+					Sim._sync_legacy(n)
+					if n["structure"] == "monster_hub":
+						main.set_meta("stage_monster", n["id"])
+						main.set_meta("stage_monster_at", 2.6)
+				elif n["node_kind"] == "common" and n["id"] != home and k < 6:
+					n["owner"] = "A"
+					n["units"] = 60.0
+					n["tier"] = 2 + k % 2
+					if guns > 0:
+						n["structure"] = "machingoon"
+						guns -= 1
+					Sim._sync_legacy(n)
+					k += 1
+			print("stage: skins ", by_d.filter(func(x): return x["owner"] == "A").map(func(x): return [x["id"], x["structure"], x["tier"]]))
 		"relays":                                      # seat A owns every relay; the first one fires at 0.6 s
 			var rel := []
 			for n in sim.nodes:
@@ -548,7 +633,7 @@ static func stage_tick(main: Node) -> void:
 		main.remove_meta("stage_relay")
 		if not rel.is_empty():
 			print("stage: relays ", rel, " firing ", rel[0], ": ", sim.fire_relay(rel[0]))
-	if not main.has_meta("stage_monster"):
+	if not main.has_meta("stage_monster") or sim.time < float(main.get_meta("stage_monster_at", 0.6)):
 		return
 	var hub: int = main.get_meta("stage_monster")
 	main.remove_meta("stage_monster")

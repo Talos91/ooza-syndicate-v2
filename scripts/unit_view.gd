@@ -48,6 +48,7 @@ var _discs: Array = []               # [[Transform3D, Color]] this frame
 var _pour := {}                      # horde id -> {"L", "head", "t", "count"} while its column walks in
 var _seen := {}                      # horde ids drawn this frame (the rest are dropped from _pour)
 var _goo := false                    # the look the materials carry (Rules.goo_look)
+var door_rate := 1.0                 # the next add_horde's door-rate multiplier (Sim.door_mult: Surge pours in faster)
 var _ghost := false                  # add_horde is drawing its owner's Ghost Line (SkillFx.ghost_alpha, 0.18.7)
 
 
@@ -199,7 +200,7 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 		if w.is_empty() or w["L"] != L or time < w["t"] - 1.0:
 			w = {"L": L, "head": L + fcut, "t": time, "count": count, "fc": fcut, "fd": fcut / gap}
 			_pour[id] = w
-		w["head"] += Rules.move_speed() * maxf(time - w["t"], 0.0)   # a guest's clock may step back to a snapshot:
+		w["head"] += Rules.move_speed() * door_rate * maxf(time - w["t"], 0.0)   # a guest's clock may step back to a snapshot:
 		w["t"] = maxf(w["t"], time)                                   # hold still until it catches up
 		head = w["head"]
 		var inside := maxi(int(ceil((head - L) / gap)), 0)

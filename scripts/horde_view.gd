@@ -87,7 +87,11 @@ func load_faction(faction: String) -> void:
 	root.free()
 
 
+var _sim: Sim                        # the Sim of the last sync (Surge's door rate, Sim.door_mult)
+
+
 func sync(sim: Sim, viewer: String) -> void:
+	_sim = sim
 	classic = not Rules.bridge_combat
 	if units == null:
 		units = UnitView.new()
@@ -210,6 +214,7 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 		add_child(mi)
 		arr.append(mi)
 	if classic:
+		units.door_rate = _sim.door_mult(h) if _sim and _sim.has_method("door_mult") else 1.0   # 0.19.2 Surge: faster doors
 		units.add_horde(h, Rules.shown_f(vis), time, drop, Sim.is_ghost_for(h, viewer))   # your own Ghost Line: see-through
 	elif not drop.is_empty():
 		units.add_goo_drops(h["owner"], drop, Sim.sample(h, 0.0)[0], Rules.shown_f(h["ordered"] - float(drop["remaining"])),

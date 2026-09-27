@@ -118,6 +118,12 @@ static func piece(name: String) -> Node3D:
 			_scenes[name] = load(KIT % name)
 		scene = _scenes[name]
 	var node: Node3D = scene.instantiate()
+	var fit := Cosmetics.fit(name)                  # 0.19.2: the Machingoon looks at a vat's size, sunk into the socket
+	if not fit.is_empty():
+		for c in node.get_children():
+			if c is Node3D:
+				(c as Node3D).scale *= float(fit["scale"])
+				(c as Node3D).position = (c as Node3D).position * float(fit["scale"]) - Vector3(0, float(fit["drop"]), 0)
 	Mats.apply_detail(node)                         # Alpha 16: surface detail on the flat kit colours
 	return node
 
