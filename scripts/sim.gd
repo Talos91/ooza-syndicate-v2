@@ -52,6 +52,7 @@ var _next_wave_at := 0.0
 var very_last_stand_active := false  # 0.18.9: the post-ring stalemate breaker (Rules.VERY_LAST_STAND_TIME)
 var vls_enabled := true              # TUTORIAL: false keeps the Very Last Stand off (every lesson but L7 / the first match)
 var vls_gap_override := -1.0         # TUTORIAL: > 0 fixes the Very Last Stand's interval (start_very_last_stand_now)
+var match_hard_end: float = Rules.MATCH_HARD_END   # TUTORIAL: a lesson moves the 7:00 end out of its way (INF)
 var very_last_stand_gap := 0.0       # this match's current interval, derived from the survivor count
                                       # and the time left to Rules.MATCH_HARD_END (Daniele: "the time
                                       # between falls is due to the number of nodes") - reuses
@@ -1470,7 +1471,7 @@ func step(dt: float) -> void:
 	time += dt
 	_step_last_stand(dt)
 	_step_very_last_stand(dt)
-	if time >= Rules.MATCH_HARD_END and not over:
+	if time >= match_hard_end and not over:
 		_force_end()
 	if over:
 		return
@@ -1478,8 +1479,8 @@ func step(dt: float) -> void:
 	for n in nodes:                                   # production (vat nodes only), up to the cap
 		if n["owner"] != "" and has_vat(n) and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11)
 			_produce(n, dt)
-		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and has_vat(n) and not collapsed.get(n["id"], false) and n["units"] < Rules.NEUTRAL_UNITS.get(n["tier"], 0):
-			n["units"] = minf(Rules.NEUTRAL_UNITS[n["tier"]], n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)
+		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and has_vat(n) and not collapsed.get(n["id"], false) 				and n["units"] < float(n.get("regen_cap", Rules.NEUTRAL_UNITS.get(n["tier"], 0))):   # (TUTORIAL: "regen_cap" - a staged node regrows only to that)
+			n["units"] = minf(float(n.get("regen_cap", Rules.NEUTRAL_UNITS[n["tier"]])), n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)
 	_step_relays(dt)
 	_step_structures(dt)
 	_step_skills(dt)
