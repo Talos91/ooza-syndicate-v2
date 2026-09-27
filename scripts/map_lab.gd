@@ -21,6 +21,7 @@ const GOOD := Color(0.49, 1.0, 0.35)
 static var entries: Array = []          # index.json "maps": {file, code, name, modes, nodes, footprint, pass, hard, soft, findings}
 static var index_info := {}
 static var picked := ""                 # file of the selected map
+static var group := "ALL"               # the list shows one group of codes (D- / J- / R- ...) or ALL
 static var pick_mode := ""
 static var level := "Standard"
 static var watch := false               # WATCH: every seat is the AI (main.demo)
@@ -31,6 +32,7 @@ var http: HTTPRequest
 var base := SITE
 var queue: Array = []
 var status: Label
+var groups_row: HBoxContainer
 var list_box: GridContainer
 var detail: VBoxContainer
 
@@ -185,6 +187,9 @@ func _build_ui() -> void:
 	status = _label("", 22, Color(0.6, 0.7, 0.78))
 	status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left.add_child(status)
+	groups_row = HBoxContainer.new()                   # group chips: every map of a group on one screen
+	groups_row.add_theme_constant_override("separation", 8)
+	left.add_child(groups_row)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -211,7 +216,22 @@ func _fill() -> void:
 		c.queue_free()
 	if picked == "" and not entries.is_empty():
 		picked = str(entries[0]["file"])
+	for c in groups_row.get_children():
+		c.queue_free()
+	var prefixes := ["ALL"]
 	for e in entries:
+		var pre := str(e.get("code", "?")).substr(0, 1)
+		if not pre in prefixes:
+			prefixes.append(pre)
+	for pre in prefixes:
+		var val: String = pre
+		var chip := _button(val, func(): _set_group(val), 72, 20)
+		chip.custom_minimum_size.y = 56
+		_style(chip, ACCENT.darkened(0.55) if val == group else CARD)
+		groups_row.add_child(chip)
+	for e in entries:
+		if group != "ALL" and not str(e.get("code", "")).begins_with(group):
+			continue
 		var f: String = str(e["file"])
 		var fp: Array = e.get("footprint", [0, 0])
 		var ok: bool = e.get("pass", false)
@@ -240,6 +260,11 @@ func _maybe_shot() -> void:
 			await RenderingServer.frame_post_draw
 			get_viewport().get_texture().get_image().save_png(arg.substr(11))
 			get_tree().quit()
+
+
+func _set_group(v: String) -> void:
+	group = v
+	_fill()
 
 
 func _select(f: String) -> void:
