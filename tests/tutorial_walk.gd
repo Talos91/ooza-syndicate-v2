@@ -211,10 +211,13 @@ func _lesson(id: int) -> void:
 				m.hud.inspect(_id("R3"), m.cam)
 				await _shot("hub-inspector")
 				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("build", _id("R3"), {"kind": "monster_hub"}))
-			"L6.send":
-				m.hud.inspect(_id("R3"), m.cam)
-				await _shot("launch-inspector")
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("launch_monster", _id("R3"), {"to": _id("M2")}))
+			"L6.send":                                       # 0.19.2: tap the monster over the hub, then the end node
+				await _secs(0.5)
+				if m.hud.monster_icon.visible:
+					m.hud.monster_icon.pressed.emit()
+				await _secs(0.4)
+				await _shot("monster-armed")
+				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("launch_monster", _id("R3"), {"to": _id("M2")}); m.monster_from = -1)
 			"L6.take":
 				await _secs(2.0)
 				await _shot("monster-walking")

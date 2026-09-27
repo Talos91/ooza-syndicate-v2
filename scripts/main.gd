@@ -1426,6 +1426,7 @@ func start_tutorial(lesson_id: int, first := false, faction := "", colour := "")
 	## afterwards), a scripted rival (no SeatAI; the Training AI in the first match).
 	director = TutorialDirector.new(lesson_id)
 	director.first_launch = first
+	show_out_panel = lesson_id == TutorialDirector.LESSON_COUNT   # no YOU'RE OUT in lessons 0-8: a TRY AGAIN instead
 	menu_faction = faction if faction != "" else str(SEAT_FACTIONS[HUMAN])
 	if colour != "":
 		color_choice = colour
@@ -1485,6 +1486,7 @@ func _tutorial_step(dt: float) -> float:
 	director.ui_fraction = fraction
 	director.ui_inspector = hud.inspector_id
 	director.ui_armed = hud.dock.armed if hud.dock else -1
+	director.ui_monster_from = monster_from
 	director.step(dt)
 	return dt * director.time_scale
 
@@ -1585,6 +1587,8 @@ func _tutorial_rect(key: String) -> Rect2:
 	match parts[0]:
 		"badge":
 			return hud.badge_rect(int(parts[1]))
+		"monster_icon":                               # 0.19.2: the monster over your ready hub
+			return hud.monster_icon_rect(int(parts[1]))
 		"send_panel":
 			return hud.side_panel.get_global_rect() if hud.side_panel.visible else Rect2()
 		"top_bar":

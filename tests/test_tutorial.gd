@@ -162,7 +162,7 @@ func test_reveal() -> void:
 			if not k in want:
 				want.append(k)
 		check(_same(got, want), "reveal L%d step 1 = the lessons before it + its own start keys %s" % [id, str(got)])
-		for k in ["halos", "eject"]:
+		for k in ["halos", "eject", "out_panel"]:
 			check(not k in got, "reveal L%d: no team part '%s' in a 1v1 lesson" % [id, k])
 		var last := TutorialDirector.reveal_for(id, (l["steps"] as Array).size() - 1)
 		for k in before:
@@ -173,6 +173,9 @@ func test_reveal() -> void:
 	check("dock" in TutorialDirector.reveal_for(8, 0) and not "dock" in TutorialDirector.reveal_for(7, 3), "reveal: the dock appears in L8")
 	check("danger" in TutorialDirector.reveal_for(7, 0) and not "danger" in TutorialDirector.reveal_for(6, 7), "reveal: danger marks from L7")
 	check("relay" in TutorialDirector.reveal_for(4, 0) and not "relay" in TutorialDirector.reveal_for(3, 4), "reveal: the relay cue from L4")
+	check("topbar" in TutorialDirector.reveal_for(1, 0) and not "strength" in TutorialDirector.reveal_for(1, 0), "reveal: L1 shows the top bar, the clock only")
+	check("monster_icon" in TutorialDirector.reveal_for(6, 0) and not "monster_icon" in TutorialDirector.reveal_for(5, 3), "reveal: the monster icon from L6")
+	check("out_panel" in TutorialDirector.reveal_for(9, 0) and "out_panel" in TutorialDirector.reveal_for(0, 0), "reveal: YOU'RE OUT only in the tour and the first match")
 
 
 func _same(a: Array, b: Array) -> bool:
@@ -443,6 +446,9 @@ func test_l6() -> void:
 	check(d.allow("launch_monster", n["R3"], {"to": n["M1"]}) != "" and d.allow("launch_monster", n["R3"], {"to": n["M2"]}) == "",
 			"L6: the monster goes to the lane's end (other targets: Not yet)")
 	check(n["M2"] in sim.monster_reach(n["R3"]), "L6: the lane's end is within the monster's reach")
+	check(d.gesture()[0] == ["press", "monster_icon:%d" % n["R3"], -1], "L6: the hand presses the monster over its hub first")
+	d.ui_monster_from = n["R3"]                                 # (the icon armed the launch)
+	check(d.gesture()[0] == ["tap", n["M2"], -1], "L6: then the hand taps the lane's end")
 	play(d, sim, "send", func(t): if first(t): check(sim.structure_order("A", "launch_monster", n["R3"], {"to": n["M2"]})[0], "L6: the monster launches"))
 	play(d, sim, "take", wait)
 	var kicked := 0.0

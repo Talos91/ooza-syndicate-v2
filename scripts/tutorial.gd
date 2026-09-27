@@ -137,7 +137,8 @@ const LINES := {
 	"L6.burst": "The Laser tower fires bursts at rival lines in range, then recharges.",
 	"L6.forge": "Build a FORGE on the next relay: your units hit harder and your nodes hold better.",
 	"L6.hub": "Build a MONSTER HUB on the last relay. You can have one.",
-	"L6.send": "Launch the monster at a node up to {hops} decks away. It kicks every line off its decks.",
+	# 0.19.2's flow (TUTORIAL-SCRIPT L6 "send", trimmed to <= 90 characters)
+	"L6.send": "Tap the monster on its hub, then a node up to {hops} decks away. It kicks lines off decks.",
 	"L6.take": "The monster takes the node at the end. Only a drop stops it.",
 	"L6.fell": "Monsters drop like everything else. Choose the route well.",
 	"L6.cooldown": "The hub needs time to grow the next monster. Make each one count.",
@@ -196,9 +197,10 @@ const LINES := {
 # relay_build (LASER / FORGE / MONSTER HUB), forge_readout, monster (LAUNCH, the reach ring, the hub line),
 # status_line, danger (the floating Last Stand symbols), dock, and - only in L9, never in a 1v1 lesson - halos
 # and eject (the team parts).
-const REVEAL_BASE := ["map", "badges", "drag", "clock"]
+const REVEAL_BASE := ["map", "badges", "drag", "clock", "topbar"]   # topbar: 0.19.2's centred bar (the clock alone early on)
 const ALL_KEYS := ["map", "badges", "drag", "clock", "send_panel", "upgrade", "machinegoon", "rival_counts", "strength",
-		"notices", "relay", "relay_build", "forge_readout", "monster", "status_line", "danger", "dock", "halos", "eject"]
+		"notices", "relay", "relay_build", "forge_readout", "monster", "monster_icon", "status_line", "danger", "dock", "halos", "eject",
+		"out_panel"]                                   # (out_panel: the YOU'RE OUT panel - only in the tour and the first match)
 
 # ---------------------------------------------------------------- the lessons (design §3)
 # stage: [name, owner, units, (tier)] - units in SHOWN numbers, or "garrison" (the tier's neutral garrison,
@@ -305,7 +307,7 @@ const LESSONS := [
 	{"id": 6, "key": "L6", "map": "T-08-relay-works", "abilities": false, "vls": false,
 		"stage": [["H", "A", 30], ["R1", "A", 60], ["R2", "A", 30], ["R3", "A", 60], ["L1", "B", 20], ["F1", "B", 20],
 				["M1", "B", 15], ["M2", "B", 30], ["BH", "B", 30]], "protect": ["BH", "L1", "F1", "M1"],
-		"reveal": ["relay_build", "forge_readout", "monster"],
+		"reveal": ["relay_build", "forge_readout", "monster", "monster_icon"],
 		"steps": [
 			{"key": "inspect", "target": {"nodes": ["R1"]}, "gesture": [["tap", "R1"]], "pass": ["inspect", "R1"], "budget": 10.0},
 			{"key": "laser", "target": {"nodes": ["R1"], "rects": ["action:LASER"]}, "gesture": [["press", "action:LASER"], ["tap", "R1"]],
@@ -316,8 +318,8 @@ const LESSONS := [
 				"pass": ["built", "R2", "forge"], "budget": 20.0},
 			{"key": "hub", "target": {"nodes": ["R3"], "rects": ["action:MONSTER HUB"]},
 				"gesture": [["press", "action:MONSTER HUB"], ["tap", "R3"]], "pass": ["built", "R3", "monster_hub"], "budget": 20.0},
-			{"key": "send", "enter": ["charge_hub", "R3"], "target": {"nodes": ["R3", "M2"], "rects": ["action:LAUNCH"]},
-				"gesture": [["drag", "R3", "M2"]], "pass": ["launched", "M2"], "only_launch": "M2", "budget": 10.0},
+			{"key": "send", "enter": ["charge_hub", "R3"], "target": {"nodes": ["R3", "M2"], "rects": ["monster_icon:R3"]},
+				"gesture": [["monster", "R3", "M2"]], "pass": ["launched", "M2"], "only_launch": "M2", "budget": 10.0},
 			{"key": "take", "enter": ["b_send", "M2", "R3", 8], "target": {"nodes": ["M2"], "lines": "B"},
 				"pass": ["custom", "monster_done", "M2"], "budget": 45.0},
 			{"key": "cooldown", "target": {"nodes": ["R3"]}, "read_only": true},
@@ -544,6 +546,7 @@ var fail_line := ""
 var ui_fraction := 0.5                               # main: the send panel's fraction
 var ui_inspector := -1                               # main: the node the inspector is open on (-1: none)
 var ui_armed := -1                                   # main: the armed dock slot (-1: none)
+var ui_monster_from := -1                            # main: the hub whose launch is armed (the monster icon / LAUNCH)
 var ai: SeatAI                                       # L9 only: the Training rival
 
 var _log: Array = []                                 # sim.events (and fx events from on_event) since the lesson began
@@ -714,8 +717,8 @@ func step(dt: float) -> void:
 	if (st.get("read_only", false) or step_t >= MIN_STEP) and _check_pass(st):
 		_pass_step(st)
 		return
-	if sim.eliminated.has(HUMAN) and not sim.over:    # out (lines keep you alive): TRY AGAIN, never a YOU'RE OUT panel
-		_fail(line("L7.lost") if lesson_id == 7 else line("try_again"))   # TODO(0.19.2): Sim.is_out(seat) / fx "eliminated"
+	if sim.is_out(HUMAN) and not sim.over:            # out (lines keep you alive): TRY AGAIN - main keeps the YOU'RE OUT
+		_fail(line("L7.lost") if lesson_id == 7 else line("try_again"))   # panel off in lessons (show_out_panel)
 		return
 	if sim.over:                                     # the match ended off-script
 		if sim.winner != "" and sim.allied(sim.winner, HUMAN):
@@ -1584,7 +1587,7 @@ func target() -> Dictionary:
 			out["decks"].append(ei)
 	for key in t.get("rects", []):                    # "badge:<name>" -> "badge:<node id>"
 		var k := str(key)
-		out["rects"].append("badge:%d" % _id(k.substr(6)) if k.begins_with("badge:") else k)
+		out["rects"].append(_rect_key(k))
 	var who := str(t.get("lines", ""))
 	if who != "":
 		for h in sim.hordes:
@@ -1618,7 +1621,15 @@ func gesture() -> Array:
 					out.append(["drag", mv[0], mv[1]])
 			"press":
 				var k := str(g[1])
-				out.append([kind, "badge:%d" % _id(k.substr(6)) if k.begins_with("badge:") else k, -1])
+				out.append([kind, _rect_key(k), -1])
+			"monster":                                # 0.19.2: tap the monster over its hub, then the end node
+				var hub := _id(str(g[1]))
+				if ui_monster_from == hub:
+					out.append(["tap", _id(str(g[2])), -1])
+				else:
+					out.append(["press", "monster_icon:%d" % hub, -1])
+					out.append(["press", "action:LAUNCH", -1])   # the second way, while the inspector is open
+					out.append(["tap", hub, -1])
 			"tap_line":                               # only once the dock slot is armed
 				if ui_armed == int(st.get("armed", -1)):
 					var hid := _a_line()
@@ -1667,6 +1678,14 @@ func _vls_move() -> Array:
 			best_score = score
 			best = n["id"]
 	return [from, best] if best >= 0 else []
+
+
+func _rect_key(k: String) -> String:
+	## "badge:<name>" / "monster_icon:<name>" -> the node id main's rect getters take.
+	for pre in ["badge:", "monster_icon:"]:
+		if k.begins_with(pre):
+			return "%s%d" % [pre, _id(k.substr(pre.length()))]
+	return k
 
 
 func _a_line() -> int:
