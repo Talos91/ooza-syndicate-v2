@@ -347,6 +347,8 @@ func _call(method: String, route: String, body, auth: bool, extra := []) -> Dict
 		await ready
 	var h := HTTPRequest.new()
 	h.timeout = 15.0
+	h.accept_gzip = not OS.has_feature("web")          # web: the browser already decompresses; Godot's second pass fails
+	                                                   # (stream_peer_gzip error; seen on /auth/v1/settings in 0.20.5)
 	add_child(h)
 	var headers := PackedStringArray(["apikey: " + KEY, "Content-Type: application/json"])
 	if auth and access_token != "":
