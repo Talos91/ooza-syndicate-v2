@@ -192,7 +192,11 @@ func _lesson(id: int) -> void:
 						st["shot"] = true
 						await _shot(key + "-prompt")
 						Engine.time_scale = FAST
-					if hid >= 0 and _deck_m(hid, relay) >= 2.0 and not fired.has(hid):
+					if hid >= 0 and not st.get("slow_shot", false) and d.time_scale < 1.0 and not d.catch_prompt():
+						st["slow_shot"] = true
+						await _shot(key + "-slow")
+						Engine.time_scale = FAST
+					if hid >= 0 and d.catch_prompt() and st["shot"] and not fired.has(hid):   # fire when the hand says
 						fired[hid] = true
 						m.node_action("switch", relay)
 					await get_tree().process_frame
@@ -284,7 +288,7 @@ func _lesson(id: int) -> void:
 						st9["shot"] = true
 						await _shot("push-prompt")
 						Engine.time_scale = FAST
-					if d.catch_prompt() and hid >= 0 and _deck_m(hid, _id("R")) >= 6.0 and not st9["fired"]:
+					if d.catch_prompt() and hid >= 0 and not st9["fired"]:
 						st9["fired"] = true
 						m.node_action("switch", _id("R"))
 					await get_tree().process_frame
