@@ -1250,7 +1250,7 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 			"ls": [s.last_stand_active, s.last_stand_method, s.last_stand_order, s.last_stand_final,
 					s.last_stand_next, s.last_stand_warn_node, s.last_stand_warn_t, s.last_stand_wave, s._next_wave_at,
 					s.last_stand_waves, s.last_stand_keep, s.last_stand_warn, s.last_stand_queue,
-					s.very_last_stand_active, s.very_last_stand_gap],
+					s.very_last_stand_active, s.very_last_stand_gap, s.last_stand_gap],
 			"losses": [s.combat_losses, s.fall_losses],
 			"skills": [s.effects, s.demolished, s.skill_cd, s.ult_charge, s.ult_since],
 			"structs": [ms, s._next_monster, s.draw_line]}
@@ -1338,6 +1338,8 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 	if ls.size() > 14:                                # 0.18.9: Very Last Stand
 		s.very_last_stand_active = ls[13]
 		s.very_last_stand_gap = ls[14]
+	if ls.size() > 15:                                # 2026-09-27: the adaptive ring drop gap (drop_in countdowns)
+		s.last_stand_gap = ls[15]
 	s.combat_losses = snap["losses"][0]
 	s.fall_losses = snap["losses"][1]
 	if snap.has("skills"):                            # SKILLS 2.0: effects, demolished decks, cooldowns, charge

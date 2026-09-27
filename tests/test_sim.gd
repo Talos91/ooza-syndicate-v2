@@ -940,6 +940,7 @@ func _init() -> void:
 	_skills_tests()
 	_dock_tests()
 	_rules_0_18_10()
+	_ls_pacing()
 	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
@@ -998,6 +999,87 @@ func _tp(seats := {3: "A", 4: "B"}, factions := {"A": "null", "B": "null"}, team
 	var s := Sim.new()
 	s.setup(m, MapBuilder.layout(m), seats, factions, 1, teams)
 	return s
+
+
+# ------------------------------------------------------------------ 2026-09-27: the ring Last Stand's adaptive drop gap
+func _ls_run(path: String) -> Sim:
+	var m := MapBuilder.load_map(path)
+	var seats := {}
+	for st in m["seats"]["1v1"]:
+		seats[int(st["node"])] = st["seat"]
+	var s := Sim.new()
+	s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null"}, 1)
+	s.time = Rules.LAST_STAND_TIME
+	s.start_last_stand_now()
+	return s
+
+
+func _ls_pacing() -> void:
+	check(Rules.LAST_STAND_DROP_GAP_MAX == 20.0 and Rules.LAST_STAND_DROP_GAP_MIN == 8.0 and Rules.LAST_STAND_DROP_GAP == 5.0,
+			"ring drop gap: adaptive 8-20 s (the old 5 s constant stays for the tutorial)")
+	for c in [["res://maps4/M-03-drift-belt.json", "small"], ["res://maps4/M-09-shard-archipelago.json", "big"]]:
+		var path: String = c[0]
+		var m := MapBuilder.load_map(path)
+		if not m["seats"].has("1v1"):                  # (M-09 is a 2v2 map: seat its first mode)
+			var seats := {}
+			for st in m["seats"][m["seats"].keys()[0]]:
+				seats[int(st["node"])] = st["seat"]
+			var s0 := Sim.new()
+			s0.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null", "C": "null", "D": "null"}, 1)
+			s0.time = Rules.LAST_STAND_TIME
+			s0.start_last_stand_now()
+			_ls_check(s0, c[1])
+		else:
+			_ls_check(_ls_run(path), c[1])
+	check(Sim._fit_gap([range(30), range(30)], 180.0) == Rules.LAST_STAND_DROP_GAP_MIN, "a huge collapse never drops faster than 8 s (the rest goes to the Very Last Stand)")
+	var so := Sim.new()
+	var mo := MapBuilder.load_map("res://maps4/M-03-drift-belt.json")
+	var so_seats := {}
+	for st in mo["seats"]["1v1"]:
+		so_seats[int(st["node"])] = st["seat"]
+	so.setup(mo, MapBuilder.layout(mo), so_seats, {"A": "null", "B": "null"}, 1)
+	so.ls_drop_gap_override = Rules.LAST_STAND_DROP_GAP
+	so.time = Rules.LAST_STAND_TIME
+	so.start_last_stand_now()
+	check(so.last_stand_gap == 5.0, "TUTORIAL: ls_drop_gap_override pins the ring's gap (L7: 5 s)")
+	# the AI empties a warned ring platform only when its own drop is near
+	var se := _ls_run("res://maps4/M-03-drift-belt.json")
+	var late: int = se.last_stand_queue[-1]
+	se.nodes[late]["owner"] = "A"
+	se.nodes[late]["units"] = 100.0
+	var ai_ev := SeatAI.new("A", 2.0, "Veteran")
+	ai_ev._evacuate(se)
+	check(not se.hordes.any(func(h): return h["route"][0] == late), "the AI keeps a platform that falls late in the ring (drop in %.0f s)" % se.drop_in(late))
+	se.last_stand_queue = [late]
+	se.last_stand_warn_t = 4.0
+	ai_ev._evacuate(se)
+	check(se.hordes.any(func(h): return h["route"][0] == late), "...and evacuates it once its drop is near")
+
+
+func _ls_check(s: Sim, tag: String) -> void:
+	var g: float = s.last_stand_gap
+	if tag == "small":
+		check(g == Rules.LAST_STAND_DROP_GAP_MAX, "small map: the ring drops a platform every 20 s (%.1f)" % g)
+	else:
+		check(g < Rules.LAST_STAND_DROP_GAP_MAX and g >= Rules.LAST_STAND_DROP_GAP_MIN, "big map: a shorter gap, never under 8 s (%.1f)" % g)
+	# countdowns: every queued platform's drop_in matches when it really falls
+	var want := {}
+	for k in range(s.last_stand_queue.size()):
+		want[s.last_stand_queue[k]] = s.time + s.drop_in(s.last_stand_queue[k])
+	var off := 0.0
+	var islands_ok := true
+	while s.time < Rules.VERY_LAST_STAND_TIME - 0.05 and not (s.last_stand_queue.is_empty() and s.last_stand_next >= s.last_stand_waves.size()):
+		var before := s.collapsed.duplicate()
+		s._step_last_stand(0.05)
+		s.time += 0.05
+		for id in s.collapsed:
+			if not before.has(id) and want.has(id):
+				off = maxf(off, absf(s.time - want[id]))
+		islands_ok = islands_ok and s._islands(s.collapsed).is_empty()
+	check(off < 0.2 and not want.is_empty(), "%s map: each badge's countdown (drop_in) matches its drop (worst %.2f s)" % [tag, off])
+	check(s.last_stand_queue.is_empty() and s.last_stand_next >= s.last_stand_waves.size() and s.time < Rules.VERY_LAST_STAND_TIME,
+			"%s map: the whole ring collapse ends before the Very Last Stand (%.0f s)" % [tag, s.time])
+	check(islands_ok, "%s map: nothing is ever left cut off" % tag)
 
 
 func _rules_0_18_10() -> void:

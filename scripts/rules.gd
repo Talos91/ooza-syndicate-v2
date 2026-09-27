@@ -176,6 +176,7 @@ const AI_RELAY_SLACK := 1.25
 const AI_RELAY_PAD := 1.0
 const AI_RELAY_DETOUR := 8.0
 const AI_RELAY_RISK := 14.0          # target-score penalty for a plan whose only route is at risk
+const AI_EVAC_MARGIN := 6.0          # s: a warned ring platform empties when its drop is this much beyond trip + one think
 const AI_RELAY_VALUE := 10.0         # target-score bonus for a relay node (control of shortcuts), + its traffic
 # (0.18.10: the fixed 6-unit relay garrison AI_RELAY_HOLD is gone - Daniele, 2026-09-27: relay nodes are held and
 # built on like any node; the AI garrisons them by threat like its other nodes, knowing they produce nothing.)
@@ -202,9 +203,17 @@ const LAST_STAND_WARNING := 10.0
 const LAST_STAND_WAVE_MIN := 12.0
 const LAST_STAND_WAVE_MAX := 30.0
 # A ring falls platform by platform (Daniele, 0.18.4: "don't make all outward rings fall at the same time but one
-# after the other, 5 s distance from each, following the rule we set for falling bridges"): after the ring's
-# 10 s warning its platforms drop one every LAST_STAND_DROP_GAP s, never leaving the rest of the map cut off.
-const LAST_STAND_DROP_GAP := 5.0
+# after the other ... following the rule we set for falling bridges"): after the ring's 10 s warning its platforms
+# drop one at a time, never leaving the rest of the map cut off, the rings back to back.
+# ADAPTIVE GAP (Daniele, 2026-09-27: "instead of a platform every 5 seconds, we do every 20; I think it makes it
+# more fair" - "Aim for 20 s, fit the time"): the gap between drops is fixed per match at the Last Stand's start
+# (Sim.last_stand_gap) - as slow as possible up to LAST_STAND_DROP_GAP_MAX, never under _MIN, sized so every wave's
+# warning and drops end before the Very Last Stand (VERY_LAST_STAND_TIME). If even _MIN can't fit, _MIN it is and
+# the leftovers go to the Very Last Stand.
+const LAST_STAND_DROP_GAP_MAX := 20.0
+const LAST_STAND_DROP_GAP_MIN := 8.0
+const LAST_STAND_DROP_GAP := 5.0     # the old fixed ring gap - no longer the rule (see Sim.last_stand_gap); the
+                                     # tutorial's staged Very Last Stand (tutorial.gd vls_gap "warning+gap") reads it
 const MATCH_HARD_END := 420.0        # 7:00 end: the side owning the Very Last Stand's last platform wins (Sim._force_end)
 # 7:00 DRAW (Daniele, 2026-09-27: "I d say DRAW and we say something funny ... for no one to have it means they
 # didn t even tried ... we can kinda call them out"): a still-neutral last platform is a draw with one of these

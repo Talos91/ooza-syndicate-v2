@@ -451,7 +451,7 @@ func _heights() -> void:
 
 
 func _drop_timing() -> void:
-	## 0.18.4: after the ring's 10 s warning its platforms drop one at a time, LAST_STAND_DROP_GAP apart.
+	## 0.18.4: after the ring's 10 s warning its platforms drop one at a time, Sim.last_stand_gap apart (adaptive, 2026-09-27).
 	for path in MapPool.all():
 		var m := MapBuilder.load_map(path)
 		if (m["lastStand"].get("methods", []) as Array).is_empty():
@@ -478,8 +478,8 @@ func _drop_timing() -> void:
 		check(drops.size() >= 2 and absf(float(drops[0][1]) - warned_at - Rules.LAST_STAND_WARNING) < 0.25,
 				"%s: the ring's first platform drops after the %d s warning" % [m["code"], int(Rules.LAST_STAND_WARNING)])
 		if drops.size() >= 2:
-			check(absf(float(drops[1][1]) - float(drops[0][1]) - Rules.LAST_STAND_DROP_GAP) < 0.25,
-					"%s: the next platform drops %d s later, not with it (%.1f s)" % [m["code"], int(Rules.LAST_STAND_DROP_GAP), float(drops[1][1]) - float(drops[0][1])])
+			check(absf(float(drops[1][1]) - float(drops[0][1]) - sim.last_stand_gap) < 0.25,
+					"%s: the next platform drops the match's gap later (%.1f s), not with it (%.1f s)" % [m["code"], sim.last_stand_gap, float(drops[1][1]) - float(drops[0][1])])
 		return
 
 
