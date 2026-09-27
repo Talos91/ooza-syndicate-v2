@@ -519,7 +519,7 @@ const SKILLS := {
 			"rate": 0.25, "cap_shown": 10.0},
 	# the decoy's length is the send fraction of the source vat (the fraction the player has set); no units spent
 	"ghost_line": {"name": "Ghost Line", "slot": "active", "cd": 32.0, "target": "vat_to_node",
-			"desc": "A decoy line that looks real and draws cannon fire, but never fights.", "fraction": 0.5},
+			"desc": "A decoy line that looks real and draws Laser tower and Machingoon fire, but never fights.", "fraction": 0.5},
 	# ---- map pool (network skills)
 	"demolish": {"name": "Demolish", "slot": "map", "cd": 60.0, "target": "fixed_deck",
 			"desc": "A deck collapses after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
@@ -527,7 +527,7 @@ const SKILLS := {
 	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "Enemy lines on one deck are 40 % slower for 8 s.", "slow": 0.6, "dur": 8.0},
 	"anchor": {"name": "Anchor", "slot": "map", "cd": 45.0, "target": "deck",
-			"desc": "A deck is locked for 10 s: no relay moves it, Demolish fails, half cannon kills on your lines.",
+			"desc": "A deck is locked for 10 s: no relay moves it, Demolish fails, half the Laser tower and Machingoon kills on your lines.",
 			"dur": 10.0, "cannon_mult": 0.5},
 	"bypass": {"name": "Bypass", "slot": "map", "cd": 45.0, "target": "relay", "needs_relays": true,
 			"desc": "A relay holds both of its states for 8 s.", "dur": 8.0},
@@ -540,7 +540,7 @@ const SKILLS := {
 			"desc": "10 s: all your lines +50 % speed; fire up to 3 relays anywhere, enemy ones too.",
 			"dur": 10.0, "mult": 1.5, "fires": 3},
 	"echo_split": {"name": "Echo Split", "slot": "ultimate", "faction": "null", "cd": 120.0, "target": "none",
-			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat and cannon for 8 s.",
+			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat, Laser tower and Machingoon for 8 s.",
 			"echoes": 3, "disrupt": 8.0},
 	# Daniele (0.18.7): "i don't like that super bloom can be casted only under attack but i like the cap"
 	"superbloom": {"name": "Superbloom", "slot": "ultimate", "faction": "bloom", "cd": 120.0, "target": "none",

@@ -3176,7 +3176,7 @@ func launch_monster(hub_id: int, seat: String, target_id: int) -> String:
 	if route.size() < 2:
 		return "No route there"
 	if _bridges(route) > Rules.MONSTER_REACH:
-		return "Out of reach - up to %d bridges" % Rules.MONSTER_REACH
+		return "Out of reach - up to %d decks" % Rules.MONSTER_REACH
 	n["units"] -= Rules.MONSTER_COST
 	n["monster_ready_t"] = time + Rules.MONSTER_COOLDOWN
 	var path := build_path(route)
