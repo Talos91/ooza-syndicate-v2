@@ -452,18 +452,22 @@ func setup(m: Node3D) -> void:
 	spectate_button.visible = false
 	root.add_child(spectate_button)
 	monster_icon = MonsterIcon.new()
-	monster_icon.custom_minimum_size = Vector2(40, 40) * ui_scale
+	monster_icon.custom_minimum_size = Vector2(48, 48) * ui_scale   # 0.20.1: >= the 44 pt tap minimum (was 40)
 	monster_icon.size = monster_icon.custom_minimum_size
 	monster_icon.ui_scale = ui_scale
 	monster_icon.visible = false
 	monster_icon.pressed.connect(func():
 		var hub := _human_hub_id()
-		main.monster_from = -1 if main.monster_from == hub else hub)
+		if main.monster_from == hub:
+			main.monster_from = -1
+		else:
+			main.monster_from = hub
+			note_monster_hint())
 	root.add_child(monster_icon)
 
 
 func _hint_text() -> String:
-	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: switch)  ·  Tap the hub icon to launch a monster" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
+	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: switch)  ·  Tap your ready monster to launch it" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
 
 
 func layout(vp: Vector2, m: Vector4) -> void:
@@ -1123,6 +1127,26 @@ func _human_hub_id() -> int:
 		if n["owner"] == human and n["structure"] == "monster_hub" and not sim.collapsed.get(n["id"], false):
 			return n["id"]
 	return -1
+
+
+func is_ready_hub(node_id: int) -> bool:
+	## 0.20.1 (Daniele's online playtest: "i couldn't figure how to send the monster ... tap IT, the
+	## guided send lights up every target, tap a target, it goes"): true while node_id is YOUR Monster
+	## hub and it can launch right now - main.gd's tap handler arms LAUNCH straight from this instead of
+	## opening the inspector (which still opens while it's charging).
+	return node_id >= 0 and node_id == _human_hub_id() and _monster_ready(sim.nodes[node_id]) == ""
+
+
+static var _monster_hint_shown := false
+
+
+func note_monster_hint() -> void:
+	## A short first-time nudge (Daniele's ask) the first time LAUNCH is armed this session, from any of
+	## the three equivalent triggers (the hub, its monster, the icon).
+	if _monster_hint_shown:
+		return
+	_monster_hint_shown = true
+	toast("Tap your monster, then a lit node", "info")
 
 
 func monster_icon_rect(hub_id: int) -> Rect2:
