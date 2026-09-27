@@ -31,7 +31,7 @@ var http: HTTPRequest
 var base := SITE
 var queue: Array = []
 var status: Label
-var list_box: VBoxContainer
+var list_box: GridContainer
 var detail: VBoxContainer
 
 
@@ -189,9 +189,11 @@ func _build_ui() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	left.add_child(scroll)
-	list_box = VBoxContainer.new()
+	list_box = GridContainer.new()                     # two columns of compact cards: every map on one screen
+	list_box.columns = 2
 	list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_box.add_theme_constant_override("separation", 10)
+	list_box.add_theme_constant_override("h_separation", 8)
+	list_box.add_theme_constant_override("v_separation", 8)
 	scroll.add_child(list_box)
 	var right_scroll := ScrollContainer.new()
 	right_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -212,14 +214,16 @@ func _fill() -> void:
 	for e in entries:
 		var f: String = str(e["file"])
 		var fp: Array = e.get("footprint", [0, 0])
-		var txt := "%s  %s\n%d x %d m · %d nodes · %s" % [e.get("code", ""), e.get("name", ""), int(fp[0]), int(fp[1]),
-				int(e.get("nodes", 0)), " ".join(e.get("modes", []))]
-		var b := _button(txt, func(): _select(f), 0, 24)
-		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		b.custom_minimum_size.y = 96
 		var ok: bool = e.get("pass", false)
-		var tag := " PASS" if ok else " %d HARD" % int(e.get("hard", 0))
-		b.text = txt.replace("\n", "   " + tag + "\n")
+		var txt := "%s  %s
+%d x %d m - %d nodes - %s" % [e.get("code", ""), e.get("name", ""), int(fp[0]), int(fp[1]),
+				int(e.get("nodes", 0)), "PASS" if ok else "%d hard" % int(e.get("hard", 0))]
+		var b := _button(txt, func(): _select(f), 0, 19)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.custom_minimum_size.y = 72
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.clip_text = true
+		b.mouse_filter = Control.MOUSE_FILTER_PASS         # a drag over a card still scrolls the list (touch)
 		if f == picked:
 			b.add_theme_color_override("font_color", GOOD if ok else BAD)
 		_style(b, CARD.lightened(0.12) if f == picked else CARD)
