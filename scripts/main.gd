@@ -1973,6 +1973,8 @@ func _mission_shot(what: String) -> void:
 	if what in ["win", "lose"]:
 		Campaign.path = "user://campaign_shots.cfg"
 		Campaign.reset_progress()
+		Progression.path = "user://progress_shots.cfg"   # the XP / SCRAP of a shot never reaches the player's wallet
+		Progression.reload_all()
 	var wait: float = {"brief": 1.0, "hud": 9.0, "win": 3.0, "lose": 3.0}.get(what, 1.0)
 	var t0 := Time.get_ticks_msec()
 	while (Time.get_ticks_msec() - t0) / 1000.0 < wait:
