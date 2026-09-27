@@ -43,6 +43,15 @@ var box: VBoxContainer
 var info: Label
 var canvas: Control
 var entry := {}
+# PERF readout (Architect, Alpha 21 optimization: "FPS avg + 1 % low over the last 5 s, frame time, draw calls,
+# primitives, objects, render scale / viewport, device pixel ratio ... a 60 s report to screenshot")
+static var perf_on := false
+var perf_box: PanelContainer
+var perf_label: Label
+var _frames: Array = []                               # [time, dt, draws, prims, objs] over the last 5 s
+var _rep: Array = []                                  # the same over the 60 s report
+var _rep_until := -1.0
+var _report := ""
 
 
 func _init(m: Node) -> void:
@@ -93,6 +102,8 @@ func _ready() -> void:
 	box.add_child(_button("LAST STAND NOW", func(): main.sim.start_last_stand_now(), 22))
 	box.add_child(_button("VERY LAST STAND NOW", func(): main.sim.start_very_last_stand_now(), 22))
 	box.add_child(_button("RULE OVERLAY", _toggle_overlay, 22))
+	box.add_child(_button("PERF READOUT", _toggle_perf, 22))
+	box.add_child(_button("PERF REPORT (60 s)", _start_report, 22))
 	var cam_lbl := Label.new()
 	cam_lbl.text = "CAMERA"
 	cam_lbl.add_theme_font_size_override("font_size", 18)
@@ -116,7 +127,24 @@ func _ready() -> void:
 		l.add_theme_color_override("font_color", HARD if f.get("sev") == "hard" else SOFT)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(l)
+	perf_box = PanelContainer.new()
+	var psb := StyleBoxFlat.new()
+	psb.bg_color = Color(0.0, 0.0, 0.0, 0.72)
+	psb.set_corner_radius_all(8)
+	psb.content_margin_left = 10
+	psb.content_margin_right = 10
+	psb.content_margin_top = 6
+	psb.content_margin_bottom = 6
+	perf_box.add_theme_stylebox_override("panel", psb)
+	perf_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	perf_label = Label.new()
+	perf_label.add_theme_font_size_override("font_size", 19)
+	perf_label.add_theme_color_override("font_color", Color(0.75, 1.0, 0.6))
+	perf_box.add_child(perf_label)
+	add_child(perf_box)
 	_refresh()
+	if "--lab-perf" in OS.get_cmdline_user_args():     # testing: the readout on from the start
+		perf_on = true
 	if "--lab-open" in OS.get_cmdline_user_args():     # testing: the panel open for --shots
 		panel.visible = true
 
@@ -164,8 +192,103 @@ func _big_vats() -> void:
 		node.position = Vector3(p.x, node.position.y, p.z)
 
 
+func _perf_sample(delta: float) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	var row := [now, delta, Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+			Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
+			Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)]
+	_frames.append(row)
+	while not _frames.is_empty() and now - float(_frames[0][0]) > 5.0:
+		_frames.pop_front()
+	if _rep_until > 0.0:
+		_rep.append(row)
+		if now >= _rep_until:
+			_rep_until = -1.0
+			_report = _stats_text(_rep, true)
+			print("LAB PERF REPORT
+" + _report)
+			DisplayServer.clipboard_set(_report)
+	perf_box.visible = perf_on or _report != "" or _rep_until > 0.0
+	if not perf_box.visible:
+		return
+	var head := ""
+	if _rep_until > 0.0:
+		head = "REPORT: recording, %d s left
+" % int(ceil(_rep_until - now))
+	perf_label.text = head + (_report if _report != "" and _rep_until < 0.0 else _stats_text(_frames, false))
+	var vp := get_viewport().get_visible_rect().size
+	perf_box.position = Vector2(12, vp.y * 0.5 + 40)
+
+
+func _stats_text(rows: Array, report: bool) -> String:
+	if rows.size() < 2:
+		return "PERF: measuring..."
+	var dts: Array = []
+	var d_sum := 0.0
+	var d_max := 0.0
+	var p_sum := 0.0
+	var p_max := 0.0
+	var o_sum := 0.0
+	var o_max := 0.0
+	for r in rows:
+		dts.append(float(r[1]))
+		d_sum += float(r[2])
+		d_max = maxf(d_max, float(r[2]))
+		p_sum += float(r[3])
+		p_max = maxf(p_max, float(r[3]))
+		o_sum += float(r[4])
+		o_max = maxf(o_max, float(r[4]))
+	var n := float(rows.size())
+	var span := maxf(float(rows[-1][0]) - float(rows[0][0]), 0.001)
+	var fps := n / span
+	dts.sort()
+	var worst := maxi(1, int(ceil(dts.size() * 0.01)))
+	var w_sum := 0.0
+	for k in range(worst):
+		w_sum += float(dts[dts.size() - 1 - k])
+	var low := worst / maxf(w_sum, 0.0001)
+	var vp := get_viewport()
+	var size := vp.get_visible_rect().size
+	var win := DisplayServer.window_get_size()
+	var dpr := 1.0
+	var ua := OS.get_name()
+	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
+		var v = JavaScriptBridge.eval("window.devicePixelRatio", true)
+		if v is float or v is int:
+			dpr = float(v)
+		var u = JavaScriptBridge.eval("navigator.userAgent", true)
+		if u is String:
+			ua = u
+	var t := "FPS %.0f avg · %.0f 1%% low · %.1f ms (max %.0f)
+draws %.0f (max %.0f) · prims %.0fk · objects %.0f
+viewport %dx%d · window %dx%d · 3D scale %.2f · dpr %.2f" % [
+			fps, low, 1000.0 * span / n, 1000.0 * float(dts[-1]), d_sum / n, d_max, p_sum / n / 1000.0, o_sum / n,
+			int(size.x), int(size.y), win.x, win.y, vp.scaling_3d_scale, dpr]
+	if report:
+		t = "PERF REPORT %.0f s · %s %s · %d nodes · speed %dx · t %d:%02d · %s
+" % [span, main.map.get("code", ""),
+				main.map.get("name", ""), main.sim.nodes.size(), speed, int(main.sim.time) / 60, int(main.sim.time) % 60,
+				Rules.VERSION] + t + "
+prims max %.0fk · objects max %.0f · %s" % [p_max / 1000.0, o_max, ua.substr(0, 120)]
+	return t
+
+
+func _toggle_perf() -> void:
+	perf_on = not perf_on
+	if not perf_on:
+		_report = ""
+
+
+func _start_report() -> void:
+	_report = ""
+	_rep.clear()
+	_rep_until = Time.get_ticks_msec() / 1000.0 + 60.0
+	panel.visible = false                              # the panel off the board while it measures
+
+
 func _process(delta: float) -> void:
 	_layout()
+	_perf_sample(delta)
 	if MapLab.big_vat and main.sim != null:
 		_big_vats()
 	if overlay:
