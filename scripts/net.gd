@@ -185,6 +185,12 @@ func is_host() -> bool:
 	return hosting
 
 
+func server_hosted() -> bool:
+	## This room runs on the room server (ranked: its rounds are reported); false in a browser-hosted fallback room and
+	## offline. True on every player's device (the owner is a player, never id 1) and on the match host itself.
+	return dedicated or (not hosting and bridge != null and room_owner > 1)
+
+
 func can_control() -> bool:
 	## The lobby's controls (mode, map, settings, MOVE, DEPLOY, the random rematch map): the browser host, or a
 	## server room's owner. The server's own match host decides nothing by itself.
@@ -1442,8 +1448,15 @@ func _report_round() -> void:
 		if is_away(int(id)):
 			left[seat] = true
 	if users.is_empty():
+		print("round %d: no signed-in seat - not reported" % match_round)
 		return
-	var body := JSON.stringify(MatchReport.payload(sim, match_info, users, left, _server_room, match_round, _round_started_at))
+	var report := MatchReport.payload(sim, match_info, users, left, _server_room, match_round, _round_started_at)
+	var seats := []                                    # one line in the room log: who was reported, who won
+	for st in report["seats"]:
+		seats.append("%s %s%s%s" % [st["seat"], str(st["user_id"]).left(8) if st["user_id"] != null else ("AI" if st["ai_level"] != null else "guest"),
+				" won" if st["won"] else "", " left" if st["left_early"] else ""])
+	print("report %s %s: %s" % [report["match_id"], report["mode"], ", ".join(seats)])
+	var body := JSON.stringify(report)
 	_report_pending += 1
 	_post_report(url + "/functions/v1/match-result", secret, body, 0)
 

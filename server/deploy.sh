@@ -27,9 +27,17 @@ set -e
 rm -rf /opt/ooze/web.new && mkdir -p /opt/ooze/web.new
 tar xzf /tmp/ooze-web.tgz -C /opt/ooze/web.new --strip-components=1 && rm /tmp/ooze-web.tgz
 rm -rf /opt/ooze/web.old && { [ -d /opt/ooze/web ] && mv /opt/ooze/web /opt/ooze/web.old || true; }
-mv /opt/ooze/web.new /opt/ooze/web && rm -rf /opt/ooze/web.old   # running match hosts keep their open pack
+mv /opt/ooze/web.new /opt/ooze/web && rm -rf /opt/ooze/web.old
+# Each build's pack is kept under its version: a running match host reopens its pack by path at every scene load (the
+# next round), so replacing it in place broke rooms that were playing during a deploy (TWVG, 0.20.12). New hosts start
+# from /opt/ooze/current.pck (resolved by the relay); packs older than 2 days go, except the current one.
+VER=$(tr '/' '_' < /opt/ooze/web/version.txt)
+mkdir -p /opt/ooze/packs
+cp /opt/ooze/web/index.pck "/opt/ooze/packs/$VER.pck"
+ln -sfn "/opt/ooze/packs/$VER.pck" /opt/ooze/current.pck
+find /opt/ooze/packs -name '*.pck' -mtime +2 ! -name "$VER.pck" -delete
 mkdir -p /opt/ooze/data /opt/ooze/logs
-chown -R ooze:ooze /opt/ooze/web /opt/ooze/data /opt/ooze/logs
+chown -R ooze:ooze /opt/ooze/web /opt/ooze/packs /opt/ooze/data /opt/ooze/logs
 find /opt/ooze/logs -name 'room-*.log' -mtime +7 -delete
 if [ "$RELAY" = "--relay" ]; then
 	install -o ooze -g ooze -m 644 /tmp/relay.py /opt/ooze/relay.py

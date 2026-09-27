@@ -52,6 +52,7 @@ func _run() -> void:
 	check(await _wait(func(): return guest.connected and host.roster.size() == 2), "guest joins and is seated")
 	check(guest.roster.size() == 2 and str(guest.roster.get(guest.local_id(), {}).get("faction", "")) == "vex",
 			"guest sees the lobby with its faction")
+	check(not host.server_hosted() and not guest.server_hosted(), "a player-hosted room is not server-hosted (unranked)")
 
 	guest.send_chat("hello from the guest")
 	check(await _wait(func(): return host.chat_history.size() == 1 and guest.chat_history.size() == 1),

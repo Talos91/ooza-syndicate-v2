@@ -74,6 +74,7 @@ func _run() -> void:
 	b.join_room(a.room_code, "vex")
 	check(await _wait(func(): return b.connected and a.roster.size() == 2), "a second player joins")
 	check(not b.can_control() and b.room_owner == a.assigned_id, "the second player sees the owner, and has no controls")
+	check(a.server_hosted() and b.server_hosted(), "both players know the room is server-hosted (ranked)")
 
 	b.set_mode("FFA3")
 	await _wait(func(): return false, 1.0)

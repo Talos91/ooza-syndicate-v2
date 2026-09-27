@@ -155,7 +155,8 @@ async def run_create(ws, version, ip):
     room = Room(code, None)
     room.secret = secrets.token_urlsafe(18)
     rooms[code] = room
-    cmd = [cfg.godot, "--headless"] + (["--main-pack", cfg.pck] if cfg.pck else ["--path", cfg.project]) + [
+    pck = os.path.realpath(cfg.pck) if cfg.pck else ""   # the versioned pack current.pck points to now (deploys swap it)
+    cmd = [cfg.godot, "--headless"] + (["--main-pack", pck] if cfg.pck else ["--path", cfg.project]) + [
         "--", "--dedicated", "--relay=ws://127.0.0.1:%d/ooze" % cfg.port, "--room=" + code, "--secret=" + room.secret] + cfg.host_arg
     env = dict(os.environ, GODOT_SILENCE_ROOT_WARNING="1")
     if cfg.data:
