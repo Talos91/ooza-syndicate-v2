@@ -28,7 +28,7 @@ extends Node3D
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
-##   --tutorial=N                           start tutorial lesson N (1-9) straight away (screenshots, testing)
+##   --tutorial=N                           start tutorial lesson N (0 the tour, 1-9) straight away (screenshots, testing)
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is an online room (Net)
@@ -143,7 +143,7 @@ func _ready() -> void:
 	if relaunch.has("map"):
 		map_path = relaunch["map"]
 		map_explicit = true
-	var tut_id := int(relaunch.get("tutorial", 0))      # TUTORIAL: a lesson relaunched (NEXT / REPLAY / RESTART)
+	var tut_id := int(relaunch.get("tutorial", -1))     # TUTORIAL: a lesson relaunched (NEXT / REPLAY / RESTART; 0 = the tour)
 	var tut_first := bool(relaunch.get("first", false))
 	menu_open = str(relaunch.get("menu", ""))
 	relaunch = {}
@@ -197,7 +197,7 @@ func _ready() -> void:
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
-	if tut_id > 0 and not map_explicit:               # TUTORIAL: a lesson, straight in
+	if tut_id >= 0 and not map_explicit:              # TUTORIAL: a lesson, straight in
 		start_tutorial(tut_id, tut_first)
 	elif map_explicit or demo or scenario != "" or not shots.is_empty():
 		_start_map(map_path)
@@ -1054,7 +1054,7 @@ func _process(delta: float) -> void:
 					hud.toast("Your node %d falls in %d s - get out!" % [ev["node"], int(ceil(left))])
 			"relay_tick":
 				var n: Dictionary = sim.nodes[ev["node"]]
-				if n["owner"] == HUMAN:
+				if n["owner"] == HUMAN and director == null:   # (TUTORIAL: the card speaks; the director's own fires stay quiet)
 					hud.toast("Relay %d switches now" % ev["node"])
 			"fling":                                  # a turning deck threw a line into the void (units already shown scale)
 				var ours := sim.allied(str(ev["seat"]), HUMAN)
@@ -1466,6 +1466,8 @@ func _tutorial_setup() -> void:
 	director.handler.connect(coach.handler_mood)      # the handler hops on a pass, droops on a fail
 	var step_seen := {"i": director.step_i}
 	director.changed.connect(func():                  # a step that adds HUD parts reveals them with a glow
+		if director.step_i != int(step_seen["i"]) and not director.uses_inspector():
+			hud.close_inspector()                     # an inspector from an earlier step never lingers over this one
 		if director.step_i != int(step_seen["i"]) and hud.gated:
 			step_seen["i"] = director.step_i
 			var before := TutorialDirector.reveal_for(director.lesson_id, director.step_i - 1)
@@ -1536,12 +1538,38 @@ func _coach_sync() -> void:
 	coach.set_obstacles(platforms)
 	coach.spotlight(pts, radius, rects)
 	_tutorial_gesture()
+	_tutorial_label(tg.get("label", []))
 	coach.set_finger_down(not touches.is_empty() or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
 	coach.set_dodge_rects(hud.top_panel.get_global_rect(), hud.side_panel.get_global_rect() if hud.side_panel.visible else Rect2(),
 			hud.dock.get_global_rect() if hud.dock.visible else Rect2(), hud.pause_button.get_global_rect())
 	hud.extra_ui_rects = coach.ui_rects()
 	if director.preview_relay >= 0 and hud.inspector_id == director.preview_relay and director.state == "running":
 		hud.overlay.hover_relay = director.preview_relay   # L4: the relay-outcome preview stays up while inspected
+
+
+func _tutorial_label(pair: Array) -> void:
+	## L1's "label" step: the line walking there carries the drag preview's own label (TAKE · units · seconds),
+	## so the line the handler talks about is on screen.
+	if drag_from >= 0 or monster_from >= 0:
+		return
+	var show := false
+	if pair.size() == 2 and int(pair[1]) >= 0:
+		for h in sim.hordes:
+			if h["owner"] == HUMAN and int(h["target"]) == int(pair[1]):
+				var tn: Dictionary = sim.nodes[int(pair[1])]
+				var verb := "reinforce" if tn["owner"] == HUMAN else ("attack" if tn["owner"] != "" else "take")
+				var units: float = float(h["units"]) + float(sim.nodes[int(h["route"][0])]["streaming"].get("remaining", 0.0) if h["streaming"] else 0.0)
+				var secs := maxf(float(h["L"]) - float(h["s"]), 0.0) / maxf(Rules.move_speed() * sim.stat(HUMAN, "speed"), 0.1)
+				route_label.text = "%s · %d units · %d s" % [verb.to_upper(), Rules.shown(units), int(ceil(secs))]
+				route_label.position = tn["pos"] + Vector3(0, 6.5, 0)
+				show = true
+				break
+	if show or route_label.has_meta("tutorial"):
+		route_label.visible = show
+		if show:
+			route_label.set_meta("tutorial", true)
+		else:
+			route_label.remove_meta("tutorial")
 
 
 func _tutorial_rect(key: String) -> Rect2:
@@ -1555,7 +1583,9 @@ func _tutorial_rect(key: String) -> Rect2:
 			return hud.side_panel.get_global_rect() if hud.side_panel.visible else Rect2()
 		"top_bar":
 			return hud.top_panel.get_global_rect()
-		"dock":
+		"dock":                                       # "dock" = the whole dock, "dock:<slot>" one slot
+			if parts.size() > 1:
+				return hud.dock_slot_rect(int(parts[1]))
 			return hud.dock.get_global_rect() if hud.dock.visible else Rect2()
 		"inspector":
 			return hud.inspector_rect()

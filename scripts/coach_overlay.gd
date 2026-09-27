@@ -1081,6 +1081,8 @@ func _position_card() -> void:
 		for o in _obstacles:               # then the nodes: a corner over the map's empty sky wins
 			if rect.grow(10.0).has_point(o):
 				score -= 700.0
+		if _card_dest.x >= 0.0 and pos.distance_to(_card_dest) < 1.0 and not rect.intersects(target_bounds):
+			score += 900.0                 # keep the corner it is in: no hop between steps unless the target needs it
 		if score > best_score:
 			best_score = score
 			best_key = key

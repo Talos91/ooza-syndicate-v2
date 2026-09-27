@@ -461,8 +461,14 @@ func test_l7() -> void:
 	var sim: Sim = r[1]
 	var n: Dictionary = d.names
 	check(d.allow("send", n["H"], {"to": n["BH"]}) != "", "L7: no attacks on the rival before the last platform")
-	play(d, sim, "reveal", func(t): if first(t): d.press_button())
 	var ls := {"at": -1.0}
+	for i in range(int(3.0 / DT)):                             # reading the reveal: the first wave's countdown waits
+		tick(d, sim)
+		if ls["at"] < 0.0 and sim.last_stand_active:
+			ls["at"] = d.lesson_t - DT
+	check(sim.last_stand_active and sim.last_stand_warn_t >= Rules.LAST_STAND_WARNING - DT - 0.001,
+			"L7: the Last Stand is on and its first countdown holds while the reveal card is up")
+	play(d, sim, "reveal", func(t): if first(t): d.press_button())
 	play(d, sim, "evacuate", func(t):
 		if first(t):
 			sim.send(n["H"], n["I1"], 1.0)

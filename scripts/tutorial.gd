@@ -44,6 +44,7 @@ const PUSH_SHARE := 0.7              # L9: the scripted push commits at least th
 const PUSH_KILL := 0.5               # L9: a relay kill = at least this share of the push lost to the fall
 const PUSH_LATEST := 150.0           # L9: 2:30 - the push goes even if A does not lead by then
 const HALF_SPEED := 0.5
+const MIN_STEP := 1.5                # a doing-step shows at least this long, even when it is already done (its line is read)
 
 # ---------------------------------------------------------------- the handler's lines (TUTORIAL-SCRIPT.md draft 2)
 # One table, so per-faction voices or translations can replace it without touching the steps. Every line uses the
@@ -208,6 +209,7 @@ const ALL_KEYS := ["map", "badges", "drag", "clock", "send_panel", "upgrade", "m
 # headless test allows), catch (a scripted rival line the player drops with a relay, see _tick_catch).
 const LESSONS := [
 	{"id": 0, "key": "L0", "map": "T-06-pivot", "abilities": true, "vls": false, "tour": true,
+		"loadout": {"active": "surge", "map": "demolish"},   # the dock shows what L8 will teach
 		"stage": [["H", "A", 20], ["BH", "B", 20]], "protect": ["BH"],
 		"reveal": [],
 		"steps": [
@@ -232,7 +234,7 @@ const LESSONS := [
 		"reveal": ["map", "badges", "drag", "clock"],
 		"steps": [
 			{"key": "drag", "target": {"nodes": ["H", "N1"]}, "gesture": [["drag", "H", "N1"]], "pass": ["send", "H", "N1"], "budget": 30.0},
-			{"key": "label", "target": {"nodes": ["N1"]}, "pass": ["owner", "N1", "A"], "budget": 30.0},
+			{"key": "label", "target": {"nodes": ["N1"], "label": ["H", "N1"]}, "pass": ["owner", "N1", "A"], "budget": 30.0},
 			{"key": "percent", "reveal": ["send_panel"], "enter": ["topup", "H", "N2", 0.25], "target": {"rects": ["send:0.25"]},
 				"gesture": [["press", "send:0.25"]], "pass": ["fraction", 0.25], "budget": 10.0},
 			{"key": "send25", "target": {"nodes": ["H", "N2"]}, "gesture": [["drag", "H", "N2"]], "pass": ["owner", "N2", "A"], "budget": 30.0},
@@ -282,7 +284,7 @@ const LESSONS := [
 			{"key": "prompt", "target": {"nodes": ["R"], "lines": "B"}, "before": "L4.incoming",
 				"catch": {"relay": "R", "from": "B2", "to": "R", "shown": 20, "kind": "fling", "min": 5, "tries": 3, "half": true,
 					"miss": "L4.miss", "practice": "L4.practice"}, "budget": 90.0},
-			{"key": "waterfall", "target": {"nodes": ["R"]}, "pass": ["fall_or_time", 4.0], "budget": 6.0},
+			{"key": "waterfall", "target": {"nodes": ["R"]}, "pass": ["fall_or_time", 4.0], "min": 3.0, "budget": 6.0},
 		],
 		"done": ["L4.done1", "L4.done2"]},
 	{"id": 5, "key": "L5", "map": "T-07-switchyard", "abilities": false, "vls": false,
@@ -290,11 +292,11 @@ const LESSONS := [
 		"protect": ["BH", "S1", "T1"],
 		"reveal": [],
 		"steps": [
-			{"key": "retract", "target": {"nodes": ["RT"], "lines": "B"},
+			{"key": "retract", "target": {"nodes": ["RT"], "lines": "B", "decks": [["RT", "T1"]]},
 				"catch": {"relay": "RT", "from": "T1", "to": "RT", "shown": 12, "kind": "fall", "min": 1, "tries": 3, "half": false}, "budget": 60.0},
-			{"key": "switch", "target": {"nodes": ["SW"], "lines": "B"},
+			{"key": "switch", "target": {"nodes": ["SW"], "lines": "B", "decks": [["SW", "S1"]]},
 				"catch": {"relay": "SW", "from": "S1", "to": "SW", "shown": 12, "kind": "fall", "min": 1, "tries": 3, "half": false}, "budget": 60.0},
-			{"key": "remote", "target": {"nodes": ["RC"], "lines": "B"},
+			{"key": "remote", "target": {"nodes": ["RC"], "lines": "B", "decks": [["S1", "BH"]]},
 				"catch": {"relay": "RC", "from": "BH", "to": "S1", "shown": 12, "kind": "fall", "min": 1, "tries": 3, "half": false}, "budget": 60.0},
 			{"key": "own", "target": {"nodes": ["SW"]}, "read_only": true},
 		],
@@ -320,7 +322,9 @@ const LESSONS := [
 			{"key": "cooldown", "target": {"nodes": ["R3"]}, "read_only": true},
 		],
 		"done": ["L6.done1", "L6.done2"]},
-	{"id": 7, "key": "L7", "map": "T-09-collapse-ring", "abilities": false, "vls": false, "last_stand_at": 15.0,
+	# the Last Stand starts with the lesson (the clock jumps to {ls}, as the first line says); its first wave's
+	# countdown holds while that line is on screen ("hold_ls": the reveal step), then the ring falls
+	{"id": 7, "key": "L7", "map": "T-09-collapse-ring", "abilities": false, "vls": false, "last_stand_at": 0.0, "hold_ls": "reveal",
 		# the design's 4 s Very Last Stand gap leaves no time to move a garrison off a warned node (a 40-unit
 		# garrison needs ~4 s just to leave its door): the lesson uses the Last Stand's own warning instead
 		"vls_gap": "warning",
@@ -331,8 +335,8 @@ const LESSONS := [
 			{"key": "reveal", "read_only": true},
 			{"key": "evacuate", "target": {"nodes": ["I1", "I2"]}, "gesture": [["drag", "H", "I1"]],
 				"pass": ["custom", "ring_down"], "fail": ["custom", "ring_lost"], "budget": 60.0},
-			{"key": "vls", "enter": ["vls"], "read_only": true, "pass": ["won"]},
-			{"key": "hold", "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
+			{"key": "vls", "enter": ["vls"], "target": {"nodes": ["I1", "I2", "I3"]}, "read_only": true, "pass": ["won"]},
+			{"key": "hold", "target": {"nodes": ["I1", "I2", "I3"]}, "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
 		],
 		"done": ["L7.done1", "L7.done2"]},
 	{"id": 8, "key": "L8", "map": "T-10-long-decks", "abilities": true, "vls": false,
@@ -602,8 +606,8 @@ func begin(s: Sim, m: Dictionary, player_faction := "") -> void:
 	sim.vls_enabled = bool(L.get("vls", true))
 	if not L.get("match", false):
 		sim.match_hard_end = INF                     # a lesson is never cut short by the 7:00 end
-	for seat in sim.skill_cd:                         # skills stand ready in a lesson (0.19.2 starts them on cooldown)
-		sim.skill_cd[seat] = {"active": 0.0, "map": 0.0}
+		for seat in sim.skill_cd:                     # skills stand ready in a lesson (0.19.2: Rules.SKILLS_START_ON_COOLDOWN);
+			sim.skill_cd[seat] = {"active": 0.0, "map": 0.0}   # the first match keeps the normal start for both seats
 	_stage()
 	_ev_cursor = sim.events.size()
 	if L.get("match", false):
@@ -706,8 +710,11 @@ func step(dt: float) -> void:
 	if why != "":
 		_fail(why)
 		return
-	if _check_pass(st):
+	if (st.get("read_only", false) or step_t >= MIN_STEP) and _check_pass(st):
 		_pass_step(st)
+		return
+	if sim.eliminated.has(HUMAN) and not sim.over:    # out (lines keep you alive): TRY AGAIN, never a YOU'RE OUT panel
+		_fail(line("L7.lost") if lesson_id == 7 else line("try_again"))   # TODO(0.19.2): Sim.is_out(seat) / fx "eliminated"
 		return
 	if sim.over:                                     # the match ended off-script
 		if sim.winner != "" and sim.allied(sim.winner, HUMAN):
@@ -909,6 +916,8 @@ func _check_pass(st: Dictionary) -> bool:
 		"launched":
 			return not _since(_step_started, "monster_launch", {"seat": HUMAN, "target": _id(str(op[1]))}).is_empty()
 		"fall_or_time":
+			if step_t < float(_step().get("min", 0.0)):
+				return false
 			for ev in _since(_step_started, "fall"):
 				if str(ev.get("seat", "")) == RIVAL:
 					return true
@@ -1037,6 +1046,8 @@ func _tick_lesson(_dt: float) -> void:
 		sim.start_last_stand_now()
 		_b_evacuate()
 		_bump()
+	if _ls_started and str(L.get("hold_ls", "")) == str(_step().get("key", "")) and not sim.last_stand_queue.is_empty():
+		sim.last_stand_warn_t = maxf(sim.last_stand_warn_t, Rules.LAST_STAND_WARNING)   # the countdown waits for GOT IT
 
 
 func _jump_clock(to: float) -> void:
@@ -1526,6 +1537,19 @@ func is_tour() -> bool:
 	return bool(L.get("tour", false)) and state == "running"
 
 
+func uses_inspector() -> bool:
+	## Does the current step work in the inspector (an action button, the inspector itself)? If not, main closes
+	## an inspector left open from an earlier step, so it never lingers over the next one.
+	if state != "running":
+		return false
+	var st := _step()
+	for k in (st.get("target", {}) as Dictionary).get("rects", []):
+		if str(k).begins_with("action:") or str(k) == "inspector":
+			return true
+	var op: Array = st.get("pass", [])
+	return st.has("inspect") or (not op.is_empty() and str(op[0]) == "inspect")
+
+
 func inspect_request() -> int:
 	## The node the step wants the inspector open on (the tour's inspector step), -1 for none.
 	if state != "running":
@@ -1550,6 +1574,8 @@ func target() -> Dictionary:
 		if id >= 0 and not sim.collapsed.get(id, false):
 			out["nodes"].append(id)
 	out["radius"] = float(t.get("radius", 1.0))
+	if t.has("label"):                                # the walking line's own TAKE · units · seconds label
+		out["label"] = [_id(str(t["label"][0])), _id(str(t["label"][1]))]
 	out["decks"] = []
 	for pair in t.get("decks", []):
 		var ei := sim._edge_index(_id(str(pair[0])), _id(str(pair[1])))
