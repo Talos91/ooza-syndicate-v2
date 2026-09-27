@@ -42,7 +42,7 @@ void fragment() {
 	ROUGHNESS = roughness;
 	SPECULAR = specular;
 #ifndef GOO_LITE
-	CLEARCOAT = clearcoat;                // (the phone / LOW RES build skips the wet highlight: PerfProfile.goo_shader)
+	CLEARCOAT = clearcoat;                // (the LOW RES build skips the wet highlight: PerfProfile.goo_shader)
 	CLEARCOAT_ROUGHNESS = 0.03;
 #endif
 	float f = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), glow_power);

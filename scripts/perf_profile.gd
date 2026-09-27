@@ -7,30 +7,40 @@ extends Node
 ##   draws the same pixels in fewer draw calls);
 ## - applies the 3D settings of the profile to each match: render scale, MSAA, shadows, glow, fill lights;
 ## - caps the frame rate, lower while nothing moves (menus, a paused or ended match);
-## - trims every particle burst on the lighter profiles (a share of CPUParticles3D.amount).
+## - trims every particle burst on LOW RES (a share of CPUParticles3D.amount).
 ##
 ## OPTIONS > PERFORMANCE (Daniele, Alpha 21: "low res mode (in OPTIONS) for weak phones", and a 30 / 60 fps
 ## choice), saved in user://settings.cfg [graphics]:
-##   GRAPHICS  AUTO     - PHONE on a phone / tablet / touch browser (or --mobile), FULL on a desktop.
-##             LOW RES  - the strongest savings: 3D at half resolution, 30 fps, no shadows / glow, LOW
+##   GRAPHICS  AUTO     - PHONE on a phone / tablet / touch browser (or --mobile), FULL on a desktop. PHONE
+##                        is today's phone look (no shadows, all effects) at full 3D resolution (no more
+##                        pixel steps) with a 45 fps cap (30 while idle), and the light kit (hd() false).
+##             LOW RES  - the strongest savings (opt-in, weak phones): 30 fps, no shadows / glow, LOW
 ##                        detail (half effects, fewer river patches, no normal maps), the lite goo,
 ##                        particle bursts at 40 %. (The fill and rim lights stay: without them the board
 ##                        went near black - they cost almost nothing, no shadows.)
-##             FULL     - today's look (a phone keeps main._apply_quality's 0.75 scale / no shadows / MSAA).
+##             FULL     - today's look, untouched (a phone keeps main._apply_quality's 0.75 scale / no
+##                        shadows / no MSAA).
 ##   FPS       AUTO (the profile's: 60 FULL, 45 PHONE, 30 LOW RES) / 30 / 60 - LOW RES stays at 30.
 ## level() is what GRAPHICS resolves to: "full", "phone" or "low".
 
 const MODES := ["auto", "low", "full"]
 const MODE_NAMES := {"auto": "AUTO", "low": "LOW RES", "full": "FULL"}
 const FPS_MODES := ["auto", "30", "60"]
+# Daniele (Alpha 21): "i hope you are not reducing the graphic of the game" - AUTO (PHONE / FULL) looks exactly
+# as before: the same resolution, effects, particles and shaders; its savings are the batching and the fps
+# cap. Only LOW RES, an explicit opt-in for weak phones, trades looks (effects, not pixels).
+# Render scale: GL Compatibility upscales a scaled 3D buffer WITHOUT filtering (measured in Alpha 21: at 0.75 -
+# main._apply_quality's phone default since Alpha 14 - and 0.6 the edges turn into hard pixel steps,
+# Daniele's "like minecraft"), so both lighter profiles render the 3D at full resolution (1.0) until a
+# linear-filtered path exists (a SubViewport shown through a linear TextureRect). No profile scales today.
 # per profile: 3D render scale (null: leave it), fps while playing / idle, shadows, glow, the fill and rim
 # lights, LOW detail, the lite goo shader, the share of each particle burst
 const PROFILES := {
 	"full": {"scale": null, "fps": 60, "idle_fps": 60, "shadows": true, "glow": true, "fill_lights": true,
 			"low_detail": false, "lite": false, "particles": 1.0},
-	"phone": {"scale": 0.7, "fps": 45, "idle_fps": 30, "shadows": false, "glow": true, "fill_lights": true,
-			"low_detail": false, "lite": true, "particles": 0.6},
-	"low": {"scale": 0.5, "fps": 30, "idle_fps": 30, "shadows": false, "glow": false, "fill_lights": true,
+	"phone": {"scale": 1.0, "fps": 45, "idle_fps": 30, "shadows": false, "glow": true, "fill_lights": true,
+			"low_detail": false, "lite": false, "particles": 1.0},
+	"low": {"scale": 1.0, "fps": 30, "idle_fps": 30, "shadows": false, "glow": false, "fill_lights": true,
 			"low_detail": true, "lite": true, "particles": 0.4},
 }
 
@@ -137,8 +147,15 @@ static func force_level(l: String) -> void:
 	_apply_static()
 
 
+static func hd() -> bool:
+	## The full-detail kit models (OPT-MESH: hd.pck / skins_hd.pck) or the light phone copies: AUTO on a
+	## desktop and FULL use HD, AUTO on a phone and LOW RES the light set (Daniele, Alpha 21: light models
+	## for phones only).
+	return level() == "full"
+
+
 static func lite() -> bool:
-	## Cheaper geometry / shaders (the goo): the PHONE and LOW RES profiles.
+	## Cheaper shaders (the goo): LOW RES only.
 	return bool(PROFILES[level()]["lite"])
 
 
@@ -166,7 +183,7 @@ static func fps_label() -> String:
 
 
 static func goo_shader(full: Shader) -> Shader:
-	## The goo territory shader, or on the lighter profiles its lite build (GOO_LITE: no clearcoat).
+	## The goo territory shader, or on LOW RES its lite build (GOO_LITE: no clearcoat).
 	if not lite():
 		return full
 	if _goo_lite == null:

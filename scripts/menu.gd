@@ -521,7 +521,7 @@ func show_options() -> void:
 	fpb.disabled = PerfProfile.level() == "low"      # LOW RES stays at 30
 	y += h4 + 12.0
 	if not mobile:
-		stack_add(st, label_at("LOW RES: half-resolution 3D at 30 fps, no glow or shadows - for weak phones. From the next match.", P(15, y), 18, Color("b8ced6")))
+		stack_add(st, label_at("LOW RES: 30 fps, no glow or shadows, fewer effects and lighter models - only for weak phones. From the next match.", P(15, y), 18, Color("b8ced6")))
 		y += 34.0
 	# --- end OPT-RENDER ---
 	# TERRITORY moved to ARMIES > COSMETICS > CORE (0.19.2, Daniele: "goo/neon should be in the choice of

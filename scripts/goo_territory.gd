@@ -202,7 +202,7 @@ func _steady_for(owner: String) -> ShaderMaterial:
 	var key := c.to_html()
 	if not _steady.has(key):
 		var m := ShaderMaterial.new()
-		m.shader = PerfProfile.goo_shader(SHADER)   # Alpha 21: the lite build on phones / LOW RES
+		m.shader = PerfProfile.goo_shader(SHADER)   # Alpha 21: the lite build on LOW RES
 		m.set_shader_parameter("col_in", c)
 		_steady[key] = m
 	return _steady[key]
