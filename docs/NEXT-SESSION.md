@@ -1,6 +1,6 @@
 # Next session - start here
 
-State as of publish today: **v0.20.6 "Alpha 20"** - HUD declutter (no count over moving lines; toasts top right, max 2; capture floaters `Fx.floater`, reveal key "floaters"), Dr. Vesk's voice - on top of **v0.20.5 "Alpha 20"** - accounts (guest, email link / Google, cloud save, WINS THIS SEASON, MATCH HISTORY; below) - on top of **v0.20.4 "Alpha 20"** - the campaign preview (VEX, the sinking city, placeholder maps; below) - on top of **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
+State as of publish today: **v0.20.9 "Alpha 20"** - the tutorial checked on the decluttered HUD - on top of **v0.20.8** - ACCOUNT without email (guest + Google + rename) - on top of **v0.20.7** - the Google buttons on (web gzip fix) - on top of **v0.20.6 "Alpha 20"** - HUD declutter (no count over moving lines; toasts top right, max 2; capture floaters `Fx.floater`, reveal key "floaters"), Dr. Vesk's voice - on top of **v0.20.5 "Alpha 20"** - accounts (guest, Google, cloud save, WINS THIS SEASON, MATCH HISTORY; below) - on top of **v0.20.4 "Alpha 20"** - the campaign preview (VEX, the sinking city, placeholder maps; below) - on top of **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
 challenges, unlocks with the locks still off (below) - on top of **v0.20.0 "Alpha 20"** - the room server hosts the matches (server-hosted rooms, the room
 owner; below) - on top of **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
 interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish
@@ -10,20 +10,39 @@ rebuilt fixed/centred top bar with a YOU'RE OUT / spectate panel, coloured skill
 size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed everywhere. Source on
 `main`, published at https://talos91.github.io/ooza-syndicate-v2/. Read, in order: `GAME-BIBLE.md`
 (project root - the whole game as built), this file,
-`README.md`, `docs/TO-TEST.md` (this session's checklist), the top of `CHANGELOG.md` (0.19.1 to 0.19.2),
-`PLAYTEST-NOTES.md` notes 169-185, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
+`README.md`, `docs/TO-TEST.md` (this session's checklist), the top of `CHANGELOG.md` (0.20.0 to 0.20.9),
+`PLAYTEST-NOTES.md` notes 186-207 (2026-09-27), then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
 (the session board), the design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and
 `05 Handoff/AGENT-BRIEF.md`.
 
-## 0.20.5 (2026-09-27): accounts - guest, email link / Google, cloud save, leaderboard, match history
+## 0.20.6 - 0.20.9 (2026-09-27): HUD declutter, Google on, no email, the tutorial on the new HUD
+
+- **0.20.6** (Architect's HUD agent): no count over moving lines; toasts in one small top-right column (max 2, 1.8 s);
+  captures show `Fx.floater` "+ CAPTURED" / "LOST" at the node (reveal key "floaters"); Dr. Vesk's 59 lines rewritten
+  (instruction first, one joke at most).
+- **0.20.7** (progression): `Account._call` turns Godot's gzip off on the web - the browser already decompressed
+  Supabase's replies, so /auth/v1/settings failed and the Google buttons stayed grey. Gotcha, same as the 0.19.2 skins
+  download: never decompress twice on the web.
+- **0.20.8** (progression; Daniele: "its a game why would they want to do that"): no email sign-in. ACCOUNT = automatic
+  guest + ADD GOOGLE / SIGN IN WITH GOOGLE + RENAME; the email code is removed. Apple (iOS) and native Google (Android)
+  come with the store builds (PROGRESSION-DESIGN §7). For Google while the Google app is in Testing mode, the account
+  must be under Audience > Test users.
+- **0.20.9** (tutorial): floaters from L1 step 1; the coach card sized to the line's wrapped height; L7's rival stays
+  scripted weak through the Very Last Stand (test_tutorial wins L7 on 16 of 16 seeds).
+- **Next:** Alpha 21 = optimization - Daniele measures first with the Map Lab's PERF REPORT (60 s) on D-17 on his phone
+  (desktop: ~1 900 draw calls a frame); then the Alpha 22-23 map rebuild (rulebook incl. N10 / N11 / N12 / L05,
+  junctions J-01..J-03 in the lab) and the full campaign. Online: a fresh signing secret before a public launch, a
+  domain, more match slots (2 today).
+
+## 0.20.5 (2026-09-27): accounts - guest, Google, cloud save, leaderboard, match history
 
 - Backend: `supabase/` (README: project ref, trust rule, the dashboard switches Daniele sets). Client: `scripts/account.gd`
   (Account.get_instance(); `start()` from main.gd once per run; `Account.enabled = false` and `--no-account` keep it
   off). Host: `net.gd` auth + `scripts/match_report.gd` (server session). Pages: menu.gd show_account /
   show_leaderboard / show_history. `tests/test_account.gd -- --live` creates real anonymous users: delete them after
   (SQL: `delete from auth.users where id = '<printed id>' and is_anonymous`).
-- Not yet clicked through: the email link (needs Site URL + Redirect URLs in the dashboard) and Google (needs the
-  Google provider). Next: the weekly challenge-points board (server-checked challenges), account deletion for the
+- Email sign-in was dropped in 0.20.8; Google is on since 0.20.7 (not yet clicked through by a session - it can't
+  enter account credentials). Next: the weekly challenge-points board (server-checked challenges), account deletion for the
   store builds, Play Games / Game Center with the store builds.
 
 ## 0.20.4 (2026-09-27): the campaign preview
@@ -137,8 +156,9 @@ local gzip web run only - not on a real phone.
 
 ## Roadmap
 
-The plan after 0.18.7 / 0.18.8 (Daniele's to-do list from 2026-09-26, plus suggested additions, by area
-and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
+Alpha 20 is done (0.20.0-0.20.9). Next: **Alpha 21 = optimization** (phone heat, frame rate, battery), then
+**Alpha 22-23 = the new maps** and the full campaign. The whole plan (Daniele's to-do list from 2026-09-26, plus
+suggested additions, by area and order) is in `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/ROADMAP.md`.
 
 ## 0.19.0 (2026-09-27): Structures 2.1, team rules, room relay server, cosmetics - LIVE, published today
 
