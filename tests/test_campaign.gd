@@ -104,6 +104,11 @@ func _opening() -> void:
 	var s := Campaign.record("vex:03", {"won": true, "time": 100.0, "stars": 1, "objective": false})
 	check(bool(s["district_done"]), "winning the district's last main mission finishes Dockside (side missions optional)")
 	check(not bool(s["campaign_done"]), "... not the campaign")
+	Campaign.record("vex:03", {"won": true, "time": 100.0, "stars": 1, "objective": false})
+	check(not Campaign.playable(Campaign.mission("vex:04")) and Campaign.is_open("vex:05"),
+			"04 is IN DEVELOPMENT: 05 opens after 03, the chain never blocks")
+	check(Campaign.next_open("vex") == "vex:05", "CONTINUE skips an IN DEVELOPMENT mission")
+	check(not Campaign.district_done("vex", "exchange"), "a district with an unbuilt main mission never counts as done")
 	Campaign.all_open = true
 	check(Campaign.is_open("vex:10") and Campaign.owned("solar"), "--campaign-all opens everything")
 	Campaign.all_open = false

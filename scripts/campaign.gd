@@ -386,14 +386,15 @@ static func is_open(key: String) -> bool:
 	for mm in main_missions(faction_of(key)):
 		if str(mm["key"]) == key:
 			return prev == "" or is_won(prev)
-		prev = str(mm["key"])
+		if playable(mm):                             # an IN DEVELOPMENT mission never blocks the chain
+			prev = str(mm["key"])
 	return false
 
 
 static func next_open(faction: String) -> String:
-	## The first open, unwon main mission (the campaign's CONTINUE); "" when every main mission is won.
+	## The first open, unwon, playable main mission (the campaign's CONTINUE); "" when none is left.
 	for m in main_missions(faction):
-		if is_open(str(m["key"])) and not is_won(str(m["key"])):
+		if playable(m) and is_open(str(m["key"])) and not is_won(str(m["key"])):
 			return str(m["key"])
 	return ""
 
@@ -506,7 +507,9 @@ static func pay_pending() -> int:
 				progress[key]["reward"] = "paid"
 				n += 1
 	for item in unlocks_pending.keys():
-		if _unlock(str(item), str(unlocks_pending[item])) or bool(_progression().call("is_unlocked", str(item))):
+		# owns(), not is_unlocked(): Progression's testing switch opens everything but records nothing
+		var p := _progression()
+		if _unlock(str(item), str(unlocks_pending[item])) or bool(p.call("owns" if _has_static(p, "owns") else "is_unlocked", str(item))):
 			unlocks_pending.erase(item)
 	if n > 0 or unlocks_pending.is_empty():
 		save_all()
