@@ -492,12 +492,15 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
-	# 0.20.6 declutter (Daniele: "all notifications should be top right"): a small stack under whichever
-	# of the top bar / PAUSE reaches lower, right-aligned with PAUSE, never over the map centre.
-	var notice_w := minf(300.0 * ui_scale, vp.x * 0.4)
-	var notice_top := maxf(top_panel.position.y + top_panel.size.y, pause_button.position.y + pause_button.size.y) + 8 * ui_scale
+	# 0.20.13 (Daniele's online co-op playtest: "notification in top right are impossible to see - move to
+	# top left"): a small stack under the top bar, left side - offset past the SEND panel's own column so
+	# it never overlaps it (side_panel is vertically centred, but on a short phone it's pinned right under
+	# the top bar too - the same spot this used to want).
+	var notice_w := minf(280.0 * ui_scale, vp.x * 0.34)
+	var notice_left := m.x + side_panel_width() + 14.0 * ui_scale
+	var notice_top := top_panel.position.y + top_panel.size.y + 8.0 * ui_scale
 	notices.size = Vector2(notice_w, 0)
-	notices.position = Vector2(vp.x - m.z - notice_w, notice_top)
+	notices.position = Vector2(notice_left, notice_top)
 	banner.size = banner.get_combined_minimum_size()
 	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	if debug_button:
@@ -695,13 +698,19 @@ func _badges(cam: Camera3D) -> void:
 			what = "MGN%d" % n["tier"]
 		else:
 			what = "T%d" % n["tier"]
+		# 0.20.13 (Daniele's 2v2 co-op playtest: "i sent troops to her node and except the count going up
+		# i couldn't see any other indicator"): your own share on an ally's node stands out in your own
+		# colour, not the sub-label's default light blue - reset every frame, or a stale override would
+		# bleed into a later node that has none.
+		sub.add_theme_color_override("font_color", Color("c8e6ee"))
 		if has_allies and not masked:                       # GAME-RULES sec11: the total is shown above -
 			if owner == human:                               # this names the ally share / your own share of it
 				what += "+A%d" % Rules.shown(sim.allied_units(n))
 			else:
 				var mine := sim.allied_units(n, human)
 				if mine > 0.0001:
-					what += "+M%d" % Rules.shown(mine)
+					what += " +%d" % Rules.shown(mine)
+					sub.add_theme_color_override("font_color", Rules.seat_color(human))
 		var clock := ""
 		var worst := ""                                     # the clock's widest form (see below)
 		if sim.is_warned(n["id"]):
@@ -1330,9 +1339,9 @@ const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade 
 func toast(msg: String, kind := "") -> void:
 	## Alpha 16: notifications in the UI's own panel style (Daniele: "better notifications, the same
 	## style as the rest of the UI"): a framed line with a colour bar - info cyan, good news in your
-	## colour, builds gold, warnings red. 0.20.6 declutter (Daniele: "all notifications should be top
-	## right ... shouldn't cover the screen while player plays"): a small stack under the top bar and
-	## PAUSE, top-right, two at most, fading fast - never over the map centre.
+	## colour, builds gold, warnings red. 0.20.6 declutter: a small stack under the top bar, two at most,
+	## fading fast - never over the map centre. 0.20.13 (Daniele's playtest: "notification in top right
+	## are impossible to see - move to top left"): top-left now, clear of the SEND panel, larger text.
 	if not shows("notices"):                          # TUTORIAL: notifications appear in L3 (main hands the
 		return                                        # refusal lines to the coach card before that)
 	if kind == "":
@@ -1352,17 +1361,17 @@ func toast(msg: String, kind := "") -> void:
 	var p := PanelContainer.new()
 	var st := panel_style(col)
 	st.set_content_margin_all(0)
-	st.content_margin_right = 10 * ui_scale
+	st.content_margin_right = 12 * ui_scale
 	p.add_theme_stylebox_override("panel", st)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.size_flags_horizontal = Control.SIZE_SHRINK_END   # right-aligned within the top-right stack
+	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN   # left-aligned within the top-left stack
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", int(7 * ui_scale))
+	row.add_theme_constant_override("separation", int(8 * ui_scale))
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.add_child(row)
 	var bar := ColorRect.new()
 	bar.color = col
-	bar.custom_minimum_size = Vector2(4, 20) * ui_scale
+	bar.custom_minimum_size = Vector2(4, 26) * ui_scale
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(bar)
 	# a line naming a player ("lost to seat B", "Seat C reconnected", "you are seat A (NULL)") names
@@ -1370,7 +1379,7 @@ func toast(msg: String, kind := "") -> void:
 	var named := _SEAT_WORD.search(msg)
 	var seat := named.get_string(1).to_upper() if named else ""
 	if seat != "" and sim.factions.has(seat):
-		row.add_child(seat_emblem(seat, Vector2(16, 16)))
+		row.add_child(seat_emblem(seat, Vector2(20, 20)))
 		var rt := RichTextLabel.new()
 		rt.bbcode_enabled = true
 		rt.fit_content = true
@@ -1379,13 +1388,13 @@ func toast(msg: String, kind := "") -> void:
 		rt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		rt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		rt.add_theme_font_override("normal_font", UI_FONT)
-		rt.add_theme_font_size_override("normal_font_size", int(14 * ui_scale))
-		rt.add_theme_color_override("default_color", Color("e6f4f8"))
+		rt.add_theme_font_size_override("normal_font_size", int(19 * ui_scale))
+		rt.add_theme_color_override("default_color", Color("f2fbff"))
 		rt.text = "%s[color=#%s]%s[/color]%s" % [msg.substr(0, named.get_start()).replace("[", "[lb]"),
 				Rules.seat_color(seat).to_html(false), str(sim.factions[seat]).to_upper(), msg.substr(named.get_end()).replace("[", "[lb]")]
 		row.add_child(rt)
 	else:
-		var l := text_label(msg, 14, Color("e6f4f8"))
+		var l := text_label(msg, 19, Color("f2fbff"))
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		row.add_child(l)
 	p.set_meta("text", msg)
