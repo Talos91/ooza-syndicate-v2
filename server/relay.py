@@ -109,6 +109,18 @@ async def forward(ws, sender, data):
     await say(ws, type="data", peer=sender, data=data)
 
 
+async def forward_bin(ws, payload):
+    if not payload:
+        return
+    kl = payload[0]
+    if payload[1:1 + kl] == b"state" and backlog(ws) > STATE_BACKLOG:
+        return                  # a slow guest skips snapshots instead of lagging further behind
+    try:
+        await ws.send(bytes([2, 4]) + b"host" + payload)
+    except ConnectionClosed:
+        pass
+
+
 def new_code():
     for _ in range(50):
         code = "".join(secrets.choice(ALPHABET) for _ in range(4))
@@ -243,6 +255,15 @@ async def host_loop(ws, room):
     code = room.code
     try:
         async for raw in ws:
+            if isinstance(raw, (bytes, bytearray)):         # net-5: [1][len][to][packet] -> the guest gets [2][4]["host"][packet]
+                if len(raw) < 3 or raw[0] != 1 or len(raw) > HOST_MAX + 256:
+                    continue
+                n = raw[1]
+                target = room.guests.get(bytes(raw[2:2 + n]).decode("utf-8", "replace"))
+                payload = bytes(raw[2 + n:])
+                if target is not None:
+                    await forward_bin(target, payload)
+                continue
             if not isinstance(raw, str) or len(raw) > HOST_MAX + 256:
                 continue
             try:
