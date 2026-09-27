@@ -1,5 +1,13 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.8 "Alpha 20" - 2026-09-27 (ACCOUNT without email)
+
+- Daniele: "if they sign in i'd like them not to have to verify email, its a game why would they want to do that for a
+  mobile game, also later auth will be on app game and android game so this step is useless". PROFILE > ACCOUNT is now
+  the automatic guest account, ADD GOOGLE / SIGN IN WITH GOOGLE (browser build) and RENAME - no email fields, nothing
+  to verify. The email functions are removed from `scripts/account.gd`. Sign in with Apple (iOS) and native Google
+  (Android) come with the store builds (PROGRESSION-DESIGN §7).
+
 ## 0.20.7 "Alpha 20" - 2026-09-27 (Google sign-in buttons turn on)
 
 - Daniele set up the Google provider in Supabase, but on the live 0.20.5 / 0.20.6 web build ADD GOOGLE / SIGN IN WITH

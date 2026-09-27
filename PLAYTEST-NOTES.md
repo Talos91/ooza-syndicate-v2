@@ -800,3 +800,8 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 - Daniele (via the Architect): the Google OAuth consent screen, a Web client and the Supabase Google provider are done -
   *Done:* 0.20.7 fixes the web build's gzip bug that kept the Google buttons greyed; a full Google sign-in waits for
   Daniele (his account must be a Test user while the Google app is in Testing).
+
+## 2026-09-27 - Daniele, no email sign-in (0.20.8)
+
+- "if they sign in i'd like them not to have to verify email, its a game why would they want to do that for a mobile game,
+  also later auth will be on app game and android game so this step is useless" - *Done:* ACCOUNT = guest + Google + rename.
