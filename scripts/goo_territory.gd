@@ -202,7 +202,7 @@ func _steady_for(owner: String) -> ShaderMaterial:
 	var key := c.to_html()
 	if not _steady.has(key):
 		var m := ShaderMaterial.new()
-		m.shader = SHADER
+		m.shader = PerfProfile.goo_shader(SHADER)   # Alpha 21: the lite build on phones / LOW RES
 		m.set_shader_parameter("col_in", c)
 		_steady[key] = m
 	return _steady[key]
@@ -291,7 +291,7 @@ func _piece(mesh: ArrayMesh, at: Vector3) -> Dictionary:
 	mi.visible = false
 	add_child(mi)
 	var anim := ShaderMaterial.new()
-	anim.shader = SHADER
+	anim.shader = PerfProfile.goo_shader(SHADER)
 	return {"mi": mi, "anim": anim, "drawn": "", "target": "?", "t": -1.0, "delay": 0.0, "reach": 1.0,
 			"recede": false, "exit": at}
 

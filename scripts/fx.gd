@@ -75,7 +75,7 @@ func setup(w: Node3D, s: Sim, v: Dictionary, hv: HordeView) -> void:
 		_ghosts[i] = arr
 	_goo = GooTerritory.new()
 	add_child(_goo)
-	_goo.setup(sim, vis, _collapsed, bool(w.get("mobile")))
+	_goo.setup(sim, vis, _collapsed, bool(w.get("mobile")) or PerfProfile.level() == "low")   # Alpha 21: LOW RES goo as on phones
 
 
 # ------------------------------------------------------------------ events

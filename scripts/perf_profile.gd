@@ -3,67 +3,110 @@ extends Node
 ## Alpha 21 OPT-RENDER: the graphics profile (Daniele: "phone overheats"; co-op "lag still a major problem" with
 ## the PAUSE CONNECTION line showing LOW FPS - the renderer, not the network) and the map batching.
 ## main.gd calls PerfProfile.apply(self) once at the top of _ready (one marked line); this node then
-## - batches the map's static kit pieces once a match is set up (MapBatch, map_batch.gd), on every profile
-##   (it draws the same pixels, only in fewer draw calls);
-## - applies the 3D settings of the profile to each match: render scale, MSAA, shadows, glow, lights;
-## - caps the frame rate: lower on phones, lower still while nothing moves (menus, a paused or ended match).
+## - batches the map's kit pieces once a match is set up (MapBatch, map_batch.gd), on every profile (it
+##   draws the same pixels in fewer draw calls);
+## - applies the 3D settings of the profile to each match: render scale, MSAA, shadows, glow, fill lights;
+## - caps the frame rate, lower while nothing moves (menus, a paused or ended match);
+## - trims every particle burst on the lighter profiles (a share of CPUParticles3D.amount).
 ##
-## OPTIONS > GRAPHICS (Daniele, Alpha 21 list: "low res mode (in OPTIONS) for weak phones"), saved in
-## user://settings.cfg:
-##   AUTO     - PHONE on a phone / tablet / touch browser (or --mobile), FULL on a desktop.
-##   LOW RES  - the strongest savings: 3D at half resolution, 30 fps, no shadows / glow / extra lights,
-##              LOW detail (half particles, fewer river patches, no normal maps), the lite goo shader.
-##   FULL     - today's look (a phone still gets main._apply_quality's 0.75 scale / no shadows / no MSAA).
-## The profile each one resolves to: "phone", "low" or "full" (level()).
+## OPTIONS > PERFORMANCE (Daniele, Alpha 21: "low res mode (in OPTIONS) for weak phones", and a 30 / 60 fps
+## choice), saved in user://settings.cfg [graphics]:
+##   GRAPHICS  AUTO     - PHONE on a phone / tablet / touch browser (or --mobile), FULL on a desktop.
+##             LOW RES  - the strongest savings: 3D at half resolution, 30 fps, no shadows / glow, LOW
+##                        detail (half effects, fewer river patches, no normal maps), the lite goo,
+##                        particle bursts at 40 %. (The fill and rim lights stay: without them the board
+##                        went near black - they cost almost nothing, no shadows.)
+##             FULL     - today's look (a phone keeps main._apply_quality's 0.75 scale / no shadows / MSAA).
+##   FPS       AUTO (the profile's: 60 FULL, 45 PHONE, 30 LOW RES) / 30 / 60 - LOW RES stays at 30.
+## level() is what GRAPHICS resolves to: "full", "phone" or "low".
 
-const SETTINGS := "user://settings.cfg"
 const MODES := ["auto", "low", "full"]
 const MODE_NAMES := {"auto": "AUTO", "low": "LOW RES", "full": "FULL"}
-# per profile: 3D render scale (null: leave it), fps while playing / while idle, shadows, glow, the two
-# fill lights, LOW detail
+const FPS_MODES := ["auto", "30", "60"]
+# per profile: 3D render scale (null: leave it), fps while playing / idle, shadows, glow, the fill and rim
+# lights, LOW detail, the lite goo shader, the share of each particle burst
 const PROFILES := {
-	"full": {"scale": null, "fps": 60, "idle_fps": 60, "shadows": true, "glow": true, "fill_lights": true, "low_detail": false},
-	"phone": {"scale": 0.7, "fps": 45, "idle_fps": 30, "shadows": false, "glow": true, "fill_lights": true, "low_detail": false},
-	"low": {"scale": 0.5, "fps": 30, "idle_fps": 30, "shadows": false, "glow": false, "fill_lights": false, "low_detail": true},
+	"full": {"scale": null, "fps": 60, "idle_fps": 60, "shadows": true, "glow": true, "fill_lights": true,
+			"low_detail": false, "lite": false, "particles": 1.0},
+	"phone": {"scale": 0.7, "fps": 45, "idle_fps": 30, "shadows": false, "glow": true, "fill_lights": true,
+			"low_detail": false, "lite": true, "particles": 0.6},
+	"low": {"scale": 0.5, "fps": 30, "idle_fps": 30, "shadows": false, "glow": false, "fill_lights": true,
+			"low_detail": true, "lite": true, "particles": 0.4},
 }
 
-static var path := SETTINGS             # tests point this elsewhere
-static var _mode := ""                  # the saved setting ("" until read)
+static var path := "user://settings.cfg"   # tests point this elsewhere
+static var _mode := ""                  # the saved GRAPHICS setting ("" until read)
+static var _fps := ""                   # the saved FPS setting
+static var _level := ""                 # level(), cached until the setting changes
 static var _live: PerfProfile = null
 static var _forced_low_detail := false  # LOW RES turned Rules.low_detail on (and turns it back off)
+static var _goo_lite: Shader = null
 
 var main: Node3D
 var _batched := false
 var _applied_3d := false
 
 
-# ------------------------------------------------------------------ the setting
-static func mode() -> String:
-	if _mode == "":
-		var cf := ConfigFile.new()
-		_mode = "auto"
-		if cf.load(path) == OK:
-			var m := str(cf.get_value("graphics", "mode", "auto"))
-			_mode = m if m in MODES else "auto"
-	return _mode
+# ------------------------------------------------------------------ the settings
+static func _load() -> void:
+	if _mode != "":
+		return
+	var cf := ConfigFile.new()
+	_mode = "auto"
+	_fps = "auto"
+	if cf.load(path) == OK:
+		var m := str(cf.get_value("graphics", "mode", "auto"))
+		_mode = m if m in MODES else "auto"
+		var f := str(cf.get_value("graphics", "fps", "auto"))
+		_fps = f if f in FPS_MODES else "auto"
+	for a in OS.get_cmdline_user_args():             # --graphics=low / --fps=30: a test run's choice, never saved
+		if a.begins_with("--graphics=") and a.substr(11) in MODES:
+			_mode = a.substr(11)
+		elif a.begins_with("--fps=") and a.substr(6) in FPS_MODES:
+			_fps = a.substr(6)
 
 
-static func set_mode(m: String) -> void:
-	## OPTIONS > GRAPHICS: save the choice and apply what can change at once (fps cap, detail); the 3D
-	## settings follow at the next match.
-	_mode = m if m in MODES else "auto"
-	_level = ""
+static func _save() -> void:
 	var cf := ConfigFile.new()
 	cf.load(path)
 	cf.set_value("graphics", "mode", _mode)
+	cf.set_value("graphics", "fps", _fps)
 	cf.save(path)
+
+
+static func mode() -> String:
+	_load()
+	return _mode
+
+
+static func fps_mode() -> String:
+	_load()
+	return _fps
+
+
+static func set_mode(m: String) -> void:
+	## OPTIONS > GRAPHICS: saved; the fps cap and LOW detail change at once, the 3D settings at the next match.
+	_load()
+	_mode = m if m in MODES else "auto"
+	_level = ""
+	_save()
 	_apply_static()
 	if _live != null and is_instance_valid(_live):
 		_live._applied_3d = false
 
 
+static func set_fps(f: String) -> void:
+	_load()
+	_fps = f if f in FPS_MODES else "auto"
+	_save()
+
+
 static func next_mode() -> String:
 	return MODES[(MODES.find(mode()) + 1) % MODES.size()]
+
+
+static func next_fps() -> String:
+	return FPS_MODES[(FPS_MODES.find(fps_mode()) + 1) % FPS_MODES.size()]
 
 
 static func is_phone() -> bool:
@@ -73,9 +116,6 @@ static func is_phone() -> bool:
 	if "--mobile" in OS.get_cmdline_user_args():
 		return true
 	return OS.has_feature("web") and DisplayServer.is_touchscreen_available()
-
-
-static var _level := ""                 # level(), cached until the setting changes
 
 
 static func level() -> String:
@@ -90,18 +130,49 @@ static func level() -> String:
 	return _level
 
 
+static func force_level(l: String) -> void:
+	## tests/perf_check: measure a profile whatever this machine is (never saved).
+	_load()
+	_level = l if PROFILES.has(l) else ""
+	_apply_static()
+
+
 static func lite() -> bool:
-	## Cheaper geometry / shaders for the goo and the like: the phone and LOW RES profiles.
-	return level() != "full"
+	## Cheaper geometry / shaders (the goo): the PHONE and LOW RES profiles.
+	return bool(PROFILES[level()]["lite"])
+
+
+static func play_fps() -> int:
+	## The frame cap while a match runs: the FPS setting, or the profile's own; LOW RES stays at 30.
+	var own: int = PROFILES[level()]["fps"]
+	if level() == "low" or fps_mode() == "auto":
+		return own
+	return int(fps_mode())
 
 
 static func label() -> String:
-	## The OPTIONS button text.
-	var m := mode()
-	var what := {"auto": "phone profile on phones, full look on desktop  (now: %s)" % ("PHONE" if is_phone() else "FULL"),
-			"low": "for weak phones - half-resolution 3D, 30 fps, no glow / shadows",
-			"full": "the full look"}
-	return "GRAPHICS: %s  -  %s" % [MODE_NAMES[m], what[m]]
+	## The OPTIONS GRAPHICS button text.
+	if mode() == "auto":
+		return "GRAPHICS: AUTO (%s)" % ("PHONE" if is_phone() else "FULL")
+	return "GRAPHICS: %s" % MODE_NAMES[mode()]
+
+
+static func fps_label() -> String:
+	if level() == "low":
+		return "FPS: 30 (LOW RES)"
+	if fps_mode() == "auto":
+		return "FPS: AUTO (%d)" % play_fps()
+	return "FPS: %s" % fps_mode()
+
+
+static func goo_shader(full: Shader) -> Shader:
+	## The goo territory shader, or on the lighter profiles its lite build (GOO_LITE: no clearcoat).
+	if not lite():
+		return full
+	if _goo_lite == null:
+		_goo_lite = Shader.new()
+		_goo_lite.code = full.code.replace("shader_type spatial;", "shader_type spatial;\n#define GOO_LITE")
+	return _goo_lite
 
 
 static func _apply_static() -> void:
@@ -126,13 +197,29 @@ static func apply(m: Node3D) -> void:
 	node.process_mode = Node.PROCESS_MODE_ALWAYS
 	m.add_child(node)
 	_live = node
-	if "--no-batch" in OS.get_cmdline_user_args():
-		MapBatch.disabled = true
+	MapBatch.disabled = "--no-batch" in OS.get_cmdline_user_args()
+
+
+func _ready() -> void:
+	get_tree().node_added.connect(_on_node_added)
 
 
 func _exit_tree() -> void:
 	if _live == self:
 		_live = null
+
+
+func _on_node_added(n: Node) -> void:
+	if n is CPUParticles3D and float(PROFILES[level()]["particles"]) < 1.0:
+		_cap_particles.call_deferred(n)               # after its maker has set the amount
+
+
+func _cap_particles(n: Node) -> void:
+	if not is_instance_valid(n) or n.has_meta("perf_capped"):
+		return
+	n.set_meta("perf_capped", true)
+	var p := n as CPUParticles3D
+	p.amount = maxi(1, roundi(p.amount * float(PROFILES[level()]["particles"])))
 
 
 func _process(_dt: float) -> void:
@@ -147,7 +234,8 @@ func _process(_dt: float) -> void:
 	var sim = main.get("sim")
 	var idle := not started or (bool(main.get("paused")) and not bool(main.get("online"))) \
 			or (sim != null and bool(sim.get("over")))
-	var cap: int = p["idle_fps"] if idle else p["fps"]
+	var play := play_fps()
+	var cap: int = mini(int(p["idle_fps"]), play) if idle else play
 	if Engine.max_fps != cap:
 		Engine.max_fps = cap
 

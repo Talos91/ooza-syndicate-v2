@@ -826,3 +826,18 @@ const CHALLENGES := {
 		{"id": "win_home5", "stat": "win_home_kept", "target": 5, "text": "Win 5 matches without losing your home"},
 	],
 }
+
+# --- Alpha 21 OPT-RENDER: render budget (tests/perf_check.tscn) ---
+# The heaviest real map (M-39: 18 nodes, 31 bridges, relays) at a busy moment (AI vs AI, fast-forwarded to
+# PERF_CHECK_FF, then PERF_CHECK_SECONDS of real play) in the PHONE profile at 1266x585 must stay under these
+# (the frame's draw calls / primitives / objects, 2D HUD included; max over the last 3 s). Before Alpha 21's
+# batching M-39 drew ~1,090 draw calls / 655 k primitives / 1,350 objects; batched ~440 / 347 k / 700, of which
+# the HUD is ~160 draw calls. The spec's targets (< 400 / < 300 k / < 800) need the lighter kit (OPT-MESH) for
+# the primitives and fewer HUD draw calls: lower these as those land.
+const PERF_CHECK_MAP := "res://maps4/M-39-circuit-warren.json"
+const PERF_CHECK_FF := 120.0
+const PERF_CHECK_SECONDS := 10.0
+const PERF_BUDGET_DRAW_CALLS := 500
+const PERF_BUDGET_PRIMITIVES := 400000
+const PERF_BUDGET_OBJECTS := 800
+# --- end OPT-RENDER ---
