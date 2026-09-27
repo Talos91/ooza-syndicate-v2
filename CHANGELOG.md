@@ -1,5 +1,19 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.13 "Alpha 20" - 2026-09-28 (online co-op playtest fixes)
+
+- **Last Stand announcement no longer covers the screen** (Daniele: "last stand still fills the whole screen"): the 5 s
+  two-line banner in the centre is now a short toast; the status line and the per-node danger symbols carry the warning.
+- **Notifications top left** (Daniele: "notification in top right are impossible to see move to top left"): the stack sits
+  top left, past the SEND panel, larger (19 pt) and brighter.
+- **Ally halo** (Daniele: "i sent troops to her node and except the count going up i couldn't see any other indicator"): one
+  ring per contributing ally in that ally's own colour, thicker at every tier, and your "+N" share on her badge in your colour.
+- **Leaderboard**: a YOU row when you're not in the top 50 (rank, wins, or "win an online round vs a player").
+- **UNRANKED** in the lobby and on the results screen when a room runs in a browser (the fallback when the server's match
+  slots are full or on another version) - such rounds never count online (`Net.server_hosted()`).
+- **Server** (server session): each version's pack is kept on the server, so a deploy no longer breaks rooms mid-session
+  (the rematch after a deploy failed before); test rooms give their slot to real players; the host logs one seat summary per report.
+
 ## 0.20.12 "Alpha 20" - 2026-09-27 (fairer Last Stand pacing; install guide; rematch fixed; connection readout)
 
 - **Last Stand pacing** (Daniele: "instead of a platform every 5 seconds, we do every 20 i think it makes it more fair" ->

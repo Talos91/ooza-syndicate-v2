@@ -825,3 +825,17 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      *Done (0.20.12):* AI fills a bigger rematch mode; the ready state names who is ready.
 211. **"some stutter here and there seems but manageable"**. *0.20.12:* a CONNECTION line in PAUSE to tell network stalls
      from phone frame rate.
+
+## 2026-09-28 - Daniele, online co-op playtest of 0.20.11 / 0.20.12 (0.20.13)
+
+212. **"rematch works we tested"** - confirmed live (0.20.12).
+213. **"in coop play the halo of the building in the color of the ally wasn't working"** / "i sent troops to her node and except the
+     count going up i couldn't see any other indicator". *Done (0.20.13):* per-ally coloured rings, your share coloured on the badge.
+214. **"last stand still fills the whole screen"**. *Done (0.20.13):* the centre banner became a toast.
+215. **"notification in top right are impossible to see move to top left"**. *Done (0.20.13).*
+216. **"in our match last stand was still 5 sec"**. *Explained:* that room ran 0.20.11 (created before 0.20.12 reached the server).
+217. **"in leaderboard my gf doesn't appear even if we won a match playing online together"**. *Explained:* the co-op round ran in a
+     browser-hosted fallback room (both server slots were held by test rooms), unranked by design; now shown as UNRANKED, and test
+     rooms give way to real players.
+218. **"in coop play the ai sucks"** (the AI enemies are too easy). *Open:* waiting on Daniele's choice of approach.
+219. **"lag still a major problem"** - the PAUSE line showed low fps. *Alpha 21 optimization started.*

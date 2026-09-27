@@ -5,6 +5,12 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.20.13
+- [ ] **Last Stand start**: no big centre banner; a short notification top left.
+- [ ] **Notifications** are top left and readable.
+- [ ] **Co-op**: send troops to your ally's node - a ring in YOUR colour appears on her node and your "+N" is coloured.
+- [ ] **Leaderboard** shows your own row; a browser-hosted room says UNRANKED.
+
 ## 0.20.12
 - [ ] **Last Stand**: drops come ~20 s apart on most maps (a bit faster on big ones); the badge countdowns match.
 - [ ] **INSTALL THE GAME** on MAIN in a phone browser (not in the installed app): the steps fit your phone.
