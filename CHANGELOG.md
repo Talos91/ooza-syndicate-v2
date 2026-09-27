@@ -1,5 +1,13 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.9 "Alpha 20" - 2026-09-27 (the tutorial on the decluttered HUD)
+
+- Checked every lesson step against 0.20.6's HUD at phone size. The "+ CAPTURED" / "LOST" floaters are revealed from L1.
+- The coach card is sized to the line's measured wrapped height: some of Dr. Vesk's longer lines wrap to three lines on a
+  phone and the card was budgeted for two, so the buttons stay clear.
+- L7: the rival stays scripted weak through the Very Last Stand (its nodes capped at 5 shown). A random drop order could
+  leave its centre node as the last platform, too big to take in the 15 s gap; test_tutorial now wins L7 on 16 of 16 seeds.
+
 ## 0.20.8 "Alpha 20" - 2026-09-27 (ACCOUNT without email)
 
 - Daniele: "if they sign in i'd like them not to have to verify email, its a game why would they want to do that for a
