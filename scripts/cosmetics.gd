@@ -30,6 +30,19 @@ extends RefCounted
 ## model shows. Desktop and editor runs load the skins straight from res://.
 ## Skin vats live like the default ones (Scenery's liquid and residents, HordeView's drops out of the tanks):
 ## is_vat_key / drops_from say which models are vats, TANKS holds each skin vat's tanks.
+##
+## LIGHT / HD (Alpha 21 "Phones only", Daniele): assets/kit/ is the light set MapBuilder and this file
+## place by default (phone triangle budgets, OPT-MESH); assets/kit_hd/ carries today's full originals
+## under the same names, for the pieces that actually differ (HD_DEFAULTS below; every skin has both).
+## kit_path(key) is the one lookup MapBuilder.piece and this file's own loads go through: it answers
+## the light path unless PerfProfile.hd() wants HD *and* the HD copy is there to give - always true off
+## web (kit_hd ships in res:// on desktop/native), and on web only once its own on-demand pack has been
+## fetched (hd.pck for kit_hd/, skins_hd.pck for kit_hd/skins/ - the "Web HD" / "Web Skins HD" presets,
+## BUILD-LOG sec10), exactly the skins.pck dance below. Until then kit_path keeps answering light, so a
+## node shows light and swaps the moment its pack lands - the same "show the default meanwhile" contract
+## the skin cache already keeps, now doubled for quality: _ready()/cached() key a loaded skin by
+## "<kit key>#hd" when it is the HD copy, so a light load already in the cache is never mistaken for HD
+## and a later arrival of the HD pack is picked up on the next ask instead of being stuck on light.
 
 const FAMILIES := ["vat", "machinegoon", "laser", "forge", "monster_hub", "monster"]
 const OPTIONS := {
@@ -43,6 +56,25 @@ const OPTIONS := {
 const MONSTER_ALT := {"vex": "Skyrig", "null": "Monolith", "bloom": "Maneater", "ember": "Titan", "solar": "Eclipse"}
 const SKIN_LINE := {"biopod": "BioPod", "crystal": "Crystal", "distillery": "Distillery", "hive": "Hive", "reactor": "Reactor"}
 const KIT := "res://assets/kit/%s.glb"
+const KIT_HD := "res://assets/kit_hd/%s.glb"
+# Default (non-skin) kit keys with a distinct HD twin (the base kit OPT-MESH slimmed, plus the default
+# Machinegoon / monster hub / monster - Skin Designer's phone rebuilds replaced their assets/kit/ copies).
+# Every "skins/" key has one (Skin Designer covers all of them 1:1); those never need listing here.
+const HD_DEFAULTS := {
+	"Platform_Standard": true, "Platform_Pillar": true, "Platform_Rotation": true,
+	"Deck_Overpass_High_Ramp": true, "Deck_Overpass_High_Span": true, "Deck_Overpass_Ramp": true, "Deck_Overpass_Span": true,
+	"Deck_Retract": true, "Deck_S": true, "Deck_Underpass_Ramp": true, "Deck_Underpass_Span": true,
+	"Pier_Connector": true, "Pier_Eject": true, "Pier_Switch": true,
+	"Vat_T1": true, "Vat_T2": true, "Vat_T3": true, "Vat_T4": true,
+	"Cannon_T1": true, "Cannon_T2": true, "Cannon_T3": true, "Laser": true, "Forge": true,
+	"Relay_Remote": true, "Relay_Retract": true, "Relay_Rotation_Tower": true, "Relay_Switch_Hub": true,
+	"Machinegoon_T1": true, "Machinegoon_T2": true, "Machinegoon_T3": true,
+	"MonsterVat_BLOOM": true, "MonsterVat_EMBER": true, "MonsterVat_NULL": true, "MonsterVat_SOLAR": true, "MonsterVat_VEX": true,
+	"Monster_BLOOM": true, "Monster_EMBER": true, "Monster_NULL": true, "Monster_SOLAR": true, "Monster_VEX": true,
+}
+const HD_PACK_FILE := {"kit": "hd.pck", "skins": "skins_hd.pck"}
+static var _hd_pack := {"kit": "", "skins": ""}      # "" not asked yet / "loading" / "ready" / "failed"
+static var _hd_http := {"kit": null, "skins": null}
 const UNUSED_FRAMES := 600           # ~10 s at 60 fps without a single ask: the skin leaves the cache
 const LIFT := 0.56                   # ATTACH_Z - SOCKET_Z: the laser looks stand on a relay's attachment socket
 
@@ -192,51 +224,118 @@ static func default_key(family: String, faction: String, tier: int) -> String:
 static func scene_for(family: String, id: String, faction: String, tier: int) -> PackedScene:
 	var key := model_key(family, id, faction, tier)
 	if not key.begins_with("skins/"):
-		return load(KIT % key) as PackedScene
-	return _cache.get(key) if _ready(key) else null
+		return load(kit_path(key)) as PackedScene
+	return _cache.get(_cache_key(key)) if _ready(key) else null
 
 
 static func cached(key: String) -> PackedScene:
 	## MapBuilder.piece: the loaded scene of a skin key (null if it is not in the cache).
-	if _cache.has(key):
-		_asked[key] = Engine.get_process_frames()
-		return _cache[key]
+	var ck := _cache_key(key)
+	if _cache.has(ck):
+		_asked[ck] = Engine.get_process_frames()
+		return _cache[ck]
 	return null
 
 
+# ------------------------------------------------------------------ light / HD
+static func kit_path(key: String) -> String:
+	## The res:// path to load for a kit key ("Vat_T2", "skins/NULL_Vat_T2"): the HD twin when the
+	## profile wants it and it is there to give, else the light one everybody already ships. Kicks off
+	## the HD pack fetch on first ask (web only; a no-op elsewhere) so it is ready for next time - never
+	## blocks, the light model shows meanwhile, exactly like an unloaded skin.
+	if not PerfProfile.hd() or not _has_hd(key):
+		return KIT % key
+	var is_skin := key.begins_with("skins/")
+	if _hd_ready(is_skin):
+		return KIT_HD % key
+	_want_hd(is_skin)
+	return KIT % key
+
+
+static func _has_hd(key: String) -> bool:
+	return key.begins_with("skins/") or HD_DEFAULTS.has(key)
+
+
+static func _cache_key(key: String) -> String:
+	return key + "#hd" if kit_path(key) != (KIT % key) else key
+
+
+static func _hd_ready(is_skin: bool) -> bool:
+	if not OS.has_feature("web"):
+		return true                                  # native/editor: kit_hd ships in res://, always there
+	return _hd_pack[("skins" if is_skin else "kit")] == "ready"
+
+
+static func _want_hd(is_skin: bool) -> void:
+	if not OS.has_feature("web"):
+		return
+	var which := "skins" if is_skin else "kit"
+	if _hd_pack[which] != "":
+		return
+	_hd_pack[which] = "loading"
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		_hd_pack[which] = "failed"
+		return
+	var pack: String = HD_PACK_FILE[which]
+	var dest := "user://%s" % pack
+	var url := str(JavaScriptBridge.eval("new URL('%s?v=%s', window.location.href).href" % [pack, Rules.VERSION], true))
+	var http := HTTPRequest.new()
+	http.download_file = dest
+	http.accept_gzip = false                         # GitHub Pages gzips the .pck; never gunzip here (see _fetch_pack)
+	_hd_http[which] = http
+	tree.root.add_child(http)
+	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
+		var ok := result == HTTPRequest.RESULT_SUCCESS and code == 200 and ProjectSettings.load_resource_pack(dest, false)
+		_hd_pack[which] = "ready" if ok else "failed"
+		print("Cosmetics: %s %s (result %d, HTTP %d)" % [pack, "loaded" if ok else "not available - light stays", result, code])
+		(_hd_http[which] as HTTPRequest).queue_free()
+		_hd_http[which] = null)
+	print("Cosmetics: fetching ", url)
+	if http.request(url) != OK:
+		_hd_pack[which] = "failed"
+
+
+static func hd_pack_state(which: String) -> String:
+	## Debug / tests: the "kit" or "skins" HD pack's state ("" before any HD copy was needed).
+	return _hd_pack.get(which, "")
+
+
 static func _ready(key: String) -> bool:
+	var ck := _cache_key(key)
 	var frame := Engine.get_process_frames()
-	_asked[key] = frame
+	_asked[ck] = frame
 	if frame - _last_prune > 120:
 		_prune(frame)
-	if _cache.has(key):
+	if _cache.has(ck):
 		return true
-	if _failed.has(key):
+	if _failed.has(ck):
 		return false
-	var path := KIT % key
-	if _pending.has(key):
+	var path := kit_path(key)
+	var hd := ck != key
+	if _pending.has(ck):
 		var st := ResourceLoader.load_threaded_get_status(path)
 		if st == ResourceLoader.THREAD_LOAD_LOADED:
-			_pending.erase(key)
+			_pending.erase(ck)
 			var res := ResourceLoader.load_threaded_get(path) as PackedScene
 			if res:
-				_cache[key] = res
+				_cache[ck] = res
 				return true
-			_failed[key] = true
+			_failed[ck] = true
 		elif st != ResourceLoader.THREAD_LOAD_IN_PROGRESS:
-			_pending.erase(key)
-			_failed[key] = true
+			_pending.erase(ck)
+			_failed[ck] = true
 		return false
 	if not ResourceLoader.exists(path):
-		if OS.has_feature("web") and _pack in ["", "loading"]:
-			_fetch_pack()                             # web: the skins come in skins.pck, asked for once
+		if not hd and OS.has_feature("web") and _pack in ["", "loading"]:
+			_fetch_pack()                             # web: the light skins come in skins.pck, asked for once
 			return false
-		_failed[key] = true                         # a file missing from the build: the default stays
+		_failed[ck] = true                          # a file missing from the build: the default stays
 		return false
 	if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
-		_failed[key] = true
+		_failed[ck] = true
 		return false
-	_pending[key] = true
+	_pending[ck] = true
 	return false
 
 
