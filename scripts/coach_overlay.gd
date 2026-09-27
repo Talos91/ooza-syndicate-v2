@@ -1027,9 +1027,15 @@ func hide_complete() -> void:
 func _resize_card() -> void:
 	## A deterministic height (not a live container measurement: an autowrap Label's minimum size
 	## only settles after a layout pass, and the card must be right the same frame show_step() is
-	## called) - budgeted for the design's own cap of one or two short lines (§2.4, §6).
+	## called). 0.20.6: the line's own wrapped height, measured with the font (Dr. Vesk's longer lines wrap to
+	## three or four on a phone) - at least two lines, so short lines keep the card steady.
 	var w := _card_w()
-	var h := _header_fsz() * 1.3 + 8.0 + _dots_h() + 8.0 + _body_fsz() * 1.35 * 2.0 + 10.0 + _btn_h()
+	var text_w := w - (18.0 + _handler_size().x) - 18.0
+	var lines := 2
+	if is_instance_valid(_card_text) and _card_text.text != "":
+		var sz: Vector2 = UI_FONT.get_multiline_string_size(_card_text.text, HORIZONTAL_ALIGNMENT_LEFT, text_w - 4.0, _body_fsz())
+		lines = maxi(2, ceili(sz.y / maxf(UI_FONT.get_height(_body_fsz()), 1.0) - 0.05))
+	var h := _header_fsz() * 1.3 + 8.0 + _dots_h() + 8.0 + _body_fsz() * 1.35 * float(lines) + 10.0 + _btn_h()
 	if _card_button.visible:
 		h += _btn_h() + 8.0
 	h += 28.0 + 8.0 * 3.0             # the VBox's own separation (4 gaps) + top/bottom padding
