@@ -1,6 +1,6 @@
 # Next session - start here
 
-State as of publish today: **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
+State as of publish today: **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
 challenges, unlocks with the locks still off (below) - on top of **v0.20.0 "Alpha 20"** - the room server hosts the matches (server-hosted rooms, the room
 owner; below) - on top of **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
 interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish

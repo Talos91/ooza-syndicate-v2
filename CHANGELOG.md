@@ -1,5 +1,22 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.3 "Alpha 20" - 2026-09-27 (Daniele's first online playtest: smooth server rooms, monster launch, full-size Machinegoon)
+
+- **Smooth online movement** (Daniele: "it lags and this time wasn't graphic related but connection"; jerky movement on
+  Wi-Fi + mobile data; server session): the server host runs at 40 fps with 20 Hz snapshots on a carried clock (was ~10 Hz
+  at uneven 100 / 133 / 167 ms gaps); server-room guests play out through a 120 ms buffer, extrapolate up to 0.5 s and blend
+  corrections over 150 ms. Simulated mobile data (80 ms, 120 ms jitter, a 0.6 s stall every 6 s): frozen 10 % -> 1.2 % of
+  the time, jumps > 0.5 m 24 / min -> 0. Browser-hosted fallback rooms unchanged. `tests/net_probe.gd` measures it.
+- **Monster launch** (Daniele: "i couldn't figure how to send the monster ... when its ready to launch you click on it, the
+  guided send ... you click and it goes"): the cause was that tapping your own ready hub opened the inspector instead of
+  arming the launch. Now a tap on a ready hub, its monster or the icon arms the guided send (reach lit), a tap on a lit node
+  launches; `Hud.is_ready_hub()`, a first-time hint, a bigger icon (48 px); a charging hub still opens the inspector.
+  test_net checks it from a guest's synced state.
+- **Machinegoon v2** (Daniele: the 0.65 shrink looked "way too small; make it look as big as the other structures but make
+  sense"): Skin Designer's rebuild with LOW barrels shown at full scale (about a T2 vat); Spitter and Pepperbox rebuilt the same
+  way on Daniele's yes (`Machinegoon_T{n}_{Spitter,Pepperbox}.glb` in skins.pck; the old GooGun_* skins removed); every
+  Pepperbox tier spins its barrel cluster.
+
 ## 0.20.2 "Alpha 20" - 2026-09-27 (menu fix on phones; tutorial fixes from Daniele's notes)
 
 - **Menu on phones (emergency, Daniele: "this is what my gf see"):** a menu page built in portrait or mid-rotation /

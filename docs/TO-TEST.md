@@ -1,9 +1,19 @@
-# To test - v0.20.1 "Alpha 20" (Daniele, on the phone and with a second player)
+# To test - v0.20.3 "Alpha 20" (Daniele, on the phone and with a second player)
 
-Everything below passed the headless suites and desktop / phone-emulation renders only. Nothing was tried on a
-real phone or across two networks. Tick what works, note what doesn't; the next session starts from this file.
+Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
+networks. Close and reopen the home-screen app after a publish.
 
-Live build: https://talos91.github.io/ooza-syndicate-v2/ (reload twice - PWA cache).
+Live build: https://talos91.github.io/ooza-syndicate-v2/
+
+## 0.20.3 (first online playtest fixes)
+- [ ] **Online movement is smooth** in a server room (you + a second phone, one on mobile data): no stutter or jumps.
+- [ ] **Monster launch:** when your hub's monster is ready, tap the hub (or the monster / icon) -> the reach lights up -> tap a
+      lit node -> it goes. Tap elsewhere to cancel. A charging hub still opens its inspector.
+- [ ] **Machinegoon** looks as big as a T2 vat and its goo arcs onto the enemy line; Spitter and Pepperbox skins (ARMIES >
+      COSMETICS) the same size.
+- [ ] **Menu on her phone** (0.20.2 fix): open the app upright, then rotate - the buttons stay normal size.
+
+## Carried over
 
 ## 0.20.1 progression (SCRAP, SYNDICATE CHIPS, levels, challenges, unlocks)
 - [ ] **After a match** (vs Veteran or Expert): the results screen shows MATCH FINISHED · WIN · FIRST WIN OF THE DAY,

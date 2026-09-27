@@ -739,3 +739,14 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 194. **"emergency this is what my gf see" (giant menu buttons on her phone).** *Done (0.20.2):* menu pages rebuild when a
      resize changes the phone sizing (built in portrait / mid-rotation). Not yet confirmed on her phone.
 
+
+## 2026-09-27 - Daniele, first online playtest of 0.20.0 (0.20.3)
+
+195. **"it lags and this time wasn't graphic related but connection....how come?"** (jerky movement, Wi-Fi + mobile data).
+     *Done (0.20.3):* 20 Hz snapshots on an even clock, a 120 ms playout buffer, extrapolation and blended corrections in
+     server rooms (freezes 10 % -> 1.2 %, jumps -> 0 on simulated mobile data).
+196. **"i couldn't figure how to send the monster... when its ready to launch you click on it, the guided send (where you see
+     all targets lights up) and you click and it goes... done".** *Done (0.20.3):* tapping a ready hub / its monster / the icon
+     arms the guided send (it used to open the inspector).
+197. **Machinegoon "look way too small; make it look as big as the other structures but make sense"** (via Skin Designer), then
+     "Yes, rebuild both" (Spitter, Pepperbox). *Done (0.20.3):* v2 models with low barrels at full scale.
