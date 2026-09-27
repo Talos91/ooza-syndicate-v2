@@ -24,7 +24,10 @@ const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "VI
 var main: Node3D
 var content: Control
 var faction := "null"
-var rival := "random"
+var rival_picks: Dictionary = {}                  # seat letter -> "random" | faction id (0.19.2, one per enemy seat)
+var rival: String:                                # kept for the RIVAL summary card: seat B's pick
+	get: return str(rival_picks.get("B", "random"))
+	set(v): rival_picks["B"] = v
 var map_path := ""                                # setup() takes main's, or the pool's first map
 var ai_level := "Standard"
 var mode := "1v1"
@@ -489,13 +492,8 @@ func show_options() -> void:
 	if not mobile:
 		stack_add(st, label_at("Low detail trims the river patches and vat residents - use it if the game makes your machine run hot.", P(15, y), 18, Color("b8ced6")))
 		y += 34.0
-	var h4 := rh(56)
-	var ter := stack_add(st, nav_button("TERRITORY: %s" % ("GOO  -  player-colour goo on owned ground, units in race colour" if Rules.goo_territory else "NEON  -  owner-colour neon on decks and platform rims"),
-			P(15, y), P(915, h4), func():
-		Rules.goo_territory = not Rules.goo_territory
-		show_options())) as Button
-	ter.add_theme_font_size_override("font_size", int(round(fsz(19) * K)))
-	y += h4 + 12.0
+	# TERRITORY moved to ARMIES > COSMETICS > CORE (0.19.2, Daniele: "goo/neon should be in the choice of
+	# cosmetic, as general core one maybe") - one place only, so it isn't duplicated here any more.
 	var h5 := rh(50)
 	var dbg := stack_add(st, nav_button("DEBUG TOOLS: %s" % ("ON  -  the Debug button and live sliders in matches" if Rules.debug_tools else "OFF"),
 			P(15, y), P(915, h5), func():
@@ -762,6 +760,8 @@ func show_cosmetics(f: String = "") -> void:
 			label_at("YOU", pos + P(306, 4), 15, Color("ffd15c"))
 	var lo := ArmyPresets.cosmetic_loadout_for(_army, true)   # the picks as saved: a locked one shows as locked
 	var y := 174.0
+	_core_row(P(415, y))                              # CORE · ALL FACTIONS: TERRITORY NEON / GOO (0.19.2)
+	y += 88.0
 	for family in COSMETIC_FAMILIES:
 		_cosmetic_row(family, str(lo.get(family, "default")), P(415, y), fc)
 		y += 88.0
@@ -769,6 +769,25 @@ func show_cosmetics(f: String = "") -> void:
 	nav_button("BACK", P(340, foot_y()), P(200, 58), func(): _leave_armies())
 	var note := "Saved on this device" if ArmyPresets.saved else "This browser keeps no storage: your picks last until the page closes"
 	label_at(note, P(985, foot_y() + 18.0), 18, Color("7795a4") if ArmyPresets.saved else Color("ffd15c"), false)
+
+
+func _core_row(pos: Vector2) -> void:
+	## CORE · ALL FACTIONS (0.19.2, Daniele: "goo/neon should be in the choice of cosmetic, as general core
+	## one maybe"): global, not per faction - TERRITORY: NEON / GOO, driving Rules.goo_territory at once.
+	var dims := P(1222, 76)
+	var accent := Color("ffb238")
+	content.add_child(neon_panel(pos, dims, accent, false, Color("1a1408e8")))
+	label_at("CORE  ·  ALL FACTIONS", pos + P(20, 10), 19, accent, false)
+	var opts := ["neon", "goo"]
+	var cur := ArmyPresets.core_territory
+	var idx := maxi(opts.find(cur), 0)
+	nav_button("<", pos + P(84, 38), P(42, 32), func():
+		ArmyPresets.set_core_territory(opts[(idx - 1 + opts.size()) % opts.size()])
+		show_cosmetics())
+	label_at("TERRITORY: %s" % cur.to_upper(), pos + P(140, 44), 19, Color("dbe6ec"), false)
+	nav_button(">", pos + P(1090, 38), P(42, 32), func():
+		ArmyPresets.set_core_territory(opts[(idx + 1) % opts.size()])
+		show_cosmetics())
 
 
 func _cosmetic_row(family: String, current: String, pos: Vector2, fc: Color) -> void:
@@ -915,6 +934,18 @@ func _modes_of(m: Dictionary) -> Array:
 	return out if not out.is_empty() else ["1v1"]
 
 
+func _enemy_seats() -> Array:
+	## Every seat but yours (main.gd: "A" is always the human), in the current map/mode's seat list,
+	## letter order - one rival-faction picker per seat (0.19.2, spec H3).
+	var out := []
+	for s in _selected_map().get("seats", {}).get(mode, []):
+		var seat := str(s.get("seat", ""))
+		if seat != "" and seat != "A":
+			out.append(seat)
+	out.sort()
+	return out
+
+
 func _map_blurb(m: Dictionary) -> String:
 	## maps 3.0/4.0: group, family, seats, rings and raised decks; legacy roster maps: tier, layout
 	## family and overpass count.
@@ -968,10 +999,16 @@ func show_setup() -> void:
 		var ck: String = keys[i]
 		var wedges := FACTIONS.map(func(f): return Rules.FACTIONS[f][1]) if ck == "faction" else []
 		var cc: Color = Color.WHITE if ck == "faction" else Rules.SEATS[ck]
-		stack_add(st, hex_chip(P(175 + i * 112, y), P(col_h, col_h), cc, wedges, ck == colour, COLOUR_NAMES[ck], func():
+		var chip := hex_chip(P(175 + i * 112, y), P(col_h, col_h), cc, wedges, ck == colour, COLOUR_NAMES[ck], func():
 			colour = ck
-			show_setup()))
+			show_setup())
+		if ck == "faction":
+			chip.emblem_faction = faction              # 0.19.2 spec H2: a recognisable face, not just wedges
+		stack_add(st, chip)
 	y += col_h + 16.0
+	if colour == "faction":                            # 0.19.2 spec H2: a one-line caption while FACTION is picked
+		stack_add(st, label_at("Every player in their faction's colour", P(23, y), 16, Color("ffd15c")))
+		y += 26.0
 	if not mobile:                                    # the phone skips the recap to save room
 		stack_add(st, label_at("Team modes: one hue per team, light and dark. FACTION: every seat in its own faction colour (Alpha 11).", P(23, y), 14, Color("7795a4")))
 		y += 26.0
@@ -990,22 +1027,39 @@ func show_setup() -> void:
 	# column's - every row here grows to the 44 pt minimum on mobile
 	var st2 := stack_open(P(1058, 556), P(552, maxf(160.0, 818.0 - 556.0 - 14.0)))
 	var y2 := 0.0
-	var choices := ["random"] + FACTIONS
-	var rv_h := rh(49)
-	for i in range(choices.size()):
-		var f: String = choices[i]
-		var b := stack_add(st2, nav_button(("ANY" if f == "random" else ("VIRIDIAN" if f == "bloom" else f.to_upper())), P(i * 93, y2), P(88, rv_h), func():
-			rival = f
-			show_setup(), rival == f)) as Button
-		b.add_theme_font_size_override("font_size", int(round(16 * K)))
-	y2 += rv_h + 22.0
+	# RIVAL FACTIONS: one compact cycling chip per enemy seat (0.19.2, spec H3 - "the single picker
+	# allows only all different or all the same"), tap to cycle ANY -> each faction -> ANY. Wraps to a
+	# second row past 2 seats, so it stays compact on phones too.
+	stack_add(st2, label_at("RIVAL FACTIONS  ·  tap a seat to cycle", P(1, y2), 20, Color("aac3cd")))
+	y2 += 34.0
+	var enemy_seats := _enemy_seats()
+	var rf_choices := ["random"] + FACTIONS
+	var rf_gap := 8.0
+	var rf_per_row := clampi(enemy_seats.size(), 1, 2)
+	var rf_w := (552.0 - rf_gap * (rf_per_row - 1)) / float(rf_per_row)
+	var rf_h := rh(46)
+	for i in range(enemy_seats.size()):
+		var seat: String = enemy_seats[i]
+		var pick := str(rival_picks.get(seat, "random"))
+		var col := i % rf_per_row
+		var row := i / rf_per_row
+		var lbl := "%s: %s" % [seat, ("ANY" if pick == "random" else ("VIRIDIAN" if pick == "bloom" else pick.to_upper()))]
+		var b := stack_add(st2, nav_button(lbl, P(col * (rf_w + rf_gap), y2 + row * (rf_h + 8.0)), P(rf_w, rf_h), func():
+			var idx := rf_choices.find(pick)
+			rival_picks[seat] = rf_choices[(idx + 1) % rf_choices.size()]
+			show_setup())) as Button
+		b.add_theme_font_size_override("font_size", int(round(14 * K)))
+	y2 += ceilf(float(enemy_seats.size()) / float(rf_per_row)) * (rf_h + 8.0) + 14.0
 	stack_add(st2, label_at("DIFFICULTY", P(1, y2), 20, Color("aac3cd")))
 	y2 += 34.0
-	var levels: Array = Rules.AI_LEVELS.keys()
+	# equal gaps, computed to fill the column exactly (0.19.2 spec H4: "aren't evenly spaced")
+	var levels: Array = Rules.AI_LEVELS.keys()               # Alpha 11's five levels
+	var lv_gap := 8.0
+	var lv_w := (552.0 - lv_gap * (levels.size() - 1)) / float(levels.size())
 	var lv_h := rh(59)
 	for i in range(levels.size()):
 		var lv: String = levels[i]
-		var b := stack_add(st2, nav_button(lv.to_upper(), P(i * 111, y2), P(105, lv_h), func():   # Alpha 11's five levels
+		var b := stack_add(st2, nav_button(lv.to_upper(), P(i * (lv_w + lv_gap), y2), P(lv_w, lv_h), func():
 			ai_level = lv
 			show_setup(), lv == ai_level)) as Button
 		b.add_theme_font_size_override("font_size", int(round(14 * K)))
@@ -1052,12 +1106,17 @@ func summary_card(f: String, pos: Vector2, dims: Vector2, change: bool) -> void:
 			label_at("NO RELAYS: %s" % ArmyPresets.skill_name(eff["map"]).to_upper(), ip + P(-14, 54), 13, Color("ffd15c"))
 
 
+func _seat_faction_picks() -> Dictionary:
+	## Every enemy seat's pick for this mode (0.19.2 spec H3): a faction id, or "random" - main.gd
+	## resolves "random" through Sim.resolve_factions (the seed, so it matches Sim.setup()'s own way).
+	var out := {}
+	for seat in _enemy_seats():
+		out[seat] = str(rival_picks.get(seat, "random"))
+	return out
+
+
 func deploy() -> void:
-	var r := rival
-	if r == "random":
-		var others := FACTIONS.filter(func(f): return f != faction)
-		r = others[randi() % others.size()]
-	main.start_match(map_path, faction, r, ai_level, mode, colour, ArmyPresets.loadout_for(faction))   # your ARMIES preset
+	main.start_match(map_path, faction, _seat_faction_picks(), ai_level, mode, colour, ArmyPresets.loadout_for(faction))   # your ARMIES preset
 
 
 # ------------------------------------------------------------------ online (Net, rooms through the room server)
