@@ -260,7 +260,8 @@ static func faction_stats(faction: String) -> Dictionary:
 # ------------------------------------------------------------------ matches
 static func result_from_sim(sim: Sim, seat: String, info := {}) -> Dictionary:
 	## The result record_match wants, for `seat`, read from a finished Sim. info: "online" (bool: a server-hosted room),
-	## "ai_level" (the strongest AI opponent's Rules.AI_LEVELS name, "" when no AI), "left_early", "tutorial".
+	## "ai_level" (the strongest AI opponent's Rules.AI_LEVELS name, "" when no AI), "left_early", "tutorial",
+	## "campaign" (a mission: XP and challenges, no per-match SCRAP - its own one-off reward pays - and no faction-vat win).
 	return {
 		"faction": str(sim.factions.get(seat, "null")),
 		"won": sim.winner != "" and (sim.winner == seat or sim.allied(seat, sim.winner)),
@@ -269,6 +270,7 @@ static func result_from_sim(sim: Sim, seat: String, info := {}) -> Dictionary:
 		"ai_level": str(info.get("ai_level", "")),
 		"left_early": bool(info.get("left_early", false)),
 		"tutorial": bool(info.get("tutorial", false)),
+		"campaign": bool(info.get("campaign", false)),
 		"stats": seat_stats(sim, seat),
 	}
 
@@ -366,7 +368,8 @@ static func record_match(result: Dictionary) -> Dictionary:
 		return out
 	var lines: Array = out["lines"]
 	var P := Rules.PROGRESSION
-	var pay := full_pay(result)
+	var mission := bool(result.get("campaign", false))
+	var pay := full_pay(result) and not mission             # a mission's SCRAP is its own one-off reward (Campaign)
 	var won := bool(result.get("won", false))
 	var f := str(result.get("faction", "null"))
 	var src := "match:%d" % _now()
@@ -389,11 +392,11 @@ static func record_match(result: Dictionary) -> Dictionary:
 	fs["plays"] += 1
 	if won:
 		fs["wins"] += 1
-		if pay:
+		if full_pay(result) and not mission:
 			fs["vat_wins"] += 1
 	factions[f] = fs
 	var vat := "vat:faction:" + f
-	if won and pay and fs["vat_wins"] == int(P["faction_vat_wins"]) and not unlocks.has(vat):
+	if won and full_pay(result) and not mission and fs["vat_wins"] == int(P["faction_vat_wins"]) and not unlocks.has(vat):
 		unlocks[vat] = "wins:" + f
 		out["unlocked"].append(vat)
 	# challenges

@@ -143,7 +143,22 @@ func _matches() -> void:
 	Progression.record_match({"faction": "vex", "won": true, "left_early": true, "online": true})
 	check(Progression.xp == xp, "tutorial lessons and matches left early pay nothing")
 	check(Progression.faction_stats("vex")["plays"] == 4, "plays counted per faction")
+	before = Progression.balance()
+	xp = Progression.xp
+	var vw: int = Progression.faction_stats("vex")["vat_wins"]
+	var mr := Progression.record_match({"faction": "vex", "won": true, "campaign": true, "ai_level": "Expert", "stats": {"captures": 4}})
+	check(Progression.balance() == before + _level_soft(mr) and Progression.xp > xp and Progression.faction_stats("vex")["vat_wins"] == vw,
+			"a campaign mission pays XP only (its reward is separate) and no faction-vat win")
 	Progression.now_override -= 86400
+
+
+func _level_soft(r: Dictionary) -> int:
+	## The SCRAP a result's level-up lines paid (they pay whatever the match paid).
+	var n := 0
+	for l in r["lines"]:
+		if l.has("level_up"):
+			n += int(l["soft"])
+	return n
 
 
 func _faction_vat() -> void:
