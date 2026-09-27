@@ -142,6 +142,8 @@ func _drops_soon(sim: Sim, node_id: int) -> bool:
 # ------------------------------------------------------------------ Last Stand
 func _evacuate(sim: Sim) -> void:
 	for doomed in sim.nodes:                          # every node of the warned wave
+		if doomed.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+			continue
 		if sim.is_warned(doomed["id"]) and doomed["owner"] == seat and doomed["units"] >= 5.0:
 			var target := _nearest_safe(sim, doomed["id"])
 			if target >= 0:
@@ -153,6 +155,8 @@ func _nearest_safe(sim: Sim, from_id: int) -> int:
 	var best := -1
 	var best_len := INF
 	for n in sim.nodes:
+		if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+			continue
 		if n["id"] == from_id or sim.collapsed.get(n["id"], false) or _drops_soon(sim, n["id"]):
 			continue
 		var route := sim.find_route(from_id, n["id"])
@@ -228,6 +232,8 @@ func _attack(sim: Sim) -> void:
 	var owned := _mine(sim)
 	var plans := []
 	for target in sim.nodes:
+		if target.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+			continue
 		if sim.allied(target["owner"], seat) or sim.collapsed.get(target["id"], false) or _drops_soon(sim, target["id"]):
 			continue
 		if target["owner"] != "" and sim.time < float(cfg["grace"]):
@@ -380,6 +386,8 @@ func _fling_cost(sim: Sim, edges: Array) -> float:
 func _relays(sim: Sim) -> void:
 	var lvl := int(cfg["relays"])
 	for n in sim.nodes:
+		if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+			continue
 		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
 			continue
 		var closing := _closing(sim, n)
@@ -427,6 +435,8 @@ func _open_route(sim: Sim, plan: Dictionary) -> bool:
 	if _route_risky:
 		t0 += Rules.AI_RELAY_DETOUR                   # a risky way in is worth replacing
 	for n in sim.nodes:
+		if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+			continue
 		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
 			continue
 		var closing := _closing(sim, n)
@@ -1102,6 +1112,8 @@ func _pick(sim: Sim, id: String) -> Array:
 						and _own_route_uses(sim, e["target"]):
 					return [e["target"]]
 			for n in sim.nodes:
+				if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+					continue
 				if n["relay"] == "" or n["relay_phase"] != "warning" or not _hostile(sim, n["owner"]):
 					continue
 				for ei in sim.controlled_edges(n["id"]):
@@ -1115,12 +1127,16 @@ func _pick(sim: Sim, id: String) -> Array:
 				if sp.is_empty():
 					continue
 				for n in sim.nodes:
+					if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+						continue
 					if n["structure"] == "laser" and _hostile(sim, n["owner"]) \
 							and (Sim.sample(h, h["s"])[0] as Vector3).distance_to(n["pos"]) <= Rules.LASER_RANGE:
 						return [sp["edge"]]
 			return []
 		"bypass":                                     # a relay about to drop or fling its own lines
 			for n in sim.nodes:
+				if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+					continue
 				if n["relay"] == "" or n["relay_phase"] != "warning":
 					continue
 				var own := 0.0
@@ -1132,6 +1148,8 @@ func _pick(sim: Sim, id: String) -> Array:
 			return []
 		"relay_hack":                                 # fire an enemy relay for the kill, or jam one that threatens it
 			for n in sim.nodes:
+				if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+					continue
 				if n["relay"] == "" or (n["owner"] != "" and sim.allied(n["owner"], seat)):
 					continue
 				var closing := _closing(sim, n)
@@ -1156,6 +1174,8 @@ func _pick(sim: Sim, id: String) -> Array:
 			var best := -1
 			var best_s := -INF
 			for n in sim.nodes:
+				if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+					continue
 				if not _hostile(sim, n["owner"]) or sim.collapsed.get(n["id"], false):
 					continue
 				var s: float = -(n["pos"] as Vector3).distance_to(src["pos"]) + (40.0 if n["structure"] in ["laser", "machingoon"] else 0.0)
@@ -1178,6 +1198,8 @@ func _pick(sim: Sim, id: String) -> Array:
 		"rewire":                                     # a relay kill is on, or a big push is under way
 			var kill := 0.0
 			for n in sim.nodes:
+				if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+					continue
 				if n["relay"] != "" and n["relay_phase"] == "" and n["relay_cd"] <= 0.0:
 					var closing := _closing(sim, n)
 					if not closing.is_empty():
@@ -1206,6 +1228,8 @@ func _pick(sim: Sim, id: String) -> Array:
 func _rewire_fires(sim: Sim) -> void:
 	## While Rewire runs: fire any relay (enemy ones too) that drops or flings more enemy than own.
 	for n in sim.nodes:
+		if n.get("node_kind", "") == "junction":   # MAP LAB: never a target or a source
+			continue
 		if n["relay"] == "" or not sim.can_cast(seat, "ultimate", n["id"]):
 			continue
 		var closing := _closing(sim, n)

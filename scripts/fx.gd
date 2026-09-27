@@ -948,7 +948,7 @@ func _build_neon() -> void:
 		for end in range(2):
 			var nid: int = e["a"] if end == 0 else e["b"]
 			var n: Dictionary = sim.nodes[nid]
-			if n["plaza"] >= 0 or vis[nid]["platform"] == null:
+			if n["plaza"] >= 0 or vis[nid]["platform"] == null or n.get("node_kind", "") == "junction":   # MAP LAB: no rim on a junction
 				continue
 			var c: Vector3 = n["pos"]
 			var x: Vector3 = line[0] if end == 0 else line[-1]
@@ -998,6 +998,8 @@ func _build_neon() -> void:
 		for arc in _arcs(gaps.get(id, [])):
 			_rim_arc(st, arc[0], arc[1], arc[2])
 		_rims[id] = _neon_mesh(st, c)
+		if sim.nodes[id].get("node_kind", "") == "junction":   # MAP LAB: a junction has no platform rim
+			(_rims[id] as Node3D).visible = false
 
 
 func _neon_mesh(st: SurfaceTool, at: Vector3) -> MeshInstance3D:
@@ -1150,7 +1152,7 @@ func _neon() -> void:
 			continue
 		_rim_key[id] = owner + ("|goo" if goo else "")
 		var mi: MeshInstance3D = _rims[id]
-		mi.visible = not goo
+		mi.visible = not goo and sim.nodes[id].get("node_kind", "") != "junction"   # MAP LAB: no rim on a junction
 		if brawl:
 			mi.material_override = Mats.light_color(_brawl_color(owner))
 		else:

@@ -107,6 +107,11 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		# map-placed T4 (it holds only its vat); common = every other vat node
 		var kind := "relay" if relay != "" else ("special" if str(n.get("category", "normal")) in ["strategic", "final"] \
 				or (owner == "" and tier >= 4) else "common")
+		var junction: String = str(n.get("junction", "")) if n.get("junction") != null else ""
+		if junction != "":                              # MAP LAB: a deck junction - no owner, no units, no structure
+			kind = "junction"
+			tier = 1
+			units = 0.0
 		if kind == "special" and owner == "":            # Daniele, 2026-09-27: a special node is always a T4 vat
 			tier = 4
 			units = float(Rules.NEUTRAL_UNITS[4])
@@ -115,14 +120,15 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"category": n.get("category", "normal"), "center": n.get("center", false), "relay": relay,
 			"ring": int(n.get("ring", 0)) if n.get("ring") != null else 0,
 			"plaza": int(n["plaza"]) if n.get("plaza") != null else -1,
-			"node_kind": kind,       # "common" / "relay" / "special" (fixed at setup)
+			"node_kind": kind,       # "common" / "relay" / "special" (fixed at setup); MAP LAB: "junction"
+			"junction": junction,   # MAP LAB: the junction piece ("" on every platform)
 			"streaming": {},        # {hid, remaining}: the one order the door is emitting
 			"siege": {},            # seat -> units on the platform fighting the garrison (arrived)
 			"siege_dir": {},        # seat -> unit vector from the tower to where they landed
 			"transit": {},          # seat -> {"units", "hordes": [Horde]}: passing-through this frame
 			"node_loss": {},        # seat -> units/s lost on this platform last step (view)
-			"buildable": (Rules.NODE_BUILDS[kind] as Array).duplicate(),   # what the owner may place here
-			"structure": "" if kind == "relay" else "vat",   # "vat" / "machingoon" / "laser" / "forge" / "monster_hub" / ""
+			"buildable": [] if kind == "junction" else (Rules.NODE_BUILDS[kind] as Array).duplicate(),   # what the owner may place here
+			"structure": "" if kind in ["relay", "junction"] else "vat",   # "vat" / "machingoon" / "laser" / "forge" / "monster_hub" / ""
 			"allies": {},           # seat -> allied troops stored here (GAME-RULES sec11; "units" is the owner's)
 			"arrivals": [],         # allied seats in the order their troops arrived (ownership tie-break)
 			"shot": {},             # laser / machingoon fire for the fx: {"t", "target_horde", "kills", "pos"}
@@ -258,6 +264,8 @@ func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 	## previous order's not-yet-emitted part (Daniele, 2026-09-25).
 	var src: Dictionary = nodes[from_id]
 	if over or from_id == to_id or src["owner"] == "":
+		return {}
+	if src["node_kind"] == "junction" or nodes[to_id]["node_kind"] == "junction":   # MAP LAB: a junction is never a target
 		return {}
 	var count := floorf(src["units"] * fraction)
 	if count < 1.0:
@@ -1174,7 +1182,7 @@ func find_route(from_id: int, to_id: int, avoid := {}) -> Array:
 			var nb: int = link[0]
 			if collapsed.get(nb, false) or not _edge_open(link[1]) or avoid.has(link[1]):
 				continue
-			var cost: float = dist[cur] + edge_cost(link[1]) + 1.0
+			var cost: float = dist[cur] + edge_cost(link[1]) + (0.0 if nodes[nb]["node_kind"] == "junction" else 1.0)
 			if not dist.has(nb) or cost < dist[nb]:
 				dist[nb] = cost
 				prev[nb] = cur
@@ -1278,8 +1286,11 @@ func _build_path3(route: Array) -> Dictionary:
 		if i + 1 < route.size() - 1:
 			var ex_out := exit_of(_edge_index(route[i + 1], route[i + 2]), route[i + 1])
 			var dout := ((ex_out - b["pos"]) as Vector3).normalized()
-			for p in _arc(b["pos"], atan2(din.z, din.x), atan2(dout.z, dout.x), ring):
-				add.call(p, 1)
+			if b["node_kind"] == "junction":               # MAP LAB: straight across the junction plate
+				add.call(b["pos"], 1)
+			else:
+				for p in _arc(b["pos"], atan2(din.z, din.x), atan2(dout.z, dout.x), ring):
+					add.call(p, 1)
 			add.call(ex_out, 1)
 			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		elif brawl:                                   # Alpha 11: round the ring to the front door, then in
