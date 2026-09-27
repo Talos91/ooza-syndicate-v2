@@ -73,7 +73,10 @@ const BUILD_KINDS := ["vat", "machinegoon", "laser", "forge", "monster_hub"]
 const SNAPSHOT_EVERY := 0.1                        # a browser host (fallback rooms)
 const SNAPSHOT_EVERY_SERVER := 0.05                # the server's match host (0.20.2: 20 Hz)
 const KEYFRAME_EVERY := 10                         # every 10th snapshot carries every horde's path (20th at 20 Hz: once a second)
-const PLAYOUT_DELAY := 0.12                        # server rooms: a guest shows the match this far behind the newest snapshot
+const PLAYOUT_DELAY := 0.12                        # server rooms: a guest shows the match this far behind the newest snapshot...
+const PLAYOUT_DELAY_MAX := 0.35                    # ...up to this after a stall (Alpha 21: adaptive), easing back over PLAYOUT_EASE
+const PLAYOUT_EASE := 20.0                         # seconds from the max back to PLAYOUT_DELAY while updates arrive evenly
+const STALL := 0.25                                # an arrival gap this long is a stall (at 20 Hz a gap is 0.05 s)
 const EXTRAPOLATE := 0.5                           # lines keep moving this long after the last snapshot applied
 const BLEND := 0.15                                # a snapshot's correction glides in over this long...
 const BLEND_MAX := 6.0                             # ...unless it is bigger than this (sim metres): then it snaps
@@ -152,6 +155,12 @@ var _play_q: Array = []                            # server-room guest: ["state"
 var _play_t := -1.0                                # the host time the guest shows now (-1: not started)
 var _latest_t := 0.0                               # the newest snapshot's host time
 var _since_applied := 0.0                          # seconds since a snapshot was last shown
+var _delay := PLAYOUT_DELAY                        # the playout delay now (adaptive, Alpha 21)
+var _calm := 0.0                                   # seconds since the last stall
+var _last_arrival := 0                             # msec of the last snapshot's arrival
+var corr_big := 0                                  # probe / CONNECTION: corrections > 0.5 m this round, the largest, hard snaps
+var corr_max := 0.0
+var corr_snaps := 0
 # the PAUSE panel's connection line (net_stats_line): is a stutter the network or the device?
 var _arrivals: Array = []                          # guest: msec of the snapshots in the last 5 s
 var _freeze_n := 0                                 # guest: times this round the shown clock stood still >= 0.1 s
@@ -1004,6 +1013,12 @@ func _launch(info: Dictionary) -> void:
 	_latest_t = 0.0
 	_since_applied = 0.0
 	_arrivals = []
+	_delay = PLAYOUT_DELAY
+	_calm = 0.0
+	_last_arrival = 0
+	corr_big = 0
+	corr_max = 0.0
+	corr_snaps = 0
 	_freeze_n = 0
 	_freeze_s = 0.0
 	_freeze_run = 0.0
@@ -1512,8 +1527,9 @@ func net_stats_line() -> String:
 		span = clampf((Time.get_ticks_msec() - int(_arrivals[0])) / 1000.0, 1.0, 5.0)
 	var rate := _arrivals.size() / span
 	var rtt := ("%d ms" % int(_rtt_ms)) if _rtt_ms >= 0.0 else "- ms"
-	return "CONNECTION  %d fps  ·  %d updates/s  ·  %d freeze%s (%.1f s)  ·  round trip %s" % [
-			fps, int(round(rate)), _freeze_n, "" if _freeze_n == 1 else "s", _freeze_s, rtt]
+	var buf := ("  ·  buffer %.2f s" % _delay) if _smooth() else ""
+	return "CONNECTION  %d fps  ·  %d updates/s  ·  %d freeze%s (%.1f s)  ·  round trip %s%s" % [
+			fps, int(round(rate)), _freeze_n, "" if _freeze_n == 1 else "s", _freeze_s, rtt, buf]
 
 
 func _smooth() -> bool:
@@ -1537,6 +1553,11 @@ func _apply_state(data: Dictionary) -> void:
 			var was = shown.get(h["id"], null)
 			if was != null and str(was[1]) == str(h.get("_pk", "")):
 				var d := float(h["s"]) - float(was[0])
+				if absf(d) > 0.5:
+					corr_big += 1
+				corr_max = maxf(corr_max, absf(d))
+				if absf(d) >= BLEND_MAX:
+					corr_snaps += 1
 				if absf(d) < BLEND_MAX:
 					h["_corr"] = d
 					h["s"] = float(was[0])
@@ -1563,7 +1584,10 @@ func _playout(dt: float) -> void:
 		var old: Array = _play_q.pop_front()
 		if old[0] == "effects" and sim != null:
 			sim.fx_events.append_array(old[1]["events"])
-	var target := _latest_t - PLAYOUT_DELAY
+	_calm += dt
+	if _calm > 5.0 and _delay > PLAYOUT_DELAY:         # steady for a while: ease back towards the short delay
+		_delay = maxf(PLAYOUT_DELAY, _delay - dt * (PLAYOUT_DELAY_MAX - PLAYOUT_DELAY) / PLAYOUT_EASE)
+	var target := _latest_t - _delay
 	if _play_t < 0.0 or absf(target - _play_t) > 0.5:
 		_play_t = target
 	else:
@@ -1856,6 +1880,10 @@ func _guest_receive(raw: String) -> void:
 			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null and active:
 				_since_snapshot = 0.0
 				var now_ms := Time.get_ticks_msec()
+				if _last_arrival > 0 and (now_ms - _last_arrival) / 1000.0 > STALL:   # a stall: hold more in hand next time
+					_delay = clampf(maxf(_delay, (now_ms - _last_arrival) / 1000.0 * 0.5 + 0.1), PLAYOUT_DELAY, PLAYOUT_DELAY_MAX)
+					_calm = 0.0
+				_last_arrival = now_ms
 				_arrivals.append(now_ms)
 				while not _arrivals.is_empty() and now_ms - int(_arrivals[0]) > 5000:
 					_arrivals.pop_front()

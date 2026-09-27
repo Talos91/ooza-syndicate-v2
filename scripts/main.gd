@@ -317,6 +317,15 @@ func _start_map(path: String) -> void:
 		lo = lo.min(n["pos"])
 		hi = hi.max(n["pos"])
 	Rules.view_yaw = PI / 2.0 if (hi - lo).z > (hi - lo).x else 0.0
+	# --- SERVER HOST (Alpha 21, the server session): the room server's match host runs the Sim, the AI and Net only.
+	# Nobody sees its screen, so no world, views, effects or HUD are built (_process has the matching block); the
+	# guests get everything from the Sim's snapshots and fx events. Keep this block whole when editing _start_map. ---
+	if Net.dedicated:
+		sim.finished.connect(_on_finished_server)
+		started = true
+		paused = false
+		return
+	# --- end SERVER HOST ---
 	_build_world()
 	vis = MapBuilder.build3(self, sim, map) if map.has("layout") else MapBuilder.build(self, sim)
 	if not vis["stretched"].is_empty():
@@ -1085,6 +1094,17 @@ func _process(delta: float) -> void:
 		_perf(delta)
 	if not started:
 		return
+	# --- SERVER HOST (Alpha 21): step the Sim and the AI, hand the fx events to the guests, draw nothing ---
+	if Net.dedicated:
+		if Net.is_host() and Net.started:
+			var ddt := minf(delta, 0.05)
+			for ai in ais:
+				ai.think(sim, ddt)
+			sim.step(ddt)
+		Net.push_effects(sim.fx_events)
+		sim.fx_events.clear()
+		return
+	# --- end SERVER HOST ---
 	if get_viewport().get_visible_rect().size != _fitted_size:
 		_on_resized()
 	var dt := minf(delta, 0.05)
@@ -1231,6 +1251,11 @@ func _on_forge_online(seat: String, _node_id: int, first: bool) -> void:
 		hud.toast("seat %s FORGE ONLINE: +%d%% attack" % [seat, roundi(Rules.forge_bonus * 100.0)], kind)
 	else:                                              # the bonus does not stack (Sim.forge_of)
 		hud.toast("seat %s FORGE ONLINE: attack bonus kept" % seat, kind)
+
+
+func _on_finished_server(winner: String) -> void:
+	## SERVER HOST (Alpha 21): the round's end on the room server - a log line and the telemetry file (no screen).
+	print("match over, winner ", winner, " - telemetry ", Telemetry.save(sim, map.get("code", ""), []))
 
 
 func _on_finished(winner: String) -> void:

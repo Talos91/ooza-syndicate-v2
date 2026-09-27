@@ -39,6 +39,7 @@ find /opt/ooze/packs -name '*.pck' -mtime +2 ! -name "$VER.pck" -delete
 mkdir -p /opt/ooze/data /opt/ooze/logs
 chown -R ooze:ooze /opt/ooze/web /opt/ooze/packs /opt/ooze/data /opt/ooze/logs
 find /opt/ooze/logs -name 'room-*.log' -mtime +7 -delete
+find /opt/ooze/data -path '*telemetry*' -name 'match_*.json' -mtime +7 -delete   # the match hosts' telemetry files
 if [ "$RELAY" = "--relay" ]; then
 	install -o ooze -g ooze -m 644 /tmp/relay.py /opt/ooze/relay.py
 	install -m 644 /tmp/ooze-relay.service /etc/systemd/system/ooze-relay.service
