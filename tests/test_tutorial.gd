@@ -38,6 +38,8 @@ func _init() -> void:
 	test_reveal()
 	test_progress()
 	test_l0()
+	test_senders()
+	test_short_sends()
 	test_l1()
 	test_l2()
 	test_l3()
@@ -262,6 +264,89 @@ func test_l0() -> void:
 	check(TutorialDirector.is_done(0) and not TutorialDirector.all_done(), "L0 done does not unlock the Graduate vat")
 
 
+# ------------------------------------------------------------------ 0.20.2: senders under the spotlight, short sends
+func test_senders() -> void:
+	## Every step where you send lights the node you send FROM (the drag's source), not only the target.
+	for l in TutorialDirector.LESSONS:
+		var steps: Array = l["steps"]
+		for i in range(steps.size()):
+			var src := ""
+			for g in (steps[i] as Dictionary).get("gesture", []):
+				if str(g[0]) == "drag":
+					src = str(g[1])
+			if src == "":
+				continue
+			var r := make(int(l["id"]))
+			var d: TutorialDirector = r[0]
+			while d.step_i < i and d.state == "running":
+				d.skip_step()
+			check(d.step_i == i and d.names[src] in d.target()["nodes"],
+					"senders: L%d '%s' spotlights its source %s" % [l["id"], steps[i]["key"], src])
+	var r7 := make(7)
+	var d7: TutorialDirector = r7[0]
+	d7.skip_step()
+	var lit: Array = d7.target()["nodes"]
+	check(d7.names["H"] in lit and d7.names["A1"] in lit and d7.names["A2"] in lit, "senders: L7 evacuate lights every node you can send from")
+
+
+func test_short_sends() -> void:
+	## A short send on a capture step: the target holds, the director tops up your sender, freezes the target and
+	## points the hand at the retry - then a 100 % send takes it. Never a TRY AGAIN.
+	var r := make(1)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	d.skip_step()
+	d.skip_step()
+	d.skip_step()                                             # send25
+	check(str(d.L["steps"][d.step_i]["key"]) == "send25", "short send: at L1 send25")
+	sim.nodes[n["H"]]["units"] = 20.0 * Rules.SCALE
+	sim.send(n["H"], n["N2"], 0.1)                            # 2 against 15
+	var said := false
+	var t := 0.0
+	while t < 20.0 and d.assist_retry().is_empty():
+		tick(d, sim)
+		said = said or d.card()["text"] == TutorialDirector.line("assist_short")
+		t += DT
+	check(not d.assist_retry().is_empty() and said, "short send: the landing short of the target triggers the assist line")
+	check(d.state == "running" and sim.nodes[n["N2"]]["owner"] == "", "short send: no TRY AGAIN, the node still stands")
+	var retry := d.assist_retry()
+	check(d.gesture()[0] == ["drag", retry[0], n["N2"]], "short send: the hand points at the retry")
+	var frozen: float = sim.nodes[n["N2"]]["units"]
+	for i in range(int(3.0 / DT)):
+		tick(d, sim)
+	check(sim.nodes[n["N2"]]["units"] <= frozen + 0.01, "short send: the target's count is frozen for the step")
+	sim.send(int(retry[0]), n["N2"], 1.0)
+	var k := d.step_i
+	t = 0.0
+	while d.step_i == k and t < 30.0:
+		tick(d, sim)
+		t += DT
+	check(d.step_i == k + 1 and sim.nodes[n["N2"]]["owner"] == "A", "short send: the 100 %% retry takes it and the step passes (%.1f s)" % t)
+	# L3's attack on the rival node: the same, against a producing rival vat
+	var r3 := make(3)
+	var d3: TutorialDirector = r3[0]
+	var s3: Sim = r3[1]
+	var n3: Dictionary = d3.names
+	while str(d3.L["steps"][d3.step_i]["key"]) != "attack":
+		d3.skip_step()
+	s3.nodes[n3["B1"]]["units"] = 40.0 * Rules.SCALE
+	s3.nodes[n3["N1"]]["units"] = 10.0 * Rules.SCALE
+	s3.nodes[n3["H"]]["units"] = 5.0 * Rules.SCALE
+	for i in range(3):
+		tick(d3, s3)
+	var retry3 := d3.assist_retry()
+	check(not retry3.is_empty() and s3.nodes[int(retry3[0])]["units"] > s3.nodes[n3["B1"]]["units"],
+			"short send: nodes that clearly can't win are topped up at once (L3 attack)")
+	s3.send(int(retry3[0]), n3["B1"], 1.0)
+	var k3 := d3.step_i
+	t = 0.0
+	while d3.step_i == k3 and t < 40.0:
+		tick(d3, s3)
+		t += DT
+	check(s3.nodes[n3["B1"]]["owner"] == "A" and d3.state == "running", "short send: L3's rival vat taken after the top-up")
+
+
 # ------------------------------------------------------------------ L1 SEND
 func test_l1() -> void:
 	var r := make(1)
@@ -363,15 +448,12 @@ func test_l4() -> void:
 	play(d, sim, "inspect", func(t): d.ui_inspector = R)
 	play(d, sim, "fire", func(t): if first(t): check(sim.fire_relay(R), "L4: double-tap fires the relay"))
 	play(d, sim, "warning", func(t): if first(t): d.press_button())
-	var st := {"fired": false, "on_ok": true, "half_ok": true, "pred": -1.0, "fling": -1}
-	var catch_step := func(t):
+	var st := {"fired": false, "slow_early": false, "pred": -1.0, "fling": -1}
+	var catch_step := func(t):                                  # the player fires the moment the prompt shows
 		var hid := d.catch_line()
-		var on := hid >= 0 and deck_metres(sim, hid, R) > 0.3
-		if d.catch_prompt() != on:
-			st["on_ok"] = false
-		if (d.time_scale < 1.0) != d.catch_prompt():
-			st["half_ok"] = false
-		if not st["fired"] and hid >= 0 and deck_metres(sim, hid, R) >= 2.0:
+		if hid >= 0 and d.time_scale <= 0.25 + 0.001 and deck_metres(sim, hid, R) <= 0.0:
+			st["slow_early"] = true
+		if not st["fired"] and hid >= 0 and d.catch_prompt():
 			st["fired"] = sim.fire_relay(R)
 		if sim.nodes[R]["relay_phase"] == "warning" and sim.nodes[R]["relay_t"] <= DT * d.time_scale + 0.001 and hid >= 0:
 			st["pred"] = deck_metres(sim, hid, R) / Rules.metres_per_unit()
@@ -388,9 +470,9 @@ func test_l4() -> void:
 		sim.fx_events.clear()
 		t += DT
 	check(d.step_i == k + 1, "L4 'prompt' passes within 90 s (%.1f s)" % t)
-	check(st["on_ok"], "L4: the prompt shows exactly while the push is on the relay deck")
-	check(st["half_ok"], "L4: half speed only while the push is on the relay deck")
-	check(int(st["fling"]) >= 5, "L4: firing flings >= 5 rival units (%d)" % int(st["fling"]))
+	check(st["slow_early"], "L4: 0.25x before the rival line is on the relay deck")
+	check(int(st["fling"]) >= 5, "L4: a fire at the prompt flings >= 5 rival units on the first line (%d)" % int(st["fling"]))
+	check(int(d._log.filter(func(e): return e.get("type") == "fling").size()) == 1, "L4: caught on the first try")
 	check(st["pred"] > 0.0 and absf(float(st["fling"]) - Rules.shown(st["pred"])) <= 2.0,
 			"L4: the fling is the share that was on the deck when it moved (%d vs %d)" % [int(st["fling"]), Rules.shown(st["pred"])])
 	play(d, sim, "waterfall", wait)
@@ -420,11 +502,14 @@ func test_l5() -> void:
 	check(d.step_i == 0, "L5 negative: the retract step does not pass on its own")
 	for key in ["retract", "switch", "remote"]:
 		var relay: int = n[{"retract": "RT", "switch": "SW", "remote": "RC"}[key]]
-		var st := {"fired": false}
+		var st := {"fired": false, "slow_early": false}
 		play(d, sim, key, func(t):
 			var hid := d.catch_line()
-			if not st["fired"] and hid >= 0 and deck_metres(sim, hid, relay) >= 1.5:
+			if hid >= 0 and d.time_scale <= 0.25 + 0.001 and deck_metres(sim, hid, relay) <= 0.0:
+				st["slow_early"] = true
+			if not st["fired"] and hid >= 0 and d.catch_prompt():
 				st["fired"] = sim.fire_relay(relay))
+		check(st["slow_early"], "L5 %s: 0.25x before the rival line is on the deck" % key)
 		check(st["fired"], "L5 %s: fired with the rival on its deck" % key)
 		var fell := 0
 		for ev in d._log:
@@ -634,19 +719,16 @@ func test_l9() -> void:
 			capped = false
 	check(capped, "L9: a neutral regrows only to its staged garrison")
 	_stage_l9(d, sim)
-	var st := {"fired": false, "on_ok": true, "half_ok": true, "prompted": false}
+	var st := {"fired": false, "slow_early": false, "prompted": false}
 	var t := 0.0
 	while d.state != "complete" and t < 120.0:
 		d.step(DT)
 		var hid := d.catch_line()
-		var on := hid >= 0 and deck_metres(sim, hid, R) > 0.3 and str(d._match.get("phase", "")) == "push"
-		if d.catch_prompt() != on:
-			st["on_ok"] = false
-		if (d.time_scale < 1.0) != d.catch_prompt():
-			st["half_ok"] = false
+		if hid >= 0 and str(d._match.get("phase", "")) == "push" and d.time_scale <= 0.25 + 0.001 and deck_metres(sim, hid, R) <= 0.0:
+			st["slow_early"] = true
 		if d.catch_prompt():
 			st["prompted"] = true
-		if not st["fired"] and on and deck_metres(sim, hid, R) >= 6.0:
+		if not st["fired"] and d.catch_prompt():               # the player fires the moment the prompt shows
 			st["fired"] = sim.fire_relay(R)
 		sim.step(DT * d.time_scale)
 		for ev in sim.fx_events:
@@ -654,10 +736,9 @@ func test_l9() -> void:
 		sim.fx_events.clear()
 		t += DT
 	check(st["prompted"], "L9: the push reached the relay deck and the prompt fired")
-	check(st["on_ok"], "L9: the prompt shows exactly while the push is on the relay deck")
-	check(st["half_ok"], "L9: half speed only while the push is on the relay deck")
+	check(st["slow_early"], "L9: 0.25x before the push is on the relay deck")
 	check(d.state == "complete" and bool(d.result.get("relay_kill", false)),
-			"L9: firing under the push is a RELAY KILL and ends the tutorial on the spot (%.0f s, %d crews)" % [t, int(d.result.get("kill_units", 0))])
+			"L9: firing under the push is a RELAY KILL and ends the tutorial on the spot (%.0f s, %d units)" % [t, int(d.result.get("kill_units", 0))])
 	check(d.result.get("final", false), "L9: the final (TRAINING COMPLETE) screen follows")
 	# a miss: the push crosses, the match goes on, nothing completes
 	var m := make(9)

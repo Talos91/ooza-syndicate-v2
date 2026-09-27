@@ -44,7 +44,9 @@ const IDLE_HINT := 20.0              # seconds without an order before the idle 
 const PUSH_SHARE := 0.7              # L9: the scripted push commits at least this share of B's units
 const PUSH_KILL := 0.5               # L9: a relay kill = at least this share of the push lost to the fall
 const PUSH_LATEST := 150.0           # L9: 2:30 - the push goes even if A does not lead by then
-const HALF_SPEED := 0.5
+const HALF_SPEED := 0.5                # (the older relay prompt; 0.20.2's slow motion is per lesson: "slow" in LESSONS)
+const ASSIST_MARGIN := 6.0             # shown units a topped-up send wins by
+const L9_SLOW := {"slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "min": 1}   # the relay-kill push's slow motion
 const MIN_STEP := 1.5                # a doing-step shows at least this long, even when it is already done (its line is read)
 
 # ---------------------------------------------------------------- the handler's lines (TUTORIAL-SCRIPT.md draft 2)
@@ -59,6 +61,7 @@ const LINES := {
 	"not_yet": "Not yet. Follow the hand.",
 	"try_again_title": "TRY AGAIN", "try_again": "That went wrong. Same board, fresh units.",
 	"idle_hint": "Still with me? Do what the hand shows.",
+	"assist_short": "Not enough units - send again, use 100 %.",   # 0.20.2: a short send is topped up, never a TRY AGAIN
 	"paused_lessons": "LESSONS",
 	"no_storage": "Progress isn't saved on this browser.",
 	# L0 THE CITY - what's what
@@ -237,11 +240,13 @@ const LESSONS := [
 		"reveal": ["map", "badges", "drag", "clock"],
 		"steps": [
 			{"key": "drag", "target": {"nodes": ["H", "N1"]}, "gesture": [["drag", "H", "N1"]], "pass": ["send", "H", "N1"], "budget": 30.0},
-			{"key": "label", "target": {"nodes": ["N1"], "label": ["H", "N1"]}, "pass": ["owner", "N1", "A"], "budget": 30.0},
+			{"key": "label", "target": {"nodes": ["N1"], "label": ["H", "N1"], "senders": ["H"]}, "assist": ["N1"],
+				"pass": ["owner", "N1", "A"], "budget": 30.0},
 			{"key": "percent", "reveal": ["send_panel"], "enter": ["topup", "H", "N2", 0.25], "target": {"rects": ["send:0.25"]},
-				"gesture": [["press", "send:0.25"]], "pass": ["fraction", 0.25], "budget": 10.0},
-			{"key": "send25", "target": {"nodes": ["H", "N2"]}, "gesture": [["drag", "H", "N2"]], "pass": ["owner", "N2", "A"], "budget": 30.0},
-			{"key": "reinforce", "target": {"nodes": ["N1", "H"]}, "gesture": [["drag", "N1", "H"]], "pass": ["send_own"], "budget": 15.0},
+				"gesture": [["press", "send:0.25"]], "pass": ["fraction_or_send", 0.25, "H"], "budget": 10.0},
+			{"key": "send25", "target": {"nodes": ["H", "N2"]}, "gesture": [["drag", "H", "N2"]], "assist": ["N2"],
+				"pass": ["owner", "N2", "A"], "budget": 30.0},
+			{"key": "reinforce", "target": {"nodes": ["N1", "H"], "senders": "mine"}, "gesture": [["drag", "N1", "H"]], "pass": ["send_own"], "budget": 15.0},
 		],
 		"done": ["L1.done1", "L1.done2"]},
 	{"id": 2, "key": "L2", "map": "T-04-vat-row", "abilities": false, "vls": false,
@@ -266,13 +271,15 @@ const LESSONS := [
 		"stage": [["H", "A", 25], ["N1", "A", 25], ["B1", "B", 5], ["BH", "B", 30]], "protect": ["BH"],
 		"reveal": ["rival_counts", "strength", "notices"],
 		"steps": [
-			{"key": "neutral", "target": {"nodes": ["N2"]}, "gesture": [["drag", "H", "N2"]], "pass": ["owner", "N2", "A"],
-				"hint": ["too_small", "N2", "L3.too_small"], "budget": 60.0},
+			{"key": "neutral", "target": {"nodes": ["N2"], "senders": "mine"}, "gesture": [["drag", "H", "N2"]], "assist": ["N2"],
+				"assist_line": "L3.too_small", "pass": ["owner", "N2", "A"], "budget": 60.0},
 			{"key": "trade", "read_only": true},
-			{"key": "defend", "enter": ["b_attack", "B1", "N1", 6], "target": {"nodes": ["N1"], "lines": "B"},
+			{"key": "defend", "enter": ["b_attack", "B1", "N1", 6], "target": {"nodes": ["N1"], "lines": "B", "senders": "mine"},
+				"supply": ["H", "N1"],   # H can always cover the attack: the rival line is N1 + 6, H is topped to that + a margin
 				"gesture": [["drag", "H", "N1"]], "pass": ["custom", "line_spent", "N1"], "fail": ["lost", "N1"],
 				"done_line": "L3.held", "budget": 40.0},
-			{"key": "attack", "target": {"nodes": ["B1"]}, "gesture": [["drag", "N1", "B1"]], "pass": ["owner", "B1", "A"], "budget": 60.0},
+			{"key": "attack", "target": {"nodes": ["B1"], "senders": "mine"}, "gesture": [["drag", "N1", "B1"]], "assist": ["B1"],
+				"pass": ["owner", "B1", "A"], "budget": 60.0},
 			{"key": "alive", "read_only": true},
 		],
 		"done": ["L3.done1", "L3.done2"]},
@@ -285,7 +292,7 @@ const LESSONS := [
 				"pass": ["fired", "R"], "budget": 10.0},
 			{"key": "warning", "target": {"nodes": ["R"]}, "read_only": true, "restore": "R"},
 			{"key": "prompt", "target": {"nodes": ["R"], "lines": "B"}, "before": "L4.incoming",
-				"catch": {"relay": "R", "from": "B2", "to": "R", "shown": 20, "kind": "fling", "min": 5, "tries": 3, "half": true,
+				"catch": {"relay": "R", "from": "B2", "to": "R", "shown": 20, "kind": "fling", "min": 5, "tries": 3, "slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "line_speed": 0.7,
 					"miss": "L4.miss", "practice": "L4.practice"}, "budget": 90.0},
 			{"key": "waterfall", "target": {"nodes": ["R"]}, "pass": ["fall_or_time", 4.0], "min": 3.0, "budget": 6.0},
 		],
@@ -296,11 +303,11 @@ const LESSONS := [
 		"reveal": [],
 		"steps": [
 			{"key": "retract", "target": {"nodes": ["RT"], "decks": [["RT", "T1"]]},
-				"catch": {"relay": "RT", "from": "T1", "to": "RT", "shown": 12, "kind": "fall", "min": 1, "tries": 3, "half": false}, "budget": 60.0},
+				"catch": {"relay": "RT", "from": "T1", "to": "RT", "shown": 12, "kind": "fall", "min": 2, "tries": 3, "slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "line_speed": 0.7}, "budget": 60.0},
 			{"key": "switch", "target": {"nodes": ["SW"], "decks": [["SW", "S1"]]},
-				"catch": {"relay": "SW", "from": "S1", "to": "SW", "shown": 12, "kind": "fall", "min": 1, "tries": 3, "half": false}, "budget": 60.0},
+				"catch": {"relay": "SW", "from": "S1", "to": "SW", "shown": 12, "kind": "fall", "min": 2, "tries": 3, "slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "line_speed": 0.7}, "budget": 60.0},
 			{"key": "remote", "target": {"nodes": ["RC"], "decks": [["S1", "BH"]]},
-				"catch": {"relay": "RC", "from": "BH", "to": "S1", "shown": 12, "kind": "fall", "min": 1, "tries": 3, "half": false}, "budget": 60.0},
+				"catch": {"relay": "RC", "from": "BH", "to": "S1", "shown": 12, "kind": "fall", "min": 2, "tries": 3, "slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "line_speed": 0.7}, "budget": 60.0},
 			{"key": "own", "target": {"nodes": ["SW"]}, "read_only": true},
 		],
 		"done": ["L5.done1", "L5.done2"]},
@@ -336,10 +343,10 @@ const LESSONS := [
 		"reveal": ["status_line", "danger"],
 		"steps": [
 			{"key": "reveal", "read_only": true},
-			{"key": "evacuate", "target": {"nodes": ["I1", "I2"]}, "gesture": [["drag", "H", "I1"]],
+			{"key": "evacuate", "target": {"nodes": ["I1", "I2"], "senders": "mine"}, "gesture": [["drag", "H", "I1"]], "assist": ["I1", "I2"],
 				"pass": ["custom", "ring_down"], "fail": ["custom", "ring_lost"], "budget": 60.0},
 			{"key": "vls", "enter": ["vls"], "target": {"nodes": ["I1", "I2", "I3"]}, "read_only": true, "pass": ["won"]},
-			{"key": "hold", "target": {"nodes": ["I1", "I2", "I3"]}, "gesture": [["vls_move"]], "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
+			{"key": "hold", "target": {"nodes": ["I1", "I2", "I3"], "senders": "mine"}, "gesture": [["vls_move"]], "assist": ["I1", "I2", "I3"], "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
 		],
 		"done": ["L7.done1", "L7.done2"]},
 	{"id": 8, "key": "L8", "map": "T-10-long-decks", "abilities": true, "vls": false,
@@ -578,6 +585,8 @@ var _demolish_tries := 0
 var _ls_started := false
 var _ls_strength := 0.0
 var _ls_falls := 0.0
+var _dt := 0.0                                       # this frame's (real) dt: the slow-motion caps count real seconds
+var _assist := {}                                    # node id -> {"seen": {hid: true}, "frozen": units or -1, "from": id}
 var _match := {}                                     # L9: {phase, muster, push, falls0, push_units, t, relay_taken}
 
 
@@ -699,6 +708,7 @@ func step(dt: float) -> void:
 		return
 	lesson_t += dt
 	step_t += dt
+	_dt = dt
 	if _note_t > 0.0:
 		_note_t -= dt
 		if _note_t <= 0.0:
@@ -856,6 +866,7 @@ func _enter(st: Dictionary) -> void:
 	step_t = 0.0
 	_step_started = sim.time
 	_catch = {}
+	_assist = {}
 	_tracked = []
 	_idle_shown = false
 	_last_order_t = sim.time
@@ -911,6 +922,9 @@ func _check_pass(st: Dictionary) -> bool:
 			return _node(str(op[1])).get("owner", "") == str(op[2])
 		"fraction":
 			return absf(ui_fraction - float(op[1])) < 0.001
+		"fraction_or_send":                           # 25 % tapped - or any send from there (it works too: no block)
+			return absf(ui_fraction - float(op[1])) < 0.001 \
+					or not _since(_step_started, "send", {"seat": HUMAN, "from": _id(str(op[2]))}).is_empty()
 		"inspect":
 			return ui_inspector == _id(str(op[1]))
 		"build_started":
@@ -1099,6 +1113,80 @@ func _tick_step(st: Dictionary, _dt: float) -> void:
 				_tracked.append(h["id"])
 	if st.has("hint"):
 		_tick_hint(st["hint"])
+	if st.has("assist"):
+		_tick_assist(st["assist"])
+	if st.has("supply") and not _catch.has("supplied"):
+		_catch["supplied"] = true                     # (the defend step: the reinforcing node can always cover the line)
+		var threat := 0.0
+		for h in sim.hordes:
+			if h["owner"] == RIVAL and int(h["target"]) == _id(str(st["supply"][1])):
+				threat += float(h["ordered"])
+		var from := _node(str(st["supply"][0]))
+		var node := _node(str(st["supply"][1]))
+		if not from.is_empty() and not node.is_empty() and threat > 0.0:
+			from["units"] = maxf(float(from["units"]), threat - float(node["units"]) + ASSIST_MARGIN * Rules.SCALE * 2.0)
+
+
+# ---------------------------------------------------------------- short sends never break a lesson (0.20.2)
+# Daniele: "since sometimes order might be short of a few troops or the user might be mistake amount sent it can
+# somewhat break the tutorial". On a capture step, when a line of yours lands on the target and it is still not
+# yours - or your nodes together clearly can't beat it - the director tops up your best sender to win with a
+# margin, freezes the target's count for the step, says so once (only after a real short landing) and points the
+# hand at the retry. A short send is never a TRY AGAIN.
+func _tick_assist(names: Array) -> void:
+	for nm in names:
+		var t := _id(str(nm))
+		if t < 0 or sim.collapsed.get(t, false):
+			continue
+		var tn: Dictionary = sim.nodes[t]
+		var a: Dictionary = _assist.get(t, {"seen": {}, "frozen": -1.0, "from": -1, "topped": false})
+		_assist[t] = a
+		if tn["owner"] == HUMAN:
+			a["from"] = -1
+			continue
+		if float(a["frozen"]) >= 0.0:                 # frozen: no regrowth, no rival production, for the step
+			tn["units"] = minf(float(tn["units"]), float(a["frozen"]))
+		var bound := false
+		for h in sim.hordes:
+			if h["owner"] == HUMAN and int(h["target"]) == t and not h.get("decoy", false):
+				a["seen"][h["id"]] = true
+				bound = true
+		var landed_short := false
+		for hid in (a["seen"] as Dictionary).keys():
+			if not _any_alive([hid]):
+				a["seen"].erase(hid)
+				landed_short = true
+		if bound:
+			continue
+		var need := float(tn["units"]) * 1.1 + ASSIST_MARGIN * Rules.SCALE
+		var best := -1
+		var supply := 0.0
+		for n in sim.nodes:
+			if n["owner"] != HUMAN or sim.collapsed.get(n["id"], false) or sim.find_route(n["id"], t).size() < 2:
+				continue
+			supply += float(n["units"])
+			if best < 0 or n["units"] > sim.nodes[best]["units"]:
+				best = n["id"]
+		if best < 0:
+			continue
+		if landed_short or (supply < need and not a["topped"]):
+			var bn: Dictionary = sim.nodes[best]
+			bn["units"] = maxf(float(bn["units"]), need)
+			a["frozen"] = float(tn["units"])
+			a["from"] = best
+			a["topped"] = true
+			if landed_short:
+				say(line(str(_step().get("assist_line", "assist_short"))))
+				handler.emit("droop")
+
+
+func assist_retry() -> Array:
+	## [from, to] of the retry the hand points at after a top-up (no line of yours on the way), else [].
+	for t in _assist:
+		var a: Dictionary = _assist[t]
+		if int(a.get("from", -1)) >= 0 and sim.nodes[t]["owner"] != HUMAN and (a["seen"] as Dictionary).is_empty():
+			return [int(a["from"]), int(t)]
+	return []
 
 
 func _tick_hint(h: Array) -> void:
@@ -1148,12 +1236,7 @@ func _tick_catch(c: Dictionary) -> void:
 			_catch["done"] = true
 			_catch["caught"] = caught
 			return
-		var on := _on_relay_deck(hid, relay)
-		if on != bool(_catch.get("prompt", false)):
-			_catch["prompt"] = on
-			_bump()
-		if on and c.get("half", false):
-			time_scale = HALF_SPEED
+		_relay_window(hid, relay, c, _catch)
 		if not _any_alive([hid]) or _landed(hid):
 			_catch["tries"] = int(_catch["tries"]) + 1
 			_catch["line"] = -1
@@ -1177,10 +1260,67 @@ func _tick_catch(c: Dictionary) -> void:
 		to["units"] = maxf(float(to["units"]), (float(c["shown"]) + 10.0) * Rules.SCALE)
 	var h := _b_send(str(c["from"]), str(c["to"]), float(c["shown"]))
 	if not h.is_empty():
+		h["speed"] = float(c.get("line_speed", 1.0))      # the scripted line walks slower: a generous window
+		_catch["slow_t"] = 0.0
 		_catch["line"] = h["id"]
 		_catch["t0"] = sim.time
 		_tracked.append(h["id"])
 		_bump()
+
+
+func _relay_window(hid: int, relay: int, cfg: Dictionary, st: Dictionary) -> void:
+	## The relay moment (L4, L5, L9 - Daniele, 0.20.2: "relay map is too fast make the time slow when the user needs
+	## to activate the relay"): slow motion (cfg "slow" x) from ~"slow_lead" s before the line reaches the relay's
+	## deck, held until the relay moves (the drop) or the line is past, at most "slow_max" real seconds so the window
+	## always ends. The prompt and the hand come when a fire NOW would still drop at least cfg "min" units - the line
+	## is where the deck is when the relay's warning runs out.
+	var rn: Dictionary = sim.nodes[relay]
+	var eta := _deck_eta(hid, relay)
+	var moving: bool = rn["relay_phase"] == "moving"
+	var fired: bool = rn["relay_phase"] != ""
+	var slow_on := eta >= 0.0 and eta <= float(cfg.get("slow_lead", 2.0)) and not moving \
+			and float(st.get("slow_t", 0.0)) < float(cfg.get("slow_max", 18.0))
+	if slow_on:
+		st["slow_t"] = float(st.get("slow_t", 0.0)) + _dt
+		time_scale = float(cfg.get("slow", 0.25))
+	var prompt := not fired and _drop_if_fired(hid, relay) >= float(cfg.get("min", 1)) * Rules.SCALE
+	if prompt != bool(st.get("prompt", false)):
+		st["prompt"] = prompt
+		_bump()
+
+
+func _deck_eta(hid: int, relay: int) -> float:
+	## Seconds (match time) until line `hid` reaches the relay's open deck: 0 while on it, -1 once past or off route.
+	var h := sim._horde(hid)
+	if h.is_empty():
+		return -1.0
+	var head: float = h["s"]
+	var tail: float = head - Sim.chain_length(h)
+	var v := maxf(Rules.move_speed() * float(h.get("speed", 1.0)) * sim.stat(h["owner"], "speed"), 0.1)
+	for sp in h["spans"]:
+		if not (sp["edge"] in sim.controlled_edges(relay)) or not sim.is_edge_open(sp["edge"]):
+			continue
+		if head >= sp["s0"] and tail <= sp["s1"]:
+			return 0.0
+		if head < sp["s0"]:
+			return (float(sp["s0"]) - head) / v
+	return -1.0
+
+
+func _drop_if_fired(hid: int, relay: int) -> float:
+	## Units (sim) of line `hid` on the relay's open deck when a fire now takes effect (after Rules.RELAY_WARNING).
+	var h := sim._horde(hid)
+	if h.is_empty():
+		return 0.0
+	var v := Rules.move_speed() * float(h.get("speed", 1.0)) * sim.stat(h["owner"], "speed")
+	var head: float = float(h["s"]) + v * Rules.RELAY_WARNING
+	var total: float = float(h["ordered"]) if h["streaming"] else float(h["units"])
+	var tail: float = head - minf(Sim.full_length(total), head)
+	var best := 0.0
+	for sp in h["spans"]:
+		if sp["edge"] in sim.controlled_edges(relay) and sim.is_edge_open(sp["edge"]):
+			best = maxf(best, minf(head, sp["s1"]) - maxf(tail, sp["s0"]))
+	return maxf(best, 0.0) / Rules.metres_per_unit()
 
 
 func _restore_relay(relay: int) -> void:
@@ -1492,12 +1632,7 @@ func _tick_push(relay: int) -> void:
 		handler.emit("happy")
 		_finish_in(line("L9.relay_kill"))
 		return
-	var on := _on_relay_deck(hid, relay)
-	if on != bool(_match.get("prompt", false)):
-		_match["prompt"] = on
-		_bump()
-	if on:
-		time_scale = HALF_SPEED
+	_relay_window(hid, relay, L9_SLOW, _match)
 	var gone := true
 	for h in sim.hordes:
 		if h["owner"] == RIVAL:
@@ -1590,6 +1725,25 @@ func target() -> Dictionary:
 		var id := _id(str(nm))
 		if id >= 0 and not sim.collapsed.get(id, false):
 			out["nodes"].append(id)
+	for g in _step().get("gesture", []):              # 0.20.2: the node you send FROM is never under the dim
+		if str(g[0]) == "drag":
+			var src := _id(str(g[1]))
+			if src >= 0 and not src in out["nodes"] and not sim.collapsed.get(src, false):
+				out["nodes"].append(src)
+	var snd = t.get("senders", [])
+	if str(snd) == "mine":                            # every node of yours that can supply the send
+		for n in sim.nodes:
+			if n["owner"] == HUMAN and not sim.collapsed.get(n["id"], false) and not n["id"] in out["nodes"] \
+					and float(n["units"]) >= Rules.SCALE and (out["nodes"] as Array).size() < 7:
+				out["nodes"].append(n["id"])
+	elif snd is Array:
+		for nm in snd:
+			var sid := _id(str(nm))
+			if sid >= 0 and not sid in out["nodes"] and not sim.collapsed.get(sid, false):
+				out["nodes"].append(sid)
+	var retry := assist_retry()
+	if not retry.is_empty() and not int(retry[0]) in out["nodes"]:
+		out["nodes"].append(int(retry[0]))
 	out["radius"] = float(t.get("radius", 1.0))
 	if t.has("label"):                                # the walking line's own TAKE · units · seconds label
 		out["label"] = [_id(str(t["label"][0])), _id(str(t["label"][1]))]
@@ -1621,6 +1775,9 @@ func gesture() -> Array:
 	if st.has("catch"):
 		return [["double_tap", _id(str(st["catch"]["relay"])), -1]] if catch_prompt() else []
 	var out := []
+	var retry := assist_retry()
+	if not retry.is_empty():                          # after a short send: the hand shows the retry, 100 % from there
+		out.append(["drag", int(retry[0]), int(retry[1])])
 	for g in st.get("gesture", []):
 		var kind := str(g[0])
 		match kind:
