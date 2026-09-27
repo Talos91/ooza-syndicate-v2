@@ -1185,7 +1185,7 @@ func show_lobby() -> void:
 	header(0)
 	if Net.roster.has(Net.local_id()):
 		faction = str(Net.roster[Net.local_id()]["faction"])
-	var host := Net.is_host()
+	var host := Net.can_control()                     # the browser host, or a server room's owner (Alpha 20)
 	label_at("ROOM %s" % (Net.room_code if Net.room_code != "" else "...."), P(40, 100), 52)
 	var th := rh(52)
 	var copy := nav_button("SHARE CODE", P(420, 110), P(230, th), _share_code)
@@ -1353,7 +1353,7 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 	if id >= 0:
 		var f: String = str(Net.roster[id]["faction"])
 		label_at("VIRIDIAN BLOOM" if f == "bloom" else NAMES[f].replace("\n", " "), Vector2(pos.x + 84 * K, mid - 24 * K), 22, Rules.FACTIONS[f][1], false)
-		var tags := ("HOST" if id == 1 else "") + ("  ·  YOU" if id == Net.local_id() else "") + ("  ·  RECONNECTING" if Net.is_away(id) else "")
+		var tags := ("HOST" if id == Net.room_owner else "") + ("  ·  YOU" if id == Net.local_id() else "") + ("  ·  RECONNECTING" if Net.is_away(id) else "")
 		label_at(("%s  %s" % [str(colours.get(seat, "")).to_upper(), tags]).strip_edges(), Vector2(pos.x + 84 * K, mid + 2 * K), 16, Color("ffd15c"), false)
 		# SKILLS 2.0: the player's loadout - active, map (the no-relay fallback on such a map), ultimate
 		var lo = Net.roster[id].get("loadout", {})

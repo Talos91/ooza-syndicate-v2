@@ -34,13 +34,21 @@ extends Node
 ## ROOM SERVER (Alpha 20 stage 1): the transport is RelayBridge -> server/relay.py (one WebSocket per player,
 ## the server forwards strings), so strict networks work; ?relay=peerjs falls back to the PeerJS rooms. The
 ## room's creator still hosts the Sim (stage 2 moves it onto the server). No host migration.
+## SERVER-HOSTED ROOMS (Alpha 20 stage 2): CREATE ROOM asks the room server for a room it hosts itself
+## (host_room -> {"op": "create"}); the server starts this same build headless with --dedicated, which runs
+## the room as host with NO seat of its own (roster ids start at 2), and the creator joins as the first guest.
+## The ROOM OWNER (Net.room_owner: the first player in, then the next one present if they drop) runs the lobby: the
+## lobby controls send {"op": "lobby", "fn", "arg"} and the host applies them only from the owner. So no
+## player's device runs the match: a phone in the background just drops its own seat for a RECONNECT. When the
+## server has no match host free, or runs another game version, the room falls back to the creator's browser
+## as host (the stage-1 rooms). Protocol ooze20-net-4 ("owner" in the lobby packet, the owner's lobby ops).
 
 signal lobby_changed
 signal rematch_changed
 signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
-const VERSION_TAG := "ooze20-net-3"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams)
+const VERSION_TAG := "ooze20-net-4"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner)
 const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
 const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
 const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
@@ -59,6 +67,9 @@ const CHAT_MAX := 256
 const CHAT_HISTORY := 50
 const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
 const RELAY_URL := "wss://45-32-126-20.sslip.io/ooze"   # server/relay.py behind Caddy on the Vultr box (Alpha 20)
+const DEDICATED_FPS := 30                          # the server's match host: a steady Sim step, no screen to draw
+const DEDICATED_IDLE := 90.0                       # an empty server room closes after this long (the first player: 45 s)
+const FALLBACK_CODES := ["no-server", "version", "busy"]   # create refused: host in this browser instead
 const AI_FILL := ["", "Training", "Casual", "Standard", "Veteran", "Expert"]   # EMPTY SEATS setting: off or the AI level
 
 var bridge                                         # window.OozePeer (or a test double)
@@ -95,6 +106,14 @@ var sim: Sim                                       # set by main when the world 
 var main: Node                                     # the match scene (host runs orders through it)
 var no_reload := false                             # tests: launch without reloading the scene
 var allow_native := false                          # tests: rooms outside the browser build (the relay works natively)
+var dedicated := false                             # this process is the room server's match host (--dedicated): no seat
+var room_owner := -1                                    # the player id who runs the lobby (browser host: 1; server room: the first in)
+var server_rooms := true                           # CREATE ROOM asks the server to host (false: this browser hosts)
+var _creating := false                             # guest: our create request is on its way (a refusal falls back)
+var _server_room := ""                             # --room / --secret: the server room this match host serves
+var _server_secret := ""
+var _empty_t := 0.0                                # dedicated: seconds with nobody in the room
+var _ever_joined := false
 var ai_fill := ""                                  # host setting: "" = every seat needs a player, else the AI level for empty seats
 var rejoin := {}                                   # guest: {code, token, faction} to RECONNECT to a dropped room
 var _tokens := {}                                  # host: player id -> secret rejoin token (never broadcast)
@@ -127,6 +146,14 @@ func online() -> bool:
 
 func is_host() -> bool:
 	return hosting
+
+
+func can_control() -> bool:
+	## The lobby's controls (mode, map, settings, MOVE, DEPLOY, the random rematch map): the browser host, or a
+	## server room's owner. The server's own match host decides nothing by itself.
+	if hosting:
+		return not dedicated
+	return assigned_id > 0 and room_owner == assigned_id
 
 
 func local_id() -> int:
@@ -306,7 +333,7 @@ func _fix_colours(first := -1, last := -1) -> void:
 
 func can_start() -> bool:
 	var full := roster.size() == slots() or (ai_fill != "" and roster.size() >= 1)
-	return hosting and connected and not active and full and map_offers(map_path, mode)
+	return (hosting or can_control()) and connected and not active and full and map_offers(map_path, mode)
 
 
 func is_away(id: int) -> bool:
@@ -330,6 +357,8 @@ func ai_seats() -> Dictionary:
 
 
 func set_ai_fill(level: String) -> void:
+	if _ask_owner("ai_fill", level):
+		return
 	if hosting and not active and level in AI_FILL:
 		ai_fill = level
 		publish_lobby()
@@ -352,6 +381,9 @@ func maps_for(m: String) -> Array:
 
 # ------------------------------------------------------------------ room lifecycle
 func host_room(faction: String) -> Error:
+	## CREATE ROOM: the room server hosts it (stage 2) unless it can't, or this is a PeerJS room.
+	if server_rooms and relay_url() != "peerjs":
+		return _start(false, faction, "", true)
 	return _start(true, faction, "")
 
 
@@ -366,7 +398,7 @@ func reconnect() -> Error:
 	return _start(false, str(rejoin["faction"]), str(rejoin["code"]))
 
 
-func _start(host: bool, faction: String, code: String) -> Error:
+func _start(host: bool, faction: String, code: String, create := false) -> Error:
 	leave(false)
 	if not OS.has_feature("web") and not allow_native:
 		status = "Online rooms run in the browser build (the playtest link)."
@@ -385,7 +417,9 @@ func _start(host: bool, faction: String, code: String) -> Error:
 	hosting = host
 	preferred_faction = faction
 	_elapsed = 0.0
+	_creating = create
 	if host:
+		room_owner = 1
 		roster = {1: {"faction": faction, "slot": 0, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}}
 		if not map_offers(map_path, mode) or not map_path in MapPool.battlefield():   # TUTORIAL: never a lesson map
 			var pool := maps_for(mode)
@@ -394,10 +428,35 @@ func _start(host: bool, faction: String, code: String) -> Error:
 				pool = maps_for(mode)
 			map_path = pool[0] if not pool.is_empty() else ""
 		_fix_colours()
-	bridge.start(host, code.strip_edges().to_upper())
+	if create:
+		bridge.start_with(false, {"op": "create", "version": version()})
+	else:
+		bridge.start(host, code.strip_edges().to_upper())
 	status = "Connecting to the room service..."
 	lobby_changed.emit()
 	return OK
+
+
+func _start_dedicated() -> void:
+	## --dedicated: the room server started this build to host room --room; nobody plays here.
+	leave(false)
+	bridge = RelayBridge.new(relay_url())
+	hosting = true
+	room_owner = -1
+	roster = {}
+	var pool := maps_for(mode)
+	map_path = pool[0] if not pool.is_empty() else ""
+	bridge.start_with(true, {"op": "host", "room": _server_room, "secret": _server_secret})
+	status = "Match host for room %s" % _server_room
+	print("dedicated host for room ", _server_room, " (", version(), ")")
+
+
+func _fallback_host(why: String) -> void:
+	## The server could not host (no match host, another version, busy): this browser hosts, as in stage 1.
+	var f := preferred_faction
+	_start(true, f, "")
+	status = "The match server is %s - this browser hosts the room" % ("busy" if why == "busy" else "unavailable")
+	lobby_changed.emit()
 
 
 func relay_url() -> String:
@@ -417,6 +476,8 @@ func relay_url() -> String:
 
 func leave(forget := true) -> void:
 	## forget = false keeps the RECONNECT details (a dropped connection, not LEAVE ROOM).
+	_creating = false
+	room_owner = -1
 	if forget:
 		_save_rejoin({})
 	if OS.has_feature("web"):
@@ -465,6 +526,10 @@ func set_busy(b: bool) -> void:
 
 
 func fail(message: String) -> void:
+	if dedicated:                                      # the server's match host: its room is gone
+		print("dedicated host stops: ", message)
+		get_tree().quit()
+		return
 	var was_playing := active
 	leave(false)
 	status = message
@@ -474,7 +539,69 @@ func fail(message: String) -> void:
 
 
 # ------------------------------------------------------------------ lobby (host decides)
+func _ask_owner(fn: String, arg = null) -> bool:
+	## Not the host: a room owner's lobby change goes to the server's match host; anyone else can't change it.
+	## true = handled here (the caller stops).
+	if hosting:
+		return false
+	if can_control() and not active:
+		_send_to_host({"op": "lobby", "fn": fn, "arg": arg})
+	return true
+
+
+func _owner_op(id: int, p: Dictionary) -> void:
+	## Host: a lobby change from the room owner (the same checks as the host's own buttons).
+	if id != room_owner:
+		return
+	var arg = p.get("arg", null)
+	match str(p.get("fn", "")):
+		"mode":
+			set_mode(str(arg))
+		"map":
+			if str(arg) in maps_for(mode):
+				set_map(str(arg))
+		"last_stand":
+			if arg is bool and arg != last_stand:
+				toggle_last_stand()
+		"abilities":
+			if arg is bool and arg != abilities:
+				toggle_abilities()
+		"ai_fill":
+			set_ai_fill(str(arg))
+		"move":
+			if arg is Array and (arg as Array).size() == 2 and _is_int(arg[0]) and _is_int(arg[1]):
+				move_to_team(int(arg[0]), int(arg[1]))
+		"start":
+			start_match()
+		"rematch_map":                                 # REMATCH ON A RANDOM MAP: the owner's pick, then their vote
+			if arg is Array and (arg as Array).size() == 2 and active and finished:
+				var m := str(arg[1])
+				if m in MODES and present_ids().size() <= SLOTS[m] and str(arg[0]) in maps_for(m):
+					map_path = str(arg[0])
+					mode = m
+				accept_rematch(id)
+
+
+func propose_rematch(path: String, m: String) -> void:
+	## A server room's owner: REMATCH ON A RANDOM MAP (the host applies the pick and counts the vote).
+	if not hosting and can_control() and active and finished:
+		_send_to_host({"op": "lobby", "fn": "rematch_map", "arg": [path, m]})
+
+
+func _pick_owner() -> void:
+	## A server room: the owner left (or dropped) - the longest-standing player still here runs the lobby.
+	if not dedicated or (roster.has(room_owner) and not is_away(room_owner)):
+		return
+	var ids := present_ids()
+	ids.sort()
+	room_owner = int(ids[0]) if not ids.is_empty() else -1
+	if room_owner > 0:
+		_notice("Seat %s now runs the room" % seat_of(room_owner))
+
+
 func set_mode(m: String) -> void:
+	if _ask_owner("mode", m):
+		return
 	if not hosting or active or not m in MODES or roster.size() > SLOTS[m]:
 		return
 	var pool := maps_for(m)
@@ -489,6 +616,8 @@ func set_mode(m: String) -> void:
 
 
 func set_map(path: String) -> void:
+	if _ask_owner("map", path):
+		return
 	if hosting and not active and map_offers(path, mode):
 		var before := _teams_now()                     # another map may seat the teams differently
 		map_path = path
@@ -497,12 +626,16 @@ func set_map(path: String) -> void:
 
 
 func toggle_last_stand() -> void:
+	if _ask_owner("last_stand", not last_stand):
+		return
 	if hosting and not active:
 		last_stand = not last_stand
 		publish_lobby()
 
 
 func toggle_abilities() -> void:
+	if _ask_owner("abilities", not abilities):
+		return
 	if hosting and not active:
 		abilities = not abilities
 		publish_lobby()
@@ -603,7 +736,11 @@ func switch_team(team: int) -> void:
 func move_to_team(id: int, team: int) -> bool:
 	## Host: a player (their own JOIN TEAM, or the host moving them) takes the first free seat of `team`;
 	## a full team takes nobody. Empty seats stay for the AI (EMPTY SEATS) or later players.
-	if not hosting or active or not mode in TEAM_MODES or not roster.has(id) or not team in team_ids() or team_of(id) == team:
+	if not hosting:
+		if id != assigned_id:                          # a server room's owner moving someone
+			_ask_owner("move", [id, team])
+		return false
+	if active or not mode in TEAM_MODES or not roster.has(id) or not team in team_ids() or team_of(id) == team:
 		return false
 	var slot := free_slot_in(team)
 	if slot < 0:
@@ -664,7 +801,7 @@ func _reseat(teams := {}) -> void:
 
 func publish_lobby() -> void:
 	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path, "siege": siege,
-			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities})
+			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities, "owner": room_owner})
 	lobby_changed.emit()
 
 
@@ -691,6 +828,9 @@ func _register(remote: String, id: int, p: Dictionary) -> void:
 	if colour_allowed(id, want):
 		roster[id]["colour"] = want
 	_fix_colours(-1, id)                               # a newcomer's hue gives way to the room's
+	_ever_joined = true
+	if dedicated and not roster.has(room_owner):            # a server room: the first player in runs it
+		room_owner = id
 	_tokens[id] = _new_token()
 	_send(remote, "identity", {"id": id, "token": _tokens[id]})
 	_send(remote, "chat_history", chat_history)
@@ -701,6 +841,8 @@ func _reclaim(remote: String, id: int) -> void:
 	## A dropped player is back: same id, same seat; mid-match they get the round and catch up.
 	links[remote] = id
 	roster[id].erase("away")
+	if dedicated and (not roster.has(room_owner) or is_away(room_owner)):
+		room_owner = id
 	_send(remote, "identity", {"id": id, "token": _tokens[id]})
 	_send(remote, "chat_history", chat_history)
 	if active:
@@ -730,6 +872,10 @@ func version() -> String:
 
 # ------------------------------------------------------------------ rounds
 func start_match() -> void:
+	if not hosting:
+		if can_start():
+			_ask_owner("start")
+		return
 	if can_start():
 		launch_round()
 
@@ -740,6 +886,7 @@ func launch_round() -> void:
 			roster.erase(id)
 			_tokens.erase(id)
 	_reseat()
+	_pick_owner()
 	var players := {}
 	var loadouts := {}                                 # players' picks; AI seats get their faction default in Sim.setup
 	var cosmetics := {}                                 # players' COSMETICS picks (0.19.0); AI seats: default
@@ -854,6 +1001,7 @@ func peer_left(id: int) -> void:
 		rematch_votes.erase(id)
 		ready_peers.erase(id)
 		_notice("Seat %s lost connection - they can RECONNECT%s" % [seat_of(id), " (the AI plays it meanwhile)" if ai_fill != "" else ""])
+		_pick_owner()
 		seats_changed.emit()
 		_check_barrier()
 		publish_lobby()
@@ -864,6 +1012,7 @@ func peer_left(id: int) -> void:
 	rematch_votes.erase(id)
 	ready_peers.erase(id)
 	_reseat()
+	_pick_owner()
 	publish_lobby()
 
 
@@ -874,6 +1023,7 @@ func return_to_room(message: String) -> void:
 				roster.erase(id)
 				_tokens.erase(id)
 		_reseat()
+		_pick_owner()
 		publish_lobby()                                # the guests get the repacked seats
 	active = false
 	started = false
@@ -1246,6 +1396,11 @@ func _process(dt: float) -> void:
 		return
 	_poll(dt)
 	_poll_chat_ui(dt)
+	if dedicated and bridge != null and connected:     # an empty server room closes itself
+		_empty_t = _empty_t + dt if present_ids().is_empty() else 0.0
+		if _empty_t > (DEDICATED_IDLE if _ever_joined else 45.0):
+			fail("room empty")
+			return
 	if not active or not started or sim == null:
 		return
 	if hosting:
@@ -1285,12 +1440,13 @@ func _poll(dt: float) -> void:
 			"connection":
 				if hosting:
 					var held := roster.keys().any(func(id): return is_away(int(id)))
-					if links.size() >= slots() - 1 or (active and not held):   # mid-match: only to reclaim a held seat
+					if links.size() >= slots() - (0 if dedicated else 1) or (active and not held):   # mid-match: only to reclaim a held seat (a server host takes no seat)
 						bridge.closePeer(event["peer"])
 						continue
 					links[event["peer"]] = next_peer
 					next_peer += 1
 				else:
+					_creating = false
 					remote_host = str(event["peer"])
 					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}
 					if not rejoin.is_empty() and str(rejoin["code"]) == room_code:
@@ -1310,6 +1466,11 @@ func _poll(dt: float) -> void:
 				else:
 					fail("The host left or the connection was lost. The room is closed." if connected else "The room did not let us in: it is full or its match already started.")
 			"error":
+				if _creating and str(event.get("code", "")) in FALLBACK_CODES:
+					_fallback_host.call_deferred(str(event.get("code", "")))
+					bridge.close()
+					bridge = null
+					return
 				fail(str(event.get("message", "Connection failed.")))
 			"signalling-lost":
 				if not active:
@@ -1360,6 +1521,9 @@ func _host_receive(remote: String, raw: String) -> void:
 			if not active:
 				roster[id]["loadout"] = _clean_loadout({"active": p.get("active", ""), "map": p.get("map", "")})
 				publish_lobby()
+		"lobby":                                       # a server room's owner runs the lobby (stage 2)
+			if not active or str(p.get("fn", "")) == "rematch_map":
+				_owner_op(id, p)
 		"cosmetic":                                    # 0.19.0: the local ARMIES > COSMETICS pick (HUD agent)
 			if not active:
 				roster[id]["cosmetic"] = _clean_cosmetic(p.get("cosmetic", {}))
@@ -1403,7 +1567,8 @@ func _guest_receive(raw: String) -> void:
 			ai_fill = str(data.get("ai_fill", ""))
 			abilities = bool(data.get("abilities", true))
 			connected = true
-			status = "ROOM %s - waiting for the host to deploy" % room_code
+			room_owner = int(data.get("owner", 1))
+			status = ("ROOM %s - you run this room: DEPLOY when ready" if can_control() else "ROOM %s - waiting for the host to deploy") % room_code
 			lobby_changed.emit()
 		"launch":
 			if data is Dictionary:
@@ -1461,6 +1626,17 @@ func _mark_ghosts() -> void:
 
 # ------------------------------------------------------------------ rejoin details
 func _ready() -> void:
+	for arg in OS.get_cmdline_user_args():             # the room server's match host (stage 2)
+		if arg == "--dedicated":
+			dedicated = true
+		elif arg.begins_with("--room="):
+			_server_room = arg.substr(7)
+		elif arg.begins_with("--secret="):
+			_server_secret = arg.substr(9)
+	if dedicated:
+		Engine.max_fps = DEDICATED_FPS
+		_start_dedicated.call_deferred()
+		return
 	if OS.has_feature("web"):                          # a reloaded tab can still RECONNECT
 		var raw = JavaScriptBridge.eval("(()=>{try{return sessionStorage.getItem('ooze20-rejoin')||''}catch(e){return ''}})()", true)
 		var text := str(raw) if raw != null else ""   # blocked site storage: nothing to rejoin

@@ -127,9 +127,11 @@ func _ready() -> void:
 	var map_explicit := false
 	if FullscreenGate.needed():                        # phones play fullscreen (Alpha 14 playtest)
 		add_child(FullscreenGate.new())
-	Engine.max_fps = 60                                # never spin faster than the screen (menu included)
+	Engine.max_fps = Net.DEDICATED_FPS if Net.dedicated else 60   # never spin faster than the screen (menu included)
 	if Net.online():                                   # a room launched (or relaunched) a round
 		_start_online()
+		return
+	if Net.dedicated:                                  # the room server's match host between rounds: no menu, no screen
 		return
 	if relaunch.has("faction"):
 		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
@@ -409,6 +411,10 @@ func _start_online() -> void:
 		SEAT_FACTIONS[seat] = info["players"][seat]
 	LOADOUTS = (info.get("loadouts", {}) as Dictionary).duplicate()   # every seat's, from the host
 	HUMAN = Net.local_seat()
+	if Net.dedicated:                                  # the server's match host has no seat: view as the first one
+		var seats: Array = (info["players"] as Dictionary).keys()
+		seats.sort()
+		HUMAN = str(seats[0])
 	_start_map(str(info["map"]))
 	Net.world_ready(sim, self)
 	Net.order_feedback.connect(_on_order_feedback)
@@ -481,6 +487,10 @@ func rematch_random() -> void:
 			var pick := _random_rematch_map()
 			Net.map_path = str(pick["map"])
 			Net.mode = str(pick["mode"])
+		elif Net.can_control():                        # a server room's owner: the host applies the pick (and the vote)
+			var pick := _random_rematch_map()
+			Net.propose_rematch(str(pick["map"]), str(pick["mode"]))
+			return
 		Net.request_rematch()
 		return
 	var pick := _random_rematch_map()

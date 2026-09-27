@@ -322,7 +322,7 @@ func _run() -> void:
 	fp2.free()
 
 	# ---------------------------------------------------------------- STRUCTURES 2.1 + TEAMS (0.18.10): orders and snapshots
-	check(host.VERSION_TAG == "ooze20-net-3", "the net protocol is bumped for structures 2.1 (ooze20-net-3)")
+	check(host.VERSION_TAG == "ooze20-net-4", "the net protocol is bumped for server-hosted rooms (ooze20-net-4; 3: structures 2.1)")
 	host._order_limits = {}
 	host._packet_limits = {}
 	host.bridge.sent = []

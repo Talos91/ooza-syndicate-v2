@@ -25,16 +25,23 @@ func _init(relay_url: String) -> void:
 
 
 func start(is_host: bool, code: String) -> void:
-	close()
-	host = is_host
-	if not host and not _valid_code(code):
+	if not is_host and not _valid_code(code):
+		close()
 		events.append({"type": "error", "message": "Enter the four-character room code."})
 		return
+	start_with(is_host, {"op": "host"} if is_host else {"op": "join", "code": code})
+
+
+func start_with(is_host: bool, first: Dictionary) -> void:
+	## Open the socket and send `first` once it is up: {"op": "create", "version"} asks for a server-hosted
+	## room (we join it as a guest), {"op": "host", "room", "secret"} is the server's own match host.
+	close()
+	host = is_host
 	ws = WebSocketPeer.new()
 	ws.inbound_buffer_size = 9 * 1024 * 1024       # a keyframe snapshot can be large (Net.MAX_PACKET 8 MB)
 	ws.outbound_buffer_size = 2 * 1024 * 1024
 	ws.max_queued_packets = 4096
-	hello = {"op": "host"} if host else {"op": "join", "code": code}
+	hello = first
 	opened = false
 	closing = false
 	_since = Time.get_ticks_msec()
