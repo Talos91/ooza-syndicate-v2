@@ -253,24 +253,6 @@ static func faction_stats(faction: String) -> Dictionary:
 static func result_from_sim(sim: Sim, seat: String, info := {}) -> Dictionary:
 	## The result record_match wants, for `seat`, read from a finished Sim. info: "online" (bool: a server-hosted room),
 	## "ai_level" (the strongest AI opponent's Rules.AI_LEVELS name, "" when no AI), "left_early", "tutorial".
-	var st := {"captures": 0, "relay_fires": 0, "monster_kicked": 0, "skills": 0, "home_lost": false}
-	var home: int = int(sim.homes.get(seat, -1))
-	for e in sim.events:
-		match str(e.get("type", "")):
-			"capture":
-				if e.get("seat") == seat:
-					st["captures"] += 1
-				if e.get("from") == seat and int(e.get("node", -2)) == home:
-					st["home_lost"] = true
-			"relay_fired":
-				if e.get("seat") == seat:
-					st["relay_fires"] += 1
-			"monster_kick":
-				if e.get("seat") == seat and e.get("seat_hit") != seat:
-					st["monster_kicked"] += Rules.shown(float(e.get("units", 0.0)))
-			"skill":
-				if e.get("seat") == seat:
-					st["skills"] += 1
 	return {
 		"faction": str(sim.factions.get(seat, "null")),
 		"won": sim.winner != "" and (sim.winner == seat or sim.allied(seat, sim.winner)),
@@ -279,8 +261,86 @@ static func result_from_sim(sim: Sim, seat: String, info := {}) -> Dictionary:
 		"ai_level": str(info.get("ai_level", "")),
 		"left_early": bool(info.get("left_early", false)),
 		"tutorial": bool(info.get("tutorial", false)),
-		"stats": st,
+		"stats": seat_stats(sim, seat),
 	}
+
+
+static func seat_stats(sim: Sim, seat: String) -> Dictionary:
+	## One seat's counters from sim.events - the same function on the device (local rewards) and on the match host
+	## (the PROGRESSION-DESIGN §7a report), so both count alike. Unit counts at Alpha 11 scale (Rules.shown).
+	## void_drops: enemy units that fell off decks this seat's relays moved (needs the relay fall events' "by" field).
+	var st := {"sends": 0, "captures": 0, "nodes_lost": 0, "home_lost": false, "relay_fires": 0, "void_drops": 0,
+			"monster_launches": 0, "monster_kicks": 0, "monster_kicked": 0, "skills": 0, "out_at_s": -1.0,
+			"units_lost_combat": Rules.shown(float(sim.combat_losses.get(seat, 0.0))),
+			"units_lost_falls": Rules.shown(float(sim.fall_losses.get(seat, 0.0)))}
+	var home: int = int(sim.homes.get(seat, -1))
+	var dropped := 0.0
+	var kicked := 0.0
+	for e in sim.events:
+		match str(e.get("type", "")):
+			"send":
+				if e.get("seat") == seat:
+					st["sends"] += 1
+			"capture", "collapse":
+				if e.get("seat") == seat and e["type"] == "capture":
+					st["captures"] += 1
+				if e.get("from") == seat and e.get("seat") != seat:
+					st["nodes_lost"] += 1
+					if int(e.get("node", -2)) == home:
+						st["home_lost"] = true
+			"relay_fired":
+				if e.get("seat") == seat:
+					st["relay_fires"] += 1
+			"fall":
+				if e.get("by") == seat and e.get("seat") != seat:
+					dropped += float(e.get("units", 0.0))
+			"monster_launch":
+				if e.get("seat") == seat:
+					st["monster_launches"] += 1
+			"monster_kick":
+				if e.get("seat") == seat and e.get("seat_hit") != seat:
+					st["monster_kicks"] += 1
+					kicked += float(e.get("units", 0.0))
+			"skill":
+				if e.get("seat") == seat:
+					st["skills"] += 1
+			"eliminated":
+				if e.get("seat") == seat and st["out_at_s"] < 0.0:
+					st["out_at_s"] = snappedf(float(e.get("t", 0.0)), 0.1)
+	st["void_drops"] = Rules.shown(dropped)
+	st["monster_kicked"] = Rules.shown(kicked)
+	return st
+
+
+static func placements(sim: Sim, strength := {}) -> Dictionary:
+	## seat -> place (1 = best). Winners (the winning seat and its team-mates) first; then survivors by `strength`
+	## (seat -> final strength, the host's number; missing = 0); then seats in reverse order of going out (sim.events
+	## "eliminated"). Team-mates share their team's best place. A draw has no winners.
+	var out_t := {}
+	for e in sim.events:
+		if e.get("type") == "eliminated" and not out_t.has(e.get("seat")):
+			out_t[e["seat"]] = float(e.get("t", 0.0))
+	var seats: Array = sim.factions.keys()
+	var score := func(s: String) -> float:
+		if sim.winner != "" and (s == sim.winner or sim.allied(s, sim.winner)):
+			return 1e12
+		if not out_t.has(s):
+			return 1e9 + float(strength.get(s, 0.0))
+		return float(out_t[s])
+	seats.sort_custom(func(a, b): return score.call(a) > score.call(b))
+	var place := {}
+	var team_place := {}
+	var next := 1
+	for s in seats:
+		var t = sim.teams.get(s, null)
+		if t != null and team_place.has(t):
+			place[s] = team_place[t]
+			continue
+		place[s] = next
+		if t != null:
+			team_place[t] = next
+		next += 1
+	return place
 
 
 static func full_pay(result: Dictionary) -> bool:
