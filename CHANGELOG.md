@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.7 "Alpha 20" - 2026-09-27 (Google sign-in buttons turn on)
+
+- Daniele set up the Google provider in Supabase, but on the live 0.20.5 / 0.20.6 web build ADD GOOGLE / SIGN IN WITH
+  GOOGLE stayed greyed: the game's read of Supabase's auth settings failed because Godot's HTTPRequest decompressed a
+  reply the browser had already decompressed (stream_peer_gzip error; the same trap as the 0.19.2 skins download).
+  `Account._call` now turns Godot's gzip off on the web, so every account call (settings, sign-in, cloud save,
+  leaderboard, match history) takes the browser's copy. Checked on a local web export in the in-app browser: both
+  Google buttons light up and ADD GOOGLE reaches Google's sign-in page (the sign-in itself not completed here). The
+  match host's own requests (net.gd) are native, not web, and unchanged. Email links stay off until confirmed.
+
 ## 0.20.6 "Alpha 20" - 2026-09-27 (HUD declutter; Dr. Vesk's voice)
 
 - **HUD declutter** (Daniele: "remove the number on top of units line ... too many notifications and many notifications

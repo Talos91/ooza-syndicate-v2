@@ -795,3 +795,8 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      silent handover, refusals and online events; captures/losses now play as a short rising "+ CAPTURED" / "LOST" label
      at the node instead (tier-down's "T2 -> T1" already worked this way).
 
+## 2026-09-27 - Daniele, Google sign-in set up (0.20.7)
+
+- Daniele (via the Architect): the Google OAuth consent screen, a Web client and the Supabase Google provider are done -
+  *Done:* 0.20.7 fixes the web build's gzip bug that kept the Google buttons greyed; a full Google sign-in waits for
+  Daniele (his account must be a Test user while the Google app is in Testing).
