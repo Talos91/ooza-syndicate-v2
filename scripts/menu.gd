@@ -1125,8 +1125,8 @@ func show_online() -> void:
 	header(0)
 	label_at("PLAY WITH FRIENDS", P(40, 107), 43)
 	frame(P(35, 174), P(1600, 640))
-	label_at("PRIVATE ROOMS  ·  THROUGH THE OOZE ROOM SERVER", P(60, 196), 24, color())
-	var about := label_at("Create a room and share its four-character code; everyone opens this same link. Keep the host's tab open and in front - the host's game runs the match. Free-for-all for 2 to 5 players, or 2 v 2. Rematch reuses the room; chat stays between rounds.",
+	label_at("PRIVATE ROOMS  ·  HOSTED ON THE OOZE ROOM SERVER", P(60, 196), 24, color())
+	var about := label_at("Create a room and share its four-character code; everyone opens this same link. The room server runs the match, so a phone that locks or switches apps only drops its own seat - RECONNECT takes it back. The room's creator picks the map and settings. Free-for-all for 2 to 5 players, or teams. Rematch reuses the room; chat stays between rounds.",
 			P(60, 245), 20, Color("bbd1db"))
 	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	about.custom_minimum_size = Vector2(1540 * K, 0)
@@ -1147,7 +1147,7 @@ func show_online() -> void:
 			Net.reconnect()
 			show_lobby(), true)
 		rc.disabled = not web
-	var msg := Net.status if Net.status != "" else ("Rooms connect through the Ooze room server, so any network that reaches the internet can join. The host still runs the match: keep the host's game open and in front." if web
+	var msg := Net.status if Net.status != "" else ("Rooms run on the Ooze room server, so any network that reaches the internet can join. If the server is busy, the room's creator hosts it in their browser instead (keep that tab in front)." if web
 			else "Online rooms run in the browser build: open https://talos91.github.io/ooza-syndicate-v2/")
 	var st := label_at(msg, P(60, 650), 20, Color("ffd15c") if Net.status != "" else Color("adc7d2"))
 	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
