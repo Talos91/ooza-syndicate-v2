@@ -36,6 +36,8 @@ const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
+var _last_show := Callable()                     # the page on screen (rebuilt when a resize changes the phone sizing)
+var _built_pt := 0.0                             # _pt_factor() the page was built with (0 while building)
 var _backdrop: TextureRect
 var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
 var _map_scroll := 0
@@ -170,9 +172,11 @@ func clear_page(art: String) -> void:
 	if is_instance_valid(_tut_page):
 		_tut_page.queue_free()
 		_tut_page = null
+	_built_pt = 0.0                                   # no rebuild check while this page is being built
 	content = Control.new()
 	add_child(content)
 	_fit()
+	_built_pt = _pt_factor()
 	_is_main = art == "ui-main"
 	_page = ""
 	# one background only: the full-screen backdrop (Alpha 14 playtest: "background on top of a
@@ -407,6 +411,7 @@ func map_preview(pos: Vector2, dims: Vector2) -> void:
 
 # ------------------------------------------------------------------ pages
 func show_main() -> void:
+	_last_show = show_main                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page("ui-main")
 	var mask := ColorRect.new()                      # the dark left column, full screen height
 	mask.color = Color("030c12")
@@ -449,6 +454,7 @@ func show_main() -> void:
 
 
 func show_options() -> void:
+	_last_show = show_options                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page("city")
 	header(0)
 	label_at("OPTIONS", P(40, 107), 43)
@@ -514,6 +520,7 @@ func show_options() -> void:
 
 
 func show_factions() -> void:
+	_last_show = show_factions                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page(faction)
 	header(1)
 	var col := color()
@@ -597,6 +604,7 @@ func faction_tab(f: String, pos: Vector2, dims: Vector2) -> void:
 
 # ------------------------------------------------------------------ TUTORIAL (TUTORIAL-DESIGN.md §7)
 func show_tutorial() -> void:
+	_last_show = show_tutorial                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## The TRAINING page: nine lesson rows (any order, a tick when done), CONTINUE = the first lesson not done,
 	## BACK. A lesson starts with the faction and colour picked here last (NEW GAME's picks).
 	clear_page("city")
@@ -676,6 +684,7 @@ func _profile_card(pos: Vector2) -> void:
 
 
 func show_profile() -> void:
+	_last_show = show_profile                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## PROFILE: level and XP, both balances and where they come from, per faction plays / wins and the faction
 	## vat's progress (25 wins online or vs Veteran / Expert AI), and whether it is saved on this device.
 	clear_page("city")
@@ -727,6 +736,7 @@ func show_profile() -> void:
 
 
 func show_challenges(just_claimed := "") -> void:
+	_last_show = func(): show_challenges()                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## CHALLENGES: three daily and three weekly (the same for everyone, reset 00:00 UTC / Monday), progress from any
 	## finished match (tutorial lessons excluded), CLAIM pays (the card counts it up), one daily REROLL a day.
 	clear_page("city")
@@ -826,6 +836,7 @@ func _cosmetic_path(family: String, id: String) -> String:
 
 # ------------------------------------------------------------------ ARMIES (army presets, SKILLS 2.0)
 func show_armies(f: String = "", back: Callable = Callable()) -> void:
+	_last_show = func(): show_armies(f, back)                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select what
 	## skill each of your factions will use, follow the skill file from faction ultimates and ability pool)".
 	## Left: the five factions (their preset's three icons). Right: the faction's ultimate (fixed), then the
@@ -953,6 +964,7 @@ const COSMETIC_FAMILY_LABEL := {"vat": "VAT LOOK", "machinegoon": "MACHINEGOON",
 
 
 func show_cosmetics(f: String = "") -> void:
+	_last_show = func(): show_cosmetics(f)                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## A look per structure family, per faction (GAME-BIBLE sec17; Daniele, 2026-09-27): DEFAULT / the
 	## faction set / GRADUATE / the skin lines for vats, DEFAULT / SPITTER / PEPPERBOX for the
 	## Machinegoon, and so on - saved in user://armies.cfg (ArmyPresets), applied at match start
@@ -1041,6 +1053,7 @@ func _cosmetic_row(family: String, current: String, pos: Vector2, fc: Color) -> 
 
 
 func show_maps() -> void:
+	_last_show = show_maps                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page("city")
 	header(2)
 	label_at("CHOOSE YOUR BATTLEFIELD", P(40, 107), 43)
@@ -1193,6 +1206,7 @@ func _selected_map() -> Dictionary:
 
 
 func show_setup() -> void:
+	_last_show = show_setup                  # a resize that changes the phone sizing rebuilds it (_fit)
 	clear_page("city")
 	header(3)
 	label_at("READY TO DEPLOY", P(40, 108), 51)
@@ -1348,6 +1362,7 @@ func deploy() -> void:
 
 # ------------------------------------------------------------------ online (Net, rooms through the room server)
 func show_online() -> void:
+	_last_show = show_online                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## ONLINE: pick your faction, then CREATE ROOM (you host) or JOIN ROOM (the host's code).
 	clear_page("city")
 	_page = "online"
@@ -1404,6 +1419,7 @@ func _faction_row(pos: Vector2, dims: Vector2) -> void:
 
 
 func show_lobby() -> void:
+	_last_show = show_lobby                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## The room: who is in which seat, the host's match settings, DEPLOY when every seat is filled.
 	if not Net.in_room():
 		show_online()
@@ -1717,3 +1733,11 @@ func _fit() -> void:
 	content.size = Vector2(1280, 720)
 	content.scale = Vector2(s, s)
 	content.position = (vp - Vector2(1280, 720) * s) / 2.0
+	# A page's tap heights and text sizes (rh / tap / fsz) are computed from the screen when it is built: a page
+	# built in portrait, or mid-rotation / fullscreen switch, kept giant buttons after the phone turned (0.20.2,
+	# Daniele: "emergency this is what my gf see"). When the phone sizing moves by more than 10 %, rebuild it.
+	if _built_pt > 0.0 and _last_show.is_valid():
+		var f := _pt_factor()
+		if f > 0.0 and absf(f / _built_pt - 1.0) > 0.1:
+			_built_pt = 0.0
+			_last_show.call_deferred()
