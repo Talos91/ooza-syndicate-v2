@@ -316,8 +316,13 @@ static func backdrop_of(key: String) -> String:
 	## The mission's own background (CAMPAIGN-BACKGROUNDS-PROMPTS.md): a "backdrop" field, else
 	## res://assets/art/campaign/<faction>-<id>.png when that file exists; "" until the art is in (callers fall back).
 	var m := mission(key)
-	var p := str(m.get("backdrop", "res://assets/art/campaign/%s-%s.png" % [faction_of(key), str(m.get("id", ""))]))
-	return p if ResourceLoader.exists(p) else ""
+	if m.has("backdrop"):
+		return str(m["backdrop"]) if ResourceLoader.exists(str(m["backdrop"])) else ""
+	for ext in ["jpg", "png"]:                       # UI: tools/ui_art.py writes .jpg (a smaller web download)
+		var p := "res://assets/art/campaign/%s-%s.%s" % [faction_of(key), str(m.get("id", "")), ext]
+		if ResourceLoader.exists(p):
+			return p
+	return ""
 
 
 static func progress_total() -> Vector2i:
