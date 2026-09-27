@@ -51,6 +51,7 @@ const RIVALS := {
 const CAMPAIGNS := {
 	"vex": {
 		"title": "VEX BIOENGINEERS",
+		"episode": "GOING UNDER",                  # the episode card's title (placeholder until Daniele picks)
 		"tagline": "The city is sinking. The vats still turn a profit.",
 		"rival": "ember",
 		"districts": [
@@ -200,10 +201,10 @@ const CAMPAIGNS := {
 			},
 		],
 	},
-	"null": {"title": "NULL DATA CARTEL", "tagline": "Coming later.", "rival": "solar", "districts": []},
-	"bloom": {"title": "VIRIDIAN BLOOM", "tagline": "Coming later.", "rival": "ember", "districts": []},
-	"ember": {"title": "EMBER MAW", "tagline": "Coming later.", "rival": "vex", "districts": []},
-	"solar": {"title": "SOLAR SHELLS", "tagline": "Coming later.", "rival": "null", "districts": []},
+	"null": {"title": "NULL DATA CARTEL", "episode": "OFF THE BOOKS", "tagline": "Coming later.", "rival": "solar", "districts": []},
+	"bloom": {"title": "VIRIDIAN BLOOM", "episode": "GROWTH MINDSET", "tagline": "Coming later.", "rival": "ember", "districts": []},
+	"ember": {"title": "EMBER MAW", "episode": "SCORCHED EARNINGS", "tagline": "Coming later.", "rival": "vex", "districts": []},
+	"solar": {"title": "SOLAR SHELLS", "episode": "TERMS & CONDITIONS", "tagline": "Coming later.", "rival": "null", "districts": []},
 }
 
 static var path := "user://campaign.cfg"             # tests point this elsewhere
@@ -233,6 +234,34 @@ static func source_of(key: String) -> String:
 
 static func has_content(faction: String) -> bool:
 	return CAMPAIGNS.has(faction) and not (CAMPAIGNS[faction]["districts"] as Array).is_empty()
+
+
+static func episodes() -> Array:
+	## The CAMPAIGN MENU's cards (Alpha 21 "choose an episode", Architect's shared EpisodeCard), one per faction in
+	## FACTION_ORDER: {faction, title (the episode), faction_title, tagline, art, state, stars, stars_max, next}.
+	## state: "open" (content, owned), "locked" (content, a paid campaign not owned - UNLOCK), "coming" (no content yet).
+	var out := []
+	for f in FACTION_ORDER:
+		var c: Dictionary = CAMPAIGNS.get(f, {})
+		var state := "coming"
+		if has_content(f):
+			state = "open" if owned(f) else "locked"
+		out.append({"faction": f, "title": str(c.get("episode", c.get("title", f.to_upper()))),
+			"faction_title": str(c.get("title", "")), "tagline": str(c.get("tagline", "")),
+			"art": "res://assets/art/%s.png" % f, "state": state,
+			"stars": stars_total(f), "stars_max": stars_max(f), "next": next_open(f) if state == "open" else ""})
+	return out
+
+
+static func progress_total() -> Vector2i:
+	## "CAMPAIGN PROGRESS ★ x / y" under the cards: every episode with content, owned or not.
+	var got := 0
+	var most := 0
+	for f in FACTION_ORDER:
+		if has_content(f):
+			got += stars_total(f)
+			most += stars_max(f)
+	return Vector2i(got, most)
 
 
 static func districts(faction: String) -> Array:

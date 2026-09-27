@@ -85,6 +85,19 @@ func _data() -> void:
 			"District 1 playable; a mission needing the event deck is not")
 	check(not Campaign.has_content("null") and Campaign.has_content("vex"), "only VEX has content so far")
 	check(Campaign.fill("Drop {n} units", Campaign.mission("vex:02")) == "Drop 60 units", "brief placeholders fill")
+	# the CAMPAIGN MENU's episode cards (Alpha 21)
+	Campaign.reset_progress()
+	var eps := Campaign.episodes()
+	check(eps.size() == 5 and str(eps[0]["faction"]) == "vex", "five episode cards, VEX first")
+	check(str(eps[0]["state"]) == "open" and str(eps[0]["title"]) == "GOING UNDER" and int(eps[0]["stars_max"]) == 39
+			and str(eps[0]["next"]) == "vex:01", "VEX: open, its episode title, 0 / 39, CONTINUE = 01")
+	check(eps.slice(1).all(func(e): return str(e["state"]) == "coming" and int(e["stars_max"]) == 0 and str(e["next"]) == ""),
+			"the other four: COMING LATER, no stars, nothing to continue")
+	check(eps.all(func(e): return ResourceLoader.exists(str(e["art"]))), "every card's faction art exists")
+	Campaign.record("vex:01", {"won": true, "time": 90.0, "stars": 3, "objective": false})
+	check(Campaign.progress_total() == Vector2i(3, 39) and int(Campaign.episodes()[0]["stars"]) == 3,
+			"progress totals follow the stars (3 / 39)")
+	Campaign.reset_progress()
 
 
 func _opening() -> void:
