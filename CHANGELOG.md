@@ -1,5 +1,25 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.19.3 "Alpha 19" - 2026-09-27 (the tutorial reworked after Daniele's 0.19.1 playtest)
+
+Daniele: "tutorial feels veeeeery unpolished and messy, also we need to standardize the language used and start it by
+naming what's what, also no trace of the handler just flat text". Script: `01 Rules/TUTORIAL-SCRIPT.md` draft 2.
+
+- **One vocabulary** in every line (node, your home, units, line, deck, badge, SEND panel, inspector, relay, fire, drop,
+  the structure names); a test rejects the banned words (platform, crew, bridge, batch, boss, cannon) and long lines.
+- **L0 THE CITY**: a new opening tour on T-06 that names every element with the whole HUD shown; the first launch opens it
+  (SKIP TUTORIAL kept); TRAINING shows n/10; the Graduate vat still needs lessons 1-9.
+- **The handler on screen: Dr. Vesk**, the game's own VEX creature beside the coach card (idle bob, talks while the line
+  types in, hops on a pass, droops on TRY AGAIN).
+- **VEX for the whole tutorial** (rival EMBER), L9 included (Surge + Demolish); your menu faction comes back afterwards.
+- **L7**: the clock reads 3:00 / 6:00 when the Last Stand / Very Last Stand start; Very Last Stand gap 15 s; the 7:00 end
+  can't cut a lesson short. **L9**: neutrals 10 / 15 / 25 / 40, no regrowth above (a per-node Sim `regen_cap`).
+- 0.19.2 wired in: the monster icon launch in L6, the new top bar in the reveal sets, YOU'RE OUT off in lessons (an
+  elimination is TRY AGAIN), skills staged ready in lessons, Machinegoon spelling, the Graduate vat v2 on the final screen.
+- Review of every step at phone size: L8 pointed at the wrong slot; the card sat on its target; inspectors lingered;
+  steps passed before their line showed; the L1 label step; stray relay toasts; lesson 0 read as "no lesson"; L7's clock.
+- Tests: test_tutorial extended (vocabulary, L0, L7 on 8 seeds, reveal keys); `tests/tutorial_walk.tscn` shoots every step.
+
 ## 0.19.2 "Alpha 19" - 2026-09-27 (Daniele's 0.19.1 playtest)
 
 Daniele's first playtest of the interactive tutorial and 0.19.1's HUD (quotes in PLAYTEST-NOTES,

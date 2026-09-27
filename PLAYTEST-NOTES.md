@@ -685,3 +685,15 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      text now says node / deck / Laser tower / Machinegoon consistently ("a node drops every N s",
      "RING N DROPPING · next node in N s", "off the deck", "Out of reach - up to N decks", skill
      texts).
+
+## 2026-09-27 - Daniele, 0.19.1 tutorial playtest (0.19.3)
+
+186. **"tutorial feels veeeeery unpolished and messy, also we need to standardize the language used and start it by naming
+     what's what, also no trace of the handler just flat text".** *Done (0.19.3):* one vocabulary, L0 THE CITY, Dr. Vesk on
+     screen, every step reviewed at phone size.
+187. **The Last Stand lesson says 3:00 / 6:00 but the clock doesn't jump.** *Done (0.19.3):* the clock is set when each starts.
+188. **One faction for the whole tutorial ("I suggest using vex or bloom") - VEX.** *Done (0.19.3):* rival EMBER, L9 too.
+189. **The last map's neutrals were all at max (endless) and it switched faction.** *Done (0.19.3):* 10 / 15 / 25 / 40, capped; VEX.
+190. **Handler "Dr. Vesk"; L7 gap 15 s; L9 neutrals as proposed; the Graduate vat remodelled if not pleasing.** *Done (0.19.3):*
+     v2 by the Skin Designer (ivory, brass, crown, laurel crest).
+

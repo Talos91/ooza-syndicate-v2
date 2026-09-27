@@ -1,6 +1,6 @@
 # Next session - start here
 
-State as of publish today: **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
+State as of publish today: **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
 interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish
 retuned, per-seat rival factions, a tappable monster-icon launch flow, a smaller Machinegoon with a
 raised muzzle, skins fixed on the web, ARMIES 3D previews and TERRITORY moved in from OPTIONS, a
@@ -12,6 +12,15 @@ size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed ever
 `PLAYTEST-NOTES.md` notes 169-185, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
 (the session board), the design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and
 `05 Handoff/AGENT-BRIEF.md`.
+
+## 0.19.3 (2026-09-27): the tutorial reworked (Daniele's 0.19.1 playtest)
+
+- TUTORIAL-SCRIPT draft 2 (one vocabulary), L0 THE CITY (T-06; `--tutorial=0`), Dr. Vesk (`TutorialDirector.HANDLER_NAME`,
+  the VEX creature in CoachOverlay's SubViewport), VEX vs EMBER in every lesson, L7 clock jumps, L9 capped neutrals
+  (`Sim` per-node `regen_cap`), `sim.match_hard_end` INF in lessons 0-8, `main.show_out_panel` false in lessons 0-8.
+- `tests/tutorial_walk.tscn` (windowed, `-- --mobile out=<dir> [lessons=..]`) plays every lesson and shoots every step.
+- Next on the tutorial: the Progression session adds the SCRAP hooks (140 per lesson 1-9, first completion) in its
+  `progression` branch after 0.20.0 - it sends the diff for review.
 
 ## 0.19.2 (2026-09-27): Daniele's 0.19.1 playtest
 
