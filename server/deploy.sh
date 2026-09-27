@@ -10,6 +10,11 @@ cd "$(dirname "$0")/.."
 SERVER="${OOZE_SERVER:-ooze-server}"
 WEB="build/web"
 [ -f "$WEB/index.pck" ] || { echo "no $WEB/index.pck - export Web first"; exit 1; }
+# Every extra pack a Web preset exports into build/web (skins.pck; from 0.21.1 hd.pck, skins_hd.pck, fetched on demand)
+# must be there too, or the test link would miss it (0.21.0 went out without skins.pck).
+for p in $(tr -d '\r' < export_presets.cfg | sed -n 's|^export_path="build/web/\([^"/]*\.pck\)"$|\1|p'); do
+	[ -f "$WEB/$p" ] || { echo "no $WEB/$p - export its preset with --export-pack first (BUILD-LOG sec10)"; exit 1; }
+done
 tag=$(sed -n 's/^const VERSION_TAG := "\([^"]*\)".*/\1/p' scripts/net.gd)
 ver=$(sed -n 's/^const VERSION := "\([^"]*\)".*/\1/p' scripts/rules.gd)
 [ -n "$tag" ] && [ -n "$ver" ] || { echo "could not read the version"; exit 1; }
@@ -47,5 +52,6 @@ if [ "$RELAY" = "--relay" ]; then
 	systemctl daemon-reload && systemctl restart ooze-relay
 fi
 echo "server build: $(cat /opt/ooze/web/version.txt)   relay: $(systemctl is-active ooze-relay)"
+for f in /opt/ooze/web/*.pck; do echo "  $(basename "$f") $(stat -c %s "$f")"; done
 EOF
 rm -rf "$tmp"

@@ -40,6 +40,9 @@ server/deploy.sh --relay    # also relay.py + the service, then restart (closes 
 Until the server has the published build, players of that build still play: their rooms fall back to
 browser hosting. A running match keeps its old pack; new rooms use the new one.
 
+deploy.sh stops if a pack that a Web preset exports into `build/web` is missing (`skins.pck`; from 0.21.1 also
+`hd.pck`, `skins_hd.pck`, fetched on demand), and prints the server's pack sizes to check against gh-pages.
+
 ## Test
 
 ```bash
