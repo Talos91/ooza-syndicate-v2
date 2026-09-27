@@ -1076,6 +1076,7 @@ func _tick_lesson(_dt: float) -> void:
 		_jump_clock(Rules.LAST_STAND_TIME)            # the clock reads {ls} as the line says
 		_ls_strength = sim.seat_strength(HUMAN)
 		_ls_falls = float(sim.fall_losses.get(HUMAN, 0.0))
+		sim.ls_drop_gap_override = Rules.LAST_STAND_DROP_GAP   # L7 keeps the brisk 5 s drops (0.20.12: matches use the adaptive gap)
 		sim.start_last_stand_now()
 		_b_evacuate()
 		_bump()

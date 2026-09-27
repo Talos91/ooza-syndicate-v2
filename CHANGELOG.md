@@ -1,5 +1,22 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.12 "Alpha 20" - 2026-09-27 (fairer Last Stand pacing; install guide; rematch fixed; connection readout)
+
+- **Last Stand pacing** (Daniele: "instead of a platform every 5 seconds, we do every 20 i think it makes it more fair" ->
+  "Aim for 20 s, fit the time"): the ring drop gap is fixed per map at the Last Stand start, as slow as the 3:00-6:00 window
+  allows, 20 s at most, never under 8 s (`Rules.LAST_STAND_DROP_GAP_MIN / _MAX`, `Sim.last_stand_gap`, `Sim._fit_gap`).
+  Across the pool: median 20 s, shortest 11.9 s (M-09); every collapse ends by 5:58. Badge countdowns and the status line
+  follow it; the AI leaves a warned node only when its own drop is near (`Rules.AI_EVAC_MARGIN`). Lessons can pin it
+  (`sim.ls_drop_gap_override`; L7 keeps 5 s). `Rules.LAST_STAND_DROP_GAP` 5 s stays as the lesson constant.
+- **INSTALL THE GAME** on MAIN (Daniele: "a guide on how to [add to home screen] so new users can figure it"): phone
+  browsers only, hidden in the installed app and on desktop; iPhone (Safari > Share > Add to Home Screen) or Android
+  (Chrome menu > Add to Home screen, or INSTALL NOW when Chrome offers it); DON'T SHOW AGAIN.
+- **Rematch** (Daniele: "it just looks like it reloads and says 1 player ready"; server session): a random-map rematch in a
+  bigger mode now fills the empty seats with the AI instead of sending everyone back to the lobby; the result panel updates in
+  place (no replayed rewards) and names who is ready ("YOU'RE READY - waiting for ...", "... wants a rematch - tap REMATCH").
+- **CONNECTION line** in PAUSE during online rounds: fps, updates per second, freezes this match and round trip, so stutter
+  can be told apart from the phone's frame rate.
+
 ## 0.20.11 "Alpha 20" - 2026-09-27 (the phone keyboard opens for the player name)
 
 - Daniele on 0.20.10: "keyboard still doesn't appear for player name" (Android). 0.20.10's field was focused from

@@ -815,3 +815,13 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 
 - "keyboard still doesn't appear for player name" - *Done:* the NAME box is a real HTML field the tap lands on (checked
   in touch emulation, not on a real phone).
+
+## 2026-09-27 - Daniele, 0.20.10 / 0.20.11 notes (0.20.12)
+
+208. **"instead of a platform every 5 seconds, we do every 20 i think it makes it more fair"** -> "Aim for 20 s, fit the time".
+     *Done (0.20.12):* adaptive drop gap, 8-20 s, median 20 s across the pool.
+209. **"on the main screen a guide on how to do this [add to home screen] so new users can figure it"**. *Done (0.20.12):* INSTALL THE GAME.
+210. **Rematch "either wasn't working or interface is crooked as it just look like it reloads and say 1 player ready"**.
+     *Done (0.20.12):* AI fills a bigger rematch mode; the ready state names who is ready.
+211. **"some stutter here and there seems but manageable"**. *0.20.12:* a CONNECTION line in PAUSE to tell network stalls
+     from phone frame rate.

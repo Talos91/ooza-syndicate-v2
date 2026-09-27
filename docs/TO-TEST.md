@@ -5,6 +5,12 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.20.12
+- [ ] **Last Stand**: drops come ~20 s apart on most maps (a bit faster on big ones); the badge countdowns match.
+- [ ] **INSTALL THE GAME** on MAIN in a phone browser (not in the installed app): the steps fit your phone.
+- [ ] **Rematch** online: both tap REMATCH; the screen says who is ready; a new round starts (AI fills extra seats).
+- [ ] **PAUSE during an online match** shows a CONNECTION line; screenshot it when you feel stutter.
+
 ## 0.20.6 (HUD declutter)
 - [ ] **No number over moving lines**; node badges still show counts.
 - [ ] **Notifications** only top right, small, at most 2; none for your own sends or captures.
