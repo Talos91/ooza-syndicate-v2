@@ -575,6 +575,8 @@ func _fit_camera() -> void:
 	if scenario_focus != Vector3.INF:
 		cam_target = scenario_focus
 		cam_dist = scenario_zoom
+	if MapLab.on():                                    # MAP LAB: the LAB panel's camera trial (pitch / shift / zoom)
+		LabPanel.adjust_camera(self)
 	_place_camera()
 
 

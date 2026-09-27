@@ -81,6 +81,9 @@ static func before_match(m: Node) -> void:
 	var variant: Dictionary = j.get("labVariant", {}) if j is Dictionary and j.get("labVariant") is Dictionary else {}
 	big_vat = variant.get("bigVat", false) == true
 	Sim.lab_direct = big_vat                            # units leave / enter at the rim (sim._build_path3)
+	if LabPanel.cam_pitch > 0.0:                         # the LAB panel's camera trial carries over to the next map
+		m.cam_pitch = LabPanel.cam_pitch
+		m.pitch_forced = true
 
 
 static var big_vat := false                             # this lab map's vats fill the platform (LabPanel scales them)

@@ -12,6 +12,29 @@ const SOFT := Color(1.0, 0.75, 0.2, 0.9)
 
 static var speed := 1
 static var overlay := true
+# CAMERA trial (Daniele 2026-09-27: "the tall notification on top covers the platforms ... add a lab function to
+# play with camera axis"): pitch (0 = the map's own), the map shifted down the screen (fraction of the map's
+# depth; + = lower on screen, room under the top bar) and zoom (x the fit distance; > 1 = further away).
+static var cam_pitch := 0.0
+static var cam_shift := 0.0
+static var cam_zoom := 1.0
+
+
+static func adjust_camera(m: Node) -> void:
+	## Called at the end of main._fit_camera (the fit already done at the current pitch): zoom, then slide the
+	## aim point away from the camera so the board sits lower on the screen.
+	if m.sim == null:
+		return
+	m.cam_dist *= cam_zoom
+	if cam_shift != 0.0:
+		var lo := Vector3(INF, 0, INF)
+		var hi := Vector3(-INF, 0, -INF)
+		for n in m.sim.nodes:
+			lo = lo.min(n["pos"])
+			hi = hi.max(n["pos"])
+		var f := Rules.front_dir()
+		var depth: float = absf((hi - lo).dot(f)) + 2.0 * Rules.R
+		m.cam_target -= f * depth * cam_shift
 
 var main: Node
 var toggle: Button
@@ -70,6 +93,20 @@ func _ready() -> void:
 	box.add_child(_button("LAST STAND NOW", func(): main.sim.start_last_stand_now(), 22))
 	box.add_child(_button("VERY LAST STAND NOW", func(): main.sim.start_very_last_stand_now(), 22))
 	box.add_child(_button("RULE OVERLAY", _toggle_overlay, 22))
+	var cam_lbl := Label.new()
+	cam_lbl.text = "CAMERA"
+	cam_lbl.add_theme_font_size_override("font_size", 18)
+	box.add_child(cam_lbl)
+	for row in [[["PITCH -", func(): _cam("pitch", -2.0)], ["PITCH +", func(): _cam("pitch", 2.0)]],
+			[["MAP LOWER", func(): _cam("shift", 0.05)], ["MAP HIGHER", func(): _cam("shift", -0.05)]],
+			[["ZOOM IN", func(): _cam("zoom", -0.05)], ["ZOOM OUT", func(): _cam("zoom", 0.05)]],
+			[["CAMERA RESET", func(): _cam("reset", 0.0)]]]:
+		var hb := HBoxContainer.new()
+		for it in row:
+			var b := _button(it[0], it[1], 20)
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			hb.add_child(b)
+		box.add_child(hb)
 	box.add_child(_button("RESTART", _restart, 22))
 	box.add_child(_button("BACK TO LAB", _back, 22))
 	for f in entry.get("findings", []):
@@ -169,11 +206,16 @@ func _size_text() -> String:
 		plat = minf(plat, 2.0 * c.distance_to(_screen(p + Vector3(Rules.R, 0, 0))) * k)
 		for j in range(i + 1, nodes.size()):
 			near = minf(near, c.distance_to(_screen(nodes[j]["pos"])) * k)
-	var fp: Array = entry.get("footprint", [0, 0])
+	var lo := Vector3(INF, 0, INF)
+	var hi := Vector3(-INF, 0, -INF)
+	for n in nodes:
+		lo = lo.min(n["pos"])
+		hi = hi.max(n["pos"])
+	var fp: Array = [hi.x - lo.x + 2.0 * Rules.R, hi.z - lo.z + 2.0 * Rules.R]   # the footprint, as the rulebook measures it
 	var rb := "PASS" if entry.get("pass", false) else "%d hard" % int(entry.get("hard", 0))
-	return "%s %s\n%d x %d m · %d nodes · rulebook %s\nplatform %.0f pt · closest platforms %.0f pt apart\nspeed %dx · t %d:%02d" % [
+	return "%s %s\n%d x %d m · %d nodes · rulebook %s\nplatform %.0f pt · closest platforms %.0f pt apart\ncamera: pitch %.0f deg · map lower %+d %% · zoom %.2f\nspeed %dx · t %d:%02d" % [
 			main.map.get("code", ""), main.map.get("name", ""), int(fp[0]), int(fp[1]), nodes.size(), rb, plat, near,
-			speed, int(main.sim.time) / 60, int(main.sim.time) % 60]
+			main._base_pitch, int(round(cam_shift * 100.0)), cam_zoom, speed, int(main.sim.time) / 60, int(main.sim.time) % 60]
 
 
 func _draw_overlay() -> void:
@@ -192,6 +234,25 @@ func _draw_overlay() -> void:
 		for k in f.get("edges", []):
 			var e: Dictionary = main.map["edges"][int(k)]
 			canvas.draw_line(_screen(nodes[int(e["from"])]["pos"]), _screen(nodes[int(e["to"])]["pos"]), col, 5.0)
+
+
+func _cam(what: String, step: float) -> void:
+	match what:
+		"pitch":
+			cam_pitch = clampf((cam_pitch if cam_pitch > 0.0 else main._base_pitch) + step, 30.0, 88.0)
+		"shift":
+			cam_shift = clampf(cam_shift + step, -0.5, 0.5)
+		"zoom":
+			cam_zoom = clampf(cam_zoom + step, 0.6, 1.6)
+		"reset":
+			cam_pitch = 0.0
+			cam_shift = 0.0
+			cam_zoom = 1.0
+	main.pitch_forced = cam_pitch > 0.0
+	main._base_pitch = cam_pitch if cam_pitch > 0.0 else MapCamera.pitch_for(str(main.map.get("code", "")))
+	main.cam_pitch = main._base_pitch
+	main._fit_camera()
+	info.text = _size_text()
 
 
 func _toggle() -> void:
