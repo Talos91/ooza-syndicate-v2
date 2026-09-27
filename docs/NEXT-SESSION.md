@@ -1,6 +1,6 @@
 # Next session - start here
 
-State as of publish today: **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
+State as of publish today: **v0.20.4 "Alpha 20"** - the campaign preview (VEX, the sinking city, placeholder maps; below) - on top of **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
 challenges, unlocks with the locks still off (below) - on top of **v0.20.0 "Alpha 20"** - the room server hosts the matches (server-hosted rooms, the room
 owner; below) - on top of **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
 interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish
@@ -14,6 +14,22 @@ size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed ever
 `PLAYTEST-NOTES.md` notes 169-185, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
 (the session board), the design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and
 `05 Handoff/AGENT-BRIEF.md`.
+
+## 0.20.4 (2026-09-27): the campaign preview
+- Design and Daniele's decisions: `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/CAMPAIGN-DESIGN.md` (§0 decisions, §5a
+  the Progression interface, §7b the systems missions still need); open points: OPEN-QUESTIONS (Campaign). Owner: the
+  "Campaign and map ideas" session.
+- Code: `scripts/campaign.gd` (static data + progress `user://campaign.cfg`, stars_for, record -> summary, pay_pending,
+  `last_run` hand-over to the page), `scripts/mission_director.gd` (pure Sim logic like TutorialDirector: begin / step /
+  on_event / on_action / on_captured, objectives, stars, optional objectives), `scripts/mission_overlay.gd` (briefing,
+  objective strip, result screen), `scripts/campaign_page.gd` (the 3D diorama page). Hooks: `# CAMPAIGN:` blocks in
+  main.gd (`mission` beside the tutorial's `director`, which stays null in missions; `start_mission`; the relaunch key
+  "mission" checked before the first-launch tour; `_on_finished` routes a mission before `_record_progress`), menu.gd
+  (CAMPAIGN | ARMIES, `show_campaign`), hud.gd (the CAMPAIGN leave label).
+- Next: the mission maps from the Game map builder (briefs `02 Maps/campaign-vex-briefs/`, pack `References/Ooze
+  Syndicate maps - campaign VEX/`, the "campaign" rulebook profile) - switch each mission's `map` to its V- code; the
+  §7b systems (extraction node, event deck items, the beast, fog) each with Daniele's yes; the rival portraits.
+- Tests: test_campaign, test_mission (`--script`), test_campaign_page (a scene - hud.gd needs the Net autoload).
 
 ## 0.20.1 (2026-09-27): progression - SCRAP, SYNDICATE CHIPS, levels, challenges, unlocks
 

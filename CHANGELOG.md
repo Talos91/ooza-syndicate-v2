@@ -1,5 +1,50 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.4 "Alpha 20" - 2026-09-27 (campaign preview: VEX, the sinking city, on placeholder maps)
+
+Daniele (CAMPAIGN-DESIGN.md §0): the sinking city is the campaign map (districts = chapters, missions = nodes, the last
+chapter descends under the city); dark comedy; linear with optional side nodes; one campaign per faction - VEX free,
+the others later / paid - and finishing one unlocks that faction's vat; stars 1-3 are achievement only, 3 stars + the
+mission's optional objective **in the same run** pays SCRAP **once per mission**; solo. "continue the part of your
+work you can do without the maps"; then "Yes, publish as preview". The full campaign lands with the new maps
+(Game map builder, Alpha 22-23); until then every mission plays on a **placeholder map** from the current pool.
+
+- **CAMPAIGN on MAIN** (the ARMIES row splits into CAMPAIGN | ARMIES). The campaign page is a 3D diorama of the
+  district built from the game's kit: missions are platforms (locked grey, open pulsing, won with your goo ring, the
+  vat growing a tier per star, star pips and a SCRAP mark), main missions joined in order by bridges, side missions
+  behind a relay. Faction tabs (VEX open, the others "LATER"), the stars total, CONTINUE, prev / next district (and
+  swipe), a mission card (story, rival, objective, optional objective, par, best time, stars, the reward line,
+  PLAY). Animations: the new bridge extends after a first win, the relay swings its deck to a side mission, a
+  finished district drops ring by ring into the void (tap to skip) and stays as a memorial, the Descent tips the
+  camera under the city.
+- **VEX campaign**, 4 districts - Dockside, The Exchange, Old Town, The Descent - 10 main + 3 side missions
+  (`scripts/campaign.gd`), briefed by Dr. Vesk and rival executives (the Foreman, the Auditor, the Guru, Compliance,
+  the Maw; names are placeholders). Playable now: 01 Hostile Takeover, 02 Mind the Gap, s1 Overtime, 03 The Foreman,
+  05 Nobody Saw Anything, 06 Aggressive Growth, 07 Last Train Out, 08 Compliance, 09 Going Down, 10 Root Cause.
+  **IN DEVELOPMENT** (they need systems the game doesn't have yet - the event deck's tides and supply drops, the
+  wandering beast): 04, s2, s3; they never block the chain.
+- **In a mission** (`scripts/mission_director.gd`, `scripts/mission_overlay.gd`): a briefing card (the match waits
+  for START), an objective line under the clock with live progress, a par clock and the optional objective with a
+  live tick / cross; objectives: take every rival node, drop N rival units with your relays, hold until a time, take
+  a node with your monster, win the collapse with N+ units (the collapse can start early). The rival is the normal
+  AI at the mission's level, with extra units at its home where the mission says.
+- **Result screen**: the mission's win / lose line, the three stars one by one with their rules (★ win, ★★ within
+  par, ★★★ within par keeping every node you started with), the optional objective, the reward (+150 / 200 / 300
+  SCRAP counting up, "already taken" after the first), the VEX vat unlock on the finale, the XP strip (a mission is a
+  match for XP and challenges - no per-match SCRAP), NEXT MISSION / RETRY / CAMPAIGN. PAUSE / YOU'RE OUT read CAMPAIGN
+  during a mission.
+- Progress on the device (`user://campaign.cfg`); rewards and the vat through `Progression.grant("campaign:vex:<id>")`
+  / `unlock("vat:faction:vex", "campaign:vex")`. Debug / shots: `--mission=<key>`, `--mission-shot=brief|hud|win|lose`,
+  `--campaign-all`, `--campaign-district=`, `--campaign-card=`, `--campaign-cfg=`.
+- Built conservatively (OPEN-QUESTIONS, Campaign): a hold mission is won at its time exactly; "lost a node" counts
+  captures, not Last Stand drops; Mind the Gap counts only your own relay drops and fails on a conquest short of the
+  drops; the collapse runs are "win the collapse with N+ units" until an extraction node exists; rewards 150 / 200 /
+  200 / 300 await Daniele's yes.
+- T-01 / T-02 are tutorial-only too: never on BATTLEFIELD, in rooms or rematches; the default map is A-01 Orbital
+  Nexus (Interactive Tutorial; Daniele: "Hide T-01 / T-02 too"; PLAYTEST-NOTES 198).
+- Tests: new test_campaign, test_mission, test_campaign_page (a scene: `res://tests/test_campaign_page.tscn`); all
+  12 suites pass headless. Desktop and phone-size renders only - nothing on a real phone.
+
 ## 0.20.3 "Alpha 20" - 2026-09-27 (Daniele's first online playtest: smooth server rooms, monster launch, full-size Machinegoon)
 
 - **Smooth online movement** (Daniele: "it lags and this time wasn't graphic related but connection"; jerky movement on

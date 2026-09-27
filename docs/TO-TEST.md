@@ -1,9 +1,24 @@
-# To test - v0.20.3 "Alpha 20" (Daniele, on the phone and with a second player)
+# To test - v0.20.4 "Alpha 20" (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
+
+## 0.20.4 campaign preview (VEX, placeholder maps)
+- [ ] **MAIN > CAMPAIGN**: the Dockside diorama - 01 open and pulsing, the rest locked. Does the city read? Are the
+      mission platforms easy to tap on the phone?
+- [ ] **A mission**: tap 01, read the card, PLAY. The briefing waits for START; the objective line under the clock
+      moves (e.g. "1 left"), the par clock counts down, the optional objective ticks or crosses as you play.
+- [ ] **Stars** ("gotta see if make sense"): win once fast and once slow - do ★ / ★★ / ★★★ feel right? 3 stars + the
+      optional objective should count up +150 SCRAP once; a second perfect run says "already taken".
+- [ ] **Back on the map**: the new bridge extends to the next mission, the stars pop on the won platform. Win 02 and
+      tap the relay beside it: the deck swings over to the side mission Overtime.
+- [ ] **District done**: win 03 - Dockside drops ring by ring into the void, the camera moves to The Exchange.
+      (Too long? Tap skips it.)
+- [ ] **Mind the Gap** (relay puzzle) and **Overtime** (hold until 3:00): fun? too hard / easy vs the AI levels set?
+- [ ] **Tone**: the handler and rival lines - funny, or too much?
+- [ ] Missions marked IN DEVELOPMENT (04, s2, s3) can't be played; CONTINUE skips them.
 
 ## 0.20.3 (first online playtest fixes)
 - [ ] **Online movement is smooth** in a server room (you + a second phone, one on mobile data): no stutter or jumps.

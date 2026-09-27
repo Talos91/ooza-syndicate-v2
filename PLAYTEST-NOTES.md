@@ -754,3 +754,19 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      tutorial-only (`MapPool.TUTORIAL_ONLY`): never on 02 BATTLEFIELD, in rooms, rematches or the AI test pools; the menu /
      room default is now A-01 Orbital Nexus; the tutorial's first match still loads T-02 by path.
 
+## 2026-09-27 - Daniele, the campaign (0.20.4 preview)
+
+199. **"I like A + C"** (the city from above as the campaign map + the Descent under it), **"dark comedy"**, **"linear with
+     optional side nodes"**, **"for now no coop campaign"**. *Done (0.20.4 preview):* CAMPAIGN-DESIGN §0; the VEX campaign
+     on a 3D district map, 10 main + 3 side missions.
+200. **"one campaign per faction (with unlock of faction vats as bonus so we already have it)"** / **"second way to get them
+     either pay, play pvp or do the campaign"**. *Done (0.20.4):* finishing VEX unlocks the VEX vat through Progression,
+     beside the price and the 25 wins; the other factions show LATER.
+201. **"1 to 3 stars just for achievement but, if 3 stars + optional objective you get an amount of ingame currency"** /
+     **"yes same run"** / **"yes currency reward is one off per mission"**. *Done (0.20.4):* stars kept per mission; 150 /
+     200 / 300 SCRAP once, only for 3 stars + the objective in one run (sizes await his yes).
+202. **The finale twist (the vats have been eating the city's supports) - "actually sound cool"**. *Done (0.20.4):* 10 Root
+     Cause.
+203. **"try continuing the part of your work you can do without the maps"**. *Done (0.20.4):* everything but the mission maps,
+     which play on placeholder maps until the Game map builder builds them from `02 Maps/campaign-vex-briefs/` (Alpha 22-23).
+204. **Star rules: "yes but gotta see if make sense"**. *To test* on the phone (TO-TEST, 0.20.4).
