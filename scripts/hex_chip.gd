@@ -78,6 +78,8 @@ static func _white_emblem(fac: String) -> Texture2D:
 		if img.is_compressed():
 			img.decompress()
 		img.convert(Image.FORMAT_RGBA8)
+		img.clear_mipmaps()                     # Hud.emblem_texture's copy has them; get_data() would
+		                                         # otherwise return every mip level, not just the base one
 		var data := img.get_data()
 		for i in range(0, data.size(), 4):
 			var v: int = maxi(data[i], maxi(data[i + 1], data[i + 2]))
