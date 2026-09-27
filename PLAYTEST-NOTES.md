@@ -779,3 +779,6 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 - First leaderboards: weekly challenge points + wins this season - *Done:* WINS THIS SEASON; weekly challenge points
   next (needs server-checked challenges).
 - MATCH HISTORY: "Yes, in 0.20.5" (via the Architect) - *Done:* PROFILE > HISTORY.
+206. **"make the text more fun dr dex is a bit flat".** *Done (0.20.6):* Dr. Vesk speaks in the campaign's dark-comedy house style
+     (CAMPAIGN-DESIGN §1): the instruction first, then one short joke at most; 59 lines (TUTORIAL-SCRIPT draft 3).
+
