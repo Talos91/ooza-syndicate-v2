@@ -1,6 +1,6 @@
 # Next session - start here
 
-State as of publish today: **v0.20.4 "Alpha 20"** - the campaign preview (VEX, the sinking city, placeholder maps; below) - on top of **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
+State as of publish today: **v0.20.5 "Alpha 20"** - accounts (guest, email link / Google, cloud save, WINS THIS SEASON, MATCH HISTORY; below) - on top of **v0.20.4 "Alpha 20"** - the campaign preview (VEX, the sinking city, placeholder maps; below) - on top of **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
 challenges, unlocks with the locks still off (below) - on top of **v0.20.0 "Alpha 20"** - the room server hosts the matches (server-hosted rooms, the room
 owner; below) - on top of **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
 interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish
@@ -14,6 +14,17 @@ size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed ever
 `PLAYTEST-NOTES.md` notes 169-185, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
 (the session board), the design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and
 `05 Handoff/AGENT-BRIEF.md`.
+
+## 0.20.5 (2026-09-27): accounts - guest, email link / Google, cloud save, leaderboard, match history
+
+- Backend: `supabase/` (README: project ref, trust rule, the dashboard switches Daniele sets). Client: `scripts/account.gd`
+  (Account.get_instance(); `start()` from main.gd once per run; `Account.enabled = false` and `--no-account` keep it
+  off). Host: `net.gd` auth + `scripts/match_report.gd` (server session). Pages: menu.gd show_account /
+  show_leaderboard / show_history. `tests/test_account.gd -- --live` creates real anonymous users: delete them after
+  (SQL: `delete from auth.users where id = '<printed id>' and is_anonymous`).
+- Not yet clicked through: the email link (needs Site URL + Redirect URLs in the dashboard) and Google (needs the
+  Google provider). Next: the weekly challenge-points board (server-checked challenges), account deletion for the
+  store builds, Play Games / Game Center with the store builds.
 
 ## 0.20.4 (2026-09-27): the campaign preview
 - Design and Daniele's decisions: `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/CAMPAIGN-DESIGN.md` (§0 decisions, §5a

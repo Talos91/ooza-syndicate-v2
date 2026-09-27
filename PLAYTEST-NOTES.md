@@ -770,3 +770,12 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 203. **"try continuing the part of your work you can do without the maps"**. *Done (0.20.4):* everything but the mission maps,
      which play on placeholder maps until the Game map builder builds them from `02 Maps/campaign-vex-briefs/` (Alpha 22-23).
 204. **Star rules: "yes but gotta see if make sense"**. *To test* on the phone (TO-TEST, 0.20.4).
+
+## 2026-09-27 - Daniele, accounts and match history (0.20.5)
+
+- Supabase: "Yes, create it (Recommended)" - *Done:* project ooze-syndicate (free, Singapore).
+- Sign-in: guest + email link + Google on web / APK - *Done* (Google waits for the dashboard provider).
+- "Keep the account's" when signing in on a device with its own progress - *Done* (tested live: account wins).
+- First leaderboards: weekly challenge points + wins this season - *Done:* WINS THIS SEASON; weekly challenge points
+  next (needs server-checked challenges).
+- MATCH HISTORY: "Yes, in 0.20.5" (via the Architect) - *Done:* PROFILE > HISTORY.

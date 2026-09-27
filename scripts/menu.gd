@@ -889,19 +889,25 @@ func show_account() -> void:
 		label_at("KEEP YOUR PROGRESS ON ANY DEVICE", lp + P(28, y), 20, Color.WHITE, false)
 		y += 32.0
 		var em := _line_edit(lp + P(28, y), P(440, 58), "your email", "")
-		nav_button("SEND LINK", lp + P(490, y), P(240, 58), func():
+		var sl := nav_button("SEND LINK", lp + P(490, y), P(240, 58), func():
 			if await a.add_email(em.text):
 				_account_note = "Check your inbox: the link keeps this account (and its progress) on any device."
 			else:
 				_account_note = a.last_error
-			show_account(), true)
+			show_account(), Account.EMAIL_LINKS)
+		sl.disabled = not Account.EMAIL_LINKS             # no dead buttons: off until the dashboard is set up
+		em.editable = Account.EMAIL_LINKS
 		y += hh + 12.0
 		var g := nav_button("ADD GOOGLE", lp + P(28, y), P(440, 58), func():
 			if not await a.google(true):
 				_account_note = a.last_error
 				show_account())
-		g.disabled = not OS.has_feature("web")
-		y += hh + 16.0
+		g.disabled = not (OS.has_feature("web") and a.google_ready)
+		y += hh + 10.0
+		if not Account.EMAIL_LINKS or not a.google_ready:
+			_wrapped("COMING SOON: " + " and ".join(([] if Account.EMAIL_LINKS else ["email links"]) + ([] if a.google_ready else ["Google"]))
+					+ " - your progress is already kept in this guest account.", lp + P(28, y), 16, Color("ffd15c"), 700)
+			y += 44.0
 	if a.pending_email != "":
 		_wrapped("LINK SENT TO %s - open it to finish." % a.pending_email, lp + P(28, y), 18, Color("ffd15c"), 700)
 	# sign in with an account made elsewhere: its progress replaces this device's
@@ -912,20 +918,25 @@ func show_account() -> void:
 			Color("c5d2da"), 760)
 	var ry := 118.0
 	var si := _line_edit(rp + P(28, ry), P(480, 58), "your email", a.email)
-	nav_button("SEND SIGN-IN LINK", rp + P(530, ry), P(264, 58), func():
+	var ssl := nav_button("SEND SIGN-IN LINK", rp + P(530, ry), P(264, 58), func():
 		if await a.email_sign_in(si.text):
 			_account_note = "Check your inbox: open the link on this device to sign in."
 		else:
 			_account_note = a.last_error
 		show_account())
+	ssl.disabled = not Account.EMAIL_LINKS
+	si.editable = Account.EMAIL_LINKS
 	ry += hh + 12.0
 	var gs := nav_button("SIGN IN WITH GOOGLE", rp + P(28, ry), P(480, 58), func():
 		if not await a.google(false):
 			_account_note = a.last_error
 			show_account())
-	gs.disabled = not OS.has_feature("web")
+	gs.disabled = not (OS.has_feature("web") and a.google_ready)
 	ry += hh + 10.0
-	if not OS.has_feature("web"):
+	if not Account.EMAIL_LINKS or not a.google_ready:
+		_wrapped("COMING SOON - sign-in links and Google are being set up.", rp + P(28, ry), 16, Color("ffd15c"), 760)
+		ry += 30.0
+	elif not OS.has_feature("web"):
 		_wrapped("Google sign-in works in the browser build.", rp + P(28, ry), 16, Color("7795a4"), 760)
 		ry += 30.0
 	if _account_note != "":

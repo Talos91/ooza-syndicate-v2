@@ -1,5 +1,38 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.5 "Alpha 20" - 2026-09-27 (accounts: guest, email link / Google, cloud save, leaderboard, match history)
+
+Daniele: Supabase "yes, create it"; web / APK sign-in = guest + an email link + Google; a sign-in onto an account that
+already has progress keeps the account's; first leaderboards = weekly challenge points + wins this season; MATCH
+HISTORY "Yes, in 0.20.5". Built by the progression session (client + backend) and the server session (host side).
+
+- **Accounts, optional.** Every player gets a silent guest account the first time the game is online (offline play is
+  unchanged). PROFILE > ACCOUNT: rename (3-16 letters / digits), add an email (Supabase sends a link; once opened the
+  account is permanent), add Google (browser build), or sign in on this device with an account made elsewhere - its
+  progress replaces this device's. The session renews itself; `user://account.cfg` holds it.
+- **Cloud save.** The device's save files (progress, ARMIES picks, tutorial, campaign via Campaign.to_dict) go up when
+  one changes; a sign-in onto another account restores that account's copy (then Campaign.from_dict / pay_pending).
+- **Server-written results.** In a server room a player's token rides in the lobby register ("auth"); the match host
+  verifies it and, at the end of a round with any account seat, sends a signed report (HMAC) to the `match-result`
+  function. Guests without a token still play (no report when no seat has an account). The report carries every
+  seat's stats (Progression.seat_stats), place and win.
+- **LEADERBOARD:** WINS THIS SEASON (the UTC month) - online wins in server rooms with two or more human seats,
+  written by the server only (a room of AI can't farm it). The weekly challenge-points board needs server-checked
+  challenges and comes next.
+- **MATCH HISTORY:** PROFILE > HISTORY - the device's last 50 matches (offline, AI, and online rounds played here) plus
+  the account's server rounds from other devices, newest first, one line per round (ONLINE / OFFLINE, date, map,
+  mode, time, every seat's emblem + name or AI level, WIN / LOSS / DRAW), MORE loads older online rounds.
+- Fixes: daily REROLL / CLAIM buttons stay inside their card on phones; PROFILE's testing note says TEST SWITCH.
+- Backend (`supabase/`, project ooze-syndicate, Singapore, free plan): tables with RLS, `set_name`,
+  `leaderboard_season_wins`, `my_matches`, `ingest_match`, the `match-result` edge function (HMAC, idempotent,
+  `x-ooze-dry-run`). Client: new `scripts/account.gd`; `progression.gd` history + merge; menu.gd ACCOUNT /
+  LEADERBOARD / HISTORY; main.gd starts the account once per run (never on the match host, headless or screenshot
+  runs). Host: `net.gd` auth in register + verification, `scripts/match_report.gd`, deploy with `--relay`.
+- Tests: new `test_account` (offline; `-- --live` signs real guests in, renames, cloud save up / restore - "account
+  wins" - RLS, the board, history; its test users deleted after), `test_match_report`; test_progression gains the
+  history log. Live end-to-end on the VPS (a signed report from a real server round) passed. Desktop and phone-size
+  renders; the email link and Google were not clicked through yet.
+
 ## 0.20.4 "Alpha 20" - 2026-09-27 (campaign preview: VEX, the sinking city, on placeholder maps)
 
 Daniele (CAMPAIGN-DESIGN.md §0): the sinking city is the campaign map (districts = chapters, missions = nodes, the last

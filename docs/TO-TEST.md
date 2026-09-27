@@ -1,9 +1,20 @@
-# To test - v0.20.4 "Alpha 20" (Daniele, on the phone and with a second player)
+# To test - v0.20.5 "Alpha 20" (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
+
+## 0.20.5 accounts (guest, email link, leaderboard, match history)
+- [ ] **ACCOUNT** (PROFILE > ACCOUNT): it should say GUEST ACCOUNT after a moment online. RENAME yourself.
+- [ ] **Add an email**: type yours, SEND LINK, open the email on the same phone - you come back SIGNED IN with the
+      same progress. (Needs the dashboard's Site URL / Redirect URLs set - tell us if the link lands on an error.)
+- [ ] **Another device**: on a second phone or browser, ACCOUNT > ALREADY HAVE AN ACCOUNT > your email > SEND SIGN-IN
+      LINK, open it there - that device should now show your level, SCRAP and unlocks.
+- [ ] **LEADERBOARD**: play an online match against another person (server room) and win - you should appear.
+- [ ] **MATCH HISTORY** (PROFILE > HISTORY): your recent matches with the right map, mode, time, factions and result;
+      online ones tagged ONLINE.
+- [ ] **Google**: only once the Google provider is set up in the dashboard.
 
 ## 0.20.4 campaign preview (VEX, placeholder maps)
 - [ ] **MAIN > CAMPAIGN**: the Dockside diorama - 01 open and pulsing, the rest locked. Does the city read? Are the

@@ -19,6 +19,9 @@ const KEY := "sb_publishable_3aX4T8IcNbI_BBg4wENMhA_3NNclYw2"   # publishable: m
 const SITE := "https://talos91.github.io/ooza-syndicate-v2/"     # where email links / Google come back (web)
 const REFRESH_EARLY := 600                          # refresh the access token 10 min before it expires
 const SAVE_CHECK := 20.0                            # seconds between "did a save file change?" checks
+# Email links need the dashboard's Site URL + Redirect URLs (supabase/README.md, switch 3): until Daniele has set them the
+# ACCOUNT page shows the email buttons disabled ("coming soon") instead of sending a link that lands nowhere.
+const EMAIL_LINKS := false
 
 static var path := "user://account.cfg"             # tests point this elsewhere
 static var enabled := true                          # false: never touch the network (tests, headless runs)
@@ -33,6 +36,7 @@ var pending_email := ""                             # an email added, waiting fo
 var providers: Array = []
 var player_name := ""                             # the profile name (SLIME-xxxxx until renamed)
 var state := "offline"                              # offline | signing_in | guest | linked | error
+var google_ready := false                          # the project's Google provider is on (read from /auth/v1/settings)
 var last_error := ""
 var _save_hash := ""
 var _save_t := 0.0
@@ -58,6 +62,9 @@ func start(auto_guest := true) -> void:
 	if not enabled:
 		return
 	_load()
+	var cfg := await _call("GET", "/auth/v1/settings", null, false)
+	if cfg["ok"] and cfg["json"] is Dictionary:
+		google_ready = bool((cfg["json"] as Dictionary).get("external", {}).get("google", false))
 	var back := _redirect_session()
 	if not back.is_empty():
 		await _adopt(back)
