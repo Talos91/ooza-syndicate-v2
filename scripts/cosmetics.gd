@@ -129,7 +129,7 @@ static func model_key(family: String, id: String, faction: String, tier: int) ->
 					key = "skins/Skin_%s_T%d" % [SKIN_LINE[id], t] if SKIN_LINE.has(id) else "Vat_T%d" % t
 		"machinegoon":
 			t = clampi(t, 1, 3)
-			key = {"spitter": "skins/GooGun_T%d_Spitter" % t, "pepperbox": "skins/GooGun_T%d_Pepperbox" % t}.get(id, "Machinegoon_T%d" % t)
+			key = {"spitter": "skins/Machinegoon_T%d_Spitter" % t, "pepperbox": "skins/Machinegoon_T%d_Pepperbox" % t}.get(id, "Machinegoon_T%d" % t)
 		"laser":
 			key = {"obelisk": "skins/Laser_Obelisk", "tesla": "skins/Laser_Tesla"}.get(id, "Laser")
 		"forge":
@@ -293,15 +293,19 @@ static func loaded_skins() -> Array:
 # within r of it and in front of z0 turns, see MapBuilder.split_spinner). Gate pivots are read from the
 # model's own `*_Gate` node at run time (MonsterView); "gate" here is the fallback.
 const POINTS := {
-	"Machinegoon_T1": {"muzzles": [Vector3(0, 2.72, 3.69)]},
-	"Machinegoon_T2": {"muzzles": [Vector3(-0.39, 2.81, 4.42), Vector3(0.39, 2.81, 4.42)]},
-	"Machinegoon_T3": {"muzzles": [Vector3(0, 2.92, 5.31)], "spin": {"axis": Vector2(0, 2.92), "r": 0.7, "z0": 1.3}},
-	"GooGun_T1_Spitter": {"muzzles": [Vector3(0, 2.35, 1.89)]},
-	"GooGun_T2_Spitter": {"muzzles": [Vector3(-0.32, 2.40, 2.30), Vector3(0.32, 2.40, 2.30)]},
-	"GooGun_T3_Spitter": {"muzzles": [Vector3(0, 2.77, 2.87), Vector3(-0.34, 2.31, 2.87), Vector3(0.34, 2.31, 2.87)]},
-	"GooGun_T1_Pepperbox": {"muzzles": [Vector3(0, 2.44, 2.03)], "spin": {"axis": Vector2(0, 2.44), "r": 0.34, "z0": 0.42}},
-	"GooGun_T2_Pepperbox": {"muzzles": [Vector3(0, 2.50, 2.45)], "spin": {"axis": Vector2(0, 2.50), "r": 0.44, "z0": 0.48}},
-	"GooGun_T3_Pepperbox": {"muzzles": [Vector3(0, 2.57, 2.97)], "spin": {"axis": Vector2(0, 2.57), "r": 0.54, "z0": 0.56}},
+	# 0.20.2 v2 (Models/2.0/structures_2_1/glb_machinegoon_v2): low barrels, built for full scale; T3's 6-barrel
+	# cluster (r 0.24) turns about +Z through (0, 1.34): its islands lie within 0.40 of the axis from z 1.08 on
+	"Machinegoon_T1": {"muzzles": [Vector3(0, 1.34, 2.65)]},
+	"Machinegoon_T2": {"muzzles": [Vector3(-0.32, 1.34, 2.75), Vector3(0.32, 1.34, 2.75)]},
+	"Machinegoon_T3": {"muzzles": [Vector3(0, 1.34, 2.90)], "spin": {"axis": Vector2(0, 1.34), "r": 0.40, "z0": 1.05}},
+	# the skins rebuilt on the v2 layout at full scale (0.20.2, glb_mg_skins_v2): every Pepperbox cluster spins
+	# (islands within r of the axis from z 0.9 on: barrels, bands and the breech drum)
+	"Machinegoon_T1_Spitter": {"muzzles": [Vector3(0, 1.34, 2.50)]},
+	"Machinegoon_T2_Spitter": {"muzzles": [Vector3(-0.30, 1.34, 2.60), Vector3(0.30, 1.34, 2.60)]},
+	"Machinegoon_T3_Spitter": {"muzzles": [Vector3(0, 1.34, 2.75), Vector3(-0.34, 1.34, 2.75), Vector3(0.34, 1.34, 2.75)]},
+	"Machinegoon_T1_Pepperbox": {"muzzles": [Vector3(0, 1.34, 2.55)], "spin": {"axis": Vector2(0, 1.34), "r": 0.36, "z0": 0.9}},
+	"Machinegoon_T2_Pepperbox": {"muzzles": [Vector3(0, 1.34, 2.65)], "spin": {"axis": Vector2(0, 1.34), "r": 0.43, "z0": 0.9}},
+	"Machinegoon_T3_Pepperbox": {"muzzles": [Vector3(0, 1.34, 2.80)], "spin": {"axis": Vector2(0, 1.34), "r": 0.49, "z0": 0.9}},
 	"Laser": {"emitter": Vector3(0, 7.85, 0), "lift": LIFT},
 	"Laser_Obelisk": {"emitter": Vector3(0, 7.51, 0), "lift": LIFT},
 	"Laser_Tesla": {"emitter": Vector3(0, 6.42, 0), "lift": LIFT},
@@ -338,14 +342,15 @@ static func points(model_name: String) -> Dictionary:
 
 
 # MACHINEGOON SIZE (0.19.2, Daniele on 0.19.1: "too big and when they shoot it looks weird as the enemies are
-# under them"): every Machinegoon look is shown at MG_SCALE (about a vat's footprint) and sunk into its socket
-# so its highest muzzle sits MG_MUZZLE_Y above the deck - the stream arcs out onto the line's bodies instead of
-# pouring straight down. Applied to the model's children by MapBuilder.piece (the root keeps scale 1 for the
+# under them"; 0.20.2 on the 0.65 fix: "way too small; make it look as big as the other structures but make
+# sense"): the default look is the v2 model with LOW barrels, shown at full scale (muzzles 1.34 m over the
+# deck, no sink), and so are the Spitter / Pepperbox skins rebuilt on its layout. fit() stays for a future look
+# modelled at another size: MG_LOOK_SCALE[look] scales it and sinks it so its highest muzzle sits MG_MUZZLE_Y
+# above the deck. Applied to the model's children by MapBuilder.piece (the root keeps scale 1 for the
 # build / pump / tier-down animations); the muzzles above stay in model space (the view reads them through
 # the turret's global transform, so they follow the scale and the drop).
-const MG_SCALE := 0.65
 const MG_MUZZLE_Y := 1.15
-const MG_LOOK_SCALE := {"Spitter": 1.45, "Pepperbox": 1.3}   # the skins are modelled smaller: same footprint
+const MG_LOOK_SCALE := {}           # per look (the skin name); empty since 0.20.2: every look is built full-scale
 
 
 static func fit(model_name: String) -> Dictionary:
@@ -356,7 +361,10 @@ static func fit(model_name: String) -> Dictionary:
 	var top := 0.0
 	for m in pt["muzzles"]:
 		top = maxf(top, (m as Vector3).y)
-	var k: float = MG_SCALE * float(MG_LOOK_SCALE.get(model_name.trim_prefix("skins/").get_slice("_", 2), 1.0))
+	var look := model_name.trim_prefix("skins/").get_slice("_", 2)
+	if not MG_LOOK_SCALE.has(look):
+		return {}                                     # the default v2 model: as modelled
+	var k: float = MG_LOOK_SCALE[look]
 	return {"scale": k, "drop": maxf(0.0, top * k - MG_MUZZLE_Y)}
 
 

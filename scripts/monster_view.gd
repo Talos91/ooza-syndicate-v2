@@ -491,7 +491,7 @@ static func stage(main: Node, arg: String) -> void:
 	##   monster:<hub>   seat A builds a ready hub on relay node <hub> (or the first relay) and launches at once
 	##                   toward the node in reach with the most enemy / neutral bodies on the way, B sends a
 	##                   line into its path
-	##   guns[:<k>]      seat A gets Machinegoons T1, T2, T3 (tiers rotated by k) and a laser on its nearest
+	##   guns[:<k>[:<look>]]  seat A (Machinegoon look <look>) gets Machinegoons T1, T2, T3 (tiers rotated by k) and a laser on its nearest
 	##                   nodes, B sends lines at them from a neighbour over an open deck
 	##   skins           seat A picks a non-default look for every family: vats, two Machinegoons, laser, forge
 	##                   and a ready hub on its nearest relays; the monster launches at 2.6 s
@@ -521,6 +521,8 @@ static func stage(main: Node, arg: String) -> void:
 			main.set_meta("stage_monster", hub)
 		"guns":
 			var home: int = sim.homes.get("A", 0)
+			if arg.count(":") >= 2:                       # guns:<k>:<look> - seat A's Machinegoon look
+				Cosmetics.set_loadout("A", {"machinegoon": arg.split(":")[2]})
 			var picks := []
 			for n in sim.nodes:
 				if n["id"] != home and n["node_kind"] == "common":
@@ -554,6 +556,7 @@ static func stage(main: Node, arg: String) -> void:
 						pairs.append([nb["id"], gun["id"]])
 						break
 			main.set_meta("stage_guns", pairs)
+			sim.nodes[home]["tier"] = 2                   # A's home as a T2 vat beside them, for scale
 			print("stage: guns at ", picks.slice(0, 4).map(func(x): return x["id"]), " lines ", pairs)
 		"skins":                                       # seat A in non-default looks everywhere (0.19.2 proof)
 			Cosmetics.set_loadout("A", {"vat": "reactor", "machinegoon": "spitter", "laser": "tesla", "forge": "anvil",

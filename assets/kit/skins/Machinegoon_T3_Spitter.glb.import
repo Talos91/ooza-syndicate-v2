@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://c80si8icb7eow"
-path="res://.godot/imported/GooGun_T2_Spitter.glb-01f04fc7148edda2261e2b1944a4069b.scn"
+uid="uid://c54k5r3wvald0"
+path="res://.godot/imported/Machinegoon_T3_Spitter.glb-ee12b5542ebd0cac68238bf84de1a131.scn"
 
 [deps]
 
-source_file="res://assets/kit/skins/GooGun_T2_Spitter.glb"
-dest_files=["res://.godot/imported/GooGun_T2_Spitter.glb-01f04fc7148edda2261e2b1944a4069b.scn"]
+source_file="res://assets/kit/skins/Machinegoon_T3_Spitter.glb"
+dest_files=["res://.godot/imported/Machinegoon_T3_Spitter.glb-ee12b5542ebd0cac68238bf84de1a131.scn"]
 
 [params]
 
