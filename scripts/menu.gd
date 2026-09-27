@@ -503,8 +503,8 @@ func show_options() -> void:
 	dbg.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
 	y += h5 + 10.0
 	var h6 := rh(50)                                   # PROGRESSION: see the game as players will once the locks go live
-	var lk := stack_add(st, nav_button("LOCKS: %s" % ("OPEN  -  every skill and look unlocked while testing" if Progression.unlock_all
-			else "ON  -  skills and looks are earned or bought (this session)"), P(15, y), P(915, h6), func():
+	var lk := stack_add(st, nav_button("TEST SWITCH  ·  LOCKS: %s" % ("OFF  -  everything unlocked (the testing default)" if Progression.unlock_all
+			else "ON  -  preview: skills and looks earned or bought (until the page closes)"), P(15, y), P(915, h6), func():
 		Progression.unlock_all = not Progression.unlock_all
 		show_options())) as Button
 	lk.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))

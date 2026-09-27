@@ -485,10 +485,12 @@ class Preview extends SubViewportContainer:
 				show = Cosmetics.model_key(family, "default", faction, 2 if family in ["vat", "machinegoon"] else 1)
 		if show == _key:
 			return
+		var node := MapBuilder.piece(show)
+		if node == null:                                  # a scene freed mid-load (0.20.1): try again next refresh
+			return
 		_key = show
 		for c in _pivot.get_children():
 			c.queue_free()
-		var node := MapBuilder.piece(show)
 		_pivot.add_child(node)
 		var seat := "A"
 		if family == "monster":

@@ -20,6 +20,13 @@ func _init() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 	Progression.path = P1
 	TutorialDirector.path = P2                    # a fresh tutorial save: the Graduate vat is locked
+	Progression.reload_all()
+	# the shipped default (Daniele: "all open until lock switch"): a fresh profile has every skill and look open
+	check(Rules.UNLOCK_ALL_TESTING and Progression.unlock_all, "locks are off by default (UNLOCK_ALL_TESTING)")
+	check(Progression.is_unlocked("skill:mire") and Progression.is_unlocked("vat:biopod") and Progression.is_unlocked("monster:alt:ember")
+			and ArmyPresets.loadout_for("null") == {"active": "ghost_line", "map": "bypass"},
+			"a fresh profile: every skill and look unlocked, NULL keeps its own defaults")
+	check(not Progression.is_unlocked("vat:graduate"), "a fresh profile: only the Graduate vat waits for the tutorial")
 	Progression.unlock_all = false
 	Progression.now_override = _unix("2026-09-27T10:00:00")   # a Sunday
 	Progression.reload_all()
