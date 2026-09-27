@@ -76,6 +76,7 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(DIR)
 	_build_ui()
 	http = HTTPRequest.new()
+	http.accept_gzip = false                         # web: the browser already unpacks GitHub Pages' gzip; unpacking twice fails
 	add_child(http)
 	http.request_completed.connect(_on_done)
 	if loaded and not entries.is_empty():
@@ -94,7 +95,7 @@ func _reload() -> void:
 func _on_done(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	var what: String = queue.pop_front() if not queue.is_empty() else ""
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
-		status.text = "Could not load %s (HTTP %d). Check the connection, then RELOAD." % [what, code]
+		status.text = "Could not load %s (HTTP %d, result %d). Check the connection, then RELOAD." % [what, code, result]
 		return
 	if what == "index":
 		var j = JSON.parse_string(body.get_string_from_utf8())
