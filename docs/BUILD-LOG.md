@@ -462,6 +462,12 @@ cp "Game/2.0/build/web/"index.* "Game/2.0/build/web/skins.pck" . && cp "Game/2.0
 git add -A && git commit -m "Playtest build: <what changed> (source main <sha>)" && git push -f origin gh-pages
 cd "Game/2.0" && git worktree remove --force /tmp/ghpages && git branch -D gh-pages
 # verify: curl -sI https://talos91.github.io/ooza-syndicate-v2/index.pck | grep -i content-length  == size of build/web/index.pck (same for skins.pck)
+# 5. (0.20.0) the room server gets the same build - its match hosts run it and it is the test link
+#    https://45-32-126-20.sslip.io/; without this, CREATE ROOM on the new build falls back to browser hosting:
+cd "Game/2.0" && server/deploy.sh          # SSH alias ooze-server (Daniele's PC); --relay also updates relay.py (closes open rooms)
+# verify: curl -s https://45-32-126-20.sslip.io/version.txt  == ooze20-net-<N>/<Rules.VERSION>
+# suites for the server: test_relay (player-hosted rooms) and test_dedicated (server rooms) - both exit 2 = SKIP
+# when the relay / a match server doesn't answer; with no args they use the live server.
 
 # web build for the phone, then serve it on the local network
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --export-release "Web" build/web/index.html

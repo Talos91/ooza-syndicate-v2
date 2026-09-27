@@ -1,6 +1,7 @@
 # Next session - start here
 
-State as of publish today: **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
+State as of publish today: **v0.20.0 "Alpha 20"** - the room server hosts the matches (server-hosted rooms, the room
+owner; below) - on top of **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
 interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish
 retuned, per-seat rival factions, a tappable monster-icon launch flow, a smaller Machinegoon with a
 raised muzzle, skins fixed on the web, ARMIES 3D previews and TERRITORY moved in from OPTIONS, a
@@ -12,6 +13,18 @@ size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed ever
 `PLAYTEST-NOTES.md` notes 169-185, then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
 (the session board), the design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and
 `05 Handoff/AGENT-BRIEF.md`.
+
+## 0.20.0 "Alpha 20" (2026-09-27): server-hosted rooms (the server session)
+
+- CREATE ROOM -> `Net.host_room` sends {"op": "create"}; `server/relay.py` starts `godot --headless --main-pack
+  /opt/ooze/web/index.pck -- --dedicated --room --secret` (`Net.dedicated`: host with no seat, `main._ready` returns
+  right after the `Net.online()` check, before the tutorial's first-launch branch); the creator joins as a guest and is
+  `Net.room_owner`; `Net.can_control()` gates every lobby control (menu `show_lobby`), `_ask_owner` / `_owner_op` carry
+  them; `_pick_owner` hands the room on. Fallback codes no-server / version / busy -> `_fallback_host` (stage-1 room).
+- Publish: `server/deploy.sh` after the Web export + skins pack (BUILD-LOG sec10); `--relay` also updates relay.py.
+- Next on the server: the match host reports results to the progression session's `match-result` (PROGRESSION-DESIGN
+  sec7a: `Net.auth_token` -> "auth" in register, verify at join, HMAC-signed report, `Progression.seat_stats` /
+  `placements`) after 0.20.1; a domain once Daniele names the game; `--max-matches` 2 -> 3 after real use.
 
 ## 0.19.3 (2026-09-27): the tutorial reworked (Daniele's 0.19.1 playtest)
 
@@ -279,17 +292,18 @@ Still open on multiplayer:
 - Real separate-network and phone tests (Daniele). **0.19.0** now routes rooms through the relay server by
   default, which should fix the old strict-network PeerJS failures - not yet confirmed on a real separate
   network.
-- A host tab in the background still freezes the match (the host's own Sim is still the referee); 10 s later
-  guests drop (they can RECONNECT). Stage 2 below removes this.
+- **0.20.0 (stage 2):** rooms are hosted on the server, so a backgrounded phone only drops its own seat. Only the
+  fallback rooms (server full or on another version) are still hosted in the creator's browser, which must stay in
+  front.
 - Built in 0.16.1: EMPTY SEATS (AI), RECONNECT into a held seat, 10 s host grace, REMATCH.
 - Not built: seat swapping in the lobby, spectators.
 - **Alpha 20, stage 1 merged (0.19.0):** the small always-on VPS (Vultr, Singapore - friends are in Asia) is
   live as a **relay**: `Game/2.0/server/relay.py` forwards messages between a room's host and guests over
   WebSockets (`scripts/relay_bridge.gd`), replacing PeerJS by default (`?relay=peerjs` still falls back to
   it); no TURN-style connection limit any more. `tests/test_relay.gd` covers the path (exit 2 = SKIP when the
-  relay is unreachable). **Stage 2 (not built):** move the match referee itself onto the server - a headless
-  Godot host, so no player's device needs to stay in front; also a domain + Caddy TLS (today's address is
-  `sslip.io`, `server/README.md`). Access details: Daniele / the server session (not in the repo). Later:
+  relay is unreachable). **Stage 2 (0.20.0):** the match host is a headless copy of the game on the server (see
+  0.20.0 above; `tests/test_dedicated.gd`, 16 checks, local and live). Caddy TLS is live; a domain waits for the game
+  name (today's address is `sslip.io`, `server/README.md`). Access details: Daniele / the server session (not in the repo). Later:
   **Supabase** for accounts (Google + Apple sign-in), friends, history and leaderboards (replaces the Vercel +
   Neon idea; it can't run a match). Store path: web, then Android (Play closed test), then iOS (TestFlight).
 - Performance: the stutter on camera moves and falling nodes is client rendering, not the network - a measured

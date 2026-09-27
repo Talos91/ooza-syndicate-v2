@@ -1,5 +1,31 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.20.0 "Alpha 20" - 2026-09-27 (the room server hosts the matches)
+
+Daniele: "we need to think about a real server also so i can have friends playing ... end goal is put on android
+and apple store". Stage 1 (0.19.0) put every room through the room server as a relay; **stage 2 moves the match
+itself onto the server**, so no player's device runs it.
+
+- **Server-hosted rooms.** CREATE ROOM asks the room server (Vultr, Singapore) for a room it hosts: it starts this
+  same build headless (`--dedicated`) as the room's match host, with no seat of its own, and the creator joins as
+  the first player. A phone that locks or switches apps now only drops its own seat (RECONNECT takes it back); the
+  match goes on for everyone else.
+- **The room owner** (the creator, marked HOST in the lobby) picks players, map, Last Stand, abilities and EMPTY
+  SEATS, moves players between teams, DEPLOYs and picks the random rematch map; everyone else sees "the host
+  decides". If the owner drops, the next player present runs the room.
+- **Fallback:** when the server has no free match host (two at a time for now) or runs another game version, the
+  room is hosted in the creator's browser as before (keep that tab in front). An empty server room closes after 90 s.
+- ONLINE page texts say where the match runs. Protocol **ooze20-net-4** (the owner's lobby changes, "owner" in the
+  lobby packet).
+- Server: `server/relay.py` starts and stops the match hosts, `server/ooze-relay.service`, `server/deploy.sh` (every
+  publish now also uploads the build to the server, BUILD-LOG sec10), `server/README.md`. Test link
+  https://45-32-126-20.sslip.io/ always runs the server's build.
+- Tests: new `tests/test_dedicated.gd` (16 checks: owner, second player, owner-only changes, DEPLOY, the server's Sim,
+  an order answered, the owner dropping) - passes against a local relay and the live server; `test_relay` also covers
+  CREATE ROOM's fallback. A real two-window browser match on the live server: owner has DEPLOY, the other player's
+  controls greyed, orders answered. The server's match host uses ~250 MB and a few % CPU in a 1v1. Not tested on real
+  phones or separate networks yet.
+
 ## 0.19.3 "Alpha 19" - 2026-09-27 (the tutorial reworked after Daniele's 0.19.1 playtest)
 
 Daniele: "tutorial feels veeeeery unpolished and messy, also we need to standardize the language used and start it by

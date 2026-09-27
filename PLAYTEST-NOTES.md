@@ -697,3 +697,15 @@ decide if mechanics are good or not... only thing I can save on is textures or b
 190. **Handler "Dr. Vesk"; L7 gap 15 s; L9 neutrals as proposed; the Graduate vat remodelled if not pleasing.** *Done (0.19.3):*
      v2 by the Skin Designer (ivory, brass, crown, laurel crest).
 
+## 2026-09-27 - Daniele, a real server for friends (0.20.0)
+
+- "for this game ... we need to think about a real server also so i can have freinds playing.... end goal is put on
+  android and apple store soooo... something that works for that" - *Done in two stages:* 0.19.0 routes every room
+  through a room server (Vultr, Singapore: "my friends are in asia"); 0.20.0 moves the match onto that server
+  (a headless copy of the game per room, the creator is the room owner), so no phone hosts. Accounts, leaderboards and
+  currency: the "Leaderboard, progression, and currency" session (Supabase), with results written only by the server.
+- "will we be able to improve game performance having now a server? as i noticed before some slowing" - *Answered:*
+  mostly no; the stutter on camera moves and falling nodes is the device drawing the scene. A measured graphics pass
+  (kit meshes, batching, cheaper fall effects, dynamic resolution on phones) is its own item (NEXT-SESSION).
+- Domain: waits for the game name (Daniele: "i need to decide game name before moving forward"); until then the
+  server answers at 45-32-126-20.sslip.io.
