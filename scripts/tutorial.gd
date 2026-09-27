@@ -238,7 +238,7 @@ const LESSONS := [
 		"done": []},
 	{"id": 1, "key": "L1", "map": "T-03-first-batch", "abilities": false, "vls": false, "fraction": 1.0,
 		"stage": [["H", "A", 30], ["BH", "B", 30]], "protect": ["BH"],
-		"reveal": ["map", "badges", "drag", "clock"],
+		"reveal": ["map", "badges", "drag", "clock", "floaters"],   # (0.20.6: "+ CAPTURED" at the node is part of sending)
 		"steps": [
 			{"key": "drag", "target": {"nodes": ["H", "N1"]}, "gesture": [["drag", "H", "N1"]], "pass": ["send", "H", "N1"], "budget": 30.0},
 			{"key": "label", "target": {"nodes": ["N1"], "label": ["H", "N1"], "senders": ["H"]}, "assist": ["N1"],

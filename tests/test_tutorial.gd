@@ -178,6 +178,8 @@ func test_reveal() -> void:
 	check("danger" in TutorialDirector.reveal_for(7, 0) and not "danger" in TutorialDirector.reveal_for(6, 7), "reveal: danger marks from L7")
 	check("relay" in TutorialDirector.reveal_for(4, 0) and not "relay" in TutorialDirector.reveal_for(3, 4), "reveal: the relay cue from L4")
 	check("topbar" in TutorialDirector.reveal_for(1, 0) and not "strength" in TutorialDirector.reveal_for(1, 0), "reveal: L1 shows the top bar, the clock only")
+	check("floaters" in TutorialDirector.reveal_for(1, 0) and "floaters" in TutorialDirector.reveal_for(8, 3),
+			"reveal: the capture floaters from L1 step 1, kept in every later lesson")
 	check("monster_icon" in TutorialDirector.reveal_for(6, 0) and not "monster_icon" in TutorialDirector.reveal_for(5, 3), "reveal: the monster icon from L6")
 	check("out_panel" in TutorialDirector.reveal_for(9, 0) and "out_panel" in TutorialDirector.reveal_for(0, 0), "reveal: YOU'RE OUT only in the tour and the first match")
 
