@@ -5,6 +5,9 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.3 (net-5: smaller online updates)
+- [ ] **Online on mobile data**: a server room over 4G - as smooth as 0.21.2 or smoother; CONNECTION shows ~20 updates/s.
+
 ## 0.21.2 (monster colours)
 - [ ] **Monsters**: launch a monster (and a skin alternate) - teal VEX, magenta NULL, green BLOOM, orange EMBER, gold SOLAR, not grey; on the phone too.
 
