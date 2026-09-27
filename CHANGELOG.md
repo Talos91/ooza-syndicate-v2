@@ -1,5 +1,18 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.0 "Alpha 21" - 2026-09-28 (optimization, part 1: drawing)
+
+- **Draw far less** (Daniele: phone overheating, "lag still a major problem" with low fps in the PAUSE line): the static map
+  (platforms, fixed decks, piers, relay ledges, neon trims) is drawn through MultiMesh batches per mesh + material
+  (`MapBatch`, scripts/map_batch.gd); pieces keep their nodes, moving / falling / recoloured ones leave or move batches.
+  Phone profile, busy maps at 2:00: A-01 592 -> 256 draw calls, C-05 835 -> 310, M-37 972 -> 318, M-39 1,093 -> ~450;
+  primitives roughly halved. Desktop looks identical (mean pixel difference < 1/255).
+- **Sharper phones**: the 3D no longer renders at 75 % on phones (the renderer upscaled it without filtering: the blocky
+  "minecraft" edges); phones draw at full resolution with a 45 fps cap (30 in menus / paused).
+- **OPTIONS > PERFORMANCE**: GRAPHICS AUTO / LOW RES / FULL and FPS AUTO / 30 / 60 (`PerfProfile`, user://settings.cfg).
+  LOW RES: 30 fps, no shadows or glow, low detail, lite goo, fewer particles.
+- **Perf regression check**: tests/perf_check.tscn plays M-39 AI vs AI and checks draw calls / primitives / objects budgets.
+
 ## 0.20.13 "Alpha 20" - 2026-09-28 (online co-op playtest fixes)
 
 - **Last Stand announcement no longer covers the screen** (Daniele: "last stand still fills the whole screen"): the 5 s

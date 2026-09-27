@@ -5,6 +5,11 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.0 (optimization part 1)
+- [ ] **Phone heat / fps**: play a full match; is the phone cooler, is PAUSE's fps steadier (target 45)?
+- [ ] **Look**: same as before, sharper on the phone (no blocky edges).
+- [ ] **OPTIONS > PERFORMANCE**: try LOW RES on a weak phone; FPS 30 / 60.
+
 ## 0.20.13
 - [ ] **Last Stand start**: no big centre banner; a short notification top left.
 - [ ] **Notifications** are top left and readable.

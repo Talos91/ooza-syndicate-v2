@@ -839,3 +839,10 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      rooms give way to real players.
 218. **"in coop play the ai sucks"** (the AI enemies are too easy). *Open:* waiting on Daniele's choice of approach.
 219. **"lag still a major problem"** - the PAUSE line showed low fps. *Alpha 21 optimization started.*
+
+## 2026-09-28 - Daniele, Alpha 21 (0.21.0)
+
+220. **"i see the graphic has become like minecraft ... i hope you are not reducing the graphic of the game"** (watching a test
+     window). *Done (0.21.0):* the default look is unchanged on desktop and sharper on phones (the old 75 % phone render scale was
+     the blocky cause); savings come from batching, not resolution. "Full resolution, check the heat".
+221. **Light models "Phones only"** - coming in the next Alpha 21 build (light set on phones, today's full models on desktop).
