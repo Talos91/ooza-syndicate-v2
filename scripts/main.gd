@@ -884,6 +884,24 @@ func _run_scenario() -> void:
 								n["owner"] = ""
 						scenario_focus = Vector3.INF
 				_fit_camera()
+		"monlaunch":
+			# 0.20.1 (Daniele's online playtest: "i couldn't figure how to send the monster"): the fix in
+			# one sheet - phase 0 is the ready hub with its icon, untouched; phase 1 is the same tap that
+			# now arms LAUNCH directly (hud.is_ready_hub, main.gd's tap handler), reach ring and all.
+			var phase: int = mini(int(sim.time), 1)
+			if phase != _hud19_phase:
+				_hud19_phase = phase
+				match phase:
+					0:
+						sim.nodes[4]["owner"] = HUMAN
+						sim.nodes[4]["structure"] = "monster_hub"
+						sim.nodes[4]["units"] = 260.0
+						sim.nodes[4]["monster_ready_t"] = 0.0
+						scenario_focus = sim.nodes[4]["pos"]
+					1:
+						monster_from = 4                        # the tap: LAUNCH armed, reach ring + lit targets
+						scenario_focus = sim.nodes[4]["pos"]
+				_fit_camera()
 		_:
 			_scenario_done = true
 
