@@ -39,6 +39,13 @@ var _is_main := false
 var _last_show := Callable()                     # the page on screen (rebuilt when a resize changes the phone sizing)
 var _built_pt := 0.0                             # _pt_factor() the page was built with (0 while building)
 var _backdrop: TextureRect
+var _backdrop_art: Texture2D                     # the backdrop's own art (HOME swaps in the hero faction's scene)
+# UI: the Alpha 21 app shell (Daniele's navigation mockups, 2026-09-28): a shell page lays out full screen width in
+# canvas units (UiKit) between a TopBar and a NavBar - HOME / PLAY / ARMIES / CAMPAIGN.
+var _shell := false
+var _built_w := 0.0                              # the shell page's canvas width when built (a rotation rebuilds it)
+var top_bar: TopBar
+var nav_bar: NavBar
 var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
 var _map_scroll := 0
 # map filters on 02 BATTLEFIELD (Daniele, 0.18.6: "add in game filters for maps like 1v1 2v2 ffa etc"): players
@@ -129,6 +136,7 @@ func setup(m: Node3D) -> void:
 	clean.atlas = art                                 # buttons baked in, which peeked out on wide screens
 	clean.region = Rect2(Vector2(art.get_size()) * Vector2(0.36, 0.0), Vector2(art.get_size()) * Vector2(0.64, 1.0))
 	_backdrop.texture = clean
+	_backdrop_art = clean
 	_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -137,6 +145,11 @@ func setup(m: Node3D) -> void:
 	add_child(_backdrop)
 	get_viewport().size_changed.connect(_fit)
 	faction = m.SEAT_FACTIONS[m.HUMAN]
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--ui-cfg="):              # UI: tests / screenshots use their own ui.cfg
+			UiKit.path = arg.substr(9)
+	if not m.relaunch.has("faction"):                 # UI: a fresh start opens on the faction played last (HOME's hero)
+		faction = UiKit.last_faction()
 	if Net.in_room() or Net.status != "":             # back from a room: keep the faction you played
 		faction = Net.preferred_faction
 	ai_level = m.ai_level
@@ -173,15 +186,20 @@ func clear_page(art: String) -> void:
 		_tut_page.queue_free()
 		_tut_page = null
 	_built_pt = 0.0                                   # no rebuild check while this page is being built
+	_shell = art == "shell"                           # UI: before _fit(), which sizes a shell page full width
+	top_bar = null
+	nav_bar = null
 	content = Control.new()
 	add_child(content)
 	_fit()
 	_built_pt = _pt_factor()
+	_built_w = content.size.x
 	_is_main = art == "ui-main"
 	_page = ""
 	# one background only: the full-screen backdrop (Alpha 14 playtest: "background on top of a
 	# background" - the page used to draw its own copy of the art, misaligned on taller screens)
 	if _backdrop:
+		_backdrop.texture = _backdrop_art
 		_backdrop.modulate = Color(0.95, 0.95, 0.95) if _is_main else Color(0.62, 0.68, 0.74)
 
 
@@ -410,56 +428,188 @@ func map_preview(pos: Vector2, dims: Vector2) -> void:
 
 
 # ------------------------------------------------------------------ pages
+# ------------------------------------------------------------------ UI: the app shell (Alpha 21 UI pass)
+func shell_open(crumb: String, tab: String) -> Rect2:
+	## Clears to a shell page: TopBar (breadcrumb, balances, level -> PROFILE, "?" -> TRAINING for now) and
+	## NavBar (HOME / PLAY / ARMIES / CAMPAIGN, `tab` lit). Returns the free area between them, in canvas units.
+	clear_page("shell")
+	_page = tab
+	var f := UiKit.last_faction() if tab == "home" else faction
+	top_bar = TopBar.make(self, crumb, f)
+	top_bar.help_pressed.connect(show_tutorial)
+	top_bar.profile_pressed.connect(show_profile)
+	top_bar.options_pressed.connect(show_options)
+	nav_bar = NavBar.make(self, tab, f)
+	nav_bar.tab_pressed.connect(_on_tab)
+	content.add_child(top_bar)
+	content.add_child(nav_bar)
+	var y0 := top_bar.bar_height()
+	return Rect2(0, y0, content.size.x, nav_bar.position.y - y0)
+
+
+func _on_tab(id: String) -> void:
+	match id:
+		"home":
+			show_main()
+		"play":
+			show_play()
+		"armies":
+			show_armies(faction, show_main)
+		"campaign":
+			show_campaign()
+
+
+func _shell_add(c: Control, pos: Vector2) -> Control:
+	c.position = pos
+	content.add_child(c)
+	return c
+
+
+func _shell_button(text: String, pos: Vector2, dims: Vector2, call: Callable, f: String, primary := false) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_override("font", UiKit.HEAD)
+	b.add_theme_font_size_override("font_size", UiKit.px(self, 20 if primary else 15))
+	UiSkin.button(b, f, primary)
+	dims.y = UiKit.tap_h(self, dims.y)
+	b.custom_minimum_size = dims
+	b.size = dims
+	b.pressed.connect(func(): call.call_deferred())
+	return _shell_add(b, pos) as Button
+
+
+func _fade_left(area: Rect2, reach: float) -> void:
+	## A dark wash from the left edge, so HOME's text reads over the hero art.
+	var g := Gradient.new()
+	g.set_color(0, Color("030c12f0"))
+	g.set_color(1, Color("030c1200"))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill_from = Vector2(0.35, 0)
+	gt.fill_to = Vector2(1, 0)
+	var r := TextureRect.new()
+	r.texture = gt
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(r)
+	r.position = area.position
+	r.size = Vector2(reach, area.size.y)
+
+
 func show_main() -> void:
+	## HOME (Daniele's mockups 2026-09-28): the faction played last as the hero (its scene fills the screen, its
+	## creature on the right), the headline, PLAY (-> NEW GAME's faction step), CONTINUE CAMPAIGN, the training
+	## link while lessons remain; CHALLENGES top right; OPTIONS / FULLSCREEN and the version at the foot.
 	_last_show = show_main                  # a resize that changes the phone sizing rebuilds it (_fit)
-	clear_page("ui-main")
-	var mask := ColorRect.new()                      # the dark left column, full screen height
-	mask.color = Color("030c12")
-	mask.position = Vector2(-3000, -3000)
-	mask.size = Vector2(3000, 6000) + Vector2(P(585, 0).x, 0)
-	mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(mask)
-	# rows stack from y0, each at least rh(<its desktop height>) tall (the phone minimum on mobile) with
-	# GAP between them, so a taller phone row never runs into the next (Daniele, 0.18.8: "quite small on
-	# mobile"); the frame and the foot label follow the stack down instead of a fixed y.
-	const GAP := 14.0
-	var y := 407.0
-	frame(P(28, 47), P(550, 860 if mobile else 840))
-	picture("res://assets/ui/Ooze-Syndicate-Logo.svg", P(59, 94), P(520, 293))
-	var h1 := rh(98)
-	var start := nav_button("NEW GAME", P(80, y), P(440, h1), show_factions, true)
-	start.add_theme_font_size_override("font_size", int(round(fsz(37) * K)))
-	y += h1 + GAP
-	# ARMIES (0.18.7, Daniele: "its own new menu item where you select what skill each of your factions will
-	# use"): its own row under NEW GAME; OPTIONS and FULLSCREEN / QUIT share the next one
-	var h2 := rh(82)
-	# CAMPAIGN: the ARMIES row split into CAMPAIGN | ARMIES (same height and style; CAMPAIGN-DESIGN §3)
-	nav_button("CAMPAIGN", P(80, y), P(212, h2), show_campaign).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
-	nav_button("ARMIES", P(307, y), P(213, h2), func(): show_armies(faction, show_main)).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
-	y += h2 + GAP
-	var h3 := rh(82)
-	nav_button("OPTIONS", P(80, y), P(212, h3), show_options).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
-	nav_button("FULLSCREEN" if OS.has_feature("web") else "QUIT", P(307, y), P(213, h3), func():
+	var area := shell_open("OOZE / HOME", "home")
+	_is_main = true
+	var hero := UiKit.last_faction()
+	var acc := UiKit.accent(hero)
+	if _backdrop:
+		_backdrop.texture = UiKit.hero_art(hero)
+		_backdrop.modulate = Color(0.9, 0.9, 0.9)
+	_fade_left(area, content.size.x * 0.62)
+	content.move_child(top_bar, -1)                    # the bars over the wash
+	content.move_child(nav_bar, -1)
+	var x := maxf(40.0, content.size.x * 0.04)
+	var kick := UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 14, acc, false, 3)
+	var head := UiKit.label(self, "THE CITY IS\nYOURS TO TAKE.", 60, UiKit.INK, true)
+	var sub := UiKit.label(self, "Pick your syndicate. Control the crossings.", 18, UiKit.MUTED)
+	var bh := UiKit.tap_h(self, 58.0)
+	var th := UiKit.tap_h(self, 36.0)
+	var tut_done := TutorialDirector.done_count() >= TutorialDirector.TOTAL_LESSONS
+	var stack_h := kick.get_minimum_size().y + 8.0 + head.get_minimum_size().y + 10.0 + sub.get_minimum_size().y \
+			+ 28.0 + bh + (8.0 + th if not tut_done else 0.0)
+	var free_h := area.size.y - th - 16.0              # the foot row (FULLSCREEN / version) keeps its own strip
+	var y := area.position.y + maxf(10.0, (free_h - stack_h) / 2.0)
+	_shell_add(kick, Vector2(x, y))
+	y += kick.get_minimum_size().y + 8.0
+	_shell_add(head, Vector2(x - 3.0, y))
+	y += head.get_minimum_size().y + 10.0
+	_shell_add(sub, Vector2(x, y))
+	y += sub.get_minimum_size().y + 28.0
+	_shell_button("PLAY", Vector2(x, y), Vector2(250, 58), show_factions, hero, true)
+	var cont := UiKit.flat_button(self, "CONTINUE CAMPAIGN", 18)
+	cont.add_theme_font_override("font", UiKit.HEAD)
+	cont.size = Vector2(cont.get_minimum_size().x + 24.0, bh)
+	cont.pressed.connect(func(): show_campaign.call_deferred())
+	_shell_add(cont, Vector2(x + 250.0 + 22.0, y))
+	y += bh + 8.0
+	if not tut_done:                                   # TUTORIAL (§7): "n / 10" until every lesson is done
+		var n := TutorialDirector.done_count()
+		var tl := UiKit.flat_button(self, "NEW HERE? START TRAINING  →" if n == 0
+				else "TRAINING %d / %d  →" % [n, TutorialDirector.TOTAL_LESSONS], 15)
+		tl.size = Vector2(tl.get_minimum_size().x + 12.0, th)
+		tl.pressed.connect(func(): show_tutorial.call_deferred())
+		_shell_add(tl, Vector2(x, y))
+	# the hero's tag, under its creature
+	var tag := UiKit.label(self, UiKit.TAGS[hero], 15, UiKit.INK, true, 2)
+	var tag_w := tag.get_minimum_size().x + 28.0
+	var tag_h := tag.get_minimum_size().y + 14.0
+	var tag_pos := Vector2(content.size.x * 0.66 - tag_w / 2.0, area.end.y - tag_h - 22.0)
+	content.add_child(UiKit.rect(tag_pos, Vector2(tag_w, tag_h), Color("030c12d8")))
+	content.add_child(UiKit.rect(tag_pos, Vector2(3.0, tag_h), acc))
+	_shell_add(tag, tag_pos + Vector2(16.0, 7.0))
+	# PROGRESSION: CHALLENGES (what is ready to claim), top right under the bar
+	var ready_n := Progression.claimable()
+	var cw := 280.0
+	_shell_button("CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else ""),
+			Vector2(content.size.x - cw - x * 0.6, area.position.y + 16.0), Vector2(cw, 44), show_challenges, hero, ready_n > 0)
+	# the foot: FULLSCREEN (QUIT on desktop) and the version; OPTIONS is the top bar's gear
+	var fy := area.end.y - th - 6.0
+	var fb := UiKit.flat_button(self, "FULLSCREEN" if OS.has_feature("web") else "QUIT", 14, UiKit.MUTED)
+	fb.size = Vector2(UiKit.text_w(self, fb.text, 14) + 20.0, th)
+	fb.pressed.connect(func():
 		if OS.has_feature("web"):
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		else:
-			get_tree().quit()).add_theme_font_size_override("font_size", int(round(fsz(28) * K)))
-	y += h3 + GAP
-	var h4 := rh(64)
-	# TUTORIAL (§7): live, reading "TUTORIAL n/10" (the tour, eight lessons, the first match) until all are done
-	var tut_text := "TUTORIAL" if TutorialDirector.done_count() >= TutorialDirector.TOTAL_LESSONS 			else "TUTORIAL %d/%d" % [TutorialDirector.done_count(), TutorialDirector.TOTAL_LESSONS]
-	nav_button(tut_text, P(80, y), P(212, h4), show_tutorial)
-	nav_button("ONLINE", P(307, y), P(213, h4), show_online)
-	y += h4 + 16.0
-	label_at("%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], P(66, y), 19, Color("839da9"))
-	_profile_card(P(1282, 36))                        # PROGRESSION: level, SCRAP, CHIPS -> PROFILE; CHALLENGES
-	# 0.20.11 (Daniele: "on the main screen a guide on how to add to home screen so new users can figure
-	# it" - chat and keyboards only work installed): bottom right, clear of the profile card above and
-	# the left column; web + phone browsers only, hidden once installed or dismissed.
+			get_tree().quit())
+	_shell_add(fb, Vector2(x - 10.0, fy))
+	var fx := x - 10.0 + fb.size.x + 8.0
+	var ver := UiKit.label(self, "%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], 12, UiKit.DIM)
+	_shell_add(ver, Vector2(fx + 8.0, fy + (th - ver.get_minimum_size().y) / 2.0))
+	# 0.20.11: INSTALL THE GAME (web + phone browsers only, hidden once installed or dismissed), bottom right
 	if _install_available():
-		_install_button(P(1270, foot_y(56.0)))
+		_install_button(Vector2(content.size.x - 300.0 - x * 0.6, area.end.y - UiKit.tap_h(self, 44.0) - 70.0))
 	if _install_guide_open:
 		_install_guide_panel()
+
+
+func show_play() -> void:
+	## PLAY: the ways into a match, one card each - VS AI (NEW GAME's faction -> battlefield -> setup), ONLINE
+	## rooms, TRAINING.
+	_last_show = show_play
+	var area := shell_open("OOZE / PLAY", "play")
+	if _backdrop:
+		_backdrop.modulate = Color(0.4, 0.44, 0.48)     # the cards carry the art; the page behind stays quiet
+	var x := maxf(40.0, content.size.x * 0.04)
+	var kick := UiKit.label(self, "PLAY", 14, UiKit.accent(faction), false, 3)
+	_shell_add(kick, Vector2(x, area.position.y + 18.0))
+	var head := UiKit.label(self, "PICK YOUR FIGHT.", 36, UiKit.INK, true)
+	_shell_add(head, Vector2(x, kick.position.y + kick.get_minimum_size().y + 4.0))
+	var top := head.position.y + head.get_minimum_size().y + 18.0
+	var gap := 18.0
+	var cw := (content.size.x - x * 2.0 - gap * 2.0) / 3.0
+	var ch := area.end.y - top - 22.0
+	var done := TutorialDirector.done_count()
+	var cards := [
+		["CUSTOM MATCH", "VS AI", "Pick a faction, a battlefield and your rivals.", "", show_factions],
+		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/null.png", show_online],
+		["LEARN THE CITY", "TRAINING", "%d / %d lessons done. Replay any lesson." % [done, TutorialDirector.TOTAL_LESSONS],
+				"res://assets/art/city-background.png", show_tutorial],
+	]
+	for i in range(cards.size()):
+		var c := FrameCard.make(self, Vector2(cw, ch), faction)
+		c.set_kicker(cards[i][0])
+		c.set_title(cards[i][1])
+		c.set_note(cards[i][2])
+		c.set_action("PLAY  →" if i == 0 else "OPEN")
+		c.set_state("next" if i == 0 else "open")
+		c.set_art(cards[i][3])
+		var go: Callable = cards[i][4]
+		c.pressed.connect(func(): go.call_deferred())
+		_shell_add(c, Vector2(x + i * (cw + gap), top))
 
 
 func show_options() -> void:
@@ -647,6 +797,7 @@ func show_tutorial() -> void:
 
 
 func _start_lesson(id: int) -> void:
+	UiKit.save_last_faction(faction)                   # UI: HOME's hero is the faction played last
 	main.SEAT_FACTIONS[main.HUMAN] = faction
 	main.start_tutorial(id, false, faction, colour)
 
@@ -1392,6 +1543,7 @@ func show_campaign() -> void:
 	_camp_page.set_mobile(mobile)
 	_camp_page.back_pressed.connect(show_main)
 	_camp_page.play_pressed.connect(func(key: String):
+		UiKit.save_last_faction(_camp_page.faction)     # UI: HOME's hero is the faction played last
 		if main.has_method("start_mission"):          # main.gd's mission launcher (the campaign session adds it)
 			main.call("start_mission", key, colour))
 	add_child(_camp_page)
@@ -1929,6 +2081,7 @@ func _seat_faction_picks() -> Dictionary:
 
 
 func deploy() -> void:
+	UiKit.save_last_faction(faction)                   # UI: HOME's hero is the faction played last
 	main.start_match(map_path, faction, _seat_faction_picks(), ai_level, mode, colour, ArmyPresets.loadout_for(faction))   # your ARMIES preset
 
 
@@ -2309,6 +2462,13 @@ func _fit() -> void:
 	content.size = Vector2(1280, 720)
 	content.scale = Vector2(s, s)
 	content.position = (vp - Vector2(1280, 720) * s) / 2.0
+	if _shell:                                        # UI: a shell page spans the whole screen (bars edge to edge)
+		content.size = vp / s
+		content.position = Vector2.ZERO
+		if _built_w > 0.0 and _last_show.is_valid() and absf(content.size.x / _built_w - 1.0) > 0.02:
+			_built_w = 0.0
+			_last_show.call_deferred()
+			return
 	# A page's tap heights and text sizes (rh / tap / fsz) are computed from the screen when it is built: a page
 	# built in portrait, or mid-rotation / fullscreen switch, kept giant buttons after the phone turned (0.20.2,
 	# Daniele: "emergency this is what my gf see"). When the phone sizing moves by more than 10 %, rebuild it.
