@@ -23,6 +23,7 @@ extends Node3D
 ##   --thumb=<png>                          render the map's menu thumbnail (no HUD), then quit
 ##   --menu-page=<page> --menu-shot=<png>   open a menu page / screenshot the menu, then quit
 ##   --menu-filter=brawl                     screenshot helper: pre-set the BATTLEFIELD TYPE filter chip
+##   --menu-mode=FFA4 --menu-colour=faction   screenshot helper: pre-set SETUP's PLAYERS mode / YOUR COLOUR
 ##   --scenario=fight|rear|queue|build|inspect|switch|rotate --zoom=N  stage one situation up close
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
@@ -217,6 +218,12 @@ func _ready() -> void:
 		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--menu-filter="):          # screenshot helper: pre-set the BATTLEFIELD TYPE filter
 				Menu.map_filter_type = arg.substr(14)
+			elif arg.begins_with("--menu-map="):            # screenshot helper: pre-set SETUP's selected map
+				(menu_layer as Menu).map_path = arg.substr(11)
+			elif arg.begins_with("--menu-mode="):          # screenshot helper: pre-set SETUP's PLAYERS mode
+				(menu_layer as Menu).mode = arg.substr(12)
+			elif arg.begins_with("--menu-colour="):        # screenshot helper: pre-set SETUP's YOUR COLOUR
+				(menu_layer as Menu).colour = arg.substr(14)
 		if menu_open != "":                              # TUTORIAL: LESSONS / ARMIES / NEW GAME from a lesson
 			if menu_open == "cosmetics":                 # (COSMETICS' BACK returns through ARMIES)
 				(menu_layer as Menu).show_armies()
@@ -728,6 +735,11 @@ func _stage_scenario() -> void:
 			sim.nodes[4]["owner"] = HUMAN
 			sim.nodes[4]["units"] = 260.0
 			scenario_focus = sim.nodes[4]["pos"]
+		"hud192":
+			# 0.19.2 contact sheet: node 0 owned normally (the new top bar, 1v1), then node 4 becomes a
+			# ready Monster hub (the launch icon + reach area), then every human node is cleared (YOU'RE OUT).
+			sim.nodes[0]["owner"] = HUMAN
+			sim.nodes[0]["units"] = 140.0
 		_:
 			sim.nodes[1]["owner"] = "A"
 			sim.nodes[1]["units"] = 160.0
@@ -835,6 +847,25 @@ func _run_scenario() -> void:
 						sim.fire_relay(4)                        # exactly what double-tap now does (main.gd)
 						hud.inspect(4, cam)                      # re-synced: the warning ring + outcome preview
 				_fit_camera()
+		"hud192":
+			var phase: int = mini(int(sim.time), 2)
+			if phase != _hud19_phase:
+				_hud19_phase = phase
+				match phase:
+					1:
+						sim.nodes[4]["owner"] = HUMAN            # the Monster hub: ready at once (icon + reach area)
+						sim.nodes[4]["structure"] = "monster_hub"
+						sim.nodes[4]["units"] = 260.0
+						sim.nodes[4]["monster_ready_t"] = 0.0
+						hud.inspect(4, cam)
+						scenario_focus = sim.nodes[4]["pos"]
+					2:
+						hud.close_inspector()
+						for n in sim.nodes:                      # YOU'RE OUT: every node of yours, gone
+							if n["owner"] == HUMAN:
+								n["owner"] = ""
+						scenario_focus = Vector3.INF
+				_fit_camera()
 		_:
 			_scenario_done = true
 
@@ -917,7 +948,7 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 			elif n["build_kind"] != "":
 				return [false, "Construction already in progress"]
 			elif n["attachment"] == "cannon" and n["cannon_tier"] >= 3:
-				return [false, "Cannon is already at max tier"]
+				return [false, "Laser tower has no upgrades"]
 			elif n["attachment"] == "forge":
 				return [false, "A forge has no further tier"]
 			elif n["tier"] >= 4:
@@ -1040,7 +1071,7 @@ func _process(delta: float) -> void:
 				if str(ev.get("seat_hit", "")) == HUMAN:
 					var kicked := int(ev.get("shown", 0))
 					if kicked > 0:
-						hud.toast("A monster kicked %d unit%s off the bridge" % [kicked, "" if kicked == 1 else "s"], "warn")
+						hud.toast("A monster kicked %d unit%s off the deck" % [kicked, "" if kicked == 1 else "s"], "warn")
 			"forge_lost":                              # red toast (spec E): the bonus is gone
 				if str(ev.get("seat", "")) == HUMAN:
 					hud.toast("Forge lost - the attack and defence bonus is gone", "warn")

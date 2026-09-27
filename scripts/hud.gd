@@ -590,13 +590,13 @@ func sync(dt: float, cam: Camera3D) -> void:
 	if not shows("status_line"):
 		status_label.text = ""
 	elif sim.very_last_stand_active:
-		status_label.text = ("VERY LAST STAND · a platform falls every %d s" % int(round(sim.very_last_stand_gap))
-				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · one platform stands - conquest decides")
+		status_label.text = ("VERY LAST STAND · a node drops every %d s" % int(round(sim.very_last_stand_gap))
+				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · one node stands - conquest decides")
 	elif sim.last_stand_active:
 		var next := ""
 		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
 		if sim.v3 and not sim.last_stand_warn.is_empty():
-			next = "RING %d FALLING · next platform in %d s (%d left)" % [sim.last_stand_next, int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
+			next = "RING %d DROPPING · next node in %d s (%d left)" % [sim.last_stand_next, int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
 		elif sim.last_stand_warn_node >= 0:
 			next = "NODE %d FALLS IN %d s" % [sim.last_stand_warn_node, int(ceil(sim.last_stand_warn_t))]
 		elif sim.last_stand_next < pending:
@@ -1134,7 +1134,7 @@ func _sync_monster_icon(cam: Camera3D) -> void:
 
 # ------------------------------------------------------------------ 0.19.2 spec H7: YOU'RE OUT
 func _check_out() -> void:
-	if _out_shown or not main.get("show_out_panel"):
+	if _out_shown or not main.get("show_out_panel") or sim.over:   # the match ending wins: show_end() takes it
 		return
 	if _seat_out(human):
 		_out_shown = true
@@ -1221,7 +1221,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 	if n["swap_cd"] > 0.0 and owner == human:
 		lines.append("attachment swap in %.0f s" % ceil(n["swap_cd"]))
 	if sim.very_last_stand_active:
-		lines.append("VERY LAST STAND: %s" % ("THE LAST PLATFORM - conquest decides" if sim.very_last_stand_gap <= 0.0
+		lines.append("VERY LAST STAND: %s" % ("THE LAST NODE - conquest decides" if sim.very_last_stand_gap <= 0.0
 				else ("falls in %d s" % int(ceil(sim.drop_in(n["id"]))) if sim.is_warned(n["id"]) else "could fall next")))
 	elif sim.last_stand_active:
 		var k := sim.drop_order_of(n["id"])
@@ -1432,6 +1432,7 @@ func _on_rematch_changed() -> void:
 func show_end(winner: String) -> void:
 	_end_winner = winner
 	main.paused = true
+	out_panel.visible = false                          # the match ending wins over YOU'RE OUT lingering on top
 	var title := "VICTORY" if sim.allied(winner, human) else ("DEFEAT" if winner != "" else "DRAW")   # team modes: allies win together
 	var a_lost: float = sim.combat_losses.get(human, 0.0)
 	var a_fell: float = sim.fall_losses.get(human, 0.0)
