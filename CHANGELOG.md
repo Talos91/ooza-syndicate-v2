@@ -1,5 +1,19 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.3 "Alpha 21" - 2026-09-28 (smaller online updates: net-5)
+
+- **Online uses about a third of the data** (server session, protocol ooze20-net-5): between once-a-second keyframes a
+  snapshot carries only what changed, positions are sent as 1/64 m steps, and the match host's frames are binary. Live
+  (FFA 4 + 2 AI): ~9.7 KB/s per guest (was ~34), 20 updates/s, 0 % frozen; on simulated mobile data 0.5 % frozen
+  (0.21.1: 1.7 %). The room server's relay already understands binary frames (installed with 0.21.2).
+
+## 0.21.2 "Alpha 21" - 2026-09-28 (the monsters in their real colours)
+
+- **Monsters in colour**: the five race monsters and their alternates (Maneater / Titan / Monolith / Eclipse / Skyrig) had
+  shown grey since 0.19.0 - their colours live in a texture (the full-colour Alpha 1 minions) that the game's files lacked
+  (HD) or dropped at import (light). Both sets now carry Skin Designer's 512 px colour map (`*_tex512` folders; one JPEG,
+  no normal / metal maps) and the light import keeps it. Geometry unchanged.
+
 ## 0.21.1 "Alpha 21" - 2026-09-28 (optimization, part 2: models; server host; iPhone fullscreen)
 
 - **Light models on phones, full ones on desktop** (Daniele: "Phones only"): index.pck now carries the light kit (base

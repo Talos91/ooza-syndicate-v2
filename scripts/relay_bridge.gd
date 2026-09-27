@@ -24,6 +24,9 @@ var _since := 0
 var netsim := []                                   # [latency s, jitter s, stall every s, stall length s]; [] = off
 var _held: Array = []                              # netsim: [release msec, raw] in arrival order
 var _last_release := 0
+var poll_json := true                              # poll() also builds the JSON string (legacy callers)
+var _typed: Array = []                             # poll_events(): the events as they are (binary data included)
+var bytes_in := 0                                  # bytes received (the probes' wire measure)
 
 
 func _init(relay_url: String) -> void:
@@ -43,7 +46,7 @@ func _init(relay_url: String) -> void:
 func start(is_host: bool, code: String) -> void:
 	if not is_host and not _valid_code(code):
 		close()
-		events.append({"type": "error", "message": "Enter the four-character room code."})
+		_emit({"type": "error", "message": "Enter the four-character room code."})
 		return
 	start_with(is_host, {"op": "host"} if is_host else {"op": "join", "code": code})
 
@@ -63,7 +66,7 @@ func start_with(is_host: bool, first: Dictionary) -> void:
 	_since = Time.get_ticks_msec()
 	if ws.connect_to_url(url) != OK:
 		ws = null
-		events.append({"type": "error", "message": "Could not reach the room server."})
+		_emit({"type": "error", "message": "Could not reach the room server."})
 
 
 func poll() -> String:
@@ -75,26 +78,61 @@ func poll() -> String:
 				opened = true
 				ws.send_text(JSON.stringify(hello))
 			while ws.get_available_packet_count() > 0:
-				_arrive(ws.get_packet().get_string_from_utf8())
+				_arrive(_read())
 		elif state == WebSocketPeer.STATE_CLOSING:
 			while ws.get_available_packet_count() > 0:  # the relay's last words arrive with its close
-				_arrive(ws.get_packet().get_string_from_utf8())
+				_arrive(_read())
 		elif state == WebSocketPeer.STATE_CLOSED:
 			while ws.get_available_packet_count() > 0:  # the relay's last words (an error, "closed")
-				_arrive(ws.get_packet().get_string_from_utf8())
+				_arrive(_read())
 			if not closing:
 				_lost()
 			ws = null
 		elif state == WebSocketPeer.STATE_CONNECTING and Time.get_ticks_msec() - _since > CONNECT_TIMEOUT * 1000.0:
 			ws.close()
 			ws = null
-			events.append({"type": "error", "message": "Could not reach the room server. Check your connection."})
+			_emit({"type": "error", "message": "Could not reach the room server. Check your connection."})
 	var now := Time.get_ticks_msec()
 	while not _held.is_empty() and int(_held[0][0]) <= now:   # netsim: packets whose delay is over
-		_take(str(_held.pop_front()[1]))
-	var out := JSON.stringify(events)
+		_take(_held.pop_front()[1])
+	var out := JSON.stringify(events) if poll_json else ""
 	events = []
 	return out
+
+
+func _emit(e: Dictionary) -> void:
+	events.append(e)
+	_typed.append(e)
+
+
+func poll_events() -> Array:
+	## Net's call (net-5): the same events as poll(), as an Array - binary host packets ("bin", data = bytes)
+	## can't ride a JSON string.
+	poll_json = false
+	poll()
+	var out := _typed
+	_typed = []
+	return out
+
+
+func send_bin(to: String, packet: PackedByteArray, is_state := false) -> bool:
+	## A binary frame for the relay: [1][length of to][to][packet] - it forwards the packet to `to` as [2][...]["host"].
+	if ws == null or ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return false
+	if is_state and ws.get_current_outbound_buffered_amount() > STATE_BACKLOG:
+		return false                               # a slow link skips snapshots instead of falling behind
+	var t := to.to_utf8_buffer()
+	var frame := PackedByteArray([1, t.size()])
+	frame.append_array(t)
+	frame.append_array(packet)
+	return ws.send(frame, WebSocketPeer.WRITE_MODE_BINARY) == OK
+
+
+func _read():
+	## One packet: text (the relay's JSON events) as a String, binary (a host packet) as bytes.
+	var p := ws.get_packet()
+	bytes_in += p.size()
+	return p if not ws.was_string_packet() else p.get_string_from_utf8()
 
 
 func send(to: String, data: String) -> bool:
@@ -116,10 +154,11 @@ func close() -> void:
 		ws.close(1000, "left")
 	ws = null
 	events = []
+	_typed = []
 	_held = []
 
 
-func _arrive(raw: String) -> void:
+func _arrive(raw) -> void:
 	if netsim.is_empty() or host:
 		_take(raw)
 		return
@@ -133,24 +172,29 @@ func _arrive(raw: String) -> void:
 	_held.append([ms, raw])
 
 
-func _take(raw: String) -> void:
+func _take(raw) -> void:
 	## Every packet goes on, snapshots included: Net's playout buffer (0.20.2) spaces out a burst instead of
-	## this dropping all but the newest.
-	var event = JSON.parse_string(raw)
+	## this dropping all but the newest. A binary frame [2][length][from][packet] is a host packet (net-5).
+	if raw is PackedByteArray:
+		var b: PackedByteArray = raw
+		if b.size() >= 2 and b[0] == 2 and 2 + b[1] <= b.size():
+			_typed.append({"type": "bin", "peer": b.slice(2, 2 + b[1]).get_string_from_utf8(), "data": b.slice(2 + b[1])})
+		return
+	var event = JSON.parse_string(str(raw))
 	if event is Dictionary:
-		events.append(event)
+		_emit(event)
 
 
 func _lost() -> void:
 	if not opened:
-		events.append({"type": "error", "message": "Could not reach the room server. Check your connection."})
+		_emit({"type": "error", "message": "Could not reach the room server. Check your connection."})
 	elif host:
-		events.append({"type": "error", "message": "Lost the room server. The room is closed."})
+		_emit({"type": "error", "message": "Lost the room server. The room is closed."})
 	else:
 		for e in events:                           # the relay already said why (host left / room not found)
 			if str(e.get("type", "")) in ["closed", "error"]:
 				return
-		events.append({"type": "closed", "peer": "host"})
+		_emit({"type": "closed", "peer": "host"})
 
 
 static func _valid_code(code: String) -> bool:

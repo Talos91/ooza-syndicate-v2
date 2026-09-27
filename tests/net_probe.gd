@@ -122,6 +122,7 @@ func _run() -> void:
 	var prev_clock := sb.time
 	var frozen := 0.0
 	var last_us := Time.get_ticks_usec()
+	var bytes0: int = b.bridge.bytes_in if b.bridge != null and "bytes_in" in b.bridge else 0
 	var t0 := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t0 < seconds * 1000.0 and not sb.over:
 		await process_frame
@@ -168,6 +169,8 @@ func _run() -> void:
 	print("match time on the guest: %.1f s (host clock), hordes now %d" % [sb.time, sb.hordes.size()])
 	print("snapshot gap ms:   ", _stats(gaps), "  -> %.1f Hz" % (1000.0 / maxf(1.0, _mean(gaps))))
 	print("snapshot bytes:    ", _stats(sizes), "  keyframe: ", _stats(key_sizes))
+	if b.bridge != null and "bytes_in" in b.bridge:
+		print("ON THE WIRE (measured): %.1f KB/s per guest" % ((b.bridge.bytes_in - bytes0) / 1024.0 / maxf(1.0, (Time.get_ticks_msec() - t0) / 1000.0)))
 	print("  -> ~%.1f KB/s per guest" % (_mean(sizes) * (1000.0 / maxf(1.0, _mean(gaps))) / 1024.0))
 	print("order round trip:  ", _stats(rtts))
 	var big := jumps.filter(func(j): return j > 0.5).size()
