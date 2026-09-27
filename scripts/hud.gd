@@ -1187,7 +1187,7 @@ func show_out_panel() -> void:
 			[["SPECTATE", func():
 				out_panel.visible = false
 				spectate_button.visible = true],
-			["LEAVE ROOM" if main.online else "MAIN MENU", main.to_menu]])
+			["LEAVE ROOM" if main.online else ("CAMPAIGN" if main.get("mission") != null else "MAIN MENU"), main.to_menu]])   # CAMPAIGN
 	out_panel.visible = true
 	layout(root.get_viewport_rect().size, margins)
 
@@ -1448,7 +1448,7 @@ func pause_menu() -> void:
 				Rules.last_stand = not Rules.last_stand
 				pause_menu()],
 			_territory_action(),
-			["RESTART", main.restart], ["MAIN MENU", main.to_menu]])
+			["RESTART", main.restart], ["CAMPAIGN" if main.get("mission") != null else "MAIN MENU", main.to_menu]])   # CAMPAIGN: a mission leaves to its page
 	pause_panel.visible = true
 	layout(root.get_viewport_rect().size, margins)
 
