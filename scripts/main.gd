@@ -1143,9 +1143,13 @@ func _process(delta: float) -> void:
 			"skill":                                  # a rival's skill that touches you: a toast (SkillDock.on_event)
 				hud.skill_event(ev)
 			"last_stand":
+				# 0.20.13 (Daniele's online co-op playtest: "last stand still fills the whole screen"): this
+				# was the culprit - a 44 pt two-line banner held 5 s dead centre. The status line already
+				# says LAST STAND continuously right under the top bar, so the one-time announcement only
+				# needs a toast now; the per-node danger symbols still carry the actual warning.
 				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
 						"chaos": "nodes fall in a hidden order - your home last"}
-				hud.show_banner("LAST STAND - %s\n%s" % [str(ev["method"]).to_upper(), how.get(ev["method"], "")], 5.0)
+				hud.toast("LAST STAND - %s: %s" % [str(ev["method"]).to_upper(), how.get(ev["method"], "")], "warn")
 			# 0.20.6 declutter (Daniele: "too many notifications and many notifications cover the map...
 			# remove all notices of things like send and capture"): VERY LAST STAND repeats the status
 			# line (H5/top bar), the node's own falls are the danger symbols, and relay switches are
