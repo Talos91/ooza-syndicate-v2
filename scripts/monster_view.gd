@@ -554,6 +554,7 @@ static func stage(main: Node, arg: String) -> void:
 						pairs.append([nb["id"], gun["id"]])
 						break
 			main.set_meta("stage_guns", pairs)
+			sim.nodes[home]["tier"] = 2                   # A's home as a T2 vat beside them, for scale
 			print("stage: guns at ", picks.slice(0, 4).map(func(x): return x["id"]), " lines ", pairs)
 		"skins":                                       # seat A in non-default looks everywhere (0.19.2 proof)
 			Cosmetics.set_loadout("A", {"vat": "reactor", "machinegoon": "spitter", "laser": "tesla", "forge": "anvil",

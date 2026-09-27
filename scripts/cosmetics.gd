@@ -293,9 +293,11 @@ static func loaded_skins() -> Array:
 # within r of it and in front of z0 turns, see MapBuilder.split_spinner). Gate pivots are read from the
 # model's own `*_Gate` node at run time (MonsterView); "gate" here is the fallback.
 const POINTS := {
-	"Machinegoon_T1": {"muzzles": [Vector3(0, 2.72, 3.69)]},
-	"Machinegoon_T2": {"muzzles": [Vector3(-0.39, 2.81, 4.42), Vector3(0.39, 2.81, 4.42)]},
-	"Machinegoon_T3": {"muzzles": [Vector3(0, 2.92, 5.31)], "spin": {"axis": Vector2(0, 2.92), "r": 0.7, "z0": 1.3}},
+	# 0.20.2 v2 (Models/2.0/structures_2_1/glb_machinegoon_v2): low barrels, built for full scale; T3's 6-barrel
+	# cluster (r 0.24) turns about +Z through (0, 1.34): its islands lie within 0.40 of the axis from z 1.08 on
+	"Machinegoon_T1": {"muzzles": [Vector3(0, 1.34, 2.65)]},
+	"Machinegoon_T2": {"muzzles": [Vector3(-0.32, 1.34, 2.75), Vector3(0.32, 1.34, 2.75)]},
+	"Machinegoon_T3": {"muzzles": [Vector3(0, 1.34, 2.90)], "spin": {"axis": Vector2(0, 1.34), "r": 0.40, "z0": 1.05}},
 	"GooGun_T1_Spitter": {"muzzles": [Vector3(0, 2.35, 1.89)]},
 	"GooGun_T2_Spitter": {"muzzles": [Vector3(-0.32, 2.40, 2.30), Vector3(0.32, 2.40, 2.30)]},
 	"GooGun_T3_Spitter": {"muzzles": [Vector3(0, 2.77, 2.87), Vector3(-0.34, 2.31, 2.87), Vector3(0.34, 2.31, 2.87)]},
@@ -338,14 +340,15 @@ static func points(model_name: String) -> Dictionary:
 
 
 # MACHINEGOON SIZE (0.19.2, Daniele on 0.19.1: "too big and when they shoot it looks weird as the enemies are
-# under them"): every Machinegoon look is shown at MG_SCALE (about a vat's footprint) and sunk into its socket
-# so its highest muzzle sits MG_MUZZLE_Y above the deck - the stream arcs out onto the line's bodies instead of
-# pouring straight down. Applied to the model's children by MapBuilder.piece (the root keeps scale 1 for the
+# under them"; 0.20.2 on the 0.65 fix: "way too small; make it look as big as the other structures but make
+# sense"): the default look is the v2 model with LOW barrels, shown at full scale (muzzles 1.34 m over the
+# deck, no sink). The Spitter / Pepperbox skins are still their old tall models: shown at MG_LOOK_SCALE and
+# sunk into the socket so their highest muzzle sits MG_MUZZLE_Y above the deck - the stream arcs out onto the
+# line's bodies instead of pouring straight down. Applied to the model's children by MapBuilder.piece (the root keeps scale 1 for the
 # build / pump / tier-down animations); the muzzles above stay in model space (the view reads them through
 # the turret's global transform, so they follow the scale and the drop).
-const MG_SCALE := 0.65
 const MG_MUZZLE_Y := 1.15
-const MG_LOOK_SCALE := {"Spitter": 1.45, "Pepperbox": 1.3}   # the skins are modelled smaller: same footprint
+const MG_LOOK_SCALE := {"Spitter": 0.9425, "Pepperbox": 0.845}   # per look; the default (v2) is 1.0 with no sink
 
 
 static func fit(model_name: String) -> Dictionary:
@@ -356,7 +359,10 @@ static func fit(model_name: String) -> Dictionary:
 	var top := 0.0
 	for m in pt["muzzles"]:
 		top = maxf(top, (m as Vector3).y)
-	var k: float = MG_SCALE * float(MG_LOOK_SCALE.get(model_name.trim_prefix("skins/").get_slice("_", 2), 1.0))
+	var look := model_name.trim_prefix("skins/").get_slice("_", 2)
+	if not MG_LOOK_SCALE.has(look):
+		return {}                                     # the default v2 model: as modelled
+	var k: float = MG_LOOK_SCALE[look]
 	return {"scale": k, "drop": maxf(0.0, top * k - MG_MUZZLE_Y)}
 
 
