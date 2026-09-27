@@ -1,15 +1,20 @@
 extends SceneTree
 ## Online smoothness probe (0.20.2): two players in a server room, a busy match (FFA 4 with two AI), and the numbers
 ## that decide how smooth guests look. Not a pass/fail test.
-##   Godot --headless --path . --script res://tests/net_probe.gd [-- --relay=<url> --seconds=60 --mode=FFA4]
+##   Godot --headless --path . --script res://tests/net_probe.gd [-- --relay=<url> --seconds=60 --mode=FFA4
+##       --netsim=<latency ms>,<jitter ms>,<stall every s>,<stall length s>]   (netsim: a bad mobile link, RelayBridge)
 ## Prints: snapshot inter-arrival (mean, p50, p95, max, rate), snapshot size (delta / keyframe, bytes on the wire),
-## order round trip (send -> feedback), and the guest's position error before each correction.
+## order round trip (send -> feedback), and what the guest shows at 60 fps: FREEZE (frames where its match clock
+## stood still, total and the longest) and JUMP (a line's movement in one frame beyond its smooth motion: the
+## change of per-frame velocity x dt, in sim metres - a snap shows as a spike).
 
 var gaps: Array = []
 var rtts: Array = []
 var sizes: Array = []
 var key_sizes: Array = []
 var jumps: Array = []
+var freeze_total := 0.0
+var freeze_long := 0.0
 
 
 func _initialize() -> void:
@@ -72,6 +77,7 @@ func _horde_pos(s: Sim) -> Dictionary:
 
 
 func _run() -> void:
+	Engine.max_fps = 60                                # a phone's frame pacing, not a headless spin
 	var seconds := 60.0
 	var want_mode := "FFA4"
 	for arg in OS.get_cmdline_user_args():
@@ -110,20 +116,39 @@ func _run() -> void:
 	var next_order := 1.0
 	var last_arrival := -1
 	var prev_since := 0.0
-	var before := {}
+	var prev_pos := _horde_pos(sb)
+	var prev_vel := {}
+	var prev_clock := sb.time
+	var frozen := 0.0
+	var last_us := Time.get_ticks_usec()
 	var t0 := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t0 < seconds * 1000.0 and not sb.over:
-		var predicted := _horde_pos(sb)                 # guest positions just before this frame's poll
 		await process_frame
+		var now_us := Time.get_ticks_usec()
+		var dt := maxf(0.001, (now_us - last_us) / 1000000.0)
+		last_us = now_us
+		if sb.time <= prev_clock + 0.0001:              # the guest's clock stood still this frame
+			frozen += dt
+		else:
+			if frozen > 0.0:
+				freeze_total += frozen
+				freeze_long = maxf(freeze_long, frozen)
+			frozen = 0.0
+		prev_clock = sb.time
+		var pos := _horde_pos(sb)
+		var vel := {}
+		for id in pos:
+			if prev_pos.has(id):
+				vel[id] = (float(pos[id]) - float(prev_pos[id])) / dt
+				if prev_vel.has(id):
+					jumps.append(absf(float(vel[id]) - float(prev_vel[id])) * dt)
+		prev_pos = pos
+		prev_vel = vel
 		if b._since_snapshot < prev_since:              # a snapshot arrived this frame
 			var now := Time.get_ticks_usec()
 			if last_arrival > 0:
 				gaps.append((now - last_arrival) / 1000.0)
 			last_arrival = now
-			var got := _horde_pos(sb)
-			for id in got:                              # how far a line jumped when the snapshot corrected it
-				if predicted.has(id):
-					jumps.append(absf(float(got[id]) - float(predicted[id])))
 			var delta := var_to_bytes(b.snapshot(sb, false)).compress(FileAccess.COMPRESSION_DEFLATE).size()
 			sizes.append(delta * 4.0 / 3.0 + 40.0)      # base64 + the JSON envelopes
 			if sizes.size() % 10 == 1:
@@ -144,7 +169,9 @@ func _run() -> void:
 	print("snapshot bytes:    ", _stats(sizes), "  keyframe: ", _stats(key_sizes))
 	print("  -> ~%.1f KB/s per guest" % (_mean(sizes) * (1000.0 / maxf(1.0, _mean(gaps))) / 1024.0))
 	print("order round trip:  ", _stats(rtts))
-	print("correction jump (sim metres along the line): ", _stats(jumps))
+	var big := jumps.filter(func(j): return j > 0.5).size()
+	print("jump per frame (m): ", _stats(jumps), "  spikes > 0.5 m: %d (%.1f / min)" % [big, big * 60.0 / seconds])
+	print("freeze: %.2f s total (%.1f %% of the time), longest %.2f s" % [freeze_total, 100.0 * freeze_total / seconds, freeze_long])
 	a.leave()
 	b.leave()
 	await _wait(func(): return false, 1.0)
