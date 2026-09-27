@@ -111,7 +111,8 @@ func _data() -> void:
 	check(str(h["missions"][2]["number"]) == "S1" and int(h["stars"]) == 3 and int(h["stars_max"]) == 12, "numbers and district stars")
 	var h2 := Campaign.hub("vex", 1)
 	check(str(h2["missions"][0]["state"]) == "dev" and str(h2["missions"][0]["needs"]) != "", "an unbuilt mission reads dev")
-	check(str(h["missions"][0]["backdrop"]) == "", "no backdrop art yet: empty path (the card falls back)")
+	check(str(h["missions"][0]["backdrop"]) == "res://assets/art/campaign/vex-01.jpg", "vex:01's own art (tools/ui_art.py)")
+	check(Campaign.backdrop_of("null:01") == "", "no art for a mission: empty path (the card falls back)")
 	Campaign.reset_progress()
 
 
