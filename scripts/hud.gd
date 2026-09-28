@@ -1846,7 +1846,8 @@ func _reconnect_watch() -> void:
 
 func _pause_settings() -> void:
 	## PAUSE > SETTINGS (Daniele 2026-09-28: yes): the DISPLAY settings that make sense mid-match - GRAPHICS (its 3D side
-	## from the next match), FRAME RATE and DETAIL - one tap cycles each (PerfProfile / Rules, saved as in SETTINGS).
+	## from the next match), FRAME RATE and DETAIL - one tap cycles each (PerfProfile / Rules, saved as in SETTINGS); SOUND /
+	## VOLUME and MUSIC / MUSIC VOL (Music) are two rows of toggles under BACK.
 	var s := MatchScreens.open(pause_panel, mobile, _my_faction())
 	var fps_now := "AUTO (%d)" % int(PerfProfile.PROFILES[PerfProfile.level()]["fps"]) if PerfProfile.fps_mode() == "auto" 			else PerfProfile.fps_mode()
 	var gfx_now := "AUTO (%s)" % ("PHONE" if PerfProfile.is_phone() else "FULL") if PerfProfile.mode() == "auto" 			else str(PerfProfile.MODE_NAMES[PerfProfile.mode()])
@@ -1854,6 +1855,8 @@ func _pause_settings() -> void:
 			"body": "Tap a setting to change it. GRAPHICS changes the 3D from the next match; the rest right away.",
 			"pairs": [["SOUND: " + ("ON" if Sfx.sound_on() else "OFF"), func(): Sfx.set_on(not Sfx.sound_on()); _pause_settings()],   # SOUND
 				["VOLUME: " + Sfx.volume_label(), func(): Sfx.set_volume(Sfx.next_volume()); _pause_settings()]],
+			"pairs2": [["MUSIC: " + ("ON" if Music.music_on() else "OFF"), func(): Music.set_on(not Music.music_on()); _pause_settings()],   # MUSIC
+				["MUSIC VOL: " + Music.volume_label(), func(): Music.set_volume(Music.next_volume()); _pause_settings()]],
 			"actions": [["BACK  →", pause_menu],
 				["GRAPHICS: " + gfx_now, func(): PerfProfile.set_mode(PerfProfile.next_mode()); _pause_settings()],
 				["FRAME RATE: " + fps_now, func(): PerfProfile.set_fps(PerfProfile.next_fps()); _pause_settings()],

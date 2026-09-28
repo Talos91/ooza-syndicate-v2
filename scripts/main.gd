@@ -151,6 +151,7 @@ func _ready() -> void:
 	Engine.max_fps = Net.DEDICATED_FPS if Net.dedicated else 60   # never spin faster than the screen (menu included)
 	PerfProfile.apply(self)                            # Alpha 21 OPT-RENDER: graphics profile, fps cap, map batching (perf_profile.gd)
 	Sfx.attach(self)                                   # SOUND: the match's sounds + the saved volume (sfx.gd; never on the room server)
+	Music.attach(self)                                 # MUSIC: the soundtrack follows this scene (music.gd; never on the room server)
 	MissionDirector.restore_settings()                 # CAMPAIGN: a blind mission's HIDE ENEMY COUNTS goes back
 	if Net.online():                                   # a room launched (or relaunched) a round
 		_start_online()
