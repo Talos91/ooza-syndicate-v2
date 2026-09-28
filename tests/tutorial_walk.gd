@@ -231,7 +231,7 @@ func _lesson(id: int) -> void:
 					m.hud.monster_icon.pressed.emit()
 				await _secs(0.4)
 				await _shot("monster-armed")
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("launch_monster", _id("R3"), {"to": _id("M2")}); m.monster_from = -1)
+				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("launch_monster", _id("R3"), {"to": _id("M1")}); m.monster_from = -1)
 			"L6.take":
 				await _secs(2.0)
 				await _shot("monster-walking")
