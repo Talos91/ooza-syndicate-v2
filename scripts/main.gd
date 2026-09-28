@@ -132,8 +132,10 @@ static var last_map_path := ""                 # MAIN MENU remembers the last ma
 var director: TutorialDirector = null            # a lesson is on (null: a normal match)
 var coach: CoachOverlay = null
 var menu_faction := ""                           # the player's own menu faction, kept while a lesson plays VEX
+var menu_ai := ""                                # AUDIT FIX: the player's own menu AI level, kept while a lesson plays its own
 var _coach_version := -1
 static var menu_open := ""                       # after a relaunch: open this menu page instead of MAIN
+var relaunched := false                          # AUDIT FIX: this scene came from a relaunch carrying your faction (Menu)
 # --- CAMPAIGN (CAMPAIGN-DESIGN.md §4 / §5): the mission director, its overlay, the menu settings kept for afterwards ---
 var mission: MissionDirector = null              # a campaign mission is on (null: not one)
 var mission_overlay: MissionOverlay = null
@@ -142,6 +144,10 @@ var mission_menu_ai := ""
 var end_shot := ""                               # UI: --end-shot=win|lose|draw|details|pause|settings|out|reconnect (_end_shot)
 static var mission_arg_used := false             # --mission=<key> starts it once per run (a leave never loops back)
 # --- end CAMPAIGN ---
+# --- AUDIT FIX (2026-09-28, audit-sim A4 + audit-client A1): a room's settings never stay applied offline ---
+static var own_settings := {}                    # the player's own LAST STAND / ABILITIES / HIDDEN COUNTS, taken offline
+static var room_rules := false                   # a room's round wrote its settings and numbers into Rules (Net._launch)
+# --- end AUDIT FIX ---
 
 
 func _ready() -> void:
@@ -151,12 +157,17 @@ func _ready() -> void:
 	Engine.max_fps = Net.DEDICATED_FPS if Net.dedicated else 60   # never spin faster than the screen (menu included)
 	PerfProfile.apply(self)                            # Alpha 21 OPT-RENDER: graphics profile, fps cap, map batching (perf_profile.gd)
 	Sfx.attach(self)                                   # SOUND: the match's sounds + the saved volume (sfx.gd; never on the room server)
-	MissionDirector.restore_settings()                 # CAMPAIGN: a blind mission's HIDE ENEMY COUNTS goes back
+	MissionDirector.restore_settings()                 # CAMPAIGN / TUTORIAL: a mission's or lesson's pinned settings go back
 	if Net.online():                                   # a room launched (or relaunched) a round
+		room_rules = true                              # AUDIT FIX: Net._launch wrote the room's settings into Rules
 		_start_online()
 		return
+	if not Net.dedicated:                              # AUDIT FIX: offline - the room's numbers and toggles go, yours come back
+		restore_own_settings()
+		keep_own_settings()
 	if Net.dedicated:                                  # the room server's match host between rounds: no menu, no screen
 		return
+	relaunched = relaunch.has("faction")
 	if relaunch.has("faction"):
 		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
 		ai_level = relaunch.get("ai", ai_level)
@@ -642,7 +653,7 @@ func _random_rematch_map() -> Dictionary:
 	var need := _human_count()
 	var candidates := []
 	for mp in MapPool.battlefield():
-		var m := MapBuilder.load_map(mp)
+		var m := pool_map(mp)                          # AUDIT FIX (B1): parsed once per session
 		var md := _rematch_mode_for(m, need)
 		if md != "":
 			candidates.append({"map": mp, "mode": md})
@@ -671,6 +682,48 @@ func rematch_random() -> void:
 	restart()
 
 
+# --- AUDIT FIX (2026-09-28, audit-client B1): the battlefield pool's maps parsed once per session ---
+static var _pool_maps := {}                      # path -> the parsed map (shared, read-only: the menu and REMATCH)
+
+
+static func pool_map(path: String) -> Dictionary:
+	## A pool map's parsed JSON for the menu's cards and REMATCH ON A RANDOM MAP - read-only, never handed to a Sim
+	## (a match loads its own copy: MapBuilder.load_map). Parsing all 88 cost ~37 ms (desktop) on every menu entry.
+	if not _pool_maps.has(path):
+		_pool_maps[path] = MapBuilder.load_map(path)
+	return _pool_maps[path]
+
+
+# --- AUDIT FIX (2026-09-28): the player's own match settings around online rounds ---
+static func keep_own_settings() -> void:
+	## Offline (main._ready, the SETUP toggles): remember the player's own LAST STAND / ABILITIES / HIDDEN COUNTS,
+	## so they come back after a room's round has written the room's into Rules.
+	if room_rules:
+		return
+	own_settings = {"last_stand": Rules.last_stand, "abilities_on": Rules.abilities_on,
+			"hide_enemy_counts": Rules.hide_enemy_counts}
+
+
+static func restore_own_settings() -> void:
+	## After a room's round (LEAVE ROOM, back offline): the default numbers again - no balance preset, the default
+	## forge bonus and speeds (Net._launch sets them for the round) - and the player's own toggles. A no-op while no
+	## room wrote anything, so the Debug panel's offline tuning still carries to the next match.
+	if not room_rules:
+		return
+	room_rules = false
+	Rules.apply_balance("")
+	Rules.forge_bonus = Rules.FORGE_BONUS_DEFAULT
+	Rules.deck_speed = Rules.DECK_SPEED_DEFAULT
+	Rules.node_speed_mult = Rules.NODE_SPEED_MULT_DEFAULT
+	Rules.door_rate = Rules.DOOR_RATE_DEFAULT
+	Rules.node_fight_mult = Rules.NODE_FIGHT_MULT_DEFAULT
+	if not own_settings.is_empty():
+		Rules.last_stand = bool(own_settings["last_stand"])
+		Rules.abilities_on = bool(own_settings["abilities_on"])
+		Rules.hide_enemy_counts = bool(own_settings["hide_enemy_counts"])
+# --- end AUDIT FIX ---
+
+
 func to_menu(page := "") -> void:
 	## `page` (UI, Alpha 21: the result screen's CONTINUE / CHANGE LOADOUT): open that menu page instead of MAIN.
 	if started and not sim.over and director == null and mission == null:   # PROGRESSION (Alpha 21): left early
@@ -679,9 +732,9 @@ func to_menu(page := "") -> void:
 	if mission:                                        # CAMPAIGN: leaving a mission returns to the campaign page
 		_mission_leave(page)
 		return
-	if director:                                       # TUTORIAL §7: leaving a lesson marks the tutorial offered
-		TutorialDirector.mark_offered()
-		SEAT_FACTIONS[HUMAN] = menu_faction            # (and the menu gets your own faction back)
+	if director:                                       # TUTORIAL §7: leaving a lesson marks the tutorial offered, and the
+		_tutorial_leave({"menu": page} if page != "" else {})   # menu gets your own faction, AI level and loadout back (AUDIT FIX)
+		return
 	if online:                                         # LEAVE ROOM: the room closes for us
 		Net.leave()
 	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice,
@@ -693,10 +746,10 @@ func to_menu(page := "") -> void:
 
 # ------------------------------------------------------------------ world
 func _apply_quality() -> void:
+	## Phones: no shadows, no MSAA. (AUDIT FIX: the old 0.75 3D render scale is gone - PerfProfile renders every
+	## profile at full resolution, the unfiltered upscale gave the "minecraft" steps; a phone on FULL got it back.)
 	if mobile:
 		sun.shadow_enabled = false
-		get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-		get_viewport().scaling_3d_scale = 0.75
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
 
 
@@ -1177,8 +1230,6 @@ func node_action(method: String, id: int, args := {}) -> bool:
 			director.say(why)
 			return false
 	var r := perform(HUMAN, method, id, args)
-	if mission:                                        # CAMPAIGN
-		mission.on_action(method, id, args, r[0])
 	if director:
 		director.on_action(method, id, args, r[0])
 		if not r[0] and str(r[1]) != "" and not hud.shows("notices"):
@@ -1390,6 +1441,14 @@ func _process(delta: float) -> void:
 						hud.callout_node(at, "FORGE LOST · BONUS GONE", "warn")
 					else:
 						hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
+			"hub_destroyed":                           # AUDIT FIX (Daniele, 2026-09-28): one Monster hub per player - a second
+				var hid := int(ev.get("node", -1))     # one taken is demolished on capture (a red burst, a word why)
+				if hid >= 0 and hid < sim.nodes.size():
+					var hpos: Vector3 = sim.nodes[hid]["pos"]
+					fx._pulse(hpos, Rules.state_color("warn"), Rules.R + 1.5, 0.9)
+					fx.floater(hpos, "HUB DESTROYED", Rules.state_color("warn"))
+					if str(ev.get("seat", "")) == HUMAN:
+						hud.callout_node(hid, "HUB DESTROYED · ONE PER PLAYER", "warn")
 			"eject":                                   # your own eject is a routine order (nothing to say, see node_action);
 				if str(ev.get("seat", "")) != HUMAN and sim.allied(str(ev.get("seat", "")), HUMAN):
 					hud.callout_node(int(ev["node"]), "STORED TROOPS SENT HOME", "info", str(ev["seat"]))
@@ -1949,7 +2008,10 @@ func start_tutorial(lesson_id: int, first := false, faction := "", colour := "")
 	SEAT_FACTIONS[HUMAN] = TutorialDirector.PLAYER_FACTION
 	SEAT_FACTIONS["B"] = TutorialDirector.RIVAL_FACTION
 	mode = "1v1"
+	menu_ai = ai_level                                 # AUDIT FIX: back on the menu after the lesson
 	ai_level = str(director.L.get("ai", ai_level))
+	MissionDirector.pin_settings({"last_stand": true, "hide_enemy_counts": false})   # AUDIT FIX: a lesson's own settings
+	# (ABILITIES: the lesson's own data, TutorialDirector.begin; restored by main._ready's MissionDirector.restore_settings)
 	LOADOUTS = {HUMAN: director.loadout_for()}
 	fraction = director.fraction_start(fraction)
 	pitch_forced = false
@@ -1978,7 +2040,9 @@ func _tutorial_setup() -> void:
 	coach.skip_step.connect(func(): director.skip_step())
 	coach.restart.connect(restart)
 	coach.exit.connect(to_lessons)
-	coach.skip_tutorial.connect(to_menu)               # SKIP TUTORIAL: MAIN, offered marked (to_menu)
+	coach.skip_tutorial.connect(func():                # SKIP TUTORIAL: MAIN, offered marked (to_menu); the lesson counts as
+		TutorialDirector.mark_skipped(director.lesson_id)   # skipped - the next one opens, nothing paid (Daniele, 2026-09-28)
+		to_menu())
 	director.completed.connect(_on_lesson_completed)
 	director.handler.connect(coach.handler_mood)      # the handler hops on a pass, droops on a fail
 	var step_seen := {"i": director.step_i}
@@ -2120,8 +2184,6 @@ func _tutorial_rect(key: String) -> Rect2:
 			return hud.send_button_rect(float(parts[1]))
 		"action":
 			return hud.action_rect(parts[1])
-		"dock":
-			return hud.dock_slot_rect(int(parts[1]))
 	return Rect2()
 
 
@@ -2139,11 +2201,9 @@ func _tutorial_gesture() -> void:
 				var a := int(g[1])
 				var b := int(g[2])
 				if a >= 0 and b >= 0:
-					var route := sim.find_route(a, b)
 					var path := PackedVector2Array()
-					if route.size() >= 2:
-						for q in (sim.build_path(route)["pts"] as PackedVector3Array):
-							path.append(cam.unproject_position(q))
+					for q in director.route_points(a, b):   # AUDIT FIX (B1): the route and its path cached by the director
+						path.append(cam.unproject_position(q))
 					coach.gesture("drag", cam.unproject_position(sim.nodes[a]["pos"]), cam.unproject_position(sim.nodes[b]["pos"]), path)
 					return
 			"press":
@@ -2224,6 +2284,8 @@ func _on_lesson_completed(r: Dictionary) -> void:
 	else:
 		var lines: Array = (r.get("lines", []) as Array).duplicate()
 		lines.append("%s · %d:%02d" % [str(r.get("title", "")), int(r.get("time", 0.0)) / 60, int(r.get("time", 0.0)) % 60])
+		if r.get("skipped", false):                    # AUDIT FIX (Daniele, 2026-09-28): a skip doesn't complete it
+			lines.append(TutorialDirector.line("skipped_note"))
 		coach.show_complete(TutorialDirector.line("lesson_complete"), lines, TutorialDirector.line("next"), [TutorialDirector.line("replay"), TutorialDirector.line("lessons")],
 				int(r.get("scrap", 0)))                       # TUTORIAL + PROGRESSION
 	hud.extra_ui_rects = coach.ui_rects()
@@ -2236,7 +2298,8 @@ func to_lessons() -> void:
 
 func _tutorial_leave(extra: Dictionary) -> void:
 	TutorialDirector.mark_offered()
-	relaunch = {"faction": menu_faction, "ai": ai_level if not extra.has("ai") else extra["ai"], "colour": color_choice,
+	var own_ai := menu_ai if menu_ai != "" else ai_level   # AUDIT FIX: the menu's AI level, not the lesson's
+	relaunch = {"faction": menu_faction, "ai": own_ai if not extra.has("ai") else extra["ai"], "colour": color_choice,
 			"loadout": ArmyPresets.loadout_for(menu_faction)}
 	if extra.has("menu"):
 		relaunch["menu"] = extra["menu"]
@@ -2247,6 +2310,8 @@ func _tutorial_leave(extra: Dictionary) -> void:
 
 func _tutorial_relaunch(extra: Dictionary) -> void:
 	relaunch = {"faction": menu_faction, "colour": color_choice}
+	if menu_ai != "":                                  # AUDIT FIX: the menu's AI level survives NEXT / REPLAY / RESTART
+		relaunch["ai"] = menu_ai
 	relaunch.merge(extra, true)
 	get_tree().reload_current_scene()
 
@@ -2277,6 +2342,7 @@ func start_mission(key: String, colour := "") -> void:
 	## that faction; the last map played stays MAIN MENU's. A mission that can't be played yet (no map, a system
 	## not built) goes back to the campaign page.
 	var m := Campaign.mission(key)
+	Campaign.last_run = {}                             # AUDIT FIX: an earlier mission's result never replays
 	mission_menu_faction = str(SEAT_FACTIONS[HUMAN])
 	mission_menu_ai = ai_level
 	if colour != "":
@@ -2298,6 +2364,7 @@ func start_mission(key: String, colour := "") -> void:
 	if menu_layer:
 		menu_layer.queue_free()
 		menu_layer = null
+	MissionDirector.pin_settings(MissionDirector.mission_pins(m))   # AUDIT FIX: the mission's own ABILITIES / LAST STAND / HIDDEN COUNTS
 	var keep_last := last_map_path                     # a mission map never becomes MAIN MENU's "last map"
 	_start_map(str(m["map"]))
 	last_map_path = keep_last
@@ -2364,7 +2431,7 @@ func _on_mission_action(id: String) -> void:
 
 
 func _mission_relaunch(key: String) -> void:
-	relaunch = {"mission": key, "faction": mission_menu_faction, "colour": color_choice}
+	relaunch = {"mission": key, "faction": mission_menu_faction, "colour": color_choice, "ai": mission_menu_ai}   # AUDIT FIX: + the menu AI
 	get_tree().reload_current_scene()
 
 
@@ -2375,11 +2442,7 @@ func _mission_leave(page := "") -> void:
 	var f := mission_menu_faction if mission_menu_faction != "" else str(SEAT_FACTIONS[HUMAN])
 	relaunch = {"faction": f, "ai": mission_menu_ai if mission_menu_ai != "" else ai_level, "colour": color_choice,
 			"loadout": ArmyPresets.loadout_for(f)}
-	var menu_script := load("res://scripts/menu.gd") as Script
-	for mm in menu_script.get_script_method_list():
-		if str(mm.get("name", "")) == "show_campaign":
-			relaunch["menu"] = "campaign"
-			break
+	relaunch["menu"] = "campaign"                      # (Menu.show_campaign)
 	if page == "armies":                               # UI: its BACK returns to the campaign page
 		relaunch["menu"] = "armies"
 		relaunch["army"] = str(SEAT_FACTIONS[HUMAN])

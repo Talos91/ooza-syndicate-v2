@@ -941,6 +941,7 @@ func _init() -> void:
 	_dock_tests()
 	_rules_0_18_10()
 	_ls_pacing()
+	_audit_fixes()
 	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
@@ -999,6 +1000,165 @@ func _tp(seats := {3: "A", 4: "B"}, factions := {"A": "null", "B": "null"}, team
 	var s := Sim.new()
 	s.setup(m, MapBuilder.layout(m), seats, factions, 1, teams)
 	return s
+
+
+# ------------------------------------------------------------------ 2026-09-28: the audit fix pass (audit-sim A1-A5, Daniele's rule fixes)
+func _audit_fixes() -> void:
+	# Core Meltdown against an allied store: the kills split by troop share, the node falls only at total 0
+	for c in [[200.0, 200.0, false], [30.0, 30.0, true]]:
+		var s := _tp({3: "A", 4: "B"}, {"A": "ember", "B": "null"}, {"A": 0, "B": 1, "C": 1})
+		_ready_skills(s)
+		s.nodes[1]["owner"] = "B"
+		s.nodes[1]["units"] = c[0]
+		s.nodes[1]["allies"] = {"C": c[1]}
+		s.nodes[1]["arrivals"] = ["C"]
+		s.nodes[3]["units"] = 200.0
+		_charged(s, "A")
+		var h := s.send(3, 1, 1.0)
+		run_until(s, func(): return float(h["L"]) - float(h["s"]) <= 12.0, 20.0)
+		var line: float = h["units"]
+		var b0: float = s.nodes[1]["units"]
+		var c0: float = s.nodes[1]["allies"].get("C", 0.0)
+		var lost_c0: float = s.combat_losses.get("C", 0.0)
+		var kills: float = minf(maxf(line * 0.25, 20.0) * 3.0, 300.0)
+		check(s.cast("A", "ultimate", h["id"]), "Core Meltdown vs an allied store: cast")
+		if c[2]:
+			check(s.nodes[1]["owner"] == "A" and s.nodes[1]["allies"].is_empty() and s.combat_losses.get("C", 0.0) - lost_c0 > c0 - 0.01,
+					"Core Meltdown: the owner's and the ally's troops both gone (%.0f + %.0f vs %.0f kills) -> captured, the ally's losses counted" % [b0, c0, kills])
+		else:
+			var frac: float = kills / (b0 + c0)
+			check(s.nodes[1]["owner"] == "B" and absf(s.nodes[1]["units"] - b0 * (1.0 - frac)) < 0.01
+					and absf(float(s.nodes[1]["allies"]["C"]) - c0 * (1.0 - frac)) < 0.01
+					and absf(s.combat_losses.get("C", 0.0) - lost_c0 - c0 * frac) < 0.01,
+					"Core Meltdown: %.0f kills split by share over the owner's %.0f and the ally's %.0f stored" % [kills, b0, c0])
+	# a split line's front does not drain its source (_split_front: no eject_left / ghost_left)
+	var sp := _tp()
+	sp.nodes[3]["units"] = 200.0
+	var hs := sp.send(3, 4, 1.0)
+	_steps(sp, 3.0)
+	hs["eject_left"] = 40.0
+	hs["ghost_left"] = 10.0
+	var n_before := sp.hordes.size()
+	sp._split_front(hs, 5.0)
+	var fr: Dictionary = sp.hordes[-1]
+	check(sp.hordes.size() == n_before + 1 and not fr.has("eject_left") and float(fr.get("ghost_left", 0.0)) == 0.0
+			and float(hs["eject_left"]) == 40.0, "a split-off front carries no EJECT / decoy feed of its own")
+	# capture: the hub forgets the old owner's monster; ONE MONSTER PER PLAYER - a second hub taken is destroyed
+	var s1 := _tp()
+	s1.nodes[2]["owner"] = "B"
+	s1.nodes[2]["structure"] = "monster_hub"
+	s1.nodes[2]["hub_monster"] = 7
+	s1._capture(s1.nodes[2], "A", 10.0)
+	check(s1.nodes[2]["structure"] == "monster_hub" and int(s1.nodes[2]["hub_monster"]) == -1
+			and absf(float(s1.nodes[2]["monster_ready_t"]) - (s1.time + Rules.MONSTER_COOLDOWN)) < 0.01,
+			"a captured hub is the capturer's: its old monster forgotten (hub_monster -1), charging afresh")
+	s1.nodes[1]["owner"] = "B"
+	s1.nodes[1]["structure"] = "monster_hub"
+	s1.nodes[1]["hub_monster"] = 3
+	s1.fx_events.clear()
+	s1._capture(s1.nodes[1], "A", 10.0)
+	check(s1.nodes[1]["owner"] == "A" and s1.nodes[1]["structure"] == "" and int(s1.nodes[1]["hub_monster"]) == -1
+			and s1.nodes[2]["structure"] == "monster_hub" and s1.events.any(func(e): return e["type"] == "hub_destroyed" and e["node"] == 1)
+			and s1.fx_events.any(func(e): return e["type"] == "hub_destroyed" and e["seat"] == "A"),
+			"one Monster hub per player: a second hub captured is destroyed on capture (slot empty, hub_destroyed event)")
+	check(s1.can_build(1, "A", "monster_hub") != "", "... and the empty slot can't take a second hub either")
+	var s2 := _tp({3: "A", 4: "B"}, {"A": "null", "B": "null"}, {"A": 0, "B": 1, "C": 1})
+	s2.nodes[2]["owner"] = "C"
+	s2.nodes[2]["structure"] = "monster_hub"
+	s2.nodes[1]["owner"] = "B"
+	s2.nodes[1]["structure"] = "monster_hub"
+	s2.nodes[1]["units"] = 0.0
+	s2.nodes[1]["allies"] = {"C": 30.0}
+	s2.nodes[1]["arrivals"] = ["C"]
+	s2._check_handovers()
+	check(s2.nodes[1]["owner"] == "C" and s2.nodes[1]["structure"] == "" and s2.events.any(func(e): return e["type"] == "hub_destroyed"),
+			"one Monster hub per player: a hub handed over to a seat that has one is destroyed too")
+	# towers fire at a line anywhere within range, not only its head (Daniele, 2026-09-28)
+	for kind in ["laser", "machinegoon"]:
+		var st := _tp()
+		var tn: Dictionary = st.nodes[1]
+		tn["owner"] = "A"
+		tn["tier"] = 2
+		st.nodes[0]["owner"] = "B"
+		st.nodes[0]["units"] = 2000.0
+		st.nodes[3]["units"] = 5000.0
+		var lh := st.send(0, 3, 1.0)                       # through node 1 and on, still streaming out of node 0
+		var reach: float = Rules.LASER_RANGE if kind == "laser" else Rules.MACHINEGOON_RANGE
+		var c1: Vector3 = tn["pos"]
+		var guard := 0
+		while guard < 3000 and lh in st.hordes and not _straddles(lh, 1, c1, reach):
+			st.step(0.02)                                  # (no structure yet: held quiet until the line straddles it)
+			guard += 1
+		var straddles: bool = lh in st.hordes and _straddles(lh, 1, c1, reach)
+		tn["structure"] = kind
+		tn["cannon_cd"] = 0.0
+		st._bodies.clear()
+		var in_range: bool = straddles and lh in st._hordes_in_range(tn, reach)
+		var lost0: float = st.combat_losses.get("B", 0.0)
+		for i in range(10):
+			st.step(0.02)
+		var at: Vector3 = tn["shot"].get("pos", Vector3(INF, 0, 0))
+		check(straddles and in_range and st.combat_losses.get("B", 0.0) > lost0 + 0.1 and at.distance_to(c1) <= reach + 0.5,
+				"%s: a line whose head and tail are both out of range but whose body passes the node is hit (%.1f killed)" % [kind, st.combat_losses.get("B", 0.0) - lost0])
+	# the Very Last Stand counts open relay decks as open links
+	var sv := _relay_sim("res://maps4/M-08-neon-delta.json", 7, 1)
+	var end_n := -1
+	for ei in sv.controlled_edges(7):
+		if sv.is_edge_open(ei):
+			end_n = int(sv.edges[ei]["a"]) if int(sv.edges[ei]["a"]) != 7 else int(sv.edges[ei]["b"])
+	var links0 := sv._vls_open_links(end_n, {}) if end_n >= 0 else -1
+	sv.nodes[7]["relay_index"] = 1                      # the retract in: its deck gone
+	var links1 := sv._vls_open_links(end_n, {}) if end_n >= 0 else -1
+	check(end_n >= 0 and links0 > links1, "the Very Last Stand counts an open relay deck as a link (%d open, %d with it gone)" % [links0, links1])
+	# the Very Last Stand paces on this match's end (match_hard_end), its batches one interval apart
+	var sh := _tp()
+	sh.match_hard_end = 400.0
+	sh.time = Rules.VERY_LAST_STAND_TIME
+	sh.start_very_last_stand_now()
+	var left := sh._vls_surviving().size()
+	check(absf(sh.very_last_stand_gap - (400.0 - Rules.VERY_LAST_STAND_TIME) / float(left - 1)) < 0.01,
+			"the Very Last Stand spreads its drops to this match's end (%.1f s apart)" % sh.very_last_stand_gap)
+	sh.last_stand_queue = [1, 2]
+	sh.last_stand_gap = 20.0
+	check(absf(sh.drop_in(2) - (sh.last_stand_warn_t + sh.very_last_stand_gap)) < 0.01, "a Very Last Stand batch drops one interval apart, not a ring gap")
+	# one "fall" event per pour, not one per step (audit B4)
+	var sw := _relay_sim("res://maps4/M-08-neon-delta.json", 7, 1)
+	var ew := -1
+	for i in range(sw.edges.size()):
+		if [int(sw.edges[i]["a"]), int(sw.edges[i]["b"])] in [[1, 7], [7, 1]]:
+			ew = i
+	sw.nodes[1]["units"] = 600.0
+	sw.nodes[7]["owner"] = "B"
+	sw.nodes[7]["units"] = 5000.0
+	var cw: int = sw.edge_controller.get(ew, -1)
+	if cw >= 0:
+		sw.nodes[cw]["owner"] = "B"
+	sw.send(1, 7, 1.0)
+	_steps(sw, 2.0, 0.1)
+	var fired := cw >= 0 and sw.fire_relay(cw)
+	var pour_fx := 0
+	for i in range(400):
+		sw.step(0.1)
+		pour_fx += sw.fx_events.filter(func(x): return x["type"] == "fall" and x.get("pour", false)).size()
+		sw.fx_events.clear()
+	var falls := sw.events.filter(func(x): return x["type"] == "fall" and x["seat"] == "A")
+	var fell := 0.0
+	for x in falls:
+		fell += float(x["units"])
+	check(fired and pour_fx > 20 and falls.size() <= 4 and absf(fell - sw.fall_losses.get("A", 0.0)) < 0.01,
+			"a pour logs one aggregated fall event (%d events for %d pour steps, %.0f units - all of them)" % [falls.size(), pour_fx, fell])
+
+
+func _straddles(h: Dictionary, node_id: int, c: Vector3, reach: float) -> bool:
+	## The line's body runs across node `node_id` (at `c`) while its head and tail are both further than `reach` away.
+	var tail_s: float = h["s"] - Sim.chain_length(h)
+	var across := false
+	for ns in h["node_spans"]:
+		if int(ns["node"]) == node_id and tail_s < float(ns["s0"]) and h["s"] > float(ns["s1"]):
+			across = true
+	var head: Vector3 = Sim.sample(h, h["s"])[0]
+	var tail: Vector3 = Sim.sample(h, tail_s)[0]
+	return across and head.distance_to(c) > reach + 1.0 and tail.distance_to(c) > reach + 1.0
 
 
 # ------------------------------------------------------------------ 2026-09-27: the ring Last Stand's adaptive drop gap

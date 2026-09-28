@@ -20,18 +20,13 @@ extends Control
 ##                                         adding the page to menu.content. Without it: its own canvas, as before
 ##   show_list()                           the normal TRAINING page: title, rows, CONTINUE, BACK (hosted: the
 ##                                         rows in two columns and CONTINUE / START TRAINING; the Menu has BACK)
-##   show_splash(handler_line: String)     the first-launch variant: the handler's opening line, START
-##                                         and SKIP TUTORIAL (no rows - forced straight into L1, §7)
 ## Signals
 ##   continue_pressed, back_pressed        the list page's footer
 ##   lesson_pressed(id: int)               a row tapped directly (replay out of order, §7)
-##   start_pressed, skip_tutorial_pressed  the splash page
 
 signal continue_pressed
 signal back_pressed
 signal lesson_pressed(id: int)
-signal start_pressed
-signal skip_tutorial_pressed
 
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
@@ -247,6 +242,10 @@ func _stack_close(stack: Dictionary, content_h: float) -> void:
 
 # ------------------------------------------------------------------ pages
 func _first_unfinished_id() -> int:
+	## The lit row / CONTINUE's lesson: the first neither done nor skipped, then the first skipped (-1: all done).
+	for l in _lessons:
+		if not bool(l.get("done", false)) and not bool(l.get("skipped", false)):
+			return int(l.get("id", -1))
 	for l in _lessons:
 		if not bool(l.get("done", false)):
 			return int(l.get("id", -1))
@@ -358,8 +357,11 @@ func _show_shell_list() -> void:
 		var go := func():
 			if not scroll.was_drag():
 				lesson_pressed.emit(idx)
+		var goal := str(lesson.get("goal", ""))
+		if bool(lesson.get("skipped", false)) and not is_done:   # (Daniele, 2026-09-28: a skipped lesson says so)
+			goal = TutorialDirector.line("skipped")
 		var b := UiKit.row(self, Vector2.ZERO, Vector2(rw, rh_), "%02d" % idx, str(lesson.get("title", "")),
-				str(lesson.get("goal", "")), go, faction, idx == next_id)
+				goal, go, faction, idx == next_id)
 		content.remove_child(b)                  # UiKit places it on the page; it belongs in the list
 		b.position = Vector2((i % 2) * (rw + gap), (i / 2) * (rh_ + gap))
 		inner.add_child(b)
@@ -370,25 +372,6 @@ func _show_shell_list() -> void:
 			t.position = Vector2(rw - 62.0, (rh_ - 22.0) / 2.0)
 			b.add_child(t)
 	inner.custom_minimum_size = Vector2(w, rows * (rh_ + gap) - gap)
-
-
-func show_splash(handler_line: String) -> void:
-	_clear_content()
-	var w := 760.0
-	var h := 380.0
-	var pos := Vector2((CANVAS.x - w) / 2.0, (CANVAS.y - h) / 2.0)
-	_frame(pos, Vector2(w, h))
-	_label_at(TutorialDirector.HANDLER_NAME, pos + Vector2(40, 28), 16, Color("8fd8e6"))
-	var line := _label(handler_line, 26, Color("edf7fa"))
-	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	line.position = pos + Vector2(40, 66)
-	line.size = Vector2(w - 80, 150)
-	content.add_child(line)
-	var start_dims := tap(Vector2(300, 64))
-	_nav_button("START", pos + Vector2(40, h - start_dims.y - 30), start_dims, func(): start_pressed.emit(), true)
-	var skip_pos := pos + Vector2(40 + start_dims.x + 20, h - start_dims.y - 30)
-	_nav_button("SKIP TUTORIAL", skip_pos, Vector2(w - 80 - start_dims.x - 20, start_dims.y),
-			func(): skip_tutorial_pressed.emit())
 
 
 class Tick extends Control:

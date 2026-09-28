@@ -43,8 +43,6 @@ var _end := {}                                       # {result, summary, xp}
 var _end_t := 0.0
 var _animated := false                               # the result screen's pop-in has played (a resize redraws it still)
 var _vp := Vector2.ZERO
-var _card: Control = null                            # the open card, re-centred each frame (wrapped text settles late)
-var _card_y := 0.5
 
 
 func setup(main_node: Node, director: MissionDirector, is_mobile: bool) -> void:
@@ -84,39 +82,6 @@ func _label(text: String, pt: float, color := TEXT, wrap_width := 0.0) -> Label:
 	return l
 
 
-func _button(text: String, id: String, primary := false) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.add_theme_font_override("font", Hud.UI_FONT)
-	b.add_theme_font_size_override("font_size", int(round(u(15))))
-	b.custom_minimum_size = Vector2(u(128), u(44))
-	var normal := Hud.panel_style(accent if primary else Color("276578"))
-	if primary:
-		normal.bg_color = Color(accent.r * 0.35, accent.g * 0.35, accent.b * 0.35, 0.95)
-	b.add_theme_stylebox_override("normal", normal)
-	b.add_theme_stylebox_override("hover", Hud.panel_style(accent))
-	var pressed := Hud.panel_style(Color("00ddf2"))
-	pressed.bg_color = Color("147185")
-	b.add_theme_stylebox_override("pressed", pressed)
-	var focus := Hud.panel_style(Color.WHITE)
-	focus.bg_color = Color(0, 0, 0, 0)
-	b.add_theme_stylebox_override("focus", focus)
-	b.pressed.connect(func(): _on_button(id))
-	return b
-
-
-func _make_card(width: float, border: Color) -> PanelContainer:
-	var p := PanelContainer.new()
-	var sb := Hud.panel_style(border)
-	sb.bg_color = Color(0.03, 0.06, 0.09, 0.96)
-	sb.set_border_width_all(2)
-	sb.set_content_margin_all(u(12))
-	p.add_theme_stylebox_override("panel", sb)
-	p.custom_minimum_size = Vector2(width, 0)
-	p.mouse_filter = Control.MOUSE_FILTER_STOP
-	return p
-
-
 func _vbox(gap: float) -> VBoxContainer:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", int(round(u(gap))))
@@ -142,17 +107,6 @@ func _new_modal(dim: float) -> Control:
 	return _modal
 
 
-func _centre(card: Control, y_frac := 0.5) -> void:
-	## Centres a card on the screen (again every frame: wrapped labels settle their height a frame late).
-	_card = card
-	_card_y = y_frac
-	var vp := get_viewport().get_visible_rect().size
-	card.reset_size()
-	var sz := card.get_combined_minimum_size()
-	card.size = sz
-	card.position = Vector2((vp.x - sz.x) / 2.0, clampf((vp.y - sz.y) * y_frac, u(6), maxf(vp.y - sz.y - u(6), u(6))))
-
-
 func _speaker(who: String) -> Array:
 	## [name, colour] for a brief line's speaker: the handler or the mission's rival.
 	if who == "rival":
@@ -176,7 +130,6 @@ func show_briefing() -> void:
 	## the best result and START MISSION at the foot.
 	phase = "brief"
 	strip.visible = false
-	_card = null                                     # nothing to re-centre: the page is laid out to the screen
 	var vp := get_viewport().get_visible_rect().size
 	var modal := _new_modal(0.97)
 	var f := _brief_faction()
@@ -413,23 +366,6 @@ class BriefMark extends Control:
 				c + Vector2(0, -r)]), color, maxf(1.5, r * 0.28), true)
 
 
-func _kv(k: String, v: String, color: Color, w: float) -> HBoxContainer:
-	var row := _hbox(8)
-	var kl := _label(k, 12.5, accent)
-	kl.custom_minimum_size = Vector2(u(96), 0)
-	row.add_child(kl)
-	row.add_child(_label(v, 13.5, color, w - u(28) - u(104)))
-	return row
-
-
-func _rule_line() -> ColorRect:
-	var r := ColorRect.new()
-	r.color = Color(accent.r, accent.g, accent.b, 0.35)
-	r.custom_minimum_size = Vector2(0, maxf(1.0, u(1)))
-	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return r
-
-
 # ---------------------------------------------------------------- the in-match strip
 func _build_strip() -> void:
 	strip = PanelContainer.new()
@@ -483,10 +419,6 @@ func _process(dt: float) -> void:
 		return
 	if get_viewport().get_visible_rect().size != _vp:
 		_vp = get_viewport().get_visible_rect().size
-	if is_instance_valid(_card) and _card.is_inside_tree() and phase != "match":
-		var sz := _card.get_combined_minimum_size()
-		if _card.size != sz:
-			_centre(_card, _card_y)
 	if phase == "match":
 		_sync_strip()
 	elif phase == "endline":
@@ -495,31 +427,43 @@ func _process(dt: float) -> void:
 			_show_result()
 
 
+var _strip_key := []                                 # what the strip last showed (_sync_strip: rebuilt only on change)
+
+
 func _sync_strip() -> void:
-	_obj.text = d.objective_line()
+	## The objective strip, rebuilt only when what it shows or where it sits changed, or while the objective line
+	## pulses (audit-tutorial-campaign B2: a theme override every frame relaid the strip out every frame).
+	var obj := d.objective_line()
 	var par := d.par_line()
-	_par.text = par + ("   " if par != "" and d.optional_line() != "" else "")
-	_opt.text = d.optional_line()
-	_opt_mark.visible = _opt.text != ""
+	var opt := d.optional_line()
 	var ok := d.optional_ok()
-	_opt_mark.kind = "check" if ok else "cross"
-	_opt_mark.color = GOOD if ok else BAD
-	_opt_mark.queue_redraw()
-	_opt.modulate = Color(1, 1, 1, 0.55) if d.optional_locked() else Color.WHITE
-	_par.add_theme_color_override("font_color", BAD if d.lost_start or (d.sim and d.sim.time > d.par()) else DIM)
-	var k := clampf(d.pulse / MissionDirector.PULSE, 0.0, 1.0)
-	_obj.modulate = Color(1.0 + 0.9 * k, 1.0 + 0.9 * k, 1.0 + 0.4 * k)
-	_obj.pivot_offset = _obj.size / 2.0
-	_obj.scale = Vector2.ONE * (1.0 + 0.08 * k)
-	strip.reset_size()
-	strip.size = strip.get_combined_minimum_size()
+	var locked := d.optional_locked()
+	var late: bool = d.lost_start or (d.sim and d.sim.time > d.par())
 	var vp := get_viewport().get_visible_rect().size
 	var y := u(4)
 	if hud and hud.top_panel and hud.top_panel.visible:
 		y = hud.top_panel.position.y + hud.top_panel.size.y + u(3)
 		if hud.status_label and hud.status_label.text != "":   # the Last Stand's status line keeps its place
 			y = hud.status_label.position.y + hud.status_label.size.y + u(2)
-	strip.position = Vector2((vp.x - strip.size.x) / 2.0, y)
+	var key := [obj, par, opt, ok, locked, late, vp, y, strip.get_combined_minimum_size()]   # (a size that settles late too)
+	if key != _strip_key or d.pulse > 0.0 or _obj.scale != Vector2.ONE:
+		_strip_key = key
+		_obj.text = obj
+		_par.text = par + ("   " if par != "" and opt != "" else "")
+		_opt.text = opt
+		_opt_mark.visible = opt != ""
+		_opt_mark.kind = "check" if ok else "cross"
+		_opt_mark.color = GOOD if ok else BAD
+		_opt_mark.queue_redraw()
+		_opt.modulate = Color(1, 1, 1, 0.55) if locked else Color.WHITE
+		_par.add_theme_color_override("font_color", BAD if late else DIM)
+		var k := clampf(d.pulse / MissionDirector.PULSE, 0.0, 1.0)
+		_obj.modulate = Color(1.0 + 0.9 * k, 1.0 + 0.9 * k, 1.0 + 0.4 * k)
+		_obj.pivot_offset = _obj.size / 2.0
+		_obj.scale = Vector2.ONE * (1.0 + 0.08 * k)
+		strip.reset_size()
+		strip.size = strip.get_combined_minimum_size()
+		strip.position = Vector2((vp.x - strip.size.x) / 2.0, y)
 	if hud and hud.notices:                                   # the HUD's toasts stack under the strip, not over it
 		hud.notices.position.y = maxf(hud.notices.position.y, strip.position.y + strip.size.y + u(4))
 
@@ -543,7 +487,6 @@ func _new_screen() -> MatchScreens:
 	_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(_modal)
-	_card = null
 	return MatchScreens.open(_modal, mobile, _faction())
 
 

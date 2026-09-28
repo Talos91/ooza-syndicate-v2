@@ -34,6 +34,7 @@ func _init() -> void:
 	test_record()
 	test_other_kinds()
 	test_hide_counts()
+	test_pins()
 	test_collapse_at()
 	Campaign.reset_progress()
 	for p in [Campaign.path, ArmyPresets.path]:
@@ -378,6 +379,28 @@ func test_other_kinds() -> void:
 	r = make("t:unknown", mk.call({"kind": "conquest"}, {"kind": "all_pods", "text": "p"}))
 	d = r[0]
 	check(not d.optional_ok(), "an unknown optional kind is never met")
+
+
+func test_pins() -> void:
+	## 2026-09-28 audit (a bug fix): a mission plays its own ABILITIES / LAST STAND / HIDDEN COUNTS, never SETUP's or a
+	## room's; restore_settings() gives the player's own back.
+	var keep := [Rules.abilities_on, Rules.last_stand, Rules.hide_enemy_counts]
+	Rules.abilities_on = false
+	Rules.last_stand = false
+	Rules.hide_enemy_counts = true
+	var m := Campaign.mission("vex:01").duplicate(true)
+	MissionDirector.pin_settings(MissionDirector.mission_pins(m))   # main.start_mission, before sim.setup
+	var r := make("t:pins", m)
+	var d: MissionDirector = r[0]
+	var sim: Sim = r[1]
+	check(Rules.abilities_on and Rules.last_stand and not Rules.hide_enemy_counts and sim.abilities_on,
+			"a mission pins ABILITIES on, LAST STAND on, HIDDEN COUNTS off (SETUP had them off / off / on)")
+	MissionDirector.restore_settings()
+	check(not Rules.abilities_on and not Rules.last_stand and Rules.hide_enemy_counts, "restore_settings -> the player's own three back")
+	Rules.abilities_on = keep[0]
+	Rules.last_stand = keep[1]
+	Rules.hide_enemy_counts = keep[2]
+	d = null
 
 
 func test_hide_counts() -> void:

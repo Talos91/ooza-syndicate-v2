@@ -44,6 +44,7 @@ func _init() -> void:
 	_rewards_without_progression()
 	_rewards_with_progression()
 	_round_trip()
+	_audit_fixes()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Campaign.path))
 	print("\n%s - %d failure(s)" % ["ALL PASSED" if failures == 0 else "FAILED", failures])
 	quit(1 if failures > 0 else 0)
@@ -208,6 +209,32 @@ func _rewards_with_progression() -> void:
 	check(Campaign.unlocks_pending.is_empty() and bool(fake2.call("is_unlocked", "vat:faction:vex")),
 			"pay_pending replays the vat unlock")
 	Campaign.use_progression(null)
+
+
+func _audit_fixes() -> void:
+	## 2026-09-28 audit: a failed storage read keeps the session's progress (private browsing); an already-paid
+	## reward reads "taken".
+	Campaign.use_progression(null)
+	Campaign.reset_progress()
+	Campaign.record("vex:01", {"won": true, "time": 90.0, "stars": 2, "objective": false})
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Campaign.path))   # as if the browser never kept it
+	Campaign.reload_all()
+	Campaign.load_if_needed()
+	check(Campaign.is_won("vex:01") and Campaign.is_open("vex:02"),
+			"no storage: a failed reload keeps this session's progress (mission 02 still open)")
+	var fake := GDScript.new()
+	fake.source_code = FAKE_PROGRESSION
+	fake.reload()
+	fake.set("granted", {Campaign.source_of("vex:02"): 150})   # paid already (another device, a lost local record)
+	Campaign.use_progression(fake)
+	var sum := Campaign.record("vex:02", {"won": true, "time": 60.0, "stars": 3, "objective": true})
+	check(str(sum["reward"]["state"]) == "taken" and Campaign.reward_state("vex:02") == "paid",
+			"an already-paid reward shows TAKEN, recorded as paid")
+	check(Campaign.reward_for(Campaign.mission("vex:01")) == int(Rules.PROGRESSION["campaign_reward"]["main"]),
+			"the mission reward table lives in Rules.PROGRESSION")
+	Campaign.use_progression(null)
+	fake.set("granted", {})
+	Campaign.reset_progress()
 
 
 func _round_trip() -> void:

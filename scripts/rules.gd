@@ -29,6 +29,11 @@ const OVERPASS_H := 2.6
 # legacy maps/ routing cost per deck module (Sim.edge_cost, non-v3 only); maps 3.0 route by
 # drawn length / move_speed()
 const MODULE_SECONDS := 2.0          # routing cost per module only (relative); real speed below
+const ROUTE_NODE_SECONDS := 1.0      # routing: what crossing a node adds to a route (Sim.find_route; relative)
+# the pour (a line walking off a missing deck's lip, Sim._cut_range / step): a head at most POUR_STEP m past the
+# lip walked off it this step (view only); a line pouring into its target enters at least POUR_MIN_RATE units/s
+const POUR_STEP := 1.0
+const POUR_MIN_RATE := 4.0
 # Daniele (Alpha 13 playtest): "deck speed at default 5 m/s... deck speed and platform speed need to
 # match, no point in it being different". Was 2 m/s on decks, x6 on platforms.
 const DECK_SPEED_DEFAULT := 5.0
@@ -224,6 +229,8 @@ const LAST_STAND_TIME := 180.0       # Daniele (0.18.6): "last stand reset to be
 const LAST_STAND_WARNING := 10.0
 const LAST_STAND_WAVE_MIN := 12.0
 const LAST_STAND_WAVE_MAX := 30.0
+const LAST_STAND_WAVE_SPARE := 90.0  # s before the hard end the ring waves' spacing leaves free (Sim.last_stand_wave)
+const LAST_STAND_FIT_SPARE := 3.0    # s of slack the adaptive ring gap keeps before the Very Last Stand (Sim._fit_gap)
 # A ring falls platform by platform (Daniele, 0.18.4: "don't make all outward rings fall at the same time but one
 # after the other ... following the rule we set for falling bridges"): after the ring's 10 s warning its platforms
 # drop one at a time, never leaving the rest of the map cut off, the rings back to back.
@@ -322,6 +329,7 @@ static var MONSTER_REACH := 3             # bridges (plaza links don't count)
 const MONSTER_R := 1.4                    # metres: the monster's reach along the deck (half a deck width)
 const MONSTER_PLATFORM_R := 2.0           # metres: on a platform it crosses, bodies of lines in transit this close to its path are kicked
 const MONSTER_FALL_TIME := 1.2            # seconds a falling monster tumbles before it is gone
+const MONSTER_GONE := 0.5                 # seconds a "done" monster stays listed for the views, then goes
 # LEGACY ALIASES (read-only, for scripts not yet on Structures 2.1 - tests/balance_probe.gd and old HUD
 # lines): the one-tier laser seen through the old cannon names. Nothing in the rules reads them.
 static var CANNON_COST := {1: 200, 2: 0, 3: 0}
@@ -678,7 +686,9 @@ static func shown_f(units: float) -> float:
 
 
 static func stat(faction: String, key: String) -> float:
-	return float(FACTION_STATS.get(faction, {}).get(key, 1.0))
+	## A faction's stat (1.0 when unknown) - no default dictionary per call (audit B3: called per unit per step).
+	var fs = FACTION_STATS.get(faction)
+	return float(fs.get(key, 1.0)) if fs != null else 1.0
 
 
 # SEAT COLOURS for the current match (Daniele, Alpha 14: "implement faction colour selection").
@@ -880,10 +890,20 @@ const PROGRESSION := {
 	"daily_count": 3, "daily_soft": 50, "daily_xp": 150,
 	"weekly_count": 3, "weekly_soft": 250, "weekly_xp": 500, "weekly_premium": 10,
 	"tutorial_lesson": 140,                       # lessons 1-9, first completion: 9 x 140 = 1 260 = a 3rd skill
+	# a campaign mission's one-off SCRAP (3 stars + its optional objective in one run), by mission kind (proposal,
+	# CAMPAIGN-DESIGN §5a; was Campaign.REWARD)
+	"campaign_reward": {"main": 150, "duel": 200, "side": 200, "finale": 300},
 	"faction_vat_wins": 25,
 	"free_skills": ["surge", "demolish"],         # the two the tutorial teaches; every other shared skill is bought
 	"ledger_keep": 200,                           # recent wallet entries kept on the device (the PROFILE history)
 }
+# TUTORIAL (tutorial.gd, coach_overlay.gd): L9's scripted relay-kill push (TutorialDirector._tick_match) - the opening
+# card closes itself after card_close s; the push waits for the rival to hold push_min_shown units (shown); every rival
+# garrison of muster_min_shown+ gathers on the muster node, which launches after muster_wait s at the latest (the push
+# is given up after launch_wait s); a push not decided after push_wait s is a miss.
+const L9_MATCH := {"card_close": 12.0, "push_min_shown": 20.0, "muster_min_shown": 3.0, "muster_wait": 25.0,
+		"launch_wait": 40.0, "push_wait": 45.0}
+const TUTORIAL_HANDLER_FPS := 20.0   # the coach card's 3D handler renders this often (its own SubViewport; audit B4)
 # Prices by item kind ({} or a missing currency = not sold for it). Skills never for chips (no power for money).
 const PRICES := {
 	"skill": {"soft": 1250},

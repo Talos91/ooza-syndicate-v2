@@ -161,8 +161,8 @@ func setup(m: Node3D) -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--ui-cfg="):              # UI: tests / screenshots use their own ui.cfg
 			UiKit.path = arg.substr(9)
-	if not m.relaunch.has("faction"):                 # UI: a fresh start opens on the faction played last (HOME's hero)
-		faction = UiKit.last_faction()
+	if not m.relaunched:                              # UI: a fresh start opens on the faction played last (HOME's hero);
+		faction = UiKit.last_faction()                # AUDIT FIX: main cleared relaunch already - its own flag says it
 	if Net.in_room() or Net.status != "":             # back from a room: keep the faction you played
 		faction = Net.preferred_faction
 	ai_level = m.ai_level
@@ -170,7 +170,7 @@ func setup(m: Node3D) -> void:
 	mode = m.mode
 	colour = m.color_choice
 	for mp in MapPool.battlefield():
-		maps.append({"path": mp, "data": MapBuilder.load_map(mp)})
+		maps.append({"path": mp, "data": m.pool_map(mp)})   # AUDIT FIX (B1): parsed once per session, read-only
 	if not maps.any(func(x): return x["path"] == map_path):
 		map_path = maps[0]["path"]                     # the pool is maps4/: the old roster is archive
 	Net.lobby_changed.connect(_on_net_changed)
@@ -3622,13 +3622,16 @@ func show_setup() -> void:
 		tgw = (rw - 10.0) / 2.0
 	_toggle("LAST STAND", Rules.last_stand, Vector2(rx, ry), Vector2(tgw, 46), func():
 		Rules.last_stand = not Rules.last_stand
+		main.keep_own_settings()                      # AUDIT FIX: yours, put back after a room's round
 		show_setup())
 	_toggle("ABILITIES", Rules.abilities_on, Vector2(rx + tgw + 10.0, ry), Vector2(tgw, 46), func():   # SKILLS 2.0: Alpha 11's match setting
 		Rules.abilities_on = not Rules.abilities_on
+		main.keep_own_settings()
 		show_setup())
 	var hp := Vector2(rx + (tgw + 10.0) * 2.0, ry) if one_row else Vector2(rx, ry + UiKit.tap_h(self, 46.0) + 8.0)
 	_toggle("HIDDEN COUNTS", Rules.hide_enemy_counts, hp, Vector2(tgw, 46), func():
 		Rules.hide_enemy_counts = not Rules.hide_enemy_counts   # (was SETTINGS > GAME > ENEMY COUNTS)
+		main.keep_own_settings()
 		show_setup())
 	ry = hp.y + UiKit.tap_h(self, 46.0) + 8.0
 	nl.visible = ry <= fy - 4.0 or ry <= nl.position.y        # the foot's "mode · vs ..." line only where it has room
@@ -4239,6 +4242,7 @@ func show_lobby() -> void:
 
 func _leave_room() -> void:
 	Net.leave()
+	main.restore_own_settings()                        # AUDIT FIX: a round's settings don't outlive the room
 	show_online()
 
 

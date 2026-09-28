@@ -11,13 +11,9 @@ extends CanvasLayer
 ##       The coach card. `header` e.g. "DR. VESK · LESSON 3 / 8 · THE RIVAL"; `dots`/`dot_index` are the
 ##       step markers; `button_text` == "" for a doing-step (no GOT IT, just SKIP/RESTART/EXIT), any
 ##       other string shows it as the one allowed button (read-only steps: "GOT IT").
-##   point_nodes(screen_points: Array[Vector2], radius: float)
-##       Spotlight: one soft circle per screen point (already projected, e.g. cam.unproject_position()),
-##       `radius` in pixels. Repositions the card to the free corner farthest from the target.
-##   point_rect(rect: Rect2)
-##       Spotlight: one soft rounded rect around a HUD control (already in screen / global space).
 ##   spotlight(screen_points: Array, radius: float, rects: Array)
-##       Both at once (circles round nodes and lines, rounded rects round HUD controls). Safe every frame
+##       Spotlight: soft circles round screen points (already projected, e.g. cam.unproject_position(),
+##       `radius` in pixels) and rounded rects round HUD controls (screen / global space). Safe every frame
 ##       (the camera moves in the Last Stand): the card only eases to a corner when its best corner changes.
 ##   clear_spotlight()
 ##       No dim, no target (a plain read-only line with nothing to point at).
@@ -35,7 +31,6 @@ extends CanvasLayer
 ##   show_training_complete(title, lines: Array, primary_text, secondary: Array, reward := {})
 ##       The final TRAINING COMPLETE variant: the same, plus the Graduate vat's reveal - the skin model on
 ##       a turntable in an ivory / brass frame (reward {"unlocked": bool, "title", "faction"}).
-##   hide_complete()
 ##   set_dodge_rects(top_bar: Rect2, send_panel: Rect2, dock: Rect2, pause_button: Rect2)
 ##       Optional: the HUD's real control rects (global / screen space), so the card's corner search
 ##       dodges them exactly. Without this it falls back to viewport-edge guesses.
@@ -65,8 +60,8 @@ extends CanvasLayer
 ## `Control.get_global_rect()` both land in the viewport's LOGICAL (visible_rect) space, which differs
 ## from the final, already-stretched DEVICE-PIXEL space whenever a window's aspect ratio isn't 1280:720
 ## (e.g. a landscape phone). Regular _draw() calls and Control positions are auto-transformed by the
-## engine at raster time, so callers pass plain viewport/global points into show_step() / point_nodes()
-## / point_rect() / gesture() with NO conversion needed. The ONE place this bites is the spotlight
+## engine at raster time, so callers pass plain viewport/global points into show_step() / spotlight()
+## / gesture() with NO conversion needed. The ONE place this bites is the spotlight
 ## shader: a canvas_item shader's FRAGCOORD is already in device-pixel space, so anything compared
 ## against it must go through world_to_overlay() first - _apply_spotlight() is the only caller.
 
@@ -276,7 +271,7 @@ class HandlerView extends SubViewportContainer:
 		_vp.own_world_3d = true
 		_vp.transparent_bg = true
 		_vp.msaa_3d = Viewport.MSAA_DISABLED
-		_vp.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+		_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED   # rendered at Rules.TUTORIAL_HANDLER_FPS (_process)
 		add_child(_vp)
 		var cam := Camera3D.new()
 		cam.fov = 28.0
@@ -326,9 +321,16 @@ class HandlerView extends SubViewportContainer:
 		_mood = kind
 		_mood_t = 0.0
 
+	var _frame_t := 0.0
+
 	func _process(delta: float) -> void:
 		if _pivot == null or not is_visible_in_tree():
 			return
+		_frame_t -= delta                                   # audit-tutorial-campaign B4: the handler's own 3D view renders
+		if _frame_t <= 0.0:                                 # at a capped rate, not a second full render every frame
+			_frame_t += 1.0 / Rules.TUTORIAL_HANDLER_FPS
+			_frame_t = maxf(_frame_t, 0.0)
+			_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 		_t += delta
 		var y := 0.03 * sin(_t * 2.2)                       # idle: a gentle bob and turn, three-quarter to the viewer
 		var yaw := 0.55 + 0.3 * sin(_t * 0.8)
@@ -552,14 +554,12 @@ func _process(delta: float) -> void:
 	if _hand.kind != "":
 		_hand.t = fmod(_hand.t + delta, GESTURE_LOOP)
 		_hand.queue_redraw()
-	if _dim.visible:
-		_dim.queue_redraw()          # the shader reads TIME itself; this just keeps ring uniforms fresh if changed
 
 
 func _fit_root() -> void:
 	## root/_dim/_hand are FULL_RECT-anchored, but a Control added straight under a CanvasLayer (not
 	## another Control) only gets that anchor-driven size once the engine's own resize notification
-	## reaches it - which can lag a frame behind _ready(), and the very first show_step()/point_nodes()
+	## reaches it - which can lag a frame behind _ready(), and the very first show_step()/spotlight()
 	## call can land before that (the same class of bug tutorial_page.gd's backdrop had). Sized
 	## explicitly instead: get_viewport().get_visible_rect() is the same logical space _dim's shader
 	## covers once world_to_overlay() maps its corners to device pixels, so filling it here guarantees
@@ -956,24 +956,17 @@ func show_step(header: String, text: String, dots: int, dot_index: int, button_t
 	_position_card()
 
 
-func point_nodes(screen_points: Array[Vector2], radius: float) -> void:
-	_targets_px.clear()
-	for p in screen_points:
-		_targets_px.append({"c": p, "r": radius})
-	_target_rects.clear()
-	_apply_spotlight()
-	_position_card()
-
-
-func point_rect(rect: Rect2) -> void:
-	_targets_px.clear()
-	_target_rects = [rect]
-	_apply_spotlight()
-	_position_card()
+var _spot_key := []                                    # spotlight()'s last inputs (a frame with the same ones does nothing)
 
 
 func spotlight(screen_points: Array, radius: float, rects: Array) -> void:
-	## Circles round nodes / lines and rounded rects round HUD controls, at once (safe every frame).
+	## Circles round nodes / lines and rounded rects round HUD controls, at once (safe every frame: the shader
+	## uniforms and the card's corner are worked out again only when something they depend on moved - audit B3).
+	var key := [screen_points, radius, rects, _obstacles, _avoid, _card.size if is_instance_valid(_card) else Vector2.ZERO,
+			is_instance_valid(_card) and _card.visible, get_viewport().get_final_transform()]
+	if key == _spot_key:
+		return
+	_spot_key = key
 	_targets_px.clear()
 	for p in screen_points:
 		_targets_px.append({"c": p, "r": radius})
@@ -986,6 +979,7 @@ func spotlight(screen_points: Array, radius: float, rects: Array) -> void:
 
 
 func clear_spotlight() -> void:
+	_spot_key = []
 	_targets_px.clear()
 	_target_rects.clear()
 	_dim.visible = false
@@ -1065,10 +1059,6 @@ func show_training_complete(title: String, lines: Array, primary_text: String, s
 	_fill_complete(title, lines, primary_text, secondary, true)
 	_complete.visible = true
 	_center_complete()
-
-
-func hide_complete() -> void:
-	_complete.visible = false
 
 
 # ------------------------------------------------------------------ layout
