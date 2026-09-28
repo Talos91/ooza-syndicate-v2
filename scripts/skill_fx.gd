@@ -275,7 +275,8 @@ func _on_cast(ev: Dictionary) -> void:
 		_star_at(p + up * 2.0, col.lerp(Color.WHITE, 0.25), 16.0 if ult else 9.0, 0.55 if ult else 0.4)
 		_ring_at(p, col, Rules.R * (3.4 if ult else 1.9), 0.8 if ult else 0.55)
 	var name := str(Rules.SKILLS.get(id, {}).get("name", id)).to_upper()
-	_label_at(name, p + up * (8.0 if ult else 6.0), col, 1.5 if ult else 1.2, 0.06 if ult else 0.045)
+	if not (ev.get("pos") is Vector3 and SkillDock.touches(ev, sim, viewer)):   # (else the callout there names it)
+		_label_at(name, p + up * (8.0 if ult else 6.0), col, 1.5 if ult else 1.2, 0.06 if ult else 0.045)
 	if ult:
 		_tint_on(col)
 		_burst(p + up * 2.0, col, 40, 12.0, 0.7, 10.0)
@@ -592,9 +593,7 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 				_size_label(lab, mid + up * 5.0, 0.07 * (1.0 + 0.25 * (1.0 - fposmod(float(slot["tl"]), 1.0))))
 				lab.visible = true
 				var blink := 0.55 + 0.45 * float(int(_t * (4.0 + 10.0 * heat)) % 2)
-				lab.modulate = warn.lerp(Color.WHITE, 0.15)
-				lab.modulate.a = blink * life
-				lab.outline_modulate.a = 0.95 * blink * life
+				Fx.label_look(lab, Color(warn.lerp(Color.WHITE, 0.15), blink * life), 0.95 * blink * life)
 				for k in range(_count((8.0 + 40.0 * heat) * detail * dt)):   # grit shaking off the deck
 					_spark(_deck_at(ei, randf()) + Vector3(randf_range(-1.4, 1.4), 0.2, randf_range(-1.4, 1.4)),
 							Vector3(randf_range(-0.5, 0.5), randf_range(0.5, 2.0), randf_range(-0.5, 0.5)),
@@ -682,9 +681,7 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 					slot["txt"] = sec
 					lab.text = "JAM %d" % sec
 				lab.visible = true
-				lab.modulate = col.lerp(Color.WHITE, 0.2)
-				lab.modulate.a = life
-				lab.outline_modulate.a = 0.95 * life
+				Fx.label_look(lab, Color(col.lerp(Color.WHITE, 0.2), life), 0.95 * life)
 				_size_label(lab, n["pos"] + up * 10.0, 0.04)
 			else:
 				_hide_part(slot, "b")
@@ -710,9 +707,7 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 				lab.text = "OFFLINE"
 			lab.visible = true
 			var fl := 0.7 + 0.3 * float(int(_t * 9.0) % 2)
-			lab.modulate = Color(1.0, 0.35, 0.4)
-			lab.modulate.a = life * fl
-			lab.outline_modulate.a = 0.95 * life * fl
+			Fx.label_look(lab, Color(1.0, 0.35, 0.4, life * fl), 0.95 * life * fl)
 			_size_label(lab, n["pos"] + up * 9.0, 0.035)
 		"rewire":
 			for h in sim.hordes:
@@ -743,9 +738,7 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 				slot["txt"] = got
 				lab.text = ("+%d / %d" % [got, cap]) if got >= 0 else "SUPERBLOOM"
 			lab.visible = hb != Vector3.INF
-			lab.modulate = col.lerp(PETAL, 0.25)
-			lab.modulate.a = life
-			lab.outline_modulate.a = 0.95 * life
+			Fx.label_look(lab, Color(col.lerp(PETAL, 0.25), life), 0.95 * life)
 			if hb != Vector3.INF:
 				_size_label(lab, hb + up * 11.0, 0.05)
 
@@ -763,8 +756,7 @@ func _fade(slot: Dictionary) -> void:
 		((mi as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("intensity", 0.9 * life)
 	if slot.has("lab"):
 		var lab: Label3D = slot["lab"]
-		lab.modulate.a = life
-		lab.outline_modulate.a = 0.95 * life
+		Fx.label_look(lab, Color(lab.modulate, life), 0.95 * life)
 
 
 func _hide(slot: Dictionary) -> void:
@@ -1024,7 +1016,7 @@ func _rewire_marks(seat: String, col: Color) -> void:
 		(mk["rmat"] as ShaderMaterial).set_shader_parameter("intensity", 1.6 * (1.0 - k))
 		var chev: Label3D = mk["chev"]
 		chev.visible = true
-		chev.modulate = col.lerp(Color.WHITE, 0.2)
+		Fx.label_look(chev, col.lerp(Color.WHITE, 0.2), chev.outline_modulate.a)
 		_size_label(chev, n["pos"] + Vector3(0, 10.5 + 1.2 * sin(_t * 5.0), 0), 0.05)
 
 
@@ -1352,7 +1344,7 @@ func _label_at(text: String, p: Vector3, col: Color, dur: float, frac: float) ->
 	_label_i = (_label_i + 1) % _labels.size()
 	var l: Label3D = e["l"]
 	l.text = text
-	l.modulate = col.lerp(Color.WHITE, 0.15)
+	Fx.label_look(l, col.lerp(Color.WHITE, 0.15), 0.95)
 	e["t"] = 0.0
 	e["dur"] = dur
 	e["pos"] = p
@@ -1394,8 +1386,7 @@ func _step_pools(dt: float) -> void:
 		var pop := 1.0 + 0.45 * (1.0 - smoothstep(0.0, 0.18, t))
 		_size_label(l, (e["pos"] as Vector3) + Vector3(0, float(e["rise"]) * smoothstep(0.0, 1.0, k), 0), float(e["frac"]) * pop)
 		var fade := 1.0 - smoothstep(0.7, 1.0, k)
-		l.modulate.a = fade
-		l.outline_modulate.a = 0.95 * fade
+		Fx.label_look(l, Color(l.modulate, fade), 0.95 * fade)
 
 
 func _tint_on(col: Color) -> void:
@@ -1437,7 +1428,7 @@ func _size_label(l: Label3D, p: Vector3, frac: float) -> void:
 	var h := 5.0
 	if _cam:
 		h = _cam.global_position.distance_to(p) * frac
-	l.pixel_size = h / float(l.font_size)
+	Fx.label_pixel(l, h / float(l.font_size))        # (its scale: pixel_size rebuilds the mesh)
 	l.position = p
 
 

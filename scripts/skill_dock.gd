@@ -712,17 +712,24 @@ func _label(ci: CanvasItem, txt: String, at: Vector2, col: Color) -> void:
 
 
 # ------------------------------------------------------------------ enemy casts
+static func touches(ev: Dictionary, s: Sim, viewer: String) -> bool:
+	## A rival's skill that touches `viewer` (on_event names it in a callout at ev["pos"]; SkillFx then leaves out
+	## its floating name there, which the callout covered - the Last Stand SCORCH shots).
+	if ev.has("private") and str(ev["private"]) != viewer:
+		return false
+	var seat := str(ev.get("seat", ""))
+	if seat == "" or seat == viewer or s.allied(seat, viewer):
+		return false
+	var hit: Array = ev.get("affects", []) if ev.get("affects", []) is Array else []
+	return viewer in hit
+
+
 func on_event(ev: Dictionary) -> void:
 	## An fx "skill" event: a rival's skill that touches you gets a toast (emblem + faction via "seat X", the
 	## skill's name, what it does to you). Private events (Ghost Line, echoes) are for their owner only.
-	if ev.has("private") and str(ev["private"]) != human:
+	if not touches(ev, sim, human):
 		return
 	var seat := str(ev.get("seat", ""))
-	if seat == "" or seat == human or sim.allied(seat, human):
-		return
-	var hit: Array = ev.get("affects", []) if ev.get("affects", []) is Array else []
-	if not human in hit:
-		return
 	var id := str(ev.get("id", ""))
 	var what := ""
 	match id:
