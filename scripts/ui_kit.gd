@@ -108,8 +108,16 @@ static func text_w(m, text: String, size: float, head := false) -> float:
 static func text_h(m, text: String, size: float, width: float, head := false) -> float:
 	## A word-wrapped text's height inside `width` (for laying out before the label is in the tree).
 	var f: Font = HEAD if head else BODY
-	return f.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width, px(m, size), -1,
+	var fs := px(m, size)
+	var h := f.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width, fs, -1,
 			TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE).y
+	# a Label also puts its theme's line_spacing (3 px) between lines, which the font's measure leaves out: a three-line
+	# text came out 6 px short and its last line touched what follows (0.22.2: the skill cards' TAP TO EQUIP)
+	var lines := maxi(1, int(round(h / maxf(1.0, f.get_height(fs)))))
+	return h + (lines - 1) * LABEL_LINE_SPACING
+
+
+const LABEL_LINE_SPACING := 3.0                     # Godot's default Label line_spacing (the theme's, unchanged here)
 
 
 static func line_h(m, size: float, head := false) -> float:
