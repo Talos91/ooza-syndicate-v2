@@ -21,6 +21,10 @@ var hover_relay := -1                 # set by Hud while the SWITCH action is ho
 var _relay_ready_prev := {}            # node id -> was it ready last frame (edge-detects "just became ready")
 var _relay_cue_count := {}             # node id -> how many times the "double-tap to switch" cue has shown
 var _relay_cue_t := {}                 # node id -> seconds left showing that cue
+var _reach_hub := -1                  # perf pass (audit B2): sim.monster_reach of the shown hub, worked out once per
+var _reach_sig := []                   # hub and board (the decks' open states, the fallen nodes), not every frame
+var _reach: Array = []
+var _drew := true                      # the last frame drew something (a frame that draws nothing clears it once)
 const RELAY_CUE_MAX := 3               # only the first few times (Daniele's ask)
 const RELAY_CUE_SECONDS := 4.0
 
@@ -54,8 +58,40 @@ func sync(dt: float) -> void:
 		_relay_ready_prev[id] = ready
 		if float(_relay_cue_t.get(id, 0.0)) > 0.0:
 			_relay_cue_t[id] = maxf(0.0, float(_relay_cue_t[id]) - dt)
-	queue_redraw()                    # cheap: a handful of arcs/lines - the danger symbols pulse continuously
+	# perf pass (audit B11): redrawn while it shows anything (it pulses), once more to clear, then left alone
+	var draws := _draws_something()
+	if draws or _drew:
+		queue_redraw()
+	_drew = draws
 	PerfProfile.lap("overlay_sync", _pt)
+
+
+func _draws_something() -> bool:
+	## Would _draw put anything on screen this frame (halos, relay cues, the monster reach, a relay preview, a
+	## danger symbol)? A cheap scan: false means the overlay can stay as it is.
+	if main.monster_from >= 0 or hover_relay >= 0 or (hud.inspector_id >= 0 and hud.inspector_id < sim.nodes.size() 			and sim.nodes[hud.inspector_id]["structure"] == "monster_hub"):
+		return true
+	for n in sim.nodes:
+		if sim.collapsed.get(n["id"], false):
+			continue
+		if not (n.get("allies", {}) as Dictionary).is_empty() or sim.is_warned(n["id"]):
+			return true
+		if n["relay"] != "" and (n["relay_phase"] == "warning" or (n["owner"] == human and n["relay_cd"] <= 0.0) 				or float(_relay_cue_t.get(n["id"], 0.0)) > 0.0):
+			return true
+	return false
+
+
+func reach(hub: int) -> Array:
+	## sim.monster_reach(hub), again only when the hub or the board's routes changed (a deck opened / closed, a
+	## node fell): the ring is drawn every frame while a hub is selected or LAUNCH is armed.
+	var sig := [hub, sim.collapsed.size(), sim.demolished.size()]
+	for ei in sim.edge_controller:
+		sig.append(sim._edge_open(ei))
+	if hub != _reach_hub or sig != _reach_sig:
+		_reach_hub = hub
+		_reach_sig = sig
+		_reach = sim.monster_reach(hub)
+	return _reach
 
 
 func _draw() -> void:
@@ -168,7 +204,7 @@ func _draw_monster_reach(cam: Camera3D, hub: int) -> void:
 	var hs := _node_screen(hub, cam)
 	_ring(hs[0], float(hs[1]) + 6.0 * ui_scale, Color.WHITE, 1.0, true)
 	_label((hs[0] as Vector2) + Vector2(0, -float(hs[1]) - 14.0 * ui_scale), "LAUNCH FROM", Color.WHITE, 14)
-	for id in sim.monster_reach(hub):
+	for id in reach(hub):
 		var ns := _node_screen(id, cam)
 		_ring(ns[0], float(ns[1]) + 6.0 * ui_scale, col, a, false)
 
