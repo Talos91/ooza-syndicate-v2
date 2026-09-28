@@ -229,7 +229,7 @@ func show_briefing() -> void:
 	var bh := fy - u(12) - y
 	var aw := (vp.x - mx * 2.0 - gap) * (0.46 if mobile else 0.54)
 	var art_path := Campaign.backdrop_of(d.key) if d.key != "" else ""
-	var tex: Texture2D = load(art_path) if art_path != "" else UiKit.background(f)
+	var tex: Texture2D = UiKit.tex(art_path) if art_path != "" else UiKit.background(f)
 	var pic := TextureRect.new()
 	pic.texture = tex
 	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE

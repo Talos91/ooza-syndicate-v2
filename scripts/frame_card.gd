@@ -85,7 +85,7 @@ func _rebuild() -> void:
 	body.size = size
 	body.pressed.connect(func():
 		if not _drag():
-			pressed.emit())
+			UiKit.acknowledge(self, func(): pressed.emit()))   # the card flashes at once (a phone builds the next page)
 	add_child(body)
 	var surface := Panel.new()
 	surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -93,7 +93,7 @@ func _rebuild() -> void:
 	surface.size = size
 	add_child(surface)
 	var ah := maxf(h * art_frac, h - _text_block_h() - 10.0)   # the art fills down to the text
-	var tex: Texture2D = load(art) if art != "" and ResourceLoader.exists(art) else UiKit.background(faction)
+	var tex: Texture2D = UiKit.tex(art) if art != "" and ResourceLoader.exists(art) else UiKit.background(faction)
 	if tex == null:
 		tex = UiKit.hero_art(faction)
 	var pic := TextureRect.new()
@@ -107,7 +107,7 @@ func _rebuild() -> void:
 	add_child(pic)
 	if hero != "":                                     # the character, standing at the art's right
 		var hr := TextureRect.new()
-		hr.texture = load(UiKit.hero_path(hero))
+		hr.texture = UiKit.tex(UiKit.hero_path(hero))
 		hr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		hr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		hr.mouse_filter = Control.MOUSE_FILTER_IGNORE

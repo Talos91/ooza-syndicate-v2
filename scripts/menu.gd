@@ -345,11 +345,39 @@ func stack_capture(stack: Dictionary, before: int) -> void:
 		inner.add_child(c)
 
 
+# --- UI (speed, Daniele's phone test 2026-09-28): the map grid's thumbnails fill in a few per frame, and idle frames warm
+# the texture cache (UiKit.tex / warm) - never while a finger or button is down, so a tap is never held up by a load
+var _thumb_queue: Array = []                       # [TextureRect, thumbnail path]
+var _warm_armed := false
+
+
+func _speed_step() -> void:
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		return
+	var n := 0
+	while not _thumb_queue.is_empty() and n < 3:
+		var job: Array = _thumb_queue.pop_front()
+		if is_instance_valid(job[0]):
+			(job[0] as TextureRect).texture = UiKit.map_thumb(str(job[1]))
+			n += 1
+	if n > 0:
+		return
+	if not _warm_armed:                                # once: the pages' common art, then every map thumbnail
+		_warm_armed = true
+		UiKit.warm_menu(faction)
+		var thumbs := []
+		for entry in maps.slice(0, 18):                # the grid's first screens (the rest fill in as it opens)
+			thumbs.append(MapPool.thumb(str((entry["data"] as Dictionary).get("code", ""))))
+		UiKit.warm(thumbs)
+	UiKit.warm_step()
+# --- end UI (speed) ---
+
+
 func picture(path: String, pos: Vector2, dims: Vector2) -> TextureRect:
 	if not ResourceLoader.exists(path):
 		return null
 	var p := TextureRect.new()
-	p.texture = load(path)
+	p.texture = UiKit.tex(path)
 	p.position = pos
 	p.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	p.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED if path.ends_with(".svg") else TextureRect.STRETCH_KEEP_ASPECT_COVERED
@@ -856,7 +884,7 @@ func show_factions() -> void:
 func _cutout(f: String, pos: Vector2, dims: Vector2) -> TextureRect:
 	## The faction's character cutout, not yet placed (a tile's or a chip's child; UiKit.hero adds it to the page).
 	var r := TextureRect.new()
-	r.texture = load(UiKit.hero_path(f))
+	r.texture = UiKit.tex(UiKit.hero_path(f))
 	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2439,7 +2467,7 @@ func _army_tile(tf: String, pos: Vector2, dims: Vector2) -> void:
 	var b := UiKit.btn(self, "", pos, dims, func(): show_armies(tf), "selected" if picked else "secondary", tf)
 	var hs := dims.y - 8.0
 	var art := TextureRect.new()
-	art.texture = load(UiKit.hero_path(tf))
+	art.texture = UiKit.tex(UiKit.hero_path(tf))
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2957,7 +2985,7 @@ func _ward_factions(y: float) -> void:
 				"selected" if tf == _army else "secondary", tf)
 		b.tooltip_text = UiKit.TAGS[tf]
 		var art := TextureRect.new()
-		art.texture = load(UiKit.hero_path(tf))
+		art.texture = UiKit.tex(UiKit.hero_path(tf))
 		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3344,7 +3372,11 @@ func show_maps() -> void:
 		var back := UiKit.rect(Vector2(6, 6), thumb, Color(UiKit.BASE, 0.9))
 		b.add_child(back)
 		var tex := TextureRect.new()
-		tex.texture = UiKit.map_thumb(MapPool.thumb(code))   # the map alone (its caption strip is written below)
+		var tp := MapPool.thumb(code)                  # the map alone (its caption strip is written below); a thumbnail
+		if UiKit.cached(tp):                           # not loaded yet fills in a few frames later (_thumb_queue)
+			tex.texture = UiKit.map_thumb(tp)
+		else:
+			_thumb_queue.append([tex, tp])
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED   # the whole map, never cropped (Daniele, 0.18.7:
 		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE                # "thumbnail of maps often overflow and can't be seen in full")
@@ -3904,7 +3936,7 @@ func _faction_row(pos: Vector2, tile: float) -> float:
 				"selected" if picked else "secondary", f)
 		b.tooltip_text = UiKit.TAGS[f]
 		var art := TextureRect.new()
-		art.texture = load(UiKit.hero_path(f))
+		art.texture = UiKit.tex(UiKit.hero_path(f))
 		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -4167,7 +4199,7 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, mo
 	if id >= 0:
 		var f: String = str(Net.roster[id]["faction"])
 		var art := TextureRect.new()
-		art.texture = load(UiKit.hero_path(f))
+		art.texture = UiKit.tex(UiKit.hero_path(f))
 		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -4406,6 +4438,7 @@ func _poll_code(dt: float) -> void:
 
 func _process(dt: float) -> void:
 	## The room code comes from the native DOM field (phone keyboards: web/room-ui.js, Alpha 11's).
+	_speed_step()
 	if _page == "lobby" and is_instance_valid(_chat_btn):   # unread count on the lobby CHAT button
 		_chat_t -= dt
 		if _chat_t <= 0.0:

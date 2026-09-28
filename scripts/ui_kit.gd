@@ -204,8 +204,26 @@ static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "se
 		var ui := "confirm" if kind == "primary" else "tap"   # SOUND: the primary action confirms, the rest tap (sfx.gd)
 		b.pressed.connect(func():
 			Sfx.play_ui(ui)
-			call.call_deferred())
+			acknowledge(b, call))
 	return b
+
+
+static func acknowledge(b: Control, call: Callable) -> void:
+	## A tap is answered at once (Daniele's phone test, 2026-09-28: "you need to double or triple click any menu item" -
+	## the tap worked, but a phone builds the next page for a few tenths of a second with nothing on screen saying so,
+	## so he tapped again): the button flashes and that frame is drawn before `call` runs; taps meanwhile are ignored.
+	if b.get_meta("busy", false):
+		return
+	b.set_meta("busy", true)
+	b.modulate = Color(1.45, 1.45, 1.45)
+	var tree := b.get_tree()
+	if tree != null:
+		await tree.process_frame
+		await RenderingServer.frame_post_draw
+	call.call()
+	if is_instance_valid(b):                          # a pick that stays on the page (a toggle): back to normal
+		b.modulate = Color.WHITE
+		b.set_meta("busy", false)
 
 
 static func btn(m, text: String, pos: Vector2, dims: Vector2, call: Callable, kind := "secondary", f := "vex", size := 16.0) -> Button:
@@ -416,6 +434,81 @@ static func safe_insets(vp: Vector2) -> Vector4:
 	return ins
 
 
+# ------------------------------------------------------------------ the texture cache (Daniele's phone test, 2026-09-28:
+# "loading between menus takes very long"). A page used to load() its art and free it when it closed, so every visit -
+# and every in-page pick, which rebuilds the page - decoded the 1600 px backdrops, the cutouts and the 88 map thumbnails
+# again (tens of ms each on a desktop, several times that on a phone's web build). tex() keeps them, least recently
+# used out first beyond TEX_BUDGET (the decoded size: w x h x 4); warm() queues art to load while the menu sits idle.
+const TEX_BUDGET := 96 * 1024 * 1024               # the pages' art
+const THUMB_BUDGET := 48 * 1024 * 1024             # the map thumbnails (960 x 540 each: ~2 MB decoded), kept apart so
+const THUMBS := "res://assets/maps4/thumbs/"       # a BATTLEFIELD visit never pushes the pages' art out
+static var _tex := {}                              # path -> Texture2D
+static var _order := {"art": [], "thumb": []}      # least recently used first, per bucket
+static var _bytes := {"art": 0, "thumb": 0}
+static var _warm: Array = []                       # paths waiting for an idle frame
+
+
+static func _tex_cost(t: Texture2D) -> int:
+	return t.get_width() * t.get_height() * 4 if t != null else 0
+
+
+static func tex(p: String) -> Texture2D:
+	## A UI texture, loaded once and kept (null when the file doesn't exist).
+	var bucket := "thumb" if p.begins_with(THUMBS) else "art"
+	var order: Array = _order[bucket]
+	if _tex.has(p):
+		order.erase(p)
+		order.append(p)
+		return _tex[p]
+	if p == "" or not ResourceLoader.exists(p):
+		return null
+	var t: Texture2D = load(p)
+	if t == null:
+		return null
+	_tex[p] = t
+	order.append(p)
+	_bytes[bucket] += _tex_cost(t)
+	var budget := THUMB_BUDGET if bucket == "thumb" else TEX_BUDGET
+	while _bytes[bucket] > budget and order.size() > 1:
+		var old: String = order.pop_front()
+		_bytes[bucket] -= _tex_cost(_tex[old])
+		_tex.erase(old)
+	return t
+
+
+static func cached(p: String) -> bool:
+	return _tex.has(p)
+
+
+static func warm(paths: Array) -> void:
+	## Queue art for idle frames (the pages the player is likely to open next); already-cached paths are skipped.
+	for p in paths:
+		if not _tex.has(p) and not (p in _warm):
+			_warm.append(p)
+
+
+static func warm_step() -> bool:
+	## One queued texture loaded (Menu._process calls it while no finger / button is down); true while more wait.
+	while not _warm.is_empty():
+		var p: String = _warm.pop_front()
+		if not _tex.has(p):
+			tex(p)
+			return not _warm.is_empty()
+	return false
+
+
+static func warm_menu(f: String) -> void:
+	## What the menu pages draw most: your faction's backdrops, every creature and emblem, the PLAY cards.
+	var paths := ["res://assets/art/ui/page_%s.jpg" % f, "res://assets/art/ui/bg_%s.jpg" % f, "res://assets/art/ui/stage_%s.jpg" % f]
+	for g in ORDER:
+		paths.append(hero_path(g))
+		paths.append(emblem_path(g, true))
+		paths.append(emblem_path(g))
+	for c in ["vs_ai", "online", "training"]:
+		paths.append("res://assets/art/ui/play_%s.jpg" % c)
+	warm(paths)
+
+
 # ------------------------------------------------------------------ art
 static func hero_path(f: String) -> String:
 	return "res://assets/art/ui/hero_%s.png" % (f if ACCENTS.has(f) else "vex")
@@ -440,7 +533,7 @@ static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true) -> Tex
 		g.size = dims * 1.3
 		add(m, g, pos - dims * 0.15)
 	var r := TextureRect.new()
-	r.texture = load(hero_path(f))
+	r.texture = tex(hero_path(f))
 	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -462,8 +555,7 @@ static func emblem_path(f: String, small := false) -> String:
 
 static func emblem(f: String, px := 64.0) -> Texture2D:
 	## The faction's emblem for a spot `px` canvas units across (<= 40: the 32 px cut).
-	var p := emblem_path(f, px <= 40.0)
-	return load(p) if ResourceLoader.exists(p) else null
+	return tex(emblem_path(f, px <= 40.0))
 
 
 static func emblem_mip(f: String) -> Texture2D:
@@ -525,32 +617,36 @@ static func emblem_badge(parent: Control, f: String, side := 20.0) -> TextureRec
 static func map_thumb(path: String) -> Texture2D:
 	## A map's menu thumbnail (MapPool.thumb, 960x540) without its baked caption strip (the bottom 11 %: name and modes in
 	## ~4 pt type on a phone - the iPhone sweep - which every page already writes out beside it). The map itself is whole.
-	if not ResourceLoader.exists(path):
+	if _thumbs.has(path) and cached(path):
+		return _thumbs[path]
+	var t := tex(path)
+	if t == null:
 		return null
-	var t: Texture2D = load(path)
 	var a := AtlasTexture.new()
 	a.atlas = t
 	a.region = Rect2(Vector2.ZERO, Vector2(t.get_width(), roundf(t.get_height() * 0.885)))
+	_thumbs[path] = a
 	return a
+
+
+static var _thumbs := {}                           # thumbnail path -> its cropped AtlasTexture
 
 
 static func background(f: String) -> Texture2D:
 	## The pages' backdrop: the faction's wallpaper without its creature (Daniele's creature-free set, 2026-09-28), so a
 	## page that shows the character (FACTION, ARMIES, the results...) never shows it twice. HOME has the wallpaper.
-	var p := "res://assets/art/ui/page_%s.jpg" % (f if ACCENTS.has(f) else "vex")
-	return load(p) if ResourceLoader.exists(p) else stage(f)
+	var t := tex("res://assets/art/ui/page_%s.jpg" % (f if ACCENTS.has(f) else "vex"))
+	return t if t != null else stage(f)
 
 
 static func wallpaper(f: String) -> Texture2D:
 	## The faction's FINAL HOME wallpaper (Daniele 2026-09-28): its place with the creature in it, on the right.
-	var p := "res://assets/art/ui/bg_%s.jpg" % (f if ACCENTS.has(f) else "vex")
-	return load(p) if ResourceLoader.exists(p) else null
+	return tex("res://assets/art/ui/bg_%s.jpg" % (f if ACCENTS.has(f) else "vex"))
 
 
 static func stage(f: String) -> Texture2D:
 	## The faction's empty VERSUS stage (Daniele's FINAL set; a creature cutout stands on its platform).
-	var p := "res://assets/art/ui/stage_%s.jpg" % (f if ACCENTS.has(f) else "vex")
-	return load(p) if ResourceLoader.exists(p) else null
+	return tex("res://assets/art/ui/stage_%s.jpg" % (f if ACCENTS.has(f) else "vex"))
 
 
 # ------------------------------------------------------------------ the last played faction (HOME's hero)

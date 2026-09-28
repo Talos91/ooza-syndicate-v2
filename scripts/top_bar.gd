@@ -63,10 +63,10 @@ func _build(crumb: String, f: String) -> void:
 	# right to left: "?", the gear, the level block, the balances
 	var help := _square("?", Vector2(w - 14.0 - q, (h - q) / 2.0), q, f)
 	help.tooltip_text = "HELP"
-	help.pressed.connect(func(): help_pressed.emit.call_deferred())
+	help.pressed.connect(func(): UiKit.acknowledge(help, func(): help_pressed.emit()))
 	var gear := _square("", help.position - Vector2(q + 8.0, 0), q, f)
 	gear.tooltip_text = "OPTIONS"
-	gear.pressed.connect(func(): options_pressed.emit.call_deferred())
+	gear.pressed.connect(func(): UiKit.acknowledge(gear, func(): options_pressed.emit()))
 	var glyph := Control.new()                       # a drawn gear (no icon for it in the kit yet)
 	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	glyph.position = gear.position
@@ -92,7 +92,7 @@ func _build(crumb: String, f: String) -> void:
 	prof.tooltip_text = "PROFILE"
 	prof.position = Vector2(bx - 6.0, 0)
 	prof.size = Vector2(block_w + 12.0, h)
-	prof.pressed.connect(func(): profile_pressed.emit.call_deferred())
+	prof.pressed.connect(func(): UiKit.acknowledge(prof, func(): profile_pressed.emit()))
 	add_child(prof)
 	var bxr := bx - 18.0                              # PROGRESSION: SCRAP and CHIPS, as on the old profile card
 	var p := UiKit.pt(menu)                           # the ticker sizes in pt: exact on phones, the old card's size on desktop
