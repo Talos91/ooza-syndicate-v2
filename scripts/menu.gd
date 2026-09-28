@@ -658,9 +658,7 @@ func show_help() -> void:
 
 static var _opt_tab := "game"                      # SETTINGS: the open tab (kept while the game runs)
 static var _opt_arg_read := false
-const OPT_TABS := [["game", "GAME"], ["display", "DISPLAY"], ["debug", "DEBUG"]]
-# PRIVACY: (the telemetry branch's rows go here) - its PRIVACY block comes before DEBUG: a ["privacy", "PRIVACY"] tab
-# between DISPLAY and DEBUG above, and its 2-3 rows in show_options' "privacy" branch (_opt_row, like the others).
+const OPT_TABS := [["game", "GAME"], ["display", "DISPLAY"], ["privacy", "PRIVACY"], ["debug", "DEBUG"]]   # PROGRESSION: PRIVACY (Alpha 21)
 
 
 func show_options() -> void:
@@ -716,8 +714,9 @@ func show_options() -> void:
 			y += _opt_row(y, w, "FRAME RATE", PerfProfile.fps_label() + ("  -  LOW RES stays at 30." if low else "  -  the cap while a match runs."), fps, low)
 			y += _opt_row(y, w, "DETAIL", "LOW trims the river patches and vat residents - use it if the game makes your machine run hot.",
 					[["FULL", not Rules.low_detail, func(): Rules.low_detail = false], ["LOW", Rules.low_detail, func(): Rules.low_detail = true]])
+		"privacy":
+			y = _privacy_rows_options(y, w)            # PROGRESSION (Alpha 21): SHARE PLAY & CRASH DATA + the PRIVACY page
 		"debug":
-			# PRIVACY: (the telemetry branch's rows go here) - or in a "privacy" tab of their own, before this one
 			y += _opt_row(y, w, "DEBUG TOOLS", "The Debug button and live sliders in matches.",
 					[["ON", Rules.debug_tools, func(): Rules.debug_tools = true], ["OFF", not Rules.debug_tools, func(): Rules.debug_tools = false]])
 			y += _opt_row(y, w, "TEST SWITCH  ·  LOCKS", "OFF: everything unlocked (the testing default). ON: a preview of the game as players will see it once the locks go live - skills and looks earned or bought (until the page closes).",   # PROGRESSION
@@ -1419,6 +1418,9 @@ func show_account() -> void:
 			col = Color("6fff2a")
 		"signing_in":
 			status = "SIGNING IN ..."
+		"deleted":                                  # PROGRESSION (Alpha 21): DELETE ACCOUNT done
+			status = "ACCOUNT DELETED  -  this device keeps its progress; a new guest account starts next time"
+			col = Color("ffd15c")
 	var y := top + 16.0
 	y += _say(status, Vector2(px, y), 15, col, w, true) + 16.0
 	y += _say("NAME", Vector2(px, y), 12, UiKit.MUTED, 0.0, true, 3) + 6.0
@@ -1487,13 +1489,123 @@ func show_account() -> void:
 		ry += _say("Google sign-in isn't available right now.", Vector2(0, ry), 13, UiKit.DIM, rcw) + 8.0
 	if _account_note != "":
 		ry += _say(_account_note, Vector2(0, ry + 6.0), 15, UiKit.STAR, rcw) + 14.0
-	# PRIVACY: (the telemetry branch's rows go here) - SHARE PLAY & CRASH DATA, PRIVACY, DELETE ACCOUNT, below the Google
-	# sign-in: `ry += ...` rows at (0, ry), width rcw; this column scrolls, so 2-3 rows fit on phones too.
+	ry = _privacy_rows_account(ry, rcw)                # PROGRESSION (Alpha 21): the switch, PRIVACY, DELETE ACCOUNT
 	_column_end(right, n0, ry, true)
 	var both := minf(ch, maxf(y + 16.0 - top, (right["panel"] as Control).size.y))   # one height for the pair
 	lp.size.y = both
 	(right["panel"] as Control).size.y = both
 	(right["scroll"] as Control).size.y = both - 24.0
+
+
+# ------------------------------------------------------------------ PROGRESSION: PRIVACY (Alpha 21)
+func _privacy_rows_options(y: float, w: float) -> float:
+	## SETTINGS > PRIVACY (TELEMETRY-PRIVACY-DESIGN §6): the switch as a settings row, then the PRIVACY page. UiKit canvas
+	## units, rows at (0, y) in the tab's column; returns the next row's y.
+	y += _opt_row(y, w, "SHARE PLAY & CRASH DATA",
+			"Gameplay and performance numbers and crash reports, tied only to your game account id. OFF: nothing leaves this device.",
+			[["ON", Telemetry.sharing(), func(): _set_share(true)], ["OFF", not Telemetry.sharing(), func(): _set_share(false)]])
+	var pw := UiKit.text_w(self, "PRIVACY  →", 15, true) + 44.0
+	var b := UiKit.btn(self, "PRIVACY  →", Vector2(0, y + 12.0), Vector2(pw, 44), func(): show_privacy(show_options),
+			"secondary", shell_f, 15)
+	return y + 12.0 + b.size.y + 12.0
+
+
+func _privacy_rows_account(ry: float, rcw: float) -> float:
+	## ACCOUNT's right column, under the Google sign-in (§6-§7): the switch, the PRIVACY page, DELETE ACCOUNT. UiKit canvas
+	## units, rows at (0, ry), width rcw (the column scrolls); returns the next row's y.
+	var a := _account()
+	ry += 10.0
+	ry += _say("PRIVACY", Vector2(0, ry), 15, UiKit.INK, rcw, true) + 6.0
+	ry += _say("Gameplay and performance numbers and crash reports, tied only to your game account id.",
+			Vector2(0, ry), 13, UiKit.MUTED, rcw) + 10.0
+	var sw := minf(rcw, UiKit.text_w(self, _share_label(), 15, true) + 44.0)
+	var sb := UiKit.btn(self, _share_label(), Vector2(0, ry), Vector2(sw, 48), func():
+		_toggle_share()
+		show_account(), "secondary", shell_f, 15)
+	ry += sb.size.y + 10.0
+	var pw := UiKit.text_w(self, "PRIVACY", 15, true) + 44.0
+	var dw := UiKit.text_w(self, "DELETE ACCOUNT", 15, true) + 44.0
+	var pb := UiKit.btn(self, "PRIVACY", Vector2(0, ry), Vector2(pw, 48), func(): show_privacy(show_account),
+			"secondary", shell_f, 15)
+	var dx := pw + 12.0
+	if dx + dw > rcw:                                  # a narrow phone column: DELETE ACCOUNT on its own row
+		ry += pb.size.y + 10.0
+		dx = 0.0
+	var del := UiKit.btn(self, "DELETE ACCOUNT", Vector2(dx, ry), Vector2(dw, 48), _delete_prompt, "secondary", shell_f, 15)
+	del.disabled = not a.signed_in()
+	ry += del.size.y + 10.0
+	return ry
+
+
+func _share_label() -> String:
+	return "SHARE PLAY & CRASH DATA: " + ("ON" if Telemetry.sharing() else "OFF")
+
+
+func _toggle_share() -> void:
+	_set_share(not Telemetry.sharing())
+
+
+func _set_share(on: bool) -> void:
+	Telemetry.choose(on)
+	if on:
+		Telemetry.flush_soon()
+
+
+func show_privacy(back: Callable = Callable()) -> void:
+	## PRIVACY (from SETTINGS and ACCOUNT): the full notice - the same text as privacy.html beside the game - in a
+	## scrolling column, the switch, DONE back to where it was opened.
+	var ret: Callable = back if back.is_valid() else show_options
+	_last_show = func(): show_privacy(ret)
+	var tab := _meta_open("privacy", ret)
+	var done := func(): ret.call()
+	var area := shell_open("OOZE / PRIVACY", tab, done, faction)
+	_page = "privacy"
+	var x := shell_x()
+	var top := page_title(area, "PRIVACY  ·  SHARE PLAY & CRASH DATA: " + ("ON" if Telemetry.sharing() else "OFF"),
+			"WHAT THE GAME KEEPS.")
+	var bh := UiKit.tap_h(self, 48.0)
+	var fy := area.end.y - bh - 12.0
+	var sw := UiKit.text_w(self, _share_label(), 15, true) + 44.0
+	UiKit.btn(self, _share_label(), Vector2(x, fy), Vector2(sw, 48), func():
+		_toggle_share()
+		show_privacy(ret), "secondary", shell_f, 15)
+	UiKit.btn(self, "DONE  →", Vector2(content.size.x - x - 200.0, fy), Vector2(200, 48), done, "primary", shell_f, 16)
+	var col := _column(Vector2(x, top), Vector2(content.size.x - x * 2.0, fy - 12.0 - top))
+	var w: float = col["w"]
+	var n0 := content.get_child_count()
+	var y := 4.0
+	for para in Telemetry.privacy_text().split("\n\n"):
+		var heading := para == para.to_upper()
+		y += _say(para, Vector2(0, y), 15 if heading else 14, UiKit.accent(shell_f) if heading else UiKit.MUTED, w, heading)
+		y += 6.0 if heading else 16.0
+	_column_end(col, n0, y)
+
+
+func _delete_prompt() -> void:
+	## DELETE ACCOUNT's confirm sheet over ACCOUNT: what goes, what stays, DELETE / CANCEL.
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.72)
+	dim.position = Vector2(-3000, -3000)
+	dim.size = Vector2(9000, 9000)
+	content.add_child(dim)
+	var pp := P(386, 230)
+	var pd := P(900, 480)
+	content.add_child(neon_panel(pp, pd, Color("ff5a4e"), true, Color("0a1216f4")))
+	label_at("DELETE ACCOUNT?", pp + P(32, 24), 34, Color.WHITE, false)
+	_wrapped("This deletes your account, cloud save, match history, leaderboard entries and shared play data. "
+			+ "It can't be undone. The progress saved on this device stays.", pp + P(32, 90), 21, Color("c5d2da"), 836)
+	var a := _account()
+	var busy := [false]
+	nav_button("DELETE", pp + P(32, 330), P(360, 66), func():
+		if busy[0]:
+			return
+		busy[0] = true
+		if await a.delete_account():
+			_account_note = "Account deleted."
+		else:
+			_account_note = "Not deleted: " + a.last_error
+		show_account())
+	nav_button("CANCEL", pp + P(420, 330), P(300, 66), show_account, true)
 
 
 # The web build's name field: a native DOM <input> laid over ACCOUNT's NAME box (like web/room-ui.js's room code, the
