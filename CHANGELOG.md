@@ -1,5 +1,14 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.11 "Alpha 21" - 2026-09-28 (player names online)
+
+- **Other players' names online** (🖥️ Server, protocol ooze20-net-7): each player's ACCOUNT name travels in the room, cleaned
+  by the host (printable, <= 16 characters) and made unique ("NAME (2)"); a player without an account shows as "PLAYER <seat>".
+  The lobby rows read "NAME · FACTION" after the emblem; VERSUS, the results, MATCH DETAILS, the top-bar chips, chat and the
+  rematch list show the names.
+- The room server can also answer on rooms.oozesyndicate.com (Caddyfile; the game still connects to the sslip.io address
+  until that DNS record is live).
+
 ## 0.21.10 "Alpha 21" - 2026-09-28 (the race emblems v2 everywhere; the final UI art; colour-blind mode)
 
 - **Race emblems v2** (Daniele's final set, Art/Interface/Final set 2026-09-28/emblems; "make sure they're enforced"): one source
