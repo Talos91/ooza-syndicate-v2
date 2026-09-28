@@ -216,15 +216,15 @@ func test_02_drops() -> void:
 	sim.time = float(m["objective"]["limit"]) + 0.1
 	tick(d, sim, 1)
 	check(got.size() == 1 and not got[0]["won"] and got[0]["reason"] == "limit", "02: the limit passes -> lost %s" % [got])
-	# conquered before the drops: the objective was not met -> lost
+	# conquered before the drops: a conquest wins too (Daniele, 2026-09-29, Decisions page)
 	r = make(k)
 	d = r[0]
 	sim = r[1]
 	got = outcome(d)
 	take_all(sim, "B", "A")
 	tick(d, sim, 30)
-	check(got.size() == 1 and not got[0]["won"] and got[0]["reason"] == "objective",
-			"02: a conquest without the drops is not the objective -> lost")
+	check(got.size() == 1 and got[0]["won"] and got[0]["reason"] == "conquest",
+			"02: a conquest before the drops wins too")
 
 
 func test_s1_survive() -> void:
