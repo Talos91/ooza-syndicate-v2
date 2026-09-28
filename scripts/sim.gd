@@ -1032,7 +1032,7 @@ func _relay_apply(n: Dictionary) -> void:
 	## cooldown starts. The troops' fate was settled when the motion began (_relay_drop).
 	n["moving_edges"] = []
 	n["relay_phase"] = ""
-	n["relay_cd"] = Rules.RELAY_COOLDOWN + maxf(n["relay_cd"], 0.0)   # (0 unless Relay Hack jammed it meanwhile)
+	n["relay_cd"] = Rules.relay_cooldown(str(n["relay"])) + maxf(n["relay_cd"], 0.0)   # (0 unless Relay Hack jammed it meanwhile)
 	fx_events.append({"type": "relay_done", "node": n["id"]})
 
 

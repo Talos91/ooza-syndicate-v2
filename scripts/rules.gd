@@ -171,6 +171,14 @@ const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
 # RELAY_COOLDOWN before the next fire.
 const RELAY_WARNING := 1.0          # Daniele (0.18.6): "bridge alert ... just 1 sec" (was 3 s)
 const RELAY_COOLDOWN := 5.0        # Daniele (Alpha 13 playtest): "relay cooldown I'd set at 5 s"
+# Daniele (2026-09-28): rotors can be used as "meat grinders" (always connected, dropping what is on their decks) -> a longer
+# cooldown for ROTATION relays ("10 is fine for now"); other kinds keep RELAY_COOLDOWN.
+const RELAY_COOLDOWN_BY_KIND := {"rotation": 10.0}
+
+
+static func relay_cooldown(kind: String) -> float:
+	return float(RELAY_COOLDOWN_BY_KIND.get(kind, RELAY_COOLDOWN))
+
 const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves (its troops fell when it started)
 # RELAY V2 (the relay redo, Alpha 22 - Daniele 2026-09-28 "they good"; Models/2.0/structures_2_1/relay_v2.json +
 # build_relay_v2.py): one standard BUTTON PLATFORM per relay off the rim (Relay_Button_<Kind>_v2, the tap target),
@@ -261,7 +269,7 @@ const AI_TEAM_DEFEND_LATE := 4.0       # s: an ally's node is reinforced only if
 # whole order is revealed; every node gets a 10 s warning before it falls; everything on a falling
 # node or its decks dies. The final node is never dropped. Wave interval per map so the collapse
 # is over well before the hard end.
-const LAST_STAND_TIME := 180.0       # Daniele (0.18.6): "last stand reset to be starting at 3 m" (was 2:00)
+const LAST_STAND_TIME := 240.0       # Daniele (2026-09-28): "last stand starts too early push it to 4 minutes" (was 3:00; VLS stays 6:00)
 const LAST_STAND_WARNING := 10.0
 const LAST_STAND_WAVE_MIN := 12.0
 const LAST_STAND_WAVE_MAX := 30.0
@@ -335,13 +343,13 @@ const NODE_BUILDS := {"common": ["vat", "machinegoon"], "relay": ["laser", "forg
 # while it holds one (it keeps and can be reinforced its garrison). Build 15, upgrades 20 / 30 shown.
 static var MACHINEGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then upgrade to T2, T3
 static var VAT_RESTORE_COST := 75         # machinegoon -> vat, 15 shown (Daniele, 2026-09-27: "cost price of a tier 1 vat ... maybe 15")
-static var MACHINEGOON_RATE := {1: 10.0, 2: 17.5, 3: 25.0} # kills/s (shown 2 / 3.5 / 5)
+static var MACHINEGOON_RATE := {1: 8.0, 2: 14.0, 3: 20.0} # kills/s (shown 1.6 / 2.8 / 4; -20 %, Daniele 2026-09-28)
 static var MACHINEGOON_RANGE := 10.0
 # LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
 # a LASER_BURST s burst killing at most LASER_KILL bodies split across the lines in range (the cannon's code
 # path), then LASER_RECHARGE s. ~8 kills/s shown, below the door's 9.6/s.
 static var LASER_COST := 200              # 40 shown
-static var LASER_KILL := 160.0            # 32 shown per burst
+static var LASER_KILL := 96.0             # 19 shown per burst (-40 %, Daniele 2026-09-28: "laser tower is waaaay too powerful"; was 160)
 static var LASER_BURST := 2.0
 static var LASER_RECHARGE := 2.0
 static var LASER_RANGE := 12.0            # metres from the node's centre: covers its piers + first module
@@ -361,7 +369,7 @@ static var MONSTER_HUB_COST := 150        # 30 shown
 static var MONSTER_COST := 100            # 20 shown
 static var MONSTER_COOLDOWN := 40.0          # Daniele, 2026-09-27: "change charge to 40 seconds" (was 90)
 static var MONSTER_SPEED := 0.6           # x BRAWL_SPEED (~3.4 m/s)
-static var MONSTER_REACH := 3             # bridges (plaza links don't count)
+static var MONSTER_REACH := 1             # bridges (plaza links don't count); Daniele 2026-09-28: "attack radius limited to 1 node" (was 3)
 const MONSTER_R := 1.4                    # metres: the monster's reach along the deck (half a deck width)
 const MONSTER_PLATFORM_R := 2.0           # metres: on a platform it crosses, bodies of lines in transit this close to its path are kicked
 const MONSTER_FALL_TIME := 1.2            # seconds a falling monster tumbles before it is gone

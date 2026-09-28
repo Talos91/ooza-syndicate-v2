@@ -911,10 +911,10 @@ func _flip_at(sim: Sim, r: Dictionary, ei: int) -> float:
 				tick = r["relay_t"]
 				idx = r["relay_pending"]
 			"moving":
-				tick = r["relay_t"] + (Rules.RELAY_COOLDOWN if lvl >= 2 else 0.0) + Rules.RELAY_WARNING
+				tick = r["relay_t"] + (Rules.relay_cooldown(str(r["relay"])) if lvl >= 2 else 0.0) + Rules.RELAY_WARNING
 			_:
 				tick = (r["relay_cd"] if lvl >= 2 else 0.0) + Rules.RELAY_WARNING
-	var period := Rules.RELAY_WARNING + Rules.RELAY_MOVE + Rules.RELAY_COOLDOWN
+	var period := Rules.RELAY_WARNING + Rules.RELAY_MOVE + Rules.relay_cooldown(str(r["relay"]))
 	for _k in range(states.size()):                      # the first fire that closes this deck
 		if not sim._edge_open_at(ei, idx):
 			return tick

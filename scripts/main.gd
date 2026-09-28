@@ -1283,7 +1283,7 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 			return [true, "Sending %d units to node %d" % [Rules.shown(count), to]]
 		"switch":
 			if sim.fire_relay(id):
-				return [true, "Relay fired - switching in %d s, then %d s cooldown" % [int(Rules.RELAY_WARNING), int(Rules.RELAY_COOLDOWN)]]
+				return [true, "Relay fired - switching in %d s, then %d s cooldown" % [int(Rules.RELAY_WARNING), int(Rules.relay_cooldown(str(n["relay"])))]]
 			return [false, "Relay on cooldown" if n["relay_cd"] > 0.0 else "Relay is already switching"]
 		"upgrade":
 			var cost := sim.upgrade_cost(n)

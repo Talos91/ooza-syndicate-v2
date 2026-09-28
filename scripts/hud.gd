@@ -1324,7 +1324,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 				if is_instance_valid(switch_ring):
 					var ring := switch_ring as SwitchRing
 					ring.warning = n["relay_phase"] == "warning"
-					ring.frac = 1.0 if n["relay_cd"] <= 0.0 else clampf(1.0 - float(n["relay_cd"]) / Rules.RELAY_COOLDOWN, 0.0, 1.0)
+					ring.frac = 1.0 if n["relay_cd"] <= 0.0 else clampf(1.0 - float(n["relay_cd"]) / Rules.relay_cooldown(str(n["relay"])), 0.0, 1.0)
 					ring.queue_redraw()
 			"build":
 				why = sim.can_build(inspector_id, human, str((a["args"] as Dictionary).get("kind", "")))

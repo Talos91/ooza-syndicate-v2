@@ -251,7 +251,7 @@ func _relay(n: Dictionary, entry: Dictionary) -> void:
 		frac = 1.0
 		arc_col = Rules.state_color(sim.relay_state_key(n, n["relay_index"]))
 	elif n["relay_cd"] > 0.0:
-		frac = 1.0 - n["relay_cd"] / Rules.RELAY_COOLDOWN
+		frac = 1.0 - n["relay_cd"] / Rules.relay_cooldown(str(n["relay"]))
 	arc.visible = n["owner"] != "" and not sim.collapsed.get(id, false)
 	if arc.visible:
 		arc.position = n["pos"] + Vector3(0, 0.3, 0)
