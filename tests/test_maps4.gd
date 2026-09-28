@@ -459,6 +459,74 @@ var _pairs := 0          # rings (all runs) with platforms near several corners
 var _pairs_alt := 0      # ... whose first two drops lie nearer different corners
 
 
+func _relay_multi() -> void:
+	## RELAY V2 composability (Daniele via Skin Designer: the relay pieces are basic pieces, no cap on bridges per relay)
+	## on tests/relay_multi.json (never pooled): a 6-bridge switch SW, a rotation RO carrying 3 decks over 6 headings,
+	## a retract RT with 2 bridges, a remote RC driving decks at 2 different nodes. One button per relay; a mechanism
+	## on every controlled bridge (the controlling end; a remote's at the target bridge); the relay's decks on each;
+	## ghosts: the switch's 5 inactive bridges, the rotation's 3 next headings (deck + pier), none for the extended
+	## retract until it retracts (then both), the remote's 2 targets once they are off.
+	var m := MapBuilder.load_map("res://tests/relay_multi.json")
+	var nm: Dictionary = m["names"]
+	var seats := {}
+	for s in m["seats"]["1v1"]:
+		seats[int(s["node"])] = s["seat"]
+	var sim := Sim.new()
+	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, 1)
+	var holder := Node3D.new()
+	root.add_child(holder)
+	var vis := MapBuilder.build3(holder, sim, m)
+	var rv: RelayView = vis["relay_view"]
+	var want := {"SW": 6, "RO": 6, "RT": 2, "RC": 2}
+	for k in want:
+		var id: int = int(nm[k])
+		var ce := sim.controlled_edges(id)
+		check(ce.size() == want[k], "relay_multi: %s drives %d bridges (%d)" % [k, want[k], ce.size()])
+		var buttons := (vis[id]["parts"] as Array).filter(func(p): return is_instance_valid(p) and (p as Node).scene_file_path.get_file().begins_with("Relay_Button_"))
+		check(buttons.size() == 1 and vis[id].has("relay_button"), "relay_multi: %s has one button" % k)
+		var gates := 0
+		for h in vis[id]["state_hosts"]:
+			if (h as Node).scene_file_path.get_file().begins_with("Relay_Gate_") or (h as Node).scene_file_path.get_file().begins_with("Relay_Retract_"):
+				gates += 1
+		check(gates == ce.size(), "relay_multi: %s has a mechanism on each of its %d bridges (%d)" % [k, ce.size(), gates])
+		var kind: String = sim.nodes[id]["relay"]
+		for ei in ce:
+			var decks: Array = vis["edge_decks"][ei]
+			var marked := decks.filter(func(d): return (d as Node).scene_file_path.get_file() == RelayView.DECK[kind] + ".glb")
+			check(not marked.is_empty(), "relay_multi: %s bridge %d carries %s" % [k, ei, RelayView.DECK[kind]])
+			check(rv.has_ghost(ei), "relay_multi: %s bridge %d has its ghost" % [k, ei])
+		var pl := RelayView.place(sim, id)
+		check(not bool(pl["tight"]) and float(pl["gap"]) >= 2.0 * Rules.RELAY_MIN_SEP, "relay_multi: %s button gap %.1f deg" % [k, pl["gap"]])
+	var shown := func(id: int) -> int:
+		var c := 0
+		for ei in sim.controlled_edges(id):
+			c += 1 if RelayView.ghost_wanted(sim, id, ei) else 0
+		return c
+	check(shown.call(int(nm["SW"])) == 5, "relay_multi: the 6-way switch shows 1 bridge + 5 ghosts (%d)" % shown.call(int(nm["SW"])))
+	check(shown.call(int(nm["RO"])) == 3, "relay_multi: the rotation shows its 3 next headings (%d)" % shown.call(int(nm["RO"])))
+	check(shown.call(int(nm["RT"])) == 0, "relay_multi: an extended retract shows no ghost")
+	var ro_pier := 0
+	for g in rv.groups:
+		if int(g["ctrl"]) == int(nm["RO"]):
+			ro_pier += (g["items"] as Array).filter(func(it): return str(it[0]).begins_with("Pier_Ghost_")).size()
+	check(ro_pier == 6, "relay_multi: every rotation heading has its ghost pier (%d)" % ro_pier)
+	var rc_links := 0
+	for ei in sim.controlled_edges(int(nm["RC"])):
+		rc_links += 1 if vis["conduits"].has(ei) else 0
+	check(rc_links == 2, "relay_multi: the remote links to both target bridges (%d)" % rc_links)
+	for k in ["RT", "RC", "SW", "RO"]:                   # fire each; after the move the ghosts follow the new state
+		var id: int = int(nm[k])
+		sim.nodes[id]["owner"] = "A"
+		check(sim.fire_relay(id), "relay_multi: %s fires" % k)
+	for i in range(int((Rules.RELAY_WARNING + Rules.RELAY_MOVE + 0.5) / 0.1)):
+		sim.step(0.1)
+	check(shown.call(int(nm["RT"])) == 2, "relay_multi: a retracted 2-bridge retract ghosts both extensions (%d)" % shown.call(int(nm["RT"])))
+	check(shown.call(int(nm["RC"])) == 2, "relay_multi: the remote's 2 targets, now off, are ghosts (%d)" % shown.call(int(nm["RC"])))
+	check(shown.call(int(nm["SW"])) == 5, "relay_multi: after a switch still 5 ghosts (%d)" % shown.call(int(nm["SW"])))
+	check(shown.call(int(nm["RO"])) == 3, "relay_multi: after a turn the other 3 headings are the ghosts (%d)" % shown.call(int(nm["RO"])))
+	holder.free()
+
+
 func _heights() -> void:
 	## A raised deck crossing a ground deck: paths follow the height and the two lines never meet.
 	for path in MapPool.all():
@@ -648,6 +716,7 @@ func _run() -> void:
 	print("Last Stand corner cycle: the latest collapse ends at %d:%02d; %d of %d multi-corner rings open on two sides (the rest: only one side could fall safely)" % [
 			int(_latest_end) / 60, int(_latest_end) % 60, _pairs_alt, _pairs])
 	print("RELAY V2 button gaps: the narrowest widest-gap is %.1f deg (rule >= %.1f); tight nodes: %s" % [_relay_min_gap, 2.0 * Rules.RELAY_MIN_SEP, str(_relay_tight)])
+	_relay_multi()
 	_heights()
 	_drop_timing()
 	_very_last_stand()

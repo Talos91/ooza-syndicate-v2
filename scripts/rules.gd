@@ -185,8 +185,13 @@ const RELAY_MIN_SEP := 25.97         # json min_separation_deg_from_any_bridge =
                                      # a smaller gap moves the pad out to CLEAR / sin(gap / 2) and stretches its Strut
 const RELAY_HIT_PT := 44.0           # the button's tap disc on a phone, points across (Apple's minimum; tests/phone_fit)
 const RELAY_HIT_PAD := 1.15          # the disc is at least the pad's projected radius x this (desktop / close-ups)
-const RELAY_GHOST := Color(0.85, 0.78, 1.0, 0.28)       # OS_Ghost: the see-through floor (build_relay_v2 relay_mats)
-const RELAY_GHOST_EDGE := Color(0.92, 0.88, 1.0)        # OS_Ghost_Edge: the bright frame
+const RELAY_GHOST := Color(0.85, 0.78, 1.0, 0.28)       # OS_Ghost: the neutral violet floor (the Pier_Ghost_v2 fallback)
+const RELAY_GHOST_EDGE := Color(0.92, 0.88, 1.0)        # OS_Ghost_Edge: its bright frame
+# v2g (Daniele: "the ghost should have also different colour so even as ghost you can see what is switch and what is
+# rotation"): each kind's ghost in its own hue (relay_v2.json ghost_colors; OS_Ghost_<Kind> floor + OS_Ghost_<Kind>_Edge)
+const RELAY_GHOST_COLORS := {"rotation": Color("#4f8bff"), "switch": Color("#ffb238"), "remote": Color("#5cffb0"),
+		"retract": Color("#ff6a5a")}         # switch = Hud.RELAY_ACCENT
+const RELAY_GHOST_ALPHA := 0.45      # json: the kind ghosts' floor alpha (see-through; the edges are emissive)
 const RELAY_GHOST_WARN := 2.4        # x the ghost's brightness while its relay's warning runs (it is about to be real)
 # The remote's LINK (Daniele 2026-09-28: "the cable looks too weird, time to improve its look"): a thin glowing arc in
 # the relay's state colour from its button up over the map to the receiver masts of the Relay_Gate_Remote_v2 on the
