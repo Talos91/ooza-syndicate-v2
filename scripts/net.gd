@@ -58,6 +58,9 @@ extends Node
 ## signed MatchReport to the `match-result` edge function (retries, and the room stays open until it is sent). The
 ## Supabase address, key and the signing secret come from the server's environment (OOZE_SUPABASE_URL / _KEY,
 ## OOZE_MATCH_SECRET from /opt/ooze/secrets.env); browser-hosted rooms never report (unranked).
+## ROOM LIMITS (Alpha 21, Daniele 2026-09-28): a server room with no round running (lobby, results) closes after ROOM_IDLE
+## (10 min; a notice ROOM_IDLE_WARN before, then "rejected" with the reason), so idle tabs can't hold the server's match
+## slots; the relay lets one address hold 2 server rooms (a refusal with code "limit" is shown, not a browser fallback).
 
 signal lobby_changed
 signal rematch_changed
@@ -97,6 +100,8 @@ const DEDICATED_FPS := 40                          # the server's match host: a 
 const DEDICATED_IDLE := 90.0                       # a server match everyone dropped out of waits this long for a RECONNECT
 const DEDICATED_LOBBY_IDLE := 5.0                  # an empty server lobby closes (nobody can come back to a lobby seat)
 const DEDICATED_BOOT_IDLE := 20.0                  # the creator never arrived
+const ROOM_IDLE := 600.0                           # a server room with no round running (lobby, results) closes after this
+const ROOM_IDLE_WARN := 60.0                       # ...with a notice this long before (Daniele 2026-09-28: idle rooms close after 10 min)
 const FALLBACK_CODES := ["no-server", "version", "busy"]   # create refused: host in this browser instead
 const REMATCH_AI := "Standard"                     # REMATCH ON A RANDOM MAP picked a bigger mode: the AI fills the extra seats
 const AI_FILL := ["", "Training", "Casual", "Standard", "Veteran", "Expert"]   # EMPTY SEATS setting: off or the AI level
@@ -149,6 +154,10 @@ var _round_started_at := 0                         # dedicated: unix time the ro
 var _reported_round := -1
 var _report_pending := 0                           # reports still being sent (the room waits for them)
 var _ever_joined := false
+var _idle_t := 0.0                                 # dedicated: seconds without a round running while players are in the room
+var _idle_warned := false
+var _room_idle := ROOM_IDLE                        # tests: --idle-close=<s> (a local relay's --host-arg)
+var _closing := false
 var ai_fill := ""                                  # host setting: "" = every seat needs a player, else the AI level for empty seats
 var rejoin := {}                                   # guest: {code, token, faction} to RECONNECT to a dropped room
 var _tokens := {}                                  # host: player id -> secret rejoin token (never broadcast)
@@ -1792,6 +1801,8 @@ func _process(dt: float) -> void:
 		if _report_pending == 0 and _empty_t > (DEDICATED_BOOT_IDLE if not _ever_joined else (DEDICATED_IDLE if active else DEDICATED_LOBBY_IDLE)):
 			fail("room empty")
 			return
+		if _idle_check(dt):
+			return
 	if not active or not started or sim == null:
 		return
 	if hosting:
@@ -1828,6 +1839,33 @@ func _process(dt: float) -> void:
 		_track_freeze(minf(dt, 0.25))
 		if _since_snapshot > HOST_GRACE:
 			fail("The host stopped responding for %d s. RECONNECT to try the room again." % int(HOST_GRACE))
+
+
+func _idle_check(dt: float) -> bool:
+	## The server's match host: a room where no round runs (the lobby, the results) for _room_idle closes, so idle tabs
+	## can't hold the server's few match slots; a notice warns everyone ROOM_IDLE_WARN before. true = closing.
+	if _closing:
+		return true
+	if active and started and not finished:
+		_idle_t = 0.0
+		_idle_warned = false
+		return false
+	if present_ids().is_empty():                       # an empty room has its own, shorter rules above
+		return false
+	_idle_t += dt
+	var warn := minf(ROOM_IDLE_WARN, _room_idle * 0.5)
+	if not _idle_warned and _idle_t >= _room_idle - warn:
+		_idle_warned = true
+		_notice("Nothing played for a while: this room closes in %d s unless a round starts" % int(round(_room_idle - _idle_t)))
+	if _idle_t < _room_idle or _report_pending > 0:
+		return false
+	_closing = true
+	var why := "Room closed: nothing was played in it for %s." % ("%d min" % int(round(_room_idle / 60.0)) if _room_idle >= 60.0 else "%d s" % int(_room_idle))
+	print("room idle ", int(_idle_t), " s - closing")
+	for remote in links:                               # "rejected": the guest shows why and forgets the RECONNECT
+		_send(remote, "rejected", why)
+	get_tree().create_timer(1.0).timeout.connect(func(): fail("room idle"))   # let the last packets leave first
+	return true
 
 
 func _poll(dt: float) -> void:
@@ -2068,6 +2106,8 @@ func _ready() -> void:
 			_server_room = arg.substr(7)
 		elif arg.begins_with("--secret="):
 			_server_secret = arg.substr(9)
+		elif arg.begins_with("--idle-close="):         # tests only (a local relay's --host-arg): a short idle limit
+			_room_idle = maxf(4.0, float(arg.substr(13)))
 	if dedicated:
 		Engine.max_fps = DEDICATED_FPS
 		_start_dedicated.call_deferred()

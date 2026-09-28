@@ -19,6 +19,12 @@
   deflated); 64 sockets per address (carrier NAT). A booting match host starts at nice 10 and goes back to 0 once it
   connects (the service gives the relay `CAP_SYS_NICE`; the hosts inherit no capabilities), so loading a pack doesn't
   slow the rooms playing. The match hosts write no telemetry files (only their room log).
+- Room limits (Daniele, 2026-09-28): **three match slots** (measured on the box: three busy FFA 4 rooms together = ~650 of
+  950 MB used, each host ~205 MB and 6-8 % CPU, 31 % for a few seconds while one boots; every room 20 Hz, 0 % frozen);
+  **2 server rooms per address** (`--rooms-per-ip`; the third is refused with code `limit`, not a browser fallback); a
+  server room where **no round runs for 10 min** (the lobby, the results) closes: a notice 1 min before, then every player
+  gets "Room closed: nothing was played in it for 10 min." (`Net.ROOM_IDLE`; tests: `--host-arg=--idle-close=<s>`,
+  `tests/test_room_limits.gd`).
 
 ## The box
 
@@ -37,7 +43,7 @@
 ## Services
 
 - `ooze-relay.service` (`server/ooze-relay.service`): the relay as `ooze`, restarts itself, `MemoryMax=900M`
-  for the relay plus up to two match hosts (~250-350 MB each). Needs `python3-websockets`, `libfontconfig1`.
+  for the relay plus up to three match hosts (~200-215 MB each; `MemoryHigh=820M` reclaims first). Needs `python3-websockets`, `libfontconfig1`.
 - Caddy (`/etc/caddy/Caddyfile`, kept in `server/Caddyfile` since 0.21.4; `deploy.sh --relay` validates and installs it when it
   differs, keeping `Caddyfile.previous`): TLS on 443, `/ooze*` -> `127.0.0.1:8765`; everything else serves
   `/opt/ooze/web` - the **test link** https://45-32-126-20.sslip.io/, always the build the match hosts run.

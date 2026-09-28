@@ -7,7 +7,7 @@ Wants=network-online.target
 User=ooze
 Group=ooze
 WorkingDirectory=/opt/ooze
-ExecStart=/usr/bin/python3 /opt/ooze/relay.py --host 127.0.0.1 --port 8765 --godot /opt/ooze/godot --pck /opt/ooze/current.pck --version-file /opt/ooze/web/version.txt --data /opt/ooze/data --logs /opt/ooze/logs --max-matches 2
+ExecStart=/usr/bin/python3 /opt/ooze/relay.py --host 127.0.0.1 --port 8765 --godot /opt/ooze/godot --pck /opt/ooze/current.pck --version-file /opt/ooze/web/version.txt --data /opt/ooze/data --logs /opt/ooze/logs --max-matches 3
 Restart=always
 RestartSec=2
 NoNewPrivileges=true
@@ -24,7 +24,10 @@ ReadWritePaths=/opt/ooze/data /opt/ooze/logs
 Environment=OOZE_SUPABASE_URL=https://uqwxorxdnucrdgaqpjpp.supabase.co
 Environment=OOZE_SUPABASE_KEY=sb_publishable_3aX4T8IcNbI_BBg4wENMhA_3NNclYw2
 EnvironmentFile=-/opt/ooze/secrets.env
-# the relay plus up to --max-matches headless match hosts (~215 MB each since 0.21.1 on the 1 GB box, 2 GB swap)
+# the relay plus up to --max-matches headless match hosts (~215 MB each since 0.21.1 on the 1 GB box, 2 GB swap).
+# Three slots since Daniele's yes (2026-09-28). MemoryHigh makes the kernel reclaim / swap before MemoryMax, which kills
+# the whole service (every room) at once.
+MemoryHigh=820M
 MemoryMax=900M
 
 [Install]
