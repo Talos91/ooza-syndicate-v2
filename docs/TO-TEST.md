@@ -14,6 +14,9 @@ Live build: https://oozesyndicate.com
 - [ ] **Tutorial**: the monster lesson (L6) and the relay lesson (L4) - nothing to watch is under the fog; a skipped lesson shows
       "skipped - replay to complete" and pays no SCRAP.
 - [ ] **PLAY page**: HOME's PLAY opens it; the three cards; CAMPAIGN opens the campaign picker at once; LEAVE ROOM visible.
+- [ ] **BACK on the phone** (your 2026-09-29 report: LEADERBOARD's back buttons dead): PROFILE > LEADERBOARD > BACK > BACK; every meta
+      page's BACK; then every other button once - tell 🧩 UI what still fails.
+- [ ] **Room owner's BACKGROUND** online: the lobby button (guests see it greyed); relay states 4-6 have their own colours.
 - [ ] **Online**: leave a server match with everyone - it closes within 30 s; the phone stays landscape without stutter.
 - [ ] **Campaign city**: the relay v2 pieces on the diorama; the background changes as the camera pans between districts.
 
