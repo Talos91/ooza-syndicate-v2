@@ -9,6 +9,8 @@ Sources (Daniele's Art Direction folder, "Alpha 20 UI Expansion" / ASSET-SOURCES
       factions/<faction>.png  -> assets/art/ui/bg_<faction>.jpg (1600 px; HOME's wallpaper and every page's backdrop,
                                  the creature is in it, on the right)
       play/<card>.png         -> assets/art/ui/play_<card>.jpg (1024 px; the PLAY cards)
+      factions-no-creatures/<faction>.png -> assets/art/ui/page_<faction>.jpg (1600 px; every other page's backdrop:
+                                 the wallpaper without its creature, so a page showing the character never doubles it)
       versus/<faction>.png    -> assets/art/ui/stage_<faction>.jpg (1024 px; VERSUS: each side's empty stage)
       emblems/<faction>-*.png -> assets/art/ui/emblem_<faction>.png (192 px RGBA) + emblem_<faction>_32.png (32 px):
                                  THE faction mark everywhere (UiKit.emblem; the HUD tints it in the seat colour)
@@ -115,6 +117,8 @@ def main() -> int:
         src = FILE_NAME.get(f, f) + ".png"
         fit(Image.open(os.path.join(FINAL, "factions", src)).convert("RGB"), 1600).save(
             os.path.join(OUT_UI, "bg_%s.jpg" % f), quality=84)
+        fit(Image.open(os.path.join(FINAL, "factions-no-creatures", src)).convert("RGB"), 1600).save(
+            os.path.join(OUT_UI, "page_%s.jpg" % f), quality=84)
         fit(Image.open(os.path.join(FINAL, "versus", src)).convert("RGB"), 1024).save(
             os.path.join(OUT_UI, "stage_%s.jpg" % f), quality=84)
         em = Image.open(os.path.join(FINAL, "emblems", EMBLEM[f] + ".png")).convert("RGBA")

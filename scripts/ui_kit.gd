@@ -535,9 +535,10 @@ static func map_thumb(path: String) -> Texture2D:
 
 
 static func background(f: String) -> Texture2D:
-	## The pages' backdrop: the faction's place without its creature (the FINAL set's empty VERSUS stage), so a page
-	## that shows the character (FACTION, ARMIES, the results...) never shows it twice. HOME has the wallpaper.
-	return stage(f)
+	## The pages' backdrop: the faction's wallpaper without its creature (Daniele's creature-free set, 2026-09-28), so a
+	## page that shows the character (FACTION, ARMIES, the results...) never shows it twice. HOME has the wallpaper.
+	var p := "res://assets/art/ui/page_%s.jpg" % (f if ACCENTS.has(f) else "vex")
+	return load(p) if ResourceLoader.exists(p) else stage(f)
 
 
 static func wallpaper(f: String) -> Texture2D:
