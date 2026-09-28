@@ -5,6 +5,9 @@ shader_type canvas_item;
 uniform vec4 tint : source_color = vec4(1.0);
 void fragment() {
 	vec4 t = texture(TEXTURE, UV);
-	float v = max(t.r, max(t.g, t.b));
-	COLOR = vec4(tint.rgb * v, t.a * COLOR.a);
+	// the race emblems v2 (Alpha 21) are neon over dark metal: the metal would tint to a muddy dark blob at badge size, so
+	// the value is lifted - the neon ring and glyph read at full strength, the dark body falls away
+	float raw = max(t.r, max(t.g, t.b));
+	float v = smoothstep(0.12, 0.62, raw);
+	COLOR = vec4(tint.rgb * v, t.a * COLOR.a * smoothstep(0.04, 0.3, raw));
 }

@@ -334,6 +334,7 @@ func _start_map(path: String) -> void:
 		Rules.use_colours(Net.match_info["colours"])
 	else:
 		Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
+	Rules.apply_colour_blind(seats.values(), teams, HUMAN)   # UI: SETTINGS > COLOUR-BLIND (your screen only)
 	sim = Sim.new()
 	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams, LOADOUTS)
 	var lo := Vector3(INF, 0, INF)                     # the camera looks along the map's short side

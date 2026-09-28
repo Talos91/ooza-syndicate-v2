@@ -770,6 +770,8 @@ func show_options() -> void:
 			y += _opt_row(y, w, "FRAME RATE", PerfProfile.fps_label() + ("  -  LOW RES stays at 30." if low else "  -  the cap while a match runs."), fps, low)
 			y += _opt_row(y, w, "DETAIL", "LOW trims the river patches and vat residents - use it if the game makes your machine run hot.",
 					[["FULL", not Rules.low_detail, func(): Rules.low_detail = false], ["LOW", Rules.low_detail, func(): Rules.low_detail = true]])
+			y += _opt_row(y, w, "COLOUR-BLIND", "Player colours anyone can tell apart, with red-green or blue-yellow colour blindness. It picks every seat's colour in the match (your screen only). From the next match.",
+					[["OFF", not Rules.colour_blind(), func(): Rules.set_colour_blind(false)], ["ON", Rules.colour_blind(), func(): Rules.set_colour_blind(true)]])
 			# SOUND: the AUDIO group (sfx.gd, user://settings.cfg [audio]) - both heard at once, the tap itself included
 			y += _say("AUDIO", Vector2(0, y + 18.0), 12, UiKit.accent(shell_f), 0.0, true) + 18.0
 			y += _opt_row(y, w, "SOUND", "The match and the menus. OFF: silent (the VOLUME is kept for ON).",
@@ -3542,7 +3544,10 @@ func _setup_colours(pos: Vector2, width: float) -> void:
 		if ck == "faction":
 			chip.emblem_faction = faction              # a recognisable face, not just wedges
 	var y := hy + hs + (10.0 if not mobile else 6.0)
-	if colour == "faction":                            # a one-line caption while FACTION is picked
+	if Rules.colour_blind():                           # UI: COLOUR-BLIND MODE decides the match's colours
+		_shell_add(UiKit.label(self, "COLOUR-BLIND MODE: the match picks colour-blind-safe colours", 13, Color("ffd15c")), Vector2(pos.x, y))
+		y += UiKit.line_h(self, 13) + 6.0
+	elif colour == "faction":                          # a one-line caption while FACTION is picked
 		_shell_add(UiKit.label(self, "Every player in their faction's colour", 13, Color("ffd15c")), Vector2(pos.x, y))
 		y += UiKit.line_h(self, 13) + 6.0
 	if not mobile:
@@ -4021,6 +4026,8 @@ func show_lobby() -> void:
 	var mine := Net.colour_of(Net.local_id())
 	y += _say("YOUR COLOUR" + (("  ·  " + mine.to_upper()) if mine != "" else ""), Vector2(0, y), 12, UiKit.MUTED, 0.0, true, 2) + 8.0
 	y += _colour_row(Vector2(0, y), w) + 12.0
+	if Rules.colour_blind():                           # UI: your screen recolours the match (the room keeps its hues)
+		y += _say("COLOUR-BLIND MODE is on: in the match your screen shows colour-blind-safe colours.", Vector2(0, y), 13, UiKit.STAR, w) + 8.0
 	if Net.ready_locked():
 		_ready_lock(pk0)
 		y += _say("You're READY: your picks are locked. UN-READY to change them.", Vector2(0, y), 13, UiKit.STAR, w) + 8.0
