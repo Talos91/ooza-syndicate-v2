@@ -1,6 +1,7 @@
 extends Node
 ## Perf pass probe (2026-09-28): the frame cost of a busy BRAWL board and of the Last Stand, per view. A windowed scene:
-##   timeout 240 Godot --fixed-fps 45 --path . tests/perf_pass_probe.tscn -- --phase=busy|ls [--secs=10] [--shot=<png>] [--perf]
+##   timeout 240 Godot --fixed-fps 45 --path . tests/perf_pass_probe.tscn -- --phase=busy|ls [--secs=10] [--shot=<png>]
+##       [--probe-map=M-57-relay-quarry] [--level=phone|full|low] [--probe-window=1600x900] [--shadow-mode=0|1|2|off]
 ## Rules.PERF_CHECK_MAP, every seat the Standard AI, seed 7, PHONE profile at 1266x585 (as tests/perf_check.tscn);
 ## busy: fast-forwarded to Rules.PERF_CHECK_FF; ls: to just after the first Last Stand wave (its camera zoom included).
 ## "scripts" is the time from the first _process of a frame to the last (every view, the Sim and the AI; not the
@@ -16,6 +17,10 @@ var main: Node3D
 var phase := "busy"
 var secs := 10.0
 var shot := ""
+var map := ""                  # --map=<code>: another map (default Rules.PERF_CHECK_MAP)
+var level := "phone"           # --level=phone|full|low: the graphics profile
+var size := Vector2i(1266, 585)
+var shadow_mode := -1          # --shadow-mode=0|1|2 (experiment: the sun's DirectionalLight3D.directional_shadow_mode)
 var frames := 0
 var t := 0.0
 var rows: Array = []           # [frame ms, scripts ms, draw calls, primitives, objects]
@@ -33,6 +38,14 @@ func _ready() -> void:
 			secs = float(a.substr(7))
 		elif a.begins_with("--shot="):
 			shot = a.substr(7)
+		elif a.begins_with("--probe-map="):
+			map = a.substr(12)
+		elif a.begins_with("--level="):
+			level = a.substr(8)
+		elif a.begins_with("--probe-window="):
+			size = Vector2i(int(a.substr(15).get_slice("x", 0)), int(a.substr(15).get_slice("x", 1)))
+		elif a.begins_with("--shadow-mode="):
+			shadow_mode = -2 if a.substr(14) == "off" else int(a.substr(14))
 	if DisplayServer.get_name() == "headless":
 		print("SKIP perf_pass_probe: needs a window")
 		get_tree().quit(0)
@@ -43,22 +56,26 @@ func _ready() -> void:
 	tail.process_priority = 1000
 	add_child(tail)
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-	DisplayServer.window_set_size(Vector2i(1266, 585))
+	DisplayServer.window_set_size(size)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	PerfProfile.force_level("phone")
+	PerfProfile.force_level(level)
 	main = (load("res://main.tscn") as PackedScene).instantiate()
-	main.set("map_path", Rules.PERF_CHECK_MAP)
+	main.set("map_path", Rules.PERF_CHECK_MAP if map == "" else "res://maps4/%s.json" % map)
 	main.set("demo", true)
 	main.set("ai_level", "Standard")
 	main.set("ff_to", Rules.PERF_CHECK_FF if phase == "busy" else Rules.LAST_STAND_TIME + 2.0)
 	main.set("seed_value", 7)
-	main.set("mobile", true)
+	main.set("mobile", level != "full")
 	add_child(main)
 
 
 func _process(_dt: float) -> void:
 	if main == null or not bool(main.get("started")):
 		return
+	if shadow_mode >= 0 and main.get("sun") != null:
+		(main.get("sun") as DirectionalLight3D).directional_shadow_mode = shadow_mode
+	elif shadow_mode == -2 and main.get("sun") != null:   # --shadow-mode=off: no sun shadows at all
+		(main.get("sun") as DirectionalLight3D).shadow_enabled = false
 	var scripts := (_tail_us - _head_us) / 1000.0 if _tail_us > _head_us else 0.0
 	var now := Time.get_ticks_usec()
 	_head_us = now
@@ -68,7 +85,7 @@ func _process(_dt: float) -> void:
 	if frames == SKIP_FRAMES:
 		PerfProfile.sections_on = true
 		PerfProfile.sections = {}
-	if frames > SKIP_FRAMES + 1:
+	if frames > SKIP_FRAMES + 1 and (shot == "" or frames < SHOT_FRAME + 1 or frames > SHOT_FRAME + 2):   # (not the shot's read-back)
 		rows.append([ms, scripts,
 				Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 				Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
@@ -83,7 +100,7 @@ func _process(_dt: float) -> void:
 	PerfProfile.sections = {}
 	if frames == SHOT_FRAME and shot != "":
 		_shot()
-	if frames < SKIP_FRAMES + 1 + int(secs * 45.0):
+	if frames < SKIP_FRAMES + 3 + int(secs * 45.0):
 		return
 	set_process(false)
 	var n := rows.size()
@@ -93,6 +110,9 @@ func _process(_dt: float) -> void:
 		var v: Array = rows.map(func(r): return r[c[0]])
 		v.sort()
 		print("  %-8s median %6.2f  p95 %6.2f  max %6.2f ms" % [c[1], v[n / 2], v[int(n * 0.95)], v[-1]])
+	var idx := range(n)
+	idx.sort_custom(func(x, y): return rows[x][0] > rows[y][0])
+	print("  longest frames (frame: ms, scripts ms): ", ", ".join(idx.slice(0, 5).map(func(i): return "#%d: %.0f, %.1f" % [i, rows[i][0], rows[i][1]])))
 	var top := [0.0, 0.0, 0.0]
 	for r in rows:
 		for k in range(3):
