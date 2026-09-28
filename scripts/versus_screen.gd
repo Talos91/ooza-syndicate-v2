@@ -1,7 +1,7 @@
 class_name VersusScreen
 extends CanvasLayer
 ## VERSUS (Alpha 21 UI pass, screen system 15): the card between DEPLOY (or a campaign mission's START) and the
-## battle - your side left (YOU / SEAT A, with any AI allies), the rivals right (RIVAL / SEAT B; free-for-alls and
+## battle - your side left (YOU / SEAT A, with any AI allies; you by your name), the rivals right (RIVAL / SEAT B; free-for-alls and
 ## teams: every rival's faction, compact), VS between them, the map / mode / difficulty line, ENTER BATTLE. A tap
 ## anywhere, a key, or AUTO_SECONDS goes on. It sits over the freshly built match, which is held paused until then
 ## (hold_match / hold_mission), so the match's own set-up and clock are untouched - it only starts a moment later.
@@ -260,8 +260,8 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> void:
 			content.remove_child(c)
 			cell.add_child(c)
 		var who := _title_of(seat, f)
-		if n > 1:                                    # compact: the seat alone under the name
-			who[1] = ("YOU  ·  SEAT %s" if seat == str(main.HUMAN) else "SEAT %s") % seat
+		if n > 1:                                    # compact: one short line under the name
+			who[1] = _compact_of(seat, f)
 		var lw := hs + gap if n > 1 else maxf(hs, 160.0)
 		var nm := UiKit.label(self, who[0], 34 if n == 1 else 18, UiKit.INK, true)
 		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -287,13 +287,31 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> void:
 
 
 func _title_of(seat: String, f: String) -> Array:
-	## [name, caption] under a character: the faction and its seat; a mission's rival by its name.
+	## [name, caption] under a character. HUD pass (Daniele: "if the user is a human his name needs to be shown ...
+	## instead of his faction only"): a human by the player's name over the faction; an AI by its faction over its
+	## level ("MAW  ·  VETERAN AI"); a mission's rival by its name.
 	var nm: String = UiKit.NAMES.get(f, f.to_upper())
-	var cap := "%s  ·  SEAT %s" % [UiKit.SUBS.get(f, ""), seat]
+	var sub: String = UiKit.SUBS.get(f, "")
 	if mission_key != "" and seat != str(main.HUMAN):
 		var r := Campaign.rival_of(Campaign.mission(mission_key))
-		return [str(r.get("name", nm)), "%s  ·  %s" % [nm, UiKit.SUBS.get(f, "")]]
-	return [nm, cap]
+		return [str(r.get("name", nm)), "%s  ·  %s" % [nm, sub]]
+	var w: Dictionary = main.seat_who(seat) if main.has_method("seat_who") else {}
+	if bool(w.get("human", false)):
+		return [str(w["name"]) if str(w["name"]) != "" else "PLAYER", "%s  ·  %s" % [nm, sub]]
+	if not w.is_empty():
+		return [nm, "%s  ·  %s" % [sub, str(w["tag"])]]
+	return [nm, "%s  ·  SEAT %s" % [sub, seat]]
+
+
+func _compact_of(seat: String, f: String) -> String:
+	## The one short line under a name when a side shows several seats: a human's faction (yours: YOU first), an
+	## AI's level.
+	var w: Dictionary = main.seat_who(seat) if main.has_method("seat_who") else {}
+	if w.is_empty():
+		return ("YOU  ·  SEAT %s" if seat == str(main.HUMAN) else "SEAT %s") % seat
+	if bool(w["human"]):
+		return ("YOU  ·  %s" if bool(w["you"]) else "%s") % str(UiKit.NAMES.get(f, f.to_upper()))
+	return str(w["tag"])
 
 
 func _info_line() -> String:

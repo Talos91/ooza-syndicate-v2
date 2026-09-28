@@ -7,8 +7,9 @@ extends CanvasLayer
 ## relay state, build bar), the
 ## ring inspector with costed actions, the skill dock (SkillDock: ACTIVE / MAP / ULTIMATE when ABILITIES
 ## are on; its target highlights sit on a layer over the badges, under the panels),
-## toasts, the Last Stand banner, status line and drop order, the results panel with match stats,
-## and the debug panel.
+## placed messages (HudCallouts: at the node / deck / chip / slot they are about - no notification box), the
+## Last Stand status line and drop order, the results panel with match stats, and the debug panel. A human seat
+## is named by the player's name wherever a seat shows (main.seat_who), an AI seat by faction and AI level.
 ## TUTORIAL (TUTORIAL-DESIGN.md §6, reveal as you go): reveal(keys) hides every part a lesson has not reached
 ## yet (TutorialDirector.ALL_KEYS) - by not showing it, never by disabling a control; outside the tutorial
 ## nothing is gated. Rect getters for the coach's spotlight: action_rect, send_button_rect, badge_rect,
@@ -35,6 +36,8 @@ var side_box: VBoxContainer
 var count_label: Label
 var badges := {}                     # node id -> {panel, label, sub, emblem, build, owner, count_w, sub_w, look}
 var _badge_px := Vector2.ZERO        # the one badge size on this screen (BADGE_SIZE x ui_scale)
+var badge_layer: BadgeLayer          # HUD pass: draws every badge, one pass per kind (see setup)
+var _badge_model: Control            # the badges' layout nodes: hidden, never drawn
 var inspector: Control
 var inspector_id := -1
 var inspector_label: Label
@@ -43,7 +46,8 @@ var inspector_who: Label
 var inspector_first: Label
 var inspector_progress: ProgressBar
 var inspector_actions: Array = []
-var notices: VBoxContainer
+var notices: Control                   # HUD pass: no stack any more - only where the old one began (a mission's
+                                       # strip still pushes it down: note_line's lines start under it)
 var banner: Label
 var _banner_time := 0.0
 var status_label: Label                # Last Stand status under the top bar
@@ -116,6 +120,7 @@ const TOP_CHIP_H := 32.0
 const TOP_CHIP_GAP := 6.0
 const TOP_CLOCK_W := 78.0
 const TOP_EMBLEM := Vector2(16, 16)
+const TOP_NAME_W := 64.0               # HUD pass: a human chip's name, at most this wide (then an ellipsis)
 
 
 static func tint_emblem(rect: TextureRect, color: Color) -> void:
@@ -257,6 +262,18 @@ func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
 	chip.add_child(row)
 	var emb := seat_emblem(seat, TOP_EMBLEM)
 	row.add_child(emb)
+	# HUD pass (Daniele: "if the user is a human his name needs to be shown ... instead of his faction only"): a
+	# human seat's chip carries the player's name between the emblem (the faction) and the strength, cut to
+	# TOP_NAME_W; AI seats keep the emblem alone. Yours is the highlighted chip, first on the left.
+	var who: Dictionary = main.seat_who(seat) if main.has_method("seat_who") else {}
+	if bool(who.get("human", false)) and str(who.get("name", "")) != "":
+		var nm := text_label(str(who["name"]), 15, Color("f2fbff") if mine else Color("c8e6ee"))
+		nm.clip_text = true
+		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		nm.custom_minimum_size = Vector2(minf(TOP_NAME_W, UI_FONT.get_string_size(nm.text, HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * ui_scale)).x / ui_scale + 2.0) * ui_scale, 0)
+		nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(nm)
+		chip.custom_minimum_size.x += nm.custom_minimum_size.x + 4.0 * ui_scale
 	var lbl := text_label("000", 15)
 	lbl.add_theme_font_override("font", SYMBOL_FONT)      # monospace: the digits never shift the chip
 	lbl.custom_minimum_size = Vector2(28 * ui_scale, 0)
@@ -284,7 +301,16 @@ func setup(m: Node3D) -> void:
 	# badges first (under everything else). Alpha 19 (Daniele: "they all look different size - we should
 	# make them have fixed size and have their inside content never get out of the box boundaries"):
 	# one fixed box per ui_scale, its parts placed by hand (_place_badge) and clipped to it.
+	# HUD pass (the stretch, Alpha 21 OPT-RENDER: the badges were ~70 of the HUD's ~165 draw calls): these
+	# nodes are the layout only - under a hidden holder, never drawn; BadgeLayer draws every badge from them,
+	# one pass per kind (boxes, bars, emblems, words), so the 2D renderer batches each pass.
 	_badge_px = (BADGE_SIZE * ui_scale).round()
+	badge_layer = BadgeLayer.new()
+	root.add_child(badge_layer)                           # where the badges always drew: under everything else
+	_badge_model = Control.new()
+	_badge_model.visible = false
+	_badge_model.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_badge_model)
 	var sb_bg := StyleBoxFlat.new()                         # shared by every build bar
 	sb_bg.bg_color = Color(0, 0, 0, 0.55)
 	var bb_fill := StyleBoxFlat.new()
@@ -322,9 +348,10 @@ func setup(m: Node3D) -> void:
 		build_bar.position = Vector2(inset, _badge_px.y - 4.0 * ui_scale)
 		build_bar.size = Vector2(_badge_px.x - 2.0 * inset, 2.0 * ui_scale)
 		badge.add_child(build_bar)
-		root.add_child(badge)
+		_badge_model.add_child(badge)
 		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "build": build_bar, "owner": "?",
 				"count_w": 0.0, "sub_w": 0.0, "sub_small": false, "wide": false, "shape": "", "look": -1}
+	badge_layer.setup(self)
 	skill_targets = SkillDock.new_layer()
 	root.add_child(skill_targets)
 	overlay = HudOverlay.new()
@@ -364,6 +391,14 @@ func setup(m: Node3D) -> void:
 			top_right.add_child(spacer)
 		for seat in g:
 			_build_top_chip(seat, into, seat == human)
+	status_glow = Panel.new()                         # HUD pass: the Last Stand announcement pulses its own line
+	var sg := panel_style(Rules.state_color("warn"))
+	sg.set_border_width_all(2)
+	sg.bg_color = Color(0.25, 0.03, 0.05, 0.72)
+	status_glow.add_theme_stylebox_override("panel", sg)
+	status_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	status_glow.visible = false
+	root.add_child(status_glow)
 	status_label = text_label("", 18, Color("ffb0b0"))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(status_label)
@@ -415,10 +450,12 @@ func setup(m: Node3D) -> void:
 	root.add_child(dock.hint_panel)
 	version_label = text_label("v%s  %s" % [Rules.VERSION, Rules.VERSION_NAME], 14, Color(1, 1, 1, 0.5))
 	root.add_child(version_label)
-	notices = VBoxContainer.new()                     # Alpha 16: styled notification stack
-	notices.add_theme_constant_override("separation", int(6 * ui_scale))
+	notices = Control.new()                           # (see its var: a position only, never drawn)
 	notices.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(notices)
+	callouts = HudCallouts.new()                      # HUD pass: every message, placed where it belongs
+	callouts.ui_scale = ui_scale
+	root.add_child(callouts)
 	banner = text_label("", 44, Color("ffd6d6"))
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	banner.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.9))
@@ -489,15 +526,10 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
-	# 0.20.13 (Daniele's online co-op playtest: "notification in top right are impossible to see - move to
-	# top left"): a small stack under the top bar, left side - offset past the SEND panel's own column so
-	# it never overlaps it (side_panel is vertically centred, but on a short phone it's pinned right under
-	# the top bar too - the same spot this used to want).
-	var notice_w := minf(280.0 * ui_scale, vp.x * 0.34)
-	var notice_left := m.x + side_panel_width() + 14.0 * ui_scale
-	var notice_top := top_panel.position.y + top_panel.size.y + 8.0 * ui_scale
-	notices.size = Vector2(notice_w, 0)
-	notices.position = Vector2(notice_left, notice_top)
+	# HUD pass: the old stack's top-left corner stays as a mark only (a mission's strip pushes it down; note_line
+	# starts under whichever is lower)
+	notices.size = Vector2.ZERO
+	notices.position = Vector2(m.x + side_panel_width() + 14.0 * ui_scale, top_panel.position.y + top_panel.size.y + 8.0 * ui_scale)
 	banner.size = banner.get_combined_minimum_size()
 	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	if debug_button:
@@ -617,7 +649,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 			next = "next drop in %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
 		else:
 			next = ("the last ring stands" if sim.v3 else "the final node stands") + " - conquest decides"
-		status_label.text = "LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), next]
+		status_label.text = "LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how if _ls_pulse > 0.0 and _ls_how != "" else next]
 	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
 		# mirrors sim._step_last_stand: no countdown when the Last Stand is off, over, or the map has none
 		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
@@ -629,13 +661,16 @@ func sync(dt: float, cam: Camera3D) -> void:
 	else:
 		count_label.text = "DRAG A VAT"
 	_badges(cam)
+	badge_layer.refresh()
 	overlay.sync(dt)
 	_sync_monster_icon(cam)
 	_check_out()
 	if dock.visible:
 		dock.sync(dt)
 	_refresh_inspector(cam)
-	_sync_notices(dt)
+	_sync_status_pulse(dt)
+	if not callouts.items.is_empty():
+		callouts.sync(dt, cam, callout_area(root.get_viewport_rect().size), callout_blocked())
 	if _banner_time > 0.0:
 		_banner_time -= dt
 		banner.modulate.a = clampf(_banner_time / 1.5, 0.0, 1.0)
@@ -1088,7 +1123,7 @@ func reveal(keys: Array, glow: Array = []) -> void:
 	_apply_reveal()
 	for k in glow:
 		var c: Control = {"send_panel": side_panel, "strength": top_panel, "dock": dock, "status_line": status_label,
-				"notices": notices}.get(str(k), null)
+				"notices": callouts}.get(str(k), null)
 		if c and c.visible:
 			c.modulate = Color(2.2, 2.2, 2.2, 0.0)
 			create_tween().set_trans(Tween.TRANS_SINE).tween_property(c, "modulate", Color.WHITE, 0.6)
@@ -1110,7 +1145,7 @@ func _apply_reveal() -> void:
 	top_right.visible = shows("strength")
 	dock.visible = sim.abilities_on and shows("dock")
 	hint.visible = not mobile and not gated
-	notices.visible = shows("notices")
+	callouts.visible = shows("notices")
 	if is_instance_valid(inspector) and inspector_id >= 0:
 		inspect(inspector_id, main.cam)
 
@@ -1162,7 +1197,7 @@ func note_monster_hint() -> void:
 	if _monster_hint_shown:
 		return
 	_monster_hint_shown = true
-	toast("Tap your monster, then a lit node", "info")
+	callout_node(_human_hub_id(), "Tap your monster, then a lit node", "info")
 
 
 func monster_icon_rect(hub_id: int) -> Rect2:
@@ -1200,7 +1235,7 @@ func show_out_panel() -> void:
 	if not shows("out_panel"):
 		return
 	# UI (Alpha 21): a card in the pause's language over the dimmed match - SPECTATE first, the way out quieter
-	MatchScreens.open(out_panel, mobile, _my_faction()).card({"kicker": "ELIMINATED", "headline": "YOU'RE OUT.",
+	MatchScreens.open(out_panel, mobile, _my_faction()).card({"kicker": "%s  ·  ELIMINATED" % _who_line(human), "headline": "YOU'RE OUT.",
 			"body": "Every node and line you had is gone - you can keep watching, or leave.", "glow": false,
 			"actions": [["SPECTATE  →", func():
 				out_panel.visible = false
@@ -1332,96 +1367,243 @@ func close_inspector() -> void:
 
 
 # ------------------------------------------------------------------ messages
-const NOTICE_HOLD := 1.8    # 0.20.6 declutter (Daniele: "too many notifications"): shorter, and fewer reach the screen
-const NOTICE_MAX := 2
+# HUD pass (2026-09-28, Daniele's "option A": "no notification box at all" - the top-left stack "feels weird"):
+# every message goes where it belongs, drawn by HudCallouts. A map event is a callout at its node / deck / spot
+# (callout_node / callout_at, an edge arrow when that place is off screen); a skill dock refusal a small line just
+# above the slot tapped (skill_refusal); a network line about a seat a line under that seat's top-bar chip; the
+# Last Stand's announcement a pulse of its own status line (pulse_last_stand); the start lines a short banner
+# (start_banner); online loading the waiting text (set_waiting). toast() stays as the thin router for every other
+# caller (other sessions' TUTORIAL / CAMPAIGN / PROGRESSION lines, Net's feedback): the seat chip when the line
+# starts with a seat, else a centred line under the top bar. TUTORIAL: nothing of it before the "notices" reveal (L3).
 const WARN_WORDS := ["lost", "falls", "get out", "can't", "Can't", "No ", "needs", "refused", "rejected", "on cooldown",
 		"swap ready", "Not your", "Too many", "already", "max tier", "no further", "Nothing", "missing", "Waiting"]
 static var _SEAT_WORD := RegEx.create_from_string("(?i)\\bseat ([A-F])\\b(?: \\([^)]*\\))?")   # "seat B", "seat A (NULL)"
 const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade started", "construction started", "Restoring", "Relay fired"]
+const INFO_COLOR := Color("7fe9f5")
+var callouts: HudCallouts               # every placed message (see above)
+var status_glow: Panel                  # behind the status line while the Last Stand announcement pulses it
+var _ls_pulse := 0.0                    # s of that pulse left
+var _ls_how := ""                       # the method's one-line explanation, shown in the line meanwhile
 
 
 func toast(msg: String, kind := "") -> void:
-	## Alpha 16: notifications in the UI's own panel style (Daniele: "better notifications, the same
-	## style as the rest of the UI"): a framed line with a colour bar - info cyan, good news in your
-	## colour, builds gold, warnings red. 0.20.6 declutter: a small stack under the top bar, two at most,
-	## fading fast - never over the map centre. 0.20.13 (Daniele's playtest: "notification in top right
-	## are impossible to see - move to top left"): top-left now, clear of the SEND panel, larger text.
-	if not shows("notices"):                          # TUTORIAL: notifications appear in L3 (main hands the
-		return                                        # refusal lines to the coach card before that)
-	if kind == "":
-		kind = "info"
-		for w in WARN_WORDS:
-			if w in msg:
-				kind = "warn"
-		if kind == "info":
-			for w in GOOD_WORDS:
-				if w in msg:
-					kind = "build" if ("started" in w or "Restoring" in w) else "good"
-	var col: Color = {"warn": Rules.state_color("warn"), "good": Rules.seat_color(human), "build": Rules.state_color("build")}.get(kind, Color("7fe9f5"))
-	for c in notices.get_children():                 # the same line again: refresh it, don't stack
-		if c.get_meta("text", "") == msg and not c.is_queued_for_deletion():
-			c.set_meta("t", 0.0)
-			return
-	var p := PanelContainer.new()
-	var st := panel_style(col)
-	st.set_content_margin_all(0)
-	st.content_margin_right = 12 * ui_scale
-	p.add_theme_stylebox_override("panel", st)
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN   # left-aligned within the top-left stack
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", int(8 * ui_scale))
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(row)
-	var bar := ColorRect.new()
-	bar.color = col
-	bar.custom_minimum_size = Vector2(4, 26) * ui_scale
-	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(bar)
-	# a line naming a player ("lost to seat B", "Seat C reconnected", "you are seat A (NULL)") names
-	# them by emblem and faction in their colour instead (Daniele: "don't use A B and C")
+	## The router for a line with no place given (see above): a line naming a seat first ("Seat C reconnected")
+	## goes under that seat's top-bar chip, named by player / faction instead of the letter (Daniele: "don't use
+	## A B and C"); anything else is a short centred line under the top bar.
+	if not shows("notices") or msg == "":           # TUTORIAL: before L3 main hands refusals to the coach card
+		return
+	kind = kind_of(msg, kind)
 	var named := _SEAT_WORD.search(msg)
 	var seat := named.get_string(1).to_upper() if named else ""
+	if seat != "" and named.get_start() == 0 and top_chips.has(seat) and top_panel.visible and top_left.visible:
+		callout_chip(seat, ("%s %s" % [seat_label(seat), msg.substr(named.get_end()).strip_edges()]).strip_edges(), kind)
+		return
+	note_line(named_text(msg), kind, seat if sim.factions.has(seat) else "")
+
+
+func kind_of(msg: String, kind := "") -> String:
+	## "" -> guessed from the words (warn / good / build / info), as the toasts always were.
+	if kind != "":
+		return kind
+	for w in WARN_WORDS:
+		if w in msg:
+			return "warn"
+	for w in GOOD_WORDS:
+		if w in msg:
+			return "build" if ("started" in w or "Restoring" in w) else "good"
+	return "info"
+
+
+func kind_color(kind: String) -> Color:
+	return {"warn": Rules.state_color("warn"), "good": Rules.seat_color(human), "build": Rules.state_color("build")}.get(kind, INFO_COLOR)
+
+
+func seat_label(seat: String) -> String:
+	## A seat in words: a human's name where the game knows it, else the faction (main.seat_who).
+	if main and main.has_method("seat_who"):
+		var w: Dictionary = main.seat_who(seat)
+		return str(w["name"]) if str(w["name"]) != "" else str(w["faction"])
+	return str(UiKit.NAMES.get(str(sim.factions.get(seat, "")), seat))
+
+
+func named_text(msg: String) -> String:
+	## "seat B ..." / "seat A (NULL) ..." -> the seat named by player or faction instead of its letter.
+	var named := _SEAT_WORD.search(msg)
+	if named == null or not sim.factions.has(named.get_string(1).to_upper()):
+		return msg
+	return msg.substr(0, named.get_start()) + seat_label(named.get_string(1).to_upper()) + msg.substr(named.get_end())
+
+
+func callout_px(base: float, min_pt: float) -> int:
+	## A message's font in canvas units: `base` x ui_scale, never under `min_pt` real points on a phone.
+	var px := base * ui_scale
+	if mobile:
+		px = maxf(px, min_pt / maxf(UiKit.pt_per_px(root.get_viewport_rect().size), 0.01))
+	return int(round(px))
+
+
+func _icon_opts(seat: String, kind: String) -> Dictionary:
+	## The callout's icon: the seat's emblem in its colour, else the kind's mark.
 	if seat != "" and sim.factions.has(seat):
-		row.add_child(seat_emblem(seat, Vector2(20, 20)))
-		var rt := RichTextLabel.new()
-		rt.bbcode_enabled = true
-		rt.fit_content = true
-		rt.autowrap_mode = TextServer.AUTOWRAP_OFF
-		rt.scroll_active = false
-		rt.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		rt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		rt.add_theme_font_override("normal_font", UI_FONT)
-		rt.add_theme_font_size_override("normal_font_size", int(19 * ui_scale))
-		rt.add_theme_color_override("default_color", Color("f2fbff"))
-		rt.text = "%s[color=#%s]%s[/color]%s" % [msg.substr(0, named.get_start()).replace("[", "[lb]"),
-				Rules.seat_color(seat).to_html(false), str(sim.factions[seat]).to_upper(), msg.substr(named.get_end()).replace("[", "[lb]")]
-		row.add_child(rt)
-	else:
-		var l := text_label(msg, 19, Color("f2fbff"))
-		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		row.add_child(l)
-	p.set_meta("text", msg)
-	p.set_meta("t", 0.0)
-	p.modulate.a = 0.0
-	notices.add_child(p)
-	while notices.get_child_count() > NOTICE_MAX:
-		var old := notices.get_child(0)
-		notices.remove_child(old)
-		old.queue_free()
+		return {"seat": seat, "emblem_tex": emblem_texture(str(sim.factions[seat]))}
+	return {"glyph": "good" if kind == "good" else ("warn" if kind == "warn" else "info")}
 
 
-func _sync_notices(dt: float) -> void:
-	for c in notices.get_children():
-		var t: float = float(c.get_meta("t", 0.0)) + dt
-		c.set_meta("t", t)
-		var a := minf(t / 0.18, 1.0) * clampf((NOTICE_HOLD + 0.45 - t) / 0.45, 0.0, 1.0)
-		(c as Control).modulate.a = a
-		(c as Control).pivot_offset = (c as Control).size / 2.0
-		(c as Control).scale = Vector2.ONE * lerpf(0.92, 1.0, minf(t / 0.18, 1.0))   # pops in
-		if t > NOTICE_HOLD + 0.45:
-			notices.remove_child(c)
-			c.queue_free()
+func callout_node(id: int, text: String, kind := "warn", seat := "", place := "") -> void:
+	## A map event at a node (its own place: the same node again refreshes it).
+	if id < 0 or id >= sim.nodes.size():
+		return
+	callout_at(sim.nodes[id]["pos"], place if place != "" else "node:%d" % id, text, kind, seat)
+
+
+func callout_at(pos: Vector3, place: String, text: String, kind := "warn", seat := "") -> void:
+	## A map event at a world point (a deck, a monster, a skill's target): one line in Fx.floater's look.
+	if not shows("notices") or callouts == null:
+		return
+	var col := kind_color(kind)
+	var opts := _icon_opts(seat, kind)
+	opts["world"] = pos + Vector3(0, Rules.HUD_CALLOUT_LIFT, 0)
+	callouts.add(place, [[text, callout_px(Rules.HUD_CALLOUT_FONT, Rules.HUD_CALLOUT_MIN_PT), col.lerp(Color.WHITE, 0.15)]], col, opts)
+
+
+func callout_chip(seat: String, text: String, kind := "info") -> void:
+	## A line about a seat (drops, reconnects, the room changing hands) under its top-bar chip.
+	if not shows("notices") or callouts == null or not top_chips.has(seat):
+		return
+	var col := kind_color(kind)
+	var opts := _icon_opts(seat, kind)
+	var chip: Control = top_chips[seat]["panel"]
+	opts["anchor"] = func(): return Vector2(chip.get_global_rect().get_center().x, chip.get_global_rect().end.y + 4.0 * ui_scale)
+	opts["side"] = "below"
+	opts["arrow"] = false
+	callouts.add("chip:%s" % seat, [[text, callout_px(Rules.HUD_CALLOUT_FONT * 0.9, Rules.HUD_CALLOUT_MIN_PT), col.lerp(Color.WHITE, 0.15)]], col, opts)
+
+
+func skill_refusal(slot: int, msg: String) -> void:
+	## A skill dock refusal: a small line just above the slot that was tapped, gone in HUD_REFUSAL_LIFE.
+	if not shows("notices") or callouts == null or msg == "":
+		return
+	if slot < 0 or slot >= dock.slots.size():
+		toast(msg, "warn")
+		return
+	var b: Control = dock.slots[slot]
+	var col := kind_color("warn")
+	callouts.add("slot:%d" % slot, [[msg, callout_px(Rules.HUD_REFUSAL_FONT, Rules.HUD_REFUSAL_MIN_PT), col.lerp(Color.WHITE, 0.25)]], col,
+			{"anchor": func(): return Vector2(b.get_global_rect().get_center().x, b.get_global_rect().position.y - 4.0 * ui_scale),
+			"glyph": "warn", "life": Rules.HUD_REFUSAL_LIFE, "arrow": false, "rise": 6.0})
+
+
+func note_line(text: String, kind := "info", seat := "") -> void:
+	## A line with no place of its own: centred under the top bar and the status line (and a mission's strip,
+	## which pushes `notices` down under it - mission_overlay.gd).
+	if not shows("notices") or callouts == null:
+		return
+	var col := kind_color(kind)
+	var opts := _icon_opts(seat, kind)
+	opts["anchor"] = func(): return Vector2(root.get_viewport_rect().size.x * 0.5, _under_top() + 6.0 * ui_scale)
+	opts["side"] = "below"
+	opts["arrow"] = false
+	opts["life"] = Rules.HUD_LINE_LIFE
+	callouts.add("line", [[text, callout_px(Rules.HUD_CALLOUT_FONT * 0.9, Rules.HUD_CALLOUT_MIN_PT), col.lerp(Color.WHITE, 0.2)]], col, opts)
+
+
+func start_banner(title: String, lines: Array) -> void:
+	## The match-start banner: the map, then who you are / the dock's note (short lines), HUD_BANNER_LIFE s of
+	## play (its clock stands still while the match is held - under the VERSUS card).
+	if not shows("notices") or callouts == null or (title == "" and lines.is_empty()):
+		return
+	var rows := []
+	if title != "":
+		rows.append([title, callout_px(Rules.HUD_BANNER_FONT, Rules.HUD_CALLOUT_MIN_PT + 6.0), Color("f2fbff"), true])
+	for l in lines:
+		rows.append([str(l), callout_px(Rules.HUD_CALLOUT_FONT * 0.9, Rules.HUD_CALLOUT_MIN_PT), Color("c8e6ee")])
+	callouts.add("banner", rows, Rules.seat_color(human), {"anchor": func(): return root.get_viewport_rect().size * Vector2(0.5, 0.3),
+			"side": "center", "arrow": false, "life": Rules.HUD_BANNER_LIFE, "rise": 0.0,
+			"hold": func(): return bool(main.paused) and not sim.over})
+
+
+func set_waiting(lines: Array) -> void:
+	## Online: the "waiting for every player to load" text in the middle until the round starts ([] clears it).
+	if callouts == null:
+		return
+	if lines.is_empty():
+		callouts.remove("wait")
+		return
+	var rows := []
+	for i in range(lines.size()):
+		rows.append([str(lines[i]), callout_px(Rules.HUD_CALLOUT_FONT * (1.25 if i == 0 else 0.9), Rules.HUD_CALLOUT_MIN_PT),
+				Color("f2fbff") if i == 0 else Color("c8e6ee"), i == 0])
+	callouts.add("wait", rows, INFO_COLOR, {"anchor": func(): return root.get_viewport_rect().size * Vector2(0.5, 0.38),
+			"side": "center", "arrow": false, "life": INF, "rise": 0.0})
+
+
+func pulse_last_stand(how: String) -> void:
+	## The Last Stand's announcement: its own status line pulses for HUD_LS_PULSE s and says how the method falls.
+	_ls_pulse = Rules.HUD_LS_PULSE
+	_ls_how = how
+
+
+func _under_top() -> float:
+	## The first free y under the top bar, the status line and a mission's strip.
+	var y := top_panel.position.y + top_panel.size.y if top_panel.visible else margins.y
+	if status_label.text != "":
+		y = status_label.position.y + status_label.size.y
+	return maxf(y, notices.position.y)
+
+
+func callout_area(vp: Vector2) -> Rect2:
+	## Where a message may be drawn: the screen inside the device's safe area and the HUD's own margins.
+	var ins := UiKit.safe_insets(vp)
+	var l := maxf(ins.x, margins.x * 0.5)
+	var t := maxf(ins.y, margins.y * 0.5)
+	var r := maxf(ins.z, margins.z * 0.5)
+	var b := maxf(ins.w, margins.w * 0.5)
+	return Rect2(l, t, maxf(vp.x - l - r, 1.0), maxf(vp.y - t - b, 1.0))
+
+
+func callout_blocked() -> Array:
+	## The HUD parts a message never covers: the top bar (and the band it heads), PAUSE, the SEND panel, the dock
+	## and its hint, the inspector, the coach card, the corner buttons.
+	var out := []
+	var vp := root.get_viewport_rect().size
+	if top_panel.visible:
+		out.append(Rect2(0, 0, vp.x, top_panel.position.y + top_panel.size.y + 3.0 * ui_scale))
+	if status_label.text != "":
+		var sw := status_label.get_theme_font("font").get_string_size(status_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+				status_label.get_theme_font_size("font_size")).x + 24.0 * ui_scale
+		out.append(Rect2(vp.x * 0.5 - sw * 0.5, status_label.position.y - 3.0 * ui_scale, sw, status_label.size.y + 8.0 * ui_scale))   # (+ its pulse frame)
+	for c in [pause_button, side_panel, dock, dock.hint_panel if dock else null, debug_button, chat_button, spectate_button, monster_icon, map_title]:
+		if c and (c as Control).is_visible_in_tree():
+			out.append((c as Control).get_global_rect())
+	if debug_panel and debug_panel.visible:
+		out.append(debug_panel.get_global_rect())
+	if is_instance_valid(inspector) and inspector_id >= 0:
+		out.append(inspector_rect())
+	out.append_array(extra_ui_rects)
+	return out
+
+
+func _sync_status_pulse(dt: float) -> void:
+	## The Last Stand announcement (pulse_last_stand): the status line pops, a red frame breathes behind it
+	## about once a second, then fades - the line itself keeps saying LAST STAND for the rest of the match.
+	if _ls_pulse <= 0.0 or status_label.text == "":
+		_ls_pulse = maxf(_ls_pulse - dt, 0.0)
+		status_glow.visible = false
+		status_label.scale = Vector2.ONE
+		return
+	_ls_pulse = maxf(_ls_pulse - dt, 0.0)
+	var age := Rules.HUD_LS_PULSE - _ls_pulse
+	var wave := 0.5 + 0.5 * cos(age * TAU / 1.1)                     # 1 -> 0 -> 1, about once a second
+	var fade := clampf(_ls_pulse / 0.6, 0.0, 1.0)
+	var font := status_label.get_theme_font("font")
+	var sw := font.get_string_size(status_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, status_label.get_theme_font_size("font_size")).x
+	var gw := sw + 36.0 * ui_scale
+	status_glow.visible = true
+	status_glow.size = Vector2(gw, status_label.size.y + 4.0 * ui_scale)
+	status_glow.position = Vector2(status_label.position.x + (status_label.size.x - gw) * 0.5, status_label.position.y - 2.0 * ui_scale)
+	status_glow.modulate = Color(1, 1, 1, (0.45 + 0.55 * wave) * fade)
+	status_label.pivot_offset = status_label.size * 0.5
+	status_label.scale = Vector2.ONE * (1.0 + 0.1 * wave * fade * clampf(1.0 - age / 2.5, 0.35, 1.0))
 
 
 func skill_event(ev: Dictionary) -> void:
@@ -1552,7 +1734,7 @@ func _build_end() -> void:
 		s.details({"name": str(main.map.get("name", "")), "sub": where, "outcome": outcome, "primary": primary,
 				"back": func():
 					_end_page = "result"
-					_build_end()}, MatchScreens.seat_table(sim, human))
+					_build_end()}, MatchScreens.seat_table(sim, human, _seat_heads()))
 		_show_screen(end_panel)
 		return
 	var placed := Progression.placements(sim)
@@ -1562,7 +1744,8 @@ func _build_end() -> void:
 		kicker = "FINISHED %s OF %d" % [MatchScreens.ordinal(int(placed.get(human, seats.size()))).to_upper(), seats.size()]
 	var sub := where + "  ·  " + (("Last Stand: %s" % sim.last_stand_method.to_upper()) if sim.last_stand_active else "decided before the Last Stand")
 	if not won and not draw and seats.size() > 2:     # who took it, when it wasn't a plain duel
-		sub = "Won by %s  ·  %s" % [str(UiKit.NAMES.get(str(sim.factions.get(winner, "")), winner)), sub]
+		sub = "Won by %s  ·  %s" % [_who_line(winner), sub]
+	sub = _versus_line(seats) + "\n" + sub           # HUD pass: who played - a human by name, an AI by faction and level
 	if draw and sim.draw_line != "":                   # 7:00, a neutral last platform: the funny call-out (0.19.0)
 		sub = str(sim.draw_line) + "\n" + sub
 	var st := Progression.seat_stats(sim, human)
@@ -1595,6 +1778,48 @@ func _reward_strip(scale := 1.0) -> Control:
 	## PROGRESSION (0.20.1): what the match paid (main.rewards, set once at the match end), or nothing.
 	var r = main.get("rewards")
 	return RewardStrip.make(r, scale) if r is Dictionary and not (r as Dictionary).get("lines", []).is_empty() else null
+
+
+func _who_line(seat: String) -> String:
+	## One seat in a line: "DANIELE · NULL" for a human (your own: "(YOU)" after the name), "EMBER · VETERAN AI"
+	## for an AI (main.seat_who).
+	if not main.has_method("seat_who"):
+		return str(UiKit.NAMES.get(str(sim.factions.get(seat, "")), seat))
+	var w: Dictionary = main.seat_who(seat)
+	if bool(w["human"]):
+		var nm := str(w["name"]) if str(w["name"]) != "" else "PLAYER"
+		return "%s%s  ·  %s" % [nm, " (YOU)" if bool(w["you"]) else "", str(w["faction"])]
+	return "%s  ·  %s" % [str(w["faction"]), str(w["tag"])]
+
+
+func _versus_line(seats: Array) -> String:
+	## The results' "who played" line: you, then everyone you faced (a free-for-all past three: "+N more").
+	var you := _who_line(human)
+	var rivals := []
+	for s in seats:
+		if str(s) != human and not sim.allied(str(s), human):
+			rivals.append(_who_line(str(s)))
+	if rivals.is_empty():
+		return you
+	if rivals.size() > 2:
+		return "%s  vs  %s, %s +%d more" % [you, rivals[0], rivals[1], rivals.size() - 2]
+	return "%s  vs  %s" % [you, "  /  ".join(rivals)]
+
+
+func _seat_heads() -> Dictionary:
+	## MATCH DETAILS column heads: seat -> [head, second line] - a human's name (yours marked YOU) over the faction,
+	## an AI's faction over its level (main.seat_who).
+	var out := {}
+	if not main.has_method("seat_who"):
+		return out
+	for s in sim.factions.keys():
+		var w: Dictionary = main.seat_who(str(s))
+		if bool(w["human"]):
+			var nm := str(w["name"]) if str(w["name"]) != "" else "PLAYER"
+			out[s] = ["%s (YOU)" % nm if bool(w["you"]) else nm, str(w["faction"])]
+		else:
+			out[s] = [str(w["faction"]), str(w["tag"])]
+	return out
 
 
 func _my_faction() -> String:

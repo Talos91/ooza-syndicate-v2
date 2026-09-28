@@ -94,9 +94,7 @@ func _run() -> void:
 			dock.press_slot(2)                              # ... then the slot fires relays
 			await _frames(20)
 	var casts := s.events.filter(func(e): return e["type"] == "skill" and e["seat"] == "A").size() - casts0
-	var toasts := []
-	for c in inst.hud.notices.get_children():
-		toasts.append(str(c.get_meta("text", "")))
+	var toasts: Array = inst.hud.callouts.texts()        # HUD pass: the placed messages (no notification stack)
 	print("PROBE state=%s armed=%d cands=%d casts=%d toasts=%s" % [state, dock.armed, dock.cands.size(), casts, toasts])
 	if state in ["cooldown", "rewire"]:
 		print("PROBE CAST %s" % ("ok" if casts >= 1 and toasts.any(func(t): return t.ends_with(" cast")) else "FAIL"))

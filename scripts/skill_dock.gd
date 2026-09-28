@@ -7,10 +7,11 @@ extends HBoxContainer
 ## charge ring and a READY burst; Rewire shows its relay fires left. Casting: tap a slot (or 1 / 2 / 3),
 ## the valid targets light up in the world (Sim.targets_for: lines, nodes, decks, relays), tap one to
 ## cast - Ghost Line takes its source node, then its destination. Tap the slot again or empty space to
-## cancel (a cancel spends nothing). A tap on a wrong target toasts Sim.cast_check's reason; a cast goes
+## cancel (a cancel spends nothing). A tap on a wrong target says Sim.cast_check's reason just above the slot
+## (Hud.skill_refusal - HUD pass: no notification box; a HUD without it, the tests' double: its toast); a cast goes
 ## through main.node_action("cast", slot index, {"target": t}) (online guests: an order to the host) and
 ## the slot pulses. While no slot is armed the dock never touches world input (drag-to-send, tap-to-inspect).
-## Also: the toast when an enemy's skill hits you (fx "skill" with `affects`), and the note when a map
+## Also: the callout where an enemy's skill hits you (fx "skill" with `affects`), and the note when a map
 ## without relays swaps a relay map skill for the faction's fallback. Target highlights are drawn here, on a
 ## screen layer under the HUD panels; the skills' own world effects are fx code, not this file.
 
@@ -44,6 +45,7 @@ var _press := Vector2.INF
 var _t := 0.0
 var _prev: Array = []                         # per slot: [cooldown, charge, rewire fires] last frame
 var _last_pulse := [-9.0, -9.0, -9.0]
+var _floor_px := 0.0                          # phones: the smallest font the slot words may use (HUD_DOCK_MIN_PT), 0 = none
 
 
 class Slot:
@@ -148,14 +150,15 @@ class Slot:
 		var tag: String = SkillDock.TAGS[index]
 		if index == 1 and dock.swapped != "":
 			tag = "MAP · NO RELAYS"
-		_text(tag, Vector2(x0, 17.0 * s), 12, Color(col, 0.85) if is_ready else Color("7f98a6"), room, UI_FONT)
+		var big := dock._floor_px > 0.0                # a phone: the three words sit a little lower, larger
+		_text(tag, Vector2(x0, (19.0 if big else 17.0) * s), 12, Color(col, 0.85) if is_ready else Color("7f98a6"), room, UI_FONT)
 		if not dock.mobile:
 			var kp := Vector2(w - 20.0 * s, 6.0 * s)
 			var kr := Rect2(kp, Vector2(14, 15) * s)
 			draw_rect(kr, Color(1, 1, 1, 0.08))
 			draw_rect(kr, Color(1, 1, 1, 0.3), false, 1.0)
 			_centred(str(index + 1), kr.get_center() + Vector2(0, 0.5 * s), 11, Color("b8ced6"), false)
-		_text(ArmyPresets.skill_name(id).to_upper(), Vector2(x0, 41.0 * s), 18, Color.WHITE if is_ready or armed else Color("b8c7cf"), room, HEAD_FONT)
+		_text(ArmyPresets.skill_name(id).to_upper(), Vector2(x0, (43.0 if big else 41.0) * s), 18, Color.WHITE if is_ready or armed else Color("b8c7cf"), room, HEAD_FONT)
 		var status := ""
 		var sc := Color("8fa6b2")
 		if armed:
@@ -173,7 +176,7 @@ class Slot:
 			status = "CHARGING · %d s" % int(ceil(cd))
 		else:
 			status = "COOLDOWN"
-		_text(status, Vector2(x0, 61.0 * s), 14, sc, room, UI_FONT)
+		_text(status, Vector2(x0, (64.0 if big else 61.0) * s), 14, sc, room, UI_FONT)
 		if burst > 0.0:                          # the ultimate turned ready: READY rises out of the slot
 			var rise := (1.0 - burst) * 16.0 * s
 			var rp := Vector2(w / 2.0, -10.0 * s - rise)
@@ -194,12 +197,18 @@ class Slot:
 		draw_string(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, col)
 
 	func _text(txt: String, base: Vector2, fs: int, col: Color, room: float, font: Font) -> void:
-		## One line, its font stepped down to fit the room (never below 70 %), baseline at `base`.
-		var f := int(fs * dock.ui_scale)
-		var least := int(fs * dock.ui_scale * 0.7)
+		## One line, its font stepped down to fit the room (never below 70 %, and on a phone never below
+		## HUD_DOCK_MIN_PT - the iPhone sweep: the tags read ~7-8 pt), baseline at `base`; what still doesn't fit
+		## is cut with an ellipsis rather than drawn past the slot.
+		var f := maxi(int(fs * dock.ui_scale), int(ceil(dock._floor_px)))
+		var least := maxi(int(fs * dock.ui_scale * 0.7), int(ceil(dock._floor_px)))
 		while f > least and font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x > room:
 			f -= 1
-		draw_string(font, base, txt, HORIZONTAL_ALIGNMENT_LEFT, room, f, col)
+		if font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x > room:
+			while txt.length() > 1 and font.get_string_size(txt + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, f).x > room:
+				txt = txt.substr(0, txt.length() - 1).strip_edges()
+			txt += "…"
+		draw_string(font, base, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, col)
 
 
 class TargetLayer:
@@ -222,11 +231,19 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 	accent = Rules.seat_color(human)
 	add_theme_constant_override("separation", int(10 * ui_scale))
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# the iPhone sweep (HUD pass): on a phone the slot words never drop under HUD_DOCK_MIN_PT real points, and the
+	# slot is a little wider (HUD_DOCK_PHONE_W) so they still fit - the height, and so the camera's room, is the same
+	var slot_size := SLOT_SIZE
+	if mobile:
+		var tree := Engine.get_main_loop() as SceneTree   # (not in the tree yet: the window's canvas size)
+		var vp := tree.root.get_visible_rect().size if tree != null and tree.root != null else Vector2(1280, 720)
+		_floor_px = Rules.HUD_DOCK_MIN_PT / maxf(UiKit.pt_per_px(vp), 0.01)
+		slot_size.x = Rules.HUD_DOCK_PHONE_W
 	for i in range(3):
 		var b := Slot.new()
 		b.dock = self
 		b.index = i
-		b.custom_minimum_size = (SLOT_SIZE * ui_scale).round()
+		b.custom_minimum_size = (slot_size * ui_scale).round()
 		b.pressed.connect(press_slot.bind(i))
 		b.tooltip_text = ""
 		add_child(b)
@@ -411,7 +428,11 @@ func cancel() -> void:
 
 func _refuse(i: int, why: String) -> void:
 	(slots[i] as Slot).warn = 1.0
-	if why != "":
+	if why == "":
+		return
+	if hud and hud.has_method("skill_refusal"):     # HUD pass: a small line just above the slot that was tapped
+		hud.skill_refusal(i, why)
+	else:
 		_toast(why, "warn")
 
 
@@ -712,4 +733,8 @@ func on_event(ev: Dictionary) -> void:
 		"rewire": what = "your relay fires" if ev.has("fire") else "their lines speed up"
 		"echo_split": what = "decoy lines on the move"
 		"core_meltdown": what = "your garrison melts"
+	# HUD pass: at the place the skill landed (the event's pos), the caster's emblem as the icon
+	if hud and hud.has_method("callout_at") and ev.get("pos") is Vector3:
+		hud.callout_at(ev["pos"], "skill:%s" % seat, "%s%s" % [ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn", seat)
+		return
 	_toast("seat %s cast %s%s" % [seat, ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn")

@@ -863,3 +863,27 @@ const PERF_BUDGET_DRAW_CALLS := 500
 const PERF_BUDGET_PRIMITIVES := 400000
 const PERF_BUDGET_OBJECTS := 800
 # --- end OPT-RENDER ---
+
+# --- HUD pass (2026-09-28, Daniele's "option A": no notification box - each message where it belongs) ---
+# HudCallouts: a short callout at the node / deck / spot it is about (Fx.floater's look + a small icon), one per
+# place, an edge arrow when that place is off screen; sizes in canvas units x Hud.ui_scale, phones floored in real
+# points (UiKit.pt_per_px). Seconds include the fade.
+const HUD_CALLOUT_LIFE := 2.6          # a map callout (monster, forge, handover, eject, a refused order at its node)
+const HUD_CALLOUT_POP := 0.16          # pop-in
+const HUD_CALLOUT_FADE := 0.45         # fade-out at the end of its life
+const HUD_CALLOUT_RISE := 14.0         # canvas units it drifts up over its life
+const HUD_CALLOUT_FONT := 21           # desktop font (x ui_scale)
+const HUD_CALLOUT_MIN_PT := 14.0       # phones: never smaller than this on the glass
+const HUD_CALLOUT_LIFT := 3.0          # m above the node's centre it points at
+const HUD_CALLOUT_ARROW := 15.0        # the off-screen edge arrow's length (x ui_scale)
+const HUD_REFUSAL_LIFE := 1.5          # a skill-dock refusal, just above the slot that was tapped
+const HUD_REFUSAL_FONT := 17
+const HUD_REFUSAL_MIN_PT := 12.0
+const HUD_BANNER_LIFE := 1.6           # the match-start banner (map, who you are, the dock's start note)
+const HUD_BANNER_FONT := 30
+const HUD_LINE_LIFE := 2.4             # a line with no place of its own (tutorial / campaign / debug), under the top bar
+const HUD_LS_PULSE := 4.5              # the Last Stand status line pulses and explains the method this long
+const HUD_DOCK_MIN_PT := 11.0          # the dock's ACTIVE / MAP / ULTIMATE and status words on a phone (iPhone sweep)
+const HUD_DOCK_PHONE_W := 212.0        # the dock slot's width on a phone (desktop: SkillDock.SLOT_SIZE.x) for those words
+const HUD_NAME_MAX := 12               # characters of a player's name before it is cut with an ellipsis
+# --- end HUD pass ---
