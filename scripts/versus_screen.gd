@@ -97,7 +97,7 @@ func _pt_factor() -> float:
 	var vp := get_viewport().get_visible_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0:
 		return 0.0
-	return UiKit.K * minf(vp.x / 1280.0, vp.y / 720.0) * (390.0 / vp.y)
+	return UiKit.K * minf(vp.x / 1280.0, vp.y / 720.0) * UiKit.pt_per_px(vp)
 
 
 func _sides() -> Array:
@@ -124,8 +124,10 @@ func _build() -> void:
 		content.queue_free()
 	var vp := get_viewport().get_visible_rect().size
 	var s := minf(vp.x / 1280.0, vp.y / 720.0)
+	var ins := UiKit.safe_insets(vp)                   # inside the notch / home-indicator bands
 	content = Control.new()
-	content.size = vp / s
+	content.position = Vector2(ins.x, ins.y)
+	content.size = (vp - Vector2(ins.x + ins.z, ins.y + ins.w)) / s
 	content.scale = Vector2(s, s)
 	content.mouse_filter = Control.MOUSE_FILTER_STOP     # a tap anywhere goes on (and nothing reaches the board)
 	content.gui_input.connect(_on_input)
@@ -141,9 +143,13 @@ func _build() -> void:
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.modulate = Color(0.42, 0.45, 0.5)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.size = content.size
+	bg.position = -Vector2(ins.x, ins.y) / s           # the art and its dim still fill the whole screen
+	bg.size = vp / s
 	content.add_child(bg)
-	content.add_child(UiKit.rect(Vector2.ZERO, content.size, Color(UiKit.BASE, 0.35)))
+	var shade := UiKit.rect(bg.position, bg.size, Color(UiKit.BASE, 0.35))
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP     # a tap in a band goes on too (never to the board)
+	shade.gui_input.connect(_on_input)
+	content.add_child(shade)
 	var sides := _sides()
 	var x := maxf(26.0, W * 0.024)
 	var top := 26.0 if mobile else 40.0
@@ -314,7 +320,7 @@ func _process(dt: float) -> void:
 
 func _on_input(e: InputEvent) -> void:
 	if (e is InputEventMouseButton and e.pressed) or (e is InputEventScreenTouch and e.pressed):
-		content.accept_event()
+		get_viewport().set_input_as_handled()          # (the content or the full-screen shade: either took it)
 		_go()
 
 

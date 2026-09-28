@@ -312,16 +312,99 @@ static func tag(m, text: String, pos: Vector2, f := "vex") -> Vector2:
 	return dims
 
 
-static func stars(m, n: int, of: int, pos: Vector2, size := 20.0, count := true) -> Label:
-	## Filled gold for earned, a dim outline for the rest - and the number, so it never rests on colour alone.
-	var s := "★".repeat(maxi(0, n)) + "☆".repeat(maxi(0, of - n)) + ("   %d / %d" % [n, of] if count else "")
-	var l := label(m, s, size, STAR if n > 0 else DIM)
-	return add(m, l, pos) as Label
+const STAR_OFF := Color(1.0, 0.808, 0.408, 0.3)   # an unearned star: the same filled star, faint (the sweep: the thin
+                                                  # outline glyph read as ~5 pt)
+
+
+static func star_row(m, n: int, of: int, size: float) -> HBoxContainer:
+	## Earned stars bright gold, the rest the same filled star faint - one row, not yet placed.
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 0)
+	if n > 0:
+		row.add_child(label(m, "★".repeat(n), size, STAR))
+	if of - n > 0:
+		row.add_child(label(m, "★".repeat(of - n), size, STAR_OFF))
+	return row
+
+
+static func stars(m, n: int, of: int, pos: Vector2, size := 20.0, count := true) -> Control:
+	## The star row and the number beside it, so it never rests on colour alone.
+	var row := star_row(m, maxi(0, n), maxi(0, of), size)
+	if count:
+		row.add_child(label(m, "   %d / %d" % [n, of], size * 0.85, STAR if n > 0 else MUTED))
+	return add(m, row, pos)
 
 
 static func bar(m, pos: Vector2, dims: Vector2, frac: float, f := "vex") -> void:
 	m.content.add_child(rect(pos, dims, Color(FRAME, 0.6)))
 	m.content.add_child(rect(pos, Vector2(dims.x * clampf(frac, 0.0, 1.0), dims.y), accent(f)))
+
+
+# ------------------------------------------------------------------ real points on the web
+static var _ppp := 0.0                             # pt_per_px's last answer, and the frame / viewport it was for
+static var _ppp_frame := -1
+static var _ppp_vp := Vector2.ZERO
+
+
+static func pt_per_px(vp: Vector2) -> float:
+	## Points per viewport pixel on a phone. The web page knows its real size in CSS px (= iOS points, Android dp) via
+	## web/viewport-fix.js's OozeViewport.size(); elsewhere the landscape-phone reference (390 pt tall) stands in, as it
+	## always did. The iPhone sweep (0.21.5): the 390 guess left taps at 42-43 pt and text near 10.5 pt on the shorter
+	## iPhones. Cached per frame - every px() / tap_h() asks.
+	var frame := Engine.get_process_frames()
+	if frame == _ppp_frame and vp == _ppp_vp:
+		return _ppp
+	_ppp_frame = frame
+	_ppp_vp = vp
+	_ppp = MIN_PHONE_REF / maxf(vp.y, 1.0)
+	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
+		var js = JavaScriptBridge.eval("window.OozeViewport ? OozeViewport.size().join(',') : ''", true)
+		var f := str(js).split(",")
+		if f.size() == 2 and float(f[0]) > 0.0 and vp.x > 0.0:
+			_ppp = float(f[0]) / vp.x
+	return _ppp
+
+
+const MIN_PHONE_REF := 390.0                       # = Menu.PHONE_PT_H: the landscape phone the sizes assume off the web
+
+
+# ------------------------------------------------------------------ the safe area (notch, Dynamic Island, home indicator)
+static var test_insets := _arg_insets()            # screenshots / tests: fake insets in viewport px (x < 0: the device's)
+
+
+static func _arg_insets() -> Vector4:
+	## --safe-insets=left,top,right,bottom (viewport px): a notched phone's bands on a desktop window, for screenshots.
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--safe-insets="):
+			var v := a.substr(14).split(",")
+			if v.size() == 4:
+				return Vector4(float(v[0]), float(v[1]), float(v[2]), float(v[3]))
+	return Vector4(-1, -1, -1, -1)
+
+
+static func safe_insets(vp: Vector2) -> Vector4:
+	## The device's unsafe bands in viewport px - left, top, right, bottom - from the same sources as main._apply_safe_area
+	## (the web page's env() insets via web/viewport-fix.js, a native phone's display safe area), without the HUD's own
+	## padding. Zero on desktop. The menu shell, VersusScreen and MatchScreens keep their controls inside them (the
+	## Architect's iPhone sweep, 0.21.5: only the battle HUD did).
+	if test_insets.x >= 0.0:
+		return test_insets
+	var ins := Vector4.ZERO
+	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
+		var js = JavaScriptBridge.eval("window.OozeViewport ? OozeViewport.safe().concat(OozeViewport.size()).join(',') : ''", true)
+		var f := str(js).split(",")
+		if f.size() == 6 and float(f[4]) > 0.0:
+			var kw := vp.x / float(f[4])                 # CSS px -> viewport units
+			ins = Vector4(float(f[0]), float(f[1]), float(f[2]), float(f[3])) * kw
+	if OS.has_feature("mobile"):
+		var screen := Vector2(DisplayServer.screen_get_size())
+		var safe := Rect2(DisplayServer.get_display_safe_area())
+		safe.position -= Vector2(DisplayServer.screen_get_position())
+		var k := vp.x / maxf(screen.x, 1.0)
+		ins = Vector4(maxf(ins.x, safe.position.x * k), maxf(ins.y, safe.position.y * k),
+				maxf(ins.z, (screen.x - safe.end.x) * k), maxf(ins.w, (screen.y - safe.end.y) * k))
+	return ins
 
 
 # ------------------------------------------------------------------ art
@@ -354,6 +437,18 @@ static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true) -> Tex
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	r.size = dims
 	return add(m, r, pos) as TextureRect
+
+
+static func map_thumb(path: String) -> Texture2D:
+	## A map's menu thumbnail (MapPool.thumb, 960x540) without its baked caption strip (the bottom 11 %: name and modes in
+	## ~4 pt type on a phone - the iPhone sweep - which every page already writes out beside it). The map itself is whole.
+	if not ResourceLoader.exists(path):
+		return null
+	var t: Texture2D = load(path)
+	var a := AtlasTexture.new()
+	a.atlas = t
+	a.region = Rect2(Vector2.ZERO, Vector2(t.get_width(), roundf(t.get_height() * 0.885)))
+	return a
 
 
 static func background(f: String) -> Texture2D:

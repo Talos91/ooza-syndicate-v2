@@ -49,6 +49,7 @@ var nav_bar: NavBar
 var shell_f := "vex"                             # the faction a shell page is dressed in (its accent, its backdrop)
 var shell_back := Callable()                     # the page's BACK (a subflow), or none (a top-level tab)
 var shell_slim := false                          # a phone subflow: BACK in the bar, no tab bar
+var safe := Vector4.ZERO                         # the device's unsafe bands around a shell page, in page units
 var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
 var _map_scroll := 0
 # map filters on 02 BATTLEFIELD (Daniele, 0.18.6: "add in game filters for maps like 1v1 2v2 ffa etc"): players
@@ -89,7 +90,7 @@ func _pt_factor() -> float:
 	var s := minf(vp.x / 1280.0, vp.y / 720.0)
 	if s <= 0.0:
 		return 0.0
-	return K * s * (PHONE_PT_H / vp.y)
+	return K * s * UiKit.pt_per_px(vp)                # real points on the web (the page's CSS size)
 
 
 func _tap_min_raw() -> float:
@@ -427,6 +428,7 @@ func map_preview(pos: Vector2, dims: Vector2) -> void:
 	var code: String = _selected_map().get("code", "")
 	var p := picture(MapPool.thumb(code), pos, dims)
 	if p != null:
+		p.texture = UiKit.map_thumb(MapPool.thumb(code))   # UI: the map alone, without the baked caption strip
 		p.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED     # the whole map, letterboxed, never cropped
 
 
@@ -734,7 +736,7 @@ func _opt_row(y: float, w: float, title_text: String, desc: String, opts: Array,
 	var widths := []
 	var cw := 0.0
 	for o in opts:
-		var bw := maxf(64.0, UiKit.text_w(self, str(o[0]), 14, true) + 32.0)
+		var bw := maxf(maxf(64.0, UiKit.tap_h(self, 46.0)), UiKit.text_w(self, str(o[0]), 14, true) + 32.0)   # >= 44 pt wide too
 		widths.append(bw)
 		cw += bw + 8.0
 	var tw := maxf(160.0, w - cw - 16.0)
@@ -3152,8 +3154,7 @@ func show_maps() -> void:
 		var back := UiKit.rect(Vector2(6, 6), thumb, Color(UiKit.BASE, 0.9))
 		b.add_child(back)
 		var tex := TextureRect.new()
-		var tp := MapPool.thumb(code)
-		tex.texture = load(tp) if ResourceLoader.exists(tp) else null
+		tex.texture = UiKit.map_thumb(MapPool.thumb(code))   # the map alone (its caption strip is written below)
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED   # the whole map, never cropped (Daniele, 0.18.7:
 		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE                # "thumbnail of maps often overflow and can't be seen in full")
@@ -3313,6 +3314,7 @@ func show_setup() -> void:
 		Rules.hide_enemy_counts = not Rules.hide_enemy_counts   # (was SETTINGS > GAME > ENEMY COUNTS)
 		show_setup())
 	ry = hp.y + UiKit.tap_h(self, 46.0) + 8.0
+	nl.visible = ry <= fy - 4.0 or ry <= nl.position.y        # the foot's "mode · vs ..." line only where it has room
 	if not mobile:                                    # the phone skips the recap to save room
 		var tip := UiKit.label(self, "LAST STAND: the map collapses ring by ring late in the match.  ABILITIES off: no skills.  "
 				+ "HIDDEN COUNTS: no unit numbers on enemy nodes, so you scout.", 13, UiKit.MUTED)
@@ -3339,8 +3341,7 @@ func _setup_map(pos: Vector2, dims: Vector2) -> void:
 	var pd := Vector2(dims.x - pad * 2.0, pos.y + dims.y - pad - th - 10.0 - py)
 	content.add_child(UiKit.rect(Vector2(pos.x + pad, py), pd, Color(UiKit.BASE, 0.9)))
 	var tex := TextureRect.new()
-	var tp := MapPool.thumb(str(sel.get("code", "")))
-	tex.texture = load(tp) if ResourceLoader.exists(tp) else null
+	tex.texture = UiKit.map_thumb(MapPool.thumb(str(sel.get("code", ""))))   # the map alone, name + tags beside it
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED     # the whole map, letterboxed, never cropped
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3411,7 +3412,10 @@ func _setup_faction(pos: Vector2, dims: Vector2) -> void:
 		skill_icon(ids[i], Vector2(10.0 + i * (isz + 6.0), (ab.size.y - isz) / 2.0), Vector2(isz, isz), ic, ab)
 	var tx := pos.x + pad + hs + 12.0
 	var tw := ab.position.x - 8.0 - tx
-	var lines := [[UiKit.NAMES[faction], 17, acc, true], ["%s  ·  SEAT A" % UiKit.SUBS[faction], 13, UiKit.MUTED, false]]
+	var sub := "%s  ·  SEAT A" % UiKit.SUBS[faction]
+	if UiKit.text_w(self, sub, 13) > tw:                 # a narrow phone column (the iPhone SE): the name alone
+		sub = UiKit.SUBS[faction]
+	var lines := [[UiKit.NAMES[faction], 17, acc, true], [sub, 13, UiKit.MUTED, false]]
 	if not Rules.abilities_on:
 		lines.append(["ABILITIES OFF", 12, UiKit.DIM, false])
 	elif eff["swapped"] != "":
@@ -4171,9 +4175,11 @@ func _fit() -> void:
 	content.size = Vector2(1280, 720)
 	content.scale = Vector2(s, s)
 	content.position = (vp - Vector2(1280, 720) * s) / 2.0
-	if _shell:                                        # UI: a shell page spans the whole screen (bars edge to edge)
-		content.size = vp / s
-		content.position = Vector2.ZERO
+	if _shell:                                        # UI: a shell page spans the whole screen (bars edge to edge),
+		var ins := UiKit.safe_insets(vp)              # its controls inside the notch / home-indicator bands
+		safe = ins / s                                # (in page units: the bars paint their backs out into them)
+		content.size = (vp - Vector2(ins.x + ins.z, ins.y + ins.w)) / s
+		content.position = Vector2(ins.x, ins.y)
 		if _built_w > 0.0 and _last_show.is_valid() and absf(content.size.x / _built_w - 1.0) > 0.02:
 			_built_w = 0.0
 			_last_show.call_deferred()

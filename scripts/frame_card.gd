@@ -173,11 +173,10 @@ func _rebuild() -> void:
 		add_child(l)
 		y -= lh + 4.0
 	if stars >= 0:
-		var s := UiKit.label(menu, "★".repeat(stars) + "☆".repeat(maxi(0, stars_max - stars)), 15,
-				UiKit.STAR if stars > 0 else UiKit.DIM)
-		s.position = Vector2(pad, y - s.get_minimum_size().y)
+		var s := UiKit.star_row(menu, stars, stars_max, 18)
+		s.position = Vector2(pad, y - UiKit.line_h(menu, 18))
 		add_child(s)
-		y -= s.get_minimum_size().y + 2.0
+		y -= UiKit.line_h(menu, 18) + 2.0
 	if subtitle != "":
 		var st := UiKit.label(menu, subtitle.to_upper(), 12, UiKit.MUTED, false, 2)
 		st.position = Vector2(pad, y - st.get_minimum_size().y)
@@ -206,7 +205,7 @@ func _text_block_h() -> float:
 	if note != "":
 		t += UiKit.text_h(menu, note, 13, w) + 4.0
 	if stars >= 0:
-		t += UiKit.line_h(menu, 15) + 2.0
+		t += UiKit.line_h(menu, 18) + 2.0
 	if subtitle != "":
 		t += UiKit.line_h(menu, 12)
 	if title != "":

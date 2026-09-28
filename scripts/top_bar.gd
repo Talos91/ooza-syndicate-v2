@@ -32,7 +32,7 @@ func bar_height() -> float:
 
 func _build(crumb: String, f: String) -> void:
 	var w: float = menu.content.size.x
-	var q := UiKit.tap_h(menu, 44.0)                  # the square buttons, >= 44 pt on phones
+	var q := UiKit.tap_h(menu, 46.0)                  # the square buttons, a little over 44 pt on phones (the sweep: 43)
 	var h := maxf(58.0, q + 10.0)
 	position = Vector2.ZERO
 	size = Vector2(w, h)
@@ -131,8 +131,9 @@ func _draw_gear(c: Control, q: float) -> void:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), UiKit.BAR)   # drawn here, not a child: children would cover the ring
-	draw_rect(Rect2(0, size.y - 1.0, size.x, 1.0), Color(_ring_col, 0.3))
+	var sf: Vector4 = menu.safe                       # the back reaches over the notch bands and the status bar
+	draw_rect(Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y), UiKit.BAR)   # (drawn here: children would cover the ring)
+	draw_rect(Rect2(-sf.x, size.y - 1.0, size.x + sf.x + sf.z, 1.0), Color(_ring_col, 0.3))
 	if slim:
 		return
 	draw_circle(_ring_c, _ring_r, UiKit.BASE)
