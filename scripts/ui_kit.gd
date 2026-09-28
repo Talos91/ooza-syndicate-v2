@@ -693,7 +693,14 @@ static func backdrop_choice() -> String:
 	if c.load(path) != OK:
 		return "auto"
 	var v := str(c.get_value("match", "backdrop", "auto"))
-	return v if v in ["auto", "rotate"] or (v.is_valid_int() and int(v) >= 0 and int(v) < BACKDROP_NAMES.size()) else "auto"
+	return v if v in ["auto", "rotate"] or (v.is_valid_int() and int(v) >= 0 and int(v) < 64) else "auto"   # (the range: battle_backdrop)
+
+
+static func backdrop_name(i: int, p: String) -> String:
+	## The five's own names; a background added later is named after its file ("battle-some-thing" -> "SOME THING").
+	if i < BACKDROP_NAMES.size():
+		return BACKDROP_NAMES[i]
+	return p.get_file().get_basename().trim_prefix("battle-").replace("-", " ").to_upper()
 
 
 static func save_backdrop_choice(v: String) -> bool:

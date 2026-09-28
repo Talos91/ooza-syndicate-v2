@@ -3417,7 +3417,9 @@ func _backdrop_short(v: String) -> String:
 		return "AUTO"
 	if v == "rotate":
 		return "ROTATE"
-	return str(UiKit.BACKDROP_NAMES[int(v)]).get_slice(" ", 0).trim_suffix(":") if v.is_valid_int() else "AUTO"
+	if not v.is_valid_int() or int(v) >= Scenery.BATTLE_BACKDROPS.size():
+		return "AUTO"
+	return UiKit.backdrop_name(int(v), Scenery.BATTLE_BACKDROPS[int(v)]).get_slice(" ", 0).trim_suffix(":")
 
 
 func _backdrop_sheet(sel: Dictionary) -> void:
@@ -3449,7 +3451,7 @@ func _backdrop_sheet(sel: Dictionary) -> void:
 	var auto_i := absi(hash(str(sel.get("code", "")))) % Scenery.BATTLE_BACKDROPS.size()
 	var opts := [["auto", auto_i, "AUTO", "This map's own"], ["rotate", -1, "ROTATE", "A new one every match"]]
 	for i in range(Scenery.BATTLE_BACKDROPS.size()):
-		opts.append([str(i), i, UiKit.BACKDROP_NAMES[i], "%d / %d" % [i + 1, Scenery.BATTLE_BACKDROPS.size()]])
+		opts.append([str(i), i, UiKit.backdrop_name(i, Scenery.BATTLE_BACKDROPS[i]), "%d / %d" % [i + 1, Scenery.BATTLE_BACKDROPS.size()]])
 	var gy := pos.y + head
 	for k in range(opts.size()):
 		var o: Array = opts[k]
