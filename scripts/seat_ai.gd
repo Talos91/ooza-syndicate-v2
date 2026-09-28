@@ -410,7 +410,18 @@ func _attack(sim: Sim, answer_only := false) -> void:
 				continue
 			var route := _route(sim, donor["id"], target["id"], available)
 			if route.is_empty():
-				continue
+				# 0.22.4 (Daniele, via Map Builder, N-04): a target only reachable once a relay it
+				# owns moves used to vanish here for good - _route()'s find_route only follows decks
+				# open right now, so a node behind a closed remote console (or switch / rotation) with
+				# no other way in never became a plan, and _open_route below (which fires a relay for
+				# a plan that already exists) never got the chance to open it. Level 2+ (same gate as
+				# _open_route): try firing one ready relay of its own to see if that opens a way in -
+				# the route it would give, for this donor to enter the plan; _open_route fires it for real.
+				if int(cfg["relays"]) < 2:
+					continue
+				route = _relay_opens_route(sim, donor["id"], target["id"], available)
+				if route.is_empty():
+					continue
 			donors.append({"node": donor, "available": available, "travel": _route_t, "risky": _route_risky})
 		if donors.is_empty():
 			continue
@@ -898,6 +909,37 @@ func _relays(sim: Sim) -> void:
 		# that goes away falls, retract included - nobody is carried into the relay node any more, so a
 		# retract is a kill tool like a switch and needs no garrison to take its riders in
 		_order(sim.fire_relay(n["id"]))
+
+
+func _relay_opens_route(sim: Sim, src: int, dst: int, units: float) -> Array:
+	## 0.22.4: `dst` cannot be reached at all right now (find_route sees no open deck to it) - before
+	## the target is dropped from the scan for good, see whether firing one of this seat's own ready
+	## relays would open a way in (the same per-relay probe as _open_route, run before a plan even
+	## exists). Returns the route it would give (sets _route_t / _route_risky to match, same as
+	## _route()), or [] if none of its relays helps. _open_route fires the relay for real once this
+	## target's plan is chosen; until then the board is left exactly as it was.
+	for n in sim.nodes:
+		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
+			continue
+		var closing := _closing(sim, n)
+		if _cut_toll(sim, closing, Rules.RELAY_WARNING)[1] > 0.5:
+			continue                                      # an own line still has to cross a deck it closes
+		if n["relay"] == "rotation" and _fling_cost(sim, closing) > 0.5:
+			continue                                      # the turn would fling its own lines
+		var keep: int = n["relay_index"]
+		var trees := _trees                           # the probe's routes are not this board's: keep them apart
+		_trees = {}
+		n["relay_index"] = sim.relay_next_index(n)
+		var alt := _route(sim, src, dst, units)
+		var alt_t := _route_t
+		var alt_risky := _route_risky
+		n["relay_index"] = keep
+		_trees = trees
+		if not alt.is_empty():
+			_route_t = alt_t
+			_route_risky = alt_risky
+			return alt
+	return []
 
 
 func _open_route(sim: Sim, plan: Dictionary) -> bool:
