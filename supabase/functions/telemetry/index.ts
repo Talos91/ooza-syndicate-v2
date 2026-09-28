@@ -16,7 +16,7 @@ const MAX_EVENT = 2048;
 const FIELDS: Record<string, string[]> = {
   session: ["platform", "mobile", "screen", "dpr", "renderer", "touch", "graphics", "fps_cap"],
   match: ["map", "mode", "faction", "result", "duration_s", "ai_level", "online", "server_hosted", "abilities",
-    "last_stand", "left_early", "placed", "stats"],
+    "last_stand", "left_early", "placed", "stats", "net"],
   perf: ["where", "frame_ms_p50", "frame_ms_p95", "frame_ms_max", "fps_avg", "fps_min", "draw_p95", "objects",
     "time_s", "long_frames", "graphics", "extra"],
   funnel: ["step", "id", "seconds", "stars", "result"],
