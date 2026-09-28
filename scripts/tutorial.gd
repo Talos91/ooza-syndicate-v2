@@ -243,7 +243,7 @@ const LESSONS := [
 		"reveal": ["map", "badges", "drag", "clock", "floaters"],   # (0.20.6: "+ CAPTURED" at the node is part of sending)
 		"steps": [
 			{"key": "drag", "target": {"nodes": ["H", "N1"]}, "gesture": [["drag", "H", "N1"]], "pass": ["send", "H", "N1"], "budget": 30.0},
-			{"key": "label", "target": {"nodes": ["N1"], "label": ["H", "N1"], "senders": ["H"]}, "assist": ["N1"],
+			{"key": "label", "target": {"nodes": ["N1"], "label": ["H", "N1"], "senders": ["H"], "lines": "A"}, "assist": ["N1"],
 				"pass": ["owner", "N1", "A"], "budget": 30.0},
 			{"key": "percent", "reveal": ["send_panel"], "enter": ["topup", "H", "N2", 0.25], "target": {"rects": ["send:0.25"]},
 				"gesture": [["press", "send:0.25"]], "pass": ["fraction_or_send", 0.25, "H"], "budget": 10.0},
@@ -263,7 +263,7 @@ const LESSONS := [
 			{"key": "t3", "target": {"nodes": ["H"]}, "gesture": [["double_tap", "H"]], "pass": ["tier", "H", 3], "budget": 40.0},
 			{"key": "machinegoon", "target": {"nodes": ["N1"], "rects": ["action:MACHINEGOON"]},
 				"gesture": [["press", "action:MACHINEGOON"], ["tap", "N1"]], "pass": ["built", "N1", "machinegoon"], "budget": 20.0},
-			{"key": "watch", "enter": ["b_send", "B1", "N1", 8], "target": {"nodes": ["N1"], "lines": "B"},
+			{"key": "watch", "enter": ["b_send", "B1", "N1", 8], "target": {"nodes": ["N1"], "lines": "B", "open": true},
 				"pass": ["custom", "line_spent", "N1"], "fail": ["lost", "N1"], "budget": 30.0},
 			{"key": "mg_upgrade", "target": {"nodes": ["N1"], "rects": ["action:UPGRADE"]},
 				"gesture": [["press", "action:UPGRADE"], ["double_tap", "N1"]], "pass": ["build_started", "N1"], "budget": 10.0},
@@ -293,11 +293,12 @@ const LESSONS := [
 			{"key": "inspect", "target": {"nodes": ["R"]}, "gesture": [["tap", "R"]], "pass": ["inspect", "R"], "budget": 10.0},
 			{"key": "fire", "target": {"nodes": ["R"], "rects": ["action:SWITCH"]}, "gesture": [["double_tap", "R"]],
 				"pass": ["fired", "R"], "budget": 10.0},
-			{"key": "warning", "target": {"nodes": ["R"]}, "read_only": true, "restore": "R"},
-			{"key": "prompt", "target": {"nodes": ["R"], "lines": "B"}, "before": "L4.incoming",
+			{"key": "warning", "target": {"nodes": ["R"], "relay_decks": "R", "open": true}, "read_only": true, "restore": "R"},
+			{"key": "prompt", "target": {"nodes": ["R"], "lines": "B", "relay_decks": "R"}, "before": "L4.incoming",
 				"catch": {"relay": "R", "from": "B2", "to": "R", "shown": 20, "kind": "fling", "min": 5, "tries": 3, "slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "line_speed": 0.7,
 					"miss": "L4.miss", "practice": "L4.practice"}, "budget": 90.0},
-			{"key": "waterfall", "target": {"nodes": ["R"]}, "pass": ["fall_or_time", 4.0], "min": 3.0, "budget": 6.0},
+			{"key": "waterfall", "target": {"nodes": ["R"], "lines": "B", "relay_decks": "R", "open": true}, "pass": ["fall_or_time", 4.0],
+				"min": 3.0, "budget": 6.0},
 		],
 		"done": ["L4.done1", "L4.done2"]},
 	{"id": 5, "key": "L5", "map": "T-07-switchyard", "abilities": false, "vls": false,
@@ -322,15 +323,15 @@ const LESSONS := [
 			{"key": "inspect", "target": {"nodes": ["R1"]}, "gesture": [["tap", "R1"]], "pass": ["inspect", "R1"], "budget": 10.0},
 			{"key": "laser", "target": {"nodes": ["R1"], "rects": ["action:LASER"]}, "gesture": [["press", "action:LASER"], ["tap", "R1"]],
 				"pass": ["built", "R1", "laser"], "budget": 20.0},
-			{"key": "burst", "enter": ["b_send", "L1", "R1", 10], "target": {"nodes": ["R1"], "lines": "B"},
+			{"key": "burst", "enter": ["b_send", "L1", "R1", 10], "target": {"nodes": ["R1"], "lines": "B", "open": true},
 				"pass": ["custom", "burst_spent", "R1"], "fail": ["lost", "R1"], "budget": 30.0},
 			{"key": "forge", "target": {"nodes": ["R2"], "rects": ["action:FORGE"]}, "gesture": [["press", "action:FORGE"], ["tap", "R2"]],
 				"pass": ["built", "R2", "forge"], "budget": 20.0},
 			{"key": "hub", "target": {"nodes": ["R3"], "rects": ["action:MONSTER HUB"]},
 				"gesture": [["press", "action:MONSTER HUB"], ["tap", "R3"]], "pass": ["built", "R3", "monster_hub"], "budget": 20.0},
-			{"key": "send", "enter": ["charge_hub", "R3"], "target": {"nodes": ["R3", "M2"], "rects": ["monster_icon:R3"]},
+			{"key": "send", "enter": ["charge_hub", "R3"], "target": {"nodes": ["R3", "M2"], "rects": ["monster_icon:R3"], "monsters": true},
 				"gesture": [["monster", "R3", "M2"]], "pass": ["launched", "M2"], "only_launch": "M2", "budget": 10.0},
-			{"key": "take", "enter": ["b_send", "M2", "R3", 8], "target": {"nodes": ["M2"], "lines": "B"},
+			{"key": "take", "enter": ["b_send", "M2", "R3", 8], "target": {"nodes": ["M2"], "lines": "B", "monsters": true, "open": true},
 				"pass": ["custom", "monster_done", "M2"], "budget": 45.0},
 			{"key": "cooldown", "target": {"nodes": ["R3"]}, "read_only": true},
 		],
@@ -348,7 +349,7 @@ const LESSONS := [
 			{"key": "reveal", "read_only": true},
 			{"key": "evacuate", "target": {"nodes": ["I1", "I2"], "senders": "mine"}, "gesture": [["drag", "H", "I1"]], "assist": ["I1", "I2"],
 				"pass": ["custom", "ring_down"], "fail": ["custom", "ring_lost"], "budget": 60.0},
-			{"key": "vls", "enter": ["vls"], "target": {"nodes": ["I1", "I2", "I3"]}, "read_only": true, "pass": ["won"], "rival_cap": 5},
+			{"key": "vls", "enter": ["vls"], "target": {"nodes": ["I1", "I2", "I3"], "open": true}, "read_only": true, "pass": ["won"], "rival_cap": 5},
 			{"key": "hold", "target": {"nodes": ["I1", "I2", "I3"], "senders": "mine"}, "gesture": [["vls_move"]], "assist": ["I1", "I2", "I3"], "rival_cap": 5, "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
 		],
 		"done": ["L7.done1", "L7.done2"]},
@@ -1774,9 +1775,10 @@ func target() -> Dictionary:
 	if state != "running":
 		return out
 	if L.get("match", false):
-		if catch_prompt():
+		if catch_prompt() or str(_match.get("phase", "")) == "push":   # the push is followed from the moment it goes
 			out["nodes"] = [_id("R")]
 			out["lines"] = [int(_match.get("push_line", -1))]
+			out["relay_decks"] = _id("R")
 		return out
 	var t: Dictionary = _step().get("target", {})
 	for nm in t.get("nodes", []):
@@ -1813,11 +1815,54 @@ func target() -> Dictionary:
 	for key in t.get("rects", []):                    # "badge:<name>" -> "badge:<node id>"
 		var k := str(key)
 		out["rects"].append(_rect_key(k))
+	out["open"] = bool(t.get("open", false))         # a watch step: rings, no dim (nothing you watch is ever fogged)
+	out["monsters"] = bool(t.get("monsters", false))
+	out["relay_decks"] = _id(str(t.get("relay_decks", "")))
 	var who := str(t.get("lines", ""))
 	if who != "":
 		for h in sim.hordes:
 			if h["owner"] == who and not h.get("decoy", false) and (who == HUMAN or _tracked.is_empty() or h["id"] in _tracked):
 				out["lines"].append(h["id"])
+	return out
+
+
+const FOLLOW_STEP := 8.0            # metres between the circles along a line (a circle is ~R x 1.35 across)
+const FOLLOW_MAX := 5                # circles per line at most
+var _deck_pts := {}                  # edge index -> its 3 world points (ends + middle): decks never move in place
+
+
+func follow_points(tg: Dictionary = {}) -> Array:
+	## World points the spotlight must cover this frame (Daniele, 0.22.1: "never have the area necessary to look at
+	## covered in fog of war ... the monster is under the fog"): each followed line from tail to head every
+	## FOLLOW_STEP m, each walking monster of yours, the step's decks and the relay's decks. A few samples per frame -
+	## no route searches, no scene lookups.
+	if tg.is_empty():
+		tg = target()
+	var out := []
+	for hid in tg.get("lines", []):
+		var h := sim._horde(int(hid))
+		if h.is_empty():
+			continue
+		var head: float = h["s"]
+		var len := Sim.chain_length(h)
+		var k := clampi(ceili(len / FOLLOW_STEP), 1, FOLLOW_MAX - 1)
+		for i in range(k + 1):
+			out.append(Sim.sample(h, head - len * float(i) / float(k))[0])
+	if tg.get("monsters", false):
+		for m in sim.monsters:
+			if str(m.get("seat", "")) == HUMAN and str(m.get("state", "")) in ["walking", "falling"]:
+				out.append(m["pos"])
+	var edges: Array = (tg.get("decks", []) as Array).duplicate()
+	var r := int(tg.get("relay_decks", -1))
+	if r >= 0:
+		for ei in sim.controlled_edges(r):
+			if not ei in edges:
+				edges.append(ei)
+	for ei in edges:
+		if not _deck_pts.has(ei):
+			var dl := sim.deck_line(int(ei))
+			_deck_pts[ei] = [] if dl.size() < 2 else [dl[0], ((dl[0] as Vector3) + (dl[-1] as Vector3)) / 2.0, dl[-1]]
+		out.append_array(_deck_pts[ei])
 	return out
 
 
