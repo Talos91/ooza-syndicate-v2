@@ -100,6 +100,8 @@ func _run() -> void:
 	await _wait(func(): return a.mode == want_mode)
 	a.set_ai_fill("Standard")
 	await _wait(func(): return a.ai_fill == "Standard")
+	b.set_ready(true)                                  # READY (ooze20-net-6): DEPLOY waits for it
+	await _wait(func(): return a.all_ready())
 	a.start_match()
 	await _wait(func(): return a.active and b.active and not b.match_info.is_empty(), 15.0)
 	var sa := _build_sim(a.match_info)

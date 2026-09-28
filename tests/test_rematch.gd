@@ -79,6 +79,8 @@ func _run() -> void:
 	var b := _net()
 	b.join_room(a.room_code, "ember")
 	await _wait(func(): return b.connected and a.roster.size() == 2)
+	b.set_ready(true)                                  # READY (ooze20-net-6): DEPLOY waits for it
+	await _wait(func(): return a.all_ready())
 	a.start_match()
 	if not await _play_round(a, b, 1):
 		print("SKIP  round 1 did not end early (start the relay with --host-arg=--match-end=15)")
