@@ -467,6 +467,7 @@ static var _sec_n := 0
 static var _fps_min := 1000
 static var _in_match := false
 static var _menu_t := 0.0
+static var _page_t := {}                            # page -> seconds in this sample (the menu perf sample says which page stutters)
 static var _phone := -1                            # PerfProfile.is_phone(), read once
 
 
@@ -481,9 +482,10 @@ static func perf_reset() -> void:
 	_sec_t = 0.0
 	_sec_n = 0
 	_fps_min = 1000
+	_page_t = {}
 
 
-static func frame(dt: float, in_match: bool) -> void:
+static func frame(dt: float, in_match: bool, page := "") -> void:
 	## Every frame from main.gd (menu and match). A new match (or the menu again) starts a fresh sample; phones send a
 	## menu sample once a minute.
 	if not enabled:
@@ -492,6 +494,8 @@ static func frame(dt: float, in_match: bool) -> void:
 		_in_match = in_match
 		perf_reset()
 		_menu_t = 0.0
+	if page != "" and (_page_t.has(page) or _page_t.size() < 12):
+		_page_t[page] = float(_page_t.get(page, 0.0)) + dt
 	var ms := clampi(int(dt * 1000.0), 0, 250)
 	_hist[ms] += 1
 	_frames += 1
@@ -534,6 +538,12 @@ static func perf_stats() -> Dictionary:
 			"long_frames": _long, "graphics": PerfProfile.level()}
 
 
+static func page_key(p: String) -> String:
+	## "SETTINGS" / "lesson_3" -> a telemetry key ([a-z0-9_], <= 32; the telemetry function drops other keys).
+	var k := RegEx.create_from_string("[^a-z0-9_]+").sub(p.to_lower().strip_edges(), "_", true)
+	return k.substr(0, 32) if k != "" else "unknown"
+
+
 static func perf_event(where: String) -> bool:
 	## Sends the sample so far and starts a new one; the Architect's PerfProfile.match_stats() (playing time only,
 	## first second skipped) rides in "extra".
@@ -542,6 +552,16 @@ static func perf_event(where: String) -> bool:
 	var d := perf_stats()
 	d["where"] = where
 	d["extra"] = PerfProfile.match_stats()             # 0.21.4: the match's playing-time sample ({} off a match)
+	if where == "menu" and not _page_t.is_empty():       # which page: the longest-open one in "where", seconds per page
+		var top := ""
+		var pages := {}
+		for k in _page_t:
+			var key := page_key(str(k))
+			pages[key] = snappedf(float(pages.get(key, 0.0)) + float(_page_t[k]), 0.1)
+			if top == "" or float(pages[key]) > float(pages[top]):
+				top = key
+		d["where"] = "menu:" + top
+		d["extra"] = pages
 	perf_reset()
 	_menu_t = 0.0
 	return event("perf", d)
