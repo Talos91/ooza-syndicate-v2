@@ -2,6 +2,9 @@
 # Ooze Syndicate room server - deploy (Alpha 20). Run from Game/2.0 after the Web export (BUILD-LOG sec10):
 #   server/deploy.sh                 the build in build/web -> the server's /opt/ooze/web (the test link AND the
 #                                    build its match hosts run) + version.txt, so server rooms match that version
+#   server/deploy.sh --staging       (0.22.x) only this build's index.pck, as its versioned pack: the relay then hosts server
+#                                    rooms for this version (the staging site) while the live site, version.txt and the test
+#                                    link stay as they are. Promote later with a plain deploy.sh of the same build.
 #   server/deploy.sh --relay         also server/relay.py + its service + server/Caddyfile, then restart the relay - only
 #                                    while no room is open (0.21.4: checked here; --relay --force skips the check and
 #                                    closes the open rooms)
@@ -13,13 +16,30 @@ SERVER="${OOZE_SERVER:-ooze-server}"
 WEB="build/web"
 RELAY=""
 FORCE=""
+STAGING=""
 for a in "$@"; do
 	case "$a" in
 		--relay) RELAY="--relay" ;;
 		--force) FORCE="--force" ;;
-		*) echo "unknown option $a (use --relay, --relay --force)"; exit 1 ;;
+		--staging) STAGING="--staging" ;;
+		*) echo "unknown option $a (use --relay, --relay --force, --staging)"; exit 1 ;;
 	esac
 done
+if [ -n "$STAGING" ]; then                       # the pack only: nothing the live site or its rooms use changes
+	[ -z "$RELAY" ] || { echo "--staging uploads a pack only; run --relay separately"; exit 1; }
+	[ -f "$WEB/index.pck" ] || { echo "no $WEB/index.pck - export Web first"; exit 1; }
+	tag=$(sed -n 's/^const VERSION_TAG := "\([^"]*\)".*/\1/p' scripts/net.gd)
+	ver=$(sed -n 's/^const VERSION := "\([^"]*\)".*/\1/p' scripts/rules.gd)
+	[ -n "$tag" ] && [ -n "$ver" ] || { echo "could not read the version"; exit 1; }
+	scp -q "$WEB/index.pck" "$SERVER:/tmp/ooze-staging.pck"
+	ssh "$SERVER" VER="${tag}_${ver}" 'bash -s' <<'EOF'
+set -e
+mkdir -p /opt/ooze/packs
+install -o ooze -g ooze -m 644 /tmp/ooze-staging.pck "/opt/ooze/packs/$VER.pck" && rm /tmp/ooze-staging.pck
+echo "staging pack: /opt/ooze/packs/$VER.pck $(stat -c %s "/opt/ooze/packs/$VER.pck")   live: $(cat /opt/ooze/web/version.txt)"
+EOF
+	exit 0
+fi
 # the live-room check (match hosts running, players connected to the relay); the same test runs again on the server
 # right before the restart
 ROOMS_CHECK='echo $(( $(pgrep -fc "^/opt/ooze/godot .*127.0.0.1:8765" || true) + $(ss -Htn state established "( sport = :8765 )" | wc -l) ))'

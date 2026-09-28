@@ -26,6 +26,12 @@
   gets "Room closed: nothing was played in it for 10 min." (`Net.ROOM_IDLE`; tests: `--host-arg=--idle-close=<s>`,
   `tests/test_room_limits.gd`).
 
+- Staging (2026-09-29, Daniele's pipeline): the relay hosts **any version whose pack is on the box**
+  (`--packs-dir /opt/ooze/packs`, `<tag>_<version>.pck`), so a staging build at https://oozesyndicate.com/staging/ gets real
+  server rooms once `deploy.sh --staging` has uploaded its pack; version.txt, current.pck and the test link stay the live
+  build until the plain deploy.sh that promotes it. A version with no pack is still refused ("version" -> browser rooms).
+  Packs older than 2 days are pruned at each plain deploy (the live one is kept).
+
 ## The box
 
 - Vultr, Singapore, `vhp-1c-1gb` (1 vCPU, 1 GB, NVMe, 2 TB traffic), Ubuntu 26.04 LTS, backups on.
@@ -56,6 +62,7 @@
 server/deploy.sh            # build/web -> the server (test link + match hosts) + version.txt
 server/deploy.sh --relay    # also relay.py + the service + Caddyfile, then restart - refused while a room is open
 server/deploy.sh --relay --force   # the same, closing the open rooms
+server/deploy.sh --staging  # only this build's index.pck as a versioned pack: server rooms for the staging site
 ```
 
 Until the server has the published build, players of that build still play: their rooms fall back to
