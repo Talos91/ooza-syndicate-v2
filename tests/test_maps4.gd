@@ -226,8 +226,8 @@ func _connected(sim: Sim, gone: Dictionary) -> bool:
 		var cur: int = open.pop_front()
 		for link in sim.adj[cur]:
 			var e: Dictionary = sim.edges[link[1]]
-			if e["state"] != "" or e["retracts"] or gone.get(link[0], false) or seen.has(link[0]):
-				continue
+			if ((e["state"] != "" or e["retracts"]) and not sim._hub_edges().has(link[1])) or gone.get(link[0], false) or seen.has(link[0]):
+				continue                                  # JUNCTION: a relay hub's decks hold like fixed ones (Sim._hub_edges)
 			seen[link[0]] = true
 			open.append(link[0])
 	for n in sim.nodes:
@@ -298,7 +298,7 @@ func _last_stand(m: Dictionary) -> void:
 						if not fallen_rings.has(nb["ring"]) and not gone.get(nb["id"], false):
 							waiting = true
 						var le: Dictionary = sim.edges[link[1]]
-						if not gone.get(nb["id"], false) and le["state"] == "" and not le["retracts"]:
+						if not gone.get(nb["id"], false) and ((le["state"] == "" and not le["retracts"]) or sim._hub_edges().has(link[1])):
 							anchored = true
 					if waiting and anchored:
 						ok_relays = false
@@ -606,6 +606,44 @@ func _very_last_stand() -> void:
 			"%s: already down to one platform at 6:00 - Very Last Stand does nothing" % m["code"])
 
 
+func _hubs(pool: Array) -> void:
+	## JUNCTION: relay hubs (maps 5.0): a rotation / switch keeping 2+ decks in every state holds to the map, so a hub on
+	## the survivor ring never falls with a wave (Sim._hub_edges in _islands) - the 6-way grinder / switch centres.
+	var seen := 0
+	for path in pool:
+		var m := MapBuilder.load_map(path)
+		var md: String = m["modes"][0]
+		var seats := {}
+		for s in m["seats"][md]:
+			seats[int(s["node"])] = s["seat"]
+		var sim := Sim.new()
+		sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 1)
+		var hub_nodes := {}
+		for i in sim._hub_edges():
+			hub_nodes[sim.edge_controller[i]] = true
+		if hub_nodes.is_empty():
+			continue
+		for method in m["lastStand"].get("methods", []):
+			if method == "chaos":
+				continue
+			var order: Array = m["lastStand"]["orders"][method]
+			var sim2 := Sim.new()
+			sim2.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 1)
+			sim2._map_last_stand = {"methods": [method], "orders": {method: order}}
+			sim2._ring_orders = sim2._map_last_stand["orders"]
+			sim2._start_rings()
+			for h in hub_nodes:
+				if int(sim2.nodes[h]["ring"]) != int(order[-1]):
+					continue
+				seen += 1
+				var dropped := false
+				for w in sim2.last_stand_waves:
+					if h in w:
+						dropped = true
+				check(not dropped, "%s %s: survivor-ring relay hub %d never falls with a wave" % [m["code"], method, h])
+	check(seen > 0 or not pool.any(func(p): return str(p).contains("N-09")), "a hub map in the pool was checked (%d hubs)" % seen)
+
+
 func _run() -> void:
 	var pool := MapPool.all()
 	var baked := Array(DirAccess.get_files_at(MapPool.DIR)).filter(func(f): return f.trim_suffix(".remap").ends_with(".json")).size()
@@ -625,5 +663,6 @@ func _run() -> void:
 	_heights()
 	_drop_timing()
 	_very_last_stand()
+	_hubs(pool)
 	print("\n%d checks - %s" % [checks, "ALL PASSED (0 failed)" if failures == 0 else "%d FAILED" % failures])
 	quit(1 if failures > 0 else 0)
