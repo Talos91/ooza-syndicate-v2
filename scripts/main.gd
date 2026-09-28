@@ -132,8 +132,10 @@ static var last_map_path := ""                 # MAIN MENU remembers the last ma
 var director: TutorialDirector = null            # a lesson is on (null: a normal match)
 var coach: CoachOverlay = null
 var menu_faction := ""                           # the player's own menu faction, kept while a lesson plays VEX
+var menu_ai := ""                                # AUDIT FIX: the player's own menu AI level, kept while a lesson plays its own
 var _coach_version := -1
 static var menu_open := ""                       # after a relaunch: open this menu page instead of MAIN
+var relaunched := false                          # AUDIT FIX: this scene came from a relaunch carrying your faction (Menu)
 # --- CAMPAIGN (CAMPAIGN-DESIGN.md §4 / §5): the mission director, its overlay, the menu settings kept for afterwards ---
 var mission: MissionDirector = null              # a campaign mission is on (null: not one)
 var mission_overlay: MissionOverlay = null
@@ -142,6 +144,10 @@ var mission_menu_ai := ""
 var end_shot := ""                               # UI: --end-shot=win|lose|draw|details|pause|settings|out|reconnect (_end_shot)
 static var mission_arg_used := false             # --mission=<key> starts it once per run (a leave never loops back)
 # --- end CAMPAIGN ---
+# --- AUDIT FIX (2026-09-28, audit-sim A4 + audit-client A1): a room's settings never stay applied offline ---
+static var own_settings := {}                    # the player's own LAST STAND / ABILITIES / HIDDEN COUNTS, taken offline
+static var room_rules := false                   # a room's round wrote its settings and numbers into Rules (Net._launch)
+# --- end AUDIT FIX ---
 
 
 func _ready() -> void:
@@ -151,12 +157,17 @@ func _ready() -> void:
 	Engine.max_fps = Net.DEDICATED_FPS if Net.dedicated else 60   # never spin faster than the screen (menu included)
 	PerfProfile.apply(self)                            # Alpha 21 OPT-RENDER: graphics profile, fps cap, map batching (perf_profile.gd)
 	Sfx.attach(self)                                   # SOUND: the match's sounds + the saved volume (sfx.gd; never on the room server)
-	MissionDirector.restore_settings()                 # CAMPAIGN: a blind mission's HIDE ENEMY COUNTS goes back
+	MissionDirector.restore_settings()                 # CAMPAIGN / TUTORIAL: a mission's or lesson's pinned settings go back
 	if Net.online():                                   # a room launched (or relaunched) a round
+		room_rules = true                              # AUDIT FIX: Net._launch wrote the room's settings into Rules
 		_start_online()
 		return
+	if not Net.dedicated:                              # AUDIT FIX: offline - the room's numbers and toggles go, yours come back
+		restore_own_settings()
+		keep_own_settings()
 	if Net.dedicated:                                  # the room server's match host between rounds: no menu, no screen
 		return
+	relaunched = relaunch.has("faction")
 	if relaunch.has("faction"):
 		SEAT_FACTIONS[HUMAN] = relaunch["faction"]
 		ai_level = relaunch.get("ai", ai_level)
@@ -642,7 +653,7 @@ func _random_rematch_map() -> Dictionary:
 	var need := _human_count()
 	var candidates := []
 	for mp in MapPool.battlefield():
-		var m := MapBuilder.load_map(mp)
+		var m := pool_map(mp)                          # AUDIT FIX (B1): parsed once per session
 		var md := _rematch_mode_for(m, need)
 		if md != "":
 			candidates.append({"map": mp, "mode": md})
@@ -671,6 +682,48 @@ func rematch_random() -> void:
 	restart()
 
 
+# --- AUDIT FIX (2026-09-28, audit-client B1): the battlefield pool's maps parsed once per session ---
+static var _pool_maps := {}                      # path -> the parsed map (shared, read-only: the menu and REMATCH)
+
+
+static func pool_map(path: String) -> Dictionary:
+	## A pool map's parsed JSON for the menu's cards and REMATCH ON A RANDOM MAP - read-only, never handed to a Sim
+	## (a match loads its own copy: MapBuilder.load_map). Parsing all 88 cost ~37 ms (desktop) on every menu entry.
+	if not _pool_maps.has(path):
+		_pool_maps[path] = MapBuilder.load_map(path)
+	return _pool_maps[path]
+
+
+# --- AUDIT FIX (2026-09-28): the player's own match settings around online rounds ---
+static func keep_own_settings() -> void:
+	## Offline (main._ready, the SETUP toggles): remember the player's own LAST STAND / ABILITIES / HIDDEN COUNTS,
+	## so they come back after a room's round has written the room's into Rules.
+	if room_rules:
+		return
+	own_settings = {"last_stand": Rules.last_stand, "abilities_on": Rules.abilities_on,
+			"hide_enemy_counts": Rules.hide_enemy_counts}
+
+
+static func restore_own_settings() -> void:
+	## After a room's round (LEAVE ROOM, back offline): the default numbers again - no balance preset, the default
+	## forge bonus and speeds (Net._launch sets them for the round) - and the player's own toggles. A no-op while no
+	## room wrote anything, so the Debug panel's offline tuning still carries to the next match.
+	if not room_rules:
+		return
+	room_rules = false
+	Rules.apply_balance("")
+	Rules.forge_bonus = Rules.FORGE_BONUS_DEFAULT
+	Rules.deck_speed = Rules.DECK_SPEED_DEFAULT
+	Rules.node_speed_mult = Rules.NODE_SPEED_MULT_DEFAULT
+	Rules.door_rate = Rules.DOOR_RATE_DEFAULT
+	Rules.node_fight_mult = Rules.NODE_FIGHT_MULT_DEFAULT
+	if not own_settings.is_empty():
+		Rules.last_stand = bool(own_settings["last_stand"])
+		Rules.abilities_on = bool(own_settings["abilities_on"])
+		Rules.hide_enemy_counts = bool(own_settings["hide_enemy_counts"])
+# --- end AUDIT FIX ---
+
+
 func to_menu(page := "") -> void:
 	## `page` (UI, Alpha 21: the result screen's CONTINUE / CHANGE LOADOUT): open that menu page instead of MAIN.
 	if started and not sim.over and director == null and mission == null:   # PROGRESSION (Alpha 21): left early
@@ -693,10 +746,10 @@ func to_menu(page := "") -> void:
 
 # ------------------------------------------------------------------ world
 func _apply_quality() -> void:
+	## Phones: no shadows, no MSAA. (AUDIT FIX: the old 0.75 3D render scale is gone - PerfProfile renders every
+	## profile at full resolution, the unfiltered upscale gave the "minecraft" steps; a phone on FULL got it back.)
 	if mobile:
 		sun.shadow_enabled = false
-		get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-		get_viewport().scaling_3d_scale = 0.75
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
 
 
