@@ -4144,9 +4144,8 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, mo
 		art.position = Vector2(tx, 7)
 		art.size = Vector2(ts, ts)
 		r.add_child(art)
-		r.add_child(UiKit.emblem_node(f, ts * 0.42, art.position + Vector2(ts * 0.6, ts * 0.58)))   # the race emblem
 		title_text = ("YOU / " if id == Net.local_id() else "") + str(UiKit.NAMES[f])
-		var words := ["HOST" if id == Net.room_owner or (id == 1 and not Net.server_hosted()) else "JOINED"]
+		var words := ["HOST  ·  DEPLOYS" if id == Net.room_owner or (id == 1 and not Net.server_hosted()) else "JOINED"]   # READY: DEPLOY is the owner's ready
 		if Net.is_away(id):
 			words.append("RECONNECTING")
 			sub_col = UiKit.STAR
@@ -4154,11 +4153,24 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, mo
 			words.append("PICKED: MOVE ON A TEAM")
 			sub_col = UiKit.accent(shell_f)
 		if id != Net.room_owner and not Net.is_away(id):   # READY: who the room waits for, in words and the seat's colour
-			if Net.is_ready(id):
-				var tag := UiKit.label(self, "READY", 14, col, true)
-				var tagw := UiKit.text_w(self, "READY", 14, true)
-				tag.position = Vector2(right - tagw, (h - UiKit.line_h(self, 14, true)) / 2.0)
-				r.add_child(tag)
+			if Net.is_ready(id):                           # a READY chip in the seat's colour, a drawn tick in it
+				var tagw := UiKit.text_w(self, "READY", 13, true) + 5.0 * 2.0 + 44.0
+				var th := UiKit.line_h(self, 13, true) + 12.0
+				var chip := Panel.new()
+				chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				chip.add_theme_stylebox_override("panel", UiKit.sb(Color(col, 0.2), col, 2, 4))
+				chip.position = Vector2(right - tagw, (h - th) / 2.0)
+				chip.size = Vector2(tagw, th)
+				r.add_child(chip)
+				var tick := MatchScreens.Mark.new()
+				tick.kind = "check"
+				tick.color = col
+				tick.position = Vector2(10.0, (th - 16.0) / 2.0)
+				tick.size = Vector2(16, 16)
+				chip.add_child(tick)
+				var tag := UiKit.label(self, "READY", 13, UiKit.INK, true, 2)
+				tag.position = Vector2(32.0, (th - UiKit.line_h(self, 13, true)) / 2.0)
+				chip.add_child(tag)
 				right -= tagw + 12.0
 			else:
 				words.append("NOT READY")
@@ -4181,12 +4193,16 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, mo
 		sub = "The AI plays this seat" if Net.ai_fill != "" else "Waiting for a player"
 	var lx := tx + ts + 12.0
 	var ty := (h - l1 - l2) / 2.0
-	for part in [[title_text, 16, UiKit.INK, true, ty], [sub, 13, sub_col, false, ty + l1]]:
+	var ex := 0.0
+	if id >= 0:                                        # the race emblem before the player's name
+		ex = l1 + 6.0
+		r.add_child(UiKit.emblem_node(str(Net.roster[id]["faction"]), l1, Vector2(lx, ty)))
+	for part in [[title_text, 16, UiKit.INK, true, ty, ex], [sub, 13, sub_col, false, ty + l1, 0.0]]:
 		var l := UiKit.label(self, part[0], part[1], part[2], part[3])
 		l.clip_text = true
 		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		l.position = Vector2(lx, part[4])
-		l.size = Vector2(maxf(10.0, right - lx), UiKit.line_h(self, part[1], part[3]))
+		l.position = Vector2(lx + part[5], part[4])
+		l.size = Vector2(maxf(10.0, right - lx - part[5]), UiKit.line_h(self, part[1], part[3]))
 		r.add_child(l)
 	return h
 
