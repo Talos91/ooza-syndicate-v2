@@ -54,7 +54,7 @@ const MIN_STEP := 1.5                # a doing-step shows at least this long, ev
 # One table, so per-faction voices or translations can replace it without touching the steps. Every line uses the
 # script's standard vocabulary (node, your home, neutral node, the rival, units, line, deck, vat, tier, cap, badge,
 # SEND panel, inspector, relay, fire, drop, the structure names, skill / dock, Last Stand, danger mark). Placeholders
-# ({cost}, {secs}, {garrison}, {cap}, {ls}, {vls}, {hops}, {ult}, {skill1}, {skill2}, {ult_name}, {n}) are filled
+# ({cost}, {secs}, {garrison}, {cap}, {ls}, {vls}, {hops}, {hops_decks}, {ult}, {skill1}, {skill2}, {ult_name}, {n}) are filled
 # from Rules and the live board by _fmt().
 const LINES := {
 	"got_it": "GOT IT", "next_step": "NEXT", "skip_step": "SKIP STEP", "restart": "RESTART", "exit": "EXIT",
@@ -143,7 +143,7 @@ const LINES := {
 	"L6.forge": "Build a FORGE on the next relay: your units hit harder and your nodes hold better.",
 	"L6.hub": "Build a MONSTER HUB on the last relay. One per commander - insurance insists.",
 	# 0.19.2's flow (TUTORIAL-SCRIPT L6 "send", trimmed to <= 90 characters)
-	"L6.send": "Tap the monster on its hub, then a node up to {hops} decks away. It kicks lines off decks.",
+	"L6.send": "Tap the monster on its hub, then a node up to {hops_decks} away. It kicks lines off decks.",
 	"L6.take": "The monster takes the node at the end. Only a drop stops it.",
 	"L6.fell": "Monsters drop like everything else. Choose the route better. Insurance noticed.",
 	"L6.cooldown": "The hub needs time to grow the next monster. Make each one count.",
@@ -2030,6 +2030,7 @@ func _fmt(text: String) -> String:
 		"secs": str(int(Rules.BUILD_SECONDS)),
 		"ls": _mmss(Rules.LAST_STAND_TIME), "vls": _mmss(Rules.VERY_LAST_STAND_TIME),
 		"hops": str(Rules.MONSTER_REACH),
+		"hops_decks": "1 deck" if Rules.MONSTER_REACH == 1 else "%d decks" % Rules.MONSTER_REACH,   # 0.22.1 reach 1: "1 decks" read wrong
 		"ult": str(roundi(Rules.ULT_CHARGE_TIME / 60.0)),
 		"cap": str(Rules.shown(Rules.CAPS[1])),
 		"faction": str(Rules.FACTION_NAMES.get(faction, [faction.to_upper()])[0]),
