@@ -1,11 +1,13 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.21.11 "Alpha 21" - 2026-09-28 (player names online)
+## 0.21.11 "Alpha 21" - 2026-09-28 (player names online; creature-free page art)
 
 - **Other players' names online** (🖥️ Server, protocol ooze20-net-7): each player's ACCOUNT name travels in the room, cleaned
   by the host (printable, <= 16 characters) and made unique ("NAME (2)"); a player without an account shows as "PLAYER <seat>".
   The lobby rows read "NAME · FACTION" after the emblem; VERSUS, the results, MATCH DETAILS, the top-bar chips, chat and the
   rematch list show the names.
+- Every page but HOME on Daniele's creature-free wallpapers (the same scene as HOME, one creature per page; +1.2 MB); the
+  results no longer read "YOU (YOU)" offline.
 - The room server can also answer on rooms.oozesyndicate.com (Caddyfile; the game still connects to the sslip.io address
   until that DNS record is live).
 
