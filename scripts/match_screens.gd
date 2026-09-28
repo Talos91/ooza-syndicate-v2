@@ -251,7 +251,7 @@ func details(d: Dictionary, table: Dictionary) -> void:
 	var notes: Array = d.get("notes", [])
 	var rows: Array = table.get("rows", [])
 	var inner_h := (notes.size() + rows.size()) * row_h
-	var head_h := 12.0 + maxf(UiKit.line_h(self, 18, true), UiKit.line_h(self, 12, true) + 10.0) + 10.0 + UiKit.line_h(self, 12, true) + 12.0
+	var head_h := 12.0 + maxf(UiKit.line_h(self, 18, true), UiKit.line_h(self, 12, true) + 10.0) + 10.0 + UiKit.line_h(self, 12, true) * 2.0 + 12.0
 	var box := Rect2(mg, y, v.x - 2.0 * mg, minf(bottom - 12.0 - y, head_h + inner_h + 10.0))   # no taller than its rows
 	UiKit.panel(self, box.position, box.size, f)
 	var pad := 18.0
@@ -270,18 +270,24 @@ func details(d: Dictionary, table: Dictionary) -> void:
 	var cols: Array = table.get("cols", [])
 	var label_w := (x1 - x0) * (0.4 if cols.size() <= 2 else 0.3)
 	var col_w := (x1 - x0 - label_w) / maxf(1.0, float(cols.size()))
-	UiKit.add(self, UiKit.label(self, "MATCH STAT", 12, acc, true, 2), Vector2(x0 + 12.0, ty))
+	var lh := UiKit.line_h(self, 12, true)
+	var two := false                                   # "YOU / SOLAR" on one line, or over two where it doesn't fit
+	for c in cols:
+		two = two or UiKit.text_w(self, "%s / %s" % [c["head"], c["faction"]], 12, true) + 16.0 > col_w - 12.0
+	var hh := lh * (2.0 if two else 1.0)
+	UiKit.add(self, UiKit.label(self, "MATCH STAT", 12, acc, true, 2), Vector2(x0 + 12.0, ty + hh - lh))
 	for i in range(cols.size()):
 		var c: Dictionary = cols[i]
-		var hl := UiKit.label(self, "%s / %s" % [c["head"], c["faction"]], 12, acc, true, 1)
+		var hl := UiKit.label(self, ("%s
+%s" if two else "%s / %s") % [c["head"], c["faction"]], 12, acc, true, 1)
 		hl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		hl.clip_text = true
-		hl.size = Vector2(col_w - 12.0, UiKit.line_h(self, 12, true))
+		hl.size = Vector2(col_w - 12.0, hh)
 		UiKit.add(self, hl, Vector2(x0 + label_w + i * col_w, ty))
 		var cw := minf(46.0, col_w - 12.0)             # the seat's own colour: which side of the board it was
-		content.add_child(UiKit.rect(Vector2(x0 + label_w + (i + 1) * col_w - 12.0 - cw, ty + UiKit.line_h(self, 12, true) + 3.0),
+		content.add_child(UiKit.rect(Vector2(x0 + label_w + (i + 1) * col_w - 12.0 - cw, ty + hh + 3.0),
 				Vector2(cw, 3.0), Rules.seat_color(str(c["seat"]))))
-	ty += UiKit.line_h(self, 12, true) + 12.0
+	ty += hh + 12.0
 	content.add_child(UiKit.rect(Vector2(x0, ty - 1.0), Vector2(x1 - x0, 1.0), Color(UiKit.FRAME, 0.9)))
 	# the rows (a mission's notes first), scrolling when they don't fit
 	var avail := box.end.y - 8.0 - ty
@@ -352,7 +358,7 @@ func card(d: Dictionary) -> Dictionary:
 	var body := str(d.get("body", ""))
 	var body_h := UiKit.text_h(self, body, 14, cw - 2.0 * pad) + 6.0 if body != "" else 0.0
 	var head_h := UiKit.line_h(self, 12, true) + 2.0 + UiKit.line_h(self, 34, true) + 8.0
-	var hero_h := minf(col_h, cw - bw - 3.0 * pad)
+	var hero_h := minf(maxf(col_h, 230.0 if ph else 170.0), cw - bw - 3.0 * pad)   # a short column still shows the character
 	var ch := pad + head_h + body_h + (10.0 + maxf(col_h, hero_h) if rows > 0 else 0.0) + pad
 	var pos := ((v - Vector2(cw, ch)) / 2.0).floor()
 	pos.y = maxf(pos.y, 6.0)
