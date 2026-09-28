@@ -89,8 +89,9 @@ const SPOTLIGHT_SHADER := "
 shader_type canvas_item;
 uniform vec4 dim_color : source_color = vec4(0.008, 0.016, 0.024, 0.42);   // 0.20.2: lighter, the map stays readable
 uniform vec4 ring_color : source_color = vec4(0.094, 0.855, 0.910, 1.0);
+uniform float dim_amount = 1.0;      // 0 on a watch step: the rings stay, the fog goes
 uniform int num_c;
-uniform vec3 circles[8];
+uniform vec3 circles[24];
 uniform int num_r;
 uniform vec4 rects[8];
 uniform float feather = 16.0;
@@ -108,7 +109,7 @@ void fragment() {
 	float inside = 0.0;
 	float ring = 0.0;
 	float pulse = 0.55 + 0.45 * sin(TIME * 3.0);
-	for (int i = 0; i < 8; i++) {
+	for (int i = 0; i < 24; i++) {
 		if (i >= num_c) break;
 		float d = circle_d(p, circles[i]);
 		inside = max(inside, 1.0 - smoothstep(-feather, feather, d));
@@ -122,7 +123,7 @@ void fragment() {
 		float rd = abs(d - (5.0 * pulse));
 		ring = max(ring, 1.0 - smoothstep(0.0, ring_w * 2.2, rd));
 	}
-	vec4 col = mix(dim_color, vec4(0.0), inside);
+	vec4 col = mix(vec4(dim_color.rgb, dim_color.a * dim_amount), vec4(0.0), inside);
 	col = mix(col, vec4(ring_color.rgb, ring_color.a), ring * (1.0 - inside * 0.4));
 	COLOR = col;
 }
@@ -959,10 +960,10 @@ func show_step(header: String, text: String, dots: int, dot_index: int, button_t
 var _spot_key := []                                    # spotlight()'s last inputs (a frame with the same ones does nothing)
 
 
-func spotlight(screen_points: Array, radius: float, rects: Array) -> void:
+func spotlight(screen_points: Array, radius: float, rects: Array, dim := true) -> void:
 	## Circles round nodes / lines and rounded rects round HUD controls, at once (safe every frame: the shader
 	## uniforms and the card's corner are worked out again only when something they depend on moved - audit B3).
-	var key := [screen_points, radius, rects, _obstacles, _avoid, _card.size if is_instance_valid(_card) else Vector2.ZERO,
+	var key := [screen_points, radius, rects, dim, _obstacles, _avoid, _card.size if is_instance_valid(_card) else Vector2.ZERO,
 			is_instance_valid(_card) and _card.visible, get_viewport().get_final_transform()]
 	if key == _spot_key:
 		return
@@ -971,6 +972,7 @@ func spotlight(screen_points: Array, radius: float, rects: Array) -> void:
 	for p in screen_points:
 		_targets_px.append({"c": p, "r": radius})
 	_target_rects = rects.duplicate()
+	_dim_mat.set_shader_parameter("dim_amount", 1.0 if dim else 0.0)
 	if _targets_px.is_empty() and _target_rects.is_empty():
 		_dim.visible = false
 	else:
@@ -1007,10 +1009,12 @@ func _apply_spotlight() -> void:
 	for t in _targets_px:
 		var c: Vector2 = world_to_overlay(t["c"])
 		circles.append(Vector3(c.x, c.y, (t["r"] as float) * _overlay_scale()))
-	while circles.size() < 8:
+	if circles.size() > 24:
+		circles.resize(24)
+	while circles.size() < 24:
 		circles.append(Vector3(-99999.0, -99999.0, 0.0))
 	_dim_mat.set_shader_parameter("circles", circles)
-	_dim_mat.set_shader_parameter("num_c", _targets_px.size())
+	_dim_mat.set_shader_parameter("num_c", mini(_targets_px.size(), 24))
 	var rects := []
 	for r in _target_rects:
 		var rr: Rect2 = r

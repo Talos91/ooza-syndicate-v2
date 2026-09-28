@@ -2116,14 +2116,8 @@ func _coach_sync() -> void:
 		pts.append(cam.unproject_position(sim.nodes[id]["pos"]))
 		if _tap_point(id) != sim.nodes[id]["pos"]:     # RELAY V2: the relay's button is lit with its node
 			pts.append(cam.unproject_position(_tap_point(id)))
-	for ei in tg.get("decks", []):
-		var dl := sim.deck_line(int(ei))
-		if dl.size() >= 2:
-			pts.append(cam.unproject_position(((dl[0] as Vector3) + (dl[-1] as Vector3)) / 2.0))
-	for hid in tg["lines"]:
-		var h := sim._horde(int(hid))
-		if not h.is_empty():
-			pts.append(cam.unproject_position(Sim.sample(h, h["s"])[0]))
+	for q in director.follow_points(tg):              # 0.22.1: lines head to tail, the monster, the decks - never fogged
+		pts.append(cam.unproject_position(q))
 	var rects := []
 	for key in tg["rects"]:
 		var r := _tutorial_rect(str(key))
@@ -2147,7 +2141,7 @@ func _coach_sync() -> void:
 		avoid.append(hud.banner.get_global_rect())
 	avoid.append_array(hud.callouts.rects())          # HUD pass: the placed messages
 	coach.set_avoid(avoid)
-	coach.spotlight(pts, radius, rects)
+	coach.spotlight(pts, radius, rects, not tg.get("open", false))   # a watch step: rings without the dim
 	_tutorial_gesture()
 	_tutorial_label(tg.get("label", []))
 	coach.set_finger_down(not touches.is_empty() or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))

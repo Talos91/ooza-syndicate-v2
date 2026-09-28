@@ -41,6 +41,8 @@ func _init() -> void:
 	test_l0()
 	test_senders()
 	test_short_sends()
+	test_follow()
+	test_skip_first_launch()
 	test_l1()
 	test_l2()
 	test_l3()
@@ -333,6 +335,127 @@ func test_senders() -> void:
 	d7.skip_step()
 	var lit: Array = d7.target()["nodes"]
 	check(d7.names["H"] in lit and d7.names["A1"] in lit and d7.names["A2"] in lit, "senders: L7 evacuate lights every node you can send from")
+
+
+# ------------------------------------------------------------------ 0.22.1: nothing you must watch is ever fogged
+func _covered(d: TutorialDirector, pts: Array) -> bool:
+	## Every point inside a spotlight circle (world radius R x 1.35, what main draws round each follow point).
+	var fp := d.follow_points()
+	var nodes: Array = d.target()["nodes"]
+	for n in nodes:
+		fp.append(d.sim.nodes[n]["pos"])
+	for q in pts:
+		var ok := false
+		for c in fp:
+			if Vector2((q as Vector3).x - (c as Vector3).x, (q as Vector3).z - (c as Vector3).z).length() <= Rules.R * 1.35:
+				ok = true
+				break
+		if not ok:
+			return false
+	return true
+
+
+func _line_pts(h: Dictionary) -> Array:
+	var out := []
+	var len := Sim.chain_length(h)
+	var k := 0.0
+	while k <= len:
+		out.append(Sim.sample(h, h["s"] - k)[0])
+		k += 1.0
+	return out
+
+
+func test_follow() -> void:
+	## Daniele (0.22.1): "never have the area necessary to look at covered in fog of war for example the monster
+	## tutorial the monster is under the fog". Every metre of the rival line (L3 defend, L4 on the relay deck) and the
+	## monster (L6) sits inside a spotlight circle on every frame it moves; the watch steps drop the dim.
+	var r3 := make(3)
+	var d3: TutorialDirector = r3[0]
+	var s3: Sim = r3[1]
+	while str(d3.L["steps"][d3.step_i]["key"]) != "defend":
+		d3.skip_step()
+	var ok3 := true
+	var frames3 := 0
+	for i in range(int(12.0 / DT)):
+		tick(d3, s3)
+		for h in s3.hordes:
+			if h["owner"] == "B" and h["state"] == "move":
+				frames3 += 1
+				if not _covered(d3, _line_pts(h)):
+					ok3 = false
+	check(ok3 and frames3 > 20, "follow: L3's rival line is inside the spotlight, head to tail, every frame (%d frames)" % frames3)
+	var r4 := make(4)
+	var d4: TutorialDirector = r4[0]
+	var s4: Sim = r4[1]
+	while str(d4.L["steps"][d4.step_i]["key"]) != "prompt":
+		d4.skip_step()
+	var ok4 := true
+	var on_deck := 0
+	for i in range(int(40.0 / DT)):
+		tick(d4, s4)
+		var hid := d4.catch_line()
+		var h := s4._horde(hid)
+		if not h.is_empty() and h["state"] == "move":
+			if deck_metres(s4, hid, d4.names["R"]) > 0.0:
+				on_deck += 1
+			if not _covered(d4, _line_pts(h)):
+				ok4 = false
+		if on_deck > 40:
+			break
+	check(ok4 and on_deck > 0, "follow: L4's rival line on the relay deck is inside the spotlight every frame (%d on the deck)" % on_deck)
+	var r6 := make(6)
+	var d6: TutorialDirector = r6[0]
+	var s6: Sim = r6[1]
+	var n6: Dictionary = d6.names
+	while str(d6.L["steps"][d6.step_i]["key"]) != "send":
+		d6.skip_step()
+	var hub: Dictionary = s6.nodes[n6["R3"]]
+	hub["structure"] = "monster_hub"
+	hub["units"] = 60.0 * Rules.SCALE
+	hub["monster_ready_t"] = s6.time
+	check(s6.launch_monster(n6["R3"], "A", n6["M2"]) == "", "follow: the L6 monster launches")
+	d6.skip_step()                                              # the take step: the monster walks, a rival line meets it
+	var ok6 := true
+	var walked := 0
+	for i in range(int(30.0 / DT)):
+		tick(d6, s6)
+		for m in s6.monsters:
+			if m["seat"] == "A" and m["state"] == "walking":
+				walked += 1
+				if not _covered(d6, [m["pos"]]):
+					ok6 = false
+	check(ok6 and walked > 40, "follow: the L6 monster is inside the spotlight every frame it walks (%d frames)" % walked)
+	for pair in [[2, "watch"], [4, "warning"], [4, "waterfall"], [6, "burst"], [6, "take"], [7, "vls"]]:
+		var rr := make(int(pair[0]))
+		var dd: TutorialDirector = rr[0]
+		while str(dd.L["steps"][dd.step_i]["key"]) != str(pair[1]):
+			dd.skip_step()
+		check(dd.target()["open"], "follow: L%d '%s' is a watch step - no dim" % [pair[0], pair[1]])
+
+
+func test_skip_first_launch() -> void:
+	## The SKIP rule (audit-fixes) on the first-launch path: a tour finished with SKIP STEP is skipped, not completed,
+	## still marks the tutorial offered (no second forced start), CONTINUE goes on to L1, and TRAINING says so.
+	_wipe()
+	TutorialDirector.reload_progress()
+	check(TutorialDirector.first_launch_due(PackedStringArray(), false), "skip rule: a fresh device still opens the tour")
+	var r := make(0)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var guard := 0
+	while d.state == "running" and guard < 30:
+		d.skip_step()
+		tick(d, sim)
+		guard += 1
+	check(d.state == "complete" and d.result.get("skipped", false) and d.result.get("tour", false), "skip rule: a skipped tour ends skipped, then on to L1")
+	TutorialDirector.reload_progress()
+	check(TutorialDirector.is_skipped(0) and not TutorialDirector.is_done(0), "skip rule: the tour is skipped, not completed")
+	check(TutorialDirector.offered and not TutorialDirector.first_launch_due(PackedStringArray(), false), "skip rule: no second forced start")
+	check(TutorialDirector.first_unfinished() == 1, "skip rule: CONTINUE goes on to L1")
+	var row: Dictionary = TutorialDirector.lesson_rows()[0]
+	check(row["skipped"] and TutorialDirector.line("skipped") == "SKIPPED - replay to complete", "skip rule: TRAINING shows 'SKIPPED - replay to complete'")
+	_wipe()
+	TutorialDirector.reload_progress()
 
 
 func test_short_sends() -> void:
