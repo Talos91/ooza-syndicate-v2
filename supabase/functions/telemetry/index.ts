@@ -14,7 +14,7 @@ const MAX_EVENT = 2048;
 
 // the fields each kind may carry (numbers, short ids and enums only - no names, codes or typed text)
 const FIELDS: Record<string, string[]> = {
-  session: ["platform", "mobile", "screen", "dpr", "renderer", "touch", "graphics", "fps_cap", "lang_region"],
+  session: ["platform", "mobile", "screen", "dpr", "renderer", "touch", "graphics", "fps_cap"],
   match: ["map", "mode", "faction", "result", "duration_s", "ai_level", "online", "server_hosted", "abilities",
     "last_stand", "left_early", "placed", "stats"],
   perf: ["where", "frame_ms_p50", "frame_ms_p95", "frame_ms_max", "fps_avg", "fps_min", "draw_p95", "objects",

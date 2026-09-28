@@ -28,18 +28,19 @@ Owner: the "Leaderboard, progression, and currency" session. Design: `Docs/Game 
 - RPCs: `set_name(new_name)`, `leaderboard_season_wins(lim)` (a season = the UTC calendar month for now),
   `ingest_match(r)` (service role only).
 - **Alpha 21 - telemetry, crash reports, deletion** (`01 Rules/TELEMETRY-PRIVACY-DESIGN.md`):
-  - `migrations/telemetry_and_crashes.sql` - tables `telemetry_events` (account id, kind, data <= 2 KB; cascade on
+  - `migrations/20260928062303_telemetry_and_crashes.sql` (+ `20260928062812_ingest_telemetry_build_param.sql`, the fix for
+    an ambiguous `build` that made every batch answer 500) - tables `telemetry_events` (account id, kind, data <= 2 KB; cascade on
     account deletion) and `crash_reports` (per signature + build, no account id, <= 5 samples), both RLS on with **no
     client policy**; `ingest_telemetry(uid, build, events)` (service role: <= 300 events per player per UTC day, one
     crash per player per signature per day); `purge_telemetry()` run nightly by pg_cron (`ooze-telemetry-purge`,
-    03:17 UTC: events 60 days, crash reports 90 days after last seen). **Not applied yet** - rename the file after
-    the version `list_migrations` shows once it is.
+    03:17 UTC: events 60 days, crash reports 90 days after last seen). **Live 2026-09-28** (Daniele's go).
   - `functions/telemetry/index.ts` (verify_jwt **on**): the player's batch (<= 50 events), fields whitelisted per kind,
     text scrubbed again; 429 when the day's cap is full.
   - `functions/delete-account/index.ts` (verify_jwt **on**, body `{"confirm": "DELETE"}`): deletes the caller's auth
     user; profiles / cloud_saves / faction_stats / telemetry_events cascade, match_seats keep the round with user_id null.
-  - Deploy: `apply_migration` with the file's SQL, `deploy_edge_function` for both (verify_jwt true), then
-    `tests/test_telemetry.gd -- --live` (it deletes its own test user).
+  - Both functions **live 2026-09-28** (verify_jwt true). Check with `tests/test_telemetry.gd -- --live` - it deletes its
+    own test user through delete-account, but its crash row ("live test crash #", no user id) stays: delete it by
+    signature afterwards.
 
 ## Dashboard switches Daniele sets (the tools can't)
 
