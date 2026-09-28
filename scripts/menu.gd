@@ -62,6 +62,7 @@ const MAP_TYPE_NAMES := {"all": "ALL", "brawl": "FAST", "siege": "FORTRESS", "co
 var _chat_btn: Button
 var _chat_t := 0.0
 var _move_pick := -1                               # host, team modes: the player picked to MOVE to a team
+var _lobby_note := ""                              # READY: the host's last notice in the lobby ("Settings changed - ...")
 const HUE_NAMES := ["red", "green", "blue", "gold", "purple", "cyan", "rose", "orange"]   # Rules.HUES, lobby order
 var _army := ""                                    # ARMIES: the faction whose preset is open
 var _army_back := Callable()                       # ARMIES: the page it was opened from
@@ -165,6 +166,7 @@ func setup(m: Node3D) -> void:
 	if not maps.any(func(x): return x["path"] == map_path):
 		map_path = maps[0]["path"]                     # the pool is maps4/: the old roster is archive
 	Net.lobby_changed.connect(_on_net_changed)
+	Net.order_feedback.connect(_on_lobby_note)         # READY: the host's notices show in the lobby's foot
 	show_main()
 
 
@@ -3870,13 +3872,34 @@ func show_lobby() -> void:
 		var go := UiKit.btn(self, "DEPLOY  →", Vector2(rx - 240.0, fy), Vector2(240, 50), func(): Net.start_match(), "primary", shell_f, 18)
 		go.disabled = not Net.can_start()
 		rx = go.position.x - 16.0
+		# READY: the owner's DEPLOY waits for every player's READY
+		var waiting := Net.present_ids().filter(func(id): return not Net.is_ready(int(id))).size()
+		if waiting > 0:
+			var ww := "WAITING FOR %d PLAYER%s" % [waiting, "" if waiting == 1 else "S"]
+			var wwid := UiKit.text_w(self, ww, 14, true)
+			_say(ww, Vector2(rx - wwid, fy + (bh - UiKit.line_h(self, 14, true)) / 2.0), 14, UiKit.STAR, 0.0, true)
+			rx -= wwid + 16.0
+		# --- end READY ---
 	else:
-		var hw := "THE HOST DEPLOYS WHEN READY"
-		var hwid := UiKit.text_w(self, hw, 14, true)
-		_say(hw, Vector2(rx - hwid, fy + (bh - UiKit.line_h(self, 14, true)) / 2.0), 14, UiKit.MUTED, 0.0, true)
+		# READY (Alpha 21, ooze20-net-6): a guest's READY / UN-READY where "the host deploys when ready" was; ready locks
+		# your faction, colour, team and army until you un-ready. 🧩 UI may restyle it (handoffs/🧩 UI.md).
+		var me_ready := Net.is_ready(Net.local_id())
+		var rt := "UN-READY" if me_ready else "READY  ✓"
+		var rw := maxf(UiKit.text_w(self, rt, 18, true) + 56.0, 200.0)
+		var rb := UiKit.btn(self, rt, Vector2(rx - rw, fy), Vector2(rw, 50), func():
+			_lobby_note = ""
+			Net.set_ready(not Net.is_ready(Net.local_id())), "secondary" if me_ready else "primary", shell_f, 18)
+		rb.disabled = Net.active or not Net.connected
+		rx = rb.position.x - 16.0
+		var hw := "THE HOST DEPLOYS WHEN EVERYONE IS READY" if me_ready else "PRESS READY WHEN YOUR PICKS ARE SET"
+		var hwid := minf(UiKit.text_w(self, hw, 13, true), rx - x - 120.0)
+		_clip(hw, Vector2(rx - hwid, fy + (bh - UiKit.line_h(self, 13, true)) / 2.0), 13, UiKit.MUTED, hwid, true)
 		rx -= hwid + 16.0
+		# --- end READY ---
 	var line := "%d / %d PLAYERS" % [Net.roster.size(), Net.slots()] + (("  ·  " + Net.status) if Net.status != "" else "")
-	_say(line, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, line, 13, rx - x)) / 2.0)), 13, UiKit.INK, rx - x)
+	if _lobby_note != "":                              # READY: the host's last notice (e.g. "Settings changed - press READY again")
+		line = _lobby_note.to_upper() + "  ·  " + line
+	_say(line, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, line, 13, rx - x)) / 2.0)), 13, UiKit.STAR if _lobby_note != "" else UiKit.INK, rx - x)
 	var gap := 18.0
 	var cw := (content.size.x - x * 2.0 - gap) / 2.0
 	var ch := fy - 12.0 - top
@@ -3898,7 +3921,7 @@ func show_lobby() -> void:
 	_chat_btn = chat
 	var army := UiKit.btn(self, "MY ARMY", Vector2.ZERO, Vector2(UiKit.text_w(self, "MY ARMY", 14, true) + 34.0, 42),
 			func(): show_armies(faction, show_lobby), "secondary", shell_f, 14)   # your preset = your loadout
-	army.disabled = Net.active
+	army.disabled = Net.active or Net.ready_locked()   # READY: a ready player's army is locked
 	var fh := _flow([share, chat, army], Vector2(code_w, y + maxf(0.0, (code_h - share.size.y) / 2.0)), w - code_w)
 	y += maxf(code_h, fh) + 16.0
 	# players (0.18.7, Daniele: "there should be so i can switch to my gf team"; every seat's colour is the same on every
@@ -3922,17 +3945,24 @@ func show_lobby() -> void:
 		groups.append([-1, range(Net.slots())])
 	for g in groups:
 		if team_mode:
+			var tb0 := content.get_child_count()
 			y += _team_button(int(g[0]), colours, Vector2(0, y), w) + 6.0
+			if Net.ready_locked():                     # READY: no JOIN while ready
+				_ready_lock(tb0)
 		for i in g[1]:
 			y += _lobby_row(i, by_slot.get(i, -1), colours, Vector2(0, y), w, host and team_mode) + 6.0
 		if team_mode:
 			y += 8.0
 	y += 10.0
 	y += _say("YOUR FACTION", Vector2(0, y), 12, UiKit.MUTED, 0.0, true, 2) + 8.0
+	var pk0 := content.get_child_count()               # READY: the picks below are locked while you're ready
 	y += _faction_row(Vector2(0, y), 50.0) + 14.0
 	var mine := Net.colour_of(Net.local_id())
 	y += _say("YOUR COLOUR" + (("  ·  " + mine.to_upper()) if mine != "" else ""), Vector2(0, y), 12, UiKit.MUTED, 0.0, true, 2) + 8.0
 	y += _colour_row(Vector2(0, y), w) + 12.0
+	if Net.ready_locked():
+		_ready_lock(pk0)
+		y += _say("You're READY: your picks are locked. UN-READY to change them.", Vector2(0, y), 13, UiKit.STAR, w) + 8.0
 	var hint := "Every seat has one colour, the same on every screen. " + (("Teammates share a hue family (%s); a colour from a free family moves your team to it." % " / ".join(
 			Net.families().map(func(f): return Rules.FAMILY_NAMES.get(f[0], "")))) if team_mode else "Seats go in join order.")
 	if Net.abilities and not ArmyPresets.map_has_relays(_selected_map()):
@@ -3985,13 +4015,30 @@ func show_lobby() -> void:
 	eb.disabled = not host
 	y += eb.size.y + 10.0
 	if host and not Net.can_start():
-		y += _say("DEPLOY opens when every seat is filled (or EMPTY SEATS: AI).", Vector2(0, y), 13, UiKit.MUTED, w)
+		y += _say("DEPLOY opens when every seat is filled (or EMPTY SEATS: AI) and every player is READY.", Vector2(0, y), 13, UiKit.MUTED, w)
 	_column_end(right, n0, y)
 
 
 func _leave_room() -> void:
 	Net.leave()
 	show_online()
+
+
+# --- READY (Alpha 21, ooze20-net-6): the lobby's ready lock and the host's notices ---
+func _ready_lock(from: int) -> void:
+	## Grey every button built since child `from` (a ready player's picks; the host refuses them anyway).
+	for i in range(from, content.get_child_count()):
+		var c := content.get_child(i)
+		for b in [c] + c.find_children("*", "BaseButton", true, false):
+			if b is BaseButton:
+				(b as BaseButton).disabled = true
+
+
+func _on_lobby_note(msg: String) -> void:
+	if _page == "lobby" and not Net.active:
+		_lobby_note = msg
+		show_lobby()
+# --- end READY ---
 
 
 func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, movable: bool) -> float:
@@ -4044,6 +4091,15 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, mo
 		if picked:
 			words.append("PICKED: MOVE ON A TEAM")
 			sub_col = UiKit.accent(shell_f)
+		if id != Net.room_owner and not Net.is_away(id):   # READY: who the room waits for, in words and the seat's colour
+			if Net.is_ready(id):
+				var tag := UiKit.label(self, "READY", 14, col, true)
+				var tagw := UiKit.text_w(self, "READY", 14, true)
+				tag.position = Vector2(right - tagw, (h - UiKit.line_h(self, 14, true)) / 2.0)
+				r.add_child(tag)
+				right -= tagw + 12.0
+			else:
+				words.append("NOT READY")
 		sub = "  ·  ".join(words) + (("  ·  " + hue.to_upper()) if hue != "" else "")
 		var lo = Net.roster[id].get("loadout", {})
 		right = _loadout_chips(r, f, lo if lo is Dictionary else {}, right, h / 2.0, clampf(h * 0.5, 26.0, 40.0)) - 10.0

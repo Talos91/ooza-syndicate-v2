@@ -140,6 +140,10 @@ func _build_sim(info: Dictionary) -> Sim:
 func _host_match(h: Node) -> void:
 	## Host view: deploy, the guest peer loads its world, every seat plays itself (AI) until --at.
 	h.no_reload = true
+	for p in peers.values():                          # READY (ooze20-net-6): every guest presses it before DEPLOY
+		if p != h:
+			p.set_ready(true)
+	await _frames(8)
 	h.start_match()
 	await _frames(4)
 	var gf: Node = peers["gf"]

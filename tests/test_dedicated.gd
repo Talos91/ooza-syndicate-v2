@@ -88,6 +88,13 @@ func _run() -> void:
 	a.toggle_last_stand()
 	check(await _wait(func(): return a.mode == "1v1" and a.last_stand != ls and b.last_stand != ls), "the owner toggles LAST STAND")
 
+	check(not a.can_start(), "READY: DEPLOY waits for the second player's READY")
+	b.set_ready(true)
+	check(await _wait(func(): return a.is_ready(b.assigned_id) and a.can_start()), "the second player presses READY: DEPLOY opens")
+	b.set_faction("solar")
+	b._send_to_host({"op": "faction", "faction": "solar"})
+	await _wait(func(): return false, 1.0)
+	check(str(a.roster[b.assigned_id]["faction"]) == "vex" and b.ready_locked(), "the server locks a READY player's faction")
 	check(a.can_start() and not b.can_start(), "the room is full: only the owner may DEPLOY")
 	a.start_match()
 	check(await _wait(func(): return a.active and b.active and not a.match_info.is_empty(), 15.0), "DEPLOY launches the round on both")

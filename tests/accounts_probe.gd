@@ -59,6 +59,8 @@ func _run() -> void:
 	b.join_room(a.room_code, "ember")
 	await _wait(func(): return b.connected and a.roster.size() == 2)
 	print("room %s: player A signed in (token %d chars), player B a plain guest" % [a.room_code, token.length()])
+	b.set_ready(true)                                  # READY (ooze20-net-6): DEPLOY waits for it
+	await _wait(func(): return a.all_ready())
 	a.start_match()
 	await _wait(func(): return a.active and b.active and not a.match_info.is_empty(), 15.0)
 	var sa := _build_sim(a.match_info)

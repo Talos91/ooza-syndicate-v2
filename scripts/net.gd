@@ -58,6 +58,11 @@ extends Node
 ## signed MatchReport to the `match-result` edge function (retries, and the room stays open until it is sent). The
 ## Supabase address, key and the signing secret come from the server's environment (OOZE_SUPABASE_URL / _KEY,
 ## OOZE_MATCH_SECRET from /opt/ooze/secrets.env); browser-hosted rooms never report (unranked).
+## READY (Alpha 21, Daniele 2026-09-28; protocol ooze20-net-6): every player but the room owner presses READY in the lobby
+## (roster[id]["ready"], host-validated); a ready player's faction / colour / team / skills / cosmetics are locked until
+## they un-ready, and DEPLOY (can_start) waits for all_ready(). The owner counts as ready - DEPLOY is their ready. An owner's
+## settings change (mode, map, EMPTY SEATS, LAST STAND, ABILITIES, moving a player) and the return to the lobby un-ready
+## everyone; the players whose flag an owner's change reset get "Settings changed - press READY again".
 ## ROOM LIMITS (Alpha 21, Daniele 2026-09-28): a server room with no round running (lobby, results) closes after ROOM_IDLE
 ## (10 min; a notice ROOM_IDLE_WARN before, then "rejected" with the reason), so idle tabs can't hold the server's match
 ## slots; the relay lets one address hold 2 server rooms (a refusal with code "limit" is shown, not a browser fallback).
@@ -67,7 +72,7 @@ signal rematch_changed
 signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
-const VERSION_TAG := "ooze20-net-5"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames)
+const VERSION_TAG := "ooze20-net-6"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY)
 const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
 const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
 const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
@@ -404,7 +409,58 @@ func _fix_colours(first := -1, last := -1) -> void:
 
 func can_start() -> bool:
 	var full := roster.size() == slots() or (ai_fill != "" and roster.size() >= 1)
-	return (hosting or can_control()) and connected and not active and full and map_offers(map_path, mode)
+	return (hosting or can_control()) and connected and not active and full and map_offers(map_path, mode) and all_ready()
+
+
+# --- READY (Alpha 21, ooze20-net-6): the lobby's per-player ready flag ---
+func is_ready(id: int) -> bool:
+	## A player is ready when they pressed READY; the room owner always is (DEPLOY is their ready).
+	return roster.has(id) and (id == room_owner or bool(roster[id].get("ready", false)))
+
+
+func all_ready() -> bool:
+	## Every player present is ready (AI seats and the owner always are): DEPLOY waits for this.
+	for id in present_ids():
+		if not is_ready(int(id)):
+			return false
+	return true
+
+
+func ready_locked() -> bool:
+	## Your picks (faction, colour, team, skills, cosmetics) are locked: you are READY and not the owner.
+	return _locked(local_id())
+
+
+func _locked(id: int) -> bool:
+	return roster.has(id) and id != room_owner and bool(roster[id].get("ready", false))
+
+
+func set_ready(on: bool) -> void:
+	## READY / UN-READY in the lobby (a guest; the owner has DEPLOY instead). The host validates it.
+	if active or local_id() == room_owner:
+		return
+	if hosting:
+		_set_ready(local_id(), on)
+	else:
+		_send_to_host({"op": "ready", "ready": on})
+
+
+func _set_ready(id: int, on: bool) -> void:
+	## Host: a player's READY.
+	if not hosting or active or not roster.has(id) or id == room_owner or bool(roster[id].get("ready", false)) == on:
+		return
+	roster[id]["ready"] = on
+	publish_lobby()
+
+
+func _unready_all() -> void:
+	## Host: an owner's settings change - everyone confirms again; only the players whose flag was set hear why.
+	for id in roster:
+		if bool(roster[id].get("ready", false)):
+			roster[id]["ready"] = false
+			for remote in links:
+				if int(links[remote]) == int(id):
+					_send(remote, "notice", "Settings changed - press READY again")
 
 
 func is_away(id: int) -> bool:
@@ -430,8 +486,9 @@ func ai_seats() -> Dictionary:
 func set_ai_fill(level: String) -> void:
 	if _ask_owner("ai_fill", level):
 		return
-	if hosting and not active and level in AI_FILL:
+	if hosting and not active and level in AI_FILL and level != ai_fill:
 		ai_fill = level
+		_unready_all()
 		publish_lobby()
 
 
@@ -675,6 +732,7 @@ func set_mode(m: String) -> void:
 	if not map_offers(map_path, mode):
 		map_path = pool[0]
 	_reseat(before)
+	_unready_all()
 	publish_lobby()
 
 
@@ -685,6 +743,7 @@ func set_map(path: String) -> void:
 		var before := _teams_now()                     # another map may seat the teams differently
 		map_path = path
 		_reseat(before)
+		_unready_all()
 		publish_lobby()
 
 
@@ -693,6 +752,7 @@ func toggle_last_stand() -> void:
 		return
 	if hosting and not active:
 		last_stand = not last_stand
+		_unready_all()
 		publish_lobby()
 
 
@@ -701,13 +761,14 @@ func toggle_abilities() -> void:
 		return
 	if hosting and not active:
 		abilities = not abilities
+		_unready_all()
 		publish_lobby()
 
 
 func set_loadout(lo: Dictionary) -> void:
 	## Your skill loadout for the next round: {"active": id, "map": id} (Rules.ACTIVE_SKILLS / MAP_SKILLS).
 	var clean := _clean_loadout(lo)
-	if active:
+	if active or ready_locked():
 		return
 	loadout = clean
 	if hosting:
@@ -733,7 +794,7 @@ static func _clean_loadout(lo) -> Dictionary:
 func set_cosmetic(c: Dictionary) -> void:
 	## Your COSMETICS pick for the next round: {family: id} (Cosmetics.OPTIONS).
 	var clean := _clean_cosmetic(c)
-	if active:
+	if active or ready_locked():
 		return
 	cosmetic = clean
 	if hosting:
@@ -755,7 +816,7 @@ static func _clean_cosmetic(c) -> Dictionary:
 
 
 func set_faction(f: String) -> void:
-	if not f in FACTIONS or active:
+	if not f in FACTIONS or active or ready_locked():
 		return
 	preferred_faction = f
 	if hosting:
@@ -768,7 +829,7 @@ func set_faction(f: String) -> void:
 
 func set_colour(key: String) -> void:
 	## Your hue in the lobby: the host validates it (pick_colour) and publishes the room.
-	if active or not Rules.HUES.has(key):
+	if active or not Rules.HUES.has(key) or ready_locked():
 		return
 	colour = key
 	if hosting:
@@ -788,7 +849,7 @@ func pick_colour(id: int, key: String) -> bool:
 
 func switch_team(team: int) -> void:
 	## JOIN TEAM in the lobby: the host validates it (move_to_team).
-	if active:
+	if active or ready_locked():
 		return
 	if hosting:
 		move_to_team(1, team)
@@ -810,6 +871,7 @@ func move_to_team(id: int, team: int) -> bool:
 		return false
 	roster[id]["slot"] = slot
 	_fix_colours(-1, id)                               # the newcomer takes the team's family
+	_unready_all()                                     # a ready player can't switch team: this is the owner moving someone
 	publish_lobby()
 	return true
 
@@ -1109,6 +1171,8 @@ func return_to_room(message: String) -> void:
 				_tokens.erase(id)
 		_reseat()
 		_pick_owner()
+		for id in roster:                              # a new lobby: everyone confirms again (no toast: they know)
+			roster[id]["ready"] = false
 		publish_lobby()                                # the guests get the repacked seats
 	active = false
 	started = false
@@ -1947,26 +2011,29 @@ func _host_receive(remote: String, raw: String) -> void:
 		"chat":
 			if p.get("text", null) is String and not accept_chat(id, p["text"]):
 				_send(remote, "chat_error", "Please wait a moment before sending again.")
+		"ready":                                       # READY (ooze20-net-6)
+			if p.get("ready", null) is bool:
+				_set_ready(id, p["ready"])
 		"faction":
 			var f := str(p.get("faction", ""))
-			if f in FACTIONS and not active:
+			if f in FACTIONS and not active and not _locked(id):
 				roster[id]["faction"] = f
 				publish_lobby()
 		"colour":
-			if p.get("colour", null) is String and not active:
+			if p.get("colour", null) is String and not active and not _locked(id):
 				pick_colour(id, p["colour"])
 		"team":
-			if _is_int(p.get("team", null)) and not active:
+			if _is_int(p.get("team", null)) and not active and not _locked(id):
 				move_to_team(id, int(p["team"]))
 		"loadout":
-			if not active:
+			if not active and not _locked(id):
 				roster[id]["loadout"] = _clean_loadout({"active": p.get("active", ""), "map": p.get("map", "")})
 				publish_lobby()
 		"lobby":                                       # a server room's owner runs the lobby (stage 2)
 			if not active or str(p.get("fn", "")) == "rematch_map":
 				_owner_op(id, p)
 		"cosmetic":                                    # 0.19.0: the local ARMIES > COSMETICS pick (HUD agent)
-			if not active:
+			if not active and not _locked(id):
 				roster[id]["cosmetic"] = _clean_cosmetic(p.get("cosmetic", {}))
 				publish_lobby()
 		"rematch":

@@ -61,6 +61,7 @@ func _open_room(mode: String) -> void:
 	host.mode = mode
 	host.map_path = host.maps_for(mode)[0]
 	host.roster = {1: {"faction": "vex", "slot": 0}}
+	host.room_owner = 1                             # a browser-hosted room: the host runs it (Net._start)
 
 
 func _join(remote: String, faction := "null", version := "") -> Node:
@@ -76,6 +77,14 @@ func _join(remote: String, faction := "null", version := "") -> Node:
 
 func _to_host(remote: String, packet: Dictionary) -> void:
 	host._host_receive(remote, JSON.stringify(packet))
+
+
+func _ready_all() -> void:
+	## READY (ooze20-net-6): every guest presses READY - DEPLOY waits for it.
+	for remote in guests:
+		if guests[remote].bridge != null:
+			guests[remote].set_ready(true)
+	_deliver()
 
 
 func _deliver() -> void:
@@ -146,6 +155,8 @@ func _run() -> void:
 		for id in host.roster:
 			seats[host.seat_of(id)] = true
 		check(seats.size() == host.slots(), mode + ": distinct seats A..")
+		check(not host.can_start(), mode + ": DEPLOY waits for the players' READY")
+		_ready_all()
 		check(host.can_start(), mode + ": host can deploy")
 		var g1: Node = guests["g1"]
 		check(g1.assigned_id == 2 and g1.local_seat() == "B", mode + ": first guest is seat B")
@@ -173,16 +184,20 @@ func _run() -> void:
 	host.set_mode("FFA3")
 	check(host.mode == "FFA3" and not host.can_start(), "host widens the room; deploy waits for the new seat")
 	host.set_mode("1v1")
+	_ready_all()
 	check(host.can_start(), "back to 1v1")
 
 	# ---------------------------------------------------------------- launch and the loading barrier
 	host.map_path = "res://maps/004-two-piers.json"
+	g.set_ready(false)                               # READY locks the picks: un-ready to change the skills
+	_deliver()
 	g.set_loadout({"active": "fortify", "map": "mire"})     # SKILLS 2.0: the guest's loadout rides in the roster
 	_to_host("g1", {"op": "loadout", "active": "nuke", "map": "mire"})
 	check(host.roster[g.assigned_id]["loadout"] == {"map": "mire"}, "an unknown skill id in a loadout is dropped")
 	g.set_loadout({"active": "fortify", "map": "mire"})
 	_deliver()
 	check(host.roster[g.assigned_id]["loadout"] == {"active": "fortify", "map": "mire"}, "a guest sets its loadout in the lobby")
+	_ready_all()
 	host.start_match()
 	var info: Dictionary = host.match_info
 	check(info["loadouts"] == {"B": {"active": "fortify", "map": "mire"}} and info["rules"]["abilities_on"] == true,
@@ -322,7 +337,7 @@ func _run() -> void:
 	fp2.free()
 
 	# ---------------------------------------------------------------- STRUCTURES 2.1 + TEAMS (0.18.10): orders and snapshots
-	check(host.VERSION_TAG == "ooze20-net-5", "the net protocol is bumped for delta snapshots + binary frames (ooze20-net-5; 4: server rooms)")
+	check(host.VERSION_TAG == "ooze20-net-6", "the net protocol is bumped for READY (ooze20-net-6; 5: delta snapshots + binary frames)")
 	host._order_limits = {}
 	host._packet_limits = {}
 	host.bridge.sent = []
@@ -529,7 +544,9 @@ func _run() -> void:
 	check(not host.can_start(), "FFA3 with two players: no deploy while EMPTY SEATS is off")
 	host.set_ai_fill("Casual")
 	_deliver()
+	_ready_all()
 	check(host.can_start() and a1.ai_fill == "Casual", "EMPTY SEATS: AI - deploy opens; guests see the setting")
+	_ready_all()
 	host.start_match()
 	_deliver()
 	check(host.match_info["players"].size() == 3 and host.match_info["ai"] == {"C": "Casual"}, "the AI takes seat C")
@@ -552,6 +569,7 @@ func _run() -> void:
 	_open_room("1v1")
 	var b1 := _join("g1")
 	_deliver()
+	_ready_all()
 	host.start_match()
 	_deliver()
 	var hs5 := _build_sim(host.match_info)
@@ -589,6 +607,7 @@ func _run() -> void:
 	_deliver()
 	check(not host.abilities and not ab.abilities, "the host turns ABILITIES OFF; the guest sees it")
 	host.map_path = "res://maps/004-two-piers.json"
+	_ready_all()
 	host.start_match()
 	_deliver()
 	var hs6 := _build_sim(host.match_info)
@@ -604,6 +623,7 @@ func _run() -> void:
 	_deliver()
 	Rules.apply_balance("legacy")
 	host.map_path = "res://maps/004-two-piers.json"
+	_ready_all()
 	host.start_match()
 	check(host.match_info["rules"].get("balance_preset", "") == "legacy", "the launch carries the host's balance preset")
 	Rules.apply_balance("")                          # what the guest had on its own
@@ -768,6 +788,7 @@ func _test_colours() -> void:
 	# ---------------------------------------------------------------- the launch carries the map, same on both
 	host.set_ai_fill("Casual")
 	host.set_mode("FFA5")
+	_ready_all()
 	host.start_match()
 	_deliver()
 	var hc: Dictionary = host.match_info.get("colours", {})
@@ -814,6 +835,7 @@ func _test_colours() -> void:
 		var same_team: bool = host.team_of_slot(sl) == host.team_of(1)
 		ok_fam = ok_fam and (host.family_of(fams, rc[host.SEATS[sl]]) == (1 - hfam if same_team else hfam))
 	check(ok_fam, "the AI seats take their team's family (the AI team the other one)")
+	_ready_all()
 	host.start_match()
 	_deliver()
 	check(t1.match_info["colours"] == host.match_info["colours"] and host.match_info["colours"] == rc, "2v2 launch: the same map on host and guest")
@@ -861,6 +883,7 @@ func _test_teams() -> void:
 	_deliver()
 	# deploy with EMPTY SEATS: AI - the humans play together, the AI fills B and D
 	host.set_ai_fill("Casual")
+	_ready_all()
 	host.start_match()
 	_deliver()
 	var info: Dictionary = host.match_info
@@ -915,6 +938,58 @@ func _test_teams() -> void:
 	check("rejected" in _kinds_to("old"), "a guest on the previous room protocol is refused")
 	guests.erase("old")
 
+	# ---------------------------------------------------------------- READY (ooze20-net-6, Daniele 2026-09-28)
+	_open_room("FFA3")
+	var r1 := _join("r1", "ember")
+	var r2 := _join("r2", "bloom")
+	_deliver()
+	check(host.all_ready() == false and host.is_ready(1) and not host.can_start(), "READY: the owner counts as ready, the guests don't yet")
+	r1.set_ready(true)
+	_deliver()
+	check(host.is_ready(r1.assigned_id) and r2.is_ready(r1.assigned_id) and not host.can_start(), "a guest's READY reaches the room; DEPLOY waits for the last one")
+	var pf: String = r1.preferred_faction
+	r1.set_faction("solar")
+	_to_host("r1", {"op": "faction", "faction": "solar"})
+	_to_host("r1", {"op": "colour", "colour": "gold"})
+	_to_host("r1", {"op": "loadout", "active": "fortify", "map": "mire"})
+	_deliver()
+	check(host.roster[r1.assigned_id]["faction"] == "ember" and r1.preferred_faction == pf and r1.ready_locked(),
+			"a READY player's picks are locked (faction, colour, skills refused on both sides)")
+	r1.set_ready(false)
+	_deliver()
+	r1.set_faction("solar")
+	_deliver()
+	check(not host.is_ready(r1.assigned_id) and host.roster[r1.assigned_id]["faction"] == "solar", "UN-READY unlocks the picks")
+	r1.set_ready(true)
+	r2.set_ready(true)
+	_deliver()
+	check(host.all_ready() and host.can_start(), "everyone READY: DEPLOY opens")
+	var before: int = host.bridge.sent.size()
+	host.toggle_last_stand()
+	var toasts: Array = []
+	for q in host.bridge.sent.slice(before):
+		if q[0] in ["r1", "r2"] and str(q[1]).contains("notice"):
+			toasts.append(q[0])
+	_deliver()
+	check(not host.is_ready(r1.assigned_id) and not host.is_ready(r2.assigned_id) and not host.can_start(),
+			"an owner's settings change un-readies everyone")
+	check(toasts.size() == 2, "...and each of them hears why (%s)" % str(toasts))
+	r1.set_ready(true)
+	_deliver()
+	before = host.bridge.sent.size()
+	host.toggle_abilities()
+	var told: Array = host.bridge.sent.slice(before).filter(func(q): return str(q[1]).contains("notice")).map(func(q): return q[0])
+	check(told == ["r1"], "only the players whose flag was reset get the toast (%s)" % str(told))
+	host.set_ready(true)
+	check(host.is_ready(1) and not host.roster[1].get("ready", false), "the owner has no READY of their own (DEPLOY is theirs)")
+	_ready_all()
+	host.start_match()
+	_deliver()
+	check(host.active, "DEPLOY with everyone READY launches")
+	host.return_to_room("back")
+	_deliver()
+	check(not host.is_ready(r1.assigned_id) and not host.is_ready(r2.assigned_id), "back in the lobby: everyone presses READY again")
+
 	quit(1 if failures > 0 else 0)
 
 
@@ -955,6 +1030,7 @@ func _test_presets() -> void:
 	_deliver()
 	check(not host.abilities and not gp.abilities, "ABILITIES OFF from the lobby reaches the guest")
 	host.map_path = "res://maps/010-first-switch.json"      # a map with relays: Relay Hack stays
+	_ready_all()
 	host.start_match()
 	_deliver()
 	var info: Dictionary = host.match_info
