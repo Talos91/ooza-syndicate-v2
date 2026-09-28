@@ -1886,7 +1886,10 @@ func _pause_settings() -> void:
 			"pairs": [["SOUND: " + ("ON" if Sfx.sound_on() else "OFF"), func(): Sfx.set_on(not Sfx.sound_on()); _pause_settings()],   # SOUND
 				["VOLUME: " + Sfx.volume_label(), func(): Sfx.set_volume(Sfx.next_volume()); _pause_settings()]],
 			"pairs2": [["MUSIC: " + ("ON" if Music.music_on() else "OFF"), func(): Music.set_on(not Music.music_on()); _pause_settings()],   # MUSIC
-				["MUSIC VOL: " + Music.volume_label(), func(): Music.set_volume(Music.next_volume()); _pause_settings()]],
+				["MUSIC VOL: " + Music.volume_label(), func(): Music.set_volume(Music.next_volume()); _pause_settings()]]
+				+ ([["FULLSCREEN", FullscreenGate.request]] if FullscreenGate.available() else []),   # 0.22.3: the emergency way back
+																									# to fullscreen (web phones), same action as the menu's;
+																									# in the MUSIC row so the card grows no taller
 			"actions": [["BACK  →", pause_menu],
 				["GRAPHICS: " + gfx_now, func(): PerfProfile.set_mode(PerfProfile.next_mode()); _pause_settings()],
 				["FRAME RATE: " + fps_now, func(): PerfProfile.set_fps(PerfProfile.next_fps()); _pause_settings()],

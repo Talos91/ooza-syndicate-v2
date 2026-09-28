@@ -671,7 +671,7 @@ func show_main() -> void:
 	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 20.0, th)
 	fb.pressed.connect(func():
 		if OS.has_feature("web"):
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+			FullscreenGate.request()                  # 0.22.3: the page's gate (document + landscape lock)
 		else:
 			get_tree().quit())
 	_shell_add(fb, Vector2(x - 10.0, fy))
