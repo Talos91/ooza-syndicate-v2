@@ -300,9 +300,11 @@ func details(d: Dictionary, table: Dictionary) -> void:
 		hl.size = Vector2(col_w - 12.0, hh)
 		UiKit.add(self, hl, Vector2(x0 + label_w + i * col_w, ty))
 		var cw := minf(46.0, col_w - 12.0)             # the seat's own colour: which side of the board it was
-		content.add_child(UiKit.rect(Vector2(x0 + label_w + (i + 1) * col_w - 12.0 - cw, ty + hh + 3.0),
-				Vector2(cw, 3.0), Rules.seat_color(str(c["seat"]))))
-	ty += hh + 12.0
+		var bx := x0 + label_w + (i + 1) * col_w - 12.0 - cw
+		content.add_child(UiKit.rect(Vector2(bx, ty + hh + 9.0), Vector2(cw, 3.0), Rules.seat_color(str(c["seat"]))))
+		if c.has("f"):                                 # its race emblem beside the colour
+			UiKit.emblem_rect(self, str(c["f"]), Vector2(bx - 24.0, ty + hh + 1.0), 19.0)
+	ty += hh + 26.0
 	content.add_child(UiKit.rect(Vector2(x0, ty - 1.0), Vector2(x1 - x0, 1.0), Color(UiKit.FRAME, 0.9)))
 	# the rows (a mission's notes first), scrolling when they don't fit
 	var avail := box.end.y - 8.0 - ty
@@ -471,7 +473,7 @@ static func seat_table(sim: Sim, human: String, heads := {}) -> Dictionary:
 		if heads.has(s):
 			head = str(heads[s][0])
 			fname = str(heads[s][1])
-		cols.append({"seat": s, "head": head, "faction": fname})
+		cols.append({"seat": s, "head": head, "faction": fname, "f": str(sim.factions[s])})   # "f": its race emblem
 		st[s] = Progression.seat_stats(sim, s)
 	var rows := []
 	var col := func(fn: Callable) -> Array:

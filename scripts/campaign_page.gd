@@ -1105,19 +1105,11 @@ func _make_plate(rec: Dictionary) -> Control:
 	if tag != "":
 		tagl = _label(tag, 12, Rules.state_color("build") if not bool(rec["playable"]) else Color("8d9aa3"))
 		p.add_child(tagl)
-	var pad := 8.0
-	var tsz := tl.get_combined_minimum_size()
-	var row_h := p.star_px * 1.2
-	var stars_w := p.star_px * 3.4 + (p.star_px * 1.3 if p.reward != "" else 0.0)
-	var tag_w := tagl.get_combined_minimum_size().x + 8.0 if tagl != null else 0.0
-	var w := maxf(tsz.x, stars_w + tag_w) + pad * 2.0
-	tl.position = Vector2(pad, 2.0)
-	p.stars_y = 2.0 + tsz.y + row_h * 0.5
-	p.stars_x = pad
-	if tagl != null:
-		tagl.position = Vector2(pad + stars_w + 8.0, 2.0 + tsz.y + (row_h - tagl.get_combined_minimum_size().y) / 2.0)
-	p.size = Vector2(w, 2.0 + tsz.y + row_h + 6.0)
-	content.add_child(p)
+	p.title = tl
+	p.tag = tagl
+	content.add_child(p)                               # measured in the page (Daniele's note: a plate sized off-tree ran
+	p.fit()                                            # shorter than its title + LOCKED on phones), and again once shaped
+	p.fit.call_deferred()
 	return p
 
 
@@ -1441,6 +1433,35 @@ class Plate extends Control:
 	var stars_y := 20.0
 	var pop := [1.0, 1.0, 1.0]         # per pip scale (the pop after a mission)
 	var bare := false                  # pips only (the mission card)
+	var title: Label                   # the number + title line (a child)
+	var tag: Label                     # LOCKED / IN DEVELOPMENT / SIDE beside the pips (a child), or null
+
+	func fit() -> void:
+		## The plate around its labels: the title on top, the pips + tag under it, sized from the labels' own fonts.
+		if not is_instance_valid(title):
+			return
+		var pad := 8.0
+		var tsz := _text_size(title)
+		var row_h := star_px * 1.2
+		var stars_w := star_px * 3.4 + (star_px * 1.3 if reward != "" else 0.0)
+		var gsz := _text_size(tag) if is_instance_valid(tag) else Vector2.ZERO
+		var tag_w := gsz.x + 8.0 if is_instance_valid(tag) else 0.0
+		title.position = Vector2(pad, 2.0)
+		stars_y = 2.0 + tsz.y + row_h * 0.5
+		stars_x = pad
+		if is_instance_valid(tag):
+			tag.position = Vector2(pad + stars_w + 8.0, 2.0 + tsz.y + (row_h - gsz.y) / 2.0)
+		size = Vector2(ceilf(maxf(tsz.x, stars_w + tag_w) + pad * 2.0 + 2.0), 2.0 + tsz.y + row_h + 6.0)
+		queue_redraw()
+
+	static func _text_size(l: Label) -> Vector2:
+		## The line's real extent: the label's min size, or its font's measure if that is wider (off-tree shaping).
+		var m := l.get_combined_minimum_size()
+		var f := l.get_theme_font("font")
+		if f != null:
+			var fs := l.get_theme_font_size("font_size")
+			m.x = maxf(m.x, f.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
+		return m
 
 	func _draw() -> void:
 		if not bare:

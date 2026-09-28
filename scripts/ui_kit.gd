@@ -496,16 +496,30 @@ static func emblem_mip(f: String) -> Texture2D:
 	return out
 
 
-static func emblem_rect(m, f: String, pos: Vector2, side: float) -> TextureRect:
-	## The faction's emblem, `side` canvas units square, added to the page at `pos` (its own colours: a faction mark;
-	## ownership stays the seat colour beside it).
+static func emblem_node(f: String, side: float, pos := Vector2.ZERO) -> TextureRect:
+	## The faction's emblem, `side` units square at `pos`, not yet added (a tile's or a row's child).
 	var r := TextureRect.new()
 	r.texture = emblem(f, side)
 	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.position = pos
 	r.size = Vector2(side, side)
+	return r
+
+
+static func emblem_rect(m, f: String, pos: Vector2, side: float) -> TextureRect:
+	## The faction's emblem, `side` canvas units square, added to the page at `pos` (its own colours: a faction mark;
+	## ownership stays the seat colour beside it).
+	var r := emblem_node(f, side)
 	return add(m, r, pos) as TextureRect
+
+
+static func emblem_badge(parent: Control, f: String, side := 20.0) -> TextureRect:
+	## The emblem in a character tile's bottom-right corner (the tiles that show a creature: which race it is, at a glance).
+	var r := emblem_node(f, side, parent.size - Vector2(side + 3.0, side + 3.0))
+	parent.add_child(r)
+	return r
 
 
 static func map_thumb(path: String) -> Texture2D:
@@ -521,7 +535,13 @@ static func map_thumb(path: String) -> Texture2D:
 
 
 static func background(f: String) -> Texture2D:
-	## The faction's FINAL wallpaper (Daniele 2026-09-28; the pages' backdrop and HOME's scene).
+	## The pages' backdrop: the faction's place without its creature (the FINAL set's empty VERSUS stage), so a page
+	## that shows the character (FACTION, ARMIES, the results...) never shows it twice. HOME has the wallpaper.
+	return stage(f)
+
+
+static func wallpaper(f: String) -> Texture2D:
+	## The faction's FINAL HOME wallpaper (Daniele 2026-09-28): its place with the creature in it, on the right.
 	var p := "res://assets/art/ui/bg_%s.jpg" % (f if ACCENTS.has(f) else "vex")
 	return load(p) if ResourceLoader.exists(p) else null
 

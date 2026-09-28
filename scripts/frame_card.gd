@@ -115,6 +115,10 @@ func _rebuild() -> void:
 		hr.size = Vector2(ah * 0.95, ah * 0.95)
 		hr.position = Vector2(w - hr.size.x - 10.0, ah - hr.size.y + 6.0)
 		add_child(hr)
+		var es := clampf(ah * 0.24, 28.0, 48.0)       # the race emblem, the art's top-left corner
+		var em := UiKit.emblem_node(hero, es, Vector2(10, 10))
+		em.modulate = Color(0.5, 0.5, 0.5) if dim else Color.WHITE
+		add_child(em)
 	var fade := TextureRect.new()                     # art -> card fill, so the text below always reads
 	var g := Gradient.new()
 	g.set_color(0, Color(UiKit.CARD, 0.0))

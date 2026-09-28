@@ -571,6 +571,9 @@ func show_main() -> void:
 	var area := shell_open("OOZE / HOME", "home", Callable(), hero)
 	_is_main = true
 	if _backdrop:
+		var wall := UiKit.wallpaper(hero)
+		if wall != null:
+			_backdrop.texture = wall
 		_backdrop.modulate = Color(0.9, 0.9, 0.92)       # the wallpaper bright (the pages behind panels stay darker)
 		_backdrop_ay = 0.7
 		_place_backdrop()
@@ -861,12 +864,13 @@ func _roster_tile(f: String, pos: Vector2, dims: Vector2) -> void:
 		show_factions(), "selected" if picked else "secondary", f)
 	var hs := b.size.y - 10.0
 	b.add_child(_cutout(f, Vector2(6, 5), Vector2(hs, hs)))
-	var tx := hs + 16.0
-	var nm := UiKit.label(self, UiKit.NAMES[f], 15, UiKit.accent(f) if picked else UiKit.INK, true)
-	var sl := UiKit.label(self, UiKit.SUBS[f], 12, UiKit.MUTED)
 	var nh := UiKit.line_h(self, 15, true)
 	var two := nh + UiKit.line_h(self, 12) <= b.size.y - 6.0
 	var ty := (b.size.y - (nh + (UiKit.line_h(self, 12) if two else 0.0))) / 2.0
+	b.add_child(UiKit.emblem_node(f, nh, Vector2(hs + 14.0, ty)))   # the race emblem before the name
+	var tx := hs + 14.0 + nh + 6.0
+	var nm := UiKit.label(self, UiKit.NAMES[f], 15, UiKit.accent(f) if picked else UiKit.INK, true)
+	var sl := UiKit.label(self, UiKit.SUBS[f], 12, UiKit.MUTED)
 	for l in ([nm, sl] if two else [nm]):
 		l.clip_text = true
 		l.position = Vector2(tx, ty)
@@ -886,8 +890,10 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 	var body_h := sy - 14.0 - (pos.y + pad)
 	var hs := minf(body_h, dims.x * 0.42)
 	UiKit.hero(self, faction, Vector2(pos.x + pad, pos.y + pad + (body_h - hs) / 2.0), Vector2(hs, hs))
+	var es := clampf(dims.y * 0.14, 40.0, 64.0)          # the race emblem, the card's top-right corner
+	UiKit.emblem_rect(self, faction, Vector2(pos.x + dims.x - pad - es, pos.y + pad), es)
 	var tx := pos.x + pad + hs + 18.0
-	var tw := pos.x + dims.x - pad - tx
+	var tw := pos.x + dims.x - pad - tx - es * 0.6
 	var ft: Array = Rules.FACTION_TRAITS[faction]
 	# [text, size, colour, head, spacing, optional] - the tagline goes first when a phone runs out of room
 	var lines := [[UiKit.SUBS[faction], 12, acc, true, 3, false], [UiKit.NAMES[faction], 38, acc, true, 0, false],
@@ -1174,7 +1180,8 @@ func show_profile() -> void:
 		var tx := rh + 8.0
 		var mid := floorf(w * 0.5)
 		var ty := y + (rh - l1 - l2) / 2.0
-		_say(UiKit.NAMES[f], Vector2(tx, ty), 16, fa, 0.0, true)
+		UiKit.emblem_rect(self, f, Vector2(tx, ty), l1)
+		_say(UiKit.NAMES[f], Vector2(tx + l1 + 6.0, ty), 16, fa, 0.0, true)
 		_say("PLAYED %d  ·  WON %d" % [int(st["plays"]), int(st["wins"])], Vector2(tx, ty + l1), 13, UiKit.INK)
 		UiKit.bar(self, Vector2(mid, y + rh / 2.0 - 9.0), Vector2(w - mid - 14.0, 6), 1.0 if owned else float(st["vat_wins"]) / float(need), f)
 		_say("VAT UNLOCKED" if owned else "VAT  %d / %d WINS" % [int(st["vat_wins"]), need], Vector2(mid, y + rh / 2.0 + 1.0), 12,
@@ -1985,16 +1992,8 @@ func _history_row(h: Dictionary, names: Dictionary, pos: Vector2, w: float) -> f
 	var px := pos.x + c3
 	for p in players:
 		var f := str(p.get("faction", "null"))
-		var tex := Hud.emblem_texture(f) if Rules.FACTIONS.has(f) else null
-		if tex != null:
-			var em := TextureRect.new()
-			em.texture = tex
-			em.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			em.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			em.size = Vector2(ic, ic)
-			em.modulate = UiKit.accent(f)
-			em.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			UiKit.add(self, em, Vector2(px, py))
+		if Rules.FACTIONS.has(f):                        # the race emblem, in its own colours
+			UiKit.emblem_rect(self, f, Vector2(px, py), ic)
 		var me := bool(p.get("is_me", false))
 		var who := "YOU" if me and str(p.get("name", "")) == "" else str(p.get("name", ""))
 		if str(p.get("ai_level", "")) != "":
@@ -2424,7 +2423,9 @@ func _army_tile(tf: String, pos: Vector2, dims: Vector2) -> void:
 	b.add_child(art)
 	var n := UiKit.label(self, UiKit.NAMES[tf], 15, UiKit.accent(tf) if picked else UiKit.INK, true)
 	var lh := n.get_minimum_size().y + (UiKit.line_h(self, 11, true) if tf == faction else 0.0)
-	var tx := 8.0 + hs + 8.0
+	var es := n.get_minimum_size().y
+	b.add_child(UiKit.emblem_node(tf, es, Vector2(8.0 + hs + 6.0, (dims.y - lh) / 2.0)))   # the race emblem before the name
+	var tx := 8.0 + hs + 6.0 + es + 6.0
 	n.position = Vector2(tx, (dims.y - lh) / 2.0)
 	n.clip_text = true
 	n.size = Vector2(dims.x - tx - 6.0, n.get_minimum_size().y)
@@ -2470,6 +2471,8 @@ func _army_identity(pos: Vector2, dims: Vector2) -> void:
 	var ah := dims.y - (stats_h if with_stats else 0.0)       # the character + text area
 	var hs := minf(ah - 24.0, hs0)
 	UiKit.hero(self, _army, pos + Vector2(20.0, (ah - hs) / 2.0), Vector2(hs, hs))
+	var es := clampf(dims.y * 0.13, 36.0, 56.0)          # the race emblem, the panel's top-right corner
+	UiKit.emblem_rect(self, _army, pos + Vector2(dims.x - 16.0 - es, 16.0), es)
 	var tx := pos.x + 20.0 + hs0 + 16.0
 	var ty := pos.y + (ah - _kept_h(items, heights, drop)) / 2.0
 	for i in range(items.size()):
@@ -2936,6 +2939,7 @@ func _ward_factions(y: float) -> void:
 		art.position = Vector2.ONE * 5.0
 		art.size = Vector2.ONE * (s - 10.0)
 		b.add_child(art)
+		UiKit.emblem_badge(b, tf, s * 0.36)
 
 
 func _ward_look_name(cat: String, id: String) -> String:
@@ -3585,11 +3589,17 @@ func _setup_faction(pos: Vector2, dims: Vector2) -> void:
 	for ln in lines:
 		total += UiKit.line_h(self, ln[1], ln[3])
 	var ly := pos.y + (dims.y - total) / 2.0
-	for ln in lines:
+	for i in range(lines.size()):
+		var ln: Array = lines[i]
 		var l := UiKit.label(self, ln[0], ln[1], ln[2], ln[3])
 		l.clip_text = true
 		l.size = Vector2(maxf(10.0, tw), UiKit.line_h(self, ln[1], ln[3]))
-		_shell_add(l, Vector2(tx, ly))
+		var ex := 0.0
+		if i == 0:                                    # the race emblem before the name
+			ex = l.size.y + 6.0
+			UiKit.emblem_rect(self, faction, Vector2(tx, ly), l.size.y)
+			l.size.x = maxf(10.0, tw - ex)
+		_shell_add(l, Vector2(tx + ex, ly))
 		ly += l.size.y
 
 
@@ -3610,6 +3620,7 @@ func _faction_picks(seat: String, pos: Vector2, width: float, back: Callable) ->
 			back.call(), "selected" if pick == f else "secondary", f)
 		b.tooltip_text = UiKit.NAMES[f]
 		b.add_child(_cutout(f, Vector2(5, 5), b.size - Vector2(10, 10)))
+		UiKit.emblem_badge(b, f, s * 0.36)
 	return s
 
 
@@ -3715,12 +3726,14 @@ func show_seats() -> void:
 		var role := "YOU" if s == "A" else ("AI ALLY" if ally else "AI RIVAL")
 		var ry := 14.0 + UiKit.line_h(self, 12, true)
 		_shell_add(UiKit.label(self, role, 17, UiKit.INK, true), p + Vector2(16, ry))
-		UiKit.tag(self, "PLAYER" if s == "A" else "AI", p + Vector2(cw - 16.0 - UiKit.text_w(self, "PLAYER" if s == "A" else "AI", 14, true) - 46.0, 12.0), faction)
+		UiKit.tag(self, "PLAYER" if s == "A" else "AI", p + Vector2(cw - 16.0 - UiKit.text_w(self, "PLAYER" if s == "A" else "AI", 14, true) - 46.0, 12.0), faction, false)
 		var py := ry + UiKit.line_h(self, 17, true) + 10.0
 		if s == "A":
 			_shell_add(_cutout(faction, Vector2.ZERO, Vector2(ph, ph)), p + Vector2(16, py))
+			var nl := UiKit.line_h(self, 15, true)
+			UiKit.emblem_rect(self, faction, p + Vector2(16.0 + ph + 12.0, py + (ph - nl) / 2.0), nl)
 			_shell_add(UiKit.label(self, "%s  ·  %s" % [UiKit.NAMES[faction], UiKit.SUBS[faction]], 15, UiKit.INK, true),
-					p + Vector2(16.0 + ph + 12.0, py + (ph - UiKit.line_h(self, 15, true)) / 2.0))
+					p + Vector2(16.0 + ph + 12.0 + nl + 6.0, py + (ph - nl) / 2.0))
 			var ct := "CHANGE"
 			var chw := UiKit.text_w(self, ct, 14, true) + 34.0
 			UiKit.btn(self, ct, p + Vector2(cw - 16.0 - chw, py), Vector2(chw, 50), show_factions, "tertiary", faction, 14)
@@ -3871,6 +3884,7 @@ func _faction_row(pos: Vector2, tile: float) -> float:
 		art.size = Vector2.ONE * tile * 0.8
 		art.modulate = Color.WHITE if picked else Color(1, 1, 1, 0.72)
 		b.add_child(art)
+		UiKit.emblem_badge(b, f, tile * 0.34)
 		var nm: String = UiKit.NAMES[f]
 		_say(nm, pos + Vector2(i * step + (step - UiKit.text_w(self, nm, 13)) / 2.0, tile + 4.0), 13, UiKit.INK if picked else UiKit.MUTED)
 	return tile + 4.0 + UiKit.line_h(self, 13)
@@ -4130,6 +4144,7 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, mo
 		art.position = Vector2(tx, 7)
 		art.size = Vector2(ts, ts)
 		r.add_child(art)
+		r.add_child(UiKit.emblem_node(f, ts * 0.42, art.position + Vector2(ts * 0.6, ts * 0.58)))   # the race emblem
 		title_text = ("YOU / " if id == Net.local_id() else "") + str(UiKit.NAMES[f])
 		var words := ["HOST" if id == Net.room_owner or (id == 1 and not Net.server_hosted()) else "JOINED"]
 		if Net.is_away(id):
