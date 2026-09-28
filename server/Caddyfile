@@ -1,6 +1,7 @@
 # Caddy on the room server (/etc/caddy/Caddyfile): TLS, /ooze -> relay.py, the rest = the server's build (the test link).
 # Installed by server/deploy.sh --relay when it differs (validated first; a reload closes open WebSockets).
-45-32-126-20.sslip.io {
+# rooms.oozesyndicate.com since 2026-09-28 (Daniele); sslip.io stays for builds that still point at it.
+45-32-126-20.sslip.io, rooms.oozesyndicate.com {
 	encode gzip
 	handle /ooze* {
 		reverse_proxy 127.0.0.1:8765
