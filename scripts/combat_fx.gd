@@ -150,8 +150,9 @@ func _gather_fights(dt: float) -> void:
 			var rate: float = maxf(Rules.move_speed() * h["units"] / maxf(Sim.chain_length(h), 0.5), 4.0)
 			var share: float = h["units"] / maxf(h["units"] + n["units"], 0.001)
 			var door: Vector3 = n["pos"] + front * (Rules.EXIT_R + 0.35) + Vector3(0, 0.9, 0)
-			_contest(n, h["owner"], came, rate, share, door)
-			_clash(door, front, Rules.seat_color(h["owner"]), _owner_color(n["owner"]), rate, dt)
+			if not sim.node_hidden(n["id"], viewer):      # POWERS: inside a rival's fog the fight (and its ring) is not seen
+				_contest(n, h["owner"], came, rate, share, door)
+				_clash(door, front, Rules.seat_color(h["owner"]), _owner_color(n["owner"]), rate, dt)
 			if n["owner"] != "" and sim.allied(n["owner"], viewer):
 				_alarm(n, came, n["owner"] != viewer, dt)
 		for id in _fights:                            # the ring's sweep: how close the strongest side is to taking it

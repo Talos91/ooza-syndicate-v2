@@ -2701,6 +2701,12 @@ func _powers_tests() -> void:
 	check(s.cast("A", "active", 1) and s.nodes[1]["tier"] == 1 and s.nodes[1]["structure"] == "vat", "Sinkhole: a T2 vat drops to T1")
 	s.skill_cd["A"]["active"] = 0.0
 	check(s.cast("A", "active", 1) and s.nodes[1]["structure"] == "" and not Sim.has_vat(s.nodes[1]), "Sinkhole: a T1 vat is destroyed")
+	s.nodes[1]["owner"] = "A"
+	s.nodes[1]["units"] = 200.0
+	check(s.can_build(1, "A", "vat") == "" and s.build(1, "A", "vat"), "Sinkhole: an emptied vat slot can be built again (%s)" % s.can_build(1, "A", "vat"))
+	s.nodes[1]["owner"] = "B"
+	s.nodes[1]["build_kind"] = ""
+	s.nodes[1]["build_target"] = {}
 	s.skill_cd["A"]["active"] = 0.0
 	s.nodes[0]["owner"] = "B"
 	s.nodes[0]["structure"] = "laser"
