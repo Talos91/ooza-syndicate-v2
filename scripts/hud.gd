@@ -58,6 +58,7 @@ var switch_ring: Control                # 0.19.0: the SWITCH button's READY / co
 var end_panel: Control                 # VICTORY / DEFEAT, and its MATCH DETAILS page
 var pause_panel: Control
 var out_panel: Control                 # 0.19.2 spec H7: "YOU'RE OUT" - SPECTATE / MAIN MENU (online: LEAVE ROOM)
+var reconnect_panel: Control           # UI (Alpha 21): CONNECTION INTERRUPTED - a guest's silent match host
 var _screens_vp := Vector2.ZERO        # the canvas size they were built for (a rotation rebuilds them)
 var spectate_button: Button             # stays after SPECTATE: a small way back to the menu while watching
 var _out_shown := false                 # this match's panel has already been offered once
@@ -441,6 +442,7 @@ func setup(m: Node3D) -> void:
 	end_panel = _screen_layer()
 	pause_panel = _screen_layer()
 	out_panel = _screen_layer()
+	reconnect_panel = _screen_layer()
 	spectate_button = button("LEAVE ROOM" if main.online else "MAIN MENU", main.to_menu, 170, 48, 16)
 	UiKit.style_button(spectate_button, "secondary", _my_faction())   # UI: the screens' language while watching
 	spectate_button.add_theme_font_override("font", UiKit.HEAD)
@@ -585,6 +587,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 			_chat_poll = 0.5
 			var n := Net.chat_unread()
 			chat_button.text = "Chat (%d)" % n if n > 0 else "Chat"
+		_reconnect_watch()
 	# 0.19.2 spec H6: the clock, centred, never shifts; a chip per seat either side, eliminated seats
 	# greyed. "topbar" gates the whole bar, "strength" the chips alone (clock-only in early lessons).
 	top_panel.visible = shows("topbar")
@@ -1441,6 +1444,8 @@ func show_banner(msg: String, seconds := 4.0) -> void:
 # ------------------------------------------------------------------ overlays
 # UI (Alpha 21 UI pass): PAUSE, VICTORY / DEFEAT, MATCH DETAILS and YOU'RE OUT are MatchScreens pages (UiKit's
 # language, the player's faction accent) on full-screen layers over the match; the actions are the same as before.
+# PAUSE carries no LAST STAND / TERRITORY switches (Daniele 2026-09-28): Last Stand is a match option (SETUP), territory
+# a look (the wardrobe).
 func pause_menu() -> void:
 	if end_panel.visible:
 		return
@@ -1449,8 +1454,7 @@ func pause_menu() -> void:
 	if main.online:                                   # a room never pauses (Alpha 11): the menu only
 		s.card({"kicker": "ROOM %s" % Net.room_code, "headline": "MATCH MENU.",
 				"body": "%s · the match keeps running\n%s" % [where, Net.net_stats_line()],
-				"actions": [["RESUME  →", func(): pause_panel.visible = false], ["LEAVE ROOM", main.to_menu, "tertiary"]],
-				"pairs": [_territory_action()]})
+				"actions": [["RESUME  →", func(): pause_panel.visible = false], ["LEAVE ROOM", main.to_menu, "tertiary"]]})
 		_show_screen(pause_panel)
 		return
 	main.paused = true
@@ -1458,23 +1462,13 @@ func pause_menu() -> void:
 	if main.get("director") != null:                  # TUTORIAL: PAUSE keeps working and gains LESSONS (§6)
 		s.card({"kicker": where, "headline": "PAUSED.",
 				"actions": [resume, [TutorialDirector.line("paused_lessons"), main.to_lessons], ["RESTART MATCH", main.restart],
-				["MAIN MENU", main.to_menu, "tertiary"]], "pairs": [_territory_action()]})
+				["MAIN MENU", main.to_menu, "tertiary"]]})
 		_show_screen(pause_panel)
 		return
 	s.card({"kicker": where, "headline": "PAUSED.",
 			"actions": [resume, ["RESTART MATCH", main.restart],
-			["CAMPAIGN" if main.get("mission") != null else "EXIT MATCH", main.to_menu, "tertiary"]],   # CAMPAIGN: a mission leaves to its page
-			"pairs": [["LAST STAND: %s" % ("ON" if Rules.last_stand else "OFF"), func():
-				Rules.last_stand = not Rules.last_stand
-				pause_menu()], _territory_action()]})
+			["CAMPAIGN" if main.get("mission") != null else "EXIT MATCH", main.to_menu, "tertiary"]]})   # CAMPAIGN: a mission leaves to its page
 	_show_screen(pause_panel)
-
-
-func _territory_action() -> Array:
-	## TERRITORY: NEON / GOO (Rules.goo_territory) - a local look, so rooms offer it too.
-	return ["TERRITORY: %s" % ("GOO" if Rules.goo_territory else "NEON"), func():
-		Rules.goo_territory = not Rules.goo_territory
-		pause_menu()]
 
 
 var _end_winner := ""
@@ -1605,6 +1599,37 @@ func _reward_strip(scale := 1.0) -> Control:
 
 func _my_faction() -> String:
 	return str(sim.factions.get(human, main.SEAT_FACTIONS.get(human, "vex")))
+
+
+# UI (Alpha 21, screen 25; Daniele: "reconnecting good"): when a guest's match host goes silent the match freezes; this
+# says why and how long the game waits (Net.HOST_GRACE - then Net.fail returns to ONLINE, where RECONNECT takes the seat
+# back), with LEAVE MATCH meanwhile. It closes by itself when the snapshots return. Net's state is only read here.
+const RECONNECT_AFTER := 2.5                      # s of host silence before it shows (a hiccup never flashes it)
+var _reconnect_left := -1
+
+
+func _reconnect_watch() -> void:
+	var silent: float = Net._since_snapshot if Net.active and not Net.hosting and not sim.over else 0.0
+	if silent >= RECONNECT_AFTER and not end_panel.visible:
+		var left := maxi(0, int(ceil(Net.HOST_GRACE - silent)))
+		if reconnect_panel.visible and left == _reconnect_left:
+			return
+		show_reconnect(left)                           # redrawn once a second, for the countdown
+	elif reconnect_panel.visible:
+		reconnect_panel.visible = false
+		_reconnect_left = -1
+
+
+func show_reconnect(left: int) -> void:
+	_reconnect_left = left
+	var s := MatchScreens.open(reconnect_panel, mobile, _my_faction())
+	s.card({"kicker": "ONLINE MATCH", "headline": "CONNECTION INTERRUPTED.",
+			"body": "The match host stopped answering, so the match is frozen.
+RECONNECTING...  %d s
+If it doesn't come back you return to ONLINE, where RECONNECT takes your seat back." % left,
+			"actions": [["LEAVE MATCH", main.to_menu, "secondary"]]})
+	if not reconnect_panel.visible:
+		_show_screen(reconnect_panel)
 
 
 func _screen_layer() -> Control:

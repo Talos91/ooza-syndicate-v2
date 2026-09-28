@@ -382,6 +382,22 @@ static func save_last_faction(f: String) -> bool:
 	return c.save(path) == OK
 
 
+static func campaign_view() -> String:
+	## CAMPAIGN opens on the view you used last: "map" (the 3D city - Daniele 2026-09-28: "i like the current campaign
+	## map view", the default) or "cards" (the mission cards).
+	var c := ConfigFile.new()
+	if c.load(path) != OK:
+		return "map"
+	return "cards" if str(c.get_value("campaign", "view", "map")) == "cards" else "map"
+
+
+static func save_campaign_view(v: String) -> bool:
+	var c := ConfigFile.new()
+	c.load(path)
+	c.set_value("campaign", "view", "cards" if v == "cards" else "map")
+	return c.save(path) == OK
+
+
 static func hero_art(f: String) -> Texture2D:
 	## The faction's full scene (assets/art/<faction>.png; VEX's is the old MAIN art minus its baked-in buttons) -
 	## FrameCard's default art.

@@ -223,19 +223,30 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> void:
 	content.add_child(k)
 	var n := seats.size()
 	var name_h := UiKit.line_h(self, 34 if n == 1 else 18, true) + UiKit.line_h(self, 12) + 8.0
-	var avail := dims.y - k.size.y - 12.0 - name_h
 	var gap := 12.0
-	var hs := minf(avail, (dims.x - gap * (n - 1)) / float(n))
-	var row_w := hs * n + gap * (n - 1)
-	var x0 := pos.x + (dims.x - row_w) / 2.0
-	var hy := pos.y + k.size.y + 12.0 + (avail - hs) / 2.0
+	# one row, or two (3+ seats: FFA 4 / 5, 3v3) when that makes the characters bigger - the side's height is there
+	var room := dims.y - k.size.y - 12.0
+	var cols := n
+	var hs := minf(room - name_h, (dims.x - gap * (n - 1)) / float(n))
+	if n >= 3:
+		var c2 := int(ceil(n / 2.0))
+		var hs2 := minf((room - 2.0 * name_h - gap) / 2.0, (dims.x - gap * (c2 - 1)) / float(c2))
+		if hs2 > hs:
+			cols = c2
+			hs = hs2
+	var rows := int(ceil(n / float(cols)))
+	var block_h := rows * (hs + name_h) + (rows - 1) * gap
+	var y0 := pos.y + k.size.y + 12.0 + (room - block_h) / 2.0
 	var from := -60.0 if mine else 60.0
 	for i in range(n):
 		var seat := str(seats[i])
 		var f := str(main.SEAT_FACTIONS[seat])
 		var cell := Control.new()
 		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cell.position = Vector2(x0 + i * (hs + gap), hy)
+		var r := i / cols
+		var in_row := mini(cols, n - r * cols)              # a short last row is centred on its own
+		var row_w := hs * in_row + gap * (in_row - 1)
+		cell.position = Vector2(pos.x + (dims.x - row_w) / 2.0 + (i % cols) * (hs + gap), y0 + r * (hs + name_h + gap))
 		cell.size = Vector2(hs, hs + name_h)
 		content.add_child(cell)
 		var hero := UiKit.hero(self, f, Vector2.ZERO, Vector2(hs, hs))
