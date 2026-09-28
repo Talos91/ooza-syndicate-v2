@@ -2426,10 +2426,10 @@ func show_online() -> void:
 	y += _say("Rooms run on the Ooze room server, so any network that reaches the internet can join. If the server is busy, the room's creator hosts it in their browser instead (keep that tab in front)." if web
 			else "Online rooms run in the browser build: open https://talos91.github.io/ooza-syndicate-v2/", Vector2(0, y), 13,
 			UiKit.DIM if web else UiKit.STAR, w)
-	_column_end(host, n0, y)
+	_column_end(host, n0, y, true)
 	# JOIN A FRIEND: a plain panel, never scrolled, so the web's native code field stays exactly on its frame
 	var jx := x + cw + gap
-	UiKit.panel(self, Vector2(jx, top), Vector2(cw, ch), shell_f)
+	var jp := UiKit.panel(self, Vector2(jx, top), Vector2(cw, ch), shell_f)
 	var px := jx + 20.0
 	var jw := cw - 40.0
 	var jy := top + 16.0
@@ -2448,6 +2448,10 @@ func show_online() -> void:
 	var join := UiKit.btn(self, "JOIN ROOM", Vector2(px, jy + 2.0), Vector2(UiKit.text_w(self, "JOIN ROOM", 16, true) + 60.0, 48),
 			_join_from_field, "secondary", shell_f, 16)
 	join.disabled = not web
+	var both := minf(ch, maxf((host["panel"] as Control).size.y, join.position.y + join.size.y + 18.0 - top))   # one height for the pair
+	jp.size.y = both
+	(host["panel"] as Control).size.y = both
+	(host["scroll"] as Control).size.y = both - 24.0
 	if web:
 		_place_code_field.call_deferred()
 
@@ -2696,7 +2700,7 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, mo
 		art.size = Vector2(ts, ts)
 		r.add_child(art)
 		title_text = ("YOU / " if id == Net.local_id() else "") + str(UiKit.NAMES[f])
-		var words := ["HOST" if id == Net.room_owner else "JOINED"]
+		var words := ["HOST" if id == Net.room_owner or (id == 1 and not Net.server_hosted()) else "JOINED"]
 		if Net.is_away(id):
 			words.append("RECONNECTING")
 			sub_col = UiKit.STAR
