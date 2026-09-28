@@ -1058,7 +1058,7 @@ func _challenge_card(c: Dictionary, kind: String, pos: Vector2, w: float, just_c
 	var claimed: bool = c["claimed"]
 	var done: bool = c["done"]
 	var id: String = c["id"]
-	var bw := 150.0
+	var bw := maxf(150.0, UiKit.text_w(self, "IN PROGRESS", 13, true) + 8.0)   # the right column fits its widest word
 	var bh := UiKit.tap_h(self, 42.0)
 	var text := str(c["text"])
 	var th := UiKit.text_h(self, text, 15, w - 28.0, true)
