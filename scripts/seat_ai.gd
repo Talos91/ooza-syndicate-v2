@@ -1062,14 +1062,19 @@ func _relay_opens_route(sim: Sim, src: int, dst: int, units: float) -> Array:
 
 func _open_route(sim: Sim, plan: Dictionary) -> bool:
 	## Level 2+ (0.18.7; level 3 before): fire one of its relays if the next state gives the plan a
-	## faster route that no rival relay can take away before the line is across.
-	var src: int = plan["donors"][0]["node"]["id"]
+	## faster route that no rival relay can take away before the line is across - faster by Rules.AI_LEVELS
+	## "shortcut" s (ai-retune-prep: N-04's remote decks are optional shortcuts beside fixed slower routes).
+	## The plan lands when its slowest donor does, so it is the plan's whole trip - the longest of its donors'
+	## - that the next state must shorten (it used to read the fastest donor only: with a 20-unit garrison next
+	## to the target and the real line far behind it, the console never looked worth firing).
 	var dst: int = plan["target"]["id"]
-	var units: float = plan["donors"][0]["available"]
-	var base := _route(sim, src, dst, units)
-	var t0 := _route_t if not base.is_empty() else INF
-	if _route_risky:
-		t0 += Rules.AI_RELAY_DETOUR                   # a risky way in is worth replacing
+	var t0 := 0.0
+	for d in plan["donors"]:
+		var base := _route(sim, d["node"]["id"], dst, d["available"])
+		var t := _route_t if not base.is_empty() else INF
+		if _route_risky:
+			t += Rules.AI_RELAY_DETOUR                    # a risky way in is worth replacing
+		t0 = maxf(t0, t)
 	for n in sim.nodes:
 		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
 			continue
@@ -1080,13 +1085,21 @@ func _open_route(sim: Sim, plan: Dictionary) -> bool:
 			continue                                      # the turn would fling its own lines
 		var keep: int = n["relay_index"]
 		var trees := _trees                           # the probe's routes are not this board's: keep them apart
+		var flips := _flips
 		_trees = {}
+		_flips = {}
 		n["relay_index"] = sim.relay_next_index(n)
-		var alt := _route(sim, src, dst, units)
-		var alt_risky := _route_risky
+		var t1 := 0.0
+		for d in plan["donors"]:
+			var alt := _route(sim, d["node"]["id"], dst, d["available"])
+			if alt.is_empty() or _route_risky:
+				t1 = INF                                  # a donor loses its way in (or gets a risky one): no
+				break
+			t1 = maxf(t1, _route_t)
 		n["relay_index"] = keep
 		_trees = trees
-		if not alt.is_empty() and not alt_risky and _route_t < t0 - 3.0:
+		_flips = flips
+		if t1 < t0 - float(cfg.get("shortcut", 3.0)):
 			_order(sim.fire_relay(n["id"]))
 			return true
 	return false

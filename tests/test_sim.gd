@@ -405,6 +405,46 @@ func _init() -> void:
 		else:
 			check(fired_m2 and sim17c.nodes[4]["owner"] == "A", "%s (relays >= 2) captures the console, fires it, then takes node 4 through the deck it opened" % level)
 
+	# Third (ai-retune-prep, 🗺️ on N-04 Console: "the remote decks are optional shortcuts - fixed slower routes always
+	# exist", and the AI never fired the console): node 4 IS reachable, by the slow fixed way 1-0-2-4 (its bypass 4-0
+	# gone); the console A holds would open 1-4 (m2), which saves clearly more than the fire-to-walkable time
+	# (RELAY_WARNING + RELAY_MOVE). Veteran / Expert (Rules.AI_LEVELS "shortcut") must fire the console for the
+	# shortcut and send the line over it; Standard takes the slow way and never fires.
+	for level in ["Standard", "Veteran", "Expert"]:
+		var sim17d := Sim.new()
+		sim17d.setup(rem_map, rem_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
+		sim17d.demolished[5] = 999999.0                   # edge "4-0": node 4's bypass is gone
+		for id in [0, 2, 3]:                               # A holds the console and the far side, with nothing there
+			sim17d.nodes[id]["owner"] = "A"
+			sim17d.nodes[id]["units"] = 0.0
+		sim17d.nodes[1]["owner"] = "A"                     # ...and node 1, where its troops are
+		sim17d.nodes[1]["units"] = 300.0
+		sim17d.nodes[6]["units"] = 2000.0                  # B's home is out of reach: node 4 is the one plan
+		var ai17d := SeatAI.new("A", 2.0, level)
+		var slow := ai17d._trip(sim17d, 1, 4)
+		var slow_route := ai17d._path(sim17d, 1, 4)
+		sim17d.nodes[0]["relay_index"] = sim17d.relay_next_index(sim17d.nodes[0])
+		ai17d._fresh()
+		var fast := ai17d._trip(sim17d, 1, 4)
+		sim17d.nodes[0]["relay_index"] = 0
+		ai17d._fresh()
+		if level == "Standard":
+			check(slow_route == [1, 0, 2, 4] and fast < slow - (Rules.RELAY_WARNING + Rules.RELAY_MOVE) - 3.0,
+					"the slow fixed way 1-0-2-4 takes %.1f s, the console's shortcut 1-4 %.1f s: clearly more than the fire-to-walkable time" % [slow, fast])
+		var fired_d := false
+		var over_shortcut := false
+		for _t in range(120):
+			ai17d.think(sim17d, 1.0)
+			sim17d.step(1.0)
+			fired_d = fired_d or sim17d.events.any(func(e): return e["type"] == "relay_fired" and e["seat"] == "A")
+			over_shortcut = over_shortcut or sim17d.hordes.any(func(h): return h["owner"] == "A" and h["route"] == [1, 4])
+			if sim17d.nodes[4]["owner"] == "A":
+				break
+		if level == "Standard":
+			check(not fired_d and not over_shortcut and sim17d.nodes[4]["owner"] == "A", "Standard takes node 4 the slow way and never fires the console")
+		else:
+			check(fired_d and over_shortcut and sim17d.nodes[4]["owner"] == "A", "%s fires the console for the shortcut and sends its line over 1-4" % level)
+
 	# LAST STAND (GAME-RULES sec10): hidden method from the map's list, revealed with the order at
 	# the start; 10 s warning per node; everything on the node dies; the final never drops.
 	var sim18 := Sim.new()

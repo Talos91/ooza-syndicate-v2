@@ -775,24 +775,34 @@ static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) ->
 # door - BRAWL commits a line once sent (Sim.recall is SIEGE only), so the "recall" is the part still in the vat.
 # "guard_share": besides the home, a node holding at least this share of the seat's troops is a key node (1.0: home
 # only). "guard_ahead": a line counts as live when it lands within this many seconds (0 = only lines already landing).
+# SHORTCUTS (ai-retune-prep, 2026-09-29; 🗺️ on N-04 Console: the remote decks are optional shortcuts beside fixed slower
+# routes, and the AI never fired the console): "shortcut" = the seconds a route that one of its own ready relays would
+# open must save over the way in it has now for the AI to fire that relay for it (SeatAI._open_route, relays 2+; the
+# levels below never open routes, the knob is unused there). The deck is walkable RELAY_WARNING + RELAY_MOVE s after
+# the fire and the line leaves on the next think, so the saving must be clearly above 2.4 s. Was a fixed 3.0 s.
 const AI_GUARD_FLOOR := 2.0                  # x SCALE: what a guard 3 donor always keeps
 const AI_GUARD_COVER := 0.8                  # guard 2+: reinforce only if the help in time covers this share of the shortfall
 const AI_LEVELS := {
 	"Training": {"period": 5.0, "coordination": 1, "error": 0.40, "observe": 10.0, "grace": 75.0, "attack_gap": 22.0,
 			"forecast": 0.0, "choice": 4, "invest": 26.0, "margin": 1.5, "relays": 0, "intel": 0,
-			"teamwork": 0, "focus": 0.0, "assist": 0.0, "sync": 0.0, "guard": 0, "guard_share": 1.0, "guard_ahead": 0.0},
+			"teamwork": 0, "focus": 0.0, "assist": 0.0, "sync": 0.0, "guard": 0, "guard_share": 1.0, "guard_ahead": 0.0,
+			"shortcut": 0.0},
 	"Casual": {"period": 4.0, "coordination": 1, "error": 0.32, "observe": 8.0, "grace": 50.0, "attack_gap": 17.0,
 			"forecast": 0.2, "choice": 3, "invest": 22.0, "margin": 1.35, "relays": 0, "intel": 0,
-			"teamwork": 1, "focus": 0.0, "assist": 0.3, "sync": 0.0, "guard": 1, "guard_share": 1.0, "guard_ahead": 12.0},
+			"teamwork": 1, "focus": 0.0, "assist": 0.3, "sync": 0.0, "guard": 1, "guard_share": 1.0, "guard_ahead": 12.0,
+			"shortcut": 0.0},
 	"Standard": {"period": 2.5, "coordination": 2, "error": 0.27, "observe": 7.0, "grace": 45.0, "attack_gap": 15.0,
 			"forecast": 0.4, "choice": 3, "invest": 18.0, "margin": 1.2, "relays": 1, "intel": 0,
-			"teamwork": 2, "focus": 10.0, "assist": 0.9, "sync": 3.0, "guard": 2, "guard_share": 0.5, "guard_ahead": 20.0},
+			"teamwork": 2, "focus": 10.0, "assist": 0.9, "sync": 3.0, "guard": 2, "guard_share": 0.5, "guard_ahead": 20.0,
+			"shortcut": 0.0},
 	"Veteran": {"period": 1.8, "coordination": 2, "error": 0.18, "observe": 4.0, "grace": 20.0, "attack_gap": 9.0,
 			"forecast": 0.6, "choice": 2, "invest": 15.0, "margin": 1.1, "relays": 2, "intel": 1,
-			"teamwork": 3, "focus": 16.0, "assist": 1.0, "sync": 6.0, "guard": 3, "guard_share": 0.4, "guard_ahead": 25.0},
+			"teamwork": 3, "focus": 16.0, "assist": 1.0, "sync": 6.0, "guard": 3, "guard_share": 0.4, "guard_ahead": 25.0,
+			"shortcut": 3.0},
 	"Expert": {"period": 1.3, "coordination": 2, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
 			"forecast": 0.75, "choice": 2, "invest": 12.0, "margin": 1.05, "relays": 3, "intel": 1,
-			"teamwork": 3, "focus": 18.0, "assist": 1.0, "sync": 8.0, "guard": 3, "guard_share": 0.35, "guard_ahead": 30.0},
+			"teamwork": 3, "focus": 18.0, "assist": 1.0, "sync": 8.0, "guard": 3, "guard_share": 0.35, "guard_ahead": 30.0,
+			"shortcut": 2.5},
 }
 
 
