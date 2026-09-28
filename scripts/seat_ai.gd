@@ -82,6 +82,11 @@ func think(sim: Sim, dt: float) -> void:
 	_clock = sim.time
 	if _t < period or sim.over or sim.eliminated.has(seat):
 		return
+	# perf pass (audit B1): no two seats think on the same frame (their costs added up to one hitch) - a seat
+	# due on a frame another seat already thought on waits one frame; the gap then stays (each think resets _t)
+	if float(sim.get_meta("ai_think_t", -1.0)) == sim.time:
+		return
+	sim.set_meta("ai_think_t", sim.time)
 	_t = 0.0
 	_busy = {}      # a send supersedes the node's earlier order: one order per node per think
 	_fresh()
