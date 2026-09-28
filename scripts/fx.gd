@@ -273,10 +273,12 @@ func _relay(n: Dictionary, entry: Dictionary) -> void:
 	arc.visible = n["owner"] != "" and not sim.collapsed.get(id, false)
 	if arc.visible:
 		arc.position = n["pos"] + Vector3(0, 0.3, 0)
-		var built := [frac, arc_col]
-		if _arc_built.get(id, []) != built:           # idle relays keep their mesh: no rebuild per frame
-			_arc_built[id] = built
-			arc.material_override = Mats.glow(arc_col, 0.9)
+		frac = roundf(frac * Rules.RELAY_ARC_STEPS) / Rules.RELAY_ARC_STEPS   # perf pass (audit B9): a rebuild per step, not per frame
+		var built: Array = _arc_built.get(id, [])
+		if built.is_empty() or built[0] != frac or built[1] != arc_col:   # idle relays keep their mesh
+			if built.is_empty() or built[1] != arc_col:
+				arc.material_override = Mats.glow(arc_col, 0.9)
+			_arc_built[id] = [frac, arc_col]
 			_build_arc(arc.mesh as ImmediateMesh, Rules.R - 1.0, Rules.R - 0.45, frac)
 	# ghosts of the next state during the warning, motion of the decks during the tick
 	for i in sim.controlled_edges(id):

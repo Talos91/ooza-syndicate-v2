@@ -7,10 +7,13 @@ extends Node
 ## is drawn where and as its node says (MapBatch.verify). Prints the numbers; exit code 0 = within budget.
 ## Headless it prints SKIP and exits 0. Run it with a timeout (a windowed capture can stall on a busy GPU):
 ##   timeout 90 Godot --path . tests/perf_check.tscn
+## `-- --full` (perf pass): the FULL profile (desktop: shadows, the HD kit) on Rules.PERF_CHECK_FULL_MAP at 1600x900
+## against Rules.PERF_BUDGET_FULL_*.
 
 var main: Node3D
 var t := 0.0
 var samples := []
+var full := "--full" in OS.get_cmdline_user_args()
 
 
 func _ready() -> void:
@@ -19,15 +22,15 @@ func _ready() -> void:
 		get_tree().quit(0)
 		return
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-	DisplayServer.window_set_size(Vector2i(1266, 585))
-	PerfProfile.force_level("phone")
+	DisplayServer.window_set_size(Vector2i(1600, 900) if full else Vector2i(1266, 585))
+	PerfProfile.force_level("full" if full else "phone")
 	main = (load("res://main.tscn") as PackedScene).instantiate()
-	main.set("map_path", Rules.PERF_CHECK_MAP)
+	main.set("map_path", Rules.PERF_CHECK_FULL_MAP if full else Rules.PERF_CHECK_MAP)
 	main.set("demo", true)
 	main.set("ai_level", "Standard")
 	main.set("ff_to", Rules.PERF_CHECK_FF)
 	main.set("seed_value", 7)
-	main.set("mobile", true)
+	main.set("mobile", not full)
 	add_child(main)
 
 
@@ -46,7 +49,7 @@ func _process(dt: float) -> void:
 	for s in samples:
 		for k in range(3):
 			top[k] = maxf(top[k], s[k])
-	var budget := [Rules.PERF_BUDGET_DRAW_CALLS, Rules.PERF_BUDGET_PRIMITIVES, Rules.PERF_BUDGET_OBJECTS]
+	var budget := [Rules.PERF_BUDGET_FULL_DRAW_CALLS, Rules.PERF_BUDGET_FULL_PRIMITIVES, Rules.PERF_BUDGET_FULL_OBJECTS] if full 			else [Rules.PERF_BUDGET_DRAW_CALLS, Rules.PERF_BUDGET_PRIMITIVES, Rules.PERF_BUDGET_OBJECTS]
 	var names := ["draw calls", "primitives", "objects"]
 	var fails := 0
 	for k in range(3):
@@ -60,6 +63,7 @@ func _process(dt: float) -> void:
 	var ms_ok := not ms.is_empty() and float(ms.get("fps_avg", 0)) > 0.0 and int(ms.get("frames", 0)) > 0 			and float(ms["frame_ms_p50"]) <= float(ms["frame_ms_p95"]) and float(ms["frame_ms_p95"]) <= float(ms["frame_ms_max"])
 	fails += 0 if ms_ok else 1
 	print("%s match_stats %s" % ["PASS" if ms_ok else "FAIL", ms])
-	print("perf_check %s: %s at t=%.0f, batch %s" % ["OK" if fails == 0 else "FAILED", Rules.PERF_CHECK_MAP.get_file(),
+	print("perf_check %s%s: %s at t=%.0f, batch %s" % ["OK" if fails == 0 else "FAILED", " (FULL)" if full else "",
+			(Rules.PERF_CHECK_FULL_MAP if full else Rules.PERF_CHECK_MAP).get_file(),
 			float(main.get("sim").get("time")), MapBatch.stats()])
 	get_tree().quit(0 if fails == 0 else 1)

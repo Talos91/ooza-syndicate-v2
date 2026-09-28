@@ -9,9 +9,9 @@ extends Node3D
 ## on the same faction never look alike (Alpha 14 playtest), and stands on a disc in that colour.
 ## Garrisons don't loiter round the vat: the platform neon shows the owner. Drawn with one
 ## MultiMesh per faction x seat plus one for the discs, rebuilt every frame.
-## Perf pass (2026-09-28, audit B1 - the #1 view cost): each MultiMesh's frame is written straight into a
-## PackedFloat32Array (Batch) and handed over in one RenderingServer.multimesh_set_buffer; a column works out its
-## key and colours once, and each body finds its path segment once for its three samples (Sim.sample's search).
+## Perf pass (2026-09-28, audit B1 - the #1 view cost): each MultiMesh's frame goes into preallocated typed arrays
+## (Batch), nothing allocated per body; a column works out its key and colours once, and each body finds its path
+## segment by a short walk for its three samples (Sim.sample's own sums).
 ## TERRITORY: GOO (Rules.goo_territory, 0.18.7 - the goo readability round 3, renders_r3 S1-S4, S9):
 ## the body keeps its RACE colour (the approved texture, no hue shift) and the player colour moves to a
 ## rim glow (the shader's rim with accent := seat colour, gain GOO_RIM_GAIN) - goo = player, body = race,
@@ -47,74 +47,51 @@ var _scale := {}                     # faction -> uniform scale to UNIT_SIZE
 var _mm := {}                        # "faction|seat" -> MultiMeshInstance3D
 var _xf := {}                        # "faction|seat" -> Batch: this frame's bodies
 var _disc: MultiMeshInstance3D
-var _discs := Batch.new(4096, 16)    # this frame's discs (transform + colour)
+var _discs := Batch.new(4096, true)  # this frame's discs (transform + colour)
 var _ghost_seed := {}                # "faction|seat|g" -> its flicker seed (SkillFx.ghost_alpha)
 
 
 class Batch:
-	## One MultiMesh's instances this frame, in RenderingServer.multimesh_set_buffer's layout (12 floats a
-	## transform: basis rows and origin; 16 with a colour). `buf` always holds `cap` instances (the MultiMesh's
-	## instance_count); the first `n` are this frame's.
-	var buf := PackedFloat32Array()
+	## One MultiMesh's instances this frame: transforms (and colours for the discs) kept in preallocated typed arrays,
+	## handed over at flush. (Measured windowed, 1,200 bodies + discs: the old Array of Transform3D / [Transform3D,
+	## Color] pairs 648 us, one packed buffer + multimesh_set_buffer 484 us - GDScript's twelve float stores cost more
+	## than the calls they save - these arrays 335 us.)
+	var xf: Array[Transform3D] = []
+	var col := PackedColorArray()
+	var colours := false
 	var n := 0
-	var cap := 0
-	var stride := 12
 
-	func _init(c: int, st := 12) -> void:
-		cap = c
-		stride = st
-		buf.resize(c * st)
+	func _init(c: int, with_colours := false) -> void:
+		colours = with_colours
+		xf.resize(c)
+		if colours:
+			col.resize(c)
 
-	func grow() -> void:
-		cap = nearest_po2(n + 1)
-		buf.resize(cap * stride)
-
-	func put(b: Basis, o: Vector3) -> void:
-		if n >= cap:
-			grow()
-		var i := n * stride
-		buf[i] = b.x.x
-		buf[i + 1] = b.y.x
-		buf[i + 2] = b.z.x
-		buf[i + 3] = o.x
-		buf[i + 4] = b.x.y
-		buf[i + 5] = b.y.y
-		buf[i + 6] = b.z.y
-		buf[i + 7] = o.y
-		buf[i + 8] = b.x.z
-		buf[i + 9] = b.y.z
-		buf[i + 10] = b.z.z
-		buf[i + 11] = o.z
+	func put(t: Transform3D) -> void:
+		if n >= xf.size():
+			xf.resize(nearest_po2(n + 1))
+		xf[n] = t
 		n += 1
 
-	func put_disc(size: float, o: Vector3, c: Color) -> void:
-		## Basis().scaled(Vector3.ONE * size) at o, in colour c.
-		if n >= cap:
-			grow()
-		var i := n * stride
-		buf[i] = size
-		buf[i + 1] = 0.0
-		buf[i + 2] = 0.0
-		buf[i + 3] = o.x
-		buf[i + 4] = 0.0
-		buf[i + 5] = size
-		buf[i + 6] = 0.0
-		buf[i + 7] = o.y
-		buf[i + 8] = 0.0
-		buf[i + 9] = 0.0
-		buf[i + 10] = size
-		buf[i + 11] = o.z
-		buf[i + 12] = c.r
-		buf[i + 13] = c.g
-		buf[i + 14] = c.b
-		buf[i + 15] = c.a
+	func put_col(t: Transform3D, c: Color) -> void:
+		if n >= xf.size():
+			xf.resize(nearest_po2(n + 1))
+			col.resize(xf.size())
+		xf[n] = t
+		col[n] = c
 		n += 1
 
 	func flush(mm: MultiMesh) -> void:
-		if mm.instance_count != cap:                     # grown this frame (every instance is rewritten below)
-			mm.instance_count = cap
-		RenderingServer.multimesh_set_buffer(mm.get_rid(), buf)
+		if n > mm.instance_count:                        # grow rather than drop (every slot is rewritten below)
+			mm.instance_count = nearest_po2(n)
+		for i in range(n):
+			mm.set_instance_transform(i, xf[i])
+		if colours:
+			for i in range(n):
+				mm.set_instance_color(i, col[i])
 		mm.visible_instance_count = n
+
+
 var _pour := {}                      # horde id -> {"L", "head", "t", "count"} while its column walks in
 var _seen := {}                      # horde ids drawn this frame (the rest are dropped from _pour)
 var _goo := false                    # the look the materials carry (Rules.goo_look)
@@ -241,8 +218,8 @@ func _put_unit(batch: Batch, scale: float, seat: String, disc: Color, pos: Vecto
 	var s: float = scale * size
 	var basis := Basis(Vector3.UP, heading + MODEL_YAW) * Basis(Vector3(0, 0, 1), roll) \
 			* Basis.from_scale(Vector3(1.0 + squeeze * 0.6, 1.0 - squeeze, 1.0 + squeeze * 0.45) * s)
-	batch.put(basis, pos + Vector3(0, 0.08 + bob, 0))
-	_discs.put_disc(size, pos + Vector3(0, 0.05, 0), disc)   # the disc goes in with its body
+	batch.put(Transform3D(basis, pos + Vector3(0, 0.08 + bob, 0)))
+	_discs.put_col(Transform3D(Basis().scaled(Vector3.ONE * size), pos + Vector3(0, 0.05, 0)), disc)   # the disc goes in with its body
 
 
 static func _seg(cum: PackedFloat32Array, s: float, lo: int) -> int:
@@ -645,14 +622,14 @@ func _draw_fallers() -> void:
 			basis = Basis(Vector3.UP, _fl_yaw[i] + MODEL_YAW + sp.y * age) * Basis(Vector3(1, 0, 0), sp.x * age) \
 					* Basis(Vector3(0, 0, 1), sp.z * age) * Basis.from_scale(Vector3(sq, stretch, sq) * s * shrink)
 			pos = _fl_p[i] + Vector3(v.x, 0.0, v.z) * age + Vector3.UP * (v.y * age - 0.5 * POUR_G * age * age)
-		(_xf[key] as Batch).put(basis, pos)
+		(_xf[key] as Batch).put(Transform3D(basis, pos))
 
 
 var _sent := {}                      # MultiMesh -> instances it was last handed (0: nothing to send again)
 
 
 func _send(b: Batch, mm: MultiMesh) -> void:
-	## One multimesh_set_buffer per MultiMesh per frame - none while it stays empty.
+	## A Batch to its MultiMesh - nothing while it stays empty.
 	if b.n == 0 and int(_sent.get(mm, 0)) == 0:
 		return
 	_sent[mm] = b.n
@@ -689,7 +666,7 @@ func add_blob(seat: String, pos: Vector3, scale3: Vector3) -> void:
 		add_child(inst)
 		_blob[seat] = inst
 		_blob_xf[seat] = Batch.new(mm.instance_count)
-	(_blob_xf[seat] as Batch).put(Basis.from_scale(scale3), pos)
+	(_blob_xf[seat] as Batch).put(Transform3D(Basis.from_scale(scale3), pos))
 
 
 func flush() -> void:
