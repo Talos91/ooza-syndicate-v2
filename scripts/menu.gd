@@ -3466,7 +3466,7 @@ func _backdrop_sheet(sel: Dictionary) -> void:
 	var th := floorf(tw * 9.0 / 16.0)
 	var cap := UiKit.line_h(self, 13, true) + UiKit.line_h(self, 12) + 12.0
 	var tile := Vector2(tw, th + cap + 12.0)
-	var note := "Your screen only: everyone in a room still plays the same map. Campaign missions and training keep their own."
+	var note := "For your matches here. In an online room its owner picks the background for everyone (the lobby's BACKGROUND). Campaign missions and training keep their own."
 	var head := UiKit.line_h(self, 12, true) + UiKit.line_h(self, 26, true) + UiKit.text_h(self, note, 13, pw - 48.0) + 28.0
 	var ph := minf(content.size.y - 24.0, head + 2.0 * tile.y + gap + 24.0)
 	var pos := ((content.size - Vector2(pw, ph)) / 2.0).floor()
@@ -4258,6 +4258,17 @@ func show_lobby() -> void:
 		show_lobby(), "secondary", shell_f, 14)
 	eb.disabled = not host
 	y += eb.size.y + 10.0
+	# UI (Daniele 2026-09-28): the room owner's BACKGROUND for everyone - AUTO / ROTATE / each of the five, in turn
+	var bgs := ["auto", "rotate"]
+	for i in range(Scenery.BATTLE_BACKDROPS.size()):
+		bgs.append(str(i))
+	var bgn := _backdrop_short(Net.room_backdrop) if not Net.room_backdrop.is_valid_int() \
+			else UiKit.backdrop_name(int(Net.room_backdrop), Scenery.BATTLE_BACKDROPS[int(Net.room_backdrop)])
+	var bgb := UiKit.btn(self, "BACKGROUND  ·  %s" % bgn, Vector2(0, y), Vector2(w, 44), func():
+		Net.set_room_backdrop(bgs[(bgs.find(Net.room_backdrop) + 1) % bgs.size()])
+		show_lobby(), "secondary", shell_f, 14)
+	bgb.disabled = not host
+	y += bgb.size.y + 10.0
 	if host and not Net.can_start():
 		y += _say("DEPLOY opens when every seat is filled (or EMPTY SEATS: AI) and every player is READY.", Vector2(0, y), 13, UiKit.MUTED, w)
 	_column_end(right, n0, y)

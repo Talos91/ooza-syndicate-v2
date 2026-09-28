@@ -405,10 +405,18 @@ const SEATS := {
 const NEUTRAL := Color("#a9b8c8")
 # relay state colours - the roster legend (BUILDING-PIECES.md B): the deck a state controls carries
 # its colour on its edge lights, the relay tower's symbol glows in the current state's colour
+# Relay states up to six a relay (Daniele 2026-09-28: states 4-6 fell back to white). The new ones (and s3, which read as s2
+# for colour-blind players: dE 1.8) were picked so every state stays apart from the others of its relay kind under normal
+# vision, protanopia, deuteranopia and tritanopia (Machado 2009 + CIEDE2000: >= 8.7 against its kind, 🧩 UI's
+# states_search.py) and as far as a light can from the 20 seat colours (both palettes, COLOUR-BLIND's too: >= 5).
 const STATE_COLORS := {
 	"r1": Color("#ffd23f"), "r2": Color("#ff8c2a"), "r3": Color("#ff4f9a"), "retract": Color("#ff5a5a"),
-	"s1": Color("#ffffff"), "s2": Color("#8fb3ff"), "s3": Color("#c9a3ff"),
-	"m1": Color("#ff9ecf"), "m2": Color("#9be7c4"), "warn": Color("#ff5a5a"), "build": Color("#ffd23f"),
+	"r4": Color("#b88ae6"), "r5": Color("#ebff99"), "r6": Color("#bfffd9"),
+	"s1": Color("#ffffff"), "s2": Color("#8fb3ff"), "s3": Color("#ffab73"),
+	"s4": Color("#bfffd2"), "s5": Color("#ffbfd2"), "s6": Color("#e0ff99"),
+	"m1": Color("#ff9ecf"), "m2": Color("#9be7c4"),
+	"m3": Color("#cae68a"), "m4": Color("#ffbfff"), "m5": Color("#ae8ae6"), "m6": Color("#ff824d"),
+	"warn": Color("#ff5a5a"), "build": Color("#ffd23f"),
 }
 const RELAY_GLYPH := {"rotation": "↻", "retract": "⇤", "switch": "⇄", "remote": "⌁"}
 # texture hue of each Alpha 11 creature map, and the race accent colour
