@@ -33,6 +33,8 @@ extends Node3D
 ##   --campaign-all                         CAMPAIGN: every playable mission open (Campaign.all_open)
 ##   --mission-start                        CAMPAIGN: skip the briefing (headless boot checks)
 ##   --mission-shot=brief|hud|win|lose --out=<dir>   CAMPAIGN: screenshot that screen as mission_<shot>.png, then quit
+##   --versus-shot=<png>                    UI: DEPLOY with the menu's saved picks (--menu-mode=, --ui-cfg=...), screenshot
+##                                           the VERSUS card, then quit (with --mission=<key> --mission-start: a mission's)
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is an online room (Net)
@@ -269,6 +271,10 @@ func _ready() -> void:
 			if arg.begins_with("--menu-page="):            # screenshot helper: open a menu page
 				(menu_layer as Menu).call("show_" + arg.substr(12))
 		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--versus-shot="):         # UI: screenshot helper - DEPLOY, the VERSUS card shoots itself
+				(menu_layer as Menu).deploy()
+				return
+		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--menu-shot="):           # screenshot the title screen, then quit
 				var out := arg.substr(12)
 				for i in range(20):
@@ -444,6 +450,7 @@ func start_match(path: String, faction: String, seat_factions: Dictionary, level
 		menu_layer.queue_free()
 		menu_layer = null
 	_start_map(path)
+	VersusScreen.hold_match(self)                      # UI: the VERSUS card over the built match, held paused until it ends
 
 
 func _start_online() -> void:
@@ -1990,6 +1997,7 @@ func start_mission(key: String, colour := "") -> void:
 	mode = "1v1"
 	ai_level = str(m.get("ai", ai_level))
 	LOADOUTS = {HUMAN: ArmyPresets.loadout_for(SEAT_FACTIONS[HUMAN])}
+	VersusScreen.note_mission(key, menu_layer != null)   # UI: from the campaign page or a new mission: VERSUS after START
 	if menu_layer:
 		menu_layer.queue_free()
 		menu_layer = null
@@ -2023,6 +2031,8 @@ func _mission_setup() -> void:
 
 
 func _mission_start() -> void:
+	if VersusScreen.hold_mission(self):                # UI: the VERSUS card first; it calls _mission_start again
+		return
 	paused = false
 	mission.start()
 
