@@ -632,7 +632,7 @@ static func privacy_text() -> String:
 		"SHARE PLAY & CRASH DATA (THE SWITCH IN SETTINGS AND ACCOUNT)",
 		"When it is ON the game sends: a session record (platform, phone or not, a rounded screen size, graphics setting), "
 			+ "a record per match (map, mode, faction, result, length, AI level, your counters such as captures and relay "
-			+ "fires), performance numbers (frame times, frame rate, draw calls), tutorial / campaign progress steps, and "
+			+ "fires), performance numbers (frame times, frame rate, draw calls), online connection quality (updates per second, freezes, round trip), tutorial / campaign progress steps, and "
 			+ "crash reports (the error text and where in the game it happened, with web addresses, keys and email "
 			+ "addresses removed). Records carry your game account id and the game version - never your name, email, "
 			+ "room codes, chat, what you type or where you are.",
