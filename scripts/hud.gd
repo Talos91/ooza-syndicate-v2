@@ -54,9 +54,11 @@ var skill_targets: Control             # the dock's target highlights: over the 
 var overlay: HudOverlay                # 0.19.0: monster reach, halo rings, relay-outcome preview, danger symbols
 var action_buttons: Dictionary = {}    # stable action name -> the inspector's Button (tutorial spotlight, spec I)
 var switch_ring: Control                # 0.19.0: the SWITCH button's READY / cooldown ring (SwitchRing)
-var end_panel: PanelContainer
-var pause_panel: PanelContainer
-var out_panel: PanelContainer          # 0.19.2 spec H7: "YOU'RE OUT" - SPECTATE / MAIN MENU (online: LEAVE ROOM)
+# UI (Alpha 21): the in-match screens are full-screen layers MatchScreens draws into (SCREEN-SYSTEM 17-20)
+var end_panel: Control                 # VICTORY / DEFEAT, and its MATCH DETAILS page
+var pause_panel: Control
+var out_panel: Control                 # 0.19.2 spec H7: "YOU'RE OUT" - SPECTATE / MAIN MENU (online: LEAVE ROOM)
+var _screens_vp := Vector2.ZERO        # the canvas size they were built for (a rotation rebuilds them)
 var spectate_button: Button             # stays after SPECTATE: a small way back to the menu while watching
 var _out_shown := false                 # this match's panel has already been offered once
 var monster_icon: MonsterIcon           # 0.19.2 spec H1: floats above your ready hub; tap to arm LAUNCH
@@ -436,19 +438,12 @@ func setup(m: Node3D) -> void:
 	rotate_hint.add_theme_stylebox_override("normal", bg)
 	rotate_hint.visible = false
 	root.add_child(rotate_hint)
-	end_panel = PanelContainer.new()
-	end_panel.visible = false
-	style_panel(end_panel, accent)
-	root.add_child(end_panel)
-	pause_panel = PanelContainer.new()
-	pause_panel.visible = false
-	style_panel(pause_panel, accent)
-	root.add_child(pause_panel)
-	out_panel = PanelContainer.new()
-	out_panel.visible = false
-	style_panel(out_panel, Rules.state_color("warn"))
-	root.add_child(out_panel)
+	end_panel = _screen_layer()
+	pause_panel = _screen_layer()
+	out_panel = _screen_layer()
 	spectate_button = button("LEAVE ROOM" if main.online else "MAIN MENU", main.to_menu, 170, 48, 16)
+	UiKit.style_button(spectate_button, "secondary", _my_faction())   # UI: the screens' language while watching
+	spectate_button.add_theme_font_override("font", UiKit.HEAD)
 	spectate_button.visible = false
 	root.add_child(spectate_button)
 	monster_icon = MonsterIcon.new()
@@ -515,9 +510,14 @@ func layout(vp: Vector2, m: Vector4) -> void:
 		chat_button.position = Vector2(vp.x - m.z - chat_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # Debug's slot (hidden online)
 	rotate_hint.size = vp
 	rotate_hint.visible = vp.y > vp.x
-	for p in [end_panel, pause_panel, out_panel]:
-		p.size = p.get_combined_minimum_size()
-		p.position = (vp - p.size) / 2.0
+	if vp != _screens_vp and (end_panel.visible or pause_panel.visible or out_panel.visible):
+		_screens_vp = vp                                # UI: a rotation / resize lays the open screen out again
+		if end_panel.visible:
+			_build_end()
+		elif pause_panel.visible:
+			pause_menu()
+		elif out_panel.visible:
+			show_out_panel()
 	spectate_button.size = spectate_button.custom_minimum_size
 	spectate_button.position = Vector2(m.x, vp.y - m.w - spectate_button.size.y - 8.0)
 
@@ -1196,13 +1196,14 @@ func _check_out() -> void:
 func show_out_panel() -> void:
 	if not shows("out_panel"):
 		return
-	_fill_overlay(out_panel, "YOU'RE OUT", "Every node and line you had is gone - you can keep watching, or leave.",
-			[["SPECTATE", func():
+	# UI (Alpha 21): a card in the pause's language over the dimmed match - SPECTATE first, the way out quieter
+	MatchScreens.open(out_panel, mobile, _my_faction()).card({"kicker": "ELIMINATED", "headline": "YOU'RE OUT.",
+			"body": "Every node and line you had is gone - you can keep watching, or leave.", "glow": false,
+			"actions": [["SPECTATE  →", func():
 				out_panel.visible = false
 				spectate_button.visible = true],
-			["LEAVE ROOM" if main.online else ("CAMPAIGN" if main.get("mission") != null else "MAIN MENU"), main.to_menu]])   # CAMPAIGN
-	out_panel.visible = true
-	layout(root.get_viewport_rect().size, margins)
+			["LEAVE ROOM" if main.online else ("CAMPAIGN" if main.get("mission") != null else "MAIN MENU"), main.to_menu]]})   # CAMPAIGN
+	_show_screen(out_panel)
 
 
 func _refresh_inspector(cam: Camera3D) -> void:
@@ -1438,34 +1439,35 @@ func show_banner(msg: String, seconds := 4.0) -> void:
 
 
 # ------------------------------------------------------------------ overlays
+# UI (Alpha 21 UI pass): PAUSE, VICTORY / DEFEAT, MATCH DETAILS and YOU'RE OUT are MatchScreens pages (UiKit's
+# language, the player's faction accent) on full-screen layers over the match; the actions are the same as before.
 func pause_menu() -> void:
 	if end_panel.visible:
 		return
+	var s := MatchScreens.open(pause_panel, mobile, _my_faction())
+	var where := "%s · %s" % [str(main.map.get("name", "")).to_upper(), MatchScreens.clock(sim.time)]
 	if main.online:                                   # a room never pauses (Alpha 11): the menu only
-		_fill_overlay(pause_panel, "ROOM %s" % Net.room_code, "%s · %02d:%02d · the match keeps running\n%s" % [
-				str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60, Net.net_stats_line()],
-				[["RESUME", func(): pause_panel.visible = false], _territory_action(), ["LEAVE ROOM", main.to_menu]])
-		pause_panel.visible = true
-		layout(root.get_viewport_rect().size, margins)
+		s.card({"kicker": "ROOM %s" % Net.room_code, "headline": "MATCH MENU.",
+				"body": "%s · the match keeps running\n%s" % [where, Net.net_stats_line()],
+				"actions": [["RESUME  →", func(): pause_panel.visible = false], ["LEAVE ROOM", main.to_menu, "tertiary"]],
+				"pairs": [_territory_action()]})
+		_show_screen(pause_panel)
 		return
 	main.paused = true
+	var resume := ["RESUME  →", func(): main.paused = false; pause_panel.visible = false]
 	if main.get("director") != null:                  # TUTORIAL: PAUSE keeps working and gains LESSONS (§6)
-		_fill_overlay(pause_panel, "PAUSED", "%s · %02d:%02d" % [str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
-				[["RESUME", func(): main.paused = false; pause_panel.visible = false],
-				[TutorialDirector.line("paused_lessons"), main.to_lessons], _territory_action(),
-				["RESTART", main.restart], ["MAIN MENU", main.to_menu]])
-		pause_panel.visible = true
-		layout(root.get_viewport_rect().size, margins)
+		s.card({"kicker": where, "headline": "PAUSED.",
+				"actions": [resume, [TutorialDirector.line("paused_lessons"), main.to_lessons], ["RESTART MATCH", main.restart],
+				["MAIN MENU", main.to_menu, "tertiary"]], "pairs": [_territory_action()]})
+		_show_screen(pause_panel)
 		return
-	_fill_overlay(pause_panel, "PAUSED", "%s · %02d:%02d" % [str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60],
-			[["RESUME", func(): main.paused = false; pause_panel.visible = false],
-			["LAST STAND: %s" % ("ON" if Rules.last_stand else "OFF"), func():
+	s.card({"kicker": where, "headline": "PAUSED.",
+			"actions": [resume, ["RESTART MATCH", main.restart],
+			["CAMPAIGN" if main.get("mission") != null else "EXIT MATCH", main.to_menu, "tertiary"]],   # CAMPAIGN: a mission leaves to its page
+			"pairs": [["LAST STAND: %s" % ("ON" if Rules.last_stand else "OFF"), func():
 				Rules.last_stand = not Rules.last_stand
-				pause_menu()],
-			_territory_action(),
-			["RESTART", main.restart], ["CAMPAIGN" if main.get("mission") != null else "MAIN MENU", main.to_menu]])   # CAMPAIGN: a mission leaves to its page
-	pause_panel.visible = true
-	layout(root.get_viewport_rect().size, margins)
+				pause_menu()], _territory_action()]})
+	_show_screen(pause_panel)
 
 
 func _territory_action() -> Array:
@@ -1478,12 +1480,14 @@ func _territory_action() -> Array:
 var _end_winner := ""
 var _end_rematch: Label                           # online results: the rematch line, updated in place
 var _end_rematch_btn: Button
+var _end_page := "result"                         # UI: the results screen's page - "result" or "details"
 
 
 func _on_rematch_changed() -> void:
 	## A vote arrived: refresh the rematch line and button only - rebuilding the panel replayed the rewards strip and
-	## read as the screen reloading (Daniele, 0.20.10 playtest).
-	if not end_panel.visible:
+	## read as the screen reloading (Daniele, 0.20.10 playtest). On MATCH DETAILS nothing moves: BACK rebuilds the
+	## results with the latest votes.
+	if not end_panel.visible or _end_page != "result":
 		return
 	if is_instance_valid(_end_rematch) and is_instance_valid(_end_rematch_btn):
 		_rematch_texts()
@@ -1515,59 +1519,108 @@ func show_end(winner: String) -> void:
 	_end_winner = winner
 	main.paused = true
 	out_panel.visible = false                          # the match ending wins over YOU'RE OUT lingering on top
-	var title := "VICTORY" if sim.allied(winner, human) else ("DEFEAT" if winner != "" else "DRAW")   # team modes: allies win together
-	var a_lost: float = sim.combat_losses.get(human, 0.0)
-	var a_fell: float = sim.fall_losses.get(human, 0.0)
-	var captures := sim.events.filter(func(e): return e["type"] == "capture" and e["seat"] == human).size()
-	var body := "%s · %02d:%02d\ncaptures %d   ·   lost in combat %d   ·   lost to falls %d\n%s" % [
-			str(main.map.get("name", "")), int(sim.time) / 60, int(sim.time) % 60, captures, Rules.shown(a_lost), Rules.shown(a_fell),
-			("Last Stand: %s" % sim.last_stand_method.to_upper()) if sim.last_stand_active else "decided before the Last Stand"]
-	if title == "DRAW" and sim.draw_line != "":            # 7:00, a neutral last platform: the funny call-out (0.19.0)
-		body = str(sim.draw_line) + "\n" + body
-	if main.online:
-		var col := _fill_overlay(end_panel, title, body, [["REMATCH", func(): main.rematch_random()],
-				["LEAVE ROOM", main.to_menu]], _reward_strip())
-		_end_rematch = text_label("", 18, Color("ffd15c"))   # who is ready, what happens next (updated in place)
-		_end_rematch.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		col.add_child(_end_rematch)
-		col.move_child(_end_rematch, col.get_child_count() - 3)   # above the two buttons
-		_end_rematch_btn = col.get_child(col.get_child_count() - 2) as Button
-		_rematch_texts()
-		if not Net.rematch_changed.is_connected(_on_rematch_changed):
-			Net.rematch_changed.connect(_on_rematch_changed)
-	else:
-		_fill_overlay(end_panel, title, body, [["REMATCH ON A RANDOM MAP", main.rematch_random], ["MAIN MENU", main.to_menu]], _reward_strip())
-	end_panel.visible = true
 	pause_panel.visible = false
-	layout(root.get_viewport_rect().size, margins)
+	_end_page = "result"
+	_build_end()
+	if main.online and not Net.rematch_changed.is_connected(_on_rematch_changed):
+		Net.rematch_changed.connect(_on_rematch_changed)
 
 
-func _reward_strip() -> Control:
+func show_end_details() -> void:
+	## MATCH DETAILS (SCREEN-SYSTEM 20): every seat's numbers; BACK returns to the results.
+	_end_page = "details"
+	_build_end()
+
+
+func _build_end() -> void:
+	## VICTORY / DEFEAT (SCREEN-SYSTEM 18 / 19): the outcome readable before any numbers - the kicker, VICTORY. /
+	## DEFEAT. / DRAW., the map, your faction's character, three real numbers - then PROGRESSION's strip exactly as it
+	## was (main.rewards, granted once at the match end: a rebuild only draws it again), then the ways on.
+	var winner := _end_winner
+	var won := sim.allied(winner, human)               # team modes: allies win together
+	var draw := winner == ""
+	var s := MatchScreens.open(end_panel, mobile, _my_faction())
+	var seats: Array = sim.factions.keys()
+	var team := sim.teams.has(human)
+	var ffa := not team and seats.size() > 2
+	var outcome := "VICTORY" if won else ("DRAW" if draw else "DEFEAT")
+	var where := "%s · %s" % [main.mode, MatchScreens.clock(sim.time)]
+	if main.online:
+		where = "ROOM %s · %s" % [Net.room_code, where]
+	var primary := []
+	var quiet := []
+	if not main.online:                                # CONTINUE opens PLAY; RETRY replays this map as it was
+		primary = ["CONTINUE  →", func(): main.to_menu("play")] if won else ["RETRY  →", main.restart]
+		quiet = [["REMATCH · RANDOM MAP", main.rematch_random], ["CHANGE LOADOUT", func(): main.to_menu("armies")],
+				["HOME", main.to_menu]]
+	if _end_page == "details":
+		s.details({"name": str(main.map.get("name", "")), "sub": where, "outcome": outcome, "primary": primary,
+				"back": func():
+					_end_page = "result"
+					_build_end()}, MatchScreens.seat_table(sim, human))
+		_show_screen(end_panel)
+		return
+	var placed := Progression.placements(sim)
+	var kicker := "NO SIDE HOLDS THE MAP"
+	if ffa and not won and not draw:
+		kicker = "FINISHED %s OF %d" % [MatchScreens.ordinal(int(placed.get(human, seats.size()))).to_upper(), seats.size()]
+	elif not draw:
+		kicker = ("YOUR TEAM HOLDS THE MAP" if team else "TERRITORY SECURED") if won else ("YOUR TEAM LOST THE MAP" if team else "TERRITORY LOST")
+	var sub := where + "  ·  " + (("Last Stand: %s" % sim.last_stand_method.to_upper()) if sim.last_stand_active else "decided before the Last Stand")
+	if not won and not draw and seats.size() > 2:     # who took it, when it wasn't a plain duel
+		sub = "Won by %s  ·  %s" % [str(UiKit.NAMES.get(str(sim.factions.get(winner, "")), winner)), sub]
+	if draw and sim.draw_line != "":                   # 7:00, a neutral last platform: the funny call-out (0.19.0)
+		sub = str(sim.draw_line) + "\n" + sub
+	var st := Progression.seat_stats(sim, human)
+	var third := [str(st["captures"]), "Captures"]
+	if ffa:
+		third = ["%s / %d" % [MatchScreens.ordinal(int(placed.get(human, seats.size()))), seats.size()], "Placement"]
+	var extras := []
+	var strip := _reward_strip(s.reward_scale(ui_scale))   # PROGRESSION: kept whole
+	if strip != null:
+		extras.append(strip)
+	if main.online:                                   # the rematch vote: who is ready, what happens next (updated in place)
+		var rs: Dictionary = Net.rematch_status()
+		_end_rematch = UiKit.label(s, "", 14, UiKit.STAR)
+		_end_rematch.custom_minimum_size.y = UiKit.line_h(s, 14) * ((rs["ready"] as Array).size() + (rs["waiting"] as Array).size() + 2)
+		extras.append(_end_rematch)
+		primary = ["REMATCH", func(): main.rematch_random()]
+		quiet = [["LEAVE ROOM", main.to_menu]]
+	var out := s.result({"won": won, "draw": draw, "kicker": kicker, "headline": outcome + ".",
+			"name": str(main.map.get("name", "")), "sub": sub,
+			"metrics": [[MatchScreens.clock(sim.time), "Match time"],
+					["%d / %d" % [MatchScreens.nodes_held(sim, human), sim.nodes.size()], "Nodes held"], third],
+			"primary": primary, "details": show_end_details, "quiet": quiet, "extras": extras})
+	if main.online:
+		_end_rematch_btn = out.get("primary") as Button
+		_rematch_texts()
+	_show_screen(end_panel)
+
+
+func _reward_strip(scale := 1.0) -> Control:
 	## PROGRESSION (0.20.1): what the match paid (main.rewards, set once at the match end), or nothing.
 	var r = main.get("rewards")
-	return RewardStrip.make(r, ui_scale) if r is Dictionary and not (r as Dictionary).get("lines", []).is_empty() else null
+	return RewardStrip.make(r, scale) if r is Dictionary and not (r as Dictionary).get("lines", []).is_empty() else null
 
 
-func _fill_overlay(panel: PanelContainer, title: String, body: String, actions: Array, extra: Control = null) -> VBoxContainer:
-	for c in panel.get_children():
-		c.queue_free()
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
-	col.custom_minimum_size = Vector2(460, 0) * ui_scale
-	panel.add_child(col)
-	var t := text_label(title, 36)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(t)
-	var b := text_label(body, 18, Color("c8e6ee"))
-	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(b)
-	if extra != null:                                 # PROGRESSION: the results screen's rewards strip
-		col.add_child(extra)
-	var tall := 80 if actions.size() <= 5 else 78     # six pause actions (TERRITORY) still fit a landscape phone; 78 keeps them >= 44 pt too
-	for a in actions:
-		var btn := button(a[0], a[1], 0, 56 if not mobile else tall, 22)
-		col.add_child(btn)
-	return col
+func _my_faction() -> String:
+	return str(sim.factions.get(human, main.SEAT_FACTIONS.get(human, "vex")))
+
+
+func _screen_layer() -> Control:
+	## One in-match screen's layer: the whole canvas, hidden until MatchScreens fills it.
+	var c := Control.new()
+	c.visible = false
+	c.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(c)
+	return c
+
+
+func _show_screen(layer: Control) -> void:
+	_screens_vp = root.get_viewport_rect().size
+	layer.visible = true
+	root.move_child(layer, -1)                         # over the monster icon / SPECTATE button added after it
+	root.move_child(rotate_hint, -1)                   # (the portrait hint stays on top of everything)
 
 
 # ------------------------------------------------------------------ debug panel
