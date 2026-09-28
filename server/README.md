@@ -35,10 +35,11 @@
 - ufw: 22, 80, 443 only. fail2ban, unattended-upgrades, 2 GB swap. Game files in `/opt/ooze` (user `ooze`):
   `godot` (the official 4.6.1 Linux binary), `relay.py`, `web/` (the build), `data/` (the match hosts'
   `user://`), `logs/room-<code>.log` (kept 7 days).
-- Address until a domain exists: `45-32-126-20.sslip.io` (sslip.io resolves it to the IP; Caddy gets a
-  Let's Encrypt certificate for it). The game connects to `wss://45-32-126-20.sslip.io/ooze`
-  (`Net.RELAY_URL`). With a domain: point `play.<domain>` at the IP, change the Caddyfile site name and
-  `Net.RELAY_URL`.
+- Addresses (2026-09-28): **`rooms.oozesyndicate.com`** (Vercel DNS, team talos-projects00: `rooms A 45.32.126.20`) and
+  the old `45-32-126-20.sslip.io`; Caddy serves both from one site block and gets a Let's Encrypt certificate for each.
+  Builds from 0.21.12 connect to `wss://rooms.oozesyndicate.com/ooze` (`Net.RELAY_URL`); older ones still use sslip.io,
+  so keep both names. The game itself is at https://oozesyndicate.com (GitHub Pages; talos91.github.io redirects there).
+  DNS, mail forwarding (ImprovMX MX + SPF) and the cut-over: `05 Handoff/handoffs/architect-specs/domain-plan.md`.
 
 ## Services
 
@@ -46,7 +47,8 @@
   for the relay plus up to three match hosts (~200-215 MB each; `MemoryHigh=820M` reclaims first). Needs `python3-websockets`, `libfontconfig1`.
 - Caddy (`/etc/caddy/Caddyfile`, kept in `server/Caddyfile` since 0.21.4; `deploy.sh --relay` validates and installs it when it
   differs, keeping `Caddyfile.previous`): TLS on 443, `/ooze*` -> `127.0.0.1:8765`; everything else serves
-  `/opt/ooze/web` - the **test link** https://45-32-126-20.sslip.io/, always the build the match hosts run.
+  `/opt/ooze/web` - the **test link** https://rooms.oozesyndicate.com/ (also https://45-32-126-20.sslip.io/), always the build the
+  match hosts run.
 
 ## Deploy (every publish, after the Web export and the skins pack)
 
