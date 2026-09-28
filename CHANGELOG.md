@@ -10,6 +10,7 @@
   re-meshed piece's old surfaces; test_map_batch_swap). A rival's cast no longer floats its name over its own callout (the SCORCH overlap).
 - **Guest network stats** (🖥️): a guest's round totals (updates/s, longest gap, freezes, RTT, buffer, corrections) go into the match
   telemetry, numbers only, only when telemetry is shared - so lag can be told from frame rate next time.
+  The PRIVACY page and privacy.html list "online connection quality" accordingly (🏆; the telemetry function whitelists the key).
 - Line endings: a .gitattributes keeps text at LF (the hotfix commit had re-saved 602 files as CRLF from a Windows worktree).
 - **Version label**: the screens read **ALPHA 22.3** (Daniele: "shouldn't it be just alpha 22.0x"); the internal number stays 0.22.2.
 
