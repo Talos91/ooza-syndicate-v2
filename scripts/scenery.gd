@@ -90,12 +90,39 @@ static func build_environment(parent: Node, _mobile: bool) -> DirectionalLight3D
 	return sun
 
 
-static func make_backdrop(parent: Node) -> CanvasLayer:
-	## The cloud-city sky on a background canvas layer (drawn by the Environment as the background).
+# CAMPAIGN: the match backdrop per map (Daniele, 2026-09-28; still WIP - "we'll get back later"). A campaign mission
+# shows its own background (Campaign.backdrop_of: assets/art/campaign/vex-<id>.jpg); a battle map one of the general
+# backgrounds, fixed per map code so every client of a room sees the same one; tutorial (T-) and debug (D-) maps and
+# anything unknown keep the cloud-city sky. The shader stays as it is (the status quo); per-background tint / haze
+# variants come later (Alpha 22-23).
+const DEFAULT_BACKDROP := "res://assets/art/city-background.png"
+const BATTLE_BACKDROPS := [
+	"res://assets/art/backdrops/battle-connection-not-guaranteed.jpg",
+	"res://assets/art/backdrops/battle-forecast-liability.jpg",
+	"res://assets/art/backdrops/battle-future-is-cloudy.jpg",
+	"res://assets/art/backdrops/battle-some-assembly-required.jpg",
+	"res://assets/art/backdrops/battle-water-is-a-privilege.jpg",
+]
+
+
+static func backdrop_for(map_code: String, mission_key := "") -> String:
+	if mission_key != "":
+		var p := Campaign.backdrop_of(mission_key)
+		if p != "":
+			return p
+	if map_code == "" or map_code.begins_with("T-") or map_code.begins_with("D-"):
+		return DEFAULT_BACKDROP
+	var p2: String = BATTLE_BACKDROPS[absi(hash(map_code)) % BATTLE_BACKDROPS.size()]
+	return p2 if ResourceLoader.exists(p2) else DEFAULT_BACKDROP
+
+
+static func make_backdrop(parent: Node, path := DEFAULT_BACKDROP) -> CanvasLayer:
+	## The sky on a background canvas layer (drawn by the Environment as the background): the cloud city, or the
+	## map's own backdrop (backdrop_for).
 	var layer := CanvasLayer.new()
 	layer.layer = -50
 	var sky := TextureRect.new()
-	sky.texture = load("res://assets/art/city-background.png")
+	sky.texture = load(path if ResourceLoader.exists(path) else DEFAULT_BACKDROP)
 	sky.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	sky.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	sky.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -149,7 +176,9 @@ func setup(m: Node3D, s: Sim, v: Dictionary) -> void:
 	main = m
 	sim = s
 	vis = v
-	backdrop = make_backdrop(m)
+	var md = m.get("mission")                         # CAMPAIGN: the mission's / the map's own backdrop
+	backdrop = make_backdrop(m, backdrop_for(str(m.get("map").get("code", "")) if m.get("map") is Dictionary else "",
+			str(md.key) if md != null else ""))
 	var lo := Vector3(INF, 0, INF)
 	var hi := Vector3(-INF, 0, -INF)
 	for n in s.nodes:
