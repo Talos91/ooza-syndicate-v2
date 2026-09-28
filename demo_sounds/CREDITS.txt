@@ -11,3 +11,6 @@ slime/      "40 CC0 water / splash / slime SFX" (OpenGameArt)
                                                  https://opengameart.org/content/40-cc0-water-splash-slime-sfx  CC0
 
 Kenney: credit (Kenney or www.kenney.nl) appreciated, not required.
+
+Music: Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io) - bought by Daniele; licence: free and commercial use,
+credit appreciated. The 15 tracks (OGG 96 kbps) go in demo_music/ (kept out of git: see README-DEMO.md).

@@ -19,18 +19,55 @@ telemetry list `sim.events`, lines pouring into hostile nodes, machinegoon `shot
 | S | speed 1x / 2x / 3x (to reach Last Stand sooner) |
 | R | restart the match with a new seed |
 | SPACE | pause / resume |
+| TAB / Shift+TAB | music: select the slot |
+| [ / ] | music: the selected slot's track (all 15; BATTLE 2 / 3 and VERY LAST STAND also (off)) |
+| P | music: play the selected slot now (preview; P again returns to the match's music) |
+| H | music: hold the MENU track |
+| N | music on / off |
+| , / . | music volume (2 dB steps) |
 
-The match restarts by itself 5 s after it ends. The overlay (top left) shows the set and alternate and the last 6
+The match restarts by itself 5 s after it ends (8 s with music on, so the stinger plays out). The overlay (top left) shows the set and alternate and the last 6
 sounds as `event  aN -> pack/file.ogg`: name the line you like or dislike (for example "set 4 capture a2").
 An event with fewer than 3 files wraps round (the line says which alternate actually played).
 
-Throttle: the same event at most every 0.2-0.45 s (alarms 1 s, win 2 s), 12 voices; when all are busy a new
-sound is dropped, except win / Last Stand / Very Last Stand / eliminated / collapse, which take the oldest voice.
-Long files are cut with a short fade (engineCircular alarms 1.8-2.2 s, digital lasers 0.6 s, ...).
+## Mix
+
+Every number is in one table, `SOUND`, at the top of `demo/sound_demo.gd` (to copy into rules.gd's SOUND block).
+Levels are against the music at 0 dB (Daniele, 2026-09-28: "the sounds are too overpowering vs the background
+music"): the frequent sounds (send / fight / hit / machinegoon) at -12 dB, laser / fall / relays -11, skills, builds and
+monsters -10, collapse / knock-out -9, capture / node lost / Last Stand / win -8. Every sound fades in over 20 ms and
+out over a 250 ms tail (at most 40 % of a short file); a repeat of the same event crossfades the earlier one out
+(150 ms) instead of restarting it; 12 voices, and when all are busy a new sound is dropped except win / Last Stand /
+Very Last Stand / eliminated / collapse, which fade the oldest one out (100 ms). The same event plays at most every
+0.2-0.45 s (alarms 1 s, win 2 s). Long files are cut with the same tail (engineCircular alarms 1.8-2.2 s, digital
+lasers 0.6 s, ...). Capture, Last Stand, Very Last Stand and win duck the music -2 dB (0.3 s in, 0.5 s held, 0.8 s out).
+
+## Music
+
+Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io), bought by Daniele (free and commercial use, credit
+appreciated). 15 tracks, OGG 96 kbps, in `demo_music/`. **Not in git** (this repository is public and the pack is
+paid): copy the pack's 15 OGG files into `demo_music/` with their names (`Boss Battle.ogg` ... `Synth Syndicate.ogg`),
+then open the project once in the editor (or run `--headless --import`). Without them the demo runs silent of music.
+
+| Slot | Starting pick | When |
+|---|---|---|
+| MENU | Cyber Sunrise | the first 8 s of every match (a menu preview), or while H holds it |
+| BATTLE 1 / 2 / 3 | Drone Patrol, Neon Street, Synth Syndicate | the battle playlist, crossfading (2 s) at each track's end |
+| LAST STAND | Midnight Hack | crossfades in (1 s) when Last Stand starts |
+| VERY LAST STAND | Boss Battle | the same at Very Last Stand ((off): Last Stand's track goes on) |
+| VICTORY | Ending Theme | stinger when seat A (the HUD's seat) wins: the first 7 s, the last 1.5 s fading |
+| DEFEAT | Game Over | stinger when anyone else wins, or a draw |
+
+Crossfades (equal power): 0.5 s from silence, 1.5 s MENU -> BATTLE, 1 s into Last Stand, 2 s between playlist
+tracks and when a single-track slot loops, 0.8 s for a new pick of the slot that is playing, 0.4 s into a stinger.
+The overlay's music panel (top right) shows every slot's pick (`>` the selected slot, `*` the one playing) and the
+track playing now with its position. Picks, volume and on / off survive R and the automatic restart.
 
 Verification flags (after `--`): `--demo-log` (print every sound), `--demo-cycle=N` (next set every N s),
 `--demo-speed=1..3`, `--demo-ff=S` (silent fast-forward to S s of match time), `--demo-quit=S`,
-`--demo-shot=<png>@<s>`, `--demo-map=res://maps4/...json`, `--demo-mode=FFA4|2v2`, `--demo-ai=Standard|Veteran`.
+`--demo-shot=<png>@<s>`, `--demo-map=res://maps4/...json`, `--demo-mode=FFA4|2v2`, `--demo-ai=Standard|Veteran`,
+`--demo-track-len=S` (treat every music track as S s long), `--demo-keys=12:Tab,13:BracketRight` (press keys at those
+seconds).
 
 ## Events
 

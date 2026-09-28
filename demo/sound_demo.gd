@@ -5,22 +5,68 @@ extends Node
 ## never cleared) plus the machinegoons' `shot` stamps, maps them to demo events and plays the current set's
 ## file. No game script is changed.
 ##   Keys: 1 / 2 / 3 / 4 sound set, A alternate (1-3), M mute, + / - master volume, S speed 1x/2x/3x, R restart (new seed),
-##         SPACE pause. The match restarts by itself 5 s after it ends.
+##         SPACE pause. The match restarts by itself 5 s after it ends (8 s with music on: the stinger plays first).
+##   Music (music_director.gd): TAB / Shift+TAB slot, [ / ] the slot's track (all 15), P play the selected slot now,
+##         H hold the MENU track, N music on / off, , / . music volume.
 ##   User args (after `--`):
 ##     --demo-log             print every sound played ("SOUND ...") and a summary on quit
 ##     --demo-cycle=20        switch to the next set every 20 s, the next alternate after each full round (verification)
 ##     --demo-speed=2         start at 2x speed (1-3)
 ##     --demo-shot=<png>@<s>  save a screenshot at <s> seconds of real time
 ##     --demo-quit=<s>        quit after <s> seconds of real time (prints the summary)
+##     --demo-track-len=20    treat every music track as 20 s long (the playlist crossfades sooner; verification)
+##     --demo-keys=12:Tab,13:BracketRight   press these keys at these seconds of real time (verification)
 ##     --demo-ff=150          fast-forward the first match to 150 s of match time (silent) before playing on
 ##     --demo-map=res://maps4/<file>.json  --demo-mode=FFA4|2v2  --demo-ai=Standard|Veteran
+
+# ------------------------------------------------------------------ SOUND: every mix number in one table
+# (copy into rules.gd's SOUND block when sound goes into the game). Levels are dB against the music at 0 dB; the
+# master volume (+ / -) sits on top of both. Times are seconds. Daniele, 2026-09-28: "the sounds are too
+# overpowering vs the background music, make them less loud and that they fade more seamlessly".
+const SOUND := {
+	"music_db": 0.0,                 # the music bus: the reference
+	"sfx_db": {                      # per event, on the SFX bus (0 dB): the frequent ones quietest, big cues on top
+		"send": -12.0, "fight": -12.0, "hit": -12.0, "machinegoon": -12.0,
+		"laser": -11.0, "fall": -11.0, "relay_warning": -11.0, "relay_switch": -11.0,
+		"skill": -10.0, "upgrade": -10.0, "build": -10.0, "collapse_warning": -10.0,
+		"monster_launch": -10.0, "monster_stomp": -10.0, "monster_take": -10.0, "monster_fall": -10.0,
+		"collapse": -9.0, "eliminated": -9.0,
+		"capture": -8.0, "node_lost": -8.0, "last_stand": -8.0, "very_last_stand": -8.0, "win": -8.0,
+	},
+	"sfx_gap": {                     # the least time between two sounds of one event (real time; default 0.3)
+		"send": 0.25, "fight": 0.3, "hit": 0.2, "capture": 0.2, "node_lost": 0.25, "upgrade": 0.3, "build": 0.3,
+		"laser": 0.25, "machinegoon": 0.45, "skill": 0.3, "fall": 0.3, "collapse_warning": 0.3, "collapse": 0.3,
+		"last_stand": 1.0, "very_last_stand": 1.0, "eliminated": 0.5, "win": 2.0,
+	},
+	"voices": 12,                    # sounds at once (fading-out tails not counted)
+	"attack": 0.02,                  # fade-in of every sound (no click on)
+	"release": 0.25,                 # fade-out tail at every sound's end or cut (no cut off) ...
+	"release_share": 0.4,            # ... but never more than this share of a short file
+	"repeat_fade": 0.15,             # a repeat of the same event fades the earlier one out (a crossfade, no restart)
+	"steal_fade": 0.1,               # a voice given up for a priority cue fades out this fast
+	"duck_events": ["capture", "last_stand", "very_last_stand", "win"],
+	"duck_db": -2.0,                 # the music under those cues
+	"duck_in": 0.3,
+	"duck_hold": 0.5,
+	"duck_out": 0.8,
+	"menu_seconds": 8.0,             # the MENU track at each match's start
+	"xfade_start": 0.5,              # music fade-in from silence
+	"xfade_phase": 1.5,              # MENU -> BATTLE, a preview on / off
+	"xfade_last_stand": 1.0,         # into LAST STAND / VERY LAST STAND (the alarm leads)
+	"xfade_playlist": 2.0,           # BATTLE track to track, a slot looping
+	"xfade_pick": 0.8,               # a new pick ([ / ]) for the slot that is playing
+	"xfade_stinger": 0.4,            # into VICTORY / DEFEAT
+	"stinger_len": 7.0,              # VICTORY / DEFEAT play the track's first 7 s ...
+	"stinger_fade": 1.5,             # ... the last 1.5 of them fading out
+	"restart_after": 5.0,            # the demo's next match (8 s with music on: stinger_len + 1)
+}
 
 const MAP := "res://maps4/M-30-sporefall-plain.json"   # FFA4, 17 nodes, 6 lasers, relays: busy but readable
 const MODE := "FFA4"
 const AI := "Veteran"
 const ROOT := "res://demo_sounds/"
-const VOICES := 12
-const RESTART_AFTER := 5.0
+const POOL := 18                                  # players: SOUND.voices plus room for fading tails
+const MusicDirector := preload("res://demo/music_director.gd")
 
 # Sound sets: event -> alternates ("<pack>/<file>" under demo_sounds/, without .ogg). Key A cycles the alternate
 # (alt 1 / 2 / 3) for every event at once; an event with fewer alternates wraps round (each overlay line says
@@ -138,19 +184,11 @@ const MAX_LEN := {"scifi/engineCircular_000": 1.8, "scifi/engineCircular_002": 2
 		"scifi/engineCircular_004": 2.2, "scifi/lowFrequency_explosion_000": 1.5, "scifi60/sfx_18a": 2.5, "scifi60/sfx_16a": 2.0, "scifi60/sfx_16b": 2.0,
 		"digital/laser5": 0.6, "digital/laser3": 0.6, "digital/zap1": 0.6, "digital/zapTwoTone": 0.8,
 		"digital/spaceTrash1": 1.0, "digital/spaceTrash2": 1.0, "digital/spaceTrash3": 1.0}
-# Per event: the least seconds between two sounds (real time), the volume in dB, and whether it may steal a voice.
-const GAP := {"send": 0.25, "fight": 0.3, "hit": 0.2, "capture": 0.2, "node_lost": 0.25, "upgrade": 0.3,
-		"build": 0.3, "laser": 0.25, "machinegoon": 0.45, "skill": 0.3, "fall": 0.3, "collapse_warning": 0.3,
-		"collapse": 0.3, "last_stand": 1.0, "very_last_stand": 1.0, "eliminated": 0.5, "win": 2.0}
-const VOL := {"send": -10.0, "fight": -8.0, "hit": -9.0, "capture": -4.0, "node_lost": -4.0, "upgrade": -5.0,
-		"build": -6.0, "laser": -8.0, "machinegoon": -16.0, "monster_launch": -4.0, "monster_stomp": -4.0,
-		"monster_take": -4.0, "monster_fall": -4.0, "skill": -5.0, "relay_warning": -9.0, "relay_switch": -7.0,
-		"fall": -8.0, "collapse_warning": -6.0, "collapse": -3.0, "last_stand": 0.0, "very_last_stand": 0.0,
-		"eliminated": -3.0, "win": 0.0}
+# Events that may take a voice when all are busy (the rest are dropped then).
 const PRIORITY := ["win", "last_stand", "very_last_stand", "eliminated", "collapse"]
 
 # Kept across a restart (the scene reloads).
-static var set_idx := 0
+static var set_idx := 3                          # Set 4 "Mix 2+3": Daniele's pick (2026-09-28)
 static var alt_idx := 0                          # the alternate every event plays (key A)
 static var shot_done := false
 static var vol_db := -6.0
@@ -170,7 +208,7 @@ var upgrading := {}                              # node id -> true: its running 
 var shot_t := {}                                 # machinegoon node id -> last shot stamp
 var absorbing := {}                              # horde id -> true: pouring into a hostile node (a fight on)
 var voices: Array[AudioStreamPlayer] = []
-var voice_info: Array = []                       # [started msec, stop msec (0 = none), event]
+var voice_info: Array = []                       # per player {event, base_db, start ms, length s, rel_start ms (-1), rel_len s}
 var streams := {}                                # "<pack>/<file>" -> AudioStream
 var recent: Array[String] = []
 var end_wait := -1.0
@@ -184,6 +222,13 @@ var map_path := MAP
 var mode := MODE
 var ai := AI
 var ff := -1.0
+var music: Node                                  # MusicDirector
+var track_len := 0.0
+static var key_script: Array = []                # [[seconds, keycode], ...] (--demo-keys; survives a restart)
+var match_clock := 0.0                           # real seconds since this match started
+var ls_seen := false
+var vls_seen := false
+var music_label: Label
 # overlay
 var title_label: Label
 var status_label: Label
@@ -213,14 +258,25 @@ func _ready() -> void:
 			ai = arg.substr(10)
 		elif arg.begins_with("--demo-ff=") and runs == 0:
 			ff = float(arg.substr(10))
+		elif arg.begins_with("--demo-track-len="):
+			track_len = float(arg.substr(17))
+		elif arg.begins_with("--demo-keys=") and runs == 0:
+			for kv in arg.substr(12).split(","):
+				var pr := kv.split(":")
+				key_script.append([float(pr[0]), OS.find_keycode_from_string(pr[1])])
 	if clock0 < 0:
 		clock0 = Time.get_ticks_msec()
 	_load_sets()
-	for i in range(VOICES):
+	MusicDirector.ensure_buses()
+	music = MusicDirector.new()
+	add_child(music)
+	music.setup(log_on, track_len, SOUND)
+	for i in range(POOL):
 		var p := AudioStreamPlayer.new()
+		p.bus = "SFX"
 		add_child(p)
 		voices.append(p)
-		voice_info.append([0, 0, ""])
+		voice_info.append({"event": "", "base_db": 0.0, "start": 0, "len": 0.0, "rel_start": -1, "rel_len": 0.0})
 	_apply_volume()
 	Engine.time_scale = float(speed)
 	Rules.abilities_on = true
@@ -285,13 +341,31 @@ func _process(delta: float) -> void:
 		get_tree().quit()
 		return
 	_trim_voices()
-	if main == null or not bool(main.get("started")):
+	var real_dt := delta / Engine.time_scale
+	while not key_script.is_empty() and now >= float(key_script[0][0]):
+		var ke := InputEventKey.new()
+		ke.keycode = int(key_script[0][1])
+		ke.pressed = true
+		key_script.pop_front()
+		if log_on:
+			print("DEMO key ", OS.get_keycode_string(ke.keycode))
+		Input.parse_input_event(ke)
+	var started := main != null and bool(main.get("started"))
+	if started:
+		match_clock += real_dt
+	music.update(real_dt, {"clock": match_clock, "ls": ls_seen, "vls": vls_seen,
+			"over": sim != null and sim.over, "won": sim != null and sim.winner == str(main.get("HUMAN"))})
+	if not started:
 		_refresh_overlay()
 		return
 	var s: Sim = main.get("sim")
 	if s != sim:                                   # a new match (or main rebuilt its Sim): start reading afresh
 		sim = s
 		ev_index = sim.events.size() if sim.time > 1.0 else 0   # (--demo-ff: the fast-forwarded past stays silent)
+		for i in range(ev_index):                  # ...but a fast-forward into Last Stand still sets its music
+			var ty := str(sim.events[i].get("type", ""))
+			ls_seen = ls_seen or ty == "last_stand"
+			vls_seen = vls_seen or ty == "very_last_stand"
 		upgrading.clear()
 		shot_t.clear()
 		absorbing.clear()
@@ -321,7 +395,8 @@ func _process(delta: float) -> void:
 			_play("machinegoon")
 	if sim.over:
 		if end_wait < 0.0:
-			end_wait = RESTART_AFTER
+			end_wait = maxf(float(SOUND["restart_after"]), float(SOUND["stinger_len"]) + 1.0) if MusicDirector.on \
+					else float(SOUND["restart_after"])
 		end_wait -= delta / Engine.time_scale
 		if end_wait <= 0.0:
 			_restart()
@@ -370,8 +445,10 @@ func _on_event(ev: Dictionary) -> void:
 		"collapse":
 			_play("collapse")
 		"last_stand":
+			ls_seen = true
 			_play("last_stand")
 		"very_last_stand":
+			vls_seen = true
 			_play("very_last_stand")
 		"eliminated":
 			_play("eliminated")
@@ -384,7 +461,7 @@ func _on_event(ev: Dictionary) -> void:
 
 func _play(event: String) -> void:
 	var now_ms := Time.get_ticks_msec()
-	var gap := float(GAP.get(event, 0.3))
+	var gap := float(SOUND["sfx_gap"].get(event, 0.3))
 	if now_ms - int(last_play.get(event, -100000)) < int(gap * 1000.0):
 		return
 	var files: Array = SETS[set_idx]["ev"].get(event, [])
@@ -394,29 +471,49 @@ func _play(event: String) -> void:
 	var f: String = files[ai_]
 	if not streams.has(f):
 		return
+	var active := 0                                    # sounding voices, not counting tails or this event's own
+	for i in range(POOL):
+		if voices[i].playing and int(voice_info[i]["rel_start"]) < 0 and str(voice_info[i]["event"]) != event:
+			active += 1
+	if active >= int(SOUND["voices"]):
+		if not event in PRIORITY:
+			return                                     # every voice busy: drop it (a busy map stays readable)
+		var oldest := -1
+		for i in range(POOL):                          # a priority cue: the oldest ordinary sound fades out for it
+			var vinf: Dictionary = voice_info[i]
+			if voices[i].playing and int(vinf["rel_start"]) < 0 and not str(vinf["event"]) in PRIORITY \
+					and (oldest < 0 or int(vinf["start"]) < int(voice_info[oldest]["start"])):
+				oldest = i
+		if oldest < 0:
+			return
+		_release(oldest, float(SOUND["steal_fade"]))
+	for i in range(POOL):                              # a repeat: the earlier sound of this event fades out under it
+		if voices[i].playing and str(voice_info[i]["event"]) == event:
+			_release(i, float(SOUND["repeat_fade"]))
 	var vi := -1
-	for i in range(VOICES):
+	for i in range(POOL):
 		if not voices[i].playing:
 			vi = i
 			break
-	if vi < 0:
-		if not event in PRIORITY:
-			return                                     # every voice busy: drop it (a busy map stays readable)
-		var oldest := now_ms + 1
-		for i in range(VOICES):
-			if int(voice_info[i][0]) < oldest and not str(voice_info[i][2]) in PRIORITY:
-				oldest = int(voice_info[i][0])
+	if vi < 0:                                         # (every player busy with tails: the quietest tail gives way)
+		var low := INF
+		for i in range(POOL):
+			if int(voice_info[i]["rel_start"]) >= 0 and voices[i].volume_db < low:
+				low = voices[i].volume_db
 				vi = i
 		if vi < 0:
 			return
 	last_play[event] = now_ms
+	if event in SOUND["duck_events"]:
+		music.duck()
 	var p := voices[vi]
 	p.stop()
 	p.stream = streams[f]
-	p.volume_db = float(VOL.get(event, -6.0))
-	p.play()
 	var cut := float(MAX_LEN.get(f, 0.0))
-	voice_info[vi] = [now_ms, now_ms + int(cut * 1000.0) if cut > 0.0 else 0, event]
+	voice_info[vi] = {"event": event, "base_db": float(SOUND["sfx_db"].get(event, -10.0)), "start": now_ms,
+			"len": cut if cut > 0.0 else p.stream.get_length(), "rel_start": -1, "rel_len": 0.0}
+	p.volume_db = -80.0                                # the attack ramps it up (_trim_voices)
+	p.play()
 	var pack := f.get_slice("/", 0)
 	var line := "%s  a%d -> %s/%s.ogg" % [event, ai_ + 1, pack, f.get_slice("/", 1)]
 	recent.push_front(line)
@@ -429,17 +526,39 @@ func _play(event: String) -> void:
 
 
 func _trim_voices() -> void:
+	## Every sound's soft envelope: SOUND.attack in, SOUND.release out at its end (or its MAX_LEN cut), and the
+	## faster fades of a repeat or a stolen voice (_release).
 	var now_ms := Time.get_ticks_msec()
-	for i in range(VOICES):
-		var stop_at := int(voice_info[i][1])
-		if stop_at <= 0 or not voices[i].playing:
+	for i in range(POOL):
+		if not voices[i].playing:
 			continue
-		var left := stop_at - now_ms
-		if left <= 0:
-			voices[i].stop()
-			voice_info[i][1] = 0
-		elif left < 150:                               # a short fade out
-			voices[i].volume_db = float(VOL.get(voice_info[i][2], -6.0)) + linear_to_db(maxf(left / 150.0, 0.001))
+		var v: Dictionary = voice_info[i]
+		var t := (now_ms - int(v["start"])) / 1000.0
+		var length := float(v["len"])
+		var rel := minf(float(SOUND["release"]), length * float(SOUND["release_share"]))
+		if int(v["rel_start"]) < 0 and t >= length - rel:
+			v["rel_start"] = now_ms
+			v["rel_len"] = maxf(length - t, 0.01)
+		var a := clampf(t / float(SOUND["attack"]), 0.0, 1.0)
+		if int(v["rel_start"]) >= 0:
+			var r := 1.0 - (now_ms - int(v["rel_start"])) / 1000.0 / float(v["rel_len"])
+			if r <= 0.0:
+				voices[i].stop()
+				continue
+			a *= r * r                                  # (quadratic: a smooth tail)
+		voices[i].volume_db = float(v["base_db"]) + linear_to_db(maxf(a, 0.0001))
+
+
+func _release(i: int, secs: float) -> void:
+	## Fades voice i out over `secs` (or sooner, if it was already fading faster).
+	var v: Dictionary = voice_info[i]
+	var now_ms := Time.get_ticks_msec()
+	if int(v["rel_start"]) >= 0:
+		var left := float(v["rel_len"]) - (now_ms - int(v["rel_start"])) / 1000.0
+		if left <= secs:
+			return
+	v["rel_start"] = now_ms
+	v["rel_len"] = maxf(secs, 0.01)
 
 
 func _apply_volume() -> void:
@@ -481,6 +600,22 @@ func _input(event: InputEvent) -> void:
 		KEY_SPACE:
 			if main != null and bool(main.get("started")):
 				main.set("paused", not bool(main.get("paused")))
+		KEY_TAB:
+			music.next_slot(-1 if (event as InputEventKey).shift_pressed else 1)
+		KEY_BRACKETRIGHT:
+			music.cycle_pick(1)
+		KEY_BRACKETLEFT:
+			music.cycle_pick(-1)
+		KEY_P:
+			music.toggle_preview()
+		KEY_H:
+			music.toggle_hold_menu()
+		KEY_N:
+			music.toggle_on()
+		KEY_PERIOD:
+			music.change_volume(2.0)
+		KEY_COMMA:
+			music.change_volume(-2.0)
 		_:
 			handled = false
 	if handled:
@@ -490,8 +625,9 @@ func _input(event: InputEvent) -> void:
 
 func _set_set(i: int) -> void:
 	set_idx = i
-	for v in voices:
-		v.stop()
+	for vi in range(POOL):
+		if voices[vi].playing:
+			_release(vi, float(SOUND["repeat_fade"]))
 	recent.push_front("--- set %d: %s ---" % [i + 1, SETS[i]["name"]])
 	if recent.size() > 6:
 		recent.resize(6)
@@ -502,8 +638,9 @@ func _set_set(i: int) -> void:
 
 func _next_alt() -> void:
 	alt_idx = (alt_idx + 1) % ALTS
-	for v in voices:
-		v.stop()
+	for vi in range(POOL):
+		if voices[vi].playing:
+			_release(vi, float(SOUND["repeat_fade"]))
 	recent.push_front("--- alternate %d/%d ---" % [alt_idx + 1, ALTS])
 	if recent.size() > 6:
 		recent.resize(6)
@@ -592,10 +729,25 @@ func _build_overlay() -> void:
 	lines_label.custom_minimum_size = Vector2(440, 6 * 19)
 	box.add_child(lines_label)
 	var keys := Label.new()
-	keys.text = "1/2/3/4 set   A alternate   M mute   +/- volume   S speed   R restart   SPACE pause"
+	keys.text = "1/2/3/4 set   A alternate   M mute   +/- volume   S speed   R restart   SPACE pause\n" \
+			+ "music: TAB slot   [ / ] track   P play slot now   H hold menu   N on/off   , / . volume"
 	keys.add_theme_font_size_override("font_size", 12)
 	keys.add_theme_color_override("font_color", Color(0.65, 0.75, 0.8))
 	box.add_child(keys)
+	var mpanel := PanelContainer.new()                # music: top right, under PAUSE
+	mpanel.add_theme_stylebox_override("panel", sb)
+	mpanel.anchor_left = 1.0
+	mpanel.anchor_right = 1.0
+	mpanel.offset_left = -330
+	mpanel.offset_right = -12
+	mpanel.offset_top = 96
+	mpanel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	mpanel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(mpanel)
+	music_label = Label.new()
+	music_label.add_theme_font_size_override("font_size", 13)
+	music_label.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
+	mpanel.add_child(music_label)
 	_refresh_overlay()
 
 
@@ -613,6 +765,7 @@ func _refresh_overlay() -> void:
 		st += "   restart in %d s" % ceili(end_wait)
 	status_label.text = st
 	lines_label.text = "\n".join(recent) if not recent.is_empty() else "(waiting for the first sound...)"
+	music_label.text = "\n".join(music.status_lines())
 
 
 # ------------------------------------------------------------------ verification helpers

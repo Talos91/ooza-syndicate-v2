@@ -3,3 +3,7 @@
 /android/
 /export/
 /build/
+
+# SOUND DEMO: the bought music pack stays local (this repo is public) - see README-DEMO.md
+demo_music/*.ogg
+demo_music/*.ogg.import
