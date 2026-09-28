@@ -112,7 +112,8 @@ static func backdrop_for(map_code: String, mission_key := "") -> String:
 			return p
 	if map_code == "" or map_code.begins_with("T-") or map_code.begins_with("D-"):
 		return DEFAULT_BACKDROP
-	var p2: String = BATTLE_BACKDROPS[absi(hash(map_code)) % BATTLE_BACKDROPS.size()]
+	var bi := UiKit.battle_backdrop(absi(hash(map_code)) % BATTLE_BACKDROPS.size(), BATTLE_BACKDROPS.size())   # UI: your
+	var p2: String = BATTLE_BACKDROPS[bi]                                        # BATTLEFIELD > BACKGROUND pick (your screen)
 	return p2 if ResourceLoader.exists(p2) else DEFAULT_BACKDROP
 
 

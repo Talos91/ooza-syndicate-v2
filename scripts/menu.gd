@@ -3329,11 +3329,17 @@ func show_maps() -> void:
 	var foot_h := maxf(bh, info_h)
 	var fy := area.end.y - foot_h - 12.0
 	UiKit.btn(self, nt, Vector2(content.size.x - x - nw, fy + (foot_h - bh) / 2.0), Vector2(nw, 48), show_setup, "primary", faction, 17)
+	# UI: BACKGROUND (Daniele 2026-09-28): the match background - AUTO / ROTATE / one of the five - picked in a sheet
+	var bgt := "BACKGROUND: " + _backdrop_short(UiKit.backdrop_choice())
+	var bgw := UiKit.text_w(self, bgt, 14, true) + 36.0
+	UiKit.btn(self, bgt, Vector2(content.size.x - x - nw - 12.0 - bgw, fy + (foot_h - bh) / 2.0), Vector2(bgw, 48), func():
+		_bg_sheet = true
+		show_maps(), "secondary", faction, 14)
 	var iy := fy + (foot_h - info_h) / 2.0
 	for ln in info:
 		var l := UiKit.label(self, ln[0], ln[1], ln[2], ln[3])
 		l.clip_text = true
-		l.size = Vector2(w - nw - 24.0, UiKit.line_h(self, ln[1], ln[3]))
+		l.size = Vector2(w - nw - bgw - 36.0, UiKit.line_h(self, ln[1], ln[3]))
 		_shell_add(l, Vector2(x, iy))
 		iy += l.size.y
 	# the grid: every shown map, a swipe scrolls (phones), a tap picks
@@ -3393,11 +3399,98 @@ func show_maps() -> void:
 		cap.size = Vector2(cw - 20.0, UiKit.line_h(self, 13, true))
 		b.add_child(cap)
 	shell_raise()
+	if _bg_sheet:                                      # UI: the BACKGROUND sheet, over the page and its bars
+		_backdrop_sheet(sel)
 
 
 func _map_type(m: Dictionary) -> String:
 	var g := str(m.get("group", "")).to_lower()
 	return "training" if g in ["tutorial", "debug"] else g
+
+
+# --- UI: BATTLEFIELD > BACKGROUND (Daniele 2026-09-28): the match background, your screen only (UiKit.backdrop_choice) ---
+var _bg_sheet := "--backdrop-sheet" in OS.get_cmdline_user_args()   # the BACKGROUND sheet is open (screenshots: open)
+
+
+func _backdrop_short(v: String) -> String:
+	if v == "auto":
+		return "AUTO"
+	if v == "rotate":
+		return "ROTATE"
+	return str(UiKit.BACKDROP_NAMES[int(v)]).get_slice(" ", 0).trim_suffix(":") if v.is_valid_int() else "AUTO"
+
+
+func _backdrop_sheet(sel: Dictionary) -> void:
+	## Over BATTLEFIELD: AUTO (the map's own background - what everyone in a room sees), ROTATE (a new one every match)
+	## and the five, each by its picture; the current pick lit. A pick saves and closes; so does a tap outside.
+	var dim := UiKit.rect(Vector2(-safe.x, -safe.y), content.size + Vector2(safe.x + safe.z, safe.y + safe.w), Color(0, 0, 0, 0.62))
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	dim.gui_input.connect(func(e):
+		if e is InputEventMouseButton and e.pressed:
+			_bg_sheet = false
+			show_maps.call_deferred())
+	content.add_child(dim)
+	var pw := minf(content.size.x - 60.0, 1080.0)
+	var cols := 4
+	var gap := 12.0
+	var tw := floorf((pw - 48.0 - gap * (cols - 1)) / cols)
+	var th := floorf(tw * 9.0 / 16.0)
+	var cap := UiKit.line_h(self, 13, true) + UiKit.line_h(self, 12) + 12.0
+	var tile := Vector2(tw, th + cap + 12.0)
+	var note := "Your screen only: everyone in a room still plays the same map. Campaign missions and training keep their own."
+	var head := UiKit.line_h(self, 12, true) + UiKit.line_h(self, 26, true) + UiKit.text_h(self, note, 13, pw - 48.0) + 28.0
+	var ph := minf(content.size.y - 24.0, head + 2.0 * tile.y + gap + 24.0)
+	var pos := ((content.size - Vector2(pw, ph)) / 2.0).floor()
+	var panel := UiKit.panel(self, pos, Vector2(pw, ph), faction)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var ty := UiKit.title(self, pos.x + 24.0, pos.y + 18.0, "BATTLEFIELD / BACKGROUND", "PICK THE SKY.", faction, 26.0)
+	_say(note, Vector2(pos.x + 24.0, ty + 2.0), 13, UiKit.MUTED, pw - 48.0)
+	var mine := UiKit.backdrop_choice()
+	var auto_i := absi(hash(str(sel.get("code", "")))) % Scenery.BATTLE_BACKDROPS.size()
+	var opts := [["auto", auto_i, "AUTO", "This map's own"], ["rotate", -1, "ROTATE", "A new one every match"]]
+	for i in range(Scenery.BATTLE_BACKDROPS.size()):
+		opts.append([str(i), i, UiKit.BACKDROP_NAMES[i], "%d / %d" % [i + 1, Scenery.BATTLE_BACKDROPS.size()]])
+	var gy := pos.y + head
+	for k in range(opts.size()):
+		var o: Array = opts[k]
+		var v: String = o[0]
+		var tp := Vector2(pos.x + 24.0 + (k % cols) * (tw + gap), gy + (k / cols) * (tile.y + gap))
+		var b := UiKit.btn(self, "", tp, tile, func():
+			UiKit.save_backdrop_choice(v)
+			_bg_sheet = false
+			show_maps(), "selected" if v == mine else "secondary", faction)
+		var idx: int = o[1]
+		if idx >= 0:                                   # the picture (ROTATE: the five in a strip)
+			var pic := TextureRect.new()
+			pic.texture = UiKit.tex(Scenery.BATTLE_BACKDROPS[idx])
+			pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			pic.position = Vector2(6, 6)
+			pic.size = Vector2(tw - 12.0, th)
+			b.add_child(pic)
+		else:
+			var n := Scenery.BATTLE_BACKDROPS.size()
+			var sw := (tw - 12.0) / n
+			for j in range(n):
+				var strip := TextureRect.new()
+				strip.texture = UiKit.tex(Scenery.BATTLE_BACKDROPS[j])
+				strip.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				strip.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+				strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				strip.position = Vector2(6.0 + j * sw, 6)
+				strip.size = Vector2(sw - 2.0, th)
+				b.add_child(strip)
+		var nm := UiKit.label(self, str(o[2]), 13, UiKit.accent(faction) if v == mine else UiKit.INK, true)
+		nm.clip_text = true
+		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		nm.position = Vector2(10, th + 12.0)
+		nm.size = Vector2(tw - 20.0, UiKit.line_h(self, 13, true))
+		b.add_child(nm)
+		var sub := UiKit.label(self, str(o[3]), 12, UiKit.MUTED)
+		sub.position = Vector2(10, th + 12.0 + nm.size.y)
+		b.add_child(sub)
+# --- end UI: BACKGROUND ---
 
 
 func _filtered_maps() -> Array:

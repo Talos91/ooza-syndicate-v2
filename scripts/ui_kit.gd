@@ -650,7 +650,15 @@ static func stage(f: String) -> Texture2D:
 
 
 # ------------------------------------------------------------------ the last played faction (HOME's hero)
-static var path := CFG                             # tests point it elsewhere; UI preferences only, never progression
+static var path := _cfg_path()                     # tests point it elsewhere; UI preferences only, never progression
+
+
+static func _cfg_path() -> String:
+	## --ui-cfg=<file> (screenshots / tests) wherever the run starts - a match launched straight from the command line too
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--ui-cfg="):
+			return a.substr(9)
+	return CFG
 
 
 static func last_faction() -> String:
@@ -669,6 +677,48 @@ static func save_last_faction(f: String) -> bool:
 	c.load(path)                                      # keep anything else saved there (none: a fresh file)
 	c.set_value("home", "faction", f)
 	return c.save(path) == OK
+
+
+# ------------------------------------------------------------------ the match background (Daniele 2026-09-28: "make sure new
+# backgrounds for maps are implemented and in rotation (can add to map selector a background selector part)"). Your pick
+# from BATTLEFIELD's BACKGROUND: "auto" (the map's own - Scenery.backdrop_for's, the same for everyone in a room), "rotate"
+# (the next of the five every match) or "0".."4" (that one). Your screen only, like COLOUR-BLIND; campaign missions and the
+# tutorial keep their own (Scenery.backdrop_for returns before it asks).
+const BACKDROP_NAMES := ["CONNECTION NOT GUARANTEED", "FORECAST: LIABILITY", "THE FUTURE IS CLOUDY", "SOME ASSEMBLY REQUIRED",
+		"WATER IS A PRIVILEGE"]
+
+
+static func backdrop_choice() -> String:
+	var c := ConfigFile.new()
+	if c.load(path) != OK:
+		return "auto"
+	var v := str(c.get_value("match", "backdrop", "auto"))
+	return v if v in ["auto", "rotate"] or (v.is_valid_int() and int(v) >= 0 and int(v) < BACKDROP_NAMES.size()) else "auto"
+
+
+static func save_backdrop_choice(v: String) -> bool:
+	var c := ConfigFile.new()
+	c.load(path)
+	c.set_value("match", "backdrop", v)
+	return c.save(path) == OK
+
+
+static func battle_backdrop(auto_i: int, n: int) -> int:
+	## Scenery.backdrop_for's hook, once per match: the background index to show - `auto_i` (the map's own) unless you
+	## picked one or ROTATE (which moves on by one each match, starting after the map's own, and remembers where it is).
+	if n <= 0 or DisplayServer.get_name() == "headless":   # (a server's match host has no screen)
+		return auto_i
+	var v := backdrop_choice()
+	if v.is_valid_int():
+		return clampi(int(v), 0, n - 1)
+	if v != "rotate":
+		return auto_i
+	var c := ConfigFile.new()
+	c.load(path)
+	var i := (int(c.get_value("match", "rotate_i", auto_i)) + 1) % n
+	c.set_value("match", "rotate_i", i)
+	c.save(path)
+	return i
 
 
 static func campaign_view() -> String:
