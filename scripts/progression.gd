@@ -405,14 +405,14 @@ static func _from_server(m: Dictionary) -> Dictionary:
 			continue
 		players.append({"seat": str(s.get("seat", "")), "faction": str(s.get("faction", "")), "team": s.get("team"),
 				"name": str(s.get("name", "")) if s.get("name") != null else "", "ai_level": str(s.get("ai_level", "")) if s.get("ai_level") != null else "",
-				"is_me": bool(s.get("is_me", false)), "won": bool(s.get("won", false))})
-		if bool(s.get("is_me", false)):
-			me_won = bool(s.get("won", false))
+				"is_me": s.get("is_me") == true, "won": s.get("won") == true})   # null-safe: bool(null) crashes
+		if s.get("is_me") == true:
+			me_won = s.get("won") == true
 	var outcome: Dictionary = m.get("outcome", {}) if m.get("outcome") is Dictionary else {}
 	var t := int(Time.get_unix_time_from_datetime_string(str(m.get("started_at", "")).substr(0, 19)))
 	return {"t": t, "map": str(m.get("map", "")), "mode": str(m.get("mode", "")), "online": true,
 			"room_key": "", "duration_s": float(m.get("duration_s", 0.0)) if m.get("duration_s") != null else 0.0,
-			"draw": bool(outcome.get("draw", false)), "won": me_won, "players": players}
+			"draw": outcome.get("draw") == true, "won": me_won, "players": players}
 
 
 static func full_pay(result: Dictionary) -> bool:
