@@ -165,25 +165,8 @@ func sync(dt: float) -> void:
 		l.position = (f["base"] as Vector3) + Vector3(0, 2.2 * (t / FLOATER_LIFE), 0)
 		var fc: Color = l.modulate
 		fc.a = 1.0 - smoothstep(FLOATER_LIFE - 0.4, FLOATER_LIFE, t)
-		label_look(l, fc, l.outline_modulate.a)
+		Mats.label_look(l, fc, l.outline_modulate.a)
 	PerfProfile.lap("fx", _pt)
-
-
-static func label_look(l: Label3D, c: Color, outline_a: float) -> void:
-	## Perf pass (audit B5): a Label3D rebuilds its text mesh on every modulate / outline change - set them only when
-	## they change (the alphas in 1/64 steps: a fade still rebuilds, a steady or blinking label no longer every frame).
-	c.a = roundf(c.a * 64.0) / 64.0
-	outline_a = roundf(outline_a * 64.0) / 64.0
-	if l.modulate != c:
-		l.modulate = c
-	if l.outline_modulate.a != outline_a:
-		l.outline_modulate.a = outline_a
-
-
-static func label_pixel(l: Label3D, pixel: float) -> void:
-	## The label drawn at `pixel` m per font pixel by its scale, not pixel_size (pixel_size rebuilds the mesh; a
-	## label sized for the screen changed it every frame the camera or the label moved).
-	l.scale = Vector3.ONE * (pixel / l.pixel_size)
 
 
 func floater(pos: Vector3, text: String, col: Color) -> void:
@@ -378,7 +361,7 @@ func _relay_beacon(n: Dictionary, entry: Dictionary, col: Color, phase: String) 
 	if glyph.x < 0.0:
 		glyph = Vector2(energy, alpha)
 	var ge := 0.6 + 0.12 * glyph.x
-	label_look(label, Color(c.r * ge, c.g * ge, c.b * ge, glyph.y), 0.9 * glyph.y)
+	Mats.label_look(label, Color(c.r * ge, c.g * ge, c.b * ge, glyph.y), 0.9 * glyph.y)
 	label.scale = Vector3.ONE * size
 	label.position = (b["top"] as Vector3) + Vector3(0, 0.25 * sin(sim.time * 1.3 + float(id)) if ready else 0.0, 0)
 

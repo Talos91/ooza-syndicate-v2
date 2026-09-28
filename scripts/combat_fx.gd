@@ -820,7 +820,7 @@ func _tier_downs(dt: float, cam: Camera3D) -> void:
 			h = cam.global_position.distance_to(base) * 0.05
 		label.visible = not gone and not d["superseded"]
 		chev.visible = not gone and not d["superseded"]
-		Fx.label_pixel(label, h / float(label.font_size) * pop)   # (by scale: pixel_size rebuilds the mesh)
+		Mats.label_pixel(label, h / float(label.font_size) * pop)   # (by scale: pixel_size rebuilds the mesh)
 		var above := base + Vector3(0, h * 1.1, 0)
 		if d["below"] == null:                        # a node under the top bar and its toasts: the line
 			d["below"] = cam != null and not cam.is_position_behind(above) 					and cam.unproject_position(above + Vector3(0, h * 0.6, 0)).y < top_limit   # goes under the platform
@@ -828,11 +828,11 @@ func _tier_downs(dt: float, cam: Camera3D) -> void:
 			label.position = (n["pos"] as Vector3) + Rules.front_dir() * (Rules.R + 3.3 + h * 1.2) + Vector3(0, 0.4, 0)
 		else:
 			label.position = above
-		Fx.label_look(label, Color(label.modulate, fade), 0.95 * fade)
+		Mats.label_look(label, Color(label.modulate, fade), 0.95 * fade)
 		var ck := fmod(t, 0.8) / 0.8                  # the chevron keeps falling toward the tower
-		Fx.label_pixel(chev, h * 0.9 / float(chev.font_size))
+		Mats.label_pixel(chev, h * 0.9 / float(chev.font_size))
 		chev.position = base + Vector3(0, -h * 0.9 * ck, 0)
-		Fx.label_look(chev, Color(chev.modulate, fade * sin(ck * PI)), 0.95 * fade * sin(ck * PI))
+		Mats.label_look(chev, Color(chev.modulate, fade * sin(ck * PI)), 0.95 * fade * sin(ck * PI))
 		if t >= TIER_DOWN_TIME:
 			if nw and is_instance_valid(nw):
 				nw.position.y = d["new_y"]
