@@ -786,6 +786,64 @@ static func assign_colors(seats: Array, factions: Dictionary, human: String, cho
 		used.append(c)
 
 
+# COLOUR-BLIND MODE (Daniele 2026-09-28: "yes add color blind mode in settings"; SETTINGS > DISPLAY, saved on the
+# device). At match start every seat takes its colour from these palettes instead - on your screen only (an online
+# room still sends the same hue keys to everyone). Picked so every pair a mode puts on one board stays apart under
+# protanopia, deuteranopia and tritanopia (Machado 2009 simulation, CIEDE2000; 🧩 UI's cvd.py): free-for-all pairs
+# >= 15 (the default palette's worst: 1.1, blue / purple), 2v2 / 3v3 teams >= 26 apart and teammates >= 14 (27 in
+# 2v2), 2v2v2 teams >= 21 apart and teammates >= 11. You take the first colour (your team the first family).
+const CB_FFA := [Color("#ff4019"), Color("#8cbcff"), Color("#ffd400"), Color("#d977a8"), Color("#19ffb2"), Color("#a666ff")]
+const CB_TEAMS := [[Color("#9077d9"), Color("#00ffea"), Color("#77b8d9")], [Color("#d95f36"), Color("#ffff66"), Color("#d9b816")]]
+const CB_TEAMS_3 := [[Color("#ff4000"), Color("#d97790")], [Color("#8c8cff"), Color("#40ffef")], [Color("#ffe28c"), Color("#ffff00")]]
+static var settings_path := "user://settings.cfg"   # tests point this elsewhere ([display] colour_blind)
+static var _colour_blind := -1                        # -1 until read
+
+
+static func colour_blind() -> bool:
+	if _colour_blind < 0:
+		var c := ConfigFile.new()
+		_colour_blind = 1 if c.load(settings_path) == OK and bool(c.get_value("display", "colour_blind", false)) else 0
+		if "--colour-blind" in OS.get_cmdline_user_args():   # screenshots: on for this run, nothing saved
+			_colour_blind = 1
+	return _colour_blind == 1
+
+
+static func set_colour_blind(on: bool) -> bool:
+	## Saved next to the other settings (PerfProfile / Sfx keep their own sections). False when nothing could be saved.
+	_colour_blind = 1 if on else 0
+	var c := ConfigFile.new()
+	c.load(settings_path)
+	c.set_value("display", "colour_blind", on)
+	return c.save(settings_path) == OK
+
+
+static func apply_colour_blind(seats: Array, teams: Dictionary, human: String) -> void:
+	## After assign_colors / use_colours: COLOUR-BLIND MODE's palettes for this match's seats (nothing when it's off).
+	if not colour_blind():
+		return
+	var order := [human] if human in seats else []
+	for s in seats:
+		if not (s in order):
+			order.append(s)
+	if teams.is_empty():
+		for i in range(order.size()):
+			var c: Color = CB_FFA[i % CB_FFA.size()]
+			seat_colors[order[i]] = c if i < CB_FFA.size() else c.darkened(0.35)
+		return
+	var team_ids := []                                 # in order of first seat: yours first
+	for s in order:
+		if not (teams.get(s, 0) in team_ids):
+			team_ids.append(teams.get(s, 0))
+	var fams: Array = CB_TEAMS if team_ids.size() <= 2 else CB_TEAMS_3
+	var count := {}
+	for s in order:
+		var t = teams.get(s, 0)
+		var fam: Array = fams[team_ids.find(t) % fams.size()]
+		var i: int = count.get(t, 0)
+		seat_colors[s] = fam[i % fam.size()] if i < fam.size() else (fam[i % fam.size()] as Color).darkened(0.35)
+		count[t] = i + 1
+
+
 static func state_color(state: String) -> Color:
 	return STATE_COLORS.get(state, Color.WHITE)
 
