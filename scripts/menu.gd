@@ -739,86 +739,192 @@ func show_options() -> void:
 
 
 func show_factions() -> void:
+	## 01 FACTION (screen system 03): the roster - five tiles, the picked one lit (a tap picks it: `faction`, and the
+	## page's accent) - the picked faction large (its character, name, tagline, persistent trait, stats) and its army
+	## preset (01 active / 02 map / 03 ultimate: each row opens ARMIES on it, as does EDIT IN ARMIES); NEXT: BATTLEFIELD.
 	_last_show = show_factions                  # a resize that changes the phone sizing rebuilds it (_fit)
-	clear_page(faction)
-	header(1)
-	var col := color()
-	frame(P(28, 78), P(572, 636))
-	portrait(faction, P(31, 81), P(566, 513))
-	var name_label := label_at(NAMES[faction].split("\n")[0], P(50, 593), 52)
-	name_label.size.x = 528 * K
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var sub_label := label_at(NAMES[faction].split("\n")[1], P(50, 651), 25, col)
-	sub_label.size.x = 528 * K
-	sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var tagline := label_at(Rules.FACTION_TAGLINES[faction], P(50, 686), 16, Color("b8ced6"))
-	tagline.size.x = 528 * K
-	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	frame(P(614, 134), P(469, 390))
-	label_at("FACTION STATS", P(636, 150), 30)
-	var rows := [["speed", "SPEED", "FASTER", "SLOWER"], ["health", "HEALTH", "TOUGHER", "FRAGILE"],
-			["attack", "ATTACK", "STRONGER", "WEAKER"], ["production", "PRODUCTION SPEED", "FASTER", "SLOWER"],
-			["garrison", "GARRISON STRENGTH", "STRONGER", "WEAKER"]]
-	for i in range(rows.size()):
-		var row: Array = rows[i]
-		var y := 201 + i * 61
-		frame(P(635, y), P(428, 57), "row")
-		neon_icon(row[0], P(652, y + 10), P(34, 34), col)
-		label_at(row[1], P(703, y + 17), 19)
-		var value := Rules.stat(faction, row[0])
-		var rating: String = row[2] if value > 1.001 else (row[3] if value < 0.999 else "BASELINE")
-		label_at(rating, P(943, y + 17), 18, col if value > 1.001 else (Color("ffb12b") if value < 0.999 else Color("9cb2bf")), false)
-		label_at(str(roundi(value * 100)) + "%", P(876, y + 17), 18, Color("9cb2bf"), false)   # tight inline pair - see label_at()
-	frame(P(614, 534), P(469, 180))
-	label_at("PERSISTENT TRAIT", P(636, 548), 22)
-	neon_icon("efficient_routing", P(642, 602), P(62, 62), col)
-	label_at(str(Rules.FACTION_TRAITS[faction][0]).to_upper(), P(719, 596), 24)
-	label_at(Rules.FACTION_TRAITS[faction][1], P(719, 632), 18, Color("bed0da"), false)   # fixed one-liner, no autowrap - see label_at()
-	label_at("COMING SOON", P(924, 685), 15, Color("7795a4"))
-	# SKILLS 2.0: the faction's army preset (ARMIES) - each row opens ARMIES on this faction
-	frame(P(1095, 134), P(550, 580))
-	label_at("ABILITIES", P(1118, 152), 30)
-	var eh := rh(50)
-	var edit := nav_button("EDIT IN ARMIES  ›", P(1392, 144), P(232, eh), func(): show_armies(faction, show_factions))
-	edit.add_theme_font_size_override("font_size", int(round(fsz(19) * K)))
-	var lo := ArmyPresets.loadout_for(faction)
-	var ids := [lo["active"], lo["map"], Rules.FACTION_ULTIMATE_ID[faction]]
-	var tags := ["ACTIVE SKILL  ·  ARMY PRESET", "MAP SKILL  ·  ARMY PRESET", "ULTIMATE  ·  %s ONLY" % str(Rules.FACTION_NAMES[faction][0])]
-	var card_y0 := 144.0 + eh + 14.0                  # below EDIT IN ARMIES, whatever it grew to
-	var card_step := 160.0
-	for i in range(3):
-		var y := card_y0 + i * card_step
-		var id: String = ids[i]
-		nav_button("", P(1117, y), P(507, 150), func(): show_armies(faction, show_factions))
-		content.add_child(neon_panel(P(1117, y), P(507, 150), col, false, Color("020a10e8")))
-		skill_icon(id, P(1136, y + 33), P(84, 84), col)
-		label_at(tags[i], P(1238, y + 14), 16, Color(col, 0.9), false)   # shares its line with the CD badge - see label_at()
-		label_at(ArmyPresets.skill_name(id).to_upper(), P(1238, y + 36), 28)
-		var desc := label_at(ArmyPresets.line(id), P(1238, y + 80), 19, Color("c5d2da"))
-		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # wrap first, then fix the width
-		desc.custom_minimum_size = Vector2(368 * K, 0)
-		desc.size = Vector2(368 * K, 0)
-		label_at(ArmyPresets.cd_text(id) + ("" if i == 2 else " CD"), P(1500, y + 16), 15, Color("ffd15c") if i == 2 else Color("9cb2bf"), false)
-	for i in range(5):
-		faction_tab(FACTIONS[i], P(34 + i * 324, 745), P(312, 101))
-	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
-	nav_button("NEXT: BATTLEFIELD", P(1280, foot_y()), P(352, 58), show_maps, true)
+	var area := shell_open("OOZE / FACTION", "play", show_play, faction)
+	var x := shell_x()
+	var w := content.size.x - x * 2.0
+	var y := page_title(area, "01 / FACTION", "PICK YOUR SYNDICATE.")
+	var gap := 10.0
+	var th := UiKit.tap_h(self, 58.0)
+	var tw := (w - gap * 4.0) / 5.0
+	for i in range(FACTIONS.size()):
+		_roster_tile(FACTIONS[i], Vector2(x + i * (tw + gap), y), Vector2(tw, th))
+	y += th + 14.0
+	# the foot: the note (where it fits), EDIT IN ARMIES, NEXT
+	var bh := UiKit.tap_h(self, 48.0)
+	var fy := area.end.y - bh - 12.0
+	var nt := "NEXT: BATTLEFIELD  →"
+	var nw := UiKit.text_w(self, nt, 17, true) + 48.0
+	UiKit.btn(self, nt, Vector2(content.size.x - x - nw, fy), Vector2(nw, 48), show_maps, "primary", faction, 17)
+	var et := "EDIT IN ARMIES  ›"
+	var ew := UiKit.text_w(self, et, 15, true) + 40.0
+	var ex := content.size.x - x - nw - 12.0 - ew
+	UiKit.btn(self, et, Vector2(ex, fy), Vector2(ew, 48), func(): show_armies(faction, show_factions), "secondary", faction, 15)
+	var note := "Faction identity is separate from your team colour."
+	if UiKit.text_w(self, note, 15) < ex - x - 16.0:
+		_shell_add(UiKit.label(self, note, 15, UiKit.MUTED), Vector2(x, fy + (bh - UiKit.line_h(self, 15)) / 2.0))
+	var ch := fy - 14.0 - y
+	var lw := floorf(w * 0.52)
+	_faction_card(Vector2(x, y), Vector2(lw, ch))
+	_preset_rows(Vector2(x + lw + 14.0, y), Vector2(w - lw - 14.0, ch))
 
 
-func faction_tab(f: String, pos: Vector2, dims: Vector2) -> void:
-	dims = tap(dims)                                  # grow once so the hit area and the visible edge agree
-	nav_button("", pos, dims, func():
+func _cutout(f: String, pos: Vector2, dims: Vector2) -> TextureRect:
+	## The faction's character cutout, not yet placed (a tile's or a chip's child; UiKit.hero adds it to the page).
+	var r := TextureRect.new()
+	r.texture = load(UiKit.hero_path(f))
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.position = pos
+	r.size = dims
+	return r
+
+
+func _roster_tile(f: String, pos: Vector2, dims: Vector2) -> void:
+	## FACTION's roster tile: the character and the name; the picked one in its accent. A tap picks the faction.
+	var picked := f == faction
+	var b := UiKit.btn(self, "", pos, dims, func():
 		faction = f
 		main.SEAT_FACTIONS[main.HUMAN] = f
-		show_factions())
-	portrait(f, pos + P(6, 6), P(104, 89))
-	var chosen := f == faction
-	var fc: Color = Rules.FACTIONS[f][1]
-	label_at("VIRIDIAN" if f == "bloom" else f.to_upper(), pos + P(122, 20), 24, fc if chosen else Color.WHITE)
-	label_at(NAMES[f].split("\n")[1], pos + P(122, 54), 17, fc)
-	content.add_child(neon_panel(pos, dims, fc, chosen, Color(0, 0, 0, 0)))
-	if chosen:
-		neon_icon("check", pos + P(279, 9), P(21, 21), fc)
+		show_factions(), "selected" if picked else "secondary", f)
+	var hs := b.size.y - 10.0
+	b.add_child(_cutout(f, Vector2(6, 5), Vector2(hs, hs)))
+	var tx := hs + 16.0
+	var nm := UiKit.label(self, UiKit.NAMES[f], 15, UiKit.accent(f) if picked else UiKit.INK, true)
+	var sl := UiKit.label(self, UiKit.SUBS[f], 12, UiKit.MUTED)
+	var nh := UiKit.line_h(self, 15, true)
+	var two := nh + UiKit.line_h(self, 12) <= b.size.y - 6.0
+	var ty := (b.size.y - (nh + (UiKit.line_h(self, 12) if two else 0.0))) / 2.0
+	for l in ([nm, sl] if two else [nm]):
+		l.clip_text = true
+		l.position = Vector2(tx, ty)
+		l.size = Vector2(maxf(10.0, b.size.x - tx - 8.0), l.get_minimum_size().y)
+		b.add_child(l)
+		ty += nh
+
+
+func _faction_card(pos: Vector2, dims: Vector2) -> void:
+	## FACTION's big card: the character over its glow, the name block with the persistent trait, the five stats
+	## (Rules.stat, as 01 FACTION always showed them) under a rule.
+	var acc := UiKit.accent(faction)
+	UiKit.panel(self, pos, dims, faction)
+	var pad := 18.0
+	var stat_h := UiKit.line_h(self, 22, true) + UiKit.line_h(self, 12)
+	var sy := pos.y + dims.y - pad - stat_h
+	var body_h := sy - 14.0 - (pos.y + pad)
+	var hs := minf(body_h, dims.x * 0.42)
+	UiKit.hero(self, faction, Vector2(pos.x + pad, pos.y + pad + (body_h - hs) / 2.0), Vector2(hs, hs))
+	var tx := pos.x + pad + hs + 18.0
+	var tw := pos.x + dims.x - pad - tx
+	var ft: Array = Rules.FACTION_TRAITS[faction]
+	# [text, size, colour, head, spacing, optional] - the tagline goes first when a phone runs out of room
+	var lines := [[UiKit.SUBS[faction], 12, acc, true, 3, false], [UiKit.NAMES[faction], 38, acc, true, 0, false],
+			[Rules.FACTION_TAGLINES[faction], 15, UiKit.MUTED, false, 0, true], ["", 10, UiKit.INK, false, 0, false],
+			["PERSISTENT TRAIT  ·  COMING SOON", 12, acc, true, 2, false], [str(ft[0]).to_upper(), 16, UiKit.INK, true, 0, false],
+			[str(ft[1]), 14, UiKit.MUTED, false, 0, false]]
+	var total := 0.0
+	var hts := []
+	for ln in lines:
+		var h: float = float(ln[1]) if ln[0] == "" else UiKit.text_h(self, ln[0], ln[1], tw, ln[3]) + 2.0
+		hts.append(h)
+		total += h
+	if total > body_h:                                       # no room for the tagline (phones)
+		total -= hts[2]
+		hts[2] = -1.0
+	var ly := pos.y + pad + maxf(0.0, (body_h - total) / 2.0)
+	for i in range(lines.size()):
+		var ln: Array = lines[i]
+		if hts[i] < 0.0:
+			continue
+		if ln[0] != "":
+			var l := UiKit.label(self, ln[0], ln[1], ln[2], ln[3], ln[4])
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size = Vector2(tw, 0)
+			_shell_add(l, Vector2(tx, ly))
+		ly += hts[i]
+	# the stats
+	content.add_child(UiKit.rect(Vector2(pos.x + pad, sy - 12.0), Vector2(dims.x - pad * 2.0, 1.0), UiKit.FRAME))
+	var rows := [["speed", "Speed", "Faster", "Slower"], ["health", "Health", "Tougher", "Fragile"],
+			["attack", "Attack", "Stronger", "Weaker"], ["production", "Production", "Faster", "Slower"],
+			["garrison", "Garrison", "Stronger", "Weaker"]]
+	var sw := (dims.x - pad * 2.0) / float(rows.size())
+	for i in range(rows.size()):
+		var r: Array = rows[i]
+		var v := Rules.stat(faction, r[0])
+		var rating: String = r[2] if v > 1.001 else (r[3] if v < 0.999 else "Baseline")
+		var cap := "%s · %s" % [r[1], rating]
+		if UiKit.text_w(self, cap, 12) > sw - 10.0:            # phones: the name only; the value's colour carries the rest
+			cap = r[1]
+		UiKit.stat(self, Vector2(pos.x + pad + i * sw, sy), "%d%%" % roundi(v * 100.0), cap,
+				acc if v > 1.001 else (Color("ffb12b") if v < 0.999 else UiKit.INK))
+
+
+func _preset_rows(pos: Vector2, dims: Vector2) -> void:
+	## FACTION's army preset (SKILLS 2.0): 01 the active skill, 02 the map skill, 03 the faction's ultimate.
+	var lo := ArmyPresets.loadout_for(faction)
+	var ids := [lo["active"], lo["map"], Rules.FACTION_ULTIMATE_ID[faction]]
+	var kicks := ["ACTIVE SKILL  ·  ARMY PRESET", "MAP SKILL  ·  ARMY PRESET", "ULTIMATE  ·  %s ONLY" % UiKit.NAMES[faction]]
+	var gap := 10.0
+	var h := (dims.y - gap * 2.0) / 3.0
+	for i in range(3):
+		_skill_row(pos + Vector2(0, i * (h + gap)), Vector2(dims.x, h), "%02d" % (i + 1), ids[i], kicks[i], i == 2)
+
+
+func _skill_row(pos: Vector2, dims: Vector2, num: String, id: String, kicker: String, ultimate: bool) -> void:
+	## One preset row: the slot number, the skill's icon, kicker + cooldown, name, its line; the row opens ARMIES.
+	var acc := UiKit.accent(faction)
+	var b := UiKit.btn(self, "", pos, dims, func(): show_armies(faction, show_factions), "secondary", faction)
+	var h := b.size.y
+	var pad := 14.0
+	var n := UiKit.label(self, num, 24, acc, true)
+	n.position = Vector2(pad, (h - UiKit.line_h(self, 24, true)) / 2.0)
+	b.add_child(n)
+	var ix := pad + UiKit.text_w(self, num, 24, true) + 12.0
+	var isz := minf(h - pad * 2.0, 64.0)
+	skill_icon(id, Vector2(ix, (h - isz) / 2.0), Vector2(isz, isz), acc, b)
+	var tx := ix + isz + 14.0
+	var tw := dims.x - tx - 34.0
+	var kh := UiKit.line_h(self, 11, true)
+	var thh := UiKit.line_h(self, 18, true)
+	var dl := UiKit.line_h(self, 14)
+	var dn := clampi(int((h - pad - kh - thh) / dl), 0, 2)
+	var desc := ArmyPresets.line(id)
+	var need := mini(dn, int(ceil(UiKit.text_h(self, desc, 14, tw) / dl - 0.1)))
+	var ty := (h - (kh + thh + need * dl)) / 2.0
+	var cd := ArmyPresets.cd_text(id) + ("" if ultimate else " CD")
+	var cdw := UiKit.text_w(self, cd, 12)
+	var cl := UiKit.label(self, cd, 12, UiKit.STAR if ultimate else UiKit.MUTED)
+	cl.position = Vector2(dims.x - 34.0 - cdw, ty)
+	b.add_child(cl)
+	var kw := maxf(10.0, tw - cdw - 12.0)
+	if UiKit.text_w(self, kicker, 11, true) + kicker.length() * 2.0 > kw:   # phones: "ACTIVE SKILL" without the preset note
+		kicker = kicker.get_slice("  ·  ", 0)
+	var k := UiKit.label(self, kicker, 11, acc, true, 2)
+	k.clip_text = true
+	k.position = Vector2(tx, ty)
+	k.size = Vector2(kw, kh)
+	b.add_child(k)
+	var t := UiKit.label(self, ArmyPresets.skill_name(id).to_upper(), 18, UiKit.INK, true)
+	t.clip_text = true
+	t.position = Vector2(tx, ty + kh)
+	t.size = Vector2(tw, thh)
+	b.add_child(t)
+	if need > 0:
+		var d := UiKit.label(self, desc, 14, UiKit.MUTED)
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		d.max_lines_visible = need
+		d.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		d.clip_text = true
+		d.position = Vector2(tx, ty + kh + thh)
+		d.size = Vector2(tw, need * dl)
+		b.add_child(d)
+	var c := UiKit.label(self, "›", 22, UiKit.MUTED)
+	c.position = Vector2(dims.x - 24.0, (h - UiKit.line_h(self, 22)) / 2.0)
+	b.add_child(c)
 
 
 # ------------------------------------------------------------------ TUTORIAL (TUTORIAL-DESIGN.md §7)
@@ -1821,83 +1927,127 @@ func _cosmetic_row(family: String, current: String, pos: Vector2, fc: Color) -> 
 
 
 func show_maps() -> void:
+	## 02 BATTLEFIELD (screen system 04): the players filter (ALL + every mode some map offers; picking one also sets
+	## up that mode) and the TYPE filter (cycles MAP_TYPES), a scrolling grid of the real thumbnails (MapPool.thumb:
+	## the whole map, never cropped; the picked one lit), the picked map's name / modes / nodes / relays / Last Stand,
+	## NEXT: MATCH SETUP. (The mockup's search box is left out: phones have no text field for it.)
 	_last_show = show_maps                  # a resize that changes the phone sizing rebuilds it (_fit)
-	clear_page("city")
-	header(2)
-	label_at("CHOOSE YOUR BATTLEFIELD", P(40, 107), 43)
-	frame(P(35, 174), P(975, 641))
 	var shown := _filtered_maps()
 	if not shown.is_empty() and not shown.any(func(e): return e["path"] == map_path):
 		map_path = shown[0]["path"]                    # back on the page with filters set: pick a shown map
 	if map_filter_mode != "all" and not shown.is_empty():
 		mode = map_filter_mode                         # filtered by players: set up that mode
-	label_at("%d OF %d MAPS" % [shown.size(), maps.size()], P(780, 122), 20, Color("8fb3c2"))
-	var modes_all := _pool_modes()
-	var chip_w: float = minf(104.0, (560.0 - 8.0 * modes_all.size()) / float(modes_all.size() + 1))
-	var chip_h := rh(52)                              # the filter row grows on mobile - the grid below follows it down
-	var x := 52.0
-	for md in ["all"] + modes_all:
-		var md_now: String = md
-		nav_button("ALL" if md == "all" else MODE_NAMES.get(md, md), P(x, 188), P(chip_w, chip_h), func():
-			map_filter_mode = md_now
-			_refilter(), md == map_filter_mode)
-		x += chip_w + 8.0
-	nav_button("TYPE: %s" % MAP_TYPE_NAMES[map_filter_type], P(752, 188), P(240, chip_h), func():
+	var area := shell_open("OOZE / BATTLEFIELD", "play", show_factions, faction)
+	var x := shell_x()
+	var w := content.size.x - x * 2.0
+	var y := page_title(area, "02 / BATTLEFIELD", "CHOOSE YOUR CROSSING.")
+	# the filters: players at the left (wrapping if a phone needs it), TYPE at the right, the count between them
+	var tt := "TYPE: %s" % MAP_TYPE_NAMES[map_filter_type]
+	var tw := maxf(UiKit.text_w(self, tt, 14, true) + 32.0, 56.0)
+	var tb := UiKit.chip(self, tt, Vector2(content.size.x - x - tw, y), func():
 		map_filter_type = MAP_TYPES[(MAP_TYPES.find(map_filter_type) + 1) % MAP_TYPES.size()]
-		_refilter(), map_filter_type != "all")
-	var grid_y := 188.0 + chip_h + 12.0
-	if shown.is_empty():
-		label_at("No map matches these filters.", P(70, grid_y + 32.0), 24, Color("abc1cd"))
-	var scroll := TouchScroll.new()                    # finger swipes scroll the grid (phones)
+		_refilter(), faction, map_filter_type != "all")
+	var chip_h := tb.size.y
+	var cx := x
+	var cy := y
+	for md in ["all"] + _pool_modes():
+		var md_now: String = md
+		var text: String = "ALL" if md == "all" else MODE_NAMES.get(md, md)
+		var cw := maxf(UiKit.text_w(self, text, 14, true) + 32.0, 56.0)
+		if cx + cw > (tb.position.x - 12.0 if cy == y else x + w):
+			cx = x
+			cy += chip_h + 8.0
+		UiKit.chip(self, text, Vector2(cx, cy), func():
+			map_filter_mode = md_now
+			_refilter(), faction, md == map_filter_mode)
+		cx += cw + 8.0
+	var count := "%d OF %d MAPS" % [shown.size(), maps.size()]
+	var count_w := UiKit.text_w(self, count, 13)
+	var count_in_row := cy == y and cx + count_w + 8.0 < tb.position.x - 12.0
+	if count_in_row:
+		_shell_add(UiKit.label(self, count, 13, UiKit.MUTED), Vector2(tb.position.x - 14.0 - count_w, y + (chip_h - UiKit.line_h(self, 13)) / 2.0))
+	y = cy + chip_h + 12.0
+	# the foot: the picked map, NEXT
+	var sel := _selected_map()
+	var bh := UiKit.tap_h(self, 48.0)
+	var nt := "NEXT: MATCH SETUP  →"
+	var nw := UiKit.text_w(self, nt, 17, true) + 48.0
+	var detail := "%s   /   %d NODES%s" % [" · ".join(_modes_of(sel).map(func(v): return MODE_NAMES.get(v, v))), sel["nodes"].size(),
+			_relay_kinds(sel).replace("    /    ", "   /   ")]
+	if not count_in_row:
+		detail += "   ·   " + count
+	var ls_methods: Array = sel.get("lastStand", {}).get("methods", [])
+	var ls_line: String = "No Last Stand on this map" if ls_methods.is_empty() else "Last Stand at %d:%02d - methods: %s" % [
+			int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(ls_methods)]
+	var info := [[str(sel.get("name", "")).replace("*", "").to_upper(), 18, UiKit.INK, true], [detail, 13, UiKit.accent(faction), false]]
+	if not mobile:                                     # the phone keeps the grid's height instead of the recap
+		info.append(["%s  ·  %s" % [_map_blurb(sel), ls_line], 12, UiKit.MUTED, false])
+	var info_h := 0.0
+	for ln in info:
+		info_h += UiKit.line_h(self, ln[1], ln[3])
+	var foot_h := maxf(bh, info_h)
+	var fy := area.end.y - foot_h - 12.0
+	UiKit.btn(self, nt, Vector2(content.size.x - x - nw, fy + (foot_h - bh) / 2.0), Vector2(nw, 48), show_setup, "primary", faction, 17)
+	var iy := fy + (foot_h - info_h) / 2.0
+	for ln in info:
+		var l := UiKit.label(self, ln[0], ln[1], ln[2], ln[3])
+		l.clip_text = true
+		l.size = Vector2(w - nw - 24.0, UiKit.line_h(self, ln[1], ln[3]))
+		_shell_add(l, Vector2(x, iy))
+		iy += l.size.y
+	# the grid: every shown map, a swipe scrolls (phones), a tap picks
+	var gy := y
+	var scroll := TouchScroll.new()
 	var keep := _map_scroll                           # picking a map rebuilds the page: stay where you were
 	get_tree().process_frame.connect(func(): if is_instance_valid(scroll): scroll.scroll_vertical = keep, CONNECT_ONE_SHOT)
-	scroll.position = P(52, grid_y)
-	scroll.size = P(940, 815.0 - grid_y - 15.0)         # the frame's own bottom is 174 + 641 = 815
+	scroll.position = Vector2(x, gy)
+	scroll.size = Vector2(w, fy - 12.0 - gy)
 	content.add_child(scroll)
+	if shown.is_empty():
+		_shell_add(UiKit.label(self, "No map matches these filters.", 18, UiKit.MUTED), Vector2(x + 4.0, gy + 20.0))
+	var gap := 12.0
+	var cols := clampi(int((w + gap) / (270.0 + gap)), 3, 6)
+	var cw := floorf((w - 16.0 - gap * (cols - 1)) / cols)    # 16: the scroll bar's lane
+	var cap_h := UiKit.line_h(self, 13, true) + 12.0
+	var thumb := Vector2(cw - 12.0, floorf((cw - 12.0) * 9.0 / 16.0))
+	var card := Vector2(cw, 6.0 + thumb.y + cap_h)
 	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", int(16 * K))
-	grid.add_theme_constant_override("v_separation", int(16 * K))
+	grid.columns = cols
+	grid.add_theme_constant_override("h_separation", int(gap))
+	grid.add_theme_constant_override("v_separation", int(gap))
 	scroll.add_child(grid)
 	for entry in shown:
 		var m: Dictionary = entry["data"]
 		var mp: String = entry["path"]
 		var code: String = m.get("code", "")
-		var b := button("", func():
+		var picked := mp == map_path
+		var b := UiKit.make_btn(self, "", card, func():
 			if scroll.was_drag():                     # that was a swipe, not a pick
 				return
 			_map_scroll = scroll.scroll_vertical
 			map_path = mp
-			show_maps(), 451 * K)
-		b.custom_minimum_size = P(451, 272)
+			show_maps(), "selected" if picked else "secondary", faction)
 		grid.add_child(b)
+		var back := UiKit.rect(Vector2(6, 6), thumb, Color(UiKit.BASE, 0.9))
+		b.add_child(back)
 		var tex := TextureRect.new()
-		var thumb := MapPool.thumb(code)
-		tex.texture = load(thumb) if ResourceLoader.exists(thumb) else null
-		tex.position = P(8, 8)
+		var tp := MapPool.thumb(code)
+		tex.texture = load(tp) if ResourceLoader.exists(tp) else null
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED   # the whole map, never cropped (Daniele, 0.18.7:
-		                                                         # "thumbnail of maps often overflow and can't be seen in full")
-		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE                # "thumbnail of maps often overflow and can't be seen in full")
+		tex.position = Vector2(6, 6)
+		tex.size = thumb
 		b.add_child(tex)
-		tex.size = P(435, 211)
-		tex.set_deferred("size", P(435, 211))
-		var caption := text_label("%s  %s" % [code, str(m.get("name", "")).replace("*", "").to_upper()], 23)
-		caption.position = P(17, 230)
-		b.add_child(caption)
-		var edge := neon_panel(Vector2.ZERO, P(451, 272), color(), mp == map_path, Color(0, 0, 0, 0))
-		b.add_child(edge)
-	frame(P(1030, 174), P(603, 641))
-	map_preview(P(1046, 193), P(571, 414))
-	var sel := _selected_map()
-	label_at(str(sel.get("name", "")).replace("*", "").to_upper(), P(1052, 631), 31)
-	label_at("%s    /    %d NODES%s" % [" · ".join(_modes_of(sel).map(func(x): return MODE_NAMES.get(x, x))), sel["nodes"].size(), _relay_kinds(sel).to_upper()], P(1053, 683), 23, color())
-	var ls_methods: Array = sel.get("lastStand", {}).get("methods", [])
-	var ls_line: String = "No Last Stand on this map" if ls_methods.is_empty() else "Last Stand at %d:%02d - methods: %s" % [
-			int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60, ", ".join(ls_methods)]
-	label_at("%s\n%s" % [_map_blurb(sel), ls_line], P(1053, 736), 22, Color("abc1cd"))
-	nav_button("BACK", P(40, foot_y()), P(230, 58), show_factions)
-	nav_button("NEXT: MATCH SETUP", P(1280, foot_y()), P(352, 58), show_setup, true)
+		var cap_text := "%s  %s" % [code, str(m.get("name", "")).replace("*", "").to_upper()]
+		if UiKit.text_w(self, cap_text, 13, true) > cw - 20.0:    # phones: the name alone (the thumbnail carries the code)
+			cap_text = str(m.get("name", "")).replace("*", "").to_upper()
+		var cap := UiKit.label(self, cap_text, 13, UiKit.accent(faction) if picked else UiKit.INK, true)
+		cap.clip_text = true
+		cap.position = Vector2(10, 6.0 + thumb.y + (cap_h - UiKit.line_h(self, 13, true)) / 2.0)
+		cap.size = Vector2(cw - 20.0, UiKit.line_h(self, 13, true))
+		b.add_child(cap)
+	shell_raise()
 
 
 func _map_type(m: Dictionary) -> String:
@@ -1974,145 +2124,330 @@ func _selected_map() -> Dictionary:
 
 
 func show_setup() -> void:
+	## 03 SETUP (screen system 05): the map (its preview, CHANGE -> BATTLEFIELD) and YOUR TEAM COLOUR on the left; your
+	## faction (CHANGE -> FACTION, its army preset -> ARMIES), the rival (1 V 1: seat B's faction; other modes: every AI
+	## seat's pick, set in SEATS & TEAMS), DIFFICULTY on the right; LAST STAND, ABILITIES and DEPLOY at the foot. SEATS &
+	## TEAMS (show_seats) holds the PLAYERS mode and every seat's pick. Each choice is the variable deploy() reads.
 	_last_show = show_setup                  # a resize that changes the phone sizing rebuilds it (_fit)
-	clear_page("city")
-	header(3)
-	label_at("READY TO DEPLOY", P(40, 108), 51)
-	frame(P(35, 188), P(982, 630))
-	label_at(str(_selected_map().get("name", "")).replace("*", "").to_upper(), P(58, 207), 28)
-	var hdr_h := rh(48)
-	nav_button("CHANGE MAP", P(810, 206), P(184, hdr_h), show_maps)
-	var preview_y := 206.0 + hdr_h + 14.0              # CHANGE MAP grows on mobile - the preview follows it down
-	map_preview(P(53, preview_y), P(946, 360))
 	var modes := _modes_of(_selected_map())
 	if not mode in modes:
 		mode = modes[0]
-	# PLAYERS / YOUR COLOUR: a scrollable stack (stack_open()) below the preview - on mobile both chip
-	# rows grow to the 44 pt tap minimum, more than this frame has spare room for stacked at desktop gaps
-	var chip_area_y := preview_y + 360.0 + 24.0
-	var st := stack_open(P(50, chip_area_y), P(960, maxf(160.0, 818.0 - chip_area_y - 15.0)))
-	var y := 4.0
-	var mode_h := rh(48)
-	stack_add(st, label_at("PLAYERS", P(23, y + mode_h / 2.0 - 10.0), 20, Color("aac3cd")))
-	for i in range(modes.size()):
-		var md: String = modes[i]
-		var mb := stack_add(st, nav_button(MODE_NAMES.get(md, md), P(115 + i * 140, y), P(132, mode_h), func():
-			mode = md
-			show_setup(), md == mode)) as Button
-		mb.add_theme_font_size_override("font_size", int(round(18 * K)))
-	y += mode_h + 20.0
-	var col_h := rh(48)
-	stack_add(st, label_at("YOUR COLOUR", P(23, y + col_h / 2.0 - 10.0), 20, Color("aac3cd")))
+	var area := shell_open("OOZE / SETUP", "play", show_maps, faction)
+	var x := shell_x()
+	var w := content.size.x - x * 2.0
+	var y := page_title(area, "03 / SETUP", "READY TO DEPLOY.")
+	# SEATS & TEAMS (and the mode), top right - left of BACK where the page has it
+	var stt := "SEATS & TEAMS  ·  %s" % MODE_NAMES.get(mode, mode)
+	var stw := UiKit.text_w(self, stt, 14, true) + 36.0
+	var right := content.size.x - x
+	if shell_back.is_valid() and not shell_slim:
+		right -= UiKit.text_w(self, "←  BACK", 15, true) + 20.0 + 14.0
+	var stb := UiKit.btn(self, stt, Vector2(right - stw, area.position.y + (10.0 if shell_slim else 14.0)), Vector2(stw, 42),
+			show_seats, "secondary", faction, 14)
+	y = maxf(y, stb.position.y + stb.size.y + 10.0)
+	var lw := floorf(w * 0.52)
+	var rx := x + lw + 18.0
+	var rw := w - lw - 18.0
+	# the foot of the right column: LAST STAND, ABILITIES, DEPLOY
+	var bh := UiKit.tap_h(self, 48.0)
+	var fy := area.end.y - bh - 12.0
+	var dt := "DEPLOY  →"
+	var dw := maxf(UiKit.text_w(self, dt, 18, true) + 56.0, 170.0)
+	UiKit.btn(self, dt, Vector2(content.size.x - x - dw, fy), Vector2(dw, 48), deploy, "primary", faction, 18)
+	var tgw := (rw - dw - 20.0) / 2.0
+	_toggle("LAST STAND", Rules.last_stand, Vector2(rx, fy), Vector2(tgw, 48), func():
+		Rules.last_stand = not Rules.last_stand
+		show_setup())
+	_toggle("ABILITIES", Rules.abilities_on, Vector2(rx + tgw + 10.0, fy), Vector2(tgw, 48), func():   # SKILLS 2.0: Alpha 11's match setting
+		Rules.abilities_on = not Rules.abilities_on
+		show_setup())
+	if not mobile:                                    # the phone skips the recap to save room
+		var tip := UiKit.label(self, "Last Stand ON = the map collapses ring by ring late in the match.  ABILITIES OFF = no skills.", 12, UiKit.DIM)
+		tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tip.custom_minimum_size = Vector2(rw, 0)
+		_shell_add(tip, Vector2(rx, fy - 8.0 - UiKit.text_h(self, tip.text, 12, rw)))
+	# the left column: the map, YOUR TEAM COLOUR under it
+	var hs := UiKit.tap_h(self, 44.0)
+	var col_h := UiKit.line_h(self, 12, true) + 8.0 + hs + (UiKit.line_h(self, 13) + 6.0 if colour == "faction" else 0.0) \
+			+ (UiKit.line_h(self, 12) + 6.0 if not mobile else 0.0)
+	var col_y := area.end.y - 18.0 - col_h           # (the picked chip grows 12 %)
+	_setup_map(Vector2(x, y), Vector2(lw, col_y - 16.0 - y))
+	_setup_colours(Vector2(x, col_y), lw)
+	# the right column: your faction, the rival(s), DIFFICULTY
+	var ry := y
+	if not mobile:
+		_shell_add(UiKit.label(self, "YOUR FACTION  ·  SEAT A", 12, UiKit.MUTED, true, 3), Vector2(rx, ry))
+		ry += UiKit.line_h(self, 12, true) + 6.0
+	var card_h := maxf(76.0, UiKit.tap_h(self, 40.0) + 12.0)
+	_setup_faction(Vector2(rx, ry), Vector2(rw, card_h))
+	ry += card_h + 14.0
+	var seats := _enemy_seats()
+	if mode == "1v1" and seats.size() == 1:
+		var pick := str(rival_picks.get(seats[0], "random"))
+		var kt := "RIVAL  ·  SEAT %s  ·  %s" % [seats[0], "ANY (picked when you deploy)" if pick == "random" else UiKit.NAMES[pick]]
+		if UiKit.text_w(self, kt, 12, true) + kt.length() * 3.0 > rw:
+			kt = kt.replace(" (picked when you deploy)", "")
+		var kl := UiKit.label(self, kt, 12, UiKit.MUTED, true, 3)
+		kl.clip_text = true
+		kl.size = Vector2(rw, UiKit.line_h(self, 12, true))
+		_shell_add(kl, Vector2(rx, ry))
+		ry += UiKit.line_h(self, 12, true) + 6.0
+		ry += _faction_picks(seats[0], Vector2(rx, ry), rw, show_setup) + 14.0
+	else:
+		_shell_add(UiKit.label(self, "AI SEATS  ·  %s" % MODE_NAMES.get(mode, mode), 12, UiKit.MUTED, true, 3), Vector2(rx, ry))
+		ry += UiKit.line_h(self, 12, true) + 6.0
+		var parts := seats.map(func(s):
+			var p := str(rival_picks.get(s, "random"))
+			return "%s %s" % [s, "ANY" if p == "random" else UiKit.NAMES[p]])
+		var r := UiKit.row(self, Vector2(rx, ry), Vector2(rw, 52), "", "  ·  ".join(parts), "Set each seat's faction, see the teams",
+				show_seats, faction)
+		ry += r.size.y + 14.0
+	_shell_add(UiKit.label(self, "DIFFICULTY", 12, UiKit.MUTED, true, 3), Vector2(rx, ry))
+	ry += UiKit.line_h(self, 12, true) + 6.0
+	_difficulty(Vector2(rx, ry), rw)
+
+
+func _setup_map(pos: Vector2, dims: Vector2) -> void:
+	## SETUP's map panel: the name and CHANGE (-> BATTLEFIELD), the whole-map preview, its mode / nodes / relays.
+	var sel := _selected_map()
+	UiKit.panel(self, pos, dims, faction)
+	var pad := 16.0
+	var ct := "CHANGE"
+	var cw := UiKit.text_w(self, ct, 14, true) + 34.0
+	var cb := UiKit.btn(self, ct, Vector2(pos.x + dims.x - pad / 2.0 - cw, pos.y + 6.0), Vector2(cw, 38), show_maps, "tertiary", faction, 14)
+	var nm := UiKit.label(self, str(sel.get("name", "")).replace("*", "").to_upper(), 18, UiKit.INK, true)
+	nm.clip_text = true
+	nm.size = Vector2(dims.x - pad * 2.0 - cw, UiKit.line_h(self, 18, true))
+	_shell_add(nm, Vector2(pos.x + pad, cb.position.y + (cb.size.y - nm.size.y) / 2.0))
+	var th := UiKit.line_h(self, 12, true) + 10.0
+	var py := cb.position.y + cb.size.y + 6.0
+	var pd := Vector2(dims.x - pad * 2.0, pos.y + dims.y - pad - th - 10.0 - py)
+	content.add_child(UiKit.rect(Vector2(pos.x + pad, py), pd, Color(UiKit.BASE, 0.9)))
+	var tex := TextureRect.new()
+	var tp := MapPool.thumb(str(sel.get("code", "")))
+	tex.texture = load(tp) if ResourceLoader.exists(tp) else null
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED     # the whole map, letterboxed, never cropped
+	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tex.size = pd
+	_shell_add(tex, Vector2(pos.x + pad, py))
+	var tx := pos.x + pad
+	var tags := [MODE_NAMES.get(mode, mode), "%d NODES" % sel["nodes"].size()]
+	for k in _relay_kinds(sel).replace("    /    ", "").split(" + ", false):
+		tags.append(k.to_upper())
+	for t in tags:
+		var tw := UiKit.text_w(self, t, 12, true) + 20.0
+		if tx + tw > pos.x + dims.x - pad:
+			break
+		content.add_child(UiKit.rect(Vector2(tx, pos.y + dims.y - pad - th), Vector2(tw, th), Color(UiKit.FRAME, 0.55)))
+		_shell_add(UiKit.label(self, t, 12, UiKit.INK, true), Vector2(tx + 10.0, pos.y + dims.y - pad - th + 5.0))
+		tx += tw + 6.0
+
+
+func _setup_colours(pos: Vector2, width: float) -> void:
+	## YOUR TEAM COLOUR: the hex chips (0.19.0), FACTION's split hexagon with your emblem (0.19.2 spec H2).
+	_shell_add(UiKit.label(self, "YOUR TEAM COLOUR", 12, UiKit.MUTED, true, 3), pos)
+	var hy := pos.y + UiKit.line_h(self, 12, true) + 8.0
 	var keys := COLOUR_NAMES.keys()
+	var hs := UiKit.tap_h(self, 44.0)
+	var gap := clampf((width - hs * keys.size()) / float(keys.size() - 1), 4.0, 14.0)
 	for i in range(keys.size()):
 		var ck: String = keys[i]
 		var wedges := FACTIONS.map(func(f): return Rules.FACTIONS[f][1]) if ck == "faction" else []
 		var cc: Color = Color.WHITE if ck == "faction" else Rules.SEATS[ck]
-		var chip := hex_chip(P(175 + i * 112, y), P(col_h, col_h), cc, wedges, ck == colour, COLOUR_NAMES[ck], func():
+		var chip := hex_chip(Vector2(pos.x + i * (hs + gap), hy), Vector2(hs, hs), cc, wedges, ck == colour, COLOUR_NAMES[ck], func():
 			colour = ck
 			show_setup())
 		if ck == "faction":
-			chip.emblem_faction = faction              # 0.19.2 spec H2: a recognisable face, not just wedges
-		stack_add(st, chip)
-	y += col_h + 16.0
-	if colour == "faction":                            # 0.19.2 spec H2: a one-line caption while FACTION is picked
-		stack_add(st, label_at("Every player in their faction's colour", P(23, y), 16, Color("ffd15c")))
-		y += 26.0
-	if not mobile:                                    # the phone skips the recap to save room
-		stack_add(st, label_at("Team modes: one hue per team, light and dark. FACTION: every seat in its own faction colour (Alpha 11).", P(23, y), 14, Color("7795a4")))
-		y += 26.0
-	stack_close(st, y)
-	frame(P(1037, 188), P(595, 630))
-	label_at("YOUR FACTION  ·  SEAT A", P(1059, 208), 20, Color("aac3cd"))
-	summary_card(faction, P(1058, 240), P(552, 130), true)
-	label_at("RIVAL  ·  SEAT B", P(1059, 389), 20, Color("aac3cd"))
-	if rival != "random":
-		summary_card(rival, P(1058, 422), P(552, 121), false)
-	else:
-		frame(P(1058, 422), P(552, 121), "row")
-		label_at("RANDOM RIVAL" if mode == "1v1" else "SEAT B + OTHER AI SEATS", P(1080, 445), 30, Color("adc7d2"))
-		label_at("picked when you deploy", P(1082, 495), 18, Color("adc7d2"))
-	# RIVAL FACTION / DIFFICULTY / LAST STAND / ABILITIES: another scrollable stack, same reason as the left
-	# column's - every row here grows to the 44 pt minimum on mobile
-	var st2 := stack_open(P(1058, 556), P(552, maxf(160.0, 818.0 - 556.0 - 14.0)))
-	var y2 := 0.0
-	# RIVAL FACTIONS: one compact cycling chip per enemy seat (0.19.2, spec H3 - "the single picker
-	# allows only all different or all the same"), tap to cycle ANY -> each faction -> ANY. Wraps to a
-	# second row past 2 seats, so it stays compact on phones too.
-	stack_add(st2, label_at("RIVAL FACTIONS  ·  tap a seat to cycle", P(1, y2), 20, Color("aac3cd")))
-	y2 += 34.0
-	var enemy_seats := _enemy_seats()
-	var rf_choices := ["random"] + FACTIONS
-	var rf_gap := 8.0
-	var rf_per_row := clampi(enemy_seats.size(), 1, 2)
-	var rf_w := (552.0 - rf_gap * (rf_per_row - 1)) / float(rf_per_row)
-	var rf_h := rh(46)
-	for i in range(enemy_seats.size()):
-		var seat: String = enemy_seats[i]
-		var pick := str(rival_picks.get(seat, "random"))
-		var col := i % rf_per_row
-		var row := i / rf_per_row
-		var lbl := "%s: %s" % [seat, ("ANY" if pick == "random" else ("VIRIDIAN" if pick == "bloom" else pick.to_upper()))]
-		var b := stack_add(st2, nav_button(lbl, P(col * (rf_w + rf_gap), y2 + row * (rf_h + 8.0)), P(rf_w, rf_h), func():
-			var idx := rf_choices.find(pick)
-			rival_picks[seat] = rf_choices[(idx + 1) % rf_choices.size()]
-			show_setup())) as Button
-		b.add_theme_font_size_override("font_size", int(round(14 * K)))
-	y2 += ceilf(float(enemy_seats.size()) / float(rf_per_row)) * (rf_h + 8.0) + 14.0
-	stack_add(st2, label_at("DIFFICULTY", P(1, y2), 20, Color("aac3cd")))
-	y2 += 34.0
-	# equal gaps, computed to fill the column exactly (0.19.2 spec H4: "aren't evenly spaced")
-	var levels: Array = Rules.AI_LEVELS.keys()               # Alpha 11's five levels
-	var lv_gap := 8.0
-	var lv_w := (552.0 - lv_gap * (levels.size() - 1)) / float(levels.size())
-	var lv_h := rh(59)
-	for i in range(levels.size()):
-		var lv: String = levels[i]
-		var b := stack_add(st2, nav_button(lv.to_upper(), P(i * (lv_w + lv_gap), y2), P(lv_w, lv_h), func():
-			ai_level = lv
-			show_setup(), lv == ai_level)) as Button
-		b.add_theme_font_size_override("font_size", int(round(14 * K)))
-	y2 += lv_h + 18.0
-	var ls_h := rh(56)
-	var lsb := stack_add(st2, nav_button("LAST STAND / %s" % ("ON" if Rules.last_stand else "OFF"), P(0, y2), P(272, ls_h), func():
-		Rules.last_stand = not Rules.last_stand
-		show_setup())) as Button
-	# SKILLS 2.0: ABILITIES ON / OFF (Alpha 11's match setting; default ON)
-	var abb := stack_add(st2, nav_button("ABILITIES / %s" % ("ON" if Rules.abilities_on else "OFF"), P(280, y2), P(272, ls_h), func():
-		Rules.abilities_on = not Rules.abilities_on
-		show_setup())) as Button
-	for b in [lsb, abb]:
-		b.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
-	y2 += ls_h + 14.0
+			chip.emblem_faction = faction              # a recognisable face, not just wedges
+	var y := hy + hs + 6.0
+	if colour == "faction":                            # a one-line caption while FACTION is picked
+		_shell_add(UiKit.label(self, "Every player in their faction's colour", 13, Color("ffd15c")), Vector2(pos.x, y))
+		y += UiKit.line_h(self, 13) + 6.0
 	if not mobile:
-		stack_add(st2, label_at("Last Stand ON = the map collapses ring by ring late in the match.  ABILITIES OFF = no skills.", P(4, y2), 14, Color("7795a4")))
-		y2 += 26.0
-	stack_close(st2, y2)
-	nav_button("BACK", P(40, foot_y()), P(230, 58), show_maps)
-	nav_button("DEPLOY", P(1280, foot_y()), P(352, 58), deploy, true)
+		var n := UiKit.label(self, "Team modes: one hue per team, light and dark. FACTION: every seat in its own faction colour (Alpha 11).", 12, UiKit.DIM)
+		n.clip_text = true
+		n.size = Vector2(width, UiKit.line_h(self, 12))
+		_shell_add(n, Vector2(pos.x, y))
 
 
-func summary_card(f: String, pos: Vector2, dims: Vector2, change: bool) -> void:
-	frame(pos, dims, "row")
-	portrait(f, pos + P(6, 6), Vector2(146 * K, dims.y - 12 * K))
-	label_at("VIRIDIAN" if f == "bloom" else f.to_upper(), pos + P(174, 23), 34, Rules.FACTIONS[f][1])
-	label_at(NAMES[f].split("\n")[1], pos + P(177, 70), 20, Color("adc7d2"))
-	if change:
-		# CHANGE and the preset preview below sit inside this compact card (dims.y ~ 92-100 post-K) - too
-		# little room for the full 44 pt phone minimum without redrawing the card; grow=false keeps them
-		# at their designed size rather than spilling out of the card's frame (open issue: still small on
-		# mobile - a card redesign, not a size-rule tweak, would be needed to fix it properly).
-		nav_button("CHANGE", pos + Vector2(dims.x - 148 * K, dims.y - 50 * K), P(132, 42), show_factions, false, false).add_theme_font_size_override("font_size", int(round(19 * K)))
-		# your army preset on this map (a relay skill greyed to its fallback where the map has no relays); tap: ARMIES
-		var ip := pos + Vector2(dims.x - 162 * K, 12 * K)
-		var ab := nav_button("", ip - P(6, 4), P(160, 60), func(): show_armies(f, show_setup), false, false)
-		ab.tooltip_text = "Your army preset - tap to change it in ARMIES"
-		loadout_icons(f, ArmyPresets.loadout_for(f), ip, 42.0 * K, 8.0 * K, ArmyPresets.map_has_relays(_selected_map()))
-		var eff := ArmyPresets.effective(f, ArmyPresets.loadout_for(f), ArmyPresets.map_has_relays(_selected_map()))
-		if not Rules.abilities_on:
-			label_at("ABILITIES OFF", ip + P(0, 54), 13, Color("7795a4"))
-		elif eff["swapped"] != "":
-			label_at("NO RELAYS: %s" % ArmyPresets.skill_name(eff["map"]).to_upper(), ip + P(-14, 54), 13, Color("ffd15c"))
+func _setup_faction(pos: Vector2, dims: Vector2) -> void:
+	## SETUP's faction card: your character, name, your army preset on this map (a relay skill greyed to its
+	## fallback where the map has no relays; tap: ARMIES), CHANGE (-> FACTION).
+	var acc := UiKit.accent(faction)
+	UiKit.panel(self, pos, dims, faction)
+	var pad := 8.0
+	var hs := dims.y - pad * 2.0
+	_shell_add(_cutout(faction, Vector2.ZERO, Vector2(hs, hs)), pos + Vector2(pad, pad))
+	var ct := "CHANGE"
+	var cw := UiKit.text_w(self, ct, 14, true) + 34.0
+	var cb := UiKit.btn(self, ct, Vector2(pos.x + dims.x - pad - cw, pos.y), Vector2(cw, 40), show_factions, "tertiary", faction, 14)
+	cb.position.y = pos.y + (dims.y - cb.size.y) / 2.0
+	var relays := ArmyPresets.map_has_relays(_selected_map())
+	var eff := ArmyPresets.effective(faction, ArmyPresets.loadout_for(faction), relays)
+	var isz := minf(34.0, cb.size.y - 16.0)
+	var aw := isz * 3.0 + 12.0 + 20.0
+	var ab := UiKit.btn(self, "", Vector2(cb.position.x - 8.0 - aw, cb.position.y), Vector2(aw, cb.size.y), func(): show_armies(faction, show_setup),
+			"secondary", faction)
+	ab.tooltip_text = "Your army preset - tap to change it in ARMIES"
+	var ids := [eff["active"], eff["map"], eff["ultimate"]]
+	for i in range(3):
+		var ic: Color = UiKit.STAR if (i == 2 or (i == 1 and eff["swapped"] != "")) else acc
+		skill_icon(ids[i], Vector2(10.0 + i * (isz + 6.0), (ab.size.y - isz) / 2.0), Vector2(isz, isz), ic, ab)
+	var tx := pos.x + pad + hs + 12.0
+	var tw := ab.position.x - 8.0 - tx
+	var lines := [[UiKit.NAMES[faction], 17, acc, true], ["%s  ·  SEAT A" % UiKit.SUBS[faction], 13, UiKit.MUTED, false]]
+	if not Rules.abilities_on:
+		lines.append(["ABILITIES OFF", 12, UiKit.DIM, false])
+	elif eff["swapped"] != "":
+		lines.append(["NO RELAYS: %s" % ArmyPresets.skill_name(eff["map"]).to_upper(), 12, Color("ffd15c"), false])
+	var total := 0.0
+	for ln in lines:
+		total += UiKit.line_h(self, ln[1], ln[3])
+	var ly := pos.y + (dims.y - total) / 2.0
+	for ln in lines:
+		var l := UiKit.label(self, ln[0], ln[1], ln[2], ln[3])
+		l.clip_text = true
+		l.size = Vector2(maxf(10.0, tw), UiKit.line_h(self, ln[1], ln[3]))
+		_shell_add(l, Vector2(tx, ly))
+		ly += l.size.y
+
+
+func _faction_picks(seat: String, pos: Vector2, width: float, back: Callable) -> float:
+	## An AI seat's faction pick (0.19.2 spec H3: one per enemy seat): ANY (drawn when you deploy) or one of the five -
+	## the characters, the picked one lit. Returns the row's height.
+	var pick := str(rival_picks.get(seat, "random"))
+	var s := UiKit.tap_h(self, 50.0)
+	var aw := UiKit.text_w(self, "ANY", 14, true) + 36.0
+	var gap := clampf((width - aw - s * 5.0) / 5.0, 4.0, 10.0)
+	UiKit.btn(self, "ANY", pos, Vector2(aw, 50), func():
+		rival_picks[seat] = "random"
+		back.call(), "selected" if pick == "random" else "secondary", faction, 14).tooltip_text = "ANY FACTION"
+	for i in range(FACTIONS.size()):
+		var f: String = FACTIONS[i]
+		var b := UiKit.btn(self, "", pos + Vector2(aw + gap + i * (s + gap), 0), Vector2(s, 50), func():
+			rival_picks[seat] = f
+			back.call(), "selected" if pick == f else "secondary", f)
+		b.tooltip_text = UiKit.NAMES[f]
+		b.add_child(_cutout(f, Vector2(5, 5), b.size - Vector2(10, 10)))
+	return s
+
+
+func _difficulty(pos: Vector2, width: float) -> void:
+	## DIFFICULTY: Alpha 11's five levels side by side - or, where they don't fit (phones), a < LEVEL > stepper.
+	var levels: Array = Rules.AI_LEVELS.keys()
+	var gap := 6.0
+	var lw := (width - gap * (levels.size() - 1)) / float(levels.size())
+	var fs := UiKit.px(self, 15)
+	var fits := levels.all(func(l): return UiKit.BODY.get_string_size(str(l).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 14.0 <= lw)
+	if fits:
+		for i in range(levels.size()):
+			var lv: String = levels[i]
+			var b := UiKit.btn(self, lv.to_upper(), pos + Vector2(i * (lw + gap), 0), Vector2(lw, 44), func():
+				ai_level = lv
+				show_setup(), "selected" if lv == ai_level else "secondary", faction, 15)
+			b.add_theme_font_override("font", UiKit.BODY)
+		return
+	var i0 := maxi(0, levels.find(ai_level))
+	var sw := UiKit.tap_h(self, 44.0)
+	UiKit.btn(self, "‹", pos, Vector2(sw, 44), func():
+		ai_level = levels[(i0 + levels.size() - 1) % levels.size()]
+		show_setup(), "secondary", faction, 20)
+	UiKit.btn(self, "›", pos + Vector2(width - sw, 0), Vector2(sw, 44), func():
+		ai_level = levels[(i0 + 1) % levels.size()]
+		show_setup(), "secondary", faction, 20)
+	var mid := UiKit.panel(self, pos + Vector2(sw + 8.0, 0), Vector2(width - sw * 2.0 - 16.0, sw), faction, true)
+	var l := UiKit.label(self, "%s   %d / %d" % [str(levels[i0]).to_upper(), i0 + 1, levels.size()], 15, UiKit.INK, true)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.size = Vector2(mid.size.x, UiKit.line_h(self, 15, true))
+	_shell_add(l, mid.position + Vector2(0, (sw - l.size.y) / 2.0))
+
+
+func _toggle(text: String, on: bool, pos: Vector2, dims: Vector2, call: Callable) -> Button:
+	## An ON / OFF switch: a check box (ticked when ON) and its name; the frame lit while ON.
+	var b := UiKit.btn(self, text, pos, dims, call, "selected" if on else "secondary", faction, 15)
+	b.add_theme_font_override("font", UiKit.BODY)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var bs := minf(22.0, b.size.y - 16.0)
+	for st in ["normal", "hover", "pressed", "hover_pressed"]:
+		(b.get_theme_stylebox(st) as StyleBoxFlat).content_margin_left = 12.0 + bs + 10.0
+	b.tooltip_text = "%s: %s" % [text, "ON" if on else "OFF"]
+	var box := Control.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.position = Vector2(12.0, (b.size.y - bs) / 2.0)
+	box.size = Vector2(bs, bs)
+	var acc := UiKit.accent(faction)
+	box.draw.connect(func():
+		box.draw_style_box(UiKit.sb(acc if on else Color(UiKit.BASE, 0.9), acc if on else UiKit.MUTED, 2, 3), Rect2(Vector2.ZERO, box.size))
+		if on:
+			box.draw_polyline(PackedVector2Array([Vector2(bs * 0.24, bs * 0.52), Vector2(bs * 0.43, bs * 0.72), Vector2(bs * 0.78, bs * 0.3)]),
+					UiKit.BASE, maxf(2.0, bs * 0.13), true))
+	b.add_child(box)
+	return b
+
+
+func show_seats() -> void:
+	## SEATS & TEAMS (screen system 29), from SETUP: PLAYERS (the map's modes), then every seat - you in seat A (your
+	## faction, CHANGE -> FACTION), each AI seat as ally or rival (its team in team modes) with its faction pick; DONE.
+	_last_show = show_seats                  # a resize that changes the phone sizing rebuilds it (_fit)
+	var sel := _selected_map()
+	var modes := _modes_of(sel)
+	if not mode in modes:
+		mode = modes[0]
+	var area := shell_open("OOZE / SEATS & TEAMS", "play", show_setup, faction)
+	var x := shell_x()
+	var w := content.size.x - x * 2.0
+	var y := page_title(area, "MATCH SETUP", "SEATS & TEAMS.")
+	var gap := 10.0
+	var mw := (w - gap * (modes.size() - 1)) / float(modes.size())
+	var mb: Button
+	for i in range(modes.size()):
+		var md: String = modes[i]
+		mb = UiKit.btn(self, MODE_NAMES.get(md, md), Vector2(x + i * (mw + gap), y), Vector2(mw, 44), func():
+			mode = md
+			show_seats(), "selected" if md == mode else "secondary", faction, 15)
+	y += mb.size.y + 14.0
+	var bh := UiKit.tap_h(self, 48.0)
+	var fy := area.end.y - bh - 12.0
+	var dw := maxf(UiKit.text_w(self, "DONE  →", 18, true) + 56.0, 170.0)
+	UiKit.btn(self, "DONE  →", Vector2(content.size.x - x - dw, fy), Vector2(dw, 48), show_setup, "primary", faction, 18)
+	_shell_add(UiKit.label(self, "Team colour identifies ownership. Faction is your army.", 15, UiKit.MUTED),
+			Vector2(x, fy + (bh - UiKit.line_h(self, 15)) / 2.0))
+	# the seats, two per row, in a scroll (five seats outgrow a phone)
+	var team := {}
+	for s in sel.get("seats", {}).get(mode, []):
+		if mode in ["2v2", "3v3", "2v2v2"] and s.get("team") != null:
+			team[str(s.get("seat", ""))] = int(s["team"])
+	var seats := ["A"] + _enemy_seats()
+	var cw := (w - 16.0 - gap) / 2.0
+	var ph := UiKit.tap_h(self, 50.0)
+	var card_h := 14.0 + UiKit.line_h(self, 12, true) + UiKit.line_h(self, 17, true) + 10.0 + ph + 14.0
+	var st := stack_open(Vector2(x, y), Vector2(w, fy - 12.0 - y))
+	var before := content.get_child_count()
+	for i in range(seats.size()):
+		var s: String = seats[i]
+		var p := Vector2((i % 2) * (cw + gap), (i / 2) * (card_h + gap))
+		UiKit.panel(self, p, Vector2(cw, card_h), faction, s == "A")
+		var ally: bool = s == "A" or (team.has(s) and team.get(s) == team.get("A", -1))
+		var kick := "SEAT %s%s" % [s, ("  ·  TEAM %d" % (int(team[s]) + 1)) if team.has(s) else ""]
+		_shell_add(UiKit.label(self, kick, 12, UiKit.accent(faction), true, 3), p + Vector2(16, 14))
+		var role := "YOU" if s == "A" else ("AI ALLY" if ally else "AI RIVAL")
+		var ry := 14.0 + UiKit.line_h(self, 12, true)
+		_shell_add(UiKit.label(self, role, 17, UiKit.INK, true), p + Vector2(16, ry))
+		UiKit.tag(self, "PLAYER" if s == "A" else "AI", p + Vector2(cw - 16.0 - UiKit.text_w(self, "PLAYER" if s == "A" else "AI", 14, true) - 46.0, 12.0), faction)
+		var py := ry + UiKit.line_h(self, 17, true) + 10.0
+		if s == "A":
+			_shell_add(_cutout(faction, Vector2.ZERO, Vector2(ph, ph)), p + Vector2(16, py))
+			_shell_add(UiKit.label(self, "%s  ·  %s" % [UiKit.NAMES[faction], UiKit.SUBS[faction]], 15, UiKit.INK, true),
+					p + Vector2(16.0 + ph + 12.0, py + (ph - UiKit.line_h(self, 15, true)) / 2.0))
+			var ct := "CHANGE"
+			var chw := UiKit.text_w(self, ct, 14, true) + 34.0
+			UiKit.btn(self, ct, p + Vector2(cw - 16.0 - chw, py), Vector2(chw, 50), show_factions, "tertiary", faction, 14)
+		else:
+			_faction_picks(s, p + Vector2(16, py), cw - 32.0, show_seats)
+	stack_capture(st, before)
+	stack_close(st, ceilf(seats.size() / 2.0) * (card_h + gap))
+	shell_raise()
 
 
 func _seat_faction_picks() -> Dictionary:
@@ -2127,6 +2462,16 @@ func _seat_faction_picks() -> Dictionary:
 func deploy() -> void:
 	UiKit.save_last_faction(faction)                   # UI: HOME's hero is the faction played last
 	main.start_match(map_path, faction, _seat_faction_picks(), ai_level, mode, colour, ArmyPresets.loadout_for(faction))   # your ARMIES preset
+
+
+func show_confirm_demo() -> void:
+	## UI: SCREENSHOT HELPER only (--menu-page=confirm_demo) - ConfirmSheet (screen system 26) over a page, with the
+	## words a LEAVE MATCH would use. No button in the game opens it; both actions just go back to HOME.
+	_last_show = show_confirm_demo
+	shell_open("OOZE / CONFIRM", "home", Callable(), faction)
+	ConfirmSheet.make(self, "CONFIRM ACTION", "LEAVE THIS MATCH?",
+			"Your current match will end. Campaign progress from this attempt will not be saved.",
+			"KEEP PLAYING", "LEAVE MATCH", show_main, show_main, faction)
 
 
 # ------------------------------------------------------------------ online (Net, rooms through the room server)
