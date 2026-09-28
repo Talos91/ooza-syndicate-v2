@@ -19,11 +19,16 @@ extends Node3D
 ## laser bursts, machinegoon shots), so online guests, who apply the host's snapshots, see the same thing
 ## with no extra traffic. One MultiMesh draws every spark; rings, beams and flares are made once per node
 ## and reused.
+## Match feel (Daniele's phone test, 2026-09-28): the contest ring is a progress meter - the attacker's colour sweeps
+## round it over the share of the fight they are winning (_progress: attackers at the door and on their way in
+## against the garrison left, at the Sim's own exchange rate; eased, no numbers) - and YOUR node under attack (an
+## ally's, dimmer) flickers red on its rim at the side the enemy line pours in from, with short sparks there (_alarm).
 
 const BEAM_SHADER := preload("res://shaders/beam.gdshader")
 const SPARK_SHADER := preload("res://shaders/spark.gdshader")
 const FLARE_SHADER := preload("res://shaders/flare.gdshader")
 const RING_SHADER := preload("res://shaders/contest_ring.gdshader")
+const ALARM_SHADER := preload("res://shaders/alarm_rim.gdshader")
 
 const HOT := Color(1.0, 0.9, 0.72)       # white-hot sparks
 const HEAT_RATE := 30.0                  # sim units/s resolved at which a fight reads at full heat
@@ -43,13 +48,17 @@ var vis: Dictionary
 var fx: Fx
 var _frame := 0
 var top_limit := 0.0        # screen y the top bar and its toasts reach (main._on_resized): tier-down lines stay below it
-var _fights := {}           # node id -> {ring, mat, life, heat, rate, best, att, angle, share, frame}
+var _fights := {}           # node id -> {ring, mat, life, heat, rate, best, att, angle, share, prog, target, frame}
+var _alarms := {}           # node id -> {ring, mat, life, angle, ally, frame, spark_t} (your / an ally's node under attack)
+var _start_angle := 0.0     # the contest ring's sweep starts here: the platforms' far side (top of the screen)
+var viewer := "A"           # whose nodes raise the under-attack cue (main.HUMAN; set in setup)
 var _cannons := {}          # node id -> {beam, bmat, muzzle, mmat, hit, hmat, scorch, smat, on, t, fade, to, col}
 var _guns := {}             # node id -> machinegoon view state (see _machinegoons_step)
 var _tier_owner := {}       # node id -> owner last frame (tier-down detection)
 var _tier_level := {}       # node id -> vat / cannon tier last frame
 var _downs: Array = []      # running tier-downs: {node, t, ghost, ghost_mis, base_y, new, new_y, label, chev, ring, rmat}
 var _annulus: ArrayMesh
+var _alarm_mesh: ArrayMesh  # the under-attack arc's thinner ring, just outside the platform (Rules.ALARM_R)
 var _strip: ArrayMesh
 var _quad: QuadMesh
 var _plane: PlaneMesh
@@ -70,7 +79,9 @@ func setup(w: Node3D, s: Sim, v: Dictionary, f: Fx) -> void:
 	sim = s
 	vis = v
 	fx = f
+	viewer = str(w.get("HUMAN")) if w.get("HUMAN") != null else "A"
 	_annulus = _annulus_mesh(0.86, 72)
+	_alarm_mesh = _annulus_mesh(Rules.ALARM_INNER, 72)
 	_strip = _strip_mesh(40)
 	_quad = QuadMesh.new()
 	_plane = PlaneMesh.new()
@@ -104,8 +115,13 @@ func sync(dt: float, cam: Camera3D) -> void:
 	## After Fx.sync (main._process): Fx._construction resets a finished structure's scale each frame,
 	## the tier-down's rising model is scaled after it.
 	_frame += 1
+	if cam:                                           # the sweep starts at the top of the screen, whatever the yaw
+		var fwd := -cam.global_transform.basis.z
+		if Vector2(fwd.x, fwd.z).length() > 0.01:
+			_start_angle = atan2(fwd.z, fwd.x)
 	_gather_fights(dt)
 	_update_fights(dt)
+	_update_alarms(dt)
 	_cannons_step(dt, cam)
 	_machinegoons_step(dt)
 	_tier_downs(dt, cam)
@@ -134,6 +150,12 @@ func _gather_fights(dt: float) -> void:
 			var door: Vector3 = n["pos"] + front * (Rules.EXIT_R + 0.35) + Vector3(0, 0.9, 0)
 			_contest(n, h["owner"], came, rate, share, door)
 			_clash(door, front, Rules.seat_color(h["owner"]), _owner_color(n["owner"]), rate, dt)
+			if n["owner"] != "" and sim.allied(n["owner"], viewer):
+				_alarm(n, came, n["owner"] != viewer, dt)
+		for id in _fights:                            # the ring's sweep: how close the strongest side is to taking it
+			var f: Dictionary = _fights[id]
+			if f["frame"] == _frame:
+				f["target"] = _progress(sim.nodes[id], str(f["att"]))
 		return
 	# SIEGE: arrivals sit on the platform (siege) and fight the garrison at node rates (Sim._node_fights);
 	# lines passing through fight it where they cross (transit).
@@ -203,7 +225,7 @@ func _contest(n: Dictionary, seat: String, dir: Vector3, rate: float, share: flo
 		glow.visible = false
 		add_child(glow)
 		_fights[id] = {"ring": mi, "mat": mat, "glow": glow, "gmat": gmat, "life": 0.0, "heat": 0.0, "rate": 0.0,
-				"best": -1.0, "att": seat, "angle": 0.0, "share": 0.3, "spot": spot, "frame": -1}
+				"best": -1.0, "att": seat, "angle": 0.0, "share": 0.3, "spot": spot, "frame": -1, "prog": 0.0, "target": 0.0}
 	var f: Dictionary = _fights[id]
 	if f["frame"] != _frame:
 		f["frame"] = _frame
@@ -215,6 +237,7 @@ func _contest(n: Dictionary, seat: String, dir: Vector3, rate: float, share: flo
 		f["att"] = seat
 		f["angle"] = atan2(dir.z, dir.x)
 		f["share"] = lerpf(f["share"], clampf(share, 0.08, 0.9), 0.15)
+		f["target"] = clampf(share, 0.0, 1.0)             # SIEGE's sweep (BRAWL: _progress, after the gather)
 		f["spot"] = spot
 
 
@@ -228,10 +251,15 @@ func _update_fights(dt: float) -> void:
 		f["life"] = minf(1.0, f["life"] + dt * 5.0) if active else f["life"] - dt / FIGHT_FADE
 		if f["life"] <= 0.0 or sim.collapsed.get(id, false):
 			f["life"] = 0.0
+			f["prog"] = 0.0                               # the next fight here sweeps in from nothing
 			ring.visible = false
 			(f["glow"] as Node3D).visible = false
 			continue
 		var n: Dictionary = sim.nodes[id]
+		if not active and sim.allied(str(n["owner"]), str(f["att"])):
+			f["target"] = 1.0                             # taken: the sweep closes while the ring fades
+		var ease_k: float = Rules.CONTEST_EASE * (1.0 if active else 4.0)
+		f["prog"] = lerpf(float(f["prog"]), float(f["target"]), minf(1.0, dt * ease_k))
 		ring.visible = true
 		# SIEGE: the goo covers the platform to its lip, so the ring rides just outside and above it
 		var siege := Rules.bridge_combat
@@ -240,8 +268,10 @@ func _update_fights(dt: float) -> void:
 		var mat: ShaderMaterial = f["mat"]
 		mat.set_shader_parameter("col_def", _owner_color(n["owner"]))
 		mat.set_shader_parameter("col_att", Rules.seat_color(f["att"]))
-		mat.set_shader_parameter("att_angle", f["angle"])
-		mat.set_shader_parameter("share", f["share"])
+		mat.set_shader_parameter("start_angle", _start_angle)
+		mat.set_shader_parameter("progress", f["prog"])
+		mat.set_shader_parameter("track", Rules.CONTEST_TRACK)
+		mat.set_shader_parameter("ticks", float(Rules.CONTEST_TICKS))
 		mat.set_shader_parameter("heat", f["heat"])
 		mat.set_shader_parameter("life", smoothstep(0.0, 1.0, f["life"]))
 		var glow: MeshInstance3D = f["glow"]           # the hot spot on the deck where they clash
@@ -252,6 +282,108 @@ func _update_fights(dt: float) -> void:
 		var gmat: ShaderMaterial = f["gmat"]
 		gmat.set_shader_parameter("color", Rules.seat_color(f["att"]).lerp(_owner_color(n["owner"]), 0.5).lerp(HOT, 0.35))
 		gmat.set_shader_parameter("intensity", smoothstep(0.0, 1.0, f["life"]) * (0.7 + 0.9 * f["heat"]))
+
+
+func _progress(n: Dictionary, seat: String) -> float:
+	## How close `seat`'s side is to taking node n, 0..1 (the contest ring's sweep). BRAWL resolves every arriving
+	## unit at the door against the whole garrison (Sim._land_classic), killing `ratio` defenders each; so the side's
+	## strength is its units pouring in plus those on their way in (within Rules.CONTEST_REACH m of the door) times
+	## that ratio, against the garrison left: A / (A + G). Both fall by the same amount per exchange, so the sweep
+	## heads for 1 when the attack will take it and back to 0 when the defence will hold. Read-only; no rule here.
+	var garrison: float = sim.garrison_total(n)
+	var att := 0.0
+	for h in sim.hordes:
+		if int(h["target"]) != int(n["id"]) or float(h["units"]) <= 0.0 or h.get("decoy", false):
+			continue
+		if not sim.allied(str(h["owner"]), seat) or sim.allied(str(n["owner"]), str(h["owner"])):
+			continue
+		if h["state"] == "absorb" or (h["state"] == "move" and float(h["L"]) - float(h["s"]) <= Rules.CONTEST_REACH):
+			att += float(h["units"]) * _kill_ratio(n, str(h["owner"]))
+	if att + garrison <= 0.0001:
+		return 0.0
+	return clampf(att / (att + garrison), 0.0, 1.0)
+
+
+func _kill_ratio(n: Dictionary, seat: String) -> float:
+	## Defenders one arriving unit of `seat` kills at node n: Sim._land_classic's exchange (attack / (health x garrison
+	## x Fortify / Aegis / forge), against the defenders' attack / the attacker's health), mixed by troop share.
+	var d_seat: String = n["owner"]
+	var total: float = sim.garrison_total(n)
+	var tough := 0.0
+	var d_att := 0.0
+	if total > 0.0001 and not (n["allies"] as Dictionary).is_empty():
+		var shares := {d_seat: float(n["units"])}
+		for k in n["allies"]:
+			shares[k] = float(n["allies"][k])
+		for k in shares:
+			var w: float = shares[k] / total
+			tough += w * sim.stat(k, "health") * sim.stat(k, "garrison")
+			d_att += w * (sim.attack_of(k) if k != "" else 1.0)
+	else:
+		tough = sim.stat(d_seat, "health") * sim.stat(d_seat, "garrison")
+		d_att = sim.attack_of(d_seat) if d_seat != "" else 1.0
+	var kill_per: float = sim.attack_of(seat) / maxf(tough * sim.garrison_div(n), 0.0001)
+	var cost_per: float = d_att / maxf(sim.stat(seat, "health"), 0.0001)
+	return kill_per / maxf(cost_per, 0.0001)
+
+
+func _alarm(n: Dictionary, came: Vector3, ally: bool, dt: float) -> void:
+	## YOUR node (ally: a team-mate's) with an enemy line pouring in at its door this frame: the rim facing the attack
+	## flickers red (_update_alarms) and, at most every Rules.ALARM_SPARK_GAP s, short sparks jump off the rim there.
+	var id: int = n["id"]
+	if not _alarms.has(id):
+		var mi := MeshInstance3D.new()
+		mi.mesh = _alarm_mesh
+		var mat := ShaderMaterial.new()
+		mat.shader = ALARM_SHADER
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visible = false
+		add_child(mi)
+		_alarms[id] = {"ring": mi, "mat": mat, "life": 0.0, "angle": 0.0, "ally": ally, "frame": -1, "spark_t": 0.0}
+	var al: Dictionary = _alarms[id]
+	var d := Vector3(came.x, 0.0, came.z)
+	d = d.normalized() if d.length() > 0.01 else Rules.front_dir()
+	if al["frame"] == _frame:
+		return                                        # two lines at one door: one cue, one spark clock
+	al["frame"] = _frame
+	al["angle"] = atan2(d.z, d.x)
+	al["ally"] = ally
+	al["spark_t"] = float(al["spark_t"]) - dt
+	if float(al["spark_t"]) <= 0.0:
+		al["spark_t"] = Rules.ALARM_SPARK_GAP
+		var k := Rules.ALARM_ALLY if ally else 1.0
+		var rim: Vector3 = n["pos"] + d * (Rules.R + 0.15) + Vector3(0, RING_Y + 0.25, 0)
+		var side := d.cross(Vector3.UP)
+		for i in range(Rules.ALARM_SPARKS):
+			var v := (d * randf_range(0.4, 1.0) + side * randf_range(-0.9, 0.9) + Vector3(0, randf_range(0.8, 1.6), 0)).normalized()
+			_spark(rim + side * randf_range(-1.2, 1.2), v * randf_range(3.0, 6.5), Rules.ALARM_COLOR.lerp(HOT, randf() * 0.4) * (1.3 * k),
+					randf_range(0.16, 0.26), randf_range(0.18, 0.32), 14.0)
+
+
+func _update_alarms(dt: float) -> void:
+	for id in _alarms:
+		var al: Dictionary = _alarms[id]
+		var ring: MeshInstance3D = al["ring"]
+		var active: bool = al["frame"] == _frame
+		al["life"] = minf(1.0, float(al["life"]) + dt * 8.0) if active else float(al["life"]) - dt / Rules.ALARM_HOLD
+		if float(al["life"]) <= 0.0 or sim.collapsed.get(id, false) or not sim.allied(str(sim.nodes[id]["owner"]), viewer):
+			al["life"] = 0.0
+			al["spark_t"] = 0.0                           # the next attack here sparks at once
+			ring.visible = false
+			continue
+		var n: Dictionary = sim.nodes[id]
+		ring.visible = true
+		ring.position = n["pos"] + Vector3(0, RING_Y + 0.06, 0)
+		ring.scale = Vector3.ONE * (Rules.R + Rules.ALARM_R)
+		# a hard-edged flicker (bright / dim at ALARM_FLICKER Hz), readable at a glance, eased in and out by the life
+		var on := 1.0 if fmod(sim.time * Rules.ALARM_FLICKER, 1.0) < 0.55 else Rules.ALARM_DIM
+		var mat: ShaderMaterial = al["mat"]
+		mat.set_shader_parameter("color", Rules.ALARM_COLOR)
+		mat.set_shader_parameter("att_angle", al["angle"])
+		mat.set_shader_parameter("arc", Rules.ALARM_ARC)
+		mat.set_shader_parameter("power", Rules.ALARM_POWER * on * smoothstep(0.0, 1.0, float(al["life"]))
+				* (Rules.ALARM_ALLY if al["ally"] else 1.0))
 
 
 func _clash(spot: Vector3, out: Vector3, att: Color, def: Color, rate: float, dt: float) -> void:

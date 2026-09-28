@@ -411,6 +411,15 @@ func _refresh(node: Node) -> void:
 			_recolour(p)
 
 
+func _refresh_meshes(meshes: Array) -> void:
+	for mi in meshes:
+		if not is_instance_valid(mi):
+			continue
+		var p: Piece = _pieces.get((mi as Node).get_instance_id())
+		if p != null and p.attached:
+			_recolour(p)
+
+
 func _release(node: Node) -> void:
 	var list: Array = _by_root.get(node.get_instance_id(), [])
 	_by_root.erase(node.get_instance_id())             # (its visibility_changed hook finds nothing now)
@@ -423,6 +432,12 @@ static func refresh(node: Node) -> void:
 	## A piece's recoloured surfaces changed (MapBuilder.set_lights / apply_owner): move their slots.
 	if current != null and is_instance_valid(node):
 		current._refresh(node)
+
+
+static func refresh_meshes(meshes: Array) -> void:
+	## refresh() for known MeshInstance3Ds (MapBuilder.set_lights' cached light surfaces): no tree search.
+	if current != null:
+		current._refresh_meshes(meshes)
 
 
 static func track(node: Node) -> void:

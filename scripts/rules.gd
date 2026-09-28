@@ -980,25 +980,90 @@ const HUD_NAME_MAX := 12               # characters of a player's name before it
 # --- end HUD pass ---
 
 # --- SOUND (first pass: Set 4 "Mix 2+3", alternate 1 - Daniele's pick in the sound demo, 2026-09-28; sfx.gd) ---
-# The numbers the demo (branch sound-demo) was heard with. Throttle: one event type plays at most every SOUND_GAP s
-# (real time, so a busy map stays readable and a 2x speed never doubles the noise); the alarms 1 s, the win 2 s.
-const SOUND_GAP := {"send": 0.25, "fight": 0.3, "hit": 0.2, "capture": 0.2, "node_lost": 0.25, "upgrade": 0.3,
-		"build": 0.3, "laser": 0.25, "machinegoon": 0.45, "skill": 0.3, "fall": 0.3, "collapse_warning": 0.3,
+# Started from the numbers the demo (branch sound-demo) was heard with. Throttle: one event type plays at most every
+# SOUND_GAP s (real time, so a busy map stays readable and a 2x speed never doubles the noise); the alarms 1 s, the win
+# 2 s. Match feel (Daniele's phone test, 2026-09-28: "right now it's obnoxious (but a good starting point)"): the
+# frequent battle noise (SOUND_BED) is a soft bed under the cues - one every 0.6-1 s at most (was 0.2-0.45), 4-6 dB
+# quieter, a little pitch spread, only for lines of your side or on screen, and held off for SOUND_DUCK s after a cue.
+const SOUND_GAP := {"send": 0.8, "fight": 0.9, "hit": 0.7, "capture": 0.2, "node_lost": 0.25, "rival_capture": 0.8, "upgrade": 0.3,
+		"build": 0.3, "laser": 0.6, "machinegoon": 1.0, "skill": 0.3, "fall": 0.6, "collapse_warning": 0.3,
 		"collapse": 0.3, "last_stand": 1.0, "very_last_stand": 1.0, "eliminated": 0.5, "win": 2.0}
 const SOUND_GAP_DEFAULT := 0.3            # an event not listed above (monsters, relays)
 const SOUND_VOICES := 12                  # match voices; all busy: a new sound is dropped, except SOUND_PRIORITY's
 const SOUND_PRIORITY := ["win", "last_stand", "very_last_stand", "eliminated", "collapse"]   # these take the oldest voice
+const SOUND_PRIORITY_VOICES := 2          # spare voices only SOUND_PRIORITY may use (so they rarely have to cut one off)
 const SOUND_UI_VOICES := 3                # menu taps (they outlive a scene reload: DEPLOY's confirm keeps playing)
 const SOUND_UI_GAP := 0.06                # s between two UI sounds (a double tap is one sound)
 # Per event its level in dB (the demo's mix; the VOLUME setting scales them all on the Master bus).
-const SOUND_VOL := {"send": -10.0, "fight": -8.0, "hit": -9.0, "capture": -4.0, "node_lost": -4.0, "upgrade": -5.0,
-		"build": -6.0, "laser": -8.0, "machinegoon": -16.0, "monster_launch": -4.0, "monster_stomp": -4.0,
-		"monster_take": -4.0, "monster_fall": -4.0, "skill": -5.0, "relay_warning": -9.0, "relay_switch": -7.0,
-		"fall": -8.0, "collapse_warning": -6.0, "collapse": -3.0, "last_stand": 0.0, "very_last_stand": 0.0,
-		"eliminated": -3.0, "win": 0.0}
+# Match feel, with music (Daniele: "the sounds are too overpowering vs the background music, make them less loud and
+# that they fade more seamlessly"): the bed 6 dB under the demo's mix, every cue 3 dB under it.
+const SOUND_VOL := {"send": -16.0, "fight": -14.0, "hit": -15.0, "capture": -7.0, "node_lost": -7.0, "rival_capture": -18.0, "upgrade": -8.0,
+		"build": -9.0, "laser": -14.0, "machinegoon": -22.0, "monster_launch": -7.0, "monster_stomp": -7.0,
+		"monster_take": -7.0, "monster_fall": -7.0, "skill": -8.0, "relay_warning": -12.0, "relay_switch": -10.0,
+		"fall": -14.0, "collapse_warning": -9.0, "collapse": -6.0, "last_stand": -3.0, "very_last_stand": -3.0,
+		"eliminated": -6.0, "win": -3.0}
 const SOUND_UI_VOL := {"tap": -14.0, "confirm": -9.0, "back": -12.0, "error": -9.0}
+const SOUND_BED := ["send", "fight", "hit", "machinegoon", "laser", "fall", "rival_capture"]   # the frequent battle noise (the soft bed)
+const SOUND_BED_PITCH := 0.06             # +- pitch spread of a bed sound (the same sample never repeats identically)
+const SOUND_DUCK := 0.6                   # s the bed stays quiet after one of SOUND_CUES
+const SOUND_CUES := ["capture", "node_lost", "last_stand", "very_last_stand", "eliminated", "win", "collapse"]
+# The envelope (Sfx._play): every match sound fades in over SOUND_FADE_IN s from SOUND_ATTACK_DB under its level (no click
+# on), and its last SOUND_FADE_OUT s fade SOUND_TAIL_DB down (no cut off); a repeat of an event still sounding fades the
+# old one out over SOUND_XFADE s on its own voice instead of restarting it.
+const SOUND_FADE_IN := 0.02
+const SOUND_FADE_OUT := 0.22
+const SOUND_XFADE := 0.12
+const SOUND_ATTACK_DB := 18.0
+const SOUND_TAIL_DB := 40.0
+# Buses (Sfx.ensure_buses, made at startup): "Sfx" and "Music" both under Master - every sound plays on Sfx; Music is
+# empty until Daniele picks a soundtrack, so the two can get their own levels later. VOLUME still drives Master.
+const SOUND_SFX_BUS := "Sfx"
+const SOUND_MUSIC_BUS := "Music"
+const SOUND_SFX_BUS_DB := 0.0
+const SOUND_MUSIC_BUS_DB := 0.0
 # SETTINGS > DISPLAY > AUDIO: VOLUME's choices (percent of full level; silence is SOUND OFF) and the first-run default.
-# 50 % = -6 dB on the Master bus, the level the demo played at when Daniele picked the set.
-const SOUND_VOLUME_STEPS := [25, 50, 75, 100]
-const SOUND_VOLUME_DEFAULT := 50
+# Match feel: 30 % (-10.5 dB on the Master bus; the demo played at 50 %). A level the player already saved is kept.
+const SOUND_VOLUME_STEPS := [15, 30, 60, 100]
+const SOUND_VOLUME_DEFAULT := 30
 # --- end SOUND ---
+
+# --- MATCH FEEL (2026-09-28, Daniele's phone test; fx.gd, combat_fx.gd, hud.gd, sfx.gd, warmup.gd) ---
+# Last Stand ring (Fx._last_stand_warning; "too in your face since we have already the alert tag"): the alert tag
+# (HudOverlay's danger symbol + countdown) and the pulsing status line carry the warning; the ring is a thin, faint
+# outline breathing slowly round the node that drops NEXT only, and only that node's decks blink.
+static var ls_ring_loud := false         # debug: the old ring - thick, bright, blinking faster toward the drop, on every warned node
+const LS_RING_ALPHA := 0.3               # the thin ring's peak opacity
+const LS_RING_BREATHE := 2.4             # rad/s of its slow breath (0.6..1 of LS_RING_ALPHA; the next node's decks blink with it)
+const LS_RING_R := 0.35                  # m beyond the platform radius
+const LS_FRAGMENTS := 18                 # fall pieces a dropping node's decks break into (Fx._collapse; at least 1 a module; was 6 a module)
+# Under attack (CombatFx._alarm; "we need an animation that shows when a building is under attack"): YOUR node while
+# an enemy line pours in at its door - the rim on the side it comes from flickers red and short sparks jump there;
+# an ally's node the same, dimmer (team modes). On the platform's lip, never over the count badge (beside the node).
+const ALARM_COLOR := Color("#ff3b30")
+const ALARM_ARC := 0.34                  # fraction of the rim lit, centred on the attack's side
+const ALARM_R := 1.2                     # m beyond the platform radius: the arc's outer edge (just outside the lip's bumpers)
+const ALARM_INNER := 0.9                 # its inner edge, x its outer radius (a band ~0.7 m wide)
+const ALARM_POWER := 1.5                 # your node's brightness (additive)
+const ALARM_ALLY := 0.45                 # an ally's node: x this (the arc and its sparks)
+const ALARM_FLICKER := 3.5               # Hz: bright / dim steps while it pours in
+const ALARM_DIM := 0.3                   # the dim step's brightness
+const ALARM_HOLD := 0.6                  # s the cue fades out after the last unit poured in
+const ALARM_SPARK_GAP := 0.45            # s between two spark bursts at one node (the throttle)
+const ALARM_SPARKS := 7                  # sparks per burst
+# Contest ring (CombatFx._progress, shaders/contest_ring.gdshader; "the ring should give me an idea" of how close the
+# attack is, "no exact numbers"): the attacker's colour sweeps clockwise from the top of the ring over the share of the
+# fight it is winning - attackers pouring in plus those within CONTEST_REACH m of the door, x the Sim's exchange rate,
+# against the garrison left; 0 = holds, 1 = taken. Eased at CONTEST_EASE 1/s so it creeps, never jumps.
+const CONTEST_REACH := 16.0
+const CONTEST_EASE := 3.0
+const CONTEST_TRACK := 0.28              # the garrison's (unswept) track brightness
+const CONTEST_TICKS := 4                 # faint marks on the track (quarters; 0 = none)
+# First-use hitches ("lags only on first time you send and first time you enter a tower"): Warmup draws every effect
+# material once, tiny, at match start (behind the VERSUS card), so the GL shader compiles happen there.
+const WARMUP_FRAMES := 3                 # frames the warm-up pieces stay drawn
+# Badges during camera motion (the Last Stand zoom "still slows the game down"): Hud._layout_badges scores 24 spots x 3
+# reaches against every platform, deck and badge (~10 ms a frame on M-39 on desktop, every frame of the 1.5 s zoom);
+# while the camera moves the badges now follow their platforms' screen position and scale, and the full layout runs
+# once the camera has held still this many frames.
+const BADGE_SETTLE_FRAMES := 2
+# --- end MATCH FEEL ---

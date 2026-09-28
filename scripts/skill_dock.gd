@@ -31,6 +31,7 @@ var sim: Sim
 var human := "A"
 var ui_scale := 1.0
 var mobile := false
+var keys := true                         # the slot's desktop key (1 / 2 / 3) drawn in its corner - never on touch (Hud)
 var accent := Color("18dae8")
 var slots: Array = []                         # Slot
 var layer: Control                            # target highlights (under the HUD panels)
@@ -152,7 +153,7 @@ class Slot:
 			tag = "MAP · NO RELAYS"
 		var big := dock._floor_px > 0.0                # a phone: the three words sit a little lower, larger
 		_text(tag, Vector2(x0, (19.0 if big else 17.0) * s), 12, Color(col, 0.85) if is_ready else Color("7f98a6"), room, UI_FONT)
-		if not dock.mobile:
+		if dock.keys and not dock.mobile:
 			var kp := Vector2(w - 20.0 * s, 6.0 * s)
 			var kr := Rect2(kp, Vector2(14, 15) * s)
 			draw_rect(kr, Color(1, 1, 1, 0.08))
