@@ -1,5 +1,23 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.4 "Alpha 21" - 2026-09-28 (online hardening; tutorial card on rotation; per-match perf stats)
+
+- **Online hardening** (server session, from its audit `handoffs/architect-specs/audit-net.md`): per-socket frame caps checked
+  on the header (hello 64 KB, guest 8 KB, host 1 MB; was 8 MB for all), 64 sockets per address (carrier NAT), crypto
+  reconnect tokens, a booting match host yields the CPU (nice 10 until it connects), deploy.sh --relay refuses while a room
+  is open, the Caddyfile in the repo; phones reserve ~3 MB of socket buffers instead of ~11. Protocol unchanged (net-5).
+- **Tutorial**: a first-launch tour started in portrait resizes its coach card after rotating to landscape (fonts, buttons,
+  handler, card); the card's point scale follows the short side (a portrait card was ~4x too big).
+- **`PerfProfile.match_stats()`**: per-match frame time p50 / p95 / max, fps average / worst second, draw calls p95, long
+  frames - for Progression's telemetry (0.21.5); tests/perf_check checks it.
+
+## 0.21.3 "Alpha 21" - 2026-09-28 (smaller online updates: net-5)
+
+- **Online uses about a third of the data** (server session, protocol ooze20-net-5): between once-a-second keyframes a
+  snapshot carries only what changed, positions are sent as 1/64 m steps, and the match host's frames are binary. Live
+  (FFA 4 + 2 AI): ~9.7 KB/s per guest (was ~34), 20 updates/s, 0 % frozen; on simulated mobile data 0.5 % frozen
+  (0.21.1: 1.7 %). The room server's relay already understands binary frames (installed with 0.21.2).
+
 ## 0.21.2 "Alpha 21" - 2026-09-28 (the monsters in their real colours)
 
 - **Monsters in colour**: the five race monsters and their alternates (Maneater / Titan / Monolith / Eclipse / Skyrig) had

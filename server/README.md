@@ -9,6 +9,17 @@
   has no free match host (`--max-matches`) or runs another game version (`version.txt`), the game falls back
   to hosting in the creator's browser, as in stage 1. An empty server lobby closes after 5 s (0.20.1; 0.20.0: 90 s); a match everyone dropped out of waits 90 s for a RECONNECT.
 
+- Protocol `ooze20-net-5` (0.21.3): the host's packets (snapshots, effects, answers) reach guests as binary
+  frames: host -> relay `[1][len][guest id][packet]`, relay -> guest `[2][4]host[packet]`; everything else stays JSON text.
+  relay.py forwards both, so it must be at least as new as the game (the binary-aware relay has run since the 0.21.2
+  deploy; the net-4 one is kept on the box as `/opt/ooze/relay.py.net4-backup`). A slow guest skips snapshots (backlog).
+
+- Limits (0.21.4): frames are capped per socket on the frame header (bigger = the socket closes with 1009, nothing
+  buffered): 64 KB for the hello, 8 KB for a guest, 1 MB for a host (the largest keyframe measured: 81 KB raw / 13 KB
+  deflated); 64 sockets per address (carrier NAT). A booting match host starts at nice 10 and goes back to 0 once it
+  connects (the service gives the relay `CAP_SYS_NICE`; the hosts inherit no capabilities), so loading a pack doesn't
+  slow the rooms playing. The match hosts write no telemetry files (only their room log).
+
 ## The box
 
 - Vultr, Singapore, `vhp-1c-1gb` (1 vCPU, 1 GB, NVMe, 2 TB traffic), Ubuntu 26.04 LTS, backups on.
@@ -27,14 +38,16 @@
 
 - `ooze-relay.service` (`server/ooze-relay.service`): the relay as `ooze`, restarts itself, `MemoryMax=900M`
   for the relay plus up to two match hosts (~250-350 MB each). Needs `python3-websockets`, `libfontconfig1`.
-- Caddy (`/etc/caddy/Caddyfile`): TLS on 443, `/ooze*` -> `127.0.0.1:8765`; everything else serves
+- Caddy (`/etc/caddy/Caddyfile`, kept in `server/Caddyfile` since 0.21.4; `deploy.sh --relay` validates and installs it when it
+  differs, keeping `Caddyfile.previous`): TLS on 443, `/ooze*` -> `127.0.0.1:8765`; everything else serves
   `/opt/ooze/web` - the **test link** https://45-32-126-20.sslip.io/, always the build the match hosts run.
 
 ## Deploy (every publish, after the Web export and the skins pack)
 
 ```bash
 server/deploy.sh            # build/web -> the server (test link + match hosts) + version.txt
-server/deploy.sh --relay    # also relay.py + the service, then restart (closes the open rooms)
+server/deploy.sh --relay    # also relay.py + the service + Caddyfile, then restart - refused while a room is open
+server/deploy.sh --relay --force   # the same, closing the open rooms
 ```
 
 Until the server has the published build, players of that build still play: their rooms fall back to

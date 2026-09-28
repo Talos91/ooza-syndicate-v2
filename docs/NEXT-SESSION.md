@@ -30,7 +30,19 @@ size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed ever
   tank columns and laser emitters +0.34 for the plinths). iPhone standalone landscape: `web/viewport-fix.js` +
   `main._apply_safe_area`. Server: `Net.dedicated` hosts build no world (SERVER HOST blocks in main.gd), adaptive playout
   buffer in net.gd.
-- **Next:** 0.21.2 = net5 (binary frames; relay deploy first). Alpha 21 left: code audit, telemetry (Progression; wants
+- **0.21.2**: the monsters in their real colours (Skin Designer's 512 px colour maps).
+- **0.21.3 = net5 (`ooze20-net-5`, 🖥️ Server)**: between keyframes (1 s) a snapshot carries only the node / line fields
+  that differ from the last keyframe (`Net._wire_state`; guests rebuild it from their copy, `_unwire_state`; a delta
+  without its keyframe is dropped and the next keyframe comes within a second); floats at 1/64; host packets travel as
+  binary WebSocket frames (`RelayBridge.send_bin` / `poll_events`; relay.py `[1][len][to][packet]` -> the guest gets
+  `[2][4]host[packet]`; the PeerJS fallback keeps text). Orders, lobby and chat stay text. The binary-aware relay went
+  live with the 0.21.2 deploy (0.21.2 clients checked against it: test_relay, test_dedicated 19/19), so 0.21.3 is a
+  plain deploy.sh. Measured on the Singapore box (private relay, FFA 4 + 2 AI, 60 s, Daniele's network): **9.7 KB/s per
+  guest** (net-4 ~34), 20 Hz, order round trip 66 ms, 0 % frozen, 0 hard snaps; match host 6 % CPU, 216 MB. Simulated
+  mobile data (80 ms, 120 ms jitter, 0.6 s stall every 6 s): 0.5 % frozen (net-a21: 1.7 %); harsh (1.2 s stall every 5 s):
+  5.9 % (net-a21 ~5 %, the stalls themselves). Probe jump spikes > 0.5 m under the stalls are the same with net-4 (local
+  A/B: 4.2 % vs 5.0 % of frames) - not from net5. `tests/snapshot_probe.gd` sizes snapshots offline.
+- **Next:** Alpha 21 left: code audit, telemetry (Progression; wants
   per-match perf stats from PerfProfile), first sound (ask Daniele for the pack), HUD badge draw calls, vat liquid
   per-instance material, download size.
 

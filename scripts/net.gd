@@ -47,6 +47,11 @@ extends Node
 ## through a small buffer (PLAYOUT_DELAY behind the newest), so bursty mobile data arrives evenly; lines keep moving
 ## up to EXTRAPOLATE seconds without news, and a correction glides in over BLEND seconds instead of snapping.
 ## Browser-hosted fallback rooms keep the 0.20.0 behaviour (10 Hz, applied on arrival).
+## SMALLER SNAPSHOTS (Alpha 21, ooze20-net-5): between keyframes (once a second) a snapshot carries only the node and
+## line fields that differ from the last keyframe (_wire_state); the guest rebuilds the whole snapshot from its copy
+## of that keyframe (_unwire_state) - a missed delta costs nothing. Floats are rounded to 1/64 (exact in float32, so
+## var_to_bytes stores 4 bytes). Over RelayBridge the host's packets travel as binary frames (no base64 / JSON
+## envelope); the PeerJS fallback keeps the text envelopes. ~57 % fewer bytes on a busy FFA 4.
 ## ACCOUNTS (0.20.5, with Progression): the device sets `auth_token` (its Supabase access token; "" = signed out) and
 ## sends it as "auth" in register. A server room's match host verifies it (GET /auth/v1/user) and keeps seat -> user id
 ## on the host only (never broadcast). When a server room's round ends and a seat has a user id, the host POSTs the
@@ -59,7 +64,7 @@ signal rematch_changed
 signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
-const VERSION_TAG := "ooze20-net-4"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner)
+const VERSION_TAG := "ooze20-net-5"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames)
 const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
 const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
 const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
@@ -82,7 +87,8 @@ const BLEND := 0.15                                # a snapshot's correction gli
 const BLEND_MAX := 6.0                             # ...unless it is bigger than this (sim metres): then it snaps
 const PLAYOUT_MAX := 40                            # queued snapshots beyond this are dropped (a tab back from the background)
 const PATH_RESEND := 1.0                           # a changed path rides along for this many seconds
-const MAX_PACKET := 8 * 1024 * 1024
+const MAX_PACKET := 1024 * 1024                   # 0.21.4: a packet, deflated or not (the largest keyframe measured: 81 KB raw /
+                                                   # 13 KB deflated, M-58 2v2 late game; net-1's JSON snapshots needed 8 MB)
 const CHAT_MAX := 256
 const CHAT_HISTORY := 50
 const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
@@ -155,6 +161,9 @@ var _play_q: Array = []                            # server-room guest: ["state"
 var _play_t := -1.0                                # the host time the guest shows now (-1: not started)
 var _latest_t := 0.0                               # the newest snapshot's host time
 var _since_applied := 0.0                          # seconds since a snapshot was last shown
+var _key_snap := {}                                # host: the last keyframe as sent (deltas are against it)
+var _key_id := 0
+var _base_snap := {}                               # guest: the last keyframe received (a delta rebuilds from it)
 var _delay := PLAYOUT_DELAY                        # the playout delay now (adaptive, Alpha 21)
 var _calm := 0.0                                   # seconds since the last stall
 var _last_arrival := 0                             # msec of the last snapshot's arrival
@@ -910,10 +919,7 @@ func _reclaim(remote: String, id: int) -> void:
 
 
 func _new_token() -> String:
-	var b := PackedByteArray()
-	for i in range(12):
-		b.append(randi() % 256)
-	return Marshalls.raw_to_base64(b)
+	return Marshalls.raw_to_base64(Crypto.new().generate_random_bytes(12))   # 0.21.4: crypto-grade (was randi())
 
 
 func _notice(message: String) -> void:
@@ -1008,6 +1014,8 @@ func _launch(info: Dictionary) -> void:
 	_snap_clock = 0.0
 	_snap_count = 0
 	_since_snapshot = 0.0
+	_key_snap = {}
+	_base_snap = {}
 	_play_q = []
 	_play_t = -1.0
 	_latest_t = 0.0
@@ -1310,6 +1318,107 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 	if s.over:
 		snap["events"] = s.events                    # the end screen's captures count
 	return snap
+
+
+func _wire_state(full: Dictionary, keyframe: bool) -> Dictionary:
+	## Host (net-5): a keyframe goes whole (and becomes the base); in between, only what differs from it -
+	## per node index its changed fields, per line its id + changed fields (a line newer than the keyframe whole).
+	if keyframe or _key_snap.is_empty():
+		_key_id += 1
+		_key_snap = full
+		var k: Dictionary = _q64(full)
+		k["key"] = _key_id
+		return k
+	var out := {}
+	for f in full:
+		if f != "nodes" and f != "hordes":
+			out[f] = full[f]
+	var nodes := {}
+	var kn: Array = _key_snap["nodes"]
+	var fn: Array = full["nodes"]
+	for i in range(fn.size()):
+		var d: Dictionary = fn[i]
+		var k: Dictionary = kn[i] if i < kn.size() else {}
+		var ch := {}
+		for f in d:
+			if not k.has(f) or k[f] != d[f]:
+				ch[f] = d[f]
+		if not ch.is_empty():
+			nodes[i] = ch
+	var kh := {}
+	for h in _key_snap["hordes"]:
+		kh[h["id"]] = h
+	var hordes := []
+	for h in full["hordes"]:
+		var k: Dictionary = kh.get(h["id"], {})
+		if k.is_empty():
+			hordes.append(h)
+			continue
+		var ch := {"id": h["id"]}
+		for f in h:
+			if not k.has(f) or k[f] != h[f]:
+				ch[f] = h[f]
+		hordes.append(ch)
+	out["nodes_d"] = nodes
+	out["hordes"] = hordes
+	out["base"] = _key_id
+	return _q64(out)
+
+
+func _unwire_state(w: Dictionary) -> Dictionary:
+	## Guest (net-5): a keyframe is stored as the base; a delta is laid over a copy of it. A delta for a keyframe we
+	## don't have (joined mid-second, or a skipped keyframe) is dropped - the next keyframe comes within a second.
+	if w.has("key"):
+		_base_snap = w
+		return w
+	if not w.has("base"):                              # a pre-net-5 whole snapshot
+		return w
+	if _base_snap.is_empty() or int(_base_snap.get("key", -1)) != int(w["base"]):
+		return {}
+	var full := {}
+	for f in w:
+		if f != "nodes_d" and f != "hordes" and f != "base":
+			full[f] = w[f]
+	var nodes := []
+	var nd: Dictionary = w["nodes_d"]
+	var bn: Array = _base_snap["nodes"]
+	for i in range(bn.size()):
+		var d: Dictionary = (bn[i] as Dictionary).duplicate()
+		if nd.has(i):
+			d.merge(nd[i], true)
+		nodes.append(d)
+	var bh := {}
+	for h in _base_snap["hordes"]:
+		bh[h["id"]] = h
+	var hordes := []
+	for h in w["hordes"]:
+		var b: Dictionary = bh.get(h["id"], {})
+		if b.is_empty():
+			hordes.append(h)
+		else:
+			var d: Dictionary = b.duplicate()
+			d.merge(h, true)
+			hordes.append(d)
+	full["nodes"] = nodes
+	full["hordes"] = hordes
+	return full
+
+
+static func _q64(v):
+	## Floats rounded to 1/64: exact in float32, so var_to_bytes stores 4 bytes, and the guest needs no decoding.
+	if v is float:
+		return round(v * 64.0) / 64.0 if absf(v) < 100000.0 else v
+	if v is Dictionary:
+		var d := {}
+		for k in v:
+			d[k] = _q64(v[k])
+		return d
+	if v is Array:
+		var a := []
+		for x in v:
+			a.append(_q64(x))
+		return a
+	return v
 
 
 static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
@@ -1694,7 +1803,7 @@ func _process(dt: float) -> void:
 			_snap_count += 1
 			var key := _snap_count % int(round(KEYFRAME_EVERY * SNAPSHOT_EVERY / rate)) == 1
 			if _has_guests():                          # alone with the AI: nobody to send to
-				var packet := var_to_bytes(snapshot(sim, key)).compress(FileAccess.COMPRESSION_DEFLATE)
+				var packet := var_to_bytes(_wire_state(snapshot(sim, key), key)).compress(FileAccess.COMPRESSION_DEFLATE)
 				_broadcast_raw("state", packet)
 				_send_ghosts(key)
 			if sim.over:
@@ -1723,7 +1832,7 @@ func _process(dt: float) -> void:
 
 func _poll(dt: float) -> void:
 	_elapsed += minf(dt, 0.25)
-	var events = JSON.parse_string(str(bridge.poll()))
+	var events = bridge.poll_events() if bridge.has_method("poll_events") else JSON.parse_string(str(bridge.poll()))
 	if not events is Array:
 		return
 	for event in events:
@@ -1757,6 +1866,12 @@ func _poll(dt: float) -> void:
 					_host_receive(str(event["peer"]), str(event["data"]))
 				elif str(event["peer"]) == remote_host:
 					_guest_receive(str(event["data"]))
+			"bin":                                     # net-5: the host's packets as binary frames (RelayBridge)
+				if not hosting and str(event["peer"]) == remote_host and event.get("data") is PackedByteArray:
+					var b: PackedByteArray = event["data"]
+					if b.size() >= 2 and b.size() <= MAX_PACKET and b[0] < b.size():
+						_guest_handle(b.slice(1, 1 + b[0]).get_string_from_utf8(),
+								b.slice(1 + b[0]).decompress_dynamic(MAX_PACKET, FileAccess.COMPRESSION_DEFLATE))
 			"closed":
 				if hosting:
 					var id: int = links.get(event["peer"], -1)
@@ -1849,8 +1964,12 @@ func _guest_receive(raw: String) -> void:
 	if not envelope is Dictionary or not envelope.get("data", null) is String:
 		return
 	var bytes := Marshalls.base64_to_raw(envelope["data"]).decompress_dynamic(MAX_PACKET, FileAccess.COMPRESSION_DEFLATE)
+	_guest_handle(str(envelope.get("kind", "")), bytes)
+
+
+func _guest_handle(kind: String, bytes: PackedByteArray) -> void:
 	var data = bytes_to_var(bytes)
-	match str(envelope.get("kind", "")):
+	match kind:
 		"identity":
 			if data is Dictionary:
 				assigned_id = int(data["id"])
@@ -1877,7 +1996,9 @@ func _guest_receive(raw: String) -> void:
 			if data is Dictionary and int(data.get("round", -1)) == match_round:
 				_begin()
 		"state":
-			if data is Dictionary and int(data.get("round", -1)) == match_round and sim != null and active:
+			if data is Dictionary:
+				data = _unwire_state(data)            # net-5: a delta becomes the whole snapshot (or {} without its keyframe)
+			if data is Dictionary and not data.is_empty() and int(data.get("round", -1)) == match_round and sim != null and active:
 				_since_snapshot = 0.0
 				var now_ms := Time.get_ticks_msec()
 				if _last_arrival > 0 and (now_ms - _last_arrival) / 1000.0 > STALL:   # a stall: hold more in hand next time
@@ -1967,13 +2088,27 @@ func _save_rejoin(d: Dictionary) -> void:
 
 
 # ------------------------------------------------------------------ transport
+static func _encode_bin(kind: String, packed: PackedByteArray) -> PackedByteArray:
+	## A binary host packet: [kind length][kind][deflated var_to_bytes] (net-5).
+	var k := kind.to_utf8_buffer()
+	var out := PackedByteArray([k.size()])
+	out.append_array(k)
+	out.append_array(packed)
+	return out
+
+
 func _encode(kind: String, packed: PackedByteArray) -> String:
 	return "{\"kind\":" + JSON.stringify(kind) + ",\"data\":" + JSON.stringify(Marshalls.raw_to_base64(packed)) + "}"
 
 
 func _send(remote: String, kind: String, data) -> void:
-	if bridge != null:
-		bridge.send(remote, _encode(kind, var_to_bytes(data).compress(FileAccess.COMPRESSION_DEFLATE)))
+	if bridge == null:
+		return
+	var packed := var_to_bytes(data).compress(FileAccess.COMPRESSION_DEFLATE)
+	if bridge.has_method("send_bin"):                  # RelayBridge: a binary frame, no base64 / JSON envelope
+		bridge.send_bin(remote, _encode_bin(kind, packed), kind == "state")
+	else:
+		bridge.send(remote, _encode(kind, packed))
 
 
 func _broadcast(kind: String, data) -> void:
@@ -1983,10 +2118,14 @@ func _broadcast(kind: String, data) -> void:
 func _broadcast_raw(kind: String, packed: PackedByteArray) -> void:
 	if bridge == null or not hosting:
 		return
-	var envelope := _encode(kind, packed)            # one envelope for every guest
+	var binary: bool = bridge.has_method("send_bin")
+	var envelope = _encode_bin(kind, packed) if binary else _encode(kind, packed)   # one envelope for every guest
 	for remote in links:
 		if roster.has(links[remote]):
-			bridge.send(remote, envelope)
+			if binary:
+				bridge.send_bin(remote, envelope, kind == "state")
+			else:
+				bridge.send(remote, envelope)
 
 
 func _has_guests() -> bool:

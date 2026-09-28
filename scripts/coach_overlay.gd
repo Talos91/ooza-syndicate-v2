@@ -576,10 +576,31 @@ func _on_resize() -> void:
 	_fit_root()
 	if _dim.visible:
 		_apply_spotlight()            # the shader's uniforms are in device pixels - a resize changes them
+	_restyle()                        # a rotation changes _pt(): the card was sized for the old height
+	_resize_card()
 	_position_card()
 	for p in [_complete]:
 		if p.visible:
 			_center_complete()
+
+
+func _restyle() -> void:
+	## Every _pt()-derived size again, for the current viewport (Alpha 21 fix: a first-launch tour started in
+	## portrait kept its portrait-size card, fonts and buttons after the phone turned to landscape).
+	if not is_instance_valid(_card):
+		return
+	_hand.hand_px = _hand_target_px()
+	_handler.size = _handler_size()
+	_card_vb.offset_left = 18 + _handler_size().x
+	_header_emblem.custom_minimum_size = Vector2(_header_fsz() * 2.2, _header_fsz() * 1.3)
+	_card_header.add_theme_font_size_override("font_size", _header_fsz())
+	_card_text.add_theme_font_size_override("font_size", _body_fsz())
+	_card_dots.custom_minimum_size = Vector2(0, _dots_h())
+	_card_dots.dot_r = _pt(3.0) if mobile else 4.0
+	_card_dots.queue_redraw()
+	for b in [_card_button] + _controls_row.get_children():
+		b.custom_minimum_size = Vector2(0, _btn_h())
+		b.add_theme_font_size_override("font_size", _btn_fsz())
 
 
 # ------------------------------------------------------------------ build
@@ -618,7 +639,9 @@ func _pt(n: float) -> float:
 	## (as this file first did) under-sized everything by the stretch's scale factor whenever the
 	## window wasn't exactly 1280:720 - e.g. a hardcoded "66.0" for 44 pt rendered at ~54 device px on
 	## a 1266x585 phone shot instead of 66. This is the fix: local_units = pt * visible_rect.y / 390.
-	return n * get_viewport().get_visible_rect().size.y / PHONE_PT_H
+	## Alpha 21: the SHORT side (portrait: the width) - the long side made a portrait card ~4x too big.
+	var vp := get_viewport().get_visible_rect().size
+	return n * minf(vp.x, vp.y) / PHONE_PT_H
 
 
 func _btn_h() -> float:
@@ -1064,6 +1087,7 @@ func _resize_card() -> void:
 	if _card_button.visible:
 		h += _btn_h() + 8.0
 	h += 28.0 + 8.0 * 3.0             # the VBox's own separation (4 gaps) + top/bottom padding
+	_card.custom_minimum_size = Vector2.ZERO  # (else the old minimum clamps a smaller card: a rotation to landscape)
 	_card.size = Vector2(w, h)        # _card_bg / _card_vb are FULL_RECT-anchored: the engine resizes
 	_card.custom_minimum_size = _card.size    # them to match immediately, no manual follow-up needed
 
