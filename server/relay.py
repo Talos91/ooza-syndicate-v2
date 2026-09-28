@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Ooze Syndicate 2.0 - room server (Alpha 20).
 
-Replaces PeerJS: every player keeps one WebSocket to this server and the server forwards strings
-between a room's host and its guests. It speaks the same events net.gd already reads from
-web/peer-transport.js (open / connection / data / closed / error), so the game rules stay in the
-host's Godot Sim; this process never looks inside a packet.
+Replaced PeerJS (0.19.0; the PeerJS rooms are gone since Alpha 21): every player keeps one WebSocket to this server and
+the server forwards packets between a room's host and its guests as events (open / connection / data / closed / error),
+so the game rules stay in the host's Godot Sim. It only peeks at a packet's kind (a slow guest skips snapshots).
 
 Stage 2: {"op": "create"} opens a room HOSTED ON THE SERVER. The relay starts a headless Godot for it
 (the same build the players run, `--dedicated`), which connects back as the room's host with
@@ -46,6 +45,7 @@ HOST_MAX = 1024 * 1024                          # a host's packet (net.gd MAX_PA
 HELLO_FRAME = 64 * 1024
 GUEST_FRAME = 8 * 1024
 HOST_FRAME = HOST_MAX + 1024
+ROOMS_PER_IP = 2                                # server rooms one address may hold at once (Daniele 2026-09-28: max 2 per player)
 BOOT_NICE = 10                                  # a booting match host yields the CPU to the rooms playing (0.21.4)
 GUEST_RATE = 60                                 # packets per second before the relay drops a guest
 STATE_BACKLOG = 64 * 1024                       # skip a snapshot while this much is still queued to a guest
@@ -71,6 +71,7 @@ class Room:
         self.secret = ""
         self.ready = asyncio.Event()
         self.test = False           # created by a test (Net.test_room): a real player's room may take its slot
+        self.ip = ""                # the creator's address (server rooms: ROOMS_PER_IP)
 
 
 def server_matches():
@@ -236,6 +237,11 @@ async def run_create(ws, version, ip, test=False):
     if want and version != want:
         await refuse(ws, "The server runs another game version.", code="version")
         return
+    if sum(1 for r in rooms.values() if r.proc is not None and r.ip == ip) >= cfg.rooms_per_ip:
+        # "limit" is no fallback code: the game shows this line instead of hosting in the browser
+        await refuse(ws, "You already have %d rooms open on the server. Leave one to create another." % cfg.rooms_per_ip,
+                     code="limit")
+        return
     code = new_code()
     if code is not None and server_matches() >= cfg.max_matches and not test:
         await free_slot_for_real_room()                 # real players first: a test room gives its slot up
@@ -244,6 +250,7 @@ async def run_create(ws, version, ip, test=False):
         return
     room = Room(code, None)
     room.test = test
+    room.ip = ip
     room.secret = secrets.token_urlsafe(18)
     rooms[code] = room
     pck = os.path.realpath(cfg.pck) if cfg.pck else ""   # the versioned pack current.pck points to now (deploys swap it)
@@ -425,7 +432,8 @@ async def main():
     ap.add_argument("--pck", default="", help="the game build it runs (the web export's index.pck)")
     ap.add_argument("--project", default="", help="or a project folder (local tests)")
     ap.add_argument("--version-file", default="", help="holds Net.version() of that build; others fall back")
-    ap.add_argument("--max-matches", type=int, default=2)
+    ap.add_argument("--max-matches", type=int, default=3)
+    ap.add_argument("--rooms-per-ip", type=int, default=ROOMS_PER_IP, help="server rooms one address may hold (tests: more)")
     ap.add_argument("--data", default="", help="XDG_DATA_HOME for the match hosts (user://)")
     ap.add_argument("--logs", default="", help="a log file per server-hosted room")
     ap.add_argument("--host-arg", action="append", default=[], help="tests: an extra argument for every match host (e.g. --match-end=20)")

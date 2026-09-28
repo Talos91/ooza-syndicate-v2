@@ -96,5 +96,5 @@ Godot is in `Tools/Godot` of the project folder. Publishing steps: `docs/BUILD-L
 | `scripts/main.gd` | world, camera fit, input, orchestration, command-line flags |
 | `scripts/net.gd` | online rooms (autoload `Net`): lobby, seats, host validation, snapshots, rematch, chat |
 | `scripts/scenery.gd` | sky backdrop, vat liquid levels and tank residents (Alpha 16 visual pass) |
-| `web/` | PeerJS, transport shim, room-code field, chat panel - copied into `build/web` at publish |
+| `web/` | room-code field, chat panel, fullscreen / viewport / update helpers - copied into `build/web` at publish |
 | `tests/test_sim.gd`, `test_map_pool.gd`, `test_net.gd`, `test_maps3.gd`, `test_ai_curve.gd` | rules; every map plays to the end (each combat mode); rooms / netcode; maps 3.0 layout, seats and Last Stand; AI fairness and difficulty curve |

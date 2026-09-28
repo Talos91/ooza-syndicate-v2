@@ -1,15 +1,14 @@
 class_name RelayBridge
 extends RefCounted
-## Ooze Syndicate 2.0 - the room-server transport (Alpha 20 stage 1). A drop-in for web/peer-transport.js
-## (window.OozePeer): the same five calls Net makes - start / poll / send / closePeer / close - but over one
-## WebSocket to server/relay.py instead of PeerJS data channels, so every network that reaches the server can
-## play and native builds (Android / iOS) can join too. The relay only forwards strings; the host's Sim still
-## owns every rule. poll() returns the relay's events as a JSON string, exactly like OozePeer.poll().
+## Ooze Syndicate 2.0 - the room-server transport (Alpha 20 stage 1; it replaced the PeerJS data channels, and the PeerJS
+## rooms were removed in Alpha 21): start / poll / send / closePeer / close over one WebSocket to server/relay.py, so every
+## network that reaches the server can play and native builds (Android / iOS) can join too. The relay only forwards;
+## the host's Sim owns every rule. poll() returns the relay's events as a JSON string; Net uses poll_events().
 ## 0.20.2: every snapshot is handed on (Net's playout buffer spaces them out), and a guest can simulate a bad
 ## mobile link for tests: --netsim=<latency ms>,<jitter ms>,<stall every s>,<stall length s> on the command line or
 ## ?netsim=... on the page (in order, like TCP: a stall holds everything behind it).
 
-const STATE_BACKLOG := 64 * 1024                   # skip a snapshot while this much is still queued (as PeerJS did)
+const STATE_BACKLOG := 64 * 1024                   # skip a snapshot while this much is still queued
 const CONNECT_TIMEOUT := 15.0
 const CODE_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 

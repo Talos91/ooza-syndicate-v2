@@ -5,6 +5,9 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.7 (room limits)
+- [ ] **Online**: leave a room idle in the lobby - the 1-minute notice, then it closes at 10 min; a running round never closes.
+
 ## 0.21.6 (iPhone fit)
 - [ ] **iPhone / notch phone**: nothing under the notch or home bar on HOME, SETUP (DEPLOY), SETTINGS (DONE), results; taps feel >= a fingertip.
 - [ ] **A fresh browser (or cleared site data)**: pick a skin on first launch - it shows (the pack downloads).
@@ -167,8 +170,8 @@ Live build: https://talos91.github.io/ooza-syndicate-v2/
 - [ ] **Ghost Line** looks translucent to you, real to the opponent (online).
 
 ### Online (two phones)
-- [ ] **Room server**: creating or joining a room should connect through the room relay server by default (no
-      PeerJS peer-to-peer unless the URL has `?relay=peerjs`) - check it still works on a strict/mobile
+- [ ] **Room server**: creating or joining a room should connect through the room relay server (the only
+      transport; the PeerJS rooms are gone since Alpha 21) - check it still works on a strict/mobile
       network that failed before.
 - [ ] Both players see the **same colours**; each picks their own in the lobby, plus their ARMIES cosmetics
       (including the new per-faction rival picks and TERRITORY skin).
