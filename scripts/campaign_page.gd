@@ -70,6 +70,8 @@ var _world: Node3D
 var _cam: Camera3D
 var _env: Environment
 var _sky: CanvasItem
+var _sky2: CanvasItem                                  # CAMPAIGN: the next district's background, crossfading in
+var _bg_tex := {}                                      # district index -> Texture2D
 var _catcher: Control                  # behind the canvas: taps on the empty diorama close the card, swipes page
 var _districts: Array = []             # per district: {d, root, groups, decor, nodes, bridges, relays, descent}
 var _cur := 0
@@ -375,9 +377,15 @@ func _build_view() -> void:
 	for c in _world.get_children():
 		if c is WorldEnvironment:
 			_env = (c as WorldEnvironment).environment
-	var sky_layer := Scenery.make_backdrop(_world)          # the cloud-city sky, drawn as the 3D background
+	var sky_layer := Scenery.make_backdrop(_world)          # the sky, drawn as the 3D background
 	if sky_layer.get_child_count() > 0:
 		_sky = sky_layer.get_child(0) as CanvasItem
+		# CAMPAIGN: each district shows its own mission background (the district's next mission's, else its first);
+		# a second layer crossfades to the next district's while the camera pans (_look)
+		_sky2 = (_sky as Node).duplicate() as CanvasItem
+		(_sky2 as CanvasItem).material = (_sky.material as ShaderMaterial).duplicate()
+		_sky2.modulate.a = 0.0
+		sky_layer.add_child(_sky2)
 	_cam = Camera3D.new()
 	_cam.fov = FOV
 	_cam.far = 2000.0
@@ -386,6 +394,7 @@ func _build_view() -> void:
 
 
 func _build_world() -> void:
+	_bg_tex = {}                                     # CAMPAIGN: progress may have moved each district's pick
 	for d in _districts:
 		(d["root"] as Node3D).queue_free()
 	_districts = []
@@ -495,8 +504,9 @@ func _build_node(g: Node3D, m: Dictionary) -> Dictionary:
 
 
 func _build_bridge(dd: Dictionary, a: Dictionary, b: Dictionary) -> Dictionary:
-	## A retract bridge from a to b: the gate on a's rim, decks sliding out of it (Deck_Retract), piers at both rims.
-	## Extended when b is open; retracted into its gate otherwise.
+	## A retract bridge from a to b: RELAY V2's retract mechanism (Relay_Retract_v2) at a, decks sliding out of it
+	## (Deck_Retract_v2), piers at both rims, and - while the bridge is in - its ghost (Deck_Ghost_Retract_v2, the
+	## retract's ghost hue) showing where it WILL be, as in a match. Extended when b is open; retracted otherwise.
 	var ga: Node3D = dd["groups"][str(a["key"])]
 	var gb: Node3D = dd["groups"][str(b["key"])]
 	var v := gb.position - ga.position
@@ -511,7 +521,7 @@ func _build_bridge(dd: Dictionary, a: Dictionary, b: Dictionary) -> Dictionary:
 	var light := Mats.light_color(_color()) if won else _mat("bridge_idle", Color(0.55, 0.62, 0.7), 1.2)
 	var holder := Node3D.new()                        # everything of this bridge rides with a's group
 	ga.add_child(holder)
-	var gate := MapBuilder.put(holder, "Relay_Retract", Vector3.ZERO, Rules.heading(d))
+	var gate := MapBuilder.put(holder, RelayView.GATE["retract"], Vector3.ZERO, Rules.heading(d))
 	_tint(gate, Mats.light_color(Rules.state_color("retract")) if not won else light, null)
 	MapBuilder.angled_pier(holder, d * Rules.R, d, 0.0, false)
 	var far := MapBuilder.angled_pier(holder, v + Vector3(0, dy, 0) - d * Rules.R, -d, 0.0, false)
@@ -519,12 +529,22 @@ func _build_bridge(dd: Dictionary, a: Dictionary, b: Dictionary) -> Dictionary:
 		_grey(far)
 	var decks := []
 	for k in range(nmod):
-		var dk := MapBuilder.put(holder, "Deck_Retract", d * (Rules.R + Rules.PIER), Rules.heading(d), f)
+		var dk := MapBuilder.put(holder, RelayView.DECK["retract"], d * (Rules.R + Rules.PIER), Rules.heading(d), f)
 		MapBuilder.set_lights(dk, light)
 		decks.append(dk)
+	var ghosts := []                                  # RELAY V2: the bridge that will be (hidden once it is out)
+	for k in range(nmod):
+		var gk := MapBuilder.put(holder, RelayView.GHOST["retract"], d * (Rules.R + Rules.PIER + k * Rules.S * f)
+				+ Vector3(0, dy * float(k) / nmod, 0), Rules.heading(d), f)
+		_ghostify(gk, "retract")
+		ghosts.append(gk)
 	# a Descent bridge slopes down to the next layer
 	var slope := atan2(dy, gap) if absf(dy) > 0.01 else 0.0
-	var rec := {"holder": holder, "decks": decks, "d": d, "gap": gap, "f": f, "slope": slope, "dy": dy, "L": L, "p": 0.0}
+	for gk in ghosts:
+		if absf(slope) > 0.001:
+			(gk as Node3D).rotate_object_local(Vector3(0, 0, 1), slope)
+	var rec := {"holder": holder, "decks": decks, "d": d, "gap": gap, "f": f, "slope": slope, "dy": dy, "L": L, "p": 0.0,
+			"ghosts": ghosts}
 	_bridge_set(rec, 1.0 if Campaign.is_open(str(b["key"])) else 0.0)
 	return rec
 
@@ -533,6 +553,8 @@ func _bridge_set(rec: Dictionary, p: float) -> void:
 	## p 0 = retracted into its gate, 1 = extended to the next rim. Each deck module slides out in turn, the one
 	## leaving the gate growing out of it.
 	rec["p"] = p
+	for gk in rec.get("ghosts", []):                   # RELAY V2: the ghost shows only while the bridge is in
+		(gk as Node3D).visible = p <= 0.001
 	var d: Vector3 = rec["d"]
 	var f: float = rec["f"]
 	var gap: float = rec["gap"]
@@ -590,8 +612,9 @@ func _build_relay(dd: Dictionary, m: Dictionary) -> Dictionary:
 	gp.add_child(holder)
 	var open := Campaign.is_open(str(m["key"]))
 	var won := Campaign.is_won(str(m["key"]))
-	MapBuilder.put(holder, "Relay_Mount", Vector3.ZERO, Rules.heading(md))
-	var tower := MapBuilder.put(holder, "Relay_Switch_Hub", md * MapBuilder.MOUNT_DIST, Rules.heading(-md))
+	# RELAY V2: the switch's button platform off the parent's rim (in the widest gap), as in a match
+	var tower := MapBuilder.put(holder, RelayView.BUTTON["switch"], Vector3.ZERO)
+	var tap_local := RelayView.seat_button(tower, Vector3.ZERO, md, Rules.RELAY_RIM_DIST)
 	var light := Mats.light_color(_color()) if won else (Mats.light_color(Rules.state_color("s2")) if open else null)
 	if light != null:
 		_tint(tower, light, null)
@@ -600,18 +623,24 @@ func _build_relay(dd: Dictionary, m: Dictionary) -> Dictionary:
 	var pivot := Node3D.new()
 	pivot.position = d * Rules.R
 	holder.add_child(pivot)
-	MapBuilder.put(pivot, "Pier_Angled_00_Switch", Vector3.ZERO)
+	MapBuilder.put(pivot, RelayView.GATE["switch"], Vector3.ZERO)
 	for k in range(nmod):
-		var dk := MapBuilder.put(pivot, "Deck_S", Vector3(Rules.PIER + k * Rules.S * f, 0, 0), 0.0, f)
+		var dk := MapBuilder.put(pivot, RelayView.DECK["switch"], Vector3(Rules.PIER + k * Rules.S * f, 0, 0), 0.0, f)
 		if light != null:
 			MapBuilder.set_lights(dk, light)
+	var ghosts := []                                  # RELAY V2: where the deck will swing to (the side mission)
+	for k in range(nmod):
+		var gk := MapBuilder.put(holder, RelayView.GHOST["switch"], d * (Rules.R + Rules.PIER + k * Rules.S * f),
+				Rules.heading(d), f)
+		_ghostify(gk, "switch")
+		ghosts.append(gk)
 	if light == null:
 		_grey(pivot)
 	var far := MapBuilder.angled_pier(gs, -d * Rules.R, -d, 0.0, false)
 	if not open:
 		_grey(far)
-	var rec := {"pivot": pivot, "d": d, "park": park, "tower_local": md * MapBuilder.MOUNT_DIST, "group": gp,
-			"parent": parent_key, "open": open, "button": null}
+	var rec := {"pivot": pivot, "d": d, "park": park, "tower_local": tap_local, "group": gp,
+			"parent": parent_key, "open": open, "button": null, "ghosts": ghosts}
 	var swung := won or bool(_swung.get(str(m["key"]), false))
 	_swing_set(rec, 1.0 if swung else 0.0)
 	return rec
@@ -619,6 +648,18 @@ func _build_relay(dd: Dictionary, m: Dictionary) -> Dictionary:
 
 func _swing_set(rec: Dictionary, p: float) -> void:
 	(rec["pivot"] as Node3D).rotation.y = Rules.heading(rec["d"]) + float(rec["park"]) * (1.0 - p)
+	for gk in rec.get("ghosts", []):                   # RELAY V2: the ghost only while the deck is parked
+		(gk as Node3D).visible = bool(rec["open"]) and p <= 0.001
+
+
+func _ghostify(node: Node, kind: String) -> void:
+	## RELAY V2: a ghost piece in its kind's ghost hue (RelayView's shared ghost materials: floor and frame).
+	for mi in node.find_children("*", "MeshInstance3D", true, false):
+		var mesh := (mi as MeshInstance3D).mesh
+		for si in range(mesh.get_surface_count()):
+			var m := mesh.surface_get_material(si)
+			var edge := m != null and m.resource_name.findn("edge") >= 0
+			(mi as MeshInstance3D).set_surface_override_material(si, RelayView._mat("edge" if edge else "ghost", kind))
 
 
 func _build_underside(dd: Dictionary) -> void:
@@ -800,8 +841,36 @@ func _look(a: int, t: float, b: int) -> void:
 	_env.adjustment_brightness = lerpf(la[1], lb[1], t)
 	_env.ambient_light_energy = lerpf(la[2], lb[2], t)
 	if _sky != null:
-		_sky.modulate = (la[3] as Color).lerp(lb[3], t)
+		var c := (la[3] as Color).lerp(lb[3], t)
+		(_sky as TextureRect).texture = _district_bg(a if t < 1.0 else b)
+		_sky.modulate = c
+		if _sky2 != null:
+			(_sky2 as TextureRect).texture = _district_bg(b)
+			_sky2.modulate = Color(c.r, c.g, c.b, t if (t < 1.0 and a != b) else 0.0)
 	_look_from = b if t >= 1.0 else _look_from
+
+
+func _district_bg(i: int) -> Texture2D:
+	## CAMPAIGN: district i's background - the backdrop of its next open mission, else of its first mission
+	## (Campaign.backdrop_of: assets/art/campaign/vex-<id>.jpg); the cloud-city sky when there is none.
+	if not _bg_tex.has(i):
+		var path := Scenery.DEFAULT_BACKDROP
+		var ds := Campaign.districts(faction)
+		if i >= 0 and i < ds.size():
+			var keys := []
+			for m in ds[i]["missions"]:
+				keys.append(Campaign.key_of(faction, str(m["id"])))
+			var pick := ""
+			for k in keys:
+				if Campaign.is_open(k) and not Campaign.is_won(k) and Campaign.backdrop_of(k) != "":
+					pick = k
+					break
+			if pick == "" and not keys.is_empty():
+				pick = keys[0]
+			if pick != "" and Campaign.backdrop_of(pick) != "":
+				path = Campaign.backdrop_of(pick)
+		_bg_tex[i] = load(path)
+	return _bg_tex[i]
 
 
 # ------------------------------------------------------------------ per frame: tap targets, plates, pulses
