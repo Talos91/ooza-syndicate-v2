@@ -1,6 +1,6 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.21.10 "Alpha 21" - 2026-09-28 (the race emblems v2 everywhere; the final UI art)
+## 0.21.10 "Alpha 21" - 2026-09-28 (the race emblems v2 everywhere; the final UI art; colour-blind mode)
 
 - **Race emblems v2** (Daniele's final set, Art/Interface/Final set 2026-09-28/emblems; "make sure they're enforced"): one source
   (UiKit.emblem / emblem_mip / emblem_badge), so every faction mark is the new one - FACTION tiles, SETUP / SEATS / RIVALS,
@@ -9,6 +9,9 @@
 - **Final UI art** (🧩 UI): HOME on Daniele's faction wallpapers; the other faction pages on the empty VERSUS stages (the
   creature shows once); the PLAY cards' art; VERSUS with each side on its own stage. index.pck about +1.6 MB (lossy imports).
 - **Lobby READY** restyled in the UI's look (same behaviour); the campaign mission plates no longer overflow their title.
+- **COLOUR-BLIND mode** (Daniele: "yes add color blind mode in settings"): SETTINGS > DISPLAY > COLOUR-BLIND ON / OFF - seats take
+  palettes that stay apart under all three colour-vision types (your screen only; the room is unchanged); the emblems
+  on the count tags read clearer (their neon lifted).
 
 ## 0.21.9 "Alpha 21" - 2026-09-28 (sound, messages where they belong, player names, co-op AI)
 
