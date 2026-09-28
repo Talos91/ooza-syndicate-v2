@@ -690,8 +690,8 @@ func _fog(slot: Dictionary, e: Dictionary, col: Color, life: float, left: float,
 
 
 func _portal(slot: Dictionary, e: Dictionary, dt: float, col: Color, life: float, left: float, detail: float) -> void:
-	## Portal: a vortex on the entrance and one turning the other way on the exit, sparks streaming along an arc from
-	## one to the other, IN / OUT over them, a time-left band round the entrance.
+	## Portal: a vortex on each end turning opposite ways, sparks streaming along an arc both ways (two-way, Daniele
+	## 2026-09-29), PORTAL over both, a time-left band round the first end.
 	var a: Dictionary = sim.nodes[_int(e["target"])]
 	var bi := _int(e.get("exit", -1))
 	if bi < 0 or bi >= sim.nodes.size():
@@ -704,8 +704,12 @@ func _portal(slot: Dictionary, e: Dictionary, dt: float, col: Color, life: float
 	var pa: Vector3 = a["pos"] + up * 1.2
 	var pb: Vector3 = b["pos"] + up * 1.2
 	var hgt := pa.distance_to(pb) * 0.22
-	for k in range(_count(70.0 * detail * life * dt)):   # sparks streaming along the link, entrance to exit
+	for k in range(_count(70.0 * detail * life * dt)):   # sparks streaming along the link, both ways (a two-way portal)
 		var t := randf()
+		if k % 2 == 1:
+			var sw := pa
+			pa = pb
+			pb = sw
 		var p := pa.lerp(pb, t) + up * (sin(t * PI) * hgt)
 		var tan := (pb - pa) + up * (cos(t * PI) * PI * hgt)
 		_spark(p, tan.normalized() * randf_range(9.0, 13.0), col.lerp(Color.WHITE, randf() * 0.4) * 1.3, randf_range(0.2, 0.34),
@@ -716,8 +720,8 @@ func _portal(slot: Dictionary, e: Dictionary, dt: float, col: Color, life: float
 	var lab2: Label3D = slot["lab2"]
 	if slot["txt"] != 1:
 		slot["txt"] = 1
-		lab.text = "IN"
-		lab2.text = "OUT"
+		lab.text = "PORTAL"                           # (two-way: no IN / OUT)
+		lab2.text = "PORTAL"
 	for pair_i in range(2):
 		var l: Label3D = lab if pair_i == 0 else lab2
 		var n: Dictionary = a if pair_i == 0 else b

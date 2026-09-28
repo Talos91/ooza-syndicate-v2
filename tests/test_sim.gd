@@ -2742,6 +2742,14 @@ func _powers_tests() -> void:
 	check(not carry.is_empty() and carry[0]["route"][0] == 2 and carry[0]["target"] == 4, "Portal: what pours in comes out of the exit, walking on to the target")
 	run_until(s, func(): return s.nodes[4]["owner"] == "A", 30.0)
 	check(s.nodes[4]["owner"] == "A", "Portal: the carried line takes the target")
+	s = _mk(tp, "vex", "ember", {"A": {"map": "portal"}})       # two-way (Daniele, 2026-09-29): the exit leads back too
+	s.cast("A", "map", [1, 2])
+	s.nodes[4]["units"] = 200.0
+	s.nodes[3]["units"] = 5.0
+	var hb := s.send(4, 3, 1.0)
+	check(hb["route"] == [4, 2] and int(hb["portal"]["dest"]) == 3 and int(hb["portal"]["exit"]) == 1,
+			"Portal: two-way - a line sent through the exit end goes in there and comes out of the entrance (route %s)" % str(hb["route"]))
+	check("already has a portal" in s.cast_check("A", "map", [0, 2]) or s.cooldown("A", "map") > 0.0, "Portal: an end can't open a second portal")
 	s = _mk(tp, "vex", "ember", {"A": {"map": "portal"}})
 	s.cast("A", "map", [1, 2])
 	s.nodes[3]["units"] = 200.0

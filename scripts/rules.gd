@@ -657,7 +657,8 @@ const SKILLS := {
 	"fog": {"name": "Fog of War", "slot": "map", "cd": 60.0, "target": "point",
 			"desc": "A dark goo cloud hides everything in a circle from your enemies for 15 s.",
 			"radius_m": 24.0, "dur": 15.0},   # 24 m (~1.5 nodes): 32 m darkened nearly all of a small map (A-01, Orbital Nexus)
-	# any player's line that enters the entrance node comes out of the exit node and walks on to its target
+	# any player's line that enters one end comes out of the other and walks on to its target - both ways (Daniele,
+	# 2026-09-29, Decisions page: "twoway")
 	"portal": {"name": "Portal", "slot": "map", "cd": 70.0, "target": "node_pair",
 			"desc": "Link two nodes up to 3 bridges apart for 12 s: every line entering one comes out of the other.",
 			"dur": 12.0, "reach": 3},

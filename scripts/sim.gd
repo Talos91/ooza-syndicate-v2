@@ -4670,7 +4670,7 @@ func _target_pos(kind: String, target, seat: String) -> Vector3:
 #   fog       map     a node as the circle's centre: "fog" on "node" {"radius"}; fog_hides / node_hidden say what a
 #                     viewer may not see (views only: the Sim and the data online are unchanged for now).
 #   portal    map     [entrance, exit] within SKILLS.portal.reach bridges: "portal" on the entrance "node"
-#                     {"exit"}. A route into the entrance ends there (h["portal"] = {"node", "exit", "dest"});
+#                     {"exit"}; TWO-WAY (Daniele, 2026-09-29): either end leads to the other. A route into an end ends there (h["portal"] = {"node", "exit", "dest"});
 #                     what pours in comes out of the exit as a carry line (h["carry_src"], "no_portal") walking
 #                     on to "dest" - or lands at the exit when that was the goal. fx "portal_pass" {"hid",
 #                     "node", "exit", "seat"} once per line. When it ends, lines still on the way walk on.
@@ -4707,11 +4707,16 @@ func portal_of(node_id: int) -> int:
 
 
 func _portal_exit(node_id: int) -> int:
+	## Two-way (Daniele, 2026-09-29): either end of an open Portal leads to the other.
 	if _fx_node.is_empty():
 		return -1
-	for e in _fx_node.get(node_id, []):
-		if e["id"] == "portal":
+	for e in effects:
+		if e["id"] != "portal":
+			continue
+		if int(e["target"]) == node_id:
 			return int(e["exit"])
+		if int(e["exit"]) == node_id:
+			return int(e["target"])
 	return -1
 
 
@@ -4813,6 +4818,8 @@ func _power_check(seat: String, id: String, target) -> String:
 				return "That node already has a portal"
 			if not _node_ok(b) or b == a:
 				return "Pick an exit"
+			if _portal_exit(b) >= 0:
+				return "That exit already has a portal"
 			var r := find_route(a, b)
 			if r.size() < 2 or _bridges(r) > int(sk["reach"]):
 				return "The exit must be within %d bridges" % int(sk["reach"])
@@ -4928,14 +4935,11 @@ func _power_cast(seat: String, id: String, target, ev: Dictionary) -> void:
 			for h in hordes:                                 # lines already on their way through the entrance
 				if h.get("no_portal", false) or h.has("portal") or h["state"] == "absorb" or h.get("retreat", false):
 					continue
-				var k: int = (h["route"] as Array).find(a)
-				if k < 1:
-					continue
-				var passed := false
+				var ahead := false                         # an end still ahead of its head (either end: two-way)
 				for ns in h["node_spans"]:
-					if int(ns["node"]) == a and float(h["s"]) > float(ns["s1"]):
-						passed = true
-				if not passed:
+					if int(ns["node"]) in [a, b] and int(ns["node"]) != int(h["route"][0]) and float(h["s"]) <= float(ns["s1"]):
+						ahead = true
+				if ahead:
 					_reroute_keep(h, h["route"])
 		"evac":
 			var src: Dictionary = nodes[_as_int(target)]
@@ -5107,10 +5111,11 @@ func _step_portals() -> void:
 func _portal_end(e: Dictionary) -> void:
 	## The portal closes: lines still on their way to the entrance walk on to their goal; one pouring through
 	## finishes going through.
-	var a: int = e["target"]
+	var ends := [int(e["target"]), int(e["exit"])]
 	for h in hordes.duplicate():
-		if not h.has("portal") or int(h["portal"]["node"]) != a or h["state"] == "absorb":
+		if not h.has("portal") or not int(h["portal"]["node"]) in ends or h["state"] == "absorb":
 			continue
+		var a: int = int(h["portal"]["node"])
 		var dest: int = int(h["portal"]["dest"])
 		var rest := find_route(a, dest) if dest != a else []
 		if rest.size() < 2:
