@@ -1283,7 +1283,7 @@ func show_account() -> void:
 	var gap := 18.0
 	var cw := (content.size.x - x * 2.0 - gap) / 2.0
 	var ch := area.end.y - 14.0 - top
-	UiKit.panel(self, Vector2(x, top), Vector2(cw, ch), shell_f)
+	var lp := UiKit.panel(self, Vector2(x, top), Vector2(cw, ch), shell_f)
 	var px := x + 20.0
 	var w := cw - 40.0
 	var status := "OFFLINE  -  no connection; you play as a guest on this device"
@@ -1343,7 +1343,7 @@ func show_account() -> void:
 		y += g.size.y + 10.0
 		var gn := "Your progress is already kept in this guest account; Google keeps it on your other devices too."
 		if y + UiKit.text_h(self, gn, 13, w) < top + ch - 10.0:      # a short phone keeps the panel's edge clear
-			_say(gn, Vector2(px, y), 13, UiKit.MUTED, w)
+			y += _say(gn, Vector2(px, y), 13, UiKit.MUTED, w)
 	# right: sign in with an account linked elsewhere - its progress replaces this device's
 	var right := _column(Vector2(x + cw + gap, top), Vector2(cw, ch))
 	var rcw: float = right["w"]
@@ -1367,7 +1367,11 @@ func show_account() -> void:
 		ry += _say(_account_note, Vector2(0, ry + 6.0), 15, UiKit.STAR, rcw) + 14.0
 	# PRIVACY: (the telemetry branch's rows go here) - SHARE PLAY & CRASH DATA, PRIVACY, DELETE ACCOUNT, below the Google
 	# sign-in: `ry += ...` rows at (0, ry), width rcw; this column scrolls, so 2-3 rows fit on phones too.
-	_column_end(right, n0, ry)
+	_column_end(right, n0, ry, true)
+	var both := minf(ch, maxf(y + 16.0 - top, (right["panel"] as Control).size.y))   # one height for the pair
+	lp.size.y = both
+	(right["panel"] as Control).size.y = both
+	(right["scroll"] as Control).size.y = both - 24.0
 
 
 # The web build's name field: a native DOM <input> laid over ACCOUNT's NAME box (like web/room-ui.js's room code, the
@@ -1603,7 +1607,7 @@ func show_leaderboard() -> void:
 			y += 8.0
 			y += _board_row("#%d" % int(_board_me.get("rank", 0)) if wins > 0 else "-", str(_board_me.get("name", "")) + "  (YOU)"
 					+ ("" if wins > 0 else "  ·  win an online round vs a player"), "%d WINS" % wins, Vector2(0, y), w, true, UiKit.STAR) + 6.0
-	_column_end(col, n0, y)
+	_column_end(col, n0, y, true)
 
 
 func _board_row(rank: String, who: String, wins: String, pos: Vector2, w: float, me: bool, wins_col := UiKit.INK) -> float:
@@ -1669,7 +1673,7 @@ func show_history() -> void:
 		var names := _map_names()
 		for h in list:
 			y += _history_row(h, names, Vector2(0, y), w) + 6.0
-	_column_end(col, n0, y)
+	_column_end(col, n0, y, true)
 
 
 func _history_row(h: Dictionary, names: Dictionary, pos: Vector2, w: float) -> float:
