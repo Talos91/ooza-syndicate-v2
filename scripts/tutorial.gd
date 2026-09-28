@@ -317,7 +317,7 @@ const LESSONS := [
 		"done": ["L5.done1", "L5.done2"]},
 	{"id": 6, "key": "L6", "map": "T-08-relay-works", "abilities": false, "vls": false,
 		"stage": [["H", "A", 30], ["R1", "A", 60], ["R2", "A", 30], ["R3", "A", 60], ["L1", "B", 20], ["F1", "B", 20],
-				["M1", "B", 15], ["M2", "B", 30], ["BH", "B", 30]], "protect": ["BH", "L1", "F1", "M1"],
+				["M1", "B", 15], ["M2", "B", 30], ["BH", "B", 30]], "protect": ["BH", "L1", "F1", "M2"],
 		"reveal": ["relay_build", "forge_readout", "monster", "monster_icon"],
 		"steps": [
 			{"key": "inspect", "target": {"nodes": ["R1"]}, "gesture": [["tap", "R1"]], "pass": ["inspect", "R1"], "budget": 10.0},
@@ -329,10 +329,10 @@ const LESSONS := [
 				"pass": ["built", "R2", "forge"], "budget": 20.0},
 			{"key": "hub", "target": {"nodes": ["R3"], "rects": ["action:MONSTER HUB"]},
 				"gesture": [["press", "action:MONSTER HUB"], ["tap", "R3"]], "pass": ["built", "R3", "monster_hub"], "budget": 20.0},
-			{"key": "send", "enter": ["charge_hub", "R3"], "target": {"nodes": ["R3", "M2"], "rects": ["monster_icon:R3"], "monsters": true},
-				"gesture": [["monster", "R3", "M2"]], "pass": ["launched", "M2"], "only_launch": "M2", "budget": 10.0},
-			{"key": "take", "enter": ["b_send", "M2", "R3", 8], "target": {"nodes": ["M2"], "lines": "B", "monsters": true, "open": true},
-				"pass": ["custom", "monster_done", "M2"], "budget": 45.0},
+			{"key": "send", "enter": ["charge_hub", "R3"], "target": {"nodes": ["R3", "M1"], "rects": ["monster_icon:R3"], "monsters": true},
+				"gesture": [["monster", "R3", "M1"]], "pass": ["launched", "M1"], "only_launch": "M1", "budget": 10.0},   # 0.22.1: MONSTER_REACH 1 (was M2, 2 bridges)
+			{"key": "take", "enter": ["b_send", "M1", "R3", 8], "target": {"nodes": ["M1"], "lines": "B", "monsters": true, "open": true},   # the rival line walks the monster's own deck
+				"pass": ["custom", "monster_done", "M1"], "budget": 45.0},
 			{"key": "cooldown", "target": {"nodes": ["R3"]}, "read_only": true},
 		],
 		"done": ["L6.done1", "L6.done2"]},

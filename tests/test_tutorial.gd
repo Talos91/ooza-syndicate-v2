@@ -413,7 +413,7 @@ func test_follow() -> void:
 	hub["structure"] = "monster_hub"
 	hub["units"] = 60.0 * Rules.SCALE
 	hub["monster_ready_t"] = s6.time
-	check(s6.launch_monster(n6["R3"], "A", n6["M2"]) == "", "follow: the L6 monster launches")
+	check(s6.launch_monster(n6["R3"], "A", n6["M1"]) == "", "follow: the L6 monster launches")
 	d6.skip_step()                                              # the take step: the monster walks, a rival line meets it
 	var ok6 := true
 	var walked := 0
@@ -706,19 +706,19 @@ func test_l6() -> void:
 	play(d, sim, "forge", func(t): if first(t): sim.structure_order("A", "build", n["R2"], {"kind": "forge"}))
 	check(sim.has_forge("A"), "L6: FORGE ONLINE (the attack and defence bonus)")
 	play(d, sim, "hub", func(t): if first(t): sim.structure_order("A", "build", n["R3"], {"kind": "monster_hub"}))
-	check(d.allow("launch_monster", n["R3"], {"to": n["M1"]}) != "" and d.allow("launch_monster", n["R3"], {"to": n["M2"]}) == "",
+	check(d.allow("launch_monster", n["R3"], {"to": n["M2"]}) != "" and d.allow("launch_monster", n["R3"], {"to": n["M1"]}) == "",
 			"L6: the monster goes to the lane's end (other targets: Not yet)")
-	check(n["M2"] in sim.monster_reach(n["R3"]), "L6: the lane's end is within the monster's reach")
+	check(n["M1"] in sim.monster_reach(n["R3"]), "L6: the lane's end is within the monster's reach (MONSTER_REACH)")
 	check(d.gesture()[0] == ["press", "monster_icon:%d" % n["R3"], -1], "L6: the hand presses the monster over its hub first")
 	d.ui_monster_from = n["R3"]                                 # (the icon armed the launch)
-	check(d.gesture()[0] == ["tap", n["M2"], -1], "L6: then the hand taps the lane's end")
-	play(d, sim, "send", func(t): if first(t): check(sim.structure_order("A", "launch_monster", n["R3"], {"to": n["M2"]})[0], "L6: the monster launches"))
+	check(d.gesture()[0] == ["tap", n["M1"], -1], "L6: then the hand taps the lane's end")
+	play(d, sim, "send", func(t): if first(t): check(sim.structure_order("A", "launch_monster", n["R3"], {"to": n["M1"]})[0], "L6: the monster launches"))
 	play(d, sim, "take", wait)
 	var kicked := 0.0
 	for ev in d._log:
 		if ev.get("type") == "monster_kick" and ev.get("seat_hit") == "B":
 			kicked += float(ev["units"])
-	check(sim.nodes[n["M2"]]["owner"] == "A", "L6: the monster took the lane's end")
+	check(sim.nodes[n["M1"]]["owner"] == "A", "L6: the monster took the lane's end")
 	check(kicked > 0.0, "L6: the monster kicked rival crews off (%d)" % Rules.shown(kicked))
 	play(d, sim, "cooldown", func(t): if first(t): d.press_button())
 	check(d.state == "complete", "L6 complete")
