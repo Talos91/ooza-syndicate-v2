@@ -1,5 +1,28 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.22.0 "Alpha 22" - 2026-09-28 (match feel; backgrounds; landscape; goo loading screen)
+
+Alpha 21 (polishing) is done (Daniele); Alpha 22 = the work in flight, without the new maps (those ship as Alpha 23).
+- **Last Stand ring** now subtle (thin, faint, slow breath) and only on the node(s) dropping next; the alert tag and the status
+  line carry the warning (Daniele: "too in your face").
+- **Under attack**: a red arc flickers on the side of YOUR node an enemy line is pouring into (an ally's node dimmer).
+- **Contested ring shows progress**: the attacker's colour sweeps round the ring as they near the capture, shrinking back when
+  the defence wins - no numbers (Daniele).
+- **No first-use hitch**: faction patches, structure models and effect materials are warmed up behind the VERSUS card (first
+  send 87-111 ms -> 22 ms, first capture 80-87 -> 22 ms on the dev PC).
+- **Last Stand zoom** no longer slows the game (badge layout only once the camera settles; deck-light and fragment work cut).
+- **Softer sound** (Daniele: "obnoxious"): default volume 30 %, frequent sounds rarer and quieter, only for your lines / on
+  screen; every sound fades in and out; captures sound by side. SFX and MUSIC buses ready for the soundtrack.
+- **No keyboard hints on phones** (the dock's 1 / 2 / 3 key caps hidden on touch).
+- **Backgrounds**: each campaign mission has its own backdrop, battle maps one of Daniele's 5 general backgrounds (fixed per
+  map); **BATTLEFIELD > BACKGROUND**: AUTO / ROTATE / pick one (your screen only). **The backgrounds are WIP** (Daniele: "BG are
+  still WIP") - not final art.
+- **Landscape on phones**: in portrait a TURN YOUR PHONE SIDEWAYS screen covers the game; landscape is locked wherever the
+  browser allows (installed app / fullscreen).
+- **Loading screen**: the logo centred and a goo loading bar.
+- Fixes: MATCH HISTORY no longer errors on a missing flag (🏆); the sign-in refresh backs off when offline instead of retrying
+  every frame (🏆).
+
 ## 0.21.12 "Alpha 21" - 2026-09-28 (oozesyndicate.com; taps answered at once; faster menus; loading screen)
 
 - **The game is at https://oozesyndicate.com** (the github.io link redirects there); online rooms connect to

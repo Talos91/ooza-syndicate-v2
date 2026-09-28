@@ -5,6 +5,14 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.22.0 "Alpha 22" (match feel, backgrounds, landscape) - backgrounds are WIP, not final
+- [ ] **Last Stand**: the ring is subtle, the warning still clear; the zoom doesn't slow the phone.
+- [ ] **Under attack / contested ring**: can you tell your node is being hit, and how close a capture is?
+- [ ] **First send / first capture**: no hitch.
+- [ ] **Sound**: softer, less spammy; SOUND / VOLUME still work.
+- [ ] **Hold the phone upright**: TURN YOUR PHONE SIDEWAYS; the home-screen app stays landscape.
+- [ ] **BATTLEFIELD > BACKGROUND**: AUTO / ROTATE / pick one; campaign missions show their own backdrops.
+
 ## 0.21.12 (domain, taps, loading screen)
 - [ ] **https://oozesyndicate.com** on the phone (re-add the home-screen app from the new address); the loading screen.
 - [ ] **One tap** opens every menu item; pages open quickly; BACK from LEADERBOARD / PROFILE / HISTORY goes back.
