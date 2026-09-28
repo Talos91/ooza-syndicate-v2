@@ -76,7 +76,7 @@ signal rematch_changed
 signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
-const VERSION_TAG := "ooze20-net-7"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY; 7: player names)
+const VERSION_TAG := "ooze20-net-8"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY; 7: player names; 8: POWERS - new horde keys, Portal [entrance, exit])
 const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
 const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
 const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
@@ -1439,7 +1439,7 @@ static func path_key(h: Dictionary) -> String:
 
 
 const PATH_FIELDS := ["pts", "cum", "fast", "spans", "node_spans"]
-const SECRET_HORDE := ["decoy", "echo", "ghost_left", "landed", "blame"]   # never broadcast (the Ghost Line bluff)
+const SECRET_HORDE := ["decoy", "echo", "ghost_left", "landed", "blame", "ghost_sent"]   # never broadcast (the Ghost Line bluff; POWERS: ghost_sent)
 const NODE_SKIP := ["pos", "transit", "category", "center", "relay", "buildable", "id", "node_kind"]
 
 
