@@ -158,7 +158,7 @@ var _sp_grav := PackedFloat32Array()
 var _sp_n := 0
 var _waves := {}                    # POWERS: edge -> {mi, mat, t, dir, col}: Backwash's wave (t < 0: idle)
 var _holes := {}                    # POWERS: node id -> {mi, mat, t, col}: Sinkhole's pit
-var _marks := {}                    # POWERS: horde id -> {star, smat, lab, seen}: an armed (Core Meltdown) / immune (Evac) line
+var _marks := {}                    # POWERS: horde id -> {star, smat, lab, seen}: an armed (Core Meltdown) / bursting (Evac) line
 
 
 static var _ghost_shader: Shader
@@ -741,14 +741,15 @@ func _swirl(slot: Dictionary, k: String, n: Dictionary, col: Color, dir: float, 
 
 
 func _line_marks(dt: float) -> void:
-	## An armed Core Meltdown line: a pulsing ember aura at its head, embers along it and "ARMED" over it; an Evac line:
-	## a pale shield shimmer. Everyone sees them (a rival's inside a fog this screen is blind to: nothing). Pooled.
+	## An armed Core Meltdown line: a pulsing ember aura at its head, embers along it and "ARMED" over it; an Evac line,
+	## while it bursts out of the door: a pale rush of sparks (no shield - Evac has no immunity, Daniele 2026-09-29).
+	## Everyone sees them (a rival's inside a fog this screen is blind to: nothing). Pooled.
 	var detail := 0.5 if Rules.low_detail else 1.0
 	var up := Vector3.UP
 	var used := 0
 	for h in sim.hordes:
 		var armed: bool = h.get("armed", false)
-		if not armed and not h.get("immune", false):
+		if not armed and not (h.get("evac", false) and float(h.get("evac_left", 0.0)) > 0.0):
 			continue
 		var head: Vector3 = Sim.sample(h, h["s"])[0]
 		if _fogged(head, str(h["owner"])):
@@ -784,7 +785,7 @@ func _line_marks(dt: float) -> void:
 			if armed:                                 # embers rising off the line
 				_spark(p + Vector3(randf_range(-1.1, 1.1), randf_range(0.3, 1.2), randf_range(-1.1, 1.1)), Vector3(randf_range(-0.6, 0.6), randf_range(2.0, 4.5), randf_range(-0.6, 0.6)),
 						EMBER if randf() < 0.6 else HOT, randf_range(0.18, 0.32), randf_range(0.4, 0.8), -1.0)
-			else:                                     # the shield's shimmer round the bodies
+			else:                                     # the Evac rush round the bodies
 				var a := randf() * TAU
 				_spark(p + Vector3(cos(a) * 1.4, randf_range(0.2, 1.8), sin(a) * 1.4), Vector3(0.0, randf_range(0.3, 1.0), 0.0),
 						SHIELD * 1.2, randf_range(0.16, 0.28), randf_range(0.3, 0.55), 0.0)
@@ -931,7 +932,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		_hordes[h["id"]] = h
 	_effects(dt)
 	_ghost_wisps(dt)
-	_line_marks(dt)                               # POWERS: armed (Core Meltdown) / immune (Evac) lines
+	_line_marks(dt)                               # POWERS: armed (Core Meltdown) / bursting (Evac) lines
 	_step_waves(dt)                               # POWERS: Backwash
 	_step_holes(dt)                               # POWERS: Sinkhole
 	_hide_dropped()                               # POWERS: a dropped deck stays hidden even while its relay moves

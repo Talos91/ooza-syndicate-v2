@@ -379,6 +379,7 @@ func _start_map(path: String) -> void:
 		Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
 	Rules.apply_colour_blind(seats.values(), teams, HUMAN)   # UI: SETTINGS > COLOUR-BLIND (your screen only)
 	sim = Sim.new()
+	sim.ai_builds = true                               # POWERS: AI seats mix their builds (Rules.AI_LOADOUTS)
 	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams, LOADOUTS)
 	var lo := Vector3(INF, 0, INF)                     # the camera looks along the map's short side
 	var hi := Vector3(-INF, 0, -INF)
@@ -519,7 +520,7 @@ func start_match(path: String, faction: String, seat_factions: Dictionary, level
 	## AI level, the map, the mode (1v1 / 2v2 / FFA3-5), your colour and your skill loadout ({"active":
 	## id, "map": id}; empty = the default).
 	mode = match_mode
-	LOADOUTS = {HUMAN: loadout} if not loadout.is_empty() else {}
+	LOADOUTS = {HUMAN: loadout}                        # (POWERS: always an entry - a seat with none is an AI seat)
 	color_choice = colour
 	SEAT_FACTIONS[HUMAN] = faction
 	for seat in seat_factions:

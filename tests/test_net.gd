@@ -1067,7 +1067,7 @@ func _test_presets() -> void:
 	ArmyPresets.set_pick("solar", "map", "anchor")
 	ArmyPresets.set_pick("ember", "map", "relay_hack")
 	ArmyPresets.reload_presets()                                  # read back from the file
-	check(ArmyPresets.loadout_for("solar") == {"active": "scorch", "map": "anchor"} and ArmyPresets.loadout_for("vex") == {"active": "surge", "map": "relay_hack"},
+	check(ArmyPresets.loadout_for("solar") == {"active": "scorch", "map": "anchor"} and ArmyPresets.loadout_for("vex") == {"active": "surge", "map": "portal"},   # (POWERS 0.22.5 defaults)
 			"ARMIES presets save, load back, and default per faction")
 	_open_room("1v1")
 	var gp := _new_net()
@@ -1086,7 +1086,7 @@ func _test_presets() -> void:
 			"a guest's ARMIES preset reaches the host with the register (%s)" % str(host.roster.get(gid, {}).get("loadout", {})))
 	ArmyPresets.room_faction(gp, "ember")                  # the lobby's faction pick: faction + that preset
 	_deliver()
-	check(host.roster[gid]["faction"] == "ember" and host.roster[gid]["loadout"] == {"active": "scorch", "map": "relay_hack"},
+	check(host.roster[gid]["faction"] == "ember" and host.roster[gid]["loadout"] == {"active": "sinkhole", "map": "relay_hack"},
 			"changing faction in the lobby sends that faction's preset")
 	ArmyPresets.send_to(host, "solar")                     # the host's own preset (CREATE ROOM)
 	check(host.roster[1]["loadout"] == {"active": "scorch", "map": "anchor"}, "the host's preset is its roster loadout")
@@ -1098,7 +1098,7 @@ func _test_presets() -> void:
 	host.start_match()
 	_deliver()
 	var info: Dictionary = host.match_info
-	check(info["rules"]["abilities_on"] == false and info["loadouts"].get("B", {}) == {"active": "scorch", "map": "relay_hack"}
+	check(info["rules"]["abilities_on"] == false and info["loadouts"].get("B", {}) == {"active": "sinkhole", "map": "relay_hack"}
 			and info["loadouts"].get("A", {}) == {"active": "scorch", "map": "anchor"},
 			"the launch carries both presets and ABILITIES OFF (%s)" % str(info["loadouts"]))
 	Rules.abilities_on = true

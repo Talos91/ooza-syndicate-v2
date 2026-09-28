@@ -662,10 +662,11 @@ const SKILLS := {
 	"portal": {"name": "Portal", "slot": "map", "cd": 70.0, "target": "node_pair",
 			"desc": "Link two nodes up to 3 bridges apart for 12 s: every line entering one comes out of the other.",
 			"dur": 12.0, "reach": 3},
-	# share of the garrison leaves at once (door rate x burst) for the nearest own node not under attack, by
-	# route; immune to Laser towers, Machinegoons, Scorch and monsters until it lands (falls still kill)
+	# share of the garrison leaves at once (door rate x burst) for the nearest own node not under attack, by route.
+	# No immunity (Daniele, 2026-09-29: "no immunity at all, just let's make sure it's not OP"): towers, Scorch,
+	# monsters and falls hit it like any line.
 	"evac": {"name": "Emergency Evac", "slot": "active", "cd": 40.0, "target": "own_node",
-			"desc": "Half of one node's garrison bursts out toward your nearest safe node, immune on the way.",
+			"desc": "Half of one node's garrison bursts out at once toward your nearest safe node.",
 			"share": 0.5, "burst": 8.0},
 	# ---- ultimates (one per faction; "cd" is the natural charge time, see ULT_CHARGE_TIME)
 	# Rewire: while it lasts, the ultimate slot fires any relay once (target = relay id), `fires` at most
@@ -698,12 +699,26 @@ const FACTION_ULTIMATE_ID := {"vex": "rewire", "null": "echo_split", "bloom": "s
 # default loadouts per faction - a seat without a chosen loadout (and every AI seat) gets its faction's;
 # between them the five cover every shared skill. "map_no_relays" replaces a relay skill on a map without
 # relays (the Ooze Factory greys Bypass / Relay Hack out there, draft sec4).
+# POWERS (0.22.5, Daniele 2026-09-29, Decisions page "approve"): the best-fit default per faction - what a player gets on
+# picking it (until they change it in ARMIES). VEX redirects (Portal), NULL hides (Fog of War), BLOOM grows and pushes
+# back (Backwash), EMBER pressures defended structures (Sinkhole), SOLAR holds (unchanged).
 const FACTION_LOADOUT := {
-	"vex": {"active": "surge", "map": "relay_hack", "map_no_relays": "mire"},
-	"null": {"active": "ghost_line", "map": "bypass", "map_no_relays": "demolish"},
-	"bloom": {"active": "spore_burst", "map": "mire", "map_no_relays": "mire"},
-	"ember": {"active": "scorch", "map": "demolish", "map_no_relays": "demolish"},
+	"vex": {"active": "surge", "map": "portal", "map_no_relays": "portal"},
+	"null": {"active": "ghost_line", "map": "fog", "map_no_relays": "fog"},
+	"bloom": {"active": "spore_burst", "map": "backwash", "map_no_relays": "backwash"},
+	"ember": {"active": "sinkhole", "map": "demolish", "map_no_relays": "demolish"},
 	"solar": {"active": "fortify", "map": "anchor", "map_no_relays": "anchor"},
+}
+# ...and the AI mixes it up (same decision: "for AI do the same but mix it up, and don't repeat builds"): an AI seat with
+# no loadout of its own gets one of its faction's builds, picked by the match seed (the same on every screen online), and
+# two AI seats of one faction in a match never share a build. A relay skill on a map without relays falls back to the
+# faction's "map_no_relays" (Sim._setup_skills). Only when Sim.ai_builds is on (real matches; tests keep the defaults).
+const AI_LOADOUTS := {
+	"vex": [{"active": "surge", "map": "portal"}, {"active": "surge", "map": "relay_hack"}, {"active": "evac", "map": "sever"}],
+	"null": [{"active": "ghost_line", "map": "fog"}, {"active": "ghost_line", "map": "sever"}, {"active": "evac", "map": "bypass"}],
+	"bloom": [{"active": "spore_burst", "map": "backwash"}, {"active": "spore_burst", "map": "mire"}, {"active": "fortify", "map": "quake"}],
+	"ember": [{"active": "sinkhole", "map": "demolish"}, {"active": "scorch", "map": "quake"}, {"active": "scorch", "map": "sever"}],
+	"solar": [{"active": "fortify", "map": "anchor"}, {"active": "evac", "map": "backwash"}, {"active": "fortify", "map": "mire"}],
 }
 # SKILLS START ON COOLDOWN (0.19.2, Daniele 2026-09-27: every active and map skill is on its full cooldown at the
 # match start "as if they just got used" - otherwise e.g. the production skill is overpowered at second 1). The

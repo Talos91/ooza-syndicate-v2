@@ -82,6 +82,7 @@ var _kill_credit: Dictionary = {}    # seat -> enemy units killed this step (ult
 var _fx_idx: Dictionary = {}         # "on:target" -> [effects] (rebuilt by _index_effects)
 var _popped: Array = []              # decoys that touched an enemy this step (they dissolve)
 var _down_seen: Dictionary = {}      # POWERS: edges whose "down" timer was set this step (_step_skills)
+var ai_builds := false               # POWERS: set before setup() - a seat with no loadout gets a Rules.AI_LOADOUTS build
 
 
 func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1, seat_teams: Dictionary = {}, seat_loadouts: Dictionary = {}) -> void:
@@ -719,7 +720,7 @@ func _hordes_in_range(n: Dictionary, reach: float, pull := {}) -> Array:
 	var out := []
 	var c: Vector3 = n["pos"]
 	for h in hordes:
-		if allied(h["owner"], n["owner"]) or h["units"] <= 0.0 or h.get("immune", false):   # (POWERS: Evac)
+		if allied(h["owner"], n["owner"]) or h["units"] <= 0.0:
 			continue
 		var r: float = reach + pull.get(h["id"], 0.0)
 		var b: Array = _body(h)
@@ -1286,7 +1287,7 @@ func _new_horde(owner: String, units: float, route: Array, extra := {}) -> Dicti
 		"ordered": units, "start_units": units, "streaming": true,
 		"s": 0.0, "state": "move", "speed": 1.0, "blocked": false,
 	}
-	h.merge(extra)                                    # POWERS: "no_portal" (a Portal carry), "immune" / "evac_left" (Evac)
+	h.merge(extra)                                    # POWERS: "no_portal" (a Portal carry), "evac" / "evac_left" (Evac)
 	_set_route(h, route)
 	_next_id += 1
 	return h
@@ -3507,7 +3508,7 @@ static func _seg_dist2(p: Vector3, a: Vector3, b: Vector3) -> float:
 func _monster_kick(m: Dictionary, h: Dictionary, lo: float, hi: float) -> void:
 	## The bodies of line `h` inside [lo, hi] of its path are kicked off the deck: they fall (fall losses,
 	## a "fall" fx). The head is kicked back, a tail shortens, a middle cut splits the line (the front walks on).
-	if not (h in hordes) or h["units"] <= 0.0 or h.get("immune", false):   # (POWERS: an Evac line is immune)
+	if not (h in hordes) or h["units"] <= 0.0:
 		return
 	var head: float = h["s"]
 	var len := maxf(chain_length(h), 0.001)
@@ -3674,11 +3675,16 @@ func _setup_skills(seat_loadouts: Dictionary) -> void:
 	demolished = {}
 	_kill_credit = {}
 	_index_effects()
-	for seat in factions:
+	var picked := {}                                 # POWERS: faction -> AI build indices already given this match
+	var order: Array = factions.keys()
+	order.sort()
+	for seat in order:
 		var f: String = factions[seat]
 		var want = seat_loadouts.get(seat, {})
 		if not want is Dictionary:
 			want = {}
+		if ai_builds and not seat_loadouts.has(seat):
+			want = _ai_build(str(seat), f, picked)
 		var lo := {"active": Rules.skill_slot_id(f, want, "active"), "map": Rules.skill_slot_id(f, want, "map"),
 				"ultimate": Rules.skill_slot_id(f, want, "ultimate")}
 		if not has_relays and Rules.SKILLS[lo["map"]].get("needs_relays", false):
@@ -3886,7 +3892,7 @@ func skill_speed(h: Dictionary) -> float:
 func door_mult(h: Dictionary) -> float:
 	## Door-rate multiplier for this line (0.19.2 Surge: its units leave the source door and pour into the
 	## target twice as fast while it lasts; 1.0 otherwise). Views scale the pour-out / pour-in by it.
-	if h.get("immune", false):                         # POWERS: an Evac line leaves "at once" (burst x the door rate)
+	if h.get("evac", false):                           # POWERS: an Evac line leaves "at once" (burst x the door rate)
 		return float(Rules.SKILLS["evac"]["burst"])
 	if _fx_horde.is_empty():
 		return 1.0
@@ -4414,7 +4420,7 @@ func _burn(e: Dictionary, dt: float) -> void:
 	for h in hordes.duplicate():
 		if float(e["left"]) <= 0.0:
 			return
-		if allied(h["owner"], e["seat"]) or h["units"] <= 0.0 or h.get("immune", false):   # (POWERS: Evac)
+		if allied(h["owner"], e["seat"]) or h["units"] <= 0.0:
 			continue
 		var on := 0.0
 		for sp in h["spans"]:
@@ -4675,9 +4681,9 @@ func _target_pos(kind: String, target, seat: String) -> Vector3:
 #                     on to "dest" - or lands at the exit when that was the goal. fx "portal_pass" {"hid",
 #                     "node", "exit", "seat"} once per line. When it ends, lines still on the way walk on.
 #   evac      active  own node: SKILLS.evac.share of its garrison leaves at once (it is out of the node at the
-#                     cast) toward the nearest own node not under attack, by route: a line with h["immune"]
-#                     (towers, Scorch, monsters and Backwash skip it; falls still kill) and h["evac_left"]
-#                     still to burst out of the door. fx {"type": "evac", "node", "seat", "hid", "to"}.
+#                     cast) toward the nearest own node not under attack, by route: a line with h["evac"] and
+#                     h["evac_left"] still to burst out of the door; NO immunity (Daniele, 2026-09-29).
+#                     fx {"type": "evac", "node", "seat", "hid", "to"}.
 #   core_meltdown (the ultimate): castable from the start of the trip - h["armed"]; _step_armed sets it off
 #                     within SKILLS.core_meltdown.range m of the target (or pouring in); fx "meltdown_fizzled"
 #                     {"hid", "seat"} when the target turns friendly first.
@@ -4848,10 +4854,10 @@ func _quake_decks(i: int) -> Array:
 
 
 func _backwash_lines(seat: String, ei: int) -> Array:
-	## [[horde, span]] for every hostile line whose head is on deck ei (an Evac line is immune).
+	## [[horde, span]] for every hostile line whose head is on deck ei.
 	var out := []
 	for h in hordes:
-		if allied(h["owner"], seat) or h["state"] == "absorb" or h["units"] <= 0.0 or h.get("immune", false):
+		if allied(h["owner"], seat) or h["state"] == "absorb" or h["units"] <= 0.0:
 			continue
 		for sp in h["spans"]:
 			if sp["edge"] == ei and h["s"] >= sp["s0"] and h["s"] <= sp["s1"]:
@@ -4946,7 +4952,7 @@ func _power_cast(seat: String, id: String, target, ev: Dictionary) -> void:
 			var route := _evac_route(seat, src["id"])
 			var count := floorf(src["units"] * float(sk["share"]))
 			src["units"] -= count                           # out of the node at once: an attack there no longer reaches them
-			var h := _new_horde(seat, count, route, {"immune": true, "evac_left": count})
+			var h := _new_horde(seat, count, route, {"evac": true, "evac_left": count})
 			hordes.append(h)
 			ev["hid"] = h["id"]
 			ev["to"] = route[-1]
@@ -5000,6 +5006,26 @@ func _sinkhole(seat: String, n: Dictionary) -> void:
 			"destroyed": destroyed, "victim": n["owner"]})
 	events.append({"t": time, "type": "sinkhole", "node": n["id"], "seat": seat, "victim": n["owner"], "structure": old,
 			"from": from, "destroyed": destroyed})
+
+
+func _ai_build(seat: String, f: String, picked: Dictionary) -> Dictionary:
+	## An AI seat's loadout: one of Rules.AI_LOADOUTS[f] by the match seed, never one another seat of that faction has.
+	var builds: Array = Rules.AI_LOADOUTS.get(f, [])
+	if builds.is_empty():
+		return {}
+	var used: Array = picked.get(f, [])
+	if used.size() >= builds.size():
+		used = []                                   # (more AIs of one faction than builds: start over)
+	var r := RandomNumberGenerator.new()
+	r.seed = hash("%d|%s" % [match_seed, seat])
+	var free := []
+	for i in range(builds.size()):
+		if not i in used:
+			free.append(i)
+	var k: int = free[r.randi_range(0, free.size() - 1)]
+	used.append(k)
+	picked[f] = used
+	return builds[k]
 
 
 func _emit_evacs(dt: float) -> void:

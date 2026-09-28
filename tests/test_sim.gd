@@ -1834,8 +1834,8 @@ func _skills_tests() -> void:
 	var fresh := Sim.new()
 	fresh.setup(tp, MapBuilder.layout(tp), {int(tp["seats"]["1v1"][0]["node"]): "A", int(tp["seats"]["1v1"][1]["node"]): "B"},
 			{"A": "bloom", "B": "ember"}, 1)
-	check(absf(fresh.cooldown("A", "active") - Rules.SKILLS["spore_burst"]["cd"]) < 0.001 and absf(fresh.cooldown("A", "map") - Rules.SKILLS["mire"]["cd"]) < 0.001
-			and absf(fresh.cooldown("B", "active") - Rules.SKILLS["scorch"]["cd"]) < 0.001 and not fresh.can_cast("A", "active", fresh.homes["A"]),
+	check(absf(fresh.cooldown("A", "active") - Rules.SKILLS["spore_burst"]["cd"]) < 0.001 and absf(fresh.cooldown("A", "map") - Rules.SKILLS["backwash"]["cd"]) < 0.001
+			and absf(fresh.cooldown("B", "active") - Rules.SKILLS["sinkhole"]["cd"]) < 0.001 and not fresh.can_cast("A", "active", fresh.homes["A"]),
 			"every active and map skill starts on its full cooldown, as if just used")
 	check(fresh.charge("A") == 0.0 and "charging" in fresh.cast_check("A", "ultimate", null), "the ultimate still charges from 0")
 	_steps(fresh, Rules.SKILLS["spore_burst"]["cd"] + 0.1, 0.5)
@@ -1843,11 +1843,13 @@ func _skills_tests() -> void:
 	# ---------------------------------------------------------------- loadouts
 	var s := _mk(sw, "vex", "bloom", {"A": {"active": "scorch", "map": "anchor"}})
 	check(s.loadouts["A"] == {"active": "scorch", "map": "anchor", "ultimate": "rewire"}, "a chosen loadout; the ultimate follows the faction")
-	check(s.loadouts["B"] == {"active": "spore_burst", "map": "mire", "ultimate": "superbloom"}, "a seat without one gets its faction's default")
+	check(s.loadouts["B"] == {"active": "spore_burst", "map": "backwash", "ultimate": "superbloom"}, "a seat without one gets its faction's default (POWERS 0.22.5 defaults)")
 	s = _mk(sw, "vex", "null", {"A": {"active": "nuke"}})
-	check(s.loadouts["A"]["active"] == "surge" and s.loadouts["A"]["map"] == "relay_hack", "unknown ids fall back to the default; relay skills kept on a relay map")
+	check(s.loadouts["A"]["active"] == "surge" and s.loadouts["A"]["map"] == "portal", "unknown ids fall back to the default")
+	s = _mk(sw, "vex", "null", {"A": {"map": "relay_hack"}})
+	check(s.loadouts["A"]["map"] == "relay_hack", "relay skills kept on a relay map")
 	s = _mk(tp, "vex", "null", {"B": {"map": "relay_hack"}})
-	check(s.loadouts["A"]["map"] == "mire" and s.loadouts["B"]["map"] == "demolish", "no relays on the map: Relay Hack / Bypass become the faction's other map skill")
+	check(s.loadouts["A"]["map"] == "portal" and s.loadouts["B"]["map"] == "fog", "no relays on the map: Relay Hack / Bypass become the faction's other map skill")
 	# ---------------------------------------------------------------- validation, cooldown, ABILITIES OFF
 	Rules.abilities_on = false
 	s = _mk(tp, "solar", "null")
@@ -1910,7 +1912,7 @@ func _skills_tests() -> void:
 	check(absf(s.nodes[1]["units"] - (100.0 - 33.0 / 1.65)) < 0.01, "BRAWL: a fortified garrison loses 1.65x less (33 attackers kill %.1f)" % (100.0 - s.nodes[1]["units"]))
 	# ---------------------------------------------------------------- Scorch
 	for tag in ["BRAWL"]:
-		s = _mk(tp, "null", "ember")
+		s = _mk(tp, "null", "ember", {"B": {"active": "scorch"}})
 		s.nodes[3]["units"] = 300.0
 		var h := s.send(3, 0, 1.0)
 		var deck: Dictionary = h["spans"][0]
@@ -1981,7 +1983,7 @@ func _skills_tests() -> void:
 	check("anchored" in s.cast_check("B", "map", e10b) or s.cooldown("B", "map") > 0.0, "and an anchored deck can't be demolished")
 	# ---------------------------------------------------------------- Mire
 	for tag in ["BRAWL"]:
-		s = _mk(tp, "null", "bloom")
+		s = _mk(tp, "null", "bloom", {"B": {"map": "mire"}})
 		s.nodes[3]["units"] = 150.0
 		var h := s.send(3, 0, 1.0)
 		var deck: Dictionary = h["spans"][0]
@@ -2585,7 +2587,7 @@ func _dock_tests() -> void:
 	var d: SkillDock = r[0]
 	var fm: DockMain = r[1]
 	var fh: DockHud = r[2]
-	check(d.swapped == "bypass" and s.skill_id("A", "map") == "demolish" and "Demolish" in d.start_note(),
+	check(d.swapped == "bypass" and s.skill_id("A", "map") == "fog" and "Fog of War" in d.start_note(),
 			"dock: a relay preset on a map without relays shows the fallback (%s)" % d.start_note())
 	d.sync(0.1)
 	check((d.slots[0] as SkillDock.Slot).id == "surge" and (d.slots[0] as SkillDock.Slot).is_ready and not (d.slots[2] as SkillDock.Slot).is_ready,
@@ -2605,11 +2607,11 @@ func _dock_tests() -> void:
 	check(armed_map and d.armed == -1 and fm.calls.size() == 1 and s.cooldown("A", "map") == 0.0, "dock: the slot tapped again cancels; nothing is spent")
 	d.press_slot(1)
 	d.pick(-5)
-	check(d.armed == 1 and fm.calls.size() == 1 and fh.toasts[-1] == "Pick a deck", "dock: a wrong target toasts cast_check's reason and stays armed")
+	check(d.armed == 1 and fm.calls.size() == 1 and fh.toasts[-1] == "Pick a spot", "dock: a wrong target toasts cast_check's reason and stays armed")
 	var ei: int = d.cands[0]
 	d.pick(ei)
-	check(fm.calls[-1] == ["cast", 1, {"target": ei}] and s.effects_on("edge", ei).any(func(e): return e["id"] == "demolish"),
-			"dock: Demolish cast on a lit deck")
+	check(fm.calls[-1] == ["cast", 1, {"target": ei}] and s.effects_on("node", ei).any(func(e): return e["id"] == "fog"),
+			"dock: Fog of War (NULL's no-relay fallback since 0.22.5) cast on a lit node")
 	var n_calls := fm.calls.size()
 	d.press_slot(2)
 	check(fm.calls.size() == n_calls and d.armed == -1 and "charging" in fh.toasts[-1], "dock: a charging ultimate only says so (%s)" % fh.toasts[-1])
@@ -2767,10 +2769,31 @@ func _powers_tests() -> void:
 	s.nodes[1]["units"] = 10.0
 	s.nodes[3]["units"] = 200.0
 	check(s.cast("A", "active", 3) and absf(s.nodes[3]["units"] - 100.0) < 0.01, "Evac: half the garrison leaves the node at once")
-	var ev_h: Dictionary = s.hordes.filter(func(x): return x.get("immune", false))[0]
-	check(ev_h["target"] == 1 and not s._hordes_in_range(s.nodes[4], 10000.0).has(ev_h), "Evac: toward the nearest safe node, out of every tower's reach (immune)")
+	var ev_h: Dictionary = s.hordes.filter(func(x): return x.get("evac", false))[0]
+	check(ev_h["target"] == 1 and s._hordes_in_range(s.nodes[4], 10000.0).has(ev_h) or ev_h["units"] <= 0.0,
+			"Evac: toward the nearest safe node; no immunity (Daniele 2026-09-29): towers can hit it like any line")
 	run_until(s, func(): return not (ev_h in s.hordes), 20.0)
 	check(s.nodes[1]["units"] >= 109.0, "Evac: it lands and reinforces (%.0f)" % s.nodes[1]["units"])
+	# ---------------------------------------------------------------- loadouts (Daniele 2026-09-29: best-fit defaults, AI mixes it up)
+	check(Rules.FACTION_LOADOUT["vex"]["map"] == "portal" and Rules.FACTION_LOADOUT["null"]["map"] == "fog"
+			and Rules.FACTION_LOADOUT["bloom"]["map"] == "backwash" and Rules.FACTION_LOADOUT["ember"]["active"] == "sinkhole",
+			"loadouts: the approved faction defaults")
+	var builds := {}
+	var clash := false
+	for seed_i in range(6):
+		var sa := Sim.new()
+		sa.ai_builds = true
+		sa.setup(tp, MapBuilder.layout(tp), {3: "A", 4: "B"}, {"A": "ember", "B": "ember"}, 50 + seed_i, {}, {"A": {}})
+		if seed_i == 0:
+			check(sa.loadouts["A"]["active"] == Rules.FACTION_LOADOUT["ember"]["active"], "loadouts: a player with no pick gets the faction default")
+		var key := "%s+%s" % [sa.loadouts["B"]["active"], sa.loadouts["B"]["map"]]
+		builds[key] = true
+		var sb := Sim.new()
+		sb.ai_builds = true
+		sb.setup(tp, MapBuilder.layout(tp), {3: "A", 4: "B"}, {"A": "ember", "B": "ember"}, 50 + seed_i, {}, {})
+		if "%s+%s" % [sb.loadouts["A"]["active"], sb.loadouts["A"]["map"]] == "%s+%s" % [sb.loadouts["B"]["active"], sb.loadouts["B"]["map"]]:
+			clash = true
+	check(builds.size() >= 2 and not clash, "loadouts: AI seats mix their builds across matches (%s) and two AIs of one faction never share one" % str(builds.keys()))
 	# ---------------------------------------------------------------- NULL's decoys look real to everyone else
 	s = _mk(tp, "null", "ember")
 	s.nodes[3]["units"] = 200.0

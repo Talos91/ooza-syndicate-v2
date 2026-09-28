@@ -1753,7 +1753,7 @@ func _pick_power(sim: Sim, id: String) -> Array:
 			var best := -1
 			var best_s := 0.0
 			for h in sim.hordes:
-				if not _hostile(sim, h["owner"]) or h["state"] == "absorb" or h.get("immune", false) or h["units"] < 8.0 * Rules.SCALE:
+				if not _hostile(sim, h["owner"]) or h["state"] == "absorb" or h["units"] < 8.0 * Rules.SCALE:
 					continue
 				var goal: Dictionary = sim.nodes[sim.line_goal(h)]
 				if goal["owner"] == "" or not sim.allied(goal["owner"], seat):
