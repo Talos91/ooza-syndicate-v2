@@ -2346,16 +2346,42 @@ func _start_last_stand() -> void:
 # (the map's orders; chaos: one of its connected orders); the order's last ring never falls; a relay
 # waits until every ring it links to has fallen; anything a wave would cut off from the surviving map
 # (fixed decks and plaza links only - never counting on a relay deck) falls with that wave.
+var lab_method := ""                                  # MAP LAB: the next Last Stand's method, forced (lab_panel.gd)
+
+
 func _start_rings() -> void:
 	last_stand_active = true
 	var methods: Array = (_map_last_stand.get("methods", []) as Array).filter(func(m): return _ring_orders.has(m))
+	if methods.is_empty() and lab_method != "":
+		methods = [lab_method]
 	if methods.is_empty():                             # the map has no Last Stand (maps 3.0 tutorials)
 		last_stand_waves = []
 		last_stand_method = ""
 		return
 	last_stand_method = methods[rng.randi_range(0, methods.size() - 1)]
 	var order: Array = []
-	if last_stand_method == "chaos":
+	if lab_method != "":                                 # MAP LAB: LS INWARD / OUTWARD / CHAOS, even when the map doesn't list it
+		last_stand_method = lab_method
+		lab_method = ""
+		var rs := {}
+		for n in nodes:
+			rs[n["ring"]] = true
+		var ids: Array = rs.keys()
+		ids.sort()
+		if last_stand_method == "chaos":
+			var all: Array = _ring_orders.get("chaos", [])
+			if not all.is_empty():
+				order = all[rng.randi_range(0, all.size() - 1)]
+			else:
+				order = ids.duplicate()
+				order.shuffle()
+		elif _ring_orders.has(last_stand_method):
+			order = _ring_orders[last_stand_method]
+		else:
+			order = ids.duplicate()
+			if last_stand_method == "inward":
+				order.reverse()
+	elif last_stand_method == "chaos":
 		var all: Array = _ring_orders.get("chaos", [])
 		order = all[rng.randi_range(0, all.size() - 1)] if not all.is_empty() else []
 	else:

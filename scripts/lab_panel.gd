@@ -15,7 +15,7 @@ static var overlay := false                      # the rule overlay starts off (
 # CAMERA trial (Daniele 2026-09-27: "the tall notification on top covers the platforms ... add a lab function to
 # play with camera axis"): pitch (0 = the map's own), the map shifted down the screen (fraction of the map's
 # depth; + = lower on screen, room under the top bar) and zoom (x the fit distance; > 1 = further away).
-static var cam_pitch := 0.0
+static var cam_pitch := 34.0                              # Daniele 2026-09-29: "34 deg is best" (0 = the map's own)
 static var cam_shift := 0.0
 static var cam_zoom := 1.0
 static var cam_pan := Vector2.ZERO                      # metres: x along the screen's right, y away from the camera
@@ -122,6 +122,13 @@ func _ready() -> void:
 		sp.add_child(b)
 	box.add_child(sp)
 	box.add_child(_button("LAST STAND NOW", func(): main.sim.start_last_stand_now(), 22))
+	var lsr := HBoxContainer.new()                      # Daniele 2026-09-29: simulate every Last Stand method
+	for meth in ["inward", "outward", "chaos"]:
+		var mm: String = meth
+		var lb := _button("LS " + mm.to_upper(), func(): _force_ls(mm), 20)
+		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lsr.add_child(lb)
+	box.add_child(lsr)
 	box.add_child(_button("VERY LAST STAND NOW", func(): main.sim.start_very_last_stand_now(), 22))
 	box.add_child(_button("RULE OVERLAY", _toggle_overlay, 22))
 	box.add_child(_button("PERF READOUT", _toggle_perf, 22))
@@ -506,3 +513,12 @@ func _style(b: Button, col: Color) -> void:
 		if st == "focus":
 			sb.draw_center = false
 		b.add_theme_stylebox_override(st, sb)
+
+
+func _force_ls(meth: String) -> void:
+	## LS INWARD / OUTWARD / CHAOS: the Last Stand now, with that method (even one the map doesn't list - the lab shows
+	## what would fall). Only before this match's Last Stand has started: RESTART to try another.
+	if main.sim.last_stand_active or main.sim.over:
+		return
+	main.sim.lab_method = meth
+	main.sim.start_last_stand_now()
