@@ -205,6 +205,14 @@ var _freeze_run := 0.0
 var _last_clock := -1.0
 var _order_sent: Array = []                        # guest: msec of orders waiting for their feedback line
 var _rtt_ms := -1.0
+# NET (0.22.x, Daniele: tell a slow phone from a bad connection in the telemetry): the round's totals, round_net_stats()
+var _rx_snaps := 0                                 # guest: snapshots received this round
+var _rx_first := 0                                 # msec of the first one
+var _gap_max := 0                                  # the longest gap between two (msec)
+var _rtt_n := 0
+var _rtt_sum := 0.0
+var _rtt_max := 0.0
+var _delay_max := 0.0
 var _elapsed := 0.0
 var _path_seen := {}                               # host: horde id -> [path key, time it changed]
 var _order_limits := {}
@@ -1193,6 +1201,13 @@ func _launch(info: Dictionary) -> void:
 	_freeze_run = 0.0
 	_last_clock = -1.0
 	_order_sent = []
+	_rx_snaps = 0                                  # NET: the round's network totals start again
+	_rx_first = 0
+	_gap_max = 0
+	_rtt_n = 0
+	_rtt_sum = 0.0
+	_rtt_max = 0.0
+	_delay_max = 0.0
 	sim = null
 	if not no_reload:
 		get_tree().reload_current_scene()
@@ -1787,6 +1802,18 @@ func _track_freeze(dt: float) -> void:
 	_last_clock = sim.time
 
 
+func round_net_stats() -> Dictionary:
+	## NET: this guest's network over the round, for the match telemetry: updates a second, the longest gap between two,
+	## freezes, the order round trip (mean / worst), the largest playout buffer, corrections. {} on a host or offline.
+	if hosting or bridge == null or _rx_snaps < 2:
+		return {}
+	var span := maxf(0.001, (_last_arrival - _rx_first) / 1000.0)
+	return {"hz": snappedf((_rx_snaps - 1) / span, 0.1), "gap_max_ms": _gap_max, "freezes": _freeze_n,
+			"freeze_s": snappedf(_freeze_s, 0.1), "rtt_ms": int(round(_rtt_sum / _rtt_n)) if _rtt_n > 0 else -1,
+			"rtt_max_ms": int(_rtt_max), "buffer_max_s": snappedf(_delay_max, 0.01), "corrections": corr_big,
+			"hard_snaps": corr_snaps, "server_hosted": server_hosted()}
+
+
 func net_stats_line() -> String:
 	## The PAUSE panel in an online round (Daniele: "some stutter here and there"): the device's frame rate, how
 	## many updates arrive a second, the freezes this round and the order round trip - a screenshot tells a slow
@@ -2196,8 +2223,14 @@ func _guest_handle(kind: String, bytes: PackedByteArray) -> void:
 				if _last_arrival > 0 and (now_ms - _last_arrival) / 1000.0 > STALL:   # a stall: hold more in hand next time
 					_delay = clampf(maxf(_delay, (now_ms - _last_arrival) / 1000.0 * 0.5 + 0.1), PLAYOUT_DELAY, PLAYOUT_DELAY_MAX)
 					_calm = 0.0
+				if _last_arrival > 0:                  # NET: the round's longest gap between two snapshots
+					_gap_max = maxi(_gap_max, now_ms - _last_arrival)
 				_last_arrival = now_ms
 				_arrivals.append(now_ms)
+				_rx_snaps += 1
+				if _rx_first == 0:
+					_rx_first = now_ms
+				_delay_max = maxf(_delay_max, _delay)
 				while not _arrivals.is_empty() and now_ms - int(_arrivals[0]) > 5000:
 					_arrivals.pop_front()
 				if _smooth() and not _fresh:           # server rooms: the playout buffer shows it on time
@@ -2224,6 +2257,9 @@ func _guest_handle(kind: String, bytes: PackedByteArray) -> void:
 			if not _order_sent.is_empty():
 				var rtt := float(now - int(_order_sent.pop_front()))
 				_rtt_ms = rtt if _rtt_ms < 0.0 else lerpf(_rtt_ms, rtt, 0.3)
+				_rtt_n += 1                            # NET
+				_rtt_sum += rtt
+				_rtt_max = maxf(_rtt_max, rtt)
 			order_feedback.emit(str(data))
 		"rematch_votes":
 			if data is Dictionary and int(data.get("round", -1)) == match_round:

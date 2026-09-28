@@ -1692,7 +1692,8 @@ func _telemetry_match(left_early: bool) -> void:
 		return
 	var hosted := online and Net.has_method("server_hosted") and bool(Net.call("server_hosted"))
 	Telemetry.match_event(sim, HUMAN, {"map": str(map.get("code", "")), "mode": mode, "online": online,
-			"server_hosted": hosted, "ai_level": "" if online else ai_level, "left_early": left_early})
+			"server_hosted": hosted, "ai_level": "" if online else ai_level, "left_early": left_early,
+			"net": Net.call("round_net_stats") if online and Net.has_method("round_net_stats") else {}})   # NET: a guest's connection
 # --- end PROGRESSION: telemetry ---
 
 
