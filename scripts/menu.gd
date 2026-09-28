@@ -4151,7 +4151,7 @@ func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, mo
 		art.position = Vector2(tx, 7)
 		art.size = Vector2(ts, ts)
 		r.add_child(art)
-		title_text = ("YOU / " if id == Net.local_id() else "") + str(UiKit.NAMES[f])
+		title_text = ("YOU / " if id == Net.local_id() else "") + Net.name_of(id).to_upper() + "  ·  " + str(UiKit.NAMES[f])   # NAMES (net-7): the player's name, then the faction
 		var words := ["HOST  ·  DEPLOYS" if id == Net.room_owner or (id == 1 and not Net.server_hosted()) else "JOINED"]   # READY: DEPLOY is the owner's ready
 		if Net.is_away(id):
 			words.append("RECONNECTING")
