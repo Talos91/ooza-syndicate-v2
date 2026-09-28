@@ -34,7 +34,7 @@ var sim: Sim
 var vis: Dictionary
 var backdrop: CanvasLayer
 var _vats := {}                      # node id -> record (see _bind)
-static var _tanks := {}              # model key -> {"tanks": [{c, r, y0, y1}], "y0", "y1", "surface"}
+static var _tanks := {}              # "model key#mesh id" -> {"tanks": [{c, r, y0, y1}], "y0", "y1", "surface"}
 var _mesh := {}                      # faction -> creature Mesh
 var _res_mat := {}                   # "faction|owner" -> resident ShaderMaterial (seat colours fixed per match)
 var _tex := {}
@@ -201,9 +201,11 @@ func setup(m: Node3D, s: Sim, v: Dictionary) -> void:
 
 static func tank_info(vat_mesh: Mesh, key: String) -> Dictionary:
 	## The tanks of a vat model, from its OS_Ooze surface: vertices grouped into columns across x,
-	## each column one tank. Cached per model.
-	if _tanks.has(key):
-		return _tanks[key]
+	## each column one tank. Cached per model AND mesh (0.22.0 web crash report: the light and the HD copy of a
+	## model - hd.pck arrives mid-match - order their surfaces differently; a surface index is only its mesh's).
+	var ck := "%s#%d" % [key, vat_mesh.get_instance_id()]
+	if _tanks.has(ck):
+		return _tanks[ck]
 	var info := {"tanks": [], "y0": 0.0, "y1": 1.0, "surface": -1}
 	var measured: Array = Cosmetics.points(key).get("tanks", [])
 	if not measured.is_empty():                        # 0.19.0 skin vats: tanks measured from the GLB (Cosmetics.TANKS)
@@ -215,7 +217,7 @@ static func tank_info(vat_mesh: Mesh, key: String) -> Dictionary:
 		info["tanks"] = measured
 		info["y0"] = measured.map(func(t): return float(t["y0"])).min()
 		info["y1"] = measured.map(func(t): return float(t["y1"])).max()
-		_tanks[key] = info
+		_tanks[ck] = info
 		return info
 	for s in range(vat_mesh.get_surface_count()):
 		var m := vat_mesh.surface_get_material(s)
@@ -246,7 +248,7 @@ static func tank_info(vat_mesh: Mesh, key: String) -> Dictionary:
 			info["y0"] = y0
 			info["y1"] = y1
 			break
-	_tanks[key] = info
+	_tanks[ck] = info
 	return info
 
 

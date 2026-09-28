@@ -240,7 +240,11 @@ static func _fixed(mat: Material) -> bool:
 
 
 static func _surface_mat(mi: MeshInstance3D, s: int) -> Material:
-	var o := mi.get_surface_override_material(s)
+	## The material surface s draws with now (its override, else the mesh's) - null past the CURRENT mesh's
+	## surfaces (0.22.0 web crash report: a piece re-meshed under its slots, 8 surfaces -> 7).
+	if mi.mesh == null or s >= mi.mesh.get_surface_count():
+		return null
+	var o := mi.get_surface_override_material(s) if s < mi.get_surface_override_material_count() else null
 	return o if o != null else mi.mesh.surface_get_material(s)
 
 
@@ -256,12 +260,18 @@ static func _static_key(mi: MeshInstance3D, chunk: String) -> String:
 	return k + chunk if any else ""
 
 
-func _batch(key: String, mi: MeshInstance3D, surfaces: Array, mats: Array) -> Batch:
+func _batch(key: String, mi: MeshInstance3D, surfaces: Array, mats: Array, from: Mesh) -> Batch:
+	## The batch `key` (made on first use from surfaces `surfaces` of mesh `from` - the Piece's own mesh, whose
+	## instance id is in the key - drawn with `mats`).
 	if _batches.has(key):
 		return _batches[key]
 	var mesh := ArrayMesh.new()
-	var src = mi.mesh.get("_surfaces") if mi.mesh is ArrayMesh else null
-	if src is Array and (src as Array).size() == mi.mesh.get_surface_count():
+	var src = from.get("_surfaces") if from is ArrayMesh else null
+	var raw := src is Array and (src as Array).size() == from.get_surface_count()
+	if raw:                                              # (never a surface dictionary without its format)
+		for k in surfaces:
+			raw = raw and int(k) < (src as Array).size() and src[k] is Dictionary and (src[k] as Dictionary).has("format")
+	if raw:
 		# the raw surfaces, LODs included (a batch keeps the kit's automatic LODs: a far chunk draws light)
 		var out := []
 		for k in range(surfaces.size()):
@@ -272,7 +282,7 @@ func _batch(key: String, mi: MeshInstance3D, surfaces: Array, mats: Array) -> Ba
 	else:
 		for k in range(surfaces.size()):
 			var s: int = surfaces[k]
-			mesh.add_surface_from_arrays(mi.mesh.surface_get_primitive_type(s), mi.mesh.surface_get_arrays(s))
+			mesh.add_surface_from_arrays(from.surface_get_primitive_type(s), from.surface_get_arrays(s))
 			mesh.surface_set_material(k, mats[k])
 	var bt := Batch.new()
 	bt.mm = MultiMesh.new()
@@ -292,6 +302,8 @@ func _batch(key: String, mi: MeshInstance3D, surfaces: Array, mats: Array) -> Ba
 func _attach(p: Piece) -> void:
 	if p.attached:
 		return
+	if _stale(p):
+		return                                            # re-meshed: _rebind has dealt with it
 	p.attached = true
 	p.mi.layers = 0                                   # the node stays; the batch draws it
 	p.mi.set_meta("map_batch", true)
@@ -306,7 +318,7 @@ func _attach(p: Piece) -> void:
 			if _fixed(p.mesh.surface_get_material(s)):
 				surfaces.append(s)
 				mats.append(_surface_mat(p.mi, s))
-		_batch(p.static_key, p.mi, surfaces, mats).add(p, STATIC_GROUP)
+		_batch(p.static_key, p.mi, surfaces, mats, p.mesh).add(p, STATIC_GROUP)
 	for s in range(p.mesh.get_surface_count()):
 		if not _fixed(p.mesh.surface_get_material(s)):
 			_attach_surface(p, s)
@@ -328,7 +340,7 @@ func _attach_surface(p: Piece, s: int) -> void:
 		_batches[mk].add(p, s)
 		return
 	var key := "%d/%d/%d%s" % [p.mesh.get_instance_id(), s, m.get_instance_id() if m else 0, p.chunk]
-	_batch(key, p.mi, [s], [m]).add(p, s)
+	_batch(key, p.mi, [s], [m], p.mesh).add(p, s)
 
 
 func _detach(p: Piece) -> void:
@@ -349,7 +361,28 @@ func _untrack(p: Piece) -> void:
 		p.mi.remove_meta("map_batch")
 
 
+func _stale(p: Piece) -> bool:
+	## The piece's node got a new mesh since it was tracked (a split turret: MapBuilder.split_spinner, 8 surfaces ->
+	## 7; any swap under a tracked node): its slots and surface indices are the old mesh's. A structure (polled)
+	## is untracked here and tracked afresh by the next poll, with its new children; a static piece is re-bound
+	## to its new mesh at once. True when it was stale.
+	if not is_instance_valid(p.mi) or p.mi.mesh == p.mesh:
+		return false
+	_detach(p)
+	if p in _polled:
+		return true                                       # _process: untrack + _track_polled
+	p.mesh = p.mi.mesh
+	p.static_key = _static_key(p.mi, p.chunk) if p.mesh != null else ""
+	if p.mesh != null and p.mi.material_override == null and p.mi.is_visible_in_tree():
+		_attach(p)
+	return true
+
+
 func _recolour(p: Piece) -> void:
+	## Every batched surface whose material changed moves to its new material's batch (MapBuilder.set_lights /
+	## apply_owner call refresh(); the poll no longer re-reads them every frame).
+	if _stale(p):
+		return
 	for s in p.dyn.keys():
 		var m := _surface_mat(p.mi, s)
 		if m != p.dyn[s]:
@@ -399,7 +432,12 @@ func _process(_dt: float) -> void:
 			p.xform = xf
 			for g in p.slots:
 				p.slots[g][0].move(p, g)
-		_recolour(p)
+		# perf pass: kept in the poll (Scenery's liquid / glass, Fx's relay symbol, CombatFx's detail and
+		# set_state_color change a structure's materials without a refresh()), but read in place - no key copy
+		for sf in p.dyn:
+			if _surface_mat(p.mi, sf) != p.dyn[sf]:
+				_recolour(p)
+				break
 	for mg in _dirty:
 		(mg as Merged).rebuild()
 	_dirty.clear()
