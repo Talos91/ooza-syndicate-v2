@@ -56,6 +56,14 @@ func _init() -> void:
 	check(sc.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED
 			and sc.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "TouchScroll.horizontal swipes sideways only")
 	sc.free()
+	# BATTLEFIELD > BACKGROUND: AUTO by default, a pick / ROTATE saved; a screenless run (a server's match host) keeps the map's own
+	UiKit.path = CFG
+	check(UiKit.backdrop_choice() == "auto", "BACKGROUND is AUTO by default")
+	check(UiKit.save_backdrop_choice("2") and UiKit.backdrop_choice() == "2", "a BACKGROUND pick is saved")
+	check(UiKit.save_backdrop_choice("rotate") and UiKit.backdrop_choice() == "rotate", "... and ROTATE")
+	check(UiKit.save_backdrop_choice("nope") and UiKit.backdrop_choice() == "auto", "an unknown pick falls back to AUTO")
+	check(UiKit.backdrop_name(7, "res://assets/art/backdrops/battle-rent-is-due.jpg") == "RENT IS DUE", "a sixth background is named after its file")
+	check(UiKit.battle_backdrop(3, 5) == 3, "headless: the map's own background, whatever the pick")
 	# COLOUR-BLIND MODE: off by default, saved, and every seat of a match on its palette
 	Rules.settings_path = CFG
 	Rules._colour_blind = -1

@@ -14,7 +14,9 @@ Sources (Daniele's Art Direction folder, "Alpha 20 UI Expansion" / ASSET-SOURCES
       versus/<faction>.png    -> assets/art/ui/stage_<faction>.jpg (1024 px; VERSUS: each side's empty stage)
       emblems/<faction>-*.png -> assets/art/ui/emblem_<faction>.png (192 px RGBA) + emblem_<faction>_32.png (32 px):
                                  THE faction mark everywhere (UiKit.emblem; the HUD tints it in the seat colour)
-  - the VEX campaign mission art, campaign-isometric-v2/*.png       -> assets/art/campaign/vex-<id>.jpg (1280 px)
+  - the VEX campaign mission backgrounds, Art/Campaign Backgrounds/[v2 ...]/<id>-*.png -> assets/art/campaign/vex-<id>.jpg
+    (1280 px) and the battle backgrounds, Art/Battle Backgrounds/v1 .../*.png -> assets/art/backdrops/battle-*.jpg
+    (1280 px); `python tools/ui_art.py --campaign` runs only these
 JPEG for the opaque plates keeps the source small; their .import files are LOSSY (quality 0.8) with a size limit
 (backdrops 1600, mission art / PLAY cards / stages 1024, cutouts 640, emblems 192), or Godot stores them lossless and the web index.pck grows ~20 MB.
 """
@@ -129,18 +131,45 @@ def main() -> int:
     for card, src in PLAY_CARDS.items():
         fit(Image.open(os.path.join(FINAL, "play", src + ".png")).convert("RGB"), 1024).save(
             os.path.join(OUT_UI, "play_%s.jpg" % card), quality=84)
-    camp = os.path.join(UX, "campaign-isometric-v2")
-    for name in sorted(os.listdir(camp)):
-        if not name.endswith("-v2.png"):
-            continue
-        mission = name.split("-")[0]                  # "01" .. "10", "s1" ..
-        fit(Image.open(os.path.join(camp, name)).convert("RGB"), 1280).save(
-            os.path.join(OUT_CAMP, "vex-%s.jpg" % mission), quality=82)
-    for d in (OUT_UI, OUT_CAMP):
+    campaign_art()
+    for d in (OUT_UI, OUT_CAMP, OUT_BATTLE):
         total = sum(os.path.getsize(os.path.join(d, n)) for n in os.listdir(d))
         print(d, len(os.listdir(d)), "files", total // 1024, "KB")
     return 0
 
 
+# ------------------------------------------------------------------ CAMPAIGN: mission + battle backgrounds
+# Daniele's top-down backgrounds (2026-09-28, still WIP - "we'll get back later"): one per VEX mission (the hub card,
+# the briefing and the match backdrop all use it) and five general ones for normal matches (Scenery picks one per map).
+# The newest set wins per mission: Art/Campaign Backgrounds/v2 ... (WIP)/<id>-*.png, else Art/Campaign Backgrounds/<id>-*.png.
+CAMP_ART = os.path.join(os.path.dirname(FINAL), os.pardir, "Campaign Backgrounds")
+BATTLE_ART = os.path.join(os.path.dirname(FINAL), os.pardir, "Battle Backgrounds", "v1 2026-09-28 (WIP)")
+OUT_BATTLE = os.path.join(HERE, "assets", "art", "backdrops")
+CAMP_SETS = ["v2 2026-09-28 (WIP)", ""]            # newest first; "" = the folder itself
+
+
+def campaign_art() -> None:
+    os.makedirs(OUT_CAMP, exist_ok=True)
+    os.makedirs(OUT_BATTLE, exist_ok=True)
+    done = set()
+    for sub in CAMP_SETS:
+        d = os.path.join(CAMP_ART, sub)
+        for name in sorted(os.listdir(d)):
+            mission = name.split("-")[0]              # "01" .. "10", "s1" ..
+            if not name.endswith(".png") or name.endswith("-alt.png") or mission in done:
+                continue
+            done.add(mission)
+            fit(Image.open(os.path.join(d, name)).convert("RGB"), 1280).save(
+                os.path.join(OUT_CAMP, "vex-%s.jpg" % mission), quality=82)
+    for name in sorted(os.listdir(BATTLE_ART)):
+        if name.endswith(".png"):
+            fit(Image.open(os.path.join(BATTLE_ART, name)).convert("RGB"), 1280).save(
+                os.path.join(OUT_BATTLE, "battle-%s.jpg" % name[:-4]), quality=82)
+    print("campaign missions:", sorted(done))
+
+
 if __name__ == "__main__":
+    if "--campaign" in sys.argv:                      # only the CAMPAIGN block (no other art sources needed)
+        campaign_art()
+        sys.exit(0)
     sys.exit(main())
