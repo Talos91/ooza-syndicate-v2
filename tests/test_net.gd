@@ -537,6 +537,30 @@ func _run() -> void:
 	_deliver()
 	check(r2.sim.time > 0.0 or r2.sim.hordes.size() >= 0, "snapshots reach the reconnected guest")
 
+	# ---------------------------------------------------------------- UI: the room owner's BACKGROUND for everyone
+	_open_room("1v1")
+	var bg1 := _join("gbg")
+	_deliver()
+	check(host.room_backdrop == "auto" and bg1.room_backdrop == "auto", "BACKGROUND: a new room plays the map's own")
+	host.set_room_backdrop("3")
+	_deliver()
+	check(bg1.room_backdrop == "3", "BACKGROUND: the owner's pick reaches the guests")
+	bg1.set_room_backdrop("1")                         # a guest can't change it
+	_deliver()
+	check(host.room_backdrop == "3", "BACKGROUND: a guest's change is refused")
+	host.set_room_backdrop("nope")
+	check(host.room_backdrop == "3", "BACKGROUND: an unknown pick is refused")
+	_ready_all()
+	host.start_match()
+	_deliver()
+	check(int(host.match_info.get("backdrop", -9)) == 3 and int(bg1.match_info.get("backdrop", -9)) == 3,
+			"BACKGROUND: the round's background is the same on every screen")
+	host.set_room_backdrop("rotate")                   # (in a match: owner settings wait for the lobby)
+	check(host.room_backdrop == "3", "BACKGROUND: no change mid-match")
+	host.leave()
+	check(host.room_backdrop == "auto", "BACKGROUND: leaving resets it")
+	bg1.leave()
+
 	# ---------------------------------------------------------------- EMPTY SEATS: AI
 	_open_room("FFA3")
 	var a1 := _join("g1")

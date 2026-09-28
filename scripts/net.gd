@@ -170,6 +170,12 @@ var _idle_warned := false
 var _room_idle := ROOM_IDLE                        # tests: --idle-close=<s> (a local relay's --host-arg)
 var _closing := false
 var ai_fill := ""                                  # host setting: "" = every seat needs a player, else the AI level for empty seats
+# UI (Daniele 2026-09-28): the ROOM OWNER picks the match background for everyone - "auto" (the map's own) / "rotate" (the next
+# one each round) / "0".."n" (that one). The host resolves it to one index at launch (match_info "backdrop", -1 = the map's
+# own), so every screen - a headless match host's too - shows the same. Offline each player keeps their own (UiKit).
+var room_backdrop := "auto"
+const BACKDROP_COUNT := 5                          # Scenery.BATTLE_BACKDROPS.size() (net.gd loads without Scenery)
+# --- end UI ---
 var rejoin := {}                                   # guest: {code, token, faction} to RECONNECT to a dropped room
 var _tokens := {}                                  # host: player id -> secret rejoin token (never broadcast)
 var _fresh := false                                # guest: the first snapshot of a round (a rejoin catches up)
@@ -548,6 +554,26 @@ func ai_seats() -> Dictionary:
 	return out
 
 
+func set_room_backdrop(v: String) -> void:
+	## UI: the owner's BACKGROUND pick for the room (the same checks as the other owner settings).
+	if _ask_owner("backdrop", v):
+		return
+	var ok := v in ["auto", "rotate"] or (v.is_valid_int() and int(v) >= 0 and int(v) < BACKDROP_COUNT)
+	if hosting and not active and ok and v != room_backdrop:
+		room_backdrop = v
+		publish_lobby()
+
+
+func _backdrop_index() -> int:
+	## UI: the round's background for match_info: -1 = the map's own (Scenery.backdrop_for's hash), else that index;
+	## ROTATE moves on by one each round, from a room-dependent start.
+	if room_backdrop.is_valid_int():
+		return clampi(int(room_backdrop), 0, BACKDROP_COUNT - 1)
+	if room_backdrop == "rotate":
+		return absi(hash(room_code) + match_round + 1) % BACKDROP_COUNT
+	return -1
+
+
 func set_ai_fill(level: String) -> void:
 	if _ask_owner("ai_fill", level):
 		return
@@ -663,6 +689,7 @@ func leave(forget := true) -> void:
 	## forget = false keeps the RECONNECT details (a dropped connection, not LEAVE ROOM).
 	_creating = false
 	room_owner = -1
+	room_backdrop = "auto"                             # UI: a new room starts on the map's own background
 	if forget:
 		_save_rejoin({})
 	if OS.has_feature("web"):
@@ -753,6 +780,8 @@ func _owner_op(id: int, p: Dictionary) -> void:
 				toggle_abilities()
 		"ai_fill":
 			set_ai_fill(str(arg))
+		"backdrop":                                    # UI: the owner's BACKGROUND pick
+			set_room_backdrop(str(arg))
 		"move":
 			if arg is Array and (arg as Array).size() == 2 and _is_int(arg[0]) and _is_int(arg[1]):
 				move_to_team(int(arg[0]), int(arg[1]))
@@ -991,7 +1020,8 @@ func _reseat(teams := {}) -> void:
 
 func publish_lobby() -> void:
 	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path, "siege": siege,
-			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities, "owner": room_owner})
+			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities, "owner": room_owner,
+			"backdrop": room_backdrop})                # UI: an older client ignores it
 	lobby_changed.emit()
 
 
@@ -1101,6 +1131,7 @@ func launch_round(fill := "") -> void:
 			ai[SEATS[slot]] = level
 	var info := {"round": match_round + 1, "map": map_path, "mode": mode, "seed": randi() % 100000,
 			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(), "loadouts": loadouts,
+			"backdrop": _backdrop_index(),             # UI: the round's background, the same on every screen
 			"cosmetics": cosmetics,
 			"rules": {"bridge_combat": siege, "last_stand": last_stand, "abilities_on": abilities, "deck_speed": Rules.deck_speed,
 					"node_speed_mult": Rules.node_speed_mult, "door_rate": Rules.door_rate,
@@ -2143,6 +2174,7 @@ func _guest_handle(kind: String, bytes: PackedByteArray) -> void:
 			map_path = str(data["map"])
 			last_stand = bool(data["last_stand"])
 			ai_fill = str(data.get("ai_fill", ""))
+			room_backdrop = str(data.get("backdrop", "auto"))   # UI
 			abilities = bool(data.get("abilities", true))
 			connected = true
 			room_owner = int(data.get("owner", 1))

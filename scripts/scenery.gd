@@ -112,9 +112,25 @@ static func backdrop_for(map_code: String, mission_key := "") -> String:
 			return p
 	if map_code == "" or map_code.begins_with("T-") or map_code.begins_with("D-"):
 		return DEFAULT_BACKDROP
-	var bi := UiKit.battle_backdrop(absi(hash(map_code)) % BATTLE_BACKDROPS.size(), BATTLE_BACKDROPS.size())   # UI: your
-	var p2: String = BATTLE_BACKDROPS[bi]                                        # BATTLEFIELD > BACKGROUND pick (your screen)
+	var auto_i := absi(hash(map_code)) % BATTLE_BACKDROPS.size()
+	var bi := auto_i
+	var room := _room_backdrop()                       # UI: online, the room owner's pick for everyone (Net.match_info)
+	if room == -2:
+		bi = UiKit.battle_backdrop(auto_i, BATTLE_BACKDROPS.size())   # offline: your BATTLEFIELD > BACKGROUND pick
+	elif room >= 0:
+		bi = room % BATTLE_BACKDROPS.size()
+	var p2: String = BATTLE_BACKDROPS[bi]
 	return p2 if ResourceLoader.exists(p2) else DEFAULT_BACKDROP
+
+
+static func _room_backdrop() -> int:
+	## UI: -2 = not in an online match (your own pick applies); -1 = the room plays the map's own; else the owner's index.
+	## Net by path: headless --script runs have no autoloads.
+	var tree := Engine.get_main_loop() as SceneTree
+	var net = tree.root.get_node_or_null("Net") if tree != null else null
+	if net == null or not bool(net.get("active")):
+		return -2
+	return int((net.get("match_info") as Dictionary).get("backdrop", -1))
 
 
 static func make_backdrop(parent: Node, path := DEFAULT_BACKDROP) -> CanvasLayer:
