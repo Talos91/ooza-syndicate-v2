@@ -22,6 +22,20 @@ extends RefCounted
 
 const HEAD := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const BODY := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
+const SYMBOLS := preload("res://assets/fonts/DejaVuSansMono.woff2")   # arrows, stars, ticks (Hud.SYMBOL_FONT)
+# Rajdhani and Russo One have no arrows (← →), stars (★ ☆) or ticks (✓), and the web build has no system fonts to
+# fall back on (they showed as boxes): both faces take DejaVu Sans Mono as their fallback, once, when UiKit loads -
+# the shared font resources, so every label in the game gets it.
+static var _symbols_ready := _add_symbol_fallback()
+
+
+static func _add_symbol_fallback() -> bool:
+	for f: Font in [HEAD, BODY]:
+		if not f.fallbacks.has(SYMBOLS):
+			var fb := f.fallbacks.duplicate()
+			fb.append(SYMBOLS)
+			f.fallbacks = fb
+	return true
 const BASE := Color("041016")                      # base surface
 const PANEL := Color("071820")                     # panel surface, opaque beneath text
 const INK := Color("e8f6fa")                       # primary text

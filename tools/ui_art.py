@@ -56,6 +56,36 @@ def key_out_dark(im: Image.Image, tol: int = 22) -> Image.Image:
     return out
 
 
+def fade_dark_fringe(im: Image.Image, lo: int = 34, hi: int = 58) -> Image.Image:
+    """The originals carry a near-black halo + drop shadow from their old backdrop: invisible on the dark menus, a dark
+    band over bright art (mission results). Fade the near-black pixels CONNECTED TO THE OUTSIDE (a flood from the border
+    through transparent / near-black pixels), ramping back to full by `hi` - so the creatures' own dark parts (pupils,
+    EMBER's rocks, NULL's body), enclosed by their bright outline, are never touched."""
+    im = im.convert("RGBA")
+    w, h = im.size
+    px = im.load()
+    seen = bytearray(w * h)
+    stack = [(x, 0) for x in range(w)] + [(x, h - 1) for x in range(w)] + [(0, y) for y in range(h)] + [(w - 1, y) for y in range(h)]
+    while stack:
+        x, y = stack.pop()
+        i = y * w + x
+        if seen[i]:
+            continue
+        r, g, b, a = px[x, y]
+        m = max(r, g, b)
+        if a > 8 and m >= hi:
+            continue                                  # the creature's lit edge: the flood stops here
+        seen[i] = 1
+        if a > 0:
+            k = 0.0 if m <= lo else (m - lo) / float(hi - lo)
+            px[x, y] = (r, g, b, int(a * k))
+        if x > 0: stack.append((x - 1, y))
+        if x < w - 1: stack.append((x + 1, y))
+        if y > 0: stack.append((x, y - 1))
+        if y < h - 1: stack.append((x, y + 1))
+    return im
+
+
 def fit(im: Image.Image, width: int) -> Image.Image:
     if im.width <= width:
         return im
@@ -68,6 +98,8 @@ def main() -> int:
     for f in ["vex", "null", "bloom", "ember", "solar"]:
         im = Image.open(os.path.join(REFS, f + ".png"))
         im = im.convert("RGBA") if im.mode == "RGBA" else key_out_dark(im)
+        if f != "null":                              # NULL's own dark body reaches its lower edge: the flood would eat it
+            im = fade_dark_fringe(im)
         im = im.crop(im.getbbox())                   # trim the empty margin: the pages place the art themselves
         side = max(im.size)
         sq = Image.new("RGBA", (side, side), (0, 0, 0, 0))
