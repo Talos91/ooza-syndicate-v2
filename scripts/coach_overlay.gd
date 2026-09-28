@@ -491,7 +491,7 @@ var _dim: ColorRect
 var _dim_mat: ShaderMaterial
 var _hand: HandLayer
 var _card: Control
-var _card_bg: NeonPanel
+var _card_bg: Panel
 var _card_header: Label
 var _card_dots: DotsRow
 var _card_text: Label
@@ -500,7 +500,7 @@ var _controls_row: HBoxContainer
 var _card_vb: VBoxContainer
 
 var _complete: Control
-var _complete_bg: NeonPanel
+var _complete_bg: Panel
 var _complete_vb: VBoxContainer
 
 var _targets_px: Array = []           # [{"c": Vector2, "r": float}]
@@ -658,30 +658,52 @@ func _hand_target_px() -> float:
 	return _pt(50.0) if mobile else 68.0
 
 
-func _make_button(text: String, cb: Callable) -> Button:
+func _make_button(text: String, cb: Callable, primary := false) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.add_theme_font_override("font", UI_FONT)
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_override("font", UI_FONT)       # (the display face would clip SKIP STEP in the card's row)
 	b.add_theme_font_size_override("font_size", _btn_fsz())
 	b.custom_minimum_size = Vector2(0, _btn_h())
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.add_theme_stylebox_override("normal", Hud.panel_style(accent))
-	b.add_theme_stylebox_override("hover", Hud.panel_style(Color("00ddf2")))
-	var pressed := Hud.panel_style(Color("00ddf2"))
-	pressed.bg_color = Color("147185")
-	b.add_theme_stylebox_override("pressed", pressed)
-	b.add_theme_color_override("font_color", Color("edf7fa"))
-	b.add_theme_color_override("font_hover_color", Color("edf7fa"))
+	b.clip_text = true
+	b.set_meta("primary", primary)
+	_style_button(b)
 	b.pressed.connect(func(): cb.call())
 	return b
+
+
+func _panel_style(glow := false) -> StyleBoxFlat:
+	## Alpha 21 UI pass: the shell's clipped-corner panel (UiKit.sb) framed in the coach's accent.
+	return UiKit.sb(Color(UiKit.PANEL, 0.96), Color(accent, 0.9 if glow else 0.7), 2 if glow else 1, UiKit.CUT,
+			Color(accent, 0.24) if glow else Color(0, 0, 0, 0))
+
+
+func _style_button(b: Button) -> void:
+	## UiKit.style_button's primary / secondary looks, in the coach's accent colour (the player's colour here).
+	var a := accent
+	var primary := bool(b.get_meta("primary", false))
+	var fc := UiKit.BASE if primary else UiKit.INK
+	if primary:
+		b.add_theme_stylebox_override("normal", UiKit.sb(a, a.lightened(0.25), 1, UiKit.CUT, Color(a, 0.28)))
+		b.add_theme_stylebox_override("hover", UiKit.sb(a.lightened(0.12), a.lightened(0.4), 1, UiKit.CUT, Color(a, 0.4)))
+		b.add_theme_stylebox_override("pressed", UiKit.sb(a.darkened(0.18), a, 1))
+	else:
+		b.add_theme_stylebox_override("normal", UiKit.sb(Color(UiKit.PANEL, 0.94), UiKit.FRAME, 1))
+		b.add_theme_stylebox_override("hover", UiKit.sb(Color(UiKit.PANEL.lightened(0.05), 0.96), a, 1))
+		b.add_theme_stylebox_override("pressed", UiKit.sb(Color(a.darkened(0.7), 0.96), a, 1))
+	b.add_theme_stylebox_override("hover_pressed", b.get_theme_stylebox("pressed"))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(c, fc)
 
 
 func _build_card() -> void:
 	_card = Control.new()
 	_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_card)
-	_card_bg = NeonPanel.new()
-	_card_bg.accent = accent
+	_card_bg = Panel.new()
+	_card_bg.add_theme_stylebox_override("panel", _panel_style())
 	_card_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_card_bg.mouse_filter = Control.MOUSE_FILTER_STOP      # a tap on the card shows the whole line (and never
 	_card_bg.gui_input.connect(func(ev):                   # reaches the map)
@@ -713,7 +735,8 @@ func _build_card() -> void:
 	_header_emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_header_emblem.visible = false                         # (0.19.3: the handler creature is the card's face now)
 	head_row.add_child(_header_emblem)
-	_card_header = _label(TutorialDirector.HANDLER_NAME, _header_fsz(), Color("8fd8e6"))
+	_card_header = _label(TutorialDirector.HANDLER_NAME, _header_fsz(), accent)
+	_card_header.add_theme_font_override("font", UiKit.HEAD)
 	_card_header.clip_text = true
 	_card_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head_row.add_child(_card_header)
@@ -721,7 +744,7 @@ func _build_card() -> void:
 	_card_dots.custom_minimum_size = Vector2(0, _dots_h())
 	_card_dots.dot_r = _pt(3.0) if mobile else 4.0
 	_card_vb.add_child(_card_dots)
-	_card_text = _label("", _body_fsz(), Color("edf7fa"))
+	_card_text = _label("", _body_fsz(), UiKit.INK)
 	_card_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_card_text.visible_characters_behavior = TextServer.VC_CHARS_AFTER_SHAPING   # the typewriter never re-wraps: the
 		# layout (and the buttons under the text) is the full line's from the first frame (0.19.3 hotfix)
@@ -729,7 +752,7 @@ func _build_card() -> void:
 	var button_row := HBoxContainer.new()
 	button_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_card_vb.add_child(button_row)
-	_card_button = _make_button("GOT IT", func(): button_pressed.emit("got_it"))
+	_card_button = _make_button("GOT IT", func(): button_pressed.emit("got_it"), true)
 	_card_button.visible = false
 	button_row.add_child(_card_button)
 	_controls_row = HBoxContainer.new()
@@ -753,9 +776,8 @@ func _build_complete() -> void:
 	_complete = Control.new()
 	_complete.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_complete)
-	_complete_bg = NeonPanel.new()
-	_complete_bg.accent = accent
-	_complete_bg.glowing = true
+	_complete_bg = Panel.new()
+	_complete_bg.add_theme_stylebox_override("panel", _panel_style(true))
 	_complete_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_complete.add_child(_complete_bg)
 	_complete_vb = VBoxContainer.new()
@@ -775,9 +797,12 @@ func set_accent(color: Color) -> void:
 	## `accent` itself then) or any time after (updates what's already built in place).
 	accent = color
 	if is_instance_valid(_card_bg):
-		_card_bg.accent = accent
+		_card_bg.add_theme_stylebox_override("panel", _panel_style())
+		_card_header.add_theme_color_override("font_color", accent)
+		for b in [_card_button] + _controls_row.get_children():
+			_style_button(b)
 	if is_instance_valid(_complete_bg):
-		_complete_bg.accent = accent
+		_complete_bg.add_theme_stylebox_override("panel", _panel_style(true))
 	if is_instance_valid(_hand):
 		_hand.accent = accent
 
@@ -1178,7 +1203,7 @@ func _covers_target(rect: Rect2) -> bool:
 func _fill_complete(title: String, lines: Array, primary_text: String, secondary: Array, graduate: bool) -> void:
 	for c in _complete_vb.get_children():
 		c.queue_free()
-	_complete_vb.add_child(_label(title, 30, Color("edf7fa")))
+	_complete_vb.add_child(_label(title, 30, UiKit.INK))
 	var first_line: Label = null
 	for line in lines:
 		var l := _label(str(line), _body_fsz(), Color("c8e6ee"))
@@ -1212,8 +1237,7 @@ func _fill_complete(title: String, lines: Array, primary_text: String, secondary
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	_complete_vb.add_child(row)
-	var primary := _make_button(primary_text, func(): button_pressed.emit("primary"))
-	primary.add_theme_stylebox_override("normal", Hud.panel_style(Color("00ddf2")))
+	var primary := _make_button(primary_text, func(): button_pressed.emit("primary"), true)
 	row.add_child(primary)
 	for i in range(secondary.size()):
 		var idx := i

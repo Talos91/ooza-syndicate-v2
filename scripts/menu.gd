@@ -823,21 +823,31 @@ func faction_tab(f: String, pos: Vector2, dims: Vector2) -> void:
 
 # ------------------------------------------------------------------ TUTORIAL (TUTORIAL-DESIGN.md §7)
 func show_tutorial() -> void:
+	## TRAINING (screen system 11, a PLAY subflow): the shell with "TRAINING / n OF 10", and in its free area the
+	## TutorialPage (host_in) - the ten lesson rows (any order, a tick when done), CONTINUE = the first lesson not
+	## done. BACK (the shell's) goes through the page's back_pressed. A lesson starts with the faction and colour
+	## picked here last (NEW GAME's picks).
 	_last_show = show_tutorial                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## The TRAINING page: nine lesson rows (any order, a tick when done), CONTINUE = the first lesson not done,
-	## BACK. A lesson starts with the faction and colour picked here last (NEW GAME's picks).
-	clear_page("city")
-	_page = "tutorial"
-	_tut_page = TutorialPage.new()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--tutorial-cfg=") and TutorialDirector.path != arg.substr(15):   # UI: screenshots
+			TutorialDirector.path = arg.substr(15)
+			TutorialDirector.reload_progress()
+	var page := TutorialPage.new()
+	var area := shell_open("OOZE / TRAINING", "play", func(): page.back_pressed.emit())
+	var top := page_title(area, "%s / %d OF %d" % [TutorialDirector.line("page_title"), TutorialDirector.done_count(),
+			TutorialDirector.TOTAL_LESSONS], "LEARN THE CITY.")
+	_tut_page = page
 	_tut_page.standalone_backdrop = false             # the menu's own backdrop shows through
-	_tut_page.set_faction(faction)
+	_tut_page.set_faction(shell_f)
 	_tut_page.set_mobile(mobile)
 	_tut_page.set_lessons(TutorialDirector.lesson_rows())
 	_tut_page.set_progress_note("" if TutorialDirector.saved else TutorialDirector.line("no_storage"))
+	_tut_page.host_in(self, Rect2(0, top, content.size.x, area.end.y - top))
 	_tut_page.continue_pressed.connect(func(): _start_lesson(TutorialDirector.first_unfinished()))
 	_tut_page.lesson_pressed.connect(_start_lesson)
 	_tut_page.back_pressed.connect(show_main)
-	add_child(_tut_page)
+	content.add_child(_tut_page)
+	shell_raise()
 
 
 func _start_lesson(id: int) -> void:
@@ -1567,27 +1577,242 @@ func _cosmetic_path(family: String, id: String) -> String:
 
 
 # ------------------------------------------------------------------ CAMPAIGN (CAMPAIGN-DESIGN.md §3)
-# CAMPAIGN: the campaign map page (CampaignPage, its own canvas and 3D diorama over the backdrop); also opened as
-# menu_open = "campaign" after a mission relaunch. Screenshot / test args: --campaign-all (every playable mission
-# open), --campaign-cfg=<path> (read progress from another file), --campaign-district=<id>, --campaign-card=<key>.
+# CAMPAIGN (Alpha 21 UI pass, screen system 09 / 28): the hub - one district's missions as image cards (Campaign.hub),
+# district paging, CHAPTERS (the faction picker) and CITY MAP (the 3D district diorama, CampaignPage, its own canvas
+# over the backdrop). The hub is the CAMPAIGN tab and the page a mission returns to (menu_open = "campaign").
+# Screenshot / test args: --campaign-all (every playable mission open), --campaign-cfg=<path> (read progress from
+# another file), --campaign-district=<id> (the district shown), --campaign-card=<key> (opens the CITY MAP on that
+# card); the last two are used once per menu.
 var _camp_page: CampaignPage
+var _hub_f := ""                                   # UI: the campaign the hub shows ("" = yours, else the first with content)
+var _hub_i := -1                                   # UI: its district (-1 = the district of the next mission)
+var _camp_args_used := false
 
 
-func show_campaign() -> void:
-	clear_page("city")
-	_page = "campaign"
+func _campaign_args() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--campaign-all":
 			Campaign.all_open = true
-		elif arg.begins_with("--campaign-cfg="):
+		elif arg.begins_with("--campaign-cfg=") and Campaign.path != arg.substr(15):
 			Campaign.path = arg.substr(15)
+			Campaign.reload_all()                      # the top bar may have read the default file already
+
+
+func _hub_faction() -> String:
+	## The campaign on show: the one picked in CHAPTERS, else yours, else the first with content.
+	for f in [_hub_f, faction] + Campaign.FACTION_ORDER:
+		if f != "" and Campaign.has_content(f):
+			return f
+	return ""
+
+
+func show_campaign() -> void:
+	## CAMPAIGN HUB (screen system 09), on the district of the next mission.
+	_campaign_args()
+	_hub_i = -1
+	if not _camp_args_used:
+		_camp_args_used = true
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--campaign-card="):
+				show_city_map()
+				return
+			if arg.begins_with("--campaign-district="):
+				var ds := Campaign.districts(_hub_faction())
+				for i in range(ds.size()):
+					if str(ds[i]["id"]) == arg.substr(20):
+						_hub_i = i
+	_show_hub()
+
+
+func _show_hub() -> void:
+	## "CAMPAIGN / VEX BIOENGINEERS", the district's name and blurb; its missions as FrameCards in a row that swipes
+	## sideways (number, the mission's art, title, stars; CONTINUE / PLAY / REPLAY, LOCKED with the reason, IN
+	## DEVELOPMENT with what it needs); district paging and the stars at the foot; CITY MAP and CHAPTERS top right.
+	_last_show = _show_hub
+	var cf := _hub_faction()
+	var h := Campaign.hub(cf, _hub_i) if cf != "" else {}
+	var area := shell_open("OOZE / CAMPAIGN", "campaign")
+	var x := shell_x()
+	var w := content.size.x - x * 2.0
+	var bh := 42.0
+	var bw := maxf(UiKit.text_w(self, "CHAPTERS", 15, true), UiKit.text_w(self, "CITY MAP", 15, true)) + 40.0
+	var by := area.position.y + 18.0
+	UiKit.btn(self, "CHAPTERS", Vector2(content.size.x - x - bw, by), Vector2(bw, bh), show_chapters, "secondary", shell_f, 15)
+	if h.is_empty():                                   # no campaign has content (never in this build)
+		page_title(area, "CAMPAIGN", "COMING LATER.")
+		return
+	_hub_i = int(h["district_index"])
+	UiKit.btn(self, "CITY MAP", Vector2(content.size.x - x - bw * 2.0 - 12.0, by), Vector2(bw, bh), show_city_map,
+			"secondary", shell_f, 15)
+	var top := page_title(area, "CAMPAIGN / " + str(h["faction_title"]), str(h["district_name"]))
+	var blurb := str(h["district_blurb"])              # "District 1 - where ..." : the foot already says which district
+	if blurb.begins_with("District ") and blurb.find(" - ") > 0:
+		blurb = blurb.substr(blurb.find(" - ") + 3)
+		blurb = blurb.left(1).to_upper() + blurb.substr(1)
+	var bl := UiKit.label(self, blurb, 15, UiKit.MUTED)
+	bl.clip_text = true
+	bl.size = Vector2(w - bw * 2.0 - 24.0, UiKit.line_h(self, 15))
+	_shell_add(bl, Vector2(x, top - 10.0))
+	top += UiKit.line_h(self, 15) - 2.0
+	# the foot: district paging, the district's stars, the campaign's total
+	var th := UiKit.tap_h(self, 42.0)
+	var fy := area.end.y - th - 12.0
+	var n := int(h["district_count"])
+	var i := _hub_i
+	var prev := UiKit.btn(self, "‹", Vector2(x, fy), Vector2(th, th), func(): _hub_page(i - 1), "secondary", shell_f, 22)
+	prev.disabled = i <= 0
+	var dl := UiKit.label(self, "DISTRICT %d OF %d" % [i + 1, n], 15, UiKit.INK, true, 2)
+	var dw := UiKit.text_w(self, dl.text, 15, true) + dl.text.length() * 2.0
+	_shell_add(dl, Vector2(x + th + 14.0, fy + (th - dl.get_minimum_size().y) / 2.0))
+	var nxt := UiKit.btn(self, "›", Vector2(x + th + 28.0 + dw, fy), Vector2(th, th), func(): _hub_page(i + 1), "secondary", shell_f, 22)
+	nxt.disabled = i >= n - 1
+	var ds := UiKit.label(self, "★  %d / %d" % [int(h["stars"]), int(h["stars_max"])], 16, UiKit.STAR if int(h["stars"]) > 0 else UiKit.MUTED)
+	_shell_add(ds, Vector2(x + th * 2.0 + 48.0 + dw, fy + (th - ds.get_minimum_size().y) / 2.0))
+	var tt := "CAMPAIGN STARS   ★  %d / %d" % [Campaign.stars_total(cf), Campaign.stars_max(cf)]
+	var tl := UiKit.label(self, tt, 16, UiKit.STAR if Campaign.stars_total(cf) > 0 else UiKit.MUTED, true)
+	_shell_add(tl, Vector2(content.size.x - x - UiKit.text_w(self, tt, 16, true), fy + (th - tl.get_minimum_size().y) / 2.0))
+	# the mission cards
+	var cards: Array = h["missions"]
+	var gap := 16.0
+	var ch := fy - 14.0 - top
+	var cw := (w - gap * (cards.size() - 1)) / cards.size() if cards.size() <= 3 else (w + gap) / 3.35 - gap
+	var row := _card_row(Vector2(x, top), Vector2(w, ch), cards.size(), cw, gap)
+	var scroll: TouchScroll = row[0]
+	var focus := 0
+	for k in range(cards.size()):
+		var c: Dictionary = cards[k]
+		var st := str(c["state"])
+		var key := str(c["key"])
+		var card := FrameCard.make(self, Vector2(cw, ch), shell_f, scroll)
+		card.set_number(str(c["number"]))
+		card.set_art(str(c["backdrop"]))
+		card.set_title(str(c["title"]))
+		card.set_kicker("NEXT MISSION" if st == "next" else {"side": "SIDE MISSION", "duel": "RIVAL DUEL", "finale": "FINALE"}.get(str(c["kind"]), ""))
+		card.set_state(st)
+		match st:
+			"dev":
+				card.set_note("IN DEVELOPMENT · needs %s" % str(c["needs"]))
+			"locked":
+				card.set_note(str(c["unlock_hint"]))
+			_:
+				card.set_stars(int(c["stars"]), int(c["stars_max"]))
+				if not mobile:                         # a phone's card keeps its art: the stars say enough
+					card.set_note(str(Campaign.mission(key).get("story", "")))
+		if st == "next":
+			focus = k
+		card.pressed.connect(func(): _hub_play(key))
+		card.position = Vector2(k * (cw + gap), 0)
+		(row[1] as Control).add_child(card)
+	if (focus + 1) * (cw + gap) > w:                   # the next mission is past the fold: start the row there
+		var sx := int(focus * (cw + gap))
+		(func(): scroll.scroll_horizontal = sx).call_deferred()
+	shell_raise()
+
+
+func _card_row(pos: Vector2, dims: Vector2, n: int, cw: float, gap: float) -> Array:
+	## [TouchScroll, inner]: a row of `n` cards `cw` wide that swipes sideways when it is wider than `dims`
+	## (a thin scrollbar under it for the mouse).
+	var scroll := TouchScroll.new()
+	scroll.horizontal = true
+	scroll.size = dims + Vector2(0, 14.0)
+	var grab := UiKit.sb(Color(UiKit.accent(shell_f), 0.7), Color(0, 0, 0, 0), 0, 2)
+	grab.set_content_margin_all(3)
+	var track := UiKit.sb(Color(UiKit.FRAME, 0.35), Color(0, 0, 0, 0), 0, 2)
+	track.set_content_margin_all(3)
+	var hb := scroll.get_h_scroll_bar()
+	for s in ["grabber", "grabber_highlight", "grabber_pressed"]:
+		hb.add_theme_stylebox_override(s, grab)
+	hb.add_theme_stylebox_override("scroll", track)
+	_shell_add(scroll, pos)
+	var inner := Control.new()
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inner.custom_minimum_size = Vector2(n * (cw + gap) - gap, dims.y)
+	scroll.add_child(inner)
+	return [scroll, inner]
+
+
+func _hub_page(i: int) -> void:
+	_hub_i = i
+	_show_hub()
+
+
+func _hub_play(key: String) -> void:
+	## CONTINUE / PLAY / REPLAY on a card (a locked or IN DEVELOPMENT one does nothing): the mission's briefing.
+	var m := Campaign.mission(key)
+	if not (Campaign.playable(m) and Campaign.is_open(key)):
+		return
+	UiKit.save_last_faction(Campaign.faction_of(key))   # UI: HOME's hero is the faction played last
+	main.SEAT_FACTIONS[main.HUMAN] = faction           # your pick: the briefing's accent, the menu's after the mission
+	if main.has_method("start_mission"):
+		main.call("start_mission", key, colour)
+
+
+func show_chapters() -> void:
+	## CAMPAIGN CHAPTERS (screen system 28): one card per faction (Campaign.episodes) - its character, OPEN CAMPAIGN /
+	## LOCKED / COMING LATER, its stars; the open one opens its hub. The overall progress at the foot.
+	_last_show = show_chapters
+	var area := shell_open("OOZE / CHAPTERS", "campaign", _show_hub)
+	var x := shell_x()
+	var w := content.size.x - x * 2.0
+	var top := page_title(area, "CAMPAIGN", "CHOOSE YOUR SYNDICATE.")
+	var th := UiKit.tap_h(self, 36.0)
+	var fy := area.end.y - th - 10.0
+	var pt := Campaign.progress_total()
+	var pl := UiKit.label(self, "CAMPAIGN PROGRESS   ★  %d / %d" % [pt.x, pt.y], 16, UiKit.STAR if pt.x > 0 else UiKit.MUTED, true)
+	_shell_add(pl, Vector2(x, fy + (th - pl.get_minimum_size().y) / 2.0))
+	var eps := Campaign.episodes()
+	var gap := 14.0
+	var ch := fy - 12.0 - top
+	var cw := (w - gap * (eps.size() - 1)) / eps.size()
+	var min_w := 290.0 if UiKit.pt(self) > 0.0 else 210.0
+	if cw < min_w:
+		cw = (w + gap) / 3.4 - gap
+	var row := _card_row(Vector2(x, top), Vector2(w, ch), eps.size(), cw, gap)
+	for k in range(eps.size()):
+		var ep: Dictionary = eps[k]
+		var f := str(ep["faction"])
+		var st := str(ep["state"])
+		var card := FrameCard.make(self, Vector2(cw, ch), f, row[0])
+		card.art_frac = 0.5
+		card.set_hero(f)
+		card.set_title(UiKit.NAMES.get(f, f.to_upper()), UiKit.SUBS.get(f, ""))
+		card.set_kicker({"open": "OPEN CAMPAIGN", "locked": "LOCKED"}.get(st, "COMING LATER"))
+		match st:
+			"open":
+				card.set_state("next")
+				card.set_action("OPEN  →")
+				card.set_note("%s  ·  ★ %d / %d" % [str(ep["title"]), int(ep["stars"]), int(ep["stars_max"])])
+			"locked":
+				card.set_state("locked")
+				card.set_note("%s  ·  not unlocked yet" % str(ep["title"]))
+			_:
+				card.set_state("coming")
+				card.set_note("Campaign not yet available")
+		if st == "open":
+			card.pressed.connect(func():
+				_hub_f = f
+				_hub_i = -1
+				_show_hub())
+		card.position = Vector2(k * (cw + gap), 0)
+		(row[1] as Control).add_child(card)
+	shell_raise()
+
+
+func show_city_map() -> void:
+	## CITY MAP: the 3D district diorama (CampaignPage - the campaign as the sinking city; its own canvas, animations
+	## and cards); BACK returns to the hub.
+	_last_show = Callable()                            # CampaignPage fits itself; a rebuild would reset its camera
+	clear_page("city")
+	_page = "campaign"
+	_campaign_args()
 	_camp_page = CampaignPage.new()
 	_camp_page.standalone_backdrop = false
-	_camp_page.set_faction(faction)
+	_camp_page.set_faction(_hub_faction() if _hub_faction() != "" else faction)
 	_camp_page.set_mobile(mobile)
-	_camp_page.back_pressed.connect(show_main)
+	_camp_page.back_pressed.connect(_show_hub)
 	_camp_page.play_pressed.connect(func(key: String):
 		UiKit.save_last_faction(_camp_page.faction)     # UI: HOME's hero is the faction played last
+		main.SEAT_FACTIONS[main.HUMAN] = faction       # your pick: the briefing's accent, the menu's after the mission
 		if main.has_method("start_mission"):          # main.gd's mission launcher (the campaign session adds it)
 			main.call("start_mission", key, colour))
 	add_child(_camp_page)
