@@ -1,6 +1,6 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.22.2 "Alpha 22" - 2026-09-29 (the perf pass; the version reads ALPHA 22.2)
+## 0.22.3 "Alpha 22" - 2026-09-29 (the perf pass; the version reads ALPHA 22.3; guest net stats)
 
 - **Perf pass** (📐's perf-pass agent, report in 05 Handoff/handoffs/architect-specs/perf-pass-report.md): AI thinks 4-6x cheaper (one
   Dijkstra per source per think, cached trip times / reach; decisions identical - same event-log hashes), UnitView bodies in preallocated
@@ -8,7 +8,17 @@
   BRAWL shortcuts. Busy-frame scripts time -20 %, worst AI think frame 6.8 -> 3.0 ms (phone profile, desktop GPU); Last Stand badge
   redraws 450 -> 203 per 450 frames. The 0.22.0 web crash "p_idx = 7 out of bounds (surfaces.size() = 7)" fixed (MapBatch mixed a
   re-meshed piece's old surfaces; test_map_batch_swap). A rival's cast no longer floats its name over its own callout (the SCORCH overlap).
-- **Version label**: the screens read **ALPHA 22.2** (Daniele: "shouldn't it be just alpha 22.0x"); the internal number stays 0.22.2.
+- **Guest network stats** (🖥️): a guest's round totals (updates/s, longest gap, freezes, RTT, buffer, corrections) go into the match
+  telemetry, numbers only, only when telemetry is shared - so lag can be told from frame rate next time.
+- Line endings: a .gitattributes keeps text at LF (the hotfix commit had re-saved 602 files as CRLF from a Windows worktree).
+- **Version label**: the screens read **ALPHA 22.3** (Daniele: "shouldn't it be just alpha 22.0x"); the internal number stays 0.22.2.
+
+## 0.22.2 "Alpha 22" - 2026-09-29 (HOTFIX: music off by default)
+
+- Daniele (2026-09-29, on the phone): "audio is super laggy and the mute doesn't work, the game is unplayable due to the music".
+  **MUSIC now starts OFF on every device** (a new settings key, so 0.22.1's saved ON is ignored) and the pack is only downloaded when you
+  switch it ON; **OFF stops both players at once** (before, the bus was muted but the tracks kept decoding). The lag itself (web Vorbis
+  decoding on phones) is being investigated; switch MUSIC ON only on a desktop for now.
 
 ## 0.22.1 "Alpha 22" - 2026-09-28 (relay redo, soundtrack, Daniele's playtest balance, audit fixes, UI / tutorial / campaign fixes)
 

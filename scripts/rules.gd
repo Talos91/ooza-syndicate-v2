@@ -1159,6 +1159,7 @@ const MUSIC_DUCK_OUT := 0.8
 # [audio] music_on / music_volume. First run: ON, 60 %.
 const MUSIC_VOLUME_STEPS := [15, 30, 60, 100]
 const MUSIC_VOLUME_DEFAULT := 60
+const MUSIC_ON_DEFAULT := false           # HOTFIX 0.22.2 (Daniele 2026-09-29: the music made phones lag and OFF did not stop it): OFF until switched on
 const MUSIC_CREDIT := "Music: Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io)"
 # --- end MUSIC ---
 
