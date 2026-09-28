@@ -270,6 +270,8 @@ func _reach(sim: Sim, hub_id: int) -> Array:
 func _estimate(sim: Sim, n: Dictionary) -> float:
 	## What it believes the garrison is: rounded, off by up to `error`, refreshed every `observe` s.
 	var mem: Dictionary = _memory.get(n["id"], {})
+	if not mem.is_empty() and sim.node_hidden(n["id"], seat):
+		return mem["units"]                               # POWERS: inside a rival's Fog of War it keeps its last look
 	if mem.is_empty() or _clock >= float(mem["next"]):
 		mem = {"units": maxf(0.0, sim.garrison_total(n) * (1.0 + rng.randf_range(-cfg["error"], cfg["error"]))), "next": _clock + float(cfg["observe"])}
 		_memory[n["id"]] = mem
@@ -1691,17 +1693,143 @@ func _pick(sim: Sim, id: String) -> Array:
 			for h in _my_lines(sim):
 				push += h["units"]
 			return [null] if kill >= 8.0 * Rules.SCALE or push >= 30.0 * Rules.SCALE else []
+		"quake", "sever", "backwash", "sinkhole", "fog", "portal", "evac":
+			return _pick_power(sim, id)
 		"core_meltdown":                              # an arriving line the meltdown turns into a capture
 			var sk: Dictionary = Rules.SKILLS["core_meltdown"]
 			for h in _my_lines(sim) + sim.hordes.filter(func(x): return x["owner"] == seat and x["state"] == "absorb" and not x.get("decoy", false)):
 				if not sim.can_cast(seat, "ultimate", h["id"]):
 					continue
-				var n: Dictionary = sim.nodes[h["target"]]
+				var n: Dictionary = sim.nodes[sim.line_goal(h)]
 				var g := _estimate(sim, n) if n["owner"] != "" else float(n["units"])
-				var sac: float = minf(h["units"], maxf(h["units"] * float(sk["share"]), float(sk["min_shown"]) * Rules.SCALE))
+				# POWERS (0.22.2): armed at the start of its trip, so it weighs the whole order, not what left so far
+				var size: float = maxf(h["units"], float(h["ordered"])) if h["streaming"] else float(h["units"])
+				var sac: float = minf(size, maxf(size * float(sk["share"]), float(sk["min_shown"]) * Rules.SCALE))
 				var kills: float = minf(sac * float(sk["kills_per"]), float(sk["cap_shown"]) * Rules.SCALE)
-				if kills >= g or (h["units"] - sac > (g - kills) * 1.05 and h["units"] < g * 1.3):
+				if kills >= g or (size - sac > (g - kills) * 1.05 and size < g * 1.3):
 					return [h["id"]]
+			return []
+	return []
+
+
+# ------------------------------------------------------------------ POWERS (0.22.2): how the AI uses the new powers
+func _pick_power(sim: Sim, id: String) -> Array:
+	var slot: String = Rules.SKILLS[id]["slot"]
+	match id:
+		"quake":                                      # the platform whose decks will carry the most enemy (and none of its own)
+			var warn: float = Rules.SKILLS["quake"]["warn"]
+			var best := -1
+			var best_u := 12.0 * Rules.SCALE
+			for n in sim.nodes:
+				if n["id"] in sim.homes.values() or sim.collapsed.get(n["id"], false):
+					continue
+				var decks: Array = sim._quake_decks(n["id"])
+				if decks.is_empty():
+					continue
+				var toll := _on_decks(sim, decks, warn)
+				if toll[0] > best_u and toll[1] <= 0.5 and sim.can_cast(seat, slot, n["id"]):
+					best_u = toll[0]
+					best = n["id"]
+			return [best] if best >= 0 else []
+		"sever":                                      # the deck that will hold the most enemy when it goes
+			var warn: float = Rules.SKILLS["sever"]["warn"]
+			var best := -1
+			var best_u := 8.0 * Rules.SCALE
+			var seen := {}
+			for h in sim.hordes:
+				if not _hostile(sim, h["owner"]) or h["state"] == "absorb":
+					continue
+				for sp in h["spans"]:
+					var ei: int = sp["edge"]
+					if seen.has(ei) or sp["s1"] < h["s"] - Sim.chain_length(h):
+						continue
+					seen[ei] = true
+					var toll := _on_decks(sim, [ei], warn)
+					if toll[0] > best_u and toll[1] <= 0.5 and not _own_route_uses(sim, ei) and sim.can_cast(seat, slot, ei):
+						best_u = toll[0]
+						best = ei
+			return [best] if best >= 0 else []
+		"backwash":                                   # the biggest line about to land on one of its (or an ally's) nodes
+			var best := -1
+			var best_s := 0.0
+			for h in sim.hordes:
+				if not _hostile(sim, h["owner"]) or h["state"] == "absorb" or h.get("immune", false) or h["units"] < 8.0 * Rules.SCALE:
+					continue
+				var goal: Dictionary = sim.nodes[sim.line_goal(h)]
+				if goal["owner"] == "" or not sim.allied(goal["owner"], seat):
+					continue
+				var sp := sim._current_span(h)
+				if sp.is_empty():
+					continue
+				var back: float = h["s"] - float(sp["s0"])
+				var s: float = back * h["units"]
+				if back >= 6.0 and s > best_s and sim.can_cast(seat, slot, sp["edge"]):
+					best_s = s
+					best = sp["edge"]
+			return [best] if best >= 0 else []
+		"sinkhole":                                   # the enemy structure that hurts it most
+			var best := -1
+			var best_s := 0.0
+			for n in sim.nodes:
+				if not _hostile(sim, n["owner"]) or n["structure"] == "":
+					continue
+				var s := 0.0
+				match str(n["structure"]):
+					"laser": s = 30.0
+					"forge": s = 26.0
+					"monster_hub": s = 24.0
+					"machinegoon": s = 8.0 * n["tier"]
+					"vat": s = 10.0 * n["tier"]
+				for link in sim.adj[n["id"]]:             # a tower next to its own ground first
+					if sim.nodes[link[0]]["owner"] == seat:
+						s += 6.0
+				if s > best_s and sim.can_cast(seat, slot, n["id"]):
+					best_s = s
+					best = n["id"]
+			return [best] if best >= 0 else []
+		"fog":                                        # hide the target of its biggest attack while the line is on its way
+			for h in _my_lines(sim):
+				var goal: Dictionary = sim.nodes[sim.line_goal(h)]
+				if not _hostile(sim, goal["owner"]) or h["units"] < 15.0 * Rules.SCALE:
+					continue
+				var left: float = float(h["L"]) - float(h["s"])
+				if left >= 10.0 and left <= 60.0 and not sim.node_hidden(goal["id"], goal["owner"]) and sim.can_cast(seat, slot, goal["id"]):
+					return [goal["id"]]
+			return []
+		"portal":                                     # a shortcut for its biggest attack: enter ahead, come out near the target
+			var best := []
+			var best_gain := 6.0
+			for h in _my_lines(sim):
+				var goal: int = sim.line_goal(h)
+				if not _hostile(sim, sim.nodes[goal]["owner"]) or h["units"] < 12.0 * Rules.SCALE or h.has("portal"):
+					continue
+				var route: Array = h["route"]
+				var entrance := -1
+				for ns in h["node_spans"]:                # the next node ahead of its head (not the goal)
+					if float(ns["s1"]) > float(h["s"]) and int(ns["node"]) != route[0] and int(ns["node"]) != goal:
+						entrance = int(ns["node"])
+						break
+				if entrance < 0:
+					continue
+				var rest := sim.find_route(entrance, goal)
+				var t_in := _travel(sim, rest) if rest.size() >= 2 else 0.0
+				for ex in sim.portal_exits(entrance):
+					var r2: Array = [] if ex == goal else sim.find_route(ex, goal)
+					if ex != goal and r2.size() < 2:
+						continue
+					var gain: float = t_in - (_travel(sim, r2) if ex != goal else 0.0)
+					if gain > best_gain and sim.can_cast(seat, slot, [entrance, ex]):
+						best_gain = gain
+						best = [entrance, ex]
+			return [best] if not best.is_empty() else []
+		"evac":                                       # save half of a garrison that is about to fall
+			for n in _mine(sim):
+				if n["units"] < 10.0 * Rules.SCALE:
+					continue
+				var t := _threat(sim, n)
+				var hold: float = n["units"] * sim.stat(seat, "garrison") * sim.garrison_div(n)
+				if (t > hold * 1.15 or _drops_soon(sim, n["id"])) and sim.can_cast(seat, slot, n["id"]):
+					return [n["id"]]
 			return []
 	return []
 
