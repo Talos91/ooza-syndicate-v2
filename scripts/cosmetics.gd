@@ -548,6 +548,7 @@ class Preview extends SubViewportContainer:
 	var family := ""
 	var id := "default"
 	var faction := "null"
+	var tier := 0                                         # the tier shown; 0 = T2 for vats / Machinegoons, else T1
 	var _vp: SubViewport
 	var _pivot: Node3D
 	var _cam: Camera3D
@@ -587,11 +588,12 @@ class Preview extends SubViewportContainer:
 			_refresh()                                    # a skin that finished loading takes over
 
 	func _refresh() -> void:
-		var key := Cosmetics.model_key(family, id, faction, 2 if family in ["vat", "machinegoon"] else 1)
+		var t := tier if tier > 0 else (2 if family in ["vat", "machinegoon"] else 1)
+		var key := Cosmetics.model_key(family, id, faction, t)
 		var show := key
 		if key.begins_with("skins/"):
 			if not Cosmetics._ready(key):
-				show = Cosmetics.model_key(family, "default", faction, 2 if family in ["vat", "machinegoon"] else 1)
+				show = Cosmetics.model_key(family, "default", faction, t)
 		if show == _key:
 			return
 		var node := MapBuilder.piece(show)
