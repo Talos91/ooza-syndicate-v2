@@ -1,0 +1,17 @@
+* text=auto
+*.gd text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.service text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.cfg text eol=lf
+*.tscn text eol=lf
+*.import text eol=lf
+Caddyfile text eol=lf
+*.glb binary
+*.png binary
+*.jpg binary
+*.ogg binary
+*.pck binary
+*.wasm binary
