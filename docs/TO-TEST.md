@@ -167,8 +167,8 @@ Live build: https://talos91.github.io/ooza-syndicate-v2/
 - [ ] **Ghost Line** looks translucent to you, real to the opponent (online).
 
 ### Online (two phones)
-- [ ] **Room server**: creating or joining a room should connect through the room relay server by default (no
-      PeerJS peer-to-peer unless the URL has `?relay=peerjs`) - check it still works on a strict/mobile
+- [ ] **Room server**: creating or joining a room should connect through the room relay server (the only
+      transport; the PeerJS rooms are gone since Alpha 21) - check it still works on a strict/mobile
       network that failed before.
 - [ ] Both players see the **same colours**; each picks their own in the lobby, plus their ARMIES cosmetics
       (including the new per-faction rival picks and TERRITORY skin).

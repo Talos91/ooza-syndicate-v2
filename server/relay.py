@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Ooze Syndicate 2.0 - room server (Alpha 20).
 
-Replaces PeerJS: every player keeps one WebSocket to this server and the server forwards strings
-between a room's host and its guests. It speaks the same events net.gd already reads from
-web/peer-transport.js (open / connection / data / closed / error), so the game rules stay in the
-host's Godot Sim; this process never looks inside a packet.
+Replaced PeerJS (0.19.0; the PeerJS rooms are gone since Alpha 21): every player keeps one WebSocket to this server and
+the server forwards packets between a room's host and its guests as events (open / connection / data / closed / error),
+so the game rules stay in the host's Godot Sim. It only peeks at a packet's kind (a slow guest skips snapshots).
 
 Stage 2: {"op": "create"} opens a room HOSTED ON THE SERVER. The relay starts a headless Godot for it
 (the same build the players run, `--dedicated`), which connects back as the room's host with

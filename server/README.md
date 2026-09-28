@@ -72,4 +72,4 @@ Godot_v4.6.1-stable_win64_console.exe --headless --path . --script res://tests/t
 ```
 
 Both exit 2 (SKIP) when no relay / no match server answers. In the browser, `?relay=ws://127.0.0.1:8765`
-points a build at a local relay and `?relay=peerjs` brings back the old PeerJS rooms.
+points a build at a local relay (the old `?relay=peerjs` rooms were removed in Alpha 21).

@@ -1,7 +1,7 @@
 extends Node
 ## Ooze Syndicate 2.0 - online rooms (autoload "Net"). Began as Alpha 11's PeerJS approach, ported from
 ## Game/Alpha 11/scripts/network.gd (the P2P half) to 2.0's seats, maps and Sim:
-## - the transport is RelayBridge (the room server, see ROOM SERVER below); ?relay=peerjs keeps web/peer-transport.js;
+## - the transport is RelayBridge (the room server, see ROOM SERVER below; the PeerJS rooms were removed in Alpha 21);
 ## - four-character room codes, 2-6 players: free-for-all (1v1, FFA 3-5) and teams (2v2, 3v3, 2v2v2),
 ##   host-assigned seats (join order); in team modes every player can switch team in the lobby (JOIN
 ##   TEAM, host-validated: a team never exceeds its seats; the host can move players too) and the team
@@ -32,7 +32,7 @@ extends Node
 ## ride with every node key: "structure", "allies", "arrivals", "shot", "monster_ready_t", "hub_monster"), the
 ## monsters and the 7:00 draw line ("structs"). Protocol ooze20-net-3.
 ## ROOM SERVER (Alpha 20 stage 1): the transport is RelayBridge -> server/relay.py (one WebSocket per player,
-## the server forwards strings), so strict networks work; ?relay=peerjs falls back to the PeerJS rooms. The
+## the server forwards strings), so strict networks work (Alpha 21: the old ?relay=peerjs rooms are gone). The
 ## room's creator still hosts the Sim (stage 2 moves it onto the server). No host migration.
 ## SERVER-HOSTED ROOMS (Alpha 20 stage 2): CREATE ROOM asks the room server for a room it hosts itself
 ## (host_room -> {"op": "create"}); the server starts this same build headless with --dedicated, which runs
@@ -51,7 +51,7 @@ extends Node
 ## line fields that differ from the last keyframe (_wire_state); the guest rebuilds the whole snapshot from its copy
 ## of that keyframe (_unwire_state) - a missed delta costs nothing. Floats are rounded to 1/64 (exact in float32, so
 ## var_to_bytes stores 4 bytes). Over RelayBridge the host's packets travel as binary frames (no base64 / JSON
-## envelope); the PeerJS fallback keeps the text envelopes. ~57 % fewer bytes on a busy FFA 4.
+## envelope); a bridge without send_bin (the tests' double) keeps the text envelopes. ~57 % fewer bytes on a busy FFA 4.
 ## ACCOUNTS (0.20.5, with Progression): the device sets `auth_token` (its Supabase access token; "" = signed out) and
 ## sends it as "auth" in register. A server room's match host verifies it (GET /auth/v1/user) and keeps seat -> user id
 ## on the host only (never broadcast). When a server room's round ends and a seat has a user id, the host POSTs the
@@ -106,7 +106,7 @@ const FALLBACK_CODES := ["no-server", "version", "busy"]   # create refused: hos
 const REMATCH_AI := "Standard"                     # REMATCH ON A RANDOM MAP picked a bigger mode: the AI fills the extra seats
 const AI_FILL := ["", "Training", "Casual", "Standard", "Veteran", "Expert"]   # EMPTY SEATS setting: off or the AI level
 
-var bridge                                         # window.OozePeer (or a test double)
+var bridge                                         # RelayBridge (or a test double)
 var hosting := false
 var connected := false                             # host: room open; guest: in the lobby
 var room_code := ""
@@ -452,8 +452,8 @@ func maps_for(m: String) -> Array:
 
 # ------------------------------------------------------------------ room lifecycle
 func host_room(faction: String) -> Error:
-	## CREATE ROOM: the room server hosts it (stage 2) unless it can't, or this is a PeerJS room.
-	if server_rooms and relay_url() != "peerjs":
+	## CREATE ROOM: the room server hosts it (stage 2) unless it can't.
+	if server_rooms:
 		return _start(false, faction, "", true)
 	return _start(true, faction, "")
 
@@ -475,15 +475,7 @@ func _start(host: bool, faction: String, code: String, create := false) -> Error
 		status = "Online rooms run in the browser build (the playtest link)."
 		lobby_changed.emit()
 		return ERR_UNAVAILABLE
-	var relay := relay_url()
-	if relay == "peerjs":                              # ?relay=peerjs: the old browser-to-browser rooms
-		bridge = JavaScriptBridge.get_interface("OozePeer") if OS.has_feature("web") else null
-		if bridge == null:
-			status = "PeerJS is unavailable. Reload the page."
-			lobby_changed.emit()
-			return ERR_UNAVAILABLE
-	else:
-		bridge = RelayBridge.new(relay)
+	bridge = RelayBridge.new(relay_url())
 	set_busy(true)                                     # a room is open: a new build waits for the menu
 	hosting = host
 	preferred_faction = faction
@@ -531,7 +523,7 @@ func _fallback_host(why: String) -> void:
 
 
 func relay_url() -> String:
-	## The room server (Alpha 20): RELAY_URL, or ?relay=<ws(s) url | peerjs> on the page / --relay=<url> on the
+	## The room server (Alpha 20): RELAY_URL, or ?relay=<ws(s) url> on the page / --relay=<url> on the
 	## command line (local tests).
 	var pick := ""
 	for arg in OS.get_cmdline_user_args():
@@ -540,7 +532,7 @@ func relay_url() -> String:
 	if pick == "" and OS.has_feature("web"):
 		var q = JavaScriptBridge.eval("new URLSearchParams(location.search).get('relay')||''", true)
 		pick = str(q) if q != null else ""
-	if pick == "peerjs" or pick.begins_with("ws://") or pick.begins_with("wss://"):
+	if pick.begins_with("ws://") or pick.begins_with("wss://"):
 		return pick
 	return RELAY_URL
 
@@ -1925,10 +1917,6 @@ func _poll(dt: float) -> void:
 					bridge = null
 					return
 				fail(str(event.get("message", "Connection failed.")))
-			"signalling-lost":
-				if not active:
-					status = "Room service disconnected. Players already here can stay; new joins need a new room."
-					lobby_changed.emit()
 	if bridge != null and not connected and _elapsed > 30.0:
 		fail("Could not reach the room. Check your connection and try again.")
 
