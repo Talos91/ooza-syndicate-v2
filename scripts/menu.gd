@@ -905,36 +905,51 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 	var tx := pos.x + pad + hs + 18.0
 	var tw := pos.x + dims.x - pad - tx - es * 0.6
 	var ft: Array = Rules.FACTION_TRAITS[faction]
-	# [text, size, colour, head, spacing, optional] - the tagline goes first when a phone runs out of room
-	var lines := [[UiKit.SUBS[faction], 12, acc, true, 3, false], [UiKit.NAMES[faction], 38, acc, true, 0, false],
-			[Rules.FACTION_TAGLINES[faction], 15, UiKit.MUTED, false, 0, true], ["", 10, UiKit.INK, false, 0, false],
-			["PERSISTENT TRAIT  ·  COMING SOON", 12, acc, true, 2, false], [str(ft[0]).to_upper(), 16, UiKit.INK, true, 0, false],
-			[str(ft[1]), 14, UiKit.MUTED, false, 0, false]]
-	var total := 0.0
+	# [text, size, colour, head, spacing] - measured as they draw (Daniele 2026-09-28: on his screen PERSISTENT TRAIT ·
+	# COMING SOON wrapped where the old width estimate said one line, and COMING SOON sat on the trait's name). Where the
+	# card is short (phones) it makes room in steps: the tagline goes, then the spacer, then the kicker shortens.
+	var nb := "PERSISTENT\u00a0TRAIT"                          # (a no-break space: the words wrap as one)
+	var attempts := [[true, true, nb], [false, true, nb], [false, false, nb], [false, false, "TRAIT"]]
+	var labels := []
 	var hts := []
-	for ln in lines:
-		if int(ln[4]) > 0 and UiKit.text_w(self, ln[0], ln[1], ln[3]) + str(ln[0]).length() * float(ln[4]) > tw:
-			ln[0] = str(ln[0]).replace("  ·  ", "
-")          # a spaced kicker too wide: one part per line
-		var h: float = float(ln[1]) if ln[0] == "" else (UiKit.line_h(self, ln[1], ln[3]) * (str(ln[0]).count("
-") + 1) + 2.0
-				if int(ln[4]) > 0 else UiKit.text_h(self, ln[0], ln[1], tw, ln[3]) + 2.0)
-		hts.append(h)
-		total += h
-	if total > body_h:                                       # no room for the tagline (phones)
-		total -= hts[2]
-		hts[2] = -1.0
+	var total := 0.0
+	for at in attempts:
+		for l in labels:
+			if l != null:
+				(l as Label).queue_free()
+		labels = []
+		hts = []
+		total = 0.0
+		var lines := [[UiKit.SUBS[faction], 12, acc, true, 3], [UiKit.NAMES[faction], 38, acc, true, 0]]
+		if at[0]:
+			lines.append([Rules.FACTION_TAGLINES[faction], 15, UiKit.MUTED, false, 0])
+		if at[1]:
+			lines.append(["", 10, UiKit.INK, false, 0])
+		var kick := "%s  ·  COMING SOON" % at[2]
+		if UiKit.text_w(self, kick, 12, true) + kick.length() * 2.0 > tw:
+			kick = kick.replace("  ·  ", "\n")                     # too wide: one part per line
+		lines.append([kick, 12, acc, true, 2])
+		lines.append([str(ft[0]).to_upper(), 16, UiKit.INK, true, 0])
+		lines.append([str(ft[1]), 14, UiKit.MUTED, false, 0])
+		for ln in lines:
+			var h := float(ln[1])
+			var l: Label = null
+			if ln[0] != "":
+				l = UiKit.label(self, ln[0], ln[1], ln[2], ln[3], ln[4])
+				l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # a line that still runs long wraps, and is measured so
+				l.custom_minimum_size = Vector2(tw, 0)
+				l.size = Vector2(tw, 0)
+				_shell_add(l, Vector2(tx, pos.y + pad))
+				h = l.get_combined_minimum_size().y + 2.0
+			labels.append(l)
+			hts.append(h)
+			total += h
+		if total <= body_h:
+			break
 	var ly := pos.y + pad + maxf(0.0, (body_h - total) / 2.0)
-	for i in range(lines.size()):
-		var ln: Array = lines[i]
-		if hts[i] < 0.0:
-			continue
-		if ln[0] != "":
-			var l := UiKit.label(self, ln[0], ln[1], ln[2], ln[3], ln[4])
-			if int(ln[4]) == 0:
-				l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			l.custom_minimum_size = Vector2(tw, 0)
-			_shell_add(l, Vector2(tx, ly))
+	for i in range(labels.size()):
+		if labels[i] != null:
+			(labels[i] as Label).position = Vector2(tx, ly)
 		ly += hts[i]
 	# the stats
 	content.add_child(UiKit.rect(Vector2(pos.x + pad, sy - 12.0), Vector2(dims.x - pad * 2.0, 1.0), UiKit.FRAME))
