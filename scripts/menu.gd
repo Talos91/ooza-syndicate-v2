@@ -1515,9 +1515,7 @@ func _privacy_rows_account(ry: float, rcw: float) -> float:
 	## units, rows at (0, ry), width rcw (the column scrolls); returns the next row's y.
 	var a := _account()
 	ry += 10.0
-	ry += _say("PRIVACY", Vector2(0, ry), 15, UiKit.INK, rcw, true) + 6.0
-	ry += _say("Gameplay and performance numbers and crash reports, tied only to your game account id.",
-			Vector2(0, ry), 13, UiKit.MUTED, rcw) + 10.0
+	ry += _say("PRIVACY", Vector2(0, ry), 15, UiKit.INK, rcw, true) + 8.0   # no line under it: the rows stay on a 640 px phone
 	var sw := minf(rcw, UiKit.text_w(self, _share_label(), 15, true) + 44.0)
 	var sb := UiKit.btn(self, _share_label(), Vector2(0, ry), Vector2(sw, 48), func():
 		_toggle_share()
