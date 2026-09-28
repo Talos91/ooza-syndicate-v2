@@ -2472,6 +2472,38 @@ func _plan_waves(order: Array) -> Array:
 	return waves
 
 
+# JUNCTION: relay hubs (maps 5.0, Daniele 2026-09-29: 6-way grinder / switch centres). A rotation or switch relay that
+# keeps at least 2 decks in EVERY state of its group is never stranded, so its decks hold it to the map like fixed
+# decks when the Last Stand looks for islands (a hub with no fixed deck would otherwise fall with the first wave).
+var _hubs_cache = null
+
+
+func _hub_edges() -> Dictionary:
+	if _hubs_cache != null:
+		return _hubs_cache
+	_hubs_cache = {}
+	var per := {}                                         # relay node -> state -> deck count
+	for i in edge_controller:
+		var e: Dictionary = edges[i]
+		var c: int = edge_controller[i]
+		if c < 0 or e["retracts"] or e["state"] == "" or not str(nodes[c]["relay"]) in ["rotation", "switch"]:
+			continue
+		if not per.has(c):
+			per[c] = {}
+		per[c][e["state"]] = int(per[c].get(e["state"], 0)) + 1
+	for c in per:
+		var prefix: String = (per[c].keys()[0] as String).substr(0, 1)
+		var ok := true
+		for st in relay_groups.get(prefix, []):
+			if int(per[c].get(st, 0)) < 2:
+				ok = false
+		if ok:
+			for i in edge_controller:
+				if edge_controller[i] == c and not edges[i]["retracts"] and edges[i]["state"] != "":
+					_hubs_cache[i] = true
+	return _hubs_cache
+
+
 func _islands(gone: Dictionary) -> Array:
 	## Surviving nodes cut off from the surviving map's main part (the one holding the most of the last
 	## ring, then the most nodes), over fixed decks and plaza links only.
@@ -2488,7 +2520,7 @@ func _islands(gone: Dictionary) -> Array:
 			var cur: int = open.pop_front()
 			for link in adj[cur]:
 				var e: Dictionary = edges[link[1]]
-				if e["state"] != "" or e["retracts"]:
+				if (e["state"] != "" or e["retracts"]) and not _hub_edges().has(link[1]):   # JUNCTION: hubs
 					continue                              # a relay deck may be switched away
 				var nb: int = link[0]
 				if gone.get(nb, false) or comp.has(nb):
