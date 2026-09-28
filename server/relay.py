@@ -45,6 +45,7 @@ HOST_MAX = 1024 * 1024                          # a host's packet (net.gd MAX_PA
 HELLO_FRAME = 64 * 1024
 GUEST_FRAME = 8 * 1024
 HOST_FRAME = HOST_MAX + 1024
+EMPTY_GRACE = 30.0                              # a server room nobody is connected to closes after this (RECONNECT window; Daniele 2026-09-28)
 ROOMS_PER_IP = 2                                # server rooms one address may hold at once (Daniele 2026-09-28: max 2 per player)
 BOOT_NICE = 10                                  # a booting match host yields the CPU to the rooms playing (0.21.4)
 GUEST_RATE = 60                                 # packets per second before the relay drops a guest
@@ -71,7 +72,9 @@ class Room:
         self.secret = ""
         self.ready = asyncio.Event()
         self.test = False           # created by a test (Net.test_room): a real player's room may take its slot
-        self.ip = ""                # the creator's address (server rooms: ROOMS_PER_IP)
+        self.ip = ""                # the creator's address
+        self.guest_ips = {}         # peer id -> address of each connected player (ROOMS_PER_IP counts these)
+        self.empty_since = None     # server room: since when no player is connected (EMPTY_GRACE)
 
 
 def server_matches():
@@ -99,6 +102,8 @@ async def say(ws, **kw):
 
 async def refuse(ws, message, code=""):
     """Send the reason and let the client hang up first: Godot drops a message that lands with the close."""
+    if code:                                        # 0.22.x: the server-room refusals show in the journal
+        log.info("refused (%s): %s", code, message)
     await say(ws, type="error", message=message, code=code)
     try:
         await asyncio.wait_for(ws.wait_closed(), 5.0)
@@ -217,6 +222,25 @@ async def free_slot_for_real_room():
     return server_matches() < cfg.max_matches
 
 
+async def reap_empty_rooms():
+    """A server room nobody is connected to (lobby, round or results; an AI-only round too) closes after EMPTY_GRACE, so
+    rooms free their match slot and their address's count without waiting on the game build's own timers. A player back
+    within the grace (RECONNECT) keeps the room."""
+    while True:
+        await asyncio.sleep(5)
+        now = time.time()
+        for r in list(rooms.values()):
+            if r.proc is None or r.host is None:
+                continue
+            if r.guests:
+                r.empty_since = None
+            elif r.empty_since is None:
+                r.empty_since = now
+            elif now - r.empty_since > cfg.empty_grace:
+                log.info("room %s: nobody connected for %d s - closed", r.code, int(now - r.empty_since))
+                stop(r)
+
+
 async def reap_old_tests():
     """Test rooms never outlive TEST_MAX_AGE, whatever the test did."""
     while True:
@@ -237,7 +261,8 @@ async def run_create(ws, version, ip, test=False):
     if want and version != want:
         await refuse(ws, "The server runs another game version.", code="version")
         return
-    if sum(1 for r in rooms.values() if r.proc is not None and r.ip == ip) >= cfg.rooms_per_ip:
+    if sum(1 for r in rooms.values() if r.proc is not None and ip in r.guest_ips.values()) >= cfg.rooms_per_ip:
+        # 0.22.x: only rooms this address still has a player in count (a room everyone left no longer blocks a house)
         # "limit" is no fallback code: the game shows this line instead of hosting in the browser
         await refuse(ws, "You already have %d rooms open on the server. Leave one to create another." % cfg.rooms_per_ip,
                      code="limit")
@@ -287,7 +312,7 @@ async def run_create(ws, version, ip, test=False):
         stop(room)
         await refuse(ws, "The match server did not start in time.", code="busy")
         return
-    await run_guest(ws, code)
+    await run_guest(ws, code, ip)
 
 
 def stop(room):
@@ -349,7 +374,7 @@ async def host_loop(ws, room):
         log.info("room %s closed (%d rooms)", code, len(rooms))
 
 
-async def run_guest(ws, code):
+async def run_guest(ws, code, ip=""):
     room = rooms.get(code)
     if room is None:
         await refuse(ws, "Room not found. Check the code and keep the host online.")
@@ -364,6 +389,8 @@ async def run_guest(ws, code):
     room.serial += 1
     pid = "p%d" % room.serial
     room.guests[pid] = ws
+    room.guest_ips[pid] = ip
+    room.empty_since = None
     await say(ws, type="open", code=code)
     await say(ws, type="connection", peer="host")
     await say(room.host, type="connection", peer=pid)
@@ -390,6 +417,7 @@ async def run_guest(ws, code):
     except ConnectionClosed:
         pass
     finally:
+        room.guest_ips.pop(pid, None)
         if room.guests.pop(pid, None) is not None and rooms.get(code) is room:
             await say(room.host, type="closed", peer=pid)
 
@@ -413,7 +441,7 @@ async def handler(ws):
         elif op == "join":
             code = str(msg.get("code", "")).strip().upper()
             if len(code) == 4 and all(c in ALPHABET for c in code):
-                await run_guest(ws, code)
+                await run_guest(ws, code, ip)
             else:
                 await refuse(ws, "Enter the four-character room code.")
     except (asyncio.TimeoutError, ConnectionClosed, ValueError):
@@ -434,6 +462,7 @@ async def main():
     ap.add_argument("--version-file", default="", help="holds Net.version() of that build; others fall back")
     ap.add_argument("--max-matches", type=int, default=3)
     ap.add_argument("--rooms-per-ip", type=int, default=ROOMS_PER_IP, help="server rooms one address may hold (tests: more)")
+    ap.add_argument("--empty-grace", type=float, default=EMPTY_GRACE, help="seconds a server room with nobody connected stays open")
     ap.add_argument("--data", default="", help="XDG_DATA_HOME for the match hosts (user://)")
     ap.add_argument("--logs", default="", help="a log file per server-hosted room")
     ap.add_argument("--host-arg", action="append", default=[], help="tests: an extra argument for every match host (e.g. --match-end=20)")
@@ -444,6 +473,7 @@ async def main():
                      ping_timeout=20, compression=None) as server:
         log.info("relay on %s:%d", args.host, args.port)
         asyncio.get_running_loop().create_task(reap_old_tests())
+        asyncio.get_running_loop().create_task(reap_empty_rooms())
         await server.serve_forever()
 
 
