@@ -12,7 +12,6 @@ extends RefCounted
 ##   seat_table(sim, human)   every per-seat stat the Sim / Progression.seat_stats record (pure; test_match_report)
 ## Faction accent = UI identity; seat colours (Rules) appear only where they name a seat of this match.
 
-const PHONE_PT_H := 390.0                           # = Menu.PHONE_PT_H (landscape phone reference height)
 const DEFEAT_INK := Color("f4c7bd")                 # DEFEAT.'s headline: a pale warning, never a celebration
 const GOOD := Color("59e07a")
 const BAD := Color("ff6b6b")
@@ -37,14 +36,20 @@ func _pt_factor() -> float:
 	## Menu._pt_factor's formula on this canvas: 0.0 on desktop (no minimum applies).
 	if not mobile or layer == null or not layer.is_inside_tree():
 		return 0.0
-	var v := vp()
+	var v := full()
 	if v.x <= 0.0 or v.y <= 0.0:
 		return 0.0
-	return UiKit.K * minf(v.x / 1280.0, v.y / 720.0) * (PHONE_PT_H / v.y)
+	return UiKit.K * minf(v.x / 1280.0, v.y / 720.0) * UiKit.pt_per_px(v)
+
+
+func full() -> Vector2:
+	return layer.get_viewport_rect().size
 
 
 func vp() -> Vector2:
-	return layer.get_viewport_rect().size
+	## The area the screen lays out in: the viewport inside the device's safe area (UiKit.safe_insets).
+	var ins := UiKit.safe_insets(full())
+	return full() - Vector2(ins.x + ins.z, ins.y + ins.w)
 
 
 func phone() -> bool:
@@ -59,7 +64,8 @@ func clear() -> void:
 	for c in layer.get_children():
 		layer.remove_child(c)
 		c.queue_free()
-	layer.position = Vector2.ZERO
+	var ins := UiKit.safe_insets(full())
+	layer.position = Vector2(ins.x, ins.y)             # inside the notch / home-indicator bands
 	layer.size = vp()
 	content = layer
 
@@ -67,7 +73,8 @@ func clear() -> void:
 func backdrop(dim: float, art := false) -> void:
 	## The dim over the match (it stays visible behind a card), or the faction's environment (the results);
 	## either way the layer takes every tap, so nothing reaches the map or the HUD under it.
-	var v := vp()
+	var v := full()                                    # the dim / art covers the whole screen, bands included
+	var at := -layer.position
 	if art:
 		var tex := UiKit.background(f)
 		if tex != null:
@@ -76,10 +83,13 @@ func backdrop(dim: float, art := false) -> void:
 			r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 			r.size = v
+			r.position = at
 			r.modulate = Color(0.52, 0.55, 0.6)
 			r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			layer.add_child(r)
-	layer.add_child(UiKit.rect(Vector2.ZERO, v, Color(UiKit.BASE, dim)))
+	var shade := UiKit.rect(at, v, Color(UiKit.BASE, dim))
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP      # the bands outside the (inset) layer take taps too
+	layer.add_child(shade)
 	layer.mouse_filter = Control.MOUSE_FILTER_STOP
 
 
@@ -152,7 +162,10 @@ func result(d: Dictionary) -> Dictionary:
 	var won := bool(d.get("won", false))
 	var hcol := UiKit.INK if won else (UiKit.MUTED if bool(d.get("draw", false)) else DEFEAT_INK)
 	var hsize := 60.0 if ph else 68.0
-	UiKit.add(self, UiKit.label(self, str(d.get("headline", "")), hsize, hcol, true), Vector2(x - 3.0, y))
+	var head := str(d.get("headline", ""))
+	while hsize > 32.0 and UiKit.text_w(self, head, hsize, true) > w:   # the syndicate's longer lines shrink to fit
+		hsize -= 4.0
+	UiKit.add(self, UiKit.label(self, head, hsize, hcol, true), Vector2(x - 3.0, y))
 	y += UiKit.line_h(self, hsize, true) + 2.0
 	var name_text := str(d.get("name", "")).to_upper()
 	if name_text != "":
@@ -213,9 +226,10 @@ func result(d: Dictionary) -> Dictionary:
 		UiKit.btn(self, "MATCH DETAILS", Vector2(x + w - dw, y), Vector2(dw, 52.0), det, "secondary", f, 15)
 	y += UiKit.tap_h(self, 52.0) + 8.0
 	var qx := x
-	for q in d.get("quiet", []):                       # the quieter ways out, text-led
-		var qw := UiKit.text_w(self, str(q[0]), 15, true) + 36.0
-		UiKit.btn(self, str(q[0]), Vector2(qx, y), Vector2(qw, 44.0), q[1], "tertiary", f, 15)
+	for q in d.get("quiet", []):                       # the quieter ways out: framed, >= 44 pt (the iPhone sweep: bare text
+		var qw := UiKit.text_w(self, str(q[0]), 14, true) + 36.0   # links were hard to hit), quiet next to the primary
+		qw = minf(qw, (x + w - qx))
+		UiKit.btn(self, str(q[0]), Vector2(qx, y), Vector2(qw, 44.0), q[1], "secondary", f, 14)
 		qx += qw + 8.0
 	if not (d.get("quiet", []) as Array).is_empty():
 		y += UiKit.tap_h(self, 44.0)
@@ -390,6 +404,21 @@ func card(d: Dictionary) -> Dictionary:
 						p[1], "secondary", f, 14))
 			by += bh + 10.0
 	return out
+
+
+# ------------------------------------------------------------------ the verdict (Daniele 2026-09-28: "something more
+# thematic for win/loss on the syndicate theme, kinda a joke in game lore") - [kicker, headline], one per match (the seed,
+# so everyone in a room reads the same line); the outcome still reads first, and MATCH DETAILS keeps VICTORY / DEFEAT.
+const WIN_LINES := [["QUARTERLY TARGETS: EXCEEDED", "HOSTILE TAKEOVER."], ["THE BOARD IS DELIGHTED", "MARKET CORNERED."],
+		["SHAREHOLDERS: THRILLED", "ACQUISITION COMPLETE."], ["BONUSES ALL ROUND", "MONOPOLY ACHIEVED."]]
+const LOSS_LINES := [["THE BOARD WOULD LIKE A WORD", "LIQUIDATED."], ["PLEASE CLEAR YOUR DESK", "BOUGHT OUT."],
+		["SHAREHOLDERS: FURIOUS", "RESTRUCTURED."], ["YOUR ASSETS ARE THEIR ASSETS NOW", "ASSETS SEIZED."]]
+const DRAW_LINES := [["NOBODY GETS A BONUS", "HUNG BOARD."], ["THE AUDITORS ARE CONFUSED", "MERGER PENDING."]]
+
+
+static func verdict(won: bool, draw: bool, seed: int) -> Array:
+	var pool: Array = DRAW_LINES if draw else (WIN_LINES if won else LOSS_LINES)
+	return pool[absi(seed) % pool.size()]
 
 
 # ------------------------------------------------------------------ the numbers

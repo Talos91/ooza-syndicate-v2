@@ -49,6 +49,7 @@ var nav_bar: NavBar
 var shell_f := "vex"                             # the faction a shell page is dressed in (its accent, its backdrop)
 var shell_back := Callable()                     # the page's BACK (a subflow), or none (a top-level tab)
 var shell_slim := false                          # a phone subflow: BACK in the bar, no tab bar
+var safe := Vector4.ZERO                         # the device's unsafe bands around a shell page, in page units
 var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
 var _map_scroll := 0
 # map filters on 02 BATTLEFIELD (Daniele, 0.18.6: "add in game filters for maps like 1v1 2v2 ffa etc"): players
@@ -89,7 +90,7 @@ func _pt_factor() -> float:
 	var s := minf(vp.x / 1280.0, vp.y / 720.0)
 	if s <= 0.0:
 		return 0.0
-	return K * s * (PHONE_PT_H / vp.y)
+	return K * s * UiKit.pt_per_px(vp)                # real points on the web (the page's CSS size)
 
 
 func _tap_min_raw() -> float:
@@ -427,6 +428,7 @@ func map_preview(pos: Vector2, dims: Vector2) -> void:
 	var code: String = _selected_map().get("code", "")
 	var p := picture(MapPool.thumb(code), pos, dims)
 	if p != null:
+		p.texture = UiKit.map_thumb(MapPool.thumb(code))   # UI: the map alone, without the baked caption strip
 		p.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED     # the whole map, letterboxed, never cropped
 
 
@@ -597,10 +599,11 @@ func show_main() -> void:
 
 
 func show_play() -> void:
-	## PLAY (screen system 02; the hub stays cyan): three image-led choices - VS AI (primary; NEW GAME's faction ->
-	## battlefield -> setup), ONLINE ROOMS, TRAINING.
+	## PLAY (screen system 02): three image-led choices - VS AI (primary; NEW GAME's faction -> battlefield -> setup ->
+	## rivals), ONLINE ROOMS, TRAINING. In your faction's accent like every page (Daniele 2026-09-28: not always cyan).
 	_last_show = show_play
-	var area := shell_open("OOZE / PLAY", "play", Callable(), "vex")
+	var area := shell_open("OOZE / PLAY", "play")
+	var other: String = UiKit.ORDER[(UiKit.ORDER.find(faction) + 1) % UiKit.ORDER.size()]   # ONLINE shows another face
 	var x := shell_x()
 	var top := page_title(area, "PLAY", "PICK YOUR FIGHT.")
 	var gap := 16.0
@@ -608,13 +611,13 @@ func show_play() -> void:
 	var ch := area.end.y - top - 18.0
 	var done := TutorialDirector.done_count()
 	var cards := [
-		["CUSTOM MATCH", "VS AI", "Pick a faction, a battlefield and your rivals.", "res://assets/art/ui/bg_vex.jpg", "vex", show_factions],
-		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/ui/bg_null.jpg", "null", show_online],
+		["CUSTOM MATCH", "VS AI", "Pick a faction, a battlefield and your rivals.", "res://assets/art/ui/bg_%s.jpg" % faction, faction, show_factions],
+		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/ui/bg_%s.jpg" % other, other, show_online],
 		["LEARN THE CITY", "TRAINING", "%d / %d lessons done. Replay any lesson." % [done, TutorialDirector.TOTAL_LESSONS],
 				"res://assets/art/campaign/vex-01.jpg", "", show_tutorial],
 	]
 	for i in range(cards.size()):
-		var c := FrameCard.make(self, Vector2(cw, ch), "vex")
+		var c := FrameCard.make(self, Vector2(cw, ch), faction)
 		c.art_frac = 0.52
 		c.set_kicker(cards[i][0])
 		c.set_title(cards[i][1])
@@ -656,16 +659,19 @@ func show_help() -> void:
 	UiKit.btn(self, "TRAINING  →", Vector2(content.size.x - x - 220.0, by), Vector2(220, 48), show_tutorial, "primary", shell_f, 16)
 
 
-static var _opt_tab := "game"                      # SETTINGS: the open tab (kept while the game runs)
+static var _opt_tab := "display"                   # SETTINGS: the open tab (kept while the game runs)
 static var _opt_arg_read := false
-const OPT_TABS := [["game", "GAME"], ["display", "DISPLAY"], ["privacy", "PRIVACY"], ["debug", "DEBUG"]]   # PROGRESSION: PRIVACY (Alpha 21)
+const OPT_TABS := [["display", "DISPLAY"], ["privacy", "PRIVACY"], ["debug", "TESTING"]]   # Daniele 2026-09-28: match options
+# (Last Stand, enemy counts) live in SETUP, not here; the test tools sit apart in TESTING (id "debug"); PROGRESSION:
+# PRIVACY (Alpha 21) between them
 
 
 func show_options() -> void:
 	## SETTINGS (screen system 23; the top bar's gear): tabs of rows, each row its name, what it does and its choices
-	## (the current one lit, the words carrying the state). GAME: LAST STAND, ENEMY COUNTS. DISPLAY: GRAPHICS AUTO /
-	## LOW RES / FULL and FRAME RATE AUTO / 30 / 60 (Alpha 21 OPT-RENDER, perf_profile.gd, user://settings.cfg), DETAIL.
-	## DEBUG: DEBUG TOOLS (the Debug button and live sliders in matches), the progression TEST SWITCH. The rows scroll
+	## (the current one lit, the words carrying the state). DISPLAY: GRAPHICS AUTO / LOW RES / FULL and FRAME RATE AUTO /
+	## 30 / 60 (Alpha 21 OPT-RENDER, perf_profile.gd, user://settings.cfg), DETAIL. TESTING (id "debug"): DEBUG TOOLS (the
+	## Debug button and live sliders in matches), the progression TEST SWITCH. Match options (LAST STAND, ENEMY COUNTS) are
+	## SETUP's (Daniele 2026-09-28: they make no sense here), TERRITORY the wardrobe's. The rows scroll
 	## (phones grow them to 44 pt). No audio settings exist yet, so no AUDIO tab and no restore-defaults. TERRITORY lives
 	## in ARMIES > COSMETICS > CORE (0.19.2). DONE / BACK return to the page the gear was pressed on.
 	_last_show = show_options                  # a resize that changes the phone sizing rebuilds it (_fit)
@@ -698,7 +704,14 @@ func show_options() -> void:
 	var n0 := content.get_child_count()
 	var y := 0.0
 	match _opt_tab:
-		"display":
+		"debug":
+			y += _opt_row(y, w, "DEBUG TOOLS", "The Debug button and live sliders in matches.",
+					[["ON", Rules.debug_tools, func(): Rules.debug_tools = true], ["OFF", not Rules.debug_tools, func(): Rules.debug_tools = false]])
+			y += _opt_row(y, w, "TEST SWITCH  ·  LOCKS", "OFF: everything unlocked (the testing default). ON: a preview of the game as players will see it once the locks go live - skills and looks earned or bought (until the page closes).",   # PROGRESSION
+					[["OFF", Progression.unlock_all, func(): Progression.unlock_all = true], ["ON", not Progression.unlock_all, func(): Progression.unlock_all = false]])
+		"privacy":
+			y = _privacy_rows_options(y, w)            # PROGRESSION (Alpha 21): SHARE PLAY & CRASH DATA + the PRIVACY page
+		_:                                            # DISPLAY
 			var modes := []
 			for m in PerfProfile.MODES:
 				var md: String = m
@@ -714,23 +727,6 @@ func show_options() -> void:
 			y += _opt_row(y, w, "FRAME RATE", PerfProfile.fps_label() + ("  -  LOW RES stays at 30." if low else "  -  the cap while a match runs."), fps, low)
 			y += _opt_row(y, w, "DETAIL", "LOW trims the river patches and vat residents - use it if the game makes your machine run hot.",
 					[["FULL", not Rules.low_detail, func(): Rules.low_detail = false], ["LOW", Rules.low_detail, func(): Rules.low_detail = true]])
-		"privacy":
-			y = _privacy_rows_options(y, w)            # PROGRESSION (Alpha 21): SHARE PLAY & CRASH DATA + the PRIVACY page
-		"debug":
-			y += _opt_row(y, w, "DEBUG TOOLS", "The Debug button and live sliders in matches.",
-					[["ON", Rules.debug_tools, func(): Rules.debug_tools = true], ["OFF", not Rules.debug_tools, func(): Rules.debug_tools = false]])
-			y += _opt_row(y, w, "TEST SWITCH  ·  LOCKS", "OFF: everything unlocked (the testing default). ON: a preview of the game as players will see it once the locks go live - skills and looks earned or bought (until the page closes).",   # PROGRESSION
-					[["OFF", Progression.unlock_all, func(): Progression.unlock_all = true], ["ON", not Progression.unlock_all, func(): Progression.unlock_all = false]])
-		_:
-			# one game: BRAWL (Daniele, 0.18.7: "for now completely deactivate [SIEGE] ... brawl is our game (can
-			# also remove mode selector)") - no MODE switch here, in SETUP, the lobby, the pause menu or Debug
-			var ls := ("The map collapses ring by ring from %d:%02d." % [int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60]) if Rules.last_stand \
-					else ("No collapse; the %d:%02d safety net still ends a stalled match." % [int(Rules.MATCH_HARD_END) / 60, int(Rules.MATCH_HARD_END) % 60])
-			y += _opt_row(y, w, "LAST STAND", ls, [["ON", Rules.last_stand, func(): Rules.last_stand = true],
-					["OFF", not Rules.last_stand, func(): Rules.last_stand = false]])
-			y += _opt_row(y, w, "ENEMY COUNTS", "SHOWN: every node's count, as in Alpha 11. HIDDEN: no unit numbers on enemy nodes, so you scout.",
-					[["SHOWN", not Rules.hide_enemy_counts, func(): Rules.hide_enemy_counts = false],
-					["HIDDEN", Rules.hide_enemy_counts, func(): Rules.hide_enemy_counts = true]])
 	_column_end(col, n0, y, true)
 
 
@@ -741,7 +737,7 @@ func _opt_row(y: float, w: float, title_text: String, desc: String, opts: Array,
 	var widths := []
 	var cw := 0.0
 	for o in opts:
-		var bw := maxf(64.0, UiKit.text_w(self, str(o[0]), 14, true) + 32.0)
+		var bw := maxf(maxf(64.0, UiKit.tap_h(self, 46.0)), UiKit.text_w(self, str(o[0]), 14, true) + 32.0)   # >= 44 pt wide too
 		widths.append(bw)
 		cw += bw + 8.0
 	var tw := maxf(160.0, w - cw - 16.0)
@@ -889,7 +885,7 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 		if UiKit.text_w(self, cap, 12) > sw - 10.0:            # phones: the name only; the value's colour carries the rest
 			cap = r[1]
 		UiKit.stat(self, Vector2(pos.x + pad + i * sw, sy), "%d%%" % roundi(v * 100.0), cap,
-				acc if v > 1.001 else (Color("ffb12b") if v < 0.999 else UiKit.INK))
+				acc if v > 1.001 else (UiKit.WEAKER if v < 0.999 else UiKit.INK))
 
 
 func _preset_rows(pos: Vector2, dims: Vector2) -> void:
@@ -968,7 +964,7 @@ func show_tutorial() -> void:
 			TutorialDirector.path = arg.substr(15)
 			TutorialDirector.reload_progress()
 	var page := TutorialPage.new()
-	var area := shell_open("OOZE / TRAINING", "play", func(): page.back_pressed.emit())
+	var area := shell_open("OOZE / TRAINING", "home", func(): page.back_pressed.emit())   # BACK: HOME (Daniele), so HOME's tab
 	var top := page_title(area, "%s / %d OF %d" % [TutorialDirector.line("page_title"), TutorialDirector.done_count(),
 			TutorialDirector.TOTAL_LESSONS], "LEARN THE CITY.")
 	_tut_page = page
@@ -2073,7 +2069,9 @@ func _hub_faction() -> String:
 
 
 func show_campaign() -> void:
-	## CAMPAIGN HUB (screen system 09), on the district of the next mission.
+	## The CAMPAIGN tab: the view used last - the CITY MAP (the 3D district diorama, the default: Daniele 2026-09-28)
+	## or the mission CARDS (the hub, screen system 09, on the district of the next mission); each has a switch to the
+	## other. A mission's return (main's menu_open "campaign") lands here too, so the city's star / bridge animations play.
 	_campaign_args()
 	_hub_i = -1
 	if not _camp_args_used:
@@ -2087,7 +2085,10 @@ func show_campaign() -> void:
 				for i in range(ds.size()):
 					if str(ds[i]["id"]) == arg.substr(20):
 						_hub_i = i
-	_show_hub()
+	if UiKit.campaign_view() == "cards":
+		_show_hub()
+	else:
+		show_city_map()
 
 
 func _show_hub() -> void:
@@ -2097,7 +2098,7 @@ func _show_hub() -> void:
 	_last_show = _show_hub
 	var cf := _hub_faction()
 	var h := Campaign.hub(cf, _hub_i) if cf != "" else {}
-	var area := shell_open("OOZE / CAMPAIGN", "campaign")
+	var area := shell_open("OOZE / CAMPAIGN", "campaign", Callable(), cf if cf != "" else faction)   # the campaign's colour
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
 	var bh := 42.0
@@ -2108,8 +2109,9 @@ func _show_hub() -> void:
 		page_title(area, "CAMPAIGN", "COMING LATER.")
 		return
 	_hub_i = int(h["district_index"])
-	UiKit.btn(self, "CITY MAP", Vector2(content.size.x - x - bw * 2.0 - 12.0, by), Vector2(bw, bh), show_city_map,
-			"secondary", shell_f, 15)
+	UiKit.btn(self, "CITY MAP", Vector2(content.size.x - x - bw * 2.0 - 12.0, by), Vector2(bw, bh), func():
+		UiKit.save_campaign_view("map")                # the view switch: CAMPAIGN reopens on the city map
+		show_city_map(), "secondary", shell_f, 15)
 	var top := page_title(area, "CAMPAIGN / " + str(h["faction_title"]), str(h["district_name"]))
 	var blurb := str(h["district_blurb"])              # "District 1 - where ..." : the foot already says which district
 	if blurb.begins_with("District ") and blurb.find(" - ") > 0:
@@ -2217,7 +2219,7 @@ func show_chapters() -> void:
 	## CAMPAIGN CHAPTERS (screen system 28): one card per faction (Campaign.episodes) - its character, OPEN CAMPAIGN /
 	## LOCKED / COMING LATER, its stars; the open one opens its hub. The overall progress at the foot.
 	_last_show = show_chapters
-	var area := shell_open("OOZE / CHAPTERS", "campaign", _show_hub)
+	var area := shell_open("OOZE / CHAPTERS", "campaign", _show_hub, _hub_faction() if _hub_faction() != "" else faction)
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
 	var top := page_title(area, "CAMPAIGN", "CHOOSE YOUR SYNDICATE.")
@@ -2275,7 +2277,11 @@ func show_city_map() -> void:
 	_camp_page.standalone_backdrop = false
 	_camp_page.set_faction(_hub_faction() if _hub_faction() != "" else faction)
 	_camp_page.set_mobile(mobile)
-	_camp_page.back_pressed.connect(_show_hub)
+	_camp_page.view_switch = "CARDS"
+	_camp_page.back_pressed.connect(show_main)
+	_camp_page.view_pressed.connect(func():
+		UiKit.save_campaign_view("cards")
+		_show_hub())
 	_camp_page.play_pressed.connect(func(key: String):
 		UiKit.save_last_faction(_camp_page.faction)     # UI: HOME's hero is the faction played last
 		main.SEAT_FACTIONS[main.HUMAN] = faction       # your pick: the briefing's accent, the menu's after the mission
@@ -2435,7 +2441,7 @@ func _army_identity(pos: Vector2, dims: Vector2) -> void:
 	var cw := (dims.x - 36.0) / STAT_ROWS.size()
 	for i in range(STAT_ROWS.size()):
 		var v := Rules.stat(_army, STAT_ROWS[i][0])
-		var col := acc if v > 1.001 else (LOCK_COL if v < 0.999 else UiKit.INK)
+		var col := acc if v > 1.001 else (UiKit.WEAKER if v < 0.999 else UiKit.INK)
 		UiKit.stat(self, Vector2(pos.x + 18.0 + i * cw, sy + 12.0), "%d%%" % roundi(v * 100.0), STAT_ROWS[i][1], col)
 
 
@@ -2934,17 +2940,20 @@ func _ward_state(cat: String, id: String, equipped: String) -> Dictionary:
 				"col": UiKit.accent(_army) if id == equipped else UiKit.DIM}
 	var item := Progression.cosmetic_item(cat, id, _army)
 	if not ArmyPresets.is_unlocked(id, cat, _army):
-		var price := Progression.price(item)
-		var line := "LOCKED"
-		if item == "vat:graduate":
-			line += "  ·  " + TutorialDirector.line("locked_cosmetic").to_upper()
-		elif price.has("soft"):
-			line += "  ·  " + Progression.amount_text(int(price["soft"]), "soft", false)
-		return {"locked": true, "equipped": false, "line": line, "col": LOCK_COL}
+		return {"locked": true, "equipped": false, "line": "LOCKED  ·  " + _ward_price(item), "col": LOCK_COL}
 	if id == equipped:
 		return {"locked": false, "equipped": true, "line": "EQUIPPED", "col": UiKit.accent(_army)}
-	return {"locked": false, "equipped": false, "line": "OWNED" if Progression.owns(item) else "OPEN",
-			"col": UiKit.DIM}
+	# Daniele 2026-09-28: a look you own shows nothing; one open only while testing shows how it will be unlocked
+	var owned := Progression.owns(item) or Progression.price(item).is_empty() and item != "vat:graduate"
+	return {"locked": false, "equipped": false, "line": "" if owned else _ward_price(item), "col": LOCK_COL}
+
+
+func _ward_price(item: String) -> String:
+	## A look's way in, short (a tile's line): its SCRAP price, or the Graduate vat's condition.
+	if item == "vat:graduate":
+		return TutorialDirector.line("locked_cosmetic").to_upper()
+	var price := Progression.price(item)
+	return Progression.amount_text(int(price["soft"]), "soft", false) if price.has("soft") else "UNLOCK"
 
 
 func _ward_stage(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped: String) -> void:
@@ -3069,7 +3078,7 @@ func _ward_detail(cat: String, sel: String, st: Dictionary) -> String:
 	var out := ""
 	if cat == "territory":
 		out = TERRITORY_LOOKS[sel][1] + " One pick for every faction."
-	elif st["locked"]:
+	elif st["locked"] or not Progression.owns(Progression.cosmetic_item(cat, sel, _army)) and str(st["line"]) != "":
 		var item := Progression.cosmetic_item(cat, sel, _army)
 		out = "TO UNLOCK: " + _cosmetic_path(cat, sel)
 		var price := Progression.price(item)
@@ -3079,10 +3088,11 @@ func _ward_detail(cat: String, sel: String, st: Dictionary) -> String:
 				costs.append(Progression.amount_text(int(price[cur]), cur, false))
 		if not costs.is_empty():
 			out += "  ·  " + " OR ".join(costs)
+		if not st["locked"]:
+			out += "
+Open while testing: you can equip it now."
 	else:
 		out = "A look only: tier read, footprint and colour stay the same."
-		if not Progression.owns(Progression.cosmetic_item(cat, sel, _army)):
-			out = "Open while testing; earned or unlocked later. " + out
 		if cat in ["monster_hub", "monster"] or sel == "faction":
 			out += " Made for %s." % UiKit.NAMES[_army]
 	if not ArmyPresets.saved:
@@ -3256,8 +3266,7 @@ func show_maps() -> void:
 		var back := UiKit.rect(Vector2(6, 6), thumb, Color(UiKit.BASE, 0.9))
 		b.add_child(back)
 		var tex := TextureRect.new()
-		var tp := MapPool.thumb(code)
-		tex.texture = load(tp) if ResourceLoader.exists(tp) else null
+		tex.texture = UiKit.map_thumb(MapPool.thumb(code))   # the map alone (its caption strip is written below)
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED   # the whole map, never cropped (Daniele, 0.18.7:
 		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE                # "thumbnail of maps often overflow and can't be seen in full")
@@ -3350,10 +3359,11 @@ func _selected_map() -> Dictionary:
 
 
 func show_setup() -> void:
-	## 03 SETUP (screen system 05): the map (its preview, CHANGE -> BATTLEFIELD) and YOUR TEAM COLOUR on the left; your
-	## faction (CHANGE -> FACTION, its army preset -> ARMIES), the rival (1 V 1: seat B's faction; other modes: every AI
-	## seat's pick, set in SEATS & TEAMS), DIFFICULTY on the right; LAST STAND, ABILITIES and DEPLOY at the foot. SEATS &
-	## TEAMS (show_seats) holds the PLAYERS mode and every seat's pick. Each choice is the variable deploy() reads.
+	## 03 SETUP (screen system 05; Daniele 2026-09-28: the match here, the rivals in step 04): the map (its preview,
+	## CHANGE -> BATTLEFIELD) and YOUR TEAM COLOUR on the left; your faction (CHANGE -> FACTION, its army preset ->
+	## ARMIES), DIFFICULTY and the MATCH OPTIONS - LAST STAND, ABILITIES, HIDDEN COUNTS (moved here from SETTINGS) - on
+	## the right; NEXT: RIVALS (04, show_seats: the PLAYERS mode, every seat's army, DEPLOY). Each choice is the variable
+	## deploy() reads.
 	_last_show = show_setup                  # a resize that changes the phone sizing rebuilds it (_fit)
 	var modes := _modes_of(_selected_map())
 	if not mode in modes:
@@ -3361,37 +3371,24 @@ func show_setup() -> void:
 	var area := shell_open("OOZE / SETUP", "play", show_maps, faction)
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
-	var y := page_title(area, "03 / SETUP", "READY TO DEPLOY.")
-	# SEATS & TEAMS (and the mode), top right - left of BACK where the page has it
-	var stt := "SEATS & TEAMS  ·  %s" % MODE_NAMES.get(mode, mode)
-	var stw := UiKit.text_w(self, stt, 14, true) + 36.0
-	var right := content.size.x - x
-	if shell_back.is_valid() and not shell_slim:
-		right -= UiKit.text_w(self, "←  BACK", 15, true) + 20.0 + 14.0
-	var stb := UiKit.btn(self, stt, Vector2(right - stw, area.position.y + (10.0 if shell_slim else 14.0)), Vector2(stw, 42),
-			show_seats, "secondary", faction, 14)
-	y = maxf(y, stb.position.y + stb.size.y + 10.0)
+	var y := page_title(area, "03 / SETUP", "SET THE MATCH.")
 	var lw := floorf(w * 0.52)
 	var rx := x + lw + 18.0
 	var rw := w - lw - 18.0
-	# the foot of the right column: LAST STAND, ABILITIES, DEPLOY
+	# the foot of the right column: NEXT: RIVALS
 	var bh := UiKit.tap_h(self, 48.0)
 	var fy := area.end.y - bh - 12.0
-	var dt := "DEPLOY  →"
-	var dw := maxf(UiKit.text_w(self, dt, 18, true) + 56.0, 170.0)
-	UiKit.btn(self, dt, Vector2(content.size.x - x - dw, fy), Vector2(dw, 48), deploy, "primary", faction, 18)
-	var tgw := (rw - dw - 20.0) / 2.0
-	_toggle("LAST STAND", Rules.last_stand, Vector2(rx, fy), Vector2(tgw, 48), func():
-		Rules.last_stand = not Rules.last_stand
-		show_setup())
-	_toggle("ABILITIES", Rules.abilities_on, Vector2(rx + tgw + 10.0, fy), Vector2(tgw, 48), func():   # SKILLS 2.0: Alpha 11's match setting
-		Rules.abilities_on = not Rules.abilities_on
-		show_setup())
-	if not mobile:                                    # the phone skips the recap to save room
-		var tip := UiKit.label(self, "Last Stand ON = the map collapses ring by ring late in the match.  ABILITIES OFF = no skills.", 13, UiKit.MUTED)
-		tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		tip.custom_minimum_size = Vector2(rw, 0)
-		_shell_add(tip, Vector2(rx, fy - 8.0 - UiKit.text_h(self, tip.text, 13, rw)))
+	var nt := "NEXT: RIVALS  →"
+	var nw := maxf(UiKit.text_w(self, nt, 18, true) + 56.0, 200.0)
+	UiKit.btn(self, nt, Vector2(content.size.x - x - nw, fy), Vector2(nw, 48), show_seats, "primary", faction, 18)
+	var who := _enemy_seats().map(func(s):
+		var p := str(rival_picks.get(s, "random"))
+		return "ANY" if p == "random" else UiKit.NAMES[p])
+	var nl := UiKit.label(self, "%s  ·  vs %s" % [MODE_NAMES.get(mode, mode), ", ".join(who)], 14, UiKit.MUTED)
+	nl.clip_text = true
+	nl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	nl.size = Vector2(maxf(rw - nw - 14.0, 10.0), UiKit.line_h(self, 14))
+	_shell_add(nl, Vector2(rx, fy + (bh - UiKit.line_h(self, 14)) / 2.0))
 	# the left column: the map, YOUR TEAM COLOUR under it
 	var hs := UiKit.tap_h(self, 44.0)
 	var col_h := UiKit.line_h(self, 12, true) + 8.0 + hs + (UiKit.line_h(self, 13) + 6.0 if colour == "faction" else 0.0) \
@@ -3399,7 +3396,7 @@ func show_setup() -> void:
 	var col_y := area.end.y - 18.0 - col_h           # (the picked chip grows 12 %)
 	_setup_map(Vector2(x, y), Vector2(lw, col_y - 16.0 - y))
 	_setup_colours(Vector2(x, col_y), lw)
-	# the right column: your faction, the rival(s), DIFFICULTY
+	# the right column: your faction, DIFFICULTY, MATCH OPTIONS
 	var ry := y
 	if not mobile:
 		_shell_add(UiKit.label(self, "YOUR FACTION  ·  SEAT A", 12, UiKit.MUTED, true, 3), Vector2(rx, ry))
@@ -3407,30 +3404,36 @@ func show_setup() -> void:
 	var card_h := maxf(76.0, UiKit.tap_h(self, 40.0) + 12.0)
 	_setup_faction(Vector2(rx, ry), Vector2(rw, card_h))
 	ry += card_h + 14.0
-	var seats := _enemy_seats()
-	if mode == "1v1" and seats.size() == 1:
-		var pick := str(rival_picks.get(seats[0], "random"))
-		var kt := "RIVAL  ·  SEAT %s  ·  %s" % [seats[0], "ANY (picked when you deploy)" if pick == "random" else UiKit.NAMES[pick]]
-		if UiKit.text_w(self, kt, 12, true) + kt.length() * 3.0 > rw:
-			kt = kt.replace(" (picked when you deploy)", "")
-		var kl := UiKit.label(self, kt, 12, UiKit.MUTED, true, 3)
-		kl.clip_text = true
-		kl.size = Vector2(rw, UiKit.line_h(self, 12, true))
-		_shell_add(kl, Vector2(rx, ry))
-		ry += UiKit.line_h(self, 12, true) + 6.0
-		ry += _faction_picks(seats[0], Vector2(rx, ry), rw, show_setup) + 14.0
-	else:
-		_shell_add(UiKit.label(self, "AI SEATS  ·  %s" % MODE_NAMES.get(mode, mode), 12, UiKit.MUTED, true, 3), Vector2(rx, ry))
-		ry += UiKit.line_h(self, 12, true) + 6.0
-		var parts := seats.map(func(s):
-			var p := str(rival_picks.get(s, "random"))
-			return "%s %s" % [s, "ANY" if p == "random" else UiKit.NAMES[p]])
-		var r := UiKit.row(self, Vector2(rx, ry), Vector2(rw, 52), "", "  ·  ".join(parts), "Set each seat's faction, see the teams",
-				show_seats, faction)
-		ry += r.size.y + 14.0
 	_shell_add(UiKit.label(self, "DIFFICULTY", 12, UiKit.MUTED, true, 3), Vector2(rx, ry))
 	ry += UiKit.line_h(self, 12, true) + 6.0
 	_difficulty(Vector2(rx, ry), rw)
+	ry += UiKit.tap_h(self, 44.0) + 16.0
+	_shell_add(UiKit.label(self, "MATCH OPTIONS", 12, UiKit.MUTED, true, 3), Vector2(rx, ry))
+	ry += UiKit.line_h(self, 12, true) + 6.0
+	# three switches in a row, or - where the longest name doesn't fit a third (phones) - two, and HIDDEN COUNTS under them
+	var tgw := (rw - 20.0) / 3.0
+	var one_row := UiKit.text_w(self, "HIDDEN COUNTS", 15) + UiKit.tap_h(self, 46.0) * 0.5 + 44.0 <= tgw
+	if not one_row:
+		tgw = (rw - 10.0) / 2.0
+	_toggle("LAST STAND", Rules.last_stand, Vector2(rx, ry), Vector2(tgw, 46), func():
+		Rules.last_stand = not Rules.last_stand
+		show_setup())
+	_toggle("ABILITIES", Rules.abilities_on, Vector2(rx + tgw + 10.0, ry), Vector2(tgw, 46), func():   # SKILLS 2.0: Alpha 11's match setting
+		Rules.abilities_on = not Rules.abilities_on
+		show_setup())
+	var hp := Vector2(rx + (tgw + 10.0) * 2.0, ry) if one_row else Vector2(rx, ry + UiKit.tap_h(self, 46.0) + 8.0)
+	_toggle("HIDDEN COUNTS", Rules.hide_enemy_counts, hp, Vector2(tgw, 46), func():
+		Rules.hide_enemy_counts = not Rules.hide_enemy_counts   # (was SETTINGS > GAME > ENEMY COUNTS)
+		show_setup())
+	ry = hp.y + UiKit.tap_h(self, 46.0) + 8.0
+	nl.visible = ry <= fy - 4.0 or ry <= nl.position.y        # the foot's "mode · vs ..." line only where it has room
+	if not mobile:                                    # the phone skips the recap to save room
+		var tip := UiKit.label(self, "LAST STAND: the map collapses ring by ring late in the match.  ABILITIES off: no skills.  "
+				+ "HIDDEN COUNTS: no unit numbers on enemy nodes, so you scout.", 13, UiKit.MUTED)
+		tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tip.custom_minimum_size = Vector2(rw, 0)
+		if ry + UiKit.text_h(self, tip.text, 13, rw) < fy - 8.0:
+			_shell_add(tip, Vector2(rx, ry))
 
 
 func _setup_map(pos: Vector2, dims: Vector2) -> void:
@@ -3450,8 +3453,7 @@ func _setup_map(pos: Vector2, dims: Vector2) -> void:
 	var pd := Vector2(dims.x - pad * 2.0, pos.y + dims.y - pad - th - 10.0 - py)
 	content.add_child(UiKit.rect(Vector2(pos.x + pad, py), pd, Color(UiKit.BASE, 0.9)))
 	var tex := TextureRect.new()
-	var tp := MapPool.thumb(str(sel.get("code", "")))
-	tex.texture = load(tp) if ResourceLoader.exists(tp) else null
+	tex.texture = UiKit.map_thumb(MapPool.thumb(str(sel.get("code", ""))))   # the map alone, name + tags beside it
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED     # the whole map, letterboxed, never cropped
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3522,7 +3524,10 @@ func _setup_faction(pos: Vector2, dims: Vector2) -> void:
 		skill_icon(ids[i], Vector2(10.0 + i * (isz + 6.0), (ab.size.y - isz) / 2.0), Vector2(isz, isz), ic, ab)
 	var tx := pos.x + pad + hs + 12.0
 	var tw := ab.position.x - 8.0 - tx
-	var lines := [[UiKit.NAMES[faction], 17, acc, true], ["%s  ·  SEAT A" % UiKit.SUBS[faction], 13, UiKit.MUTED, false]]
+	var sub := "%s  ·  SEAT A" % UiKit.SUBS[faction]
+	if UiKit.text_w(self, sub, 13) > tw:                 # a narrow phone column (the iPhone SE): the name alone
+		sub = UiKit.SUBS[faction]
+	var lines := [[UiKit.NAMES[faction], 17, acc, true], [sub, 13, UiKit.MUTED, false]]
 	if not Rules.abilities_on:
 		lines.append(["ABILITIES OFF", 12, UiKit.DIM, false])
 	elif eff["swapped"] != "":
@@ -3613,17 +3618,18 @@ func _toggle(text: String, on: bool, pos: Vector2, dims: Vector2, call: Callable
 
 
 func show_seats() -> void:
-	## SEATS & TEAMS (screen system 29), from SETUP: PLAYERS (the map's modes), then every seat - you in seat A (your
-	## faction, CHANGE -> FACTION), each AI seat as ally or rival (its team in team modes) with its faction pick; DONE.
+	## 04 RIVALS (screen system 29; Daniele 2026-09-28: the step after SETUP): PLAYERS (the map's modes), then every seat -
+	## you in seat A (your faction, CHANGE -> FACTION), each AI seat as ally or rival (its team in team modes) with its
+	## army pick; DEPLOY.
 	_last_show = show_seats                  # a resize that changes the phone sizing rebuilds it (_fit)
 	var sel := _selected_map()
 	var modes := _modes_of(sel)
 	if not mode in modes:
 		mode = modes[0]
-	var area := shell_open("OOZE / SEATS & TEAMS", "play", show_setup, faction)
+	var area := shell_open("OOZE / RIVALS", "play", show_setup, faction)
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
-	var y := page_title(area, "MATCH SETUP", "SEATS & TEAMS.")
+	var y := page_title(area, "04 / RIVALS", "PICK YOUR RIVALS.")
 	var gap := 10.0
 	var mw := (w - gap * (modes.size() - 1)) / float(modes.size())
 	var mb: Button
@@ -3635,8 +3641,8 @@ func show_seats() -> void:
 	y += mb.size.y + 14.0
 	var bh := UiKit.tap_h(self, 48.0)
 	var fy := area.end.y - bh - 12.0
-	var dw := maxf(UiKit.text_w(self, "DONE  →", 18, true) + 56.0, 170.0)
-	UiKit.btn(self, "DONE  →", Vector2(content.size.x - x - dw, fy), Vector2(dw, 48), show_setup, "primary", faction, 18)
+	var dw := maxf(UiKit.text_w(self, "DEPLOY  →", 18, true) + 56.0, 170.0)
+	UiKit.btn(self, "DEPLOY  →", Vector2(content.size.x - x - dw, fy), Vector2(dw, 48), deploy, "primary", faction, 18)
 	_shell_add(UiKit.label(self, "Team colour identifies ownership. Faction is your army.", 15, UiKit.MUTED),
 			Vector2(x, fy + (bh - UiKit.line_h(self, 15)) / 2.0))
 	# the seats, two per row, in a scroll (five seats outgrow a phone)
@@ -4281,9 +4287,11 @@ func _fit() -> void:
 	content.size = Vector2(1280, 720)
 	content.scale = Vector2(s, s)
 	content.position = (vp - Vector2(1280, 720) * s) / 2.0
-	if _shell:                                        # UI: a shell page spans the whole screen (bars edge to edge)
-		content.size = vp / s
-		content.position = Vector2.ZERO
+	if _shell:                                        # UI: a shell page spans the whole screen (bars edge to edge),
+		var ins := UiKit.safe_insets(vp)              # its controls inside the notch / home-indicator bands
+		safe = ins / s                                # (in page units: the bars paint their backs out into them)
+		content.size = (vp - Vector2(ins.x + ins.z, ins.y + ins.w)) / s
+		content.position = Vector2(ins.x, ins.y)
 		if _built_w > 0.0 and _last_show.is_valid() and absf(content.size.x / _built_w - 1.0) > 0.02:
 			_built_w = 0.0
 			_last_show.call_deferred()

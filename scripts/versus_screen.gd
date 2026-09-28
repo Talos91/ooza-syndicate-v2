@@ -97,7 +97,7 @@ func _pt_factor() -> float:
 	var vp := get_viewport().get_visible_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0:
 		return 0.0
-	return UiKit.K * minf(vp.x / 1280.0, vp.y / 720.0) * (390.0 / vp.y)
+	return UiKit.K * minf(vp.x / 1280.0, vp.y / 720.0) * UiKit.pt_per_px(vp)
 
 
 func _sides() -> Array:
@@ -124,8 +124,10 @@ func _build() -> void:
 		content.queue_free()
 	var vp := get_viewport().get_visible_rect().size
 	var s := minf(vp.x / 1280.0, vp.y / 720.0)
+	var ins := UiKit.safe_insets(vp)                   # inside the notch / home-indicator bands
 	content = Control.new()
-	content.size = vp / s
+	content.position = Vector2(ins.x, ins.y)
+	content.size = (vp - Vector2(ins.x + ins.z, ins.y + ins.w)) / s
 	content.scale = Vector2(s, s)
 	content.mouse_filter = Control.MOUSE_FILTER_STOP     # a tap anywhere goes on (and nothing reaches the board)
 	content.gui_input.connect(_on_input)
@@ -141,9 +143,13 @@ func _build() -> void:
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.modulate = Color(0.42, 0.45, 0.5)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.size = content.size
+	bg.position = -Vector2(ins.x, ins.y) / s           # the art and its dim still fill the whole screen
+	bg.size = vp / s
 	content.add_child(bg)
-	content.add_child(UiKit.rect(Vector2.ZERO, content.size, Color(UiKit.BASE, 0.35)))
+	var shade := UiKit.rect(bg.position, bg.size, Color(UiKit.BASE, 0.35))
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP     # a tap in a band goes on too (never to the board)
+	shade.gui_input.connect(_on_input)
+	content.add_child(shade)
 	var sides := _sides()
 	var x := maxf(26.0, W * 0.024)
 	var top := 26.0 if mobile else 40.0
@@ -223,19 +229,30 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> void:
 	content.add_child(k)
 	var n := seats.size()
 	var name_h := UiKit.line_h(self, 34 if n == 1 else 18, true) + UiKit.line_h(self, 12) + 8.0
-	var avail := dims.y - k.size.y - 12.0 - name_h
 	var gap := 12.0
-	var hs := minf(avail, (dims.x - gap * (n - 1)) / float(n))
-	var row_w := hs * n + gap * (n - 1)
-	var x0 := pos.x + (dims.x - row_w) / 2.0
-	var hy := pos.y + k.size.y + 12.0 + (avail - hs) / 2.0
+	# one row, or two (3+ seats: FFA 4 / 5, 3v3) when that makes the characters bigger - the side's height is there
+	var room := dims.y - k.size.y - 12.0
+	var cols := n
+	var hs := minf(room - name_h, (dims.x - gap * (n - 1)) / float(n))
+	if n >= 3:
+		var c2 := int(ceil(n / 2.0))
+		var hs2 := minf((room - 2.0 * name_h - gap) / 2.0, (dims.x - gap * (c2 - 1)) / float(c2))
+		if hs2 > hs:
+			cols = c2
+			hs = hs2
+	var rows := int(ceil(n / float(cols)))
+	var block_h := rows * (hs + name_h) + (rows - 1) * gap
+	var y0 := pos.y + k.size.y + 12.0 + (room - block_h) / 2.0
 	var from := -60.0 if mine else 60.0
 	for i in range(n):
 		var seat := str(seats[i])
 		var f := str(main.SEAT_FACTIONS[seat])
 		var cell := Control.new()
 		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cell.position = Vector2(x0 + i * (hs + gap), hy)
+		var r := i / cols
+		var in_row := mini(cols, n - r * cols)              # a short last row is centred on its own
+		var row_w := hs * in_row + gap * (in_row - 1)
+		cell.position = Vector2(pos.x + (dims.x - row_w) / 2.0 + (i % cols) * (hs + gap), y0 + r * (hs + name_h + gap))
 		cell.size = Vector2(hs, hs + name_h)
 		content.add_child(cell)
 		var hero := UiKit.hero(self, f, Vector2.ZERO, Vector2(hs, hs))
@@ -303,7 +320,7 @@ func _process(dt: float) -> void:
 
 func _on_input(e: InputEvent) -> void:
 	if (e is InputEventMouseButton and e.pressed) or (e is InputEventScreenTouch and e.pressed):
-		content.accept_event()
+		get_viewport().set_input_as_handled()          # (the content or the full-screen shade: either took it)
 		_go()
 
 

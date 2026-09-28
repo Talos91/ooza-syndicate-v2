@@ -33,8 +33,9 @@ func _build(f: String) -> void:
 	position = Vector2(0, float(menu.content.size.y) - h)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	var acc := UiKit.accent(f)
-	add_child(UiKit.rect(Vector2.ZERO, size, UiKit.BAR))
-	add_child(UiKit.rect(Vector2.ZERO, Vector2(w, 1.0), Color(acc, 0.25)))
+	var sf: Vector4 = menu.safe                        # the back reaches over the notch bands and the home indicator
+	add_child(UiKit.rect(Vector2(-sf.x, 0), Vector2(w + sf.x + sf.z, h + sf.w), UiKit.BAR))
+	add_child(UiKit.rect(Vector2(-sf.x, 0), Vector2(w + sf.x + sf.z, 1.0), Color(acc, 0.25)))
 	var longest := 0.0                               # every tab as wide as the longest label needs (phones grow the text)
 	for t in TABS:
 		longest = maxf(longest, UiKit.text_w(menu, t[1], 15, true))

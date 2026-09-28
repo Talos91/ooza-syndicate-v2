@@ -32,6 +32,9 @@ extends Control
 
 signal play_pressed(key: String)
 signal back_pressed
+signal view_pressed                                # UI (Alpha 21): the menu's switch to the mission cards view
+
+var view_switch := ""                              # UI: a label shows the view switch under BACK ("" = none)
 
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
@@ -992,6 +995,8 @@ func _rebuild_ui() -> void:
 	# top bar: BACK, the campaign's name, the faction tabs, the star count
 	var top_h := rh(56.0)
 	_button(content, "BACK", Vector2(16, 12), tap(Vector2(150, 56)), func(): back_pressed.emit(), false, 20)
+	if view_switch != "":                             # UI (Alpha 21, Daniele: "maybe we can have a switch for the 2 modes")
+		_button(content, view_switch, Vector2(16, 12 + top_h + 10.0), tap(Vector2(150, 48)), func(): view_pressed.emit(), false, 18)
 	var info: Dictionary = Campaign.CAMPAIGNS.get(faction, {})
 	_label_at(content, "CAMPAIGN", Vector2(16 + rh(150.0) + 18.0, 12), 14, fc.lightened(0.3))
 	_label_at(content, str(info.get("title", "")), Vector2(16 + rh(150.0) + 18.0, 12 + top_h * 0.34), 24, Color("edf7fa"), true)

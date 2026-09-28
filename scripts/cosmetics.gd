@@ -284,7 +284,6 @@ static func _want_hd(is_skin: bool) -> void:
 	http.download_file = dest
 	http.accept_gzip = false                         # GitHub Pages gzips the .pck; never gunzip here (see _fetch_pack)
 	_hd_http[which] = http
-	tree.root.add_child(http)
 	http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
 		var ok := result == HTTPRequest.RESULT_SUCCESS and code == 200 and ProjectSettings.load_resource_pack(dest, false)
 		_hd_pack[which] = "ready" if ok else "failed"
@@ -292,8 +291,12 @@ static func _want_hd(is_skin: bool) -> void:
 		(_hd_http[which] as HTTPRequest).queue_free()
 		_hd_http[which] = null)
 	print("Cosmetics: fetching ", url)
-	if http.request(url) != OK:
-		_hd_pack[which] = "failed"
+	# deferred (0.21.6): the first ask can come while the root is still adding its children (a fresh first launch:
+	# "Parent node is busy setting up children"), so add it next idle frame and request once it is in the tree
+	http.tree_entered.connect(func() -> void:
+		if http.request(url) != OK:
+			_hd_pack[which] = "failed", CONNECT_ONE_SHOT)
+	tree.root.add_child.call_deferred(http)
 
 
 static func hd_pack_state(which: String) -> String:
@@ -363,7 +366,6 @@ static func _fetch_pack() -> void:
 	# gunzip of the same (already plain) body failed with RESULT_BODY_DECOMPRESS_FAILED on the live 0.19.1
 	# ("skins don't look implemented"). Never gunzip here.
 	_http.accept_gzip = false
-	tree.root.add_child(_http)
 	_http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
 		var ok := result == HTTPRequest.RESULT_SUCCESS and code == 200 and ProjectSettings.load_resource_pack(SKINS_FILE, false)
 		_pack = "ready" if ok else "failed"
@@ -371,8 +373,11 @@ static func _fetch_pack() -> void:
 		_http.queue_free()
 		_http = null)
 	print("Cosmetics: fetching ", url)
-	if _http.request(url) != OK:
-		_pack = "failed"
+	var http := _http                                # deferred like the HD packs' fetch above (a first launch)
+	http.tree_entered.connect(func() -> void:
+		if http.request(url) != OK:
+			_pack = "failed", CONNECT_ONE_SHOT)
+	tree.root.add_child.call_deferred(http)
 
 
 static func pack_state() -> String:
