@@ -40,6 +40,8 @@ var _last_show := Callable()                     # the page on screen (rebuilt w
 var _built_pt := 0.0                             # _pt_factor() the page was built with (0 while building)
 var _backdrop: TextureRect
 var _backdrop_art: Texture2D                     # the backdrop's own art (HOME swaps in the hero faction's scene)
+var _backdrop_ay := 0.5                           # UI: the backdrop's vertical anchor when it crops (0.5 centred; HOME
+                                                  # lower, so the wallpaper's creature stands above the tab bar)
 # UI: the Alpha 21 app shell (Daniele's navigation mockups, 2026-09-28): a shell page lays out full screen width in
 # canvas units (UiKit) between a TopBar and a NavBar - HOME / PLAY / ARMIES / CAMPAIGN.
 var _shell := false
@@ -207,6 +209,8 @@ func clear_page(art: String) -> void:
 	if _backdrop:
 		_backdrop.texture = _backdrop_art
 		_backdrop.modulate = Color(0.95, 0.95, 0.95) if _is_main else Color(0.62, 0.68, 0.74)
+		_backdrop_ay = 0.5
+		_place_backdrop()
 
 
 func text_label(text: String, size_value: int = 20, col: Color = Color.WHITE, grow := true) -> Label:
@@ -452,6 +456,8 @@ func shell_open(crumb: String, tab: String, back := Callable(), f := "") -> Rect
 		if bg != null:
 			_backdrop.texture = bg
 		_backdrop.modulate = Color(0.55, 0.58, 0.62)
+		_backdrop_ay = 0.5
+		_place_backdrop()
 	top_bar = TopBar.make(self, crumb, shell_f, shell_slim)
 	top_bar.help_pressed.connect(show_help)
 	top_bar.options_pressed.connect(show_options)
@@ -508,14 +514,38 @@ func _shell_add(c: Control, pos: Vector2) -> Control:
 	return UiKit.add(self, c, pos)
 
 
+func _place_backdrop() -> void:
+	## UI: the backdrop covers the screen (like STRETCH_KEEP_ASPECT_COVERED), cropped at `_backdrop_ay` (0 = keep the
+	## top, 1 = keep the bottom) - HOME keeps its wallpaper's floor, where the creature stands, on wide phones.
+	if not _backdrop or _backdrop.texture == null:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	var ts := Vector2(_backdrop.texture.get_size())
+	if ts.x <= 0.0 or ts.y <= 0.0 or vp.x <= 0.0:
+		return
+	var sz := ts * maxf(vp.x / ts.x, vp.y / ts.y)
+	_backdrop.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_backdrop.stretch_mode = TextureRect.STRETCH_SCALE
+	_backdrop.size = sz
+	_backdrop.position = Vector2((vp.x - sz.x) / 2.0, (vp.y - sz.y) * _backdrop_ay)
+
+
+func _backdrop_point(frac: Vector2) -> Vector2:
+	## UI: a point of the backdrop art (fractions of the image) in page units - where HOME's wallpaper creature stands.
+	var gp := _backdrop.position + _backdrop.size * frac
+	return (gp - content.position) / content.scale.x
+
+
 func _fade_left(area: Rect2, reach: float) -> void:
-	## A dark wash from the left edge, so HOME's text reads over the environment.
+	## A dark wash from the left edge, so HOME's white headline reads over the bright wallpaper (VEX / NULL / SOLAR have
+	## white sky and fog there): nearly opaque behind the text, gone before the creature.
 	var g := Gradient.new()
-	g.set_color(0, Color(UiKit.BASE, 0.92))
-	g.set_color(1, Color(UiKit.BASE, 0.0))
+	g.set_color(0, Color(UiKit.BASE, 0.9))
+	g.add_point(0.55, Color(UiKit.BASE, 0.72))
+	g.set_color(g.get_point_count() - 1, Color(UiKit.BASE, 0.0))
 	var gt := GradientTexture2D.new()
 	gt.gradient = g
-	gt.fill_from = Vector2(0.3, 0)
+	gt.fill_from = Vector2(0.25, 0)
 	gt.fill_to = Vector2(1, 0)
 	var r := TextureRect.new()
 	r.texture = gt
@@ -526,25 +556,34 @@ func _fade_left(area: Rect2, reach: float) -> void:
 	r.size = Vector2(reach, area.size.y)
 
 
+const HOME_CREATURE := {                         # where each FINAL wallpaper's creature stands: [centre x, feet y]
+	"vex": Vector2(0.73, 0.86), "null": Vector2(0.76, 0.83), "bloom": Vector2(0.71, 0.84),
+	"ember": Vector2(0.77, 0.88), "solar": Vector2(0.71, 0.86),
+}
+
+
 func show_main() -> void:
-	## HOME (Daniele's screen system 01): the faction played last - its environment behind, its original character
-	## on the right - the headline, PLAY (-> NEW GAME's faction step), CONTINUE CAMPAIGN, the training link while
+	## HOME (Daniele's screen system 01): the faction played last - its FINAL wallpaper behind, the creature in it on
+	## the right (Daniele 2026-09-28; its tag under it) - the headline, PLAY (-> NEW GAME's faction step), CONTINUE CAMPAIGN, the training link while
 	## lessons remain; CHALLENGES top right; QUIT / FULLSCREEN and the version at the foot; the install guide.
 	_last_show = show_main                  # a resize that changes the phone sizing rebuilds it (_fit)
 	var hero := UiKit.last_faction()
 	var area := shell_open("OOZE / HOME", "home", Callable(), hero)
 	_is_main = true
 	if _backdrop:
-		_backdrop.modulate = Color(0.7, 0.72, 0.76)
+		_backdrop.modulate = Color(0.9, 0.9, 0.92)       # the wallpaper bright (the pages behind panels stay darker)
+		_backdrop_ay = 0.8
+		_place_backdrop()
 	var acc := UiKit.accent(hero)
-	_fade_left(area, content.size.x * 0.6)
+	_fade_left(area, content.size.x * 0.62)
 	var x := shell_x() + 8.0
-	# the character, right of centre, over its glow; its tag under it
-	var hs := minf(area.size.y * 0.78, content.size.x * 0.3)
-	var hpos := Vector2(content.size.x * 0.66 - hs / 2.0, area.position.y + (area.size.y - hs) / 2.0 - 10.0)
-	UiKit.hero(self, hero, hpos, Vector2(hs, hs))
-	var tag_w := UiKit.text_w(self, UiKit.TAGS[hero], 14, true) + 60.0
-	UiKit.tag(self, UiKit.TAGS[hero], Vector2(content.size.x * 0.66 - tag_w / 2.0 + 30.0, area.end.y - UiKit.tap_h(self, 36.0) - 20.0), hero)
+	# the wallpaper's creature, its tag under it (on the floor; kept above the tab bar)
+	var feet := _backdrop_point(HOME_CREATURE.get(hero, Vector2(0.73, 0.86)) as Vector2)
+	var tag_t := str(UiKit.TAGS[hero])
+	var tag_w: float = UiKit.text_w(self, tag_t, 14, true) + tag_t.length() * 2.0 + 30.0
+	var tag_h: float = UiKit.line_h(self, 14, true) + 14.0
+	UiKit.tag(self, tag_t, Vector2(clampf(feet.x - tag_w / 2.0, content.size.x * 0.5, content.size.x - tag_w - shell_x()),
+			minf(feet.y + 4.0, area.end.y - tag_h - 12.0)), hero)
 	var kick := UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 13, acc, true, 3)
 	var head := UiKit.label(self, "THE CITY IS\nYOURS TO TAKE.", 56, UiKit.INK, true)
 	var sub := UiKit.label(self, "Pick your syndicate. Control the crossings.", 18, UiKit.MUTED)
@@ -4348,6 +4387,7 @@ func _fit() -> void:
 	if not is_instance_valid(content):
 		return
 	var vp := get_viewport().get_visible_rect().size
+	_place_backdrop()
 	var s := minf(vp.x / 1280.0, vp.y / 720.0)
 	content.size = Vector2(1280, 720)
 	content.scale = Vector2(s, s)

@@ -5,10 +5,15 @@
 Sources (Daniele's Art Direction folder, "Alpha 20 UI Expansion" / ASSET-SOURCES.json):
   - the five faction characters, Alpha 12/references/<faction>.png  -> assets/art/ui/hero_<faction>.png
     (transparent cutouts, 768 px; SOLAR's dark backdrop is keyed out)
-  - the menu environments, Alpha 20 UX/assets/...                   -> assets/art/ui/bg_<faction>.jpg (1600 px)
+  - Daniele's FINAL UI set (Art/Interface/Final set 2026-09-28, 2026-09-28; supersedes the Alpha 20 UX environments):
+      factions/<faction>.png  -> assets/art/ui/bg_<faction>.jpg (1600 px; HOME's wallpaper and every page's backdrop,
+                                 the creature is in it, on the right)
+      play/<card>.png         -> assets/art/ui/play_<card>.jpg (1024 px; the PLAY cards)
+      versus/<faction>.png    -> assets/art/ui/stage_<faction>.jpg (1024 px; VERSUS: each side's empty stage)
+      emblems/<faction>-*.png -> assets/art/ui/emblem_<faction>.png (192 px RGBA; the faction's mark)
   - the VEX campaign mission art, campaign-isometric-v2/*.png       -> assets/art/campaign/vex-<id>.jpg (1280 px)
 JPEG for the opaque plates keeps the source small; their .import files are LOSSY (quality 0.8) with a size limit
-(backdrops 1600, mission art 1024, cutouts 640), or Godot stores them lossless and the web index.pck grows ~20 MB.
+(backdrops 1600, mission art / PLAY cards / stages 1024, cutouts 640, emblems 192), or Godot stores them lossless and the web index.pck grows ~20 MB.
 """
 import os
 import sys
@@ -21,13 +26,13 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_UI = os.path.join(HERE, "assets", "art", "ui")
 OUT_CAMP = os.path.join(HERE, "assets", "art", "campaign")
 
-BACKGROUNDS = {
-    "vex": os.path.join(UX, "dockside-menu-v2.png"),
-    "null": os.path.join(UX, "backgrounds-set-02", "null-blackglass-exchange-v1.png"),
-    "bloom": os.path.join(UX, "backgrounds-set-02", "viridian-culture-gardens-v1.png"),
-    "ember": os.path.join(UX, "backgrounds-set-02", "ember-cinderworks-v1.png"),
-    "solar": os.path.join(UX, "backgrounds-set-02", "solar-helios-bastion-v1.png"),
-}
+FINAL = os.path.join(os.path.dirname(os.path.dirname(HERE)), "Art", "Interface", "Final set 2026-09-28")
+if not os.path.isdir(FINAL):                          # run from a clone outside the Drive project
+    FINAL = r"H:/My Drive/PROJECTS/Ooze Syndicate/Art/Interface/Final set 2026-09-28"
+FILE_NAME = {"bloom": "viridian"}                     # the art's file names: the game's "bloom" is "viridian" there
+EMBLEM = {"vex": "vex-emblem-v1", "null": "null-emblem-v1", "bloom": "bloom-emblem-v1", "ember": "ember-emblem-v1",
+          "solar": "solar-emblem-v2"}
+PLAY_CARDS = {"vs_ai": "vs-ai", "online": "online", "training": "training"}
 
 
 def key_out_dark(im: Image.Image, tol: int = 22) -> Image.Image:
@@ -106,7 +111,17 @@ def main() -> int:
         sq = Image.new("RGBA", (side, side), (0, 0, 0, 0))
         sq.paste(im, ((side - im.width) // 2, side - im.height))   # standing on the square's floor
         fit(sq, 768).save(os.path.join(OUT_UI, "hero_%s.png" % f), optimize=True)
-        fit(Image.open(BACKGROUNDS[f]).convert("RGB"), 1600).save(os.path.join(OUT_UI, "bg_%s.jpg" % f), quality=84)
+        src = FILE_NAME.get(f, f) + ".png"
+        fit(Image.open(os.path.join(FINAL, "factions", src)).convert("RGB"), 1600).save(
+            os.path.join(OUT_UI, "bg_%s.jpg" % f), quality=84)
+        fit(Image.open(os.path.join(FINAL, "versus", src)).convert("RGB"), 1024).save(
+            os.path.join(OUT_UI, "stage_%s.jpg" % f), quality=84)
+        em = Image.open(os.path.join(FINAL, "emblems", EMBLEM[f] + ".png")).convert("RGBA")
+        em = em.crop(em.getbbox())
+        fit(em, 192).save(os.path.join(OUT_UI, "emblem_%s.png" % f), optimize=True)
+    for card, src in PLAY_CARDS.items():
+        fit(Image.open(os.path.join(FINAL, "play", src + ".png")).convert("RGB"), 1024).save(
+            os.path.join(OUT_UI, "play_%s.jpg" % card), quality=84)
     camp = os.path.join(UX, "campaign-isometric-v2")
     for name in sorted(os.listdir(camp)):
         if not name.endswith("-v2.png"):
