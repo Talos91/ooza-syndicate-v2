@@ -617,7 +617,10 @@ class Preview extends SubViewportContainer:
 		for c in _pivot.get_children():
 			c.queue_free()
 		_pivot.add_child(node)
-		var seat := "A"
+		# UI (Daniele's phone test 2026-09-28: "monster skins previewed on the grey default"): the preview wears its army's
+		# faction colour (NULL magenta, VEX cyan...) - a preview seat of that colour, not seat A's
+		var seat := "W_" + faction
+		Rules.seat_colors[seat] = Rules.FACTIONS[faction][1] if Rules.FACTIONS.has(faction) else Rules.seat_color("A")
 		if family == "monster":
 			MonsterView.dress(node, faction, seat)
 		else:

@@ -269,14 +269,14 @@ static func title(m, x: float, y: float, kicker: String, headline: String, f := 
 	return y + h.get_minimum_size().y
 
 
-static func back_link(m, right_x: float, y: float, call: Callable) -> Button:
-	var b := flat_button(m, "←  BACK", 15)
-	b.alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	var w := text_w(m, b.text, 15, true) + 20.0
-	b.size = Vector2(w, tap_h(m, 36.0))
+static func back_link(m, right_x: float, y: float, call: Callable, text := "←  BACK") -> Button:
+	## A page's BACK (or LEAVE ROOM) at the right of its title row: a framed secondary button like every other one
+	## (Daniele, 0.22.0: "the LEAVE ROOM button needs to be like other buttons, right now it's invisible").
+	var w := text_w(m, text, 15, true) + 40.0
+	var b := make_btn(m, text, Vector2(w, 42.0), Callable(), "secondary", m.shell_f if "shell_f" in m else "vex", 15)
 	b.pressed.connect(func():
 		Sfx.play_ui("back")                                 # SOUND
-		call.call_deferred())
+		acknowledge(b, call))
 	return add(m, b, Vector2(right_x - w, y)) as Button
 
 
