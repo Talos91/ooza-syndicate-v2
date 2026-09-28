@@ -3034,14 +3034,14 @@ func show_setup() -> void:
 		Rules.abilities_on = not Rules.abilities_on
 		show_setup())
 	if not mobile:                                    # the phone skips the recap to save room
-		var tip := UiKit.label(self, "Last Stand ON = the map collapses ring by ring late in the match.  ABILITIES OFF = no skills.", 12, UiKit.DIM)
+		var tip := UiKit.label(self, "Last Stand ON = the map collapses ring by ring late in the match.  ABILITIES OFF = no skills.", 13, UiKit.MUTED)
 		tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		tip.custom_minimum_size = Vector2(rw, 0)
-		_shell_add(tip, Vector2(rx, fy - 8.0 - UiKit.text_h(self, tip.text, 12, rw)))
+		_shell_add(tip, Vector2(rx, fy - 8.0 - UiKit.text_h(self, tip.text, 13, rw)))
 	# the left column: the map, YOUR TEAM COLOUR under it
 	var hs := UiKit.tap_h(self, 44.0)
 	var col_h := UiKit.line_h(self, 12, true) + 8.0 + hs + (UiKit.line_h(self, 13) + 6.0 if colour == "faction" else 0.0) \
-			+ (UiKit.line_h(self, 12) + 6.0 if not mobile else 0.0)
+			+ (UiKit.line_h(self, 13) + 10.0 if not mobile else 0.0)
 	var col_y := area.end.y - 18.0 - col_h           # (the picked chip grows 12 %)
 	_setup_map(Vector2(x, y), Vector2(lw, col_y - 16.0 - y))
 	_setup_colours(Vector2(x, col_y), lw)
@@ -3132,14 +3132,14 @@ func _setup_colours(pos: Vector2, width: float) -> void:
 			show_setup())
 		if ck == "faction":
 			chip.emblem_faction = faction              # a recognisable face, not just wedges
-	var y := hy + hs + 6.0
+	var y := hy + hs + (10.0 if not mobile else 6.0)
 	if colour == "faction":                            # a one-line caption while FACTION is picked
 		_shell_add(UiKit.label(self, "Every player in their faction's colour", 13, Color("ffd15c")), Vector2(pos.x, y))
 		y += UiKit.line_h(self, 13) + 6.0
 	if not mobile:
-		var n := UiKit.label(self, "Team modes: one hue per team, light and dark. FACTION: every seat in its own faction colour (Alpha 11).", 12, UiKit.DIM)
+		var n := UiKit.label(self, "Team modes: one hue per team, light and dark. FACTION: every seat in its own faction colour (Alpha 11).", 13, UiKit.MUTED)
 		n.clip_text = true
-		n.size = Vector2(width, UiKit.line_h(self, 12))
+		n.size = Vector2(width, UiKit.line_h(self, 13))
 		_shell_add(n, Vector2(pos.x, y))
 
 
