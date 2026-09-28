@@ -352,7 +352,8 @@ func details(d: Dictionary, table: Dictionary) -> void:
 # ------------------------------------------------------------------ 17: PAUSE, and YOU'RE OUT
 func card(d: Dictionary) -> Dictionary:
 	## d: kicker, headline, body, actions [[text, Callable, kind]...] (the first is the primary), pairs [[text, Callable]]
-	## (two side by side: the pause's toggles; placed after the first action), glow (the hero's accent glow), dim.
+	## (two side by side: the pause's toggles; placed after the first action), pairs2 (a second row of them under the
+	## first: the pause's MUSIC toggles), glow (the hero's accent glow), dim.
 	## No actions: a message card (the mission's closing line) - no hero either. Returns {"buttons": [Button...]} in
 	## the order given (pairs after the actions).
 	clear()
@@ -363,12 +364,14 @@ func card(d: Dictionary) -> Dictionary:
 	var pad := 28.0
 	var actions: Array = d.get("actions", [])
 	var pairs: Array = d.get("pairs", [])
+	var pairs2: Array = d.get("pairs2", []) if not pairs.is_empty() else []
 	var bw := 520.0 if ph else 300.0
-	for p in pairs:                                    # wide enough that the toggles' text never clips
-		bw = maxf(bw, (UiKit.text_w(self, str(p[0]), 14, true) + 34.0) * pairs.size() + 10.0)
+	for row in [pairs, pairs2]:
+		for p in row:                                  # wide enough that the toggles' text never clips
+			bw = maxf(bw, (UiKit.text_w(self, str(p[0]), 14, true) + 34.0) * (row as Array).size() + 10.0)
 	var cw := minf(v.x - 2.0 * mg, (1080.0 if ph else 700.0) + bw - (520.0 if ph else 300.0))
 	var bh := UiKit.tap_h(self, 48.0)
-	var rows := actions.size() + (1 if not pairs.is_empty() else 0)
+	var rows := actions.size() + (1 if not pairs.is_empty() else 0) + (1 if not pairs2.is_empty() else 0)
 	var col_h := maxf(0.0, rows * (bh + 10.0) - 10.0)
 	if rows == 0:
 		cw = minf(v.x - 2.0 * mg, 980.0 if ph else 620.0)
@@ -399,13 +402,16 @@ func card(d: Dictionary) -> Dictionary:
 		var b := UiKit.btn(self, str(a[0]), Vector2(bx, by), Vector2(bw, 48.0), a[1], kind, f, 16)
 		(out["buttons"] as Array).append(b)
 		by += bh + 10.0
-		if i == 0 and not pairs.is_empty():            # the toggles, side by side under the primary
-			var pw := (bw - 10.0) / float(pairs.size())
-			for j in range(pairs.size()):
-				var p: Array = pairs[j]
-				(out["buttons"] as Array).append(UiKit.btn(self, str(p[0]), Vector2(bx + j * (pw + 10.0), by), Vector2(pw, 48.0),
-						p[1], "secondary", f, 14))
-			by += bh + 10.0
+		if i == 0 and not pairs.is_empty():            # the toggles, side by side under the primary (one or two rows)
+			for row in [pairs, pairs2]:
+				if (row as Array).is_empty():
+					continue
+				var pw := (bw - 10.0) / float((row as Array).size())
+				for j in range((row as Array).size()):
+					var p: Array = row[j]
+					(out["buttons"] as Array).append(UiKit.btn(self, str(p[0]), Vector2(bx + j * (pw + 10.0), by), Vector2(pw, 48.0),
+							p[1], "secondary", f, 14))
+				by += bh + 10.0
 	return out
 
 

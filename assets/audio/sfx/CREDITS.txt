@@ -9,3 +9,8 @@ slime/      "40 CC0 water / splash / slime SFX" (OpenGameArt)
                                                  https://opengameart.org/content/40-cc0-water-splash-slime-sfx  CC0
 
 Kenney: credit (Kenney or www.kenney.nl) appreciated, not required.
+
+MUSIC (not in this folder or in git - a bought pack; tools/copy_music.py, music.pck):
+Music: Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io)
+    https://smellycatcafe.itch.io/cyberpunk-music-pack - bought by Daniele (2026-09-28); "This song pack can be used in
+    free and commercial projects. Crediting is not necessary, but deeply appreciated!"

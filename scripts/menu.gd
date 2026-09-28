@@ -764,7 +764,8 @@ func show_options() -> void:
 	## 30 / 60 (Alpha 21 OPT-RENDER, perf_profile.gd, user://settings.cfg), DETAIL. TESTING (id "debug"): DEBUG TOOLS (the
 	## Debug button and live sliders in matches), the progression TEST SWITCH. Match options (LAST STAND, ENEMY COUNTS) are
 	## SETUP's (Daniele 2026-09-28: they make no sense here), TERRITORY the wardrobe's. The rows scroll
-	## (phones grow them to 44 pt). DISPLAY ends with an AUDIO group: SOUND ON / OFF and VOLUME 25-100 % (sfx.gd, live). TERRITORY lives
+	## (phones grow them to 44 pt). DISPLAY ends with an AUDIO group: SOUND ON / OFF and VOLUME (sfx.gd), MUSIC ON / OFF and
+## MUSIC VOLUME (music.gd), all live, then a small CREDITS line (the soundtrack's). TERRITORY lives
 	## in ARMIES > COSMETICS > CORE (0.19.2). DONE / BACK return to the page the gear was pressed on.
 	_last_show = show_options                  # a resize that changes the phone sizing rebuilds it (_fit)
 	if not _opt_arg_read:                              # UI: screenshots open a tab (--options-tab=display)
@@ -830,6 +831,16 @@ func show_options() -> void:
 				var pct: int = v
 				vols.append([Sfx.volume_label(pct), Sfx.volume() == pct, func(): Sfx.set_volume(pct)])
 			y += _opt_row(y, w, "VOLUME", "How loud the sounds are - heard at once.", vols, not Sfx.sound_on())
+			y += _opt_row(y, w, "MUSIC", "The soundtrack, in the menus and the match. OFF: no music (the MUSIC VOLUME is kept for ON).",
+					[["ON", Music.music_on(), func(): Music.set_on(true)], ["OFF", not Music.music_on(), func(): Music.set_on(false)]])
+			var mvols := []
+			for v in Rules.MUSIC_VOLUME_STEPS:
+				var pct: int = v
+				mvols.append([Music.volume_label(pct), Music.volume() == pct, func(): Music.set_volume(pct)])
+			y += _opt_row(y, w, "MUSIC VOLUME", "How loud the music is, apart from the sounds - heard at once.", mvols, not Music.music_on())
+			# MUSIC: the soundtrack's credit (the game has no credits page: a small CREDITS line under AUDIO)
+			y += _say("CREDITS", Vector2(0, y + 18.0), 12, UiKit.accent(shell_f), 0.0, true) + 18.0
+			y += _say(Rules.MUSIC_CREDIT, Vector2(0, y + 8.0), 13, UiKit.MUTED, w) + 16.0
 	_column_end(col, n0, y, true)
 
 

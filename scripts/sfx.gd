@@ -15,8 +15,9 @@ extends Node
 ## Menus: Sfx.play_ui("tap" | "confirm" | "back" | "error") - UiKit's shared button factory calls it.
 ## SETTINGS > DISPLAY > AUDIO (and PAUSE > SETTINGS): SOUND ON / OFF (Daniele 2026-09-28: "don't forget a sound
 ## on/off in the options"; OFF = silent, menus and matches alike) and VOLUME (Rules.SOUND_VOLUME_STEPS, %), saved in
-## user://settings.cfg [audio] and applied to the Master bus at once (there is no music yet, so one bus is the whole
-## mix; Web's sample playback supports the Master bus's volume and mute). Web: browsers start audio on the first tap - Godot's web audio resumes its
+## user://settings.cfg [audio] and applied to the Sfx bus at once (MUSIC / MUSIC VOLUME drive the Music bus the same way,
+## music.gd, so the two are independent; Master stays 0 dB; Web's sample playback mirrors every bus's volume and mute).
+## Web: browsers start audio on the first tap - Godot's web audio resumes its
 ## context on the first input event, so nothing plays before it and nothing needs unlocking here.
 ## Match feel (Daniele's phone test, 2026-09-28: "obnoxious (but a good starting point)"): the frequent battle noise
 ## (Rules.SOUND_BED: sends, fights, hits, machinegoon, laser, falls) is a soft bed - long throttles, quieter, a small
@@ -27,7 +28,8 @@ extends Node
 ## tail fades out (Rules.SOUND_FADE_IN / SOUND_FADE_OUT, a volume tween per voice), a repeat of an event still sounding
 ## crossfades (the old voice fades out over Rules.SOUND_XFADE, the new one starts on a free voice), and the priority
 ## sounds get spare voices (Rules.SOUND_PRIORITY_VOICES) so they seldom cut anything off. Every sound plays on the
-## "Sfx" bus; an empty "Music" bus waits beside it, both under Master (ensure_buses).
+## "Sfx" bus; the soundtrack plays on the "Music" bus beside it, both under Master (ensure_buses). Playing one of
+## Rules.MUSIC_DUCK_EVENTS dips the music under it (Music.duck).
 ## Debug: --sfx-log (after `--`) prints every sound played.
 
 const ROOT := "res://assets/audio/sfx/"
@@ -107,7 +109,7 @@ static func sound_on() -> bool:
 
 
 static func set_volume(pct: int) -> void:
-	## SETTINGS > VOLUME: saved and heard at once (the Master bus).
+	## SETTINGS > VOLUME: saved and heard at once (the Sfx bus).
 	_load()
 	_volume = clampi(pct, 1, 100)
 	_save()
@@ -115,7 +117,8 @@ static func set_volume(pct: int) -> void:
 
 
 static func set_on(on: bool) -> void:
-	## SETTINGS > SOUND ON / OFF: OFF mutes the Master bus (menus and matches), keeping the VOLUME for ON.
+	## SETTINGS > SOUND ON / OFF: OFF mutes the Sfx bus (menus and matches; the music has its own MUSIC switch), keeping the
+	## VOLUME for ON.
 	_load()
 	_on = on
 	_save()
@@ -134,19 +137,20 @@ static func volume_label(pct := -1) -> String:
 
 
 static func bus_db() -> float:
-	## What the VOLUME setting puts on the Master bus.
+	## What the VOLUME setting puts on the Sfx bus (over Rules.SOUND_SFX_BUS_DB).
 	return linear_to_db(volume() / 100.0)
 
 
 static func apply_settings() -> void:
 	_load()
 	ensure_buses()
-	AudioServer.set_bus_volume_db(0, bus_db())
-	AudioServer.set_bus_mute(0, not _on)
+	var i := AudioServer.get_bus_index(Rules.SOUND_SFX_BUS)
+	AudioServer.set_bus_volume_db(i, Rules.SOUND_SFX_BUS_DB + bus_db())
+	AudioServer.set_bus_mute(i, not _on)
 
 
 static func ensure_buses() -> void:
-	## The "Sfx" bus every sound plays on and an empty "Music" bus for the soundtrack to come, both sending to Master.
+	## The "Sfx" bus every sound plays on and the "Music" bus the soundtrack plays on (music.gd), both sending to Master.
 	for spec in [[Rules.SOUND_SFX_BUS, Rules.SOUND_SFX_BUS_DB], [Rules.SOUND_MUSIC_BUS, Rules.SOUND_MUSIC_BUS_DB]]:
 		if AudioServer.get_bus_index(str(spec[0])) >= 0:
 			continue
@@ -396,6 +400,8 @@ func _play(event: String, heard := true) -> void:
 		tw.tween_property(p, "volume_db", level - Rules.SOUND_TAIL_DB, tail).set_ease(Tween.EASE_IN)
 	envelopes[vi] = tw
 	played[event] = int(played.get(event, 0)) + 1
+	if event in Rules.MUSIC_DUCK_EVENTS:
+		Music.duck()                                   # MUSIC: the soundtrack dips under the big cues
 	if log_on:
 		print("SFX t=%.1f %s -> %s.ogg" % [sim.time if sim else 0.0, event, FILES[event]])
 

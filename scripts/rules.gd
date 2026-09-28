@@ -1050,7 +1050,7 @@ const SOUND_PRIORITY := ["win", "last_stand", "very_last_stand", "eliminated", "
 const SOUND_PRIORITY_VOICES := 2          # spare voices only SOUND_PRIORITY may use (so they rarely have to cut one off)
 const SOUND_UI_VOICES := 3                # menu taps (they outlive a scene reload: DEPLOY's confirm keeps playing)
 const SOUND_UI_GAP := 0.06                # s between two UI sounds (a double tap is one sound)
-# Per event its level in dB (the demo's mix; the VOLUME setting scales them all on the Master bus).
+# Per event its level in dB (the demo's mix; the VOLUME setting scales them all on the Sfx bus).
 # Match feel, with music (Daniele: "the sounds are too overpowering vs the background music, make them less loud and
 # that they fade more seamlessly"): the bed 6 dB under the demo's mix, every cue 3 dB under it.
 const SOUND_VOL := {"send": -16.0, "fight": -14.0, "hit": -15.0, "capture": -7.0, "node_lost": -7.0, "rival_capture": -18.0, "upgrade": -8.0,
@@ -1071,17 +1071,60 @@ const SOUND_FADE_OUT := 0.22
 const SOUND_XFADE := 0.12
 const SOUND_ATTACK_DB := 18.0
 const SOUND_TAIL_DB := 40.0
-# Buses (Sfx.ensure_buses, made at startup): "Sfx" and "Music" both under Master - every sound plays on Sfx; Music is
-# empty until Daniele picks a soundtrack, so the two can get their own levels later. VOLUME still drives Master.
+# Buses (Sfx.ensure_buses, made at startup): "Sfx" and "Music" both under Master - every sound plays on Sfx, the
+# soundtrack on Music (music.gd). SOUND / VOLUME drive the Sfx bus, MUSIC / MUSIC VOLUME the Music bus (Master stays
+# 0 dB), so the two are independent. SOUND_MUSIC_BUS_DB is only the level the bus is made at: Music sets its level.
 const SOUND_SFX_BUS := "Sfx"
 const SOUND_MUSIC_BUS := "Music"
 const SOUND_SFX_BUS_DB := 0.0
 const SOUND_MUSIC_BUS_DB := 0.0
 # SETTINGS > DISPLAY > AUDIO: VOLUME's choices (percent of full level; silence is SOUND OFF) and the first-run default.
-# Match feel: 30 % (-10.5 dB on the Master bus; the demo played at 50 %). A level the player already saved is kept.
+# Match feel: 30 % (-10.5 dB on the Sfx bus; the demo played at 50 %). A level the player already saved is kept.
 const SOUND_VOLUME_STEPS := [15, 30, 60, 100]
 const SOUND_VOLUME_DEFAULT := 30
 # --- end SOUND ---
+
+# --- MUSIC (the soundtrack, music.gd: the spectate demo's slots and mix, branch sound-demo 912ee68, Daniele 2026-09-28) ---
+# Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io; bought, "free and commercial projects, crediting
+# appreciated"). The tracks are NOT in git (public repo): tools/copy_music.py copies the ones below into
+# assets/audio/music/ before an import / export (BUILD-LOG sec10); Web gets them in music.pck ("Web Music"), fetched
+# the first time music is needed. Slot -> its tracks (file names without .ogg). BATTLE is a playlist (the next track
+# each time one ends or a match starts); a one-track slot loops with the playlist crossfade; VICTORY / DEFEAT are
+# stingers - the track's first MUSIC_STINGER_LEN s, the last MUSIC_STINGER_FADE of them fading, cut into the file by
+# tools/copy_music.py (it reads these numbers from here) - played once at the match's end.
+const MUSIC_DIR := "res://assets/audio/music/"
+const MUSIC_PACK := "music.pck"                  # web: beside index.pck, fetched once (Music._fetch_pack)
+const MUSIC_TRACKS := {"MENU": ["Cyber Sunrise"], "BATTLE": ["Drone Patrol", "Neon Street", "Synth Syndicate"],
+		"LAST STAND": ["Midnight Hack"], "VERY LAST STAND": ["Boss Battle"],
+		"VICTORY": ["Ending Theme (stinger)"], "DEFEAT": ["Game Over (stinger)"]}
+const MUSIC_STINGERS := ["VICTORY", "DEFEAT"]    # played once, never looped
+const MUSIC_STINGER_LEN := 7.0                   # s of the source track a stinger keeps (tools/copy_music.py) ...
+const MUSIC_STINGER_FADE := 1.5                  # ... its last 1.5 s fading out
+const MUSIC_ENCODE_KBPS := 80                    # tools/copy_music.py --encode: Vorbis bitrate for the web (the pack's own copy: 96)
+# Crossfades (equal power), s: from silence, MENU <-> BATTLE, into (Very) Last Stand (the alarm leads), BATTLE track to
+# track and a slot looping, into a stinger.
+const MUSIC_XFADE_START := 0.5
+const MUSIC_XFADE_PHASE := 1.5
+const MUSIC_XFADE_LAST_STAND := 1.0
+const MUSIC_XFADE_PLAYLIST := 2.0
+const MUSIC_XFADE_STINGER := 0.4
+# The mix: the demo heard the music at 0 dB against the SFX table (Rules.SOUND_VOL) under one master volume. The
+# settings are separate now, so the Music bus sits MUSIC_LEVEL_DB under full: at the defaults (SOUND 30 %, MUSIC 60 %)
+# the music is exactly where the demo put it against the sounds (30 % vs 60 %: -6 dB).
+const MUSIC_LEVEL_DB := -6.0
+# Ducking under the big cues (Sfx plays one of these: Music.duck): the music MUSIC_DUCK_DB down over MUSIC_DUCK_IN s,
+# held MUSIC_DUCK_HOLD s after the last one, back up over MUSIC_DUCK_OUT s.
+const MUSIC_DUCK_EVENTS := ["capture", "last_stand", "very_last_stand", "win"]
+const MUSIC_DUCK_DB := -2.0
+const MUSIC_DUCK_IN := 0.3
+const MUSIC_DUCK_HOLD := 0.5
+const MUSIC_DUCK_OUT := 0.8
+# SETTINGS > DISPLAY > AUDIO (and PAUSE > SETTINGS): MUSIC ON / OFF and MUSIC VOLUME (percent), user://settings.cfg
+# [audio] music_on / music_volume. First run: ON, 60 %.
+const MUSIC_VOLUME_STEPS := [15, 30, 60, 100]
+const MUSIC_VOLUME_DEFAULT := 60
+const MUSIC_CREDIT := "Music: Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io)"
+# --- end MUSIC ---
 
 # --- MATCH FEEL (2026-09-28, Daniele's phone test; fx.gd, combat_fx.gd, hud.gd, sfx.gd, warmup.gd) ---
 # Last Stand ring (Fx._last_stand_warning; "too in your face since we have already the alert tag"): the alert tag
