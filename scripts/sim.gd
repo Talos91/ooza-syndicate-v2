@@ -572,6 +572,9 @@ func _step_structures(dt: float) -> void:
 	## Builds complete after Rules.BUILD_SECONDS. A laser bursts for LASER_BURST s, killing up to LASER_KILL
 	## units of enemy lines within LASER_RANGE outright (Alpha 11: body kills bypass HP), then recharges AFTER
 	## the burst. A machinegoon streams at the nearest enemy line in range, MACHINEGOON_RATE[tier] kills/s.
+	## "In range" = any part of the line, not only its head (Daniele, 2026-09-28); each line's body is traced
+	## once per step (_body), for every tower.
+	_bodies.clear()
 	for n in nodes:
 		if n["swap_cd"] > 0.0:
 			n["swap_cd"] = maxf(0.0, n["swap_cd"] - dt)
@@ -602,7 +605,7 @@ func _step_structures(dt: float) -> void:
 				var kill: float = minf(each * _cannon_mult(h), h["units"])   # Anchor: half kills on the caster's lines
 				killed += kill
 				_structure_kill(n, h, kill, "cannon")
-			n["cannon_target"] = _hit_point(n, targets[0])     # (after the kill: the head it pulled back)
+			n["cannon_target"] = _hit_point(n, targets[0], Rules.LASER_RANGE)   # (after the kill: the head it pulled back)
 			n["shot"] = {"t": time, "target_horde": first, "kills": killed, "pos": n["cannon_target"]}
 			n["cannon_burst"] -= dt
 			if n["cannon_burst"] <= 0.0 or n["cannon_kill_left"] <= 0.0:
@@ -618,13 +621,13 @@ func _step_structures(dt: float) -> void:
 		n["cannon_burst"] = Rules.LASER_BURST
 		n["cannon_kill_left"] = Rules.LASER_KILL
 		n["cannon_pull"] = {}
-		n["cannon_target"] = _hit_point(n, in_range[0])
+		n["cannon_target"] = _hit_point(n, in_range[0], Rules.LASER_RANGE)
 		events.append({"t": time, "type": "cannon_burst", "node": n["id"], "seat": n["owner"]})
 		fx_events.append({"type": "cannon", "node": n["id"]})
 
 
 func _fire_machinegoon(n: Dictionary, dt: float) -> void:
-	## One stream at the nearest enemy line whose head is within MACHINEGOON_RANGE: single target, good against
+	## One stream at the nearest enemy line with any part within MACHINEGOON_RANGE: single target, good against
 	## trickles, weak against big blobs. Jammed by an Echo Split echo like a vat.
 	if n["owner"] == "" or is_disrupted(n["id"]):
 		return
@@ -635,12 +638,12 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 	var best: Dictionary = targets[0]
 	var best_d := INF
 	for h in targets:
-		var d: float = (sample(h, h["s"])[0] as Vector3).distance_squared_to(c)
+		var d: float = _body_dist2(h, c)
 		if d < best_d:
 			best_d = d
 			best = h
 	var kill: float = minf(float(Rules.MACHINEGOON_RATE.get(n["tier"], Rules.MACHINEGOON_RATE[1])) * dt * _cannon_mult(best), best["units"])   # Anchor halves these too (Daniele, 2026-09-27)
-	var at := _hit_point(n, best)
+	var at := _hit_point(n, best, Rules.MACHINEGOON_RANGE)
 	var hid: int = best["id"]
 	_structure_kill(n, best, kill, "machinegoon")
 	n["shot"] = {"t": time, "target_horde": hid, "kills": kill, "pos": at}
@@ -674,9 +677,14 @@ func _hit_head(n: Dictionary, h: Dictionary) -> bool:
 	return head.distance_squared_to(c) <= tail.distance_squared_to(c) + 0.01
 
 
-func _hit_point(n: Dictionary, h: Dictionary) -> Vector3:
-	## Where the beam lands on this line: the end it kills from.
-	return sample(h, h["s"] if _hit_head(n, h) else h["s"] - chain_length(h))[0]
+func _hit_point(n: Dictionary, h: Dictionary, reach := -1.0) -> Vector3:
+	## Where the beam lands on this line: the end it kills from - or, when only the line's middle is within
+	## `reach` (a line passing the tower), the nearest point of its body.
+	var end: Vector3 = sample(h, h["s"] if _hit_head(n, h) else h["s"] - chain_length(h))[0]
+	var c: Vector3 = n["pos"]
+	if reach < 0.0 or end.distance_to(c) <= reach:
+		return end
+	return _body_nearest(h, c)
 
 
 func _cut_front(h: Dictionary, kill: float) -> float:
@@ -703,17 +711,75 @@ func _cut_front(h: Dictionary, kill: float) -> float:
 
 
 func _hordes_in_range(n: Dictionary, reach: float, pull := {}) -> Array:
-	## Enemy lines whose head is within `reach` m of the node. `pull` (a burst's horde id -> metres it cut
-	## off that head): a line the burst is mowing down from the front stays its target while the head it
-	## had is in range - the burst keeps its whole kill budget, as when it took the tail.
+	## Enemy lines with any part of their body within `reach` m of the node (Daniele, 2026-09-28: "anywhere
+	## within range", not only the head). `pull` (a burst's horde id -> metres it cut off that head): a line
+	## the burst is mowing down from the front stays its target while the head it had is in range - the burst
+	## keeps its whole kill budget, as when it took the tail.
 	var out := []
+	var c: Vector3 = n["pos"]
 	for h in hordes:
 		if allied(h["owner"], n["owner"]) or h["units"] <= 0.0:
 			continue
-		var p: Vector3 = sample(h, h["s"])[0]
-		if (p - (n["pos"] as Vector3)).length() <= reach + pull.get(h["id"], 0.0):
+		var r: float = reach + pull.get(h["id"], 0.0)
+		var b: Array = _body(h)
+		if c.x < b[1] - r or c.x > b[2] + r or c.z < b[3] - r or c.z > b[4] + r:
+			continue                                      # (its whole body is further than that)
+		if _body_dist2(h, c) <= r * r:
 			out.append(h)
 	return out
+
+
+# A line's body for the towers, traced once per step (cleared in _step_structures): [vertices tail -> head
+# (PackedVector3Array: the tail, the path's own corners between, the head), min x, max x, min z, max z].
+var _bodies: Dictionary = {}
+
+
+func _body(h: Dictionary) -> Array:
+	var hid: int = h["id"]
+	if _bodies.has(hid):
+		return _bodies[hid]
+	var cum: PackedFloat32Array = h["cum"]
+	var pts: PackedVector3Array = h["pts"]
+	var head_s: float = clampf(h["s"], 0.0, cum[-1])
+	var tail_s: float = clampf(h["s"] - chain_length(h), 0.0, head_s)
+	var v := PackedVector3Array()
+	v.append(sample(h, tail_s)[0])
+	var i := cum.bsearch(tail_s, false)              # the first corner past the tail
+	while i < cum.size() and cum[i] < head_s:
+		v.append(pts[i])
+		i += 1
+	v.append(sample(h, head_s)[0])
+	var b := [v, INF, -INF, INF, -INF]
+	for p in v:
+		b[1] = minf(b[1], p.x)
+		b[2] = maxf(b[2], p.x)
+		b[3] = minf(b[3], p.z)
+		b[4] = maxf(b[4], p.z)
+	_bodies[hid] = b
+	return b
+
+
+func _body_dist2(h: Dictionary, c: Vector3) -> float:
+	## Squared distance from `c` to the nearest point of the line's body (this step's trace).
+	var v: PackedVector3Array = _body(h)[0]
+	var best := c.distance_squared_to(v[0])
+	for k in range(v.size() - 1):
+		best = minf(best, _seg_dist2(c, v[k], v[k + 1]))
+	return best
+
+
+func _body_nearest(h: Dictionary, c: Vector3) -> Vector3:
+	## The point of the line's body nearest `c` (where a tower hits a line passing it by).
+	var v: PackedVector3Array = _body(h)[0]
+	var best_p: Vector3 = v[0]
+	var best := INF
+	for k in range(v.size() - 1):
+		var p: Vector3 = Geometry3D.get_closest_point_to_segment(c, v[k], v[k + 1])
+		var d := c.distance_squared_to(p)
+		if d < best:
+			best = d
+			best_p = p
+	return best_p
 
 
 func forge_of(seat: String) -> float:
@@ -1007,7 +1073,7 @@ func _overlap(h: Dictionary, s0: float, s1: float) -> float:
 	return maxf(0.0, minf(head, s1) - maxf(tail, s0))
 
 
-const POUR_STEP := 1.0               # m: a head at most this far past a lip walked off it this step (view only)
+var _pour_ev: Dictionary = {}        # horde id -> [its pour's "fall" event, the lip s]: one event per pour (_cut_range)
 
 
 func _cut_range(h: Dictionary, s0: float, s1: float, reroute := true, fling = null) -> void:
@@ -1034,7 +1100,7 @@ func _cut_range(h: Dictionary, s0: float, s1: float, reroute := true, fling = nu
 	# cooler"): a head that just walked over the lip (or was parked there last step) is the line walking
 	# off it - the line's own view drops those bodies as they pass the lip (pour-tagged fall, no Fx
 	# bodies); anything bigger is a stretch that was on the deck when it went (Fx drops it where it was)
-	var walked: bool = not reroute and head_in and not (fling is Dictionary) and (h["s"] - s0 <= POUR_STEP \
+	var walked: bool = not reroute and head_in and not (fling is Dictionary) and (h["s"] - s0 <= Rules.POUR_STEP \
 			or (h.get("pour_prev", false) and absf(float(h.get("pour_lip", -1.0)) - s0) < 0.01))
 	var survives: bool = pours or h["units"] - units_on >= 1.0
 	if h["streaming"] and not pours:
@@ -1058,8 +1124,17 @@ func _cut_range(h: Dictionary, s0: float, s1: float, reroute := true, fling = nu
 	else:
 		fx_events.append({"type": "fall", "seat": h["owner"], "faction": h["faction"], "pts": pts, "units": units_on,
 				"hid": h["id"], "pour": walked and survives})
-		if not decoy:
-			events.append({"t": time, "type": "fall", "seat": h["owner"], "units": units_on})
+		if not decoy:                                  # a line walking off one lip is ONE "fall" event, its units
+			var pe: Array = _pour_ev.get(h["id"], [])  # adding up while it pours (audit B4: was one per step)
+			if walked and not pe.is_empty() and absf(float(pe[1]) - s0) < 0.01:
+				pe[0]["units"] = float(pe[0]["units"]) + units_on
+			else:
+				var fev := {"t": time, "type": "fall", "seat": h["owner"], "units": units_on}
+				events.append(fev)
+				if walked:
+					_pour_ev[h["id"]] = [fev, s0]
+				else:
+					_pour_ev.erase(h["id"])
 	h["units"] -= units_on
 	if not reroute and not head_in and h["s"] > s1 and h["s"] - len < s0:
 		_split_front(h, (h["units"] + units_on) * (h["s"] - s1) / maxf(len, 0.001))   # the deck went from under its middle
@@ -1112,6 +1187,9 @@ func _split_front(h: Dictionary, units_front: float) -> void:
 	f["pour_lip"] = -1.0
 	f["pour_k"] = 0.0
 	f.erase("pending_loss")
+	f.erase("eject_left")                             # the source feeds only the part behind the lip (audit 2026-09-28):
+	if f.has("ghost_left"):                           # an EJECT / decoy door keeps emitting into `h`, never the front
+		f["ghost_left"] = 0.0
 	h["units"] = maxf(0.0, h["units"] - units_front)
 	hordes.append(f)
 	# its fights were at the head, which is the new line now
@@ -1183,7 +1261,7 @@ func find_route(from_id: int, to_id: int, avoid := {}) -> Array:
 			var nb: int = link[0]
 			if collapsed.get(nb, false) or not _edge_open(link[1]) or avoid.has(link[1]):
 				continue
-			var cost: float = dist[cur] + edge_cost(link[1]) + 1.0
+			var cost: float = dist[cur] + edge_cost(link[1]) + Rules.ROUTE_NODE_SECONDS
 			if not dist.has(nb) or cost < dist[nb]:
 				dist[nb] = cost
 				prev[nb] = cur
@@ -1539,7 +1617,7 @@ func step(dt: float) -> void:
 			var tail := sample(h, h["L"] - len)
 			var tail_speed: float = Rules.move_speed() * (Rules.platform_mult() if tail[2] else 1.0)
 			var rate: float = tail_speed * h["units"] / maxf(len, 0.5) * door_mult(h)   # Surge: pours in twice as fast
-			var x := minf(h["units"], maxf(rate, 4.0) * dt)
+			var x := minf(h["units"], maxf(rate, Rules.POUR_MIN_RATE) * dt)
 			h["units"] -= x
 			_arrive(nodes[h["target"]], h, x)
 			if h["units"] <= 0.0 and not h["streaming"]:
@@ -1598,6 +1676,17 @@ func _check_missing_decks() -> void:
 	## dissolved, retracted or collapsed falls too, and a line that walked onto a deck while it was
 	## moving falls once the motion ends. A head reaching the lip of a missing deck walks off it:
 	## the line pours into the void at deck speed.
+	## (audit B3: the step's closed decks are found once, and a step with none only rolls the pour flags.)
+	var closed := {}
+	for ei in range(edges.size()):
+		if not is_edge_open(ei):                          # a deck in motion is not (0.18.7): going or not yet there
+			closed[ei] = true
+	if closed.is_empty():
+		for h in hordes:
+			h["pour_prev"] = h.get("pour", false)
+			h["pour"] = false
+		_pour_ev.clear()
+		return
 	for h in hordes.duplicate():
 		if not (h in hordes):
 			continue
@@ -1611,7 +1700,7 @@ func _check_missing_decks() -> void:
 			if head < sp["s0"] or tail > sp["s1"]:
 				continue                                  # the line doesn't touch this deck
 			var ei: int = sp["edge"]
-			if is_edge_open(ei):                          # a deck in motion is not (0.18.7): going or not yet there
+			if not closed.has(ei):
 				continue
 			# the vat keeps sending: an order across a deck that has gone is still obeyed, every unit
 			# marches on and pours into the void (Daniele, 0.18.6: "they should go even if the bridge is
@@ -1623,6 +1712,10 @@ func _check_missing_decks() -> void:
 				h["state"] = "move"
 				h["pour"] = true                          # (also when it did not move this step)
 				h["pour_lip"] = sp["s0"]
+	for hid in _pour_ev.keys():                           # a pour that ended: the next one is a new event
+		var ph := _horde(hid)
+		if ph.is_empty() or not ph.get("pour", false):
+			_pour_ev.erase(hid)
 
 
 func _current_span(h: Dictionary) -> Dictionary:
@@ -2010,9 +2103,14 @@ func _check_handovers() -> void:
 			_end_streaming(n, "lost")
 		n["build_kind"] = ""
 		n["build_target"] = {}
+		var second_hub := _second_hub(n, best)
 		n["owner"] = best
 		n["units"] = float(n["allies"][best])
+		n["hub_monster"] = -1
 		_drop_ally(n, best)
+		if second_hub:                                 # one Monster hub per player, handovers too
+			_destroy_hub(n, best)
+			_sync_legacy(n)
 		_capture_effects(n, best)
 		events.append({"t": time, "type": "handover", "node": n["id"], "seat": best, "from": old})
 		fx_events.append({"type": "capture", "node": n["id"], "seat": best, "handover": true})
@@ -2094,7 +2192,8 @@ func _register_transit() -> void:
 	## horde's own or an ally's (pure pass-through, GAME-RULES §6) or neutral (a free glide). There
 	## is no hidden shield: a passing force fights the garrison itself. BRAWL: waypoints are free.
 	for n in nodes:
-		n["transit"] = {}
+		if not n["transit"].is_empty():                # (audit B3: no fresh dict per node per step in BRAWL)
+			n["transit"] = {}
 	if not Rules.bridge_combat:                        # classic (Alpha 11): waypoints are free
 		return
 	for h in hordes:
@@ -2123,7 +2222,10 @@ func _node_fights(dt: float) -> Array:
 	_register_transit()
 	var destroyed := []
 	for n in nodes:
-		n["node_loss"] = {}
+		if not n["node_loss"].is_empty():
+			n["node_loss"] = {}
+		if n["siege"].is_empty() and n["transit"].is_empty():
+			continue                                   # (nobody on the platform: BRAWL's every node)
 		var seats := {}
 		for k in n["siege"]:
 			seats[k] = true
@@ -2234,15 +2336,36 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 			n["tier"] = maxi(1, n["tier"] - 1)
 		if n["structure"] == "monster_hub":
 			n["monster_ready_t"] = time + Rules.MONSTER_COOLDOWN   # the new owner's hub charges afresh
+	var second_hub := _second_hub(n, seat)             # (asked before the node is the capturer's)
 	n["owner"] = seat
 	n["units"] = garrison
 	n["siege"] = {}
 	n["siege_dir"] = {}
 	n["allies"] = {}                                   # stored allied troops fell with the garrison
 	n["arrivals"] = []
+	n["hub_monster"] = -1                              # the old owner's monster out is not this owner's to wait for
+	if second_hub:
+		_destroy_hub(n, seat)
 	_sync_legacy(n)
 	_capture_effects(n, seat)
 	fx_events.append({"type": "capture", "node": n["id"], "seat": seat})
+
+
+func _second_hub(n: Dictionary, seat: String) -> bool:
+	## ONE MONSTER PER PLAYER (Daniele, 2026-09-28): would `seat` taking this node hold a second Monster hub? It
+	## already owns (or builds) one elsewhere.
+	return n["structure"] == "monster_hub" and n["owner"] != seat and has_hub(seat)
+
+
+func _destroy_hub(n: Dictionary, seat: String) -> void:
+	## A second Monster hub captured / handed over is destroyed on capture: the relay slot is left empty
+	## (buildable again). The view plays the demolish and the HUD says why ("hub_destroyed").
+	n["structure"] = ""
+	n["hub_monster"] = -1
+	n["monster_ready_t"] = 0.0
+	n["shot"] = {}
+	events.append({"t": time, "type": "hub_destroyed", "node": n["id"], "seat": seat})
+	fx_events.append({"type": "hub_destroyed", "node": n["id"], "seat": seat})
 
 
 # ------------------------------------------------------------------ Last Stand (GAME-RULES sec10)
@@ -2350,7 +2473,7 @@ func _start_rings() -> void:
 	for w in last_stand_waves:
 		last_stand_order.append_array(w)
 	last_stand_next = 0
-	last_stand_wave = clampf((Rules.MATCH_HARD_END - 90.0 - Rules.LAST_STAND_TIME) / maxf(last_stand_waves.size(), 1.0),
+	last_stand_wave = clampf((_hard_end() - Rules.LAST_STAND_WAVE_SPARE - Rules.LAST_STAND_TIME) / maxf(last_stand_waves.size(), 1.0),
 			Rules.LAST_STAND_WAVE_MIN, Rules.LAST_STAND_WAVE_MAX)
 	last_stand_gap = ls_drop_gap_override if ls_drop_gap_override >= 0.0 else _fit_gap(last_stand_waves, Rules.VERY_LAST_STAND_TIME - time)
 	events.append({"t": time, "type": "last_stand", "method": last_stand_method, "order": order.duplicate(),
@@ -2370,7 +2493,7 @@ static func _fit_gap(waves: Array, window: float) -> float:
 		drops += (w as Array).size()
 	if drops <= 1:
 		return Rules.LAST_STAND_DROP_GAP_MAX
-	var g: float = (window - 3.0 - Rules.LAST_STAND_WARNING * waves.size()) / float(drops - 1)
+	var g: float = (window - Rules.LAST_STAND_FIT_SPARE - Rules.LAST_STAND_WARNING * waves.size()) / float(drops - 1)
 	return clampf(g, Rules.LAST_STAND_DROP_GAP_MIN, Rules.LAST_STAND_DROP_GAP_MAX)
 
 
@@ -2601,7 +2724,19 @@ func _keep_depth() -> Dictionary:
 func drop_in(id: int) -> float:
 	## Seconds until a warned platform drops (its place in the ring's queue), or -1.
 	var k := last_stand_queue.find(id)
-	return last_stand_warn_t + k * last_stand_gap if k >= 0 else -1.0
+	return last_stand_warn_t + k * _queue_gap() if k >= 0 else -1.0
+
+
+func _queue_gap() -> float:
+	## Seconds between two drops of the warned queue: the ring's gap, or the Very Last Stand's interval once it
+	## runs (its rare stranded-island batches drop one interval apart too; audit 2026-09-28).
+	return very_last_stand_gap if very_last_stand_active else last_stand_gap
+
+
+func _hard_end() -> float:
+	## This match's end for the collapse timing: match_hard_end (a lesson moves it to INF - its collapses then
+	## pace on the usual 7:00, as before).
+	return match_hard_end if is_finite(match_hard_end) else Rules.MATCH_HARD_END
 
 
 func _step_rings(dt: float) -> void:
@@ -2620,7 +2755,7 @@ func _step_rings(dt: float) -> void:
 				_next_wave_at = time + last_stand_gap + minf(last_stand_warn_t, 0.0)   # the next ring's warning, one gap after the last drop
 			else:
 				last_stand_warn_node = last_stand_queue[0]
-				last_stand_warn_t += last_stand_gap           # (the step's overshoot carries: the countdowns stay exact)
+				last_stand_warn_t += _queue_gap()             # (the step's overshoot carries: the countdowns stay exact)
 	elif last_stand_next < last_stand_waves.size() and time >= _next_wave_at:
 		_next_wave_at += last_stand_wave
 		_warn_wave()
@@ -2693,11 +2828,14 @@ func _vls_surviving() -> Array:
 
 
 func _vls_open_links(id: int, gone: Dictionary) -> int:
-	## Decks to other surviving platforms - a relay deck counts only while it is actually open.
+	## Decks to other surviving platforms - a relay deck counts only while it is actually open (Daniele,
+	## 2026-09-28: the Very Last Stand counts open relay decks as open links).
 	var c := 0
 	for link in adj[id]:
 		var e: Dictionary = edges[link[1]]
-		if e["state"] != "" or e["retracts"] or gone.get(link[0], false):
+		if gone.get(link[0], false):
+			continue
+		if (e["state"] != "" or e["retracts"]) and not _edge_open(link[1]):
 			continue
 		c += 1
 	return c
@@ -2748,7 +2886,7 @@ func _vls_queue_next() -> void:
 		last_stand_warn = {}
 		last_stand_queue = []
 		return
-	very_last_stand_gap = vls_gap_override if vls_gap_override > 0.0 else (Rules.MATCH_HARD_END - time) / float(survivors.size() - 1)
+	very_last_stand_gap = vls_gap_override if vls_gap_override > 0.0 else maxf(0.0, (_hard_end() - time) / float(survivors.size() - 1))
 	var gone := collapsed.duplicate()
 	var id := _vls_pick(gone)
 	var batch := [id]
@@ -2796,7 +2934,7 @@ func _start_last_stand_legacy() -> void:
 		order = _collapse_order("inward", centre)
 	last_stand_order = order
 	last_stand_next = 0
-	last_stand_wave = clampf((Rules.MATCH_HARD_END - 90.0 - Rules.LAST_STAND_TIME) / maxf(order.size(), 1.0),
+	last_stand_wave = clampf((_hard_end() - Rules.LAST_STAND_WAVE_SPARE - Rules.LAST_STAND_TIME) / maxf(order.size(), 1.0),
 			Rules.LAST_STAND_WAVE_MIN, Rules.LAST_STAND_WAVE_MAX)
 	events.append({"t": time, "type": "last_stand", "method": last_stand_method, "order": order.duplicate(), "final": last_stand_final})
 	fx_events.append({"type": "last_stand", "method": last_stand_method})
@@ -2980,9 +3118,11 @@ func _alive_seats() -> Dictionary:
 	return alive
 
 
-func _check_eliminations() -> void:
-	## A seat is out only when it has no nodes and no lines left (and no monster, no stored troops).
-	var alive := _alive_seats()
+func _check_eliminations(alive := {}) -> void:
+	## A seat is out only when it has no nodes and no lines left (and no monster, no stored troops). `alive`:
+	## this step's _alive_seats() when the caller already has it.
+	if alive.is_empty():
+		alive = _alive_seats()
 	for seat in factions.keys():
 		if not eliminated.has(seat) and not alive.has(seat):
 			eliminated[seat] = true
@@ -3033,9 +3173,9 @@ func _force_end() -> void:
 
 
 func _check_end() -> void:
+	var alive := _alive_seats()                       # (once per step: audit B3)
 	if time > 1.0:
-		_check_eliminations()
-	var alive := _alive_seats()
+		_check_eliminations(alive)
 	for s in eliminated:
 		alive.erase(s)
 	var sides := {}                                   # team modes: one side per team
@@ -3128,7 +3268,7 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 #   monsters: [{"id", "seat", "faction", "hub", "target", "route" (node ids), "path" (edge indices), "pos" (Vector3),
 #       "dir" (Vector3), "edge" (edge index under it, -1 on a platform), "s", "L", "t" (s in the current state),
 #       "state": "walking" | "falling" | "done"}, plus its path arrays ("pts", "cum", "fast", "spans", "node_spans")
-#       so Sim.sample(m, s) works]. A "done" monster stays listed MONSTER_GONE s for the views, then goes.
+#       so Sim.sample(m, s) works]. A "done" monster stays listed Rules.MONSTER_GONE s for the views, then goes.
 #   draw_line: the 7:00 DRAW call-out ("" unless the last platform was neutral)
 # EVENTS (sim.fx_events for the views, the same in sim.events with "t")
 #   {"type": "monster_launch", "id", "seat", "hub", "target", "path"}
@@ -3139,7 +3279,6 @@ func _ring_order(ids: Array, centre: Vector3, far_first: bool) -> Array:
 #   {"type": "forge_lost", "seat"}   {"type": "eject", "node", "seat"}   {"type": "draw", "line"}
 #   {"type": "capture", "node", "seat", "handover": true} (fx) / {"type": "handover", "node", "seat", "from"} (events):
 #       the owner's troops reached zero and an ally took the node over (GAME-RULES sec11)
-const MONSTER_GONE := 0.5
 
 
 func monster_speed() -> float:
@@ -3276,7 +3415,7 @@ func _step_monsters(dt: float) -> void:
 					m["t"] = 0.0
 				continue
 			"done":
-				if m["t"] >= MONSTER_GONE:
+				if m["t"] >= Rules.MONSTER_GONE:
 					monsters.erase(m)
 				continue
 		var s0: float = m["s"]
@@ -4085,7 +4224,7 @@ func cast(seat: String, slot: String, target = null) -> bool:
 			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "left": left})
 		"core_meltdown":
 			var hm := _horde(_as_int(target))
-			ev["affects"] = _hostile_list(seat, [nodes[hm["target"]]["owner"]])
+			ev["affects"] = _hostile_list(seat, [nodes[hm["target"]]["owner"]] + nodes[hm["target"]]["allies"].keys())
 			_meltdown(seat, hm)
 		"relay_aegis":
 			_aegis(seat, _as_int(target))
@@ -4291,17 +4430,28 @@ func _meltdown(seat: String, h: Dictionary) -> void:
 	## Core Meltdown (sec5.2): sacrifice share of the line (at least min_shown, no upper cap); each unit
 	## sacrificed kills kills_per defenders (cap_shown at most; Fortify / Aegis divide it); a garrison at zero
 	## -> the rest of the line (and its siege there) captures. No charge from any of it.
+	## Team modes (audit 2026-09-28): the kills hit the whole garrison - the owner's troops and every ally's
+	## stored troops - split by troop share as in _land_classic; the node falls only once all of it is gone.
 	var sk: Dictionary = Rules.SKILLS["core_meltdown"]
 	var n: Dictionary = nodes[h["target"]]
 	var sac: float = minf(h["units"], maxf(h["units"] * float(sk["share"]), float(sk["min_shown"]) * Rules.SCALE))
 	h["units"] -= sac
 	combat_losses[seat] = combat_losses.get(seat, 0.0) + sac
-	var kills: float = minf(minf(sac * float(sk["kills_per"]), float(sk["cap_shown"]) * Rules.SCALE) / garrison_div(n), n["units"])
-	n["units"] -= kills
+	var total: float = garrison_total(n)
+	var kills: float = minf(minf(sac * float(sk["kills_per"]), float(sk["cap_shown"]) * Rules.SCALE) / garrison_div(n), total)
+	var frac: float = kills / total if total > 0.0001 else 0.0
+	var own_killed: float = float(n["units"]) * frac
+	n["units"] = maxf(0.0, float(n["units"]) - own_killed)
 	if n["owner"] != "":
-		combat_losses[n["owner"]] = combat_losses.get(n["owner"], 0.0) + kills
+		combat_losses[n["owner"]] = combat_losses.get(n["owner"], 0.0) + own_killed
+	for k in n["allies"].keys():                       # the allies' share of the losses
+		var lost: float = float(n["allies"][k]) * frac
+		n["allies"][k] = float(n["allies"][k]) - lost
+		combat_losses[k] = combat_losses.get(k, 0.0) + lost
+		if n["allies"][k] <= 0.0001:
+			_drop_ally(n, k)
 	var took := false
-	if n["units"] <= 0.0001:
+	if garrison_total(n) <= 0.0001:
 		n["units"] = 0.0
 		var rest: float = h["units"] + n["siege"].get(seat, 0.0)
 		if rest > 0.0:

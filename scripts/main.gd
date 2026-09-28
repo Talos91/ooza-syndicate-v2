@@ -1390,6 +1390,14 @@ func _process(delta: float) -> void:
 						hud.callout_node(at, "FORGE LOST · BONUS GONE", "warn")
 					else:
 						hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
+			"hub_destroyed":                           # AUDIT FIX (Daniele, 2026-09-28): one Monster hub per player - a second
+				var hid := int(ev.get("node", -1))     # one taken is demolished on capture (a red burst, a word why)
+				if hid >= 0 and hid < sim.nodes.size():
+					var hpos: Vector3 = sim.nodes[hid]["pos"]
+					fx._pulse(hpos, Rules.state_color("warn"), Rules.R + 1.5, 0.9)
+					fx.floater(hpos, "HUB DESTROYED", Rules.state_color("warn"))
+					if str(ev.get("seat", "")) == HUMAN:
+						hud.callout_node(hid, "HUB DESTROYED · ONE PER PLAYER", "warn")
 			"eject":                                   # your own eject is a routine order (nothing to say, see node_action);
 				if str(ev.get("seat", "")) != HUMAN and sim.allied(str(ev.get("seat", "")), HUMAN):
 					hud.callout_node(int(ev["node"]), "STORED TROOPS SENT HOME", "info", str(ev["seat"]))
