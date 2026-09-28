@@ -2112,6 +2112,7 @@ const TERRITORY_LOOKS := {"neon": ["NEON", "Your colour in neon on the decks, pi
 var _ward_cat := "vat"                             # COSMETICS: the open category ("territory" or a Cosmetics family)
 var _ward_sel := {}                                # COSMETICS: category -> the look on preview (not equipped yet)
 var _ward_tier := 2                                # COSMETICS: the tier the vat / Machinegoon preview shows
+var _ward_args := false                            # COSMETICS: the screenshot args below were read
 
 
 func show_cosmetics(f: String = "") -> void:
@@ -2124,6 +2125,13 @@ func show_cosmetics(f: String = "") -> void:
 	## categories on the left (TERRITORY - CORE, every faction - then the six families), ONE large turning preview of
 	## the look on selection (its tier switchable for vats and Machinegoons), the category's looks as tiles
 	## (EQUIPPED / on preview / LOCKED with its way in), and EQUIP - or UNLOCK (_buy_prompt) for a locked look.
+	if not _ward_args:                                # screenshot args: --wardrobe-cat=<category> --wardrobe-look=<id>
+		_ward_args = true
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--wardrobe-cat="):
+				_ward_cat = arg.substr(15)
+			elif arg.begins_with("--wardrobe-look="):
+				_ward_sel[_ward_cat] = arg.substr(16)
 	if f != "" and f != _army:
 		_ward_sel = {}                                  # another faction: its own saved picks
 	if f != "":
@@ -2298,12 +2306,14 @@ func _ward_stage(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped
 		var big := UiKit.label(self, TERRITORY_LOOKS[sel][0], 64, acc, true, 6)
 		big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		big.size = Vector2(iw, big.get_minimum_size().y)
-		var tl := UiKit.label(self, "TERRITORY  ·  HOW THE GROUND YOU HOLD IS DRAWN", 13, UiKit.MUTED, true, 2)
+		var tl := UiKit.label(self, "HOW THE GROUND YOU HOLD IS DRAWN", 13, UiKit.MUTED, true, 2)
 		tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		tl.size = Vector2(iw, tl.get_minimum_size().y)
+		tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tl.custom_minimum_size = Vector2(iw - 24.0, 0)
+		tl.size = Vector2(iw - 24.0, UiKit.text_h(self, tl.text, 13, iw - 24.0 - tl.text.length() * 2.0, true))
 		var bh2 := big.size.y + tl.size.y + 6.0
 		_shell_add(big, Vector2(ix, y + (vh - bh2) / 2.0))
-		_shell_add(tl, Vector2(ix, y + (vh - bh2) / 2.0 + big.size.y + 6.0))
+		_shell_add(tl, Vector2(ix + 12.0, y + (vh - bh2) / 2.0 + big.size.y + 6.0))
 	else:
 		var tier := clampi(_ward_tier, 1, tiers) if tiers > 0 else 0
 		pv = WardrobePreview.make(cat, sel, _army, tier, Vector2(iw, vh))

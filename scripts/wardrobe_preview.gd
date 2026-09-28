@@ -85,7 +85,7 @@ func _refresh() -> void:
 		# a closer frame than the rows' small previews: the look fills the stage
 		var z := _cam.position.z
 		var h := _cam.position.y - 0.5 * z
-		var d := z / 0.9 * 0.8
+		var d := z / 0.9 * 0.9
 		_cam.position = Vector3(0, h + d * 0.45, d * 0.9)
 		_cam.look_at(Vector3(0, h, 0), Vector3.UP)
 		_fit_plinth()
