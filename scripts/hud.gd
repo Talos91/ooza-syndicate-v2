@@ -1636,7 +1636,7 @@ func pause_menu() -> void:
 		s.card({"kicker": "ROOM %s" % Net.room_code, "headline": "MATCH MENU.",
 				"body": "%s · the match keeps running\n%s" % [where, Net.net_stats_line()],
 				"actions": [["RESUME  →", func(): pause_panel.visible = false], ["SETTINGS", _pause_settings],
-				["LEAVE ROOM", main.to_menu, "tertiary"]]})
+				["LEAVE ROOM", main.to_menu, "secondary"]]})   # UI (0.22.1): a framed button, like the others (Daniele)
 		_show_screen(pause_panel)
 		return
 	main.paused = true
@@ -1644,12 +1644,12 @@ func pause_menu() -> void:
 	if main.get("director") != null:                  # TUTORIAL: PAUSE keeps working and gains LESSONS (§6)
 		s.card({"kicker": where, "headline": "PAUSED.",
 				"actions": [resume, [TutorialDirector.line("paused_lessons"), main.to_lessons], ["RESTART MATCH", main.restart],
-				["SETTINGS", _pause_settings], ["MAIN MENU", main.to_menu, "tertiary"]]})
+				["SETTINGS", _pause_settings], ["MAIN MENU", main.to_menu, "secondary"]]})   # UI (0.22.1): framed
 		_show_screen(pause_panel)
 		return
 	s.card({"kicker": where, "headline": "PAUSED.",
 			"actions": [resume, ["RESTART MATCH", main.restart], ["SETTINGS", _pause_settings],
-			["CAMPAIGN" if main.get("mission") != null else "EXIT MATCH", main.to_menu, "tertiary"]]})   # CAMPAIGN: a mission leaves to its page
+			["CAMPAIGN" if main.get("mission") != null else "EXIT MATCH", main.to_menu, "secondary"]]})   # CAMPAIGN: a mission leaves to its page (UI 0.22.1: framed)
 	_show_screen(pause_panel)
 
 

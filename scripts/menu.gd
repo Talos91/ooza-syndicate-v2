@@ -36,7 +36,11 @@ const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
-var _last_show := Callable()                     # the page on screen (rebuilt when a resize changes the phone sizing)
+var _last_show := Callable():                    # the page on screen (rebuilt when a resize changes the phone sizing)
+	set(v):
+		_prev_show = _last_show                      # UI: the page before it - a meta page's BACK (_meta_open)
+		_last_show = v
+var _prev_show := Callable()
 var _built_pt := 0.0                             # _pt_factor() the page was built with (0 while building)
 var _backdrop: TextureRect
 var _backdrop_art: Texture2D                     # the backdrop's own art (HOME swaps in the hero faction's scene)
@@ -495,19 +499,22 @@ func shell_open(crumb: String, tab: String, back := Callable(), f := "") -> Rect
 		_backdrop_ay = 0.5
 		_place_backdrop()
 	top_bar = TopBar.make(self, crumb, shell_f, shell_slim)
-	top_bar.help_pressed.connect(show_help)
-	top_bar.options_pressed.connect(show_options)
-	top_bar.profile_pressed.connect(show_profile)
-	top_bar.back_pressed.connect(func(): back.call_deferred())
+	# (the bar's BACK / ? / gear / level block call bar_back / show_help / show_options / show_profile themselves - 0.22.1)
 	content.add_child(top_bar)
 	var y0 := top_bar.bar_height()
 	var y1 := content.size.y
 	if not shell_slim:
 		nav_bar = NavBar.make(self, tab, shell_f)
-		nav_bar.tab_pressed.connect(_on_tab)
+		pass                                           # (its tabs call _on_tab themselves - 0.22.1)
 		content.add_child(nav_bar)
 		y1 = nav_bar.position.y
 	return Rect2(0, y0, content.size.x, y1 - y0)
+
+
+func bar_back() -> void:
+	## The slim top bar's BACK: the page's own way back (shell_open's `back`).
+	if shell_back.is_valid():
+		shell_back.call()
 
 
 func shell_x() -> float:
@@ -542,8 +549,8 @@ func _on_tab(id: String) -> void:
 			show_play()
 		"armies":
 			show_armies(faction, show_main)
-		"campaign":
-			show_campaign()
+		"campaign":                                    # UI (Daniele, 0.22.0): the tab opens every campaign first; the
+			show_chapters()                            # city map opens once you pick one (show_campaign)
 
 
 func _shell_add(c: Control, pos: Vector2) -> Control:
@@ -639,7 +646,7 @@ func show_main() -> void:
 	y += head.get_minimum_size().y + 10.0
 	_shell_add(sub, Vector2(x, y))
 	y += sub.get_minimum_size().y + 26.0
-	UiKit.btn(self, "PLAY", Vector2(x, y), Vector2(230, 54), show_factions, "primary", hero, 20)
+	UiKit.btn(self, "PLAY", Vector2(x, y), Vector2(230, 54), show_play, "primary", hero, 20)   # UI (Daniele, 0.22.0): PLAY opens PLAY
 	var cont := UiKit.flat_button(self, "CONTINUE CAMPAIGN", 16)
 	cont.size = Vector2(UiKit.text_w(self, cont.text, 16, true) + 28.0, bh)
 	cont.pressed.connect(func(): show_campaign.call_deferred())
@@ -685,16 +692,22 @@ func show_play() -> void:
 	var area := shell_open("OOZE / PLAY", "play")
 	var x := shell_x()
 	var top := page_title(area, "PLAY", "PICK YOUR FIGHT.")
+	var ct := "CAMPAIGN  →"                            # UI (0.22.1, the Architect's suggestion): the campaigns are their own tab
+	var ctw := UiKit.text_w(self, ct, 15, true) + 40.0
+	UiKit.btn(self, ct, Vector2(content.size.x - x - ctw, area.position.y + (12.0 if shell_slim else 20.0)), Vector2(ctw, 42), show_chapters,
+			"secondary", faction, 15)
 	var gap := 16.0
 	var cw := (content.size.x - x * 2.0 - gap * 2.0) / 3.0
 	var ch := area.end.y - top - 18.0
 	var done := TutorialDirector.done_count()
 	var cards := [
 		# Daniele's FINAL PLAY art (2026-09-28): the creatures are in the pictures, so no cutout over them
-		["CUSTOM MATCH", "VS AI", "Pick a faction, a battlefield and your rivals.", "res://assets/art/ui/play_vs_ai.jpg", show_factions],
-		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/ui/play_online.jpg", show_online],
+		["CUSTOM MATCH", "VS AI", "Pick a faction, a battlefield and your rivals.", "res://assets/art/ui/play_vs_ai.jpg", show_factions,
+				"PLAY  →"],
+		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/ui/play_online.jpg", show_online,
+				"PLAY ONLINE  →"],
 		["LEARN THE CITY", "TRAINING", "%d / %d lessons done. Replay any lesson." % [done, TutorialDirector.TOTAL_LESSONS],
-				"res://assets/art/ui/play_training.jpg", show_tutorial],
+				"res://assets/art/ui/play_training.jpg", show_tutorial, "START  →" if done < TutorialDirector.TOTAL_LESSONS else "REPLAY  →"],
 	]
 	for i in range(cards.size()):
 		var c := FrameCard.make(self, Vector2(cw, ch), faction)
@@ -703,8 +716,8 @@ func show_play() -> void:
 		c.set_title(cards[i][1])
 		c.set_note(cards[i][2])
 		c.set_art(cards[i][3])
-		c.set_action("PLAY  →" if i == 0 else "OPEN")
-		c.set_selected(i == 0)
+		c.set_action(cards[i][5])                      # UI (Daniele, 0.22.0): three equal cards, each with its own verb
+		c.set_selected(false)
 		var go: Callable = cards[i][4]
 		c.pressed.connect(func(): go.call_deferred())
 		_shell_add(c, Vector2(x + i * (cw + gap), top))
@@ -1346,7 +1359,9 @@ func _meta_open(page: String, fallback: Callable) -> String:
 			tab = nav_bar.active
 		elif _meta_from.has(_page):
 			tab = str(_meta_from[_page][1])
-		_meta_from[page] = [_last_show if _last_show.is_valid() and _page != "" else fallback, tab]
+		# UI (Daniele 2026-09-28: "the BACK in LEADERBOARD just reloads the leaderboard"): every meta page sets _last_show
+		# to itself before it gets here, so the page it came from is the one before that (_prev_show)
+		_meta_from[page] = [_prev_show if _prev_show.is_valid() and _page != "" else fallback, tab]
 	return str(_meta_from[page][1])
 
 
@@ -1936,7 +1951,7 @@ func show_leaderboard() -> void:
 	else:
 		y = 0.0
 		for row in _board_rows:
-			var me := bool(row.get("is_me", false))
+			var me: bool = row.get("is_me", false) == true   # the server may send null
 			y += _board_row("#%d" % int(row.get("rank", 0)), str(row.get("name", "")) + ("  (YOU)" if me else ""),
 					"%d WINS" % int(row.get("wins", 0)), Vector2(0, y), w, me) + 6.0
 		if not _board_me.is_empty():                  # 0.20.13: YOU, when you're not on the list - a row like the rest
@@ -1965,7 +1980,7 @@ func _load_board() -> void:
 	var rows := await _account().leaderboard("season_wins", 50)
 	_board_rows = rows
 	_board_me = {}
-	if not rows.any(func(r): return bool(r.get("is_me", false))):   # not on the list: say where you stand (0.20.13)
+	if not rows.any(func(r): return r.get("is_me", false) == true):   # not on the list: say where you stand (0.20.13)
 		_board_me = await _account().my_season_wins()
 	_board_state = "done" if _account().state != "offline" or not rows.is_empty() else "offline"
 	if _page == "leaderboard":
@@ -2047,7 +2062,7 @@ func _history_row(h: Dictionary, names: Dictionary, pos: Vector2, w: float) -> f
 		var f := str(p.get("faction", "null"))
 		if Rules.FACTIONS.has(f):                        # the race emblem, in its own colours
 			UiKit.emblem_rect(self, f, Vector2(px, py), ic)
-		var me := bool(p.get("is_me", false))
+		var me: bool = p.get("is_me", false) == true   # (a null from the server)
 		var who := "YOU" if me and str(p.get("name", "")) == "" else str(p.get("name", ""))
 		if str(p.get("ai_level", "")) != "":
 			who = "AI" if str(p["ai_level"]) == "AI" else "AI " + str(p["ai_level"]).to_upper()
@@ -2199,13 +2214,14 @@ func _show_hub() -> void:
 	_last_show = _show_hub
 	var cf := _hub_faction()
 	var h := Campaign.hub(cf, _hub_i) if cf != "" else {}
-	var area := shell_open("OOZE / CAMPAIGN", "campaign", Callable(), cf if cf != "" else faction)   # the campaign's colour
+	var area := shell_open("OOZE / CAMPAIGN / %s" % str(UiKit.NAMES.get(cf, "")), "campaign", Callable(),
+			cf if cf != "" else faction)                # the campaign's colour; ALL CAMPAIGNS (top right) goes back (0.22.0)
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
 	var bh := 42.0
-	var bw := maxf(UiKit.text_w(self, "CHAPTERS", 15, true), UiKit.text_w(self, "CITY MAP", 15, true)) + 40.0
+	var bw := maxf(UiKit.text_w(self, "ALL CAMPAIGNS", 15, true), UiKit.text_w(self, "CITY MAP", 15, true)) + 40.0
 	var by := area.position.y + 18.0
-	UiKit.btn(self, "CHAPTERS", Vector2(content.size.x - x - bw, by), Vector2(bw, bh), show_chapters, "secondary", shell_f, 15)
+	UiKit.btn(self, "ALL CAMPAIGNS", Vector2(content.size.x - x - bw, by), Vector2(bw, bh), show_chapters, "secondary", shell_f, 15)
 	if h.is_empty():                                   # no campaign has content (never in this build)
 		page_title(area, "CAMPAIGN", "COMING LATER.")
 		return
@@ -2320,7 +2336,7 @@ func show_chapters() -> void:
 	## CAMPAIGN CHAPTERS (screen system 28): one card per faction (Campaign.episodes) - its character, OPEN CAMPAIGN /
 	## LOCKED / COMING LATER, its stars; the open one opens its hub. The overall progress at the foot.
 	_last_show = show_chapters
-	var area := shell_open("OOZE / CHAPTERS", "campaign", _show_hub, _hub_faction() if _hub_faction() != "" else faction)
+	var area := shell_open("OOZE / CAMPAIGN", "campaign", Callable(), _hub_faction() if _hub_faction() != "" else faction)   # the tab's page
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
 	var top := page_title(area, "CAMPAIGN", "CHOOSE YOUR SYNDICATE.")
@@ -2345,11 +2361,11 @@ func show_chapters() -> void:
 		card.art_frac = 0.5
 		card.set_hero(f)
 		card.set_title(UiKit.NAMES.get(f, f.to_upper()), UiKit.SUBS.get(f, ""))
-		card.set_kicker({"open": "OPEN CAMPAIGN", "locked": "LOCKED"}.get(st, "COMING LATER"))
+		card.set_kicker({"open": "CAMPAIGN", "locked": "LOCKED"}.get(st, "COMING LATER"))
 		match st:
 			"open":
 				card.set_state("next")
-				card.set_action("OPEN  →")
+				card.set_action("PLAY  →")
 				card.set_note("%s  ·  ★ %d / %d" % [str(ep["title"]), int(ep["stars"]), int(ep["stars_max"])])
 			"locked":
 				card.set_state("locked")
@@ -2361,7 +2377,7 @@ func show_chapters() -> void:
 			card.pressed.connect(func():
 				_hub_f = f
 				_hub_i = -1
-				_show_hub())
+				show_campaign())                       # its city map (or the cards, the view used last)
 		card.position = Vector2(k * (cw + gap), 0)
 		(row[1] as Control).add_child(card)
 	shell_raise()
@@ -2379,7 +2395,7 @@ func show_city_map() -> void:
 	_camp_page.set_faction(_hub_faction() if _hub_faction() != "" else faction)
 	_camp_page.set_mobile(mobile)
 	_camp_page.view_switch = "CARDS"
-	_camp_page.back_pressed.connect(show_main)
+	_camp_page.back_pressed.connect(show_chapters)       # UI (0.22.0): BACK to every campaign, the tab's page
 	_camp_page.view_pressed.connect(func():
 		UiKit.save_campaign_view("cards")
 		_show_hub())
@@ -4078,11 +4094,7 @@ func show_lobby() -> void:
 	var acc := UiKit.accent(shell_f)
 	var ty := area.position.y + (10.0 if shell_slim else 18.0)
 	var top := UiKit.title(self, x, ty, "ONLINE / LOBBY", "WAITING FOR THE CREW.", shell_f, 34.0 * (0.8 if shell_slim else 1.0)) + 14.0
-	var lv := UiKit.flat_button(self, "LEAVE ROOM", 15)
-	lv.alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	lv.size = Vector2(UiKit.text_w(self, lv.text, 15, true) + 20.0, UiKit.tap_h(self, 36.0))
-	lv.pressed.connect(func(): _leave_room.call_deferred())
-	_shell_add(lv, Vector2(content.size.x - x - lv.size.x, ty))
+	UiKit.back_link(self, content.size.x - x, ty, _leave_room, "LEAVE ROOM")   # UI (0.22.1): a real button (Daniele)
 	# the foot: who is in and the room's status at the left, DEPLOY (the host) at the right
 	var bh := UiKit.tap_h(self, 50.0)
 	var fy := area.end.y - bh - 12.0

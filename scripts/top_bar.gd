@@ -40,7 +40,9 @@ func _build(crumb: String, f: String) -> void:
 	_ring_col = UiKit.accent(f)
 	var x := 18.0
 	if slim:
-		var back := UiKit.make_btn(menu, "←  BACK", Vector2(120, q), func(): back_pressed.emit(), "secondary", f, 15)
+		# UI (0.22.1): the bars' taps act through the Menu, which outlives a rebuild - a phone's resize can rebuild the page
+		# (and free this bar) during the tap's flash frame, and a tap then did nothing (Daniele: "double or triple tap")
+		var back := UiKit.make_btn(menu, "←  BACK", Vector2(120, q), Callable(menu, "bar_back"), "secondary", f, 15)
 		back.position = Vector2(x, (h - back.size.y) / 2.0)
 		add_child(back)
 		x += back.size.x + 18.0
@@ -63,10 +65,10 @@ func _build(crumb: String, f: String) -> void:
 	# right to left: "?", the gear, the level block, the balances
 	var help := _square("?", Vector2(w - 14.0 - q, (h - q) / 2.0), q, f)
 	help.tooltip_text = "HELP"
-	help.pressed.connect(func(): UiKit.acknowledge(help, func(): help_pressed.emit()))
+	help.pressed.connect(func(): UiKit.acknowledge(help, Callable(menu, "show_help")))
 	var gear := _square("", help.position - Vector2(q + 8.0, 0), q, f)
 	gear.tooltip_text = "OPTIONS"
-	gear.pressed.connect(func(): UiKit.acknowledge(gear, func(): options_pressed.emit()))
+	gear.pressed.connect(func(): UiKit.acknowledge(gear, Callable(menu, "show_options")))
 	var glyph := Control.new()                       # a drawn gear (no icon for it in the kit yet)
 	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	glyph.position = gear.position
@@ -92,7 +94,7 @@ func _build(crumb: String, f: String) -> void:
 	prof.tooltip_text = "PROFILE"
 	prof.position = Vector2(bx - 6.0, 0)
 	prof.size = Vector2(block_w + 12.0, h)
-	prof.pressed.connect(func(): UiKit.acknowledge(prof, func(): profile_pressed.emit()))
+	prof.pressed.connect(func(): UiKit.acknowledge(prof, Callable(menu, "show_profile")))
 	add_child(prof)
 	var bxr := bx - 18.0                              # PROGRESSION: SCRAP and CHIPS, as on the old profile card
 	var p := UiKit.pt(menu)                           # the ticker sizes in pt: exact on phones, the old card's size on desktop
