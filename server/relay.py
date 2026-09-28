@@ -27,6 +27,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import secrets
 import sys
 import time
@@ -87,6 +88,21 @@ def server_version():
             return f.read().strip()
     except (OSError, TypeError):
         return ""
+
+
+VERSION_RE = re.compile(r"^[A-Za-z0-9._-]{1,40}/[A-Za-z0-9._-]{1,20}$")
+
+
+def pack_for(version):
+    """The pack a match host for `version` runs: the live one (current.pck) when it is the live version, else that
+    version's own pack in --packs-dir (<tag>_<version>.pck: a staging build, or a live one players still have cached).
+    None = this server can't host it."""
+    if version and version == server_version():
+        return os.path.realpath(cfg.pck) if cfg.pck else ""
+    if not cfg.packs_dir or not VERSION_RE.match(version or ""):
+        return None
+    path = os.path.join(cfg.packs_dir, version.replace("/", "_") + ".pck")
+    return path if os.path.isfile(path) else None
 
 
 def packet(**kw):
@@ -257,8 +273,8 @@ async def run_create(ws, version, ip, test=False):
     if not cfg.godot or not os.path.exists(cfg.godot) or not (cfg.pck or cfg.project):
         await refuse(ws, "No match server here.", code="no-server")
         return
-    want = server_version()
-    if want and version != want:
+    pck = pack_for(version) if cfg.pck else ""       # 0.22.x (staging): any version whose pack is on the box
+    if pck is None:
         await refuse(ws, "The server runs another game version.", code="version")
         return
     if sum(1 for r in rooms.values() if r.proc is not None and ip in r.guest_ips.values()) >= cfg.rooms_per_ip:
@@ -278,7 +294,8 @@ async def run_create(ws, version, ip, test=False):
     room.ip = ip
     room.secret = secrets.token_urlsafe(18)
     rooms[code] = room
-    pck = os.path.realpath(cfg.pck) if cfg.pck else ""   # the versioned pack current.pck points to now (deploys swap it)
+    if cfg.pck and pck != os.path.realpath(cfg.pck):
+        log.info("room %s: version %s from its own pack %s", code, version, os.path.basename(pck))
     cmd = [cfg.godot, "--headless"] + (["--main-pack", pck] if cfg.pck else ["--path", cfg.project]) + [
         "--", "--dedicated", "--relay=ws://127.0.0.1:%d/ooze" % cfg.port, "--room=" + code, "--secret=" + room.secret] + cfg.host_arg
     env = dict(os.environ, GODOT_SILENCE_ROOT_WARNING="1")
@@ -460,6 +477,7 @@ async def main():
     ap.add_argument("--pck", default="", help="the game build it runs (the web export's index.pck)")
     ap.add_argument("--project", default="", help="or a project folder (local tests)")
     ap.add_argument("--version-file", default="", help="holds Net.version() of that build; others fall back")
+    ap.add_argument("--packs-dir", default="", help="versioned packs (<tag>_<version>.pck): other versions, e.g. staging")
     ap.add_argument("--max-matches", type=int, default=3)
     ap.add_argument("--rooms-per-ip", type=int, default=ROOMS_PER_IP, help="server rooms one address may hold (tests: more)")
     ap.add_argument("--empty-grace", type=float, default=EMPTY_GRACE, help="seconds a server room with nobody connected stays open")
