@@ -5,6 +5,12 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.9 (sound, callouts, names, co-op AI)
+- [ ] **Sound** on the phone: first tap unlocks it; SOUND ON / OFF + VOLUME in SETTINGS and PAUSE work live; nothing too loud / spammy.
+- [ ] **Callouts**: monster incoming (and the edge arrow), forge, handover; skill refusal above the slot; Last Stand line pulse.
+- [ ] **Your name** on VERSUS and the results.
+- [ ] **Co-op**: 2v2 with an AI ally vs AI - does the enemy team feel coordinated but beatable?
+
 ## 0.21.8 (telemetry, privacy)
 - [ ] **First launch**: the privacy notice (in the EU it starts OFF); SETTINGS > PRIVACY and ACCOUNT > PRIVACY show the switch.
 - [ ] **DELETE ACCOUNT** on a throwaway guest: gone from the leaderboard; the device's progress stays.

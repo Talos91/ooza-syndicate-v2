@@ -1,5 +1,26 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.9 "Alpha 21" - 2026-09-28 (sound, messages where they belong, player names, co-op AI)
+
+- **Sound** (first pass; Daniele's pick in the sound demo, Set 4 "Mix 2+3"; CC0 Kenney + OpenGameArt, 23 files, ~0.3 MB):
+  sends, fights, hits, captures, upgrades / builds, lasers, Machinegoon, monsters, skills, relays, falls, collapse, Last
+  Stand, eliminated, win; menu taps. SETTINGS > DISPLAY > AUDIO and PAUSE > SETTINGS: **SOUND ON / OFF** and **VOLUME**
+  25-100 %. Online guests hear the match too. Credits in assets/audio/sfx/CREDITS.txt.
+- **No notification box** (Daniele's "option A"): each message where it belongs - a callout at the node / deck (monster
+  incoming with an edge arrow when off screen, monster kicked N off, forge online / lost, handed over, troops sent home,
+  a refused order), the Last Stand status line pulses and explains the method, skill refusals just above the tapped slot,
+  a short match-start banner, the online waiting text centred. Handovers now show at all (they never did).
+- **Player names**: a human seat shows the player's name (faction underneath, YOU marked) on VERSUS, the results, MATCH
+  DETAILS, the top-bar chips and YOU'RE OUT; AI seats show faction + level. (Online, other humans' names come with a
+  later protocol change.)
+- **Co-op AI** (Daniele: "take advantage of coop mode and is more strong, but not unbeatable"): AI teammates pick a common
+  target (preferring a human), reinforce an ally's node about to fall, back up and time joint attacks, and send rear
+  surplus to the front - more at higher levels (Standard wins 65 %, Veteran 72 %, Expert 76 % against the same level
+  without teamwork). No economy or combat change.
+- **Difficulty order fixed**: Expert now beats Veteran (66 %; vs Standard 80 %, was 67 % - below Veteran's 72 %). Training
+  16 / Casual 39 / Standard 50 / Veteran 72 / Expert 80 % vs Standard.
+- **Phone dock labels** at least 11 pt; **HUD badges** drawn in one pass (perf_check M-39: ~457 -> ~396 draw calls).
+
 ## 0.21.8 "Alpha 21" - 2026-09-28 (telemetry, crash reports, privacy, DELETE ACCOUNT; lobby READY)
 
 - **READY in the online lobby** (Daniele; 🖥️ Server, protocol ooze20-net-6): each guest presses READY, which locks their
