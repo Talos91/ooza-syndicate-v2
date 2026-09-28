@@ -19,7 +19,18 @@ const WITHHELD: Array[String] = []
 # Not on phones (Daniele, Alpha 18: "if some map is not good for mobile still flag them and remove them"):
 # maps the phone-fit probe (tests/phone_fit.tscn) finds crowded on a phone; tablets and desktop keep them.
 # Maps 4.0 listed its 3v3 / 2v2v2 maps here; the 4.1 partial pack has none, and every 4.1 map passes.
-const PHONE_UNFIT: Array[String] = []
+# 34 deg camera (Daniele 2026-09-29): "34deg is best" dropped every map's own MapCamera.PITCH entry to
+# Rules.CAM_PITCH = 34.0 (cam-34). Re-run at pitches=34 (tests/phone_fit.tscn) showed the lower, more
+# diagonal camera foreshortens the ground plane enough that these maps fall under the 33 pt phone tap
+# minimum (they all cleared it comfortably at the old 58 deg); no map geometry changed, only the pitch.
+const PHONE_UNFIT: Array[String] = [
+	"T-01", "M-01", "M-02", "M-03", "M-04", "M-05", "M-06", "M-07", "M-08", "M-09", "M-10",
+	"M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-21", "M-22", "M-23", "M-24", "M-25",
+	"M-26", "M-27", "M-28", "M-29", "M-30", "M-31", "M-32", "M-35", "M-37", "M-38", "M-39",
+	"M-40", "M-51", "M-52", "M-53", "M-55", "M-56", "M-57", "M-58", "M-59", "M-60",
+	"C-01", "C-02", "C-03", "C-04", "C-05", "B-01", "B-03", "B-04", "B-05",
+	"S-01", "S-02", "S-03", "S-04", "S-05", "D-01", "D-02", "D-12", "D-13", "D-14", "D-15", "D-16",
+]
 # Teaching boards, not fair matches (the interactive tutorial, References/Ooze Syndicate maps 4.2 -
 # tutorial): never on 02 BATTLEFIELD, never a REMATCH ON A RANDOM MAP pick, never in test_map_pool /
 # test_ai_curve's pools. T-01 / T-02 (the older tutorial pair in the main maps 4.2 pack) joined them in 0.20.4

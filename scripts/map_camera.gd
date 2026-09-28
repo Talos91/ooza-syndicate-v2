@@ -1,95 +1,12 @@
 class_name MapCamera
-## Camera pitch per map (maps 4.2, the Alpha 11 classics, maps 4.3 / 4.4 classic and 4.6 relay, the
-## tutorial lessons), in degrees above the horizon: from 58 (bird's-eye, Daniele Alpha 18: "a bit
-## more from the top") up to the lowest angle at which the smallest node tap target reaches 44 pt (Apple's
-## guideline) on a landscape phone (844 x 390 pt) with no badge overflowing or colliding. From the phone-fit
-## probe (tests/phone_fit.tscn) - rerun it and regenerate this table after a map pack changes. On maps 4.2
-## every map already reaches 45-66 pt at 58 degrees; the Alpha 11 classics A-01..A-04 56-88 pt; maps 4.4 classic M-21..M-40 44-54 pt; maps 4.6 relay M-51..M-60 44-54 pt;
-## the tutorial lessons T-03..T-10 (small teaching boards) 62-74 pt, also at 58 degrees.
-const PITCH := {
-	"A-01": 58.0,
-	"A-02": 58.0,
-	"A-03": 58.0,
-	"A-04": 58.0,
-	"B-01": 58.0,
-	"B-02": 58.0,
-	"B-03": 58.0,
-	"B-04": 58.0,
-	"B-05": 58.0,
-	"C-01": 58.0,
-	"C-02": 58.0,
-	"C-03": 58.0,
-	"C-04": 58.0,
-	"C-05": 58.0,
-	"D-01": 58.0,
-	"D-02": 58.0,
-	"D-03": 58.0,
-	"M-01": 58.0,
-	"M-02": 58.0,
-	"M-03": 58.0,
-	"M-04": 58.0,
-	"M-05": 58.0,
-	"M-06": 58.0,
-	"M-07": 58.0,
-	"M-08": 58.0,
-	"M-09": 58.0,
-	"M-10": 58.0,
-	"M-11": 58.0,
-	"M-12": 58.0,
-	"M-13": 58.0,
-	"M-14": 58.0,
-	"M-15": 58.0,
-	"M-16": 58.0,
-	"M-17": 58.0,
-	"M-18": 58.0,
-	"M-19": 58.0,
-	"M-20": 58.0,
-	"M-21": 58.0,
-	"M-22": 58.0,
-	"M-23": 58.0,
-	"M-24": 58.0,
-	"M-25": 58.0,
-	"M-26": 58.0,
-	"M-27": 58.0,
-	"M-28": 58.0,
-	"M-29": 58.0,
-	"M-30": 58.0,
-	"M-31": 58.0,
-	"M-32": 58.0,
-	"M-33": 58.0,
-	"M-34": 58.0,
-	"M-35": 58.0,
-	"M-36": 58.0,
-	"M-37": 58.0,
-	"M-38": 58.0,
-	"M-39": 58.0,
-	"M-40": 58.0,
-	"M-51": 58.0,
-	"M-52": 58.0,
-	"M-53": 58.0,
-	"M-54": 58.0,
-	"M-55": 58.0,
-	"M-56": 58.0,
-	"M-57": 58.0,
-	"M-58": 58.0,
-	"M-59": 58.0,
-	"M-60": 58.0,
-	"S-01": 58.0,
-	"S-02": 58.0,
-	"S-03": 58.0,
-	"S-04": 58.0,
-	"S-05": 58.0,
-	"T-01": 58.0,
-	"T-02": 58.0,
-	"T-03": 58.0,
-	"T-04": 58.0,
-	"T-05": 58.0,
-	"T-06": 58.0,
-	"T-07": 58.0,
-	"T-08": 58.0,
-	"T-09": 58.0,
-	"T-10": 58.0,
-}
+## Camera pitch per map, in degrees above the horizon. Daniele, Map Lab, 2026-09-29: "34deg is best" -
+## a lower, more diagonal camera for EVERY map, no per-map overrides; let the phone-fit probe
+## (tests/phone_fit.tscn) flag any map that stops fitting at 34 (scripts/map_pool.gd PHONE_UNFIT) rather
+## than giving that map its own pitch back. PITCH stays here, empty, so a future per-map override is
+## still one line away if a map ever needs it again; until then every map falls through to
+## Rules.CAM_PITCH (34.0). History: this table held 58.0 for every maps 4.2 / Alpha 11 classics / maps
+## 4.3-4.6 / tutorial map from Alpha 18 ("a bit more from the top") through 0.22.x.
+const PITCH := {}
 
 
 static func pitch_for(code: String) -> float:
