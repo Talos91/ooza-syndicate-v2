@@ -293,7 +293,7 @@ const LAST_STAND_FIT_SPARE := 3.0    # s of slack the adaptive ring gap keeps be
 # warning and drops end before the Very Last Stand (VERY_LAST_STAND_TIME). If even _MIN can't fit, _MIN it is and
 # the leftovers go to the Very Last Stand.
 const LAST_STAND_DROP_GAP_MAX := 20.0
-const LAST_STAND_DROP_GAP_MIN := 8.0
+const LAST_STAND_DROP_GAP_MIN := 6.0    # Daniele (2026-09-29, Decisions "ls-big-maps = gap6"): 6 s so big maps' ring collapse fits the 4:00-6:00 window (was 8)
 const LAST_STAND_DROP_GAP := 5.0     # the old fixed ring gap - no longer the rule (see Sim.last_stand_gap); the
                                      # tutorial's staged Very Last Stand (tutorial.gd vls_gap "warning+gap") reads it
 const MATCH_HARD_END := 420.0        # 7:00 end: the side owning the Very Last Stand's last platform wins (Sim._force_end)

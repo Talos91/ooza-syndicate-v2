@@ -1176,8 +1176,8 @@ func _ls_run(path: String) -> Sim:
 
 
 func _ls_pacing() -> void:
-	check(Rules.LAST_STAND_DROP_GAP_MAX == 20.0 and Rules.LAST_STAND_DROP_GAP_MIN == 8.0 and Rules.LAST_STAND_DROP_GAP == 5.0,
-			"ring drop gap: adaptive 8-20 s (the old 5 s constant stays for the tutorial)")
+	check(Rules.LAST_STAND_DROP_GAP_MAX == 20.0 and Rules.LAST_STAND_DROP_GAP_MIN == 6.0 and Rules.LAST_STAND_DROP_GAP == 5.0,
+			"ring drop gap: adaptive 6-20 s (6 s min since 0.22.5, Daniele; the old 5 s constant stays for the tutorial)")
 	for c in [["res://maps4/M-03-drift-belt.json", "small"], ["res://maps4/M-09-shard-archipelago.json", "big"]]:
 		var path: String = c[0]
 		var m := MapBuilder.load_map(path)
@@ -1192,7 +1192,7 @@ func _ls_pacing() -> void:
 			_ls_check(s0, c[1])
 		else:
 			_ls_check(_ls_run(path), c[1])
-	check(Sim._fit_gap([range(30), range(30)], 180.0) == Rules.LAST_STAND_DROP_GAP_MIN, "a huge collapse never drops faster than 8 s (the rest goes to the Very Last Stand)")
+	check(Sim._fit_gap([range(30), range(30)], 180.0) == Rules.LAST_STAND_DROP_GAP_MIN, "a huge collapse never drops faster than 6 s (the rest goes to the Very Last Stand)")
 	var so := Sim.new()
 	var mo := MapBuilder.load_map("res://maps4/M-03-drift-belt.json")
 	var so_seats := {}
@@ -1330,7 +1330,7 @@ func _ls_check(s: Sim, tag: String) -> void:
 	if tag == "small":
 		check(g == Rules.LAST_STAND_DROP_GAP_MAX, "small map: the ring drops a platform every 20 s (%.1f)" % g)
 	else:
-		check(g < Rules.LAST_STAND_DROP_GAP_MAX and g >= Rules.LAST_STAND_DROP_GAP_MIN, "big map: a shorter gap, never under 8 s (%.1f)" % g)
+		check(g < Rules.LAST_STAND_DROP_GAP_MAX and g >= Rules.LAST_STAND_DROP_GAP_MIN, "big map: a shorter gap, never under 6 s (%.1f)" % g)
 	# countdowns: every queued platform's drop_in matches when it really falls
 	var want := {}
 	for k in range(s.last_stand_queue.size()):
@@ -1357,7 +1357,7 @@ func _ls_check(s: Sim, tag: String) -> void:
 		# minimum gap (Daniele: never faster than 8 s; "the rest goes to the Very Last Stand") - it then runs on past 6:00 at
 		# that gap while the Very Last Stand takes its own picks in between, and still ends well before the hard end.
 		check(ring_end > 0.0 and (ring_end < Rules.VERY_LAST_STAND_TIME or g == Rules.LAST_STAND_DROP_GAP_MIN) and ring_end < Rules.MATCH_HARD_END - 20.0,
-				"big map: the ring collapse ends before the Very Last Stand, or at the 8 s minimum gap it runs on past it (ended %.0f s)" % ring_end)
+				"big map: the ring collapse ends before the Very Last Stand, or at the 6 s minimum gap it runs on past it (ended %.0f s)" % ring_end)
 	check(islands_ok, "%s map: nothing is ever left cut off" % tag)
 
 
