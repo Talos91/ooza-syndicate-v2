@@ -882,7 +882,7 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 		if UiKit.text_w(self, cap, 12) > sw - 10.0:            # phones: the name only; the value's colour carries the rest
 			cap = r[1]
 		UiKit.stat(self, Vector2(pos.x + pad + i * sw, sy), "%d%%" % roundi(v * 100.0), cap,
-				acc if v > 1.001 else (Color("ffb12b") if v < 0.999 else UiKit.INK))
+				acc if v > 1.001 else (UiKit.WEAKER if v < 0.999 else UiKit.INK))
 
 
 func _preset_rows(pos: Vector2, dims: Vector2) -> void:
@@ -961,7 +961,7 @@ func show_tutorial() -> void:
 			TutorialDirector.path = arg.substr(15)
 			TutorialDirector.reload_progress()
 	var page := TutorialPage.new()
-	var area := shell_open("OOZE / TRAINING", "play", func(): page.back_pressed.emit())
+	var area := shell_open("OOZE / TRAINING", "home", func(): page.back_pressed.emit())   # BACK: HOME (Daniele), so HOME's tab
 	var top := page_title(area, "%s / %d OF %d" % [TutorialDirector.line("page_title"), TutorialDirector.done_count(),
 			TutorialDirector.TOTAL_LESSONS], "LEARN THE CITY.")
 	_tut_page = page
@@ -1984,7 +1984,7 @@ func _show_hub() -> void:
 	_last_show = _show_hub
 	var cf := _hub_faction()
 	var h := Campaign.hub(cf, _hub_i) if cf != "" else {}
-	var area := shell_open("OOZE / CAMPAIGN", "campaign")
+	var area := shell_open("OOZE / CAMPAIGN", "campaign", Callable(), cf if cf != "" else faction)   # the campaign's colour
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
 	var bh := 42.0
@@ -2105,7 +2105,7 @@ func show_chapters() -> void:
 	## CAMPAIGN CHAPTERS (screen system 28): one card per faction (Campaign.episodes) - its character, OPEN CAMPAIGN /
 	## LOCKED / COMING LATER, its stars; the open one opens its hub. The overall progress at the foot.
 	_last_show = show_chapters
-	var area := shell_open("OOZE / CHAPTERS", "campaign", _show_hub)
+	var area := shell_open("OOZE / CHAPTERS", "campaign", _show_hub, _hub_faction() if _hub_faction() != "" else faction)
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
 	var top := page_title(area, "CAMPAIGN", "CHOOSE YOUR SYNDICATE.")
@@ -2327,7 +2327,7 @@ func _army_identity(pos: Vector2, dims: Vector2) -> void:
 	var cw := (dims.x - 36.0) / STAT_ROWS.size()
 	for i in range(STAT_ROWS.size()):
 		var v := Rules.stat(_army, STAT_ROWS[i][0])
-		var col := acc if v > 1.001 else (LOCK_COL if v < 0.999 else UiKit.INK)
+		var col := acc if v > 1.001 else (UiKit.WEAKER if v < 0.999 else UiKit.INK)
 		UiKit.stat(self, Vector2(pos.x + 18.0 + i * cw, sy + 12.0), "%d%%" % roundi(v * 100.0), STAT_ROWS[i][1], col)
 
 
@@ -2826,17 +2826,20 @@ func _ward_state(cat: String, id: String, equipped: String) -> Dictionary:
 				"col": UiKit.accent(_army) if id == equipped else UiKit.DIM}
 	var item := Progression.cosmetic_item(cat, id, _army)
 	if not ArmyPresets.is_unlocked(id, cat, _army):
-		var price := Progression.price(item)
-		var line := "LOCKED"
-		if item == "vat:graduate":
-			line += "  ·  " + TutorialDirector.line("locked_cosmetic").to_upper()
-		elif price.has("soft"):
-			line += "  ·  " + Progression.amount_text(int(price["soft"]), "soft", false)
-		return {"locked": true, "equipped": false, "line": line, "col": LOCK_COL}
+		return {"locked": true, "equipped": false, "line": "LOCKED  ·  " + _ward_price(item), "col": LOCK_COL}
 	if id == equipped:
 		return {"locked": false, "equipped": true, "line": "EQUIPPED", "col": UiKit.accent(_army)}
-	return {"locked": false, "equipped": false, "line": "OWNED" if Progression.owns(item) else "OPEN",
-			"col": UiKit.DIM}
+	# Daniele 2026-09-28: a look you own shows nothing; one open only while testing shows how it will be unlocked
+	var owned := Progression.owns(item) or Progression.price(item).is_empty() and item != "vat:graduate"
+	return {"locked": false, "equipped": false, "line": "" if owned else _ward_price(item), "col": LOCK_COL}
+
+
+func _ward_price(item: String) -> String:
+	## A look's way in, short (a tile's line): its SCRAP price, or the Graduate vat's condition.
+	if item == "vat:graduate":
+		return TutorialDirector.line("locked_cosmetic").to_upper()
+	var price := Progression.price(item)
+	return Progression.amount_text(int(price["soft"]), "soft", false) if price.has("soft") else "UNLOCK"
 
 
 func _ward_stage(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped: String) -> void:
@@ -2961,7 +2964,7 @@ func _ward_detail(cat: String, sel: String, st: Dictionary) -> String:
 	var out := ""
 	if cat == "territory":
 		out = TERRITORY_LOOKS[sel][1] + " One pick for every faction."
-	elif st["locked"]:
+	elif st["locked"] or not Progression.owns(Progression.cosmetic_item(cat, sel, _army)) and str(st["line"]) != "":
 		var item := Progression.cosmetic_item(cat, sel, _army)
 		out = "TO UNLOCK: " + _cosmetic_path(cat, sel)
 		var price := Progression.price(item)
@@ -2971,10 +2974,11 @@ func _ward_detail(cat: String, sel: String, st: Dictionary) -> String:
 				costs.append(Progression.amount_text(int(price[cur]), cur, false))
 		if not costs.is_empty():
 			out += "  ·  " + " OR ".join(costs)
+		if not st["locked"]:
+			out += "
+Open while testing: you can equip it now."
 	else:
 		out = "A look only: tier read, footprint and colour stay the same."
-		if not Progression.owns(Progression.cosmetic_item(cat, sel, _army)):
-			out = "Open while testing; earned or unlocked later. " + out
 		if cat in ["monster_hub", "monster"] or sel == "faction":
 			out += " Made for %s." % UiKit.NAMES[_army]
 	if not ArmyPresets.saved:

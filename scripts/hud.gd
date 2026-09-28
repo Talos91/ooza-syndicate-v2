@@ -1454,7 +1454,8 @@ func pause_menu() -> void:
 	if main.online:                                   # a room never pauses (Alpha 11): the menu only
 		s.card({"kicker": "ROOM %s" % Net.room_code, "headline": "MATCH MENU.",
 				"body": "%s · the match keeps running\n%s" % [where, Net.net_stats_line()],
-				"actions": [["RESUME  →", func(): pause_panel.visible = false], ["LEAVE ROOM", main.to_menu, "tertiary"]]})
+				"actions": [["RESUME  →", func(): pause_panel.visible = false], ["SETTINGS", _pause_settings],
+				["LEAVE ROOM", main.to_menu, "tertiary"]]})
 		_show_screen(pause_panel)
 		return
 	main.paused = true
@@ -1462,11 +1463,11 @@ func pause_menu() -> void:
 	if main.get("director") != null:                  # TUTORIAL: PAUSE keeps working and gains LESSONS (§6)
 		s.card({"kicker": where, "headline": "PAUSED.",
 				"actions": [resume, [TutorialDirector.line("paused_lessons"), main.to_lessons], ["RESTART MATCH", main.restart],
-				["MAIN MENU", main.to_menu, "tertiary"]]})
+				["SETTINGS", _pause_settings], ["MAIN MENU", main.to_menu, "tertiary"]]})
 		_show_screen(pause_panel)
 		return
 	s.card({"kicker": where, "headline": "PAUSED.",
-			"actions": [resume, ["RESTART MATCH", main.restart],
+			"actions": [resume, ["RESTART MATCH", main.restart], ["SETTINGS", _pause_settings],
 			["CAMPAIGN" if main.get("mission") != null else "EXIT MATCH", main.to_menu, "tertiary"]]})   # CAMPAIGN: a mission leaves to its page
 	_show_screen(pause_panel)
 
@@ -1555,11 +1556,10 @@ func _build_end() -> void:
 		_show_screen(end_panel)
 		return
 	var placed := Progression.placements(sim)
-	var kicker := "NO SIDE HOLDS THE MAP"
-	if ffa and not won and not draw:
+	var line := MatchScreens.verdict(won, draw, int(main.seed_value))   # the syndicate's joke for it (Daniele)
+	var kicker: String = line[0]
+	if ffa and not won and not draw:                   # an FFA loss says where you finished instead
 		kicker = "FINISHED %s OF %d" % [MatchScreens.ordinal(int(placed.get(human, seats.size()))).to_upper(), seats.size()]
-	elif not draw:
-		kicker = ("YOUR TEAM HOLDS THE MAP" if team else "TERRITORY SECURED") if won else ("YOUR TEAM LOST THE MAP" if team else "TERRITORY LOST")
 	var sub := where + "  ·  " + (("Last Stand: %s" % sim.last_stand_method.to_upper()) if sim.last_stand_active else "decided before the Last Stand")
 	if not won and not draw and seats.size() > 2:     # who took it, when it wasn't a plain duel
 		sub = "Won by %s  ·  %s" % [str(UiKit.NAMES.get(str(sim.factions.get(winner, "")), winner)), sub]
@@ -1580,7 +1580,7 @@ func _build_end() -> void:
 		extras.append(_end_rematch)
 		primary = ["REMATCH", func(): main.rematch_random()]
 		quiet = [["LEAVE ROOM", main.to_menu]]
-	var out := s.result({"won": won, "draw": draw, "kicker": kicker, "headline": outcome + ".",
+	var out := s.result({"won": won, "draw": draw, "kicker": kicker, "headline": str(line[1]),
 			"name": str(main.map.get("name", "")), "sub": sub,
 			"metrics": [[MatchScreens.clock(sim.time), "Match time"],
 					["%d / %d" % [MatchScreens.nodes_held(sim, human), sim.nodes.size()], "Nodes held"], third],
@@ -1618,6 +1618,21 @@ func _reconnect_watch() -> void:
 	elif reconnect_panel.visible:
 		reconnect_panel.visible = false
 		_reconnect_left = -1
+
+
+func _pause_settings() -> void:
+	## PAUSE > SETTINGS (Daniele 2026-09-28: yes): the DISPLAY settings that make sense mid-match - GRAPHICS (its 3D side
+	## from the next match), FRAME RATE and DETAIL - one tap cycles each (PerfProfile / Rules, saved as in SETTINGS).
+	var s := MatchScreens.open(pause_panel, mobile, _my_faction())
+	var fps_now := "AUTO (%d)" % int(PerfProfile.PROFILES[PerfProfile.level()]["fps"]) if PerfProfile.fps_mode() == "auto" 			else PerfProfile.fps_mode()
+	var gfx_now := "AUTO (%s)" % ("PHONE" if PerfProfile.is_phone() else "FULL") if PerfProfile.mode() == "auto" 			else str(PerfProfile.MODE_NAMES[PerfProfile.mode()])
+	s.card({"kicker": "PAUSED", "headline": "SETTINGS.",
+			"body": "Tap a setting to change it. GRAPHICS changes the 3D from the next match; the rest right away.",
+			"actions": [["BACK  →", pause_menu],
+				["GRAPHICS: " + gfx_now, func(): PerfProfile.set_mode(PerfProfile.next_mode()); _pause_settings()],
+				["FRAME RATE: " + fps_now, func(): PerfProfile.set_fps(PerfProfile.next_fps()); _pause_settings()],
+				["DETAIL: " + ("LOW" if Rules.low_detail else "FULL"), func(): Rules.low_detail = not Rules.low_detail; _pause_settings()]]})
+	_show_screen(pause_panel)
 
 
 func show_reconnect(left: int) -> void:

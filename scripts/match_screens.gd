@@ -152,7 +152,10 @@ func result(d: Dictionary) -> Dictionary:
 	var won := bool(d.get("won", false))
 	var hcol := UiKit.INK if won else (UiKit.MUTED if bool(d.get("draw", false)) else DEFEAT_INK)
 	var hsize := 60.0 if ph else 68.0
-	UiKit.add(self, UiKit.label(self, str(d.get("headline", "")), hsize, hcol, true), Vector2(x - 3.0, y))
+	var head := str(d.get("headline", ""))
+	while hsize > 32.0 and UiKit.text_w(self, head, hsize, true) > w:   # the syndicate's longer lines shrink to fit
+		hsize -= 4.0
+	UiKit.add(self, UiKit.label(self, head, hsize, hcol, true), Vector2(x - 3.0, y))
 	y += UiKit.line_h(self, hsize, true) + 2.0
 	var name_text := str(d.get("name", "")).to_upper()
 	if name_text != "":
@@ -390,6 +393,21 @@ func card(d: Dictionary) -> Dictionary:
 						p[1], "secondary", f, 14))
 			by += bh + 10.0
 	return out
+
+
+# ------------------------------------------------------------------ the verdict (Daniele 2026-09-28: "something more
+# thematic for win/loss on the syndicate theme, kinda a joke in game lore") - [kicker, headline], one per match (the seed,
+# so everyone in a room reads the same line); the outcome still reads first, and MATCH DETAILS keeps VICTORY / DEFEAT.
+const WIN_LINES := [["QUARTERLY TARGETS: EXCEEDED", "HOSTILE TAKEOVER."], ["THE BOARD IS DELIGHTED", "MARKET CORNERED."],
+		["SHAREHOLDERS: THRILLED", "ACQUISITION COMPLETE."], ["BONUSES ALL ROUND", "MONOPOLY ACHIEVED."]]
+const LOSS_LINES := [["THE BOARD WOULD LIKE A WORD", "LIQUIDATED."], ["PLEASE CLEAR YOUR DESK", "BOUGHT OUT."],
+		["SHAREHOLDERS: FURIOUS", "RESTRUCTURED."], ["YOUR ASSETS ARE THEIR ASSETS NOW", "ASSETS SEIZED."]]
+const DRAW_LINES := [["NOBODY GETS A BONUS", "HUNG BOARD."], ["THE AUDITORS ARE CONFUSED", "MERGER PENDING."]]
+
+
+static func verdict(won: bool, draw: bool, seed: int) -> Array:
+	var pool: Array = DRAW_LINES if draw else (WIN_LINES if won else LOSS_LINES)
+	return pool[absi(seed) % pool.size()]
 
 
 # ------------------------------------------------------------------ the numbers

@@ -35,7 +35,7 @@ extends Node3D
 ##   --mission-shot=brief|hud|win|lose|details|endline --out=<dir>   CAMPAIGN: screenshot that screen as mission_<shot>.png, then quit
 ##   --versus-shot=<png>                    UI: DEPLOY with the menu's saved picks (--menu-mode=, --ui-cfg=...), screenshot
 ##                                           the VERSUS card, then quit (with --mission=<key> --mission-start: a mission's)
-##   --end-shot=win|lose|draw|details|pause|out|reconnect --out=<dir>  UI: with --map=: that in-match screen as end_<shot>.png, then quit
+##   --end-shot=win|lose|draw|details|pause|settings|out|reconnect --out=<dir>  UI: with --map=: that in-match screen as end_<shot>.png, then quit
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is an online room (Net)
@@ -133,7 +133,7 @@ var mission: MissionDirector = null              # a campaign mission is on (nul
 var mission_overlay: MissionOverlay = null
 var mission_menu_faction := ""                   # the player's own menu faction / AI level, back after the mission
 var mission_menu_ai := ""
-var end_shot := ""                               # UI: --end-shot=win|lose|draw|details|pause|out|reconnect (_end_shot)
+var end_shot := ""                               # UI: --end-shot=win|lose|draw|details|pause|settings|out|reconnect (_end_shot)
 static var mission_arg_used := false             # --mission=<key> starts it once per run (a leave never loops back)
 # --- end CAMPAIGN ---
 
@@ -1274,6 +1274,9 @@ func _end_shot(what: String) -> void:
 			hud.show_out_panel()
 		"reconnect":                                   # UI: CONNECTION INTERRUPTED as a guest would see it
 			hud.show_reconnect(7)
+		"settings":                                    # UI: PAUSE > SETTINGS
+			hud.pause_menu()
+			hud._pause_settings()
 		_:
 			Progression.path = "user://progress_shots.cfg"
 			Progression.reload_all()

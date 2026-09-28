@@ -296,10 +296,10 @@ func show_briefing() -> void:
 
 
 func _brief_faction() -> String:
-	## The briefing wears the menu's faction (the player's pick before the mission: the menu hands it to main as
-	## seat A's before start_mission), else the mission's.
-	var f := str(main.get("mission_menu_faction")) if main else ""
-	return f if UiKit.ACCENTS.has(f) else str(m.get("faction", "vex"))
+	## The briefing wears the campaign's own faction - the one you play the mission as (Daniele 2026-09-28: "for campaign
+	## keep campaign faction colour", VEX's cyan for the VEX campaign).
+	var f := str(m.get("faction", "vex"))
+	return f if UiKit.ACCENTS.has(f) else "vex"
 
 
 func _b_label(text: String, pt: float, color: Color, head := false, spacing := 0) -> Label:

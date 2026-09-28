@@ -44,6 +44,8 @@ const DIM := Color("5f7a86")                       # captions, unavailable
 const FRAME := Color("255363")                     # quiet frame
 const CYAN := Color("14d3e4")                      # VEX / neutral action
 const STAR := Color("ffce68")                      # earned stars
+const WEAKER := Color("ff4f64")                    # a stat below baseline - a rose red no faction accent is near (Daniele:
+                                                  # the old amber read like EMBER / SOLAR)
 const BAR := Color("041016f2")                     # top / bottom bars
 const CARD := Color("071820f0")                    # card fill
 const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Color("a1eb39"),
