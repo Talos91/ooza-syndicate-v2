@@ -370,6 +370,7 @@ func _on_visibility(root: Node3D) -> void:
 func _process(_dt: float) -> void:
 	## The structures: gone, hidden, re-meshed (a split turret), overridden, moved (growing, pumping,
 	## aiming, tier-down) or recoloured since last frame.
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	var k := 0
 	while k < _polled.size():
 		var p: Piece = _polled[k]
@@ -402,6 +403,7 @@ func _process(_dt: float) -> void:
 	for mg in _dirty:
 		(mg as Merged).rebuild()
 	_dirty.clear()
+	PerfProfile.lap("map_batch", _pt)
 
 
 func _refresh(node: Node) -> void:

@@ -91,6 +91,7 @@ var _sim: Sim                        # the Sim of the last sync (Surge's door ra
 
 
 func sync(sim: Sim, viewer: String) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	_sim = sim
 	classic = not Rules.bridge_combat
 	if units == null:
@@ -143,6 +144,7 @@ func sync(sim: Sim, viewer: String) -> void:
 		if not seen.has(key):
 			contacts[key]["root"].queue_free()
 			contacts.erase(key)
+	PerfProfile.lap("horde", _pt)
 
 
 func _role(roles: Dictionary, id: int) -> Dictionary:

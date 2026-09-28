@@ -288,6 +288,7 @@ static func glass_tint(owner: String) -> Color:
 
 
 func sync(dt: float) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	var t := Time.get_ticks_msec() / 1000.0
 	for n in sim.nodes:
 		var id: int = n["id"]
@@ -327,6 +328,7 @@ func sync(dt: float) -> void:
 			mat.set_shader_parameter("agitation", ag)
 			rec["last_agit"] = ag
 		_residents(rec, n, level, t)
+	PerfProfile.lap("scenery", _pt)
 
 
 func _residents(rec: Dictionary, n: Dictionary, level: float, t: float) -> void:

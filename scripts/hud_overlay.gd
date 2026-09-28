@@ -40,6 +40,7 @@ func setup(m: Node3D, s: Sim, h: Hud, seat: String, scale_ui: float) -> void:
 
 
 func sync(dt: float) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	_t += dt
 	for n in sim.nodes:
 		var id: int = n["id"]
@@ -54,9 +55,11 @@ func sync(dt: float) -> void:
 		if float(_relay_cue_t.get(id, 0.0)) > 0.0:
 			_relay_cue_t[id] = maxf(0.0, float(_relay_cue_t[id]) - dt)
 	queue_redraw()                    # cheap: a handful of arcs/lines - the danger symbols pulse continuously
+	PerfProfile.lap("overlay_sync", _pt)
 
 
 func _draw() -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	var cam: Camera3D = main.cam
 	if cam == null or sim == null or (main._start_fit as Array).is_empty():   # (not before the camera's first fit:
 		return                                                               # a tutorial owns a relay from frame 1)
@@ -78,6 +81,7 @@ func _draw() -> void:
 			_draw_relay_preview(cam, id)
 	if hud.shows("danger"):
 		_draw_danger_symbols(cam)
+	PerfProfile.lap("overlay_draw", _pt)
 
 
 # ------------------------------------------------------------------ shared helpers (SkillDock's pattern)

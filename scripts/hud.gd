@@ -592,6 +592,7 @@ func badge_at(p: Vector2) -> int:
 
 # ------------------------------------------------------------------ per frame
 func sync(dt: float, cam: Camera3D) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	if main.online:
 		_chat_poll -= dt
 		if _chat_poll <= 0.0:
@@ -661,6 +662,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		print("FPS %d  draw calls %d  triangles %d  hordes %d  t=%.0f" % [Engine.get_frames_per_second(),
 				Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 				Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME), sim.hordes.size(), sim.time])
+	PerfProfile.lap("hud", _pt)
 
 
 func _badges(cam: Camera3D) -> void:

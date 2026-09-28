@@ -556,6 +556,7 @@ func add_blob(seat: String, pos: Vector3, scale3: Vector3) -> void:
 
 
 func flush() -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	for id in _pour.keys():
 		if not _seen.has(id):
 			_pour.erase(id)
@@ -592,3 +593,4 @@ func flush() -> void:
 		dm.set_instance_transform(i, _discs[i][0])
 		dm.set_instance_color(i, _discs[i][1])
 	dm.visible_instance_count = dc
+	PerfProfile.lap("units_flush", _pt)

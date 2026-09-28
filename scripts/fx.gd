@@ -111,6 +111,7 @@ func _pulse(pos: Vector3, color: Color, radius: float, dur: float) -> void:
 
 # ------------------------------------------------------------------ per frame
 func sync(dt: float) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	if not _neon_built:
 		_build_neon()
 	var classic := not Rules.bridge_combat
@@ -163,6 +164,7 @@ func sync(dt: float) -> void:
 			continue
 		l.position = (f["base"] as Vector3) + Vector3(0, 2.2 * (t / FLOATER_LIFE), 0)
 		l.modulate.a = 1.0 - smoothstep(FLOATER_LIFE - 0.4, FLOATER_LIFE, t)
+	PerfProfile.lap("fx", _pt)
 
 
 func floater(pos: Vector3, text: String, col: Color) -> void:

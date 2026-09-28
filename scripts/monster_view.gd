@@ -70,6 +70,7 @@ func setup(w: Node3D, s: Sim, v: Dictionary, c: Node3D) -> void:
 # ------------------------------------------------------------------ per frame
 func sync(dt: float, _cam: Camera3D) -> void:
 	## main (the 0.19.0 views block), before the frame's fx events are drained: reads them too.
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	for ev in sim.fx_events:
 		match ev["type"]:
 			"monster_kick":
@@ -78,6 +79,7 @@ func sync(dt: float, _cam: Camera3D) -> void:
 				_take_burst(ev)
 	_sync_hubs(dt)
 	_sync_monsters(dt)
+	PerfProfile.lap("monster", _pt)
 
 
 # ------------------------------------------------------------------ hubs

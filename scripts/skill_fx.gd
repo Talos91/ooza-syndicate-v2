@@ -419,6 +419,7 @@ func _ghost_end(ev: Dictionary) -> void:
 
 # ------------------------------------------------------------------ per frame
 func sync(dt: float, cam: Camera3D) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	_frame += 1
 	_t += dt
 	_cam = cam
@@ -431,6 +432,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 	_step_pools(dt)
 	_step_tint(dt)
 	_update_sparks(dt)
+	PerfProfile.lap("skill_fx", _pt)
 
 
 func _effects(dt: float) -> void:

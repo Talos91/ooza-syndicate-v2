@@ -114,6 +114,7 @@ func setup(w: Node3D, s: Sim, v: Dictionary, f: Fx) -> void:
 func sync(dt: float, cam: Camera3D) -> void:
 	## After Fx.sync (main._process): Fx._construction resets a finished structure's scale each frame,
 	## the tier-down's rising model is scaled after it.
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	_frame += 1
 	if cam:                                           # the sweep starts at the top of the screen, whatever the yaw
 		var fwd := -cam.global_transform.basis.z
@@ -129,6 +130,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 	for n in sim.nodes:                               # remembered for the next frame's tier-down check
 		_tier_owner[n["id"]] = n["owner"]
 		_tier_level[n["id"]] = _level(n)
+	PerfProfile.lap("combat", _pt)
 
 
 # ------------------------------------------------------------------ the fight for a tower

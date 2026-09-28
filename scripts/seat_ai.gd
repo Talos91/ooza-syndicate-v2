@@ -69,6 +69,7 @@ func _init(s: String, think_every := 2.5, lvl := "") -> void:
 
 
 func think(sim: Sim, dt: float) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	_t += dt
 	_clock = sim.time
 	if _t < period or sim.over or sim.eliminated.has(seat):
@@ -76,24 +77,51 @@ func think(sim: Sim, dt: float) -> void:
 	_t = 0.0
 	_busy = {}      # a send supersedes the node's earlier order: one order per node per think
 	_post(sim)
+	var p := _pt
 	if int(cfg["relays"]) > 0:
 		_relays(sim)
+	p = _phase("relays", p)
 	_skills(sim)
+	p = _phase("skills", p)
 	_note_raids(sim)
 	if Rules.bridge_combat and int(cfg["relays"]) > 0:   # RECALL is SIEGE only
 		_retreats(sim)
 	if sim.last_stand_active:
 		_evacuate(sim)
 		_ejects(sim)
+	p = _phase("evacuate", p)
 	_defend(sim)
+	p = _phase("defend", p)
 	_defend_allies(sim)
+	p = _phase("defend_allies", p)
 	_build(sim)
+	p = _phase("build", p)
 	_monsters(sim)
+	p = _phase("monsters", p)
 	if sim.time >= _attack_after:
 		_attack(sim)
 	elif sim.time >= _attack_after - float(cfg.get("sync", 0.0)) and not _open_calls(sim).is_empty():
 		_attack(sim, true)                                # an ally called: its next offensive comes early
+	p = _phase("attack", p)
 	_surplus(sim)
+	p = _phase("surplus", p)
+	PerfProfile.lap("ai", _pt)
+
+
+static var phases_on := false             # perf pass (tests/ai_bench.gd): per-phase think time
+static var phases := {}                   # phase -> [total us, max us]
+
+
+func _phase(name: String, t0: int) -> int:
+	## tests/ai_bench.gd: adds the time since t0 to `name` while phases_on; returns now.
+	if not phases_on:
+		return t0
+	var now := Time.get_ticks_usec()
+	var s: Array = phases.get(name, [0, 0])
+	s[0] += now - t0
+	s[1] = maxi(s[1], now - t0)
+	phases[name] = s
+	return now
 
 
 # ------------------------------------------------------------------ helpers
