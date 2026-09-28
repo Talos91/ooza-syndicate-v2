@@ -13,7 +13,7 @@ extends Node
 ##    track's end (Music.test_len shortens the tracks), Sfx plays at least MIN_TYPES different match events in SECONDS of
 ##    real time, SOUND ON / OFF and VOLUME move the Sfx bus (not Master, not Music), a UI tap plays; then the Last Stand
 ##    (the real start, Sim.start_last_stand_now) switches to LAST STAND and its alarm ducks the music, the Very Last Stand
-##    to VERY LAST STAND, and your win (seat A) plays the VICTORY stinger once, then silence.
+##    to VERY LAST STAND, and your win (seat A) plays the VICTORY stinger once, then the MENU music (0.22.1).
 ## Prints the counts; exit code 0 = passed. Headless it prints SKIP and exits 0.
 
 const MAP := "res://maps4/M-30-sporefall-plain.json"
@@ -131,8 +131,9 @@ func _process(dt: float) -> void:
 		7:
 			if t > vls_t + 2.5 + Rules.MUSIC_STINGER_LEN + 1.0:
 				step = 8
-				check(float(np.get("pos", 0.0)) < 0.0 and str(np.get("phase", "")) == "VICTORY" and int(Music.played.get("VICTORY", 0)) == 1,
-						"the stinger played once, then silence (%s)" % [np])
+				check(str(np.get("slot", "")) == "MENU" and float(np.get("pos", -1.0)) > 0.0 and str(np.get("phase", "")) == "VICTORY"
+						and int(Music.played.get("VICTORY", 0)) == 1,
+						"the stinger played once, then the MENU music on the results screen (Daniele, 0.22.1) (%s)" % [np])
 				print("MUSIC CHECK: slots started %s" % [Music.played])
 				get_tree().quit(1 if fails > 0 else 0)
 
