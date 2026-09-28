@@ -1,0 +1,13 @@
+SOUND DEMO - candidate sound packs (demo only, not shipped in the game)
+Every file keeps its original name; folders are per pack. All packs are CC0 1.0 (public domain):
+http://creativecommons.org/publicdomain/zero/1.0/
+
+interface/  Kenney - Interface Sounds (1.0)      https://kenney.nl/assets/interface-sounds    CC0
+impact/     Kenney - Impact Sounds (1.0)         https://kenney.nl/assets/impact-sounds       CC0
+scifi/      Kenney - Sci-Fi Sounds (1.0)         https://kenney.nl/assets/sci-fi-sounds       CC0
+digital/    Kenney - Digital Audio               https://kenney.nl/assets/digital-audio       CC0
+scifi60/    "60 CC0 Sci-Fi SFX" (OpenGameArt)    https://opengameart.org/content/60-cc0-sci-fi-sfx          CC0
+slime/      "40 CC0 water / splash / slime SFX" (OpenGameArt)
+                                                 https://opengameart.org/content/40-cc0-water-splash-slime-sfx  CC0
+
+Kenney: credit (Kenney or www.kenney.nl) appreciated, not required.
