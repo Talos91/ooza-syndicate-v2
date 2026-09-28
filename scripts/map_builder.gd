@@ -660,9 +660,10 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 			var p_len: float = p0 if end == 0 else p1
 			var lean := float(g["lean%d" % end])
 			var pier: Node3D
-			# RELAY V2: the mechanism replaces a straight pier (Pier_Connector's geometry, origin and heading); over a
-			# leaned or longer pier it stands on the pier, a hair above it
-			var gated: bool = end == g_end and not bool(g["plaza%d" % end])
+			# RELAY V2: the full mechanism replaces a straight pier (Pier_Connector's geometry, origin and heading); a
+			# leaned / longer / plaza pier stays and gets the mechanism without its pier (v2h *_Pylons_v2, origin at the
+			# pier's outer end where the first deck starts, +X along the bridge)
+			var gated: bool = end == g_end
 			var straight: bool = absf(lean) < 2.5 and absf(p_len - Rules.PIER) < 0.05 and not g.get("dock", false)
 			if bool(g["plaza%d" % end]):
 				pier = glb_nodes.get("PlazaPier_%d_%d" % [i, end])
@@ -674,10 +675,12 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 				pier = angled_pier(parent, exit, dir, lean, st.begins_with("s") and ctrl == nid and not gated)
 			var gate: Node3D = null
 			if gated:
-				gate = put(parent, RelayView.GATE[kind], exit + dir * (p_len - Rules.PIER) - dir * Rules.R, Rules.heading(dir))
-				gate_xf = gate.transform
-				if pier != null:
-					gate.position.y += RelayView.GATE_LIFT
+				# the kit pier frame (origin R + PIER behind the deck start): the rotation's ghost pier, the link's masts
+				gate_xf = Transform3D(Basis(Vector3.UP, Rules.heading(dir)), exit + dir * (p_len - Rules.PIER) - dir * Rules.R)
+				if pier == null and not bool(g["plaza%d" % end]):
+					gate = put(parent, RelayView.GATE[kind], (gate_xf as Transform3D).origin, Rules.heading(dir))
+				else:
+					gate = put(parent, RelayView.GATE_PYLONS[kind], exit + dir * p_len, Rules.heading(dir))
 				(vis[ctrl]["state_hosts"] as Array).append(gate)   # its lamps / marks: the relay's state colour
 				piers.append(gate)
 			if kind == "rotation" and nid == ctrl:

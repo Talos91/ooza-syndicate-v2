@@ -21,6 +21,8 @@ const SHOTS := [
 	["structure", "T-08-relay-works", 2, 36.0, "laser"],
 	["tight_gap", "D-02-relay-bench", 6, 48.0, "tight"],
 	["relay_bench", "D-02-relay-bench", -1, 0.0, ""],
+	["leaned_gate", "T-07-switchyard", 2, 24.0, ""],       # v2h: the switch gate's pylons on a 50 deg angled pier
+	["leaned_retract", "T-08-relay-works", 2, 26.0, ""],    # two retract pylons gates on 6 / 12 deg piers
 ]
 
 

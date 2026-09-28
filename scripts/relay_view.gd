@@ -9,12 +9,13 @@ extends Node3D
 ##    tap anyway"): a double-tap on it or on the node fires the relay, a tap selects / inspects / sends from the node
 ##    as before. The node centre holds the structure. A gap under 51.9 deg moves the
 ##    pad out to CLEAR / sin(gap / 2) and stretches the child "Strut" back under the rim; "Glyph" faces the viewer.
-##  - MECHANISM: Relay_Retract_v2 / Relay_Gate_<Kind>_v2 on the pier of every relay bridge (MapBuilder.build3).
+##  - MECHANISM: Relay_Retract_v2 / Relay_Gate_<Kind>_v2 in place of a straight pier of every relay bridge, the
+##    *_Pylons_v2 version (no pier) on a leaned / longer / plaza pier (MapBuilder.build3).
 ##  - RELAY DECKS: Deck_<Kind>_v2 on relay bridges (flat decks; the maps have no raised relay deck).
 ##  - GHOSTS: Deck_Ghost_<Kind>_v2 (+ Pier_Ghost_v2 on a rotation's own pier) where the bridge WILL be - a deck that
 ##    is not there now and appears on the relay's next state (rotation's next heading, the switch's inactive
-##    bridge, the remote target, the retract's extended length). This node shows them, live, every frame: pale
-##    violet (never an owner / state colour), brighter while the relay's warning runs, hidden while the real deck
+##    bridge, the remote target, the retract's extended length). This node shows them, live, every frame: each kind in its
+##    own ghost hue (v2g: Rules.RELAY_GHOST_COLORS - never an owner / state colour), brighter while the relay's warning runs, hidden while the real deck
 ##    moves in, once it is there, or when an end has dropped. Never batched (MapBatch never sees them).
 ##  - LINK: a remote relay's glowing arc from its button to the receiver masts on each far bridge it drives (add_link).
 ## Placement and hit testing are static helpers (main.gd, tests/phone_fit.gd, tests/test_maps4.gd use them).
@@ -27,9 +28,11 @@ const DECK := {"rotation": "Deck_Rotation_v2", "retract": "Deck_Retract_v2",
 		"switch": "Deck_Switch_v2", "remote": "Deck_Remote_v2"}
 const GHOST := {"rotation": "Deck_Ghost_Rotation_v2", "retract": "Deck_Ghost_Retract_v2",
 		"switch": "Deck_Ghost_Switch_v2", "remote": "Deck_Ghost_Remote_v2"}
-const PIER_GHOST := "Pier_Ghost_v2"
+const PIER_GHOST := {"rotation": "Pier_Ghost_Rotation_v2", "retract": "Pier_Ghost_Retract_v2",
+		"switch": "Pier_Ghost_Switch_v2", "remote": "Pier_Ghost_Remote_v2"}   # v2g; Pier_Ghost_v2: the violet fallback
 const STRUT_BASE := Rules.R - 0.5 - 0.1   # strut scale.x = dist - PAD_R - (R - 0.5) + 0.1 (json placement)
-const GATE_LIFT := 0.012                  # m: a gate over a leaned pier sits this much above it (no z-fight)
+const GATE_PYLONS := {"rotation": "Relay_Gate_Rotation_Pylons_v2", "retract": "Relay_Retract_Pylons_v2",
+		"switch": "Relay_Gate_Switch_Pylons_v2", "remote": "Relay_Gate_Remote_Pylons_v2"}   # v2h: on a kit angled pier
 
 var sim: Sim
 var groups: Array = []                    # [{ctrl, edge, items: [[piece, Transform3D]], on: bool, warm: bool}]
@@ -181,7 +184,7 @@ func add_ghosts(ctrl: int, ei: int, decks: Array, pier_xf) -> void:
 	for dk in decks:
 		items.append([GHOST[kind], (dk as Node3D).transform])
 	if pier_xf is Transform3D:
-		items.append([PIER_GHOST, pier_xf])
+		items.append([PIER_GHOST.get(kind, "Pier_Ghost_v2"), pier_xf])
 	groups.append({"ctrl": ctrl, "edge": ei, "items": items, "on": false, "warm": false})
 
 
@@ -199,7 +202,7 @@ func _batch(piece: String, warm: bool) -> MultiMeshInstance3D:
 			var nm := m.surface_get_material(k).resource_name if m.surface_get_material(k) else ""
 			mesh.add_surface_from_arrays(m.surface_get_primitive_type(k), m.surface_get_arrays(k))
 			mesh.surface_set_material(mesh.get_surface_count() - 1,
-					_mat(("edge" if nm.begins_with("OS_Ghost_Edge") else "ghost") + ("_w" if warm else "")))
+					_mat(("edge" if nm.ends_with("_Edge") else "ghost") + ("_w" if warm else ""), _kind_of(nm)))
 		break                                         # (a ghost GLB is one mesh)
 	src.free()
 	var mmi := MultiMeshInstance3D.new()
@@ -241,14 +244,29 @@ func has_ghost(ei: int) -> bool:
 	return groups.any(func(g): return int(g["edge"]) == ei)
 
 
-static func _mat(key: String) -> StandardMaterial3D:
-	if not _mats.has(key):
+static func _kind_of(material_name: String) -> String:
+	## v2g: "OS_Ghost_Switch" / "OS_Ghost_Switch_Edge" -> "switch"; the violet OS_Ghost / OS_Ghost_Edge -> "".
+	for k in Rules.RELAY_GHOST_COLORS:
+		if material_name.begins_with("OS_Ghost_" + str(k).capitalize()):
+			return k
+	return ""
+
+
+static func _mat(key: String, kind := "") -> StandardMaterial3D:
+	## A ghost material: floor ("ghost") or frame ("edge"), warm ("_w": the warning) or not, in the kind's own hue
+	## (Rules.RELAY_GHOST_COLORS, floor alpha RELAY_GHOST_ALPHA) or the neutral violet for kind "".
+	var mk := key + "|" + kind
+	if not _mats.has(mk):
 		var m := StandardMaterial3D.new()
 		var warm := key.ends_with("_w")
 		var edge := key.begins_with("edge")
 		var c: Color = Rules.RELAY_GHOST_EDGE if edge else Rules.RELAY_GHOST
+		var a: float = Rules.RELAY_GHOST.a
+		if kind != "":
+			c = (Rules.RELAY_GHOST_COLORS[kind] as Color).lerp(Color.WHITE, 0.25 if edge else 0.0)
+			a = Rules.RELAY_GHOST_ALPHA
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.albedo_color = Color(c.r, c.g, c.b, 1.0 if edge else Rules.RELAY_GHOST.a * (1.6 if warm else 1.0))
+		m.albedo_color = Color(c.r, c.g, c.b, 1.0 if edge else minf(a * (1.4 if warm else 1.0), 0.8))
 		if not edge:
 			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			m.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -256,8 +274,8 @@ static func _mat(key: String) -> StandardMaterial3D:
 		m.emission_enabled = true
 		m.emission = c
 		m.emission_energy_multiplier = (1.4 if edge else 0.8) * (Rules.RELAY_GHOST_WARN if warm else 1.0)
-		_mats[key] = m
-	return _mats[key]
+		_mats[mk] = m
+	return _mats[mk]
 
 
 static func ghost_wanted(sim: Sim, ctrl: int, ei: int) -> bool:
