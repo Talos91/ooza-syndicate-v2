@@ -447,16 +447,19 @@ Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res:
 # The game fetches skins.pck?v=<VERSION> from the page's folder the first time a skin is needed (Cosmetics).
 # hd.pck / skins_hd.pck (0.21.1, opt-mesh): the full-detail kit_hd/ for desktops, fetched on demand (Cosmetics.kit_path):
 #   ... --export-pack "Web HD" build/web/hd.pck ; ... --export-pack "Web Skins HD" build/web/skins_hd.pck
-# music.pck (MUSIC pass, branch music): the soundtrack (Cyberpunk Music Pack by SmellyCatCafe - BOUGHT, so never in git:
-# .gitignore has assets/audio/music/). Before any import / export of a clone, copy the used tracks in from the project's
-# Art folder (the list and numbers: rules.gd's MUSIC block; it also checks the "Web Music" preset lists the same files):
-#   python tools/copy_music.py        # Art/Audio/Soundtrack - Cyberpunk Music Pack (SmellyCatCafe)/OGG web/ -> assets/audio/music/
-#   (a new pick / stinger length: edit the MUSIC block and the "Web Music" export_files, then  python tools/copy_music.py --encode
-#    re-makes OGG web/ with Blender's aud module - 80 kbps, the stingers cut and faded - from the pack's FLAC/ or OGG 96k/)
+# THE SOUNDTRACK (0.22.4, branch music-v2; was music.pck 0.22.1-0.22.3): the Cyberpunk Music Pack by SmellyCatCafe - BOUGHT,
+# so never in git (.gitignore: assets/audio/music/; build/ is ignored too). NO .pck: on the web the browser streams the tracks
+# (web/music.js, loaded in the page head; Music drives it) from two loose folders beside index.html, fetched per track:
+#   build/web/music/<track>.ogg        desktop: stereo 44.1 kHz, 80 kbps (Art/.../OGG web/)
+#   build/web/music_phone/<track>.ogg  phones (PerfProfile.is_phone): mono 22 kHz, 40 kbps (Art/.../OGG phone/)
+# Before any import / export of a clone (the list and numbers: rules.gd's MUSIC block):
+#   python tools/copy_music.py --web  # OGG web/ -> assets/audio/music/ (native / editor) + build/web/music/, OGG phone/ -> build/web/music_phone/
+#   (a new pick / stinger length: edit the MUSIC block, then  python tools/copy_music.py --encode --web  re-makes OGG web/ with
+#    Blender's aud module - 80 kbps, the stingers cut and faded - from the pack's FLAC/ or OGG 96k/, and OGG phone/ from OGG web/
+#    (pip install imageio-ffmpeg, else Blender); --encode-phone re-makes only the phone set)
 #   Godot_v4.6.1-stable_win64_console.exe --headless --import --path "Game/2.0"      (twice on a fresh clone)
-# "Web" excludes assets/audio/music/*; the "Web Music" preset packs them, beside index.pck:
-#   ... --export-pack "Web Music" build/web/music.pck
-# The game fetches music.pck?v=<VERSION> the first time music is needed (Music._fetch_pack; nothing plays until it is in).
+# "Web" excludes assets/audio/music/*. Run copy_music.py --web AFTER the export (an export into build/web leaves the folders, but
+# a wiped build/web loses them); the publish copies build/web/music and music_phone along (below). The server never plays music.
 # Never run  git add -A  in the game clone with the tracks copied in unless .gitignore covers them (it does from this pass).
 
 # two players on one PC (Alpha 16): cp tests/duo.html build/web, serve build/web, open /duo.html: two
@@ -465,18 +468,18 @@ Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res:
 
 # PUBLISH THE PLAYTEST BUILD - do this after every pass that changes play or looks (Daniele, 2026-09-25),
 # then send the link:  https://talos91.github.io/ooza-syndicate-v2/
-# 1. commit + push main; 2. python tools/copy_music.py + import, then export (Web, Web Skins, Web HD, Web Skins HD,
-#    Web Music); 3. replace the orphan gh-pages branch with build/web (Pages source = gh-pages, root, set 2026-09-25);
+# 1. commit + push main; 2. python tools/copy_music.py --web + import, then export (Web, Web Skins, Web HD, Web Skins HD;
+#    then copy_music.py --web again if build/web was wiped); 3. replace the orphan gh-pages branch with build/web (Pages source = gh-pages, root, set 2026-09-25);
 #    4. wait until index.pck answers 200 on the link (~1 min).
 Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --export-release "Web" build/web/index.html
 git worktree prune && git branch -D gh-pages     # the previous publish leaves a LOCAL gh-pages branch behind:
                                                  # without this the orphan checkout fails ("branch already exists")
 git worktree add --detach /tmp/ghpages && cd /tmp/ghpages && git checkout --orphan gh-pages && git rm -rqf .
-cp "Game/2.0/build/web/"index.* "Game/2.0/build/web/"{skins,hd,skins_hd,music}.pck . && cp "Game/2.0/web/"*.js "Game/2.0/web/"*.html . && rm -f *.import && touch .nojekyll && printf 'oozesyndicate.com
+cp "Game/2.0/build/web/"index.* "Game/2.0/build/web/"{skins,hd,skins_hd}.pck . && cp -r "Game/2.0/build/web/"music "Game/2.0/build/web/"music_phone . && cp "Game/2.0/web/"*.js "Game/2.0/web/"*.html . && rm -f *.import && touch .nojekyll && printf 'oozesyndicate.com
 ' > CNAME   # the custom domain (2026-09-28): EVERY rebuild keeps it   # web/ = PeerJS, room code field, chat (Alpha 16)
 git add -A && git commit -m "Playtest build: <what changed> (source main <sha>)" && git push -f origin gh-pages
 cd "Game/2.0" && git worktree remove --force /tmp/ghpages && git branch -D gh-pages
-# verify: curl -sI https://oozesyndicate.com/index.pck | grep -i content-length  == size of build/web/index.pck (same for skins.pck, hd.pck, skins_hd.pck, music.pck)
+# verify: curl -sI https://oozesyndicate.com/index.pck | grep -i content-length  == size of build/web/index.pck (same for skins.pck, hd.pck, skins_hd.pck; and one track in each music folder answers 200, e.g. music_phone/Cyber%20Sunrise.ogg)
 # 5. (0.20.0) the room server gets the same build - its match hosts run it and it is the test link
 #    https://45-32-126-20.sslip.io/; without this, CREATE ROOM on the new build falls back to browser hosting:
 cd "Game/2.0" && server/deploy.sh          # SSH alias ooze-server (Daniele's PC); --relay also updates relay.py (closes open rooms)

@@ -1103,13 +1103,16 @@ const SOUND_VOLUME_DEFAULT := 30
 # --- MUSIC (the soundtrack, music.gd: the spectate demo's slots and mix, branch sound-demo 912ee68, Daniele 2026-09-28) ---
 # Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io; bought, "free and commercial projects, crediting
 # appreciated"). The tracks are NOT in git (public repo): tools/copy_music.py copies the ones below into
-# assets/audio/music/ before an import / export (BUILD-LOG sec10); Web gets them in music.pck ("Web Music"), fetched
-# the first time music is needed. Slot -> its tracks (file names without .ogg). BATTLE is a playlist (the next track
+# assets/audio/music/ before an import / export (BUILD-LOG sec10). Web (0.22.4): no .pck - the browser streams loose
+# files beside index.html (web/music.js; copy_music.py --web), the phone set on phones (PerfProfile.is_phone). Slot -> its tracks (file names without .ogg). BATTLE is a playlist (the next track
 # each time one ends or a match starts); a one-track slot loops with the playlist crossfade; VICTORY / DEFEAT are
 # stingers - the track's first MUSIC_STINGER_LEN s, the last MUSIC_STINGER_FADE of them fading, cut into the file by
 # tools/copy_music.py (it reads these numbers from here) - played once at the match's end.
 const MUSIC_DIR := "res://assets/audio/music/"
-const MUSIC_PACK := "music.pck"                  # web: beside index.pck, fetched once (Music._fetch_pack)
+const MUSIC_WEB_DIR := "music/"                  # web: the desktop set beside index.html (stereo 44.1 kHz, MUSIC_ENCODE_KBPS)
+const MUSIC_WEB_DIR_PHONE := "music_phone/"      # web, phones: mono MUSIC_PHONE_HZ at MUSIC_PHONE_KBPS (Daniele 2026-09-29, A/B/C test)
+const MUSIC_PHONE_HZ := 22050
+const MUSIC_PHONE_KBPS := 40
 const MUSIC_TRACKS := {"MENU": ["Cyber Sunrise"], "BATTLE": ["Drone Patrol", "Neon Street", "Synth Syndicate"],
 		"LAST STAND": ["Midnight Hack"], "VERY LAST STAND": ["Boss Battle"],
 		"VICTORY": ["Ending Theme (stinger)"], "DEFEAT": ["Game Over (stinger)"]}
@@ -1136,9 +1139,9 @@ const MUSIC_DUCK_IN := 0.3
 const MUSIC_DUCK_HOLD := 0.5
 const MUSIC_DUCK_OUT := 0.8
 # SETTINGS > DISPLAY > AUDIO (and PAUSE > SETTINGS): MUSIC ON / OFF and MUSIC VOLUME (percent), user://settings.cfg
-# [audio] music_on / music_volume. First run: ON, 60 %.
+# [audio] music_on_v2 / music_volume_v2. First run: OFF (0.22.2), 30 % (0.22.4, Daniele: "default volume needs to be toned down"; was 60).
 const MUSIC_VOLUME_STEPS := [15, 30, 60, 100]
-const MUSIC_VOLUME_DEFAULT := 60
+const MUSIC_VOLUME_DEFAULT := 30
 const MUSIC_ON_DEFAULT := false           # HOTFIX 0.22.2 (Daniele 2026-09-29: the music made phones lag and OFF did not stop it): OFF until switched on
 const MUSIC_CREDIT := "Music: Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io)"
 # --- end MUSIC ---

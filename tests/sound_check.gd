@@ -50,6 +50,9 @@ func _ready() -> void:
 	Sfx.path = CFG
 	Sfx._volume = -1                                   # read the (empty) test cfg: the default levels
 	Music._volume = -1
+	check(not Music.music_on() and Music.volume() == Rules.MUSIC_VOLUME_DEFAULT,
+			"first run: MUSIC OFF (0.22.2), MUSIC VOLUME %d %% (0.22.4: lower)" % Rules.MUSIC_VOLUME_DEFAULT)
+	Music.set_on(true)                                 # the rest hears it: switched ON, as a player would
 	_check_slots()
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	DisplayServer.window_set_size(Vector2i(1266, 585))
@@ -173,7 +176,7 @@ func _check_menu() -> void:
 	var sb := AudioServer.get_bus_index(Rules.SOUND_SFX_BUS)
 	check(Music.music_on() and Music.volume() == Rules.MUSIC_VOLUME_DEFAULT and is_equal_approx(AudioServer.get_bus_volume_db(mb),
 			Rules.MUSIC_LEVEL_DB + linear_to_db(Rules.MUSIC_VOLUME_DEFAULT / 100.0)) and not AudioServer.is_bus_mute(mb),
-			"first run: MUSIC ON, MUSIC VOLUME %d %% on the Music bus (%.1f dB)" % [Rules.MUSIC_VOLUME_DEFAULT, AudioServer.get_bus_volume_db(mb)])
+			"switched ON: MUSIC VOLUME %d %% on the Music bus (%.1f dB)" % [Rules.MUSIC_VOLUME_DEFAULT, AudioServer.get_bus_volume_db(mb)])
 	var sfx_db := AudioServer.get_bus_volume_db(sb)
 	Music.set_volume(30)
 	check(is_equal_approx(AudioServer.get_bus_volume_db(mb), Rules.MUSIC_LEVEL_DB + linear_to_db(0.30))
@@ -182,8 +185,8 @@ func _check_menu() -> void:
 	Music.set_on(false)
 	var cf := ConfigFile.new()
 	check(AudioServer.is_bus_mute(mb) and not AudioServer.is_bus_mute(sb) and cf.load(CFG) == OK
-			and not bool(cf.get_value("audio", "music_on", true)) and int(cf.get_value("audio", "music_volume", 0)) == 30,
-			"MUSIC OFF: the Music bus muted (Sfx not), saved in [audio] music_on / music_volume")
+			and not bool(cf.get_value("audio", "music_on_v2", true)) and int(cf.get_value("audio", "music_volume_v2", 0)) == 30,
+			"MUSIC OFF: the Music bus muted (Sfx not), saved in [audio] music_on_v2 / music_volume_v2")
 	Music._volume = -1                                 # read back from the file, as the next run would
 	check(not Music.music_on() and Music.volume() == 30 and Music.next_volume() == 60, "[audio] read back: OFF, 30 %; the cycle 30 -> 60")
 	Music.set_on(true)
@@ -205,7 +208,7 @@ func _check_sfx_settings() -> void:
 	Sfx.set_on(false)
 	var cf := ConfigFile.new()
 	check(AudioServer.is_bus_mute(bus) and not AudioServer.is_bus_mute(mb) and not AudioServer.is_bus_mute(0) and not Sfx.sound_on()
-			and cf.load(CFG) == OK and not bool(cf.get_value("audio", "on", true)) and bool(cf.get_value("audio", "music_on", false)),
+			and cf.load(CFG) == OK and not bool(cf.get_value("audio", "on", true)) and bool(cf.get_value("audio", "music_on_v2", false)),
 			"SOUND OFF: the Sfx bus muted (Music and Master not), saved in [audio] beside MUSIC's keys")
 	Sfx.set_volume(100)
 	check(AudioServer.is_bus_mute(bus), "SOUND OFF stays silent whatever the VOLUME")
