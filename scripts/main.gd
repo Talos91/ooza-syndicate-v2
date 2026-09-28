@@ -36,6 +36,9 @@ extends Node3D
 ##   --versus-shot=<png>                    UI: DEPLOY with the menu's saved picks (--menu-mode=, --ui-cfg=...), screenshot
 ##                                           the VERSUS card, then quit (with --mission=<key> --mission-start: a mission's)
 ##   --end-shot=win|lose|draw|details|pause|settings|out|reconnect --out=<dir>  UI: with --map=: that in-match screen as end_<shot>.png, then quit
+##   --player-name=NAME                     HUD pass: your name for this run only (screenshots; nothing is saved)
+##   --scenario=notices [--focus=N --zoom=N]  HUD pass: every placed message at once (callouts, an off-screen arrow
+##                                           with --focus, a skill refusal, the Last Stand line's pulse)
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is an online room (Net)
@@ -99,6 +102,9 @@ var scenario_zoom := 30.0
 var focus_node := -1                              # --focus=N: a close-up of node N in a normal match
 var _scenario_done := false
 var _hud19_phase := -1                            # --scenario=hud19: the contact sheet's timed phases
+var player_name := ""                             # --player-name=: overrides the account's name for this run (seat_who)
+var _forge_node := {}                             # seat -> the node of its last forge that came online (FORGE LOST's place)
+var _last_order := [-1, "", 0]                    # a guest's last order [id, method, msec]: where the host's answer shows
 var mobile := OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios")
 var window_size := Vector2i.ZERO
 var sun: DirectionalLight3D
@@ -213,6 +219,8 @@ func _ready() -> void:
 			SEAT_FACTIONS[HUMAN] = arg.substr(10)
 		elif arg.begins_with("--rival="):
 			SEAT_FACTIONS["B"] = arg.substr(8)
+		elif arg.begins_with("--player-name="):
+			player_name = arg.substr(14)
 		elif arg.begins_with("--focus="):
 			focus_node = int(arg.substr(8))
 		elif arg.begins_with("--thumb="):              # map thumbnail for the menu: no HUD, first frame
@@ -433,13 +441,26 @@ func _start_map(path: String) -> void:
 		return
 	await get_tree().process_frame
 	_on_resized()
+	# HUD pass (Daniele's "option A": no notification box): online, "waiting for every player to load" is the
+	# waiting text in the middle until the round starts (_process clears it); offline the start lines are a short
+	# banner - the map and who you are only where the VERSUS card didn't just say it (a restart, a rematch, a
+	# command-line run), the dock's note (a relay skill this map swapped) always.
+	var note: String = hud.dock.start_note() if hud.dock.visible else ""
 	if online:
-		hud.toast("ROOM %s · ROUND %d · you are seat %s (%s) - waiting for every player to load" % [
-				Net.room_code, Net.match_round, HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
+		var me := seat_who(HUMAN)
+		hud.set_waiting(["WAITING FOR EVERY PLAYER TO LOAD", "ROOM %s  ·  ROUND %d  ·  you are %s" % [Net.room_code, Net.match_round,
+				("%s · %s" % [me["name"], me["faction"]]) if str(me["name"]) != "" else str(me["faction"])]])
+		if note != "":
+			hud.start_banner("", [note])
 	elif director == null:                             # (a lesson's coach card says what to do)
-		hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
-	if hud.dock.visible and hud.dock.start_note() != "":   # a relay map skill swapped on a map with no relays
-		hud.toast(hud.dock.start_note(), "info")
+		var lines := []
+		var said := mission != null or VersusScreen.wanted(self)
+		if not said:
+			var me := seat_who(HUMAN)
+			lines.append("%s · %s  ·  drag from your node to send" % [me["name"], me["faction"]])
+		if note != "":
+			lines.append(note)
+		hud.start_banner("" if said else str(map.get("name", "")).replace("*", "").to_upper(), lines)
 	if end_shot != "" and mission == null and director == null:   # UI
 		_end_shot(end_shot)
 
@@ -500,8 +521,78 @@ func _sync_online_ais() -> void:
 
 
 func _on_order_feedback(msg: String) -> void:
-	if hud:
+	## Net's lines: the host's answer to this guest's order (shown where that order was given, when it was recent)
+	## or a room notice (a seat's drop / reconnect: Hud.toast puts it under that seat's chip).
+	if hud == null:
+		return
+	var notice := msg.begins_with("Seat ")              # Net._notice: drops, reconnects, the room changing hands
+	if not notice and int(_last_order[0]) >= 0 and Time.get_ticks_msec() - int(_last_order[2]) < 3000:
+		if hud.kind_of(msg) == "warn":                  # a refusal: said where the order was given
+			_placed_refusal(str(_last_order[1]), int(_last_order[0]), msg)
+		_last_order[0] = -1                             # an accepted order is routine (0.20.6 declutter, as offline)
+		return
+	hud.toast(msg)
+
+
+func _placed_refusal(method: String, id: int, msg: String) -> void:
+	## A refused order's reason, where it was given: above the skill slot (a cast), at the line (a recall), at the
+	## node (everything else) - Hud.toast's line only when the place is gone.
+	if method == "cast":
+		hud.skill_refusal(id, msg)
+	elif method == "recall":
+		var h := sim._horde(id)
+		if h.is_empty():
+			hud.toast(msg)
+		else:
+			hud.callout_at(Sim.sample(h, float(h["s"]))[0], "line:%d" % id, msg, "warn")
+	elif id >= 0 and id < sim.nodes.size():
+		hud.callout_node(id, msg, hud.kind_of(msg))
+	else:
 		hud.toast(msg)
+
+
+func seat_who(seat: String) -> Dictionary:
+	## HUD pass (Daniele, 2026-09-28: "if the user is a human his name needs to be shown in the various screens like
+	## versus / match stats etc instead of his faction only"): how every screen names a seat - {name: a human's name
+	## ("" where this device doesn't know it), faction: VEX / NULL / ..., tag: an AI's "VETERAN AI", human, you}.
+	## Offline your seat is the one human (the account's name, --player-name, else YOU); online every seat a player
+	## holds (Net.roster) is human, and only your own name is known here - the room carries no names yet.
+	var f := str(sim.factions.get(seat, SEAT_FACTIONS.get(seat, "")))
+	var out := {"name": "", "faction": str(UiKit.NAMES.get(f, f.to_upper())), "tag": "", "human": false, "you": seat == HUMAN}
+	var humans := []
+	if online:
+		for id in Net.roster:
+			humans.append(Net.seat_of(int(id)))
+	elif not demo:
+		humans = [HUMAN]
+	out["human"] = seat in humans
+	if out["human"]:
+		if seat == HUMAN:
+			out["name"] = _my_name()
+		return out
+	var level := str(Net.ai_seats().get(seat, "")) if online else ai_level
+	for a in ais:
+		if a.seat == seat:
+			level = str(a.level)
+	out["tag"] = ("%s AI" % level.to_upper()) if level != "" else "AI"
+	return out
+
+
+func _my_name() -> String:
+	## Your display name: --player-name, the account's profile name (its last stored copy when it isn't signed in
+	## this run), else YOU - cut at Rules.HUD_NAME_MAX characters.
+	var nm := player_name
+	if nm == "" and Account.enabled:
+		var acct := Account.get_instance()
+		nm = acct.player_name
+		if nm == "":
+			var cf := ConfigFile.new()
+			if cf.load(Account.path) == OK:
+				nm = str(cf.get_value("session", "name", ""))
+	nm = nm.strip_edges().to_upper()
+	if nm == "":
+		return "YOU"
+	return nm if nm.length() <= Rules.HUD_NAME_MAX else nm.substr(0, Rules.HUD_NAME_MAX - 1) + "…"
 
 
 func restart() -> void:
@@ -789,6 +880,9 @@ func _stage_scenario() -> void:
 	## The node indices assume the legacy maps: pass --map=res://maps/004-two-piers.json (fight/rear/
 	## queue/inspect), 008-strait (build), 010-first-switch (switch), 061-switchback-foundry (rotate).
 	match scenario:
+		"notices":                                      # HUD pass: the normal view (--focus=N: a close-up)
+			if focus_node >= 0 and focus_node < sim.nodes.size():
+				scenario_focus = sim.nodes[focus_node]["pos"]
 		"build", "inspect":
 			sim.nodes[1]["owner"] = "A"
 			sim.nodes[1]["units"] = 300.0
@@ -977,13 +1071,52 @@ func _run_scenario() -> void:
 				_hud19_phase = phase
 				match phase:
 					1:
-						hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
-						hud.toast("Node 2 handed over to seat B", "warn")
+						hud.callout_node(3, "FORGE LOST", "warn")
+						hud.callout_node(1, "HANDED OVER", "warn", "B")
 						fx.floater(sim.nodes[2]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
 						sim.last_stand_active = true
 						sim.last_stand_warn[3] = true
 						sim.last_stand_queue = [3]
 						sim.last_stand_warn_t = 6.0
+				_fit_camera()
+		"notices":
+			# HUD pass (Daniele's "option A"): every placed message at once - phase 1 the map callouts (a monster
+			# launched at you, a deck's kicked units, forge online / lost, a handover, stored troops sent home),
+			# a skill refusal above its slot and the Last Stand line's pulse; phase 2 (with --focus=N) a launch at a
+			# node off screen, which points there from the screen edge.
+			var phase: int = mini(int(sim.time), 2)
+			if phase != _hud19_phase:
+				_hud19_phase = phase
+				var mine := sim.nodes.filter(func(n): return n["owner"] == HUMAN)
+				var theirs := sim.nodes.filter(func(n): return n["owner"] != HUMAN and n["owner"] != "")
+				var free := sim.nodes.filter(func(n): return n["owner"] == "")
+				match phase:
+					1:
+						if not mine.is_empty():
+							hud.callout_node(mine[0]["id"], "MONSTER INCOMING", "warn", "B")
+						if not theirs.is_empty():
+							hud.callout_node(theirs[0]["id"], "FORGE ONLINE  +%d%% ATTACK" % roundi(Rules.forge_bonus * 100.0), "warn", str(theirs[0]["owner"]))
+						if free.size() >= 2:
+							hud.callout_node(free[0]["id"], "HANDED OVER TO YOU", "good")
+							hud.callout_node(free[1]["id"], "STORED TROOPS SENT HOME", "info")
+						if not sim.edges.is_empty():
+							var line: Array = sim.deck_line(sim.edges.size() / 2)
+							hud.callout_at(line[line.size() / 2], "deck", "MONSTER KICKED 12 OFF", "warn")
+						if hud.dock.visible:
+							hud.skill_refusal(1, "Pick a deck")
+						sim.last_stand_active = true
+						sim.last_stand_method = "inward"
+						hud.pulse_last_stand("the rim falls first - hold the centre")
+					2:
+						var far := -1
+						var best := -1.0
+						for n in sim.nodes:                   # the node farthest from the close-up
+							var d := (n["pos"] as Vector3).distance_to(scenario_focus) if scenario_focus != Vector3.INF else 0.0
+							if d > best:
+								best = d
+								far = n["id"]
+						if far >= 0:
+							hud.callout_node(far, "MONSTER INCOMING", "warn", "B")
 				_fit_camera()
 		"monlaunch":
 			# 0.20.1 (Daniele's online playtest: "i couldn't figure how to send the monster"): the fix in
@@ -1018,11 +1151,11 @@ func _place_camera() -> void:
 func node_action(method: String, id: int, args := {}) -> bool:
 	## Every tap gives feedback (Alpha 11): what happened, or why it couldn't. Online guests send the
 	## order to the host, which runs perform() for their seat and answers with the same line.
-	if online and not Net.started:
-		hud.toast("Waiting for every player to load")
+	if online and not Net.started:                    # (the waiting text in the middle says why - HUD pass)
 		return false
 	if online and not Net.is_host():
 		Net.order(method, id, args)
+		_last_order = [id, method, Time.get_ticks_msec()]   # the host's answer shows at this order's place
 		return true
 	if director:                                       # TUTORIAL: an order that would wreck the lesson's staging
 		var why := director.allow(method, id, args)
@@ -1038,9 +1171,10 @@ func node_action(method: String, id: int, args := {}) -> bool:
 			director.say(str(r[1]))                   # before L3 the refusals speak on the coach card
 	# 0.20.6 declutter (Daniele: "remove all notices of things like send... better is in game text"): an
 	# accepted order is routine (drag preview / node badges / floaters already show it); only a refusal
-	# needs a toast, since nothing else on screen explains why nothing happened.
-	if not r[0] and str(r[1]) != "":
-		hud.toast(r[1])
+	# needs a word, since nothing else on screen explains why nothing happened - HUD pass: said where the order was
+	# given (the node, the line, the skill slot), never in a box.
+	if not r[0] and str(r[1]) != "" and hud.shows("notices"):
+		_placed_refusal(method, id, str(r[1]))
 	return r[0]
 
 
@@ -1142,6 +1276,8 @@ func _process(delta: float) -> void:
 		_on_resized()
 	var dt := minf(delta, 0.05)
 	_flush_inspect()
+	if online and Net.started and not hud.callouts.find("wait").is_empty():
+		hud.set_waiting([])                           # HUD pass: every player loaded - the round is on
 	if online:                                    # the host's Sim is the only simulation (Net)
 		if Net.is_host() and Net.started:
 			for ai in ais:
@@ -1194,41 +1330,64 @@ func _process(delta: float) -> void:
 		fx.handle(ev)
 		skill_fx.handle(ev)
 		match ev["type"]:
-			"skill":                                  # a rival's skill that touches you: a toast (SkillDock.on_event)
+			"skill":                                  # a rival's skill that touches you: a callout there (SkillDock.on_event)
 				hud.skill_event(ev)
 			"last_stand":
 				# 0.20.13 (Daniele's online co-op playtest: "last stand still fills the whole screen"): this
 				# was the culprit - a 44 pt two-line banner held 5 s dead centre. The status line already
-				# says LAST STAND continuously right under the top bar, so the one-time announcement only
-				# needs a toast now; the per-node danger symbols still carry the actual warning.
+				# says LAST STAND continuously right under the top bar, so the one-time announcement is that
+				# line's own pulse now (HUD pass: no toast), saying how the method falls meanwhile; the per-node
+				# danger symbols still carry the actual warning.
 				var how := {"inward": "the rim falls first - hold the centre", "outward": "the centre falls first - hold the rim",
 						"chaos": "nodes fall in a hidden order - your home last"}
-				hud.toast("LAST STAND - %s: %s" % [str(ev["method"]).to_upper(), how.get(ev["method"], "")], "warn")
+				if hud.shows("status_line"):
+					hud.pulse_last_stand(str(how.get(ev["method"], "")))
 			# 0.20.6 declutter (Daniele: "too many notifications and many notifications cover the map...
 			# remove all notices of things like send and capture"): VERY LAST STAND repeats the status
 			# line (H5/top bar), the node's own falls are the danger symbols, and relay switches are
 			# visible on the relay itself - none of those need a toast of their own any more. "fling" /
 			# "fall" are ordinary battle noise already shown by the falling units themselves.
-			"monster_launch":                          # Structures 2.1: only a launch aimed at you is worth a toast
+			# HUD pass (Daniele's "option A": "no notification box at all"): each of these is a short callout at the
+			# node / deck it is about (Hud.callout_node / callout_at: an edge arrow when it is off screen), the
+			# owner's emblem as its icon.
+			"monster_launch":                          # Structures 2.1: only a launch aimed at you is worth a word
 				var to_you: bool = str(ev["seat"]) != HUMAN and sim.nodes[int(ev["target"])]["owner"] == HUMAN
 				if to_you:
-					hud.toast("seat %s launched a monster at you" % ev["seat"], "warn")
-			"monster_kick":                            # only your own lines' losses are worth a toast
-				if str(ev.get("seat_hit", "")) == HUMAN:
+					hud.callout_node(int(ev["target"]), "MONSTER INCOMING", "warn", str(ev["seat"]))
+			"monster_kick":                            # only your own lines' losses: at the deck, the count adding up
+				if str(ev.get("seat_hit", "")) == HUMAN and ev.get("pos") is Vector3:
 					var kicked := int(ev.get("shown", 0))
+					var place := "kick:%d" % int(ev.get("id", -1))
+					var had: Dictionary = hud.callouts.find(place)
+					if not had.is_empty():
+						kicked += int(had.get("count", 0))
 					if kicked > 0:
-						hud.toast("A monster kicked %d unit%s off the deck" % [kicked, "" if kicked == 1 else "s"], "warn")
-			"forge_lost":                              # red toast (spec E): the bonus is gone
+						hud.callout_at(ev["pos"], place, "MONSTER KICKED %d OFF" % kicked, "warn", str(ev.get("seat", "")))
+						var it: Dictionary = hud.callouts.find(place)
+						if not it.is_empty():
+							it["count"] = kicked
+			"forge_lost":                              # red (spec E): the bonus is gone - at the forge it was
 				if str(ev.get("seat", "")) == HUMAN:
-					hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
-			"eject":                                   # your own eject is a routine order (no toast, see node_action);
+					var at := int(_forge_node.get(HUMAN, -1))
+					if at >= 0:
+						hud.callout_node(at, "FORGE LOST · BONUS GONE", "warn")
+					else:
+						hud.toast("Forge lost - the attack and defence bonus is gone", "warn")
+			"eject":                                   # your own eject is a routine order (nothing to say, see node_action);
 				if str(ev.get("seat", "")) != HUMAN and sim.allied(str(ev.get("seat", "")), HUMAN):
-					hud.toast("Your stored troops were sent home from node %d" % ev["node"], "info")
+					hud.callout_node(int(ev["node"]), "STORED TROOPS SENT HOME", "info", str(ev["seat"]))
 			"handover":                                 # a silent production-only takeover (no fight to see it by)
 				if str(ev.get("seat", "")) == HUMAN:
-					hud.toast("Node %d handed over to you" % ev["node"], "good")
+					hud.callout_node(int(ev["node"]), "HANDED OVER TO YOU", "good")
 				elif str(ev.get("from", "")) == HUMAN:
-					hud.toast("Node %d handed over to seat %s" % [ev["node"], ev["seat"]], "warn")
+					hud.callout_node(int(ev["node"]), "HANDED OVER TO %s" % hud.seat_label(str(ev["seat"])), "warn", str(ev["seat"]))
+			"capture":                                  # (the Sim's fx event for a handover: "handover" is in sim.events)
+				if ev.get("handover", false):
+					var id := int(ev.get("node", -1))
+					if str(ev.get("seat", "")) == HUMAN:
+						hud.callout_node(id, "HANDED OVER TO YOU", "good")
+					elif str(_took_from.get(id, "")) == HUMAN:
+						hud.callout_node(id, "HANDED OVER TO %s" % hud.seat_label(str(ev["seat"])), "warn", str(ev["seat"]))
 	sim.fx_events.clear()
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
@@ -1301,29 +1460,37 @@ func _end_shot(what: String) -> void:
 	get_tree().quit()
 
 
+var _took_from := {}                              # node id -> its owner before the last capture (a handover's callout)
+
+
 func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 	if mission:                                        # CAMPAIGN: a start node / vat / home lost
 		mission.on_captured(node_id, new_owner, _old)
+	_took_from[node_id] = _old
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
 	# 0.20.6 declutter (Daniele: "remove all notices of things like send and capture - better is in game
 	# text coming out of the conquer place"): a fight is already visible on the node itself (fx.gd's
 	# capture pulse), so the toast becomes a short rising label there instead of covering the map.
 	if not hud.shows("floaters"):                       # TUTORIAL: the reveal set names when this is taught
 		return
+	var last: Dictionary = sim.fx_events[-1] if not sim.fx_events.is_empty() else {}
+	if last.get("handover", false) and int(last.get("node", -1)) == node_id:
+		return                                          # a handover: its own callout says it (the fx loop, HUD pass)
 	if new_owner == HUMAN:
 		fx.floater(sim.nodes[node_id]["pos"], "+ CAPTURED", Rules.seat_color(HUMAN))
 	elif _old == HUMAN:
 		fx.floater(sim.nodes[node_id]["pos"], "LOST", Color("ff5b5b"))
 
 
-func _on_forge_online(seat: String, _node_id: int, first: bool) -> void:
-	## ForgePulse: a forge just came online (built or captured). The toast names the owner by emblem and
-	## faction ("seat X" -> Hud._SEAT_WORD); good news in your colour for your side, red for a rival's.
+func _on_forge_online(seat: String, node_id: int, first: bool) -> void:
+	## ForgePulse: a forge just came online (built or captured). HUD pass: a callout at the forge, the owner's
+	## emblem as its icon; good news in your colour for your side, red for a rival's.
+	_forge_node[seat] = node_id                        # where FORGE LOST shows, should this one go
 	var kind := "good" if sim.allied(seat, HUMAN) else "warn"
 	if first:
-		hud.toast("seat %s FORGE ONLINE: +%d%% attack" % [seat, roundi(Rules.forge_bonus * 100.0)], kind)
+		hud.callout_node(node_id, "FORGE ONLINE  +%d%% ATTACK" % roundi(Rules.forge_bonus * 100.0), kind, seat)
 	else:                                              # the bonus does not stack (Sim.forge_of)
-		hud.toast("seat %s FORGE ONLINE: attack bonus kept" % seat, kind)
+		hud.callout_node(node_id, "FORGE ONLINE · BONUS KEPT", kind, seat)
 
 
 func _on_finished_server(winner: String) -> void:
@@ -1817,8 +1984,7 @@ func _coach_sync() -> void:
 	var avoid := []                                   # the banner and the toasts never sit under the card
 	if hud.banner.visible:
 		avoid.append(hud.banner.get_global_rect())
-	if hud.notices.get_child_count() > 0:
-		avoid.append(hud.notices.get_global_rect())
+	avoid.append_array(hud.callouts.rects())          # HUD pass: the placed messages
 	coach.set_avoid(avoid)
 	coach.spotlight(pts, radius, rects)
 	_tutorial_gesture()

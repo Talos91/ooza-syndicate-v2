@@ -292,8 +292,9 @@ func details(d: Dictionary, table: Dictionary) -> void:
 	UiKit.add(self, UiKit.label(self, "MATCH STAT", 12, acc, true, 2), Vector2(x0 + 12.0, ty + hh - lh))
 	for i in range(cols.size()):
 		var c: Dictionary = cols[i]
-		var hl := UiKit.label(self, ("%s
-%s" if two else "%s / %s") % [c["head"], c["faction"]], 12, acc, true, 1)
+		# (an escaped newline: the literal one this had became "\r\n" in a CRLF checkout, and the second line of a
+		# two-line head fell onto the first row - HUD pass: the names made two-line heads common)
+		var hl := UiKit.label(self, ("%s\n%s" if two else "%s / %s") % [c["head"], c["faction"]], 12, acc, true, 1)
 		hl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		hl.clip_text = true
 		hl.size = Vector2(col_w - 12.0, hh)
@@ -438,11 +439,13 @@ static func nodes_held(sim: Sim, seat: String) -> int:
 	return held
 
 
-static func seat_table(sim: Sim, human: String) -> Dictionary:
+static func seat_table(sim: Sim, human: String, heads := {}) -> Dictionary:
 	## Every per-seat number this device can show (the Sim's events through Progression.seat_stats - the same counting
 	## as the rewards and the server's report - plus the board at the end). {cols: [{seat, head, faction}], rows:
 	## [[label, [value per column]]]}: you first, then your team-mates, then every rival. Rows a match can't have
-	## (relays on a map without them, skills with ABILITIES off, monsters nobody launched) are left out.
+	## (relays on a map without them, skills with ABILITIES off, monsters nobody launched) are left out. heads (HUD
+	## pass: seat -> [head, second line], Hud._seat_heads): a human column by the player's name over the faction, an AI
+	## column by faction over its level; without it, YOU / ALLY / RIVAL over the faction.
 	var seats: Array = sim.factions.keys()
 	seats.sort()
 	var order := [human]
@@ -464,7 +467,11 @@ static func seat_table(sim: Sim, human: String) -> Dictionary:
 			else:
 				rn += 1
 				head = "RIVAL" if rivals == 1 else "RIVAL %d" % rn
-		cols.append({"seat": s, "head": head, "faction": str(UiKit.NAMES.get(str(sim.factions[s]), str(sim.factions[s]).to_upper()))})
+		var fname := str(UiKit.NAMES.get(str(sim.factions[s]), str(sim.factions[s]).to_upper()))
+		if heads.has(s):
+			head = str(heads[s][0])
+			fname = str(heads[s][1])
+		cols.append({"seat": s, "head": head, "faction": fname})
 		st[s] = Progression.seat_stats(sim, s)
 	var rows := []
 	var col := func(fn: Callable) -> Array:
