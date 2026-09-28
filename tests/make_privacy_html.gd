@@ -4,6 +4,9 @@ extends SceneTree
 ## test_telemetry fails when they differ. The release copies web/privacy.html into build/web.
 
 
+const UPDATED := "2026-09-28"                       # change when privacy_text() changes (not per build)
+
+
 func _initialize() -> void:
 	var body := ""
 	for para in Telemetry.privacy_text().split("\n\n"):
@@ -17,9 +20,9 @@ main{max-width:760px;margin:0 auto;padding:32px 16px 64px}h1{color:#fff;font-siz
 h2{color:#19dce8;font-size:17px;letter-spacing:.06em;margin:28px 0 6px}p{margin:0 0 12px}.v{color:#7795a4;font-size:14px}
 </style></head><body><main>
 <h1>Ooze Syndicate - Privacy</h1>
-<p class="v">Game version %s. The same text is in the game: SETTINGS or ACCOUNT &gt; PRIVACY.</p>
+<p class="v">Updated %s. The same text is in the game: SETTINGS or ACCOUNT &gt; PRIVACY.</p>
 %s</main></body></html>
-""" % [Rules.VERSION, body]
+""" % [UPDATED, body]
 	var f := FileAccess.open("res://web/privacy.html", FileAccess.WRITE)
 	f.store_string(html)
 	f.close()
