@@ -1,6 +1,16 @@
 # Next session - start here
 
-State as of publish today: **v0.22.0 "Alpha 22"** (see the 0.21.2 - 0.22.0 section) - before that **v0.21.1 "Alpha 21"** - light models on phones / HD packs on desktop, quality skins, iPhone fullscreen, the server host draws nothing (below) - on top of **v0.21.0 "Alpha 21"** - optimization part 1 (below) - on top of **v0.20.13**; before that **v0.20.9 "Alpha 20"** - the tutorial checked on the decluttered HUD - on top of **v0.20.8** - ACCOUNT without email (guest + Google + rename) - on top of **v0.20.7** - the Google buttons on (web gzip fix) - on top of **v0.20.6 "Alpha 20"** - HUD declutter (no count over moving lines; toasts top right, max 2; capture floaters `Fx.floater`, reveal key "floaters"), Dr. Vesk's voice - on top of **v0.20.5 "Alpha 20"** - accounts (guest, Google, cloud save, WINS THIS SEASON, MATCH HISTORY; below) - on top of **v0.20.4 "Alpha 20"** - the campaign preview (VEX, the sinking city, placeholder maps; below) - on top of **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
+## 0.22.1 "Alpha 22" (2026-09-29) - live at https://oozesyndicate.com
+Read first: the root `GAME-BIBLE.md` (updated for the 0.22.1 balance), `CHANGELOG.md` 0.22.1, `docs/TO-TEST.md`, then
+`Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md` and `05 Handoff/handoffs/Architect Session.md` (the coordinator's
+state). Packs: index.pck + skins.pck + hd.pck + skins_hd.pck + **music.pck** (new: the soundtrack, git-ignored tracks copied by
+`tools/copy_music.py` before the export - BUILD-LOG sec 10). Numbers changed: Rules.LASER_KILL 96, MACHINEGOON_RATE 8 / 14 / 20,
+MONSTER_REACH 1 (tests that stage a 2-3 deck walk pin 3 locally), LAST_STAND_TIME 240, RELAY_COOLDOWN_BY_KIND rotation 10 s.
+Next: **0.22.2** = branch `perf-pass` e6687d2 (report: 05 Handoff/handoffs/architect-specs/perf-pass-report.md; after merging set
+SeatAI._tree's `+ 1.0` to `+ Rules.ROUTE_NODE_SECONDS`) + ⚡ Powers (7 new powers, Core Meltdown 4 / cap 90, trip-start casting, NULL
+decoys) + 🧩 `ui-powers`, then ONE AI curve re-tune (seat_ai.gd AI_LEVELS) -> "Alpha 22 done". Alpha 23 = the new maps (🗺️).
+
+State as of publish today: **v0.20.9 "Alpha 20"** - the tutorial checked on the decluttered HUD - on top of **v0.20.8** - ACCOUNT without email (guest + Google + rename) - on top of **v0.20.7** - the Google buttons on (web gzip fix) - on top of **v0.20.6 "Alpha 20"** - HUD declutter (no count over moving lines; toasts top right, max 2; capture floaters `Fx.floater`, reveal key "floaters"), Dr. Vesk's voice - on top of **v0.20.5 "Alpha 20"** - accounts (guest, Google, cloud save, WINS THIS SEASON, MATCH HISTORY; below) - on top of **v0.20.4 "Alpha 20"** - the campaign preview (VEX, the sinking city, placeholder maps; below) - on top of **v0.20.3 "Alpha 20"** - smooth server rooms (20 Hz, playout buffer), the monster launch flow fixed, Machinegoon v2 at full scale - on top of **v0.20.2** (phone menu fix, tutorial fixes) on top of **v0.20.1 "Alpha 20"** - progression: SCRAP / SYNDICATE CHIPS, levels, daily / weekly
 challenges, unlocks with the locks still off (below) - on top of **v0.20.0 "Alpha 20"** - the room server hosts the matches (server-hosted rooms, the room
 owner; below) - on top of **v0.19.3 "Alpha 19"** (the reworked tutorial, below) on top of **v0.19.2 "Alpha 19"** live - Daniele's first playtest of 0.19.1 (the
 interactive tutorial + the 0.19.0 rules pass, below): skills start on cooldown, Surge and Demolish
@@ -14,48 +24,6 @@ size-test maps D-11..D-16, and the Machingoon -> Machinegoon spelling fixed ever
 `PLAYTEST-NOTES.md` notes 186-207 (2026-09-27), then `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md`
 (the session board), the design package `Docs/Game Design/Ooze Syndicate 2.0/00 README.md` and
 `05 Handoff/AGENT-BRIEF.md`.
-
-## 0.21.2 - 0.22.0 (2026-09-28): Alpha 21 done, Alpha 22 started - read handoffs/Architect Session.md (Docs/.../05 Handoff)
-
-- The game is at **https://oozesyndicate.com** (gh-pages CNAME; every rebuild writes it), rooms at **rooms.oozesyndicate.com**
-  (net-7: READY in the lobby, player names). 0.21.x added: net-5 binary frames, net hardening, room limits + 3 slots, telemetry +
-  privacy + DELETE ACCOUNT, the UI pass (0.21.5) + iPhone fit + emblems v2 + final art + colour-blind, first sound, callouts at the
-  node + player names, co-op AI + a monotonic difficulty curve, the tap fix + art cache, the Ooze Syndicate loading screen.
-- 0.22.0: match feel (subtle Last Stand ring, under-attack cue, contest ring progress, warm-up, Last Stand zoom fix, softer sound),
-  the BACKGROUND picker + WIP backgrounds, landscape on phones, the goo loading bar.
-- Next: audit-fixes + perf-pass branches (handoffs/architect-specs/audit-*.md), MUSIC (0.22.1; paid pack NOT in git), the relay
-  redo (after Daniele's yes), then Alpha 23 = the new maps (🗺️).
-
-## 0.21.0 - 0.21.1 (2026-09-28): Alpha 21 optimization - batching, phone profile, light / HD models
-
-- **0.21.0**: `MapBatch` (scripts/map_batch.gd) draws the static map through MultiMesh batches (A-01 592 -> 256 draw calls,
-  M-39 1,093 -> ~450); `PerfProfile` (scripts/perf_profile.gd; `PerfProfile.apply(self)` at the top of main._ready) sets
-  GRAPHICS AUTO / LOW RES / FULL and FPS AUTO / 30 / 60 (OPTIONS > PERFORMANCE); phones render at full resolution (the old
-  0.75 scale was upscaled unfiltered = blocky edges) with a 45 fps cap. `tests/perf_check.tscn` (windowed, timeout 240)
-  checks M-39's budgets from rules.gd.
-- **0.21.1**: `assets/kit/` is the LIGHT kit everywhere (index.pck); `assets/kit_hd/` holds the full originals, packed as
-  hd.pck ("Web HD") and skins_hd.pck ("Web Skins HD"), fetched on demand when `PerfProfile.hd()` (desktop / FULL);
-  `Cosmetics.kit_path(key)` is the one lookup (`tests/test_kit_hd.gd`). Publishing exports FOUR packs: index, skins, hd,
-  skins_hd (BUILD-LOG §10; server/deploy.sh refuses a build folder missing one). A new skin goes into BOTH skins folders and
-  BOTH skin presets. Skin Designer's quality-pass skins are in (kit/skins <- `*_q_phone`, kit_hd/skins <- `*_q`; Skin_*
-  tank columns and laser emitters +0.34 for the plinths). iPhone standalone landscape: `web/viewport-fix.js` +
-  `main._apply_safe_area`. Server: `Net.dedicated` hosts build no world (SERVER HOST blocks in main.gd), adaptive playout
-  buffer in net.gd.
-- **0.21.2**: the monsters in their real colours (Skin Designer's 512 px colour maps).
-- **0.21.3 = net5 (`ooze20-net-5`, 🖥️ Server)**: between keyframes (1 s) a snapshot carries only the node / line fields
-  that differ from the last keyframe (`Net._wire_state`; guests rebuild it from their copy, `_unwire_state`; a delta
-  without its keyframe is dropped and the next keyframe comes within a second); floats at 1/64; host packets travel as
-  binary WebSocket frames (`RelayBridge.send_bin` / `poll_events`; relay.py `[1][len][to][packet]` -> the guest gets
-  `[2][4]host[packet]`; the PeerJS fallback keeps text). Orders, lobby and chat stay text. The binary-aware relay went
-  live with the 0.21.2 deploy (0.21.2 clients checked against it: test_relay, test_dedicated 19/19), so 0.21.3 is a
-  plain deploy.sh. Measured on the Singapore box (private relay, FFA 4 + 2 AI, 60 s, Daniele's network): **9.7 KB/s per
-  guest** (net-4 ~34), 20 Hz, order round trip 66 ms, 0 % frozen, 0 hard snaps; match host 6 % CPU, 216 MB. Simulated
-  mobile data (80 ms, 120 ms jitter, 0.6 s stall every 6 s): 0.5 % frozen (net-a21: 1.7 %); harsh (1.2 s stall every 5 s):
-  5.9 % (net-a21 ~5 %, the stalls themselves). Probe jump spikes > 0.5 m under the stalls are the same with net-4 (local
-  A/B: 4.2 % vs 5.0 % of frames) - not from net5. `tests/snapshot_probe.gd` sizes snapshots offline.
-- **Next:** Alpha 21 left: code audit, telemetry (Progression; wants
-  per-match perf stats from PerfProfile), first sound (ask Daniele for the pack), HUD badge draw calls, vat liquid
-  per-instance material, download size.
 
 ## 0.20.6 - 0.20.9 (2026-09-27): HUD declutter, Google on, no email, the tutorial on the new HUD
 

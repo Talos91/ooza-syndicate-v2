@@ -846,3 +846,15 @@ decide if mechanics are good or not... only thing I can save on is textures or b
      window). *Done (0.21.0):* the default look is unchanged on desktop and sharper on phones (the old 75 % phone render scale was
      the blocky cause); savings come from batching, not resolution. "Full resolution, check the heat".
 221. **Light models "Phones only"** - coming in the next Alpha 21 build (light set on phones, today's full models on desktop).
+
+## 2026-09-28 - Daniele + cousins, 0.22.0 (answered in 0.22.1)
+
+222. **"laser tower is waaaay too powerful"**, Machinegoon too. *Done (0.22.1):* Laser 32 -> 19 per burst, Machinegoon 2 / 3.5 / 5 -> 1.6 / 2.8 / 4.
+223. **"attack radius limited to 1 node"** (the monster). *Done:* MONSTER_REACH 1; the monster lesson launches at the next node.
+224. **"last stand starts too early push it to 4 minutes"**. *Done:* 4:00 (Very Last Stand stays 6:00). Note: on the biggest maps the ring
+     collapse now runs ~20 s past 6:00 at the 8 s minimum gap - open question for Daniele (OPEN-QUESTIONS).
+225. Rotors used as "meat grinders". *Done:* rotation relays cool down 10 s (others 5 s).
+226. Rooms not closing when players leave; LEAVE ROOM invisible; co-op AI capturing allies; NULL decoys visible to all. *Done:* rooms close
+     30 s after the last player, LEAVE ROOM is a framed button. *Open (0.22.2):* co-op AI vs allies, NULL decoys (⚡ Powers), upgrade-ready arrow, ally halo.
+227. **"when you go in leaderboard on mobile buttons to go back don't work, check all buttons"** (2026-09-29, on 0.22.0). *Done (0.22.1):* the
+     meta pages' BACK (01d3731, missed by 0.21.12). *Open:* 🧩 UI sweeps every button on a phone build after 0.22.1 is live.
