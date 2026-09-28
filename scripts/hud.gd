@@ -668,7 +668,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 func _font_color(l: Control, c: Color) -> void:
 	## add_theme_color_override("font_color", c) only when it changes (perf pass, audit B3: every override is a
 	## THEME_CHANGED - the label re-shaped - and these ran for every badge on every frame).
-	if l.get_meta("font_color", null) != c:
+	if (l.get_meta("font_color") if l.has_meta("font_color") else null) != c:   # (4.6: a null default still errors)
 		l.set_meta("font_color", c)
 		l.add_theme_color_override("font_color", c)
 
@@ -815,8 +815,8 @@ func _badges(cam: Camera3D) -> bool:
 			var label: Label = b["label"]
 			var sub: Label = b["sub"]
 			sig.append_array([panel.position, panel.size, b["owner"], b["look"], label.visible, label.text, label.position,
-					label.size, label.get_theme_font_size("font_size"), label.get_meta("font_color", null), sub.visible, sub.text,
-					sub.position, sub.size, sub.get_theme_font_size("font_size"), sub.get_meta("font_color", null), emb.visible,
+					label.size, label.get_theme_font_size("font_size"), label.get_meta("font_color") if label.has_meta("font_color") else null, sub.visible, sub.text,
+					sub.position, sub.size, sub.get_theme_font_size("font_size"), sub.get_meta("font_color") if sub.has_meta("font_color") else null, emb.visible,
 					emb.texture, emb.position, emb.size, emb.get_meta("seat", ""), bar.visible, bar.position, bar.size,
 					bar.value if bar.visible else 0.0])
 		if sig != b.get("drawn", []):
