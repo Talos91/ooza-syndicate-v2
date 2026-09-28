@@ -85,6 +85,35 @@ func _data() -> void:
 			"District 1 playable; a mission needing the event deck is not")
 	check(not Campaign.has_content("null") and Campaign.has_content("vex"), "only VEX has content so far")
 	check(Campaign.fill("Drop {n} units", Campaign.mission("vex:02")) == "Drop 60 units", "brief placeholders fill")
+	# the CAMPAIGN MENU's episode cards (Alpha 21)
+	Campaign.reset_progress()
+	var eps := Campaign.episodes()
+	check(eps.size() == 5 and str(eps[0]["faction"]) == "vex", "five episode cards, VEX first")
+	check(str(eps[0]["state"]) == "open" and str(eps[0]["title"]) == "GOING UNDER" and int(eps[0]["stars_max"]) == 39
+			and str(eps[0]["next"]) == "vex:01", "VEX: open, its episode title, 0 / 39, CONTINUE = 01")
+	check(eps.slice(1).all(func(e): return str(e["state"]) == "coming" and int(e["stars_max"]) == 0 and str(e["next"]) == ""),
+			"the other four: COMING LATER, no stars, nothing to continue")
+	check(eps.all(func(e): return ResourceLoader.exists(str(e["art"]))), "every card's faction art exists")
+	Campaign.record("vex:01", {"won": true, "time": 90.0, "stars": 3, "objective": false})
+	check(Campaign.progress_total() == Vector2i(3, 39) and int(Campaign.episodes()[0]["stars"]) == 3,
+			"progress totals follow the stars (3 / 39)")
+	# the CAMPAIGN HUB (Alpha 21): one district's cards
+	var h := Campaign.hub("vex")
+	check(str(h["district_name"]) == "DOCKSIDE" and int(h["district_index"]) == 0 and int(h["district_count"]) == 4,
+			"hub opens on the next mission's district: Dockside, 1 of 4")
+	var st := {}
+	for c in h["missions"]:
+		st[str(c["key"])] = str(c["state"])
+	check(st == {"vex:01": "won", "vex:02": "next", "vex:s1": "locked", "vex:03": "locked"}, "card states: won / next / locked (%s)" % st)
+	check(str(h["missions"][2]["unlock_hint"]) == "Complete MIND THE GAP to unlock."
+			and str(h["missions"][3]["unlock_hint"]) == "Complete MIND THE GAP to unlock." and str(h["missions"][1]["unlock_hint"]) == "",
+			"unlock hints name the mission to beat")
+	check(str(h["missions"][2]["number"]) == "S1" and int(h["stars"]) == 3 and int(h["stars_max"]) == 12, "numbers and district stars")
+	var h2 := Campaign.hub("vex", 1)
+	check(str(h2["missions"][0]["state"]) == "dev" and str(h2["missions"][0]["needs"]) != "", "an unbuilt mission reads dev")
+	check(str(h["missions"][0]["backdrop"]) == "res://assets/art/campaign/vex-01.jpg", "vex:01's own art (tools/ui_art.py)")
+	check(Campaign.backdrop_of("null:01") == "", "no art for a mission: empty path (the card falls back)")
+	Campaign.reset_progress()
 
 
 func _opening() -> void:

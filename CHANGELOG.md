@@ -1,5 +1,44 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.6 "Alpha 21" - 2026-09-28 (iPhone fit, Daniele's UI answers, first-launch skins)
+
+- **Every screen clear of the notch and home bar** (🧩 UI, from the iPhone size sweep): the menus, VERSUS and the results lay
+  out inside the safe-area insets (UiKit.safe_insets(), the HUD's sources), backgrounds still edge to edge; real points on
+  the web (UiKit.pt_per_px() from the CSS size, not a 390 pt guess) - taps back to >= 44 pt, text to its intended size;
+  top-bar squares 46 pt, SETTINGS chips >= 44 pt wide, framed result links, readable unearned stars, map thumbnails
+  without the baked caption strip, the SE's SETUP clip fixed.
+- **Daniele's UI answers**: campaign pages in the campaign's own colour; TRAINING BACK -> HOME; wardrobe tiles show the real
+  price / way in; "weaker" stats in rose red; PAUSE > SETTINGS (graphics / frame rate / detail); win / loss / draw verdicts as
+  syndicate jokes ("HOSTILE TAKEOVER." / "LIQUIDATED." / "HUNG BOARD."; MATCH DETAILS keeps VICTORY / DEFEAT).
+- **First-launch skins**: on a fresh first visit the skins / HD packs never downloaded (the request started while the scene
+  root was still being built); the fetch now waits a frame.
+
+## 0.21.5 "Alpha 21" - 2026-09-28 (the UI pass)
+
+- **New menus and result screens** (🧩 UI session; Daniele's "Alpha 20 UI Expansion" direction, Mushroom Wars 2-inspired,
+  per-faction accents; reviewed and approved by Daniele): an app shell (TOP BAR + HOME / PLAY / ARMIES / CAMPAIGN tabs),
+  new HOME, PLAY, ARMIES (skills restyled, a rebuilt wardrobe), ONLINE / LOBBY / PROFILE / CHALLENGES / LEADERBOARD /
+  HISTORY / ACCOUNT restyled, SETTINGS with DISPLAY + TESTING tabs, a VERSUS screen before VS AI matches and missions,
+  new pause / victory / defeat / match details screens, and a CONNECTION INTERRUPTED overlay with a countdown when a host
+  goes silent. The battle HUD itself is unchanged.
+- **Flow changes**: VS AI is 01 FACTION -> 02 BATTLEFIELD -> 03 SETUP (map, faction, difficulty, colour, match options:
+  Last Stand / Abilities / hidden counts) -> 04 RIVALS (mode, every seat's army, DEPLOY); SETTINGS no longer holds match
+  options; pause has no toggles; CAMPAIGN opens on the city map (CARDS / CITY MAP switch, remembered) and BACK goes HOME;
+  ONLINE's BACK goes to PLAY; JOIN ROOM types the code in place; CONTINUE after a win opens PLAY, RETRY replays the map.
+- New art (character cutouts, environments, VEX mission images) imported lossy: index.pck +3.4 MB. Arrows / stars on
+  the web no longer show as boxes (a DejaVu fallback on the UI fonts).
+
+## 0.21.4 "Alpha 21" - 2026-09-28 (online hardening; tutorial card on rotation; per-match perf stats)
+
+- **Online hardening** (server session, from its audit `handoffs/architect-specs/audit-net.md`): per-socket frame caps checked
+  on the header (hello 64 KB, guest 8 KB, host 1 MB; was 8 MB for all), 64 sockets per address (carrier NAT), crypto
+  reconnect tokens, a booting match host yields the CPU (nice 10 until it connects), deploy.sh --relay refuses while a room
+  is open, the Caddyfile in the repo; phones reserve ~3 MB of socket buffers instead of ~11. Protocol unchanged (net-5).
+- **Tutorial**: a first-launch tour started in portrait resizes its coach card after rotating to landscape (fonts, buttons,
+  handler, card); the card's point scale follows the short side (a portrait card was ~4x too big).
+- **`PerfProfile.match_stats()`**: per-match frame time p50 / p95 / max, fps average / worst second, draw calls p95, long
+  frames - for Progression's telemetry (0.21.5); tests/perf_check checks it.
+
 ## 0.21.3 "Alpha 21" - 2026-09-28 (smaller online updates: net-5)
 
 - **Online uses about a third of the data** (server session, protocol ooze20-net-5): between once-a-second keyframes a

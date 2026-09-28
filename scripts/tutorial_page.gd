@@ -15,7 +15,11 @@ extends Control
 ##                                         9 rows, already in the order they should show
 ##   set_progress_note(text: String)       e.g. "Progress isn't saved on this browser" (no user:// - the
 ##                                         ARMIES pattern, §7); "" (default) shows nothing
-##   show_list()                           the normal TRAINING page: title, rows, CONTINUE, BACK
+##   host_in(menu, area: Rect2)            Alpha 21 UI pass: build inside the Menu's shell page (menu.content, its
+##                                         top / tab bars, title and BACK) with UiKit, in `area`; call before
+##                                         adding the page to menu.content. Without it: its own canvas, as before
+##   show_list()                           the normal TRAINING page: title, rows, CONTINUE, BACK (hosted: the
+##                                         rows in two columns and CONTINUE / START TRAINING; the Menu has BACK)
 ##   show_splash(handler_line: String)     the first-launch variant: the handler's opening line, START
 ##                                         and SKIP TUTORIAL (no rows - forced straight into L1, §7)
 ## Signals
@@ -44,12 +48,22 @@ var mobile := false
 var standalone_backdrop := true          # false once Menu hosts this page and supplies its own backdrop
 
 var content: Control
+var host = null                          # the Menu hosting this page in its shell (host_in); null = own canvas
+var area := Rect2()                      # hosted: the free area to lay out in (the host's canvas units)
 var _backdrop: ColorRect
 var _lessons: Array = []
 var _progress_note := ""
 
 
 func _ready() -> void:
+	if host != null:                     # in the shell: the host's canvas, no backdrop, the host rebuilds on resize
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		size = host.content.size
+		content = Control.new()
+		add_child(content)
+		_fit()
+		show_list()
+		return
 	if standalone_backdrop:
 		_backdrop = ColorRect.new()
 		_backdrop.color = Color("030c12")
@@ -71,6 +85,10 @@ func _fit() -> void:
 	## screen shape and centred.
 	if not is_instance_valid(content):
 		return
+	if host != null:                     # hosted: the host's canvas units already
+		content.position = Vector2.ZERO
+		content.size = size
+		return
 	var vp := get_viewport().get_visible_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0:
 		return
@@ -87,6 +105,8 @@ func _fit() -> void:
 
 
 func _pt_factor() -> float:
+	if host != null:                     # hosted: the Menu's (UiKit's unit)
+		return host._pt_factor()
 	if not mobile:
 		return 0.0
 	var vp := get_viewport().get_visible_rect().size
@@ -135,6 +155,12 @@ func set_lessons(lessons: Array) -> void:
 
 func set_progress_note(text: String) -> void:
 	_progress_note = text
+
+
+func host_in(m, free_area: Rect2) -> void:
+	host = m
+	area = free_area
+	standalone_backdrop = false
 
 
 # ------------------------------------------------------------------ building blocks (menu.gd's shapes)
@@ -257,6 +283,9 @@ func _lesson_row(stack: Dictionary, lesson: Dictionary, y: float, w: float, h: f
 
 
 func show_list() -> void:
+	if host != null:
+		_show_shell_list()
+		return
 	_clear_content()
 	var frame_dims := Vector2(1160, 640)
 	var frame_pos := Vector2(60, 40)
@@ -284,6 +313,65 @@ func show_list() -> void:
 			func(): continue_pressed.emit(), true)
 
 
+func _show_shell_list() -> void:
+	## The shell's TRAINING list (screen system 11) in `area`: the lessons as numbered rows in two columns (UiKit.row:
+	## "00", title, goal, a tick when done; the first one not done lit), swiped when they outgrow the area; the
+	## progress note and CONTINUE / START TRAINING (the first lesson not done; REPLAY when all are) at the foot.
+	_clear_content()
+	var x: float = host.shell_x()
+	var w := content.size.x - x * 2.0
+	var bh := UiKit.tap_h(self, 50.0)
+	var fy := area.end.y - bh - 14.0
+	var next_id := _first_unfinished_id()
+	var done := _lessons.filter(func(l): return bool(l.get("done", false))).size()
+	var label := TutorialDirector.line("replay") if next_id < 0 else 			(TutorialDirector.line("continue") if done > 0 else "START TRAINING")
+	label += "  →"
+	var bw := UiKit.text_w(self, label, 17, true) + 64.0
+	UiKit.btn(self, label, Vector2(content.size.x - x - bw, fy), Vector2(bw, 50), func(): continue_pressed.emit(),
+			"primary", faction, 17)
+	var note := "%d / %d lessons done" % [done, _lessons.size()]
+	if _progress_note != "":
+		note += "  ·  " + _progress_note
+	var nl := UiKit.label(self, note, 15, UiKit.MUTED)
+	UiKit.add(self, nl, Vector2(x, fy + (bh - nl.get_minimum_size().y) / 2.0))
+	# the rows, left to right then down
+	var scroll := TouchScroll.new()
+	scroll.position = Vector2(x, area.position.y)
+	scroll.size = Vector2(w + 20.0, fy - 14.0 - area.position.y)
+	var grab := UiKit.sb(Color(UiKit.accent(faction), 0.7), Color(0, 0, 0, 0), 0, 2)
+	grab.set_content_margin_all(3)
+	for st in ["grabber", "grabber_highlight", "grabber_pressed"]:
+		scroll.get_v_scroll_bar().add_theme_stylebox_override(st, grab)
+	scroll.get_v_scroll_bar().add_theme_stylebox_override("scroll", UiKit.sb(Color(UiKit.FRAME, 0.35), Color(0, 0, 0, 0), 0, 2))
+	content.add_child(scroll)
+	var inner := Control.new()
+	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scroll.add_child(inner)
+	var gap := 12.0
+	var rw := (w - gap) / 2.0
+	var rows := ceili(_lessons.size() / 2.0)
+	var rh_ := maxf(UiKit.tap_h(self, 64.0), minf(84.0, (scroll.size.y - gap * (rows - 1)) / maxf(rows, 1)))
+	for i in range(_lessons.size()):
+		var lesson: Dictionary = _lessons[i]
+		var idx := int(lesson.get("id", 0))
+		var is_done := bool(lesson.get("done", false))
+		var go := func():
+			if not scroll.was_drag():
+				lesson_pressed.emit(idx)
+		var b := UiKit.row(self, Vector2.ZERO, Vector2(rw, rh_), "%02d" % idx, str(lesson.get("title", "")),
+				str(lesson.get("goal", "")), go, faction, idx == next_id)
+		content.remove_child(b)                  # UiKit places it on the page; it belongs in the list
+		b.position = Vector2((i % 2) * (rw + gap), (i / 2) * (rh_ + gap))
+		inner.add_child(b)
+		if is_done:                              # the done tick, left of the chevron
+			var t := Tick.new()
+			t.color = UiKit.accent(faction)
+			t.size = Vector2(22, 22)
+			t.position = Vector2(rw - 62.0, (rh_ - 22.0) / 2.0)
+			b.add_child(t)
+	inner.custom_minimum_size = Vector2(w, rows * (rh_ + gap) - gap)
+
+
 func show_splash(handler_line: String) -> void:
 	_clear_content()
 	var w := 760.0
@@ -301,3 +389,17 @@ func show_splash(handler_line: String) -> void:
 	var skip_pos := pos + Vector2(40 + start_dims.x + 20, h - start_dims.y - 30)
 	_nav_button("SKIP TUTORIAL", skip_pos, Vector2(w - 80 - start_dims.x - 20, start_dims.y),
 			func(): skip_tutorial_pressed.emit())
+
+
+class Tick extends Control:
+	## A drawn tick (the web build has no symbol fallback for a font glyph).
+	var color := Color.WHITE
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var r := minf(size.x, size.y) / 2.0
+		var c := size / 2.0
+		draw_polyline(PackedVector2Array([c + Vector2(-0.8, 0.0) * r, c + Vector2(-0.25, 0.6) * r,
+				c + Vector2(0.85, -0.65) * r]), color, maxf(2.0, r * 0.3), true)

@@ -57,8 +57,8 @@ func start_with(is_host: bool, first: Dictionary) -> void:
 	close()
 	host = is_host
 	ws = WebSocketPeer.new()
-	ws.inbound_buffer_size = 9 * 1024 * 1024       # a keyframe snapshot can be large (Net.MAX_PACKET 8 MB)
-	ws.outbound_buffer_size = 2 * 1024 * 1024
+	ws.inbound_buffer_size = 2 * 1024 * 1024       # 0.21.4: room for a few of the largest packets (Net.MAX_PACKET 1 MB; was 9 MB)
+	ws.outbound_buffer_size = 1024 * 1024
 	ws.max_queued_packets = 4096
 	hello = first
 	opened = false

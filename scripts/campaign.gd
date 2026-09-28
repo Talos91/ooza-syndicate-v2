@@ -51,6 +51,7 @@ const RIVALS := {
 const CAMPAIGNS := {
 	"vex": {
 		"title": "VEX BIOENGINEERS",
+		"episode": "GOING UNDER",                  # the episode card's title (placeholder until Daniele picks)
 		"tagline": "The city is sinking. The vats still turn a profit.",
 		"rival": "ember",
 		"districts": [
@@ -200,10 +201,10 @@ const CAMPAIGNS := {
 			},
 		],
 	},
-	"null": {"title": "NULL DATA CARTEL", "tagline": "Coming later.", "rival": "solar", "districts": []},
-	"bloom": {"title": "VIRIDIAN BLOOM", "tagline": "Coming later.", "rival": "ember", "districts": []},
-	"ember": {"title": "EMBER MAW", "tagline": "Coming later.", "rival": "vex", "districts": []},
-	"solar": {"title": "SOLAR SHELLS", "tagline": "Coming later.", "rival": "null", "districts": []},
+	"null": {"title": "NULL DATA CARTEL", "episode": "OFF THE BOOKS", "tagline": "Coming later.", "rival": "solar", "districts": []},
+	"bloom": {"title": "VIRIDIAN BLOOM", "episode": "GROWTH MINDSET", "tagline": "Coming later.", "rival": "ember", "districts": []},
+	"ember": {"title": "EMBER MAW", "episode": "SCORCHED EARNINGS", "tagline": "Coming later.", "rival": "vex", "districts": []},
+	"solar": {"title": "SOLAR SHELLS", "episode": "TERMS & CONDITIONS", "tagline": "Coming later.", "rival": "null", "districts": []},
 }
 
 static var path := "user://campaign.cfg"             # tests point this elsewhere
@@ -233,6 +234,106 @@ static func source_of(key: String) -> String:
 
 static func has_content(faction: String) -> bool:
 	return CAMPAIGNS.has(faction) and not (CAMPAIGNS[faction]["districts"] as Array).is_empty()
+
+
+static func episodes() -> Array:
+	## The CAMPAIGN MENU's cards (Alpha 21 "choose an episode", Architect's shared EpisodeCard), one per faction in
+	## FACTION_ORDER: {faction, title (the episode), faction_title, tagline, art, state, stars, stars_max, next}.
+	## state: "open" (content, owned), "locked" (content, a paid campaign not owned - UNLOCK), "coming" (no content yet).
+	var out := []
+	for f in FACTION_ORDER:
+		var c: Dictionary = CAMPAIGNS.get(f, {})
+		var state := "coming"
+		if has_content(f):
+			state = "open" if owned(f) else "locked"
+		out.append({"faction": f, "title": str(c.get("episode", c.get("title", f.to_upper()))),
+			"faction_title": str(c.get("title", "")), "tagline": str(c.get("tagline", "")),
+			"art": "res://assets/art/%s.png" % f, "state": state,
+			"stars": stars_total(f), "stars_max": stars_max(f), "next": next_open(f) if state == "open" else ""})
+	return out
+
+
+static func hub(faction: String, district_index := -1) -> Dictionary:
+	## The CAMPAIGN HUB page (Alpha 21, the UI helper's mockup): one district's header and its mission cards.
+	## district_index -1 = the district of the next mission (the first one when nothing is left).
+	## {faction, faction_title, district_index, district_count, district_name, district_blurb, stars, stars_max,
+	##  missions: [{key, number ("01" / "S1"), title, kind, state, stars, stars_max, unlock_hint, backdrop, needs}]}
+	## state: "next" (CONTINUE), "won", "open", "locked", "dev" (IN DEVELOPMENT - needs a system not built yet).
+	var ds := districts(faction)
+	if ds.is_empty():
+		return {}
+	var nxt := next_open(faction)
+	if district_index < 0:
+		district_index = 0
+		for i in range(ds.size()):
+			for m in ds[i]["missions"]:
+				if key_of(faction, str(m["id"])) == nxt:
+					district_index = i
+	district_index = clampi(district_index, 0, ds.size() - 1)
+	var d: Dictionary = ds[district_index]
+	var cards := []
+	var got := 0
+	for m in d["missions"]:
+		var key := key_of(faction, str(m["id"]))
+		var mm := mission(key)
+		var state := "locked"
+		if not playable(mm):
+			state = "dev"
+		elif is_won(key):
+			state = "won"
+		elif key == nxt:
+			state = "next"
+		elif is_open(key):
+			state = "open"
+		got += stars_of(key)
+		cards.append({"key": key, "number": str(m["id"]).to_upper(), "title": str(m["title"]), "kind": str(m["kind"]),
+			"state": state, "stars": stars_of(key), "stars_max": 3,
+			"unlock_hint": unlock_hint(key) if state == "locked" else "", "backdrop": backdrop_of(key),
+			"needs": str(m.get("needs", ""))})
+	return {"faction": faction, "faction_title": str(CAMPAIGNS[faction].get("title", "")), "district_index": district_index,
+		"district_count": ds.size(), "district_name": str(d["name"]), "district_blurb": str(d.get("blurb", "")),
+		"stars": got, "stars_max": cards.size() * 3, "missions": cards}
+
+
+static func unlock_hint(key: String) -> String:
+	## Why a mission is locked: "Complete HOSTILE TAKEOVER to unlock." (the main mission before it; a side mission:
+	## its parent). "" when it is open.
+	var m := mission(key)
+	if m.is_empty() or is_open(key):
+		return ""
+	if str(m["kind"]) == "side":
+		return "Complete %s to unlock." % str(mission(key_of(faction_of(key), str(m.get("parent", "")))).get("title", ""))
+	var prev := ""
+	for mm in main_missions(faction_of(key)):
+		if str(mm["key"]) == key:
+			break
+		if playable(mm):
+			prev = str(mm["title"])
+	return "Complete %s to unlock." % prev if prev != "" else ""
+
+
+static func backdrop_of(key: String) -> String:
+	## The mission's own background (CAMPAIGN-BACKGROUNDS-PROMPTS.md): a "backdrop" field, else
+	## res://assets/art/campaign/<faction>-<id>.png when that file exists; "" until the art is in (callers fall back).
+	var m := mission(key)
+	if m.has("backdrop"):
+		return str(m["backdrop"]) if ResourceLoader.exists(str(m["backdrop"])) else ""
+	for ext in ["jpg", "png"]:                       # UI: tools/ui_art.py writes .jpg (a smaller web download)
+		var p := "res://assets/art/campaign/%s-%s.%s" % [faction_of(key), str(m.get("id", "")), ext]
+		if ResourceLoader.exists(p):
+			return p
+	return ""
+
+
+static func progress_total() -> Vector2i:
+	## "CAMPAIGN PROGRESS ★ x / y" under the cards: every episode with content, owned or not.
+	var got := 0
+	var most := 0
+	for f in FACTION_ORDER:
+		if has_content(f):
+			got += stars_total(f)
+			most += stars_max(f)
+	return Vector2i(got, most)
 
 
 static func districts(faction: String) -> Array:

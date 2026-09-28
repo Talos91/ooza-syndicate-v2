@@ -56,6 +56,10 @@ func _process(dt: float) -> void:
 	var bad := MapBatch.verify()
 	fails += 0 if bad.is_empty() else 1
 	print("%s batched pieces consistent (%d mismatches) %s" % ["PASS" if bad.is_empty() else "FAIL", bad.size(), bad.slice(0, 5)])
+	var ms := PerfProfile.match_stats()                # Alpha 21: the per-match stats Progression's telemetry reads
+	var ms_ok := not ms.is_empty() and float(ms.get("fps_avg", 0)) > 0.0 and int(ms.get("frames", 0)) > 0 			and float(ms["frame_ms_p50"]) <= float(ms["frame_ms_p95"]) and float(ms["frame_ms_p95"]) <= float(ms["frame_ms_max"])
+	fails += 0 if ms_ok else 1
+	print("%s match_stats %s" % ["PASS" if ms_ok else "FAIL", ms])
 	print("perf_check %s: %s at t=%.0f, batch %s" % ["OK" if fails == 0 else "FAILED", Rules.PERF_CHECK_MAP.get_file(),
 			float(main.get("sim").get("time")), MapBatch.stats()])
 	get_tree().quit(0 if fails == 0 else 1)

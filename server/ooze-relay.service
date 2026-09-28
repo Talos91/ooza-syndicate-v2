@@ -11,6 +11,10 @@ ExecStart=/usr/bin/python3 /opt/ooze/relay.py --host 127.0.0.1 --port 8765 --god
 Restart=always
 RestartSec=2
 NoNewPrivileges=true
+# 0.21.4: a booting match host starts niced; the relay may take it back to normal priority once it runs. Its children get
+# no capabilities (relay.py boot_nice clears the ambient set before exec).
+AmbientCapabilities=CAP_SYS_NICE
+CapabilityBoundingSet=CAP_SYS_NICE
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
@@ -20,7 +24,7 @@ ReadWritePaths=/opt/ooze/data /opt/ooze/logs
 Environment=OOZE_SUPABASE_URL=https://uqwxorxdnucrdgaqpjpp.supabase.co
 Environment=OOZE_SUPABASE_KEY=sb_publishable_3aX4T8IcNbI_BBg4wENMhA_3NNclYw2
 EnvironmentFile=-/opt/ooze/secrets.env
-# the relay plus up to --max-matches headless match hosts (~250-350 MB each on the 1 GB box, 2 GB swap)
+# the relay plus up to --max-matches headless match hosts (~215 MB each since 0.21.1 on the 1 GB box, 2 GB swap)
 MemoryMax=900M
 
 [Install]

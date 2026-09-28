@@ -2,13 +2,31 @@
 # Ooze Syndicate room server - deploy (Alpha 20). Run from Game/2.0 after the Web export (BUILD-LOG sec10):
 #   server/deploy.sh                 the build in build/web -> the server's /opt/ooze/web (the test link AND the
 #                                    build its match hosts run) + version.txt, so server rooms match that version
-#   server/deploy.sh --relay         also server/relay.py + its service, then restart it (closes open rooms)
+#   server/deploy.sh --relay         also server/relay.py + its service + server/Caddyfile, then restart the relay - only
+#                                    while no room is open (0.21.4: checked here; --relay --force skips the check and
+#                                    closes the open rooms)
 # The server is the SSH host alias "ooze-server" (~/.ssh/config on Daniele's PC) or $OOZE_SERVER.
 # Players on another build still play: CREATE ROOM falls back to hosting in their browser.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 SERVER="${OOZE_SERVER:-ooze-server}"
 WEB="build/web"
+RELAY=""
+FORCE=""
+for a in "$@"; do
+	case "$a" in
+		--relay) RELAY="--relay" ;;
+		--force) FORCE="--force" ;;
+		*) echo "unknown option $a (use --relay, --relay --force)"; exit 1 ;;
+	esac
+done
+# the live-room check (match hosts running, players connected to the relay); the same test runs again on the server
+# right before the restart
+ROOMS_CHECK='echo $(( $(pgrep -fc "^/opt/ooze/godot .*127.0.0.1:8765" || true) + $(ss -Htn state established "( sport = :8765 )" | wc -l) ))'
+if [ -n "$RELAY" ] && [ -z "$FORCE" ]; then
+	open=$(ssh "$SERVER" "$ROOMS_CHECK")
+	[ "$open" = "0" ] || { echo "rooms are open on the server ($open match hosts + connections): --relay would close them."; 		echo "Retry when the server is idle, deploy the build only (no --relay), or add --force."; exit 3; }
+fi
 [ -f "$WEB/index.pck" ] || { echo "no $WEB/index.pck - export Web first"; exit 1; }
 # Every extra pack a Web preset exports into build/web (skins.pck; from 0.21.1 hd.pck, skins_hd.pck, fetched on demand)
 # must be there too, or the test link would miss it (0.21.0 went out without skins.pck).
@@ -24,10 +42,10 @@ rm -f "$WEB"/*.import "$WEB/duo.html"
 tmp=$(mktemp -d)
 tar czf "$tmp/web.tgz" -C build web
 scp -q "$tmp/web.tgz" "$SERVER:/tmp/ooze-web.tgz"
-if [ "${1:-}" = "--relay" ]; then
-	scp -q server/relay.py server/ooze-relay.service "$SERVER:/tmp/"
+if [ -n "$RELAY" ]; then
+	scp -q server/relay.py server/ooze-relay.service server/Caddyfile "$SERVER:/tmp/"
 fi
-ssh "$SERVER" RELAY="${1:-}" 'bash -s' <<'EOF'
+ssh "$SERVER" RELAY="$RELAY" FORCE="$FORCE" 'bash -s' <<'EOF'
 set -e
 rm -rf /opt/ooze/web.new && mkdir -p /opt/ooze/web.new
 tar xzf /tmp/ooze-web.tgz -C /opt/ooze/web.new --strip-components=1 && rm /tmp/ooze-web.tgz
@@ -46,9 +64,25 @@ chown -R ooze:ooze /opt/ooze/web /opt/ooze/packs /opt/ooze/data /opt/ooze/logs
 find /opt/ooze/logs -name 'room-*.log' -mtime +7 -delete
 find /opt/ooze/data -path '*telemetry*' -name 'match_*.json' -mtime +7 -delete   # the match hosts' telemetry files
 if [ "$RELAY" = "--relay" ]; then
+	open=$(( $(pgrep -fc "^/opt/ooze/godot .*127.0.0.1:8765" || true) + $(ss -Htn state established "( sport = :8765 )" | wc -l) ))   # = ROOMS_CHECK
+	if [ "$open" != "0" ] && [ -z "$FORCE" ]; then
+		rm -f /tmp/relay.py /tmp/ooze-relay.service /tmp/Caddyfile
+		echo "server build: $(cat /opt/ooze/web/version.txt) - a room opened meanwhile ($open): relay NOT restarted, retry --relay later"
+		exit 3
+	fi
+	sed -i 's/\r$//' /tmp/relay.py /tmp/ooze-relay.service /tmp/Caddyfile   # a Windows checkout's line ends
+	cp -p /opt/ooze/relay.py /opt/ooze/relay.py.previous 2>/dev/null || true
 	install -o ooze -g ooze -m 644 /tmp/relay.py /opt/ooze/relay.py
 	install -m 644 /tmp/ooze-relay.service /etc/systemd/system/ooze-relay.service
-	rm -f /tmp/relay.py /tmp/ooze-relay.service
+	if ! cmp -s /tmp/Caddyfile /etc/caddy/Caddyfile; then      # the repo's Caddyfile (0.21.4): validated before it replaces
+		if caddy validate --config /tmp/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
+			cp -p /etc/caddy/Caddyfile /etc/caddy/Caddyfile.previous
+			install -m 644 /tmp/Caddyfile /etc/caddy/Caddyfile && systemctl reload caddy && echo "Caddyfile updated"
+		else
+			echo "server/Caddyfile does not validate - the server keeps its Caddyfile"
+		fi
+	fi
+	rm -f /tmp/relay.py /tmp/ooze-relay.service /tmp/Caddyfile
 	systemctl daemon-reload && systemctl restart ooze-relay
 fi
 echo "server build: $(cat /opt/ooze/web/version.txt)   relay: $(systemctl is-active ooze-relay)"
