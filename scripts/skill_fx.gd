@@ -23,11 +23,29 @@ extends Node3D
 ##   Superbloom     every own vat blooming (petals, a ground glow), "+N / 40" over the caster's home
 ##   Core Meltdown  a sacrifice explosion at the node, defenders blown away, "-N", a capture column if it takes
 ##   Relay Aegis    a hex dome over each node of the group, locked rails on its decks, clamps on its relays
+## POWERS (0.22.2, NEW-POWERS-2026-09-28.md):
+##   Quake          the platform's ground cracks from the centre, rumble rings and dust off its rim for the 1.5 s
+##                  warning (its countdown over it); every deck touching it cracks and drops like Demolish's; a
+##                  time-left band round the platform while it sits cut off
+##   Sever          a glowing jagged cut line across the deck's middle, sparks spitting from it, the countdown; then
+##                  the deck snaps in two and each half swings down into the void; "CUT" over the gap (relay decks too)
+##   Backwash       a goo wave sweeping along the deck toward the lip it shoved the lines back to, a splash at each
+##   Sinkhole       a black goo pit opening under the structure (CombatFx plays the old tier sinking, the new rising)
+##   Fog of War     a dark churning goo dome over the circle for every rival; the caster's side sees a faint veil;
+##                  a time-left band round its foot for everyone. Rivals' counts / lines inside are hidden elsewhere
+##                  (Hud badges, HordeView / UnitView bodies); this view skips a rival's own-thing cast moments,
+##                  streaks and line marks inside it too
+##   Portal         a vortex on the entrance and one turning the other way on the exit, sparks streaming along an arc
+##                  between them, IN / OUT over them, a time-left band; a flash at the exit as each line comes out
+##   Emergency Evac a burst at the node's door; the line wears a pale shield shimmer until it lands
+##   Core Meltdown  armed from the start of the trip: a pulsing ember aura at the line's head, embers along it and
+##                  "ARMED" over it (everyone sees it); "FIZZLED" and a puff of smoke if its target turns friendly
 ## Ultimates also tint the screen's edges in the caster's colour for a moment (a CanvasLayer under the HUD
 ## that ignores the mouse: it never blocks input); every cast shows its name over the target.
 ## Pure view, like CombatFx / ForgePulse: driven only by the Sim's state (sim.effects, sim.demolished,
 ## the readouts) and its fx events ("skill", "skill_end", "demolish", "deck_rebuilt", "demolish_failed",
-## "relay_settle", "meltdown", "disrupt", "ghost_end", "ghosts"), so online guests, who apply the host's
+## "relay_settle", "meltdown", "disrupt", "ghost_end", "ghosts"; POWERS: "backwash", "sinkhole", "portal_pass",
+## "evac", "meltdown_fizzled"), so online guests, who apply the host's
 ## snapshots and get its events, see the same. An event marked "private" for another seat is skipped.
 ## Budget: every mesh is made once per node / deck / effect slot and reused (hidden when idle); the deck
 ## strips are built once per deck; bursts, rings and labels come from small pools; sparks are one MultiMesh.
@@ -38,9 +56,13 @@ const TINT_SHADER := preload("res://shaders/skill_tint.gdshader")
 const FLARE_SHADER := preload("res://shaders/flare.gdshader")
 const SPARK_SHADER := preload("res://shaders/spark.gdshader")
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")   # Hud.UI_FONT (not referenced: the headless tests load this without the HUD)
+const POWER_SHADER := preload("res://shaders/skill_powers.gdshader")   # POWERS: quake cracks, portal swirl, Sever's cut, Backwash's wave
+const DARK_SHADER := preload("res://shaders/skill_dark.gdshader")      # POWERS: the fog cloud, the sinkhole pit
 
 const IDS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line", "demolish", "mire", "anchor", "bypass",
-		"relay_hack", "rewire", "echo_split", "superbloom", "core_meltdown", "relay_aegis"]
+		"relay_hack", "rewire", "echo_split", "superbloom", "core_meltdown", "relay_aegis",
+		"quake", "sever", "fog", "portal"]         # POWERS: the new powers with a lasting effect (Backwash, Sinkhole, Evac: moments)
+const DECK_DROPS := ["demolish", "quake", "sever"]   # POWERS: Sim.DECK_DROPS - one deck-drop look for all three
 const ONS := ["node", "edge", "horde", "relay", "seat"]
 const SEATS := "ABCDEFGH"
 # skill_fx.gdshader modes
@@ -82,6 +104,18 @@ const P_HOLO := {"mode": M_HOLO}
 const P_CLAMP := {"mode": M_CLAMP}
 const P_HACK := {"mode": M_GLITCH, "color2": Color(0.6, 1.0, 1.0), "heat": 0.8}
 const P_JAMMED := {"mode": M_GLITCH, "color2": Color(1.0, 0.25, 0.3), "heat": 0.45}
+# POWERS: skill_powers.gdshader / skill_dark.gdshader settings
+const P_QUAKE := {"mode": 0}
+const P_SWIRL := {"mode": 1}
+const P_CUT := {"mode": 2}
+const P_WAVE := {"mode": 3}
+const P_FOG_DOME := {"mode": 0}
+const P_FOG_DISC := {"mode": 1}
+const P_HOLE := {"mode": 2}
+const EMBER := Color(1.0, 0.5, 0.12)
+const SHIELD := Color(0.8, 0.97, 1.0)
+const WAVE_T := 0.9                 # s: Backwash's wave runs the deck
+const HOLE_T := 2.4                 # s: Sinkhole's pit opens, holds and closes
 const _BIG := AABB(Vector3(-2000, -400, -2000), Vector3(4000, 800, 4000))
 
 var sim: Sim
@@ -122,6 +156,9 @@ var _sp_max := PackedFloat32Array()
 var _sp_size := PackedFloat32Array()
 var _sp_grav := PackedFloat32Array()
 var _sp_n := 0
+var _waves := {}                    # POWERS: edge -> {mi, mat, t, dir, col}: Backwash's wave (t < 0: idle)
+var _holes := {}                    # POWERS: node id -> {mi, mat, t, col}: Sinkhole's pit
+var _marks := {}                    # POWERS: horde id -> {star, smat, lab, seen}: an armed (Core Meltdown) / immune (Evac) line
 
 
 static var _ghost_shader: Shader
@@ -213,8 +250,8 @@ func handle(ev: Dictionary) -> void:
 			_on_cast(ev)
 		"skill_end":
 			_on_end(ev)
-		"demolish":
-			_break(int(ev["edge"]), str(ev.get("seat", "")))
+		"demolish":                                   # (POWERS: Quake / Sever send it too, with their "id")
+			_break(int(ev["edge"]), str(ev.get("seat", "")), str(ev.get("id", "demolish")))
 		"deck_rebuilt":
 			_rebuilt(int(ev["edge"]))
 		"demolish_failed":
@@ -251,6 +288,43 @@ func handle(ev: Dictionary) -> void:
 				_ring_at(src, WISP, Rules.R * 2.2, 0.6)
 				_wisps_at(src + Vector3(0, 1.5, 0), 22, Rules.seat_color(str(ev.get("seat", ""))))
 			_count_stat("echoes")
+		# POWERS (0.22.2): the new powers' moments
+		"backwash":
+			_backwash(ev)
+		"sinkhole":
+			_sinkhole(ev)
+		"portal_pass":                                # a line pours into the entrance and comes out of the exit
+			var seat := str(ev.get("seat", ""))
+			var col := Rules.seat_color(seat)
+			var a: Vector3 = sim.nodes[int(ev["node"])]["pos"]
+			var b: Vector3 = sim.nodes[int(ev["exit"])]["pos"]
+			if not _fogged(a, seat):
+				_ring_at(a, col.lerp(Color.WHITE, 0.3), Rules.R * 1.6, 0.45)
+			if not _fogged(b, seat):
+				_star_at(b + Vector3(0, 2.5, 0), col.lerp(Color.WHITE, 0.4), 11.0, 0.5)
+				_ring_at(b, col, Rules.R * 2.4, 0.6)
+				_burst(b + Vector3(0, 1.5, 0), col.lerp(Color.WHITE, 0.2), 30, 9.0, 0.5, 6.0)
+			_count_stat("portal_pass")
+		"evac":                                       # the garrison bursts out of the door, shielded
+			var seat := str(ev.get("seat", ""))
+			var n: Dictionary = sim.nodes[int(ev["node"])]
+			var door: Vector3 = n["pos"] + Rules.front_dir() * (Rules.EXIT_R + 0.4) + Vector3(0, 1.0, 0)
+			if not _fogged(n["pos"], seat):
+				var col := Rules.seat_color(seat)
+				_star_at(door + Vector3(0, 0.8, 0), SHIELD, 12.0, 0.5)
+				_ring_at(n["pos"], SHIELD.lerp(col, 0.4), Rules.R * 2.2, 0.6)
+				_burst(door, SHIELD.lerp(col, 0.3), 34, 11.0, 0.55, 6.0)
+			_count_stat("evac")
+		"meltdown_fizzled":                           # its target turned friendly first: the charge goes out
+			var h = _hordes.get(int(ev.get("hid", -1)))
+			if h is Dictionary and not (h as Dictionary).is_empty():
+				var head: Vector3 = Sim.sample(h, h["s"])[0]
+				if not _fogged(head, str(ev.get("seat", ""))):
+					for k in range(24):
+						_spark(head + Vector3(randf_range(-1, 1), randf_range(0.5, 1.5), randf_range(-1, 1)), Vector3(randf_range(-0.8, 0.8), randf_range(1.5, 3.0), randf_range(-0.8, 0.8)),
+								SMOKE, randf_range(0.4, 0.7), randf_range(0.7, 1.2), -0.5)
+					_label_at("FIZZLED", head + Vector3(0, 5.0, 0), SMOKE.lerp(Color.WHITE, 0.5), 1.2, 0.04)
+			_count_stat("fizzled")
 
 
 static func touches(ev: Dictionary, s: Sim, viewer: String) -> bool:
@@ -283,6 +357,9 @@ func _on_cast(ev: Dictionary) -> void:
 		pos = _target_pos(ev)
 	var p: Vector3 = pos
 	var ult := str(ev.get("slot", "")) == "ultimate"
+	var kind := str(Rules.SKILLS.get(id, {}).get("target", ""))   # POWERS: a rival's cast on its own things inside
+	if kind in ["own_line", "own_node", "own_vat"] and _fogged(p, seat):   # a fog you are blind to shows nothing
+		return
 	if id != "core_meltdown":                         # (its blast is the "meltdown" event's)
 		_star_at(p + up * 2.0, col.lerp(Color.WHITE, 0.25), 16.0 if ult else 9.0, 0.55 if ult else 0.4)
 		_ring_at(p, col, Rules.R * (3.4 if ult else 1.9), 0.8 if ult else 0.55)
@@ -330,6 +407,31 @@ func _on_cast(ev: Dictionary) -> void:
 		"relay_aegis":
 			var n: Dictionary = sim.nodes[clampi(_int(ev.get("target")), 0, sim.nodes.size() - 1)]
 			_ring_at(n["pos"], col.lerp(Color.WHITE, 0.3), Rules.R * 4.5, 0.9)
+		# POWERS (0.22.2)
+		"core_meltdown":                              # armed at the start of the trip (the blast is "meltdown"'s)
+			_star_at(p + up * 1.5, EMBER, 10.0, 0.5)
+			_burst(p + up * 1.2, EMBER, 26, 7.0, 0.6, 4.0)
+		"quake":                                      # the ground heaves: dust off the rim, a heavy ring
+			_ring_at(p, Rules.state_color("warn"), Rules.R * 3.2, 0.7)
+			for k in range(36):
+				var a := randf() * TAU
+				var d := Vector3(cos(a), 0.0, sin(a))
+				_spark(p + d * Rules.R * randf_range(0.8, 1.05) + up * 0.4, d * randf_range(1.0, 3.0) + up * randf_range(3.0, 6.0),
+						Color(0.62, 0.6, 0.66), randf_range(0.3, 0.5), randf_range(0.6, 1.0), 14.0)
+		"sever":
+			var ei := _int(ev.get("target"))
+			_burst(_deck_at(ei, 0.5) + up * 0.5, col.lerp(HOT, 0.4), 22, 7.0, 0.45, 12.0)
+		"fog":                                        # the cloud rolls out from the centre
+			for k in range(30):
+				var a := randf() * TAU
+				var d := Vector3(cos(a), 0.0, sin(a))
+				_spark(p + up * 1.0, d * randf_range(8.0, 16.0) + up * randf_range(0.5, 2.0), col * 0.7, randf_range(0.4, 0.7), randf_range(0.6, 1.0), 2.0)
+		"portal":
+			var t = ev.get("target")
+			if t is Array and (t as Array).size() > 1:
+				var b: Vector3 = sim.nodes[_int(t[1])]["pos"]
+				_star_at(b + up * 2.0, col.lerp(Color.WHITE, 0.25), 9.0, 0.4)
+				_ring_at(b, col, Rules.R * 1.9, 0.55)
 
 
 func _on_end(ev: Dictionary) -> void:
@@ -430,6 +532,390 @@ func _ghost_end(ev: Dictionary) -> void:
 				WISP.lerp(col, randf() * 0.5), randf_range(0.3, 0.55), randf_range(0.7, 1.2), -1.5)
 
 
+# ------------------------------------------------------------------ POWERS (0.22.2): the new powers
+func _fogged(pos: Vector3, seat: String) -> bool:
+	## Is this a rival's thing inside a Fog of War this screen is blind to? (Sim.fog_hides; your own side's stays shown.)
+	return viewer != "" and seat != "" and not sim.allied(seat, viewer) and sim.fog_hides(pos, viewer)
+
+
+func _countdown(slot: Dictionary, lab: Label3D, left_s: float, at: Vector3, heat: float, life: float) -> void:
+	## The warning's seconds over a deck or a platform, blinking faster toward the drop (Demolish's).
+	var warn := Rules.state_color("warn")
+	var sec := int(ceil(maxf(left_s, 0.01)))
+	if slot["txt"] != sec:
+		slot["txt"] = sec
+		lab.text = str(sec)
+	_size_label(lab, at, 0.07 * (1.0 + 0.25 * (1.0 - fposmod(left_s, 1.0))))
+	lab.visible = true
+	var blink := 0.55 + 0.45 * float(int(_t * (4.0 + 10.0 * heat)) % 2)
+	Mats.label_look(lab, Color(warn.lerp(Color.WHITE, 0.15), blink * life), 0.95 * blink * life)
+
+
+func _deck_drop(slot: Dictionary, e: Dictionary, dt: float, col: Color, life: float, detail: float) -> void:
+	## Demolish / Quake / Sever on a deck - one look (Demolish's): the warning's glowing cracks and countdown, then a
+	## faint outline while it is gone and its pieces flying back in over the last seconds. Sever: a jagged cut line
+	## glows across the middle through the warning (the rest of the deck barely cracks) and "CUT" hangs over the gap;
+	## Quake: the countdown is over its platform (_quake_node), not on each deck.
+	var id: String = slot["id"]
+	var ei := _int(e["target"])
+	var phase := str(e.get("phase", "warning"))
+	var up := Vector3.UP
+	var s := _strip_part(slot, "a", ei, FX_SHADER, P_CRACKS, float(ei) * 1.7)
+	if s == null:
+		return
+	var m := _mat(slot, "a")
+	var warn := Rules.state_color("warn")
+	var sever := id == "sever"
+	if phase != slot["phase"]:
+		slot["phase"] = phase
+		slot["txt"] = -1
+		m.set_shader_parameter("mode", M_CRACKS if phase == "warning" else M_HOLO)
+	var lab := _slot_label(slot)
+	if phase == "warning":
+		var heat := clampf(1.0 - float(slot["tl"]) / float(Rules.SKILLS[id]["warn"]), 0.0, 1.0)
+		m.set_shader_parameter("color", col)
+		m.set_shader_parameter("color2", warn)
+		m.set_shader_parameter("heat", heat * (0.3 if sever else 1.0))
+		m.set_shader_parameter("intensity", (0.55 if sever else 1.3) * life)
+		var mid := _deck_at(ei, 0.5)
+		if sever:
+			_strip_part(slot, "c", ei, POWER_SHADER, P_CUT, float(ei) * 2.3)
+			var cm := _mat(slot, "c")
+			cm.set_shader_parameter("color", col.lerp(HOT, 0.3))
+			cm.set_shader_parameter("heat", heat)
+			cm.set_shader_parameter("intensity", 1.5 * life)
+			for k in range(_count((14.0 + 50.0 * heat) * detail * dt)):   # sparks spitting from the cut
+				_spark(mid + Vector3(randf_range(-1.3, 1.3), 0.3, randf_range(-1.3, 1.3)), Vector3(randf_range(-3, 3), randf_range(2, 6), randf_range(-3, 3)),
+						HOT if randf() < 0.5 else col.lerp(HOT, 0.5), randf_range(0.14, 0.26), randf_range(0.25, 0.5), 14.0)
+		if id == "quake":
+			lab.visible = false
+		else:
+			_countdown(slot, lab, float(slot["tl"]), mid + up * 5.0, heat, life)
+		for k in range(_count((8.0 + 40.0 * heat) * detail * dt)):   # grit shaking off the deck
+			_spark(_deck_at(ei, randf()) + Vector3(randf_range(-1.4, 1.4), 0.2, randf_range(-1.4, 1.4)),
+					Vector3(randf_range(-0.5, 0.5), randf_range(0.5, 2.0), randf_range(-0.5, 0.5)),
+					warn.lerp(HOT, randf() * 0.6), randf_range(0.14, 0.26), randf_range(0.3, 0.6), 12.0)
+	else:
+		_hide_part(slot, "c")
+		if sever:                                     # the gap reads CUT (relay decks too) until it is back
+			if slot["txt"] != 0:
+				slot["txt"] = 0
+				lab.text = "CUT"
+			lab.visible = true
+			Mats.label_look(lab, Color(col.lerp(Color.WHITE, 0.3), 0.85 * life), 0.9 * life)
+			_size_label(lab, _deck_at(ei, 0.5) + up * 3.0, 0.03)
+		else:
+			lab.visible = false
+		m.set_shader_parameter("color", col.lerp(Color.WHITE, 0.25))
+		m.set_shader_parameter("intensity", (0.22 + 0.08 * sin(_t * 4.0)) * life)
+		if float(slot["tl"]) < REBUILD_T and not _breaks.has(ei):
+			_rebuild_pieces(ei, 1.0 - clampf(float(slot["tl"]) / REBUILD_T, 0.0, 1.0))
+		elif not _breaks.has(ei):
+			_hide_pieces(ei)
+		for k in range(_count(3.0 * detail * dt)):   # embers on the broken ends (Sever: on the cut)
+			var u := (0.48 + randf() * 0.04) if sever else (0.02 if randf() < 0.5 else 0.98)
+			_spark(_deck_at(ei, u) + up * 0.3, Vector3(randf_range(-1, 1), randf_range(0.5, 2.0), randf_range(-1, 1)),
+					FIRE.lerp(col, 0.4), randf_range(0.14, 0.24), randf_range(0.4, 0.8), 8.0)
+
+
+func _quake_node(slot: Dictionary, e: Dictionary, dt: float, col: Color, life: float, detail: float) -> void:
+	## Quake on its platform: the ground cracks open from the centre, rumble rings and dust shaken off the rim through
+	## the warning (its countdown over it); then a time-left band round the platform while it sits cut off.
+	var n: Dictionary = sim.nodes[_int(e["target"])]
+	var up := Vector3.UP
+	var warn_s := float(Rules.SKILLS["quake"]["warn"])
+	var dur := maxf(float(e.get("dur", 1.0)), 0.001)
+	var age := dur - float(slot["tl"])
+	var warning := age < warn_s
+	var heat := clampf(age / warn_s, 0.0, 1.0)
+	var warn := Rules.state_color("warn")
+	var g := _plane_part(slot, "a", POWER_SHADER, P_QUAKE, float(n["id"]) * 0.37)
+	var shake := Vector3(sin(_t * 53.0), 0.0, cos(_t * 47.0)) * (0.3 * heat if warning else 0.0)
+	g.position = n["pos"] + up * 0.42 + shake
+	g.scale = Vector3.ONE * Rules.R * 2.3
+	var m := _mat(slot, "a")
+	m.set_shader_parameter("color", col)
+	m.set_shader_parameter("color2", warn)
+	m.set_shader_parameter("heat", heat)
+	m.set_shader_parameter("intensity", (1.4 if warning else 0.45) * life)
+	var lab := _slot_label(slot)
+	if warning:
+		_hide_part(slot, "b")
+		slot["acc"] = float(slot["acc"]) + dt
+		if float(slot["acc"]) >= 0.3:                 # a rumble ring every 0.3 s
+			slot["acc"] = 0.0
+			_ring_at(n["pos"], warn.lerp(Color(0.8, 0.8, 0.85), 0.4), Rules.R * (1.4 + 0.6 * heat), 0.45)
+		for k in range(_count((20.0 + 60.0 * heat) * detail * dt)):   # dust shaken off the rim
+			var a := randf() * TAU
+			var d := Vector3(cos(a), 0.0, sin(a))
+			_spark(n["pos"] + d * Rules.R * randf_range(0.85, 1.05) + up * 0.4, d * randf_range(0.5, 2.0) + up * randf_range(1.5, 4.0),
+					Color(0.62, 0.6, 0.66) if randf() < 0.7 else warn, randf_range(0.25, 0.45), randf_range(0.5, 0.9), 12.0)
+		_countdown(slot, lab, warn_s - age, n["pos"] + up * 2.5, heat, life)   # (under the cast's name)
+	else:
+		lab.visible = false
+		_arc(slot, "b", n, col, clampf(float(slot["tl"]) / maxf(dur - warn_s, 0.01), 0.0, 1.0), 1.1 * life)
+
+
+func _fog(slot: Dictionary, e: Dictionary, col: Color, life: float, left: float, age: float) -> void:
+	## Fog of War: a dark churning goo dome over the circle for every seat outside the caster's side (what is inside is
+	## hidden by the HUD and the line views); the caster's side sees a faint veil. A time-left band round its foot.
+	var n: Dictionary = sim.nodes[_int(e["target"])]
+	var r := float(e.get("radius", 30.0))
+	var blind := viewer != "" and not sim.allied(str(e["seat"]), viewer)
+	var grow := smoothstep(0.0, 1.0, minf(age / 0.6, 1.0))
+	var d := _part(slot, "a", _dome, DARK_SHADER, P_FOG_DOME, float(n["id"]) * 0.21)
+	d.visible = true
+	d.position = n["pos"] + Vector3(0, -0.6, 0)
+	d.scale = Vector3(r * lerpf(0.25, 1.0, grow), (11.0 if blind else 7.0) * lerpf(0.3, 1.0, grow), r * lerpf(0.25, 1.0, grow))
+	slot["adark"] = 0.9 if blind else 0.16
+	var dm := _mat(slot, "a")
+	dm.set_shader_parameter("color", col)
+	dm.set_shader_parameter("alpha", float(slot["adark"]) * life)
+	var f := _plane_part(slot, "b", DARK_SHADER, P_FOG_DISC, float(n["id"]) * 0.53)
+	f.position = n["pos"] + Vector3(0, 0.45, 0)
+	f.scale = Vector3.ONE * 2.0 * r * lerpf(0.25, 1.0, grow)
+	slot["bdark"] = 0.75 if blind else 0.08
+	var fm := _mat(slot, "b")
+	fm.set_shader_parameter("color", col)
+	fm.set_shader_parameter("alpha", float(slot["bdark"]) * life)
+	var a := _part(slot, "c", _annulus, FX_SHADER, P_ARC)
+	a.visible = true
+	a.position = n["pos"] + Vector3(0, 0.5, 0)
+	a.scale = Vector3.ONE * r * lerpf(0.25, 1.0, grow)
+	a.rotation.y = -Rules.view_yaw - PI / 2.0
+	var am := _mat(slot, "c")
+	am.set_shader_parameter("color", col)
+	am.set_shader_parameter("left", left)
+	am.set_shader_parameter("intensity", (0.8 if blind else 1.4) * life)
+
+
+func _portal(slot: Dictionary, e: Dictionary, dt: float, col: Color, life: float, left: float, detail: float) -> void:
+	## Portal: a vortex on the entrance and one turning the other way on the exit, sparks streaming along an arc from
+	## one to the other, IN / OUT over them, a time-left band round the entrance.
+	var a: Dictionary = sim.nodes[_int(e["target"])]
+	var bi := _int(e.get("exit", -1))
+	if bi < 0 or bi >= sim.nodes.size():
+		return
+	var b: Dictionary = sim.nodes[bi]
+	var up := Vector3.UP
+	_swirl(slot, "a", a, col, 1.0, life)
+	_swirl(slot, "b", b, col, -1.0, life)
+	_arc(slot, "c", a, col, left, 1.2 * life)
+	var pa: Vector3 = a["pos"] + up * 1.2
+	var pb: Vector3 = b["pos"] + up * 1.2
+	var hgt := pa.distance_to(pb) * 0.22
+	for k in range(_count(70.0 * detail * life * dt)):   # sparks streaming along the link, entrance to exit
+		var t := randf()
+		var p := pa.lerp(pb, t) + up * (sin(t * PI) * hgt)
+		var tan := (pb - pa) + up * (cos(t * PI) * PI * hgt)
+		_spark(p, tan.normalized() * randf_range(9.0, 13.0), col.lerp(Color.WHITE, randf() * 0.4) * 1.3, randf_range(0.2, 0.34),
+				randf_range(0.25, 0.4), 0.0)
+	var lab := _slot_label(slot)
+	if not slot.has("lab2"):
+		slot["lab2"] = _new_label(110)
+	var lab2: Label3D = slot["lab2"]
+	if slot["txt"] != 1:
+		slot["txt"] = 1
+		lab.text = "IN"
+		lab2.text = "OUT"
+	for pair_i in range(2):
+		var l: Label3D = lab if pair_i == 0 else lab2
+		var n: Dictionary = a if pair_i == 0 else b
+		l.visible = true
+		Mats.label_look(l, Color(col.lerp(Color.WHITE, 0.35), life), 0.95 * life)
+		_size_label(l, n["pos"] + up * 5.0, 0.035)
+
+
+func _swirl(slot: Dictionary, k: String, n: Dictionary, col: Color, dir: float, life: float) -> void:
+	var g := _plane_part(slot, k, POWER_SHADER, P_SWIRL, float(n["id"]) * 0.7)
+	g.position = n["pos"] + Vector3(0, 0.44, 0)
+	g.scale = Vector3.ONE * Rules.R * 2.1
+	var m := _mat(slot, k)
+	m.set_shader_parameter("color", col)
+	m.set_shader_parameter("dir", dir)
+	m.set_shader_parameter("intensity", 1.2 * life)
+
+
+func _line_marks(dt: float) -> void:
+	## An armed Core Meltdown line: a pulsing ember aura at its head, embers along it and "ARMED" over it; an Evac line:
+	## a pale shield shimmer. Everyone sees them (a rival's inside a fog this screen is blind to: nothing). Pooled.
+	var detail := 0.5 if Rules.low_detail else 1.0
+	var up := Vector3.UP
+	var used := 0
+	for h in sim.hordes:
+		var armed: bool = h.get("armed", false)
+		if not armed and not h.get("immune", false):
+			continue
+		var head: Vector3 = Sim.sample(h, h["s"])[0]
+		if _fogged(head, str(h["owner"])):
+			continue
+		if used >= _marks.size():
+			var st := MeshInstance3D.new()
+			st.mesh = _quad
+			var smt := ShaderMaterial.new()
+			smt.shader = FLARE_SHADER
+			smt.set_shader_parameter("mode", 0)
+			st.material_override = smt
+			st.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(st)
+			var lb := _new_label(110)
+			lb.text = "ARMED"
+			_marks[used] = {"star": st, "smat": smt, "lab": lb}
+		var mk: Dictionary = _marks[used]
+		used += 1
+		var id: int = h["id"]
+		var col := EMBER if armed else SHIELD
+		var pulse := 0.5 + 0.5 * sin(_t * (9.0 if armed else 5.0) + id)
+		var star: MeshInstance3D = mk["star"]
+		star.visible = true
+		star.position = head + up * 1.4
+		star.scale = Vector3.ONE * ((4.5 + 2.2 * pulse) if armed else (3.6 + 1.0 * pulse))
+		var sm: ShaderMaterial = mk["smat"]
+		sm.set_shader_parameter("color", col)
+		sm.set_shader_parameter("intensity", (0.8 + 0.7 * pulse) if armed else (0.55 + 0.35 * pulse))
+		sm.set_shader_parameter("spin", _t * (2.0 if armed else 0.6))
+		var length := maxf(_line_len(h), 0.5)
+		for k in range(_count((28.0 if armed else 20.0) * clampf(length / 8.0, 0.5, 3.0) * detail * dt)):
+			var p: Vector3 = Sim.sample(h, h["s"] - randf() * length)[0]
+			if armed:                                 # embers rising off the line
+				_spark(p + Vector3(randf_range(-1.1, 1.1), randf_range(0.3, 1.2), randf_range(-1.1, 1.1)), Vector3(randf_range(-0.6, 0.6), randf_range(2.0, 4.5), randf_range(-0.6, 0.6)),
+						EMBER if randf() < 0.6 else HOT, randf_range(0.18, 0.32), randf_range(0.4, 0.8), -1.0)
+			else:                                     # the shield's shimmer round the bodies
+				var a := randf() * TAU
+				_spark(p + Vector3(cos(a) * 1.4, randf_range(0.2, 1.8), sin(a) * 1.4), Vector3(0.0, randf_range(0.3, 1.0), 0.0),
+						SHIELD * 1.2, randf_range(0.16, 0.28), randf_range(0.3, 0.55), 0.0)
+		var lab: Label3D = mk["lab"]
+		lab.visible = armed
+		if armed:
+			Mats.label_look(lab, Color(EMBER.lerp(HOT, 0.3), 0.7 + 0.3 * pulse), 0.95)
+			_size_label(lab, head + up * 5.5, 0.03)
+	for i in range(used, _marks.size()):
+		var mk: Dictionary = _marks[i]
+		if (mk["star"] as Node3D).visible:
+			(mk["star"] as Node3D).visible = false
+			(mk["lab"] as Node3D).visible = false
+
+
+func _backwash(ev: Dictionary) -> void:
+	## A wave of goo sweeps along the deck toward the lip it shoved the lines back to; a splash where each one lands.
+	var ei := int(ev["edge"])
+	if ei < 0 or ei >= sim.edges.size():
+		return
+	var seat := str(ev.get("seat", ""))
+	var col := Rules.seat_color(seat).lerp(SHIELD, 0.25)
+	var dir := -1.0                                   # toward u = 0 (the deck's first end) unless the lines went the other way
+	for hid in ev.get("hids", []):
+		var h := sim._horde(int(hid))
+		if h.is_empty():
+			continue
+		var at: Vector3 = Sim.sample(h, h["s"])[0]
+		if dir < 0.0 and at.distance_to(_deck_at(ei, 1.0)) < at.distance_to(_deck_at(ei, 0.0)):
+			dir = 1.0
+		_burst(at + Vector3(0, 0.8, 0), col, 20, 7.0, 0.5, 12.0)
+	if not _waves.has(ei):
+		var mi := _strip_mi(ei, POWER_SHADER, P_WAVE, float(ei) * 0.9)
+		if mi == null:
+			return
+		_waves[ei] = {"mi": mi, "mat": mi.material_override, "t": -1.0, "dir": 1.0, "col": col}
+	var w: Dictionary = _waves[ei]
+	w["t"] = 0.0
+	w["dir"] = dir
+	w["col"] = col
+	(w["mat"] as ShaderMaterial).set_shader_parameter("dir", dir)
+	(w["mat"] as ShaderMaterial).set_shader_parameter("color", col)
+	_count_stat("backwash")
+
+
+func _step_waves(dt: float) -> void:
+	for ei in _waves:
+		var w: Dictionary = _waves[ei]
+		if float(w["t"]) < 0.0:
+			continue
+		w["t"] = float(w["t"]) + dt
+		var k := float(w["t"]) / WAVE_T
+		var mi: MeshInstance3D = w["mi"]
+		if k >= 1.3:
+			w["t"] = -1.0
+			mi.visible = false
+			continue
+		mi.visible = true
+		var dir: float = w["dir"]
+		var front := k if dir > 0.0 else 1.0 - k      # it runs from the far end to the lip
+		var m: ShaderMaterial = w["mat"]
+		m.set_shader_parameter("front", front)
+		m.set_shader_parameter("intensity", 1.4 * (1.0 - smoothstep(1.0, 1.3, k)))
+		if k <= 1.0:
+			var crest := _deck_at(int(ei), front)
+			var fwd := (_deck_at(int(ei), 1.0) - _deck_at(int(ei), 0.0)).normalized() * dir
+			for n in range(_count(70.0 * dt)):        # spray thrown off the crest
+				_spark(crest + Vector3(randf_range(-1.3, 1.3), 0.4, randf_range(-1.3, 1.3)), fwd * randf_range(6.0, 12.0) + Vector3(0, randf_range(2.0, 5.0), 0),
+						(w["col"] as Color).lerp(Color.WHITE, randf() * 0.5), randf_range(0.2, 0.36), randf_range(0.35, 0.6), 12.0)
+
+
+func _sinkhole(ev: Dictionary) -> void:
+	## A black goo pit opens under the structure (CombatFx sinks the old tier into it and raises the new one).
+	var id := int(ev["node"])
+	if id < 0 or id >= sim.nodes.size():
+		return
+	var n: Dictionary = sim.nodes[id]
+	var col := Rules.seat_color(str(ev.get("seat", "")))
+	if not _holes.has(id):
+		var mi := MeshInstance3D.new()
+		mi.mesh = _plane
+		var m := ShaderMaterial.new()
+		m.shader = DARK_SHADER
+		for p in P_HOLE:
+			m.set_shader_parameter(p, P_HOLE[p])
+		m.set_shader_parameter("seed", float(id) * 1.3)
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visible = false
+		add_child(mi)
+		_holes[id] = {"mi": mi, "mat": m, "t": -1.0}
+	var hole: Dictionary = _holes[id]
+	hole["t"] = 0.0
+	(hole["mat"] as ShaderMaterial).set_shader_parameter("color", col)
+	var c: Vector3 = n["pos"]
+	_ring_at(c, col.lerp(Color(0.2, 0.2, 0.25), 0.4), Rules.R * 2.2, 0.6)
+	for k in range(int(40 * (0.6 if Rules.low_detail else 1.0))):   # goo and grit thrown off the rim of the pit
+		var a := randf() * TAU
+		var d := Vector3(cos(a), 0.0, sin(a))
+		_spark(c + d * randf_range(1.5, 3.0) + Vector3(0, 0.6, 0), d * randf_range(3.0, 7.0) + Vector3(0, randf_range(3.0, 7.0), 0),
+				col if randf() < 0.5 else Color(0.25, 0.24, 0.3), randf_range(0.25, 0.45), randf_range(0.5, 0.9), 16.0)
+	_count_stat("sinkhole")
+
+
+func _step_holes(dt: float) -> void:
+	for id in _holes:
+		var hole: Dictionary = _holes[id]
+		if float(hole["t"]) < 0.0:
+			continue
+		hole["t"] = float(hole["t"]) + dt
+		var k := float(hole["t"]) / HOLE_T
+		var mi: MeshInstance3D = hole["mi"]
+		if k >= 1.0 or sim.collapsed.get(id, false):
+			hole["t"] = -1.0
+			mi.visible = false
+			continue
+		mi.visible = true
+		mi.position = sim.nodes[id]["pos"] + Vector3(0, 0.43, 0)
+		mi.scale = Vector3.ONE * Rules.R * 1.5
+		(hole["mat"] as ShaderMaterial).set_shader_parameter("opening", smoothstep(0.0, 0.15, k) * (1.0 - smoothstep(0.7, 1.0, k)))
+		(hole["mat"] as ShaderMaterial).set_shader_parameter("alpha", 0.95)
+
+
+func _hide_dropped() -> void:
+	## A deck that Demolish / Quake / Sever dropped stays hidden even while its relay swings it (Fx._relay_motion shows
+	## moving decks): Sever may cut a relay deck.
+	if sim.demolished.is_empty():
+		return
+	var decks: Dictionary = vis.get("edge_decks", {})
+	for ei in sim.demolished:
+		for d in decks.get(int(ei), []):
+			if is_instance_valid(d) and (d as Node3D).visible:
+				(d as Node3D).visible = false
+
+
 # ------------------------------------------------------------------ per frame
 func sync(dt: float, cam: Camera3D) -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
@@ -441,6 +927,10 @@ func sync(dt: float, cam: Camera3D) -> void:
 		_hordes[h["id"]] = h
 	_effects(dt)
 	_ghost_wisps(dt)
+	_line_marks(dt)                               # POWERS: armed (Core Meltdown) / immune (Evac) lines
+	_step_waves(dt)                               # POWERS: Backwash
+	_step_holes(dt)                               # POWERS: Sinkhole
+	_hide_dropped()                               # POWERS: a dropped deck stays hidden even while its relay moves
 	_step_breaks(dt)
 	_step_pools(dt)
 	_step_tint(dt)
@@ -475,7 +965,7 @@ func _effects(dt: float) -> void:
 		slot["life"] = maxf(0.0, float(slot["life"]) - dt / FADE_OUT)
 		if slot["life"] <= 0.0:
 			_hide(slot)
-			if slot["id"] == "demolish":
+			if slot["id"] in DECK_DROPS and slot["on"] == "edge":   # (POWERS: Quake / Sever too)
 				_hide_pieces(int(slot["target"]))
 		else:
 			_fade(slot)
@@ -579,49 +1069,17 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 						Vector3(randf_range(-0.8, 0.8), randf_range(3.0, 6.5), randf_range(-0.8, 0.8)),
 						FIRE if randf() < 0.55 else (HOT if randf() < 0.6 else col), randf_range(0.18, 0.34), randf_range(0.45, 0.9), -1.5)
 			_scorch_victims(slot, e, ei, dt, detail)
-		"demolish":
-			var ei := _int(e["target"])
-			var phase := str(e.get("phase", "warning"))
-			var s := _strip_part(slot, "a", ei, FX_SHADER, P_CRACKS, float(ei) * 1.7)
-			if s == null:
-				return
-			var m := _mat(slot, "a")
-			var warn := Rules.state_color("warn")
-			if phase != slot["phase"]:
-				slot["phase"] = phase
-				m.set_shader_parameter("mode", M_CRACKS if phase == "warning" else M_HOLO)
-			var lab := _slot_label(slot)
-			if phase == "warning":
-				var heat := clampf(1.0 - float(slot["tl"]) / float(Rules.SKILLS["demolish"]["warn"]), 0.0, 1.0)
-				m.set_shader_parameter("color", col)
-				m.set_shader_parameter("color2", warn)
-				m.set_shader_parameter("heat", heat)
-				m.set_shader_parameter("intensity", 1.3 * life)
-				var sec := int(ceil(maxf(float(slot["tl"]), 0.01)))
-				if slot["txt"] != sec:
-					slot["txt"] = sec
-					lab.text = str(sec)
-				var mid := _deck_at(ei, 0.5)
-				_size_label(lab, mid + up * 5.0, 0.07 * (1.0 + 0.25 * (1.0 - fposmod(float(slot["tl"]), 1.0))))
-				lab.visible = true
-				var blink := 0.55 + 0.45 * float(int(_t * (4.0 + 10.0 * heat)) % 2)
-				Mats.label_look(lab, Color(warn.lerp(Color.WHITE, 0.15), blink * life), 0.95 * blink * life)
-				for k in range(_count((8.0 + 40.0 * heat) * detail * dt)):   # grit shaking off the deck
-					_spark(_deck_at(ei, randf()) + Vector3(randf_range(-1.4, 1.4), 0.2, randf_range(-1.4, 1.4)),
-							Vector3(randf_range(-0.5, 0.5), randf_range(0.5, 2.0), randf_range(-0.5, 0.5)),
-							warn.lerp(HOT, randf() * 0.6), randf_range(0.14, 0.26), randf_range(0.3, 0.6), 12.0)
+		"demolish", "sever":                          # (POWERS: Sever shares the deck-drop look, with its cut line)
+			_deck_drop(slot, e, dt, col, life, detail)
+		"quake":                                      # POWERS: each deck drops like Demolish's; the platform shakes
+			if slot["on"] == "edge":
+				_deck_drop(slot, e, dt, col, life, detail)
 			else:
-				lab.visible = false
-				m.set_shader_parameter("color", col.lerp(Color.WHITE, 0.25))
-				m.set_shader_parameter("intensity", (0.22 + 0.08 * sin(_t * 4.0)) * life)
-				if float(slot["tl"]) < REBUILD_T and not _breaks.has(ei):
-					_rebuild_pieces(ei, 1.0 - clampf(float(slot["tl"]) / REBUILD_T, 0.0, 1.0))
-				elif not _breaks.has(ei):
-					_hide_pieces(ei)
-				for k in range(_count(3.0 * detail * dt)):   # embers on the broken ends
-					var u := 0.02 if randf() < 0.5 else 0.98
-					_spark(_deck_at(ei, u) + up * 0.3, Vector3(randf_range(-1, 1), randf_range(0.5, 2.0), randf_range(-1, 1)),
-							FIRE.lerp(col, 0.4), randf_range(0.14, 0.24), randf_range(0.4, 0.8), 8.0)
+				_quake_node(slot, e, dt, col, life, detail)
+		"fog":                                        # POWERS
+			_fog(slot, e, col, life, left, age)
+		"portal":                                     # POWERS
+			_portal(slot, e, dt, col, life, left, detail)
 		"mire":
 			var ei := _int(e["target"])
 			var s := _strip_part(slot, "a", ei, SLUDGE_SHADER, P_NONE, float(ei) * 0.73)
@@ -758,26 +1216,31 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 func _fade(slot: Dictionary) -> void:
 	## A lasting effect that just ended: its visuals ease out (intensity, a mire drains to the middle).
 	var life: float = slot["life"]
-	for k in ["a", "b", "c", "d"]:
+	for k in ["a", "b", "c", "d", "e"]:
 		if slot.has(k + "m"):
 			var m: ShaderMaterial = slot[k + "m"]
+			if slot.get(k + "dark", false):               # POWERS: the dark goo fades by its alpha
+				m.set_shader_parameter("alpha", float(slot[k + "dark"]) * life)
+				continue
 			m.set_shader_parameter("intensity", life * (1.1 if slot["id"] != "mire" else 1.0))
 			if slot["id"] in ["mire", "scorch", "anchor", "relay_aegis"]:
 				m.set_shader_parameter("fill", life)
 	for mi in (slot["extra"] as Dictionary).values():
 		((mi as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("intensity", 0.9 * life)
-	if slot.has("lab"):
-		var lab: Label3D = slot["lab"]
-		Mats.label_look(lab, Color(lab.modulate, life), 0.95 * life)
+	for lk in ["lab", "lab2"]:                       # (POWERS: Portal's second label)
+		if slot.has(lk):
+			var lab: Label3D = slot[lk]
+			Mats.label_look(lab, Color(lab.modulate, life), 0.95 * life)
 
 
 func _hide(slot: Dictionary) -> void:
-	for k in ["a", "b", "c", "d"]:
+	for k in ["a", "b", "c", "d", "e"]:
 		_hide_part(slot, k)
 	for mi in (slot["extra"] as Dictionary).values():
 		(mi as Node3D).visible = false
-	if slot.has("lab"):
-		(slot["lab"] as Node3D).visible = false
+	for lk in ["lab", "lab2"]:
+		if slot.has(lk):
+			(slot[lk] as Node3D).visible = false
 	slot["phase"] = ""
 	slot["txt"] = -1
 
@@ -914,6 +1377,8 @@ func _streaks(h: Dictionary, col: Color, rate: float, dt: float) -> void:
 	## Surge / Rewire: speed streaks peeling off the line's bodies, left behind as it runs.
 	var length := _line_len(h)
 	if length <= 0.2 or h["state"] == "absorb":
+		return
+	if _fogged(Sim.sample(h, h["s"])[0], str(h["owner"])):   # POWERS: a rival's line inside a fog you are blind to
 		return
 	var c := col.lerp(Color.WHITE, 0.3) * 1.6
 	for k in range(_count(rate * clampf(length / 8.0, 0.4, 4.0) * dt)):
@@ -1094,21 +1559,32 @@ func _pieces_of(ei: int) -> Array:
 		var u := 0.5
 		if total > 0.01:
 			u = clampf(_nearest_u(ei, xf.origin), 0.0, 1.0)
-		out.append({"node": g, "mis": mis, "base": xf, "u": u,
-				"v": Vector3(randf_range(-2.5, 2.5), randf_range(1.0, 3.5), randf_range(-2.5, 2.5)),
-				"spin": Vector3(randf_range(-2.5, 2.5), randf_range(-1.5, 1.5), randf_range(-2.5, 2.5))})
+		var v := Vector3(randf_range(-2.5, 2.5), randf_range(1.0, 3.5), randf_range(-2.5, 2.5))
+		var spin := Vector3(randf_range(-2.5, 2.5), randf_range(-1.5, 1.5), randf_range(-2.5, 2.5))
+		out.append({"node": g, "mis": mis, "base": xf, "u": u, "v": v, "spin": spin, "v0": v, "spin0": spin})   # (POWERS: v0 / spin0 kept for Sever)
 	_pieces[ei] = out
 	return out
 
 
-func _break(ei: int, seat: String) -> void:
+func _break(ei: int, seat: String, id := "demolish") -> void:
 	if ei < 0 or ei >= sim.edges.size():
 		return
 	_breaks[ei] = 0.0
 	_count_stat("break")
+	var along := _deck_at(ei, 1.0) - _deck_at(ei, 0.0)   # POWERS: Sever snaps it in two - each half falls away from the cut
+	along.y = 0.0
+	along = along.normalized() if along.length() > 0.01 else Vector3.RIGHT
+	for p in _pieces_of(ei):
+		if id == "sever":
+			var out := -along if float(p["u"]) < 0.5 else along
+			p["v"] = out * randf_range(1.5, 3.0) + Vector3(0, randf_range(0.5, 1.5), 0)
+			p["spin"] = along.cross(Vector3.UP) * (1.0 if float(p["u"]) < 0.5 else -1.0) * randf_range(1.0, 2.0)
+		else:
+			p["v"] = p["v0"]
+			p["spin"] = p["spin0"]
 	var col := Rules.seat_color(seat) if seat != "" else Rules.state_color("warn")
 	var total: float = _line(ei)[2]
-	var detail := 0.6 if Rules.low_detail else 1.0
+	var detail := (0.6 if Rules.low_detail else 1.0) * (0.5 if id == "quake" else 1.0)   # (POWERS: a Quake drops several at once)
 	for k in range(int(clampf(total * 5.0, 30.0, 90.0) * detail)):    # the deck bursts into grit and sparks
 		var roll := randf()
 		_spark(_deck_at(ei, randf()) + Vector3(randf_range(-1.5, 1.5), randf_range(0.0, 0.6), randf_range(-1.5, 1.5)),
@@ -1117,7 +1593,8 @@ func _break(ei: int, seat: String) -> void:
 				randf_range(0.6, 1.2), 16.0)
 	var mid := _deck_at(ei, 0.5)
 	_star_at(mid + Vector3(0, 0.8, 0), HOT, 10.0, 0.4)
-	_ring_at(mid, col.lerp(Color(0.8, 0.8, 0.85), 0.5), maxf(total, 8.0) * 1.1, 0.7)
+	if id != "quake":                                 # (POWERS: Quake's one ring is on its platform)
+		_ring_at(mid, col.lerp(Color(0.8, 0.8, 0.85), 0.5), maxf(total, 8.0) * 1.1, 0.7)
 
 
 func _step_breaks(dt: float) -> void:

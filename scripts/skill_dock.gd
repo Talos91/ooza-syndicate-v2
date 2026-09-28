@@ -11,6 +11,10 @@ extends HBoxContainer
 ## (Hud.skill_refusal - HUD pass: no notification box; a HUD without it, the tests' double: its toast); a cast goes
 ## through main.node_action("cast", slot index, {"target": t}) (online guests: an order to the host) and
 ## the slot pulses. While no slot is armed the dock never touches world input (drag-to-send, tap-to-inspect).
+## POWERS (0.22.2): Quake taps a platform, Sinkhole an enemy structure (each lit one says what it becomes: "T3→T2" /
+## "SINK"), Fog of War the circle's centre, Backwash / Sever a deck (relay decks too), Evac one of your nodes; Portal
+## takes two taps like Ghost Line - an entrance, then an exit among Sim.portal_exits (lit, with a faint link from the
+## entrance); Core Meltdown lists every attacking line from the start of its trip.
 ## Also: the callout where an enemy's skill hits you (fx "skill" with `affects`), and the note when a map
 ## without relays swaps a relay map skill for the faction's fallback. Target highlights are drawn here, on a
 ## screen layer under the HUD panels; the skills' own world effects are fx code, not this file.
@@ -38,7 +42,7 @@ var layer: Control                            # target highlights (under the HUD
 var hint_panel: PanelContainer                # "SURGE · tap one of your lines" above the dock while armed
 var hint_label: Label
 var armed := -1                               # the slot being aimed, -1 = none
-var src := -1                                 # Ghost Line: the source node picked (then the destination)
+var src := -1                                 # Ghost Line: the source node picked (then the destination); POWERS: Portal's entrance
 var cands: Array = []                         # valid targets right now
 var swapped := ""                             # the relay map skill this map replaced ("" = none)
 var _cand_t := 0.0
@@ -163,7 +167,7 @@ class Slot:
 		var status := ""
 		var sc := Color("8fa6b2")
 		if armed:
-			status = "TAP A TARGET" if not (dock.src >= 0) else "TAP WHERE IT GOES"
+			status = "TAP A TARGET" if not (dock.src >= 0) else ("TAP THE EXIT" if dock._kind() == "node_pair" else "TAP WHERE IT GOES")   # (POWERS: Portal)
 			if fires > 0:
 				status = "TAP A RELAY · %d LEFT" % fires
 			sc = Color.WHITE
@@ -346,7 +350,14 @@ func _refresh_cands() -> void:
 	if armed < 0:
 		return
 	var slot: String = SLOTS[armed]
-	if _kind() == "vat_to_node" and src >= 0:
+	if _kind() == "node_pair" and src >= 0:          # POWERS (Portal): the exits of the entrance picked
+		if not sim._node_ok(src) or sim.portal_of(src) >= 0:
+			src = -1                                  # (its node dropped, or someone opened a portal there first)
+			cands = sim.targets_for(human, slot)
+			_hint()
+		else:
+			cands = sim.portal_exits(src).filter(func(x): return sim.cast_check(human, slot, [src, x]) == "")
+	elif _kind() == "vat_to_node" and src >= 0:
 		cands = []
 		for n in sim.nodes:
 			if sim.cast_check(human, slot, [src, n["id"]]) == "":
@@ -561,6 +572,24 @@ func pick(raw) -> void:
 				_hint()
 				return
 			target = [src, raw, clampf(float(main.fraction), 0.01, 1.0)]
+		"node_pair":                           # POWERS (Portal): the entrance, then the exit
+			if src < 0:
+				if raw in cands:
+					src = raw
+					_refresh_cands()
+					_cand_t = 0.3
+					_hint()
+					(slots[armed] as Slot).queue_redraw()
+				else:
+					var why0 := sim.cast_check(human, slot, [raw, -1])
+					_refuse(armed, why0 if why0 != "" and why0 != "Pick an exit" else "No exit within reach of that node")
+				return
+			if raw == src:                     # the entrance again: pick another
+				src = -1
+				cands = sim.targets_for(human, slot)
+				_hint()
+				return
+			target = [src, raw]
 	var why := sim.cast_check(human, slot, target)
 	if why != "":
 		_refuse(armed, why)
@@ -677,10 +706,10 @@ func _draw_targets(ci: CanvasItem) -> void:
 				var mid := pts[pts.size() / 2] if pts.size() % 2 == 1 else (pts[pts.size() / 2 - 1] + pts[pts.size() / 2]) / 2.0
 				ci.draw_circle(mid, 5.0 * s, Color(col, 0.6 + 0.4 * a))
 		_:
+			var kind := _kind()
+			var ss := []
 			if src >= 0 and sim._node_ok(src):
-				var ss := _node_screen(src, cam)
-				_ring(ci, ss[0], float(ss[1]) + 6.0 * s, Color.WHITE, 1.0, true)
-				_label(ci, "FROM", (ss[0] as Vector2) + Vector2(0, -float(ss[1]) - 14.0 * s), Color.WHITE)
+				ss = _node_screen(src, cam)
 			for c in cands:
 				var jam: bool = c is Array
 				var id: int = c[0] if jam else int(c)
@@ -688,9 +717,18 @@ func _draw_targets(ci: CanvasItem) -> void:
 					continue
 				var ns := _node_screen(id, cam)
 				var cc := Rules.state_color("build") if jam else col
+				if kind == "node_pair" and not ss.is_empty():   # POWERS (Portal): a faint link from the entrance to each exit
+					_dashes(ci, ss[0], ns[0], Color(col, 0.35 + 0.25 * a), 2.0 * s)
 				_ring(ci, ns[0], float(ns[1]) + 6.0 * s, cc, a, false)
 				if jam:
 					_label(ci, "JAM", (ns[0] as Vector2) + Vector2(0, -float(ns[1]) - 14.0 * s), cc)
+				elif kind == "enemy_structure":        # POWERS (Sinkhole): what the structure becomes
+					var n: Dictionary = sim.nodes[id]
+					var sink := "SINK" if not (n["structure"] in ["vat", "machinegoon"] and int(n["tier"]) > 1) else "T%d→T%d" % [int(n["tier"]), int(n["tier"]) - 1]
+					_label(ci, sink, (ns[0] as Vector2) + Vector2(0, -float(ns[1]) - 14.0 * s), cc)
+			if not ss.is_empty():                      # the source / entrance on top of its neighbours' rings
+				_ring(ci, ss[0], float(ss[1]) + 6.0 * s, Color.WHITE, 1.0, true)
+				_label(ci, "IN" if kind == "node_pair" else "FROM", (ss[0] as Vector2) + Vector2(0, -float(ss[1]) - 14.0 * s), Color.WHITE)
 
 
 func _ring(ci: CanvasItem, c: Vector2, r: float, col: Color, a: float, solid: bool) -> void:
@@ -703,8 +741,22 @@ func _ring(ci: CanvasItem, c: Vector2, r: float, col: Color, a: float, solid: bo
 		ci.draw_line(c + d * (r + 5.0 * s), c + d * (r + 13.0 * s), Color(col, 0.95), 3.0 * s, true)
 
 
+func _dashes(ci: CanvasItem, a: Vector2, b: Vector2, col: Color, w: float) -> void:
+	## POWERS: a dashed line from a to b, the dashes marching toward b.
+	var d := b - a
+	var length := d.length()
+	if length < 1.0:
+		return
+	var step := 14.0 * ui_scale
+	var dir := d / length
+	var k := fposmod(_t * 30.0 * ui_scale, step)
+	while k < length:
+		ci.draw_line(a + dir * k, a + dir * minf(k + step * 0.55, length), col, w, true)
+		k += step
+
+
 func _label(ci: CanvasItem, txt: String, at: Vector2, col: Color) -> void:
-	var f := int(14 * ui_scale)
+	var f := maxi(int(14 * ui_scale), int(ceil(_floor_px * 1.15)))   # (POWERS: never under the phone's floor - IN / SINK / JAM)
 	var sz := UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
 	var p := at - Vector2(sz.x / 2.0, 0)
 	ci.draw_string_outline(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(4 * ui_scale), Color(0, 0, 0, 0.9))
@@ -728,7 +780,14 @@ func on_event(ev: Dictionary) -> void:
 		"relay_hack": what = "your relay is jammed" if ev.get("target") is Array else "your relay fires"
 		"rewire": what = "your relay fires" if ev.has("fire") else "their lines speed up"
 		"echo_split": what = "decoy lines on the move"
-		"core_meltdown": what = "your garrison melts"
+		"core_meltdown": what = "an armed line is coming"   # POWERS (0.22.2): armed from the start of its trip
+		# POWERS (0.22.2): the new powers (Emergency Evac never touches a rival: no callout)
+		"quake": what = "decks around a platform drop"
+		"sever": what = "a deck is cut"
+		"backwash": what = "your lines are shoved back"
+		"sinkhole": what = "your structure sinks"
+		"fog": what = "a fog hides their moves"
+		"portal": what = "a portal opens"
 	# HUD pass: at the place the skill landed (the event's pos), the caster's emblem as the icon
 	if hud and hud.has_method("callout_at") and ev.get("pos") is Vector3:
 		hud.callout_at(ev["pos"], "skill:%s" % seat, "%s%s" % [ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn", seat)

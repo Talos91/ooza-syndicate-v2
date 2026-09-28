@@ -295,7 +295,9 @@ func _progress(n: Dictionary, seat: String) -> float:
 	var garrison: float = sim.garrison_total(n)
 	var att := 0.0
 	for h in sim.hordes:
-		if int(h["target"]) != int(n["id"]) or float(h["units"]) <= 0.0 or h.get("decoy", false):
+		# POWERS (0.22.2, Daniele's playtest: "NULL decoys visible to all"): only a decoy's OWNER sees it as a decoy - for
+		# everyone else it pushes the ring exactly like a real line (Sim.is_ghost_for)
+		if int(h["target"]) != int(n["id"]) or float(h["units"]) <= 0.0 or Sim.is_ghost_for(h, viewer):
 			continue
 		if not sim.allied(str(h["owner"]), seat) or sim.allied(str(n["owner"]), str(h["owner"])):
 			continue
@@ -704,6 +706,10 @@ func before_swap(n: Dictionary, entry: Dictionary) -> void:
 	var was: String = _tier_owner[id]
 	var lv: int = _tier_level[id]
 	var now := _level(n)
+	var sunk := _sunk_by(id)                          # POWERS: a Sinkhole drops (or destroys) it without a capture
+	if not sunk.is_empty() and was != "" and n["owner"] == was:
+		_sink_down(n, entry, sunk, was)
+		return
 	if was == "" or n["owner"] == "" or n["owner"] == was or now <= 0 or now >= lv:
 		return
 	var old_key: String = entry.get("model_key", "")
@@ -745,6 +751,58 @@ func before_swap(n: Dictionary, entry: Dictionary) -> void:
 			"top": top, "col": col, "landed": false, "below": null, "superseded": false})
 
 
+func _sunk_by(id: int) -> Dictionary:
+	## POWERS: this frame's Sinkhole fx event on node id, if any (main swaps the models after the Sim's step and before
+	## it drains the fx events, so the event that caused this swap is still in the list - on a guest too).
+	for ev in sim.fx_events:
+		if str(ev.get("type", "")) == "sinkhole" and int(ev.get("node", -1)) == id:
+			return ev
+	return {}
+
+
+func _sink_down(n: Dictionary, entry: Dictionary, ev: Dictionary, was: String) -> void:
+	## POWERS (Sinkhole): the conquest tier-down's look, the owner unchanged - the old tier sinks into the goo pit
+	## (SkillFx draws it) while the new one rises; a destroyed structure sinks away and the slot is left empty
+	## ("SUNK"). The line is in the caster's colour.
+	var id: int = n["id"]
+	var old_key: String = entry.get("model_key", "")
+	var ghost: Node3D = null
+	if old_key != "":
+		ghost = MapBuilder.put(world, old_key, (entry.get("centre", n["pos"]) as Vector3) + MapBuilder.centre_lift(old_key), Rules.view_yaw)
+		MapBuilder.apply_owner([ghost], was)
+	var mis := []
+	if ghost:
+		for mi in ghost.find_children("*", "MeshInstance3D", true, false):
+			(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mis.append(mi)
+	var col := Rules.seat_color(str(ev.get("seat", "")))
+	var from := int(ev.get("from", 1))
+	var destroyed: bool = ev.get("destroyed", false)
+	var top: Vector3 = (entry.get("centre", n["pos"]) as Vector3) + Vector3(0, 4.0 + 0.9 * from, 0)
+	var label := _tier_label("SUNK" if destroyed else "T%d → T%d" % [from, int(ev.get("to", from - 1))], col, 96)
+	var chev := _tier_label("▼", col, 150)
+	var ring := MeshInstance3D.new()                   # a dark wave over the platform
+	ring.mesh = _plane
+	var rmat := ShaderMaterial.new()
+	rmat.shader = FLARE_SHADER
+	rmat.set_shader_parameter("mode", 2)
+	rmat.set_shader_parameter("thickness", 0.07)
+	rmat.set_shader_parameter("color", col.lerp(Color(0.3, 0.3, 0.35), 0.5))
+	ring.material_override = rmat
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring.position = n["pos"] + Vector3(0, RING_Y + 0.05, 0)
+	add_child(ring)
+	var old_col := Rules.seat_color(was)
+	for i in range(40 if not Rules.low_detail else 20):   # grit off the old top as it goes under
+		var a := randf() * TAU
+		var v := Vector3(cos(a), randf_range(0.3, 1.2), sin(a)).normalized() * randf_range(3.0, 7.0)
+		_spark(top + Vector3(randf_range(-1, 1), randf_range(-1.2, 0.4), randf_range(-1, 1)), v, old_col if randf() < 0.5 else Color(0.3, 0.3, 0.36),
+				randf_range(0.14, 0.3), randf_range(0.5, 0.9), 16.0)
+	_downs.append({"node": id, "t": 0.0, "ghost": ghost, "mis": mis, "base_y": ghost.position.y if ghost else 0.0,
+			"new": null, "new_y": 0.0, "label": label, "chev": chev, "ring": ring, "rmat": rmat,
+			"top": top, "col": col, "landed": false, "below": null, "superseded": false, "sink": true})
+
+
 func after_swap(n: Dictionary, entry: Dictionary) -> void:
 	## main._process, just after the swap: the new (lower) tier is the model that rises.
 	for d in _downs:
@@ -782,12 +840,13 @@ func _tier_downs(dt: float, cam: Camera3D) -> void:
 		# the old tier's ghost sinks into the socket, shrinking and fading (0 .. 0.7 s)
 		var ghost: Node3D = d["ghost"] if is_instance_valid(d["ghost"]) else null
 		if ghost:
-			var k := clampf(t / 0.7, 0.0, 1.0)
+			var sink: bool = d.get("sink", false)      # POWERS: a Sinkhole swallows it deeper, a little slower
+			var k := clampf(t / (1.0 if sink else 0.7), 0.0, 1.0)
 			if k >= 1.0 or gone:
 				ghost.queue_free()
 				d["ghost"] = null
 			else:
-				ghost.position.y = d["base_y"] - 2.6 * k * k
+				ghost.position.y = d["base_y"] - (6.0 if sink else 2.6) * k * k
 				ghost.scale = Vector3(1.0 - 0.25 * k, 1.0 - 0.5 * k, 1.0 - 0.25 * k)
 				for mi in d["mis"]:
 					(mi as GeometryInstance3D).transparency = k * k
