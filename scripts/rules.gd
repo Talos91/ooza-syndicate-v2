@@ -167,6 +167,22 @@ const CONTACT_CELL := 3.0            # spatial hash cell for the contact scan
 const RELAY_WARNING := 1.0          # Daniele (0.18.6): "bridge alert ... just 1 sec" (was 3 s)
 const RELAY_COOLDOWN := 5.0        # Daniele (Alpha 13 playtest): "relay cooldown I'd set at 5 s"
 const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves (its troops fell when it started)
+# RELAY V2 (the relay redo, Alpha 22 - Daniele 2026-09-28 "they good"; Models/2.0/structures_2_1/relay_v2.json +
+# build_relay_v2.py): one standard BUTTON PLATFORM per relay off the rim (Relay_Button_<Kind>_v2, the tap target),
+# a MECHANISM on the pier of every relay bridge, marked relay decks and violet GHOSTS of where the bridge will be.
+# The node centre holds the structure (laser / forge / monster hub); a double-tap on the button or the node fires it.
+const RELAY_RIM_DIST := 8.45         # json RIM_DIST: the pad centre from the node centre (R + pad + 0.45)
+const RELAY_PAD_R := 2.0             # json pad_radius
+const RELAY_BUTTON_Y := 0.22         # json buttons[*][2]: the "Button" empty (tap target) above the pad
+const RELAY_BUTTON_CLEAR := RELAY_PAD_R + W / 2.0 + 0.3   # pad radius + half a deck + 0.3 m: pad and bridge never touch
+const RELAY_MIN_SEP := 25.97         # json min_separation_deg_from_any_bridge = asin(CLEAR / RIM_DIST): a node needs a
+                                     # 51.9 deg gap between two bridges (json node_needs_a_gap_of_deg; test_maps4 checks it);
+                                     # a smaller gap moves the pad out to CLEAR / sin(gap / 2) and stretches its Strut
+const RELAY_HIT_PT := 44.0           # the button's tap disc on a phone, points across (Apple's minimum; tests/phone_fit)
+const RELAY_HIT_PAD := 1.15          # the disc is at least the pad's projected radius x this (desktop / close-ups)
+const RELAY_GHOST := Color(0.85, 0.78, 1.0, 0.28)       # OS_Ghost: the see-through floor (build_relay_v2 relay_mats)
+const RELAY_GHOST_EDGE := Color(0.92, 0.88, 1.0)        # OS_Ghost_Edge: the bright frame
+const RELAY_GHOST_WARN := 2.4        # x the ghost's brightness while its relay's warning runs (it is about to be real)
 # AI relay sense (0.18.7 - Daniele: "the ai tends to avoid relay bridges all together and almost never
 # build structure on relays"). From Standard up (AI_LEVELS "relays" >= 1) an order crosses a relay deck
 # unless somebody hostile can change that deck before the whole line is over it (estimated crossing

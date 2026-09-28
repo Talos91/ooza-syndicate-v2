@@ -61,6 +61,9 @@ func setup(w: Node3D, s: Sim, v: Dictionary, hv: HordeView) -> void:
 	_sel_ring.visible = false
 	add_child(_sel_ring)
 	for i in sim.edge_controller:                        # ghost decks: the NEXT state's preview
+		if vis.has("relay_view") and (vis["relay_view"] as RelayView).has_ghost(i):
+			_ghosts[i] = []                               # RELAY V2: RelayView's violet ghost shows this one
+			continue
 		var arr := []
 		var e: Dictionary = sim.edges[i]
 		var col := Rules.state_color("retract" if e["retracts"] else e["state"])
