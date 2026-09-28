@@ -61,6 +61,9 @@ func setup(w: Node3D, s: Sim, v: Dictionary, hv: HordeView) -> void:
 	_sel_ring.visible = false
 	add_child(_sel_ring)
 	for i in sim.edge_controller:                        # ghost decks: the NEXT state's preview
+		if vis.has("relay_view") and (vis["relay_view"] as RelayView).has_ghost(i):
+			_ghosts[i] = []                               # RELAY V2: RelayView's violet ghost shows this one
+			continue
 		var arr := []
 		var e: Dictionary = sim.edges[i]
 		var col := Rules.state_color("retract" if e["retracts"] else e["state"])
@@ -320,7 +323,7 @@ func _relay_beacon(n: Dictionary, entry: Dictionary, col: Color, phase: String) 
 	if sim.collapsed.get(id, false):
 		label.visible = false
 		return
-	label.visible = true
+	label.visible = not entry.has("relay_button")        # RELAY V2: the button's own glyph is the symbol (it breathes: mat)
 	var owned: bool = n["owner"] != ""
 	var ready: bool = owned and phase == "" and n["relay_cd"] <= 0.0 and not sim.is_relay_locked(id)
 	var energy := 1.6

@@ -23,7 +23,8 @@ extends Node3D
 const STATIC_KIT := ["Platform_", "Pier_", "Relay_Mount", "Deck_"]   # kit scenes batched as static pieces
 # low-poly pieces in many variants (17 pier leans, switch and mirrored copies, one or two of each on a map):
 # merged into one mesh per material instead (a MultiMesh per variant would still cost a draw per variant)
-const MERGED_KIT := ["Pier_", "Relay_Mount"]
+const MERGED_KIT := ["Pier_", "Relay_Mount",
+		"Relay_Button_", "Relay_Gate_Switch", "Relay_Gate_Remote", "Relay_Retract_"]   # RELAY V2: buttons + still gates
 const FIXED := ["OS_Plate", "OS_Dark", "OS_Steel", "OS_Recess", "OS_Shell"]   # materials no game code swaps
 const STATIC_GROUP := -1
 const CHUNK := 128.0                    # batches split into cells of at most this size over the map's bounds

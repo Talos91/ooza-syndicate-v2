@@ -3,7 +3,8 @@ extends Node3D
 ## the interface lives in hud.gd, in-world effects in fx.gd (fights, tier-downs and the cannon laser in
 ## combat_fx.gd), hordes in horde_view.gd, rules in sim.gd.
 ## Drag from one of your nodes to any node to send; tap a node to inspect; double-tap your own node
-## to upgrade (Alpha 11 convention); the inspector offers costed actions and the relay's switch.
+## to upgrade (Alpha 11 convention); the inspector offers costed actions and the relay's switch. RELAY V2: a
+## relay's button platform off the rim is a second tap target for its node (double-tap it, or the node, to fire).
 ## Command-line user args (after `--`):
 ##   --map=res://maps4/T-01-first-steps.json  map to load (skips the title screen)
 ##   --mode=1v1|2v2|3v3|2v2v2|FFA3|FFA4|FFA5  match mode (the map's first mode if it lacks this one)
@@ -1762,6 +1763,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				var n := _node_at(hit, mb.position)
 				_press_pos = mb.position
 				_press_time = Time.get_ticks_msec() / 1000.0
+				# RELAY V2 (Daniele: "the tap target should be both the button or the whole node, as relays activate
+				# with double tap anyway"): _node_at answers the relay for its button disc too, so a double-tap on the
+				# button, the platform or the badge fires it - two taps on either target count as one double-tap
 				if n >= 0:
 					if sim.nodes[n]["owner"] == HUMAN and n == _tap_node and _press_time - _tap_time < DOUBLE_TAP_WINDOW \
 							and hud.shows("relay" if sim.nodes[n]["relay"] != "" else "upgrade"):   # (TUTORIAL: from L2 / L4)
@@ -1846,6 +1850,9 @@ func _ground(screen: Vector2) -> Vector3:
 
 func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 	if screen.x >= 0.0 and hud:
+		var rb := _relay_button_at(p, screen)          # RELAY V2: a relay's button disc selects its relay
+		if rb >= 0:
+			return rb
 		var b := hud.badge_at(screen)
 		if b >= 0:
 			return b
@@ -1857,6 +1864,20 @@ func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 		if (n["pos"] as Vector3).distance_to(p) <= Rules.R + (2.5 if mobile else 1.0):
 			return n["id"]
 	return -1
+
+
+func _relay_button_at(p: Vector3, screen: Vector2) -> int:
+	## RELAY V2: the relay whose button tap disc (RelayView.hit_disc: >= Rules.RELAY_HIT_PT on a phone) holds this
+	## screen point, or -1. A badge drawn right over the point keeps it (badges are the explicit node targets).
+	if screen.x < 0.0 or vis.is_empty() or cam == null:
+		return -1
+	var rb := RelayView.button_at(cam, sim, vis, screen, p, mobile)
+	if rb >= 0 and hud:
+		for id in hud.badges:
+			var panel: Control = hud.badges[id]["panel"]
+			if panel.visible and panel.get_global_rect().has_point(screen):
+				return -1
+	return rb
 
 
 func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
@@ -2092,6 +2113,8 @@ func _coach_sync() -> void:
 	var pts := []
 	for id in tg["nodes"]:
 		pts.append(cam.unproject_position(sim.nodes[id]["pos"]))
+		if _tap_point(id) != sim.nodes[id]["pos"]:     # RELAY V2: the relay's button is lit with its node
+			pts.append(cam.unproject_position(_tap_point(id)))
 	for ei in tg.get("decks", []):
 		var dl := sim.deck_line(int(ei))
 		if dl.size() >= 2:
@@ -2187,6 +2210,13 @@ func _tutorial_rect(key: String) -> Rect2:
 	return Rect2()
 
 
+func _tap_point(id: int) -> Vector3:
+	## RELAY V2: where the coach's hand taps node `id` - a relay's button (its visible cue; the node answers a double-tap
+	## too), otherwise the node centre.
+	var b = vis.get(id, {}).get("relay_button") if vis.has(id) else null
+	return b["tap"] if b is Dictionary else sim.nodes[id]["pos"]
+
+
 func _tutorial_gesture() -> void:
 	## The first of the step's gesture alternatives that can be drawn right now (a press needs its button on
 	## screen - otherwise the next alternative, e.g. the tap that opens the inspector).
@@ -2195,7 +2225,7 @@ func _tutorial_gesture() -> void:
 		match kind:
 			"tap", "double_tap":
 				if int(g[1]) >= 0:
-					coach.gesture(kind, cam.unproject_position(sim.nodes[int(g[1])]["pos"]))
+					coach.gesture(kind, cam.unproject_position(_tap_point(int(g[1]))))   # RELAY V2: a relay's button
 					return
 			"drag":
 				var a := int(g[1])

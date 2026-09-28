@@ -76,7 +76,7 @@ const LINES := {
 	"L0.neutral": "Grey nodes are neutral. Their badge shows what defends them. Unclaimed assets.",
 	"L0.rival": "That colour is the rival - EMBER. They solve every problem by setting it on fire.",
 	"L0.deck": "Nodes are joined by decks. Units walk the decks. Do not look down.",
-	"L0.relay": "A relay moves a deck. Anything on it drops into the void. We call that downsizing.",
+	"L0.relay": "A relay moves a deck - its button sits off the rim. Whatever is on it drops. Downsizing.",
 	"L0.send": "The SEND panel sets how much of a node goes when you send. Delegation!",
 	"L0.inspector": "Tap a node and its inspector opens: what it makes, what it can build.",
 	"L0.top": "Up top: your strength, the clock and the rival's. The clock is the scary one.",
@@ -114,14 +114,14 @@ const LINES := {
 	"L3.alive": "The rival is out when it has no nodes and no lines left. Nothing personal.",
 	"L3.done1": "Send more units than a node holds to take it.",
 	"L3.done2": "Reinforce before the rival lands.",
-	# L4 RELAYS
+	# L4 RELAYS (RELAY V2: the hand points at the relay's button; a double-tap on it or on the node fires it)
 	"L4.title": "RELAYS",
-	"L4.inspect": "Tap the relay. The preview shows where its deck will go.",
-	"L4.fire": "Double-tap the relay to fire it. The SWITCH button in the inspector works too.",
+	"L4.inspect": "Tap the relay. The violet ghost shows where its deck will go.",
+	"L4.fire": "Double-tap the relay's button - or the node - to fire it. SWITCH works too.",
 	"L4.warning": "Firing gives one second of warning. Then the deck moves - anything on it drops.",
 	# not in TUTORIAL-SCRIPT draft 2 (for Daniele's review): the prompt step before the line reaches the deck
 	"L4.incoming": "A rival line is coming. Wait until it's on the relay's deck. Patience pays.",
-	"L4.prompt": "Their line is on the deck. Fire the relay now!",
+	"L4.prompt": "Their line is on the deck. Double-tap the button now!",
 	"L4.miss": "Too late - they got across. Here comes another line. They never learn.",
 	"L4.practice": "Timing takes practice. You'll get more chances. The void is very patient.",
 	"L4.waterfall": "Their vat keeps sending. The rest of the line walks off the edge. So loyal.",

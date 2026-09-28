@@ -144,7 +144,10 @@ func _draw_relay_cues(cam: Camera3D) -> void:
 			continue
 		var ready: bool = n["relay_cd"] <= 0.0 and n["relay_phase"] == ""
 		var ns := _node_screen(id, cam)
-		if ready:                                      # a ready glow round the badge's spot (Hud.RELAY_ACCENT)
+		var bs := RelayView.button_screen(cam, main.vis, id)   # RELAY V2: the glow and the cue sit on the button
+		if not bs.is_empty():
+			ns = bs
+		if ready:                                      # a ready glow round the button (Hud.RELAY_ACCENT)
 			var a := 0.5 + 0.5 * sin(_t * 3.0)
 			draw_arc(ns[0], float(ns[1]) + 5.0 * ui_scale, 0.0, TAU, 32, Color(Hud.RELAY_ACCENT, 0.55 * a), 2.5 * ui_scale, true)
 		if float(_relay_cue_t.get(id, 0.0)) > 0.0:      # the first few times: spell it out
