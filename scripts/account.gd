@@ -20,6 +20,8 @@ const KEY := "sb_publishable_3aX4T8IcNbI_BBg4wENMhA_3NNclYw2"   # publishable: m
 const SITE := "https://oozesyndicate.com/"     # where Google sign-in comes back off the web (site())
 const REFRESH_EARLY := 600                          # refresh the access token 10 min before it expires
 const SAVE_CHECK := 20.0                            # seconds between "did a save file change?" checks
+const RETRY_FIRST := 5.0                            # a failed refresh waits 5 s, then 10, 20 ... (code audit A4)
+const RETRY_MAX := 300.0                            # ... up to 5 min; a success resets it
 
 static var path := "user://account.cfg"             # tests point this elsewhere
 static var enabled := true                          # false: never touch the network (tests, headless runs)
@@ -38,6 +40,8 @@ var last_error := ""
 var _save_hash := ""
 var _save_t := 0.0
 var _refresh_busy := false
+var _retry_at := 0.0                                # unix time before which no refresh is tried (after a failure)
+var _retry_wait := RETRY_FIRST
 
 static var _instance: Account = null
 
@@ -103,6 +107,12 @@ func sign_in_guest() -> bool:
 	return false
 
 
+func refresh_due(now: float) -> bool:
+	## The token expires within REFRESH_EARLY, no refresh is running, and no failed one is still waiting out its backoff
+	## (offline / Supabase down: the retry must not run every frame - code audit A4).
+	return expires_at - int(now) < REFRESH_EARLY and not _refresh_busy and now >= _retry_at
+
+
 func refresh() -> bool:
 	if refresh_token == "" or _refresh_busy:
 		return false
@@ -110,8 +120,10 @@ func refresh() -> bool:
 	var r := await _call("POST", "/auth/v1/token?grant_type=refresh_token", {"refresh_token": refresh_token}, false)
 	_refresh_busy = false
 	if r["ok"]:
-		await _adopt(r["json"])
+		await _adopt(r["json"])                     # (resets the backoff)
 		return true
+	_retry_at = Time.get_unix_time_from_system() + _retry_wait   # next try after the backoff, which doubles
+	_retry_wait = minf(_retry_wait * 2.0, RETRY_MAX)
 	if int(r["code"]) in [400, 401, 403]:           # the refresh token is gone: start over as a new guest
 		_clear()
 	_fail(r)
@@ -123,6 +135,8 @@ func _adopt(s: Dictionary) -> void:
 	## the account's cloud save replaces the device's progress (Daniele: "keep the account's").
 	var u: Dictionary = s.get("user", {}) if s.get("user") is Dictionary else {}
 	var before := user_id
+	_retry_wait = RETRY_FIRST                       # a working session: no backoff left over
+	_retry_at = 0.0
 	access_token = str(s.get("access_token", ""))
 	refresh_token = str(s.get("refresh_token", refresh_token))
 	expires_at = int(s.get("expires_at", Time.get_unix_time_from_system() + int(s.get("expires_in", 3600))))
@@ -159,7 +173,7 @@ func _process(dt: float) -> void:
 	Telemetry.tick(self, dt)                        # captured errors, the upload every 2 min (only when shared + signed in)
 	if not signed_in():
 		return
-	if expires_at - int(Time.get_unix_time_from_system()) < REFRESH_EARLY:
+	if refresh_due(Time.get_unix_time_from_system()):
 		refresh()
 	_save_t += dt
 	if _save_t >= SAVE_CHECK:
@@ -418,10 +432,12 @@ func _fail(r: Dictionary) -> void:
 	var msg := ""
 	if js is Dictionary:
 		msg = str(js.get("msg", js.get("message", js.get("error_description", js.get("error", "")))))
+	var before := [last_error, state]
 	last_error = msg if msg != "" else ("offline" if int(r["code"]) == 0 else "error %d" % int(r["code"]))
 	if not signed_in():
 		state = "offline" if int(r["code"]) == 0 else "error"
-	changed.emit()
+	if [last_error, state] != before:               # a repeat of the same failure doesn't rebuild the open page
+		changed.emit()
 
 
 func _clear() -> void:

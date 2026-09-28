@@ -30,6 +30,7 @@ func _run() -> void:
 	_wipe()
 	_fragment()
 	_save_round_trip()
+	await _backoff()
 	if "--live" in OS.get_cmdline_user_args():
 		await _live()
 	_wipe()
@@ -43,6 +44,33 @@ func _wipe() -> void:
 	Progression.reload_all()
 	ArmyPresets.reload_presets()
 	TutorialDirector.reload_progress()
+
+
+func _backoff() -> void:
+	## Code audit A4: offline (or Supabase down) near token expiry, the refresh backs off 5 s, 10 s ... instead of retrying
+	## every frame, and a repeat of the same failure doesn't redraw the open page.
+	var was := Account.enabled
+	Account.enabled = false                         # every call fails at once as "offline" (code 0), no network
+	var a := Account.new()
+	a.refresh_token = "offline-test"
+	var now := Time.get_unix_time_from_system()
+	a.expires_at = int(now) + 60                    # inside REFRESH_EARLY
+	check(a.refresh_due(now), "a token about to expire is due for a refresh")
+	var emits := [0]
+	a.changed.connect(func(): emits[0] += 1)
+	check(not await a.refresh(), "offline: the refresh fails")
+	var t := Time.get_unix_time_from_system()
+	check(not a.refresh_due(t) and not a.refresh_due(t + 4.0) and a.refresh_due(t + 5.5), "then it waits 5 s, not a frame")
+	await a.refresh()
+	t = Time.get_unix_time_from_system()
+	check(not a.refresh_due(t + 9.0) and a.refresh_due(t + 10.5), "the wait doubles (10 s)")
+	for i in range(10):
+		await a.refresh()
+	check(a._retry_wait == Account.RETRY_MAX, "and stops at %d s" % int(Account.RETRY_MAX))
+	check(emits[0] == 1, "only the first failure redraws the page (%d)" % emits[0])
+	check(a.refresh_token == "offline-test", "an offline failure keeps the session (no new guest)")
+	a.free()
+	Account.enabled = was
 
 
 func _fragment() -> void:
