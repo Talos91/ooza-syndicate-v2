@@ -12,8 +12,17 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.22.1"
+const VERSION := "0.22.2"
 const VERSION_NAME := "Alpha 22"
+
+
+static func version_label() -> String:
+	## What the screens show (Daniele, 2026-09-29: "shouldn't it be just alpha 22.0x"): "ALPHA 22.2" from VERSION 0.22.2 - the
+	## internal VERSION stays x.y.z (pack URLs ?v=, the exact-match rule online).
+	var parts := VERSION.split(".")
+	if parts.size() == 3 and parts[0] == "0":
+		return "ALPHA %s.%s" % [parts[1], parts[2]]
+	return "%s v%s" % [VERSION_NAME.to_upper(), VERSION]
 
 # kit geometry (metres)
 const R := 6.0                       # platform radius

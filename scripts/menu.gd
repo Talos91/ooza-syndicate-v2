@@ -466,7 +466,7 @@ func header(step: int) -> void:
 	picture("res://assets/ui/Ooze-Syndicate-Wordmark.svg", P(35, 10), P(172, 64))
 	if step > 0:
 		picture("res://assets/ui-kit/Navigation/stepper-%d.png" % step, P(565, 20), P(620, 59))
-	label_at("v%s  %s" % [Rules.VERSION, Rules.VERSION_NAME], P(1480, 34), 16, Color("839da9"))
+	label_at(Rules.version_label(), P(1480, 34), 16, Color("839da9"))
 
 
 func map_preview(pos: Vector2, dims: Vector2) -> void:
@@ -675,7 +675,7 @@ func show_main() -> void:
 		else:
 			get_tree().quit())
 	_shell_add(fb, Vector2(x - 10.0, fy))
-	var ver := UiKit.label(self, "%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], 12, UiKit.DIM)
+	var ver := UiKit.label(self, Rules.version_label(), 12, UiKit.DIM)
 	_shell_add(ver, Vector2(x + fb.size.x + 4.0, fy + (th - ver.get_minimum_size().y) / 2.0))
 	shell_raise()
 	# 0.20.11: INSTALL THE GAME (web + phone browsers only, hidden once installed or dismissed), bottom right

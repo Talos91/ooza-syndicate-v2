@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.22.2 "Alpha 22" - 2026-09-29 (the perf pass; the version reads ALPHA 22.2)
+
+- **Perf pass** (📐's perf-pass agent, report in 05 Handoff/handoffs/architect-specs/perf-pass-report.md): AI thinks 4-6x cheaper (one
+  Dijkstra per source per think, cached trip times / reach; decisions identical - same event-log hashes), UnitView bodies in preallocated
+  typed arrays, HUD / badge layer / overlays redraw only on change, Label3D without per-frame mesh rebuilds, MonsterView / HordeView
+  BRAWL shortcuts. Busy-frame scripts time -20 %, worst AI think frame 6.8 -> 3.0 ms (phone profile, desktop GPU); Last Stand badge
+  redraws 450 -> 203 per 450 frames. The 0.22.0 web crash "p_idx = 7 out of bounds (surfaces.size() = 7)" fixed (MapBatch mixed a
+  re-meshed piece's old surfaces; test_map_batch_swap). A rival's cast no longer floats its name over its own callout (the SCORCH overlap).
+- **Version label**: the screens read **ALPHA 22.2** (Daniele: "shouldn't it be just alpha 22.0x"); the internal number stays 0.22.2.
+
 ## 0.22.1 "Alpha 22" - 2026-09-28 (relay redo, soundtrack, Daniele's playtest balance, audit fixes, UI / tutorial / campaign fixes)
 
 - **RELAY REDO (v2, 🎨 Skin Designer + 📐)**: every relay has a BUTTON platform off the node's rim (the tap target: double-tap the

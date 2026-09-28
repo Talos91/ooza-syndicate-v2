@@ -1,9 +1,13 @@
-# To test - v0.22.1 "Alpha 22" (Daniele, on the phone and with a second player)
+# To test - ALPHA 22.2 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.22.2 (perf pass)
+- [ ] **Smoother?** A busy 2v2 and the Last Stand on your phone and your girlfriend's iPhone (🖥️: her lag looks like a 30 fps cap, likely iOS Low
+      Power Mode - check that first). The version in the corner reads ALPHA 22.2.
 
 ## 0.22.1 "Alpha 22" (relay redo, music, balance) - the tracks download once (music.pck) when music first plays
 - [ ] **Relays**: the button platform off the rim - double-tap it or the node; the ghosts in the relay kind's colour; a 6-way switch

@@ -419,7 +419,7 @@ func setup(m: Node3D) -> void:
 	dock.keys = not touch_ui()
 	dock.visible = sim.abilities_on
 	root.add_child(dock.hint_panel)
-	version_label = text_label("v%s  %s" % [Rules.VERSION, Rules.VERSION_NAME], 14, Color(1, 1, 1, 0.5))
+	version_label = text_label(Rules.version_label(), 14, Color(1, 1, 1, 0.5))
 	root.add_child(version_label)
 	notices = Control.new()                           # (see its var: a position only, never drawn)
 	notices.mouse_filter = Control.MOUSE_FILTER_IGNORE

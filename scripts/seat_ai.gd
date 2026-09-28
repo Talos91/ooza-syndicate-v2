@@ -162,7 +162,7 @@ func _incoming(sim: Sim, node_id: int, hostile: bool) -> float:
 func _travel(sim: Sim, route: Array) -> float:
 	var t := 0.0
 	for i in range(route.size() - 1):
-		t += sim.edge_cost(sim._edge_index(route[i], route[i + 1])) + 1.0
+		t += sim.edge_cost(sim._edge_index(route[i], route[i + 1])) + Rules.ROUTE_NODE_SECONDS
 	return t
 
 
@@ -210,7 +210,7 @@ func _trip(sim: Sim, from_id: int, to_id: int, avoid := {}) -> float:
 	if to_id == from_id or not prev.has(to_id):
 		return 0.0
 	var p: int = prev[to_id]
-	var t: float = _trip(sim, from_id, p, avoid) + (sim.edge_cost(sim._edge_index(p, to_id)) + 1.0)
+	var t: float = _trip(sim, from_id, p, avoid) + (sim.edge_cost(sim._edge_index(p, to_id)) + Rules.ROUTE_NODE_SECONDS)
 	trip[to_id] = t
 	return t
 
@@ -240,7 +240,7 @@ func _tree(sim: Sim, from_id: int, avoid: Dictionary) -> Array:
 			var nb: int = link[0]
 			if sim.collapsed.get(nb, false) or not sim._edge_open(link[1]) or avoid.has(link[1]):
 				continue
-			var cost: float = dist[cur] + sim.edge_cost(link[1]) + 1.0
+			var cost: float = dist[cur] + sim.edge_cost(link[1]) + Rules.ROUTE_NODE_SECONDS   # = Sim.find_route
 			if not dist.has(nb) or cost < dist[nb]:
 				dist[nb] = cost
 				prev[nb] = cur

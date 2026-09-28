@@ -51,7 +51,7 @@ func _ready() -> void:
 	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	box.add_child(logo)
-	var title := _label("%s  ·  v%s" % [Rules.VERSION_NAME.to_upper(), Rules.VERSION], 26, HEAD_FONT)
+	var title := _label(Rules.version_label(), 26, HEAD_FONT)
 	box.add_child(title)
 	if ios:
 		box.add_child(_label("Ooze Syndicate plays fullscreen. On iPhone and iPad:", 24, UI_FONT))
