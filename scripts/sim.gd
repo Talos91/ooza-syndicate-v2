@@ -125,6 +125,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"plaza": int(n["plaza"]) if n.get("plaza") != null else -1,
 			"node_kind": kind,       # "common" / "relay" / "special" (fixed at setup); MAP LAB: "junction"
 			"junction": junction,   # MAP LAB: the junction piece ("" on every platform)
+			"junction_yaw": float(n.get("junctionYaw", 0.0)) if junction != "" else 0.0,   # MAP LAB: degrees, ccw seen from above
 			"streaming": {},        # {hid, remaining}: the one order the door is emitting
 			"siege": {},            # seat -> units on the platform fighting the garrison (arrived)
 			"siege_dir": {},        # seat -> unit vector from the tower to where they landed
@@ -1296,7 +1297,13 @@ func _build_path3(route: Array) -> Dictionary:
 		if i + 1 < route.size() - 1:
 			var ex_out := exit_of(_edge_index(route[i + 1], route[i + 2]), route[i + 1])
 			var dout := ((ex_out - b["pos"]) as Vector3).normalized()
-			if b["node_kind"] == "junction":               # MAP LAB: straight across the junction plate
+			if b["node_kind"] == "junction" and str(b["junction"]).begins_with("Curve_"):   # MAP LAB: along the curve's arc
+				var c := _curve_centre(b)
+				var a_in := atan2(ex_in.z - c.z, ex_in.x - c.x)
+				var a_out := atan2(ex_out.z - c.z, ex_out.x - c.x)
+				for p in _arc(c, a_in, a_out, CURVE_R):
+					add.call(p, 1)
+			elif b["node_kind"] == "junction":             # MAP LAB: straight across the junction plate
 				add.call(b["pos"], 1)
 			else:
 				for p in _arc(b["pos"], atan2(din.z, din.x), atan2(dout.z, dout.x), ring):
@@ -1376,6 +1383,16 @@ func _build_path_legacy(route: Array) -> Dictionary:
 		cum.append(cum[k - 1] + (pts[k] as Vector3).distance_to(pts[k - 1]))
 	return {"pts": PackedVector3Array(pts), "cum": cum, "fast": PackedByteArray(fast), "spans": spans,
 			"node_spans": node_spans}
+
+
+const CURVE_R := 5.09                  # MAP LAB: the curve pieces' centreline radius (junctions.json)
+
+
+func _curve_centre(n: Dictionary) -> Vector3:
+	## MAP LAB: a curve's origin is its start port; its arc turns left round a centre one radius to the piece's left
+	## (+Y in the piece, the scene's -Z), turned by the piece's yaw.
+	var yaw := deg_to_rad(float(n.get("junction_yaw", 0.0)))
+	return (n["pos"] as Vector3) + Vector3(-sin(yaw), 0.0, -cos(yaw)) * CURVE_R
 
 
 func _arc(c: Vector3, a0: float, a1: float, r: float) -> Array:
