@@ -81,6 +81,7 @@ var has_relays := false              # the map has at least one relay (Bypass / 
 var _kill_credit: Dictionary = {}    # seat -> enemy units killed this step (ultimate charge)
 var _fx_idx: Dictionary = {}         # "on:target" -> [effects] (rebuilt by _index_effects)
 var _popped: Array = []              # decoys that touched an enemy this step (they dissolve)
+var _down_seen: Dictionary = {}      # POWERS: edges whose "down" timer was set this step (_step_skills)
 
 
 func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1, seat_teams: Dictionary = {}, seat_loadouts: Dictionary = {}) -> void:
@@ -718,7 +719,7 @@ func _hordes_in_range(n: Dictionary, reach: float, pull := {}) -> Array:
 	var out := []
 	var c: Vector3 = n["pos"]
 	for h in hordes:
-		if allied(h["owner"], n["owner"]) or h["units"] <= 0.0:
+		if allied(h["owner"], n["owner"]) or h["units"] <= 0.0 or h.get("immune", false):   # (POWERS: Evac)
 			continue
 		var r: float = reach + pull.get(h["id"], 0.0)
 		var b: Array = _body(h)
@@ -1037,6 +1038,8 @@ func _relay_apply(n: Dictionary) -> void:
 
 
 func _set_route(h: Dictionary, route: Array) -> void:
+	if (not _fx_node.is_empty() or h.has("portal")) and not h.get("no_portal", false):
+		route = _portal_cut(h, route)                  # POWERS: a route into a Portal's entrance ends there
 	var path := build_path(route)
 	h["route"] = route
 	h["target"] = route[-1]
@@ -1276,13 +1279,14 @@ func find_route(from_id: int, to_id: int, avoid := {}) -> Array:
 
 
 # ------------------------------------------------------------------ path geometry
-func _new_horde(owner: String, units: float, route: Array) -> Dictionary:
+func _new_horde(owner: String, units: float, route: Array, extra := {}) -> Dictionary:
 	var h := {
 		"id": _next_id, "owner": owner, "faction": factions.get(owner, "null"),
 		"units": 0.0,                                 # units OUT of the vat (the line); grows as the door emits
 		"ordered": units, "start_units": units, "streaming": true,
 		"s": 0.0, "state": "move", "speed": 1.0, "blocked": false,
 	}
+	h.merge(extra)                                    # POWERS: "no_portal" (a Portal carry), "immune" / "evac_left" (Evac)
 	_set_route(h, route)
 	_next_id += 1
 	return h
@@ -1578,6 +1582,7 @@ func step(dt: float) -> void:
 		if n["streaming"]["remaining"] <= 0.001 or n["units"] <= 0.0:
 			_end_streaming(n, "done")
 	_emit_decoys(dt)
+	_emit_evacs(dt)                                   # POWERS: Emergency Evac bursts out of the door
 	_emit_ejects(dt)
 	_check_missing_decks()
 	for h in hordes:
@@ -1594,6 +1599,7 @@ func step(dt: float) -> void:
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
 				h["state"] = "absorb"
+	_step_armed()                                     # POWERS: an armed Core Meltdown goes off on arrival
 	_step_monsters(dt)
 	_detect_contacts()
 	_pop_decoys()
@@ -1662,6 +1668,7 @@ func step(dt: float) -> void:
 		elif h["state"] == "move" and fighting.has(h["id"]) and not h.get("retreat", false):
 			h["state"] = "fight"
 	_step_decoys()
+	_step_portals()                                   # POWERS: a carry whose line has fully gone through stops streaming
 	_check_handovers()
 	_step_forges()
 	_step_charge(dt)
@@ -1999,6 +2006,9 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 	## stored there and stay theirs (GAME-RULES sec11, "allies"). Otherwise the units sit on the platform as
 	## a siege and fight the garrison there (see _node_fights); the whole platform is the node.
 	var owner: String = h["owner"]
+	if h.has("portal") and n["id"] == int(h["portal"]["node"]):
+		_portal_carry(n, h, x)                         # POWERS: into the entrance, out of the exit
+		return
 	if h.get("decoy", false):                          # a Ghost Line pours in and vanishes (skills section)
 		_decoy_arrive(n, h)
 		return
@@ -3497,7 +3507,7 @@ static func _seg_dist2(p: Vector3, a: Vector3, b: Vector3) -> float:
 func _monster_kick(m: Dictionary, h: Dictionary, lo: float, hi: float) -> void:
 	## The bodies of line `h` inside [lo, hi] of its path are kicked off the deck: they fall (fall losses,
 	## a "fall" fx). The head is kicked back, a tail shortens, a middle cut splits the line (the front walks on).
-	if not (h in hordes) or h["units"] <= 0.0:
+	if not (h in hordes) or h["units"] <= 0.0 or h.get("immune", false):   # (POWERS: an Evac line is immune)
 		return
 	var head: float = h["s"]
 	var len := maxf(chain_length(h), 0.001)
@@ -3876,6 +3886,8 @@ func skill_speed(h: Dictionary) -> float:
 func door_mult(h: Dictionary) -> float:
 	## Door-rate multiplier for this line (0.19.2 Surge: its units leave the source door and pour into the
 	## target twice as fast while it lasts; 1.0 otherwise). Views scale the pour-out / pour-in by it.
+	if h.get("immune", false):                         # POWERS: an Evac line leaves "at once" (burst x the door rate)
+		return float(Rules.SKILLS["evac"]["burst"])
 	if _fx_horde.is_empty():
 		return 1.0
 	var m := 1.0
@@ -4027,16 +4039,17 @@ func _target_check(seat: String, id: String, target) -> String:
 				return "Pick one of your lines"
 			if h["state"] == "absorb":
 				return "That line has already arrived"
-		"core_meltdown":
+		"core_meltdown":                               # POWERS (0.22.2): armed from the start of the trip
 			var h := _horde(_as_int(target))
 			if h.is_empty() or h["owner"] != seat or h.get("decoy", false):
 				return "Pick one of your attacking lines"
-			var n: Dictionary = nodes[h["target"]]
+			var n: Dictionary = nodes[line_goal(h)]
 			if allied(n["owner"], seat) or collapsed.get(n["id"], false) or h.get("retreat", false):
 				return "That line is not attacking"
-			if h["state"] != "absorb" and float(h["L"]) - float(h["s"]) > float(sk["range"]):
-				return "Wait until the line reaches its target"
-			if h["units"] < float(sk["min_shown"]) * Rules.SCALE:
+			if h.get("armed", false):
+				return "That line is already armed"
+			var size: float = maxf(h["units"], float(h["ordered"])) if h["streaming"] else h["units"]
+			if size < float(sk["min_shown"]) * Rules.SCALE:
 				return "The line needs at least %d units" % int(sk["min_shown"])
 		"spore_burst":
 			var i := _as_int(target)
@@ -4064,7 +4077,7 @@ func _target_check(seat: String, id: String, target) -> String:
 			var e: Dictionary = edges[ei]
 			if e["state"] != "" or e["retracts"]:
 				return "Pick a deck no relay moves"
-			if demolished.has(ei) or effects_on("edge", ei).any(func(x): return x["id"] == "demolish"):
+			if deck_going(ei):
 				return "That deck is already coming down"
 			if anchor_state(ei) != null:
 				return "That deck is anchored"
@@ -4110,6 +4123,8 @@ func _target_check(seat: String, id: String, target) -> String:
 		"echo_split":
 			if _echo_plan(seat).is_empty():
 				return "Echo Split needs your lines on the move"
+		"quake", "sever", "backwash", "sinkhole", "fog", "portal", "evac":
+			return _power_check(seat, id, target)
 		"superbloom":
 			if Rules.SUPERBLOOM_MODE == "under_attack" and not nodes.any(func(n): return n["owner"] == seat and node_under_attack(n["id"], seat)):
 				return "Superbloom needs one of your nodes under attack"
@@ -4215,6 +4230,7 @@ func cast(seat: String, slot: String, target = null) -> bool:
 					hids.append(g["id"])
 			ev["count"] = hids.size()
 			ev["affects"] = _hostile_list(seat, factions.keys())
+			ev["private"] = seat                         # POWERS (0.22.2): nobody else may learn the new lines are echoes
 			fx_events.append({"type": "ghosts", "seat": seat, "hids": hids, "private": seat})
 		"rewire":
 			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "fires": int(sk["fires"]), "fired": []})
@@ -4222,18 +4238,23 @@ func cast(seat: String, slot: String, target = null) -> bool:
 		"superbloom":
 			var left: float = float(sk["cap_shown"]) * Rules.SCALE if Rules.SUPERBLOOM_MODE == "cap" else -1.0
 			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "left": left})
-		"core_meltdown":
+		"core_meltdown":                               # POWERS (0.22.2): armed now, goes off on arrival (_step_armed)
 			var hm := _horde(_as_int(target))
-			ev["affects"] = _hostile_list(seat, [nodes[hm["target"]]["owner"]] + nodes[hm["target"]]["allies"].keys())
-			_meltdown(seat, hm)
+			var goal: Dictionary = nodes[line_goal(hm)]
+			ev["affects"] = _hostile_list(seat, [goal["owner"]] + goal["allies"].keys())
+			hm["armed"] = true
 		"relay_aegis":
 			_aegis(seat, _as_int(target))
+		"quake", "sever", "backwash", "sinkhole", "fog", "portal", "evac":
+			_power_cast(seat, id, target, ev)
 	if slot == "ultimate":
 		ult_charge[seat] = 0.0
 		ult_since[seat] = 0.0
 	else:
 		skill_cd[seat][slot] = float(sk["cd"])
 	_cast_done(ev)
+	if id == "core_meltdown":
+		_step_armed()                                    # POWERS: a line already at its target goes off at once
 	return true
 
 
@@ -4269,6 +4290,16 @@ func targets_for(seat: String, slot: String) -> Array:
 			for n in nodes:
 				if n["relay"] != "":
 					cands.append(n["id"])
+		"platform", "enemy_structure", "point":         # POWERS
+			for n in nodes:
+				cands.append(n["id"])
+		"node_pair":                                   # POWERS (Portal): the entrances; then portal_exits(entrance)
+			var out := []
+			if cast_check(seat, slot, [-1, -1]) == "Pick an entrance":
+				for n in nodes:
+					if not collapsed.get(n["id"], false) and _portal_exit(n["id"]) < 0 and not portal_exits(n["id"]).is_empty():
+						out.append(n["id"])
+			return out
 		"vat_to_node":
 			var out := []
 			if cast_check(seat, slot, [-1, -1]) == "Start from one of your nodes":   # slot ready: list the sources
@@ -4319,10 +4350,13 @@ func _step_skills(dt: float) -> void:
 		e["t"] = float(e["t"]) - dt
 		if e["id"] == "scorch":
 			_burn(e, dt)
-		if e["id"] == "demolish" and e.get("phase", "") == "down":
-			demolished[e["target"]] = maxf(float(e["t"]), 0.0)
+		if e.get("phase", "") == "down" and e["on"] == "edge":   # POWERS: Demolish / Quake / Sever, the longest wins
+			var t0: float = demolished.get(e["target"], 0.0) if _down_seen.has(e["target"]) else 0.0
+			demolished[e["target"]] = maxf(t0, float(e["t"]))
+			_down_seen[e["target"]] = true
 		if float(e["t"]) <= 0.0 or (e["on"] == "horde" and _horde(e["target"]).is_empty()):
 			ended.append(e)
+	_down_seen.clear()
 	for e in ended:
 		_end_effect(e)
 
@@ -4333,20 +4367,11 @@ func _end_effect(e: Dictionary) -> void:
 	fx_events.append({"type": "skill_end", "id": e["id"], "seat": e["seat"], "on": e["on"], "target": e["target"]})
 	events.append({"t": time, "type": "skill_end", "id": e["id"], "seat": e["seat"], "kills": e.get("kills", 0.0)})
 	match e["id"]:
-		"demolish":
-			var ei: int = e["target"]
-			if e.get("phase", "") == "warning":
-				if anchor_state(ei) != null or not _deck_ok(ei):
-					fx_events.append({"type": "demolish_failed", "edge": ei, "seat": e["seat"]})
-					events.append({"t": time, "type": "demolish_failed", "edge": ei, "seat": e["seat"]})
-				else:                                     # the deck is gone: lines on it and ordered across it pour off (0.18.6 waterfall)
-					var down: float = Rules.SKILLS["demolish"]["down"]
-					demolished[ei] = down
-					_add_effect("demolish", e["seat"], "edge", ei, down, {"phase": "down"})
-					fx_events.append({"type": "demolish", "edge": ei, "seat": e["seat"]})
-			else:
-				demolished.erase(ei)
-				fx_events.append({"type": "deck_rebuilt", "edge": ei})
+		"demolish", "quake", "sever":                  # POWERS: one deck-drop path for all three
+			if e["on"] == "edge":
+				_deck_drop_end(e)
+		"portal":
+			_portal_end(e)
 		"anchor", "relay_aegis":
 			if e["on"] == "edge":
 				_settle_edge(e["target"], bool(e["open"]))
@@ -4389,7 +4414,7 @@ func _burn(e: Dictionary, dt: float) -> void:
 	for h in hordes.duplicate():
 		if float(e["left"]) <= 0.0:
 			return
-		if allied(h["owner"], e["seat"]) or h["units"] <= 0.0:
+		if allied(h["owner"], e["seat"]) or h["units"] <= 0.0 or h.get("immune", false):   # (POWERS: Evac)
 			continue
 		var on := 0.0
 		for sp in h["spans"]:
@@ -4540,6 +4565,7 @@ func _emit_decoys(dt: float) -> void:
 		var x: float = minf(h["ghost_left"], Rules.exit_rate() * dt)
 		h["units"] += x
 		h["ghost_left"] -= x
+		h["ghost_sent"] = float(h.get("ghost_sent", 0.0)) + x   # POWERS: visible_units() takes it off the source for rivals
 		if h["ghost_left"] <= 0.001:
 			_decoy_done_streaming(h)
 
@@ -4617,7 +4643,7 @@ func _target_pos(kind: String, target, seat: String) -> Vector3:
 		"deck", "fixed_deck":
 			var line := deck_line(_as_int(target))
 			return (line[0] as Vector3).lerp(line[-1], 0.5) if not line.is_empty() else Vector3.ZERO
-		"vat_to_node":
+		"vat_to_node", "node_pair":
 			return nodes[_as_int(target[0])]["pos"]
 		"enemy_relay":
 			return nodes[_relay_target(target)[0]]["pos"]
@@ -4625,3 +4651,469 @@ func _target_pos(kind: String, target, seat: String) -> Vector3:
 			return nodes[homes[seat]]["pos"] if homes.has(seat) else Vector3.ZERO
 	var i := _as_int(target)
 	return nodes[i]["pos"] if i >= 0 and i < nodes.size() else Vector3.ZERO
+
+
+
+# ------------------------------------------------------------------ POWERS (0.22.2)
+# Daniele, 2026-09-28: "we need more powers like demolish as its very fun and very op". Spec and first numbers:
+# Docs/Game Design/Ooze Syndicate 2.0/01 Rules/NEW-POWERS-2026-09-28.md (numbers in Rules.SKILLS). Every power
+# is an ordinary skill: cast_check -> cast -> effects / fx events, streamed in snapshots like the others.
+#   quake     map     platform (not a home): every deck touching it gets a Demolish-style warning, then drops
+#                     (riders fall) for SKILLS.quake.down s. Effects: "quake" on each "edge" (phase warning /
+#                     down, "center"), plus one on the "node" (phase "", "edges") for the view's shake.
+#   sever     map     any deck, relay decks too: warning, then down for SKILLS.sever.down s ("sever" on "edge").
+#   backwash  map     a deck: every hostile line whose head is on it is shoved back to the lip it came from
+#                     (its order stands; nothing lost). fx {"type": "backwash", "edge", "seat", "hids"}.
+#   sinkhole  active  an enemy structure: a vat / Machinegoon drops a tier, a T1 or single-tier one is destroyed
+#                     (never a T4; a home keeps a T1 vat). fx {"type": "sinkhole", "node", "seat", "structure",
+#                     "from", "to", "destroyed"}.
+#   fog       map     a node as the circle's centre: "fog" on "node" {"radius"}; fog_hides / node_hidden say what a
+#                     viewer may not see (views only: the Sim and the data online are unchanged for now).
+#   portal    map     [entrance, exit] within SKILLS.portal.reach bridges: "portal" on the entrance "node"
+#                     {"exit"}. A route into the entrance ends there (h["portal"] = {"node", "exit", "dest"});
+#                     what pours in comes out of the exit as a carry line (h["carry_src"], "no_portal") walking
+#                     on to "dest" - or lands at the exit when that was the goal. fx "portal_pass" {"hid",
+#                     "node", "exit", "seat"} once per line. When it ends, lines still on the way walk on.
+#   evac      active  own node: SKILLS.evac.share of its garrison leaves at once (it is out of the node at the
+#                     cast) toward the nearest own node not under attack, by route: a line with h["immune"]
+#                     (towers, Scorch, monsters and Backwash skip it; falls still kill) and h["evac_left"]
+#                     still to burst out of the door. fx {"type": "evac", "node", "seat", "hid", "to"}.
+#   core_meltdown (the ultimate): castable from the start of the trip - h["armed"]; _step_armed sets it off
+#                     within SKILLS.core_meltdown.range m of the target (or pouring in); fx "meltdown_fizzled"
+#                     {"hid", "seat"} when the target turns friendly first.
+# PUBLIC (views, dock, AI): deck_going(ei), line_goal(h), portal_exits(entrance), portal_of(node) -> exit or -1,
+# fog_hides(pos, viewer), node_hidden(node_id, viewer), visible_units(n, viewer) (a Ghost Line's source count
+# drops for rivals as if the decoy were real).
+const DECK_DROPS := ["demolish", "quake", "sever"]
+
+
+func line_goal(h: Dictionary) -> int:
+	## Where a line is really going: its target, or past a Portal's entrance, the node it was sent to.
+	return int(h["portal"]["dest"]) if h.has("portal") else int(h["target"])
+
+
+func deck_going(ei: int) -> bool:
+	## The deck is down or under a Demolish / Quake / Sever warning.
+	if demolished.has(ei):
+		return true
+	for x in effects_on("edge", ei):
+		if x["id"] in DECK_DROPS and x.get("phase", "") != "":
+			return true
+	return false
+
+
+func portal_of(node_id: int) -> int:
+	return _portal_exit(node_id)
+
+
+func _portal_exit(node_id: int) -> int:
+	if _fx_node.is_empty():
+		return -1
+	for e in _fx_node.get(node_id, []):
+		if e["id"] == "portal":
+			return int(e["exit"])
+	return -1
+
+
+func portal_exits(entrance: int) -> Array:
+	## Every node a Portal from `entrance` may open on (within SKILLS.portal.reach bridges by route).
+	var out := []
+	if not _node_ok(entrance):
+		return out
+	var reach := int(Rules.SKILLS["portal"]["reach"])
+	for n in nodes:
+		var id: int = n["id"]
+		if id == entrance or collapsed.get(id, false):
+			continue
+		var r := find_route(entrance, id)
+		if r.size() >= 2 and _bridges(r) <= reach:
+			out.append(id)
+	return out
+
+
+func fog_hides(pos: Vector3, viewer: String) -> bool:
+	## Is this point inside a Fog of War cast by someone outside the viewer's side?
+	if _fx_node.is_empty():
+		return false
+	for e in effects:
+		if e["id"] != "fog" or (viewer != "" and allied(str(e["seat"]), viewer)):
+			continue
+		var c: Vector3 = nodes[int(e["target"])]["pos"]
+		if Vector2(pos.x - c.x, pos.z - c.z).length() <= float(e["radius"]):
+			return true
+	return false
+
+
+func node_hidden(node_id: int, viewer: String) -> bool:
+	return fog_hides(nodes[node_id]["pos"], viewer)
+
+
+func visible_units(n: Dictionary, viewer: String) -> float:
+	## The garrison count a viewer should see: the truth for its own side; for a rival, a node that sends a Ghost
+	## Line (or an echo) looks as if the decoy's units had left it, as a real send would.
+	var u: float = n["units"]
+	if viewer == "" or n["owner"] == "" or allied(str(n["owner"]), viewer):
+		return u
+	for h in hordes:
+		if h.get("decoy", false) and h["owner"] == n["owner"] and int(h["route"][0]) == int(n["id"]):
+			u -= float(h.get("ghost_sent", 0.0))
+	return maxf(u, 0.0)
+
+
+# ---- checks
+func _power_check(seat: String, id: String, target) -> String:
+	var sk: Dictionary = Rules.SKILLS[id]
+	match id:
+		"quake":
+			var i := _as_int(target)
+			if not _node_ok(i):
+				return "Pick a platform"
+			if i in homes.values():
+				return "Pick a platform that is not a home"
+			if _quake_decks(i).is_empty():
+				return "No deck there can drop"
+		"sever":
+			var ei := _as_int(target)
+			if not _deck_ok(ei):
+				return "Pick a deck"
+			if deck_going(ei):
+				return "That deck is already coming down"
+			if anchor_state(ei) != null:
+				return "That deck is anchored"
+			if _deck_moving(ei) or not is_edge_open(ei):
+				return "That deck is not there now"
+		"backwash":
+			var ei := _as_int(target)
+			if not _deck_ok(ei):
+				return "Pick a deck"
+			if _backwash_lines(seat, ei).is_empty():
+				return "No enemy lines on that deck"
+		"sinkhole":
+			var i := _as_int(target)
+			if not _node_ok(i) or nodes[i]["owner"] == "" or allied(nodes[i]["owner"], seat):
+				return "Pick an enemy structure"
+			var n: Dictionary = nodes[i]
+			if n["structure"] == "":
+				return "Nothing to sink there"
+			if n["structure"] in ["vat", "machinegoon"] and n["tier"] >= 4:
+				return "A T4 holds its ground"
+			if n["structure"] == "vat" and n["tier"] <= 1 and i in homes.values():
+				return "A home keeps its vat"
+		"fog":
+			if not _node_ok(_as_int(target)):
+				return "Pick a spot"
+		"portal":
+			if not target is Array or (target as Array).size() < 2:
+				return "Pick an entrance and an exit"
+			var a := _as_int(target[0])
+			var b := _as_int(target[1])
+			if not _node_ok(a):
+				return "Pick an entrance"
+			if _portal_exit(a) >= 0:
+				return "That node already has a portal"
+			if not _node_ok(b) or b == a:
+				return "Pick an exit"
+			var r := find_route(a, b)
+			if r.size() < 2 or _bridges(r) > int(sk["reach"]):
+				return "The exit must be within %d bridges" % int(sk["reach"])
+		"evac":
+			var i := _as_int(target)
+			if not _node_ok(i) or nodes[i]["owner"] != seat:
+				return "Pick one of your nodes"
+			if floorf(nodes[i]["units"] * float(sk["share"])) < 1.0:
+				return "No units to evacuate"
+			if _evac_route(seat, i).is_empty():
+				return "No safe node to evacuate to"
+	return ""
+
+
+func _quake_decks(i: int) -> Array:
+	## The decks a Quake on platform i drops: every deck touching it that is there now and not anchored.
+	var out := []
+	for link in adj[i]:
+		var ei: int = link[1]
+		if edges[ei]["plaza"] or not _deck_ok(ei) or deck_going(ei) or anchor_state(ei) != null or ei in out:
+			continue
+		if _deck_moving(ei) or not is_edge_open(ei):
+			continue
+		out.append(ei)
+	return out
+
+
+func _backwash_lines(seat: String, ei: int) -> Array:
+	## [[horde, span]] for every hostile line whose head is on deck ei (an Evac line is immune).
+	var out := []
+	for h in hordes:
+		if allied(h["owner"], seat) or h["state"] == "absorb" or h["units"] <= 0.0 or h.get("immune", false):
+			continue
+		for sp in h["spans"]:
+			if sp["edge"] == ei and h["s"] >= sp["s0"] and h["s"] <= sp["s1"]:
+				out.append([h, sp])
+				break
+	return out
+
+
+func _evac_route(seat: String, src: int) -> Array:
+	## The route to the nearest own node that is not under attack nor under a Last Stand warning ([] if none).
+	var best := []
+	var best_t := INF
+	for n in nodes:
+		var id: int = n["id"]
+		if id == src or n["owner"] != seat or collapsed.get(id, false) or is_warned(id) or node_under_attack(id, seat):
+			continue
+		var r := find_route(src, id)
+		if r.size() < 2:
+			continue
+		var t := 0.0
+		for k in range(r.size() - 1):
+			t += edge_cost(_edge_index(r[k], r[k + 1])) + Rules.ROUTE_NODE_SECONDS
+		if t < best_t:
+			best_t = t
+			best = r
+	return best
+
+
+# ---- casts
+func _power_cast(seat: String, id: String, target, ev: Dictionary) -> void:
+	var sk: Dictionary = Rules.SKILLS[id]
+	match id:
+		"quake":
+			var i := _as_int(target)
+			var decks := _quake_decks(i)
+			var hit := [nodes[i]["owner"]]
+			for ei in decks:
+				_add_effect("quake", seat, "edge", ei, sk["warn"], {"phase": "warning", "center": i})
+				hit += _deck_seats(seat, ei)
+			_add_effect("quake", seat, "node", i, float(sk["warn"]) + float(sk["down"]), {"edges": decks})
+			ev["edges"] = decks
+			ev["affects"] = _hostile_list(seat, hit)
+		"sever":
+			var ei := _as_int(target)
+			_add_effect("sever", seat, "edge", ei, sk["warn"], {"phase": "warning"})
+			ev["affects"] = _deck_seats(seat, ei)
+		"backwash":
+			var ei := _as_int(target)
+			var hids := []
+			var hit := []
+			for pair in _backwash_lines(seat, ei):
+				var h: Dictionary = pair[0]
+				h["s"] = maxf(float(pair[1]["s0"]), 1.0)      # the head back at the lip it came from; the order stands
+				h["pour"] = false
+				if h["state"] == "fight":
+					h["state"] = "move"
+				hids.append(h["id"])
+				hit.append(h["owner"])
+			ev["hids"] = hids
+			ev["affects"] = _hostile_list(seat, hit)
+			fx_events.append({"type": "backwash", "edge": ei, "seat": seat, "hids": hids})
+		"sinkhole":
+			var n: Dictionary = nodes[_as_int(target)]
+			ev["affects"] = _hostile_list(seat, [n["owner"]])
+			_sinkhole(seat, n)
+		"fog":
+			var i := _as_int(target)
+			_drop_effects("node", i, "fog")
+			_add_effect("fog", seat, "node", i, sk["dur"], {"radius": float(sk["radius_m"])})
+			var hit := []
+			for n in nodes:
+				if fog_hides(n["pos"], n["owner"]) and n["owner"] != "":
+					hit.append(n["owner"])
+			ev["affects"] = _hostile_list(seat, hit)
+		"portal":
+			var a := _as_int(target[0])
+			var b := _as_int(target[1])
+			_add_effect("portal", seat, "node", a, sk["dur"], {"exit": b})
+			ev["exit"] = b
+			ev["affects"] = _hostile_list(seat, [nodes[a]["owner"], nodes[b]["owner"]])
+			for h in hordes:                                 # lines already on their way through the entrance
+				if h.get("no_portal", false) or h.has("portal") or h["state"] == "absorb" or h.get("retreat", false):
+					continue
+				var k: int = (h["route"] as Array).find(a)
+				if k < 1:
+					continue
+				var passed := false
+				for ns in h["node_spans"]:
+					if int(ns["node"]) == a and float(h["s"]) > float(ns["s1"]):
+						passed = true
+				if not passed:
+					_reroute_keep(h, h["route"])
+		"evac":
+			var src: Dictionary = nodes[_as_int(target)]
+			var route := _evac_route(seat, src["id"])
+			var count := floorf(src["units"] * float(sk["share"]))
+			src["units"] -= count                           # out of the node at once: an attack there no longer reaches them
+			var h := _new_horde(seat, count, route, {"immune": true, "evac_left": count})
+			hordes.append(h)
+			ev["hid"] = h["id"]
+			ev["to"] = route[-1]
+			fx_events.append({"type": "evac", "node": src["id"], "seat": seat, "hid": h["id"], "to": route[-1]})
+			events.append({"t": time, "type": "evac", "seat": seat, "node": src["id"], "units": count, "to": route[-1]})
+
+
+func _deck_drop_end(e: Dictionary) -> void:
+	## A Demolish / Quake / Sever phase ends. Warning over: the deck goes (unless an Anchor holds it or it is gone),
+	## its lines and every order across it pour off (0.18.6 waterfall). Down over: it is back when nothing else
+	## keeps it down.
+	var ei: int = e["target"]
+	var id: String = e["id"]
+	if e.get("phase", "") == "warning":
+		if anchor_state(ei) != null or not _deck_ok(ei):
+			fx_events.append({"type": "demolish_failed", "edge": ei, "seat": e["seat"], "id": id})
+			events.append({"t": time, "type": "demolish_failed", "edge": ei, "seat": e["seat"], "id": id})
+			return
+		var down: float = Rules.SKILLS[id]["down"]
+		var was_down := demolished.has(ei)
+		demolished[ei] = maxf(float(demolished.get(ei, 0.0)), down)
+		_add_effect(id, e["seat"], "edge", ei, down, {"phase": "down"})
+		if not was_down:
+			fx_events.append({"type": "demolish", "edge": ei, "seat": e["seat"], "id": id})
+		return
+	for x in effects_on("edge", ei):
+		if x["id"] in DECK_DROPS and x.get("phase", "") == "down":
+			return                                          # another drop still keeps it down
+	demolished.erase(ei)
+	fx_events.append({"type": "deck_rebuilt", "edge": ei})
+
+
+func _sinkhole(seat: String, n: Dictionary) -> void:
+	var old: String = n["structure"]
+	var from: int = n["tier"]
+	if n["build_kind"] != "":                               # an upgrade in progress sinks with it
+		n["build_kind"] = ""
+		n["build_target"] = {}
+	var destroyed := true
+	if old in ["vat", "machinegoon"] and from > 1:
+		n["tier"] = from - 1
+		destroyed = false
+	else:
+		n["structure"] = ""
+		n["shot"] = {}
+		if old == "monster_hub":
+			n["hub_monster"] = -1
+			n["monster_ready_t"] = 0.0
+	_sync_legacy(n)
+	fx_events.append({"type": "sinkhole", "node": n["id"], "seat": seat, "structure": old, "from": from, "to": n["tier"],
+			"destroyed": destroyed, "victim": n["owner"]})
+	events.append({"t": time, "type": "sinkhole", "node": n["id"], "seat": seat, "victim": n["owner"], "structure": old,
+			"from": from, "destroyed": destroyed})
+
+
+func _emit_evacs(dt: float) -> void:
+	## An Evac line bursts out of the door (its units already left the node at the cast).
+	for h in hordes:
+		var left: float = float(h.get("evac_left", 0.0))
+		if left <= 0.0:
+			continue
+		var x: float = minf(left, Rules.exit_rate() * door_mult(h) * dt)
+		h["units"] += x
+		h["evac_left"] = left - x
+		if h["evac_left"] <= 0.001:
+			h["evac_left"] = 0.0
+			h["streaming"] = false
+			h["ordered"] = h["units"]
+			h["start_units"] = maxf(h["units"], 1.0)
+
+
+func _step_armed() -> void:
+	## Core Meltdown armed at the start of the trip: it goes off once the head is within range of the target (or
+	## pouring in); a target that turned friendly or dropped wastes it.
+	for h in hordes.duplicate():
+		if not h.get("armed", false) or not (h in hordes) or h.has("portal"):
+			continue
+		var n: Dictionary = nodes[h["target"]]
+		if allied(n["owner"], h["owner"]) or collapsed.get(n["id"], false) or h.get("retreat", false):
+			h.erase("armed")
+			fx_events.append({"type": "meltdown_fizzled", "hid": h["id"], "seat": h["owner"]})
+			events.append({"t": time, "type": "meltdown_fizzled", "seat": h["owner"]})
+			continue
+		if h["state"] == "absorb" or float(h["L"]) - float(h["s"]) <= float(Rules.SKILLS["core_meltdown"]["range"]):
+			h.erase("armed")
+			_meltdown(h["owner"], h)
+
+
+# ---- Portal
+func _portal_cut(h: Dictionary, route: Array) -> Array:
+	## A route into a Portal's entrance ends there; h["portal"] remembers the exit and where the line is going.
+	var dest: int = route[-1]
+	if h.has("portal") and dest == int(h["portal"]["node"]):
+		dest = int(h["portal"]["dest"])                     # (a reroute toward the entrance keeps the real goal)
+	h.erase("portal")
+	for i in range(1, route.size()):
+		var x := _portal_exit(route[i])
+		if x >= 0:
+			h["portal"] = {"node": route[i], "exit": x, "dest": dest}
+			return route.slice(0, i + 1)
+	return route
+
+
+func _reroute_keep(h: Dictionary, route: Array) -> void:
+	## A new route with the same start and the same path so far (the line keeps its place and its view state).
+	var keep := {}
+	for k in ["fcut", "pour", "pour_lip", "pour_k"]:
+		keep[k] = h.get(k)
+	_set_route(h, route)
+	for k in keep:
+		if keep[k] != null:
+			h[k] = keep[k]
+	if h["s"] >= h["L"]:
+		h["s"] = h["L"]
+		h["state"] = "absorb"
+
+
+func _portal_carry(n: Dictionary, h: Dictionary, x: float) -> void:
+	## Units pouring into a Portal's entrance come out of its exit: a carry line toward the line's goal, or they
+	## land at the exit when that was the goal (or the way on is cut).
+	var p: Dictionary = h["portal"]
+	var ex: int = int(p["exit"])
+	var dest: int = int(p["dest"])
+	if collapsed.get(ex, false):
+		h.erase("portal")                                   # the exit is gone: they land at the entrance
+		_arrive(n, h, x)
+		return
+	if not p.get("passed", false):
+		p["passed"] = true
+		fx_events.append({"type": "portal_pass", "hid": h["id"], "node": n["id"], "exit": ex, "seat": h["owner"]})
+	var c := _horde(int(h.get("carry_id", -1)))
+	if c.is_empty():
+		var route := [] if dest == ex or dest == int(p["node"]) else find_route(ex, dest)
+		if route.size() < 2:
+			_arrive(nodes[ex], h, x)                        # the exit was the goal: they land there
+			return
+		var extra := {"no_portal": true, "carry_src": h["id"]}
+		for k in ["decoy", "echo"]:
+			if h.get(k, false):
+				extra[k] = true
+		c = _new_horde(h["owner"], h["units"] + x, route, extra)
+		if h.get("armed", false):
+			c["armed"] = true
+			h.erase("armed")
+		hordes.append(c)
+		h["carry_id"] = c["id"]
+	c["units"] += x
+
+
+func _step_portals() -> void:
+	for c in hordes.duplicate():
+		if not c.has("carry_src") or not c["streaming"] or not _horde(int(c["carry_src"])).is_empty():
+			continue
+		c.erase("carry_src")                                # everything went through: a finished order
+		c["streaming"] = false
+		c["ordered"] = c["units"]
+		c["start_units"] = maxf(c["units"], 1.0)
+		if c["units"] <= 0.0:
+			hordes.erase(c)
+
+
+func _portal_end(e: Dictionary) -> void:
+	## The portal closes: lines still on their way to the entrance walk on to their goal; one pouring through
+	## finishes going through.
+	var a: int = e["target"]
+	for h in hordes.duplicate():
+		if not h.has("portal") or int(h["portal"]["node"]) != a or h["state"] == "absorb":
+			continue
+		var dest: int = int(h["portal"]["dest"])
+		var rest := find_route(a, dest) if dest != a else []
+		if rest.size() < 2:
+			h.erase("portal")
+			continue
+		_reroute_keep(h, (h["route"] as Array) + rest.slice(1))

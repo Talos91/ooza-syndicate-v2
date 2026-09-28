@@ -942,6 +942,7 @@ func _init() -> void:
 	_rules_0_18_10()
 	_ls_pacing()
 	_audit_fixes()
+	_powers_tests()
 	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
@@ -1020,7 +1021,7 @@ func _audit_fixes() -> void:
 		var b0: float = s.nodes[1]["units"]
 		var c0: float = s.nodes[1]["allies"].get("C", 0.0)
 		var lost_c0: float = s.combat_losses.get("C", 0.0)
-		var kills: float = minf(maxf(line * 0.25, 20.0) * 3.0, 300.0)
+		var kills: float = minf(maxf(line * 0.25, 20.0) * 4.0, 450.0)       # POWERS (0.22.2): 4 per unit, cap 90 shown
 		check(s.cast("A", "ultimate", h["id"]), "Core Meltdown vs an allied store: cast")
 		if c[2]:
 			check(s.nodes[1]["owner"] == "A" and s.nodes[1]["allies"].is_empty() and s.combat_losses.get("C", 0.0) - lost_c0 > c0 - 0.01,
@@ -1825,8 +1826,8 @@ func _skills_tests() -> void:
 		ok = ok and sk.has("name") and sk.has("slot") and sk.has("cd") and sk.has("target") and sk.has("desc")
 		if sk["slot"] == "ultimate":
 			ok = ok and Rules.FACTION_ULTIMATE_ID[sk["faction"]] == id
-	check(ok and Rules.ACTIVE_SKILLS.size() == 5 and Rules.MAP_SKILLS.size() == 5 and Rules.FACTION_ULTIMATE_ID.size() == 5 and Rules.SKILLS.size() == 15,
-			"skills table: 5 active + 5 map + 5 ultimates, each with name, slot, cd, target and desc")
+	check(ok and Rules.ACTIVE_SKILLS.size() == 7 and Rules.MAP_SKILLS.size() == 10 and Rules.FACTION_ULTIMATE_ID.size() == 5 and Rules.SKILLS.size() == 22,
+			"skills table: 7 active + 10 map + 5 ultimates (POWERS 0.22.2), each with name, slot, cd, target and desc")
 	check(Rules.FACTION_ULTIMATE.values().map(func(v): return v[0]) == ["Rewire", "Echo Split", "Superbloom", "Core Meltdown", "Relay Aegis"],
 			"FACTION_ULTIMATE carries the approved names")
 	# ---------------------------------------------------------------- 0.19.2: skills start on their full cooldown
@@ -2178,21 +2179,38 @@ func _skills_tests() -> void:
 			_charged(s, "A")
 			var h := s.send(3, 1, 1.0)
 			_steps(s, 0.5)
-			check("reaches its target" in s.cast_check("A", "ultimate", h["id"]), tag + ": Core Meltdown waits until the line is at its target")
-			run_until(s, func(): return float(h["L"]) - float(h["s"]) <= 12.0, 20.0)
-			var line: float = h["units"]
-			var g0: float = s.nodes[1]["units"]
+			# POWERS (0.22.2, Daniele 2026-09-28): castable from the START of the trip - armed, it goes off on arrival
+			var g_start: float = s.nodes[1]["units"]
+			check(s.cast("A", "ultimate", h["id"]) and h.get("armed", false) and s.nodes[1]["units"] == g_start and s.charge("A") == 0.0,
+					tag + ": Core Meltdown arms a line at the start of its trip (nothing happens yet, the charge is spent)")
+			check("already armed" in s.cast_check("A", "ultimate", h["id"]) or s.charge("A") < 1.0, tag + ": an armed line cannot be armed twice")
+			run_until(s, func(): return float(h["L"]) - float(h["s"]) <= 20.0, 20.0)
+			check(h.get("armed", false) and s.nodes[1]["owner"] == "B", tag + ": still armed on the way")
+			var line := 0.0
+			var g0 := 0.0
+			var charge_b := 0.0
+			var ev := {}
+			for k in range(200):
+				line = h["units"]
+				g0 = s.nodes[1]["units"]
+				charge_b = s.charge("B")
+				var n0 := s.events.size()
+				s.step(0.05)
+				for e in s.events.slice(n0):
+					if e["type"] == "meltdown":
+						ev = e
+				if not ev.is_empty():
+					break
+			var left := float(h["L"]) - float(h["s"]) if h in s.hordes else 0.0
+			check(not ev.is_empty() and left <= 12.0 + 0.5, tag + ": it goes off within 12 m of the target (%.1f m)" % left)
 			var sac: float = maxf(line * 0.25, 20.0)
-			var kills: float = minf(sac * 3.0, 300.0)
-			var charge_b := s.charge("B")
-			check(s.cast("A", "ultimate", h["id"]), tag + ": Core Meltdown on the arriving line")
+			var kills: float = minf(sac * 4.0, 450.0)
 			if g0 <= kills:
-				check(s.nodes[1]["owner"] == "A" and absf(s.nodes[1]["units"] - (line - sac)) < 0.5 and not (h in s.hordes),
-						tag + ": the garrison hits zero and the rest of the line (%.0f) captures" % (line - sac))
+				check(s.nodes[1]["owner"] == "A" and not (h in s.hordes) and bool(ev.get("captured", false)),
+						tag + ": the garrison hits zero and the rest of the line captures")
 			else:
-				check(s.nodes[1]["owner"] == "B" and absf(s.nodes[1]["units"] - (g0 - kills)) < 0.01 and absf(h["units"] - (line - sac)) < 0.01,
-						tag + ": 25 %% sacrificed (%.0f), 3 defenders each (%.0f killed)" % [sac, kills])
-			s.step(0.05)
+				check(s.nodes[1]["owner"] == "B" and absf(float(ev["sacrificed"]) - sac) < 0.6 and absf(float(ev["killed"]) - minf(float(ev["sacrificed"]) * 4.0, 450.0)) < 0.01,
+						tag + ": 25 %% sacrificed (%.0f), 4 defenders each (%.0f killed)" % [float(ev["sacrificed"]), float(ev["killed"])])
 			check(absf(s.charge("B") - charge_b - 0.05 / Rules.ULT_CHARGE_TIME) < 0.0001, tag + ": no charge from the meltdown")
 	s = _mk(tp, "ember", "null")
 	s.nodes[3]["units"] = 1000.0
@@ -2206,7 +2224,7 @@ func _skills_tests() -> void:
 	var gm: float = s.nodes[2]["units"]
 	var lm: float = hm["units"]
 	s.cast("A", "ultimate", hm["id"])
-	check(lm * 0.25 * 3.0 > 300.0 and absf(gm - s.nodes[2]["units"] - 300.0) < 0.01 and absf(lm - hm["units"] - lm * 0.25) < 0.01, "a big line: no cap on the sacrifice, 60 shown kills at most")
+	check(lm * 0.25 * 4.0 > 450.0 and absf(gm - s.nodes[2]["units"] - 450.0) < 0.01 and absf(lm - hm["units"] - lm * 0.25) < 0.01, "a big line: no cap on the sacrifice, 90 shown kills at most (cast in range: it goes off at once)")
 	# ---------------------------------------------------------------- Relay Aegis
 	s = _mk(tp, "solar", "null")
 	for id in [1, 0]:
@@ -2624,3 +2642,138 @@ func _dock_tests() -> void:
 		x.layer.free()
 		x.hint_panel.free()
 		x.free()
+
+
+# ------------------------------------------------------------------ POWERS (0.22.2): the 7 new powers + NULL's decoys look real
+func _powers_tests() -> void:
+	var tp := MapBuilder.load_map("res://maps/004-two-piers.json")       # 3 - 1 - 0 - 2 - 4, no relays (A home 3, B home 4)
+	var sw := MapBuilder.load_map("res://maps/010-first-switch.json")    # switch relays 1 and 2
+	check(Rules.skill_slot_id("vex", {"map": "portal"}, "map") == "portal" and Rules.skill_slot_id("vex", {"active": "evac"}, "active") == "evac",
+			"POWERS: the new powers can be picked in a loadout")
+	# ---------------------------------------------------------------- Quake
+	var s := _mk(tp, "null", "ember", {"B": {"map": "quake"}})
+	check("not a home" in s.cast_check("B", "map", 3), "Quake: refused on a home")
+	var e10 := s._edge_index(1, 0)
+	var e13 := s._edge_index(1, 3)
+	s.nodes[3]["units"] = 300.0
+	var h := s.send(3, 4, 1.0)
+	check(s.cast("B", "map", 1), "Quake: cast on platform 1")
+	_steps(s, 1.4)
+	check(s.is_edge_open(e10) and s.is_edge_open(e13), "Quake: its decks stand through the 1.5 s warning")
+	_steps(s, 0.2)
+	check(not s.is_edge_open(e10) and not s.is_edge_open(e13) and s.find_route(3, 4).is_empty(), "Quake: then every deck touching the platform is gone")
+	_steps(s, 3.0)
+	check(s.fall_losses.get("A", 0.0) > 0.0, "Quake: riders fall (%.0f)" % s.fall_losses.get("A", 0.0))
+	_steps(s, 3.2)
+	check(s.is_edge_open(e10) and s.is_edge_open(e13) and s.demolished.is_empty(), "Quake: the decks are back after 6 s")
+	# ---------------------------------------------------------------- Sever (a relay deck too)
+	s = _mk(sw, "null", "ember", {"B": {"map": "sever"}})
+	var rd := -1
+	for i in range(s.edges.size()):
+		if s.edges[i]["state"] != "" and s.is_edge_open(i) and not s.edges[i]["plaza"]:
+			rd = i
+			break
+	check(rd >= 0 and s.cast("B", "map", rd), "Sever: cast on a relay deck")
+	_steps(s, 1.6)
+	check(not s.is_edge_open(rd) and s.demolished.has(rd), "Sever: the relay deck is cut after the warning")
+	_steps(s, 10.0)
+	check(s.is_edge_open(rd) and not s.demolished.has(rd), "Sever: back after 10 s")
+	s = _mk(tp, "null", "ember", {"A": {"map": "anchor"}, "B": {"map": "sever"}})
+	s.cast("A", "map", e10)
+	check("anchored" in s.cast_check("B", "map", e10), "Sever: an anchored deck holds")
+	# ---------------------------------------------------------------- Backwash
+	s = _mk(tp, "null", "ember", {"B": {"map": "backwash"}})
+	check("No enemy lines" in s.cast_check("B", "map", e10), "Backwash: refused on a deck with no enemy line")
+	s.nodes[3]["units"] = 100.0
+	h = s.send(3, 4, 1.0)
+	var span := {}
+	for sp in h["spans"]:
+		if sp["edge"] == e10:
+			span = sp
+	run_until(s, func(): return h["s"] > float(span["s0"]) + 3.0, 20.0)
+	var u0: float = h["units"]
+	check(s.cast("B", "map", e10), "Backwash: cast on the deck under the line's head")
+	check(absf(h["s"] - float(span["s0"])) < 0.01 and h["units"] == u0 and h["target"] == 4, "Backwash: the head is back at the lip it came from, nothing lost, the order stands")
+	# ---------------------------------------------------------------- Sinkhole
+	s = _mk(tp, "ember", "null", {"A": {"active": "sinkhole"}})
+	s.nodes[1]["owner"] = "B"
+	s.nodes[1]["tier"] = 2
+	check(s.cast("A", "active", 1) and s.nodes[1]["tier"] == 1 and s.nodes[1]["structure"] == "vat", "Sinkhole: a T2 vat drops to T1")
+	s.skill_cd["A"]["active"] = 0.0
+	check(s.cast("A", "active", 1) and s.nodes[1]["structure"] == "" and not Sim.has_vat(s.nodes[1]), "Sinkhole: a T1 vat is destroyed")
+	s.skill_cd["A"]["active"] = 0.0
+	s.nodes[0]["owner"] = "B"
+	s.nodes[0]["structure"] = "laser"
+	check(s.cast("A", "active", 0) and s.nodes[0]["structure"] == "", "Sinkhole: a Laser tower (single tier) is destroyed")
+	s.skill_cd["A"]["active"] = 0.0
+	s.nodes[2]["owner"] = "B"
+	s.nodes[2]["tier"] = 4
+	check("T4" in s.cast_check("A", "active", 2), "Sinkhole: a T4 holds its ground (as on capture)")
+	check("home" in s.cast_check("A", "active", 4) or s.nodes[4]["tier"] > 1, "Sinkhole: a home keeps its T1 vat")
+	check("enemy" in s.cast_check("A", "active", 3), "Sinkhole: only enemy structures")
+	# ---------------------------------------------------------------- Fog of War
+	s = _mk(tp, "null", "ember", {"A": {"map": "fog"}})
+	check(s.cast("A", "map", 1), "Fog: cast on node 1")
+	var far := -1
+	for n in s.nodes:
+		if Vector2(n["pos"].x - s.nodes[1]["pos"].x, n["pos"].z - s.nodes[1]["pos"].z).length() > float(Rules.SKILLS["fog"]["radius_m"]) + 1.0:
+			far = n["id"]
+	check(s.node_hidden(1, "B") and not s.node_hidden(1, "A") and (far < 0 or not s.node_hidden(far, "B")),
+			"Fog: hidden from the rivals inside its circle only, never from the caster")
+	_steps(s, 15.1)
+	check(not s.node_hidden(1, "B"), "Fog: lifts after 15 s")
+	# ---------------------------------------------------------------- Portal
+	s = _mk(tp, "vex", "ember", {"A": {"map": "portal"}})
+	check("within 3 bridges" in s.cast_check("A", "map", [3, 4]), "Portal: the exit must be within 3 bridges")
+	check(s.cast("A", "map", [1, 2]), "Portal: entrance 1, exit 2 (2 bridges)")
+	check("already has a portal" in s.cast_check("A", "map", [1, 0]) or s.cooldown("A", "map") > 0.0, "Portal: one portal per entrance")
+	s.nodes[3]["units"] = 200.0
+	s.nodes[4]["units"] = 5.0
+	h = s.send(3, 4, 1.0)
+	check(h["route"] == [3, 1] and h.has("portal") and int(h["portal"]["dest"]) == 4, "Portal: a line sent through the entrance ends its route there (route %s)" % str(h["route"]))
+	run_until(s, func(): return s.hordes.any(func(x): return x.get("carry_src", -1) == h["id"]), 20.0)
+	var carry: Array = s.hordes.filter(func(x): return x.get("no_portal", false) and x["owner"] == "A")
+	check(not carry.is_empty() and carry[0]["route"][0] == 2 and carry[0]["target"] == 4, "Portal: what pours in comes out of the exit, walking on to the target")
+	run_until(s, func(): return s.nodes[4]["owner"] == "A", 30.0)
+	check(s.nodes[4]["owner"] == "A", "Portal: the carried line takes the target")
+	s = _mk(tp, "vex", "ember", {"A": {"map": "portal"}})
+	s.cast("A", "map", [1, 2])
+	s.nodes[3]["units"] = 200.0
+	h = s.send(3, 4, 1.0)
+	_steps(s, 0.5)
+	for e in s.effects:
+		if e["id"] == "portal":
+			e["t"] = 0.01
+	s.step(0.05)
+	check(h["route"] == [3, 1, 0, 2, 4] and not h.has("portal"), "Portal: when it closes, lines on the way walk on to their target (route %s)" % str(h["route"]))
+	# ---------------------------------------------------------------- Emergency Evac
+	s = _mk(tp, "null", "ember", {"A": {"active": "evac"}})
+	check("No safe node" in s.cast_check("A", "active", 3), "Evac: refused with no safe node to go to")
+	s.nodes[1]["owner"] = "A"
+	s.nodes[1]["units"] = 10.0
+	s.nodes[3]["units"] = 200.0
+	check(s.cast("A", "active", 3) and absf(s.nodes[3]["units"] - 100.0) < 0.01, "Evac: half the garrison leaves the node at once")
+	var ev_h: Dictionary = s.hordes.filter(func(x): return x.get("immune", false))[0]
+	check(ev_h["target"] == 1 and not s._hordes_in_range(s.nodes[4], 10000.0).has(ev_h), "Evac: toward the nearest safe node, out of every tower's reach (immune)")
+	run_until(s, func(): return not (ev_h in s.hordes), 20.0)
+	check(s.nodes[1]["units"] >= 109.0, "Evac: it lands and reinforces (%.0f)" % s.nodes[1]["units"])
+	# ---------------------------------------------------------------- NULL's decoys look real to everyone else
+	s = _mk(tp, "null", "ember")
+	s.nodes[3]["units"] = 200.0
+	s.nodes[1]["owner"] = "A"
+	s.nodes[1]["units"] = 100.0
+	s.nodes[2]["owner"] = "B"                           # (an echo heads for another enemy node)
+	var real := s.send(1, 4, 1.0)
+	_steps(s, 0.5)
+	_charged(s, "A")
+	var n0 := s.fx_events.size()
+	check(s.cast("A", "ultimate", null), "Echo Split: cast")
+	var cast_ev: Array = s.fx_events.slice(n0).filter(func(e): return e["type"] == "skill")
+	check(not cast_ev.is_empty() and str(cast_ev[0].get("private", "")) == "A", "Echo Split: the cast is private (no callout tells the rivals the new lines are echoes)")
+	s = _mk(tp, "null", "ember")
+	s.nodes[3]["units"] = 200.0
+	check(s.cast("A", "active", [3, 4]), "Ghost Line: cast")
+	_steps(s, 2.0)
+	var vis: float = s.visible_units(s.nodes[3], "B")
+	check(vis < s.nodes[3]["units"] - 5.0 and s.visible_units(s.nodes[3], "A") == s.nodes[3]["units"],
+			"Ghost Line: its source count drops for the rivals as a real send's would (%.0f seen of %.0f), the owner sees the truth" % [vis, s.nodes[3]["units"]])

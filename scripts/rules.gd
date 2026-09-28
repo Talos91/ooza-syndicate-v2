@@ -602,6 +602,9 @@ const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
 #   fixed_deck  a deck no relay moves (edge index)      relay     any relay node (node id)
 #   enemy_relay an enemy or neutral relay (node id)     vat_to_node [source node id, destination node id]
 #   none        no target (cast at once)
+# POWERS (0.22.2, NEW-POWERS-2026-09-28.md):
+#   platform    any platform but a home (node id)       enemy_structure  an enemy node with a structure (node id)
+#   point       the node at the centre of the circle    node_pair  [entrance node id, exit node id]
 const SKILLS := {
 	# ---- active pool (combat), every map
 	# 0.19.2 (Daniele, 2026-09-27): +75 % speed (was +50 %) and its units leave and enter doors twice as fast
@@ -634,6 +637,35 @@ const SKILLS := {
 	# target: the relay id fires it once (its normal warning); [relay id, "jam"] adds `jam` s to its cooldown
 	"relay_hack": {"name": "Relay Hack", "slot": "map", "cd": 45.0, "target": "enemy_relay", "needs_relays": true,
 			"desc": "Fire an enemy or neutral relay once, or jam it (+10 s cooldown).", "jam": 10.0},
+	# ---- POWERS (0.22.2, Daniele 2026-09-28: "we need more powers like demolish as its very fun and very op";
+	# spec + first numbers: 01 Rules/NEW-POWERS-2026-09-28.md, all to tune by play). "warn": the Demolish-style
+	# warning before a deck goes (the spec is silent; 1.5 s like Demolish, so a deck never vanishes unannounced).
+	"quake": {"name": "Quake", "slot": "map", "cd": 60.0, "target": "platform",
+			"desc": "A platform shakes: every deck touching it drops after 1.5 s, riders fall; back after 6 s.",
+			"warn": 1.5, "down": 6.0},
+	"sever": {"name": "Sever", "slot": "map", "cd": 45.0, "target": "deck",
+			"desc": "Cut any deck, relay decks too, after 1.5 s: riders fall; it is back after 10 s.",
+			"warn": 1.5, "down": 10.0},
+	"backwash": {"name": "Backwash", "slot": "map", "cd": 40.0, "target": "deck",
+			"desc": "A wave shoves every enemy line on a deck back to the end it came from. No losses."},
+	# a vat / Machinegoon drops one tier; a T1 or single-tier structure (Laser, Forge, Monster hub) is destroyed.
+	# Like a capture it never touches a T4, and a home keeps at least a T1 vat (conservative readings, OPEN-QUESTIONS).
+	"sinkhole": {"name": "Sinkhole", "slot": "active", "cd": 50.0, "target": "enemy_structure",
+			"desc": "An enemy structure sinks one tier; a T1 or single-tier one is destroyed."},
+	# every seat outside the caster's side sees nothing inside the circle (radius_m around the tapped node):
+	# nodes, counts, lines, structures (client-side hiding for now; online the data still travels)
+	"fog": {"name": "Fog of War", "slot": "map", "cd": 60.0, "target": "point",
+			"desc": "A dark goo cloud hides everything in a circle from your enemies for 15 s.",
+			"radius_m": 32.0, "dur": 15.0},
+	# any player's line that enters the entrance node comes out of the exit node and walks on to its target
+	"portal": {"name": "Portal", "slot": "map", "cd": 70.0, "target": "node_pair",
+			"desc": "Link two nodes up to 3 bridges apart for 12 s: every line entering one comes out of the other.",
+			"dur": 12.0, "reach": 3},
+	# share of the garrison leaves at once (door rate x burst) for the nearest own node not under attack, by
+	# route; immune to Laser towers, Machinegoons, Scorch and monsters until it lands (falls still kill)
+	"evac": {"name": "Emergency Evac", "slot": "active", "cd": 40.0, "target": "own_node",
+			"desc": "Half of one node's garrison bursts out toward your nearest safe node, immune on the way.",
+			"share": 0.5, "burst": 8.0},
 	# ---- ultimates (one per faction; "cd" is the natural charge time, see ULT_CHARGE_TIME)
 	# Rewire: while it lasts, the ultimate slot fires any relay once (target = relay id), `fires` at most
 	"rewire": {"name": "Rewire", "slot": "ultimate", "faction": "vex", "cd": 120.0, "target": "none",
@@ -647,18 +679,20 @@ const SKILLS := {
 			"desc": "Every vat produces 1.5x for 12 s (at most 40 extra units).", "mult": 1.5, "dur": 12.0, "cap_shown": 40.0},
 	# sacrifice `share` of the line (at least min_shown, no upper cap), kills_per defenders each (at most
 	# cap_shown); a garrison at zero -> the rest of the line captures. The line must be attacking: headed for
-	# a node that isn't yours or an ally's, and within `range` metres of it (or pouring in).
+	# a node that isn't yours or an ally's. POWERS (0.22.2, Daniele 2026-09-28): 4 per unit (was 3), cap 90 (was
+	# 60), castable from the START of the trip - the line is armed and it goes off when the head is within
+	# `range` metres of the target (or pouring in); a line that dies, falls or loses its target first wastes it.
 	"core_meltdown": {"name": "Core Meltdown", "slot": "ultimate", "faction": "ember", "cd": 120.0, "target": "own_line",
-			"desc": "Sacrifice 25 % of an arriving line: 3 defenders die per unit; a garrison at zero is captured.",
-			"share": 0.25, "min_shown": 4.0, "kills_per": 3.0, "cap_shown": 60.0, "range": 12.0},
+			"desc": "Arm an attacking line: on arrival 25 % of it melts down, 4 defenders die per unit; a garrison at zero is captured.",
+			"share": 0.25, "min_shown": 4.0, "kills_per": 4.0, "cap_shown": 90.0, "range": 12.0},
 	# the node + its adjacent own nodes: garrison damage / div, production x prod, the decks between them anchored
 	# and any relay among them locked (nobody can fire it)
 	"relay_aegis": {"name": "Relay Aegis", "slot": "ultimate", "faction": "solar", "cd": 120.0, "target": "own_node",
 			"desc": "A node and its neighbours: 1.8x less garrison damage, +20 % production, decks locked, 12 s.",
 			"div": 1.8, "dur": 12.0, "prod": 1.2},
 }
-const ACTIVE_SKILLS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line"]
-const MAP_SKILLS := ["demolish", "mire", "anchor", "bypass", "relay_hack"]
+const ACTIVE_SKILLS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line", "sinkhole", "evac"]   # POWERS: 5 -> 7
+const MAP_SKILLS := ["demolish", "mire", "anchor", "bypass", "relay_hack", "quake", "sever", "backwash", "fog", "portal"]   # POWERS: 5 -> 10
 const FACTION_ULTIMATE_ID := {"vex": "rewire", "null": "echo_split", "bloom": "superbloom", "ember": "core_meltdown", "solar": "relay_aegis"}
 # default loadouts per faction - a seat without a chosen loadout (and every AI seat) gets its faction's;
 # between them the five cover every shared skill. "map_no_relays" replaces a relay skill on a map without
