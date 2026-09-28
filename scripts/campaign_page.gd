@@ -93,7 +93,7 @@ var _look_from := 0                    # the district whose look (normal / memor
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Campaign.reload_all()
+	Campaign.load_if_needed()                          # AUDIT FIX: never re-read (private browsing: the file never saved)
 	if not Campaign.has_content(faction):
 		faction = _first_with_content()
 	_build_view()
@@ -811,6 +811,7 @@ func _process(dt: float) -> void:
 		return
 	var s := content.scale.x
 	var moving := _busy
+	var fac_ok := _faction_ok()                        # (once per frame: audit-tutorial-campaign B5)
 	for i in range(_districts.size()):
 		var dd: Dictionary = _districts[i]
 		for key in dd["nodes"]:
@@ -822,7 +823,7 @@ func _process(dt: float) -> void:
 				(ring.material_override as StandardMaterial3D).albedo_color.a = 0.3 + 0.5 * w
 			var btn: Button = rec["button"]
 			var plate: Control = rec["plate"]
-			var here := i == _cur and not moving and _faction_ok()
+			var here := i == _cur and not moving and fac_ok
 			if is_instance_valid(btn):
 				btn.visible = here
 			if is_instance_valid(plate):
@@ -844,7 +845,7 @@ func _process(dt: float) -> void:
 			var rb: Button = rr["button"]
 			if not is_instance_valid(rb):
 				continue
-			rb.visible = i == _cur and not moving and _faction_ok()
+			rb.visible = i == _cur and not moving and fac_ok
 			if rb.visible:
 				var gp: Node3D = rr["group"]
 				var tp := gp.global_transform * (rr["tower_local"] as Vector3) + Vector3(0, 2.0, 0)

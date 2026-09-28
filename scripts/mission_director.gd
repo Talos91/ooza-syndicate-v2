@@ -6,14 +6,16 @@ extends RefCounted
 ## stays a normal SeatAI at the mission's level (main.gd); nothing here scripts a seat.
 ##
 ##   MissionDirector.new(key)       the mission (Campaign.mission(key)); a test may pass its own mission dict
+##   pin_settings(pins)             before sim.setup (main): the match settings the mission / lesson plays with -
+##                                  never SETUP's or a room's (audit 2026-09-28); put back by restore_settings()
 ##   begin(sim, map, seat)          right after sim.setup: stage.rival_units (shown units) onto the rival's home,
-##                                  stage.hide_counts (Rules.hide_enemy_counts, put back by restore_settings()),
+##                                  the mission's pins (mission_pins: ABILITIES on, LAST STAND on, stage.hide_counts),
 ##                                  remembers the nodes `seat` starts with; state "briefing"
 ##   start()                        the briefing's START: the objective runs from here
 ##   step(dt)                       every frame after sim.step: reads sim.events, objective.collapse_at
 ##                                  (sim.start_last_stand_now()), decides win / lose
 ##   on_event(ev)                   every sim.fx_events entry (only a pulse for the HUD: counts come from sim.events)
-##   on_action(method, id, args, ok) / on_captured(node, new_owner, old_owner)   main's hooks
+##   on_captured(node, new_owner, old_owner)   main's hook
 ##   signals: changed (a counter moved), completed(result)
 ##       result = {key, won, time, stars, objective, lost_start, reason}
 ##   readouts for the HUD: objective_line(), par_line(), optional_line(), optional_ok(), optional_locked(), pulse
@@ -32,7 +34,8 @@ signal completed(result: Dictionary)
 const HUMAN := "A"
 const PULSE := 0.6                                   # seconds the objective line glows when its progress moves
 
-static var _hide_before = null                       # Rules.hide_enemy_counts before a blind mission changed it
+const PIN_KEYS := ["abilities_on", "last_stand", "hide_enemy_counts"]   # the Rules match settings pin_settings() may pin
+static var _pinned_before := {}                      # those Rules settings before a mission / lesson pinned its own
 
 var key := ""
 var m: Dictionary = {}
@@ -56,7 +59,6 @@ var rival_ult := false                               # a rival seat cast its ult
 var skills_cast := {}                                # your skill ids cast
 var collapse_started := false
 var _ev_cursor := 0
-var _last_order_t := 0.0
 
 
 func _init(k := "", data := {}) -> void:
@@ -88,10 +90,8 @@ func begin(s: Sim, mp: Dictionary, player_seat := HUMAN) -> void:
 			if sim.homes.has(rs):
 				var h: Dictionary = sim.nodes[int(sim.homes[rs])]
 				h["units"] = float(h["units"]) + extra * Rules.SCALE
-	if bool(stage.get("hide_counts", false)):
-		if _hide_before == null:
-			_hide_before = Rules.hide_enemy_counts
-		Rules.hide_enemy_counts = true
+	pin_settings(mission_pins(m))                    # (main pinned them before sim.setup already; tests pin here)
+	sim.abilities_on = Rules.abilities_on
 	start_nodes = []
 	for n in sim.nodes:
 		if n["owner"] == seat:
@@ -101,11 +101,50 @@ func begin(s: Sim, mp: Dictionary, player_seat := HUMAN) -> void:
 	_bump()
 
 
+static func mission_pins(mission: Dictionary) -> Dictionary:
+	## A mission's own match settings (audit 2026-09-28, a bug fix: SETUP's toggles or a room's used to leak in):
+	## ABILITIES on and LAST STAND on unless its stage says otherwise (stage.abilities / stage.last_stand), HIDDEN
+	## COUNTS only for a blind mission (stage.hide_counts).
+	var stage: Dictionary = mission.get("stage", {})
+	return {"abilities_on": bool(stage.get("abilities", true)), "last_stand": bool(stage.get("last_stand", true)),
+			"hide_enemy_counts": bool(stage.get("hide_counts", false))}
+
+
+static func pin_settings(pins: Dictionary) -> void:
+	## Set these Rules match settings (PIN_KEYS) for the mission / lesson about to play; the first pin remembers the
+	## player's own values for restore_settings().
+	for k in pins:
+		if not k in PIN_KEYS:
+			continue
+		if not _pinned_before.has(k):
+			_pinned_before[k] = _setting(k)
+		_set_setting(k, bool(pins[k]))
+
+
 static func restore_settings() -> void:
-	## main._ready: whatever a blind mission switched (HIDE ENEMY COUNTS) goes back to the player's own setting.
-	if _hide_before != null:
-		Rules.hide_enemy_counts = bool(_hide_before)
-		_hide_before = null
+	## main._ready: whatever a mission or a lesson pinned goes back to the player's own setting.
+	for k in _pinned_before:
+		_set_setting(k, bool(_pinned_before[k]))
+	_pinned_before = {}
+
+
+static func _setting(k: String) -> bool:
+	match k:
+		"abilities_on":
+			return Rules.abilities_on
+		"last_stand":
+			return Rules.last_stand
+	return Rules.hide_enemy_counts
+
+
+static func _set_setting(k: String, v: bool) -> void:
+	match k:
+		"abilities_on":
+			Rules.abilities_on = v
+		"last_stand":
+			Rules.last_stand = v
+		"hide_enemy_counts":
+			Rules.hide_enemy_counts = v
 
 
 func start() -> void:
@@ -254,11 +293,6 @@ func on_event(ev: Dictionary) -> void:
 	if str(ev.get("type", "")) in ["fall", "fling"] and str(ev.get("by", "")) == seat \
 			and not sim.allied(str(ev.get("seat", "")), seat):
 		pulse = PULSE
-
-
-func on_action(method: String, _id: int, _args := {}, ok := true) -> void:
-	if ok and method != "" and sim != null:
-		_last_order_t = sim.time
 
 
 func on_captured(node_id: int, new_owner: String, old_owner: String) -> void:
