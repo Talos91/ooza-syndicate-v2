@@ -5,6 +5,12 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.12 (domain, taps, loading screen)
+- [ ] **https://oozesyndicate.com** on the phone (re-add the home-screen app from the new address); the loading screen.
+- [ ] **One tap** opens every menu item; pages open quickly; BACK from LEADERBOARD / PROFILE / HISTORY goes back.
+- [ ] **Online** on the new server address (rooms.oozesyndicate.com); Google sign-in on the new domain.
+- [ ] **Wardrobe**: skins on their base, monsters in the army's colour.
+
 ## 0.21.11 (names online)
 - [ ] **Online with your girlfriend**: both names in the lobby, VERSUS, the chips and the results; chat shows names.
 

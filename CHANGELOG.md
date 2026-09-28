@@ -1,5 +1,18 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.12 "Alpha 21" - 2026-09-28 (oozesyndicate.com; taps answered at once; faster menus; loading screen)
+
+- **The game is at https://oozesyndicate.com** (the github.io link redirects there); online rooms connect to
+  rooms.oozesyndicate.com (the old server address still answers older builds).
+- **Taps answered at once** (Daniele: "double or triple click any menu item"): the tap was never lost - each page rebuilt and
+  decoded its art before showing anything. Now every button / card / tab flashes the moment it's tapped (repeat taps ignored
+  meanwhile), menu art is cached and warmed up while idle, BATTLEFIELD's thumbnails fill in over a few frames. Desktop page
+  opens 30-150 ms -> 3-14 ms; map thumbnails imported lossy at 480 px (~3x smaller).
+- **BACK** on PROFILE / CHALLENGES / LEADERBOARD / HISTORY / ACCOUNT / SETTINGS / PRIVACY goes back instead of reloading the page;
+  the leaderboard no longer errors on a row without "is me".
+- **Wardrobe previews** in the look's faction colour, each model on a small base fitted to its own plinth.
+- **Loading screen**: the Ooze Syndicate logo and a neon progress bar instead of Godot's.
+
 ## 0.21.11 "Alpha 21" - 2026-09-28 (player names online; creature-free page art)
 
 - **Other players' names online** (🖥️ Server, protocol ooze20-net-7): each player's ACCOUNT name travels in the room, cleaned
