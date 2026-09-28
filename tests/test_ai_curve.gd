@@ -6,6 +6,11 @@ extends SceneTree
 ##   hostile sends aimed at players (at most 1.5x an even split).
 ## - Curve (Alpha 11's five levels): each level plays a fixed Standard AI on the same 1v1 maps; the
 ##   stronger the level, the more it wins, and Training never beats Standard more often than Expert.
+##   Strictly monotonic (0.21.5, Daniele 2026-09-28: "a nice scale for a new player"): the win rate vs Standard
+##   rises Training < Casual < Standard < Veteran < Expert, Expert clearly (5 points) above Veteran; each level
+##   beats the one below more often than not (Casual vs Training and Expert vs Veteran are played too, Standard
+##   vs Casual and Veteran vs Standard read off the series above), and Expert stays beatable (at most 90 % vs
+##   Veteran).
 ##   Maps: every maps 4.2 duel map (B-, C-, S-) plus every M duel map (0.18.10 - Daniele, 2026-09-27: "Widen the
 ##   test"). A smoke run can cap it: `-- maps=2` plays only the first two duel maps (and a smaller FFA sample).
 
@@ -39,6 +44,22 @@ func _match(path: String, mode: String, levels: Dictionary, seed_value: int, lim
 			ai.think(sim, 0.1)
 		sim.step(0.1)
 	return sim
+
+
+func _series(duel: Array, games: int, lv: String, vs: String) -> float:
+	## `lv`'s score against `vs` over the first `games` duel maps, each played from both seats: a win 1, undecided
+	## at the limit and ahead 0.5.
+	var w := 0.0
+	for i in range(games):
+		for side in range(2):                             # each level plays both seats
+			var seat := "A" if side == 0 else "B"
+			var other := "B" if side == 0 else "A"
+			var sim := _match(duel[i], "1v1", {seat: lv, other: vs}, 100 + i)
+			if sim.over and sim.winner == seat:
+				w += 1.0
+			elif not sim.over and sim.seat_strength(seat) > sim.seat_strength(other):
+				w += 0.5                                   # undecided at the limit: ahead counts half
+	return w / (games * 2.0)
 
 
 func _arg_maps() -> int:
@@ -79,20 +100,19 @@ func _run() -> void:
 	print("      curve on %d duel maps: %s" % [games, ", ".join(duel.slice(0, games).map(func(p): return p.get_file().substr(0, 4)))])
 	var wins := {}
 	for lv in LEVELS:
-		var w := 0.0
-		for i in range(games):
-			for side in range(2):                         # each level plays both seats
-				var seat := "A" if side == 0 else "B"
-				var other := "B" if side == 0 else "A"
-				var sim := _match(duel[i], "1v1", {seat: lv, other: "Standard"}, 100 + i)
-				if sim.over and sim.winner == seat:
-					w += 1.0
-				elif not sim.over and sim.seat_strength(seat) > sim.seat_strength(other):
-					w += 0.5                               # undecided at the limit: ahead counts half
-		wins[lv] = w / (games * 2.0)
+		wins[lv] = _series(duel, games, lv, "Standard")
 		print("      %-8s vs Standard: %.0f %%" % [lv, wins[lv] * 100.0])
 	check(wins["Training"] < wins["Standard"] + 0.05 and wins["Casual"] < wins["Veteran"] + 0.05, "levels below Standard win less than those above")
 	check(wins["Expert"] >= wins["Training"] + 0.25, "Expert wins clearly more than Training (%.2f vs %.2f)" % [wins["Expert"], wins["Training"]])
+	check(wins["Training"] < wins["Casual"] and wins["Casual"] < wins["Standard"] and wins["Standard"] < wins["Veteran"] \
+			and wins["Veteran"] < wins["Expert"], "win rate vs Standard rises strictly Training < Casual < Standard < Veteran < Expert")
+	check(wins["Expert"] >= wins["Veteran"] + 0.05, "Expert wins clearly more than Veteran vs Standard (%.2f vs %.2f)" % [wins["Expert"], wins["Veteran"]])
+	var below := {"Casual": _series(duel, games, "Casual", "Training"), "Standard": 1.0 - wins["Casual"],
+			"Veteran": wins["Veteran"], "Expert": _series(duel, games, "Expert", "Veteran")}
+	for lv in below:
+		print("      %-8s vs %-8s: %.0f %%" % [lv, LEVELS[LEVELS.find(lv) - 1], below[lv] * 100.0])
+		check(below[lv] > 0.5, "%s beats %s more often than not (%.2f)" % [lv, LEVELS[LEVELS.find(lv) - 1], below[lv]])
+	check(below["Expert"] <= 0.9, "Expert stays beatable: at most 90 %% vs Veteran (%.2f)" % below["Expert"])
 	Rules.last_stand = true
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)

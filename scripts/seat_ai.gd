@@ -28,6 +28,11 @@ extends RefCounted
 ## kicked enemy lines are worth it (never through their own lines), the lower levels rarely. In team modes it
 ## EJECTs stored allied troops from a node about to drop. Veteran / Expert (intel 1) count the defender's forge
 ## (attack and defence), Fortify / Aegis and faction stats in their garrison estimates.
+## Teamwork (0.21.5, team modes only, Rules.AI_LEVELS "teamwork" 0-3): the AI seats of a team share a board on the
+## match (_board). 1 reinforces an ally's node that would fall, from its nodes next door; 2 also from any node in
+## time, goes after the team's common enemy (the weakest rival, a human preferred), backs up an ally's short
+## offensive, answers an ally's call (up to `sync` s early) and moves rear surplus to the team front; 3 also calls
+## joint offensives on the common enemy's nodes it cannot take alone (it sends once an ally's answer is on the way).
 ## Skills (0.18.7, "the AI must not be skill-less"): every think it may cast one of its loadout's skills
 ## (its faction's Rules.FACTION_LOADOUT unless the match gave it another), at most one cast every
 ## Rules.AI_SKILL_GAP[level] s, each on a cheap heuristic of what it can see (_skills). It never reads
@@ -48,6 +53,7 @@ var _route_risky := false                  # set by _route: the route it returne
 var _skill_after := 0.0                    # no cast before this match time (Rules.AI_SKILL_GAP)
 var _raids := {}                           # own node id -> [[time, sim units]] hostile lines that came at it
 var _raid_seen := {}                       # horde ids already noted
+var _alarm := {}                           # allied node id -> when it first saw a threat there (teamwork)
 var casts := 0                             # skills cast this match (tests)
 var rng := RandomNumberGenerator.new()
 
@@ -69,6 +75,7 @@ func think(sim: Sim, dt: float) -> void:
 		return
 	_t = 0.0
 	_busy = {}      # a send supersedes the node's earlier order: one order per node per think
+	_post(sim)
 	if int(cfg["relays"]) > 0:
 		_relays(sim)
 	_skills(sim)
@@ -79,10 +86,14 @@ func think(sim: Sim, dt: float) -> void:
 		_evacuate(sim)
 		_ejects(sim)
 	_defend(sim)
+	_defend_allies(sim)
 	_build(sim)
 	_monsters(sim)
 	if sim.time >= _attack_after:
 		_attack(sim)
+	elif sim.time >= _attack_after - float(cfg.get("sync", 0.0)) and not _open_calls(sim).is_empty():
+		_attack(sim, true)                                # an ally called: its next offensive comes early
+	_surplus(sim)
 
 
 # ------------------------------------------------------------------ helpers
@@ -233,11 +244,18 @@ func _rival_adjustment(sim: Sim, target: Dictionary) -> float:
 	return border + retaliation + strength - congestion
 
 
-func _attack(sim: Sim) -> void:
+func _attack(sim: Sim, answer_only := false) -> void:
+	## answer_only: an early offensive (Rules.AI_LEVELS "sync") that may only answer an ally's call.
 	var owned := _mine(sim)
 	var plans := []
+	var focus := _team_focus(sim)
+	var calls := _open_calls(sim)
+	var joint_ok := _teamwork() >= 3 and not _allies(sim).is_empty()
 	for target in sim.nodes:
 		if sim.allied(target["owner"], seat) or sim.collapsed.get(target["id"], false) or _drops_soon(sim, target["id"]):
+			continue
+		var called: bool = calls.has(target["id"])
+		if answer_only and not called:
 			continue
 		if target["owner"] != "" and sim.time < float(cfg["grace"]):
 			continue                                      # early game: take neutrals, leave players be
@@ -269,8 +287,21 @@ func _attack(sim: Sim) -> void:
 		var defenders := minf(estimate + growth, maxf(estimate, float(Rules.CAPS[target["tier"]])))
 		var needed: float = _attackers_for(sim, target, defenders + 3.0 * Rules.SCALE) * float(cfg["margin"]) \
 				- _incoming(sim, target["id"], false)
-		if needed <= 0.0 or available < needed:
-			continue
+		if needed <= 0.0:
+			continue                                      # (what an ally's lines already take is left to them)
+		var joint := false
+		var own_call: bool = _my_call(sim, target["id"])
+		if called:
+			needed -= float(calls[target["id"]]["pledge"])    # an answer brings what the caller will not
+			if needed <= 0.0:
+				continue
+		if available < needed:
+			# teamwork 3: a joint offensive on what it cannot take alone - it calls, and sends once an ally answers
+			if joint_ok and not own_call and target["owner"] != "" and target["owner"] == focus \
+					and available >= needed * Rules.AI_TEAM_JOINT_SHARE and available + _ally_spare(sim, target, travel) >= needed:
+				joint = true
+			else:
+				continue
 		# what the node is worth: its production (a relay - or a laser / forge / hub node - makes nothing: its
 		# value is the shortcut, _relay_value), plus a special node's bonus and a neutral's
 		var worth: float = target["tier"] * 8.0 if target["structure"] in ["vat", "machinegoon"] else 0.0
@@ -281,12 +312,26 @@ func _attack(sim: Sim) -> void:
 			score -= Rules.AI_RELAY_RISK                  # its only way in crosses a deck a rival can change
 		if sim.last_stand_active and sim.is_final(target["id"]):
 			score += 20.0                                 # the last ring is where the match is decided
-		plans.append({"target": target, "donors": donors, "needed": needed, "score": score})
+		if focus != "" and target["owner"] == focus:
+			score += float(cfg.get("focus", 0.0))         # the team's common enemy
+		if called or (own_call and _ally_attacking(sim, target["id"])):
+			score += Rules.AI_TEAM_CALL_BONUS             # an ally's call, or its own call answered: follow through
+		elif _teamwork() >= 2 and _ally_attacking(sim, target["id"]):
+			score += Rules.AI_TEAM_JOIN_BONUS             # an ally's offensive there is short: back it up
+		plans.append({"target": target, "donors": donors, "needed": needed, "score": score, "joint": joint, "called": called})
 	if plans.is_empty():
 		return
 	plans.sort_custom(func(a, b): return a["score"] > b["score"])
-	var plan: Dictionary = plans[rng.randi_range(0, mini(plans.size(), int(cfg["choice"])) - 1)]
-	if int(cfg["relays"]) >= 2 and _open_route(sim, plan):
+	var plan: Dictionary = plans[0] if plans[0]["called"] else plans[rng.randi_range(0, mini(plans.size(), int(cfg["choice"])) - 1)]
+	if plan["joint"]:
+		# the call: nothing leaves yet - it sends on a later think, once an answer is on its way (the answer
+		# lowers what it still needs); an unanswered call only costs the wait
+		var pledge := 0.0
+		for d in plan["donors"]:
+			pledge += d["available"]
+		_board(sim)["calls"][plan["target"]["id"]] = {"by": seat, "until": sim.time + Rules.AI_TEAM_CALL_TTL, "pledge": pledge * 0.9}
+		return
+	if int(cfg["relays"]) >= 2 and not plan["called"] and _open_route(sim, plan):
 		return                                            # a shorter way opens first; send next time
 	_attack_after = sim.time + float(cfg["attack_gap"])
 	var need: float = plan["needed"]
@@ -313,6 +358,294 @@ func _attackers_for(sim: Sim, target: Dictionary, defenders: float) -> float:
 		var tough: float = sim.stat(o, "health") * sim.stat(o, "garrison") * sim.garrison_div(target)
 		return defenders * tough * sim.attack_of(o) / maxf(sim.attack_of(seat) * sim.stat(seat, "health"), 0.1)
 	return defenders * sim.stat(o, "health") / maxf(sim.attack_of(seat), 0.1)
+
+
+# ------------------------------------------------------------------ teamwork (0.21.5)
+# Daniele, 2026-09-28: "make sure ai take advantage of coop mode and is more strong (but not unbeatable)". Team
+# modes only, decisions only (Rules.AI_LEVELS "teamwork" / "focus" / "assist" / "sync", Rules.AI_TEAM_*). The AI
+# seats of one team share a board on the match - team-mates talk, as players on a team do - but never see more
+# of the rivals than they would alone.
+func _teamwork() -> int:
+	return int(cfg.get("teamwork", 0))
+
+
+func _allies(sim: Sim) -> Array:
+	## Its living team-mates (none in FFA or a duel).
+	var out := []
+	if sim.teams.is_empty():
+		return out
+	for s in sim.factions:
+		if s != seat and sim.allied(s, seat) and not sim.eliminated.has(s):
+			out.append(s)
+	return out
+
+
+func _board(sim: Sim) -> Dictionary:
+	## The team's shared plan, kept on the match so every allied SeatAI reads the same one: "members" seat -> what
+	## it posted on its last think, "focus" the common enemy until "focus_until", "calls" target node id ->
+	## {"by", "until", "pledge"} open calls for a joint offensive (pledge: what the caller will bring).
+	if not sim.has_meta("ai_boards"):
+		sim.set_meta("ai_boards", {})
+	var boards: Dictionary = sim.get_meta("ai_boards")
+	var team = sim.teams.get(seat, seat)
+	if not boards.has(team):
+		boards[team] = {"members": {}, "focus": "", "focus_until": -1.0, "calls": {}}
+	return boards[team]
+
+
+func _post(sim: Sim) -> void:
+	## Every think: it is an AI seat (its rivals' teams prefer a human as their common enemy) and, in a team mode,
+	## what its team-mates need to know to count on it for a joint offensive.
+	if not sim.has_meta("ai_seats"):
+		sim.set_meta("ai_seats", {})
+	sim.get_meta("ai_seats")[seat] = sim.time
+	if sim.teams.is_empty():
+		return
+	_board(sim)["members"][seat] = {"t": sim.time, "teamwork": _teamwork(), "period": period, "grace": float(cfg["grace"]),
+			"ready": _attack_after - float(cfg.get("sync", 0.0)), "coordination": int(cfg["coordination"])}
+
+
+func _is_ai(sim: Sim, s: String) -> bool:
+	## An AI plays this seat (it thought lately: a dropped player's seat that got its player back is human again).
+	var seen: Dictionary = sim.get_meta("ai_seats", {})
+	return seen.has(s) and sim.time - float(seen[s]) <= 12.0
+
+
+func _team_focus(sim: Sim) -> String:
+	## Teamwork 2+: the team's common enemy - the weakest, most exposed rival seat (a human preferred), chosen by
+	## the first member to think after the last choice expired, so the team's offensives converge on one seat
+	## and knock it out instead of trading evenly with both.
+	if _teamwork() < 2 or _allies(sim).is_empty():
+		return ""
+	var b := _board(sim)
+	var f: String = b["focus"]
+	if f != "" and sim.time < float(b["focus_until"]) and not sim.eliminated.has(f):
+		return f
+	var rivals := []
+	var total := 0.0
+	for s in sim.factions:
+		if not sim.allied(s, seat) and not sim.eliminated.has(s):
+			rivals.append(s)
+			total += sim.seat_strength(s)
+	var avg := maxf(total / maxf(rivals.size(), 1.0), 1.0)
+	var best := ""
+	var best_s := -INF
+	for s in rivals:
+		var exposed := 0                                  # its nodes on the team's border
+		for n in sim.nodes:
+			if n["owner"] != s or sim.collapsed.get(n["id"], false):
+				continue
+			for link in sim.adj[n["id"]]:
+				if sim.allied(sim.nodes[link[0]]["owner"], seat):
+					exposed += 1
+					break
+		var sc: float = -sim.seat_strength(s) / avg * 10.0 + minf(exposed, 4) * 1.5
+		if not _is_ai(sim, s) and sim.time >= Rules.AI_TEAM_HUMAN_AFTER:
+			sc += Rules.AI_TEAM_HUMAN_BONUS
+		if s == f:
+			sc += Rules.AI_TEAM_FOCUS_STICK
+		if sc > best_s:
+			best_s = sc
+			best = s
+	b["focus"] = best
+	# held AI_TEAM_FOCUS_HOLD s - only re-picked after AI_TEAM_HUMAN_AFTER if chosen before it (until every AI seat
+	# has had its first think, a rival that has not thought yet would pass for a human)
+	var ready := sim.time >= Rules.AI_TEAM_HUMAN_AFTER
+	b["focus_until"] = sim.time + Rules.AI_TEAM_FOCUS_HOLD if ready else Rules.AI_TEAM_HUMAN_AFTER
+	return best
+
+
+func _open_calls(sim: Sim) -> Dictionary:
+	## Teamwork 2+: target node id -> call, for the joint offensives an ally called (still hostile, still open).
+	if _teamwork() < 2 or sim.teams.is_empty():
+		return {}
+	var calls: Dictionary = _board(sim)["calls"]
+	var out := {}
+	for id in calls.keys():
+		var t: Dictionary = sim.nodes[id]
+		if sim.time > float(calls[id]["until"]) or sim.allied(t["owner"], seat) or sim.collapsed.get(id, false):
+			calls.erase(id)
+		elif calls[id]["by"] != seat:
+			out[id] = calls[id]
+	return out
+
+
+func _my_call(sim: Sim, node_id: int) -> bool:
+	## It called a joint offensive on this node and the call is still open.
+	if sim.teams.is_empty():
+		return false
+	var c: Dictionary = _board(sim)["calls"].get(node_id, {})
+	return not c.is_empty() and c["by"] == seat and sim.time <= float(c["until"])
+
+
+func _ally_attacking(sim: Sim, node_id: int) -> bool:
+	## A team-mate's line is on its way to this node (its attack is short, or the target would be skipped).
+	for h in sim.hordes:
+		if h["target"] == node_id and h["owner"] != seat and sim.allied(h["owner"], seat) and not h.get("retreat", false) \
+				and not h.get("decoy", false):
+			return true
+	return false
+
+
+func _ally_spare(sim: Sim, target: Dictionary, travel: float) -> float:
+	## Teamwork 3, planning a joint offensive: what its AI team-mates that answer calls (teamwork 2+, past their
+	## grace, their next offensive due within one think and their sync) could bring to `target`, from their
+	## nodes that get there at most 8 s after its own lines, their `coordination` biggest.
+	var b := _board(sim)
+	var total := 0.0
+	for s in _allies(sim):
+		var m: Dictionary = b["members"].get(s, {})
+		if m.is_empty() or int(m["teamwork"]) < 2 or sim.time - float(m["t"]) > 2.0 * float(m["period"]) + 1.0 \
+				or sim.time < float(m["grace"]) or float(m["ready"]) > sim.time + float(m["period"]):
+			continue
+		var spare := []
+		for n in sim.nodes:
+			if n["owner"] != s or n["build_kind"] != "" or sim.collapsed.get(n["id"], false):
+				continue
+			var a: float = n["units"] - _reserve(sim, n)
+			if a < 4.0 * Rules.SCALE:
+				continue
+			var route := sim.find_route(n["id"], target["id"])
+			if route.size() >= 2 and _travel(sim, route) <= travel + 8.0:
+				spare.append(a)
+		spare.sort()
+		spare.reverse()
+		for i in range(mini(spare.size(), int(m["coordination"]))):
+			total += spare[i]
+	return total
+
+
+func _eta(sim: Sim, node_id: int) -> float:
+	## Seconds until the first hostile line lands on this node (0: a siege is already there).
+	var t := INF
+	for h in sim.hordes:
+		if h["target"] != node_id or h.get("retreat", false) or not _hostile(sim, h["owner"]):
+			continue
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		t = minf(t, maxf(0.0, float(h["L"]) - float(h["s"])) / maxf(v, 0.1))
+	return 0.0 if t == INF else t
+
+
+func _defend_allies(sim: Sim) -> void:
+	## Teamwork 1+: after its own nodes, an ally's node that would fall gets `assist` of its shortfall - from the
+	## nodes next door at teamwork 1, from any node whose help lands in time at 2+ (at most AI_TEAM_DEFEND_LATE s
+	## after the threat). It first leaves the ally one of its own thinks to answer (the ally's lines count), and
+	## sends nothing unless what it can bring covers most of the shortfall: stored troops stay in the ally's node
+	## (GAME-RULES sec11) - a trickle into a node that falls anyway is only lost.
+	if _teamwork() < 1:
+		return
+	var allies := _allies(sim)
+	if allies.is_empty():
+		_alarm = {}
+		return
+	for target in sim.nodes:
+		var id: int = target["id"]
+		if not (target["owner"] in allies) or sim.collapsed.get(id, false) or sim.is_warned(id):
+			_alarm.erase(id)
+			continue
+		var threat := _threat(sim, target)
+		if threat <= 0.0:
+			_alarm.erase(id)
+			continue
+		if not _alarm.has(id):
+			_alarm[id] = sim.time
+		if sim.time - float(_alarm[id]) < period * 0.9:
+			continue                                      # the ally's own answer first
+		var eta := _eta(sim, id)
+		var held: float = sim.garrison_total(target) + sim.production(target) * eta + _incoming(sim, id, false)
+		var need: float = (threat * 1.1 + 4.0 * Rules.SCALE - held) * float(cfg.get("assist", 0.0))
+		if need < 2.0 * Rules.SCALE:
+			continue
+		var next_door := {}
+		for link in sim.adj[id]:
+			next_door[link[0]] = true
+		var helpers := []
+		var total := 0.0
+		for n in _mine(sim):
+			if n["build_kind"] != "" or _busy.has(n["id"]) or _threat(sim, n) > 0.0 or (_teamwork() < 2 and not next_door.has(n["id"])):
+				continue
+			var spare: float = n["units"] - _reserve(sim, n)
+			if spare < 2.0 * Rules.SCALE:
+				continue
+			var route := _route(sim, n["id"], id, minf(need, spare))
+			if route.is_empty() or _travel(sim, route) > eta + Rules.AI_TEAM_DEFEND_LATE:
+				continue
+			helpers.append({"node": n, "spare": spare, "travel": _travel(sim, route)})
+			total += spare
+		if total < need * 0.8:
+			continue                                      # it cannot save it: keep the troops
+		helpers.sort_custom(func(a, b): return a["travel"] < b["travel"])
+		for hp in helpers:
+			if need <= 0.0:
+				break
+			var donor: Dictionary = hp["node"]
+			var frac := clampf(minf(need, hp["spare"]) / maxf(donor["units"], 1.0), 0.1, 1.0)
+			if not _send(sim, donor["id"], id, frac).is_empty():
+				_busy[donor["id"]] = true
+				need -= donor["units"] * frac
+
+
+func _surplus(sim: Sim) -> void:
+	## Teamwork 2+: a rear vat (nothing but team nodes next door, nothing coming at it) at AI_TEAM_SURPLUS of its
+	## cap makes nothing more - its surplus goes to the team front: the thinnest own or allied node next to a
+	## rival, next to the common enemy first, an ally's non-producing node (a relay) before its vats (troops stored
+	## in an ally's vat count against its cap). One send per think.
+	if _teamwork() < 2 or _allies(sim).is_empty():
+		return
+	var focus := _team_focus(sim)
+	var fronts := []
+	for n in sim.nodes:
+		if not sim.allied(n["owner"], seat) or sim.collapsed.get(n["id"], false) or _drops_soon(sim, n["id"]):
+			continue
+		var rival := false
+		var on_focus := false
+		for link in sim.adj[n["id"]]:
+			var o: String = sim.nodes[link[0]]["owner"]
+			if _hostile(sim, o):
+				rival = true
+				on_focus = on_focus or o == focus
+		if rival:
+			fronts.append({"node": n, "focus": on_focus})
+	if fronts.is_empty():
+		return
+	for src in _mine(sim):
+		if _busy.has(src["id"]) or src["build_kind"] != "" or not Sim.has_vat(src) or _threat(sim, src) > 0.0 \
+				or _drops_soon(sim, src["id"]):
+			continue
+		if src["units"] < (Rules.CAPS[src["tier"]] - sim.allied_units(src)) * Rules.AI_TEAM_SURPLUS:
+			continue
+		if sim.adj[src["id"]].any(func(link): return not sim.allied(sim.nodes[link[0]]["owner"], seat)):
+			continue                                      # a front (or a neutral next door): it attacks from here
+		var amount: float = src["units"] - _reserve(sim, src) - 4.0 * Rules.SCALE
+		if amount < 4.0 * Rules.SCALE:
+			continue
+		var best := {}
+		var best_s := -INF
+		var best_amount := 0.0
+		for f in fronts:
+			var n: Dictionary = f["node"]
+			var give := amount
+			if n["owner"] != seat and Sim.has_vat(n):
+				give = minf(amount, (Rules.CAPS[n["tier"]] - sim.garrison_total(n)) * 0.5)
+				if give < 4.0 * Rules.SCALE:
+					continue
+			var route := _route(sim, src["id"], n["id"], give)
+			if route.is_empty() or _route_risky:
+				continue
+			var t := _travel(sim, route)
+			if t > Rules.AI_TEAM_SURPLUS_TRAVEL:
+				continue
+			var s: float = -t - sim.garrison_total(n) / maxf(sim.node_cap(n), 1.0) * 10.0 + (6.0 if f["focus"] else 0.0) \
+					+ (4.0 if n["owner"] != seat and not Sim.has_vat(n) else 0.0)
+			if s > best_s:
+				best_s = s
+				best = n
+				best_amount = give
+		if best.is_empty():
+			continue
+		if not _send(sim, src["id"], best["id"], clampf(best_amount / maxf(src["units"], 1.0), 0.05, 1.0)).is_empty():
+			_busy[src["id"]] = true
+			return
 
 
 # ------------------------------------------------------------------ relays

@@ -192,6 +192,28 @@ const AI_TRICKLE_WINDOW := 60.0
 const AI_MACHINEGOON_VATS := 4
 const AI_MONSTER_VALUE := 60.0
 const AI_MONSTER_CHANCE := {"Training": 0.05, "Casual": 0.08, "Standard": 0.12}
+# AI TEAMWORK (0.21.5, Daniele 2026-09-28: "make sure ai take advantage of coop mode and is more strong (but not
+# unbeatable)"). Team modes only; decisions only - no economy or combat number changes. The AI seats of one team
+# share a board on the match (SeatAI._board): who is on it, the team's common enemy and open calls for a joint
+# offensive. AI_LEVELS "teamwork" tiers: 1 reinforces an ally's node that would fall from its nodes next door (it
+# covers "assist" of the ally's shortfall, after leaving the ally one think to answer, and only if it can cover most
+# of it); 2 also from any node whose help lands in time, goes after the team's common enemy (target-score bonus
+# "focus"), backs up an ally's offensive that is short, answers an ally's call (bringing its own offensive forward by
+# up to "sync" s) and moves rear surplus to the team front; 3 also calls joint offensives on the common enemy's nodes
+# it cannot take alone (it pledges its share and sends once an answer is on the way). The common enemy is the
+# weakest, most exposed rival seat, a human preferred (AI_TEAM_HUMAN_BONUS), held AI_TEAM_FOCUS_HOLD s (a current
+# focus keeps AI_TEAM_FOCUS_STICK). Measured by tests/test_ai_coop.gd (teamwork on vs off, same level).
+const AI_TEAM_FOCUS_HOLD := 20.0
+const AI_TEAM_FOCUS_STICK := 3.0
+const AI_TEAM_HUMAN_BONUS := 4.0
+const AI_TEAM_HUMAN_AFTER := 6.0       # s: a seat no AI thinks for by then is a human (every level thinks within 5 s)
+const AI_TEAM_CALL_TTL := 8.0          # s an ally's call for a joint offensive stays open
+const AI_TEAM_CALL_BONUS := 40.0       # target-score bonus for answering an ally's call (and it is taken first)
+const AI_TEAM_JOIN_BONUS := 10.0       # target-score bonus for a node an ally's line is already attacking, short
+const AI_TEAM_JOINT_SHARE := 0.35      # a joint offensive: the caller brings at least this share of what it needs
+const AI_TEAM_SURPLUS := 0.9           # a rear node this full (of its cap) sends surplus to the team front
+const AI_TEAM_SURPLUS_TRAVEL := 25.0   # s: the farthest front a surplus send goes to
+const AI_TEAM_DEFEND_LATE := 4.0       # s: an ally's node is reinforced only if help lands at most this long after the threat
 
 # LAST STAND (GAME-RULES sec10; Daniele 2026-09-25: 2:00 "seems ok" for now, not 3:00). The method
 # (inward / outward / chaos, from the map's eligible list) is hidden until the start, then the
@@ -618,18 +640,29 @@ static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) ->
 # 0 never, 1 reacts to enemies on its decks, 2 also fires ahead (where lines will be when the deck
 # moves), 3 also opens shorter routes to its targets. intel (0.18.10, Daniele 2026-09-27: "Veteran + Expert only"):
 # 1 = its garrison estimates count the defender's forge (attack and the -20 % defence), Fortify / Aegis and faction
-# stats (health, garrison, attack); 0 keeps the blind spot (the defender's health only).
+# stats (health, garrison, attack); 0 keeps the blind spot (the defender's health only). Teamwork (0.21.5, team
+# modes only, see AI_TEAM_*): "teamwork" 0-3 how much it plays with its allies, "focus" the target-score bonus for the
+# team's common enemy, "assist" the share of an ally's shortfall it covers when an allied node is attacked, "sync" the
+# seconds it brings its next offensive forward to answer an ally's call. Training and Casual barely coordinate.
+# Expert's coordination is 2 since 0.21.5 (Daniele 2026-09-28: the five levels must be "a nice scale for a new
+# player"): a third, farther node in each offensive left it thin and made Expert win less vs Standard than
+# Veteran (67 vs 72 %); with 2 the curve is strictly monotonic (tests/test_ai_curve.gd).
 const AI_LEVELS := {
 	"Training": {"period": 5.0, "coordination": 1, "error": 0.40, "observe": 10.0, "grace": 75.0, "attack_gap": 22.0,
-			"forecast": 0.0, "choice": 4, "invest": 26.0, "margin": 1.5, "relays": 0, "intel": 0},
+			"forecast": 0.0, "choice": 4, "invest": 26.0, "margin": 1.5, "relays": 0, "intel": 0,
+			"teamwork": 0, "focus": 0.0, "assist": 0.0, "sync": 0.0},
 	"Casual": {"period": 4.0, "coordination": 1, "error": 0.32, "observe": 8.0, "grace": 50.0, "attack_gap": 17.0,
-			"forecast": 0.2, "choice": 3, "invest": 22.0, "margin": 1.35, "relays": 0, "intel": 0},
+			"forecast": 0.2, "choice": 3, "invest": 22.0, "margin": 1.35, "relays": 0, "intel": 0,
+			"teamwork": 1, "focus": 0.0, "assist": 0.3, "sync": 0.0},
 	"Standard": {"period": 2.5, "coordination": 2, "error": 0.27, "observe": 7.0, "grace": 45.0, "attack_gap": 15.0,
-			"forecast": 0.4, "choice": 3, "invest": 18.0, "margin": 1.2, "relays": 1, "intel": 0},
+			"forecast": 0.4, "choice": 3, "invest": 18.0, "margin": 1.2, "relays": 1, "intel": 0,
+			"teamwork": 2, "focus": 10.0, "assist": 0.9, "sync": 3.0},
 	"Veteran": {"period": 1.8, "coordination": 2, "error": 0.18, "observe": 4.0, "grace": 20.0, "attack_gap": 9.0,
-			"forecast": 0.6, "choice": 2, "invest": 15.0, "margin": 1.1, "relays": 2, "intel": 1},
-	"Expert": {"period": 1.3, "coordination": 3, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
-			"forecast": 0.75, "choice": 2, "invest": 12.0, "margin": 1.05, "relays": 3, "intel": 1},
+			"forecast": 0.6, "choice": 2, "invest": 15.0, "margin": 1.1, "relays": 2, "intel": 1,
+			"teamwork": 3, "focus": 16.0, "assist": 1.0, "sync": 6.0},
+	"Expert": {"period": 1.3, "coordination": 2, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
+			"forecast": 0.75, "choice": 2, "invest": 12.0, "margin": 1.05, "relays": 3, "intel": 1,
+			"teamwork": 3, "focus": 18.0, "assist": 1.0, "sync": 8.0},
 }
 
 
