@@ -116,7 +116,7 @@ const LINES := {
 	"L3.done2": "Reinforce before the rival lands.",
 	# L4 RELAYS (RELAY V2: the hand points at the relay's button; a double-tap on it or on the node fires it)
 	"L4.title": "RELAYS",
-	"L4.inspect": "Tap the relay. The violet ghost shows where its deck will go.",
+	"L4.inspect": "Tap the relay. The glowing ghost shows where its deck will go.",
 	"L4.fire": "Double-tap the relay's button - or the node - to fire it. SWITCH works too.",
 	"L4.warning": "Firing gives one second of warning. Then the deck moves - anything on it drops.",
 	# not in TUTORIAL-SCRIPT draft 2 (for Daniele's review): the prompt step before the line reaches the deck
