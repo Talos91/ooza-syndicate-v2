@@ -116,27 +116,47 @@ static func gate_end(sim: Sim, ei: int) -> int:
 
 static func put_button(parent: Node3D, sim: Sim, n: Dictionary) -> Dictionary:
 	## Places node n's button; returns vis[id]["relay_button"]: {"node", "tap" (world pos of the Button empty),
-	## "dir", "dist", "gap", "tight"}.
+	## "dir", "dist", "gap", "tight", "strut"}.
 	var pl := place(sim, n["id"])
-	var d: Vector3 = pl["dir"]
-	var btn := MapBuilder.put(parent, BUTTON[n["relay"]], (n["pos"] as Vector3) + d * float(pl["dist"]), Rules.heading(d))
-	var tap := (n["pos"] as Vector3) + d * float(pl["dist"]) + Vector3(0, Rules.RELAY_BUTTON_Y, 0)
-	for c in btn.find_children("*", "Node3D", true, false):
-		match String(c.name):
-			"Glyph":
-				(c as Node3D).rotation.y = Rules.view_yaw - btn.rotation.y   # square to the camera (every structure faces it)
-			"Strut":
-				(c as Node3D).scale.x = float(pl["strut"])
-	if not btn.find_child("Button", true, false):
+	var btn := MapBuilder.put(parent, BUTTON[n["relay"]], n["pos"])
+	if _child(btn, "Button") == null:
 		push_warning("RELAY V2: %s has no Button empty" % BUTTON[n["relay"]])
 	pl["node"] = btn
-	pl["tap"] = _button_world(btn, tap)
+	pl["tap"] = seat_button(btn, n["pos"], pl["dir"], float(pl["dist"]))
 	return pl
+
+
+static func seat_button(btn: Node3D, centre: Vector3, dir: Vector3, dist: float) -> Vector3:
+	## Puts a button piece at `dist` m from `centre` along `dir` (local +X out of the rim), its Strut reaching back
+	## under the rim (relay_v2.json: scale.x = dist - PAD_R - (R - 0.5) + 0.1), its Glyph square to the camera.
+	## Returns the tap target (the Button empty) in the parent's space.
+	btn.position = centre + dir * dist
+	btn.rotation.y = Rules.heading(dir)
+	for c in btn.find_children("*", "Node3D", true, false):
+		match _base(String(c.name)):
+			"Glyph":
+				(c as Node3D).rotation.y = Rules.view_yaw - btn.rotation.y   # every structure faces the viewer
+			"Strut":
+				(c as Node3D).scale.x = dist - Rules.RELAY_PAD_R - STRUT_BASE
+	return _button_world(btn, btn.position + Vector3(0, Rules.RELAY_BUTTON_Y, 0))
+
+
+static func _base(nm: String) -> String:
+	## A GLB child's name without Blender's duplicate suffix ("Button_002" -> "Button": the four buttons share one scene).
+	var k := nm.rfind("_")
+	return nm.substr(0, k) if k > 0 and nm.substr(k + 1).is_valid_int() else nm
+
+
+static func _child(root: Node, base: String) -> Node3D:
+	for c in root.find_children("*", "Node3D", true, false):
+		if _base(String(c.name)) == base:
+			return c as Node3D
+	return null
 
 
 static func _button_world(btn: Node3D, fallback: Vector3) -> Vector3:
 	## The Button empty's position in the piece's parent space (the map root: world), whatever its depth in the GLB.
-	var b := btn.find_child("Button", true, false) as Node3D
+	var b := _child(btn, "Button")
 	if b == null:
 		return fallback
 	var xf := Transform3D.IDENTITY
