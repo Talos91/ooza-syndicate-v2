@@ -656,86 +656,110 @@ func show_help() -> void:
 	UiKit.btn(self, "TRAINING  →", Vector2(content.size.x - x - 220.0, by), Vector2(220, 48), show_tutorial, "primary", shell_f, 16)
 
 
+static var _opt_tab := "game"                      # SETTINGS: the open tab (kept while the game runs)
+static var _opt_arg_read := false
+const OPT_TABS := [["game", "GAME"], ["display", "DISPLAY"], ["debug", "DEBUG"]]
+# PRIVACY: (the telemetry branch's rows go here) - its PRIVACY block comes before DEBUG: a ["privacy", "PRIVACY"] tab
+# between DISPLAY and DEBUG above, and its 2-3 rows in show_options' "privacy" branch (_opt_row, like the others).
+
+
 func show_options() -> void:
+	## SETTINGS (screen system 23; the top bar's gear): tabs of rows, each row its name, what it does and its choices
+	## (the current one lit, the words carrying the state). GAME: LAST STAND, ENEMY COUNTS. DISPLAY: GRAPHICS AUTO /
+	## LOW RES / FULL and FRAME RATE AUTO / 30 / 60 (Alpha 21 OPT-RENDER, perf_profile.gd, user://settings.cfg), DETAIL.
+	## DEBUG: DEBUG TOOLS (the Debug button and live sliders in matches), the progression TEST SWITCH. The rows scroll
+	## (phones grow them to 44 pt). No audio settings exist yet, so no AUDIO tab and no restore-defaults. TERRITORY lives
+	## in ARMIES > COSMETICS > CORE (0.19.2). DONE / BACK return to the page the gear was pressed on.
 	_last_show = show_options                  # a resize that changes the phone sizing rebuilds it (_fit)
-	clear_page("city")
-	header(0)
-	label_at("OPTIONS", P(40, 107), 43)
-	frame(P(35, 174), P(1000, 600))
-	# a scrollable stack (stack_open()): on mobile every toggle row grows to the 44 pt tap minimum, which
-	# would no longer fit this frame stacked at the desktop gaps - scrolling keeps every row full size
-	# instead of shrinking them back down or hiding rows.
-	var st := stack_open(P(45, 190), P(980, 566))
-	var y := 5.0
-	stack_add(st, label_at("MATCH RULES", P(15, y), 30))
-	y += 41.0
-	# one game: BRAWL (Daniele, 0.18.7: "for now completely deactivate [SIEGE] ... brawl is our game (can
-	# also remove mode selector)") - no MODE switch here, in SETUP, the lobby, the pause menu or Debug
-	var h1 := rh(66)
-	var lsb := stack_add(st, nav_button("LAST STAND: %s" % (("ON  -  the map collapses from %d:%02d" % [int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60])
-			if Rules.last_stand else ("OFF  -  no collapse; the %d:%02d safety net still ends a stalled match" % [int(Rules.MATCH_HARD_END) / 60, int(Rules.MATCH_HARD_END) % 60])),
-			P(15, y), P(915, h1), func():
-		Rules.last_stand = not Rules.last_stand
-		show_options())) as Button
-	lsb.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
-	y += h1 + 12.0
-	var h2 := rh(60)
-	var hec := stack_add(st, nav_button("ENEMY COUNTS: %s" % ("HIDDEN  -  no unit numbers on enemy nodes" if Rules.hide_enemy_counts else "SHOWN  -  every node's count, as in Alpha 11"),
-			P(15, y), P(915, h2), func():
-		Rules.hide_enemy_counts = not Rules.hide_enemy_counts
-		show_options())) as Button
-	hec.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
-	y += h2 + 12.0
-	if not mobile:                                    # the button text already carries the state; the phone skips the recap to save room
-		stack_add(st, label_at("Last Stand: the map collapses ring by ring late in the match. Hidden counts make you scout.", P(15, y), 18, Color("b8ced6")))
-		y += 34.0
-	y += 20.0
-	stack_add(st, label_at("PERFORMANCE", P(15, y), 30))
-	y += 41.0
-	var h3 := rh(60)
-	var det := stack_add(st, nav_button("DETAIL: %s" % ("FULL" if not Rules.low_detail else "LOW  -  fewer river patches and vat residents"),
-			P(15, y), P(915, h3), func():
-		Rules.low_detail = not Rules.low_detail
-		show_options())) as Button
-	det.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
-	y += h3 + 12.0
-	if not mobile:
-		stack_add(st, label_at("Low detail trims the river patches and vat residents - use it if the game makes your machine run hot.", P(15, y), 18, Color("b8ced6")))
-		y += 34.0
-	# --- Alpha 21 OPT-RENDER: GRAPHICS AUTO / LOW RES / FULL and FPS AUTO / 30 / 60 (perf_profile.gd, user://settings.cfg) ---
-	var h4 := rh(60)
-	var gfx := stack_add(st, nav_button(PerfProfile.label(), P(15, y), P(600, h4), func():
-		PerfProfile.set_mode(PerfProfile.next_mode())
-		show_options())) as Button
-	gfx.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
-	var fpb := stack_add(st, nav_button(PerfProfile.fps_label(), P(627, y), P(303, h4), func():
-		PerfProfile.set_fps(PerfProfile.next_fps())
-		show_options())) as Button
-	fpb.add_theme_font_size_override("font_size", int(round(fsz(22) * K)))
-	fpb.disabled = PerfProfile.level() == "low"      # LOW RES stays at 30
-	y += h4 + 12.0
-	if not mobile:
-		stack_add(st, label_at("LOW RES: 30 fps, no glow or shadows, fewer effects and lighter models - only for weak phones. From the next match.", P(15, y), 18, Color("b8ced6")))
-		y += 34.0
-	# --- end OPT-RENDER ---
-	# TERRITORY moved to ARMIES > COSMETICS > CORE (0.19.2, Daniele: "goo/neon should be in the choice of
-	# cosmetic, as general core one maybe") - one place only, so it isn't duplicated here any more.
-	var h5 := rh(50)
-	var dbg := stack_add(st, nav_button("DEBUG TOOLS: %s" % ("ON  -  the Debug button and live sliders in matches" if Rules.debug_tools else "OFF"),
-			P(15, y), P(915, h5), func():
-		Rules.debug_tools = not Rules.debug_tools
-		show_options())) as Button
-	dbg.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
-	y += h5 + 10.0
-	var h6 := rh(50)                                   # PROGRESSION: see the game as players will once the locks go live
-	var lk := stack_add(st, nav_button("TEST SWITCH  ·  LOCKS: %s" % ("OFF  -  everything unlocked (the testing default)" if Progression.unlock_all
-			else "ON  -  preview: skills and looks earned or bought (until the page closes)"), P(15, y), P(915, h6), func():
-		Progression.unlock_all = not Progression.unlock_all
-		show_options())) as Button
-	lk.add_theme_font_size_override("font_size", int(round(fsz(20) * K)))
-	y += h6 + 10.0
-	stack_close(st, y)
-	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
+	if not _opt_arg_read:                              # UI: screenshots open a tab (--options-tab=display)
+		_opt_arg_read = true
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--options-tab="):
+				_opt_tab = arg.substr(14)
+	var tab := _meta_open("options", show_main)
+	var back := func(): _meta_back("options", show_main)
+	var area := shell_open("OOZE / SETTINGS", tab, back, faction)
+	_page = "options"
+	var x := shell_x()
+	var top := page_title(area, "SETTINGS", "TUNE YOUR EXPERIENCE.")
+	var cx := x
+	var chip_h := 0.0
+	for t in OPT_TABS:
+		var id: String = t[0]
+		var c := UiKit.chip(self, t[1], Vector2(cx, top), func():
+			_opt_tab = id
+			show_options(), shell_f, _opt_tab == id)
+		cx += c.size.x + 8.0
+		chip_h = c.size.y
+	var bh := UiKit.tap_h(self, 48.0)
+	var fy := area.end.y - bh - 12.0
+	UiKit.btn(self, "DONE  →", Vector2(content.size.x - x - 200.0, fy), Vector2(200, 48), back, "primary", shell_f, 16)
+	var y0 := top + chip_h + 12.0
+	var col := _column(Vector2(x, y0), Vector2(content.size.x - x * 2.0, fy - 12.0 - y0))
+	var w: float = col["w"]
+	var n0 := content.get_child_count()
+	var y := 0.0
+	match _opt_tab:
+		"display":
+			var modes := []
+			for m in PerfProfile.MODES:
+				var md: String = m
+				modes.append([("AUTO (%s)" % ("PHONE" if PerfProfile.is_phone() else "FULL")) if md == "auto" else str(PerfProfile.MODE_NAMES[md]),
+						PerfProfile.mode() == md, func(): PerfProfile.set_mode(md)])
+			y += _opt_row(y, w, "GRAPHICS", "AUTO: PHONE on phones and tablets, FULL on computers. LOW RES: 30 fps, no glow or shadows, fewer effects and lighter models - only for weak phones. From the next match.", modes)
+			var low := PerfProfile.level() == "low"
+			var fps := []
+			for fm in PerfProfile.FPS_MODES:
+				var fv: String = fm
+				fps.append([("AUTO (%d)" % int(PerfProfile.PROFILES[PerfProfile.level()]["fps"])) if fv == "auto" else fv,
+						PerfProfile.fps_mode() == fv, func(): PerfProfile.set_fps(fv)])
+			y += _opt_row(y, w, "FRAME RATE", PerfProfile.fps_label() + ("  -  LOW RES stays at 30." if low else "  -  the cap while a match runs."), fps, low)
+			y += _opt_row(y, w, "DETAIL", "LOW trims the river patches and vat residents - use it if the game makes your machine run hot.",
+					[["FULL", not Rules.low_detail, func(): Rules.low_detail = false], ["LOW", Rules.low_detail, func(): Rules.low_detail = true]])
+		"debug":
+			# PRIVACY: (the telemetry branch's rows go here) - or in a "privacy" tab of their own, before this one
+			y += _opt_row(y, w, "DEBUG TOOLS", "The Debug button and live sliders in matches.",
+					[["ON", Rules.debug_tools, func(): Rules.debug_tools = true], ["OFF", not Rules.debug_tools, func(): Rules.debug_tools = false]])
+			y += _opt_row(y, w, "TEST SWITCH  ·  LOCKS", "OFF: everything unlocked (the testing default). ON: a preview of the game as players will see it once the locks go live - skills and looks earned or bought (until the page closes).",   # PROGRESSION
+					[["OFF", Progression.unlock_all, func(): Progression.unlock_all = true], ["ON", not Progression.unlock_all, func(): Progression.unlock_all = false]])
+		_:
+			# one game: BRAWL (Daniele, 0.18.7: "for now completely deactivate [SIEGE] ... brawl is our game (can
+			# also remove mode selector)") - no MODE switch here, in SETUP, the lobby, the pause menu or Debug
+			var ls := ("The map collapses ring by ring from %d:%02d." % [int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60]) if Rules.last_stand \
+					else ("No collapse; the %d:%02d safety net still ends a stalled match." % [int(Rules.MATCH_HARD_END) / 60, int(Rules.MATCH_HARD_END) % 60])
+			y += _opt_row(y, w, "LAST STAND", ls, [["ON", Rules.last_stand, func(): Rules.last_stand = true],
+					["OFF", not Rules.last_stand, func(): Rules.last_stand = false]])
+			y += _opt_row(y, w, "ENEMY COUNTS", "SHOWN: every node's count, as in Alpha 11. HIDDEN: no unit numbers on enemy nodes, so you scout.",
+					[["SHOWN", not Rules.hide_enemy_counts, func(): Rules.hide_enemy_counts = false],
+					["HIDDEN", Rules.hide_enemy_counts, func(): Rules.hide_enemy_counts = true]])
+	_column_end(col, n0, y, true)
+
+
+func _opt_row(y: float, w: float, title_text: String, desc: String, opts: Array, off := false) -> float:
+	## A SETTINGS row: its name over what it does (left), its choices [text, current, apply] as chips at the right, the
+	## current one lit; `off` greys them out. A pick applies and redraws the page. Returns the row's height.
+	var ch := UiKit.tap_h(self, 40.0)
+	var widths := []
+	var cw := 0.0
+	for o in opts:
+		var bw := maxf(64.0, UiKit.text_w(self, str(o[0]), 14, true) + 32.0)
+		widths.append(bw)
+		cw += bw + 8.0
+	var tw := maxf(160.0, w - cw - 16.0)
+	var l1 := UiKit.line_h(self, 16, true)
+	var h := maxf(ch, l1 + 4.0 + UiKit.text_h(self, desc, 13, tw)) + 24.0
+	_say(title_text, Vector2(0, y + 12.0), 16, UiKit.INK, 0.0, true)
+	_say(desc, Vector2(0, y + 16.0 + l1), 13, UiKit.MUTED, tw)
+	var bx := w - cw + 8.0
+	for i in range(opts.size()):
+		var apply: Callable = opts[i][2]
+		var b := UiKit.btn(self, str(opts[i][0]), Vector2(bx, y + (h - ch) / 2.0), Vector2(widths[i], 40), func():
+			apply.call()
+			show_options(), "selected" if opts[i][1] else "secondary", shell_f, 14)
+		b.disabled = off
+		bx += float(widths[i]) + 8.0
+	content.add_child(UiKit.rect(Vector2(0, y + h - 1.0), Vector2(w, 1.0), Color(UiKit.FRAME, 0.7)))
+	return h
 
 
 func show_factions() -> void:
@@ -1027,124 +1051,290 @@ func _profile_card(pos: Vector2) -> void:
 
 func show_profile() -> void:
 	_last_show = show_profile                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## PROFILE: level and XP, both balances and where they come from, per faction plays / wins and the faction
-	## vat's progress (25 wins online or vs Veteran / Expert AI), and whether it is saved on this device.
-	clear_page("city")
+	## PROFILE (screen system 21; the top bar's level block): level and XP, both balances and where they come from, per
+	## faction plays / wins and the faction vat's progress (25 wins online or vs Veteran / Expert AI), and whether it is
+	## saved on this device; CHALLENGES, LEADERBOARD, MATCH HISTORY and ACCOUNT at the foot (a guest's ACCOUNT lit: add
+	## Google there). BACK returns to the page it was opened from.
+	var tab := _meta_open("profile", show_main)
+	var area := shell_open("OOZE / PROFILE", tab, func(): _meta_back("profile", show_main), faction)
 	_page = "profile"
-	header(0)
-	label_at("PROFILE", P(40, 104), 43)
-	label_at("LEVEL, SCRAP, CHIPS AND YOUR FACTIONS  ·  earned by playing", P(300, 122), 20, Color("abc1cd"))
+	var x := shell_x()
+	var acc := UiKit.accent(shell_f)
+	var top := page_title(area, "PROFILE", "YOUR SYNDICATE RECORD.")
+	var a := _account()
+	var bh := UiKit.tap_h(self, 46.0)
+	var fy := area.end.y - bh - 12.0
+	var bx := x
+	for l in [["CHALLENGES", show_challenges], ["LEADERBOARD", show_leaderboard], ["MATCH HISTORY", show_history],
+			["ACCOUNT", show_account]]:                  # 0.20.5: LEADERBOARD, HISTORY, ACCOUNT
+		var bw := UiKit.text_w(self, l[0], 15, true) + 44.0
+		var lit: bool = l[0] == "ACCOUNT" and a.state == "guest"
+		UiKit.btn(self, l[0], Vector2(bx, fy), Vector2(bw, 46), l[1], "primary" if lit else "secondary", shell_f, 15)
+		bx += bw + 10.0
+	var gap := 18.0
+	var all_w := content.size.x - x * 2.0
+	var lw := floorf((all_w - gap) * 0.42)
+	var ch := fy - 12.0 - top
+	# left: level, XP, SCRAP and CHIPS and where they come from, where it is saved
+	var left := _column(Vector2(x, top), Vector2(lw, ch))
+	var w: float = left["w"]
+	var n0 := content.get_child_count()
 	var lf := Progression.level_for(Progression.xp)
-	var lp := P(35, 174)
-	frame(lp, P(560, 600))
-	label_at("LEVEL %d" % int(lf["level"]), lp + P(28, 20), 56)
-	_bar(lp + P(28, 108), P(500, 16), float(lf["into"]) / maxf(1.0, float(lf["need"])), Color("5fd7ff"))
-	label_at("%d / %d XP TO LEVEL %d" % [int(lf["into"]), int(lf["need"]), int(lf["level"]) + 1], lp + P(28, 132), 18, Color("9cb2bf"))
+	var hs := 88.0
+	UiKit.hero(self, shell_f, Vector2(0, 0), Vector2(hs, hs), false)
+	var ly := 10.0
+	ly += _say("YOUR LEVEL", Vector2(hs + 14.0, ly), 12, acc, 0.0, true, 3) + 2.0
+	ly += _say("LEVEL %d" % int(lf["level"]), Vector2(hs + 12.0, ly), 34, UiKit.INK, 0.0, true)
+	var y := maxf(hs, ly) + 10.0
+	UiKit.bar(self, Vector2(0, y), Vector2(w, 8), float(lf["into"]) / maxf(1.0, float(lf["need"])), shell_f)
+	y += 16.0
+	y += _say("%d / %d XP TO LEVEL %d" % [int(lf["into"]), int(lf["need"]), int(lf["level"]) + 1], Vector2(0, y), 14, UiKit.INK, 0.0, true) + 2.0
 	var PR := Rules.PROGRESSION
-	# the explanations wrap inside the frame at their designed size (a dense box - see label_at())
-	_wrapped("EVERY LEVEL +%d SCRAP  ·  EVERY %dTH ALSO +%d CHIPS" % [int(PR["level_soft"]), int(PR["level_premium_every"]),
-			int(PR["level_premium"])], lp + P(28, 162), 16, Color("7795a4"), 500)
-	_balance(Progression.balance("soft"), "soft", lp + P(24, 216), K * 1.6)
-	_wrapped("Matches (from Veteran AI up), challenges, the tutorial and the campaign. A skill costs %s." % Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false),
-			lp + P(28, 284), 17, Color("c5d2da"), 500)
-	_balance(Progression.balance("premium"), "premium", lp + P(24, 364), K * 1.6)
-	_wrapped("Weekly challenges and every %dth level; the store later. For looks only - never skills." % int(PR["level_premium_every"]),
-			lp + P(28, 432), 17, Color("c5d2da"), 500)
+	y += _say("EVERY LEVEL +%d SCRAP  ·  EVERY %dTH ALSO +%d CHIPS" % [int(PR["level_soft"]), int(PR["level_premium_every"]),
+			int(PR["level_premium"])], Vector2(0, y), 12, UiKit.MUTED, w, true) + 14.0
+	for cur in ["soft", "premium"]:
+		content.add_child(UiKit.rect(Vector2(0, y), Vector2(w, 1.0), Color(UiKit.FRAME, 0.7)))
+		y += 12.0
+		var t := _ticker(Progression.balance(cur), cur, Vector2(-4.0, y))
+		y += t.size.y + 4.0
+		var why := ("Matches (from Veteran AI up), challenges, the tutorial and the campaign. A skill costs %s." % Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false)) if cur == "soft" \
+				else ("Weekly challenges and every %dth level; the store later. For looks only - never skills." % int(PR["level_premium_every"]))
+		y += _say(why, Vector2(0, y), 13, UiKit.MUTED, w) + 14.0
 	if Progression.unlock_all:
-		label_at("UNLOCKS OPEN WHILE TESTING (OPTIONS > TEST SWITCH)", lp + P(28, 530), 16, Color("ffd15c"), false)
-	# factions
-	var fp := P(620, 174)
-	frame(fp, P(1017, 600))
-	label_at("FACTIONS", fp + P(24, 16), 28)
-	label_at("%d WINS WITH A FACTION UNLOCK ITS VAT  ·  ONLINE, OR VS VETERAN / EXPERT AI" % int(PR["faction_vat_wins"]),
-			fp + P(210, 26), 16, Color("8fb3c2"), false)
-	for i in range(FACTIONS.size()):
-		var f: String = FACTIONS[i]
-		var rp := fp + P(24, 70 + i * 104)
-		var fc: Color = Rules.FACTIONS[f][1]
-		var st := Progression.faction_stats(f)
-		portrait(f, rp, P(86, 92))
-		label_at("VIRIDIAN" if f == "bloom" else f.to_upper(), rp + P(104, 6), 26, fc, false)
-		label_at("PLAYED %d  ·  WON %d" % [int(st["plays"]), int(st["wins"])], rp + P(104, 44), 19, Color("dbe6ec"), false)
-		var need: int = PR["faction_vat_wins"]
-		var owned := Progression.owns("vat:faction:" + f)
-		_bar(rp + P(470, 30), P(360, 14), 1.0 if owned else float(st["vat_wins"]) / float(need), fc)
-		label_at("VAT UNLOCKED" if owned else "VAT  %d / %d WINS" % [int(st["vat_wins"]), need], rp + P(470, 54), 17,
-				fc if owned else Color("9cb2bf"), false)
-	nav_button("BACK", P(40, foot_y()), P(210, 58), show_main)
-	nav_button("CHALLENGES", P(265, foot_y()), P(270, 58), show_challenges)
-	nav_button("LEADERBOARD", P(550, foot_y()), P(290, 58), show_leaderboard)    # 0.20.5
-	nav_button("HISTORY", P(855, foot_y()), P(230, 58), show_history)
-	nav_button("ACCOUNT", P(1100, foot_y()), P(230, 58), show_account, _account().state == "guest")
-	var acct := _account()
+		y += _say("UNLOCKS OPEN WHILE TESTING (SETTINGS > DEBUG > TEST SWITCH)", Vector2(0, y), 12, UiKit.STAR, w, true) + 10.0
 	var note := "Progress saved on this device" if Progression.saved else "This browser keeps no storage: progress lasts until the page closes"
-	if acct.state == "linked":
+	if a.state == "linked":
 		note = "Progress saved on this device and in your account"
-	elif acct.state == "guest":
+	elif a.state == "guest":
 		note = "Guest account: add Google (ACCOUNT) to keep your progress on any device"
-	_wrapped(note, lp + P(28, 560), 15, Color("7795a4") if Progression.saved else Color("ffd15c"), 500)
+	y += _say(note, Vector2(0, y), 13, UiKit.DIM if Progression.saved else UiKit.STAR, w)
+	_column_end(left, n0, y)
+	# right: the five factions - plays, wins, the faction vat
+	var right := _column(Vector2(x + lw + gap, top), Vector2(all_w - lw - gap, ch))
+	w = right["w"]
+	n0 = content.get_child_count()
+	y = 0.0
+	y += _say("FACTIONS", Vector2(0, y), 18, UiKit.INK, 0.0, true) + 2.0
+	var need: int = PR["faction_vat_wins"]
+	y += _say("%d WINS WITH A FACTION UNLOCK ITS VAT  ·  ONLINE, OR VS VETERAN / EXPERT AI" % need, Vector2(0, y), 12,
+			UiKit.MUTED, w, true) + 12.0
+	var l1 := UiKit.line_h(self, 16, true)
+	var l2 := UiKit.line_h(self, 13)
+	var rh := maxf(62.0, l1 + l2 + 16.0)
+	for f in FACTIONS:
+		var fa := UiKit.accent(f)
+		var st := Progression.faction_stats(f)
+		var owned := Progression.owns("vat:faction:" + f)
+		UiKit.panel(self, Vector2(0, y), Vector2(w, rh), f, false, Color(UiKit.BASE, 0.6))
+		UiKit.hero(self, f, Vector2(8, y + 5.0), Vector2(rh - 10.0, rh - 10.0), false)
+		var tx := rh + 8.0
+		var mid := floorf(w * 0.5)
+		var ty := y + (rh - l1 - l2) / 2.0
+		_say(UiKit.NAMES[f], Vector2(tx, ty), 16, fa, 0.0, true)
+		_say("PLAYED %d  ·  WON %d" % [int(st["plays"]), int(st["wins"])], Vector2(tx, ty + l1), 13, UiKit.INK)
+		UiKit.bar(self, Vector2(mid, y + rh / 2.0 - 9.0), Vector2(w - mid - 14.0, 6), 1.0 if owned else float(st["vat_wins"]) / float(need), f)
+		_say("VAT UNLOCKED" if owned else "VAT  %d / %d WINS" % [int(st["vat_wins"]), need], Vector2(mid, y + rh / 2.0 + 1.0), 12,
+				fa if owned else UiKit.MUTED, 0.0, true)
+		y += rh + 8.0
+	_column_end(right, n0, y)
 
 
 func show_challenges(just_claimed := "") -> void:
 	_last_show = func(): show_challenges()                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## CHALLENGES: three daily and three weekly (the same for everyone, reset 00:00 UTC / Monday), progress from any
-	## finished match (tutorial lessons excluded), CLAIM pays (the card counts it up), one daily REROLL a day.
-	clear_page("city")
+	## CHALLENGES (screen system 22): three daily and three weekly (the same for everyone, reset 00:00 UTC / Monday),
+	## progress from any finished match (tutorial lessons excluded), CLAIM pays (the card counts it up), one daily REROLL
+	## a day; PROFILE and PLAY at the foot. BACK returns to the page it was opened from (HOME's CHALLENGES, PROFILE...).
+	var tab := _meta_open("challenges", show_main)
+	var area := shell_open("OOZE / CHALLENGES", tab, func(): _meta_back("challenges", show_main), faction)
 	_page = "challenges"
-	header(0)
-	label_at("CHALLENGES", P(40, 104), 43)
-	label_at("PLAY ANY MATCH TO PROGRESS  ·  CLAIM TO COLLECT", P(380, 122), 20, Color("abc1cd"))
-	for kind in ["daily", "weekly"]:
-		var x := 35.0 if kind == "daily" else 845.0
-		var cp := P(x, 174)
-		frame(cp, P(792, 600))
-		label_at(kind.to_upper(), cp + P(24, 16), 30)
-		label_at("RESETS IN " + Progression.duration_text(Progression.seconds_to_reset(kind)).to_upper(), cp + P(210, 28), 17,
-				Color("8fb3c2"), false)
-		var list := Progression.current_challenges(kind)
-		var rerolled: bool = Progression.challenges.get("daily", {}).get("rerolled", false)
-		for i in range(list.size()):
-			var c: Dictionary = list[i]
-			var rp := cp + P(24, 76 + i * 172)
-			content.add_child(neon_panel(rp, P(744, 158), color(), c["done"] and not c["claimed"], Color("08131ae8")))
-			label_at(str(c["text"]), rp + P(18, 12), 24, Color.WHITE if not c["claimed"] else Color("7795a4"), false)
-			_bar(rp + P(18, 60), P(440, 14), float(c["progress"]) / maxf(1.0, float(c["target"])), color())
-			label_at("%d / %d" % [int(c["progress"]), int(c["target"])], rp + P(470, 52), 19, Color("dbe6ec"), false)
-			var reward := "%s  ·  +%d XP" % [Progression.amount_text(int(c["soft"])), int(c["xp"])]
-			if int(c["premium"]) > 0:
-				reward += "  ·  " + Progression.amount_text(int(c["premium"]), "premium")
-			label_at(reward, rp + P(18, 94), 18, Color("e08a3a"), false)
-			var id: String = c["id"]
-			var k: String = kind
-			if c["claimed"]:
-				if id == just_claimed:               # the paid SCRAP counts up on the card it came from
-					var t := RewardTicker.make(int(c["soft"]), "soft", func(n: float) -> float: return n * K * 1.4)
-					t.position = rp + P(540, 96)
-					t.fit()
-					content.add_child(t)
-					t.play()
-				else:
-					label_at("CLAIMED", rp + P(600, 104), 19, Color("7795a4"), false)
-			elif c["done"]:
-				_card_button("CLAIM", rp, P(744, 158), func():
-					if not Progression.claim(k, id).is_empty():
-						show_challenges(id), true)
-			elif kind == "daily" and not rerolled:
-				var rb := _card_button("REROLL", rp, P(744, 158), func():
-					Progression.reroll(id)
-					show_challenges())
-				rb.add_theme_font_size_override("font_size", int(round(fsz(19) * K)))
-	nav_button("BACK", P(40, foot_y()), P(230, 58), show_main)
-	nav_button("PROFILE", P(290, foot_y()), P(230, 58), show_profile)
-	label_at("One reroll a day, for a daily you would rather swap.", P(985, foot_y() + 18.0), 18, Color("7795a4"), false)
+	var x := shell_x()
+	var top := page_title(area, "CHALLENGES", "A LITTLE EXTRA PRESSURE.")
+	var bh := UiKit.tap_h(self, 48.0)
+	var fy := area.end.y - bh - 12.0
+	var play := UiKit.btn(self, "PLAY  →", Vector2(content.size.x - x - 200.0, fy), Vector2(200, 48), show_play, "primary", shell_f, 16)
+	var prof := UiKit.btn(self, "PROFILE", Vector2(play.position.x - 170.0, fy), Vector2(160, 48), show_profile, "secondary", shell_f, 15)
+	var note := "Play any match to progress, then claim. One reroll a day, for a daily you would rather swap."
+	var nw := prof.position.x - x - 16.0
+	_say(note, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, note, 13, nw)) / 2.0)), 13, UiKit.MUTED, nw)
+	var gap := 18.0
+	var cw := (content.size.x - x * 2.0 - gap) / 2.0
+	var rerolled: bool = Progression.challenges.get("daily", {}).get("rerolled", false)
+	for k in range(2):
+		var kind: String = ["daily", "weekly"][k]
+		var col := _column(Vector2(x + k * (cw + gap), top), Vector2(cw, fy - 12.0 - top))
+		var w: float = col["w"]
+		var n0 := content.get_child_count()
+		_say(kind.to_upper(), Vector2(0, 0), 18, UiKit.INK, 0.0, true)
+		var rs := "RESETS IN " + Progression.duration_text(Progression.seconds_to_reset(kind)).to_upper()
+		_say(rs, Vector2(w - UiKit.text_w(self, rs, 12, true) - 4.0, (UiKit.line_h(self, 18, true) - UiKit.line_h(self, 12, true)) / 2.0),
+				12, UiKit.MUTED, 0.0, true)
+		var y := UiKit.line_h(self, 18, true) + 10.0
+		for c in Progression.current_challenges(kind):
+			y += _challenge_card(c, kind, Vector2(0, y), w, just_claimed, rerolled) + 10.0
+		_column_end(col, n0, y)
 
 
-func _card_button(text: String, card_pos: Vector2, card_dims: Vector2, call: Callable, primary := false) -> Button:
-	## A card's action button in its bottom-right corner, inside the card at any phone size (0.20.5: REROLL grew
-	## past the card's edge on phones - tap() makes it taller there, so place it from its grown height).
-	var dims := tap(P(166, 58))
-	var pos := card_pos + card_dims - dims - P(14, 8)
-	return nav_button(text, pos, dims, call, primary, false)
+func _challenge_card(c: Dictionary, kind: String, pos: Vector2, w: float, just_claimed: String, rerolled: bool) -> float:
+	## One challenge on its card: the task, its progress bar and count, the reward; at the right CLAIM (done), REROLL (a
+	## daily, once a day), the paid SCRAP counting up (just claimed), CLAIMED, or IN PROGRESS. Returns the card's height.
+	var claimed: bool = c["claimed"]
+	var done: bool = c["done"]
+	var id: String = c["id"]
+	var bw := maxf(150.0, UiKit.text_w(self, "IN PROGRESS", 13, true) + 8.0)   # the right column fits its widest word
+	var bh := UiKit.tap_h(self, 42.0)
+	var text := str(c["text"])
+	var th := UiKit.text_h(self, text, 15, w - 28.0, true)
+	var lh := UiKit.line_h(self, 13)
+	var reward := "%s  ·  +%d XP" % [Progression.amount_text(int(c["soft"])), int(c["xp"])]
+	if int(c["premium"]) > 0:
+		reward += "  ·  " + Progression.amount_text(int(c["premium"]), "premium")
+	var rw := w - 28.0 - bw - 16.0
+	var rwh := UiKit.text_h(self, reward, 13, rw)
+	var body := maxf(bh, lh + 6.0 + rwh)
+	var h := 14.0 + th + 8.0 + body + 14.0
+	UiKit.panel(self, pos, Vector2(w, h), shell_f, done and not claimed, Color(UiKit.BASE, 0.6))
+	_say(text, pos + Vector2(14, 14), 15, UiKit.DIM if claimed else UiKit.INK, w - 28.0, true)
+	var by := pos.y + 14.0 + th + 8.0
+	var cnt := "%d / %d" % [int(c["progress"]), int(c["target"])]
+	var cnt_w := UiKit.text_w(self, cnt, 13, true)
+	var bar_w := rw - cnt_w - 10.0
+	UiKit.bar(self, Vector2(pos.x + 14.0, by + (lh - 6.0) / 2.0), Vector2(bar_w, 6), float(c["progress"]) / maxf(1.0, float(c["target"])), shell_f)
+	_say(cnt, Vector2(pos.x + 14.0 + bar_w + 10.0, by), 13, UiKit.INK, 0.0, true)
+	_say(reward, Vector2(pos.x + 14.0, by + lh + 6.0), 13, RewardTicker.COLOURS["soft"], rw)
+	var bp := Vector2(pos.x + w - 14.0 - bw, by + (body - bh) / 2.0)
+	var tag := ""
+	if claimed:
+		if id == just_claimed:                          # the paid SCRAP counts up on the card it came from
+			var t := _ticker(int(c["soft"]), "soft", bp, false)
+			t.position.x = pos.x + w - 14.0 - t.size.x
+			t.position.y = by + (body - t.size.y) / 2.0
+		else:
+			tag = "CLAIMED"
+	elif done:
+		UiKit.btn(self, "CLAIM", bp, Vector2(bw, 42), func():
+			if not Progression.claim(kind, id).is_empty():
+				show_challenges(id), "primary", shell_f, 15)
+	elif kind == "daily" and not rerolled:
+		UiKit.btn(self, "REROLL", bp, Vector2(bw, 42), func():
+			Progression.reroll(id)
+			show_challenges(), "secondary", shell_f, 15)
+	else:
+		tag = "IN PROGRESS"
+	if tag != "":
+		_say(tag, Vector2(pos.x + w - 14.0 - UiKit.text_w(self, tag, 13, true), by + (body - UiKit.line_h(self, 13, true)) / 2.0), 13,
+				UiKit.DIM, 0.0, true)
+	return h
+
+
+# ------------------------------------------------------------------ UI: parts of the online / progression / settings pages (Alpha 21)
+var _meta_from := {}                               # page -> [the page it was opened from (its BACK), the tab kept lit]
+var _meta_returning := false                       # a BACK is under way: the page it lands on keeps its own record
+const META_TABS := ["home", "play", "armies", "campaign"]
+
+
+func _meta_open(page: String, fallback: Callable) -> String:
+	## PROFILE, CHALLENGES, LEADERBOARD, MATCH HISTORY, ACCOUNT and SETTINGS open from the shell (the level block, the
+	## gear, HOME's CHALLENGES) and from each other: remembers the page each came from - its BACK - and returns the tab
+	## to keep lit (that page's). A rebuild of the same page, or a BACK landing on it, keeps what it had.
+	if not _meta_from.has(page) or (_page != page and not _meta_returning):
+		var tab := "home"
+		if is_instance_valid(nav_bar) and nav_bar.active in META_TABS:
+			tab = nav_bar.active
+		elif _meta_from.has(_page):
+			tab = str(_meta_from[_page][1])
+		_meta_from[page] = [_last_show if _last_show.is_valid() and _page != "" else fallback, tab]
+	return str(_meta_from[page][1])
+
+
+func _meta_back(page: String, fallback: Callable) -> void:
+	var to: Callable = _meta_from[page][0] if _meta_from.has(page) else fallback
+	_meta_returning = true
+	to.call()
+	_meta_returning = false
+
+
+func _say(text: String, pos: Vector2, size: float, col := UiKit.INK, width := 0.0, head := false, spacing := 0) -> float:
+	## A label at `pos` (wrapping inside `width` when one is given); returns its height.
+	var l := UiKit.label(self, text, size, col, head, spacing)
+	var h := UiKit.line_h(self, size, head)
+	if width > 0.0:
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		h = UiKit.text_h(self, text, size, width, head)
+		l.custom_minimum_size = Vector2(width, 0)
+		l.size = Vector2(width, h)
+	UiKit.add(self, l, pos)
+	return h
+
+
+func _clip(text: String, pos: Vector2, size: float, col: Color, width: float, head := false) -> Label:
+	## A one-line label cut to `width` with an ellipsis (names, map names in a row).
+	var l := UiKit.label(self, text, size, col, head)
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.size = Vector2(maxf(width, 10.0), UiKit.line_h(self, size, head))
+	return UiKit.add(self, l, pos) as Label
+
+
+func _column(pos: Vector2, dims: Vector2, selected := false) -> Dictionary:
+	## An opaque panel whose inside scrolls (phones grow rows to 44 pt and text to 12.5 pt, more than fits): build its
+	## rows at (0, y) in `content`, then _column_end(col, before, height) moves them in. col["w"] = the width to fill.
+	var pnl := UiKit.panel(self, pos, dims, shell_f, selected)
+	var col := stack_open(pos + Vector2(18.0, 12.0), dims - Vector2(26.0, 24.0))
+	col["panel"] = pnl
+	var sc: TouchScroll = col["scroll"]
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var bar := sc.get_v_scroll_bar()                  # a slim accent grabber, not the default grey bar
+	var track := UiKit.sb(Color(UiKit.FRAME, 0.35), Color(0, 0, 0, 0), 0, 2)
+	var grab := UiKit.sb(Color(UiKit.accent(shell_f), 0.75), Color(0, 0, 0, 0), 0, 2)
+	for s in [track, grab]:
+		s.set_content_margin_all(2)
+	bar.add_theme_stylebox_override("scroll", track)
+	for k in ["grabber", "grabber_highlight", "grabber_pressed"]:
+		bar.add_theme_stylebox_override(k, grab)
+	col["w"] = dims.x - 44.0
+	return col
+
+
+func _column_end(col: Dictionary, before: int, h: float, fit := false) -> void:
+	## `fit`: the panel shrinks to its rows when they need less than it was given.
+	stack_capture(col, before)
+	var inner: Control = col["inner"]
+	inner.custom_minimum_size = Vector2(float(col["w"]), h + 6.0)
+	inner.size = inner.custom_minimum_size
+	var sc: Control = col["scroll"]
+	if fit and h + 12.0 < sc.size.y:
+		sc.size.y = h + 12.0                            # a little over the rows: no scroll bar
+		(col["panel"] as Control).size.y = h + 36.0
+
+
+func _flow(nodes: Array, pos: Vector2, width: float, gap := 8.0) -> float:
+	## Places the (already added) controls left to right from `pos`, wrapping at `width`; returns the height used.
+	var cx := 0.0
+	var cy := 0.0
+	var row := 0.0
+	for c in nodes:
+		var s: Vector2 = (c as Control).size
+		if cx > 0.0 and cx + s.x > width:
+			cx = 0.0
+			cy += row + gap
+			row = 0.0
+		(c as Control).position = pos + Vector2(cx, cy)
+		cx += s.x + gap
+		row = maxf(row, s.y)
+	return cy + row
+
+
+func _ticker(amount: int, cur: String, pos: Vector2, balance := true) -> RewardTicker:
+	## SCRAP / CHIPS with its mark, sized in pt on phones: a balance ("1 260 SCRAP") shows at once, a claim ("+140
+	## SCRAP") counts up.
+	var p := UiKit.pt(self)
+	var t := RewardTicker.make(amount, cur, func(n: float) -> float: return n * 0.8 / p if p > 0.0 else n * 1.1)
+	t.sign = not balance
+	t.tooltip_text = Rules.CURRENCY_NAMES.get(cur, "")
+	t.fit()
+	UiKit.add(self, t, pos)
+	t.play(balance)
+	return t
 
 
 # ------------------------------------------------------------------ PROGRESSION: ACCOUNT, LEADERBOARD, MATCH HISTORY (0.20.5)
@@ -1170,20 +1360,28 @@ func _account() -> Account:
 
 
 func _line_edit(pos: Vector2, dims: Vector2, placeholder: String, text := "") -> LineEdit:
-	## A text field in the menu's style (email, name); the phone's own keyboard opens on tap.
-	dims = tap(dims)
+	## A text field in the shell's style (ACCOUNT's name, ONLINE ROOMS' code frame), >= 44 pt tall on phones; the
+	## phone's own keyboard opens on tap (the web build lays a native HTML field over it instead).
+	dims.y = UiKit.tap_h(self, dims.y)
 	var e := LineEdit.new()
-	e.position = pos
 	e.size = dims
 	e.custom_minimum_size = dims
 	e.placeholder_text = placeholder
 	e.text = text
-	e.add_theme_font_override("font", UI_FONT)
-	e.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
-	e.add_theme_stylebox_override("normal", Hud.panel_style())
-	e.add_theme_stylebox_override("focus", Hud.panel_style(color()))
+	e.add_theme_font_override("font", UiKit.HEAD)
+	e.add_theme_font_size_override("font_size", UiKit.px(self, 17))
+	e.add_theme_color_override("font_color", UiKit.INK)
+	e.add_theme_color_override("font_placeholder_color", UiKit.DIM)
+	e.add_theme_color_override("font_uneditable_color", UiKit.MUTED)
+	var box := UiKit.sb(Color(UiKit.BASE, 0.96), UiKit.FRAME, 1, 6)
+	box.set_content_margin_all(12)
+	var lit := UiKit.sb(Color(UiKit.BASE, 0.96), UiKit.accent(shell_f), 2, 6)
+	lit.set_content_margin_all(12)
+	e.add_theme_stylebox_override("normal", box)
+	e.add_theme_stylebox_override("read_only", box)
+	e.add_theme_stylebox_override("focus", lit)
 	e.virtual_keyboard_enabled = true
-	content.add_child(e)
+	UiKit.add(self, e, pos)
 	return e
 
 
@@ -1191,15 +1389,25 @@ func show_account() -> void:
 	_last_show = show_account                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## ACCOUNT (Daniele: an automatic guest, then Google to keep progress on any device - no email: "its a game why
 	## would they want to do that"; a sign-in onto an account that already has progress keeps the account's). Guests are
-	## never asked to verify anything; the game plays offline without it.
+	## never asked to verify anything; the game plays offline without it. Left: the account's state and your NAME (a
+	## plain panel, never scrolled, so the web build's native name field stays exactly on its frame); right: sign in with
+	## an account linked elsewhere. BACK returns to PROFILE (or wherever it was opened from).
 	var a := _account()
-	clear_page("city")
+	var tab := _meta_open("account", show_profile)
+	var back := func():
+		_account_note = ""
+		_meta_back("account", show_profile)
+	var area := shell_open("OOZE / ACCOUNT", tab, back, faction)
 	_page = "account"
-	header(0)
-	label_at("ACCOUNT", P(40, 104), 43)
-	label_at("OPTIONAL  ·  the game plays offline without it", P(300, 122), 20, Color("abc1cd"))
-	var lp := P(35, 174)
-	frame(lp, P(760, 600))
+	var x := shell_x()
+	var top := page_title(area, "ACCOUNT  ·  OPTIONAL, THE GAME PLAYS OFFLINE WITHOUT IT", "KEEP YOUR PROGRESS.")
+	var web := OS.has_feature("web")
+	var gap := 18.0
+	var cw := (content.size.x - x * 2.0 - gap) / 2.0
+	var ch := area.end.y - 14.0 - top
+	var lp := UiKit.panel(self, Vector2(x, top), Vector2(cw, ch), shell_f)
+	var px := x + 20.0
+	var w := cw - 40.0
 	var status := "OFFLINE  -  no connection; you play as a guest on this device"
 	var col := Color("ffd15c")
 	match a.state:
@@ -1211,75 +1419,81 @@ func show_account() -> void:
 			col = Color("6fff2a")
 		"signing_in":
 			status = "SIGNING IN ..."
-	_wrapped(status, lp + P(28, 22), 22, col, 700)
-	# rows advance by each control's grown height (rh / tap): on a phone the 44 pt fields are taller than designed
-	var hh := rh(58)
-	var y := 86.0
-	label_at("NAME", lp + P(28, y), 18, Color("8fb3c2"), false)
-	y += 28.0
-	if OS.has_feature("web"):
+	var y := top + 16.0
+	y += _say(status, Vector2(px, y), 15, col, w, true) + 16.0
+	y += _say("NAME", Vector2(px, y), 12, UiKit.MUTED, 0.0, true, 3) + 6.0
+	var rw := UiKit.text_w(self, "RENAME", 15, true) + 44.0
+	var fw := minf(w - rw - 12.0, 360.0)
+	if web:
 		# the web build: Godot's LineEdit doesn't raise a phone keyboard, and a field focused from Godot's own input
 		# handling doesn't either on Android (outside the tap's gesture - Daniele, 0.20.10: "keyboard still doesn't
 		# appear"). So the NAME box IS a native HTML <input> laid over it (_place_name_field): the tap lands on the DOM
 		# element itself and the phone raises its keyboard. RENAME (or Enter) saves what it holds.
-		var box := _line_edit(lp + P(28, y), P(440, 58), "", "")   # the frame the HTML field sits on (never typed into)
+		var box := _line_edit(Vector2(px, y), Vector2(fw, 46), "", "")   # the frame the HTML field sits on (never typed into)
 		box.editable = false
 		box.focus_mode = Control.FOCUS_NONE
 		_name_box = box
 		_name_enabled = a.signed_in()
 		_name_value = a.player_name
 		_place_name_field.call_deferred()
-		var rw := nav_button("RENAME", lp + P(490, y), P(240, 58), func(): _rename_from_field())
-		rw.disabled = not a.signed_in()
+		var rn := UiKit.btn(self, "RENAME", Vector2(px + fw + 12.0, y), Vector2(rw, 46), func(): _rename_from_field(), "secondary", shell_f, 15)
+		rn.disabled = not a.signed_in()
+		y += box.size.y
 	else:
-		var nm := _line_edit(lp + P(28, y), P(440, 58), "3-16 letters or digits", a.player_name)
-		var rn := nav_button("RENAME", lp + P(490, y), P(240, 58), func():
+		var nm := _line_edit(Vector2(px, y), Vector2(fw, 46), "3-16 letters or digits", a.player_name)
+		var rn := UiKit.btn(self, "RENAME", Vector2(px + fw + 12.0, y), Vector2(rw, 46), func():
 			if await a.rename(nm.text):
 				_account_note = "Name saved: " + a.player_name
 			else:
 				_account_note = a.last_error
-			show_account())
+			show_account(), "secondary", shell_f, 15)
 		rn.disabled = not a.signed_in()
 		nm.editable = a.signed_in()
-	y += hh + 22.0
-	if OS.has_feature("web") and not a.google_ready and a.state != "offline":
+		y += nm.size.y
+	y += 22.0
+	if web and not a.google_ready and a.state != "offline":
 		a.check_google()                           # redraws through Account.changed when the answer differs
-	var google_ok := OS.has_feature("web") and a.google_ready
+	var google_ok := web and a.google_ready
 	if a.state == "guest":
-		label_at("KEEP YOUR PROGRESS ON ANY DEVICE", lp + P(28, y), 20, Color.WHITE, false)
-		y += 32.0
-		var g := nav_button("ADD GOOGLE", lp + P(28, y), P(440, 58), func():
+		y += _say("KEEP YOUR PROGRESS ON ANY DEVICE", Vector2(px, y), 15, UiKit.INK, w, true) + 8.0
+		var gw := UiKit.text_w(self, "ADD GOOGLE", 16, true) + 60.0
+		var g := UiKit.btn(self, "ADD GOOGLE", Vector2(px, y), Vector2(gw, 48), func():
 			if not await a.google(true):
 				_account_note = a.last_error
-				show_account(), google_ok)
+				show_account(), "primary" if google_ok else "secondary", shell_f, 16)
 		g.disabled = not google_ok
-		y += hh + 10.0
-		_wrapped("Your progress is already kept in this guest account; Google keeps it on your other devices too.",
-				lp + P(28, y), 16, Color("7795a4"), 700)
-	# sign in with an account linked elsewhere: its progress replaces this device's
-	var rp := P(815, 174)
-	frame(rp, P(822, 600))
-	label_at("ALREADY HAVE AN ACCOUNT?", rp + P(28, 22), 22, Color.WHITE, false)
-	_wrapped("Sign in with the Google account you linked on another device. Its progress replaces this device's.",
-			rp + P(28, 60), 18, Color("c5d2da"), 760)
-	var ry := 130.0
-	var gs := nav_button("SIGN IN WITH GOOGLE", rp + P(28, ry), P(480, 58), func():
+		y += g.size.y + 10.0
+		var gn := "Your progress is already kept in this guest account; Google keeps it on your other devices too."
+		if y + UiKit.text_h(self, gn, 13, w) < top + ch - 10.0:      # a short phone keeps the panel's edge clear
+			y += _say(gn, Vector2(px, y), 13, UiKit.MUTED, w)
+	# right: sign in with an account linked elsewhere - its progress replaces this device's
+	var right := _column(Vector2(x + cw + gap, top), Vector2(cw, ch))
+	var rcw: float = right["w"]
+	var n0 := content.get_child_count()
+	var ry := 4.0
+	ry += _say("ALREADY HAVE AN ACCOUNT?", Vector2(0, ry), 15, UiKit.INK, rcw, true) + 6.0
+	ry += _say("Sign in with the Google account you linked on another device. Its progress replaces this device's.",
+			Vector2(0, ry), 14, UiKit.MUTED, rcw) + 14.0
+	var sw := UiKit.text_w(self, "SIGN IN WITH GOOGLE", 15, true) + 50.0
+	var gs := UiKit.btn(self, "SIGN IN WITH GOOGLE", Vector2(0, ry), Vector2(sw, 48), func():
 		if not await a.google(false):
 			_account_note = a.last_error
-			show_account())
+			show_account(), "secondary", shell_f, 15)
 	gs.disabled = not google_ok
-	ry += hh + 10.0
-	if not OS.has_feature("web"):
-		_wrapped("Google sign-in works in the browser build.", rp + P(28, ry), 16, Color("7795a4"), 760)
-		ry += 30.0
+	ry += gs.size.y + 10.0
+	if not web:
+		ry += _say("Google sign-in works in the browser build.", Vector2(0, ry), 13, UiKit.DIM, rcw) + 8.0
 	elif not a.google_ready and a.state != "offline":
-		_wrapped("Google sign-in isn't available right now.", rp + P(28, ry), 16, Color("7795a4"), 760)
-		ry += 30.0
+		ry += _say("Google sign-in isn't available right now.", Vector2(0, ry), 13, UiKit.DIM, rcw) + 8.0
 	if _account_note != "":
-		_wrapped(_account_note, rp + P(28, ry + 10.0), 19, Color("ffd15c"), 760)
-	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
-		_account_note = ""
-		show_profile())
+		ry += _say(_account_note, Vector2(0, ry + 6.0), 15, UiKit.STAR, rcw) + 14.0
+	# PRIVACY: (the telemetry branch's rows go here) - SHARE PLAY & CRASH DATA, PRIVACY, DELETE ACCOUNT, below the Google
+	# sign-in: `ry += ...` rows at (0, ry), width rcw; this column scrolls, so 2-3 rows fit on phones too.
+	_column_end(right, n0, ry, true)
+	var both := minf(ch, maxf(y + 16.0 - top, (right["panel"] as Control).size.y))   # one height for the pair
+	lp.size.y = both
+	(right["panel"] as Control).size.y = both
+	(right["scroll"] as Control).size.y = both - 24.0
 
 
 # The web build's name field: a native DOM <input> laid over ACCOUNT's NAME box (like web/room-ui.js's room code, the
@@ -1470,56 +1684,66 @@ func _install_guide_panel() -> void:
 
 func show_leaderboard() -> void:
 	_last_show = show_leaderboard              # a resize that changes the phone sizing rebuilds it (_fit)
-	## LEADERBOARD: WINS THIS SEASON (the UTC month) - online wins in server rooms with two or more players,
-	## written by the server only. Reads it when opened; offline says so.
-	clear_page("city")
+	## LEADERBOARD: WINS THIS SEASON (the UTC month) - online wins in server rooms with two or more players, written by
+	## the server only. Reads it when opened (LOADING / needs a connection / no wins yet say so); YOU, when you're not on
+	## the list, as a row of its own (0.20.13; "-" until you win one). REFRESH reads it again.
+	var tab := _meta_open("leaderboard", show_profile)
+	var back := func():
+		_board_state = "idle"
+		_meta_back("leaderboard", show_profile)
+	var area := shell_open("OOZE / LEADERBOARD", tab, back, faction)
 	_page = "leaderboard"
-	header(0)
-	label_at("LEADERBOARD", P(40, 104), 43)
+	var x := shell_x()
 	var now := Time.get_datetime_dict_from_system(true)
-	label_at("WINS THIS SEASON  ·  %s %d  ·  online, server rooms with 2+ players" % [MONTHS[int(now["month"]) - 1], int(now["year"])],
-			P(400, 122), 20, Color("abc1cd"))
-	var fp := P(35, 174)
-	frame(fp, P(1602, 600))
+	var top := page_title(area, "LEADERBOARD  ·  %s %d" % [MONTHS[int(now["month"]) - 1], int(now["year"])], "WINS THIS SEASON.")
+	var bh := UiKit.tap_h(self, 48.0)
+	var fy := area.end.y - bh - 12.0
+	var rb := UiKit.btn(self, "REFRESH", Vector2(content.size.x - x - 180.0, fy), Vector2(180, 48), func():
+		_board_state = "idle"
+		show_leaderboard(), "secondary", shell_f, 15)
+	var nt := "Online wins in server rooms with two or more players, written by the server only."
+	var nw := rb.position.x - x - 16.0
+	_say(nt, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, nt, 13, nw)) / 2.0)), 13, UiKit.MUTED, nw)
+	var col := _column(Vector2(x, top), Vector2(content.size.x - x * 2.0, fy - 12.0 - top))
+	var w: float = col["w"]
+	var n0 := content.get_child_count()
+	var y := 4.0
 	if _board_state == "idle":
 		_board_state = "loading"
-		_load_board()
+		_load_board.call_deferred()                    # after this page is built (an offline answer comes back at once)
 	if _board_state == "loading":
-		label_at("LOADING ...", fp + P(30, 30), 24, Color("9cb2bf"), false)
+		y += _say("LOADING ...", Vector2(4, y), 16, UiKit.MUTED, 0.0, true)
 	elif _board_state == "offline":
-		label_at("The leaderboard needs a connection.", fp + P(30, 30), 24, Color("ffd15c"), false)
+		y += _say("The leaderboard needs a connection.", Vector2(4, y), 16, UiKit.STAR, w)
 	elif _board_rows.is_empty():
-		_wrapped("No wins yet this season - win an online match against another player to open the board.", fp + P(30, 30),
-				24, Color("9cb2bf"), 1500)
+		y += _say("No wins yet this season - win an online match against another player to open the board.", Vector2(4, y), 16,
+				UiKit.MUTED, w)
 	else:
-		var st := stack_open(fp + P(16, 16), P(1570, 568))
-		var ry := 0.0
+		y = 0.0
 		for row in _board_rows:
 			var me := bool(row.get("is_me", false))
-			var h := rh(56)
-			stack_add(st, _placed(neon_panel(P(0, ry), P(1560, h), color(), me, Color("08202ae8") if me else Color("020a10d8"))))
-			stack_add(st, label_at("#%d" % int(row.get("rank", 0)), P(20, ry + h * 0.2), 24, Color("ffd15c"), false))
-			stack_add(st, label_at(str(row.get("name", "")) + ("  (YOU)" if me else ""), P(160, ry + h * 0.2), 24,
-					Color.WHITE, false))
-			stack_add(st, label_at("%d WINS" % int(row.get("wins", 0)), P(1320, ry + h * 0.2), 24, Color("6fff2a"), false))
-			ry += h + 8.0
+			y += _board_row("#%d" % int(row.get("rank", 0)), str(row.get("name", "")) + ("  (YOU)" if me else ""),
+					"%d WINS" % int(row.get("wins", 0)), Vector2(0, y), w, me) + 6.0
 		if not _board_me.is_empty():                  # 0.20.13: YOU, when you're not on the list - a row like the rest
-			var h := rh(56)
 			var wins := int(_board_me.get("wins", 0))
-			stack_add(st, _placed(neon_panel(P(0, ry + 8.0), P(1560, h), Color("ffd15c"), true, Color("08202ae8"))))
-			stack_add(st, label_at("#%d" % int(_board_me.get("rank", 0)) if wins > 0 else "-", P(20, ry + 8.0 + h * 0.2), 24, Color("ffd15c"), false))
-			stack_add(st, label_at(str(_board_me.get("name", "")) + "  (YOU)" + ("" if wins > 0 else "  ·  win an online round vs a player"),
-					P(160, ry + 8.0 + h * 0.2), 24, Color.WHITE, false))
-			stack_add(st, label_at("%d WINS" % wins, P(1320, ry + 8.0 + h * 0.2), 24, Color("ffd15c"), false))
-			ry += h + 16.0
-		stack_close(st, ry * K)
-	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
-		_board_state = "idle"
-		show_profile())
-	nav_button("REFRESH", P(290, foot_y()), P(230, 58), func():
-		_board_state = "idle"
-		show_leaderboard())
+			y += 8.0
+			y += _board_row("#%d" % int(_board_me.get("rank", 0)) if wins > 0 else "-", str(_board_me.get("name", "")) + "  (YOU)"
+					+ ("" if wins > 0 else "  ·  win an online round vs a player"), "%d WINS" % wins, Vector2(0, y), w, true, UiKit.STAR) + 6.0
+	_column_end(col, n0, y, true)
 
+
+func _board_row(rank: String, who: String, wins: String, pos: Vector2, w: float, me: bool, wins_col := UiKit.INK) -> float:
+	## One LEADERBOARD row: the rank, the name, the wins; your own row lit. Returns its height.
+	var lh := UiKit.line_h(self, 16, true)
+	var h := maxf(48.0, lh + 18.0)
+	UiKit.panel(self, pos, Vector2(w, h), shell_f, me, Color(UiKit.BASE, 0.6))
+	var ty := pos.y + (h - lh) / 2.0
+	_say(rank, Vector2(pos.x + 16.0, ty), 16, UiKit.STAR, 0.0, true)
+	var nx := 16.0 + UiKit.text_w(self, "#0000", 16, true) + 24.0
+	var ww := UiKit.text_w(self, wins, 16, true)
+	_clip(who, Vector2(pos.x + nx, ty), 16, UiKit.INK, w - nx - ww - 40.0, true)
+	_say(wins, Vector2(pos.x + w - 16.0 - ww, ty), 16, wins_col if not me or wins_col != UiKit.INK else UiKit.accent(shell_f), 0.0, true)
+	return h
 
 
 func _load_board() -> void:
@@ -1536,76 +1760,96 @@ func _load_board() -> void:
 func show_history() -> void:
 	_last_show = show_history                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## MATCH HISTORY (Daniele, 0.20.5): your recent matches - this device's log (offline, AI, and online rounds played
-	## here) plus the server's record of your online rounds from other devices; newest first, ONLINE / OFFLINE tags.
+	## here) plus the server's record of your online rounds from other devices; newest first, ONLINE / OFFLINE tags,
+	## WIN / LOSS / DRAW in words (and colour). MORE loads older online rounds.
 	var a := _account()
-	clear_page("city")
-	_page = "history"
-	header(0)
-	label_at("MATCH HISTORY", P(40, 104), 43)
-	label_at("YOUR RECENT MATCHES  ·  this device" + (" + your account's online rounds" if a.signed_in() else ""),
-			P(420, 122), 20, Color("abc1cd"))
-	if _history_state == "idle" and a.signed_in():
-		_history_state = "loading"
-		_load_history(false)
-	var list := Progression.merge_history(Progression.history, _history_online)
-	var fp := P(35, 174)
-	frame(fp, P(1602, 600))
-	if list.is_empty():
-		_wrapped("No matches yet - finish one and it shows here.", fp + P(30, 30), 24, Color("9cb2bf"), 1500)
-	else:
-		var names := _map_names()
-		var st := stack_open(fp + P(16, 16), P(1570, 568))
-		var ry := 0.0
-		for h in list:
-			var rowh := rh(92)
-			var won := bool(h.get("won", false))
-			var draw := bool(h.get("draw", false))
-			var res := "DRAW" if draw else ("WIN" if won else "LOSS")
-			var rc := Color("9cb2bf") if draw else (Color("6fff2a") if won else Color("ff5a4a"))
-			stack_add(st, _placed(neon_panel(P(0, ry), P(1560, rowh), rc.darkened(0.3), false, Color("020a10d8"))))
-			var online := bool(h.get("online", false))
-			stack_add(st, label_at("ONLINE" if online else "OFFLINE", P(16, ry + 8), 15, Color("5fd7ff") if online else Color("839da9"), false))
-			stack_add(st, label_at(_date_text(int(h.get("t", 0))), P(16, ry + 34), 17, Color("c5d2da"), false))
-			var code := str(h.get("map", ""))
-			stack_add(st, label_at(code + "  " + str(names.get(code, "")), P(220, ry + 8), 20, Color.WHITE, false))
-			var dur := int(h.get("duration_s", 0))
-			stack_add(st, label_at("%s  ·  %d:%02d" % [str(Menu.MODE_NAMES.get(str(h.get("mode", "")), str(h.get("mode", "")))), dur / 60, dur % 60],
-					P(220, ry + 40), 17, Color("9cb2bf"), false))
-			var px := 760.0
-			for p in h.get("players", []):
-				if not p is Dictionary:
-					continue
-				var f := str(p.get("faction", "null"))
-				var tex := Hud.emblem_texture(f) if Rules.FACTIONS.has(f) else null
-				if tex != null:
-					var ic := TextureRect.new()
-					ic.texture = tex
-					ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-					ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-					ic.position = P(px, ry + 10)
-					ic.size = P(34, 34)
-					ic.modulate = Rules.FACTIONS[f][1]
-					ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-					content.add_child(ic)
-					stack_add(st, ic)
-				var who := "YOU" if bool(p.get("is_me", false)) and str(p.get("name", "")) == "" else str(p.get("name", ""))
-				if str(p.get("ai_level", "")) != "":
-					who = "AI" if str(p["ai_level"]) == "AI" else "AI " + str(p["ai_level"]).to_upper()
-				elif who == "":
-					who = "PLAYER"
-				stack_add(st, label_at(who, P(px - 10, ry + 50), 14, Color.WHITE if bool(p.get("is_me", false)) else Color("9cb2bf"), false))
-				px += 120.0
-			stack_add(st, label_at(res, P(1420, ry + 22), 28, rc, false))
-			ry += rowh + 8.0
-		stack_close(st, ry * K)
-	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
+	var tab := _meta_open("history", show_profile)
+	var back := func():
 		_history_state = "idle"
 		_history_online = []
-		show_profile())
+		_meta_back("history", show_profile)
+	var area := shell_open("OOZE / MATCH HISTORY", tab, back, faction)
+	_page = "history"
+	var x := shell_x()
+	var top := page_title(area, "MATCH HISTORY", "YOUR RECENT MATCHES.")
+	if _history_state == "idle" and a.signed_in():
+		_history_state = "loading"
+		_load_history.call_deferred(false)             # after this page is built
+	var list := Progression.merge_history(Progression.history, _history_online)
+	var bh := UiKit.tap_h(self, 48.0)
+	var fy := area.end.y - bh - 12.0
+	var nx := content.size.x - x
 	if a.signed_in() and _history_more and not _history_online.is_empty():
-		nav_button("MORE", P(290, foot_y()), P(230, 58), func(): _load_history(true))
-	if _history_state == "loading":
-		label_at("LOADING ONLINE ROUNDS ...", P(985, foot_y() + 18.0), 18, Color("9cb2bf"), false)
+		var mb := UiKit.btn(self, "MORE", Vector2(nx - 160.0, fy), Vector2(160, 48), func(): _load_history(true), "secondary", shell_f, 15)
+		nx = mb.position.x - 16.0
+	var nt := "This device" + (" + your account's online rounds" if a.signed_in() else "") \
+			+ ("  ·  LOADING ONLINE ROUNDS ..." if _history_state == "loading" else "")
+	_say(nt, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, nt, 13, nx - x)) / 2.0)), 13, UiKit.MUTED, nx - x)
+	var col := _column(Vector2(x, top), Vector2(content.size.x - x * 2.0, fy - 12.0 - top))
+	var w: float = col["w"]
+	var n0 := content.get_child_count()
+	var y := 0.0
+	if list.is_empty():
+		y += _say("No matches yet - finish one and it shows here.", Vector2(4, 4), 16, UiKit.MUTED, w) + 4.0
+	else:
+		var names := _map_names()
+		for h in list:
+			y += _history_row(h, names, Vector2(0, y), w) + 6.0
+	_column_end(col, n0, y, true)
+
+
+func _history_row(h: Dictionary, names: Dictionary, pos: Vector2, w: float) -> float:
+	## One match: ONLINE / OFFLINE and when, the map and mode and how long, everyone's faction mark and name, the result.
+	## Returns the row's height.
+	var won := bool(h.get("won", false))
+	var draw := bool(h.get("draw", false))
+	var res := "DRAW" if draw else ("WIN" if won else "LOSS")
+	var rc := Color("9cb2bf") if draw else (Color("6fff2a") if won else Color("ff5a4a"))
+	var l1 := UiKit.line_h(self, 15, true)
+	var l2 := UiKit.line_h(self, 13)
+	var rh := maxf(64.0, l1 + l2 + 20.0)
+	UiKit.panel(self, pos, Vector2(w, rh), shell_f, false, Color(UiKit.BASE, 0.6))
+	content.add_child(UiKit.rect(pos + Vector2(0, 6), Vector2(4, rh - 12.0), rc))   # the result at the row's edge too
+	var ty := pos.y + (rh - l1 - l2) / 2.0
+	var online := bool(h.get("online", false))
+	var c1 := 16.0
+	_say("ONLINE" if online else "OFFLINE", Vector2(pos.x + c1, ty + 2.0), 12, Color("5fd7ff") if online else UiKit.MUTED, 0.0, true, 2)
+	_say(_date_text(int(h.get("t", 0))), Vector2(pos.x + c1, ty + l1), 13, UiKit.MUTED)
+	var c2 := c1 + maxf(UiKit.text_w(self, "OFFLINE", 12, true) + 20.0, UiKit.text_w(self, "30 SEP 23:59", 13)) + 20.0
+	var c3 := c2 + floorf(w * 0.28)
+	var code := str(h.get("map", ""))
+	_clip(code + "  " + str(names.get(code, "")), Vector2(pos.x + c2, ty), 15, UiKit.INK, c3 - c2 - 14.0, true)
+	var dur := int(h.get("duration_s", 0))
+	_clip("%s  ·  %d:%02d" % [str(Menu.MODE_NAMES.get(str(h.get("mode", "")), str(h.get("mode", "")))), dur / 60, dur % 60],
+			Vector2(pos.x + c2, ty + l1), 13, UiKit.MUTED, c3 - c2 - 14.0)
+	var res_w := UiKit.text_w(self, "LOSS", 20, true) + 24.0
+	var players: Array = h.get("players", []).filter(func(p): return p is Dictionary)
+	var pw := minf(130.0, (w - c3 - res_w - 16.0) / float(maxi(1, players.size())))
+	var ic := minf(26.0, rh - l2 - 16.0)
+	var py := pos.y + (rh - ic - 2.0 - UiKit.line_h(self, 12)) / 2.0
+	var px := pos.x + c3
+	for p in players:
+		var f := str(p.get("faction", "null"))
+		var tex := Hud.emblem_texture(f) if Rules.FACTIONS.has(f) else null
+		if tex != null:
+			var em := TextureRect.new()
+			em.texture = tex
+			em.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			em.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			em.size = Vector2(ic, ic)
+			em.modulate = UiKit.accent(f)
+			em.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			UiKit.add(self, em, Vector2(px, py))
+		var me := bool(p.get("is_me", false))
+		var who := "YOU" if me and str(p.get("name", "")) == "" else str(p.get("name", ""))
+		if str(p.get("ai_level", "")) != "":
+			who = "AI" if str(p["ai_level"]) == "AI" else "AI " + str(p["ai_level"]).to_upper()
+		elif who == "":
+			who = "PLAYER"
+		_clip(who, Vector2(px, py + ic + 2.0), 12, UiKit.INK if me else UiKit.MUTED, pw - 8.0)
+		px += pw
+	_say(res, Vector2(pos.x + w - 16.0 - UiKit.text_w(self, res, 20, true), pos.y + (rh - UiKit.line_h(self, 20, true)) / 2.0), 20, rc, 0.0, true)
+	return rh
 
 
 func _load_history(more: bool) -> void:
@@ -3347,99 +3591,202 @@ func show_confirm_demo() -> void:
 
 
 # ------------------------------------------------------------------ online (Net, rooms through the room server)
+var _code_box: Control = null                      # ONLINE ROOMS' ROOM CODE frame (web: the native field sits on it)
+var _code_inline := false                          # web: room-ui.js's inline code field is on the page
+var _code_t := 0.0
+var _code_error := ""                              # the field's own error (an incomplete code), shown under it
+var _code_value := ""                              # the code last tried: the field keeps it after a failed join
+const CODE_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # a room code's characters (no I / O / 0 / 1; web/room-ui.js)
+
+
 func show_online() -> void:
 	_last_show = show_online                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## ONLINE: pick your faction, then CREATE ROOM (you host) or JOIN ROOM (the host's code).
-	clear_page("city")
+	## ONLINE ROOMS (screen system 13; a PLAY subflow): HOST A MATCH - your faction and CREATE ROOM (RECONNECT when a room
+	## dropped you) - and JOIN A FRIEND - the ROOM CODE field and JOIN ROOM, what went wrong right under the field (an
+	## incomplete code, or Net's answer: full, not found, closed...). The web build lays web/room-ui.js's native <input>
+	## over the field, so a phone raises its keyboard for it; Enter joins too. The room's lobby sets mode, map and rules.
+	var area := shell_open("OOZE / ROOMS", "play", _leave_online, faction)
 	_page = "online"
-	header(0)
-	label_at("PLAY WITH FRIENDS", P(40, 107), 43)
-	frame(P(35, 174), P(1600, 640))
-	label_at("PRIVATE ROOMS  ·  HOSTED ON THE OOZE ROOM SERVER", P(60, 196), 24, color())
-	var about := label_at("Create a room and share its four-character code; everyone opens this same link. The room server runs the match, so a phone that locks or switches apps only drops its own seat - RECONNECT takes it back. The room's creator picks the map and settings. Free-for-all for 2 to 5 players, or teams. Rematch reuses the room; chat stays between rounds.",
-			P(60, 245), 20, Color("bbd1db"))
-	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	about.custom_minimum_size = Vector2(1540 * K, 0)
-	about.size = Vector2(1540 * K, 0)
-	label_at("YOUR FACTION", P(60, 372), 20, Color("aac3cd"))
-	_faction_row(P(60, 405), P(300, 64))
+	_code_box = null
+	var x := shell_x()
+	var acc := UiKit.accent(shell_f)
 	var web := OS.has_feature("web")
-	var create := nav_button("CREATE ROOM", P(60, 520), P(560, 92), func():
+	var top := page_title(area, "ONLINE", "MEET IN THE CITY.")
+	var gap := 18.0
+	var cw := (content.size.x - x * 2.0 - gap) / 2.0
+	var ch := area.end.y - 14.0 - top
+	# HOST A MATCH (its inside scrolls on a short phone)
+	var host := _column(Vector2(x, top), Vector2(cw, ch))
+	var w: float = host["w"]
+	var n0 := content.get_child_count()
+	var y := 4.0
+	y += _say("HOST A MATCH", Vector2(0, y), 12, acc, 0.0, true, 3) + 6.0
+	y += _say("YOUR ROOM. YOUR RULES.", Vector2(0, y), 20, UiKit.INK, w, true) + 4.0
+	y += _say("Create a room, set the map and the rules in its lobby, then share its four-character code - everyone opens this same link.",
+			Vector2(0, y), 14, UiKit.MUTED, w) + 14.0
+	y += _say("YOUR FACTION", Vector2(0, y), 12, UiKit.MUTED, 0.0, true, 2) + 8.0
+	y += _faction_row(Vector2(0, y), 58.0) + 16.0
+	var create := UiKit.btn(self, "CREATE ROOM  →", Vector2(0, y), Vector2(UiKit.text_w(self, "CREATE ROOM  →", 16, true) + 60.0, 50), func():
 		ArmyPresets.send_to(Net, faction)                     # your ARMIES preset rides in the roster
 		Net.host_room(faction)
-		show_lobby(), true)
+		show_lobby(), "primary", shell_f, 16)
 	create.disabled = not web
-	var join := nav_button("JOIN ROOM", P(640, 520), P(560, 92), _open_code)
-	join.disabled = not web
 	if not Net.rejoin.is_empty():                     # dropped out of a room: back into the same seat
-		var rc := nav_button("RECONNECT  %s" % str(Net.rejoin["code"]), P(1220, 520), P(380, 92), func():
+		var rt := "RECONNECT  %s" % str(Net.rejoin["code"])
+		var rw := UiKit.text_w(self, rt, 16, true) + 44.0
+		var rpos := Vector2(create.size.x + 12.0, y) if create.size.x + 12.0 + rw <= w else Vector2(0, y + create.size.y + 10.0)
+		var rc := UiKit.btn(self, rt, rpos, Vector2(rw, 50), func():
 			ArmyPresets.send_to(Net, str(Net.rejoin.get("faction", faction)))
 			Net.reconnect()
-			show_lobby(), true)
+			show_lobby(), "selected", shell_f, 16)
 		rc.disabled = not web
-	var msg := Net.status if Net.status != "" else ("Rooms run on the Ooze room server, so any network that reaches the internet can join. If the server is busy, the room's creator hosts it in their browser instead (keep that tab in front)." if web
-			else "Online rooms run in the browser build: open https://talos91.github.io/ooza-syndicate-v2/")
-	var st := label_at(msg, P(60, 650), 20, Color("ffd15c") if Net.status != "" else Color("adc7d2"))
-	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	st.custom_minimum_size = Vector2(1540 * K, 0)
-	st.size = Vector2(1540 * K, 0)
-	nav_button("BACK", P(40, foot_y()), P(230, 58), func():
-		Net.status = ""
-		show_main())
+		y = rpos.y
+	y += create.size.y + 18.0
+	y += _say("The room server runs the match, so a phone that locks or switches apps only drops its own seat - RECONNECT takes it back. The room's creator picks the map and settings. Free-for-all for 2 to 5 players, or teams. Rematch reuses the room; chat stays between rounds.",
+			Vector2(0, y), 13, UiKit.MUTED, w) + 10.0
+	y += _say("Rooms run on the Ooze room server, so any network that reaches the internet can join. If the server is busy, the room's creator hosts it in their browser instead (keep that tab in front)." if web
+			else "Online rooms run in the browser build: open https://talos91.github.io/ooza-syndicate-v2/", Vector2(0, y), 13,
+			UiKit.DIM if web else UiKit.STAR, w)
+	_column_end(host, n0, y, true)
+	# JOIN A FRIEND: a plain panel, never scrolled, so the web's native code field stays exactly on its frame
+	var jx := x + cw + gap
+	var jp := UiKit.panel(self, Vector2(jx, top), Vector2(cw, ch), shell_f)
+	var px := jx + 20.0
+	var jw := cw - 40.0
+	var jy := top + 16.0
+	jy += _say("JOIN A FRIEND", Vector2(px, jy), 12, acc, 0.0, true, 3) + 6.0
+	jy += _say("GOT A CODE?", Vector2(px, jy), 20, UiKit.INK, jw, true) + 4.0
+	jy += _say("Type the host's four-character room code.", Vector2(px, jy), 14, UiKit.MUTED, jw) + 14.0
+	jy += _say("ROOM CODE", Vector2(px, jy), 12, UiKit.MUTED, 0.0, true, 2) + 6.0
+	var box := _line_edit(Vector2(px, jy), Vector2(minf(jw, 340.0), 50), "E.G. K7QX", "")
+	box.editable = false                              # web: the native field lies over it; elsewhere rooms need the browser build
+	box.focus_mode = Control.FOCUS_NONE
+	_code_box = box
+	jy += box.size.y + 8.0
+	var err := _code_error if _code_error != "" else Net.status
+	if err != "":                                     # the field's error, or the room's answer, next to the field
+		jy += _say(err, Vector2(px, jy), 13, UiKit.STAR, jw) + 8.0
+	var join := UiKit.btn(self, "JOIN ROOM", Vector2(px, jy + 2.0), Vector2(UiKit.text_w(self, "JOIN ROOM", 16, true) + 60.0, 48),
+			_join_from_field, "secondary", shell_f, 16)
+	join.disabled = not web
+	var both := minf(ch, maxf((host["panel"] as Control).size.y, join.position.y + join.size.y + 18.0 - top))   # one height for the pair
+	jp.size.y = both
+	(host["panel"] as Control).size.y = both
+	(host["scroll"] as Control).size.y = both - 24.0
+	if web:
+		_place_code_field.call_deferred()
 
 
-func _faction_row(pos: Vector2, dims: Vector2) -> void:
+func _leave_online() -> void:
+	Net.status = ""
+	_code_error = ""
+	show_play()
+
+
+func _faction_row(pos: Vector2, tile: float) -> float:
+	## Your faction: its five characters as tiles (the picked one lit in its accent), each name under it - the room
+	## gets the pick and its ARMIES preset. Returns the height used.
+	tile = UiKit.tap_h(self, tile)
+	var nw := 0.0
+	for f in FACTIONS:
+		nw = maxf(nw, UiKit.text_w(self, UiKit.NAMES[f], 13))
+	var step := maxf(tile + 10.0, nw + 10.0)
 	for i in range(FACTIONS.size()):
 		var f: String = FACTIONS[i]
-		var b := nav_button("VIRIDIAN" if f == "bloom" else f.to_upper(), pos + Vector2(i * (dims.x + 12 * K), 0), dims, func():
-			faction = f
-			main.SEAT_FACTIONS[main.HUMAN] = f
-			ArmyPresets.room_faction(Net, f)                          # the faction and its ARMIES preset
-			if _page == "lobby":
-				show_lobby()
-			else:
-				show_online(), f == faction)
-		b.add_theme_font_size_override("font_size", int(round(20 * K)))
-		if f != faction:
-			b.add_theme_color_override("font_color", Rules.FACTIONS[f][1])
+		var picked := f == faction
+		var b := UiKit.btn(self, "", pos + Vector2(i * step + (step - tile) / 2.0, 0), Vector2(tile, tile), func(): _pick_faction(f),
+				"selected" if picked else "secondary", f)
+		b.tooltip_text = UiKit.TAGS[f]
+		var art := TextureRect.new()
+		art.texture = load(UiKit.hero_path(f))
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		art.position = Vector2.ONE * tile * 0.1
+		art.size = Vector2.ONE * tile * 0.8
+		art.modulate = Color.WHITE if picked else Color(1, 1, 1, 0.72)
+		b.add_child(art)
+		var nm: String = UiKit.NAMES[f]
+		_say(nm, pos + Vector2(i * step + (step - UiKit.text_w(self, nm, 13)) / 2.0, tile + 4.0), 13, UiKit.INK if picked else UiKit.MUTED)
+	return tile + 4.0 + UiKit.line_h(self, 13)
+
+
+func _pick_faction(f: String) -> void:
+	faction = f
+	main.SEAT_FACTIONS[main.HUMAN] = f
+	ArmyPresets.room_faction(Net, f)                          # the faction and its ARMIES preset
+	if _page == "lobby":
+		show_lobby()
+	else:
+		show_online()
 
 
 func show_lobby() -> void:
 	_last_show = show_lobby                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## The room: who is in which seat, the host's match settings, DEPLOY when every seat is filled.
+	## LOBBY (screen system 14; a PLAY subflow): the room code (SHARE CODE), CHAT with its unread count, MY ARMY; the seats
+	## in words - HOST / JOINED / YOU / RECONNECTING, OPEN SEAT, the AI - team by team with JOIN / MOVE in team modes (the
+	## host picks a player's row, then MOVE on a team); your faction and colour; the host's MATCH (map, PLAYERS, LAST
+	## STAND, ABILITIES, EMPTY SEATS); DEPLOY for the host once every seat is filled, LEAVE ROOM. The foot carries who is
+	## in and Net's status (a browser-hosted room's UNRANKED line). Both columns scroll on phones.
 	if not Net.in_room():
 		show_online()
 		return
-	clear_page("city")
-	_page = "lobby"
-	map_path = Net.map_path                           # the rows' loadout icons read the room's map (relays)
-	header(0)
 	if Net.roster.has(Net.local_id()):
 		faction = str(Net.roster[Net.local_id()]["faction"])
+	var area := shell_open("OOZE / LOBBY", "play", _leave_room, faction)
+	_page = "lobby"
+	map_path = Net.map_path                           # the rows' loadout icons read the room's map (relays)
 	var host := Net.can_control()                     # the browser host, or a server room's owner (Alpha 20)
-	label_at("ROOM %s" % (Net.room_code if Net.room_code != "" else "...."), P(40, 100), 52)
-	var th := rh(52)
-	var copy := nav_button("SHARE CODE", P(420, 110), P(230, th), _share_code)
-	copy.disabled = Net.room_code == ""
-	var chat := nav_button("CHAT (%d)" % Net.chat_unread() if Net.chat_unread() > 0 else "CHAT", P(668, 110), P(180, th), Net.open_chat)
+	var x := shell_x()
+	var acc := UiKit.accent(shell_f)
+	var ty := area.position.y + (10.0 if shell_slim else 18.0)
+	var top := UiKit.title(self, x, ty, "ONLINE / LOBBY", "WAITING FOR THE CREW.", shell_f, 34.0 * (0.8 if shell_slim else 1.0)) + 14.0
+	var lv := UiKit.flat_button(self, "LEAVE ROOM", 15)
+	lv.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	lv.size = Vector2(UiKit.text_w(self, lv.text, 15, true) + 20.0, UiKit.tap_h(self, 36.0))
+	lv.pressed.connect(func(): _leave_room.call_deferred())
+	_shell_add(lv, Vector2(content.size.x - x - lv.size.x, ty))
+	# the foot: who is in and the room's status at the left, DEPLOY (the host) at the right
+	var bh := UiKit.tap_h(self, 50.0)
+	var fy := area.end.y - bh - 12.0
+	var rx := content.size.x - x
+	if host:
+		var go := UiKit.btn(self, "DEPLOY  →", Vector2(rx - 240.0, fy), Vector2(240, 50), func(): Net.start_match(), "primary", shell_f, 18)
+		go.disabled = not Net.can_start()
+		rx = go.position.x - 16.0
+	else:
+		var hw := "THE HOST DEPLOYS WHEN READY"
+		var hwid := UiKit.text_w(self, hw, 14, true)
+		_say(hw, Vector2(rx - hwid, fy + (bh - UiKit.line_h(self, 14, true)) / 2.0), 14, UiKit.MUTED, 0.0, true)
+		rx -= hwid + 16.0
+	var line := "%d / %d PLAYERS" % [Net.roster.size(), Net.slots()] + (("  ·  " + Net.status) if Net.status != "" else "")
+	_say(line, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, line, 13, rx - x)) / 2.0)), 13, UiKit.INK, rx - x)
+	var gap := 18.0
+	var cw := (content.size.x - x * 2.0 - gap) / 2.0
+	var ch := fy - 12.0 - top
+	# left: the code, the seats, you
+	var left := _column(Vector2(x, top), Vector2(cw, ch))
+	var w: float = left["w"]
+	var n0 := content.get_child_count()
+	var y := 2.0
+	y += _say("ROOM CODE", Vector2(0, y), 12, UiKit.MUTED, 0.0, true, 3) + 2.0
+	var code := Net.room_code if Net.room_code != "" else "····"
+	var code_h := UiKit.line_h(self, 40, true)
+	_say(code, Vector2(0, y), 40, acc, 0.0, true, 10)
+	var code_w := UiKit.text_w(self, code, 40, true) + code.length() * 10.0 + 20.0
+	var share := UiKit.btn(self, "SHARE CODE", Vector2.ZERO, Vector2(UiKit.text_w(self, "SHARE CODE", 14, true) + 34.0, 42), _share_code, "secondary", shell_f, 14)
+	share.disabled = Net.room_code == ""
+	var chat := UiKit.btn(self, "CHAT (%d)" % Net.chat_unread() if Net.chat_unread() > 0 else "CHAT", Vector2.ZERO,
+			Vector2(UiKit.text_w(self, "CHAT (99)", 14, true) + 34.0, 42), Net.open_chat, "secondary", shell_f, 14)
 	chat.disabled = not Net.connected
 	_chat_btn = chat
-	var army := nav_button("MY ARMY", P(866, 110), P(170, th), func(): show_armies(faction, show_lobby))   # your preset = your loadout
+	var army := UiKit.btn(self, "MY ARMY", Vector2.ZERO, Vector2(UiKit.text_w(self, "MY ARMY", 14, true) + 34.0, 42),
+			func(): show_armies(faction, show_lobby), "secondary", shell_f, 14)   # your preset = your loadout
 	army.disabled = Net.active
-	var st := label_at(Net.status, P(1054, 110.0 + th / 2.0 - 11.0), 18, Color("adc7d2"))
-	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	st.custom_minimum_size = Vector2(584 * K, 0)
-	st.size = Vector2(584 * K, 0)
-	# both frames start below the (possibly taller) top row and stop short of the (possibly taller) foot
-	# row - a scrollable stack (stack_open()) inside each, since on mobile several rows below grow to the
-	# 44 pt tap minimum, more than fits stacked at the desktop gaps
-	var fy := 110.0 + th + 16.0
-	var frame_h := foot_y() - 20.0 - fy
-	# players (0.18.7, Daniele: "there should be so i can switch to my gf team"; every seat's colour is
-	# the same on every screen): team modes list the seats team by team, each team with its JOIN TEAM
-	# control (tall enough for a phone thumb); the host can pick a player's row and MOVE them
-	frame(P(35, fy), P(800, frame_h))
-	label_at("PLAYERS  %d / %d" % [Net.roster.size(), Net.slots()], P(58, fy + 17.0), 28)
+	var fh := _flow([share, chat, army], Vector2(code_w, y + maxf(0.0, (code_h - share.size.y) / 2.0)), w - code_w)
+	y += maxf(code_h, fh) + 16.0
+	# players (0.18.7, Daniele: "there should be so i can switch to my gf team"; every seat's colour is the same on every
+	# screen): team modes list the seats team by team, each under its JOIN control; the host can pick a row and MOVE it
 	var by_slot := {}
 	for id in Net.roster:
 		by_slot[int(Net.roster[id]["slot"])] = int(id)
@@ -3447,206 +3794,241 @@ func show_lobby() -> void:
 		_move_pick = -1
 	var colours := Net.room_colours()
 	var team_mode := Net.mode in Net.TEAM_MODES
+	y += _say("SEATS", Vector2(0, y), 12, UiKit.MUTED, 0.0, true, 3) + 4.0
+	if team_mode and host:
+		y += _say("Host: tap a player, then MOVE on a team.", Vector2(0, y), 13, UiKit.MUTED, w) + 4.0
+	y += 4.0
 	var groups := []                                  # [team, [slots]] in seat order; FFA: one group
 	if team_mode:
 		for t in Net.team_ids():
 			groups.append([t, range(Net.slots()).filter(func(sl): return Net.team_of_slot(sl) == t)])
 	else:
 		groups.append([-1, range(Net.slots())])
-	var row_h: float = minf(76.0, floorf((384.0 - 10.0 * (groups.size() - 1)) / float(Net.slots())))
-	var row_w := 590.0 if team_mode else 754.0
-	var left_st := stack_open(P(50, fy + 56.0), P(770, maxf(160.0, frame_h - 56.0 - 14.0)))
-	var y := 0.0
 	for g in groups:
-		var top := y
-		var before := content.get_child_count()
-		for i in g[1]:
-			_lobby_row(i, by_slot.get(i, -1), colours, P(8, y), P(row_w, row_h - 8.0), host and team_mode)
-			y += row_h
 		if team_mode:
-			_team_button(int(g[0]), colours, P(610, top), P(152, y - top - 8.0))
-			y += 10.0
-		stack_capture(left_st, before)
-	y += 8.0
-	var frow_h := rh(52)
-	var before_fc := content.get_child_count()
-	label_at("FACTION", P(8, y + frow_h / 2.0 - 9.0), 18, Color("aac3cd"))
-	_faction_row(P(140, y), P(114, frow_h))
-	stack_capture(left_st, before_fc)
-	y += frow_h + 10.0
-	var crow_h := rh(52)
-	var before_cc := content.get_child_count()
-	label_at("COLOUR", P(8, y + crow_h / 2.0 - 9.0), 18, Color("aac3cd"))
-	_colour_row(P(140, y), P(74, crow_h))
-	stack_capture(left_st, before_cc)
-	y += crow_h + 8.0
-	if not mobile:                                    # the phone skips the recap to save room (the chip colours already show it)
-		var hint := "Every seat has one colour, the same on every screen. " + (("Teammates share a hue family (%s); a colour from a free family moves your team to it. " % " / ".join(
-				Net.families().map(func(f): return Rules.FAMILY_NAMES.get(f[0], "")))) if team_mode else "Seats go in join order. ")
-		if team_mode and host:
-			hint += "Host: tap a player, then MOVE on a team."
-		if Net.abilities and not ArmyPresets.map_has_relays(_selected_map()):
-			hint += " No relays on this map: a gold map skill is the faction's fallback for a relay skill."
-		var before_h := content.get_child_count()
-		var hl := label_at(hint, P(8, y), 14, Color("7795a4"))
-		hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		hl.custom_minimum_size = Vector2(700 * K, 0)
-		hl.size = Vector2(700 * K, 0)
-		stack_capture(left_st, before_h)
-		y += 40.0
-	stack_close(left_st, y)
-	# match settings (host decides)
-	map_path = Net.map_path
-	frame(P(855, fy), P(780, frame_h))
-	label_at("MATCH" + ("" if host else "  ·  the host decides"), P(878, fy + 17.0), 28)
-	map_preview(P(876, fy + 62.0), P(738, 290))
-	var right_st := stack_open(P(870, fy + 62.0 + 290.0 + 14.0), P(750, maxf(160.0, frame_h - (62.0 + 290.0 + 14.0) - 14.0)))
-	var y2 := 0.0
-	var step_h := rh(48)
-	var before_step := content.get_child_count()
-	label_at(str(_selected_map().get("name", "")).replace("*", "").to_upper(), P(8, y2 + step_h / 2.0 - 13.0), 26)
-	var prev := nav_button("<", P(570, y2), P(80, step_h), func(): _step_map(-1))
-	var next := nav_button(">", P(664, y2), P(80, step_h), func(): _step_map(1))
-	prev.disabled = not host
-	next.disabled = not host
-	stack_capture(right_st, before_step)
-	y2 += step_h + 20.0
-	var mode_h2 := rh(48)
-	var before_mode := content.get_child_count()
-	label_at("PLAYERS", P(8, y2 + mode_h2 / 2.0 - 10.0), 20, Color("aac3cd"))
-	for i in range(Net.MODES.size()):
-		var md: String = Net.MODES[i]
-		var mb := nav_button(Net.MODE_LABELS[md], P(92 + i * 96, y2), P(90, mode_h2), func():
-			Net.set_mode(md)
-			show_lobby(), md == Net.mode)
-		mb.add_theme_font_size_override("font_size", int(round(15 * K)))
-		mb.disabled = not host or Net.roster.size() > Net.SLOTS[md] or Net.maps_for(md).is_empty()
-	stack_capture(right_st, before_mode)
-	y2 += mode_h2 + 20.0
-	var ls_h2 := rh(56)
-	var before_ls := content.get_child_count()
-	var lb := nav_button("LAST STAND / %s" % ("ON" if Net.last_stand else "OFF"), P(8, y2), P(360, ls_h2), func():
-		Net.toggle_last_stand()
-		show_lobby())
-	lb.disabled = not host
-	var abl := nav_button("ABILITIES / %s" % ("ON" if Net.abilities else "OFF"), P(384, y2), P(360, ls_h2), func():   # SKILLS 2.0
-		ArmyPresets.room_toggle_abilities(Net)
-		show_lobby())
-	abl.disabled = not host
-	stack_capture(right_st, before_ls)
-	y2 += ls_h2 + 14.0
-	var empty_h := rh(50)
-	var before_empty := content.get_child_count()
-	var ab := nav_button("EMPTY SEATS / %s" % ("AI " + Net.ai_fill.to_upper() if Net.ai_fill != "" else "PLAYERS ONLY"), P(8, y2), P(736, empty_h), func():
-		Net.set_ai_fill(Net.AI_FILL[(Net.AI_FILL.find(Net.ai_fill) + 1) % Net.AI_FILL.size()])
-		show_lobby())
-	ab.add_theme_font_size_override("font_size", int(round(fsz(17) * K)))
-	ab.disabled = not host
-	stack_capture(right_st, before_empty)
-	y2 += empty_h + 10.0
-	stack_close(right_st, y2)
-	nav_button("LEAVE ROOM", P(40, foot_y()), P(260, 58), func():
-		Net.leave()
-		show_online())
+			y += _team_button(int(g[0]), colours, Vector2(0, y), w) + 6.0
+		for i in g[1]:
+			y += _lobby_row(i, by_slot.get(i, -1), colours, Vector2(0, y), w, host and team_mode) + 6.0
+		if team_mode:
+			y += 8.0
+	y += 10.0
+	y += _say("YOUR FACTION", Vector2(0, y), 12, UiKit.MUTED, 0.0, true, 2) + 8.0
+	y += _faction_row(Vector2(0, y), 50.0) + 14.0
+	var mine := Net.colour_of(Net.local_id())
+	y += _say("YOUR COLOUR" + (("  ·  " + mine.to_upper()) if mine != "" else ""), Vector2(0, y), 12, UiKit.MUTED, 0.0, true, 2) + 8.0
+	y += _colour_row(Vector2(0, y), w) + 12.0
+	var hint := "Every seat has one colour, the same on every screen. " + (("Teammates share a hue family (%s); a colour from a free family moves your team to it." % " / ".join(
+			Net.families().map(func(f): return Rules.FAMILY_NAMES.get(f[0], "")))) if team_mode else "Seats go in join order.")
+	if Net.abilities and not ArmyPresets.map_has_relays(_selected_map()):
+		hint += " No relays on this map: a gold map skill is the faction's fallback for a relay skill."
+	y += _say(hint, Vector2(0, y), 13, UiKit.DIM, w)
+	_column_end(left, n0, y)
+	# right: the match (the host decides)
+	var right := _column(Vector2(x + cw + gap, top), Vector2(cw, ch))
+	w = right["w"]
+	n0 = content.get_child_count()
+	y = 2.0
+	y += _say("MATCH" + ("" if host else "  ·  THE HOST DECIDES"), Vector2(0, y), 12, acc if host else UiKit.MUTED, 0.0, true, 3) + 6.0
+	var sh := UiKit.tap_h(self, 40.0)
+	var mname := str(_selected_map().get("name", "")).replace("*", "").to_upper()
 	if host:
-		var go := nav_button("DEPLOY", P(1280, foot_y()), P(352, 58), func(): Net.start_match(), true)
-		go.disabled = not Net.can_start()
-		if not Net.can_start():
-			label_at("DEPLOY opens when every seat is filled (or EMPTY SEATS: AI)", P(820, foot_y() + 18.0), 17, Color("adc7d2"), false)   # shares the foot row with DEPLOY - see label_at()
+		_clip(mname, Vector2(0, y + (sh - UiKit.line_h(self, 18, true)) / 2.0), 18, UiKit.INK, w - sh * 2.0 - 20.0, true)
+		UiKit.btn(self, "<", Vector2(w - sh * 2.0 - 8.0, y), Vector2(sh, 40), func(): _step_map(-1), "secondary", shell_f, 18)
+		UiKit.btn(self, ">", Vector2(w - sh, y), Vector2(sh, 40), func(): _step_map(1), "secondary", shell_f, 18)
+		y += sh + 10.0
 	else:
-		label_at("The host deploys when ready", P(1300, foot_y() + 18.0), 19, Color("adc7d2"), false)
+		_clip(mname, Vector2(0, y), 18, UiKit.INK, w, true)
+		y += UiKit.line_h(self, 18, true) + 10.0
+	var ph := minf(w * 0.45, 210.0)
+	map_preview(Vector2(0, y), Vector2(w, ph))
+	y += ph + 14.0
+	y += _say("PLAYERS" + ("" if host else "  ·  " + str(Net.MODE_LABELS[Net.mode])), Vector2(0, y), 12, UiKit.MUTED, 0.0, true, 2) + 8.0
+	if host:
+		var chips := []
+		for md in Net.MODES:
+			var m2: String = md
+			var mb := UiKit.chip(self, Net.MODE_LABELS[m2], Vector2.ZERO, func():
+				Net.set_mode(m2)
+				show_lobby(), shell_f, m2 == Net.mode)
+			mb.disabled = Net.roster.size() > Net.SLOTS[m2] or Net.maps_for(m2).is_empty()
+			chips.append(mb)
+		y += _flow(chips, Vector2(0, y), w) + 14.0
+	var tw := (w - 10.0) / 2.0
+	var lb := UiKit.btn(self, "LAST STAND  ·  %s" % ("ON" if Net.last_stand else "OFF"), Vector2(0, y), Vector2(tw, 44), func():
+		Net.toggle_last_stand()
+		show_lobby(), "selected" if Net.last_stand else "secondary", shell_f, 14)
+	lb.disabled = not host
+	var abl := UiKit.btn(self, "ABILITIES  ·  %s" % ("ON" if Net.abilities else "OFF"), Vector2(tw + 10.0, y), Vector2(tw, 44), func():   # SKILLS 2.0
+		ArmyPresets.room_toggle_abilities(Net)
+		show_lobby(), "selected" if Net.abilities else "secondary", shell_f, 14)
+	abl.disabled = not host
+	y += lb.size.y + 10.0
+	var eb := UiKit.btn(self, "EMPTY SEATS  ·  %s" % ("AI " + Net.ai_fill.to_upper() if Net.ai_fill != "" else "PLAYERS ONLY"), Vector2(0, y), Vector2(w, 44), func():
+		Net.set_ai_fill(Net.AI_FILL[(Net.AI_FILL.find(Net.ai_fill) + 1) % Net.AI_FILL.size()])
+		show_lobby(), "secondary", shell_f, 14)
+	eb.disabled = not host
+	y += eb.size.y + 10.0
+	if host and not Net.can_start():
+		y += _say("DEPLOY opens when every seat is filled (or EMPTY SEATS: AI).", Vector2(0, y), 13, UiKit.MUTED, w)
+	_column_end(right, n0, y)
 
 
-func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector2, movable: bool) -> void:
-	## One seat of the room: its letter in the seat's colour (the room's colour, the same for everyone),
-	## the player's faction and colour, HOST / YOU. Host, team modes: a guest's row picks them to MOVE.
+func _leave_room() -> void:
+	Net.leave()
+	show_online()
+
+
+func _lobby_row(i: int, id: int, colours: Dictionary, pos: Vector2, w: float, movable: bool) -> float:
+	## One seat: its letter and an edge bar in the seat's room colour (the same on every screen), the player's character
+	## and faction, who holds it in words - HOST / JOINED / RECONNECTING, YOU, OPEN SEAT, the AI - and their loadout
+	## (active, map, ultimate; dimmed with ABILITIES OFF). Host, team modes: a guest's row picks them to MOVE.
+	## Returns the row's height.
 	var seat: String = Net.SEATS[i]
-	var col: Color = Rules.HUES.get(str(colours.get(seat, "")), Rules.SEATS.get(seat, Color.WHITE))
-	if movable and id >= 0 and id != Net.local_id():
-		nav_button("", pos, dims, func():
+	var hue := str(colours.get(seat, ""))
+	var col: Color = Rules.HUES.get(hue, Rules.SEATS.get(seat, Color.WHITE))
+	var l1 := UiKit.line_h(self, 16, true)
+	var l2 := UiKit.line_h(self, 13)
+	var h := maxf(58.0, l1 + l2 + 16.0)
+	var pick := movable and id >= 0 and id != Net.local_id()
+	if pick:
+		h = UiKit.tap_h(self, h)
+	var picked := pick and id == _move_pick
+	var r: Control
+	if pick:
+		r = UiKit.btn(self, "", pos, Vector2(w, h), func():
 			_move_pick = -1 if _move_pick == id else id
-			show_lobby())
-	frame(pos, dims, "row")
-	if id == _move_pick and id >= 0:
-		content.add_child(neon_panel(pos, dims, col, true, Color(0, 0, 0, 0)))
-	var mid := pos.y + dims.y / 2.0
-	# this row's own size is deliberately left at its Alpha-11 dims (its tap targets - the row-select
-	# button above, the MOVE / colour chips it feeds - already grow to the phone minimum): every label
-	# inside it keeps its designed size too (grow=false), or the fixed-width faction-name/tag/icon layout
-	# below would start overlapping itself, seat by seat, at a size no card redesign fixes.
-	label_at(seat, Vector2(pos.x + 20 * K, mid - 22 * K), 34, col, false)
-	var sw := ColorRect.new()                         # the seat's colour as a swatch, named beside it
-	sw.color = col
-	sw.position = Vector2(pos.x + 64 * K, mid - 13 * K)
-	sw.size = P(10, 26)
-	sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(sw)
+			show_lobby(), "selected" if picked else "secondary", shell_f)
+	else:
+		r = UiKit.panel(self, pos, Vector2(w, h), shell_f, false, Color(UiKit.BASE, 0.7))
+	r.add_child(UiKit.rect(Vector2(0, 6), Vector2(4, h - 12.0), col))
+	var sl := UiKit.label(self, seat, 22, col, true)
+	sl.position = Vector2(14, (h - UiKit.line_h(self, 22, true)) / 2.0)
+	r.add_child(sl)
+	var tx := 14.0 + UiKit.text_w(self, "W", 22, true) + 10.0
+	var ts := h - 14.0
+	var title_text := ""
+	var sub := ""
+	var sub_col := UiKit.MUTED
+	var right := w - 12.0
 	if id >= 0:
 		var f: String = str(Net.roster[id]["faction"])
-		label_at("VIRIDIAN BLOOM" if f == "bloom" else NAMES[f].replace("\n", " "), Vector2(pos.x + 84 * K, mid - 24 * K), 22, Rules.FACTIONS[f][1], false)
-		var tags := ("HOST" if id == Net.room_owner else "") + ("  ·  YOU" if id == Net.local_id() else "") + ("  ·  RECONNECTING" if Net.is_away(id) else "")
-		label_at(("%s  %s" % [str(colours.get(seat, "")).to_upper(), tags]).strip_edges(), Vector2(pos.x + 84 * K, mid + 2 * K), 16, Color("ffd15c"), false)
-		# SKILLS 2.0: the player's loadout - active, map (the no-relay fallback on such a map), ultimate
+		var art := TextureRect.new()
+		art.texture = load(UiKit.hero_path(f))
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		art.position = Vector2(tx, 7)
+		art.size = Vector2(ts, ts)
+		r.add_child(art)
+		title_text = ("YOU / " if id == Net.local_id() else "") + str(UiKit.NAMES[f])
+		var words := ["HOST" if id == Net.room_owner or (id == 1 and not Net.server_hosted()) else "JOINED"]
+		if Net.is_away(id):
+			words.append("RECONNECTING")
+			sub_col = UiKit.STAR
+		if picked:
+			words.append("PICKED: MOVE ON A TEAM")
+			sub_col = UiKit.accent(shell_f)
+		sub = "  ·  ".join(words) + (("  ·  " + hue.to_upper()) if hue != "" else "")
 		var lo = Net.roster[id].get("loadout", {})
-		var ic := minf(44.0 * K, dims.y - 22.0 * K)
-		var gap := 7.0 * K
-		var lp := Vector2(pos.x + dims.x - 3.0 * ic - 2.0 * gap - 12.0 * K, mid - ic / 2.0)
-		loadout_icons(f, lo if lo is Dictionary else {}, lp, ic, gap, ArmyPresets.map_has_relays(_selected_map()))
-		if not Net.abilities:
-			var off := ColorRect.new()                    # ABILITIES OFF: the icons dimmed
-			off.color = Color(0.01, 0.04, 0.06, 0.62)
-			off.position = lp - Vector2.ONE * 3.0 * K
-			off.size = Vector2(3.0 * ic + 2.0 * gap + 6.0 * K, ic + 6.0 * K)
-			off.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			content.add_child(off)
+		right = _loadout_chips(r, f, lo if lo is Dictionary else {}, right, h / 2.0, clampf(h * 0.5, 26.0, 40.0)) - 10.0
 	else:
-		label_at(("AI  ·  %s" % Net.ai_fill.to_upper()) if Net.ai_fill != "" else "open seat - waiting for a player", Vector2(pos.x + 84 * K, mid - 12 * K), 18, Color("7795a4"), false)
+		var box := Panel.new()
+		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_theme_stylebox_override("panel", UiKit.sb(Color(UiKit.BASE, 0.9), UiKit.FRAME, 1, 6))
+		box.position = Vector2(tx, 7)
+		box.size = Vector2(ts, ts)
+		r.add_child(box)
+		var mark := UiKit.label(self, "AI" if Net.ai_fill != "" else "+", 18, UiKit.MUTED, true)
+		mark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		mark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		mark.size = Vector2(ts, ts)
+		box.add_child(mark)
+		title_text = ("AI / " + Net.ai_fill.to_upper()) if Net.ai_fill != "" else "OPEN SEAT"
+		sub = "The AI plays this seat" if Net.ai_fill != "" else "Waiting for a player"
+	var lx := tx + ts + 12.0
+	var ty := (h - l1 - l2) / 2.0
+	for part in [[title_text, 16, UiKit.INK, true, ty], [sub, 13, sub_col, false, ty + l1]]:
+		var l := UiKit.label(self, part[0], part[1], part[2], part[3])
+		l.clip_text = true
+		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		l.position = Vector2(lx, part[4])
+		l.size = Vector2(maxf(10.0, right - lx), UiKit.line_h(self, part[1], part[3]))
+		r.add_child(l)
+	return h
 
 
-func _team_button(t: int, colours: Dictionary, pos: Vector2, dims: Vector2) -> void:
-	## JOIN TEAM n (you), or MOVE X HERE (the host, with a player picked); a full team takes nobody.
-	dims = tap(dims)                                  # grow once so the bottom hue bar (below) lands correctly
+func _loadout_chips(parent: Control, f: String, lo: Dictionary, right_x: float, cy: float, ic: float) -> float:
+	## A seat's loadout (SKILLS 2.0) as three framed icons ending at `right_x`: active, map (gold: the no-relay fallback
+	## on a map without relays), ultimate (gold frame); dimmed while ABILITIES is OFF. Returns their left edge.
+	var eff := ArmyPresets.effective(f, lo, ArmyPresets.map_has_relays(_selected_map()))
+	var ids := [eff["active"], eff["map"], eff["ultimate"]]
+	var fa := UiKit.accent(f)
+	var gold := Color("ffd15c")
+	var gap := 6.0
+	var x0 := right_x - 3.0 * ic - 2.0 * gap
+	for k in range(3):
+		var p := Vector2(x0 + k * (ic + gap), cy - ic / 2.0)
+		var fr := Panel.new()
+		fr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fr.add_theme_stylebox_override("panel", UiKit.sb(Color(UiKit.BASE, 0.9), gold if k == 2 else Color(fa, 0.7), 1, 5))
+		fr.position = p
+		fr.size = Vector2(ic, ic)
+		parent.add_child(fr)
+		skill_icon(ids[k], p + Vector2.ONE * ic * 0.14, Vector2.ONE * ic * 0.72, gold if (k == 1 and eff["swapped"] != "") else fa, parent)
+	if not Net.abilities:                             # ABILITIES OFF: the icons dimmed
+		parent.add_child(UiKit.rect(Vector2(x0 - 2.0, cy - ic / 2.0 - 2.0), Vector2(3.0 * ic + 2.0 * gap + 4.0, ic + 4.0), Color(0.01, 0.04, 0.06, 0.62)))
+	return x0
+
+
+func _team_button(t: int, colours: Dictionary, pos: Vector2, w: float) -> float:
+	## A team's header: TEAM n and its hue, and JOIN (you) or MOVE X HERE (the host, with a player picked) - YOUR TEAM /
+	## X IS HERE when already there, FULL when it takes nobody. Returns its height.
 	var me := Net.local_id()
 	var who := _move_pick if _move_pick >= 0 else me
 	var here := Net.team_of(who) == t
 	var room := Net.free_slot_in(t) >= 0
 	var verb := ("YOUR TEAM" if who == me else "%s IS HERE" % Net.seat_of(who)) if here else (("JOIN" if who == me else "MOVE %s HERE" % Net.seat_of(who)) if room else "FULL")
-	var b := nav_button("TEAM %d\n%s" % [Net.team_ids().find(t) + 1, verb], pos, dims, func():
-		if who == me:
-			Net.switch_team(t)
-		else:
-			Net.move_to_team(who, t)
-		_move_pick = -1
-		show_lobby(), not here and room)
-	b.add_theme_font_size_override("font_size", int(round(19 * K)))
-	b.disabled = here or not room or Net.active
+	var bh := UiKit.tap_h(self, 38.0)
+	var tl := "TEAM %d" % (Net.team_ids().find(t) + 1)
+	_say(tl, Vector2(pos.x, pos.y + (bh - UiKit.line_h(self, 15, true)) / 2.0), 15, UiKit.INK, 0.0, true)
 	var first := -1
 	for sl in range(Net.slots()):
 		if Net.team_of_slot(sl) == t:
 			first = sl
 			break
-	if first >= 0:                                    # the team's hue as a bar along the button's foot
-		var bar := ColorRect.new()
-		bar.color = Rules.HUES.get(str(colours.get(Net.SEATS[first], "")), Color.WHITE)
-		bar.position = Vector2(14 * K, dims.y - 16 * K)
-		bar.size = Vector2(dims.x - 28 * K, 6 * K)
-		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		b.add_child(bar)
+	if first >= 0:                                    # the team's hue beside its name
+		content.add_child(UiKit.rect(Vector2(pos.x + UiKit.text_w(self, tl, 15, true) + 12.0, pos.y + bh / 2.0 - 2.0), Vector2(36, 4),
+				Rules.HUES.get(str(colours.get(Net.SEATS[first], "")), Color.WHITE)))
+	var bw := UiKit.text_w(self, verb, 14, true) + 36.0
+	var b := UiKit.btn(self, verb, Vector2(pos.x + w - bw, pos.y), Vector2(bw, 38), func():
+		if who == me:
+			Net.switch_team(t)
+		else:
+			Net.move_to_team(who, t)
+		_move_pick = -1
+		show_lobby(), "primary" if (not here and room) else "secondary", shell_f, 14)
+	b.disabled = here or not room or Net.active
+	return bh
 
 
-func _colour_row(pos: Vector2, dims: Vector2) -> void:
-	## Your colour: one hexagon chip per hue, filled solid in its colour, border the same colour, no
-	## words (Daniele, 0.19.0); taken hues (and, in team modes, another team's family) are dimmed and
-	## disabled. The picked chip gets HexChip's white ring + scale-up.
+func _colour_row(pos: Vector2, w: float) -> float:
+	## Your colour: one hexagon chip per hue, filled solid in its colour, border the same colour, no words (Daniele,
+	## 0.19.0 - the picked one is named in the caption above); taken hues (and, in team modes, another team's family)
+	## are dimmed and disabled. The picked chip gets HexChip's white ring + scale-up. Wraps on a narrow column; returns
+	## the height used.
 	var me := Net.local_id()
 	var mine := Net.colour_of(me)
+	var d := UiKit.tap_h(self, 44.0)
+	var per := maxi(1, int((w + 6.0) / (d + 6.0)))
 	for i in range(HUE_NAMES.size()):
 		var k: String = HUE_NAMES[i]
 		var ok := Net.colour_allowed(me, k) or k == mine
-		var b := hex_chip(pos + Vector2(i * (dims.x + 5 * K), 0), dims, Rules.HUES[k], [], k == mine, k.to_upper(), func():
+		var b := hex_chip(pos + Vector2((i % per) * (d + 6.0), (i / per) * (d + 6.0)), Vector2(d, d), Rules.HUES[k], [], k == mine, k.to_upper(), func():
 			Net.set_colour(k)
 			show_lobby())
 		b.disabled = not ok or Net.active
+	var rows := int(ceil(HUE_NAMES.size() / float(per)))
+	return rows * d + (rows - 1) * 6.0
 
 
 func _step_map(d: int) -> void:
@@ -3681,6 +4063,67 @@ func _share_code() -> void:
 		DisplayServer.clipboard_set(Net.room_code)
 
 
+static func _valid_code(code: String) -> bool:
+	if code.length() != 4:
+		return false
+	for c in code:
+		if CODE_CHARS.find(c) < 0:
+			return false
+	return true
+
+
+func _code_field_ready() -> bool:
+	## Web: this page's room-ui.js has the inline code field (an older cached one only has the code dialog).
+	return OS.has_feature("web") and bool(JavaScriptBridge.eval("!!(window.OozeRoom&&window.OozeRoom.placeCode)", true))
+
+
+func _join_from_field() -> void:
+	## JOIN ROOM: the code in the field (web/room-ui.js's inline <input>); an incomplete one is said under the field.
+	## Without the inline field (an older cached room-ui.js) it opens the code dialog, as before.
+	if not OS.has_feature("web"):
+		return
+	if not _code_field_ready():
+		_open_code()
+		return
+	var code := str(JavaScriptBridge.eval("OozeRoom.codeValue()", true)).strip_edges().to_upper()
+	if not _valid_code(code):
+		_code_error = "Enter all four characters from the host." if code != "" else "Type the host's four-character code first."
+		show_online()
+		return
+	_code_error = ""
+	_code_value = code
+	ArmyPresets.send_to(Net, faction)                         # the register carries your ARMIES preset
+	Net.join_room(code, faction)
+	show_lobby()
+
+
+func _place_code_field() -> void:
+	## Web: lay the native code field over ROOM CODE's frame (canvas fractions -> CSS px in the page), or move it
+	## there - the same way ACCOUNT's name field sits on its box (_place_name_field).
+	if _page != "online" or not is_instance_valid(_code_box) or not _code_field_ready():
+		return
+	var t := _code_box.get_global_transform_with_canvas()
+	var r := Rect2(t.origin, _code_box.size * t.get_scale())
+	var vp := get_viewport().get_visible_rect().size
+	JavaScriptBridge.eval("OozeRoom.placeCode(%f,%f,%f,%f,%s,%s)" % [r.position.x / vp.x, r.position.y / vp.y,
+			r.size.x / vp.x, r.size.y / vp.y, JSON.stringify(_code_value), JSON.stringify("#" + UiKit.accent(shell_f).to_html(false))], true)
+	_code_inline = true
+
+
+func _poll_code(dt: float) -> void:
+	## Web, while the inline code field is up: remove it off ONLINE ROOMS, keep it on its frame.
+	if not _code_inline:
+		return
+	if _page != "online":
+		JavaScriptBridge.eval("window.OozeRoom&&OozeRoom.removeCode&&OozeRoom.removeCode()", true)
+		_code_inline = false
+		return
+	_code_t -= dt
+	if _code_t <= 0.0:
+		_code_t = 0.4
+		_place_code_field()
+
+
 func _process(dt: float) -> void:
 	## The room code comes from the native DOM field (phone keyboards: web/room-ui.js, Alpha 11's).
 	if _page == "lobby" and is_instance_valid(_chat_btn):   # unread count on the lobby CHAT button
@@ -3692,13 +4135,16 @@ func _process(dt: float) -> void:
 			_chat_btn.disabled = not Net.connected
 	if OS.has_feature("web"):                                  # PROGRESSION: the HTML name field (ACCOUNT)
 		_poll_name(dt)
+		_poll_code(dt)                                         # UI: ONLINE ROOMS' inline code field
 	if not OS.has_feature("web") or _page != "online":
 		return
 	var ui = JavaScriptBridge.get_interface("OozeRoom")
 	if ui == null:
 		return
-	var code := str(ui.takeCode())
+	var code := str(ui.takeCode())                             # the dialog's code, or Enter in the inline field
 	if code.length() == 4:
+		_code_error = ""
+		_code_value = code
 		ArmyPresets.send_to(Net, faction)                         # the register carries your ARMIES preset
 		Net.join_room(code, faction)
 		show_lobby()
@@ -3709,6 +4155,8 @@ func _exit_tree() -> void:
 		var ui = JavaScriptBridge.get_interface("OozeRoom")
 		if ui != null:
 			ui.closeCode()
+		if _code_inline:                                 # UI: ONLINE ROOMS' inline code field, if it is up
+			JavaScriptBridge.eval("window.OozeRoom&&OozeRoom.removeCode&&OozeRoom.removeCode()", true)
 		if _name_inline:                                 # PROGRESSION: the HTML name field, if it is up
 			JavaScriptBridge.eval("window.OozeName&&OozeName.remove()", true)
 
