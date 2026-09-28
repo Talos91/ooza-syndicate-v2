@@ -1,7 +1,7 @@
 extends SceneTree
 ## AI think cost and determinism (perf pass, 2026-09-28):
 ##   Godot --headless --path . --script res://tests/ai_bench.gd -- [lvl=Expert] [map=M-39-circuit-warren] [mode=2v2]
-##       [dt=0.016667] [limit=420] [seed=7] [log=user://ai_orders.txt]
+##       [dt=0.016667] [limit=420] [seed=7] [log=user://ai_orders.txt] [guard=off]
 ## Every seat is the AI at `lvl`; the match runs at a fixed step. Prints the think cost (per frame: the sum of every
 ## seat's think that frame; worst / p99 / mean over frames with a think; frames where two seats thought together),
 ## the time per think phase (SeatAI.phases), Sim.step's cost, and a hash of the whole event log (every send, build,
@@ -37,6 +37,7 @@ func _run() -> void:
 	var ais := []
 	for seat in seats.values():
 		ais.append(SeatAI.new(seat, 2.5, lvl))
+	SeatAI.guard_on = _arg("guard", "on") != "off"   # ai-retune-prep: the home-defence reflex (Rules.AI_LEVELS "guard") off
 	SeatAI.phases_on = true
 	SeatAI.phases = {}
 	var frame_us := PackedInt32Array()

@@ -55,6 +55,9 @@ var _raids := {}                           # own node id -> [[time, sim units]] 
 var _raid_seen := {}                       # horde ids already noted
 var _alarm := {}                           # allied node id -> when it first saw a threat there (teamwork)
 var casts := 0                             # skills cast this match (tests)
+var guards := 0                            # thinks in which the home-defence reflex froze or reinforced a node (tests)
+var _guarded := {}                         # node id -> shortfall (sim units) the reflex found this think
+static var guard_on := true                # tests (`-- guard=off`): play every level without its home-defence reflex
 # Perf pass (2026-09-28, audit B1: think spikes up to 47 ms desktop = a 0.25-0.5 s phone hitch): what one think
 # works out once. Cleared at each think and after every order that can change the board's routes or slots (a relay
 # fired, a skill cast, a build / upgrade, a monster launched); a send changes neither.
@@ -87,6 +90,8 @@ func think(sim: Sim, dt: float) -> void:
 	_fresh()
 	_post(sim)
 	var p := _pt
+	_guard(sim)                                          # home defence first: nothing leaves a key node about to fall
+	p = _phase("guard", p)
 	if int(cfg["relays"]) > 0:
 		_relays(sim)
 	p = _phase("relays", p)
@@ -323,6 +328,117 @@ func _nearest_safe(sim: Sim, from_id: int) -> int:
 			best_len = score
 			best = n["id"]
 	return best
+
+
+# ------------------------------------------------------------------ home defence (ai-retune-prep, 2026-09-29)
+func _guard(sim: Sim) -> void:
+	## The reflex that needs no skill (Rules.AI_LEVELS "guard" / "guard_share" / "guard_ahead", documented there). A key
+	## node - the home, or one holding "guard_share" of its troops - under a live attack that would take it (_shortfall:
+	## the lines landing within "guard_ahead" s and the siege on it, in the defenders they kill, against what it holds,
+	## makes and has coming) is, in this order: (a) frozen - marked busy, so no phase of this think orders a send out of
+	## it; (b) guard 2+: reinforced from the nearest own nodes, only when what lands in time (AI_TEAM_DEFEND_LATE after
+	## the first line) covers AI_GUARD_COVER of the shortfall - a trickle into a node that falls anyway is only lost;
+	## guard 3 donors go down to AI_GUARD_FLOOR instead of their reserve and a donor's order still pouring out of its
+	## door is superseded (BRAWL commits a line once out: Sim.recall is SIEGE only); (c) a defensive skill, if it has
+	## one: _skills runs right after and its picks favour a node under attack. Nothing here draws on rng, so on a match
+	## where no key node is ever about to fall the decisions - and tests/ai_bench.gd's event hash - are unchanged.
+	_guarded = {}
+	var g := int(cfg.get("guard", 0))
+	if g <= 0 or not guard_on:
+		return
+	var owned := _mine(sim)
+	var total := 0.0
+	for n in owned:
+		total += n["units"]
+	var home: int = sim.homes.get(seat, -1)
+	var share := float(cfg.get("guard_share", 1.0))
+	var keys := []
+	for n in owned:
+		if sim.is_warned(n["id"]):
+			continue                                      # it falls with the ring: _evacuate empties it
+		if n["id"] != home and (share >= 1.0 or total <= 0.0 or n["units"] < total * share):
+			continue
+		var short := _shortfall(sim, n)
+		if short > 0.0:
+			keys.append({"node": n, "need": short})
+	if keys.is_empty():
+		return
+	guards += 1
+	for k in keys:
+		_busy[k["node"]["id"]] = true                     # (a) nothing leaves it this think
+		_guarded[k["node"]["id"]] = k["need"]
+	if g < 2:
+		return
+	keys.sort_custom(func(a, b): return (a["node"]["id"] == home) or (b["node"]["id"] != home and a["need"] > b["need"]))
+	for k in keys:
+		var target: Dictionary = k["node"]
+		var id: int = target["id"]
+		var need: float = k["need"]
+		var eta := _eta(sim, id)
+		var helpers := []
+		var can := 0.0
+		for n in owned:
+			if n["id"] == id or n["build_kind"] != "" or _busy.has(n["id"]) or _threat(sim, n) > 0.0:
+				continue
+			if g < 3 and not n["streaming"].is_empty():
+				continue                                  # its order stands; guard 3 supersedes what is still inside
+			var keep: float = _reserve(sim, n) if g < 3 else minf(_reserve(sim, n), Rules.AI_GUARD_FLOOR * Rules.SCALE)
+			var spare: float = n["units"] - keep
+			if spare < 2.0 * Rules.SCALE:
+				continue
+			var route := _route(sim, n["id"], id, minf(need, spare))
+			if route.is_empty() or _route_t > eta + Rules.AI_TEAM_DEFEND_LATE:
+				continue
+			helpers.append({"node": n, "spare": spare, "travel": _route_t})
+			can += spare
+		if can < need * Rules.AI_GUARD_COVER:
+			continue                                      # (b) only when it saves the node
+		helpers.sort_custom(func(a, b): return a["travel"] < b["travel"])
+		for hp in helpers:
+			if need <= 0.0:
+				break
+			var donor: Dictionary = hp["node"]
+			var frac := clampf(minf(need, hp["spare"]) / maxf(donor["units"], 1.0), 0.1, 1.0)
+			if not _send(sim, donor["id"], id, frac).is_empty():
+				_busy[donor["id"]] = true
+				need -= donor["units"] * frac
+
+
+func _shortfall(sim: Sim, n: Dictionary) -> float:
+	## Sim units the node is short of holding against what is coming (> 0: it falls): every hostile line landing on it
+	## within "guard_ahead" s and the siege on it, each turned into the defenders it kills (BRAWL landing,
+	## Sim._land_classic: attack / (health x garrison x Fortify / forge) per exchange against the defender's attack /
+	## the attacker's health - its own stats it knows, a rival's are on the faction card), against its garrison, what it
+	## makes until the first line lands and its own lines on the way. No estimate error: it counts its own troops.
+	var ahead := float(cfg.get("guard_ahead", 0.0))
+	var kill := 0.0
+	var first := INF
+	for h in sim.hordes:
+		if h["target"] != n["id"] or h.get("retreat", false) or not _hostile(sim, h["owner"]):
+			continue
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		var eta: float = maxf(0.0, float(h["L"]) - float(h["s"])) / maxf(v, 0.1)
+		if eta > ahead:
+			continue
+		first = minf(first, eta)
+		var u: float = maxf(h["units"], h["ordered"]) if h["streaming"] else h["units"]
+		kill += u * _kills_per(sim, h["owner"], n)
+	for k in n["siege"]:
+		if not sim.allied(k, seat):
+			first = 0.0
+			kill += float(n["siege"][k]) * _kills_per(sim, k, n)
+	if kill <= 0.0:
+		return 0.0
+	var held: float = sim.garrison_total(n) + sim.production(n) * (0.0 if first == INF else first) + _incoming(sim, n["id"], false)
+	return kill + 2.0 * Rules.SCALE - held
+
+
+func _kills_per(sim: Sim, attacker: String, n: Dictionary) -> float:
+	## Defenders of `n` one of `attacker`'s units kills before it dies (Sim._land_classic's ratio, the owner's stats).
+	var tough: float = sim.stat(seat, "health") * sim.stat(seat, "garrison") * sim.garrison_div(n)
+	var kill_per: float = sim.attack_of(attacker) / maxf(tough, 0.0001)
+	var cost_per: float = sim.attack_of(seat) / maxf(sim.stat(attacker, "health"), 0.0001)
+	return kill_per / maxf(cost_per, 0.0001)
 
 
 # ------------------------------------------------------------------ defence first

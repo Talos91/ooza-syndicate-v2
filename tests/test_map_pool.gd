@@ -2,6 +2,8 @@ extends SceneTree
 ## Headless map-pool check:  Godot --headless --path . --script res://tests/test_map_pool.gd
 ## Every map in MapPool loads, has seats (1v1, or its first team/FFA mode), lays out every node, and an AI vs AI match on it
 ## finishes with captures. Exit code 0 = all passed.
+## The AI seats play what they get in a match (ai-retune-prep): Sim.ai_builds on, so each takes one of its faction's
+## Rules.AI_LOADOUTS builds by the fixed seed. `-- guard=off` plays them without their home-defence reflex (SeatAI._guard).
 
 var failures := 0
 
@@ -49,7 +51,15 @@ func _check_overpass() -> void:
 	check(not fought, "049: over and under never engage")
 
 
+func _arg(key: String, fallback: String) -> String:
+	for a in OS.get_cmdline_user_args():
+		if str(a).begins_with(key + "="):
+			return str(a).substr(key.length() + 1)
+	return fallback
+
+
 func _init() -> void:
+	SeatAI.guard_on = _arg("guard", "on") != "off"
 	var paths := MapPool.battlefield()
 	print("%d maps in the pool" % paths.size())
 	for map_path in paths:
@@ -78,6 +88,7 @@ func _init() -> void:
 
 func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, s_teams: Dictionary, md: String) -> void:
 		var ssim := Sim.new()
+		ssim.ai_builds = true                              # the AI seats' rotating builds, as in play (seed 5)
 		ssim.setup(sm, spos, s_seats, {"A": "null", "B": "ember", "C": "vex", "D": "solar", "E": "bloom", "F": "null"}, 5, s_teams)
 		var s_ais := []
 		for seat in s_seats.values():
@@ -95,8 +106,15 @@ func _play(sm: Dictionary, spos: Dictionary, s_seats: Dictionary, s_teams: Dicti
 			if e["type"] == "build_start" and e["kind"] in ["machinegoon", "laser", "forge", "monster_hub"]:
 				builds[e["kind"]] = builds.get(e["kind"], 0) + 1
 		var monsters := ssim.events.filter(func(e): return e["type"] == "monster_launch").size()
+		var guards := 0
+		for ai in s_ais:
+			guards += int(ai.guards)
+		var home_fall := -1.0                              # when a home first changed hands (-1: never)
+		for e in ssim.events:
+			if e["type"] == "capture" and int(e.get("node", -1)) in ssim.homes.values() and home_fall < 0.0:
+				home_fall = float(e["t"])
 		var tag := "BRAWL"
-		print("      %s %-24s %-5s %-5s over=%s winner=%s at %.0f s, captures=%d relay fires=%d builds=%s monsters=%d" % [sm["code"],
-				str(sm["name"]), md, tag, ssim.over, ssim.winner, ssim.time, caps, fires, str(builds), monsters])
+		print("      %s %-24s %-5s %-5s over=%s winner=%s at %.0f s, captures=%d relay fires=%d builds=%s monsters=%d guards=%d home fall=%.0f" % [sm["code"],
+				str(sm["name"]), md, tag, ssim.over, ssim.winner, ssim.time, caps, fires, str(builds), monsters, guards, home_fall])
 		check(ssim.over, "%s %s: AI vs AI finishes within 8 simulated minutes (t=%.0fs)" % [sm["code"], tag, ssim.time])
 		check(caps >= 2, "%s %s: AIs capture nodes (%d)" % [sm["code"], tag, caps])
