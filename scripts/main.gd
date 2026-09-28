@@ -1273,7 +1273,7 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 func _process(delta: float) -> void:
 	if perf_on:
 		_perf(delta)
-	Telemetry.frame(delta, started)                    # PROGRESSION (Alpha 21): frame times for the perf event
+	Telemetry.frame(delta, started, _telemetry_page())   # PROGRESSION (Alpha 21): frame times for the perf event
 	if not started:
 		return
 	# --- SERVER HOST (Alpha 21): step the Sim and the AI, hand the fx events to the guests, draw nothing ---
@@ -1610,6 +1610,19 @@ func _start_telemetry() -> void:
 		var n := PrivacyNotice.new()
 		n.name = "PrivacyNotice"
 		add_child(n)
+
+
+func _telemetry_page() -> String:
+	## What is on screen, for the perf sample: a lesson, a mission, a match, or the menu page.
+	if director != null:
+		return "lesson_%d" % director.lesson_id
+	if mission != null:
+		return "mission"
+	if started:
+		return "match"
+	if is_instance_valid(menu_layer) and menu_layer.has_method("telemetry_page_name"):
+		return str(menu_layer.call("telemetry_page_name"))
+	return ""
 
 
 func _telemetry_match(left_early: bool) -> void:

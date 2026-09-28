@@ -163,6 +163,16 @@ func _perf() -> void:
 	check(Telemetry.perf_event("match") and Telemetry.queue()[-1]["kind"] == "perf", "perf event queued")
 	check(Telemetry.queue()[-1]["data"].get("extra") is Dictionary, "PerfProfile.match_stats() rides in extra")
 	check(not Telemetry.perf_event("match"), "an empty sample sends nothing")
+	# the menu sample says which page was open (📐 Architect: "so we can see which page stutters")
+	for i in range(60):
+		Telemetry.frame(0.033, false, "home")
+	for i in range(30):
+		Telemetry.frame(0.033, false, "FACTION")
+	check(Telemetry.perf_event("menu"), "menu perf event queued")
+	var md: Dictionary = Telemetry.queue()[-1]["data"]
+	check(md["where"] == "menu:home" and md["extra"].has("home") and md["extra"].has("faction")
+			and absf(float(md["extra"]["home"]) - 2.0) < 0.1, "menu sample: longest page in where, seconds per page: %s" % str(md))
+	check(Telemetry.page_key("lesson 3 / L0!") == "lesson_3_l0_", "page keys fit the function's key rule")
 
 
 func _match() -> void:

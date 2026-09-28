@@ -53,6 +53,12 @@ var shell_back := Callable()                     # the page's BACK (a subflow), 
 var shell_slim := false                          # a phone subflow: BACK in the bar, no tab bar
 var safe := Vector4.ZERO                         # the device's unsafe bands around a shell page, in page units
 var _page := ""                                  # "online" / "lobby": rebuilt when the room changes
+var _tele_page := ""                               # PROGRESSION (Alpha 21): the open page for telemetry (the breadcrumb's last part)
+
+
+func telemetry_page_name() -> String:
+	## The page the menu shows, for the menu perf sample ("home", "faction", "settings"; an old-style page's _page).
+	return _tele_page if _tele_page != "" else _page
 var _map_scroll := 0
 # map filters on 02 BATTLEFIELD (Daniele, 0.18.6: "add in game filters for maps like 1v1 2v2 ffa etc"): players
 # (a mode the map offers) and type (the map's group); static, so they survive a trip through the match
@@ -204,6 +210,7 @@ func clear_page(art: String) -> void:
 	_built_w = content.size.x
 	_is_main = art == "ui-main"
 	_page = ""
+	_tele_page = ""                                   # PROGRESSION: the page name for the menu perf sample
 	# one background only: the full-screen backdrop (Alpha 14 playtest: "background on top of a
 	# background" - the page used to draw its own copy of the art, misaligned on taller screens)
 	if _backdrop:
@@ -448,6 +455,7 @@ func shell_open(crumb: String, tab: String, back := Callable(), f := "") -> Rect
 	## title row carries the BACK link (page_title). Returns the free area in canvas units (full screen width).
 	clear_page("shell")
 	_page = tab
+	_tele_page = crumb.get_slice("/", crumb.get_slice_count("/") - 1).strip_edges().to_lower()   # PROGRESSION: "OOZE / FACTION" -> "faction"
 	shell_f = f if f != "" else faction
 	shell_back = back
 	shell_slim = mobile and back.is_valid()
