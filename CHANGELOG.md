@@ -1,5 +1,12 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.22.2 "Alpha 22" - 2026-09-29 (HOTFIX: music off by default)
+
+- Daniele (2026-09-29, on the phone): "audio is super laggy and the mute doesn't work, the game is unplayable due to the music".
+  **MUSIC now starts OFF on every device** (a new settings key, so 0.22.1's saved ON is ignored) and the pack is only downloaded when you
+  switch it ON; **OFF stops both players at once** (before, the bus was muted but the tracks kept decoding). The lag itself (web Vorbis
+  decoding on phones) is being investigated; switch MUSIC ON only on a desktop for now.
+
 ## 0.22.1 "Alpha 22" - 2026-09-28 (relay redo, soundtrack, Daniele's playtest balance, audit fixes, UI / tutorial / campaign fixes)
 
 - **RELAY REDO (v2, 🎨 Skin Designer + 📐)**: every relay has a BUTTON platform off the node's rim (the tap target: double-tap the

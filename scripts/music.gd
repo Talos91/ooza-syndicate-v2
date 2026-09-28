@@ -61,18 +61,20 @@ static func _load() -> void:
 	if _volume >= 0:
 		return
 	_volume = Rules.MUSIC_VOLUME_DEFAULT
-	_on = true
+	_on = Rules.MUSIC_ON_DEFAULT
 	var cf := ConfigFile.new()
 	if cf.load(Sfx.path) == OK:
 		_volume = clampi(int(cf.get_value("audio", "music_volume", _volume)), 1, 100)
-		_on = bool(cf.get_value("audio", "music_on", true))
+		# HOTFIX 0.22.2 (Daniele: "audio is super laggy and the mute doesn't work, unplayable"): the key is new, so every device starts
+		# OFF again whatever 0.22.1 saved; music plays only for who switches it ON.
+		_on = bool(cf.get_value("audio", "music_on_v2", Rules.MUSIC_ON_DEFAULT))
 
 
 static func _save() -> void:
 	var cf := ConfigFile.new()
 	cf.load(Sfx.path)                                  # keep the other keys and sections (SOUND's, [graphics], ...)
 	cf.set_value("audio", "music_volume", _volume)
-	cf.set_value("audio", "music_on", _on)
+	cf.set_value("audio", "music_on_v2", _on)
 	cf.save(Sfx.path)
 
 
@@ -100,8 +102,11 @@ static func set_on(on: bool) -> void:
 	_on = on
 	_save()
 	apply_settings()
-	if on and _node != null and is_instance_valid(_node):
-		_need_pack()
+	if _node != null and is_instance_valid(_node):
+		if on:
+			_need_pack()
+		else:
+			_node._silence()                           # at once, not at the next frame: nothing decodes while OFF
 
 
 static func next_volume() -> int:
@@ -258,12 +263,8 @@ func _exit_tree() -> void:
 func _process(dt: float) -> void:
 	_step_duck(dt)
 	if not _on:                                        # MUSIC OFF: nothing plays or decodes; ON starts afresh
-		if phase != "":
-			for i in range(2):
-				_fade(i, 0.0, 0.0)
-			phase = ""
-			slot = ""
-			track = ""
+		if phase != "" or cur >= 0:
+			_silence()
 		return
 	if _pack != "ready":
 		return
@@ -287,6 +288,18 @@ func _process(dt: float) -> void:
 	var pos: float = track_t if test_len > 0.0 else players[cur].get_playback_position()
 	if length - pos <= Rules.MUSIC_XFADE_PLAYLIST:    # the track's end: the playlist's next, or the slot loops
 		_play(slot, Rules.MUSIC_XFADE_PLAYLIST)
+
+
+func _silence() -> void:
+	## MUSIC OFF: both players stopped now (a muted bus still decodes), the state cleared so ON starts afresh.
+	for i in range(2):
+		_fade(i, 0.0, 0.0)
+		players[i].stop()
+		players[i].stream = null
+	cur = -1
+	phase = ""
+	slot = ""
+	track = ""
 
 
 func _target() -> String:
