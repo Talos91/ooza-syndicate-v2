@@ -1868,7 +1868,14 @@ func _icon_box(id: String, pos: Vector2, s: float, col: Color, parent: Control =
 	skill_icon(id, pos + Vector2.ONE * s * 0.14, Vector2.ONE * s * 0.72, col, parent)
 
 
+var _skills_args := false                          # SKILLS: the screenshot arg below was read
+
+
 func show_skills(slot: String = "active") -> void:
+	if not _skills_args:                              # screenshot arg: --skills-slot=map (open on the map pool)
+		_skills_args = true
+		if "--skills-slot=map" in OS.get_cmdline_user_args():
+			slot = "map"
 	_last_show = func(): show_skills(slot)
 	## UI (Alpha 21, screen 07): ARMIES > SKILLS - the SKILLS 2.0 pools as they were (Daniele 2026-09-28: "skills i
 	## think are better how we have them now") in the new language: the faction's fixed ultimate, then the five active
@@ -1965,8 +1972,7 @@ func _skill_stacked(cw: float) -> bool:
 func _skill_head_h(id: String, cw: float) -> float:
 	## The block beside the icon: name + cooldown (+ NEEDS RELAYS); stacked, the icon row and the name under it.
 	if _skill_stacked(cw):
-		var side := UiKit.line_h(self, 13, true) + (UiKit.line_h(self, 11, true) if Rules.SKILLS[id].get("needs_relays", false) else 0.0)
-		return maxf(40.0, side) + 6.0 + UiKit.line_h(self, 16, true)
+		return 46.0 + UiKit.line_h(self, 16, true) + (UiKit.line_h(self, 11, true) if Rules.SKILLS[id].get("needs_relays", false) else 0.0)
 	var h := UiKit.line_h(self, 16, true) + UiKit.line_h(self, 13, true)
 	if Rules.SKILLS[id].get("needs_relays", false) and not _relays_inline(id, cw):
 		h += UiKit.line_h(self, 11, true)
@@ -1999,15 +2005,13 @@ func _skill_card(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vec
 	nm.clip_text = true
 	var cd := UiKit.label(self, "%s CD" % ArmyPresets.cd_text(id), 13, acc if chosen else UiKit.MUTED, true)
 	var nr: Label = UiKit.label(self, "NEEDS RELAYS", 11, UiKit.STAR, true, 1) if relays else null
-	if _skill_stacked(dims.x):                         # icon | cooldown (+ relays) - then the name, full width
-		var side := UiKit.line_h(self, 13, true) + (UiKit.line_h(self, 11, true) if relays else 0.0)
-		var row := maxf(40.0, side)
-		_icon_box(id, Vector2(12.0, 12.0 + (row - 40.0) / 2.0), 40.0, ic_col, b)
-		cd.position = Vector2(tx, 12.0 + (row - side) / 2.0)
-		if relays:
-			nr.position = cd.position + Vector2(0, UiKit.line_h(self, 13, true))
-		nm.position = Vector2(12.0, 12.0 + row + 6.0)
+	if _skill_stacked(dims.x):                         # icon | cooldown - then the name (and NEEDS RELAYS), full width
+		_icon_box(id, Vector2(12.0, 12.0), 40.0, ic_col, b)
+		cd.position = Vector2(tx, 12.0 + (40.0 - UiKit.line_h(self, 13, true)) / 2.0)
+		nm.position = Vector2(12.0, 12.0 + 46.0)
 		nm.size = Vector2(dims.x - 22.0, UiKit.line_h(self, 16, true))
+		if relays:
+			nr.position = nm.position + Vector2(0, UiKit.line_h(self, 16, true))
 	else:
 		_icon_box(id, Vector2(12.0, 12.0 + (maxf(40.0, hh) - 40.0) / 2.0), 40.0, ic_col, b)
 		var y0 := 12.0 + (maxf(40.0, hh) - hh) / 2.0
@@ -2065,7 +2069,9 @@ func _check(parent: Control, pos: Vector2, s: float, col: Color) -> void:
 
 
 func _quiet_bar(scroll: ScrollContainer) -> void:
-	## A thin, quiet scroll bar for the ARMIES pages' lists (the theme's default is a wide grey one).
+	## A thin, quiet scroll bar for the ARMIES pages' lists (the theme's default is a wide grey one); vertical only.
+	if scroll is TouchScroll:
+		(scroll as TouchScroll).horizontal = false      # the setter turns sideways scrolling off
 	for bar in [scroll.get_v_scroll_bar(), scroll.get_h_scroll_bar()]:
 		bar.add_theme_stylebox_override("scroll", UiKit.sb(Color(UiKit.FRAME, 0.25), Color(0, 0, 0, 0), 0, 2))
 		bar.add_theme_stylebox_override("grabber", UiKit.sb(Color(UiKit.FRAME, 0.9), Color(0, 0, 0, 0), 0, 2))

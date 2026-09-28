@@ -85,7 +85,7 @@ func _refresh() -> void:
 		# a closer frame than the rows' small previews: the look fills the stage
 		var z := _cam.position.z
 		var h := _cam.position.y - 0.5 * z
-		var d := z / 0.9 * 0.9
+		var d := z / 0.9 * 0.95
 		_cam.position = Vector3(0, h + d * 0.45, d * 0.9)
 		_cam.look_at(Vector3(0, h, 0), Vector3.UP)
 		_fit_plinth()
@@ -102,4 +102,4 @@ func _fit_plinth() -> void:
 		for c in [box.position, box.end]:
 			var v: Vector3 = _pivot.global_transform.affine_inverse() * (c as Vector3)
 			reach = maxf(reach, maxf(absf(v.x), absf(v.z)))
-	_plinth.scale = Vector3(reach * 1.08, 1.0, reach * 1.08)
+	_plinth.scale = Vector3(reach * 0.98, 1.0, reach * 0.98)
