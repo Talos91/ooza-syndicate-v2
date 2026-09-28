@@ -1197,6 +1197,13 @@ const CONTEST_TICKS := 4                 # faint marks on the track (quarters; 0
 # First-use hitches ("lags only on first time you send and first time you enter a tower"): Warmup draws every effect
 # material once, tiny, at match start (behind the VERSUS card), so the GL shader compiles happen there.
 const WARMUP_FRAMES := 3                 # frames the warm-up pieces stay drawn
+# ONLINE VERSUS (0.22.3, Daniele 2026-09-29: "every time you press DEPLOY you can see the map loading"): a room's round
+# shows the VERSUS card too (VersusScreen.hold_online), from the launch until this client's world is built and warmed
+# and the round runs - the host once the loading barrier passed (Net.started), a guest once its first snapshot is in -
+# for at least VERSUS_ONLINE_MIN s so it reads as a screen, never a flash. After VERSUS_ONLINE_MAX s it goes anyway and
+# the HUD's waiting text says what is still missing (a silent host: Net.HOST_GRACE).
+const VERSUS_ONLINE_MIN := 2.5
+const VERSUS_ONLINE_MAX := 20.0
 # Badges during camera motion (the Last Stand zoom "still slows the game down"): Hud._layout_badges scores 24 spots x 3
 # reaches against every platform, deck and badge (~10 ms a frame on M-39 on desktop, every frame of the 1.5 s zoom);
 # while the camera moves the badges now follow their platforms' screen position and scale, and the full layout runs
