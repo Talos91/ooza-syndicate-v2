@@ -61,6 +61,7 @@ func _run() -> void:
 	var a := _net()
 	print("relay: ", a.relay_url())
 	a.test_room = true                             # a test room: real players may take its slot
+	a.player_name = "Alice"
 	a.host_room("null")
 	var up := await _wait(func(): return (a.connected and a.room_owner > 0) or a.hosting or a.bridge == null, 30.0)
 	if not up or a.hosting:
@@ -72,8 +73,10 @@ func _run() -> void:
 	check(str(a.roster.get(a.assigned_id, {}).get("faction", "")) == "null" and a.local_seat() == "A", "the owner holds seat A")
 
 	var b := _net()
+	b.player_name = "Bob"                          # NAMES (net-7): what the ACCOUNT's name would be
 	b.join_room(a.room_code, "vex")
 	check(await _wait(func(): return b.connected and a.roster.size() == 2), "a second player joins")
+	check(a.name_of(b.assigned_id) == "Bob" and b.name_of(a.assigned_id) == "Alice", "NAMES: each player sees the other's name")
 	check(not b.can_control() and b.room_owner == a.assigned_id, "the second player sees the owner, and has no controls")
 	check(a.server_hosted() and b.server_hosted(), "both players know the room is server-hosted (ranked)")
 

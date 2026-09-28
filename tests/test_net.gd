@@ -337,7 +337,7 @@ func _run() -> void:
 	fp2.free()
 
 	# ---------------------------------------------------------------- STRUCTURES 2.1 + TEAMS (0.18.10): orders and snapshots
-	check(host.VERSION_TAG == "ooze20-net-6", "the net protocol is bumped for READY (ooze20-net-6; 5: delta snapshots + binary frames)")
+	check(host.VERSION_TAG == "ooze20-net-7", "the net protocol is bumped for player names (ooze20-net-7; 6: READY)")
 	host._order_limits = {}
 	host._packet_limits = {}
 	host.bridge.sent = []
@@ -466,7 +466,7 @@ func _run() -> void:
 
 	# ---------------------------------------------------------------- chat
 	check(host.accept_chat(1, "  hello <b>there</b>\u0007 "), "host chats")
-	check(host.chat_history[-1]["text"] == "hello <b>there</b>" and host.chat_history[-1]["who"] == "A · VEX", "chat is cleaned and stamped with the seat")
+	check(host.chat_history[-1]["text"] == "hello <b>there</b>" and host.chat_history[-1]["who"] == "PLAYER A · VEX", "chat is cleaned and stamped with the name (no name: PLAYER + seat)")
 	check(not host.accept_chat(1, "again"), "chat rate limit: 0.7 s between messages")
 	check(not host.accept_chat(1, "   "), "empty chat is dropped")
 	_to_host("g1", {"op": "chat", "text": "x".repeat(400)})
@@ -937,6 +937,31 @@ func _test_teams() -> void:
 	_join("old", "null", "ooze20-net-1/" + Rules.VERSION)
 	check("rejected" in _kinds_to("old"), "a guest on the previous room protocol is refused")
 	guests.erase("old")
+
+	# ---------------------------------------------------------------- NAMES (ooze20-net-7, Daniele 2026-09-28)
+	_open_room("FFA4")
+	host.roster[1]["name"] = "Daniele"
+	var n1 := _new_net()
+	n1.remote_host = "host"
+	guests["n1"] = n1
+	host.links["n1"] = host.next_peer
+	host.next_peer += 1
+	_to_host("n1", {"op": "register", "version": host.version(), "faction": "ember", "name": "  Gf\u0007  the   Great\u200b  "})
+	_join("n2", "bloom")
+	var n3 := _new_net()
+	n3.remote_host = "host"
+	guests["n3"] = n3
+	host.links["n3"] = host.next_peer
+	host.next_peer += 1
+	_to_host("n3", {"op": "register", "version": host.version(), "faction": "solar", "name": "daniele"})
+	_deliver()
+	check(host.name_of(n1.assigned_id) == "Gf the Great" and n1.name_of(1) == "Daniele", "a name travels, cleaned (controls, zero-width, extra spaces): \"%s\"" % host.name_of(n1.assigned_id))
+	check(host.name_of(guests["n2"].assigned_id) == "PLAYER C", "no name: PLAYER + the seat")
+	check(host.name_of(n3.assigned_id) == "daniele (2)" and n3.name_of(n3.assigned_id) == "daniele (2)", "names are unique in the room: \"%s\"" % host.name_of(n3.assigned_id))
+	check(host.clean_name("x".repeat(40)).length() == host.NAME_MAX, "a name is at most %d characters" % host.NAME_MAX)
+	check(host.accept_chat(n1.assigned_id, "hi") and host.chat_history[-1]["who"] == "GF THE GREAT · EMBER", "the chat stamp carries the sender's name")
+	_to_host("n1", {"op": "register", "version": host.version(), "faction": "ember", "name": "Impostor"})
+	check(host.name_of(n1.assigned_id) == "Gf the Great", "a second register can't rename a seated player")
 
 	# ---------------------------------------------------------------- READY (ooze20-net-6, Daniele 2026-09-28)
 	_open_room("FFA3")
