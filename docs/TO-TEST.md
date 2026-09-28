@@ -5,6 +5,10 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.10 (emblems v2, final art)
+- [ ] **Emblems**: the new marks on every screen and on the in-match badges - nothing old left; readable at badge size on the phone.
+- [ ] **HOME / PLAY / VERSUS** art on the phone: headline readable over the bright wallpapers.
+
 ## 0.21.9 (sound, callouts, names, co-op AI)
 - [ ] **Sound** on the phone: first tap unlocks it; SOUND ON / OFF + VOLUME in SETTINGS and PAUSE work live; nothing too loud / spammy.
 - [ ] **Callouts**: monster incoming (and the edge arrow), forge, handover; skill refusal above the slot; Last Stand line pulse.
