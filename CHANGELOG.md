@@ -1,5 +1,16 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.8 "Alpha 21" - 2026-09-28 (telemetry, crash reports, privacy, DELETE ACCOUNT)
+
+- **Privacy notice** (🏆 Progression; Daniele: opt-in in the EU / EEA / UK / Switzerland, opt-out elsewhere): shown once, in
+  SETTINGS > PRIVACY and ACCOUNT > PRIVACY, and on the web at privacy.html. **SHARE PLAY & CRASH DATA** switch.
+- **Telemetry to Supabase**: a session record, a record per match (map, mode, faction, result, length, AI level, counters),
+  performance numbers per match (PerfProfile.match_stats: frame times, fps, draw calls, long frames), tutorial / campaign
+  steps and crash reports (scrubbed); account id + game version, never name / email / chat / location. Kept 60 days
+  (crashes 90 days after last seen), then purged nightly. Off = nothing leaves the device.
+- **DELETE ACCOUNT**: deletes the account, cloud save, match history, leaderboard entries and shared data at once; the
+  device's progress stays.
+
 ## 0.21.7 "Alpha 21" - 2026-09-28 (room limits, 3 match slots, PeerJS gone)
 
 - **Idle rooms close** (Daniele: "sit idle make 10 min"): a server room where no round runs (lobby / results) for 10 minutes

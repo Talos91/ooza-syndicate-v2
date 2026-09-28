@@ -5,6 +5,10 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.8 (telemetry, privacy)
+- [ ] **First launch**: the privacy notice (in the EU it starts OFF); SETTINGS > PRIVACY and ACCOUNT > PRIVACY show the switch.
+- [ ] **DELETE ACCOUNT** on a throwaway guest: gone from the leaderboard; the device's progress stays.
+
 ## 0.21.7 (room limits)
 - [ ] **Online**: leave a room idle in the lobby - the 1-minute notice, then it closes at 10 min; a running round never closes.
 

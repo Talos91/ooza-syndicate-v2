@@ -460,7 +460,7 @@ Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --export-rele
 git worktree prune && git branch -D gh-pages     # the previous publish leaves a LOCAL gh-pages branch behind:
                                                  # without this the orphan checkout fails ("branch already exists")
 git worktree add --detach /tmp/ghpages && cd /tmp/ghpages && git checkout --orphan gh-pages && git rm -rqf .
-cp "Game/2.0/build/web/"index.* "Game/2.0/build/web/"{skins,hd,skins_hd}.pck . && cp "Game/2.0/web/"*.js . && rm -f *.import && touch .nojekyll   # web/ = PeerJS, room code field, chat (Alpha 16)
+cp "Game/2.0/build/web/"index.* "Game/2.0/build/web/"{skins,hd,skins_hd}.pck . && cp "Game/2.0/web/"*.js "Game/2.0/web/"*.html . && rm -f *.import && touch .nojekyll   # web/ = PeerJS, room code field, chat (Alpha 16)
 git add -A && git commit -m "Playtest build: <what changed> (source main <sha>)" && git push -f origin gh-pages
 cd "Game/2.0" && git worktree remove --force /tmp/ghpages && git branch -D gh-pages
 # verify: curl -sI https://talos91.github.io/ooza-syndicate-v2/index.pck | grep -i content-length  == size of build/web/index.pck (same for skins.pck, hd.pck, skins_hd.pck)
