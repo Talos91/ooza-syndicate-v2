@@ -118,6 +118,9 @@ func _run() -> void:
 	var line: String = b.net_stats_line()              # the PAUSE panel's connection line
 	check(b._rtt_ms > 0.0 and b._arrivals.size() >= 10 and line.contains("updates/s") and line.contains("round trip"),
 			"the connection line has real numbers: " + line)
+	var ns: Dictionary = b.round_net_stats()               # NET: the round's totals the match telemetry carries
+	check(float(ns.get("hz", 0.0)) > 10.0 and int(ns.get("rtt_ms", -1)) >= 0 and ns.has("gap_max_ms") and bool(ns.get("server_hosted", false)),
+			"NET: the guest's round network totals are filled: %s" % str(ns))
 
 	var t_before: float = sb.time
 	a.leave()                                          # the owner drops out mid-match

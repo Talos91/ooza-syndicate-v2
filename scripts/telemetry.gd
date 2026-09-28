@@ -586,7 +586,20 @@ static func match_event(sim: Sim, seat: String, info: Dictionary) -> bool:
 			"stats": {"captures": st["captures"], "sends": st["sends"], "relay_fires": st["relay_fires"],
 					"void_drops": st["void_drops"], "monster_launches": st["monster_launches"],
 					"monster_kicks": st["monster_kicks"], "skills": st["skills"], "nodes_lost": st["nodes_lost"],
-					"units_lost_combat": st["units_lost_combat"], "units_lost_falls": st["units_lost_falls"]}})
+					"units_lost_combat": st["units_lost_combat"], "units_lost_falls": st["units_lost_falls"]},
+			"net": _net_numbers(info.get("net", {}))})   # NET (🖥️ Server): a guest's connection over the round; {} otherwise
+
+
+static func _net_numbers(n) -> Dictionary:
+	## NET: only the known numeric keys of Net.round_net_stats() travel (nothing identifying).
+	var out := {}
+	if n is Dictionary:
+		for k in ["hz", "gap_max_ms", "freezes", "freeze_s", "rtt_ms", "rtt_max_ms", "buffer_max_s", "corrections", "hard_snaps"]:
+			if n.has(k) and (n[k] is int or n[k] is float):
+				out[k] = n[k]
+		if n.has("server_hosted"):
+			out["server_hosted"] = bool(n["server_hosted"])
+	return out
 
 
 static func funnel(step: String, id := "", extra := {}) -> bool:
