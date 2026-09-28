@@ -5,6 +5,10 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.6 (iPhone fit)
+- [ ] **iPhone / notch phone**: nothing under the notch or home bar on HOME, SETUP (DEPLOY), SETTINGS (DONE), results; taps feel >= a fingertip.
+- [ ] **A fresh browser (or cleared site data)**: pick a skin on first launch - it shows (the pack downloads).
+
 ## 0.21.5 (the UI pass)
 - [ ] **Every screen on the phone**: HOME, PLAY -> SETUP -> RIVALS -> VERSUS -> match -> results; ARMIES / wardrobe; CAMPAIGN (city map + CARDS);
       ONLINE -> JOIN ROOM (the code field) -> LOBBY; SETTINGS; ACCOUNT. Anything cut off, too small to tap, or under the notch / home bar?
