@@ -1,5 +1,14 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.7 "Alpha 21" - 2026-09-28 (room limits, 3 match slots, PeerJS gone)
+
+- **Idle rooms close** (Daniele: "sit idle make 10 min"): a server room where no round runs (lobby / results) for 10 minutes
+  closes and frees its slot; a notice a minute before ("this room closes in 60 s unless a round starts"), then
+  "Room closed: nothing was played in it for 10 min."
+- **2 rooms per player** (per address); a third is refused with a clear line.
+- **3 match slots** on the room server (measured: 3 busy FFA 4 rooms ~650 of 950 MB, 20 Hz, 0 % frozen).
+- **PeerJS removed** (the unused peer-to-peer mode): ~90 KB less on every page load.
+
 ## 0.21.6 "Alpha 21" - 2026-09-28 (iPhone fit, Daniele's UI answers, first-launch skins)
 
 - **Every screen clear of the notch and home bar** (🧩 UI, from the iPhone size sweep): the menus, VERSUS and the results lay

@@ -5,6 +5,9 @@ networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://talos91.github.io/ooza-syndicate-v2/
 
+## 0.21.7 (room limits)
+- [ ] **Online**: leave a room idle in the lobby - the 1-minute notice, then it closes at 10 min; a running round never closes.
+
 ## 0.21.6 (iPhone fit)
 - [ ] **iPhone / notch phone**: nothing under the notch or home bar on HOME, SETUP (DEPLOY), SETTINGS (DONE), results; taps feel >= a fingertip.
 - [ ] **A fresh browser (or cleared site data)**: pick a skin on first launch - it shows (the pack downloads).
