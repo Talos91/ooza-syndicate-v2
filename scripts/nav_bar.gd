@@ -2,7 +2,7 @@ class_name NavBar
 extends Control
 ## The app shell's bottom tab bar (Alpha 21 UI pass, Daniele's navigation mockups 2026-09-28): HOME / PLAY /
 ## ARMIES / CAMPAIGN, the open one lit in the faction accent. Full screen width at the foot of every shell
-## page, tabs at least 44 pt tall on phones. Menu routes `tab_pressed(id)` to its pages.
+## page, tabs at least 44 pt tall on phones. A tab calls Menu._on_tab(id) itself (0.22.1: bound to the Menu, which outlives a page rebuild).
 
 signal tab_pressed(id: String)
 
@@ -43,7 +43,8 @@ func _build(f: String) -> void:
 	var x0 := (w - tw * TABS.size()) / 2.0
 	for i in range(TABS.size()):
 		var id: String = TABS[i][0]
-		var b := UiKit.make_btn(menu, TABS[i][1], Vector2(tw - 12.0, th), func(): tab_pressed.emit(id),
+		# UI (0.22.1): through the Menu (it outlives a rebuild during the tap's flash frame), not this bar's signal
+		var b := UiKit.make_btn(menu, TABS[i][1], Vector2(tw - 12.0, th), Callable(menu, "_on_tab").bind(id),
 				"selected" if id == active else "tertiary", f, 15)
 		if id != active:
 			b.add_theme_color_override("font_color", UiKit.MUTED)

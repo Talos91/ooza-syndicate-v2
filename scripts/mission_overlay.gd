@@ -206,7 +206,7 @@ func show_briefing() -> void:
 	back.focus_mode = Control.FOCUS_NONE
 	back.add_theme_font_override("font", UiKit.HEAD)
 	back.add_theme_font_size_override("font_size", int(round(u(14))))
-	UiKit.style_button(back, "tertiary", f)
+	UiKit.style_button(back, "secondary", f)             # UI (0.22.1): a framed BACK, like every other button
 	back.add_theme_color_override("font_color", UiKit.INK)
 	back.size = Vector2(UiKit.HEAD.get_string_size(back.text, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(u(14)))).x + u(24), u(44))
 	back.pressed.connect(func(): _on_button("campaign"))
