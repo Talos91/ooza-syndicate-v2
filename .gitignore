@@ -4,6 +4,6 @@
 /export/
 /build/
 # the soundtrack (a bought pack; this repo is public): tools/copy_music.py puts the used tracks here before an
-# import / export, and they ship only inside build/web/music.pck ("Web Music" preset)
+# import / export; the web build streams them from build/web/music/ and music_phone/ (copy_music.py --web), never in git
 /assets/audio/music/
 /assets/audio/music/*.import

@@ -19,22 +19,23 @@ extends Node
 ## it plays one of Rules.MUSIC_DUCK_EVENTS (capture, Last Stand, Very Last Stand, win), which dips the bus
 ## Rules.MUSIC_DUCK_DB for a moment.
 ## The tracks are not in git (the repo is public; tools/copy_music.py copies them into Rules.MUSIC_DIR before an import /
-## export). Native and editor runs load them straight from res://. WEB: they are not in index.pck (the "Web" preset
-## excludes assets/audio/music/*) but in music.pck beside it (the "Web Music" preset, BUILD-LOG sec10), fetched once
-## the first time music is needed (the skins.pck pattern, Cosmetics._fetch_pack) and mounted with
-## ProjectSettings.load_resource_pack; nothing plays until it is in, and a failed fetch stays silent (no error).
-## On the web the players use PLAYBACK_TYPE_STREAM (Godot's mixer), not the WebAudio samples the SFX use: a sample is
-## the whole track decoded at once (seconds of stall and ~40-80 MB per track on a phone).
+## export). Native and editor runs load them straight from res:// and play them on two AudioStreamPlayers.
+## WEB (0.22.4, Music session): the browser plays them, not Godot - web/music.js's two <audio> elements (JavaScriptBridge
+## interface "OozeMusic"), each through a GainNode in the AudioContext the SFX unlock. The browser streams and decodes
+## off the main thread: Godot's mixer decoded Vorbis on the main thread every frame (no threads on the web export) and
+## lagged phones; a WebAudio sample decodes the whole track at once (seconds of stall, tens of MB). The files are loose
+## beside index.html, fetched per track: Rules.MUSIC_WEB_DIR (desktop, stereo 44.1 kHz) or MUSIC_WEB_DIR_PHONE (mono
+## 22 kHz, Daniele 2026-09-29) by PerfProfile.is_phone() - the light / HD rule. Not in any .pck (the "Web" preset
+## excludes assets/audio/music/*); tools/copy_music.py --web fills both folders (BUILD-LOG sec10). Every failure
+## (no WebAudio, a 404, autoplay refused until a tap, offline) is silence, never an error.
 ## SETTINGS > DISPLAY > AUDIO and PAUSE > SETTINGS: MUSIC ON / OFF and MUSIC VOLUME (Rules.MUSIC_VOLUME_STEPS, %), saved
-## in user://settings.cfg [audio] music_on / music_volume (Sfx.path: the same file), applied to the Music bus at once;
-## OFF stops the players (nothing decodes) and never fetches music.pck.
+## in user://settings.cfg [audio] music_on_v2 / music_volume_v2 (Sfx.path: the same file), applied to the Music bus (web:
+## music.js's master gain) at once; OFF stops the players (nothing decodes, nothing downloads).
 ## Debug: --music-log (after `--`) prints every slot change.
 
-const PACK_FILE := "user://music.pck"
-
 static var _node: Music = null
-static var _pack := ""                    # "" / "loading" / "ready" / "failed"
-static var _http: HTTPRequest = null
+static var _pack := ""                    # "" / "ready" / "failed" (the tracks: in res://, or web/music.js)
+static var _jsm: JavaScriptObject = null  # web: window.OozeMusic (web/music.js)
 static var _volume := -1                  # MUSIC VOLUME, % (-1 until read)
 static var _on := true                    # MUSIC ON / OFF
 static var _streams := {}                 # track name -> AudioStream (null: missing)
@@ -64,7 +65,8 @@ static func _load() -> void:
 	_on = Rules.MUSIC_ON_DEFAULT
 	var cf := ConfigFile.new()
 	if cf.load(Sfx.path) == OK:
-		_volume = clampi(int(cf.get_value("audio", "music_volume", _volume)), 1, 100)
+		# 0.22.4 (Daniele 2026-09-29: "default volume needs to be toned down"): a new key, so the lower default reaches everyone once.
+		_volume = clampi(int(cf.get_value("audio", "music_volume_v2", _volume)), 1, 100)
 		# HOTFIX 0.22.2 (Daniele: "audio is super laggy and the mute doesn't work, unplayable"): the key is new, so every device starts
 		# OFF again whatever 0.22.1 saved; music plays only for who switches it ON.
 		_on = bool(cf.get_value("audio", "music_on_v2", Rules.MUSIC_ON_DEFAULT))
@@ -73,7 +75,7 @@ static func _load() -> void:
 static func _save() -> void:
 	var cf := ConfigFile.new()
 	cf.load(Sfx.path)                                  # keep the other keys and sections (SOUND's, [graphics], ...)
-	cf.set_value("audio", "music_volume", _volume)
+	cf.set_value("audio", "music_volume_v2", _volume)
 	cf.set_value("audio", "music_on_v2", _on)
 	cf.save(Sfx.path)
 
@@ -132,6 +134,14 @@ static func apply_settings() -> void:
 	var duck: float = _node.duck_env if _node != null and is_instance_valid(_node) else 0.0
 	AudioServer.set_bus_volume_db(i, bus_db() + duck)
 	AudioServer.set_bus_mute(i, not _on)
+	_web_level(duck)
+
+
+static func _web_level(duck: float) -> void:
+	## Web: the Music bus's level on music.js's master gain (the <audio> elements bypass Godot's buses).
+	var js := _js()
+	if js != null:
+		js.level(db_to_linear(bus_db() + duck) if _on else 0.0)
 
 
 # ------------------------------------------------------------------ the node
@@ -170,8 +180,8 @@ static func now_playing() -> Dictionary:
 		return {}
 	var n := _node
 	var pos := -1.0
-	if n.cur >= 0 and n.players[n.cur].playing:
-		pos = n.players[n.cur].get_playback_position()
+	if n.cur >= 0 and n._p_playing(n.cur):
+		pos = n._p_pos(n.cur)
 	return {"phase": n.phase, "slot": n.slot, "track": n.track, "pos": pos, "duck_db": n.duck_env}
 
 
@@ -193,42 +203,34 @@ static func slot_for(started: bool, s: Sim, human: String, spectating: bool) -> 
 
 
 static func _need_pack() -> void:
-	## The tracks, the first time music is needed: in res:// already (native, editor), else music.pck (web).
+	## The tracks, the first time music is needed: web/music.js on the web (each track fetched when it plays), else
+	## res:// (native, editor).
 	if _pack != "":
+		return
+	if OS.has_feature("web"):
+		var js := _js()
+		_pack = "ready" if js != null and bool(js.available()) else "failed"
+		if _pack == "failed":
+			print("Music: no web/music.js or no WebAudio - silent")
 		return
 	if ResourceLoader.exists(_path(str((Rules.MUSIC_TRACKS["MENU"] as Array)[0]))):
 		_pack = "ready"
 		return
-	if not OS.has_feature("web"):
-		_pack = "failed"
-		print("Music: no soundtrack in %s (python tools/copy_music.py, then import) - silent" % Rules.MUSIC_DIR)
-		return
-	_fetch_pack()
+	_pack = "failed"
+	print("Music: no soundtrack in %s (python tools/copy_music.py, then import) - silent" % Rules.MUSIC_DIR)
 
 
-static func _fetch_pack() -> void:
-	## Web: download music.pck from beside index.pck once and mount it (every failure: silence, no error).
-	_pack = "loading"
-	var tree := Engine.get_main_loop() as SceneTree
-	if tree == null:
-		_pack = "failed"
-		return
-	var url := str(JavaScriptBridge.eval("new URL('%s?v=%s', window.location.href).href" % [Rules.MUSIC_PACK, Rules.VERSION], true))
-	_http = HTTPRequest.new()
-	_http.download_file = PACK_FILE
-	_http.accept_gzip = false                          # GitHub Pages gzips the .pck; never gunzip here (Cosmetics._fetch_pack)
-	_http.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
-		var ok := result == HTTPRequest.RESULT_SUCCESS and code == 200 and ProjectSettings.load_resource_pack(PACK_FILE, false)
-		_pack = "ready" if ok else "failed"
-		print("Music: %s %s (result %d, HTTP %d)" % [Rules.MUSIC_PACK, "loaded" if ok else "not available - no music", result, code])
-		_http.queue_free()
-		_http = null)
-	print("Music: fetching ", url)
-	var http := _http                                  # deferred, then requested once in the tree (a first launch)
-	http.tree_entered.connect(func() -> void:
-		if http.request(url) != OK:
-			_pack = "failed", CONNECT_ONE_SHOT)
-	tree.root.add_child.call_deferred(http)
+static func _js() -> JavaScriptObject:
+	## Web: window.OozeMusic (web/music.js, in the page head), or null.
+	if _jsm == null and OS.has_feature("web"):
+		_jsm = JavaScriptBridge.get_interface("OozeMusic")
+	return _jsm
+
+
+static func web_url(name: String) -> String:
+	## Web: a track's file beside index.html - the phone set (mono 22 kHz) on a phone, else the desktop set.
+	var dir := Rules.MUSIC_WEB_DIR_PHONE if PerfProfile.is_phone() else Rules.MUSIC_WEB_DIR
+	return "%s%s.ogg?v=%s" % [dir, name.uri_encode(), Rules.VERSION.uri_encode()]
 
 
 static func _path(name: String) -> String:
@@ -247,10 +249,8 @@ static func _stream(name: String) -> AudioStream:
 
 func _ready() -> void:
 	for i in range(2):
-		var p := AudioStreamPlayer.new()
+		var p := AudioStreamPlayer.new()                # (native / editor; the web plays music.js's elements)
 		p.bus = Rules.SOUND_MUSIC_BUS
-		if OS.has_feature("web"):
-			p.playback_type = AudioServer.PLAYBACK_TYPE_STREAM   # the mixer, not a whole-track WebAudio sample
 		add_child(p)
 		players.append(p)
 
@@ -276,17 +276,20 @@ func _process(dt: float) -> void:
 	if slot in Rules.MUSIC_STINGERS:
 		# Daniele (2026-09-28): after the VICTORY / DEFEAT stinger the MENU music comes back on the results screen (was silence).
 		# The phase stays the stinger's (it is not re-entered); only the slot moves on to MENU, which loops as usual.
-		var ended := cur < 0 or not players[cur].playing
+		var ended := cur < 0 or not _p_playing(cur)
 		if test_len > 0.0:
 			ended = track_t >= test_len
 		if ended and phase in Rules.MUSIC_STINGERS:
 			_play("MENU", Rules.MUSIC_XFADE_START)
 		return
-	if cur < 0 or track == "" or not players[cur].playing:
+	if cur >= 0 and track != "" and _p_ended(cur):   # web: ended before the crossfade (a length estimate): chain on
+		_play(slot, Rules.MUSIC_XFADE_START)
 		return
-	var length: float = test_len if test_len > 0.0 else players[cur].stream.get_length()
-	var pos: float = track_t if test_len > 0.0 else players[cur].get_playback_position()
-	if length - pos <= Rules.MUSIC_XFADE_PLAYLIST:    # the track's end: the playlist's next, or the slot loops
+	if cur < 0 or track == "" or not _p_playing(cur):
+		return
+	var length: float = test_len if test_len > 0.0 else _p_len(cur)
+	var pos: float = track_t if test_len > 0.0 else _p_pos(cur)
+	if length > 0.0 and length - pos <= Rules.MUSIC_XFADE_PLAYLIST:    # the track's end: the playlist's next, or the slot loops
 		_play(slot, Rules.MUSIC_XFADE_PLAYLIST)
 
 
@@ -294,7 +297,7 @@ func _silence() -> void:
 	## MUSIC OFF: both players stopped now (a muted bus still decodes), the state cleared so ON starts afresh.
 	for i in range(2):
 		_fade(i, 0.0, 0.0)
-		players[i].stop()
+		_p_stop(i)
 		players[i].stream = null
 	cur = -1
 	phase = ""
@@ -314,7 +317,7 @@ func _enter(want: String) -> void:
 	var was := phase
 	phase = want
 	var xf := Rules.MUSIC_XFADE_PHASE
-	if cur < 0 or not players[cur].playing:
+	if cur < 0 or not _p_playing(cur):
 		xf = Rules.MUSIC_XFADE_START                   # from silence
 	elif want in ["LAST STAND", "VERY LAST STAND"]:
 		xf = Rules.MUSIC_XFADE_LAST_STAND
@@ -335,20 +338,16 @@ func _play(to: String, xfade: float) -> void:
 			_battle_next += 1
 		else:
 			name = str(names[0])
-	var st := _stream(name) if name != "" else null
 	if cur >= 0:
 		_fade(cur, 0.0, xfade)
-	if st == null:                                     # a slot without a track (a missing file): silence
+	var nxt := 0 if cur < 0 else 1 - cur
+	amp[nxt] = 0.0 if xfade > 0.0 else 1.0
+	_p_stop(nxt)
+	_p_amp(nxt, amp[nxt])
+	if name == "" or not _p_start(nxt, name):         # a slot without a track (a missing file): silence
 		slot = ""
 		track = ""
 		return
-	var nxt := 0 if cur < 0 else 1 - cur
-	var p := players[nxt]
-	p.stop()
-	p.stream = st
-	amp[nxt] = 0.0 if xfade > 0.0 else 1.0
-	p.volume_db = linear_to_db(maxf(amp[nxt], 0.0001))
-	p.play()
 	_fade(nxt, 1.0, xfade)
 	cur = nxt
 	slot = to
@@ -363,9 +362,9 @@ func _fade(i: int, to: float, length: float) -> void:
 	fades[i] = [amp[i], to, 0.0, maxf(length, 0.0)]
 	if length <= 0.0:
 		amp[i] = to
-		players[i].volume_db = linear_to_db(maxf(to, 0.0001))
+		_p_amp(i, to)
 		if to <= 0.0:
-			players[i].stop()
+			_p_stop(i)
 
 
 func _step_fades(dt: float) -> void:
@@ -377,11 +376,11 @@ func _step_fades(dt: float) -> void:
 		var x := clampf(float(f[2]) / float(f[3]), 0.0, 1.0)
 		var e := sin(x * PI * 0.5) if float(f[1]) > float(f[0]) else 1.0 - cos(x * PI * 0.5)   # equal power
 		amp[i] = lerpf(float(f[0]), float(f[1]), e)
-		players[i].volume_db = linear_to_db(maxf(amp[i], 0.0001))
+		_p_amp(i, amp[i])
 		if x >= 1.0:
 			f[3] = 0.0
 			if float(f[1]) <= 0.0:
-				players[i].stop()
+				_p_stop(i)                             # faded out: stopped (the web frees its buffer)
 
 
 func _step_duck(dt: float) -> void:
@@ -394,3 +393,57 @@ func _step_duck(dt: float) -> void:
 	var secs := Rules.MUSIC_DUCK_IN if goal < duck_env else Rules.MUSIC_DUCK_OUT
 	duck_env = move_toward(duck_env, goal, absf(depth) / maxf(secs, 0.01) * dt)
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index(Rules.SOUND_MUSIC_BUS), bus_db() + duck_env)
+	_web_level(duck_env)
+
+
+# ------------------------------------------------------------------ the two players: Godot's (native) or music.js's (web)
+func _p_start(i: int, name: String) -> bool:
+	## Player i plays track `name` from its start (its gain set before); false: no such track.
+	var js := _js()
+	if js != null:
+		return bool(js.start(i, web_url(name)))
+	var st := _stream(name)
+	if st == null:
+		return false
+	players[i].stream = st
+	players[i].play()
+	return true
+
+
+func _p_stop(i: int) -> void:
+	var js := _js()
+	if js != null:
+		js.stop(i)
+	players[i].stop()
+
+
+func _p_amp(i: int, a: float) -> void:
+	var js := _js()
+	if js != null:
+		js.gain(i, maxf(a, 0.0))
+	else:
+		players[i].volume_db = linear_to_db(maxf(a, 0.0001))
+
+
+func _p_playing(i: int) -> bool:
+	var js := _js()
+	return bool(js.playing(i)) if js != null else players[i].playing
+
+
+func _p_ended(i: int) -> bool:
+	## Web only: the track played to its end without the crossfade (native players always crossfade first).
+	var js := _js()
+	return js != null and bool(js.ended(i))
+
+
+func _p_pos(i: int) -> float:
+	var js := _js()
+	return float(js.pos(i)) if js != null else players[i].get_playback_position()
+
+
+func _p_len(i: int) -> float:
+	## The track's length, s (-1 while the web has no metadata yet).
+	var js := _js()
+	if js != null:
+		return float(js.len(i))
+	return players[i].stream.get_length() if players[i].stream != null else -1.0
