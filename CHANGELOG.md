@@ -1,5 +1,20 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.21.5 "Alpha 21" - 2026-09-28 (the UI pass)
+
+- **New menus and result screens** (🧩 UI session; Daniele's "Alpha 20 UI Expansion" direction, Mushroom Wars 2-inspired,
+  per-faction accents; reviewed and approved by Daniele): an app shell (TOP BAR + HOME / PLAY / ARMIES / CAMPAIGN tabs),
+  new HOME, PLAY, ARMIES (skills restyled, a rebuilt wardrobe), ONLINE / LOBBY / PROFILE / CHALLENGES / LEADERBOARD /
+  HISTORY / ACCOUNT restyled, SETTINGS with DISPLAY + TESTING tabs, a VERSUS screen before VS AI matches and missions,
+  new pause / victory / defeat / match details screens, and a CONNECTION INTERRUPTED overlay with a countdown when a host
+  goes silent. The battle HUD itself is unchanged.
+- **Flow changes**: VS AI is 01 FACTION -> 02 BATTLEFIELD -> 03 SETUP (map, faction, difficulty, colour, match options:
+  Last Stand / Abilities / hidden counts) -> 04 RIVALS (mode, every seat's army, DEPLOY); SETTINGS no longer holds match
+  options; pause has no toggles; CAMPAIGN opens on the city map (CARDS / CITY MAP switch, remembered) and BACK goes HOME;
+  ONLINE's BACK goes to PLAY; JOIN ROOM types the code in place; CONTINUE after a win opens PLAY, RETRY replays the map.
+- New art (character cutouts, environments, VEX mission images) imported lossy: index.pck +3.4 MB. Arrows / stars on
+  the web no longer show as boxes (a DejaVu fallback on the UI fonts).
+
 ## 0.21.4 "Alpha 21" - 2026-09-28 (online hardening; tutorial card on rotation; per-match perf stats)
 
 - **Online hardening** (server session, from its audit `handoffs/architect-specs/audit-net.md`): per-socket frame caps checked
