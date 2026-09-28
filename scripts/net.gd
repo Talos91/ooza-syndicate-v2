@@ -63,6 +63,10 @@ extends Node
 ## they un-ready, and DEPLOY (can_start) waits for all_ready(). The owner counts as ready - DEPLOY is their ready. An owner's
 ## settings change (mode, map, EMPTY SEATS, LAST STAND, ABILITIES, moving a player) and the return to the lobby un-ready
 ## everyone; the players whose flag an owner's change reset get "Settings changed - press READY again".
+## NAMES (Alpha 21, Daniele 2026-09-28; ooze20-net-7): every player's display name (the ACCOUNT name, own_name()) rides in
+## register; the host cleans it (NAME_MAX printable characters, trimmed) and makes it unique in the room ("NAME (2)"),
+## roster[id]["name"]. name_of(id) = that name, or "PLAYER <seat>" without one; the chat stamp and every screen
+## (main.seat_who) use it. Client-sent: a server room could verify it against the account's profile later (OPEN-QUESTIONS).
 ## ROOM LIMITS (Alpha 21, Daniele 2026-09-28): a server room with no round running (lobby, results) closes after ROOM_IDLE
 ## (10 min; a notice ROOM_IDLE_WARN before, then "rejected" with the reason), so idle tabs can't hold the server's match
 ## slots; the relay lets one address hold 2 server rooms (a refusal with code "limit" is shown, not a browser fallback).
@@ -72,7 +76,7 @@ signal rematch_changed
 signal order_feedback(message: String)
 signal seats_changed                               # host: which seats the AI plays changed
 
-const VERSION_TAG := "ooze20-net-6"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY)
+const VERSION_TAG := "ooze20-net-7"               # plus Rules.VERSION: guests must match the host exactly (2: team switch, room colours; 3: structures 2.1, teams; 4: server-hosted rooms, room owner; 5: delta snapshots, binary frames; 6: READY; 7: player names)
 const MODES := ["1v1", "FFA3", "FFA4", "FFA5", "2v2", "3v3", "2v2v2"]
 const MODE_LABELS := {"1v1": "1 V 1", "FFA3": "FFA 3", "FFA4": "FFA 4", "FFA5": "FFA 5", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2V2V2"}
 const SLOTS := {"1v1": 2, "FFA3": 3, "FFA4": 4, "FFA5": 5, "2v2": 4, "3v3": 6, "2v2v2": 6}
@@ -98,6 +102,7 @@ const PATH_RESEND := 1.0                           # a changed path rides along 
 const MAX_PACKET := 1024 * 1024                   # 0.21.4: a packet, deflated or not (the largest keyframe measured: 81 KB raw /
                                                    # 13 KB deflated, M-58 2v2 late game; net-1's JSON snapshots needed 8 MB)
 const CHAT_MAX := 256
+const NAME_MAX := 16                               # NAMES: a player's name in the room, in characters
 const CHAT_HISTORY := 50
 const HOST_GRACE := 10.0                           # guests wait this long for a silent host (Daniele: 10 s)
 const RELAY_URL := "wss://45-32-126-20.sslip.io/ooze"   # server/relay.py behind Caddy on the Vultr box (Alpha 20)
@@ -132,6 +137,7 @@ var abilities := true                              # ABILITIES ON/OFF (0.18.7: d
 var loadout := {}                                  # your own {"active", "map"} (empty = the faction's default)
 var cosmetic := {}                                 # your own COSMETICS pick {family: id} (0.19.0; empty = default)
 var auth_token := ""                               # 0.20.5: your Supabase access token (Progression sets it; "" = a guest)
+var player_name := ""                              # NAMES: tests / --player-name; "" = the ACCOUNT's name (own_name)
 var own_ghosts := {}                               # guest: horde id -> true for our own decoys (host tells us only)
 var _ghosts_sent := {}                             # host: remote -> the ghost list last sent to it
 # match state
@@ -249,10 +255,69 @@ func local_seat() -> String:
 
 
 func label_of(id: int) -> String:
-	## Chat and lobby name: the seat letter and faction (host-assigned, never typed by the player).
+	## Chat and rematch name: the player's name and faction, stamped by the host (NAMES, net-7; was the seat letter).
 	if not roster.has(id):
 		return "?"
-	return "%s · %s" % [seat_of(id), str(roster[id]["faction"]).to_upper()]
+	return "%s · %s" % [name_of(id).to_upper(), str(roster[id]["faction"]).to_upper()]
+
+
+# --- NAMES (Alpha 21, ooze20-net-7): players' display names in the room ---
+func name_of(id: int) -> String:
+	## A player's name in this room (host-cleaned, unique), or "PLAYER <seat>" when they have none.
+	if not roster.has(id):
+		return ""
+	var nm := str(roster[id].get("name", ""))
+	return nm if nm != "" else "PLAYER %s" % seat_of(id)
+
+
+func own_name() -> String:
+	## Your display name for the room: player_name (tests), else the ACCOUNT's profile name (its last stored copy when it
+	## isn't signed in this run), else "" (the room calls you PLAYER <seat>).
+	var nm := player_name
+	if nm == "" and Account.enabled:
+		var acct = Account._instance                   # the running one only: reading a name never starts an account
+		if acct != null and is_instance_valid(acct):
+			nm = str(acct.player_name)
+		if nm == "":
+			var cf := ConfigFile.new()
+			if cf.load(Account.path) == OK:
+				nm = str(cf.get_value("session", "name", ""))
+	return clean_name(nm)
+
+
+static func clean_name(raw) -> String:
+	## Host and client: printable characters only, spaces collapsed, trimmed, at most NAME_MAX.
+	var out := ""
+	var s := str(raw) if raw is String else ""
+	for i in range(s.length()):
+		var c := s.unicode_at(i)
+		if c < 32 or c == 127 or (c >= 0x200B and c <= 0x200F) or c == 0xFEFF:
+			continue
+		if c == 32 and (out.is_empty() or out.ends_with(" ")):
+			continue
+		out += s.substr(i, 1)
+		if out.length() >= NAME_MAX:
+			break
+	return out.strip_edges()
+
+
+func _unique_name(nm: String, id: int) -> String:
+	## Host: two players with one name become "NAME" and "NAME (2)" (the later one gets the suffix).
+	if nm == "":
+		return ""
+	var taken := {}
+	for other in roster:
+		if int(other) != id:
+			taken[str(roster[other].get("name", "")).to_lower()] = true
+	if not taken.has(nm.to_lower()):
+		return nm
+	for n in range(2, 10):
+		var tail := " (%d)" % n
+		var cand := nm.substr(0, NAME_MAX - tail.length()).strip_edges() + tail
+		if not taken.has(cand.to_lower()):
+			return cand
+	return ""
+# --- end NAMES ---
 
 
 func team_of_slot(slot: int) -> int:
@@ -540,7 +605,7 @@ func _start(host: bool, faction: String, code: String, create := false) -> Error
 	_creating = create
 	if host:
 		room_owner = 1
-		roster = {1: {"faction": faction, "slot": 0, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}}
+		roster = {1: {"faction": faction, "slot": 0, "colour": colour, "loadout": loadout, "cosmetic": cosmetic, "name": own_name()}}
 		if not map_offers(map_path, mode) or not map_path in MapPool.battlefield():   # TUTORIAL: never a lesson map
 			var pool := maps_for(mode)
 			if pool.is_empty():
@@ -949,6 +1014,7 @@ func _register(remote: String, id: int, p: Dictionary) -> void:
 	var f := str(p.get("faction", ""))
 	roster[id] = {"faction": f if f in FACTIONS else FACTIONS[slot % FACTIONS.size()], "slot": slot, "colour": "",
 			"loadout": _clean_loadout(p.get("loadout", {})), "cosmetic": _clean_cosmetic(p.get("cosmetic", {}))}
+	roster[id]["name"] = _unique_name(clean_name(p.get("name", "")), id)   # NAMES (net-7)
 	var want := str(p.get("colour", ""))
 	if colour_allowed(id, want):
 		roster[id]["colour"] = want
@@ -1949,7 +2015,7 @@ func _poll(dt: float) -> void:
 				else:
 					_creating = false
 					remote_host = str(event["peer"])
-					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour, "loadout": loadout, "cosmetic": cosmetic}
+					var reg := {"op": "register", "version": version(), "faction": preferred_faction, "colour": colour, "loadout": loadout, "cosmetic": cosmetic, "name": own_name()}
 					if auth_token != "":
 						reg["auth"] = auth_token          # 0.20.5: verified by a server room's host (not the reconnect "token")
 					if not rejoin.is_empty() and str(rejoin["code"]) == room_code:

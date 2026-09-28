@@ -574,6 +574,11 @@ func seat_who(seat: String) -> Dictionary:
 	if out["human"]:
 		if seat == HUMAN:
 			out["name"] = _my_name()
+		elif online:                                   # NAMES (net-7): the room carries every player's name
+			for id in Net.roster:
+				if Net.seat_of(int(id)) == seat:
+					var nm := Net.name_of(int(id)).to_upper()
+					out["name"] = nm if nm.length() <= Rules.HUD_NAME_MAX else nm.substr(0, Rules.HUD_NAME_MAX - 1) + "…"
 		return out
 	var level := str(Net.ai_seats().get(seat, "")) if online else ai_level
 	for a in ais:
