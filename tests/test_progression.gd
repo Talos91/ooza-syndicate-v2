@@ -327,6 +327,11 @@ func _history() -> void:
 	var other: Dictionary = merged.filter(func(h): return h["map"] == "C-05")[0]
 	check(other["online"] and other["won"] and other["players"][1]["ai_level"] == "Expert", "a server round from another device: %s" % str(other))
 	check(int(merged[0]["t"]) >= int(merged[1]["t"]) and int(merged[1]["t"]) >= int(merged[2]["t"]), "newest first")
+	# the server may send JSON null for a boolean (is_me for a caller who isn't signed in; 🧩 UI's crash report)
+	var nulls := Progression.merge_history([], [{"match_id": "NN-1-1", "started_at": "2026-09-27T12:10:00+00:00", "map": "M-01",
+			"outcome": {"draw": null}, "seats": [{"seat": "A", "is_me": null, "won": null}]}])
+	check(nulls.size() == 1 and not nulls[0]["won"] and not nulls[0]["draw"] and not nulls[0]["players"][0]["is_me"],
+			"null booleans from the server read as false, no crash")
 
 
 func _ticker() -> void:
