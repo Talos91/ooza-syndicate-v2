@@ -1758,7 +1758,7 @@ func _who_line(seat: String) -> String:
 	var w: Dictionary = main.seat_who(seat)
 	if bool(w["human"]):
 		var nm := str(w["name"]) if str(w["name"]) != "" else "PLAYER"
-		return "%s%s  ·  %s" % [nm, " (YOU)" if bool(w["you"]) else "", str(w["faction"])]
+		return "%s%s  ·  %s" % [nm, " (YOU)" if bool(w["you"]) and nm != "YOU" else "", str(w["faction"])]   # the "YOU" fallback needs no tag
 	return "%s  ·  %s" % [str(w["faction"]), str(w["tag"])]
 
 
@@ -1786,7 +1786,7 @@ func _seat_heads() -> Dictionary:
 		var w: Dictionary = main.seat_who(str(s))
 		if bool(w["human"]):
 			var nm := str(w["name"]) if str(w["name"]) != "" else "PLAYER"
-			out[s] = ["%s (YOU)" % nm if bool(w["you"]) else nm, str(w["faction"])]
+			out[s] = ["%s (YOU)" % nm if bool(w["you"]) and nm != "YOU" else nm, str(w["faction"])]
 		else:
 			out[s] = [str(w["faction"]), str(w["tag"])]
 	return out
