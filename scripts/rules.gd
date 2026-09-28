@@ -843,7 +843,7 @@ const TELEMETRY := {
 	"long_frame_ms": 50,        # a frame this long counts as a long frame (heat / stutter proxy)
 	"retention_days": 60,       # shown in the notice; the purge is the database's (purge_telemetry)
 	"crash_retention_days": 90,
-	"contact": "privacy@ooze-syndicate.example",   # PLACEHOLDER until Daniele creates the game mailbox
+	"contact": "info@oozesyndicate.com",   # Daniele, 2026-09-28 (the domain is to be registered)
 	"policy_url": "https://talos91.github.io/ooza-syndicate-v2/privacy.html",
 	"min_age": 13,
 }
