@@ -131,40 +131,10 @@ static func tint_emblem(rect: TextureRect, color: Color) -> void:
 	rect.modulate = Color.WHITE
 
 
-static var _emblem_cache := {}
-
-
 static func emblem_texture(faction: String) -> Texture2D:
-	## A faction emblem for the HUD's small spots (badges, inspector, toasts). The SVGs are 200 px and
-	## imported without mipmaps, so drawn at ~20 px their thin strokes broke up: a mipmapped copy is
-	## made once per faction (the imported texture itself if its image can't be read back).
-	if _emblem_cache.has(faction):
-		return _emblem_cache[faction]
-	var path := "res://assets/ui/%s.svg" % faction
-	var tex: Texture2D = load(path if ResourceLoader.exists(path) else "res://assets/ui/null.svg")
-	var out: Texture2D = tex
-	var img: Image = tex.get_image() if tex else null
-	if img and not img.is_empty():
-		img = img.duplicate()
-		if img.is_compressed():
-			img.decompress()
-		img.convert(Image.FORMAT_RGBA8)
-		img.fix_alpha_edges()                          # no dark fringe in the smaller mip levels
-		img.generate_mipmaps()
-		# the thin-stroke emblems (NULL, VEX) averaged down to a faint haze at badge size: the coverage
-		# of the small levels (50 px and below) is lifted so their strokes keep reading as lines
-		var lut := PackedByteArray()
-		lut.resize(256)
-		for a in range(256):
-			lut[a] = int(round(255.0 * pow(a / 255.0, 0.5)))
-		var data := img.get_data()
-		var from := img.get_mipmap_offset(mini(2, img.get_mipmap_count()))
-		for i in range(from + 3, data.size(), 4):
-			data[i] = lut[data[i]]
-		img = Image.create_from_data(img.get_width(), img.get_height(), true, Image.FORMAT_RGBA8, data)
-		out = ImageTexture.create_from_image(img)
-	_emblem_cache[faction] = out
-	return out
+	## A faction emblem for the HUD's small spots (badges, inspector, toasts): the race emblems v2, from their one
+	## source (UiKit.emblem_mip - mipmapped, the small levels lifted), tinted in the seat colour by tint_emblem.
+	return UiKit.emblem_mip(faction)
 
 
 func seat_emblem(seat: String, size_px: Vector2) -> TextureRect:

@@ -13,6 +13,7 @@ extends CanvasLayer
 signal finished
 
 const AUTO_SECONDS := 3.0
+const STAGE_FLOOR := 0.8                           # the stages' platform ring centre (fraction of the art's height)
 const SKIP_ARGS := ["--map=", "--demo", "--shots=", "--ff=", "--menu-", "--mission", "--tutorial=", "--scenario=",
 		"--thumb=", "--focus="]
 static var last_mission := ""                      # the mission the card was last offered for (its RETRY skips it)
@@ -137,20 +138,19 @@ func _build() -> void:
 	var you := str(main.HUMAN)
 	var yf := str(main.SEAT_FACTIONS[you])
 	var acc := UiKit.accent(yf)
-	var bg := TextureRect.new()                     # your faction's environment, dark, over the waiting board
-	bg.texture = UiKit.background(yf)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.modulate = Color(0.42, 0.45, 0.5)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.position = -Vector2(ins.x, ins.y) / s           # the art and its dim still fill the whole screen
-	bg.size = vp / s
-	content.add_child(bg)
-	var shade := UiKit.rect(bg.position, bg.size, Color(UiKit.BASE, 0.35))
+	var full := Rect2(-Vector2(ins.x, ins.y) / s, vp / s)   # the art still fills the whole screen (bands too)
+	var sides := _sides()
+	# Daniele's FINAL VERSUS art (2026-09-28): each side on its own faction's empty stage, split down the middle -
+	# placed once the sides are laid out, so each creature stands on its platform
+	var hw := full.size.x / 2.0
+	var stages := [_stage_half(Rect2(full.position, Vector2(hw, full.size.y))),
+			_stage_half(Rect2(full.position + Vector2(hw, 0), Vector2(hw, full.size.y)))]
+	var shade := UiKit.rect(full.position, full.size, Color(UiKit.BASE, 0.0))
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP     # a tap in a band goes on too (never to the board)
 	shade.gui_input.connect(_on_input)
 	content.add_child(shade)
-	var sides := _sides()
+	_wash(Rect2(full.position.x + hw - 150.0, full.position.y, 300.0, full.size.y), true)   # the seam, under VS
+	_wash(Rect2(full.position.x, full.end.y - 210.0, full.size.x, 210.0), false)           # the foot
 	var x := maxf(26.0, W * 0.024)
 	var top := 26.0 if mobile else 40.0
 	var bh := UiKit.tap_h(self, 50.0)
@@ -159,8 +159,10 @@ func _build() -> void:
 	var foot := bh + info_h + hint_h + 30.0
 	var col_h := H - top - foot - 20.0
 	var half := (W - x * 2.0) * 0.4
-	_side(sides[0], Vector2(x, top), Vector2(half, col_h), true)
-	_side(sides[1], Vector2(W - x - half, top), Vector2(half, col_h), false)
+	var floor0 := _side(sides[0], Vector2(x, top), Vector2(half, col_h), true)
+	var floor1 := _side(sides[1], Vector2(W - x - half, top), Vector2(half, col_h), false)
+	_place_stage(stages[0], _side_faction(sides[0], yf), floor0 if floor0 > 0.0 else floor1)
+	_place_stage(stages[1], _side_faction(sides[1], yf), floor1 if floor1 > 0.0 else floor0)
 	# VS, its glow, between the two
 	var vs_c := Vector2(W / 2.0, top + col_h * 0.45)
 	var glow := TextureRect.new()
@@ -214,18 +216,78 @@ func _build() -> void:
 		tw.tween_property(vs, "modulate:a", 1.0, 0.25)
 
 
-func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> void:
-	## One side: the kicker, then each seat's character, name and seat (one large; several smaller, side by side).
+func _side_faction(seats: Array, fallback: String) -> String:
+	return str(main.SEAT_FACTIONS[seats[0]]) if not seats.is_empty() else fallback
+
+
+func _stage_half(r: Rect2) -> TextureRect:
+	## One half of the screen, clipped, for a side's stage (its art placed by _place_stage).
+	var clip := Control.new()
+	clip.clip_contents = true
+	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	clip.position = r.position
+	clip.size = r.size
+	content.add_child(clip)
+	var t := TextureRect.new()
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_SCALE
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	t.modulate = Color(0.82, 0.84, 0.88)
+	clip.add_child(t)
+	return t
+
+
+func _place_stage(t: TextureRect, f: String, floor_y: float) -> void:
+	## The faction's stage covering its half, scaled / shifted so the platform's centre (STAGE_FLOOR) sits at
+	## `floor_y` (page units) - where the side's creatures stand.
+	t.texture = UiKit.stage(f)
+	var clip := t.get_parent() as Control
+	var r := Rect2(clip.position, clip.size)
+	var fy := clampf(floor_y - r.position.y, r.size.y * 0.3, r.size.y * 0.95)   # in the half's own units
+	var cover := maxf(r.size.x, r.size.y)
+	var side := clampf(maxf(fy / STAGE_FLOOR, (r.size.y - fy) / (1.0 - STAGE_FLOOR)), cover, cover * 1.35)   # zoom capped:
+	t.size = Vector2(side, side)                                    # a high floor line (FFA rows) lets the platform sit lower
+	t.position = Vector2((r.size.x - side) / 2.0, clampf(fy - side * STAGE_FLOOR, r.size.y - side, 0.0))
+
+
+func _wash(r: Rect2, across: bool) -> void:
+	## A dark wash: `across` = a vertical seam band (dark in its middle), else a foot band (dark at its bottom).
+	var g := Gradient.new()
+	g.set_color(0, Color(UiKit.BASE, 0.0))
+	if across:
+		g.add_point(0.5, Color(UiKit.BASE, 0.62))
+		g.set_color(g.get_point_count() - 1, Color(UiKit.BASE, 0.0))
+	else:
+		g.set_color(1, Color(UiKit.BASE, 0.88))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill_from = Vector2.ZERO
+	gt.fill_to = Vector2(1, 0) if across else Vector2(0, 1)
+	var w := TextureRect.new()
+	w.texture = gt
+	w.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	w.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	w.position = r.position
+	w.size = r.size
+	content.add_child(w)
+
+
+func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> float:
+	## One side: the kicker, then each seat's character (standing on the side's stage), emblem, name and seat (one
+	## large; several smaller, side by side). Returns the floor line the side's front row stands on (0: no seats).
 	if seats.is_empty():
-		return
+		return 0.0
 	var f0 := str(main.SEAT_FACTIONS[seats[0]])
 	var kick := ("YOU / SEAT %s" % seats[0]) if mine else ("RIVAL / SEAT %s" % seats[0] if seats.size() == 1 else "RIVALS")
 	if mine and seats.size() > 1:
 		kick = "YOUR TEAM"
-	var k := UiKit.label(self, kick, 13, UiKit.accent(f0) if (mine or seats.size() == 1) else UiKit.MUTED, true, 3)
+	var k := UiKit.label(self, kick, 13, UiKit.accent(f0) if (mine or seats.size() == 1) else UiKit.INK, true, 3)
 	k.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	k.size = Vector2(dims.x, UiKit.line_h(self, 13, true))
 	k.position = pos
+	var kw := UiKit.text_w(self, kick, 13, true) + kick.length() * 3.0 + 28.0   # on a dark plate: the sky is bright
+	content.add_child(UiKit.rect(Vector2(pos.x + (dims.x - kw) / 2.0, pos.y - 5.0), Vector2(kw, k.size.y + 10.0),
+			Color(UiKit.BASE, 0.82)))
 	content.add_child(k)
 	var n := seats.size()
 	var name_h := UiKit.line_h(self, 34 if n == 1 else 18, true) + UiKit.line_h(self, 12) + 8.0
@@ -244,6 +306,7 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> void:
 	var block_h := rows * (hs + name_h) + (rows - 1) * gap
 	var y0 := pos.y + k.size.y + 12.0 + (room - block_h) / 2.0
 	var from := -60.0 if mine else 60.0
+	var floor_y := y0 + (rows - 1) * (hs + name_h + gap) + hs * 0.97   # the front (last) row's feet
 	for i in range(n):
 		var seat := str(seats[i])
 		var f := str(main.SEAT_FACTIONS[seat])
@@ -255,19 +318,32 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> void:
 		cell.position = Vector2(pos.x + (dims.x - row_w) / 2.0 + (i % cols) * (hs + gap), y0 + r * (hs + name_h + gap))
 		cell.size = Vector2(hs, hs + name_h)
 		content.add_child(cell)
-		var hero := UiKit.hero(self, f, Vector2.ZERO, Vector2(hs, hs))
-		for c in [content.get_child(content.get_child_count() - 2), hero]:   # the glow and the cutout, into the cell
-			content.remove_child(c)
-			cell.add_child(c)
+		var hero := UiKit.hero(self, f, Vector2.ZERO, Vector2(hs, hs), false)
+		content.remove_child(hero)                    # the cutout, into the cell (on the stage: no glow)
+		cell.add_child(hero)
 		var who := _title_of(seat, f)
 		if n > 1:                                    # compact: one short line under the name
 			who[1] = _compact_of(seat, f)
 		var lw := hs + gap if n > 1 else maxf(hs, 160.0)
-		var nm := UiKit.label(self, who[0], 34 if n == 1 else 18, UiKit.INK, true)
-		nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var fs := 34 if n == 1 else 18
+		var nh := UiKit.line_h(self, fs, true)
+		var es := nh * 0.9                            # the race emblem, left of the name
+		var name_w := minf(UiKit.text_w(self, str(who[0]), fs, true), lw - es - 8.0)
+		var plate := UiKit.rect(Vector2((hs - lw) / 2.0, hs + 2.0), Vector2(lw, nh + UiKit.line_h(self, 12) + 12.0),
+				Color(UiKit.BASE, 0.8))                # the name reads on the bright platform
+		cell.add_child(plate)
+		var em := TextureRect.new()
+		em.texture = UiKit.emblem(f, es)
+		em.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		em.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		em.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		em.size = Vector2(es, es)
+		em.position = Vector2((hs - name_w - es - 8.0) / 2.0, hs + 4.0 + (nh - es) / 2.0)
+		cell.add_child(em)
+		var nm := UiKit.label(self, who[0], fs, UiKit.INK, true)
 		nm.clip_text = true
-		nm.size = Vector2(lw, UiKit.line_h(self, 34 if n == 1 else 18, true))
-		nm.position = Vector2((hs - nm.size.x) / 2.0, hs + 4.0)
+		nm.size = Vector2(name_w + 4.0, nh)
+		nm.position = Vector2(em.position.x + es + 8.0, hs + 4.0)
 		cell.add_child(nm)
 		var sub := UiKit.label(self, who[1], 12, UiKit.MUTED, true, 2)
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -284,6 +360,7 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> void:
 			var tw := create_tween().set_parallel(true)
 			tw.tween_property(cell, "position", end, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT).set_delay(0.05 * i)
 			tw.tween_property(cell, "modulate:a", 1.0, 0.3).set_delay(0.05 * i)
+	return floor_y
 
 
 func _title_of(seat: String, f: String) -> Array:

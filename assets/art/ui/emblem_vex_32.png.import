@@ -2,22 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c2iegfs55un2v"
-path="res://.godot/imported/bloom.svg-9d5fa105508be51c3f13b4f81dca4945.ctex"
+uid="uid://b88ekxat8bmnm"
+path="res://.godot/imported/emblem_vex_32.png-ca7bd635af4838808f7dfd0a39f50fd5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/bloom.svg"
-dest_files=["res://.godot/imported/bloom.svg-9d5fa105508be51c3f13b4f81dca4945.ctex"]
+source_file="res://assets/art/ui/emblem_vex_32.png"
+dest_files=["res://.godot/imported/emblem_vex_32.png-ca7bd635af4838808f7dfd0a39f50fd5.ctex"]
 
 [params]
 
 compress/mode=0
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.8
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

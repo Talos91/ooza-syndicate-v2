@@ -2,22 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://btr722do6w2b1"
-path="res://.godot/imported/ember.svg-550bf4ef6d068b1d4efc751a92e0e838.ctex"
+uid="uid://bk6af2sg1hqjd"
+path="res://.godot/imported/emblem_ember_32.png-0c45d2febe873b49c5677e1891898d0a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/ember.svg"
-dest_files=["res://.godot/imported/ember.svg-550bf4ef6d068b1d4efc751a92e0e838.ctex"]
+source_file="res://assets/art/ui/emblem_ember_32.png"
+dest_files=["res://.godot/imported/emblem_ember_32.png-0c45d2febe873b49c5677e1891898d0a.ctex"]
 
 [params]
 
 compress/mode=0
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.8
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

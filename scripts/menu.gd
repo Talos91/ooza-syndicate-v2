@@ -572,7 +572,7 @@ func show_main() -> void:
 	_is_main = true
 	if _backdrop:
 		_backdrop.modulate = Color(0.9, 0.9, 0.92)       # the wallpaper bright (the pages behind panels stay darker)
-		_backdrop_ay = 0.8
+		_backdrop_ay = 0.7
 		_place_backdrop()
 	var acc := UiKit.accent(hero)
 	_fade_left(area, content.size.x * 0.62)
@@ -644,7 +644,6 @@ func show_play() -> void:
 	## rivals), ONLINE ROOMS, TRAINING. In your faction's accent like every page (Daniele 2026-09-28: not always cyan).
 	_last_show = show_play
 	var area := shell_open("OOZE / PLAY", "play")
-	var other: String = UiKit.ORDER[(UiKit.ORDER.find(faction) + 1) % UiKit.ORDER.size()]   # ONLINE shows another face
 	var x := shell_x()
 	var top := page_title(area, "PLAY", "PICK YOUR FIGHT.")
 	var gap := 16.0
@@ -652,10 +651,11 @@ func show_play() -> void:
 	var ch := area.end.y - top - 18.0
 	var done := TutorialDirector.done_count()
 	var cards := [
-		["CUSTOM MATCH", "VS AI", "Pick a faction, a battlefield and your rivals.", "res://assets/art/ui/bg_%s.jpg" % faction, faction, show_factions],
-		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/ui/bg_%s.jpg" % other, other, show_online],
+		# Daniele's FINAL PLAY art (2026-09-28): the creatures are in the pictures, so no cutout over them
+		["CUSTOM MATCH", "VS AI", "Pick a faction, a battlefield and your rivals.", "res://assets/art/ui/play_vs_ai.jpg", show_factions],
+		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/ui/play_online.jpg", show_online],
 		["LEARN THE CITY", "TRAINING", "%d / %d lessons done. Replay any lesson." % [done, TutorialDirector.TOTAL_LESSONS],
-				"res://assets/art/campaign/vex-01.jpg", "", show_tutorial],
+				"res://assets/art/ui/play_training.jpg", show_tutorial],
 	]
 	for i in range(cards.size()):
 		var c := FrameCard.make(self, Vector2(cw, ch), faction)
@@ -664,10 +664,9 @@ func show_play() -> void:
 		c.set_title(cards[i][1])
 		c.set_note(cards[i][2])
 		c.set_art(cards[i][3])
-		c.set_hero(cards[i][4])
 		c.set_action("PLAY  →" if i == 0 else "OPEN")
 		c.set_selected(i == 0)
-		var go: Callable = cards[i][5]
+		var go: Callable = cards[i][4]
 		c.pressed.connect(func(): go.call_deferred())
 		_shell_add(c, Vector2(x + i * (cw + gap), top))
 

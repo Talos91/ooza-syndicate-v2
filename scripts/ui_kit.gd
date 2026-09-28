@@ -307,13 +307,17 @@ static func stat(m, pos: Vector2, value: String, caption: String, col := INK) ->
 	return maxf(text_w(m, value, 22, true), text_w(m, caption, 12))
 
 
-static func tag(m, text: String, pos: Vector2, f := "vex") -> Vector2:
-	## "EMBER / MAW": a dark plate with the accent bar on its left; returns its size.
+static func tag(m, text: String, pos: Vector2, f := "vex", mark := true) -> Vector2:
+	## "EMBER / MAW": a dark plate with the accent bar on its left and the faction's emblem (`mark`); returns its size.
 	var l := label(m, text.to_upper(), 14, INK, true, 2)
-	var dims := Vector2(text_w(m, text.to_upper(), 14, true) + text.length() * 2.0 + 30.0, l.get_minimum_size().y + 14.0)
+	var lh := l.get_minimum_size().y
+	var es := lh + 6.0 if mark else 0.0
+	var dims := Vector2(text_w(m, text.to_upper(), 14, true) + text.length() * 2.0 + 30.0 + (es + 6.0 if mark else 0.0), lh + 14.0)
 	m.content.add_child(rect(pos, dims, Color(BASE, 0.88)))
 	m.content.add_child(rect(pos, Vector2(3.0, dims.y), accent(f)))
-	add(m, l, pos + Vector2(16.0, 7.0))
+	if mark:
+		emblem_rect(m, f, pos + Vector2(12.0, (dims.y - es) / 2.0), es)
+	add(m, l, pos + Vector2(16.0 + (es + 6.0 if mark else 0.0), 7.0))
 	return dims
 
 
@@ -444,6 +448,66 @@ static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true) -> Tex
 	return add(m, r, pos) as TextureRect
 
 
+# ------------------------------------------------------------------ the race emblems (THE faction mark, everywhere)
+## Daniele's race emblems v2 (Art/Interface/Final set 2026-09-28/emblems; SOLAR = v2), cut out by tools/ui_art.py:
+## emblem_<f>.png (192 px) and emblem_<f>_32.png (32 px, downsampled offline so small spots stay crisp). Every faction
+## mark reads from here: the menus (emblem / emblem_rect), the HUD's badges, chips and inspector (Hud.emblem_texture ->
+## emblem_mip, tinted in the seat colour there), the lobby's hex chips (their white silhouette).
+static var _emblem_mips := {}
+
+
+static func emblem_path(f: String, small := false) -> String:
+	return "res://assets/art/ui/emblem_%s%s.png" % [f if ACCENTS.has(f) else "vex", "_32" if small else ""]
+
+
+static func emblem(f: String, px := 64.0) -> Texture2D:
+	## The faction's emblem for a spot `px` canvas units across (<= 40: the 32 px cut).
+	var p := emblem_path(f, px <= 40.0)
+	return load(p) if ResourceLoader.exists(p) else null
+
+
+static func emblem_mip(f: String) -> Texture2D:
+	## The 192 px emblem with mipmaps (made once per faction), for spots drawn at many sizes (the HUD's badges scale
+	## with ui_scale; TEXTURE_FILTER_LINEAR_WITH_MIPMAPS there); the small levels' coverage lifted so the thin ring
+	## keeps reading as a line at ~18 px.
+	if _emblem_mips.has(f):
+		return _emblem_mips[f]
+	var tex := emblem(f, 192.0)
+	var out: Texture2D = tex
+	var img: Image = tex.get_image() if tex else null
+	if img and not img.is_empty():
+		img = img.duplicate()
+		if img.is_compressed():
+			img.decompress()
+		img.convert(Image.FORMAT_RGBA8)
+		img.fix_alpha_edges()                          # no dark fringe in the smaller mip levels
+		img.generate_mipmaps()
+		var lut := PackedByteArray()
+		lut.resize(256)
+		for a in range(256):
+			lut[a] = int(round(255.0 * pow(a / 255.0, 0.6)))
+		var data := img.get_data()
+		var from := img.get_mipmap_offset(mini(2, img.get_mipmap_count()))
+		for i in range(from + 3, data.size(), 4):
+			data[i] = lut[data[i]]
+		img = Image.create_from_data(img.get_width(), img.get_height(), true, Image.FORMAT_RGBA8, data)
+		out = ImageTexture.create_from_image(img)
+	_emblem_mips[f] = out
+	return out
+
+
+static func emblem_rect(m, f: String, pos: Vector2, side: float) -> TextureRect:
+	## The faction's emblem, `side` canvas units square, added to the page at `pos` (its own colours: a faction mark;
+	## ownership stays the seat colour beside it).
+	var r := TextureRect.new()
+	r.texture = emblem(f, side)
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.size = Vector2(side, side)
+	return add(m, r, pos) as TextureRect
+
+
 static func map_thumb(path: String) -> Texture2D:
 	## A map's menu thumbnail (MapPool.thumb, 960x540) without its baked caption strip (the bottom 11 %: name and modes in
 	## ~4 pt type on a phone - the iPhone sweep - which every page already writes out beside it). The map itself is whole.
@@ -457,8 +521,14 @@ static func map_thumb(path: String) -> Texture2D:
 
 
 static func background(f: String) -> Texture2D:
-	## The faction's environment plate (the pages' backdrop; Daniele will supply new wallpapers after this pass).
+	## The faction's FINAL wallpaper (Daniele 2026-09-28; the pages' backdrop and HOME's scene).
 	var p := "res://assets/art/ui/bg_%s.jpg" % (f if ACCENTS.has(f) else "vex")
+	return load(p) if ResourceLoader.exists(p) else null
+
+
+static func stage(f: String) -> Texture2D:
+	## The faction's empty VERSUS stage (Daniele's FINAL set; a creature cutout stands on its platform).
+	var p := "res://assets/art/ui/stage_%s.jpg" % (f if ACCENTS.has(f) else "vex")
 	return load(p) if ResourceLoader.exists(p) else null
 
 

@@ -10,7 +10,8 @@ Sources (Daniele's Art Direction folder, "Alpha 20 UI Expansion" / ASSET-SOURCES
                                  the creature is in it, on the right)
       play/<card>.png         -> assets/art/ui/play_<card>.jpg (1024 px; the PLAY cards)
       versus/<faction>.png    -> assets/art/ui/stage_<faction>.jpg (1024 px; VERSUS: each side's empty stage)
-      emblems/<faction>-*.png -> assets/art/ui/emblem_<faction>.png (192 px RGBA; the faction's mark)
+      emblems/<faction>-*.png -> assets/art/ui/emblem_<faction>.png (192 px RGBA) + emblem_<faction>_32.png (32 px):
+                                 THE faction mark everywhere (UiKit.emblem; the HUD tints it in the seat colour)
   - the VEX campaign mission art, campaign-isometric-v2/*.png       -> assets/art/campaign/vex-<id>.jpg (1280 px)
 JPEG for the opaque plates keeps the source small; their .import files are LOSSY (quality 0.8) with a size limit
 (backdrops 1600, mission art / PLAY cards / stages 1024, cutouts 640, emblems 192), or Godot stores them lossless and the web index.pck grows ~20 MB.
@@ -119,6 +120,8 @@ def main() -> int:
         em = Image.open(os.path.join(FINAL, "emblems", EMBLEM[f] + ".png")).convert("RGBA")
         em = em.crop(em.getbbox())
         fit(em, 192).save(os.path.join(OUT_UI, "emblem_%s.png" % f), optimize=True)
+        small = em.resize((32, round(em.height * 32 / em.width)), Image.LANCZOS)   # from the full cut, not the 192
+        small.filter(ImageFilter.UnsharpMask(1, 60, 2)).save(os.path.join(OUT_UI, "emblem_%s_32.png" % f), optimize=True)
     for card, src in PLAY_CARDS.items():
         fit(Image.open(os.path.join(FINAL, "play", src + ".png")).convert("RGB"), 1024).save(
             os.path.join(OUT_UI, "play_%s.jpg" % card), quality=84)
