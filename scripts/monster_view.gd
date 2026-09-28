@@ -116,6 +116,11 @@ func _sync_hubs(dt: float) -> void:
 				(h["idle"] as Node).queue_free()
 			h["idle"] = _make_monster(idle_key, n["owner"])
 			h["idle_key"] = idle_key
+			h["idle_owner"] = n["owner"]
+		elif str(h.get("idle_owner", "")) != n["owner"]:   # audit A1: a capture with the same model (a same-faction or
+			h["idle_owner"] = n["owner"]                    # default-skin owner): the idle monster takes the new colours
+			if is_instance_valid(h["idle"]):
+				dress(h["idle"] as Node3D, sim.factions.get(n["owner"], "null"), n["owner"])
 		var idle: Node3D = h["idle"]
 		var home := int(n["hub_monster"]) < 0 or m.is_empty()
 		idle.visible = home and n["owner"] != ""
@@ -500,6 +505,7 @@ static func stage(main: Node, arg: String) -> void:
 	##   relays          seat A owns every relay, the first fires at 0.6 s (ready / warning / cooling looks)
 	##   vats:<look>     every free node becomes seat A's in vat look <look> (Cosmetics id), tiers 1-3 round the
 	##                   map, part-filled, and each sends a line out (the bodies drop out of the tanks)
+	_staged = true
 	var sim: Sim = main.get("sim")
 	var what := arg.split(":")[0]
 	var node := int(arg.split(":")[1]) if arg.contains(":") else -1
@@ -624,8 +630,13 @@ static func stage(main: Node, arg: String) -> void:
 		MapBuilder.apply_owner(main.get("vis")[n["id"]]["parts"], n["owner"])
 
 
+static var _staged := false           # a --stage moment was set up (stage_tick does nothing otherwise)
+
+
 static func stage_tick(main: Node) -> void:
 	## Per frame while a staged moment waits: launch the monster, send the lines at the guns.
+	if not _staged:
+		return                                        # perf pass: debug only - nothing to read in a real match
 	var sim: Sim = main.get("sim")
 	if sim.time < 0.6:
 		return

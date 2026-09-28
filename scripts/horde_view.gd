@@ -598,7 +598,7 @@ func _draw_corridors(sim: Sim) -> void:
 		var e: Dictionary = sim.edges[i]
 		var a: Dictionary = sim.nodes[e["a"]]
 		var b: Dictionary = sim.nodes[e["b"]]
-		var held: bool = sim.bonded(i) and not classic
+		var held: bool = not classic and sim.bonded(i)   # (BRAWL: no corridors - no bond test per deck per frame)
 		var st: Dictionary = corridor_state.get(i, {})
 		if st.is_empty():
 			if not held:
@@ -751,6 +751,11 @@ func _draw_rivers(sim: Sim, seen: Dictionary, dt: float) -> void:
 		var vis: float = r["vis"]
 		vis += (total - vis) * minf(1.0, EASE * 0.6 * dt)
 		r["vis"] = vis
+		if classic and (n["siege"] as Dictionary).is_empty():   # BRAWL draws only attackers on a platform: none here
+			if r.get("sig", "") != "brawl":              # (perf pass: no signature string per node per frame)
+				_hide_river(r)
+				r["sig"] = "brawl"
+			continue
 		if vis < 1.0:
 			_hide_river(r)
 			continue
