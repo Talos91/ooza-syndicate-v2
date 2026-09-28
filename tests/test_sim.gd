@@ -369,6 +369,42 @@ func _init() -> void:
 	run_until(sim17, func(): return sim17.nodes[0]["relay_phase"] == "", 8.0)
 	check(sim17.find_route(1, 4).size() == 2 and sim17.find_route(1, 3).size() != 2, "m2: 1-4 is direct now and 1-3 is gone")
 
+	# AI + remote (0.22.4, Daniele via Map Builder, N-04: "the AI never gets on a remote-controlled
+	# bridge, not even once"). First: with the console at m1 (its start state) the direct 1-3 deck is
+	# the fastest way to a target at 3 - the AI must actually send a line across it, not detour via 0.
+	var sim17b := Sim.new()
+	sim17b.setup(rem_map, rem_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
+	sim17b.nodes[1]["owner"] = "A"
+	sim17b.nodes[1]["units"] = 300.0
+	var h17b := SeatAI.new("A", 2.0, "Standard")._send(sim17b, 1, 3, 0.3)
+	check(not h17b.is_empty() and h17b["route"] == [1, 3], "the AI sends a line over the open remote deck (1-3) when it is the fastest way in (%s)" % str(h17b.get("route", [])))
+
+	# Second: node 4 is reachable ONLY through the remote console's other state (edge 8, "1-4", m2) -
+	# its bypass through 0 and its other remote deck (edge 7, "2-4", m1) are both gone. Level 0/1
+	# (Standard, "relays" == 1) never opens a route, only reacts to what is already open, so node 4
+	# stays out of its reach; level 2+ (Veteran/Expert, "relays" >= 2) must capture the console, fire
+	# it, and then take node 4 once the deck it needed opens.
+	for level in ["Standard", "Veteran"]:
+		var sim17c := Sim.new()
+		sim17c.setup(rem_map, rem_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
+		sim17c.demolished[5] = 999999.0                   # edge "4-0": node 4's bypass is gone
+		sim17c.demolished[7] = 999999.0                   # edge "2-4" (m1): its other remote deck too
+		sim17c.nodes[5]["units"] = 500.0
+		check(sim17c.find_route(5, 4).is_empty(), "node 4 is unreachable right now (m1: only edge 8 (m2) would reach it, and it is closed)")
+		var ai := SeatAI.new("A", 2.0, level)
+		var fired_m2 := false
+		for _t in range(600):
+			ai.think(sim17c, 1.0)
+			sim17c.step(1.0)
+			if sim17c.events.any(func(e): return e["type"] == "relay_fired" and e["seat"] == "A"):
+				fired_m2 = true
+			if sim17c.nodes[4]["owner"] == "A":
+				break
+		if level == "Standard":
+			check(not fired_m2 and sim17c.nodes[4]["owner"] != "A", "Standard (relays 1) never opens a route: node 4 stays out of its reach")
+		else:
+			check(fired_m2 and sim17c.nodes[4]["owner"] == "A", "%s (relays >= 2) captures the console, fires it, then takes node 4 through the deck it opened" % level)
+
 	# LAST STAND (GAME-RULES sec10): hidden method from the map's list, revealed with the order at
 	# the start; 10 s warning per node; everything on the node dies; the final never drops.
 	var sim18 := Sim.new()
