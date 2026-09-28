@@ -525,164 +525,177 @@ func _sync_strip() -> void:
 
 
 # ---------------------------------------------------------------- the end
+# UI (Alpha 21 UI pass, SCREEN-SYSTEM 18 / 19 / 20): the closing line and the result are MatchScreens pages in the
+# mission faction's accent - the same VICTORY / DEFEAT / MATCH DETAILS as a normal match, plus the stars, the optional
+# objective, the one-off reward, the unlocks and the XP strip (all of Campaign.record's / Progression's lines, as before).
+var _page := "result"                                # the result's page: "result" or "details"
+
+
+func _faction() -> String:
+	return str(main.SEAT_FACTIONS.get(d.seat, "vex")) if main else "vex"
+
+
+func _new_screen() -> MatchScreens:
+	## A full-screen layer of its own for a result page (it replaces the open modal; taps stop there).
+	if _modal:
+		_modal.queue_free()
+	_modal = Control.new()
+	_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_modal.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(_modal)
+	_card = null
+	return MatchScreens.open(_modal, mobile, _faction())
+
+
 func show_end(res: Dictionary, summary: Dictionary, xp := {}) -> void:
 	## The mission's closing line (the handler), then the result screen (tap skips ahead).
 	_end = {"result": res, "summary": summary, "xp": xp}
 	_animated = false
+	_page = "result"
 	strip.visible = false
 	phase = "endline"
 	_end_t = END_LINE_SECONDS
-	var vp := get_viewport().get_visible_rect().size
-	var modal := _new_modal(0.35)
-	modal.gui_input.connect(func(ev):
+	var won := bool(res.get("won", false))
+	var s := _new_screen()
+	s.card({"kicker": "DISTRICT SECURED" if won else "THE CITY PUSHED BACK", "headline": "MISSION COMPLETE." if won else "MISSION FAILED.",
+			"body": "%s:  %s" % [Campaign.HANDLER, str(m.get("win_line" if won else "lose_line", ""))], "dim": 0.35})
+	_modal.gui_input.connect(func(ev):
 		if ev is InputEventMouseButton and ev.pressed and phase == "endline":
 			_show_result())
-	var won := bool(res.get("won", false))
-	var w := minf(vp.x - u(24), u(520))
-	var card := _make_card(w, GOOD if won else BAD)
-	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	modal.add_child(card)
-	var col := _vbox(6)
-	card.add_child(col)
-	var t := _label("MISSION COMPLETE" if won else "MISSION FAILED", 24, GOOD if won else BAD)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(t)
-	var row := _hbox(8)
-	row.add_child(_label(Campaign.HANDLER, 13, accent))
-	row.add_child(_label(str(m.get("win_line" if won else "lose_line", "")), 15, TEXT, w - u(28) - u(90)))
-	col.add_child(row)
-	_centre(card, 0.4)
-	card.scale = Vector2(0.92, 0.92)
-	card.pivot_offset = card.size / 2.0
-	card.modulate = Color(1, 1, 1, 0)
-	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(card, "scale", Vector2.ONE, 0.35)
-	tw.tween_property(card, "modulate", Color.WHITE, 0.25)
+	_modal.modulate = Color(1, 1, 1, 0)
+	create_tween().tween_property(_modal, "modulate", Color.WHITE, 0.25)
+
+
+func _star_rules() -> Array:
+	## The three stars' rules (CAMPAIGN-DESIGN §5: the same on every mission).
+	return ["Win the mission", "Win within par (%s)" % MissionDirector.clock(d.par()),
+			"Within par, keep every node you started with"]
+
+
+func _mission_name() -> String:
+	var id := str(m.get("id", ""))
+	return ("%s / %s" % [id, str(m.get("title", ""))]) if id.is_valid_int() else str(m.get("title", ""))
+
+
+func _ways_on(won: bool) -> Array:
+	## [primary, quiet...] as [text, id]: CONTINUE (the next mission) or RETRY first, then the quieter ways out.
+	var nxt := str(_end.get("summary", {}).get("next", ""))
+	if won and nxt != "" and nxt != d.key:
+		return [["CONTINUE  →", "next"], ["RETRY", "retry"], ["CAMPAIGN", "campaign"]]
+	if won:
+		return [["CAMPAIGN  →", "campaign"], ["RETRY", "retry"]]
+	return [["RETRY  →", "retry"], ["CHANGE LOADOUT", "loadout"], ["CAMPAIGN", "campaign"]]
 
 
 func _show_result() -> void:
 	phase = "result"
+	_page = "result"
 	var res: Dictionary = _end.get("result", {})
 	var summary: Dictionary = _end.get("summary", {})
 	var won := bool(res.get("won", false))
 	var stars := int(res.get("stars", 0))
-	var vp := get_viewport().get_visible_rect().size
-	var modal := _new_modal(0.66)
-	var w := minf(vp.x - u(24), u(560))
-	var card := _make_card(w, GOOD if won else BAD)
-	modal.add_child(card)
-	var col := _vbox(5)
-	card.add_child(col)
-	var head := _hbox(10)
-	head.alignment = BoxContainer.ALIGNMENT_CENTER
-	head.add_child(_label("MISSION COMPLETE" if won else "MISSION FAILED", 21, GOOD if won else BAD))
-	head.add_child(_label("%s · %s" % [str(m.get("title", "")), MissionDirector.clock(float(res.get("time", 0.0)))], 13, DIM))
-	col.add_child(head)
-	var line := _label(str(m.get("win_line" if won else "lose_line", "")), 13, DIM, w - u(28))
-	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(line)
-	# the three stars, each with its rule (CAMPAIGN-DESIGN §5: the same rules on every mission)
-	var rules := ["Win the mission", "Win within par (%s)" % MissionDirector.clock(d.par()),
-			"Within par, keep every node you started with"]
-	var row := _hbox(14)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	var pops := []
-	for i in range(3):
-		var cell := _vbox(2)
-		var g := Glyph.new()
-		g.kind = "star"
-		g.color = GOLD if i < stars else Color(0.45, 0.5, 0.55)
-		g.custom_minimum_size = Vector2(u(34), u(34))
-		g.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		cell.add_child(g)
-		var rl := _label(rules[i], 12.5, TEXT if i < stars else DIM, u(150))
-		rl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		cell.add_child(rl)
-		row.add_child(cell)
-		pops.append([g, rl, i < stars])
-	col.add_child(row)
+	var s := _new_screen()
+	var ways := _ways_on(won)
+	var quiet := []
+	for w in ways.slice(1):
+		quiet.append([w[0], _on_button.bind(str(w[1]))])
+	var extras := []
 	# the optional objective, this run
 	var opt_text := str(d.optional().get("text", ""))
 	if opt_text != "":
-		var orow := _hbox(6)
-		orow.alignment = BoxContainer.ALIGNMENT_CENTER
 		var met := bool(res.get("objective", false))
-		var mk := Glyph.new()
+		var orow := _hbox(8)
+		var mk := MatchScreens.Mark.new()
 		mk.kind = "check" if met else "cross"
 		mk.color = GOOD if met else BAD
-		mk.custom_minimum_size = Vector2(u(14), u(14))
+		mk.custom_minimum_size = Vector2.ONE * UiKit.line_h(s, 14) * 0.7
 		mk.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		orow.add_child(mk)
-		orow.add_child(_label("OPTIONAL: " + opt_text, 13, TEXT if met else DIM))
-		col.add_child(orow)
+		orow.add_child(UiKit.label(s, "OPTIONAL: " + opt_text, 14, UiKit.INK if met else UiKit.MUTED))
+		extras.append(orow)
 	# the reward (Campaign.record's summary): paid / earned / taken / none
 	var rw: Dictionary = summary.get("reward", {})
 	var amount := int(rw.get("amount", Campaign.reward_for(m)))
-	var state := str(rw.get("state", "none"))
-	var reward_row := _hbox(6)
-	reward_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	var ticker: RewardTicker = null
-	match state:
+	match str(rw.get("state", "none")):
 		"paid":                                    # the one-off SCRAP counts up after the stars (Progression's ticker)
 			ticker = RewardTicker.make(amount, "soft", func(n: float) -> float: return u(n))
-			reward_row.add_child(ticker)
+			extras.append(ticker)
 		"earned":
-			reward_row.add_child(_label("+%d SCRAP earned - paid when your wallet arrives" % amount, 13, GOLD))
+			extras.append(UiKit.label(s, "+%d SCRAP earned - paid when your wallet arrives" % amount, 14, GOLD))
 		"taken":
-			reward_row.add_child(_label("Reward already taken", 13, DIM))
+			extras.append(UiKit.label(s, "Reward already taken", 14, UiKit.DIM))
 		_:
-			reward_row.add_child(_label("3 stars + the optional objective in one run: +%d SCRAP" % amount, 13, DIM))
-	col.add_child(reward_row)
+			extras.append(UiKit.label(s, "3 stars + the optional objective in one run: +%d SCRAP" % amount, 14, UiKit.MUTED))
 	for item in summary.get("unlocked", []):
 		var parts := str(item).split(":")
 		var what := ("%s vat unlocked" % parts[-1].to_upper()) if str(item).begins_with("vat:faction:") else ("%s unlocked" % str(item))
-		var ul := _label(what, 14, accent)
-		ul.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		col.add_child(ul)
+		extras.append(UiKit.label(s, what, 15, UiKit.accent(_faction()), true))
 	var xp: Dictionary = _end.get("xp", {})
 	if not xp.is_empty():
-		var strip_ui := RewardStrip.make(xp, hud.ui_scale if hud else 1.0) if not (xp.get("lines", []) as Array).is_empty() else null
+		var strip_ui := RewardStrip.make(xp, s.reward_scale(hud.ui_scale if hud else 1.0)) if not (xp.get("lines", []) as Array).is_empty() else null
 		if strip_ui:
-			col.add_child(strip_ui)
+			extras.append(strip_ui)
 		else:
 			var xl := _xp_text(xp)
 			if xl != "":
-				var xlab := _label(xl, 13, TEXT)
-				xlab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-				col.add_child(xlab)
-	var buttons := _hbox(10)
-	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
-	var next := str(summary.get("next", ""))
-	if won and next != "" and next != d.key:
-		buttons.add_child(_button("NEXT MISSION", "next", true))
-	buttons.add_child(_button("RETRY", "retry", not won))
-	buttons.add_child(_button("CAMPAIGN", "campaign"))
-	col.add_child(buttons)
-	_centre(card)
+				extras.append(UiKit.label(s, xl, 14, UiKit.INK))
+	var rules := _star_rules()
+	var out := s.result({"won": won, "kicker": "DISTRICT SECURED" if won else "THE CITY PUSHED BACK",
+			"headline": "VICTORY." if won else "DEFEAT.", "name": _mission_name(),
+			"sub": "%s:  %s" % [Campaign.HANDLER, str(m.get("win_line" if won else "lose_line", ""))],
+			"stars": stars, "star_note": ("NEXT STAR: %s" % rules[stars]) if stars < 3 else "",
+			"metrics": [[MissionDirector.clock(float(res.get("time", 0.0))), "Match time"],
+					["%d / %d" % [MatchScreens.nodes_held(d.sim, d.seat), d.sim.nodes.size()], "Nodes held"],
+					["%d / 3" % stars, "Mission stars"]],
+			"primary": [ways[0][0], _on_button.bind(str(ways[0][1]))], "details": show_details, "quiet": quiet,
+			"extras": extras})
+	var pops: Array = out.get("stars", [])
 	if _animated:
+		if ticker:
+			ticker.play(true)
 		return
 	_animated = true
-	# the pop-in: each earned star grows in with a bounce, one after the other; unearned ones fade in grey
+	# the pop-in: each earned star grows in with a bounce, one after the other; unearned ones fade in
 	var tw := create_tween()
-	for p in pops:
-		var g: Glyph = p[0]
-		var rl: Label = p[1]
-		g.pivot_offset = g.custom_minimum_size / 2.0
-		g.scale = Vector2.ZERO if p[2] else Vector2.ONE
-		g.modulate = Color(1, 1, 1, 0.0 if not p[2] else 1.0)
-		rl.modulate = Color(1, 1, 1, 0)
-	for p in pops:
-		var g: Glyph = p[0]
-		var rl: Label = p[1]
-		if p[2]:
+	for i in range(pops.size()):
+		var g: Control = pops[i]
+		g.pivot_offset = g.size / 2.0
+		g.scale = Vector2.ZERO if i < stars else Vector2.ONE
+		g.modulate = Color(1, 1, 1, 1.0 if i < stars else 0.0)
+	for i in range(pops.size()):
+		var g: Control = pops[i]
+		if i < stars:
 			tw.tween_property(g, "scale", Vector2.ONE * 1.3, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			tw.tween_property(g, "scale", Vector2.ONE, 0.12)
 		else:
-			tw.tween_property(g, "modulate", Color(1, 1, 1, 0.55), 0.2)
-		tw.parallel().tween_property(rl, "modulate", Color.WHITE, 0.2)
+			tw.tween_property(g, "modulate", Color.WHITE, 0.2)
 		tw.tween_interval(STAR_GAP - 0.3)
 	if ticker:
 		tw.tween_callback(ticker.play)
+
+
+func show_details() -> void:
+	## MATCH DETAILS (SCREEN-SYSTEM 20): the stars' rules and the optional objective for this run, then every seat's
+	## numbers (MatchScreens.seat_table); BACK returns to the result.
+	phase = "result"
+	_page = "details"
+	var res: Dictionary = _end.get("result", {})
+	var won := bool(res.get("won", false))
+	var stars := int(res.get("stars", 0))
+	var notes := []
+	var rules := _star_rules()
+	for i in range(3):
+		notes.append(["star", rules[i], i < stars])
+	var opt_text := str(d.optional().get("text", ""))
+	if opt_text != "":
+		var met := bool(res.get("objective", false))
+		notes.append(["check" if met else "cross", "OPTIONAL: " + opt_text, met])
+	var ways := _ways_on(won)
+	var s := _new_screen()
+	s.details({"name": _mission_name(), "sub": "%s · %s" % [_mission_title(), MissionDirector.clock(float(res.get("time", 0.0)))],
+			"outcome": "MISSION COMPLETE" if won else "MISSION FAILED", "back": _show_result, "notes": notes,
+			"primary": [ways[0][0], _on_button.bind(str(ways[0][1]))]}, MatchScreens.seat_table(d.sim, d.seat))
 
 
 func _xp_text(xp: Dictionary) -> String:
@@ -693,7 +706,6 @@ func _xp_text(xp: Dictionary) -> String:
 	return ("+%d XP" % gain) if gain > 0 else ""
 
 
-
 func _rebuild() -> void:
 	## A resize (a phone rotating, a window drag): the open card is laid out again at the new size.
 	if root == null or not is_inside_tree():
@@ -702,7 +714,14 @@ func _rebuild() -> void:
 		"brief":
 			show_briefing()
 		"result":
-			_show_result()
+			if _page == "details":                  # UI: the page that was open
+				show_details()
+			else:
+				_show_result()
+		"endline":                                  # UI: laid out again, its timer kept
+			var left := _end_t
+			show_end(_end.get("result", {}), _end.get("summary", {}), _end.get("xp", {}))
+			_end_t = left
 
 
 func _on_button(id: String) -> void:

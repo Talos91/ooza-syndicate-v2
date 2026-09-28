@@ -32,9 +32,10 @@ extends Node3D
 ##   --mission=vex:01                       CAMPAIGN: start that mission straight away (its briefing first)
 ##   --campaign-all                         CAMPAIGN: every playable mission open (Campaign.all_open)
 ##   --mission-start                        CAMPAIGN: skip the briefing (headless boot checks)
-##   --mission-shot=brief|hud|win|lose --out=<dir>   CAMPAIGN: screenshot that screen as mission_<shot>.png, then quit
+##   --mission-shot=brief|hud|win|lose|details|endline --out=<dir>   CAMPAIGN: screenshot that screen as mission_<shot>.png, then quit
 ##   --versus-shot=<png>                    UI: DEPLOY with the menu's saved picks (--menu-mode=, --ui-cfg=...), screenshot
 ##                                           the VERSUS card, then quit (with --mission=<key> --mission-start: a mission's)
+##   --end-shot=win|lose|draw|details|pause|out --out=<dir>  UI: with --map=: that in-match screen as end_<shot>.png, then quit
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is an online room (Net)
@@ -132,6 +133,7 @@ var mission: MissionDirector = null              # a campaign mission is on (nul
 var mission_overlay: MissionOverlay = null
 var mission_menu_faction := ""                   # the player's own menu faction / AI level, back after the mission
 var mission_menu_ai := ""
+var end_shot := ""                               # UI: --end-shot=win|lose|draw|details|pause|out (_end_shot)
 static var mission_arg_used := false             # --mission=<key> starts it once per run (a leave never loops back)
 # --- end CAMPAIGN ---
 
@@ -164,6 +166,7 @@ func _ready() -> void:
 	var tut_first := bool(relaunch.get("first", false))
 	menu_open = str(relaunch.get("menu", ""))
 	var mission_key := str(relaunch.get("mission", ""))   # CAMPAIGN: RETRY / NEXT MISSION
+	var army_open := str(relaunch.get("army", ""))      # UI: CHANGE LOADOUT from a mission's result
 	relaunch = {}
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--progress="):              # PROGRESSION screenshot helper: a scratch save, never the real one
@@ -217,6 +220,9 @@ func _ready() -> void:
 			map_explicit = true
 		elif arg.begins_with("--tutorial="):
 			tut_id = int(arg.substr(11))
+		elif arg.begins_with("--end-shot="):          # UI: screenshot an in-match screen (_end_shot)
+			end_shot = arg.substr(11)
+			map_explicit = true
 	MapPool.phone = MapPool.phone_screen(mobile)       # Alpha 18: phones get the phone-fit maps only
 	if window_size != Vector2i.ZERO:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
@@ -265,7 +271,10 @@ func _ready() -> void:
 		if menu_open != "":                              # TUTORIAL: LESSONS / ARMIES / NEW GAME from a lesson
 			if menu_open == "cosmetics":                 # (COSMETICS' BACK returns through ARMIES)
 				(menu_layer as Menu).show_armies()
-			(menu_layer as Menu).call("show_" + menu_open)
+			if menu_open == "armies" and army_open != "":   # UI: a mission's CHANGE LOADOUT - its faction, BACK to CAMPAIGN
+				(menu_layer as Menu).show_armies(army_open, Callable(menu_layer, "show_campaign"))
+			else:
+				(menu_layer as Menu).call("show_" + menu_open)
 			menu_open = ""
 		for arg in OS.get_cmdline_user_args():
 			if arg.begins_with("--menu-page="):            # screenshot helper: open a menu page
@@ -431,6 +440,8 @@ func _start_map(path: String) -> void:
 		hud.toast("%s - you are seat %s (%s). Drag from your node to send." % [map.get("name", ""), HUMAN, str(SEAT_FACTIONS[HUMAN]).to_upper()])
 	if hud.dock.visible and hud.dock.start_note() != "":   # a relay map skill swapped on a map with no relays
 		hud.toast(hud.dock.start_note(), "info")
+	if end_shot != "" and mission == null and director == null:   # UI
+		_end_shot(end_shot)
 
 
 func start_match(path: String, faction: String, seat_factions: Dictionary, level: String, match_mode := "1v1", colour := "A", loadout := {}) -> void:
@@ -558,9 +569,10 @@ func rematch_random() -> void:
 	restart()
 
 
-func to_menu() -> void:
+func to_menu(page := "") -> void:
+	## `page` (UI, Alpha 21: the result screen's CONTINUE / CHANGE LOADOUT): open that menu page instead of MAIN.
 	if mission:                                        # CAMPAIGN: leaving a mission returns to the campaign page
-		_mission_leave()
+		_mission_leave(page)
 		return
 	if director:                                       # TUTORIAL §7: leaving a lesson marks the tutorial offered
 		TutorialDirector.mark_offered()
@@ -569,6 +581,8 @@ func to_menu() -> void:
 		Net.leave()
 	relaunch = {"faction": SEAT_FACTIONS[HUMAN], "rival": SEAT_FACTIONS["B"], "ai": ai_level, "mode": mode, "colour": color_choice,
 			"loadout": LOADOUTS.get(HUMAN, {})}
+	if page != "" and not online:                      # UI: "play" (CONTINUE) / "armies" (CHANGE LOADOUT)
+		relaunch["menu"] = page
 	get_tree().reload_current_scene()
 
 
@@ -1245,6 +1259,41 @@ func _take_shot(t: float, last: bool) -> void:
 	if last:
 		print("telemetry ", Telemetry.save(sim, map.get("code", ""), trace))
 		get_tree().quit()
+
+
+# UI (Alpha 21 UI pass): --end-shot - the results / MATCH DETAILS / PAUSE / YOU'RE OUT screens on a real board
+func _end_shot(what: String) -> void:
+	## The match ends here as `what` says (win: seat A, lose: seat B, draw: nobody), paid into a scratch progress file
+	## (never the player's own), so Progression's strip shows real lines; then the screen, saved as end_<what>.png.
+	for i in range(60):                                # the board settles (and --ff's end state renders)
+		await get_tree().process_frame
+	match what:
+		"pause":
+			hud.pause_menu()
+		"out":
+			hud.show_out_panel()
+		_:
+			Progression.path = "user://progress_shots.cfg"
+			Progression.reload_all()
+			var w := "" if what == "draw" else (HUMAN if what in ["win", "details"] else "B")
+			sim.over = true
+			sim.winner = w
+			sim.events.append({"t": sim.time, "type": "end", "winner": w, "forced": false, "draw": w == ""})
+			hud.close_inspector()
+			var info := {"online": false, "ai_level": ai_level}
+			rewards = Progression.record_match(Progression.result_from_sim(sim, HUMAN, info))
+			rewards["full_pay"] = Progression.full_pay(info)
+			rewards["ai_level"] = ai_level
+			hud.show_end(w)
+			if what == "details":
+				hud.show_end_details()
+	for i in range(100):                               # the count-ups play out
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var out := "%s/end_%s.png" % [shot_dir if shot_dir != "" else OS.get_user_data_dir(), what]
+	get_viewport().get_texture().get_image().save_png(out)
+	print("screenshot ", out)
+	get_tree().quit()
 
 
 func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
@@ -2020,7 +2069,7 @@ func _mission_setup() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--mission-shot="):
 			shot = arg.substr(15)
-	if "--mission-start" in OS.get_cmdline_user_args() or shot in ["hud", "win", "lose"]:
+	if "--mission-start" in OS.get_cmdline_user_args() or shot in ["hud", "win", "lose", "details", "endline"]:
 		mission_overlay.begin_match()
 		_mission_start()
 	else:
@@ -2058,6 +2107,8 @@ func _on_mission_action(id: String) -> void:
 			_mission_relaunch(nxt if nxt != "" else mission.key)
 		"retry":
 			_mission_relaunch(mission.key)
+		"loadout":                                     # UI: the result's CHANGE LOADOUT
+			_mission_leave("armies")
 		_:
 			_mission_leave()
 
@@ -2067,8 +2118,9 @@ func _mission_relaunch(key: String) -> void:
 	get_tree().reload_current_scene()
 
 
-func _mission_leave() -> void:
+func _mission_leave(page := "") -> void:
 	## CAMPAIGN / the pause menu's MAIN MENU: back to the campaign page (MAIN while this build's menu has none).
+	## UI: page "armies" (the result's CHANGE LOADOUT) opens ARMIES on the mission's faction instead.
 	MissionDirector.restore_settings()
 	var f := mission_menu_faction if mission_menu_faction != "" else str(SEAT_FACTIONS[HUMAN])
 	relaunch = {"faction": f, "ai": mission_menu_ai if mission_menu_ai != "" else ai_level, "colour": color_choice,
@@ -2078,26 +2130,33 @@ func _mission_leave() -> void:
 		if str(mm.get("name", "")) == "show_campaign":
 			relaunch["menu"] = "campaign"
 			break
+	if page == "armies":                               # UI: its BACK returns to the campaign page
+		relaunch["menu"] = "armies"
+		relaunch["army"] = str(SEAT_FACTIONS[HUMAN])
 	get_tree().reload_current_scene()
 
 
 func _mission_shot(what: String) -> void:
 	## --mission-shot=brief|hud|win|lose --out=<dir>: that screen, saved as mission_<what>.png, then quit. The
 	## result shots record into a scratch progress file, never the player's own.
-	if what in ["win", "lose"]:
+	if what in ["win", "lose", "details", "endline"]:   # (UI: details = the win's MATCH DETAILS page, endline its closing line)
 		Campaign.path = "user://campaign_shots.cfg"
 		Campaign.reset_progress()
 		Progression.path = "user://progress_shots.cfg"   # the XP / SCRAP of a shot never reaches the player's wallet
 		Progression.reload_all()
-	var wait: float = {"brief": 1.0, "hud": 9.0, "win": 3.0, "lose": 3.0}.get(what, 1.0)
+	var wait: float = {"brief": 1.0, "hud": 9.0, "win": 3.0, "lose": 3.0, "details": 3.0, "endline": 3.0}.get(what, 1.0)
 	var t0 := Time.get_ticks_msec()
 	while (Time.get_ticks_msec() - t0) / 1000.0 < wait:
 		await get_tree().process_frame
-	if what in ["win", "lose"]:
-		mission.finish_now(what == "win", what == "win", false)
+	if what in ["win", "lose", "details", "endline"]:
+		mission.finish_now(what != "lose", what != "lose", false)
 		t0 = Time.get_ticks_msec()
-		while (Time.get_ticks_msec() - t0) / 1000.0 < MissionOverlay.END_LINE_SECONDS + 2.6:
+		while (Time.get_ticks_msec() - t0) / 1000.0 < (1.0 if what == "endline" else MissionOverlay.END_LINE_SECONDS + 2.6):
 			await get_tree().process_frame
+		if what == "details":
+			mission_overlay.show_details()
+			for i in range(10):
+				await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	var out := "%s/mission_%s.png" % [shot_dir if shot_dir != "" else OS.get_user_data_dir(), what]
 	get_viewport().get_texture().get_image().save_png(out)

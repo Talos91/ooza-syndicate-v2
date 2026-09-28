@@ -61,6 +61,17 @@ func _run() -> void:
 			"units_lost_combat", "units_lost_falls", "out_at_s"]
 	check(keys.all(func(k): return (by["A"]["stats"] as Dictionary).has(k)), "stats carry every §7a counter (Progression.seat_stats)")
 	check(by["A"].has("final_strength") and by["A"].has("final_nodes") and by["A"]["faction"] == "vex", "final strength, nodes, faction")
+	# UI (Alpha 21): MATCH DETAILS reads the same counters (MatchScreens.seat_table), you first, a column per seat
+	var tb := MatchScreens.seat_table(sim, "A")
+	check((tb["cols"] as Array).map(func(c): return c["seat"]) == ["A", "B", "C"] and tb["cols"][0]["head"] == "YOU"
+			and tb["cols"][1]["head"] == "RIVAL 1", "MATCH DETAILS: you first, then each rival")
+	var rows := {}
+	for row in tb["rows"]:
+		rows[row[0]] = row[1]
+	check(rows.has("Captures") and int(rows["Captures"][0]) == int(by["A"]["stats"]["captures"]), "MATCH DETAILS: captures = seat_stats")
+	check(rows.has("Placement") and rows["Placement"][1] == "1st", "MATCH DETAILS: FFA placements, the winner 1st")
+	check(rows.has("Skills used") == sim.abilities_on, "MATCH DETAILS: a skills row only with ABILITIES on")
+	check(tb["rows"].all(func(row): return (row[1] as Array).size() == 3), "MATCH DETAILS: a value per seat in every row")
 	var body := JSON.stringify(r)
 	check(JSON.parse_string(body) is Dictionary and body.length() < 16000, "serialises to JSON (%d bytes)" % body.length())
 
