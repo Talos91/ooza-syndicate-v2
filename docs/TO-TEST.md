@@ -1,9 +1,21 @@
-# To test - v0.20.6 "Alpha 20" (Daniele, on the phone and with a second player)
+# To test - v0.22.1 "Alpha 22" (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
-Live build: https://talos91.github.io/ooza-syndicate-v2/
+Live build: https://oozesyndicate.com
+
+## 0.22.1 "Alpha 22" (relay redo, music, balance) - the tracks download once (music.pck) when music first plays
+- [ ] **Relays**: the button platform off the rim - double-tap it or the node; the ghosts in the relay kind's colour; a 6-way switch
+      reads (tests/relay_multi.json is a test board, not in the pool). Is the button tappable on the phone at every camera pitch?
+- [ ] **Music**: MENU on the menus, the battle playlist, the Last Stand / Very Last Stand change, the stinger at the end and MENU
+      after it; MUSIC ON / OFF + volume in SETTINGS and PAUSE; SOUND still only the effects. Does music.pck load on the phone (data)?
+- [ ] **Balance**: laser / Machinegoon feel; a monster only reaches the next node; the Last Stand at 4:00; a rotation relay's 10 s.
+- [ ] **Tutorial**: the monster lesson (L6) and the relay lesson (L4) - nothing to watch is under the fog; a skipped lesson shows
+      "skipped - replay to complete" and pays no SCRAP.
+- [ ] **PLAY page**: HOME's PLAY opens it; the three cards; CAMPAIGN opens the campaign picker at once; LEAVE ROOM visible.
+- [ ] **Online**: leave a server match with everyone - it closes within 30 s; the phone stays landscape without stutter.
+- [ ] **Campaign city**: the relay v2 pieces on the diorama; the background changes as the camera pans between districts.
 
 ## 0.22.0 "Alpha 22" (match feel, backgrounds, landscape) - backgrounds are WIP, not final
 - [ ] **Last Stand**: the ring is subtle, the warning still clear; the zoom doesn't slow the phone.

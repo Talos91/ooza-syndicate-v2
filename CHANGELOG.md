@@ -1,5 +1,40 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.22.1 "Alpha 22" - 2026-09-28 (relay redo, soundtrack, Daniele's playtest balance, audit fixes, UI / tutorial / campaign fixes)
+
+- **RELAY REDO (v2, 🎨 Skin Designer + 📐)**: every relay has a BUTTON platform off the node's rim (the tap target: double-tap the
+  button OR the node), a mechanism gate on each controlled bridge (pylons-only on leaned piers), relay decks, ghosts of the closed
+  bridges in the relay kind's own hue (rotation blue, switch amber, remote mint, retract coral), the remote's link as a glowing arc.
+  Any count composes (a 6-way switch, a rotation turning 3 decks, a remote driving 2 nodes' decks). Fewer draw calls than 0.22.0.
+- **MUSIC**: the soundtrack (Cyberpunk Music Pack by SmellyCatCafe) - MENU, a BATTLE playlist, LAST STAND, VERY LAST STAND, a
+  VICTORY / DEFEAT stinger, then the MENU music on the results screen; ducking under the big cues. SETTINGS + PAUSE: MUSIC ON / OFF
+  + volume (SOUND now drives only the effects). The tracks come as their own music.pck, fetched the first time music plays.
+- **Balance (Daniele + cousins' playtest, approved)**: Laser 32 -> 19 kills per burst (-40 %); Machinegoon 2 / 3.5 / 5 -> 1.6 / 2.8 / 4
+  kills a second (-20 %); a monster reaches only the next node (was 3 bridges); the **Last Stand starts at 4:00** (was 3:00; the
+  Very Last Stand stays 6:00); **ROTATION relays cool down 10 s** (the other kinds 5 s).
+- **Rule fixes (code follows the bible, Daniele)**: lasers and Machinegoons hit a line anywhere in range, not only its head; the Very
+  Last Stand counts open relay decks; one monster per player - a second captured hub self-destructs on capture. Bible corrected
+  where the code was right: Relay Aegis halves laser / Machinegoon kills; a captured forge works at once; Last Stand rings 8-20 s apart.
+- **Audit fixes (sim)**: Core Meltdown vs an allied store splits by share and only drops the node at total 0; the split-line eject
+  drain; a captured hub can launch; the VLS timing; the balance reset offline.
+- **Audit fixes (tutorial / campaign)**: skipping a step or SKIP TUTORIAL unlocks the next lesson but does not complete it (no SCRAP,
+  no Graduate vat until played through; the page says "skipped - replay to complete"); campaign progress survives a browser without
+  storage; missions and lessons pin their own ABILITIES / LAST STAND / HIDDEN COUNTS; last-run replay and AI level fixes; coach /
+  mission overlays rebuilt only on change.
+- **Audit fixes (menu / main)**: a room's settings never stay applied offline after LEAVE ROOM; pool maps parsed once; the last
+  faction kept.
+- **Tutorial (🎓)**: the coach spotlight follows what moves (the monster, lines, moving decks) - nothing to watch is ever under the
+  fog; watch steps light the whole action area; L4 no longer names the ghost's colour.
+- **Campaign (🏙️)**: the city diorama on the relay v2 pieces (retract gates + ghosts for the missions to come, switch buttons for side
+  missions); each district shows its own mission background, crossfading as the camera pans.
+- **UI (🧩, Daniele's 0.22.0 test)**: HOME's PLAY opens the PLAY page; three equal PLAY cards (PLAY / PLAY ONLINE / START) + a
+  CAMPAIGN link; the CAMPAIGN tab opens the picker of all campaigns, instantly; taps survive a page rebuild (test_ui_nav, 64 taps);
+  framed BACK / LEAVE ROOM buttons; BACK from the meta pages, the null is_me crash, lossy map thumbnails, the wardrobe preview in the
+  faction colour on its own base (these four were meant for 0.21.12 and had been missed).
+- **Online**: a server match everyone left closes after 30 s (client + relay; the relay's fix is live since 0.22.0); the landscape
+  lock happens once per fullscreen / installed-app session (a lock can trigger a resize).
+- The version label reads "Alpha 22" (0.22.0 still said Alpha 21).
+
 ## 0.22.0 "Alpha 22" - 2026-09-28 (match feel; backgrounds; landscape; goo loading screen)
 
 Alpha 21 (polishing) is done (Daniele); Alpha 22 = the work in flight, without the new maps (those ship as Alpha 23).

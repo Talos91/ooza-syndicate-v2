@@ -1017,7 +1017,7 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 	elif cost > 0:
 		suffix = "\n%d UNITS" % Rules.shown(cost)
 	elif method == "switch":
-		suffix = "\n%d s CD" % int(Rules.RELAY_COOLDOWN)
+		suffix = "\n%d s CD" % int(Rules.relay_cooldown(str(sim.nodes[id]["relay"])))   # per kind: rotations 10 s
 	else:
 		suffix = "\nFREE"
 	var text := title + suffix

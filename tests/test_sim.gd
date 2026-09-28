@@ -1228,17 +1228,27 @@ func _ls_check(s: Sim, tag: String) -> void:
 		want[s.last_stand_queue[k]] = s.time + s.drop_in(s.last_stand_queue[k])
 	var off := 0.0
 	var islands_ok := true
-	while s.time < Rules.VERY_LAST_STAND_TIME - 0.05 and not (s.last_stand_queue.is_empty() and s.last_stand_next >= s.last_stand_waves.size()):
+	var ring_end := -1.0                                  # when the ring plan's last platform fell
+	while s.time < Rules.MATCH_HARD_END and ring_end < 0.0:
 		var before := s.collapsed.duplicate()
 		s._step_last_stand(0.05)
+		if s.last_stand_queue.is_empty() and s.last_stand_next >= s.last_stand_waves.size():
+			ring_end = s.time + 0.05
+		s._step_very_last_stand(0.05)                    # from 6:00 the Very Last Stand runs alongside whatever is left
 		s.time += 0.05
 		for id in s.collapsed:
 			if not before.has(id) and want.has(id):
 				off = maxf(off, absf(s.time - want[id]))
 		islands_ok = islands_ok and s._islands(s.collapsed).is_empty()
 	check(off < 0.2 and not want.is_empty(), "%s map: each badge's countdown (drop_in) matches its drop (worst %.2f s)" % [tag, off])
-	check(s.last_stand_queue.is_empty() and s.last_stand_next >= s.last_stand_waves.size() and s.time < Rules.VERY_LAST_STAND_TIME,
-			"%s map: the whole ring collapse ends before the Very Last Stand (%.0f s)" % [tag, s.time])
+	if tag == "small":
+		check(ring_end > 0.0 and ring_end < Rules.VERY_LAST_STAND_TIME, "small map: the whole ring collapse ends before the Very Last Stand (%.0f s)" % ring_end)
+	else:
+		# Since the Last Stand moved to 4:00 (0.22.1) a big map's ring collapse can't always fit the 4:00-6:00 window at the 8 s
+		# minimum gap (Daniele: never faster than 8 s; "the rest goes to the Very Last Stand") - it then runs on past 6:00 at
+		# that gap while the Very Last Stand takes its own picks in between, and still ends well before the hard end.
+		check(ring_end > 0.0 and (ring_end < Rules.VERY_LAST_STAND_TIME or g == Rules.LAST_STAND_DROP_GAP_MIN) and ring_end < Rules.MATCH_HARD_END - 20.0,
+				"big map: the ring collapse ends before the Very Last Stand, or at the 8 s minimum gap it runs on past it (ended %.0f s)" % ring_end)
 	check(islands_ok, "%s map: nothing is ever left cut off" % tag)
 
 
@@ -1254,8 +1264,8 @@ func _rules_0_18_10() -> void:
 		s._land_classic(n, "A", 40.0)
 		check(n["owner"] == "A" and n["tier"] == c[3] and n["structure"] == c[1],
 				"conquest: a %s T%d becomes T%d (a T4 keeps its tier, min 1)" % [c[1], c[2], c[3]])
-	# ---------------------------------------------------------------- machinegoon: 2 / 3.5 / 5 kills a second, one line at a time
-	check(Rules.MACHINEGOON_RATE == {1: 10.0, 2: 17.5, 3: 25.0} and Rules.MACHINEGOON_RANGE == 10.0, "machinegoon numbers: 2 / 3.5 / 5 kills/s shown, 10 m")
+	# ---------------------------------------------------------------- machinegoon: 1.6 / 2.8 / 4 kills a second, one line at a time
+	check(Rules.MACHINEGOON_RATE == {1: 8.0, 2: 14.0, 3: 20.0} and Rules.MACHINEGOON_RANGE == 10.0, "machinegoon numbers: 1.6 / 2.8 / 4 kills/s shown (-20 %, Daniele 2026-09-28), 10 m")
 	for tier in [1, 3]:
 		s = _tp()
 		var gn: Dictionary = s.nodes[1]
@@ -1276,9 +1286,9 @@ func _rules_0_18_10() -> void:
 		check(absf(killed - Rules.MACHINEGOON_RATE[tier]) < 0.3, "a T%d machinegoon kills %.1f a second (%.2f)" % [tier, Rules.MACHINEGOON_RATE[tier], killed])
 		check(int(gn["shot"].get("target_horde", -1)) == hb["id"] and float(gn["shot"]["kills"]) > 0.0, "its shot names the line it streams at (fx)")
 		check(absf(gn["units"] - u1) < 0.01, "the machinegoon node produces nothing")
-	# ---------------------------------------------------------------- laser: 32 per 2 s burst, 2 s recharge, 12 m
-	check(Rules.LASER_KILL == 160.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
-			"laser numbers: 32 shown per 2 s burst, 2 s recharge, 12 m, cost 40")
+	# ---------------------------------------------------------------- laser: 19 per 2 s burst, 2 s recharge, 12 m
+	check(Rules.LASER_KILL == 96.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
+			"laser numbers: 19 shown per 2 s burst (-40 %, Daniele 2026-09-28), 2 s recharge, 12 m, cost 40")
 	s = _tp()
 	s.nodes[1]["owner"] = "A"
 	s.nodes[1]["structure"] = "laser"
@@ -1311,7 +1321,12 @@ func _rules_0_18_10() -> void:
 	var hub: Dictionary = s.nodes[3]
 	hub["structure"] = "monster_hub"                  # (staged on A's home: Two Piers has no relay)
 	hub["units"] = 300.0
-	check(s.monster_reach(3) == [0, 1, 2], "reach: every node up to 3 bridges (B's home is 4 away) (%s)" % str(s.monster_reach(3)))
+	# Daniele (2026-09-28): "attack radius limited to 1 node" - MONSTER_REACH 1: only the hub's neighbours
+	check(Rules.MONSTER_REACH == 1 and s.monster_reach(3) == [1], "reach: only the next node (1 bridge) (%s)" % str(s.monster_reach(3)))
+	check(s.launch_monster(3, "A", 2).begins_with("Out of reach"), "a node 3 bridges away is refused")
+	# the walk itself (kick, pass-through, take) is exercised over 3 decks with the old reach, then the rule is restored
+	Rules.MONSTER_REACH = 3
+	check(s.monster_reach(3) == [0, 1, 2], "reach 3: every node up to 3 bridges (B's home is 4 away) (%s)" % str(s.monster_reach(3)))
 	check(s.launch_monster(3, "A", 4).begins_with("Out of reach"), "a node 4 bridges away is refused")
 	s.nodes[1]["owner"] = "B"                         # an intermediate enemy node...
 	s.nodes[1]["units"] = 50.0
@@ -1397,6 +1412,7 @@ func _rules_0_18_10() -> void:
 			"only a fall kills it: the deck under it goes and it falls")
 	_steps(s, Rules.MONSTER_FALL_TIME + 0.7)
 	check(s.monsters.is_empty() and s.nodes[0]["owner"] == "B", "it is gone and takes nothing")
+	Rules.MONSTER_REACH = 1                           # (the monster scenarios above were staged over 2-3 decks)
 	# ---------------------------------------------------------------- teams (GAME-RULES sec11)
 	var ts := _tp({3: "A", 4: "B", 0: "C", 2: "D"}, {"A": "null", "B": "null", "C": "null", "D": "null"}, {"A": 0, "B": 0, "D": 0, "C": 1})
 	var tn: Dictionary = ts.nodes[3]
@@ -1519,7 +1535,8 @@ func _rules_0_18_10() -> void:
 	ai_g._build_machinegoon(s, ai_g._mine(s), ai_g._mine(s).filter(func(n): return Sim.has_vat(n)))
 	check(s.nodes[2]["build_kind"] == "machinegoon", "the AI puts a machinegoon on the raided frontline vat (%s)" % s.nodes[2]["build_kind"])
 	check(s.nodes[1]["build_kind"] == "" and s.nodes[3]["build_kind"] == "", "...not on a quiet node nor its home")
-	# monsters: Veteran launches at a target worth it; never through its own line
+	# monsters: Veteran launches at a target worth it; never through its own line (staged 2 bridges away: the old reach)
+	Rules.MONSTER_REACH = 3
 	for own_line in [false, true]:
 		s = _tp()
 		s.nodes[3]["structure"] = "monster_hub"
@@ -1538,6 +1555,7 @@ func _rules_0_18_10() -> void:
 			check(s.monsters.is_empty(), "...but never through its own line on the way")
 		else:
 			check(s.monsters.size() == 1 and s.monsters[0]["target"] == 0, "Veteran launches its monster at the big enemy garrison in reach")
+	Rules.MONSTER_REACH = 1
 	# EJECT: only to save stored allied troops from a node about to drop
 	var te := _tp({3: "A", 4: "B"}, {"A": "null", "B": "null"}, {"A": 0, "B": 0})
 	te.nodes[1]["owner"] = "A"

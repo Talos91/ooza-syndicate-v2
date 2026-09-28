@@ -272,7 +272,16 @@ func _process(dt: float) -> void:
 		_enter(want)
 	_step_fades(dt)
 	track_t += dt
-	if cur < 0 or track == "" or slot in Rules.MUSIC_STINGERS or not players[cur].playing:
+	if slot in Rules.MUSIC_STINGERS:
+		# Daniele (2026-09-28): after the VICTORY / DEFEAT stinger the MENU music comes back on the results screen (was silence).
+		# The phase stays the stinger's (it is not re-entered); only the slot moves on to MENU, which loops as usual.
+		var ended := cur < 0 or not players[cur].playing
+		if test_len > 0.0:
+			ended = track_t >= test_len
+		if ended and phase in Rules.MUSIC_STINGERS:
+			_play("MENU", Rules.MUSIC_XFADE_START)
+		return
+	if cur < 0 or track == "" or not players[cur].playing:
 		return
 	var length: float = test_len if test_len > 0.0 else players[cur].stream.get_length()
 	var pos: float = track_t if test_len > 0.0 else players[cur].get_playback_position()

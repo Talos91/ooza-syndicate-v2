@@ -354,6 +354,7 @@ func _run() -> void:
 	hs.nodes[target]["structure"] = "monster_hub"     # (staged: B's captured neighbour holds a ready hub)
 	hs.nodes[target]["units"] = 300.0
 	hs.nodes[target]["monster_ready_t"] = 0.0
+	Rules.MONSTER_REACH = 3                           # (A's home is 2 decks from the staged hub; the rule is 1 since 0.22.1 - restored below)
 	check(host._execute(g_id, {"action": "launch_monster", "a": target, "args": {"to": 1.5}}) == [false, "Order rejected"], "a monster order with a bad target is rejected")
 	var lm: Array = host._execute(g_id, {"action": "launch_monster", "a": target, "args": {"to": home_a}})
 	check(lm[0] and hs.monsters.size() == 1, "a guest's monster launch runs on the host (%s)" % str(lm))
@@ -381,6 +382,7 @@ func _run() -> void:
 	hs.monsters = []
 	hs.nodes[target]["hub_monster"] = -1              # (cleanup, matching hs.monsters = [] above)
 	hs.nodes[target]["monster_ready_t"] = 0.0          # (the earlier real launch put it on a ~40 s cooldown)
+	Rules.MONSTER_REACH = 1
 	hs.nodes[home_b]["allies"] = {}
 	hs.nodes[home_b]["arrivals"] = []
 	hs.draw_line = ""
