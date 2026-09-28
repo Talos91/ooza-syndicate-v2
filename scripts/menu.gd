@@ -657,6 +657,7 @@ func show_help() -> void:
 
 
 static var _opt_tab := "game"                      # SETTINGS: the open tab (kept while the game runs)
+static var _opt_arg_read := false
 const OPT_TABS := [["game", "GAME"], ["display", "DISPLAY"], ["debug", "DEBUG"]]
 # PRIVACY: (the telemetry branch's rows go here) - its PRIVACY block comes before DEBUG: a ["privacy", "PRIVACY"] tab
 # between DISPLAY and DEBUG above, and its 2-3 rows in show_options' "privacy" branch (_opt_row, like the others).
@@ -670,6 +671,11 @@ func show_options() -> void:
 	## (phones grow them to 44 pt). No audio settings exist yet, so no AUDIO tab and no restore-defaults. TERRITORY lives
 	## in ARMIES > COSMETICS > CORE (0.19.2). DONE / BACK return to the page the gear was pressed on.
 	_last_show = show_options                  # a resize that changes the phone sizing rebuilds it (_fit)
+	if not _opt_arg_read:                              # UI: screenshots open a tab (--options-tab=display)
+		_opt_arg_read = true
+		for arg in OS.get_cmdline_user_args():
+			if arg.begins_with("--options-tab="):
+				_opt_tab = arg.substr(14)
 	var tab := _meta_open("options", show_main)
 	var back := func(): _meta_back("options", show_main)
 	var area := shell_open("OOZE / SETTINGS", tab, back, faction)
@@ -726,7 +732,7 @@ func show_options() -> void:
 			y += _opt_row(y, w, "ENEMY COUNTS", "SHOWN: every node's count, as in Alpha 11. HIDDEN: no unit numbers on enemy nodes, so you scout.",
 					[["SHOWN", not Rules.hide_enemy_counts, func(): Rules.hide_enemy_counts = false],
 					["HIDDEN", Rules.hide_enemy_counts, func(): Rules.hide_enemy_counts = true]])
-	_column_end(col, n0, y)
+	_column_end(col, n0, y, true)
 
 
 func _opt_row(y: float, w: float, title_text: String, desc: String, opts: Array, off := false) -> float:
@@ -1150,8 +1156,9 @@ func _clip(text: String, pos: Vector2, size: float, col: Color, width: float, he
 func _column(pos: Vector2, dims: Vector2, selected := false) -> Dictionary:
 	## An opaque panel whose inside scrolls (phones grow rows to 44 pt and text to 12.5 pt, more than fits): build its
 	## rows at (0, y) in `content`, then _column_end(col, before, height) moves them in. col["w"] = the width to fill.
-	UiKit.panel(self, pos, dims, shell_f, selected)
+	var pnl := UiKit.panel(self, pos, dims, shell_f, selected)
 	var col := stack_open(pos + Vector2(18.0, 12.0), dims - Vector2(26.0, 24.0))
+	col["panel"] = pnl
 	var sc: TouchScroll = col["scroll"]
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var bar := sc.get_v_scroll_bar()                  # a slim accent grabber, not the default grey bar
@@ -1166,11 +1173,16 @@ func _column(pos: Vector2, dims: Vector2, selected := false) -> Dictionary:
 	return col
 
 
-func _column_end(col: Dictionary, before: int, h: float) -> void:
+func _column_end(col: Dictionary, before: int, h: float, fit := false) -> void:
+	## `fit`: the panel shrinks to its rows when they need less than it was given.
 	stack_capture(col, before)
 	var inner: Control = col["inner"]
 	inner.custom_minimum_size = Vector2(float(col["w"]), h + 6.0)
 	inner.size = inner.custom_minimum_size
+	var sc: Control = col["scroll"]
+	if fit and h + 12.0 < sc.size.y:
+		sc.size.y = h + 12.0                            # a little over the rows: no scroll bar
+		(col["panel"] as Control).size.y = h + 36.0
 
 
 func _flow(nodes: Array, pos: Vector2, width: float, gap := 8.0) -> float:
