@@ -829,7 +829,12 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 	var total := 0.0
 	var hts := []
 	for ln in lines:
-		var h: float = float(ln[1]) if ln[0] == "" else UiKit.text_h(self, ln[0], ln[1], tw, ln[3]) + 2.0
+		if int(ln[4]) > 0 and UiKit.text_w(self, ln[0], ln[1], ln[3]) + str(ln[0]).length() * float(ln[4]) > tw:
+			ln[0] = str(ln[0]).replace("  ·  ", "
+")          # a spaced kicker too wide: one part per line
+		var h: float = float(ln[1]) if ln[0] == "" else (UiKit.line_h(self, ln[1], ln[3]) * (str(ln[0]).count("
+") + 1) + 2.0
+				if int(ln[4]) > 0 else UiKit.text_h(self, ln[0], ln[1], tw, ln[3]) + 2.0)
 		hts.append(h)
 		total += h
 	if total > body_h:                                       # no room for the tagline (phones)
@@ -842,7 +847,8 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 			continue
 		if ln[0] != "":
 			var l := UiKit.label(self, ln[0], ln[1], ln[2], ln[3], ln[4])
-			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			if int(ln[4]) == 0:
+				l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			l.custom_minimum_size = Vector2(tw, 0)
 			_shell_add(l, Vector2(tx, ly))
 		ly += hts[i]
@@ -2044,6 +2050,7 @@ func show_maps() -> void:
 			cap_text = str(m.get("name", "")).replace("*", "").to_upper()
 		var cap := UiKit.label(self, cap_text, 13, UiKit.accent(faction) if picked else UiKit.INK, true)
 		cap.clip_text = true
+		cap.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		cap.position = Vector2(10, 6.0 + thumb.y + (cap_h - UiKit.line_h(self, 13, true)) / 2.0)
 		cap.size = Vector2(cw - 20.0, UiKit.line_h(self, 13, true))
 		b.add_child(cap)
