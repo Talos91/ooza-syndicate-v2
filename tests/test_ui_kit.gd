@@ -1,7 +1,7 @@
 extends SceneTree
 ## Headless UI-kit check:  Godot --headless --path . --script res://tests/test_ui_kit.gd
 ## The Alpha 21 shell pieces that need no running menu: the last played faction (save / load / fallbacks), every
-## faction's accent and tag, FrameCard's button per state, NavBar's tabs, TouchScroll's horizontal mode.
+## faction's accent and tag, the CAMPAIGN view switch, FrameCard's button per state, NavBar's tabs, TouchScroll's horizontal mode.
 ## (The pages' phone sizes are checked on screenshots: --window=1136x640 --mobile --menu-page=... --menu-shot=...)
 ## Exit code 0 = all passed.
 
@@ -25,6 +25,10 @@ func _init() -> void:
 	c.set_value("home", "faction", "stale")
 	c.save(CFG)
 	check(UiKit.last_faction() == "vex", "a stale saved faction falls back to VEX")
+	check(UiKit.campaign_view() == "map", "CAMPAIGN opens on the city map by default")
+	check(UiKit.save_campaign_view("cards") and UiKit.campaign_view() == "cards" and UiKit.last_faction() == "vex",
+			"the CARDS switch is remembered, next to the faction")
+	check(UiKit.save_campaign_view("nope") and UiKit.campaign_view() == "map", "anything else is the city map")
 	UiKit.path = "user://no/such/dir/ui.cfg"
 	check(UiKit.last_faction() == "vex" and not UiKit.save_last_faction("null"), "no storage: VEX, and the save says no")
 	for f in UiKit.ORDER:
