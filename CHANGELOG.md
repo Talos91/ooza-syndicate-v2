@@ -12,6 +12,7 @@
   telemetry, numbers only, only when telemetry is shared - so lag can be told from frame rate next time.
   The PRIVACY page and privacy.html list "online connection quality" accordingly (🏆; the telemetry function whitelists the key).
 - Line endings: a .gitattributes keeps text at LF (the hotfix commit had re-saved 602 files as CRLF from a Windows worktree).
+- Tutorial L6 says "1 deck away" (🎓; was "1 decks").
 - **Version label**: the screens read **ALPHA 22.3** (Daniele: "shouldn't it be just alpha 22.0x"); the internal number stays 0.22.2.
 
 ## 0.22.2 "Alpha 22" - 2026-09-29 (HOTFIX: music off by default)
