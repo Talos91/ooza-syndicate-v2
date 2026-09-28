@@ -175,6 +175,7 @@ var ai_fill := ""                                  # host setting: "" = every se
 # own), so every screen - a headless match host's too - shows the same. Offline each player keeps their own (UiKit).
 var room_backdrop := "auto"
 const BACKDROP_COUNT := 5                          # Scenery.BATTLE_BACKDROPS.size() (net.gd loads without Scenery)
+# The backdrop pick is cosmetic: unlike the other owner settings it does NOT un-READY anyone (🖥️ Server review, 2026-09-29) - on purpose.
 # --- end UI ---
 var rejoin := {}                                   # guest: {code, token, faction} to RECONNECT to a dropped room
 var _tokens := {}                                  # host: player id -> secret rejoin token (never broadcast)

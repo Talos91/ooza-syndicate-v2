@@ -543,6 +543,7 @@ func _run() -> void:
 	_open_room("1v1")
 	var bg1 := _join("gbg")
 	_deliver()
+	check(Net.BACKDROP_COUNT == Scenery.BATTLE_BACKDROPS.size(), "BACKGROUND: Net.BACKDROP_COUNT matches Scenery.BATTLE_BACKDROPS (🖥️: they drift otherwise)")
 	check(host.room_backdrop == "auto" and bg1.room_backdrop == "auto", "BACKGROUND: a new room plays the map's own")
 	host.set_room_backdrop("3")
 	_deliver()
