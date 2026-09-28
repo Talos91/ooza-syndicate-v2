@@ -428,6 +428,7 @@ func _start_map(path: String) -> void:
 	get_viewport().size_changed.connect(_on_resized)
 	started = true
 	paused = false
+	Warmup.run(self)                                   # MATCH FEEL: every effect's shader drawn once now, behind the VERSUS card (warmup.gd)
 	if mission:                                        # CAMPAIGN: the briefing card, the match paused until START
 		_mission_setup()
 	if thumb_path != "":

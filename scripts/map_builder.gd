@@ -277,15 +277,35 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 	return vis
 
 
+static var _light_slots := {}        # piece instance id -> [[MeshInstance3D, surface]]: its OS_Light surfaces (set_lights)
+
+
 static func set_lights(node: Node3D, mat: Material) -> void:
-	## Override every OS_Light surface of a piece (deck edge lights in a state colour, or null).
-	for mi in node.find_children("*", "MeshInstance3D", true, false):
-		var mesh := (mi as MeshInstance3D).mesh
-		for s in range(mesh.get_surface_count()):
-			var m := mesh.surface_get_material(s)
-			if m and m.resource_name.begins_with("OS_Light"):
-				mi.set_surface_override_material(s, mat)
-	MapBatch.refresh(node)                          # Alpha 21: a batched piece's light slots follow
+	## Override every OS_Light surface of a piece (deck edge lights in a state colour, or null). Match feel (view
+	## audit): the Last Stand / relay blinks call this several times a second per deck - the surfaces are found once
+	## per piece (not two tree searches per call) and only their meshes move batch slots.
+	var id := node.get_instance_id()
+	var slots: Array = _light_slots.get(id, [])
+	if not _light_slots.has(id) or (not slots.is_empty() and not is_instance_valid(slots[0][0])):
+		slots = []
+		for mi in node.find_children("*", "MeshInstance3D", true, false):
+			var mesh := (mi as MeshInstance3D).mesh
+			if mesh == null:
+				continue
+			for s in range(mesh.get_surface_count()):
+				var m := mesh.surface_get_material(s)
+				if m and m.resource_name.begins_with("OS_Light"):
+					slots.append([mi, s])
+		_light_slots[id] = slots
+	var meshes := []
+	for sl in slots:
+		var mi: MeshInstance3D = sl[0]
+		if not is_instance_valid(mi):
+			continue
+		mi.set_surface_override_material(int(sl[1]), mat)
+		if not mi in meshes:
+			meshes.append(mi)
+	MapBatch.refresh_meshes(meshes)                 # Alpha 21: a batched piece's light slots follow
 
 
 static func set_state_color(entry: Dictionary, c: Color) -> void:

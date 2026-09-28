@@ -18,13 +18,24 @@ extends Node
 ## user://settings.cfg [audio] and applied to the Master bus at once (there is no music yet, so one bus is the whole
 ## mix; Web's sample playback supports the Master bus's volume and mute). Web: browsers start audio on the first tap - Godot's web audio resumes its
 ## context on the first input event, so nothing plays before it and nothing needs unlocking here.
+## Match feel (Daniele's phone test, 2026-09-28: "obnoxious (but a good starting point)"): the frequent battle noise
+## (Rules.SOUND_BED: sends, fights, hits, machinegoon, laser, falls) is a soft bed - long throttles, quieter, a small
+## pitch spread, only for your side's lines or ones on screen, held off for Rules.SOUND_DUCK s after a cue
+## (Rules.SOUND_CUES: capture, node lost, Last Stand, knock-out, win, collapse), which stay clear. First run: 30 %.
+## Web: every stream is registered as a WebAudio sample when the match node is made (no decode on its first play).
+## Envelope (Daniele, with music: "less loud and that they fade more seamlessly"): each match sound fades in and its
+## tail fades out (Rules.SOUND_FADE_IN / SOUND_FADE_OUT, a volume tween per voice), a repeat of an event still sounding
+## crossfades (the old voice fades out over Rules.SOUND_XFADE, the new one starts on a free voice), and the priority
+## sounds get spare voices (Rules.SOUND_PRIORITY_VOICES) so they seldom cut anything off. Every sound plays on the
+## "Sfx" bus; an empty "Music" bus waits beside it, both under Master (ensure_buses).
 ## Debug: --sfx-log (after `--`) prints every sound played.
 
 const ROOT := "res://assets/audio/sfx/"
 # event -> "<pack>/<file>" (Set 4 alt 1, the demo's table in README-DEMO.md)
 const FILES := {
 	"send": "slime/slime_05", "fight": "slime/slime_14", "hit": "impact/impactGeneric_light_000",
-	"capture": "digital/powerUp5", "node_lost": "digital/phaserDown2", "upgrade": "digital/powerUp2",
+	"capture": "digital/powerUp5", "node_lost": "digital/phaserDown2", "rival_capture": "digital/powerUp5",
+	"upgrade": "digital/powerUp2",
 	"build": "digital/highUp", "laser": "scifi60/sfx_07a", "machinegoon": "scifi60/sfx_09a",
 	"monster_launch": "slime/slime_03", "monster_stomp": "impact/impactPunch_heavy_002",
 	"monster_take": "slime/slime_08", "monster_fall": "slime/splash_14", "skill": "digital/phaseJump2",
@@ -52,7 +63,8 @@ var main: Node
 var sim: Sim = null
 var log_on := "--sfx-log" in OS.get_cmdline_user_args()
 var voices: Array[AudioStreamPlayer] = []
-var voice_info: Array = []                # per voice [started msec, event]
+var voice_info: Array = []                # per voice [started msec, event, fading out]
+var envelopes: Array = []                 # per voice its volume Tween (null when none runs)
 var last_play := {}                       # event -> msec
 var pending: Array = []                   # this frame's fx events (main's loop, before it clears the list)
 var lines := {}                           # horde id -> [state, s, L, hostile target]: the board last frame
@@ -60,6 +72,8 @@ var owners := {}                          # node id -> owner last frame (a captu
 var builds := {}                          # node id -> [structure, tier] last frame (a build_done = upgrade or build)
 var shot_t := {}                          # machinegoon node id -> its last shot stamp
 var was_over := false
+var duck_until := 0                       # msec: the bed stays quiet until then (a cue just played)
+var human := "A"                          # the viewer's seat (main.HUMAN, read each frame)
 
 
 # ------------------------------------------------------------------ the settings (user://settings.cfg [audio])
@@ -126,8 +140,21 @@ static func bus_db() -> float:
 
 static func apply_settings() -> void:
 	_load()
+	ensure_buses()
 	AudioServer.set_bus_volume_db(0, bus_db())
 	AudioServer.set_bus_mute(0, not _on)
+
+
+static func ensure_buses() -> void:
+	## The "Sfx" bus every sound plays on and an empty "Music" bus for the soundtrack to come, both sending to Master.
+	for spec in [[Rules.SOUND_SFX_BUS, Rules.SOUND_SFX_BUS_DB], [Rules.SOUND_MUSIC_BUS, Rules.SOUND_MUSIC_BUS_DB]]:
+		if AudioServer.get_bus_index(str(spec[0])) >= 0:
+			continue
+		AudioServer.add_bus()
+		var i := AudioServer.bus_count - 1
+		AudioServer.set_bus_name(i, str(spec[0]))
+		AudioServer.set_bus_send(i, "Master")
+		AudioServer.set_bus_volume_db(i, float(spec[1]))
 
 
 static func _can_play(n: Node) -> bool:
@@ -169,13 +196,17 @@ static func on_fx(ev: Dictionary) -> void:
 
 
 func _ready() -> void:
-	for i in range(Rules.SOUND_VOICES):
+	for i in range(Rules.SOUND_VOICES + Rules.SOUND_PRIORITY_VOICES):   # the last ones: the priority sounds' spares
 		var p := AudioStreamPlayer.new()
+		p.bus = Rules.SOUND_SFX_BUS
 		add_child(p)
 		voices.append(p)
-		voice_info.append([0, ""])
+		voice_info.append([0, "", false])
+		envelopes.append(null)
 	for ev in FILES:                                   # load the set now, not on the first fight
-		_stream(FILES[ev])
+		var st := _stream(FILES[ev])
+		if st != null and OS.has_feature("web"):       # match feel: into WebAudio now, not on its first play
+			AudioServer.register_stream_as_sample(st)
 
 
 func _exit_tree() -> void:
@@ -190,13 +221,17 @@ func _process(_delta: float) -> void:
 	var s: Sim = main.get("sim")
 	if s == null:
 		return
+	if not _on:                                        # SOUND OFF: no board tracking at all (code audit); it is
+		pending.clear()                                # learned afresh, silently, when the sound comes back on
+		sim = null
+		return
 	if s != sim:                                       # a new match (or a rebuilt Sim): learn the board silently
 		sim = s
 		pending.clear()
 		_remember()
 		was_over = sim.over
 		return
-	var human := str(main.get("HUMAN"))
+	human = str(main.get("HUMAN"))
 	var taken := {}                                    # nodes a monster took this frame (its own sound says it)
 	var gone := {}                                     # lines recalled / ghosts ended: not wiped out
 	var fell := false
@@ -213,11 +248,18 @@ func _process(_delta: float) -> void:
 			continue                                   # another seat's secret (Ghost Line): not ours to hear
 		match str(ev.get("type", "")):
 			"capture":
+				# by side (code audit A3): you / an ally took it = capture, you / an ally lost it = node lost, the
+				# rivals among themselves (or off a neutral) = a quiet generic cue, only when on screen
 				var id := int(ev["node"])
 				if taken.has(id):
 					continue
 				var was := str(owners.get(id, ""))
-				_play("node_lost" if was != "" and not ev.get("handover", false) else "capture")
+				if sim.allied(str(ev.get("seat", "")), human):
+					_play("capture")
+				elif was != "" and sim.allied(was, human):
+					_play("node_lost")
+				else:
+					_play("rival_capture", _near(false, sim.nodes[id]["pos"]))
 			"build_done":
 				var id := int(ev["node"])
 				var n: Dictionary = sim.nodes[id]
@@ -243,17 +285,20 @@ func _process(_delta: float) -> void:
 				and not tn.is_empty() and not sim.collapsed.get(tn["id"], false) and not sim.allied(str(tn["owner"]), str(h["owner"]))
 		var st := str(h.get("state", ""))
 		var was: Array = lines.get(id, [])
+		var mine: bool = sim.allied(str(h["owner"]), human) or (not tn.is_empty() and sim.allied(str(tn["owner"]), human))
+		var at: Vector3 = Sim.sample(h, float(h.get("s", 0.0)))[0] if h.has("pts") and (h["pts"] as PackedVector3Array).size() > 1 else Vector3.INF
+		var near := _near(mine, at)
 		if was.is_empty():
-			_play("send")
+			_play("send", near)
 		elif (st == "fight" and str(was[0]) != "fight") or (hostile and not bool(was[3])):
-			_play("fight")
-		now[id] = [st, float(h.get("s", 0.0)), float(h.get("L", 0.0)), hostile]
+			_play("fight", near)
+		now[id] = [st, float(h.get("s", 0.0)), float(h.get("L", 0.0)), hostile, near]
 	for id in lines:
 		if now.has(id) or gone.has(id):
 			continue
 		var was: Array = lines[id]
 		if str(was[0]) == "fight" or (str(was[0]) == "move" and float(was[1]) < float(was[2]) - HIT_MARGIN and not fell):
-			_play("hit")
+			_play("hit", was.size() < 5 or bool(was[4]))
 	lines = now
 	for n in sim.nodes:                                # machinegoon streams: a new shot stamp every firing frame
 		if str(n.get("structure", "")) == "machinegoon":
@@ -262,7 +307,7 @@ func _process(_delta: float) -> void:
 				var t := float(shot.get("t", -1.0))
 				if t != float(shot_t.get(n["id"], -1.0)):
 					shot_t[n["id"]] = t
-					_play("machinegoon")
+					_play("machinegoon", _near(sim.allied(str(n["owner"]), human), n["pos"]))
 	_remember_nodes()
 	if sim.over and not was_over:                      # the win jingle for your side (every side in an all-AI demo)
 		var w := str(sim.winner)
@@ -287,22 +332,36 @@ func _remember_nodes() -> void:
 		builds[n["id"]] = [str(n.get("structure", "")), int(n.get("tier", 0))]
 
 
+func _near(mine: bool, at: Vector3) -> bool:
+	## A bed sound is heard for your side's lines (and lines at your nodes) or ones on screen (the Last Stand's zoom
+	## leaves part of the map out).
+	if mine:
+		return true
+	var cam: Camera3D = main.get("cam") if main != null else null
+	return at == Vector3.INF or cam == null or cam.is_position_in_frustum(at)
+
+
 # ------------------------------------------------------------------ playback
-func _play(event: String) -> void:
+func _play(event: String, heard := true) -> void:
 	var now_ms := Time.get_ticks_msec()
+	var bed: bool = event in Rules.SOUND_BED
+	if bed and (not heard or now_ms < duck_until):
+		return                                         # not your side's and off screen, or a cue is speaking
 	var gap := float(Rules.SOUND_GAP.get(event, Rules.SOUND_GAP_DEFAULT))
 	if now_ms - int(last_play.get(event, -100000)) < int(gap * 1000.0):
 		return
 	var st := _stream(str(FILES.get(event, "")))
 	if st == null:
 		return
+	var prio: bool = event in Rules.SOUND_PRIORITY
 	var vi := -1
-	for i in range(voices.size()):
+	var usable := voices.size() if prio else Rules.SOUND_VOICES
+	for i in range(usable):
 		if not voices[i].playing:
 			vi = i
 			break
 	if vi < 0:
-		if not event in Rules.SOUND_PRIORITY:
+		if not prio:
 			return                                     # every voice busy: drop it (a busy map stays readable)
 		var oldest := now_ms + 1
 		for i in range(voices.size()):
@@ -311,16 +370,46 @@ func _play(event: String) -> void:
 				vi = i
 		if vi < 0:
 			return
+	for i in range(voices.size()):                     # the same event still sounding: it fades out under the new one
+		if i != vi and voices[i].playing and str(voice_info[i][1]) == event and not bool(voice_info[i][2]):
+			_fade_out(i, Rules.SOUND_XFADE)
 	last_play[event] = now_ms
 	var p := voices[vi]
+	if envelopes[vi] != null:
+		(envelopes[vi] as Tween).kill()
 	p.stop()
 	p.stream = st
-	p.volume_db = float(Rules.SOUND_VOL.get(event, -6.0))
+	var level := float(Rules.SOUND_VOL.get(event, -6.0))
+	p.pitch_scale = (1.0 + randf_range(-Rules.SOUND_BED_PITCH, Rules.SOUND_BED_PITCH)) if bed else 1.0
+	if event in Rules.SOUND_CUES:
+		duck_until = now_ms + int(Rules.SOUND_DUCK * 1000.0)
+	p.volume_db = level - Rules.SOUND_ATTACK_DB
 	p.play()
-	voice_info[vi] = [now_ms, event]
+	voice_info[vi] = [now_ms, event, false]
+	# the envelope: in over SOUND_FADE_IN, hold, the tail's last SOUND_FADE_OUT down by SOUND_TAIL_DB (the sample ends)
+	var length := st.get_length() / maxf(p.pitch_scale, 0.01)
+	var tail := minf(Rules.SOUND_FADE_OUT, length * 0.5) if length > 0.0 else 0.0
+	var tw := create_tween()
+	tw.tween_property(p, "volume_db", level, Rules.SOUND_FADE_IN)
+	if tail > 0.0:
+		tw.tween_interval(maxf(length - tail - Rules.SOUND_FADE_IN, 0.0))
+		tw.tween_property(p, "volume_db", level - Rules.SOUND_TAIL_DB, tail).set_ease(Tween.EASE_IN)
+	envelopes[vi] = tw
 	played[event] = int(played.get(event, 0)) + 1
 	if log_on:
 		print("SFX t=%.1f %s -> %s.ogg" % [sim.time if sim else 0.0, event, FILES[event]])
+
+
+func _fade_out(i: int, seconds: float) -> void:
+	## Voice i fades SOUND_TAIL_DB down over `seconds`, then stops (a crossfade under a repeat of its event).
+	if envelopes[i] != null:
+		(envelopes[i] as Tween).kill()
+	voice_info[i][2] = true
+	var p := voices[i]
+	var tw := create_tween()
+	tw.tween_property(p, "volume_db", p.volume_db - Rules.SOUND_TAIL_DB, seconds).set_ease(Tween.EASE_IN)
+	tw.tween_callback(p.stop)
+	envelopes[i] = tw
 
 
 static func play_ui(kind: String) -> void:
@@ -341,6 +430,7 @@ static func play_ui(kind: String) -> void:
 		for i in range(Rules.SOUND_UI_VOICES):
 			var p := AudioStreamPlayer.new()
 			p.name = "SfxUi%d" % i
+			p.bus = Rules.SOUND_SFX_BUS
 			tree.root.add_child(p)
 			_ui_voices.append(p)
 	var pick: AudioStreamPlayer = _ui_voices[0]

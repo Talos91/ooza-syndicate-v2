@@ -427,32 +427,61 @@ func _build_arc(mesh: ImmediateMesh, r0: float, r1: float, frac: float) -> void:
 
 
 func _last_stand_warning(n: Dictionary) -> void:
+	## Match feel (Daniele's phone test, 2026-09-28: "last stand ring is too in your face since we have already the
+	## alert tag"): the alert tag (HudOverlay's danger symbol and its countdown) and the pulsing status line carry the
+	## warning; the ring is only a thin, faint outline breathing slowly round the node that drops NEXT, and only that
+	## node's decks blink, slowly. Rules.ls_ring_loud (debug) brings back the old ring - thick, bright, blinking faster
+	## toward the drop on every warned node, every warned deck flashing.
 	var id: int = n["id"]
 	var warned: bool = sim.is_warned(id)
+	var shown := warned and (Rules.ls_ring_loud or ls_next(id))
+	var loud := Rules.ls_ring_loud
 	if not _warn_rings.has(id):
-		if not warned:
+		if not shown:
 			return
 		var mi := MeshInstance3D.new()
-		mi.mesh = _ring_mesh
-		mi.material_override = Mats.glow(Rules.state_color("warn"), 0.9)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		_warn_rings[id] = mi
 	var ring: MeshInstance3D = _warn_rings[id]
-	ring.visible = warned
-	if warned:
-		var left: float = sim.drop_in(id) if sim.v3 else sim.last_stand_warn_t   # 0.18.4: each platform counts to its own drop
-		var blink := 0.5 + 0.5 * sin(sim.time * (4.0 + 12.0 * (1.0 - clampf(left / Rules.LAST_STAND_WARNING, 0.0, 1.0))))
+	ring.visible = shown
+	if not warned:
+		return
+	var left: float = sim.drop_in(id) if sim.v3 else sim.last_stand_warn_t   # 0.18.4: each platform counts to its own drop
+	var blink := 0.5 + 0.5 * sin(sim.time * (4.0 + 12.0 * (1.0 - clampf(left / Rules.LAST_STAND_WARNING, 0.0, 1.0))))
+	if not loud:
+		blink = 0.5 + 0.5 * sin(sim.time * Rules.LS_RING_BREATHE)
+	if shown:
 		ring.position = n["pos"] + Vector3(0, 0.3, 0)
-		ring.scale = Vector3.ONE * (Rules.R + 0.9)
-		ring.transparency = 0.2 + 0.5 * blink
-		for link in sim.adj[id]:                        # threatened decks flash red
-			var edge_i: int = link[1]
-			var off: Material = null if Rules.bridge_combat else Mats.light_color(TRIM_OFF, "trim_off")
-			var mat: Material = Mats.light_color(Rules.state_color("warn")) if blink > 0.5 else off
-			if _edge_light.get(edge_i, "") != "warn%d" % int(blink > 0.5):
-				_edge_light[edge_i] = "warn%d" % int(blink > 0.5)
-				for d in vis["edge_decks"][edge_i]:
-					MapBuilder.set_lights(d, mat)
+		if loud:
+			ring.mesh = _ring_mesh
+			ring.material_override = Mats.glow(Rules.state_color("warn"), 0.9)
+			ring.scale = Vector3.ONE * (Rules.R + 0.9)
+			ring.transparency = 0.2 + 0.5 * blink
+		else:
+			ring.mesh = _thin_ring
+			ring.material_override = Mats.glow(Rules.state_color("warn"), Rules.LS_RING_ALPHA)
+			ring.scale = Vector3.ONE * (Rules.R + Rules.LS_RING_R)
+			ring.transparency = 1.0 - (0.6 + 0.4 * blink)
+	for link in sim.adj[id]:                        # threatened decks flash red (only the next drop's, unless loud)
+		var edge_i: int = link[1]
+		var flash := blink > 0.5 and (loud or ls_next(id) or ls_next(int(link[0])))   # (one answer per deck)
+		var off: Material = null if Rules.bridge_combat else Mats.light_color(TRIM_OFF, "trim_off")
+		var mat: Material = Mats.light_color(Rules.state_color("warn")) if flash else off
+		if _edge_light.get(edge_i, "") != "warn%d" % int(flash):
+			_edge_light[edge_i] = "warn%d" % int(flash)
+			for d in vis["edge_decks"][edge_i]:
+				MapBuilder.set_lights(d, mat)
+
+
+func ls_next(id: int) -> bool:
+	## The Last Stand node(s) that actually drop next: the head of the ring's queue (the Very Last Stand reuses it),
+	## or the one warned node of the legacy (v2) Last Stand.
+	if not sim.is_warned(id) or sim.collapsed.get(id, false):
+		return false
+	if not sim.v3:
+		return true
+	return not sim.last_stand_queue.is_empty() and int(sim.last_stand_queue[0]) == id
 
 
 func _decks() -> void:
@@ -855,6 +884,15 @@ func _collapse(node_id: int, from := "") -> void:
 		var dict: Dictionary = get(("_" + key))
 		if dict.has(node_id):
 			(dict[node_id] as Node3D).visible = false
+	var frags := []                                    # the fall pieces made here: freed once they have fallen
+	var decks := 0                                      # visible deck modules going down (the fragment budget)
+	for i in range(sim.edges.size()):
+		if (sim.edges[i]["a"] == node_id or sim.edges[i]["b"] == node_id) and not _collapsed.has(i):
+			for d in vis["edge_decks"][i]:
+				decks += 1 if (d as Node3D).visible else 0
+	# match feel (view audit): a drop used to instance 6 fragment GLBs per module (~48 in one frame) and keep them
+	# all, hidden; at most Rules.LS_FRAGMENTS now, spread over the modules
+	var per := clampi(floori(float(Rules.LS_FRAGMENTS) / maxf(decks, 1.0)), 1, _frag_names.size())
 	for i in range(sim.edges.size()):
 		if sim.edges[i]["a"] == node_id or sim.edges[i]["b"] == node_id:
 			if _collapsed.has(i):
@@ -869,9 +907,11 @@ func _collapse(node_id: int, from := "") -> void:
 				if not deck.visible:
 					continue
 				deck.visible = false
-				for frag in _frag_names:                  # the module breaks into its fall pieces
+				for k in range(per):                       # the module breaks into its fall pieces
+					var frag: String = _frag_names[floori(float(k * _frag_names.size()) / per)]
 					var piece := MapBuilder.put(world, "Deck_S_Frag_" + frag, deck.position, deck.rotation.y, deck.scale.x)
 					falling.append(piece)
+					frags.append(piece)
 	falling.append_array(_goo.falling(node_id))       # TERRITORY: GOO - the goo drops with its platform and decks
 	for pid in vis.get("plazas", {}):                  # maps 3.0: a plaza goes when its last socket goes
 		var pz: Dictionary = vis["plazas"][pid]
@@ -896,7 +936,10 @@ func _collapse(node_id: int, from := "") -> void:
 	tw.chain().tween_callback(func():
 		for p in falling:
 			if is_instance_valid(p):
-				(p as Node3D).visible = false)
+				(p as Node3D).visible = false
+		for p in frags:                                # (the map's own pieces stay, hidden: vis still holds them)
+			if is_instance_valid(p):
+				(p as Node).queue_free())
 
 
 # ------------------------------------------------------------------ neon: half-bridge trims, pier stripes, rims

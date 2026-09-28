@@ -92,7 +92,7 @@ func _check_settings() -> void:
 	check(is_equal_approx(AudioServer.get_bus_volume_db(bus), 0.0) and not AudioServer.is_bus_mute(bus), "SOUND ON at VOLUME 100 %: 0 dB")
 	Sfx._volume = -1                                   # read back from the file, as the next run would
 	check(Sfx.sound_on() and Sfx.volume() == 100, "[audio] read back: ON, 100 %")
-	check(Sfx.next_volume() == 25 and Sfx.volume_label() == "100 %", "the cycle: 100 % -> 25 %")
+	check(Sfx.next_volume() == int(Rules.SOUND_VOLUME_STEPS[0]) and Sfx.volume_label() == "100 %", "the cycle: 100 %% -> %d %%" % int(Rules.SOUND_VOLUME_STEPS[0]))
 	Sfx.set_volume(Rules.SOUND_VOLUME_DEFAULT)
 	var before := int(Sfx.played.get("ui_tap", 0))
 	Sfx.play_ui("tap")

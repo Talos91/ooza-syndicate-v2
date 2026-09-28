@@ -411,11 +411,12 @@ func setup(m: Node3D) -> void:
 	hint.add_theme_color_override("font_shadow_color", Color.BLACK)
 	hint.add_theme_constant_override("shadow_offset_x", 2)
 	hint.add_theme_constant_override("shadow_offset_y", 2)
-	hint.visible = not mobile
+	hint.visible = not touch_ui()                      # (desktop words and the 1 2 3 keys: never on a touch screen)
 	root.add_child(hint)
 	dock = SkillDock.new()                            # SKILLS 2.0: ACTIVE / MAP / ULTIMATE, only when abilities are on
 	root.add_child(dock)
 	dock.setup(main, sim, human, ui_scale, mobile, self, skill_targets)
+	dock.keys = not touch_ui()
 	dock.visible = sim.abilities_on
 	root.add_child(dock.hint_panel)
 	version_label = text_label("v%s  %s" % [Rules.VERSION, Rules.VERSION_NAME], 14, Color(1, 1, 1, 0.5))
@@ -470,12 +471,20 @@ func setup(m: Node3D) -> void:
 	root.add_child(monster_icon)
 
 
+func touch_ui() -> bool:
+	## Match feel (Daniele's phone screenshot, 2026-09-28: the dock's "1 / 2 / 3" on a phone): keyboard hints show only
+	## where there is a keyboard - not on a phone / tablet build, a --mobile run, nor a touch browser that reports
+	## neither (PerfProfile.is_phone: web + a touch screen), where main.mobile stays false.
+	return mobile or PerfProfile.is_phone()
+
+
 func _hint_text() -> String:
 	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: switch)  ·  Tap your ready monster to launch it" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
 
 
 func layout(vp: Vector2, m: Vector4) -> void:
 	margins = m
+	_ins_vp = Vector2(-1, -1)                         # the safe area is read again (a rotation, a new window size)
 	top_panel.size = top_panel.get_combined_minimum_size()
 	top_panel.position = Vector2((vp.x - top_panel.size.x) / 2.0, m.y)   # 0.19.2 spec H6: centred, not left-hung
 	status_label.size = Vector2(maxf(top_panel.size.x, 260 * ui_scale), 30)
@@ -765,10 +774,21 @@ func _badges(cam: Camera3D) -> void:
 			_place_badge(b, masked, small)
 	var vp := get_viewport().get_visible_rect().size
 	var xf := cam.global_transform
-	if vp != _layout_vp or xf != _layout_xf:
+	# Match feel (the Last Stand zoom "still slows the game down"): the full layout is the HUD's heaviest step (~10 ms
+	# on M-39 on desktop, several times that on a phone) and it used to run on every frame the camera moved. While the
+	# camera moves the badges follow their platforms (_follow_badges); the layout runs once it has held still.
+	if vp != _layout_vp or _badge_screen.is_empty():
 		_layout_vp = vp
 		_layout_xf = xf
 		_layout_badges(cam)
+	elif xf != _layout_xf:
+		_still = _still + 1 if xf == _last_xf else 0
+		if _still >= Rules.BADGE_SETTLE_FRAMES:
+			_layout_xf = xf
+			_layout_badges(cam)
+		else:
+			_follow_badges(cam)
+	_last_xf = xf
 	for n in sim.nodes:
 		var panel: Control = badges[n["id"]]["panel"]
 		if panel.visible and _badge_screen.has(n["id"]):
@@ -1114,7 +1134,7 @@ func _apply_reveal() -> void:
 	top_left.visible = shows("strength")
 	top_right.visible = shows("strength")
 	dock.visible = sim.abilities_on and shows("dock")
-	hint.visible = not mobile and not gated
+	hint.visible = not touch_ui() and not gated
 	callouts.visible = shows("notices")
 	if is_instance_valid(inspector) and inspector_id >= 0:
 		inspect(inspector_id, main.cam)
@@ -1521,9 +1541,18 @@ func _under_top() -> float:
 	return maxf(y, notices.position.y)
 
 
+var _ins := Vector4.ZERO               # UiKit.safe_insets for _ins_vp (callout_area; reset by layout())
+var _ins_vp := Vector2(-1, -1)
+
+
 func callout_area(vp: Vector2) -> Rect2:
-	## Where a message may be drawn: the screen inside the device's safe area and the HUD's own margins.
-	var ins := UiKit.safe_insets(vp)
+	## Where a message may be drawn: the screen inside the device's safe area and the HUD's own margins. The insets
+	## are read once per screen size (view audit: on the web they are a JavaScriptBridge.eval, and this runs every
+	## frame a callout is up).
+	if vp != _ins_vp:
+		_ins_vp = vp
+		_ins = UiKit.safe_insets(vp)
+	var ins := _ins
 	var l := maxf(ins.x, margins.x * 0.5)
 	var t := maxf(ins.y, margins.y * 0.5)
 	var r := maxf(ins.z, margins.z * 0.5)
@@ -1958,6 +1987,9 @@ var _badge_dirs := {}
 var _badge_screen := {}                 # node id -> badge centre on screen (fixed camera: laid out once)
 var _layout_vp := Vector2(-1, -1)       # viewport size and camera of the last layout (-1: none yet)
 var _layout_xf := Transform3D()
+var _last_xf := Transform3D()           # the camera last frame (still or moving)
+var _still := 0                         # frames the camera has held still since it moved
+var _anchors := {}                      # node id -> [badge offset from the platform's screen centre, platform scale] at the last layout
 
 
 func _layout_badges(cam: Camera3D) -> void:
@@ -2027,7 +2059,26 @@ func _layout_badges(cam: Camera3D) -> void:
 		if Rect2(Vector2.ZERO, vp).has_point(c):          # a node off screen (close-up) keeps its spot
 			best = _clear_of(best, sz, blocked, vp)
 		_badge_screen[id] = best
+		_anchors[id] = [best - c, _screen_scale(cam, n["pos"], c)]
 		placed.append([best, rb])
+
+
+func _screen_scale(cam: Camera3D, pos: Vector3, c: Vector2) -> float:
+	## A platform's radius on screen along the camera's right axis (the badge offset's scale while the camera moves).
+	return maxf(cam.unproject_position(pos + cam.global_transform.basis.x * Rules.R).distance_to(c), 0.5)
+
+
+func _follow_badges(cam: Camera3D) -> void:
+	## Camera in motion (the Last Stand zoom): each badge keeps its last layout's spot relative to its platform, scaled
+	## with the platform's size on screen - two projections per node instead of the full scoring.
+	var vp := get_viewport().get_visible_rect().size
+	for n in sim.nodes:
+		var a: Array = _anchors.get(n["id"], [])
+		if a.is_empty():
+			continue
+		var c := cam.unproject_position(n["pos"])
+		var p: Vector2 = c + (a[0] as Vector2) * (_screen_scale(cam, n["pos"], c) / float(a[1]))
+		_badge_screen[n["id"]] = Vector2(clampf(p.x, 2.0, vp.x - 2.0), clampf(p.y, 2.0, vp.y - 2.0))
 
 
 func _clear_of(p: Vector2, sz: Vector2, blocked: Array, vp: Vector2) -> Vector2:
