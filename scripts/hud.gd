@@ -479,7 +479,7 @@ func touch_ui() -> bool:
 
 
 func _hint_text() -> String:
-	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: switch)  ·  Tap your ready monster to launch it" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
+	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: its button)  ·  Tap your ready monster to launch it" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
 
 
 func layout(vp: Vector2, m: Vector4) -> void:
@@ -2009,6 +2009,10 @@ func _layout_badges(cam: Camera3D) -> void:
 			var a := TAU * k / 8.0
 			r = maxf(r, cam.unproject_position((n["pos"] as Vector3) + Vector3(cos(a), 0, sin(a)) * Rules.R).distance_to(c))
 		plat[n["id"]] = [c, r]
+	for n in sim.nodes:                                   # RELAY V2: a relay's button pad is covered like a platform
+		var bs := RelayView.button_screen(cam, main.vis, n["id"])
+		if not bs.is_empty():
+			plat[-1 - int(n["id"])] = bs
 	var decks := []                                       # [a, b, half width] on screen
 	for e in sim.edges:
 		var pa: Vector3 = sim.nodes[e["a"]]["pos"]

@@ -71,6 +71,12 @@ const HD_DEFAULTS := {
 	"Machinegoon_T1": true, "Machinegoon_T2": true, "Machinegoon_T3": true,
 	"MonsterVat_BLOOM": true, "MonsterVat_EMBER": true, "MonsterVat_NULL": true, "MonsterVat_SOLAR": true, "MonsterVat_VEX": true,
 	"Monster_BLOOM": true, "Monster_EMBER": true, "Monster_NULL": true, "Monster_SOLAR": true, "Monster_VEX": true,
+	# RELAY V2 (Alpha 22): the relay redo - buttons, mechanisms, relay decks, ghosts (relay_view.gd)
+	"Deck_Ghost_Remote_v2": true, "Deck_Ghost_Retract_v2": true, "Deck_Ghost_Rotation_v2": true,
+	"Deck_Ghost_Switch_v2": true, "Deck_Remote_v2": true, "Deck_Retract_v2": true, "Deck_Rotation_v2": true,
+	"Deck_Switch_v2": true, "Pier_Ghost_v2": true, "Relay_Button_Remote_v2": true, "Relay_Button_Retract_v2": true,
+	"Relay_Button_Rotation_v2": true, "Relay_Button_Switch_v2": true, "Relay_Gate_Remote_v2": true,
+	"Relay_Gate_Rotation_v2": true, "Relay_Gate_Switch_v2": true, "Relay_Retract_v2": true,
 }
 const HD_PACK_FILE := {"kit": "hd.pck", "skins": "skins_hd.pck"}
 static var _hd_pack := {"kit": "", "skins": ""}      # "" not asked yet / "loading" / "ready" / "failed"

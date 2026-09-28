@@ -6,11 +6,12 @@ extends RefCounted
 ## (breadth-first at honest lengths, mark_crossings) for the rules tests, and through build() for
 ## the desktop --map dev path.
 ##
-## Relay nodes (BUILDING-PIECES.md B, Daniele 2026-09-24): the attachment socket sits in the
-## middle like a vat; the relay's own tower stands on Relay_Mount, a ledge bolted outside the rim
-## in the widest free gap between piers; the retract housing is the gate the deck slides into,
-## straddling the rim where that deck enters. State colours: a relay-controlled deck's edge lights
-## carry its state's colour, the tower's symbol (OS_State) glows in the current state's colour.
+## Relay nodes - RELAY V2 (Alpha 22, relay_view.gd): the structure (or the bare attachment socket) holds the
+## node centre; the relay is a button platform off the rim in the widest gap between the bridges (the tap
+## target), a mechanism on the pier of every relay bridge, the kind's marked decks and violet ghosts of where
+## the bridge will be. State colours: a relay-controlled deck's edge lights carry its state's colour; the
+## button glyph, gate lamps and deck marks (OS_State) glow in the relay's current state colour (Fx).
+## (Before 0.22: a tower on the Relay_Mount ledge, or on the socket when no ledge fitted - LEGACY below.)
 
 static var _scenes := {}     # keyed by resolved path (Cosmetics.kit_path), not by kit key: see piece()
 
@@ -140,6 +141,7 @@ static func put(parent: Node3D, name: String, pos: Vector3, heading := 0.0, stre
 	return n
 
 
+# LEGACY (before RELAY V2): the relay towers and their ledge - only campaign_page.gd's diorama and tests/kit_sheet.gd
 const RELAY_HOUSING := {"rotation": "Relay_Rotation_Tower", "retract": "Relay_Retract",
 		"switch": "Relay_Switch_Hub", "remote": "Relay_Remote"}
 const MOUNT_DIST := 7.15             # the tower's centre on the Relay_Mount ledge (kit: 4.6..9.63 m)
@@ -193,29 +195,28 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		var housing: Node3D = null
 		var mount_dir := Vector3.FORWARD
 		var state_parts := []
+		var button := {}
 		if relay != "":
-			var neighbours := []
-			for link in sim.adj[n["id"]]:
-				neighbours.append(sim.nodes[link[0]]["pos"])
-			if relay == "retract":
-				# the gate straddles the rim where the retracting deck enters
-				var far := -1
-				for i in sim.controlled_edges(n["id"]):
-					far = sim._other_end(i, n["id"])
-				var d: Vector3 = (sim.nodes[far]["pos"] - n["pos"]).normalized() if far >= 0 else Vector3.FORWARD
-				housing = put(parent, "Relay_Retract", n["pos"], Rules.heading(d))
-				mount_dir = d
-			else:
-				mount_dir = widest_gap_dir(n["pos"], neighbours)
-				parts.append(put(parent, "Relay_Mount", n["pos"], Rules.heading(mount_dir)))
-				housing = put(parent, RELAY_HOUSING[relay], n["pos"] + mount_dir * MOUNT_DIST, Rules.heading(-mount_dir))
+			# RELAY V2 (the archive roster's dev path too): the button platform, and the retract's v2 gate on the pier
+			# of every deck it retracts (the legacy piers are radial, so the gate stands at the node centre)
+			button = RelayView.put_button(parent, sim, n)
+			housing = button["node"]
+			mount_dir = button["dir"]
 			parts.append(housing)
-			for mi in housing.find_children("*", "MeshInstance3D", true, false):
-				var mesh := (mi as MeshInstance3D).mesh
-				for s in range(mesh.get_surface_count()):
-					var m := mesh.surface_get_material(s)
-					if m and m.resource_name.begins_with("OS_State"):
-						state_parts.append([mi, s])
+			var hosts: Array = [housing]
+			if relay == "retract":
+				for i in sim.controlled_edges(n["id"]):
+					var far: int = sim._other_end(i, n["id"])
+					var gate := put(parent, RelayView.GATE["retract"], n["pos"], Rules.heading((sim.nodes[far]["pos"] - n["pos"]).normalized()))
+					parts.append(gate)
+					hosts.append(gate)
+			for hs in hosts:
+				for mi in (hs as Node3D).find_children("*", "MeshInstance3D", true, false):
+					var mesh := (mi as MeshInstance3D).mesh
+					for s in range(mesh.get_surface_count()):
+						var m := mesh.surface_get_material(s)
+						if m and m.resource_name.begins_with("OS_State"):
+							state_parts.append([mi, s])
 			vat_node = put(parent, "Socket_Attachment", n["pos"], Rules.view_yaw)
 		else:
 			vat_node = put(parent, "Vat_T%d" % n["tier"], n["pos"], Rules.view_yaw)   # every structure faces the viewer
@@ -224,6 +225,8 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 				"vat_tier": -1 if relay != "" else n["tier"], "model_key": "",
 				"attachment_node": null, "attachment": "", "cannon_tier": 0, "housing": housing,
 				"state_parts": state_parts, "mount_dir": mount_dir}
+		if not button.is_empty():
+			vis[n["id"]]["relay_button"] = button
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		var pa: Vector3 = sim.nodes[e["a"]]["pos"]
@@ -261,7 +264,7 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		vis["edge_decks"][i] = deck_nodes
 		vis["edge_base"][i] = base
 		if e["state"].begins_with("m") and ctrl >= 0:  # remote: a lit conduit from the console to its deck
-			var c: Vector3 = sim.nodes[ctrl]["pos"] + vis[ctrl]["mount_dir"] * MOUNT_DIST
+			var c: Vector3 = sim.nodes[ctrl]["pos"] + vis[ctrl]["mount_dir"] * Rules.RELAY_RIM_DIST   # RELAY V2: the button
 			var mid := (pa + pb) / 2.0
 			var conduit := MeshInstance3D.new()
 			var box := BoxMesh.new()
@@ -490,8 +493,9 @@ static func apply_owner(parts: Array, seat: String) -> void:
 # layout baked per map (Models/2.0/export_maps_4_0_game.py -> maps4/*.json + assets/maps4/<code>.glb): 1.7 m
 # per map unit, each bridge on its own rim exit, angled piers (Pier_Angled_00..80, mirrored for negative
 # leans; plazas get exact cuts in the map's GLB), deck heights 0 / +4 / -4 / +8 from the clearance
-# planner, ramps between the pier and the first crossing, relay towers on the clearest rim ledge or on
-# the socket; a pocket hop too short for two piers is a dock (one straight connector, or plain contact).
+# planner, ramps between the pier and the first crossing (the baked relay "mount" ledges are ignored since
+# RELAY V2: RelayView.place picks the button's gap); a pocket hop too short for two piers is a dock (one
+# straight connector, or plain contact).
 # This only places pieces; it never re-plans.
 const OVER_H := 4.0                  # Deck_Overpass_High rise per level (builder OVER_H)
 const UNDER_BASE := 2.4              # Deck_Underpass depth as modelled (builder base)
@@ -594,7 +598,12 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 			if n["plaza"] == int(pid):
 				members.append(n["id"])
 		vis["plazas"][int(pid)] = {"node": glb_nodes.get("Plaza_%s" % pid), "members": members}
-	var relays: Dictionary = lay.get("relays", {})
+	# RELAY V2: the button platform, mechanisms, relay decks and ghosts (RelayView) replace the Relay_Mount ledge, the
+	# relay towers and the tower-on-socket fallback: the node centre always holds the structure.
+	var rv := RelayView.new()
+	parent.add_child(rv)
+	rv.setup(sim)
+	vis["relay_view"] = rv
 	for n in sim.nodes:
 		var id: int = n["id"]
 		var parts: Array = []
@@ -606,21 +615,14 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 			parts.append(platform)
 		var housing: Node3D = null
 		var mount_dir := Vector3.FORWARD
-		var tower_on_socket := false
 		var state_parts := []
-		if relay != "" and relay != "retract":
-			var mount = relays.get(str(id), {}).get("mount")
-			if mount is Array:
-				mount_dir = Vector3(mount[0], 0.0, mount[1]).normalized()
-				parts.append(put(parent, "Relay_Mount", n["pos"], Rules.heading(mount_dir)))
-				housing = put(parent, RELAY_HOUSING[relay], n["pos"] + mount_dir * MOUNT_DIST, Rules.heading(-mount_dir))
-			else:                                      # no clear ledge (or a plaza): the tower holds the socket
-				housing = put(parent, RELAY_HOUSING[relay], n["pos"], Rules.view_yaw)
-				tower_on_socket = true
+		var button := {}
+		if relay != "":                                # RELAY V2: the button is the relay's housing (fx beacon, cues)
+			button = RelayView.put_button(parent, sim, n)
+			housing = button["node"]
+			mount_dir = button["dir"]
 			parts.append(housing)
 		var centre := n["pos"] as Vector3
-		if tower_on_socket:                            # the centre slot moves in front of the tower
-			centre += Rules.front_dir() * 3.4
 		var vat_node := put(parent, model_for(n), centre + centre_lift(model_for(n)), Rules.view_yaw)
 		parts.append(vat_node)
 		vis[id] = {"parts": parts, "platform": platform, "vat_node": vat_node,
@@ -628,6 +630,8 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 				"attachment_node": null, "attachment": "", "cannon_tier": 0, "housing": housing,
 				"state_parts": state_parts, "mount_dir": mount_dir, "centre": centre,
 				"state_hosts": [housing] if housing != null else []}   # every piece carrying an OS_State symbol
+		if not button.is_empty():
+			vis[id]["relay_button"] = button
 	for i in range(sim.edges.size()):
 		var e: Dictionary = sim.edges[i]
 		if e["plaza"]:
@@ -645,26 +649,47 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 		var ctrl: int = sim.edge_controller.get(i, -1)
 		var st: String = e["state"]
 		var piers := []
+		var kind := RelayView.edge_kind(e) if ctrl >= 0 else ""   # RELAY V2: this bridge's relay kind
+		var g_end := RelayView.gate_end(sim, i) if kind != "" else -1
+		var swing := []                                # RELAY V2: a rotation's own pier + gate turn with its decks
+		var gate_xf = null
 		for end in range(2):
 			var nid: int = e["a"] if end == 0 else e["b"]
 			var exit := A if end == 0 else B
 			var dir := d if end == 0 else -d
 			var p_len: float = p0 if end == 0 else p1
+			var lean := float(g["lean%d" % end])
 			var pier: Node3D
+			# RELAY V2: the mechanism replaces a straight pier (Pier_Connector's geometry, origin and heading); over a
+			# leaned or longer pier it stands on the pier, a hair above it
+			var gated: bool = end == g_end and not bool(g["plaza%d" % end])
+			var straight: bool = absf(lean) < 2.5 and absf(p_len - Rules.PIER) < 0.05 and not g.get("dock", false)
 			if bool(g["plaza%d" % end]):
 				pier = glb_nodes.get("PlazaPier_%d_%d" % [i, end])
 			elif g.get("dock", false):                    # maps 4.0 dock: the connector meets the rim directly
 				pier = null
+			elif gated and straight:
+				pier = null
 			else:
-				pier = angled_pier(parent, exit, dir, float(g["lean%d" % end]), st.begins_with("s") and ctrl == nid)
-			if pier:
-				vis[nid]["parts"].append(pier)
-				piers.append(pier)
-			if e["retracts"] and ctrl == nid:           # the gate the deck slides into, at the rim
-				var gate := put(parent, "Relay_Retract", exit + dir * (p_len - Rules.PIER) - dir * Rules.R, Rules.heading(dir))
-				vis[nid]["housing"] = gate
-				vis[nid]["parts"].append(gate)
-				(vis[nid]["state_hosts"] as Array).append(gate)   # a relay may gate several decks
+				pier = angled_pier(parent, exit, dir, lean, st.begins_with("s") and ctrl == nid and not gated)
+			var gate: Node3D = null
+			if gated:
+				gate = put(parent, RelayView.GATE[kind], exit + dir * (p_len - Rules.PIER) - dir * Rules.R, Rules.heading(dir))
+				gate_xf = gate.transform
+				if pier != null:
+					gate.position.y += RelayView.GATE_LIFT
+				(vis[ctrl]["state_hosts"] as Array).append(gate)   # its lamps / marks: the relay's state colour
+				piers.append(gate)
+			if kind == "rotation" and nid == ctrl:
+				swing.append_array([pier, gate].filter(func(x): return x != null))
+				if pier:
+					piers.append(pier)
+			else:
+				if pier and not piers.has(pier):
+					vis[nid]["parts"].append(pier)
+					piers.append(pier)
+				if gate:
+					vis[nid]["parts"].append(gate)
 		vis["edge_piers"][i] = piers
 		var state_key: String = "retract" if e["retracts"] else st
 		var s0 := A + d * p0
@@ -677,6 +702,8 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 				var nmod := maxi(1, roundi(gap / Rules.S))
 				var f := gap / (nmod * Rules.S)
 				var piece_name := "Deck_Retract" if e["retracts"] else ("Deck_Remote" if st.begins_with("m") else "Deck_S")
+				if kind != "":                           # RELAY V2: the kind's marked relay deck (same size)
+					piece_name = RelayView.DECK[kind]
 				for k in range(nmod):
 					decks.append(put(parent, piece_name, s0 + d * (k * Rules.S * f), Rules.heading(d), f))
 			else:
@@ -702,22 +729,20 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 		if state_key != "":
 			for dk in decks:
 				set_lights(dk, Mats.light_color(Rules.state_color(state_key)))
+		if kind != "":                                 # RELAY V2: the destination ghosts (flat decks only), the deck
+			if h == 0.0:                               # marks in the relay's state colour, the swinging pier + gate
+				rv.add_ghosts(ctrl, i, decks, gate_xf if kind == "rotation" else null)
+			(vis[ctrl]["state_hosts"] as Array).append_array(decks)
+			decks.append_array(swing)
 		vis["edge_decks"][i] = decks
 		vis["edge_base"][i] = decks.map(func(x): return (x as Node3D).transform)
-		if st.begins_with("m") and ctrl >= 0:          # remote: a lit conduit from the console to its deck
-			var c: Vector3 = sim.nodes[ctrl]["pos"] + vis[ctrl]["mount_dir"] * (MOUNT_DIST if relays.get(str(ctrl), {}).get("mount") is Array else 0.0)
-			var mid := (A + B) / 2.0
-			var conduit := MeshInstance3D.new()
-			var box := BoxMesh.new()
-			box.size = Vector3(1.0, 0.12, 0.22)
-			conduit.mesh = box
-			conduit.material_override = Mats.light_color(Rules.state_color(st))
-			parent.add_child(conduit)
-			var v := mid - c
-			conduit.position = (c + mid) / 2.0 + Vector3(0, 0.55, 0)
-			conduit.rotation = Vector3(0, Rules.heading(v.normalized()), 0)
-			conduit.scale = Vector3(v.length(), 1.0, 1.0)
-			vis["conduits"][i] = conduit
+		# RELAY V2: the remote's link - a glowing arc from its button to the receiver masts on this bridge's gate (the
+		# old straight conduit is gone, Daniele: "the cable looks too weird"); none when the gate sits by the button
+		if kind == "remote" and vis[ctrl].has("relay_button") and gate_xf is Transform3D:
+			var from: Vector3 = vis[ctrl]["relay_button"]["tap"] + Vector3(0, 0.3, 0)
+			var to: Vector3 = (gate_xf as Transform3D) * Rules.RELAY_LINK_MAST
+			if from.distance_to(to) > Rules.RELAY_LINK_NEAR:
+				vis["conduits"][i] = rv.add_link(ctrl, i, from, to)
 	for n in sim.nodes:                               # relay symbols (OS_State) on the housings and gates
 		for hs in vis[n["id"]]["state_hosts"]:
 			for mi in (hs as Node3D).find_children("*", "MeshInstance3D", true, false):

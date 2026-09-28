@@ -203,6 +203,38 @@ func _invariants(m: Dictionary) -> void:
 		for link in sim.adj[id]:
 			check(not seen.has(link[0]), "%s: one edge per node pair, plaza links included (%d-%d)" % [code, id, link[0]])
 			seen[link[0]] = true
+	_relay_buttons(sim, code)
+
+
+var _relay_min_gap := 360.0
+var _relay_tight := []
+
+
+func _relay_buttons(sim: Sim, code: String) -> void:
+	## RELAY V2 (the map rule for the builder): every relay node off a plaza has a gap of at least 2 x RELAY_MIN_SEP
+	## (51.9 deg) between two of its bridges (headings where the decks cross the button's circle, RIM_DIST 8.45 m), so
+	## its button pad sits in that gap at 8.45 m without touching a deck; and the pad (radius 2) clears every other
+	## platform and every deck of the map by 0.3 m. A tighter node still works in game (the pad moves out, the Strut
+	## stretches) but is reported and fails here.
+	for n in sim.nodes:
+		if n["relay"] == "" or n["plaza"] >= 0:
+			continue
+		var pl := RelayView.place(sim, n["id"])
+		_relay_min_gap = minf(_relay_min_gap, float(pl["gap"]))
+		if bool(pl["tight"]):
+			_relay_tight.append("%s node %d (%.1f deg)" % [code, n["id"], pl["gap"]])
+		check(not bool(pl["tight"]), "%s: relay node %d has a %.1f deg button gap (>= %.1f needed)" % [code, n["id"], pl["gap"], 2.0 * Rules.RELAY_MIN_SEP])
+		var p: Vector3 = (n["pos"] as Vector3) + (pl["dir"] as Vector3) * float(pl["dist"])
+		for o in sim.nodes:
+			if o["id"] != n["id"]:
+				check(Vector2(p.x - o["pos"].x, p.z - o["pos"].z).length() >= Rules.R + Rules.RELAY_PAD_R + 0.3,
+						"%s: relay %d's button clears node %d's platform" % [code, n["id"], o["id"]])
+		for ei in range(sim.edges.size()):
+			var line: Array = sim.deck_line(ei)
+			for k in range(1, line.size()):
+				var q := Geometry3D.get_closest_point_to_segment(p, (line[k - 1] as Vector3) * Vector3(1, 0, 1), (line[k] as Vector3) * Vector3(1, 0, 1))
+				check(q.distance_to(p * Vector3(1, 0, 1)) >= Rules.RELAY_BUTTON_CLEAR - 0.05,
+						"%s: relay %d's button clears deck %d (%.2f m)" % [code, n["id"], ei, q.distance_to(p * Vector3(1, 0, 1))])
 
 
 func _connected(sim: Sim, gone: Dictionary) -> bool:
@@ -615,6 +647,7 @@ func _run() -> void:
 		_corners(m)
 	print("Last Stand corner cycle: the latest collapse ends at %d:%02d; %d of %d multi-corner rings open on two sides (the rest: only one side could fall safely)" % [
 			int(_latest_end) / 60, int(_latest_end) % 60, _pairs_alt, _pairs])
+	print("RELAY V2 button gaps: the narrowest widest-gap is %.1f deg (rule >= %.1f); tight nodes: %s" % [_relay_min_gap, 2.0 * Rules.RELAY_MIN_SEP, str(_relay_tight)])
 	_heights()
 	_drop_timing()
 	_very_last_stand()
