@@ -3883,7 +3883,7 @@ func show_online() -> void:
 	y += _say("The room server runs the match, so a phone that locks or switches apps only drops its own seat - RECONNECT takes it back. The room's creator picks the map and settings. Free-for-all for 2 to 5 players, or teams. Rematch reuses the room; chat stays between rounds.",
 			Vector2(0, y), 13, UiKit.MUTED, w) + 10.0
 	y += _say("Rooms run on the Ooze room server, so any network that reaches the internet can join. If the server is busy, the room's creator hosts it in their browser instead (keep that tab in front)." if web
-			else "Online rooms run in the browser build: open https://talos91.github.io/ooza-syndicate-v2/", Vector2(0, y), 13,
+			else "Online rooms run in the browser build: open https://oozesyndicate.com", Vector2(0, y), 13,
 			UiKit.DIM if web else UiKit.STAR, w)
 	_column_end(host, n0, y, true)
 	# JOIN A FRIEND: a plain panel, never scrolled, so the web's native code field stays exactly on its frame

@@ -17,7 +17,7 @@ signal changed                                      # session, profile or state 
 
 const URL := "https://uqwxorxdnucrdgaqpjpp.supabase.co"
 const KEY := "sb_publishable_3aX4T8IcNbI_BBg4wENMhA_3NNclYw2"   # publishable: meant to ship in the client
-const SITE := "https://talos91.github.io/ooza-syndicate-v2/"     # where Google sign-in comes back off the web (site())
+const SITE := "https://oozesyndicate.com/"     # where Google sign-in comes back off the web (site())
 const REFRESH_EARLY := 600                          # refresh the access token 10 min before it expires
 const SAVE_CHECK := 20.0                            # seconds between "did a save file change?" checks
 
