@@ -428,6 +428,9 @@ const STATE_COLORS := {
 	"warn": Color("#ff5a5a"), "build": Color("#ffd23f"),
 }
 const RELAY_GLYPH := {"rotation": "↻", "retract": "⇤", "switch": "⇄", "remote": "⌁"}
+const RELAY_GLYPH_EMISSION_MAX := 3.2   # 0.22.4 playtest (Daniele's cousins): the ready-breathing relay glyph
+# (Fx._relay_beacon / RelayView's "Glyph") saturated to white in close-ups at its uncapped peak (~5.8); capped
+# here so it keeps its state colour (Rules.state_color) instead of blowing out.
 # texture hue of each Alpha 11 creature map, and the race accent colour
 const FACTIONS := {
 	"vex": [0.518, Color("#19e5ff")], "null": [0.894, Color("#ff19ab")],

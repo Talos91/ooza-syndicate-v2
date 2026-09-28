@@ -361,7 +361,7 @@ func card(d: Dictionary) -> Dictionary:
 	var v := vp()
 	var ph := phone()
 	var mg := margin()
-	var pad := 28.0
+	var pad := float(d.get("pad", 28.0))
 	var actions: Array = d.get("actions", [])
 	var pairs: Array = d.get("pairs", [])
 	var pairs2: Array = d.get("pairs2", []) if not pairs.is_empty() else []
@@ -370,9 +370,11 @@ func card(d: Dictionary) -> Dictionary:
 		for p in row:                                  # wide enough that the toggles' text never clips
 			bw = maxf(bw, (UiKit.text_w(self, str(p[0]), 14, true) + 34.0) * (row as Array).size() + 10.0)
 	var cw := minf(v.x - 2.0 * mg, (1080.0 if ph else 700.0) + bw - (520.0 if ph else 300.0))
-	var bh := UiKit.tap_h(self, 48.0)
+	var row_h := float(d.get("row_h", 48.0))          # 0.22.4: PAUSE > SETTINGS (6 rows) overflowed a 585 px phone
+	var row_gap := float(d.get("row_gap", 10.0))      # by ~8 px; that card alone asks for a tighter row_h/row_gap
+	var bh := UiKit.tap_h(self, row_h)                # (never below the 44 pt tap minimum) - every other card()
 	var rows := actions.size() + (1 if not pairs.is_empty() else 0) + (1 if not pairs2.is_empty() else 0)
-	var col_h := maxf(0.0, rows * (bh + 10.0) - 10.0)
+	var col_h := maxf(0.0, rows * (bh + row_gap) - row_gap)   # caller keeps the defaults above and is unaffected
 	if rows == 0:
 		cw = minf(v.x - 2.0 * mg, 980.0 if ph else 620.0)
 	var body := str(d.get("body", ""))
@@ -399,9 +401,9 @@ func card(d: Dictionary) -> Dictionary:
 	for i in range(actions.size()):
 		var a: Array = actions[i]
 		var kind := str(a[2]) if a.size() > 2 else ("primary" if i == 0 else "secondary")
-		var b := UiKit.btn(self, str(a[0]), Vector2(bx, by), Vector2(bw, 48.0), a[1], kind, f, 16)
+		var b := UiKit.btn(self, str(a[0]), Vector2(bx, by), Vector2(bw, bh), a[1], kind, f, 16)
 		(out["buttons"] as Array).append(b)
-		by += bh + 10.0
+		by += bh + row_gap
 		if i == 0 and not pairs.is_empty():            # the toggles, side by side under the primary (one or two rows)
 			for row in [pairs, pairs2]:
 				if (row as Array).is_empty():
@@ -409,9 +411,9 @@ func card(d: Dictionary) -> Dictionary:
 				var pw := (bw - 10.0) / float((row as Array).size())
 				for j in range((row as Array).size()):
 					var p: Array = row[j]
-					(out["buttons"] as Array).append(UiKit.btn(self, str(p[0]), Vector2(bx + j * (pw + 10.0), by), Vector2(pw, 48.0),
+					(out["buttons"] as Array).append(UiKit.btn(self, str(p[0]), Vector2(bx + j * (pw + 10.0), by), Vector2(pw, bh),
 							p[1], "secondary", f, 14))
-				by += bh + 10.0
+				by += bh + row_gap
 	return out
 
 

@@ -1883,6 +1883,10 @@ func _pause_settings() -> void:
 	var gfx_now := "AUTO (%s)" % ("PHONE" if PerfProfile.is_phone() else "FULL") if PerfProfile.mode() == "auto" 			else str(PerfProfile.MODE_NAMES[PerfProfile.mode()])
 	s.card({"kicker": "PAUSED", "headline": "SETTINGS.",
 			"body": "Tap a setting to change it. GRAPHICS changes the 3D from the next match; the rest right away.",
+			# 0.22.4 playtest (Daniele's cousins): 6 rows (4 actions + 2 toggle rows) at the default row_gap
+			# overflowed a 1266x585 phone viewport by ~8 px. Tighter row_gap/pad here only - MatchScreens.card()
+			# defaults are unchanged for every other card (PAUSE, YOU'RE OUT, VICTORY/DEFEAT, ...).
+			"row_gap": 6.0, "pad": 24.0,
 			"pairs": [["SOUND: " + ("ON" if Sfx.sound_on() else "OFF"), func(): Sfx.set_on(not Sfx.sound_on()); _pause_settings()],   # SOUND
 				["VOLUME: " + Sfx.volume_label(), func(): Sfx.set_volume(Sfx.next_volume()); _pause_settings()]],
 			"pairs2": [["MUSIC: " + ("ON" if Music.music_on() else "OFF"), func(): Music.set_on(not Music.music_on()); _pause_settings()],   # MUSIC
