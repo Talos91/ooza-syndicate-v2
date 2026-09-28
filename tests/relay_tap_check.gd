@@ -2,7 +2,7 @@ extends Node
 ## RELAY V2 tap check (Daniele: "the tap target should be both the button or the whole node, as relays activate with
 ## double tap anyway"). Run WINDOWED as a scene (the camera must project; the Net autoload):
 ##   Godot --path . --resolution 1688x780 res://tests/relay_tap_check.tscn -- --no-telemetry [--mobile]
-## On T-07 (retract, switch, remote relays) with your seat owning them, clicks through main._unhandled_input:
+## On T-07 (retract, switch, remote relays) and tests/relay_multi.json (many bridges per relay), your seat owning them, clicks through main._unhandled_input:
 ##  - a double-tap on the relay's BUTTON fires it; so does a double-tap on the node centre, and one tap on each;
 ##  - a single tap on the button selects the relay node (the inspector opens as for a tap on the node) and fires
 ##    nothing; the button's tap disc is at least Rules.RELAY_HIT_PT across on a phone (RelayView.hit_disc).
@@ -50,13 +50,23 @@ func _reset(id: int) -> void:
 
 func _run() -> void:
 	var mobile := "--mobile" in OS.get_cmdline_user_args()
-	var path := "res://maps4/T-07-switchyard.json"
+	# T-07 (one relay of each kind) and tests/relay_multi.json (a 6-way switch, a rotation turning 3 decks, a 2-bridge
+	# retract, a remote driving decks at 2 nodes: no cap on bridges per relay)
+	for path in ["res://maps4/T-07-switchyard.json", "res://tests/relay_multi.json"]:
+		await _map(path, mobile)
+	print("
+%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
+	get_tree().quit(1 if failures > 0 else 0)
+
+
+func _map(path: String, mobile: bool) -> void:
 	load("res://scripts/main.gd").relaunch = {"faction": "null", "mode": "1v1", "map": path}
 	m = (load(MAIN) as PackedScene).instantiate()
 	m.mobile = mobile
 	get_tree().root.add_child(m)
 	await _frames(12)
 	m.ais.clear()
+	print("-- ", path.get_file())
 	var ppt := UiKit.pt_per_px(m.get_viewport().get_visible_rect().size)
 	for n in m.sim.nodes:
 		if n["relay"] == "":
@@ -82,5 +92,5 @@ func _run() -> void:
 		m._flush_inspect()
 		check(m.hud.inspector_id == id, "%s relay %d: ... and opens its inspector" % [n["relay"], id])
 		await _reset(id)
-	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
-	get_tree().quit(1 if failures > 0 else 0)
+	m.queue_free()
+	await _frames(3)

@@ -21,6 +21,14 @@ const SHOTS := [
 	["structure", "T-08-relay-works", 2, 36.0, "laser"],
 	["tight_gap", "D-02-relay-bench", 6, 48.0, "tight"],
 	["relay_bench", "D-02-relay-bench", -1, 0.0, ""],
+	# composability (tests/relay_multi.json, never pooled): a 6-way switch, a rotation turning 3 decks, 2-bridge retract,
+	# a remote driving decks at 2 nodes
+	["multi_all", "res://tests/relay_multi.json", -1, 0.0, ""],
+	["multi_switch", "res://tests/relay_multi.json", 0, 50.0, ""],
+	["multi_rotation", "res://tests/relay_multi.json", 7, 50.0, ""],
+	["multi_rotation_turn", "res://tests/relay_multi.json", 7, 50.0, "turn"],
+	["multi_retract", "res://tests/relay_multi.json", 13, 44.0, "retract"],
+	["multi_remote", "res://tests/relay_multi.json", 14, 70.0, "remote_off"],
 	["leaned_gate", "T-07-switchyard", 2, 24.0, ""],       # v2h: the switch gate's pylons on a 50 deg angled pier
 	["leaned_retract", "T-08-relay-works", 2, 26.0, ""],    # two retract pylons gates on 6 / 12 deg piers
 ]
@@ -65,7 +73,7 @@ func _run() -> void:
 		var name: String = sh[0]
 		if not only.is_empty() and not name in only:
 			continue
-		var path := "res://maps4/%s.json" % sh[1]
+		var path: String = sh[1] if str(sh[1]).begins_with("res://") else "res://maps4/%s.json" % sh[1]
 		var m := MapBuilder.load_map(path)
 		main_script.relaunch = {"faction": "null", "mode": m["modes"][0], "map": path}
 		var inst: Node = (load(MAIN) as PackedScene).instantiate()
@@ -90,6 +98,9 @@ func _run() -> void:
 				sim.fire_relay(id)
 				await _step(inst, Rules.RELAY_WARNING * 0.4)
 			"retract":
+				sim.fire_relay(id)
+				await _step(inst, Rules.RELAY_WARNING + Rules.RELAY_MOVE + 0.3)
+			"remote_off":                                    # fired once: its targets go, their ghosts show
 				sim.fire_relay(id)
 				await _step(inst, Rules.RELAY_WARNING + Rules.RELAY_MOVE + 0.3)
 			"laser":

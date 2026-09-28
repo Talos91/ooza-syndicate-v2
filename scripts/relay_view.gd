@@ -279,14 +279,25 @@ static func _mat(key: String, kind := "") -> StandardMaterial3D:
 
 
 static func ghost_wanted(sim: Sim, ctrl: int, ei: int) -> bool:
-	## Is relay bridge ei a destination right now: not there, and there on its relay's next state (the pending one
-	## while the warning runs)? Never while it moves in, never for a deck Anchor / Aegis hold, never once an end fell.
+	## Is relay bridge ei a destination right now? A deck that is not there and comes on the relay's next state (the
+	## pending one while the warning runs) - rotation's next heading, a retract's extension, a remote's target. A
+	## SWITCH shows every bridge it has that is not there (Daniele, via Skin Designer: a 6-way switch reads 1 solid +
+	## 5 ghosts). Never while it moves in, never for a deck Anchor / Aegis hold, never once an end fell.
 	var e: Dictionary = sim.edges[ei]
 	if sim.collapsed.get(e["a"], false) or sim.collapsed.get(e["b"], false) or sim.collapsed.get(ctrl, false):
 		return false
 	var n: Dictionary = sim.nodes[ctrl]
 	if n["relay_phase"] == "moving" or sim.is_edge_open(ei) or sim.anchor_state(ei) != null:
 		return false
+	var cur: int = n["relay_index"]
+	if n["relay"] == "switch":
+		return not sim._edge_open_at(ei, cur)
+	return is_next(sim, ctrl, ei)
+
+
+static func is_next(sim: Sim, ctrl: int, ei: int) -> bool:
+	## Does relay bridge ei come in on its relay's next state (the pending one while the warning runs)?
+	var n: Dictionary = sim.nodes[ctrl]
 	var cur: int = n["relay_index"]
 	var nxt: int = n["relay_pending"] if n["relay_phase"] == "warning" else sim.relay_next_index(n)
 	return nxt != cur and not sim._edge_open_at(ei, cur) and sim._edge_open_at(ei, nxt)
@@ -298,7 +309,7 @@ func _process(_dt: float) -> void:
 	var dirty := false
 	for g in groups:
 		var on := ghost_wanted(sim, int(g["ctrl"]), int(g["edge"]))
-		var warm: bool = on and sim.nodes[int(g["ctrl"])]["relay_phase"] == "warning"
+		var warm: bool = on and sim.nodes[int(g["ctrl"])]["relay_phase"] == "warning" and is_next(sim, int(g["ctrl"]), int(g["edge"]))
 		if on != bool(g["on"]) or warm != bool(g["warm"]):
 			g["on"] = on
 			g["warm"] = warm
