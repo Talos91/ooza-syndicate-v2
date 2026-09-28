@@ -30,7 +30,7 @@ func _run() -> void:
 	var teams := {}
 	for s in m["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
-		if mode != "ffa" and s.has("team"):
+		if typeof(s.get("team")) in [TYPE_INT, TYPE_FLOAT]:
 			teams[s["seat"]] = int(s["team"])
 	var sim := Sim.new()
 	sim.setup(m, MapBuilder.layout(m), seats, {}, int(_arg("seed", "7")), teams)
