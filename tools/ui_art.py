@@ -7,7 +7,8 @@ Sources (Daniele's Art Direction folder, "Alpha 20 UI Expansion" / ASSET-SOURCES
     (transparent cutouts, 768 px; SOLAR's dark backdrop is keyed out)
   - the menu environments, Alpha 20 UX/assets/...                   -> assets/art/ui/bg_<faction>.jpg (1600 px)
   - the VEX campaign mission art, campaign-isometric-v2/*.png       -> assets/art/campaign/vex-<id>.jpg (1280 px)
-JPEG for the opaque plates keeps the web download small (the phone build loads them on the menu).
+JPEG for the opaque plates keeps the source small; their .import files are LOSSY (quality 0.8) with a size limit
+(backdrops 1600, mission art 1024, cutouts 640), or Godot stores them lossless and the web index.pck grows ~20 MB.
 """
 import os
 import sys
