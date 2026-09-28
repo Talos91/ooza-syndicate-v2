@@ -36,7 +36,11 @@ const MODE_NAMES := {"1v1": "1 V 1", "2v2": "2 V 2", "3v3": "3 V 3", "2v2v2": "2
 const COLOUR_NAMES := {"A": "CYAN", "B": "GREEN", "C": "PURPLE", "D": "RED", "E": "GOLD", "F": "ROSE", "faction": "FACTION"}
 var maps: Array = []
 var _is_main := false
-var _last_show := Callable()                     # the page on screen (rebuilt when a resize changes the phone sizing)
+var _last_show := Callable():                    # the page on screen (rebuilt when a resize changes the phone sizing)
+	set(v):
+		_prev_show = _last_show                      # UI: the page before it - a meta page's BACK (_meta_open)
+		_last_show = v
+var _prev_show := Callable()
 var _built_pt := 0.0                             # _pt_factor() the page was built with (0 while building)
 var _backdrop: TextureRect
 var _backdrop_art: Texture2D                     # the backdrop's own art (HOME swaps in the hero faction's scene)
@@ -1346,7 +1350,9 @@ func _meta_open(page: String, fallback: Callable) -> String:
 			tab = nav_bar.active
 		elif _meta_from.has(_page):
 			tab = str(_meta_from[_page][1])
-		_meta_from[page] = [_last_show if _last_show.is_valid() and _page != "" else fallback, tab]
+		# UI (Daniele 2026-09-28: "the BACK in LEADERBOARD just reloads the leaderboard"): every meta page sets _last_show
+		# to itself before it gets here, so the page it came from is the one before that (_prev_show)
+		_meta_from[page] = [_prev_show if _prev_show.is_valid() and _page != "" else fallback, tab]
 	return str(_meta_from[page][1])
 
 
@@ -1936,7 +1942,7 @@ func show_leaderboard() -> void:
 	else:
 		y = 0.0
 		for row in _board_rows:
-			var me := bool(row.get("is_me", false))
+			var me: bool = row.get("is_me", false) == true   # the server may send null
 			y += _board_row("#%d" % int(row.get("rank", 0)), str(row.get("name", "")) + ("  (YOU)" if me else ""),
 					"%d WINS" % int(row.get("wins", 0)), Vector2(0, y), w, me) + 6.0
 		if not _board_me.is_empty():                  # 0.20.13: YOU, when you're not on the list - a row like the rest
@@ -1965,7 +1971,7 @@ func _load_board() -> void:
 	var rows := await _account().leaderboard("season_wins", 50)
 	_board_rows = rows
 	_board_me = {}
-	if not rows.any(func(r): return bool(r.get("is_me", false))):   # not on the list: say where you stand (0.20.13)
+	if not rows.any(func(r): return r.get("is_me", false) == true):   # not on the list: say where you stand (0.20.13)
 		_board_me = await _account().my_season_wins()
 	_board_state = "done" if _account().state != "offline" or not rows.is_empty() else "offline"
 	if _page == "leaderboard":
@@ -2047,7 +2053,7 @@ func _history_row(h: Dictionary, names: Dictionary, pos: Vector2, w: float) -> f
 		var f := str(p.get("faction", "null"))
 		if Rules.FACTIONS.has(f):                        # the race emblem, in its own colours
 			UiKit.emblem_rect(self, f, Vector2(px, py), ic)
-		var me := bool(p.get("is_me", false))
+		var me: bool = p.get("is_me", false) == true   # (a null from the server)
 		var who := "YOU" if me and str(p.get("name", "")) == "" else str(p.get("name", ""))
 		if str(p.get("ai_level", "")) != "":
 			who = "AI" if str(p["ai_level"]) == "AI" else "AI " + str(p["ai_level"]).to_upper()

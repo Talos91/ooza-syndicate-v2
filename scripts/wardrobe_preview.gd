@@ -92,14 +92,31 @@ func _refresh() -> void:
 
 
 func _fit_plinth() -> void:
-	## The plinth follows the model's footprint (the widest mesh extent across x / z, from the framed model).
+	## The disc follows the model's BASE (the meshes that reach its lowest tenth), not its widest reach (Daniele's phone
+	## test 2026-09-28: "the base on which they float is often wrong" - side tanks and spikes blew the disc up, and the
+	## quality-pass skins stand on their own 0.34 / 0.56 m plinth): a thin floor spot just under whatever the model
+	## stands on. Refitted whenever the model changes (a skin arriving late included).
 	if _plinth == null or _pivot.get_child_count() == 0:
 		return
 	var node := _pivot.get_child(_pivot.get_child_count() - 1) as Node3D
-	var reach := 0.5
+	var inv := _pivot.global_transform.affine_inverse()
+	var boxes := []
+	var lo := INF
+	var hi := -INF
 	for mi in node.find_children("*", "MeshInstance3D", true, false):
-		var box: AABB = (mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()
-		for c in [box.position, box.end]:
-			var v: Vector3 = _pivot.global_transform.affine_inverse() * (c as Vector3)
-			reach = maxf(reach, maxf(absf(v.x), absf(v.z)))
-	_plinth.scale = Vector3(reach * 0.98, 1.0, reach * 0.98)
+		if not (mi as MeshInstance3D).is_visible_in_tree():
+			continue
+		var box: AABB = inv * ((mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb())
+		boxes.append(box)
+		lo = minf(lo, box.position.y)
+		hi = maxf(hi, box.end.y)
+	if boxes.is_empty():
+		return
+	var band := lo + maxf(0.05, (hi - lo) * 0.1)
+	var reach := 0.3
+	for box in boxes:
+		if (box as AABB).position.y <= band:
+			for c in [(box as AABB).position, (box as AABB).end]:
+				reach = maxf(reach, maxf(absf((c as Vector3).x), absf((c as Vector3).z)))
+	_plinth.scale = Vector3(reach * 1.12, 0.5, reach * 1.12)
+	_plinth.position.y = lo
