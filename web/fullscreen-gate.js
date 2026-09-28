@@ -55,10 +55,15 @@
  // (installed app / fullscreen), and in portrait cover the game with "turn your phone sideways" - the only way on iPhone,
  // where Safari never locks. It sits above the fullscreen gate and goes away the moment the phone is turned.
  let rot = null;
+ let locked = false;                     // lock once per fullscreen / installed-app session (a lock can trigger a resize)
  function tryLock() {
-  if (!(isFull() || matchMedia('(display-mode: standalone)').matches)) return;
-  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+  if (locked || !(isFull() || matchMedia('(display-mode: standalone)').matches)) return;
+  try {
+   if (screen.orientation && screen.orientation.lock)
+    screen.orientation.lock('landscape').then(() => { locked = true; }, () => { locked = true; });   // refused: don't retry
+  } catch (e) { locked = true; }
  }
+ for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) addEventListener(ev, () => { locked = false; });
  function portrait() { return innerHeight > innerWidth * 1.05; }
  function buildRot() {
   const st = document.createElement('style');
@@ -75,7 +80,7 @@
   const up = portrait();
   rot.hidden = !up;
   panel.hidden = up || skipped || isFull();
-  if (!up) tryLock();
+  if (!up && !locked) tryLock();
  }
  for (const ev of ['fullscreenchange', 'webkitfullscreenchange', 'resize', 'orientationchange']) addEventListener(ev, update);
  document.addEventListener('DOMContentLoaded', update);
