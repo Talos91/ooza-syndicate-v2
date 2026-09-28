@@ -11,6 +11,8 @@ extends Node
 ##   off   - platforms (rim) outside the screen, under   hud - platforms under the HUD panels
 ##   bover - badges outside the screen or under the HUD, bhit - badge/badge overlaps,
 ##   bplat - badges covering another node's platform
+##   relay buttons (RELAY V2) - the smallest button tap disc and the pad's own size (pt), discs off screen / under the
+##           HUD, discs reaching over another node's platform (that node keeps those taps: RelayView.button_at)
 ## Output: one line per (map, pitch) and a CHOICE line per map (the sweep behind scripts/map_camera.gd).
 ## Args (after --): out=<file> pitches=auto|50,54,.. maps=C-05,S-19 (optional filter) pt=844
 
@@ -127,8 +129,33 @@ func _measure(main: Node, pt_w: float) -> Dictionary:
 		for n in sim.nodes:
 			if n["id"] != ids[i] and _rect_hits_circle(r, circ[n["id"]]):
 				bplat += 1
+	# RELAY V2: every relay button's tap disc (RelayView.hit_disc, the phone minimum Rules.RELAY_HIT_PT): its size, the
+	# pad's own projected size, discs off screen / under the HUD, and discs reaching over ANOTHER node's platform
+	var btn := INF
+	var pad := INF
+	var bthud := 0
+	var btclash := 0
+	for n in sim.nodes:
+		var disc := RelayView.hit_disc(cam, sim, main.vis, n["id"], true)
+		if disc.is_empty():
+			continue
+		var own := RelayView.button_screen(cam, main.vis, n["id"])
+		btn = minf(btn, 2.0 * float(disc[1]) * ppt)
+		pad = minf(pad, 2.0 * float(own[1]) * ppt)
+		var dc: Vector2 = disc[0]
+		if not screen.has_point(dc):
+			bthud += 1
+		else:
+			for pr in panels:
+				if (pr as Rect2).has_point(dc):
+					bthud += 1
+					break
+		for m in sim.nodes:
+			if m["id"] != n["id"] and _rect_hits_circle(Rect2(dc, Vector2.ZERO).grow(float(disc[1]) * 0.7), circ[m["id"]]):
+				btclash += 1
 	return {"tap": tap * ppt, "worst": worst, "off": off, "hud": under, "bover": bover, "bhit": bhit, "bplat": bplat,
-			"plat": 2.0 * minf(circ[worst]["hx"], circ[worst]["hy"]) * ppt if worst >= 0 else 0.0}
+			"plat": 2.0 * minf(circ[worst]["hx"], circ[worst]["hy"]) * ppt if worst >= 0 else 0.0,
+			"btn": btn, "pad": pad, "bthud": bthud, "btclash": btclash}
 
 
 func _run() -> void:
@@ -165,6 +192,8 @@ func _run() -> void:
 			rows.append(r)
 			var line := "%s %-6s pitch %2.0f  tap %5.1f pt (node %d, platform %4.1f pt)  off %d hud %d  badges: over %d hit %d on-platform %d" % [
 					code, md, r["pitch"], r["tap"], r["worst"], r["plat"], r["off"], r["hud"], r["bover"], r["bhit"], r["bplat"]]
+			if r["btn"] < INF:                               # RELAY V2
+				line += "  relay buttons: tap %.1f pt (pad %.1f pt) off/hud %d over-a-platform %d" % [r["btn"], r["pad"], r["bthud"], r["btclash"]]
 			print(line)
 			out_lines.append(line)
 			inst.queue_free()

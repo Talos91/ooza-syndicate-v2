@@ -736,20 +736,13 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 			decks.append_array(swing)
 		vis["edge_decks"][i] = decks
 		vis["edge_base"][i] = decks.map(func(x): return (x as Node3D).transform)
-		if st.begins_with("m") and ctrl >= 0:          # remote: a lit conduit from the console to its deck
-			var c: Vector3 = vis[ctrl]["relay_button"]["tap"] if vis[ctrl].has("relay_button") else sim.nodes[ctrl]["pos"]   # RELAY V2: from the button
-			var mid := (A + B) / 2.0
-			var conduit := MeshInstance3D.new()
-			var box := BoxMesh.new()
-			box.size = Vector3(1.0, 0.12, 0.22)
-			conduit.mesh = box
-			conduit.material_override = Mats.light_color(Rules.state_color(st))
-			parent.add_child(conduit)
-			var v := mid - c
-			conduit.position = (c + mid) / 2.0 + Vector3(0, 0.55, 0)
-			conduit.rotation = Vector3(0, Rules.heading(v.normalized()), 0)
-			conduit.scale = Vector3(v.length(), 1.0, 1.0)
-			vis["conduits"][i] = conduit
+		# RELAY V2: the remote's link - a glowing arc from its button to the receiver masts on this bridge's gate (the
+		# old straight conduit is gone, Daniele: "the cable looks too weird"); none when the gate sits by the button
+		if kind == "remote" and vis[ctrl].has("relay_button") and gate_xf is Transform3D:
+			var from: Vector3 = vis[ctrl]["relay_button"]["tap"] + Vector3(0, 0.3, 0)
+			var to: Vector3 = (gate_xf as Transform3D) * Rules.RELAY_LINK_MAST
+			if from.distance_to(to) > Rules.RELAY_LINK_NEAR:
+				vis["conduits"][i] = rv.add_link(ctrl, i, from, to)
 	for n in sim.nodes:                               # relay symbols (OS_State) on the housings and gates
 		for hs in vis[n["id"]]["state_hosts"]:
 			for mi in (hs as Node3D).find_children("*", "MeshInstance3D", true, false):

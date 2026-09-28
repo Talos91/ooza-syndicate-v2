@@ -183,6 +183,21 @@ const RELAY_HIT_PAD := 1.15          # the disc is at least the pad's projected 
 const RELAY_GHOST := Color(0.85, 0.78, 1.0, 0.28)       # OS_Ghost: the see-through floor (build_relay_v2 relay_mats)
 const RELAY_GHOST_EDGE := Color(0.92, 0.88, 1.0)        # OS_Ghost_Edge: the bright frame
 const RELAY_GHOST_WARN := 2.4        # x the ghost's brightness while its relay's warning runs (it is about to be real)
+# The remote's LINK (Daniele 2026-09-28: "the cable looks too weird, time to improve its look"): a thin glowing arc in
+# the relay's state colour from its button up over the map to the receiver masts of the Relay_Gate_Remote_v2 on the
+# far bridge (RelayView.add_link). Faint at rest; small pulses run button -> gate while the relay is ready; a quick
+# bright blink along it while it fires; dim on cooldown; hidden once an end has dropped.
+const RELAY_LINK_MAST := Vector3(7.3, 3.15, 0.0)   # gate local point between the receiver dishes (json: pylons x 7.3, masts 3.27)
+const RELAY_LINK_W := 0.3            # m ribbon width (soft edges)
+const RELAY_LINK_RISE := 0.28        # apex height x the link's length ...
+const RELAY_LINK_RISE_MIN := 5.0     # ... at least (m; over every structure on the way) ...
+const RELAY_LINK_RISE_MAX := 16.0    # ... at most
+const RELAY_LINK_REST := 0.22        # alpha at rest (ready, or firing)
+const RELAY_LINK_DIM := 0.12         # alpha on cooldown / neutral
+const RELAY_LINK_PULSE := 0.75       # pulse brightness while ready
+const RELAY_LINK_GAP := 7.0          # m between two pulses
+const RELAY_LINK_SPEED := 9.0        # m/s the pulses travel
+const RELAY_LINK_NEAR := 16.0        # m: a remote bridge whose gate is this close to the button needs no link
 # AI relay sense (0.18.7 - Daniele: "the ai tends to avoid relay bridges all together and almost never
 # build structure on relays"). From Standard up (AI_LEVELS "relays" >= 1) an order crosses a relay deck
 # unless somebody hostile can change that deck before the whole line is over it (estimated crossing

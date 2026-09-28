@@ -16,6 +16,7 @@ const SHOTS := [
 	["switch", "T-07-switchyard", 2, 40.0, ""],
 	["switch_warning", "T-07-switchyard", 2, 40.0, "warn"],
 	["remote", "T-07-switchyard", 3, 58.0, ""],
+	["remote_fire", "T-07-switchyard", 3, 58.0, "warn"],
 	["retract", "T-07-switchyard", 1, 40.0, "retract"],
 	["structure", "T-08-relay-works", 2, 36.0, "laser"],
 	["tight_gap", "D-02-relay-bench", 6, 48.0, "tight"],

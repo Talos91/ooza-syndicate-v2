@@ -16,6 +16,7 @@ extends Node3D
 ##    bridge, the remote target, the retract's extended length). This node shows them, live, every frame: pale
 ##    violet (never an owner / state colour), brighter while the relay's warning runs, hidden while the real deck
 ##    moves in, once it is there, or when an end has dropped. Never batched (MapBatch never sees them).
+##  - LINK: a remote relay's glowing arc from its button to the receiver masts on each far bridge it drives (add_link).
 ## Placement and hit testing are static helpers (main.gd, tests/phone_fit.gd, tests/test_maps4.gd use them).
 
 const BUTTON := {"rotation": "Relay_Button_Rotation_v2", "retract": "Relay_Button_Retract_v2",
@@ -31,7 +32,8 @@ const STRUT_BASE := Rules.R - 0.5 - 0.1   # strut scale.x = dist - PAD_R - (R - 
 const GATE_LIFT := 0.012                  # m: a gate over a leaned pier sits this much above it (no z-fight)
 
 var sim: Sim
-var groups: Array = []                    # [{ctrl, edge, pieces: [Node3D], warm: bool}]
+var groups: Array = []                    # [{ctrl, edge, items: [[piece, Transform3D]], on: bool, warm: bool}]
+var _mm := {}                             # "<ghost piece>[|w]" -> MultiMeshInstance3D
 static var _mats := {}                    # "ghost" / "edge" / "ghost_w" / "edge_w" -> StandardMaterial3D (shared)
 
 
@@ -170,23 +172,68 @@ static func _button_world(btn: Node3D, fallback: Vector3) -> Vector3:
 # ------------------------------------------------------------------ ghosts
 func add_ghosts(ctrl: int, ei: int, decks: Array, pier_xf) -> void:
 	## A ghost of every module of relay bridge ei (same transform as the real deck) and, for a rotation's own
-	## bridge, of its pier (pier_xf: the gate's Transform3D, or null).
+	## bridge, of its pier (pier_xf: the gate's Transform3D, or null). Drawn as MultiMeshes (one per ghost piece and
+	## brightness: 2 draw calls each however many ghosts show), rebuilt only when a ghost appears / goes / warms.
 	var kind := edge_kind(sim.edges[ei])
 	if kind == "":
 		return
-	var pieces := []
+	var items := []                                   # [piece name, Transform3D]
 	for dk in decks:
-		var g := MapBuilder.put(self, GHOST[kind], Vector3.ZERO)
-		g.transform = (dk as Node3D).transform
-		pieces.append(g)
+		items.append([GHOST[kind], (dk as Node3D).transform])
 	if pier_xf is Transform3D:
-		var pg := MapBuilder.put(self, PIER_GHOST, Vector3.ZERO)
-		pg.transform = pier_xf
-		pieces.append(pg)
-	for g in pieces:
-		_dress(g, false)
-		(g as Node3D).visible = false
-	groups.append({"ctrl": ctrl, "edge": ei, "pieces": pieces, "warm": false})
+		items.append([PIER_GHOST, pier_xf])
+	groups.append({"ctrl": ctrl, "edge": ei, "items": items, "on": false, "warm": false})
+
+
+func _batch(piece: String, warm: bool) -> MultiMeshInstance3D:
+	var key := piece + ("|w" if warm else "")
+	if _mm.has(key):
+		return _mm[key]
+	var src := MapBuilder.piece(piece)                # the kit ghost (light / HD like every piece)
+	var mesh := ArrayMesh.new()
+	var local := Transform3D.IDENTITY
+	for mi in src.find_children("*", "MeshInstance3D", true, false):
+		var m := (mi as MeshInstance3D).mesh
+		local = src.global_transform.affine_inverse() * (mi as MeshInstance3D).global_transform if src.is_inside_tree() 				else (mi as MeshInstance3D).transform
+		for k in range(m.get_surface_count()):
+			var nm := m.surface_get_material(k).resource_name if m.surface_get_material(k) else ""
+			mesh.add_surface_from_arrays(m.surface_get_primitive_type(k), m.surface_get_arrays(k))
+			mesh.surface_set_material(mesh.get_surface_count() - 1,
+					_mat(("edge" if nm.begins_with("OS_Ghost_Edge") else "ghost") + ("_w" if warm else "")))
+		break                                         # (a ghost GLB is one mesh)
+	src.free()
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = MultiMesh.new()
+	mmi.multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	mmi.multimesh.mesh = mesh
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.set_meta("local", local)
+	add_child(mmi)
+	_mm[key] = mmi
+	return mmi
+
+
+func _rebuild() -> void:
+	var lists := {}                                   # batch key -> [piece, warm, [Transform3D]]
+	for g in groups:
+		if not bool(g["on"]):
+			continue
+		for it in g["items"]:
+			var key: String = str(it[0]) + ("|w" if bool(g["warm"]) else "")
+			if not lists.has(key):
+				lists[key] = [it[0], bool(g["warm"]), []]
+			(lists[key][2] as Array).append(it[1])
+	for key in _mm:
+		if not lists.has(key):
+			(_mm[key] as MultiMeshInstance3D).visible = false
+	for key in lists:
+		var mmi := _batch(str(lists[key][0]), bool(lists[key][1]))
+		var xs: Array = lists[key][2]
+		var local: Transform3D = mmi.get_meta("local")
+		mmi.multimesh.instance_count = xs.size()
+		for k in range(xs.size()):
+			mmi.multimesh.set_instance_transform(k, (xs[k] as Transform3D) * local)
+		mmi.visible = true
 
 
 func has_ghost(ei: int) -> bool:
@@ -213,18 +260,6 @@ static func _mat(key: String) -> StandardMaterial3D:
 	return _mats[key]
 
 
-static func _dress(g: Node3D, warm: bool) -> void:
-	## OS_Ghost / OS_Ghost_Edge -> the fixed pale violet (the GLB's own alpha is not trusted to survive import).
-	for mi in g.find_children("*", "MeshInstance3D", true, false):
-		var mesh := (mi as MeshInstance3D).mesh
-		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		for s in range(mesh.get_surface_count()):
-			var src := mesh.surface_get_material(s)
-			var nm := src.resource_name if src else ""
-			var key := "edge" if nm.begins_with("OS_Ghost_Edge") else "ghost"
-			(mi as MeshInstance3D).set_surface_override_material(s, _mat(key + ("_w" if warm else "")))
-
-
 static func ghost_wanted(sim: Sim, ctrl: int, ei: int) -> bool:
 	## Is relay bridge ei a destination right now: not there, and there on its relay's next state (the pending one
 	## while the warning runs)? Never while it moves in, never for a deck Anchor / Aegis hold, never once an end fell.
@@ -242,16 +277,117 @@ static func ghost_wanted(sim: Sim, ctrl: int, ei: int) -> bool:
 func _process(_dt: float) -> void:
 	if sim == null:
 		return
+	var dirty := false
 	for g in groups:
 		var on := ghost_wanted(sim, int(g["ctrl"]), int(g["edge"]))
 		var warm: bool = on and sim.nodes[int(g["ctrl"])]["relay_phase"] == "warning"
-		if warm != bool(g["warm"]):
+		if on != bool(g["on"]) or warm != bool(g["warm"]):
+			g["on"] = on
 			g["warm"] = warm
-			for p in g["pieces"]:
-				_dress(p, warm)
-		for p in g["pieces"]:
-			if (p as Node3D).visible != on:
-				(p as Node3D).visible = on
+			dirty = true
+	if dirty:
+		_rebuild()
+	_links()
+
+
+# ------------------------------------------------------------------ the remote's link (arc)
+const LINK_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+uniform vec4 col : source_color = vec4(1.0);
+uniform float base = 0.2;
+uniform float pulse = 0.0;
+uniform float flash = 0.0;
+uniform float len = 20.0;
+uniform float gap = 7.0;
+uniform float speed = 9.0;
+void fragment() {
+	float across = 1.0 - smoothstep(0.35, 1.0, abs(UV.y - 0.5) * 2.0);
+	float ph = fract((UV.x * len - TIME * speed) / gap);
+	float p = smoothstep(0.82, 0.97, ph) * (1.0 - smoothstep(0.97, 1.0, ph));
+	float ends = smoothstep(0.0, 0.04, UV.x) * smoothstep(1.0, 0.96, UV.x);
+	ALBEDO = col.rgb;
+	ALPHA = clamp(across * ends * (base + pulse * p + flash), 0.0, 1.0);
+}
+"""
+static var _link_shader: Shader
+var links: Array = []                     # [{ctrl, edge, mi, mat, key}]
+
+
+func add_link(ctrl: int, ei: int, from: Vector3, to: Vector3) -> MeshInstance3D:
+	## The remote relay's link to a far bridge's receiver masts: a ribbon along a raised arc (quadratic, apex
+	## RELAY_LINK_RISE x its length, clamped), flat to the ground so the 58 deg camera sees its width. Its look follows
+	## the relay in _links (uniforms only, on change; the pulses run in the shader). Returns it (vis["conduits"]).
+	if _link_shader == null:
+		_link_shader = Shader.new()
+		_link_shader.code = LINK_SHADER
+	var length := from.distance_to(to)
+	var rise := clampf(length * Rules.RELAY_LINK_RISE, Rules.RELAY_LINK_RISE_MIN, Rules.RELAY_LINK_RISE_MAX)
+	var ctl := (from + to) / 2.0 + Vector3(0, rise * 2.0, 0)       # control point (the apex is half of it)
+	var n := 40
+	var pts := []
+	for k in range(n + 1):
+		var t := float(k) / n
+		pts.append(from.lerp(ctl, t).lerp(ctl.lerp(to, t), t))
+	var total := 0.0
+	for k in range(1, pts.size()):
+		total += (pts[k] as Vector3).distance_to(pts[k - 1])
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+	var run := 0.0
+	for k in range(pts.size()):
+		var q: Vector3 = pts[k]
+		if k > 0:
+			run += q.distance_to(pts[k - 1])
+		var tan: Vector3 = ((pts[mini(k + 1, n)] as Vector3) - (pts[maxi(k - 1, 0)] as Vector3)).normalized()
+		var side := tan.cross(Vector3.UP).normalized() * Rules.RELAY_LINK_W * 0.5
+		st.set_uv(Vector2(run / maxf(total, 0.01), 0.0))
+		st.add_vertex(q - side)
+		st.set_uv(Vector2(run / maxf(total, 0.01), 1.0))
+		st.add_vertex(q + side)
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mat := ShaderMaterial.new()
+	mat.shader = _link_shader
+	mat.set_shader_parameter("len", total)
+	mat.set_shader_parameter("gap", Rules.RELAY_LINK_GAP)
+	mat.set_shader_parameter("speed", Rules.RELAY_LINK_SPEED)
+	mi.material_override = mat
+	add_child(mi)
+	links.append({"ctrl": ctrl, "edge": ei, "mi": mi, "mat": mat, "key": ""})
+	return mi
+
+
+func _links() -> void:
+	## Each link's look: the relay's state colour; faint + pulses when owned and ready; dim on cooldown / neutral;
+	## blinking bright through the warning (the fire), one fading flash as the bridge moves; hidden once an end fell.
+	for l in links:
+		var ctrl: int = l["ctrl"]
+		var e: Dictionary = sim.edges[int(l["edge"])]
+		var n: Dictionary = sim.nodes[ctrl]
+		var gone: bool = sim.collapsed.get(ctrl, false) or sim.collapsed.get(e["a"], false) or sim.collapsed.get(e["b"], false)
+		var mi: MeshInstance3D = l["mi"]
+		mi.visible = not gone
+		if gone:
+			continue
+		var phase: String = n["relay_phase"]
+		var ready: bool = n["owner"] != "" and phase == "" and n["relay_cd"] <= 0.0 and not sim.is_relay_locked(ctrl)
+		var flash := 0.0
+		if phase == "warning":
+			flash = 0.9 if int(sim.time * 5.0) % 2 == 0 else 0.45
+		elif phase == "moving":
+			flash = snappedf(0.8 * clampf(float(n["relay_t"]) / Rules.RELAY_MOVE, 0.0, 1.0), 0.05)
+		var state := sim.relay_state_key(n, n["relay_index"])
+		var key := "%s|%s|%d|%.2f" % [state, phase, int(ready), flash]
+		if key == l["key"]:
+			continue
+		l["key"] = key
+		var mat: ShaderMaterial = l["mat"]
+		mat.set_shader_parameter("col", Rules.state_color(state))
+		mat.set_shader_parameter("base", Rules.RELAY_LINK_REST if ready or phase != "" else Rules.RELAY_LINK_DIM)
+		mat.set_shader_parameter("pulse", Rules.RELAY_LINK_PULSE if ready else 0.0)
+		mat.set_shader_parameter("flash", flash)
 
 
 # ------------------------------------------------------------------ hit testing (main.gd, tests/phone_fit.gd)

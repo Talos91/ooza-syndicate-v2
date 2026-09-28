@@ -2049,6 +2049,8 @@ func _coach_sync() -> void:
 	var pts := []
 	for id in tg["nodes"]:
 		pts.append(cam.unproject_position(sim.nodes[id]["pos"]))
+		if _tap_point(id) != sim.nodes[id]["pos"]:     # RELAY V2: the relay's button is lit with its node
+			pts.append(cam.unproject_position(_tap_point(id)))
 	for ei in tg.get("decks", []):
 		var dl := sim.deck_line(int(ei))
 		if dl.size() >= 2:
@@ -2146,6 +2148,13 @@ func _tutorial_rect(key: String) -> Rect2:
 	return Rect2()
 
 
+func _tap_point(id: int) -> Vector3:
+	## RELAY V2: where the coach's hand taps node `id` - a relay's button (its visible cue; the node answers a double-tap
+	## too), otherwise the node centre.
+	var b = vis.get(id, {}).get("relay_button") if vis.has(id) else null
+	return b["tap"] if b is Dictionary else sim.nodes[id]["pos"]
+
+
 func _tutorial_gesture() -> void:
 	## The first of the step's gesture alternatives that can be drawn right now (a press needs its button on
 	## screen - otherwise the next alternative, e.g. the tap that opens the inspector).
@@ -2154,7 +2163,7 @@ func _tutorial_gesture() -> void:
 		match kind:
 			"tap", "double_tap":
 				if int(g[1]) >= 0:
-					coach.gesture(kind, cam.unproject_position(sim.nodes[int(g[1])]["pos"]))
+					coach.gesture(kind, cam.unproject_position(_tap_point(int(g[1]))))   # RELAY V2: a relay's button
 					return
 			"drag":
 				var a := int(g[1])
