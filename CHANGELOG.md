@@ -34,6 +34,10 @@
 - **Online**: a server match everyone left closes after 30 s (client + relay; the relay's fix is live since 0.22.0); the landscape
   lock happens once per fullscreen / installed-app session (a lock can trigger a resize).
 - The version label reads "Alpha 22" (0.22.0 still said Alpha 21).
+- **Relay state colours** (🧩): every switch / rotation / remote state up to 6 has its own colour (states 4-6 were white), all told
+  apart under normal and colour-blind vision. **Online, the ROOM OWNER picks the BACKGROUND for everyone** (a lobby button; guests see
+  it greyed; ROTATE moves on each round); offline your own BATTLEFIELD pick still applies.
+- **L6 (monster lesson)** launches at the next node, matching the new reach.
 
 ## 0.22.0 "Alpha 22" - 2026-09-28 (match feel; backgrounds; landscape; goo loading screen)
 
