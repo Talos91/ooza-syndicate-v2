@@ -52,6 +52,13 @@ func _fragment() -> void:
 	var e := Account.parse_fragment("#error=access_denied&error_description=Email+link+is+invalid")
 	check(e.get("error_description") == "Email link is invalid", "an error fragment is read too (+ decodes as a space)")
 	check(Account.parse_fragment("").is_empty(), "no fragment, no session")
+	# Google sign-in comes back to the page the game runs on (the domain move keeps working on both addresses)
+	check(Account.site_from("https://talos91.github.io", "/ooza-syndicate-v2/") == "https://talos91.github.io/ooza-syndicate-v2/",
+			"site: the github.io page")
+	check(Account.site_from("https://oozesyndicate.com", "/") == "https://oozesyndicate.com/", "site: the domain's root")
+	check(Account.site_from("https://oozesyndicate.com", "/index.html") == "https://oozesyndicate.com/", "site: index.html dropped")
+	check(Account.site_from("http://127.0.0.1:8060", "/index.html") == "http://127.0.0.1:8060/", "site: a local test server")
+	check(Account.site_from("null", "") == Account.SITE, "site: no usable origin falls back to SITE")
 
 
 func _save_round_trip() -> void:

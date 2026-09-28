@@ -412,7 +412,7 @@ static func session_data() -> Dictionary:
 			"dpr": snappedf(DisplayServer.screen_get_scale(), 0.25),
 			"renderer": str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "")),
 			"touch": DisplayServer.is_touchscreen_available(), "graphics": PerfProfile.level(),
-			"fps_cap": Engine.max_fps}
+			"fps_cap": PerfProfile.play_fps()}             # the match cap (the menu idles lower by design)
 
 
 static func signature(message: String) -> String:

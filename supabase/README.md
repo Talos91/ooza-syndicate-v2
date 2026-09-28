@@ -46,8 +46,10 @@ Owner: the "Leaderboard, progression, and currency" session. Design: `Docs/Game 
 
 1. Authentication > Sign In / Providers: **Allow anonymous sign-ins** on (every player starts as a guest).
 2. Authentication > Sign In / Providers: **Allow manual linking** on (a guest adds an email or Google later).
-3. Authentication > URL Configuration: Site URL `https://talos91.github.io/ooza-syndicate-v2/`; Redirect URLs
-   `https://talos91.github.io/ooza-syndicate-v2/**` and `https://45-32-126-20.sslip.io/**` (email links and Google
+3. Authentication > URL Configuration: Site URL `https://talos91.github.io/ooza-syndicate-v2/` (after the domain move:
+   `https://oozesyndicate.com/`); Redirect URLs `https://talos91.github.io/ooza-syndicate-v2/**`,
+   `https://45-32-126-20.sslip.io/**` and, for the domain move, `https://oozesyndicate.com/**` (Google sign-in returns to
+   the page the game runs on: `Account.site()`) (email links and Google
    sign-in come back to the game). Then set `Account.EMAIL_LINKS = true` (scripts/account.gd) so the email buttons
    turn on.
 4. Google (optional): Google Cloud Console > APIs & Services > Credentials > OAuth client ID (Web application),

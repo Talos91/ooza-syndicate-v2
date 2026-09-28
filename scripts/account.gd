@@ -17,7 +17,7 @@ signal changed                                      # session, profile or state 
 
 const URL := "https://uqwxorxdnucrdgaqpjpp.supabase.co"
 const KEY := "sb_publishable_3aX4T8IcNbI_BBg4wENMhA_3NNclYw2"   # publishable: meant to ship in the client
-const SITE := "https://talos91.github.io/ooza-syndicate-v2/"     # where Google sign-in comes back (web)
+const SITE := "https://talos91.github.io/ooza-syndicate-v2/"     # where Google sign-in comes back off the web (site())
 const REFRESH_EARLY := 600                          # refresh the access token 10 min before it expires
 const SAVE_CHECK := 20.0                            # seconds between "did a save file change?" checks
 
@@ -178,16 +178,35 @@ func google(link := true) -> bool:
 		return false
 	var target := ""
 	if link and signed_in():
-		var r := await _call("GET", "/auth/v1/user/identities/authorize?provider=google&skip_http_redirect=true&redirect_to=" + SITE.uri_encode(), null, true)
+		var r := await _call("GET", "/auth/v1/user/identities/authorize?provider=google&skip_http_redirect=true&redirect_to=" + site().uri_encode(), null, true)
 		if not r["ok"]:
 			_fail(r)
 			return false
 		target = str((r["json"] as Dictionary).get("url", ""))
 	else:
-		target = URL + "/auth/v1/authorize?provider=google&redirect_to=" + SITE.uri_encode()
+		target = URL + "/auth/v1/authorize?provider=google&redirect_to=" + site().uri_encode()
 	if target != "":
 		JavaScriptBridge.eval("window.location.href = %s" % JSON.stringify(target), true)
 	return target != ""
+
+
+static func site() -> String:
+	## Where Google sign-in comes back: the page the game runs on (github.io today, oozesyndicate.com after the domain
+	## move - both must be in Supabase Auth's Redirect URLs), SITE off the web.
+	if not OS.has_feature("web") or not Engine.has_singleton("JavaScriptBridge"):
+		return SITE
+	return site_from(str(JavaScriptBridge.eval("window.location.origin", true)),
+			str(JavaScriptBridge.eval("window.location.pathname", true)))
+
+
+static func site_from(origin: String, pathname: String) -> String:
+	## "https://oozesyndicate.com" + "/index.html" -> "https://oozesyndicate.com/"; no usable origin -> SITE.
+	if not origin.begins_with("https://") and not origin.begins_with("http://"):
+		return SITE
+	var p := pathname if pathname.begins_with("/") else "/" + pathname
+	if not p.ends_with("/"):
+		p = p.get_base_dir() + "/"                      # drop index.html (or any page name)
+	return origin + p.replace("//", "/")
 
 
 func _redirect_session() -> Dictionary:
