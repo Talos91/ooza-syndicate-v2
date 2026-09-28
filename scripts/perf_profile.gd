@@ -52,6 +52,26 @@ static var _live: PerfProfile = null
 static var _forced_low_detail := false  # LOW RES turned Rules.low_detail on (and turns it back off)
 static var _goo_lite: Shader = null
 
+# Perf pass (2026-09-28): a script-time breakdown per view, for tests/perf_pass_probe.tscn. Off in play (one bool
+# per sync); the probe turns it on and reads / clears `sections` (name -> [total us, max us, calls]).
+static var sections_on := false
+static var sections := {}
+
+
+static func lap(name: String, t0: int) -> void:
+	## Adds the time since `t0` (Time.get_ticks_usec) to section `name` while sections_on.
+	if not sections_on:
+		return
+	var us := Time.get_ticks_usec() - t0
+	var s: Array = sections.get(name, [])
+	if s.is_empty():
+		s = [0, 0, 0]
+		sections[name] = s
+	s[0] += us
+	s[1] = maxi(s[1], us)
+	s[2] += 1
+
+
 var main: Node3D
 var _batched := false
 var _applied_3d := false

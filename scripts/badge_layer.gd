@@ -100,13 +100,16 @@ func setup(h) -> void:
 
 func refresh() -> void:
 	## Hud.sync, after _badges moved and re-dressed the badges: draw them again.
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	queue_redraw()
 	for g in _groups.values():
 		(g as CanvasItem).queue_redraw()
 	_text.queue_redraw()
+	PerfProfile.lap("badges_refresh", _pt)
 
 
 func _draw() -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	var boxes := []
 	for id in hud.badges:
 		var b: Dictionary = hud.badges[id]
@@ -131,6 +134,7 @@ func _draw() -> void:
 		var r := Rect2((b["panel"] as Control).position + bar.position, bar.size)
 		draw_rect(r, Color(0, 0, 0, 0.55))
 		draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(bar.value / 100.0, 0.0, 1.0), r.size.y)), Rules.state_color("build"))
+	PerfProfile.lap("badges_draw", _pt)
 
 
 static func _box_texture(rim: bool) -> Texture2D:

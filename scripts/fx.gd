@@ -114,6 +114,7 @@ func _pulse(pos: Vector3, color: Color, radius: float, dur: float) -> void:
 
 # ------------------------------------------------------------------ per frame
 func sync(dt: float) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	if not _neon_built:
 		_build_neon()
 	var classic := not Rules.bridge_combat
@@ -165,7 +166,10 @@ func sync(dt: float) -> void:
 			_floaters.erase(f)
 			continue
 		l.position = (f["base"] as Vector3) + Vector3(0, 2.2 * (t / FLOATER_LIFE), 0)
-		l.modulate.a = 1.0 - smoothstep(FLOATER_LIFE - 0.4, FLOATER_LIFE, t)
+		var fc: Color = l.modulate
+		fc.a = 1.0 - smoothstep(FLOATER_LIFE - 0.4, FLOATER_LIFE, t)
+		Mats.label_look(l, fc, l.outline_modulate.a)
+	PerfProfile.lap("fx", _pt)
 
 
 func floater(pos: Vector3, text: String, col: Color) -> void:
@@ -255,10 +259,12 @@ func _relay(n: Dictionary, entry: Dictionary) -> void:
 	arc.visible = n["owner"] != "" and not sim.collapsed.get(id, false)
 	if arc.visible:
 		arc.position = n["pos"] + Vector3(0, 0.3, 0)
-		var built := [frac, arc_col]
-		if _arc_built.get(id, []) != built:           # idle relays keep their mesh: no rebuild per frame
-			_arc_built[id] = built
-			arc.material_override = Mats.glow(arc_col, 0.9)
+		frac = roundf(frac * Rules.RELAY_ARC_STEPS) / Rules.RELAY_ARC_STEPS   # perf pass (audit B9): a rebuild per step, not per frame
+		var built: Array = _arc_built.get(id, [])
+		if built.is_empty() or built[0] != frac or built[1] != arc_col:   # idle relays keep their mesh
+			if built.is_empty() or built[1] != arc_col:
+				arc.material_override = Mats.glow(arc_col, 0.9)
+			_arc_built[id] = [frac, arc_col]
 			_build_arc(arc.mesh as ImmediateMesh, Rules.R - 1.0, Rules.R - 0.45, frac)
 	# ghosts of the next state during the warning, motion of the decks during the tick
 	for i in sim.controlled_edges(id):
@@ -330,6 +336,7 @@ func _relay_beacon(n: Dictionary, entry: Dictionary, col: Color, phase: String) 
 	var alpha := 0.55
 	var size := 1.0
 	var c := col
+	var glyph := Vector2(-1.0, -1.0)                  # the glyph's energy / alpha when not the material's (a breath)
 	if phase == "warning":                            # flashes with the deck (col already blinks in _relay)
 		var blink := int(sim.time * 5.0) % 2 == 0
 		energy = 7.0 if blink else 2.0
@@ -344,6 +351,8 @@ func _relay_beacon(n: Dictionary, entry: Dictionary, col: Color, phase: String) 
 		energy = 2.6 + 3.2 * k
 		alpha = 0.8 + 0.2 * k
 		size = 1.0 + 0.1 * k
+		k = roundf(k * 24.0) / 24.0                   # the glyph's colour in 24 steps (each step rebuilds its mesh)
+		glyph = Vector2(2.6 + 3.2 * k, 0.8 + 0.2 * k)
 	elif owned:                                       # cooling down / locked: dim
 		energy = 0.9
 		alpha = 0.7
@@ -352,8 +361,10 @@ func _relay_beacon(n: Dictionary, entry: Dictionary, col: Color, phase: String) 
 	mat.albedo_color = c
 	mat.emission = c
 	mat.emission_energy_multiplier = energy
-	label.modulate = Color(c.r * (0.6 + 0.12 * energy), c.g * (0.6 + 0.12 * energy), c.b * (0.6 + 0.12 * energy), alpha)
-	label.outline_modulate.a = 0.9 * alpha
+	if glyph.x < 0.0:
+		glyph = Vector2(energy, alpha)
+	var ge := 0.6 + 0.12 * glyph.x
+	Mats.label_look(label, Color(c.r * ge, c.g * ge, c.b * ge, glyph.y), 0.9 * glyph.y)
 	label.scale = Vector3.ONE * size
 	label.position = (b["top"] as Vector3) + Vector3(0, 0.25 * sin(sim.time * 1.3 + float(id)) if ready else 0.0, 0)
 

@@ -715,14 +715,9 @@ func _label(ci: CanvasItem, txt: String, at: Vector2, col: Color) -> void:
 func on_event(ev: Dictionary) -> void:
 	## An fx "skill" event: a rival's skill that touches you gets a toast (emblem + faction via "seat X", the
 	## skill's name, what it does to you). Private events (Ghost Line, echoes) are for their owner only.
-	if ev.has("private") and str(ev["private"]) != human:
+	if not SkillFx.touches(ev, sim, human):
 		return
 	var seat := str(ev.get("seat", ""))
-	if seat == "" or seat == human or sim.allied(seat, human):
-		return
-	var hit: Array = ev.get("affects", []) if ev.get("affects", []) is Array else []
-	if not human in hit:
-		return
 	var id := str(ev.get("id", ""))
 	var what := ""
 	match id:

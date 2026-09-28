@@ -229,3 +229,21 @@ static func apply_detail(node: Node) -> void:
 				(mi as MeshInstance3D).set_surface_override_material(s, detail(src))
 			elif src.resource_name == "OS_Glass":           # 0.18.7: lit-rim glass instead of a grey film
 				(mi as MeshInstance3D).set_surface_override_material(s, glass(Rules.NEUTRAL))
+
+
+# ------------------------------------------------------------------ Label3D looks (perf pass)
+static func label_look(l: Label3D, c: Color, outline_a: float) -> void:
+	## Perf pass (audit B5): a Label3D rebuilds its text mesh on every modulate / outline change - set them only when
+	## they change (the alphas in 1/64 steps: a fade still rebuilds, a steady or blinking label no longer every frame).
+	c.a = roundf(c.a * 64.0) / 64.0
+	outline_a = roundf(outline_a * 64.0) / 64.0
+	if l.modulate != c:
+		l.modulate = c
+	if l.outline_modulate.a != outline_a:
+		l.outline_modulate.a = outline_a
+
+
+static func label_pixel(l: Label3D, pixel: float) -> void:
+	## The label drawn at `pixel` m per font pixel by its scale, not pixel_size (pixel_size rebuilds the mesh; a
+	## label sized for the screen changed it every frame the camera or the label moved).
+	l.scale = Vector3.ONE * (pixel / l.pixel_size)

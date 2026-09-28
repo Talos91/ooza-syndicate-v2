@@ -1027,6 +1027,17 @@ const PERF_BUDGET_PRIMITIVES := 400000
 const PERF_BUDGET_OBJECTS := 800
 # --- end OPT-RENDER ---
 
+# --- PERF PASS (2026-09-28): view numbers ---
+const RELAY_ARC_STEPS := 48.0           # a relay's cooldown / warning arc is rebuilt once per 1/48 of its sweep (Fx._relay)
+# tests/perf_check.tscn -- --full: the FULL profile's own budget (desktop: shadows, the HD kit) on the 2v2 map Daniele's
+# telemetry drew the most on (0.22.0: M-57 p95 740 draw calls on his desktop), at 1600x900; measured 2026-09-28 at the
+# check's moment: ~465 draw calls / 408 k primitives / 1,190 objects (M-57 FULL, the Last Stand: ~590 / 457 k / 1,250).
+const PERF_CHECK_FULL_MAP := "res://maps4/M-57-relay-quarry.json"
+const PERF_BUDGET_FULL_DRAW_CALLS := 600
+const PERF_BUDGET_FULL_PRIMITIVES := 550000
+const PERF_BUDGET_FULL_OBJECTS := 1400
+# --- end PERF PASS ---
+
 # --- HUD pass (2026-09-28, Daniele's "option A": no notification box - each message where it belongs) ---
 # HudCallouts: a short callout at the node / deck / spot it is about (Fx.floater's look + a small icon), one per
 # place, an edge arrow when that place is off screen; sizes in canvas units x Hud.ui_scale, phones floored in real

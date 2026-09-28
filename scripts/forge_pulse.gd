@@ -161,6 +161,7 @@ func _hit(p: Dictionary, pos: Vector3) -> float:
 
 # ------------------------------------------------------------------ per frame (after CombatFx.sync)
 func sync(dt: float, cam: Camera3D) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	_cam = cam
 	_detect()
 	var i := 0
@@ -175,6 +176,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 	_draw_waves()
 	_draw_structures()
 	_flush_glows()
+	PerfProfile.lap("forge", _pt)
 
 
 func _detect() -> void:

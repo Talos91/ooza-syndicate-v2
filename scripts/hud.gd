@@ -592,6 +592,7 @@ func badge_at(p: Vector2) -> int:
 
 # ------------------------------------------------------------------ per frame
 func sync(dt: float, cam: Camera3D) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	if main.online:
 		_chat_poll -= dt
 		if _chat_poll <= 0.0:
@@ -639,10 +640,10 @@ func sync(dt: float, cam: Camera3D) -> void:
 		count_label.text = "%d / %d" % [Rules.shown(floorf(sim.nodes[source]["units"] * main.fraction)), Rules.shown(sim.nodes[source]["units"])]
 	else:
 		count_label.text = "DRAG A VAT"
-	_badges(cam)
-	badge_layer.refresh()
+	if _badges(cam):
+		badge_layer.refresh()                             # perf pass (audit B4): only when a badge changed
 	overlay.sync(dt)
-	_sync_monster_icon(cam)
+	_sync_monster_icon(cam, 0.0 if main.paused else dt)
 	_check_out()
 	if dock.visible:
 		dock.sync(dt)
@@ -661,9 +662,19 @@ func sync(dt: float, cam: Camera3D) -> void:
 		print("FPS %d  draw calls %d  triangles %d  hordes %d  t=%.0f" % [Engine.get_frames_per_second(),
 				Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 				Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME), sim.hordes.size(), sim.time])
+	PerfProfile.lap("hud", _pt)
 
 
-func _badges(cam: Camera3D) -> void:
+func _font_color(l: Control, c: Color) -> void:
+	## add_theme_color_override("font_color", c) only when it changes (perf pass, audit B3: every override is a
+	## THEME_CHANGED - the label re-shaped - and these ran for every badge on every frame).
+	if l.get_meta("font_color", null) != c:
+		l.set_meta("font_color", c)
+		l.add_theme_color_override("font_color", c)
+
+
+func _badges(cam: Camera3D) -> bool:
+	## Lays out and places every node badge; true when anything BadgeLayer draws changed (it redraws only then).
 	var order_shown := sim.last_stand_active
 	for n in sim.nodes:
 		var b: Dictionary = badges[n["id"]]
@@ -680,7 +691,7 @@ func _badges(cam: Camera3D) -> void:
 			b["owner"] = owner
 			var col := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
 			panel.add_theme_stylebox_override("panel", badge_style(col))
-			(b["label"] as Label).add_theme_color_override("font_color", col if owner != "" else Color("d8e0e8"))
+			_font_color(b["label"] as Label, col if owner != "" else Color("d8e0e8"))
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
 		var classic := not Rules.bridge_combat
@@ -719,7 +730,7 @@ func _badges(cam: Camera3D) -> void:
 		# i couldn't see any other indicator"): your own share on an ally's node stands out in your own
 		# colour, not the sub-label's default light blue - reset every frame, or a stale override would
 		# bleed into a later node that has none.
-		sub.add_theme_color_override("font_color", Color("c8e6ee"))
+		var sub_col := Color("c8e6ee")
 		if has_allies and not masked:                       # GAME-RULES sec11: the total is shown above -
 			if owner == human:                               # this names the ally share / your own share of it
 				what += "+A%d" % Rules.shown(sim.allied_units(n))
@@ -727,7 +738,8 @@ func _badges(cam: Camera3D) -> void:
 				var mine := sim.allied_units(n, human)
 				if mine > 0.0001:
 					what += " +%d" % Rules.shown(mine)
-					sub.add_theme_color_override("font_color", Rules.seat_color(human))
+					sub_col = Rules.seat_color(human)
+		_font_color(sub, sub_col)
 		var clock := ""
 		var worst := ""                                     # the clock's widest form (see below)
 		if sim.is_warned(n["id"]):
@@ -789,10 +801,28 @@ func _badges(cam: Camera3D) -> void:
 		else:
 			_follow_badges(cam)
 	_last_xf = xf
+	var changed := false
 	for n in sim.nodes:
-		var panel: Control = badges[n["id"]]["panel"]
+		var b: Dictionary = badges[n["id"]]
+		var panel: Control = b["panel"]
 		if panel.visible and _badge_screen.has(n["id"]):
 			panel.position = ((_badge_screen[n["id"]] as Vector2) - _badge_px / 2.0).round()
+		# what BadgeLayer reads of this badge (its box, texts, colours, emblem, bar): redraw only if it changed
+		var sig := [panel.visible]
+		if panel.visible:
+			var bar: ProgressBar = b["build"]
+			var emb: TextureRect = b["emblem"]
+			var label: Label = b["label"]
+			var sub: Label = b["sub"]
+			sig.append_array([panel.position, panel.size, b["owner"], b["look"], label.visible, label.text, label.position,
+					label.size, label.get_theme_font_size("font_size"), label.get_meta("font_color", null), sub.visible, sub.text,
+					sub.position, sub.size, sub.get_theme_font_size("font_size"), sub.get_meta("font_color", null), emb.visible,
+					emb.texture, emb.position, emb.size, emb.get_meta("seat", ""), bar.visible, bar.position, bar.size,
+					bar.value if bar.visible else 0.0])
+		if sig != b.get("drawn", []):
+			b["drawn"] = sig
+			changed = true
+	return changed
 
 
 func _fit_text(l: Label, text: String, base: int, width: float, drawn: float) -> float:
@@ -1198,7 +1228,7 @@ func monster_icon_rect(hub_id: int) -> Rect2:
 	return Rect2()
 
 
-func _sync_monster_icon(cam: Camera3D) -> void:
+func _sync_monster_icon(cam: Camera3D, dt: float) -> void:
 	var hub := _human_hub_id()
 	var ready := hub >= 0 and _monster_ready(sim.nodes[hub]) == "" and shows("monster_icon")
 	monster_icon.visible = ready
@@ -1208,7 +1238,7 @@ func _sync_monster_icon(cam: Camera3D) -> void:
 	var p := cam.unproject_position((n["pos"] as Vector3) + Vector3(0, 5.5, 0))
 	monster_icon.position = p - monster_icon.size / 2.0
 	monster_icon.accent = Rules.seat_color(human)
-	monster_icon.t += 0.016
+	monster_icon.t += dt                              # (audit A3: was 0.016 a frame - half speed at 30 fps, on while paused)
 	monster_icon.queue_redraw()
 
 
@@ -1253,7 +1283,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		inspector_emblem.texture = emblem_texture(str(sim.factions.get(owner, "null")))
 		tint_emblem(inspector_emblem, Rules.seat_color(owner))
 	inspector_who.text = "NEUTRAL" if owner == "" else str(sim.factions.get(owner, "")).to_upper()
-	inspector_who.add_theme_color_override("font_color", Color("c8e6ee") if owner == "" else Rules.seat_color(owner))
+	_font_color(inspector_who, Color("c8e6ee") if owner == "" else Rules.seat_color(owner))
 	var lines := []
 	if owner != "" and owner != human:
 		lines.append("population hidden")

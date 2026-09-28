@@ -55,6 +55,14 @@ var _raids := {}                           # own node id -> [[time, sim units]] 
 var _raid_seen := {}                       # horde ids already noted
 var _alarm := {}                           # allied node id -> when it first saw a threat there (teamwork)
 var casts := 0                             # skills cast this match (tests)
+# Perf pass (2026-09-28, audit B1: think spikes up to 47 ms desktop = a 0.25-0.5 s phone hitch): what one think
+# works out once. Cleared at each think and after every order that can change the board's routes or slots (a relay
+# fired, a skill cast, a build / upgrade, a monster launched); a send changes neither.
+var _trees := {}                           # source (+ decks left out) -> [dist, prev, trip]: find_route's own Dijkstra, run to the end
+var _flips := {}                           # relay deck index -> _flip_at
+var _route_t := 0.0                        # set by _route: the trip time (_travel) of the route it returned
+var _kinds := {}                           # relay node id -> _slot_kind
+var _reaches := {}                         # hub node id -> _reach
 var rng := RandomNumberGenerator.new()
 
 
@@ -69,31 +77,60 @@ func _init(s: String, think_every := 2.5, lvl := "") -> void:
 
 
 func think(sim: Sim, dt: float) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	_t += dt
 	_clock = sim.time
 	if _t < period or sim.over or sim.eliminated.has(seat):
 		return
 	_t = 0.0
 	_busy = {}      # a send supersedes the node's earlier order: one order per node per think
+	_fresh()
 	_post(sim)
+	var p := _pt
 	if int(cfg["relays"]) > 0:
 		_relays(sim)
+	p = _phase("relays", p)
 	_skills(sim)
+	p = _phase("skills", p)
 	_note_raids(sim)
 	if Rules.bridge_combat and int(cfg["relays"]) > 0:   # RECALL is SIEGE only
 		_retreats(sim)
 	if sim.last_stand_active:
 		_evacuate(sim)
 		_ejects(sim)
+	p = _phase("evacuate", p)
 	_defend(sim)
+	p = _phase("defend", p)
 	_defend_allies(sim)
+	p = _phase("defend_allies", p)
 	_build(sim)
+	p = _phase("build", p)
 	_monsters(sim)
+	p = _phase("monsters", p)
 	if sim.time >= _attack_after:
 		_attack(sim)
 	elif sim.time >= _attack_after - float(cfg.get("sync", 0.0)) and not _open_calls(sim).is_empty():
 		_attack(sim, true)                                # an ally called: its next offensive comes early
+	p = _phase("attack", p)
 	_surplus(sim)
+	p = _phase("surplus", p)
+	PerfProfile.lap("ai", _pt)
+
+
+static var phases_on := false             # perf pass (tests/ai_bench.gd): per-phase think time
+static var phases := {}                   # phase -> [total us, max us]
+
+
+func _phase(name: String, t0: int) -> int:
+	## tests/ai_bench.gd: adds the time since t0 to `name` while phases_on; returns now.
+	if not phases_on:
+		return t0
+	var now := Time.get_ticks_usec()
+	var s: Array = phases.get(name, [0, 0])
+	s[0] += now - t0
+	s[1] = maxi(s[1], now - t0)
+	phases[name] = s
+	return now
 
 
 # ------------------------------------------------------------------ helpers
@@ -129,6 +166,107 @@ func _travel(sim: Sim, route: Array) -> float:
 	return t
 
 
+func _order(done: bool) -> bool:
+	## Wraps every order that can change routes or slots (fire, recall, build, upgrade, launch, cast): once it went
+	## through, the think's caches are stale.
+	if done:
+		_fresh()
+	return done
+
+
+func _fresh() -> void:
+	## Forget what this think worked out (the board changed under it).
+	_trees = {}
+	_flips = {}
+	_kinds = {}
+	_reaches = {}
+
+
+func _path(sim: Sim, from_id: int, to_id: int, avoid := {}) -> Array:
+	## sim.find_route(from_id, to_id, avoid), from one single-source run per source (and set of decks left out) per
+	## think (_trees). The run is find_route's own loop - the same open list, sort and relaxation order - only not
+	## stopped at the target, so every route it gives is the one find_route returns (the settled part of the tree
+	## never changes afterwards).
+	if sim.collapsed.get(from_id, false) or sim.collapsed.get(to_id, false):
+		return []
+	var tree := _tree_of(sim, from_id, avoid)
+	var dist: Dictionary = tree[0]
+	if not dist.has(to_id):
+		return []
+	var prev: Dictionary = tree[1]
+	var route := [to_id]
+	while route[0] != from_id:
+		route.push_front(prev[route[0]])
+	return route
+
+
+func _trip(sim: Sim, from_id: int, to_id: int, avoid := {}) -> float:
+	## _travel(sim, _path(sim, from_id, to_id, avoid)) - the same sums in the same order - kept per tree node.
+	var tree := _tree_of(sim, from_id, avoid)
+	var trip: Dictionary = tree[2]
+	if trip.has(to_id):
+		return trip[to_id]
+	var prev: Dictionary = tree[1]
+	if to_id == from_id or not prev.has(to_id):
+		return 0.0
+	var p: int = prev[to_id]
+	var t: float = _trip(sim, from_id, p, avoid) + (sim.edge_cost(sim._edge_index(p, to_id)) + 1.0)
+	trip[to_id] = t
+	return t
+
+
+func _tree_of(sim: Sim, from_id: int, avoid: Dictionary) -> Array:
+	var key: Variant = from_id
+	if not avoid.is_empty():
+		var decks := avoid.keys()
+		decks.sort()
+		key = "%d|%s" % [from_id, decks]
+	var tree: Array = _trees.get(key, [])
+	if tree.is_empty():
+		tree = _tree(sim, from_id, avoid)
+		_trees[key] = tree
+	return tree
+
+
+func _tree(sim: Sim, from_id: int, avoid: Dictionary) -> Array:
+	## [dist, prev, {}] of Sim.find_route's Dijkstra from `from_id`, over every node it reaches (keep in step with it).
+	var dist := {from_id: 0.0}
+	var prev := {}
+	var open := [from_id]
+	while not open.is_empty():
+		open.sort_custom(func(x, y): return dist[x] < dist[y])
+		var cur: int = open.pop_front()
+		for link in sim.adj[cur]:
+			var nb: int = link[0]
+			if sim.collapsed.get(nb, false) or not sim._edge_open(link[1]) or avoid.has(link[1]):
+				continue
+			var cost: float = dist[cur] + sim.edge_cost(link[1]) + 1.0
+			if not dist.has(nb) or cost < dist[nb]:
+				dist[nb] = cost
+				prev[nb] = cur
+				if nb not in open:
+					open.append(nb)
+	return [dist, prev, {}]
+
+
+func _reach(sim: Sim, hub_id: int) -> Array:
+	## sim.monster_reach(hub_id) over the hub's one cached tree: every node up to Rules.MONSTER_REACH bridges
+	## along the route a monster would walk.
+	if _reaches.has(hub_id):
+		return _reaches[hub_id]
+	var out := []
+	if sim._node_open(hub_id):
+		for n in sim.nodes:
+			var id: int = n["id"]
+			if id == hub_id or sim.collapsed.get(id, false):
+				continue
+			var r := _path(sim, hub_id, id)
+			if r.size() >= 2 and sim._bridges(r) <= Rules.MONSTER_REACH:
+				out.append(id)
+	_reaches[hub_id] = out
+	return out
+
+
 func _estimate(sim: Sim, n: Dictionary) -> float:
 	## What it believes the garrison is: rounded, off by up to `error`, refreshed every `observe` s.
 	var mem: Dictionary = _memory.get(n["id"], {})
@@ -161,8 +299,8 @@ func _evacuate(sim: Sim) -> void:
 			if target >= 0:
 				var left := sim.drop_in(doomed["id"]) if sim.v3 else -1.0
 				if left >= 0.0:
-					var route := sim.find_route(doomed["id"], target)
-					var trip := _travel(sim, route) if route.size() >= 2 else 0.0
+					var route := _path(sim, doomed["id"], target)
+					var trip := _trip(sim, doomed["id"], target) if route.size() >= 2 else 0.0
 					if left > trip + period + Rules.AI_EVAC_MARGIN:
 						continue                              # not yet: it falls later in the ring
 				if not _send(sim, doomed["id"], target, 1.0).is_empty():
@@ -175,7 +313,7 @@ func _nearest_safe(sim: Sim, from_id: int) -> int:
 	for n in sim.nodes:
 		if n["id"] == from_id or sim.collapsed.get(n["id"], false) or _drops_soon(sim, n["id"]):
 			continue
-		var route := sim.find_route(from_id, n["id"])
+		var route := _path(sim, from_id, n["id"])
 		if route.is_empty():
 			continue
 		var score: float = route.size() + (0.0 if n["owner"] == seat else 3.0)
@@ -251,6 +389,10 @@ func _attack(sim: Sim, answer_only := false) -> void:
 	var focus := _team_focus(sim)
 	var calls := _open_calls(sim)
 	var joint_ok := _teamwork() >= 3 and not _allies(sim).is_empty()
+	var spare := {}                                       # donor id -> what it can send (the same for every target)
+	for donor in owned:
+		if donor["build_kind"] == "" and not _busy.has(donor["id"]):
+			spare[donor["id"]] = donor["units"] - _reserve(sim, donor)
 	for target in sim.nodes:
 		if sim.allied(target["owner"], seat) or sim.collapsed.get(target["id"], false) or _drops_soon(sim, target["id"]):
 			continue
@@ -261,15 +403,15 @@ func _attack(sim: Sim, answer_only := false) -> void:
 			continue                                      # early game: take neutrals, leave players be
 		var donors := []
 		for donor in owned:
-			if donor["build_kind"] != "" or _busy.has(donor["id"]):
+			if not spare.has(donor["id"]):
 				continue
-			var available: float = donor["units"] - _reserve(sim, donor)
+			var available: float = spare[donor["id"]]
 			if available < 4.0 * Rules.SCALE:
 				continue
 			var route := _route(sim, donor["id"], target["id"], available)
 			if route.is_empty():
 				continue
-			donors.append({"node": donor, "available": available, "travel": _travel(sim, route), "risky": _route_risky})
+			donors.append({"node": donor, "available": available, "travel": _route_t, "risky": _route_risky})
 		if donors.is_empty():
 			continue
 		donors.sort_custom(func(a, b): return a["travel"] < b["travel"])
@@ -505,8 +647,8 @@ func _ally_spare(sim: Sim, target: Dictionary, travel: float) -> float:
 			var a: float = n["units"] - _reserve(sim, n)
 			if a < 4.0 * Rules.SCALE:
 				continue
-			var route := sim.find_route(n["id"], target["id"])
-			if route.size() >= 2 and _travel(sim, route) <= travel + 8.0:
+			var route := _path(sim, n["id"], target["id"])
+			if route.size() >= 2 and _trip(sim, n["id"], target["id"]) <= travel + 8.0:
 				spare.append(a)
 		spare.sort()
 		spare.reverse()
@@ -568,9 +710,9 @@ func _defend_allies(sim: Sim) -> void:
 			if spare < 2.0 * Rules.SCALE:
 				continue
 			var route := _route(sim, n["id"], id, minf(need, spare))
-			if route.is_empty() or _travel(sim, route) > eta + Rules.AI_TEAM_DEFEND_LATE:
+			if route.is_empty() or _route_t > eta + Rules.AI_TEAM_DEFEND_LATE:
 				continue
-			helpers.append({"node": n, "spare": spare, "travel": _travel(sim, route)})
+			helpers.append({"node": n, "spare": spare, "travel": _route_t})
 			total += spare
 		if total < need * 0.8:
 			continue                                      # it cannot save it: keep the troops
@@ -632,7 +774,7 @@ func _surplus(sim: Sim) -> void:
 			var route := _route(sim, src["id"], n["id"], give)
 			if route.is_empty() or _route_risky:
 				continue
-			var t := _travel(sim, route)
+			var t := _route_t
 			if t > Rules.AI_TEAM_SURPLUS_TRAVEL:
 				continue
 			var s: float = -t - sim.garrison_total(n) / maxf(sim.node_cap(n), 1.0) * 10.0 + (6.0 if f["focus"] else 0.0) \
@@ -729,7 +871,7 @@ func _relays(sim: Sim) -> void:
 			# 0.18.7: a retract left in / a remote left off after a kill blocks its own shortcut - put
 			# the deck back, unless a rival order is still pouring off its lip (it would walk across)
 			if _cut_toll(sim, _opening(sim, n), 0.0)[0] <= 0.5:
-				sim.fire_relay(n["id"])
+				_order(sim.fire_relay(n["id"]))
 			continue
 		# 0.18.7: with the 0.18.6 waterfall an own line routed across the deck is lost too, not only
 		# the part on it - never fire while an own or allied line still has to cross it at the tick
@@ -744,7 +886,7 @@ func _relays(sim: Sim) -> void:
 			var kill: float = cut[0] if lvl >= 2 else _fling_toll(sim, closing, 0.0)[0]
 			var cost := _fling_cost(sim, closing)
 			if kill >= 2.0 * Rules.SCALE and cost <= 0.5 and kill > cost:
-				sim.fire_relay(n["id"])
+				_order(sim.fire_relay(n["id"]))
 			continue
 		var now := _on_decks(sim, closing, 0.0)
 		var later := _on_decks(sim, closing, Rules.RELAY_WARNING + Rules.RELAY_MOVE * 0.5) if lvl >= 2 else now
@@ -755,7 +897,7 @@ func _relays(sim: Sim) -> void:
 		# 0.18.7 assumes the relay-fall rule (Daniele): when the motion starts everything still on a deck
 		# that goes away falls, retract included - nobody is carried into the relay node any more, so a
 		# retract is a kill tool like a switch and needs no garrison to take its riders in
-		sim.fire_relay(n["id"])
+		_order(sim.fire_relay(n["id"]))
 
 
 func _open_route(sim: Sim, plan: Dictionary) -> bool:
@@ -765,7 +907,7 @@ func _open_route(sim: Sim, plan: Dictionary) -> bool:
 	var dst: int = plan["target"]["id"]
 	var units: float = plan["donors"][0]["available"]
 	var base := _route(sim, src, dst, units)
-	var t0 := _travel(sim, base) if not base.is_empty() else INF
+	var t0 := _route_t if not base.is_empty() else INF
 	if _route_risky:
 		t0 += Rules.AI_RELAY_DETOUR                   # a risky way in is worth replacing
 	for n in sim.nodes:
@@ -777,12 +919,15 @@ func _open_route(sim: Sim, plan: Dictionary) -> bool:
 		if n["relay"] == "rotation" and _fling_cost(sim, closing) > 0.5:
 			continue                                      # the turn would fling its own lines
 		var keep: int = n["relay_index"]
+		var trees := _trees                           # the probe's routes are not this board's: keep them apart
+		_trees = {}
 		n["relay_index"] = sim.relay_next_index(n)
 		var alt := _route(sim, src, dst, units)
 		var alt_risky := _route_risky
 		n["relay_index"] = keep
-		if not alt.is_empty() and not alt_risky and _travel(sim, alt) < t0 - 3.0:
-			sim.fire_relay(n["id"])
+		_trees = trees
+		if not alt.is_empty() and not alt_risky and _route_t < t0 - 3.0:
+			_order(sim.fire_relay(n["id"]))
 			return true
 	return false
 
@@ -837,22 +982,24 @@ func _route(sim: Sim, from_id: int, to_id: int, units: float) -> Array:
 	## trip. Otherwise the fastest route with _route_risky set (attack plans price it; defence and
 	## evacuation take it anyway). Level 0 routes like sim.send.
 	_route_risky = false
-	var route := sim.find_route(from_id, to_id)
+	var route := _path(sim, from_id, to_id)
+	_route_t = _trip(sim, from_id, to_id)
 	if int(cfg["relays"]) <= 0 or route.size() < 2:
 		return route
 	var bad := _risky_decks(sim, route, units)
 	if bad.is_empty():
 		return route
-	var limit := maxf(_travel(sim, route) * 2.0, _travel(sim, route) + Rules.AI_RELAY_DETOUR)
+	var limit := maxf(_route_t * 2.0, _route_t + Rules.AI_RELAY_DETOUR)
 	var avoid := {}
 	for _pass in range(4):
 		for ei in bad:
 			avoid[ei] = true
-		var alt := sim.find_route(from_id, to_id, avoid)
-		if alt.size() < 2 or _travel(sim, alt) > limit:
+		var alt := _path(sim, from_id, to_id, avoid)
+		if alt.size() < 2 or _trip(sim, from_id, to_id, avoid) > limit:
 			break
 		bad = _risky_decks(sim, alt, units)
 		if bad.is_empty():
+			_route_t = _trip(sim, from_id, to_id, avoid)
 			return alt
 	_route_risky = true
 	return route
@@ -873,10 +1020,17 @@ func _risky_decks(sim: Sim, route: Array, units: float) -> Array:
 		var ei := sim._edge_index(route[i], route[i + 1])
 		var cross := sim.edge_cost(ei) + 1.0
 		var c: int = sim.edge_controller.get(ei, -1)
-		if c >= 0 and _flip_at(sim, sim.nodes[c], ei) < (t + cross) * Rules.AI_RELAY_SLACK + Rules.AI_RELAY_PAD + emit:
+		if c >= 0 and _flip(sim, c, ei) < (t + cross) * Rules.AI_RELAY_SLACK + Rules.AI_RELAY_PAD + emit:
 			out.append(ei)
 		t += cross
 	return out
+
+
+func _flip(sim: Sim, c: int, ei: int) -> float:
+	## _flip_at, once per deck per think (_flips): it reads only the relay and the lines, not the order.
+	if not _flips.has(ei):
+		_flips[ei] = _flip_at(sim, sim.nodes[c], ei)
+	return _flips[ei]
 
 
 func _flip_at(sim: Sim, r: Dictionary, ei: int) -> float:
@@ -976,7 +1130,7 @@ func _retreats(sim: Sim) -> void:
 			continue                                      # recall() refuses these: try the next fight
 		var theirs := b if mine == a else a
 		if sim.power_of(mine) < 0.4 * sim.power_of(theirs) and mine["units"] > 15.0:
-			if sim.recall(mine["id"]):
+			if _order(sim.recall(mine["id"])):
 				return
 
 
@@ -993,7 +1147,7 @@ func _build(sim: Sim) -> void:
 			continue
 		var reserve := _reserve(sim, n) + 4.0 * Rules.SCALE
 		if n["structure"] == "machinegoon" and n["tier"] < 3 \
-				and n["units"] >= sim.upgrade_cost(n) + reserve and sim.upgrade(n["id"], seat):
+				and n["units"] >= sim.upgrade_cost(n) + reserve and _order(sim.upgrade(n["id"], seat)):
 			_invest_after = sim.time + float(cfg["invest"])
 			return
 	var vats := owned.filter(func(n): return Sim.has_vat(n))
@@ -1008,7 +1162,7 @@ func _build(sim: Sim) -> void:
 		if n["build_kind"] != "" or Sim.vat_cost(n) <= 0 or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
 			continue
 		if n["units"] >= Sim.vat_cost(n) + _reserve(sim, n) + 4.0 * Rules.SCALE and n["units"] >= Rules.CAPS[n["tier"]] * 0.6 \
-				and sim.upgrade(n["id"], seat):
+				and _order(sim.upgrade(n["id"], seat)):
 			_invest_after = sim.time + float(cfg["invest"])
 			return
 	if _build_relay_slot(sim, owned, false):
@@ -1069,7 +1223,7 @@ func _build_machinegoon(sim: Sim, owned: Array, vats: Array) -> bool:
 		if best.is_empty() or v > best_v:
 			best = n
 			best_v = v
-	if best.is_empty() or not sim.build(best["id"], seat, "machinegoon"):
+	if best.is_empty() or not _order(sim.build(best["id"], seat, "machinegoon")):
 		return false
 	_invest_after = sim.time + float(cfg["invest"])
 	return true
@@ -1079,6 +1233,13 @@ func _slot_kind(sim: Sim, n: Dictionary) -> String:
 	## What goes in an empty relay slot: its one monster hub first (a relay with a rival or neutral node in a
 	## monster's reach, once it holds two vats - the first monster charges from the hub's completion (MONSTER_COOLDOWN), so an
 	## early hub is the one that gets used), then the forge (one per seat, once it holds three vats), else a laser.
+	## Worked out once per slot per think (_kinds; _reserve asks for it on every donor).
+	if not _kinds.has(n["id"]):
+		_kinds[n["id"]] = _slot_kind_now(sim, n)
+	return _kinds[n["id"]]
+
+
+func _slot_kind_now(sim: Sim, n: Dictionary) -> String:
 	var vats := _mine(sim).filter(func(x): return Sim.has_vat(x)).size()
 	if "monster_hub" in n["buildable"] and vats >= 2 and not sim.has_hub(seat) and _hub_front(sim, n):
 		return "monster_hub"
@@ -1090,7 +1251,7 @@ func _slot_kind(sim: Sim, n: Dictionary) -> String:
 
 func _hub_front(sim: Sim, n: Dictionary) -> bool:
 	## A rival or neutral node within a monster's reach of this relay (routes as they stand now).
-	for id in sim.monster_reach(n["id"]):
+	for id in _reach(sim, n["id"]):
 		if not sim.allied(sim.nodes[id]["owner"], seat):
 			return true
 	return false
@@ -1132,7 +1293,7 @@ func _build_relay_slot(sim: Sim, owned: Array, busy_only: bool) -> bool:
 		if v > best_v:
 			best_v = v
 			best = {"node": n, "kind": kind}
-	if best.is_empty() or not sim.build(best["node"]["id"], seat, best["kind"]):
+	if best.is_empty() or not _order(sim.build(best["node"]["id"], seat, best["kind"])):
 		return false
 	_fed.erase(best["node"]["id"])
 	_invest_after = sim.time + float(cfg["invest"])
@@ -1172,7 +1333,7 @@ func _feed_relay_slot(sim: Sim, owned: Array, vats: Array, worth: float) -> void
 		var route := _route(sim, d["id"], slot["id"], need)
 		if route.is_empty() or _route_risky:
 			continue
-		var t := _travel(sim, route)
+		var t := _route_t
 		if t < pick_t:
 			pick_t = t
 			pick = d
@@ -1200,13 +1361,13 @@ func _monsters(sim: Sim) -> void:
 			continue
 		if sim.time < float(hub["monster_ready_t"]):
 			continue
-		var reach := sim.monster_reach(hub["id"])
+		var reach := _reach(sim, hub["id"])
 		if int(cfg.get("intel", 0)) <= 0:
 			if rng.randf() > float(Rules.AI_MONSTER_CHANCE.get(level, 0.1)):
 				continue
 			var cands := reach.filter(func(id): return not sim.allied(sim.nodes[id]["owner"], seat) and not _drops_soon(sim, id))
 			if not cands.is_empty():
-				sim.launch_monster(hub["id"], seat, cands[rng.randi_range(0, cands.size() - 1)])
+				_order(sim.launch_monster(hub["id"], seat, cands[rng.randi_range(0, cands.size() - 1)]) == "")
 			continue
 		var best := -1
 		var best_v := Rules.AI_MONSTER_VALUE
@@ -1214,7 +1375,7 @@ func _monsters(sim: Sim) -> void:
 			var t: Dictionary = sim.nodes[id]
 			if (t["owner"] != "" and sim.allied(t["owner"], seat)) or _drops_soon(sim, id):
 				continue                                  # a friendly end node only loses a tier
-			var route := sim.find_route(hub["id"], id)
+			var route := _path(sim, hub["id"], id)
 			if route.size() < 2 or not _risky_decks(sim, route, 0.0).is_empty():
 				continue
 			var kick := 0.0
@@ -1235,7 +1396,7 @@ func _monsters(sim: Sim) -> void:
 				best_v = v
 				best = id
 		if best >= 0:
-			sim.launch_monster(hub["id"], seat, best)
+			_order(sim.launch_monster(hub["id"], seat, best) == "")
 
 
 func _feed_hub(sim: Sim, hub: Dictionary) -> void:
@@ -1254,7 +1415,7 @@ func _feed_hub(sim: Sim, hub: Dictionary) -> void:
 		var route := _route(sim, d["id"], hub["id"], need)
 		if route.is_empty() or _route_risky:
 			continue
-		var t := _travel(sim, route)
+		var t := _route_t
 		if t < pick_t:
 			pick_t = t
 			pick = d
@@ -1280,7 +1441,7 @@ func _ejects(sim: Sim) -> void:
 	## Stand (they would fall with it).
 	for n in _mine(sim):
 		if not n["allies"].is_empty() and sim.is_warned(n["id"]) and sim.can_build(n["id"], seat, "eject") == "":
-			sim.build(n["id"], seat, "eject")
+			_order(sim.build(n["id"], seat, "eject"))
 
 
 # ------------------------------------------------------------------ skills (0.18.7)
@@ -1301,7 +1462,7 @@ func _skills(sim: Sim) -> void:
 		var pick := _pick(sim, id)
 		if pick.is_empty():
 			continue
-		if sim.cast(seat, slot, pick[0]):
+		if _order(sim.cast(seat, slot, pick[0])):
 			casts += 1
 			_skill_after = sim.time + float(Rules.AI_SKILL_GAP.get(level, 9.0))
 			return
@@ -1555,6 +1716,6 @@ func _rewire_fires(sim: Sim) -> void:
 			continue
 		var toll: Array = _fling_toll(sim, closing, Rules.RELAY_WARNING) if n["relay"] == "rotation" \
 				else _on_decks(sim, closing, Rules.RELAY_WARNING)
-		if toll[0] >= 4.0 * Rules.SCALE and toll[1] <= 0.5 and sim.cast(seat, "ultimate", n["id"]):
+		if toll[0] >= 4.0 * Rules.SCALE and toll[1] <= 0.5 and _order(sim.cast(seat, "ultimate", n["id"])):
 			casts += 1
 			return
