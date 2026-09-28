@@ -18,14 +18,17 @@ extends RefCounted
 ##   ui_fraction / ui_inspector / ui_armed   the send fraction, the open inspector's node, the armed dock slot
 ##   press_button() / skip_step()  the card's GOT IT / SKIP STEP
 ## and reads back card(), target(), gesture(), time_scale, preview_relay, state, result, reveal_keys().
-## Signals: changed (the card / target moved on), completed(result), failed(line).
+## Signals: changed (the card / target moved on), completed(result), handler(mood).
 ##
-## Progress (static, like ArmyPresets): user://tutorial.cfg [progress] completed / offered / relay_kill /
+## Progress (static, like ArmyPresets): user://tutorial.cfg [progress] completed / skipped / offered / relay_kill /
 ## version; `saved` false when the browser keeps no storage (the TUTORIAL page says so).
+## SKIPPING (Daniele, 2026-09-28: "skipping should allow you to play the one after but doesn't count as completed
+## hence no scrap nor graduate vat at the end until all are actually completed"): a lesson finished with a SKIP
+## STEP (or left by SKIP TUTORIAL) is `skipped` - CONTINUE goes on past it, but it pays no SCRAP and counts toward
+## nothing; replaying it without a skip completes it (and pays, once).
 
 signal changed
 signal completed(result: Dictionary)
-signal failed(line: String)
 signal handler(mood: String)                       # the on-screen handler: "happy" (a step passed) / "droop" (failed)
 
 const HANDLER_NAME := "DR. VESK"                    # the handler on the card (Daniele, 2026-09-27)
@@ -41,10 +44,8 @@ const RIVAL := "B"
 const NOTE_SECONDS := 3.0            # a transient handler line (a refusal, a miss) stays this long on the card
 const INTERLUDE := 1.8               # a step's "done" line shows this long before the next step starts
 const IDLE_HINT := 20.0              # seconds without an order before the idle hint
-const PUSH_SHARE := 0.7              # L9: the scripted push commits at least this share of B's units
 const PUSH_KILL := 0.5               # L9: a relay kill = at least this share of the push lost to the fall
 const PUSH_LATEST := 150.0           # L9: 2:30 - the push goes even if A does not lead by then
-const HALF_SPEED := 0.5                # (the older relay prompt; 0.20.2's slow motion is per lesson: "slow" in LESSONS)
 const ASSIST_MARGIN := 6.0             # shown units a topped-up send wins by
 const L9_SLOW := {"slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "min": 1}   # the relay-kill push's slow motion
 const MIN_STEP := 1.5                # a doing-step shows at least this long, even when it is already done (its line is read)
@@ -64,6 +65,7 @@ const LINES := {
 	"assist_short": "Not enough units - send again, use 100 %. Accounting rounded down.",   # 0.20.2: a short send is topped up, never a TRY AGAIN
 	"paused_lessons": "LESSONS",
 	"no_storage": "Progress isn't saved on this browser.",
+	"skipped": "SKIPPED - replay to complete", "skipped_note": "Skipped a step: replay it to complete it and earn its SCRAP.",
 	# L0 THE CITY - what's what
 	"L0.title": "THE CITY",
 	"L0.hello": "I'm Dr. Vesk, your handler. Quick tour first - the city is sinking, so we're on the clock.",
@@ -377,6 +379,7 @@ const LESSONS := [
 static var path := "user://tutorial.cfg"             # tests point this elsewhere
 static var map_dir := "res://maps4"                  # tests may point this at a checkout with the lesson maps
 static var completed_ids: Array = []
+static var skipped_ids: Array = []                   # lessons finished with a skip, not completed (Daniele, 2026-09-28)
 static var offered := false
 static var relay_kill_done := false
 static var saved := true                             # false: the last save failed (no storage)
@@ -386,6 +389,7 @@ static var _loaded := false
 static func load_progress() -> void:
 	_loaded = true
 	completed_ids = []
+	skipped_ids = []
 	offered = false
 	relay_kill_done = false
 	var cf := ConfigFile.new()
@@ -396,6 +400,11 @@ static func load_progress() -> void:
 		if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids:
 			completed_ids.append(id)
 	completed_ids.sort()
+	for v in cf.get_value("progress", "skipped", []):
+		var id := int(v)
+		if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids and not id in skipped_ids:
+			skipped_ids.append(id)
+	skipped_ids.sort()
 	offered = bool(cf.get_value("progress", "offered", false))
 	relay_kill_done = bool(cf.get_value("progress", "relay_kill", false))
 
@@ -414,6 +423,7 @@ static func _ensure() -> void:
 static func save_progress() -> bool:
 	var cf := ConfigFile.new()
 	cf.set_value("progress", "completed", completed_ids.duplicate())
+	cf.set_value("progress", "skipped", skipped_ids.duplicate())
 	cf.set_value("progress", "offered", offered)
 	cf.set_value("progress", "relay_kill", relay_kill_done)
 	cf.set_value("progress", "version", PROGRESS_VERSION)
@@ -429,6 +439,7 @@ static func mark_complete(id: int, relay_kill := false) -> bool:
 	if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids:
 		completed_ids.append(id)
 		completed_ids.sort()
+	skipped_ids.erase(id)                            # replayed without a skip: completed now
 	offered = true
 	relay_kill_done = relay_kill_done or relay_kill
 	# TUTORIAL + PROGRESSION (Daniele, 2026-09-27): lessons 1-9 pay SCRAP on their first completion (enough for a 3rd
@@ -441,6 +452,23 @@ static func mark_complete(id: int, relay_kill := false) -> bool:
 	if all_done():
 		Progression.unlock("vat:graduate", "tutorial")
 	return save_progress()
+
+
+static func mark_skipped(id: int) -> bool:
+	## A lesson finished with a skipped step, or left by SKIP TUTORIAL: the next one opens (CONTINUE goes past it)
+	## but it is not completed - no SCRAP, no step toward the Graduate vat. A completed lesson stays completed.
+	_ensure()
+	last_scrap = 0
+	if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids and not id in skipped_ids:
+		skipped_ids.append(id)
+		skipped_ids.sort()
+	offered = true
+	return save_progress()
+
+
+static func is_skipped(id: int) -> bool:
+	_ensure()
+	return id in skipped_ids
 
 
 static func mark_offered() -> bool:
@@ -469,8 +497,12 @@ static func all_done() -> bool:
 
 
 static func first_unfinished() -> int:
-	## CONTINUE: the first lesson not done yet, the tour included (L1 when every one is).
+	## CONTINUE: the first lesson neither done nor skipped, the tour included; then the first skipped one (replay to
+	## complete it); L1 when every one is done.
 	_ensure()
+	for i in range(FIRST_ID, LESSON_COUNT + 1):
+		if not i in completed_ids and not i in skipped_ids:
+			return i
 	for i in range(FIRST_ID, LESSON_COUNT + 1):
 		if not i in completed_ids:
 			return i
@@ -511,12 +543,13 @@ static func title_of(id: int) -> String:
 
 
 static func lesson_rows() -> Array:
-	## The TUTORIAL page's rows: {id, title, goal, done}.
+	## The TUTORIAL page's rows: {id, title, goal, done, skipped}.
 	_ensure()
 	var out := []
 	for l in LESSONS:
 		var id := int(l["id"])
-		out.append({"id": id, "title": title_of(id), "goal": line("L%d.goal" % id), "done": id in completed_ids})
+		out.append({"id": id, "title": title_of(id), "goal": line("L%d.goal" % id), "done": id in completed_ids,
+				"skipped": id in skipped_ids})
 	return out
 
 
@@ -553,6 +586,7 @@ var sim: Sim
 var map: Dictionary
 var names := {}                                      # lesson name -> node id (the map's lessonNames)
 var first_launch := false                            # the forced first run: the card carries SKIP TUTORIAL
+var skipped := false                                 # a SKIP STEP was used in this run: it ends skipped, not completed
 var faction := PLAYER_FACTION                        # the player's faction (VEX in the tutorial)
 var state := "running"                               # running / interlude / failed / complete
 var step_i := 0
@@ -584,7 +618,6 @@ var _tracked := []                                   # horde ids of the step's s
 var _burst_seen := false
 var _demolish_tries := 0
 var _ls_started := false
-var _ls_strength := 0.0
 var _ls_falls := 0.0
 var _dt := 0.0                                       # this frame's (real) dt: the slow-motion caps count real seconds
 var _assist := {}                                    # node id -> {"seen": {hid: true}, "frozen": units or -1, "from": id}
@@ -813,10 +846,11 @@ func skip_step() -> void:
 		return
 	if state != "running":
 		return
-	if L.get("match", false):
+	if L.get("match", false):                        # the first match's opening card: closing it skips nothing
 		_match["card_done"] = true
 		_bump()
 		return
+	skipped = true                                   # this run no longer completes the lesson (mark_skipped)
 	_advance()
 
 
@@ -900,7 +934,6 @@ func _enter(st: Dictionary) -> void:
 				sim.ult_since[HUMAN] = Rules.ULT_MIN_TIME
 			"vls":
 				_jump_clock(Rules.VERY_LAST_STAND_TIME)   # the clock reads {vls}
-				var gap = L.get("vls_gap", -1.0)
 				sim.start_very_last_stand_now(vls_gap())
 	_bump()
 
@@ -1048,7 +1081,6 @@ func _fail(text: String) -> void:
 	fail_line = text
 	_bump()
 	handler.emit("droop")
-	failed.emit(text)
 
 
 func _complete(relay_kill := false, kill_units := 0) -> void:
@@ -1056,12 +1088,16 @@ func _complete(relay_kill := false, kill_units := 0) -> void:
 		return
 	state = "complete"
 	time_scale = 1.0
-	mark_complete(lesson_id, relay_kill)
+	if skipped:
+		mark_skipped(lesson_id)
+	else:
+		mark_complete(lesson_id, relay_kill)
 	var lines := []
 	for k in L.get("done", []):
 		lines.append(line(str(k)))
 	result = {"id": lesson_id, "title": title_of(lesson_id), "lines": lines, "time": lesson_t, "relay_kill": relay_kill,
 			"scrap": last_scrap,                        # TUTORIAL + PROGRESSION
+			"skipped": skipped,                         # finished with a skip: not completed, nothing paid
 			"kill_units": kill_units, "final": lesson_id == LESSON_COUNT, "graduate": all_done(), "tour": L.get("tour", false),
 			"next": lesson_id + 1 if lesson_id < LESSON_COUNT else -1, "won": sim.over and sim.allied(sim.winner, HUMAN)}
 	_bump()
@@ -1074,7 +1110,6 @@ func _tick_lesson(_dt: float) -> void:
 	if at >= 0.0 and not _ls_started and lesson_t >= at:
 		_ls_started = true
 		_jump_clock(Rules.LAST_STAND_TIME)            # the clock reads {ls} as the line says
-		_ls_strength = sim.seat_strength(HUMAN)
 		_ls_falls = float(sim.fall_losses.get(HUMAN, 0.0))
 		sim.ls_drop_gap_override = Rules.LAST_STAND_DROP_GAP   # L7 keeps the brisk 5 s drops (0.20.12: matches use the adaptive gap)
 		sim.start_last_stand_now()
@@ -1526,7 +1561,7 @@ func _tick_match(dt: float) -> void:
 	if relay >= 0 and sim.nodes[relay]["owner"] == HUMAN and not _match.get("relay_taken", false):
 		_match["relay_taken"] = true
 		say(line("L9.relay_taken"))
-	if not _match.get("card_done", false) and sim.time > 12.0:
+	if not _match.get("card_done", false) and sim.time > float(Rules.L9_MATCH["card_close"]):
 		_match["card_done"] = true
 		_bump()
 	if phase in ["idle", "done"] and sim.time - _last_order_t > IDLE_HINT and not _idle_shown:
@@ -1539,7 +1574,7 @@ func _tick_match(dt: float) -> void:
 		"muster":
 			if sim.nodes[relay]["owner"] != HUMAN:
 				_match["phase"] = "done"
-			elif not _rival_moving() or sim.time - float(_match["t"]) > 25.0:
+			elif not _rival_moving() or sim.time - float(_match["t"]) > float(Rules.L9_MATCH["muster_wait"]):
 				_launch_push(relay)
 		"push":
 			_tick_push(relay)
@@ -1550,7 +1585,7 @@ func _push_due(relay: int) -> bool:
 	if rn["owner"] != HUMAN or rn["relay_phase"] != "" or rn["relay_cd"] > 0.0:
 		return false
 	var b := sim.seat_strength(RIVAL)
-	if b < 20.0 * Rules.SCALE:
+	if b < float(Rules.L9_MATCH["push_min_shown"]) * Rules.SCALE:
 		return false
 	return sim.seat_strength(HUMAN) > b or sim.time >= PUSH_LATEST
 
@@ -1589,7 +1624,7 @@ func _start_muster(relay: int) -> void:
 	if best < 0:
 		return
 	for n in sim.nodes:                              # every other rival garrison gathers there
-		if n["owner"] == RIVAL and n["id"] != best and float(n["units"]) >= 3.0 * Rules.SCALE:
+		if n["owner"] == RIVAL and n["id"] != best and float(n["units"]) >= float(Rules.L9_MATCH["muster_min_shown"]) * Rules.SCALE:
 			sim.send(n["id"], best, 1.0)
 	_match["phase"] = "muster"
 	_match["muster"] = best
@@ -1602,7 +1637,7 @@ func _launch_push(relay: int) -> void:
 	var rn: Dictionary = sim.nodes[relay]
 	if m < 0 or deck.is_empty() or sim.nodes[m]["owner"] != RIVAL or rn["owner"] != HUMAN or rn["relay_cd"] > 0.0 \
 			or rn["relay_phase"] != "":
-		if sim.time - float(_match["t"]) > 40.0:
+		if sim.time - float(_match["t"]) > float(Rules.L9_MATCH["launch_wait"]):
 			_match["phase"] = "done"
 		return
 	# the push's target: your node nearest the deck's far end (the far end itself if it is yours)
@@ -1660,7 +1695,7 @@ func _tick_push(relay: int) -> void:
 	for h in sim.hordes:
 		if h["owner"] == RIVAL:
 			gone = false
-	if (gone or sim.time - float(_match["t"]) > 45.0) and lost < PUSH_KILL * units:
+	if (gone or sim.time - float(_match["t"]) > float(Rules.L9_MATCH["push_wait"])) and lost < PUSH_KILL * units:
 		_match["phase"] = "done"
 		_match["prompt"] = false
 		say(line("L9.miss"))
@@ -1850,6 +1885,45 @@ func vls_gap() -> float:
 	return float(gap)
 
 
+# ROUTE CACHE (audit-tutorial-campaign B1): the hand's drag path and L7's evacuation pick ask for the same routes every
+# frame; they are cached per (from, to) until the board's routes can have changed (_route_stamp).
+var _routes := {}                                    # "from:to" -> [route, path points or null]
+var _routes_stamp := ""
+var _stamp_t := -1.0
+
+
+func _route_stamp() -> String:
+	## What invalidates the cached routes: the card moving on, a collapse, a demolished deck, a relay's state or motion.
+	var relays := 0
+	for n in sim.nodes:
+		if n["relay"] != "":
+			relays = relays * 7 + int(n["relay_index"]) * 2 + (1 if n["relay_phase"] == "moving" else 0)
+	return "%d|%d|%d|%d" % [version, sim.collapsed.size(), sim.demolished.size(), relays]
+
+
+func route(from: int, to: int) -> Array:
+	## sim.find_route(from, to), cached for as long as the routes stand.
+	if sim.time != _stamp_t:
+		_stamp_t = sim.time
+		var st := _route_stamp()
+		if st != _routes_stamp:
+			_routes_stamp = st
+			_routes = {}
+	var k := "%d:%d" % [from, to]
+	if not _routes.has(k):
+		_routes[k] = [sim.find_route(from, to), null]
+	return _routes[k][0]
+
+
+func route_points(from: int, to: int) -> PackedVector3Array:
+	## The drawn path of route(from, to) (main's drag hand), built once per cached route.
+	var r := route(from, to)
+	var entry: Array = _routes["%d:%d" % [from, to]]
+	if entry[1] == null:
+		entry[1] = sim.build_path(r)["pts"] if r.size() >= 2 else PackedVector3Array()
+	return entry[1]
+
+
 func _vls_move() -> Array:
 	## [from, to]: your warned node with units and the nearest survivor that is not warned (yours first).
 	var from := -1
@@ -1863,7 +1937,7 @@ func _vls_move() -> Array:
 	for n in sim.nodes:
 		if n["id"] == from or sim.collapsed.get(n["id"], false) or sim.is_warned(n["id"]):
 			continue
-		var r := sim.find_route(from, n["id"])
+		var r := route(from, n["id"])
 		if r.size() < 2:
 			continue
 		var score := float(r.size()) - (10.0 if n["owner"] == HUMAN else 0.0)

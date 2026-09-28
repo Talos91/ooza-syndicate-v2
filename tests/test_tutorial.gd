@@ -37,6 +37,7 @@ func _init() -> void:
 	test_lines()
 	test_reveal()
 	test_progress()
+	test_skipping()
 	test_l0()
 	test_senders()
 	test_short_sends()
@@ -235,6 +236,49 @@ func test_progress() -> void:
 	var cf := ConfigFile.new()
 	check(cf.load(TutorialDirector.path) == OK and int(cf.get_value("progress", "version", 0)) == TutorialDirector.PROGRESS_VERSION,
 			"progress: the file carries [progress] version")
+	_wipe()
+	TutorialDirector.reload_progress()
+	ArmyPresets._loaded = false
+	ArmyPresets.load_all()
+
+
+# ------------------------------------------------------------------ 2026-09-28: skipping (Daniele) - a skip opens the next lesson, never pays
+func test_skipping() -> void:
+	_wipe()
+	TutorialDirector.reload_progress()
+	var pay: int = Rules.PROGRESSION["tutorial_lesson"]
+	TutorialDirector.mark_complete(0)
+	var r := make(1)
+	var d: TutorialDirector = r[0]
+	var guard := 0
+	while d.state == "running" and guard < 40:
+		d.skip_step()
+		guard += 1
+	check(d.state == "complete" and d.result.get("skipped", false) and int(d.result.get("scrap", -1)) == 0,
+			"skipping: L1 finished with SKIP STEP ends skipped, 0 SCRAP on its card")
+	check(not TutorialDirector.is_done(1) and TutorialDirector.is_skipped(1) and Progression.balance() == 0,
+			"skipping: a skipped lesson is not completed and pays nothing (balance %d)" % Progression.balance())
+	check(TutorialDirector.first_unfinished() == 2 and TutorialDirector.lesson_rows()[1].get("skipped", false),
+			"skipping: CONTINUE goes on to L2; the TUTORIAL page marks L1 skipped")
+	TutorialDirector.reload_progress()
+	check(TutorialDirector.is_skipped(1) and not TutorialDirector.is_done(1), "skipping: the skipped mark round-trips")
+	TutorialDirector.mark_complete(1)                     # replayed without a skip
+	check(TutorialDirector.is_done(1) and not TutorialDirector.is_skipped(1) and TutorialDirector.last_scrap == pay
+			and Progression.balance() == pay, "skipping: replaying it without a skip completes it and pays once (%d)" % Progression.balance())
+	TutorialDirector.mark_skipped(1)
+	check(TutorialDirector.is_done(1) and Progression.balance() == pay, "skipping: a later skipped replay takes nothing back")
+	for i in range(2, 9):
+		TutorialDirector.mark_complete(i)
+	TutorialDirector.mark_skipped(9)
+	check(not TutorialDirector.all_done() and not ArmyPresets.is_unlocked("graduate") and TutorialDirector.first_unfinished() == 9,
+			"skipping: no Graduate vat while a lesson is only skipped; CONTINUE offers it again")
+	TutorialDirector.mark_complete(9)
+	check(TutorialDirector.all_done() and ArmyPresets.is_unlocked("graduate") and Progression.balance() == 9 * pay,
+			"skipping: every lesson really completed -> the Graduate vat, 9 x %d SCRAP" % pay)
+	var r9 := make(9)
+	var d9: TutorialDirector = r9[0]
+	d9.skip_step()                                        # the first match's opening card: closing it skips nothing
+	check(not d9.skipped, "skipping: closing L9's opening card is not a skip")
 	_wipe()
 	TutorialDirector.reload_progress()
 	ArmyPresets._loaded = false

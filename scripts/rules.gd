@@ -890,10 +890,20 @@ const PROGRESSION := {
 	"daily_count": 3, "daily_soft": 50, "daily_xp": 150,
 	"weekly_count": 3, "weekly_soft": 250, "weekly_xp": 500, "weekly_premium": 10,
 	"tutorial_lesson": 140,                       # lessons 1-9, first completion: 9 x 140 = 1 260 = a 3rd skill
+	# a campaign mission's one-off SCRAP (3 stars + its optional objective in one run), by mission kind (proposal,
+	# CAMPAIGN-DESIGN §5a; was Campaign.REWARD)
+	"campaign_reward": {"main": 150, "duel": 200, "side": 200, "finale": 300},
 	"faction_vat_wins": 25,
 	"free_skills": ["surge", "demolish"],         # the two the tutorial teaches; every other shared skill is bought
 	"ledger_keep": 200,                           # recent wallet entries kept on the device (the PROFILE history)
 }
+# TUTORIAL (tutorial.gd, coach_overlay.gd): L9's scripted relay-kill push (TutorialDirector._tick_match) - the opening
+# card closes itself after card_close s; the push waits for the rival to hold push_min_shown units (shown); every rival
+# garrison of muster_min_shown+ gathers on the muster node, which launches after muster_wait s at the latest (the push
+# is given up after launch_wait s); a push not decided after push_wait s is a miss.
+const L9_MATCH := {"card_close": 12.0, "push_min_shown": 20.0, "muster_min_shown": 3.0, "muster_wait": 25.0,
+		"launch_wait": 40.0, "push_wait": 45.0}
+const TUTORIAL_HANDLER_FPS := 20.0   # the coach card's 3D handler renders this often (its own SubViewport; audit B4)
 # Prices by item kind ({} or a missing currency = not sold for it). Skills never for chips (no power for money).
 const PRICES := {
 	"skill": {"soft": 1250},

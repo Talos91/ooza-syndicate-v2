@@ -23,7 +23,6 @@ extends RefCounted
 const PROGRESS_VERSION := 1
 const FACTION_ORDER := ["vex", "null", "bloom", "ember", "solar"]
 const FREE := ["vex"]                                # the free campaign (Daniele); the rest are paid, later
-const REWARD := {"main": 150, "duel": 200, "side": 200, "finale": 300}   # SCRAP, proposal (CAMPAIGN-DESIGN §5a)
 const HUMAN := "A"
 const RIVAL := "B"
 const HANDLER := "DR. VESK"                          # the tutorial's handler (TutorialDirector.HANDLER_NAME)
@@ -42,7 +41,7 @@ const RIVALS := {
 ## platforms without a mission, city dressing) and the order its platforms drop when it is done.
 ## A mission:
 ##   id, title, story (one line on the card), type (takeover / relay_puzzle / hold / duel / blind / monster /
-##   collapse / mutator / beast), kind (main / side / duel / finale -> REWARD), parent (side missions: the main id),
+##   collapse / mutator / beast), kind (main / side / duel / finale -> Rules.PROGRESSION.campaign_reward), parent (side missions: the main id),
 ##   map (a baked map path; PLACEHOLDER maps until the new maps land - Game map builder), placeholder,
 ##   par (seconds, the ★★ / ★★★ time), objective {kind, ...} (what wins), optional {kind, text, ...},
 ##   ai (Rules.AI_LEVELS), rival (RIVALS key), stage {rival_units: shown units added to the rival's home},
@@ -214,6 +213,7 @@ static var progress := {}                            # key -> {stars, objective,
 static var unlocks_pending := {}                     # item -> source, recorded until Progression exists
 static var seen := {}                                # "collapse:<district>" -> true once its drop has played
 static var _loaded := false
+static var _loaded_path := ""                        # the file `progress` came from (a new `path` loads afresh)
 static var _prog_script: Script = null
 static var _prog_checked := false
 
@@ -373,7 +373,8 @@ static func district_of(key: String) -> Dictionary:
 
 
 static func reward_for(m: Dictionary) -> int:
-	return int(REWARD.get(str(m.get("kind", "main")), REWARD["main"]))
+	var rewards: Dictionary = Rules.PROGRESSION["campaign_reward"]
+	return int(rewards.get(str(m.get("kind", "main")), rewards["main"]))
 
 
 static func playable(m: Dictionary) -> bool:
@@ -413,12 +414,19 @@ static func objective_text(m: Dictionary) -> String:
 
 # ------------------------------------------------------------------ progress
 static func load_all() -> void:
+	## Reads `path`. A file that won't load (no storage: private browsing) keeps this session's progress when it was
+	## already loaded from the same path (AUDIT FIX, 2026-09-28: the campaign page's reload used to wipe mission 01's
+	## win before mission 02 could open).
+	var cf := ConfigFile.new()
+	var ok := cf.load(path) == OK
+	if not ok and _loaded and _loaded_path == path:
+		return
 	progress = {}
 	unlocks_pending = {}
 	seen = {}
 	_loaded = true
-	var cf := ConfigFile.new()
-	if cf.load(path) != OK:
+	_loaded_path = path
+	if not ok:
 		return
 	for k in cf.get_section_keys("progress") if cf.has_section("progress") else []:
 		var v = cf.get_value("progress", k, {})
@@ -431,8 +439,14 @@ static func load_all() -> void:
 
 
 static func reload_all() -> void:
-	_loaded = false
-	_ensure()
+	## Read the file again (tests; a failed read keeps the session's progress, see load_all).
+	load_all()
+
+
+static func load_if_needed() -> void:
+	## The campaign page: load once per path - the session's progress is the truth after that (every change saves).
+	if not _loaded or _loaded_path != path:
+		load_all()
 
 
 static func save_all() -> bool:
@@ -449,7 +463,7 @@ static func save_all() -> bool:
 
 
 static func _ensure() -> void:
-	if not _loaded:
+	if not _loaded or _loaded_path != path:
 		load_all()
 
 
@@ -580,6 +594,11 @@ static func record(key: String, run: Dictionary) -> Dictionary:
 			if _grant(key, amount):
 				rec["reward"] = "paid"
 				reward["state"] = "paid"
+			else:                                      # AUDIT FIX: the wallet already had it (paid on another device,
+				var p := _progression()                # a lost local record): taken, not "earned" again
+				if p != null and bool(p.call("has_granted", source_of(key))):
+					rec["reward"] = "paid"
+					reward["state"] = "taken"
 	progress[key] = rec
 	var f := faction_of(key)
 	var unlocked := []
@@ -649,6 +668,7 @@ static func from_dict(d: Dictionary) -> void:
 	for k in d.get("seen", {}):
 		seen[str(k)] = true
 	_loaded = true
+	_loaded_path = path
 	save_all()
 
 
@@ -658,6 +678,7 @@ static func reset_progress() -> void:
 	unlocks_pending = {}
 	seen = {}
 	_loaded = true
+	_loaded_path = path
 	save_all()
 
 
