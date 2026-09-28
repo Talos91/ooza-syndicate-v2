@@ -201,7 +201,10 @@ static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "se
 	b.custom_minimum_size = dims
 	b.size = dims
 	if call.is_valid():
-		b.pressed.connect(func(): call.call_deferred())
+		var ui := "confirm" if kind == "primary" else "tap"   # SOUND: the primary action confirms, the rest tap (sfx.gd)
+		b.pressed.connect(func():
+			Sfx.play_ui(ui)
+			call.call_deferred())
 	return b
 
 
@@ -253,7 +256,9 @@ static func back_link(m, right_x: float, y: float, call: Callable) -> Button:
 	b.alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var w := text_w(m, b.text, 15, true) + 20.0
 	b.size = Vector2(w, tap_h(m, 36.0))
-	b.pressed.connect(func(): call.call_deferred())
+	b.pressed.connect(func():
+		Sfx.play_ui("back")                                 # SOUND
+		call.call_deferred())
 	return add(m, b, Vector2(right_x - w, y)) as Button
 
 

@@ -673,7 +673,7 @@ func show_options() -> void:
 	## 30 / 60 (Alpha 21 OPT-RENDER, perf_profile.gd, user://settings.cfg), DETAIL. TESTING (id "debug"): DEBUG TOOLS (the
 	## Debug button and live sliders in matches), the progression TEST SWITCH. Match options (LAST STAND, ENEMY COUNTS) are
 	## SETUP's (Daniele 2026-09-28: they make no sense here), TERRITORY the wardrobe's. The rows scroll
-	## (phones grow them to 44 pt). No audio settings exist yet, so no AUDIO tab and no restore-defaults. TERRITORY lives
+	## (phones grow them to 44 pt). DISPLAY ends with an AUDIO group: SOUND ON / OFF and VOLUME 25-100 % (sfx.gd, live). TERRITORY lives
 	## in ARMIES > COSMETICS > CORE (0.19.2). DONE / BACK return to the page the gear was pressed on.
 	_last_show = show_options                  # a resize that changes the phone sizing rebuilds it (_fit)
 	if not _opt_arg_read:                              # UI: screenshots open a tab (--options-tab=display)
@@ -726,6 +726,15 @@ func show_options() -> void:
 			y += _opt_row(y, w, "FRAME RATE", PerfProfile.fps_label() + ("  -  LOW RES stays at 30." if low else "  -  the cap while a match runs."), fps, low)
 			y += _opt_row(y, w, "DETAIL", "LOW trims the river patches and vat residents - use it if the game makes your machine run hot.",
 					[["FULL", not Rules.low_detail, func(): Rules.low_detail = false], ["LOW", Rules.low_detail, func(): Rules.low_detail = true]])
+			# SOUND: the AUDIO group (sfx.gd, user://settings.cfg [audio]) - both heard at once, the tap itself included
+			y += _say("AUDIO", Vector2(0, y + 18.0), 12, UiKit.accent(shell_f), 0.0, true) + 18.0
+			y += _opt_row(y, w, "SOUND", "The match and the menus. OFF: silent (the VOLUME is kept for ON).",
+					[["ON", Sfx.sound_on(), func(): Sfx.set_on(true)], ["OFF", not Sfx.sound_on(), func(): Sfx.set_on(false)]])
+			var vols := []
+			for v in Rules.SOUND_VOLUME_STEPS:
+				var pct: int = v
+				vols.append([Sfx.volume_label(pct), Sfx.volume() == pct, func(): Sfx.set_volume(pct)])
+			y += _opt_row(y, w, "VOLUME", "How loud the sounds are - heard at once.", vols, not Sfx.sound_on())
 	_column_end(col, n0, y, true)
 
 

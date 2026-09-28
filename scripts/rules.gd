@@ -841,3 +841,27 @@ const PERF_BUDGET_DRAW_CALLS := 500
 const PERF_BUDGET_PRIMITIVES := 400000
 const PERF_BUDGET_OBJECTS := 800
 # --- end OPT-RENDER ---
+
+# --- SOUND (first pass: Set 4 "Mix 2+3", alternate 1 - Daniele's pick in the sound demo, 2026-09-28; sfx.gd) ---
+# The numbers the demo (branch sound-demo) was heard with. Throttle: one event type plays at most every SOUND_GAP s
+# (real time, so a busy map stays readable and a 2x speed never doubles the noise); the alarms 1 s, the win 2 s.
+const SOUND_GAP := {"send": 0.25, "fight": 0.3, "hit": 0.2, "capture": 0.2, "node_lost": 0.25, "upgrade": 0.3,
+		"build": 0.3, "laser": 0.25, "machinegoon": 0.45, "skill": 0.3, "fall": 0.3, "collapse_warning": 0.3,
+		"collapse": 0.3, "last_stand": 1.0, "very_last_stand": 1.0, "eliminated": 0.5, "win": 2.0}
+const SOUND_GAP_DEFAULT := 0.3            # an event not listed above (monsters, relays)
+const SOUND_VOICES := 12                  # match voices; all busy: a new sound is dropped, except SOUND_PRIORITY's
+const SOUND_PRIORITY := ["win", "last_stand", "very_last_stand", "eliminated", "collapse"]   # these take the oldest voice
+const SOUND_UI_VOICES := 3                # menu taps (they outlive a scene reload: DEPLOY's confirm keeps playing)
+const SOUND_UI_GAP := 0.06                # s between two UI sounds (a double tap is one sound)
+# Per event its level in dB (the demo's mix; the VOLUME setting scales them all on the Master bus).
+const SOUND_VOL := {"send": -10.0, "fight": -8.0, "hit": -9.0, "capture": -4.0, "node_lost": -4.0, "upgrade": -5.0,
+		"build": -6.0, "laser": -8.0, "machinegoon": -16.0, "monster_launch": -4.0, "monster_stomp": -4.0,
+		"monster_take": -4.0, "monster_fall": -4.0, "skill": -5.0, "relay_warning": -9.0, "relay_switch": -7.0,
+		"fall": -8.0, "collapse_warning": -6.0, "collapse": -3.0, "last_stand": 0.0, "very_last_stand": 0.0,
+		"eliminated": -3.0, "win": 0.0}
+const SOUND_UI_VOL := {"tap": -14.0, "confirm": -9.0, "back": -12.0, "error": -9.0}
+# SETTINGS > DISPLAY > AUDIO: VOLUME's choices (percent of full level; silence is SOUND OFF) and the first-run default.
+# 50 % = -6 dB on the Master bus, the level the demo played at when Daniele picked the set.
+const SOUND_VOLUME_STEPS := [25, 50, 75, 100]
+const SOUND_VOLUME_DEFAULT := 50
+# --- end SOUND ---

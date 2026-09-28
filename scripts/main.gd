@@ -144,6 +144,7 @@ func _ready() -> void:
 		add_child(FullscreenGate.new())
 	Engine.max_fps = Net.DEDICATED_FPS if Net.dedicated else 60   # never spin faster than the screen (menu included)
 	PerfProfile.apply(self)                            # Alpha 21 OPT-RENDER: graphics profile, fps cap, map batching (perf_profile.gd)
+	Sfx.attach(self)                                   # SOUND: the match's sounds + the saved volume (sfx.gd; never on the room server)
 	MissionDirector.restore_settings()                 # CAMPAIGN: a blind mission's HIDE ENEMY COUNTS goes back
 	if Net.online():                                   # a room launched (or relaunched) a round
 		_start_online()
@@ -1041,6 +1042,7 @@ func node_action(method: String, id: int, args := {}) -> bool:
 	# needs a toast, since nothing else on screen explains why nothing happened.
 	if not r[0] and str(r[1]) != "":
 		hud.toast(r[1])
+		Sfx.play_ui("error")                          # SOUND: a refused order
 	return r[0]
 
 
@@ -1193,6 +1195,7 @@ func _process(delta: float) -> void:
 			mission.on_event(ev)
 		fx.handle(ev)
 		skill_fx.handle(ev)
+		Sfx.on_fx(ev)                                 # SOUND: the same events (a guest's come from the host through Net)
 		match ev["type"]:
 			"skill":                                  # a rival's skill that touches you: a toast (SkillDock.on_event)
 				hud.skill_event(ev)
