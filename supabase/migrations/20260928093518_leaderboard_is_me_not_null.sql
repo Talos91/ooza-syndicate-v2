@@ -1,6 +1,6 @@
 -- leaderboard_season_wins: is_me was `w.user_id = auth.uid()`, which is NULL (not false) for a caller who isn't signed
 -- in, and the client's bool(null) crashed (🧩 UI fixed the client in 0.21.12). Same body, is_me coalesced to false
--- (my_matches already does). NOT APPLIED: needs Daniele's go; rename to the live version once applied.
+-- (my_matches already does). Applied 2026-09-28 on Daniele's go.
 create or replace function public.leaderboard_season_wins(lim integer default 50)
 returns table(rank bigint, name text, wins bigint, is_me boolean)
 language sql stable security definer set search_path to '' as $function$
