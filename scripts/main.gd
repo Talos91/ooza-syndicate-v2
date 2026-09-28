@@ -1792,7 +1792,7 @@ func _node_at(p: Vector3, screen: Vector2 = Vector2(-1, -1)) -> int:
 	if p == Vector3.INF:
 		return -1
 	for n in sim.nodes:
-		if sim.collapsed.get(n["id"], false):
+		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: not tappable
 			continue
 		if (n["pos"] as Vector3).distance_to(p) <= Rules.R + (2.5 if mobile else 1.0):
 			return n["id"]

@@ -306,6 +306,8 @@ static func model_for(n: Dictionary) -> String:
 	## names come from tables and caches, not string formatting.
 	var kind: String
 	var tier: int
+	if n.get("node_kind", "") == "junction":            # JUNCTION: nothing in the centre slot
+		return "junction"
 	if n["build_kind"] != "" and not n["build_target"].is_empty():
 		var t: Dictionary = n["build_target"]
 		kind = t["kind"]
@@ -581,6 +583,17 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 		var relay: String = n["relay"]
 		var on_plaza: bool = n["plaza"] >= 0
 		var platform: Node3D = null
+		if n.get("junction", "") != "":                # JUNCTION: the piece itself (a curve's origin is its start port)
+			var ji := map["nodes"][id] as Dictionary
+			platform = put(parent, "junctions/" + str(n["junction"]), n["pos"], deg_to_rad(float(ji.get("junctionYaw", 0.0))))
+			parts.append(platform)
+			var empty := Node3D.new()
+			parent.add_child(empty)
+			empty.position = n["pos"]
+			vis[id] = {"parts": parts, "platform": platform, "vat_node": empty, "vat_tier": -1, "model_key": model_for(n),
+					"attachment_node": null, "attachment": "", "cannon_tier": 0, "housing": null, "state_parts": [],
+					"mount_dir": Vector3.FORWARD, "centre": n["pos"], "state_hosts": []}
+			continue
 		if not on_plaza:
 			platform = put(parent, platform_piece(n), n["pos"])
 			parts.append(platform)
@@ -634,6 +647,8 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 			if bool(g["plaza%d" % end]):
 				pier = glb_nodes.get("PlazaPier_%d_%d" % [i, end])
 			elif g.get("dock", false):                    # maps 4.0 dock: the connector meets the rim directly
+				pier = null
+			elif sim.nodes[nid].get("junction", "") != "":  # JUNCTION: decks plug straight into the piece's port
 				pier = null
 			else:
 				pier = angled_pier(parent, exit, dir, float(g["lean%d" % end]), st.begins_with("s") and ctrl == nid)

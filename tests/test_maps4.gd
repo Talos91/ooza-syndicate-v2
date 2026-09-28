@@ -97,10 +97,17 @@ func _layout(m: Dictionary, path: String) -> void:
 		print("WARN  %s: %d deck(s) with piers past the kit's 80 degrees (clamped; pack layout)" % [code, steep])
 	# deck against deck at full width, same height only
 	var clashes := 0
+	var junction := {}                                # JUNCTION: deck junctions and curves (maps 5.0) - not platforms
+	for nd in m["nodes"]:
+		if str(nd.get("junction", "") if nd.get("junction") != null else "") != "":
+			junction[int(nd["id"])] = true
 	for i in range(decks.size()):
 		var di: Dictionary = decks[i]
 		for j in range(i + 1, decks.size()):
 			var dj: Dictionary = decks[j]
+			var shared := [int(di["e"]["from"]), int(di["e"]["to"])].filter(func(x): return x in [int(dj["e"]["from"]), int(dj["e"]["to"])])
+			if shared.any(func(x): return junction.has(x)):
+				continue                              # JUNCTION: decks meeting at a piece's ports (the piece's own plate)
 			var n := maxi(2, int(di["L"] / STEP))
 			for t in range(n + 1):
 				var s: float = di["L"] * t / n
@@ -131,7 +138,7 @@ func _layout(m: Dictionary, path: String) -> void:
 			var p: Vector2 = d["A"] + d["u"] * s
 			var z := _z(d["g"], s)
 			for nd in m["nodes"]:
-				if int(nd["id"]) in mine or nd.get("plaza") != null:
+				if int(nd["id"]) in mine or nd.get("plaza") != null or junction.has(int(nd["id"])):   # JUNCTION: not a platform
 					continue
 				var key := str(int(nd["id"]))
 				var c := Vector2(lay["nodes"][key][0], lay["nodes"][key][1])
