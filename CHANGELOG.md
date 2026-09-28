@@ -1,7 +1,11 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.21.8 "Alpha 21" - 2026-09-28 (telemetry, crash reports, privacy, DELETE ACCOUNT)
+## 0.21.8 "Alpha 21" - 2026-09-28 (telemetry, crash reports, privacy, DELETE ACCOUNT; lobby READY)
 
+- **READY in the online lobby** (Daniele; 🖥️ Server, protocol ooze20-net-6): each guest presses READY, which locks their
+  faction / colour / team / skills until they un-ready; the owner's DEPLOY waits ("WAITING FOR N PLAYERS"); an owner's
+  settings change un-readies the players it affects ("Settings changed - press READY again"); AI seats and the owner count
+  as ready. A READY tag on each ready player's row.
 - **Privacy notice** (🏆 Progression; Daniele: opt-in in the EU / EEA / UK / Switzerland, opt-out elsewhere): shown once, in
   SETTINGS > PRIVACY and ACCOUNT > PRIVACY, and on the web at privacy.html. **SHARE PLAY & CRASH DATA** switch.
 - **Telemetry to Supabase**: a session record, a record per match (map, mode, faction, result, length, AI level, counters),
