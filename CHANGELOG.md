@@ -8,6 +8,8 @@
   rematch list show the names.
 - Every page but HOME on Daniele's creature-free wallpapers (the same scene as HOME, one creature per page; +1.2 MB); the
   results no longer read "YOU (YOU)" offline.
+- Google sign-in returns to the page the game runs on (github.io now, oozesyndicate.com after the move; 🏆); the phone
+  telemetry's menu samples name their page. 01 FACTION: "COMING SOON" no longer drawn over the trait name (🧩).
 - The room server can also answer on rooms.oozesyndicate.com (Caddyfile; the game still connects to the sslip.io address
   until that DNS record is live).
 
