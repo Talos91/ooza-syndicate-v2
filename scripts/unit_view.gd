@@ -9,6 +9,9 @@ extends Node3D
 ## on the same faction never look alike (Alpha 14 playtest), and stands on a disc in that colour.
 ## Garrisons don't loiter round the vat: the platform neon shows the owner. Drawn with one
 ## MultiMesh per faction x seat plus one for the discs, rebuilt every frame.
+## Perf pass (2026-09-28, audit B1 - the #1 view cost): each MultiMesh's frame is written straight into a
+## PackedFloat32Array (Batch) and handed over in one RenderingServer.multimesh_set_buffer; a column works out its
+## key and colours once, and each body finds its path segment once for its three samples (Sim.sample's search).
 ## TERRITORY: GOO (Rules.goo_territory, 0.18.7 - the goo readability round 3, renders_r3 S1-S4, S9):
 ## the body keeps its RACE colour (the approved texture, no hue shift) and the player colour moves to a
 ## rim glow (the shader's rim with accent := seat colour, gain GOO_RIM_GAIN) - goo = player, body = race,
@@ -42,9 +45,76 @@ var _mesh := {}                      # faction -> Mesh
 var _tex := {}                       # faction -> albedo Texture2D
 var _scale := {}                     # faction -> uniform scale to UNIT_SIZE
 var _mm := {}                        # "faction|seat" -> MultiMeshInstance3D
-var _xf := {}                        # "faction|seat" -> [Transform3D] this frame
+var _xf := {}                        # "faction|seat" -> Batch: this frame's bodies
 var _disc: MultiMeshInstance3D
-var _discs: Array = []               # [[Transform3D, Color]] this frame
+var _discs := Batch.new(4096, 16)    # this frame's discs (transform + colour)
+var _ghost_seed := {}                # "faction|seat|g" -> its flicker seed (SkillFx.ghost_alpha)
+
+
+class Batch:
+	## One MultiMesh's instances this frame, in RenderingServer.multimesh_set_buffer's layout (12 floats a
+	## transform: basis rows and origin; 16 with a colour). `buf` always holds `cap` instances (the MultiMesh's
+	## instance_count); the first `n` are this frame's.
+	var buf := PackedFloat32Array()
+	var n := 0
+	var cap := 0
+	var stride := 12
+
+	func _init(c: int, st := 12) -> void:
+		cap = c
+		stride = st
+		buf.resize(c * st)
+
+	func grow() -> void:
+		cap = nearest_po2(n + 1)
+		buf.resize(cap * stride)
+
+	func put(b: Basis, o: Vector3) -> void:
+		if n >= cap:
+			grow()
+		var i := n * stride
+		buf[i] = b.x.x
+		buf[i + 1] = b.y.x
+		buf[i + 2] = b.z.x
+		buf[i + 3] = o.x
+		buf[i + 4] = b.x.y
+		buf[i + 5] = b.y.y
+		buf[i + 6] = b.z.y
+		buf[i + 7] = o.y
+		buf[i + 8] = b.x.z
+		buf[i + 9] = b.y.z
+		buf[i + 10] = b.z.z
+		buf[i + 11] = o.z
+		n += 1
+
+	func put_disc(size: float, o: Vector3, c: Color) -> void:
+		## Basis().scaled(Vector3.ONE * size) at o, in colour c.
+		if n >= cap:
+			grow()
+		var i := n * stride
+		buf[i] = size
+		buf[i + 1] = 0.0
+		buf[i + 2] = 0.0
+		buf[i + 3] = o.x
+		buf[i + 4] = 0.0
+		buf[i + 5] = size
+		buf[i + 6] = 0.0
+		buf[i + 7] = o.y
+		buf[i + 8] = 0.0
+		buf[i + 9] = 0.0
+		buf[i + 10] = size
+		buf[i + 11] = o.z
+		buf[i + 12] = c.r
+		buf[i + 13] = c.g
+		buf[i + 14] = c.b
+		buf[i + 15] = c.a
+		n += 1
+
+	func flush(mm: MultiMesh) -> void:
+		if mm.instance_count != cap:                     # grown this frame (every instance is rewritten below)
+			mm.instance_count = cap
+		RenderingServer.multimesh_set_buffer(mm.get_rid(), buf)
+		mm.visible_instance_count = n
 var _pour := {}                      # horde id -> {"L", "head", "t", "count"} while its column walks in
 var _seen := {}                      # horde ids drawn this frame (the rest are dropped from _pour)
 var _goo := false                    # the look the materials carry (Rules.goo_look)
@@ -109,7 +179,9 @@ func _instance(faction: String, seat: String, ghost := false) -> MultiMeshInstan
 			inst.material_override = m
 		add_child(inst)
 		_mm[key] = inst
-		_xf[key] = []
+		_xf[key] = Batch.new(mm.instance_count)
+		if ghost:
+			_ghost_seed[key] = key.hash() % 97
 	return _mm[key]
 
 
@@ -133,10 +205,10 @@ func begin(now := -1.0) -> void:
 				style(m, parts[0], parts[1], _goo)
 		_disc.visible = not _goo
 	for k in _xf:
-		(_xf[k] as Array).clear()
+		(_xf[k] as Batch).n = 0
 	for k in _blob_xf:
-		(_blob_xf[k] as Array).clear()
-	_discs.clear()
+		(_blob_xf[k] as Batch).n = 0
+	_discs.n = 0
 	_seen.clear()
 	if now >= 0.0:
 		_now = now
@@ -145,20 +217,50 @@ func begin(now := -1.0) -> void:
 func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob := 0.0, roll := 0.0, squeeze := 0.0, size := 1.0) -> void:
 	if not _mesh.has(faction):
 		return
-	if ForgePulse.live:                              # a forge coming online: the body glows, hops and swells in its wave
-		var b := ForgePulse.boost(seat, pos)
-		bob += ForgePulse.HOP * b
-		size *= 1.0 + ForgePulse.SWELL * b
+	_put_unit(_batch(faction, seat), _scale[faction], seat, Rules.seat_color(seat) * (0.35 if _ghost else 1.0), pos, heading,
+			bob, roll, squeeze, size)
+
+
+func _batch(faction: String, seat: String) -> Batch:
+	## This frame's bodies of faction x seat (the Ghost Line's own while _ghost), its MultiMesh made on first use.
 	var key := "%s|%s" % [faction, seat]
 	if _ghost:                                       # Skills 2.0: its owner sees a Ghost Line see-through
 		key += "|g"
 	if not _mm.has(key):
 		_instance(faction, seat, _ghost)
-	var s: float = _scale[faction] * size
+	return _xf[key]
+
+
+func _put_unit(batch: Batch, scale: float, seat: String, disc: Color, pos: Vector3, heading: float, bob: float, roll: float,
+		squeeze: float, size: float) -> void:
+	## One body and its disc (in colour `disc`); `scale` is its faction's model scale.
+	if ForgePulse.live:                              # a forge coming online: the body glows, hops and swells in its wave
+		var b := ForgePulse.boost(seat, pos)
+		bob += ForgePulse.HOP * b
+		size *= 1.0 + ForgePulse.SWELL * b
+	var s: float = scale * size
 	var basis := Basis(Vector3.UP, heading + MODEL_YAW) * Basis(Vector3(0, 0, 1), roll) \
 			* Basis.from_scale(Vector3(1.0 + squeeze * 0.6, 1.0 - squeeze, 1.0 + squeeze * 0.45) * s)
-	(_xf[key] as Array).append(Transform3D(basis, pos + Vector3(0, 0.08 + bob, 0)))
-	_discs.append([Transform3D(Basis().scaled(Vector3.ONE * size), pos + Vector3(0, 0.05, 0)), Rules.seat_color(seat) * (0.35 if _ghost else 1.0)])   # the disc goes in with its body
+	batch.put(basis, pos + Vector3(0, 0.08 + bob, 0))
+	_discs.put_disc(size, pos + Vector3(0, 0.05, 0), disc)   # the disc goes in with its body
+
+
+static func _seg(cum: PackedFloat32Array, s: float, lo: int) -> int:
+	## Sim.sample's segment for arc length s (already clamped to the path): the last point at or before s, never
+	## the path's last one - walked from `lo` (the neighbouring body's segment) instead of searched from scratch.
+	var last := cum.size() - 2
+	lo = clampi(lo, 0, last)
+	while lo > 0 and cum[lo] > s:
+		lo -= 1
+	while lo < last and cum[lo + 1] <= s:
+		lo += 1
+	return lo
+
+
+static func _pos(cum: PackedFloat32Array, pts: PackedVector3Array, s: float, lo: int) -> Vector3:
+	## Sim.sample's position on segment lo (the same sums).
+	var seg := maxf(cum[lo + 1] - cum[lo], 0.0001)
+	return pts[lo].lerp(pts[lo + 1], (s - cum[lo]) / seg)
 
 
 func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost := false) -> void:
@@ -227,6 +329,15 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 	var P: int = tr["P"]
 	var mask: int = tr["mask"]
 	var drawn := 0
+	var owner: String = h["owner"]
+	var batch: Batch = _batch(h["faction"], owner) if _mesh.has(h["faction"]) else null   # the column's key, once
+	var model_scale: float = _scale.get(h["faction"], 1.0)
+	var disc_col := Rules.seat_color(owner) * (0.35 if _ghost else 1.0)
+	var cum: PackedFloat32Array = h["cum"]
+	var pts: PackedVector3Array = h["pts"]
+	var walk := cum.size() >= 2                       # (a one-point path: Sim.sample itself)
+	var end: float = cum[-1] if walk else 0.0
+	var seg := cum.size()                             # the walk starts at the head end
 	for j in range(P, count):
 		var k := j - P
 		if k < 31 and (mask >> k) & 1:
@@ -260,13 +371,28 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 		drawn += 1
 		var door_d := (L - travel) if from_tanks else minf(travel, L - travel)   # dropped bodies are already out
 		var door := smoothstep(0.0, 1.0, clampf(door_d / DOOR, 0.0, 1.0))
-		var smp := Sim.sample(h, travel)
+		if batch == null:
+			continue                                  # (add_unit drew nothing for a faction without a model)
 		# the heading over the metre either side, not the polyline segment's: where the bridge meets the
 		# platform ring (and round the ring's segments) the side lanes swing round the corner instead of
 		# stepping sideways, and a body turns from one three-quarter view to the other over a stride
-		var fwd: Vector3 = (Sim.sample(h, travel + BEND)[0] as Vector3) - (Sim.sample(h, travel - BEND)[0] as Vector3)
-		fwd.y = 0.0
-		fwd = fwd.normalized() if fwd.length() > 0.001 else (smp[1] as Vector3)
+		var at: Vector3
+		var fwd: Vector3
+		if walk:                                      # Sim.sample's three samples, one segment walk
+			var s0 := clampf(travel, 0.0, end)
+			seg = _seg(cum, s0, seg)
+			at = _pos(cum, pts, s0, seg)
+			var s1 := clampf(travel + BEND, 0.0, end)
+			var s2 := clampf(travel - BEND, 0.0, end)
+			fwd = _pos(cum, pts, s1, _seg(cum, s1, seg)) - _pos(cum, pts, s2, _seg(cum, s2, seg))
+			fwd.y = 0.0
+			fwd = fwd.normalized() if fwd.length() > 0.001 else (pts[seg + 1] - pts[seg]).normalized()
+		else:
+			var smp := Sim.sample(h, travel)
+			at = smp[0]
+			fwd = (Sim.sample(h, travel + BEND)[0] as Vector3) - (Sim.sample(h, travel - BEND)[0] as Vector3)
+			fwd.y = 0.0
+			fwd = fwd.normalized() if fwd.length() > 0.001 else (smp[1] as Vector3)
 		var side := fwd.cross(Vector3.UP).normalized()
 		var row_size := mini(lanes, count - int(j / lanes) * lanes)
 		var lateral := (col - (row_size - 1) * 0.5) * LANE * expansion
@@ -274,7 +400,7 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 		var yaw := Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing))
 		var phase := fmod(j * 0.618 + float(id) * 0.137, 1.0)
 		var wave := sin(time * WAVE + phase * TAU)
-		add_unit(h["faction"], h["owner"], (smp[0] as Vector3) + side * lateral * door + Vector3.DOWN * 0.35 * (1.0 - door), yaw,
+		_put_unit(batch, model_scale, owner, disc_col, at + side * lateral * door + Vector3.DOWN * 0.35 * (1.0 - door), yaw,
 				maxf(0.0, wave) * HOP * door, wave * ROLL, wave * SQUASH * soft, lerpf(0.12, 1.0, door))
 	while mask & 1:                                # the gone prefix is done with
 		mask >>= 1
@@ -519,7 +645,18 @@ func _draw_fallers() -> void:
 			basis = Basis(Vector3.UP, _fl_yaw[i] + MODEL_YAW + sp.y * age) * Basis(Vector3(1, 0, 0), sp.x * age) \
 					* Basis(Vector3(0, 0, 1), sp.z * age) * Basis.from_scale(Vector3(sq, stretch, sq) * s * shrink)
 			pos = _fl_p[i] + Vector3(v.x, 0.0, v.z) * age + Vector3.UP * (v.y * age - 0.5 * POUR_G * age * age)
-		(_xf[key] as Array).append(Transform3D(basis, pos))
+		(_xf[key] as Batch).put(basis, pos)
+
+
+var _sent := {}                      # MultiMesh -> instances it was last handed (0: nothing to send again)
+
+
+func _send(b: Batch, mm: MultiMesh) -> void:
+	## One multimesh_set_buffer per MultiMesh per frame - none while it stays empty.
+	if b.n == 0 and int(_sent.get(mm, 0)) == 0:
+		return
+	_sent[mm] = b.n
+	b.flush(mm)
 
 
 static func _rnd(a: int, b: int) -> float:
@@ -528,7 +665,7 @@ static func _rnd(a: int, b: int) -> float:
 
 # ------------------------------------------------------------------ goo blobs (vat drops)
 var _blob := {}                      # seat -> MultiMeshInstance3D of goo spheres
-var _blob_xf := {}                   # seat -> [Transform3D] this frame
+var _blob_xf := {}                   # seat -> Batch: this frame's blobs
 var _blob_mesh: SphereMesh
 
 
@@ -551,8 +688,8 @@ func add_blob(seat: String, pos: Vector3, scale3: Vector3) -> void:
 		inst.material_override = Mats.goo(seat)
 		add_child(inst)
 		_blob[seat] = inst
-		_blob_xf[seat] = []
-	(_blob_xf[seat] as Array).append(Transform3D(Basis.from_scale(scale3), pos))
+		_blob_xf[seat] = Batch.new(mm.instance_count)
+	(_blob_xf[seat] as Batch).put(Basis.from_scale(scale3), pos)
 
 
 func flush() -> void:
@@ -565,32 +702,12 @@ func flush() -> void:
 			_front.erase(id)
 	_draw_fallers()
 	for seat in _blob:
-		var arr: Array = _blob_xf[seat]
-		var bm: MultiMesh = (_blob[seat] as MultiMeshInstance3D).multimesh
-		if arr.size() > bm.instance_count:
-			bm.instance_count = nearest_po2(arr.size())
-		for i in range(arr.size()):
-			bm.set_instance_transform(i, arr[i])
-		bm.visible_instance_count = arr.size()
+		_send(_blob_xf[seat], (_blob[seat] as MultiMeshInstance3D).multimesh)
 	for k in _mm:
-		var arr: Array = _xf[k]
-		var mm: MultiMesh = (_mm[k] as MultiMeshInstance3D).multimesh
-		if arr.size() > mm.instance_count:            # grow rather than drop bodies (every transform is rewritten below)
-			mm.instance_count = nearest_po2(arr.size())
-		var count := mini(arr.size(), mm.instance_count)
-		for i in range(count):
-			mm.set_instance_transform(i, arr[i])
-		mm.visible_instance_count = count
-		if str(k).ends_with("|g"):                 # a Ghost Line column breathes and flickers
+		_send(_xf[k], (_mm[k] as MultiMeshInstance3D).multimesh)
+		if _ghost_seed.has(k):                        # a Ghost Line column breathes and flickers
 			var gm := (_mm[k] as MultiMeshInstance3D).material_override as ShaderMaterial
 			if gm:
-				gm.set_shader_parameter("ghost_alpha", 1.0 - SkillFx.ghost_alpha(_now, str(k).hash() % 97))
-	var dm := _disc.multimesh
-	if _discs.size() > dm.instance_count:
-		dm.instance_count = nearest_po2(_discs.size())
-	var dc := mini(_discs.size(), dm.instance_count)
-	for i in range(dc):
-		dm.set_instance_transform(i, _discs[i][0])
-		dm.set_instance_color(i, _discs[i][1])
-	dm.visible_instance_count = dc
+				gm.set_shader_parameter("ghost_alpha", 1.0 - SkillFx.ghost_alpha(_now, _ghost_seed[k]))
+	_send(_discs, _disc.multimesh)
 	PerfProfile.lap("units_flush", _pt)
