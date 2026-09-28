@@ -7,6 +7,9 @@ extends Node
 ##   25 % (A's attack) / 60 % (the rival's), then 75 % / 30 %: feel_<tag>_fight25.png / _fight75.png (whole map) and
 ##   _close25.png / _close75.png (the camera on the two nodes). YOUR node shows the under-attack cue.
 ## laststand: A-01, every seat the AI, fast-forwarded into the Last Stand's first warning: feel_<tag>_laststand.png.
+## wave (0.22.3): A-01 into the first warning; the first platform to drop is made A's, a line of A's walks away from it
+##   over a deck and a rival line walks toward it; the camera closes on the platform and the deck's break is shot
+##   0.4 / 1.2 / 2.2 s after the drop: feel_<tag>_wave1.png .. _wave3.png (the deck goes module by module from the node).
 ## <tag> = phone when --mobile is given, else desktop.
 
 var main: Node3D
@@ -39,7 +42,7 @@ func _ready() -> void:
 	main.set("demo", true)
 	main.set("seed_value", 7)
 	main.set("ai_level", "Standard")
-	if shot == "laststand":
+	if shot == "laststand" or shot == "wave":
 		main.set("ff_to", Rules.LAST_STAND_TIME + 3.0)
 	else:
 		main.set("ff_to", 45.0)
@@ -55,6 +58,9 @@ func _process(dt: float) -> void:
 			_stage = 1
 			await _save("laststand")
 			get_tree().quit(0)
+		return
+	if shot == "wave":
+		await _wave(dt)
 		return
 	var sim: Sim = main.get("sim")
 	match _stage:
@@ -106,6 +112,76 @@ func _process(dt: float) -> void:
 			if _t > 1.0:
 				_stage = 6
 				await _save("close75")
+				get_tree().quit(0)
+
+
+var _wave_node := -1
+var _wave_t := -1.0
+
+
+func _wave(_dt: float) -> void:
+	var sim: Sim = main.get("sim")
+	match _stage:
+		0:
+			if _t < 0.3 or sim.last_stand_queue.is_empty():
+				return
+			main.set("ais", [])
+			main.set("demo", false)
+			_wave_node = int(sim.last_stand_queue[0])
+			var away := -1
+			var toward := -1
+			for link in sim.adj[_wave_node]:
+				var o: Dictionary = sim.nodes[link[0]]
+				if o["relay"] != "" or not sim.is_edge_open(link[1]):
+					continue
+				if away < 0:
+					away = o["id"]
+				elif toward < 0:
+					toward = o["id"]
+			if away < 0:
+				print("feel_shots: the first drop has no walkable deck")
+				get_tree().quit(1)
+				return
+			sim.nodes[_wave_node]["owner"] = "A"
+			sim.nodes[_wave_node]["units"] = 300.0
+			sim.nodes[away]["owner"] = "A"
+			sim.nodes[away]["units"] = 50.0
+			if toward >= 0:
+				sim.nodes[toward]["owner"] = "B"
+				sim.nodes[toward]["units"] = 300.0
+			# the lines leave 5 s before the drop: the one walking away is mid-deck when the platform goes
+			_wave_t = maxf(sim.drop_in(_wave_node) - 5.0, 0.0)
+			main.set("scenario_focus", sim.nodes[_wave_node]["pos"])
+			main.set("scenario_zoom", 60.0)
+			main.call("_fit_camera")
+			print("feel_shots: platform %d drops in %.1f s; A walks away to %d, B walks toward from %d" % [_wave_node, sim.drop_in(_wave_node), away, toward])
+			_stage = 1
+			_t = 0.0
+			set_meta("away", away)
+			set_meta("toward", toward)
+		1:
+			if _t < _wave_t:
+				return
+			sim.send(_wave_node, int(get_meta("away")), 0.5)
+			if int(get_meta("toward")) >= 0:
+				sim.send(int(get_meta("toward")), _wave_node, 0.5)
+			_stage = 2
+		2:
+			if sim.collapsed.get(_wave_node, false):
+				_stage = 3
+				_t = 0.0
+		3:
+			if _t > 0.4:
+				_stage = 4
+				await _save("wave1")
+		4:
+			if _t > 1.2:
+				_stage = 5
+				await _save("wave2")
+		5:
+			if _t > 2.2:
+				_stage = 6
+				await _save("wave3")
 				get_tree().quit(0)
 
 

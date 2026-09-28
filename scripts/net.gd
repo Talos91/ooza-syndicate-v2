@@ -1471,6 +1471,7 @@ func snapshot(s: Sim, keyframe: bool) -> Dictionary:
 	var snap := {"round": match_round, "t": s.time, "over": s.over, "winner": s.winner, "next_id": s._next_id,
 			"nodes": nodes, "hordes": hs, "fights": s.fights, "fight_info": s.fight_info,
 			"collapsed": s.collapsed, "eliminated": s.eliminated,
+			"breaking": s.breaking,                       # 0.22.3 THE WAVE (additive): decks still breaking outward
 			"ls": [s.last_stand_active, s.last_stand_method, s.last_stand_order, s.last_stand_final,
 					s.last_stand_next, s.last_stand_warn_node, s.last_stand_warn_t, s.last_stand_wave, s._next_wave_at,
 					s.last_stand_waves, s.last_stand_keep, s.last_stand_warn, s.last_stand_queue,
@@ -1644,6 +1645,8 @@ static func apply_snapshot(s: Sim, snap: Dictionary) -> void:
 	s.fight_info = snap["fight_info"]
 	s.collapsed = snap["collapsed"]
 	s.eliminated = snap["eliminated"]
+	if snap.has("breaking"):                          # 0.22.3 THE WAVE: a breaking deck stays walkable (is_edge_open)
+		s.breaking = snap["breaking"]
 	var ls: Array = snap["ls"]
 	s.last_stand_active = ls[0]
 	s.last_stand_method = ls[1]

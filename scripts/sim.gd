@@ -31,6 +31,9 @@ var relay_groups: Dictionary = {}    # "r"/"s"/"m" -> [sorted state keys]
 var edge_controller: Dictionary = {} # edge index -> relay node id that fires it (-1 if none)
 var _ctrl_edges: Dictionary = {}     # relay node id -> [edge indices] it fires (filled once in setup; read-only)
 var collapsed: Dictionary = {}       # node id -> true once dropped by the Last Stand
+var breaking: Dictionary = {}        # THE WAVE (0.22.3): edge index -> {a, b: m broken from that end, fa, fb: breaking from
+                                     # that end, L: deck length, t: s toward the next segment} while a dropped node's deck
+                                     # breaks outward (Rules.LAST_STAND_WAVE_STEP / _SEGMENT); gone from here = closed
 var eliminated: Dictionary = {}      # seat -> true once the collapse took its last node
 var last_stand_active := false
 var last_stand_method := ""          # hidden until it starts, then revealed with the whole order
@@ -872,8 +875,8 @@ func is_edge_open(edge_index: int) -> bool:
 	## Is this deck currently usable / present? Closed while its relay is mid-motion, while its
 	## state is not the current one, or when either end has collapsed.
 	var e: Dictionary = edges[edge_index]
-	if collapsed.get(e["a"], false) or collapsed.get(e["b"], false):
-		return false
+	if (collapsed.get(e["a"], false) or collapsed.get(e["b"], false)) and not breaking.has(edge_index):
+		return false                                # (a deck still breaking in the wave is walked until it is gone)
 	return _edge_open(edge_index)
 
 
@@ -1579,6 +1582,7 @@ func step(dt: float) -> void:
 			_end_streaming(n, "done")
 	_emit_decoys(dt)
 	_emit_ejects(dt)
+	_step_breaks(dt)
 	_check_missing_decks()
 	for h in hordes:
 		if h["state"] == "move" and not h.get("blocked", false):
@@ -1681,7 +1685,7 @@ func _check_missing_decks() -> void:
 	for ei in range(edges.size()):
 		if not is_edge_open(ei):                          # a deck in motion is not (0.18.7): going or not yet there
 			closed[ei] = true
-	if closed.is_empty():
+	if closed.is_empty() and breaking.is_empty():
 		for h in hordes:
 			h["pour_prev"] = h.get("pour", false)
 			h["pour"] = false
@@ -1700,18 +1704,31 @@ func _check_missing_decks() -> void:
 			if head < sp["s0"] or tail > sp["s1"]:
 				continue                                  # the line doesn't touch this deck
 			var ei: int = sp["edge"]
-			if not closed.has(ei):
+			if not closed.has(ei) and not breaking.has(ei):
 				continue
 			# the vat keeps sending: an order across a deck that has gone is still obeyed, every unit
 			# marches on and pours into the void (Daniele, 0.18.6: "they should go even if the bridge is
 			# no longer there hence... waterfall")
-			var head_on: bool = head >= sp["s0"] and head <= sp["s1"]
-			_cut_range(h, sp["s0"], sp["s1"], false)
-			if head_on and h in hordes:
-				h["s"] = sp["s0"]                         # the head stays at the lip; the next step pours more
-				h["state"] = "move"
-				h["pour"] = true                          # (also when it did not move this step)
-				h["pour_lip"] = sp["s0"]
+			# THE WAVE (0.22.3): a breaking deck is gone only over the segments broken so far, from the dropped
+			# end(s); bodies on those fall, the rest of the line walks on - away from the node it outruns
+			# the break, toward it the head meets the break and pours off it, lip after lip
+			for r in _gone_ranges(sp):
+				if not (h in hordes):
+					break
+				var r0: float = r[0]
+				var r1: float = r[1]
+				if head < r0 or tail > r1:
+					continue
+				var head_on: bool = head >= r0 and head <= r1
+				if not head_on and tail >= r0 - Rules.LAST_STAND_WAVE_SEGMENT:
+					_cut_range(h, r0, r1, true)           # only its tail was on the segment: those bodies fall
+					continue                              # (no lip to pour off: the head is past it; the tail's
+				_cut_range(h, r0, r1, false)              # slack behind r0 is the line's density rounding, not a
+				if head_on and h in hordes:               # stretch left on the far side - that case splits below)
+					h["s"] = r0                           # the head stays at the lip; the next step pours more
+					h["state"] = "move"
+					h["pour"] = true                      # (also when it did not move this step)
+					h["pour_lip"] = r0
 	for hid in _pour_ev.keys():                           # a pour that ended: the next one is a new event
 		var ph := _horde(hid)
 		if ph.is_empty() or not ph.get("pour", false):
@@ -1723,6 +1740,87 @@ func _current_span(h: Dictionary) -> Dictionary:
 		if h["s"] >= sp["s0"] and h["s"] <= sp["s1"]:
 			return sp
 	return {}
+
+
+func _gone_ranges(sp: Dictionary) -> Array:
+	## The stretches of a horde's deck span [s0, s1] (path arc length) that are no longer there: the whole span
+	## of a closed deck, or the broken segments of a breaking one (THE WAVE) from the dropped end(s).
+	var ei: int = sp["edge"]
+	if not breaking.has(ei):
+		return [[sp["s0"], sp["s1"]]]
+	var rec: Dictionary = breaking[ei]
+	var L: float = maxf(float(rec["L"]), 0.001)
+	var s0: float = sp["s0"]
+	var s1: float = sp["s1"]
+	var span: float = s1 - s0
+	var out := []
+	var fa: float = minf(float(rec["a"]) / L, 1.0)     # fraction gone from a's end
+	var fb: float = minf(float(rec["b"]) / L, 1.0)     # fraction gone from b's end
+	if fa > 0.0:
+		out.append([s0, s0 + fa * span] if sp["forward"] else [s1 - fa * span, s1])
+	if fb > 0.0:
+		out.append([s1 - fb * span, s1] if sp["forward"] else [s0, s0 + fb * span])
+	return out
+
+
+func deck_length(ei: int) -> float:
+	## A deck's walked length rim exit to rim exit (the path's span; plaza links socket to socket).
+	var e: Dictionary = edges[ei]
+	var line := deck_line(ei)
+	if line.is_empty():                                   # a plaza link
+		if v3:
+			return (exit_of(ei, e["a"]) as Vector3).distance_to(exit_of(ei, e["b"]))
+		return (nodes[e["a"]]["pos"] as Vector3).distance_to(nodes[e["b"]]["pos"])
+	return _length(line)
+
+
+func _begin_break(ei: int, node_id: int) -> void:
+	## THE WAVE: node_id dropped - its deck ei starts breaking from that end (or, already breaking from the other
+	## end, from both). A deck that is not there (closed relay state, demolished, already gone) has nothing to break.
+	var e: Dictionary = edges[ei]
+	var end := "a" if e["a"] == node_id else "b"
+	if breaking.has(ei):
+		breaking[ei]["f" + end] = true
+	else:
+		if collapsed.get(_other_end(ei, node_id), false) or not _edge_open(ei):
+			return                                        # gone with the other end already, or not there
+		breaking[ei] = {"a": 0.0, "b": 0.0, "fa": end == "a", "fb": end == "b", "L": deck_length(ei), "t": 0.0}
+	_advance_break(ei)                                    # the first segment goes with the platform
+
+
+func _advance_break(ei: int) -> void:
+	## One segment more from every breaking end; the deck is gone (closed) once the ends meet.
+	var rec: Dictionary = breaking[ei]
+	var L: float = rec["L"]
+	for end in ["a", "b"]:
+		if not rec["f" + end]:
+			continue
+		var was: float = rec[end]
+		var other: float = rec["b" if end == "a" else "a"]
+		var now: float = minf(was + Rules.LAST_STAND_WAVE_SEGMENT, L - other)
+		if now <= was:
+			continue
+		rec[end] = now
+		var e: Dictionary = edges[ei]
+		fx_events.append({"type": "deck_break", "edge": ei, "node": e[end], "from": was, "to": now,
+				"done": rec["a"] + rec["b"] >= L - 0.001})   # the view drops the modules the break passed
+	if rec["a"] + rec["b"] >= L - 0.001:
+		breaking.erase(ei)
+		events.append({"t": time, "type": "deck_gone", "edge": ei})
+
+
+func _step_breaks(dt: float) -> void:
+	## THE WAVE's clock: every breaking deck loses a segment each Rules.LAST_STAND_WAVE_STEP s.
+	if breaking.is_empty():
+		return
+	for ei in breaking.keys():
+		if not breaking.has(ei):
+			continue
+		var rec: Dictionary = breaking[ei]
+		rec["t"] = float(rec["t"]) + dt
+		while breaking.has(ei) and float(rec["t"]) >= Rules.LAST_STAND_WAVE_STEP:
+			rec["t"] = float(rec["t"]) - Rules.LAST_STAND_WAVE_STEP
+			_advance_break(ei)
 
 
 
@@ -3036,8 +3134,10 @@ func drop_order_of(node_id: int) -> int:
 
 
 func _drop_node(id: int) -> void:
-	## Everything on a falling node or its decks dies (GAME-RULES sec10): garrison, siege, every
-	## horde portion on the platform or on a deck attached to it. The attachment goes with it.
+	## Everything on a falling node dies (GAME-RULES sec10): garrison, siege, every horde portion on the
+	## platform. The attachment goes with it. THE WAVE (0.22.3, Daniele): its decks do not go at once - each
+	## breaks outward from this end segment by segment (_begin_break / _step_breaks); bodies on a deck fall
+	## with their segment (_check_missing_decks), so a line walking away can still reach the far pier.
 	var n: Dictionary = nodes[id]
 	if n["relay_phase"] == "moving":
 		_relay_apply(n)                     # finish the tick: the view restores the decks
@@ -3070,13 +3170,7 @@ func _drop_node(id: int) -> void:
 			continue
 		var lo := INF
 		var hi := -INF
-		for i in range(h["spans"].size()):
-			var sp: Dictionary = h["spans"][i]
-			var e: Dictionary = edges[sp["edge"]]
-			if e["a"] == id or e["b"] == id:
-				lo = minf(lo, sp["s0"])
-				hi = maxf(hi, sp["s1"])
-		for ns in h["node_spans"]:
+		for ns in h["node_spans"]:                    # (the decks stay for now: THE WAVE takes them)
 			if ns["node"] == id:
 				lo = minf(lo, ns["s0"])
 				hi = maxf(hi, ns["s1"])
@@ -3091,6 +3185,8 @@ func _drop_node(id: int) -> void:
 			_cut_range(h, lo, hi)
 	events.append({"t": time, "type": "collapse", "node": id, "from": old})
 	fx_events.append({"type": "collapse", "node": id, "from": old})   # the view pours the old owner's goo
+	for link in adj[id]:                                # its decks break outward from here, segment by segment
+		_begin_break(link[1], id)
 	for m in monsters:                                  # a monster on the platform or its decks falls
 		if m["state"] == "walking" and _monster_touches(m, id):
 			_monster_fall(m)
