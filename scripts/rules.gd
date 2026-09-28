@@ -935,11 +935,7 @@ const TELEMETRY := {
 	"retention_days": 60,       # shown in the notice; the purge is the database's (purge_telemetry)
 	"crash_retention_days": 90,
 	"contact": "info@oozesyndicate.com",   # Daniele, 2026-09-28 (the domain is to be registered)
-<<<<<<< ours
-	"policy_url": "https://oozesyndicate.com/privacy.html",
-=======
 	"policy_url": "https://oozesyndicate.com/privacy.html",   # the domain move (2026-09-28)
->>>>>>> theirs
 	"min_age": 13,
 }
 # --- end PROGRESSION: telemetry ---
