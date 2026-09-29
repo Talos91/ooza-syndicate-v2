@@ -2,10 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
+uid="uid://bbp073bjd7oou"
+path="res://.godot/imported/N-04.png-e992f7a4b125be92967e4cea90bd7c98.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/maps4/thumbs/N-04.png"
+dest_files=["res://.godot/imported/N-04.png-e992f7a4b125be92967e4cea90bd7c98.ctex"]
 
 [params]
 

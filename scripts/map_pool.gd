@@ -44,10 +44,16 @@ static func all() -> Array:
 	return out
 
 
+# MAPS 5.0 (Daniele 2026-09-29: "replace current pool with the new ones"): the player's pool is the map builder's
+# N- maps only. Every older map stays baked in maps4/ - the campaign's placeholder missions and the tutorial load
+# theirs by path, and test_maps4 still checks them all - but none is offered on 02 BATTLEFIELD or as a random rematch.
+const POOL_GROUPS: Array[String] = ["N"]
+
+
 static func battlefield() -> Array:
-	## all() minus TUTORIAL_ONLY: what the player actually gets offered (02 BATTLEFIELD, REMATCH ON A
-	## RANDOM MAP) and what test_map_pool / test_ai_curve run their coverage over.
-	return all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY)
+	## all() minus TUTORIAL_ONLY, limited to POOL_GROUPS: what the player actually gets offered (02 BATTLEFIELD,
+	## REMATCH ON A RANDOM MAP) and what test_map_pool / test_ai_curve run their coverage over.
+	return all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY 			and (POOL_GROUPS.is_empty() or p.get_file().substr(0, 1) in POOL_GROUPS))
 
 
 static func phone_screen(mobile: bool) -> bool:
