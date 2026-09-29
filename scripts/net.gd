@@ -150,6 +150,7 @@ var rematch_votes := {}
 var match_info := {}                               # the launch packet of the current round
 var sim: Sim                                       # set by main when the world is built
 var main: Node                                     # the match scene (host runs orders through it)
+var load_marks: Array = []                         # LOAD TRACE (staged load): [label, usec] from DEPLOY to the built world (load_mark)
 var no_reload := false                             # tests: launch without reloading the scene
 var allow_native := false                          # tests: rooms outside the browser build (the relay works natively)
 var dedicated := false                             # this process is the room server's match host (--dedicated): no seat
@@ -1103,9 +1104,25 @@ func version() -> String:
 
 
 # ------------------------------------------------------------------ rounds
+func load_mark(label: String) -> void:
+	## LOAD TRACE: one step of the round's launch and world build (DEPLOY, the launch, the reload, main's build steps);
+	## tests/staged_load_probe prints them, and main prints the list once the world is built (the web console).
+	load_marks.append([label, Time.get_ticks_usec()])
+
+
+func load_summary() -> String:
+	## LOAD TRACE: "deploy 0 · launch 64 · ..." - each step in ms after the first.
+	if load_marks.is_empty():
+		return ""
+	var t0 := int(load_marks[0][1])
+	return " · ".join(load_marks.map(func(mk): return "%s %d" % [mk[0], (int(mk[1]) - t0) / 1000]))
+
+
 func start_match() -> void:
 	if not can_start():
 		return
+	load_marks = []
+	load_mark("deploy")
 	if is_inside_tree():                               # 0.23.2 (Daniele): the VERSUS card from the moment DEPLOY is pressed -
 		VersusScreen.hold_lobby(get_tree().root)       # a server room takes seconds to start its match; the lobby must not sit there
 	if not hosting:
@@ -1155,6 +1172,9 @@ func launch_round(fill := "") -> void:
 
 
 func _launch(info: Dictionary) -> void:
+	if load_marks.is_empty() or str(load_marks[-1][0]) != "deploy":   # (a guest, a rematch: the trace starts here)
+		load_marks = []
+	load_mark("launch")
 	match_info = info
 	match_round = int(info["round"])
 	roster = info["roster"]
@@ -1227,6 +1247,7 @@ func _reload_after_card() -> void:
 		await get_tree().process_frame
 	if not active:                                     # (🖥️ review: the player left the room in those frames - no reload)
 		return
+	load_mark("reload")
 	get_tree().reload_current_scene()
 
 

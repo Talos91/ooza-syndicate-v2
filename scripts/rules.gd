@@ -1292,6 +1292,12 @@ const CONTEST_TICKS := 4                 # faint marks on the track (quarters; 0
 # First-use hitches ("lags only on first time you send and first time you enter a tower"): Warmup draws every effect
 # material once, tiny, at match start (behind the VERSUS card), so the GL shader compiles happen there.
 const WARMUP_FRAMES := 3                 # frames the warm-up pieces stay drawn
+# STAGED LOAD (0.23.4, Daniele 2026-09-30: "the vs screen should be the loading ... not the frozen deploy screen"): an online
+# round's world is built a block per frame under the VERSUS card, each block's meshes (and the warm-up's pieces) revealed a few
+# materials at a time. A frame slower than STAGED_LOAD_FRAME_MS halves the next reveal, one under a third of it doubles it;
+# STAGED_LOAD_FIRST_GROUPS is where each block starts (main._staged_frame, Warmup).
+const STAGED_LOAD_FRAME_MS := 60.0
+const STAGED_LOAD_FIRST_GROUPS := 2
 # ONLINE VERSUS (0.22.3, Daniele 2026-09-29: "every time you press DEPLOY you can see the map loading"): a room's round
 # shows the VERSUS card too (VersusScreen.hold_online), from the launch until this client's world is built and warmed
 # and the round runs - the host once the loading barrier passed (Net.started), a guest once its first snapshot is in -
