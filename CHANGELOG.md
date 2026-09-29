@@ -1,5 +1,13 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.6 "Alpha 23" - 2026-09-30 (staging test: zoom + bigger unit counts)
+
+- **Zoom** (Daniele: "use 2 fingers to zoom"): pinch in a match to zoom around the fingers (two fingers also pan), the mouse wheel
+  on desktop. Never wider than the fitted whole-map view (after a Last Stand wave: the survivors' view), never closer than
+  `Rules.CAM_ZOOM_MIN` (35 %) of it; zoomed all the way out it is the fitted view exactly. The pinch never taps, sends or opens the
+  inspector. Lessons keep the fixed camera. Check: `tests/zoom_check.tscn` (windowed).
+- **Bigger unit counts** (Daniele: "make numbers of units in structure bigger"): the badge count 16 -> 22 px, the box 44 x 33 -> 54 x 40.
+
 ## 0.23.5 "Alpha 23" - 2026-09-30 (phone: DEPLOY still froze; sound OFF by default)
 
 - **DEPLOY on the phone** (Daniele on 0.23.4: sound works; "the versus wallpaper fires for a frame, the rest is freeze"): the map build itself

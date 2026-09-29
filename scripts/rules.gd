@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.23.5"
+const VERSION := "0.23.6"
 const VERSION_NAME := "Alpha 23"
 
 
@@ -130,8 +130,8 @@ static var bridge_combat: bool = false:   # BRAWL (Daniele, 2026-09-26: "brawl i
 # Off: no ring collapse; the Very Last Stand still runs at 6:00 and the 7:00 end still decides.
 static var last_stand: bool = true
 # CAMERA (Daniele, Alpha 14 playtest: "map size should be fixed, no zoom... too vertical"; "vats and
-# buildings should all face the viewer on every map"). The camera is fitted once per screen size,
-# never zoomed or panned; VIEW_YAW is set per map before it is built so every structure faces it.
+# buildings should all face the viewer on every map"). The camera is fitted once per screen size
+# (the player may zoom in from that fit since 0.23.6, below); VIEW_YAW is set per map before it is built so every structure faces it.
 const CAM_PITCH := 41.0              # Daniele (2026-09-30): "camera angle too low, raise of 20%" (34 -> 41; 58 until 0.22.3)
 const CAM_PITCH_LARGE := 58.0        # LARGE maps (tags.size "L"): the original pitch (Daniele 2026-09-30: the tilt made them "very hard to play")
 const CAM_LARGE_SIZES := ["L", "XL"]
@@ -139,6 +139,12 @@ const CAM_LARGE_SIZES := ["L", "XL"]
                                      # from the top" - each map gets its own pitch, 58 on every maps 4.2 map, see MapCamera;
                                      # Daniele, 2026-09-29, Map Lab: "34deg is best" - lower, more diagonal, every map, no per-map overrides)
 static var view_yaw := 0.0
+# Player zoom (Daniele 2026-09-30: "zoom, use 2 fingers to zoom"): pinch on phones, the wheel on desktop, around the
+# fingers' midpoint / the pointer. Never wider than the fitted whole-map view (the Last Stand's survivor view once it has
+# closed in), never closer than CAM_ZOOM_MIN of it; the view's centre may stray from the fit's by up to (1 - zoom) of the
+# map's half size, so zoomed all the way out it is exactly the fitted view again. Lessons keep the fixed camera.
+const CAM_ZOOM_MIN := 0.35
+const CAM_WHEEL_STEP := 1.12          # one wheel notch
 # TUG-OF-WAR (bridge-combat mode): the front slides toward the weaker side at up to this fraction of
 # deck speed (total dominance); 2:1 odds move it at a third of that.
 const TUG_SPEED := 0.35

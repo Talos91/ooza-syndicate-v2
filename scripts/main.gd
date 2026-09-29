@@ -78,6 +78,9 @@ var _base_pitch: float = Rules.CAM_PITCH            # the start view's pitch (th
 var pitch_forced := false                          # --pitch=N (or the phone-fit probe) overrides it
 var cam_yaw := 0.0
 var _start_fit := []                              # [cam_target, cam_dist] of the whole-map fit (_fit_camera)
+var _view_fit := []                               # [cam_target, cam_dist] the player zoom widens back to (start / survivor fit)
+var _map_half := Vector3.ZERO                     # half the nodes' extent (x, z): how far a zoomed view may pan
+var _pinch := {}                                  # two fingers down: {"d": their distance, "mid": their midpoint}
 var _gone_seen := 0                               # Last Stand: nodes collapsed at the last check
 var _gone_wait := 0.0                             # seconds left before the camera re-fits (the fall plays first)
 var _fit_gone := 0                                # collapsed count the camera is fitted to (0 = the whole map)
@@ -1006,8 +1009,8 @@ func _fit_camera() -> void:
 	## Fits the whole map - every platform rim and the badge hanging under it - inside the screen area
 	## the HUD leaves free (right of the send panel, below the top bar, above the bottom strip), by
 	## projecting those points and correcting distance and aim until they fit (Alpha 14 playtest:
-	## "the HUD should never overlap a corridor or a platform"). Fixed from then on: no player zoom or
-	## pan; only the Last Stand closes in on the nodes still standing (_collapse_zoom).
+	## "the HUD should never overlap a corridor or a platform"). The player may zoom in from it (pinch / wheel,
+	## _zoom_at) but never out past it; the Last Stand closes in on the nodes still standing (_collapse_zoom).
 	cam_yaw = Rules.view_yaw
 	if _fit_gone == 0 and _zoom_t < 0.0:              # no Last Stand zoom yet: cam_pitch is the start view's
 		_base_pitch = cam_pitch                       # (a probe may have set it after _start_map)
@@ -1024,7 +1027,48 @@ func _fit_camera() -> void:
 	if scenario_focus != Vector3.INF:
 		cam_target = scenario_focus
 		cam_dist = scenario_zoom
+	_view_fit = [cam_target, cam_dist]
+	var lo := Vector3(INF, 0, INF)
+	var hi := Vector3(-INF, 0, -INF)
+	for n in sim.nodes:
+		lo = lo.min(n["pos"])
+		hi = hi.max(n["pos"])
+	_map_half = ((hi - lo) / 2.0).abs() + Vector3(Rules.R, 0, Rules.R)
 	_place_camera()
+
+
+func _zoom_enabled() -> bool:
+	## Player zoom: normal matches, missions and online; not lessons (the coach's spotlight), staged scenarios,
+	## thumbnails, or while the Last Stand eases in.
+	return director == null and scenario_focus == Vector3.INF and thumb_path == "" and not _view_fit.is_empty() 			and _zoom_t < 0.0
+
+
+func _zoom_at(from: Vector2, to: Vector2, factor: float) -> void:
+	## Zooms by `factor` (> 1 closer) keeping the ground under screen point `from` under `to` (a pinch's midpoint
+	## moves too: two fingers also pan), clamped to Rules.CAM_ZOOM_MIN..1 of the fitted view (_view_fit).
+	var g := _ground(from)
+	var far: float = _view_fit[1]
+	cam_dist = clampf(cam_dist / maxf(factor, 0.01), far * Rules.CAM_ZOOM_MIN, far)
+	_place_camera()
+	var h := _ground(to)
+	if g != Vector3.INF and h != Vector3.INF:
+		cam_target += Vector3(g.x - h.x, 0.0, g.z - h.z)
+	var home: Vector3 = _view_fit[0]
+	var room := 1.0 - cam_dist / far                  # 0 at the fitted view: exactly the fit again
+	cam_target.x = clampf(cam_target.x, home.x - _map_half.x * room, home.x + _map_half.x * room)
+	cam_target.z = clampf(cam_target.z, home.z - _map_half.z * room, home.z + _map_half.z * room)
+	_place_camera()                                   # hud.sync lets the badges follow, then re-lays them
+
+
+func _pinch_move() -> void:
+	var pts := touches.values()
+	var a: Vector2 = pts[0]
+	var b: Vector2 = pts[1]
+	var d := a.distance_to(b)
+	var mid := (a + b) / 2.0
+	if not _pinch.is_empty() and d > 1.0 and float(_pinch["d"]) > 1.0 and _zoom_enabled():
+		_zoom_at(_pinch["mid"], mid, d / float(_pinch["d"]))
+	_pinch = {"d": d, "mid": mid}
 
 
 func _fit_nodes(nodes: Array) -> Array:
@@ -1126,6 +1170,7 @@ func _collapse_zoom(dt: float) -> void:
 			_zoom_from = [cam_target, cam_dist, cam_pitch]
 			_zoom_to = _survivor_fit()
 			_zoom_t = 0.0
+			_view_fit = [_zoom_to[0], _zoom_to[1]]     # the player zoom now widens back to the survivors' view
 	if _zoom_t >= 0.0:
 		_zoom_t = minf(_zoom_t + dt / COLLAPSE_ZOOM_SECONDS, 1.0)
 		var k := ease(_zoom_t, -2.0)                  # ease in and out
@@ -2012,13 +2057,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			touches.erase(st.index)
 		if touches.size() == 2:
 			_end_drag()
+			_swallow_release = true                   # the first finger's (emulated) release never taps
+		_pinch = {}
 		return
 	if event is InputEventScreenDrag and touches.size() == 2:
-		return                                        # fixed camera: no pinch zoom or two-finger pan
+		var sd := event as InputEventScreenDrag
+		if touches.has(sd.index):
+			touches[sd.index] = sd.position
+			_pinch_move()                             # pinch zoom + two-finger pan
+		return
 	if touches.size() >= 2:
 		return
-	if event is InputEventMouseButton:                # fixed camera: the wheel does nothing
+	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+		if mb.pressed and (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+			if _zoom_enabled() and not hud.pointer_over_ui(mb.position):
+				var step := Rules.CAM_WHEEL_STEP * maxf(mb.factor, 1.0) if mb.factor > 0.0 else Rules.CAM_WHEEL_STEP
+				_zoom_at(mb.position, mb.position, step if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / step)
+			return
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if hud.pointer_over_ui(mb.position):
 				if not mb.pressed:                      # a drag released on the HUD is cancelled, never left hanging
