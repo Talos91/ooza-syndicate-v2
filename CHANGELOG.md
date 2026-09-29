@@ -52,6 +52,7 @@
 - **Every button tapped** (🧩, Daniele: "check all buttons"): 184 taps on a phone-size build and 293 on desktop all answer; fixed: desktop
   TRAINING's BACK, LOCKED / COMING LATER cards no longer flash, and a per-frame error logged for every HUD label in every match.
 - **Staging matches report nothing** to the leaderboard (🖥️).
+- **Sound effects back on the web** (Daniele, staging check: "effects and sound are not there, only music"): the browser's audio routed the effects through the music channel, which MUSIC OFF muted; that channel now stays neutral on the web.
 - **Perf pass** (📐's perf-pass agent, report in 05 Handoff/handoffs/architect-specs/perf-pass-report.md): AI thinks 4-6x cheaper (one
   Dijkstra per source per think, cached trip times / reach; decisions identical - same event-log hashes), UnitView bodies in preallocated
   typed arrays, HUD / badge layer / overlays redraw only on change, Label3D without per-frame mesh rebuilds, MonsterView / HordeView
