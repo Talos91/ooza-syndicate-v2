@@ -190,6 +190,9 @@ func _resolve() -> void:
 			if Rules.shown_f(drops) >= float(o.get("n", 0)):
 				_complete(true, "drops")
 				return
+			if ours:                                 # Daniele (2026-09-29, Decisions page): a conquest wins it too
+				_complete(true, "conquest")
+				return
 		"survive":
 			if sim.time >= float(o.get("t", 0.0)):
 				_complete(true, "survived")
@@ -384,7 +387,7 @@ func objective_line() -> String:
 	var line := ""
 	match str(o.get("kind", "conquest")):
 		"drops":
-			line = "DROPS %d / %d" % [mini(Rules.shown(drops), int(o.get("n", 0))), int(o.get("n", 0))]
+			line = "DROPS %d / %d · or take every node" % [mini(Rules.shown(drops), int(o.get("n", 0))), int(o.get("n", 0))]
 		"survive":
 			line = "HOLD UNTIL %s · %s left" % [clock(float(o.get("t", 0.0))), clock(float(o.get("t", 0.0)) - sim.time)]
 		"monster_take":

@@ -50,7 +50,7 @@ const RIVALS := {
 const CAMPAIGNS := {
 	"vex": {
 		"title": "VEX BIOENGINEERS",
-		"episode": "GOING UNDER",                  # the episode card's title (placeholder until Daniele picks)
+		"episode": "GOING UNDER",                  # the episode card's title (Daniele approved all five, 2026-09-29)
 		"tagline": "The city is sinking. The vats still turn a profit.",
 		"rival": "ember",
 		"districts": [
@@ -401,7 +401,7 @@ static func objective_text(m: Dictionary) -> String:
 		"conquest":
 			return "Take every rival node"
 		"drops":
-			return "Drop %d rival units into the void" % int(o.get("n", 0))
+			return "Drop %d rival units into the void - or take every rival node" % int(o.get("n", 0))
 		"survive":
 			var t := float(o.get("t", 0.0))
 			return "Keep your home until %d:%02d" % [int(t) / 60, int(t) % 60]
