@@ -163,9 +163,22 @@ static func apply_settings() -> void:
 	Sfx.ensure_buses()
 	var i := AudioServer.get_bus_index(Rules.SOUND_MUSIC_BUS)
 	var duck: float = _node.duck_env if _node != null and is_instance_valid(_node) else 0.0
-	AudioServer.set_bus_volume_db(i, bus_db() + duck)
-	AudioServer.set_bus_mute(i, not _on)
+	_set_bus(i, bus_db() + duck, not _on)
 	_web_level(duck)
+
+
+static func _set_bus(i: int, db: float, muted: bool) -> void:
+	## The Music bus's level and mute - NATIVE only. On the web the music plays through music.js's own gains, and Godot's
+	## web sample buses route the SOUND effects through the Music bus on their way out (seen 2026-09-30 on staging 0.22.3:
+	## SFX -> Sfx bus -> Music bus volume -> Music bus mute -> speakers), so muting / lowering it there silenced every
+	## effect (Daniele: "game effects and sound are not there, only music"). Web: keep it a neutral 0 dB, never muted.
+	if i < 0:
+		return
+	if OS.has_feature("web"):
+		db = 0.0
+		muted = false
+	AudioServer.set_bus_volume_db(i, db)
+	AudioServer.set_bus_mute(i, muted)
 
 
 static func _web_level(duck: float) -> void:
@@ -425,7 +438,7 @@ func _step_duck(dt: float) -> void:
 		return
 	var secs := Rules.MUSIC_DUCK_IN if goal < duck_env else Rules.MUSIC_DUCK_OUT
 	duck_env = move_toward(duck_env, goal, absf(depth) / maxf(secs, 0.01) * dt)
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index(Rules.SOUND_MUSIC_BUS), bus_db() + duck_env)
+	_set_bus(AudioServer.get_bus_index(Rules.SOUND_MUSIC_BUS), bus_db() + duck_env, not _on)
 	_web_level(duck_env)
 
 
