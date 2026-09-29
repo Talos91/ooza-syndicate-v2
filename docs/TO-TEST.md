@@ -1,9 +1,18 @@
-# To test - ALPHA 22.3 (Daniele, on the phone and with a second player)
+# To test - ALPHA 22.4 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.22.4 (the rules release)
+- [ ] **New powers**: try each in ARMIES > SKILLS and in a match - QUAKE, SEVER, BACKWASH, SINKHOLE, FOG, PORTAL, EVAC; does each read clearly?
+- [ ] **Last Stand wave**: a line walking away from a dropping platform makes it across; the break is visible, segment by segment.
+- [ ] **AI**: on a map with a remote console, does Veteran / Expert use it? Does the AI still defend its home?
+- [ ] **34° camera** on the phone: are the far platforms on big maps still tappable?
+- [ ] **Online**: DEPLOY shows the VERSUS card until the map is loaded (both phones).
+- [ ] **PROFILE tab**, the top-bar level block, the music MUTE button (top bar + in match), MENU / MATCH MUSIC volumes.
+- [ ] **HUD**: upgrade-ready arrow, ally halo, PAUSE settings fits the phone.
 
 ## 0.22.3 (perf pass + hotfix)
 - [ ] **Fullscreen**: first tap enters fullscreen, navbar gone (browser tab AND the home-screen app); if not: PAUSE > SETTINGS > FULLSCREEN.

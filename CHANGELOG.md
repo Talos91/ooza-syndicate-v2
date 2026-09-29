@@ -1,5 +1,30 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.22.4 "Alpha 22" - 2026-09-30 (the rules release: 7 new powers, the Last Stand wave, a smarter AI, the 34° camera, PROFILE tab, music controls)
+
+- **7 new powers** (⚡ Powers; spec 01 Rules/NEW-POWERS-2026-09-28.md "As built"): QUAKE (every deck of a platform drops 6 s, 1.5 s warning),
+  SEVER (cut any deck, relay decks too, 10 s), BACKWASH (enemy lines on a deck shoved back to its start), SINKHOLE (a structure loses a
+  tier; spares T4 and a home's last vat), FOG OF WAR (hides everything in a 24 m circle), PORTAL (two-way), EMERGENCY EVAC (empties a node
+  at 8x the door rate). Faction defaults (Daniele): VEX Surge + Portal, NULL Ghost Line + Fog, BLOOM Spore Burst + Backwash, EMBER
+  Sinkhole + Demolish, SOLAR Fortify + Anchor; AI seats rotate three builds per faction. **Core Meltdown** 4 kills per unit, cap 90, armed
+  from the start of the trip; skills castable while a line travels (they fire on arrival). **NULL decoys** look real to everyone but NULL.
+  Online protocol ooze20-net-8 (the room server updates in the same step).
+- **Last Stand wave** (Daniele): a dropped platform's decks break outward from it, 2 m every 0.5 s (4 m/s - slower than a line), so a line
+  already walking away reaches the far side; lines walking in still pour off the lip. The ring drop gap can go down to 6 s, so big maps'
+  collapse fits 4:00-6:00. A match is decided at 7:00 or when every other side has no nodes AND no troops.
+- **AI**: defends its home without relying on a skill (stops draining a threatened node, reinforces it in time); Veteran / Expert fire
+  their own remote / switch / rotation relays to open a route or a faster shortcut (Daniele: "the AI never gets on a remote-controlled
+  bridge"); AI seats play their faction's rotating builds.
+- **Camera 34°** on every map (Daniele: "34 everywhere for now, I wanna test") - lower and more diagonal; far rows on big maps get smaller
+  on phones (the probe lists them; judged again with the Alpha 23 maps).
+- **Online VERSUS**: after DEPLOY the VERSUS card covers the map loading and lifts when everyone is in (at least 2.5 s).
+- **PROFILE tab** in the bottom bar + a framed level block in the top bar (🧩, Daniele's pick A+B): LEADERBOARD, MATCH HISTORY, ACCOUNT one
+  tap away. **Music controls** (🎵 + 🧩): a MUTE button in the top bar and the match HUD mutes all music at once; SETTINGS has MENU MUSIC and
+  MATCH MUSIC volumes beside SOUND.
+- **HUD** (Daniele's playtest): an arrow on your structures when an upgrade is ready; the ally halo is a clean ring with 1-3 segments; the
+  relay button glyph keeps its colour at full brightness; the PAUSE settings card fits a 585 px phone.
+- **Campaign**: in Mind the Gap, taking EMBER's last node also wins (🏙️, Daniele "also win").
+
 ## 0.22.3 "Alpha 22" - 2026-09-30 (the perf pass; fullscreen fixed; music streams; every button checked; guest net stats)
 
 - **Fullscreen on the phone** (Daniele: "doesn't open any more in full screen ... often shows the navbar"): the page asks for fullscreen on
