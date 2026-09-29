@@ -209,9 +209,11 @@ func _check_sfx_settings() -> void:
 	var bus := AudioServer.get_bus_index(Rules.SOUND_SFX_BUS)
 	var mb := AudioServer.get_bus_index(Rules.SOUND_MUSIC_BUS)
 	var music_db := AudioServer.get_bus_volume_db(mb)
-	check(Sfx.volume() == Rules.SOUND_VOLUME_DEFAULT and is_equal_approx(AudioServer.get_bus_volume_db(bus),
+	check(Sfx.volume() == Rules.SOUND_VOLUME_DEFAULT and Sfx.sound_on() == Rules.SOUND_ON_DEFAULT and is_equal_approx(AudioServer.get_bus_volume_db(bus),
 			Rules.SOUND_SFX_BUS_DB + linear_to_db(Rules.SOUND_VOLUME_DEFAULT / 100.0)) and is_equal_approx(AudioServer.get_bus_volume_db(0), 0.0),
-			"first run: SOUND ON, VOLUME %d %% on the Sfx bus (%.1f dB), Master 0 dB" % [Rules.SOUND_VOLUME_DEFAULT, AudioServer.get_bus_volume_db(bus)])
+			"first run: SOUND %s (Rules.SOUND_ON_DEFAULT), VOLUME %d %% on the Sfx bus (%.1f dB), Master 0 dB" % ["ON" if Rules.SOUND_ON_DEFAULT else "OFF",
+			Rules.SOUND_VOLUME_DEFAULT, AudioServer.get_bus_volume_db(bus)])
+	Sfx.set_on(true)                                   # (0.23.5: OFF by default - turned on for the volume check)
 	Sfx.set_volume(25)
 	check(is_equal_approx(AudioServer.get_bus_volume_db(bus), Rules.SOUND_SFX_BUS_DB + linear_to_db(0.25)) and not AudioServer.is_bus_mute(bus)
 			and is_equal_approx(AudioServer.get_bus_volume_db(mb), music_db),
@@ -219,7 +221,7 @@ func _check_sfx_settings() -> void:
 	Sfx.set_on(false)
 	var cf := ConfigFile.new()
 	check(AudioServer.is_bus_mute(bus) and not AudioServer.is_bus_mute(mb) and not AudioServer.is_bus_mute(0) and not Sfx.sound_on()
-			and cf.load(CFG) == OK and not bool(cf.get_value("audio", "on_v2", true)) and bool(cf.get_value("audio", "music_on_v3", false)),
+			and cf.load(CFG) == OK and not bool(cf.get_value("audio", "on_v3", true)) and bool(cf.get_value("audio", "music_on_v3", false)),
 			"SOUND OFF: the Sfx bus muted (Music and Master not), saved in [audio] beside MUSIC's keys")
 	Sfx.set_volume(100)
 	check(AudioServer.is_bus_mute(bus), "SOUND OFF stays silent whatever the VOLUME")
