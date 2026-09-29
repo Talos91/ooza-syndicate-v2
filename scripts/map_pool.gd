@@ -9,7 +9,8 @@ class_name MapPool
 ## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
 ## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
-const GROUP_ORDER := ["T", "A", "M", "C", "B", "S", "X", "D"]   # A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay
+const GROUP_ORDER := ["T", "N", "A", "M", "C", "B", "S", "X", "D"]   # A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
+                                                              # MAPS 5.0: N = the map builder's new maps (References/Ooze Syndicate maps 5.0)
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
 static var dir := DIR                                   # tests/test_net.gd points it at the legacy roster
@@ -46,10 +47,16 @@ static func all() -> Array:
 	return out
 
 
+# MAPS 5.0 (Daniele 2026-09-29: "replace current pool with the new ones"): the player's pool is the map builder's
+# N- maps only. Every older map stays baked in maps4/ - the campaign's placeholder missions and the tutorial load
+# theirs by path, and test_maps4 still checks them all - but none is offered on 02 BATTLEFIELD or as a random rematch.
+const POOL_GROUPS: Array[String] = ["N"]
+
+
 static func battlefield() -> Array:
-	## all() minus TUTORIAL_ONLY: what the player actually gets offered (02 BATTLEFIELD, REMATCH ON A
-	## RANDOM MAP) and what test_map_pool / test_ai_curve run their coverage over.
-	return all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY)
+	## all() minus TUTORIAL_ONLY, limited to POOL_GROUPS: what the player actually gets offered (02 BATTLEFIELD,
+	## REMATCH ON A RANDOM MAP) and what test_map_pool / test_ai_curve run their coverage over.
+	return all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY 			and (POOL_GROUPS.is_empty() or p.get_file().substr(0, 1) in POOL_GROUPS))
 
 
 static func phone_screen(mobile: bool) -> bool:

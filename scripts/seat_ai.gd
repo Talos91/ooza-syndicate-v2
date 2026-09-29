@@ -167,7 +167,7 @@ func _incoming(sim: Sim, node_id: int, hostile: bool) -> float:
 func _travel(sim: Sim, route: Array) -> float:
 	var t := 0.0
 	for i in range(route.size() - 1):
-		t += sim.edge_cost(sim._edge_index(route[i], route[i + 1])) + Rules.ROUTE_NODE_SECONDS
+		t += sim.edge_cost(sim._edge_index(route[i], route[i + 1])) + sim.node_cost(route[i + 1])
 	return t
 
 
@@ -215,7 +215,7 @@ func _trip(sim: Sim, from_id: int, to_id: int, avoid := {}) -> float:
 	if to_id == from_id or not prev.has(to_id):
 		return 0.0
 	var p: int = prev[to_id]
-	var t: float = _trip(sim, from_id, p, avoid) + (sim.edge_cost(sim._edge_index(p, to_id)) + Rules.ROUTE_NODE_SECONDS)
+	var t: float = _trip(sim, from_id, p, avoid) + (sim.edge_cost(sim._edge_index(p, to_id)) + sim.node_cost(to_id))
 	trip[to_id] = t
 	return t
 
@@ -245,7 +245,7 @@ func _tree(sim: Sim, from_id: int, avoid: Dictionary) -> Array:
 			var nb: int = link[0]
 			if sim.collapsed.get(nb, false) or not sim._edge_open(link[1]) or avoid.has(link[1]):
 				continue
-			var cost: float = dist[cur] + sim.edge_cost(link[1]) + Rules.ROUTE_NODE_SECONDS   # = Sim.find_route
+			var cost: float = dist[cur] + sim.edge_cost(link[1]) + sim.node_cost(nb)   # = Sim.find_route (junctions free)
 			if not dist.has(nb) or cost < dist[nb]:
 				dist[nb] = cost
 				prev[nb] = cur
@@ -301,6 +301,8 @@ func _evacuate(sim: Sim) -> void:
 	## drop is near (2026-09-27: the adaptive gap spaces a ring's drops up to 20 s apart; Sim.drop_in is its
 	## countdown): when the trip, a think and a margin no longer fit before it falls. Until then it keeps working.
 	for doomed in sim.nodes:
+		if doomed["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+			continue
 		if sim.is_warned(doomed["id"]) and doomed["owner"] == seat and doomed["units"] >= 5.0:
 			var target := _nearest_safe(sim, doomed["id"])
 			if target >= 0:
@@ -318,6 +320,8 @@ func _nearest_safe(sim: Sim, from_id: int) -> int:
 	var best := -1
 	var best_len := INF
 	for n in sim.nodes:
+		if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+			continue
 		if n["id"] == from_id or sim.collapsed.get(n["id"], false) or _drops_soon(sim, n["id"]):
 			continue
 		var route := _path(sim, from_id, n["id"])
@@ -512,6 +516,8 @@ func _attack(sim: Sim, answer_only := false) -> void:
 		if donor["build_kind"] == "" and not _busy.has(donor["id"]):
 			spare[donor["id"]] = donor["units"] - _reserve(sim, donor)
 	for target in sim.nodes:
+		if target["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+			continue
 		if sim.allied(target["owner"], seat) or sim.collapsed.get(target["id"], false) or _drops_soon(sim, target["id"]):
 			continue
 		var called: bool = calls.has(target["id"])
@@ -704,6 +710,8 @@ func _team_focus(sim: Sim) -> String:
 	for s in rivals:
 		var exposed := 0                                  # its nodes on the team's border
 		for n in sim.nodes:
+			if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+				continue
 			if n["owner"] != s or sim.collapsed.get(n["id"], false):
 				continue
 			for link in sim.adj[n["id"]]:
@@ -771,6 +779,8 @@ func _ally_spare(sim: Sim, target: Dictionary, travel: float) -> float:
 			continue
 		var spare := []
 		for n in sim.nodes:
+			if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+				continue
 			if n["owner"] != s or n["build_kind"] != "" or sim.collapsed.get(n["id"], false):
 				continue
 			var a: float = n["units"] - _reserve(sim, n)
@@ -810,6 +820,8 @@ func _defend_allies(sim: Sim) -> void:
 		_alarm = {}
 		return
 	for target in sim.nodes:
+		if target["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+			continue
 		var id: int = target["id"]
 		if not (target["owner"] in allies) or sim.collapsed.get(id, false) or sim.is_warned(id):
 			_alarm.erase(id)
@@ -866,6 +878,8 @@ func _surplus(sim: Sim) -> void:
 	var focus := _team_focus(sim)
 	var fronts := []
 	for n in sim.nodes:
+		if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+			continue
 		if not sim.allied(n["owner"], seat) or sim.collapsed.get(n["id"], false) or _drops_soon(sim, n["id"]):
 			continue
 		var rival := false
@@ -993,6 +1007,8 @@ func _fling_cost(sim: Sim, edges: Array) -> float:
 func _relays(sim: Sim) -> void:
 	var lvl := int(cfg["relays"])
 	for n in sim.nodes:
+		if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+			continue
 		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
 			continue
 		var closing := _closing(sim, n)
@@ -1037,6 +1053,8 @@ func _relay_opens_route(sim: Sim, src: int, dst: int, units: float) -> Array:
 	## _route()), or [] if none of its relays helps. _open_route fires the relay for real once this
 	## target's plan is chosen; until then the board is left exactly as it was.
 	for n in sim.nodes:
+		if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+			continue
 		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
 			continue
 		var closing := _closing(sim, n)
@@ -1538,7 +1556,7 @@ func _monsters(sim: Sim) -> void:
 		if int(cfg.get("intel", 0)) <= 0:
 			if rng.randf() > float(Rules.AI_MONSTER_CHANCE.get(level, 0.1)):
 				continue
-			var cands := reach.filter(func(id): return not sim.allied(sim.nodes[id]["owner"], seat) and not _drops_soon(sim, id))
+			var cands := reach.filter(func(id): return not sim.allied(sim.nodes[id]["owner"], seat) and not _drops_soon(sim, id) and sim.nodes[id]["node_kind"] != "junction")   # JUNCTION: a monster never targets one
 			if not cands.is_empty():
 				_order(sim.launch_monster(hub["id"], seat, cands[rng.randi_range(0, cands.size() - 1)]) == "")
 			continue
@@ -1778,6 +1796,8 @@ func _pick(sim: Sim, id: String) -> Array:
 						and _own_route_uses(sim, e["target"]):
 					return [e["target"]]
 			for n in sim.nodes:
+				if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+					continue
 				if n["relay"] == "" or n["relay_phase"] != "warning" or not _hostile(sim, n["owner"]):
 					continue
 				for ei in sim.controlled_edges(n["id"]):
@@ -1791,12 +1811,16 @@ func _pick(sim: Sim, id: String) -> Array:
 				if sp.is_empty():
 					continue
 				for n in sim.nodes:
+					if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+						continue
 					if n["structure"] == "laser" and _hostile(sim, n["owner"]) \
 							and (Sim.sample(h, h["s"])[0] as Vector3).distance_to(n["pos"]) <= Rules.LASER_RANGE:
 						return [sp["edge"]]
 			return []
 		"bypass":                                     # a relay about to drop or fling its own lines
 			for n in sim.nodes:
+				if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+					continue
 				if n["relay"] == "" or n["relay_phase"] != "warning":
 					continue
 				var own := 0.0
@@ -1808,6 +1832,8 @@ func _pick(sim: Sim, id: String) -> Array:
 			return []
 		"relay_hack":                                 # fire an enemy relay for the kill, or jam one that threatens it
 			for n in sim.nodes:
+				if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+					continue
 				if n["relay"] == "" or (n["owner"] != "" and sim.allied(n["owner"], seat)):
 					continue
 				var closing := _closing(sim, n)
@@ -1832,6 +1858,8 @@ func _pick(sim: Sim, id: String) -> Array:
 			var best := -1
 			var best_s := -INF
 			for n in sim.nodes:
+				if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+					continue
 				if not _hostile(sim, n["owner"]) or sim.collapsed.get(n["id"], false):
 					continue
 				var s: float = -(n["pos"] as Vector3).distance_to(src["pos"]) + (40.0 if n["structure"] in ["laser", "machinegoon"] else 0.0)
@@ -1854,6 +1882,8 @@ func _pick(sim: Sim, id: String) -> Array:
 		"rewire":                                     # a relay kill is on, or a big push is under way
 			var kill := 0.0
 			for n in sim.nodes:
+				if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+					continue
 				if n["relay"] != "" and n["relay_phase"] == "" and n["relay_cd"] <= 0.0:
 					var closing := _closing(sim, n)
 					if not closing.is_empty():
@@ -2008,6 +2038,8 @@ func _pick_power(sim: Sim, id: String) -> Array:
 func _rewire_fires(sim: Sim) -> void:
 	## While Rewire runs: fire any relay (enemy ones too) that drops or flings more enemy than own.
 	for n in sim.nodes:
+		if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
+			continue
 		if n["relay"] == "" or not sim.can_cast(seat, "ultimate", n["id"]):
 			continue
 		var closing := _closing(sim, n)

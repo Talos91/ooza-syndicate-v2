@@ -114,6 +114,11 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		# map-placed T4 (it holds only its vat); common = every other vat node
 		var kind := "relay" if relay != "" else ("special" if str(n.get("category", "normal")) in ["strategic", "final"] \
 				or (owner == "" and tier >= 4) else "common")
+		var junction: String = str(n.get("junction", "")) if n.get("junction") != null else ""
+		if junction != "":                              # JUNCTION: a deck junction or curve - no owner, no units, no structure
+			kind = "junction"
+			tier = 1
+			units = 0.0
 		if kind == "special" and owner == "":            # Daniele, 2026-09-27: a special node is always a T4 vat
 			tier = 4
 			units = float(Rules.NEUTRAL_UNITS[4])
@@ -122,14 +127,16 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"category": n.get("category", "normal"), "center": n.get("center", false), "relay": relay,
 			"ring": int(n.get("ring", 0)) if n.get("ring") != null else 0,
 			"plaza": int(n["plaza"]) if n.get("plaza") != null else -1,
-			"node_kind": kind,       # "common" / "relay" / "special" (fixed at setup)
+			"node_kind": kind,       # "common" / "relay" / "special" (fixed at setup); JUNCTION: "junction"
+			"junction": junction,   # JUNCTION: the piece (Junction_X / T / Y / L / K / Fork, Curve_45 / 90; "" on a platform)
+			"junction_yaw": float(n.get("junctionYaw", 0.0)) if junction != "" else 0.0,   # JUNCTION: degrees, ccw seen from above
 			"streaming": {},        # {hid, remaining}: the one order the door is emitting
 			"siege": {},            # seat -> units on the platform fighting the garrison (arrived)
 			"siege_dir": {},        # seat -> unit vector from the tower to where they landed
 			"transit": {},          # seat -> {"units", "hordes": [Horde]}: passing-through this frame
 			"node_loss": {},        # seat -> units/s lost on this platform last step (view)
-			"buildable": (Rules.NODE_BUILDS[kind] as Array).duplicate(),   # what the owner may place here
-			"structure": "" if kind == "relay" else "vat",   # "vat" / "machinegoon" / "laser" / "forge" / "monster_hub" / ""
+			"buildable": [] if kind == "junction" else (Rules.NODE_BUILDS[kind] as Array).duplicate(),   # what the owner may place here
+			"structure": "" if kind in ["relay", "junction"] else "vat",   # "vat" / "machinegoon" / "laser" / "forge" / "monster_hub" / ""
 			"allies": {},           # seat -> allied troops stored here (GAME-RULES sec11; "units" is the owner's)
 			"arrivals": [],         # allied seats in the order their troops arrived (ownership tie-break)
 			"shot": {},             # laser / machinegoon fire for the fx: {"t", "target_horde", "kills", "pos"}
@@ -265,6 +272,8 @@ func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 	## previous order's not-yet-emitted part (Daniele, 2026-09-25).
 	var src: Dictionary = nodes[from_id]
 	if over or from_id == to_id or src["owner"] == "":
+		return {}
+	if src["node_kind"] == "junction" or nodes[to_id]["node_kind"] == "junction":   # JUNCTION: never a source or a target
 		return {}
 	var count := floorf(src["units"] * fraction)
 	if count < 1.0:
@@ -1250,6 +1259,12 @@ func edge_cost(ei: int) -> float:
 	return float(e["geo"]["L"]) / Rules.move_speed()
 
 
+func node_cost(id: int) -> float:
+	## What crossing node `id` adds to a route: Rules.ROUTE_NODE_SECONDS, 0 at a junction piece (JUNCTION: a line never stops
+	## there). SeatAI's route tree uses the same so its trip times match find_route.
+	return 0.0 if nodes[id]["node_kind"] == "junction" else Rules.ROUTE_NODE_SECONDS
+
+
 func find_route(from_id: int, to_id: int, avoid := {}) -> Array:
 	## Fastest route by deck travel time (Dijkstra; each node crossed costs a little). Skips
 	## closed relay decks and nodes dropped by the Last Stand collapse. `avoid` (edge index -> true):
@@ -1268,7 +1283,7 @@ func find_route(from_id: int, to_id: int, avoid := {}) -> Array:
 			var nb: int = link[0]
 			if collapsed.get(nb, false) or not _edge_open(link[1]) or avoid.has(link[1]):
 				continue
-			var cost: float = dist[cur] + edge_cost(link[1]) + Rules.ROUTE_NODE_SECONDS
+			var cost: float = dist[cur] + edge_cost(link[1]) + node_cost(nb)   # JUNCTION: no stop at a junction
 			if not dist.has(nb) or cost < dist[nb]:
 				dist[nb] = cost
 				prev[nb] = cur
@@ -1371,8 +1386,17 @@ func _build_path3(route: Array) -> Dictionary:
 		if i + 1 < route.size() - 1:
 			var ex_out := exit_of(_edge_index(route[i + 1], route[i + 2]), route[i + 1])
 			var dout := ((ex_out - b["pos"]) as Vector3).normalized()
-			for p in _arc(b["pos"], atan2(din.z, din.x), atan2(dout.z, dout.x), ring):
-				add.call(p, 1)
+			if b["node_kind"] == "junction" and str(b["junction"]).begins_with("Curve_"):   # JUNCTION: along the curve's arc
+				var c := _curve_centre(b)
+				var a_in := atan2(ex_in.z - c.z, ex_in.x - c.x)
+				var a_out := atan2(ex_out.z - c.z, ex_out.x - c.x)
+				for p in _arc(c, a_in, a_out, CURVE_R):
+					add.call(p, 1)
+			elif b["node_kind"] == "junction":             # JUNCTION: straight across the junction plate
+				add.call(b["pos"], 1)
+			else:
+				for p in _arc(b["pos"], atan2(din.z, din.x), atan2(dout.z, dout.x), ring):
+					add.call(p, 1)
 			add.call(ex_out, 1)
 			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		elif brawl:                                   # Alpha 11: round the ring to the front door, then in
@@ -1448,6 +1472,16 @@ func _build_path_legacy(route: Array) -> Dictionary:
 		cum.append(cum[k - 1] + (pts[k] as Vector3).distance_to(pts[k - 1]))
 	return {"pts": PackedVector3Array(pts), "cum": cum, "fast": PackedByteArray(fast), "spans": spans,
 			"node_spans": node_spans}
+
+
+const CURVE_R := 5.09                  # JUNCTION: the curve pieces' centreline radius (Models/2.0/structures_2_1/junctions.json)
+
+
+func _curve_centre(n: Dictionary) -> Vector3:
+	## JUNCTION: a curve's origin is its start port; its arc turns left round a centre one radius to the piece's left
+	## (+Y in the piece, the scene's -Z), turned by the piece's yaw. A right turn is the same piece crossed backwards.
+	var yaw := deg_to_rad(float(n.get("junction_yaw", 0.0)))
+	return (n["pos"] as Vector3) + Vector3(-sin(yaw), 0.0, -cos(yaw)) * CURVE_R
 
 
 func _arc(c: Vector3, a0: float, a1: float, r: float) -> Array:
@@ -2647,6 +2681,38 @@ func _plan_waves(order: Array) -> Array:
 	return waves
 
 
+# JUNCTION: relay hubs (maps 5.0, Daniele 2026-09-29: 6-way grinder / switch centres). A rotation or switch relay that
+# keeps at least 2 decks in EVERY state of its group is never stranded, so its decks hold it to the map like fixed
+# decks when the Last Stand looks for islands (a hub with no fixed deck would otherwise fall with the first wave).
+var _hubs_cache = null
+
+
+func _hub_edges() -> Dictionary:
+	if _hubs_cache != null:
+		return _hubs_cache
+	_hubs_cache = {}
+	var per := {}                                         # relay node -> state -> deck count
+	for i in edge_controller:
+		var e: Dictionary = edges[i]
+		var c: int = edge_controller[i]
+		if c < 0 or e["retracts"] or e["state"] == "" or not str(nodes[c]["relay"]) in ["rotation", "switch"]:
+			continue
+		if not per.has(c):
+			per[c] = {}
+		per[c][e["state"]] = int(per[c].get(e["state"], 0)) + 1
+	for c in per:
+		var prefix: String = (per[c].keys()[0] as String).substr(0, 1)
+		var ok := true
+		for st in relay_groups.get(prefix, []):
+			if int(per[c].get(st, 0)) < 2:
+				ok = false
+		if ok:
+			for i in edge_controller:
+				if edge_controller[i] == c and not edges[i]["retracts"] and edges[i]["state"] != "":
+					_hubs_cache[i] = true
+	return _hubs_cache
+
+
 func _islands(gone: Dictionary) -> Array:
 	## Surviving nodes cut off from the surviving map's main part (the one holding the most of the last
 	## ring, then the most nodes), over fixed decks and plaza links only.
@@ -2663,7 +2729,7 @@ func _islands(gone: Dictionary) -> Array:
 			var cur: int = open.pop_front()
 			for link in adj[cur]:
 				var e: Dictionary = edges[link[1]]
-				if e["state"] != "" or e["retracts"]:
+				if (e["state"] != "" or e["retracts"]) and not _hub_edges().has(link[1]):   # JUNCTION: hubs
 					continue                              # a relay deck may be switched away
 				var nb: int = link[0]
 				if gone.get(nb, false) or comp.has(nb):
@@ -3393,10 +3459,11 @@ func monster_speed() -> float:
 
 
 func _bridges(route: Array) -> int:
-	## Bridges along a route (plaza links between sockets don't count).
+	## Bridges along a route (plaza links between sockets don't count). JUNCTION: a road through junctions and curves
+	## is one bridge (only a deck that lands on a platform counts).
 	var k := 0
 	for i in range(route.size() - 1):
-		if not edges[_edge_index(route[i], route[i + 1])]["plaza"]:
+		if not edges[_edge_index(route[i], route[i + 1])]["plaza"] and nodes[route[i + 1]]["node_kind"] != "junction":
 			k += 1
 	return k
 
@@ -3409,7 +3476,7 @@ func monster_reach(hub_id: int) -> Array:
 		return out
 	for n in nodes:
 		var id: int = n["id"]
-		if id == hub_id or collapsed.get(id, false):
+		if id == hub_id or collapsed.get(id, false) or n["node_kind"] == "junction":   # JUNCTION: never a monster's target
 			continue
 		var r := find_route(hub_id, id)
 		if r.size() >= 2 and _bridges(r) <= Rules.MONSTER_REACH:

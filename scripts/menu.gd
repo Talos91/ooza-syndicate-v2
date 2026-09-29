@@ -68,8 +68,9 @@ var _map_scroll := 0
 # (a mode the map offers) and type (the map's group); static, so they survive a trip through the match
 static var map_filter_mode := "all"
 static var map_filter_type := "all"
-const MAP_TYPES := ["all", "brawl", "siege", "core", "alpha 11", "training"]
-const MAP_TYPE_NAMES := {"all": "ALL", "brawl": "FAST", "siege": "FORTRESS", "core": "STANDARD", "alpha 11": "ALPHA 11", "training": "TRAINING"}
+const MAP_TYPES := ["all", "new", "brawl", "siege", "core", "alpha 11", "training"]   # MAPS 5.0: "new" (group "new")
+const MAP_TYPE_NAMES := {"all": "ALL", "new": "NEW MAPS", "brawl": "FAST", "siege": "FORTRESS", "core": "STANDARD", "alpha 11": "ALPHA 11",
+		"training": "TRAINING"}
 # (0.19.0, Daniele: labels only - the pack groups (BRAWL / SIEGE / CORE) stay the same underneath)
 var _chat_btn: Button
 var _chat_t := 0.0

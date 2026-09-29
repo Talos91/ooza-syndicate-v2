@@ -714,7 +714,7 @@ func _badges(cam: Camera3D) -> bool:
 	for n in sim.nodes:
 		var b: Dictionary = badges[n["id"]]
 		var panel: Control = b["panel"]
-		if sim.collapsed.get(n["id"], false):
+		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: no badge
 			panel.visible = false
 			continue
 		if sim.is_warned(n["id"]):                    # 0.19.0: the floating danger symbol replaces the badge
