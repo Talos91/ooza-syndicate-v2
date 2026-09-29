@@ -2709,8 +2709,9 @@ func show_skills(slot: String = "active") -> void:
 			slot = "map"
 	_last_show = func(): show_skills(slot)
 	## UI (Alpha 21, screen 07): ARMIES > SKILLS - the SKILLS 2.0 pools as they were (Daniele 2026-09-28: "skills i
-	## think are better how we have them now") in the new language: the faction's fixed ultimate, then the five active
-	## skills and the five map skills; tap a card to equip it at once, a locked one to unlock it (PROGRESSION).
+	## think are better how we have them now") in the new language: the faction's fixed ultimate, then the active skills
+	## and the map skills (Rules.ACTIVE_SKILLS / MAP_SKILLS, however many; a grid that wraps); tap a card to equip it at
+	## once, a locked one to unlock it (PROGRESSION).
 	## `slot` ("active" / "map", the row that opened it) lights its pool and scrolls to it where the page scrolls.
 	if _army == "":
 		_army = faction
@@ -2768,14 +2769,23 @@ func show_skills(slot: String = "active") -> void:
 		hx += UiKit.text_w(self, pool[2] + "  ·  PICK ONE", 16, true) + 16.0
 		_shell_add(UiKit.label(self, pool[3], 13, UiKit.MUTED), Vector2(hx, y + (UiKit.line_h(self, 18, true) - UiKit.line_h(self, 13)) / 2.0))
 		y += UiKit.line_h(self, 18, true) + 8.0
+		# UI (0.22.2, ⚡ Powers: 7 active + 10 map skills): a grid that wraps - as many cards a row as keep them readable
+		# (>= 210 units on desktop, 250 on phones), rows balanced (7 = 4 + 3, 10 = 5 + 5), each row as tall as its tallest card
 		var ids: Array = pool[4]
-		var cw := (iw - gap * (ids.size() - 1)) / ids.size()
-		var ch := 0.0
-		for id in ids:
-			ch = maxf(ch, _skill_card_h(id, cw))
-		for i in range(ids.size()):
-			_skill_card(ids[i], ps, lo[ps] == ids[i], Vector2(i * (cw + gap), y), Vector2(cw, ch), scroll)
-		y += ch + 20.0
+		var min_w := 250.0 if UiKit.pt(self) > 0.0 else 210.0
+		var fit := clampi(int((iw + gap) / (min_w + gap)), 1, maxi(1, ids.size()))
+		var rows := int(ceil(ids.size() / float(fit)))
+		var cols := int(ceil(ids.size() / float(rows)))
+		var cw := (iw - gap * (cols - 1)) / cols
+		for r in range(rows):
+			var row_ids := ids.slice(r * cols, mini((r + 1) * cols, ids.size()))
+			var ch := 0.0
+			for id in row_ids:
+				ch = maxf(ch, _skill_card_h(id, cw))
+			for i in range(row_ids.size()):
+				_skill_card(row_ids[i], ps, lo[ps] == row_ids[i], Vector2(i * (cw + gap), y), Vector2(cw, ch), scroll)
+			y += ch + gap
+		y += 20.0 - gap
 	stack_capture(st, before)
 	stack_close(st, y - 8.0)
 	if slot == "map":
