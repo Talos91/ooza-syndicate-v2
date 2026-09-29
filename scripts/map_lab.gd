@@ -79,7 +79,7 @@ static func before_match(m: Node) -> void:
 	m.demo = watch
 	if level != "":
 		m.ai_level = level
-	if LabPanel.cam_pitch > 0.0:                         # the LAB camera trial's pitch (default 34, Daniele 2026-09-29)
+	if LabPanel.cam_pitch > 0.0:                         # the LAB camera trial's pitch (default 41, Daniele 2026-09-29)
 		m.pitch_forced = true
 		m.cam_pitch = LabPanel.cam_pitch
 	var j = JSON.parse_string(FileAccess.get_file_as_string(m.map_path))

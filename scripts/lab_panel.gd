@@ -15,7 +15,7 @@ static var overlay := false                      # the rule overlay starts off (
 # CAMERA trial (Daniele 2026-09-27: "the tall notification on top covers the platforms ... add a lab function to
 # play with camera axis"): pitch (0 = the map's own), the map shifted down the screen (fraction of the map's
 # depth; + = lower on screen, room under the top bar) and zoom (x the fit distance; > 1 = further away).
-static var cam_pitch := 34.0                              # Daniele 2026-09-29: "34 deg is best" (0 = the map's own)
+static var cam_pitch := 41.0                              # Daniele 2026-09-29: 34, then raised 20 % to 41 (the game's pitch, 0.23.0)
 static var cam_shift := 0.0
 static var cam_zoom := 1.0
 static var cam_pan := Vector2.ZERO                      # metres: x along the screen's right, y away from the camera
