@@ -65,17 +65,18 @@ class LobbyView extends Node:
 	var online := true
 	var my_name := ""
 	var ai := {}
+	var net: Node = null
 
 	func seat_who(seat: String) -> Dictionary:
 		var f := str(SEAT_FACTIONS.get(seat, ""))
 		var out := {"name": "", "faction": str(UiKit.NAMES.get(f, f.to_upper())), "tag": "", "human": false, "you": seat == HUMAN}
-		for id in Net.roster:
-			if Net.seat_of(int(id)) == seat:
+		for id in net.roster:
+			if net.seat_of(int(id)) == seat:
 				out["human"] = true
-				var nm := my_name if seat == HUMAN else Net.name_of(int(id)).to_upper()
+				var nm: String = my_name if seat == HUMAN else str(net.name_of(int(id))).to_upper()
 				out["name"] = nm if nm.length() <= Rules.HUD_NAME_MAX else nm.substr(0, Rules.HUD_NAME_MAX - 1) + "…"
 				return out
-		var level := str(ai.get(seat, Net.ai_fill))
+		var level := str(ai.get(seat, net.ai_fill))
 		out["tag"] = ("%s AI" % level.to_upper()) if level != "" else "AI"
 		return out
 
@@ -86,7 +87,8 @@ static func wanted(m) -> bool:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--versus-shot="):              # the screenshot helper asks for it
 			return true
-	if Net.dedicated or m.online or m.director != null or DisplayServer.get_name() == "headless":
+	var nt := _net_node()
+	if (nt != null and bool(nt.dedicated)) or m.online or m.director != null or DisplayServer.get_name() == "headless":
 		return false
 	for a in OS.get_cmdline_user_args():
 		for p in SKIP_ARGS:
@@ -109,7 +111,8 @@ static func hold_match(m) -> void:
 static func hold_online(m) -> bool:
 	## main._start_online, after _start_map: the card over a room's round while it loads (never the room server's
 	## match host, a lesson, a headless run). The match is not paused: Net's barrier and the host's clock run as before.
-	if Net.dedicated or m.director != null or DisplayServer.get_name() == "headless":
+	var nt := _net_node()
+	if (nt != null and bool(nt.dedicated)) or m.director != null or DisplayServer.get_name() == "headless":
 		return false
 	for a in OS.get_cmdline_user_args():
 		for p in SKIP_ARGS:
@@ -118,17 +121,25 @@ static func hold_online(m) -> bool:
 	var v := VersusScreen.new()
 	v.main = m
 	v.online = true
-	v.net = Net
+	v.net = nt
 	m.add_child(v)
 	LaunchCard.drop(m.get_tree().root)                 # UI (0.23.1): the launch card hands over to this card
 	return true
+
+
+static func _net_node() -> Node:
+	## The Net autoload, looked up at run time: naming the global would make this script (and net.gd, which calls it) fail to
+	## compile in a --script test, where autoloads don't exist.
+	var ml := Engine.get_main_loop() as SceneTree
+	return ml.root.get_node_or_null("Net") if ml != null and ml.root != null else null
 
 
 static func hold_lobby(root: Node, info := {}) -> void:
 	## 0.23.2: the VERSUS card from the moment DEPLOY is pressed (the owner) or the launch arrives (everyone) - on the window's
 	## root, so it survives the room's scene reload; main._start_online's card replaces it (LaunchCard.drop) once the match
 	## scene is up. `info`: the launch packet when there is one, else the lobby's own state (the seats known so far).
-	if Net.dedicated or DisplayServer.get_name() == "headless":
+	var nt := _net_node()
+	if nt == null or bool(nt.dedicated) or DisplayServer.get_name() == "headless":
 		return
 	if _lobby_card != null and is_instance_valid(_lobby_card) and not _lobby_card.is_queued_for_deletion():
 		return                                         # already up since DEPLOY: the launch carries on under it
@@ -137,18 +148,19 @@ static func hold_lobby(root: Node, info := {}) -> void:
 	var scene := root.get_tree().current_scene
 	lv.mobile = bool(scene.get("mobile")) if scene != null and scene.get("mobile") != null else false
 	lv.my_name = str(scene.call("_my_name")) if scene != null and scene.has_method("_my_name") else ""
-	lv.HUMAN = Net.local_seat()
-	lv.mode = str(info.get("mode", Net.mode))
-	var path := str(info.get("map", Net.map_path))
-	lv.map = {"name": str(Net.map_data(path).get("name", path.get_file().get_basename()))}
+	lv.HUMAN = nt.local_seat()
+	lv.net = nt
+	lv.mode = str(info.get("mode", nt.mode))
+	var path := str(info.get("map", nt.map_path))
+	lv.map = {"name": str(nt.map_data(path).get("name", path.get_file().get_basename()))}
 	var players: Dictionary = info.get("players", {})
 	if players.is_empty():
-		for id in Net.roster:
-			players[Net.seat_of(int(id))] = str(Net.roster[id]["faction"])
+		for id in nt.roster:
+			players[nt.seat_of(int(id))] = str(nt.roster[id]["faction"])
 	lv.SEAT_FACTIONS = players.duplicate()
 	lv.sim.factions = players.duplicate()
 	lv.ai = (info.get("ai", {}) as Dictionary).duplicate()
-	for s in (Net.map_data(path).get("seats", {}) as Dictionary).get(lv.mode, []):
+	for s in (nt.map_data(path).get("seats", {}) as Dictionary).get(lv.mode, []):
 		lv.sim.teams[str(s["seat"])] = int(s.get("team", -1))
 	var v := VersusScreen.new()
 	v.name = LaunchCard.NAME                           # (LaunchCard.drop removes it, whichever card is up)
@@ -156,7 +168,7 @@ static func hold_lobby(root: Node, info := {}) -> void:
 	v._lobby_view = lv
 	v.online = true
 	v.lobby = true
-	v.net = Net
+	v.net = nt
 	v.process_mode = Node.PROCESS_MODE_ALWAYS
 	_lobby_card = v
 	root.add_child.call_deferred(v)                    # (deferred: the root may be busy; _lobby_card guards a second raise meanwhile)
