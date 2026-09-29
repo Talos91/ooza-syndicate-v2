@@ -62,7 +62,7 @@ func _build(crumb: String, f: String) -> void:
 	if slim:
 		queue_redraw()
 		return
-	# right to left: "?", the gear, the level block, the balances
+	# right to left: "?", the gear, MUSIC, the level block, the balances
 	var help := _square("?", Vector2(w - 14.0 - q, (h - q) / 2.0), q, f)
 	help.tooltip_text = "HELP"
 	help.pressed.connect(func(): UiKit.acknowledge(help, Callable(menu, "show_help")))
@@ -75,6 +75,19 @@ func _build(crumb: String, f: String) -> void:
 	glyph.size = gear.size
 	glyph.draw.connect(func(): _draw_gear(glyph, q))
 	add_child(glyph)
+	# MUSIC (Daniele 2026-09-29/30): the top-right instant mute - Music.toggle_on(), a drawn note glyph (slashed + dim OFF)
+	var music_btn := _square("", gear.position - Vector2(q + 8.0, 0), q, f)
+	music_btn.tooltip_text = "MUSIC"
+	var music_glyph := Control.new()
+	music_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	music_glyph.position = music_btn.position
+	music_glyph.size = music_btn.size
+	music_glyph.draw.connect(func(): _draw_note(music_glyph, q))
+	music_btn.pressed.connect(func():
+		Music.toggle_on()                            # OFF at once, everywhere (Music.set_on stops the players itself)
+		Sfx.play_ui("tap")
+		music_glyph.queue_redraw())
+	add_child(music_glyph)
 	var lf := Progression.level_for(Progression.xp)
 	_level = int(lf["level"])
 	var cf := f if Campaign.has_content(f) else "vex"
@@ -83,19 +96,28 @@ func _build(crumb: String, f: String) -> void:
 	var text_w := maxf(UiKit.text_w(menu, top.text, 15, true), UiKit.text_w(menu, sub.text, 12))
 	_ring_r = minf(17.0, h * 0.28)
 	var block_w := _ring_r * 2.0 + 12.0 + text_w
-	var bx := gear.position.x - 22.0 - block_w
+	var bx := music_btn.position.x - 22.0 - block_w
 	_ring_c = Vector2(bx + _ring_r, h / 2.0)
 	var th := top.get_minimum_size().y + sub.get_minimum_size().y
 	top.position = Vector2(bx + _ring_r * 2.0 + 12.0, (h - th) / 2.0)
 	sub.position = top.position + Vector2(0, top.get_minimum_size().y)
 	add_child(top)
 	add_child(sub)
+	# UI (Daniele: "Where's PROFILE?"): a translucent framed block, not flat, so the ring drawn in _draw still shows
+	# through it, with a "›" chevron; behind the labels (moved to top's index) so LEVEL n / the stars stay crisp on it.
 	var prof := UiKit.flat_button(menu, "", 12)       # the whole level block is PROFILE's tap target
 	prof.tooltip_text = "PROFILE"
+	var prof_sb := UiKit.sb(Color(UiKit.BASE, 0.35), UiKit.FRAME, 1)
+	for st in ["normal", "hover", "pressed"]:
+		prof.add_theme_stylebox_override(st, prof_sb)
 	prof.position = Vector2(bx - 6.0, 0)
 	prof.size = Vector2(block_w + 12.0, h)
 	prof.pressed.connect(func(): UiKit.acknowledge(prof, Callable(menu, "show_profile")))
 	add_child(prof)
+	move_child(prof, top.get_index())
+	var chev := UiKit.label(menu, "›", 18, UiKit.MUTED)
+	chev.position = prof.position + Vector2(prof.size.x - 22.0, (h - chev.get_minimum_size().y) / 2.0)
+	add_child(chev)
 	var bxr := bx - 18.0                              # PROGRESSION: SCRAP and CHIPS, as on the old profile card
 	var p := UiKit.pt(menu)                           # the ticker sizes in pt: exact on phones, the old card's size on desktop
 	for cur in ["premium", "soft"]:
@@ -130,6 +152,20 @@ func _draw_gear(c: Control, q: float) -> void:
 		c.draw_line(o + d * r * 0.9, o + d * r * 1.45, col, q * 0.085)
 	c.draw_arc(o, r, 0.0, TAU, 32, col, q * 0.07, true)
 	c.draw_arc(o, r * 0.42, 0.0, TAU, 20, col, q * 0.05, true)
+
+
+func _draw_note(c: Control, q: float) -> void:
+	## MUSIC (0.22.x): a drawn eighth-note - dim and slashed through when OFF (no icon for it in the kit yet).
+	var on := Music.music_on()
+	var col := UiKit.INK if on else UiKit.MUTED
+	var o := Vector2(q * 0.36, q * 0.66)
+	var r := q * 0.1
+	c.draw_circle(o, r, col)
+	var stem_top := o + Vector2(r * 0.92, -q * 0.36)
+	c.draw_line(o + Vector2(r * 0.92, 0), stem_top, col, q * 0.06)
+	c.draw_line(stem_top, stem_top + Vector2(q * 0.18, q * 0.1), col, q * 0.06)
+	if not on:
+		c.draw_line(Vector2(q * 0.16, q * 0.86), Vector2(q * 0.84, q * 0.14), col, q * 0.08)
 
 
 func _draw() -> void:

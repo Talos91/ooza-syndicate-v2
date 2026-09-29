@@ -174,14 +174,25 @@ func _check_menu() -> void:
 			"the menu plays MENU: %s (%s)" % [menu_track, np])
 	var mb := AudioServer.get_bus_index(Rules.SOUND_MUSIC_BUS)
 	var sb := AudioServer.get_bus_index(Rules.SOUND_SFX_BUS)
-	check(Music.music_on() == true and Music.volume() == Rules.MUSIC_VOLUME_DEFAULT and is_equal_approx(AudioServer.get_bus_volume_db(mb),
-			Rules.MUSIC_LEVEL_DB + linear_to_db(Rules.MUSIC_VOLUME_DEFAULT / 100.0)) and not AudioServer.is_bus_mute(mb),
-			"MUSIC ON (switched on by the check: OFF is the default since 0.22.2), MUSIC VOLUME %d %% on the Music bus (%.1f dB)" % [Rules.MUSIC_VOLUME_DEFAULT, AudioServer.get_bus_volume_db(mb)])
+	var mp: AudioStreamPlayer = Music._node.players[Music._node.cur]
+	check(Music.music_on() == true and Music.volume("menu") == Rules.MUSIC_VOLUME_DEFAULT and Music.volume("match") == Rules.MUSIC_VOLUME_DEFAULT
+			and is_equal_approx(AudioServer.get_bus_volume_db(mb), Rules.MUSIC_LEVEL_DB) and not AudioServer.is_bus_mute(mb)
+			and absf(mp.volume_db - linear_to_db(Rules.MUSIC_VOLUME_DEFAULT / 100.0)) < 0.05,
+			"MUSIC ON (switched on by the check: OFF is the default since 0.22.2): the Music bus %.1f dB, the MENU track at MENU MUSIC %d %% (%.1f dB)" % [AudioServer.get_bus_volume_db(mb), Rules.MUSIC_VOLUME_DEFAULT, mp.volume_db])
+	Music.set_volume(60, "match")
+	check(absf(mp.volume_db - linear_to_db(Rules.MUSIC_VOLUME_DEFAULT / 100.0)) < 0.05 and Music.volume("match") == 60,
+			"MATCH MUSIC 60 %%: the MENU track keeps MENU MUSIC (%.1f dB)" % mp.volume_db)
+	Music.set_volume(15, "menu")
+	check(absf(mp.volume_db - linear_to_db(0.15)) < 0.05 and Music.volume("match") == 60,
+			"MENU MUSIC 15 %%: the MENU track at once (%.1f dB), MATCH MUSIC kept" % mp.volume_db)
+	var was_on := Music.music_on()
+	check(Music.toggle_on() == not was_on and not Music.music_on() and not mp.playing and Music.toggle_on() and Music.music_on(),
+			"the top-right MUSIC button (toggle_on): OFF stops the music at once, ON again")
 	var sfx_db := AudioServer.get_bus_volume_db(sb)
 	Music.set_volume(30)
-	check(is_equal_approx(AudioServer.get_bus_volume_db(mb), Rules.MUSIC_LEVEL_DB + linear_to_db(0.30))
+	check(Music.volume("menu") == 30 and Music.volume("match") == 30 and is_equal_approx(AudioServer.get_bus_volume_db(mb), Rules.MUSIC_LEVEL_DB)
 			and is_equal_approx(AudioServer.get_bus_volume_db(sb), sfx_db) and is_equal_approx(AudioServer.get_bus_volume_db(0), 0.0),
-			"MUSIC VOLUME 30 %%: the Music bus at once (%.1f dB); Sfx and Master untouched" % AudioServer.get_bus_volume_db(mb))
+			"one MUSIC VOLUME 30 %% sets both; the Music bus stays at its level (%.1f dB); Sfx and Master untouched" % AudioServer.get_bus_volume_db(mb))
 	Music.set_on(false)
 	var cf := ConfigFile.new()
 	check(AudioServer.is_bus_mute(mb) and not AudioServer.is_bus_mute(sb) and cf.load(CFG) == OK

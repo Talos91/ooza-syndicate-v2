@@ -31,6 +31,8 @@ var top_left: HBoxContainer            # your side (you first, then teammates)
 var top_right: HBoxContainer           # every other team, grouped with a wider gap between groups
 var top_chips := {}                    # seat -> {panel, emblem, label}
 var pause_button: Button
+var music_button: Button              # MUSIC (0.22.x): left of PAUSE, a drawn note glyph (Music.toggle_on())
+var _music_glyph: Control
 var side_panel: PanelContainer
 var side_box: VBoxContainer
 var count_label: Label
@@ -375,6 +377,22 @@ func setup(m: Node3D) -> void:
 	pause_button = button("PAUSE", pause_menu, 100)
 	UiSkin.button(pause_button, main.SEAT_FACTIONS[human])
 	root.add_child(pause_button)
+	# MUSIC (Daniele 2026-09-29/30): left of PAUSE, same height - the top-right button's twin, a drawn note glyph
+	var pb_h: float = (52.0 if not mobile else 78.0) * ui_scale
+	music_button = button("", Callable(), pb_h, -1, 19)
+	music_button.custom_minimum_size = Vector2(pb_h, pb_h)
+	music_button.size = music_button.custom_minimum_size
+	UiSkin.button(music_button, main.SEAT_FACTIONS[human])
+	music_button.tooltip_text = "MUSIC"
+	music_button.pressed.connect(func():
+		Music.toggle_on()                            # OFF at once, everywhere
+		_music_glyph.queue_redraw())
+	root.add_child(music_button)
+	_music_glyph = Control.new()
+	_music_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_music_glyph.size = music_button.size
+	_music_glyph.draw.connect(func(): _draw_music_note(_music_glyph))
+	music_button.add_child(_music_glyph)
 	# side command panel (Alpha 11: 100/75/50/25 + the selected vat's count)
 	side_panel = PanelContainer.new()
 	style_panel(side_panel)
@@ -471,6 +489,21 @@ func setup(m: Node3D) -> void:
 	root.add_child(monster_icon)
 
 
+func _draw_music_note(c: Control) -> void:
+	## MUSIC (0.22.x): a drawn eighth-note, dim and slashed through when OFF (top_bar.gd's twin, no icon in the kit yet).
+	var q: float = c.size.y
+	var on := Music.music_on()
+	var col := Color.WHITE if on else Color(1, 1, 1, 0.4)
+	var o := Vector2(q * 0.36, q * 0.66)
+	var r := q * 0.1
+	c.draw_circle(o, r, col)
+	var stem_top := o + Vector2(r * 0.92, -q * 0.36)
+	c.draw_line(o + Vector2(r * 0.92, 0), stem_top, col, q * 0.06)
+	c.draw_line(stem_top, stem_top + Vector2(q * 0.18, q * 0.1), col, q * 0.06)
+	if not on:
+		c.draw_line(Vector2(q * 0.16, q * 0.86), Vector2(q * 0.84, q * 0.14), col, q * 0.08)
+
+
 func touch_ui() -> bool:
 	## Match feel (Daniele's phone screenshot, 2026-09-28: the dock's "1 / 2 / 3" on a phone): keyboard hints show only
 	## where there is a keyboard - not on a phone / tablet build, a --mobile run, nor a touch browser that reports
@@ -492,6 +525,8 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	status_label.position = Vector2((vp.x - status_label.size.x) / 2.0, m.y + top_panel.size.y + 2)
 	pause_button.size = pause_button.custom_minimum_size
 	pause_button.position = Vector2(vp.x - m.z - pause_button.size.x, m.y)
+	music_button.size = music_button.custom_minimum_size
+	music_button.position = Vector2(pause_button.position.x - 8.0 * ui_scale - music_button.size.x, pause_button.position.y)
 	side_panel.size = side_panel.get_combined_minimum_size()
 	var side_y := (vp.y - side_panel.size.y) / 2.0
 	var top_bottom := top_panel.position.y + top_panel.size.y + 34.0   # below the top bar and status line
@@ -551,7 +586,7 @@ func bottom_used() -> float:
 
 
 func pointer_over_ui(p: Vector2) -> bool:
-	for c in [top_panel, pause_button, side_panel, dock, debug_button, chat_button, monster_icon, spectate_button]:
+	for c in [top_panel, pause_button, music_button, side_panel, dock, debug_button, chat_button, monster_icon, spectate_button]:
 		if c and c.visible and c.get_global_rect().has_point(p):
 			return true
 	if debug_panel and debug_panel.visible and debug_panel.get_global_rect().has_point(p):
@@ -1609,7 +1644,7 @@ func callout_blocked() -> Array:
 		var sw := status_label.get_theme_font("font").get_string_size(status_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
 				status_label.get_theme_font_size("font_size")).x + 24.0 * ui_scale
 		out.append(Rect2(vp.x * 0.5 - sw * 0.5, status_label.position.y - 3.0 * ui_scale, sw, status_label.size.y + 8.0 * ui_scale))   # (+ its pulse frame)
-	for c in [pause_button, side_panel, dock, dock.hint_panel if dock else null, debug_button, chat_button, spectate_button, monster_icon, map_title]:
+	for c in [pause_button, music_button, side_panel, dock, dock.hint_panel if dock else null, debug_button, chat_button, spectate_button, monster_icon, map_title]:
 		if c and (c as Control).is_visible_in_tree():
 			out.append((c as Control).get_global_rect())
 	if debug_panel and debug_panel.visible:
@@ -1898,7 +1933,7 @@ func _pause_settings() -> void:
 			"pairs": [["SOUND: " + ("ON" if Sfx.sound_on() else "OFF"), func(): Sfx.set_on(not Sfx.sound_on()); _pause_settings()],   # SOUND
 				["VOLUME: " + Sfx.volume_label(), func(): Sfx.set_volume(Sfx.next_volume()); _pause_settings()]],
 			"pairs2": [["MUSIC: " + ("ON" if Music.music_on() else "OFF"), func(): Music.set_on(not Music.music_on()); _pause_settings()],   # MUSIC
-				["MUSIC VOL: " + Music.volume_label(), func(): Music.set_volume(Music.next_volume()); _pause_settings()]]
+				["MATCH MUSIC: " + Music.volume_label(-1, "match"), func(): Music.set_volume(Music.next_volume("match"), "match"); _pause_settings()]]
 				+ ([["FULLSCREEN", FullscreenGate.request]] if FullscreenGate.available() else []),   # 0.22.3: the emergency way back
 																									# to fullscreen (web phones), same action as the menu's;
 																									# in the MUSIC row so the card grows no taller
@@ -2073,7 +2108,7 @@ func _layout_badges(cam: Camera3D) -> void:
 	var placed := []                                      # [centre, radius]
 	var down := Vector2(0, 1)
 	var blocked := [Rect2(0, 0, vp.x, top_used()), Rect2(0, vp.y - bottom_used(), vp.x, bottom_used())]
-	for c in [side_panel, pause_button, debug_button, chat_button, dock]:   # Alpha 18: never under the HUD
+	for c in [side_panel, pause_button, music_button, debug_button, chat_button, dock]:   # Alpha 18: never under the HUD
 		if c and c.visible:
 			blocked.append((c as Control).get_global_rect().grow(4.0))
 	for n in sim.nodes:
