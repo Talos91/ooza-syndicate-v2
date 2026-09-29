@@ -29,8 +29,19 @@ const RELAY_CUE_MAX := 3               # only the first few times (Daniele's ask
 const RELAY_CUE_SECONDS := 4.0
 
 
-const HALO_WIDTH := [0.0, 3.0, 5.0, 7.0]   # 0.20.13: a touch thicker at tier 1 - it used to read as barely there
-const HALO_PAD := [0.0, 4.0, 10.0, 17.0]
+const HALO_RING_WIDTH := 3.0          # 0.22.4: one thin, clean ring width at every tier (no more "fatter = tier" blob)
+const HALO_BASE_PAD := 6.0            # ring radius past the node's rim
+const HALO_RING_GAP := 6.0            # radius step between stacked seats' rings on the same node
+const HALO_SEGMENT_GAP := 0.35        # rad, gap left between a ring's bright segments
+const HALO_SEGMENT_ALPHA := 0.95
+const HALO_BACKDROP_ALPHA := 0.22     # the faint full ring under the segments
+const HALO_SPIN := 0.5                # rad/s the segments slowly turn (reads as "alive", not static)
+
+const UPGRADE_ARROW_W := 11.0         # 0.22.4 playtest: the upgrade-ready chevron over the human's own badges
+const UPGRADE_ARROW_H := 13.0
+const UPGRADE_ARROW_GAP := 7.0        # past the node's rim
+const UPGRADE_ARROW_BOB := 3.0        # px it gently bobs
+const UPGRADE_ARROW_SPEED := 2.4      # rad/s of the bob/pulse
 
 
 func setup(m: Node3D, s: Sim, h: Hud, seat: String, scale_ui: float) -> void:
@@ -76,6 +87,8 @@ func _draws_something() -> bool:
 			continue
 		if not (n.get("allies", {}) as Dictionary).is_empty() or sim.is_warned(n["id"]):
 			return true
+		if n["owner"] == human and _upgrade_ready(n["id"]):
+			return true
 		if n["relay"] != "" and (n["relay_phase"] == "warning" or (n["owner"] == human and n["relay_cd"] <= 0.0) 				or float(_relay_cue_t.get(n["id"], 0.0)) > 0.0):
 			return true
 	return false
@@ -102,6 +115,8 @@ func _draw() -> void:
 	# (TUTORIAL: each part draws once its lesson is reached - Hud.shows(); outside the tutorial, always)
 	if hud.shows("halos"):
 		_draw_halos(cam)
+	if hud.shows("upgrade_arrow"):
+		_draw_upgrade_arrows(cam)
 	if hud.shows("relay"):
 		_draw_relay_cues(cam)
 	if hud.shows("monster"):
@@ -155,8 +170,12 @@ func _label(at: Vector2, txt: String, col: Color, size_px: int) -> void:
 func _draw_halos(cam: Camera3D) -> void:
 	## 0.20.13 (Daniele's 2v2 co-op playtest: "i sent troops to her node and except the count going up i
 	## couldn't see any other indicator"): one ring per seat with troops stored here, each in THAT seat's
-	## own colour (a single fixed gold ring never said whose troops they were, and read as barely there
-	## at tier 1) - stacked outward so more than one ally's rings don't just merge into one blob.
+	## own colour - stacked outward so more than one ally's rings don't merge into one blob.
+	## 0.22.4 playtest redesign (Daniele: "a nicer ally halo"): the old ring grew THICKER with tier, which
+	## at tier 3 read as a fat glowing blob rather than a ring. Now every tier draws the same thin, clean
+	## ring (HALO_RING_WIDTH) plus a faint full backdrop so it still reads at a glance; the tier shows as
+	## the number of bright segments round it (1 / 2 / 3), slowly turning - readable at phone size without
+	## the "more troops = bigger smear" look.
 	for n in sim.nodes:
 		var id: int = n["id"]
 		if sim.collapsed.get(id, false):
@@ -170,9 +189,50 @@ func _draw_halos(cam: Camera3D) -> void:
 			var tier := sim.halo_tier(id, str(seat))
 			if tier <= 0:
 				continue
-			draw_arc(ns[0], float(ns[1]) + (HALO_PAD[tier] + ring * 5.0) * ui_scale, 0.0, TAU, 40,
-					Color(Rules.seat_color(str(seat)), 0.85), HALO_WIDTH[tier] * ui_scale, true)
+			var r := float(ns[1]) + (HALO_BASE_PAD + ring * HALO_RING_GAP) * ui_scale
+			_draw_halo_ring(ns[0], r, Rules.seat_color(str(seat)), tier)
 			ring += 1
+
+
+func _draw_halo_ring(c: Vector2, r: float, col: Color, tier: int) -> void:
+	var w := HALO_RING_WIDTH * ui_scale
+	draw_arc(c, r, 0.0, TAU, 40, Color(col, HALO_BACKDROP_ALPHA), w, true)   # a faint full ring (always reads)
+	var seg_len := TAU / float(tier) - HALO_SEGMENT_GAP
+	for i in range(tier):                              # tier bright segments, slowly turning round the ring
+		var start := _t * HALO_SPIN + i * (TAU / float(tier))
+		draw_arc(c, r, start, start + seg_len, 20, Color(col, HALO_SEGMENT_ALPHA), w, true)
+
+
+# ------------------------------------------------------------------ upgrade-ready arrow (playtest 2026-09-28,
+# Daniele's cousins: "how do I know when I can upgrade?"): a small pulsing chevron over the badge of any of the
+# human's own nodes that can go up a tier RIGHT NOW - enough units, not mid-construction (Sim.can_upgrade already
+# refuses both), and not under attack (Sim.node_under_attack). It hides itself the moment any of that stops being
+# true: the inspector opening on that node, or the upgrade starting, both make can_upgrade refuse next frame.
+func _upgrade_ready(id: int) -> bool:
+	if sim.collapsed.get(id, false) or hud.inspector_id == id:
+		return false
+	var n: Dictionary = sim.nodes[id]
+	if n["owner"] != human:
+		return false
+	return sim.can_upgrade(id, human) == "" and not sim.node_under_attack(id, human)
+
+
+func _draw_upgrade_arrows(cam: Camera3D) -> void:
+	for n in sim.nodes:
+		var id: int = n["id"]
+		if n["owner"] != human or not _upgrade_ready(id):
+			continue
+		var ns := _node_screen(id, cam)
+		var k := 0.5 + 0.5 * sin(_t * UPGRADE_ARROW_SPEED + float(id))
+		var bob := UPGRADE_ARROW_BOB * ui_scale * k
+		var a := 0.55 + 0.45 * k
+		var top: Vector2 = ns[0] + Vector2(0.0, -float(ns[1]) - UPGRADE_ARROW_GAP * ui_scale - bob)
+		var w := UPGRADE_ARROW_W * ui_scale
+		var h := UPGRADE_ARROW_H * ui_scale
+		var col := Rules.state_color("build")           # the same gold the build bar / cost line use
+		var pts := PackedVector2Array([top + Vector2(0.0, -h), top + Vector2(-w * 0.5, 0.0), top + Vector2(w * 0.5, 0.0)])
+		draw_polygon(pts, PackedColorArray([Color(col, a)]))
+		draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[0]]), Color(0, 0, 0, 0.55 * a), 1.5 * ui_scale, true)
 
 
 # ------------------------------------------------------------------ relay badge cues (0.19.0, Daniele:

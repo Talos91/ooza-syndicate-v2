@@ -363,10 +363,10 @@ func _relay_beacon(n: Dictionary, entry: Dictionary, col: Color, phase: String) 
 		c = col.lerp(Color(0.35, 0.35, 0.4), 0.45)
 	mat.albedo_color = c
 	mat.emission = c
-	mat.emission_energy_multiplier = energy
-	if glyph.x < 0.0:
+	mat.emission_energy_multiplier = minf(energy, Rules.RELAY_GLYPH_EMISSION_MAX)   # 0.22.4: keep the state colour,
+	if glyph.x < 0.0:                                                              # never blow out to white at peak
 		glyph = Vector2(energy, alpha)
-	var ge := 0.6 + 0.12 * glyph.x
+	var ge := 0.6 + 0.12 * minf(glyph.x, Rules.RELAY_GLYPH_EMISSION_MAX)
 	Mats.label_look(label, Color(c.r * ge, c.g * ge, c.b * ge, glyph.y), 0.9 * glyph.y)
 	label.scale = Vector3.ONE * size
 	label.position = (b["top"] as Vector3) + Vector3(0, 0.25 * sin(sim.time * 1.3 + float(id)) if ready else 0.0, 0)
