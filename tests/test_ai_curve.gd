@@ -104,7 +104,7 @@ func _run() -> void:
 	# ---------------------------------------------------------------- the curve
 	var duel := MapPool.battlefield().filter(func(p):
 		var m := MapBuilder.load_map(p)
-		return m["seats"].has("1v1") and str(m["code"]).substr(0, 1) in ["B", "C", "S", "M"])
+		return m["seats"].has("1v1") and str(m["code"]).substr(0, 1) in (MapPool.POOL_GROUPS if not MapPool.POOL_GROUPS.is_empty() else ["B", "C", "S", "M"]))   # 0.23.0: the new duel maps
 	var games := duel.size() if cap <= 0 else mini(duel.size(), cap)
 	print("      curve on %d duel maps: %s" % [games, ", ".join(duel.slice(0, games).map(func(p): return p.get_file().substr(0, 4)))])
 	var wins := {}

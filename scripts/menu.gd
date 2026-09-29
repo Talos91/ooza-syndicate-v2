@@ -3575,7 +3575,7 @@ func _relay_kinds(m: Dictionary) -> String:
 func _modes_of(m: Dictionary) -> Array:
 	var out := []
 	for k in ["1v1", "2v2", "3v3", "2v2v2", "FFA3", "FFA4", "FFA5"]:
-		if m.get("seats", {}).has(k):
+		if m.get("seats", {}).has(k) and MapPool.mode_offered(str(m.get("code", "")), k):   # 0.23.0: a kept older map fills gaps only
 			out.append(k)
 	return out if not out.is_empty() else ["1v1"]
 

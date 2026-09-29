@@ -697,7 +697,7 @@ func _random_rematch_map() -> Dictionary:
 	for mp in MapPool.battlefield():
 		var m := pool_map(mp)                          # AUDIT FIX (B1): parsed once per session
 		var md := _rematch_mode_for(m, need)
-		if md != "":
+		if md != "" and MapPool.mode_offered(mp, md):  # 0.23.0: a kept older map only for a mode the new pool lacks
 			candidates.append({"map": mp, "mode": md})
 	if candidates.is_empty():                           # never happens (every map seats at least 1v1), but be safe
 		return {"map": map_path, "mode": mode}

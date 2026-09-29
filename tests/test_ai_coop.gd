@@ -105,7 +105,8 @@ func _run() -> void:
 	var cap := int(_arg("maps", "0"))
 	var pick := _arg("levels", "")                   # "all", or a comma list (a parallel run); default: CHECKED
 	var levels: Array = CHECKED if pick == "" else (Rules.AI_LEVELS.keys() if pick == "all" else Array(pick.split(",")))
-	var pool := MapPool.battlefield().filter(func(p): return MapBuilder.load_map(p)["seats"].has("2v2"))
+	# 0.23.0: teamwork is measured on every baked 2v2 map (the new pool has only 2 - too few for a win-rate band)
+	var pool := MapPool.all().filter(func(p): return not p.get_file().substr(0, 4) in MapPool.TUTORIAL_ONLY and MapBuilder.load_map(p)["seats"].has("2v2"))
 	_human_focus(pool)
 	var games := pool.size() if cap <= 0 else mini(pool.size(), cap)
 	print("      co-op on %d 2v2 maps: %s" % [games, ", ".join(pool.slice(0, games).map(func(p): return p.get_file().substr(0, 4)))])

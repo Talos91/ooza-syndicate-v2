@@ -604,7 +604,7 @@ func map_offers(path: String, m: String) -> bool:
 
 
 func maps_for(m: String) -> Array:
-	return MapPool.battlefield().filter(func(p): return map_offers(p, m))   # TUTORIAL: lesson maps never in a room
+	return MapPool.battlefield().filter(func(p): return map_offers(p, m) and MapPool.mode_offered(p, m))   # TUTORIAL: lesson maps never in a room; 0.23.0: kept older maps only fill modes the new pool lacks
 
 
 # ------------------------------------------------------------------ room lifecycle
@@ -641,7 +641,7 @@ func _start(host: bool, faction: String, code: String, create := false) -> Error
 	if host:
 		room_owner = 1
 		roster = {1: {"faction": faction, "slot": 0, "colour": colour, "loadout": loadout, "cosmetic": cosmetic, "name": own_name()}}
-		if not map_offers(map_path, mode) or not map_path in MapPool.battlefield():   # TUTORIAL: never a lesson map
+		if not map_offers(map_path, mode) or not map_path in MapPool.battlefield() or not MapPool.mode_offered(map_path, mode):   # TUTORIAL: never a lesson map
 			var pool := maps_for(mode)
 			if pool.is_empty():
 				mode = "1v1"

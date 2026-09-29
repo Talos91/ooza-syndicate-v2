@@ -56,8 +56,47 @@ const POOL_GROUPS: Array[String] = ["N"]
 static func battlefield() -> Array:
 	## all() minus TUTORIAL_ONLY, limited to POOL_GROUPS: what the player actually gets offered (02 BATTLEFIELD,
 	## REMATCH ON A RANDOM MAP) and what test_map_pool / test_ai_curve run their coverage over.
-	return all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY 			and (POOL_GROUPS.is_empty() or p.get_file().substr(0, 1) in POOL_GROUPS))
+	## 0.23.0: the new maps (POOL_GROUPS) are the pool for every mode they offer; a mode NO pooled map offers yet (the N maps are
+	## 1v1 / 2v2 only - FFA 3/4/5, 3v3, 2v2v2) keeps the older maps that offer it, so no mode disappears (conservative reading of
+	## Daniele's "replace current pool with the new ones"; OPEN-QUESTIONS). Cached: the map files don't change at run time.
+	if not _battlefield_cache.is_empty():
+		return _battlefield_cache
+	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY)
+	if POOL_GROUPS.is_empty():
+		_battlefield_cache = offered
+		return offered
+	var pooled := offered.filter(func(p): return p.get_file().substr(0, 1) in POOL_GROUPS)
+	var modes := {}
+	for p in pooled:
+		for m in (MapBuilder.load_map(p)["seats"] as Dictionary).keys():
+			modes[m] = true
+	_pooled_modes = modes
+	var fill := offered.filter(func(p):
+		if p.get_file().substr(0, 1) in POOL_GROUPS:
+			return false
+		for m in (MapBuilder.load_map(p)["seats"] as Dictionary).keys():
+			if not modes.has(m):
+				return true
+		return false)
+	_battlefield_cache = pooled + fill
+	return _battlefield_cache
 
+
+static var _battlefield_cache: Array = []
+static var _pooled_modes: Dictionary = {}              # the modes the new pool (POOL_GROUPS) offers
+
+
+static func mode_offered(code_or_path: String, mode: String) -> bool:
+	## 0.23.0: may this map be played in `mode`? A pooled (new) map: every mode it seats. A kept older map: only the modes the
+	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps).
+	if POOL_GROUPS.is_empty():
+		return true
+	var c := code_or_path.get_file().substr(0, 1)
+	if c in POOL_GROUPS:
+		return true
+	if _pooled_modes.is_empty():
+		battlefield()
+	return not _pooled_modes.has(mode)
 
 static func phone_screen(mobile: bool) -> bool:
 	## A phone rather than a tablet: the phone profile on a screen whose short side is under 600 CSS px
