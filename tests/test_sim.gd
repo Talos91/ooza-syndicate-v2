@@ -1017,6 +1017,7 @@ func _init() -> void:
 	_dock_tests()
 	_rules_0_18_10()
 	_ls_pacing()
+	_ls_wave()
 	_audit_fixes()
 	_powers_tests()
 	_ai_relays(mr, seats_r)
@@ -1252,8 +1253,8 @@ func _ls_run(path: String) -> Sim:
 
 
 func _ls_pacing() -> void:
-	check(Rules.LAST_STAND_DROP_GAP_MAX == 20.0 and Rules.LAST_STAND_DROP_GAP_MIN == 8.0 and Rules.LAST_STAND_DROP_GAP == 5.0,
-			"ring drop gap: adaptive 8-20 s (the old 5 s constant stays for the tutorial)")
+	check(Rules.LAST_STAND_DROP_GAP_MAX == 20.0 and Rules.LAST_STAND_DROP_GAP_MIN == 6.0 and Rules.LAST_STAND_DROP_GAP == 5.0,
+			"ring drop gap: adaptive 6-20 s (6 s min since 0.22.5, Daniele; the old 5 s constant stays for the tutorial)")
 	for c in [["res://maps4/M-03-drift-belt.json", "small"], ["res://maps4/M-09-shard-archipelago.json", "big"]]:
 		var path: String = c[0]
 		var m := MapBuilder.load_map(path)
@@ -1268,7 +1269,7 @@ func _ls_pacing() -> void:
 			_ls_check(s0, c[1])
 		else:
 			_ls_check(_ls_run(path), c[1])
-	check(Sim._fit_gap([range(30), range(30)], 180.0) == Rules.LAST_STAND_DROP_GAP_MIN, "a huge collapse never drops faster than 8 s (the rest goes to the Very Last Stand)")
+	check(Sim._fit_gap([range(30), range(30)], 180.0) == Rules.LAST_STAND_DROP_GAP_MIN, "a huge collapse never drops faster than 6 s (the rest goes to the Very Last Stand)")
 	var so := Sim.new()
 	var mo := MapBuilder.load_map("res://maps4/M-03-drift-belt.json")
 	var so_seats := {}
@@ -1293,12 +1294,120 @@ func _ls_pacing() -> void:
 	check(se.hordes.any(func(h): return h["route"][0] == late), "...and evacuates it once its drop is near")
 
 
+# ------------------------------------------------------------------ 0.22.3: THE WAVE - a dropped node's decks break outward
+# (Daniele, 2026-09-29: "bridges don't fall all at the same time but starting from the node ... as if in a wave ... every
+# 1/2 sec ... gives a few sec more for troops to reach the end and not all instantly die") + the win rule (no nodes AND no
+# troops; 7:00 decides)
+func _ls_wave() -> void:
+	check(Rules.LAST_STAND_WAVE_STEP == 0.5 and Rules.LAST_STAND_WAVE_SEGMENT == 2.0
+			and Rules.LAST_STAND_WAVE_SEGMENT / Rules.LAST_STAND_WAVE_STEP < Rules.BRAWL_SPEED,
+			"the wave: a 2 m segment every 0.5 s (4 m/s) - slower than a line, so a line walking away outruns it")
+	# a line walking AWAY from the dropped node: only what stood on the platform falls; the deck part walks on and
+	# reaches the far pier (B keeps its line - and captures with it)
+	var s := _tp()
+	s.nodes[4]["units"] = 40.0
+	s.nodes[2]["units"] = 0.0                          # (an empty neutral ahead: the survivors capture it)
+	var ha := s.send(4, 2, 1.0)                        # 40 units = a 4.8 m line: whole on the deck once 7.5 m in
+	var ei_away: int = ha["spans"][0]["edge"]
+	run_until(s, func(): return not ha["streaming"] and ha["s"] > ha["spans"][0]["s0"] + 7.5, 20.0)
+	var units_before: float = ha["units"]
+	s._drop_node(4)
+	check(s.breaking.has(ei_away) and s.is_edge_open(ei_away) and s.breaking[ei_away]["a" if s.edges[ei_away]["a"] == 4 else "b"] == Rules.LAST_STAND_WAVE_SEGMENT,
+			"the drop starts the deck breaking from the node's end: one segment gone with the platform, the deck still walkable")
+	var deck_len: float = s.breaking[ei_away]["L"]
+	var fell0: float = s.fall_losses.get("B", 0.0)
+	check(ha in s.hordes and ha["units"] > units_before * 0.5, "the line on the deck is not cut at the drop (%.0f of %.0f left)" % [ha["units"], units_before])
+	var t_gone := run_until(s, func(): return not s.breaking.has(ei_away), 30.0)
+	var want_gone: float = (ceilf(deck_len / Rules.LAST_STAND_WAVE_SEGMENT) - 1.0) * Rules.LAST_STAND_WAVE_STEP
+	check(absf(t_gone - want_gone) <= 0.11 and not s.is_edge_open(ei_away),
+			"the deck (%.1f m) is gone after %.2f s (%d segments, expected %.2f s), closed from then on" % [deck_len, t_gone, ceili(deck_len / Rules.LAST_STAND_WAVE_SEGMENT), want_gone])
+	check((ha in s.hordes or s.nodes[2]["owner"] == "B") and s.fall_losses.get("B", 0.0) == fell0,
+			"a line walking away outran the break: nothing more of it fell (B lost %.0f, all on the platform)" % fell0)
+	run_until(s, func(): return s.nodes[2]["owner"] == "B", 20.0)
+	check(s.nodes[2]["owner"] == "B" and not s.eliminated.has("B") and not s.over, "...it reached the far pier and captured (B lives on with a node)")
+	# a line walking TOWARD the dropped node meets the break and falls segment by segment, not at once
+	var sw := _tp()
+	sw.nodes[3]["units"] = 40.0
+	var hw := sw.send(3, 1, 1.0)
+	var ei_to: int = hw["spans"][0]["edge"]
+	run_until(sw, func(): return not hw["streaming"] and hw["s"] > hw["spans"][0]["s0"] + 2.0, 20.0)
+	var u0: float = hw["units"]
+	check(u0 > 30.0 and hw["s"] < hw["spans"][0]["s1"] - 5.0, "(a %.0f-unit line on the deck toward node 1, %.1f m from its far end)" % [u0, hw["spans"][0]["s1"] - hw["s"]])
+	sw._drop_node(1)
+	sw.step(0.05)
+	var f1: float = sw.fall_losses.get("A", 0.0)
+	check(hw in sw.hordes and f1 < u0 * 0.5 and sw.is_edge_open(ei_to), "toward the node: the line is still there after the drop (%.0f fell of %.0f)" % [f1, u0])
+	var f_steps := []
+	while sw.breaking.has(ei_to) and hw in sw.hordes:
+		sw.step(0.05)
+		f_steps.append(sw.fall_losses.get("A", 0.0))
+	var grew := 0
+	for k in range(1, f_steps.size()):
+		if f_steps[k] > f_steps[k - 1] + 0.01:
+			grew += 1
+	check(grew >= 2 and sw.fall_losses.get("A", 0.0) > f1, "...and falls off the advancing break over several steps (%d rises, %.0f fell)" % [grew, sw.fall_losses.get("A", 0.0)])
+	run_until(sw, func(): return not (hw in sw.hordes), 30.0)
+	check(not (hw in sw.hordes) and sw.fall_losses.get("A", 0.0) >= u0 - 1.0, "nothing of it crossed: all %.0f fell (%.0f)" % [u0, sw.fall_losses.get("A", 0.0)])
+	# a deck whose both ends dropped breaks from both ends and goes in half the time
+	var sb := _tp()
+	var ei_mid: int = sb._edge_index(1, 0)
+	sb._drop_node(1)
+	sb.step(0.05)
+	sb._drop_node(0)
+	var rec: Dictionary = sb.breaking[ei_mid]
+	check(rec["fa"] and rec["fb"] and rec["a"] > 0.0 and rec["b"] > 0.0, "a deck between two dropped nodes breaks from both ends")
+	var t_both := run_until(sb, func(): return not sb.breaking.has(ei_mid), 30.0)
+	check(t_both < want_gone * 0.75, "...and is gone sooner (%.2f s)" % t_both)
+	# a relay deck or plaza link goes the same way (v3: the first queued platform's open decks all start breaking)
+	var sv := _ls_run("res://maps4/M-03-drift-belt.json")
+	var first: int = -1
+	for id in sv.last_stand_queue:                     # (a queued platform that is nobody's only node)
+		if not (id in sv.homes.values()):
+			first = id
+			break
+	var open_decks := []
+	for link in sv.adj[first]:
+		if sv.is_edge_open(link[1]):
+			open_decks.append(link[1])
+	sv._drop_node(first)
+	check(not open_decks.is_empty() and open_decks.all(func(i): return sv.breaking.has(i) and sv.is_edge_open(i)),
+			"maps 3.0: every deck the dropped platform had breaks outward (%d decks)" % open_decks.size())
+	var events_break: int = sv.fx_events.filter(func(e): return e["type"] == "deck_break").size()
+	check(events_break == open_decks.size(), "one deck_break fx per deck for the first segment (the view drops the modules the break passed)")
+	var t_v3 := run_until(sv, func(): return open_decks.all(func(i): return not sv.breaking.has(i)), 30.0)
+	check(open_decks.all(func(i): return not sv.is_edge_open(i)) and sv.events.filter(func(e): return e["type"] == "deck_gone").size() >= open_decks.size(),
+			"...each is closed once its wave reaches the far pier (%.2f s; over=%s; %s)" % [t_v3, sv.over, str(open_decks.map(func(i): return [i, sv.is_edge_open(i), sv.breaking.get(i, {})]))])
+	# WIN RULE: no elimination while a line is in flight; out once no nodes AND no troops; 7:00 decides regardless
+	var se := _tp()
+	se.nodes[4]["units"] = 40.0
+	se.nodes[2]["units"] = 0.0
+	var he := se.send(4, 2, 1.0)
+	run_until(se, func(): return not he["streaming"] and he["s"] > he["spans"][0]["s0"] + 7.5, 20.0)
+	se._drop_node(4)
+	se.step(0.05)
+	check(he in se.hordes and not se.eliminated.has("B") and not se.over, "B's last platform fell under its line - the line in flight keeps B in (no auto-loss)")
+	se.nodes[2]["units"] = 500.0                        # a wall: the line dies on the far platform
+	run_until(se, func(): return not (he in se.hordes), 40.0)
+	se.step(0.05)
+	check(not (he in se.hordes) and se.eliminated.has("B") and se.over and se.winner == "A", "no nodes AND no troops: B is out, A wins (%s)" % se.winner)
+	var s7 := _tp()
+	s7.nodes[4]["units"] = 100.0
+	var h7 := s7.send(4, 2, 1.0)
+	run_until(s7, func(): return not h7["streaming"] and h7["s"] > h7["spans"][0]["s0"] + 3.0, 20.0)
+	for id in [0, 1, 2, 3]:
+		s7.collapsed[id] = true
+	s7.nodes[4]["owner"] = "A"
+	s7.time = Rules.MATCH_HARD_END - 0.01
+	s7.step(0.05)
+	check(s7.over and s7.winner == "A" and not s7.eliminated.has("B"), "7:00 with B's line still walking: the last platform's owner decides (A), no elimination needed")
+
+
 func _ls_check(s: Sim, tag: String) -> void:
 	var g: float = s.last_stand_gap
 	if tag == "small":
 		check(g == Rules.LAST_STAND_DROP_GAP_MAX, "small map: the ring drops a platform every 20 s (%.1f)" % g)
 	else:
-		check(g < Rules.LAST_STAND_DROP_GAP_MAX and g >= Rules.LAST_STAND_DROP_GAP_MIN, "big map: a shorter gap, never under 8 s (%.1f)" % g)
+		check(g < Rules.LAST_STAND_DROP_GAP_MAX and g >= Rules.LAST_STAND_DROP_GAP_MIN, "big map: a shorter gap, never under 6 s (%.1f)" % g)
 	# countdowns: every queued platform's drop_in matches when it really falls
 	var want := {}
 	for k in range(s.last_stand_queue.size()):
@@ -1325,7 +1434,7 @@ func _ls_check(s: Sim, tag: String) -> void:
 		# minimum gap (Daniele: never faster than 8 s; "the rest goes to the Very Last Stand") - it then runs on past 6:00 at
 		# that gap while the Very Last Stand takes its own picks in between, and still ends well before the hard end.
 		check(ring_end > 0.0 and (ring_end < Rules.VERY_LAST_STAND_TIME or g == Rules.LAST_STAND_DROP_GAP_MIN) and ring_end < Rules.MATCH_HARD_END - 20.0,
-				"big map: the ring collapse ends before the Very Last Stand, or at the 8 s minimum gap it runs on past it (ended %.0f s)" % ring_end)
+				"big map: the ring collapse ends before the Very Last Stand, or at the 6 s minimum gap it runs on past it (ended %.0f s)" % ring_end)
 	check(islands_ok, "%s map: nothing is ever left cut off" % tag)
 
 

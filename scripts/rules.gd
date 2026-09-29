@@ -293,10 +293,20 @@ const LAST_STAND_FIT_SPARE := 3.0    # s of slack the adaptive ring gap keeps be
 # warning and drops end before the Very Last Stand (VERY_LAST_STAND_TIME). If even _MIN can't fit, _MIN it is and
 # the leftovers go to the Very Last Stand.
 const LAST_STAND_DROP_GAP_MAX := 20.0
-const LAST_STAND_DROP_GAP_MIN := 8.0
+const LAST_STAND_DROP_GAP_MIN := 6.0    # Daniele (2026-09-29, Decisions "ls-big-maps = gap6"): 6 s so big maps' ring collapse fits the 4:00-6:00 window (was 8)
 const LAST_STAND_DROP_GAP := 5.0     # the old fixed ring gap - no longer the rule (see Sim.last_stand_gap); the
                                      # tutorial's staged Very Last Stand (tutorial.gd vls_gap "warning+gap") reads it
 const MATCH_HARD_END := 420.0        # 7:00 end: the side owning the Very Last Stand's last platform wins (Sim._force_end)
+# THE WAVE (Daniele, 2026-09-29: "when a node drops sockets and bridges don't fall all at the same time but starting from
+# the node ... they break as if in a wave starting from the node every 1/2 sec (I let you decide) so gives a few sec more
+# for troops to reach the end and not all instantly die"): a dropped platform goes at once (its garrison and stored
+# troops with it); every deck on it then breaks OUTWARD from that end, one segment every LAST_STAND_WAVE_STEP s (the
+# first with the platform), LAST_STAND_WAVE_SEGMENT m per segment (Sim.breaking / _step_breaks). Bodies fall only
+# when THEIR segment breaks. 2 m every 0.5 s = 4 m/s, slower than a line (BRAWL_SPEED 5.7 m/s): a line walking away
+# from the node always outruns the break and is safe once past the far pier; one walking toward the node meets the
+# break and pours off it segment by segment. A deck whose both ends dropped breaks from both ends.
+const LAST_STAND_WAVE_STEP := 0.5
+const LAST_STAND_WAVE_SEGMENT := 2.0   # half a kit module (S); the view drops a module once the break passes its middle
 # 7:00 DRAW (Daniele, 2026-09-27: "I d say DRAW and we say something funny ... for no one to have it means they
 # didn t even tried ... we can kinda call them out"): a still-neutral last platform is a draw with one of these
 # call-out lines (picked by the match seed; Sim.draw_line, the {"type": "draw", "line"} event).

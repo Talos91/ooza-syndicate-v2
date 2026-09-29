@@ -299,6 +299,19 @@ func _run() -> void:
 			"the guest's drop queue and per-platform countdowns are the host's corner-cycle order")
 	check(ls_host.nearest_corner(ls_host.last_stand_queue[0]) != ls_host.nearest_corner(ls_host.last_stand_queue[1]),
 			"the ring's first two drops lie near different starting corners")
+	# 0.22.3 THE WAVE: a dropped platform's decks break outward over a few steps - the guest learns the break progress
+	# from the snapshot's additive "breaking" field, so its is_edge_open (walkable until gone) matches the host's
+	var ls_drop: int = ls_host.last_stand_queue[0]
+	ls_host._drop_node(ls_drop)
+	ls_host.step(0.05)
+	var ls_decks: Array = (ls_host.adj[ls_drop] as Array).map(func(l): return l[1])
+	var ls_wire2: PackedByteArray = var_to_bytes(host.snapshot(ls_host, false))
+	host.apply_snapshot(ls_guest, bytes_to_var(ls_wire2))
+	check(not ls_host.breaking.is_empty() and ls_guest.breaking == ls_host.breaking
+			and ls_decks.all(func(i): return ls_guest.is_edge_open(i) == ls_host.is_edge_open(i)),
+			"the guest's breaking decks (%d) and their walkability follow the host's snapshot" % ls_host.breaking.size())
+	var ls_bytes: int = ls_wire2.size()
+	check(ls_bytes < 40000, "(the lean snapshot with the wave stays small: %d bytes)" % ls_bytes)
 	# a forge built on the host plays the guest's forge pulse from the snapshots alone (ForgePulse, view only)
 	var fp := ForgePulse.new()
 	root.add_child(fp)

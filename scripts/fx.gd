@@ -28,6 +28,7 @@ var _edge_light := {}       # edge -> owner key currently applied
 var _state_color := {}      # node id -> state key applied
 var _beacons := {}          # relay node id -> {label, mat, top}: the relay's big symbol and its own light material
 var _collapsed := {}
+var _break_per := {}         # THE WAVE (0.22.3): edge -> fall pieces per module while its deck breaks (_deck_break)
 var _lights_classic := false  # the mode the deck lights were last laid out for (true = BRAWL)
 var _pulses: Array = []     # transient rings: {mesh, t, dur, color}
 var _frag_names := ["girder_l", "girder_r", "plate_a", "plate_b", "plate_c", "truss"]
@@ -100,6 +101,8 @@ func handle(ev: Dictionary) -> void:
 			_fling_horde(ev)
 		"collapse":
 			_collapse(ev["node"], str(ev.get("from", "")))
+		"deck_break":
+			_deck_break(int(ev["edge"]), int(ev["node"]), float(ev["to"]), bool(ev.get("done", false)))
 
 
 func _pulse(pos: Vector3, color: Color, radius: float, dur: float) -> void:
@@ -916,16 +919,15 @@ func _collapse(node_id: int, from := "") -> void:
 				(g as Node3D).visible = false
 			if vis["conduits"].has(i):
 				(vis["conduits"][i] as Node3D).visible = false
-			for d in vis["edge_decks"][i]:
-				var deck := d as Node3D
+			if sim.breaking.has(i):                        # THE WAVE (0.22.3): the deck breaks outward from this
+				_break_per[i] = per                        # end, module by module (_deck_break events follow)
+				continue
+			for d in vis["edge_decks"][i]:                 # (a deck already gone with its other end, or a late
+				var deck := d as Node3D                    # join's catch-up: it falls whole, as before)
 				if not deck.visible:
 					continue
 				deck.visible = false
-				for k in range(per):                       # the module breaks into its fall pieces
-					var frag: String = _frag_names[floori(float(k * _frag_names.size()) / per)]
-					var piece := MapBuilder.put(world, "Deck_S_Frag_" + frag, deck.position, deck.rotation.y, deck.scale.x)
-					falling.append(piece)
-					frags.append(piece)
+				_deck_frags(deck, per, falling, frags)
 	falling.append_array(_goo.falling(node_id))       # TERRITORY: GOO - the goo drops with its platform and decks
 	for pid in vis.get("plazas", {}):                  # maps 3.0: a plaza goes when its last socket goes
 		var pz: Dictionary = vis["plazas"][pid]
@@ -935,6 +937,21 @@ func _collapse(node_id: int, from := "") -> void:
 	wf.amount = 220
 	wf.position = n["pos"] + Vector3(0, 0.2, 0)
 	add_child(wf)
+	_fall_pieces(falling, frags)
+
+
+func _deck_frags(deck: Node3D, per: int, falling: Array, frags: Array) -> void:
+	## A deck module breaks into `per` of the kit's fall pieces, laid where it was.
+	for k in range(per):
+		var frag: String = _frag_names[floori(float(k * _frag_names.size()) / per)]
+		var piece := MapBuilder.put(world, "Deck_S_Frag_" + frag, deck.position, deck.rotation.y, deck.scale.x)
+		falling.append(piece)
+		frags.append(piece)
+
+
+func _fall_pieces(falling: Array, frags: Array) -> void:
+	## The Last Stand fall: every piece tumbles 26 m down over 1.5 s (a little staggered), then hides; the
+	## fragments made for it are freed (the map's own pieces stay, hidden: vis still holds them).
 	MapBatch.release(falling)                          # Alpha 21: batched pieces and merged neon draw themselves to fall
 	_neon_merge.release(falling)
 	var tw := create_tween()
@@ -951,9 +968,44 @@ func _collapse(node_id: int, from := "") -> void:
 		for p in falling:
 			if is_instance_valid(p):
 				(p as Node3D).visible = false
-		for p in frags:                                # (the map's own pieces stay, hidden: vis still holds them)
+		for p in frags:
 			if is_instance_valid(p):
 				(p as Node).queue_free())
+
+
+func _deck_break(ei: int, node_id: int, to: float, done: bool) -> void:
+	## THE WAVE (0.22.3, Daniele: "they break as if in a wave starting from the node every 1/2 sec"): the sim's
+	## break on deck ei has reached `to` m from node_id's rim exit - every module whose middle it passed drops
+	## now, breaking into fall pieces like the whole deck used to (bodies on it fell with the sim's segment).
+	## `done`: the ends met - whatever is left of the deck goes too.
+	if ei < 0 or ei >= sim.edges.size() or not vis["edge_decks"].has(ei):
+		return
+	var line := sim.deck_line(ei)
+	if line.is_empty():
+		return                                        # a plaza link has no deck to break
+	var e: Dictionary = sim.edges[ei]
+	var end_pt: Vector3 = line[0] if e["a"] == node_id else line[-1]
+	var far_pt: Vector3 = line[-1] if e["a"] == node_id else line[0]
+	var axis := (far_pt - end_pt)
+	axis.y = 0.0
+	axis = axis.normalized()
+	var falling := []
+	var frags := []
+	var per: int = _break_per.get(ei, 1)
+	for d in vis["edge_decks"][ei]:
+		var deck := d as Node3D
+		if not deck.visible:
+			continue
+		var centre: Vector3 = deck.position + deck.transform.basis.x * (Rules.S * 0.5)   # local +X runs along the deck (basis.x carries the stretch)
+		var dist := (centre - end_pt).dot(axis)
+		if not done and dist > to:
+			continue
+		deck.visible = false
+		_deck_frags(deck, per, falling, frags)
+	if done:
+		_break_per.erase(ei)
+	if not falling.is_empty():
+		_fall_pieces(falling, frags)
 
 
 # ------------------------------------------------------------------ neon: half-bridge trims, pier stripes, rims
