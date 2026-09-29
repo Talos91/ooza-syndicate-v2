@@ -814,7 +814,7 @@ const AI_LEVELS := {
 			"teamwork": 3, "focus": 16.0, "assist": 1.0, "sync": 6.0, "guard": 3, "guard_share": 0.4, "guard_ahead": 25.0,
 			"shortcut": 3.0},
 	"Expert": {"period": 1.3, "coordination": 2, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
-			"forecast": 0.75, "choice": 2, "invest": 12.0, "margin": 1.05, "relays": 3, "intel": 1,
+			"forecast": 0.9, "choice": 1, "invest": 12.0, "margin": 1.1, "relays": 3, "intel": 1,
 			"teamwork": 3, "focus": 18.0, "assist": 1.0, "sync": 8.0, "guard": 3, "guard_share": 0.35, "guard_ahead": 30.0,
 			"shortcut": 2.5},
 }
@@ -1247,7 +1247,7 @@ const MUSIC_DUCK_OUT := 0.8
 # [audio] music_on_v3 / music_volume_v2. First run: ON (0.23.0; OFF 0.22.2-0.22.4), 30 % (0.22.4, Daniele: "default volume needs to be toned down"; was 60).
 const MUSIC_VOLUME_STEPS := [15, 30, 60, 100]
 const MUSIC_VOLUME_DEFAULT := 30
-const MUSIC_ON_DEFAULT := true            # Daniele (2026-09-30): "music doesn't start until you press unmute" - ON again now it streams (0.22.2-0.22.4: OFF)
+const MUSIC_ON_DEFAULT := false           # Daniele (2026-09-30): "for 23 put default audio as OFF (I'm remaking all music; we know it's plugged)" - MUTE / SETTINGS turn it on
 const MUSIC_CREDIT := "Music: Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io)"
 # --- end MUSIC ---
 

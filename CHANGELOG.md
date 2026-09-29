@@ -8,10 +8,12 @@
   piece; a rotation / switch relay that keeps 2+ decks in every state holds its node to the map (a "hub") through the Last Stand.
 - **Camera 41°** (Daniele: "too low, raise of 20%"; was 34° in 0.22.4, 58° before).
 - **Online VERSUS**: the card now goes up the moment you press DEPLOY and the map loads under it (it showed for one frame after the load).
-- **Music ON by default** again (Daniele: "doesn't start until you press unmute"), and the web music has its own audio engine, apart from the
-  game's effects (Daniele: effects still silent on his phone).
+- **Music OFF by default** while the soundtrack is remade (Daniele); MUTE in the top bar or SETTINGS turns it on. The web music has its own
+  audio engine now, apart from the game's effects (Daniele: effects still silent on his phone).
 - **Upgrade-ready chip** in the UI's style (dark card, faction-accent frame, a double chevron), low on the platform beside the tower
   (Daniele: "not in line with the rest of our UI, too high over the tower").
+- **AI re-tuned on the new maps**: Expert attacks with Veteran's safety margin but picks targets and forecasts more sharply (Expert 80 % vs
+  Standard, Veteran 71 %, Expert beats Veteran 57 %); older maps are kept only for the modes the new maps lack (FFA 3 / 4 / 5, 3v3, 2v2v2).
 - Includes all of 0.22.4 (never promoted on its own): the 7 new powers, the Last Stand wave, the AI fixes, PROFILE tab, music controls, HUD items.
 
 ## 0.22.4 "Alpha 22" - 2026-09-30 (the rules release: 7 new powers, the Last Stand wave, a smarter AI, the 34° camera, PROFILE tab, music controls)

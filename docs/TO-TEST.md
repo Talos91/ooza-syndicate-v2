@@ -8,7 +8,7 @@ Live build: https://oozesyndicate.com
 ## 0.23.0 (the new maps + the 0.22.4 rules release, tested together)
 - [ ] **The 30 new maps** (N-01..N-30): play a few of each round (mirrored / curves / junctions); are the far platforms tappable at 41°?
 - [ ] **Sound effects** on the phone with MUSIC ON and OFF (the music now has its own audio engine).
-- [ ] **Music** starts by itself (no need to press unmute).
+- [ ] **Music** is OFF by default (you asked); the MUTE button turns it on at once.
 - [ ] **Online DEPLOY**: the VERSUS card appears at once and stays while the map loads.
 - [ ] **Upgrade chip**: does it look like our UI now, and sit right beside the tower?
 - [ ] Everything of 0.22.4 below.
