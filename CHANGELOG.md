@@ -1,5 +1,19 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.0 "Alpha 23" - 2026-09-30 (THE NEW MAPS, plus everything of 0.22.4 and Daniele's staging fixes)
+
+- **30 new maps** (🗺️ Map Builder, Daniele: "replace current pool with the new ones"): N-01..N-30 - round 1 mirrored, round 2 point-symmetric
+  with curves, round 3 junction-first (Hub6, X, K, T, Y, L, Fork pieces). They are the whole BRAWL pool now (random rematch, online rooms,
+  02 BATTLEFIELD); the older maps stay baked for the campaign placeholders and the tutorial. Junctions: a line never stops on a junction
+  piece; a rotation / switch relay that keeps 2+ decks in every state holds its node to the map (a "hub") through the Last Stand.
+- **Camera 41°** (Daniele: "too low, raise of 20%"; was 34° in 0.22.4, 58° before).
+- **Online VERSUS**: the card now goes up the moment you press DEPLOY and the map loads under it (it showed for one frame after the load).
+- **Music ON by default** again (Daniele: "doesn't start until you press unmute"), and the web music has its own audio engine, apart from the
+  game's effects (Daniele: effects still silent on his phone).
+- **Upgrade-ready chip** in the UI's style (dark card, faction-accent frame, a double chevron), low on the platform beside the tower
+  (Daniele: "not in line with the rest of our UI, too high over the tower").
+- Includes all of 0.22.4 (never promoted on its own): the 7 new powers, the Last Stand wave, the AI fixes, PROFILE tab, music controls, HUD items.
+
 ## 0.22.4 "Alpha 22" - 2026-09-30 (the rules release: 7 new powers, the Last Stand wave, a smarter AI, the 34° camera, PROFILE tab, music controls)
 
 - **7 new powers** (⚡ Powers; spec 01 Rules/NEW-POWERS-2026-09-28.md "As built"): QUAKE (every deck of a platform drops 6 s, 1.5 s warning),

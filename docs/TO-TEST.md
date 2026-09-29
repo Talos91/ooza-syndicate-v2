@@ -1,9 +1,17 @@
-# To test - ALPHA 22.4 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.0 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.0 (the new maps + the 0.22.4 rules release, tested together)
+- [ ] **The 30 new maps** (N-01..N-30): play a few of each round (mirrored / curves / junctions); are the far platforms tappable at 41°?
+- [ ] **Sound effects** on the phone with MUSIC ON and OFF (the music now has its own audio engine).
+- [ ] **Music** starts by itself (no need to press unmute).
+- [ ] **Online DEPLOY**: the VERSUS card appears at once and stays while the map loads.
+- [ ] **Upgrade chip**: does it look like our UI now, and sit right beside the tower?
+- [ ] Everything of 0.22.4 below.
 
 ## 0.22.4 (the rules release)
 - [ ] **New powers**: try each in ARMIES > SKILLS and in a match - QUAKE, SEVER, BACKWASH, SINKHOLE, FOG, PORTAL, EVAC; does each read clearly?
