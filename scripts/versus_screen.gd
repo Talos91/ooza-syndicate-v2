@@ -127,6 +127,15 @@ static func hold_online(m) -> bool:
 	return true
 
 
+static func warm_art(factions: Array) -> void:
+	## 0.23.3 (Daniele: "still freezes on deploy for like 3 sec, then the versus shows nicely"): the card's stage and creature
+	## images decode the first time they're drawn - seconds on a phone, with the lobby frozen meanwhile. The lobby calls this
+	## once it's on screen, so DEPLOY finds them in UiKit's texture cache.
+	for f in factions:
+		UiKit.stage(str(f))
+		UiKit.tex(UiKit.hero_path(str(f)))
+
+
 static func _net_node() -> Node:
 	## The Net autoload, looked up at run time: naming the global would make this script (and net.gd, which calls it) fail to
 	## compile in a --script test, where autoloads don't exist.

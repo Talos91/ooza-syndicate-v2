@@ -4127,8 +4127,17 @@ func _pick_faction(f: String) -> void:
 		show_online()
 
 
+var _versus_warmed := false
+
+
 func show_lobby() -> void:
 	_last_show = show_lobby                  # a resize that changes the phone sizing rebuilds it (_fit)
+	if not _versus_warmed:                   # 0.23.3: the VERSUS art decoded while the lobby sits, not on DEPLOY
+		_versus_warmed = true
+		var fs := [faction]
+		for id in Net.roster:
+			fs.append(str(Net.roster[id]["faction"]))
+		(func(): VersusScreen.warm_art(fs)).call_deferred()
 	## LOBBY (screen system 14; a PLAY subflow): the room code (SHARE CODE), CHAT with its unread count, MY ARMY; the seats
 	## in words - HOST / JOINED / YOU / RECONNECTING, OPEN SEAT, the AI - team by team with JOIN / MOVE in team modes (the
 	## host picks a player's row, then MOVE on a team); your faction and colour; the host's MATCH (map, PLAYERS, LAST
