@@ -1,5 +1,16 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.5 "Alpha 23" - 2026-09-30 (phone: DEPLOY still froze; sound OFF by default)
+
+- **DEPLOY on the phone** (Daniele on 0.23.4: sound works; "the versus wallpaper fires for a frame, the rest is freeze"): the map build itself
+  (`MapBuilder.build3`, every platform, housing, deck and pier) was still one block - fine on a desktop, seconds on a phone. It now draws a frame
+  whenever `Rules.STAGED_LOAD_FRAME_MS` of work has piled up (a `pace` callable per node and edge; `main._pace`), so the card keeps animating
+  through the whole build. The load trace (DEPLOY -> launch -> reload -> each build step, ms) now rides in the telemetry (`perf` /
+  `load_trace`) once the warm-up ends, so a phone's numbers can be read.
+- **Sound OFF by default** (Daniele: "default audio to muted even now that it works, both in game and music"): `Rules.SOUND_ON_DEFAULT` false, a
+  new settings key so every device starts muted; SETTINGS / MUTE turn it on and remember it. Music was already OFF by default.
+- Noted for the sound pass (Alpha 24): the game effects sound distorted on his phone (they will be replaced anyway).
+
 ## 0.23.4 "Alpha 23" - 2026-09-30 (phone sound, staged load)
 
 - **Game effects on phones** (Daniele hears the SOUND TEST beeps but never a game effect): the web build played effects through

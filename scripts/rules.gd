@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.23.4"
+const VERSION := "0.23.5"
 const VERSION_NAME := "Alpha 23"
 
 
@@ -1205,6 +1205,7 @@ const SOUND_MUSIC_BUS_DB := 0.0
 # Match feel: 30 % (-10.5 dB on the Sfx bus; the demo played at 50 %). A level the player already saved is kept.
 const SOUND_VOLUME_STEPS := [15, 30, 60, 100]
 const SOUND_VOLUME_DEFAULT := 30
+const SOUND_ON_DEFAULT := false           # Daniele (2026-09-30, 0.23.5): "default audio to muted even now that it works, both in game and music"
 # AUDIO DIAG (branch audio-diag; audio_diag.gd, web/audio-diag.js): SETTINGS > TEST SOUND plays the game's capture chime
 # through Sfx, then a raw beep on Godot's own AudioContext, then one on a fresh context, "gap_s" apart; the AUDIO readout
 # rides in the telemetry once per session "telemetry_after_s" into it (and once after the first TEST).

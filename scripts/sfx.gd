@@ -84,20 +84,20 @@ static func _load() -> void:
 	if _volume >= 0:
 		return
 	_volume = Rules.SOUND_VOLUME_DEFAULT
-	_on = true
+	_on = Rules.SOUND_ON_DEFAULT
 	var cf := ConfigFile.new()
 	if cf.load(path) == OK:
 		_volume = clampi(int(cf.get_value("audio", "volume", _volume)), 1, 100)
-		# 0.23.1 (Daniele: "sound effects still not working"): a new key, so SOUND starts ON again on every device - in 0.22.1
-		# SOUND OFF was the only switch that seemed to "mute" the lagging music, and that choice stayed saved since.
-		_on = bool(cf.get_value("audio", "on_v2", true))
+		# 0.23.5: a new key again, so SOUND starts OFF on every device (Rules.SOUND_ON_DEFAULT; Daniele: default muted even now
+		# that it works) - SETTINGS / MUTE turn it on and that choice is saved.
+		_on = bool(cf.get_value("audio", "on_v3", Rules.SOUND_ON_DEFAULT))
 
 
 static func _save() -> void:
 	var cf := ConfigFile.new()
 	cf.load(path)                                      # keep the other sections ([graphics], ...)
 	cf.set_value("audio", "volume", _volume)
-	cf.set_value("audio", "on_v2", _on)
+	cf.set_value("audio", "on_v3", _on)
 	cf.save(path)
 
 

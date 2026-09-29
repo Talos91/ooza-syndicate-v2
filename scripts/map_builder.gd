@@ -585,6 +585,14 @@ static func _mirror_mesh(src: Mesh) -> ArrayMesh:
 
 
 static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
+	## In one block. (build3_paced is a coroutine; through a Callable it returns the Dictionary at once when it never suspends,
+	## and the parser does not demand an await here.)
+	return Callable(MapBuilder, "build3_paced").call(parent, sim, map, Callable())
+
+
+static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callable) -> Dictionary:
+	## STAGED LOAD (0.23.5): pace is called before each node and each edge; main._pace draws a frame once a budget of work
+	## has piled up (the await only suspends when pace does).
 	var lay: Dictionary = map["layout"]
 	var vis := {"stretched": [], "edge_decks": {}, "edge_base": {}, "edge_piers": {}, "conduits": {}, "plazas": {}}
 	var glb_nodes := {}
@@ -607,6 +615,8 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 	rv.setup(sim)
 	vis["relay_view"] = rv
 	for n in sim.nodes:
+		if pace.is_valid():
+			await pace.call()
 		var id: int = n["id"]
 		var parts: Array = []
 		var relay: String = n["relay"]
@@ -646,6 +656,8 @@ static func build3(parent: Node3D, sim: Sim, map: Dictionary) -> Dictionary:
 		if not button.is_empty():
 			vis[id]["relay_button"] = button
 	for i in range(sim.edges.size()):
+		if pace.is_valid():
+			await pace.call()
 		var e: Dictionary = sim.edges[i]
 		if e["plaza"]:
 			vis["edge_decks"][i] = []

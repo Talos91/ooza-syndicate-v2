@@ -404,6 +404,7 @@ func _start_map(path: String) -> void:
 		if VersusScreen.hold_online(self):           # so the load happens under it instead of freezing the DEPLOY page
 			_staged = true                             # STAGED LOAD (0.23.4): the build below goes a step per frame under the card
 			load_progress = 0.0
+			_pace_us = Time.get_ticks_usec()
 			for i in range(Rules.VERSUS_ONLINE_PREDRAW_FRAMES):   # (no card - headless, a lesson, the server - no wait)
 				await get_tree().process_frame
 		_lm("card")
@@ -417,7 +418,12 @@ func _start_map(path: String) -> void:
 	if _staged:
 		_fit_camera()                                  # the whole map in view now: what each step reveals is drawn (and compiled)
 		await _staged_frame("build_world", 1)
-	vis = MapBuilder.build3(self, sim, map) if map.has("layout") else MapBuilder.build(self, sim)
+	if not map.has("layout"):
+		vis = MapBuilder.build(self, sim)
+	elif _staged:
+		vis = await MapBuilder.build3_paced(self, sim, map, Callable(self, "_pace"))
+	else:
+		vis = MapBuilder.build3(self, sim, map)
 	if _staged:                                        # the owners' lights now, so the map is first drawn as it will look
 		for n in sim.nodes:                            # (the same loop runs again below: idempotent)
 			MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
@@ -585,15 +591,7 @@ func _staged_frame(label: String, step: int) -> void:
 	## (process off: no view runs on a half-built world) and their meshes hidden, then revealed a few materials' worth per
 	## frame - each drawn frame compiles only the new shaders it shows (Rules.STAGED_LOAD_FRAME_MS adapts the pace).
 	_lm(label)
-	var fresh: Array[Node] = []
-	for c in get_children():
-		if _held_ids.has(c.get_instance_id()) or c is VersusScreen or c is PerfProfile or c is FullscreenGate:
-			continue
-		_held_ids[c.get_instance_id()] = true
-		fresh.append(c)
-		if c.process_mode == Node.PROCESS_MODE_INHERIT:
-			c.process_mode = Node.PROCESS_MODE_DISABLED
-			_held.append(c)
+	var fresh := _hold_fresh()
 	var groups := {}                                   # draw signature -> the meshes that share it
 	var order: Array = []
 	for c in fresh:
@@ -651,6 +649,34 @@ func _draw_sig(g: GeometryInstance3D) -> String:
 	return sig
 
 
+func _hold_fresh() -> Array[Node]:
+	## STAGED LOAD: the children added since the last call, held (process off: no view runs on a half-built world).
+	var fresh: Array[Node] = []
+	for c in get_children():
+		if _held_ids.has(c.get_instance_id()) or c is VersusScreen or c is PerfProfile or c is FullscreenGate:
+			continue
+		_held_ids[c.get_instance_id()] = true
+		fresh.append(c)
+		if c.process_mode == Node.PROCESS_MODE_INHERIT:
+			c.process_mode = Node.PROCESS_MODE_DISABLED
+			_held.append(c)
+	return fresh
+
+
+var _pace_us := 0                                     # STAGED LOAD: when the build last drew a frame (_pace)
+
+
+func _pace() -> void:
+	## STAGED LOAD (0.23.5, Daniele's phone on 0.23.4: "the versus wallpaper fires for a frame, the rest is freeze" - the map
+	## build was still one block there): MapBuilder.build3 calls this before each node and edge; once Rules.STAGED_LOAD_FRAME_MS
+	## of work has piled up, the pieces so far are held and a frame is drawn (the card animates, their shaders compile now).
+	if (Time.get_ticks_usec() - _pace_us) / 1000.0 < Rules.STAGED_LOAD_FRAME_MS:
+		return
+	_hold_fresh()
+	await get_tree().process_frame
+	_pace_us = Time.get_ticks_usec()
+
+
 func _release_held() -> void:
 	## STAGED LOAD: the world is whole - every held view processes again.
 	for c in _held:
@@ -663,6 +689,9 @@ func _lm(label: String) -> void:
 	## LOAD TRACE: a step of an online round's build (Net.load_marks; tests/staged_load_probe).
 	if online:
 		Net.load_mark(label)
+		if label == "warmup_done" and OS.has_feature("web") and not Net.dedicated:   # 0.23.5: the trace rides in the telemetry
+			Telemetry.event("perf", {"where": "load_trace", "time_s": snappedf(Time.get_ticks_msec() / 1000.0, 1.0),   # (Daniele's phone: which step froze?)
+					"extra": {"trace": Net.load_summary(), "map": str(map.get("code", "")), "staged": _staged}})
 
 
 func _start_online() -> void:
