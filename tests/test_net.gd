@@ -142,6 +142,16 @@ func _fake_main(s: Sim) -> Node3D:
 	return m
 
 
+func _versus_card(m: Node3D, n: Node) -> Node:
+	## ONLINE VERSUS: the card as main._start_online adds it (VersusScreen.hold_online), watching this test's Net.
+	var v: Node = load("res://scripts/versus_screen.gd").new()
+	v.main = m
+	v.online = true
+	v.net = n
+	root.add_child(v)                                # its _ready builds the card (headless: no draw)
+	return v
+
+
 func _run() -> void:
 	MapPool.dir = "res://maps"                     # the legacy roster offers every mode, whatever pack ships
 	# ---------------------------------------------------------------- lobby, every mode
@@ -209,11 +219,33 @@ func _run() -> void:
 			"rooms play BRAWL: the launch says so and no room control switches SIEGE on (deactivated, 0.18.7)")
 	var hs := _build_sim(info)
 	var gs := _build_sim(g.match_info)
-	host.world_ready(hs, _fake_main(hs))
+	# ONLINE VERSUS (0.22.3): the card is a loading screen on both ends - up from the launch, gone only once this
+	# client is loaded, the round runs and (a guest) the first snapshot is in, and VERSUS_ONLINE_MIN s have passed.
+	# (No frames run in this script: the frames drawn under the card and its clock are set by hand.)
+	var hm := _fake_main(hs)
+	var gm := _fake_main(gs)
+	gm.HUMAN = "B"
+	var vh := _versus_card(hm, host)
+	var vg := _versus_card(gm, g)
+	check(not vh.online_loaded() and vh.online_wait_text().begins_with("LOADING"), "VERSUS: up from the launch, loading the world first")
+	vh._frames = Rules.WARMUP_FRAMES + 2
+	vg._frames = Rules.WARMUP_FRAMES + 2
+	check(vh.online_loaded() and not vh.online_ready() and vh.online_wait_text().begins_with("WAITING FOR EVERY"),
+			"VERSUS: a loaded host waits for every player at the barrier")
+	host.world_ready(hs, hm)
 	check(not host.started, "host waits for every player to load")
 	g.world_ready(gs, null)
 	_deliver()
 	check(host.started and g.started, "everyone loaded: the round begins on both")
+	check(vh.online_ready() and not vh.online_done(), "VERSUS: the host's card is ready once the barrier passed, but stays VERSUS_ONLINE_MIN")
+	check(not vg.online_ready() and vg.online_wait_text().begins_with("WAITING FOR THE HOST"), "VERSUS: the guest's card waits for the first snapshot")
+	vg._go()
+	check(not vg._gone, "VERSUS: a tap before the guest is ready does nothing")
+	vh._t = Rules.VERSUS_ONLINE_MIN
+	check(vh.online_done(), "VERSUS: the host's card goes after VERSUS_ONLINE_MIN")
+	vh._go()
+	check(vh._gone, "VERSUS: the host's card is gone")
+	vh.free()
 	check(hs.nodes.size() == gs.nodes.size() and hs.homes == gs.homes, "both browsers built the same map")
 	check(hs.loadouts["B"] == {"active": "fortify", "map": "mire", "ultimate": Rules.FACTION_ULTIMATE_ID[info["players"]["B"]]} and hs.loadouts == gs.loadouts,
 			"host and guest set up the same loadouts (a missing one = the faction default)")
@@ -249,6 +281,16 @@ func _run() -> void:
 	host._broadcast_raw("state", wire)
 	_deliver()
 	check(gs.hordes.size() == 1 and gs.hordes[0]["owner"] == "B", "guest sees the host's horde")
+	check(vg.online_ready() and not vg.online_done(), "VERSUS: the guest's card is ready with the first snapshot in, still up under VERSUS_ONLINE_MIN")
+	vg._t = Rules.VERSUS_ONLINE_MIN
+	check(vg.online_done(), "VERSUS: the guest's card goes after VERSUS_ONLINE_MIN")
+	vg._go()
+	check(vg._gone, "VERSUS: the guest's card is gone")
+	vg.free()
+	var vx := _versus_card(_fake_main(gs), g)
+	vx._t = Rules.VERSUS_ONLINE_MAX
+	check(vx.online_done() and not vx.online_loaded(), "VERSUS: an unloaded card still goes at VERSUS_ONLINE_MAX (the HUD's waiting text takes over)")
+	vx.free()
 	check(absf(gs.hordes[0]["s"] - hs.hordes[0]["s"]) < 0.001 and absf(gs.time - hs.time) < 0.001, "guest line and clock match the host")
 	var same := true
 	for i in range(hs.nodes.size()):

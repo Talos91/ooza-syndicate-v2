@@ -5,10 +5,17 @@ extends CanvasLayer
 ## teams: every rival's faction, compact), VS between them, the map / mode / difficulty line, ENTER BATTLE. A tap
 ## anywhere, a key, or AUTO_SECONDS goes on. It sits over the freshly built match, which is held paused until then
 ## (hold_match / hold_mission), so the match's own set-up and clock are untouched - it only starts a moment later.
-## Never shown for online rooms, lessons, the dedicated host, headless runs or command-line match / screenshot runs
-## (wanted()); a RESTART / REMATCH relaunches straight into the match (main._ready -> _start_map), so it never slows
-## repeated play; a campaign RETRY (the same mission again, relaunched) skips it too. Canvas units like the menu's
-## shell pages (UiKit), >= 44 pt / 12.5 pt on phones.
+## Never shown for lessons, the dedicated host, headless runs or command-line match / screenshot runs (wanted());
+## a RESTART / REMATCH relaunches straight into the match (main._ready -> _start_map), so it never slows repeated
+## play; a campaign RETRY (the same mission again, relaunched) skips it too. Canvas units like the menu's shell
+## pages (UiKit), >= 44 pt / 12.5 pt on phones.
+## ONLINE (0.22.3, Daniele 2026-09-29: "every time you press DEPLOY you can see the map loading"): a room's round
+## shows the card too (hold_online, from main._start_online), as a loading screen: it covers the map build and the
+## warm-up and only goes once this client is loaded (Warmup gone, a few frames drawn), the round runs (Net.started:
+## the host's loading barrier passed) and - a guest - the first snapshot is in; at least Rules.VERSUS_ONLINE_MIN s,
+## at most Rules.VERSUS_ONLINE_MAX s (then the HUD's waiting text takes over). It never pauses or holds the match:
+## the host's clock and the barrier are untouched (the fairness rules stay). A tap / key before that does nothing;
+## the countdown line says what it waits for. Nothing runs once it has gone (it frees itself).
 
 signal finished
 
@@ -28,6 +35,9 @@ var _left := 0.0                                   # seconds before AUTO continu
 var _count: Label
 var _gone := false
 var _shot := ""
+var online := false                                # ONLINE: a room's round (hold_online) - a loading screen, not a hold
+var net: Node = null                               # ONLINE: the Net the card watches (the autoload; tests hand in theirs)
+var _frames := 0                                   # ONLINE: frames drawn under the card (the warm-up needs a few)
 
 
 # ------------------------------------------------------------------ when (main.gd's hooks)
@@ -54,6 +64,50 @@ static func hold_match(m) -> void:
 	v.main = m
 	v.finished.connect(func(): m.paused = false)
 	m.add_child(v)
+
+
+static func hold_online(m) -> void:
+	## main._start_online, after _start_map: the card over a room's round while it loads (never the room server's
+	## match host, a lesson, a headless run). The match is not paused: Net's barrier and the host's clock run as before.
+	if Net.dedicated or m.director != null or DisplayServer.get_name() == "headless":
+		return
+	for a in OS.get_cmdline_user_args():
+		for p in SKIP_ARGS:
+			if a.begins_with(p):
+				return
+	var v := VersusScreen.new()
+	v.main = m
+	v.online = true
+	v.net = Net
+	m.add_child(v)
+
+
+func online_loaded() -> bool:
+	## ONLINE: this client's world is built and its effects warmed (Warmup freed itself; a few frames drawn).
+	return _frames > Rules.WARMUP_FRAMES + 1 and main.get_node_or_null("Warmup") == null
+
+
+func online_ready() -> bool:
+	## ONLINE: the battlefield may show - loaded here, the round running (the barrier passed), a guest's first snapshot in.
+	if not online_loaded() or net == null or not bool(net.started):
+		return false
+	return bool(net.hosting) or int(net._rx_snaps) > 0
+
+
+func online_done() -> bool:
+	## ONLINE: the card may go - ready and on screen for VERSUS_ONLINE_MIN, or VERSUS_ONLINE_MAX passed (the HUD says why).
+	return (online_ready() and _t >= Rules.VERSUS_ONLINE_MIN) or _t >= Rules.VERSUS_ONLINE_MAX
+
+
+func online_wait_text() -> String:
+	## ONLINE: the countdown line - what the card still waits for.
+	if not online_loaded():
+		return "LOADING THE BATTLEFIELD…"
+	if net == null or not bool(net.started):
+		return "WAITING FOR EVERY PLAYER TO LOAD…"
+	if not bool(net.hosting) and int(net._rx_snaps) == 0:
+		return "WAITING FOR THE HOST'S FIRST FRAME…"
+	return "ENTERING BATTLE…"
 
 
 static func note_mission(key: String, from_menu: bool) -> void:
@@ -395,16 +449,33 @@ func _info_line() -> String:
 	var mp := str(main.map.get("name", "")).replace("*", "").to_upper()
 	if mission_key != "":
 		return "%s  ·  CAMPAIGN  ·  %s" % [mp, str(main.ai_level).to_upper()]
+	if online and net != null:
+		return "%s  ·  %s  ·  ROOM %s  ·  ROUND %d" % [mp, Menu.MODE_NAMES.get(str(main.mode), str(main.mode)), str(net.room_code), int(net.match_round)]
 	return "%s  ·  %s  ·  %s" % [mp, Menu.MODE_NAMES.get(str(main.mode), str(main.mode)), str(main.ai_level).to_upper()]
 
 
 func _tick_text() -> void:
-	if is_instance_valid(_count):
-		_count.text = "TAP ANYWHERE  ·  STARTING IN %d" % maxi(1, int(ceil(_left)))
+	if not is_instance_valid(_count):
+		return
+	if online:
+		_count.text = online_wait_text()
+		return
+	_count.text = "TAP ANYWHERE  ·  STARTING IN %d" % maxi(1, int(ceil(_left)))
 
 
 func _process(dt: float) -> void:
-	if _gone or _shot != "":
+	if _gone:
+		return
+	if online:                                       # a loading screen: goes by itself once loaded, running and MIN up
+		_frames += 1
+		_tick_text()
+		if _shot != "":                              # (the screenshot helper: the line is live, the card stays)
+			return
+		_t += dt
+		if online_done():
+			_go()
+		return
+	if _shot != "":
 		return
 	_t += dt
 	_left -= dt
@@ -427,7 +498,7 @@ func _unhandled_input(e: InputEvent) -> void:
 
 func _go() -> void:
 	## On to the battle: once, the card fades, the match runs.
-	if _gone:
+	if _gone or (online and not online_done()):      # ONLINE: a tap can't reveal a battlefield that isn't there yet
 		return
 	_gone = true
 	finished.emit()

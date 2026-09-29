@@ -549,6 +549,7 @@ func _start_online() -> void:
 		seats.sort()
 		HUMAN = str(seats[0])
 	_start_map(str(info["map"]))
+	VersusScreen.hold_online(self)                     # UI: the VERSUS card as the round's loading screen (never a hold)
 	for arg in OS.get_cmdline_user_args():             # tests only (a local relay's --host-arg): a short server round
 		if Net.dedicated and arg.begins_with("--match-end="):
 			sim.match_hard_end = float(arg.substr(12))

@@ -4,6 +4,8 @@ extends Node
 ## carries the real envelopes (JSON + base64 + deflate), so the lobby and the launch are the real protocol.
 ##   Godot --path . res://tests/room_probe.tscn -- --probe=<state> --view=host|guest [--window=WxH] [--mobile]
 ##       [--menu-shot=<png>] | [--match-shot=<png> --at=25 --save=<file> | --load=<file>]
+##       [--versus-shot=<png>]: with --probe=match, the ONLINE VERSUS card (0.22.3) shoots itself instead - the host's
+##       view (no --load) or, with --load=<file> from a saved host run, the guest's.
 ## states: teams-before (2v2 on A-01: the guest joined seat B, the rival team), teams-after (the guest took
 ## JOIN TEAM to the host's team and picked a colour), teams-move (host view: a guest row picked for MOVE),
 ## ffa (four players' colour picks), match (a 2v2 round, both humans on one team).
@@ -63,6 +65,7 @@ func _ready() -> void:
 	h.preferred_faction = "null"
 	h.loadout = {"active": "ghost_line", "map": "relay_hack"}
 	h.roster = {1: {"faction": "null", "slot": 0, "colour": "", "loadout": h.loadout}}
+	h.room_owner = 1                                    # a browser-hosted room: the host runs it (READY, net-6: the owner's DEPLOY is its ready)
 	h._fix_colours()
 	var names := ["gf"] if state != "ffa" else ["gf", "p3", "p4"]
 	var factions := {"gf": "bloom", "p3": "ember", "p4": "solar"}
@@ -145,8 +148,11 @@ func _host_match(h: Node) -> void:
 			p.set_ready(true)
 	await _frames(8)
 	h.start_match()
-	await _frames(4)
 	var gf: Node = peers["gf"]
+	for i in range(120):                              # the launch reaches the guest peer over the loopback
+		await get_tree().process_frame
+		if gf.match_info.has("map"):
+			break
 	gf.world_ready(_build_sim(gf.match_info), null)
 	_open_main()
 	await _frames(3)
