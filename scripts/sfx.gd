@@ -176,7 +176,9 @@ static func _can_play(n: Node) -> bool:
 
 static func _stream(f: String) -> AudioStream:
 	if not _streams.has(f):
-		var p := ROOT + f + ".ogg"
+		var p := ROOT + f + ".wav"                     # 0.23.4: PCM (web STREAM playback mixes it for nothing; a Vorbis
+		if not ResourceLoader.exists(p):               # stream would be decoded on the main thread per voice, the no-threads
+			p = ROOT + f + ".ogg"                      # web build - the 0.22.1 music lag); the .ogg originals stay as sources
 		_streams[f] = load(p) if ResourceLoader.exists(p) else null
 		if _streams[f] == null:
 			push_warning("Sfx: missing " + p)
