@@ -25,6 +25,23 @@ static func needed() -> bool:
 	return JavaScriptBridge.eval("!!window.OozeGate", true) != true
 
 
+static func available() -> bool:
+	## A FULLSCREEN button makes sense: the web build, not iPhone / iPad Safari (no fullscreen API there).
+	return OS.has_feature("web") and not OS.has_feature("web_ios")
+
+
+static func request() -> void:
+	## The FULLSCREEN buttons (main menu, PAUSE > SETTINGS; 0.22.3): fullscreen the page through the native gate
+	## (web/fullscreen-gate.js OozeGate.request - the whole document, so the DOM room / chat panels stay visible, then
+	## the landscape lock); without the script, the engine's own request (the canvas). Runs in the tap's transient
+	## activation window, which Chrome honours for a few seconds after the gesture.
+	if not OS.has_feature("web"):
+		return
+	var done = JavaScriptBridge.eval("(window.OozeGate && OozeGate.request) ? (OozeGate.request(), true) : false", true)
+	if done != true:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
 func _ready() -> void:
 	layer = 100
 	ios = OS.has_feature("web_ios")

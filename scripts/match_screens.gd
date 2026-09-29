@@ -406,7 +406,7 @@ func card(d: Dictionary) -> Dictionary:
 			for row in [pairs, pairs2]:
 				if (row as Array).is_empty():
 					continue
-				var pw := (bw - 10.0) / float((row as Array).size())
+				var pw := (bw - 10.0 * float((row as Array).size() - 1)) / float((row as Array).size())   # n toggles, 10 px gaps
 				for j in range((row as Array).size()):
 					var p: Array = row[j]
 					(out["buttons"] as Array).append(UiKit.btn(self, str(p[0]), Vector2(bx + j * (pw + 10.0), by), Vector2(pw, 48.0),

@@ -19,14 +19,40 @@
   return w >= sw - 4 && h >= sh - 4;            // the page already covers the screen
  }
  function skip() { skipped = true; try { sessionStorage.setItem(KEY, '1'); } catch (e) {} update(); }
- function go() {
+ // 0.22.3: one request path for every caller - the gate's button, any tap on the page while the document is not
+ // fullscreen (Daniele: "the game doesn't open anymore in full screen ... often shows the navbar"), and the game's
+ // FULLSCREEN buttons (main menu, PAUSE > SETTINGS) through OozeGate.request(). Chrome on Android only grants
+ // requestFullscreen inside a user gesture (a tap's pointerup / click, or the ~5 s of transient activation after
+ // it), and drops fullscreen on a Back gesture, a rotation, or the notification shade - after which the next tap
+ // brings it back. The landscape lock runs after the request settles, in its own try/catch: a refused lock never
+ // aborts the fullscreen request. Requests are throttled (one per 1.5 s) so a tap + the button's click, or the
+ // engine's own handling of the same tap, never queue two.
+ let lastReq = 0;
+ function request() {
+  skipped = false; try { sessionStorage.removeItem(KEY); } catch (e) {}
   const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
-  if (!req) { note.textContent = 'This browser has no fullscreen - use Continue below.'; return; }
+  if (!req) return null;
+  const now = Date.now();
+  if (now - lastReq < 1500) return null;
+  lastReq = now;
+  const lock = () => { try { screen.orientation.lock('landscape').then(() => { locked = true; }, () => {}); } catch (e) {} };
   try {
    const p = req.call(el, {navigationUI: 'hide'});
-   const lock = () => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} };
-   if (p && p.then) p.then(lock, () => { note.textContent = 'The browser refused fullscreen - use Continue below.'; }); else lock();
-  } catch (e) { note.textContent = 'The browser refused fullscreen - use Continue below.'; }
+   if (p && p.then) return p.then(() => { lock(); update(); });
+   lock(); return Promise.resolve();
+  } catch (e) { return Promise.reject(e); }
+ }
+ function go() {                          // the gate's PLAY FULLSCREEN button
+  const el = document.documentElement;
+  if (!(el.requestFullscreen || el.webkitRequestFullscreen)) { note.textContent = 'This browser has no fullscreen - use Continue below.'; return; }
+  const p = request();
+  if (p) p.catch(() => { note.textContent = 'The browser refused fullscreen - use Continue below.'; });
+ }
+ function reallyFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+ function onTap() {                       // any tap while the document is not fullscreen (Android; iPhone has no API)
+  if (ios || !mobile || skipped || reallyFull()) return;
+  const p = request();
+  if (p) p.catch(() => {});
  }
  function build() {
   const style = document.createElement('style');
@@ -86,5 +112,8 @@
  document.addEventListener('DOMContentLoaded', update);
  setInterval(update, 1000);
  document.addEventListener('pointerdown', tryLock, {passive: true});   // a tap is the gesture some browsers want for the lock
- window.OozeGate = {update, isFull, portrait};
+ // the re-entry tap: pointerup (a touch's activation event; pointerdown is not one for touch) and click, captured before
+ // the engine's canvas handlers - they preventDefault but never stop propagation
+ for (const ev of ['pointerup', 'click']) document.addEventListener(ev, onTap, {capture: true, passive: true});
+ window.OozeGate = {update, isFull, portrait, request, reallyFull};
 })();
