@@ -62,8 +62,15 @@ static func data() -> Dictionary:
 		"samples": samples, "streams": loaded, "played": played, "playback": "sample" if ptype == 1 else "stream",
 		"test": "%s|%s|%s" % [str(t.get("godot", "")), str(t.get("fresh_made", "")), str(t.get("fresh", ""))] if tests > 0 else "",
 		"js_err": str(j.get("err", "")).substr(0, 80),
-		"meas": str(t.get("meas", "")).substr(0, 160) if tests > 0 else "",
 	}
+
+
+static func meas() -> String:
+	## 0.23.3: the last TEST's effect-chain measurement (web/audio-diag.js D.arm): data / src / out peaks and the path's gains.
+	if not web() or tests == 0:
+		return ""
+	var j := js_state()
+	return str((j.get("test", {}) as Dictionary).get("meas", "")).substr(0, 160) if j.get("test") is Dictionary else ""
 
 
 static func readout() -> String:
@@ -81,7 +88,7 @@ static func readout() -> String:
 			"ON" if bool(d["sfx_on"]) else "OFF", int(d["sfx_vol"]), "MUTED" if bool(d["sfx_mute"]) else "on",
 			float(d["sfx_db"]), "MUTED" if bool(d["master_mute"]) else "on", float(d["master_db"]), int(d["samples"]),
 			int(d["streams"]), int(d["played"]), int(d["starts"]), int(d["starts_godot"]), str(d["playback"])],
-		"EFFECT 1 %s" % (str(d["meas"]) if str(d["meas"]) != "" else "- (tap TEST)"),
+		"EFFECT 1 %s" % (meas() if meas() != "" else "- (tap TEST)"),
 		"states %s  ·  last test %s  ·  error %s" % [str(d["ctx_history"]) if str(d["ctx_history"]) != "" else "-",
 			_test_words(str(d["test"])), str(d["js_err"]) if str(d["js_err"]) != "" else "none"],
 	]
@@ -124,4 +131,7 @@ static func send(trigger: String) -> bool:
 		return false
 	var d := data()
 	d["trigger"] = trigger
+	if tests > 0:                                   # 0.23.3: the measurement in place of the state history (24 keys max)
+		d.erase("ctx_history")
+		d["meas"] = meas()
 	return Telemetry.event("perf", {"where": "audio_diag", "time_s": snappedf(Time.get_ticks_msec() / 1000.0, 1.0), "extra": d})
