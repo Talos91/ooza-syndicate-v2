@@ -19,6 +19,9 @@ const WITHHELD: Array[String] = []
 # Not on phones (Daniele, Alpha 18: "if some map is not good for mobile still flag them and remove them"):
 # maps the phone-fit probe (tests/phone_fit.tscn) finds crowded on a phone; tablets and desktop keep them.
 # Maps 4.0 listed its 3v3 / 2v2v2 maps here; the 4.1 partial pack has none, and every 4.1 map passes.
+# 34 deg camera (Daniele 2026-09-29, "34 everywhere for now, I wanna test, as we're making new maps so it might not matter"):
+# the phone-fit probe at pitch 34 puts 64 of 88 pooled maps under the 33 pt tap minimum (table: 05 Handoff/handoffs/
+# architect-specs/cam-34-report.md) - kept IN the pool on his call; re-judge with the Alpha 23 maps.
 const PHONE_UNFIT: Array[String] = []
 # Teaching boards, not fair matches (the interactive tutorial, References/Ooze Syndicate maps 4.2 -
 # tutorial): never on 02 BATTLEFIELD, never a REMATCH ON A RANDOM MAP pick, never in test_map_pool /
