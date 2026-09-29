@@ -847,15 +847,33 @@ func show_options() -> void:
 				var pct: int = v
 				mvols_match.append([Music.volume_label(pct, "match"), Music.volume("match") == pct, func(): Music.set_volume(pct, "match")])
 			y += _opt_row(y, w, "MATCH MUSIC", "How loud the music is in a match, apart from the sounds - heard at once.", mvols_match, not Music.music_on())
+			# AUDIO DIAG (audio_diag.gd): three sounds ~0.6 s apart, then the readout under it (web) refreshes in place
+			y += _opt_row(y, w, "TEST SOUND", "Plays 3 sounds about half a second apart: 1 the game's capture chime, 2 a plain beep through the game's audio, 3 a plain beep on a fresh audio channel. Tell us which ones you hear.",
+					[["TEST", false, func(): AudioDiag.run_test(_audio_refresh)]], false, false)
+			var ro := AudioDiag.readout()
+			_audio_readout = null
+			if ro != "":
+				var n_ro := content.get_child_count()
+				y += _say(ro, Vector2(0, y + 10.0), 11, UiKit.MUTED, w) + UiKit.line_h(self, 11) + 14.0   # a spare line: the refresh may wrap longer
+				_audio_readout = content.get_child(n_ro) as Label
 			# MUSIC: the soundtrack's credit (the game has no credits page: a small CREDITS line under AUDIO)
 			y += _say("CREDITS", Vector2(0, y + 18.0), 12, UiKit.accent(shell_f), 0.0, true) + 18.0
 			y += _say(Rules.MUSIC_CREDIT, Vector2(0, y + 8.0), 13, UiKit.MUTED, w) + 16.0
 	_column_end(col, n0, y, true)
 
 
-func _opt_row(y: float, w: float, title_text: String, desc: String, opts: Array, off := false) -> float:
+var _audio_readout: Label = null                  # AUDIO DIAG: SETTINGS' audio readout (refreshed after a TEST SOUND)
+
+
+func _audio_refresh() -> void:
+	if is_instance_valid(_audio_readout):
+		_audio_readout.text = AudioDiag.readout()
+
+
+func _opt_row(y: float, w: float, title_text: String, desc: String, opts: Array, off := false, redraw := true) -> float:
 	## A SETTINGS row: its name over what it does (left), its choices [text, current, apply] as chips at the right, the
-	## current one lit; `off` greys them out. A pick applies and redraws the page. Returns the row's height.
+	## current one lit; `off` greys them out. A pick applies and redraws the page (not with `redraw` false: AUDIO DIAG's
+	## TEST SOUND, whose readout refreshes in place). Returns the row's height.
 	var ch := UiKit.tap_h(self, 40.0)
 	var widths := []
 	var cw := 0.0
@@ -873,7 +891,8 @@ func _opt_row(y: float, w: float, title_text: String, desc: String, opts: Array,
 		var apply: Callable = opts[i][2]
 		var b := UiKit.btn(self, str(opts[i][0]), Vector2(bx, y + (h - ch) / 2.0), Vector2(widths[i], 40), func():
 			apply.call()
-			show_options(), "selected" if opts[i][1] else "secondary", shell_f, 14)
+			if redraw:
+				show_options(), "selected" if opts[i][1] else "secondary", shell_f, 14)
 		b.disabled = off
 		bx += float(widths[i]) + 8.0
 	content.add_child(UiKit.rect(Vector2(0, y + h - 1.0), Vector2(w, 1.0), Color(UiKit.FRAME, 0.7)))

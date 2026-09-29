@@ -1181,7 +1181,7 @@ const SOUND_VOL := {"send": -16.0, "fight": -14.0, "hit": -15.0, "capture": -7.0
 		"monster_take": -7.0, "monster_fall": -7.0, "skill": -8.0, "relay_warning": -12.0, "relay_switch": -10.0,
 		"fall": -14.0, "collapse_warning": -9.0, "collapse": -6.0, "last_stand": -3.0, "very_last_stand": -3.0,
 		"eliminated": -6.0, "win": -3.0}
-const SOUND_UI_VOL := {"tap": -14.0, "confirm": -9.0, "back": -12.0, "error": -9.0}
+const SOUND_UI_VOL := {"tap": -14.0, "confirm": -9.0, "back": -12.0, "error": -9.0, "test": -7.0}   # "test": AUDIO DIAG
 const SOUND_BED := ["send", "fight", "hit", "machinegoon", "laser", "fall", "rival_capture"]   # the frequent battle noise (the soft bed)
 const SOUND_BED_PITCH := 0.06             # +- pitch spread of a bed sound (the same sample never repeats identically)
 const SOUND_DUCK := 0.6                   # s the bed stays quiet after one of SOUND_CUES
@@ -1205,6 +1205,11 @@ const SOUND_MUSIC_BUS_DB := 0.0
 # Match feel: 30 % (-10.5 dB on the Sfx bus; the demo played at 50 %). A level the player already saved is kept.
 const SOUND_VOLUME_STEPS := [15, 30, 60, 100]
 const SOUND_VOLUME_DEFAULT := 30
+# AUDIO DIAG (branch audio-diag; audio_diag.gd, web/audio-diag.js): SETTINGS > TEST SOUND plays the game's capture chime
+# through Sfx, then a raw beep on Godot's own AudioContext, then one on a fresh context, "gap_s" apart; the AUDIO readout
+# rides in the telemetry once per session "telemetry_after_s" into it (and once after the first TEST).
+const AUDIO_DIAG := {"gap_s": 0.6, "beep_s": 0.3, "beep_hz": 440.0, "beep_gain": 0.25,
+		"telemetry_after_s": 60.0}
 # --- end SOUND ---
 
 # --- MUSIC (the soundtrack, music.gd: the spectate demo's slots and mix, branch sound-demo 912ee68, Daniele 2026-09-28) ---

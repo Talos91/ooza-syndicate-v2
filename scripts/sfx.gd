@@ -49,7 +49,7 @@ const FILES := {
 # The demo had no menu sounds: these reuse the set's own files (no new pack) - a soft click, the build's rising
 # blip, the knock-out's falling one, the node-lost buzz. (An open question for Daniele: dedicated UI sounds.)
 const UI_FILES := {"tap": "impact/impactGeneric_light_000", "confirm": "digital/highUp", "back": "digital/highDown",
-		"error": "digital/phaserDown2"}
+		"error": "digital/phaserDown2", "test": "digital/powerUp5"}   # "test": AUDIO DIAG's TEST SOUND (the capture chime)
 const HIT_MARGIN := 1.0                  # m: a line gone this far short of its node's door was wiped out, not landed
 
 static var path := "user://settings.cfg"   # tests point this elsewhere
@@ -420,14 +420,14 @@ func _fade_out(i: int, seconds: float) -> void:
 	envelopes[i] = tw
 
 
-static func play_ui(kind: String) -> void:
+static func play_ui(kind: String, force := false) -> void:
 	## A menu sound ("tap" | "confirm" | "back" | "error"); UiKit's buttons call it. Its players live under the tree
 	## root, so a button that reloads the scene (DEPLOY, PLAY AGAIN) still finishes its sound.
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null or tree.root == null or not _can_play(tree.root):
 		return
 	var now_ms := Time.get_ticks_msec()
-	if now_ms - _ui_last < int(Rules.SOUND_UI_GAP * 1000.0):
+	if not force and now_ms - _ui_last < int(Rules.SOUND_UI_GAP * 1000.0):   # force: AUDIO DIAG's TEST (right after its tap)
 		return
 	var st := _stream(str(UI_FILES.get(kind, "")))
 	if st == null:
