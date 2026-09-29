@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.23.1"
+const VERSION := "0.23.2"
 const VERSION_NAME := "Alpha 23"
 
 
@@ -1294,6 +1294,7 @@ const WARMUP_FRAMES := 3                 # frames the warm-up pieces stay drawn
 # the HUD's waiting text says what is still missing (a silent host: Net.HOST_GRACE).
 const VERSUS_ONLINE_MIN := 2.5
 const VERSUS_ONLINE_PREDRAW_FRAMES := 2     # frames the online VERSUS card is drawn before the map build starts (0.23.0)
+const VERSUS_LOBBY_MAX := 45.0             # s a DEPLOY-raised VERSUS card waits for the launch before giving the lobby back (0.23.2)
 const VERSUS_ONLINE_MAX := 20.0
 # Badges during camera motion (the Last Stand zoom "still slows the game down"): Hud._layout_badges scores 24 spots x 3
 # reaches against every platform, deck and badge (~10 ms a frame on M-39 on desktop, every frame of the 1.5 s zoom);

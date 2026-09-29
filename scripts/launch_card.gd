@@ -26,6 +26,9 @@ static func drop(root: Node) -> void:
 	var old := root.get_node_or_null(NAME)
 	if old != null:
 		old.queue_free()
+	if VersusScreen._lobby_card != null and is_instance_valid(VersusScreen._lobby_card):   # 0.23.2: also one still being added
+		VersusScreen._lobby_card.queue_free()
+	VersusScreen._lobby_card = null
 
 
 func _build(info: Dictionary, map_name: String) -> void:

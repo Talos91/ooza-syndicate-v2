@@ -1104,12 +1104,14 @@ func version() -> String:
 
 # ------------------------------------------------------------------ rounds
 func start_match() -> void:
-	if not hosting:
-		if can_start():
-			_ask_owner("start")
+	if not can_start():
 		return
-	if can_start():
-		launch_round()
+	if is_inside_tree():                               # 0.23.2 (Daniele): the VERSUS card from the moment DEPLOY is pressed -
+		VersusScreen.hold_lobby(get_tree().root)       # a server room takes seconds to start its match; the lobby must not sit there
+	if not hosting:
+		_ask_owner("start")
+		return
+	launch_round()
 
 
 func launch_round(fill := "") -> void:
@@ -1213,7 +1215,7 @@ func _launch(info: Dictionary) -> void:
 	sim = null
 	if not no_reload:
 		if not dedicated and DisplayServer.get_name() != "headless":   # UI (0.23.1): the loading card first, drawn, then the reload
-			LaunchCard.raise(get_tree().root, info, str(map_data(map_path).get("name", map_path.get_file().get_basename())))
+			VersusScreen.hold_lobby(get_tree().root, info)   # 0.23.2: THE VERSUS card is the loading screen (kept if DEPLOY raised it)
 			_reload_after_card()
 		else:
 			get_tree().reload_current_scene()
@@ -1223,6 +1225,8 @@ func _reload_after_card() -> void:
 	## UI (0.23.1): the launch card is drawn (Rules.VERSUS_ONLINE_PREDRAW_FRAMES) before the scene reload freezes the frame.
 	for i in range(Rules.VERSUS_ONLINE_PREDRAW_FRAMES):
 		await get_tree().process_frame
+	if not active:                                     # (🖥️ review: the player left the room in those frames - no reload)
+		return
 	get_tree().reload_current_scene()
 
 

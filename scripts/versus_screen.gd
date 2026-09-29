@@ -38,6 +38,46 @@ var _shot := ""
 var online := false                                # ONLINE: a room's round (hold_online) - a loading screen, not a hold
 var net: Node = null                               # ONLINE: the Net the card watches (the autoload; tests hand in theirs)
 var _frames := 0                                   # ONLINE: frames drawn under the card (the warm-up needs a few)
+var lobby := false                                 # 0.23.2: raised from the lobby on DEPLOY (hold_lobby), until the match scene's card replaces it
+var _lobby_view: Node = null                       # (the stand-in `main` a lobby card reads; freed with the card)
+static var _lobby_card: VersusScreen = null        # the lobby card raised (hold_lobby), until it goes
+
+
+class LobbySim extends RefCounted:
+	## What the card asks a Sim, answered from the lobby: the seats' factions and who stands with whom.
+	var factions := {}
+	var teams := {}
+	func allied(a: String, b: String) -> bool:
+		return a == b or (teams.has(a) and teams.has(b) and teams[a] == teams[b])
+
+
+class LobbyView extends Node:
+	## What the card asks main, answered from the room before the match scene exists (0.23.2, Daniele: "the vs screen should
+	## be the loading, so when you click deploy that's what players see until the map is ready").
+	var mobile := false
+	var HUMAN := "A"
+	var SEAT_FACTIONS := {}
+	var sim: LobbySim = LobbySim.new()
+	var map := {}
+	var mode := ""
+	var ai_level := ""
+	var director = null
+	var online := true
+	var my_name := ""
+	var ai := {}
+
+	func seat_who(seat: String) -> Dictionary:
+		var f := str(SEAT_FACTIONS.get(seat, ""))
+		var out := {"name": "", "faction": str(UiKit.NAMES.get(f, f.to_upper())), "tag": "", "human": false, "you": seat == HUMAN}
+		for id in Net.roster:
+			if Net.seat_of(int(id)) == seat:
+				out["human"] = true
+				var nm := my_name if seat == HUMAN else Net.name_of(int(id)).to_upper()
+				out["name"] = nm if nm.length() <= Rules.HUD_NAME_MAX else nm.substr(0, Rules.HUD_NAME_MAX - 1) + "…"
+				return out
+		var level := str(ai.get(seat, Net.ai_fill))
+		out["tag"] = ("%s AI" % level.to_upper()) if level != "" else "AI"
+		return out
 
 
 # ------------------------------------------------------------------ when (main.gd's hooks)
@@ -84,6 +124,44 @@ static func hold_online(m) -> bool:
 	return true
 
 
+static func hold_lobby(root: Node, info := {}) -> void:
+	## 0.23.2: the VERSUS card from the moment DEPLOY is pressed (the owner) or the launch arrives (everyone) - on the window's
+	## root, so it survives the room's scene reload; main._start_online's card replaces it (LaunchCard.drop) once the match
+	## scene is up. `info`: the launch packet when there is one, else the lobby's own state (the seats known so far).
+	if Net.dedicated or DisplayServer.get_name() == "headless":
+		return
+	if _lobby_card != null and is_instance_valid(_lobby_card) and not _lobby_card.is_queued_for_deletion():
+		return                                         # already up since DEPLOY: the launch carries on under it
+	LaunchCard.drop(root)
+	var lv := LobbyView.new()
+	var scene := root.get_tree().current_scene
+	lv.mobile = bool(scene.get("mobile")) if scene != null and scene.get("mobile") != null else false
+	lv.my_name = str(scene.call("_my_name")) if scene != null and scene.has_method("_my_name") else ""
+	lv.HUMAN = Net.local_seat()
+	lv.mode = str(info.get("mode", Net.mode))
+	var path := str(info.get("map", Net.map_path))
+	lv.map = {"name": str(Net.map_data(path).get("name", path.get_file().get_basename()))}
+	var players: Dictionary = info.get("players", {})
+	if players.is_empty():
+		for id in Net.roster:
+			players[Net.seat_of(int(id))] = str(Net.roster[id]["faction"])
+	lv.SEAT_FACTIONS = players.duplicate()
+	lv.sim.factions = players.duplicate()
+	lv.ai = (info.get("ai", {}) as Dictionary).duplicate()
+	for s in (Net.map_data(path).get("seats", {}) as Dictionary).get(lv.mode, []):
+		lv.sim.teams[str(s["seat"])] = int(s.get("team", -1))
+	var v := VersusScreen.new()
+	v.name = LaunchCard.NAME                           # (LaunchCard.drop removes it, whichever card is up)
+	v.main = lv
+	v._lobby_view = lv
+	v.online = true
+	v.lobby = true
+	v.net = Net
+	v.process_mode = Node.PROCESS_MODE_ALWAYS
+	_lobby_card = v
+	root.add_child.call_deferred(v)                    # (deferred: the root may be busy; _lobby_card guards a second raise meanwhile)
+
+
 func online_loaded() -> bool:
 	## ONLINE: this client's world is built and its effects warmed (Warmup freed itself; a few frames drawn).
 	return _frames > Rules.WARMUP_FRAMES + 1 and main.get_node_or_null("Warmup") == null
@@ -98,11 +176,15 @@ func online_ready() -> bool:
 
 func online_done() -> bool:
 	## ONLINE: the card may go - ready and on screen for VERSUS_ONLINE_MIN, or VERSUS_ONLINE_MAX passed (the HUD says why).
+	if lobby:                                        # 0.23.2: the match scene's own card takes over; it never goes by itself
+		return false
 	return (online_ready() and _t >= Rules.VERSUS_ONLINE_MIN) or _t >= Rules.VERSUS_ONLINE_MAX
 
 
 func online_wait_text() -> String:
 	## ONLINE: the countdown line - what the card still waits for.
+	if lobby:
+		return "DEPLOYING  ·  LOADING THE BATTLEFIELD…"
 	if not online_loaded():
 		return "LOADING THE BATTLEFIELD…"
 	if net == null or not bool(net.started):
@@ -136,6 +218,8 @@ static func hold_mission(m) -> bool:
 # ------------------------------------------------------------------ the card
 func _ready() -> void:
 	layer = 6                                        # over the HUD (1) and the mission overlay (3)
+	if lobby:
+		layer = 120                                  # 0.23.2: over the lobby's menus too
 	mobile = bool(main.mobile)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--versus-shot="):
@@ -145,6 +229,11 @@ func _ready() -> void:
 	_build()
 	if _shot != "":
 		_shoot()
+
+
+func _exit_tree() -> void:
+	if _lobby_view != null and is_instance_valid(_lobby_view):
+		_lobby_view.queue_free()
 
 
 func _pt_factor() -> float:
@@ -452,7 +541,7 @@ func _info_line() -> String:
 	if mission_key != "":
 		return "%s  ·  CAMPAIGN  ·  %s" % [mp, str(main.ai_level).to_upper()]
 	if online and net != null:
-		return "%s  ·  %s  ·  ROOM %s  ·  ROUND %d" % [mp, Menu.MODE_NAMES.get(str(main.mode), str(main.mode)), str(net.room_code), int(net.match_round)]
+		return "%s  ·  %s  ·  ROOM %s  ·  ROUND %d" % [mp, Menu.MODE_NAMES.get(str(main.mode), str(main.mode)), str(net.room_code), int(net.match_round) + (1 if lobby else 0)]   # (a lobby card: the round about to start)
 	return "%s  ·  %s  ·  %s" % [mp, Menu.MODE_NAMES.get(str(main.mode), str(main.mode)), str(main.ai_level).to_upper()]
 
 
@@ -471,6 +560,11 @@ func _process(dt: float) -> void:
 	if online:                                       # a loading screen: goes by itself once loaded, running and MIN up
 		_frames += 1
 		_tick_text()
+		if lobby:
+			_t += dt
+			if _t > Rules.VERSUS_LOBBY_MAX:              # 0.23.2 safety: a launch that never came (refused, dropped)
+				queue_free()
+			return
 		if _shot != "":                              # (the screenshot helper: the line is live, the card stays)
 			return
 		_t += dt
