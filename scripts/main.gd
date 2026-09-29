@@ -174,6 +174,7 @@ func _ready() -> void:
 	Music.attach(self)                                 # MUSIC: the soundtrack follows this scene (music.gd; never on the room server)
 	MissionDirector.restore_settings()                 # CAMPAIGN / TUTORIAL: a mission's or lesson's pinned settings go back
 	if Net.online():                                   # a room launched (or relaunched) a round
+		Net.load_mark("main_ready")
 		room_rules = true                              # AUDIT FIX: Net._launch wrote the room's settings into Rules
 		_start_online()
 		return
@@ -352,6 +353,7 @@ func _start_map(path: String) -> void:
 	map_path = path
 	last_map_path = path                               # MAIN MENU remembers it (0.19.0)
 	map = MapBuilder.load_map(path)
+	_lm("map_json")
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
 		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")), str((map.get("tags", {}) as Dictionary).get("size", "")))
 	_base_pitch = cam_pitch
@@ -381,6 +383,7 @@ func _start_map(path: String) -> void:
 	sim = Sim.new()
 	sim.ai_builds = true                               # POWERS: AI seats mix their builds (Rules.AI_LOADOUTS)
 	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams, LOADOUTS)
+	_lm("sim_setup")
 	var lo := Vector3(INF, 0, INF)                     # the camera looks along the map's short side
 	var hi := Vector3(-INF, 0, -INF)
 	for n in sim.nodes:
@@ -399,10 +402,26 @@ func _start_map(path: String) -> void:
 	if _online_card_pending:                          # UI (Daniele 2026-09-30: "shows the vs load screen for a frame"): online, the
 		_online_card_pending = false                  # VERSUS card goes up BEFORE the heavy world build and is drawn first,
 		if VersusScreen.hold_online(self):           # so the load happens under it instead of freezing the DEPLOY page
+			_staged = true                             # STAGED LOAD (0.23.4): the build below goes a step per frame under the card
+			load_progress = 0.0
 			for i in range(Rules.VERSUS_ONLINE_PREDRAW_FRAMES):   # (no card - headless, a lesson, the server - no wait)
 				await get_tree().process_frame
+		_lm("card")
+	# --- STAGED LOAD (0.23.4, Daniele 2026-09-30: "the vs screen should be the loading, so when you click deploy that's what
+	# players see until the map is ready, not the frozen deploy screen"): online, under the VERSUS card (_staged), each block
+	# of the build below is followed by _staged_frame - the views built so far are held (no _process: nothing runs on a
+	# half-built world, `started` stays false) and what the block added is revealed a few materials per frame, so the card
+	# keeps animating and the first-draw shader compiles are spread out. Offline, lessons, missions, headless runs and the
+	# room server's match host (returned above) build in one block, as before. ---
 	_build_world()
+	if _staged:
+		_fit_camera()                                  # the whole map in view now: what each step reveals is drawn (and compiled)
+		await _staged_frame("build_world", 1)
 	vis = MapBuilder.build3(self, sim, map) if map.has("layout") else MapBuilder.build(self, sim)
+	if _staged:                                        # the owners' lights now, so the map is first drawn as it will look
+		for n in sim.nodes:                            # (the same loop runs again below: idempotent)
+			MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
+		await _staged_frame("build3", 2)
 	if not vis["stretched"].is_empty():
 		push_warning("edges stretched to fit (not honest): %s" % [vis["stretched"]])
 	hordes = HordeView.new()
@@ -410,7 +429,14 @@ func _start_map(path: String) -> void:
 	add_child(hordes)
 	scenery = Scenery.new()
 	add_child(scenery)
-	scenery.setup(self, sim, vis)
+	if _staged:                                        # (the backdrop, the mist, each faction's model: a frame each)
+		var n_step := 0
+		for step in scenery.setup_steps(self, sim, vis):
+			step.call()
+			n_step += 1
+			await _staged_frame("scenery%d" % n_step, 3)
+	else:
+		scenery.setup(self, sim, vis)
 	fx = Fx.new()
 	add_child(fx)
 	fx.setup(self, sim, vis, hordes)
@@ -468,16 +494,23 @@ func _start_map(path: String) -> void:
 	for seat in seats.values():
 		var co: Dictionary = ArmyPresets.cosmetic_loadout_for(SEAT_FACTIONS[HUMAN]) if (seat == HUMAN and not online) else net_cosmetics.get(seat, {})
 		Cosmetics.set_loadout(seat, co)
+	if _staged:
+		await _staged_frame("views", 4)
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
 	if director:
 		_tutorial_setup()
 	_apply_quality()
+	if _staged:
+		await _staged_frame("hud", 5)
+		_release_held()                                # the world is whole: every view runs from here
 	get_viewport().size_changed.connect(_on_resized)
 	started = true
 	paused = false
-	Warmup.run(self)                                   # MATCH FEEL: every effect's shader drawn once now, behind the VERSUS card (warmup.gd)
+	_lm("started")
+	Warmup.run(self, _staged)                          # MATCH FEEL: every effect's shader drawn once now, behind the VERSUS card (warmup.gd)
+	_lm("warmup_made")
 	if mission:                                        # CAMPAIGN: the briefing card, the match paused until START
 		_mission_setup()
 	if thumb_path != "":
@@ -493,6 +526,7 @@ func _start_map(path: String) -> void:
 		get_tree().quit()
 		return
 	await get_tree().process_frame
+	_lm("first_frame")
 	_on_resized()
 	# HUD pass (Daniele's "option A": no notification box): online, "waiting for every player to load" is the
 	# waiting text in the middle until the round starts (_process clears it); offline the start lines are a short
@@ -539,6 +573,96 @@ func start_match(path: String, faction: String, seat_factions: Dictionary, level
 
 
 var _online_card_pending := false                     # UI: set by _start_online, read once by _start_map
+var _staged := false                                  # STAGED LOAD: this online round's world is built a step per frame (_start_map)
+var load_progress := -1.0                             # STAGED LOAD: 0..1 through the build (the VERSUS card's bar); -1: not staged
+var _held: Array[Node] = []                           # STAGED LOAD: the views held (process off) until the world is whole
+var _held_ids := {}                                   # (instance id -> true: every child already seen by _staged_frame)
+const STAGED_STEPS := 5                               # _staged_frame's steps (the bar); the warm-up fills the last share
+
+
+func _staged_frame(label: String, step: int) -> void:
+	## STAGED LOAD: after one block of an online round's build, under the VERSUS card. The children the block added are held
+	## (process off: no view runs on a half-built world) and their meshes hidden, then revealed a few materials' worth per
+	## frame - each drawn frame compiles only the new shaders it shows (Rules.STAGED_LOAD_FRAME_MS adapts the pace).
+	_lm(label)
+	var fresh: Array[Node] = []
+	for c in get_children():
+		if _held_ids.has(c.get_instance_id()) or c is VersusScreen or c is PerfProfile or c is FullscreenGate:
+			continue
+		_held_ids[c.get_instance_id()] = true
+		fresh.append(c)
+		if c.process_mode == Node.PROCESS_MODE_INHERIT:
+			c.process_mode = Node.PROCESS_MODE_DISABLED
+			_held.append(c)
+	var groups := {}                                   # draw signature -> the meshes that share it
+	var order: Array = []
+	for c in fresh:
+		var list: Array = [c] if c is GeometryInstance3D else []
+		list.append_array(c.find_children("*", "GeometryInstance3D", true, false))
+		for g in list:
+			if not (g as GeometryInstance3D).is_visible_in_tree():
+				continue
+			var sig := _draw_sig(g)
+			if not groups.has(sig):
+				groups[sig] = []
+				order.append(sig)
+			groups[sig].append(g)
+			g.visible = false
+	var from := float(step - 1) / float(STAGED_STEPS + 1)
+	var span := 1.0 / float(STAGED_STEPS + 1)
+	var k: int = Rules.STAGED_LOAD_FIRST_GROUPS
+	var i := 0
+	while true:
+		var t0 := Time.get_ticks_usec()
+		for j in range(i, mini(i + k, order.size())):
+			for g in groups[order[j]]:
+				if is_instance_valid(g):
+					g.visible = true
+		i += k
+		load_progress = maxf(load_progress, from + span * (float(mini(i, order.size())) / float(maxi(order.size(), 1))))
+		await get_tree().process_frame
+		if i >= order.size():
+			break
+		var ms := (Time.get_ticks_usec() - t0) / 1000.0
+		if ms > Rules.STAGED_LOAD_FRAME_MS:
+			k = maxi(1, k / 2)
+		elif ms < Rules.STAGED_LOAD_FRAME_MS / 3.0:
+			k *= 2
+	load_progress = maxf(load_progress, from + span)
+	_lm("%s_drawn(%d)" % [label, order.size()])
+
+
+func _draw_sig(g: GeometryInstance3D) -> String:
+	## STAGED LOAD: what a mesh needs compiled to draw - its kind and its materials (distinct materials may share a shader:
+	## the grouping is only ever finer than the compiles, never coarser).
+	var sig := g.get_class()
+	if g.material_override != null:
+		return "%s|%d" % [sig, g.material_override.get_instance_id()]
+	var mesh: Mesh = null
+	if g is MeshInstance3D:
+		mesh = (g as MeshInstance3D).mesh
+	elif g is MultiMeshInstance3D and (g as MultiMeshInstance3D).multimesh != null:
+		mesh = (g as MultiMeshInstance3D).multimesh.mesh
+	if mesh == null:
+		return sig
+	for s in range(mesh.get_surface_count()):
+		var m: Material = (g as MeshInstance3D).get_active_material(s) if g is MeshInstance3D else mesh.surface_get_material(s)
+		sig += "|%d" % (m.get_instance_id() if m != null else 0)
+	return sig
+
+
+func _release_held() -> void:
+	## STAGED LOAD: the world is whole - every held view processes again.
+	for c in _held:
+		if is_instance_valid(c) and c.process_mode == Node.PROCESS_MODE_DISABLED:
+			c.process_mode = Node.PROCESS_MODE_INHERIT
+	_held.clear()
+
+
+func _lm(label: String) -> void:
+	## LOAD TRACE: a step of an online round's build (Net.load_marks; tests/staged_load_probe).
+	if online:
+		Net.load_mark(label)
 
 
 func _start_online() -> void:
@@ -561,6 +685,9 @@ func _start_online() -> void:
 	for arg in OS.get_cmdline_user_args():             # tests only (a local relay's --host-arg): a short server round
 		if Net.dedicated and arg.begins_with("--match-end="):
 			sim.match_hard_end = float(arg.substr(12))
+	_lm("world_ready")
+	if not Net.dedicated:                              # LOAD TRACE: the steps in the console (the web build's too)
+		print("LOAD ", Net.load_summary())
 	Net.world_ready(sim, self)
 	Net.order_feedback.connect(_on_order_feedback)
 	if not Net.dedicated:

@@ -33,6 +33,8 @@ var mission_key := ""
 var _t := 0.0
 var _left := 0.0                                   # seconds before AUTO continues (the countdown line)
 var _count: Label
+var _bar_fill: ColorRect                           # STAGED LOAD (0.23.4): the thin loading bar under the line (main.load_progress)
+var _bar_w := 0.0
 var _gone := false
 var _shot := ""
 var online := false                                # ONLINE: a room's round (hold_online) - a loading screen, not a hold
@@ -184,8 +186,9 @@ static func hold_lobby(root: Node, info := {}) -> void:
 
 
 func online_loaded() -> bool:
-	## ONLINE: this client's world is built and its effects warmed (Warmup freed itself; a few frames drawn).
-	return _frames > Rules.WARMUP_FRAMES + 1 and main.get_node_or_null("Warmup") == null
+	## ONLINE: this client's world is built (main.started: STAGED LOAD builds it over several frames, 0.23.4) and its effects
+	## warmed (Warmup freed itself; a few frames drawn).
+	return _frames > Rules.WARMUP_FRAMES + 1 and main.get("started") == true and main.get_node_or_null("Warmup") == null
 
 
 func online_ready() -> bool:
@@ -373,6 +376,13 @@ func _build() -> void:
 	_count.size = Vector2(W, hint_h)
 	_count.position = Vector2(0, y)
 	content.add_child(_count)
+	if online and not lobby:                          # STAGED LOAD: a thin bar under the line while the battlefield loads
+		_bar_w = minf(260.0, W * 0.4)
+		var track := UiKit.rect(Vector2((W - _bar_w) / 2.0, y - 5.5), Vector2(_bar_w, 3.0), Color(UiKit.FRAME, 0.6))   # (between ENTER BATTLE and the line)
+		track.name = "LoadTrack"
+		content.add_child(track)
+		_bar_fill = UiKit.rect(track.position, Vector2(0.0, 3.0), UiKit.accent(_bar_faction()))
+		content.add_child(_bar_fill)
 	_tick_text()
 	if _t == 0.0:                                     # the entrance, once: VS lands, the sides slide in
 		vs.scale = Vector2(1.6, 1.6)
@@ -566,11 +576,29 @@ func _info_line() -> String:
 	return "%s  ·  %s  ·  %s" % [mp, Menu.MODE_NAMES.get(str(main.mode), str(main.mode)), str(main.ai_level).to_upper()]
 
 
+func _bar_faction() -> String:
+	var f = main.get("SEAT_FACTIONS")
+	return str((f as Dictionary).get(str(main.HUMAN), "vex")) if f is Dictionary else "vex"
+
+
+func load_fraction() -> float:
+	## STAGED LOAD: how far this client's world build has got (main.load_progress), 1 once loaded; -1 when unknown.
+	if online_loaded():
+		return 1.0
+	var p = main.get("load_progress")
+	return float(p) if p != null else -1.0
+
+
 func _tick_text() -> void:
 	if not is_instance_valid(_count):
 		return
 	if online:
 		_count.text = online_wait_text()
+		if is_instance_valid(_bar_fill):
+			var f := load_fraction()
+			_bar_fill.get_parent().get_node("LoadTrack").visible = f >= 0.0
+			_bar_fill.visible = f >= 0.0
+			_bar_fill.size.x = _bar_w * clampf(f, 0.0, 1.0)
 		return
 	_count.text = "TAP ANYWHERE  ·  STARTING IN %d" % maxi(1, int(ceil(_left)))
 

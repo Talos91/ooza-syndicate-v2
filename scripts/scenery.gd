@@ -190,29 +190,44 @@ static func make_void(parent: Node, centre: Vector3, extent: Vector2, full: bool
 
 
 func setup(m: Node3D, s: Sim, v: Dictionary) -> void:
+	for step in setup_steps(m, s, v):
+		step.call()
+
+
+func setup_steps(m: Node3D, s: Sim, v: Dictionary) -> Array[Callable]:
+	## setup's work in its blocks, in order (STAGED LOAD, 0.23.4: an online round's main._start_map draws a frame between
+	## them - the backdrop image, the mist's noise and the faction models each load in a frame of their own).
 	main = m
 	sim = s
 	vis = v
-	var md = m.get("mission")                         # CAMPAIGN: the mission's / the map's own backdrop
-	backdrop = make_backdrop(m, backdrop_for(str(m.get("map").get("code", "")) if m.get("map") is Dictionary else "",
-			str(md.key) if md != null else ""))
-	var lo := Vector3(INF, 0, INF)
-	var hi := Vector3(-INF, 0, -INF)
-	for n in s.nodes:
-		lo = lo.min(n["pos"])
-		hi = hi.max(n["pos"])
-	make_void(self, (lo + hi) / 2.0, Vector2(hi.x - lo.x, hi.z - lo.z), not (Rules.low_detail or main.mobile))
+	var steps: Array[Callable] = []
+	steps.append(func():
+		var md = m.get("mission")                     # CAMPAIGN: the mission's / the map's own backdrop
+		backdrop = make_backdrop(m, backdrop_for(str(m.get("map").get("code", "")) if m.get("map") is Dictionary else "",
+				str(md.key) if md != null else "")))
+	steps.append(func():
+		var lo := Vector3(INF, 0, INF)
+		var hi := Vector3(-INF, 0, -INF)
+		for n in s.nodes:
+			lo = lo.min(n["pos"])
+			hi = hi.max(n["pos"])
+		make_void(self, (lo + hi) / 2.0, Vector2(hi.x - lo.x, hi.z - lo.z), not (Rules.low_detail or main.mobile)))
 	for f in Rules.FACTIONS.keys():
-		var root: Node = load("res://assets/units/%s.glb" % f).instantiate()
-		for mi in root.find_children("*", "MeshInstance3D", true, false):
-			_mesh[f] = (mi as MeshInstance3D).mesh
-			break
-		root.free()
-		if _mesh.has(f):
-			var aabb: AABB = (_mesh[f] as Mesh).get_aabb()
-			_scale[f] = RESIDENT_SIZE / maxf(maxf(aabb.size.x, aabb.size.z), 0.001)
-			var src := (_mesh[f] as Mesh).surface_get_material(0) as BaseMaterial3D
-			_tex[f] = src.albedo_texture if src else null
+		steps.append(func(): _load_resident(str(f)))
+	return steps
+
+
+func _load_resident(f: String) -> void:
+	var root: Node = load("res://assets/units/%s.glb" % f).instantiate()
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		_mesh[f] = (mi as MeshInstance3D).mesh
+		break
+	root.free()
+	if _mesh.has(f):
+		var aabb: AABB = (_mesh[f] as Mesh).get_aabb()
+		_scale[f] = RESIDENT_SIZE / maxf(maxf(aabb.size.x, aabb.size.z), 0.001)
+		var src := (_mesh[f] as Mesh).surface_get_material(0) as BaseMaterial3D
+		_tex[f] = src.albedo_texture if src else null
 
 
 static func tank_info(vat_mesh: Mesh, key: String) -> Dictionary:

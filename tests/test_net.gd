@@ -230,6 +230,10 @@ func _run() -> void:
 	check(not vh.online_loaded() and vh.online_wait_text().begins_with("LOADING"), "VERSUS: up from the launch, loading the world first")
 	vh._frames = Rules.WARMUP_FRAMES + 2
 	vg._frames = Rules.WARMUP_FRAMES + 2
+	check(not vh.online_loaded() and vh.online_wait_text().begins_with("LOADING"),
+			"STAGED LOAD: frames drawn under the card, the world still being built (main.started false): still loading")
+	hm.started = true                                # (the staged build finished)
+	gm.started = true
 	check(vh.online_loaded() and not vh.online_ready() and vh.online_wait_text().begins_with("WAITING FOR EVERY"),
 			"VERSUS: a loaded host waits for every player at the barrier")
 	host.world_ready(hs, hm)

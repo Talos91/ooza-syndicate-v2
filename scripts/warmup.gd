@@ -19,22 +19,42 @@ const CHARS := "+-0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ·▼!→%"   # what the 
 var main: Node3D
 var _left := 0
 var _pieces: Array[Node3D] = []
+var staged := false                        # STAGED LOAD (0.23.4, an online round under the VERSUS card): the pieces go in a few per frame
+var _queue: Array[Node3D] = []             # STAGED LOAD: pieces made, not yet drawn
+var _batch := 1                            # STAGED LOAD: pieces added per frame (adapts to Rules.STAGED_LOAD_FRAME_MS)
+var _last_us := 0
 
 
-static func run(m: Node3D) -> void:
-	## main._start_map, after the world and the HUD are built.
+static func run(m: Node3D, stage := false) -> void:
+	## main._start_map, after the world and the HUD are built. stage: an online round's staged load - the pieces are drawn
+	## a few per frame (each frame compiles only its own new shaders), then held Rules.WARMUP_FRAMES frames as usual.
 	if DisplayServer.get_name() == "headless" or m.get("hordes") == null:
 		return
 	var w := Warmup.new()
 	w.name = "Warmup"
 	w.main = m
+	w.staged = stage
+	w._batch = Rules.STAGED_LOAD_FIRST_GROUPS
 	m.add_child(w)
+
+
+var _jobs: Array[Callable] = []           # STAGED LOAD: the making still to do (a model load, the effects' pieces), a job a frame
 
 
 func _ready() -> void:
 	_left = Rules.WARMUP_FRAMES
 	var sim: Sim = main.get("sim")
-	_loads(sim)
+	_jobs = _loads(sim)
+	_jobs.append(_effects.bind(sim))
+	if staged:
+		return
+	for j in _jobs:
+		j.call()
+	_jobs.clear()
+
+
+func _effects(sim: Sim) -> void:
+	## The effects' materials and shaders on stand-in meshes, the instanced ones, the in-world labels' fonts.
 	var quad := QuadMesh.new()
 	var mats: Array[Material] = [Mats.glow(Color.WHITE, 0.9), Mats.glow(Color.WHITE, 1.0), Mats.construction(), Mats.seam()]
 	for seat in sim.factions.keys():
@@ -89,18 +109,20 @@ func _ready() -> void:
 		_add(l)
 
 
-func _loads(sim: Sim) -> void:
+func _loads(sim: Sim) -> Array[Callable]:
 	## What the views load the first time it is needed, measured as the first send's stall (76 ms of script on a
 	## desktop, 2026-09-28 probe: HordeView.load_faction reading assets/horde/patches_<faction>.glb on a line's first
 	## frame): every seat's faction patches, and the centre models a capture's tier-down, an upgrade or a build swaps in
 	## (MapBuilder's scene cache) with their vat-tank measurements (Scenery.tank_info, cached per model), one tiny copy
 	## of each drawn with the rest.
+	## Returned as jobs (a model each), run at once or - staged - one per frame.
+	var jobs: Array[Callable] = []
 	var hv: HordeView = main.get("hordes")
 	var seats: Array = [""]
 	for seat in sim.factions.keys():
 		seats.append(seat)
 		if hv != null:
-			hv.load_faction(str(sim.factions[seat]))
+			jobs.append(hv.load_faction.bind(str(sim.factions[seat])))
 	var keys := {}
 	for seat in seats:
 		for spec in [["vat", 1], ["vat", 2], ["vat", 3], ["machinegoon", 1], ["laser", 1], ["forge", 1], ["monster_hub", 1]]:
@@ -110,22 +132,37 @@ func _loads(sim: Sim) -> void:
 	for frag in ["girder_l", "girder_r", "plate_a", "plate_b", "plate_c", "truss"]:   # Fx._collapse's fall pieces
 		keys["Deck_S_Frag_" + frag] = ""
 	for key in keys:
-		var node := MapBuilder.piece(key)
-		MapBuilder.apply_owner([node], keys[key])
-		for mi in node.find_children("*", "MeshInstance3D", true, false):   # as Scenery._bind measures a new vat
-			var info := Scenery.tank_info((mi as MeshInstance3D).mesh, key)
-			if info["surface"] >= 0 and not (info["tanks"] as Array).is_empty():
-				var mat := ShaderMaterial.new()
-				mat.shader = Scenery.LIQUID_SHADER
-				(mi as MeshInstance3D).set_surface_override_material(info["surface"], mat)
-				break
-		_add(node)
+		jobs.append(_piece.bind(str(key), str(keys[key])))
+	return jobs
+
+
+func _piece(key: String, seat: String) -> void:
+	var node := MapBuilder.piece(key)
+	MapBuilder.apply_owner([node], seat)
+	for mi in node.find_children("*", "MeshInstance3D", true, false):   # as Scenery._bind measures a new vat
+		var info := Scenery.tank_info((mi as MeshInstance3D).mesh, key)
+		if info["surface"] >= 0 and not (info["tanks"] as Array).is_empty():
+			var mat := ShaderMaterial.new()
+			mat.shader = Scenery.LIQUID_SHADER
+			(mi as MeshInstance3D).set_surface_override_material(info["surface"], mat)
+			break
+	_add(node)
 
 
 func _add(n: Node3D) -> void:
 	n.scale = Vector3.ONE * TINY
+	if staged:
+		_queue.append(n)
+		return
 	add_child(n)
 	_pieces.append(n)
+
+
+func _exit_tree() -> void:
+	for n in _queue:                                      # (freed before every piece went in: the rest go too)
+		if is_instance_valid(n):
+			n.free()
+	_queue.clear()
 
 
 func _spark_material() -> ShaderMaterial:
@@ -148,8 +185,31 @@ func _process(_dt: float) -> void:
 	var spot: Vector3 = cam.global_position - cam.global_transform.basis.z * AHEAD
 	position = spot
 	_units(spot)
+	if not _jobs.is_empty() or not _queue.is_empty():     # STAGED LOAD: the next job, the next few pieces, paced by the last frame
+		var now := Time.get_ticks_usec()
+		if _last_us > 0:
+			var ms := (now - _last_us) / 1000.0
+			if ms > Rules.STAGED_LOAD_FRAME_MS:
+				_batch = maxi(1, _batch / 2)
+			elif ms < Rules.STAGED_LOAD_FRAME_MS / 3.0:
+				_batch *= 2
+		_last_us = now
+		var t0 := Time.get_ticks_usec()                   # jobs: as many as fit a third of the frame budget (at least one)
+		while not _jobs.is_empty():
+			_jobs.pop_front().call()
+			if (Time.get_ticks_usec() - t0) / 1000.0 > Rules.STAGED_LOAD_FRAME_MS / 3.0:
+				break
+		for i in range(mini(_batch, _queue.size())):
+			var n: Node3D = _queue.pop_front()
+			add_child(n)
+			_pieces.append(n)
+		if main.get("load_progress") != null and float(main.get("load_progress")) >= 0.0:
+			main.set("load_progress", lerpf(float(main.get("load_progress")), 0.99, 0.25))
+		return
 	_left -= 1
 	if _left < 0:
+		if main.has_method("_lm"):
+			main.call("_lm", "warmup_done")
 		queue_free()
 
 
