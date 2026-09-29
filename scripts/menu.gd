@@ -551,6 +551,8 @@ func _on_tab(id: String) -> void:
 			show_armies(faction, show_main)
 		"campaign":                                    # UI (Daniele, 0.22.0): the tab opens every campaign first; the
 			show_chapters()                            # city map opens once you pick one (show_campaign)
+		"profile":                                     # UI (0.22.x): PROFILE is a tab of its own now, not a meta page
+			show_profile()
 
 
 func _shell_add(c: Control, pos: Vector2) -> Control:
@@ -833,11 +835,16 @@ func show_options() -> void:
 			y += _opt_row(y, w, "VOLUME", "How loud the sounds are - heard at once.", vols, not Sfx.sound_on())
 			y += _opt_row(y, w, "MUSIC", "The soundtrack, in the menus and the match. OFF: no music (the MUSIC VOLUME is kept for ON).",
 					[["ON", Music.music_on(), func(): Music.set_on(true)], ["OFF", not Music.music_on(), func(): Music.set_on(false)]])
-			var mvols := []
+			var mvols_menu := []
 			for v in Rules.MUSIC_VOLUME_STEPS:
 				var pct: int = v
-				mvols.append([Music.volume_label(pct), Music.volume() == pct, func(): Music.set_volume(pct)])
-			y += _opt_row(y, w, "MUSIC VOLUME", "How loud the music is, apart from the sounds - heard at once.", mvols, not Music.music_on())
+				mvols_menu.append([Music.volume_label(pct, "menu"), Music.volume("menu") == pct, func(): Music.set_volume(pct, "menu")])
+			y += _opt_row(y, w, "MENU MUSIC", "How loud the music is in the menus - heard at once.", mvols_menu, not Music.music_on())
+			var mvols_match := []
+			for v in Rules.MUSIC_VOLUME_STEPS:
+				var pct: int = v
+				mvols_match.append([Music.volume_label(pct, "match"), Music.volume("match") == pct, func(): Music.set_volume(pct, "match")])
+			y += _opt_row(y, w, "MATCH MUSIC", "How loud the music is in a match, apart from the sounds - heard at once.", mvols_match, not Music.music_on())
 			# MUSIC: the soundtrack's credit (the game has no credits page: a small CREDITS line under AUDIO)
 			y += _say("CREDITS", Vector2(0, y + 18.0), 12, UiKit.accent(shell_f), 0.0, true) + 18.0
 			y += _say(Rules.MUSIC_CREDIT, Vector2(0, y + 8.0), 13, UiKit.MUTED, w) + 16.0
@@ -1180,30 +1187,31 @@ func _profile_card(pos: Vector2) -> void:
 
 func show_profile() -> void:
 	_last_show = show_profile                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## PROFILE (screen system 21; the top bar's level block): level and XP, both balances and where they come from, per
-	## faction plays / wins and the faction vat's progress (25 wins online or vs Veteran / Expert AI), and whether it is
-	## saved on this device; CHALLENGES, LEADERBOARD, MATCH HISTORY and ACCOUNT at the foot (a guest's ACCOUNT lit: add
-	## Google there). BACK returns to the page it was opened from.
-	var tab := _meta_open("profile", show_main)
-	var area := shell_open("OOZE / PROFILE", tab, func(): _meta_back("profile", show_main), faction)
+	## PROFILE (screen system 21; the top bar's level block; a NavBar tab of its own, Decisions ui-profile-access "ab"):
+	## level and XP, both balances and where they come from, per faction plays / wins and the faction vat's progress
+	## (25 wins online or vs Veteran / Expert AI), and whether it is saved on this device; CHALLENGES, LEADERBOARD,
+	## MATCH HISTORY and ACCOUNT as an equal row at the TOP (a guest's ACCOUNT lit: add Google there); the two columns
+	## under it. Its sub-pages' BACK returns here (_meta_open / _prev_show).
+	var area := shell_open("OOZE / PROFILE", "profile", Callable(), faction)
 	_page = "profile"
 	var x := shell_x()
 	var acc := UiKit.accent(shell_f)
 	var top := page_title(area, "PROFILE", "YOUR SYNDICATE RECORD.")
 	var a := _account()
 	var bh := UiKit.tap_h(self, 46.0)
-	var fy := area.end.y - bh - 12.0
-	var bx := x
-	for l in [["CHALLENGES", show_challenges], ["LEADERBOARD", show_leaderboard], ["MATCH HISTORY", show_history],
-			["ACCOUNT", show_account]]:                  # 0.20.5: LEADERBOARD, HISTORY, ACCOUNT
-		var bw := UiKit.text_w(self, l[0], 15, true) + 44.0
-		var lit: bool = l[0] == "ACCOUNT" and a.state == "guest"
-		UiKit.btn(self, l[0], Vector2(bx, fy), Vector2(bw, 46), l[1], "primary" if lit else "secondary", shell_f, 15)
-		bx += bw + 10.0
-	var gap := 18.0
+	var items := [["CHALLENGES", show_challenges], ["LEADERBOARD", show_leaderboard], ["MATCH HISTORY", show_history],
+			["ACCOUNT", show_account]]                   # 0.20.5: LEADERBOARD, HISTORY, ACCOUNT
 	var all_w := content.size.x - x * 2.0
+	var bgap := 10.0
+	var bw := (all_w - bgap * (items.size() - 1)) / items.size()
+	for i in range(items.size()):
+		var l = items[i]
+		var lit: bool = l[0] == "ACCOUNT" and a.state == "guest"
+		UiKit.btn(self, l[0], Vector2(x + i * (bw + bgap), top), Vector2(bw, bh), l[1], "primary" if lit else "secondary", shell_f, 15)
+	top += bh + 20.0
+	var gap := 18.0
 	var lw := floorf((all_w - gap) * 0.42)
-	var ch := fy - 12.0 - top
+	var ch := area.end.y - 12.0 - top
 	# left: level, XP, SCRAP and CHIPS and where they come from, where it is saved
 	var left := _column(Vector2(x, top), Vector2(lw, ch))
 	var w: float = left["w"]
@@ -1359,7 +1367,7 @@ func _challenge_card(c: Dictionary, kind: String, pos: Vector2, w: float, just_c
 # ------------------------------------------------------------------ UI: parts of the online / progression / settings pages (Alpha 21)
 var _meta_from := {}                               # page -> [the page it was opened from (its BACK), the tab kept lit]
 var _meta_returning := false                       # a BACK is under way: the page it lands on keeps its own record
-const META_TABS := ["home", "play", "armies", "campaign"]
+const META_TABS := ["home", "play", "armies", "campaign", "profile"]
 
 
 func _meta_open(page: String, fallback: Callable) -> String:
