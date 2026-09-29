@@ -13,6 +13,13 @@ boot_splash/bg_color=Color(0.008, 0.01, 0.014, 1)
 boot_splash/image="res://assets/art/ui/boot_logo.png"
 boot_splash/use_filter=true
 
+[audio]
+
+; 0.23.4 (Daniele's phone, Android Chrome: the SOUND TEST beeps play, the game effects never - Godot's web SAMPLE chain
+; put out a signal 15x over full scale with a DC offset; desktop read 0.02): web effects play as STREAMS, mixed in wasm and
+; sent through the AudioWorklet, which read clean on his phone. 0 = Stream, 1 = Sample (the web template's default).
+general/default_playback_type.web=0
+
 [autoload]
 
 Net="*res://scripts/net.gd"

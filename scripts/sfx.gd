@@ -23,7 +23,8 @@ extends Node
 ## (Rules.SOUND_BED: sends, fights, hits, machinegoon, laser, falls) is a soft bed - long throttles, quieter, a small
 ## pitch spread, only for your side's lines or ones on screen, held off for Rules.SOUND_DUCK s after a cue
 ## (Rules.SOUND_CUES: capture, node lost, Last Stand, knock-out, win, collapse), which stay clear. First run: 30 %.
-## Web: every stream is registered as a WebAudio sample when the match node is made (no decode on its first play).
+## Web (0.23.4): effects play as STREAMS (mixed in wasm, out through the AudioWorklet), never as WebAudio samples - the
+## sample chain was silent on Android Chrome (its output 15x over full scale); the set is still loaded when the match node is made.
 ## Envelope (Daniele, with music: "less loud and that they fade more seamlessly"): each match sound fades in and its
 ## tail fades out (Rules.SOUND_FADE_IN / SOUND_FADE_OUT, a volume tween per voice), a repeat of an event still sounding
 ## crossfades (the old voice fades out over Rules.SOUND_XFADE, the new one starts on a free voice), and the priority
@@ -210,9 +211,9 @@ func _ready() -> void:
 		voice_info.append([0, "", false])
 		envelopes.append(null)
 	for ev in FILES:                                   # load the set now, not on the first fight
-		var st := _stream(FILES[ev])
-		if st != null and OS.has_feature("web"):       # match feel: into WebAudio now, not on its first play
-			AudioServer.register_stream_as_sample(st)
+		_stream(FILES[ev])                             # (0.23.4: no WebAudio sample registration any more - the web plays
+		                                               # effects as streams, project.godot [audio]; the sample chain was
+		                                               # silent on Daniele's phone, its output 15x over full scale)
 
 
 func _exit_tree() -> void:

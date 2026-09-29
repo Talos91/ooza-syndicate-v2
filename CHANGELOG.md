@@ -1,5 +1,18 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.4 "Alpha 23" - 2026-09-30 (phone sound, staged load)
+
+- **Game effects on phones** (Daniele hears the SOUND TEST beeps but never a game effect): the web build played effects through
+  Godot's WebAudio *sample* chain, which on his Android Chrome put out a signal 15x over full scale with a DC offset (the 0.23.3
+  meters: `Gain 0.00>5.40 dc-0.31`; desktop 0.02) - the phone plays nothing for it. Effects now play as *streams* on the web (mixed
+  in wasm, out through the AudioWorklet, which read clean on his phone): `audio/general/default_playback_type.web = Stream`, no
+  sample registration in Sfx. The SOUND TEST's AUDIO readout says `playback stream`.
+- **DEPLOY no longer freezes** (his phone: ~14 s with no VERSUS card): an online round's world is built a block per frame under the
+  VERSUS card - the views built so far are held, each block's meshes revealed a few materials per frame, the warm-up paced the
+  same way - and the card shows a thin loading bar. Desktop probe (tests/staged_load_probe): worst frame after DEPLOY 843 ms
+  before, 148 ms after (target 250). Offline, lessons, missions and the room server build in one block as before.
+- Net.load_marks: a load trace (DEPLOY, launch, reload, build steps) for the probe; additive, no protocol change.
+
 ## 0.23.3 "Alpha 23" - 2026-09-30 (sound diagnosis, DEPLOY stall)
 
 - **SOUND TEST measures the effect's path** (Daniele hears the two test beeps but never the game effect, even at SOUND 100 %): TEST now also
