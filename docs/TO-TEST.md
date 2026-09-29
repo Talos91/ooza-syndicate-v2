@@ -1,9 +1,13 @@
-# To test - ALPHA 23.1 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.2 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.2
+- [ ] **DEPLOY** in a room: the VERSUS card at once (no frozen lobby), until the map is there.
+- [ ] **SOUND TEST**: SETTINGS (gear) > DISPLAY > AUDIO > TEST - tell me which of sounds 1 / 2 / 3 you hear, and screenshot the three AUDIO lines.
 
 ## 0.23.1
 - [ ] **Sound effects** play (SETTINGS > SOUND should read ON; if you had turned it OFF, it's ON again once).

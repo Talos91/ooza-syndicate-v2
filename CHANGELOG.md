@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.2 "Alpha 23" - 2026-09-30 (Daniele's 0.23.1 check)
+
+- **The VERSUS card IS the loading screen now** (Daniele: "when you click deploy that's what players see until the map is ready, not the
+  frozen deploy screen"): it goes up the moment DEPLOY is pressed - built from the lobby (both sides, names, map, room) - and stays while the
+  room server starts the match (the seconds that looked like a freeze), through the scene reload and the map build, then the match's own card
+  takes over, identical. Everyone else in the room gets it the moment the launch arrives.
+- **SOUND TEST** (Daniele: effects still silent on his phone, not reproducible elsewhere): SETTINGS > DISPLAY > AUDIO > TEST plays three sounds
+  0.6 s apart - (1) a game effect, (2) a raw beep on the game's audio engine, (3) a raw beep on a fresh one - and shows an AUDIO readout;
+  which of the three you hear says where the sound stops. The same readout goes into the play data (when shared). PAUSE > SETTINGS has TEST too.
+
 ## 0.23.1 "Alpha 23" - 2026-09-30 (Daniele's Alpha 23 check)
 
 - **LARGE maps back to the original camera** (58°; Daniele: "on large maps the tilt makes it very hard to play"); tiny, small and medium
