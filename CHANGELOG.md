@@ -1,7 +1,16 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.22.3 "Alpha 22" - 2026-09-29 (the perf pass; the version reads ALPHA 22.3; guest net stats)
+## 0.22.3 "Alpha 22" - 2026-09-30 (the perf pass; fullscreen fixed; music streams; every button checked; guest net stats)
 
+- **Fullscreen on the phone** (Daniele: "doesn't open any more in full screen ... often shows the navbar"): the page asks for fullscreen on
+  the first tap again and again whenever the browser has dropped it (installed app included); the orientation lock can no longer abort
+  it; **PAUSE > SETTINGS has a FULLSCREEN button** as the emergency fallback (web, not iOS).
+- **Music streams** (🎵): on the web the browser plays the tracks itself (no music.pck, no decoding on the game's thread - the cause of the
+  0.22.1 lag); desktop gets the stereo set, phones a lighter mono set; MUSIC still starts OFF; OFF stops it at once. (A top-right mute and
+  separate menu / match volumes come later - Daniele.)
+- **Every button tapped** (🧩, Daniele: "check all buttons"): 184 taps on a phone-size build and 293 on desktop all answer; fixed: desktop
+  TRAINING's BACK, LOCKED / COMING LATER cards no longer flash, and a per-frame error logged for every HUD label in every match.
+- **Staging matches report nothing** to the leaderboard (🖥️).
 - **Perf pass** (📐's perf-pass agent, report in 05 Handoff/handoffs/architect-specs/perf-pass-report.md): AI thinks 4-6x cheaper (one
   Dijkstra per source per think, cached trip times / reach; decisions identical - same event-log hashes), UnitView bodies in preallocated
   typed arrays, HUD / badge layer / overlays redraw only on change, Label3D without per-frame mesh rebuilds, MonsterView / HordeView

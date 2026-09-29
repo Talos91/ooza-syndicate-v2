@@ -6,6 +6,9 @@ networks. Close and reopen the home-screen app after a publish.
 Live build: https://oozesyndicate.com
 
 ## 0.22.3 (perf pass + hotfix)
+- [ ] **Fullscreen**: first tap enters fullscreen, navbar gone (browser tab AND the home-screen app); if not: PAUSE > SETTINGS > FULLSCREEN.
+- [ ] **Music**: SETTINGS > MUSIC ON on the phone - plays without lag? OFF stops it at once? (defaults to OFF).
+- [ ] **Buttons**: LEADERBOARD > BACK > BACK; TRAINING's BACK; the locked cards do nothing.
 - [ ] **Smoother?** A busy 2v2 and the Last Stand on your phone and your girlfriend's iPhone (🖥️: her lag looks like a 30 fps cap, likely iOS Low
       Power Mode - check that first). The version in the corner reads ALPHA 22.3. MUSIC is OFF unless you switch it on.
 
