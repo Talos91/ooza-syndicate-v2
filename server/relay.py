@@ -295,10 +295,14 @@ async def run_create(ws, version, ip, test=False):
     room.secret = secrets.token_urlsafe(18)
     rooms[code] = room
     if cfg.pck and pck != os.path.realpath(cfg.pck):
-        log.info("room %s: version %s from its own pack %s", code, version, os.path.basename(pck))
+        log.info("room %s: version %s from its own pack %s (no match reports)", code, version, os.path.basename(pck))
     cmd = [cfg.godot, "--headless"] + (["--main-pack", pck] if cfg.pck else ["--path", cfg.project]) + [
         "--", "--dedicated", "--relay=ws://127.0.0.1:%d/ooze" % cfg.port, "--room=" + code, "--secret=" + room.secret] + cfg.host_arg
     env = dict(os.environ, GODOT_SILENCE_ROOT_WARNING="1")
+    if cfg.pck and pck != os.path.realpath(cfg.pck):
+        # Daniele (2026-09-29, Decisions): a version that isn't live (the staging site) plays server rooms but reports
+        # nothing to the leaderboard - its match host gets no signing secret (Net._report_round then sends nothing)
+        env.pop("OOZE_MATCH_SECRET", None)
     if cfg.data:
         env["XDG_DATA_HOME"] = cfg.data
     out = asyncio.subprocess.DEVNULL
