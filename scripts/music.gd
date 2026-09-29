@@ -29,7 +29,7 @@ extends Node
 ## excludes assets/audio/music/*); tools/copy_music.py --web fills both folders (BUILD-LOG sec10). Every failure
 ## (no WebAudio, a 404, autoplay refused until a tap, offline) is silence, never an error.
 ## SETTINGS > DISPLAY > AUDIO and PAUSE > SETTINGS: MUSIC ON / OFF, MENU MUSIC and MATCH MUSIC volume (Daniele 2026-09-29;
-## Rules.MUSIC_VOLUME_STEPS, %), saved in user://settings.cfg [audio] music_on_v2 / music_volume_menu / music_volume_v2 (the
+## Rules.MUSIC_VOLUME_STEPS, %), saved in user://settings.cfg [audio] music_on_v3 (0.23.0: a new key so everyone starts ON once) / music_volume_menu / music_volume_v2 (the
 ## match's; Sfx.path: the same file). The top-right MUSIC button (🧩 UI) is toggle_on(): OFF at once, everywhere. The Music bus
 ## (web: music.js's master gain) carries the level + the duck; each player scales by its own track's volume - MENU (the
 ## menus, the results screen) by MENU MUSIC, every other slot (BATTLE, LAST STAND, VLS, the stingers) by MATCH MUSIC - so a
@@ -76,7 +76,7 @@ static func _load() -> void:
 		_volume_menu = clampi(int(cf.get_value("audio", "music_volume_menu", _volume)), 1, 100)   # (before the split: the one volume)
 		# HOTFIX 0.22.2 (Daniele: "audio is super laggy and the mute doesn't work, unplayable"): the key is new, so every device starts
 		# OFF again whatever 0.22.1 saved; music plays only for who switches it ON.
-		_on = bool(cf.get_value("audio", "music_on_v2", Rules.MUSIC_ON_DEFAULT))
+		_on = bool(cf.get_value("audio", "music_on_v3", Rules.MUSIC_ON_DEFAULT))
 
 
 static func _save() -> void:
@@ -84,7 +84,7 @@ static func _save() -> void:
 	cf.load(Sfx.path)                                  # keep the other keys and sections (SOUND's, [graphics], ...)
 	cf.set_value("audio", "music_volume_v2", _volume)
 	cf.set_value("audio", "music_volume_menu", _volume_menu)
-	cf.set_value("audio", "music_on_v2", _on)
+	cf.set_value("audio", "music_on_v3", _on)
 	cf.save(Sfx.path)
 
 

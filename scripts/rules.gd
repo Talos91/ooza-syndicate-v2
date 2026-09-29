@@ -132,7 +132,7 @@ static var last_stand: bool = true
 # CAMERA (Daniele, Alpha 14 playtest: "map size should be fixed, no zoom... too vertical"; "vats and
 # buildings should all face the viewer on every map"). The camera is fitted once per screen size,
 # never zoomed or panned; VIEW_YAW is set per map before it is built so every structure faces it.
-const CAM_PITCH := 34.0              # degrees above the horizon for a map MapCamera doesn't list (Alpha 14: 42,
+const CAM_PITCH := 41.0              # Daniele (2026-09-30): "camera angle too low, raise of 20%" (34 -> 41; 58 until 0.22.3)
                                      # "too vertical" at 55 on the deep maps 3.0; Alpha 18, maps 4.0: "a bit more
                                      # from the top" - each map gets its own pitch, 58 on every maps 4.2 map, see MapCamera;
                                      # Daniele, 2026-09-29, Map Lab: "34deg is best" - lower, more diagonal, every map, no per-map overrides)
@@ -1244,10 +1244,10 @@ const MUSIC_DUCK_IN := 0.3
 const MUSIC_DUCK_HOLD := 0.5
 const MUSIC_DUCK_OUT := 0.8
 # SETTINGS > DISPLAY > AUDIO (and PAUSE > SETTINGS): MUSIC ON / OFF and MUSIC VOLUME (percent), user://settings.cfg
-# [audio] music_on_v2 / music_volume_v2. First run: OFF (0.22.2), 30 % (0.22.4, Daniele: "default volume needs to be toned down"; was 60).
+# [audio] music_on_v3 / music_volume_v2. First run: ON (0.23.0; OFF 0.22.2-0.22.4), 30 % (0.22.4, Daniele: "default volume needs to be toned down"; was 60).
 const MUSIC_VOLUME_STEPS := [15, 30, 60, 100]
 const MUSIC_VOLUME_DEFAULT := 30
-const MUSIC_ON_DEFAULT := false           # HOTFIX 0.22.2 (Daniele 2026-09-29: the music made phones lag and OFF did not stop it): OFF until switched on
+const MUSIC_ON_DEFAULT := true            # Daniele (2026-09-30): "music doesn't start until you press unmute" - ON again now it streams (0.22.2-0.22.4: OFF)
 const MUSIC_CREDIT := "Music: Cyberpunk Music Pack by SmellyCatCafe (smellycatcafe.itch.io)"
 # --- end MUSIC ---
 
@@ -1291,6 +1291,7 @@ const WARMUP_FRAMES := 3                 # frames the warm-up pieces stay drawn
 # for at least VERSUS_ONLINE_MIN s so it reads as a screen, never a flash. After VERSUS_ONLINE_MAX s it goes anyway and
 # the HUD's waiting text says what is still missing (a silent host: Net.HOST_GRACE).
 const VERSUS_ONLINE_MIN := 2.5
+const VERSUS_ONLINE_PREDRAW_FRAMES := 2     # frames the online VERSUS card is drawn before the map build starts (0.23.0)
 const VERSUS_ONLINE_MAX := 20.0
 # Badges during camera motion (the Last Stand zoom "still slows the game down"): Hud._layout_badges scores 24 spots x 3
 # reaches against every platform, deck and badge (~10 ms a frame on M-39 on desktop, every frame of the 1.5 s zoom);

@@ -50,8 +50,8 @@ func _ready() -> void:
 	Sfx.path = CFG
 	Sfx._volume = -1                                   # read the (empty) test cfg: the default levels
 	Music._volume = -1
-	check(not Music.music_on() and Music.volume() == Rules.MUSIC_VOLUME_DEFAULT,
-			"first run: MUSIC OFF (0.22.2), MUSIC VOLUME %d %% (0.22.4: lower)" % Rules.MUSIC_VOLUME_DEFAULT)
+	check(Music.music_on() == Rules.MUSIC_ON_DEFAULT and Music.volume() == Rules.MUSIC_VOLUME_DEFAULT,
+			"first run: MUSIC %s (0.23.0: ON again), MUSIC VOLUME %d %%" % ["ON" if Rules.MUSIC_ON_DEFAULT else "OFF", Rules.MUSIC_VOLUME_DEFAULT])
 	Music.set_on(true)                                 # the default is OFF since the 0.22.2 hotfix: the check plays it on purpose
 	_check_slots()
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
@@ -196,8 +196,8 @@ func _check_menu() -> void:
 	Music.set_on(false)
 	var cf := ConfigFile.new()
 	check(AudioServer.is_bus_mute(mb) and not AudioServer.is_bus_mute(sb) and cf.load(CFG) == OK
-			and not bool(cf.get_value("audio", "music_on_v2", true)) and int(cf.get_value("audio", "music_volume_v2", 0)) == 30,
-			"MUSIC OFF: the Music bus muted (Sfx not), saved in [audio] music_on_v2 / music_volume_v2")
+			and not bool(cf.get_value("audio", "music_on_v3", true)) and int(cf.get_value("audio", "music_volume_v2", 0)) == 30,
+			"MUSIC OFF: the Music bus muted (Sfx not), saved in [audio] music_on_v3 / music_volume_v2")
 	Music._volume = -1                                 # read back from the file, as the next run would
 	check(not Music.music_on() and Music.volume() == 30 and Music.next_volume() == 60, "[audio] read back: OFF, 30 %; the cycle 30 -> 60")
 	Music.set_on(true)
@@ -219,7 +219,7 @@ func _check_sfx_settings() -> void:
 	Sfx.set_on(false)
 	var cf := ConfigFile.new()
 	check(AudioServer.is_bus_mute(bus) and not AudioServer.is_bus_mute(mb) and not AudioServer.is_bus_mute(0) and not Sfx.sound_on()
-			and cf.load(CFG) == OK and not bool(cf.get_value("audio", "on", true)) and bool(cf.get_value("audio", "music_on_v2", false)),
+			and cf.load(CFG) == OK and not bool(cf.get_value("audio", "on", true)) and bool(cf.get_value("audio", "music_on_v3", false)),
 			"SOUND OFF: the Sfx bus muted (Music and Master not), saved in [audio] beside MUSIC's keys")
 	Sfx.set_volume(100)
 	check(AudioServer.is_bus_mute(bus), "SOUND OFF stays silent whatever the VOLUME")

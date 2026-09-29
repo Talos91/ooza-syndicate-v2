@@ -66,20 +66,21 @@ static func hold_match(m) -> void:
 	m.add_child(v)
 
 
-static func hold_online(m) -> void:
+static func hold_online(m) -> bool:
 	## main._start_online, after _start_map: the card over a room's round while it loads (never the room server's
 	## match host, a lesson, a headless run). The match is not paused: Net's barrier and the host's clock run as before.
 	if Net.dedicated or m.director != null or DisplayServer.get_name() == "headless":
-		return
+		return false
 	for a in OS.get_cmdline_user_args():
 		for p in SKIP_ARGS:
 			if a.begins_with(p):
-				return
+				return false
 	var v := VersusScreen.new()
 	v.main = m
 	v.online = true
 	v.net = Net
 	m.add_child(v)
+	return true
 
 
 func online_loaded() -> bool:

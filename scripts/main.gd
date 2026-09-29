@@ -396,6 +396,11 @@ func _start_map(path: String) -> void:
 		paused = false
 		return
 	# --- end SERVER HOST ---
+	if _online_card_pending:                          # UI (Daniele 2026-09-30: "shows the vs load screen for a frame"): online, the
+		_online_card_pending = false                  # VERSUS card goes up BEFORE the heavy world build and is drawn first,
+		if VersusScreen.hold_online(self):           # so the load happens under it instead of freezing the DEPLOY page
+			for i in range(Rules.VERSUS_ONLINE_PREDRAW_FRAMES):   # (no card - headless, a lesson, the server - no wait)
+				await get_tree().process_frame
 	_build_world()
 	vis = MapBuilder.build3(self, sim, map) if map.has("layout") else MapBuilder.build(self, sim)
 	if not vis["stretched"].is_empty():
@@ -533,6 +538,9 @@ func start_match(path: String, faction: String, seat_factions: Dictionary, level
 	VersusScreen.hold_match(self)                      # UI: the VERSUS card over the built match, held paused until it ends
 
 
+var _online_card_pending := false                     # UI: set by _start_online, read once by _start_map
+
+
 func _start_online() -> void:
 	## A room's round (Net): players, plus the AI in empty or dropped seats (host only). The host
 	## steps the Sim; guests build the same world from the same seed and render the host's snapshots.
@@ -548,8 +556,8 @@ func _start_online() -> void:
 		var seats: Array = (info["players"] as Dictionary).keys()
 		seats.sort()
 		HUMAN = str(seats[0])
-	_start_map(str(info["map"]))
-	VersusScreen.hold_online(self)                     # UI: the VERSUS card as the round's loading screen (never a hold)
+	_online_card_pending = not Net.dedicated          # UI: _start_map raises the VERSUS card before building (the round's loading screen)
+	await _start_map(str(info["map"]))
 	for arg in OS.get_cmdline_user_args():             # tests only (a local relay's --host-arg): a short server round
 		if Net.dedicated and arg.begins_with("--match-end="):
 			sim.match_hard_end = float(arg.substr(12))

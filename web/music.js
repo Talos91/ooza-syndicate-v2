@@ -13,22 +13,13 @@
     ctx: null, master: null, els: [null, null], gains: [null, null], wanted: [false, false], failed: [false, false],
     hidden: false
   };
-  if (AC) {                                      // catch the context Godot makes (the one its first-tap unlock resumes)
-    var Wrapped = function (opts) {
-      var c = opts === undefined ? new AC() : new AC(opts);
-      if (!M.ctx) M.ctx = c;
-      return c;
-    };
-    Wrapped.prototype = AC.prototype;
-    try { Object.setPrototypeOf(Wrapped, AC); } catch (e) {}
-    if (window.AudioContext) window.AudioContext = Wrapped;
-    if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
-  }
-
+  // 0.23.0 (Daniele: sound effects silent on his phone while the music played): the music has its OWN AudioContext,
+  // made on the first tap (a user gesture - iOS / Android allow it then) and resumed on every tap; it no longer shares
+  // Godot's context, so the <audio> elements can never interfere with the game's effects.
   function build() {                             // the elements and gains, once, in Godot's context
     if (M.master) return true;
     try {
-      if (!M.ctx) { if (!AC) return false; M.ctx = new AC(); }
+      if (!M.ctx) { if (!AC) return false; M.ctx = new AC(); }   // our own context (see above)
       M.master = M.ctx.createGain();
       M.master.gain.value = 0;
       M.master.connect(M.ctx.destination);
@@ -63,7 +54,7 @@
   }
 
   function unlock() {                            // every tap: resume the context, retry what autoplay refused
-    if (M.ctx) build();                          // (made inside a gesture where possible: iOS likes that)
+    build();                                     // the first tap makes our context and elements (a user gesture)
     try { if (M.ctx && M.ctx.state !== "running" && !M.hidden) M.ctx.resume(); } catch (e) {}
     for (var i = 0; i < 2; i++) if (M.wanted[i] && M.els[i] && M.els[i].paused) kick(i);
   }

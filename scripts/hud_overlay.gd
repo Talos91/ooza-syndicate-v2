@@ -37,10 +37,10 @@ const HALO_SEGMENT_ALPHA := 0.95
 const HALO_BACKDROP_ALPHA := 0.22     # the faint full ring under the segments
 const HALO_SPIN := 0.5                # rad/s the segments slowly turn (reads as "alive", not static)
 
-const UPGRADE_ARROW_W := 11.0         # 0.22.4 playtest: the upgrade-ready chevron over the human's own badges
-const UPGRADE_ARROW_H := 13.0
-const UPGRADE_ARROW_GAP := 7.0        # past the node's rim
-const UPGRADE_ARROW_BOB := 3.0        # px it gently bobs
+const UPGRADE_ARROW_W := 18.0         # the upgrade-ready chip (0.23.0 restyle, Daniele: "not in line with the rest of our UI, too
+const UPGRADE_ARROW_H := 18.0         # high over the tower"): a small UiKit chip - dark card, neon frame, a double chevron
+const UPGRADE_ARROW_LIFT := 0.35      # of the node's screen radius above its centre: on the platform, just over the tower's base
+const UPGRADE_ARROW_BOB := 2.0        # px it gently bobs
 const UPGRADE_ARROW_SPEED := 2.4      # rad/s of the bob/pulse
 
 
@@ -218,22 +218,26 @@ func _upgrade_ready(id: int) -> bool:
 
 
 func _draw_upgrade_arrows(cam: Camera3D) -> void:
+	## The upgrade-ready chip: the UI's own look (UiKit card fill, a frame in the player's accent, a double chevron), sat low on
+	## the platform beside the tower - not a loose gold triangle floating above it (0.23.0).
+	var acc := UiKit.accent(str(main.SEAT_FACTIONS.get(human, "vex")))
 	for n in sim.nodes:
 		var id: int = n["id"]
 		if n["owner"] != human or not _upgrade_ready(id):
 			continue
 		var ns := _node_screen(id, cam)
 		var k := 0.5 + 0.5 * sin(_t * UPGRADE_ARROW_SPEED + float(id))
-		var bob := UPGRADE_ARROW_BOB * ui_scale * k
-		var a := 0.55 + 0.45 * k
-		var top: Vector2 = ns[0] + Vector2(0.0, -float(ns[1]) - UPGRADE_ARROW_GAP * ui_scale - bob)
 		var w := UPGRADE_ARROW_W * ui_scale
 		var h := UPGRADE_ARROW_H * ui_scale
-		var col := Rules.state_color("build")           # the same gold the build bar / cost line use
-		var pts := PackedVector2Array([top + Vector2(0.0, -h), top + Vector2(-w * 0.5, 0.0), top + Vector2(w * 0.5, 0.0)])
-		draw_polygon(pts, PackedColorArray([Color(col, a)]))
-		draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[0]]), Color(0, 0, 0, 0.55 * a), 1.5 * ui_scale, true)
-
+		var c: Vector2 = ns[0] + Vector2(float(ns[1]) * 0.55, -float(ns[1]) * UPGRADE_ARROW_LIFT - UPGRADE_ARROW_BOB * ui_scale * k)
+		var r := Rect2(c - Vector2(w, h) * 0.5, Vector2(w, h))
+		draw_rect(r, UiKit.CARD, true)
+		draw_rect(r, Color(acc, 0.65 + 0.35 * k), false, 1.5 * ui_scale)
+		var cw := w * 0.28
+		for step in [-0.18, 0.12]:                      # two stacked chevrons, pointing up
+			var y: float = c.y + h * step
+			draw_polyline(PackedVector2Array([Vector2(c.x - cw, y + cw * 0.6), Vector2(c.x, y - cw * 0.4), Vector2(c.x + cw, y + cw * 0.6)]),
+					Color(acc, 0.75 + 0.25 * k), 2.0 * ui_scale, true)
 
 # ------------------------------------------------------------------ relay badge cues (0.19.0, Daniele:
 # "add some visibility to the buttons / models of the relays")
