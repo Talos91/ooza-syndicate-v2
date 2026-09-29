@@ -337,7 +337,7 @@ func _run() -> void:
 	fp2.free()
 
 	# ---------------------------------------------------------------- STRUCTURES 2.1 + TEAMS (0.18.10): orders and snapshots
-	check(host.VERSION_TAG == "ooze20-net-7", "the net protocol is bumped for player names (ooze20-net-7; 6: READY)")
+	check(host.VERSION_TAG == "ooze20-net-8", "the net protocol is bumped for the powers (ooze20-net-8; 7: player names)")
 	host._order_limits = {}
 	host._packet_limits = {}
 	host.bridge.sent = []
@@ -746,20 +746,32 @@ func _test_skill_fx() -> void:
 		hs.ult_since["A"] = 500.0
 		if not casts.get("core_meltdown", false) and hs.cast_check("A", "ultimate", raid["id"]) == "":
 			cast.call("A", "ultimate", "core_meltdown", raid["id"])
+	# POWERS (0.22.2): each new power cast on the first target the Sim offers (Portal: the first entrance and its first exit)
+	hs.nodes[8]["tier"] = 2                            # (a structure Sinkhole may take down: not a home's last T1 vat)
+	for p in [["B", "map", "backwash"], ["A", "map", "quake"], ["A", "map", "sever"], ["A", "map", "fog"], ["A", "map", "portal"],
+			["A", "active", "sinkhole"], ["A", "active", "evac"]]:
+		hs.loadouts[p[0]][p[1]] = p[2]
+		hs.skill_cd[p[0]][p[1]] = 0.0
+		var ts: Array = hs.targets_for(p[0], p[1])
+		var t = ts[0] if not ts.is_empty() else -1
+		if p[2] == "portal" and not ts.is_empty():
+			t = [ts[0], hs.portal_exits(ts[0])[0]]
+		cast.call(p[0], p[1], p[2], t)
+		frame.call(0.1)
 	var kids := hfx.get_child_count()
 	for k in range(240):                               # past Demolish's 3 s warning and 20 s down, and every effect's end
 		frame.call(0.1)
-	check(casts.values().all(func(ok): return ok) and casts.size() == 15, "every skill cast for the view check (%s)" % str(casts.keys().filter(func(k): return not casts[k])))
+	check(casts.values().all(func(ok): return ok) and casts.size() == Rules.SKILLS.size(), "every skill cast for the view check (%s)" % str(casts.keys().filter(func(k): return not casts[k])))
 	var missing := []
 	for id in Rules.SKILLS:
 		if int(hfx.stats.get("cast_" + id, 0)) < 1:
 			missing.append(id)
-	check(missing.is_empty(), "the host's view shows a cast moment for all 15 skills %s" % str(missing))
+	check(missing.is_empty(), "the host's view shows a cast moment for all %d skills %s" % [Rules.SKILLS.size(), str(missing)])
 	var lasting := ["surge", "spore_burst", "fortify", "scorch", "demolish", "mire", "anchor", "bypass", "relay_hack", "rewire",
 			"superbloom", "relay_aegis"]
 	var gone := lasting.filter(func(id): return int(gfx.stats.get("slot_" + id, 0)) < 1)
 	check(gone.is_empty(), "a guest draws every lasting effect from the snapshots %s" % str(gone))
-	check(int(gfx.stats.get("break", 0)) == 1 and int(gfx.stats.get("rebuild", 0)) == 1 and int(gfx.stats.get("meltdown", 0)) == 1
+	check(int(gfx.stats.get("break", 0)) >= 1 and int(gfx.stats.get("rebuild", 0)) == int(gfx.stats.get("break", 0)) and int(gfx.stats.get("meltdown", 0)) == 1
 			and int(gfx.stats.get("tint", 0)) >= 3, "a guest sees the deck break and rebuild, the meltdown and the ultimates' tint")
 	check(int(hfx.stats.get("cast_ghost_line", 0)) == 1 and int(gfx.stats.get("cast_ghost_line", 0)) == 1,
 			"each Ghost Line cast reaches its own caster's view only")
@@ -1055,7 +1067,7 @@ func _test_presets() -> void:
 	ArmyPresets.set_pick("solar", "map", "anchor")
 	ArmyPresets.set_pick("ember", "map", "relay_hack")
 	ArmyPresets.reload_presets()                                  # read back from the file
-	check(ArmyPresets.loadout_for("solar") == {"active": "scorch", "map": "anchor"} and ArmyPresets.loadout_for("vex") == {"active": "surge", "map": "relay_hack"},
+	check(ArmyPresets.loadout_for("solar") == {"active": "scorch", "map": "anchor"} and ArmyPresets.loadout_for("vex") == {"active": "surge", "map": "portal"},   # (POWERS 0.22.5 defaults)
 			"ARMIES presets save, load back, and default per faction")
 	_open_room("1v1")
 	var gp := _new_net()
@@ -1074,7 +1086,7 @@ func _test_presets() -> void:
 			"a guest's ARMIES preset reaches the host with the register (%s)" % str(host.roster.get(gid, {}).get("loadout", {})))
 	ArmyPresets.room_faction(gp, "ember")                  # the lobby's faction pick: faction + that preset
 	_deliver()
-	check(host.roster[gid]["faction"] == "ember" and host.roster[gid]["loadout"] == {"active": "scorch", "map": "relay_hack"},
+	check(host.roster[gid]["faction"] == "ember" and host.roster[gid]["loadout"] == {"active": "sinkhole", "map": "relay_hack"},
 			"changing faction in the lobby sends that faction's preset")
 	ArmyPresets.send_to(host, "solar")                     # the host's own preset (CREATE ROOM)
 	check(host.roster[1]["loadout"] == {"active": "scorch", "map": "anchor"}, "the host's preset is its roster loadout")
@@ -1086,7 +1098,7 @@ func _test_presets() -> void:
 	host.start_match()
 	_deliver()
 	var info: Dictionary = host.match_info
-	check(info["rules"]["abilities_on"] == false and info["loadouts"].get("B", {}) == {"active": "scorch", "map": "relay_hack"}
+	check(info["rules"]["abilities_on"] == false and info["loadouts"].get("B", {}) == {"active": "sinkhole", "map": "relay_hack"}
 			and info["loadouts"].get("A", {}) == {"active": "scorch", "map": "anchor"},
 			"the launch carries both presets and ABILITIES OFF (%s)" % str(info["loadouts"]))
 	Rules.abilities_on = true

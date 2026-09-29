@@ -40,6 +40,15 @@ extends Node3D
 ##   --player-name=NAME                     HUD pass: your name for this run only (screenshots; nothing is saved)
 ##   --scenario=notices [--focus=N --zoom=N]  HUD pass: every placed message at once (callouts, an off-screen arrow
 ##                                           with --focus, a skill refusal, the Last Stand line's pulse)
+##   --cast-at=<t>:<seat>:<slot>:<skill>[:<target>]  POWERS (DEBUG, offline): from match time t, put <skill> in that seat's
+##                                           <slot> (active / map / ultimate), ready, and cast it on <target> (a node / deck /
+##                                           line id, "a,b" for a pair; "auto" or none: the Sim's target nearest the view's
+##                                           centre) as soon as the Sim accepts it; repeatable. --cast-zoom=N: the camera
+##                                           then frames the cast N m away; --cast-shots=0.3,1.5: the screenshots are
+##                                           taken that long after the first cast instead (the run quits after the last)
+##   --send-at=<t>:<from>:<to>               POWERS (DEBUG): at time t, send the whole garrison of <from> to <to>
+##   --aim=<t>:<slot>:<skill>[:<first>]      POWERS (DEBUG): at time t your <slot> holds <skill>, ready, and the dock arms
+##                                           it (the first tap of a two-tap skill: <first>, e.g. Portal's entrance)
 
 var HUMAN := "A"                                  # your seat: always A offline, host-assigned online
 var online := false                               # this match is an online room (Net)
@@ -92,6 +101,10 @@ var _trace_t := 0.0
 var shots: Array = []
 var shot_dir := ""
 var ff_to := -1.0        # --ff=<seconds>: step the sim headless-fast to this match time before playing on
+var _cast_at: Array = []  # POWERS (DEBUG): --cast-at orders still to cast [t, seat, slot, skill, target string]
+var _cast_zoom := -1.0    # POWERS (DEBUG): --cast-zoom=N
+var _cast_shots: Array = []   # POWERS (DEBUG): --cast-shots=0.3,1.5: screenshots that long after the first --cast-at cast
+var _aim: Array = []      # POWERS (DEBUG): --aim [t, slot, skill, first tap string]
 var demo := false
 var ai_level := "Standard"
 var seed_value := -1
@@ -242,6 +255,23 @@ func _ready() -> void:
 			map_explicit = true
 		elif arg.begins_with("--tutorial="):
 			tut_id = int(arg.substr(11))
+		elif arg.begins_with("--cast-at="):           # POWERS (DEBUG): a forced cast for screenshots (_debug_casts)
+			var cp := arg.substr(10).split(":")
+			if cp.size() >= 4:
+				_cast_at.append([float(cp[0]), cp[1], cp[2], cp[3], cp[4] if cp.size() > 4 else "auto"])
+		elif arg.begins_with("--send-at="):           # POWERS (DEBUG): --send-at=<t>:<from>:<to> - a whole-garrison send then
+			var sp := arg.substr(10).split(":")
+			if sp.size() >= 3:
+				_cast_at.append([float(sp[0]), "", "send", "", "%s,%s" % [sp[1], sp[2]]])
+		elif arg.begins_with("--cast-zoom="):
+			_cast_zoom = float(arg.substr(12))
+		elif arg.begins_with("--cast-shots="):
+			for t in arg.substr(13).split(","):
+				_cast_shots.append(float(t))
+		elif arg.begins_with("--aim="):               # POWERS (DEBUG): the dock armed for screenshots (_debug_casts)
+			var ap := arg.substr(6).split(":")
+			if ap.size() >= 3:
+				_aim = [float(ap[0]), ap[1], ap[2], ap[3] if ap.size() > 3 else ""]
 		elif arg.begins_with("--end-shot="):          # UI: screenshot an in-match screen (_end_shot)
 			end_shot = arg.substr(11)
 			map_explicit = true
@@ -349,6 +379,7 @@ func _start_map(path: String) -> void:
 		Rules.assign_colors(seats.values(), SEAT_FACTIONS, HUMAN, color_choice, teams)
 	Rules.apply_colour_blind(seats.values(), teams, HUMAN)   # UI: SETTINGS > COLOUR-BLIND (your screen only)
 	sim = Sim.new()
+	sim.ai_builds = true                               # POWERS: AI seats mix their builds (Rules.AI_LOADOUTS)
 	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams, LOADOUTS)
 	var lo := Vector3(INF, 0, INF)                     # the camera looks along the map's short side
 	var hi := Vector3(-INF, 0, -INF)
@@ -489,7 +520,7 @@ func start_match(path: String, faction: String, seat_factions: Dictionary, level
 	## AI level, the map, the mode (1v1 / 2v2 / FFA3-5), your colour and your skill loadout ({"active":
 	## id, "map": id}; empty = the default).
 	mode = match_mode
-	LOADOUTS = {HUMAN: loadout} if not loadout.is_empty() else {}
+	LOADOUTS = {HUMAN: loadout}                        # (POWERS: always an entry - a seat with none is an AI seat)
 	color_choice = colour
 	SEAT_FACTIONS[HUMAN] = faction
 	for seat in seat_factions:
@@ -1018,6 +1049,88 @@ func _stage_scenario() -> void:
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
 
 
+func _debug_casts() -> void:
+	## POWERS (DEBUG, screenshots): the --cast-at casts that are due (retried each frame until the Sim takes them) and
+	## the --aim arming. Offline only; never used by a player.
+	for c in _cast_at.duplicate():
+		if sim.time < float(c[0]):
+			continue
+		var seat := str(c[1])
+		var slot := str(c[2])
+		if slot == "send":                            # --send-at
+			var ft := str(c[4]).split(",")
+			sim.send(int(ft[0]), int(ft[1]), 1.0)
+			_cast_at.erase(c)
+			continue
+		if not sim.loadouts.has(seat):
+			_cast_at.erase(c)
+			continue
+		sim.loadouts[seat][slot] = str(c[3])
+		if slot == "ultimate":
+			sim.ult_charge[seat] = 1.0
+			sim.ult_since[seat] = 999.0
+		else:
+			sim.skill_cd[seat][slot] = 0.0
+		var t = _debug_target(seat, slot, str(c[4]))
+		if t is String or not sim.cast(seat, slot, t):
+			if sim.time > float(c[0]) + 30.0:
+				print("cast-at: %s gave up (%s)" % [str(c[3]), sim.cast_check(seat, slot, null if t is String else t)])
+				_cast_at.erase(c)
+			continue
+		print("cast-at t=%.1f %s %s -> %s" % [sim.time, seat, str(c[3]), str(t)])
+		_cast_at.erase(c)
+		if not _cast_shots.is_empty():
+			shots.clear()
+			for o in _cast_shots:
+				shots.append(sim.time + float(o))
+			_cast_shots = []
+		if _cast_zoom > 0.0:
+			var at: Vector3 = sim._target_pos(str(Rules.SKILLS[str(c[3])]["target"]), t, seat)
+			scenario_focus = at
+			scenario_zoom = _cast_zoom
+			cam_target = at
+			cam_dist = _cast_zoom
+			_place_camera()
+	if not _aim.is_empty() and sim.time >= float(_aim[0]) and hud and hud.dock:
+		var slot := str(_aim[1])
+		var i := SkillDock.SLOTS.find(slot)
+		sim.loadouts[HUMAN][slot] = str(_aim[2])
+		sim.skill_cd[HUMAN][slot] = 0.0
+		hud.dock.press_slot(i)
+		if str(_aim[3]) != "" and hud.dock.armed == i:
+			hud.dock.pick(int(_aim[3]))
+		_aim = []
+
+
+func _debug_target(seat: String, slot: String, spec: String):
+	## POWERS (DEBUG): a --cast-at target: as given, or the Sim's candidate nearest the view's centre ("" = none yet).
+	if spec != "auto":
+		if "," in spec:
+			var ab := spec.split(",")
+			return [int(ab[0]), int(ab[1])]
+		return int(spec)
+	var id := sim.skill_id(seat, slot)
+	var kind := str(Rules.SKILLS[id]["target"])
+	var cands := sim.targets_for(seat, slot)
+	if cands.is_empty():
+		return ""
+	var best = cands[0]
+	var best_d := INF
+	for c in cands:
+		var p: Vector3 = sim._target_pos("node" if kind == "node_pair" else kind, c, seat)
+		var d := Vector2(p.x - cam_target.x, p.z - cam_target.z).length()
+		if kind == "own_line":                        # a line: the one with the longest way still to go
+			var h := sim._horde(int(c))
+			d = -(float(h["L"]) - float(h["s"]))
+		if d < best_d:
+			best_d = d
+			best = c
+	if kind == "node_pair":
+		var exits := sim.portal_exits(int(best))
+		return [int(best), int(exits[0])] if not exits.is_empty() else ""
+	return best
+
+
 func _run_scenario() -> void:
 	if scenario == "hud19draw":
 		# no sim.time gate: show_end() pauses the match (freezes sim.time) - waiting for a later
@@ -1360,6 +1473,8 @@ func _process(delta: float) -> void:
 			ai.think(sim, sdt)
 		if scenario != "":
 			_run_scenario()
+		if not _cast_at.is_empty() or not _aim.is_empty():   # POWERS (DEBUG): --cast-at / --aim
+			_debug_casts()
 		sim.step(sdt)
 		if mission:                                    # CAMPAIGN: the objective after the Sim's step
 			mission.step(sdt)

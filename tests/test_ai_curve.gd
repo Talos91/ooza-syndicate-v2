@@ -13,6 +13,8 @@ extends SceneTree
 ##   Veteran).
 ##   Maps: every maps 4.2 duel map (B-, C-, S-) plus every M duel map (0.18.10 - Daniele, 2026-09-27: "Widen the
 ##   test"). A smoke run can cap it: `-- maps=2` plays only the first two duel maps (and a smaller FFA sample).
+## The AI seats play what they get in a match (ai-retune-prep): Sim.ai_builds on, so each takes one of its faction's
+## Rules.AI_LOADOUTS builds by the fixed seed. `-- guard=off` plays them without their home-defence reflex (SeatAI._guard).
 
 const LEVELS := ["Training", "Casual", "Standard", "Veteran", "Expert"]
 var failures := 0
@@ -35,6 +37,7 @@ func _match(path: String, mode: String, levels: Dictionary, seed_value: int, lim
 	for s in m["seats"][mode]:
 		seats[int(s["node"])] = s["seat"]
 	var sim := Sim.new()
+	sim.ai_builds = true                              # the AI seats' rotating builds, as in play
 	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null", "C": "null", "D": "null", "E": "null", "F": "null"}, seed_value, teams)
 	var ais := []
 	for seat in seats.values():
@@ -70,8 +73,14 @@ func _arg_maps() -> int:
 	return 0
 
 
+func _guard_off() -> bool:
+	## `-- guard=off`: every level plays without its home-defence reflex.
+	return OS.get_cmdline_user_args().has("guard=off")
+
+
 func _run() -> void:
 	Rules.last_stand = false                       # decide by play, not by the collapse (the Very Last Stand still runs)
+	SeatAI.guard_on = not _guard_off()
 	var cap := _arg_maps()
 	# ---------------------------------------------------------------- fairness in FFA
 	var ffa := MapPool.battlefield().filter(func(p): return MapBuilder.load_map(p)["seats"].has("FFA4"))

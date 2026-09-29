@@ -326,7 +326,8 @@ func sync(dt: float) -> void:
 		if rec["mat"] == null:
 			continue
 		var cap: float = float(Rules.CAPS[n["tier"]])
-		var target := clampf(float(n["units"]) / maxf(cap, 1.0), 0.06, 1.0)
+		var seen: float = sim.visible_units(n, str(main.get("HUMAN")) if main.get("HUMAN") != null else "")   # POWERS: a Ghost Line drains it for rivals too
+		var target := clampf(seen / maxf(cap, 1.0), 0.06, 1.0)
 		rec["fill"] = target if rec["fill"] < 0.0 else lerpf(rec["fill"], target, minf(1.0, EASE * dt))
 		var info: Dictionary = rec["info"]
 		var level: float = lerpf(info["y0"], info["y1"], rec["fill"])

@@ -57,6 +57,8 @@ var units: UnitView                  # classic mode (bridge combat OFF): Alpha 1
 var classic := false                # true this frame when drawing the classic unit look
 var vis: Dictionary = {}             # MapBuilder's node entries (main): the vat models the drops come out of
 var _spouts := {}                    # node id -> {"vn", "spouts", "rims", "lands", "centre", "plat_y"} (see vat_drop)
+var _fog := PackedVector3Array()     # POWERS: this frame's rival Fog of War circles over this screen: (x, z, radius^2)
+var _no_fog := PackedVector3Array()   # (never filled: "no fog" for a line)
 
 
 func _ready() -> void:
@@ -122,10 +124,19 @@ func sync(sim: Sim, viewer: String) -> void:
 	for h in sim.hordes:
 		if h.has("blocked_by"):
 			_role(roles, h["id"])["queue"] = true
+	# POWERS (0.22.2): Fog of War - a rival's line inside a circle cast by someone outside this screen's side is not
+	# drawn (body by body: UnitView.fog; SIEGE's patches here). Your own side's lines always show.
+	_fog.clear()
+	for e in sim.effects:
+		if e["id"] == "fog" and viewer != "" and not sim.allied(str(e["seat"]), viewer):
+			var c: Vector3 = sim.nodes[int(e["target"])]["pos"]
+			_fog.append(Vector3(c.x, c.z, float(e["radius"]) * float(e["radius"])))
 	var alive := {}
 	for h in sim.hordes:
 		alive[h["id"]] = true
+		units.fog = _no_fog if _fog.is_empty() or viewer == "" or sim.allied(str(h["owner"]), viewer) else _fog
 		_draw(h, viewer, roles.get(h["id"], {}), sim.time, dt, _drop_for(sim, h))
+	units.fog = _no_fog
 	for id in pools.keys():
 		if not alive.has(id):
 			for p in pools[id]["patches"]:
@@ -218,7 +229,7 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 		var mi: MeshInstance3D = arr[q]
 		var i := posmod(q - k0, SLOTS) if k0 > 0 else q
 		var s: float = h["s"] - off - i * sp_len
-		if i >= n or s < 0.0 or classic:
+		if i >= n or s < 0.0 or classic or (not units.fog.is_empty() and UnitView.fogged(units.fog, Sim.sample(h, s)[0])):   # (POWERS: fog)
 			mi.visible = false
 			continue
 		var kind: String = "head" if i == 0 else ("tail" if i == n - 1 else KINDS[1 + ((k0 + i) % 3)])

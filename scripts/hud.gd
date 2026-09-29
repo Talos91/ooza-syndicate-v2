@@ -696,23 +696,31 @@ func _badges(cam: Camera3D) -> bool:
 		var sub: Label = b["sub"]
 		var classic := not Rules.bridge_combat
 		var masked := not (owner == "" or sim.allied(owner, human) or (classic and not Rules.hide_enemy_counts and shows("rival_counts")))   # Brawl = Alpha 11: every count, unless hidden (TUTORIAL: from L3)
+		# POWERS (0.22.2): a rival's Fog of War over this node - "?" for its count, no owner emblem, no tags or build bar
+		# (your own side's nodes stay readable to you; Sim.node_hidden is true only outside the caster's side)
+		var fogged: bool = sim.node_hidden(n["id"], human) and (owner == "" or not sim.allied(owner, human))
+		if fogged:
+			masked = false
 		label.visible = not masked
 		var inner := _badge_px.x - 2.0 * BADGE_PAD * ui_scale
 		var has_allies := sim.allied_units(n) > 0.0001   # GAME-RULES sec11: team members see total + own
-		if not masked:
-			var shown_units: float = sim.garrison_total(n) if has_allies else n["units"]
+		if fogged:
+			b["count_w"] = _fit_text(label, "?", BADGE_COUNT_FONT, inner, b["count_w"])
+		elif not masked:
+			# POWERS: a rival's count as a rival should see it - a Ghost Line's source drops as a real send would
+			var shown_units: float = sim.garrison_total(n) if has_allies else sim.visible_units(n, human)
 			b["count_w"] = _fit_text(label, str(Rules.shown(shown_units)), BADGE_COUNT_FONT, inner, b["count_w"])
 		# no numbers on enemy nodes: the owner's emblem in the owner's colour stands in the count's place
 		# (Daniele: "don't use A B and C but use emblems in the color of the owner")
 		var emb: TextureRect = b["emblem"]
-		var show_emb := owner != "" and (classic or masked)
+		var show_emb := owner != "" and (classic or masked) and not fogged
 		if show_emb and emb.get_meta("f", "") != sim.factions.get(owner, ""):
 			emb.set_meta("f", sim.factions.get(owner, ""))
 			emb.texture = emblem_texture(str(sim.factions.get(owner, "null")))
 		if show_emb and emb.get_meta("seat", "") != owner:
 			emb.set_meta("seat", owner)
 			tint_emblem(emb, Rules.seat_color(owner))
-		sub.visible = not classic or n["build_kind"] != "" or sim.last_stand_active
+		sub.visible = (not classic or n["build_kind"] != "" or sim.last_stand_active) and not fogged   # (POWERS: fog)
 		# Alpha 19 (Daniele: "some text is too long, like the word FINAL isn't necessary"): two compact
 		# tags at most - what the node is (relay glyph + state, CN3 cannon, FRG forge, T2 tier) and the
 		# one clock that matters most: the falling countdown (a down triangle), the relay's !n switch
@@ -776,7 +784,7 @@ func _badges(cam: Camera3D) -> bool:
 			b["sub_w"] = _fit_text(sub, what + (" " + clock if clock != "" else ""), BADGE_SUB_FONT, room, b["sub_w"])
 		emb.visible = show_emb and (masked or small)
 		var build_bar: ProgressBar = b["build"]
-		build_bar.visible = n["build_kind"] != ""
+		build_bar.visible = n["build_kind"] != "" and not fogged
 		if build_bar.visible:
 			build_bar.value = 100.0 * Sim.build_progress(n)
 		# the box never changes size; its parts move only when what it shows changes

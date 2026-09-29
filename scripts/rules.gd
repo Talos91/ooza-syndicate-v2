@@ -602,6 +602,9 @@ const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
 #   fixed_deck  a deck no relay moves (edge index)      relay     any relay node (node id)
 #   enemy_relay an enemy or neutral relay (node id)     vat_to_node [source node id, destination node id]
 #   none        no target (cast at once)
+# POWERS (0.22.2, NEW-POWERS-2026-09-28.md):
+#   platform    any platform but a home (node id)       enemy_structure  an enemy node with a structure (node id)
+#   point       the node at the centre of the circle    node_pair  [entrance node id, exit node id]
 const SKILLS := {
 	# ---- active pool (combat), every map
 	# 0.19.2 (Daniele, 2026-09-27): +75 % speed (was +50 %) and its units leave and enter doors twice as fast
@@ -634,6 +637,37 @@ const SKILLS := {
 	# target: the relay id fires it once (its normal warning); [relay id, "jam"] adds `jam` s to its cooldown
 	"relay_hack": {"name": "Relay Hack", "slot": "map", "cd": 45.0, "target": "enemy_relay", "needs_relays": true,
 			"desc": "Fire an enemy or neutral relay once, or jam it (+10 s cooldown).", "jam": 10.0},
+	# ---- POWERS (0.22.2, Daniele 2026-09-28: "we need more powers like demolish as its very fun and very op";
+	# spec + first numbers: 01 Rules/NEW-POWERS-2026-09-28.md, all to tune by play). "warn": the Demolish-style
+	# warning before a deck goes (the spec is silent; 1.5 s like Demolish, so a deck never vanishes unannounced).
+	"quake": {"name": "Quake", "slot": "map", "cd": 60.0, "target": "platform",
+			"desc": "A platform shakes: every deck touching it drops after 1.5 s, riders fall; back after 6 s.",
+			"warn": 1.5, "down": 6.0},
+	"sever": {"name": "Sever", "slot": "map", "cd": 45.0, "target": "deck",
+			"desc": "Cut any deck, relay decks too, after 1.5 s: riders fall; it is back after 10 s.",
+			"warn": 1.5, "down": 10.0},
+	"backwash": {"name": "Backwash", "slot": "map", "cd": 40.0, "target": "deck",
+			"desc": "A wave shoves every enemy line on a deck back to the end it came from. No losses."},
+	# a vat / Machinegoon drops one tier; a T1 or single-tier structure (Laser, Forge, Monster hub) is destroyed.
+	# Like a capture it never touches a T4, and a home keeps at least a T1 vat (conservative readings, OPEN-QUESTIONS).
+	"sinkhole": {"name": "Sinkhole", "slot": "active", "cd": 50.0, "target": "enemy_structure",
+			"desc": "An enemy structure sinks one tier; a T1 or single-tier one is destroyed."},
+	# every seat outside the caster's side sees nothing inside the circle (radius_m around the tapped node):
+	# nodes, counts, lines, structures (client-side hiding for now; online the data still travels)
+	"fog": {"name": "Fog of War", "slot": "map", "cd": 60.0, "target": "point",
+			"desc": "A dark goo cloud hides everything in a circle from your enemies for 15 s.",
+			"radius_m": 24.0, "dur": 15.0},   # 24 m (~1.5 nodes): 32 m darkened nearly all of a small map (A-01, Orbital Nexus)
+	# any player's line that enters one end comes out of the other and walks on to its target - both ways (Daniele,
+	# 2026-09-29, Decisions page: "twoway")
+	"portal": {"name": "Portal", "slot": "map", "cd": 70.0, "target": "node_pair",
+			"desc": "Link two nodes up to 3 bridges apart for 12 s: every line entering one comes out of the other.",
+			"dur": 12.0, "reach": 3},
+	# share of the garrison leaves at once (door rate x burst) for the nearest own node not under attack, by route.
+	# No immunity (Daniele, 2026-09-29: "no immunity at all, just let's make sure it's not OP"): towers, Scorch,
+	# monsters and falls hit it like any line.
+	"evac": {"name": "Emergency Evac", "slot": "active", "cd": 40.0, "target": "own_node",
+			"desc": "Half of one node's garrison bursts out at once toward your nearest safe node.",
+			"share": 0.5, "burst": 8.0},
 	# ---- ultimates (one per faction; "cd" is the natural charge time, see ULT_CHARGE_TIME)
 	# Rewire: while it lasts, the ultimate slot fires any relay once (target = relay id), `fires` at most
 	"rewire": {"name": "Rewire", "slot": "ultimate", "faction": "vex", "cd": 120.0, "target": "none",
@@ -647,28 +681,44 @@ const SKILLS := {
 			"desc": "Every vat produces 1.5x for 12 s (at most 40 extra units).", "mult": 1.5, "dur": 12.0, "cap_shown": 40.0},
 	# sacrifice `share` of the line (at least min_shown, no upper cap), kills_per defenders each (at most
 	# cap_shown); a garrison at zero -> the rest of the line captures. The line must be attacking: headed for
-	# a node that isn't yours or an ally's, and within `range` metres of it (or pouring in).
+	# a node that isn't yours or an ally's. POWERS (0.22.2, Daniele 2026-09-28): 4 per unit (was 3), cap 90 (was
+	# 60), castable from the START of the trip - the line is armed and it goes off when the head is within
+	# `range` metres of the target (or pouring in); a line that dies, falls or loses its target first wastes it.
 	"core_meltdown": {"name": "Core Meltdown", "slot": "ultimate", "faction": "ember", "cd": 120.0, "target": "own_line",
-			"desc": "Sacrifice 25 % of an arriving line: 3 defenders die per unit; a garrison at zero is captured.",
-			"share": 0.25, "min_shown": 4.0, "kills_per": 3.0, "cap_shown": 60.0, "range": 12.0},
+			"desc": "Arm an attacking line: on arrival 25 % of it melts down, 4 defenders die per unit; a garrison at zero is captured.",
+			"share": 0.25, "min_shown": 4.0, "kills_per": 4.0, "cap_shown": 90.0, "range": 12.0},
 	# the node + its adjacent own nodes: garrison damage / div, production x prod, the decks between them anchored
 	# and any relay among them locked (nobody can fire it)
 	"relay_aegis": {"name": "Relay Aegis", "slot": "ultimate", "faction": "solar", "cd": 120.0, "target": "own_node",
 			"desc": "A node and its neighbours: 1.8x less garrison damage, +20 % production, decks locked, 12 s.",
 			"div": 1.8, "dur": 12.0, "prod": 1.2},
 }
-const ACTIVE_SKILLS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line"]
-const MAP_SKILLS := ["demolish", "mire", "anchor", "bypass", "relay_hack"]
+const ACTIVE_SKILLS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line", "sinkhole", "evac"]   # POWERS: 5 -> 7
+const MAP_SKILLS := ["demolish", "mire", "anchor", "bypass", "relay_hack", "quake", "sever", "backwash", "fog", "portal"]   # POWERS: 5 -> 10
 const FACTION_ULTIMATE_ID := {"vex": "rewire", "null": "echo_split", "bloom": "superbloom", "ember": "core_meltdown", "solar": "relay_aegis"}
 # default loadouts per faction - a seat without a chosen loadout (and every AI seat) gets its faction's;
 # between them the five cover every shared skill. "map_no_relays" replaces a relay skill on a map without
 # relays (the Ooze Factory greys Bypass / Relay Hack out there, draft sec4).
+# POWERS (0.22.5, Daniele 2026-09-29, Decisions page "approve"): the best-fit default per faction - what a player gets on
+# picking it (until they change it in ARMIES). VEX redirects (Portal), NULL hides (Fog of War), BLOOM grows and pushes
+# back (Backwash), EMBER pressures defended structures (Sinkhole), SOLAR holds (unchanged).
 const FACTION_LOADOUT := {
-	"vex": {"active": "surge", "map": "relay_hack", "map_no_relays": "mire"},
-	"null": {"active": "ghost_line", "map": "bypass", "map_no_relays": "demolish"},
-	"bloom": {"active": "spore_burst", "map": "mire", "map_no_relays": "mire"},
-	"ember": {"active": "scorch", "map": "demolish", "map_no_relays": "demolish"},
+	"vex": {"active": "surge", "map": "portal", "map_no_relays": "portal"},
+	"null": {"active": "ghost_line", "map": "fog", "map_no_relays": "fog"},
+	"bloom": {"active": "spore_burst", "map": "backwash", "map_no_relays": "backwash"},
+	"ember": {"active": "sinkhole", "map": "demolish", "map_no_relays": "demolish"},
 	"solar": {"active": "fortify", "map": "anchor", "map_no_relays": "anchor"},
+}
+# ...and the AI mixes it up (same decision: "for AI do the same but mix it up, and don't repeat builds"): an AI seat with
+# no loadout of its own gets one of its faction's builds, picked by the match seed (the same on every screen online), and
+# two AI seats of one faction in a match never share a build. A relay skill on a map without relays falls back to the
+# faction's "map_no_relays" (Sim._setup_skills). Only when Sim.ai_builds is on (real matches; tests keep the defaults).
+const AI_LOADOUTS := {
+	"vex": [{"active": "surge", "map": "portal"}, {"active": "surge", "map": "relay_hack"}, {"active": "evac", "map": "sever"}],
+	"null": [{"active": "ghost_line", "map": "fog"}, {"active": "ghost_line", "map": "sever"}, {"active": "evac", "map": "bypass"}],
+	"bloom": [{"active": "spore_burst", "map": "backwash"}, {"active": "spore_burst", "map": "mire"}, {"active": "fortify", "map": "quake"}],
+	"ember": [{"active": "sinkhole", "map": "demolish"}, {"active": "scorch", "map": "quake"}, {"active": "scorch", "map": "sever"}],
+	"solar": [{"active": "fortify", "map": "anchor"}, {"active": "evac", "map": "backwash"}, {"active": "fortify", "map": "mire"}],
 }
 # SKILLS START ON COOLDOWN (0.19.2, Daniele 2026-09-27: every active and map skill is on its full cooldown at the
 # match start "as if they just got used" - otherwise e.g. the production skill is overpowered at second 1). The
@@ -716,22 +766,43 @@ static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) ->
 # Expert's coordination is 2 since 0.21.5 (Daniele 2026-09-28: the five levels must be "a nice scale for a new
 # player"): a third, farther node in each offensive left it thin and made Expert win less vs Standard than
 # Veteran (67 vs 72 %); with 2 the curve is strictly monotonic (tests/test_ai_curve.gd).
+# HOME DEFENCE (ai-retune-prep, 2026-09-29; POWERS' approved defaults left EMBER's AI without a defensive active skill,
+# and a Veteran EMBER kept sending out of its home while a line that would take it was landing - B-02 fell at 113 s):
+# a reflex that needs no skill (SeatAI._guard). "guard": 0 off; 1 a key node under a live attack that would take it
+# takes no new order out (nothing leaves the home while it is threatened); 2 also brings the shortfall in from the
+# nearest own nodes, only when what can land in time saves it (else the troops stay where they are); 3 also lets those
+# donors go below their own reserve (down to AI_GUARD_FLOOR) and supersedes a donor's order still pouring out of its
+# door - BRAWL commits a line once sent (Sim.recall is SIEGE only), so the "recall" is the part still in the vat.
+# "guard_share": besides the home, a node holding at least this share of the seat's troops is a key node (1.0: home
+# only). "guard_ahead": a line counts as live when it lands within this many seconds (0 = only lines already landing).
+# SHORTCUTS (ai-retune-prep, 2026-09-29; 🗺️ on N-04 Console: the remote decks are optional shortcuts beside fixed slower
+# routes, and the AI never fired the console): "shortcut" = the seconds a route that one of its own ready relays would
+# open must save over the way in it has now for the AI to fire that relay for it (SeatAI._open_route, relays 2+; the
+# levels below never open routes, the knob is unused there). The deck is walkable RELAY_WARNING + RELAY_MOVE s after
+# the fire and the line leaves on the next think, so the saving must be clearly above 2.4 s. Was a fixed 3.0 s.
+const AI_GUARD_FLOOR := 2.0                  # x SCALE: what a guard 3 donor always keeps
+const AI_GUARD_COVER := 0.8                  # guard 2+: reinforce only if the help in time covers this share of the shortfall
 const AI_LEVELS := {
 	"Training": {"period": 5.0, "coordination": 1, "error": 0.40, "observe": 10.0, "grace": 75.0, "attack_gap": 22.0,
 			"forecast": 0.0, "choice": 4, "invest": 26.0, "margin": 1.5, "relays": 0, "intel": 0,
-			"teamwork": 0, "focus": 0.0, "assist": 0.0, "sync": 0.0},
+			"teamwork": 0, "focus": 0.0, "assist": 0.0, "sync": 0.0, "guard": 0, "guard_share": 1.0, "guard_ahead": 0.0,
+			"shortcut": 0.0},
 	"Casual": {"period": 4.0, "coordination": 1, "error": 0.32, "observe": 8.0, "grace": 50.0, "attack_gap": 17.0,
 			"forecast": 0.2, "choice": 3, "invest": 22.0, "margin": 1.35, "relays": 0, "intel": 0,
-			"teamwork": 1, "focus": 0.0, "assist": 0.3, "sync": 0.0},
+			"teamwork": 1, "focus": 0.0, "assist": 0.3, "sync": 0.0, "guard": 1, "guard_share": 1.0, "guard_ahead": 12.0,
+			"shortcut": 0.0},
 	"Standard": {"period": 2.5, "coordination": 2, "error": 0.27, "observe": 7.0, "grace": 45.0, "attack_gap": 15.0,
 			"forecast": 0.4, "choice": 3, "invest": 18.0, "margin": 1.2, "relays": 1, "intel": 0,
-			"teamwork": 2, "focus": 10.0, "assist": 0.9, "sync": 3.0},
+			"teamwork": 2, "focus": 10.0, "assist": 0.9, "sync": 3.0, "guard": 2, "guard_share": 0.5, "guard_ahead": 20.0,
+			"shortcut": 0.0},
 	"Veteran": {"period": 1.8, "coordination": 2, "error": 0.18, "observe": 4.0, "grace": 20.0, "attack_gap": 9.0,
 			"forecast": 0.6, "choice": 2, "invest": 15.0, "margin": 1.1, "relays": 2, "intel": 1,
-			"teamwork": 3, "focus": 16.0, "assist": 1.0, "sync": 6.0},
+			"teamwork": 3, "focus": 16.0, "assist": 1.0, "sync": 6.0, "guard": 3, "guard_share": 0.4, "guard_ahead": 25.0,
+			"shortcut": 3.0},
 	"Expert": {"period": 1.3, "coordination": 2, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
 			"forecast": 0.75, "choice": 2, "invest": 12.0, "margin": 1.05, "relays": 3, "intel": 1,
-			"teamwork": 3, "focus": 18.0, "assist": 1.0, "sync": 8.0},
+			"teamwork": 3, "focus": 18.0, "assist": 1.0, "sync": 8.0, "guard": 3, "guard_share": 0.35, "guard_ahead": 30.0,
+			"shortcut": 2.5},
 }
 
 

@@ -97,6 +97,7 @@ var _seen := {}                      # horde ids drawn this frame (the rest are 
 var _goo := false                    # the look the materials carry (Rules.goo_look)
 var door_rate := 1.0                 # the next add_horde's door-rate multiplier (Sim.door_mult: Surge pours in faster)
 var _ghost := false                  # add_horde is drawing its owner's Ghost Line (SkillFx.ghost_alpha, 0.18.7)
+var fog := PackedVector3Array()      # POWERS (0.22.2): HordeView sets it per line - Fog of War circles (x, z, r^2) it hides in
 
 
 func _ready() -> void:
@@ -191,8 +192,20 @@ func begin(now := -1.0) -> void:
 		_now = now
 
 
+static func fogged(circles: PackedVector3Array, pos: Vector3) -> bool:
+	## POWERS: is pos inside one of these Fog of War circles (x, z, radius^2)?
+	for c in circles:
+		var dx := pos.x - c.x
+		var dz := pos.z - c.y
+		if dx * dx + dz * dz <= c.z:
+			return true
+	return false
+
+
 func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob := 0.0, roll := 0.0, squeeze := 0.0, size := 1.0) -> void:
 	if not _mesh.has(faction):
+		return
+	if not fog.is_empty() and fogged(fog, pos):       # POWERS: a rival's body inside a Fog of War this screen is blind to
 		return
 	_put_unit(_batch(faction, seat), _scale[faction], seat, Rules.seat_color(seat) * (0.35 if _ghost else 1.0), pos, heading,
 			bob, roll, squeeze, size)
@@ -647,6 +660,8 @@ var _blob_mesh: SphereMesh
 
 
 func add_blob(seat: String, pos: Vector3, scale3: Vector3) -> void:
+	if not fog.is_empty() and fogged(fog, pos):       # POWERS: fogged bodies stay hidden at every level of detail
+		return
 	if not _blob.has(seat):
 		if _blob_mesh == null:
 			_blob_mesh = SphereMesh.new()

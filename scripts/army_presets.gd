@@ -255,10 +255,25 @@ static func line(id: String) -> String:
 			return "%d moving lines spawn decoys that jam %d s" % [int(s["echoes"]), int(s["disrupt"])]
 		"superbloom":
 			return "Every vat %sx for %d s (at most +%d units)" % [_x(s["mult"]), int(s["dur"]), int(s["cap_shown"])]
-		"core_meltdown":
-			return "Sacrifice %d %% of an attacking line: %d kills a unit" % [roundi(float(s["share"]) * 100.0), int(s["kills_per"])]
+		"core_meltdown":                               # POWERS (0.22.2): armed from the start of the trip
+			return "Arm an attacking line: on arrival %d %% melts, %d kills a unit" % [roundi(float(s["share"]) * 100.0), int(s["kills_per"])]
 		"relay_aegis":
 			return "A node + neighbours: %sx less damage, %d s" % [_x(s["div"]), int(s["dur"])]
+		# POWERS (0.22.2)
+		"quake":
+			return "Every deck on a platform drops, back in %d s" % int(s["down"])
+		"sever":
+			return "Cut any deck, relay decks too, for %d s" % int(s["down"])
+		"backwash":
+			return "Shove enemy lines on a deck back where they came from"
+		"sinkhole":
+			return "An enemy structure sinks a tier (T1: destroyed)"
+		"fog":
+			return "Hide a circle from your enemies for %d s" % int(s["dur"])
+		"portal":
+			return "Link two nodes %d s: lines in one come out the other" % int(s["dur"])
+		"evac":
+			return "%d %% of a garrison bursts out to safety at once" % roundi(float(s["share"]) * 100.0)
 	return str(s.get("desc", ""))
 
 
@@ -266,7 +281,7 @@ static func target_hint(id: String, stage := 0) -> String:
 	## What the dock asks you to tap while a slot is armed.
 	match str(Rules.SKILLS.get(id, {}).get("target", "none")):
 		"own_line":
-			return "tap one of your attacking lines" if id == "core_meltdown" else "tap one of your lines"
+			return "tap an attacking line - it goes off on arrival" if id == "core_meltdown" else "tap one of your lines"   # (POWERS: armed at the start)
 		"own_vat":
 			return "tap one of your vats"
 		"own_node":
@@ -279,6 +294,15 @@ static func target_hint(id: String, stage := 0) -> String:
 			return "tap an enemy or neutral relay"
 		"vat_to_node":
 			return "tap the node it starts from" if stage == 0 else "tap where it goes"
+		# POWERS (0.22.2)
+		"platform":
+			return "tap a platform (not a home)"
+		"enemy_structure":
+			return "tap an enemy structure"
+		"point":
+			return "tap the centre of the fog"
+		"node_pair":
+			return "tap the entrance" if stage == 0 else "tap the exit"
 	return ""
 
 

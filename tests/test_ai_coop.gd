@@ -8,6 +8,8 @@ extends SceneTree
 ## coordinating team must win clearly more (>= 60 %) but not always (<= 90 %). `-- levels=all` (or a comma list) also prints
 ## the other three levels (not checked: Training has no teamwork, Casual barely any); `-- maps=N` caps the sample.
 ## - Common enemy: with one rival seat played by a human (no SeatAI thinks for it), a team's focus is that human.
+## The AI seats play what they get in a match (ai-retune-prep): Sim.ai_builds on, so each takes one of its faction's
+## Rules.AI_LOADOUTS builds by the fixed seed. `-- guard=off` plays them without their home-defence reflex (SeatAI._guard).
 
 const CHECKED := ["Standard", "Veteran"]
 const SEEDS := 2
@@ -41,6 +43,7 @@ func _match(path: String, level: String, coop_team: int, seed_value: int, limit 
 		seats[int(s["node"])] = s["seat"]
 		teams[s["seat"]] = int(s["team"])
 	var sim := Sim.new()
+	sim.ai_builds = true                              # the AI seats' rotating builds, as in play
 	sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null", "C": "null", "D": "null"}, seed_value, teams)
 	var ais := []
 	for seat in seats.values():
@@ -81,6 +84,7 @@ func _human_focus(pool: Array) -> void:
 		var rivals: Array = teams.keys().filter(func(s): return teams[s] != teams["A"])
 		for human in rivals:
 			var sim := Sim.new()
+			sim.ai_builds = true
 			sim.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null", "C": "null", "D": "null"}, 7, teams)
 			var ais := []
 			for s in mates + rivals.filter(func(r): return r != human):
@@ -97,6 +101,7 @@ func _human_focus(pool: Array) -> void:
 
 func _run() -> void:
 	Rules.last_stand = false                       # decide by play, not by the collapse (the Very Last Stand still runs)
+	SeatAI.guard_on = _arg("guard", "on") != "off"
 	var cap := int(_arg("maps", "0"))
 	var pick := _arg("levels", "")                   # "all", or a comma list (a parallel run); default: CHECKED
 	var levels: Array = CHECKED if pick == "" else (Rules.AI_LEVELS.keys() if pick == "all" else Array(pick.split(",")))

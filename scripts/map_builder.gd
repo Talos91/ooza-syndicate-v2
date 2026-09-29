@@ -341,7 +341,7 @@ static func model_for(n: Dictionary) -> String:
 	match kind:
 		"vat", "machinegoon", "laser", "forge", "monster_hub":
 			return Cosmetics.key_for(kind, n["owner"], tier)
-	if n["relay"] != "":
+	if n["relay"] != "" or kind == "":                # POWERS (0.22.2): a common node a Sinkhole emptied shows the bare socket
 		return "Socket_Attachment"
 	return VAT_MODEL[clampi(tier, 1, 4)]
 

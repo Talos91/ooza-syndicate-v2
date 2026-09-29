@@ -55,6 +55,9 @@ var _raids := {}                           # own node id -> [[time, sim units]] 
 var _raid_seen := {}                       # horde ids already noted
 var _alarm := {}                           # allied node id -> when it first saw a threat there (teamwork)
 var casts := 0                             # skills cast this match (tests)
+var guards := 0                            # thinks in which the home-defence reflex froze or reinforced a node (tests)
+var _guarded := {}                         # node id -> shortfall (sim units) the reflex found this think
+static var guard_on := true                # tests (`-- guard=off`): play every level without its home-defence reflex
 # Perf pass (2026-09-28, audit B1: think spikes up to 47 ms desktop = a 0.25-0.5 s phone hitch): what one think
 # works out once. Cleared at each think and after every order that can change the board's routes or slots (a relay
 # fired, a skill cast, a build / upgrade, a monster launched); a send changes neither.
@@ -87,6 +90,8 @@ func think(sim: Sim, dt: float) -> void:
 	_fresh()
 	_post(sim)
 	var p := _pt
+	_guard(sim)                                          # home defence first: nothing leaves a key node about to fall
+	p = _phase("guard", p)
 	if int(cfg["relays"]) > 0:
 		_relays(sim)
 	p = _phase("relays", p)
@@ -270,6 +275,8 @@ func _reach(sim: Sim, hub_id: int) -> Array:
 func _estimate(sim: Sim, n: Dictionary) -> float:
 	## What it believes the garrison is: rounded, off by up to `error`, refreshed every `observe` s.
 	var mem: Dictionary = _memory.get(n["id"], {})
+	if not mem.is_empty() and sim.node_hidden(n["id"], seat):
+		return mem["units"]                               # POWERS: inside a rival's Fog of War it keeps its last look
 	if mem.is_empty() or _clock >= float(mem["next"]):
 		mem = {"units": maxf(0.0, sim.garrison_total(n) * (1.0 + rng.randf_range(-cfg["error"], cfg["error"]))), "next": _clock + float(cfg["observe"])}
 		_memory[n["id"]] = mem
@@ -321,6 +328,117 @@ func _nearest_safe(sim: Sim, from_id: int) -> int:
 			best_len = score
 			best = n["id"]
 	return best
+
+
+# ------------------------------------------------------------------ home defence (ai-retune-prep, 2026-09-29)
+func _guard(sim: Sim) -> void:
+	## The reflex that needs no skill (Rules.AI_LEVELS "guard" / "guard_share" / "guard_ahead", documented there). A key
+	## node - the home, or one holding "guard_share" of its troops - under a live attack that would take it (_shortfall:
+	## the lines landing within "guard_ahead" s and the siege on it, in the defenders they kill, against what it holds,
+	## makes and has coming) is, in this order: (a) frozen - marked busy, so no phase of this think orders a send out of
+	## it; (b) guard 2+: reinforced from the nearest own nodes, only when what lands in time (AI_TEAM_DEFEND_LATE after
+	## the first line) covers AI_GUARD_COVER of the shortfall - a trickle into a node that falls anyway is only lost;
+	## guard 3 donors go down to AI_GUARD_FLOOR instead of their reserve and a donor's order still pouring out of its
+	## door is superseded (BRAWL commits a line once out: Sim.recall is SIEGE only); (c) a defensive skill, if it has
+	## one: _skills runs right after and its picks favour a node under attack. Nothing here draws on rng, so on a match
+	## where no key node is ever about to fall the decisions - and tests/ai_bench.gd's event hash - are unchanged.
+	_guarded = {}
+	var g := int(cfg.get("guard", 0))
+	if g <= 0 or not guard_on:
+		return
+	var owned := _mine(sim)
+	var total := 0.0
+	for n in owned:
+		total += n["units"]
+	var home: int = sim.homes.get(seat, -1)
+	var share := float(cfg.get("guard_share", 1.0))
+	var keys := []
+	for n in owned:
+		if sim.is_warned(n["id"]):
+			continue                                      # it falls with the ring: _evacuate empties it
+		if n["id"] != home and (share >= 1.0 or total <= 0.0 or n["units"] < total * share):
+			continue
+		var short := _shortfall(sim, n)
+		if short > 0.0:
+			keys.append({"node": n, "need": short})
+	if keys.is_empty():
+		return
+	guards += 1
+	for k in keys:
+		_busy[k["node"]["id"]] = true                     # (a) nothing leaves it this think
+		_guarded[k["node"]["id"]] = k["need"]
+	if g < 2:
+		return
+	keys.sort_custom(func(a, b): return (a["node"]["id"] == home) or (b["node"]["id"] != home and a["need"] > b["need"]))
+	for k in keys:
+		var target: Dictionary = k["node"]
+		var id: int = target["id"]
+		var need: float = k["need"]
+		var eta := _eta(sim, id)
+		var helpers := []
+		var can := 0.0
+		for n in owned:
+			if n["id"] == id or n["build_kind"] != "" or _busy.has(n["id"]) or _threat(sim, n) > 0.0:
+				continue
+			if g < 3 and not n["streaming"].is_empty():
+				continue                                  # its order stands; guard 3 supersedes what is still inside
+			var keep: float = _reserve(sim, n) if g < 3 else minf(_reserve(sim, n), Rules.AI_GUARD_FLOOR * Rules.SCALE)
+			var spare: float = n["units"] - keep
+			if spare < 2.0 * Rules.SCALE:
+				continue
+			var route := _route(sim, n["id"], id, minf(need, spare))
+			if route.is_empty() or _route_t > eta + Rules.AI_TEAM_DEFEND_LATE:
+				continue
+			helpers.append({"node": n, "spare": spare, "travel": _route_t})
+			can += spare
+		if can < need * Rules.AI_GUARD_COVER:
+			continue                                      # (b) only when it saves the node
+		helpers.sort_custom(func(a, b): return a["travel"] < b["travel"])
+		for hp in helpers:
+			if need <= 0.0:
+				break
+			var donor: Dictionary = hp["node"]
+			var frac := clampf(minf(need, hp["spare"]) / maxf(donor["units"], 1.0), 0.1, 1.0)
+			if not _send(sim, donor["id"], id, frac).is_empty():
+				_busy[donor["id"]] = true
+				need -= donor["units"] * frac
+
+
+func _shortfall(sim: Sim, n: Dictionary) -> float:
+	## Sim units the node is short of holding against what is coming (> 0: it falls): every hostile line landing on it
+	## within "guard_ahead" s and the siege on it, each turned into the defenders it kills (BRAWL landing,
+	## Sim._land_classic: attack / (health x garrison x Fortify / forge) per exchange against the defender's attack /
+	## the attacker's health - its own stats it knows, a rival's are on the faction card), against its garrison, what it
+	## makes until the first line lands and its own lines on the way. No estimate error: it counts its own troops.
+	var ahead := float(cfg.get("guard_ahead", 0.0))
+	var kill := 0.0
+	var first := INF
+	for h in sim.hordes:
+		if h["target"] != n["id"] or h.get("retreat", false) or not _hostile(sim, h["owner"]):
+			continue
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		var eta: float = maxf(0.0, float(h["L"]) - float(h["s"])) / maxf(v, 0.1)
+		if eta > ahead:
+			continue
+		first = minf(first, eta)
+		var u: float = maxf(h["units"], h["ordered"]) if h["streaming"] else h["units"]
+		kill += u * _kills_per(sim, h["owner"], n)
+	for k in n["siege"]:
+		if not sim.allied(k, seat):
+			first = 0.0
+			kill += float(n["siege"][k]) * _kills_per(sim, k, n)
+	if kill <= 0.0:
+		return 0.0
+	var held: float = sim.garrison_total(n) + sim.production(n) * (0.0 if first == INF else first) + _incoming(sim, n["id"], false)
+	return kill + 2.0 * Rules.SCALE - held
+
+
+func _kills_per(sim: Sim, attacker: String, n: Dictionary) -> float:
+	## Defenders of `n` one of `attacker`'s units kills before it dies (Sim._land_classic's ratio, the owner's stats).
+	var tough: float = sim.stat(seat, "health") * sim.stat(seat, "garrison") * sim.garrison_div(n)
+	var kill_per: float = sim.attack_of(attacker) / maxf(tough, 0.0001)
+	var cost_per: float = sim.attack_of(seat) / maxf(sim.stat(attacker, "health"), 0.0001)
+	return kill_per / maxf(cost_per, 0.0001)
 
 
 # ------------------------------------------------------------------ defence first
@@ -410,7 +528,18 @@ func _attack(sim: Sim, answer_only := false) -> void:
 				continue
 			var route := _route(sim, donor["id"], target["id"], available)
 			if route.is_empty():
-				continue
+				# 0.22.4 (Daniele, via Map Builder, N-04): a target only reachable once a relay it
+				# owns moves used to vanish here for good - _route()'s find_route only follows decks
+				# open right now, so a node behind a closed remote console (or switch / rotation) with
+				# no other way in never became a plan, and _open_route below (which fires a relay for
+				# a plan that already exists) never got the chance to open it. Level 2+ (same gate as
+				# _open_route): try firing one ready relay of its own to see if that opens a way in -
+				# the route it would give, for this donor to enter the plan; _open_route fires it for real.
+				if int(cfg["relays"]) < 2:
+					continue
+				route = _relay_opens_route(sim, donor["id"], target["id"], available)
+				if route.is_empty():
+					continue
 			donors.append({"node": donor, "available": available, "travel": _route_t, "risky": _route_risky})
 		if donors.is_empty():
 			continue
@@ -900,16 +1029,13 @@ func _relays(sim: Sim) -> void:
 		_order(sim.fire_relay(n["id"]))
 
 
-func _open_route(sim: Sim, plan: Dictionary) -> bool:
-	## Level 2+ (0.18.7; level 3 before): fire one of its relays if the next state gives the plan a
-	## faster route that no rival relay can take away before the line is across.
-	var src: int = plan["donors"][0]["node"]["id"]
-	var dst: int = plan["target"]["id"]
-	var units: float = plan["donors"][0]["available"]
-	var base := _route(sim, src, dst, units)
-	var t0 := _route_t if not base.is_empty() else INF
-	if _route_risky:
-		t0 += Rules.AI_RELAY_DETOUR                   # a risky way in is worth replacing
+func _relay_opens_route(sim: Sim, src: int, dst: int, units: float) -> Array:
+	## 0.22.4: `dst` cannot be reached at all right now (find_route sees no open deck to it) - before
+	## the target is dropped from the scan for good, see whether firing one of this seat's own ready
+	## relays would open a way in (the same per-relay probe as _open_route, run before a plan even
+	## exists). Returns the route it would give (sets _route_t / _route_risky to match, same as
+	## _route()), or [] if none of its relays helps. _open_route fires the relay for real once this
+	## target's plan is chosen; until then the board is left exactly as it was.
 	for n in sim.nodes:
 		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
 			continue
@@ -923,10 +1049,57 @@ func _open_route(sim: Sim, plan: Dictionary) -> bool:
 		_trees = {}
 		n["relay_index"] = sim.relay_next_index(n)
 		var alt := _route(sim, src, dst, units)
+		var alt_t := _route_t
 		var alt_risky := _route_risky
 		n["relay_index"] = keep
 		_trees = trees
-		if not alt.is_empty() and not alt_risky and _route_t < t0 - 3.0:
+		if not alt.is_empty():
+			_route_t = alt_t
+			_route_risky = alt_risky
+			return alt
+	return []
+
+
+func _open_route(sim: Sim, plan: Dictionary) -> bool:
+	## Level 2+ (0.18.7; level 3 before): fire one of its relays if the next state gives the plan a
+	## faster route that no rival relay can take away before the line is across - faster by Rules.AI_LEVELS
+	## "shortcut" s (ai-retune-prep: N-04's remote decks are optional shortcuts beside fixed slower routes).
+	## The plan lands when its slowest donor does, so it is the plan's whole trip - the longest of its donors'
+	## - that the next state must shorten (it used to read the fastest donor only: with a 20-unit garrison next
+	## to the target and the real line far behind it, the console never looked worth firing).
+	var dst: int = plan["target"]["id"]
+	var t0 := 0.0
+	for d in plan["donors"]:
+		var base := _route(sim, d["node"]["id"], dst, d["available"])
+		var t := _route_t if not base.is_empty() else INF
+		if _route_risky:
+			t += Rules.AI_RELAY_DETOUR                    # a risky way in is worth replacing
+		t0 = maxf(t0, t)
+	for n in sim.nodes:
+		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
+			continue
+		var closing := _closing(sim, n)
+		if _cut_toll(sim, closing, Rules.RELAY_WARNING)[1] > 0.5:
+			continue                                      # an own line still has to cross a deck it closes
+		if n["relay"] == "rotation" and _fling_cost(sim, closing) > 0.5:
+			continue                                      # the turn would fling its own lines
+		var keep: int = n["relay_index"]
+		var trees := _trees                           # the probe's routes are not this board's: keep them apart
+		var flips := _flips
+		_trees = {}
+		_flips = {}
+		n["relay_index"] = sim.relay_next_index(n)
+		var t1 := 0.0
+		for d in plan["donors"]:
+			var alt := _route(sim, d["node"]["id"], dst, d["available"])
+			if alt.is_empty() or _route_risky:
+				t1 = INF                                  # a donor loses its way in (or gets a risky one): no
+				break
+			t1 = maxf(t1, _route_t)
+		n["relay_index"] = keep
+		_trees = trees
+		_flips = flips
+		if t1 < t0 - float(cfg.get("shortcut", 3.0)):
 			_order(sim.fire_relay(n["id"]))
 			return true
 	return false
@@ -1691,17 +1864,143 @@ func _pick(sim: Sim, id: String) -> Array:
 			for h in _my_lines(sim):
 				push += h["units"]
 			return [null] if kill >= 8.0 * Rules.SCALE or push >= 30.0 * Rules.SCALE else []
+		"quake", "sever", "backwash", "sinkhole", "fog", "portal", "evac":
+			return _pick_power(sim, id)
 		"core_meltdown":                              # an arriving line the meltdown turns into a capture
 			var sk: Dictionary = Rules.SKILLS["core_meltdown"]
 			for h in _my_lines(sim) + sim.hordes.filter(func(x): return x["owner"] == seat and x["state"] == "absorb" and not x.get("decoy", false)):
 				if not sim.can_cast(seat, "ultimate", h["id"]):
 					continue
-				var n: Dictionary = sim.nodes[h["target"]]
+				var n: Dictionary = sim.nodes[sim.line_goal(h)]
 				var g := _estimate(sim, n) if n["owner"] != "" else float(n["units"])
-				var sac: float = minf(h["units"], maxf(h["units"] * float(sk["share"]), float(sk["min_shown"]) * Rules.SCALE))
+				# POWERS (0.22.2): armed at the start of its trip, so it weighs the whole order, not what left so far
+				var size: float = maxf(h["units"], float(h["ordered"])) if h["streaming"] else float(h["units"])
+				var sac: float = minf(size, maxf(size * float(sk["share"]), float(sk["min_shown"]) * Rules.SCALE))
 				var kills: float = minf(sac * float(sk["kills_per"]), float(sk["cap_shown"]) * Rules.SCALE)
-				if kills >= g or (h["units"] - sac > (g - kills) * 1.05 and h["units"] < g * 1.3):
+				if kills >= g or (size - sac > (g - kills) * 1.05 and size < g * 1.3):
 					return [h["id"]]
+			return []
+	return []
+
+
+# ------------------------------------------------------------------ POWERS (0.22.2): how the AI uses the new powers
+func _pick_power(sim: Sim, id: String) -> Array:
+	var slot: String = Rules.SKILLS[id]["slot"]
+	match id:
+		"quake":                                      # the platform whose decks will carry the most enemy (and none of its own)
+			var warn: float = Rules.SKILLS["quake"]["warn"]
+			var best := -1
+			var best_u := 12.0 * Rules.SCALE
+			for n in sim.nodes:
+				if n["id"] in sim.homes.values() or sim.collapsed.get(n["id"], false):
+					continue
+				var decks: Array = sim._quake_decks(n["id"])
+				if decks.is_empty():
+					continue
+				var toll := _on_decks(sim, decks, warn)
+				if toll[0] > best_u and toll[1] <= 0.5 and sim.can_cast(seat, slot, n["id"]):
+					best_u = toll[0]
+					best = n["id"]
+			return [best] if best >= 0 else []
+		"sever":                                      # the deck that will hold the most enemy when it goes
+			var warn: float = Rules.SKILLS["sever"]["warn"]
+			var best := -1
+			var best_u := 8.0 * Rules.SCALE
+			var seen := {}
+			for h in sim.hordes:
+				if not _hostile(sim, h["owner"]) or h["state"] == "absorb":
+					continue
+				for sp in h["spans"]:
+					var ei: int = sp["edge"]
+					if seen.has(ei) or sp["s1"] < h["s"] - Sim.chain_length(h):
+						continue
+					seen[ei] = true
+					var toll := _on_decks(sim, [ei], warn)
+					if toll[0] > best_u and toll[1] <= 0.5 and not _own_route_uses(sim, ei) and sim.can_cast(seat, slot, ei):
+						best_u = toll[0]
+						best = ei
+			return [best] if best >= 0 else []
+		"backwash":                                   # the biggest line about to land on one of its (or an ally's) nodes
+			var best := -1
+			var best_s := 0.0
+			for h in sim.hordes:
+				if not _hostile(sim, h["owner"]) or h["state"] == "absorb" or h["units"] < 8.0 * Rules.SCALE:
+					continue
+				var goal: Dictionary = sim.nodes[sim.line_goal(h)]
+				if goal["owner"] == "" or not sim.allied(goal["owner"], seat):
+					continue
+				var sp := sim._current_span(h)
+				if sp.is_empty():
+					continue
+				var back: float = h["s"] - float(sp["s0"])
+				var s: float = back * h["units"]
+				if back >= 6.0 and s > best_s and sim.can_cast(seat, slot, sp["edge"]):
+					best_s = s
+					best = sp["edge"]
+			return [best] if best >= 0 else []
+		"sinkhole":                                   # the enemy structure that hurts it most
+			var best := -1
+			var best_s := 0.0
+			for n in sim.nodes:
+				if not _hostile(sim, n["owner"]) or n["structure"] == "":
+					continue
+				var s := 0.0
+				match str(n["structure"]):
+					"laser": s = 30.0
+					"forge": s = 26.0
+					"monster_hub": s = 24.0
+					"machinegoon": s = 8.0 * n["tier"]
+					"vat": s = 10.0 * n["tier"]
+				for link in sim.adj[n["id"]]:             # a tower next to its own ground first
+					if sim.nodes[link[0]]["owner"] == seat:
+						s += 6.0
+				if s > best_s and sim.can_cast(seat, slot, n["id"]):
+					best_s = s
+					best = n["id"]
+			return [best] if best >= 0 else []
+		"fog":                                        # hide the target of its biggest attack while the line is on its way
+			for h in _my_lines(sim):
+				var goal: Dictionary = sim.nodes[sim.line_goal(h)]
+				if not _hostile(sim, goal["owner"]) or h["units"] < 15.0 * Rules.SCALE:
+					continue
+				var left: float = float(h["L"]) - float(h["s"])
+				if left >= 10.0 and left <= 60.0 and not sim.node_hidden(goal["id"], goal["owner"]) and sim.can_cast(seat, slot, goal["id"]):
+					return [goal["id"]]
+			return []
+		"portal":                                     # a shortcut for its biggest attack: enter ahead, come out near the target
+			var best := []
+			var best_gain := 6.0
+			for h in _my_lines(sim):
+				var goal: int = sim.line_goal(h)
+				if not _hostile(sim, sim.nodes[goal]["owner"]) or h["units"] < 12.0 * Rules.SCALE or h.has("portal"):
+					continue
+				var route: Array = h["route"]
+				var entrance := -1
+				for ns in h["node_spans"]:                # the next node ahead of its head (not the goal)
+					if float(ns["s1"]) > float(h["s"]) and int(ns["node"]) != route[0] and int(ns["node"]) != goal:
+						entrance = int(ns["node"])
+						break
+				if entrance < 0:
+					continue
+				var rest := sim.find_route(entrance, goal)
+				var t_in := _travel(sim, rest) if rest.size() >= 2 else 0.0
+				for ex in sim.portal_exits(entrance):
+					var r2: Array = [] if ex == goal else sim.find_route(ex, goal)
+					if ex != goal and r2.size() < 2:
+						continue
+					var gain: float = t_in - (_travel(sim, r2) if ex != goal else 0.0)
+					if gain > best_gain and sim.can_cast(seat, slot, [entrance, ex]):
+						best_gain = gain
+						best = [entrance, ex]
+			return [best] if not best.is_empty() else []
+		"evac":                                       # save half of a garrison that is about to fall
+			for n in _mine(sim):
+				if n["units"] < 10.0 * Rules.SCALE:
+					continue
+				var t := _threat(sim, n)
+				var hold: float = n["units"] * sim.stat(seat, "garrison") * sim.garrison_div(n)
+				if (t > hold * 1.15 or _drops_soon(sim, n["id"])) and sim.can_cast(seat, slot, n["id"]):
+					return [n["id"]]
 			return []
 	return []
 
