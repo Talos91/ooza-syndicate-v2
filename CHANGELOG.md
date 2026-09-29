@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.1 "Alpha 23" - 2026-09-30 (Daniele's Alpha 23 check)
+
+- **LARGE maps back to the original camera** (58°; Daniele: "on large maps the tilt makes it very hard to play"); tiny, small and medium
+  maps keep the 41° tilt (by each map's size tag).
+- **One loading screen from DEPLOY to the battlefield** (Daniele: "the game freezes on the deploy page, shows the vs screen for half a sec
+  and then starts"): a room launch reloads the whole scene, and nothing can draw during that reload - a loading card (VS, the factions,
+  the map) now goes up the moment you press DEPLOY, stays through the reload and the map build, and hands over to the VERSUS card.
+- **Sound effects ON again on every device** (Daniele: "sound effects still not working"): SOUND is read from a new setting, so an OFF
+  saved back in 0.22.1 (when SOUND OFF was the only switch that seemed to stop the lagging music) no longer silences the effects.
+
 ## 0.23.0 "Alpha 23" - 2026-09-30 (THE NEW MAPS, plus everything of 0.22.4 and Daniele's staging fixes)
 
 - **30 new maps** (🗺️ Map Builder, Daniele: "replace current pool with the new ones"): N-01..N-30 - round 1 mirrored, round 2 point-symmetric

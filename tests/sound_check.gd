@@ -219,7 +219,7 @@ func _check_sfx_settings() -> void:
 	Sfx.set_on(false)
 	var cf := ConfigFile.new()
 	check(AudioServer.is_bus_mute(bus) and not AudioServer.is_bus_mute(mb) and not AudioServer.is_bus_mute(0) and not Sfx.sound_on()
-			and cf.load(CFG) == OK and not bool(cf.get_value("audio", "on", true)) and bool(cf.get_value("audio", "music_on_v3", false)),
+			and cf.load(CFG) == OK and not bool(cf.get_value("audio", "on_v2", true)) and bool(cf.get_value("audio", "music_on_v3", false)),
 			"SOUND OFF: the Sfx bus muted (Music and Master not), saved in [audio] beside MUSIC's keys")
 	Sfx.set_volume(100)
 	check(AudioServer.is_bus_mute(bus), "SOUND OFF stays silent whatever the VOLUME")

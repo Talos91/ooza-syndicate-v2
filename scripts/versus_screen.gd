@@ -80,6 +80,7 @@ static func hold_online(m) -> bool:
 	v.online = true
 	v.net = Net
 	m.add_child(v)
+	LaunchCard.drop(m.get_tree().root)                 # UI (0.23.1): the launch card hands over to this card
 	return true
 
 

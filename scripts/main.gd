@@ -353,7 +353,7 @@ func _start_map(path: String) -> void:
 	last_map_path = path                               # MAIN MENU remembers it (0.19.0)
 	map = MapBuilder.load_map(path)
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
-		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")))
+		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")), str((map.get("tags", {}) as Dictionary).get("size", "")))
 	_base_pitch = cam_pitch
 	if not map["seats"].has(mode):                     # this map doesn't offer the mode: its first one
 		mode = "1v1" if map["seats"].has("1v1") else map["seats"].keys()[0]

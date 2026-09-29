@@ -1,9 +1,14 @@
-# To test - ALPHA 23.0 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.1 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.1
+- [ ] **Sound effects** play (SETTINGS > SOUND should read ON; if you had turned it OFF, it's ON again once).
+- [ ] **DEPLOY** in a room: a loading card at once, then VERSUS, then the map - no frozen lobby.
+- [ ] **Large maps** at the old top-down camera; tiny / small / medium ones stay tilted.
 
 ## 0.23.0 (the new maps + the 0.22.4 rules release, tested together)
 - [ ] **The 30 new maps** (N-01..N-30): play a few of each round (mirrored / curves / junctions); are the far platforms tappable at 41°?

@@ -9,5 +9,10 @@ class_name MapCamera
 const PITCH := {}
 
 
-static func pitch_for(code: String) -> float:
-	return PITCH.get(code, Rules.CAM_PITCH)
+static func pitch_for(code: String, size := "") -> float:
+	## A per-map override first, then by the map's size tag (tags.size): LARGE maps keep the original top-down pitch
+	## (Rules.CAM_PITCH_LARGE; Daniele 2026-09-30: "on large maps the tilt makes it very hard to play ... switch back to the
+	## original one; keep only mid, small and tiny tilted"), the rest Rules.CAM_PITCH.
+	if PITCH.has(code):
+		return PITCH[code]
+	return Rules.CAM_PITCH_LARGE if size in Rules.CAM_LARGE_SIZES else Rules.CAM_PITCH

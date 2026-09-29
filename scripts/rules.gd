@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.23.0"
+const VERSION := "0.23.1"
 const VERSION_NAME := "Alpha 23"
 
 
@@ -133,6 +133,8 @@ static var last_stand: bool = true
 # buildings should all face the viewer on every map"). The camera is fitted once per screen size,
 # never zoomed or panned; VIEW_YAW is set per map before it is built so every structure faces it.
 const CAM_PITCH := 41.0              # Daniele (2026-09-30): "camera angle too low, raise of 20%" (34 -> 41; 58 until 0.22.3)
+const CAM_PITCH_LARGE := 58.0        # LARGE maps (tags.size "L"): the original pitch (Daniele 2026-09-30: the tilt made them "very hard to play")
+const CAM_LARGE_SIZES := ["L", "XL"]
                                      # "too vertical" at 55 on the deep maps 3.0; Alpha 18, maps 4.0: "a bit more
                                      # from the top" - each map gets its own pitch, 58 on every maps 4.2 map, see MapCamera;
                                      # Daniele, 2026-09-29, Map Lab: "34deg is best" - lower, more diagonal, every map, no per-map overrides)
