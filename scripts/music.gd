@@ -28,15 +28,19 @@ extends Node
 ## 22 kHz, Daniele 2026-09-29) by PerfProfile.is_phone() - the light / HD rule. Not in any .pck (the "Web" preset
 ## excludes assets/audio/music/*); tools/copy_music.py --web fills both folders (BUILD-LOG sec10). Every failure
 ## (no WebAudio, a 404, autoplay refused until a tap, offline) is silence, never an error.
-## SETTINGS > DISPLAY > AUDIO and PAUSE > SETTINGS: MUSIC ON / OFF and MUSIC VOLUME (Rules.MUSIC_VOLUME_STEPS, %), saved
-## in user://settings.cfg [audio] music_on_v2 / music_volume_v2 (Sfx.path: the same file), applied to the Music bus (web:
-## music.js's master gain) at once; OFF stops the players (nothing decodes, nothing downloads).
+## SETTINGS > DISPLAY > AUDIO and PAUSE > SETTINGS: MUSIC ON / OFF, MENU MUSIC and MATCH MUSIC volume (Daniele 2026-09-29;
+## Rules.MUSIC_VOLUME_STEPS, %), saved in user://settings.cfg [audio] music_on_v2 / music_volume_menu / music_volume_v2 (the
+## match's; Sfx.path: the same file). The top-right MUSIC button (🧩 UI) is toggle_on(): OFF at once, everywhere. The Music bus
+## (web: music.js's master gain) carries the level + the duck; each player scales by its own track's volume - MENU (the
+## menus, the results screen) by MENU MUSIC, every other slot (BATTLE, LAST STAND, VLS, the stingers) by MATCH MUSIC - so a
+## MENU -> BATTLE crossfade also crossfades the two volumes. OFF stops the players (nothing decodes, nothing downloads).
 ## Debug: --music-log (after `--`) prints every slot change.
 
 static var _node: Music = null
 static var _pack := ""                    # "" / "ready" / "failed" (the tracks: in res://, or web/music.js)
 static var _jsm: JavaScriptObject = null  # web: window.OozeMusic (web/music.js)
-static var _volume := -1                  # MUSIC VOLUME, % (-1 until read)
+static var _volume := -1                  # MATCH MUSIC volume, % (-1 until read: the settings are read again)
+static var _volume_menu := 30             # MENU MUSIC volume, %
 static var _on := true                    # MUSIC ON / OFF
 static var _streams := {}                 # track name -> AudioStream (null: missing)
 static var _battle_next := 0              # the playlist's next entry (it runs on across matches)
@@ -47,6 +51,7 @@ static var log_on := "--music-log" in OS.get_cmdline_user_args()
 var main: Node = null                     # the scene's main (Music.attach); freed on a reload until the next attach
 var players: Array[AudioStreamPlayer] = []
 var amp := [0.0, 0.0]
+var pslot := ["", ""]                     # per player: the slot of the track it holds (its volume: menu / match)
 var fades := [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]]   # per player [from, to, t, length]; length 0 = still
 var cur := -1                             # the player holding the current track
 var phase := ""                           # the slot the game wants ("" nothing yet / music off)
@@ -62,11 +67,13 @@ static func _load() -> void:
 	if _volume >= 0:
 		return
 	_volume = Rules.MUSIC_VOLUME_DEFAULT
+	_volume_menu = Rules.MUSIC_VOLUME_DEFAULT
 	_on = Rules.MUSIC_ON_DEFAULT
 	var cf := ConfigFile.new()
 	if cf.load(Sfx.path) == OK:
 		# 0.22.4 (Daniele 2026-09-29: "default volume needs to be toned down"): a new key, so the lower default reaches everyone once.
 		_volume = clampi(int(cf.get_value("audio", "music_volume_v2", _volume)), 1, 100)
+		_volume_menu = clampi(int(cf.get_value("audio", "music_volume_menu", _volume)), 1, 100)   # (before the split: the one volume)
 		# HOTFIX 0.22.2 (Daniele: "audio is super laggy and the mute doesn't work, unplayable"): the key is new, so every device starts
 		# OFF again whatever 0.22.1 saved; music plays only for who switches it ON.
 		_on = bool(cf.get_value("audio", "music_on_v2", Rules.MUSIC_ON_DEFAULT))
@@ -76,13 +83,20 @@ static func _save() -> void:
 	var cf := ConfigFile.new()
 	cf.load(Sfx.path)                                  # keep the other keys and sections (SOUND's, [graphics], ...)
 	cf.set_value("audio", "music_volume_v2", _volume)
+	cf.set_value("audio", "music_volume_menu", _volume_menu)
 	cf.set_value("audio", "music_on_v2", _on)
 	cf.save(Sfx.path)
 
 
-static func volume() -> int:
+static func volume(kind := "match") -> int:
+	## MATCH MUSIC ("match") or MENU MUSIC ("menu") volume, %.
 	_load()
-	return _volume
+	return _volume_menu if kind == "menu" else _volume
+
+
+static func kind_of(s: String) -> String:
+	## Whose volume a slot's track plays at: "menu" for MENU (menus, results screen), else "match".
+	return "menu" if s == "MENU" else "match"
 
 
 static func music_on() -> bool:
@@ -90,12 +104,24 @@ static func music_on() -> bool:
 	return _on
 
 
-static func set_volume(pct: int) -> void:
-	## SETTINGS > MUSIC VOLUME: saved and heard at once (the Music bus).
+static func set_volume(pct: int, kind := "") -> void:
+	## SETTINGS > MENU MUSIC (kind "menu") / MATCH MUSIC ("match") volume, saved and heard at once; "" sets both (one
+	## MUSIC VOLUME control, as before the split).
 	_load()
-	_volume = clampi(pct, 1, 100)
+	if kind != "match":
+		_volume_menu = clampi(pct, 1, 100)
+	if kind != "menu":
+		_volume = clampi(pct, 1, 100)
 	_save()
 	apply_settings()
+	if _node != null and is_instance_valid(_node):
+		_node._reamp()
+
+
+static func toggle_on() -> bool:
+	## The top-right MUSIC button (🧩 UI): ON <-> OFF at once (menus and matches); returns the new state.
+	set_on(not music_on())
+	return music_on()
 
 
 static func set_on(on: bool) -> void:
@@ -111,20 +137,25 @@ static func set_on(on: bool) -> void:
 			_node._silence()                           # at once, not at the next frame: nothing decodes while OFF
 
 
-static func next_volume() -> int:
-	## The step after the current one, round (the pause menu's one-tap MUSIC VOLUME).
+static func next_volume(kind := "match") -> int:
+	## The step after the current one, round (the pause menu's one-tap volume).
 	var steps: Array = Rules.MUSIC_VOLUME_STEPS
-	var i := steps.find(volume())
+	var i := steps.find(volume(kind))
 	return int(steps[(i + 1) % steps.size()])
 
 
-static func volume_label(pct := -1) -> String:
-	return "%d %%" % (volume() if pct < 0 else pct)
+static func volume_label(pct := -1, kind := "match") -> String:
+	return "%d %%" % (volume(kind) if pct < 0 else pct)
 
 
 static func bus_db() -> float:
-	## The Music bus without the duck: Rules.MUSIC_LEVEL_DB plus what MUSIC VOLUME puts on it.
-	return Rules.MUSIC_LEVEL_DB + linear_to_db(volume() / 100.0)
+	## The Music bus without the duck: Rules.MUSIC_LEVEL_DB (each player adds its own volume: _p_amp).
+	return Rules.MUSIC_LEVEL_DB
+
+
+static func level_db(kind := "match") -> float:
+	## What a track of that kind plays at, at full crossfade and no duck: the bus + its volume (tests, debug).
+	return bus_db() + linear_to_db(volume(kind) / 100.0)
 
 
 static func apply_settings() -> void:
@@ -182,7 +213,8 @@ static func now_playing() -> Dictionary:
 	var pos := -1.0
 	if n.cur >= 0 and n._p_playing(n.cur):
 		pos = n._p_pos(n.cur)
-	return {"phase": n.phase, "slot": n.slot, "track": n.track, "pos": pos, "duck_db": n.duck_env}
+	return {"phase": n.phase, "slot": n.slot, "track": n.track, "pos": pos, "duck_db": n.duck_env,
+			"kind": kind_of(n.slot), "vol": volume(kind_of(n.slot))}
 
 
 static func slot_for(started: bool, s: Sim, human: String, spectating: bool) -> String:
@@ -342,6 +374,7 @@ func _play(to: String, xfade: float) -> void:
 		_fade(cur, 0.0, xfade)
 	var nxt := 0 if cur < 0 else 1 - cur
 	amp[nxt] = 0.0 if xfade > 0.0 else 1.0
+	pslot[nxt] = to
 	_p_stop(nxt)
 	_p_amp(nxt, amp[nxt])
 	if name == "" or not _p_start(nxt, name):         # a slot without a track (a missing file): silence
@@ -418,11 +451,19 @@ func _p_stop(i: int) -> void:
 
 
 func _p_amp(i: int, a: float) -> void:
+	## Player i at crossfade amplitude a, times its track's volume (MENU MUSIC / MATCH MUSIC).
+	var g := maxf(a, 0.0) * volume(kind_of(str(pslot[i]))) / 100.0
 	var js := _js()
 	if js != null:
-		js.gain(i, maxf(a, 0.0))
+		js.gain(i, g)
 	else:
-		players[i].volume_db = linear_to_db(maxf(a, 0.0001))
+		players[i].volume_db = linear_to_db(maxf(g, 0.0001))
+
+
+func _reamp() -> void:
+	## A volume changed: both players at their new level now.
+	for i in range(2):
+		_p_amp(i, amp[i])
 
 
 func _p_playing(i: int) -> bool:
