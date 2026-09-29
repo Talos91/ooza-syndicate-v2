@@ -70,7 +70,7 @@ static func meas() -> String:
 	if not web() or tests == 0:
 		return ""
 	var j := js_state()
-	return str((j.get("test", {}) as Dictionary).get("meas", "")).substr(0, 160) if j.get("test") is Dictionary else ""
+	return str((j.get("test", {}) as Dictionary).get("meas", "")).substr(0, 420) if j.get("test") is Dictionary else ""
 
 
 static func readout() -> String:

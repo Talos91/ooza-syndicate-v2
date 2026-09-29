@@ -129,19 +129,46 @@
     } catch (e) { m.buf_peak = -1; }
     setTimeout(function () { try { m.path = pathGains(s); } catch (e) {} }, 30);
   };
+  function kind(n) {
+    var k = (n && n.constructor && n.constructor.name) || "?";
+    return k.replace("AudioWorkletNode", "Worklet").replace("GainNode", "Gain").replace("ChannelMergerNode", "Merger");
+  }
+  function levels(an) {                              // [peak, mean] of one analyser read (mean = the steady offset)
+    var b = new Float32Array(an.fftSize); an.getFloatTimeDomainData(b);
+    var p = 0, s = 0; for (var i = 0; i < b.length; i++) { var v = b[i]; s += v; if (Math.abs(v) > p) p = Math.abs(v); }
+    return [p, s / b.length];
+  }
   D.arm = function () {                              // called right before the game effect of a TEST plays
     var c = D.godot(); if (!c) return false;
-    var m = D.meas = { a_src: c.createAnalyser(), a_out: c.createAnalyser(), src_peak: 0, out_peak: 0, buf_peak: -2, buf_ch: 0, buf_rate: 0, buf_len: 0, taps: 0, path: "" };
-    m.a_src.fftSize = 2048; m.a_out.fftSize = 2048;
-    D.destNodes.forEach(function (n) { try { if (n.context === c) { n.connect(m.a_out); m.taps++; } } catch (e) {} });
+    var m = D.meas = { a_src: c.createAnalyser(), src_peak: 0, buf_peak: -2, buf_ch: 0, buf_rate: 0, buf_len: 0, path: "",
+      feeds: [], ch: c.destination.channelCount + "/" + c.destination.maxChannelCount };
+    m.a_src.fftSize = 2048;
+    D.destNodes.forEach(function (n) {               // every node feeding the speakers, each on its own meter
+      try {
+        if (n.context !== c) return;
+        var a = c.createAnalyser(); a.fftSize = 2048; n.connect(a);
+        m.feeds.push({ n: n, a: a, k: kind(n), pre: 0, pre_dc: 0, peak: 0, dc: 0, ch: n.channelCount });
+      } catch (e) {}
+    });
     var t0 = Date.now();
     (function poll() {
       if (D.meas !== m) return;
-      try { m.src_peak = Math.max(m.src_peak, peakOf(m.a_src)); m.out_peak = Math.max(m.out_peak, peakOf(m.a_out)); } catch (e) {}
+      var early = Date.now() - t0 < 40;              // the first reads come before the effect starts: the baseline
+      try {
+        m.src_peak = Math.max(m.src_peak, peakOf(m.a_src));
+        m.feeds.forEach(function (f) {
+          var l = levels(f.a);
+          if (early) { f.pre = Math.max(f.pre, l[0]); f.pre_dc = l[1]; }
+          f.peak = Math.max(f.peak, l[0]); f.dc = l[1];
+        });
+      } catch (e) {}
       if (Date.now() - t0 < 700) { setTimeout(poll, 15); return; }
-      D.test.meas = "data " + m.buf_peak.toFixed(3) + " (" + m.buf_ch + "ch " + m.buf_rate + "Hz " + m.buf_len + ")  src " + m.src_peak.toFixed(3) +
-        "  out " + m.out_peak.toFixed(3) + " (" + m.taps + " feeds)  path " + (m.path || "?");
-      try { m.a_src.disconnect(); m.a_out.disconnect(); } catch (e) {}
+      var fs = m.feeds.map(function (f) {
+        return f.k + " " + f.pre.toFixed(2) + ">" + f.peak.toFixed(2) + " dc" + f.dc.toFixed(2) + " c" + f.ch;
+      }).join(" | ");
+      D.test.meas = "data " + m.buf_peak.toFixed(2) + " (" + m.buf_ch + "ch " + m.buf_rate + ")  src " + m.src_peak.toFixed(2) +
+        "  out " + m.ch + ": " + fs + "  path " + (m.path || "?");
+      try { m.a_src.disconnect(); m.feeds.forEach(function (f) { try { f.n.disconnect(f.a); } catch (e) {} }); } catch (e) {}
       D.meas = null;
     })();
     return true;
