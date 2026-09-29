@@ -1931,7 +1931,8 @@ func _pause_settings() -> void:
 			# defaults are unchanged for every other card (PAUSE, YOU'RE OUT, VICTORY/DEFEAT, ...).
 			"row_gap": 6.0, "pad": 24.0,
 			"pairs": [["SOUND: " + ("ON" if Sfx.sound_on() else "OFF"), func(): Sfx.set_on(not Sfx.sound_on()); _pause_settings()],   # SOUND
-				["VOLUME: " + Sfx.volume_label(), func(): Sfx.set_volume(Sfx.next_volume()); _pause_settings()]],
+				["VOLUME: " + Sfx.volume_label(), func(): Sfx.set_volume(Sfx.next_volume()); _pause_settings()],
+				["TEST SOUND", func(): AudioDiag.run_test()]],   # AUDIO DIAG (audio_diag.gd): in the SOUND row, the card no taller
 			"pairs2": [["MUSIC: " + ("ON" if Music.music_on() else "OFF"), func(): Music.set_on(not Music.music_on()); _pause_settings()],   # MUSIC
 				["MATCH MUSIC: " + Music.volume_label(-1, "match"), func(): Music.set_volume(Music.next_volume("match"), "match"); _pause_settings()]]
 				+ ([["FULLSCREEN", FullscreenGate.request]] if FullscreenGate.available() else []),   # 0.22.3: the emergency way back

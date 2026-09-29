@@ -173,6 +173,15 @@ func _perf() -> void:
 	check(md["where"] == "menu:home" and md["extra"].has("home") and md["extra"].has("faction")
 			and absf(float(md["extra"]["home"]) - 2.0) < 0.1, "menu sample: longest page in where, seconds per page: %s" % str(md))
 	check(Telemetry.page_key("lesson 3 / L0!") == "lesson_3_l0_", "page keys fit the function's key rule")
+	# AUDIO DIAG: the readout rides in perf's "extra" - the function keeps <= 24 keys matching [a-z0-9_]{1,32}
+	var ad := AudioDiag.data()
+	ad["trigger"] = "auto"
+	var key_rx := RegEx.create_from_string("^[a-z0-9_]{1,32}$")
+	var keys_ok := ad.size() <= 24
+	for k in ad:
+		keys_ok = keys_ok and key_rx.search(str(k)) != null and not (ad[k] is Dictionary or ad[k] is Array)
+	check(keys_ok, "audio_diag: <= 24 flat keys the telemetry function keeps (%d)" % ad.size())
+	check(not AudioDiag.send("auto"), "audio_diag: nothing sent off the web")
 
 
 func _match() -> void:

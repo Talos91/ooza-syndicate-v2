@@ -78,6 +78,8 @@ static var _loaded := false
 static var _seen := false                           # the privacy notice has been answered
 static var _share := false
 static var _eu_cache := -1                          # -1 unknown, 0 / 1
+static var _audio_t := 0.0                          # AUDIO DIAG: seconds of this session (Telemetry.tick)
+static var _audio_sent := false
 
 
 static func _load() -> void:
@@ -287,6 +289,11 @@ static func tick(acct: Account, dt: float) -> void:
 	## From Account._process: drain captured errors, upload every Rules.TELEMETRY "flush_s" (or when asked).
 	_drain_logger()
 	_poll_web_crashes(dt)
+	if not _audio_sent:                               # AUDIO DIAG: the audio readout once per session (audio_diag.gd)
+		_audio_t += dt
+		if _audio_t >= float(Rules.AUDIO_DIAG["telemetry_after_s"]):
+			_audio_sent = true
+			AudioDiag.send("auto")
 	_flush_t += dt
 	if _flush_now or _flush_t >= float(Rules.TELEMETRY["flush_s"]):
 		_flush_t = 0.0
