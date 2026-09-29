@@ -1110,6 +1110,8 @@ func show_tutorial() -> void:
 	_tut_page.lesson_pressed.connect(_start_lesson)
 	_tut_page.back_pressed.connect(show_main)
 	content.add_child(_tut_page)
+	if _tut_page.get("content") is Control:            # UI (0.22.x button sweep): its empty area let the desktop BACK
+		(_tut_page.content as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE   # (title row) under it take no tap
 	shell_raise()
 
 

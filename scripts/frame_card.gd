@@ -86,6 +86,9 @@ func _rebuild() -> void:
 	body.pressed.connect(func():
 		if not _drag():
 			UiKit.acknowledge(self, func(): pressed.emit()))   # the card flashes at once (a phone builds the next page)
+	# UI (0.22.x button sweep): a card that can't be opened (COMING LATER, IN DEVELOPMENT, LOCKED and not buyable) doesn't
+	# react - it flashed and then nothing happened, which on a phone reads as a dead button; its note / button says why
+	body.disabled = dim and not buyable
 	add_child(body)
 	var surface := Panel.new()
 	surface.mouse_filter = Control.MOUSE_FILTER_IGNORE
