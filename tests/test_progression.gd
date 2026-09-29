@@ -24,7 +24,7 @@ func _init() -> void:
 	# the shipped default (Daniele: "all open until lock switch"): a fresh profile has every skill and look open
 	check(Rules.UNLOCK_ALL_TESTING and Progression.unlock_all, "locks are off by default (UNLOCK_ALL_TESTING)")
 	check(Progression.is_unlocked("skill:mire") and Progression.is_unlocked("vat:biopod") and Progression.is_unlocked("monster:alt:ember")
-			and ArmyPresets.loadout_for("null") == {"active": "ghost_line", "map": "bypass"},
+			and ArmyPresets.loadout_for("null") == {"active": str(Rules.FACTION_LOADOUT["null"]["active"]), "map": str(Rules.FACTION_LOADOUT["null"]["map"])},   # 0.22.4: Daniele's defaults (Ghost Line + Fog)
 			"a fresh profile: every skill and look unlocked, NULL keeps its own defaults")
 	check(not Progression.is_unlocked("vat:graduate"), "a fresh profile: only the Graduate vat waits for the tutorial")
 	Progression.unlock_all = false
