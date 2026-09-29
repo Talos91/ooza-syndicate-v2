@@ -68,10 +68,11 @@ var _map_scroll := 0
 # (a mode the map offers) and type (the map's group); static, so they survive a trip through the match
 static var map_filter_mode := "all"
 static var map_filter_type := "all"
-const MAP_TYPES := ["all", "new", "brawl", "siege", "core", "alpha 11", "training"]   # MAPS 5.0: "new" (group "new")
-const MAP_TYPE_NAMES := {"all": "ALL", "new": "NEW MAPS", "brawl": "FAST", "siege": "FORTRESS", "core": "STANDARD", "alpha 11": "ALPHA 11",
-		"training": "TRAINING"}
-# (0.19.0, Daniele: labels only - the pack groups (BRAWL / SIEGE / CORE) stay the same underneath)
+# MAPS 5.0 (📐 Architect, 2026-09-30): the pool is only the N- maps now (MapPool.POOL_GROUPS), all group "new" -
+# the old BRAWL / SIEGE / CORE / ALPHA 11 / TRAINING groups never match, so TYPE relabels by each map's own "size"
+# (XS / S / M / L, baked by the map builder) instead.
+const MAP_TYPES := ["all", "xs", "s", "m", "l"]
+const MAP_TYPE_NAMES := {"all": "ALL SIZES", "xs": "TINY", "s": "SMALL", "m": "MEDIUM", "l": "LARGE"}
 var _chat_btn: Button
 var _chat_t := 0.0
 var _move_pick := -1                               # host, team modes: the player picked to MOVE to a team
@@ -3452,8 +3453,9 @@ func show_maps() -> void:
 
 
 func _map_type(m: Dictionary) -> String:
-	var g := str(m.get("group", "")).to_lower()
-	return "training" if g in ["tutorial", "debug"] else g
+	## MAPS 5.0: TYPE filters by size (XS / S / M / L, under "tags", not a top-level field); a map without
+	## one (none baked before 5.0) never matches a size chip, only ALL SIZES.
+	return str(m.get("tags", {}).get("size", "")).to_lower()
 
 
 # --- UI: BATTLEFIELD > BACKGROUND (Daniele 2026-09-28): the match background, your screen only (UiKit.backdrop_choice) ---
