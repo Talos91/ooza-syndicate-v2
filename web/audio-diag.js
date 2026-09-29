@@ -49,6 +49,7 @@
     var S = window.AudioBufferSourceNode && window.AudioBufferSourceNode.prototype, s0 = S && S.start;
     if (s0) S.start = function () {
       try { D.starts++; if (this.context === D.godot()) D.startsGodot++; } catch (e) {}
+      try { if (D.meas && this.context === D.godot()) D.tapSource(this); } catch (e) { note(e, "tap"); }
       try { return s0.apply(this, arguments); } catch (e) { note(e, "start"); throw e; }
     };
   } catch (e) {}
@@ -87,8 +88,66 @@
       return "started " + st;
     } catch (e) { note(e, "beep"); return "error " + (e && e.name || e); }
   }
+  // 0.23.3 measurement: which stage of Godot's effect chain is silent on a phone (buffer data / after the source / at the output)
+  D.edges = [];
+  D.destNodes = [];
+  try {
+    var N = window.AudioNode && window.AudioNode.prototype, c0 = N && N.connect;
+    if (c0) N.connect = function (dest) {
+      try {
+        if (D.edges.length < 600) D.edges.push([this, dest]);
+        if (window.AudioDestinationNode && dest instanceof AudioDestinationNode && D.destNodes.indexOf(this) < 0) D.destNodes.push(this);
+      } catch (e) {}
+      return c0.apply(this, arguments);
+    };
+  } catch (e) {}
+  function peakOf(an) {
+    var b = new Float32Array(an.fftSize); an.getFloatTimeDomainData(b);
+    var p = 0; for (var i = 0; i < b.length; i++) { var v = Math.abs(b[i]); if (v > p) p = v; } return p;
+  }
+  function pathGains(src) {                         // the gain values along the first path from the source to the destination
+    var out = [], cur = src, k = 0;
+    while (cur && k < 12) {
+      var nxt = null;
+      for (var i = 0; i < D.edges.length; i++) if (D.edges[i][0] === cur) { nxt = D.edges[i][1]; break; }
+      if (!nxt || !(nxt instanceof AudioNode)) break;
+      if (window.GainNode && nxt instanceof GainNode) out.push(nxt.gain.value.toFixed(3));
+      if (window.AudioDestinationNode && nxt instanceof AudioDestinationNode) { out.push("OUT"); break; }
+      cur = nxt; k++;
+    }
+    return out.join(">");
+  }
+  D.tapSource = function (s) {
+    var m = D.meas; if (!m || m.src_tapped) return;
+    m.src_tapped = true;
+    try { s.connect(m.a_src); } catch (e) {}
+    try {
+      var b = s.buffer, p = 0;
+      if (b) { m.buf_ch = b.numberOfChannels; m.buf_rate = b.sampleRate; m.buf_len = b.length;
+        for (var c = 0; c < b.numberOfChannels; c++) { var d = b.getChannelData(c); for (var i = 0; i < d.length; i += 4) { var v = Math.abs(d[i]); if (v > p) p = v; } } }
+      m.buf_peak = p;
+    } catch (e) { m.buf_peak = -1; }
+    setTimeout(function () { try { m.path = pathGains(s); } catch (e) {} }, 30);
+  };
+  D.arm = function () {                              // called right before the game effect of a TEST plays
+    var c = D.godot(); if (!c) return false;
+    var m = D.meas = { a_src: c.createAnalyser(), a_out: c.createAnalyser(), src_peak: 0, out_peak: 0, buf_peak: -2, buf_ch: 0, buf_rate: 0, buf_len: 0, taps: 0, path: "" };
+    m.a_src.fftSize = 2048; m.a_out.fftSize = 2048;
+    D.destNodes.forEach(function (n) { try { if (n.context === c) { n.connect(m.a_out); m.taps++; } } catch (e) {} });
+    var t0 = Date.now();
+    (function poll() {
+      if (D.meas !== m) return;
+      try { m.src_peak = Math.max(m.src_peak, peakOf(m.a_src)); m.out_peak = Math.max(m.out_peak, peakOf(m.a_out)); } catch (e) {}
+      if (Date.now() - t0 < 700) { setTimeout(poll, 15); return; }
+      D.test.meas = "data " + m.buf_peak.toFixed(3) + " (" + m.buf_ch + "ch " + m.buf_rate + "Hz " + m.buf_len + ")  src " + m.src_peak.toFixed(3) +
+        "  out " + m.out_peak.toFixed(3) + " (" + m.taps + " feeds)  path " + (m.path || "?");
+      try { m.a_src.disconnect(); m.a_out.disconnect(); } catch (e) {}
+      D.meas = null;
+    })();
+    return true;
+  };
   D.runTest = function (gapMs, beepMs, hz, gain) {
-    var t = D.test = { godot: "", fresh: "", fresh_made: "", runs: (D.test.runs || 0) + 1 };
+    var t = D.test = { godot: "", fresh: "", fresh_made: "", meas: D.test.meas_pending || "", runs: (D.test.runs || 0) + 1 };
     var fresh = null;
     try { fresh = new Orig(); t.fresh_made = fresh.state; } catch (e) { t.fresh = "error " + (e && e.name || e); note(e, "test"); }
     setTimeout(function () { t.godot = beep(D.godot(), beepMs / 1000, hz, gain, false); }, gapMs);

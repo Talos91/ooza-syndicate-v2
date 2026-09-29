@@ -1,5 +1,12 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.3 "Alpha 23" - 2026-09-30 (sound diagnosis, DEPLOY stall)
+
+- **SOUND TEST measures the effect's path** (Daniele hears the two test beeps but never the game effect, even at SOUND 100 %): TEST now also
+  reads the effect's sound data, the signal leaving it and the signal reaching the speakers, with every gain on the way (the "EFFECT 1" line) -
+  the stage that reads zero on his phone is where it dies.
+- **DEPLOY**: the VERSUS art is decoded while the lobby is open, so pressing DEPLOY no longer stalls a few seconds on it.
+
 ## 0.23.2 "Alpha 23" - 2026-09-30 (Daniele's 0.23.1 check)
 
 - **The VERSUS card IS the loading screen now** (Daniele: "when you click deploy that's what players see until the map is ready, not the

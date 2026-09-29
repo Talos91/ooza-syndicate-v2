@@ -62,6 +62,7 @@ static func data() -> Dictionary:
 		"samples": samples, "streams": loaded, "played": played, "playback": "sample" if ptype == 1 else "stream",
 		"test": "%s|%s|%s" % [str(t.get("godot", "")), str(t.get("fresh_made", "")), str(t.get("fresh", ""))] if tests > 0 else "",
 		"js_err": str(j.get("err", "")).substr(0, 80),
+		"meas": str(t.get("meas", "")).substr(0, 160) if tests > 0 else "",
 	}
 
 
@@ -80,6 +81,7 @@ static func readout() -> String:
 			"ON" if bool(d["sfx_on"]) else "OFF", int(d["sfx_vol"]), "MUTED" if bool(d["sfx_mute"]) else "on",
 			float(d["sfx_db"]), "MUTED" if bool(d["master_mute"]) else "on", float(d["master_db"]), int(d["samples"]),
 			int(d["streams"]), int(d["played"]), int(d["starts"]), int(d["starts_godot"]), str(d["playback"])],
+		"EFFECT 1 %s" % (str(d["meas"]) if str(d["meas"]) != "" else "- (tap TEST)"),
 		"states %s  ·  last test %s  ·  error %s" % [str(d["ctx_history"]) if str(d["ctx_history"]) != "" else "-",
 			_test_words(str(d["test"])), str(d["js_err"]) if str(d["js_err"]) != "" else "none"],
 	]
@@ -98,6 +100,8 @@ static func run_test(on_done := Callable()) -> void:
 	## TEST SOUND: A now (Sfx, forced past the UI gap - the button's own tap just played), B and C from JavaScript;
 	## `on_done` (the readout refresh) once the three are over. The first TEST also sends the readout (telemetry).
 	tests += 1
+	if web():                                        # 0.23.3: tap the game effect's chain while it plays (web/audio-diag.js D.arm)
+		JavaScriptBridge.eval("window.OozeAudioDiag&&OozeAudioDiag.arm()", true)
 	Sfx.play_ui("test", true)
 	var A := Rules.AUDIO_DIAG
 	if web():

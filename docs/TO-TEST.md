@@ -1,9 +1,13 @@
-# To test - ALPHA 23.2 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.3 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.3
+- [ ] **SOUND TEST**: SETTINGS > DISPLAY > AUDIO > TEST, then screenshot the AUDIO lines - especially the new "EFFECT 1" line.
+- [ ] **DEPLOY**: does the VERSUS card now come up without the ~3 s stall?
 
 ## 0.23.2
 - [ ] **DEPLOY** in a room: the VERSUS card at once (no frozen lobby), until the map is there.
