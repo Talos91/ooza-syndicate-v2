@@ -1,5 +1,9 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.7 "Alpha 23" - 2026-09-30
+
+- Unit counts on the badges another 10 % bigger (Daniele, after 0.23.6 went live): count 22 -> 24 px, the box 54 x 40 -> 59 x 44.
+
 ## 0.23.6 "Alpha 23" - 2026-09-30 (staging test: zoom + bigger unit counts)
 
 - **Zoom** (Daniele: "use 2 fingers to zoom"): pinch in a match to zoom around the fingers (two fingers also pan), the mouse wheel

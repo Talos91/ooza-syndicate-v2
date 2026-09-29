@@ -108,12 +108,13 @@ static func badge_style(color: Color) -> StyleBoxFlat:
 
 const EMBLEM_TINT := preload("res://shaders/emblem_tint.gdshader")
 const BADGE_EMBLEM := Vector2(12, 10)          # under a BRAWL count (Alpha 11)
-const BADGE_EMBLEM_OWNER := Vector2(22, 22)    # in place of a hidden count: about the count's own height
+const BADGE_EMBLEM_OWNER := Vector2(24, 24)    # in place of a hidden count: about the count's own height
 # Alpha 19: every node badge is one fixed box (x ui_scale) sized for its largest normal content - a
 # 3-digit count over an emblem and a short sub line; longer text steps its font down, then clips.
-# 0.23.6 (Daniele: "make numbers of units in structure bigger"): count 16 -> 22 px, the box 44 x 33 -> 54 x 40.
-const BADGE_SIZE := Vector2(54, 40)
-const BADGE_COUNT_FONT := 22
+# 0.23.6 (Daniele: "make numbers of units in structure bigger"): count 16 -> 22 px, the box 44 x 33 -> 54 x 40;
+# 0.23.7 ("another 10 %"): count 24 px, the box 59 x 44.
+const BADGE_SIZE := Vector2(59, 44)
+const BADGE_COUNT_FONT := 24
 const BADGE_SUB_FONT := 9
 const BADGE_PAD := 3.0                         # side margin inside the box
 # 0.19.2 spec H6: the top bar's fixed sizes (fits 844 x 390 pt with up to 6 seats: 1 (you) + 5 rivals,
@@ -903,8 +904,8 @@ func _place_badge(b: Dictionary, masked: bool, small: bool) -> void:
 	var sub: Label = b["sub"]
 	var emb: TextureRect = b["emblem"]
 	var row2 := sub.visible or small
-	var top_y := (15.0 if row2 else 20.0) * s                # centre of the count row
-	var low_y := 30.0 * s                                    # centre of the sub line
+	var top_y := (16.5 if row2 else 22.0) * s                # centre of the count row
+	var low_y := 33.0 * s                                    # centre of the sub line
 	var pad := BADGE_PAD * s
 	# each label is as tall as its full-size font line, so a stepped-down font stays centred in it
 	var lh := UI_FONT.get_height(int(BADGE_COUNT_FONT * s)) + 3.0
