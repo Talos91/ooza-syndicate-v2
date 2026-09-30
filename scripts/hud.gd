@@ -60,7 +60,9 @@ var skill_targets: Control             # the dock's target highlights: over the 
 var overlay: HudOverlay                # 0.19.0: monster reach, halo rings, relay-outcome preview, danger symbols
 var action_buttons: Dictionary = {}    # stable action name -> the inspector's Button (tutorial spotlight, spec I)
 var switch_ring: Control                # 0.19.0: the SWITCH button's READY / cooldown ring (SwitchRing)
-var _inspector_guides: Control          # 0.23.x radial redesign: a faint accent wash at the card fan's hinge
+var _inspector_guides: Control          # 0.23.x radial redesign: the glowing arc the card fan stands on
+var _inspector_opened_ms := 0           # when the ring opened: the cards deal out from the vat over ~0.25 s
+var _fan := {}                          # this frame's fan geometry for _draw_inspector_guides
 # UI (Alpha 21): the in-match screens are full-screen layers MatchScreens draws into (SCREEN-SYSTEM 17-20)
 var end_panel: Control                 # VICTORY / DEFEAT, and its MATCH DETAILS page
 var pause_panel: Control
@@ -599,9 +601,9 @@ func pointer_over_ui(p: Vector2) -> bool:
 			return true
 	if is_instance_valid(inspector):
 		for a in inspector_actions:
-			if _true_rect(a["button"] as Control).has_point(p):   # 0.23.x: the action fan can be rotated
+			if (a["button"] as ActionWedge).hit_global(p):     # 0.23.x: a slice of the hex pie, not its square
 				return true
-		if inspector.has_meta("close") and _true_rect(inspector.get_meta("close") as Control).has_point(p):
+		if inspector.has_meta("close") and (inspector.get_meta("close") as Control).get_global_rect().has_point(p):
 			return true
 	return end_panel.visible or pause_panel.visible or out_panel.visible
 
@@ -930,16 +932,15 @@ func _place_badge(b: Dictionary, masked: bool, small: bool) -> void:
 
 # ------------------------------------------------------------------ inspector (Alpha 11 ring)
 ## 0.23.x radial redesign (Daniele: "the radial menu is messy ... doesn't account for screen position ...
-## more beautiful, more useful, easier to understand" - then: "a set of cards resembling a semicircle
-## coming out of the vat, stacked together"): the ring stays exactly on the node (never dragged off it,
-## unlike the old fixed-offset version); everything around it is laid out fresh every frame in
-## _layout_inspector_wheel (called from _refresh_inspector), in three slots that never contest each other -
-## the action fan (a hand of overlapping cards hinged at the ring, opening straight up or down toward
-## whichever side has more room), the close chip (the ring's other vertical side), the info card (whichever
-## side left/right has more room) - each clamped inside _inspector_bounds so nothing crosses the SEND panel,
-## the top bar, the dock or a screen edge. See _open_dir / _inspector_bounds / _layout_inspector_wheel.
-const INSPECTOR_RING_R := 76.0
-const INSPECTOR_CARD_W := 320.0
+## more beautiful, more useful, easier to understand"; then his reference - a pie of wedges round a centre
+## × - "only on the right side and in the style of our game", "make the radial hexagonal"): a half-hexagon
+## pie on the node's right, one slice per action (ActionWedge: glyph, name, price), a hex × hub on the node
+## itself (InspectorHub), the info card on the other side. The ring always sits on the node; every frame
+## _layout_inspector_wheel (from _refresh_inspector) turns the pie away from any edge or panel it would cross
+## (flipping it to the left only when the right has no room) and keeps the card inside _inspector_bounds.
+const INSPECTOR_RING_R := 76.0                    # the node's own hex ring (apothem), and the pie's inner edge
+const INSPECTOR_PIE_W := 112.0                    # the pie's depth, ring to outer edge (x ui_scale; phones +16)
+const INSPECTOR_CARD_W := 280.0
 
 
 func inspect(id: int, cam: Camera3D) -> void:
@@ -952,30 +953,20 @@ func inspect(id: int, cam: Camera3D) -> void:
 	inspector = Control.new()
 	inspector.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(inspector)
-	_inspector_guides = Control.new()                 # drawn first: the spokes sit behind the ring and its controls
+	_inspector_opened_ms = Time.get_ticks_msec()
+	_inspector_guides = Control.new()                 # drawn first: the node's hex ring and the pie's dark backing
 	_inspector_guides.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_inspector_guides.draw.connect(func(): _draw_inspector_guides())
+	_inspector_guides.draw.connect(func(): _draw_inspector_guides(col))
 	inspector.add_child(_inspector_guides)
-	var ring := Panel.new()
-	ring.position = Vector2(-INSPECTOR_RING_R, -INSPECTOR_RING_R) * ui_scale
-	ring.size = Vector2(INSPECTOR_RING_R, INSPECTOR_RING_R) * 2.0 * ui_scale
-	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := panel_style(col)
-	style.set_corner_radius_all(int(INSPECTOR_RING_R * ui_scale))
-	style.bg_color = Color(col, 0.08)                 # a soft glow tint, not just an outline - the vat still reads through it
-	style.set_border_width_all(2)
-	ring.add_theme_stylebox_override("panel", style)
-	inspector.add_child(ring)
-	var close_sz := 52.0 if not mobile else 80.0
-	var close := button("×", close_inspector, close_sz, close_sz, 22)
-	var close_style := panel_style(col)
-	close_style.bg_color = Color(0.05, 0.08, 0.11, 0.75)
-	close_style.set_corner_radius_all(int(close_sz * ui_scale / 2.0))
-	close_style.set_content_margin_all(0)
-	for st in ["normal", "hover", "pressed"]:
-		close.add_theme_stylebox_override(st, close_style)
-	inspector.add_child(close)
-	inspector.set_meta("close", close)
+	var hub := InspectorHub.new()                     # the pie's centre: × on the node (was a loose X chip)
+	hub.accent = col
+	hub.ui_scale = ui_scale
+	hub.custom_minimum_size = Vector2.ONE * (60.0 if not mobile else 78.0) * ui_scale
+	hub.size = hub.custom_minimum_size
+	hub.position = -hub.size / 2.0
+	hub.pressed.connect(func(): close_inspector.call_deferred())
+	inspector.add_child(hub)
+	inspector.set_meta("close", hub)
 	var info_bg := PanelContainer.new()
 	info_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var info_style := panel_style(col)
@@ -1077,6 +1068,255 @@ class SwitchRing:
 			draw_arc(c, r, -PI / 2.0, -PI / 2.0 + TAU * frac, 40, Color(accent, 0.85), 3.5 * s, true)
 
 
+class ActionWedge:
+	## 0.23.x (Daniele's reference: a pie of wedges round a centre ×, "only on the right side and in the style
+	## of our game"): one action as a slice of the half-ring beside the node - dark glass, the accent on its
+	## outer rim, a line glyph, its name and price. The control is the pie's whole bounding square (its centre
+	## is the node); _has_point keeps taps to this slice alone, so the slices overlap as controls and each still
+	## takes only its own. Hud._layout_inspector_wheel sets a0 / a1 / radii / grow every frame.
+	extends Button
+	var title := ""
+	var cost := ""
+	var kind := ""              # UPGRADE / MACHINEGOON / VAT / SWITCH / LASER / FORGE / MONSTER HUB / LAUNCH / EJECT
+	var glyph := ""             # SWITCH: the relay's own symbol (Rules.RELAY_GLYPH), in the symbol font
+	var accent := Color.WHITE
+	var ui_scale := 1.0
+	var font: Font
+	var symbol_font: Font
+	var a0 := 0.0               # the slice, radians (screen space: 0 = right, + = clockwise / down)
+	var a1 := 0.0
+	var r_in := 80.0            # apothems of the inner and outer hexagon (Daniele: "make the radial hexagonal")
+	var r_out := 200.0
+	var hex_base := 0.0         # the direction of the flat edge the pie opens toward (its middle edge)
+	var grow := 1.0             # deal-out from the ring, 0..1
+	var type_scale := 1.0       # phones: 1.15 (the slice's name / price / glyph)
+	var lift := 0.0             # hover / held: the slice slides out along its own middle, 0..1
+	var _held := false
+
+	func _init() -> void:
+		flat = true
+		text = ""
+		focus_mode = Control.FOCUS_NONE
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var empty := StyleBoxEmpty.new()
+		for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+			add_theme_stylebox_override(st, empty)
+		button_down.connect(func(): _held = true)
+		button_up.connect(func(): _held = false)
+
+	func centre() -> Vector2:
+		return size / 2.0
+
+	func mid() -> float:
+		return (a0 + a1) / 2.0
+
+	func outer() -> float:
+		return r_in + (r_out - r_in) * grow
+
+	func _shift() -> Vector2:
+		return Vector2(cos(mid()), sin(mid())) * lift * 8.0 * ui_scale
+
+	static func hex_r(t: float, apothem: float, base: float) -> float:
+		## The distance from the centre to a hexagon (flat edge facing `base`) along direction t.
+		var rel := t - base
+		return apothem / cos(rel - round(rel / (PI / 3.0)) * (PI / 3.0))
+
+	func _angles() -> PackedFloat32Array:
+		## Samples across the slice, with its hexagon corners exactly on them (no clipped corners).
+		var out := PackedFloat32Array()
+		var steps := maxi(4, int(ceil((a1 - a0) / deg_to_rad(6.0))))
+		for i in range(steps + 1):
+			out.append(lerpf(a0, a1, float(i) / steps))
+		var k := ceilf((a0 - hex_base - PI / 6.0) / (PI / 3.0))
+		var v := hex_base + PI / 6.0 + k * PI / 3.0
+		while v < a1:
+			if v > a0:
+				out.append(v)
+			v += PI / 3.0
+		out.sort()
+		return out
+
+	func content_point() -> Vector2:
+		## Local: the middle of the slice, where its glyph / name / price sit.
+		var m := mid()
+		var rr := (hex_r(m, r_in, hex_base) + hex_r(m, outer(), hex_base)) / 2.0
+		return centre() + _shift() + Vector2(cos(m), sin(m)) * rr
+
+	func _has_point(pt: Vector2) -> bool:
+		var d := pt - centre() - _shift()
+		var t := d.angle()
+		if wrapf(t - a0, 0.0, TAU) > a1 - a0:
+			return false
+		var r := d.length()
+		return r >= hex_r(t, r_in, hex_base) and r <= hex_r(t, outer(), hex_base)
+
+	func hit_global(p: Vector2) -> bool:
+		return visible and _has_point(get_global_transform().affine_inverse() * p)
+
+	func sector_rect() -> Rect2:
+		## Global: a square round the slice's middle - the tutorial's spotlight and the coach's fingertip
+		## (action_rect -> its centre) land inside the slice, not on the pie's shared centre (the close hub).
+		var g: Vector2 = get_global_transform() * content_point()
+		var e := (r_out - r_in) * 0.72
+		return Rect2(g - Vector2(e, e) / 2.0, Vector2(e, e))
+
+	func bbox_global() -> Rect2:
+		var gt := get_global_transform()
+		var r := Rect2(gt * (centre() + Vector2(cos(a0), sin(a0)) * hex_r(a0, r_in, hex_base)), Vector2.ZERO)
+		for a in _angles():
+			for ap in [r_in, r_out]:
+				r = r.expand(gt * (centre() + Vector2(cos(a), sin(a)) * hex_r(a, ap, hex_base)))
+		return r
+
+	func _process(dt: float) -> void:
+		var want := 1.0 if (is_hovered() or _held) and not disabled else 0.0
+		lift = move_toward(lift, want, dt * 8.0)
+		queue_redraw()
+
+	func _edge(c: Vector2, ap: float) -> PackedVector2Array:
+		## The slice's hexagon edge at apothem `ap`, a0 -> a1.
+		var pts := PackedVector2Array()
+		for a in _angles():
+			pts.append(c + Vector2(cos(a), sin(a)) * hex_r(a, ap, hex_base))
+		return pts
+
+	func _slice(c: Vector2, ri: float, ro: float) -> PackedVector2Array:
+		var pts := _edge(c, ro)
+		var inner := _edge(c, ri)
+		inner.reverse()
+		pts.append_array(inner)
+		return pts
+
+	func _draw() -> void:
+		if grow <= 0.001 or a1 <= a0:
+			return
+		var s := ui_scale
+		var c := centre() + _shift()
+		var ro := outer()
+		var off := disabled
+		var a := accent.darkened(0.35) if off else accent      # unaffordable: still its colour, just quieter
+		var poly := _slice(c, r_in, ro)
+		if lift > 0.01:                                   # a soft glow along the lifted slice's outer edge
+			draw_polyline(_edge(c, ro + 4.0 * s), Color(a, 0.25 * lift), 8.0 * s, true)
+		var fill := Color(0.03, 0.055, 0.08, 0.9).lerp(Color(a.darkened(0.6), 0.94), 0.55 * lift)
+		draw_colored_polygon(poly, fill)
+		draw_colored_polygon(_slice(c, ro - 14.0 * s * grow, ro), Color(a, 0.12 + 0.10 * lift))   # the lit rim band
+		var edge := poly.duplicate()
+		edge.append(poly[0])
+		draw_polyline(edge, Color(a, 0.32), 1.2 * s, true)
+		draw_polyline(_edge(c, ro - 1.0 * s), Color(a, 0.8 if off else 0.95), (2.2 + 1.2 * lift) * s, true)
+		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)     # the content fades in over the second half of the deal
+		if k <= 0.0:
+			return
+		var p := content_point()
+		var ink := Color(0.92, 0.97, 0.98, k) if not off else Color(0.72, 0.78, 0.82, k)
+		_icon(p + Vector2(0, -16.0 * s * type_scale), 14.0 * s * type_scale, Color(a.lightened(0.15), k * (0.7 if off else 1.0)))
+		var maxw := minf(ro - r_in, (a1 - a0) * (r_in + ro) / 2.0) * 0.9
+		_text(title, p + Vector2(0, 9.0 * s * type_scale), 13.0, ink, maxw)
+		_text(cost, p + Vector2(0, 25.0 * s * type_scale), 12.0, Color(Color("ff8a7a") if off else a.lightened(0.3), k), maxw)
+
+	func _text(t: String, at: Vector2, px: float, col: Color, maxw: float) -> void:
+		var fs := int(round(px * ui_scale * type_scale))
+		while fs > 7 and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > maxw:
+			fs -= 1
+		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		draw_string(font, Vector2(at.x - w / 2.0, at.y + (font.get_ascent(fs) - font.get_descent(fs)) / 2.0), t,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+
+	func _icon(p: Vector2, r: float, col: Color) -> void:
+		## Line glyphs in the kit's manner: one stroke weight, the accent, no fills except where a shape needs mass.
+		var w := 2.2 * ui_scale
+		match kind:
+			"UPGRADE":
+				for dy in [-0.45, 0.2]:
+					draw_polyline(PackedVector2Array([p + Vector2(-0.75, dy + 0.4) * r, p + Vector2(0, dy - 0.3) * r,
+							p + Vector2(0.75, dy + 0.4) * r]), col, w, true)
+			"MACHINEGOON":
+				draw_arc(p, r * 0.62, 0.0, TAU, 24, col, w, true)
+				for d in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+					draw_line(p + d * r * 0.3, p + d * r * 1.0, col, w, true)
+				draw_circle(p, r * 0.12, col)
+			"VAT":
+				var body := PackedVector2Array([p + Vector2(-0.6, -0.5) * r, p + Vector2(0.6, -0.5) * r, p + Vector2(0.6, 0.9) * r,
+						p + Vector2(-0.6, 0.9) * r, p + Vector2(-0.6, -0.5) * r])
+				draw_polyline(body, col, w, true)
+				draw_line(p + Vector2(-0.3, -0.85) * r, p + Vector2(0.3, -0.85) * r, col, w, true)
+				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.5, 0.25) * r, p + Vector2(0.5, 0.1) * r,
+						p + Vector2(0.5, 0.8) * r, p + Vector2(-0.5, 0.8) * r]), Color(col, col.a * 0.55))
+			"SWITCH":
+				if glyph != "" and symbol_font:
+					var fs := int(round(r * 1.7))
+					var gw := symbol_font.get_string_size(glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+					draw_string(symbol_font, p + Vector2(-gw / 2.0, (symbol_font.get_ascent(fs) - symbol_font.get_descent(fs)) / 2.0),
+							glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+				else:
+					draw_arc(p, r * 0.7, -PI * 0.9, PI * 0.4, 20, col, w, true)
+			"LASER":
+				draw_colored_polygon(PackedVector2Array([p + Vector2(0.2, -1.0) * r, p + Vector2(-0.5, 0.12) * r,
+						p + Vector2(-0.02, 0.12) * r, p + Vector2(-0.2, 1.0) * r, p + Vector2(0.5, -0.15) * r,
+						p + Vector2(0.02, -0.15) * r]), col)
+			"FORGE":
+				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.8, -0.75) * r, p + Vector2(0.35, -0.75) * r,
+						p + Vector2(0.35, -0.25) * r, p + Vector2(-0.8, -0.25) * r]), col)
+				draw_line(p + Vector2(-0.15, -0.25) * r, p + Vector2(0.55, 0.95) * r, col, w * 1.3, true)
+			"MONSTER HUB":
+				for dx in [-0.5, 0.0, 0.5]:
+					draw_line(p + Vector2(dx - 0.25, -0.85) * r, p + Vector2(dx + 0.2, 0.85) * r, col, w * 1.2, true)
+			"LAUNCH":
+				draw_line(p + Vector2(0, 0.9) * r, p + Vector2(0, -0.75) * r, col, w, true)
+				draw_polyline(PackedVector2Array([p + Vector2(-0.55, -0.2) * r, p + Vector2(0, -0.85) * r,
+						p + Vector2(0.55, -0.2) * r]), col, w, true)
+			"EJECT":
+				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.15) * r, p + Vector2(0.75, 0.15) * r,
+						p + Vector2(0, -0.8) * r]), col)
+				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.42) * r, p + Vector2(0.75, 0.42) * r,
+						p + Vector2(0.75, 0.72) * r, p + Vector2(-0.75, 0.72) * r]), col)
+			_:
+				draw_circle(p, r * 0.4, col)
+
+
+class InspectorHub:
+	## The pie's centre: a round × on the node itself (Daniele's reference) - tap to close. Round hit area.
+	extends Button
+	var accent := Color.WHITE
+	var ui_scale := 1.0
+	var grow := 1.0
+	var hex_base := 0.0         # same orientation as the pie's hexagon
+
+	func _init() -> void:
+		flat = true
+		text = ""
+		focus_mode = Control.FOCUS_NONE
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var empty := StyleBoxEmpty.new()
+		for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+			add_theme_stylebox_override(st, empty)
+
+	func _has_point(pt: Vector2) -> bool:
+		var d := pt - size / 2.0
+		var rel := d.angle() - hex_base
+		return d.length() <= size.x / 2.0 * 0.866 / cos(rel - round(rel / (PI / 3.0)) * (PI / 3.0))
+
+	func _process(_dt: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		var s := ui_scale
+		var c := size / 2.0
+		var r := size.x / 2.0 * (0.55 + 0.45 * grow)       # the hexagon's corner radius
+		var hot := is_hovered() or button_pressed
+		var hex := PackedVector2Array()
+		for i in range(7):
+			var a := hex_base + PI / 6.0 + i * PI / 3.0
+			hex.append(c + Vector2(cos(a), sin(a)) * r)
+		draw_colored_polygon(hex, Color(0.03, 0.055, 0.08, 0.92))
+		draw_polyline(hex, Color(accent, 1.0 if hot else 0.75), (2.0 + (1.0 if hot else 0.0)) * s, true)
+		var k := r * 0.3
+		var ink := Color(0.92, 0.97, 0.98)
+		draw_line(c + Vector2(-k, -k), c + Vector2(k, k), ink, 2.4 * s, true)
+		draw_line(c + Vector2(-k, k), c + Vector2(k, -k), ink, 2.4 * s, true)
+
+
 func _inspector_actions(n: Dictionary) -> void:
 	## Structures 2.1 (spec B): common - UPGRADE / MACHINEGOON (or VAT to go back); relay - LASER / FORGE /
 	## MONSTER HUB (single tier) + SWITCH; special - T4 vat only, no swap; hub - LAUNCH; EJECT wherever
@@ -1110,17 +1350,23 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 	# prices shown at Alpha 11 scale like every other number (Alpha 14 playtest: "upgrade info still
 	# says 150") - the button used to print the raw internal cost. `name` is the stable id the tutorial
 	# spotlights (action_rect(name); TUTORIAL-DESIGN.md sec11).
-	var suffix := ""
-	if method == "launch_monster":
-		suffix = "\n%d UNITS · DRAG" % Rules.shown(cost)
-	elif cost > 0:
-		suffix = "\n%d UNITS" % Rules.shown(cost)
+	var price := "FREE"
+	if cost > 0:
+		price = "%d UNITS" % Rules.shown(cost)
 	elif method == "switch":
-		suffix = "\n%d s CD" % int(Rules.relay_cooldown(str(sim.nodes[id]["relay"])))   # per kind: rotations 10 s
-	else:
-		suffix = "\nFREE"
-	var text := title + suffix
-	var b := button(text, func():
+		price = "%d s COOLDOWN" % int(Rules.relay_cooldown(str(sim.nodes[id]["relay"])))   # per kind: rotations 10 s
+	var b := ActionWedge.new()                            # 0.23.x: a slice of the hex pie (see ActionWedge)
+	b.title = title.get_slice("\n", 0)
+	b.cost = price
+	b.kind = name
+	if method == "switch":
+		b.glyph = str(Rules.RELAY_GLYPH.get(sim.nodes[id]["relay"], ""))
+	b.accent = RELAY_ACCENT if method == "switch" else Rules.seat_color(human)
+	b.ui_scale = ui_scale
+	b.font = UI_FONT
+	b.symbol_font = SYMBOL_FONT
+	b.type_scale = 1.15 if mobile else 1.0
+	var act := func():
 		if method == "launch_monster":                    # arm: drag from the hub, or tap a highlighted node
 			main.monster_from = id
 			close_inspector()
@@ -1128,47 +1374,35 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 		if main.node_action(method, id, args):
 			close_inspector()
 		else:
-			_refresh_inspector(main.cam), 150, 82 if not mobile else 100, 16)
+			_refresh_inspector(main.cam)
+	b.pressed.connect(func(): act.call_deferred())
 	if method == "switch":                                # relay-outcome preview while SWITCH is hovered / held
 		b.mouse_entered.connect(func(): overlay.hover_relay = id)
 		b.mouse_exited.connect(func():
 			if overlay.hover_relay == id:
 				overlay.hover_relay = -1)
 		b.button_down.connect(func(): overlay.hover_relay = id)
-	# 0.23.x (Daniele: "a set of cards resembling a semicircle coming out of the vat, stacked together"):
-	# b.position / .rotation / .pivot_offset are set every frame in _layout_inspector_wheel (the card fan) -
-	# a fixed slot ignored screen position entirely.
-	# SWITCH stands out (Daniele, 0.19.0: "add some visibility to the buttons / models of the relays"):
-	# its own accent colour plus a READY / cooldown ring (SwitchRing, updated in _refresh_inspector).
-	var style := panel_style(RELAY_ACCENT if method == "switch" else Rules.seat_color(human))
-	style.set_corner_radius_all(int(14 * ui_scale))    # 0.23.x: a card's corners, not a pill
-	style.set_border_width_all(2)
-	b.add_theme_stylebox_override("normal", style)
+	# The slice's angles / radii are set every frame in _layout_inspector_wheel. SWITCH stands out (Daniele,
+	# 0.19.0: "add some visibility to the buttons / models of the relays"): the relay's own accent plus a
+	# READY / cooldown ring round its glyph (SwitchRing, updated in _refresh_inspector, placed by the layout).
 	inspector.add_child(b)
 	if method == "switch":
 		switch_ring = SwitchRing.new()
 		switch_ring.ui_scale = ui_scale
-		switch_ring.set_anchors_preset(Control.PRESET_FULL_RECT)
 		switch_ring.accent = RELAY_ACCENT
 		b.add_child(switch_ring)
 	inspector_actions.append({"button": b, "cost": cost, "method": method, "name": name, "args": args})
 	action_buttons[name] = b
 
 
-func _true_rect(c: Control) -> Rect2:
-	## get_global_rect() is Rect2(global_position, size) - it ignores rotation (a Rect2 can't represent
-	## one), which was never wrong before 0.23.x's fanned action cards. Re-centring it on the control's
-	## actual rotated middle keeps a spotlight or a scripted tap landing on it even tilted.
-	var centre: Vector2 = c.get_global_transform() * (c.size / 2.0)
-	return Rect2(centre - c.size / 2.0, c.size)
-
-
 func action_rect(name: String) -> Rect2:
 	## Stable rect getter for the tutorial's spotlight (TUTORIAL-DESIGN.md sec11): valid only while that
 	## action's button is on screen (the inspector open on the right node kind). Empty otherwise.
+	## 0.23.x: a slice of the hex pie - a square round the slice's own middle (ActionWedge.sector_rect), so
+	## the coach's fingertip (its centre) lands on that slice, never on the pie's shared centre (the × hub).
 	name = name.replace("MACHINGOON", "MACHINEGOON")   # 0.19.2 spelling fix; old name accepted for one release
 	if action_buttons.has(name) and is_instance_valid(action_buttons[name]):
-		return _true_rect(action_buttons[name] as Control)
+		return (action_buttons[name] as ActionWedge).sector_rect()
 	return Rect2()
 
 
@@ -1192,8 +1426,9 @@ func inspector_rect() -> Rect2:
 		return Rect2()
 	var r := Rect2()
 	for c in inspector.get_children():
-		if c is Control and (c as Control).visible:
-			var g := _true_rect(c as Control)             # 0.23.x: some of these (the action fan) are rotated
+		if c is Control and (c as Control).visible and (c as Control).size != Vector2.ZERO:
+			# 0.23.x: a pie slice's control is the pie's whole square - its own slice is what it covers
+			var g: Rect2 = (c as ActionWedge).bbox_global() if c is ActionWedge else (c as Control).get_global_rect()
 			r = g if r.size == Vector2.ZERO else r.merge(g)
 	return r
 
@@ -1345,22 +1580,13 @@ func show_out_panel() -> void:
 
 func _inspector_bounds() -> Rect2:
 	## The open play area the radial menu may use: below the top bar, right of the SEND panel (when it
-	## shows), above the dock / hint / map title, inside the safe-area margins. Reused by _open_dir so the
-	## fan points into whichever of this rect is actually free from the node's own position.
+	## shows), above the dock / hint / map title, inside the safe-area margins - the pie turns to stay in it.
 	var vp := root.get_viewport_rect().size
 	var l := margins.x + (side_panel.size.x + 16.0 * ui_scale if side_panel.visible else 0.0)
 	var t := top_used() + 8.0 * ui_scale
 	var r := vp.x - margins.z - 8.0 * ui_scale
 	var bo := vp.y - bottom_used() - 8.0 * ui_scale
 	return Rect2(l, t, maxf(r - l, 20.0), maxf(bo - t, 20.0))
-
-
-func _open_dir(p: Vector2, bounds: Rect2) -> Vector2:
-	## The direction from the node's screen point toward the middle of the open play area - the radial menu
-	## always fans this way, so a node hugging an edge or the SEND panel never opens into it (Daniele:
-	## "doesn't account for screen position").
-	var d := bounds.position + bounds.size / 2.0 - p
-	return d.normalized() if d.length() > 1.0 else Vector2(0, -1)
 
 
 func _settle(p: Vector2, centre_offset: Vector2, size: Vector2, bounds: Rect2) -> Vector2:
@@ -1373,61 +1599,152 @@ func _settle(p: Vector2, centre_offset: Vector2, size: Vector2, bounds: Rect2) -
 	return top_left - p
 
 
-func _layout_inspector_wheel(p: Vector2, vp: Vector2) -> void:
-	## The action fan, the close chip and the info card, freshly placed every frame: see the block comment
-	## above inspect(). The actions are a hand of cards, hinged together right at the ring's edge and
-	## splayed into a tight overlapping semicircle (Daniele, 0.23.x: "a set of cards resembling a semicircle
-	## coming out of the vat, stacked together") - one shared pivot, each card just rotated round it, so they
-	## naturally overlap near the hinge and fan apart toward their tips; no separate "radius" to compute.
+static func _hex_edge(c: Vector2, base: float, a0: float, a1: float, ap: float) -> PackedVector2Array:
+	## Points along a hexagon (flat edge facing `base`, apothem `ap`) from direction a0 to a1, corners included.
+	var angs: Array[float] = []
+	var steps := maxi(2, int(ceil((a1 - a0) / deg_to_rad(6.0))))
+	for i in range(steps + 1):
+		angs.append(lerpf(a0, a1, float(i) / steps))
+	var v := base + PI / 6.0 + ceilf((a0 - base - PI / 6.0) / (PI / 3.0)) * PI / 3.0
+	while v < a1:
+		if v > a0:
+			angs.append(v)
+		v += PI / 3.0
+	angs.sort()
+	var pts := PackedVector2Array()
+	for a in angs:
+		pts.append(c + Vector2(cos(a), sin(a)) * ActionWedge.hex_r(a, ap, base))
+	return pts
+
+
+func _pie_overflow(p: Vector2, base: float, total: float, r_out: float, bounds: Rect2, rot := 0.0) -> float:
+	## How far (px, summed) a half-hex pie facing `base` would cross the play area's edges.
+	var over := 0.0
+	for q in _hex_edge(p, base + rot, base - total / 2.0, base + total / 2.0, r_out):
+		over += maxf(0.0, bounds.position.x - q.x) + maxf(0.0, q.x - bounds.end.x)
+		over += maxf(0.0, bounds.position.y - q.y) + maxf(0.0, q.y - bounds.end.y)
+	return over
+
+
+static func _poly_area(poly: PackedVector2Array) -> float:
+	var a := 0.0
+	for i in range(poly.size()):
+		a += poly[i].cross(poly[(i + 1) % poly.size()])
+	return a / 2.0
+
+
+func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
+	## The hex pie, the hub and the info card, placed fresh every frame (see the block comment above inspect()).
 	var bounds := _inspector_bounds()
-	var dir := _open_dir(p, bounds)
-	# The card fan always opens straight up or straight down (whichever side of the node has more room) -
-	# a landscape card (wider than tall) only reads as a card, text upright, near that axis; rotating a
-	# whole fan open sideways just lays every card on its side (tried it - unreadable). The info card and
-	# the close chip still use the full continuous `dir` below, so they still slide sideways to dodge the
-	# SEND panel or a screen edge; only the fan itself is pinned vertical.
-	# Three slots that never contest each other: the fan takes whichever of up/down has more room; the
-	# close chip takes the vertical side the fan did NOT take (small, right at the ring, always easy to
-	# find); the info card takes whichever of left/right has more room, clear of both.
-	var space_above := p.y - bounds.position.y
-	var space_below := bounds.position.y + bounds.size.y - p.y
-	var fan_down := space_below > space_above
-	var fan_angle := PI / 2.0 if fan_down else -PI / 2.0
+	var s := ui_scale
 	var n := inspector_actions.size()
-	# 28 deg/step (100 deg max) read as one card with a sliver of the next peeking out - not a fan
-	# (Daniele, seeing the shot: "all cards one over the other instead of as a fan"). Wider steps, and a
-	# spread that can open past a semicircle for 4-5 actions, so each card's own title is actually legible.
-	var step := deg_to_rad(clampf(72.0 * float(n - 1), 0.0, 170.0)) / maxf(float(n - 1), 1.0)
-	var hinge := Vector2(0, (INSPECTOR_RING_R * ui_scale + 6.0 * ui_scale) * (1.0 if fan_down else -1.0))
+	var ring := INSPECTOR_RING_R * s
+	var r_in := ring + 5.0 * s
+	var r_out := r_in + (INSPECTOR_PIE_W + (16.0 if mobile else 0.0)) * s
+	# one hexagon edge (60 deg) per action up to 3 - the half-hex; 4-5 take half an edge each (30 deg), so every
+	# seam still lands on a corner or an edge's midpoint and each slice stays a clean trapezoid (45 / 36 deg
+	# slices cut across the edges and came out as kites)
+	var span := PI / 3.0 if n <= 3 else PI / 6.0
+	var total := span * n
+	# the hexagon turned so the seams land on those points: flat edge to the front for 1, 3 or 4 slices, a
+	# corner for 2, 15 deg off for 5
+	var rot := {2: PI / 6.0, 5: PI / 12.0}.get(n, 0.0) as float
+	# Facing: the right (0) - Daniele: "only on the right side" - turned by the smallest step that keeps the
+	# whole pie inside the play area; the mirror (the left, PI) only when no turn of the right one fits.
+	var base := 0.0
+	if n > 0:
+		var best := INF
+		for side in [0.0, PI]:
+			for k in range(19):
+				for sg in ([1.0] if k == 0 else [1.0, -1.0]):
+					var b: float = side + sg * deg_to_rad(k * 5.0)
+					var score: float = _pie_overflow(p, b, total, r_out, bounds, rot) * 1000.0 + k * 5.0 + (150.0 if side != 0.0 else 0.0)
+					if score < best:
+						best = score
+						base = b
+	var now := Time.get_ticks_msec() - _inspector_opened_ms
+	var box := Vector2.ONE * 2.0 * (r_out * 1.16 + 14.0 * s)
+	var hex_base := base + rot
+	var mirrored := cos(base) < 0.0                   # the left side: keep the first action on top there too
 	for i in range(n):
-		var b: Control = inspector_actions[i]["button"]
-		var ang := fan_angle if n <= 1 else fan_angle + step * (float(i) - float(n - 1) / 2.0)
-		# the hinge is the pivot - bottom-centre fanning up, top-centre fanning down - so the lone-action
-		# case (n=1, ang == fan_angle exactly: every tutorial spotlight) always lands dead upright (rotation
-		# 0), not upside down; TOP.rotated(ang-90) == BOTTOM.rotated(ang+90) == the outward direction (cos,sin ang)
-		b.pivot_offset = Vector2(b.custom_minimum_size.x / 2.0, 0.0 if fan_down else b.custom_minimum_size.y)
-		b.rotation = (ang - PI / 2.0) if fan_down else (ang + PI / 2.0)
-		b.position = hinge - b.pivot_offset
-	var close: Control = inspector.get_meta("close")
-	var close_gap := 10.0 * ui_scale
-	var close_r := INSPECTOR_RING_R * ui_scale + close_gap + close.custom_minimum_size.y / 2.0
-	var close_c := Vector2(0, close_r * (-1.0 if fan_down else 1.0))
-	close.position = _settle(p, close_c, close.custom_minimum_size, bounds)
+		var w: ActionWedge = inspector_actions[i]["button"]
+		var j := (n - 1 - i) if mirrored else i
+		var a0 := base - total / 2.0 + span * j
+		w.a0 = a0 + deg_to_rad(1.4)                   # the dark seams between slices
+		w.a1 = a0 + span - deg_to_rad(1.4)
+		w.r_in = r_in
+		w.r_out = r_out
+		w.hex_base = hex_base
+		var t := clampf((now - i * 45.0) / 230.0, 0.0, 1.0)
+		w.grow = 1.0 - pow(1.0 - t, 3.0)              # dealt out from the ring, one after the other
+		w.custom_minimum_size = box
+		w.size = box
+		w.position = -box / 2.0
+		if w.get_child_count() > 0 and w.get_child(0) == switch_ring and is_instance_valid(switch_ring):
+			var gp := w.content_point() + Vector2(0, -16.0 * s * w.type_scale)
+			switch_ring.size = Vector2.ONE * 40.0 * s
+			switch_ring.position = gp - switch_ring.size / 2.0
+	var hub: Control = inspector.get_meta("close")
+	if hub is InspectorHub:
+		(hub as InspectorHub).hex_base = hex_base
+		(hub as InspectorHub).grow = 1.0 - pow(1.0 - clampf(now / 160.0, 0.0, 1.0), 3.0)
+	# the info card: the far side of the node from the pie, else above / below it leaning that way - whichever
+	# spot overlaps the pie and the node's ring least (their real shapes, not boxes)
 	var card: Control = inspector.get_meta("card")
-	var gap := 14.0 * ui_scale
-	var card_sz: Vector2 = card.get_combined_minimum_size()
-	var card_sign := signf(dir.x) if absf(dir.x) > 0.05 else 1.0
-	var card_c := Vector2((INSPECTOR_RING_R * ui_scale + gap + card_sz.x / 2.0) * card_sign, 0)
-	card.position = _settle(p, card_c, card_sz, bounds)
+	var isz: Vector2 = card.get_combined_minimum_size()
+	var sx := -signf(cos(base)) if absf(cos(base)) > 0.05 else -1.0
+	var shapes: Array = [_hex_edge(p, hex_base, hex_base - PI, hex_base + PI - 0.001, ring * 1.05)]
+	if n > 0:
+		var pie_poly := _hex_edge(p, hex_base, base - total / 2.0, base + total / 2.0, r_out + 4.0 * s)
+		pie_poly.append(p)
+		shapes.append(pie_poly)
+	var rr := ring * 1.16 + 12.0 * s
+	var lean := isz.x / 2.0 - ring * 0.4
+	var tries := [Vector2(sx * (rr + isz.x / 2.0), 0),
+			Vector2(sx * lean, -(rr + isz.y / 2.0)), Vector2(sx * lean, rr + isz.y / 2.0),
+			Vector2(0, -(rr + isz.y / 2.0)), Vector2(0, rr + isz.y / 2.0),
+			Vector2(-sx * (r_out * 1.16 + 12.0 * s + isz.x / 2.0), 0)]
+	var best_pos := Vector2.ZERO
+	var best_hit := INF
+	for cc in tries:
+		var lp := _settle(p, cc, isz, bounds)
+		var q := p + lp
+		var rect_poly := PackedVector2Array([q, q + Vector2(isz.x, 0), q + isz, q + Vector2(0, isz.y)])
+		var hit := 0.0
+		for sh in shapes:
+			for part in Geometry2D.intersect_polygons(rect_poly, sh):
+				hit += absf(_poly_area(part))
+		if hit < best_hit - 1.0:
+			best_hit = hit
+			best_pos = lp
+	card.position = best_pos
+	_fan = {"base": base, "hex": hex_base, "total": total, "r_in": r_in, "r_out": r_out, "n": n,
+			"e": 1.0 - pow(1.0 - clampf(now / 200.0, 0.0, 1.0), 3.0)}
 	if is_instance_valid(_inspector_guides):
 		_inspector_guides.queue_redraw()
 
 
-func _draw_inspector_guides() -> void:
-	## A faint accent wash at the hand's hinge (the node itself is the "source" of the fan - Daniele: "coming
-	## out of the vat") - subtle on purpose, the cards themselves carry the read now.
-	var col := Rules.seat_color(human)
-	_inspector_guides.draw_circle(Vector2.ZERO, 10.0 * ui_scale, Color(col, 0.5))
+func _draw_inspector_guides(col: Color) -> void:
+	## The node's own hex ring (the pie's hub sits inside it) and a dark backing under the pie, so the seams
+	## between slices read as clean dark lines over any background.
+	if _fan.is_empty():
+		return
+	var s := ui_scale
+	var base: float = _fan["base"]
+	var hx: float = _fan["hex"]
+	var e: float = _fan["e"]
+	var g := _inspector_guides
+	var hexp := _hex_edge(Vector2.ZERO, hx, hx - PI, hx + PI, INSPECTOR_RING_R * s)
+	g.draw_colored_polygon(hexp.slice(0, hexp.size() - 1), Color(col, 0.08 * e))
+	g.draw_polyline(hexp, Color(col, 0.85 * e), 2.0 * s, true)
+	if int(_fan["n"]) > 0:
+		var total: float = _fan["total"]
+		var outer := _hex_edge(Vector2.ZERO, hx, base - total / 2.0, base + total / 2.0, float(_fan["r_out"]) + 3.0 * s)
+		var inner := _hex_edge(Vector2.ZERO, hx, base - total / 2.0, base + total / 2.0, float(_fan["r_in"]) - 2.0 * s)
+		inner.reverse()
+		outer.append_array(inner)
+		g.draw_colored_polygon(outer, Color(0.0, 0.0, 0.0, 0.42 * e))
+
 
 
 func _refresh_inspector(cam: Camera3D) -> void:
@@ -1556,6 +1873,7 @@ func close_inspector() -> void:
 	inspector_actions.clear()
 	action_buttons.clear()
 	switch_ring = null
+	_fan = {}
 	if overlay:
 		overlay.hover_relay = -1
 
