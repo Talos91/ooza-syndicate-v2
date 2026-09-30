@@ -48,6 +48,7 @@ func _init() -> void:
 	test_reinforce()
 	test_upgrade()
 	test_machinegoon()
+	test_inspector_hand()
 	test_free_play()
 	test_relay()
 	test_relay_miss()
@@ -798,3 +799,23 @@ func test_soak() -> void:
 	print("   soak: ", d.state, " steps ", order, " real ", int(t), " s, clock ", int(sim.time))
 	check(d.state == "complete" and not d.skipped and order.size() == 12, "soak: a player following the hand finishes the quick start (%s, %d steps)" % [d.state, order.size()])
 	check(t < 300.0, "soak: in about four to five minutes (%.0f s)" % t)
+
+
+func test_inspector_hand() -> void:
+	## 0.23.9's pie inspector has its close hub on the node centre: with it open, the hand points at the step's slice, or at
+	## the hub to close it first - never at the node for another move.
+	var r := make()
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var n: Dictionary = d.names
+	own(sim, [n["N1"]], 5.0)
+	goto(d, sim, "upgrade")
+	d.ui_inspector = n["H"]
+	d._bump()
+	check(d.gesture()[0] == ["press", "action:UPGRADE", -1] and "action:UPGRADE" in d.target()["rects"], "inspector: open on the home at UPGRADE -> the hand presses the UPGRADE slice")
+	d.ui_inspector = n["N1"]
+	d._bump()
+	check(d.gesture()[0] == ["tap", n["N1"], -1], "inspector: open on another node -> the hand taps its hub to close it first")
+	d.ui_inspector = -1
+	d._bump()
+	check(d.gesture()[0] == ["double_tap", n["H"], -1], "inspector: closed -> the double-tap on the home again")

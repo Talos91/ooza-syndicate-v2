@@ -72,9 +72,11 @@ const LINES := {
 	"T1.reinforce": "Now drag from your home to your new node. Units move where they're needed.",
 	"T1.reinforce_prep": "You need two nodes for this. Take a grey node first.",
 	"T1.upgrade": "Double-tap your home to upgrade its vat to T2. Costs {cost} units.",
+	"T1.upgrade_pie": "Tap UPGRADE in the menu - or double-tap the node next time. Costs {cost} units.",
 	"T1.upgrade_wait": "Building: {secs} s. Watch the bar on the badge. A T2 vat breeds faster.",
 	"T1.machinegoon_prep": "Take the grey node the hand shows. A Machinegoon goes there next.",
 	"T1.machinegoon": "Tap that node, then MACHINEGOON. It shoots rival lines on its decks.",
+	"T1.machinegoon_pie": "Now tap MACHINEGOON in the menu. It shoots rival lines on its decks.",
 	"T1.machinegoon_wait": "Building your Machinegoon: {secs} s. Security budget approved.",
 	"T1.machinegoon_watch": "Here comes a rival line. Watch it walk into your Machinegoon.",
 	# chapter 2, free play
@@ -1425,13 +1427,17 @@ func _phase(g: Dictionary) -> String:
 			return "main" if _mine().size() >= 2 else "prep"
 		"upgrade":
 			var s := _upgrade_site()
-			return "wait" if s >= 0 and sim.nodes[s]["build_kind"] != "" else "main"
+			if s >= 0 and sim.nodes[s]["build_kind"] != "":
+				return "wait"
+			return "pie" if s >= 0 and ui_inspector == s else "main"
 		"machinegoon":
 			if _mg_site >= 0:
 				return "watch"
 			var site := _mg_site_id()
 			if site >= 0 and sim.nodes[site]["owner"] == HUMAN:
-				return "wait" if sim.nodes[site]["build_kind"] != "" else "main"
+				if sim.nodes[site]["build_kind"] != "":
+					return "wait"
+				return "pie" if ui_inspector == site else "main"
 			return "prep"
 		"relay":
 			return "now" if catch_prompt() else "wait"
@@ -1454,7 +1460,7 @@ func _refresh_hint() -> void:
 	## Rebuild the card's hint only when what it says changes (the number in it is frozen at that moment, so the typed line
 	## is never retyped).
 	var g := goals.current()
-	var k := "%s|%s|%d" % [str(g.get("id", "")), _phase(g) if not g.is_empty() else "", _upgrade_site()]
+	var k := "%s|%s|%d" % [str(g.get("id", "")), _phase(g) if not g.is_empty() else "", _upgrade_site() if current_id() == "upgrade" else -1]
 	if k != _hint_key:
 		_hint_key = k
 		_hint_text = _fmt(_hint_line())
@@ -1481,7 +1487,7 @@ func uses_inspector() -> bool:
 	## Does the current step work in the inspector (an action button)? If not, main closes an inspector left open.
 	if state != "running":
 		return false
-	return current_id() == "machinegoon" and _phase(current_step()) == "main"
+	return current_id() in ["machinegoon", "upgrade"] and _phase(current_step()) in ["main", "pie"]
 
 
 func inspect_request() -> int:
@@ -1538,7 +1544,10 @@ func target() -> Dictionary:
 		return out
 	var h := _hand(g)
 	out["nodes"] = h.get("nodes", [])
-	out["rects"] = h.get("rects", [])
+	out["rects"] = (h.get("rects", []) as Array).duplicate()
+	var gs := _inspector_aware(h.get("gesture", []))
+	if not gs.is_empty() and str(gs[0][0]) == "press" and not str(gs[0][1]) in out["rects"]:
+		out["rects"].append(str(gs[0][1]))           # the pie slice the hand presses is lit
 	out["lines"] = _moving_lines()
 	out["open"] = str(g["id"]) == "ls_move"
 	return out
@@ -1549,12 +1558,23 @@ func gesture() -> Array:
 	## double_tap (node id), drag (node id -> node id), press (a rect key).
 	if state != "running" or goals == null:
 		return []
-	if catch_prompt():
-		return [["double_tap", _relay(), -1]]
+	if catch_prompt():                               # (the inspector open on the relay: its SWITCH slice, never the hub)
+		return [["press", "action:SWITCH", -1]] if ui_inspector == _relay() else [["double_tap", _relay(), -1]]
 	var g := goals.current()
 	if g.is_empty() or g.get("read", false) or not _hand_armed():
 		return []
-	return _hand(g).get("gesture", [])
+	var out: Array = _hand(g).get("gesture", [])
+	return _inspector_aware(out)
+
+
+func _inspector_aware(gs: Array) -> Array:
+	## 0.23.9's inspector is a pie beside the node with its close hub ON the node centre: while it is open, a hand on the
+	## node would close it. So: the step's own action there -> its slice; anything else -> tap the hub to close it first.
+	if ui_inspector < 0 or gs.is_empty() or str(gs[0][0]) == "press":
+		return gs
+	if str(gs[0][0]) == "double_tap" and int(gs[0][1]) == ui_inspector:
+		return [["press", "action:UPGRADE", -1]]      # (the double-tap's action in the pie)
+	return [["tap", ui_inspector, -1]]                # close the inspector, then the move
 
 
 func _moving_lines() -> Array:
@@ -1662,6 +1682,9 @@ func _upgrade_site() -> int:
 	for id in _mine():                               # a vat going up right now: that one (the card watches its bar)
 		if sim.nodes[id]["structure"] == "vat" and sim.nodes[id]["build_kind"] == "vat":
 			return id
+	var h := _home()                                 # the card says "your home": the home, whenever it can go up
+	if h >= 0 and sim.nodes[h]["owner"] == HUMAN and sim.nodes[h]["structure"] == "vat" and int(sim.nodes[h]["tier"]) < 2 			and sim.can_upgrade(h, HUMAN) == "":
+		return h
 	var best := -1
 	var best_ok := false
 	for id in _mine():

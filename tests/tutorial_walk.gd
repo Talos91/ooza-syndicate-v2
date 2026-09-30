@@ -135,12 +135,21 @@ func _follow(force := false) -> void:
 			m.node_action("send", int(g[0][1]), {"to": int(g[0][2]), "fraction": f})
 		"double_tap":
 			m.node_action("upgrade", int(g[0][1]))
-		"tap":
-			m.hud.inspect(int(g[0][1]), m.cam)
-		"press":
-			if str(g[0][1]) == "action:MACHINEGOON":
-				m.node_action("build", m.hud.inspector_id, {"kind": "machinegoon"})
+		"tap":                                        # (a tap on an open inspector's node is its close hub)
+			if m.hud.inspector_id == int(g[0][1]):
 				m.hud.close_inspector()
+			else:
+				m.hud.inspect(int(g[0][1]), m.cam)
+		"press":
+			var at: int = m.hud.inspector_id
+			match str(g[0][1]):
+				"action:MACHINEGOON":
+					m.node_action("build", at, {"kind": "machinegoon"})
+				"action:UPGRADE":
+					m.node_action("upgrade", at)
+				"action:SWITCH":
+					m.node_action("switch", at)
+			m.hud.close_inspector()
 
 
 func _step_until(id_not: String, limit: float) -> void:
@@ -176,6 +185,9 @@ func _quick() -> void:
 	await _step_until("reinforce", 40.0)
 	await _secs(2.8)
 	await _shot("1-upgrade-hand")
+	m.hud.inspect(_id("H"), m.cam)                                  # a player who taps once: the pie opens on the home
+	await _secs(0.6)
+	await _shot("1-upgrade-inspector-slice")                        # the hand on the UPGRADE slice, never the hub
 	_follow(true)
 	await _secs(1.0)
 	await _shot("1-upgrade-building")

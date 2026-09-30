@@ -913,10 +913,9 @@ func set_goals(chips: Array) -> void:
 
 func set_strip_avoid(rects: Array) -> void:
 	## Screen rects the strip must not cover (every badge and platform, from main); worked out again only when they move.
-	if rects == _strip_avoid:
-		return
-	_strip_avoid = rects
-	_place_strip()
+	if rects != _strip_avoid:
+		_strip_avoid = rects
+	_place_strip()                                     # (keyed: nothing is worked out again unless something moved)
 
 
 func strip_rect() -> Rect2:
@@ -1391,6 +1390,7 @@ func _position_card() -> void:
 		return
 	_card_dest = chosen
 	_strip_key = []                                    # the strip re-checks where it sits
+	_place_strip()
 	if _card_tween and _card_tween.is_valid():
 		_card_tween.kill()
 	if _card.position == Vector2.ZERO:
