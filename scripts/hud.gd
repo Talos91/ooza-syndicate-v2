@@ -1639,8 +1639,11 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 	var s := ui_scale
 	var n := inspector_actions.size()
 	var ring := INSPECTOR_RING_R * s
-	var r_in := ring + 5.0 * s
-	var r_out := r_in + (INSPECTOR_PIE_W + (16.0 if mobile else 0.0)) * s
+	# 4-5 actions (a relay) share half an edge each: a bigger pie there, or names and prices got cut (Daniele,
+	# 2026-10-01: "for relay vat make them a bit larger as some text gets cut")
+	var big := n >= 4
+	var r_in := ring + (5.0 + (18.0 if big else 0.0)) * s
+	var r_out := r_in + (INSPECTOR_PIE_W + (16.0 if mobile else 0.0) + (34.0 if big else 0.0)) * s
 	# one hexagon edge (60 deg) per action up to 3 - the half-hex; 4-5 take half an edge each (30 deg), so every
 	# seam still lands on a corner or an edge's midpoint and each slice stays a clean trapezoid (45 / 36 deg
 	# slices cut across the edges and came out as kites)
