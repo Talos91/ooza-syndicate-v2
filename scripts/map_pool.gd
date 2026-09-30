@@ -28,8 +28,9 @@ const PHONE_UNFIT: Array[String] = []
 # tutorial): never on 02 BATTLEFIELD, never a REMATCH ON A RANDOM MAP pick, never in test_map_pool /
 # test_ai_curve's pools. T-01 / T-02 (the older tutorial pair in the main maps 4.2 pack) joined them in 0.20.4
 # (Daniele: "Hide T-01 / T-02 too" - a server room had defaulted to T-01); the tutorial's first match still
-# loads T-02 by path.
-const TUTORIAL_ONLY: Array[String] = ["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07", "T-08", "T-09", "T-10"]
+# loads T-02 by path. T-11 (quick start) / T-12 (team play 2v2) are the rewritten tutorial's maps (2026-09-30); the prefix
+# match below is the first four characters of the file name, so two-digit codes work the same.
+const TUTORIAL_ONLY: Array[String] = ["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07", "T-08", "T-09", "T-10", "T-11", "T-12"]
 static var phone := false                               # set by main at startup: a phone-sized screen
 
 
