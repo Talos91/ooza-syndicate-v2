@@ -60,6 +60,7 @@ var skill_targets: Control             # the dock's target highlights: over the 
 var overlay: HudOverlay                # 0.19.0: monster reach, halo rings, relay-outcome preview, danger symbols
 var action_buttons: Dictionary = {}    # stable action name -> the inspector's Button (tutorial spotlight, spec I)
 var switch_ring: Control                # 0.19.0: the SWITCH button's READY / cooldown ring (SwitchRing)
+var _inspector_guides: Control          # 0.23.x radial redesign: a faint accent wash at the card fan's hinge
 # UI (Alpha 21): the in-match screens are full-screen layers MatchScreens draws into (SCREEN-SYSTEM 17-20)
 var end_panel: Control                 # VICTORY / DEFEAT, and its MATCH DETAILS page
 var pause_panel: Control
@@ -598,9 +599,9 @@ func pointer_over_ui(p: Vector2) -> bool:
 			return true
 	if is_instance_valid(inspector):
 		for a in inspector_actions:
-			if (a["button"] as Button).get_global_rect().has_point(p):
+			if _true_rect(a["button"] as Control).has_point(p):   # 0.23.x: the action fan can be rotated
 				return true
-		if inspector.has_meta("close") and (inspector.get_meta("close") as Button).get_global_rect().has_point(p):
+		if inspector.has_meta("close") and _true_rect(inspector.get_meta("close") as Control).has_point(p):
 			return true
 	return end_panel.visible or pause_panel.visible or out_panel.visible
 
@@ -928,6 +929,19 @@ func _place_badge(b: Dictionary, masked: bool, small: bool) -> void:
 
 
 # ------------------------------------------------------------------ inspector (Alpha 11 ring)
+## 0.23.x radial redesign (Daniele: "the radial menu is messy ... doesn't account for screen position ...
+## more beautiful, more useful, easier to understand" - then: "a set of cards resembling a semicircle
+## coming out of the vat, stacked together"): the ring stays exactly on the node (never dragged off it,
+## unlike the old fixed-offset version); everything around it is laid out fresh every frame in
+## _layout_inspector_wheel (called from _refresh_inspector), in three slots that never contest each other -
+## the action fan (a hand of overlapping cards hinged at the ring, opening straight up or down toward
+## whichever side has more room), the close chip (the ring's other vertical side), the info card (whichever
+## side left/right has more room) - each clamped inside _inspector_bounds so nothing crosses the SEND panel,
+## the top bar, the dock or a screen edge. See _open_dir / _inspector_bounds / _layout_inspector_wheel.
+const INSPECTOR_RING_R := 76.0
+const INSPECTOR_CARD_W := 320.0
+
+
 func inspect(id: int, cam: Camera3D) -> void:
 	close_inspector()
 	if id < 0 or sim.collapsed.get(id, false):
@@ -938,32 +952,42 @@ func inspect(id: int, cam: Camera3D) -> void:
 	inspector = Control.new()
 	inspector.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(inspector)
+	_inspector_guides = Control.new()                 # drawn first: the spokes sit behind the ring and its controls
+	_inspector_guides.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_inspector_guides.draw.connect(func(): _draw_inspector_guides())
+	inspector.add_child(_inspector_guides)
 	var ring := Panel.new()
-	ring.position = Vector2(-76, -76) * ui_scale
-	ring.size = Vector2(152, 152) * ui_scale
+	ring.position = Vector2(-INSPECTOR_RING_R, -INSPECTOR_RING_R) * ui_scale
+	ring.size = Vector2(INSPECTOR_RING_R, INSPECTOR_RING_R) * 2.0 * ui_scale
 	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := panel_style(col)
-	style.set_corner_radius_all(int(76 * ui_scale))
-	style.bg_color = Color(0.09, 0.13, 0.17, 0.0)     # a ring only: the vat stays visible
+	style.set_corner_radius_all(int(INSPECTOR_RING_R * ui_scale))
+	style.bg_color = Color(col, 0.08)                 # a soft glow tint, not just an outline - the vat still reads through it
+	style.set_border_width_all(2)
 	ring.add_theme_stylebox_override("panel", style)
 	inspector.add_child(ring)
-	var close_h := 52.0 if not mobile else 80.0
-	var close := button("X", close_inspector, 64, close_h)
-	close.position = Vector2(84, -68.0 - close_h) * ui_scale     # Alpha 18: top right of the ring, between the
-	                                                             # top and right actions (the info panel covered it)
+	var close_sz := 52.0 if not mobile else 80.0
+	var close := button("×", close_inspector, close_sz, close_sz, 22)
+	var close_style := panel_style(col)
+	close_style.bg_color = Color(0.05, 0.08, 0.11, 0.75)
+	close_style.set_corner_radius_all(int(close_sz * ui_scale / 2.0))
+	close_style.set_content_margin_all(0)
+	for st in ["normal", "hover", "pressed"]:
+		close.add_theme_stylebox_override(st, close_style)
 	inspector.add_child(close)
 	inspector.set_meta("close", close)
 	var info_bg := PanelContainer.new()
-	info_bg.position = Vector2(-190, 96) * ui_scale
 	info_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var info_style := panel_style(col)
-	info_style.bg_color = Color(0.05, 0.08, 0.11, 0.9)
-	info_style.set_content_margin_all(8)
+	info_style.bg_color = Color(0.05, 0.08, 0.11, 0.92)
+	info_style.set_border_width_all(2)
+	info_style.set_content_margin_all(10)
 	info_bg.add_theme_stylebox_override("panel", info_style)
 	inspector.add_child(info_bg)
+	inspector.set_meta("card", info_bg)
 	var info_box := VBoxContainer.new()
-	info_box.add_theme_constant_override("separation", 0)
-	info_box.custom_minimum_size = Vector2(364, 0) * ui_scale
+	info_box.add_theme_constant_override("separation", int(4 * ui_scale))
+	info_box.custom_minimum_size = Vector2(INSPECTOR_CARD_W, 0) * ui_scale
 	info_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_bg.add_child(info_box)
 	var head := HBoxContainer.new()                   # [emblem] FACTION · first line: the owner, no seat letter
@@ -977,16 +1001,16 @@ func inspect(id: int, cam: Camera3D) -> void:
 	head.add_child(inspector_who)
 	inspector_first = text_label("", 16, Color("c8e6ee"))
 	head.add_child(inspector_first)
+	info_box.add_child(HSeparator.new())              # a thin rule under the header (0.23.x: was a flat wall of text)
 	inspector_label = text_label("", 16, Color("c8e6ee"))
 	inspector_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspector_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info_box.add_child(inspector_label)
 	inspector_progress = ProgressBar.new()
-	inspector_progress.position = Vector2(-130, 82) * ui_scale
-	inspector_progress.size = Vector2(260, 12) * ui_scale
+	inspector_progress.custom_minimum_size = Vector2(0, 10) * ui_scale
 	inspector_progress.show_percentage = false
 	inspector_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	inspector.add_child(inspector_progress)
+	info_box.add_child(inspector_progress)             # 0.23.x: inside the card's own flow, not a loose fixed offset
 	if n["owner"] == human:
 		_inspector_actions(n)
 	_refresh_inspector(cam)
@@ -1111,12 +1135,14 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 			if overlay.hover_relay == id:
 				overlay.hover_relay = -1)
 		b.button_down.connect(func(): overlay.hover_relay = id)
-	var slots := [Vector2(-75, -175), Vector2(80, -60), Vector2(-230, -60), Vector2(80, 30), Vector2(-230, 30)]
-	b.position = slots[mini(inspector_actions.size(), slots.size() - 1)] * ui_scale
+	# 0.23.x (Daniele: "a set of cards resembling a semicircle coming out of the vat, stacked together"):
+	# b.position / .rotation / .pivot_offset are set every frame in _layout_inspector_wheel (the card fan) -
+	# a fixed slot ignored screen position entirely.
 	# SWITCH stands out (Daniele, 0.19.0: "add some visibility to the buttons / models of the relays"):
 	# its own accent colour plus a READY / cooldown ring (SwitchRing, updated in _refresh_inspector).
 	var style := panel_style(RELAY_ACCENT if method == "switch" else Rules.seat_color(human))
-	style.set_corner_radius_all(int(40 * ui_scale))
+	style.set_corner_radius_all(int(14 * ui_scale))    # 0.23.x: a card's corners, not a pill
+	style.set_border_width_all(2)
 	b.add_theme_stylebox_override("normal", style)
 	inspector.add_child(b)
 	if method == "switch":
@@ -1129,12 +1155,20 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 	action_buttons[name] = b
 
 
+func _true_rect(c: Control) -> Rect2:
+	## get_global_rect() is Rect2(global_position, size) - it ignores rotation (a Rect2 can't represent
+	## one), which was never wrong before 0.23.x's fanned action cards. Re-centring it on the control's
+	## actual rotated middle keeps a spotlight or a scripted tap landing on it even tilted.
+	var centre: Vector2 = c.get_global_transform() * (c.size / 2.0)
+	return Rect2(centre - c.size / 2.0, c.size)
+
+
 func action_rect(name: String) -> Rect2:
 	## Stable rect getter for the tutorial's spotlight (TUTORIAL-DESIGN.md sec11): valid only while that
 	## action's button is on screen (the inspector open on the right node kind). Empty otherwise.
 	name = name.replace("MACHINGOON", "MACHINEGOON")   # 0.19.2 spelling fix; old name accepted for one release
 	if action_buttons.has(name) and is_instance_valid(action_buttons[name]):
-		return (action_buttons[name] as Control).get_global_rect()
+		return _true_rect(action_buttons[name] as Control)
 	return Rect2()
 
 
@@ -1159,7 +1193,7 @@ func inspector_rect() -> Rect2:
 	var r := Rect2()
 	for c in inspector.get_children():
 		if c is Control and (c as Control).visible:
-			var g := (c as Control).get_global_rect()
+			var g := _true_rect(c as Control)             # 0.23.x: some of these (the action fan) are rotated
 			r = g if r.size == Vector2.ZERO else r.merge(g)
 	return r
 
@@ -1309,6 +1343,90 @@ func show_out_panel() -> void:
 	_show_screen(out_panel)
 
 
+func _inspector_bounds() -> Rect2:
+	## The open play area the radial menu may use: below the top bar, right of the SEND panel (when it
+	## shows), above the dock / hint / map title, inside the safe-area margins. Reused by _open_dir so the
+	## fan points into whichever of this rect is actually free from the node's own position.
+	var vp := root.get_viewport_rect().size
+	var l := margins.x + (side_panel.size.x + 16.0 * ui_scale if side_panel.visible else 0.0)
+	var t := top_used() + 8.0 * ui_scale
+	var r := vp.x - margins.z - 8.0 * ui_scale
+	var bo := vp.y - bottom_used() - 8.0 * ui_scale
+	return Rect2(l, t, maxf(r - l, 20.0), maxf(bo - t, 20.0))
+
+
+func _open_dir(p: Vector2, bounds: Rect2) -> Vector2:
+	## The direction from the node's screen point toward the middle of the open play area - the radial menu
+	## always fans this way, so a node hugging an edge or the SEND panel never opens into it (Daniele:
+	## "doesn't account for screen position").
+	var d := bounds.position + bounds.size / 2.0 - p
+	return d.normalized() if d.length() > 1.0 else Vector2(0, -1)
+
+
+func _settle(p: Vector2, centre_offset: Vector2, size: Vector2, bounds: Rect2) -> Vector2:
+	## Where a wheel part (an action button, the close chip, the info card) actually lands: `centre_offset`
+	## from the node p is the ask, clamped fully inside `bounds`; returns a position local to `inspector`
+	## (which sits at p), ready to assign straight to that Control's .position.
+	var top_left := p + centre_offset - size / 2.0
+	top_left = Vector2(clampf(top_left.x, bounds.position.x, bounds.position.x + bounds.size.x - size.x),
+			clampf(top_left.y, bounds.position.y, bounds.position.y + bounds.size.y - size.y))
+	return top_left - p
+
+
+func _layout_inspector_wheel(p: Vector2, vp: Vector2) -> void:
+	## The action fan, the close chip and the info card, freshly placed every frame: see the block comment
+	## above inspect(). The actions are a hand of cards, hinged together right at the ring's edge and
+	## splayed into a tight overlapping semicircle (Daniele, 0.23.x: "a set of cards resembling a semicircle
+	## coming out of the vat, stacked together") - one shared pivot, each card just rotated round it, so they
+	## naturally overlap near the hinge and fan apart toward their tips; no separate "radius" to compute.
+	var bounds := _inspector_bounds()
+	var dir := _open_dir(p, bounds)
+	# The card fan always opens straight up or straight down (whichever side of the node has more room) -
+	# a landscape card (wider than tall) only reads as a card, text upright, near that axis; rotating a
+	# whole fan open sideways just lays every card on its side (tried it - unreadable). The info card and
+	# the close chip still use the full continuous `dir` below, so they still slide sideways to dodge the
+	# SEND panel or a screen edge; only the fan itself is pinned vertical.
+	# Three slots that never contest each other: the fan takes whichever of up/down has more room; the
+	# close chip takes the vertical side the fan did NOT take (small, right at the ring, always easy to
+	# find); the info card takes whichever of left/right has more room, clear of both.
+	var space_above := p.y - bounds.position.y
+	var space_below := bounds.position.y + bounds.size.y - p.y
+	var fan_down := space_below > space_above
+	var fan_angle := PI / 2.0 if fan_down else -PI / 2.0
+	var n := inspector_actions.size()
+	var step := deg_to_rad(clampf(28.0 * float(n - 1), 0.0, 100.0)) / maxf(float(n - 1), 1.0)
+	var hinge := Vector2(0, (INSPECTOR_RING_R * ui_scale + 6.0 * ui_scale) * (1.0 if fan_down else -1.0))
+	for i in range(n):
+		var b: Control = inspector_actions[i]["button"]
+		var ang := fan_angle if n <= 1 else fan_angle + step * (float(i) - float(n - 1) / 2.0)
+		# the hinge is the pivot - bottom-centre fanning up, top-centre fanning down - so the lone-action
+		# case (n=1, ang == fan_angle exactly: every tutorial spotlight) always lands dead upright (rotation
+		# 0), not upside down; TOP.rotated(ang-90) == BOTTOM.rotated(ang+90) == the outward direction (cos,sin ang)
+		b.pivot_offset = Vector2(b.custom_minimum_size.x / 2.0, 0.0 if fan_down else b.custom_minimum_size.y)
+		b.rotation = (ang - PI / 2.0) if fan_down else (ang + PI / 2.0)
+		b.position = hinge - b.pivot_offset
+	var close: Control = inspector.get_meta("close")
+	var close_gap := 10.0 * ui_scale
+	var close_r := INSPECTOR_RING_R * ui_scale + close_gap + close.custom_minimum_size.y / 2.0
+	var close_c := Vector2(0, close_r * (-1.0 if fan_down else 1.0))
+	close.position = _settle(p, close_c, close.custom_minimum_size, bounds)
+	var card: Control = inspector.get_meta("card")
+	var gap := 14.0 * ui_scale
+	var card_sz: Vector2 = card.get_combined_minimum_size()
+	var card_sign := signf(dir.x) if absf(dir.x) > 0.05 else 1.0
+	var card_c := Vector2((INSPECTOR_RING_R * ui_scale + gap + card_sz.x / 2.0) * card_sign, 0)
+	card.position = _settle(p, card_c, card_sz, bounds)
+	if is_instance_valid(_inspector_guides):
+		_inspector_guides.queue_redraw()
+
+
+func _draw_inspector_guides() -> void:
+	## A faint accent wash at the hand's hinge (the node itself is the "source" of the fan - Daniele: "coming
+	## out of the vat") - subtle on purpose, the cards themselves carry the read now.
+	var col := Rules.seat_color(human)
+	_inspector_guides.draw_circle(Vector2.ZERO, 10.0 * ui_scale, Color(col, 0.5))
+
+
 func _refresh_inspector(cam: Camera3D) -> void:
 	if not is_instance_valid(inspector) or inspector_id < 0:
 		return
@@ -1318,7 +1436,10 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		return
 	var vp := root.get_viewport_rect().size
 	var p := cam.unproject_position(n["pos"] + Vector3(0, 2.0, 0))
-	inspector.position = Vector2(clampf(p.x, 250 * ui_scale, vp.x - 250 * ui_scale), clampf(p.y, 200 * ui_scale, vp.y - 200 * ui_scale))
+	inspector.position = p                            # 0.23.x: the ring always sits truthfully on the node itself -
+	                                                   # everything around it moves instead (_layout_inspector_wheel,
+	                                                   # called at the end of this function - after the info card's
+	                                                   # text below, so its size is this frame's, not last frame's)
 	var owner: String = n["owner"]
 	# the header names the owner by emblem and faction in the owner's colour (Daniele: "don't use A B
 	# and C but use emblems in the color of the owner")
@@ -1387,6 +1508,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 	inspector_label.visible = not lines.is_empty()
 	inspector_progress.visible = n["build_kind"] != ""
 	inspector_progress.value = Sim.build_progress(n) * 100.0
+	_layout_inspector_wheel(p, vp)
 	for a in inspector_actions:
 		var b: Button = a["button"]
 		var why := ""

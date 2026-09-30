@@ -29,6 +29,7 @@ extends Node3D
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
+##   --inspect=N                            force the ring open on node N (0.23.x radial redesign shots)
 ##   --tutorial=N                           start tutorial N (1 quick start ... 5 team play; one not built yet plays the quick start) straight away
 ##   --mission=vex:01                       CAMPAIGN: start that mission straight away (its briefing first)
 ##   --campaign-all                         CAMPAIGN: every playable mission open (Campaign.all_open)
@@ -117,6 +118,7 @@ var scenario := ""
 var scenario_focus := Vector3.INF
 var scenario_zoom := 30.0
 var focus_node := -1                              # --focus=N: a close-up of node N in a normal match
+var _debug_inspect_node := -1                     # --inspect=N: forces the ring open on node N (screenshot helper)
 var _scenario_done := false
 var _hud19_phase := -1                            # --scenario=hud19: the contact sheet's timed phases
 var player_name := ""                             # --player-name=: overrides the account's name for this run (seat_who)
@@ -254,6 +256,8 @@ func _ready() -> void:
 			player_name = arg.substr(14)
 		elif arg.begins_with("--focus="):
 			focus_node = int(arg.substr(8))
+		elif arg.begins_with("--inspect="):           # screenshot helper: force the radial menu open on node N
+			_debug_inspect_node = int(arg.substr(10))
 		elif arg.begins_with("--thumb="):              # map thumbnail for the menu: no HUD, first frame
 			thumb_path = arg.substr(8)
 			map_explicit = true
@@ -1668,6 +1672,8 @@ func _process(delta: float) -> void:
 		_on_resized()
 	var dt := minf(delta, 0.05)
 	_flush_inspect()
+	if _debug_inspect_node >= 0 and hud.inspector_id < 0:   # --inspect=N: opens once, closes normally after
+		hud.inspect(_debug_inspect_node, cam)
 	if online and Net.started and not hud.callouts.find("wait").is_empty():
 		hud.set_waiting([])                           # HUD pass: every player loaded - the round is on
 	if online:                                    # the host's Sim is the only simulation (Net)
