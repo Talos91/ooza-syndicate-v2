@@ -1,5 +1,24 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.10 "Alpha 23" - 2026-09-30 (the guided quick start)
+
+Daniele, on 0.23.8: "ok the idea is good but you cannot have new players just randomly do things without any guidance, i d still have the scripted
+instruction to learn the mechanics once they are shown let them play a bit make them do a scripted rotator relay kill and then explain last stand
+mechanic". The quick start (T-11, same engine) is now FOUR CHAPTERS IN ORDER; the goal strip shows the chapter and its progress (BASICS 2/4, YOUR TURN 0:32).
+
+1. **Basics, guided**: one mechanic at a time - Dr. Vesk explains it, the hand and the spotlight show it from the start, the step waits until it is done:
+   TAKE (home -> a grey node; its badge count, then the SEND panel), REINFORCE (between your two nodes), UPGRADE (double-tap the home to T2; the step makes sure it
+   can pay), MACHINEGOON (take M, tap it, MACHINEGOON; a scripted rival line walks into it and is shot - undimmed). Each mechanic's HUD part appears at its step.
+2. **Your turn**: 45 s of free play (`Rules.QUICK_START["free_play"]`), the rival passive, a nudge (and a hand) only when idle.
+3. **The relay kill**: take the relay (hand from the start), then the rival's push crosses its deck - 0.25x slow motion, "double-tap now!", the line is flung (3 tries, then it passes).
+4. **The Last Stand, explained**: the clock jumps to 4:00, three GOT IT cards (the city collapses ring by ring; the danger marks; the outer ring falls, the centre stays)
+   with the countdown held, then "move your units to the centre" (hand) and "hold on" until the first ring has fallen -> LESSON COMPLETE / CONTINUE PLAYING.
+
+- On 0.23.9's pie inspector the hand points at the slice's centre (UPGRADE / MACHINEGOON / SWITCH) and never at the node while the pie is open (its centre is the close hub);
+  the card says "tap MACHINEGOON in the menu" then.
+- The goal strip moves when the card moves (it no longer ends up under a tall GOT IT card).
+- Kept: the single-outline spotlight, the short-send top-up, skipping, rewards, first launch, the TRAINING page. `test_tutorial` rewritten for the order.
+
 ## 0.23.9 "Alpha 23" - 2026-09-30 (staging: the new node inspector)
 
 - **Node inspector redone** (🧩 UI; Daniele: "the radial menu is messy", then his reference: a pie of wedges round a centre X, "only on the right side, in our style, hexagonal"): a half-hexagon pie on the node's right, one slice per action (glyph, name, price; SWITCH in relay amber with its ready ring), a hex X hub on the node closes it. It turns up to 90° to stay in the play area and mirrors left only when no turn fits; the info card goes where it covers the pie least; it follows the zoom and closes once its node is zoomed off screen. (A first "fan of cards" version was staged and rejected.)

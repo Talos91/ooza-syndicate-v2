@@ -1,9 +1,18 @@
-# To test - ALPHA 23.8 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.10 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.10 (the guided quick start - phone check on staging)
+- [ ] **First launch** (fresh browser / cleared site data): straight into the QUICK START. Does each BASICS step (TAKE, REINFORCE, UPGRADE, MACHINEGOON) say clearly what to do, with the hand already showing it?
+- [ ] **UPGRADE and MACHINEGOON with the new menu**: tap your vat once - does the hand move to the UPGRADE / MACHINEGOON slice (never the X in the middle)?
+- [ ] **The Machinegoon**: a small rival line walks into it and is shot; the step then ticks.
+- [ ] **YOUR TURN**: 45 s counted down on the strip; the rival leaves you alone; stop for ~10 s and Dr. Vesk nudges.
+- [ ] **The relay kill**: take the relay (hand), the rival line comes, the game slows down, "double-tap now" - is it easy to hit? Miss once on purpose: another line comes.
+- [ ] **The Last Stand**: 4:00, three GOT IT cards (nothing falls while you read), then move to the centre and hold on -> LESSON COMPLETE. Is anything unclear?
+- [ ] Too long / too slow anywhere? (A player following the hand takes about 3 minutes.)
 
 ## 0.23.8 (the tutorial rewrite, phase 1 - phone check on staging)
 - [ ] **First launch** (clear the site data, or a fresh browser): the game opens straight into the QUICK START on T-11 with SKIP TUTORIAL on the card. Play it end to end
