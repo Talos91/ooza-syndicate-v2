@@ -1,5 +1,9 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.11 "Alpha 23" - 2026-10-01
+
+- Relay pie a bit larger (🧩; Daniele: "for relay vat make them a bit larger as some text gets cut"): pies with 4-5 actions start 18 px further out and run 34 px deeper, so every name and price fits; 1-3 action pies unchanged.
+
 ## 0.23.10 "Alpha 23" - 2026-09-30 (the guided quick start)
 
 Daniele, on 0.23.8: "ok the idea is good but you cannot have new players just randomly do things without any guidance, i d still have the scripted
