@@ -11,9 +11,11 @@ extends CanvasLayer
 ##       The coach card. `header` e.g. "DR. VESK · LESSON 3 / 8 · THE RIVAL"; `dots`/`dot_index` are the
 ##       step markers; `button_text` == "" for a doing-step (no GOT IT, just SKIP/RESTART/EXIT), any
 ##       other string shows it as the one allowed button (read-only steps: "GOT IT").
-##   spotlight(screen_points: Array, radius: float, rects: Array)
+##   spotlight(screen_points: Array, radius: float, rects: Array, dim := true, light_points := [])
 ##       Spotlight: soft circles round screen points (already projected, e.g. cam.unproject_position(),
-##       `radius` in pixels) and rounded rects round HUD controls (screen / global space). Safe every frame
+##       `radius` in pixels) and rounded rects round HUD controls (screen / global space). ONE outline is drawn round each
+##       lit region (the union of the target circles / rects), however many overlap; `light_points` (lines, decks) only cut
+##       the dim and get no ring; `dim` false = a watch moment (no fog, one subtle ring). Safe every frame
 ##       (the camera moves in the Last Stand): the card only eases to a corner when its best corner changes.
 ##   clear_spotlight()
 ##       No dim, no target (a plain read-only line with nothing to point at).
@@ -31,6 +33,8 @@ extends CanvasLayer
 ##   show_training_complete(title, lines: Array, primary_text, secondary: Array, reward := {})
 ##       The final TRAINING COMPLETE variant: the same, plus the Graduate vat's reveal - the skin model on
 ##       a turntable in an ivory / brass frame (reward {"unlocked": bool, "title", "faction"}).
+##   set_goals(chips: Array)       the goal strip ([{text, done, skipped, current, locked}]; [] hides it); it places itself
+##                                 where it covers the least (set_strip_avoid(rects): badges, platforms)
 ##   set_dodge_rects(top_bar: Rect2, send_panel: Rect2, dock: Rect2, pause_button: Rect2)
 ##       Optional: the HUD's real control rects (global / screen space), so the card's corner search
 ##       dodges them exactly. Without this it falls back to viewport-edge guesses.
@@ -89,8 +93,10 @@ const SPOTLIGHT_SHADER := "
 shader_type canvas_item;
 uniform vec4 dim_color : source_color = vec4(0.008, 0.016, 0.024, 0.42);   // 0.20.2: lighter, the map stays readable
 uniform vec4 ring_color : source_color = vec4(0.094, 0.855, 0.910, 1.0);
-uniform float dim_amount = 1.0;      // 0 on a watch step: the rings stay, the fog goes
-uniform int num_c;
+uniform float dim_amount = 1.0;      // 0 on a watch moment: nothing is fogged
+uniform float ring_amount = 1.0;     // a watch moment keeps one subtle ring on its main object (or none)
+uniform int num_c;                   // every lit circle (targets first, then the light-only ones that follow what moves)
+uniform int num_ring;                // the first num_ring circles are real targets: they get the ring
 uniform vec3 circles[24];
 uniform int num_r;
 uniform vec4 rects[8];
@@ -107,22 +113,22 @@ float rrect_d(vec2 p, vec4 r) {
 void fragment() {
 	vec2 p = FRAGCOORD.xy;
 	float inside = 0.0;
-	float ring = 0.0;
+	float du = 1.0e6;                // the signed distance to the UNION of the targets: one outline round the whole shape
 	float pulse = 0.55 + 0.45 * sin(TIME * 3.0);
 	for (int i = 0; i < 24; i++) {
 		if (i >= num_c) break;
 		float d = circle_d(p, circles[i]);
 		inside = max(inside, 1.0 - smoothstep(-feather, feather, d));
-		float rd = abs(d - (6.0 * pulse));
-		ring = max(ring, 1.0 - smoothstep(0.0, ring_w * 2.5, rd));
+		if (i < num_ring) du = min(du, d);
 	}
 	for (int i = 0; i < 8; i++) {
 		if (i >= num_r) break;
 		float d = rrect_d(p, rects[i]);
 		inside = max(inside, 1.0 - smoothstep(-feather, feather, d));
-		float rd = abs(d - (5.0 * pulse));
-		ring = max(ring, 1.0 - smoothstep(0.0, ring_w * 2.2, rd));
+		du = min(du, d);
 	}
+	float ring = 1.0 - smoothstep(0.0, ring_w * 2.5, abs(du - 5.0 * pulse));
+	ring *= ring_amount;
 	vec4 col = mix(vec4(dim_color.rgb, dim_color.a * dim_amount), vec4(0.0), inside);
 	col = mix(col, vec4(ring_color.rgb, ring_color.a), ring * (1.0 - inside * 0.4));
 	COLOR = col;
@@ -485,6 +491,69 @@ class GraduatePanel extends Control:
 		draw_colored_polygon(star, brass)
 
 
+class GoalStrip extends Control:
+	## The goal strip (TUTORIAL-REWRITE-DESIGN.md §3): one compact chip per goal, a tick when done, the current one
+	## outlined. Not tappable. `layout(rows)` gives its size for a number of rows; CoachOverlay picks where it sits.
+	var chips: Array = []                # [{text, done, skipped, current, locked}]
+	var accent := Color("18dae8")
+	var font: Font
+	var fsize := 14
+	var rows := 1
+	var chip_h := 24.0
+	var gap := 5.0
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func chip_w(c: Dictionary) -> float:
+		return font.get_string_size(str(c["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, fsize).x + fsize * 1.2 + fsize * 0.9
+
+	func _rows_of(n_rows: int) -> Array:
+		var per := ceili(float(chips.size()) / float(maxi(n_rows, 1)))
+		var out := []
+		for r in range(n_rows):
+			out.append(chips.slice(r * per, (r + 1) * per))
+		return out
+
+	func layout(n_rows: int) -> Vector2:
+		var w := 0.0
+		for row in _rows_of(n_rows):
+			var rw := 0.0
+			for c in row:
+				rw += chip_w(c) + gap
+			w = maxf(w, rw - gap)
+		return Vector2(w, n_rows * chip_h + (n_rows - 1) * gap)
+
+	func _draw() -> void:
+		var y := 0.0
+		for row in _rows_of(rows):
+			var x := 0.0
+			for c in row:
+				var w := chip_w(c)
+				var done: bool = c["done"]
+				var cur: bool = c["current"]
+				var box := StyleBoxFlat.new()
+				box.set_corner_radius_all(int(chip_h * 0.32))
+				box.bg_color = Color(accent, 0.92) if done else Color(0.04, 0.07, 0.09, 0.86)
+				box.border_color = accent if (cur or done) else Color(accent, 0.38)
+				box.set_border_width_all(2 if cur else 1)
+				draw_style_box(box, Rect2(Vector2(x, y), Vector2(w, chip_h)))
+				var mid := y + chip_h * 0.5
+				var tick_c := Vector2(x + fsize * 0.85, mid)
+				var ink := Color(0.03, 0.06, 0.08) if done else (Color("edf7fa") if not c["locked"] else Color("7d95a1"))
+				if done:                                       # a drawn tick (the web build has no symbol fallback)
+					var r := fsize * 0.34
+					draw_polyline(PackedVector2Array([tick_c + Vector2(-0.8, 0.0) * r, tick_c + Vector2(-0.25, 0.6) * r,
+							tick_c + Vector2(0.85, -0.65) * r]), ink, maxf(2.0, r * 0.4), true)
+				else:
+					draw_arc(tick_c, fsize * 0.26, 0.0, TAU, 16, Color(accent, 0.9 if cur else 0.4), 1.5, true)
+				var asc := font.get_ascent(fsize)
+				var th := font.get_height(fsize)
+				draw_string(font, Vector2(x + fsize * 1.5, mid - th * 0.5 + asc), str(c["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, ink)
+				x += w + gap
+			y += chip_h + gap
+
+
 # ------------------------------------------------------------------ state
 var accent := Color("18dae8")
 var mobile := false
@@ -524,6 +593,10 @@ var _skip_button: Button
 var _restart_button: Button
 var _first_launch := false
 var _header_emblem: TextureRect
+var _strip: GoalStrip
+var _strip_rect := Rect2()             # where the goal strip sits now (the card keeps clear of it)
+var _strip_avoid: Array = []           # [Rect2] badges, platforms and HUD parts the strip must not cover
+var _strip_key := []
 
 
 func _ready() -> void:
@@ -536,6 +609,11 @@ func _ready() -> void:
 	_hand.hand_px = _hand_target_px()           # picks up set_mobile()/set_accent() called pre-_ready
 	_hand.accent = accent
 	root.add_child(_hand)
+	_strip = GoalStrip.new()
+	_strip.font = UI_FONT
+	_strip.accent = accent
+	_strip.visible = false
+	root.add_child(_strip)
 	_build_card()
 	_build_complete()
 	_fit_root()
@@ -578,6 +656,8 @@ func _on_resize() -> void:
 	if _dim.visible:
 		_apply_spotlight()            # the shader's uniforms are in device pixels - a resize changes them
 	_restyle()                        # a rotation changes _pt(): the card was sized for the old height
+	if is_instance_valid(_strip) and _strip.visible:
+		set_goals(_strip.chips)      # ... and the strip's text size and place
 	_resize_card()
 	_position_card()
 	for p in [_complete]:
@@ -815,6 +895,105 @@ func _build_complete() -> void:
 	_complete.visible = false
 
 
+# ------------------------------------------------------------------ the goal strip
+func set_goals(chips: Array) -> void:
+	## The goal strip's chips ([{text, done, skipped, current, locked}]; [] hides it). Text >= 12.5 pt on phones.
+	if not is_instance_valid(_strip):
+		return
+	_strip.chips = chips
+	_strip.accent = accent
+	_strip.fsize = int(round(_pt(12.5))) if mobile else 15
+	_strip.chip_h = _strip.fsize * 1.7
+	_strip.gap = maxf(3.0, _strip.fsize * 0.3)
+	_strip.visible = not chips.is_empty()
+	_strip_key = []
+	_place_strip()
+	_strip.queue_redraw()
+
+
+func set_strip_avoid(rects: Array) -> void:
+	## Screen rects the strip must not cover (every badge and platform, from main); worked out again only when they move.
+	if rects == _strip_avoid:
+		return
+	_strip_avoid = rects
+	_place_strip()
+
+
+func strip_rect() -> Rect2:
+	return _strip_rect if is_instance_valid(_strip) and _strip.visible else Rect2()
+
+
+func _place_strip() -> void:
+	## The strip sits where it covers the least: candidate spots along the screen edges (one, two or three rows), scored
+	## against the badges, platforms, HUD parts, the card and the spotlight; the spot it has stays unless it gets covered.
+	if not is_instance_valid(_strip) or not _strip.visible:
+		_strip_rect = Rect2()
+		return
+	var vp := get_viewport().get_visible_rect().size
+	if vp.x <= 0.0 or vp.y <= 0.0:
+		return
+	var card_r := Rect2()
+	if is_instance_valid(_card) and _card.visible:
+		card_r = Rect2(_card_dest if _card_dest.x >= 0.0 else _card.position, _card.size)
+	var key := [_strip.chips.size(), _strip.fsize, _strip_avoid, card_r, _dodge, vp, _targets_px, _target_rects]
+	if key == _strip_key:
+		return
+	_strip_key = key
+	var top_bar: Rect2 = _dodge["top_bar"] if _has_dodge else _fallback_rect("top_bar", vp)
+	var pause_r: Rect2 = _dodge["pause_button"] if _has_dodge else _fallback_rect("pause_button", vp)
+	var send_r: Rect2 = _dodge["send_panel"] if _has_dodge else _fallback_rect("send_panel", vp)
+	var dock_r: Rect2 = _dodge["dock"] if _has_dodge else _fallback_rect("dock", vp)
+	var hud_r := [top_bar, pause_r, send_r, dock_r]
+	var m := MARGIN * 0.6
+	var cands := []                                    # [rect, rows, preference penalty]
+	for n_rows in [1, 2, 3]:
+		var sz: Vector2 = _strip.layout(n_rows)
+		var pen := float(n_rows - 1) * 60.0
+		var below := top_bar.end.y + m if top_bar.size.y > 0.0 else m
+		var left := send_r.end.x + m if send_r.size.x > 0.0 else m
+		cands.append([Rect2(Vector2(top_bar.get_center().x - sz.x * 0.5, below), sz), n_rows, pen])           # under the top bar
+		cands.append([Rect2(Vector2(m, m), sz), n_rows, pen + 10.0])                                            # top left
+		cands.append([Rect2(Vector2(left, below), sz), n_rows, pen + 30.0])                                     # left of the map, under the bar
+		cands.append([Rect2(Vector2(left, vp.y - sz.y - m), sz), n_rows, pen + 15.0])                           # bottom left
+		cands.append([Rect2(Vector2((vp.x - sz.x) * 0.5, vp.y - sz.y - m), sz), n_rows, pen + 5.0])             # bottom centre
+		cands.append([Rect2(Vector2(vp.x - sz.x - m, vp.y - sz.y - m), sz), n_rows, pen + 25.0])                # bottom right
+		cands.append([Rect2(Vector2(vp.x - sz.x - m, pause_r.end.y + m), sz), n_rows, pen + 35.0])              # right edge, under PAUSE
+	var best_i := -1
+	var best_score := INF
+	for i in range(cands.size()):
+		var r: Rect2 = cands[i][0]
+		if r.position.x < m * 0.5 or r.end.x > vp.x - m * 0.5 or r.position.y < 0.0 or r.end.y > vp.y - m * 0.5:
+			continue
+		var score := float(cands[i][2])
+		for a in _strip_avoid:
+			if r.intersects(a):
+				score += 900.0 + r.intersection(a).get_area() * 0.05
+		for h in hud_r:
+			if (h as Rect2).size != Vector2.ZERO and r.intersects(h):
+				score += 3000.0
+		if card_r.size != Vector2.ZERO and r.grow(6.0).intersects(card_r):
+			score += 1500.0
+		for t in _targets_px:
+			if r.grow(float(t["r"])).has_point(t["c"]):
+				score += 800.0
+		for tr in _target_rects:
+			if r.intersects(tr):
+				score += 800.0
+		if _strip_rect.size != Vector2.ZERO and r.position.distance_to(_strip_rect.position) < 1.0 and r.size.distance_to(_strip_rect.size) < 1.0:
+			score -= 250.0                             # keep the spot it has unless it gets covered
+		if score < best_score:
+			best_score = score
+			best_i = i
+	if best_i < 0:
+		return
+	var pick: Rect2 = cands[best_i][0]
+	_strip.rows = int(cands[best_i][1])
+	_strip.position = pick.position
+	_strip.size = pick.size
+	_strip_rect = pick
+	_strip.queue_redraw()
+
+
 # ------------------------------------------------------------------ public API
 func set_accent(color: Color) -> void:
 	## Safe to call before this node enters the tree (its children don't exist yet - _ready() picks up
@@ -883,7 +1062,7 @@ func handler_rect() -> Rect2:
 
 
 func spotlit(p: Vector2) -> bool:
-	for t in _targets_px:
+	for t in _targets_px + _light_px:
 		if (t["c"] as Vector2).distance_to(p) <= float(t["r"]):
 			return true
 	for r in _target_rects:
@@ -928,6 +1107,12 @@ func ui_rects() -> Array:
 	return out
 
 
+func hide_complete() -> void:
+	## CONTINUE PLAYING: the completion screen goes, the match plays on.
+	if is_instance_valid(_complete):
+		_complete.visible = false
+
+
 func hide_card() -> void:
 	if is_instance_valid(_card):
 		_card.visible = false
@@ -947,6 +1132,7 @@ func show_step(header: String, text: String, dots: int, dot_index: int, button_t
 		_typed = 0.0
 		_typing = true
 		_handler.talking = true
+	_card_dots.visible = dots > 0                          # the goal-based tutorial has no step dots
 	_card_dots.count = dots
 	_card_dots.index = dot_index
 	_card_dots.accent = accent
@@ -958,21 +1144,29 @@ func show_step(header: String, text: String, dots: int, dot_index: int, button_t
 
 
 var _spot_key := []                                    # spotlight()'s last inputs (a frame with the same ones does nothing)
+var _light_px: Array = []                              # [{"c": Vector2, "r": float}] light-only circles (follow what moves)
 
 
-func spotlight(screen_points: Array, radius: float, rects: Array, dim := true) -> void:
-	## Circles round nodes / lines and rounded rects round HUD controls, at once (safe every frame: the shader
-	## uniforms and the card's corner are worked out again only when something they depend on moved - audit B3).
-	var key := [screen_points, radius, rects, dim, _obstacles, _avoid, _card.size if is_instance_valid(_card) else Vector2.ZERO,
+func spotlight(screen_points: Array, radius: float, rects: Array, dim := true, light_points := []) -> void:
+	## The step's real targets: circles round nodes and rounded rects round HUD controls - ONE outline round each lit
+	## region, however many circles overlap (the shader draws the ring on the union). `light_points` (lines, decks, the
+	## monster) only cut the dim - no ring of their own. `dim` false = a watch moment: nothing fogged, the ring stays
+	## subtle. Safe every frame (the shader uniforms and the card's corner are worked out again only when something they
+	## depend on moved - audit B3).
+	var key := [screen_points, radius, rects, dim, light_points, _obstacles, _avoid, _card.size if is_instance_valid(_card) else Vector2.ZERO,
 			is_instance_valid(_card) and _card.visible, get_viewport().get_final_transform()]
 	if key == _spot_key:
 		return
 	_spot_key = key
 	_targets_px.clear()
+	_light_px.clear()
 	for p in screen_points:
 		_targets_px.append({"c": p, "r": radius})
+	for p in light_points:
+		_light_px.append({"c": p, "r": radius})
 	_target_rects = rects.duplicate()
 	_dim_mat.set_shader_parameter("dim_amount", 1.0 if dim else 0.0)
+	_dim_mat.set_shader_parameter("ring_amount", 1.0 if dim else 0.5)
 	if _targets_px.is_empty() and _target_rects.is_empty():
 		_dim.visible = false
 	else:
@@ -983,6 +1177,7 @@ func spotlight(screen_points: Array, radius: float, rects: Array, dim := true) -
 func clear_spotlight() -> void:
 	_spot_key = []
 	_targets_px.clear()
+	_light_px.clear()
 	_target_rects.clear()
 	_dim.visible = false
 
@@ -1006,15 +1201,17 @@ func _overlay_scale() -> float:
 func _apply_spotlight() -> void:
 	_dim.visible = true
 	var circles := []
-	for t in _targets_px:
+	for t in _targets_px + _light_px:                    # the ring-bearing targets first
 		var c: Vector2 = world_to_overlay(t["c"])
 		circles.append(Vector3(c.x, c.y, (t["r"] as float) * _overlay_scale()))
 	if circles.size() > 24:
 		circles.resize(24)
+	var n_lit := circles.size()
 	while circles.size() < 24:
 		circles.append(Vector3(-99999.0, -99999.0, 0.0))
 	_dim_mat.set_shader_parameter("circles", circles)
-	_dim_mat.set_shader_parameter("num_c", mini(_targets_px.size(), 24))
+	_dim_mat.set_shader_parameter("num_c", n_lit)
+	_dim_mat.set_shader_parameter("num_ring", mini(_targets_px.size(), n_lit))
 	var rects := []
 	for r in _target_rects:
 		var rr: Rect2 = r
@@ -1077,7 +1274,7 @@ func _resize_card() -> void:
 	if is_instance_valid(_card_text) and _card_text.text != "":
 		var sz: Vector2 = UI_FONT.get_multiline_string_size(_card_text.text, HORIZONTAL_ALIGNMENT_LEFT, text_w - 4.0, _body_fsz())
 		lines = maxi(2, ceili(sz.y / maxf(UI_FONT.get_height(_body_fsz()), 1.0) - 0.05))
-	var h := _header_fsz() * 1.3 + 8.0 + _dots_h() + 8.0 + _body_fsz() * 1.35 * float(lines) + 10.0 + _btn_h()
+	var h := _header_fsz() * 1.3 + 8.0 + (_dots_h() + 8.0 if _card_dots.visible else 0.0) + _body_fsz() * 1.35 * float(lines) + 10.0 + _btn_h()
 	if _card_button.visible:
 		h += _btn_h() + 8.0
 	h += 28.0 + 8.0 * 3.0             # the VBox's own separation (4 gaps) + top/bottom padding
@@ -1172,6 +1369,8 @@ func _position_card() -> void:
 		for a in _avoid:
 			if rect.intersects(a):
 				score -= 2500.0
+		if _strip_rect.size != Vector2.ZERO and rect.grow(4.0).intersects(_strip_rect):
+			score -= 2500.0
 		score -= 4000.0 * _covered(rect)   # heavily discourage covering targets: each ring / rect counts (not their bounding box)
 		for o in _obstacles:               # then the nodes: a corner over the map's empty sky wins
 			if rect.grow(10.0).has_point(o):
@@ -1187,6 +1386,7 @@ func _position_card() -> void:
 	if chosen.distance_to(_card_dest) < 1.0:
 		return
 	_card_dest = chosen
+	_strip_key = []                                    # the strip re-checks where it sits
 	if _card_tween and _card_tween.is_valid():
 		_card_tween.kill()
 	if _card.position == Vector2.ZERO:

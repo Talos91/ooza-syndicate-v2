@@ -29,7 +29,7 @@ extends Node3D
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
-##   --tutorial=N                           start tutorial lesson N (0 the tour, 1-9) straight away (screenshots, testing)
+##   --tutorial=N                           start tutorial N (1 quick start ... 5 team play; one not built yet plays the quick start) straight away
 ##   --mission=vex:01                       CAMPAIGN: start that mission straight away (its briefing first)
 ##   --campaign-all                         CAMPAIGN: every playable mission open (Campaign.all_open)
 ##   --mission-start                        CAMPAIGN: skip the briefing (headless boot checks)
@@ -199,7 +199,7 @@ func _ready() -> void:
 	if relaunch.has("map"):
 		map_path = relaunch["map"]
 		map_explicit = true
-	var tut_id := int(relaunch.get("tutorial", -1))     # TUTORIAL: a lesson relaunched (NEXT / REPLAY / RESTART; 0 = the tour)
+	var tut_id := int(relaunch.get("tutorial", -1))     # TUTORIAL: a tutorial relaunched (REPLAY / RESTART)
 	var tut_first := bool(relaunch.get("first", false))
 	menu_open = str(relaunch.get("menu", ""))
 	var mission_key := str(relaunch.get("mission", ""))   # CAMPAIGN: RETRY / NEXT MISSION
@@ -302,7 +302,7 @@ func _ready() -> void:
 		_start_map(map_path)
 	elif TutorialDirector.first_launch_due(OS.get_cmdline_user_args(), Net.online() or Net.in_room() or Net.status != "" \
 			or not Net.rejoin.is_empty()):
-		start_tutorial(TutorialDirector.FIRST_ID, true)   # TUTORIAL §7: the first launch opens the tour (L0), then L1
+		start_tutorial(TutorialDirector.FIRST_ID, true)   # TUTORIAL §7: the first launch opens the quick start (skippable)
 	else:
 		if not map_explicit and last_map_path != "":   # MAIN MENU keeps the last map played (0.19.0)
 			map_path = last_map_path
@@ -1908,7 +1908,7 @@ func _on_finished(winner: String) -> void:
 	Telemetry.perf_event("match")                      # PROGRESSION (Alpha 21): this match's frame times
 	Telemetry.flush_soon()
 	hud.close_inspector()
-	if director:                                       # TUTORIAL: the lesson's completion screen replaces the results
+	if director and director.state != "released":       # TUTORIAL: the completion screen replaces the results (CONTINUE PLAYING plays on)
 		return
 	if mission:                                        # CAMPAIGN: the mission's result screen replaces the results
 		mission.step(0.0)
@@ -1934,7 +1934,7 @@ func _record_progress() -> void:
 		return
 	if not sim.factions.has(HUMAN):
 		return
-	var info := {"online": online, "ai_level": "" if online else ai_level}
+	var info := {"online": online, "ai_level": "" if online else ai_level, "tutorial": director != null}   # (a tutorial match pays nothing)
 	var result := Progression.result_from_sim(sim, HUMAN, info)
 	result["history"] = Progression.history_entry(sim, HUMAN, _history_info())   # MATCH HISTORY (0.20.5)
 	rewards = Progression.record_match(result)
@@ -2349,18 +2349,22 @@ func _flush_inspect() -> void:
 			hud.inspect(id, cam)
 
 
-# ================================================================== TUTORIAL (TUTORIAL-DESIGN.md §8)
-# The lesson hooks, all here: start_tutorial (like start_match), the director stepped before the Sim with its
-# time scale (half speed at a relay prompt), the coach overlay fed from the director each frame (card, spotlight,
-# hand, completion screens), and the ways out (NEXT / REPLAY / LESSONS / ARMIES / MAIN MENU / SKIP TUTORIAL).
+# ================================================================== TUTORIAL (TUTORIAL-REWRITE-DESIGN.md)
+# The tutorial hooks, all here: start_tutorial (like start_match), the director stepped before the Sim with its time
+# scale (slow motion at the relay moment), the coach overlay fed from the director each frame (card, goal strip,
+# spotlight, hand, completion screens), and the ways out (CONTINUE PLAYING / REPLAY / LESSONS / ARMIES / MAIN MENU /
+# SKIP TUTORIAL). The director is non-null for the whole tutorial (also after CONTINUE PLAYING), so pinch / wheel zoom
+# stays off (_zoom_enabled).
 func start_tutorial(lesson_id: int, first := false, faction := "", colour := "") -> void:
-	## Entry from the TUTORIAL page, the first launch or a relaunch: lesson `lesson_id` on its map, your colour,
-	## VEX against EMBER (Daniele, 0.19.3: one faction for the whole tutorial - your menu faction is kept for
-	## afterwards), a scripted rival (no SeatAI; the Training AI in the first match).
+	## Entry from the TRAINING page, the first launch or a relaunch: tutorial `lesson_id` (1..5; one that is not built yet
+	## plays the quick start) on its map, your colour, VEX against EMBER (Daniele, 0.19.3: one faction for the whole
+	## tutorial - your menu faction is kept for afterwards), the Training AI as the rival (run by the director).
+	if not TutorialDirector.playable(lesson_id):
+		lesson_id = TutorialDirector.FIRST_ID
 	director = TutorialDirector.new(lesson_id)
 	director.first_launch = first
 	Telemetry.funnel("lesson_start", str(lesson_id))   # PROGRESSION (Alpha 21): the tutorial funnel
-	show_out_panel = lesson_id == TutorialDirector.LESSON_COUNT   # no YOU'RE OUT in lessons 0-8: a TRY AGAIN instead
+	show_out_panel = false                             # no YOU'RE OUT in a tutorial: a TRY AGAIN instead (back on after CONTINUE PLAYING)
 	menu_faction = faction if faction != "" else str(SEAT_FACTIONS[HUMAN])
 	if colour != "":
 		color_choice = colour
@@ -2370,7 +2374,7 @@ func start_tutorial(lesson_id: int, first := false, faction := "", colour := "")
 	menu_ai = ai_level                                 # AUDIT FIX: back on the menu after the lesson
 	ai_level = str(director.L.get("ai", ai_level))
 	MissionDirector.pin_settings({"last_stand": true, "hide_enemy_counts": false})   # AUDIT FIX: a lesson's own settings
-	# (ABILITIES: the lesson's own data, TutorialDirector.begin; restored by main._ready's MissionDirector.restore_settings)
+	# (ABILITIES: the tutorial's own data, TutorialDirector.begin; restored by main._ready's MissionDirector.restore_settings)
 	LOADOUTS = {HUMAN: director.loadout_for()}
 	fraction = director.fraction_start(fraction)
 	pitch_forced = false
@@ -2383,11 +2387,8 @@ func start_tutorial(lesson_id: int, first := false, faction := "", colour := "")
 
 
 func _tutorial_setup() -> void:
-	## After the HUD: the reveal set, the coach overlay and its signals.
-	if director.lesson_id in [TutorialDirector.FIRST_ID, TutorialDirector.LESSON_COUNT]:
-		hud.reveal_all()                              # the tour and the first match: the whole HUD, as in any match
-	else:
-		hud.reveal(director.reveal_keys(), _tutorial_new_keys())
+	## After the HUD: the reveal stage, the coach overlay and its signals.
+	hud.reveal(director.reveal_keys(), director.reveal_keys())
 	coach = CoachOverlay.new()
 	coach.set_mobile(mobile)
 	coach.set_accent(Rules.seat_color(HUMAN))
@@ -2399,29 +2400,25 @@ func _tutorial_setup() -> void:
 	coach.skip_step.connect(func(): director.skip_step())
 	coach.restart.connect(restart)
 	coach.exit.connect(to_lessons)
-	coach.skip_tutorial.connect(func():                # SKIP TUTORIAL: MAIN, offered marked (to_menu); the lesson counts as
-		TutorialDirector.mark_skipped(director.lesson_id)   # skipped - the next one opens, nothing paid (Daniele, 2026-09-28)
+	coach.skip_tutorial.connect(func():                # SKIP TUTORIAL: MAIN, offered marked (to_menu); the run counts as
+		TutorialDirector.mark_skipped(director.lesson_id)   # skipped - nothing paid (Daniele, 2026-09-28)
 		to_menu())
 	director.completed.connect(_on_lesson_completed)
-	director.handler.connect(coach.handler_mood)      # the handler hops on a pass, droops on a fail
-	var step_seen := {"i": director.step_i}
-	director.changed.connect(func():                  # a step that adds HUD parts reveals them with a glow
-		if director.step_i != int(step_seen["i"]) and not director.uses_inspector():
-			hud.close_inspector()                     # an inspector from an earlier step never lingers over this one
-		if director.step_i != int(step_seen["i"]) and hud.gated:
-			step_seen["i"] = director.step_i
-			var before := TutorialDirector.reveal_for(director.lesson_id, director.step_i - 1)
+	director.handler.connect(coach.handler_mood)      # the handler hops when a goal ticks, droops on a fail
+	var seen := {"stage": director.stage, "goal": director.current_id()}
+	director.changed.connect(func():                  # a stage that adds HUD parts reveals them with a glow
+		if director.current_id() != str(seen["goal"]):
+			seen["goal"] = director.current_id()
+			if not director.uses_inspector():
+				hud.close_inspector()                 # an inspector from an earlier goal never lingers over this one
+		if director.stage != int(seen["stage"]) and hud.gated:
+			var before := TutorialDirector.reveal_for(director.lesson_id, int(seen["stage"]))
+			seen["stage"] = director.stage
 			hud.reveal(director.reveal_keys(), director.reveal_keys().filter(func(k): return not k in before)))
 
 
-func _tutorial_new_keys() -> Array:
-	## The keys this lesson adds to the ones before it (they glow in at the start).
-	var before := TutorialDirector.reveal_for(director.lesson_id - 1, 99) if director.lesson_id > 1 else []
-	return director.reveal_keys().filter(func(k): return not k in before)
-
-
 func _tutorial_step(dt: float) -> float:
-	## One frame of the lesson: the UI state the steps read, the director, and the Sim's dt at its time scale.
+	## One frame of the tutorial: the UI state the goals read, the director, and the Sim's dt at its time scale.
 	director.ui_fraction = fraction
 	director.ui_inspector = hud.inspector_id
 	director.ui_armed = hud.dock.armed if hud.dock else -1
@@ -2431,9 +2428,11 @@ func _tutorial_step(dt: float) -> float:
 
 
 func _coach_sync() -> void:
-	## The coach overlay follows the director: the card when it changed; the spotlight, the hand, the dodge
-	## rects and the UI rects every frame (the camera moves in the Last Stand).
+	## The coach overlay follows the director: the card and the goal strip when they changed; the spotlight, the hand,
+	## the dodge rects and the UI rects every frame (the camera moves in the Last Stand).
 	if coach == null or _start_fit.is_empty():        # (the camera is fitted on the second frame)
+		return
+	if director.state == "released":                   # CONTINUE PLAYING: the coach is gone, the match plays on
 		return
 	if director.version != _coach_version and director.state != "complete":
 		_coach_version = director.version
@@ -2442,19 +2441,17 @@ func _coach_sync() -> void:
 			coach.show_step(c["header"], c["text"], int(c["dots"]), int(c["dot"]), str(c["button"]))
 		else:
 			coach.hide_card()
-	var want := director.inspect_request()            # the tour opens the inspector on your home, then closes it
-	if want >= 0 and hud.inspector_id != want:
-		hud.inspect(want, cam)
-	elif want < 0 and director.is_tour() and hud.inspector_id >= 0:
-		hud.close_inspector()
+		coach.set_goals(director.chips() if director.state == "running" else [])
 	var tg := director.target()
-	var pts := []
+	var ring := []                                    # the step's real targets: one ring per lit region
 	for id in tg["nodes"]:
-		pts.append(cam.unproject_position(sim.nodes[id]["pos"]))
+		ring.append(cam.unproject_position(sim.nodes[id]["pos"]))
 		if _tap_point(id) != sim.nodes[id]["pos"]:     # RELAY V2: the relay's button is lit with its node
-			pts.append(cam.unproject_position(_tap_point(id)))
-	for q in director.follow_points(tg):              # 0.22.1: lines head to tail, the monster, the decks - never fogged
-		pts.append(cam.unproject_position(q))
+			ring.append(cam.unproject_position(_tap_point(id)))
+	var light := []                                   # lines, decks: only cut the dim (0.22.1: never fogged), no ring
+	if not tg.get("open", false):
+		for q in director.follow_points(tg):
+			light.append(cam.unproject_position(q))
 	var rects := []
 	for key in tg["rects"]:
 		var r := _tutorial_rect(str(key))
@@ -2466,52 +2463,37 @@ func _coach_sync() -> void:
 		radius = cam.unproject_position(c0).distance_to(cam.unproject_position(c0 + cam.global_transform.basis.x * Rules.R)) * 1.35 \
 				* float(tg.get("radius", 1.0))
 	if director.state == "complete":
-		pts = []
+		ring = []
+		light = []
 		rects = []
 	var platforms := []                               # the card rather sits over empty sky than over a platform
+	var busy := []                                    # ... and the strip over none, nor over a badge
 	for n in sim.nodes:
 		if not sim.collapsed.get(n["id"], false):
-			platforms.append(cam.unproject_position(n["pos"]))
+			var sp := cam.unproject_position(n["pos"])
+			platforms.append(sp)
+			busy.append(Rect2(sp - Vector2(radius, radius) * 0.6, Vector2(radius, radius) * 1.2))
+			var br := hud.badge_rect(n["id"])
+			if br.size != Vector2.ZERO:
+				busy.append(br.grow(3.0))
 	coach.set_obstacles(platforms)
+	coach.set_strip_avoid(busy)
 	var avoid := []                                   # the banner and the toasts never sit under the card
 	if hud.banner.visible:
 		avoid.append(hud.banner.get_global_rect())
 	avoid.append_array(hud.callouts.rects())          # HUD pass: the placed messages
 	coach.set_avoid(avoid)
-	coach.spotlight(pts, radius, rects, not tg.get("open", false))   # a watch step: rings without the dim
+	coach.spotlight(ring, radius, rects, not tg.get("open", false), light)   # a watch moment: no dim, one subtle ring
 	_tutorial_gesture()
-	_tutorial_label(tg.get("label", []))
 	coach.set_finger_down(not touches.is_empty() or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+	var pause_r := hud.pause_button.get_global_rect()
+	if hud.music_button != null and hud.music_button.visible:
+		pause_r = pause_r.merge(hud.music_button.get_global_rect())
 	coach.set_dodge_rects(hud.top_panel.get_global_rect(), hud.side_panel.get_global_rect() if hud.side_panel.visible else Rect2(),
-			hud.dock.get_global_rect() if hud.dock.visible else Rect2(), hud.pause_button.get_global_rect())
+			hud.dock.get_global_rect() if hud.dock.visible else Rect2(), pause_r)
 	hud.extra_ui_rects = coach.ui_rects()
 	if director.preview_relay >= 0 and hud.inspector_id == director.preview_relay and director.state == "running":
-		hud.overlay.hover_relay = director.preview_relay   # L4: the relay-outcome preview stays up while inspected
-
-
-func _tutorial_label(pair: Array) -> void:
-	## L1's "label" step: the line walking there carries the drag preview's own label (TAKE · units · seconds),
-	## so the line the handler talks about is on screen.
-	if drag_from >= 0 or monster_from >= 0:
-		return
-	var show := false
-	if pair.size() == 2 and int(pair[1]) >= 0:
-		for h in sim.hordes:
-			if h["owner"] == HUMAN and int(h["target"]) == int(pair[1]):
-				var tn: Dictionary = sim.nodes[int(pair[1])]
-				var verb := "reinforce" if tn["owner"] == HUMAN else ("attack" if tn["owner"] != "" else "take")
-				var units: float = float(h["units"]) + float(sim.nodes[int(h["route"][0])]["streaming"].get("remaining", 0.0) if h["streaming"] else 0.0)
-				var secs := maxf(float(h["L"]) - float(h["s"]), 0.0) / maxf(Rules.move_speed() * sim.stat(HUMAN, "speed"), 0.1)
-				route_label.text = "%s · %d units · %d s" % [verb.to_upper(), Rules.shown(units), int(ceil(secs))]
-				route_label.position = tn["pos"] + Vector3(0, 6.5, 0)
-				show = true
-				break
-	if show or route_label.has_meta("tutorial"):
-		route_label.visible = show
-		if show:
-			route_label.set_meta("tutorial", true)
-		else:
-			route_label.remove_meta("tutorial")
+		hud.overlay.hover_relay = director.preview_relay   # the relay-outcome preview stays up while inspected
 
 
 func _tutorial_rect(key: String) -> Rect2:
@@ -2550,8 +2532,8 @@ func _tap_point(id: int) -> Vector3:
 
 
 func _tutorial_gesture() -> void:
-	## The first of the step's gesture alternatives that can be drawn right now (a press needs its button on
-	## screen - otherwise the next alternative, e.g. the tap that opens the inspector).
+	## The first of the goal's gesture alternatives that can be drawn right now (a press needs its button on screen -
+	## otherwise the next alternative, e.g. the tap that opens the inspector).
 	for g in director.gesture():
 		var kind := str(g[0])
 		match kind:
@@ -2573,60 +2555,60 @@ func _tutorial_gesture() -> void:
 				if r.size != Vector2.ZERO:
 					coach.gesture("press", r.get_center())
 					return
-			"tap_line":
-				var h := sim._horde(int(g[1]))
-				if not h.is_empty():
-					coach.gesture("tap", cam.unproject_position(Sim.sample(h, maxf(h["s"] - 1.0, 0.0))[0]))
-					return
-			"tap_deck":
-				var line := sim.deck_line(int(g[1]))
-				if line.size() >= 2:
-					coach.gesture("tap", cam.unproject_position(((line[0] as Vector3) + (line[-1] as Vector3)) / 2.0))
-					return
 	coach.clear_gesture()
 
 
 func _on_coach_button(id: String) -> void:
 	if director.state == "complete":                   # a completion screen
 		var r := director.result
-		match id:
-			"primary":
-				if r.get("final", false):              # PLAY YOUR FIRST MATCH: NEW GAME, Casual preselected
+		if r.get("final", false):                      # TRAINING COMPLETE (all five done)
+			match id:
+				"primary":                             # PLAY YOUR FIRST MATCH: NEW GAME, Casual preselected
 					_tutorial_leave({"ai": "Casual", "menu": "factions"})
-				else:
-					_tutorial_relaunch({"tutorial": int(r.get("next", 1))})
-			"secondary:0":
-				if r.get("final", false):              # ARMIES: put the Graduate vat on
+				"secondary:0":                         # ARMIES: put the Graduate vat on
 					_tutorial_leave({"menu": "cosmetics"})
-				else:
-					_tutorial_relaunch({"tutorial": director.lesson_id})   # REPLAY
+				"secondary:1":
+					_tutorial_leave({})                # MAIN MENU
+			return
+		match id:
+			"primary":                                 # CONTINUE PLAYING: the match goes on to its end
+				_tutorial_continue()
+			"secondary:0":
+				_tutorial_leave({})                    # MAIN MENU
 			"secondary:1":
-				if r.get("final", false):
-					_tutorial_leave({})                   # MAIN MENU
-				else:
-					to_lessons()
+				_tutorial_relaunch({"tutorial": director.lesson_id})   # REPLAY
 		return
-	if director.state == "failed":                     # TRY AGAIN: the same board, fresh crews
+	if director.state == "failed":                     # TRY AGAIN: the same board, fresh units
 		restart()
-	elif director.L.get("match", false):
-		director.skip_step()                            # the first match's opening card
 	else:
 		director.press_button()
 
 
+func _tutorial_continue() -> void:
+	## CONTINUE PLAYING: the completion screen goes, the match plays on to its normal end with the normal results.
+	director.release()
+	show_out_panel = true
+	paused = false
+	coach.hide_card()
+	coach.set_goals([])
+	coach.clear_spotlight()
+	coach.clear_gesture()
+	hud.reveal_all()
+	hud.extra_ui_rects = []
+	coach.hide_complete()
+
+
 func _on_lesson_completed(r: Dictionary) -> void:
-	## LESSON COMPLETE / TRAINING COMPLETE instead of the results screen (§6). The tour goes straight on to L1.
+	## LESSON COMPLETE / TRAINING COMPLETE instead of the results screen (§6).
 	Telemetry.funnel("lesson_done", str(director.lesson_id),   # PROGRESSION (Alpha 21): the tutorial funnel
 			{"seconds": int(r.get("time", sim.time))})
-	if r.get("tour", false):
-		_tutorial_relaunch({"tutorial": 1, "first": director.first_launch})
-		return
 	paused = true
 	hud.close_inspector()
 	_end_drag()
 	if coach == null:
 		return
 	coach.hide_card()
+	coach.set_goals([])
 	if r.get("final", false):
 		var lines := []
 		if r.get("relay_kill", false):
@@ -2648,13 +2630,14 @@ func _on_lesson_completed(r: Dictionary) -> void:
 		lines.append("%s · %d:%02d" % [str(r.get("title", "")), int(r.get("time", 0.0)) / 60, int(r.get("time", 0.0)) % 60])
 		if r.get("skipped", false):                    # AUDIT FIX (Daniele, 2026-09-28): a skip doesn't complete it
 			lines.append(TutorialDirector.line("skipped_note"))
-		coach.show_complete(TutorialDirector.line("lesson_complete"), lines, TutorialDirector.line("next"), [TutorialDirector.line("replay"), TutorialDirector.line("lessons")],
+		coach.show_complete(TutorialDirector.line("lesson_complete"), lines, TutorialDirector.line("continue_playing"),
+				[TutorialDirector.line("main_menu"), TutorialDirector.line("replay")],
 				int(r.get("scrap", 0)))                       # TUTORIAL + PROGRESSION
 	hud.extra_ui_rects = coach.ui_rects()
 
 
 func to_lessons() -> void:
-	## PAUSE > LESSONS, the card's EXIT, a completion screen's LESSONS: the TUTORIAL page.
+	## PAUSE > LESSONS, the card's EXIT, a completion screen's LESSONS: the TRAINING page.
 	_tutorial_leave({"menu": "tutorial"})
 
 
@@ -2672,26 +2655,10 @@ func _tutorial_leave(extra: Dictionary) -> void:
 
 func _tutorial_relaunch(extra: Dictionary) -> void:
 	relaunch = {"faction": menu_faction, "colour": color_choice}
-	if menu_ai != "":                                  # AUDIT FIX: the menu's AI level survives NEXT / REPLAY / RESTART
+	if menu_ai != "":                                  # AUDIT FIX: the menu's AI level survives REPLAY / RESTART
 		relaunch["ai"] = menu_ai
 	relaunch.merge(extra, true)
 	get_tree().reload_current_scene()
-
-
-func _input(event: InputEvent) -> void:
-	## The tour (L0): a tap on the spotlit element counts as NEXT - taken here, before the HUD or the map, so it
-	## never also arms a skill, sends or selects.
-	if director == null or coach == null or not director.is_tour() or paused:
-		return
-	var mb := event as InputEventMouseButton
-	if mb == null or not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
-		return
-	for r in hud.extra_ui_rects:                      # the card's own buttons stay the card's
-		if (r as Rect2).has_point(mb.position):
-			return
-	if coach.spotlit(mb.position):
-		get_viewport().set_input_as_handled()
-		director.press_button()
 
 
 # ================================================================== CAMPAIGN (CAMPAIGN-DESIGN.md §4 / §5)

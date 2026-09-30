@@ -1,393 +1,176 @@
 class_name TutorialDirector
 extends RefCounted
-## The interactive tutorial's lesson director (Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-DESIGN.md
-## draft 3, §3 lessons, §6 reveal-as-you-go, §7 progress, §8 shape; TUTORIAL-SCRIPT.md draft 2). A tour of the city
-## (L0), eight short lessons and a first match, all played as VEX against EMBER, each a real BRAWL match on a baked
-## lesson map: the director STAGES the board (owners, units, tiers),
-## SCRIPTS the rival (seat B: plain Sim.send / fire_relay calls - no SeatAI, except the Training AI of the
-## first match), walks the player through the lesson's steps and says when a step passed, failed (TRY AGAIN)
-## or the lesson is done. Every line the handler says is in LINES (TUTORIAL-SCRIPT.md), every number in them
-## comes from Rules at run time, every lesson timing lives in LESSONS.
+## The interactive tutorial (Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-REWRITE-DESIGN.md, Daniele 2026-09-30:
+## "waay too long and way too messy ... rewrite it all and its logic"). Five tutorials, numbered 1..5 (quick start,
+## relays, structures, skills, team play); each is DATA in TUTORIALS - a map, a staged start, reveal stages and a GOAL
+## LIST done in any order - run by GoalDirector (goal_director.gd, standalone) with this class as the tutorial layer on
+## top: the coach card and its one current hint, the hand / spotlight after idle time, the staged HUD reveal, the
+## scripted rival moments (the relay push, the Machinegoon probe, the Last Stand staging), the assists (a short send
+## is topped up), progress, rewards and the first-launch rule. Phase 1 builds the QUICK START (1); 2..5 are listed
+## (the TRAINING page shows them as SOON) and convert on the same engine later: add the tutorial's row to TUTORIALS,
+## its detector ops to _eval(), its hand providers to _hand() and its lines to LINES.
 ##
 ## Pure Sim logic, headless-testable (tests/test_tutorial.gd): no Node, no HUD in here. main.gd drives it:
 ##   begin(sim, map, seat)        after sim.setup; stages the board (call before the world is built)
 ##   step(dt)                      every frame, before sim.step(dt * time_scale)
 ##   on_event(ev)                  every sim.fx_events entry (flings and relay falls live only there)
-##   on_action(method, id, args, ok)   every node_action result (the double-tap relay fires included)
-##   allow(method, id, args) -> String   "" or the refusal line ("Not yet. Follow the hand.")
+##   on_action(method, id, args, ok)   every node_action result
+##   allow(method, id, args) -> String   "" or the refusal line ("Not yet - follow the hand.")
 ##   ui_fraction / ui_inspector / ui_armed   the send fraction, the open inspector's node, the armed dock slot
-##   press_button() / skip_step()  the card's GOT IT / SKIP STEP
-## and reads back card(), target(), gesture(), time_scale, preview_relay, state, result, reveal_keys().
-## Signals: changed (the card / target moved on), completed(result), handler(mood).
+##   skip_step()                   the card's SKIP GOAL
+## and reads back card(), chips(), target(), gesture(), follow_points(), time_scale, preview_relay, state, stage,
+## result, reveal_keys(). Signals: changed, completed(result), handler(mood).
 ##
-## Progress (static, like ArmyPresets): user://tutorial.cfg [progress] completed / skipped / offered / relay_kill /
-## version; `saved` false when the browser keeps no storage (the TUTORIAL page says so).
-## SKIPPING (Daniele, 2026-09-28: "skipping should allow you to play the one after but doesn't count as completed
-## hence no scrap nor graduate vat at the end until all are actually completed"): a lesson finished with a SKIP
-## STEP (or left by SKIP TUTORIAL) is `skipped` - CONTINUE goes on past it, but it pays no SCRAP and counts toward
-## nothing; replaying it without a skip completes it (and pays, once).
+## Progress (static, like ArmyPresets): user://tutorial.cfg [progress] completed_v2 / skipped_v2 (the ids "quick",
+## "relays", "structures", "skills", "team") / offered / relay_kill / version 2. The old numeric keys are ignored.
+## SKIPPING (Daniele, 2026-09-28): a run with a skipped goal (or SKIP TUTORIAL) is `skipped` - it pays no SCRAP and
+## counts toward nothing; replaying it without a skip completes it (and pays, once).
 
 signal changed
 signal completed(result: Dictionary)
-signal handler(mood: String)                       # the on-screen handler: "happy" (a step passed) / "droop" (failed)
+signal handler(mood: String)                       # the on-screen handler: "happy" (a goal ticked) / "droop" (a fail)
 
 const HANDLER_NAME := "DR. VESK"                    # the handler on the card (Daniele, 2026-09-27)
-const LESSON_COUNT := 9                            # the Graduate vat needs lessons 1..9 (the L0 tour is extra)
-const FIRST_ID := 0                                # L0 THE CITY, the tour
-const TOTAL_LESSONS := 10                          # 0..9 (the TUTORIAL n/10 count)
+const IDS := ["quick", "relays", "structures", "skills", "team"]   # tutorial n (1..5) -> IDS[n - 1]
+const FIRST_ID := 1
+const LESSON_COUNT := 5                            # the Graduate vat needs all five
+const TOTAL_LESSONS := 5                           # the TUTORIAL n/5 count
 const PLAYER_FACTION := "vex"                      # Daniele (0.19.3): VEX for the whole tutorial
 const RIVAL_FACTION := "ember"                     # ... and the rival is always EMBER
-const L9_NEUTRALS := {1: 10, 2: 15, 3: 25, 4: 40}  # the first match's neutral garrisons (shown), capped there
-const PROGRESS_VERSION := 1
+const PROGRESS_VERSION := 2
 const HUMAN := "A"
 const RIVAL := "B"
-const NOTE_SECONDS := 3.0            # a transient handler line (a refusal, a miss) stays this long on the card
-const INTERLUDE := 1.8               # a step's "done" line shows this long before the next step starts
-const IDLE_HINT := 20.0              # seconds without an order before the idle hint
-const PUSH_KILL := 0.5               # L9: a relay kill = at least this share of the push lost to the fall
-const PUSH_LATEST := 150.0           # L9: 2:30 - the push goes even if A does not lead by then
-const ASSIST_MARGIN := 6.0             # shown units a topped-up send wins by
-const L9_SLOW := {"slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "min": 1}   # the relay-kill push's slow motion
-const MIN_STEP := 1.5                # a doing-step shows at least this long, even when it is already done (its line is read)
+const IDLE_LINE := 20.0                            # seconds without an order before Dr. Vesk asks if you are stuck
 
-# ---------------------------------------------------------------- the handler's lines (TUTORIAL-SCRIPT.md draft 2)
-# One table, so per-faction voices or translations can replace it without touching the steps. Every line uses the
+# ---------------------------------------------------------------- the handler's lines (TUTORIAL-SCRIPT.md draft 4)
+# One table, so per-faction voices or translations can replace it without touching the logic. Every line uses the
 # script's standard vocabulary (node, your home, neutral node, the rival, units, line, deck, vat, tier, cap, badge,
-# SEND panel, inspector, relay, fire, drop, the structure names, skill / dock, Last Stand, danger mark). Placeholders
-# ({cost}, {secs}, {garrison}, {cap}, {ls}, {vls}, {hops}, {hops_decks}, {ult}, {skill1}, {skill2}, {ult_name}, {n}) are filled
-# from Rules and the live board by _fmt().
+# SEND panel, inspector, relay, fire, drop, Machinegoon, Last Stand, danger mark). A line is <= 90 characters, a hint
+# about 60-70. Placeholders ({cost}, {garrison}, {ls}, {secs}) are filled from Rules and the live board by _fmt().
 const LINES := {
-	"got_it": "GOT IT", "next_step": "NEXT", "skip_step": "SKIP STEP", "restart": "RESTART", "exit": "EXIT",
+	"got_it": "GOT IT", "next_step": "NEXT", "skip_step": "SKIP GOAL", "restart": "RESTART", "exit": "EXIT",
 	"skip_tutorial": "SKIP TUTORIAL",
 	"not_yet": "Not yet. Follow the hand - it has a plan, which is more than HR does.",
 	"try_again_title": "TRY AGAIN", "try_again": "Well, that happened. Legal says it didn't. Same board, fresh units.",
 	"idle_hint": "Still with me? Follow the hand. I bill by the minute.",
-	"assist_short": "Not enough units - send again, use 100 %. Accounting rounded down.",   # 0.20.2: a short send is topped up, never a TRY AGAIN
+	"assist_short": "Not enough units - send again, use 100 %. Accounting rounded down.",   # a short send is topped up, never a TRY AGAIN
 	"paused_lessons": "LESSONS",
 	"no_storage": "Progress isn't saved on this browser.",
-	"skipped": "SKIPPED - replay to complete", "skipped_note": "Skipped a step: replay it to complete it and earn its SCRAP.",
-	# L0 THE CITY - what's what
-	"L0.title": "THE CITY",
-	"L0.hello": "I'm Dr. Vesk, your handler. Quick tour first - the city is sinking, so we're on the clock.",
-	"L0.node": "This is a node. You win by taking nodes. That's the whole business plan.",
-	"L0.home": "This one is your home. Your colour means it's yours. Let's keep it that way.",
-	"L0.vat": "The tank on it is a vat. It breeds units, up to its cap. Our flagship product.",
-	"L0.badge": "The badge shows a node's units and its tier. Numbers going up: good.",
-	"L0.neutral": "Grey nodes are neutral. Their badge shows what defends them. Unclaimed assets.",
-	"L0.rival": "That colour is the rival - EMBER. They solve every problem by setting it on fire.",
-	"L0.deck": "Nodes are joined by decks. Units walk the decks. Do not look down.",
-	"L0.relay": "A relay moves a deck - its button sits off the rim. Whatever is on it drops. Downsizing.",
-	"L0.send": "The SEND panel sets how much of a node goes when you send. Delegation!",
-	"L0.inspector": "Tap a node and its inspector opens: what it makes, what it can build.",
-	"L0.top": "Up top: your strength, the clock and the rival's. The clock is the scary one.",
-	"L0.dock": "Down here, the dock: your skills. Later - they're still in budget review.",
-	"L0.go": "That's the city. Let's move some units before it sinks any further.",
-	# L1 SEND
-	"L1.title": "SEND",
-	"L1.drag": "Drag from your home to the node above it. Your first acquisition!",
-	"L1.label": "The label says what happens: TAKE, how many units, how many seconds. Paperwork.",
-	"L1.percent": "You don't have to send everything. Tap 25 % on the SEND panel. Budget cuts.",
-	"L1.send25": "A quarter of your home is enough for the node below. Send it. Lean operations.",
-	"L1.reinforce": "Drag between two of your nodes to move units where they're needed. Restructuring.",
-	"L1.done1": "Drag from your node to send units.",
-	"L1.done2": "The SEND panel sets how much goes.",
-	# L2 VATS AND THE MACHINEGOON
-	"L2.title": "VATS",
-	"L2.inspect": "Tap your home. The inspector shows how fast its vat breeds and its cap.",
-	"L2.upgrade": "Double-tap your home to upgrade its vat to T2. Costs {cost} units. An investment.",
-	"L2.build": "Building takes {secs} s. Watch the bar on the badge. Progress!",
-	"L2.t3": "A higher tier breeds faster and holds more. Take it to T3 - the top of the org chart.",
-	"L2.machinegoon": "A node can hold a Machinegoon instead of a vat. Build one here. Security budget.",
-	"L2.watch": "A Machinegoon shoots rival lines on its decks, but breeds nothing. Performance review.",
-	"L2.mg_upgrade": "A Machinegoon has tiers too. Upgrade it. Bigger gun, same salary.",
-	"L2.t4": "That big node holds a T4 vat. Nobody builds T4 - you take it. Hostile takeover.",
-	"L2.done1": "Double-tap a node to upgrade its vat, up to T3.",
-	"L2.done2": "A Machinegoon swaps breeding for firepower.",
-	# L3 THE RIVAL
-	"L3.title": "THE RIVAL",
-	"L3.neutral": "A neutral node defends with its badge count: {garrison}. Send more units than that.",
-	"L3.too_small": "Not enough units. Tap 75 % and send again.",
-	"L3.trade": "Each unit that lands takes one defender with it. Bring more. Always bring more.",
-	"L3.defend": "The rival is sending a line at your node. Reinforce it before they land!",
-	"L3.held": "Held. Somewhere an EMBER foreman is setting his desk on fire. Your turn.",
-	"L3.attack": "Take the rival's node. A vat you capture drops one tier - takeovers get messy.",
-	"L3.alive": "The rival is out when it has no nodes and no lines left. Nothing personal.",
-	"L3.done1": "Send more units than a node holds to take it.",
-	"L3.done2": "Reinforce before the rival lands.",
-	# L4 RELAYS (RELAY V2: the hand points at the relay's button; a double-tap on it or on the node fires it)
-	"L4.title": "RELAYS",
-	"L4.inspect": "Tap the relay. The glowing ghost shows where its deck will go.",
-	"L4.fire": "Double-tap the relay's button - or the node - to fire it. SWITCH works too.",
-	"L4.warning": "Firing gives one second of warning. Then the deck moves - anything on it drops.",
-	# not in TUTORIAL-SCRIPT draft 2 (for Daniele's review): the prompt step before the line reaches the deck
-	"L4.incoming": "A rival line is coming. Wait until it's on the relay's deck. Patience pays.",
-	"L4.prompt": "Their line is on the deck. Double-tap the button now!",
-	"L4.miss": "Too late - they got across. Here comes another line. They never learn.",
-	"L4.practice": "Timing takes practice. You'll get more chances. The void is very patient.",
-	"L4.waterfall": "Their vat keeps sending. The rest of the line walks off the edge. So loyal.",
-	"L4.done1": "Fire a relay while the rival's line is on its deck.",
-	"L4.done2": "One second of warning, then the drop.",
-	# L5 RELAY KINDS
-	"L5.title": "RELAY KINDS",
-	"L5.retract": "A retract relay pulls its deck in. Fire it while their line is on it.",
-	"L5.switch": "A switch relay swaps one deck for another. Fire it while they're on the deck that goes.",
-	"L5.remote": "A remote relay moves decks far away - follow the lit wire, then fire. Remote work!",
-	"L5.own": "Your own lines drop too. Check the preview before you fire. HR hates the paperwork.",
-	"L5.done1": "Every relay kind drops what's on the deck it moves.",
-	"L5.done2": "Read the preview first.",
-	# L6 RELAY STRUCTURES
-	"L6.title": "RELAY STRUCTURES",
-	"L6.inspect": "A relay node holds one structure: Laser tower, Forge or Monster hub. Tap this relay.",
-	"L6.laser": "Build the LASER TOWER. Every syndicate needs a light show.",
-	"L6.burst": "The Laser tower fires bursts at rival lines in range, then recharges. Like me at lunch.",
-	"L6.forge": "Build a FORGE on the next relay: your units hit harder and your nodes hold better.",
-	"L6.hub": "Build a MONSTER HUB on the last relay. One per commander - insurance insists.",
-	# 0.19.2's flow (TUTORIAL-SCRIPT L6 "send", trimmed to <= 90 characters)
-	"L6.send": "Tap the monster on its hub, then a node up to {hops_decks} away. It kicks lines off decks.",
-	"L6.take": "The monster takes the node at the end. Only a drop stops it.",
-	"L6.fell": "Monsters drop like everything else. Choose the route better. Insurance noticed.",
-	"L6.cooldown": "The hub needs time to grow the next monster. Make each one count.",
-	"L6.done1": "One structure per relay: Laser tower, Forge or Monster hub.",
-	"L6.done2": "A monster clears its route and takes the node at the end.",
-	# L7 LAST STAND
-	"L7.title": "LAST STAND",
-	"L7.reveal": "It's {ls}: the Last Stand. Nodes fall ring by ring. Watch the danger marks.",
-	"L7.evacuate": "Your ring falls first. Move your units to the centre ring. Relocation package!",
-	"L7.lost": "Nobody made it out. The void thanks you for your business. Move sooner.",
-	"L7.vls": "It's {vls}: the Very Last Stand. The last nodes fall one by one. Very last. Really.",
-	"L7.hold": "Whoever holds the last node wins. Be on it. Tenure is everything.",
-	"L7.done1": "Leave a ring before it falls.",
-	"L7.done2": "Hold the last node to win.",
-	# L8 SKILLS
-	"L8.title": "SKILLS",
-	"L8.surge": "The dock holds three skills. Tap {skill1}, then one of your lines.",
-	"L8.demolish": "{skill2} is a map skill: it drops a deck a moment later. Pick a busy one.",
-	"L8.ultimate": "{ult_name} is VEX's ultimate: about {ult} min to charge - I pulled strings. Use it.",
-	"L8.armies": "You choose your skills for each faction in ARMIES, on the main menu.",
-	"L8.done1": "Tap a skill in the dock, then its target.",
-	"L8.done2": "Choose your skills in ARMIES.",
-	# L9 FIRST MATCH
-	"L9.title": "FIRST MATCH",
-	"L9.start": "A real match now. Take neutral nodes, grow your vats, hold the relay in the middle.",
-	"L9.relay_taken": "The relay is yours. Watch for rival lines on its decks.",
-	"L9.push": "Their whole army is on the relay deck. FIRE THE RELAY!",
-	"L9.relay_kill": "Straight into the void. Record quarter. I'm framing this one.",
-	"L9.miss": "They got across. Finish the match the long way. Overtime it is.",
-	"L9.win": "Well played, commander. The city is yours - what's left of it.",
-	"L9.lose": "They took it this time. Let's call it a learning outcome.",
+	"skipped": "SKIPPED - replay to complete", "skipped_note": "Skipped a goal: replay it to complete it and earn its SCRAP.",
+	"soon": "SOON",
+	# titles and one-line goals of the five tutorials (the TRAINING page)
+	"T1.title": "QUICK START", "T1.goal": "Upgrade, take, reinforce, Machinegoon, relay, Last Stand",
+	"T2.title": "RELAYS", "T2.goal": "Retract, switch and remote relays",
+	"T3.title": "STRUCTURES", "T3.goal": "Laser tower, Forge, Monster hub",
+	"T4.title": "SKILLS", "T4.goal": "Surge, Demolish and your ultimate",
+	"T5.title": "TEAM PLAY", "T5.goal": "Shared garrison, handover, EJECT",
+	# the quick start: the goal strip's chips
+	"T1.chip.upgrade": "UPGRADE", "T1.chip.take": "TAKE", "T1.chip.reinforce": "REINFORCE",
+	"T1.chip.machinegoon": "MACHINEGOON", "T1.chip.relay": "RELAY", "T1.chip.last_stand": "LAST STAND",
+	# the quick start: the one current hint
+	"T1.start": "Six goals, any order. Start anywhere - I'll point if you stall.",
+	"T1.upgrade": "Double-tap your home to upgrade its vat to T2. Costs {cost} units.",
+	"T1.take": "Drag from your home to a grey node. Send more units than its badge shows.",
+	"T1.reinforce": "Drag between two of your nodes. Units move to where they're needed.",
+	"T1.reinforce_prep": "Take a second node first, then drag units between the two.",
+	"T1.machinegoon": "Tap a node of yours, then MACHINEGOON. It shoots rival lines on its decks.",
+	"T1.machinegoon_prep": "A Machinegoon needs a node of its own. Take another node first.",
+	"T1.machinegoon_watch": "Built. Now let a rival line walk past it - it does the rest.",
+	"T1.relay_prep": "Take the relay in the middle. It moves a deck - and whatever is on it.",
+	"T1.relay_wait": "The relay is yours. When their line is on its deck, double-tap the relay.",
+	"T1.relay_now": "Their line is on the deck. Double-tap the relay now!",
+	"T1.relay_miss": "Too late - they got across. Here comes another line. They never learn.",
+	"T1.relay_practice": "Timing takes practice. You'll get more chances. The void is very patient.",
+	"T1.last_stand_wait": "Nearly there. Hold your nodes - the city is about to collapse.",
+	"T1.last_stand": "It's {ls}: the Last Stand. Your ring falls first - move your units inward.",
+	# the quick start: a goal ticks (one line, one joke at most)
+	"T1.done.upgrade": "T2. Faster breeding, bigger cap. Growth!",
+	"T1.done.take": "Node taken. Acquisitions are going well.",
+	"T1.done.reinforce": "Units moved. Restructuring complete.",
+	"T1.done.machinegoon": "It works. Security budget approved.",
+	"T1.done.relay": "Straight into the void. Record quarter. I'm framing this one.",
+	"T1.done.last_stand": "The ring is gone and you are not. Promotion pending.",
+	"T1.done1": "Upgrade, take and reinforce - with a Machinegoon on guard.",
+	"T1.done2": "Fire a relay under a line. Leave a ring before it falls.",
 	# completion screens
-	"lesson_complete": "LESSON COMPLETE", "next": "NEXT LESSON", "replay": "REPLAY", "lessons": "LESSONS",
+	"lesson_complete": "LESSON COMPLETE", "continue_playing": "CONTINUE PLAYING", "main_menu": "MAIN MENU",
+	"next": "NEXT LESSON", "replay": "REPLAY", "lessons": "LESSONS",
 	"final_title": "TRAINING COMPLETE",
 	"final_relay_kill": "RELAY KILL - {n} units into the void.",
 	"final_reward": "GRADUATE VAT UNLOCKED",
 	"final_reward_line": "Ivory and brass, for commanders who survived training. Put it on in ARMIES.",
-	"final_locked": "Finish every lesson to unlock the Graduate vat.",
+	"final_locked": "Finish every tutorial to unlock the Graduate vat.",
 	"final_armies": "ARMIES", "locked_cosmetic": "Finish the tutorial",
 	"final_play": "PLAY YOUR FIRST MATCH", "final_menu": "MAIN MENU",
-	# the TUTORIAL page
+	# the TRAINING page
 	"page_title": "TRAINING",
-	"page_sub": "A tour of the city, eight short lessons and a first match. Replay any of them.",
+	"page_sub": "A quick start, then four short tutorials. Replay any of them.",
 	"continue": "CONTINUE", "back": "BACK",
-	"L0.goal": "Learn what's what", "L1.goal": "Send units", "L2.goal": "Grow vats, build a Machinegoon",
-	"L3.goal": "Take nodes, beat the rival", "L4.goal": "Fire a relay", "L5.goal": "Retract, switch, remote",
-	"L6.goal": "Laser tower, Forge, monster", "L7.goal": "Survive the Last Stand", "L8.goal": "Use your skills",
-	"L9.goal": "Win your first match",
 }
 
-# ---------------------------------------------------------------- reveal as you go (design §6)
-# What a lesson has not reached yet is not on screen (Hud.reveal). Keys: map / badges / drag / clock (always, L1),
-# upgrade_arrow (base: the badge's own pulsing upgrade-ready chevron, HudOverlay._draw_upgrade_arrows),
-# send_panel, upgrade (the inspector's UPGRADE line, "Double-tap: N units", the double-tap), machinegoon (MACHINEGOON
-# / VAT actions), rival_counts, strength (your total, RIVALS, the strength bar), notices (toasts), relay (the
-# double-tap fire, SWITCH, the relay line and outcome preview, the badge's relay state, ready glow and cue),
-# relay_build (LASER / FORGE / MONSTER HUB), forge_readout, monster (LAUNCH, the reach ring, the hub line),
-# status_line, danger (the floating Last Stand symbols), dock, floaters (0.20.6: the rising "+ CAPTURED" /
-# "LOST" node text), and - only in L9, never in a 1v1 lesson - halos and eject (the team parts).
-const REVEAL_BASE := ["map", "badges", "drag", "clock", "topbar", "upgrade_arrow"]   # topbar: 0.19.2's centred bar (the
-# clock alone early on); upgrade_arrow (0.22.4 playtest): the badge's upgrade-ready arrow - base, like "badges", since
-# it only ever shows once Sim.can_upgrade already agrees a lesson's own node can go up a tier, same as today.
+# ---------------------------------------------------------------- reveal as you go (staged by goals)
+# What the tutorial has not reached yet is not on screen (Hud.reveal). Keys: map / badges / drag / clock (always),
+# upgrade_arrow, send_panel, upgrade (the inspector's UPGRADE line, the double-tap), machinegoon, rival_counts,
+# strength (your total, RIVALS), notices (toasts), relay (the double-tap fire, SWITCH, the relay line and outcome
+# preview, the badge's relay state, ready glow and cue), relay_build (LASER / FORGE / MONSTER HUB), forge_readout,
+# monster, monster_icon, status_line, danger (the floating Last Stand symbols), dock, floaters (the rising
+# "+ CAPTURED" / "LOST" node text), and - never in a 1v1 tutorial - halos and eject (the team parts).
+const REVEAL_BASE := ["map", "badges", "drag", "clock", "topbar", "upgrade_arrow"]
 const ALL_KEYS := ["map", "badges", "drag", "clock", "upgrade_arrow", "send_panel", "upgrade", "machinegoon", "rival_counts", "strength",
 		"notices", "relay", "relay_build", "forge_readout", "monster", "monster_icon", "status_line", "danger", "dock", "halos", "eject",
-		"out_panel", "floaters"]                        # (out_panel: the YOU'RE OUT panel; floaters: 0.20.6's in-world
-                                                       # capture/loss text - only in the tour and the first match)
+		"out_panel", "floaters"]
 
-# ---------------------------------------------------------------- the lessons (design §3)
-# stage: [name, owner, units, (tier)] - units in SHOWN numbers, or "garrison" (the tier's neutral garrison,
-# Rules.NEUTRAL_UNITS), or "cap" (Rules.CAPS). Every other node keeps the map's own start (neutrals at their
-# real garrison). protect: nodes the player may not attack in this lesson (their loss would wreck the staging).
-# A step: key (its line is LINES["L<n>.<key>"]), target {nodes, rects, lines}, gesture (alternatives, the first
-# main can draw wins: [kind, from, to]; kinds tap / double_tap / drag / press), reveal (keys it adds), pass /
-# fail / enter (ops, see _check_pass / _check_fail / _enter), read_only (a GOT IT card), budget (seconds the
-# headless test allows), catch (a scripted rival line the player drops with a relay, see _tick_catch).
-const LESSONS := [
-	{"id": 0, "key": "L0", "map": "T-06-pivot", "abilities": true, "vls": false, "tour": true,
-		"loadout": {"active": "surge", "map": "demolish"},   # the dock shows what L8 will teach
-		"stage": [["H", "A", 20], ["BH", "B", 20]], "protect": ["BH"],
-		"reveal": [],
-		"steps": [
-			{"key": "hello", "target": {"rects": ["handler"]}, "read_only": true},
-			{"key": "node", "target": {"nodes": ["A2"]}, "gesture": [["tap", "A2"]], "read_only": true},
-			{"key": "home", "target": {"nodes": ["H"]}, "gesture": [["tap", "H"]], "read_only": true},
-			{"key": "vat", "target": {"nodes": ["H"], "radius": 0.55}, "gesture": [["tap", "H"]], "read_only": true},
-			{"key": "badge", "target": {"rects": ["badge:H"]}, "gesture": [["press", "badge:H"]], "read_only": true},
-			{"key": "neutral", "target": {"rects": ["badge:T"]}, "gesture": [["press", "badge:T"]], "read_only": true},
-			{"key": "rival", "target": {"nodes": ["BH"]}, "gesture": [["tap", "BH"]], "read_only": true},
-			{"key": "deck", "target": {"decks": [["H", "U"]]}, "read_only": true},
-			{"key": "relay", "target": {"nodes": ["R"]}, "gesture": [["tap", "R"]], "read_only": true},
-			{"key": "send", "target": {"rects": ["send_panel"]}, "gesture": [["press", "send:0.5"]], "read_only": true},
-			{"key": "inspector", "inspect": "H", "target": {"rects": ["inspector"]}, "read_only": true},
-			{"key": "top", "target": {"rects": ["top_bar"]}, "gesture": [["press", "top_bar"]], "read_only": true},
-			{"key": "dock", "target": {"rects": ["dock"]}, "gesture": [["press", "dock"]], "read_only": true},
-			{"key": "go", "read_only": true},
-		],
-		"done": []},
-	{"id": 1, "key": "L1", "map": "T-03-first-batch", "abilities": false, "vls": false, "fraction": 1.0,
-		"stage": [["H", "A", 30], ["BH", "B", 30]], "protect": ["BH"],
-		"reveal": ["map", "badges", "drag", "clock", "floaters"],   # (0.20.6: "+ CAPTURED" at the node is part of sending)
-		"steps": [
-			{"key": "drag", "target": {"nodes": ["H", "N1"]}, "gesture": [["drag", "H", "N1"]], "pass": ["send", "H", "N1"], "budget": 30.0},
-			{"key": "label", "target": {"nodes": ["N1"], "label": ["H", "N1"], "senders": ["H"], "lines": "A"}, "assist": ["N1"],
-				"pass": ["owner", "N1", "A"], "budget": 30.0},
-			{"key": "percent", "reveal": ["send_panel"], "enter": ["topup", "H", "N2", 0.25], "target": {"rects": ["send:0.25"]},
-				"gesture": [["press", "send:0.25"]], "pass": ["fraction_or_send", 0.25, "H"], "budget": 10.0},
-			{"key": "send25", "target": {"nodes": ["H", "N2"]}, "gesture": [["drag", "H", "N2"]], "assist": ["N2"],
-				"pass": ["owner", "N2", "A"], "budget": 30.0},
-			{"key": "reinforce", "target": {"nodes": ["N1", "H"], "senders": "mine"}, "gesture": [["drag", "N1", "H"]], "pass": ["send_own"], "budget": 15.0},
-		],
-		"done": ["L1.done1", "L1.done2"]},
-	{"id": 2, "key": "L2", "map": "T-04-vat-row", "abilities": false, "vls": false,
-		"stage": [["H", "A", 30], ["N1", "A", 45], ["N2", "A", 15], ["BH", "B", 30], ["B1", "B", 8]], "protect": ["BH", "B1", "B2"],
-		"reveal": ["upgrade", "machinegoon"],
-		"steps": [
-			{"key": "inspect", "target": {"nodes": ["H"]}, "gesture": [["tap", "H"]], "pass": ["inspect", "H"], "budget": 10.0},
-			{"key": "upgrade", "target": {"nodes": ["H"], "rects": ["action:UPGRADE"]}, "gesture": [["double_tap", "H"]],
-				"pass": ["build_started", "H"], "budget": 10.0},
-			{"key": "build", "target": {"nodes": ["H"]}, "pass": ["tier", "H", 2], "budget": 15.0},
-			{"key": "t3", "target": {"nodes": ["H"]}, "gesture": [["double_tap", "H"]], "pass": ["tier", "H", 3], "budget": 40.0},
-			{"key": "machinegoon", "target": {"nodes": ["N1"], "rects": ["action:MACHINEGOON"]},
-				"gesture": [["press", "action:MACHINEGOON"], ["tap", "N1"]], "pass": ["built", "N1", "machinegoon"], "budget": 20.0},
-			{"key": "watch", "enter": ["b_send", "B1", "N1", 8], "target": {"nodes": ["N1"], "lines": "B", "open": true},
-				"pass": ["custom", "line_spent", "N1"], "fail": ["lost", "N1"], "budget": 30.0},
-			{"key": "mg_upgrade", "target": {"nodes": ["N1"], "rects": ["action:UPGRADE"]},
-				"gesture": [["press", "action:UPGRADE"], ["double_tap", "N1"]], "pass": ["build_started", "N1"], "budget": 10.0},
-			{"key": "t4", "target": {"nodes": ["SP"]}, "read_only": true},
-		],
-		"done": ["L2.done1", "L2.done2"]},
-	{"id": 3, "key": "L3", "map": "T-05-border-run", "abilities": false, "vls": false,
-		"stage": [["H", "A", 25], ["N1", "A", 25], ["B1", "B", 5], ["BH", "B", 30]], "protect": ["BH"],
-		"reveal": ["rival_counts", "strength", "notices"],
-		"steps": [
-			{"key": "neutral", "target": {"nodes": ["N2"], "senders": "mine"}, "gesture": [["drag", "H", "N2"]], "assist": ["N2"],
-				"assist_line": "L3.too_small", "pass": ["owner", "N2", "A"], "budget": 60.0},
-			{"key": "trade", "read_only": true},
-			{"key": "defend", "enter": ["b_attack", "B1", "N1", 6], "target": {"nodes": ["N1"], "lines": "B", "senders": "mine"},
-				"supply": ["H", "N1"],   # H can always cover the attack: the rival line is N1 + 6, H is topped to that + a margin
-				"gesture": [["drag", "H", "N1"]], "pass": ["custom", "line_spent", "N1"], "fail": ["lost", "N1"],
-				"done_line": "L3.held", "budget": 40.0},
-			{"key": "attack", "target": {"nodes": ["B1"], "senders": "mine"}, "gesture": [["drag", "N1", "B1"]], "assist": ["B1"],
-				"pass": ["owner", "B1", "A"], "budget": 60.0},
-			{"key": "alive", "read_only": true},
-		],
-		"done": ["L3.done1", "L3.done2"]},
-	{"id": 4, "key": "L4", "map": "T-06-pivot", "abilities": false, "vls": false,
-		"stage": [["H", "A", 30], ["A2", "A", 20], ["R", "A", 40], ["B2", "B", 60], ["BH", "B", 30]], "protect": ["BH", "B2"],
-		"reveal": ["relay"], "preview": "R",
-		"steps": [
-			{"key": "inspect", "target": {"nodes": ["R"]}, "gesture": [["tap", "R"]], "pass": ["inspect", "R"], "budget": 10.0},
-			{"key": "fire", "target": {"nodes": ["R"], "rects": ["action:SWITCH"]}, "gesture": [["double_tap", "R"]],
-				"pass": ["fired", "R"], "budget": 10.0},
-			{"key": "warning", "target": {"nodes": ["R"], "relay_decks": "R", "open": true}, "read_only": true, "restore": "R"},
-			{"key": "prompt", "target": {"nodes": ["R"], "lines": "B", "relay_decks": "R"}, "before": "L4.incoming",
-				"catch": {"relay": "R", "from": "B2", "to": "R", "shown": 20, "kind": "fling", "min": 5, "tries": 3, "slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "line_speed": 0.7,
-					"miss": "L4.miss", "practice": "L4.practice"}, "budget": 90.0},
-			{"key": "waterfall", "target": {"nodes": ["R"], "lines": "B", "relay_decks": "R", "open": true}, "pass": ["fall_or_time", 4.0],
-				"min": 3.0, "budget": 6.0},
-		],
-		"done": ["L4.done1", "L4.done2"]},
-	{"id": 5, "key": "L5", "map": "T-07-switchyard", "abilities": false, "vls": false,
-		"stage": [["H", "A", 30], ["RT", "A", 40], ["SW", "A", 40], ["RC", "A", 40], ["T1", "B", 30], ["S1", "B", 30], ["BH", "B", 30]],
-		"protect": ["BH", "S1", "T1"],
-		"reveal": [],
-		"steps": [
-			{"key": "retract", "target": {"nodes": ["RT"], "decks": [["RT", "T1"]]},
-				"catch": {"relay": "RT", "from": "T1", "to": "RT", "shown": 12, "kind": "fall", "min": 2, "tries": 3, "slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "line_speed": 0.7}, "budget": 60.0},
-			{"key": "switch", "target": {"nodes": ["SW"], "decks": [["SW", "S1"]]},
-				"catch": {"relay": "SW", "from": "S1", "to": "SW", "shown": 12, "kind": "fall", "min": 2, "tries": 3, "slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "line_speed": 0.7}, "budget": 60.0},
-			{"key": "remote", "target": {"nodes": ["RC"], "decks": [["S1", "BH"]]},
-				"catch": {"relay": "RC", "from": "BH", "to": "S1", "shown": 12, "kind": "fall", "min": 2, "tries": 3, "slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0, "line_speed": 0.7}, "budget": 60.0},
-			{"key": "own", "target": {"nodes": ["SW"]}, "read_only": true},
-		],
-		"done": ["L5.done1", "L5.done2"]},
-	{"id": 6, "key": "L6", "map": "T-08-relay-works", "abilities": false, "vls": false,
-		"stage": [["H", "A", 30], ["R1", "A", 60], ["R2", "A", 30], ["R3", "A", 60], ["L1", "B", 20], ["F1", "B", 20],
-				["M1", "B", 15], ["M2", "B", 30], ["BH", "B", 30]], "protect": ["BH", "L1", "F1", "M2"],
-		"reveal": ["relay_build", "forge_readout", "monster", "monster_icon"],
-		"steps": [
-			{"key": "inspect", "target": {"nodes": ["R1"]}, "gesture": [["tap", "R1"]], "pass": ["inspect", "R1"], "budget": 10.0},
-			{"key": "laser", "target": {"nodes": ["R1"], "rects": ["action:LASER"]}, "gesture": [["press", "action:LASER"], ["tap", "R1"]],
-				"pass": ["built", "R1", "laser"], "budget": 20.0},
-			{"key": "burst", "enter": ["b_send", "L1", "R1", 10], "target": {"nodes": ["R1"], "lines": "B", "open": true},
-				"pass": ["custom", "burst_spent", "R1"], "fail": ["lost", "R1"], "budget": 30.0},
-			{"key": "forge", "target": {"nodes": ["R2"], "rects": ["action:FORGE"]}, "gesture": [["press", "action:FORGE"], ["tap", "R2"]],
-				"pass": ["built", "R2", "forge"], "budget": 20.0},
-			{"key": "hub", "target": {"nodes": ["R3"], "rects": ["action:MONSTER HUB"]},
-				"gesture": [["press", "action:MONSTER HUB"], ["tap", "R3"]], "pass": ["built", "R3", "monster_hub"], "budget": 20.0},
-			{"key": "send", "enter": ["charge_hub", "R3"], "target": {"nodes": ["R3", "M1"], "rects": ["monster_icon:R3"], "monsters": true},
-				"gesture": [["monster", "R3", "M1"]], "pass": ["launched", "M1"], "only_launch": "M1", "budget": 10.0},   # 0.22.1: MONSTER_REACH 1 (was M2, 2 bridges)
-			{"key": "take", "enter": ["b_send", "M1", "R3", 8], "target": {"nodes": ["M1"], "lines": "B", "monsters": true, "open": true},   # the rival line walks the monster's own deck
-				"pass": ["custom", "monster_done", "M1"], "budget": 45.0},
-			{"key": "cooldown", "target": {"nodes": ["R3"]}, "read_only": true},
-		],
-		"done": ["L6.done1", "L6.done2"]},
-	# the Last Stand starts with the lesson (the clock jumps to {ls}, as the first line says); its first wave's
-	# countdown holds while that line is on screen ("hold_ls": the reveal step), then the ring falls
-	{"id": 7, "key": "L7", "map": "T-09-collapse-ring", "abilities": false, "vls": false, "last_stand_at": 0.0, "hold_ls": "reveal",
-		# the design's 4 s Very Last Stand gap leaves no time to move a garrison off a warned node (a 100-unit
-		# garrison needs ~10 s just to leave its door): the lesson uses the Last Stand's own warning + drop gap
-		"vls_gap": "warning+gap",
-		"stage": [["H", "A", 30], ["A1", "A", 30], ["A2", "A", 30], ["BH", "B", 8], ["B1", "B", 8], ["B2", "B", 8]],
-		"protect_rival_until": "hold",
-		"reveal": ["status_line", "danger"],
-		"steps": [
-			{"key": "reveal", "read_only": true},
-			{"key": "evacuate", "target": {"nodes": ["I1", "I2"], "senders": "mine"}, "gesture": [["drag", "H", "I1"]], "assist": ["I1", "I2"],
-				"pass": ["custom", "ring_down"], "fail": ["custom", "ring_lost"], "budget": 60.0},
-			{"key": "vls", "enter": ["vls"], "target": {"nodes": ["I1", "I2", "I3"], "open": true}, "read_only": true, "pass": ["won"], "rival_cap": 5},
-			{"key": "hold", "target": {"nodes": ["I1", "I2", "I3"], "senders": "mine"}, "gesture": [["vls_move"]], "assist": ["I1", "I2", "I3"], "rival_cap": 5, "pass": ["won"], "fail": ["lost_match"], "budget": 60.0},
-		],
-		"done": ["L7.done1", "L7.done2"]},
-	{"id": 8, "key": "L8", "map": "T-10-long-decks", "abilities": true, "vls": false,
-		"loadout": {"active": "surge", "map": "demolish"},
-		"stage": [["H", "A", 30], ["A1", "A", 20], ["A2", "A", 20], ["BH", "B", 30], ["B1", "B", 20], ["B2", "B", 20]],
-		"protect": ["BH", "B1", "B2"],
-		"reveal": ["dock"],
-		"steps": [
-			{"key": "surge", "keep_a_line": true, "target": {"rects": ["dock:0"], "lines": "A"},
-				"gesture": [["tap_line", "A"], ["press", "dock:0"]], "armed": 0, "pass": ["cast", "active"], "budget": 30.0},
-			{"key": "demolish", "b_stream": ["BH", "C", 10], "target": {"rects": ["dock:1"], "lines": "B"},
-				"gesture": [["tap_deck", "B"], ["press", "dock:1"]], "armed": 1, "pass": ["custom", "demolish_busy"], "budget": 60.0},
-			{"key": "ultimate", "enter": ["fill_ultimate"], "keep_a_line": true, "target": {"rects": ["dock:2"]},
-				"gesture": [["tap_ult", "A"], ["press", "dock:2"]], "armed": 2, "pass": ["cast", "ultimate"], "budget": 60.0},
-			{"key": "armies", "read_only": true},
-		],
-		"done": ["L8.done1", "L8.done2"]},
-	{"id": 9, "key": "L9", "map": "T-02-turning-tide", "abilities": true, "vls": true, "match": true, "ai": "Training",
-		"loadout": {"active": "surge", "map": "demolish"},   # the skills L8 just taught (VEX's ultimate: Rewire)
-		"stage": [], "neutrals": L9_NEUTRALS, "reveal": [],
-		"steps": [{"key": "start", "read_only": true}],
-		"done": []},
-]
+# ---------------------------------------------------------------- the tutorials (data)
+# map: the baked lesson map (its lessonNames name the nodes: H your home, BH the rival's, N1.. neutrals, M the
+# Machinegoon node, R the relay); stage: [name, owner, shown units | "home" | "rival_home"]; reveal: keys per stage
+# (cumulative: stage A from the start, B when the relay goal opens, C when the Last Stand is announced); goals: the
+# list GoalDirector runs - id, chip word, hint line key, stage, ready (a precondition op), the detector `op` and the
+# hand provider `hand` (see _eval / _hand). ready false = the tutorial is listed but not built yet (SOON).
+const TUTORIALS := {
+	1: {"key": "quick", "ready": true, "map": "T-11-proving-ground", "abilities": false, "ai": "Training",
+		"stage": [["H", "A", "home"], ["BH", "B", "rival_home"]],
+		"reveal": [["send_panel", "upgrade", "machinegoon", "rival_counts", "strength", "notices", "floaters"],
+				["relay"], ["status_line", "danger"]],
+		"goals": [
+			{"id": "upgrade", "stage": 0, "op": ["upgraded", 2], "hand": "upgrade"},
+			{"id": "take", "stage": 0, "op": ["took_neutral"], "hand": "take"},
+			{"id": "reinforce", "stage": 0, "op": ["reinforced"], "ready": ["own_nodes", 2], "hand": "reinforce"},
+			{"id": "machinegoon", "stage": 0, "op": ["mg_kills"], "ready": ["mg_site"], "hand": "machinegoon"},
+			{"id": "relay", "stage": 1, "op": ["relay_drop"], "ready": ["relay_owned"], "hand": "relay"},
+			{"id": "last_stand", "stage": 2, "op": ["ring_down"], "hand": "last_stand"},
+		]},
+	2: {"key": "relays", "ready": false, "map": "T-07-switchyard", "abilities": false, "ai": "Training", "stage": [], "reveal": [], "goals": []},
+	3: {"key": "structures", "ready": false, "map": "T-08-relay-works", "abilities": false, "ai": "Training", "stage": [], "reveal": [], "goals": []},
+	4: {"key": "skills", "ready": false, "map": "T-10-long-decks", "abilities": true, "ai": "Training", "stage": [], "reveal": [], "goals": []},
+	5: {"key": "team", "ready": false, "map": "T-12-team-up", "abilities": false, "ai": "Training", "stage": [], "reveal": [], "goals": []},
+}
 
 
 # ================================================================ progress (static, user://tutorial.cfg)
 static var path := "user://tutorial.cfg"             # tests point this elsewhere
 static var map_dir := "res://maps4"                  # tests may point this at a checkout with the lesson maps
-static var completed_ids: Array = []
-static var skipped_ids: Array = []                   # lessons finished with a skip, not completed (Daniele, 2026-09-28)
+static var completed_ids: Array = []                 # tutorial numbers 1..5 (stored as the string ids)
+static var skipped_ids: Array = []                   # finished with a skip, not completed (Daniele, 2026-09-28)
 static var offered := false
 static var relay_kill_done := false
 static var saved := true                             # false: the last save failed (no storage)
 static var _loaded := false
+
+
+static func id_of(n: int) -> String:
+	return IDS[n - 1] if n >= 1 and n <= IDS.size() else ""
+
+
+static func number_of(id: String) -> int:
+	return IDS.find(id) + 1
+
+
+static func tutorial(n: int) -> Dictionary:
+	return TUTORIALS.get(n, {})
+
+
+static func playable(n: int) -> bool:
+	return bool(tutorial(n).get("ready", false))
 
 
 static func load_progress() -> void:
@@ -399,15 +182,15 @@ static func load_progress() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(path) != OK:                          # none yet, or no storage at all (private browsing)
 		return
-	for v in cf.get_value("progress", "completed", []):
-		var id := int(v)
-		if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids:
-			completed_ids.append(id)
+	for v in cf.get_value("progress", "completed_v2", []):
+		var n := number_of(str(v))
+		if n >= 1 and not n in completed_ids:
+			completed_ids.append(n)
 	completed_ids.sort()
-	for v in cf.get_value("progress", "skipped", []):
-		var id := int(v)
-		if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids and not id in skipped_ids:
-			skipped_ids.append(id)
+	for v in cf.get_value("progress", "skipped_v2", []):
+		var n := number_of(str(v))
+		if n >= 1 and not n in completed_ids and not n in skipped_ids:
+			skipped_ids.append(n)
 	skipped_ids.sort()
 	offered = bool(cf.get_value("progress", "offered", false))
 	relay_kill_done = bool(cf.get_value("progress", "relay_kill", false))
@@ -426,8 +209,9 @@ static func _ensure() -> void:
 
 static func save_progress() -> bool:
 	var cf := ConfigFile.new()
-	cf.set_value("progress", "completed", completed_ids.duplicate())
-	cf.set_value("progress", "skipped", skipped_ids.duplicate())
+	cf.load(path)                                    # keeps the old (ignored) numeric keys a v1 file carried
+	cf.set_value("progress", "completed_v2", completed_ids.map(func(n): return id_of(int(n))))
+	cf.set_value("progress", "skipped_v2", skipped_ids.map(func(n): return id_of(int(n))))
 	cf.set_value("progress", "offered", offered)
 	cf.set_value("progress", "relay_kill", relay_kill_done)
 	cf.set_value("progress", "version", PROGRESS_VERSION)
@@ -438,41 +222,51 @@ static func save_progress() -> bool:
 static var last_scrap := 0                           # TUTORIAL + PROGRESSION: what the last mark_complete paid (0 = nothing)
 
 
-static func mark_complete(id: int, relay_kill := false) -> bool:
+static func scrap_for(n: int) -> int:
+	## SCRAP the first completion of tutorial n pays. One helper, so Daniele's answer on the split (TUTORIAL-REWRITE-DESIGN
+	## §5: 460 + 4 x 200) is a data change: Rules.PROGRESSION["tutorial_scrap"] = {1: 460, 2: 200, ...}.
+	var per = Rules.PROGRESSION.get("tutorial_scrap", {})
+	if per is Dictionary and (per as Dictionary).has(n):
+		return int(per[n])
+	return int(Rules.PROGRESSION["tutorial_lesson"])
+
+
+static func mark_complete(n: int, relay_kill := false) -> bool:
 	_ensure()
-	if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids:
-		completed_ids.append(id)
+	if n >= 1 and n <= LESSON_COUNT and not n in completed_ids:
+		completed_ids.append(n)
 		completed_ids.sort()
-	skipped_ids.erase(id)                            # replayed without a skip: completed now
+	skipped_ids.erase(n)                             # replayed without a skip: completed now
 	offered = true
 	relay_kill_done = relay_kill_done or relay_kill
-	# TUTORIAL + PROGRESSION (Daniele, 2026-09-27): lessons 1-9 pay SCRAP on their first completion (enough for a 3rd
-	# skill by the end); the tour pays nothing. The Graduate vat is recorded in Progression once all are done.
+	# TUTORIAL + PROGRESSION: each tutorial pays SCRAP on its first completion (the same "tutorial:N" keys as before, so
+	# nobody is paid twice); the Graduate vat is recorded in Progression only when all five are done (Daniele: "Vat only
+	# after all of them").
 	last_scrap = 0
-	if id >= 1 and id <= LESSON_COUNT:                   # 1..9: FIRST_ID is the tour (0), which pays nothing
-		var amount: int = Rules.PROGRESSION["tutorial_lesson"]
-		if Progression.grant("tutorial:%d" % id, amount):
+	if n >= 1 and n <= LESSON_COUNT:
+		var amount := scrap_for(n)
+		if Progression.grant("tutorial:%d" % n, amount):
 			last_scrap = amount
 	if all_done():
 		Progression.unlock("vat:graduate", "tutorial")
 	return save_progress()
 
 
-static func mark_skipped(id: int) -> bool:
-	## A lesson finished with a skipped step, or left by SKIP TUTORIAL: the next one opens (CONTINUE goes past it)
-	## but it is not completed - no SCRAP, no step toward the Graduate vat. A completed lesson stays completed.
+static func mark_skipped(n: int) -> bool:
+	## A run finished with a skipped goal, or left by SKIP TUTORIAL: not completed - no SCRAP, no step toward the Graduate
+	## vat. A completed tutorial stays completed.
 	_ensure()
 	last_scrap = 0
-	if id >= FIRST_ID and id <= LESSON_COUNT and not id in completed_ids and not id in skipped_ids:
-		skipped_ids.append(id)
+	if n >= 1 and n <= LESSON_COUNT and not n in completed_ids and not n in skipped_ids:
+		skipped_ids.append(n)
 		skipped_ids.sort()
 	offered = true
 	return save_progress()
 
 
-static func is_skipped(id: int) -> bool:
+static func is_skipped(n: int) -> bool:
 	_ensure()
-	return id in skipped_ids
+	return n in skipped_ids
 
 
 static func mark_offered() -> bool:
@@ -481,9 +275,9 @@ static func mark_offered() -> bool:
 	return save_progress()
 
 
-static func is_done(id: int) -> bool:
+static func is_done(n: int) -> bool:
 	_ensure()
-	return id in completed_ids
+	return n in completed_ids
 
 
 static func done_count() -> int:
@@ -492,29 +286,28 @@ static func done_count() -> int:
 
 
 static func all_done() -> bool:
-	## Lessons 1-9 complete (the L0 tour is not needed): the Graduate vat unlocks (ArmyPresets.is_unlocked).
 	_ensure()
-	for i in range(1, LESSON_COUNT + 1):
-		if not i in completed_ids:
+	for n in range(1, LESSON_COUNT + 1):
+		if not n in completed_ids:
 			return false
 	return true
 
 
 static func first_unfinished() -> int:
-	## CONTINUE: the first lesson neither done nor skipped, the tour included; then the first skipped one (replay to
-	## complete it); L1 when every one is done.
+	## CONTINUE: the first playable tutorial neither done nor skipped; then the first skipped one (replay to complete it);
+	## the quick start when every playable one is done.
 	_ensure()
-	for i in range(FIRST_ID, LESSON_COUNT + 1):
-		if not i in completed_ids and not i in skipped_ids:
-			return i
-	for i in range(FIRST_ID, LESSON_COUNT + 1):
-		if not i in completed_ids:
-			return i
-	return 1
+	for n in range(1, LESSON_COUNT + 1):
+		if playable(n) and not n in completed_ids and not n in skipped_ids:
+			return n
+	for n in range(1, LESSON_COUNT + 1):
+		if playable(n) and not n in completed_ids:
+			return n
+	return FIRST_ID
 
 
 static func first_launch_due(user_args: PackedStringArray, net_busy: bool) -> bool:
-	## §7: with no `offered` key the game opens straight into the tour (L0), then L1. Never for a launch with a map, scenario, stage,
+	## With no `offered` key the game opens straight into the quick start. Never for a launch with a map, scenario, stage,
 	## thumbnail, screenshot or test flag, an online room or a pending Net reconnect (`net_busy`).
 	_ensure()
 	if offered or net_busy:
@@ -527,116 +320,106 @@ static func first_launch_due(user_args: PackedStringArray, net_busy: bool) -> bo
 	return true
 
 
-static func lesson(id: int) -> Dictionary:
-	for l in LESSONS:
-		if int(l["id"]) == id:
-			return l
-	return {}
-
-
-static func map_path_for(id: int) -> String:
-	return "%s/%s.json" % [map_dir, str(lesson(id).get("map", ""))]
+static func map_path_for(n: int) -> String:
+	return "%s/%s.json" % [map_dir, str(tutorial(n).get("map", ""))]
 
 
 static func line(key: String) -> String:
 	return str(LINES.get(key, key))
 
 
-static func title_of(id: int) -> String:
-	return line("L%d.title" % id)
+static func title_of(n: int) -> String:
+	return line("T%d.title" % n)
 
 
 static func lesson_rows() -> Array:
-	## The TUTORIAL page's rows: {id, title, goal, done, skipped}.
+	## The TRAINING page's rows: {id, title, goal, done, skipped, soon}.
 	_ensure()
 	var out := []
-	for l in LESSONS:
-		var id := int(l["id"])
-		out.append({"id": id, "title": title_of(id), "goal": line("L%d.goal" % id), "done": id in completed_ids,
-				"skipped": id in skipped_ids})
+	for n in range(1, LESSON_COUNT + 1):
+		out.append({"id": n, "title": title_of(n), "goal": line("T%d.goal" % n), "done": n in completed_ids,
+				"skipped": n in skipped_ids, "soon": not playable(n)})
 	return out
 
 
-static func reveal_for(id: int, step_index := 0) -> Array:
-	## Every HUD key a lesson shows at that step: all of the lessons before it, then this lesson's own keys up
-	## to the step (a lesson replayed out of order reveals everything up to it, §7). The tour (L0) and the first
-	## match show everything; the tour is not part of the chain, so L1 hides it all again.
-	if id == FIRST_ID or id == LESSON_COUNT:
+static func reveal_for(n: int, stage := 0) -> Array:
+	## Every HUD key tutorial n shows at that stage (cumulative). A tutorial without reveal data shows everything.
+	var rv: Array = tutorial(n).get("reveal", [])
+	if rv.is_empty():
 		return ALL_KEYS.duplicate()
 	var keys := REVEAL_BASE.duplicate()
-	for l in LESSONS:
-		var lid := int(l["id"])
-		if lid == FIRST_ID:
-			continue
-		if lid > id:
-			break
-		for k in l.get("reveal", []):
+	for s in range(mini(stage, rv.size() - 1) + 1):
+		for k in rv[s]:
 			if not k in keys:
 				keys.append(k)
-		var steps: Array = l["steps"]
-		for i in range(steps.size()):
-			if lid == id and i > step_index:
-				break
-			for k in (steps[i] as Dictionary).get("reveal", []):
-				if not k in keys:
-					keys.append(k)
 	return keys
 
 
-# ================================================================ one lesson run
+static func final_kill_line(units: int) -> String:
+	return line("final_relay_kill").replace("{n}", str(units))
+
+
+# ================================================================ one run
 var lesson_id := 1
-var L: Dictionary                                    # the lesson's row in LESSONS
+var L: Dictionary                                    # the tutorial's row in TUTORIALS
 var sim: Sim
 var map: Dictionary
 var names := {}                                      # lesson name -> node id (the map's lessonNames)
+var goals: GoalDirector
+var ai: SeatAI                                       # the Training rival (main does not run one for a tutorial)
 var first_launch := false                            # the forced first run: the card carries SKIP TUTORIAL
-var skipped := false                                 # a SKIP STEP was used in this run: it ends skipped, not completed
-var faction := PLAYER_FACTION                        # the player's faction (VEX in the tutorial)
-var state := "running"                               # running / interlude / failed / complete
-var step_i := 0
-var step_t := 0.0
+var skipped := false                                 # a goal was skipped in this run: it ends skipped, not completed
+var faction := PLAYER_FACTION
+var state := "running"                               # running / failed / complete (the screen is up) / released (play on)
+var stage := 0                                       # the reveal stage: 0 A (start), 1 B (the relay), 2 C (the Last Stand)
 var lesson_t := 0.0
-var version := 0                                     # bumped whenever card() / target() / gesture() change
-var time_scale := 1.0                                # main steps the Sim at dt x this (half speed at a relay prompt)
+var version := 0                                     # bumped whenever card() / chips() / target() / gesture() change
+var time_scale := 1.0                                # main steps the Sim at dt x this (slow motion at the relay moment)
 var preview_relay := -1                              # main keeps the relay-outcome preview up for this relay
-var result := {}                                     # completed(): {id, title, lines, time, relay_kill, final, graduate}
+var result := {}
 var fail_line := ""
-var ui_fraction := 0.5                               # main: the send panel's fraction
+var ui_fraction := 0.5
 var ui_inspector := -1                               # main: the node the inspector is open on (-1: none)
-var ui_armed := -1                                   # main: the armed dock slot (-1: none)
-var ui_monster_from := -1                            # main: the hub whose launch is armed (the monster icon / LAUNCH)
-var ai: SeatAI                                       # L9 only: the Training rival
+var ui_armed := -1
+var ui_monster_from := -1
 
-var _log: Array = []                                 # sim.events (and fx events from on_event) since the lesson began
 var _ev_cursor := 0
-var _step_started := 0.0                             # sim time the current step began
+var _log: Array = []                                 # fx events kept for the detectors (fling, fall, last_stand ...)
 var _note := ""
 var _note_t := 0.0
-var _interlude_t := 0.0
-var _interlude_next := ""                            # "advance" / "complete"
 var _last_order_t := 0.0
 var _idle_shown := false
-var _catch := {}                                     # the current catch step's state (see _tick_catch)
-var _hint_seen := {}                                 # horde ids already judged by a "too_small" hint
-var _tracked := []                                   # horde ids of the step's scripted rival line(s)
-var _burst_seen := false
-var _demolish_tries := 0
+var _wrong_until := -1.0                             # the hand shows until this match time after a wrong action
+var _dt := 0.0
+var _hint_key := ""                                  # what the card's hint was built from (it is rebuilt only when this changes)
+var _hint_text := ""
+var _hmeta := {}                                     # horde id -> {"to_owner", "from", "to"}: what each of your lines was sent at
+var _upgraded_tier := 0
+var _took := 0
+var _reinforced := false
+var _mg_kills := 0.0
+var _mg_seen := {}                                   # machinegoon node -> the last shot time counted
+var _mg_site := -1
+var _mg_probe := {"tries": 0, "next": -1.0, "line": -1}
+var _relay_drops := 0                                # shown rival units your relay dropped (fling + fall events)
+var _push := {"phase": "idle", "tries": 0, "line": -1, "t": 0.0, "slow_t": 0.0, "prompt": false, "units": 0}
+var _relay_done_t := -1.0
+var _relay_kill_units := 0
 var _ls_started := false
+var _ls_t0 := 0.0
 var _ls_falls := 0.0
-var _dt := 0.0                                       # this frame's (real) dt: the slow-motion caps count real seconds
-var _assist := {}                                    # node id -> {"seen": {hid: true}, "frozen": units or -1, "from": id}
-var _assist_added := {}                              # node id -> units the assists added there (never a "fall loss")
-var _match := {}                                     # L9: {phase, muster, push, falls0, push_units, t, relay_taken}
+var _assist := {}                                    # neutral node id -> {"seen", "frozen", "from", "topped"}
+var _assist_added := {}
 
 
 func _init(id := 1) -> void:
 	lesson_id = clampi(id, FIRST_ID, LESSON_COUNT)
-	L = lesson(lesson_id)
+	L = tutorial(lesson_id)
 
 
 func loadout_for(_player_faction := "", _preset := {}) -> Dictionary:
-	## The skill loadout the lesson plays with: L8's and L9's fixed Surge + Demolish (+ VEX's Rewire), else VEX's
-	## default. Never the player's ARMIES preset: the whole tutorial is VEX (Daniele, 0.19.3).
+	## The quick start plays with the skill dock off (abilities are off): no loadout. Never the ARMIES preset: the whole
+	## tutorial is VEX (Daniele, 0.19.3).
 	faction = PLAYER_FACTION
 	return (L.get("loadout", {}) as Dictionary).duplicate()
 
@@ -657,8 +440,8 @@ func begin(s: Sim, m: Dictionary, player_faction := "") -> void:
 	if ln is Dictionary:
 		for k in ln:
 			names[str(k)] = int(ln[k])
-	if not names.has("H") and sim.homes.has(HUMAN):  # T-02 (the first match) has no lesson names: its homes
-		names["H"] = int(sim.homes[HUMAN])            # and first relay stand in
+	if not names.has("H") and sim.homes.has(HUMAN):
+		names["H"] = int(sim.homes[HUMAN])
 	if not names.has("BH") and sim.homes.has(RIVAL):
 		names["BH"] = int(sim.homes[RIVAL])
 	if not names.has("R"):
@@ -667,23 +450,21 @@ func begin(s: Sim, m: Dictionary, player_faction := "") -> void:
 				names["R"] = int(n["id"])
 				break
 	sim.abilities_on = bool(L.get("abilities", false))
-	sim.vls_enabled = bool(L.get("vls", true))
-	if not L.get("match", false):
-		sim.match_hard_end = INF                     # a lesson is never cut short by the 7:00 end
-		for seat in sim.skill_cd:                     # skills stand ready in a lesson (0.19.2: Rules.SKILLS_START_ON_COOLDOWN);
-			sim.skill_cd[seat] = {"active": 0.0, "map": 0.0}   # the first match keeps the normal start for both seats
-	_stage()
+	sim.vls_enabled = false                          # the Very Last Stand waits until the quick start is over
+	sim.match_hard_end = INF                         # ... and so does the 7:00 end (release_pins puts both back)
+	for seat in sim.skill_cd:                        # skills stand ready
+		sim.skill_cd[seat] = {"active": 0.0, "map": 0.0}
+	_stage_board()
 	_ev_cursor = sim.events.size()
-	if L.get("match", false):
-		ai = SeatAI.new(RIVAL, 2.5, str(L.get("ai", "Training")))
-		_match = {"phase": "idle", "relay_taken": false}
-	preview_relay = _id(str(L.get("preview", "")))
+	ai = SeatAI.new(RIVAL, 2.5, str(L.get("ai", "Training")))
+	_build_goals()
+	_last_order_t = sim.time
 	state = "running"
-	step_i = 0
-	_enter(_step())
+	stage = 0
+	goals.unlock_stage(0)
 
 
-func _stage() -> void:
+func _stage_board() -> void:
 	var by_id := {}
 	for mn in map.get("nodes", []):
 		by_id[int(mn["id"])] = mn
@@ -701,169 +482,242 @@ func _stage() -> void:
 		if id < 0:
 			continue
 		var n: Dictionary = sim.nodes[id]
-		if (e as Array).size() > 3:
-			n["tier"] = int(e[3])
 		n["owner"] = str(e[1])
-		n["units"] = _units(e[2], n["tier"])
-	var low: Dictionary = L.get("neutrals", {})        # L9: T-02's neutrals start (and stay) low, so a match ends
-	if not low.is_empty():
-		for n in sim.nodes:
-			if n["owner"] == "" and Sim.has_vat(n) and low.has(int(n["tier"])):
-				n["units"] = float(low[int(n["tier"])]) * Rules.SCALE
-				n["regen_cap"] = n["units"]
-
-
-func _units(v, tier: int) -> float:
-	if v is String:
-		match v:
-			"garrison":
-				return float(Rules.NEUTRAL_UNITS.get(tier, 0))
-			"cap":
-				return float(Rules.CAPS.get(tier, 0))
-	return float(v) * Rules.SCALE
+		var v = e[2]
+		if v is String:
+			v = Rules.QUICK_START["home_shown"] if v == "home" else Rules.QUICK_START["rival_home_shown"]
+		n["units"] = float(v) * Rules.SCALE
 
 
 func _id(name: String) -> int:
 	return int(names.get(name, -1))
 
 
-func _node(name: String) -> Dictionary:
-	var id := _id(name)
-	return sim.nodes[id] if id >= 0 else {}
+func _home() -> int:
+	return _id("H")
 
 
-func _step() -> Dictionary:
-	var steps: Array = L["steps"]
-	return steps[clampi(step_i, 0, steps.size() - 1)]
+func _relay() -> int:
+	return _id("R")
 
 
 func reveal_keys() -> Array:
-	return reveal_for(lesson_id, step_i)
+	return reveal_for(lesson_id, stage)
+
+
+# ---------------------------------------------------------------- the goals (GoalDirector + this layer's detectors)
+func _build_goals() -> void:
+	goals = GoalDirector.new(self)
+	for spec in L.get("goals", []):
+		var sp: Dictionary = (spec as Dictionary).duplicate()
+		var op: Array = sp["op"]
+		sp["check"] = func(_c): return _eval(op)
+		if sp.has("ready"):
+			var rd: Array = sp["ready"]
+			sp["ready"] = func(_c): return bool(_eval(rd))
+		match str(sp["id"]):                         # the per-goal assists (scripted rival lines, top-ups)
+			"machinegoon":
+				sp["assist"] = func(_c, _d): _tick_probe()
+			"relay":
+				sp["assist"] = func(_c, _d): _tick_push()
+			"last_stand":
+				sp["assist"] = func(_c, _d): _tick_last_stand()
+		goals.add_goal(sp)
+	goals.goal_completed.connect(_on_goal_done)
+	# the timeline: the opening line, the relay stage, the Last Stand (§3)
+	goals.add_event({"at": 0.0, "do": func(_c): say(line("T1.start"), float(Rules.QUICK_START["welcome"]))})
+	goals.add_event({"when": func(_c): return _stage_b_due(), "do": func(_c): _open_stage(1)})
+	goals.add_event({"when": func(_c): return _last_stand_due(), "do": func(_c): _stage_last_stand()})
+
+
+func _eval(op: Array):
+	## The detectors and preconditions goals are made of: true / false, or a progress float.
+	match str(op[0]):
+		"upgraded":                                  # a vat of yours went up to tier op[1] (an upgrade, never a captured T2)
+			return _upgraded_tier >= int(op[1])
+		"took_neutral":
+			return _took > 0
+		"reinforced":
+			return _reinforced
+		"mg_kills":                                  # you built a Machinegoon and it killed rival units
+			return _mg_kills >= float(Rules.QUICK_START["mg_kill_shown"]) * Rules.SCALE
+		"relay_drop":                                # your relay dropped rival units
+			return _relay_drops >= int(Rules.QUICK_START["relay_min_drop"])
+		"ring_down":                                 # the Last Stand's first ring fell and you still hold a node
+			return _ring_down()
+		"own_nodes":
+			return _mine().size() >= int(op[1])
+		"mg_site":                                   # a node of yours can hold it (or it stands)
+			var site := _mg_site_id()
+			return site >= 0 and sim.nodes[site]["owner"] == HUMAN
+		"relay_owned":
+			return _relay() >= 0 and sim.nodes[_relay()]["owner"] == HUMAN
+	return false
+
+
+func _mine() -> Array:
+	var out := []
+	for n in sim.nodes:
+		if n["owner"] == HUMAN and not sim.collapsed.get(n["id"], false) and n["node_kind"] != "junction":
+			out.append(n["id"])
+	return out
+
+
+func _stage_b_due() -> bool:
+	if stage >= 1:
+		return false
+	if sim.time >= float(Rules.QUICK_START["stage_b_after"]) or sim.time >= float(Rules.QUICK_START["push_latest"]):
+		return true
+	for id in ["upgrade", "take", "reinforce", "machinegoon"]:
+		if not goals.goal_done(id):
+			return false
+	return true
+
+
+func _open_stage(n: int) -> void:
+	if n <= stage:
+		return
+	stage = n
+	goals.unlock_stage(n)
+	if n == 1:
+		preview_relay = _relay()
+	_bump()
+
+
+func current_id() -> String:
+	return str(goals.current().get("id", "")) if goals else ""
+
+
+func _on_goal_done(id: String, was_skipped: bool) -> void:
+	if was_skipped:
+		skipped = true
+	else:
+		say(line("T1.done.%s" % id), float(Rules.QUICK_START["tick_note"]))
+		handler.emit("happy")
+	if id == "relay":
+		_relay_done_t = sim.time
+		_push["prompt"] = false
+	_bump()
 
 
 # ---------------------------------------------------------------- the frame
 func step(dt: float) -> void:
-	if state in ["complete", "failed"] or sim == null:
+	if sim == null:
 		return
-	lesson_t += dt
-	step_t += dt
+	if state == "released":
+		if ai != null:
+			ai.think(sim, dt)
+		return
+	if state != "running":
+		return
 	_dt = dt
+	lesson_t += dt
+	time_scale = 1.0
 	if _note_t > 0.0:
 		_note_t -= dt
 		if _note_t <= 0.0:
 			_note = ""
 			_bump()
 	_scan_events()
-	if L.get("match", false):
-		_tick_match(dt)
-		return
-	if state == "interlude":
-		_interlude_t -= dt
-		if _interlude_t <= 0.0:
-			state = "running"
-			if _interlude_next == "complete":
-				_complete()
-			else:
-				_advance()
-		return
-	var st := _step()
-	_tick_lesson(dt)
-	_tick_step(st, dt)
+	_track_hordes()
+	_scan_machinegoons()
+	_scan_reinforce()
+	_tick_short_sends()
+	goals.tick(dt, sim.time)
 	if state != "running":
 		return
-	var why := _check_fail(st)
+	_hold_last_stand()
+	_cap_rival()
+	if goals.all_done():
+		_complete()
+		return
+	var why := _check_fail()
 	if why != "":
 		_fail(why)
 		return
-	if (st.get("read_only", false) or step_t >= MIN_STEP) and _check_pass(st):
-		_pass_step(st)
+	if state != "running":
 		return
-	if sim.is_out(HUMAN) and not sim.over:            # out (lines keep you alive): TRY AGAIN - main keeps the YOU'RE OUT
-		_fail(line("L7.lost") if lesson_id == 7 else line("try_again"))   # panel off in lessons (show_out_panel)
-		return
-	if sim.over:                                     # the match ended off-script
-		if sim.winner != "" and sim.allied(sim.winner, HUMAN):
-			_complete()
-		else:
-			_fail(line("try_again"))
-		return
-	if not st.get("read_only", false) and not _idle_shown and sim.time - _last_order_t > IDLE_HINT:
+	_refresh_hint()
+	if not _idle_shown and sim.time - _last_order_t > IDLE_LINE and _push["phase"] != "out":
 		_idle_shown = true
 		say(line("idle_hint"))
+	if ai != null:
+		ai.think(sim, dt * time_scale)
 
 
 func on_event(ev: Dictionary) -> void:
 	## main: every sim.fx_events entry (and the headless test does the same after each sim.step).
 	match str(ev.get("type", "")):
-		"fling", "fall", "monster_kick", "last_stand", "collapse", "build_done", "monster_take", "monster_fall":
+		"fling", "fall", "last_stand", "collapse", "build_done", "monster_kick":
 			var e := ev.duplicate()
 			e.erase("pts")
 			e["t"] = sim.time if sim else 0.0
-			e["fx"] = true
 			_log.append(e)
+			if str(ev.get("seat", "")) == RIVAL:
+				var relay := _relay()
+				if str(ev["type"]) == "fling" and int(ev.get("node", -1)) == relay and relay >= 0:
+					_relay_drops += int(ev.get("units", 0))
+					_relay_kill_units += int(ev.get("units", 0))
+				elif str(ev["type"]) == "fall" and int(ev.get("relay", -1)) == relay and relay >= 0:
+					_relay_drops += int(ev.get("shown", 0))
+					_relay_kill_units += int(ev.get("shown", 0))
 
 
 func on_action(method: String, _id_arg: int, _args := {}, ok := true) -> void:
-	## main: every node_action result. Only the timing of the player's orders matters here (the idle hint); what
-	## they did is read from the Sim's own events.
+	## main: every node_action result. An accepted order resets the idle clock (the hand hides); a refused one is a
+	## wrong action (the hand shows).
+	if sim == null:
+		return
 	if ok and method != "":
-		_last_order_t = sim.time if sim else 0.0
+		_last_order_t = sim.time
 		_idle_shown = false
+	elif not ok:
+		_wrong_until = sim.time + float(Rules.QUICK_START["wrong_hand"])
+		_bump()
 
 
-func allow(method: String, id: int, args := {}) -> String:
-	## "" or the line that refuses an order which would wreck the lesson's staging (design §6).
-	if sim == null or state == "complete":
+func allow(method: String, _id_arg: int, args := {}) -> String:
+	## "" or the line that refuses an order which would wreck the staging: an attack on the rival's home before the goals
+	## are done (the match would end under the tutorial).
+	if sim == null or state != "running":
 		return ""
 	if method == "send":
 		var to := int(args.get("to", -1))
-		if to >= 0 and to < sim.nodes.size() and not sim.allied(sim.nodes[to]["owner"], HUMAN):
-			for p in L.get("protect", []):
-				if _id(str(p)) == to:
-					return line("not_yet")
-			var until := str(L.get("protect_rival_until", ""))
-			if until != "" and sim.nodes[to]["owner"] == RIVAL and _step_index_of(until) > step_i:
-				return line("not_yet")
-	if method == "launch_monster" and _step().has("only_launch"):
-		if int(args.get("to", -1)) != _id(str(_step()["only_launch"])):
+		if to >= 0 and to == _id("BH") and not goals.all_done():
+			_wrong_until = sim.time + float(Rules.QUICK_START["wrong_hand"])
 			return line("not_yet")
 	return ""
 
 
-func _step_index_of(key: String) -> int:
-	var steps: Array = L["steps"]
-	for i in range(steps.size()):
-		if str(steps[i]["key"]) == key:
-			return i
-	return steps.size()
-
-
 func press_button() -> void:
-	## The card's one button: GOT IT on a read-only step.
-	if state == "running" and _step().get("read_only", false):
-		_pass_step(_step())
+	pass                                             # the quick start has no read-only card
 
 
 func skip_step() -> void:
-	if state == "interlude":
-		_interlude_t = 0.0
-		return
+	## SKIP GOAL: the current goal counts as done for the flow (the next ones open) but the run ends skipped.
 	if state != "running":
 		return
-	if L.get("match", false):                        # the first match's opening card: closing it skips nothing
-		_match["card_done"] = true
-		_bump()
+	var g := goals.current()
+	if g.is_empty():
+		g = goals.open_goals()[0] if not goals.open_goals().is_empty() else {}
+	if g.is_empty():
 		return
-	skipped = true                                   # this run no longer completes the lesson (mark_skipped)
-	_advance()
+	skipped = true
+	if str(g["id"]) == "relay":
+		_push["phase"] = "done"
+		_push["prompt"] = false
+	if str(g["id"]) == "last_stand" and not _ls_started:
+		_ls_started = true                           # nothing left to stage
+	goals.skip(str(g["id"]))
+	_bump()
 
 
-func say(text: String) -> void:
-	## A transient handler line on the card (a refusal, a hint, a miss).
+func say(text: String, secs := -1.0) -> void:
+	## A transient handler line on the card (a refusal, a goal ticking, a miss).
 	if text == "":
 		return
 	_note = text
-	_note_t = NOTE_SECONDS
+	_note_t = secs if secs > 0.0 else float(Rules.QUICK_START["note"])
 	_bump()
 
 
@@ -872,363 +726,139 @@ func _bump() -> void:
 	changed.emit()
 
 
-# ---------------------------------------------------------------- events
+# ---------------------------------------------------------------- reading the Sim
 func _scan_events() -> void:
 	while _ev_cursor < sim.events.size():
 		var ev: Dictionary = sim.events[_ev_cursor]
 		_ev_cursor += 1
-		var t := str(ev.get("type", ""))
-		if t in ["send", "build_start", "build_done", "relay_fired", "skill", "monster_launch", "capture", "cannon_burst",
-				"horde_destroyed", "handover", "eliminated"]:
-			_log.append(ev)
-			if str(ev.get("seat", "")) == HUMAN and t in ["send", "build_start", "relay_fired", "skill", "monster_launch"]:
-				_last_order_t = sim.time
-				_idle_shown = false
+		var seat := str(ev.get("seat", ""))
+		match str(ev.get("type", "")):
+			"build_done":
+				if seat == HUMAN and str(ev.get("kind", "")) == "vat":
+					var nd: Dictionary = sim.nodes[int(ev["node"])]
+					_upgraded_tier = maxi(_upgraded_tier, int(nd["tier"]))
+			"capture":
+				if seat == HUMAN and str(ev.get("from", "x")) == "":
+					_took += 1
+			"send", "build_start", "relay_fired", "skill", "monster_launch":
+				if seat == HUMAN:
+					_last_order_t = sim.time
+					_idle_shown = false
 
 
-func _since(t0: float, type: String, filter := {}) -> Array:
-	var out := []
-	for ev in _log:
-		if float(ev.get("t", 0.0)) + 0.0001 < t0 or str(ev.get("type", "")) != type:
+func _track_hordes() -> void:
+	## What each of your lines was sent at (the target's owner at the first frame it is seen): a capture that pours in
+	## after the node changed hands is not a reinforcement.
+	var alive := {}
+	for h in sim.hordes:
+		if h["owner"] != HUMAN or h.get("decoy", false):
 			continue
-		var ok := true
-		for k in filter:
-			if not ev.has(k) or ev[k] != filter[k]:
-				ok = false
-				break
-		if ok:
-			out.append(ev)
-	return out
+		alive[h["id"]] = true
+		if not _hmeta.has(h["id"]):
+			var t := int(h["target"])
+			_hmeta[h["id"]] = {"to_owner": str(sim.nodes[t]["owner"]), "from": int(h["route"][0]), "to": t}
+	for hid in _hmeta.keys():
+		if not alive.has(hid):
+			_hmeta[hid]["gone"] = true
+	for hid in _hmeta.keys():                        # forget the gone ones after the assist has looked (one frame)
+		if _hmeta[hid].get("gone", false) and _hmeta[hid].get("gone_seen", false):
+			_hmeta.erase(hid)
+		elif _hmeta[hid].get("gone", false):
+			_hmeta[hid]["gone_seen"] = true
 
 
-# ---------------------------------------------------------------- steps: enter / pass / fail
-func _enter(st: Dictionary) -> void:
-	step_t = 0.0
-	_step_started = sim.time
-	_catch = {}
-	_assist = {}
-	_tracked = []
-	_idle_shown = false
-	_last_order_t = sim.time
-	var op: Array = st.get("enter", [])
-	if not op.is_empty():
-		match str(op[0]):
-			"topup":                                  # the vat gets enough for `fraction` of it to beat the target
-				var n := _node(str(op[1]))
-				var target := _node(str(op[2]))
-				if not n.is_empty() and not target.is_empty():
-					var need: float = (float(target["units"]) + 3.0 * Rules.SCALE) / float(op[3])
-					n["units"] = maxf(float(n["units"]), ceilf(need))
-			"b_send":
-				var h := _b_send(str(op[1]), str(op[2]), float(op[3]))
-				if not h.is_empty():
-					_tracked.append(h["id"])
-			"b_attack":                              # a line the target can't hold alone: its garrison + op[3]
-				var target := _node(str(op[2]))
-				var shown := float(Rules.shown(float(target["units"]))) + float(op[3]) if not target.is_empty() else float(op[3])
-				var h := _b_send(str(op[1]), str(op[2]), shown)
-				if not h.is_empty():
-					_tracked.append(h["id"])
-			"charge_hub":                             # the director fills the hub's charge, as L8 fills the ultimate
-				var n := _node(str(op[1]))
-				if not n.is_empty():
-					n["monster_ready_t"] = sim.time
-			"fill_ultimate":
-				sim.ult_charge[HUMAN] = 1.0
-				sim.ult_since[HUMAN] = Rules.ULT_MIN_TIME
-			"vls":
-				_jump_clock(Rules.VERY_LAST_STAND_TIME)   # the clock reads {vls}
-				sim.start_very_last_stand_now(vls_gap())
-	_bump()
-
-
-func _check_pass(st: Dictionary) -> bool:
-	if st.has("catch"):
-		return _catch.get("done", false)
-	var op: Array = st.get("pass", [])
-	if op.is_empty():
-		return false
-	match str(op[0]):
-		"send":
-			for ev in _since(0.0, "send", {"seat": HUMAN}):
-				if (str(op[1]) == "" or int(ev["from"]) == _id(str(op[1]))) and int(ev["to"]) == _id(str(op[2])):
-					return true
-		"send_own":
-			for ev in _since(_step_started, "send", {"seat": HUMAN}):
-				if str(ev.get("target_owner", "")) == HUMAN:
-					return true
-		"owner":
-			return _node(str(op[1])).get("owner", "") == str(op[2])
-		"fraction":
-			return absf(ui_fraction - float(op[1])) < 0.001
-		"fraction_or_send":                           # 25 % tapped - or any send from there (it works too: no block)
-			return absf(ui_fraction - float(op[1])) < 0.001 \
-					or not _since(_step_started, "send", {"seat": HUMAN, "from": _id(str(op[2]))}).is_empty()
-		"inspect":
-			return ui_inspector == _id(str(op[1]))
-		"build_started":
-			var n := _node(str(op[1]))
-			return not _since(_step_started, "build_start", {"node": _id(str(op[1])), "seat": HUMAN}).is_empty() \
-					or (not n.is_empty() and n["build_kind"] == n["structure"] and n["build_kind"] != "")
-		"tier":
-			var n := _node(str(op[1]))
-			return not n.is_empty() and int(n["tier"]) >= int(op[2]) and n["build_kind"] == ""
-		"built":
-			var n := _node(str(op[1]))
-			return not n.is_empty() and n["owner"] == HUMAN and n["structure"] == str(op[2]) and n["build_kind"] == ""
-		"fired":
-			var n := _node(str(op[1]))
-			return not _since(0.0, "relay_fired", {"node": _id(str(op[1])), "seat": HUMAN}).is_empty() \
-					or (not n.is_empty() and n["relay_phase"] != "")
-		"cast":
-			return not _since(_step_started, "skill", {"seat": HUMAN, "slot": str(op[1])}).is_empty()
-		"launched":
-			return not _since(_step_started, "monster_launch", {"seat": HUMAN, "target": _id(str(op[1]))}).is_empty()
-		"fall_or_time":
-			if step_t < float(_step().get("min", 0.0)):
-				return false
-			for ev in _since(_step_started, "fall"):
-				if str(ev.get("seat", "")) == RIVAL:
-					return true
-			return step_t >= float(op[1])
-		"won":
-			return sim.over and sim.winner != "" and sim.allied(sim.winner, HUMAN)
-		"custom":
-			return _custom_pass(str(op[1]), op)
-	return false
-
-
-func _check_fail(st: Dictionary) -> String:
-	var op: Array = st.get("fail", [])
-	if op.is_empty():
-		return ""
-	match str(op[0]):
-		"lost":
-			return line("try_again") if _node(str(op[1])).get("owner", "") != HUMAN else ""
-		"lost_match":
-			return line("try_again") if sim.over and not (sim.winner != "" and sim.allied(sim.winner, HUMAN)) else ""
-		"custom":
-			if str(op[1]) == "ring_lost":
-				return _ring_lost()
-	return ""
-
-
-func _custom_pass(what: String, op: Array) -> bool:
-	match what:
-		"line_spent":                                # the step's rival line is gone and the node held
-			if _node(str(op[2])).get("owner", "") != HUMAN or _tracked.is_empty():
-				return false
-			return not _any_alive(_tracked) and not _rival_bound_for(_id(str(op[2])))
-		"burst_spent":                               # the laser fired at the line, which is gone
-			if not _since(_step_started, "cannon_burst", {"node": _id(str(op[2]))}).is_empty():
-				_burst_seen = true
-			return _burst_seen and _node(str(op[2])).get("owner", "") == HUMAN and not _any_alive(_tracked) \
-					and not _rival_bound_for(_id(str(op[2])))
-		"monster_done":                              # the monster took the lane's end - or fell (the step passes)
-			for ev in _since(_step_started, "monster_take"):
-				if str(ev.get("seat", "")) == HUMAN and int(ev.get("node", -1)) == _id(str(op[2])):
-					return true
-			for ev in _since(_step_started, "monster_fall"):
-				if str(ev.get("seat", "")) == HUMAN:
-					if not _catch.get("fell_said", false):
-						_catch["fell_said"] = true
-						say(line("L6.fell"))
-					return true
-		"ring_down":
-			return _ring_down()
-		"demolish_busy":
-			for ev in _since(_step_started, "skill", {"seat": HUMAN, "slot": "map"}):
-				if ev.get("judged", false):
-					continue
-				ev["judged"] = true
-				if _rival_on_edge(int(ev.get("target", -1))):
-					return true
-				_demolish_tries += 1
-				if _demolish_tries >= 2:
-					return true
-				sim.skill_cd[HUMAN]["map"] = 0.0      # the director hands the skill back for another try
-	return false
-
-
-func _pass_step(st: Dictionary) -> void:
-	if not st.get("read_only", false):
-		handler.emit("happy")
-	var dl := str(st.get("done_line", ""))
-	var last := step_i >= (L["steps"] as Array).size() - 1
-	if dl != "":
-		_note = line(dl)
-		_note_t = INTERLUDE
-		state = "interlude"
-		_interlude_t = INTERLUDE
-		_interlude_next = "complete" if last else "advance"
-		_bump()
+func _scan_reinforce() -> void:
+	if _reinforced:
 		return
-	if last:
-		_complete()
-	else:
-		_advance()
-
-
-func _advance() -> void:
-	step_i += 1
-	time_scale = 1.0
-	if step_i >= (L["steps"] as Array).size():
-		step_i = (L["steps"] as Array).size() - 1
-		_complete()
-		return
-	_enter(_step())
-
-
-func _fail(text: String) -> void:
-	state = "failed"
-	time_scale = 1.0
-	fail_line = text
-	_bump()
-	handler.emit("droop")
-
-
-func _complete(relay_kill := false, kill_units := 0) -> void:
-	if state == "complete":
-		return
-	state = "complete"
-	time_scale = 1.0
-	if skipped:
-		mark_skipped(lesson_id)
-	else:
-		mark_complete(lesson_id, relay_kill)
-	var lines := []
-	for k in L.get("done", []):
-		lines.append(line(str(k)))
-	result = {"id": lesson_id, "title": title_of(lesson_id), "lines": lines, "time": lesson_t, "relay_kill": relay_kill,
-			"scrap": last_scrap,                        # TUTORIAL + PROGRESSION
-			"skipped": skipped,                         # finished with a skip: not completed, nothing paid
-			"kill_units": kill_units, "final": lesson_id == LESSON_COUNT, "graduate": all_done(), "tour": L.get("tour", false),
-			"next": lesson_id + 1 if lesson_id < LESSON_COUNT else -1, "won": sim.over and sim.allied(sim.winner, HUMAN)}
-	_bump()
-	completed.emit(result)
-
-
-# ---------------------------------------------------------------- per-frame lesson behaviour
-func _tick_lesson(_dt: float) -> void:
-	var at := float(L.get("last_stand_at", -1.0))
-	if at >= 0.0 and not _ls_started and lesson_t >= at:
-		_ls_started = true
-		_jump_clock(Rules.LAST_STAND_TIME)            # the clock reads {ls} as the line says
-		_ls_falls = float(sim.fall_losses.get(HUMAN, 0.0))
-		sim.ls_drop_gap_override = Rules.LAST_STAND_DROP_GAP   # L7 keeps the brisk 5 s drops (0.20.12: matches use the adaptive gap)
-		sim.start_last_stand_now()
-		_b_evacuate()
-		_bump()
-	if _ls_started and str(L.get("hold_ls", "")) == str(_step().get("key", "")) and not sim.last_stand_queue.is_empty():
-		sim.last_stand_warn_t = maxf(sim.last_stand_warn_t, Rules.LAST_STAND_WARNING)   # the countdown waits for GOT IT
-
-
-func _jump_clock(to: float) -> void:
-	## L7: the match clock jumps to the collapse's own time (so the HUD clock and the line agree); every time
-	## the director measures from moves with it.
-	var d := to - sim.time
-	if d <= 0.0:
-		return
-	sim.time = to
-	_last_order_t += d
-	_step_started += d
-	for ev in _log:
-		ev["t"] = float(ev.get("t", 0.0)) + d
-	if _catch.has("t0"):
-		_catch["t0"] = float(_catch["t0"]) + d
-
-
-func _tick_step(st: Dictionary, _dt: float) -> void:
-	time_scale = 1.0
-	var restore := str(st.get("restore", ""))
-	if restore != "":
-		_restore_relay(_id(restore))
-	if st.has("catch"):
-		_tick_catch(st["catch"])
-	if st.get("keep_a_line", false):
-		_keep_a_line()
-	if st.has("b_stream"):
-		var bs: Array = st["b_stream"]
-		if not _rival_moving():
-			var h := _b_send(str(bs[0]), str(bs[1]), float(bs[2]))
-			if not h.is_empty():
-				_tracked.append(h["id"])
-	if st.has("hint"):
-		_tick_hint(st["hint"])
-	if st.has("assist"):
-		_tick_assist(st["assist"])
-	if st.has("rival_cap"):                           # L7's rival is scripted weak (§3): whatever node the Very Last
-		var cap := float(st["rival_cap"]) * Rules.SCALE   # Stand leaves it, any attack of yours can take it
-		for n in sim.nodes:
-			if n["owner"] == RIVAL:
-				n["units"] = minf(float(n["units"]), cap)
-	if st.has("supply") and not _catch.has("supplied"):
-		_catch["supplied"] = true                     # (the defend step: the reinforcing node can always cover the line)
-		var threat := 0.0
-		for h in sim.hordes:
-			if h["owner"] == RIVAL and int(h["target"]) == _id(str(st["supply"][1])):
-				threat += float(h["ordered"])
-		var from := _node(str(st["supply"][0]))
-		var node := _node(str(st["supply"][1]))
-		if not from.is_empty() and not node.is_empty() and threat > 0.0:
-			from["units"] = maxf(float(from["units"]), threat - float(node["units"]) + ASSIST_MARGIN * Rules.SCALE * 2.0)
-
-
-# ---------------------------------------------------------------- short sends never break a lesson (0.20.2)
-# Daniele: "since sometimes order might be short of a few troops or the user might be mistake amount sent it can
-# somewhat break the tutorial". On a capture step, when a line of yours lands on the target and it is still not
-# yours - or your nodes together clearly can't beat it - the director tops up your best sender to win with a
-# margin, freezes the target's count for the step, says so once (only after a real short landing) and points the
-# hand at the retry. A short send is never a TRY AGAIN.
-func _tick_assist(names: Array) -> void:
-	for nm in names:
-		var t := _id(str(nm))
-		if t < 0 or sim.collapsed.get(t, false):
+	for h in sim.hordes:
+		if h["owner"] != HUMAN or h["state"] != "absorb" or not _hmeta.has(h["id"]):
 			continue
-		var tn: Dictionary = sim.nodes[t]
+		var m: Dictionary = _hmeta[h["id"]]
+		if str(m["to_owner"]) == HUMAN and int(m["from"]) != int(m["to"]) and sim.nodes[int(m["to"])]["owner"] == HUMAN \
+				and sim.nodes[int(m["from"])]["owner"] == HUMAN:
+			_reinforced = true
+			return
+
+
+func _scan_machinegoons() -> void:
+	_mg_site = -1
+	for n in sim.nodes:
+		if n["owner"] == HUMAN and n["structure"] == "machinegoon" and n["build_kind"] == "":
+			_mg_site = n["id"]
+			var shot: Dictionary = n["shot"]
+			if not shot.is_empty():
+				var st := float(shot.get("t", -1.0))
+				if st > float(_mg_seen.get(n["id"], -1.0)):
+					_mg_seen[n["id"]] = st
+					_mg_kills += float(shot.get("kills", 0.0))
+
+
+func _any_alive(hid: int) -> bool:
+	return not sim._horde(hid).is_empty()
+
+
+# ---------------------------------------------------------------- short sends never break the quick start
+# Daniele (0.20.2): "since sometimes order might be short of a few troops or the user might be mistake amount sent it can
+# somewhat break the tutorial". When a line of yours lands on a neutral node and it is still not yours, the director
+# tops up your best sender to win with a margin, freezes the target's count until it is taken, says so once and points
+# the hand at the retry. A short send is never a TRY AGAIN.
+func _tick_short_sends() -> void:
+	for hid in _hmeta.keys():
+		var m: Dictionary = _hmeta[hid]
+		if str(m["to_owner"]) != "" or m.get("counted", false):
+			continue
+		var t := int(m["to"])
+		if sim.collapsed.get(t, false):
+			continue
 		var a: Dictionary = _assist.get(t, {"seen": {}, "frozen": -1.0, "from": -1, "topped": false})
 		_assist[t] = a
-		if tn["owner"] == HUMAN:
-			a["from"] = -1
+		if not m.get("gone", false):
+			a["seen"][hid] = true
+		elif a["seen"].has(hid):
+			a["seen"].erase(hid)
+			m["counted"] = true
+			a["short"] = true
+	for t in _assist.keys():
+		var a: Dictionary = _assist[t]
+		var tn: Dictionary = sim.nodes[t]
+		if tn["owner"] != "" or sim.collapsed.get(t, false):
+			_assist.erase(t)
 			continue
-		if float(a["frozen"]) >= 0.0:                 # frozen: no regrowth, no rival production, for the step
+		if float(a["frozen"]) >= 0.0:
 			tn["units"] = minf(float(tn["units"]), float(a["frozen"]))
-		var bound := false
-		for h in sim.hordes:
-			if h["owner"] == HUMAN and int(h["target"]) == t and not h.get("decoy", false):
-				a["seen"][h["id"]] = true
-				bound = true
-		var landed_short := false
-		for hid in (a["seen"] as Dictionary).keys():
-			if not _any_alive([hid]):
-				a["seen"].erase(hid)
-				landed_short = true
-		if bound:
+		if not (a["seen"] as Dictionary).is_empty() or not a.get("short", false):
 			continue
-		var need := float(tn["units"]) * 1.1 + ASSIST_MARGIN * Rules.SCALE
+		a["short"] = false
+		var need := float(tn["units"]) * 1.1 + float(Rules.QUICK_START["assist_margin"]) * Rules.SCALE
 		var best := -1
 		var best_doomed := true
-		var supply := 0.0
 		for n in sim.nodes:
 			if n["owner"] != HUMAN or sim.collapsed.get(n["id"], false) or sim.find_route(n["id"], t).size() < 2:
 				continue
-			supply += float(n["units"])
-			var doomed := _doomed(n["id"])              # (L7: never top up a node the collapse is about to take)
+			var doomed := _doomed(n["id"])
 			if best < 0 or (best_doomed and not doomed) or (doomed == best_doomed and n["units"] > sim.nodes[best]["units"]):
 				best = n["id"]
 				best_doomed = doomed
 		if best < 0:
 			continue
-		if landed_short or (supply < need and not a["topped"]):
-			var bn: Dictionary = sim.nodes[best]
-			_assist_added[best] = float(_assist_added.get(best, 0.0)) + maxf(need - float(bn["units"]), 0.0)
-			bn["units"] = maxf(float(bn["units"]), need)
-			a["frozen"] = float(tn["units"])
-			a["from"] = best
-			a["topped"] = true
-			if landed_short:
-				say(line(str(_step().get("assist_line", "assist_short"))))
-				handler.emit("droop")
+		var bn: Dictionary = sim.nodes[best]
+		_assist_added[best] = float(_assist_added.get(best, 0.0)) + maxf(need - float(bn["units"]), 0.0)
+		bn["units"] = maxf(float(bn["units"]), need)
+		a["frozen"] = float(tn["units"])
+		a["from"] = best
+		a["topped"] = true
+		say(line("assist_short"))
+		_wrong_until = sim.time + float(Rules.QUICK_START["wrong_hand"])
+		handler.emit("droop")
+
+
+func assist_retry() -> Array:
+	## [from, to] of the retry the hand points at after a top-up (no line of yours on the way), else [].
+	for t in _assist:
+		var a: Dictionary = _assist[t]
+		if int(a.get("from", -1)) >= 0 and sim.nodes[t]["owner"] == "" and (a["seen"] as Dictionary).is_empty():
+			return [int(a["from"]), int(t)]
+	return []
 
 
 func _doomed(id: int) -> bool:
@@ -1238,112 +868,201 @@ func _doomed(id: int) -> bool:
 	return sim.last_stand_active and id in _ring_nodes()
 
 
-func assist_retry() -> Array:
-	## [from, to] of the retry the hand points at after a top-up (no line of yours on the way), else [].
-	for t in _assist:
-		var a: Dictionary = _assist[t]
-		if int(a.get("from", -1)) >= 0 and sim.nodes[t]["owner"] != HUMAN and (a["seen"] as Dictionary).is_empty():
-			return [int(a["from"]), int(t)]
-	return []
-
-
-func _tick_hint(h: Array) -> void:
-	## L3's "too small": a line of yours reached the neutral and it held.
-	var target := _id(str(h[1]))
-	if target < 0 or sim.nodes[target]["owner"] == HUMAN:
+# ---------------------------------------------------------------- the Machinegoon probe
+func _tick_probe() -> void:
+	## Once a Machinegoon of yours stands, a small scripted rival line walks at it so it has something to shoot (the
+	## Training AI may take a minute to come). Tries again if nothing was killed.
+	if _mg_site < 0 or _mg_kills >= float(Rules.QUICK_START["mg_kill_shown"]) * Rules.SCALE:
 		return
-	for ev in _since(_step_started, "send", {"seat": HUMAN}):
-		if int(ev["to"]) != target or _hint_seen.has(ev.get("t")):
+	if float(_mg_probe["next"]) < 0.0:
+		_mg_probe["next"] = sim.time + float(Rules.QUICK_START["probe_delay"])
+	if sim.time < float(_mg_probe["next"]) or int(_mg_probe["tries"]) >= int(Rules.QUICK_START["probe_tries"]):
+		return
+	if _rival_bound_for(_mg_site):
+		return
+	var from := _nearest_rival(_mg_site)
+	if from < 0:
+		return
+	var h := _rival_send(from, _mg_site, float(Rules.QUICK_START["probe_shown"]))
+	if h.is_empty():
+		return
+	_mg_probe["line"] = h["id"]
+	_mg_probe["tries"] = int(_mg_probe["tries"]) + 1
+	_mg_probe["next"] = sim.time + float(Rules.QUICK_START["probe_gap"])
+	_bump()
+
+
+func _nearest_rival(to: int) -> int:
+	var best := -1
+	var best_len := 99999
+	for n in sim.nodes:
+		if n["owner"] != RIVAL or sim.collapsed.get(n["id"], false) or n["node_kind"] == "relay":
 			continue
-		var alive := false
-		for x in sim.hordes:
-			if x["owner"] == HUMAN and int(x["target"]) == target:
-				alive = true
-		if not alive:
-			_hint_seen[ev.get("t")] = true
-			say(line(str(h[2])))
+		var r := sim.find_route(n["id"], to)
+		if r.size() >= 2 and (r.size() < best_len or (r.size() == best_len and n["units"] > sim.nodes[best]["units"])):
+			best_len = r.size()
+			best = n["id"]
+	return best
 
 
-# ---------------------------------------------------------------- the relay catch (L4, L5)
-# A scripted rival line walks onto the relay's deck; the player fires the relay while it is on it. Before every
-# line the relay is set back to its starting state (fired again once its cooldown allows - "the director turns
-# the deck back"), and the node the line attacks is topped up so a miss never takes it. A catch: a fling
-# (rotation) or a relay fall of at least `min` shown rival units. A miss: the line is spent without one - the
-# next line comes, up to `tries`, then the step passes anyway ("Timing takes practice").
-func _tick_catch(c: Dictionary) -> void:
-	var relay := _id(str(c["relay"]))
-	if relay < 0:
-		_catch["done"] = true
+func _rival_send(from: int, to: int, shown: float) -> Dictionary:
+	## One scripted rival order of about `shown` units (the source is topped up if it has fewer - staging).
+	if from < 0 or to < 0 or sim.collapsed.get(from, false):
+		return {}
+	var n: Dictionary = sim.nodes[from]
+	if n["owner"] != RIVAL:
+		return {}
+	var want := shown * Rules.SCALE
+	if float(n["units"]) < want + 1.0:
+		n["units"] = want + 1.0
+	return sim.send(from, to, clampf((want + 0.5) / float(n["units"]), 0.01, 1.0))
+
+
+func _rival_bound_for(node: int) -> bool:
+	for h in sim.hordes:
+		if h["owner"] == RIVAL and int(h["target"]) == node:
+			return true
+	return false
+
+
+# ---------------------------------------------------------------- the relay moment
+# Once the relay goal is open and the relay is yours (at 2:00 the stage opens whatever you did), a scripted rival line
+# walks onto the relay's open deck. The game drops to slow motion from ~2 s before the line is on the deck and holds
+# until the relay moves (the drop) or the line is past, at most `slow_max` real seconds so the window always ends. A
+# miss sends the next line after `relay_retry` s, up to `relay_tries`, then "timing takes practice" passes the goal.
+func _tick_push() -> void:
+	var relay := _relay()
+	if str(_push["phase"]) == "done":
+		return
+	if relay < 0 or sim.collapsed.get(relay, false):     # no relay left to fire (or none on this map)
+		_pass_relay_by_practice()
 		return
 	var rn: Dictionary = sim.nodes[relay]
-	if _catch.get("done", false):
-		return
-	if not _catch.has("tries"):
-		_catch = {"tries": 0, "line": -1, "t0": sim.time, "prompt": false}
-	# was the line caught?
-	var hid := int(_catch["line"])
-	if hid >= 0:
-		var caught := 0
-		for ev in _since(float(_catch["t0"]), "fling"):
-			if str(ev.get("seat", "")) == RIVAL and int(ev.get("node", -1)) == relay:
-				caught += int(ev.get("units", 0))
-		for ev in _since(float(_catch["t0"]), "fall"):
-			if str(ev.get("seat", "")) == RIVAL and int(ev.get("relay", -1)) == relay:
-				caught += int(ev.get("shown", 0))
-		if caught >= int(c["min"]):
-			_catch["done"] = true
-			_catch["caught"] = caught
-			return
-		_relay_window(hid, relay, c, _catch)
-		if not _any_alive([hid]) or _landed(hid):
-			_catch["tries"] = int(_catch["tries"]) + 1
-			_catch["line"] = -1
-			_catch["prompt"] = false
-			if int(_catch["tries"]) >= int(c["tries"]):
-				say(line(str(c.get("practice", "L4.practice"))))
-				_catch["done"] = true
-				return
-			if c.has("miss"):
-				say(line(str(c["miss"])))
-			_bump()
-		return
-	# no line out: set the relay back, then send the next one
-	if rn["relay_index"] != 0 or rn["relay_phase"] != "":
-		_restore_relay(relay)
-		return
-	if rn["relay_cd"] > 0.0 or rn["owner"] != HUMAN:
-		return
-	var to := _node(str(c["to"]))
-	if not to.is_empty() and to["owner"] == HUMAN:
-		to["units"] = maxf(float(to["units"]), (float(c["shown"]) + 10.0) * Rules.SCALE)
-	var h := _b_send(str(c["from"]), str(c["to"]), float(c["shown"]))
-	if not h.is_empty():
-		h["speed"] = float(c.get("line_speed", 1.0))      # the scripted line walks slower: a generous window
-		_catch["slow_t"] = 0.0
-		_catch["line"] = h["id"]
-		_catch["t0"] = sim.time
-		_tracked.append(h["id"])
-		_bump()
+	match str(_push["phase"]):
+		"idle":
+			if _push_due(relay):
+				_launch_push(relay)
+		"out":
+			var hid := int(_push["line"])
+			_relay_window(hid, relay)
+			if not _any_alive(hid) or _landed(hid):
+				_push["prompt"] = false
+				_push["tries"] = int(_push["tries"]) + 1
+				_push["phase"] = "cool"
+				_push["t"] = sim.time
+				if int(_push["tries"]) >= int(Rules.QUICK_START["relay_tries"]):
+					_pass_relay_by_practice()
+				else:
+					say(line("T1.relay_miss"))
+		"cool":
+			if sim.time - float(_push["t"]) >= float(Rules.QUICK_START["relay_retry"]) and rn["owner"] == HUMAN:
+				_push["phase"] = "idle"
 
 
-func _relay_window(hid: int, relay: int, cfg: Dictionary, st: Dictionary) -> void:
-	## The relay moment (L4, L5, L9 - Daniele, 0.20.2: "relay map is too fast make the time slow when the user needs
-	## to activate the relay"): slow motion (cfg "slow" x) from ~"slow_lead" s before the line reaches the relay's
-	## deck, held until the relay moves (the drop) or the line is past, at most "slow_max" real seconds so the window
-	## always ends. The prompt and the hand come when a fire NOW would still drop at least cfg "min" units - the line
-	## is where the deck is when the relay's warning runs out.
+func _pass_relay_by_practice() -> void:
+	_push["phase"] = "done"
+	_push["prompt"] = false
+	goals.complete("relay")
+	say(line("T1.relay_practice"))
+
+
+func _push_due(relay: int) -> bool:
+	var rn: Dictionary = sim.nodes[relay]
+	if stage < 1 or rn["owner"] != HUMAN or rn["relay_phase"] != "" or rn["relay_cd"] > 0.0:
+		return false
+	return sim.seat_strength(RIVAL) >= float(Rules.L9_MATCH["push_min_shown"]) * Rules.SCALE and not _ls_started
+
+
+func _relay_deck(relay: int) -> Dictionary:
+	## The relay's deck open now, as {edge, near, far}: near = the end the rival reaches first.
+	for ei in sim.controlled_edges(relay):
+		if not sim.is_edge_open(ei):
+			continue
+		var e: Dictionary = sim.edges[ei]
+		var a: int = e["a"]
+		var b: int = e["b"]
+		var home := int(sim.homes.get(RIVAL, -1))
+		var ra := sim.find_route(home, a, {ei: true}) if home >= 0 else []
+		var rb := sim.find_route(home, b, {ei: true}) if home >= 0 else []
+		var near := a if (not ra.is_empty() and (rb.is_empty() or ra.size() <= rb.size())) else b
+		return {"edge": ei, "near": near, "far": b if near == a else a}
+	return {}
+
+
+func _launch_push(relay: int) -> void:
+	var deck := _relay_deck(relay)
+	if deck.is_empty():
+		return
+	var m := -1
+	var best_len := 99999
+	for n in sim.nodes:
+		if n["owner"] != RIVAL or sim.collapsed.get(n["id"], false):
+			continue
+		var r := sim.find_route(n["id"], deck["near"], {deck["edge"]: true}) if n["id"] != deck["near"] else [n["id"]]
+		if r.is_empty():
+			continue
+		if r.size() < best_len or (r.size() == best_len and n["units"] > sim.nodes[m]["units"]):
+			best_len = r.size()
+			m = n["id"]
+	if m < 0:
+		return
+	# the push's target: your node nearest the deck's far end (the far end itself if it is yours)
+	var target := int(deck["far"])
+	if sim.nodes[target]["owner"] != HUMAN:
+		var tl := 99999
+		for n in sim.nodes:
+			if n["owner"] != HUMAN or sim.collapsed.get(n["id"], false):
+				continue
+			var r2 := sim.find_route(deck["far"], n["id"])
+			if not r2.is_empty() and r2.size() < tl:
+				tl = r2.size()
+				target = n["id"]
+	var route: Array = [m] if m == int(deck["near"]) else sim.find_route(m, deck["near"], {deck["edge"]: true})
+	if route.is_empty():
+		return
+	route.append(deck["far"])
+	if target != int(deck["far"]):
+		var tail := sim.find_route(deck["far"], target, {deck["edge"]: true})
+		if tail.size() >= 2:
+			route.append_array(tail.slice(1))
+		else:
+			target = int(deck["far"])
+	if route.size() < 2 or route.count(route[-1]) > 1:
+		return
+	var shown := float(Rules.QUICK_START["push_shown"])
+	var tn: Dictionary = sim.nodes[target]
+	if tn["owner"] == HUMAN:                         # a miss never takes the node
+		tn["units"] = maxf(float(tn["units"]), (shown + 10.0) * Rules.SCALE)
+	var h := _rival_send(m, target, shown)
+	if h.is_empty():
+		return
+	sim._set_route(h, route)                         # the scripted line crosses the relay deck, whatever is fastest
+	h["speed"] = float(Rules.QUICK_START["line_speed"])
+	_push["phase"] = "out"
+	_push["line"] = h["id"]
+	_push["t"] = sim.time
+	_push["slow_t"] = 0.0
+	_push["prompt"] = false
+	_push["units"] = shown
+	_relay_kill_units = 0
+	_bump()
+
+
+func _relay_window(hid: int, relay: int) -> void:
+	## The slow-motion window and the prompt: a fire NOW would still drop at least the counted units - the line is where
+	## the deck is when the relay's warning runs out.
 	var rn: Dictionary = sim.nodes[relay]
 	var eta := _deck_eta(hid, relay)
 	var moving: bool = rn["relay_phase"] == "moving"
 	var fired: bool = rn["relay_phase"] != ""
-	var slow_on := eta >= 0.0 and eta <= float(cfg.get("slow_lead", 2.0)) and not moving \
-			and float(st.get("slow_t", 0.0)) < float(cfg.get("slow_max", 18.0))
+	var slow_on := eta >= 0.0 and eta <= float(Rules.QUICK_START["slow_lead"]) and not moving \
+			and float(_push["slow_t"]) < float(Rules.QUICK_START["slow_max"])
 	if slow_on:
-		st["slow_t"] = float(st.get("slow_t", 0.0)) + _dt
-		time_scale = float(cfg.get("slow", 0.25))
-	var prompt := not fired and _drop_if_fired(hid, relay) >= float(cfg.get("min", 1)) * Rules.SCALE
-	if prompt != bool(st.get("prompt", false)):
-		st["prompt"] = prompt
+		_push["slow_t"] = float(_push["slow_t"]) + _dt
+		time_scale = float(Rules.QUICK_START["slow"])
+	var prompt := not fired and _drop_if_fired(hid, relay) >= float(Rules.QUICK_START["relay_min_drop"]) * Rules.SCALE
+	if prompt != bool(_push["prompt"]):
+		_push["prompt"] = prompt
 		_bump()
 
 
@@ -1381,156 +1100,94 @@ func _drop_if_fired(hid: int, relay: int) -> float:
 	return maxf(best, 0.0) / Rules.metres_per_unit()
 
 
-func _restore_relay(relay: int) -> void:
-	## Back to the relay's starting state (index 0) once it may fire again.
-	if relay < 0:
-		return
-	var rn: Dictionary = sim.nodes[relay]
-	if rn["relay_index"] != 0 and rn["relay_phase"] == "" and rn["relay_cd"] <= 0.0 and rn["owner"] != "":
-		sim.fire_relay(relay)
-
-
-func catch_prompt() -> bool:
-	## The catch step's line is on the relay's deck right now (the prompt, the hand, the half speed).
-	return bool(_catch.get("prompt", false)) or bool(_match.get("prompt", false))
-
-
-func catch_line() -> int:
-	return int(_catch.get("line", -1)) if not _catch.is_empty() else int(_match.get("push_line", -1))
-
-
-func _on_relay_deck(hid: int, relay: int) -> bool:
-	## Does line `hid` have bodies on one of the relay's decks that is open now (the deck a fire would drop)?
-	var h := sim._horde(hid)
-	if h.is_empty():
-		return false
-	var edges := sim.controlled_edges(relay)
-	var head: float = h["s"]
-	var tail: float = head - Sim.chain_length(h)
-	for sp in h["spans"]:
-		if sp["edge"] in edges and sim.is_edge_open(sp["edge"]):
-			if minf(head, sp["s1"]) - maxf(tail, sp["s0"]) > 0.3:
-				return true
-	return false
-
-
 func _landed(hid: int) -> bool:
 	var h := sim._horde(hid)
 	return not h.is_empty() and h["state"] == "absorb" and not h["streaming"]
 
 
-# ---------------------------------------------------------------- scripted rival and helper lines
-func _b_send(from_name: String, to_name: String, shown: float) -> Dictionary:
-	## One scripted rival order of about `shown` units (the source is topped up if it has fewer - staging).
-	var from := _id(from_name)
-	var to := _id(to_name)
-	if from < 0 or to < 0 or sim.collapsed.get(from, false):
-		return {}
-	var n: Dictionary = sim.nodes[from]
-	if n["owner"] != RIVAL:
-		return {}
-	var want := shown * Rules.SCALE
-	if float(n["units"]) < want + 1.0:
-		n["units"] = want + 1.0
-	return sim.send(from, to, clampf((want + 0.5) / float(n["units"]), 0.01, 1.0))
+func catch_prompt() -> bool:
+	## The push's line is on the relay's deck right now (the prompt, the hand, the slow motion).
+	return bool(_push["prompt"]) and str(_push["phase"]) == "out"
 
 
-func _b_evacuate() -> void:
-	## L7: the weak rival pulls every line of units off its falling ring onto the centre's far end (it never attacks).
-	var dest := _id("I3")
-	if dest < 0:
+func catch_line() -> int:
+	return int(_push["line"]) if str(_push["phase"]) == "out" else -1
+
+
+# ---------------------------------------------------------------- the Last Stand
+func _last_stand_due() -> bool:
+	if _ls_started or stage < 1 or time_scale < 1.0 or bool(_push["prompt"]):
+		return false
+	if sim.time >= float(Rules.QUICK_START["ls_latest"]):
+		return true
+	return _relay_done_t >= 0.0 and sim.time >= _relay_done_t + float(Rules.QUICK_START["ls_after_relay"])
+
+
+func _stage_last_stand() -> void:
+	## The collapse is announced: the clock jumps to {ls}, the drops are pinned short, the rival is capped weak so the
+	## collapse can be won, the kept ring's neutral nodes are made cheap to take.
+	if _ls_started:
 		return
+	_ls_started = true
+	_note = ""                                       # the announcement is the hint now
+	_note_t = 0.0
+	_jump_clock(Rules.LAST_STAND_TIME)
+	_ls_t0 = sim.time
+	_ls_falls = float(sim.fall_losses.get(HUMAN, 0.0))
+	sim.ls_drop_gap_override = Rules.LAST_STAND_DROP_GAP
+	sim.start_last_stand_now()
 	for n in sim.nodes:
-		if n["owner"] == RIVAL and n["id"] != dest and float(n["units"]) >= Rules.SCALE:
-			sim.send(n["id"], dest, 1.0)
+		if n["owner"] == "" and Sim.has_vat(n) and sim.last_stand_keep.has(n["id"]):
+			var cap := float(Rules.QUICK_START["ls_neutral_cap_shown"]) * Rules.SCALE
+			n["units"] = minf(float(n["units"]), cap)
+			n["regen_cap"] = n["units"]
+	_open_stage(2)
+	_bump()
 
 
-func _keep_a_line() -> void:
-	## L8: keep one of your lines on the move (a Surge / ultimate target): half a garrison at the centre.
-	for h in sim.hordes:
-		if h["owner"] == HUMAN and h["state"] == "move" and not h.get("decoy", false):
-			return
-	var best := -1
-	for n in sim.nodes:
-		if n["owner"] == HUMAN and not sim.collapsed.get(n["id"], false) and (best < 0 or n["units"] > sim.nodes[best]["units"]):
-			best = n["id"]
-	var target := _id("C")
-	if target < 0 or best < 0 or sim.nodes[best]["units"] < 4.0 * Rules.SCALE:
+func _jump_clock(to: float) -> void:
+	## The match clock jumps to the collapse's own time (so the HUD clock and the line agree); every time the director
+	## measures from moves with it.
+	var d := to - sim.time
+	if d <= 0.0:
 		return
-	if sim.allied(sim.nodes[target]["owner"], HUMAN):
-		target = _id("BH")
-	sim.send(best, target, 0.5)
+	sim.time = to
+	_last_order_t += d
+	if _wrong_until > 0.0:
+		_wrong_until += d
+	if float(_mg_probe["next"]) > 0.0:
+		_mg_probe["next"] = float(_mg_probe["next"]) + d
+	_push["t"] = float(_push["t"]) + d
+	if _relay_done_t >= 0.0:
+		_relay_done_t += d
+	for k in _mg_seen.keys():
+		_mg_seen[k] = float(_mg_seen[k]) + d
 
 
-func _any_alive(ids: Array) -> bool:
-	for h in sim.hordes:
-		if h["id"] in ids:
-			return true
-	return false
+func _hold_last_stand() -> void:
+	## The first ring's countdown waits while the line is read and the units move.
+	if _ls_started and sim.time - _ls_t0 < float(Rules.QUICK_START["ls_hold"]) and not sim.last_stand_queue.is_empty() \
+			and not goals.goal_done("last_stand"):
+		sim.last_stand_warn_t = maxf(sim.last_stand_warn_t, Rules.LAST_STAND_WARNING)
 
 
-func _rival_bound_for(node: int) -> bool:
-	for h in sim.hordes:
-		if h["owner"] == RIVAL and int(h["target"]) == node:
-			return true
-	return false
+func _cap_rival() -> void:
+	## From the announcement to the end of the Last Stand goal the rival's nodes hold at most a few units: whatever the
+	## collapse leaves it, an attack of yours can take.
+	if not _ls_started or goals.goal_done("last_stand"):
+		return
+	var cap := float(Rules.QUICK_START["ls_rival_cap_shown"]) * Rules.SCALE
+	for n in sim.nodes:
+		if n["owner"] == RIVAL:
+			n["units"] = minf(float(n["units"]), cap)
 
 
-func _rival_moving() -> bool:
-	for h in sim.hordes:
-		if h["owner"] == RIVAL and h["state"] == "move":
-			return true
-	return false
+func _tick_last_stand() -> void:
+	pass                                             # the top-ups are _tick_short_sends (the take goal); the rest is _cap_rival
 
 
-func _rival_on_edge(ei: int) -> bool:
-	for h in sim.hordes:
-		if h["owner"] != RIVAL:
-			continue
-		var head: float = h["s"]
-		var tail: float = head - Sim.chain_length(h)
-		for sp in h["spans"]:
-			if int(sp["edge"]) == ei and minf(head, sp["s1"]) - maxf(tail, sp["s0"]) > -1.0:
-				return true
-	return false
-
-
-# ---------------------------------------------------------------- L7: the collapse
 func _ring_nodes() -> Array:
 	return (sim.last_stand_waves[0] as Array) if not sim.last_stand_waves.is_empty() else []
-
-
-func _ring_down() -> bool:
-	if not _ls_started or not sim.last_stand_active:
-		return false
-	var ring := _ring_nodes()
-	if ring.is_empty():
-		return false
-	for id in ring:
-		if not sim.collapsed.get(id, false):
-			return false
-	return _holds_node() and _ring_lost() == ""
-
-
-func _ring_lost() -> String:
-	## Out, or the ring is down and more than half of what you had went with it (the vats you left kept
-	## breeding until they fell, so "what you had" is what fell plus what is still standing).
-	if sim.eliminated.has(HUMAN) or (sim.over and not sim.allied(sim.winner, HUMAN)):
-		return line("L7.lost")
-	if not _ls_started:
-		return ""
-	var ring := _ring_nodes()
-	var down := not ring.is_empty() and ring.all(func(id): return sim.collapsed.get(id, false))
-	if not down:
-		return ""
-	var fell := float(sim.fall_losses.get(HUMAN, 0.0)) - _ls_falls
-	for id in _assist_added:                          # what an assist put on a node that then fell is not yours to lose
-		if sim.collapsed.get(id, false):
-			fell -= float(_assist_added[id])
-	fell = maxf(fell, 0.0)
-	if not _holds_node() or fell >= 0.5 * maxf(fell + sim.seat_strength(HUMAN), 1.0):
-		return line("L7.lost")
-	return ""
 
 
 func _holds_node() -> bool:
@@ -1540,293 +1197,397 @@ func _holds_node() -> bool:
 	return false
 
 
-# ---------------------------------------------------------------- L9: the first match
-# A normal 1v1 against the Training AI with one scripted moment (§3): once you hold the relay and lead (at 2:30 at
-# the latest) the rival MUSTERS its units on the node nearest the relay deck's near end, then commits one big PUSH
-# (>= 70 % of its units) across that deck. While the push is on the deck the game runs at half speed and the relay
-# is spotlit; losing >= 50 % of the push to the fall (the fling and the waterfall behind it) ends the tutorial on
-# the spot. A miss hands the match back to the AI; win or lose, the lesson completes.
-func _tick_match(dt: float) -> void:
-	time_scale = 1.0
-	var relay := _id("R")
-	if state == "interlude":
-		_interlude_t -= dt
-		if _interlude_t <= 0.0:
-			state = "running"
-			_complete(bool(_match.get("kill", false)), int(_match.get("kill_units", 0)))
-		return
-	if sim.over:
-		var won := sim.winner != "" and sim.allied(sim.winner, HUMAN)
-		_finish_in(line("L9.win") if won else line("L9.lose"))
-		return
-	var phase := str(_match.get("phase", "idle"))
-	if phase in ["idle", "done"]:
-		ai.think(sim, dt)
-	if relay >= 0 and sim.nodes[relay]["owner"] == HUMAN and not _match.get("relay_taken", false):
-		_match["relay_taken"] = true
-		say(line("L9.relay_taken"))
-	if not _match.get("card_done", false) and sim.time > float(Rules.L9_MATCH["card_close"]):
-		_match["card_done"] = true
-		_bump()
-	if phase in ["idle", "done"] and sim.time - _last_order_t > IDLE_HINT and not _idle_shown:
-		_idle_shown = true
-		say(line("idle_hint"))
-	match phase:
-		"idle":
-			if relay >= 0 and _push_due(relay):
-				_start_muster(relay)
-		"muster":
-			if sim.nodes[relay]["owner"] != HUMAN:
-				_match["phase"] = "done"
-			elif not _rival_moving() or sim.time - float(_match["t"]) > float(Rules.L9_MATCH["muster_wait"]):
-				_launch_push(relay)
-		"push":
-			_tick_push(relay)
-
-
-func _push_due(relay: int) -> bool:
-	var rn: Dictionary = sim.nodes[relay]
-	if rn["owner"] != HUMAN or rn["relay_phase"] != "" or rn["relay_cd"] > 0.0:
+func _ring_down() -> bool:
+	if not _ls_started:
 		return false
-	var b := sim.seat_strength(RIVAL)
-	if b < float(Rules.L9_MATCH["push_min_shown"]) * Rules.SCALE:
+	if sim.over and sim.winner != "" and sim.allied(sim.winner, HUMAN):
+		return true                                  # the collapse itself took the rival's last node: you stood, you won
+	if not sim.last_stand_active:
 		return false
-	return sim.seat_strength(HUMAN) > b or sim.time >= PUSH_LATEST
+	var ring := _ring_nodes()
+	if ring.is_empty():                              # a map without rings (a test board): nothing to wait for
+		return _holds_node()
+	for id in ring:
+		if not sim.collapsed.get(id, false):
+			return false
+	return _holds_node()
 
 
-func _relay_deck(relay: int) -> Dictionary:
-	## The relay's deck open now, as {edge, near, far}: near = the end the rival reaches first.
-	for ei in sim.controlled_edges(relay):
-		if not sim.is_edge_open(ei):
-			continue
-		var e: Dictionary = sim.edges[ei]
-		var a: int = e["a"]
-		var b: int = e["b"]
-		var home := int(sim.homes.get(RIVAL, -1))
-		var ra := sim.find_route(home, a, {ei: true}) if home >= 0 else []
-		var rb := sim.find_route(home, b, {ei: true}) if home >= 0 else []
-		var near := a if (not ra.is_empty() and (rb.is_empty() or ra.size() <= rb.size())) else b
-		return {"edge": ei, "near": near, "far": b if near == a else a}
-	return {}
+func _release_pins() -> void:
+	## The quick start is over: the match goes on to its normal end (the Very Last Stand and the 7:00 end are back, the
+	## rival is free).
+	sim.vls_enabled = true
+	sim.match_hard_end = Rules.MATCH_HARD_END
 
 
-func _start_muster(relay: int) -> void:
-	var deck := _relay_deck(relay)
-	if deck.is_empty():
-		return
-	var best := -1
-	var best_len := 99999
-	for n in sim.nodes:
-		if n["owner"] != RIVAL or sim.collapsed.get(n["id"], false):
-			continue
-		var r := sim.find_route(n["id"], deck["near"], {deck["edge"]: true}) if n["id"] != deck["near"] else [n["id"]]
-		if r.is_empty():
-			continue
-		if r.size() < best_len or (r.size() == best_len and n["units"] > sim.nodes[best]["units"]):
-			best_len = r.size()
-			best = n["id"]
-	if best < 0:
-		return
-	for n in sim.nodes:                              # every other rival garrison gathers there
-		if n["owner"] == RIVAL and n["id"] != best and float(n["units"]) >= float(Rules.L9_MATCH["muster_min_shown"]) * Rules.SCALE:
-			sim.send(n["id"], best, 1.0)
-	_match["phase"] = "muster"
-	_match["muster"] = best
-	_match["t"] = sim.time
+# ---------------------------------------------------------------- endings
+func _check_fail() -> String:
+	if sim.is_out(HUMAN) and not sim.over:
+		return line("try_again")
+	var home := _home()
+	if home >= 0 and not sim.collapsed.get(home, false) and sim.nodes[home]["owner"] == RIVAL:
+		return line("try_again")
+	if sim.over:                                     # the match ended off-script
+		if sim.winner != "" and sim.allied(sim.winner, HUMAN):
+			skipped = skipped or not goals.all_done()
+			_complete()
+			return ""
+		return line("try_again")
+	return ""
 
 
-func _launch_push(relay: int) -> void:
-	var m := int(_match.get("muster", -1))
-	var deck := _relay_deck(relay)
-	var rn: Dictionary = sim.nodes[relay]
-	if m < 0 or deck.is_empty() or sim.nodes[m]["owner"] != RIVAL or rn["owner"] != HUMAN or rn["relay_cd"] > 0.0 \
-			or rn["relay_phase"] != "":
-		if sim.time - float(_match["t"]) > float(Rules.L9_MATCH["launch_wait"]):
-			_match["phase"] = "done"
-		return
-	# the push's target: your node nearest the deck's far end (the far end itself if it is yours)
-	var target := int(deck["far"])
-	if sim.nodes[target]["owner"] != HUMAN:
-		var best_len := 99999
-		for n in sim.nodes:
-			if n["owner"] != HUMAN or sim.collapsed.get(n["id"], false):
-				continue
-			var r := sim.find_route(deck["far"], n["id"])
-			if not r.is_empty() and r.size() < best_len:
-				best_len = r.size()
-				target = n["id"]
-	var route: Array = [m] if m == int(deck["near"]) else sim.find_route(m, deck["near"], {deck["edge"]: true})
-	if route.is_empty():
-		_match["phase"] = "done"
-		return
-	route.append(deck["far"])
-	if target != int(deck["far"]):
-		var tail := sim.find_route(deck["far"], target, {deck["edge"]: true})
-		if tail.size() >= 2:
-			route.append_array(tail.slice(1))
-		else:
-			target = int(deck["far"])
-	if route.size() < 2 or route.count(route[-1]) > 1:
-		_match["phase"] = "done"
-		return
-	var h := sim.send(m, target, 1.0)
-	if h.is_empty():
-		_match["phase"] = "done"
-		return
-	sim._set_route(h, route)                         # the scripted push crosses the relay deck, whatever is fastest
-	_match["phase"] = "push"
-	_match["push_line"] = h["id"]
-	_match["push_units"] = float(h["ordered"])
-	_match["falls0"] = float(sim.fall_losses.get(RIVAL, 0.0))
-	_match["t"] = sim.time
-	_match["prompt"] = false
-
-
-func _tick_push(relay: int) -> void:
-	var hid := int(_match["push_line"])
-	var lost := float(sim.fall_losses.get(RIVAL, 0.0)) - float(_match["falls0"])
-	var units := maxf(float(_match["push_units"]), 1.0)
-	if lost >= PUSH_KILL * units:
-		_match["kill"] = true
-		_match["kill_units"] = Rules.shown(lost)
-		_match["prompt"] = false
-		_match["phase"] = "done"
-		handler.emit("happy")
-		_finish_in(line("L9.relay_kill"))
-		return
-	_relay_window(hid, relay, L9_SLOW, _match)
-	var gone := true
-	for h in sim.hordes:
-		if h["owner"] == RIVAL:
-			gone = false
-	if (gone or sim.time - float(_match["t"]) > float(Rules.L9_MATCH["push_wait"])) and lost < PUSH_KILL * units:
-		_match["phase"] = "done"
-		_match["prompt"] = false
-		say(line("L9.miss"))
-
-
-func _finish_in(text: String) -> void:
-	if state == "interlude":
-		return
-	state = "interlude"
-	_interlude_t = INTERLUDE
-	_note = text
-	_note_t = INTERLUDE + 1.0
+func _fail(text: String) -> void:
+	state = "failed"
 	time_scale = 1.0
+	fail_line = text
+	_bump()
+	handler.emit("droop")
+
+
+func _complete() -> void:
+	if state == "complete" or state == "released":
+		return
+	state = "complete"
+	time_scale = 1.0
+	_release_pins()
+	var kill := _relay_kill_units > 0
+	if skipped:
+		mark_skipped(lesson_id)
+	else:
+		mark_complete(lesson_id, kill)
+	result = {"id": lesson_id, "title": title_of(lesson_id), "lines": [line("T1.done1"), line("T1.done2")], "time": lesson_t,
+			"relay_kill": kill, "kill_units": _relay_kill_units, "scrap": last_scrap, "skipped": skipped,
+			"final": all_done(), "graduate": all_done(), "next": -1, "continue": true,
+			"won": sim.over and sim.allied(sim.winner, HUMAN)}
+	_bump()
+	completed.emit(result)
+
+
+func release() -> void:
+	## CONTINUE PLAYING: the coach goes away, the match plays on to its end.
+	if state != "complete":
+		return
+	state = "released"
+	_release_pins()
 	_bump()
 
 
 # ================================================================ what the coach shows
 func header() -> String:
-	if lesson_id == FIRST_ID:
-		return "%s · %s" % [HANDLER_NAME, title_of(FIRST_ID)]
-	if lesson_id == LESSON_COUNT:
-		return "%s · FIRST MATCH" % HANDLER_NAME
-	return "%s · LESSON %d / %d · %s" % [HANDLER_NAME, lesson_id, LESSON_COUNT - 1, title_of(lesson_id)]
+	return "%s · %s" % [HANDLER_NAME, title_of(lesson_id)]
+
+
+func chips() -> Array:
+	## The goal strip: [{text, done, current, skipped, locked}] in list order.
+	var cur := current_id()
+	var out := []
+	for g in goals.goals:
+		out.append({"id": g["id"], "text": line("T%d.chip.%s" % [lesson_id, g["id"]]), "done": g["done"], "skipped": g["skipped"],
+				"current": g["id"] == cur and not g["done"], "locked": not goals.is_live(g)})
+	return out
+
+
+func _phase(g: Dictionary) -> String:
+	## Which of a goal's lines applies now: "main", "prep" (something must come first), "watch" (built / waiting),
+	## "wait", "now" (the moment).
+	match str(g.get("id", "")):
+		"reinforce":
+			return "main" if _mine().size() >= 2 else "prep"
+		"machinegoon":
+			if _mg_site >= 0:
+				return "watch"
+			var site := _mg_site_id()
+			return "main" if site >= 0 and sim.nodes[site]["owner"] == HUMAN else "prep"
+		"relay":
+			if catch_prompt():
+				return "now"
+			return "wait" if _relay() >= 0 and sim.nodes[_relay()]["owner"] == HUMAN else "prep"
+		"last_stand":
+			return "main" if _ls_started else "wait"
+	return "main"
+
+
+func _hint_line() -> String:
+	var g := goals.current()
+	if g.is_empty():
+		return line("T1.last_stand_wait") if not goals.all_done() else ""
+	var id := str(g["id"])
+	var ph := _phase(g)
+	var key := "T1.%s" % id if ph == "main" else "T1.%s_%s" % [id, ph]
+	if not LINES.has(key):
+		key = "T1.%s" % id
+	return line(key)
+
+
+func _refresh_hint() -> void:
+	## Rebuild the card's hint only when what it says changes (the number in it is frozen at that moment, so the typed line
+	## is never retyped).
+	var g := goals.current()
+	var k := "%s|%s|%d" % [str(g.get("id", "")), _phase(g) if not g.is_empty() else "", _upgrade_site()]
+	if k != _hint_key:
+		_hint_key = k
+		_hint_text = _fmt(_hint_line())
+		_bump()
 
 
 func card() -> Dictionary:
-	## The coach card now: {visible, header, text, dots, dot, button}. button "" = a doing-step.
+	## The coach card now: {visible, header, text, dots, dot, button}. The quick start has no read-only steps: no button.
 	if state == "failed":
 		return {"visible": true, "header": "%s · %s" % [header(), line("try_again_title")], "text": fail_line,
 				"dots": 0, "dot": 0, "button": line("try_again_title")}
-	var steps: Array = L["steps"]
-	if L.get("match", false):
-		var show: bool = not _match.get("card_done", false) or _note != "" or catch_prompt()
-		var text := line("L9.push") if catch_prompt() else (_note if _note != "" else line("L9.start"))
-		return {"visible": show and state != "complete", "header": header(), "text": text, "dots": 0, "dot": 0,
-				"button": line("got_it") if not _match.get("card_done", false) and _note == "" and not catch_prompt() else ""}
-	var st := _step()
-	var text := _note if _note != "" else _fmt(line("%s.%s" % [L["key"], st["key"]]))
-	if st.has("before") and not catch_prompt() and _note == "":
-		text = line(str(st["before"]))              # the catch before its line reaches the deck
-	var button := ""
-	if st.get("read_only", false) and state == "running":
-		button = line("next_step") if L.get("tour", false) else line("got_it")
-	return {"visible": state != "complete", "header": header(), "text": text, "dots": steps.size(), "dot": step_i,
-			"button": button}
+	var text := _note if _note != "" else _hint_text
+	return {"visible": state == "running" and text != "", "header": header(), "text": text, "dots": 0, "dot": 0, "button": ""}
 
 
 func is_tour() -> bool:
-	return bool(L.get("tour", false)) and state == "running"
+	return false
 
 
 func uses_inspector() -> bool:
-	## Does the current step work in the inspector (an action button, the inspector itself)? If not, main closes
-	## an inspector left open from an earlier step, so it never lingers over the next one.
+	## Does the current hint work in the inspector (an action button)? If not, main closes an inspector left open.
 	if state != "running":
 		return false
-	var st := _step()
-	for k in (st.get("target", {}) as Dictionary).get("rects", []):
-		if str(k).begins_with("action:") or str(k) == "inspector":
-			return true
-	var op: Array = st.get("pass", [])
-	return st.has("inspect") or (not op.is_empty() and str(op[0]) == "inspect")
+	return current_id() == "machinegoon" and _mg_site < 0 and _mg_site_id() >= 0
 
 
 func inspect_request() -> int:
-	## The node the step wants the inspector open on (the tour's inspector step), -1 for none.
-	if state != "running":
-		return -1
-	return _id(str(_step().get("inspect", "")))
+	return -1
+
+
+func _hand_armed() -> bool:
+	return sim.time - _last_order_t >= float(Rules.QUICK_START["idle_hand"]) or sim.time < _wrong_until
 
 
 func target() -> Dictionary:
-	## What the spotlight rings: {nodes: [ids], rects: [keys], lines: [horde ids]}. Rect keys: "send:0.25",
-	## "action:<NAME>" (Hud.action_rect), "dock:<slot>".
-	var out := {"nodes": [], "rects": [], "lines": []}
-	if state != "running":
+	## What the spotlight rings: {nodes: [ids], rects: [keys], lines: [horde ids], open, ...}. `open`: a watch moment - no
+	## dim, nothing fogged, at most one soft ring. Empty until the hand is due (idle time or a wrong action).
+	var out := {"nodes": [], "rects": [], "lines": [], "decks": [], "open": false, "radius": 1.0, "monsters": false, "relay_decks": -1}
+	if state != "running" or goals == null:
 		return out
-	if L.get("match", false):
-		if catch_prompt() or str(_match.get("phase", "")) == "push":   # the push is followed from the moment it goes
-			out["nodes"] = [_id("R")]
-			out["lines"] = [int(_match.get("push_line", -1))]
-			out["relay_decks"] = _id("R")
+	# watch moments: undimmed, one subtle ring on the main object - whichever goal is current
+	if catch_prompt() or str(_push["phase"]) == "out":
+		out["nodes"] = [_relay()]
+		out["lines"] = [int(_push["line"])]
+		out["relay_decks"] = _relay()
+		out["open"] = true
 		return out
-	var t: Dictionary = _step().get("target", {})
-	for nm in t.get("nodes", []):
-		var id := _id(str(nm))
-		if id >= 0 and not sim.collapsed.get(id, false):
-			out["nodes"].append(id)
-	for g in _step().get("gesture", []):              # 0.20.2: the node you send FROM is never under the dim
-		if str(g[0]) == "drag":
-			var src := _id(str(g[1]))
-			if src >= 0 and not src in out["nodes"] and not sim.collapsed.get(src, false):
-				out["nodes"].append(src)
-	var snd = t.get("senders", [])
-	if str(snd) == "mine":                            # every node of yours that can supply the send
-		for n in sim.nodes:
-			if n["owner"] == HUMAN and not sim.collapsed.get(n["id"], false) and not n["id"] in out["nodes"] \
-					and float(n["units"]) >= Rules.SCALE and (out["nodes"] as Array).size() < 7:
-				out["nodes"].append(n["id"])
-	elif snd is Array:
-		for nm in snd:
-			var sid := _id(str(nm))
-			if sid >= 0 and not sid in out["nodes"] and not sim.collapsed.get(sid, false):
-				out["nodes"].append(sid)
-	var retry := assist_retry()
-	if not retry.is_empty() and not int(retry[0]) in out["nodes"]:
-		out["nodes"].append(int(retry[0]))
-	out["radius"] = float(t.get("radius", 1.0))
-	if t.has("label"):                                # the walking line's own TAKE · units · seconds label
-		out["label"] = [_id(str(t["label"][0])), _id(str(t["label"][1]))]
-	out["decks"] = []
-	for pair in t.get("decks", []):
-		var ei := sim._edge_index(_id(str(pair[0])), _id(str(pair[1])))
-		if ei >= 0:
-			out["decks"].append(ei)
-	for key in t.get("rects", []):                    # "badge:<name>" -> "badge:<node id>"
-		var k := str(key)
-		out["rects"].append(_rect_key(k))
-	out["open"] = bool(t.get("open", false))         # a watch step: rings, no dim (nothing you watch is ever fogged)
-	out["monsters"] = bool(t.get("monsters", false))
-	out["relay_decks"] = _id(str(t.get("relay_decks", "")))
-	var who := str(t.get("lines", ""))
-	if who != "":
-		for h in sim.hordes:
-			if h["owner"] == who and not h.get("decoy", false) and (who == HUMAN or _tracked.is_empty() or h["id"] in _tracked):
-				out["lines"].append(h["id"])
+	var g := goals.current()
+	if g.is_empty():
+		return out
+	var id := str(g["id"])
+	if id == "machinegoon" and _mg_site >= 0:
+		out["open"] = true
+		out["nodes"] = [_mg_site]
+		if _any_alive(int(_mg_probe["line"])):
+			out["lines"] = [int(_mg_probe["line"])]
+		return out
+	if id == "last_stand" and _ls_started:
+		out["open"] = true
+		return out
+	if not _hand_armed():
+		return out
+	var h := _hand(g)
+	out["nodes"] = h.get("nodes", [])
+	out["rects"] = h.get("rects", [])
+	out["lines"] = _moving_lines()
 	return out
+
+
+func gesture() -> Array:
+	## The pointing hand's alternatives, resolved to ids: [[kind, a, b], ...] - main draws the first it can. kinds: tap /
+	## double_tap (node id), drag (node id -> node id), press (a rect key).
+	if state != "running" or goals == null:
+		return []
+	if catch_prompt():
+		return [["double_tap", _relay(), -1]]
+	var g := goals.current()
+	if g.is_empty() or not _hand_armed():
+		return []
+	return _hand(g).get("gesture", [])
+
+
+func _moving_lines() -> Array:
+	## The lines on the move the spotlight keeps lit while it dims (a few: up to 2 of yours, 3 of the rival's).
+	var out := []
+	var mine := 0
+	var theirs := 0
+	for h in sim.hordes:
+		if h["state"] != "move" or h.get("decoy", false):
+			continue
+		if h["owner"] == HUMAN and mine < 2:
+			mine += 1
+			out.append(h["id"])
+		elif h["owner"] == RIVAL and theirs < 3:
+			theirs += 1
+			out.append(h["id"])
+	return out
+
+
+# ---------------------------------------------------------------- the hand providers (per goal)
+func _hand(g: Dictionary) -> Dictionary:
+	## {nodes, rects, gesture} for the goal's hint now.
+	var retry := assist_retry()
+	if not retry.is_empty():                          # after a short send: the hand shows the retry, 100 % from there
+		return {"nodes": [int(retry[0]), int(retry[1])], "rects": [], "gesture": [["drag", int(retry[0]), int(retry[1])]]}
+	match str(g.get("hand", "")):
+		"upgrade":
+			var s := _upgrade_site()
+			if s < 0:
+				return {}
+			return {"nodes": [s], "rects": [], "gesture": [["double_tap", s, -1]]}
+		"take":
+			var t := _neutral_target()
+			var f := _best_sender(t)
+			if t < 0 or f < 0:
+				return {}
+			return {"nodes": [f, t], "rects": [], "gesture": [["drag", f, t]]}
+		"reinforce":
+			var p := _reinforce_pair()
+			if p.is_empty():
+				return _capture_hand(_neutral_target())
+			return {"nodes": p, "rects": [], "gesture": [["drag", int(p[0]), int(p[1])]]}
+		"machinegoon":
+			var site := _mg_site_id()
+			if site < 0:
+				return _capture_hand(_neutral_target())
+			if sim.nodes[site]["owner"] != HUMAN:
+				return _capture_hand(site)
+			if _mg_site >= 0:
+				return {}
+			if ui_inspector == site:
+				return {"nodes": [site], "rects": ["action:MACHINEGOON"], "gesture": [["press", "action:MACHINEGOON", -1]]}
+			return {"nodes": [site], "rects": [], "gesture": [["tap", site, -1]]}
+		"relay":
+			var r := _relay()
+			if r >= 0 and sim.nodes[r]["owner"] != HUMAN:
+				return _capture_hand(r)
+			return {}
+		"last_stand":
+			var mv := _evac_move()
+			if mv.is_empty():
+				return {}
+			return {"nodes": mv, "rects": [], "gesture": [["drag", int(mv[0]), int(mv[1])]]}
+	return {}
+
+
+func _capture_hand(t: int) -> Dictionary:
+	var f := _best_sender(t)
+	if t < 0 or f < 0:
+		return {}
+	return {"nodes": [f, t], "rects": [], "gesture": [["drag", f, t]]}
+
+
+func _upgrade_site() -> int:
+	## The vat the hint points at: one of yours below T2 that can go up now, else the richest one below T2, else your home.
+	var best := -1
+	var best_ok := false
+	for id in _mine():
+		var n: Dictionary = sim.nodes[id]
+		if n["structure"] != "vat" or int(n["tier"]) >= 2:
+			continue
+		var ok := sim.can_upgrade(id, HUMAN) == ""
+		if best < 0 or (ok and not best_ok) or (ok == best_ok and float(n["units"]) > float(sim.nodes[best]["units"])):
+			best = id
+			best_ok = ok
+	return best if best >= 0 else _home()
+
+
+func _neutral_target() -> int:
+	## The grey node the take hint points at: the nearest vat node nobody owns (by decks from your nodes), the weakest first.
+	var best := -1
+	var best_key := INF
+	for n in sim.nodes:
+		if n["owner"] != "" or sim.collapsed.get(n["id"], false) or not Sim.has_vat(n) or n["node_kind"] == "relay" \
+				or n["node_kind"] == "junction":
+			continue
+		var f := _best_sender(n["id"])
+		if f < 0:
+			continue
+		var key := float(sim.find_route(f, n["id"]).size()) * 1000.0 + float(n["units"])
+		if key < best_key:
+			best_key = key
+			best = n["id"]
+	return best
+
+
+func _best_sender(to: int) -> int:
+	## Your richest node (not `to`) with a route to `to`; a node the collapse is about to take last.
+	var best := -1
+	var best_doomed := true
+	for id in _mine():
+		if id == to or sim.find_route(id, to).size() < 2:
+			continue
+		var doomed := _doomed(id)
+		if best < 0 or (best_doomed and not doomed) or (doomed == best_doomed and sim.nodes[id]["units"] > sim.nodes[best]["units"]):
+			best = id
+			best_doomed = doomed
+	return best
+
+
+func _reinforce_pair() -> Array:
+	var mine := _mine()
+	if mine.size() < 2:
+		return []
+	var from := -1
+	for id in mine:
+		if from < 0 or sim.nodes[id]["units"] > sim.nodes[from]["units"]:
+			from = id
+	var to := -1
+	for id in mine:
+		if id == from or sim.find_route(from, id).size() < 2:
+			continue
+		if to < 0 or float(sim.nodes[id]["units"]) < float(sim.nodes[to]["units"]):
+			to = id
+	return [from, to] if to >= 0 else []
+
+
+func _mg_site_id() -> int:
+	## Where the Machinegoon goes: a built one of yours; else the map's M node; else another node of yours that can hold it
+	## (not your home if you have a second); else -1 (take a node first).
+	if _mg_site >= 0:
+		return _mg_site
+	var m := _id("M")
+	if m >= 0 and not sim.collapsed.get(m, false) and sim.nodes[m]["owner"] != RIVAL:
+		if sim.nodes[m]["owner"] == HUMAN:
+			return m if "machinegoon" in sim.nodes[m]["buildable"] else -1
+		return m
+	var mine := _mine()
+	var pick := -1
+	for id in mine:
+		if not "machinegoon" in sim.nodes[id]["buildable"] or sim.nodes[id]["structure"] != "vat":
+			continue
+		if pick < 0 or (pick == _home() and id != _home()):
+			pick = id
+	if pick >= 0 and (pick != _home() or mine.size() == 1):
+		return pick
+	return -1
+
+
+func _evac_move() -> Array:
+	## [from, to]: your doomed node with units, and the safest node to move them to (yours first, a kept-ring node).
+	var from := -1
+	for id in _mine():
+		if _doomed(id) and float(sim.nodes[id]["units"]) >= Rules.SCALE:
+			if from < 0 or sim.nodes[id]["units"] > sim.nodes[from]["units"]:
+				from = id
+	if from < 0:
+		return []
+	var best := -1
+	var best_score := INF
+	for n in sim.nodes:
+		var id: int = n["id"]
+		if id == from or sim.collapsed.get(id, false) or _doomed(id) or n["node_kind"] == "junction":
+			continue
+		var r := route(from, id)
+		if r.size() < 2:
+			continue
+		var score := float(r.size()) - (6.0 if n["owner"] == HUMAN else 0.0) - (4.0 if sim.last_stand_keep.has(id) else 0.0)
+		if n["owner"] == RIVAL:
+			score += 3.0
+		if score < best_score:
+			best_score = score
+			best = id
+	return [from, best] if best >= 0 else []
 
 
 const FOLLOW_STEP := 8.0            # metres between the circles along a line (a circle is ~R x 1.35 across)
@@ -1835,10 +1596,9 @@ var _deck_pts := {}                  # edge index -> its 3 world points (ends + 
 
 
 func follow_points(tg: Dictionary = {}) -> Array:
-	## World points the spotlight must cover this frame (Daniele, 0.22.1: "never have the area necessary to look at
-	## covered in fog of war ... the monster is under the fog"): each followed line from tail to head every
-	## FOLLOW_STEP m, each walking monster of yours, the step's decks and the relay's decks. A few samples per frame -
-	## no route searches, no scene lookups.
+	## World points the spotlight must light this frame (Daniele, 0.22.1: "never have the area necessary to look at covered
+	## in fog of war"): each followed line from tail to head every FOLLOW_STEP m, the relay's decks. Light only - no
+	## ring of their own. A few samples per frame: no route searches, no scene lookups.
 	if tg.is_empty():
 		tg = target()
 	var out := []
@@ -1851,10 +1611,6 @@ func follow_points(tg: Dictionary = {}) -> Array:
 		var k := clampi(ceili(len / FOLLOW_STEP), 1, FOLLOW_MAX - 1)
 		for i in range(k + 1):
 			out.append(Sim.sample(h, head - len * float(i) / float(k))[0])
-	if tg.get("monsters", false):
-		for m in sim.monsters:
-			if str(m.get("seat", "")) == HUMAN and str(m.get("state", "")) in ["walking", "falling"]:
-				out.append(m["pos"])
 	var edges: Array = (tg.get("decks", []) as Array).duplicate()
 	var r := int(tg.get("relay_decks", -1))
 	if r >= 0:
@@ -1866,74 +1622,11 @@ func follow_points(tg: Dictionary = {}) -> Array:
 			var dl := sim.deck_line(int(ei))
 			_deck_pts[ei] = [] if dl.size() < 2 else [dl[0], ((dl[0] as Vector3) + (dl[-1] as Vector3)) / 2.0, dl[-1]]
 		out.append_array(_deck_pts[ei])
+	out.append_array(goals.follow_points())
 	return out
 
 
-func gesture() -> Array:
-	## The pointing hand's alternatives, resolved to ids: [[kind, a, b], ...] - main draws the first it can.
-	## kinds: tap / double_tap (node id), drag (node id -> node id), press (a rect key), tap_line (horde id),
-	## tap_deck (edge index).
-	if state != "running":
-		return []
-	if L.get("match", false):
-		return [["double_tap", _id("R"), -1]] if catch_prompt() else []
-	var st := _step()
-	if st.has("catch"):
-		return [["double_tap", _id(str(st["catch"]["relay"])), -1]] if catch_prompt() else []
-	var out := []
-	var retry := assist_retry()
-	if not retry.is_empty():                          # after a short send: the hand shows the retry, 100 % from there
-		out.append(["drag", int(retry[0]), int(retry[1])])
-	for g in st.get("gesture", []):
-		var kind := str(g[0])
-		match kind:
-			"tap", "double_tap":
-				out.append([kind, _id(str(g[1])), -1])
-			"drag":
-				out.append([kind, _id(str(g[1])), _id(str(g[2]))])
-			"vls_move":                               # L7: off your warned node, onto the one that stays
-				var mv := _vls_move()
-				if not mv.is_empty():
-					out.append(["drag", mv[0], mv[1]])
-			"press":
-				var k := str(g[1])
-				out.append([kind, _rect_key(k), -1])
-			"monster":                                # 0.19.2: tap the monster over its hub, then the end node
-				var hub := _id(str(g[1]))
-				if ui_monster_from == hub:
-					out.append(["tap", _id(str(g[2])), -1])
-				else:
-					out.append(["press", "monster_icon:%d" % hub, -1])
-					out.append(["press", "action:LAUNCH", -1])   # the second way, while the inspector is open
-					out.append(["tap", hub, -1])
-			"tap_line":                               # only once the dock slot is armed
-				if ui_armed == int(st.get("armed", -1)):
-					var hid := _a_line()
-					if hid >= 0:
-						out.append(["tap_line", hid, -1])
-			"tap_deck":
-				if ui_armed == int(st.get("armed", -1)):
-					var ei := _busy_deck()
-					if ei >= 0:
-						out.append(["tap_deck", ei, -1])
-			"tap_ult":
-				if ui_armed == int(st.get("armed", -1)):
-					var kind_t := str(Rules.SKILLS.get(sim.skill_id(HUMAN, "ultimate"), {}).get("target", "none"))
-					if kind_t == "own_line" and _a_line() >= 0:
-						out.append(["tap_line", _a_line(), -1])
-					elif kind_t in ["own_node", "own_vat"]:
-						out.append(["tap", _id("H"), -1])
-	return out
-
-
-func vls_gap() -> float:
-	var gap = L.get("vls_gap", -1.0)
-	if str(gap) == "warning+gap":
-		return Rules.LAST_STAND_WARNING + Rules.LAST_STAND_DROP_GAP
-	return float(gap)
-
-
-# ROUTE CACHE (audit-tutorial-campaign B1): the hand's drag path and L7's evacuation pick ask for the same routes every
+# ROUTE CACHE (audit-tutorial-campaign B1): the hand's drag path and the evacuation pick ask for the same routes every
 # frame; they are cached per (from, to) until the board's routes can have changed (_route_stamp).
 var _routes := {}                                    # "from:to" -> [route, path points or null]
 var _routes_stamp := ""
@@ -1941,12 +1634,12 @@ var _stamp_t := -1.0
 
 
 func _route_stamp() -> String:
-	## What invalidates the cached routes: the card moving on, a collapse, a demolished deck, a relay's state or motion.
+	## What invalidates the cached routes: a collapse, a demolished deck, a relay's state or motion.
 	var relays := 0
 	for n in sim.nodes:
 		if n["relay"] != "":
 			relays = relays * 7 + int(n["relay_index"]) * 2 + (1 if n["relay_phase"] == "moving" else 0)
-	return "%d|%d|%d|%d" % [version, sim.collapsed.size(), sim.demolished.size(), relays]
+	return "%d|%d|%d" % [sim.collapsed.size(), sim.demolished.size(), relays]
 
 
 func route(from: int, to: int) -> Array:
@@ -1972,79 +1665,15 @@ func route_points(from: int, to: int) -> PackedVector3Array:
 	return entry[1]
 
 
-func _vls_move() -> Array:
-	## [from, to]: your warned node with units and the nearest survivor that is not warned (yours first).
-	var from := -1
-	for n in sim.nodes:
-		if n["owner"] == HUMAN and sim.is_warned(n["id"]) and n["units"] >= Rules.SCALE and not sim.collapsed.get(n["id"], false):
-			from = n["id"]
-	if from < 0:
-		return []
-	var best := -1
-	var best_score := INF
-	for n in sim.nodes:
-		if n["id"] == from or sim.collapsed.get(n["id"], false) or sim.is_warned(n["id"]):
-			continue
-		var r := route(from, n["id"])
-		if r.size() < 2:
-			continue
-		var score := float(r.size()) - (10.0 if n["owner"] == HUMAN else 0.0)
-		if score < best_score:
-			best_score = score
-			best = n["id"]
-	return [from, best] if best >= 0 else []
-
-
-func _rect_key(k: String) -> String:
-	## "badge:<name>" / "monster_icon:<name>" -> the node id main's rect getters take.
-	for pre in ["badge:", "monster_icon:"]:
-		if k.begins_with(pre):
-			return "%s%d" % [pre, _id(k.substr(pre.length()))]
-	return k
-
-
-func _a_line() -> int:
-	for h in sim.hordes:
-		if h["owner"] == HUMAN and h["state"] == "move" and not h.get("decoy", false):
-			return h["id"]
-	return -1
-
-
-func _busy_deck() -> int:
-	for h in sim.hordes:
-		if h["owner"] != RIVAL:
-			continue
-		var head: float = h["s"]
-		for sp in h["spans"]:
-			if head >= sp["s0"] and head <= sp["s1"]:
-				return int(sp["edge"])
-	return -1
-
-
 func _fmt(text: String) -> String:
 	if not "{" in text:
 		return text
-	var st := _step()
-	var first := -1
-	for nm in (st.get("target", {}) as Dictionary).get("nodes", []):
-		first = _id(str(nm))
-		break
+	var site := _upgrade_site()
 	var vals := {
 		"secs": str(int(Rules.BUILD_SECONDS)),
-		"ls": _mmss(Rules.LAST_STAND_TIME), "vls": _mmss(Rules.VERY_LAST_STAND_TIME),
-		"hops": str(Rules.MONSTER_REACH),
-		"hops_decks": "1 deck" if Rules.MONSTER_REACH == 1 else "%d decks" % Rules.MONSTER_REACH,   # 0.22.1 reach 1: "1 decks" read wrong
-		"ult": str(roundi(Rules.ULT_CHARGE_TIME / 60.0)),
-		"cap": str(Rules.shown(Rules.CAPS[1])),
-		"faction": str(Rules.FACTION_NAMES.get(faction, [faction.to_upper()])[0]),
-		"skill1": ArmyPresets.skill_name(sim.skill_id(HUMAN, "active")),
-		"skill2": ArmyPresets.skill_name(sim.skill_id(HUMAN, "map")),
-		"ult_name": ArmyPresets.skill_name(sim.skill_id(HUMAN, "ultimate")),
-		"n": str(lesson_id),
+		"ls": _mmss(Rules.LAST_STAND_TIME),
+		"cost": str(Rules.shown(sim.upgrade_cost(sim.nodes[site]))) if site >= 0 else str(Rules.shown(Rules.VAT_COST[1])),
 	}
-	if first >= 0:
-		vals["cost"] = str(Rules.shown(sim.upgrade_cost(sim.nodes[first])))
-		vals["garrison"] = str(Rules.shown(sim.nodes[first]["units"]))
 	for k in vals:
 		text = text.replace("{%s}" % k, str(vals[k]))
 	return text
@@ -2052,7 +1681,3 @@ func _fmt(text: String) -> String:
 
 static func _mmss(secs: float) -> String:
 	return "%d:%02d" % [int(secs) / 60, int(secs) % 60]
-
-
-static func final_kill_line(units: int) -> String:
-	return line("final_relay_kill").replace("{n}", str(units))

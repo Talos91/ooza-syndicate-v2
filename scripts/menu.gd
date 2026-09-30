@@ -710,7 +710,7 @@ func show_play() -> void:
 				"PLAY  →"],
 		["WITH FRIENDS", "ONLINE ROOMS", "Create a room or join a friend's code.", "res://assets/art/ui/play_online.jpg", show_online,
 				"PLAY ONLINE  →"],
-		["LEARN THE CITY", "TRAINING", "%d / %d lessons done. Replay any lesson." % [done, TutorialDirector.TOTAL_LESSONS],
+		["LEARN THE CITY", "TRAINING", "%d / %d tutorials done. Replay any of them." % [done, TutorialDirector.TOTAL_LESSONS],
 				"res://assets/art/ui/play_training.jpg", show_tutorial, "START  →" if done < TutorialDirector.TOTAL_LESSONS else "REPLAY  →"],
 	]
 	for i in range(cards.size()):

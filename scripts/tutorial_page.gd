@@ -244,10 +244,10 @@ func _stack_close(stack: Dictionary, content_h: float) -> void:
 func _first_unfinished_id() -> int:
 	## The lit row / CONTINUE's lesson: the first neither done nor skipped, then the first skipped (-1: all done).
 	for l in _lessons:
-		if not bool(l.get("done", false)) and not bool(l.get("skipped", false)):
+		if not bool(l.get("done", false)) and not bool(l.get("skipped", false)) and not bool(l.get("soon", false)):
 			return int(l.get("id", -1))
 	for l in _lessons:
-		if not bool(l.get("done", false)):
+		if not bool(l.get("done", false)) and not bool(l.get("soon", false)):
 			return int(l.get("id", -1))
 	return -1
 
@@ -267,7 +267,8 @@ func _lesson_row(stack: Dictionary, lesson: Dictionary, y: float, w: float, h: f
 	var goal := _label(str(lesson.get("goal", "")), 14, Color("9fb6c0"))
 	goal.position = Vector2(pad, h * 0.56)
 	row.add_child(goal)
-	var tick := _label("DONE" if done else "-", fsz(16), Color("6dff8a") if done else Color("445a66"))
+	var soon := bool(lesson.get("soon", false))
+	var tick := _label("DONE" if done else ("SOON" if soon else "-"), fsz(16), Color("6dff8a") if done else Color("445a66"))
 	tick.position = Vector2(w - 96, h / 2.0 - 12)
 	row.add_child(tick)
 	var hit := Button.new()                # a flat, invisible full-row tap target
@@ -276,7 +277,7 @@ func _lesson_row(stack: Dictionary, lesson: Dictionary, y: float, w: float, h: f
 	hit.modulate = Color(1, 1, 1, 0)
 	var scroll: TouchScroll = stack["scroll"]
 	hit.pressed.connect(func():
-		if not scroll.was_drag():
+		if not scroll.was_drag() and not soon:
 			lesson_pressed.emit(idx))
 	row.add_child(hit)
 
@@ -328,7 +329,7 @@ func _show_shell_list() -> void:
 	var bw := UiKit.text_w(self, label, 17, true) + 64.0
 	UiKit.btn(self, label, Vector2(content.size.x - x - bw, fy), Vector2(bw, 50), func(): continue_pressed.emit(),
 			"primary", faction, 17)
-	var note := "%d / %d lessons done" % [done, _lessons.size()]
+	var note := "%d / %d tutorials done" % [done, _lessons.size()]
 	if _progress_note != "":
 		note += "  ·  " + _progress_note
 	var nl := UiKit.label(self, note, 15, UiKit.MUTED)
@@ -354,10 +355,13 @@ func _show_shell_list() -> void:
 		var lesson: Dictionary = _lessons[i]
 		var idx := int(lesson.get("id", 0))
 		var is_done := bool(lesson.get("done", false))
+		var is_soon := bool(lesson.get("soon", false))
 		var go := func():
-			if not scroll.was_drag():
+			if not scroll.was_drag() and not is_soon:
 				lesson_pressed.emit(idx)
 		var goal := str(lesson.get("goal", ""))
+		if is_soon:                                # phase 2 / 3 tutorials: listed, not built yet
+			goal = "%s  ·  %s" % [TutorialDirector.line("soon"), goal]
 		if bool(lesson.get("skipped", false)) and not is_done:   # (Daniele, 2026-09-28: a skipped lesson says so)
 			goal = TutorialDirector.line("skipped")
 		var b := UiKit.row(self, Vector2.ZERO, Vector2(rw, rh_), "%02d" % idx, str(lesson.get("title", "")),

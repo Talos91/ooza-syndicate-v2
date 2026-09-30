@@ -1058,6 +1058,33 @@ const PROGRESSION := {
 const L9_MATCH := {"card_close": 12.0, "push_min_shown": 20.0, "muster_min_shown": 3.0, "muster_wait": 25.0,
 		"launch_wait": 40.0, "push_wait": 45.0}
 const TUTORIAL_HANDLER_FPS := 20.0   # the coach card's 3D handler renders this often (its own SubViewport; audit B4)
+# TUTORIAL REWRITE (TUTORIAL-REWRITE-DESIGN.md, Daniele 2026-09-30): the QUICK START's timings and staging numbers (tutorial.gd).
+# Times are match seconds; "shown" numbers are at Alpha 11 scale (x SCALE in the Sim). The relay push and the machinegoon probe
+# are scripted rival lines; everything else is the Training AI's own match.
+const QUICK_START := {
+	"home_shown": 25, "rival_home_shown": 25,      # the staged start: both homes hold this many units
+	"stage_b_after": 60.0,                          # the relay stage opens after this long at the latest (or once goals 1-4 are done)
+	"push_latest": 120.0,                           # 2:00: the relay stage is open by then; the rival's push comes once the relay is yours
+	"ls_latest": 150.0,                             # 2:30: the Last Stand is staged by then at the latest ...
+	"ls_after_relay": 30.0,                         # ... or this long after the relay goal is done
+	"ls_hold": 12.0,                                # s the first ring's countdown waits so the line can be read and units moved
+	"ls_rival_cap_shown": 5,                        # the rival's nodes hold at most this many units from the Last Stand on
+	"ls_neutral_cap_shown": 6,                      # ... and a neutral node of the kept ring at most this many (an evacuation can take it)
+	"idle_hand": 8.0,                               # s without an order before the hand and spotlight show
+	"wrong_hand": 10.0,                             # s the hand stays after a wrong action (a refused order, a short send)
+	"note": 3.0,                                    # a transient handler line stays this long on the card
+	"tick_note": 4.0,                               # ... a goal's "done" line
+	"relay_min_drop": 3,                            # shown units the relay must drop to count
+	"relay_tries": 3,                               # scripted pushes before "timing takes practice" passes the goal
+	"relay_retry": 20.0,                            # s between a missed push and the next one
+	"push_shown": 22,                               # the scripted push's size (shown units)
+	"probe_shown": 8, "probe_delay": 5.0, "probe_gap": 18.0, "probe_tries": 4,   # the rival line that walks onto the Machinegoon
+	"mg_kill_shown": 1,                             # rival units the Machinegoon must kill to count
+	"assist_margin": 6.0,                           # shown units a topped-up send wins by
+	"slow": 0.25, "slow_lead": 2.0, "slow_max": 18.0,   # the relay moment's slow motion (x speed, s before the deck, real-s cap)
+	"line_speed": 0.7,                              # the scripted push walks slower: a generous window
+	"welcome": 6.0,                                 # s the opening line stays
+}
 # Prices by item kind ({} or a missing currency = not sold for it). Skills never for chips (no power for money).
 const PRICES := {
 	"skill": {"soft": 1250},
