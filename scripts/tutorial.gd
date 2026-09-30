@@ -1453,8 +1453,21 @@ func _moving_lines() -> Array:
 
 
 # ---------------------------------------------------------------- the hand providers (per goal)
+var _hand_cache := {}
+var _hand_cache_key := ""
+
+
 func _hand(g: Dictionary) -> Dictionary:
-	## {nodes, rects, gesture} for the goal's hint now.
+	## {nodes, rects, gesture} for the goal's hint now - worked out once per frame (target() and gesture() both ask), from
+	## the cached routes: no route search per frame.
+	var key := "%s|%.3f|%d|%d" % [str(g.get("id", "")), sim.time, ui_inspector, version]
+	if key != _hand_cache_key:
+		_hand_cache_key = key
+		_hand_cache = _hand_now(g)
+	return _hand_cache
+
+
+func _hand_now(g: Dictionary) -> Dictionary:
 	var retry := assist_retry()
 	if not retry.is_empty():                          # after a short send: the hand shows the retry, 100 % from there
 		return {"nodes": [int(retry[0]), int(retry[1])], "rects": [], "gesture": [["drag", int(retry[0]), int(retry[1])]]}
@@ -1532,7 +1545,7 @@ func _neutral_target() -> int:
 		var f := _best_sender(n["id"])
 		if f < 0:
 			continue
-		var key := float(sim.find_route(f, n["id"]).size()) * 1000.0 + float(n["units"])
+		var key := float(route(f, n["id"]).size()) * 1000.0 + float(n["units"])
 		if key < best_key:
 			best_key = key
 			best = n["id"]
@@ -1544,7 +1557,7 @@ func _best_sender(to: int) -> int:
 	var best := -1
 	var best_doomed := true
 	for id in _mine():
-		if id == to or sim.find_route(id, to).size() < 2:
+		if id == to or route(id, to).size() < 2:
 			continue
 		var doomed := _doomed(id)
 		if best < 0 or (best_doomed and not doomed) or (doomed == best_doomed and sim.nodes[id]["units"] > sim.nodes[best]["units"]):
@@ -1563,7 +1576,7 @@ func _reinforce_pair() -> Array:
 			from = id
 	var to := -1
 	for id in mine:
-		if id == from or sim.find_route(from, id).size() < 2:
+		if id == from or route(from, id).size() < 2:
 			continue
 		if to < 0 or float(sim.nodes[id]["units"]) < float(sim.nodes[to]["units"]):
 			to = id

@@ -1,5 +1,19 @@
 # Next session - start here
 
+## Tutorial rewrite (0.23.8, phase 1 built; phases 2 and 3 to do) - branch `tutorial-rewrite`
+Spec: `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-REWRITE-DESIGN.md`; words: `TUTORIAL-SCRIPT.md` (draft 4).
+- `scripts/goal_director.gd` = the standalone goal engine (goals with `check` / `stage` / `ready` / `assist` / `follow`, an event timeline). `scripts/tutorial.gd`
+  (`TutorialDirector`) = the tutorial layer: **a tutorial is a row of `TUTORIALS`** (map, staging, reveal stages, goals), its detectors are `_eval(op)`, its hand
+  providers `_hand_now()`, its lines `LINES` ("T<n>.…"). Tutorials 2..5 are listed with `ready: false` (the TRAINING page shows SOON) - phase 2 = relays (T-07), structures
+  (T-08), skills (T-10) as goal lists on the same engine (add the ops: retract / switch / remote catch per relay - the push machine `_tick_push` is per relay id today,
+  make it a list; laser / forge / monster hub built and used; surge / demolish / ultimate cast; `abilities: true` and a `loadout` show the dock); phase 3 = team play on T-12
+  (shared garrison, handover, EJECT; `halos` / `eject` reveal keys, a friendly AI ally seat - `begin()` builds one `ai` for seat B only today).
+- The quick start's numbers are `Rules.QUICK_START`; the reward per tutorial is `TutorialDirector.scrap_for(n)` (`Rules.PROGRESSION["tutorial_scrap"]` {n: amount} overrides
+  the flat `tutorial_lesson` 140 - Daniele's split is a data change). Progress keys: `completed_v2` / `skipped_v2` (string ids), `offered`, `relay_kill`.
+- Coach UI: the goal strip (`CoachOverlay.set_goals`, places itself), one outline per lit region (`spotlight(..., light_points)`), compact card on the relay prompt.
+  The tutorial reads the node inspector only through `main._inspector_target()` (🧩 UI's radial menu changes that one function).
+- Checks: `tests/test_tutorial.gd` (engine on T-02 / T-09, the real map T-11 and a scripted-player soak), `tests/tutorial_walk.tscn` (phone walk + one contact sheet).
+
 ## 0.22.1 "Alpha 22" (2026-09-29) - live at https://oozesyndicate.com
 Read first: the root `GAME-BIBLE.md` (updated for the 0.22.1 balance), `CHANGELOG.md` 0.22.1, `docs/TO-TEST.md`, then
 `Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/SESSIONS.md` and `05 Handoff/handoffs/Architect Session.md` (the coordinator's
