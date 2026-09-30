@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.12 "Alpha 23" - 2026-10-01 (the quick start's relay chapter)
+
+Daniele on 0.23.10: "the relay part still shows these ugly halo and fails if you move the bridge before they get on it which is honestly wrong as its fine anyway".
+- **No halo**: the coach rings only a tap target now - ONE small ring on the relay's rim button at the prompt (or on the node when you tap or drag onto it), none while
+  you wait or watch. The big outline round the relay, its decks and its button is gone; the Last Stand's explanation cards and the Machinegoon watch have no ring either.
+- **Firing early counts**: fire the relay while the rival push is still coming (before it is across) and the relay step completes once the deck has moved - "Early - but
+  their deck's gone before they got on it. That works too." A fire with the line on the deck is still the relay kill; the 3-miss fallback is only for a line that crosses
+  with no fire at all. The old push line walks on harmlessly.
+- A step's "done" line now shows before a GOT IT card (the relay's line was hidden by the Last Stand's first card).
+
 ## 0.23.10 "Alpha 23" - 2026-09-30 (the guided quick start)
 
 Daniele, on 0.23.8: "ok the idea is good but you cannot have new players just randomly do things without any guidance, i d still have the scripted
