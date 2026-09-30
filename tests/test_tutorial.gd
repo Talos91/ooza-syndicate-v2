@@ -52,6 +52,7 @@ func _init() -> void:
 	test_free_play()
 	test_relay()
 	test_relay_miss()
+	test_relay_early()
 	test_follow()
 	test_last_stand()
 	test_last_stand_seeds()
@@ -549,11 +550,18 @@ func test_relay() -> void:
 	sim.send(n["M"], R, 1.0)
 	run_until(d, sim, func(): return d.current_id() == "relay", 40.0)
 	check(d.current_id() == "relay" and sim.nodes[R]["owner"] == "A", "RELAY: the relay is yours -> the push step")
-	var st := {"fired": false, "slow_early": false, "fling": 0, "prompt_hand": false}
+	var st := {"fired": false, "slow_early": false, "fling": 0, "prompt_hand": false, "halo_ok": true}
 	var t := 0.0
 	while d.state == "running" and not d.goals.goal_done("relay") and t < 150.0:
 		d.step(DT)
 		var hid := d.catch_line()
+		var tg := d.target()
+		if not (tg["nodes"] as Array).is_empty():
+			st["halo_ok"] = false
+		if d.catch_prompt() and not st["fired"] and (tg["buttons"] != [R] or float(tg["ring_m"]) > Rules.RELAY_PAD_R * 2.0):
+			st["halo_ok"] = false
+		if not d.catch_prompt() and not (tg["buttons"] as Array).is_empty():
+			st["halo_ok"] = false
 		if hid >= 0 and d.time_scale <= float(Rules.QUICK_START["slow"]) + 0.001 and deck_metres(sim, hid, R) <= 0.0:
 			st["slow_early"] = true
 		if d.catch_prompt() and not st["fired"]:
@@ -567,6 +575,7 @@ func test_relay() -> void:
 		sim.fx_events.clear()
 		t += DT
 	check(st["slow_early"], "RELAY: 0.25x before the rival line is on the relay deck")
+	check(st["halo_ok"], "RELAY: no halo - no ring while waiting, one small ring on the rim button at the prompt")
 	check(st["fired"] and st["prompt_hand"], "RELAY: at the prompt the hand double-taps the relay, undimmed, the card compact")
 	check(st["fling"] >= int(Rules.QUICK_START["relay_min_drop"]) and d.goals.goal_done("relay"), "RELAY: the fire flings the line (%d units, %.0f s)" % [st["fling"], t])
 	check(d.current_id() == "ls_intro" and d._relay_kill_units >= int(Rules.QUICK_START["relay_min_drop"]), "RELAY: the kill is counted -> chapter 4")
@@ -586,6 +595,38 @@ func test_relay_miss() -> void:
 	check(seen.size() == int(Rules.QUICK_START["relay_tries"]), "RELAY negative: %d pushes went unanswered (%d)" % [int(Rules.QUICK_START["relay_tries"]), seen.size()])
 	check(d.goals.goal_done("relay") and d._relay_kill_units == 0 and sim.nodes[d.names["R"]]["owner"] == "A",
 			"RELAY negative: then 'timing takes practice' passes it, no kill counted, the relay held (%.0f s)" % t)
+
+
+func test_relay_early() -> void:
+	## Daniele (0.23.10): firing before their line is on the deck "is fine anyway" - the deck is gone, the step completes
+	## (no miss, no retry, no kill counted), and the push line never breaks what comes next.
+	var r := make()
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var R: int = d.names["R"]
+	_stage_relay(d, sim)
+	own(sim, [R])
+	run_until(d, sim, func(): return d.catch_line() >= 0, 60.0)
+	check(d.catch_line() >= 0 and not d.catch_prompt(), "RELAY early: the push has just left, it is not on the deck yet (no prompt)")
+	var hid := d.catch_line()
+	check(sim.fire_relay(R), "RELAY early: the relay fires early")
+	var t := run_until(d, sim, func(): return d.goals.goal_done("relay"), 10.0)
+	check(d.goals.goal_done("relay") and t <= Rules.RELAY_WARNING + 1.0 and int(d._push["tries"]) == 0 and d._relay_drops < int(Rules.QUICK_START["relay_min_drop"]),
+			"RELAY early: the step completes once the deck has moved (%.1f s) - not a miss, no retry, no kill" % t)
+	check(d.card()["text"] == TutorialDirector.line("T1.relay_early") and d.current_id() == "ls_intro", "RELAY early: Dr. Vesk's early line, then the Last Stand")
+	run_for(d, sim, 30.0)
+	check(d.state == "running" and d.current_id() == "ls_intro", "RELAY early: the old push line breaks nothing after (30 s)")
+	# a fire with the line on the deck is still the relay kill
+	var r2 := make()
+	var d2: TutorialDirector = r2[0]
+	var s2: Sim = r2[1]
+	_stage_relay(d2, s2)
+	own(s2, [R])
+	run_until(d2, s2, func(): return d2.catch_prompt(), 60.0)
+	s2.fire_relay(R)
+	run_until(d2, s2, func(): return d2.goals.goal_done("relay"), 10.0)
+	check(d2.goals.goal_done("relay") and d2._relay_kill_units >= int(Rules.QUICK_START["relay_min_drop"]) and d2.card()["text"] != TutorialDirector.line("T1.relay_early"),
+			"RELAY: a fire at the prompt is still the relay kill (%d units)" % d2._relay_kill_units)
 
 
 func test_follow() -> void:
@@ -651,11 +692,11 @@ func test_last_stand() -> void:
 			"LAST STAND: nothing falls while the explanation is read (25 s)")
 	d.press_button()
 	tick(d, sim)
-	check(d.current_id() == "ls_marks" and (d.target()["nodes"] as Array).size() > 0 and (d.target()["nodes"] as Array).all(func(id): return sim.is_warned(id)),
-			"LAST STAND: GOT IT -> the danger marks card lights the warned nodes")
+	check(d.current_id() == "ls_marks" and (d.target()["nodes"] as Array).is_empty() and d.target()["open"] and not sim.last_stand_warn.is_empty(),
+			"LAST STAND: GOT IT -> the danger marks card (undimmed, no halo - the marks themselves show it)")
 	d.press_button()
 	tick(d, sim)
-	check(d.current_id() == "ls_rings" and (d.target()["nodes"] as Array).all(func(id): return sim.last_stand_keep.has(id)), "LAST STAND: -> the rings card lights the centre ring")
+	check(d.current_id() == "ls_rings" and (d.target()["nodes"] as Array).is_empty() and d.target()["open"], "LAST STAND: -> the rings card, undimmed, no ring")
 	check(sim.nodes.any(func(x): return x["owner"] == "B" and sim.last_stand_keep.has(x["id"])), "LAST STAND: the rival keeps a centre node, so the match goes on after")
 	for x in sim.nodes:
 		if x["owner"] == "B":
@@ -667,6 +708,7 @@ func test_last_stand() -> void:
 	var g := d.gesture()
 	check(d.current_id() == "ls_move" and g.size() > 0 and g[0][0] == "drag" and sim.last_stand_waves[0].has(int(g[0][1])) and sim.last_stand_keep.has(int(g[0][2])),
 			"LAST STAND: the move card - the hand drags off a falling node onto the centre ring, from the start")
+	check(d.target()["nodes"] == [int(g[0][1])] and d.target()["open"], "LAST STAND: one small ring, where the drag starts")
 	var mv := d._evac_move()
 	sim.send(int(mv[0]), int(mv[1]), 1.0)
 	run_until(d, sim, func(): return d.current_id() != "ls_move", 5.0)

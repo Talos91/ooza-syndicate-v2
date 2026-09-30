@@ -2449,11 +2449,11 @@ func _coach_sync() -> void:
 			coach.hide_card()
 		coach.set_goals(director.chips() if director.state == "running" else [])
 	var tg := director.target()
-	var ring := []                                    # the step's real targets: one ring per lit region
+	var ring := []                                    # the tap targets: ONE small ring each (a node's rim, a relay's button)
 	for id in tg["nodes"]:
 		ring.append(cam.unproject_position(sim.nodes[id]["pos"]))
-		if _tap_point(id) != sim.nodes[id]["pos"]:     # RELAY V2: the relay's button is lit with its node
-			ring.append(cam.unproject_position(_tap_point(id)))
+	for id in tg.get("buttons", []):                  # RELAY V2: the rim button the hand taps - never a halo round node + button
+		ring.append(cam.unproject_position(_tap_point(int(id))))
 	var light := []                                   # lines, decks: only cut the dim (0.22.1: never fogged), no ring
 	if not tg.get("open", false):
 		for q in director.follow_points(tg):
@@ -2463,11 +2463,13 @@ func _coach_sync() -> void:
 		var r := _tutorial_rect(str(key))
 		if r.size != Vector2.ZERO:
 			rects.append(r.grow(4.0))
-	var radius: float = 30.0
+	var radius: float = 30.0                          # the light cut-out round follow points (lines, decks)
+	var ring_r: float = 26.0                          # the ring round a tap target
 	if not sim.nodes.is_empty():
 		var c0: Vector3 = sim.nodes[0]["pos"]
-		radius = cam.unproject_position(c0).distance_to(cam.unproject_position(c0 + cam.global_transform.basis.x * Rules.R)) * 1.35 \
-				* float(tg.get("radius", 1.0))
+		var px_m := cam.unproject_position(c0).distance_to(cam.unproject_position(c0 + cam.global_transform.basis.x))
+		radius = px_m * Rules.R * 1.35 * float(tg.get("radius", 1.0))
+		ring_r = px_m * float(tg.get("ring_m", Rules.R * 1.1))
 	if director.state == "complete":
 		ring = []
 		light = []
@@ -2486,6 +2488,10 @@ func _coach_sync() -> void:
 		var ir := _inspector_target()
 		if ir.size != Vector2.ZERO:
 			busy.append(ir.grow(4.0))
+	if tg.get("open", false) and not (tg["lines"] as Array).is_empty():   # a watch moment: the card keeps off the line you watch
+		for q in director.follow_points(tg):
+			platforms.append(cam.unproject_position(q))
+			platforms.append(cam.unproject_position(q))   # (counted twice: a line matters more than a platform)
 	coach.set_obstacles(platforms)
 	coach.set_strip_avoid(busy)
 	var avoid := []                                   # the banner and the toasts never sit under the card
@@ -2493,7 +2499,7 @@ func _coach_sync() -> void:
 		avoid.append(hud.banner.get_global_rect())
 	avoid.append_array(hud.callouts.rects())          # HUD pass: the placed messages
 	coach.set_avoid(avoid)
-	coach.spotlight(ring, radius, rects, not tg.get("open", false), light)   # a watch moment: no dim, one subtle ring
+	coach.spotlight(ring, ring_r, rects, not tg.get("open", false), light, radius)   # a watch moment: no dim, one subtle ring
 	_tutorial_gesture()
 	coach.set_finger_down(not touches.is_empty() or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
 	var pause_r := hud.pause_button.get_global_rect()

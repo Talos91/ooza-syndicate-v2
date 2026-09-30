@@ -16,6 +16,7 @@ var out_dir := ""
 var m: Node
 var d: TutorialDirector
 var shots: Array = []                # [label, path]
+var early := false                   # early=1: fire the relay as soon as the push leaves (Daniele: "it's fine anyway")
 
 
 func _ready() -> void:
@@ -46,6 +47,7 @@ func _secs(s: float) -> void:
 func _run() -> void:
 	var args := _args()
 	out_dir = str(args.get("out", "user://tutorial_walk"))
+	early = str(args.get("early", "0")) == "1"
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	TutorialDirector.path = PROGRESS
 	Progression.path = "user://coach_preview_progression.cfg"   # TUTORIAL + PROGRESSION: never the real wallet
@@ -218,6 +220,16 @@ func _quick() -> void:
 	Engine.time_scale = FAST
 	var t := 0.0
 	while d.state == "running" and d.current_id() == "relay" and t < 150.0:
+		if early and d.catch_line() >= 0 and not st.get("early", false):
+			st["early"] = true
+			await _shot("3-relay-push-leaves")
+			m.node_action("switch", _id("R"))                       # before the line is on the deck
+			Engine.time_scale = 1.0
+			await _until(func(): return d.current_id() != "relay", 6.0)
+			Engine.time_scale = 1.0
+			await _secs(0.3)
+			await _shot("3-relay-early-done")
+			break
 		if d.catch_line() >= 0 and d.time_scale < 1.0 and not d.catch_prompt() and not st["slow"]:
 			st["slow"] = true
 			await _shot("3-relay-slow-motion")
