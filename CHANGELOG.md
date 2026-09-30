@@ -1,5 +1,9 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.9 "Alpha 23" - 2026-09-30 (staging: the new node inspector)
+
+- **Node inspector redone** (🧩 UI; Daniele: "the radial menu is messy", then his reference: a pie of wedges round a centre X, "only on the right side, in our style, hexagonal"): a half-hexagon pie on the node's right, one slice per action (glyph, name, price; SWITCH in relay amber with its ready ring), a hex X hub on the node closes it. It turns up to 90° to stay in the play area and mirrors left only when no turn fits; the info card goes where it covers the pie least; it follows the zoom and closes once its node is zoomed off screen. (A first "fan of cards" version was staged and rejected.)
+
 ## 0.23.8 "Alpha 23" - 2026-09-30 (the tutorial rewrite, phase 1: the quick start)
 
 Daniele, on the old tutorial: "saw my friend playing and is waay too long and way too messy, i think we should rewrite it all and its logic."
