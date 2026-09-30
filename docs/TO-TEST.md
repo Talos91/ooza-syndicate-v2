@@ -1,9 +1,21 @@
-# To test - ALPHA 23.3 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.8 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.8 (the tutorial rewrite, phase 1 - phone check on staging)
+- [ ] **First launch** (clear the site data, or a fresh browser): the game opens straight into the QUICK START on T-11 with SKIP TUTORIAL on the card. Play it end to end
+  (about 4-5 minutes): UPGRADE, TAKE, REINFORCE, MACHINEGOON, RELAY, LAST STAND, in any order. Does the goal strip stay out of your way (no badge or node under it)?
+- [ ] **Hints**: one line on Dr. Vesk's card; the hand and the ring appear only if you stop for ~8 s. Are the circles clean (ONE outline round a lit shape, not a heap of rings)?
+- [ ] **A short send** (send a few units at a grey node): the line "Not enough units - send again" and the hand at the retry, never a TRY AGAIN.
+- [ ] **The Machinegoon**: build one on the grey node in the middle of your side; a small rival line walks at it and it shoots; the goal ticks.
+- [ ] **The relay moment**: take the relay in the middle; a rival line walks onto its deck, the game slows down, "Double-tap the relay now" - is the line easy to watch (nothing dimmed, card out of the way)? Miss it once on purpose: another line comes.
+- [ ] **The Last Stand**: the clock jumps to 4:00, danger marks appear, the first ring waits ~12 s before it falls; move your units to the centre; the ring falls and you are still there -> LESSON COMPLETE. CONTINUE PLAYING plays the match on to its end.
+- [ ] **Skipping**: SKIP GOAL on a goal, or SKIP TUTORIAL: the TRAINING page then says "SKIPPED - replay to complete" and no SCRAP is paid.
+- [ ] **TRAINING page** (PLAY > TRAINING): five rows, only QUICK START opens, the other four say SOON; the main page button reads TRAINING n / 5. Taps land (>= 44 pt).
+- [ ] Anything that feels too long, or a moment where you did not know what to do.
 
 ## 0.23.3
 - [ ] **SOUND TEST**: SETTINGS > DISPLAY > AUDIO > TEST, then screenshot the AUDIO lines - especially the new "EFFECT 1" line.

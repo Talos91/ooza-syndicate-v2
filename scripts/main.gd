@@ -285,7 +285,7 @@ func _ready() -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_size(window_size)
 	# CAMPAIGN: a mission relaunched (RETRY / NEXT MISSION) or --mission=<key> goes straight in - checked before
-	# the tutorial's first launch, so a fresh profile never lands in the L0 tour instead
+	# the tutorial's first launch, so a fresh profile never lands in the quick start instead
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--mission=") and not mission_arg_used:
 			mission_key = arg.substr(10)
@@ -2438,7 +2438,7 @@ func _coach_sync() -> void:
 		_coach_version = director.version
 		var c := director.card()
 		if c["visible"]:
-			coach.show_step(c["header"], c["text"], int(c["dots"]), int(c["dot"]), str(c["button"]))
+			coach.show_step(c["header"], c["text"], int(c["dots"]), int(c["dot"]), str(c["button"]), bool(c.get("compact", false)))
 		else:
 			coach.hide_card()
 		coach.set_goals(director.chips() if director.state == "running" else [])
@@ -2476,6 +2476,10 @@ func _coach_sync() -> void:
 			var br := hud.badge_rect(n["id"])
 			if br.size != Vector2.ZERO:
 				busy.append(br.grow(3.0))
+	if hud.inspector_id >= 0:                         # the open inspector's ring, info panel and buttons
+		var ir := _inspector_target()
+		if ir.size != Vector2.ZERO:
+			busy.append(ir.grow(4.0))
 	coach.set_obstacles(platforms)
 	coach.set_strip_avoid(busy)
 	var avoid := []                                   # the banner and the toasts never sit under the card
@@ -2514,14 +2518,21 @@ func _tutorial_rect(key: String) -> Rect2:
 				return hud.dock_slot_rect(int(parts[1]))
 			return hud.dock.get_global_rect() if hud.dock.visible else Rect2()
 		"inspector":
-			return hud.inspector_rect()
+			return _inspector_target()
 		"handler":
 			return coach.handler_rect() if coach else Rect2()
 		"send":
 			return hud.send_button_rect(float(parts[1]))
 		"action":
-			return hud.action_rect(parts[1])
+			return _inspector_target(parts[1])
 	return Rect2()
+
+
+func _inspector_target(action := "") -> Rect2:
+	## THE one place the tutorial reads the node inspector's screen geometry: an action's button ("MACHINEGOON", "UPGRADE" ...),
+	## or with no name the whole open inspector. Nothing else in the tutorial code knows where the inspector puts things,
+	## so a new inspector layout (🧩 UI's radial menu) is a change to this function alone.
+	return hud.action_rect(action) if action != "" else hud.inspector_rect()
 
 
 func _tap_point(id: int) -> Vector3:

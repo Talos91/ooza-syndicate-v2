@@ -1,10 +1,11 @@
 extends Node
-## Tutorial review walk (0.19.3, Daniele: "tutorial feels veeeeery unpolished and messy"): plays every lesson
-## through the real game (main.tscn, orders through main.node_action and the coach's own buttons, as a player's
-## input would) and shoots EVERY step once its line has typed in, plus the relay prompts and each completion
-## screen, then lays one contact sheet per lesson. For looking at, not a test suite. Run WINDOWED:
+## Quick-start review walk (TUTORIAL-REWRITE-DESIGN.md): plays the QUICK START through the real game (main.tscn, orders
+## through main.node_action and the coach's own buttons, as a player's input would) on T-11 and shoots each state - the
+## opening, the idle hint (hand + spotlight), a goal ticking, a short-send assist, the Machinegoon watch, the relay moment
+## (slow motion, the prompt, the drop), the Last Stand (announcement, evacuation hand, the ring falling), LESSON COMPLETE and
+## CONTINUE PLAYING - then lays ONE contact sheet. For looking at, not a test suite. Run WINDOWED (phone size):
 ##
-##   Godot --path <wt> --resolution 1266x585 res://tests/tutorial_walk.tscn -- --mobile out=<dir> [lessons=0,4]
+##   Godot --path <wt> --resolution 1266x585 res://tests/tutorial_walk.tscn -- --mobile --no-notice out=<dir>
 ##
 ## Waits run the game 3x faster (Engine.time_scale); every shot is taken at 1x. Progress goes to a scratch file
 ## (user://tutorial_walk.cfg), never the real one.
@@ -14,7 +15,7 @@ const FAST := 3.0
 var out_dir := ""
 var m: Node
 var d: TutorialDirector
-var shots: Array = []                # this lesson's [label, path]
+var shots: Array = []                # [label, path]
 
 
 func _ready() -> void:
@@ -49,24 +50,21 @@ func _run() -> void:
 	TutorialDirector.path = PROGRESS
 	Progression.path = "user://coach_preview_progression.cfg"   # TUTORIAL + PROGRESSION: never the real wallet
 	TutorialDirector.completed_ids = []
+	TutorialDirector.skipped_ids = []
 	TutorialDirector.offered = true
 	TutorialDirector._loaded = true
-	var only := []
-	for v in str(args.get("lessons", "0,1,2,3,4,5,6,7,8,9")).split(","):
-		only.append(int(v))
-	for id in only:
-		shots = []
-		await _lesson(id)
-		await _sheet(id)
+	await _start()
+	await _quick()
+	await _sheet()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(PROGRESS))
 	Engine.time_scale = 1.0
 	print("WALK done ", out_dir)
 	get_tree().quit()
 
 
-func _start(id: int) -> void:
+func _start() -> void:
 	var ms: GDScript = load("res://scripts/main.gd")
-	ms.relaunch = {"tutorial": id, "faction": "null", "colour": "A"}
+	ms.relaunch = {"tutorial": 1, "faction": "null", "colour": "A"}
 	m = (load("res://main.tscn") as PackedScene).instantiate()
 	get_tree().root.add_child(m)
 	await _frames(20)
@@ -75,6 +73,7 @@ func _start(id: int) -> void:
 
 func _shot(label: String) -> void:
 	## At 1x, once the card's line has typed in.
+	var was := Engine.time_scale
 	Engine.time_scale = 1.0
 	var t := 0.0
 	while m.coach and m.coach._typing and t < 4.0:
@@ -82,32 +81,24 @@ func _shot(label: String) -> void:
 		t += get_process_delta_time()
 	await _frames(8)
 	await RenderingServer.frame_post_draw
-	var path := "%s/L%d-%02d-%s.png" % [out_dir, d.lesson_id, shots.size(), label]
+	var path := "%s/Q-%02d-%s.png" % [out_dir, shots.size(), label]
 	get_viewport().get_texture().get_image().save_png(path)
 	shots.append([label, path])
-	print("shot ", path)
+	print("shot ", path, "  [", d.current_id(), " | ", d.card()["text"], "]")
+	Engine.time_scale = was
 
 
-func _got_it() -> void:
-	m._on_coach_button("got_it")
-
-
-func _step_key() -> String:
-	return str(d.L["steps"][d.step_i]["key"]) if d.state != "complete" else ""
-
-
-func _play(act: Callable, limit := 90.0) -> void:
-	## Run the current step (act.call(t) every frame, at FAST) until the next step starts or the lesson ends.
-	var k := d.step_i
+func _until(cond: Callable, limit: float, act := Callable()) -> bool:
+	## Run the game (FAST) until cond, acting every frame; false on the limit.
 	var t := 0.0
 	Engine.time_scale = FAST
-	while d.step_i == k and d.state in ["running", "interlude", "failed"] and t < limit:
-		if d.state == "failed":
-			break
-		act.call(t)
+	while t < limit and d.state == "running" and not cond.call():
+		if act.is_valid():
+			act.call(t)
 		await get_tree().process_frame
 		t += get_process_delta_time()
 	Engine.time_scale = 1.0
+	return cond.call()
 
 
 func _id(nm: String) -> int:
@@ -119,220 +110,114 @@ func _send(a: String, b: String, f: float) -> void:
 	m.node_action("send", _id(a), {"to": _id(b), "fraction": f})
 
 
-func _deck_m(hid: int, relay: int) -> float:
-	var h: Dictionary = m.sim._horde(hid)
-	if h.is_empty():
-		return 0.0
-	var head: float = h["s"]
-	var tail: float = head - Sim.chain_length(h)
-	var out := 0.0
-	for sp in h["spans"]:
-		if sp["edge"] in m.sim.controlled_edges(relay) and m.sim.is_edge_open(sp["edge"]):
-			out += maxf(0.0, minf(head, sp["s1"]) - maxf(tail, sp["s0"]))
-	return out
+func _units(nm: String, shown: float) -> void:
+	m.sim.nodes[_id(nm)]["units"] = shown * Rules.SCALE
 
 
-# ------------------------------------------------------------------ per lesson
-func _lesson(id: int) -> void:
-	await _start(id)
-	var once := {}
-	var fired := {}
-	while d.state != "complete" and d.state != "failed":
-		var key := _step_key()
-		await _shot(key)
-		if id == 0 and key == "go":                     # (the tour's last NEXT reloads the scene into L1)
-			break
-		var sim: Sim = m.sim
-		match "L%d.%s" % [id, key]:
-			"L1.drag":
-				await _play(func(t): if not once.has(key): once[key] = true; _send("H", "N1", m.fraction))
-			"L1.percent":
-				await _play(func(t): m.fraction = 0.25)
-			"L1.send25":                                     # a deliberately short send first: the assist
-				m.sim.nodes[_id("H")]["units"] = 20.0 * Rules.SCALE
-				_send("H", "N2", 0.1)
-				Engine.time_scale = FAST
-				var ta := 0.0
-				while d.assist_retry().is_empty() and ta < 20.0:
-					await get_tree().process_frame
-					ta += get_process_delta_time()
-				await _shot("short-assist")
-				var rt := d.assist_retry()
-				await _play(func(t): if not once.has(key) and not rt.is_empty(): once[key] = true; m.node_action("send", int(rt[0]), {"to": int(rt[1]), "fraction": 1.0}))
-			"L1.reinforce":
-				await _play(func(t): if not once.has(key): once[key] = true; _send("N1", "H", 0.5))
-			"L2.inspect":
-				await _play(func(t): if m.hud.inspector_id != _id("H"): m.hud.inspect(_id("H"), m.cam))
-			"L2.upgrade":
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("upgrade", _id("H")))
-			"L2.t3":
-				await _play(func(t): if sim.can_upgrade(_id("H"), "A") == "": m.node_action("upgrade", _id("H")))
-			"L2.machinegoon":
-				m.hud.inspect(_id("N1"), m.cam)
-				await _shot("machinegoon-inspector")
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("build", _id("N1"), {"kind": "machinegoon"}))
-			"L2.mg_upgrade":
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("upgrade", _id("N1")))
-			"L3.neutral":
-				await _play(func(t): if not once.has(key): once[key] = true; _send("H", "N2", 0.75))
-			"L3.defend":
-				await _secs(1.0)
-				await _shot("defend-incoming")
-				await _play(func(t): if not once.has(key): once[key] = true; _send("H", "N1", 1.0))
-			"L3.attack":
-				await _play(func(t):
-					var mine: float = sim.nodes[_id("N1")]["units"] + sim.nodes[_id("H")]["units"]
-					if not sim.hordes.any(func(h): return h["owner"] == "A") and mine > sim.nodes[_id("B1")]["units"] + 60.0:
-						_send("N1", "B1", 1.0)
-						_send("H", "B1", 1.0))
-			"L4.inspect":
-				await _play(func(t): if m.hud.inspector_id != _id("R"): m.hud.inspect(_id("R"), m.cam))
-			"L4.fire":
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("switch", _id("R")))
-			"L4.prompt", "L5.retract", "L5.switch", "L5.remote":
-				var relay := _id({"prompt": "R", "retract": "RT", "switch": "SW", "remote": "RC"}[key])
-				var st := {"shot": false}
-				var k := d.step_i
-				Engine.time_scale = FAST
-				var t := 0.0
-				while d.step_i == k and d.state == "running" and t < 120.0:
-					var hid := d.catch_line()
-					if hid >= 0 and d.catch_prompt() and not st["shot"]:
-						st["shot"] = true
-						await _shot(key + "-prompt")
-						Engine.time_scale = FAST
-					if hid >= 0 and not st.get("slow_shot", false) and d.time_scale < 1.0 and not d.catch_prompt():
-						st["slow_shot"] = true
-						await _shot(key + "-slow")
-						Engine.time_scale = FAST
-					if hid >= 0 and d.catch_prompt() and st["shot"] and not fired.has(hid):   # fire when the hand says
-						fired[hid] = true
-						m.node_action("switch", relay)
-					await get_tree().process_frame
-					t += get_process_delta_time()
-				Engine.time_scale = 1.0
-			"L6.inspect":
-				await _play(func(t): if m.hud.inspector_id != _id("R1"): m.hud.inspect(_id("R1"), m.cam))
-			"L6.laser":
-				if m.hud.inspector_id != _id("R1"):
-					m.hud.inspect(_id("R1"), m.cam)
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("build", _id("R1"), {"kind": "laser"}))
-			"L6.forge":
-				m.hud.inspect(_id("R2"), m.cam)
-				await _shot("forge-inspector")
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("build", _id("R2"), {"kind": "forge"}))
-			"L6.hub":
-				m.hud.inspect(_id("R3"), m.cam)
-				await _shot("hub-inspector")
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("build", _id("R3"), {"kind": "monster_hub"}))
-			"L6.send":                                       # 0.19.2: tap the monster over the hub, then the end node
-				await _secs(0.5)
-				if m.hud.monster_icon.visible:
-					m.hud.monster_icon.pressed.emit()
-				await _secs(0.4)
-				await _shot("monster-armed")
-				await _play(func(t): if not once.has(key): once[key] = true; m.node_action("launch_monster", _id("R3"), {"to": _id("M1")}); m.monster_from = -1)
-			"L6.take":
-				await _secs(2.0)
-				await _shot("monster-walking")
-				await _play(func(t): pass)
-			"L7.evacuate":
-				await _play(func(t):
-					if not once.has(key):
-						once[key] = true
-						_send("H", "I1", 1.0)
-						_send("A1", "I2", 1.0)
-						_send("A2", "I2", 1.0)
-					if sim.last_stand_active and not once.has("ls"):
-						once["ls"] = true
-						for nm in ["H", "A1", "A2"]:
-							if sim.nodes[_id(nm)]["owner"] == "A":
-								_send(nm, "I1", 1.0)
-					if sim.last_stand_active and not once.has("ls_shot") and not sim.last_stand_warn.is_empty():
-						once["ls_shot"] = true)
-			"L7.vls":
-				await _secs(1.0)
-				await _shot("vls-running")
-				_got_it()
-				await _frames(4)
-			"L7.hold":
-				await _play(func(t):                      # the player follows the hand: off the warned node
-					var mv := d._vls_move()
-					if not mv.is_empty() and not sim.hordes.any(func(h): return h["owner"] == "A" and int(h["route"][0]) == int(mv[0])):
-						m.node_action("send", int(mv[0]), {"to": int(mv[1]), "fraction": 1.0}))
-			"L8.surge":
-				await _secs(1.0)
-				m.hud.dock.press_slot(0)
-				await _shot("surge-armed")
-				await _play(func(t):
-					for h in sim.hordes:
-						if h["owner"] == "A" and sim.cast_check("A", "active", h["id"]) == "":
-							m.node_action("cast", 0, {"target": h["id"]})
-							break)
-			"L8.demolish":
-				await _play(func(t):
-					for h in sim.hordes:
-						if h["owner"] != "B":
-							continue
-						for sp in h["spans"]:
-							if h["s"] >= sp["s0"] + 2.0 and h["s"] <= sp["s1"] and sim.cast_check("A", "map", sp["edge"]) == "":
-								m.node_action("cast", 1, {"target": sp["edge"]})
-								return)
-			"L8.ultimate":
-				await _play(func(t):
-					var ts := sim.targets_for("A", "ultimate")
-					if not ts.is_empty():
-						m.node_action("cast", 2, {"target": ts[0]}))
-			"L9.start":
-				_got_it()
-				await _secs(0.5)
-				await _shot("match-running")
-				_stage_l9()
-				var st9 := {"shot": false, "fired": false}
-				var t := 0.0
-				Engine.time_scale = FAST
-				while d.state != "complete" and t < 150.0:
-					var hid := d.catch_line()
-					if d.catch_prompt() and not st9["shot"]:
-						st9["shot"] = true
-						await _shot("push-prompt")
-						Engine.time_scale = FAST
-					if d.catch_prompt() and hid >= 0 and not st9["fired"]:
-						st9["fired"] = true
-						m.node_action("switch", _id("R"))
-					await get_tree().process_frame
-					t += get_process_delta_time()
-				Engine.time_scale = 1.0
-			_:
-				if d.L["steps"][d.step_i].get("read_only", false):
-					await _secs(0.4)
-					_got_it()
-					await _frames(4)
-				else:
-					await _play(func(t): pass)
-		await _frames(2)
-	await _secs(0.6)
-	if id != 0:
-		await _shot("complete" if d.state == "complete" else "FAILED")
+# ------------------------------------------------------------------ the quick start
+func _quick() -> void:
+	var sim: Sim = m.sim
+	await _secs(1.2)
+	await _shot("opening")                                          # the welcome line, the strip, no hand yet
+	await _until(func(): return sim.time > 7.0, 20.0)
+	await _shot("hint-upgrade")                                     # the current hint, nothing pointed yet (the player is "active")
+	await _until(func(): return sim.time - d._last_order_t >= 8.5, 30.0)
+	await _shot("idle-hand-upgrade")                                # 8 s idle: the hand double-taps the home, one ring
+	m.node_action("upgrade", _id("H"))
+	await _until(func(): return d.goals.goal_done("upgrade"), 30.0)
+	await _shot("goal-upgrade")                                     # a goal ticked: Dr. Vesk's one line, the chip ticked
+	# TAKE, with a deliberately short send first (the assist)
+	_units("H", 30.0)
+	_send("H", "N2", 0.1)
+	await _until(func(): return not d.assist_retry().is_empty(), 25.0)
+	await _shot("short-send-assist")
+	var rt := d.assist_retry()
+	if not rt.is_empty():
+		m.node_action("send", int(rt[0]), {"to": int(rt[1]), "fraction": 1.0})
+	await _until(func(): return d.goals.goal_done("take"), 60.0)
+	await _shot("goal-take")
+	# REINFORCE
+	await _until(func(): return sim.time - d._last_order_t >= 8.5, 30.0)
+	await _shot("idle-hand-reinforce")                              # a drag between two of your nodes
+	_send("N2", "H", 1.0)
+	await _until(func(): return d.goals.goal_done("reinforce"), 60.0)
+	await _shot("goal-reinforce")
+	# MACHINEGOON: take M, build, watch the probe
+	_units("H", 60.0)
+	_send("H", "M", 1.0)
+	await _until(func(): return sim.nodes[_id("M")]["owner"] == "A", 60.0)
+	_units("M", 30.0)
+	m.hud.inspect(_id("M"), m.cam)
+	await _secs(0.5)
+	await _shot("machinegoon-inspector")
+	m.node_action("build", _id("M"), {"kind": "machinegoon"})
+	m.hud.close_inspector()
+	await _until(func(): return int(d._mg_probe["line"]) >= 0, 60.0)
+	await _secs(1.5)
+	await _shot("machinegoon-probe")                                # the watch moment: undimmed, one subtle ring
+	await _until(func(): return d.goals.goal_done("machinegoon"), 60.0)
+	await _shot("goal-machinegoon")
+	# RELAY: take it (stage B), wait for the push
+	await _until(func(): return d.stage >= 1, 70.0)
+	await _secs(0.5)
+	await _shot("stage-b-relay")                                    # the relay parts appear
+	_units("M", 60.0)
+	_send("M", "R", 1.0)
+	await _until(func(): return sim.nodes[_id("R")]["owner"] == "A", 60.0)
+	var st := {"slow": false, "prompt": false, "fired": false}
+	Engine.time_scale = FAST
+	var t := 0.0
+	while d.state == "running" and not d.goals.goal_done("relay") and t < 150.0:
+		if d.catch_line() >= 0 and d.time_scale < 1.0 and not d.catch_prompt() and not st["slow"]:
+			st["slow"] = true
+			await _shot("relay-slow-motion")
+			Engine.time_scale = FAST
+		if d.catch_prompt() and not st["prompt"]:
+			st["prompt"] = true
+			await _shot("relay-prompt")                             # the line is on the deck: hand on the relay, no dim
+			Engine.time_scale = 1.0
+			await _secs(0.4)
+			await _shot("relay-prompt-2")
+			m.node_action("switch", _id("R"))
+			st["fired"] = true
+			Engine.time_scale = 0.5
+			await _secs(1.4)
+			await _shot("relay-drop")
+			Engine.time_scale = FAST
+		await get_tree().process_frame
+		t += get_process_delta_time()
+	Engine.time_scale = 1.0
+	await _shot("goal-relay")
+	# LAST STAND
+	await _until(func(): return d._ls_started, 90.0)
+	await _secs(1.0)
+	await _shot("last-stand-announced")
+	await _until(func(): return sim.time - d._last_order_t >= 8.5, 30.0)
+	await _shot("last-stand-hand")                                  # the hand drags off the falling ring
+	var mv := d._evac_move()
+	for id in d._mine():
+		if d._doomed(id) and float(sim.nodes[id]["units"]) >= Rules.SCALE and not mv.is_empty():
+			m.node_action("send", id, {"to": int(mv[1]), "fraction": 1.0})
+	await _until(func(): return not sim.last_stand_warn.is_empty() and sim.last_stand_warn_t < 6.0, 40.0)
+	await _shot("last-stand-warning")
+	await _until(func(): return d.state != "running", 90.0, func(_t):
+		for id in d._mine():
+			if d._doomed(id) and float(sim.nodes[id]["units"]) >= Rules.SCALE and sim.nodes[id]["streaming"].is_empty():
+				var mv2 := d._evac_move()
+				if not mv2.is_empty() and int(mv2[0]) == id:
+					m.node_action("send", id, {"to": int(mv2[1]), "fraction": 1.0}))
+	await _secs(0.8)
+	await _shot("complete" if d.state == "complete" else "NOT-COMPLETE-" + d.state)
+	if d.state == "complete":
+		m._on_coach_button("primary")                               # CONTINUE PLAYING
+		await _secs(1.5)
+		await _shot("continue-playing")
 	m.queue_free()
 	await _frames(6)
 
 
-func _stage_l9() -> void:
-	var sim: Sim = m.sim
-	var R := _id("R")
-	for x in sim.nodes:
-		if x["id"] in [_id("H"), 1, 2, 3, R]:
-			x["owner"] = "A"
-			x["units"] = 30.0 * Rules.SCALE
-		elif x["id"] in [_id("BH"), 8, 9, 10]:
-			x["owner"] = "B"
-			x["units"] = 25.0 * Rules.SCALE
-		MapBuilder.apply_owner(m.vis[x["id"]]["parts"], x["owner"])
-
-
-# ------------------------------------------------------------------ one contact sheet per lesson
-func _sheet(id: int) -> void:
+# ------------------------------------------------------------------ one contact sheet
+func _sheet() -> void:
 	if shots.is_empty():
 		return
 	const COLS := 4
@@ -359,7 +244,7 @@ func _sheet(id: int) -> void:
 		var x := PAD + (i % COLS) * (TW + PAD)
 		var y := PAD + (i / COLS) * (th + LH + PAD)
 		var l := Label.new()
-		l.text = "L%d · %02d · %s" % [id, i, str(shots[i][0]).to_upper()]
+		l.text = "%02d · %s" % [i, str(shots[i][0]).to_upper()]
 		l.add_theme_font_override("font", font)
 		l.add_theme_font_size_override("font_size", 16)
 		l.position = Vector2(x, y)
@@ -377,7 +262,7 @@ func _sheet(id: int) -> void:
 	bg.size = ui.size
 	sub.size = Vector2i(int(W), int(H))
 	await _frames(6)
-	var path := "%s/L%d-sheet.png" % [out_dir, id]
+	var path := "%s/quick-start-sheet.png" % out_dir
 	sub.get_texture().get_image().save_png(path)
 	sub.queue_free()
 	print("SHEET ", path)

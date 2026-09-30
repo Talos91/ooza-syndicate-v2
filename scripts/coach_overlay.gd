@@ -1031,6 +1031,7 @@ func set_dodge_rects(top_bar: Rect2, send_panel: Rect2, dock: Rect2, pause_butto
 	_dodge = d
 	_has_dodge = true
 	_position_card()
+	_place_strip()                                     # the strip keeps clear of the same HUD parts
 
 
 var _labels := {"skip_step": "SKIP STEP", "restart": "RESTART", "exit": "EXIT", "skip_tutorial": "SKIP TUTORIAL"}
@@ -1044,6 +1045,7 @@ func set_labels(words: Dictionary) -> void:
 		_skip_button.text = _labels["skip_step"]
 		_restart_button.text = _labels["restart"]
 		_exit_button.text = _labels["skip_tutorial"] if _first_launch else _labels["exit"]
+		_exit_button.size_flags_stretch_ratio = 1.7 if _first_launch else 1.0   # SKIP TUTORIAL is the longest word on the row
 
 
 func set_first_launch(on: bool) -> void:
@@ -1120,7 +1122,8 @@ func hide_card() -> void:
 	clear_gesture()
 
 
-func show_step(header: String, text: String, dots: int, dot_index: int, button_text := "") -> void:
+func show_step(header: String, text: String, dots: int, dot_index: int, button_text := "", compact := false) -> void:
+	## `compact`: a watch moment (the relay prompt) - the card drops its SKIP / RESTART / EXIT row so it covers less of the map.
 	if not _card.visible and is_instance_valid(_handler):
 		_handler.mood("happy")                         # the handler greets as its card comes up
 	_complete.visible = false
@@ -1132,6 +1135,7 @@ func show_step(header: String, text: String, dots: int, dot_index: int, button_t
 		_typed = 0.0
 		_typing = true
 		_handler.talking = true
+	_controls_row.visible = not compact
 	_card_dots.visible = dots > 0                          # the goal-based tutorial has no step dots
 	_card_dots.count = dots
 	_card_dots.index = dot_index
@@ -1274,7 +1278,7 @@ func _resize_card() -> void:
 	if is_instance_valid(_card_text) and _card_text.text != "":
 		var sz: Vector2 = UI_FONT.get_multiline_string_size(_card_text.text, HORIZONTAL_ALIGNMENT_LEFT, text_w - 4.0, _body_fsz())
 		lines = maxi(2, ceili(sz.y / maxf(UI_FONT.get_height(_body_fsz()), 1.0) - 0.05))
-	var h := _header_fsz() * 1.3 + 8.0 + (_dots_h() + 8.0 if _card_dots.visible else 0.0) + _body_fsz() * 1.35 * float(lines) + 10.0 + _btn_h()
+	var h := _header_fsz() * 1.3 + 8.0 + (_dots_h() + 8.0 if _card_dots.visible else 0.0) + _body_fsz() * 1.35 * float(lines) + 10.0 + (_btn_h() if _controls_row.visible else 0.0)
 	if _card_button.visible:
 		h += _btn_h() + 8.0
 	h += 28.0 + 8.0 * 3.0             # the VBox's own separation (4 gaps) + top/bottom padding

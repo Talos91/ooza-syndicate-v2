@@ -594,6 +594,8 @@ func _on_goal_done(id: String, was_skipped: bool) -> void:
 	else:
 		say(line("T1.done.%s" % id), float(Rules.QUICK_START["tick_note"]))
 		handler.emit("happy")
+		_last_order_t = sim.time                     # a fresh hint: the hand waits its idle time again
+		_idle_shown = false
 	if id == "relay":
 		_relay_done_t = sim.time
 		_push["prompt"] = false
@@ -1362,7 +1364,8 @@ func card() -> Dictionary:
 		return {"visible": true, "header": "%s · %s" % [header(), line("try_again_title")], "text": fail_line,
 				"dots": 0, "dot": 0, "button": line("try_again_title")}
 	var text := _note if _note != "" else _hint_text
-	return {"visible": state == "running" and text != "", "header": header(), "text": text, "dots": 0, "dot": 0, "button": ""}
+	return {"visible": state == "running" and text != "", "header": header(), "text": text, "dots": 0, "dot": 0, "button": "",
+			"compact": catch_prompt()}                # the relay prompt: no button row, the card covers less of the map
 
 
 func is_tour() -> bool:

@@ -1,5 +1,31 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.8 "Alpha 23" - 2026-09-30 (the tutorial rewrite, phase 1: the quick start)
+
+Daniele, on the old tutorial: "saw my friend playing and is waay too long and way too messy, i think we should rewrite it all and its logic."
+The tour and nine lessons on nine maps (15-20 minutes, forced on the first launch, a fixed script of ~60 steps that every rule change broke) are gone.
+
+- **QUICK START** (TRAINING 1/5, and the first launch, skippable): one real match on the new map T-11 Proving Ground against the Training AI, ABILITIES OFF, six
+  goals done in ANY order - UPGRADE (a vat reaches T2), TAKE (a neutral node), REINFORCE (a send between your nodes lands), MACHINEGOON (build one, it kills rival
+  units), RELAY (fire it under a rival line and units drop), LAST STAND (hold a node after the first ring falls). About 4-5 minutes; then LESSON COMPLETE with
+  CONTINUE PLAYING (the match goes on to its end) / MAIN MENU / REPLAY.
+- **The goal engine** (`scripts/goal_director.gd`, standalone: goals + checks + an event timeline, no Sim / campaign dependency) with the tutorial layer on top
+  (`TutorialDirector`: a tutorial is now data in `TUTORIALS`; the old L0..L9 tables are gone). The relay tutorials, structures, skills and team play convert onto it next.
+- **Goal strip**: six compact chips under the map's edge (it moves to the spot that covers no badge, node, inspector or card), ticked as goals are done. One
+  current hint on Dr. Vesk's card; the hand and the spotlight only after ~8 s idle or a wrong action; Dr. Vesk speaks one line when a goal ticks and when you are stuck.
+- **Staged HUD**: stage A from the start (map, badges, SEND panel, inspector with UPGRADE and MACHINEGOON, top bar), stage B when the relay goal opens (after goals 1-4 or 60 s),
+  stage C when the Last Stand is announced (status line, danger marks). No skill dock.
+- **The relay moment** kept: a scripted rival line walks onto the relay's deck, the game drops to 0.25x from ~2 s before it is on the deck until you fire; a miss sends another
+  (3 tries, then "timing takes practice"). The card drops its buttons while the prompt is up so it covers less of the map.
+- **Spotlight fix** (Daniele: "see the circles all overlapping? looks horrible"): ONE outline per lit region (the shader draws the ring on the union of the target circles),
+  follow points (lines, decks) only light the area with no ring, and a watch moment (the relay push, the Machinegoon probe, the Last Stand) is undimmed with at most one subtle ring.
+- **Progress**: `user://tutorial.cfg` v2 (`completed_v2` / `skipped_v2` with the ids quick, relays, structures, skills, team); the old numeric keys are ignored. SCRAP per tutorial
+  through `TutorialDirector.scrap_for(n)` (140 each until Daniele decides the split); the Graduate vat only when all five are done (an already owned one is not revoked).
+- **TRAINING page**: five rows (QUICK START, RELAYS, STRUCTURES, SKILLS, TEAM PLAY), only the quick start playable (the others say SOON); MAIN shows TRAINING n / 5.
+- New maps T-11 Proving Ground and T-12 Team Up (tutorial-only, from the map pipeline; T-12 is for the team-play tutorial, phase 3).
+- Tests: `test_tutorial` rewritten around goals (detectors, the relay moment, the Last Stand over several seeds, assists, reveal stages, skip rule, first launch, progress and
+  rewards, a scripted player finishing the quick start on T-11); `tests/tutorial_walk.tscn` plays the quick start at phone size and lays one contact sheet.
+
 ## 0.23.7 "Alpha 23" - 2026-09-30
 
 - Unit counts on the badges another 10 % bigger (Daniele, after 0.23.6 went live): count 22 -> 24 px, the box 54 x 40 -> 59 x 44.
