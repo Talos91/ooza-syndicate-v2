@@ -1394,7 +1394,10 @@ func _layout_inspector_wheel(p: Vector2, vp: Vector2) -> void:
 	var fan_down := space_below > space_above
 	var fan_angle := PI / 2.0 if fan_down else -PI / 2.0
 	var n := inspector_actions.size()
-	var step := deg_to_rad(clampf(28.0 * float(n - 1), 0.0, 100.0)) / maxf(float(n - 1), 1.0)
+	# 28 deg/step (100 deg max) read as one card with a sliver of the next peeking out - not a fan
+	# (Daniele, seeing the shot: "all cards one over the other instead of as a fan"). Wider steps, and a
+	# spread that can open past a semicircle for 4-5 actions, so each card's own title is actually legible.
+	var step := deg_to_rad(clampf(72.0 * float(n - 1), 0.0, 170.0)) / maxf(float(n - 1), 1.0)
 	var hinge := Vector2(0, (INSPECTOR_RING_R * ui_scale + 6.0 * ui_scale) * (1.0 if fan_down else -1.0))
 	for i in range(n):
 		var b: Control = inspector_actions[i]["button"]
