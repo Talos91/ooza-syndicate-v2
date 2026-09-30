@@ -1436,6 +1436,10 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		return
 	var vp := root.get_viewport_rect().size
 	var p := cam.unproject_position(n["pos"] + Vector3(0, 2.0, 0))
+	var off_margin := 90.0 * ui_scale                 # 0.23.6+: a wheel/pinch zoom can carry the inspected node
+	if p.x < -off_margin or p.x > vp.x + off_margin or p.y < -off_margin or p.y > vp.y + off_margin:
+		close_inspector()                             # well off the fitted view - close rather than leave the info
+		return                                        # card floating disconnected with no ring, no fan, to point at
 	inspector.position = p                            # 0.23.x: the ring always sits truthfully on the node itself -
 	                                                   # everything around it moves instead (_layout_inspector_wheel,
 	                                                   # called at the end of this function - after the info card's
