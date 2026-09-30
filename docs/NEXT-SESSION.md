@@ -1,6 +1,9 @@
 # Next session - start here
 
-## Tutorial rewrite (0.23.8, phase 1 built; phases 2 and 3 to do) - branch `tutorial-rewrite`
+## Tutorial rewrite (0.23.8 phase 1; 0.23.10 the GUIDED quick start, branch `tutorial-guided`; phases 2 and 3 to do)
+0.23.10 (§3a): a tutorial's `steps` run IN ORDER (step i = GoalDirector stage i, unlocked when i-1 is done; `chapter` groups them on the strip;
+`read: true` = a GOT IT card; `enter` = its staging; `reveal` = its reveal stage). The AI is off until CONTINUE PLAYING. On the pie inspector the hand goes
+through `_inspector_aware()` (slice, or the hub to close it).
 Spec: `Docs/Game Design/Ooze Syndicate 2.0/01 Rules/TUTORIAL-REWRITE-DESIGN.md`; words: `TUTORIAL-SCRIPT.md` (draft 4).
 - `scripts/goal_director.gd` = the standalone goal engine (goals with `check` / `stage` / `ready` / `assist` / `follow`, an event timeline). `scripts/tutorial.gd`
   (`TutorialDirector`) = the tutorial layer: **a tutorial is a row of `TUTORIALS`** (map, staging, reveal stages, goals), its detectors are `_eval(op)`, its hand
