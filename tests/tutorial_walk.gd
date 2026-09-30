@@ -1,9 +1,9 @@
 extends Node
-## Quick-start review walk (TUTORIAL-REWRITE-DESIGN.md): plays the QUICK START through the real game (main.tscn, orders
-## through main.node_action and the coach's own buttons, as a player's input would) on T-11 and shoots each state - the
-## opening, the idle hint (hand + spotlight), a goal ticking, a short-send assist, the Machinegoon watch, the relay moment
-## (slow motion, the prompt, the drop), the Last Stand (announcement, evacuation hand, the ring falling), LESSON COMPLETE and
-## CONTINUE PLAYING - then lays ONE contact sheet. For looking at, not a test suite. Run WINDOWED (phone size):
+## Quick-start review walk (TUTORIAL-REWRITE-DESIGN.md §3a): plays the guided QUICK START through the real game (main.tscn,
+## orders through main.node_action and the coach's own buttons, following the hand as a new player would) on T-11 and shoots
+## every step - the four basics (the Machinegoon card in the inspector), free play, the relay kill (slow motion, the prompt,
+## the drop), the Last Stand's explanation cards, the move and the ring falling, LESSON COMPLETE and CONTINUE PLAYING - then
+## lays ONE contact sheet. For looking at, not a test suite. Run WINDOWED (phone size):
 ##
 ##   Godot --path <wt> --resolution 1266x585 res://tests/tutorial_walk.tscn -- --mobile --no-notice out=<dir>
 ##
@@ -114,98 +114,132 @@ func _units(nm: String, shown: float) -> void:
 	m.sim.nodes[_id(nm)]["units"] = shown * Rules.SCALE
 
 
-# ------------------------------------------------------------------ the quick start
+# ------------------------------------------------------------------ the quick start (four chapters, in order)
+var _last_follow := -100000
+
+
+func _follow(force := false) -> void:
+	## Do what the hand shows, through the game's own input paths (main.node_action, the inspector).
+	var now := Time.get_ticks_msec()
+	if now - _last_follow < 700 and not force:                     # at most one order every 0.7 s (real time)
+		return
+	var g := d.gesture()
+	if g.is_empty():
+		return
+	_last_follow = now
+	var cur := d.current_id()
+	match str(g[0][0]):
+		"drag":
+			var f := 0.5 if cur in ["take", "reinforce"] else 1.0
+			m.fraction = f
+			m.node_action("send", int(g[0][1]), {"to": int(g[0][2]), "fraction": f})
+		"double_tap":
+			m.node_action("upgrade", int(g[0][1]))
+		"tap":
+			m.hud.inspect(int(g[0][1]), m.cam)
+		"press":
+			if str(g[0][1]) == "action:MACHINEGOON":
+				m.node_action("build", m.hud.inspector_id, {"kind": "machinegoon"})
+				m.hud.close_inspector()
+
+
+func _step_until(id_not: String, limit: float) -> void:
+	## Follow the hand once a second until the step is over.
+	var t := 0.0
+	var next := 0.0
+	Engine.time_scale = FAST
+	while t < limit and d.state == "running" and d.current_id() == id_not:
+		if t >= next:
+			next = t + 1.0
+			_follow()
+		await get_tree().process_frame
+		t += get_process_delta_time()
+	Engine.time_scale = 1.0
+
+
+func _got_it() -> void:
+	m._on_coach_button("got_it")
+	await _frames(3)
+
+
 func _quick() -> void:
 	var sim: Sim = m.sim
-	await _secs(1.2)
-	await _shot("opening")                                          # the welcome line, the strip, no hand yet
-	await _until(func(): return sim.time > 7.0, 20.0)
-	await _shot("hint-upgrade")                                     # the current hint, nothing pointed yet (the player is "active")
-	await _until(func(): return sim.time - d._last_order_t >= 8.5, 30.0)
-	await _shot("idle-hand-upgrade")                                # 8 s idle: the hand double-taps the home, one ring
-	m.node_action("upgrade", _id("H"))
-	await _until(func(): return d.goals.goal_done("upgrade"), 30.0)
-	await _shot("goal-upgrade")                                     # a goal ticked: Dr. Vesk's one line, the chip ticked
-	# TAKE, with a deliberately short send first (the assist)
-	_units("H", 30.0)
-	_send("H", "N2", 0.1)
-	await _until(func(): return not d.assist_retry().is_empty(), 25.0)
-	await _shot("short-send-assist")
-	var rt := d.assist_retry()
-	if not rt.is_empty():
-		m.node_action("send", int(rt[0]), {"to": int(rt[1]), "fraction": 1.0})
-	await _until(func(): return d.goals.goal_done("take"), 60.0)
-	await _shot("goal-take")
-	# REINFORCE
-	await _until(func(): return sim.time - d._last_order_t >= 8.5, 30.0)
-	await _shot("idle-hand-reinforce")                              # a drag between two of your nodes
-	_send("N2", "H", 1.0)
-	await _until(func(): return d.goals.goal_done("reinforce"), 60.0)
-	await _shot("goal-reinforce")
-	# MACHINEGOON: take M, build, watch the probe
-	_units("H", 60.0)
-	_send("H", "M", 1.0)
-	await _until(func(): return sim.nodes[_id("M")]["owner"] == "A", 60.0)
-	_units("M", 30.0)
-	m.hud.inspect(_id("M"), m.cam)
+	await _secs(1.0)
+	await _shot("1-take-hand")                                      # chapter 1: the card, the hand and the spotlight from the start
+	await _until(func(): return d.card()["text"] == TutorialDirector.line("T1.take_send"), 12.0)
+	await _shot("1-take-send-panel")
+	_follow(true)
+	await _until(func(): return d.current_id() != "take", 30.0)
+	await _shot("1-take-done")
+	await _secs(2.8)
+	await _shot("1-reinforce-hand")
+	await _step_until("reinforce", 40.0)
+	await _secs(2.8)
+	await _shot("1-upgrade-hand")
+	_follow(true)
+	await _secs(1.0)
+	await _shot("1-upgrade-building")
+	await _until(func(): return d.current_id() != "upgrade", 20.0)
+	await _secs(2.8)
+	await _shot("1-machinegoon-take-M")
+	await _until(func(): return d._phase(d.current_step()) == "main", 40.0, func(_t): _follow())
 	await _secs(0.5)
-	await _shot("machinegoon-inspector")
-	m.node_action("build", _id("M"), {"kind": "machinegoon"})
-	m.hud.close_inspector()
-	await _until(func(): return int(d._mg_probe["line"]) >= 0, 60.0)
-	await _secs(1.5)
-	await _shot("machinegoon-probe")                                # the watch moment: undimmed, one subtle ring
-	await _until(func(): return d.goals.goal_done("machinegoon"), 60.0)
-	await _shot("goal-machinegoon")
-	# RELAY: take it (stage B), wait for the push
-	await _until(func(): return d.stage >= 1, 70.0)
-	await _secs(0.5)
-	await _shot("stage-b-relay")                                    # the relay parts appear
-	_units("M", 60.0)
-	_send("M", "R", 1.0)
-	await _until(func(): return sim.nodes[_id("R")]["owner"] == "A", 60.0)
-	var st := {"slow": false, "prompt": false, "fired": false}
+	_follow(true)                                                    # the tap: the inspector opens on M
+	await _secs(0.8)
+	await _shot("1-machinegoon-inspector-card")                     # the new inspector: the hand on the MACHINEGOON card's centre
+	_follow(true)
+	await _until(func(): return d._phase(d.current_step()) == "watch" and int(d._mg_probe["line"]) >= 0, 40.0)
+	await _secs(1.0)
+	await _shot("1-machinegoon-watch")
+	await _until(func(): return d.current_id() != "machinegoon", 60.0)
+	await _secs(2.8)
+	await _shot("2-free-play")                                      # chapter 2: your turn, the countdown on the strip
+	await _until(func(): return d.card()["text"] == TutorialDirector.line("T1.free_nudge"), 30.0)
+	await _shot("2-free-nudge")
+	await _until(func(): return d.current_id() != "free", 60.0)
+	await _secs(2.8)
+	await _shot("3-relay-take-hand")                                # chapter 3
+	await _step_until("relay_take", 60.0)
+	await _secs(2.8)
+	await _shot("3-relay-wait")
+	var st := {"slow": false, "prompt": false}
 	Engine.time_scale = FAST
 	var t := 0.0
-	while d.state == "running" and not d.goals.goal_done("relay") and t < 150.0:
+	while d.state == "running" and d.current_id() == "relay" and t < 150.0:
 		if d.catch_line() >= 0 and d.time_scale < 1.0 and not d.catch_prompt() and not st["slow"]:
 			st["slow"] = true
-			await _shot("relay-slow-motion")
+			await _shot("3-relay-slow-motion")
 			Engine.time_scale = FAST
 		if d.catch_prompt() and not st["prompt"]:
 			st["prompt"] = true
-			await _shot("relay-prompt")                             # the line is on the deck: hand on the relay, no dim
-			Engine.time_scale = 1.0
-			await _secs(0.4)
-			await _shot("relay-prompt-2")
+			await _shot("3-relay-prompt")
 			m.node_action("switch", _id("R"))
-			st["fired"] = true
 			Engine.time_scale = 0.5
 			await _secs(1.4)
-			await _shot("relay-drop")
+			await _shot("3-relay-drop")
 			Engine.time_scale = FAST
 		await get_tree().process_frame
 		t += get_process_delta_time()
 	Engine.time_scale = 1.0
-	await _shot("goal-relay")
-	# LAST STAND
-	await _until(func(): return d._ls_started, 90.0)
+	await _secs(0.5)
+	await _shot("4-last-stand-announced")                           # chapter 4: the explanation cards
+	await _got_it()
+	await _secs(0.8)
+	await _shot("4-danger-marks")
+	await _got_it()
+	await _secs(0.8)
+	await _shot("4-centre-ring")
+	await _got_it()
+	await _secs(0.8)
+	await _shot("4-move-hand")
+	_follow(true)
+	await _until(func(): return d.current_id() != "ls_move", 20.0)
 	await _secs(1.0)
-	await _shot("last-stand-announced")
-	await _until(func(): return sim.time - d._last_order_t >= 8.5, 30.0)
-	await _shot("last-stand-hand")                                  # the hand drags off the falling ring
-	var mv := d._evac_move()
-	for id in d._mine():
-		if d._doomed(id) and float(sim.nodes[id]["units"]) >= Rules.SCALE and not mv.is_empty():
-			m.node_action("send", id, {"to": int(mv[1]), "fraction": 1.0})
-	await _until(func(): return not sim.last_stand_warn.is_empty() and sim.last_stand_warn_t < 6.0, 40.0)
-	await _shot("last-stand-warning")
-	await _until(func(): return d.state != "running", 90.0, func(_t):
-		for id in d._mine():
-			if d._doomed(id) and float(sim.nodes[id]["units"]) >= Rules.SCALE and sim.nodes[id]["streaming"].is_empty():
-				var mv2 := d._evac_move()
-				if not mv2.is_empty() and int(mv2[0]) == id:
-					m.node_action("send", id, {"to": int(mv2[1]), "fraction": 1.0}))
+	await _shot("4-hold-on")
+	await _until(func(): return not sim.collapsed.is_empty(), 60.0, func(_t): _follow())
+	await _secs(0.6)
+	await _shot("4-ring-falling")
+	await _until(func(): return d.state != "running", 90.0)
 	await _secs(0.8)
 	await _shot("complete" if d.state == "complete" else "NOT-COMPLETE-" + d.state)
 	if d.state == "complete":
