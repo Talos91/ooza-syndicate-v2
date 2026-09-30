@@ -1150,13 +1150,13 @@ var _spot_key := []                                    # spotlight()'s last inpu
 var _light_px: Array = []                              # [{"c": Vector2, "r": float}] light-only circles (follow what moves)
 
 
-func spotlight(screen_points: Array, radius: float, rects: Array, dim := true, light_points := []) -> void:
+func spotlight(screen_points: Array, radius: float, rects: Array, dim := true, light_points := [], light_radius := -1.0) -> void:
 	## The step's real targets: circles round nodes and rounded rects round HUD controls - ONE outline round each lit
 	## region, however many circles overlap (the shader draws the ring on the union). `light_points` (lines, decks, the
 	## monster) only cut the dim - no ring of their own. `dim` false = a watch moment: nothing fogged, the ring stays
 	## subtle. Safe every frame (the shader uniforms and the card's corner are worked out again only when something they
 	## depend on moved - audit B3).
-	var key := [screen_points, radius, rects, dim, light_points, _obstacles, _avoid, _card.size if is_instance_valid(_card) else Vector2.ZERO,
+	var key := [screen_points, radius, rects, dim, light_points, light_radius, _obstacles, _avoid, _card.size if is_instance_valid(_card) else Vector2.ZERO,
 			is_instance_valid(_card) and _card.visible, get_viewport().get_final_transform()]
 	if key == _spot_key:
 		return
@@ -1166,10 +1166,10 @@ func spotlight(screen_points: Array, radius: float, rects: Array, dim := true, l
 	for p in screen_points:
 		_targets_px.append({"c": p, "r": radius})
 	for p in light_points:
-		_light_px.append({"c": p, "r": radius})
+		_light_px.append({"c": p, "r": light_radius if light_radius > 0.0 else radius})
 	_target_rects = rects.duplicate()
 	_dim_mat.set_shader_parameter("dim_amount", 1.0 if dim else 0.0)
-	_dim_mat.set_shader_parameter("ring_amount", 1.0 if dim else 0.5)
+	_dim_mat.set_shader_parameter("ring_amount", 1.0 if dim else 0.75)   # (a watch moment rings only a tap target)
 	if _targets_px.is_empty() and _target_rects.is_empty():
 		_dim.visible = false
 	else:

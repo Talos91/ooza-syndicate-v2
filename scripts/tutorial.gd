@@ -86,6 +86,7 @@ const LINES := {
 	"T1.relay_take": "Take the relay in the middle. It moves a deck - and whatever is on it.",
 	"T1.relay_wait": "Their line is coming. Wait until it's on the relay's deck. Patience pays.",
 	"T1.relay_now": "Their line is on the deck. Double-tap the relay now!",
+	"T1.relay_early": "Early - but their deck's gone before they got on it. That works too.",
 	"T1.relay_miss": "Too late - they got across. Here comes another line. They never learn.",
 	"T1.relay_practice": "Timing takes practice. You'll get more chances. The void is very patient.",
 	# chapter 4, the Last Stand explained
@@ -840,6 +841,10 @@ func _scan_events() -> void:
 				if seat == HUMAN:
 					_last_order_t = sim.time
 					_idle_shown = false
+					if str(ev["type"]) == "relay_fired" and int(ev.get("node", -1)) == _relay() and str(_push["phase"]) == "out" \
+							and float(_push.get("early_t", -1.0)) < 0.0 and _deck_eta(int(_push["line"]), _relay()) >= 0.0 \
+							and not _landed(int(_push["line"])):
+						_push["early_t"] = sim.time        # fired before the push is across: whatever drops, the deck is gone for it
 					if str(ev["type"]) == "send" and _ls_started and _doomed(int(ev.get("from", -1))) \
 							and sim.last_stand_keep.has(int(ev.get("to", -1))):
 						_evac_sent = true              # off a falling node, onto the kept ring
@@ -1043,6 +1048,15 @@ func _tick_push() -> void:
 				_launch_push(relay)
 		"out":
 			var hid := int(_push["line"])
+			var early_t := float(_push.get("early_t", -1.0))
+			if early_t >= 0.0:                        # fired before the line was on the deck: once the deck has moved,
+				time_scale = 1.0                      # that is the lesson too (Daniele: "it's fine anyway")
+				if sim.time >= early_t + Rules.RELAY_WARNING + 0.3:
+					_push["phase"] = "done"
+					_push["prompt"] = false
+					goals.complete("relay")           # (had the line reached the deck in the warning, the fling won already)
+					say(line("T1.relay_early"))
+				return
 			_relay_window(hid, relay)
 			if not _any_alive(hid) or _landed(hid):
 				_push["prompt"] = false
@@ -1138,6 +1152,7 @@ func _launch_push(relay: int) -> void:
 	sim._set_route(h, route)                         # the scripted line crosses the relay deck, whatever is fastest
 	h["speed"] = float(Rules.QUICK_START["line_speed"])
 	_push["phase"] = "out"
+	_push["early_t"] = -1.0
 	_push["line"] = h["id"]
 	_push["t"] = sim.time
 	_push["slow_t"] = 0.0
@@ -1220,8 +1235,6 @@ func _stage_last_stand() -> void:
 	if _ls_started:
 		return
 	_ls_started = true
-	_note = ""                                       # the announcement is the hint now
-	_note_t = 0.0
 	_jump_clock(Rules.LAST_STAND_TIME)
 	_ls_t0 = sim.time
 	_ls_falls = float(sim.fall_losses.get(HUMAN, 0.0))
@@ -1473,9 +1486,9 @@ func card() -> Dictionary:
 		return {"visible": true, "header": "%s · %s" % [header(), line("try_again_title")], "text": fail_line,
 				"dots": 0, "dot": 0, "button": line("try_again_title")}
 	var read := bool(current_step().get("read", false))
-	var text := _hint_text if read or _note == "" else _note   # a read-only card is never hidden by a passing line
+	var text := _note if _note != "" else _hint_text   # (a step's "done" line first - a read-only card's GOT IT comes after it)
 	return {"visible": state == "running" and text != "", "header": header(), "text": text, "dots": 0, "dot": 0,
-			"button": line("got_it") if read and state == "running" else "",
+			"button": line("got_it") if read and state == "running" and _note == "" else "",
 			"compact": catch_prompt()}                # the relay prompt: no button row, the card covers less of the map
 
 
@@ -1502,41 +1515,39 @@ func _hand_armed() -> bool:
 
 
 func target() -> Dictionary:
-	## What the spotlight rings: {nodes: [ids], rects: [keys], lines: [horde ids], open, ...}. `open`: a watch moment - no
-	## dim, nothing fogged, at most one soft ring.
-	var out := {"nodes": [], "rects": [], "lines": [], "decks": [], "open": false, "radius": 1.0, "monsters": false, "relay_decks": -1}
+	## What the spotlight rings: {nodes: [ids], buttons: [relay ids], rects: [keys], lines: [horde ids], open, ring_m}.
+	## Rings go on the TAP TARGET only, one small ring each (ring_m world metres: a node's rim, or a relay's rim button) -
+	## never a halo round an area (Daniele, 0.23.10: "the relay part still shows these ugly halo"). `open`: a watch moment -
+	## no dim, nothing fogged, no ring unless there is something to tap.
+	var out := {"nodes": [], "buttons": [], "rects": [], "lines": [], "decks": [], "open": false, "radius": 1.0, "monsters": false,
+			"relay_decks": -1, "ring_m": Rules.R * 1.1}
 	if state != "running" or goals == null:
 		return out
-	if catch_prompt() or str(_push["phase"]) == "out":   # the relay moment: the relay and the line, undimmed
-		out["nodes"] = [_relay()]
+	if catch_prompt() or str(_push["phase"]) == "out":   # the relay moment: undimmed; at the prompt one ring on what you tap
 		out["lines"] = [int(_push["line"])]
 		out["relay_decks"] = _relay()
 		out["open"] = true
+		if catch_prompt():
+			if ui_inspector == _relay():
+				out["rects"] = ["action:SWITCH"]
+			else:
+				out["buttons"] = [_relay()]
+				out["ring_m"] = Rules.RELAY_PAD_R * 1.4
 		return out
 	var g := goals.current()
 	if g.is_empty():
 		return out
 	match str(g["id"]):
 		"machinegoon":
-			if _mg_site >= 0:                        # built: watch the probe walk into it
+			if _mg_site >= 0:                        # built: watch the probe walk into it (no ring: nothing to tap)
 				out["open"] = true
-				out["nodes"] = [_mg_site]
 				if _any_alive(int(_mg_probe["line"])):
 					out["lines"] = [int(_mg_probe["line"])]
 				return out
-		"ls_intro", "ls_hold":                       # the Last Stand is never fogged over
+		"ls_intro", "ls_hold", "ls_marks", "ls_rings":   # the Last Stand's cards: never fogged, no ring (the danger marks speak)
 			out["open"] = true
 			return out
-		"ls_marks":                                  # the danger marks: the nodes that fall next
-			out["open"] = true
-			out["nodes"] = sim.last_stand_warn.keys().filter(func(id): return not sim.collapsed.get(id, false)).slice(0, 8)
-			return out
-		"ls_rings":                                  # the centre ring that stays
-			out["open"] = true
-			out["nodes"] = sim.last_stand_keep.keys().slice(0, 8)
-			return out
-		"relay":                                     # waiting for the push: the relay
-			out["nodes"] = [_relay()] if _relay() >= 0 else []
+		"relay":                                     # waiting for the push: undimmed, nothing to tap yet
 			out["relay_decks"] = _relay()
 			out["open"] = true
 			return out
@@ -1549,7 +1560,9 @@ func target() -> Dictionary:
 	if not gs.is_empty() and str(gs[0][0]) == "press" and not str(gs[0][1]) in out["rects"]:
 		out["rects"].append(str(gs[0][1]))           # the pie slice the hand presses is lit
 	out["lines"] = _moving_lines()
-	out["open"] = str(g["id"]) == "ls_move"
+	if str(g["id"]) == "ls_move":                    # the move: undimmed, one ring where the drag starts
+		out["open"] = true
+		out["nodes"] = (out["nodes"] as Array).slice(0, 1)
 	return out
 
 
