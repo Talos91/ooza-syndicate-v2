@@ -6,7 +6,13 @@ class_name MapCamera
 ## still one line away if a map ever needs it again; until then every map falls through to
 ## Rules.CAM_PITCH (34.0). History: this table held 58.0 for every maps 4.2 / Alpha 11 classics / maps
 ## 4.3-4.6 / tutorial map from Alpha 18 ("a bit more from the top") through 0.22.x.
-const PITCH := {}
+## T-11 (quick start) / T-12 (team play 2v2), the rewritten tutorial's maps (2026-09-30): rows at the current CAM_PITCH, from the
+## phone-fit probe (1266x585, 844 x 390 pt): T-11 tap 58.5 pt, T-12 tap 55.3 pt at 41 (34: 54.7 / 45.7, 50: 63.6 / 66.3,
+## 58: 67.3 / 70.8 - all clear 44 pt, nothing off screen or under the HUD, no badge overlaps).
+const PITCH := {
+	"T-11": 41.0,
+	"T-12": 41.0,
+}
 
 
 static func pitch_for(code: String, size := "") -> float:
