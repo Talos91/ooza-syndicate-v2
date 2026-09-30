@@ -59,38 +59,49 @@ const LINES := {
 	"skipped": "SKIPPED - replay to complete", "skipped_note": "Skipped a goal: replay it to complete it and earn its SCRAP.",
 	"soon": "SOON",
 	# titles and one-line goals of the five tutorials (the TRAINING page)
-	"T1.title": "QUICK START", "T1.goal": "Upgrade, take, reinforce, Machinegoon, relay, Last Stand",
+	"T1.title": "QUICK START", "T1.goal": "Take, reinforce, upgrade, Machinegoon, a relay kill, the Last Stand",
 	"T2.title": "RELAYS", "T2.goal": "Retract, switch and remote relays",
 	"T3.title": "STRUCTURES", "T3.goal": "Laser tower, Forge, Monster hub",
 	"T4.title": "SKILLS", "T4.goal": "Surge, Demolish and your ultimate",
 	"T5.title": "TEAM PLAY", "T5.goal": "Shared garrison, handover, EJECT",
-	# the quick start: the goal strip's chips
-	"T1.chip.upgrade": "UPGRADE", "T1.chip.take": "TAKE", "T1.chip.reinforce": "REINFORCE",
-	"T1.chip.machinegoon": "MACHINEGOON", "T1.chip.relay": "RELAY", "T1.chip.last_stand": "LAST STAND",
-	# the quick start: the one current hint
-	"T1.start": "Six goals, any order. Start anywhere - I'll point if you stall.",
+	# the quick start (TUTORIAL-REWRITE-DESIGN.md §3a): four chapters in order - the goal strip's chips
+	"T1.chapter.0": "BASICS", "T1.chapter.1": "YOUR TURN", "T1.chapter.2": "RELAY", "T1.chapter.3": "LAST STAND",
+	# chapter 1, guided basics: each card is the instruction, the hand shows it from the start
+	"T1.take": "Drag from your home to the grey node. Send more units than its badge: {garrison}.",
+	"T1.take_send": "The SEND panel sets how much of a node goes. 50 % is plenty here.",
+	"T1.reinforce": "Now drag from your home to your new node. Units move where they're needed.",
+	"T1.reinforce_prep": "You need two nodes for this. Take a grey node first.",
 	"T1.upgrade": "Double-tap your home to upgrade its vat to T2. Costs {cost} units.",
-	"T1.take": "Drag from your home to a grey node. Send more units than its badge shows.",
-	"T1.reinforce": "Drag between two of your nodes. Units move to where they're needed.",
-	"T1.reinforce_prep": "Take a second node first, then drag units between the two.",
-	"T1.machinegoon": "Tap a node of yours, then MACHINEGOON. It shoots rival lines on its decks.",
-	"T1.machinegoon_prep": "A Machinegoon needs a node of its own. Take another node first.",
-	"T1.machinegoon_watch": "Built. Now let a rival line walk past it - it does the rest.",
-	"T1.relay_prep": "Take the relay in the middle. It moves a deck - and whatever is on it.",
-	"T1.relay_wait": "The relay is yours. When their line is on its deck, double-tap the relay.",
+	"T1.upgrade_wait": "Building: {secs} s. Watch the bar on the badge. A T2 vat breeds faster.",
+	"T1.machinegoon_prep": "Take the grey node the hand shows. A Machinegoon goes there next.",
+	"T1.machinegoon": "Tap that node, then MACHINEGOON. It shoots rival lines on its decks.",
+	"T1.machinegoon_wait": "Building your Machinegoon: {secs} s. Security budget approved.",
+	"T1.machinegoon_watch": "Here comes a rival line. Watch it walk into your Machinegoon.",
+	# chapter 2, free play
+	"T1.free": "Your turn: grow a bit. Take grey nodes, upgrade vats. The rival is napping.",
+	"T1.free_nudge": "Still there? Take a grey node or double-tap a vat. The clock is running.",
+	# chapter 3, the scripted relay kill
+	"T1.relay_take": "Take the relay in the middle. It moves a deck - and whatever is on it.",
+	"T1.relay_wait": "Their line is coming. Wait until it's on the relay's deck. Patience pays.",
 	"T1.relay_now": "Their line is on the deck. Double-tap the relay now!",
 	"T1.relay_miss": "Too late - they got across. Here comes another line. They never learn.",
 	"T1.relay_practice": "Timing takes practice. You'll get more chances. The void is very patient.",
-	"T1.last_stand_wait": "Nearly there. Hold your nodes - the city is about to collapse.",
-	"T1.last_stand": "It's {ls}: the Last Stand. Your ring falls first - move your units inward.",
-	# the quick start: a goal ticks (one line, one joke at most)
-	"T1.done.upgrade": "T2. Faster breeding, bigger cap. Growth!",
+	# chapter 4, the Last Stand explained
+	"T1.ls_intro": "It's {ls}: the Last Stand. The city now collapses, ring by ring.",
+	"T1.ls_marks": "Red danger marks show the nodes that fall next. Anything on them drops.",
+	"T1.ls_rings": "The outer ring falls first. The centre ring stays - be on it.",
+	"T1.ls_move": "Drag your units off the marked nodes onto the centre ring. Relocation package!",
+	"T1.ls_hold": "Hold on. The outer ring falls, the centre stays standing. Tenure!",
+	# a step is done (one line, one joke at most, a short moment before the next card)
 	"T1.done.take": "Node taken. Acquisitions are going well.",
 	"T1.done.reinforce": "Units moved. Restructuring complete.",
-	"T1.done.machinegoon": "It works. Security budget approved.",
+	"T1.done.upgrade": "T2. Faster breeding, bigger cap. Growth!",
+	"T1.done.machinegoon": "Shredded. That's your Machinegoon on guard.",
+	"T1.done.free": "Time's up. Now the fun part: relays.",
+	"T1.done.relay_take": "The relay is yours.",
 	"T1.done.relay": "Straight into the void. Record quarter. I'm framing this one.",
-	"T1.done.last_stand": "The ring is gone and you are not. Promotion pending.",
-	"T1.done1": "Upgrade, take and reinforce - with a Machinegoon on guard.",
+	"T1.done.ls_hold": "The ring is gone and you are not. Promotion pending.",
+	"T1.done1": "Take, reinforce, upgrade - with a Machinegoon on guard.",
 	"T1.done2": "Fire a relay under a line. Leave a ring before it falls.",
 	# completion screens
 	"lesson_complete": "LESSON COMPLETE", "continue_playing": "CONTINUE PLAYING", "main_menu": "MAIN MENU",
@@ -115,7 +126,8 @@ const LINES := {
 # preview, the badge's relay state, ready glow and cue), relay_build (LASER / FORGE / MONSTER HUB), forge_readout,
 # monster, monster_icon, status_line, danger (the floating Last Stand symbols), dock, floaters (the rising
 # "+ CAPTURED" / "LOST" node text), and - never in a 1v1 tutorial - halos and eject (the team parts).
-const REVEAL_BASE := ["map", "badges", "drag", "clock", "topbar", "upgrade_arrow"]
+const REVEAL_BASE := ["map", "badges", "drag", "clock", "topbar"]
+const REVEAL_RELAY := 3                           # the quick start's reveal stage for the relay (TUTORIALS[1]["reveal"])
 const ALL_KEYS := ["map", "badges", "drag", "clock", "upgrade_arrow", "send_panel", "upgrade", "machinegoon", "rival_counts", "strength",
 		"notices", "relay", "relay_build", "forge_readout", "monster", "monster_icon", "status_line", "danger", "dock", "halos", "eject",
 		"out_panel", "floaters"]
@@ -127,22 +139,32 @@ const ALL_KEYS := ["map", "badges", "drag", "clock", "upgrade_arrow", "send_pane
 # list GoalDirector runs - id, chip word, hint line key, stage, ready (a precondition op), the detector `op` and the
 # hand provider `hand` (see _eval / _hand). ready false = the tutorial is listed but not built yet (SOON).
 const TUTORIALS := {
+	# The quick start (§3a, Daniele 2026-09-30: "you cannot have new players just randomly do things without any guidance"):
+	# four chapters, the steps IN ORDER. A step: id (its line "T1.<id>", done line "T1.done.<id>"), chapter, reveal (the
+	# reveal stage it needs), op (the detector, _eval), read (a GOT IT card), enter (_enter), hand (_hand_now).
 	1: {"key": "quick", "ready": true, "map": "T-11-proving-ground", "abilities": false, "ai": "Training",
 		"stage": [["H", "A", "home"], ["BH", "B", "rival_home"]],
-		"reveal": [["send_panel", "upgrade", "machinegoon", "rival_counts", "strength", "notices", "floaters"],
+		"reveal": [["send_panel", "floaters"], ["upgrade", "upgrade_arrow"], ["machinegoon", "rival_counts", "strength", "notices"],
 				["relay"], ["status_line", "danger"]],
-		"goals": [
-			{"id": "upgrade", "stage": 0, "op": ["upgraded", 2], "hand": "upgrade"},
-			{"id": "take", "stage": 0, "op": ["took_neutral"], "hand": "take"},
-			{"id": "reinforce", "stage": 0, "op": ["reinforced"], "ready": ["own_nodes", 2], "hand": "reinforce"},
-			{"id": "machinegoon", "stage": 0, "op": ["mg_kills"], "ready": ["mg_site"], "hand": "machinegoon"},
-			{"id": "relay", "stage": 1, "op": ["relay_drop"], "ready": ["relay_owned"], "hand": "relay"},
-			{"id": "last_stand", "stage": 2, "op": ["ring_down"], "hand": "last_stand"},
+		"chapters": 4,
+		"steps": [
+			{"id": "take", "chapter": 0, "reveal": 0, "op": ["took"], "hand": "take"},
+			{"id": "reinforce", "chapter": 0, "reveal": 0, "op": ["reinforced"], "hand": "reinforce"},
+			{"id": "upgrade", "chapter": 0, "reveal": 1, "op": ["upgraded", 2], "enter": "topup_home", "hand": "upgrade"},
+			{"id": "machinegoon", "chapter": 0, "reveal": 2, "op": ["mg_kills"], "hand": "machinegoon"},
+			{"id": "free", "chapter": 1, "reveal": 2, "op": ["free_done"], "hand": "free"},
+			{"id": "relay_take", "chapter": 2, "reveal": 3, "op": ["relay_owned"], "hand": "relay_take"},
+			{"id": "relay", "chapter": 2, "reveal": 3, "op": ["relay_drop"], "hand": "relay"},
+			{"id": "ls_intro", "chapter": 3, "reveal": 4, "read": true, "enter": "last_stand"},
+			{"id": "ls_marks", "chapter": 3, "reveal": 4, "read": true},
+			{"id": "ls_rings", "chapter": 3, "reveal": 4, "read": true},
+			{"id": "ls_move", "chapter": 3, "reveal": 4, "op": ["evacuated"], "enter": "ls_move", "hand": "ls_move"},
+			{"id": "ls_hold", "chapter": 3, "reveal": 4, "op": ["ring_down"]},
 		]},
-	2: {"key": "relays", "ready": false, "map": "T-07-switchyard", "abilities": false, "ai": "Training", "stage": [], "reveal": [], "goals": []},
-	3: {"key": "structures", "ready": false, "map": "T-08-relay-works", "abilities": false, "ai": "Training", "stage": [], "reveal": [], "goals": []},
-	4: {"key": "skills", "ready": false, "map": "T-10-long-decks", "abilities": true, "ai": "Training", "stage": [], "reveal": [], "goals": []},
-	5: {"key": "team", "ready": false, "map": "T-12-team-up", "abilities": false, "ai": "Training", "stage": [], "reveal": [], "goals": []},
+	2: {"key": "relays", "ready": false, "map": "T-07-switchyard", "abilities": false, "ai": "Training", "stage": [], "reveal": [], "steps": []},
+	3: {"key": "structures", "ready": false, "map": "T-08-relay-works", "abilities": false, "ai": "Training", "stage": [], "reveal": [], "steps": []},
+	4: {"key": "skills", "ready": false, "map": "T-10-long-decks", "abilities": true, "ai": "Training", "stage": [], "reveal": [], "steps": []},
+	5: {"key": "team", "ready": false, "map": "T-12-team-up", "abilities": false, "ai": "Training", "stage": [], "reveal": [], "steps": []},
 }
 
 
@@ -371,7 +393,7 @@ var first_launch := false                            # the forced first run: the
 var skipped := false                                 # a goal was skipped in this run: it ends skipped, not completed
 var faction := PLAYER_FACTION
 var state := "running"                               # running / failed / complete (the screen is up) / released (play on)
-var stage := 0                                       # the reveal stage: 0 A (start), 1 B (the relay), 2 C (the Last Stand)
+var stage := 0                                       # the reveal stage reached (an index into the tutorial's "reveal")
 var lesson_t := 0.0
 var version := 0                                     # bumped whenever card() / chips() / target() / gesture() change
 var time_scale := 1.0                                # main steps the Sim at dt x this (slow motion at the relay moment)
@@ -410,6 +432,12 @@ var _ls_t0 := 0.0
 var _ls_falls := 0.0
 var _assist := {}                                    # neutral node id -> {"seen", "frozen", "from", "topped"}
 var _assist_added := {}
+var _entered := ""                                   # the step whose `enter` ran last
+var _enter_t := {}                                   # step id -> the match time it became current
+var _base := {}                                      # counters at a step's start (its detector counts from there)
+var _pressed := {}                                   # read-only steps whose GOT IT was pressed
+var _evac_sent := false                              # the Last Stand move: a send off a falling node onto the kept ring
+var _free_shown := -1                                # the free-play countdown the strip shows
 
 
 func _init(id := 1) -> void:
@@ -507,51 +535,48 @@ func reveal_keys() -> Array:
 
 # ---------------------------------------------------------------- the goals (GoalDirector + this layer's detectors)
 func _build_goals() -> void:
+	## The steps become GoalDirector goals, one stage each: step i is live once step i-1 is done (the order of §3a).
 	goals = GoalDirector.new(self)
-	for spec in L.get("goals", []):
-		var sp: Dictionary = (spec as Dictionary).duplicate()
-		var op: Array = sp["op"]
-		sp["check"] = func(_c): return _eval(op)
-		if sp.has("ready"):
-			var rd: Array = sp["ready"]
-			sp["ready"] = func(_c): return bool(_eval(rd))
-		match str(sp["id"]):                         # the per-goal assists (scripted rival lines, top-ups)
+	var steps: Array = L.get("steps", [])
+	for i in range(steps.size()):
+		var sp: Dictionary = (steps[i] as Dictionary).duplicate()
+		var id := str(sp["id"])
+		sp["stage"] = i
+		if sp.get("read", false):
+			sp["check"] = func(_c): return _pressed.has(id)
+		else:
+			var op: Array = sp["op"]
+			sp["check"] = func(_c): return _eval(op)
+		match id:                                    # the per-step assists (scripted rival lines, top-ups)
 			"machinegoon":
-				sp["assist"] = func(_c, _d): _tick_probe()
+				sp["assist"] = func(_c, _d): _tick_mg_step()
 			"relay":
 				sp["assist"] = func(_c, _d): _tick_push()
-			"last_stand":
-				sp["assist"] = func(_c, _d): _tick_last_stand()
 		goals.add_goal(sp)
 	goals.goal_completed.connect(_on_goal_done)
-	# the timeline: the opening line, the relay stage, the Last Stand (§3)
-	goals.add_event({"at": 0.0, "do": func(_c): say(line("T1.start"), float(Rules.QUICK_START["welcome"]))})
-	goals.add_event({"when": func(_c): return _stage_b_due(), "do": func(_c): _open_stage(1)})
-	goals.add_event({"when": func(_c): return _last_stand_due(), "do": func(_c): _stage_last_stand()})
 
 
 func _eval(op: Array):
-	## The detectors and preconditions goals are made of: true / false, or a progress float.
+	## The step detectors - each counts from its own step's start (a later step never passes before its turn).
 	match str(op[0]):
+		"took":                                      # a neutral node captured since the step began
+			return _took > int(_base.get("took", 0))
+		"reinforced":                                # a line between two of your nodes landed since the step began
+			return _reinforced
 		"upgraded":                                  # a vat of yours went up to tier op[1] (an upgrade, never a captured T2)
 			return _upgraded_tier >= int(op[1])
-		"took_neutral":
-			return _took > 0
-		"reinforced":
-			return _reinforced
 		"mg_kills":                                  # you built a Machinegoon and it killed rival units
 			return _mg_kills >= float(Rules.QUICK_START["mg_kill_shown"]) * Rules.SCALE
-		"relay_drop":                                # your relay dropped rival units
-			return _relay_drops >= int(Rules.QUICK_START["relay_min_drop"])
-		"ring_down":                                 # the Last Stand's first ring fell and you still hold a node
-			return _ring_down()
-		"own_nodes":
-			return _mine().size() >= int(op[1])
-		"mg_site":                                   # a node of yours can hold it (or it stands)
-			var site := _mg_site_id()
-			return site >= 0 and sim.nodes[site]["owner"] == HUMAN
+		"free_done":
+			return sim.time - float(_enter_t.get("free", sim.time)) >= float(Rules.QUICK_START["free_play"])
 		"relay_owned":
 			return _relay() >= 0 and sim.nodes[_relay()]["owner"] == HUMAN
+		"relay_drop":                                # your relay dropped rival units
+			return _relay_drops >= int(Rules.QUICK_START["relay_min_drop"])
+		"evacuated":                                 # a send off a falling node onto the kept ring - or nothing left to move
+			return _evac_sent or (_ls_started and _evac_move().is_empty())
+		"ring_down":                                 # the first ring fell and you still hold a node
+			return _ring_down()
 	return false
 
 
@@ -563,23 +588,12 @@ func _mine() -> Array:
 	return out
 
 
-func _stage_b_due() -> bool:
-	if stage >= 1:
-		return false
-	if sim.time >= float(Rules.QUICK_START["stage_b_after"]) or sim.time >= float(Rules.QUICK_START["push_latest"]):
-		return true
-	for id in ["upgrade", "take", "reinforce", "machinegoon"]:
-		if not goals.goal_done(id):
-			return false
-	return true
-
-
 func _open_stage(n: int) -> void:
+	## Reveal stage n (and everything before it); the relay stage also arms the relay-outcome preview.
 	if n <= stage:
 		return
 	stage = n
-	goals.unlock_stage(n)
-	if n == 1:
+	if n >= REVEAL_RELAY:
 		preview_relay = _relay()
 	_bump()
 
@@ -588,25 +602,78 @@ func current_id() -> String:
 	return str(goals.current().get("id", "")) if goals else ""
 
 
+func current_step() -> Dictionary:
+	return goals.current() if goals else {}
+
+
+func _step_index(id: String) -> int:
+	for i in range(goals.goals.size()):
+		if goals.goals[i]["id"] == id:
+			return i
+	return -1
+
+
+func _enter_current() -> void:
+	## The step that just became current: its reveal, its staging (`enter`), its clocks.
+	var g := goals.current()
+	if g.is_empty() or str(g["id"]) == _entered:
+		return
+	var id := str(g["id"])
+	_entered = id
+	_enter_t[id] = sim.time
+	_open_stage(int(g.get("reveal", 0)))
+	match id:
+		"take":
+			_base["took"] = _took
+		"reinforce":
+			_reinforced = false
+		"relay":
+			_push["phase"] = "idle"
+	match str(g.get("enter", "")):
+		"topup_home":                                # the upgrade can always be paid
+			var h := _home()
+			if h >= 0 and sim.nodes[h]["owner"] == HUMAN:
+				var need := float(sim.upgrade_cost(sim.nodes[h])) + 5.0 * Rules.SCALE
+				sim.nodes[h]["units"] = maxf(float(sim.nodes[h]["units"]), need)
+		"last_stand":
+			_stage_last_stand()
+		"ls_move":
+			_evac_sent = false
+	_last_order_t = sim.time                         # a fresh card: the idle clock starts again
+	_idle_shown = false
+	_bump()
+
+
 func _on_goal_done(id: String, was_skipped: bool) -> void:
 	if was_skipped:
 		skipped = true
-	else:
+	elif LINES.has("T1.done.%s" % id):
 		say(line("T1.done.%s" % id), float(Rules.QUICK_START["tick_note"]))
 		handler.emit("happy")
-		_last_order_t = sim.time                     # a fresh hint: the hand waits its idle time again
-		_idle_shown = false
 	if id == "relay":
 		_relay_done_t = sim.time
 		_push["prompt"] = false
+		_push["phase"] = "done"
+	goals.unlock_stage(_step_index(id) + 1)          # the next step goes live now
+	_enter_current()
 	_bump()
+
+
+func _tick_mg_step() -> void:
+	## The Machinegoon step: once M is yours it can always pay for the build (staging), then the probe walks at it.
+	var site := _mg_site_id()
+	if site >= 0 and sim.nodes[site]["owner"] == HUMAN and sim.nodes[site]["structure"] == "vat" and sim.nodes[site]["build_kind"] == "":
+		var need := float(Rules.MACHINEGOON_COST[1]) + 5.0 * Rules.SCALE
+		if float(sim.nodes[site]["units"]) < need:
+			sim.nodes[site]["units"] = need
+	_tick_probe()
 
 
 # ---------------------------------------------------------------- the frame
 func step(dt: float) -> void:
 	if sim == null:
 		return
-	if state == "released":
+	if state == "released":                          # CONTINUE PLAYING: the Training AI plays the rest of the match
 		if ai != null:
 			ai.think(sim, dt)
 		return
@@ -625,7 +692,8 @@ func step(dt: float) -> void:
 	_scan_machinegoons()
 	_scan_reinforce()
 	_tick_short_sends()
-	goals.tick(dt, sim.time)
+	_enter_current()
+	goals.tick(dt, sim.time)                         # (the rival stays passive: no AI until the quick start is done)
 	if state != "running":
 		return
 	_hold_last_stand()
@@ -640,11 +708,31 @@ func step(dt: float) -> void:
 	if state != "running":
 		return
 	_refresh_hint()
-	if not _idle_shown and sim.time - _last_order_t > IDLE_LINE and _push["phase"] != "out":
+	_tick_countdown()
+	var cur := current_id()
+	var read := bool(current_step().get("read", false))
+	var idle_after := float(Rules.QUICK_START["free_nudge"]) if cur == "free" else IDLE_LINE
+	if not _idle_shown and not read and sim.time - _last_order_t > idle_after and str(_push["phase"]) != "out":
 		_idle_shown = true
-		say(line("idle_hint"))
-	if ai != null:
-		ai.think(sim, dt * time_scale)
+		say(line("T1.free_nudge") if cur == "free" else line("idle_hint"))
+
+
+func _tick_countdown() -> void:
+	## Free play: the strip's chip counts the seconds down.
+	if current_id() != "free":
+		return
+	var left := free_left()
+	if left != _free_shown:
+		_free_shown = left
+		_bump()
+
+
+func free_left() -> int:
+	## Whole seconds of free play left (the strip shows it).
+	if current_id() != "free":
+		return 0
+	var t := sim.time - float(_enter_t.get("free", sim.time))
+	return maxi(0, ceili(float(Rules.QUICK_START["free_play"]) - t))
 
 
 func on_event(ev: Dictionary) -> void:
@@ -692,24 +780,28 @@ func allow(method: String, _id_arg: int, args := {}) -> String:
 
 
 func press_button() -> void:
-	pass                                             # the quick start has no read-only card
+	## The card's GOT IT on a read-only step (the Last Stand explanations).
+	if state != "running" or goals == null:
+		return
+	_enter_current()
+	var g := goals.current()
+	if not g.is_empty() and g.get("read", false):
+		_pressed[str(g["id"])] = true
+		goals.complete(str(g["id"]))
 
 
 func skip_step() -> void:
-	## SKIP GOAL: the current goal counts as done for the flow (the next ones open) but the run ends skipped.
-	if state != "running":
+	## SKIP GOAL: the current step counts as done for the flow (the next one starts) but the run ends skipped.
+	if state != "running" or goals == null:
 		return
+	_enter_current()                                 # (its staging runs even when it is skipped at once)
 	var g := goals.current()
-	if g.is_empty():
-		g = goals.open_goals()[0] if not goals.open_goals().is_empty() else {}
 	if g.is_empty():
 		return
 	skipped = true
 	if str(g["id"]) == "relay":
 		_push["phase"] = "done"
 		_push["prompt"] = false
-	if str(g["id"]) == "last_stand" and not _ls_started:
-		_ls_started = true                           # nothing left to stage
 	goals.skip(str(g["id"]))
 	_bump()
 
@@ -746,6 +838,9 @@ func _scan_events() -> void:
 				if seat == HUMAN:
 					_last_order_t = sim.time
 					_idle_shown = false
+					if str(ev["type"]) == "send" and _ls_started and _doomed(int(ev.get("from", -1))) \
+							and sim.last_stand_keep.has(int(ev.get("to", -1))):
+						_evac_sent = true              # off a falling node, onto the kept ring
 
 
 func _track_hordes() -> void:
@@ -970,9 +1065,9 @@ func _pass_relay_by_practice() -> void:
 
 func _push_due(relay: int) -> bool:
 	var rn: Dictionary = sim.nodes[relay]
-	if stage < 1 or rn["owner"] != HUMAN or rn["relay_phase"] != "" or rn["relay_cd"] > 0.0:
+	if current_id() != "relay" or rn["owner"] != HUMAN or rn["relay_phase"] != "" or rn["relay_cd"] > 0.0:
 		return false
-	return sim.seat_strength(RIVAL) >= float(Rules.L9_MATCH["push_min_shown"]) * Rules.SCALE and not _ls_started
+	return true                                      # (the scripted line tops its source up: no strength needed)
 
 
 func _relay_deck(relay: int) -> Dictionary:
@@ -1117,14 +1212,6 @@ func catch_line() -> int:
 
 
 # ---------------------------------------------------------------- the Last Stand
-func _last_stand_due() -> bool:
-	if _ls_started or stage < 1 or time_scale < 1.0 or bool(_push["prompt"]):
-		return false
-	if sim.time >= float(Rules.QUICK_START["ls_latest"]):
-		return true
-	return _relay_done_t >= 0.0 and sim.time >= _relay_done_t + float(Rules.QUICK_START["ls_after_relay"])
-
-
 func _stage_last_stand() -> void:
 	## The collapse is announced: the clock jumps to {ls}, the drops are pinned short, the rival is capped weak so the
 	## collapse can be won, the kept ring's neutral nodes are made cheap to take.
@@ -1144,7 +1231,6 @@ func _stage_last_stand() -> void:
 			n["units"] = minf(float(n["units"]), cap)
 			n["regen_cap"] = n["units"]
 	_give_rival_a_kept_node()
-	_open_stage(2)
 	_bump()
 
 
@@ -1190,28 +1276,31 @@ func _jump_clock(to: float) -> void:
 		_relay_done_t += d
 	for k in _mg_seen.keys():
 		_mg_seen[k] = float(_mg_seen[k]) + d
+	for k in _enter_t.keys():                        # the step clocks move with it
+		_enter_t[k] = float(_enter_t[k]) + d
 
 
 func _hold_last_stand() -> void:
-	## The first ring's countdown waits while the line is read and the units move.
-	if _ls_started and sim.time - _ls_t0 < float(Rules.QUICK_START["ls_hold"]) and not sim.last_stand_queue.is_empty() \
-			and not goals.goal_done("last_stand"):
+	## The first ring's countdown waits while the explanation cards are read, and a few seconds into the move.
+	if not _ls_started or sim.last_stand_queue.is_empty() or goals.goal_done("ls_hold"):
+		return
+	var cur := current_id()
+	var hold := cur in ["ls_intro", "ls_marks", "ls_rings"]
+	if cur == "ls_move" and sim.time - float(_enter_t.get("ls_move", sim.time)) < float(Rules.QUICK_START["ls_grace"]):
+		hold = true
+	if hold:
 		sim.last_stand_warn_t = maxf(sim.last_stand_warn_t, Rules.LAST_STAND_WARNING)
 
 
 func _cap_rival() -> void:
-	## From the announcement to the end of the Last Stand goal the rival's nodes hold at most a few units: whatever the
+	## From the announcement to the end of the quick start the rival's nodes hold at most a few units: whatever the
 	## collapse leaves it, an attack of yours can take.
-	if not _ls_started or goals.goal_done("last_stand"):
+	if not _ls_started or goals.goal_done("ls_hold"):
 		return
 	var cap := float(Rules.QUICK_START["ls_rival_cap_shown"]) * Rules.SCALE
 	for n in sim.nodes:
 		if n["owner"] == RIVAL:
 			n["units"] = minf(float(n["units"]), cap)
-
-
-func _tick_last_stand() -> void:
-	pass                                             # the top-ups are _tick_short_sends (the take goal); the rest is _cap_rival
 
 
 func _ring_nodes() -> Array:
@@ -1306,39 +1395,53 @@ func header() -> String:
 
 
 func chips() -> Array:
-	## The goal strip: [{text, done, current, skipped, locked}] in list order.
-	var cur := current_id()
+	## The goal strip: one chip per chapter, the current one outlined with its progress ("BASICS 2/4", "YOUR TURN 0:32"),
+	## ticked when done, the later ones dimmed.
+	var cur := current_step()
+	var cur_ch := int(cur.get("chapter", 99)) if not cur.is_empty() else 99
 	var out := []
-	for g in goals.goals:
-		out.append({"id": g["id"], "text": line("T%d.chip.%s" % [lesson_id, g["id"]]), "done": g["done"], "skipped": g["skipped"],
-				"current": g["id"] == cur and not g["done"], "locked": not goals.is_live(g)})
+	for ch in range(int(L.get("chapters", 0))):
+		var all := goals.goals.filter(func(g): return int(g["chapter"]) == ch)
+		var done := all.filter(func(g): return g["done"]).size()
+		var text := line("T%d.chapter.%d" % [lesson_id, ch])
+		if ch == cur_ch:
+			if str(cur["id"]) == "free":
+				text += " %s" % _mmss(float(free_left()))
+			elif all.size() > 1:
+				text += " %d/%d" % [done, all.size()]
+		out.append({"id": ch, "text": text, "done": done == all.size() and all.size() > 0,
+				"skipped": all.any(func(g): return g["skipped"]), "current": ch == cur_ch, "locked": ch > cur_ch})
 	return out
 
 
 func _phase(g: Dictionary) -> String:
-	## Which of a goal's lines applies now: "main", "prep" (something must come first), "watch" (built / waiting),
-	## "wait", "now" (the moment).
+	## Which of a step's lines applies now: "main", "prep" (something must come first), "wait" (building / waiting),
+	## "watch", "now" (the moment), "send" (the take card's second line).
 	match str(g.get("id", "")):
+		"take":
+			return "send" if sim.time - float(_enter_t.get("take", sim.time)) > float(Rules.QUICK_START["take_send_after"]) \
+					and _hmeta.is_empty() else "main"
 		"reinforce":
 			return "main" if _mine().size() >= 2 else "prep"
+		"upgrade":
+			var s := _upgrade_site()
+			return "wait" if s >= 0 and sim.nodes[s]["build_kind"] != "" else "main"
 		"machinegoon":
 			if _mg_site >= 0:
 				return "watch"
 			var site := _mg_site_id()
-			return "main" if site >= 0 and sim.nodes[site]["owner"] == HUMAN else "prep"
+			if site >= 0 and sim.nodes[site]["owner"] == HUMAN:
+				return "wait" if sim.nodes[site]["build_kind"] != "" else "main"
+			return "prep"
 		"relay":
-			if catch_prompt():
-				return "now"
-			return "wait" if _relay() >= 0 and sim.nodes[_relay()]["owner"] == HUMAN else "prep"
-		"last_stand":
-			return "main" if _ls_started else "wait"
+			return "now" if catch_prompt() else "wait"
 	return "main"
 
 
 func _hint_line() -> String:
 	var g := goals.current()
 	if g.is_empty():
-		return line("T1.last_stand_wait") if not goals.all_done() else ""
+		return ""
 	var id := str(g["id"])
 	var ph := _phase(g)
 	var key := "T1.%s" % id if ph == "main" else "T1.%s_%s" % [id, ph]
@@ -1359,12 +1462,14 @@ func _refresh_hint() -> void:
 
 
 func card() -> Dictionary:
-	## The coach card now: {visible, header, text, dots, dot, button}. The quick start has no read-only steps: no button.
+	## The coach card now: {visible, header, text, dots, dot, button, compact}. GOT IT on the read-only steps.
 	if state == "failed":
 		return {"visible": true, "header": "%s · %s" % [header(), line("try_again_title")], "text": fail_line,
 				"dots": 0, "dot": 0, "button": line("try_again_title")}
-	var text := _note if _note != "" else _hint_text
-	return {"visible": state == "running" and text != "", "header": header(), "text": text, "dots": 0, "dot": 0, "button": "",
+	var read := bool(current_step().get("read", false))
+	var text := _hint_text if read or _note == "" else _note   # a read-only card is never hidden by a passing line
+	return {"visible": state == "running" and text != "", "header": header(), "text": text, "dots": 0, "dot": 0,
+			"button": line("got_it") if read and state == "running" else "",
 			"compact": catch_prompt()}                # the relay prompt: no button row, the card covers less of the map
 
 
@@ -1373,10 +1478,10 @@ func is_tour() -> bool:
 
 
 func uses_inspector() -> bool:
-	## Does the current hint work in the inspector (an action button)? If not, main closes an inspector left open.
+	## Does the current step work in the inspector (an action button)? If not, main closes an inspector left open.
 	if state != "running":
 		return false
-	return current_id() == "machinegoon" and _mg_site < 0 and _mg_site_id() >= 0
+	return current_id() == "machinegoon" and _phase(current_step()) == "main"
 
 
 func inspect_request() -> int:
@@ -1384,17 +1489,19 @@ func inspect_request() -> int:
 
 
 func _hand_armed() -> bool:
+	## The guided steps show the hand from the start; free play only after idle time or a wrong action.
+	if current_id() != "free":
+		return true
 	return sim.time - _last_order_t >= float(Rules.QUICK_START["idle_hand"]) or sim.time < _wrong_until
 
 
 func target() -> Dictionary:
 	## What the spotlight rings: {nodes: [ids], rects: [keys], lines: [horde ids], open, ...}. `open`: a watch moment - no
-	## dim, nothing fogged, at most one soft ring. Empty until the hand is due (idle time or a wrong action).
+	## dim, nothing fogged, at most one soft ring.
 	var out := {"nodes": [], "rects": [], "lines": [], "decks": [], "open": false, "radius": 1.0, "monsters": false, "relay_decks": -1}
 	if state != "running" or goals == null:
 		return out
-	# watch moments: undimmed, one subtle ring on the main object - whichever goal is current
-	if catch_prompt() or str(_push["phase"]) == "out":
+	if catch_prompt() or str(_push["phase"]) == "out":   # the relay moment: the relay and the line, undimmed
 		out["nodes"] = [_relay()]
 		out["lines"] = [int(_push["line"])]
 		out["relay_decks"] = _relay()
@@ -1403,22 +1510,37 @@ func target() -> Dictionary:
 	var g := goals.current()
 	if g.is_empty():
 		return out
-	var id := str(g["id"])
-	if id == "machinegoon" and _mg_site >= 0:
-		out["open"] = true
-		out["nodes"] = [_mg_site]
-		if _any_alive(int(_mg_probe["line"])):
-			out["lines"] = [int(_mg_probe["line"])]
-		return out
-	if id == "last_stand" and _ls_started:
-		out["open"] = true
-		return out
+	match str(g["id"]):
+		"machinegoon":
+			if _mg_site >= 0:                        # built: watch the probe walk into it
+				out["open"] = true
+				out["nodes"] = [_mg_site]
+				if _any_alive(int(_mg_probe["line"])):
+					out["lines"] = [int(_mg_probe["line"])]
+				return out
+		"ls_intro", "ls_hold":                       # the Last Stand is never fogged over
+			out["open"] = true
+			return out
+		"ls_marks":                                  # the danger marks: the nodes that fall next
+			out["open"] = true
+			out["nodes"] = sim.last_stand_warn.keys().filter(func(id): return not sim.collapsed.get(id, false)).slice(0, 8)
+			return out
+		"ls_rings":                                  # the centre ring that stays
+			out["open"] = true
+			out["nodes"] = sim.last_stand_keep.keys().slice(0, 8)
+			return out
+		"relay":                                     # waiting for the push: the relay
+			out["nodes"] = [_relay()] if _relay() >= 0 else []
+			out["relay_decks"] = _relay()
+			out["open"] = true
+			return out
 	if not _hand_armed():
 		return out
 	var h := _hand(g)
 	out["nodes"] = h.get("nodes", [])
 	out["rects"] = h.get("rects", [])
 	out["lines"] = _moving_lines()
+	out["open"] = str(g["id"]) == "ls_move"
 	return out
 
 
@@ -1430,7 +1552,7 @@ func gesture() -> Array:
 	if catch_prompt():
 		return [["double_tap", _relay(), -1]]
 	var g := goals.current()
-	if g.is_empty() or not _hand_armed():
+	if g.is_empty() or g.get("read", false) or not _hand_armed():
 		return []
 	return _hand(g).get("gesture", [])
 
@@ -1452,13 +1574,13 @@ func _moving_lines() -> Array:
 	return out
 
 
-# ---------------------------------------------------------------- the hand providers (per goal)
+# ---------------------------------------------------------------- the hand providers (per step)
 var _hand_cache := {}
 var _hand_cache_key := ""
 
 
 func _hand(g: Dictionary) -> Dictionary:
-	## {nodes, rects, gesture} for the goal's hint now - worked out once per frame (target() and gesture() both ask), from
+	## {nodes, rects, gesture} for the step's hint now - worked out once per frame (target() and gesture() both ask), from
 	## the cached routes: no route search per frame.
 	var key := "%s|%.3f|%d|%d" % [str(g.get("id", "")), sim.time, ui_inspector, version]
 	if key != _hand_cache_key:
@@ -1472,44 +1594,60 @@ func _hand_now(g: Dictionary) -> Dictionary:
 	if not retry.is_empty():                          # after a short send: the hand shows the retry, 100 % from there
 		return {"nodes": [int(retry[0]), int(retry[1])], "rects": [], "gesture": [["drag", int(retry[0]), int(retry[1])]]}
 	match str(g.get("hand", "")):
-		"upgrade":
-			var s := _upgrade_site()
-			if s < 0:
-				return {}
-			return {"nodes": [s], "rects": [], "gesture": [["double_tap", s, -1]]}
 		"take":
-			var t := _neutral_target()
-			var f := _best_sender(t)
-			if t < 0 or f < 0:
-				return {}
-			return {"nodes": [f, t], "rects": [], "gesture": [["drag", f, t]]}
+			var t := _take_target()
+			var h := _capture_hand(t)
+			if not h.is_empty():
+				h["rects"] = ["send_panel"]         # the card talks about the SEND panel
+			return h
 		"reinforce":
 			var p := _reinforce_pair()
 			if p.is_empty():
 				return _capture_hand(_neutral_target())
 			return {"nodes": p, "rects": [], "gesture": [["drag", int(p[0]), int(p[1])]]}
+		"upgrade":
+			var s := _upgrade_site()
+			if s < 0:
+				return {}
+			if sim.nodes[s]["build_kind"] != "":     # building: the badge's bar, no hand
+				return {"nodes": [s], "rects": [], "gesture": []}
+			return {"nodes": [s], "rects": [], "gesture": [["double_tap", s, -1]]}
 		"machinegoon":
 			var site := _mg_site_id()
 			if site < 0:
 				return _capture_hand(_neutral_target())
 			if sim.nodes[site]["owner"] != HUMAN:
 				return _capture_hand(site)
-			if _mg_site >= 0:
-				return {}
-			if ui_inspector == site:
+			if _mg_site >= 0 or sim.nodes[site]["build_kind"] != "":
+				return {"nodes": [site], "rects": [], "gesture": []}
+			if ui_inspector == site:                # the inspector's MACHINEGOON card (main._inspector_target: its centre)
 				return {"nodes": [site], "rects": ["action:MACHINEGOON"], "gesture": [["press", "action:MACHINEGOON", -1]]}
 			return {"nodes": [site], "rects": [], "gesture": [["tap", site, -1]]}
-		"relay":
+		"free":                                      # after idle time: something to do - a grey node, else a vat
+			var t2 := _neutral_target()
+			if t2 >= 0 and _best_sender(t2) >= 0:
+				return _capture_hand(t2)
+			var s2 := _upgrade_site()
+			return {"nodes": [s2], "rects": [], "gesture": [["double_tap", s2, -1]]} if s2 >= 0 else {}
+		"relay_take":
 			var r := _relay()
 			if r >= 0 and sim.nodes[r]["owner"] != HUMAN:
 				return _capture_hand(r)
 			return {}
-		"last_stand":
+		"ls_move":
 			var mv := _evac_move()
 			if mv.is_empty():
 				return {}
 			return {"nodes": mv, "rects": [], "gesture": [["drag", int(mv[0]), int(mv[1])]]}
 	return {}
+
+
+func _take_target() -> int:
+	## The take step's grey node: the map's N1 (a T1 next to your home) while it is still grey, else the nearest one.
+	var n1 := _id("N1")
+	if n1 >= 0 and sim.nodes[n1]["owner"] == "" and not sim.collapsed.get(n1, false):
+		return n1
+	return _neutral_target()
 
 
 func _capture_hand(t: int) -> Dictionary:
@@ -1521,6 +1659,9 @@ func _capture_hand(t: int) -> Dictionary:
 
 func _upgrade_site() -> int:
 	## The vat the hint points at: one of yours below T2 that can go up now, else the richest one below T2, else your home.
+	for id in _mine():                               # a vat going up right now: that one (the card watches its bar)
+		if sim.nodes[id]["structure"] == "vat" and sim.nodes[id]["build_kind"] == "vat":
+			return id
 	var best := -1
 	var best_ok := false
 	for id in _mine():
@@ -1716,6 +1857,8 @@ func _fmt(text: String) -> String:
 		"ls": _mmss(Rules.LAST_STAND_TIME),
 		"cost": str(Rules.shown(sim.upgrade_cost(sim.nodes[site]))) if site >= 0 else str(Rules.shown(Rules.VAT_COST[1])),
 	}
+	var t := _take_target()
+	vals["garrison"] = str(Rules.shown(sim.nodes[t]["units"])) if t >= 0 else "0"
 	for k in vals:
 		text = text.replace("{%s}" % k, str(vals[k]))
 	return text
