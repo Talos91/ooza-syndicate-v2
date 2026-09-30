@@ -2596,6 +2596,9 @@ func _tutorial_continue() -> void:
 	hud.reveal_all()
 	hud.extra_ui_rects = []
 	coach.hide_complete()
+	if sim.over:                                       # the collapse already ended the match under the goals: its results now
+		_record_progress()
+		hud.show_end(sim.winner)
 
 
 func _on_lesson_completed(r: Dictionary) -> void:

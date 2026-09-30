@@ -29,6 +29,8 @@ func _init() -> void:
 			TutorialDirector.map_dir = a.substr(5)
 		if a.begins_with("quick="):
 			quick_map = a.substr(6)
+	if quick_map == "" and FileAccess.file_exists("%s/T-11-proving-ground.json" % TutorialDirector.map_dir):
+		quick_map = "T-11-proving-ground"
 	TutorialDirector.path = "user://test_tutorial_progress.cfg"
 	ArmyPresets.path = "user://test_tutorial_armies.cfg"
 	Progression.path = "user://test_tutorial_progression.cfg"   # TUTORIAL + PROGRESSION: never the real wallet
@@ -624,7 +626,6 @@ func _stage_ls(d: TutorialDirector) -> void:
 	for id in ["upgrade", "take", "reinforce", "machinegoon", "relay"]:
 		d.goals.complete(id)
 	d._open_stage(1)
-	set_units(d.sim, d.names["I3"], 3.0, "B")                   # the rival keeps a node on the kept ring: the collapse cannot end the match
 
 
 func test_last_stand() -> void:
@@ -640,6 +641,8 @@ func test_last_stand() -> void:
 	d.on_action("send", 0, {}, true)                            # (the player is active: no "still with me?" over the announcement)
 	var started := run_until(d, sim, func(): return sim.last_stand_active, 5.0)
 	check(sim.last_stand_active and sim.time >= Rules.LAST_STAND_TIME, "LAST STAND: staged by 2:30, the clock jumps to %s" % TutorialDirector._mmss(Rules.LAST_STAND_TIME))
+	var rival_kept := sim.nodes.any(func(x): return x["owner"] == "B" and sim.last_stand_keep.has(x["id"]))
+	check(rival_kept, "LAST STAND: the rival keeps a node on the kept ring, so the match goes on after the collapse")
 	check(d.stage == 2 and "danger" in d.reveal_keys() and "status_line" in d.reveal_keys(), "LAST STAND: stage C reveals the status line and the danger marks")
 	check(sim.ls_drop_gap_override == Rules.LAST_STAND_DROP_GAP, "LAST STAND: the drop gap is pinned short")
 	check(sim.match_hard_end == INF and not sim.vls_enabled, "LAST STAND: the Very Last Stand and the 7:00 end stay off until the end")
@@ -774,7 +777,7 @@ func test_complete_flow() -> void:
 	TutorialDirector.reload_progress()
 
 
-# ------------------------------------------------------------------ T-11 (once the map pipeline has baked it)
+# ------------------------------------------------------------------ T-11, the quick start's own map
 func test_quick_map() -> void:
 	var path := "%s/%s.json" % [TutorialDirector.map_dir, quick_map]
 	check(FileAccess.file_exists(path), "T-11: %s is baked" % quick_map)
@@ -784,10 +787,117 @@ func test_quick_map() -> void:
 	var d: TutorialDirector = r[0]
 	var sim: Sim = r[1]
 	var n: Dictionary = d.names
-	check(n.has("H") and n.has("BH") and n.has("R") and sim.nodes[n["R"]]["relay"] == "rotation", "T-11: names H, BH and the rotation relay R")
-	check(TutorialDirector.map_path_for(1) == "%s/T-11-proving-ground.json" % TutorialDirector.map_dir, "T-11: the quick start's map path")
+	check(n["H"] == 0 and n["BH"] == 5 and n["R"] == 4 and n["M"] == 3 and n["N1"] == 1 and n["N2"] == 2, "T-11: the lessonNames (H, BH, R, M, N1, N2)")
+	check(sim.nodes[n["R"]]["relay"] == "rotation" and TutorialDirector.map_path_for(1).ends_with("T-11-proving-ground.json"), "T-11: a rotation relay in the middle, the quick start's map path")
+	check("machinegoon" in sim.nodes[n["M"]]["buildable"] and sim.nodes[n["M"]]["owner"] == "", "T-11: M is a neutral common node that can hold a Machinegoon")
 	var neutrals := sim.nodes.filter(func(x): return x["owner"] == "" and Sim.has_vat(x))
 	check(neutrals.size() >= 4, "T-11: neutral vat nodes to take (%d)" % neutrals.size())
-	check(not sim.last_stand_waves.is_empty() or sim.nodes.any(func(x): return x["ring"] != 0), "T-11: has rings")
-	var ls: Dictionary = MapBuilder.load_map(path).get("lastStand", {})
-	check((ls.get("methods", []) as Array).has("inward"), "T-11: the Last Stand falls inward")
+	check(d._mg_site_id() == n["M"], "T-11: the Machinegoon hint points at M")
+	check(d._neutral_target() in [n["N1"], n["N2"], n["M"]], "T-11: the take hint points at a neutral on your side (%d)" % d._neutral_target())
+	# the relay push crosses the relay's open deck (r1, toward the rival) and a fire drops it
+	for id in [n["H"], n["N1"], n["N2"], n["M"], n["R"]]:
+		set_units(sim, id, 30.0, "A")
+	for id in [n["BH"], n["B1"], n["B2"], 8]:
+		set_units(sim, id, 25.0, "B")
+	for id in ["upgrade", "take", "reinforce", "machinegoon"]:
+		d.goals.complete(id)
+	d._open_stage(1)
+	var st := {"fired": false, "slow_early": false, "fling": 0}
+	var t := 0.0
+	while d.state == "running" and not d.goals.goal_done("relay") and t < 150.0:
+		d.step(DT)
+		var hid := d.catch_line()
+		if hid >= 0 and d.time_scale <= float(Rules.QUICK_START["slow"]) + 0.001 and deck_metres(sim, hid, n["R"]) <= 0.0:
+			st["slow_early"] = true
+		if d.catch_prompt() and not st["fired"]:
+			st["fired"] = sim.fire_relay(n["R"])
+		sim.step(DT * d.time_scale)
+		for ev in sim.fx_events:
+			d.on_event(ev)
+			if ev["type"] == "fling" and ev["seat"] == "B":
+				st["fling"] += int(ev["units"])
+		sim.fx_events.clear()
+		t += DT
+	check(st["slow_early"] and st["fired"] and st["fling"] >= int(Rules.QUICK_START["relay_min_drop"]) and d.goals.goal_done("relay"),
+			"T-11: the push is on the deck when the slow motion opens, the fire drops it (%d units, %.0f s)" % [st["fling"], t])
+	# the Last Stand on this map: ring 1 falls (both pockets), the evacuation runs to M / R
+	var r2 := make(quick_map)
+	var d2: TutorialDirector = r2[0]
+	var s2: Sim = r2[1]
+	for id in ["upgrade", "take", "reinforce", "machinegoon", "relay"]:
+		d2.goals.complete(id)
+	d2._open_stage(1)
+	d2._stage_last_stand()
+	check(s2.last_stand_active and (s2.last_stand_waves[0] as Array).size() == 6 and s2.last_stand_keep.has(n["R"]) and s2.last_stand_keep.has(n["M"]),
+			"T-11: the outer ring (six nodes) falls, R / M / M2 are kept")
+	check(s2.nodes.any(func(x): return x["owner"] == "B" and s2.last_stand_keep.has(x["id"])), "T-11: the rival is given a node on the kept ring")
+	check(d2._evac_move().size() == 2 and s2.last_stand_keep.has(int(d2._evac_move()[1])), "T-11: the hand's evacuation goes to a kept node")
+	set_units(s2, n["H"], 40.0, "A")
+	s2.send(n["H"], n["M"], 1.0)
+	run_until(d2, s2, func(): return d2.goals.goal_done("last_stand") or d2.state != "running", 120.0)
+	check(d2.goals.goal_done("last_stand") and not s2.eliminated.has("A"), "T-11: an evacuating player holds M when the outer ring has fallen")
+	# a whole quick start by a scripted player against the Training AI
+	test_quick_soak(quick_map)
+
+
+func bot(d: TutorialDirector, sim: Sim, t: float) -> void:
+	## A plain scripted player: upgrade the home, take neutrals with a margin, reinforce, build a Machinegoon on M,
+	## fire the relay at the prompt, and in the Last Stand run off the falling ring.
+	if int(t * 20.0) % 20 != 0:                          # once a second
+		return
+	var n: Dictionary = d.names
+	var H: int = n["H"]
+	if sim.can_upgrade(H, "A") == "" and int(sim.nodes[H]["tier"]) < 2:
+		sim.upgrade_structure(H)
+	if d.catch_prompt():
+		sim.fire_relay(n["R"])
+	var mine := d._mine()
+	for id in mine:                                        # the collapse: off a warned or falling node
+		if d._doomed(id) and float(sim.nodes[id]["units"]) >= Rules.SCALE and sim.nodes[id]["streaming"].is_empty():
+			var mv := d._evac_move()
+			if not mv.is_empty() and int(mv[0]) == id:
+				sim.send(id, int(mv[1]), 1.0)
+	if d._ls_started:
+		return
+	var M: int = n["M"]
+	if sim.nodes[M]["owner"] == "A" and sim.nodes[M]["structure"] == "vat" and sim.nodes[M]["build_kind"] == "" \
+			and float(sim.nodes[M]["units"]) >= float(Rules.MACHINEGOON_COST[1]) + 5.0:
+		sim.structure_order("A", "build", M, {"kind": "machinegoon"})
+	for id in mine:
+		var nd: Dictionary = sim.nodes[id]
+		if float(nd["units"]) < 22.0 * Rules.SCALE or not nd["streaming"].is_empty():
+			continue
+		var tgt := -1
+		var best := INF
+		for o in sim.nodes:
+			if o["owner"] == "" and o["node_kind"] != "junction" and float(o["units"]) * 1.4 + 20.0 < float(nd["units"]):
+				var rr := sim.find_route(id, o["id"])
+				if rr.size() >= 2 and float(rr.size()) < best:
+					best = float(rr.size())
+					tgt = o["id"]
+		if tgt >= 0:
+			sim.send(id, tgt, 1.0)
+			return
+	if mine.size() >= 2 and sim.time > 60.0 and int(t) % 40 == 0:            # a reinforcement now and then
+		var a: int = mine[0]
+		var b: int = mine[1]
+		if float(sim.nodes[a]["units"]) > 12.0 * Rules.SCALE and sim.nodes[a]["streaming"].is_empty():
+			sim.send(a, b, 0.5)
+
+
+func test_quick_soak(map_name: String) -> void:
+	var r := make(map_name, 11, true)
+	var d: TutorialDirector = r[0]
+	var sim: Sim = r[1]
+	var t := 0.0
+	var order := []
+	d.goals.goal_completed.connect(func(id, _s): order.append("%s@%d" % [id, int(sim.time)]))
+	while d.state == "running" and t < 420.0:
+		bot(d, sim, t)
+		tick(d, sim)
+		t += DT
+	print("   soak: ", d.state, " goals ", order, " t ", int(t), " sim ", int(sim.time), " stage ", d.stage)
+	check(d.state == "complete" and not d.skipped, "soak: a scripted player finishes the quick start on the real map (%s)" % d.state)
+	check(d.goals.goal_done("upgrade") and d.goals.goal_done("take") and d.goals.goal_done("reinforce") and d.goals.goal_done("machinegoon")
+			and d.goals.goal_done("relay") and d.goals.goal_done("last_stand"), "soak: all six goals ticked")
+	check(t < 330.0, "soak: within a few minutes of match time (%.0f s)" % t)

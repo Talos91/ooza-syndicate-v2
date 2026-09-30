@@ -1141,8 +1141,34 @@ func _stage_last_stand() -> void:
 			var cap := float(Rules.QUICK_START["ls_neutral_cap_shown"]) * Rules.SCALE
 			n["units"] = minf(float(n["units"]), cap)
 			n["regen_cap"] = n["units"]
+	_give_rival_a_kept_node()
 	_open_stage(2)
 	_bump()
+
+
+func _give_rival_a_kept_node() -> void:
+	## The rival keeps a node on the kept ring (the one nearest its home that you do not hold), so the collapse takes its
+	## outer nodes and the match still goes on when you CONTINUE PLAYING - instead of ending under the tutorial.
+	var home := int(sim.homes.get(RIVAL, -1))
+	if home < 0 or sim.last_stand_keep.is_empty():
+		return
+	for n in sim.nodes:
+		if n["owner"] == RIVAL and sim.last_stand_keep.has(n["id"]):
+			return
+	var best := -1
+	var best_len := 99999
+	for id in sim.last_stand_keep.keys():
+		var n: Dictionary = sim.nodes[id]
+		if n["owner"] == HUMAN or n["node_kind"] in ["junction", "relay"] or not Sim.has_vat(n):
+			continue
+		var r := sim.find_route(home, id)
+		if r.size() >= 2 and r.size() < best_len:
+			best_len = r.size()
+			best = id
+	if best >= 0:
+		sim.nodes[best]["owner"] = RIVAL
+		sim.nodes[best]["units"] = minf(float(sim.nodes[best]["units"]), float(Rules.QUICK_START["ls_rival_cap_shown"]) * Rules.SCALE)
+		sim.nodes[best]["regen_cap"] = sim.nodes[best]["units"]
 
 
 func _jump_clock(to: float) -> void:
