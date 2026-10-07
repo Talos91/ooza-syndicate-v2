@@ -4459,7 +4459,7 @@ func targets_for(seat: String, slot: String) -> Array:
 			for n in nodes:
 				if n["relay"] != "":
 					cands.append(n["id"])
-		"platform", "enemy_structure", "point":         # POWERS
+		"platform", "enemy_structure", "point", "enemy_node":   # POWERS
 			for n in nodes:
 				cands.append(n["id"])
 		"node_pair":                                   # POWERS (Portal): the entrances; then portal_exits(entrance)
@@ -4843,10 +4843,11 @@ func _target_pos(kind: String, target, seat: String) -> Vector3:
 #                     what pours in comes out of the exit as a carry line (h["carry_src"], "no_portal") walking
 #                     on to "dest" - or lands at the exit when that was the goal. fx "portal_pass" {"hid",
 #                     "node", "exit", "seat"} once per line. When it ends, lines still on the way walk on.
-#   evac      active  own node: SKILLS.evac.share of its garrison leaves at once (it is out of the node at the
-#                     cast) toward the nearest own node not under attack, by route: a line with h["evac"] and
-#                     h["evac_left"] still to burst out of the door; NO immunity (Daniele, 2026-09-29).
-#                     fx {"type": "evac", "node", "seat", "hid", "to"}.
+#   evac      active  an ENEMY node (Daniele, 2026-10-07: offensive): SKILLS.evac.share of its owner's garrison is
+#                     forced out at once (out of the node at the cast) toward the OWNER's nearest own node not under
+#                     attack, by route: the owner's line with h["evac"] and h["evac_left"] still to burst out of the
+#                     door; no immunity. Refused when they have nowhere to run (nothing is ever simply deleted).
+#                     fx {"type": "evac", "node", "seat" (caster), "victim", "hid", "to"}.
 #   core_meltdown (the ultimate): castable from the start of the trip - h["armed"]; _step_armed sets it off
 #                     within SKILLS.core_meltdown.range m of the target (or pouring in); fx "meltdown_fizzled"
 #                     {"hid", "seat"} when the target turns friendly first.
@@ -4994,12 +4995,12 @@ func _power_check(seat: String, id: String, target) -> String:
 				return "The exit must be within %d bridges" % int(sk["reach"])
 		"evac":
 			var i := _as_int(target)
-			if not _node_ok(i) or nodes[i]["owner"] != seat:
-				return "Pick one of your nodes"
+			if not _node_ok(i) or nodes[i]["owner"] == "" or allied(nodes[i]["owner"], seat):
+				return "Pick an enemy node"
 			if floorf(nodes[i]["units"] * float(sk["share"])) < 1.0:
-				return "No units to evacuate"
-			if _evac_route(seat, i).is_empty():
-				return "No safe node to evacuate to"
+				return "No troops to force out"
+			if _evac_route(nodes[i]["owner"], i).is_empty():
+				return "They have nowhere to run"
 	return ""
 
 
@@ -5110,17 +5111,20 @@ func _power_cast(seat: String, id: String, target, ev: Dictionary) -> void:
 						ahead = true
 				if ahead:
 					_reroute_keep(h, h["route"])
-		"evac":
+		"evac":                                          # offensive: the defender's troops are forced out
 			var src: Dictionary = nodes[_as_int(target)]
-			var route := _evac_route(seat, src["id"])
+			var victim: String = src["owner"]
+			var route := _evac_route(victim, src["id"])
 			var count := floorf(src["units"] * float(sk["share"]))
-			src["units"] -= count                           # out of the node at once: an attack there no longer reaches them
-			var h := _new_horde(seat, count, route, {"evac": true, "evac_left": count})
+			src["units"] -= count                           # out of the node at once: the garrison left is what an attack meets
+			var h := _new_horde(victim, count, route, {"evac": true, "evac_left": count})
 			hordes.append(h)
 			ev["hid"] = h["id"]
 			ev["to"] = route[-1]
-			fx_events.append({"type": "evac", "node": src["id"], "seat": seat, "hid": h["id"], "to": route[-1]})
-			events.append({"t": time, "type": "evac", "seat": seat, "node": src["id"], "units": count, "to": route[-1]})
+			ev["victim"] = victim
+			ev["affects"] = _hostile_list(seat, [victim])
+			fx_events.append({"type": "evac", "node": src["id"], "seat": seat, "victim": victim, "hid": h["id"], "to": route[-1]})
+			events.append({"t": time, "type": "evac", "seat": seat, "victim": victim, "node": src["id"], "units": count, "to": route[-1]})
 
 
 func _deck_drop_end(e: Dictionary) -> void:

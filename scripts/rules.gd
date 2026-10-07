@@ -627,6 +627,7 @@ const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
 # POWERS (0.22.2, NEW-POWERS-2026-09-28.md):
 #   platform    any platform but a home (node id)       enemy_structure  an enemy node with a structure (node id)
 #   point       the node at the centre of the circle    node_pair  [entrance node id, exit node id]
+#   enemy_node  a rival's node (node id; Emergency Evac, offensive since 2026-10-07)
 const SKILLS := {
 	# ---- active pool (combat), every map
 	# 0.19.2 (Daniele, 2026-09-27): +75 % speed (was +50 %) and its units leave and enter doors twice as fast
@@ -687,8 +688,10 @@ const SKILLS := {
 	# share of the garrison leaves at once (door rate x burst) for the nearest own node not under attack, by route.
 	# No immunity (Daniele, 2026-09-29: "no immunity at all, just let's make sure it's not OP"): towers, Scorch,
 	# monsters and falls hit it like any line.
-	"evac": {"name": "Emergency Evac", "slot": "active", "cd": 40.0, "target": "own_node",
-			"desc": "Half of one node's garrison bursts out at once toward your nearest safe node.",
+	# OFFENSIVE (Daniele, 2026-10-07: "emergency evac isn't a defensive power but an offensive one so that the defender has
+	# his troops force evac"): cast on a rival's node, its owner's garrison is forced out toward THEIR nearest safe node.
+	"evac": {"name": "Emergency Evac", "slot": "active", "cd": 40.0, "target": "enemy_node",
+			"desc": "Half of an enemy node's garrison is forced out at once and runs for their nearest safe node.",
 			"share": 0.5, "burst": 8.0},
 	# ---- ultimates (one per faction; "cd" is the natural charge time, see ULT_CHARGE_TIME)
 	# Rewire: while it lasts, the ultimate slot fires any relay once (target = relay id), `fires` at most

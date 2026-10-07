@@ -273,7 +273,7 @@ static func line(id: String) -> String:
 		"portal":
 			return "Link two nodes %d s: lines in one come out the other" % int(s["dur"])
 		"evac":
-			return "%d %% of a garrison bursts out to safety at once" % roundi(float(s["share"]) * 100.0)
+			return "Force %d %% of an enemy garrison out of its node" % roundi(float(s["share"]) * 100.0)
 	return str(s.get("desc", ""))
 
 
@@ -286,6 +286,8 @@ static func target_hint(id: String, stage := 0) -> String:
 			return "tap one of your vats"
 		"own_node":
 			return "tap one of your nodes"
+		"enemy_node":                                  # POWERS (Emergency Evac, offensive since 2026-10-07)
+			return "tap an enemy node"
 		"deck", "fixed_deck":
 			return "tap a deck"
 		"relay":

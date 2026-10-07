@@ -12,7 +12,7 @@ extends HBoxContainer
 ## through main.node_action("cast", slot index, {"target": t}) (online guests: an order to the host) and
 ## the slot pulses. While no slot is armed the dock never touches world input (drag-to-send, tap-to-inspect).
 ## POWERS (0.22.2): Quake taps a platform, Sinkhole an enemy structure (each lit one says what it becomes: "T3→T2" /
-## "SINK"), Fog of War the circle's centre, Backwash / Sever a deck (relay decks too), Evac one of your nodes; Portal
+## "SINK"), Fog of War the circle's centre, Backwash / Sever a deck (relay decks too), Evac an enemy node; Portal
 ## takes two taps like Ghost Line - an entrance, then an exit among Sim.portal_exits (lit, with a faint link from the
 ## entrance); Core Meltdown lists every attacking line from the start of its trip.
 ## Also: the callout where an enemy's skill hits you (fx "skill" with `affects`), and the note when a map
@@ -781,13 +781,14 @@ func on_event(ev: Dictionary) -> void:
 		"rewire": what = "your relay fires" if ev.has("fire") else "their lines speed up"
 		"echo_split": what = "decoy lines on the move"
 		"core_meltdown": what = "an armed line is coming"   # POWERS (0.22.2): armed from the start of its trip
-		# POWERS (0.22.2): the new powers (Emergency Evac never touches a rival: no callout)
+		# POWERS (0.22.2): the new powers
 		"quake": what = "decks around a platform drop"
 		"sever": what = "a deck is cut"
 		"backwash": what = "your lines are shoved back"
 		"sinkhole": what = "your structure sinks"
 		"fog": what = "a fog hides their moves"
 		"portal": what = "a portal opens"
+		"evac": what = "your garrison is forced out"   # (offensive since 2026-10-07)
 	# HUD pass: at the place the skill landed (the event's pos), the caster's emblem as the icon
 	if hud and hud.has_method("callout_at") and ev.get("pos") is Vector3:
 		hud.callout_at(ev["pos"], "skill:%s" % seat, "%s%s" % [ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn", seat)

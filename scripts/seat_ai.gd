@@ -2023,15 +2023,21 @@ func _pick_power(sim: Sim, id: String) -> Array:
 						best_gain = gain
 						best = [entrance, ex]
 			return [best] if not best.is_empty() else []
-		"evac":                                       # save half of a garrison that is about to fall
-			for n in _mine(sim):
-				if n["units"] < 10.0 * Rules.SCALE:
-					continue
-				var t := _threat(sim, n)
-				var hold: float = n["units"] * sim.stat(seat, "garrison") * sim.garrison_div(n)
-				if (t > hold * 1.15 or _drops_soon(sim, n["id"])) and sim.can_cast(seat, slot, n["id"]):
-					return [n["id"]]
-			return []
+		"evac":                                       # offensive (2026-10-07): empty the node its own attack is about to hit
+			var best := -1
+			var best_g := 0.0
+			for h in _my_lines(sim):
+				var n: Dictionary = sim.nodes[sim.line_goal(h)]
+				if not _hostile(sim, n["owner"]) or float(h["L"]) - float(h["s"]) > 30.0:
+					continue                              # (cast late: the forced-out half can't refill it)
+				var g := _estimate(sim, n)
+				var half: float = g * float(Rules.SKILLS["evac"]["share"])
+				var mine: float = maxf(h["units"], float(h["ordered"])) if h["streaming"] else float(h["units"])
+				if half >= 8.0 * Rules.SCALE and mine < g * 1.1 and mine > (g - half) * 1.1 and half > best_g \
+						and sim.can_cast(seat, slot, n["id"]):
+					best_g = half                         # the attack fails as things stand, wins without that half
+					best = n["id"]
+			return [best] if best >= 0 else []
 	return []
 
 

@@ -2947,18 +2947,22 @@ func _powers_tests() -> void:
 			e["t"] = 0.01
 	s.step(0.05)
 	check(h["route"] == [3, 1, 0, 2, 4] and not h.has("portal"), "Portal: when it closes, lines on the way walk on to their target (route %s)" % str(h["route"]))
-	# ---------------------------------------------------------------- Emergency Evac
+	# ---------------------------------------------------------------- Emergency Evac (offensive, Daniele 2026-10-07)
 	s = _mk(tp, "null", "ember", {"A": {"active": "evac"}})
-	check("No safe node" in s.cast_check("A", "active", 3), "Evac: refused with no safe node to go to")
-	s.nodes[1]["owner"] = "A"
-	s.nodes[1]["units"] = 10.0
-	s.nodes[3]["units"] = 200.0
-	check(s.cast("A", "active", 3) and absf(s.nodes[3]["units"] - 100.0) < 0.01, "Evac: half the garrison leaves the node at once")
+	check("enemy node" in s.cast_check("A", "active", 3) and "enemy node" in s.cast_check("A", "active", 1),
+			"Evac: refused on your own node and on a neutral one - it is cast on an enemy node")
+	check("nowhere to run" in s.cast_check("A", "active", 4), "Evac: refused when the defender has nowhere to run")
+	s.nodes[2]["owner"] = "B"
+	s.nodes[2]["units"] = 10.0
+	s.nodes[4]["units"] = 200.0
+	var n_ev := s.fx_events.size()
+	check(s.cast("A", "active", 4) and absf(s.nodes[4]["units"] - 100.0) < 0.01, "Evac: half the defender's garrison is forced out at once")
 	var ev_h: Dictionary = s.hordes.filter(func(x): return x.get("evac", false))[0]
-	check(ev_h["target"] == 1 and s._hordes_in_range(s.nodes[4], 10000.0).has(ev_h) or ev_h["units"] <= 0.0,
-			"Evac: toward the nearest safe node; no immunity (Daniele 2026-09-29): towers can hit it like any line")
+	var evac_ev: Array = s.fx_events.slice(n_ev).filter(func(e): return e["type"] == "skill")
+	check(ev_h["owner"] == "B" and ev_h["target"] == 2 and not evac_ev.is_empty() and "B" in evac_ev[0]["affects"],
+			"Evac: the forced-out troops stay the defender's and run for THEIR nearest safe node; the defender gets the callout")
 	run_until(s, func(): return not (ev_h in s.hordes), 20.0)
-	check(s.nodes[1]["units"] >= 109.0, "Evac: it lands and reinforces (%.0f)" % s.nodes[1]["units"])
+	check(s.nodes[2]["owner"] == "B" and s.nodes[2]["units"] >= 109.0, "Evac: they land there and reinforce it (%.0f)" % s.nodes[2]["units"])
 	# ---------------------------------------------------------------- loadouts (Daniele 2026-09-29: best-fit defaults, AI mixes it up)
 	check(Rules.FACTION_LOADOUT["vex"]["map"] == "portal" and Rules.FACTION_LOADOUT["null"]["map"] == "fog"
 			and Rules.FACTION_LOADOUT["bloom"]["map"] == "backwash" and Rules.FACTION_LOADOUT["ember"]["active"] == "sinkhole",

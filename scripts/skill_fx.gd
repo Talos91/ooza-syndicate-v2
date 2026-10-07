@@ -37,7 +37,8 @@ extends Node3D
 ##                  streaks and line marks inside it too
 ##   Portal         a vortex on the entrance and one turning the other way on the exit, sparks streaming along an arc
 ##                  between them, IN / OUT over them, a time-left band; a flash at the exit as each line comes out
-##   Emergency Evac a burst at the node's door; the line wears a pale shield shimmer until it lands
+##   Emergency Evac (offensive) a burst at the enemy node's door as half its garrison is forced out; a pale rush of
+##                  sparks round that line while it pours out (no shield: no immunity)
 ##   Core Meltdown  armed from the start of the trip: a pulsing ember aura at the line's head, embers along it and
 ##                  "ARMED" over it (everyone sees it); "FIZZLED" and a puff of smoke if its target turns friendly
 ## Ultimates also tint the screen's edges in the caster's colour for a moment (a CanvasLayer under the HUD
@@ -305,7 +306,7 @@ func handle(ev: Dictionary) -> void:
 				_ring_at(b, col, Rules.R * 2.4, 0.6)
 				_burst(b + Vector3(0, 1.5, 0), col.lerp(Color.WHITE, 0.2), 30, 9.0, 0.5, 6.0)
 			_count_stat("portal_pass")
-		"evac":                                       # the garrison bursts out of the door, shielded
+		"evac":                                       # the defender's garrison is forced out of its door (offensive)
 			var seat := str(ev.get("seat", ""))
 			var n: Dictionary = sim.nodes[int(ev["node"])]
 			var door: Vector3 = n["pos"] + Rules.front_dir() * (Rules.EXIT_R + 0.4) + Vector3(0, 1.0, 0)

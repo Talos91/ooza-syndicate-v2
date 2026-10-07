@@ -811,6 +811,8 @@ func _test_skill_fx() -> void:
 			["A", "active", "sinkhole"], ["A", "active", "evac"]]:
 		hs.loadouts[p[0]][p[1]] = p[2]
 		hs.skill_cd[p[0]][p[1]] = 0.0
+		if p[2] == "evac":                             # (offensive since 2026-10-07: B needs a safe node to be forced out to)
+			hs.nodes[9]["owner"] = "B"
 		var ts: Array = hs.targets_for(p[0], p[1])
 		var t = ts[0] if not ts.is_empty() else -1
 		if p[2] == "portal" and not ts.is_empty():
