@@ -9,7 +9,9 @@ extends Node
 ##    music.pck) and plays; MUSIC ON / OFF and MUSIC VOLUME move the Music bus at once (saved to a test cfg, never the
 ##    player's), apart from the Sfx bus.
 ## 3. A match: spectates an AI-vs-AI BRAWL match (M-30 Sporefall Plain, FFA4, Veteran - the sound demo's board),
-##    fast-forwarded silently to FF s of match time: the music crossfades MENU -> BATTLE, the playlist moves on at a
+##    (off-screen and silent is fine:  Godot --audio-driver Dummy --position -6000,-6000 --path . tests/sound_check.tscn)
+##    fast-forwarded silently to FF s of match time: the music crossfades MENU -> BATTLE, a forced fight (Music.test_heat)
+##    switches to FIGHT mid-tune and back to BATTLE when it is over, the music moves on at a
 ##    track's end (Music.test_len shortens the tracks), Sfx plays at least MIN_TYPES different match events in SECONDS of
 ##    real time, SOUND ON / OFF and VOLUME move the Sfx bus (not Master, not Music), a UI tap plays; then the Last Stand
 ##    (the real start, Sim.start_last_stand_now) switches to LAST STAND and its alarm ducks the music, the Very Last Stand
@@ -31,6 +33,8 @@ var menu_t := 0.0
 var fails := 0
 var step := 0
 var first_battle := ""
+var fight_t := -1.0                                # real s the forced fight started / ended
+var fight_step := 0
 var ls_t := -1.0                                   # real s the Last Stand started at
 var vls_t := -1.0
 var sim: Sim
@@ -88,18 +92,38 @@ func _process(dt: float) -> void:
 			if t > 3.0:                                # MENU -> BATTLE took MUSIC_XFADE_PHASE
 				step = 1
 				first_battle = str(np.get("track", ""))
-				check(str(np.get("slot", "")) == "BATTLE" and first_battle in Rules.MUSIC_TRACKS["BATTLE"] and float(np.get("pos", -1.0)) > 0.0,
-						"the match: MENU -> BATTLE, %s playing (%s)" % [first_battle, np])
+				check(str(np.get("slot", "")) in ["BATTLE", "FIGHT"] and first_battle in Rules.MUSIC_TRACKS[str(np.get("slot", "BATTLE"))]
+						and float(np.get("pos", -1.0)) > 0.0, "the match: MENU -> BATTLE / FIGHT (heat %d), %s playing (%s)"
+						% [Music._node.heat_now, first_battle, np])
 				_check_sfx_settings()
 				Music.test_len = 5.0                   # every track "5 s long": the playlist moves on now
 		1:
 			if t > 6.0:
 				step = 2
-				check(str(np.get("slot", "")) == "BATTLE" and str(np.get("track", "")) != first_battle and int(Music.played.get("BATTLE", 0)) >= 2,
-						"the playlist moved on at the track's end: %s -> %s (BATTLE started %d times)" % [first_battle,
-						np.get("track", ""), int(Music.played.get("BATTLE", 0))])
+				var bf := int(Music.played.get("BATTLE", 0)) + int(Music.played.get("FIGHT", 0))
+				check(str(np.get("slot", "")) in ["BATTLE", "FIGHT"] and bf >= 2,
+						"the battle music carried on at the track's end: %s -> %s (BATTLE + FIGHT started %d times)" % [first_battle,
+						np.get("track", ""), bf])
 				Music.test_len = 0.0
+				Music.test_heat = 9.0                  # a big fight on the board: FIGHT once MUSIC_FIGHT_MIN has run
+				Music._node.mode_t = Rules.MUSIC_FIGHT_MIN
+				fight_t = t
 		2:                                             # the Last Stand: at 3:00 on its own (FF + ~30 s), else started here
+			if fight_step == 0 and t > fight_t + Rules.MUSIC_FIGHT_IN + Rules.MUSIC_XFADE_FIGHT + 0.5:
+				fight_step = 1
+				check(str(np.get("slot", "")) == "FIGHT" and str(np.get("track", "")) == str(Rules.MUSIC_TRACKS["FIGHT"][0])
+						and float(np.get("pos", -1.0)) > Rules.MUSIC_XFADE_FIGHT + 1.0,
+						"a fight on the board: BATTLE -> FIGHT, the same tune carried on mid-track (%s)" % [np])
+				Music.test_heat = 0.0                  # the fight is over: calm again after MUSIC_FIGHT_OUT
+				Music._node.mode_t = Rules.MUSIC_FIGHT_MIN
+				fight_t = t
+			elif fight_step == 1 and t > fight_t + Rules.MUSIC_FIGHT_OUT + Rules.MUSIC_XFADE_FIGHT + 0.5:
+				fight_step = 2
+				check(str(np.get("slot", "")) == "BATTLE" and float(np.get("pos", -1.0)) > Rules.MUSIC_XFADE_FIGHT + 1.0,
+						"the fight is over: FIGHT -> BATTLE after %.0f s calm, mid-track (%s)" % [Rules.MUSIC_FIGHT_OUT, np])
+				Music.test_heat = -1.0                 # the board's own heat again
+			if fight_step < 2:
+				return
 			if sim.last_stand_active and ls_t < 0.0:
 				ls_t = t
 			elif not sim.last_stand_active and t > LS_BY:

@@ -454,6 +454,9 @@ Godot_v4.6.1-stable_win64_console.exe --headless --path "Game/2.0" --script res:
 #   build/web/music_phone/<track>.ogg  phones (PerfProfile.is_phone): mono 22 kHz, 40 kbps (Art/.../OGG phone/)
 # Before any import / export of a clone (the list and numbers: rules.gd's MUSIC block):
 #   python tools/copy_music.py --web  # OGG web/ -> assets/audio/music/ (native / editor) + build/web/music/, OGG phone/ -> build/web/music_phone/
+#   (ALPHA 24: Daniele's Suno tracks - "Suno ..." names - live in Art/Audio/Suno/ beside the pack: his WAVs per slot folder,
+#    SUNO_SRC in copy_music.py maps each name to its WAV;  python tools/copy_music.py --encode-suno --web  makes their OGG web/
+#    + OGG phone/ with ffmpeg (pip install imageio-ffmpeg) and copies everything as above)
 #   (a new pick / stinger length: edit the MUSIC block, then  python tools/copy_music.py --encode --web  re-makes OGG web/ with
 #    Blender's aud module - 80 kbps, the stingers cut and faded - from the pack's FLAC/ or OGG 96k/, and OGG phone/ from OGG web/
 #    (pip install imageio-ffmpeg, else Blender); --encode-phone re-makes only the phone set)

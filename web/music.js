@@ -71,12 +71,21 @@
 
   // ---- what music.gd calls (JavaScriptBridge.get_interface("OozeMusic")) ----
   M.available = function () { return !!AC; };
-  M.start = function (i, url) {                  // element i plays url from the start (its gain is set by the caller)
+  M.start = function (i, url, at, beat) {        // element i plays url from `at` s (the battle chain; its gain set by the caller)
     if (!build()) return false;
     var a = M.els[i];
     M.wanted[i] = true;
     M.failed[i] = false;
+    at = at > 0 ? at : 0;
     try { a.src = url; a.currentTime = 0; } catch (e) { M.failed[i] = true; return false; }
+    if (at > 0) {                                // once the length is known: past the end wraps, back on the beat grid
+      a.addEventListener("loadedmetadata", function seek() {
+        a.removeEventListener("loadedmetadata", seek);
+        var d = a.duration, t = at;
+        if (isFinite(d) && d > 0 && t >= d - 2) { t = t % d; if (beat > 0) t = Math.round(t / beat) * beat; }
+        try { a.currentTime = t; } catch (e) {}
+      });
+    }
     kick(i);
     return true;
   };

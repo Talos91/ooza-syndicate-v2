@@ -3,9 +3,13 @@ extends Node
 ## MUSIC: the soundtrack (Cyberpunk Music Pack by SmellyCatCafe, smellycatcafe.itch.io - bought by Daniele, "free and
 ## commercial projects, crediting appreciated"), the slots and mix Daniele approved in the spectate demo (branch
 ## sound-demo 912ee68, demo/music_director.gd). Every number and the track of each slot: Rules' MUSIC block.
-##   MENU             the menus (and the load / VERSUS / briefing before a match's clock runs), looping
-##   BATTLE           a match: the playlist (Rules.MUSIC_TRACKS["BATTLE"]), the next track each time one ends (and at
-##                    each new match), crossfading Rules.MUSIC_XFADE_PLAYLIST s
+##   MENU             the menus (and the load / VERSUS / briefing before a match's clock runs); a playlist (Alpha 24:
+##                    Daniele's three Suno menus), the next track each time one ends
+##   BATTLE           a match, calm (Alpha 24: the battle chain's calm track; any slot with more tracks is a playlist,
+##                    crossfading Rules.MUSIC_XFADE_PLAYLIST s at a track's end)
+##   FIGHT            the same match while the board is in a fight (Music.heat, smoothed, with hysteresis:
+##                    Rules.MUSIC_FIGHT_*); BATTLE <-> FIGHT <-> LAST STAND are one tune (Rules.MUSIC_SYNC_SLOTS): the new
+##                    track starts where the old one was, on the beat (Rules.MUSIC_BPM), so the music heats up / cools down
 ##   LAST STAND       crossfades in (Rules.MUSIC_XFADE_LAST_STAND) when the Last Stand starts
 ##   VERY LAST STAND  the same at the Very Last Stand (6:00)
 ##   VICTORY / DEFEAT a stinger at the match's end, played once: your side won = VICTORY; a draw, a loss, spectating
@@ -43,7 +47,8 @@ static var _volume := -1                  # MATCH MUSIC volume, % (-1 until read
 static var _volume_menu := 30             # MENU MUSIC volume, %
 static var _on := true                    # MUSIC ON / OFF
 static var _streams := {}                 # track name -> AudioStream (null: missing)
-static var _battle_next := 0              # the playlist's next entry (it runs on across matches)
+static var _next := {}                    # slot -> its playlist's next entry (it runs on across matches)
+static var test_heat := -1.0             # tests: >= 0 replaces the board's heat (forces FIGHT / calm)
 static var test_len := 0.0                # tests: > 0 treats every track as this long (the playlist changes sooner)
 static var played := {}                   # slot -> times it started (debug / tests/sound_check.gd)
 static var log_on := "--music-log" in OS.get_cmdline_user_args()
@@ -60,6 +65,11 @@ var track := ""
 var track_t := 0.0                        # s since the current track started (test_len)
 var duck_left := 0.0
 var duck_env := 0.0                       # dB the duck takes off the bus now (0 .. Rules.MUSIC_DUCK_DB)
+var fight := false                        # the battle's heat says FIGHT (Rules.MUSIC_FIGHT_*)
+var hot_t := 0.0                          # s the heat has been >= MUSIC_FIGHT_ON (calm) / <= MUSIC_FIGHT_OFF (fight)
+var mode_t := 0.0                         # s in the current BATTLE / FIGHT mode
+var heat_now := 0                         # debug / tests: the raw heat this frame
+var heat_avg := 0.0                       # the heat smoothed over Rules.MUSIC_HEAT_TAU s (what decides)
 
 
 # ------------------------------------------------------------------ the settings (user://settings.cfg [audio])
@@ -313,6 +323,7 @@ func _process(dt: float) -> void:
 		return
 	if _pack != "ready":
 		return
+	_step_heat(dt)
 	var want := _target()
 	if want != phase:
 		_enter(want)
@@ -355,7 +366,50 @@ func _target() -> String:
 		return phase                                   # a scene reload in between: keep what plays
 	var s: Sim = main.get("sim") as Sim if main.get("sim") is Sim else null
 	var human := str(main.get("HUMAN")) if main.get("HUMAN") != null else "A"
-	return slot_for(main.get("started") == true, s, human, main.get("demo") == true)
+	var want := slot_for(main.get("started") == true, s, human, main.get("demo") == true)
+	return "FIGHT" if want == "BATTLE" and fight else want
+
+
+static func heat(s: Sim) -> int:
+	## How hot the battle is on screen: lines clashing on a deck + lines pouring into a hostile platform (an attack: the
+	## same "fight" Sfx hears). A guest's sim is the host's snapshot.
+	if s == null:
+		return 0
+	var h := 0
+	for horde in s.hordes:
+		var st := str(horde.get("state", ""))
+		if st == "fight":
+			h += 1
+		elif st == "absorb" and float(horde.get("units", 0.0)) > 0.0 and int(horde.get("target", -1)) >= 0:
+			var tn: Dictionary = s.nodes[int(horde["target"])]
+			if not s.collapsed.get(tn["id"], false) and not s.allied(str(tn["owner"]), str(horde["owner"])):
+				h += 1
+	return h
+
+
+func _step_heat(dt: float) -> void:
+	## BATTLE <-> FIGHT with hysteresis (Rules.MUSIC_FIGHT_*); calm again whenever no battle is on.
+	if not phase in ["BATTLE", "FIGHT"]:
+		fight = false
+		hot_t = 0.0
+		mode_t = 0.0
+		heat_now = 0
+		heat_avg = 0.0
+		return
+	var s: Sim = main.get("sim") as Sim if main != null and is_instance_valid(main) and main.get("sim") is Sim else null
+	heat_now = heat(s) if test_heat < 0.0 else int(test_heat)
+	heat_avg += (heat_now - heat_avg) * (1.0 - exp(-dt / Rules.MUSIC_HEAT_TAU))
+	if test_heat >= 0.0:
+		heat_avg = test_heat                           # (tests: no smoothing wait)
+	mode_t += dt
+	var pushing := heat_avg <= Rules.MUSIC_FIGHT_OFF if fight else heat_avg >= Rules.MUSIC_FIGHT_ON
+	hot_t = hot_t + dt if pushing else 0.0
+	if hot_t >= (Rules.MUSIC_FIGHT_OUT if fight else Rules.MUSIC_FIGHT_IN) and mode_t >= Rules.MUSIC_FIGHT_MIN:
+		fight = not fight
+		hot_t = 0.0
+		mode_t = 0.0
+		if log_on:
+			print("MUSIC heat %.1f: %s" % [heat_avg, "FIGHT" if fight else "calm"])
 
 
 func _enter(want: String) -> void:
@@ -368,21 +422,30 @@ func _enter(want: String) -> void:
 		xf = Rules.MUSIC_XFADE_LAST_STAND
 	elif want in Rules.MUSIC_STINGERS:
 		xf = Rules.MUSIC_XFADE_STINGER
+	elif want in ["BATTLE", "FIGHT"] and was in ["BATTLE", "FIGHT"]:
+		xf = Rules.MUSIC_XFADE_FIGHT
+	var at := 0.0                                      # the battle chain: the new track carries on where the tune was
+	if slot in Rules.MUSIC_SYNC_SLOTS and want in Rules.MUSIC_SYNC_SLOTS and cur >= 0 and _p_playing(cur):
+		at = sync_pos(_p_pos(cur))
 	if log_on:
-		print("MUSIC %s -> %s" % [was if was != "" else "(silence)", want])
-	_play(want, xf)
+		print("MUSIC %s -> %s (heat %.1f)" % [was if was != "" else "(silence)", want, heat_avg])
+	_play(want, xf, at)
 
 
-func _play(to: String, xfade: float) -> void:
-	## Crossfades from whatever plays to `to`'s track (BATTLE: the playlist's next).
+static func sync_pos(pos: float) -> float:
+	## A position in the battle chain on the beat grid (Rules.MUSIC_BPM): where the next track of the tune starts.
+	var beat := 60.0 / Rules.MUSIC_BPM
+	return roundf(maxf(pos, 0.0) / beat) * beat
+
+
+func _play(to: String, xfade: float, at := 0.0) -> void:
+	## Crossfades from whatever plays to `to`'s track (a playlist: its next), starting `at` s in (the battle chain).
 	var names: Array = Rules.MUSIC_TRACKS.get(to, [])
 	var name := ""
 	if not names.is_empty():
-		if to == "BATTLE":
-			name = str(names[_battle_next % names.size()])
-			_battle_next += 1
-		else:
-			name = str(names[0])
+		var k := int(_next.get(to, 0))
+		name = str(names[k % names.size()])
+		_next[to] = k + 1
 	if cur >= 0:
 		_fade(cur, 0.0, xfade)
 	var nxt := 0 if cur < 0 else 1 - cur
@@ -390,7 +453,7 @@ func _play(to: String, xfade: float) -> void:
 	pslot[nxt] = to
 	_p_stop(nxt)
 	_p_amp(nxt, amp[nxt])
-	if name == "" or not _p_start(nxt, name):         # a slot without a track (a missing file): silence
+	if name == "" or not _p_start(nxt, name, at):     # a slot without a track (a missing file): silence
 		slot = ""
 		track = ""
 		return
@@ -401,7 +464,7 @@ func _play(to: String, xfade: float) -> void:
 	track_t = 0.0
 	played[to] = int(played.get(to, 0)) + 1
 	if log_on:
-		print("MUSIC %s plays %s (crossfade %.1f s)" % [to, name, xfade])
+		print("MUSIC %s plays %s at %.1f s (crossfade %.1f s)" % [to, name, at, xfade])
 
 
 func _fade(i: int, to: float, length: float) -> void:
@@ -443,16 +506,20 @@ func _step_duck(dt: float) -> void:
 
 
 # ------------------------------------------------------------------ the two players: Godot's (native) or music.js's (web)
-func _p_start(i: int, name: String) -> bool:
-	## Player i plays track `name` from its start (its gain set before); false: no such track.
+func _p_start(i: int, name: String, at := 0.0) -> bool:
+	## Player i plays track `name` from `at` s (past its end: wrapped, back on the beat grid; its gain set before);
+	## false: no such track.
 	var js := _js()
 	if js != null:
-		return bool(js.start(i, web_url(name)))
+		return bool(js.start(i, web_url(name), at, 60.0 / Rules.MUSIC_BPM))
 	var st := _stream(name)
 	if st == null:
 		return false
+	var length := st.get_length()
+	if at > 0.0 and length > 0.0 and at >= length - Rules.MUSIC_XFADE_PLAYLIST:
+		at = sync_pos(fmod(at, length))
 	players[i].stream = st
-	players[i].play()
+	players[i].play(at)
 	return true
 
 
