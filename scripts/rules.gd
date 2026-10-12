@@ -1264,9 +1264,29 @@ const MUSIC_WEB_DIR := "music/"                  # web: the desktop set beside i
 const MUSIC_WEB_DIR_PHONE := "music_phone/"      # web, phones: mono MUSIC_PHONE_HZ at MUSIC_PHONE_KBPS (Daniele 2026-09-29, A/B/C test)
 const MUSIC_PHONE_HZ := 22050
 const MUSIC_PHONE_KBPS := 40
-const MUSIC_TRACKS := {"MENU": ["Cyber Sunrise"], "BATTLE": ["Drone Patrol", "Neon Street", "Synth Syndicate"],
-		"LAST STAND": ["Midnight Hack"], "VERY LAST STAND": ["Boss Battle"],
+# ALPHA 24 (Daniele 2026-10-12): Daniele's own Suno soundtrack ("Suno ..." names: Art/Audio/Suno/, tools/copy_music.py
+# --encode-suno) replaces the pack where it exists - MENU (a playlist of his three), the battle chain BATTLE (calm) ->
+# FIGHT -> LAST STAND (one tune, each a Suno cover of the one before, ~MUSIC_BPM). VERY LAST STAND and the stingers stay the
+# pack's until his Suno ones come. A slot with more than one track is a playlist (the next track each time it starts).
+const MUSIC_TRACKS := {"MENU": ["Suno Menu A", "Suno Menu B", "Suno Menu C"], "BATTLE": ["Suno Battle Calm"],
+		"FIGHT": ["Suno Battle Fight"], "LAST STAND": ["Suno Last Stand"], "VERY LAST STAND": ["Boss Battle"],
 		"VICTORY": ["Ending Theme (stinger)"], "DEFEAT": ["Game Over (stinger)"]}
+# The battle chain plays one tune: moving between these slots starts the new track at the old one's position (snapped to
+# the beat at MUSIC_BPM), so the music heats up instead of changing song.
+const MUSIC_SYNC_SLOTS := ["BATTLE", "FIGHT", "LAST STAND"]
+const MUSIC_BPM := 122.3                         # measured on the three Suno battle tracks (2026-10-12)
+# BATTLE -> FIGHT follows the screen: the heat is the lines clashing + the lines pouring into a hostile platform (Music.heat). FIGHT
+# smoothed over MUSIC_HEAT_TAU s (an attack pours in for a moment; a fight is a run of them). FIGHT after MUSIC_FIGHT_IN s
+# at smoothed heat >= MUSIC_FIGHT_ON; back to BATTLE after MUSIC_FIGHT_OUT s at <= MUSIC_FIGHT_OFF; either way not before
+# MUSIC_FIGHT_MIN s in the current one (no flip-flop). Crossfade MUSIC_XFADE_FIGHT s. (An AI FFA4 on M-30 runs at raw heat
+# 0-4, mostly 1-2: measured 2026-10-12.)
+const MUSIC_HEAT_TAU := 4.0
+const MUSIC_FIGHT_ON := 1.5
+const MUSIC_FIGHT_OFF := 0.7
+const MUSIC_FIGHT_IN := 1.5
+const MUSIC_FIGHT_OUT := 10.0
+const MUSIC_FIGHT_MIN := 12.0
+const MUSIC_XFADE_FIGHT := 2.0
 const MUSIC_STINGERS := ["VICTORY", "DEFEAT"]    # played once, never looped
 const MUSIC_STINGER_LEN := 7.0                   # s of the source track a stinger keeps (tools/copy_music.py) ...
 const MUSIC_STINGER_FADE := 1.5                  # ... its last 1.5 s fading out

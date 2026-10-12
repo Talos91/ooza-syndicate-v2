@@ -48,6 +48,17 @@ WEB_DIR = "OGG web"
 PHONE_DIR = "OGG phone"
 BUILD_WEB = os.path.join(GAME, "build", "web")
 WEB_OUT = {WEB_DIR: "music", PHONE_DIR: "music_phone"}         # Art folder -> build/web/<folder> (Rules.MUSIC_WEB_DIR*)
+# ALPHA 24: Daniele's Suno tracks (a track name starting "Suno "): sources in Art/Audio/Suno/<slot>/ as he downloaded them,
+# encoded by --encode-suno into Art/Audio/Suno/OGG web/ and OGG phone/ (the same two sets as the pack's).
+SUNO = "Suno "
+SUNO_SRC = {
+    "Suno Menu A": "MENU/MENU.wav",
+    "Suno Menu B": "MENU/MENU 1.wav",
+    "Suno Menu C": "MENU/MENU 2.wav",
+    "Suno Battle Calm": "BATTLE calm/BATTLE CALM 2.wav",
+    "Suno Battle Fight": "BATTLE fights/FIGHT COVER 1.wav",
+    "Suno Last Stand": "LAST STAND/LST STAND COVER 1.wav",
+}
 STINGER = " (stinger)"
 
 
@@ -160,13 +171,38 @@ for f, o in %r:
     print("copy_music: encoded %d phone tracks into %s (mono %d Hz, %d kbps)" % (len(names), out, hz, kbps))
 
 
+def home(n, pack):
+    """The folder holding a track's two sets: Daniele's Suno folder for a "Suno ..." track, else the pack."""
+    return os.path.join(os.path.dirname(pack), "Suno") if n.startswith(SUNO) else pack
+
+
+def encode_suno(names, pack, kbps, hz, phone_kbps):
+    """Art/Audio/Suno/<slot>/<file>.wav -> OGG web/ (stereo 44.1 kHz, kbps) + OGG phone/ (mono hz, phone_kbps), ffmpeg."""
+    import imageio_ffmpeg                                      # pip install imageio-ffmpeg (a bundled ffmpeg)
+    ff = imageio_ffmpeg.get_ffmpeg_exe()
+    root = home(SUNO, pack)
+    todo = [n for n in names if n.startswith(SUNO)]
+    for n in todo:
+        if n not in SUNO_SRC:
+            sys.exit("copy_music: no source for %r in SUNO_SRC" % n)
+        src = os.path.join(root, SUNO_SRC[n])
+        for d, args in ((WEB_DIR, ["-ac", "2", "-ar", "44100", "-b:a", "%dk" % kbps]),
+                        (PHONE_DIR, ["-ac", "1", "-ar", str(hz), "-b:a", "%dk" % phone_kbps])):
+            os.makedirs(os.path.join(root, d), exist_ok=True)
+            r = subprocess.run([ff, "-v", "error", "-y", "-i", src] + args + ["-c:a", "libvorbis", os.path.join(root, d, n + ".ogg")],
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                sys.exit("copy_music: ffmpeg failed on %s\n%s" % (n, r.stderr[-2000:]))
+    print("copy_music: encoded %d Suno tracks into %s (OGG web + OGG phone)" % (len(todo), root))
+
+
 def sync(names, src, dest):
-    """dest/<track>.ogg = src/<track>.ogg for every track (a changed file only); any other .ogg there (and its .import)
-    goes. Returns the bytes in dest."""
+    """dest/<track>.ogg = src(<track>)/<track>.ogg for every track (a changed file only; src: name -> folder); any other
+    .ogg there (and its .import) goes. Returns the bytes in dest."""
     os.makedirs(dest, exist_ok=True)
     total = 0
     for n in names:
-        a = os.path.join(src, n + ".ogg")
+        a = os.path.join(src(n), n + ".ogg")
         b = os.path.join(dest, n + ".ogg")
         if not os.path.isfile(b) or os.path.getsize(b) != os.path.getsize(a) or open(b, "rb").read() != open(a, "rb").read():
             shutil.copyfile(a, b)                              # (a changed file only: Godot re-imports what changed)
@@ -184,6 +220,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--encode", action="store_true", help="(re)make the web-sized tracks with Blender first")
     ap.add_argument("--encode-phone", action="store_true", help="(re)make the phone set (mono) from the web-sized tracks")
+    ap.add_argument("--encode-suno", action="store_true", help="(re)make both sets of Daniele's Suno tracks from his WAVs")
     ap.add_argument("--web", action="store_true", help="also copy both sets into build/web/music*/ (the publish)")
     ap.add_argument("--check", action="store_true", help="only report what is missing")
     ap.add_argument("--art", help="the music pack's folder (Art/Audio/Soundtrack - ...)")
@@ -191,16 +228,19 @@ def main():
     a = ap.parse_args()
     names, length, fade, kbps, phone_hz, phone_kbps = rules()
     pack = pack_dir(a.art)
+    pack_names = [n for n in names if not n.startswith(SUNO)]
     if a.encode:
-        encode(names, pack, a.src, length, fade, kbps)
+        encode(pack_names, pack, a.src, length, fade, kbps)
     if a.encode or a.encode_phone:
-        encode_phone(names, pack, phone_hz, phone_kbps)
+        encode_phone(pack_names, pack, phone_hz, phone_kbps)
+    if a.encode_suno:
+        encode_suno(names, pack, kbps, phone_hz, phone_kbps)
     web = os.path.join(pack, WEB_DIR)
     bad = False
-    for d, fix in ((WEB_DIR, "--encode"), (PHONE_DIR, "--encode-phone")):
-        missing = [n for n in names if not os.path.isfile(os.path.join(pack, d, n + ".ogg"))]
+    for d, fix in ((WEB_DIR, "--encode / --encode-suno"), (PHONE_DIR, "--encode-phone / --encode-suno")):
+        missing = [n for n in names if not os.path.isfile(os.path.join(home(n, pack), d, n + ".ogg"))]
         if missing:
-            print("copy_music: missing in %s: %s (run with %s)" % (os.path.join(pack, d), ", ".join(missing), fix))
+            print("copy_music: missing in %s: %s (run with %s)" % (d, ", ".join(missing), fix))
             bad = True
     if bad:
         sys.exit(1)
@@ -209,9 +249,9 @@ def main():
         return
     if a.web:
         for d, sub in WEB_OUT.items():
-            n_bytes = sync(names, os.path.join(pack, d), os.path.join(BUILD_WEB, sub))
+            n_bytes = sync(names, lambda n, d=d: os.path.join(home(n, pack), d), os.path.join(BUILD_WEB, sub))
             print("copy_music: %d tracks in build/web/%s/ (%.1f MB)" % (len(names), sub, n_bytes / 1e6))
-    total = sync(names, web, DEST)                             # native / editor runs play these from res://
+    total = sync(names, lambda n: os.path.join(home(n, pack), WEB_DIR), DEST)   # native / editor runs play these from res://
     print("copy_music: %d tracks in %s (%.1f MB) - import the project before exporting" % (len(names), DEST, total / 1e6))
 
 
