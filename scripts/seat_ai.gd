@@ -2024,18 +2024,18 @@ func _pick_power(sim: Sim, id: String) -> Array:
 						best = [entrance, ex]
 			return [best] if not best.is_empty() else []
 		"evac":                                       # offensive (2026-10-07): empty the node its own attack is about to hit
+			# Every attack about to land gains from it (half the garrison it must kill is gone), whatever the level - so no
+			# "only when the attack would fail" test: a well-sized (Expert) attack never met it and a rough (Veteran)
+			# estimate often did, which inverted the level curve (test_ai_curve, 0.23.13). The biggest half wins.
 			var best := -1
 			var best_g := 0.0
 			for h in _my_lines(sim):
 				var n: Dictionary = sim.nodes[sim.line_goal(h)]
 				if not _hostile(sim, n["owner"]) or float(h["L"]) - float(h["s"]) > 30.0:
 					continue                              # (cast late: the forced-out half can't refill it)
-				var g := _estimate(sim, n)
-				var half: float = g * float(Rules.SKILLS["evac"]["share"])
-				var mine: float = maxf(h["units"], float(h["ordered"])) if h["streaming"] else float(h["units"])
-				if half >= 8.0 * Rules.SCALE and mine < g * 1.1 and mine > (g - half) * 1.1 and half > best_g \
-						and sim.can_cast(seat, slot, n["id"]):
-					best_g = half                         # the attack fails as things stand, wins without that half
+				var half: float = _estimate(sim, n) * float(Rules.SKILLS["evac"]["share"])
+				if half >= 8.0 * Rules.SCALE and half > best_g and sim.can_cast(seat, slot, n["id"]):
+					best_g = half
 					best = n["id"]
 			return [best] if best >= 0 else []
 	return []
