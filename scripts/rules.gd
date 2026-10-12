@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.23.12"
+const VERSION := "0.23.13"
 const VERSION_NAME := "Alpha 23"
 
 
@@ -135,6 +135,10 @@ static var last_stand: bool = true
 const CAM_PITCH := 41.0              # Daniele (2026-09-30): "camera angle too low, raise of 20%" (34 -> 41; 58 until 0.22.3)
 const CAM_PITCH_LARGE := 58.0        # LARGE maps (tags.size "L"): the original pitch (Daniele 2026-09-30: the tilt made them "very hard to play")
 const CAM_LARGE_SIZES := ["L", "XL"]
+# 0.23.13 (Daniele 2026-10-12: "for big maps the camera is too tilted, adjust the camera default angle based on map size"):
+# the pitch steps up with the map's size tag (tags.size) - tiny maps keep the low 41 deg diagonal, the bigger the map
+# the more top-down. A map without a size tag keeps CAM_PITCH. Each step re-checked with tests/phone_fit.tscn.
+const CAM_PITCH_BY_SIZE := {"XS": 41.0, "S": 45.0, "M": 50.0, "L": 62.0, "XL": 66.0}
                                      # "too vertical" at 55 on the deep maps 3.0; Alpha 18, maps 4.0: "a bit more
                                      # from the top" - each map gets its own pitch, 58 on every maps 4.2 map, see MapCamera;
                                      # Daniele, 2026-09-29, Map Lab: "34deg is best" - lower, more diagonal, every map, no per-map overrides)

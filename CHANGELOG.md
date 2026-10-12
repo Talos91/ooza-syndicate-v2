@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.13 "Alpha 23" - 2026-10-12 (staging: Emergency Evac offensive, camera by map size)
+
+- **EMERGENCY EVAC is an offensive power** (⚡ Powers; Daniele: "emergency evac isn't a defensive power but an offensive one so that the
+  defender has his troops force evac"): cast on an ENEMY node, 50 % of its owner's garrison is forced out at once toward that owner's nearest
+  safe node (still their line, no immunity); refused when they have nowhere to run. The AI casts it on any attack about to land (the level curve
+  stays strictly monotonic). Numbers unchanged (50 %, 40 s) - Daniele: "make sure it's not OP".
+- **Camera pitch by map size** (Daniele: "for big maps the camera is too tilted, adjust the camera default angle based on map size"):
+  `Rules.CAM_PITCH_BY_SIZE` XS 41 / S 45 / M 50 / L 62 / XL 66 degrees (was 41, and 58 for L / XL). Phone-fit probe on all 30 N maps: nothing
+  off screen or under the HUD; the smallest tap grows on 22 maps, equal on 6 (XS), N-16 27.8 -> 26.9 pt; N-21 / N-29 one more badge overlap.
+
 ## 0.23.12 "Alpha 23" - 2026-10-01 (the quick start's relay chapter)
 
 Daniele on 0.23.10: "the relay part still shows these ugly halo and fails if you move the bridge before they get on it which is honestly wrong as its fine anyway".
