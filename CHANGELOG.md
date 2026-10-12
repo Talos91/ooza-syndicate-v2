@@ -6,6 +6,10 @@
   defender has his troops force evac"): cast on an ENEMY node, 50 % of its owner's garrison is forced out at once toward that owner's nearest
   safe node (still their line, no immunity); refused when they have nowhere to run. The AI casts it on any attack about to land (the level curve
   stays strictly monotonic). Numbers unchanged (50 %, 40 s) - Daniele: "make sure it's not OP".
+- **Daniele's Suno soundtrack** (🎵 Music, Alpha 24 music): MENU = a playlist of his 3 menus; the battle chain BATTLE (calm) -> FIGHT -> LAST
+  STAND as one tune, switching on the beat (122.3 BPM) at the same position; FIGHT follows the board (smoothed heat of clashes + lines pouring into
+  a hostile platform, with hysteresis, Rules.MUSIC_FIGHT_*). VERY LAST STAND and the VICTORY / DEFEAT stingers stay the pack's until his new ones.
+  **MUSIC still starts OFF** (turn it on in SETTINGS); MUSIC_ON_DEFAULT is Daniele's call.
 - **Camera pitch by map size** (Daniele: "for big maps the camera is too tilted, adjust the camera default angle based on map size"):
   `Rules.CAM_PITCH_BY_SIZE` XS 41 / S 45 / M 50 / L 62 / XL 66 degrees (was 41, and 58 for L / XL). Phone-fit probe on all 30 N maps: nothing
   off screen or under the HUD; the smallest tap grows on 22 maps, equal on 6 (XS), N-16 27.8 -> 26.9 pt; N-21 / N-29 one more badge overlap.
