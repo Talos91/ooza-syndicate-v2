@@ -73,12 +73,19 @@ rm -rf /opt/ooze/web.old && { [ -d /opt/ooze/web ] && mv /opt/ooze/web /opt/ooze
 mv /opt/ooze/web.new /opt/ooze/web && rm -rf /opt/ooze/web.old
 # Each build's pack is kept under its version: a running match host reopens its pack by path at every scene load (the
 # next round), so replacing it in place broke rooms that were playing during a deploy (TWVG, 0.20.12). New hosts start
-# from /opt/ooze/current.pck (resolved by the relay); packs older than 2 days go, except the current one.
+# from /opt/ooze/current.pck (resolved by the relay). Pruning is by VERSION, never by age (0.23.13: a deploy after two quiet
+# weeks used to delete every rollback pack): the newest KEEP packs by version stay; the current one never goes, and neither
+# does a pack a running match host was started from.
 VER=$(tr '/' '_' < /opt/ooze/web/version.txt)
 mkdir -p /opt/ooze/packs
 cp /opt/ooze/web/index.pck "/opt/ooze/packs/$VER.pck"
 ln -sfn "/opt/ooze/packs/$VER.pck" /opt/ooze/current.pck
-find /opt/ooze/packs -name '*.pck' -mtime +2 ! -name "$VER.pck" -delete
+KEEP=4
+ls /opt/ooze/packs/*.pck | sort -V | head -n "-$KEEP" | while read -r p; do
+	[ "$p" = "/opt/ooze/packs/$VER.pck" ] && continue
+	if pgrep -f -- "--main-pack $p " > /dev/null; then echo "keeping $(basename "$p"): a room is running from it"; continue; fi
+	rm -f -- "$p"
+done
 mkdir -p /opt/ooze/data /opt/ooze/logs
 chown -R ooze:ooze /opt/ooze/web /opt/ooze/packs /opt/ooze/data /opt/ooze/logs
 find /opt/ooze/logs -name 'room-*.log' -mtime +7 -delete
