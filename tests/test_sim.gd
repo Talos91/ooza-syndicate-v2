@@ -2501,14 +2501,14 @@ func _skills_tests() -> void:
 		s.nodes[id]["owner"] = "A"
 	_charged(s, "A")
 	check(s.cast("A", "ultimate", 1), "Relay Aegis on node 1")
-	check(s.garrison_div(s.nodes[3]) == 1.8 and s.garrison_div(s.nodes[0]) == 1.8 and s.garrison_div(s.nodes[2]) == 1.0 and absf(s.prod_mult(s.nodes[1]) - 1.2) < 0.001,
-			"the node and its own neighbours: 1.8x less garrison damage, +20 % production")
+	check(s.garrison_div(s.nodes[3]) == 2.5 and s.garrison_div(s.nodes[0]) == 2.5 and s.garrison_div(s.nodes[2]) == 1.0 and absf(s.prod_mult(s.nodes[1]) - 1.5) < 0.001,
+			"the node and its own neighbours: 2.5x less garrison damage, +50 % production (ultimates rework, was 1.8x / +20 %)")
 	check(s.anchor_state(s._edge_index(1, 3)) == true and s.anchor_state(s._edge_index(1, 0)) == true and s.anchor_state(s._edge_index(0, 2)) == null,
 			"the decks between them are anchored")
 	s.nodes[3]["units"] = 100.0
 	s._land_classic(s.nodes[3], "B", 18.0)
-	var aegis_kill := 18.0 / (Rules.stat("solar", "health") * Rules.stat("solar", "garrison") * 1.8)
-	check(absf(s.nodes[3]["units"] - (100.0 - aegis_kill)) < 0.01, "BRAWL: 18 attackers kill %.1f of a SOLAR Aegis garrison (1.8x less)" % aegis_kill)
+	var aegis_kill := 18.0 / (Rules.stat("solar", "health") * Rules.stat("solar", "garrison") * 2.5)
+	check(absf(s.nodes[3]["units"] - (100.0 - aegis_kill)) < 0.01, "BRAWL: 18 attackers kill %.1f of a SOLAR Aegis garrison (2.5x less)" % aegis_kill)
 	s = _mk(sw, "solar", "null", {"B": {"map": "relay_hack"}})
 	s.nodes[1]["owner"] = "A"
 	_charged(s, "A")
@@ -2521,8 +2521,8 @@ func _skills_tests() -> void:
 		s.nodes[id]["owner"] = "A"
 	_charged(s, "A")
 	s.cast("A", "ultimate", 1)
-	check(s.garrison_div(s.nodes[2]) == 1.8 and s.anchor_state(s._edge_index(0, 2)) != null,
-			"ultimates rework: Relay Aegis reaches 2 bridges out (node 2 via node 0), and anchors that deck")
+	check(s.garrison_div(s.nodes[0]) == 2.5 and s.garrison_div(s.nodes[2]) == 1.0 and s.anchor_state(s._edge_index(0, 2)) == null,
+			"Relay Aegis stays one ring: node 2, two bridges out, is not covered (2 rings measured worse)")
 	# ---------------------------------------------------------------- ultimate charge: ~120 s, kills speed it, never under 90 s
 	s = _mk(tp, "null", "null")
 	_steps(s, 119.0, 0.5)

@@ -617,7 +617,7 @@ const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
 		"null": ["Echo Split", "moving lines spawn jamming decoys"],
 		"bloom": ["Superbloom", "every vat 2x for 12 s"],
 		"ember": ["Core Meltdown", "sacrifice part of a line to gut a garrison"],
-		"solar": ["Relay Aegis", "a node and 2 rings of neighbours shielded"]}
+		"solar": ["Relay Aegis", "a node and its neighbours shielded"]}
 
 # ------------------------------------------------------------------ SKILLS 2.0 (0.18.7)
 # Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select
@@ -730,10 +730,11 @@ const SKILLS := {
 			"share": 0.25, "min_shown": 4.0, "kills_per": 3.0, "cap_shown": 70.0, "range": 12.0},
 	# the node + its adjacent own nodes: garrison damage / div, production x prod, the decks between them anchored
 	# and any relay among them locked (nobody can fire it)
-	# ULTIMATES REWORK (proposal, 2026-10-27; was 1 ring, 12 s): "rings" = how many bridges out from the node it reaches
+	# ULTIMATES REWORK (proposal, 2026-10-27; was div 1.8, prod 1.2, 12 s). "rings" = how many bridges out it reaches (1; 2 rings
+	# was measured and lost value: it also locks more of your own relays and decks)
 	"relay_aegis": {"name": "Relay Aegis", "slot": "ultimate", "faction": "solar", "cd": 120.0, "target": "own_node",
-			"desc": "A node and your nodes up to 2 bridges away: 1.8x less garrison damage, +20 % production, decks locked, 15 s.",
-			"div": 1.8, "dur": 15.0, "prod": 1.2, "rings": 2},
+			"desc": "A node and its neighbours: 2.5x less garrison damage, +50 % production, decks locked, 15 s.",
+			"div": 2.5, "dur": 15.0, "prod": 1.5, "rings": 1},
 }
 const ACTIVE_SKILLS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line", "sinkhole", "evac"]   # POWERS: 5 -> 7
 const MAP_SKILLS := ["demolish", "mire", "anchor", "bypass", "relay_hack", "quake", "sever", "backwash", "fog", "portal"]   # POWERS: 5 -> 10

@@ -24,6 +24,17 @@ def ci(x):
     return 1.96 * (p * (1 - p) / n) ** 0.5 * 100
 
 
+def ult_casts(r, seat, uid=None):
+    """Activations only: Rewire's free relay fires are logged as ultimate casts too, so casts within 20 s count once."""
+    n, last = 0, -99.0
+    for x in r["casts"]:
+        if x[1] == seat and x[3] == "ultimate" and (uid is None or x[2] == uid):
+            if x[0] - last >= 20.0:
+                n += 1
+            last = x[0] if x[0] - last >= 20.0 else last
+    return n
+
+
 def s(r, seat):
     w = r["winner"]
     return 0.5 if w == "" else (1.0 if w == seat else 0.0)
@@ -42,7 +53,7 @@ if rows:
             stock = "B" if r["vseat"] == "A" else "A"         # vseat plays the habit (noult)
             sc = s(r, stock)
             g.append(sc)
-            c = sum(1 for x in r["casts"] if x[1] == stock and x[3] == "ultimate" and x[2] == ULT[f])
+            c = ult_casts(r, stock, ULT[f])
             nc.append(c)
             if c >= 2:
                 g2.append(sc)
@@ -62,7 +73,7 @@ if rows:
     for r in rows:
         a, b = r["spec"]["A"], r["spec"]["B"]
         for seat, f, o in (("A", a, b), ("B", b, a)):
-            casts[f].append(sum(1 for x in r["casts"] if x[1] == seat and x[3] == "ultimate"))
+            casts[f].append(ult_casts(r, seat))
             if f == o:
                 continue
             tot[f].append(s(r, seat))

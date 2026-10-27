@@ -260,7 +260,7 @@ static func line(id: String) -> String:
 		"core_meltdown":                               # POWERS (0.22.2): armed from the start of the trip
 			return "Arm an attacking line: on arrival %d %% melts, %d kills a unit" % [roundi(float(s["share"]) * 100.0), int(s["kills_per"])]
 		"relay_aegis":
-			return "A node + %d rings of neighbours: %sx less damage, %d s" % [int(s.get("rings", 1)), _x(s["div"]), int(s["dur"])]
+			return "A node + neighbours: %sx less damage, +%d %% production, %d s" % [_x(s["div"]), _pct(s["prod"]), int(s["dur"])]
 		# POWERS (0.22.2)
 		"quake":
 			return "Every deck on a platform drops, back in %d s" % int(s["down"])
