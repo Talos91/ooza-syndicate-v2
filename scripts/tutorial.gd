@@ -483,6 +483,7 @@ func begin(s: Sim, m: Dictionary, player_faction := "") -> void:
 	sim.abilities_on = bool(L.get("abilities", false))
 	sim.vls_enabled = false                          # the Very Last Stand waits until the quick start is over
 	sim.match_hard_end = INF                         # ... and so does the 7:00 end (release_pins puts both back)
+	sim.catchup_on = false                           # CATCH-UP (Rules.CATCHUP_*) stays off in every lesson
 	for seat in sim.skill_cd:                        # skills stand ready
 		sim.skill_cd[seat] = {"active": 0.0, "map": 0.0}
 	_stage_board()

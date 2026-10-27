@@ -748,6 +748,10 @@ func _run() -> void:
 	var pool := MapPool.all()
 	var baked := Array(DirAccess.get_files_at(MapPool.DIR)).filter(func(f): return f.trim_suffix(".remap").ends_with(".json")).size()
 	check(pool.size() == baked - MapPool.WITHHELD.size() and pool.size() > 0, "every baked map is in the pool except the withheld (%d of %d)" % [pool.size(), baked])
+	for code in MapPool.WITHHELD_MODES:                # a per-mode withhold names a baked map and modes it really seats
+		var hit := pool.filter(func(p): return str(p).get_file().begins_with(code))
+		check(hit.size() == 1 and (MapPool.WITHHELD_MODES[code] as Array).all(func(md): return MapBuilder.load_map(hit[0])["seats"].has(md)),
+				"%s: WITHHELD_MODES %s names a baked map seating those modes" % [code, str(MapPool.WITHHELD_MODES[code])])
 	for path in pool:
 		var m := MapBuilder.load_map(path)
 		check(m.has("layout"), "%s: baked layout present" % path)

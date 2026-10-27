@@ -86,6 +86,8 @@ var _fx_idx: Dictionary = {}         # "on:target" -> [effects] (rebuilt by _ind
 var _popped: Array = []              # decoys that touched an enemy this step (they dissolve)
 var _down_seen: Dictionary = {}      # POWERS: edges whose "down" timer was set this step (_step_skills)
 var ai_builds := false               # POWERS: set before setup() - a seat with no loadout gets a Rules.AI_LOADOUTS build
+var catchup_on := true               # CATCH-UP (Rules.CATCHUP_*): lessons and campaign missions set it false (opt-in: true)
+var _catchup: Dictionary = {}        # side (team id, or the seat) -> true while it trails; refreshed every step
 
 
 func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_factions: Dictionary, seed_value: int = -1, seat_teams: Dictionary = {}, seat_loadouts: Dictionary = {}) -> void:
@@ -322,7 +324,39 @@ func production(n: Dictionary) -> float:
 
 
 func _base_production(n: Dictionary) -> float:
-	return Rules.PROD[n["tier"]] * stat(n["owner"], "production") if n["owner"] != "" and has_vat(n) else 0.0
+	if n["owner"] == "" or not has_vat(n):
+		return 0.0
+	var p: float = Rules.PROD[n["tier"]] * stat(n["owner"], "production")
+	return p * Rules.CATCHUP_PRODUCTION if _catchup.has(teams.get(n["owner"], n["owner"])) else p
+
+
+func catchup_sides() -> Dictionary:
+	## CATCH-UP: side -> true for every side holding fewer than Rules.CATCHUP_NODE_RATIO of the leading side's nodes
+	## (owned nodes of any kind; a side = a team in team modes, else the seat). Off: {}.
+	if not catchup_on:
+		return {}
+	var held := {}
+	for s in factions.keys():
+		held[teams.get(s, s)] = 0
+	for n in nodes:
+		if n["owner"] != "" and not collapsed.get(n["id"], false):
+			var side = teams.get(n["owner"], n["owner"])
+			held[side] = int(held.get(side, 0)) + 1
+	var lead := 0
+	for side in held:
+		lead = maxi(lead, int(held[side]))
+	var out := {}
+	for side in held:
+		if float(held[side]) < float(lead) * Rules.CATCHUP_NODE_RATIO:
+			out[side] = true
+	return out
+
+
+func catchup_active(seat: String) -> bool:
+	## CATCH-UP: is this seat's side producing +15 % now (the HUD tag)? Recounts from the nodes: an online guest never
+	## steps its Sim (Net snapshots carry the owners), so the HUD's call keeps its tag and production readout current.
+	_catchup = catchup_sides()
+	return _catchup.has(teams.get(seat, seat))
 
 
 func node_cap(n: Dictionary) -> float:
@@ -1608,6 +1642,7 @@ func step(dt: float) -> void:
 	if over:
 		return
 	_check_handovers()                                # (an owner at zero hands over before producing again)
+	_catchup = catchup_sides()                        # CATCH-UP: who trails, from this step's node count
 	for n in nodes:                                   # production (vat nodes only), up to the cap
 		if n["owner"] != "" and has_vat(n) and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11)
 			_produce(n, dt)

@@ -355,6 +355,12 @@ static var PROD := {1: 5.0, 2: 8.0, 3: 12.0, 4: 17.5}     # Alpha 11 1.0/1.6/2.4
 # NEUTRAL REGEN (Daniele, 0.18.9: "make neutral villages regenerate at the speed of their vat"): a chipped
 # neutral vat node grows back at its tier's PROD (no faction bonus), up to its starting garrison NEUTRAL_UNITS.
 const NEUTRAL_REGEN := true
+# CATCH-UP (Daniele, 2026-10-27: "include both in 0.23.15: the +15 % catch-up for the trailing side"; balance study: the node
+# leader at 2:00 won 77 %): while a side (a seat, or a team in team modes) holds fewer than CATCHUP_NODE_RATIO of the leading
+# side's nodes, its vats produce x CATCHUP_PRODUCTION (vats only: not forges, not neutral regen). Strictly under half: exactly
+# half gets nothing. Re-checked every step (Sim._catchup); lessons and campaign missions keep it off (Sim.catchup_on).
+const CATCHUP_PRODUCTION := 1.15
+const CATCHUP_NODE_RATIO := 0.5
 # HOMES (Daniele, 2026-09-27: "T1 like the packs", "they start at 1" - Alpha 11's start): T1 with 1 unit shown.
 static var HOME_TIER := 1
 static var HOME_UNITS := 5
@@ -797,6 +803,8 @@ static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) ->
 # Expert's coordination is 2 since 0.21.5 (Daniele 2026-09-28: the five levels must be "a nice scale for a new
 # player"): a third, farther node in each offensive left it thin and made Expert win less vs Standard than
 # Veteran (67 vs 72 %); with 2 the curve is strictly monotonic (tests/test_ai_curve.gd).
+# Expert's margin 1.1 -> 1.2 (0.23.15, with the catch-up and N-24 / N-04 out of 1v1): Expert beat Veteran only 50 % head to
+# head; asking 20 % over its garrison estimate before attacking puts it at 63 % (vs Standard 73 -> 79 %, Veteran 62 %).
 # HOME DEFENCE (ai-retune-prep, 2026-09-29; POWERS' approved defaults left EMBER's AI without a defensive active skill,
 # and a Veteran EMBER kept sending out of its home while a line that would take it was landing - B-02 fell at 113 s):
 # a reflex that needs no skill (SeatAI._guard). "guard": 0 off; 1 a key node under a live attack that would take it
@@ -831,7 +839,7 @@ const AI_LEVELS := {
 			"teamwork": 3, "focus": 16.0, "assist": 1.0, "sync": 6.0, "guard": 3, "guard_share": 0.4, "guard_ahead": 25.0,
 			"shortcut": 3.0},
 	"Expert": {"period": 1.3, "coordination": 2, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
-			"forecast": 0.9, "choice": 1, "invest": 12.0, "margin": 1.1, "relays": 3, "intel": 1,
+			"forecast": 0.9, "choice": 1, "invest": 12.0, "margin": 1.2, "relays": 3, "intel": 1,
 			"teamwork": 3, "focus": 18.0, "assist": 1.0, "sync": 8.0, "guard": 3, "guard_share": 0.35, "guard_ahead": 30.0,
 			"shortcut": 2.5},
 }
