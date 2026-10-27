@@ -801,6 +801,8 @@ static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) ->
 # Expert's coordination is 2 since 0.21.5 (Daniele 2026-09-28: the five levels must be "a nice scale for a new
 # player"): a third, farther node in each offensive left it thin and made Expert win less vs Standard than
 # Veteran (67 vs 72 %); with 2 the curve is strictly monotonic (tests/test_ai_curve.gd).
+# Expert's margin 1.1 -> 1.2 (0.23.15, with the catch-up and N-24 / N-04 out of 1v1): Expert beat Veteran only 50 % head to
+# head; asking 20 % over its garrison estimate before attacking puts it at 63 % (vs Standard 73 -> 79 %, Veteran 62 %).
 # HOME DEFENCE (ai-retune-prep, 2026-09-29; POWERS' approved defaults left EMBER's AI without a defensive active skill,
 # and a Veteran EMBER kept sending out of its home while a line that would take it was landing - B-02 fell at 113 s):
 # a reflex that needs no skill (SeatAI._guard). "guard": 0 off; 1 a key node under a live attack that would take it
@@ -835,7 +837,7 @@ const AI_LEVELS := {
 			"teamwork": 3, "focus": 16.0, "assist": 1.0, "sync": 6.0, "guard": 3, "guard_share": 0.4, "guard_ahead": 25.0,
 			"shortcut": 3.0},
 	"Expert": {"period": 1.3, "coordination": 2, "error": 0.12, "observe": 3.0, "grace": 12.0, "attack_gap": 6.5,
-			"forecast": 0.9, "choice": 1, "invest": 12.0, "margin": 1.1, "relays": 3, "intel": 1,
+			"forecast": 0.9, "choice": 1, "invest": 12.0, "margin": 1.2, "relays": 3, "intel": 1,
 			"teamwork": 3, "focus": 18.0, "assist": 1.0, "sync": 8.0, "guard": 3, "guard_share": 0.35, "guard_ahead": 30.0,
 			"shortcut": 2.5},
 }
