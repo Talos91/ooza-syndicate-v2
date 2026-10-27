@@ -355,6 +355,12 @@ static var PROD := {1: 5.0, 2: 8.0, 3: 12.0, 4: 17.5}     # Alpha 11 1.0/1.6/2.4
 # NEUTRAL REGEN (Daniele, 0.18.9: "make neutral villages regenerate at the speed of their vat"): a chipped
 # neutral vat node grows back at its tier's PROD (no faction bonus), up to its starting garrison NEUTRAL_UNITS.
 const NEUTRAL_REGEN := true
+# CATCH-UP (Daniele, 2026-10-27: "include both in 0.23.15: the +15 % catch-up for the trailing side"; balance study: the node
+# leader at 2:00 won 77 %): while a side (a seat, or a team in team modes) holds fewer than CATCHUP_NODE_RATIO of the leading
+# side's nodes, its vats produce x CATCHUP_PRODUCTION (vats only: not forges, not neutral regen). Strictly under half: exactly
+# half gets nothing. Re-checked every step (Sim._catchup); lessons and campaign missions keep it off (Sim.catchup_on).
+const CATCHUP_PRODUCTION := 1.15
+const CATCHUP_NODE_RATIO := 0.5
 # HOMES (Daniele, 2026-09-27: "T1 like the packs", "they start at 1" - Alpha 11's start): T1 with 1 unit shown.
 static var HOME_TIER := 1
 static var HOME_UNITS := 5

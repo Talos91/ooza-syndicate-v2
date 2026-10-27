@@ -53,6 +53,7 @@ var notices: Control                   # HUD pass: no stack any more - only wher
 var banner: Label
 var _banner_time := 0.0
 var status_label: Label                # Last Stand status under the top bar
+var catchup_tag: PanelContainer        # CATCH-UP (Rules.CATCHUP_*): "CATCH-UP +15 %" under your chips while your side trails
 var hint: Label
 var map_title: Label
 var dock: SkillDock
@@ -379,6 +380,17 @@ func setup(m: Node3D) -> void:
 	status_label = text_label("", 18, Color("ffb0b0"))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(status_label)
+	catchup_tag = PanelContainer.new()                 # CATCH-UP: your side only (the HUD shows no rival modifiers)
+	var cs := badge_style(accent)
+	cs.set_content_margin_all(4 * ui_scale)
+	cs.content_margin_left = 10 * ui_scale
+	cs.content_margin_right = 10 * ui_scale
+	catchup_tag.add_theme_stylebox_override("panel", cs)
+	catchup_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	catchup_tag.add_child(text_label("CATCH-UP +%d %%" % int(round((Rules.CATCHUP_PRODUCTION - 1.0) * 100.0)), 18, accent))
+	catchup_tag.modulate.a = 0.0
+	catchup_tag.visible = false
+	root.add_child(catchup_tag)
 	pause_button = button("PAUSE", pause_menu, 100)
 	UiSkin.button(pause_button, main.SEAT_FACTIONS[human])
 	root.add_child(pause_button)
@@ -528,6 +540,8 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	status_label.size = Vector2(maxf(top_panel.size.x, 260 * ui_scale), 30)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.position = Vector2((vp.x - status_label.size.x) / 2.0, m.y + top_panel.size.y + 2)
+	catchup_tag.size = catchup_tag.get_combined_minimum_size()   # under the status line, at your chips' end of the bar
+	catchup_tag.position = Vector2(maxf(top_panel.position.x, m.x), status_label.position.y + status_label.size.y + 2)
 	pause_button.size = pause_button.custom_minimum_size
 	pause_button.position = Vector2(vp.x - m.z - pause_button.size.x, m.y)
 	music_button.size = music_button.custom_minimum_size
@@ -675,6 +689,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
 	else:
 		status_label.text = ""
+	_sync_catchup(dt)
 	var source: int = main.drag_from if main.drag_from >= 0 else main.selected
 	if source >= 0 and sim.nodes[source]["owner"] == human:
 		count_label.text = "%d / %d" % [Rules.shown(floorf(sim.nodes[source]["units"] * main.fraction)), Rules.shown(sim.nodes[source]["units"])]
@@ -2052,6 +2067,15 @@ func set_waiting(lines: Array) -> void:
 			"side": "center", "arrow": false, "life": INF, "rise": 0.0})
 
 
+func _sync_catchup(dt: float) -> void:
+	## CATCH-UP: the tag fades in while your side's vats make +15 % (Sim.catchup_active), out when the gap closes - over
+	## Rules.HUD_CALLOUT_FADE, the callouts' fade. Recounted every frame (an online guest's Sim never steps).
+	var on: bool = shows("status_line") and not sim.over and not _seat_out(human) and sim.catchup_active(human)
+	var a := move_toward(catchup_tag.modulate.a, 1.0 if on else 0.0, dt / Rules.HUD_CALLOUT_FADE)
+	catchup_tag.modulate.a = a
+	catchup_tag.visible = a > 0.0
+
+
 func pulse_last_stand(how: String) -> void:
 	## The Last Stand's announcement: its own status line pulses for HUD_LS_PULSE s and says how the method falls.
 	_ls_pulse = Rules.HUD_LS_PULSE
@@ -2063,6 +2087,8 @@ func _under_top() -> float:
 	var y := top_panel.position.y + top_panel.size.y if top_panel.visible else margins.y
 	if status_label.text != "":
 		y = status_label.position.y + status_label.size.y
+	if catchup_tag.visible:
+		y = maxf(y, catchup_tag.position.y + catchup_tag.size.y)
 	return maxf(y, notices.position.y)
 
 
@@ -2096,7 +2122,7 @@ func callout_blocked() -> Array:
 		var sw := status_label.get_theme_font("font").get_string_size(status_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
 				status_label.get_theme_font_size("font_size")).x + 24.0 * ui_scale
 		out.append(Rect2(vp.x * 0.5 - sw * 0.5, status_label.position.y - 3.0 * ui_scale, sw, status_label.size.y + 8.0 * ui_scale))   # (+ its pulse frame)
-	for c in [pause_button, music_button, side_panel, dock, dock.hint_panel if dock else null, debug_button, chat_button, spectate_button, monster_icon, map_title]:
+	for c in [catchup_tag, pause_button, music_button, side_panel, dock, dock.hint_panel if dock else null, debug_button, chat_button, spectate_button, monster_icon, map_title]:
 		if c and (c as Control).is_visible_in_tree():
 			out.append((c as Control).get_global_rect())
 	if debug_panel and debug_panel.visible:
