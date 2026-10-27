@@ -119,7 +119,8 @@ func _run() -> void:
 		var rate := w / (games * 2.0 * SEEDS)
 		print("      %-8s teamwork on vs off: %.0f %%" % [lv, rate * 100.0])
 		if lv in CHECKED:
-			check(rate >= 0.60 and rate <= 0.90, "%s: the coordinating team wins clearly more but not always (%.0f %%, wanted 60-90 %%)" % [lv, rate * 100.0])
+			# floor 60 -> 55: the 0.23.15 catch-up rule narrows team gaps (catchup-n24-report.md)
+			check(rate >= 0.55 and rate <= 0.90, "%s: the coordinating team wins clearly more but not always (%.0f %%, wanted 55-90 %%)" % [lv, rate * 100.0])
 	Rules.last_stand = true
 	print("\n%s (%d failed)" % ["ALL PASSED" if failures == 0 else "FAILURES", failures])
 	quit(1 if failures else 0)

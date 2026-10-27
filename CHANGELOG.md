@@ -1,13 +1,18 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.23.15 "Alpha 23" - 2026-10-27 (staging: balance pass)
+## 0.23.15 "Alpha 23" - 2026-10-27 (staging: balance pass, catch-up)
 
 - **0.23.15 - balance pass (Daniele approved 2026-10-27: "for me it's fine to follow its changes")**, measured by `tests/balance_study.gd`
   (Expert 1v1, 1400 games + a 4760-game power swap; write-up `05 Handoff/handoffs/architect-specs/balance-pass-2026-10-27.md`), `Rules` numbers only:
   faction stats Ember attack 1.10 -> 1.02, production Bloom 1.10 -> 1.06 / NULL 1.00 -> 1.03 / Solar 0.90 -> 0.93; Core Meltdown 4 defenders per
   unit, 90 shown at most -> 3 per unit, 70 at most; cooldowns Sinkhole 50 -> 75 s, Sever 45 -> 70 s (deck down 10 -> 6 s), Quake 60 -> 90 s,
   Emergency Evac 40 -> 32 s (share 0.5 -> 0.65, "two thirds"), Ghost Line 32 -> 24 s, Surge 28 -> 22 s, Portal 70 -> 55 s, Backwash 40 -> 32 s.
-  test_sim's pins on the old numbers updated. NOT in this build (still Daniele's call): the 2:00 snowball catch-up, withholding N-24 / N-04.
+  test_sim's pins on the old numbers updated.
+- **Catch-up** (Daniele 2026-10-27): while a side holds fewer than half the leading side's nodes, its vats produce +15 % (Rules.CATCHUP_PRODUCTION /
+  CATCHUP_NODE_RATIO); a CATCH-UP +15 % tag shows under your chips; off in lessons and missions. N-24 K-Crossing and N-04 Console are out of 1v1
+  (MapPool.WITHHELD_MODES; seat A won 92 % / 78 %) until 🗺️ moves their spawns. AI Expert re-tuned for the new numbers (margin 1.1 -> 1.2; the
+  curve 15 / 31 / 48 / 62 / 79 %). test_ai_coop's "coordinating team wins clearly more" floor 60 -> 55 % (the catch-up narrows team gaps).
+- Server: deploy.sh refuses to overwrite a pack a running room uses (🖥️ deploy-guard).
 
 ## 0.23.14 "Alpha 23" - 2026-10-27 (staging: iPhone fixes, rotation relay)
 

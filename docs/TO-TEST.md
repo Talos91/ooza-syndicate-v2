@@ -9,6 +9,8 @@ Live build: https://oozesyndicate.com
 - [ ] **Ember** no longer runs away with games (attack +2 %, Core Meltdown 3 kills per unit, 70 at most) - does it still feel like the hard-hitting faction?
 - [ ] **Powers**: Sinkhole / Sever / Quake come back slower (75 / 70 / 90 s), Sever's deck is back after 6 s; Evac / Ghost Line / Surge / Portal / Backwash come back sooner. Does any power now feel spammy or useless?
 - [ ] **Evac** forces two thirds of the garrison out (was half) - still fair?
+- [ ] **Catch-up**: fall behind (fewer than half the leader's nodes) - the CATCH-UP +15 % tag shows under your chips and you can claw back; it never shows in lessons or missions.
+- [ ] **1v1 map pool**: N-24 K-Crossing and N-04 Console never come up in 1v1.
 
 ## 0.23.14 (iPhone fixes, rotation relay - phone check on staging: https://oozesyndicate.com/staging/)
 - [ ] **iPhone / iPad** (Safari, landscape): the sky / background shows behind the board and nothing looks broken; a match runs smoothly.
