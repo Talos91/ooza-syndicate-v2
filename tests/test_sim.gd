@@ -3208,6 +3208,7 @@ func _relays_proto() -> void:
 	run_until(tl, func(): return not (he in tl.hordes), 15.0)
 	check(tl.fall_losses.get("B", 0.0) < 0.01 and (tl.nodes[1]["owner"] == "B" or tl.nodes[1]["units"] < n1 - 0.5),
 			"tilt: the slid line reaches that neighbour (node 1: %s, %.1f -> %.1f)" % [tl.nodes[1]["owner"], n1, tl.nodes[1]["units"]])
+	_relays_proto_ai()
 
 
 func _route_edges(s: Sim, route: Array) -> Array:
@@ -3215,3 +3216,46 @@ func _route_edges(s: Sim, route: Array) -> Array:
 	for k in range(route.size() - 1):
 		out.append(s._edge_index(int(route[k]), int(route[k + 1])))
 	return out
+
+
+func _relays_proto_ai() -> void:
+	## RELAYS 3.0 PROTOTYPES, AI v1: one rule per kind (conveyor, launcher, tilt); ferry and lift are routing only.
+	var ai := SeatAI.new("A", 2.0, "Standard")
+	var c := _proto_sim("conveyor")
+	c.nodes[1]["owner"] = "A"
+	c.nodes[3]["units"] = 30.0
+	var hc := c.send(3, 4, 0.5)
+	var spc := _span_of(hc, 7)
+	hc["s"] = (float(spc["s0"]) + float(spc["s1"])) * 0.5
+	check(not ai._proto_fire(c, c.nodes[1]), "AI conveyor: its line goes with the flow - no fire")
+	c.nodes[1]["relay_index"] = 1
+	check(ai._proto_fire(c, c.nodes[1]), "AI conveyor: its line is against the flow, none with it - fires")
+	var l := _proto_sim("launcher")
+	l.nodes[1]["owner"] = "A"
+	l.nodes[0]["owner"] = "A"
+	l.nodes[0]["units"] = 30.0
+	check(not ai._proto_fire(l, l.nodes[1]), "AI launcher: no line heading to the pad - no fire")
+	l.send(0, 2, 0.5)
+	check(ai._proto_fire(l, l.nodes[1]), "AI launcher: a line heading to the pad, the target neutral - fires")
+	l.nodes[8]["owner"] = "A"
+	check(not ai._proto_fire(l, l.nodes[1]), "AI launcher: never at its own node")
+	var t := _proto_sim("tilt")
+	t.nodes[4]["owner"] = "A"
+	t.nodes[4]["relay_index"] = 1                     # next exit: 1 (neutral)
+	t.nodes[5]["units"] = 60.0
+	var he := t.send(5, 3, 0.5)
+	run_until(t, func():
+		var pr: Array = t._platform_range(he, 4)
+		return not pr.is_empty() and he["s"] >= pr[0] + 1.0, 12.0)
+	check(ai._proto_fire(t, t.nodes[4]), "AI tilt: an enemy line on the platform, the next exit away from its nodes - fires")
+	t.nodes[1]["owner"] = "A"
+	check(not ai._proto_fire(t, t.nodes[4]), "AI tilt: never slides the enemy into its own node")
+	for kind in ["ferry", "lift"]:
+		var s := _proto_sim(kind)
+		var rid: int = 1 if kind == "ferry" else 4
+		s.nodes[rid]["owner"] = "A"
+		s.nodes[3]["units"] = 40.0
+		s.send(3, 4, 0.5)
+		run_until(s, func(): return false, 3.0)
+		SeatAI.new("A", 2.0, "Expert").think(s, 10.0)
+		check(not s.events.any(func(e): return e["type"] == "relay_fired" and e["node"] == rid), "AI %s: routing only, never fired" % kind)

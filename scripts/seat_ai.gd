@@ -1011,6 +1011,10 @@ func _relays(sim: Sim) -> void:
 			continue
 		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
 			continue
+		if Rules.is_proto(n["relay"]):                   # RELAYS 3.0 PROTOTYPES: one rule per kind, nothing else
+			if _proto_fire(sim, n):
+				_order(sim.fire_relay(n["id"]))
+			continue
 		var closing := _closing(sim, n)
 		if closing.is_empty():
 			# 0.18.7: a retract left in / a remote left off after a kill blocks its own shortcut - put
@@ -1045,6 +1049,56 @@ func _relays(sim: Sim) -> void:
 		_order(sim.fire_relay(n["id"]))
 
 
+func _proto_fire(sim: Sim, n: Dictionary) -> bool:
+	## RELAYS 3.0 PROTOTYPES (spec v1): the one AI rule per kind; the ferry and the lift are routing only.
+	var id: int = n["id"]
+	match str(n["relay"]):
+		"conveyor":                                   # an own line on its deck against the flow, none with it
+			var against := false
+			for h in _my_lines(sim):
+				var sense: Array = sim.conveyor_sense(h)
+				if int(sense[1]) != id:
+					continue
+				if int(sense[0]) > 0:
+					return false
+				against = against or int(sense[0]) < 0
+			return against
+		"launcher":                                   # an own line on its way to the pad, the target enemy or neutral
+			var tgt: int = int(n["proto"].get("target", -1))
+			if tgt < 0 or sim.collapsed.get(tgt, false):
+				return false
+			var t_owner: String = sim.nodes[tgt]["owner"]
+			if t_owner == seat or (t_owner != "" and sim.allied(t_owner, seat)):
+				return false
+			for h in _my_lines(sim):
+				var k: int = (h["route"] as Array).find(id)
+				if k <= 0:
+					continue
+				var pr: Array = sim._platform_range(h, id)
+				if not pr.is_empty() and h["s"] <= pr[1]:
+					return true
+			return false
+		"tilt":                                       # an enemy line on the platform, the next exit away from its nodes
+			var ex := sim.tilt_next_exit(id)
+			if ex < 0:
+				return false
+			var ex_owner: String = sim.nodes[ex]["owner"]
+			if ex_owner == seat or (ex_owner != "" and sim.allied(ex_owner, seat)):
+				return false
+			var enemy := 0.0
+			var own := 0.0
+			for h in sim.hordes:
+				var pr: Array = sim._platform_range(h, id)
+				if pr.is_empty() or h["s"] < pr[0] or h["s"] > pr[1] or h.get("decoy", false):
+					continue
+				if _hostile(sim, h["owner"]):
+					enemy += h["units"]
+				else:
+					own += h["units"]                     # (its own lines would slide too)
+			return enemy >= 1.0 and own <= 0.5
+	return false
+
+
 func _relay_opens_route(sim: Sim, src: int, dst: int, units: float) -> Array:
 	## 0.22.4: `dst` cannot be reached at all right now (find_route sees no open deck to it) - before
 	## the target is dropped from the scan for good, see whether firing one of this seat's own ready
@@ -1055,8 +1109,8 @@ func _relay_opens_route(sim: Sim, src: int, dst: int, units: float) -> Array:
 	for n in sim.nodes:
 		if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
 			continue
-		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
-			continue
+		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "" or Rules.is_proto(n["relay"]):
+			continue                                      # (RELAYS 3.0 prototypes: routing only, never a probe)
 		var closing := _closing(sim, n)
 		if _cut_toll(sim, closing, Rules.RELAY_WARNING)[1] > 0.5:
 			continue                                      # an own line still has to cross a deck it closes
@@ -1094,8 +1148,8 @@ func _open_route(sim: Sim, plan: Dictionary) -> bool:
 			t += Rules.AI_RELAY_DETOUR                    # a risky way in is worth replacing
 		t0 = maxf(t0, t)
 	for n in sim.nodes:
-		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "":
-			continue
+		if n["owner"] != seat or n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "" or Rules.is_proto(n["relay"]):
+			continue                                      # (RELAYS 3.0 prototypes: routing only, never a probe)
 		var closing := _closing(sim, n)
 		if _cut_toll(sim, closing, Rules.RELAY_WARNING)[1] > 0.5:
 			continue                                      # an own line still has to cross a deck it closes
@@ -1834,7 +1888,7 @@ func _pick(sim: Sim, id: String) -> Array:
 			for n in sim.nodes:
 				if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
 					continue
-				if n["relay"] == "" or (n["owner"] != "" and sim.allied(n["owner"], seat)):
+				if n["relay"] == "" or Rules.is_proto(n["relay"]) or (n["owner"] != "" and sim.allied(n["owner"], seat)):
 					continue
 				var closing := _closing(sim, n)
 				if closing.is_empty():
@@ -1884,7 +1938,7 @@ func _pick(sim: Sim, id: String) -> Array:
 			for n in sim.nodes:
 				if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
 					continue
-				if n["relay"] != "" and n["relay_phase"] == "" and n["relay_cd"] <= 0.0:
+				if n["relay"] != "" and not Rules.is_proto(n["relay"]) and n["relay_phase"] == "" and n["relay_cd"] <= 0.0:
 					var closing := _closing(sim, n)
 					if not closing.is_empty():
 						var toll: Array = _fling_toll(sim, closing, Rules.RELAY_WARNING)
@@ -2046,7 +2100,7 @@ func _rewire_fires(sim: Sim) -> void:
 	for n in sim.nodes:
 		if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
 			continue
-		if n["relay"] == "" or not sim.can_cast(seat, "ultimate", n["id"]):
+		if n["relay"] == "" or Rules.is_proto(n["relay"]) or not sim.can_cast(seat, "ultimate", n["id"]):
 			continue
 		var closing := _closing(sim, n)
 		if closing.is_empty():

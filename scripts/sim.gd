@@ -5603,20 +5603,26 @@ func ferry_pos(id: int) -> float:
 # CONVEYOR: the line's speed on the deck under its head, with the flow x RELAYS_PROTO.conveyor.with, against it x .against.
 func conveyor_mult(h: Dictionary) -> float:
 	## Also leaves h["conv"] = 1 (with) / -1 (against) / 0 for the view's speed tag.
-	h["conv"] = 0
+	var sense := conveyor_sense(h)
+	h["conv"] = sense[0]
 	var cfg: Dictionary = Rules.RELAYS_PROTO["conveyor"]
+	return 1.0 if sense[0] == 0 else (float(cfg["with"]) if sense[0] > 0 else float(cfg["against"]))
+
+
+func conveyor_sense(h: Dictionary) -> Array:
+	## [1 with the flow / -1 against / 0 (no conveyor under the head, or it is flipping), the conveyor node id or -1].
 	for sp in h["spans"]:
 		if h["s"] < sp["s0"] or h["s"] > sp["s1"]:
 			continue
 		if not _conv_edges.has(sp["edge"]):
-			return 1.0
-		var n: Dictionary = nodes[_conv_edges[sp["edge"]]]
+			return [0, -1]
+		var id: int = _conv_edges[sp["edge"]]
+		var n: Dictionary = nodes[id]
 		if n["relay_phase"] == "moving":
-			return 1.0                                    # flipping: no flow
+			return [0, id]                                # flipping: no flow
 		var with: bool = (int(n["relay_index"]) == 0) == bool(sp["forward"])
-		h["conv"] = 1 if with else -1
-		return float(cfg["with"]) if with else float(cfg["against"])
-	return 1.0
+		return [1 if with else -1, id]
+	return [0, -1]
 
 
 # LAUNCHER: armed, every own line whose head enters the node's platform parks there and pours into the air at the arrival
