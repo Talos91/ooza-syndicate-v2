@@ -3342,6 +3342,8 @@ func _alive_seats() -> Dictionary:
 	for m in monsters:
 		if m["state"] == "walking":
 			alive[m["seat"]] = true
+	for f in flights:                                 # RELAYS 3.0: a launcher's throw in the air is a line too
+		alive[f["seat"]] = true
 	return alive
 
 
