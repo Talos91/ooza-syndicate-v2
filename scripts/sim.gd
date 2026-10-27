@@ -973,29 +973,39 @@ func _relay_begin_move(n: Dictionary) -> void:
 			opening.append(i)
 	n["relay_index"] = new_index
 	n["moving_edges"] = closing + opening
-	var pairs := {}
-	var delta := 0.0
-	if n["relay"] == "rotation":
-		for c in closing:                                 # the deck pivots from its old pier to the nearest new one
-			var a: int = _other_end(c, n["id"])
-			var ang_a := _angle_from(n["pos"], nodes[a]["pos"])
-			var best := -1
-			var best_d := INF
-			for o in opening:
-				var b: int = _other_end(o, n["id"])
-				var d := wrapf(_angle_from(n["pos"], nodes[b]["pos"]) - ang_a, -PI, PI)
-				if absf(d) < absf(best_d):
-					best_d = d
-					best = o
-			if best >= 0:
-				pairs[c] = best
-				delta = best_d
+	var turn := rotation_turn(n["id"], closing, opening) if n["relay"] == "rotation" else [0.0, {}]
+	var delta: float = turn[0]
+	var pairs: Dictionary = turn[1]
 	n["relay_anim"] = {"delta": delta, "closing": closing, "opening": opening, "pairs": pairs, "progress": 0.0}
 	_relay_drop(n, closing, delta)
 	n["relay_phase"] = "moving"
 	n["relay_t"] = Rules.RELAY_MOVE
 	events.append({"t": time, "type": "relay_tick", "node": n["id"], "seat": n["owner"], "index": new_index})
 	fx_events.append({"type": "relay_tick", "node": n["id"]})
+
+
+func rotation_turn(id: int, closing: Array, opening: Array) -> Array:
+	## A rotation relay's turn: [delta (rad, atan2(z, x) sense), pairs {closing edge: opening edge}]. Each going deck
+	## pivots from its old pier to the nearest new one; the turn is the last pair's. Pure geometry: a guest's view
+	## (Fx) recomputes it exactly instead of reading the snapshot's rounded copy.
+	var pairs := {}
+	var delta := 0.0
+	var pos: Vector3 = nodes[id]["pos"]
+	for c in closing:
+		var a: int = _other_end(int(c), id)
+		var ang_a := _angle_from(pos, nodes[a]["pos"])
+		var best := -1
+		var best_d := INF
+		for o in opening:
+			var b: int = _other_end(int(o), id)
+			var d := wrapf(_angle_from(pos, nodes[b]["pos"]) - ang_a, -PI, PI)
+			if absf(d) < absf(best_d):
+				best_d = d
+				best = o
+		if best >= 0:
+			pairs[c] = best
+			delta = best_d
+	return [delta, pairs]
 
 
 # RELAYS TAKE THE GROUND AWAY (Daniele, 0.18.7, replacing the per-kind troop fates: "when a switch happens
