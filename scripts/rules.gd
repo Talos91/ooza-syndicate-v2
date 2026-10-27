@@ -466,10 +466,10 @@ const FACTIONS := {
 # garrison takes (divides it). Baseline 1.0 everywhere.
 static var FACTION_STATS := {
 	"vex": {"speed": 1.15, "garrison": 0.90},
-	"null": {},
-	"bloom": {"speed": 0.90, "production": 1.10},   # 1.15 -> 1.10 (Daniele, 0.18.9 balance)
-	"ember": {"attack": 1.10, "production": 0.90},   # 1.15 -> 1.10 (Daniele, 0.18.9 balance)
-	"solar": {"health": 1.10, "garrison": 1.05, "speed": 0.90, "production": 0.90},
+	"null": {"production": 1.03},
+	"bloom": {"speed": 0.90, "production": 1.06},   # 1.15 -> 1.10 (Daniele, 0.18.9 balance)
+	"ember": {"attack": 1.02, "production": 0.90},   # 1.15 -> 1.10 (Daniele, 0.18.9 balance)
+	"solar": {"health": 1.10, "garrison": 1.05, "speed": 0.90, "production": 0.93},
 }
 
 # BALANCE PRESETS (0.18.7 balance study - Daniele: "another thing we should revisit is balancing ... vat
@@ -632,11 +632,13 @@ const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
 #   platform    any platform but a home (node id)       enemy_structure  an enemy node with a structure (node id)
 #   point       the node at the centre of the circle    node_pair  [entrance node id, exit node id]
 #   enemy_node  a rival's node (node id; Emergency Evac, offensive since 2026-10-07)
+# 0.23.14 balance pass (proposal, 2026-10-27; tests/balance_study.gd, Expert 1v1 1400 + power swap 4760). Was: ember attack 1.10; bloom production 1.10; null {} (no stats); solar production 0.90;
+# core_meltdown kills_per 4 cap 90; sinkhole cd 50; sever cd 45 down 10; quake cd 60; evac cd 40 share 0.5; ghost_line cd 32; surge cd 28; portal cd 70; backwash cd 40.
 const SKILLS := {
 	# ---- active pool (combat), every map
 	# 0.19.2 (Daniele, 2026-09-27): +75 % speed (was +50 %) and its units leave and enter doors twice as fast
 	# ("door": the door-rate multiplier, Sim.door_mult)
-	"surge": {"name": "Surge", "slot": "active", "cd": 28.0, "target": "own_line",
+	"surge": {"name": "Surge", "slot": "active", "cd": 22.0, "target": "own_line",
 			"desc": "One of your lines moves 75 % faster for 8 s, and pours out of and into doors twice as fast.",
 			"mult": 1.75, "door": 2.0, "dur": 8.0},
 	"spore_burst": {"name": "Spore Burst", "slot": "active", "cd": 35.0, "target": "own_vat",
@@ -648,7 +650,7 @@ const SKILLS := {
 			"desc": "A deck burns for 5 s: enemy lines on it lose units (up to 10).", "dur": 5.0,
 			"rate": 0.25, "cap_shown": 10.0},
 	# the decoy's length is the send fraction of the source vat (the fraction the player has set); no units spent
-	"ghost_line": {"name": "Ghost Line", "slot": "active", "cd": 32.0, "target": "vat_to_node",
+	"ghost_line": {"name": "Ghost Line", "slot": "active", "cd": 24.0, "target": "vat_to_node",
 			"desc": "A decoy line that looks real and draws Laser tower and Machinegoon fire, but never fights.", "fraction": 0.5},
 	# ---- map pool (network skills)
 	"demolish": {"name": "Demolish", "slot": "map", "cd": 60.0, "target": "fixed_deck",
@@ -667,17 +669,17 @@ const SKILLS := {
 	# ---- POWERS (0.22.2, Daniele 2026-09-28: "we need more powers like demolish as its very fun and very op";
 	# spec + first numbers: 01 Rules/NEW-POWERS-2026-09-28.md, all to tune by play). "warn": the Demolish-style
 	# warning before a deck goes (the spec is silent; 1.5 s like Demolish, so a deck never vanishes unannounced).
-	"quake": {"name": "Quake", "slot": "map", "cd": 60.0, "target": "platform",
+	"quake": {"name": "Quake", "slot": "map", "cd": 90.0, "target": "platform",
 			"desc": "A platform shakes: every deck touching it drops after 1.5 s, riders fall; back after 6 s.",
 			"warn": 1.5, "down": 6.0},
-	"sever": {"name": "Sever", "slot": "map", "cd": 45.0, "target": "deck",
-			"desc": "Cut any deck, relay decks too, after 1.5 s: riders fall; it is back after 10 s.",
-			"warn": 1.5, "down": 10.0},
-	"backwash": {"name": "Backwash", "slot": "map", "cd": 40.0, "target": "deck",
+	"sever": {"name": "Sever", "slot": "map", "cd": 70.0, "target": "deck",
+			"desc": "Cut any deck, relay decks too, after 1.5 s: riders fall; it is back after 6 s.",
+			"warn": 1.5, "down": 6.0},
+	"backwash": {"name": "Backwash", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "A wave shoves every enemy line on a deck back to the end it came from. No losses."},
 	# a vat / Machinegoon drops one tier; a T1 or single-tier structure (Laser, Forge, Monster hub) is destroyed.
 	# Like a capture it never touches a T4, and a home keeps at least a T1 vat (conservative readings, OPEN-QUESTIONS).
-	"sinkhole": {"name": "Sinkhole", "slot": "active", "cd": 50.0, "target": "enemy_structure",
+	"sinkhole": {"name": "Sinkhole", "slot": "active", "cd": 75.0, "target": "enemy_structure",
 			"desc": "An enemy structure sinks one tier; a T1 or single-tier one is destroyed."},
 	# every seat outside the caster's side sees nothing inside the circle (radius_m around the tapped node):
 	# nodes, counts, lines, structures (client-side hiding for now; online the data still travels)
@@ -686,7 +688,7 @@ const SKILLS := {
 			"radius_m": 24.0, "dur": 15.0},   # 24 m (~1.5 nodes): 32 m darkened nearly all of a small map (A-01, Orbital Nexus)
 	# any player's line that enters one end comes out of the other and walks on to its target - both ways (Daniele,
 	# 2026-09-29, Decisions page: "twoway")
-	"portal": {"name": "Portal", "slot": "map", "cd": 70.0, "target": "node_pair",
+	"portal": {"name": "Portal", "slot": "map", "cd": 55.0, "target": "node_pair",
 			"desc": "Link two nodes up to 3 bridges apart for 12 s: every line entering one comes out of the other.",
 			"dur": 12.0, "reach": 3},
 	# share of the garrison leaves at once (door rate x burst) for the nearest own node not under attack, by route.
@@ -694,9 +696,9 @@ const SKILLS := {
 	# monsters and falls hit it like any line.
 	# OFFENSIVE (Daniele, 2026-10-07: "emergency evac isn't a defensive power but an offensive one so that the defender has
 	# his troops force evac"): cast on a rival's node, its owner's garrison is forced out toward THEIR nearest safe node.
-	"evac": {"name": "Emergency Evac", "slot": "active", "cd": 40.0, "target": "enemy_node",
-			"desc": "Half of an enemy node's garrison is forced out at once and runs for their nearest safe node.",
-			"share": 0.5, "burst": 8.0},
+	"evac": {"name": "Emergency Evac", "slot": "active", "cd": 32.0, "target": "enemy_node",
+			"desc": "Two thirds of an enemy node's garrison is forced out at once and runs for their nearest safe node.",
+			"share": 0.65, "burst": 8.0},
 	# ---- ultimates (one per faction; "cd" is the natural charge time, see ULT_CHARGE_TIME)
 	# Rewire: while it lasts, the ultimate slot fires any relay once (target = relay id), `fires` at most
 	"rewire": {"name": "Rewire", "slot": "ultimate", "faction": "vex", "cd": 120.0, "target": "none",
@@ -714,8 +716,8 @@ const SKILLS := {
 	# 60), castable from the START of the trip - the line is armed and it goes off when the head is within
 	# `range` metres of the target (or pouring in); a line that dies, falls or loses its target first wastes it.
 	"core_meltdown": {"name": "Core Meltdown", "slot": "ultimate", "faction": "ember", "cd": 120.0, "target": "own_line",
-			"desc": "Arm an attacking line: on arrival 25 % of it melts down, 4 defenders die per unit; a garrison at zero is captured.",
-			"share": 0.25, "min_shown": 4.0, "kills_per": 4.0, "cap_shown": 90.0, "range": 12.0},
+			"desc": "Arm an attacking line: on arrival 25 % of it melts down, 3 defenders die per unit; a garrison at zero is captured.",
+			"share": 0.25, "min_shown": 4.0, "kills_per": 3.0, "cap_shown": 70.0, "range": 12.0},
 	# the node + its adjacent own nodes: garrison damage / div, production x prod, the decks between them anchored
 	# and any relay among them locked (nobody can fire it)
 	"relay_aegis": {"name": "Relay Aegis", "slot": "ultimate", "faction": "solar", "cd": 120.0, "target": "own_node",
