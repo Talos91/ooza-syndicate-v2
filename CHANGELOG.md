@@ -1,5 +1,21 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.14 "Alpha 23" - 2026-10-27 (staging: iPhone fixes, rotation relay)
+
+- **iPhone / iPad (every model)** (Daniele: "on IOS it shows no background and looks broken"):
+  - the 3D board is drawn straight onto the canvas the sky is on (`Scenery.ios_safe`: no glow, no colour adjustment, no MSAA on iOS) - GL
+    Compatibility otherwise renders the 3D off screen and copies the sky in every frame, the path WebKit rejects;
+  - the canvas is capped at 2x device pixels on iOS (an iPhone 14: 2250 x 1020 -> 1500 x 680; less than half the WebGL memory);
+  - the menu fits Safari's short landscape (320-340 pt with the browser bars): a compact layout under 370 pt real height - no overlaps in the
+    top bar, HOME, PLAY, ARMIES (the ultimate over the tab bar), CAMPAIGN, FACTION, SETUP, RIVALS, HELP, results, PAUSE > SETTINGS, VERSUS;
+    swipeable rows show a fade and a chevron. Checked in real WebKit at 568x320, 750x340, 844x390, 932x430 (not on a real iPhone);
+  - the session telemetry carries the GPU name.
+- **Rotation relay animation** (Daniele: "on rotation the animation always breaks"): online guests (everyone in a server room) ended the swing on
+  the `relay_done` effect, which arrives behind a snapshot still saying "moving" - the turntable got the turn twice (+90 degrees), the leaving deck
+  stayed hidden mid-swing. The motion now follows the relay's state, the turn is exact (`Sim.rotation_turn`), a guest's swing runs on its own clock,
+  and each deck module eases onto the new bridge (on mirrored pivots it landed 1.1-1.4 m off, then snapped). tests/relay_rot_probe: 19195 desyncs -> 0.
+- Server: deploy.sh keeps the newest 4 packs by version (🖥️ deploy-keep-packs).
+
 ## 0.23.13 "Alpha 23" - 2026-10-12 (staging: Emergency Evac offensive, camera by map size)
 
 - **EMERGENCY EVAC is an offensive power** (⚡ Powers; Daniele: "emergency evac isn't a defensive power but an offensive one so that the
