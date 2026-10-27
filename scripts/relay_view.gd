@@ -123,12 +123,26 @@ static func put_button(parent: Node3D, sim: Sim, n: Dictionary) -> Dictionary:
 	## Places node n's button; returns vis[id]["relay_button"]: {"node", "tap" (world pos of the Button empty),
 	## "dir", "dist", "gap", "tight", "strut"}.
 	var pl := place(sim, n["id"])
-	var btn := MapBuilder.put(parent, BUTTON[n["relay"]], n["pos"])
+	var piece: String = BUTTON.get(n["relay"], "")
+	if piece == "":                                   # RELAYS 3.0 PROTOTYPES: 🎨's Relay_Button_<Kind>_v2 once it exists,
+		piece = proto_button(str(n["relay"]))         # until then the switch's button with its glyph hidden (Fx draws
+		pl["glyph_hidden"] = piece == BUTTON["switch"]   # the kind's symbol as a label instead)
+	var btn := MapBuilder.put(parent, piece, n["pos"])
 	if _child(btn, "Button") == null:
-		push_warning("RELAY V2: %s has no Button empty" % BUTTON[n["relay"]])
+		push_warning("RELAY V2: %s has no Button empty" % piece)
+	if pl.get("glyph_hidden", false):
+		var g := _child(btn, "Glyph")
+		if g != null:
+			g.visible = false
 	pl["node"] = btn
 	pl["tap"] = seat_button(btn, n["pos"], pl["dir"], float(pl["dist"]))
 	return pl
+
+
+static func proto_button(kind: String) -> String:
+	## RELAYS 3.0 PROTOTYPES: the kind's own button piece (Relay_Button_Ferry_v2 ...) if the kit has it, else the switch's.
+	var own := "Relay_Button_%s_v2" % kind.capitalize()
+	return own if ResourceLoader.exists(Cosmetics.kit_path(own)) else BUTTON["switch"]
 
 
 static func seat_button(btn: Node3D, centre: Vector3, dir: Vector3, dist: float) -> Vector3:

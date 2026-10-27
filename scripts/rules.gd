@@ -221,7 +221,7 @@ const RELAYS_PROTO := {
 	"ferry": {"cooldown": 5.0, "secs_per_8m": 1.4, "hull": 0.5},
 	"conveyor": {"cooldown": 5.0, "with": 1.5, "against": 0.5, "move": 1.4},
 	"launcher": {"cooldown": 30.0, "armed": 8.0, "flight": 2.0, "land": 1.5, "reach": 3},
-	"lift": {"cooldown": 10.0, "move": 1.4, "rise": 4.0},
+	"lift": {"cooldown": 10.0, "move": 1.4, "rise": 1.5},   # rise: the view's metres per level (placeholder)
 	"tilt": {"cooldown": 10.0, "move": 1.4},
 }
 
@@ -229,6 +229,22 @@ const RELAYS_PROTO := {
 static func is_proto(kind: String) -> bool:
 	## A Relays 3.0 prototype kind (test maps only).
 	return RELAYS_PROTO.has(kind)
+
+
+static func proto_tag(kind: String, state: String, phase: String) -> String:
+	## The node tag's state text for a prototype relay (HUD): AT A / AT B, A>B / B>A, UP / DOWN, EXIT n, PAD / ARMED.
+	match kind:
+		"ferry":
+			return "AT " + state.substr(1)
+		"conveyor":
+			return state.substr(1, 1) + ">" + state.substr(2, 1)
+		"lift":
+			return "UP" if state == "l1" else "DOWN"
+		"tilt":
+			return "EXIT %d" % (int(state.substr(1)) + 1)
+		"launcher":
+			return "ARMED" if phase == "moving" else "PAD"
+	return state
 
 const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves (its troops fell when it started)
 # RELAY V2 (the relay redo, Alpha 22 - Daniele 2026-09-28 "they good"; Models/2.0/structures_2_1/relay_v2.json +
