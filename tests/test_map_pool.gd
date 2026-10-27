@@ -62,6 +62,14 @@ func _init() -> void:
 	SeatAI.guard_on = _arg("guard", "on") != "off"
 	var paths := MapPool.battlefield()
 	print("%d maps in the pool" % paths.size())
+	# SEAT BIAS (Daniele 2026-10-27): N-24 / N-04 are out of 1v1 (MapPool.WITHHELD_MODES) - 1v1 is all they seat, so they
+	# leave the picker and the random rematch entirely; still baked and in all() (test_maps4 keeps checking them)
+	for code in ["N-24", "N-04"]:
+		check(MapPool.WITHHELD_MODES.get(code, []).has("1v1") and not MapPool.mode_offered(code, "1v1"), "%s: never offered in 1v1" % code)
+		check(not paths.any(func(p): return p.get_file().begins_with(code)), "%s: not on 02 BATTLEFIELD / the random rematch" % code)
+		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)), "%s: still baked and in MapPool.all()" % code)
+	check(MapPool.mode_offered("N-01", "1v1") and paths.any(func(p): return p.get_file().begins_with("N-01")), "an unbiased 1v1 map (N-01) is still offered")
+	check(not paths.any(func(p): return p.get_file().substr(0, 4) in MapPool.TUTORIAL_ONLY), "no tutorial map on 02 BATTLEFIELD")
 	for map_path in paths:
 		var sm := MapBuilder.load_map(map_path)
 		check(sm.has("seats") and not sm["seats"].is_empty(), "%s: has seats" % map_path)

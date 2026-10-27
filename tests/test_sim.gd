@@ -1020,6 +1020,7 @@ func _init() -> void:
 	_ls_wave()
 	_audit_fixes()
 	_powers_tests()
+	_catchup_tests()
 	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
@@ -1078,6 +1079,77 @@ func _tp(seats := {3: "A", 4: "B"}, factions := {"A": "null", "B": "null"}, team
 	var s := Sim.new()
 	s.setup(m, MapBuilder.layout(m), seats, factions, 1, teams)
 	return s
+
+
+# ------------------------------------------------------------------ CATCH-UP (Daniele 2026-10-27, Rules.CATCHUP_*)
+func _own(s: Sim, owners: Dictionary) -> void:
+	## Every node neutral except `owners` (node id -> seat); 20 units each, under every cap.
+	for n in s.nodes:
+		n["owner"] = owners.get(int(n["id"]), "")
+		n["units"] = 20.0
+
+
+func _catchup_tests() -> void:
+	# Two Piers: 3 - 1 - 0 - 2 - 4. A (home 3) holds 1 node, B holds 3: 1 < 3 x 0.5 -> A's vats x1.15
+	var s := _tp()
+	_own(s, {3: "A", 4: "B", 2: "B", 0: "B"})
+	var base_a: float = Rules.PROD[s.nodes[3]["tier"]] * s.stat("A", "production")
+	var base_b: float = Rules.PROD[s.nodes[4]["tier"]] * s.stat("B", "production")
+	s.step(0.05)
+	check(s.catchup_active("A") and absf(s.production(s.nodes[3]) - base_a * Rules.CATCHUP_PRODUCTION) < 0.001,
+			"catch-up: a side under half the leader's nodes (1 vs 3) produces x%.2f" % Rules.CATCHUP_PRODUCTION)
+	check(not s.catchup_active("B") and absf(s.production(s.nodes[4]) - base_b) < 0.001, "catch-up: the leader never gets it")
+	var u0: float = s.nodes[3]["units"]
+	_steps(s, 1.0)
+	check(absf(s.nodes[3]["units"] - u0 - base_a * Rules.CATCHUP_PRODUCTION) < 0.05,
+			"catch-up: the vat really makes +15 %% (%.2f in 1 s, %.2f without)" % [s.nodes[3]["units"] - u0, base_a])
+	# the gap closes: A takes node 1 -> 2 vs 3 is not under half: off again, from the next step
+	s.nodes[1]["owner"] = "A"
+	s.step(0.05)
+	check(not s.catchup_active("A") and absf(s.production(s.nodes[3]) - base_a) < 0.001, "catch-up: switches off when the gap closes (2 vs 3)")
+	# exactly half: 1 vs 2 gets nothing
+	s = _tp()
+	_own(s, {3: "A", 4: "B", 2: "B"})
+	s.step(0.05)
+	check(not s.catchup_active("A") and absf(s.production(s.nodes[3]) - base_a) < 0.001, "catch-up: exactly half the leader's nodes (1 vs 2) does not count")
+	# off where the match turns it off (lessons, missions without stage.catchup)
+	s = _tp()
+	s.catchup_on = false
+	_own(s, {3: "A", 4: "B", 2: "B", 0: "B"})
+	s.step(0.05)
+	check(not s.catchup_active("A") and absf(s.production(s.nodes[3]) - base_a) < 0.001, "catch-up: off when the match turns it off (catchup_on false)")
+	# 2v2 counts sides (teams), not seats: A 1 + C 3 = 4 vs B 3 + D 3 = 6 -> nobody (A alone would trail 1 vs 3)
+	var m := MapBuilder.load_map("res://maps4/N-06-ring-road.json")
+	var seats := {}
+	var teams := {}
+	for st in m["seats"]["2v2"]:
+		seats[int(st["node"])] = st["seat"]
+		teams[st["seat"]] = int(st["team"])
+	s = Sim.new()
+	s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null", "C": "null", "D": "null"}, 1, teams)
+	var home := {}
+	for id in seats:
+		home[seats[id]] = id
+	var free: Array = s.nodes.map(func(n): return int(n["id"])).filter(func(id): return not seats.has(id))
+	var own := {home["A"]: "A", home["B"]: "B", home["C"]: "C", home["D"]: "D"}
+	for i in range(2):
+		own[free[i]] = "C"
+	for i in range(2, 4):
+		own[free[i]] = "B"
+	for i in range(4, 6):
+		own[free[i]] = "D"
+	_own(s, own)
+	s.step(0.05)
+	check(not s.catchup_active("A") and not s.catchup_active("C") and not s.catchup_active("B"),
+			"catch-up 2v2: sides are counted (team 4 vs 6 nodes: nobody, though seat A alone holds 1 vs 3)")
+	own.erase(free[0])                                  # team A + C: 3 nodes vs 6 -> still exactly half: nobody
+	own.erase(free[1])                                  # 2 vs 6 -> both A and C produce +15 %
+	_own(s, own)
+	s.step(0.05)
+	var hb: float = Rules.PROD[s.nodes[home["C"]]["tier"]] * s.stat("C", "production")
+	check(s.catchup_active("A") and s.catchup_active("C") and not s.catchup_active("B") and not s.catchup_active("D")
+			and absf(s.production(s.nodes[home["C"]]) - hb * Rules.CATCHUP_PRODUCTION) < 0.001,
+			"catch-up 2v2: a trailing team (2 vs 6 nodes) gets it on both seats, the leading team on neither")
 
 
 # ------------------------------------------------------------------ 2026-09-28: the audit fix pass (audit-sim A1-A5, Daniele's rule fixes)
