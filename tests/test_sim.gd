@@ -21,6 +21,11 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 
 func _init() -> void:
+	if "--only=relays_proto" in OS.get_cmdline_user_args():   # RELAYS 3.0 PROTOTYPES alone (quick)
+		_relays_proto()
+		print("relays_proto: %d failure(s)" % failures)
+		quit(1 if failures else 0)
+		return
 	var map := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var pos := MapBuilder.layout(map)
 	check(pos.size() == 5, "Two Piers lays out 5 nodes")
@@ -1020,6 +1025,7 @@ func _init() -> void:
 	_ls_wave()
 	_audit_fixes()
 	_powers_tests()
+	_relays_proto()
 	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
@@ -3003,3 +3009,209 @@ func _powers_tests() -> void:
 	var vis: float = s.visible_units(s.nodes[3], "B")
 	check(vis < s.nodes[3]["units"] - 5.0 and s.visible_units(s.nodes[3], "A") == s.nodes[3]["units"],
 			"Ghost Line: its source count drops for the rivals as a real send's would (%.0f seen of %.0f), the owner sees the truth" % [vis, s.nodes[3]["units"]])
+
+
+# ------------------------------------------------------------------ RELAYS 3.0 PROTOTYPES (01 Rules/RELAYS-3.0-PROTOTYPES.md)
+# Fixtures tests/relays_proto/P-9x: Orbital Nexus (A-01) with one prototype kind each. 3 = A's home, 5 = B's, 4 = the centre,
+# 1 / 7 the old retract relays (north / south), 0 2 6 8 the corners. Run alone: test_sim.gd -- --only=relays_proto
+func _proto_sim(kind: String, seats := {3: "A", 5: "B"}) -> Sim:
+	var code: String = {"ferry": "P-91", "conveyor": "P-92", "launcher": "P-93", "lift": "P-94", "tilt": "P-95"}[kind]
+	var m := MapBuilder.load_map("res://tests/relays_proto/%s-fixture-%s.json" % [code, kind])
+	var s := Sim.new()
+	s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null"}, 1)
+	return s
+
+
+func _span_of(h: Dictionary, ei: int) -> Dictionary:
+	for sp in h["spans"]:
+		if sp["edge"] == ei:
+			return sp
+	return {}
+
+
+func _skip_warning(s: Sim, id: int) -> void:
+	s.nodes[id]["relay_t"] = 0.0
+	s.step(0.05)
+
+
+func _relays_proto() -> void:
+	# the pool maps never carry a prototype kind, and a P map is never offered
+	var proto_in_pool := false
+	for path in MapPool.all():
+		var m := MapBuilder.load_map(path)
+		for n in m["nodes"]:
+			if n.get("relay") != null and Rules.is_proto(str(n["relay"])) and not path.get_file().begins_with("P-"):
+				proto_in_pool = true
+	check(not proto_in_pool, "RELAYS 3.0: no pool map uses a prototype relay kind")
+	check(not MapPool.battlefield().any(func(p): return p.get_file().begins_with("P-")), "RELAYS 3.0: no P map is in the battlefield pool")
+
+	# ---- FERRY: P-91, ferry node 1 drives deck 7 (3 -> 4, A's home to the centre), docked at A (node 3)
+	var f := _proto_sim("ferry")
+	f.nodes[1]["owner"] = "A"
+	f.nodes[3]["units"] = 40.0
+	check(f.nodes[1]["relay_index"] == 0 and f.is_edge_open(7), "ferry: docked at A at the start, the deck is a way across")
+	var centre0: float = f.nodes[4]["units"]
+	var hf := f.send(3, 4, 0.5)
+	check(not hf.is_empty() and hf["route"] == [3, 4], "ferry: a send to the centre boards the ferry (%s)" % str(hf.get("route", [])))
+	var spf := _span_of(hf, 7)
+	var front: float = float(spf["s0"]) + (float(spf["s1"]) - float(spf["s0"])) * float(Rules.RELAYS_PROTO["ferry"]["hull"])
+	run_until(f, func(): return false, 6.0)
+	check(hf in f.hordes and hf["s"] <= front + 0.01 and hf["s"] >= front - 0.5, "ferry: the line waits at the hull's front (s %.1f, front %.1f)" % [hf["s"], front])
+	check(absf(f.nodes[4]["units"] - centre0) < 0.01, "ferry: nobody crosses the gap without the ferry")
+	check(f.fire_relay(1) and f.nodes[1]["relay_phase"] == "warning", "ferry: the owner fires it (1 s warning)")
+	run_until(f, func(): return f.nodes[1]["relay_phase"] == "moving", 3.0)
+	var riders := f.hordes.filter(func(h): return h.has("ferry_ride"))
+	var gap_m: float = float(f.edges[7]["deck_m"])
+	check(not riders.is_empty() and absf(float(f.nodes[1]["relay_move"]) - 1.4 * gap_m / 8.0) < 0.01,
+			"ferry: it travels with %d rider(s), %.2f s for the %.0f m gap" % [riders.size(), f.nodes[1]["relay_move"], gap_m])
+	check(not f.is_edge_open(7) and f.find_route(3, 4) != [3, 4], "ferry: while travelling the gap is closed (routes avoid it: %s)" % str(f.find_route(3, 4)))
+	run_until(f, func(): return f.nodes[1]["relay_phase"] != "moving", 5.0)
+	check(f.nodes[1]["relay_index"] == 1 and f.fall_losses.get("A", 0.0) < 0.01, "ferry: docked at B, nobody fell (falls %.2f)" % f.fall_losses.get("A", 0.0))
+	check(not f.hordes.any(func(h): return h.has("ferry_ride")), "ferry: the riders got off")
+	run_until(f, func(): return f.nodes[4]["units"] < centre0 - 0.5 or f.nodes[4]["owner"] == "A", 8.0)
+	check(f.nodes[4]["units"] < centre0 - 0.5 or f.nodes[4]["owner"] == "A", "ferry: the riders continue their order to the centre")
+	# docked at B: a line reaching the empty pier at A queues at the lip (no waterfall)
+	run_until(f, func(): return f.nodes[1]["relay_cd"] <= 0.0, 8.0)
+	f.nodes[3]["units"] = 30.0
+	var hq := f.send(3, 4, 0.5)
+	check(not hq.is_empty() and hq["route"] == [3, 4], "ferry: docked across, the way is still routed (it queues for the ferry)")
+	var spq := _span_of(hq, 7)
+	var falls0: float = f.fall_losses.get("A", 0.0)
+	run_until(f, func(): return false, 5.0)
+	check(hq in f.hordes and hq["s"] <= float(spq["s0"]) + 0.01 and f.fall_losses.get("A", 0.0) - falls0 < 0.01,
+			"ferry: a line reaching the empty pier queues at the lip (s %.1f, lip %.1f)" % [hq["s"], spq["s0"]])
+
+	# ---- CONVEYOR: P-92, conveyor node 1 drives decks 7 (3 -> 4) and 9 (4 -> 5), flowing A -> B
+	var c := _proto_sim("conveyor")
+	c.nodes[1]["owner"] = "A"
+	c.nodes[3]["units"] = 30.0
+	c.nodes[5]["units"] = 30.0
+	var hw := c.send(3, 4, 0.5)
+	var hb := c.send(5, 4, 0.5)
+	var spw := _span_of(hw, 7)
+	var spb := _span_of(hb, 9)
+	hw["s"] = (float(spw["s0"]) + float(spw["s1"])) * 0.5
+	hb["s"] = (float(spb["s0"]) + float(spb["s1"])) * 0.5
+	check(absf(c.conveyor_mult(hw) - 1.5) < 0.001 and hw["conv"] == 1, "conveyor: with the flow x1.5")
+	check(absf(c.conveyor_mult(hb) - 0.5) < 0.001 and hb["conv"] == -1, "conveyor: against it x0.5")
+	hw["streaming"] = false
+	c.nodes[3]["streaming"] = {}
+	var s_before: float = hw["s"]
+	var plain: float = Rules.move_speed() * c.stat("A", "speed") * c.deck_slow(hw) * 0.1
+	c.step(0.1)
+	check(absf((hw["s"] - s_before) - plain * 1.5) < plain * 0.05, "conveyor: the line really walks x1.5 (%.2f m vs %.2f plain)" % [hw["s"] - s_before, plain])
+	check(c.fire_relay(1), "conveyor: the owner fires it")
+	run_until(c, func(): return c.nodes[1]["relay_phase"] == "moving", 3.0)
+	check(absf(c.conveyor_mult(hb) - 1.0) < 0.001, "conveyor: while it flips there is no flow")
+	run_until(c, func(): return c.nodes[1]["relay_phase"] == "", 3.0)
+	if hb in c.hordes and not _span_of(hb, 9).is_empty() and hb["s"] < float(spb["s1"]):
+		check(absf(c.conveyor_mult(hb) - 1.5) < 0.001, "conveyor: flipped, B's line now goes with the flow")
+	hw["s"] = (float(spw["s0"]) + float(spw["s1"])) * 0.5
+	check(absf(c.conveyor_mult(hw) - 0.5) < 0.001, "conveyor: and A's line against it")
+	check(c.fall_losses.get("A", 0.0) < 0.01 and c.fall_losses.get("B", 0.0) < 0.01, "conveyor: nothing falls")
+
+	# ---- LAUNCHER: P-93, launcher node 1 throws at node 8 (2 bridges: 1 - 4 - 8)
+	var l := _proto_sim("launcher")
+	l.nodes[1]["owner"] = "A"
+	l.nodes[1]["units"] = 5.0
+	l.nodes[0]["owner"] = "A"
+	l.nodes[0]["units"] = 40.0
+	var hn := l.send(0, 1, 0.25)                       # not armed: an ordinary arrival
+	run_until(l, func(): return not (hn in l.hordes), 10.0)
+	check(l.flights.is_empty() and l.nodes[1]["units"] > 5.5, "launcher: not armed, an own line just arrives")
+	var u8: float = l.nodes[8]["units"]
+	check(l.fire_relay(1), "launcher: the owner arms it")
+	run_until(l, func(): return l.nodes[1]["relay_phase"] == "moving", 3.0)
+	check(absf(float(l.nodes[1]["relay_move"]) - 8.0) < 0.01, "launcher: ARMED for 8 s")
+	l.nodes[5]["units"] = 40.0                        # B's line through the pad (5 -> 2 -> 1 -> 0)
+	var hbl := l.send(5, 0, 0.5)
+	var hl := l.send(0, 2, 1.0)                       # A's line through the pad (0 -> 1 -> 2)
+	check(1 in hl["route"] and 1 in hbl["route"], "launcher: both lines pass the pad (%s / %s)" % [str(hl["route"]), str(hbl["route"])])
+	var first_throw := -1.0
+	var first_land := -1.0
+	var b_thrown := false
+	var t := 0.0
+	while t < 14.0:
+		l.step(0.05)
+		t += 0.05
+		if first_throw < 0.0 and not l.flights.is_empty():
+			first_throw = l.time
+		if first_land < 0.0 and l.flights.any(func(fl): return fl.get("landed", false)):
+			first_land = l.time
+		if hbl in l.hordes and hbl.has("launch"):
+			b_thrown = true
+	check(first_throw > 0.0, "launcher: an own line entering the armed pad is thrown")
+	check(first_land > 0.0 and first_land - first_throw >= 1.95, "launcher: it flies 2 s before landing (%.2f s)" % (first_land - first_throw))
+	check(not b_thrown, "launcher: enemy lines are never thrown")
+	check(l.nodes[8]["owner"] == "A" or l.nodes[8]["units"] < u8 - 0.5, "launcher: the throw lands at the target as an arrival (owner %s)" % l.nodes[8]["owner"])
+	check(absf(float(Rules.RELAYS_PROTO["launcher"]["land"]) - 1.5) < 0.001 and l.nodes[1]["relay_cd"] > 20.0,
+			"launcher: lands over 1.5 s; 30 s cooldown after the arm (%.1f left)" % l.nodes[1]["relay_cd"])
+	# the landing is spread: a single 2 s-old throw lands over RELAYS_PROTO.launcher.land
+	var l2 := _proto_sim("launcher")
+	l2.flights.append({"seat": "A", "faction": "null", "units": 3.0, "left": 3.0, "from": 1, "to": 8, "t0": 0.0, "land": 0.0, "end": 1.5})
+	l2.step(0.5)
+	check(l2.flights.size() == 1 and absf(float(l2.flights[0]["left"]) - 2.0) < 0.05, "launcher: units arrive one by one over the 1.5 s")
+
+	# ---- LIFT: P-94, the centre (4) is a lift at level 0: decks 3 (0-4), 12 (4-8) level 0, 5 (2-4), 10 (4-6) level 1
+	var lf := _proto_sim("lift")
+	lf.nodes[4]["owner"] = "A"
+	lf.nodes[4]["units"] = 20.0
+	check(lf.is_edge_open(3) and lf.is_edge_open(12) and not lf.is_edge_open(5) and not lf.is_edge_open(10) and lf.is_edge_open(7),
+			"lift: level 0 decks open, level 1 closed, untagged decks open")
+	lf.nodes[0]["owner"] = "A"
+	lf.nodes[0]["units"] = 30.0
+	var hr := lf.send(0, 8, 1.0)
+	check(hr["route"] == [0, 4, 8], "lift: a line crosses the platform on level 0 (%s)" % str(hr["route"]))
+	run_until(lf, func():
+		var pr: Array = lf._platform_range(hr, 4)
+		return not pr.is_empty() and hr["s"] >= pr[0] + 1.0, 10.0)
+	check(lf.fire_relay(4), "lift: the owner fires it")
+	_skip_warning(lf, 4)
+	check(lf.nodes[4]["relay_phase"] == "moving" and lf.nodes[4]["relay_index"] == 1, "lift: the platform moves to level 1")
+	check(hr in lf.hordes and hr["units"] > 0.5 and not 12 in _route_edges(lf, hr["route"]),
+			"lift: the rider survives and takes the open way on (%s)" % str(hr.get("route", [])))
+	run_until(lf, func(): return lf.nodes[4]["relay_phase"] == "", 3.0)
+	check(not lf.is_edge_open(3) and not lf.is_edge_open(12) and lf.is_edge_open(5) and lf.is_edge_open(10),
+			"lift: at level 1 the other level's decks are closed")
+	check(absf(float(Rules.RELAYS_PROTO["lift"]["cooldown"]) - 10.0) < 0.001 and lf.nodes[4]["relay_cd"] > 9.0, "lift: 10 s cooldown")
+	# a line on a deck that leaves the current level falls when the motion starts (the existing rule)
+	var lf2 := _proto_sim("lift")
+	lf2.nodes[4]["owner"] = "A"
+	lf2.nodes[0]["owner"] = "B"
+	lf2.nodes[0]["units"] = 30.0
+	var hd := lf2.send(0, 4, 1.0)
+	var spd := _span_of(hd, 3)
+	run_until(lf2, func(): return hd["s"] > (float(spd["s0"]) + float(spd["s1"])) * 0.5, 10.0)
+	lf2.fire_relay(4)
+	_skip_warning(lf2, 4)
+	check(lf2.fall_losses.get("B", 0.0) > 0.5, "lift: a line on a deck leaving the level falls (%.1f)" % lf2.fall_losses.get("B", 0.0))
+
+	# ---- TILT: P-95, the centre (4) tips toward exits [3, 1, 5, 7] in turn
+	var tl := _proto_sim("tilt")
+	tl.nodes[4]["owner"] = "A"
+	tl.nodes[4]["units"] = 25.0
+	check(tl.tilt_next_exit(4) == 3, "tilt: the tower shows its next exit (3)")
+	tl.nodes[4]["relay_index"] = 1                    # next exit: 1 (north)
+	tl.nodes[5]["units"] = 60.0
+	var he := tl.send(5, 3, 0.5)                      # B's line through the platform: 5 -> 4 -> 3
+	check(he["route"] == [5, 4, 3], "tilt: B's line crosses the platform (%s)" % str(he["route"]))
+	run_until(tl, func():
+		var pr: Array = tl._platform_range(he, 4)
+		return not pr.is_empty() and he["s"] >= pr[0] + 1.0, 12.0)
+	var g0: float = tl.nodes[4]["units"]
+	check(tl.fire_relay(4), "tilt: the owner fires it")
+	_skip_warning(tl, 4)
+	check(he in tl.hordes and he["route"] == [5, 4, 1] and he["target"] == 1, "tilt: every line on it slides out the next exit as a new order (%s)" % str(he.get("route", [])))
+	check(absf(tl.nodes[4]["units"] - g0) < 0.5 and tl.nodes[4]["owner"] == "A", "tilt: the garrison stays (%.1f -> %.1f)" % [g0, tl.nodes[4]["units"]])
+	check(tl.tilt_next_exit(4) == 5, "tilt: the next fire tips toward the next exit (5)")
+	var n1: float = tl.nodes[1]["units"]
+	run_until(tl, func(): return not (he in tl.hordes), 15.0)
+	check(tl.fall_losses.get("B", 0.0) < 0.01 and (tl.nodes[1]["owner"] == "B" or tl.nodes[1]["units"] < n1 - 0.5),
+			"tilt: the slid line reaches that neighbour (node 1: %s, %.1f -> %.1f)" % [tl.nodes[1]["owner"], n1, tl.nodes[1]["units"]])
+
+
+func _route_edges(s: Sim, route: Array) -> Array:
+	var out := []
+	for k in range(route.size() - 1):
+		out.append(s._edge_index(int(route[k]), int(route[k + 1])))
+	return out
