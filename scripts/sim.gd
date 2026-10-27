@@ -4062,7 +4062,12 @@ func _prod_info(n: Dictionary) -> Array:
 			m = maxf(m, float(e["prod"]))
 	var bloom = null
 	for e in _fx_seat.get(n["owner"], []):
-		if e["id"] == "superbloom" and float(e["left"]) != 0.0 and float(e["mult"]) > m:
+		if e["id"] != "superbloom" or float(e["left"]) == 0.0:
+			continue
+		if e.get("stack", false):                      # ULTIMATES REWORK: on top of Spore Burst / Relay Aegis
+			m *= float(e["mult"])
+			bloom = e
+		elif float(e["mult"]) > m:
 			m = float(e["mult"])
 			bloom = e
 	return [m, bloom]
@@ -4102,11 +4107,12 @@ func door_mult(h: Dictionary) -> float:
 	## target twice as fast while it lasts; 1.0 otherwise). Views scale the pour-out / pour-in by it.
 	if h.get("evac", false):                           # POWERS: an Evac line leaves "at once" (burst x the door rate)
 		return float(Rules.SKILLS["evac"]["burst"])
-	if _fx_horde.is_empty():
-		return 1.0
 	var m := 1.0
 	for e in _fx_horde.get(h["id"], []):
 		if e["id"] == "surge":
+			m = maxf(m, float(e.get("door", 1.0)))
+	for e in _fx_seat.get(h["owner"], []):             # ULTIMATES REWORK: Rewire doubles every own line's doors too
+		if e["id"] == "rewire":
 			m = maxf(m, float(e.get("door", 1.0)))
 	return m
 
@@ -4447,11 +4453,11 @@ func cast(seat: String, slot: String, target = null) -> bool:
 			ev["private"] = seat                         # POWERS (0.22.2): nobody else may learn the new lines are echoes
 			fx_events.append({"type": "ghosts", "seat": seat, "hids": hids, "private": seat})
 		"rewire":
-			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "fires": int(sk["fires"]), "fired": []})
+			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "door": sk.get("door", 1.0), "fires": int(sk["fires"]), "fired": []})
 			ev["affects"] = _hostile_list(seat, factions.keys())
 		"superbloom":
-			var left: float = float(sk["cap_shown"]) * Rules.SCALE if Rules.SUPERBLOOM_MODE == "cap" else -1.0
-			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "left": left})
+			var left: float = float(sk["cap_shown"]) * Rules.SCALE if Rules.SUPERBLOOM_MODE == "cap" and float(sk["cap_shown"]) > 0.0 else -1.0
+			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "left": left, "stack": sk.get("stack", false)})
 		"core_meltdown":                               # POWERS (0.22.2): armed now, goes off on arrival (_step_armed)
 			var hm := _horde(_as_int(target))
 			var goal: Dictionary = nodes[line_goal(hm)]
@@ -4714,10 +4720,16 @@ func _aegis(seat: String, id: int) -> void:
 	## decks between them are anchored and the relays among them locked, for `dur` seconds.
 	var sk: Dictionary = Rules.SKILLS["relay_aegis"]
 	var group := [id]
-	for link in adj[id]:
-		var nb: int = link[0]
-		if nodes[nb]["owner"] == seat and not collapsed.get(nb, false) and is_edge_open(link[1]) and not nb in group:
-			group.append(nb)
+	var ring := [id]
+	for _r in range(int(sk.get("rings", 1))):          # ULTIMATES REWORK: "rings" bridges out over open decks
+		var next := []
+		for c in ring:
+			for link in adj[c]:
+				var nb: int = link[0]
+				if nodes[nb]["owner"] == seat and not collapsed.get(nb, false) and is_edge_open(link[1]) and not nb in group:
+					group.append(nb)
+					next.append(nb)
+		ring = next
 	for g in group:
 		_drop_effects("node", g, "relay_aegis")
 		_add_effect("relay_aegis", seat, "node", g, sk["dur"], {"div": sk["div"], "prod": sk["prod"], "center": id})

@@ -2361,12 +2361,12 @@ func _skills_tests() -> void:
 	_charged(s, "A")
 	s.nodes[5]["units"] = 200.0
 	var hv := s.send(5, 0, 1.0)
-	check(s.cast("A", "ultimate", null) and s.rewire_left("A") == 3 and absf(s.skill_speed(hv) - 1.5) < 0.001 and s.charge("A") == 0.0,
-			"Rewire: all own lines +50 % speed, 3 relay fires, the charge spent")
+	check(s.cast("A", "ultimate", null) and s.rewire_left("A") == 3 and absf(s.skill_speed(hv) - 1.75) < 0.001 and s.door_mult(hv) == 2.0 and s.charge("A") == 0.0,
+			"Rewire: all own lines +75 % speed and doors 2x (ultimates rework, was +50 %), 3 relay fires, the charge spent")
 	check(s.cast("A", "ultimate", 1) and s.nodes[1]["relay_phase"] == "warning" and s.rewire_left("A") == 2, "Rewire fires an enemy relay")
 	check(s.cast("A", "ultimate", 2) and s.rewire_left("A") == 1 and not s.can_cast("A", "ultimate", 2), "and a neutral one, each relay once")
-	_steps(s, 10.1)
-	check(s.rewire_left("A") == 0 and s.skill_speed(hv) == 1.0, "Rewire ends after 10 s")
+	_steps(s, 12.1)
+	check(s.rewire_left("A") == 0 and s.skill_speed(hv) == 1.0 and s.door_mult(hv) == 1.0, "Rewire ends after 12 s (was 10)")
 	# ---------------------------------------------------------------- Echo Split: up to 3 echoes; a landing jams the node
 	s = _mk(rot, "null", "null", {}, {7: "A", 10: "B"})
 	for id in [8, 9, 12]:
@@ -2412,10 +2412,21 @@ func _skills_tests() -> void:
 	u0 = s.nodes[3]["units"] + s.nodes[1]["units"] + s.nodes[0]["units"]
 	s.step(0.1)
 	var g1: float = s.nodes[3]["units"] + s.nodes[1]["units"] + s.nodes[0]["units"] - u0
-	check(absf(g1 / (base * 0.1) - 1.5) < 0.01, "cap: every vat 1.5x (%.2f)" % (g1 / (base * 0.1)))
+	check(absf(g1 / (base * 0.1) - 2.0) < 0.01, "every vat 2x (ultimates rework, was 1.5x) (%.2f)" % (g1 / (base * 0.1)))
 	_steps(s, 12.0)
 	var total: float = s.nodes[3]["units"] + s.nodes[1]["units"] + s.nodes[0]["units"] - u0
-	check(absf(total - (base * 12.1 + 40.0 * Rules.SCALE)) < 1.0, "cap: the extra stops at 40 shown units (extra %.1f sim)" % (total - base * 12.1))
+	check(absf(total - base * 2.0 * 12.0 - base * 0.1) < 1.0, "no cap on the extra any more (was 40 shown) (extra %.1f sim)" % (total - base * 12.1))
+	s = _mk(tp, "bloom", "null")
+	s.nodes[3]["tier"] = 4
+	s.nodes[3]["units"] = 0.0
+	_charged(s, "A")
+	s.skill_cd["A"]["active"] = 0.0
+	check(s.cast("A", "active", 3) and s.cast("A", "ultimate", null), "Spore Burst, then Superbloom")
+	u0 = s.nodes[3]["units"]
+	s.step(0.1)
+	var bb: float = Rules.PROD[4] * Rules.stat("bloom", "production") * 0.1
+	check(absf((s.nodes[3]["units"] - u0) / bb - 2.0 * float(Rules.SKILLS["spore_burst"]["mult"])) < 0.02,
+			"Superbloom stacks on Spore Burst: 2 x 1.8 = 3.6x (%.2f)" % ((s.nodes[3]["units"] - u0) / bb))
 	Rules.SUPERBLOOM_MODE = "under_attack"
 	s = _mk(tp, "bloom", "null")
 	_charged(s, "A")
@@ -2425,7 +2436,7 @@ func _skills_tests() -> void:
 	check(s.cast("A", "ultimate", null) and float(s.effects_on("seat", "A")[0]["left"]) < 0.0, "under_attack: castable once a line comes for you, no cap")
 	u0 = s.nodes[3]["units"]
 	s.step(0.1)
-	check(absf((s.nodes[3]["units"] - u0) / (Rules.PROD[1] * Rules.stat("bloom", "production") * 0.1) - 1.5) < 0.01, "under_attack: 1.5x")
+	check(absf((s.nodes[3]["units"] - u0) / (Rules.PROD[1] * Rules.stat("bloom", "production") * 0.1) - 2.0) < 0.01, "under_attack: 2x")
 	Rules.SUPERBLOOM_MODE = "cap"
 	# ---------------------------------------------------------------- Core Meltdown
 	for tag in ["BRAWL"]:
@@ -2503,8 +2514,15 @@ func _skills_tests() -> void:
 	_charged(s, "A")
 	s.cast("A", "ultimate", 5)
 	check(s.is_relay_locked(1) and not s.fire_relay(1) and "locked" in s.cast_check("B", "map", 1), "the relays among them are locked, for their owner and for a hacker")
-	_steps(s, 12.1)
-	check(not s.is_relay_locked(1) and s.effects.is_empty(), "Relay Aegis ends after 12 s")
+	_steps(s, 15.1)
+	check(not s.is_relay_locked(1) and s.effects.is_empty(), "Relay Aegis ends after 15 s (ultimates rework, was 12)")
+	s = _mk(tp, "solar", "null")
+	for id in [1, 0, 2]:
+		s.nodes[id]["owner"] = "A"
+	_charged(s, "A")
+	s.cast("A", "ultimate", 1)
+	check(s.garrison_div(s.nodes[2]) == 1.8 and s.anchor_state(s._edge_index(0, 2)) != null,
+			"ultimates rework: Relay Aegis reaches 2 bridges out (node 2 via node 0), and anchors that deck")
 	# ---------------------------------------------------------------- ultimate charge: ~120 s, kills speed it, never under 90 s
 	s = _mk(tp, "null", "null")
 	_steps(s, 119.0, 0.5)

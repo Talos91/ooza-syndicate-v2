@@ -615,9 +615,9 @@ const FACTION_TRAITS := {"vex": ["Efficient routing", "Faster travel on owned co
 # the approved ultimates (SKILLS-2.0-DRAFT sec5 / sec5.2, Daniele 2026-09-26); [name, one short line]
 const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
 		"null": ["Echo Split", "moving lines spawn jamming decoys"],
-		"bloom": ["Superbloom", "every vat 1.5x for 12 s"],
+		"bloom": ["Superbloom", "every vat 2x for 12 s"],
 		"ember": ["Core Meltdown", "sacrifice part of a line to gut a garrison"],
-		"solar": ["Relay Aegis", "a node and its neighbours shielded"]}
+		"solar": ["Relay Aegis", "a node and 2 rings of neighbours shielded"]}
 
 # ------------------------------------------------------------------ SKILLS 2.0 (0.18.7)
 # Daniele (0.18.7): "time to add armies presets and skills (its own new menu item where you select
@@ -707,15 +707,19 @@ const SKILLS := {
 			"share": 0.65, "burst": 8.0},
 	# ---- ultimates (one per faction; "cd" is the natural charge time, see ULT_CHARGE_TIME)
 	# Rewire: while it lasts, the ultimate slot fires any relay once (target = relay id), `fires` at most
+	# ULTIMATES REWORK (proposal, 2026-10-27; was dur 10, mult 1.5, no door): every line gets Surge's speed and doors, longer
 	"rewire": {"name": "Rewire", "slot": "ultimate", "faction": "vex", "cd": 120.0, "target": "none",
-			"desc": "10 s: all your lines +50 % speed; fire up to 3 relays anywhere, enemy ones too.",
-			"dur": 10.0, "mult": 1.5, "fires": 3},
+			"desc": "12 s: all your lines move 75 % faster and pour through doors twice as fast; fire up to 3 relays anywhere, enemy ones too.",
+			"dur": 12.0, "mult": 1.75, "door": 2.0, "fires": 3},
 	"echo_split": {"name": "Echo Split", "slot": "ultimate", "faction": "null", "cd": 120.0, "target": "none",
 			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat, Laser tower and Machinegoon for 8 s.",
 			"echoes": 3, "disrupt": 8.0},
 	# Daniele (0.18.7): "i don't like that super bloom can be casted only under attack but i like the cap"
+	# ULTIMATES REWORK (proposal, 2026-10-27; was mult 1.5, cap_shown 40, no stacking): double, uncapped (cap_shown 0 = no
+	# cap), and on top of Spore Burst / Relay Aegis ("stack": the multipliers multiply)
 	"superbloom": {"name": "Superbloom", "slot": "ultimate", "faction": "bloom", "cd": 120.0, "target": "none",
-			"desc": "Every vat produces 1.5x for 12 s (at most 40 extra units).", "mult": 1.5, "dur": 12.0, "cap_shown": 40.0},
+			"desc": "Every vat produces 2x for 12 s, on top of Spore Burst.", "mult": 2.0, "dur": 12.0, "cap_shown": 0.0,
+			"stack": true},
 	# sacrifice `share` of the line (at least min_shown, no upper cap), kills_per defenders each (at most
 	# cap_shown); a garrison at zero -> the rest of the line captures. The line must be attacking: headed for
 	# a node that isn't yours or an ally's. POWERS (0.22.2, Daniele 2026-09-28): 4 per unit (was 3), cap 90 (was
@@ -726,9 +730,10 @@ const SKILLS := {
 			"share": 0.25, "min_shown": 4.0, "kills_per": 3.0, "cap_shown": 70.0, "range": 12.0},
 	# the node + its adjacent own nodes: garrison damage / div, production x prod, the decks between them anchored
 	# and any relay among them locked (nobody can fire it)
+	# ULTIMATES REWORK (proposal, 2026-10-27; was 1 ring, 12 s): "rings" = how many bridges out from the node it reaches
 	"relay_aegis": {"name": "Relay Aegis", "slot": "ultimate", "faction": "solar", "cd": 120.0, "target": "own_node",
-			"desc": "A node and its neighbours: 1.8x less garrison damage, +20 % production, decks locked, 12 s.",
-			"div": 1.8, "dur": 12.0, "prod": 1.2},
+			"desc": "A node and your nodes up to 2 bridges away: 1.8x less garrison damage, +20 % production, decks locked, 15 s.",
+			"div": 1.8, "dur": 15.0, "prod": 1.2, "rings": 2},
 }
 const ACTIVE_SKILLS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line", "sinkhole", "evac"]   # POWERS: 5 -> 7
 const MAP_SKILLS := ["demolish", "mire", "anchor", "bypass", "relay_hack", "quake", "sever", "backwash", "fog", "portal"]   # POWERS: 5 -> 10

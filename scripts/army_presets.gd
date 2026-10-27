@@ -250,15 +250,17 @@ static func line(id: String) -> String:
 		"relay_hack":
 			return "Fire an enemy relay, or jam it +%d s" % int(s["jam"])
 		"rewire":
-			return "%d s: lines +%d %% speed, fire any %d relays" % [int(s["dur"]), _pct(s["mult"]), int(s["fires"])]
+			return "%d s: lines +%d %% speed, doors %sx, fire any %d relays" % [int(s["dur"]), _pct(s["mult"]), _x(s.get("door", 1.0)), int(s["fires"])]
 		"echo_split":
 			return "%d moving lines spawn decoys that jam %d s" % [int(s["echoes"]), int(s["disrupt"])]
 		"superbloom":
+			if float(s["cap_shown"]) <= 0.0:          # ULTIMATES REWORK: uncapped, stacks with Spore Burst
+				return "Every vat %sx for %d s, on top of Spore Burst" % [_x(s["mult"]), int(s["dur"])]
 			return "Every vat %sx for %d s (at most +%d units)" % [_x(s["mult"]), int(s["dur"]), int(s["cap_shown"])]
 		"core_meltdown":                               # POWERS (0.22.2): armed from the start of the trip
 			return "Arm an attacking line: on arrival %d %% melts, %d kills a unit" % [roundi(float(s["share"]) * 100.0), int(s["kills_per"])]
 		"relay_aegis":
-			return "A node + neighbours: %sx less damage, %d s" % [_x(s["div"]), int(s["dur"])]
+			return "A node + %d rings of neighbours: %sx less damage, %d s" % [int(s.get("rings", 1)), _x(s["div"]), int(s["dur"])]
 		# POWERS (0.22.2)
 		"quake":
 			return "Every deck on a platform drops, back in %d s" % int(s["down"])
