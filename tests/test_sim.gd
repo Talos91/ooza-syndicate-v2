@@ -556,9 +556,9 @@ func _init() -> void:
 	check(tv < tn, "a VEX horde arrives before a NULL one on the same deck (%.2f vs %.2f s)" % [tv, tn])
 	var sim26 := Sim.new()
 	sim26.setup(map, pos, {3: "A", 4: "B"}, {"A": "bloom", "B": "ember"}, 1)
-	check(absf(sim26.production(sim26.nodes[3]) - Rules.PROD[1] * 1.10) < 0.001, "Bloom's home produces 10 % more (0.18.9: was 15 %)")
+	check(absf(sim26.production(sim26.nodes[3]) - Rules.PROD[1] * 1.06) < 0.001, "Bloom's home produces 6 % more (0.23.15: was 10 %)")
 	check(absf(sim26.production(sim26.nodes[4]) - Rules.PROD[1] * 0.9) < 0.001, "Ember's home produces 10 % less")
-	check(absf(sim26.attack_of("B") - 1.10) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 10 % more damage (0.18.9: was 15 %)")
+	check(absf(sim26.attack_of("B") - 1.02) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 2 % more damage (0.23.15: was 10 %)")
 
 	# CLASSIC = Alpha 11's landing rule: each arriving unit is resolved at once, one-for-one at
 	# baseline; nothing waits outside as a siege; survivors take the node
@@ -1098,7 +1098,7 @@ func _audit_fixes() -> void:
 		var b0: float = s.nodes[1]["units"]
 		var c0: float = s.nodes[1]["allies"].get("C", 0.0)
 		var lost_c0: float = s.combat_losses.get("C", 0.0)
-		var kills: float = minf(maxf(line * 0.25, 20.0) * 4.0, 450.0)       # POWERS (0.22.2): 4 per unit, cap 90 shown
+		var kills: float = minf(maxf(line * 0.25, 20.0) * 3.0, 350.0)       # 0.23.15 balance: 3 per unit, cap 70 shown (was 4 / 90)
 		check(s.cast("A", "ultimate", h["id"]), "Core Meltdown vs an allied store: cast")
 		if c[2]:
 			check(s.nodes[1]["owner"] == "A" and s.nodes[1]["allies"].is_empty() and s.combat_losses.get("C", 0.0) - lost_c0 > c0 - 0.01,
@@ -2391,13 +2391,13 @@ func _skills_tests() -> void:
 			var left := float(h["L"]) - float(h["s"]) if h in s.hordes else 0.0
 			check(not ev.is_empty() and left <= 12.0 + 0.5, tag + ": it goes off within 12 m of the target (%.1f m)" % left)
 			var sac: float = maxf(line * 0.25, 20.0)
-			var kills: float = minf(sac * 4.0, 450.0)
+			var kills: float = minf(sac * 3.0, 350.0)
 			if g0 <= kills:
 				check(s.nodes[1]["owner"] == "A" and not (h in s.hordes) and bool(ev.get("captured", false)),
 						tag + ": the garrison hits zero and the rest of the line captures")
 			else:
-				check(s.nodes[1]["owner"] == "B" and absf(float(ev["sacrificed"]) - sac) < 0.6 and absf(float(ev["killed"]) - minf(float(ev["sacrificed"]) * 4.0, 450.0)) < 0.01,
-						tag + ": 25 %% sacrificed (%.0f), 4 defenders each (%.0f killed)" % [float(ev["sacrificed"]), float(ev["killed"])])
+				check(s.nodes[1]["owner"] == "B" and absf(float(ev["sacrificed"]) - sac) < 0.6 and absf(float(ev["killed"]) - minf(float(ev["sacrificed"]) * 3.0, 350.0)) < 0.01,
+						tag + ": 25 %% sacrificed (%.0f), 3 defenders each (%.0f killed)" % [float(ev["sacrificed"]), float(ev["killed"])])
 			check(absf(s.charge("B") - charge_b - 0.05 / Rules.ULT_CHARGE_TIME) < 0.0001, tag + ": no charge from the meltdown")
 	s = _mk(tp, "ember", "null")
 	s.nodes[3]["units"] = 1000.0
@@ -2411,7 +2411,7 @@ func _skills_tests() -> void:
 	var gm: float = s.nodes[2]["units"]
 	var lm: float = hm["units"]
 	s.cast("A", "ultimate", hm["id"])
-	check(lm * 0.25 * 4.0 > 450.0 and absf(gm - s.nodes[2]["units"] - 450.0) < 0.01 and absf(lm - hm["units"] - lm * 0.25) < 0.01, "a big line: no cap on the sacrifice, 90 shown kills at most (cast in range: it goes off at once)")
+	check(lm * 0.25 * 3.0 > 350.0 and absf(gm - s.nodes[2]["units"] - 350.0) < 0.01 and absf(lm - hm["units"] - lm * 0.25) < 0.01, "a big line: no cap on the sacrifice, 70 shown kills at most (0.23.15: was 90) (cast in range: it goes off at once)")
 	# ---------------------------------------------------------------- Relay Aegis
 	s = _mk(tp, "solar", "null")
 	for id in [1, 0]:
@@ -2956,7 +2956,7 @@ func _powers_tests() -> void:
 	s.nodes[2]["units"] = 10.0
 	s.nodes[4]["units"] = 200.0
 	var n_ev := s.fx_events.size()
-	check(s.cast("A", "active", 4) and absf(s.nodes[4]["units"] - 100.0) < 0.01, "Evac: half the defender's garrison is forced out at once")
+	check(s.cast("A", "active", 4) and absf(s.nodes[4]["units"] - 70.0) < 0.01, "Evac: 65 % of the defender's garrison is forced out at once (0.23.15: was half)")
 	var ev_h: Dictionary = s.hordes.filter(func(x): return x.get("evac", false))[0]
 	var evac_ev: Array = s.fx_events.slice(n_ev).filter(func(e): return e["type"] == "skill")
 	check(ev_h["owner"] == "B" and ev_h["target"] == 2 and not evac_ev.is_empty() and "B" in evac_ev[0]["affects"],

@@ -1,9 +1,20 @@
-# To test - ALPHA 23.10 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.15 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.15 (balance pass - phone check on staging: https://oozesyndicate.com/staging/)
+- [ ] **Ember** no longer runs away with games (attack +2 %, Core Meltdown 3 kills per unit, 70 at most) - does it still feel like the hard-hitting faction?
+- [ ] **Powers**: Sinkhole / Sever / Quake come back slower (75 / 70 / 90 s), Sever's deck is back after 6 s; Evac / Ghost Line / Surge / Portal / Backwash come back sooner. Does any power now feel spammy or useless?
+- [ ] **Evac** forces two thirds of the garrison out (was half) - still fair?
+
+## 0.23.14 (iPhone fixes, rotation relay - phone check on staging: https://oozesyndicate.com/staging/)
+- [ ] **iPhone / iPad** (Safari, landscape): the sky / background shows behind the board and nothing looks broken; a match runs smoothly.
+- [ ] **The menu on a short iPhone screen** (Safari with its bars showing): HOME, PLAY, ARMIES, CAMPAIGN, SETUP, RIVALS, HELP, PAUSE > SETTINGS, results - nothing overlaps or is cut off; swipeable rows show a fade and a chevron.
+- [ ] **Rotation relay online** (a server room, e.g. B-03 Khepri Wheel or M-54 Gearwheel Glade): fire a rotation relay a few times - the deck swings once, lands on the new bridge without a snap, the turntable turns exactly once per fire.
+- [ ] Android: nothing changed on Chrome (same look and speed as 0.23.13).
 
 ## 0.23.10 (the guided quick start - phone check on staging)
 - [ ] **First launch** (fresh browser / cleared site data): straight into the QUICK START. Does each BASICS step (TAKE, REINFORCE, UPGRADE, MACHINEGOON) say clearly what to do, with the hand already showing it?
