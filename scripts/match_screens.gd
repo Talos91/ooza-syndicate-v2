@@ -171,7 +171,19 @@ func result(d: Dictionary) -> Dictionary:
 	if name_text != "":
 		UiKit.add(self, UiKit.label(self, name_text, 20, UiKit.INK, true), Vector2(x, y))
 		y += UiKit.line_h(self, 20, true) + 4.0
+	# iOS (Safari's 320-340 pt, a narrow column): where the quiet buttons need a second row, the sub line (the matchup -
+	# MATCH DETAILS shows it too) gives them its height
+	var quiet_rows := 1
+	var fx := 0.0
+	for q in d.get("quiet", []):
+		var qw := minf(UiKit.text_w(self, str(q[0]), 14, true) + 36.0, w)
+		if fx > 0.0 and fx + qw > w:
+			quiet_rows += 1
+			fx = 0.0
+		fx += qw + 8.0
 	var sub := str(d.get("sub", ""))
+	if quiet_rows > 1 and ph:
+		sub = ""
 	if sub != "":
 		y += _wrapped(sub, 15, UiKit.MUTED, Vector2(x, y), w) + 6.0
 	var stars := int(d.get("stars", -1))
@@ -228,7 +240,10 @@ func result(d: Dictionary) -> Dictionary:
 	var qx := x
 	for q in d.get("quiet", []):                       # the quieter ways out: framed, >= 44 pt (the iPhone sweep: bare text
 		var qw := UiKit.text_w(self, str(q[0]), 14, true) + 36.0   # links were hard to hit), quiet next to the primary
-		qw = minf(qw, (x + w - qx))
+		qw = minf(qw, w)
+		if qx > x and qx + qw > x + w:                 # iOS: the next row rather than off the screen ("HO...")
+			qx = x
+			y += UiKit.tap_h(self, 44.0) + 8.0
 		UiKit.btn(self, str(q[0]), Vector2(qx, y), Vector2(qw, 44.0), q[1], "secondary", f, 14)
 		qx += qw + 8.0
 	if not (d.get("quiet", []) as Array).is_empty():
@@ -382,6 +397,22 @@ func card(d: Dictionary) -> Dictionary:
 	var head_h := UiKit.line_h(self, 12, true) + 2.0 + UiKit.line_h(self, 34, true) + 8.0
 	var hero_h := minf(maxf(col_h, 230.0 if ph else 170.0), cw - bw - 3.0 * pad)   # a short column still shows the character
 	var ch := pad + head_h + body_h + (10.0 + maxf(col_h, hero_h) if rows > 0 else 0.0) + pad
+	# iOS (Safari's 320-340 pt: PAUSE > SETTINGS ran off the screen): the actions after the first go two to a row, then
+	# the body line goes
+	var act_pairs := false
+	if ch > v.y - 12.0 and actions.size() > 2:
+		act_pairs = true
+		for k in range(1, actions.size()):             # wide enough that the halves' text never clips
+			bw = maxf(bw, (UiKit.text_w(self, str(actions[k][0]), 14, true) + 30.0) * 2.0 + 10.0)
+		bw = minf(bw, cw - 3.0 * pad - 120.0)
+		rows = 1 + ceili((actions.size() - 1) / 2.0) + (1 if not pairs.is_empty() else 0) + (1 if not pairs2.is_empty() else 0)
+		col_h = maxf(0.0, rows * (bh + row_gap) - row_gap)
+		hero_h = minf(maxf(col_h, 230.0 if ph else 170.0), cw - bw - 3.0 * pad)
+		ch = pad + head_h + body_h + 10.0 + maxf(col_h, hero_h) + pad
+	if ch > v.y - 12.0 and body != "":
+		ch -= body_h
+		body = ""
+		body_h = 0.0
 	var pos := ((v - Vector2(cw, ch)) / 2.0).floor()
 	pos.y = maxf(pos.y, 6.0)
 	UiKit.panel(self, pos, Vector2(cw, ch), f, false, Color(UiKit.PANEL, 0.97))
@@ -401,9 +432,15 @@ func card(d: Dictionary) -> Dictionary:
 	for i in range(actions.size()):
 		var a: Array = actions[i]
 		var kind := str(a[2]) if a.size() > 2 else ("primary" if i == 0 else "secondary")
-		var b := UiKit.btn(self, str(a[0]), Vector2(bx, by), Vector2(bw, bh), a[1], kind, f, 16)
+		var half := act_pairs and i > 0
+		var aw := (bw - 10.0) / 2.0 if half else bw
+		var ax := bx + (aw + 10.0 if half and (i - 1) % 2 == 1 else 0.0)
+		if half and (i - 1) % 2 == 0 and i == actions.size() - 1:
+			aw = bw                                    # an odd one out keeps the full width
+		var b := UiKit.btn(self, str(a[0]), Vector2(ax, by), Vector2(aw, bh), a[1], kind, f, 16 if not half else 14)
 		(out["buttons"] as Array).append(b)
-		by += bh + row_gap
+		if not half or (i - 1) % 2 == 1 or i == actions.size() - 1:
+			by += bh + row_gap
 		if i == 0 and not pairs.is_empty():            # the toggles, side by side under the primary (one or two rows)
 			for row in [pairs, pairs2]:
 				if (row as Array).is_empty():

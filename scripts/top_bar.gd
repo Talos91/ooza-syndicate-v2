@@ -42,7 +42,8 @@ func _build(crumb: String, f: String) -> void:
 	if slim:
 		# UI (0.22.1): the bars' taps act through the Menu, which outlives a rebuild - a phone's resize can rebuild the page
 		# (and free this bar) during the tap's flash frame, and a tap then did nothing (Daniele: "double or triple tap")
-		var back := UiKit.make_btn(menu, "←  BACK", Vector2(120, q), Callable(menu, "bar_back"), "secondary", f, 15)
+		var back := UiKit.make_btn(menu, "←  BACK", Vector2(maxf(120.0, UiKit.text_w(menu, "←  BACK", 15, true) + 36.0), q),
+				Callable(menu, "bar_back"), "secondary", f, 15)   # iOS: wide enough for its grown text ("← BAC" at 320 pt)
 		back.position = Vector2(x, (h - back.size.y) / 2.0)
 		add_child(back)
 		x += back.size.x + 18.0
@@ -131,6 +132,13 @@ func _build(crumb: String, f: String) -> void:
 		bxr -= t.size.x
 		t.position = Vector2(bxr, (h - t.size.y) / 2.0)
 		bxr -= 16.0
+	# iOS (Safari's 320-340 pt): the breadcrumb never runs under the balances - "OOZE / " goes first, then the whole
+	# crumb (the lit tab below already says where you are)
+	var room := bxr + 16.0 - 14.0 - x
+	var cw := func(t: String) -> float: return UiKit.text_w(menu, t, 12, true) + t.length() * 3.0   # (a label's own
+	if cw.call(c.text) > room and crumb.contains("/"):                                            # size isn't ready yet)
+		c.text = crumb.get_slice("/", crumb.get_slice_count("/") - 1).strip_edges().to_upper()
+	c.visible = cw.call(c.text) <= room
 	queue_redraw()
 
 

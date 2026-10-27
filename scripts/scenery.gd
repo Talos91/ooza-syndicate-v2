@@ -41,6 +41,15 @@ var _tex := {}
 var _scale := {}
 
 
+static func ios_safe() -> bool:
+	## iPhone / iPad (every model, 0.23.14 - Daniele: "on IOS it shows no background and looks broken"): Safari's WebGL
+	## (ANGLE on Metal) gets the 3D drawn straight onto the canvas the sky is on. Glow, the colour adjustments and the
+	## 3D scaling mode each make GL Compatibility render the 3D into an off-screen buffer and copy the sky into it every
+	## frame (rasterizer_scene_gles3.cpp, ENV_BG_CANVAS) - the copy WebKit rejects ("glBlitFramebuffer: read and write
+	## color attachments cannot be the same image"). So on iOS none of the three, and no MSAA. --ios-safe forces it on a desktop.
+	return OS.has_feature("web_ios") or OS.get_cmdline_user_args().has("--ios-safe")
+
+
 static func build_environment(parent: Node, _mobile: bool) -> DirectionalLight3D:
 	## The WorldEnvironment and lights (main._build_world; tests/kit_sheet.gd renders the kit under the
 	## same light). Returns the sun (main's quality profile turns its shadows off on phones).
@@ -68,6 +77,9 @@ static func build_environment(parent: Node, _mobile: bool) -> DirectionalLight3D
 	env.adjustment_enabled = true                      # a touch more punch for the neon and the owner colours
 	env.adjustment_contrast = 1.06
 	env.adjustment_saturation = 1.08
+	if ios_safe():                                     # the sky stays on the shared canvas (ios_safe)
+		env.glow_enabled = false
+		env.adjustment_enabled = false
 	var we := WorldEnvironment.new()
 	we.environment = env
 	parent.add_child(we)

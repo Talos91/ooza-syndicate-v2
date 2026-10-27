@@ -419,7 +419,8 @@ static func session_data() -> Dictionary:
 			"dpr": snappedf(DisplayServer.screen_get_scale(), 0.25),
 			"renderer": str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "")),
 			"touch": DisplayServer.is_touchscreen_available(), "graphics": PerfProfile.level(),
-			"fps_cap": PerfProfile.play_fps()}             # the match cap (the menu idles lower by design)
+			"fps_cap": PerfProfile.play_fps(),
+			"gpu": RenderingServer.get_video_adapter_name().left(60)}   # 0.23.14: which GPU (the iOS background hunt)             # the match cap (the menu idles lower by design)
 
 
 static func signature(message: String) -> String:

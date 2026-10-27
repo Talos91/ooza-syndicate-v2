@@ -575,7 +575,7 @@ class Preview extends SubViewportContainer:
 		_vp = SubViewport.new()
 		_vp.own_world_3d = true
 		_vp.transparent_bg = true
-		_vp.msaa_3d = Viewport.MSAA_2X
+		_vp.msaa_3d = Viewport.MSAA_DISABLED if Scenery.ios_safe() else Viewport.MSAA_2X
 		add_child(_vp)
 		var env := WorldEnvironment.new()
 		env.environment = Environment.new()

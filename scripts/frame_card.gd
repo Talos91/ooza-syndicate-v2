@@ -95,7 +95,8 @@ func _rebuild() -> void:
 	surface.add_theme_stylebox_override("panel", UiKit.sb(UiKit.CARD))
 	surface.size = size
 	add_child(surface)
-	var ah := maxf(h * art_frac, h - _text_block_h() - 10.0)   # the art fills down to the text
+	var plan := _plan()
+	var ah := maxf(h * art_frac, h - _text_block_h(plan) - 10.0)   # the art fills down to the text
 	var tex: Texture2D = UiKit.tex(art) if art != "" and ResourceLoader.exists(art) else UiKit.background(faction)
 	if tex == null:
 		tex = UiKit.hero_art(faction)
@@ -154,6 +155,28 @@ func _rebuild() -> void:
 		add_child(nb)
 		n.position = nb.position + Vector2(9, 3)
 		add_child(n)
+	var kb := kicker if kicker != "" else ("NEXT MISSION" if state == "next" else "")
+	if plan["badge"] and kb != "":                     # iOS (a short phone): the kicker on a plate in the art's corner
+		var bx := 10.0                                 # instead of above the title, where it ran over the picture
+		if hero != "":
+			bx += clampf(ah * 0.24, 28.0, 48.0) + 8.0
+		if number != "":
+			bx += UiKit.text_w(menu, number, 15, true) + 26.0
+		var kt := UiKit.label(menu, kb.to_upper(), 11, acc if not dim else UiKit.MUTED, true, 2)
+		var kp := Panel.new()
+		kp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		kp.add_theme_stylebox_override("panel", UiKit.sb(Color(UiKit.BASE, 0.92), Color(acc, 0.7) if not dim else UiKit.FRAME, 1, 5))
+		var ks := Vector2(UiKit.text_w(menu, kt.text, 11, true) + kt.text.length() * 2.0, UiKit.line_h(menu, 11, true))
+		var by := 10.0
+		if ks.x + 16.0 > w - bx - 10.0 and bx > 10.0:     # too wide beside the emblem / number: under them
+			by = 10.0 + (clampf(ah * 0.24, 28.0, 48.0) if hero != "" else UiKit.line_h(menu, 15, true) + 6.0) + 6.0
+			bx = 10.0
+		kp.size = Vector2(minf(ks.x + 16.0, w - bx - 10.0), ks.y + 4.0)
+		kp.position = Vector2(bx, by)
+		kp.clip_contents = true
+		add_child(kp)
+		kt.position = Vector2(8.0, 2.0)
+		kp.add_child(kt)
 	# the text column, bottom up: the button, the note, stars, the title, the kicker
 	var y := h - pad
 	var bt := _button_text()
@@ -171,11 +194,17 @@ func _rebuild() -> void:
 				pressed.emit())
 		add_child(b)
 		y -= b.size.y + 10.0
-	if note != "":
+	if note != "" and plan["note"] > 0:
 		var l := UiKit.label(menu, note, 13, UiKit.MUTED)
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.custom_minimum_size = Vector2(w - pad * 2.0, 0)
-		var lh := UiKit.text_h(menu, note, 13, w - pad * 2.0)
+		var lh := UiKit.line_h(menu, 13)
+		if plan["note"] == 2:
+			l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			l.custom_minimum_size = Vector2(w - pad * 2.0, 0)
+			lh = UiKit.text_h(menu, note, 13, w - pad * 2.0)
+		else:                                          # one line, trimmed
+			l.clip_text = true
+			l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			l.size = Vector2(w - pad * 2.0, lh)
 		l.position = Vector2(pad, y - lh)
 		add_child(l)
 		y -= lh + 4.0
@@ -184,7 +213,7 @@ func _rebuild() -> void:
 		s.position = Vector2(pad, y - UiKit.line_h(menu, 18))
 		add_child(s)
 		y -= UiKit.line_h(menu, 18) + 2.0
-	if subtitle != "":
+	if subtitle != "" and plan["sub"]:
 		var st := UiKit.label(menu, subtitle.to_upper(), 12, UiKit.MUTED, false, 2)
 		st.position = Vector2(pad, y - st.get_minimum_size().y)
 		add_child(st)
@@ -197,27 +226,42 @@ func _rebuild() -> void:
 		add_child(t)
 		y -= t.size.y + 2.0
 	var k := kicker if kicker != "" else ("NEXT MISSION" if state == "next" else "")
-	if k != "":
+	if k != "" and not plan["badge"]:
 		var kl := UiKit.label(menu, k.to_upper(), 11, acc if not dim else UiKit.DIM, true, 3)
 		kl.position = Vector2(pad, y - kl.get_minimum_size().y)
 		add_child(kl)
 
 
-func _text_block_h() -> float:
+func _plan() -> Dictionary:
+	## What the text column keeps. A card too short for all of it above its art (iOS Safari's 320-340 pt pages: the
+	## kicker ran over the picture) moves the kicker onto the art as a plate, then trims the note to one line, then
+	## drops the subtitle, then the note - until the text starts below the art's upper part.
+	var plan := {"badge": UiKit.compact(menu), "note": 2, "sub": true}   # a short phone: the plate always (it read badly
+	# over the art's fade, Daniele's iPhone)
+	var limit := size.y - size.y * art_frac * (0.55 if UiKit.compact(menu) else 0.8)
+	var steps := [["badge", true], ["note", 1], ["sub", false], ["note", 0]]
+	for st in steps:
+		if _text_block_h(plan) <= limit:
+			break
+		plan[st[0]] = st[1]
+	return plan
+
+
+func _text_block_h(plan := {"badge": false, "note": 2, "sub": true}) -> float:
 	## The text column's height (kicker .. button), measured the way _rebuild() lays it out.
 	var w := size.x - 28.0
 	var t := 14.0
 	if _button_text() != "":
 		t += UiKit.tap_h(menu, 38.0) + 10.0
-	if note != "":
-		t += UiKit.text_h(menu, note, 13, w) + 4.0
+	if note != "" and plan["note"] > 0:
+		t += (UiKit.text_h(menu, note, 13, w) if plan["note"] == 2 else UiKit.line_h(menu, 13)) + 4.0
 	if stars >= 0:
 		t += UiKit.line_h(menu, 18) + 2.0
-	if subtitle != "":
+	if subtitle != "" and plan["sub"]:
 		t += UiKit.line_h(menu, 12)
 	if title != "":
 		t += UiKit.line_h(menu, 20, true) + 2.0
-	if kicker != "" or state == "next":
+	if (kicker != "" or state == "next") and not plan["badge"]:
 		t += UiKit.line_h(menu, 11, true)
 	return t + 6.0
 

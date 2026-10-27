@@ -347,7 +347,9 @@ func _process(dt: float) -> void:
 
 func _apply_3d(p: Dictionary) -> void:
 	var vp := main.get_viewport()
-	if p["scale"] != null:
+	if Scenery.ios_safe():                           # no off-screen 3D buffer on iOS (Scenery.ios_safe); scale 1.0 = no scaling
+		vp.msaa_3d = Viewport.MSAA_DISABLED
+	elif p["scale"] != null:
 		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 		vp.scaling_3d_scale = float(p["scale"])
 		vp.msaa_3d = Viewport.MSAA_DISABLED

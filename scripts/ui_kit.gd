@@ -78,6 +78,18 @@ static func tap_h(m, h: float) -> float:
 	return maxf(h, MIN_TAP_PT / p) if p > 0.0 else h
 
 
+const COMPACT_PT := 370.0                          # iOS (2026-10-27): shorter pages (iPhone Safari with its bars) lay out compact
+
+
+static func compact(m) -> bool:
+	## The page is a short landscape phone (iPhone Safari: 320-340 pt tall): pages drop secondary lines and shrink their
+	## titles instead of overlapping. False on desktop and on taller phones (390 / 430 pt home-screen apps).
+	var p := pt(m)
+	if p <= 0.0 or m == null or not ("content" in m) or not is_instance_valid(m.content):
+		return false
+	return m.content.size.y * p < COMPACT_PT
+
+
 static func px(m, size: float) -> int:
 	## A font size in canvas units, grown on phones to >= 12.5 pt.
 	var p := pt(m)
@@ -380,6 +392,15 @@ static func bar(m, pos: Vector2, dims: Vector2, frac: float, f := "vex") -> void
 static var _ppp := 0.0                             # pt_per_px's last answer, and the frame / viewport it was for
 static var _ppp_frame := -1
 static var _ppp_vp := Vector2.ZERO
+static var test_pt_h := _arg_pt_h()                # screenshots / tests: --pt-height=320 plays a phone that many pt tall
+
+
+static func _arg_pt_h() -> float:
+	## --pt-height=N: off the web, the viewport stands for a landscape phone N pt tall (iPhone Safari with its bars: 320-340).
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--pt-height="):
+			return float(a.substr(12))
+	return 0.0
 
 
 static func pt_per_px(vp: Vector2) -> float:
@@ -392,7 +413,7 @@ static func pt_per_px(vp: Vector2) -> float:
 		return _ppp
 	_ppp_frame = frame
 	_ppp_vp = vp
-	_ppp = MIN_PHONE_REF / maxf(vp.y, 1.0)
+	_ppp = (test_pt_h if test_pt_h > 0.0 else MIN_PHONE_REF) / maxf(vp.y, 1.0)
 	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
 		var js = JavaScriptBridge.eval("window.OozeViewport ? OozeViewport.size().join(',') : ''", true)
 		var f := str(js).split(",")
