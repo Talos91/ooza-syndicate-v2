@@ -99,7 +99,8 @@ func _run() -> void:
 		inst.scenario_zoom = float(k[3])
 		get_tree().root.add_child(inst)
 		await _frames(10)
-		inst.ais.clear()
+		if not use_p or kind == "switch":
+			inst.ais.clear()                          # a still board; a P map keeps its AIs playing (traffic on it)
 		var sim: Sim = inst.sim
 		if kind == "switch":
 			rid = focus
@@ -137,8 +138,8 @@ func _run() -> void:
 					fire_wait = Rules.RELAY_WARNING + Rules.RELAY_MOVE * 0.45
 				"switch":
 					await _step(inst, 0.2)
-		else:                                         # a P map: let its home lines run a little first
-			await _step(inst, 1.0)
+		else:                                         # a P map: let the AIs play a little first
+			await _step(inst, float(args.get("play", "20")))
 		await _shot(inst, "%s/%s-1-before.png" % [out_dir, kind])
 		sim.nodes[rid]["relay_cd"] = 0.0
 		sim.fire_relay(rid)

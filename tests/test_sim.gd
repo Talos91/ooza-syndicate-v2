@@ -3209,6 +3209,7 @@ func _relays_proto() -> void:
 	check(tl.fall_losses.get("B", 0.0) < 0.01 and (tl.nodes[1]["owner"] == "B" or tl.nodes[1]["units"] < n1 - 0.5),
 			"tilt: the slid line reaches that neighbour (node 1: %s, %.1f -> %.1f)" % [tl.nodes[1]["owner"], n1, tl.nodes[1]["units"]])
 	_relays_proto_ai()
+	_relays_proto_maps()
 
 
 func _route_edges(s: Sim, route: Array) -> Array:
@@ -3259,3 +3260,32 @@ func _relays_proto_ai() -> void:
 		run_until(s, func(): return false, 3.0)
 		SeatAI.new("A", 2.0, "Expert").think(s, 10.0)
 		check(not s.events.any(func(e): return e["type"] == "relay_fired" and e["node"] == rid), "AI %s: routing only, never fired" % kind)
+
+
+func _relays_proto_maps() -> void:
+	## The 🗺️ test maps P-01..P-05 (maps4/P-0x-*.json, branch maps-proto), when present: each kind set up from its map,
+	## and 120 s of Expert vs Expert on it without a stall (the AI uses the kinds it has a rule for).
+	for f in DirAccess.get_files_at("res://maps4"):
+		if not (f.begins_with("P-") and f.ends_with(".json")):
+			continue
+		var m := MapBuilder.load_map("res://maps4/" + f)
+		var seats := {}
+		for st in m["seats"]["1v1"]:
+			seats[int(st["node"])] = str(st["seat"])
+		var s := Sim.new()
+		s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "ember"}, 3)
+		var kinds := {}
+		for n in s.nodes:
+			if Rules.is_proto(n["relay"]):
+				kinds[n["relay"]] = true
+		var ais := [SeatAI.new("A", 2.0, "Expert"), SeatAI.new("B", 2.0, "Expert")]
+		var t := 0.0
+		while t < 120.0 and not s.over:
+			for ai in ais:
+				ai.think(s, 0.1)
+			s.step(0.1)
+			t += 0.1
+		var fires := s.events.filter(func(e): return e["type"] == "relay_fired" and Rules.is_proto(s.nodes[e["node"]]["relay"])).size()
+		check(not kinds.is_empty() and s.hordes.all(func(h): return h["s"] >= 0.0 and h["s"] <= h["L"] + 0.01),
+				"%s: %s set up, 120 s of Expert vs Expert (prototype fires %d, captures %d)" % [f.get_basename(), str(kinds.keys()),
+				fires, s.events.filter(func(e): return e["type"] == "capture").size()])

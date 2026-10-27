@@ -502,7 +502,7 @@ const STATE_COLORS := {
 	"t2": Color("#b88ae6"), "t3": Color("#ff4f9a"), "pad": Color("#ffd23f"),
 }
 const RELAY_GLYPH := {"rotation": "↻", "retract": "⇤", "switch": "⇄", "remote": "⌁",
-		"ferry": "⇋", "conveyor": "⇉", "launcher": "➶", "lift": "⇅", "tilt": "◮"}   # (⛴ / ⟋ are not in DejaVu Sans Mono)
+		"ferry": "⇋", "conveyor": "⇉", "launcher": "➶", "lift": "⇅", "tilt": "⇲"}   # (⛴ / ⟋ are not in DejaVu Sans Mono; ◮ read as a hazard sign)
 const RELAY_GLYPH_EMISSION_MAX := 3.2   # 0.22.4 playtest (Daniele's cousins): the ready-breathing relay glyph
 # (Fx._relay_beacon / RelayView's "Glyph") saturated to white in close-ups at its uncapped peak (~5.8); capped
 # here so it keeps its state colour (Rules.state_color) instead of blowing out.
