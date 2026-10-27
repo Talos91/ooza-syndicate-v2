@@ -501,6 +501,8 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> float:
 		if n > 1:                                    # compact: one short line under the name
 			who[1] = _compact_of(seat, f)
 		var lw := hs + gap if n > 1 else maxf(hs, 160.0)
+		if n == 1:                                    # iOS: the plate holds its line ("VEX · BIOENGINEERS" ran past it)
+			lw = maxf(lw, UiKit.text_w(self, str(who[1]), 12, true) + str(who[1]).length() * 2.0 + 28.0)
 		var fs := 34 if n == 1 else 18
 		var nh := UiKit.line_h(self, fs, true)
 		var es := nh * 0.9                            # the race emblem, left of the name

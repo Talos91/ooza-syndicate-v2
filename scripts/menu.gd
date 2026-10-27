@@ -528,8 +528,22 @@ func page_title(area: Rect2, kicker: String, headline: String, size := 34.0) -> 
 	## The page's kicker + headline at the top of `area`, and BACK at the right when the page has one and the bar
 	## doesn't; returns the y under the title (canvas units).
 	var x := shell_x()
+	if UiKit.compact(self):                            # iOS (Safari's 320-340 pt): kicker and headline share one row when
+		var hs := size * 0.8                           # they fit beside the title row's own buttons
+		var kw := UiKit.text_w(self, kicker.to_upper(), 12, true) + kicker.length() * 3.0
+		var hw := UiKit.text_w(self, headline.to_upper(), hs, true)
+		if kw + 18.0 + hw <= content.size.x * 0.62 - x:
+			var ty := area.position.y + 10.0
+			var hl := UiKit.label(self, headline.to_upper(), hs, UiKit.INK, true)
+			var kl := UiKit.label(self, kicker.to_upper(), 12, UiKit.accent(shell_f), true, 3)
+			var rowh := UiKit.line_h(self, hs, true)      # (font measures: a label off the tree reports its default size)
+			_shell_add(kl, Vector2(x, ty + (rowh - UiKit.line_h(self, 12, true)) / 2.0 + 2.0))
+			_shell_add(hl, Vector2(x + kw + 18.0, ty))
+			if shell_back.is_valid() and not shell_slim:
+				UiKit.back_link(self, content.size.x - x, ty, shell_back)
+			return ty + rowh + 10.0
 	var y := UiKit.title(self, x, area.position.y + (10.0 if shell_slim else 18.0), kicker, headline, shell_f,
-			size * (0.8 if shell_slim else 1.0))
+			size * (0.8 if shell_slim or UiKit.compact(self) else 1.0))
 	if shell_back.is_valid() and not shell_slim:
 		UiKit.back_link(self, content.size.x - x, area.position.y + 20.0, shell_back)
 	return y + 14.0
@@ -634,22 +648,41 @@ func show_main() -> void:
 	var tag_h: float = UiKit.line_h(self, 14, true) + 14.0
 	UiKit.tag(self, tag_t, Vector2(clampf(feet.x - tag_w / 2.0, content.size.x * 0.5, content.size.x - tag_w - shell_x()),
 			minf(feet.y + 4.0, area.end.y - tag_h - 12.0)), hero)
-	var kick := UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 13, acc, true, 3)
-	var head := UiKit.label(self, "THE CITY IS\nYOURS TO TAKE.", 56, UiKit.INK, true)
-	var sub := UiKit.label(self, "Pick your syndicate. Control the crossings.", 18, UiKit.MUTED)
 	var bh := UiKit.tap_h(self, 54.0)
 	var th := UiKit.tap_h(self, 36.0)
 	var tut_done := TutorialDirector.done_count() >= TutorialDirector.TOTAL_LESSONS
-	var stack_h := kick.get_minimum_size().y + 8.0 + head.get_minimum_size().y + 10.0 + sub.get_minimum_size().y \
-			+ 26.0 + bh + (8.0 + th if not tut_done else 0.0)
 	var free_h := area.size.y - th - 14.0              # the foot row (QUIT / version) keeps its own strip
-	var y := area.position.y + maxf(10.0, (free_h - stack_h) / 2.0)
+	# iOS (Safari's 320-340 pt): the stack steps down until it fits above the foot row - a smaller headline, then
+	# without the subline, then the headline on one line - instead of the training link running into FULLSCREEN
+	var steps := [[56.0, true, "THE CITY IS\nYOURS TO TAKE.", 26.0], [44.0, true, "THE CITY IS\nYOURS TO TAKE.", 18.0],
+			[44.0, false, "THE CITY IS\nYOURS TO TAKE.", 16.0], [36.0, false, "THE CITY IS YOURS TO TAKE.", 14.0]]
+	var kick: Label
+	var head: Label
+	var sub: Label
+	var stack_h := 0.0
+	var gap_b := 26.0
+	for st in steps:
+		for l in [kick, head, sub]:                    # the step that didn't fit (never added)
+			if l:
+				l.free()
+		kick = UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 13, acc, true, 3)
+		head = UiKit.label(self, st[2], st[0], UiKit.INK, true)
+		sub = UiKit.label(self, "Pick your syndicate. Control the crossings.", 18, UiKit.MUTED) if st[1] else null
+		gap_b = st[3]
+		var lines: int = str(st[2]).count("\n") + 1   # measured by the fonts (a label off the tree reports its default size)
+		stack_h = UiKit.line_h(self, 13, true) + 8.0 + UiKit.line_h(self, st[0], true) * lines + 3.0 * (lines - 1) + 10.0 \
+				+ (UiKit.line_h(self, 18) if sub else 0.0) + gap_b + bh + (8.0 + th if not tut_done else 0.0)
+		if stack_h <= free_h - 16.0:
+			break
+	var y := area.position.y + maxf(8.0, (free_h - stack_h) / 2.0)
 	_shell_add(kick, Vector2(x, y))
 	y += kick.get_minimum_size().y + 8.0
 	_shell_add(head, Vector2(x - 3.0, y))
 	y += head.get_minimum_size().y + 10.0
-	_shell_add(sub, Vector2(x, y))
-	y += sub.get_minimum_size().y + 26.0
+	if sub:
+		_shell_add(sub, Vector2(x, y))
+		y += sub.get_minimum_size().y
+	y += gap_b
 	UiKit.btn(self, "PLAY", Vector2(x, y), Vector2(230, 54), show_play, "primary", hero, 20)   # UI (Daniele, 0.22.0): PLAY opens PLAY
 	var cont := UiKit.flat_button(self, "CONTINUE CAMPAIGN", 16)
 	cont.size = Vector2(UiKit.text_w(self, cont.text, 16, true) + 28.0, bh)
@@ -698,8 +731,10 @@ func show_play() -> void:
 	var top := page_title(area, "PLAY", "PICK YOUR FIGHT.")
 	var ct := "CAMPAIGN  →"                            # UI (0.22.1, the Architect's suggestion): the campaigns are their own tab
 	var ctw := UiKit.text_w(self, ct, 15, true) + 40.0
-	UiKit.btn(self, ct, Vector2(content.size.x - x - ctw, area.position.y + (12.0 if shell_slim else 20.0)), Vector2(ctw, 42), show_chapters,
-			"secondary", faction, 15)
+	if not UiKit.compact(self):                        # iOS (Safari's 320-340 pt): the CAMPAIGN tab below says the same, and the
+		UiKit.btn(self, ct, Vector2(content.size.x - x - ctw, area.position.y + (12.0 if shell_slim else 20.0)), Vector2(ctw, 42),
+				show_chapters, "secondary", faction, 15)   # cards need the height
+		top = maxf(top, area.position.y + 20.0 + UiKit.tap_h(self, 42.0) + 10.0)
 	var gap := 16.0
 	var cw := (content.size.x - x * 2.0 - gap * 2.0) / 3.0
 	var ch := area.end.y - top - 18.0
@@ -741,7 +776,12 @@ func show_help() -> void:
 		["RELAYS", "Relays change the bridges. Check the next state before you fire one."],
 		["ABILITIES", "A ready ability has a bright frame. Tap it, then choose a valid target."],
 	]
-	var chh := minf(110.0, (area.end.y - y - UiKit.tap_h(self, 48.0) - 40.0) / 2.0 - gap)
+	# iOS: the cards are as tall as their wrapped text needs (the grown text ran out of the 110 they had)
+	var body_y := 14.0 + UiKit.line_h(self, 17, true) + 4.0
+	var need := 0.0
+	for t in tips:
+		need = maxf(need, body_y + UiKit.text_h(self, t[1], 14, cw - 32.0) + 12.0)
+	var chh := minf(maxf(110.0, need), (area.end.y - y - UiKit.tap_h(self, 48.0) - 40.0) / 2.0 - gap)
 	for i in range(tips.size()):
 		var p := Vector2(x + (i % 2) * (cw + gap), y + (i / 2) * (chh + gap))
 		UiKit.panel(self, p, Vector2(cw, chh), shell_f)
@@ -749,7 +789,7 @@ func show_help() -> void:
 		var l := UiKit.label(self, tips[i][1], 14, UiKit.MUTED)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.custom_minimum_size = Vector2(cw - 32.0, 0)
-		_shell_add(l, p + Vector2(16, 44))
+		_shell_add(l, p + Vector2(16, body_y))
 	var by := y + 2.0 * (chh + gap) + 8.0
 	_shell_add(UiKit.label(self, "Learn by doing.", 15, UiKit.MUTED), Vector2(x, by + 12.0))
 	UiKit.btn(self, "TRAINING  →", Vector2(content.size.x - x - 220.0, by), Vector2(220, 48), show_tutorial, "primary", shell_f, 16)
@@ -953,16 +993,22 @@ func _roster_tile(f: String, pos: Vector2, dims: Vector2) -> void:
 		main.SEAT_FACTIONS[main.HUMAN] = f
 		show_factions(), "selected" if picked else "secondary", f)
 	var hs := b.size.y - 10.0
-	b.add_child(_cutout(f, Vector2(6, 5), Vector2(hs, hs)))
 	var nh := UiKit.line_h(self, 15, true)
+	# iOS: the name keeps its letters on a narrow tile ("EMBEI") - the emblem goes first, then the character shrinks
+	var name_w := UiKit.text_w(self, UiKit.NAMES[f], 15, true)
+	var with_em := hs + 14.0 + nh + 6.0 + name_w + 8.0 <= b.size.x
+	hs = clampf(b.size.x - 14.0 - (nh + 6.0 if with_em else 0.0) - name_w - 8.0, hs * 0.55, hs)
+	b.add_child(_cutout(f, Vector2(6, (b.size.y - hs) / 2.0), Vector2(hs, hs)))
 	var two := nh + UiKit.line_h(self, 12) <= b.size.y - 6.0
 	var ty := (b.size.y - (nh + (UiKit.line_h(self, 12) if two else 0.0))) / 2.0
-	b.add_child(UiKit.emblem_node(f, nh, Vector2(hs + 14.0, ty)))   # the race emblem before the name
-	var tx := hs + 14.0 + nh + 6.0
+	if with_em:
+		b.add_child(UiKit.emblem_node(f, nh, Vector2(hs + 14.0, ty)))   # the race emblem before the name
+	var tx := hs + 14.0 + (nh + 6.0 if with_em else 0.0)
 	var nm := UiKit.label(self, UiKit.NAMES[f], 15, UiKit.accent(f) if picked else UiKit.INK, true)
 	var sl := UiKit.label(self, UiKit.SUBS[f], 12, UiKit.MUTED)
 	for l in ([nm, sl] if two else [nm]):
 		l.clip_text = true
+		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		l.position = Vector2(tx, ty)
 		l.size = Vector2(maxf(10.0, b.size.x - tx - 8.0), l.get_minimum_size().y)
 		b.add_child(l)
@@ -979,21 +1025,24 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 	var sy := pos.y + dims.y - pad - stat_h
 	var body_h := sy - 14.0 - (pos.y + pad)
 	var hs := minf(body_h, dims.x * 0.42)
-	UiKit.hero(self, faction, Vector2(pos.x + pad, pos.y + pad + (body_h - hs) / 2.0), Vector2(hs, hs))
 	var es := clampf(dims.y * 0.14, 40.0, 64.0)          # the race emblem, the card's top-right corner
 	UiKit.emblem_rect(self, faction, Vector2(pos.x + dims.x - pad - es, pos.y + pad), es)
 	var tx := pos.x + pad + hs + 18.0
 	var tw := pos.x + dims.x - pad - tx - es * 0.6
+	var with_stats := true
 	var ft: Array = Rules.FACTION_TRAITS[faction]
 	# [text, size, colour, head, spacing] - measured as they draw (Daniele 2026-09-28: on his screen PERSISTENT TRAIT ·
 	# COMING SOON wrapped where the old width estimate said one line, and COMING SOON sat on the trait's name). Where the
 	# card is short (phones) it makes room in steps: the tagline goes, then the spacer, then the kicker shortens.
 	var nb := "PERSISTENT\u00a0TRAIT"                          # (a no-break space: the words wrap as one)
-	var attempts := [[true, true, nb], [false, true, nb], [false, false, nb], [false, false, "TRAIT"]]
+	var attempts := [[true, true, nb], [false, true, nb], [false, false, nb], [false, false, "TRAIT"], [false, false, "TRAIT", "no stats"]]
 	var labels := []
 	var hts := []
 	var total := 0.0
 	for at in attempts:
+		if at.size() > 3:                               # iOS (Safari's 320-340 pt): still too tall - the stats row goes
+			with_stats = false                         # (as on ARMIES), its height to the text
+			body_h = dims.y - pad * 2.0
 		for l in labels:
 			if l != null:
 				(l as Label).queue_free()
@@ -1026,11 +1075,14 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 			total += h
 		if total <= body_h:
 			break
+	UiKit.hero(self, faction, Vector2(pos.x + pad, pos.y + pad + (body_h - hs) / 2.0), Vector2(hs, hs))
 	var ly := pos.y + pad + maxf(0.0, (body_h - total) / 2.0)
 	for i in range(labels.size()):
 		if labels[i] != null:
 			(labels[i] as Label).position = Vector2(tx, ly)
 		ly += hts[i]
+	if not with_stats:
+		return
 	# the stats
 	content.add_child(UiKit.rect(Vector2(pos.x + pad, sy - 12.0), Vector2(dims.x - pad * 2.0, 1.0), UiKit.FRAME))
 	var rows := [["speed", "Speed", "Faster", "Slower"], ["health", "Health", "Tougher", "Fragile"],
@@ -2355,6 +2407,31 @@ func _card_row(pos: Vector2, dims: Vector2, n: int, cw: float, gap: float) -> Ar
 	inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	inner.custom_minimum_size = Vector2(n * (cw + gap) - gap, dims.y)
 	scroll.add_child(inner)
+	if inner.custom_minimum_size.x > dims.x + 1.0:     # iOS: a row that swipes says so - a fade and a "›" over the
+		var hint := Control.new()                      # cut card at the right edge, gone once the row is scrolled to its end
+		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var hw := minf(cw * 0.45, 140.0)
+		var g := Gradient.new()
+		g.set_color(0, Color(UiKit.BASE, 0.0))
+		g.set_color(1, Color(UiKit.BASE, 0.88))
+		var gt := GradientTexture2D.new()
+		gt.gradient = g
+		gt.fill_to = Vector2(1, 0)
+		var fade := TextureRect.new()
+		fade.texture = gt
+		fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fade.size = Vector2(hw, dims.y)
+		hint.add_child(fade)
+		var arrow := UiKit.label(self, "›", 54, UiKit.accent(shell_f), true)
+		arrow.position = Vector2(hw - arrow.get_minimum_size().x - 6.0, (dims.y - arrow.get_minimum_size().y) / 2.0)
+		hint.add_child(arrow)
+		hint.size = Vector2(hw, dims.y)
+		_shell_add(hint, pos + Vector2(dims.x - hw, 0))
+		var bar := scroll.get_h_scroll_bar()
+		bar.value_changed.connect(func(v: float):
+			if is_instance_valid(hint):
+				hint.visible = v < bar.max_value - bar.page - 4.0)
 	return [scroll, inner]
 
 
@@ -2498,14 +2575,16 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 		show_armies(), "tertiary", _army, 14)
 	rs.disabled = ArmyPresets.is_default(_army)
 	UiKit.btn(self, "COSMETICS", Vector2(right - cw, by), Vector2(cw, bh), func(): show_cosmetics(_army), "secondary", _army, 15)
+	var tight := UiKit.compact(self)                   # iOS (Safari's 320-340 pt): tighter gaps, the loadout drops lines
+	top = maxf(top, by + rs.size.y + (8.0 if tight else 12.0))   # never under the title row's buttons
 	# the roster
 	var th := UiKit.tap_h(self, 58.0)
 	var gap := 10.0
 	var tw := (w - gap * 4.0) / 5.0
 	for i in range(FACTIONS.size()):
 		_army_tile(FACTIONS[i], Vector2(x + i * (tw + gap), top), Vector2(tw, th))
-	var y := top + th + 14.0
-	var ph := area.end.y - 16.0 - y
+	var y := top + th + (8.0 if tight else 14.0)
+	var ph := area.end.y - (8.0 if tight else 16.0) - y
 	var lw := floorf((w - 14.0) * 0.5)
 	_army_identity(Vector2(x, y), Vector2(lw, ph))
 	_army_loadout(Vector2(x + lw + 14.0, y), Vector2(w - lw - 14.0, ph))
@@ -2524,19 +2603,25 @@ func _army_tile(tf: String, pos: Vector2, dims: Vector2) -> void:
 	var picked := tf == _army
 	var b := UiKit.btn(self, "", pos, dims, func(): show_armies(tf), "selected" if picked else "secondary", tf)
 	var hs := dims.y - 8.0
+	# iOS: the name keeps its letters on a narrow tile ("VIRIDI") - the emblem goes first, then the character shrinks
+	var name_w := UiKit.text_w(self, UiKit.NAMES[tf], 15, true)
+	var es0 := UiKit.line_h(self, 15, true)
+	var with_em := 8.0 + hs + 6.0 + es0 + 6.0 + name_w + 6.0 <= dims.x
+	hs = clampf(dims.x - 8.0 - 6.0 - (es0 + 6.0 if with_em else 0.0) - name_w - 6.0, hs * 0.55, hs)
 	var art := TextureRect.new()
 	art.texture = UiKit.tex(UiKit.hero_path(tf))
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	art.position = Vector2(8.0, 4.0)
+	art.position = Vector2(8.0, (dims.y - hs) / 2.0)
 	art.size = Vector2(hs, hs)
 	b.add_child(art)
 	var n := UiKit.label(self, UiKit.NAMES[tf], 15, UiKit.accent(tf) if picked else UiKit.INK, true)
 	var lh := n.get_minimum_size().y + (UiKit.line_h(self, 11, true) if tf == faction else 0.0)
-	var es := n.get_minimum_size().y
-	b.add_child(UiKit.emblem_node(tf, es, Vector2(8.0 + hs + 6.0, (dims.y - lh) / 2.0)))   # the race emblem before the name
-	var tx := 8.0 + hs + 6.0 + es + 6.0
+	var es := n.get_minimum_size().y if with_em else 0.0
+	if with_em:
+		b.add_child(UiKit.emblem_node(tf, es, Vector2(8.0 + hs + 6.0, (dims.y - lh) / 2.0)))   # the race emblem before the name
+	var tx := 8.0 + hs + 6.0 + (es + 6.0 if with_em else 0.0)
 	n.position = Vector2(tx, (dims.y - lh) / 2.0)
 	n.clip_text = true
 	n.size = Vector2(dims.x - tx - 6.0, n.get_minimum_size().y)
@@ -2631,6 +2716,16 @@ func _army_loadout(pos: Vector2, dims: Vector2) -> void:
 	var full: bool = 2 * maxf(row_h.call(2), UiKit.tap_h(self, 64.0)) + ult_h.call(2) + gap * 2.0 + note_h <= dims.y
 	var rh: float = maxf(row_h.call(2 if full else 1), UiKit.tap_h(self, 64.0))
 	var uh: float = ult_h.call(2 if full else 1)
+	# iOS (Safari's 320-340 pt): the ultimate ran over the tab bar - it drops its line, then puts ULTIMATE beside its name
+	var ult_lines := 2 if full else 1
+	var ult_inline := false
+	if 2.0 * rh + uh + gap * 2.0 > dims.y:
+		gap = 8.0
+		ult_lines = 0
+		uh = ult_h.call(0)
+		if 2.0 * rh + uh + gap * 2.0 > dims.y:
+			ult_inline = true
+			uh = maxf(20.0 + UiKit.line_h(self, 17, true), dims.y - 2.0 * rh - gap * 2.0)
 	var show_note: bool = not ArmyPresets.saved or 2.0 * rh + uh + gap * 2.0 + note_h <= dims.y
 	var y := pos.y
 	var extra := dims.y - (2.0 * rh + uh + gap * 2.0 + (note_h if show_note else 0.0))
@@ -2657,12 +2752,21 @@ func _army_loadout(pos: Vector2, dims: Vector2) -> void:
 	_icon_box(ult, Vector2(pos.x + 18.0, y + (uh - ic) / 2.0), ic, UiKit.STAR)
 	var tx := pos.x + 18.0 + ic + 16.0
 	var ty := y + 14.0
-	var k := UiKit.label(self, "ULTIMATE  ·  %s ONLY  ·  FIXED" % UiKit.NAMES[_army], 11, UiKit.STAR, true, 2)
-	_shell_add(k, Vector2(tx, ty))
-	ty += UiKit.line_h(self, 11, true)
-	_shell_add(UiKit.label(self, ArmyPresets.skill_name(ult).to_upper(), 17, UiKit.INK, true), Vector2(tx, ty))
-	ty += UiKit.line_h(self, 17, true)
-	var lines := [ArmyPresets.line(ult)]
+	if ult_inline:                                       # one row: ULTIMATE, then its name
+		var kt := UiKit.label(self, "ULTIMATE", 11, UiKit.STAR, true, 2)
+		var nt := UiKit.label(self, ArmyPresets.skill_name(ult).to_upper(), 17, UiKit.INK, true)
+		var rowh := UiKit.line_h(self, 17, true)
+		ty = y + (uh - rowh) / 2.0
+		_shell_add(kt, Vector2(tx, ty + (rowh - UiKit.line_h(self, 11, true)) / 2.0))
+		_shell_add(nt, Vector2(tx + UiKit.text_w(self, "ULTIMATE", 11, true) + 16.0 + 14.0, ty))
+	else:
+		ty = y + (uh - (ult_h.call(ult_lines) - 28.0)) / 2.0
+		var k := UiKit.label(self, "ULTIMATE  ·  %s ONLY  ·  FIXED" % UiKit.NAMES[_army], 11, UiKit.STAR, true, 2)
+		_shell_add(k, Vector2(tx, ty))
+		ty += UiKit.line_h(self, 11, true)
+		_shell_add(UiKit.label(self, ArmyPresets.skill_name(ult).to_upper(), 17, UiKit.INK, true), Vector2(tx, ty))
+		ty += UiKit.line_h(self, 17, true)
+	var lines := [ArmyPresets.line(ult)] if ult_lines > 0 else []
 	if full:
 		lines.append("Charges in ~%d s (at least %d s); enemy kills speed it up" % [int(Rules.ULT_CHARGE_TIME), int(Rules.ULT_MIN_TIME)])
 	for t in lines:
@@ -3665,7 +3769,9 @@ func show_setup() -> void:
 	_shell_add(nl, Vector2(rx, fy + (bh - UiKit.line_h(self, 14)) / 2.0))
 	# the left column: the map, YOUR TEAM COLOUR under it
 	var hs := UiKit.tap_h(self, 44.0)
-	var col_h := UiKit.line_h(self, 12, true) + 8.0 + hs + (UiKit.line_h(self, 13) + 6.0 if colour == "faction" else 0.0) \
+	var col_rows := _colour_rows(lw)
+	var col_h := UiKit.line_h(self, 12, true) + 8.0 + hs * col_rows + 8.0 * (col_rows - 1) \
+			+ (UiKit.line_h(self, 13) + 6.0 if colour == "faction" else 0.0) \
 			+ (UiKit.line_h(self, 13) + 10.0 if not mobile else 0.0)
 	var col_y := area.end.y - 18.0 - col_h           # (the picked chip grows 12 %)
 	_setup_map(Vector2(x, y), Vector2(lw, col_y - 16.0 - y))
@@ -3755,17 +3861,20 @@ func _setup_colours(pos: Vector2, width: float) -> void:
 	var hy := pos.y + UiKit.line_h(self, 12, true) + 8.0
 	var keys := COLOUR_NAMES.keys()
 	var hs := UiKit.tap_h(self, 44.0)
-	var gap := clampf((width - hs * keys.size()) / float(keys.size() - 1), 4.0, 14.0)
+	var rows := _colour_rows(width)                    # iOS (the iPhone SE): two rows where seven 44 pt chips don't fit one
+	var per := ceili(keys.size() / float(rows))
+	var gap := clampf((width - hs * per) / float(maxi(per - 1, 1)), 4.0, 14.0)
 	for i in range(keys.size()):
 		var ck: String = keys[i]
 		var wedges := FACTIONS.map(func(f): return Rules.FACTIONS[f][1]) if ck == "faction" else []
 		var cc: Color = Color.WHITE if ck == "faction" else Rules.SEATS[ck]
-		var chip := hex_chip(Vector2(pos.x + i * (hs + gap), hy), Vector2(hs, hs), cc, wedges, ck == colour, COLOUR_NAMES[ck], func():
+		var cp := Vector2(pos.x + (i % per) * (hs + gap), hy + (i / per) * (hs + 8.0))
+		var chip := hex_chip(cp, Vector2(hs, hs), cc, wedges, ck == colour, COLOUR_NAMES[ck], func():
 			colour = ck
 			show_setup())
 		if ck == "faction":
 			chip.emblem_faction = faction              # a recognisable face, not just wedges
-	var y := hy + hs + (10.0 if not mobile else 6.0)
+	var y := hy + hs * rows + 8.0 * (rows - 1) + (10.0 if not mobile else 6.0)
 	if Rules.colour_blind():                           # UI: COLOUR-BLIND MODE decides the match's colours
 		_shell_add(UiKit.label(self, "COLOUR-BLIND MODE: the match picks colour-blind-safe colours", 13, Color("ffd15c")), Vector2(pos.x, y))
 		y += UiKit.line_h(self, 13) + 6.0
@@ -3777,6 +3886,12 @@ func _setup_colours(pos: Vector2, width: float) -> void:
 		n.clip_text = true
 		n.size = Vector2(width, UiKit.line_h(self, 13))
 		_shell_add(n, Vector2(pos.x, y))
+
+
+func _colour_rows(width: float) -> int:
+	## YOUR TEAM COLOUR's rows: one, or two where the chips (>= 44 pt) don't fit the column on one.
+	var n := COLOUR_NAMES.size()
+	return 1 if UiKit.tap_h(self, 44.0) * n + 4.0 * (n - 1) <= width else 2
 
 
 func _setup_faction(pos: Vector2, dims: Vector2) -> void:
@@ -3820,6 +3935,7 @@ func _setup_faction(pos: Vector2, dims: Vector2) -> void:
 		var ln: Array = lines[i]
 		var l := UiKit.label(self, ln[0], ln[1], ln[2], ln[3])
 		l.clip_text = true
+		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		l.size = Vector2(maxf(10.0, tw), UiKit.line_h(self, ln[1], ln[3]))
 		var ex := 0.0
 		if i == 0:                                    # the race emblem before the name
@@ -3940,12 +4056,16 @@ func show_seats() -> void:
 	var seats := ["A"] + _enemy_seats()
 	var cw := (w - 16.0 - gap) / 2.0
 	var ph := UiKit.tap_h(self, 50.0)
+	# iOS (the iPhone SE): where an AI seat's six picks don't fit half the width, one seat per row
+	var cols := 2 if UiKit.text_w(self, "ANY", 14, true) + 36.0 + 5.0 * (ph + 4.0) <= cw - 32.0 else 1
+	if cols == 1:
+		cw = w - 16.0
 	var card_h := 14.0 + UiKit.line_h(self, 12, true) + UiKit.line_h(self, 17, true) + 10.0 + ph + 14.0
 	var st := stack_open(Vector2(x, y), Vector2(w, fy - 12.0 - y))
 	var before := content.get_child_count()
 	for i in range(seats.size()):
 		var s: String = seats[i]
-		var p := Vector2((i % 2) * (cw + gap), (i / 2) * (card_h + gap))
+		var p := Vector2((i % cols) * (cw + gap), (i / cols) * (card_h + gap))
 		UiKit.panel(self, p, Vector2(cw, card_h), faction, s == "A")
 		var ally: bool = s == "A" or (team.has(s) and team.get(s) == team.get("A", -1))
 		var kick := "SEAT %s%s" % [s, ("  ·  TEAM %d" % (int(team[s]) + 1)) if team.has(s) else ""]
@@ -3959,15 +4079,18 @@ func show_seats() -> void:
 			_shell_add(_cutout(faction, Vector2.ZERO, Vector2(ph, ph)), p + Vector2(16, py))
 			var nl := UiKit.line_h(self, 15, true)
 			UiKit.emblem_rect(self, faction, p + Vector2(16.0 + ph + 12.0, py + (ph - nl) / 2.0), nl)
-			_shell_add(UiKit.label(self, "%s  ·  %s" % [UiKit.NAMES[faction], UiKit.SUBS[faction]], 15, UiKit.INK, true),
-					p + Vector2(16.0 + ph + 12.0 + nl + 6.0, py + (ph - nl) / 2.0))
 			var ct := "CHANGE"
 			var chw := UiKit.text_w(self, ct, 14, true) + 34.0
+			var nm := "%s  ·  %s" % [UiKit.NAMES[faction], UiKit.SUBS[faction]]
+			var nx := 16.0 + ph + 12.0 + nl + 6.0
+			if nx + UiKit.text_w(self, nm, 15, true) > cw - 16.0 - chw - 10.0:   # iOS: the name alone where CHANGE needs the room
+				nm = UiKit.NAMES[faction]
+			_shell_add(UiKit.label(self, nm, 15, UiKit.INK, true), p + Vector2(nx, py + (ph - nl) / 2.0))
 			UiKit.btn(self, ct, p + Vector2(cw - 16.0 - chw, py), Vector2(chw, 50), show_factions, "tertiary", faction, 14)
 		else:
 			_faction_picks(s, p + Vector2(16, py), cw - 32.0, show_seats)
 	stack_capture(st, before)
-	stack_close(st, ceilf(seats.size() / 2.0) * (card_h + gap))
+	stack_close(st, ceilf(seats.size() / float(cols)) * (card_h + gap))
 	shell_raise()
 
 
