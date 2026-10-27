@@ -90,11 +90,9 @@ func handle(ev: Dictionary) -> void:
 		"build_done":
 			var n: Dictionary = sim.nodes[ev["node"]]
 			_pulse(n["pos"], Rules.state_color("build"), 4.0, 0.6)
-		"relay_done":
-			var n: Dictionary = sim.nodes[ev["node"]]
-			if n["relay"] == "rotation":
-				_plat_angle[n["id"]] = _plat_angle.get(n["id"], 0.0) + n["relay_anim"].get("delta", 0.0)
-			_restore_edges(n)
+		# "relay_done": nothing here - the motion ends when the relay's STATE leaves "moving" (_relay -> _relay_finish).
+		# A guest gets this event up to a snapshot before that state (Net queues effects behind the last snapshot
+		# shown), so ending the motion on it turned the turntable twice and parked the going deck mid-swing.
 		"fall":
 			_fall_horde(ev)
 		"fling":
@@ -278,6 +276,8 @@ func _relay(n: Dictionary, entry: Dictionary) -> void:
 			(g as Node3D).visible = ghost_on and not _collapsed.has(i)
 	if phase == "moving":
 		_relay_motion(n, entry)
+	elif _moves.has(id):
+		_relay_finish(n)
 
 
 # RELAY VISIBILITY (0.19.0, Daniele: "add some visibility to the buttons / models of the relays"; relays fire
@@ -372,25 +372,147 @@ func _relay_beacon(n: Dictionary, entry: Dictionary, col: Color, phase: String) 
 	label.position = (b["top"] as Vector3) + Vector3(0, 0.25 * sin(sim.time * 1.3 + float(id)) if ready else 0.0, 0)
 
 
-func _relay_motion(n: Dictionary, entry: Dictionary) -> void:
+# RELAY MOTION, state-driven (0.23.14, Daniele: "on rotation the animation always breaks"). A motion starts when Fx
+# first sees the relay "moving" and ends when it sees it stop (or a new motion replace it) - never on the relay_done
+# event, which a guest gets ahead of the state. Each motion keeps its own record (_moves): the exact turn (Sim.
+# rotation_turn on the view's own geometry, not the snapshot's 1/64-rounded copy), the shown progress (a guest's
+# 20 Hz snapshots are extrapolated on the view clock, at most RELAY_VIEW_LEAD s ahead, so the deck swings smoothly
+# instead of in steps) and, for a rotation, each swinging module's landing fit: the turn alone lands a deck off its
+# new bridge where the pivot is a mirror, not a rotation (leaned piers: ~1.1-1.4 m on T-06 / B-03), so each module
+# eases into the matching module of the deck it becomes (Transform3D.interpolate_with, same 0..1 smoothstep).
+const RELAY_VIEW_LEAD := 0.15        # s: how far a guest's shown motion may run ahead of its last snapshot (3 at 20 Hz)
+const RELAY_FIT_MAX_M := 6.0         # a landing fit larger than this (m, or 0.7 rad) is not a fit: the deck just swaps
+var _moves := {}                     # relay node id -> {key, kind, closing, opening, delta, p, sim_p, time, fit}
+
+
+func _relay_move_of(n: Dictionary) -> Dictionary:
+	var id: int = n["id"]
 	var anim: Dictionary = n["relay_anim"]
-	var progress: float = anim.get("progress", 0.0)
+	var closing: Array = anim.get("closing", [])
+	var opening: Array = anim.get("opening", [])
+	var key := "%s|%s" % [str(closing.map(func(x): return int(x))), str(opening.map(func(x): return int(x)))]
+	if _moves.has(id) and str(_moves[id]["key"]) != key:
+		_relay_finish(n)                                  # a new motion without a rest frame between (a guest's gap)
+	if not _moves.has(id):
+		var sp: float = anim.get("progress", 0.0)
+		var mv := {"key": key, "kind": n["relay"], "closing": closing.map(func(x): return int(x)),
+				"opening": opening.map(func(x): return int(x)), "delta": 0.0, "p": sp, "sim_p": sp, "time": sim.time, "fit": {}}
+		if n["relay"] == "rotation":
+			mv["delta"] = float(sim.rotation_turn(id, mv["closing"], mv["opening"])[0])
+			mv["fit"] = _swing_fit(n["pos"], mv["closing"], mv["opening"], float(mv["delta"]))
+		_moves[id] = mv
+	var mv: Dictionary = _moves[id]
+	var sp: float = anim.get("progress", 0.0)
+	if sp != float(mv["sim_p"]):                          # fresh progress (every frame offline): show it, or stay a
+		mv["sim_p"] = sp                                  # little ahead of it (a guest's extrapolation)
+		mv["p"] = clampf(float(mv["p"]), sp, minf(sp + RELAY_VIEW_LEAD / Rules.RELAY_MOVE, 1.0))
+	elif sim.time > float(mv["time"]):                    # a guest between snapshots (its clock runs: Net.predict)
+		mv["p"] = minf(float(mv["p"]) + (sim.time - float(mv["time"])) / Rules.RELAY_MOVE,
+				minf(sp + RELAY_VIEW_LEAD / Rules.RELAY_MOVE, 1.0))
+	mv["time"] = sim.time
+	return mv
+
+
+static func _swing(base: Transform3D, c: Vector3, angle: float) -> Transform3D:
+	## A deck module turned by -angle about UP round the relay centre c (atan2(z, x) grows by angle).
+	var t := base
+	t.origin = c + (base.origin - c).rotated(Vector3.UP, -angle)
+	t.basis = Basis(Vector3.UP, -angle) * base.basis
+	return t
+
+
+func _swing_fit(c: Vector3, closing: Array, opening: Array, delta: float) -> Dictionary:
+	## closing edge -> [local Transform3D per module] that carries the module turned by delta onto the matching
+	## module of the opening deck it lands on (the nearest heading; modules matched outward from the centre). An
+	## edge whose decks differ in module count, or whose fit is not small, gets none (it swaps as before).
+	var fit := {}
+	for i in closing:
+		var src: Array = _outward(int(i), c)
+		if src.is_empty():
+			continue
+		var tip: Vector3 = _swing(vis["edge_base"][int(i)][src[-1]], c, delta).origin - c
+		var best := -1
+		var best_d := INF
+		for o in opening:
+			var dst: Array = _outward(int(o), c)
+			if dst.size() != src.size():
+				continue
+			var q: Vector3 = (vis["edge_base"][int(o)][dst[-1]] as Transform3D).origin - c
+			var d := absf(wrapf(atan2(q.z, q.x) - atan2(tip.z, tip.x), -PI, PI))
+			if d < best_d:
+				best_d = d
+				best = int(o)
+		if best < 0:
+			continue
+		var dst: Array = _outward(best, c)
+		var locs := []
+		for k in range(src.size()):
+			var a := _swing(vis["edge_base"][int(i)][src[k]], c, delta)
+			var b: Transform3D = vis["edge_base"][best][dst[k]]
+			var l := a.affine_inverse() * b
+			if (a.basis * l.origin).length() > RELAY_FIT_MAX_M or l.basis.orthonormalized().get_rotation_quaternion().get_angle() > 0.7:
+				locs = []
+				break
+			locs.append(l)
+		if not locs.is_empty():
+			var by_k := {}
+			for k in range(src.size()):
+				by_k[src[k]] = locs[k]
+			fit[int(i)] = by_k
+	return fit
+
+
+func _outward(i: int, c: Vector3) -> Array:
+	## Edge i's deck module indices ordered by distance from c (its relay end first).
+	var base: Array = vis["edge_base"].get(i, [])
+	var ks := range(base.size())
+	ks.sort_custom(func(x, y): return ((base[x] as Transform3D).origin - c).length() < ((base[y] as Transform3D).origin - c).length())
+	return ks
+
+
+func _relay_finish(n: Dictionary) -> void:
+	## The motion is over (the state says so): commit the turntable's turn, put every moved deck back on its own
+	## transform (_decks shows the open ones). A relay that fell mid-motion is left to its fall (Fx._collapse).
+	var id: int = n["id"]
+	var mv: Dictionary = _moves[id]
+	_moves.erase(id)
+	if str(mv["kind"]) == "rotation":
+		_plat_angle[id] = _plat_angle.get(id, 0.0) + float(mv["delta"])
+	if sim.collapsed.get(id, false):
+		return
+	if str(mv["kind"]) == "rotation" and vis[id]["platform"] != null:
+		(vis[id]["platform"] as Node3D).rotation.y = -_plat_angle.get(id, 0.0)
+	for i in mv["closing"] + mv["opening"]:
+		if _collapsed.has(i):
+			continue
+		var decks: Array = vis["edge_decks"][i]
+		for k in range(decks.size()):
+			(decks[k] as Node3D).transform = vis["edge_base"][i][k]
+
+
+func _relay_motion(n: Dictionary, entry: Dictionary) -> void:
+	var mv := _relay_move_of(n)
+	var progress: float = mv["p"]
 	var eased := smoothstep(0.0, 1.0, progress)
 	var c: Vector3 = n["pos"]
+	var anim := {"closing": mv["closing"], "opening": mv["opening"]}
 	match n["relay"]:
 		"rotation":
-			var delta: float = anim.get("delta", 0.0)
+			var delta: float = mv["delta"]
 			var angle := delta * eased
 			if entry["platform"] != null:                 # a plaza socket has no turntable
 				(entry["platform"] as Node3D).rotation.y = -(_plat_angle.get(n["id"], 0.0) + angle)
 			for i in anim["closing"]:
 				var decks: Array = vis["edge_decks"][i]
+				var fit: Dictionary = mv["fit"].get(i, {})
 				for k in range(decks.size()):
 					var base: Transform3D = vis["edge_base"][i][k]
 					var d: Node3D = decks[k]
 					d.visible = true
-					d.position = c + (base.origin - c).rotated(Vector3.UP, -angle)
-					d.rotation.y = base.basis.get_euler().y - angle
+					var t := _swing(base, c, angle)
+					if fit.has(k):
+						t = t * Transform3D.IDENTITY.interpolate_with(fit[k], eased)
+					d.transform = t
 			for i in anim["opening"]:
 				for d in vis["edge_decks"][i]:
 					(d as Node3D).visible = false
@@ -418,16 +540,6 @@ func _relay_motion(n: Dictionary, entry: Dictionary) -> void:
 					d.visible = true
 					d.scale = Vector3(base.basis.get_scale().x, maxf(1.0 - k2, 0.02), 1.0 - 0.6 * k2)
 					d.position = base.origin - Vector3(0, 6.0 * k2 * k2, 0)
-
-
-func _restore_edges(n: Dictionary) -> void:
-	var anim: Dictionary = n["relay_anim"]
-	if n["relay"] == "rotation" and vis[n["id"]]["platform"] != null:
-		(vis[n["id"]]["platform"] as Node3D).rotation.y = -_plat_angle.get(n["id"], 0.0)
-	for i in anim.get("closing", []) + anim.get("opening", []):
-		var decks: Array = vis["edge_decks"][i]
-		for k in range(decks.size()):
-			(decks[k] as Node3D).transform = vis["edge_base"][i][k]
 
 
 func _build_arc(mesh: ImmediateMesh, r0: float, r1: float, frac: float) -> void:
