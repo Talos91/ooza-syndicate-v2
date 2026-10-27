@@ -15,6 +15,11 @@
  const nativeW = () => dw.get.call(window), nativeH = () => dh.get.call(window);
  const ua = navigator.userAgent;
  const ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
+ // 0.23.14 (every iPhone): Godot sizes its canvas in device pixels - 3x on most iPhones, ~3 million pixels in landscape.
+ // At 2x the board reads the same on a phone, and Safari's WebGL needs less than half the memory and fill rate.
+ if (ios && (window.devicePixelRatio || 1) > 2) {
+  try { Object.defineProperty(window, 'devicePixelRatio', {configurable: true, get: () => 2}); } catch (e) {}
+ }
  function covering() {                      // the page is meant to cover the whole screen
   if (navigator.standalone === true) return true;
   for (const m of ['fullscreen', 'standalone']) if (matchMedia('(display-mode: ' + m + ')').matches) return true;
