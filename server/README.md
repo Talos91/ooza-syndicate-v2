@@ -63,10 +63,18 @@ server/deploy.sh            # build/web -> the server (test link + match hosts) 
 server/deploy.sh --relay    # also relay.py + the service + Caddyfile, then restart - refused while a room is open
 server/deploy.sh --relay --force   # the same, closing the open rooms
 server/deploy.sh --staging  # only this build's index.pck as a versioned pack: server rooms for the staging site
+server/deploy.sh --check    # (or --check --staging) only the overwrite guard below: uploads and changes nothing
 ```
 
 Until the server has the published build, players of that build still play: their rooms fall back to
 browser hosting. A running match keeps its old pack; new rooms use the new one.
+
+**Overwrite guard (Daniele, 2026-10-27).** A match host reopens its pack by path at every scene load, so a pack is never
+rewritten under a running room. Every deploy (plain or `--staging`) first looks for a match host started with
+`--main-pack /opt/ooze/packs/<tag>_<version>.pck` and, if one runs, prints "a room runs this version - bump Rules.VERSION
+or wait" and exits 4 with nothing changed; the same check runs again on the server right before the pack is written. A
+pack that is byte-identical to the build (the staging pack a plain deploy promotes) is left in place and the deploy goes
+on. **The bump rule:** a rebuilt game under the same `Rules.VERSION` is a new pack - bump the version, don't redeploy.
 
 deploy.sh stops if a pack that a Web preset exports into `build/web` is missing (`skins.pck`; from 0.21.1 also
 `hd.pck`, `skins_hd.pck`, fetched on demand), and prints the server's pack sizes to check against gh-pages.

@@ -8,6 +8,12 @@
 #   server/deploy.sh --relay         also server/relay.py + its service + server/Caddyfile, then restart the relay - only
 #                                    while no room is open (0.21.4: checked here; --relay --force skips the check and
 #                                    closes the open rooms)
+#   server/deploy.sh --check         (with or without --staging) only the overwrite guard below, against the box: uploads
+#                                    and changes nothing; exit 0 = this build may deploy, 4 = a room runs this version
+# The overwrite guard (Daniele, 2026-10-27): every deploy refuses (exit 4) to rewrite /opt/ooze/packs/<tag>_<version>.pck
+# while a match host runs from that pack - a host reopens its pack by path at every scene load, so a rebuilt pack under
+# the same version string breaks the room (bump Rules.VERSION or wait). A pack byte-identical to this build (the staging
+# pack a plain deploy promotes) is left as it is, not rewritten.
 # The server is the SSH host alias "ooze-server" (~/.ssh/config on Daniele's PC) or $OOZE_SERVER.
 # Players on another build still play: CREATE ROOM falls back to hosting in their browser.
 set -euo pipefail
@@ -17,25 +23,46 @@ WEB="build/web"
 RELAY=""
 FORCE=""
 STAGING=""
+CHECK=""
 for a in "$@"; do
 	case "$a" in
 		--relay) RELAY="--relay" ;;
 		--force) FORCE="--force" ;;
 		--staging) STAGING="--staging" ;;
-		*) echo "unknown option $a (use --relay, --relay --force, --staging)"; exit 1 ;;
+		--check) CHECK="--check" ;;
+		*) echo "unknown option $a (use --relay, --relay --force, --staging, --check)"; exit 1 ;;
 	esac
 done
+[ -f "$WEB/index.pck" ] || { echo "no $WEB/index.pck - export Web first"; exit 1; }
+tag=$(sed -n 's/^const VERSION_TAG := "\([^"]*\)".*/\1/p' scripts/net.gd)
+ver=$(sed -n 's/^const VERSION := "\([^"]*\)".*/\1/p' scripts/rules.gd)
+[ -n "$tag" ] && [ -n "$ver" ] || { echo "could not read the version"; exit 1; }
+# The overwrite guard, run on the box before anything is uploaded (and again there right before the pack is written):
+# "free" = no match host runs from the pack, "same" = one does but the pack on the box is already this build, "busy" = refuse.
+# Fed through stdin so the remote command line never contains the pattern (pgrep -f would match its own ssh shell).
+GUARD='P=/opt/ooze/packs/$VER.pck
+if ! pgrep -f -- "--main-pack $P( |\$)" > /dev/null; then echo free
+elif [ -f "$P" ] && [ "$(sha256sum < "$P" | cut -d" " -f1)" = "$SUM" ]; then echo same
+else echo busy; fi'
+SUM=$(sha256sum < "$WEB/index.pck" | cut -d" " -f1)
+guard=$(ssh "$SERVER" VER="${tag}_${ver}" SUM="$SUM" 'bash -s' <<< "$GUARD")
+case "$guard" in
+	free|same) echo "overwrite guard: ${tag}_${ver}.pck $guard${CHECK:+ - this build may deploy}" ;;
+	busy) echo "a room runs this version - bump Rules.VERSION or wait (${tag}_${ver}.pck is in use on the server)"; exit 4 ;;
+	*) echo "overwrite guard: no answer from $SERVER ($guard)"; exit 1 ;;
+esac
+[ -z "$CHECK" ] || exit 0
 if [ -n "$STAGING" ]; then                       # the pack only: nothing the live site or its rooms use changes
 	[ -z "$RELAY" ] || { echo "--staging uploads a pack only; run --relay separately"; exit 1; }
-	[ -f "$WEB/index.pck" ] || { echo "no $WEB/index.pck - export Web first"; exit 1; }
-	tag=$(sed -n 's/^const VERSION_TAG := "\([^"]*\)".*/\1/p' scripts/net.gd)
-	ver=$(sed -n 's/^const VERSION := "\([^"]*\)".*/\1/p' scripts/rules.gd)
-	[ -n "$tag" ] && [ -n "$ver" ] || { echo "could not read the version"; exit 1; }
 	scp -q "$WEB/index.pck" "$SERVER:/tmp/ooze-staging.pck"
 	ssh "$SERVER" VER="${tag}_${ver}" 'bash -s' <<'EOF'
 set -e
 mkdir -p /opt/ooze/packs
-install -o ooze -g ooze -m 644 /tmp/ooze-staging.pck "/opt/ooze/packs/$VER.pck" && rm /tmp/ooze-staging.pck
+P="/opt/ooze/packs/$VER.pck"
+if [ -f "$P" ] && cmp -s /tmp/ooze-staging.pck "$P"; then rm /tmp/ooze-staging.pck; echo "staging pack already this build"
+elif pgrep -f -- "--main-pack $P( |\$)" > /dev/null; then   # the overwrite guard, again: a room may have opened since the check
+	rm /tmp/ooze-staging.pck; echo "a room runs this version - bump Rules.VERSION or wait ($VER.pck is in use)"; exit 4
+else install -o ooze -g ooze -m 644 /tmp/ooze-staging.pck "$P" && rm /tmp/ooze-staging.pck; fi
 echo "staging pack: /opt/ooze/packs/$VER.pck $(stat -c %s "/opt/ooze/packs/$VER.pck")   live: $(cat /opt/ooze/web/version.txt)"
 EOF
 	exit 0
@@ -47,7 +74,6 @@ if [ -n "$RELAY" ] && [ -z "$FORCE" ]; then
 	open=$(ssh "$SERVER" "$ROOMS_CHECK")
 	[ "$open" = "0" ] || { echo "rooms are open on the server ($open match hosts + connections): --relay would close them."; 		echo "Retry when the server is idle, deploy the build only (no --relay), or add --force."; exit 3; }
 fi
-[ -f "$WEB/index.pck" ] || { echo "no $WEB/index.pck - export Web first"; exit 1; }
 # Every extra pack a Web preset exports into build/web (skins.pck; from 0.21.1 hd.pck, skins_hd.pck, fetched on demand)
 # must be there too, or the test link would miss it (0.21.0 went out without skins.pck).
 for p in $(tr -d '\r' < export_presets.cfg | sed -n 's|^export_path="build/web/\([^"/]*\.pck\)"$|\1|p'); do
@@ -65,10 +91,16 @@ scp -q "$tmp/web.tgz" "$SERVER:/tmp/ooze-web.tgz"
 if [ -n "$RELAY" ]; then
 	scp -q server/relay.py server/ooze-relay.service server/Caddyfile "$SERVER:/tmp/"
 fi
-ssh "$SERVER" RELAY="$RELAY" FORCE="$FORCE" 'bash -s' <<'EOF'
+ssh "$SERVER" RELAY="$RELAY" FORCE="$FORCE" VER="${tag}_${ver}" 'bash -s' <<'EOF'
 set -e
 rm -rf /opt/ooze/web.new && mkdir -p /opt/ooze/web.new
 tar xzf /tmp/ooze-web.tgz -C /opt/ooze/web.new --strip-components=1 && rm /tmp/ooze-web.tgz
+# the overwrite guard, again, before anything live changes: a room may have opened since the check
+P="/opt/ooze/packs/$VER.pck"
+if ! { [ -f "$P" ] && cmp -s /opt/ooze/web.new/index.pck "$P"; } && pgrep -f -- "--main-pack $P( |\$)" > /dev/null; then
+	rm -rf /opt/ooze/web.new /tmp/relay.py /tmp/ooze-relay.service /tmp/Caddyfile
+	echo "a room runs this version - bump Rules.VERSION or wait ($VER.pck is in use; nothing changed on the server)"; exit 4
+fi
 rm -rf /opt/ooze/web.old && { [ -d /opt/ooze/web ] && mv /opt/ooze/web /opt/ooze/web.old || true; }
 mv /opt/ooze/web.new /opt/ooze/web && rm -rf /opt/ooze/web.old
 # Each build's pack is kept under its version: a running match host reopens its pack by path at every scene load (the
@@ -76,9 +108,8 @@ mv /opt/ooze/web.new /opt/ooze/web && rm -rf /opt/ooze/web.old
 # from /opt/ooze/current.pck (resolved by the relay). Pruning is by VERSION, never by age (0.23.13: a deploy after two quiet
 # weeks used to delete every rollback pack): the newest KEEP packs by version stay; the current one never goes, and neither
 # does a pack a running match host was started from.
-VER=$(tr '/' '_' < /opt/ooze/web/version.txt)
 mkdir -p /opt/ooze/packs
-cp /opt/ooze/web/index.pck "/opt/ooze/packs/$VER.pck"
+cmp -s /opt/ooze/web/index.pck "$P" || cp /opt/ooze/web/index.pck "$P"   # identical (a promoted staging pack): left as it is
 ln -sfn "/opt/ooze/packs/$VER.pck" /opt/ooze/current.pck
 KEEP=4
 ls /opt/ooze/packs/*.pck | sort -V | head -n "-$KEEP" | while read -r p; do
