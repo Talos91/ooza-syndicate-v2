@@ -1,9 +1,14 @@
-# To test - ALPHA 23.15 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.16 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.16 (live)
+- [ ] A Forge costs 40; a monster reaching a node with more than 40 defenders kicks 40 and the node holds ("MONSTER KICKED 40 - n HOLD").
+- [ ] ARMIES / HOME: each faction's trait line reads its real stat leans (no COMING SOON).
+- [ ] Tutorials: the quick start pays 460 SCRAP, each advanced tutorial 200.
 
 ## 0.23.15 (balance pass - phone check on staging: https://oozesyndicate.com/staging/)
 - [ ] **Ember** no longer runs away with games (attack +2 %, Core Meltdown 3 kills per unit, 70 at most) - does it still feel like the hard-hitting faction?

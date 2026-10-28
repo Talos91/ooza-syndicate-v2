@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.16 "Alpha 23" - 2026-10-28 (straight to live: Daniele's Ooze Desk answers)
+
+- **Forge costs 40** (was 20; Rules.FORGE_COST 200 sim), the build buttons read it from Sim.build_cost.
+- **A monster kicks at most 40 defenders** at its end node (Rules.MONSTER_TAKE_MAX 200 sim; garrison + stored allies, each its share): a node holding
+  more keeps its owner and the rest of its troops ("MONSTER KICKED 40 - n HOLD" to the owner); the decks on the way are not capped. Missions don't
+  count a held take; the AI values a monster target at most 40.
+- **Tutorial SCRAP**: the quick start pays 460, each of the four advanced tutorials 200 (Rules.PROGRESSION tutorial_scrap; 1 260 in all, a 3rd skill as before).
+- **ARMIES / HOME faction traits** describe the real stat leans, written from FACTION_STATS (Rules.faction_trait: "Swift lines", "Steady vats",
+  "Rich vats", "Hard hitters", "Tough shells"); COMING SOON gone from those cards. No new passives.
+
 ## 0.23.15 "Alpha 23" - 2026-10-28 (LIVE 2026-10-28 on Daniele's OK; staged 2026-10-28: balance pass, catch-up)
 
 - **0.23.15 - balance pass (Daniele approved 2026-10-27: "for me it's fine to follow its changes")**, measured by `tests/balance_study.gd`
