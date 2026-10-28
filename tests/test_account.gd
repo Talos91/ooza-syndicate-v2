@@ -100,7 +100,7 @@ func _save_round_trip() -> void:
 	_wipe()
 	check(Progression.balance() == 0 and not Progression.has_granted("tutorial:1"), "a fresh device has nothing")
 	check(Account.restore_save(JSON.parse_string(text)), "a restore from the JSON copy works")
-	check(Progression.balance() == 280 and Progression.owns("vat:faction:vex") and Progression.has_granted("tutorial:2"),   # lesson 2 paid 140 too
+	check(Progression.balance() == 140 + TutorialDirector.scrap_for(2) and Progression.owns("vat:faction:vex") and Progression.has_granted("tutorial:2"),   # tutorial 2 pays its tutorial_scrap (200 since 0.23.16)
 			"wallet, unlocks and grants come back")
 	check(ArmyPresets.loadout_for("vex", true)["active"] == "fortify", "ARMIES picks come back")
 	check(TutorialDirector.is_done(2), "tutorial progress comes back")
