@@ -155,7 +155,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"cannon_kill_left": 0.0,
 			"cannon_target": Vector3.ZERO,
 			"cannon_pull": {},      # horde id -> metres this burst has cut off its head (it stays the target)
-			"relay_index": 0,       # current position in this relay's state cycle (retract: 0 out / 1 in)
+			"relay_index": int(n.get("relayStart", 0)),   # current position in this relay's state cycle (retract: 0 out / 1 in);
+			                        # 2026-10-28: a map may start a console / switch at another index (N-04 / N-24: the
+			                        # shortcuts start DOWN, the console raises them - as their notes always said)
 			"relay_pending": 0,     # the state a fired relay is moving to
 			"relay_phase": "",      # "" / "warning" / "moving"
 			"relay_t": 0.0,         # seconds left in the phase
@@ -2785,17 +2787,28 @@ func _islands(gone: Dictionary) -> Array:
 		groups.append(g)
 	if groups.size() <= 1:
 		return []
+	# 2026-10-28 PROPOSAL (🗺️ maps-exp worker, needs Daniele's / ⚡'s yes): an exact tie between two parts (the same
+	# last-ring count and size - N-24 / N-04's outward rims split into two equal halves in the Very Last Stand) used to
+	# keep the part found first, i.e. the one holding the lowest node id, which is seat A's side on every map (nodes are
+	# written top-left first): seat A won 92 % / 78 % of AI matches. The tie now goes against the corner the cycle is
+	# aiming at (the ring drops aim at the same corner), so over seeds it is a coin flip, like the first corner itself.
+	var corner: int = last_stand_corners[_ls_corner_k % last_stand_corners.size()] if not last_stand_corners.is_empty() else -1
 	var best := 0
 	var best_score := -1
+	var best_has_corner := false
 	for gi in range(groups.size()):
 		var keep_n := 0
+		var has_corner := false
 		for id in groups[gi]:
 			if last_stand_keep.has(id):
 				keep_n += 1
+			if id == corner:
+				has_corner = true
 		var score: int = keep_n * 1000 + (groups[gi] as Array).size()
-		if score > best_score:
+		if score > best_score or (score == best_score and best_has_corner and not has_corner):
 			best_score = score
 			best = gi
+			best_has_corner = has_corner
 	var out := []
 	for gi in range(groups.size()):
 		if gi != best:
@@ -3121,6 +3134,8 @@ func _vls_queue_next() -> void:
 	last_stand_queue = batch
 	last_stand_warn_node = batch[0]
 	last_stand_warn_t = very_last_stand_gap
+	if batch.size() > 1 and not last_stand_corners.is_empty():   # 2026-10-28 PROPOSAL: a stranding drop moves the corner on
+		_ls_corner_k = (_ls_corner_k + 1) % last_stand_corners.size()
 	for bid in batch:
 		fx_events.append({"type": "collapse_warning", "node": bid})
 	events.append({"t": time, "type": "collapse_warning", "nodes": batch.duplicate(), "very_last_stand": true})
