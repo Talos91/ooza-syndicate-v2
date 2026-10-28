@@ -1,7 +1,8 @@
 # Next session - start here
 
 ## Live state (2026-10-28)
-**LIVE 0.23.15** (main = release-0.23.15 + this docs commit): the balance pass (faction stats + power cooldowns, Daniele approved), the +15 % catch-up
+**LIVE 0.23.16** = 0.23.15 + Daniele's Ooze Desk answers: Forge 40, a monster kicks at most 40 defenders, tutorial SCRAP 460 + 4 x 200, ARMIES traits from the stat leans.
+0.23.15 (main = release-0.23.15 + this docs commit): the balance pass (faction stats + power cooldowns, Daniele approved), the +15 % catch-up
 for a side under half the leader's nodes, N-24 / N-04 out of 1v1 (🗺️ to move their spawns, then back in), AI Expert margin 1.2. 0.23.14 (iPhone render +
 compact menu, rotation relay fix) went live the day before. Open: an iPhone check of 0.23.14 (Daniele has none), N-04's own maps4 fix, the relay
 prototypes (0.23.15-proto on https://oozesyndicate.com/staging/proto/, branch proto-0.23.15 - never merge it into the release line as is).

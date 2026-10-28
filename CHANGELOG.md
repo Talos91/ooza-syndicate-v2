@@ -1,6 +1,6 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.23.16 "Alpha 23" - 2026-10-28 (straight to live: Daniele's Ooze Desk answers)
+## 0.23.16 "Alpha 23" - 2026-10-28 (LIVE 2026-10-28, straight to live: Daniele's Ooze Desk answers)
 
 - **Forge costs 40** (was 20; Rules.FORGE_COST 200 sim), the build buttons read it from Sim.build_cost.
 - **A monster kicks at most 40 defenders** at its end node (Rules.MONSTER_TAKE_MAX 200 sim; garrison + stored allies, each its share): a node holding
