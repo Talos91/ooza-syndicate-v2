@@ -419,7 +419,7 @@ func _init() -> void:
 			sim17d.nodes[id]["owner"] = "A"
 			sim17d.nodes[id]["units"] = 0.0
 		sim17d.nodes[1]["owner"] = "A"                     # ...and node 1, where its troops are
-		sim17d.nodes[1]["units"] = 300.0
+		sim17d.nodes[1]["units"] = 400.0                   # forge 20 -> 40 (0.23.16)
 		sim17d.nodes[6]["units"] = 2000.0                  # B's home is out of reach: node 4 is the one plan
 		var ai17d := SeatAI.new("A", 2.0, level)
 		var slow := ai17d._trip(sim17d, 1, 4)
