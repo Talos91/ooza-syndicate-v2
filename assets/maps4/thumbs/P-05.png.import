@@ -2,10 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
+uid="uid://dwfpr234fvspl"
+path="res://.godot/imported/P-05.png-c4abd561400787cf5c7b050c763cbfab.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/maps4/thumbs/P-05.png"
+dest_files=["res://.godot/imported/P-05.png-c4abd561400787cf5c7b050c763cbfab.ctex"]
 
 [params]
 
