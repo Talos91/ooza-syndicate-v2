@@ -1767,6 +1767,9 @@ func _process(delta: float) -> void:
 						var it: Dictionary = hud.callouts.find(place)
 						if not it.is_empty():
 							it["count"] = kicked
+			"monster_take":                            # Rules.MONSTER_TAKE_MAX: your monster's target held - how many are left there
+				if bool(ev.get("held", false)) and str(ev.get("seat", "")) == HUMAN:
+					hud.callout_node(int(ev["node"]), "MONSTER KICKED %d · %d HOLD" % [Rules.shown(Rules.MONSTER_TAKE_MAX), int(ev.get("left", 0))], "warn", HUMAN)
 			"forge_lost":                              # red (spec E): the bonus is gone - at the forge it was
 				if str(ev.get("seat", "")) == HUMAN:
 					var at := int(_forge_node.get(HUMAN, -1))

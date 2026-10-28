@@ -1433,8 +1433,8 @@ func _fill_complete(title: String, lines: Array, primary_text: String, secondary
 		_complete_vb.add_child(l)
 		if first_line == null:
 			first_line = l
-	# TUTORIAL + PROGRESSION: "+140 SCRAP" counting up under the "done" lines, first completion only; on TRAINING
-	# COMPLETE right after the first line (relay kill, +140 SCRAP, the 3rd-skill line, then the Graduate vat)
+	# TUTORIAL + PROGRESSION: "+460 SCRAP" (quick start) / "+200 SCRAP" counting up under the "done" lines, first completion only; on TRAINING
+	# COMPLETE right after the first line (relay kill, +460 SCRAP, the 3rd-skill line, then the Graduate vat)
 	var ticker_h := 0.0
 	if _scrap > 0:
 		var t := RewardTicker.make(_scrap, "soft", func(n: float) -> float: return _pt(n) if mobile else n * 1.2)

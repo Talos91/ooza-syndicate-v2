@@ -394,7 +394,7 @@ static var LASER_RANGE := 12.0            # metres from the node's centre: cover
 # FORGE: +50 % attack to everything its owner deals AND the defence half (Daniele, 2026-09-27: "Attack +
 # defence", "All garrisons -20 %"): while the owner holds a completed forge every one of its garrisons takes
 # 20 % less damage (incoming / FORGE_DEFENCE). Forges do not stack.
-static var FORGE_COST := 100              # 20 shown
+static var FORGE_COST := 200              # 40 shown (Daniele 2026-10-27, Ooze Desk: "Forge cost 20 -> 40"; was 100)
 const FORGE_DEFENCE := 1.25
 const FORGE_BONUS_DEFAULT := 0.5
 static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable (Alpha 11: +50 on the 100 attack scale)
@@ -402,7 +402,10 @@ static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable (Alpha 11: +
 # (charging from the hub's completion); it walks the fastest route to a node up to MONSTER_REACH bridges away at
 # MONSTER_SPEED of the BRAWL unit speed, kicks every unit on its decks off the bridge (friend or foe), passes
 # through the nodes on the way (their garrisons untouched; lines crossing those platforms are kicked too) and takes the end node empty (a friendly end node loses a tier instead). Nothing
-# can shoot it; only a fall kills it.
+# can shoot it; only a fall kills it. MONSTER_TAKE_MAX (Daniele 2026-10-27, Ooze Desk: "a monster kills up to 40 defenders"): at
+# the end node it kicks off at most this many defenders (garrison + stored allied troops, shared in proportion); a node holding
+# more keeps its owner and the rest of its troops. The decks on the way are not capped.
+const MONSTER_TAKE_MAX := 200.0           # 40 shown
 static var MONSTER_HUB_COST := 150        # 30 shown
 static var MONSTER_COST := 100            # 20 shown
 static var MONSTER_COOLDOWN := 40.0          # Daniele, 2026-09-27: "change charge to 40 seconds" (was 90)
@@ -607,11 +610,40 @@ const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA C
 		"ember": ["EMBER", "MAW"], "solar": ["SOLAR", "SHELLS"]}
 const FACTION_TAGLINES := {"vex": "ADAPT. CONNECT. REDIRECT.", "null": "SAME SIGNAL. DIFFERENT TRUTH.",
 		"bloom": "A WILDER TOMORROW.", "ember": "PRESSURE BREEDS PROGRESS.", "solar": "HOLD THE LIGHT."}
-const FACTION_TRAITS := {"vex": ["Efficient routing", "Faster travel on owned connections."],
-		"null": ["Obscured intel", "Hide precise counts from enemies."],
-		"bloom": ["Biomass recovery", "Recover a portion of nearby losses."],
-		"ember": ["Siege pressure", "Pressure defended structures."],
-		"solar": ["Connected defense", "Protect connected friendly nodes."]}
+# ARMIES trait (Daniele 2026-10-27, Ooze Desk: "faction trait text rewritten to describe the real stat leans (no new
+# passives)"): the name here, the line written from FACTION_STATS by faction_trait(), so it follows every balance pass.
+const FACTION_TRAIT_NAMES := {"vex": "Swift lines", "null": "Steady vats", "bloom": "Rich vats", "ember": "Hard hitters",
+		"solar": "Tough shells"}
+
+
+static func faction_trait(faction: String) -> Array:
+	## [name, line] for the ARMIES / HOME card: the faction's FACTION_STATS leans in words, strengths first
+	## ("Lines travel 15 % faster; garrisons take 11 % more damage."). health / garrison divide damage taken.
+	var good := []
+	var bad := []
+	for key in ["speed", "attack", "health", "garrison", "production"]:
+		var v := stat(faction, key)
+		if absf(v - 1.0) < 0.001:
+			continue
+		var up := v > 1.0
+		var pct := int(round(absf(v - 1.0) * 100.0))
+		if key in ["health", "garrison"]:
+			pct = int(round(absf(1.0 - 1.0 / v) * 100.0))
+		var words := ""
+		match key:
+			"speed": words = "lines travel %d %% %s" % [pct, "faster" if up else "slower"]
+			"attack": words = "lines deal %d %% %s damage" % [pct, "more" if up else "less"]
+			"health": words = "lines take %d %% %s damage" % [pct, "less" if up else "more"]
+			"garrison": words = "garrisons take %d %% %s damage" % [pct, "less" if up else "more"]
+			"production": words = "vats produce %d %% %s" % [pct, "more" if up else "less"]
+		(good if up else bad).append(words)
+	var parts := []
+	for g in [good, bad]:
+		if not g.is_empty():
+			parts.append(", ".join(g))
+	var line := "; ".join(parts)
+	line = (line.substr(0, 1).to_upper() + line.substr(1) + ".") if line != "" else "No stat leans."
+	return [FACTION_TRAIT_NAMES.get(faction, ""), line]
 # the approved ultimates (SKILLS-2.0-DRAFT sec5 / sec5.2, Daniele 2026-09-26); [name, one short line]
 const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
 		"null": ["Echo Split", "moving lines spawn jamming decoys"],
@@ -1060,7 +1092,10 @@ const PROGRESSION := {
 	"level_premium_every": 5, "level_premium": 25, # every 5th level also pays a few chips
 	"daily_count": 3, "daily_soft": 50, "daily_xp": 150,
 	"weekly_count": 3, "weekly_soft": 250, "weekly_xp": 500, "weekly_premium": 10,
-	"tutorial_lesson": 140,                       # lessons 1-9, first completion: 9 x 140 = 1 260 = a 3rd skill
+	"tutorial_lesson": 140,                       # fallback for a tutorial missing from tutorial_scrap
+	# per tutorial, first completion (Daniele 2026-10-27, Ooze Desk: "quick start 460 + 4 x 200"): 1 = quick start, 2-5 the
+	# advanced ones (TutorialDirector.IDS); 460 + 4 x 200 = 1 260 = a 3rd skill, as before
+	"tutorial_scrap": {1: 460, 2: 200, 3: 200, 4: 200, 5: 200},
 	# a campaign mission's one-off SCRAP (3 stars + its optional objective in one run), by mission kind (proposal,
 	# CAMPAIGN-DESIGN §5a; was Campaign.REWARD)
 	"campaign_reward": {"main": 150, "duel": 200, "side": 200, "finale": 300},
