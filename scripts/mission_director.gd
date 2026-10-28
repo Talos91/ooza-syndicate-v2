@@ -92,6 +92,7 @@ func begin(s: Sim, mp: Dictionary, player_seat := HUMAN) -> void:
 				h["units"] = float(h["units"]) + extra * Rules.SCALE
 	pin_settings(mission_pins(m))                    # (main pinned them before sim.setup already; tests pin here)
 	sim.abilities_on = Rules.abilities_on
+	sim.catchup_on = bool(stage.get("catchup", false))   # CATCH-UP (Rules.CATCHUP_*): off unless the mission opts in (stage.catchup)
 	start_nodes = []
 	for n in sim.nodes:
 		if n["owner"] == seat:

@@ -17,6 +17,11 @@ static var dir := DIR                                   # tests/test_net.gd poin
 # Baked but kept out of the pool (OPEN-QUESTIONS): none on maps 4.1 so far (maps 4.0 withheld B-30 for deck
 # clashes and D-08 for 27 pt tap targets; neither is in the 4.1 partial pack).
 const WITHHELD: Array[String] = []
+# Baked and pooled, but not offered in these modes (mode_offered; a map left with no offered mode leaves battlefield()).
+# SEAT BIAS (balance study 2026-10-27, Expert AI vs Expert AI, every faction pair from both seats): seat A wins 92 % on
+# N-24 K-Crossing and 78 % on N-04 Console - map geometry, not factions. Out of 1v1 (their only mode) until 🗺️ moves
+# the spawns (Daniele 2026-10-27: "withhold N-24 / N-04 from 1v1 until the map builder fixes their seats").
+const WITHHELD_MODES := {"N-24": ["1v1"], "N-04": ["1v1"]}
 # Not on phones (Daniele, Alpha 18: "if some map is not good for mobile still flag them and remove them"):
 # maps the phone-fit probe (tests/phone_fit.tscn) finds crowded on a phone; tablets and desktop keep them.
 # Maps 4.0 listed its 3v3 / 2v2v2 maps here; the 4.1 partial pack has none, and every 4.1 map passes.
@@ -66,16 +71,17 @@ static func battlefield() -> Array:
 	if POOL_GROUPS.is_empty():
 		_battlefield_cache = offered
 		return offered
+	offered = offered.filter(func(p): return not _offered_modes(p).is_empty())   # WITHHELD_MODES took every mode it seats
 	var pooled := offered.filter(func(p): return p.get_file().substr(0, 1) in POOL_GROUPS)
 	var modes := {}
 	for p in pooled:
-		for m in (MapBuilder.load_map(p)["seats"] as Dictionary).keys():
+		for m in _offered_modes(p):
 			modes[m] = true
 	_pooled_modes = modes
 	var fill := offered.filter(func(p):
 		if p.get_file().substr(0, 1) in POOL_GROUPS:
 			return false
-		for m in (MapBuilder.load_map(p)["seats"] as Dictionary).keys():
+		for m in _offered_modes(p):
 			if not modes.has(m):
 				return true
 		return false)
@@ -87,9 +93,17 @@ static var _battlefield_cache: Array = []
 static var _pooled_modes: Dictionary = {}              # the modes the new pool (POOL_GROUPS) offers
 
 
+static func _offered_modes(path: String) -> Array:
+	## The modes this map seats, minus its WITHHELD_MODES.
+	var out: Array = (MapBuilder.load_map(path)["seats"] as Dictionary).keys()
+	return out.filter(func(m): return not m in WITHHELD_MODES.get(path.get_file().substr(0, 4), []))
+
+
 static func mode_offered(code_or_path: String, mode: String) -> bool:
 	## 0.23.0: may this map be played in `mode`? A pooled (new) map: every mode it seats. A kept older map: only the modes the
-	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps).
+	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps). Never a WITHHELD_MODES mode.
+	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []):
+		return false
 	if POOL_GROUPS.is_empty():
 		return true
 	var c := code_or_path.get_file().substr(0, 1)
