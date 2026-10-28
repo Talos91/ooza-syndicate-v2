@@ -1,5 +1,11 @@
 # Next session - start here
 
+## Live state (2026-10-28)
+**LIVE 0.23.15** (main = release-0.23.15 + this docs commit): the balance pass (faction stats + power cooldowns, Daniele approved), the +15 % catch-up
+for a side under half the leader's nodes, N-24 / N-04 out of 1v1 (🗺️ to move their spawns, then back in), AI Expert margin 1.2. 0.23.14 (iPhone render +
+compact menu, rotation relay fix) went live the day before. Open: an iPhone check of 0.23.14 (Daniele has none), N-04's own maps4 fix, the relay
+prototypes (0.23.15-proto on https://oozesyndicate.com/staging/proto/, branch proto-0.23.15 - never merge it into the release line as is).
+
 ## Tutorial rewrite (0.23.8 phase 1; 0.23.10 the GUIDED quick start, branch `tutorial-guided`; phases 2 and 3 to do)
 0.23.10 (§3a): a tutorial's `steps` run IN ORDER (step i = GoalDirector stage i, unlocked when i-1 is done; `chapter` groups them on the strip;
 `read: true` = a GOT IT card; `enter` = its staging; `reveal` = its reveal stage). The AI is off until CONTINUE PLAYING. On the pie inspector the hand goes

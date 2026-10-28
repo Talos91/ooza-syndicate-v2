@@ -1,5 +1,11 @@
 # Playtest notes
 
+## 2026-10-27 / 28 - Daniele's items answered in 0.23.14 + 0.23.15 (live)
+- "on IOS it shows no background and looks broken" -> 0.23.14: the board draws on the sky's canvas on iOS, canvas capped 2x, compact menu for Safari's
+  short landscape (checked in WebKit at 568x320 .. 932x430, not on a real iPhone).
+- "on rotation the animation always breaks" -> 0.23.14: the swing follows the relay's state online (relay_rot_probe 0 desyncs).
+- Balance (his yes to the measured table) -> 0.23.15: faction stats, power cooldowns, the +15 % catch-up, N-24 / N-04 out of 1v1, Expert retuned.
+
 ## 2026-09-25 - Daniele, first Two Piers demo (to do next)
 
 1. **Fight losses must show on the blob.** When hordes fight, the blob shrinks in step with the

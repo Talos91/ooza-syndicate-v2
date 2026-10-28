@@ -1,6 +1,6 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.23.15 "Alpha 23" - 2026-10-27 (staging: balance pass, catch-up)
+## 0.23.15 "Alpha 23" - 2026-10-28 (LIVE 2026-10-28 on Daniele's OK; staged 2026-10-28: balance pass, catch-up)
 
 - **0.23.15 - balance pass (Daniele approved 2026-10-27: "for me it's fine to follow its changes")**, measured by `tests/balance_study.gd`
   (Expert 1v1, 1400 games + a 4760-game power swap; write-up `05 Handoff/handoffs/architect-specs/balance-pass-2026-10-27.md`), `Rules` numbers only:
@@ -14,7 +14,7 @@
   curve 15 / 31 / 48 / 62 / 79 %). test_ai_coop's "coordinating team wins clearly more" floor 60 -> 55 % (the catch-up narrows team gaps).
 - Server: deploy.sh refuses to overwrite a pack a running room uses (🖥️ deploy-guard).
 
-## 0.23.14 "Alpha 23" - 2026-10-27 (staging: iPhone fixes, rotation relay)
+## 0.23.14 "Alpha 23" - 2026-10-27 (LIVE 2026-10-27: iPhone fixes, rotation relay)
 
 - **iPhone / iPad (every model)** (Daniele: "on IOS it shows no background and looks broken"):
   - the 3D board is drawn straight onto the canvas the sky is on (`Scenery.ios_safe`: no glow, no colour adjustment, no MSAA on iOS) - GL
