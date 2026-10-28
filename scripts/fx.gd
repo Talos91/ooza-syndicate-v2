@@ -332,7 +332,8 @@ func _relay_beacon(n: Dictionary, entry: Dictionary, col: Color, phase: String) 
 	if sim.collapsed.get(id, false):
 		label.visible = false
 		return
-	label.visible = not entry.has("relay_button")        # RELAY V2: the button's own glyph is the symbol (it breathes: mat)
+	label.visible = not entry.has("relay_button") or entry["relay_button"].get("glyph_hidden", false)   # RELAY V2: the button's
+	# own glyph is the symbol (it breathes: mat); RELAYS 3.0 prototypes on a stand-in button keep the label
 	var owned: bool = n["owner"] != ""
 	var ready: bool = owned and phase == "" and n["relay_cd"] <= 0.0 and not sim.is_relay_locked(id)
 	var energy := 1.6
@@ -529,7 +530,24 @@ func _relay_motion(n: Dictionary, entry: Dictionary) -> void:
 					d.visible = true
 					var slide := eased if closing else 1.0 - eased
 					d.position = base.origin + dir * len * slide - Vector3(0, 0.9 * slide, 0)
-		_:                                                # switch / remote: dissolve and assemble
+		"switch":                                         # RELAYS 3.0 (approved): two drawbridges on one hinge - the going
+			for i in anim["closing"] + anim["opening"]:   # deck lifts into its pier, the coming one lowers out of its own
+				var closing: bool = i in anim["closing"]
+				var lift := eased if closing else 1.0 - eased
+				var hinge := sim.exit_of(i, n["id"]) if sim.v3 else (c + ((sim.nodes[sim._other_end(i, n["id"])]["pos"] as Vector3) - c).normalized() * Rules.R)
+				var out := ((sim.nodes[sim._other_end(i, n["id"])]["pos"] as Vector3) - c)
+				out = Vector3(out.x, 0.0, out.z).normalized()
+				var axis := out.cross(Vector3.UP).normalized()   # the far end rises
+				var rot := Basis(axis, DRAWBRIDGE_UP * lift)
+				var decks: Array = vis["edge_decks"][i]
+				for k in range(decks.size()):
+					var base: Transform3D = vis["edge_base"][i][k]
+					var d: Node3D = decks[k]
+					d.visible = lift < 0.999
+					var t := Transform3D(rot * base.basis, hinge + rot * (base.origin - hinge))
+					t.origin += out * -SWITCH_TUCK * lift  # and tucks back into the pier
+					d.transform = t
+		_:                                                # remote: dissolve and assemble
 			for i in anim["closing"] + anim["opening"]:
 				var closing: bool = i in anim["closing"]
 				var k2 := eased if closing else 1.0 - eased
@@ -540,6 +558,10 @@ func _relay_motion(n: Dictionary, entry: Dictionary) -> void:
 					d.visible = true
 					d.scale = Vector3(base.basis.get_scale().x, maxf(1.0 - k2, 0.02), 1.0 - 0.6 * k2)
 					d.position = base.origin - Vector3(0, 6.0 * k2 * k2, 0)
+
+
+const DRAWBRIDGE_UP := deg_to_rad(82.0)   # the switch's deck pitch when fully raised into its pier
+const SWITCH_TUCK := 1.2                    # m it slides back into the pier while it rises
 
 
 func _build_arc(mesh: ImmediateMesh, r0: float, r1: float, frac: float) -> void:

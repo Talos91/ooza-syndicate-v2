@@ -66,6 +66,7 @@ var ais: Array = []
 var vis: Dictionary
 var hordes: HordeView
 var fx: Fx
+var proto_view: ProtoRelayView       # RELAYS 3.0 PROTOTYPES: only on a map that has one (the P test maps)
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var forge_pulse: ForgePulse                        # a forge coming online: the owner's 2 s power-up wave
 var skill_fx: SkillFx                              # Skills 2.0 in the world: every cast, lasting effect and end
@@ -453,6 +454,10 @@ func _start_map(path: String) -> void:
 	fx = Fx.new()
 	add_child(fx)
 	fx.setup(self, sim, vis, hordes)
+	if ProtoRelayView.wanted(sim):
+		proto_view = ProtoRelayView.new()
+		add_child(proto_view)
+		proto_view.setup(sim, vis)
 	combat = CombatFx.new()
 	add_child(combat)
 	combat.setup(self, sim, vis, fx)
@@ -1801,6 +1806,8 @@ func _process(delta: float) -> void:
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
 	fx.sync(dt)
+	if proto_view:
+		proto_view.sync(dt)                       # after Fx: it hides the ferry's deck, sinks a lift's closed decks
 	combat.sync(dt, cam)                          # after Fx: it scales the tier-down's rising model
 	skill_fx.sync(dt, cam)                        # after Fx: it hides a demolished deck, whose pieces fall here
 	forge_pulse.sync(dt, cam)                     # after both (it pumps the models) and the views (their glows)

@@ -199,7 +199,52 @@ const RELAY_COOLDOWN_BY_KIND := {"rotation": 10.0}
 
 
 static func relay_cooldown(kind: String) -> float:
+	if RELAYS_PROTO.has(kind):
+		return float(RELAYS_PROTO[kind]["cooldown"])
 	return float(RELAY_COOLDOWN_BY_KIND.get(kind, RELAY_COOLDOWN))
+
+
+# RELAYS 3.0 PROTOTYPES (01 Rules/RELAYS-3.0-PROTOTYPES.md, spec v1 2026-10-27; map schema 01 Rules/relays-proto-schema.md):
+# five relay-like mechanics on the test maps P-01..P-05 only - a kind exists only where a map uses it, the pool maps are
+# untouched. Common rules as today's relays: the owner fires (double-tap / SWITCH), RELAY_WARNING s with a ghost of the
+# outcome, the motion, then the kind's cooldown. Conservative first readings; every open point is in OPEN-QUESTIONS.
+#   ferry     a deck that carries everything on it across a gap: travel = secs_per_8m per 8 m of the gap; the hull is
+#             `hull` of the deck long; lines reaching an empty pier queue at its lip (no waterfall)
+#   conveyor  a deck with a direction: lines with the flow x`with`, against it x`against`; fire flips it (`move` s, x1)
+#   launcher  fire = ARMED `armed` s: every own line entering the node is thrown at the target (`flight` s in the air,
+#             immune), landing over `land` s like a normal arrival; `reach` = the most bridges to the target
+#   lift      the node is a platform at level 0 / 1: only its decks at the current level are open; the move takes
+#             `move` s, the closing decks drop what is on them, lines on the platform ride (`rise` m per level, view)
+#   tilt      the node tips toward its next exit (`move` s): every line on the platform (not the garrison) slides out that
+#             deck as a new order to that neighbour, enemy lines too
+const RELAYS_PROTO := {
+	"ferry": {"cooldown": 5.0, "secs_per_8m": 1.4, "hull": 0.5},
+	"conveyor": {"cooldown": 5.0, "with": 1.5, "against": 0.5, "move": 1.4},
+	"launcher": {"cooldown": 30.0, "armed": 8.0, "flight": 2.0, "land": 1.5, "reach": 3},
+	"lift": {"cooldown": 10.0, "move": 1.4, "rise": 1.5},   # rise: the view's metres per level (placeholder)
+	"tilt": {"cooldown": 10.0, "move": 1.4},
+}
+
+
+static func is_proto(kind: String) -> bool:
+	## A Relays 3.0 prototype kind (test maps only).
+	return RELAYS_PROTO.has(kind)
+
+
+static func proto_tag(kind: String, state: String, phase: String) -> String:
+	## The node tag's state text for a prototype relay (HUD): AT A / AT B, A>B / B>A, UP / DOWN, EXIT n, PAD / ARMED.
+	match kind:
+		"ferry":
+			return "AT " + state.substr(1)
+		"conveyor":
+			return state.substr(1, 1) + ">" + state.substr(2, 1)
+		"lift":
+			return "UP" if state == "l1" else "DOWN"
+		"tilt":
+			return "EXIT %d" % (int(state.substr(1)) + 1)
+		"launcher":
+			return "ARMED" if phase == "moving" else "PAD"
+	return state
 
 const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves (its troops fell when it started)
 # RELAY V2 (the relay redo, Alpha 22 - Daniele 2026-09-28 "they good"; Models/2.0/structures_2_1/relay_v2.json +
@@ -220,7 +265,8 @@ const RELAY_GHOST_EDGE := Color(0.92, 0.88, 1.0)        # OS_Ghost_Edge: its bri
 # v2g (Daniele: "the ghost should have also different colour so even as ghost you can see what is switch and what is
 # rotation"): each kind's ghost in its own hue (relay_v2.json ghost_colors; OS_Ghost_<Kind> floor + OS_Ghost_<Kind>_Edge)
 const RELAY_GHOST_COLORS := {"rotation": Color("#4f8bff"), "switch": Color("#ffb238"), "remote": Color("#5cffb0"),
-		"retract": Color("#ff6a5a")}         # switch = Hud.RELAY_ACCENT
+		"retract": Color("#ff6a5a"), "ferry": Color("#4fd8ff"), "conveyor": Color("#7dff6a"), "launcher": Color("#ffd23f"),
+		"lift": Color("#ffe066"), "tilt": Color("#ff8c2a")}         # switch = Hud.RELAY_ACCENT
 const RELAY_GHOST_ALPHA := 0.45      # json: the kind ghosts' floor alpha (see-through; the edges are emissive)
 const RELAY_GHOST_WARN := 2.4        # x the ghost's brightness while its relay's warning runs (it is about to be real)
 # The remote's LINK (Daniele 2026-09-28: "the cable looks too weird, time to improve its look"): a thin glowing arc in
@@ -455,8 +501,14 @@ const STATE_COLORS := {
 	"m1": Color("#ff9ecf"), "m2": Color("#9be7c4"),
 	"m3": Color("#cae68a"), "m4": Color("#ffbfff"), "m5": Color("#ae8ae6"), "m6": Color("#ff824d"),
 	"warn": Color("#ff5a5a"), "build": Color("#ffd23f"),
+	# RELAYS 3.0 PROTOTYPES: ferry docked at A / B, conveyor flowing A->B / B->A, lift level 0 / 1, tilt's next exit,
+	# the launcher's pad (its armed look is the warning / moving phase)
+	"fA": Color("#4fd8ff"), "fB": Color("#ffb238"), "cAB": Color("#7dff6a"), "cBA": Color("#ff6ad5"),
+	"l0": Color("#8fb3ff"), "l1": Color("#ffe066"), "t0": Color("#ff8c2a"), "t1": Color("#5cffb0"),
+	"t2": Color("#b88ae6"), "t3": Color("#ff4f9a"), "pad": Color("#ffd23f"),
 }
-const RELAY_GLYPH := {"rotation": "↻", "retract": "⇤", "switch": "⇄", "remote": "⌁"}
+const RELAY_GLYPH := {"rotation": "↻", "retract": "⇤", "switch": "⇄", "remote": "⌁",
+		"ferry": "⇋", "conveyor": "⇉", "launcher": "➶", "lift": "⇅", "tilt": "⇲"}   # (⛴ / ⟋ are not in DejaVu Sans Mono; ◮ read as a hazard sign)
 const RELAY_GLYPH_EMISSION_MAX := 3.2   # 0.22.4 playtest (Daniele's cousins): the ready-breathing relay glyph
 # (Fx._relay_beacon / RelayView's "Glyph") saturated to white in close-ups at its uncapped peak (~5.8); capped
 # here so it keeps its state colour (Rules.state_color) instead of blowing out.
