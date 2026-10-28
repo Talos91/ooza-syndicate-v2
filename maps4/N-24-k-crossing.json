@@ -197,7 +197,8 @@
     "laser",
     "forge",
     "monster_hub"
-   ]
+   ],
+   "relayStart": 1
   },
   {
    "id": 10,
@@ -232,7 +233,8 @@
     "laser",
     "forge",
     "monster_hub"
-   ]
+   ],
+   "relayStart": 1
   },
   {
    "id": 12,

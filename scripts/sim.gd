@@ -155,7 +155,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"cannon_kill_left": 0.0,
 			"cannon_target": Vector3.ZERO,
 			"cannon_pull": {},      # horde id -> metres this burst has cut off its head (it stays the target)
-			"relay_index": 0,       # current position in this relay's state cycle (retract: 0 out / 1 in)
+			"relay_index": int(n.get("relayStart", 0)),   # current position in this relay's state cycle (retract: 0 out / 1 in);
+			                        # 2026-10-28: a map may start a console / switch at another index (N-04 / N-24: the
+			                        # shortcuts start DOWN, the console raises them - as their notes always said)
 			"relay_pending": 0,     # the state a fired relay is moving to
 			"relay_phase": "",      # "" / "warning" / "moving"
 			"relay_t": 0.0,         # seconds left in the phase
@@ -170,7 +172,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 	var geo: Array = map["layout"]["edges"] if v3 else []
 	for ek in range(map["edges"].size()):
 		var e: Dictionary = map["edges"][ek]
-		var mods: int = {"S": 1, "M": 2, "L": 3}[e["tier"]]
+		# EXP (maps E-*, 2026-10-28): a deck may carry `modules` (0.5 = a 2 m half bridge, 4 / 5 = 16 / 20 m spans, a flex
+		# S-bridge's real length); else its tier's 1 / 2 / 3
+		var mods: float = float(e["modules"]) if e.get("modules") != null else float({"S": 1, "M": 2, "L": 3}[e["tier"]])
 		var st: String = e["state"] if e.get("state") != null else ""     # JSON stores "state": null
 		var retracts: bool = e.get("retracts", false) == true or st == "ret"   # maps 3.0 spells a retract "ret"
 		if st == "ret":
@@ -1434,7 +1438,7 @@ func _build_path3(route: Array) -> Dictionary:
 				var c := _curve_centre(b)
 				var a_in := atan2(ex_in.z - c.z, ex_in.x - c.x)
 				var a_out := atan2(ex_out.z - c.z, ex_out.x - c.x)
-				for p in _arc(c, a_in, a_out, CURVE_R):
+				for p in _arc(c, a_in, a_out, curve_r(str(b["junction"]))):
 					add.call(p, 1)
 			elif b["node_kind"] == "junction":             # JUNCTION: straight across the junction plate
 				add.call(b["pos"], 1)
@@ -1519,13 +1523,19 @@ func _build_path_legacy(route: Array) -> Dictionary:
 
 
 const CURVE_R := 5.09                  # JUNCTION: the curve pieces' centreline radius (Models/2.0/structures_2_1/junctions.json)
+# EXP curves (connectors_exp.json, maps E-* 2026-10-28): Curve_30 / 60 turn on 7.64 m, the wide 45 / 90 on 10.19 m
+const CURVE_R_BY := {"Curve_45": 5.09, "Curve_90": 5.09, "Curve_30": 7.64, "Curve_60": 7.64, "Curve_W45": 10.19, "Curve_W90": 10.19}
+
+
+static func curve_r(piece: String) -> float:
+	return float(CURVE_R_BY.get(piece, CURVE_R))
 
 
 func _curve_centre(n: Dictionary) -> Vector3:
 	## JUNCTION: a curve's origin is its start port; its arc turns left round a centre one radius to the piece's left
 	## (+Y in the piece, the scene's -Z), turned by the piece's yaw. A right turn is the same piece crossed backwards.
 	var yaw := deg_to_rad(float(n.get("junction_yaw", 0.0)))
-	return (n["pos"] as Vector3) + Vector3(-sin(yaw), 0.0, -cos(yaw)) * CURVE_R
+	return (n["pos"] as Vector3) + Vector3(-sin(yaw), 0.0, -cos(yaw)) * curve_r(str(n.get("junction", "")))
 
 
 func _arc(c: Vector3, a0: float, a1: float, r: float) -> Array:

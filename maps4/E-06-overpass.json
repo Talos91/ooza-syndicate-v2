@@ -1,0 +1,983 @@
+{
+ "code": "E-06",
+ "name": "Overpass",
+ "group": "experimental",
+ "players": "versus",
+ "playersLabel": "1v1 (2 homes)",
+ "combatMode": "both",
+ "family": "build page",
+ "modes": [
+  "1v1"
+ ],
+ "symmetry": "point (half turn)",
+ "frame": {
+  "width": 160,
+  "height": 80,
+  "units": "metres",
+  "version": "5.0"
+ },
+ "minEnemyHomeHops": 2,
+ "centreSpawn": false,
+ "plazas": [],
+ "nodes": [
+  {
+   "id": 0,
+   "x": 79.91,
+   "y": 12.98,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 1,
+   "x": 106.3,
+   "y": 13.7,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 2,
+   "x": 122.93,
+   "y": 23.3,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 3,
+   "x": 64.73,
+   "y": 24.73,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "laser"
+   },
+   "buildable": [
+    "laser",
+    "forge",
+    "monster_hub"
+   ],
+   "relayTag": "B"
+  },
+  {
+   "id": 4,
+   "x": 92.73,
+   "y": 27.27,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "relay",
+   "relay": "switch",
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "forge"
+   },
+   "buildable": [
+    "laser",
+    "forge",
+    "monster_hub"
+   ],
+   "relayTag": "A"
+  },
+  {
+   "id": 5,
+   "x": 109.36,
+   "y": 36.87,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 6,
+   "x": 80,
+   "y": 40,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "junction",
+   "relay": null,
+   "home": false,
+   "neutral": null,
+   "buildable": [],
+   "junction": "Crossing",
+   "junctionYaw": 45.0
+  },
+  {
+   "id": 7,
+   "x": 80,
+   "y": 40,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "junction",
+   "relay": null,
+   "home": false,
+   "neutral": null,
+   "buildable": [],
+   "junction": "Crossing",
+   "junctionYaw": 45.0,
+   "lane": "over",
+   "junctionDraw": false
+  },
+  {
+   "id": 8,
+   "x": 50.64,
+   "y": 43.13,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 9,
+   "x": 67.27,
+   "y": 52.73,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "relay",
+   "relay": "switch",
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "forge"
+   },
+   "buildable": [
+    "laser",
+    "forge",
+    "monster_hub"
+   ],
+   "relayTag": "C"
+  },
+  {
+   "id": 10,
+   "x": 95.27,
+   "y": 55.27,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "relay",
+   "relay": "retract",
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "laser"
+   },
+   "buildable": [
+    "laser",
+    "forge",
+    "monster_hub"
+   ],
+   "relayTag": "D"
+  },
+  {
+   "id": 11,
+   "x": 37.07,
+   "y": 56.7,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 12,
+   "x": 53.7,
+   "y": 66.3,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 13,
+   "x": 80.09,
+   "y": 67.02,
+   "plaza": null,
+   "socket": null,
+   "ring": 0,
+   "category": "normal",
+   "relay": null,
+   "home": false,
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": 6,
+   "to": 4,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": "s1",
+   "relay": 4,
+   "retracts": false,
+   "deckMetres": 8.0
+  },
+  {
+   "from": 7,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": 3,
+   "retracts": true,
+   "deckMetres": 8.0
+  },
+  {
+   "from": 4,
+   "to": 0,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": "s2",
+   "relay": 4,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 3,
+   "to": 0,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 4,
+   "to": 1,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": "s1",
+   "relay": 4,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 4,
+   "to": 5,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": "s2",
+   "relay": 4,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 1,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 5,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 6,
+   "to": 9,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": "s1",
+   "relay": 9,
+   "retracts": false,
+   "deckMetres": 8.0
+  },
+  {
+   "from": 7,
+   "to": 10,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": 10,
+   "retracts": true,
+   "deckMetres": 8.0
+  },
+  {
+   "from": 9,
+   "to": 13,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": "s2",
+   "relay": 9,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 10,
+   "to": 13,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 9,
+   "to": 12,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": "s1",
+   "relay": 9,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 9,
+   "to": 8,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": "s2",
+   "relay": 9,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 12,
+   "to": 11,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 8,
+   "to": 11,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0
+  },
+  {
+   "from": 5,
+   "to": 10,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 8.0
+  },
+  {
+   "from": 8,
+   "to": 3,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 8.0
+  }
+ ],
+ "rings": {
+  "count": 2,
+  "boundaries": [
+   30
+  ],
+  "aspect": 2,
+  "shape": "ellipse"
+ },
+ "lastStand": {
+  "methods": [
+   "inward"
+  ],
+  "orders": {
+   "inward": [
+    1,
+    0
+   ]
+  }
+ },
+ "seats": {
+  "1v1": [
+   {
+    "seat": "A",
+    "node": 11,
+    "team": 0
+   },
+   {
+    "seat": "B",
+    "node": 2,
+    "team": 1
+   }
+  ]
+ },
+ "note": "A Crossing piece in the middle stacks two diagonal lanes (half-turn symmetry). The ground lane runs through two rotors: open in r1, and in r2 they swing to the bypass platforms. The over lane is held by two retract relays that drop its ramps. Bypass triangles round the top and bottom.",
+ "geometricSymmetry": true,
+ "labVariant": {
+  "junctions": true
+ },
+ "experimental": true,
+ "ruleWaivers": {
+  "S03": "half-turn symmetry: the front door (camera side) is the same for both seats, so the sim walk from each home differs by a few seconds - the same as the live point-symmetric pool maps N-11 / N-14 / N-20 / N-22 / N-24 / N-28 (first measured 2026-10-28, junction fairness walk); pending Daniele",
+  "S04": "half-turn symmetry: the front door (camera side) is the same for both seats, so the sim walk from each home differs by a few seconds - the same as the live point-symmetric pool maps N-11 / N-14 / N-20 / N-22 / N-24 / N-28 (first measured 2026-10-28, junction fairness walk); pending Daniele",
+  "N13": "rotor -> switch (rulebook pass 2026-10-28): the two states join decks of different tiers / spacing, which N13 forbids for a rigid rotor; the connections per state are the original's",
+  "N03": "the switch hub IS the crossing by design (every state keeps 2+ decks, so the game's _islands counts its decks as fixed and never strands a side); N03 reads 'relays only add shortcuts' - Daniele's call on hub crossings",
+  "N16": "each over-lane relay drops its own ramp onto the Crossing - the overpass idea; pending Daniele"
+ },
+ "tags": {
+  "size": "S",
+  "family": "choke",
+  "finale": "inward"
+ },
+ "layout": {
+  "K": 1.0,
+  "nodes": {
+   "0": [
+    -0.09,
+    -27.02
+   ],
+   "1": [
+    26.3,
+    -26.3
+   ],
+   "2": [
+    42.93,
+    -16.7
+   ],
+   "3": [
+    -15.27,
+    -15.27
+   ],
+   "4": [
+    12.73,
+    -12.73
+   ],
+   "5": [
+    29.36,
+    -3.13
+   ],
+   "6": [
+    0.0,
+    0.0
+   ],
+   "7": [
+    0.0,
+    0.0
+   ],
+   "8": [
+    -29.36,
+    3.13
+   ],
+   "9": [
+    -12.73,
+    12.73
+   ],
+   "10": [
+    15.27,
+    15.27
+   ],
+   "11": [
+    -42.93,
+    16.7
+   ],
+   "12": [
+    -26.3,
+    26.3
+   ],
+   "13": [
+    0.09,
+    27.02
+   ]
+  },
+  "plazas": {},
+  "edges": [
+   {
+    "A": [
+     1.6971,
+     -1.6971
+    ],
+    "B": [
+     8.4874,
+     -8.4874
+    ],
+    "L": 9.6029,
+    "p0": 0.0,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -4.2426,
+     -4.2426
+    ],
+    "B": [
+     -11.0274,
+     -11.0274
+    ],
+    "L": 9.5952,
+    "p0": 0.0,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     8.7233,
+     -17.1961
+    ],
+    "B": [
+     3.9167,
+     -22.5539
+    ],
+    "L": 7.1979,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -10.5253,
+     -18.9426
+    ],
+    "B": [
+     -4.8347,
+     -23.3474
+    ],
+    "L": 7.1962,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     16.9726,
+     -16.9726
+    ],
+    "B": [
+     22.0574,
+     -22.0574
+    ],
+    "L": 7.191,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     17.9263,
+     -9.7303
+    ],
+    "B": [
+     24.1637,
+     -6.1297
+    ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     31.4963,
+     -23.3003
+    ],
+    "B": [
+     37.7337,
+     -19.6997
+    ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     33.6026,
+     -7.3726
+    ],
+    "B": [
+     38.6874,
+     -12.4574
+    ],
+    "L": 7.191,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -1.6971,
+     1.6971
+    ],
+    "B": [
+     -8.4874,
+     8.4874
+    ],
+    "L": 9.6029,
+    "p0": 0.0,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     4.2426,
+     4.2426
+    ],
+    "B": [
+     11.0274,
+     11.0274
+    ],
+    "L": 9.5952,
+    "p0": 0.0,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -8.7233,
+     17.1961
+    ],
+    "B": [
+     -3.9167,
+     22.5539
+    ],
+    "L": 7.1979,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     10.5253,
+     18.9426
+    ],
+    "B": [
+     4.8347,
+     23.3474
+    ],
+    "L": 7.1962,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -16.9726,
+     16.9726
+    ],
+    "B": [
+     -22.0574,
+     22.0574
+    ],
+    "L": 7.191,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -17.9263,
+     9.7303
+    ],
+    "B": [
+     -24.1637,
+     6.1297
+    ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -31.4963,
+     23.3003
+    ],
+    "B": [
+     -37.7337,
+     19.6997
+    ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -33.6026,
+     7.3726
+    ],
+    "B": [
+     -38.6874,
+     12.4574
+    ],
+    "L": 7.191,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     25.7121,
+     1.6337
+    ],
+    "B": [
+     18.9179,
+     10.5063
+    ],
+    "L": 11.1752,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -25.7121,
+     -1.6337
+    ],
+    "B": [
+     -18.9179,
+     -10.5063
+    ],
+    "L": 11.1752,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   }
+  ],
+  "relays": {},
+  "glb": "",
+  "verify": {
+   "clashes": 0,
+   "over_platform": 0,
+   "short": 0,
+   "ledge_hits": 0,
+   "tower_on_socket": [],
+   "docks": 0,
+   "off_length": [],
+   "junctions": 2
+  }
+ }
+}

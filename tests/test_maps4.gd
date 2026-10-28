@@ -83,12 +83,15 @@ func _layout(m: Dictionary, path: String) -> void:
 					"%s: dock %d runs straight from the plaza to the node's rim" % [code, k])
 		else:
 			check(float(g["L"]) - float(g["p0"]) - float(g["p1"]) >= 0.0, "%s: deck %d leaves room for its piers" % [code, k])
-			if float(g["h"]) == 0.0:                   # maps 4.1: a ground deck keeps its tier's honest length (Alpha 18:
-				var honest: float = Rules.S * {"S": 1, "M": 2, "L": 3}[m["edges"][k]["tier"]]   # maps 4.0 ran 3.6x long)
+			var ek: Dictionary = m["edges"][k]
+			if str(ek.get("shape", "")) == "sbend":   # EXP flex S-bridge (maps E-*): walked at its S length, baked straight
+				print("WARN  %s: deck %d is a flex S-bridge (%.1f m of S, %.1f m straight)" % [code, k, float(ek.get("deckMetres", 0.0)), float(g["L"]) - float(g["p0"]) - float(g["p1"])])
+			elif float(g["h"]) == 0.0:                 # maps 4.1: a ground deck keeps its tier's honest length (Alpha 18:
+				var honest: float = Rules.S * (float(ek["modules"]) if ek.get("modules") != null else float({"S": 1, "M": 2, "L": 3}[ek["tier"]]))   # maps 4.0 ran 3.6x long); EXP: `modules`
 				var off := absf(float(g["L"]) - float(g["p0"]) - float(g["p1"]) - honest)
-				check(debug or off <= 2.5, "%s: deck %d is its tier's honest %.0f m (off by %.1f m)" % [code, k, honest, off])
+				check(debug or off <= 2.5, "%s: deck %d is its tier's honest %.1f m (off by %.1f m)" % [code, k, honest, off])
 				if off > 1.5:
-					print("WARN  %s: deck %d is %.1f m off its honest %.0f m (pack drawing)" % [code, k, off, honest])
+					print("WARN  %s: deck %d is %.1f m off its honest %.1f m (pack drawing)" % [code, k, off, honest])
 		var lean := maxf(absf(float(g["lean0"])), absf(float(g["lean1"])))
 		check(lean <= 100.0, "%s: deck %d piers within 100 degrees (the kit clamps to 80)" % [code, k])
 		if lean > 82.5:
@@ -98,14 +101,23 @@ func _layout(m: Dictionary, path: String) -> void:
 	# deck against deck at full width, same height only
 	var clashes := 0
 	var junction := {}                                # JUNCTION: deck junctions and curves (maps 5.0) - not platforms
+	var twin := {}                                    # EXP Crossing: two lane nodes at one point are one piece
 	for nd in m["nodes"]:
 		if str(nd.get("junction", "") if nd.get("junction") != null else "") != "":
 			junction[int(nd["id"])] = true
+			for od in m["nodes"]:
+				if int(od["id"]) != int(nd["id"]) and str(od.get("junction", "") if od.get("junction") != null else "") == str(nd["junction"]) \
+						and absf(float(od["x"]) - float(nd["x"])) < 0.05 and absf(float(od["y"]) - float(nd["y"])) < 0.05:
+					twin[int(nd["id"])] = int(od["id"])
 	for i in range(decks.size()):
 		var di: Dictionary = decks[i]
 		for j in range(i + 1, decks.size()):
 			var dj: Dictionary = decks[j]
-			var shared := [int(di["e"]["from"]), int(di["e"]["to"])].filter(func(x): return x in [int(dj["e"]["from"]), int(dj["e"]["to"])])
+			var ends_i := [int(di["e"]["from"]), int(di["e"]["to"])]
+			for x in ends_i.duplicate():
+				if twin.has(x):
+					ends_i.append(twin[x])
+			var shared := ends_i.filter(func(x): return x in [int(dj["e"]["from"]), int(dj["e"]["to"])])
 			if shared.any(func(x): return junction.has(x)):
 				continue                              # JUNCTION: decks meeting at a piece's ports (the piece's own plate)
 			var n := maxi(2, int(di["L"] / STEP))
