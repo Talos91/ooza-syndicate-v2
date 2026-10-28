@@ -206,8 +206,13 @@ func test_progress() -> void:
 	TutorialDirector.mark_offered()
 	TutorialDirector.reload_progress()
 	check(TutorialDirector.offered and TutorialDirector.saved, "progress: `offered` round-trips")
-	var pay: int = Rules.PROGRESSION["tutorial_lesson"]
-	check(TutorialDirector.scrap_for(1) == pay and TutorialDirector.scrap_for(5) == pay, "scrap: scrap_for() reads Rules.PROGRESSION (%d)" % pay)
+	var pay: int = TutorialDirector.scrap_for(1)
+	check(pay == 460 and TutorialDirector.scrap_for(2) == 200 and TutorialDirector.scrap_for(5) == 200,
+			"scrap: the quick start pays 460, each advanced tutorial 200 (Rules.PROGRESSION tutorial_scrap, Daniele 2026-10-27)")
+	var all_five := 0
+	for i in range(1, TutorialDirector.LESSON_COUNT + 1):
+		all_five += TutorialDirector.scrap_for(i)
+	check(all_five == 1260, "scrap: all five tutorials pay 1 260 SCRAP = a 3rd skill (%d)" % all_five)
 	TutorialDirector.mark_complete(1, true)
 	check(TutorialDirector.last_scrap == pay and Progression.balance() == pay and TutorialDirector.relay_kill_done, "scrap: a first completion pays once (%d)" % pay)
 	TutorialDirector.mark_complete(1)
@@ -221,12 +226,13 @@ func test_progress() -> void:
 			"vat: one tutorial does not unlock the Graduate vat")
 	for n in [2, 3, 4]:
 		TutorialDirector.mark_complete(n)
-	check(not TutorialDirector.all_done() and not Progression.owns("vat:graduate") and Progression.balance() == 4 * pay,
+	var four := pay + TutorialDirector.scrap_for(2) + TutorialDirector.scrap_for(3) + TutorialDirector.scrap_for(4)
+	check(not TutorialDirector.all_done() and not Progression.owns("vat:graduate") and Progression.balance() == four,
 			"vat: four of five - still locked (%d SCRAP)" % Progression.balance())
 	TutorialDirector.mark_complete(5)
 	TutorialDirector.reload_progress()
-	check(TutorialDirector.all_done() and Progression.owns("vat:graduate") and ArmyPresets.is_unlocked("graduate") and Progression.balance() == 5 * pay,
-			"vat: all five done -> the Graduate vat (5 x %d SCRAP)" % pay)
+	check(TutorialDirector.all_done() and Progression.owns("vat:graduate") and ArmyPresets.is_unlocked("graduate") and Progression.balance() == 1260,
+			"vat: all five done -> the Graduate vat (460 + 4 x 200 = %d SCRAP)" % Progression.balance())
 	# old numeric keys are ignored; a v1 file does not complete anything
 	_wipe()
 	var old := ConfigFile.new()

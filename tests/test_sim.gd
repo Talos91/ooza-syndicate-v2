@@ -107,6 +107,7 @@ func _init() -> void:
 	check(sim10.nodes[1]["structure"] == "laser" and sim10.nodes[1]["attachment"] == "cannon", "the laser finishes building (legacy mirror: cannon)")
 	check(sim10.can_upgrade(1, "A") != "" and not sim10.upgrade_structure(1), "a laser has a single tier")
 	# swap: laser -> forge needs the cooldown, pays the forge cost
+	check(Rules.FORGE_COST == 200 and sim10.build_cost(sim10.nodes[1], "forge") == Rules.FORGE_COST, "a forge costs 40 shown (Daniele 2026-10-27; was 20)")
 	sim10.nodes[1]["units"] = 300.0
 	sim10.nodes[1]["swap_cd"] = 5.0
 	check(not sim10.build(1, "A", "forge") and sim10.can_build(1, "A", "forge").begins_with("Swap ready"), "a structure swap waits for the swap cooldown")
@@ -1591,6 +1592,7 @@ func _rules_0_18_10() -> void:
 	var g0: float = s.nodes[0]["units"]               # ...and the neutral centre on the way
 	s.nodes[2]["owner"] = "B"
 	s.nodes[2]["tier"] = 2
+	s.nodes[2]["structure"] = "machinegoon"           # (no vat: its 16 shown stay under MONSTER_TAKE_MAX over the 24 s walk)
 	s.nodes[2]["units"] = 80.0
 	s.nodes[4]["units"] = 200.0
 	var hk := s.send(4, 1, 1.0)                       # B's line walks 4-2-0-1: head-on into the monster
@@ -1653,6 +1655,27 @@ func _rules_0_18_10() -> void:
 	s.launch_monster(3, "A", 1)
 	run_until(s, func(): return s.monsters.is_empty() or s.monsters[0]["state"] != "walking", 30.0)
 	check(s.nodes[1]["owner"] == "A" and s.nodes[1]["tier"] == 2 and s.nodes[1]["units"] >= 40.0, "a friendly end node loses a tier and keeps its troops")
+	# MONSTER_TAKE_MAX (Daniele 2026-10-27): it kicks at most 40 shown defenders at the end node; more and the node holds
+	check(Rules.MONSTER_TAKE_MAX == 200.0, "a monster kicks at most 40 shown defenders at its end node")
+	for case in [[200.0, true], [300.0, false]]:        # exactly 40 shown: taken empty; 60 shown: 40 kicked, 20 hold
+		s = _tp()
+		s.nodes[3]["structure"] = "monster_hub"
+		s.nodes[3]["units"] = 300.0
+		s.nodes[1]["owner"] = "B"
+		s.nodes[1]["units"] = case[0]
+		s.nodes[0]["owner"] = "B"
+		s.launch_monster(3, "A", 1)
+		run_until(s, func(): return s.monsters.is_empty() or s.monsters[0]["state"] != "walking", 30.0)
+		var tk: Array = s.events.filter(func(e): return e["type"] == "monster_take" and e["node"] == 1)
+		var kick_b: float = s.events.filter(func(e): return e["type"] == "monster_kick" and e["seat_hit"] == "B").reduce(func(a, e): return a + float(e["units"]), 0.0)
+		if case[1]:
+			check(s.nodes[1]["owner"] == "A" and s.nodes[1]["units"] == 0.0 and not tk.is_empty() and not tk[0]["held"],
+					"monster vs 40 shown defenders: all kicked, the node is taken")
+		else:
+			check(s.nodes[1]["owner"] == "B" and absf(s.nodes[1]["units"] - 100.0) < 0.5 and absf(kick_b - 200.0) < 0.5 and not tk.is_empty() and tk[0]["held"],
+					"monster vs 60 shown defenders: 40 kicked, 20 hold the node for B (%s, %.0f left)" % [s.nodes[1]["owner"], s.nodes[1]["units"]])
+			check(s.fx_events.any(func(e): return e["type"] == "monster_take" and e.get("held", false) and int(e.get("left", 0)) == 20),
+					"the held take tells the HUD how many are left (20 shown)")
 	# a fall kills it: its deck demolished under it
 	s = _tp()
 	s.nodes[3]["structure"] = "monster_hub"

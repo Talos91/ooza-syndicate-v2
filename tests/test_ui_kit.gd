@@ -37,6 +37,13 @@ func _init() -> void:
 		check(UiKit.TAGS.has(f), "HOME tag of " + f)
 		check(UiKit.hero_art(f) != null, "hero art of " + f)
 	check(UiKit.accent("nope") == UiKit.CYAN, "an unknown faction's accent is the neon cyan")
+	# ARMIES trait = the real stat leans (Daniele 2026-10-27), written from Rules.FACTION_STATS
+	for f in UiKit.ORDER:
+		var tr: Array = Rules.faction_trait(f)
+		print("      trait %s: %s - %s" % [f, tr[0], tr[1]])
+		check(str(tr[0]) != "" and str(tr[1]).ends_with(".") and not str(tr[1]).contains("No stat"), "ARMIES trait of " + f + " names its stat leans")
+	check(Rules.faction_trait("vex")[1].contains("15 % faster") and Rules.faction_trait("vex")[1].contains("11 % more damage"),
+			"VEX's trait reads its speed 1.15 / garrison 0.90 (%s)" % Rules.faction_trait("vex")[1])
 	var card := FrameCard.new()
 	var want := {"next": "CONTINUE  →", "open": "PLAY", "won": "REPLAY", "locked": "LOCKED", "coming": "COMING LATER", "dev": ""}
 	for s in want:

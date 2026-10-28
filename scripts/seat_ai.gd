@@ -1580,8 +1580,9 @@ func _monsters(sim: Sim) -> void:
 					own += 1.0 * Rules.SCALE
 			if own > 0.5:
 				continue                                  # never through its own (or an ally's) lines
-			var v := kick + sim.garrison_total(t) * (1.0 if t["owner"] != "" else 0.6)
-			if t["owner"] != "" and _incoming(sim, id, false) + _nearby_spare(sim, id) > 4.0 * Rules.SCALE:
+			var g: float = sim.garrison_total(t)
+			var v := kick + minf(g, Rules.MONSTER_TAKE_MAX) * (1.0 if t["owner"] != "" else 0.6)   # it kicks at most MONSTER_TAKE_MAX there
+			if t["owner"] != "" and g <= Rules.MONSTER_TAKE_MAX and _incoming(sim, id, false) + _nearby_spare(sim, id) > 4.0 * Rules.SCALE:
 				v += 8.0 * Rules.SCALE + t["tier"] * 4.0 * Rules.SCALE   # it can hold what it takes
 			if v > best_v:
 				best_v = v

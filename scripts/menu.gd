@@ -1030,7 +1030,7 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 	var tx := pos.x + pad + hs + 18.0
 	var tw := pos.x + dims.x - pad - tx - es * 0.6
 	var with_stats := true
-	var ft: Array = Rules.FACTION_TRAITS[faction]
+	var ft: Array = Rules.faction_trait(faction)
 	# [text, size, colour, head, spacing] - measured as they draw (Daniele 2026-09-28: on his screen PERSISTENT TRAIT ·
 	# COMING SOON wrapped where the old width estimate said one line, and COMING SOON sat on the trait's name). Where the
 	# card is short (phones) it makes room in steps: the tagline goes, then the spacer, then the kicker shortens.
@@ -1054,9 +1054,7 @@ func _faction_card(pos: Vector2, dims: Vector2) -> void:
 			lines.append([Rules.FACTION_TAGLINES[faction], 15, UiKit.MUTED, false, 0])
 		if at[1]:
 			lines.append(["", 10, UiKit.INK, false, 0])
-		var kick := "%s  ·  COMING SOON" % at[2]
-		if UiKit.text_w(self, kick, 12, true) + kick.length() * 2.0 > tw:
-			kick = kick.replace("  ·  ", "\n")                     # too wide: one part per line
+		var kick: String = at[2]                           # (the trait is the live stat leans: no COMING SOON)
 		lines.append([kick, 12, acc, true, 2])
 		lines.append([str(ft[0]).to_upper(), 16, UiKit.INK, true, 0])
 		lines.append([str(ft[1]), 14, UiKit.MUTED, false, 0])
@@ -2638,7 +2636,7 @@ func _army_identity(pos: Vector2, dims: Vector2) -> void:
 	## first, then the smaller lines, when a phone's panel is too short).
 	var acc := UiKit.accent(_army)
 	UiKit.panel(self, pos, dims, _army)
-	var ftrait: Array = Rules.FACTION_TRAITS[_army]
+	var ftrait: Array = Rules.faction_trait(_army)
 	var stats_h := UiKit.line_h(self, 20, true) + UiKit.line_h(self, 12) + 30.0
 	var hs0 := minf(dims.y - 32.0, dims.x * 0.44)
 	var tw := dims.x - 20.0 - hs0 - 16.0 - 18.0
@@ -2650,7 +2648,6 @@ func _army_identity(pos: Vector2, dims: Vector2) -> void:
 		["PERSISTENT TRAIT", 12, acc, true, 3, 16.0, false, 0],
 		[str(ftrait[0]).to_upper(), 16, UiKit.INK, true, 0, 2.0, false, 0],
 		[str(ftrait[1]), 14, UiKit.MUTED, false, 0, 0.0, true, 0],
-		["COMING SOON", 11, UiKit.DIM, true, 2, 6.0, false, 1],
 	]
 	var heights := []
 	for it in items:

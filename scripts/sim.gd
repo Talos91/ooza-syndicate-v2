@@ -3775,7 +3775,8 @@ func _monster_gone(m: Dictionary) -> void:
 
 func _monster_end(m: Dictionary) -> void:
 	## The end node: an enemy's or a neutral one is taken empty - its garrison (and any stored allied troops)
-	## kicked off, conquest's tier rule applied (a T4 keeps its tier); a friendly one (own or an ally's) loses
+	## kicked off, conquest's tier rule applied (a T4 keeps its tier) - unless it holds more than Rules.MONSTER_TAKE_MAX:
+	## then that many are kicked (each group its share) and the node keeps its owner ("held"); a friendly one (own or an ally's) loses
 	## a tier instead (min 1, a T4 excepted) and keeps its troops. Then the monster is gone.
 	var n: Dictionary = nodes[m["target"]]
 	if collapsed.get(n["id"], false):
@@ -3783,6 +3784,7 @@ func _monster_end(m: Dictionary) -> void:
 		return
 	var seat: String = m["seat"]
 	var friendly: bool = n["owner"] != "" and allied(n["owner"], seat)
+	var held := false                                  # more than Rules.MONSTER_TAKE_MAX defenders: kicked, not taken
 	if friendly:
 		if n["structure"] in ["vat", "machinegoon"] and n["tier"] < 4:
 			n["tier"] = maxi(1, n["tier"] - 1)
@@ -3793,6 +3795,19 @@ func _monster_end(m: Dictionary) -> void:
 			kicked[k] = kicked.get(k, 0.0) + float(n["allies"][k])
 		for k in n["siege"]:
 			kicked[k] = kicked.get(k, 0.0) + float(n["siege"][k])
+		var total := 0.0
+		for k in kicked:
+			total += maxf(float(kicked[k]), 0.0)
+		held = total > Rules.MONSTER_TAKE_MAX + 0.0001     # Rules.MONSTER_TAKE_MAX: more defenders than it can kick - the node holds
+		if held:
+			var f := Rules.MONSTER_TAKE_MAX / total        # every defender group loses its share of the 40
+			n["units"] = float(n["units"]) * (1.0 - f)
+			for k in n["allies"]:
+				n["allies"][k] = float(n["allies"][k]) * (1.0 - f)
+			for k in n["siege"]:
+				n["siege"][k] = float(n["siege"][k]) * (1.0 - f)
+			for k in kicked:
+				kicked[k] = float(kicked[k]) * f
 		for k in kicked:
 			if kicked[k] <= 0.0001:
 				continue
@@ -3801,11 +3816,13 @@ func _monster_end(m: Dictionary) -> void:
 				events.append({"t": time, "type": "monster_kick", "id": m["id"], "seat": seat, "seat_hit": k, "units": kicked[k]})
 			fx_events.append({"type": "monster_kick", "id": m["id"], "seat": seat, "seat_hit": k, "units": kicked[k],
 					"shown": Rules.shown(kicked[k]), "pos": n["pos"]})
-		_capture(n, seat, 0.0)
-		events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old, "monster": true})
-		captured.emit(n["id"], seat, old)
-	fx_events.append({"type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly})
-	events.append({"t": time, "type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly})
+		if not held:
+			_capture(n, seat, 0.0)
+			events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old, "monster": true})
+			captured.emit(n["id"], seat, old)
+	fx_events.append({"type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly, "held": held,
+			"left": Rules.shown(garrison_total(n)) if held else 0})
+	events.append({"t": time, "type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly, "held": held})
 	m["state"] = "done"
 	m["t"] = 0.0
 	_monster_gone(m)
