@@ -1078,8 +1078,8 @@ func _proto_fire(sim: Sim, n: Dictionary) -> bool:
 				if not pr.is_empty() and h["s"] <= pr[1]:
 					return true
 			return false
-		"tilt":                                       # an enemy line on the platform, the next exit away from its nodes
-			var ex := sim.tilt_next_exit(id)
+		"tilt":                                       # an enemy line on the platform (round 2: or stepping onto it
+			var ex := sim.tilt_next_exit(id)          # before the tip), the next exit away from its nodes
 			if ex < 0:
 				return false
 			var ex_owner: String = sim.nodes[ex]["owner"]
@@ -1087,9 +1087,10 @@ func _proto_fire(sim: Sim, n: Dictionary) -> bool:
 				return false
 			var enemy := 0.0
 			var own := 0.0
+			var ahead: float = Rules.move_speed() * (Rules.RELAY_WARNING + 1.0)   # (the hold catches what arrives)
 			for h in sim.hordes:
 				var pr: Array = sim._platform_range(h, id)
-				if pr.is_empty() or h["s"] < pr[0] or h["s"] > pr[1] or h.get("decoy", false):
+				if pr.is_empty() or h["s"] < float(pr[0]) - ahead or h["s"] > pr[1] or h.get("decoy", false):
 					continue
 				if _hostile(sim, h["owner"]):
 					enemy += h["units"]

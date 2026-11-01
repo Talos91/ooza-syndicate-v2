@@ -217,12 +217,25 @@ static func relay_cooldown(kind: String) -> float:
 #             `move` s, the closing decks drop what is on them, lines on the platform ride (`rise` m per level, view)
 #   tilt      the node tips toward its next exit (`move` s): every line on the platform (not the garrison) slides out that
 #             deck as a new order to that neighbour, enemy lines too
+# ROUND 2 (Daniele's verdict 2026-11-01; RELAYS-3.0-PROTOTYPES.md "Round 2") - replaces the readings above where they differ:
+#   ferry     MOVING BRIDGE, nobody fires it: the gap's deck keeps sliding sideways out of line and back on a fixed
+#             cycle - in line (walkable) `open` s, `slide` s out, `away` s out of line, `slide` s back, then the same to
+#             the other side. Routes always count it as a way across; whatever is on it when it starts to slide out
+#             falls, and a line reaching the lip while it is out pours into the void (no queue). `open` is worked out per
+#             gap so that `survive` of a long stream makes it across: open - crossing = survive x the half cycle
+#   conveyor  the WHOLE line is pushed while any of its bodies stands on a belt (more of it with the flow: x`with`,
+#             more against: x`against`); a line still leaving its vat is fed out of the door that much faster
+#   launcher  the aim steps to the next of its targets every `cycle` s on its own; the owner's fire LOCKS the current
+#             target and arms the pad (the throw rules are unchanged)
+#   lift      rules unchanged; round 2 is its look (`rise` 2.6 view m, the closed level dimmed and sunk, an UP / DOWN badge)
+#   tilt      the platform stays tipped `hold` s: every line on it or walking onto it meanwhile (any owner, arrivals too)
+#             slides out down the lit exit as a new order to that neighbour; the garrison stays
 const RELAYS_PROTO := {
-	"ferry": {"cooldown": 5.0, "secs_per_8m": 1.4, "hull": 0.5},
-	"conveyor": {"cooldown": 5.0, "with": 1.5, "against": 0.5, "move": 1.4},
-	"launcher": {"cooldown": 30.0, "armed": 8.0, "flight": 2.0, "land": 1.5, "reach": 3},
-	"lift": {"cooldown": 10.0, "move": 1.4, "rise": 1.5},   # rise: the view's metres per level (placeholder)
-	"tilt": {"cooldown": 10.0, "move": 1.4},
+	"ferry": {"cooldown": 0.0, "survive": 0.5, "slide": 1.0, "away": 0.6, "side": 7.5},   # side: the view's metres out of line
+	"conveyor": {"cooldown": 5.0, "with": 2.0, "against": 0.5, "move": 1.4},
+	"launcher": {"cooldown": 30.0, "armed": 8.0, "flight": 2.0, "land": 1.5, "reach": 3, "cycle": 10.0},
+	"lift": {"cooldown": 10.0, "move": 1.4, "rise": 2.6},   # rise: the view's metres per level (🎨's model: 2.6)
+	"tilt": {"cooldown": 10.0, "move": 1.4, "hold": 6.0},
 }
 
 
@@ -267,10 +280,10 @@ static func is_proto(kind: String) -> bool:
 
 
 static func proto_tag(kind: String, state: String, phase: String) -> String:
-	## The node tag's state text for a prototype relay (HUD): AT A / AT B, A>B / B>A, UP / DOWN, EXIT n, PAD / ARMED.
+	## The node tag's state text for a prototype relay (HUD): OPEN n / SHUT n, A>B / B>A, UP / DOWN, EXIT n, AIM / LOCK / ARMED.
 	match kind:
 		"ferry":
-			return "AT " + state.substr(1)
+			return state                                    # round 2: OPEN n / SHUT n (Sim.proto_state_text)
 		"conveyor":
 			return state.substr(1, 1) + ">" + state.substr(2, 1)
 		"lift":
@@ -278,7 +291,7 @@ static func proto_tag(kind: String, state: String, phase: String) -> String:
 		"tilt":
 			return "EXIT %d" % (int(state.substr(1)) + 1)
 		"launcher":
-			return "ARMED" if phase == "moving" else "PAD"
+			return "ARMED" if phase == "moving" else ("LOCK" if phase == "warning" else "AIM")
 	return state
 
 const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves (its troops fell when it started)

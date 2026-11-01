@@ -981,8 +981,10 @@ func _fire_relay_by(n: Dictionary, seat: String) -> bool:
 	## Starts a relay's warning on behalf of `seat` (its owner, or a Relay Hack / Rewire caster).
 	if n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "" or is_relay_locked(n["id"]):
 		return false
-	if relay_states(n).is_empty():
+	if relay_states(n).is_empty() or n["relay"] == "ferry":   # RELAYS 3.0 round 2: the moving bridge runs on its own
 		return false
+	if n["relay"] == "launcher":                      # RELAYS 3.0 round 2: the fire LOCKS the target it aims at now
+		n["proto"]["target"] = launcher_aim(n["id"])
 	n["relay_pending"] = relay_next_index(n)
 	n["relay_phase"] = "warning"
 	n["relay_t"] = Rules.RELAY_WARNING
@@ -1006,12 +1008,14 @@ func _step_relays(dt: float) -> void:
 			"moving":
 				n["relay_t"] -= dt
 				n["relay_anim"]["progress"] = clampf(1.0 - n["relay_t"] / float(n["relay_move"]), 0.0, 1.0)   # the view's deck motion
-				if n["relay"] == "ferry":
-					_ferry_carry(n)
-				elif n["relay"] == "launcher":
+				if n["relay"] == "launcher":
 					_launcher_catch(n, dt)
+				elif n["relay"] == "tilt":
+					_tilt_slide(n, int(n.get("tilt_exit", -1)))   # round 2: tipped for the hold, everyone who steps on slides
 				if n["relay_t"] <= 0.0:
 					_relay_apply(n)
+		if n["relay"] == "launcher" and n["relay_phase"] == "":
+			_launcher_track(n)                       # round 2: the aim steps on by itself
 	_step_flights(dt)
 
 
@@ -1122,9 +1126,7 @@ func _relay_apply(n: Dictionary) -> void:
 	## Motion over: the new state's decks become walkable (they were closed while moving) and the
 	## cooldown starts. The troops' fate was settled when the motion began (_relay_drop).
 	n["moving_edges"] = []
-	if n["relay"] == "ferry":
-		_ferry_arrive(n)
-	elif n["relay"] == "launcher":
+	if n["relay"] == "launcher":
 		_launcher_release(n)
 	n["relay_phase"] = ""
 	n["relay_cd"] = Rules.relay_cooldown(str(n["relay"])) + maxf(n["relay_cd"], 0.0)   # (0 unless Relay Hack jammed it meanwhile)
@@ -1723,7 +1725,7 @@ func step(dt: float) -> void:
 	_step_breaks(dt)
 	_check_missing_decks()
 	for h in hordes:
-		if h.has("ferry_ride") or h.has("launch"):       # RELAYS 3.0: carried by a ferry / parked on an armed launcher
+		if h.has("launch"):                           # RELAYS 3.0: parked on an armed launcher
 			continue
 		if h["state"] == "move" and not h.get("blocked", false):
 			var here := sample(h, h["s"])
@@ -1737,12 +1739,12 @@ func step(dt: float) -> void:
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
 				ds = minf(ds, Rules.exit_rate() * Rules.metres_per_unit() * maxf(boost, door_mult(h)) * dt)
 			var s_was: float = h["s"]
-			var cap := ferry_cap(h) if not _ferry_edges.is_empty() else INF   # RELAYS 3.0: no walking past a ferry's
-			h["s"] += ds                                                       # hull / onto an empty pier
-			h["s"] = minf(h["s"], maxf(cap, s_was))
+			h["s"] += ds
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
 				h["state"] = "absorb"
+			if not _ferry_edges.is_empty():
+				_ferry_count(h, s_was)                    # RELAYS 3.0 round 2: bodies past the moving bridge's far end
 	_step_armed()                                     # POWERS: an armed Core Meltdown goes off on arrival
 	_step_monsters(dt)
 	_detect_contacts()
@@ -1768,8 +1770,11 @@ func step(dt: float) -> void:
 			var tail_speed: float = Rules.move_speed() * (Rules.platform_mult() if tail[2] else 1.0)
 			var rate: float = tail_speed * h["units"] / maxf(len, 0.5) * door_mult(h)   # Surge: pours in twice as fast
 			var x := minf(h["units"], maxf(rate, Rules.POUR_MIN_RATE) * dt)
+			var past := _ferry_past(h) if not _ferry_edges.is_empty() else {}   # RELAYS 3.0 round 2 (the tally)
 			h["units"] -= x
 			_arrive(nodes[h["target"]], h, x)
+			for fe in past:                           # the line shortens from its tail: bodies come off the bridge
+				_ferry_note(h, fe, "ok", float(_ferry_past(h).get(fe, 0.0)) - (float(past[fe]) - x))
 			if h["units"] <= 0.0 and not h["streaming"]:
 				dead.append(h)
 	for h in _node_fights(dt):
@@ -1816,6 +1821,8 @@ func step(dt: float) -> void:
 	_check_handovers()
 	_step_forges()
 	_step_charge(dt)
+	if not _ferry_tally.is_empty():
+		_ferry_tally_step()                           # RELAYS 3.0 round 2: the FERRY n / m CROSSED readout
 	_check_end()
 
 
@@ -1830,8 +1837,11 @@ func _check_missing_decks() -> void:
 	## (audit B3: the step's closed decks are found once, and a step with none only rolls the pour flags.)
 	var closed := {}
 	for ei in range(edges.size()):
-		if not is_edge_open(ei) and not _ferry_holds(ei):   # a deck in motion is not (0.18.7): going or not yet there
-			closed[ei] = true                                 # (RELAYS 3.0: a travelling ferry carries, nobody falls)
+		if not is_edge_open(ei):                      # a deck in motion is not (0.18.7): going or not yet there
+			closed[ei] = true
+	for ei in _ferry_edges:                           # RELAYS 3.0 round 2: the moving bridge out of line is no floor
+		if ferry_out(int(_ferry_edges[ei])):
+			closed[ei] = true
 	if closed.is_empty() and breaking.is_empty():
 		for h in hordes:
 			h["pour_prev"] = h.get("pour", false)
@@ -1853,6 +1863,7 @@ func _check_missing_decks() -> void:
 			var ei: int = sp["edge"]
 			if not closed.has(ei) and not breaking.has(ei):
 				continue
+			var fell0: float = fall_losses.get(h["owner"], 0.0)   # (RELAYS 3.0 round 2: the ferry's tally of the fallen)
 			# the vat keeps sending: an order across a deck that has gone is still obeyed, every unit
 			# marches on and pours into the void (Daniele, 0.18.6: "they should go even if the bridge is
 			# no longer there hence... waterfall")
@@ -1867,6 +1878,9 @@ func _check_missing_decks() -> void:
 				if head < r0 or tail > r1:
 					continue
 				var head_on: bool = head >= r0 and head <= r1
+				if not head_on and tail >= r0 - Rules.LAST_STAND_WAVE_SEGMENT and _ferry_edges.has(ei):
+					_ferry_tail_cut(h, r0, r1)            # RELAYS 3.0 round 2: the order stands (no reroute)
+					continue
 				if not head_on and tail >= r0 - Rules.LAST_STAND_WAVE_SEGMENT:
 					_cut_range(h, r0, r1, true)           # only its tail was on the segment: those bodies fall
 					continue                              # (no lip to pour off: the head is past it; the tail's
@@ -1876,6 +1890,8 @@ func _check_missing_decks() -> void:
 					h["state"] = "move"
 					h["pour"] = true                      # (also when it did not move this step)
 					h["pour_lip"] = r0
+			if _ferry_edges.has(ei):
+				_ferry_note(h, ei, "fell", fall_losses.get(h["owner"], 0.0) - fell0)
 	for hid in _pour_ev.keys():                           # a pour that ended: the next one is a new event
 		var ph := _horde(hid)
 		if ph.is_empty() or not ph.get("pour", false):
@@ -4164,9 +4180,11 @@ func door_mult(h: Dictionary) -> float:
 	## target twice as fast while it lasts; 1.0 otherwise). Views scale the pour-out / pour-in by it.
 	if h.get("evac", false):                           # POWERS: an Evac line leaves "at once" (burst x the door rate)
 		return float(Rules.SKILLS["evac"]["burst"])
-	if _fx_horde.is_empty():
-		return 1.0
 	var m := 1.0
+	if not _conv_edges.is_empty():                     # RELAYS 3.0 round 2: a belt pulls a line out of its vat faster
+		m = maxf(m, conveyor_mult(h))
+	if _fx_horde.is_empty():
+		return m
 	for e in _fx_horde.get(h["id"], []):
 		if e["id"] == "surge":
 			m = maxf(m, float(e.get("door", 1.0)))
@@ -5428,20 +5446,24 @@ func _portal_end(e: Dictionary) -> void:
 # 01 Rules/RELAYS-3.0-PROTOTYPES.md (spec v1, 2026-10-27), map schema 01 Rules/relays-proto-schema.md, numbers
 # Rules.RELAYS_PROTO. Five relay-like kinds that exist only where a map uses them (the P test maps): the common relay
 # rules hold (owner fires, RELAY_WARNING with a ghost, the motion, the kind's cooldown); what the motion does is here.
-#   ferry     relay_index 0 = docked at deck end A (from), 1 = at B; "moving" = travelling (riders carried, gap closed)
+#   ferry     (round 2) a moving bridge on a clock (ferry_phase); never fired, relay_index stays 0
 #   conveyor  relay_index 0 = flow A->B, 1 = B->A; "moving" = the 1.4 s flip (no flow)
-#   launcher  relay_index stays 0; "moving" = ARMED (own lines entering the node are thrown at proto.target)
+#   launcher  relay_index stays 0; "moving" = ARMED (own lines entering the node are thrown at proto.target); round 2:
+#             the aim steps through proto.targets every RELAYS_PROTO.launcher.cycle s, a fire locks it into proto.target
 #   lift      relay_index = the platform's level; a switch whose decks are tagged by level (+ the riders rule)
-#   tilt      relay_index = the NEXT exit (proto.exits); the motion's start slides every line on it out that exit
+#   tilt      relay_index = the NEXT exit (proto.exits); round 2: "moving" = tipped for RELAYS_PROTO.tilt.hold s, every
+#             line on the platform meanwhile slides out that exit
 var _ferry_edges := {}               # ferry deck edge index -> its ferry node id
 var _conv_edges := {}                # conveyor deck edge index -> its conveyor node id
 var flights: Array = []              # launcher throws in the air: {seat, faction, units, left, from, to, t0, land, end}
+var _ferry_tally := {}               # horde id -> {node, edge, seat, ok, fell, shown} (the FERRY n / m CROSSED readout)
 
 
 func _setup_proto() -> void:
 	_ferry_edges = {}
 	_conv_edges = {}
 	flights = []
+	_ferry_tally = {}
 	for i in edge_controller:
 		match str(edges[i].get("proto", "")):
 			"ferry":
@@ -5459,7 +5481,8 @@ func _setup_proto() -> void:
 				push_warning("RELAYS 3.0: deck %d names relay %d (%s) but is tagged %s" % [i, n["id"], k, edges[i]["proto"]])
 		match k:
 			"ferry":
-				n["relay_index"] = 1 if str(p.get("dock", "A")) == "B" else 0
+				n["relay_index"] = 0                      # round 2: a clock, not a state (dock B starts half a cycle on)
+				p["start"] = 0.5 if str(p.get("dock", "A")) == "B" else 0.0
 				if mine.size() != 1:
 					push_warning("RELAYS 3.0: ferry %d drives %d decks (wants exactly 1)" % [n["id"], mine.size()])
 			"conveyor":
@@ -5479,6 +5502,9 @@ func _setup_proto() -> void:
 				if p["target"] < 0 or p["target"] >= nodes.size():
 					push_warning("RELAYS 3.0: launcher %d has no target" % n["id"])
 					p["target"] = -1
+				p["targets"] = _launcher_targets(n)
+				p["aim0"] = maxi(0, (p["targets"] as Array).find(p["target"]))
+				p["aim_t0"] = 0.0
 
 
 func _proto_states(n: Dictionary) -> Array:
@@ -5503,8 +5529,8 @@ func _proto_edge_open(ei: int) -> bool:
 		return true
 	var n: Dictionary = nodes[ctrl]
 	match str(edges[ei]["proto"]):
-		"ferry":                                          # a travelling ferry leaves a gap; docked it is a way across
-			return n["relay_phase"] != "moving"
+		"ferry":                                          # round 2: a fixed path - routes always count it (ferry_out drops)
+			return true
 		"lift":
 			if ei in n["moving_edges"]:
 				return false
@@ -5515,16 +5541,6 @@ func _proto_edge_open(ei: int) -> bool:
 				return true
 			return _edge_open_at(ei, n["relay_index"])
 	return true
-
-
-func _ferry_holds(ei: int) -> bool:
-	## A ferry deck closed only because the ferry is travelling: nobody on it falls (they ride), nobody walks off it.
-	if not _ferry_edges.has(ei) or demolished.has(ei):
-		return false
-	var e: Dictionary = edges[ei]
-	if collapsed.get(e["a"], false) or collapsed.get(e["b"], false):
-		return false
-	return nodes[_ferry_edges[ei]]["relay_phase"] == "moving"
 
 
 func _platform_range(h: Dictionary, id: int) -> Array:
@@ -5548,19 +5564,15 @@ func _proto_begin_move(n: Dictionary, old_index: int, new_index: int) -> void:
 	var k: String = n["relay"]
 	var cfg: Dictionary = Rules.RELAYS_PROTO[k]
 	match k:
-		"ferry":
-			var gap := 8.0
-			for i in controlled_edges(n["id"]):
-				gap = float(edges[i]["deck_m"]) if float(edges[i]["deck_m"]) > 0.0 else deck_length(i)
-			n["relay_move"] = float(cfg["secs_per_8m"]) * maxf(gap, 1.0) / 8.0
-			_ferry_depart(n, old_index)
 		"conveyor":
 			n["relay_move"] = float(cfg["move"])
 		"launcher":
 			n["relay_move"] = float(cfg["armed"])
 		"tilt":
-			n["relay_move"] = float(cfg["move"])
-			_tilt_slide(n, old_index)
+			n["relay_move"] = float(cfg["hold"])          # round 2: it stays tipped (the tip itself is cfg.move in the view)
+			var exits: Array = n["proto"].get("exits", [])
+			n["tilt_exit"] = int(exits[old_index % exits.size()]) if not exits.is_empty() else -1
+			_tilt_slide(n, int(n["tilt_exit"]))
 	n["relay_index"] = new_index
 	n["moving_edges"] = []
 	n["relay_anim"] = {"delta": 0.0, "closing": [], "opening": [], "pairs": {}, "progress": 0.0, "from": old_index, "to": new_index}
@@ -5570,90 +5582,160 @@ func _proto_begin_move(n: Dictionary, old_index: int, new_index: int) -> void:
 	fx_events.append({"type": "relay_tick", "node": n["id"]})
 
 
-# FERRY: the hull is RELAYS_PROTO.ferry.hull of the deck, at the docked end. A line reaching the docked end walks on board
-# and waits at the hull's front; one reaching the other end waits at the lip (no waterfall, open point 1). Fire: the part
-# of every line on board rides (a line only partly on board splits at the hull's back), the gap is closed while it
-# travels, and at the far pier the riders walk off and continue their order.
-func ferry_cap(h: Dictionary) -> float:
-	## The furthest arc length the horde's head may walk to now (INF: no ferry in the way).
-	for sp in h["spans"]:
-		var ei: int = sp["edge"]
-		if not _ferry_edges.has(ei):
-			continue
-		var s0: float = sp["s0"]
-		var s1: float = sp["s1"]
-		if h["s"] >= s1 - 0.001:
-			continue                                      # past this ferry
-		var n: Dictionary = nodes[_ferry_edges[ei]]
-		if n["relay_phase"] == "moving":
-			return s0 if h["s"] < s0 else float(h["s"])     # travelling: the pier lip; nobody walks on the gap
-		var at_entry: bool = (int(n["relay_index"]) == 0) == bool(sp["forward"])
-		if at_entry:
-			return s0 + (s1 - s0) * float(Rules.RELAYS_PROTO["ferry"]["hull"])
-		return INF if h["s"] > s0 + 0.01 else s0          # docked at the far end: walking off it, or waiting at the lip
-	return INF
+# FERRY (round 2, Daniele 2026-11-01: "a fixed path where the bridge keeps moving, so if you send 50 troops only ~25
+# survive"): the gap's deck slides sideways out of line and back on a clock nobody controls - in line `open` s, `slide`
+# out to one side, `away`, `slide` back, in line again, then out to the other side. Routes always count it; the moment it
+# starts to slide out whatever is on it falls, and a line reaching the lip while it is out pours into the void (the
+# missing-deck rule, _check_missing_decks). `open` is worked out per gap: open - crossing = survive x the half cycle.
+func ferry_cycle(id: int) -> Dictionary:
+	## {open, slide, away, half, period, cross, gap} in seconds (gap in m) for ferry node `id` (cached in its proto).
+	var p: Dictionary = nodes[id]["proto"]
+	if p.has("cycle"):
+		return p["cycle"]
+	var cfg: Dictionary = Rules.RELAYS_PROTO["ferry"]
+	var gap := 8.0
+	for i in controlled_edges(id):
+		gap = deck_length(i)
+	var cross: float = gap / Rules.move_speed()
+	var sv: float = clampf(float(cfg["survive"]), 0.05, 0.9)
+	var moving: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
+	var open: float = (cross + sv * moving) / (1.0 - sv)
+	var c := {"open": open, "slide": float(cfg["slide"]), "away": float(cfg["away"]), "half": open + moving,
+			"period": 2.0 * (open + moving), "cross": cross, "gap": gap}
+	p["cycle"] = c
+	return c
 
 
-func _ferry_depart(n: Dictionary, old_index: int) -> void:
-	var hull: float = float(Rules.RELAYS_PROTO["ferry"]["hull"])
-	for ei in controlled_edges(n["id"]):
-		for h in hordes.duplicate():
-			if not (h in hordes):
-				continue
-			for sp in h["spans"]:
-				if sp["edge"] != ei:
-					continue
-				var s0: float = sp["s0"]
-				var s1: float = sp["s1"]
-				var head: float = h["s"]
-				if head <= s0 + 0.01 or head >= s1 - 0.001:
-					break                                 # not on board (waiting at the lip, or walked off)
-				if (old_index == 0) != bool(sp["forward"]):
-					break                                 # (on the deck from the far end: cannot be on board)
-				var rider: Dictionary = h
-				var len := chain_length(h)
-				if head - len < s0 - 0.01:                # partly on board: the part behind the hull's back stays
-					var front: float = h["units"] * (head - s0) / maxf(len, 0.001)
-					if front < 0.5:
-						h["s"] = s0
-						break
-					_split_front(h, front)
-					rider = hordes[-1]
-					h["s"] = s0
-				var travel: float = (s1 - s0) * (1.0 - hull)
-				rider["ferry_ride"] = {"node": n["id"], "from": float(rider["s"]), "to": minf(float(rider["s"]) + travel, s1)}
-				rider["state"] = "move"
-				break
-	fx_events.append({"type": "ferry_depart", "node": n["id"]})
+func ferry_phase(id: int) -> Dictionary:
+	## Where the moving bridge is now: {part: "open" | "out" | "away" | "back", left: s in that part, side: +1 / -1 (the
+	## side it slides to this half), off: 0 in line .. 1 fully out (the view), next_open: s until it is in line again}.
+	var c := ferry_cycle(id)
+	var t: float = fposmod(time + float(nodes[id]["proto"].get("start", 0.0)) * float(c["period"]), float(c["period"]))
+	var side := 1.0
+	if t >= float(c["half"]):
+		t -= float(c["half"])
+		side = -1.0
+	var o: float = c["open"]
+	var sl: float = c["slide"]
+	var aw: float = c["away"]
+	if t < o:
+		return {"part": "open", "left": o - t, "side": side, "off": 0.0, "next_open": 0.0}
+	t -= o
+	if t < sl:
+		return {"part": "out", "left": sl - t, "side": side, "off": smoothstep(0.0, 1.0, t / sl), "next_open": sl - t + aw + sl}
+	t -= sl
+	if t < aw:
+		return {"part": "away", "left": aw - t, "side": side, "off": 1.0, "next_open": aw - t + sl}
+	t -= aw
+	return {"part": "back", "left": sl - t, "side": side, "off": 1.0 - smoothstep(0.0, 1.0, t / sl), "next_open": sl - t}
 
 
-func _ferry_carry(n: Dictionary) -> void:
-	var p := smoothstep(0.0, 1.0, float(n["relay_anim"].get("progress", 0.0)))
-	for h in hordes:
-		var r = h.get("ferry_ride")
-		if r is Dictionary and int(r["node"]) == n["id"]:
-			h["s"] = lerpf(float(r["from"]), float(r["to"]), p)
-
-
-func _ferry_arrive(n: Dictionary) -> void:
-	for h in hordes:
-		var r = h.get("ferry_ride")
-		if r is Dictionary and int(r["node"]) == n["id"]:
-			h["s"] = float(r["to"])
-			h.erase("ferry_ride")
-	fx_events.append({"type": "ferry_arrive", "node": n["id"]})
-
-
-func ferry_pos(id: int) -> float:
-	## 0 = the hull docked at deck end A, 1 = at B; in between while it travels (the view's hull).
+func proto_tag(id: int) -> String:
+	## The node tag's state text for a prototype relay (HUD): round 2's clocks (the ferry, the launcher's aim, the tilt's
+	## hold), Rules.proto_tag for the rest.
 	var n: Dictionary = nodes[id]
-	if n["relay_phase"] != "moving":
-		return float(int(n["relay_index"]))
-	var p := smoothstep(0.0, 1.0, float(n["relay_anim"].get("progress", 0.0)))
-	return p if int(n["relay_index"]) == 1 else 1.0 - p
+	match str(n["relay"]):
+		"ferry":
+			var fp := ferry_phase(id)
+			return "OPEN %d" % int(ceil(float(fp["left"]))) if fp["part"] == "open" else "SHUT %d" % int(ceil(float(fp["next_open"])))
+		"launcher":
+			if n["relay_phase"] == "moving":
+				return "ARMED %d" % int(ceil(float(n["relay_t"])))
+			if n["relay_phase"] == "warning":
+				return "LOCK"
+			var left := launcher_aim_left(id)
+			return "AIM" if left == INF else "AIM %d" % int(ceil(left))
+		"tilt":
+			if n["relay_phase"] == "moving":
+				return "SLIDE %d" % int(ceil(float(n["relay_t"])))
+	return Rules.proto_tag(str(n["relay"]), relay_state_key(n, n["relay_index"]), str(n["relay_phase"]))
 
 
-# CONVEYOR: the line's speed on the deck under its head, with the flow x RELAYS_PROTO.conveyor.with, against it x .against.
+func ferry_out(id: int) -> bool:
+	## The moving bridge is not in line (sliding out, away, or sliding back): no floor.
+	return ferry_phase(id)["part"] != "open"
+
+
+func _ferry_note(h: Dictionary, ei: int, what: String, units: float) -> void:
+	## The FERRY readout: units of this line that made it past the far end ("ok") or fell off it / at its lip ("fell").
+	if units <= 0.0:
+		return
+	var hid: int = h["id"]
+	if not _ferry_tally.has(hid):
+		_ferry_tally[hid] = {"node": _ferry_edges[ei], "edge": ei, "seat": h["owner"], "ok": 0.0, "fell": 0.0, "shown": [-1, -1],
+				"decoy": h.get("decoy", false)}
+	_ferry_tally[hid][what] = float(_ferry_tally[hid][what]) + units
+
+
+func _ferry_tail_cut(h: Dictionary, r0: float, r1: float) -> void:
+	## The bridge slid out from under a line's tail (its head past the far end): those bodies fall like anywhere, but the
+	## order stands - a line still leaving its vat (one longer than Rules.MAX_CHAIN trails the door) splits at the far
+	## end: what is past it made it, and the vat goes on feeding the lip, where it pours into the void until the bridge
+	## is back (the plain missing-deck rule would cut the order and reroute the rest).
+	_cut_range(h, r0, r1, false)
+	if h in hordes and h["streaming"] and float(h["s"]) > r1 and float(h["units"]) >= 0.5:
+		_split_front(h, float(h["units"]))
+		h["units"] = 0.0
+		h["s"] = r0
+		h["state"] = "move"
+
+
+func _ferry_past(h: Dictionary) -> Dictionary:
+	## Ferry deck edge -> the units of the line already past its far end.
+	var out := {}
+	var len := chain_length(h)
+	var tail: float = float(h["s"]) - len
+	for sp in h["spans"]:
+		if _ferry_edges.has(sp["edge"]):
+			out[sp["edge"]] = h["units"] * clampf((float(h["s"]) - maxf(float(sp["s1"]), tail)) / maxf(len, 0.001), 0.0, 1.0)
+	return out
+
+
+func _ferry_count(h: Dictionary, s_was: float) -> void:
+	## The bodies that walked past a ferry deck's far end this step (head from s_was to s; the bodies trail it evenly).
+	var len := chain_length(h)
+	for sp in h["spans"]:
+		if not _ferry_edges.has(sp["edge"]):
+			continue
+		var s1: float = sp["s1"]
+		var k0: float = maxf(s_was - s1, 0.0)
+		var k1: float = minf(float(h["s"]) - s1, len)
+		if k1 > k0:
+			_ferry_note(h, sp["edge"], "ok", h["units"] * (k1 - k0) / maxf(len, 0.001))
+
+
+func _ferry_tally_step() -> void:
+	## Sends the readout (fx "ferry_tally": shown crossed / shown sent) when it changes, and closes it (done) once the
+	## line is past the ferry or gone; a closed tally is also an event ("ferry_cross", sim units) for the tests.
+	for hid in _ferry_tally.keys():
+		var t: Dictionary = _ferry_tally[hid]
+		var h := _horde(hid)
+		var done := h.is_empty()
+		if not done:
+			var sp := {}
+			for x in h["spans"]:
+				if x["edge"] == int(t["edge"]):
+					sp = x
+			done = sp.is_empty() or (not h["streaming"] and float(h["s"]) - chain_length(h) >= float(sp["s1"]) - 0.01)
+		var ok := Rules.shown(float(t["ok"]))
+		var sent := Rules.shown(float(t["ok"]) + float(t["fell"]))
+		var small: bool = float(t["ok"]) + float(t["fell"]) < 1.0   # (a split-off front's rounding at the far end)
+		if (done or [ok, sent] != t["shown"]) and not small:
+			t["shown"] = [ok, sent]
+			if not t["decoy"]:
+				fx_events.append({"type": "ferry_tally", "node": t["node"], "edge": t["edge"], "seat": t["seat"], "hid": hid,
+						"ok": ok, "sent": sent, "done": done})
+		if done:
+			if not t["decoy"] and not small:
+				events.append({"t": time, "type": "ferry_cross", "node": t["node"], "seat": t["seat"], "hid": hid,
+						"ok": float(t["ok"]), "fell": float(t["fell"])})
+			_ferry_tally.erase(hid)
+
+
+# CONVEYOR (round 2, Daniele: "the effect must apply to all troops on it"): the whole line is pushed while any of its
+# bodies stands on a belt - more of its length with the flow: x RELAYS_PROTO.conveyor.with, more against: x .against
+# (a line is one chain, its speed one number). A line still leaving its vat is fed out of the door that much faster
+# (door_mult), so a belt next to the vat is felt at once.
 func conveyor_mult(h: Dictionary) -> float:
 	## Also leaves h["conv"] = 1 (with) / -1 (against) / 0 for the view's speed tag.
 	var sense := conveyor_sense(h)
@@ -5663,19 +5745,28 @@ func conveyor_mult(h: Dictionary) -> float:
 
 
 func conveyor_sense(h: Dictionary) -> Array:
-	## [1 with the flow / -1 against / 0 (no conveyor under the head, or it is flipping), the conveyor node id or -1].
+	## [1 more of the line with a belt's flow / -1 more against / 0 (no body on a belt, or it is flipping), the belt's
+	## conveyor node id or -1].
+	var head: float = h["s"]
+	var tail: float = head - chain_length(h)
+	var with_m := 0.0
+	var against_m := 0.0
+	var id := -1
 	for sp in h["spans"]:
-		if h["s"] < sp["s0"] or h["s"] > sp["s1"]:
+		if head < sp["s0"] or tail > sp["s1"] or not _conv_edges.has(sp["edge"]):
 			continue
-		if not _conv_edges.has(sp["edge"]):
-			return [0, -1]
-		var id: int = _conv_edges[sp["edge"]]
+		id = _conv_edges[sp["edge"]]
 		var n: Dictionary = nodes[id]
 		if n["relay_phase"] == "moving":
-			return [0, id]                                # flipping: no flow
-		var with: bool = (int(n["relay_index"]) == 0) == bool(sp["forward"])
-		return [1 if with else -1, id]
-	return [0, -1]
+			continue                                      # flipping: no flow
+		var on: float = maxf(minf(head, sp["s1"]) - maxf(tail, sp["s0"]), 0.01)
+		if (int(n["relay_index"]) == 0) == bool(sp["forward"]):
+			with_m += on
+		else:
+			against_m += on
+	if with_m <= 0.0 and against_m <= 0.0:
+		return [0, id]
+	return [1 if with_m >= against_m else -1, id]
 
 
 # LAUNCHER: armed, every own line whose head enters the node's platform parks there and pours into the air at the arrival
@@ -5687,7 +5778,7 @@ func _launcher_catch(n: Dictionary, dt: float) -> void:
 	var ok: bool = n["owner"] != "" and tgt >= 0 and not collapsed.get(tgt, false)
 	var cfg: Dictionary = Rules.RELAYS_PROTO["launcher"]
 	for h in hordes.duplicate():
-		if not (h in hordes) or h.has("ferry_ride"):
+		if not (h in hordes):
 			continue
 		if h.has("launch"):
 			if int(h["launch"]) != id:
@@ -5726,6 +5817,75 @@ func _launcher_release(n: Dictionary) -> void:
 	for h in hordes:
 		if int(h.get("launch", -1)) == n["id"]:
 			h.erase("launch")
+	var p: Dictionary = n["proto"]                    # round 2: the aim moves on from the locked target
+	p["aim0"] = maxi(0, (p.get("targets", []) as Array).find(int(p.get("target", -1))))
+	p["aim_t0"] = time
+
+
+# LAUNCHER AIM (round 2, Daniele: "it switches its target on its own every 10 s, the player locks it and fires with a
+# double tap"): proto.targets in order (the map's `launcher.targets`, else its `target` and the nodes as many
+# bridges away but the seats' homes, round the pad by angle); the aim steps every RELAYS_PROTO.launcher.cycle s, a fire
+# locks it (warning + arm).
+func _launcher_targets(n: Dictionary) -> Array:
+	var id: int = n["id"]
+	var p: Dictionary = n["proto"]
+	var out := []
+	if p.get("targets") is Array:
+		for x in p["targets"]:
+			if int(x) >= 0 and int(x) < nodes.size() and int(x) != id and not int(x) in out:
+				out.append(int(x))
+	if out.is_empty() and int(p.get("target", -1)) >= 0:
+		var hops := _hops_from(id)
+		var want: int = int(hops.get(int(p["target"]), -1))
+		for m in nodes:
+			var keep: bool = not m["id"] in homes.values() or m["id"] == int(p["target"])   # (a seat's home only as the map's own target)
+			if want >= 1 and int(hops.get(m["id"], -1)) == want and m["node_kind"] != "junction" and keep:
+				out.append(m["id"])
+		var c: Vector3 = n["pos"]
+		out.sort_custom(func(x, y): return _angle_from(c, nodes[x]["pos"]) < _angle_from(c, nodes[y]["pos"]))
+	if out.is_empty() and int(p.get("target", -1)) >= 0:
+		out = [int(p["target"])]
+	return out
+
+
+func _hops_from(id: int) -> Dictionary:
+	## Bridges from node `id` to every node (any relay state).
+	var d := {id: 0}
+	var q := [id]
+	while not q.is_empty():
+		var cur: int = q.pop_front()
+		for link in adj[cur]:
+			if not d.has(int(link[0])):
+				d[int(link[0])] = int(d[cur]) + 1
+				q.append(int(link[0]))
+	return d
+
+
+func launcher_aim(id: int) -> int:
+	## The node the launcher aims at now (-1: none): locked while it warns / is armed, else where the cycle is.
+	var n: Dictionary = nodes[id]
+	var p: Dictionary = n["proto"]
+	var tg: Array = p.get("targets", [])
+	if n["relay_phase"] != "" or tg.is_empty():
+		return int(p.get("target", -1))
+	var step := int(floor((time - float(p.get("aim_t0", 0.0))) / float(Rules.RELAYS_PROTO["launcher"]["cycle"])))
+	return int(tg[(int(p.get("aim0", 0)) + step) % tg.size()])
+
+
+func launcher_aim_left(id: int) -> float:
+	## Seconds until the aim steps on (INF while locked or with one target).
+	var n: Dictionary = nodes[id]
+	if n["relay_phase"] != "" or (n["proto"].get("targets", []) as Array).size() < 2:
+		return INF
+	var cyc := float(Rules.RELAYS_PROTO["launcher"]["cycle"])
+	return cyc - fposmod(time - float(n["proto"].get("aim_t0", 0.0)), cyc)
+
+
+func _launcher_track(n: Dictionary) -> void:
+	var aim := launcher_aim(n["id"])
+	if aim != int(n["proto"].get("target", -1)):
+		n["proto"]["target"] = aim
+		fx_events.append({"type": "launch_aim", "node": n["id"], "target": aim})
 
 
 func _step_flights(dt: float) -> void:
@@ -5764,7 +5924,7 @@ func flight_units(seat: String) -> float:
 func _lift_riders(n: Dictionary, closing: Array) -> void:
 	var id: int = n["id"]
 	for h in hordes.duplicate():
-		if not (h in hordes) or h.has("ferry_ride"):
+		if not (h in hordes):
 			continue
 		var route: Array = h["route"]
 		var k := route.find(id)
@@ -5792,15 +5952,13 @@ func _lift_riders(n: Dictionary, closing: Array) -> void:
 
 # TILT: the motion's start slides every line on the platform (any owner; open point 3) out the exit the tower shows, as a
 # new order to that neighbour; the garrison stays. A closed exit deck is a missing deck: the slid line walks off its lip.
-func _tilt_slide(n: Dictionary, exit_i: int) -> void:
-	var exits: Array = n["proto"].get("exits", [])
-	if exits.is_empty():
+func _tilt_slide(n: Dictionary, ex: int) -> void:
+	## Round 2: called when the tip starts and every step of the hold - a line already leaving by `ex` is left alone.
+	if ex < 0:
 		return
 	var id: int = n["id"]
-	var ex: int = int(exits[exit_i % exits.size()])
-	n["tilt_exit"] = ex
 	for h in hordes.duplicate():
-		if not (h in hordes) or h.has("ferry_ride") or h.has("launch"):
+		if not (h in hordes) or h.has("launch"):
 			continue
 		var pr := _platform_range(h, id)
 		if pr.is_empty() or h["s"] < pr[0] or h["s"] > pr[1]:

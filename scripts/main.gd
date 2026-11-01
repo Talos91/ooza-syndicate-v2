@@ -459,6 +459,7 @@ func _start_map(path: String) -> void:
 		proto_view = ProtoRelayView.new()
 		add_child(proto_view)
 		proto_view.setup(sim, vis)
+		proto_view.human = HUMAN
 	combat = CombatFx.new()
 	add_child(combat)
 	combat.setup(self, sim, vis, fx)
@@ -1621,6 +1622,8 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 		"switch":
 			if sim.fire_relay(id):
 				return [true, "Relay fired - switching in %d s, then %d s cooldown" % [int(Rules.RELAY_WARNING), int(Rules.relay_cooldown(str(n["relay"])))]]
+			if n["relay"] == "ferry":                   # RELAYS 3.0 round 2
+				return [false, "The moving bridge runs on its own - time your send"]
 			return [false, "Relay on cooldown" if n["relay_cd"] > 0.0 else "Relay is already switching"]
 		"upgrade":
 			var cost := sim.upgrade_cost(n)
@@ -1777,6 +1780,14 @@ func _process(delta: float) -> void:
 						var it: Dictionary = hud.callouts.find(place)
 						if not it.is_empty():
 							it["count"] = kicked
+			"ferry_tally":                             # RELAYS 3.0 round 2: FERRY 24 / 50 CROSSED at the moving bridge
+				var fseat := str(ev.get("seat", ""))
+				if int(ev.get("sent", 0)) > 0:
+					var fpts: Array = sim.deck_line(int(ev["edge"]))
+					var fmid: Vector3 = (fpts[0] + fpts[-1]) * 0.5 if not fpts.is_empty() else sim.nodes[int(ev["node"])]["pos"]
+					var mine_f := fseat == HUMAN or sim.allied(fseat, HUMAN)
+					hud.callout_at(fmid, "ferry:%d" % int(ev["edge"]), "%sFERRY %d / %d CROSSED" % ["" if mine_f else "ENEMY ",
+							int(ev["ok"]), int(ev["sent"])], "good" if mine_f and int(ev["ok"]) * 2 >= int(ev["sent"]) else "warn", fseat)
 			"forge_lost":                              # red (spec E): the bonus is gone - at the forge it was
 				if str(ev.get("seat", "")) == HUMAN:
 					var at := int(_forge_node.get(HUMAN, -1))

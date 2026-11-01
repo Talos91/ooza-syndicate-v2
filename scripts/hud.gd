@@ -784,8 +784,8 @@ func _badges(cam: Camera3D) -> bool:
 		var what := ""
 		if n["relay"] != "":
 			var st := sim.relay_state_key(n, n["relay_index"])
-			if Rules.is_proto(n["relay"]):                # RELAYS 3.0: AT A / A>B / UP / EXIT 2 / ARMED
-				st = Rules.proto_tag(n["relay"], st, n["relay_phase"])
+			if Rules.is_proto(n["relay"]):                # RELAYS 3.0: OPEN 3 / A>B / UP / EXIT 2 / AIM 7 / ARMED 5
+				st = sim.proto_tag(n["id"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
 			what = "MGN%d" % n["tier"]
@@ -1342,8 +1342,8 @@ func _inspector_actions(n: Dictionary) -> void:
 	var id: int = n["id"]
 	# (TUTORIAL: each action shows once its lesson is reached - shows(); outside the tutorial, always)
 	if n["relay"] != "":
-		if shows("relay"):
-			_add_action("SWITCH", "%s\n%s" % ["ARM" if n["relay"] == "launcher" else "SWITCH", Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)
+		if shows("relay") and n["relay"] != "ferry":    # RELAYS 3.0 round 2: the moving bridge runs on its own
+			_add_action("SWITCH", "%s\n%s" % ["LOCK" if n["relay"] == "launcher" else "SWITCH", Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)
 		for kind in ["laser", "forge", "monster_hub"]:
 			if kind in n["buildable"] and n["structure"] != kind and shows("relay_build"):
 				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})

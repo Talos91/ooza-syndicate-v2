@@ -59,8 +59,8 @@ func sync(dt: float) -> void:
 	_t += dt
 	for n in sim.nodes:
 		var id: int = n["id"]
-		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false):
-			continue
+		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false) or n["relay"] == "ferry":
+			continue                                   # (RELAYS 3.0 round 2: the moving bridge is never fired)
 		var ready: bool = n["relay_cd"] <= 0.0 and n["relay_phase"] == ""
 		var was: bool = _relay_ready_prev.get(id, false)
 		if ready and not was and int(_relay_cue_count.get(id, 0)) < RELAY_CUE_MAX:
@@ -244,8 +244,8 @@ func _draw_upgrade_arrows(cam: Camera3D) -> void:
 func _draw_relay_cues(cam: Camera3D) -> void:
 	for n in sim.nodes:
 		var id: int = n["id"]
-		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false):
-			continue
+		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false) or n["relay"] == "ferry":
+			continue                                   # (RELAYS 3.0 round 2: the moving bridge is never fired)
 		var ready: bool = n["relay_cd"] <= 0.0 and n["relay_phase"] == ""
 		var ns := _node_screen(id, cam)
 		var bs := RelayView.button_screen(cam, main.vis, id)   # RELAY V2: the glow and the cue sit on the button
@@ -255,7 +255,7 @@ func _draw_relay_cues(cam: Camera3D) -> void:
 			var a := 0.5 + 0.5 * sin(_t * 3.0)
 			draw_arc(ns[0], float(ns[1]) + 5.0 * ui_scale, 0.0, TAU, 32, Color(Hud.RELAY_ACCENT, 0.55 * a), 2.5 * ui_scale, true)
 		if float(_relay_cue_t.get(id, 0.0)) > 0.0:      # the first few times: spell it out
-			var txt := "DOUBLE-TAP TO SWITCH"
+			var txt := "DOUBLE-TAP TO LOCK" if n["relay"] == "launcher" else "DOUBLE-TAP TO SWITCH"
 			var f := int(13 * ui_scale)
 			var sz := Hud.UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
 			var p: Vector2 = ns[0] + Vector2(-sz.x / 2.0, -float(ns[1]) - 16.0 * ui_scale)
