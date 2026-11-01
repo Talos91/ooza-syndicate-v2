@@ -6,6 +6,7 @@ extends SeatAI
 ##   nomg       never builds a Machinegoon
 ##   noslot     never builds on a relay slot (no laser / forge / monster hub)
 ##   nomonster  never launches a monster (its hub may still be built)
+##   noult      never casts its ultimate (active and map skills as stock; 2026-10-27 ultimates rework)
 
 var habit := "stock"
 
@@ -40,3 +41,9 @@ func _monsters(sim: Sim) -> void:
 	if habit == "nomonster":
 		return
 	super(sim)
+
+
+func _pick(sim: Sim, id: String) -> Array:
+	if habit == "noult" and id == sim.skill_id(seat, "ultimate"):
+		return []
+	return super(sim, id)
