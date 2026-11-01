@@ -1,9 +1,14 @@
-# To test - ALPHA 23.16 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.17 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.17 (phone rendering - check on staging: https://oozesyndicate.com/staging/)
+- [ ] iPhone and Android: the board looks sharp enough (3D at 0.75 of native, HUD sharp); edges smooth, no blur on the HUD.
+- [ ] The phone stays cooler / the battery lasts longer in menus (idle 15 fps); a match still plays smoothly.
+- [ ] Taps land on the nodes you touch (the 3D is drawn through a scaled view).
 
 ## 0.23.16 (live)
 - [ ] A Forge costs 40; a monster reaching a node with more than 40 defenders kicks 40 and the node holds ("MONSTER KICKED 40 - n HOLD").

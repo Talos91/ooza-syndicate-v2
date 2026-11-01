@@ -1,5 +1,11 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.17 "Alpha 23" - 2026-11-01 (staging: phone rendering)
+
+- perf-ios: phones render the 3D at 1.5 pixels per point through a linear-filtered SubViewport (0.75 of native on a dpr-2 iPhone,
+  smooth edges, HUD at native); PHONE idles at 15 fps in menus / pause / results; one batching cell per map (M-39 phone: 357 -> 287
+  draw calls). FULL and LOW RES unchanged. Renderer only: no rule, protocol or server change (ooze20-net-8).
+
 ## 0.23.16 "Alpha 23" - 2026-10-28 (LIVE 2026-10-28, straight to live: Daniele's Ooze Desk answers)
 
 - **Forge costs 40** (was 20; Rules.FORGE_COST 200 sim), the build buttons read it from Sim.build_cost.
