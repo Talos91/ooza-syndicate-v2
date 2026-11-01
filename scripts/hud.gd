@@ -737,9 +737,9 @@ func _badges(cam: Camera3D) -> bool:
 		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: no badge
 			panel.visible = false
 			continue
-		if sim.is_warned(n["id"]):                    # 0.19.0: the floating danger symbol replaces the badge
-			panel.visible = false                     # circle instead (HudOverlay._draw_danger_symbols)
-			continue
+		# ui-neon (Daniele 2026-11-02, "unit count HUD disappearing"): a warned node keeps its badge - the count stays readable
+		# all through the Last Stand; the neon alarm sign (HudOverlay._draw_danger_symbols) sits beside it, clear of it.
+		# (0.19.0 hid the badge here, when the sign replaced a round badge; with a whole ring warned at once that hid 6 counts.)
 		panel.visible = true
 		var owner: String = n["owner"]
 		if b["owner"] != owner:
@@ -805,8 +805,8 @@ func _badges(cam: Camera3D) -> bool:
 		_font_color(sub, sub_col)
 		var clock := ""
 		var worst := ""                                     # the clock's widest form (see below)
-		if sim.is_warned(n["id"]):
-			clock = "▼%d" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t))
+		if sim.is_warned(n["id"]) and not shows("danger"):   # ui-neon: the alarm sign shows the seconds (no second copy here) -
+			clock = "▼%d" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t))   # so a warned relay keeps its !n
 			worst = "▼88"
 		elif n["relay"] != "" and n["relay_phase"] == "warning":
 			clock = "!%d" % int(ceil(n["relay_t"]))
