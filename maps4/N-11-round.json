@@ -9,7 +9,7 @@
  "modes": [
   "1v1"
  ],
- "symmetry": "point (180 degrees about the centre)",
+ "symmetry": "mirror left/right",
  "frame": {
   "width": 160,
   "height": 80,
@@ -22,8 +22,8 @@
  "nodes": [
   {
    "id": 0,
-   "x": 60.8,
-   "y": 5.3,
+   "x": 61.4,
+   "y": 10.06,
    "plaza": null,
    "socket": null,
    "ring": 1,
@@ -40,38 +40,8 @@
   },
   {
    "id": 1,
-   "x": 74.95,
-   "y": 17.02,
-   "plaza": null,
-   "socket": null,
-   "ring": 1,
-   "category": "junction",
-   "relay": null,
-   "home": false,
-   "neutral": null,
-   "buildable": [],
-   "junction": "Curve_45",
-   "junctionYaw": 187.64
-  },
-  {
-   "id": 2,
-   "x": 82.68,
-   "y": 17.49,
-   "plaza": null,
-   "socket": null,
-   "ring": 1,
-   "category": "junction",
-   "relay": null,
-   "home": false,
-   "neutral": null,
-   "buildable": [],
-   "junction": "Curve_45",
-   "junctionYaw": 142.64
-  },
-  {
-   "id": 3,
-   "x": 46.01,
-   "y": 23.17,
+   "x": 98.6,
+   "y": 10.06,
    "plaza": null,
    "socket": null,
    "ring": 1,
@@ -79,7 +49,7 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
+    "tier": 2,
     "structure": "vat"
    },
    "buildable": [
@@ -87,9 +57,39 @@
    ]
   },
   {
+   "id": 2,
+   "x": 78.12,
+   "y": 23.04,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "junction",
+   "relay": null,
+   "home": false,
+   "neutral": null,
+   "buildable": [],
+   "junction": "Curve_45",
+   "junctionYaw": 180.0
+  },
+  {
+   "id": 3,
+   "x": 85.48,
+   "y": 24.53,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "junction",
+   "relay": null,
+   "home": false,
+   "neutral": null,
+   "buildable": [],
+   "junction": "Curve_45",
+   "junctionYaw": 135.0
+  },
+  {
    "id": 4,
-   "x": 110.98,
-   "y": 23.69,
+   "x": 47.55,
+   "y": 28.67,
    "plaza": null,
    "socket": null,
    "ring": 1,
@@ -106,16 +106,16 @@
   },
   {
    "id": 5,
-   "x": 91.8,
-   "y": 24.54,
+   "x": 112.45,
+   "y": 28.67,
    "plaza": null,
    "socket": null,
-   "ring": 0,
+   "ring": 1,
    "category": "normal",
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 2,
+    "tier": 1,
     "structure": "vat"
    },
    "buildable": [
@@ -124,8 +124,8 @@
   },
   {
    "id": 6,
-   "x": 64.54,
-   "y": 28.2,
+   "x": 66.32,
+   "y": 32.73,
    "plaza": null,
    "socket": null,
    "ring": 0,
@@ -142,23 +142,26 @@
   },
   {
    "id": 7,
-   "x": 102.98,
-   "y": 34.95,
+   "x": 93.68,
+   "y": 32.73,
    "plaza": null,
    "socket": null,
-   "ring": 1,
-   "category": "junction",
+   "ring": 0,
+   "category": "normal",
    "relay": null,
    "home": false,
-   "neutral": null,
-   "buildable": [],
-   "junction": "Curve_45",
-   "junctionYaw": 97.63
+   "neutral": {
+    "tier": 2,
+    "structure": "vat"
+   },
+   "buildable": [
+    "vat"
+   ]
   },
   {
    "id": 8,
-   "x": 57.49,
-   "y": 37.32,
+   "x": 58.12,
+   "y": 40.85,
    "plaza": null,
    "socket": null,
    "ring": 1,
@@ -168,12 +171,27 @@
    "neutral": null,
    "buildable": [],
    "junction": "Curve_45",
-   "junctionYaw": 232.63
+   "junctionYaw": 225.0
   },
   {
    "id": 9,
-   "x": 128.59,
-   "y": 38.8,
+   "x": 103.37,
+   "y": 44.45,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "junction",
+   "relay": null,
+   "home": false,
+   "neutral": null,
+   "buildable": [],
+   "junction": "Curve_45",
+   "junctionYaw": 90.0
+  },
+  {
+   "id": 10,
+   "x": 31.67,
+   "y": 45.58,
    "plaza": null,
    "socket": null,
    "ring": 1,
@@ -186,9 +204,24 @@
    ]
   },
   {
-   "id": 10,
+   "id": 11,
+   "x": 128.33,
+   "y": 45.58,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "normal",
+   "relay": null,
+   "home": true,
+   "neutral": null,
+   "buildable": [
+    "vat"
+   ]
+  },
+  {
+   "id": 12,
    "x": 80.0,
-   "y": 40.0,
+   "y": 46.53,
    "plaza": null,
    "socket": null,
    "ring": 0,
@@ -206,39 +239,9 @@
    ]
   },
   {
-   "id": 11,
-   "x": 31.41,
-   "y": 41.2,
-   "plaza": null,
-   "socket": null,
-   "ring": 1,
-   "category": "normal",
-   "relay": null,
-   "home": true,
-   "neutral": null,
-   "buildable": [
-    "vat"
-   ]
-  },
-  {
-   "id": 12,
-   "x": 102.51,
-   "y": 42.68,
-   "plaza": null,
-   "socket": null,
-   "ring": 1,
-   "category": "junction",
-   "relay": null,
-   "home": false,
-   "neutral": null,
-   "buildable": [],
-   "junction": "Curve_45",
-   "junctionYaw": 52.63
-  },
-  {
    "id": 13,
-   "x": 57.02,
-   "y": 45.05,
+   "x": 56.63,
+   "y": 48.45,
    "plaza": null,
    "socket": null,
    "ring": 1,
@@ -248,30 +251,27 @@
    "neutral": null,
    "buildable": [],
    "junction": "Curve_45",
-   "junctionYaw": 277.63
+   "junctionYaw": 270.0
   },
   {
    "id": 14,
-   "x": 95.46,
-   "y": 51.8,
+   "x": 101.88,
+   "y": 52.05,
    "plaza": null,
    "socket": null,
-   "ring": 0,
-   "category": "normal",
+   "ring": 1,
+   "category": "junction",
    "relay": null,
    "home": false,
-   "neutral": {
-    "tier": 2,
-    "structure": "vat"
-   },
-   "buildable": [
-    "vat"
-   ]
+   "neutral": null,
+   "buildable": [],
+   "junction": "Curve_45",
+   "junctionYaw": 45.0
   },
   {
    "id": 15,
-   "x": 68.2,
-   "y": 55.46,
+   "x": 66.32,
+   "y": 60.25,
    "plaza": null,
    "socket": null,
    "ring": 0,
@@ -288,16 +288,16 @@
   },
   {
    "id": 16,
-   "x": 49.02,
-   "y": 56.31,
+   "x": 93.68,
+   "y": 60.25,
    "plaza": null,
    "socket": null,
-   "ring": 1,
+   "ring": 0,
    "category": "normal",
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
+    "tier": 2,
     "structure": "vat"
    },
    "buildable": [
@@ -306,8 +306,8 @@
   },
   {
    "id": 17,
-   "x": 113.99,
-   "y": 56.83,
+   "x": 47.28,
+   "y": 62.74,
    "plaza": null,
    "socket": null,
    "ring": 1,
@@ -324,38 +324,8 @@
   },
   {
    "id": 18,
-   "x": 77.32,
-   "y": 62.51,
-   "plaza": null,
-   "socket": null,
-   "ring": 1,
-   "category": "junction",
-   "relay": null,
-   "home": false,
-   "neutral": null,
-   "buildable": [],
-   "junction": "Curve_45",
-   "junctionYaw": 322.64
-  },
-  {
-   "id": 19,
-   "x": 85.05,
-   "y": 62.98,
-   "plaza": null,
-   "socket": null,
-   "ring": 1,
-   "category": "junction",
-   "relay": null,
-   "home": false,
-   "neutral": null,
-   "buildable": [],
-   "junction": "Curve_45",
-   "junctionYaw": 7.64
-  },
-  {
-   "id": 20,
-   "x": 99.2,
-   "y": 74.7,
+   "x": 112.72,
+   "y": 62.74,
    "plaza": null,
    "socket": null,
    "ring": 1,
@@ -363,12 +333,42 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 2,
+    "tier": 1,
     "structure": "vat"
    },
    "buildable": [
     "vat"
    ]
+  },
+  {
+   "id": 19,
+   "x": 74.52,
+   "y": 68.45,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "junction",
+   "relay": null,
+   "home": false,
+   "neutral": null,
+   "buildable": [],
+   "junction": "Curve_45",
+   "junctionYaw": 315.0
+  },
+  {
+   "id": 20,
+   "x": 81.88,
+   "y": 69.94,
+   "plaza": null,
+   "socket": null,
+   "ring": 1,
+   "category": "junction",
+   "relay": null,
+   "home": false,
+   "neutral": null,
+   "buildable": [],
+   "junction": "Curve_45",
+   "junctionYaw": 0.0
   }
  ],
  "edges": [
@@ -382,11 +382,11 @@
    "relay": null,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 15.28
+   "centreDistance": 15.27
   },
   {
-   "from": 5,
-   "to": 7,
+   "from": 16,
+   "to": 14,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -394,7 +394,7 @@
    "relay": null,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 15.28
+   "centreDistance": 11.6
   },
   {
    "from": 13,
@@ -409,8 +409,8 @@
    "centreDistance": 7.74
   },
   {
-   "from": 7,
-   "to": 12,
+   "from": 14,
+   "to": 9,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -430,11 +430,11 @@
    "relay": null,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 11.53
+   "centreDistance": 11.54
   },
   {
-   "from": 12,
-   "to": 14,
+   "from": 9,
+   "to": 7,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -442,34 +442,10 @@
    "relay": null,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 11.53
+   "centreDistance": 15.21
   },
   {
    "from": 6,
-   "to": 1,
-   "tier": "S",
-   "seconds": 2,
-   "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
-   "deckMetres": 4.0,
-   "centreDistance": 15.28
-  },
-  {
-   "from": 14,
-   "to": 19,
-   "tier": "S",
-   "seconds": 2,
-   "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
-   "deckMetres": 4.0,
-   "centreDistance": 15.28
-  },
-  {
-   "from": 1,
    "to": 2,
    "tier": "S",
    "seconds": 2,
@@ -478,47 +454,71 @@
    "relay": null,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 7.74
+   "centreDistance": 15.27
   },
   {
-   "from": 19,
-   "to": 18,
-   "tier": "S",
-   "seconds": 2,
-   "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
-   "deckMetres": 4.0,
-   "centreDistance": 7.74
-  },
-  {
-   "from": 2,
-   "to": 5,
-   "tier": "S",
-   "seconds": 2,
-   "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
-   "deckMetres": 4.0,
-   "centreDistance": 11.53
-  },
-  {
-   "from": 18,
-   "to": 15,
-   "tier": "S",
-   "seconds": 2,
-   "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
-   "deckMetres": 4.0,
-   "centreDistance": 11.53
-  },
-  {
-   "from": 11,
+   "from": 7,
    "to": 3,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 11.6
+  },
+  {
+   "from": 3,
+   "to": 2,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 7.51
+  },
+  {
+   "from": 15,
+   "to": 19,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 11.6
+  },
+  {
+   "from": 16,
+   "to": 20,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 15.27
+  },
+  {
+   "from": 20,
+   "to": 19,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "centreDistance": 7.51
+  },
+  {
+   "from": 10,
+   "to": 4,
    "tier": "M",
    "seconds": 4,
    "level": 0,
@@ -529,7 +529,19 @@
    "centreDistance": 23.2
   },
   {
-   "from": 9,
+   "from": 11,
+   "to": 5,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 8.0,
+   "centreDistance": 23.2
+  },
+  {
+   "from": 10,
    "to": 17,
    "tier": "M",
    "seconds": 4,
@@ -542,7 +554,7 @@
   },
   {
    "from": 11,
-   "to": 16,
+   "to": 18,
    "tier": "M",
    "seconds": 4,
    "level": 0,
@@ -553,19 +565,7 @@
    "centreDistance": 23.2
   },
   {
-   "from": 9,
-   "to": 4,
-   "tier": "M",
-   "seconds": 4,
-   "level": 0,
-   "state": null,
-   "relay": null,
-   "retracts": false,
-   "deckMetres": 8.0,
-   "centreDistance": 23.2
-  },
-  {
-   "from": 3,
+   "from": 4,
    "to": 6,
    "tier": "S",
    "seconds": 2,
@@ -577,8 +577,8 @@
    "centreDistance": 19.2
   },
   {
-   "from": 17,
-   "to": 14,
+   "from": 5,
+   "to": 7,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -589,7 +589,7 @@
    "centreDistance": 19.2
   },
   {
-   "from": 16,
+   "from": 17,
    "to": 15,
    "tier": "S",
    "seconds": 2,
@@ -601,8 +601,8 @@
    "centreDistance": 19.2
   },
   {
-   "from": 4,
-   "to": 5,
+   "from": 18,
+   "to": 16,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -613,7 +613,7 @@
    "centreDistance": 19.2
   },
   {
-   "from": 3,
+   "from": 4,
    "to": 0,
    "tier": "M",
    "seconds": 4,
@@ -625,8 +625,8 @@
    "centreDistance": 23.2
   },
   {
-   "from": 17,
-   "to": 20,
+   "from": 5,
+   "to": 1,
    "tier": "M",
    "seconds": 4,
    "level": 0,
@@ -649,8 +649,8 @@
    "centreDistance": 23.2
   },
   {
-   "from": 20,
-   "to": 14,
+   "from": 1,
+   "to": 7,
    "tier": "M",
    "seconds": 4,
    "level": 0,
@@ -661,52 +661,52 @@
    "centreDistance": 23.2
   },
   {
-   "from": 10,
+   "from": 12,
    "to": 6,
    "tier": "S",
    "seconds": 2,
    "level": 0,
    "state": "r1",
-   "relay": 10,
+   "relay": 12,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 19.45
+   "centreDistance": 19.43
   },
   {
-   "from": 10,
-   "to": 14,
+   "from": 12,
+   "to": 7,
    "tier": "S",
    "seconds": 2,
    "level": 0,
    "state": "r1",
-   "relay": 10,
+   "relay": 12,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 19.45
+   "centreDistance": 19.43
   },
   {
-   "from": 10,
+   "from": 12,
    "to": 15,
    "tier": "S",
    "seconds": 2,
    "level": 0,
    "state": "r2",
-   "relay": 10,
+   "relay": 12,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 19.45
+   "centreDistance": 19.37
   },
   {
-   "from": 10,
-   "to": 5,
+   "from": 12,
+   "to": 16,
    "tier": "S",
    "seconds": 2,
    "level": 0,
    "state": "r2",
-   "relay": 10,
+   "relay": 12,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 19.45
+   "centreDistance": 19.37
   }
  ],
  "rings": {
@@ -730,17 +730,17 @@
   "1v1": [
    {
     "seat": "A",
-    "node": 11,
+    "node": 10,
     "team": 0
    },
    {
     "seat": "B",
-    "node": 9,
+    "node": 11,
     "team": 1
    }
   ]
  },
- "note": "S, 13 platforms, open, inward. A round ring of four platforms on the hub's diagonals, joined by curved quarter arcs, circles a 4-way grinder hub (a rotor with no fixed deck: its pair of bridges turns from one diagonal to the other, killing what is on it). Each home's two pockets land on the ring's near side; a high platform over the top pocket drops onto the ring too. Point-symmetric. Survivor ring: the hub and the ring.",
+ "note": "S, 13 platforms, open, inward. A round ring of four platforms on the hub's diagonals, joined by curved quarter arcs, circles a 4-way grinder hub (a rotor with no fixed deck: its V of two bridges turns from the upper pair to the lower pair, killing what is on it). Each home's two pockets land on the ring's near side; a high platform over the top pocket drops onto the ring too. Mirrored left / right (2026-11-01, was point-symmetric). Survivor ring: the hub and the ring.",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true,
@@ -759,102 +759,102 @@
   "K": 1.0,
   "nodes": {
    "0": [
-    -19.2,
-    -34.7
+    -18.6,
+    -29.94
    ],
    "1": [
-    -5.05,
-    -22.98
+    18.6,
+    -29.94
    ],
    "2": [
-    2.68,
-    -22.51
+    -1.88,
+    -16.96
    ],
    "3": [
-    -33.99,
-    -16.83
+    5.48,
+    -15.47
    ],
    "4": [
-    30.98,
-    -16.31
+    -32.45,
+    -11.33
    ],
    "5": [
-    11.8,
-    -15.46
+    32.45,
+    -11.33
    ],
    "6": [
-    -15.46,
-    -11.8
+    -13.68,
+    -7.27
    ],
    "7": [
-    22.98,
-    -5.05
+    13.68,
+    -7.27
    ],
    "8": [
-    -22.51,
-    -2.68
+    -21.88,
+    0.85
    ],
    "9": [
-    48.59,
-    -1.2
+    23.37,
+    4.45
    ],
    "10": [
-    0.0,
-    0.0
+    -48.33,
+    5.58
    ],
    "11": [
-    -48.59,
-    1.2
+    48.33,
+    5.58
    ],
    "12": [
-    22.51,
-    2.68
+    0.0,
+    6.53
    ],
    "13": [
-    -22.98,
-    5.05
+    -23.37,
+    8.45
    ],
    "14": [
-    15.46,
-    11.8
+    21.88,
+    12.05
    ],
    "15": [
-    -11.8,
-    15.46
+    -13.68,
+    20.25
    ],
    "16": [
-    -30.98,
-    16.31
+    13.68,
+    20.25
    ],
    "17": [
-    33.99,
-    16.83
+    -32.72,
+    22.74
    ],
    "18": [
-    -2.68,
-    22.51
+    32.72,
+    22.74
    ],
    "19": [
-    5.05,
-    22.98
+    -5.48,
+    28.45
    ],
    "20": [
-    19.2,
-    34.7
+    1.88,
+    29.94
    ]
   },
   "plazas": {},
   "edges": [
    {
     "A": [
-     -16.5695,
-     11.8197
+     -17.9222,
+     16.0069
     ],
     "B": [
-     -21.0245,
-     8.4194
+     -21.8792,
+     12.0492
     ],
-    "L": 5.6044,
+    "L": 5.5965,
     "p0": 1.6,
     "p1": 0.0,
     "lean0": 0.0,
@@ -868,14 +868,14 @@
    },
    {
     "A": [
-     16.5695,
-     -11.8197
+     17.9226,
+     16.0074
     ],
     "B": [
-     21.0245,
-     -8.4194
+     21.88,
+     12.05
     ],
-    "L": 5.6044,
+    "L": 5.5966,
     "p0": 1.6,
     "p1": 0.0,
     "lean0": 0.0,
@@ -889,14 +889,14 @@
    },
    {
     "A": [
-     -22.98,
-     5.05
+     -23.37,
+     8.45
     ],
     "B": [
-     -23.5098,
-     1.0853
+     -23.3709,
+     4.4492
     ],
-    "L": 3.9999,
+    "L": 4.0008,
     "p0": 0.0,
     "p1": 0.0,
     "lean0": 0.0,
@@ -910,14 +910,14 @@
    },
    {
     "A": [
-     22.98,
-     -5.05
+     23.3709,
+     8.4508
     ],
     "B": [
-     23.5098,
-     -1.0853
+     23.37,
+     4.45
     ],
-    "L": 3.9999,
+    "L": 4.0008,
     "p0": 0.0,
     "p1": 0.0,
     "lean0": 0.0,
@@ -931,14 +931,14 @@
    },
    {
     "A": [
-     -22.51,
-     -2.68
+     -21.88,
+     0.85
     ],
     "B": [
-     -19.1296,
-     -7.053
+     -17.9434,
+     -3.0482
     ],
-    "L": 5.5272,
+    "L": 5.5401,
     "p0": 0.0,
     "p1": 1.6,
     "lean0": 0.0,
@@ -952,14 +952,14 @@
    },
    {
     "A": [
-     22.51,
-     2.68
+     21.8792,
+     0.8508
     ],
     "B": [
-     19.1296,
-     7.053
+     17.943,
+     -3.0478
     ],
-    "L": 5.5272,
+    "L": 5.5401,
     "p0": 0.0,
     "p1": 1.6,
     "lean0": 0.0,
@@ -973,14 +973,14 @@
    },
    {
     "A": [
-     -11.8194,
-     -16.5693
+     -9.4369,
+     -11.5122
     ],
     "B": [
-     -8.4191,
-     -21.0239
+     -5.4792,
+     -15.4692
     ],
-    "L": 5.6041,
+    "L": 5.5965,
     "p0": 1.6,
     "p1": 0.0,
     "lean0": 0.0,
@@ -994,14 +994,14 @@
    },
    {
     "A": [
-     11.8194,
-     16.5693
+     9.4374,
+     -11.5126
     ],
     "B": [
-     8.4191,
-     21.0239
+     5.48,
+     -15.47
     ],
-    "L": 5.6041,
+    "L": 5.5966,
     "p0": 1.6,
     "p1": 0.0,
     "lean0": 0.0,
@@ -1015,14 +1015,14 @@
    },
    {
     "A": [
-     -5.05,
-     -22.98
+     1.8808,
+     -16.9609
     ],
     "B": [
-     -1.0854,
-     -23.5091
+     -1.88,
+     -16.96
     ],
-    "L": 3.9997,
+    "L": 3.7608,
     "p0": 0.0,
     "p1": 0.0,
     "lean0": 0.0,
@@ -1036,14 +1036,56 @@
    },
    {
     "A": [
-     5.05,
-     22.98
+     -9.4374,
+     24.4926
     ],
     "B": [
-     1.0854,
-     23.5091
+     -5.48,
+     28.45
     ],
-    "L": 3.9997,
+    "L": 5.5966,
+    "p0": 1.6,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     9.4369,
+     24.4922
+    ],
+    "B": [
+     5.4792,
+     28.4492
+    ],
+    "L": 5.5965,
+    "p0": 1.6,
+    "p1": 0.0,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     1.88,
+     29.94
+    ],
+    "B": [
+     -1.8808,
+     29.9409
+    ],
+    "L": 3.7608,
     "p0": 0.0,
     "p1": 0.0,
     "lean0": 0.0,
@@ -1057,56 +1099,14 @@
    },
    {
     "A": [
-     2.68,
-     -22.51
+     -44.2227,
+     1.2062
     ],
     "B": [
-     7.053,
-     -19.1296
+     -36.5573,
+     -6.9562
     ],
-    "L": 5.5272,
-    "p0": 0.0,
-    "p1": 1.6,
-    "lean0": 0.0,
-    "lean1": 0.0,
-    "plaza0": false,
-    "plaza1": false,
-    "h": 0.0,
-    "r0": 0.0,
-    "r1": 0.0,
-    "dock": false
-   },
-   {
-    "A": [
-     -2.68,
-     22.51
-    ],
-    "B": [
-     -7.053,
-     19.1296
-    ],
-    "L": 5.5272,
-    "p0": 0.0,
-    "p1": 1.6,
-    "lean0": 0.0,
-    "lean1": 0.0,
-    "plaza0": false,
-    "plaza1": false,
-    "h": 0.0,
-    "r0": 0.0,
-    "r1": 0.0,
-    "dock": false
-   },
-   {
-    "A": [
-     -44.8141,
-     -3.4629
-    ],
-    "B": [
-     -37.7659,
-     -12.1671
-    ],
-    "L": 11.2,
+    "L": 11.1975,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1120,14 +1120,14 @@
    },
    {
     "A": [
-     44.8141,
-     3.4629
+     44.2227,
+     1.2062
     ],
     "B": [
-     37.7659,
-     12.1671
+     36.5573,
+     -6.9562
     ],
-    "L": 11.2,
+    "L": 11.1975,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1141,14 +1141,14 @@
    },
    {
     "A": [
-     -44.0365,
-     5.1071
+     -44.2925,
+     10.0184
     ],
     "B": [
-     -35.5335,
-     12.4029
+     -36.7575,
+     18.3016
     ],
-    "L": 11.204,
+    "L": 11.1977,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1162,14 +1162,14 @@
    },
    {
     "A": [
-     44.0365,
-     -5.1071
+     44.2925,
+     10.0184
     ],
     "B": [
-     35.5335,
-     -12.4029
+     36.7575,
+     18.3016
     ],
-    "L": 11.204,
+    "L": 11.1977,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1183,14 +1183,14 @@
    },
    {
     "A": [
-     -28.1995,
-     -15.2582
+     -26.5856,
+     -10.0615
     ],
     "B": [
-     -21.2505,
-     -13.3718
+     -19.5444,
+     -8.5385
     ],
-    "L": 7.2005,
+    "L": 7.204,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1204,14 +1204,14 @@
    },
    {
     "A": [
-     28.1995,
-     15.2582
+     26.5856,
+     -10.0615
     ],
     "B": [
-     21.2505,
-     13.3718
+     19.5444,
+     -8.5385
     ],
-    "L": 7.2005,
+    "L": 7.204,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1225,14 +1225,14 @@
    },
    {
     "A": [
-     -24.9859,
-     16.0444
+     -26.7707,
+     21.962
     ],
     "B": [
-     -17.7941,
-     15.7256
+     -19.6293,
+     21.028
     ],
-    "L": 7.1989,
+    "L": 7.2022,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1246,14 +1246,14 @@
    },
    {
     "A": [
-     24.9859,
-     -16.0444
+     26.7707,
+     21.962
     ],
     "B": [
-     17.7941,
-     -15.7256
+     19.6293,
+     21.028
     ],
-    "L": 7.1989,
+    "L": 7.2022,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1267,14 +1267,14 @@
    },
    {
     "A": [
-     -30.1644,
-     -21.4522
+     -28.8678,
+     -16.1433
     ],
     "B": [
-     -23.0256,
-     -30.0778
+     -22.1822,
+     -25.1267
     ],
-    "L": 11.1966,
+    "L": 11.1982,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1288,14 +1288,14 @@
    },
    {
     "A": [
-     30.1644,
-     21.4522
+     28.8678,
+     -16.1433
     ],
     "B": [
-     23.0256,
-     30.0778
+     22.1822,
+     -25.1267
     ],
-    "L": 11.1966,
+    "L": 11.1982,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1309,14 +1309,14 @@
    },
    {
     "A": [
-     -18.2329,
-     -28.7785
+     -17.3275,
+     -24.0765
     ],
     "B": [
-     -16.4271,
-     -17.7215
+     -14.9525,
+     -13.1335
     ],
-    "L": 11.2035,
+    "L": 11.1978,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1330,14 +1330,14 @@
    },
    {
     "A": [
-     18.2329,
-     28.7785
+     17.3275,
+     -24.0765
     ],
     "B": [
-     16.4271,
-     17.7215
+     14.9525,
+     -13.1335
     ],
-    "L": 11.2035,
+    "L": 11.1978,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1351,14 +1351,14 @@
    },
    {
     "A": [
-     -4.7695,
-     -3.6403
+     -4.2241,
+     2.2689
     ],
     "B": [
-     -10.6905,
-     -8.1597
+     -9.4559,
+     -3.0089
     ],
-    "L": 7.4487,
+    "L": 7.4315,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1372,14 +1372,14 @@
    },
    {
     "A": [
-     4.7695,
-     3.6403
+     4.2241,
+     2.2689
     ],
     "B": [
-     10.6905,
-     8.1597
+     9.4559,
+     -3.0089
     ],
-    "L": 7.4487,
+    "L": 7.4315,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1393,14 +1393,14 @@
    },
    {
     "A": [
-     -3.6403,
-     4.7695
+     -4.2364,
+     10.7788
     ],
     "B": [
-     -8.1597,
-     10.6905
+     -9.4436,
+     16.0012
     ],
-    "L": 7.4487,
+    "L": 7.3748,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,
@@ -1414,14 +1414,14 @@
    },
    {
     "A": [
-     3.6403,
-     -4.7695
+     4.2364,
+     10.7788
     ],
     "B": [
-     8.1597,
-     -10.6905
+     9.4436,
+     16.0012
     ],
-    "L": 7.4487,
+    "L": 7.3748,
     "p0": 1.6,
     "p1": 1.6,
     "lean0": 0.0,

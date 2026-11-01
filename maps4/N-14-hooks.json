@@ -9,7 +9,7 @@
  "modes": [
   "1v1"
  ],
- "symmetry": "point (180 degrees about the centre)",
+ "symmetry": "mirror left/right",
  "frame": {
   "width": 160,
   "height": 80,
@@ -94,7 +94,7 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 2,
+    "tier": 1,
     "structure": "vat"
    },
    "buildable": [
@@ -110,11 +110,8 @@
    "ring": 1,
    "category": "normal",
    "relay": null,
-   "home": false,
-   "neutral": {
-    "tier": 1,
-    "structure": "vat"
-   },
+   "home": true,
+   "neutral": null,
    "buildable": [
     "vat"
    ]
@@ -186,7 +183,7 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
+    "tier": 2,
     "structure": "vat"
    },
    "buildable": [
@@ -202,8 +199,11 @@
    "ring": 1,
    "category": "normal",
    "relay": null,
-   "home": true,
-   "neutral": null,
+   "home": false,
+   "neutral": {
+    "tier": 1,
+    "structure": "vat"
+   },
    "buildable": [
     "vat"
    ]
@@ -253,8 +253,8 @@
    "centreDistance": 11.6
   },
   {
-   "from": 9,
-   "to": 12,
+   "from": 4,
+   "to": 1,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -262,7 +262,7 @@
    "relay": null,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 11.6
+   "centreDistance": 17.45
   },
   {
    "from": 0,
@@ -277,8 +277,8 @@
    "centreDistance": 17.44
   },
   {
-   "from": 12,
-   "to": 10,
+   "from": 1,
+   "to": 5,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -286,7 +286,7 @@
    "relay": null,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 17.44
+   "centreDistance": 11.6
   },
   {
    "from": 8,
@@ -301,8 +301,8 @@
    "centreDistance": 17.45
   },
   {
-   "from": 4,
-   "to": 1,
+   "from": 9,
+   "to": 12,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -310,7 +310,7 @@
    "relay": null,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 17.45
+   "centreDistance": 11.6
   },
   {
    "from": 11,
@@ -325,8 +325,8 @@
    "centreDistance": 11.6
   },
   {
-   "from": 1,
-   "to": 5,
+   "from": 12,
+   "to": 10,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -334,7 +334,7 @@
    "relay": null,
    "retracts": false,
    "deckMetres": 4.0,
-   "centreDistance": 11.6
+   "centreDistance": 17.44
   },
   {
    "from": 2,
@@ -349,8 +349,8 @@
    "centreDistance": 27.2
   },
   {
-   "from": 10,
-   "to": 5,
+   "from": 5,
+   "to": 10,
    "tier": "L",
    "seconds": 6,
    "level": 0,
@@ -373,8 +373,8 @@
    "centreDistance": 27.2
   },
   {
-   "from": 8,
-   "to": 9,
+   "from": 9,
+   "to": 8,
    "tier": "L",
    "seconds": 6,
    "level": 0,
@@ -398,7 +398,7 @@
   },
   {
    "from": 6,
-   "to": 9,
+   "to": 4,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -422,7 +422,7 @@
   },
   {
    "from": 6,
-   "to": 4,
+   "to": 9,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -459,12 +459,12 @@
    },
    {
     "seat": "B",
-    "node": 10,
+    "node": 5,
     "team": 1
    }
   ]
  },
- "note": "XS, 9 platforms, choke, inward. A 4-way grinder hub (a rotor with no fixed deck) on the diagonals; each diagonal platform throws a Curve_90 hook back to the home side - the top one to the home, the bottom one to its pocket - and a long straight to the far side's platform. Point-symmetric. Survivor ring: the hub and its four platforms.",
+ "note": "XS, 9 platforms, choke, inward. A 4-way grinder hub (a rotor with no fixed deck, its V of bridges turning from the upper pair to the lower pair) on the diagonals; each diagonal platform throws a Curve_90 hook back to its home side - the top one to the home, the bottom one to its pocket - and a long straight to the far side's platform. Mirrored left / right (2026-11-01, was point-symmetric). Survivor ring: the hub and its four platforms.",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true,
@@ -560,14 +560,14 @@
    },
    {
     "A": [
-     17.8349,
-     17.8004
+     17.8311,
+     -17.8041
     ],
     "B": [
-     21.79,
-     21.77
+     21.7817,
+     -21.7762
     ],
-    "L": 5.6036,
+    "L": 5.6022,
     "p0": 1.6,
     "p1": 0.0,
     "lean0": 0.0,
@@ -602,14 +602,14 @@
    },
    {
     "A": [
-     28.9883,
-     21.7838
+     28.98,
+     -21.79
     ],
     "B": [
-     32.9502,
-     17.8354
+     32.9496,
+     -17.8349
     ],
-    "L": 5.5934,
+    "L": 5.6036,
     "p0": 0.0,
     "p1": 1.6,
     "lean0": 0.0,
@@ -644,14 +644,14 @@
    },
    {
     "A": [
-     17.8311,
-     -17.8041
+     17.8349,
+     17.8004
     ],
     "B": [
-     21.7817,
-     -21.7762
+     21.79,
+     21.77
     ],
-    "L": 5.6022,
+    "L": 5.6036,
     "p0": 1.6,
     "p1": 0.0,
     "lean0": 0.0,
@@ -686,14 +686,14 @@
    },
    {
     "A": [
-     28.98,
-     -21.79
+     28.9883,
+     21.7838
     ],
     "B": [
-     32.9496,
-     -17.8349
+     32.9502,
+     17.8354
     ],
-    "L": 5.6036,
+    "L": 5.5934,
     "p0": 0.0,
     "p1": 1.6,
     "lean0": 0.0,
@@ -729,11 +729,11 @@
    {
     "A": [
      37.2,
-     7.6
+     -7.6
     ],
     "B": [
      37.2,
-     -7.6
+     7.6
     ],
     "L": 15.2,
     "p0": 1.6,
@@ -770,11 +770,11 @@
    },
    {
     "A": [
-     -7.6,
+     7.6,
      13.55
     ],
     "B": [
-     7.6,
+     -7.6,
      13.55
     ],
     "L": 15.2,
@@ -813,11 +813,11 @@
    {
     "A": [
      4.2504,
-     4.2348
+     -4.2348
     ],
     "B": [
      9.3496,
-     9.3152
+     -9.3152
     ],
     "L": 7.1981,
     "p0": 1.6,
@@ -855,11 +855,11 @@
    {
     "A": [
      4.2504,
-     -4.2348
+     4.2348
     ],
     "B": [
      9.3496,
-     -9.3152
+     9.3152
     ],
     "L": 7.1981,
     "p0": 1.6,
