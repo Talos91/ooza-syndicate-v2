@@ -21,7 +21,7 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 
 func _init() -> void:
-	if "--only=two_doors" in OS.get_cmdline_user_args():      # PROTO: TWO DOORS alone (quick)
+	if "--only=two_doors" in OS.get_cmdline_user_args():      # TWO DOORS alone (quick)
 		_two_doors()
 		print("two_doors: %d failure(s)" % failures)
 		quit(1 if failures else 0)
@@ -399,7 +399,7 @@ func _init() -> void:
 		sim17c.setup(rem_map, rem_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
 		sim17c.demolished[5] = 999999.0                   # edge "4-0": node 4's bypass is gone
 		sim17c.demolished[7] = 999999.0                   # edge "2-4" (m1): its other remote deck too
-		# (PROTO: TWO DOORS - with door exits the Veteran's lines walk less and it won the whole match before node 4)
+		# (TWO DOORS - with door exits the Veteran's lines walk less and it won the whole match before node 4)
 		sim17c.nodes[5]["units"] = 500.0
 		sim17c.nodes[6]["units"] = 5000.0                 # B's home holds: the check is about node 4, not about winning first
 		check(sim17c.find_route(5, 4).is_empty(), "node 4 is unreachable right now (m1: only edge 8 (m2) would reach it, and it is closed)")
@@ -645,7 +645,7 @@ func _init() -> void:
 	var hally := sim31.send(a_home, ally_home, 1.0)
 	check(not hally.is_empty(), "A can send to an ally's node")
 	run_until(sim31, func(): return not (hally in sim31.hordes), 40.0)
-	# (PROTO: TWO DOORS - the arriving troops are stored as allies (n["allies"]); "units" grew past +50 only through the
+	# (TWO DOORS - the arriving troops are stored as allies (n["allies"]); "units" grew past +50 only through the
 	# ally's own production over a 10 s+ walk, which the top door's shorter walk no longer gives)
 	var stored_a: float = float(sim31.nodes[ally_home].get("allies", {}).get("A", 0.0))
 	check(sim31.nodes[ally_home]["owner"] == ally and sim31.nodes[ally_home]["units"] + stored_a > before_ally + 50.0,
@@ -1172,10 +1172,10 @@ func _catchup_tests() -> void:
 # ------------------------------------------------------------------ 2026-09-28: the audit fix pass (audit-sim A1-A5, Daniele's rule fixes)
 func _audit_fixes() -> void:
 	# Core Meltdown against an allied store: the kills split by troop share, the node falls only at total 0
-	# (PROTO: TWO DOORS - the fixture casts 12 m before arrival and counts on the whole line being out by then; the top
+	# (TWO DOORS - the fixture casts 12 m before arrival and counts on the whole line being out by then; the top
 	# door's shorter walk on Two Piers casts it mid-emission, so the fixture keeps the one-door path it was built on)
-	var doors_was: bool = Rules.PROTO_TWO_DOORS
-	Rules.PROTO_TWO_DOORS = false
+	var doors_was: bool = Rules.TWO_DOORS
+	Rules.TWO_DOORS = false
 	for c in [[200.0, 200.0, false], [30.0, 30.0, true]]:
 		var s := _tp({3: "A", 4: "B"}, {"A": "ember", "B": "null"}, {"A": 0, "B": 1, "C": 1})
 		_ready_skills(s)
@@ -1202,7 +1202,7 @@ func _audit_fixes() -> void:
 					and absf(float(s.nodes[1]["allies"]["C"]) - c0 * (1.0 - frac)) < 0.01
 					and absf(s.combat_losses.get("C", 0.0) - lost_c0 - c0 * frac) < 0.01,
 					"Core Meltdown: %.0f kills split by share over the owner's %.0f and the ally's %.0f stored" % [kills, b0, c0])
-	Rules.PROTO_TWO_DOORS = doors_was
+	Rules.TWO_DOORS = doors_was
 	# a split line's front does not drain its source (_split_front: no eject_left / ghost_left)
 	var sp := _tp()
 	sp.nodes[3]["units"] = 200.0
@@ -3143,7 +3143,7 @@ func _relays_proto() -> void:
 			and absf(float(fc["cross"]) - f.deck_length(7) / Rules.move_speed()) < 0.001,
 			"ferry: in line %.2f s = the %.2f s crossing + %.0f %% of the %.2f s half cycle" % [fc["open"], fc["cross"],
 			float(fcfg["survive"]) * 100.0, fc["half"]])
-	check(not f.fire_relay(1) and f.nodes[1]["relay_phase"] == "", "ferry: nobody fires it (it runs on its own)")
+	check(not f.relay_fixed(1) and f.ferry_hold_refusal(1) == "", "ferry (round 3): its owner may HOLD it (in line now)")
 	var parts := {}
 	var t_f := 0.0
 	var open_routes := true
@@ -3187,6 +3187,7 @@ func _relays_proto() -> void:
 	check(f3.fall_losses.get("A", 0.0) > 1.0 and waited < 0.01, "ferry: a line reaching the open gap pours into the void, no queue (%.1f fell)"
 			% f3.fall_losses.get("A", 0.0))
 	check(f3.fx_events.any(func(e): return e["type"] == "fall") or f3.fall_losses.get("A", 0.0) > 1.0, "ferry: the falls are shown")
+	_ferry_round3()
 	# Daniele's example: a 50 send loses about half on average (20 moments over the cycle)
 	var sum := 0.0
 	var runs := 0
@@ -3235,7 +3236,7 @@ func _relays_proto() -> void:
 	hb["s"] = (float(spb["s0"]) + float(spb["s1"])) * 0.5
 	var cw: float = float(Rules.RELAYS_PROTO["conveyor"]["with"])
 	var ca: float = float(Rules.RELAYS_PROTO["conveyor"]["against"])
-	check(cw >= 2.0 and ca <= 0.5, "conveyor (round 2): the push is x%.1f with the flow, x%.1f against" % [cw, ca])
+	check(absf(cw - 2.25) < 0.001 and absf(ca - 0.3) < 0.001, "conveyor (round 3): the push is x%.2f with the flow, x%.1f against" % [cw, ca])
 	check(absf(c.conveyor_mult(hw) - cw) < 0.001 and hw["conv"] == 1, "conveyor: with the flow x%.1f" % cw)
 	check(absf(c.conveyor_mult(hb) - ca) < 0.001 and hb["conv"] == -1, "conveyor: against it x%.1f" % ca)
 	check(c.door_mult(hw) >= cw - 0.001, "conveyor: a line still leaving its vat onto the belt is fed out x%.1f (door x%.2f)" % [cw, c.door_mult(hw)])
@@ -3262,6 +3263,7 @@ func _relays_proto() -> void:
 	hw["s"] = (float(spw["s0"]) + float(spw["s1"])) * 0.5
 	check(absf(c.conveyor_mult(hw) - ca) < 0.001, "conveyor: and A's line against it")
 	check(c.fall_losses.get("A", 0.0) < 0.01 and c.fall_losses.get("B", 0.0) < 0.01, "conveyor: nothing falls")
+	_conveyor_round3()
 
 	# ---- LAUNCHER: P-93, launcher node 1 throws at node 8 (2 bridges: 1 - 4 - 8)
 	var l := _proto_sim("launcher")
@@ -3275,7 +3277,7 @@ func _relays_proto() -> void:
 	# round 2: the aim steps through its targets every 10 s on its own; the owner's fire locks the one it shows
 	var tg: Array = l.nodes[1]["proto"]["targets"]
 	var cyc: float = float(Rules.RELAYS_PROTO["launcher"]["cycle"])
-	check(tg.size() >= 2 and 8 in tg and absf(cyc - 10.0) < 0.001, "launcher (round 2): it cycles through %s every %.0f s" % [str(tg), cyc])
+	check(tg.size() >= 2 and 8 in tg and absf(cyc - 4.0) < 0.001, "launcher (round 3): it cycles through %s every %.0f s" % [str(tg), cyc])
 	var a0 := l.launcher_aim(1)
 	var left0 := l.launcher_aim_left(1)
 	var t_step := run_until(l, func(): return l.launcher_aim(1) != a0, cyc + 0.5)
@@ -3302,11 +3304,17 @@ func _relays_proto() -> void:
 	var b_thrown := false
 	var t := 0.0
 	var locked_ok := true
+	var t_rel := -1.0                                  # the arm's end, and when the aim first left 8 after it
+	var t_moved := -1.0
 	while t < 14.0:
 		l.step(0.05)
 		t += 0.05
 		if l.nodes[1]["relay_phase"] == "moving":
 			locked_ok = locked_ok and l.launcher_aim(1) == 8 and int(l.nodes[1]["proto"]["target"]) == 8
+		elif t_rel < 0.0 and first_throw > 0.0:
+			t_rel = l.time
+		if t_rel >= 0.0 and t_moved < 0.0 and l.launcher_aim(1) != 8:
+			t_moved = l.time
 		if first_throw < 0.0 and not l.flights.is_empty():
 			first_throw = l.time
 		if first_land < 0.0 and l.flights.any(func(fl): return fl.get("landed", false)):
@@ -3314,20 +3322,26 @@ func _relays_proto() -> void:
 		if hbl in l.hordes and hbl.has("launch"):
 			b_thrown = true
 	check(first_throw > 0.0, "launcher: an own line entering the armed pad is thrown")
-	check(first_land > 0.0 and first_land - first_throw >= 1.95, "launcher: it flies 2 s before landing (%.2f s)" % (first_land - first_throw))
+	var fl_s: float = float(Rules.RELAYS_PROTO["launcher"]["flight"])
+	check(first_land > 0.0 and first_land - first_throw >= fl_s - 0.05 and fl_s <= 1.2, "launcher (round 3): it flies %.1f s before landing (%.2f s)" % [fl_s, first_land - first_throw])
 	check(not b_thrown, "launcher: enemy lines are never thrown")
 	check(l.nodes[8]["owner"] == "A" or l.nodes[8]["units"] < u8 - 0.5, "launcher: the throw lands at the target as an arrival (owner %s)" % l.nodes[8]["owner"])
-	check(absf(float(Rules.RELAYS_PROTO["launcher"]["land"]) - 1.5) < 0.001 and l.nodes[1]["relay_cd"] > 20.0,
-			"launcher: lands over 1.5 s; 30 s cooldown after the arm (%.1f left)" % l.nodes[1]["relay_cd"])
+	check(absf(float(Rules.RELAYS_PROTO["launcher"]["land"]) - 0.5) < 0.001 and l.nodes[1]["relay_cd"] > 20.0,
+			"launcher (round 3): lands over 0.5 s; 30 s cooldown after the arm (%.1f left)" % l.nodes[1]["relay_cd"])
 	check(locked_ok, "launcher: the aim never moved while armed")
-	var after_arm := run_until(l, func(): return l.launcher_aim(1) != 8, cyc + 0.5)
+	if t_moved < 0.0 and t_rel >= 0.0:
+		run_until(l, func(): return l.launcher_aim(1) != 8, cyc + 0.5)
+		t_moved = l.time
+	var after_arm: float = t_moved - t_rel if t_rel >= 0.0 else -1.0
 	check(l.nodes[1]["relay_phase"] == "" and after_arm > 0.5 and after_arm <= cyc + 0.1,
 			"launcher: after the arm the aim moves on from the locked target (in %.1f s)" % after_arm)
-	# the landing is spread: a single 2 s-old throw lands over RELAYS_PROTO.launcher.land
+	# the landing is spread: a single throw lands over RELAYS_PROTO.launcher.land
+	var land_s: float = float(Rules.RELAYS_PROTO["launcher"]["land"])
 	var l2 := _proto_sim("launcher")
-	l2.flights.append({"seat": "A", "faction": "null", "units": 3.0, "left": 3.0, "from": 1, "to": 8, "t0": 0.0, "land": 0.0, "end": 1.5})
-	l2.step(0.5)
-	check(l2.flights.size() == 1 and absf(float(l2.flights[0]["left"]) - 2.0) < 0.05, "launcher: units arrive one by one over the 1.5 s")
+	l2.flights.append({"seat": "A", "faction": "null", "units": 3.0, "left": 3.0, "from": 1, "to": 8, "t0": 0.0, "land": 0.0, "end": land_s})
+	l2.step(land_s * 0.5)
+	check(l2.flights.size() == 1 and absf(float(l2.flights[0]["left"]) - 1.5) < 0.05, "launcher: units arrive one by one over the %.1f s" % land_s)
+	_launcher_round3()
 
 	# ---- LIFT: P-94, the centre (4) is a lift at level 0: decks 3 (0-4), 12 (4-8) level 0, 5 (2-4), 10 (4-6) level 1
 	var lf := _proto_sim("lift")
@@ -3403,6 +3417,206 @@ func _relays_proto() -> void:
 	_relays_proto_maps()
 
 
+func _proto_map(kind: String) -> Dictionary:
+	var code: String = {"ferry": "P-91", "conveyor": "P-92", "launcher": "P-93", "lift": "P-94", "tilt": "P-95"}[kind]
+	return MapBuilder.load_map("res://tests/relays_proto/%s-fixture-%s.json" % [code, kind])
+
+
+func _sim_of(m: Dictionary, lo := {}) -> Sim:
+	var s := Sim.new()
+	s.setup(m, MapBuilder.layout(m), {3: "A", 5: "B"}, {"A": "null", "B": "null"}, 1, {}, lo)
+	_ready_skills(s)
+	return s
+
+
+func _ferry_round3() -> void:
+	## RELAYS 3.0 round 3 (Daniele: the ferry "amazing; maybe tweak the timing or how it is used"; it can exist without a
+	## relay): the owner HOLDS the bridge in line RELAYS_PROTO.ferry.hold s (only while in line; its clock stops), the AI holds
+	## it for a line about to be cut, and a "proto": "ferry" deck with no relay runs on its own clock.
+	var hold: float = float(Rules.RELAYS_PROTO["ferry"]["hold"])
+	var f := _proto_sim("ferry")
+	f.nodes[1]["owner"] = "A"
+	var fc := f.ferry_cycle(1)
+	f.time = float(fc["open"]) - 0.5                   # half a second before it would slide out
+	var left0: float = f.ferry_phase(1)["left"]
+	check(hold >= 3.0 and f.fire_relay(1) and f.nodes[1]["relay_phase"] == "moving" and f.proto_tag(1).begins_with("HOLD"),
+			"ferry hold: the owner holds it in line (%s, %.0f s)" % [f.proto_tag(1), hold])
+	var stayed := true
+	var t := 0.0
+	while t < hold - 0.1:
+		f.step(0.05)
+		t += 0.05
+		stayed = stayed and not f.ferry_out(1) and f.is_edge_open(7)
+	check(stayed, "ferry hold: it stays in line for the whole hold (the clock stops)")
+	run_until(f, func(): return f.nodes[1]["relay_phase"] == "", 1.0)
+	check(absf(float(f.ferry_phase(1)["left"]) - left0) < 0.15 and f.nodes[1]["relay_cd"] > float(Rules.RELAYS_PROTO["ferry"]["cooldown"]) - 0.5,
+			"ferry hold: then it runs on from where it was (%.2f s left, was %.2f) and cools down %.0f s" % [f.ferry_phase(1)["left"], left0,
+			float(Rules.RELAYS_PROTO["ferry"]["cooldown"])])
+	run_until(f, func(): return f.ferry_out(1), float(fc["open"]))
+	f.nodes[1]["relay_cd"] = 0.0                       # (off cooldown: the refusal is about the bridge being out)
+	check(f.ferry_out(1) and f.ferry_hold_refusal(1) != "" and not f.fire_relay(1), "ferry hold: refused while the bridge is out (%s)" % f.ferry_hold_refusal(1))
+	# measured: a 25 send timed to be cut by the slide-out - the AI's hold carries (most of) it across
+	var fracs := []
+	for use_ai in [false, true]:
+		var g := _proto_sim("ferry")
+		g.nodes[1]["owner"] = "A"
+		var gc := g.ferry_cycle(1)
+		g.time = float(gc["open"]) - float(gc["cross"]) * 1.4
+		g.nodes[3]["units"] = 25.0 * Rules.SCALE
+		var hg := g.send(3, 4, 1.0)
+		var ai := SeatAI.new("A", 2.0, "Standard")
+		var fired := false
+		var done := {}
+		var tg := 0.0
+		while tg < 30.0 and done.is_empty():
+			if use_ai and not fired and g.nodes[1]["relay_phase"] == "" and g.nodes[1]["relay_cd"] <= 0.0 and ai._proto_fire(g, g.nodes[1]):
+				fired = g.fire_relay(1)
+			g.step(0.05)
+			tg += 0.05
+			for e in g.events:
+				if e["type"] == "ferry_cross" and int(e["hid"]) == int(hg["id"]):
+					done = e
+		if use_ai:
+			check(fired, "AI ferry: it holds the bridge for its own line about to be cut")
+		fracs.append(float(done.get("ok", 0.0)) / maxf(float(done.get("ok", 0.0)) + float(done.get("fell", 0.0)), 0.001))
+	check(fracs[1] > fracs[0] + 0.3 and fracs[1] > 0.85, "ferry hold: a 25 send cut by the slide-out crosses %.0f %% unheld, %.0f %% held"
+			% [fracs[0] * 100.0, fracs[1] * 100.0])
+	# a plain moving bridge (no relay): deck 7 "relay": null - it runs on its own clock, nobody holds it
+	var m := _proto_map("ferry")
+	m["edges"][7]["relay"] = null
+	m["edges"][7]["ferry"] = {"dock": "B"}
+	var pf := _sim_of(m)
+	check(pf._ferry_edges.get(7, 0) == -1 and not pf.edge_controller.has(7), "plain ferry: deck 7 is a moving bridge with no relay")
+	var pc := pf.ferry_cycle_e(7)
+	var parts := {}
+	var tp := 0.0
+	while tp < float(pc["period"]) + 0.1:
+		parts[pf.ferry_phase_e(7)["part"]] = true
+		pf.step(0.05)
+		tp += 0.05
+	check(parts.size() == 4 and pf.find_route(3, 4) == [3, 4], "plain ferry: it cycles in line, out, away, back on its own (%s), routed" % str(parts.keys()))
+	pf.time = 0.0
+	check(not pf.ferry_edge_out(7) and float(pf.ferry_phase_e(7)["side"]) < 0.0, "plain ferry: dock B starts half a cycle on (in line, sliding to the other side)")
+	pf.time = float(pc["half"]) + 0.1
+	pf.nodes[3]["units"] = 10.0 * Rules.SCALE
+	var hp := pf.send(3, 4, 1.0)
+	var tally := {}
+	run_until(pf, func():
+		for e in pf.events:
+			if e["type"] == "ferry_cross" and int(e["hid"]) == int(hp["id"]):
+				tally.merge(e)
+		return not tally.is_empty(), 20.0)
+	check(not tally.is_empty() and float(tally["ok"]) > 9.5 * Rules.SCALE and int(tally["node"]) == -1,
+			"plain ferry: a send in its window crosses and is tallied (node %s)" % str(tally.get("node", "?")))
+
+
+func _conveyor_round3() -> void:
+	## RELAYS 3.0 round 3: a belt with no relay (deck "belt": "AB" / "BA") always runs; a conveyor relay whose map says
+	## "switch": false never flips (nobody fires it, the AI neither).
+	var cw: float = float(Rules.RELAYS_PROTO["conveyor"]["with"])
+	var ca: float = float(Rules.RELAYS_PROTO["conveyor"]["against"])
+	var m := _proto_map("conveyor")
+	m["edges"][7]["relay"] = null
+	m["edges"][7]["belt"] = "AB"                      # 3 -> 4
+	m["edges"][9]["relay"] = null
+	m["edges"][9]["belt"] = "BA"                      # 5 -> 4
+	var b := _sim_of(m)
+	check(b._belt_edges.get(7, -1) == 0 and b._belt_edges.get(9, -1) == 1 and not b.edge_controller.has(7), "belt: decks 7 / 9 are plain belts (no relay)")
+	b.nodes[3]["units"] = 30.0
+	b.nodes[5]["units"] = 30.0
+	var hw := b.send(3, 4, 0.5)
+	var spw := _span_of(hw, 7)
+	hw["s"] = (float(spw["s0"]) + float(spw["s1"])) * 0.5
+	check(absf(b.conveyor_mult(hw) - cw) < 0.001, "belt: a line with its flow walks x%.2f" % cw)
+	var hb := b.send(5, 4, 0.5)
+	var spb := _span_of(hb, 9)
+	hb["s"] = (float(spb["s0"]) + float(spb["s1"])) * 0.5
+	check(absf(b.conveyor_mult(hb) - cw) < 0.001, "belt: \"BA\" flows 5 -> 4 - B's line with it x%.2f" % cw)
+	m["edges"][9]["belt"] = "AB"
+	var b2 := _sim_of(m)
+	b2.nodes[5]["units"] = 30.0
+	var hb2 := b2.send(5, 4, 0.5)
+	var spb2 := _span_of(hb2, 9)
+	hb2["s"] = (float(spb2["s0"]) + float(spb2["s1"])) * 0.5
+	check(absf(b2.conveyor_mult(hb2) - ca) < 0.001, "belt: against a belt x%.1f" % ca)
+	# a conveyor relay with no switch
+	var m2 := _proto_map("conveyor")
+	m2["nodes"][1]["conveyor"]["switch"] = false
+	var c := _sim_of(m2)
+	c.nodes[1]["owner"] = "A"
+	check(c.relay_fixed(1) and not c.fire_relay(1) and c.nodes[1]["relay_phase"] == "", "conveyor \"switch\": false - it never flips")
+	check(not SeatAI.new("A", 2.0, "Expert")._proto_fire(c, c.nodes[1]), "AI: never fires a fixed conveyor")
+	c.nodes[3]["units"] = 30.0
+	var hc := c.send(3, 4, 0.5)
+	var spc := _span_of(hc, 7)
+	hc["s"] = (float(spc["s0"]) + float(spc["s1"])) * 0.5
+	check(absf(c.conveyor_mult(hc) - cw) < 0.001, "conveyor \"switch\": false - its flow still pushes x%.2f" % cw)
+
+
+func _launcher_round3() -> void:
+	## RELAYS 3.0 round 3 (Daniele: "fix the timer and the unit transfer speed (too slow)"; "if it is hit by Rewire or
+	## similar, it throws units into the void at random"): a line pours into the air x pour; a rival's Relay Hack (fire or
+	## jam) / Rewire makes it MISFIRE RELAYS_PROTO.launcher.misfire s - what steps on is thrown off the map and lost.
+	var pour: float = float(Rules.RELAYS_PROTO["launcher"]["pour"])
+	var mis: float = float(Rules.RELAYS_PROTO["launcher"]["misfire"])
+	var l := _proto_sim("launcher")
+	l.nodes[1]["owner"] = "A"
+	l.nodes[0]["owner"] = "A"
+	l.nodes[0]["units"] = 60.0 * Rules.SCALE
+	run_until(l, func(): return l.launcher_aim(1) == 8, 20.0)
+	l.fire_relay(1)
+	_skip_warning(l, 1)
+	var h0 := l.send(0, 2, 1.0)
+	var caught := [-1.0, 0.0]                         # the time it is caught, its length then (a lambda captures by value)
+	run_until(l, func():
+		if caught[0] < 0.0 and h0.has("launch"):
+			caught[0] = l.time
+			caught[1] = Sim.chain_length(h0) if not h0["streaming"] else Rules.BRAWL_SPACING * h0["units"]
+		return caught[0] >= 0.0 and not (h0 in l.hordes), 10.0)
+	var took: float = l.time - float(caught[0]) if caught[0] >= 0.0 else 99.0
+	var x1: float = float(caught[1]) / (Rules.move_speed() * Rules.platform_mult())   # the round-2 pour: one line length at walk pace
+	check(pour >= 2.5 and caught[0] >= 0.0 and took < x1 * 0.6, "launcher (round 3): a 60 line is in the air in %.2f s (x1 would take ~%.2f s)" % [took, x1])
+	# Relay Hack FIRE by the rival: after the warning it misfires instead of arming
+	var m := _proto_map("launcher")
+	var s := _sim_of(m, {"B": {"map": "relay_hack"}})
+	s.nodes[1]["owner"] = "A"
+	s.nodes[0]["owner"] = "A"
+	s.nodes[0]["units"] = 40.0 * Rules.SCALE
+	var u8: float = s.nodes[8]["units"]
+	check(s.cast("B", "map", 1) and s.nodes[1]["relay_phase"] == "warning", "launcher misfire: B's Relay Hack fires A's launcher")
+	_skip_warning(s, 1)
+	check(s.nodes[1].get("misfire", "") == "B" and absf(float(s.nodes[1]["relay_move"]) - mis) < 0.01 and s.proto_tag(1).begins_with("MISFIRE"),
+			"launcher misfire: it misfires %.0f s instead of arming (%s)" % [mis, s.proto_tag(1)])
+	check(s.fx_events.any(func(e): return e["type"] == "launch_misfire" and e["by"] == "B"), "launcher misfire: the view and the callout get it")
+	var fall0: float = s.fall_losses.get("A", 0.0)
+	var h := s.send(0, 2, 1.0)                        # A's own line walks onto the scrambled pad
+	run_until(s, func(): return not (h in s.hordes) and s.flights.is_empty(), 12.0)
+	var lost: float = s.fall_losses.get("A", 0.0) - fall0
+	check(lost > 30.0 * Rules.SCALE and absf(s.nodes[8]["units"] - u8) < 0.5 and s.events.any(func(e): return e["type"] == "launch_lost" and e["by"] == "B"),
+			"launcher misfire: A's line stepping on is thrown into the void (%.0f lost, target untouched)" % Rules.shown(lost))
+	check(s.nodes[1]["relay_phase"] == "" and s.nodes[1].get("misfire", "") == "" and s.nodes[1]["relay_cd"] > 20.0,
+			"launcher misfire: over after %.0f s, then the usual cooldown" % mis)
+	# Relay Hack JAM: at once
+	var s2 := _sim_of(m, {"B": {"map": "relay_hack"}})
+	s2.nodes[1]["owner"] = "A"
+	check(s2.cast("B", "map", [1, "jam"]) and s2.nodes[1].get("misfire", "") == "B" and s2.nodes[1]["relay_phase"] == "moving",
+			"launcher misfire: B's Relay Hack jam scrambles it at once")
+	# the owner's own fire (or Rewire by the owner) arms it as before
+	var s3 := _proto_sim("launcher")
+	s3.nodes[1]["owner"] = "A"
+	s3.fire_relay(1)
+	_skip_warning(s3, 1)
+	check(s3.nodes[1].get("misfire", "") == "" and s3.proto_tag(1).begins_with("ARMED"), "launcher: the owner's own fire still arms it (%s)" % s3.proto_tag(1))
+	# the garrison and a line leaving the pad are never thrown
+	var s4 := _sim_of(m, {"B": {"map": "relay_hack"}})
+	s4.nodes[1]["owner"] = "A"
+	s4.nodes[1]["units"] = 40.0 * Rules.SCALE
+	s4.cast("B", "map", [1, "jam"])
+	var hl := s4.send(1, 0, 0.5)
+	run_until(s4, func(): return not (hl in s4.hordes), 10.0)
+	check(s4.fall_losses.get("A", 0.0) < 0.01 and s4.nodes[1]["units"] > 15.0 * Rules.SCALE, "launcher misfire: the garrison and a line leaving it are safe")
+
+
 func _route_edges(s: Sim, route: Array) -> Array:
 	var out := []
 	for k in range(route.size() - 1):
@@ -3442,7 +3656,7 @@ func _relays_proto_ai() -> void:
 	check(ai._proto_fire(t, t.nodes[4]), "AI tilt: an enemy line on the platform, the next exit away from its nodes - fires")
 	t.nodes[1]["owner"] = "A"
 	check(not ai._proto_fire(t, t.nodes[4]), "AI tilt: never slides the enemy into its own node")
-	for kind in ["ferry", "lift"]:
+	for kind in ["lift"]:                             # (round 3: the ferry HOLDS - _ferry_round3)
 		var s := _proto_sim(kind)
 		var rid: int = 1 if kind == "ferry" else 4
 		s.nodes[rid]["owner"] = "A"
@@ -3483,10 +3697,10 @@ func _relays_proto_maps() -> void:
 
 
 func _door_send(m: Dictionary, seats: Dictionary, a: int, b: int, two: bool, exits := false) -> Dictionary:
-	## PROTO: TWO DOORS - a 400-unit send a -> b (neighbours) with the switch as given: its path, the time until it starts
-	## pouring in (state "absorb"), and whether it took b. `exits`: Rules.PROTO_DOOR_EXITS for this send.
-	Rules.PROTO_TWO_DOORS = two
-	Rules.PROTO_DOOR_EXITS = exits
+	## TWO DOORS - a 400-unit send a -> b (neighbours) with the switch as given: its path, the time until it starts
+	## pouring in (state "absorb"), and whether it took b. `exits`: Rules.DOOR_EXITS for this send.
+	Rules.TWO_DOORS = two
+	Rules.DOOR_EXITS = exits
 	var s := Sim.new()
 	s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null"}, 1)
 	s.nodes[a]["owner"] = "A"
@@ -3504,11 +3718,11 @@ func _door_send(m: Dictionary, seats: Dictionary, a: int, b: int, two: bool, exi
 
 
 func _two_doors() -> void:
-	## PROTO: TWO DOORS (Rules.PROTO_TWO_DOORS, proto line): an arriving line takes the nearer door along the ring (ties: the
-	## front); with PROTO_DOOR_EXITS a leaving line comes out of the door nearer its bridge; PROTO_DOOR_EXITS off keeps
+	## TWO DOORS (Rules.TWO_DOORS, proto line): an arriving line takes the nearer door along the ring (ties: the
+	## front); with DOOR_EXITS a leaving line comes out of the door nearer its bridge; DOOR_EXITS off keeps
 	## exits at the front door; switched off, every path is today's (front door in and out).
-	var was: bool = Rules.PROTO_TWO_DOORS
-	var was_exits: bool = Rules.PROTO_DOOR_EXITS
+	var was: bool = Rules.TWO_DOORS
+	var was_exits: bool = Rules.DOOR_EXITS
 	var front := Rules.front_dir()
 	var a_front := atan2(front.z, front.x)
 	var a_back := wrapf(a_front + PI, -PI, PI)
@@ -3556,7 +3770,7 @@ func _two_doors() -> void:
 		check(absf(one_b["L"] - two_b["L"]) < 0.001 and absf(one_b["t"] - two_b["t"]) < 0.001,
 				"two doors: a front-side arrival is unchanged (%.2f m, %.2f s)" % [two_b["L"], two_b["t"]])
 	# switched off: every path on N-24 and Two Piers (legacy builder) leaves and enters by the front door - today's rule
-	Rules.PROTO_TWO_DOORS = false
+	Rules.TWO_DOORS = false
 	var bad := 0
 	var n_paths := 0
 	for path in ["res://maps4/N-24-k-crossing.json", "res://maps/004-two-piers.json"]:
@@ -3581,8 +3795,8 @@ func _two_doors() -> void:
 				if pts[0] != door_a or pts[pts.size() - 1] != door_b:
 					bad += 1
 	check(bad == 0 and n_paths > 20, "two doors OFF: all %d paths leave and enter by the front door exactly (today's rule), %d off" % [n_paths, bad])
-	Rules.PROTO_TWO_DOORS = true
-	Rules.PROTO_DOOR_EXITS = false
+	Rules.TWO_DOORS = true
+	Rules.DOOR_EXITS = false
 	var bad_exit := 0                                  # entry only: exits still leave by the front door
 	for e in probe.edges:
 		if probe.nodes[e["a"]]["node_kind"] == "junction" or probe.nodes[e["b"]]["node_kind"] == "junction":
@@ -3590,8 +3804,8 @@ func _two_doors() -> void:
 		var p0: Vector3 = (probe.build_path([e["a"], e["b"]])["pts"] as PackedVector3Array)[0]
 		if p0 != (probe.nodes[e["a"]]["pos"] as Vector3) + front * Rules.EXIT_R:
 			bad_exit += 1
-	check(bad_exit == 0, "two doors, entry only (PROTO_DOOR_EXITS off): every exit still leaves by the front door (%d off)" % bad_exit)
-	# PROTO_DOOR_EXITS: a line whose bridge leaves its node on the far side comes out of the top door, sooner
+	check(bad_exit == 0, "two doors, entry only (DOOR_EXITS off): every exit still leaves by the front door (%d off)" % bad_exit)
+	# DOOR_EXITS: a line whose bridge leaves its node on the far side comes out of the top door, sooner
 	var top_out := []
 	for ei in range(probe.edges.size()):
 		var e: Dictionary = probe.edges[ei]
@@ -3612,7 +3826,7 @@ func _two_doors() -> void:
 		var front_out := _door_send(m, seats, top_out[0], top_out[1], true, false)
 		var top_exit := _door_send(m, seats, top_out[0], top_out[1], true, true)
 		check((front_out["start"] as Vector3).dot(front) > 1.0 and (top_exit["start"] as Vector3).dot(front) < -1.0,
-				"door exits: entry only leaves by the front door, PROTO_DOOR_EXITS by the top door (start dot front %.2f -> %.2f)" % [
+				"door exits: entry only leaves by the front door, DOOR_EXITS by the top door (start dot front %.2f -> %.2f)" % [
 				(front_out["start"] as Vector3).dot(front), (top_exit["start"] as Vector3).dot(front)])
 		var saved_o: float = front_out["t"] - top_exit["t"]
 		var want_o: float = (front_out["L"] - top_exit["L"]) / Rules.BRAWL_SPEED
@@ -3620,8 +3834,8 @@ func _two_doors() -> void:
 				"door exits: the top exit is shorter: %.2f m -> %.2f m, arrives %.2f s sooner (path says %.2f s)" % [
 				front_out["L"], top_exit["L"], saved_o, want_o])
 		check(front_out["took"] and top_exit["took"], "door exits: the fight at the target is the same - it takes the node both ways")
-	Rules.PROTO_TWO_DOORS = true                       # both on: every path is half-turn fair on N-24 (seat A's walk to
-	Rules.PROTO_DOOR_EXITS = true                      # each node = seat B's walk to its image)
+	Rules.TWO_DOORS = true                       # both on: every path is half-turn fair on N-24 (seat A's walk to
+	Rules.DOOR_EXITS = true                      # each node = seat B's walk to its image)
 	var ha := -1
 	var hb := -1
 	for id in seats:
@@ -3632,5 +3846,5 @@ func _two_doors() -> void:
 	var la: float = (probe.build_path(probe.find_route(ha, hb))["cum"] as PackedFloat32Array)[-1]
 	var lb: float = (probe.build_path(probe.find_route(hb, ha))["cum"] as PackedFloat32Array)[-1]
 	check(absf(la - lb) < 0.01, "two doors in and out: N-24 home to home is even (A %.2f m, B %.2f m)" % [la, lb])
-	Rules.PROTO_TWO_DOORS = was
-	Rules.PROTO_DOOR_EXITS = was_exits
+	Rules.TWO_DOORS = was
+	Rules.DOOR_EXITS = was_exits

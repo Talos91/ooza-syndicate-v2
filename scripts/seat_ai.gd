@@ -1050,9 +1050,28 @@ func _relays(sim: Sim) -> void:
 
 
 func _proto_fire(sim: Sim, n: Dictionary) -> bool:
-	## RELAYS 3.0 PROTOTYPES (spec v1): the one AI rule per kind; the ferry and the lift are routing only.
+	## RELAYS 3.0 PROTOTYPES (spec v1): the one AI rule per kind; the lift is routing only (round 3: the ferry holds).
 	var id: int = n["id"]
+	if sim.relay_fixed(id):                           # round 3: a fixed conveyor / a ferry without the hold
+		return false
 	match str(n["relay"]):
+		"ferry":                                      # round 3: HOLD it when an own line on its way across would be cut
+			var fp: Dictionary = sim.ferry_phase(id)  # by the next slide-out and the hold saves the rest of it
+			if fp["part"] != "open":
+				return false
+			var hold: float = float(Rules.RELAYS_PROTO["ferry"]["hold"])
+			var spd: float = maxf(Rules.move_speed(), 0.1)
+			for h in _my_lines(sim):
+				for sp in h["spans"]:
+					if sim.edge_controller.get(int(sp["edge"]), -1) != id:
+						continue
+					var left_in: float = float(sim.nodes[int(h["route"][0])]["streaming"].get("remaining", 0.0)) if h["streaming"] else 0.0
+					var tail: float = float(h["s"]) - Sim.full_length(float(h["units"]) + left_in)   # (the part still in its vat too)
+					var need: float = (float(sp["s1"]) - tail) / spd   # until its last body is past the far end
+					var near: bool = float(h["s"]) >= float(sp["s0"]) - spd * 1.5
+					if near and need > float(fp["left"]) and need <= float(fp["left"]) + hold and float(h["units"]) >= 2.0 * Rules.SCALE:
+						return true
+			return false
 		"conveyor":                                   # an own line on its deck against the flow, none with it
 			var against := false
 			for h in _my_lines(sim):

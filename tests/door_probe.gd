@@ -1,5 +1,5 @@
 extends SceneTree
-## PROTO: TWO DOORS probe.  Godot --headless --path . --script res://tests/door_probe.gd -- --doors=0|1 [--exits=0|1] [--dump]
+## TWO DOORS probe.  Godot --headless --path . --script res://tests/door_probe.gd -- --doors=0|1 [--exits=0|1] [--dump]
 ## (doors=12 in the output = two doors in and out; 2 = entry only; 1 = one door)
 ## Per half-turn map: seat A's and seat B's walk (path metres / BRAWL_SPEED = seconds) home -> enemy home, and the mean over
 ## every target (A -> X against B -> the half-turn image of X). --dump prints every route's path length (baseline compare).
@@ -12,9 +12,9 @@ func _init() -> void:
 	var dump := "--dump" in args
 	for a in args:
 		if a.begins_with("--doors="):
-			Rules.PROTO_TWO_DOORS = a.ends_with("1")   #DOORSET
+			Rules.TWO_DOORS = a.ends_with("1")   #DOORSET
 		if a.begins_with("--exits="):
-			Rules.PROTO_DOOR_EXITS = a.ends_with("1")   #DOORSET
+			Rules.DOOR_EXITS = a.ends_with("1")   #DOORSET
 	for code in MAPS:
 		var m := MapBuilder.load_map("res://maps4/%s.json" % code)
 		var seats := {}
@@ -71,7 +71,7 @@ func _init() -> void:
 			worst = maxf(worst, absf(ta - tb))
 			k += 1
 		print("FAIR %s doors=%d homeA->B %.2f s homeB->A %.2f s diff %+.2f s | targets %d mean A-B %+.2f s mean|A-B| %.2f s worst %.2f s" % [
-				code, (1 if not Rules.PROTO_TWO_DOORS else 2) + (10 if Rules.PROTO_TWO_DOORS and Rules.PROTO_DOOR_EXITS else 0), hh_a, hh_b, hh_a - hh_b, k, sum / maxf(k, 1), sum_abs / maxf(k, 1), worst])
+				code, (1 if not Rules.TWO_DOORS else 2) + (10 if Rules.TWO_DOORS and Rules.DOOR_EXITS else 0), hh_a, hh_b, hh_a - hh_b, k, sum / maxf(k, 1), sum_abs / maxf(k, 1), worst])
 		if dump:
 			for a in ids:
 				for b in ids:

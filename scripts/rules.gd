@@ -230,32 +230,40 @@ static func relay_cooldown(kind: String) -> float:
 #   lift      rules unchanged; round 2 is its look (`rise` 2.6 view m, the closed level dimmed and sunk, an UP / DOWN badge)
 #   tilt      the platform stays tipped `hold` s: every line on it or walking onto it meanwhile (any owner, arrivals too)
 #             slides out down the lit exit as a new order to that neighbour; the garrison stays
+# Round 3 (Daniele's proto4 verdict, 2026-11-02; tests/relays_v3_probe.gd):
+#   ferry     "amazing" - kept; its OWNER may HOLD it in line `hold` s (double-tap while in line; its clock stops), then
+#             `cooldown`; hold 0 = round 2. Also a plain map piece: a "proto": "ferry" deck with no relay (always running)
+#   conveyor  x`with` 2.25 / x`against` 0.3 (was 2.0 / 0.5); also a plain map piece (deck "belt": "AB" / "BA", no relay)
+#             or a relay whose map sets "switch": false (it never flips)
+#   launcher  faster: lines pour into the air x`pour`, `flight` 2.0 -> 1.1 s, `land` 1.5 -> 0.5 s, the aim steps every
+#             `cycle` 10 -> 4 s; a rival's Relay Hack / Rewire makes it MISFIRE `misfire` s (throws into the void, lost)
+#   tilt      rule unchanged (tilt-what unanswered); the lag fixed (the platform left MapBatch's static slots)
 const RELAYS_PROTO := {
-	"ferry": {"cooldown": 0.0, "survive": 0.5, "slide": 1.0, "away": 0.6, "side": 7.5},   # side: the view's metres out of line
-	"conveyor": {"cooldown": 5.0, "with": 2.0, "against": 0.5, "move": 1.4},
-	"launcher": {"cooldown": 30.0, "armed": 8.0, "flight": 2.0, "land": 1.5, "reach": 3, "cycle": 10.0},
+	"ferry": {"cooldown": 20.0, "survive": 0.5, "slide": 1.0, "away": 0.6, "side": 7.5, "hold": 4.0},   # side: the view's metres out of line
+	"conveyor": {"cooldown": 5.0, "with": 2.25, "against": 0.3, "move": 1.4},
+	"launcher": {"cooldown": 30.0, "armed": 8.0, "flight": 1.1, "land": 0.5, "reach": 3, "cycle": 4.0, "pour": 3.0, "misfire": 6.0},
 	"lift": {"cooldown": 10.0, "move": 1.4, "rise": 2.6},   # rise: the view's metres per level (🎨's model: 2.6)
 	"tilt": {"cooldown": 10.0, "move": 1.4, "hold": 6.0},
 }
 
 
-# PROTO: TWO DOORS (Daniele, 2026-11-01; proto line only, never in the release line - its reading is false): every BRAWL
-# platform gets a second door opposite the front one (the camera-far / top side). An ARRIVING line goes round the ring to
-# whichever door is nearer from the deck it arrives on (ties: the front door), then in; with PROTO_DOOR_EXITS a LEAVING
-# line likewise comes out of the door nearer its bridge. Static vars so test_sim can measure every reading; the release
-# line has no switch (= false).
-static var PROTO_TWO_DOORS := true
+# TWO DOORS (Daniele, 2026-11-02: "a success, promote it to the main game"; tried on proto3/4 since 2026-11-01): every BRAWL
+# platform has a second door opposite the front one (the camera-far / top side). An ARRIVING line goes round the ring to
+# whichever door is nearer from the deck it arrives on (ties: the front door), then in; a LEAVING line likewise comes out
+# of the door nearer its bridge (DOOR_EXITS). Only doors in AND out keep the half-turn maps exactly even (N-11 / 14 / 20 /
+# 22 / 24 / 28: seat A vs B 0.00 s, tests/door_probe.gd). Readout: a floor arrow at each door that lights while a line uses
+# it (DoorView). Static vars so test_sim can measure every reading; false = Alpha 11's single front door.
+static var TWO_DOORS := true
 
 
-# Lines also LEAVE by the nearer of the two doors toward their bridge (🎛️ 2026-11-01: only entry + exit doors keep the
-# half-turn maps exactly even - tests/door_probe.gd). True on the proto line; false = PROTO_TWO_DOORS entry-only (exits
-# by the front door). No effect without PROTO_TWO_DOORS.
-static var PROTO_DOOR_EXITS := true
+# Lines also LEAVE by the nearer of the two doors toward their bridge; false = entry-only (exits by the front door).
+# No effect without TWO_DOORS.
+static var DOOR_EXITS := true
 
 
 static func exit_angle(a_out: float) -> float:
 	## BRAWL: the angle of the door a line leaves by toward the ring point at a_out. The front door unless both switches.
-	if PROTO_TWO_DOORS and PROTO_DOOR_EXITS:
+	if TWO_DOORS and DOOR_EXITS:
 		return entry_angle(a_out)
 	var front := front_dir()
 	return atan2(front.z, front.x)
@@ -263,10 +271,10 @@ static func exit_angle(a_out: float) -> float:
 
 static func entry_angle(a_in: float) -> float:
 	## BRAWL: the angle (round the platform centre) of the door an arriving line walks to from the ring point at a_in.
-	## One door: the front. PROTO_TWO_DOORS: the nearer of front / back along the ring, ties to the front.
+	## One door: the front. TWO_DOORS: the nearer of front / back along the ring, ties to the front.
 	var front := front_dir()
 	var a_front := atan2(front.z, front.x)
-	if not PROTO_TWO_DOORS:
+	if not TWO_DOORS:
 		return a_front
 	var a_back := wrapf(a_front + PI, -PI, PI)
 	if absf(wrapf(a_back - a_in, -PI, PI)) < absf(wrapf(a_front - a_in, -PI, PI)) - 0.001:

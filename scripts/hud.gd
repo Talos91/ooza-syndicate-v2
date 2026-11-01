@@ -1342,8 +1342,9 @@ func _inspector_actions(n: Dictionary) -> void:
 	var id: int = n["id"]
 	# (TUTORIAL: each action shows once its lesson is reached - shows(); outside the tutorial, always)
 	if n["relay"] != "":
-		if shows("relay") and n["relay"] != "ferry":    # RELAYS 3.0 round 2: the moving bridge runs on its own
-			_add_action("SWITCH", "%s\n%s" % ["LOCK" if n["relay"] == "launcher" else "SWITCH", Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)
+		if shows("relay") and not sim.relay_fixed(id):  # RELAYS 3.0: a ferry without the hold / a fixed belt runs on its own
+			var verb: String = {"launcher": "LOCK", "ferry": "HOLD"}.get(n["relay"], "SWITCH")   # round 3: the ferry HOLDS
+			_add_action("SWITCH", "%s\n%s" % [verb, Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)
 		for kind in ["laser", "forge", "monster_hub"]:
 			if kind in n["buildable"] and n["structure"] != kind and shows("relay_build"):
 				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})

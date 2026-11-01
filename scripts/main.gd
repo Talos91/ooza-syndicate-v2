@@ -67,7 +67,7 @@ var vis: Dictionary
 var hordes: HordeView
 var fx: Fx
 var proto_view: ProtoRelayView       # RELAYS 3.0 PROTOTYPES: only on a map that has one (the P test maps)
-var door_view: DoorView             # PROTO: TWO DOORS (Rules.PROTO_TWO_DOORS): both doors marked on every platform
+var door_view: DoorView             # TWO DOORS (Rules.TWO_DOORS): both doors marked on every platform
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var forge_pulse: ForgePulse                        # a forge coming online: the owner's 2 s power-up wave
 var skill_fx: SkillFx                              # Skills 2.0 in the world: every cast, lasting effect and end
@@ -1620,10 +1620,16 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 				return [false, "No route to that node" if count > 0 else "No units to send"]
 			return [true, "Sending %d units to node %d" % [Rules.shown(count), to]]
 		"switch":
+			if n["relay"] == "ferry":                   # RELAYS 3.0 round 3: the owner HOLDS the moving bridge in line
+				var why: String = sim.ferry_hold_refusal(id)
+				if why == "" and sim.fire_relay(id):
+					return [true, "Bridge held in line for %d s, then %d s cooldown" % [int(Rules.RELAYS_PROTO["ferry"]["hold"]),
+							int(Rules.relay_cooldown("ferry"))]]
+				return [false, why if why != "" else "Relay is already switching"]
+			if sim.relay_fixed(id):                     # round 3: a conveyor whose map says "switch": false
+				return [false, "This belt runs on its own"]
 			if sim.fire_relay(id):
 				return [true, "Relay fired - switching in %d s, then %d s cooldown" % [int(Rules.RELAY_WARNING), int(Rules.relay_cooldown(str(n["relay"])))]]
-			if n["relay"] == "ferry":                   # RELAYS 3.0 round 2
-				return [false, "The moving bridge runs on its own - time your send"]
 			return [false, "Relay on cooldown" if n["relay_cd"] > 0.0 else "Relay is already switching"]
 		"upgrade":
 			var cost := sim.upgrade_cost(n)
@@ -1780,11 +1786,21 @@ func _process(delta: float) -> void:
 						var it: Dictionary = hud.callouts.find(place)
 						if not it.is_empty():
 							it["count"] = kicked
+			"launch_misfire":                          # RELAYS 3.0 round 3: a rival scrambled a launcher
+				var by := str(ev.get("by", ""))
+				var lseat := str(ev.get("seat", ""))
+				var mine_l: bool = lseat == HUMAN or (lseat != "" and sim.allied(lseat, HUMAN))
+				hud.callout_node(int(ev["node"]), "YOUR LAUNCHER MISFIRES" if mine_l else ("LAUNCHER SCRAMBLED" if by == HUMAN else "LAUNCHER MISFIRE"),
+						"good" if by == HUMAN else "warn", by)
+			"ferry_hold":                              # RELAYS 3.0 round 3: the owner holds the moving bridge in line
+				var fs := str(ev.get("seat", ""))
+				var mine_h: bool = fs == HUMAN or sim.allied(fs, HUMAN)
+				hud.callout_node(int(ev["node"]), "BRIDGE HELD" if mine_h else "ENEMY HOLDS THE BRIDGE", "good" if mine_h else "warn", fs)
 			"ferry_tally":                             # RELAYS 3.0 round 2: FERRY 24 / 50 CROSSED at the moving bridge
 				var fseat := str(ev.get("seat", ""))
 				if int(ev.get("sent", 0)) > 0:
 					var fpts: Array = sim.deck_line(int(ev["edge"]))
-					var fmid: Vector3 = (fpts[0] + fpts[-1]) * 0.5 if not fpts.is_empty() else sim.nodes[int(ev["node"])]["pos"]
+					var fmid: Vector3 = (fpts[0] + fpts[-1]) * 0.5 if not fpts.is_empty() else Vector3.ZERO   # (round 3: node -1 = a plain piece)
 					var mine_f := fseat == HUMAN or sim.allied(fseat, HUMAN)
 					hud.callout_at(fmid, "ferry:%d" % int(ev["edge"]), "%sFERRY %d / %d CROSSED" % ["" if mine_f else "ENEMY ",
 							int(ev["ok"]), int(ev["sent"])], "good" if mine_f and int(ev["ok"]) * 2 >= int(ev["sent"]) else "warn", fseat)
@@ -1825,7 +1841,7 @@ func _process(delta: float) -> void:
 	if proto_view:
 		proto_view.sync(dt)                       # after Fx: it hides the ferry's deck, sinks a lift's closed decks
 	if door_view:
-		door_view.sync(dt)                        # PROTO: TWO DOORS - the door a line pours in by flares
+		door_view.sync(dt)                        # TWO DOORS - the door a line pours in by flares
 	combat.sync(dt, cam)                          # after Fx: it scales the tier-down's rising model
 	skill_fx.sync(dt, cam)                        # after Fx: it hides a demolished deck, whose pieces fall here
 	forge_pulse.sync(dt, cam)                     # after both (it pumps the models) and the views (their glows)

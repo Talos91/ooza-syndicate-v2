@@ -149,7 +149,7 @@ func _gather_fights(dt: float) -> void:
 			var came: Vector3 = (sim.nodes[route[-2]]["pos"] - n["pos"]) if route.size() >= 2 else front
 			var rate: float = maxf(Rules.move_speed() * h["units"] / maxf(Sim.chain_length(h), 0.5), 4.0)
 			var share: float = h["units"] / maxf(h["units"] + n["units"], 0.001)
-			var door_d: Vector3 = sim.entry_door_dir(h) if Rules.PROTO_TWO_DOORS else front   # PROTO: the door it entered by
+			var door_d: Vector3 = sim.entry_door_dir(h) if Rules.TWO_DOORS else front   # TWO DOORS: the door it entered by
 			var door: Vector3 = n["pos"] + door_d * (Rules.EXIT_R + 0.35) + Vector3(0, 0.9, 0)
 			if not sim.node_hidden(n["id"], viewer):      # POWERS: inside a rival's fog the fight (and its ring) is not seen
 				_contest(n, h["owner"], came, rate, share, door)

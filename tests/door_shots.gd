@@ -1,5 +1,5 @@
 extends Node
-## PROTO: TWO DOORS render probe (a dev tool, not a suite): N-24, a line from node 2 to node 8 (its deck meets 8's ring on
+## TWO DOORS render probe (a dev tool, not a suite): N-24, a line from node 2 to node 8 (its deck meets 8's ring on
 ## the far side) walks to the TOP door and pours in there; plus the board with both doors drawn. Run WINDOWED, off-screen,
 ## silent:  Godot --path . --resolution 1688x780 --audio-driver Dummy --position -6000,-6000 res://tests/door_shots.tscn
 ##          -- --no-telemetry out=<dir> [doors=0]
@@ -39,10 +39,10 @@ func _run() -> void:
 		if a.begins_with("out="):
 			out = a.substr(4)
 		if a == "doors=0":
-			Rules.PROTO_TWO_DOORS = false
+			Rules.TWO_DOORS = false
 			tag = "one"
 		if a == "exits=0":
-			Rules.PROTO_DOOR_EXITS = false
+			Rules.DOOR_EXITS = false
 			tag += "_entryonly"
 	var main_script = load("res://scripts/main.gd")
 	main_script.relaunch = {"faction": "null", "mode": "1v1", "map": MAP}
@@ -66,7 +66,7 @@ func _run() -> void:
 	await _shot(inst, "%s/doors_%s_2_pouring_in.png" % [out, tag])
 	await _step(inst, 1.5)
 	await _shot(inst, "%s/doors_%s_3_taken.png" % [out, tag])
-	# leaving: node 8's deck to 2 leaves its ring on the far side - with PROTO_DOOR_EXITS the line comes out of the top door
+	# leaving: node 8's deck to 2 leaves its ring on the far side - with DOOR_EXITS the line comes out of the top door
 	sim.nodes[8]["owner"] = "A"
 	sim.nodes[8]["units"] = 300.0
 	MapBuilder.apply_owner(inst.vis[8]["parts"], "A")

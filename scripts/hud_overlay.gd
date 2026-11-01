@@ -59,8 +59,8 @@ func sync(dt: float) -> void:
 	_t += dt
 	for n in sim.nodes:
 		var id: int = n["id"]
-		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false) or n["relay"] == "ferry":
-			continue                                   # (RELAYS 3.0 round 2: the moving bridge is never fired)
+		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false) or sim.relay_fixed(id):
+			continue                                   # (RELAYS 3.0: a ferry without the hold / a fixed belt is never fired)
 		var ready: bool = n["relay_cd"] <= 0.0 and n["relay_phase"] == ""
 		var was: bool = _relay_ready_prev.get(id, false)
 		if ready and not was and int(_relay_cue_count.get(id, 0)) < RELAY_CUE_MAX:
@@ -244,8 +244,8 @@ func _draw_upgrade_arrows(cam: Camera3D) -> void:
 func _draw_relay_cues(cam: Camera3D) -> void:
 	for n in sim.nodes:
 		var id: int = n["id"]
-		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false) or n["relay"] == "ferry":
-			continue                                   # (RELAYS 3.0 round 2: the moving bridge is never fired)
+		if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false) or sim.relay_fixed(id):
+			continue                                   # (RELAYS 3.0: a ferry without the hold / a fixed belt is never fired)
 		var ready: bool = n["relay_cd"] <= 0.0 and n["relay_phase"] == ""
 		var ns := _node_screen(id, cam)
 		var bs := RelayView.button_screen(cam, main.vis, id)   # RELAY V2: the glow and the cue sit on the button

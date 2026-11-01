@@ -9,7 +9,7 @@ extends Node3D
 ##             piers (its fixed path), a lamp at each lip (green in line, blinking red its last second, red out), a red
 ##             hole where the bridge belongs while it is out
 ##   conveyor  chevrons running along the deck in the flow's colour (at the push's speed), reversing through the flip;
-##             the line speed tags (x2 with the flow, x0.5 against) over every line on a conveyor
+##             the line speed tags (x2.25 with the flow, x0.3 against since round 3) over every line on a belt
 ##   launcher  the pad, the dotted arc to the node it aims at (round 2: always shown, marching, it swings to the next target
 ##             every cycle), a ring on that target (small dim rings on the others; solid + LOCKED once fired), the throws
 ##             in flight as a stream of blobs in the seat's colour
@@ -19,6 +19,11 @@ extends Node3D
 ##             the next exit's deck lit (bright in the warning)
 ##   all       a pointer over the node: the slide, the flow, the target, up / down, the next exit (ghosted toward the
 ##             next state during the warning)
+## Round 3 (Daniele's proto4 verdict, 2026-11-02): the ferry's HOLD (steady green lamps, glowing rails, HELD n over the deck),
+## the plain pieces with no relay (a moving bridge on its own clock, a belt always running), the launcher's throw (quicker,
+## the pad kicks, blobs stretch along the arc and splash at the target; a MISFIRE wobbles the pad red and flings the throws
+## off the map), the lift's decks read by level (a flat UP / DOWN on every lift deck, a ghost where a closed deck docks, a
+## glowing edge riding the deck that moves), and the lift / tilt platforms drawn by themselves (_unbatch: the tilt lag).
 ## Created by main.gd only when the map has a prototype relay; synced after Fx (Fx shows / hides decks first).
 
 const POINTER_UP := 6.2              # m over the node centre
@@ -32,15 +37,23 @@ const LIFT_DIM := 0.6                # ... and this see-through
 const FERRY_LAMP := 0.6              # m: the lamp at each lip of the moving bridge
 const TILT_TIP := 0.36               # rad the tilt tips by (round 2: 0.22 read as flat from the default camera)
 const TILT_EASE := 0.4               # s it takes to tip / come back
+const SPLASH := 0.45                 # s a launcher landing's ring spreads
+const SPLASHES := 16
+const MISFIRE_FLING := 30.0          # m a misfired throw travels out before it drops away
 
 var sim: Sim
 var vis: Dictionary
 var _r := {}                         # relay node id -> its pieces
 var _tags := {}                      # horde id -> Label3D (conveyor speed tag)
 var _flights: MultiMeshInstance3D
+var _splash: MultiMeshInstance3D
+var _plain_ferry := []               # round 3: moving bridges with no relay (Sim._ferry_edges -1): their deck parts
+var _belts := []                     # round 3: plain belts with no relay (Sim._belt_edges): their chevrons
+var _belt_phase := 0.0
 var _t := 0.0
 var _dt := 0.0
 var human := "A"                     # the seat this screen plays (main.gd): whose launcher aim is "TARGET"
+var _unbatched := false              # round 3: the lift / tilt platforms left MapBatch (see _unbatch)
 
 
 static func wanted(s: Sim) -> bool:
@@ -62,7 +75,9 @@ func setup(s: Sim, v: Dictionary) -> void:
 		var r := {"kind": k, "pointer": _pointer(), "ghost_pointer": _pointer(true)}
 		match k:
 			"ferry":
-				r["ferry"] = _ferry_parts(id)
+				r["ferry"] = []
+				for ei in sim.controlled_edges(id):
+					r["ferry"].append(_ferry_deck(ei))
 			"conveyor":
 				r["chev"] = _chevrons(sim.controlled_edges(id))
 				r["phase"] = 0.0
@@ -72,6 +87,8 @@ func setup(s: Sim, v: Dictionary) -> void:
 				r["rings"] = _target_rings(n)
 				r["aim"] = -1
 				r["aim_pop"] = 0.0
+				r["kick"] = 0.0                       # round 3: the pad's kick per throw
+				r["thrown"] = 0
 			"lift", "tilt":
 				var base := {}
 				for p in vis[id]["parts"]:
@@ -110,6 +127,31 @@ func setup(s: Sim, v: Dictionary) -> void:
 	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_flights.material_override = fm
 	add_child(_flights)
+	_splash = MultiMeshInstance3D.new()               # round 3: a landing's ring in the thrower's colour
+	_splash.name = "Proto_Launcher_Splash"
+	var smm := MultiMesh.new()
+	smm.transform_format = MultiMesh.TRANSFORM_3D
+	smm.use_colors = true
+	var tm := TorusMesh.new()
+	tm.inner_radius = 1.6
+	tm.outer_radius = 2.2
+	tm.rings = 24
+	tm.ring_segments = 6
+	smm.mesh = tm
+	smm.instance_count = SPLASHES
+	smm.visible_instance_count = 0
+	_splash.multimesh = smm
+	var spm := StandardMaterial3D.new()
+	spm.vertex_color_use_as_albedo = true
+	spm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	spm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_splash.material_override = spm
+	_splash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_splash)
+	for ei in sim._ferry_edges:                       # round 3: the plain pieces (no relay, no button, no pointer)
+		if int(sim._ferry_edges[ei]) < 0:
+			_plain_ferry.append(_ferry_deck(int(ei)))
+	_belts = _chevrons(sim._belt_edges.keys(), Rules.state_color("cAB"))
 
 
 # ------------------------------------------------------------------ pieces
@@ -185,39 +227,41 @@ func _box(nm: String, size: Vector3, c: Color, a := 1.0) -> MeshInstance3D:
 	return mi
 
 
-func _ferry_parts(id: int) -> Array:
-	## Per ferry deck: its two rails (the fixed path across both piers), a lamp at each lip, the hole marker.
-	var out := []
+func _ferry_deck(ei: int) -> Dictionary:
+	## One moving-bridge deck: its two rails (the fixed path across both piers), a lamp at each lip, the hole marker, the
+	## HELD label (round 3).
 	var side: float = float(Rules.RELAYS_PROTO["ferry"]["side"])
-	for ei in sim.controlled_edges(id):
-		var ends := _deck_ends(ei)
-		var a: Vector3 = ends[0]
-		var b: Vector3 = ends[1]
-		var u := (b - a).normalized()
-		var perp := Vector3(-u.z, 0.0, u.x)
-		var yaw := Rules.heading(u)
-		var parts := {"edge": ei, "a": a, "b": b, "u": u, "perp": perp, "rails": [], "lamps": []}
-		for end in [a, b]:
-			var rail := _box("Proto_Ferry_Rail", Vector3(0.35, 0.18, 2.0 * side + Rules.W), Rules.RELAY_GHOST_COLORS["ferry"], 0.85)
-			rail.position = end + Vector3(0, -0.05, 0)
-			rail.rotation.y = yaw
-			parts["rails"].append(rail)
-			var lamp := MeshInstance3D.new()
-			lamp.name = "Proto_Ferry_Lamp"
-			var sm := SphereMesh.new()
-			sm.radius = FERRY_LAMP
-			sm.height = FERRY_LAMP * 2.0
-			lamp.mesh = sm
-			lamp.material_override = _mat(Color.WHITE)
-			lamp.position = end + perp * (Rules.W * 0.5 + 0.7) + Vector3(0, 1.0, 0)
-			add_child(lamp)
-			parts["lamps"].append(lamp)
-		var hole := _box("Proto_Ferry_Hole", Vector3(a.distance_to(b), 0.06, Rules.W), Rules.state_color("warn"), 0.3)
-		hole.position = (a + b) * 0.5 + Vector3(0, 0.25, 0)
-		hole.rotation.y = yaw
-		parts["hole"] = hole
-		out.append(parts)
-	return out
+	var ends := _deck_ends(ei)
+	var a: Vector3 = ends[0]
+	var b: Vector3 = ends[1]
+	var u := (b - a).normalized()
+	var perp := Vector3(-u.z, 0.0, u.x)
+	var yaw := Rules.heading(u)
+	var parts := {"edge": ei, "a": a, "b": b, "u": u, "perp": perp, "rails": [], "lamps": []}
+	for end in [a, b]:
+		var rail := _box("Proto_Ferry_Rail", Vector3(0.35, 0.18, 2.0 * side + Rules.W), Rules.RELAY_GHOST_COLORS["ferry"], 0.85)
+		rail.position = end + Vector3(0, -0.05, 0)
+		rail.rotation.y = yaw
+		parts["rails"].append(rail)
+		var lamp := MeshInstance3D.new()
+		lamp.name = "Proto_Ferry_Lamp"
+		var sm := SphereMesh.new()
+		sm.radius = FERRY_LAMP
+		sm.height = FERRY_LAMP * 2.0
+		lamp.mesh = sm
+		lamp.material_override = _mat(Color.WHITE)
+		lamp.position = end + perp * (Rules.W * 0.5 + 0.7) + Vector3(0, 1.0, 0)
+		add_child(lamp)
+		parts["lamps"].append(lamp)
+	var hole := _box("Proto_Ferry_Hole", Vector3(a.distance_to(b), 0.06, Rules.W), Rules.state_color("warn"), 0.3)
+	hole.position = (a + b) * 0.5 + Vector3(0, 0.25, 0)
+	hole.rotation.y = yaw
+	parts["hole"] = hole
+	var held := _label(64)                         # round 3: HELD n over the deck while its owner holds it
+	held.position = (a + b) * 0.5 + Vector3(0, 6.5, 0)   # (above the FERRY n / m CROSSED callout)
+	held.visible = false
+	parts["held"] = held
+	return parts
 
 
 func _chevrons(eis: Array, col := Color.WHITE) -> Array:
@@ -291,15 +335,45 @@ func _lift_parts(n: Dictionary) -> Dictionary:
 	piston.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(piston)
 	var strips := {}
+	var tags := {}
+	var ghosts := {}
+	var edges_m := {}
 	for ei in sim.controlled_edges(id):
 		var line: Array = sim.deck_line(ei)
 		var a: Vector3 = line[0]
 		var b: Vector3 = line[-1]
+		var yaw := Rules.heading((b - a).normalized())
+		var lvl_col: Color = Rules.RELAY_GHOST_COLORS["lift"] if int(sim.edges[ei]["lift_level"]) == 1 else Rules.RELAY_GHOST_COLORS["ferry"]
 		var mi := _box("Proto_Lift_OpenStrip", Vector3(a.distance_to(b), 0.12, Rules.W * 0.5), Rules.RELAY_GHOST_COLORS["lift"], 0.85)
 		mi.position = (a + b) * 0.5 + Vector3(0, 0.42, 0)
-		mi.rotation.y = Rules.heading((b - a).normalized())
+		mi.rotation.y = yaw
 		strips[ei] = mi
-	return {"piston": piston, "strips": strips, "badge": _label(96)}
+		# round 3 (Daniele: "players may misread the bridge animation"): a flat UP / DOWN painted on every lift deck in its
+		# level's colour (lit while it connects), a ghost of the deck where it docks when it is closed, and a glowing
+		# edge riding the deck's platform end while it moves
+		var tag := Label3D.new()
+		tag.font = Fx.SYMBOL_FONT
+		tag.font_size = 96
+		tag.pixel_size = 0.02
+		tag.no_depth_test = true                    # (a sunk deck's rails would cut it)
+		tag.render_priority = 2
+		tag.outline_size = 18
+		tag.outline_modulate = Color(0.02, 0.02, 0.05, 0.9)
+		tag.text = "▲ UP" if int(sim.edges[ei]["lift_level"]) == 1 else "▼ DOWN"
+		tag.modulate = lvl_col
+		tag.rotation = Vector3(-PI / 2.0, 0.0, 0.0)       # flat on the deck, read from the camera
+		tag.rotation.y = 0.0
+		add_child(tag)
+		tags[ei] = tag
+		var ghost := _box("Proto_Lift_DockGhost", Vector3(a.distance_to(b), 0.3, Rules.W), lvl_col, 0.22)
+		ghost.position = (a + b) * 0.5 + Vector3(0, 0.2, 0)
+		ghost.rotation.y = yaw
+		ghosts[ei] = ghost
+		var edge := _box("Proto_Lift_MovingEdge", Vector3(0.5, 0.5, Rules.W + 0.6), Color.WHITE, 0.95)
+		edge.rotation.y = yaw
+		edge.visible = false
+		edges_m[ei] = edge
+	return {"piston": piston, "strips": strips, "badge": _label(96), "tags": tags, "ghosts": ghosts, "edges": edges_m}
 
 
 func _pad(n: Dictionary) -> MeshInstance3D:
@@ -382,6 +456,8 @@ func _exit_strips(n: Dictionary) -> Dictionary:
 
 # ------------------------------------------------------------------ per frame
 func sync(dt: float) -> void:
+	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
+	_unbatch()
 	_t += dt
 	_dt = dt
 	for id in _r:
@@ -412,42 +488,89 @@ func sync(dt: float) -> void:
 				_lift(n, r, top, phase)
 			"tilt":
 				_tilt(n, r, top, phase, blink, gone)
+	for parts in _plain_ferry:                        # round 3: the plain pieces
+		_ferry_deck_sync(parts, sim.ferry_phase_e(int(parts["edge"])), false)
+	if not _belts.is_empty():
+		_belt_phase += dt * CHEVRON_SPEED * float(Rules.RELAYS_PROTO["conveyor"]["with"])
+		for c in _belts:
+			var flow_ab: bool = int(sim._belt_edges[int(c["edge"])]) == 0
+			var mmi: MultiMeshInstance3D = c["mmi"]
+			mmi.visible = not sim.demolished.has(int(c["edge"])) and sim.is_edge_open(int(c["edge"]))
+			_run_chevrons(c, _belt_phase, flow_ab)
 	_flight_stream()
 	_speed_tags()
+	PerfProfile.lap("proto_view", _pt)
+
+
+func _unbatch() -> void:
+	## Round 3 (the TILT lag, Daniele 2026-11-02 "the animation lags badly"): MapBatch draws a platform's kit pieces as
+	## STATIC batch slots (map_batch.gd STATIC_KIT) and never re-reads their transforms, so a tipped / raised platform
+	## moved its nodes while its drawn copy stayed flat - only the polled vat tipped, then the whole thing snapped. The
+	## lift and tilt platforms draw themselves instead (MapBatch.release, as a falling piece does): a few more draw
+	## calls on the P maps, nothing per frame. Waits for the batch, which PerfProfile builds after this view's setup.
+	if _unbatched:
+		return
+	if MapBatch.disabled:
+		_unbatched = true
+		return
+	if MapBatch.current == null:
+		return
+	_unbatched = true
+	for id in _r:
+		if _r[id].has("base"):
+			MapBatch.release((_r[id]["base"] as Dictionary).keys())
 
 
 func _ferry(n: Dictionary, r: Dictionary, top: Vector3, gone: bool) -> void:
 	## Round 2: the deck itself slides sideways along its rails (Sim.ferry_phase), lamps green / red, the hole while out.
+	## Round 3: held in line by its owner - steady bright lamps, glowing rails, HELD n over the deck.
 	var fp := sim.ferry_phase(n["id"])
+	var lc := Color.WHITE
+	for parts in r["ferry"]:
+		lc = _ferry_deck_sync(parts, sim.ferry_phase_e(int(parts["edge"])), gone)
+	if not (r["ferry"] as Array).is_empty():
+		var c0: Dictionary = r["ferry"][0]
+		_aim(r["pointer"], top, (c0["u"] as Vector3) if fp["part"] == "open" else (c0["perp"] as Vector3) * float(fp["side"]))
+		_tint(r["pointer"], lc)
+	(r["ghost_pointer"] as Node3D).visible = false
+
+
+func _ferry_deck_sync(parts: Dictionary, fp: Dictionary, gone: bool) -> Color:
+	## One moving-bridge deck this frame; returns its lamps' colour.
 	var side: float = float(Rules.RELAYS_PROTO["ferry"]["side"])
 	var off: float = float(fp["off"]) * float(fp["side"]) * side
 	var open: bool = fp["part"] == "open"
-	var soon: bool = open and float(fp["left"]) <= 1.0          # it slides out within a second: the lamps blink red
+	var held: float = float(fp.get("held", 0.0))
+	var soon: bool = open and held <= 0.0 and float(fp["left"]) <= 1.0   # it slides out within a second: the lamps blink red
 	var blink_fast := int(sim.time * 8.0) % 2 == 0
 	var lc: Color = Color("#5cff7a") if open and not (soon and blink_fast) else Rules.state_color("warn")
-	for parts in r["ferry"]:
-		var ei: int = parts["edge"]
-		var down: bool = gone or sim.demolished.has(ei) or sim.collapsed.get(sim.edges[ei]["a"], false) \
-				or sim.collapsed.get(sim.edges[ei]["b"], false)
-		var decks: Array = vis["edge_decks"][ei]
-		for k in range(decks.size()):
-			var d: Node3D = decks[k]
-			d.visible = not down
-			d.transform = (vis["edge_base"][ei][k] as Transform3D).translated((parts["perp"] as Vector3) * off)
-		for rail in parts["rails"]:
-			(rail as Node3D).visible = not down
-		for lamp in parts["lamps"]:
-			_tint(lamp, lc)
-			((lamp as MeshInstance3D).material_override as StandardMaterial3D).emission_energy_multiplier = 3.0
-			(lamp as Node3D).visible = not down
-		var hole: MeshInstance3D = parts["hole"]
-		hole.visible = not down and not open
-		(hole.material_override as StandardMaterial3D).albedo_color.a = 0.18 + (0.14 if blink_fast else 0.0)
-	if not (r["ferry"] as Array).is_empty():
-		var c0: Dictionary = r["ferry"][0]
-		_aim(r["pointer"], top, (c0["u"] as Vector3) if open else (c0["perp"] as Vector3) * float(fp["side"]))
-		_tint(r["pointer"], lc)
-	(r["ghost_pointer"] as Node3D).visible = false
+	var ei: int = parts["edge"]
+	var down: bool = gone or sim.demolished.has(ei) or sim.collapsed.get(sim.edges[ei]["a"], false) \
+			or sim.collapsed.get(sim.edges[ei]["b"], false)
+	var decks: Array = vis["edge_decks"][ei]
+	for k in range(decks.size()):
+		var d: Node3D = decks[k]
+		d.visible = not down
+		d.transform = (vis["edge_base"][ei][k] as Transform3D).translated((parts["perp"] as Vector3) * off)
+	var pulse := 0.5 + 0.5 * sin(sim.time * 7.0)
+	for rail in parts["rails"]:
+		(rail as Node3D).visible = not down
+		var rm := (rail as MeshInstance3D).material_override as StandardMaterial3D
+		rm.emission = Color("#5cff7a") if held > 0.0 else Rules.RELAY_GHOST_COLORS["ferry"]
+		rm.emission_energy_multiplier = (2.5 + 2.0 * pulse) if held > 0.0 else 1.4
+	for lamp in parts["lamps"]:
+		_tint(lamp, lc)
+		((lamp as MeshInstance3D).material_override as StandardMaterial3D).emission_energy_multiplier = 5.0 if held > 0.0 else 3.0
+		(lamp as Node3D).visible = not down
+	var hole: MeshInstance3D = parts["hole"]
+	hole.visible = not down and not open
+	(hole.material_override as StandardMaterial3D).albedo_color.a = 0.18 + (0.14 if blink_fast else 0.0)
+	var hl: Label3D = parts["held"]
+	hl.visible = not down and held > 0.0
+	if held > 0.0:
+		hl.text = "HELD · %d" % int(ceil(held))
+		hl.modulate = Color("#5cff7a")
+	return lc
 
 
 func _conveyor(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink: bool, dt: float, gone: bool) -> void:
@@ -518,15 +641,38 @@ func _launcher(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 	m.emission_energy_multiplier = 3.0 if locked else 1.2
 	var pm := pad.material_override as StandardMaterial3D
 	var k2 := 0.5 + 0.5 * sin(sim.time * 6.0)        # the armed pad pulses (its ready ring)
+	var misfire: bool = n.get("misfire", "") != ""
+	var thrown := 0                                   # round 3: every new throw kicks the pad (squash, then pop)
+	for f in sim.flights:
+		if int(f["from"]) == id:
+			thrown += 1
+	if thrown > int(r["thrown"]):
+		r["kick"] = 1.0
+	r["thrown"] = thrown
+	r["kick"] = maxf(0.0, float(r["kick"]) - _dt * 5.0)
+	var kick := float(r["kick"])
 	pm.emission_energy_multiplier = (1.5 + 3.0 * k2) if armed else (1.0 if n["relay_cd"] > 0.0 else 1.8)
-	pad.scale = Vector3.ONE * ((1.0 + 0.08 * k2) if armed else 1.0)
+	pad.scale = Vector3.ONE * ((1.0 + 0.08 * k2) if armed else 1.0) * Vector3(1.0 + 0.18 * kick, 1.0 - 0.45 * kick, 1.0 + 0.18 * kick)
+	pad.position = (n["pos"] as Vector3) + Vector3(0, 0.3 + 0.25 * kick, 0)
+	pad.rotation = Vector3.ZERO
+	var red := Rules.state_color("warn")
+	if misfire:                                       # round 3: scrambled - it wobbles like a tipped plate, blinking red
+		pad.rotation = Vector3(0.28 * sin(sim.time * 9.0), 0.0, 0.28 * cos(sim.time * 7.0))
+		pm.albedo_color = red if blink else Rules.RELAY_GHOST_COLORS["launcher"]
+		pm.emission = red
+		pm.emission_energy_multiplier = 4.0
+	else:
+		pm.albedo_color = Rules.RELAY_GHOST_COLORS["launcher"]
+		pm.emission = Rules.RELAY_GHOST_COLORS["launcher"]
+	if misfire:
+		arc.visible = false                           # (no aim: the throws go anywhere)
 	var rings: Dictionary = r["rings"]
 	for x in rings:
 		if int(x) < 0:
 			continue
 		var ring: MeshInstance3D = rings[x]
 		var on := int(x) == tgt
-		ring.visible = not gone and not sim.collapsed.get(int(x), false)
+		ring.visible = not gone and not sim.collapsed.get(int(x), false) and not misfire
 		var rm := ring.material_override as StandardMaterial3D
 		var dim := 1.0 if n["owner"] != "" else 0.45   # a neutral pad's aim: shown, quieter
 		rm.albedo_color = Color(ac.r, ac.g, ac.b, ((0.95 if locked else 0.75) if on else 0.22) * dim)
@@ -537,6 +683,12 @@ func _launcher(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 	var own: String = n["owner"]
 	var mine := own != "" and (own == human or sim.allied(own, human))
 	lab.visible = not gone and tgt >= 0 and own != ""
+	if misfire:                                       # round 3: MISFIRE n over the pad itself
+		lab.visible = not gone
+		lab.position = (n["pos"] as Vector3) + Vector3(0, 7.5, 0)
+		lab.text = "MISFIRE · %d" % int(ceil(float(n["relay_t"])))
+		lab.modulate = red
+		return
 	if tgt >= 0:
 		lab.position = (sim.nodes[tgt]["pos"] as Vector3) + Vector3(0, 7.5, 0)
 		var left := sim.launcher_aim_left(id)
@@ -551,26 +703,58 @@ func _launcher(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 
 
 func _flight_stream() -> void:
+	## Round 3: the blobs (up to 8 per throw, 0.05 s apart) stretch along the arc and spin, drop onto the target and
+	## splash a ring there; a misfire's throws fly off the map along their random heading and fall away.
 	var mm: MultiMesh = _flights.multimesh
+	var smm: MultiMesh = _splash.multimesh
 	var flight: float = float(Rules.RELAYS_PROTO["launcher"]["flight"])
 	var k := 0
+	var ks := 0
 	for f in sim.flights:
 		var from: Vector3 = sim.nodes[int(f["from"])]["pos"]
-		var to: Vector3 = sim.nodes[int(f["to"])]["pos"]
-		var blobs := clampi(int(ceilf(Rules.shown(float(f["left"])))), 1, 6)
+		var void_: bool = f.get("void", false)
+		var hd := float(f.get("heading", 0.0))
+		var away := Vector3(cos(hd), 0.0, sin(hd))
+		var to: Vector3 = from + away * MISFIRE_FLING if void_ else sim.nodes[int(f["to"])]["pos"]
+		var blobs := clampi(int(ceilf(Rules.shown(float(f["left"])))), 1, 8)
 		var col := Rules.seat_color(str(f["seat"]))
 		for b in range(blobs):
 			if k >= FLIGHT_BLOBS:
 				break
-			var age := sim.time - float(f["t0"]) - b * 0.12
-			var q := clampf(age / flight, 0.0, 1.0)
+			var age := sim.time - float(f["t0"]) - b * 0.05
 			if age < 0.0:
 				continue
-			var pos := arc_point(from, to, q) if q < 1.0 else to + Vector3(0, 1.0 + 3.0 * maxf(0.0, 1.0 - (age - flight) / 0.4), 0)
-			mm.set_instance_transform(k, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * 1.1), pos))
+			var q := clampf(age / flight, 0.0, 1.0)
+			var pos: Vector3
+			var vel: Vector3
+			if void_:                                 # out over the edge, then a long drop into the void
+				pos = from.lerp(to, minf(age / flight, 1.6)) + Vector3(0, 6.0 * sin(minf(q, 1.0) * PI * 0.7) - 18.0 * maxf(age / flight - 0.6, 0.0) ** 2, 0)
+				vel = (to - from).normalized() + Vector3(0, -maxf(age / flight - 0.6, 0.0) * 2.0, 0)
+				if pos.y < from.y - 30.0:
+					continue
+			elif q < 1.0:
+				pos = arc_point(from, to, q)
+				vel = arc_point(from, to, minf(q + 0.02, 1.0)) - pos
+			else:
+				var d := clampf((age - flight) / 0.25, 0.0, 1.0)
+				pos = to + Vector3(0, 1.0 + 2.0 * (1.0 - d), 0)
+				vel = Vector3.DOWN
+			var fwd := vel.normalized() if vel.length() > 0.001 else Vector3.UP
+			var side := fwd.cross(Vector3.UP).normalized() if absf(fwd.y) < 0.99 else Vector3.RIGHT
+			var up := side.cross(fwd).normalized()
+			var spin := Basis(fwd, age * 9.0 + b)
+			var basis := spin * Basis(side * 0.85, up * 0.85, fwd * 1.6)   # stretched along its flight
+			mm.set_instance_transform(k, Transform3D(basis, pos))
 			mm.set_instance_color(k, col)
 			k += 1
+		var since := sim.time - float(f["land"])
+		if not void_ and since >= 0.0 and since < SPLASH and ks < SPLASHES:
+			var g := since / SPLASH
+			smm.set_instance_transform(ks, Transform3D(Basis.IDENTITY.scaled(Vector3(1.0 + 2.2 * g, 1.0, 1.0 + 2.2 * g)), to + Vector3(0, 0.6, 0)))
+			smm.set_instance_color(ks, Color(col.r, col.g, col.b, 0.85 * (1.0 - g)))
+			ks += 1
 	mm.visible_instance_count = k
+	smm.visible_instance_count = ks
 
 
 func _lift(n: Dictionary, r: Dictionary, top: Vector3, phase: String) -> void:
@@ -618,14 +802,37 @@ func _lift(n: Dictionary, r: Dictionary, top: Vector3, phase: String) -> void:
 			for gi in d.find_children("*", "GeometryInstance3D", true, false):
 				(gi as GeometryInstance3D).transparency = LIFT_DIM * off
 		strip.visible = off < 0.99
-		strip.position.y = (sim.deck_line(ei)[0] as Vector3).lerp(sim.deck_line(ei)[-1], 0.5).y + 0.42 - LIFT_SINK * off
+		var dl: Array = sim.deck_line(ei)
+		var mid: Vector3 = (dl[0] as Vector3).lerp(dl[-1], 0.5)
+		strip.position.y = mid.y + 0.42 - LIFT_SINK * off
 		var sm := strip.material_override as StandardMaterial3D
 		sm.albedo_color = Color(lvl_col.r, lvl_col.g, lvl_col.b, 0.85 * (1.0 - off))
 		sm.emission = lvl_col
+		var deck_up: bool = int(sim.edges[ei]["lift_level"]) == 1    # round 3: this deck's own level, not the platform's
+		var dcol: Color = Rules.RELAY_GHOST_COLORS["lift"] if deck_up else Rules.RELAY_GHOST_COLORS["ferry"]
+		var tag: Label3D = lp["tags"][ei]
+		tag.visible = true
+		tag.position = mid + shift + Vector3(0, 0.55, 0)
+		tag.rotation = Vector3(-PI / 2.0, Rules.view_yaw, 0.0)
+		tag.modulate = Color(dcol.r, dcol.g, dcol.b, lerpf(1.0, 0.35, off))
+		var ghost: MeshInstance3D = lp["ghosts"][ei]    # where a closed deck docks once the lift comes to its level
+		ghost.visible = off > 0.05
+		var gm := ghost.material_override as StandardMaterial3D
+		var docking: bool = phase == "warning" and int(n["relay_pending"]) == int(sim.edges[ei]["lift_level"])
+		gm.albedo_color = Color(dcol.r, dcol.g, dcol.b, 0.08 + 0.06 * off + (0.14 if docking else 0.0))
+		gm.emission = dcol
+		gm.emission_energy_multiplier = 1.6 if docking else 0.5
+		var edge: MeshInstance3D = lp["edges"][ei]      # the deck's platform end, glowing while it moves
+		edge.visible = phase == "moving"
+		if phase == "moving":
+			var near_end: Vector3 = dl[0] if (dl[0] as Vector3).distance_to(n["pos"]) < (dl[-1] as Vector3).distance_to(n["pos"]) else dl[-1]
+			edge.position = near_end + shift + Vector3(0, 0.45, 0)
+			_tint(edge, dcol.lightened(0.4))
+			(edge.material_override as StandardMaterial3D).emission_energy_multiplier = 4.0
 	var badge: Label3D = lp["badge"]
 	badge.visible = not gone
 	badge.position = top + Vector3(0, rise + 2.4, 0)
-	badge.text = "⇅ UP" if up else "⇅ DOWN"
+	badge.text = "▲ UP" if up else "▼ DOWN"
 	badge.modulate = Color.WHITE if phase == "moving" else lvl_col
 	_aim(r["pointer"], top + Vector3(0, rise, 0), Vector3.UP if up else Vector3.DOWN)
 	_aim(r["ghost_pointer"], top + Vector3(0, rise + 0.8, 0), Vector3.UP if int(n["relay_pending"]) == 1 else Vector3.DOWN)
@@ -677,7 +884,7 @@ func _tilt(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink: boo
 
 
 func _speed_tags() -> void:
-	## Conveyor: x2 (with the flow) / x0.5 (against) over every line with bodies on a conveyor deck.
+	## Conveyor: x2.25 (with the flow) / x0.3 (against) over every line with bodies on a belt (relay or plain).
 	var seen := {}
 	var cfg: Dictionary = Rules.RELAYS_PROTO["conveyor"]
 	for h in sim.hordes:
@@ -701,4 +908,4 @@ func _speed_tags() -> void:
 
 
 static func _num(x: float) -> String:
-	return str(int(x)) if is_equal_approx(x, roundf(x)) else str(snappedf(x, 0.1))
+	return str(int(x)) if is_equal_approx(x, roundf(x)) else str(snappedf(x, 0.01))   # (round 3: x2.25)

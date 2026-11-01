@@ -189,6 +189,11 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 				# other); a lift deck's level; the gap a ferry crosses (m)
 				"proto": str(e["proto"]) if e.get("proto") != null else "",
 				"lift_level": int((e["lift"] as Dictionary).get("level", 0)) if e.get("lift") is Dictionary else 0,
+				# RELAYS 3.0 round 3: a deck that is a map piece on its own (no relay): "belt": "AB" / "BA" on a
+				# "proto": "conveyor" deck (the flow, from `from` to `to` = AB), "ferry": {"dock": "A" / "B"} on a
+				# "proto": "ferry" deck (its clock starts in line / half a cycle on) - relays-proto-schema.md "Round 3"
+				"belt": str(e["belt"]) if e.get("belt") != null else "",
+				"ferry": (e["ferry"] as Dictionary).duplicate() if e.get("ferry") is Dictionary else {},
 				"deck_m": float(e.get("deckMetres", 0.0)) if e.get("deckMetres") != null else 0.0})
 		var i := edges.size() - 1
 		adj[int(e["from"])].append([int(e["to"]), i])
@@ -211,7 +216,8 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			for x in range(ids.size()):
 				for y in range(x + 1, ids.size()):
 					edges.append({"a": ids[x], "b": ids[y], "modules": 0, "state": "", "retracts": false,
-							"overpass": false, "geo": {}, "plaza": true, "relay_node": -1, "proto": "", "lift_level": 0, "deck_m": 0.0})
+							"overpass": false, "geo": {}, "plaza": true, "relay_node": -1, "proto": "", "lift_level": 0, "deck_m": 0.0,
+							"belt": "", "ferry": {}})
 					var pi := edges.size() - 1
 					adj[ids[x]].append([ids[y], pi])
 					adj[ids[y]].append([ids[x], pi])
@@ -981,10 +987,14 @@ func _fire_relay_by(n: Dictionary, seat: String) -> bool:
 	## Starts a relay's warning on behalf of `seat` (its owner, or a Relay Hack / Rewire caster).
 	if n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "" or is_relay_locked(n["id"]):
 		return false
-	if relay_states(n).is_empty() or n["relay"] == "ferry":   # RELAYS 3.0 round 2: the moving bridge runs on its own
-		return false
+	if relay_states(n).is_empty() or relay_fixed(n["id"]):   # RELAYS 3.0: a ferry without a hold / a conveyor without a
+		return false                                  # switch runs on its own
+	if n["relay"] == "ferry":                         # RELAYS 3.0 round 3: the fire HOLDS the bridge in line (no warning)
+		return _ferry_hold(n, seat)
 	if n["relay"] == "launcher":                      # RELAYS 3.0 round 2: the fire LOCKS the target it aims at now
 		n["proto"]["target"] = launcher_aim(n["id"])
+		if _launcher_hostile(n, seat):                # round 3: a rival's Relay Hack / Rewire scrambles it - a MISFIRE
+			n["misfire_next"] = seat
 	n["relay_pending"] = relay_next_index(n)
 	n["relay_phase"] = "warning"
 	n["relay_t"] = Rules.RELAY_WARNING
@@ -1009,7 +1019,10 @@ func _step_relays(dt: float) -> void:
 				n["relay_t"] -= dt
 				n["relay_anim"]["progress"] = clampf(1.0 - n["relay_t"] / float(n["relay_move"]), 0.0, 1.0)   # the view's deck motion
 				if n["relay"] == "launcher":
-					_launcher_catch(n, dt)
+					if n.get("misfire", "") != "":
+						_launcher_misfire_catch(n, dt)    # round 3: scrambled, it throws whatever steps on into the void
+					else:
+						_launcher_catch(n, dt)
 				elif n["relay"] == "tilt":
 					_tilt_slide(n, int(n.get("tilt_exit", -1)))   # round 2: tipped for the hold, everyone who steps on slides
 				if n["relay_t"] <= 0.0:
@@ -1128,6 +1141,8 @@ func _relay_apply(n: Dictionary) -> void:
 	n["moving_edges"] = []
 	if n["relay"] == "launcher":
 		_launcher_release(n)
+	if n["relay"] == "ferry":
+		_ferry_unhold(n)
 	n["relay_phase"] = ""
 	n["relay_cd"] = Rules.relay_cooldown(str(n["relay"])) + maxf(n["relay_cd"], 0.0)   # (0 unless Relay Hack jammed it meanwhile)
 	fx_events.append({"type": "relay_done", "node": n["id"]})
@@ -1444,7 +1459,7 @@ func _build_path3(route: Array) -> Dictionary:
 	var ex0 := exit_of(_edge_index(route[0], route[1]), route[0])
 	var d0 := ((ex0 - a0["pos"]) as Vector3).normalized()
 	if brawl:
-		var a_exit := Rules.exit_angle(atan2(d0.z, d0.x))   # the front door (PROTO_DOOR_EXITS: or the back, if nearer)
+		var a_exit := Rules.exit_angle(atan2(d0.z, d0.x))   # the front door (DOOR_EXITS: or the back, if nearer)
 		add.call(a0["pos"] + _door_dir(a_exit) * Rules.EXIT_R, 1)
 		for p in _arc(a0["pos"], a_exit, atan2(d0.z, d0.x), ring):
 			add.call(p, 1)
@@ -1482,7 +1497,7 @@ func _build_path3(route: Array) -> Dictionary:
 			add.call(ex_out, 1)
 			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		elif brawl:                                   # Alpha 11: round the ring to the front door, then in
-			var a_door := Rules.entry_angle(atan2(din.z, din.x))   # PROTO_TWO_DOORS: or the back door, if nearer
+			var a_door := Rules.entry_angle(atan2(din.z, din.x))   # TWO_DOORS: or the back door, if nearer
 			for p in _arc(b["pos"], atan2(din.z, din.x), a_door, ring):
 				add.call(p, 1)
 			add.call(b["pos"] + _door_dir(a_door) * Rules.EXIT_R, 1)
@@ -1544,7 +1559,7 @@ func _build_path_legacy(route: Array) -> Dictionary:
 			# destination: straight onto the platform from this side, up to the tower's footprint -
 			# the whole platform is the node, every side is an entrance
 			if brawl:                                   # Alpha 11: round the ring to the front door, then in
-				var a_door := Rules.entry_angle(a_in)     # PROTO_TWO_DOORS: or the back door, if nearer
+				var a_door := Rules.entry_angle(a_in)     # TWO_DOORS: or the back door, if nearer
 				for p in _arc(b["pos"], a_in, a_door, Rules.BRAWL_RING):
 					add.call(p, true)
 				add.call(b["pos"] + _door_dir(a_door) * Rules.EXIT_R, true)
@@ -1568,7 +1583,7 @@ func _curve_centre(n: Dictionary) -> Vector3:
 
 
 static func _door_dir(a_door: float) -> Vector3:
-	## The door at a_door: the front door is exactly Rules.front_dir() (one door = today's paths to the bit); PROTO_TWO_DOORS'
+	## The door at a_door: the front door is exactly Rules.front_dir() (one door = today's paths to the bit); TWO_DOORS'
 	## back door is its opposite.
 	var front := Rules.front_dir()
 	return front if is_equal_approx(a_door, atan2(front.z, front.x)) else -front
@@ -1840,7 +1855,7 @@ func _check_missing_decks() -> void:
 		if not is_edge_open(ei):                      # a deck in motion is not (0.18.7): going or not yet there
 			closed[ei] = true
 	for ei in _ferry_edges:                           # RELAYS 3.0 round 2: the moving bridge out of line is no floor
-		if ferry_out(int(_ferry_edges[ei])):
+		if ferry_edge_out(int(ei)):
 			closed[ei] = true
 	if closed.is_empty() and breaking.is_empty():
 		for h in hordes:
@@ -3410,7 +3425,8 @@ func _alive_seats() -> Dictionary:
 		if m["state"] == "walking":
 			alive[m["seat"]] = true
 	for f in flights:                                 # RELAYS 3.0: a launcher's throw in the air is a line too
-		alive[f["seat"]] = true
+		if not f.get("void", false):                  # (round 3: not a misfire's throw - it is lost)
+			alive[f["seat"]] = true
 	return alive
 
 
@@ -4506,6 +4522,8 @@ func cast(seat: String, slot: String, target = null) -> bool:
 			if rt[1] == "jam":
 				n["relay_cd"] = maxf(n["relay_cd"], 0.0) + float(sk["jam"])
 				_add_effect(id, seat, "relay", n["id"], n["relay_cd"], {"mode": "jam"})
+				if n["relay"] == "launcher":              # RELAYS 3.0 round 3: jamming a launcher scrambles it at once
+					launcher_misfire(n["id"], seat)
 			else:
 				_fire_relay_by(n, seat)
 				_add_effect(id, seat, "relay", n["id"], Rules.RELAY_WARNING, {"mode": "fire"})
@@ -5457,11 +5475,15 @@ var _ferry_edges := {}               # ferry deck edge index -> its ferry node i
 var _conv_edges := {}                # conveyor deck edge index -> its conveyor node id
 var flights: Array = []              # launcher throws in the air: {seat, faction, units, left, from, to, t0, land, end}
 var _ferry_tally := {}               # horde id -> {node, edge, seat, ok, fell, shown} (the FERRY n / m CROSSED readout)
+var _belt_edges := {}                # round 3: a plain belt deck (no relay) -> 0 flowing A -> B (its from -> to), 1 B -> A
+var _ferry_plain := {}               # round 3: a plain moving-bridge deck (no relay; _ferry_edges -1) -> its clock record
 
 
 func _setup_proto() -> void:
 	_ferry_edges = {}
 	_conv_edges = {}
+	_belt_edges = {}
+	_ferry_plain = {}
 	flights = []
 	_ferry_tally = {}
 	for i in edge_controller:
@@ -5470,6 +5492,15 @@ func _setup_proto() -> void:
 				_ferry_edges[i] = edge_controller[i]
 			"conveyor":
 				_conv_edges[i] = edge_controller[i]
+	for i in range(edges.size()):                     # round 3: the same decks as map pieces on their own (no relay)
+		if edge_controller.has(i):
+			continue
+		match str(edges[i].get("proto", "")):
+			"conveyor":
+				_belt_edges[i] = 1 if str(edges[i].get("belt", "AB")) == "BA" else 0
+			"ferry":
+				_ferry_edges[i] = -1
+				_ferry_plain[i] = {"start": 0.5 if str((edges[i]["ferry"] as Dictionary).get("dock", "A")) == "B" else 0.0}
 	for n in nodes:
 		var k: String = n["relay"]
 		if not Rules.is_proto(k):
@@ -5568,6 +5599,9 @@ func _proto_begin_move(n: Dictionary, old_index: int, new_index: int) -> void:
 			n["relay_move"] = float(cfg["move"])
 		"launcher":
 			n["relay_move"] = float(cfg["armed"])
+			if n.has("misfire_next"):                     # round 3: a rival fired it - it misfires instead of arming
+				n["relay_move"] = float(cfg["misfire"])
+				_misfire_start(n, str(n["misfire_next"]))
 		"tilt":
 			n["relay_move"] = float(cfg["hold"])          # round 2: it stays tipped (the tip itself is cfg.move in the view)
 			var exits: Array = n["proto"].get("exits", [])
@@ -5587,15 +5621,31 @@ func _proto_begin_move(n: Dictionary, old_index: int, new_index: int) -> void:
 # out to one side, `away`, `slide` back, in line again, then out to the other side. Routes always count it; the moment it
 # starts to slide out whatever is on it falls, and a line reaching the lip while it is out pours into the void (the
 # missing-deck rule, _check_missing_decks). `open` is worked out per gap: open - crossing = survive x the half cycle.
+func _ferry_rec(ei: int) -> Dictionary:
+	## The clock record of moving-bridge deck `ei`: its relay node's proto, or (round 3) the plain piece's own.
+	var id: int = int(_ferry_edges.get(ei, -1))
+	return nodes[id]["proto"] if id >= 0 else _ferry_plain.get(ei, {})
+
+
+func _ferry_edge_of(id: int) -> int:
+	var mine: Array = controlled_edges(id)
+	return int(mine[-1]) if not mine.is_empty() else -1
+
+
 func ferry_cycle(id: int) -> Dictionary:
 	## {open, slide, away, half, period, cross, gap} in seconds (gap in m) for ferry node `id` (cached in its proto).
-	var p: Dictionary = nodes[id]["proto"]
+	return ferry_cycle_e(_ferry_edge_of(id))
+
+
+func ferry_cycle_e(ei: int) -> Dictionary:
+	## ferry_cycle for moving-bridge deck `ei` (relay or plain piece).
+	var p: Dictionary = _ferry_rec(ei)
 	if p.has("cycle"):
 		return p["cycle"]
 	var cfg: Dictionary = Rules.RELAYS_PROTO["ferry"]
 	var gap := 8.0
-	for i in controlled_edges(id):
-		gap = deck_length(i)
+	if ei >= 0:
+		gap = deck_length(ei)
 	var cross: float = gap / Rules.move_speed()
 	var sv: float = clampf(float(cfg["survive"]), 0.05, 0.9)
 	var moving: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
@@ -5608,9 +5658,29 @@ func ferry_cycle(id: int) -> Dictionary:
 
 func ferry_phase(id: int) -> Dictionary:
 	## Where the moving bridge is now: {part: "open" | "out" | "away" | "back", left: s in that part, side: +1 / -1 (the
-	## side it slides to this half), off: 0 in line .. 1 fully out (the view), next_open: s until it is in line again}.
-	var c := ferry_cycle(id)
-	var t: float = fposmod(time + float(nodes[id]["proto"].get("start", 0.0)) * float(c["period"]), float(c["period"]))
+	## side it slides to this half), off: 0 in line .. 1 fully out (the view), next_open: s until it is in line again,
+	## held: s left of the owner's HOLD (round 3; 0 when not held)}.
+	return ferry_phase_e(_ferry_edge_of(id))
+
+
+func ferry_clock(ei: int) -> float:
+	## The moving bridge's own time: the match clock minus every second it was HELD in line (round 3); stopped while held.
+	var p: Dictionary = _ferry_rec(ei)
+	var t: float = float(p["held_from"]) if p.has("held_from") else time
+	return t - float(p.get("frozen", 0.0))
+
+
+func ferry_phase_e(ei: int) -> Dictionary:
+	## ferry_phase for moving-bridge deck `ei` (relay or plain piece).
+	var c := ferry_cycle_e(ei)
+	var p: Dictionary = _ferry_rec(ei)
+	if p.has("held_from"):                            # round 3: held in line by its owner
+		var id: int = int(_ferry_edges.get(ei, -1))
+		var held: float = float(nodes[id]["relay_t"]) if id >= 0 else 0.0
+		var t_h: float = fposmod(ferry_clock(ei) + float(p.get("start", 0.0)) * float(c["period"]), float(c["half"]))
+		return {"part": "open", "left": maxf(float(c["open"]) - t_h, 0.0) + held, "side": 1.0, "off": 0.0, "next_open": 0.0,
+				"held": held}
+	var t: float = fposmod(ferry_clock(ei) + float(p.get("start", 0.0)) * float(c["period"]), float(c["period"]))
 	var side := 1.0
 	if t >= float(c["half"]):
 		t -= float(c["half"])
@@ -5619,15 +5689,66 @@ func ferry_phase(id: int) -> Dictionary:
 	var sl: float = c["slide"]
 	var aw: float = c["away"]
 	if t < o:
-		return {"part": "open", "left": o - t, "side": side, "off": 0.0, "next_open": 0.0}
+		return {"part": "open", "left": o - t, "side": side, "off": 0.0, "next_open": 0.0, "held": 0.0}
 	t -= o
 	if t < sl:
-		return {"part": "out", "left": sl - t, "side": side, "off": smoothstep(0.0, 1.0, t / sl), "next_open": sl - t + aw + sl}
+		return {"part": "out", "left": sl - t, "side": side, "off": smoothstep(0.0, 1.0, t / sl), "next_open": sl - t + aw + sl, "held": 0.0}
 	t -= sl
 	if t < aw:
-		return {"part": "away", "left": aw - t, "side": side, "off": 1.0, "next_open": aw - t + sl}
+		return {"part": "away", "left": aw - t, "side": side, "off": 1.0, "next_open": aw - t + sl, "held": 0.0}
 	t -= aw
-	return {"part": "back", "left": sl - t, "side": side, "off": 1.0 - smoothstep(0.0, 1.0, t / sl), "next_open": sl - t}
+	return {"part": "back", "left": sl - t, "side": side, "off": 1.0 - smoothstep(0.0, 1.0, t / sl), "next_open": sl - t, "held": 0.0}
+
+
+# FERRY HOLD (round 3, Daniele 2026-11-02 "maybe tweak the timing or how it is used"): a relay ferry's owner double-taps it
+# while the bridge is IN LINE: it stays in line RELAYS_PROTO.ferry.hold s (its clock stops), then runs on from where it was;
+# RELAYS_PROTO.ferry.cooldown after. No warning (nothing moves, nobody falls). hold 0 = round 2 (nobody fires it).
+func relay_fixed(id: int) -> bool:
+	## A relay that runs on its own and is never fired: a ferry without the hold, a conveyor whose map says "switch": false.
+	var n: Dictionary = nodes[id]
+	match str(n["relay"]):
+		"ferry":
+			return float(Rules.RELAYS_PROTO["ferry"].get("hold", 0.0)) <= 0.0
+		"conveyor":
+			return n["proto"].get("switch", true) == false
+	return false
+
+
+func ferry_hold_refusal(id: int) -> String:
+	## "" if the ferry can be held now, else why not (the HUD's message).
+	var n: Dictionary = nodes[id]
+	if relay_fixed(id):
+		return "The moving bridge runs on its own - time your send"
+	if n["relay_phase"] != "":
+		return "The bridge is already held"
+	if n["relay_cd"] > 0.0:
+		return "Hold on cooldown"
+	if ferry_phase(id)["part"] != "open":
+		return "The bridge is out - hold it once it is back in line"
+	return ""
+
+
+func _ferry_hold(n: Dictionary, seat: String) -> bool:
+	if ferry_hold_refusal(n["id"]) != "":
+		return false
+	var hold: float = float(Rules.RELAYS_PROTO["ferry"]["hold"])
+	n["proto"]["held_from"] = time
+	n["relay_by"] = seat
+	n["relay_move"] = hold
+	n["relay_t"] = hold
+	n["relay_anim"] = {"progress": 0.0}
+	n["relay_phase"] = "moving"
+	events.append({"t": time, "type": "relay_fired", "node": n["id"], "seat": seat, "index": n["relay_index"]})
+	events.append({"t": time, "type": "ferry_hold", "node": n["id"], "seat": seat})
+	fx_events.append({"type": "ferry_hold", "node": n["id"], "seat": seat})
+	return true
+
+
+func _ferry_unhold(n: Dictionary) -> void:
+	var p: Dictionary = n["proto"]
+	if p.has("held_from"):
+		p["frozen"] = float(p.get("frozen", 0.0)) + (time - float(p["held_from"]))
+		p.erase("held_from")
 
 
 func proto_tag(id: int) -> String:
@@ -5636,10 +5757,14 @@ func proto_tag(id: int) -> String:
 	var n: Dictionary = nodes[id]
 	match str(n["relay"]):
 		"ferry":
+			if n["relay_phase"] == "moving":
+				return "HOLD %d" % int(ceil(float(n["relay_t"])))
 			var fp := ferry_phase(id)
 			return "OPEN %d" % int(ceil(float(fp["left"]))) if fp["part"] == "open" else "SHUT %d" % int(ceil(float(fp["next_open"])))
 		"launcher":
 			if n["relay_phase"] == "moving":
+				if n.get("misfire", "") != "":
+					return "MISFIRE %d" % int(ceil(float(n["relay_t"])))
 				return "ARMED %d" % int(ceil(float(n["relay_t"])))
 			if n["relay_phase"] == "warning":
 				return "LOCK"
@@ -5654,6 +5779,11 @@ func proto_tag(id: int) -> String:
 func ferry_out(id: int) -> bool:
 	## The moving bridge is not in line (sliding out, away, or sliding back): no floor.
 	return ferry_phase(id)["part"] != "open"
+
+
+func ferry_edge_out(ei: int) -> bool:
+	## ferry_out for moving-bridge deck `ei` (relay or plain piece).
+	return ferry_phase_e(ei)["part"] != "open"
 
 
 func _ferry_note(h: Dictionary, ei: int, what: String, units: float) -> void:
@@ -5753,14 +5883,19 @@ func conveyor_sense(h: Dictionary) -> Array:
 	var against_m := 0.0
 	var id := -1
 	for sp in h["spans"]:
-		if head < sp["s0"] or tail > sp["s1"] or not _conv_edges.has(sp["edge"]):
+		if head < sp["s0"] or tail > sp["s1"] or not (_conv_edges.has(sp["edge"]) or _belt_edges.has(sp["edge"])):
 			continue
-		id = _conv_edges[sp["edge"]]
-		var n: Dictionary = nodes[id]
-		if n["relay_phase"] == "moving":
-			continue                                      # flipping: no flow
+		var flow := 0
+		if _conv_edges.has(sp["edge"]):
+			id = _conv_edges[sp["edge"]]
+			var n: Dictionary = nodes[id]
+			if n["relay_phase"] == "moving":
+				continue                                  # flipping: no flow
+			flow = int(n["relay_index"])
+		else:
+			flow = int(_belt_edges[sp["edge"]])           # round 3: a plain belt (no relay) always runs
 		var on: float = maxf(minf(head, sp["s1"]) - maxf(tail, sp["s0"]), 0.01)
-		if (int(n["relay_index"]) == 0) == bool(sp["forward"]):
+		if (flow == 0) == bool(sp["forward"]):
 			with_m += on
 		else:
 			against_m += on
@@ -5798,7 +5933,7 @@ func _launcher_catch(n: Dictionary, dt: float) -> void:
 			fx_events.append({"type": "launch_catch", "node": id, "hid": h["id"], "seat": h["owner"]})
 		var len := chain_length(h)
 		var rate: float = Rules.move_speed() * Rules.platform_mult() * h["units"] / maxf(len, 0.5)
-		var x: float = minf(h["units"], maxf(rate, Rules.POUR_MIN_RATE) * dt)
+		var x: float = minf(h["units"], maxf(rate, Rules.POUR_MIN_RATE) * float(cfg.get("pour", 1.0)) * dt)   # round 3: x pour
 		if x > 0.0:
 			h["units"] -= x
 			var last: Dictionary = flights[-1] if not flights.is_empty() else {}
@@ -5817,6 +5952,9 @@ func _launcher_release(n: Dictionary) -> void:
 	for h in hordes:
 		if int(h.get("launch", -1)) == n["id"]:
 			h.erase("launch")
+	if n.get("misfire", "") != "":
+		n.erase("misfire")
+		fx_events.append({"type": "launch_misfire_end", "node": n["id"]})
 	var p: Dictionary = n["proto"]                    # round 2: the aim moves on from the locked target
 	p["aim0"] = maxi(0, (p.get("targets", []) as Array).find(int(p.get("target", -1))))
 	p["aim_t0"] = time
@@ -5899,8 +6037,16 @@ func _step_flights(dt: float) -> void:
 		f["left"] = float(f["left"]) - amt
 		if not f.get("landed", false):
 			f["landed"] = true
-			fx_events.append({"type": "launch_land", "node": f["to"], "seat": f["seat"]})
-		if amt > 0.0:
+			if f.get("void", false):
+				if not f.get("decoy", false):
+					events.append({"t": time, "type": "launch_lost", "node": f["from"], "seat": f["seat"], "units": float(f["units"]),
+							"by": str(f.get("by", ""))})
+			else:
+				fx_events.append({"type": "launch_land", "node": f["to"], "seat": f["seat"]})
+		if amt > 0.0 and f.get("void", false):        # round 3: a misfire's throw - lost
+			if not f.get("decoy", false):
+				fall_losses[f["seat"]] = fall_losses.get(f["seat"], 0.0) + amt
+		elif amt > 0.0:
 			var to: int = int(f["to"])
 			if collapsed.get(to, false):              # the target dropped meanwhile: into the void
 				fall_losses[f["seat"]] = fall_losses.get(f["seat"], 0.0) + amt
@@ -5914,9 +6060,79 @@ func flight_units(seat: String) -> float:
 	## Units of `seat` in the air (still theirs).
 	var t := 0.0
 	for f in flights:
-		if f["seat"] == seat:
+		if f["seat"] == seat and not f.get("void", false):   # (round 3: a misfire's throw is lost)
 			t += float(f["left"])
 	return t
+
+
+# LAUNCHER MISFIRE (round 3, Daniele 2026-11-02: "if it is hit by Rewire or similar, it throws units into the void at
+# random, as if it tilted"): fired by a rival's Relay Hack / Rewire (after the usual warning) or jammed by Relay Hack (at
+# once), the pad is scrambled RELAYS_PROTO.launcher.misfire s: every line stepping on it - any owner, the owner's armed
+# lines included; not the garrison or a line leaving it - is thrown at a random heading off the map and lost (it counts as
+# a fall for its owner; credit: the caster). Then the usual cooldown.
+func _launcher_hostile(n: Dictionary, seat: String) -> bool:
+	return n["owner"] == "" or (seat != n["owner"] and not allied(seat, n["owner"]))
+
+
+func launcher_misfire(id: int, seat: String) -> void:
+	## Scrambles launcher `id` now (Relay Hack's jam): a misfire for RELAYS_PROTO.launcher.misfire s whatever it was doing.
+	var n: Dictionary = nodes[id]
+	if n["relay"] != "launcher" or collapsed.get(id, false):
+		return
+	if n["relay_phase"] == "warning":
+		n["misfire_next"] = seat                      # it will misfire instead of arming
+		return
+	var mis: float = float(Rules.RELAYS_PROTO["launcher"]["misfire"])
+	if n["relay_phase"] == "":
+		n["relay_anim"] = {"progress": 0.0}
+		n["relay_phase"] = "moving"
+		n["relay_move"] = mis
+		n["relay_t"] = mis
+	else:                                             # armed: the rest of the arm (at least the misfire) goes wrong
+		n["relay_t"] = maxf(float(n["relay_t"]), mis)
+		n["relay_move"] = maxf(float(n["relay_move"]), float(n["relay_t"]))
+	_misfire_start(n, seat)
+
+
+func _misfire_start(n: Dictionary, seat: String) -> void:
+	n["misfire"] = seat
+	n.erase("misfire_next")
+	n["relay_by"] = seat
+	events.append({"t": time, "type": "launch_misfire", "node": n["id"], "seat": n["owner"], "by": seat})
+	fx_events.append({"type": "launch_misfire", "node": n["id"], "seat": n["owner"], "by": seat})
+
+
+func _launcher_misfire_catch(n: Dictionary, dt: float) -> void:
+	var id: int = n["id"]
+	var cfg: Dictionary = Rules.RELAYS_PROTO["launcher"]
+	for h in hordes.duplicate():
+		if not (h in hordes) or int(h["route"][0]) == id:
+			continue
+		if int(h.get("launch", -1)) != id:
+			var pr := _platform_range(h, id)
+			if pr.is_empty() or h["s"] < pr[0] or h["s"] > pr[1]:
+				continue
+			h["launch"] = id
+			h["s"] = pr[0]
+			h["state"] = "move"
+			fx_events.append({"type": "launch_catch", "node": id, "hid": h["id"], "seat": h["owner"], "misfire": true})
+		var len := chain_length(h)
+		var rate: float = Rules.move_speed() * Rules.platform_mult() * h["units"] / maxf(len, 0.5)
+		var x: float = minf(h["units"], maxf(rate, Rules.POUR_MIN_RATE) * float(cfg.get("pour", 1.0)) * dt)
+		if x > 0.0:
+			h["units"] -= x
+			var last: Dictionary = flights[-1] if not flights.is_empty() else {}
+			if not last.is_empty() and last.get("void", false) and last["seat"] == h["owner"] and int(last["from"]) == id \
+					and time - float(last["t0"]) < 0.25:
+				last["units"] = float(last["units"]) + x
+				last["left"] = float(last["left"]) + x
+			else:                                     # a random heading off the map, into the void
+				var land: float = time + float(cfg["flight"])
+				flights.append({"seat": h["owner"], "faction": h["faction"], "units": x, "left": x, "from": id, "to": -1,
+						"void": true, "heading": rng.randf_range(-PI, PI), "decoy": h.get("decoy", false), "by": str(n["misfire"]),
+						"t0": time, "land": land, "end": land + float(cfg["land"])})
+		if h["units"] <= 0.001 and not h["streaming"]:
+			hordes.erase(h)
 
 
 # LIFT: a switch whose decks are tagged by level; the lines whose head is on the platform when it moves ride it - one

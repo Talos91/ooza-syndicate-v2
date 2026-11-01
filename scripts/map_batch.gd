@@ -466,6 +466,14 @@ func _release(node: Node) -> void:
 	_by_root.erase(node.get_instance_id())             # (its visibility_changed hook finds nothing now)
 	for p in list:
 		_untrack(p)
+	var k := 0                                           # RELAYS 3.0 round 3: a polled structure released with its node
+	while k < _polled.size():                            # (a tipping / rising platform's vat) stops being moved slot by slot
+		var q: Piece = _polled[k]
+		if q.root == node:
+			_untrack(q)
+			_polled.remove_at(k)
+		else:
+			k += 1
 
 
 # ------------------------------------------------------------------ hooks (static: no-ops when nothing is batched)
