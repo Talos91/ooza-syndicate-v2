@@ -1,11 +1,18 @@
-# To test - ALPHA 23.19 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.20 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
 
-## 0.23.19 hotfix (staging: https://oozesyndicate.com/staging/)
+## 0.23.20 (staging: https://oozesyndicate.com/staging/)
+- [ ] **Two doors**: lines walk in by the nearer of the two doors and leave by the one nearer their bridge; the floor arrow at a door lights while a line uses it.
+- [ ] **Neon HUD in the Last Stand**: every standing node keeps its count; the next node to fall has a RED sign, the one after YELLOW, the rest GREY; a new / changed sign pulses.
+- [ ] **Upgrade chip**: a 34 pt neon hex with a double chevron when a vat can upgrade - easy to see and tap?
+- [ ] **Solar v3**: the new Solar creature on the board and in its resident tank (the egg must not poke out); Solar monsters unchanged.
+- [ ] **Bloom 0.75 x 4 lanes**: smaller Bloom bodies in four lanes - does the race read better / more varied?
+
+## 0.23.19 hotfix (live)
 - [ ] **Turn the phone mid-match** (portrait -> landscape, and back) in an online round and in a solo round: the board stays on screen, nothing hides behind the top bar.
 - [ ] **Fullscreen mid-match** (tap into fullscreen, or let the browser bars hide / show): the board refits and stays on screen.
 - [ ] **Menus** feel smoother again (PHONE back to 30 fps in menus / pause / results).

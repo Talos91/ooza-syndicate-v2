@@ -1,7 +1,18 @@
 # Ooze Syndicate 2.0 - changelog
 
-## Unreleased - branch ui-neon (2026-11-02, Daniele on 0.23.18: "upgrade badges not appearing, unit count HUD disappearing, some of the alert signs disappear")
+## 0.23.20 "Alpha 23" - 2026-11-02 (staged 2026-11-02: two doors, neon HUD marks, Solar v3 + faction look)
 
+- **Two doors in the main game** (Daniele 2026-11-02, after proto3 / proto4: "a success, promote it to the main game"; branch doors-main): every BRAWL
+  platform has a second door opposite the front one. An arriving line goes round the ring to whichever door is nearer from the deck it arrives on
+  (ties: the front door); a leaving line comes out of the door nearer its bridge (Rules.TWO_DOORS + DOOR_EXITS, both on). Doors in AND out keep the
+  half-turn maps exactly even (N-11 / 14 / 20 / 22 / 24 / 28: seat A vs B 0.00 s, tests/door_probe.gd). Readout: a **floor arrow** at each door that lights
+  while a line uses it (DoorView) - the floor arrow only, no other door marker. Mirrored maps (maps-mirror) are not shipped: two doors won.
+- **Solar v3** (Daniele's Rodin model, Desk review-solar-v3 = keep; branch faction-solar-v3): the Solar unit is the new creature - 4,800 tris (was 5,818),
+  1.90 m footprint like the other units, 1024 px textures incl. a new emissive map; the tall egg stays inside its resident tank (residents taller than the
+  old tallest sink by the excess). Solar monsters keep the old minion body and its old texture (assets/units/legacy/).
+- **Rules.FACTION_LOOK** (looks only, no rule): a per-faction body size and lanes per column; **Bloom 0.75 x 4 lanes** (Daniele 2026-11-02), every other
+  faction 1.0 x 3 as before. Lane spacing scales with size, so Bloom's column stays about as wide. Debug: --look=bloom:0.75:4.
+- **Neon HUD marks** (branch ui-neon, Daniele on 0.23.18: "upgrade badges not appearing, unit count HUD disappearing, some of the alert signs disappear") - the items below:
 - **Counts never vanish in the Last Stand**: a warned node keeps its count badge (0.19.0 hid the whole badge when the falling sign replaced its round badge;
   with a v3 ring a whole ring is warned at once, so 6-12 counts - your own home's included - and their relay !n / build / drop-order tags went with it).
 - **Neon alarm signs** (HudOverlay._draw_danger_symbols): the next node to fall RED (30 pt), the one after YELLOW, every other warned node GREY - still
