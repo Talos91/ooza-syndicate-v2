@@ -814,6 +814,11 @@ func _test_skill_fx() -> void:
 		if p[2] == "evac":                             # (offensive since 2026-10-07: B needs a safe node to be forced out to)
 			hs.nodes[9]["owner"] = "B"
 		var ts: Array = hs.targets_for(p[0], p[1])
+		var wait := 0
+		while p[2] == "backwash" and ts.is_empty() and wait < 200:   # (two doors, 0.23.20: wait for a hostile line's head on a deck)
+			frame.call(0.1)
+			wait += 1
+			ts = hs.targets_for(p[0], p[1])
 		var t = ts[0] if not ts.is_empty() else -1
 		if p[2] == "portal" and not ts.is_empty():
 			t = [ts[0], hs.portal_exits(ts[0])[0]]
