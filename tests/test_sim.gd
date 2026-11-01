@@ -429,6 +429,10 @@ func _init() -> void:
 		var fast := ai17d._trip(sim17d, 1, 4)
 		sim17d.nodes[0]["relay_index"] = 0
 		ai17d._fresh()
+		ai17d._invest_after = 1.0e9                       # no investments here: this checks the shortcut decision alone. (speed-15: its
+		# opening investment fed the empty console's build slot from node 1, and the AI never fires a console while an own line still
+		# has to cross the deck it closes; at 5.7 m/s that pour had landed one tick before the attack think, at 4.84 m/s it had not,
+		# and Expert's next invest then landed on the same think as its attack. Both were coincidences of the tick, not the rule.)
 		if level == "Standard":
 			check(slow_route == [1, 0, 2, 4] and fast < slow - (Rules.RELAY_WARNING + Rules.RELAY_MOVE) - 3.0,
 					"the slow fixed way 1-0-2-4 takes %.1f s, the console's shortcut 1-4 %.1f s: clearly more than the fire-to-walkable time" % [slow, fast])
@@ -713,7 +717,8 @@ func _init() -> void:
 	# ---------------------------------------------------------------- Alpha 16: Brawl moves like Alpha 11
 	Rules.bridge_combat = true                          # 0.18.7: SIEGE is deactivated - the switch is locked
 	check(not Rules.bridge_combat and not Rules.SIEGE_ON, "SIEGE is deactivated: nothing can switch bridge combat on")
-	check(is_equal_approx(Rules.move_speed(), 8.9 * 0.8 * 0.8) and Rules.platform_mult() == 1.0, "BRAWL: 5.7 m/s on decks and platforms alike (Alpha 11 speed less 20 % twice)")
+	check(is_equal_approx(Rules.move_speed(), 8.9 * 0.8 * 0.8 * Rules.BRAWL_TRIAL_15) and Rules.platform_mult() == 1.0,
+		"BRAWL: 4.84 m/s on decks and platforms alike (Alpha 11 speed less 20 % twice, less 15 % for the speed-15 staging trial)")
 	check(absf(Rules.exit_rate() - 47.9167) < 0.01, "BRAWL: 9.6 shown units/s out of the door (Alpha 11: one every 12 px)")
 	var bmap := MapBuilder.load_map("res://maps/004-two-piers.json")
 	var bsim := Sim.new()
@@ -978,7 +983,8 @@ func _init() -> void:
 			# a line straddling the deck when it goes: the front past the far pier made it and walks on as its
 			# own line, the part behind pours off the lip, nothing walks over the gap
 			var rm := _relay_sim(c[1], c[2], c[3])
-			rm.nodes[c[3]]["units"] = 400.0
+			rm.nodes[c[3]]["units"] = 600.0               # (speed-15: 400 poured out in 8.4 s, and at 4.84 m/s the switch deck's far pier
+			                                               # + 1.5 m is 9.7 s away: the door must still be pouring for "the rest waits at the lip")
 			var hm: Dictionary = rm.send(c[3], c[4], 1.0)
 			var dm: Dictionary = _relay_deck(rm, hm, c[2])
 			run_until(rm, func(): return hm["s"] > dm["s1"] + 1.5, 30.0, 0.02)
@@ -2334,11 +2340,13 @@ func _skills_tests() -> void:
 	# ---------------------------------------------------------------- Bypass: both states for 8 s, then the normal outcome
 	s = _mk(sw, "null", "null", {"A": {"map": "bypass"}})
 	s.nodes[1]["owner"] = "B"
+	s.nodes[5]["units"] = 300.0
+	var hb2 := s.send(5, 0, 1.0)
+	_steps(s, 1.5)                                      # (speed-15: 3 m onto the deck is 40.6 m = 8.4 s at 4.84 m/s, past Bypass's 8 s;
+	                                                    # the line walks 1.5 s before the cast so the check below still lands inside the window)
 	check(s.cast("A", "map", 1), "Bypass an enemy relay")
 	check(s.is_edge_open(2) and s.is_edge_open(6) and s.find_route(5, 3) == [5, 1, 3], "the relay holds both states: both decks stand, routes use either")
 	s.fire_relay(1)
-	s.nodes[5]["units"] = 300.0
-	var hb2 := s.send(5, 0, 1.0)
 	var ab: Dictionary = hb2["spans"][1]
 	run_until(s, func(): return hb2["s"] > ab["s0"] + 3.0 and s.nodes[1]["relay_phase"] == "", 30.0)
 	check(s.is_edge_open(2) and s.fall_losses.get("A", 0.0) == 0.0, "fired while bypassed, nothing moves and nobody falls")
