@@ -3115,7 +3115,8 @@ func _relays_proto() -> void:
 			if n.get("relay") != null and Rules.is_proto(str(n["relay"])) and not path.get_file().begins_with("P-"):
 				proto_in_pool = true
 	check(not proto_in_pool, "RELAYS 3.0: no pool map uses a prototype relay kind")
-	check(not MapPool.battlefield().any(func(p): return p.get_file().begins_with("P-")), "RELAYS 3.0: no P map is in the battlefield pool")
+	# proto line only (POOL_GROUPS ["N", "P"]): the P maps ARE offered on 02 BATTLEFIELD here; the release line keeps them out
+	check(MapPool.battlefield().any(func(p): return p.get_file().begins_with("P-")), "RELAYS 3.0 (proto line): the P maps are in the battlefield pool")
 
 	# ---- FERRY: P-91, ferry node 1 drives deck 7 (3 -> 4, A's home to the centre), docked at A (node 3)
 	var f := _proto_sim("ferry")

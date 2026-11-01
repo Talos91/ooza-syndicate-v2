@@ -56,7 +56,7 @@ static func all() -> Array:
 # MAPS 5.0 (Daniele 2026-09-29: "replace current pool with the new ones"): the player's pool is the map builder's
 # N- maps only. Every older map stays baked in maps4/ - the campaign's placeholder missions and the tutorial load
 # theirs by path, and test_maps4 still checks them all - but none is offered on 02 BATTLEFIELD or as a random rematch.
-const POOL_GROUPS: Array[String] = ["N"]
+const POOL_GROUPS: Array[String] = ["N", "P"]   # proto line only: the Relays 3.0 test maps are offered in 02 BATTLEFIELD
 
 
 static func battlefield() -> Array:
