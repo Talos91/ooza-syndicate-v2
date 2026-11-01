@@ -50,6 +50,21 @@ func _run() -> void:
 							for seat in ["A", "B"]:
 								spec[seat] = {"f": f, "h": h if seat == vs else "stock"}
 							jobs.append([p, spec, seed0 + s, "habit:" + h, vs])
+			elif study == "lift":                     # bal-audit 2026-11-02: cast vs never-cast, the same skill on both seats
+				var only: Array = Array(str(args.get("skills", "")).split(",", false))
+				for slot in ["active", "map"]:
+					for pid in (Rules.ACTIVE_SKILLS if slot == "active" else Rules.MAP_SKILLS):
+						if not only.is_empty() and not pid in only:
+							continue
+						for f in facs:
+							for vs in ["A", "B"]:
+								var spec := {}
+								for seat in ["A", "B"]:
+									var d: Dictionary = Rules.FACTION_LOADOUT[f]
+									var lo := {"active": d["active"], "map": d["map"]}
+									lo[slot] = pid
+									spec[seat] = {"f": f, "h": "stock" if seat == vs else "no" + slot, "lo": lo}
+								jobs.append([p, spec, seed0 + s, "lift:" + slot + ":" + pid, vs])
 			elif study == "power":
 				for slot in ["active", "map"]:
 					for pid in (Rules.ACTIVE_SKILLS if slot == "active" else Rules.MAP_SKILLS):
@@ -166,10 +181,38 @@ func _play(path: String, mode: String, level: String, spec: Dictionary, seed_val
 	var snaps := {}
 	var next_snap := 30.0
 	var dt := 0.1
+	var ev_i := 0
+	var ult_ctx := []                                 # bal-audit: [t, seat, id, own lines moving, their units (shown)] per ult cast
+	var mg := {}                                      # bal-audit: seat -> [MG node-seconds, MG kills shown, production forgone shown]
 	while not sim.over and sim.time < 600.0:
 		for ai in ais:
 			ai.think(sim, dt)
+		var shot_t := {}
+		for n in sim.nodes:
+			if n["structure"] == "machinegoon" and n["owner"] != "":
+				shot_t[n["id"]] = float(n["shot"].get("t", -1.0))
 		sim.step(dt)
+		for id in shot_t:
+			var n: Dictionary = sim.nodes[id]
+			if n["structure"] != "machinegoon" or n["owner"] == "":
+				continue
+			var row: Array = mg.get(n["owner"], [0.0, 0.0, 0.0])
+			row[0] += dt
+			if float(n["shot"].get("t", -1.0)) != shot_t[id]:
+				row[1] += Rules.shown_f(float(n["shot"].get("kills", 0.0)))
+			row[2] += Rules.shown_f(Rules.PROD[n["tier"]] * sim.stat(n["owner"], "production")) * (1.0 - Rules.MACHINEGOON_PROD) * dt
+			mg[n["owner"]] = row
+		while ev_i < sim.events.size():
+			var e: Dictionary = sim.events[ev_i]
+			ev_i += 1
+			if str(e["type"]) == "skill" and str(e["slot"]) == "ultimate" and (e["target"] == null or str(e["id"]) != "rewire"):
+				var nl := 0
+				var nu := 0.0
+				for h in sim.hordes:
+					if h["owner"] == e["seat"] and not h.get("decoy", false):
+						nl += 1
+						nu += float(h["units"])
+				ult_ctx.append([snappedf(e["t"], 0.1), e["seat"], e["id"], nl, snappedf(Rules.shown(nu), 0.1)])
 		sim.fx_events.clear()
 		if sim.time >= next_snap:
 			snaps[str(int(next_snap))] = _snap(sim, seat_list)
@@ -218,4 +261,5 @@ func _play(path: String, mode: String, level: String, spec: Dictionary, seed_val
 	return {"map": str(m.get("code", path.get_file().substr(0, 4))), "file": path.get_file(), "spec": factions, "habits": {"A": spec["A"]["h"], "B": spec["B"]["h"]} if spec.has("B") else {}, "teams": teams,
 			"loadouts": sim.loadouts, "winner": sim.winner, "t": snappedf(sim.time, 0.1), "over": sim.over, "forced": forced,
 			"draw": draw, "ls_t": ls_t, "vls_t": vls_t, "builds": builds, "casts": casts, "caps": caps, "snaps": snaps,
-			"losses": losses, "bursts": bursts, "monsters": monsters, "elim": elim, "seed": seed_value}
+			"losses": losses, "bursts": bursts, "monsters": monsters, "elim": elim, "seed": seed_value,
+			"relays": sim.has_relays, "ult_ctx": ult_ctx, "mg": mg}

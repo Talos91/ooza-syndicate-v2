@@ -393,6 +393,9 @@ static var MACHINEGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then up
 static var VAT_RESTORE_COST := 75         # machinegoon -> vat, 15 shown (Daniele, 2026-09-27: "cost price of a tier 1 vat ... maybe 15")
 static var MACHINEGOON_RATE := {1: 8.0, 2: 14.0, 3: 20.0} # kills/s (shown 1.6 / 2.8 / 4; -20 %, Daniele 2026-09-28)
 static var MACHINEGOON_RANGE := 10.0
+# BAL-AUDIT (measurement only, 2026-11-02, not a rule): the share of its vat's production a Machinegoon node keeps
+# (0 = today's rule: the node produces nothing while it holds one).
+static var MACHINEGOON_PROD := 0.0
 # LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
 # a LASER_BURST s burst killing at most LASER_KILL bodies split across the lines in range (the cannon's code
 # path), then LASER_RECHARGE s. ~8 kills/s shown, below the door's 9.6/s.
@@ -499,7 +502,7 @@ const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS
 		"SWAP_COOLDOWN", "MACHINEGOON_COST", "MACHINEGOON_RATE", "MACHINEGOON_RANGE", "LASER_COST", "LASER_KILL",
 		"LASER_BURST", "LASER_RECHARGE", "LASER_RANGE", "FORGE_COST", "MONSTER_HUB_COST", "MONSTER_COST",
 		"MONSTER_COOLDOWN", "MONSTER_SPEED", "MONSTER_REACH", "VAT_RESTORE_COST", "FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS",
-		"forge_bonus"]
+		"forge_bonus", "MACHINEGOON_PROD", "SKILLS"]   # BAL-AUDIT (measurement only, 2026-11-02): + MACHINEGOON_PROD, SKILLS
 const BALANCE_PRESETS := {
 	# The 0.18.7 balance study (tests/balance_probe.gd, BRAWL) proposed b187: neutrals 12/16/32/64 shown, Ember
 	# attack 1.07, Bloom production 1.05, Vex garrison 0.95. Daniele (0.18.9) took the neutrals, set Ember and
@@ -584,6 +587,8 @@ static func _balance_get(k: String):
 		"FIGHT_RATE_K": return FIGHT_RATE_K
 		"FACTION_STATS": return FACTION_STATS
 		"forge_bonus": return forge_bonus
+		"MACHINEGOON_PROD": return MACHINEGOON_PROD
+		"SKILLS": return SKILLS
 	return null
 
 
@@ -616,6 +621,8 @@ static func _balance_set(k: String, v) -> void:
 		"FIGHT_RATE_K": FIGHT_RATE_K = v
 		"FACTION_STATS": FACTION_STATS = v
 		"forge_bonus": forge_bonus = v
+		"MACHINEGOON_PROD": MACHINEGOON_PROD = v
+		"SKILLS": SKILLS = v
 const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA CARTEL"], "bloom": ["VIRIDIAN", "BLOOM"],
 		"ember": ["EMBER", "MAW"], "solar": ["SOLAR", "SHELLS"]}
 const FACTION_TAGLINES := {"vex": "ADAPT. CONNECT. REDIRECT.", "null": "SAME SIGNAL. DIFFERENT TRUTH.",
@@ -682,7 +689,7 @@ const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
 #   enemy_node  a rival's node (node id; Emergency Evac, offensive since 2026-10-07)
 # 0.23.14 balance pass (proposal, 2026-10-27; tests/balance_study.gd, Expert 1v1 1400 + power swap 4760). Was: ember attack 1.10; bloom production 1.10; null {} (no stats); solar production 0.90;
 # core_meltdown kills_per 4 cap 90; sinkhole cd 50; sever cd 45 down 10; quake cd 60; evac cd 40 share 0.5; ghost_line cd 32; surge cd 28; portal cd 70; backwash cd 40.
-const SKILLS := {
+static var SKILLS := {   # BAL-AUDIT: static var (was const) so balance_study --override can A/B skill numbers
 	# ---- active pool (combat), every map
 	# 0.19.2 (Daniele, 2026-09-27): +75 % speed (was +50 %) and its units leave and enter doors twice as fast
 	# ("door": the door-rate multiplier, Sim.door_mult)

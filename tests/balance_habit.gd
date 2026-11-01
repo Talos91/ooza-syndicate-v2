@@ -7,6 +7,8 @@ extends SeatAI
 ##   noslot     never builds on a relay slot (no laser / forge / monster hub)
 ##   nomonster  never launches a monster (its hub may still be built)
 ##   noult      never casts its ultimate (active and map skills as stock; 2026-10-27 ultimates rework)
+##   noactive   never casts its active skill; nomap: never casts its map skill (bal-audit 2026-11-02: per-skill lift)
+##   mgfront    builds its Machinegoon on any frontline vat, not only one that keeps taking small raids (bal-audit)
 
 var habit := "stock"
 
@@ -46,4 +48,14 @@ func _monsters(sim: Sim) -> void:
 func _pick(sim: Sim, id: String) -> Array:
 	if habit == "noult" and id == sim.skill_id(seat, "ultimate"):
 		return []
+	if habit == "noactive" and id == sim.skill_id(seat, "active"):
+		return []
+	if habit == "nomap" and id == sim.skill_id(seat, "map"):
+		return []
 	return super(sim, id)
+
+
+func _trickled(n: Dictionary) -> bool:
+	if habit == "mgfront":
+		return true
+	return super(n)

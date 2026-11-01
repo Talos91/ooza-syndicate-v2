@@ -328,9 +328,12 @@ func production(n: Dictionary) -> float:
 
 
 func _base_production(n: Dictionary) -> float:
-	if n["owner"] == "" or not has_vat(n):
+	var keep := 1.0
+	if n["owner"] != "" and n["structure"] == "machinegoon" and Rules.MACHINEGOON_PROD > 0.0:
+		keep = Rules.MACHINEGOON_PROD                 # BAL-AUDIT (measurement only): a Machinegoon node keeps this share
+	elif n["owner"] == "" or not has_vat(n):
 		return 0.0
-	var p: float = Rules.PROD[n["tier"]] * stat(n["owner"], "production")
+	var p: float = Rules.PROD[n["tier"]] * stat(n["owner"], "production") * keep
 	return p * Rules.CATCHUP_PRODUCTION if _catchup.has(teams.get(n["owner"], n["owner"])) else p
 
 
@@ -1654,7 +1657,8 @@ func step(dt: float) -> void:
 	_check_handovers()                                # (an owner at zero hands over before producing again)
 	_catchup = catchup_sides()                        # CATCH-UP: who trails, from this step's node count
 	for n in nodes:                                   # production (vat nodes only), up to the cap
-		if n["owner"] != "" and has_vat(n) and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11)
+		if n["owner"] != "" and (has_vat(n) or (n["structure"] == "machinegoon" and Rules.MACHINEGOON_PROD > 0.0)) \
+				and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11); BAL-AUDIT: MACHINEGOON_PROD
 			_produce(n, dt)
 		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and has_vat(n) and not collapsed.get(n["id"], false) 				and n["units"] < float(n.get("regen_cap", Rules.NEUTRAL_UNITS.get(n["tier"], 0))):   # (TUTORIAL: "regen_cap" - a staged node regrows only to that)
 			n["units"] = minf(float(n.get("regen_cap", Rules.NEUTRAL_UNITS[n["tier"]])), n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)
@@ -3956,7 +3960,7 @@ func cooldown(seat: String, slot: String) -> float:
 		var c := charge(seat)
 		if c >= 1.0:
 			return 0.0
-		return maxf((1.0 - c) * Rules.ULT_CHARGE_TIME, Rules.ULT_MIN_TIME - float(ult_since.get(seat, 0.0)))
+		return maxf((1.0 - c) * _ult_time(seat), _ult_min(seat) - float(ult_since.get(seat, 0.0)))
 	return float(skill_cd.get(seat, {}).get(slot, 0.0))
 
 
@@ -4179,6 +4183,9 @@ func deck_slow(h: Dictionary) -> float:
 
 func _cannon_mult(h: Dictionary) -> float:
 	## Anchor (and Aegis decks): the caster's lines on it take half the cannon kills.
+	for e in _fx_seat.get(h["owner"], []):             # BAL-AUDIT (measurement only): Rewire "shield" spares its lines
+		if e["id"] == "rewire" and float(Rules.SKILLS["rewire"].get("shield", 0.0)) > 0.0:
+			return 1.0 - float(Rules.SKILLS["rewire"]["shield"])
 	if _fx_edge.is_empty():
 		return 1.0
 	var sp := _current_span(h)
@@ -4217,14 +4224,23 @@ func _credit_blame(h: Dictionary, actual: float) -> void:
 		_credit(s, h["owner"], actual * b[s] / total)
 
 
+func _ult_time(seat: String) -> float:
+	## BAL-AUDIT (measurement only): an ultimate's own "charge" / "charge_min" (s) if it names one, else the shared one.
+	return float(Rules.SKILLS.get(skill_id(seat, "ultimate"), {}).get("charge", Rules.ULT_CHARGE_TIME))
+
+
+func _ult_min(seat: String) -> float:
+	return float(Rules.SKILLS.get(skill_id(seat, "ultimate"), {}).get("charge_min", Rules.ULT_MIN_TIME))
+
+
 func _step_charge(dt: float) -> void:
 	for seat in ult_charge:
 		if eliminated.has(seat):
 			continue
 		ult_since[seat] = float(ult_since[seat]) + dt
-		var gain: float = dt / Rules.ULT_CHARGE_TIME \
-				+ Rules.shown_f(_kill_credit.get(seat, 0.0)) * Rules.ULT_KILL_SECONDS / Rules.ULT_CHARGE_TIME
-		ult_charge[seat] = minf(minf(1.0, float(ult_charge[seat]) + gain), float(ult_since[seat]) / Rules.ULT_MIN_TIME)
+		var gain: float = dt / _ult_time(seat) \
+				+ Rules.shown_f(_kill_credit.get(seat, 0.0)) * Rules.ULT_KILL_SECONDS / _ult_time(seat)
+		ult_charge[seat] = minf(minf(1.0, float(ult_charge[seat]) + gain), float(ult_since[seat]) / _ult_min(seat))
 	_kill_credit = {}
 
 
