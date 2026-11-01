@@ -83,6 +83,8 @@ var _debug_proto: VBoxContainer         # PROTO DEBUG: the controls (hidden wher
 var _debug_off_note: Label
 var _debug_last_node := -1              # PROTO DEBUG: the node last opened (tapped) - the +100 target
 var _debug_add_button: Button
+var _debug_vp := Vector2(-1, -1)        # the viewport size of the last layout()
+var _debug_box: VBoxContainer          # the Debug panel's content (its height: the ScrollContainer reports none)
 var margins := Vector4(16, 12, 16, 12)
 var _last_fps_print := 0.0
 var version_label: Label
@@ -572,12 +574,8 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	if debug_button:
 		debug_button.position = Vector2(vp.x - m.z - debug_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # under PAUSE, off the map
-		var dp_y := debug_button.position.y + debug_button.size.y + 8.0
-		var dp_natural := debug_panel.get_combined_minimum_size()
-		# clamp to what's actually left on screen (phones: the panel used to run off the bottom) - the
-		# ScrollContainer in _build_debug() lets the panel be shorter than its buttons and scroll them
-		debug_panel.size = Vector2(dp_natural.x, minf(dp_natural.y, vp.y - dp_y - 10.0))
-		debug_panel.position = Vector2(vp.x - m.z - debug_panel.size.x, dp_y)
+		_debug_vp = vp
+		_size_debug_panel()
 	_place_debug_tag()
 	if chat_button:
 		chat_button.position = Vector2(vp.x - m.z - chat_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # Debug's slot (hidden online)
@@ -2485,7 +2483,8 @@ func _build_debug() -> void:
 	debug_button.toggled.connect(func(on: bool):
 		debug_panel.visible = on
 		if on:
-			_debug_proto_refresh())
+			_debug_proto_refresh()
+			_size_debug_panel())
 	# the panel's own size is clamped to the screen in layout() (Daniele, 0.18.8: "the Debug panel's last
 	# button runs off the phone screen") - a ScrollContainer (Godot doesn't count its content against its
 	# own minimum size, unlike a bare VBoxContainer) lets that clamp actually take effect instead of the
@@ -2497,6 +2496,7 @@ func _build_debug() -> void:
 	box.add_theme_constant_override("separation", 6)
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	debug_scroll.add_child(box)
+	_debug_box = box
 	box.add_child(text_label("Debug - live, resets on reload", 20))
 	if Rules.proto_debug:
 		_build_proto_debug(box)
@@ -2619,6 +2619,22 @@ func _debug_proto_refresh() -> void:
 	debug_tag.text = "DEBUG " + " · ".join(bits)
 	debug_tag.visible = not bits.is_empty()
 	_place_debug_tag()
+
+
+func _size_debug_panel() -> void:
+	## Under the Debug button, as tall as its content (a ScrollContainer reports no height of its own) but clamped to what
+	## is left on screen (phones: the panel used to run off the bottom) - the ScrollContainer then scrolls the rest.
+	if debug_panel == null or debug_button == null:
+		return
+	var vp := _debug_vp if _debug_vp.x > 0.0 else root.get_viewport_rect().size
+	var dp_y := debug_button.position.y + debug_button.size.y + 8.0
+	var frame := debug_panel.get_theme_stylebox("panel").get_minimum_size()
+	var natural := debug_panel.get_combined_minimum_size()
+	if _debug_box:
+		natural.y = _debug_box.get_combined_minimum_size().y + frame.y
+		natural.x = maxf(natural.x, _debug_box.get_combined_minimum_size().x + frame.x)
+	debug_panel.size = Vector2(natural.x, minf(natural.y, vp.y - dp_y - 10.0))
+	debug_panel.position = Vector2(vp.x - margins.z - debug_panel.size.x, dp_y)
 
 
 func _place_debug_tag() -> void:

@@ -59,6 +59,9 @@ func _ready() -> void:
 	hud.debug_button.button_pressed = true
 	await _frames(3)
 	check(hud._debug_proto.visible and not hud._debug_off_note.visible, "the panel shows the proto tools offline")
+	var dp: Rect2 = hud.debug_panel.get_global_rect()
+	check(dp.size.y >= 150.0 and dp.end.y <= hud.root.get_viewport_rect().size.y + 0.5,
+			"the panel opens to its content, on screen (%.0f x %.0f)" % [dp.size.x, dp.size.y])
 	check(not hud.debug_tag.visible, "all x1: no DEBUG tag")
 	r = await _ratio(main, 60)
 	check(absf(r - 1.0) < 0.05, "x1: the sim runs at x1 (%.2f)" % r)
