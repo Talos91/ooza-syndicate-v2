@@ -139,8 +139,15 @@ static func put_button(parent: Node3D, sim: Sim, n: Dictionary) -> Dictionary:
 	return pl
 
 
+const PROTO_V3_BUTTONS := ["ferry", "conveyor"]   # round 3: the relays-4.0 buttons Daniele ticked (Hub review-relay-looks)
+
+
 static func proto_button(kind: String) -> String:
 	## RELAYS 3.0 PROTOTYPES: the kind's own button piece (Relay_Button_Ferry_v2 ...) if the kit has it, else the switch's.
+	## Round 3: Relay_Button_<Kind>_v3 (relays-4.0) for the kinds in PROTO_V3_BUTTONS.
+	var v3 := "Relay_Button_%s_v3" % kind.capitalize()
+	if kind in PROTO_V3_BUTTONS and ResourceLoader.exists(Cosmetics.kit_path(v3)):
+		return v3
 	var own := "Relay_Button_%s_v2" % kind.capitalize()
 	return own if ResourceLoader.exists(Cosmetics.kit_path(own)) else BUTTON["switch"]
 

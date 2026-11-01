@@ -40,6 +40,13 @@ const TILT_EASE := 0.4               # s it takes to tip / come back
 const SPLASH := 0.45                 # s a launcher landing's ring spreads
 const SPLASHES := 16
 const MISFIRE_FLING := 30.0          # m a misfired throw travels out before it drops away
+# Round 3: the relays-4.0 models Daniele ticked on the Hub (review-relay-looks: node, ferry, conveyor) replace the stand-ins
+# here, when the kit has them: Platform_Relay_v3 under the ferry / conveyor / launcher nodes, Deck_Ferry_v3_<L> sliding
+# instead of the ferry edge's module decks with Relay_Ferry_Rail_v3 at both lips (their Light = the lamp), and
+# Deck_Conveyor_Relay_v3_<L> / Deck_Conveyor_v3_<L> (plain belt) with their own scrolling Treads instead of the chevrons.
+# Not ticked (stand-ins kept): the launcher, lift and tilt pieces.
+const V3_NODE_KINDS := ["ferry", "conveyor", "launcher"]
+const TREAD_PERIOD := {4: 0.9850, 8: 0.9943, 12: 0.9964}   # relays_4_0.json: the Treads' scroll period per deck length
 
 var sim: Sim
 var vis: Dictionary
@@ -50,6 +57,7 @@ var _splash: MultiMeshInstance3D
 var _plain_ferry := []               # round 3: moving bridges with no relay (Sim._ferry_edges -1): their deck parts
 var _belts := []                     # round 3: plain belts with no relay (Sim._belt_edges): their chevrons
 var _belt_phase := 0.0
+var _v3_plats := {}                  # round 3: node id -> its Platform_Relay_v3
 var _t := 0.0
 var _dt := 0.0
 var human := "A"                     # the seat this screen plays (main.gd): whose launcher aim is "TARGET"
@@ -152,7 +160,29 @@ func setup(s: Sim, v: Dictionary) -> void:
 		if int(sim._ferry_edges[ei]) < 0:
 			_plain_ferry.append(_ferry_deck(int(ei)))
 	_belts = _chevrons(sim._belt_edges.keys(), Rules.state_color("cAB"))
+	for c in _belts:
+		_v3_belt(c, false)
+	for id in _r:
+		if _r[id]["kind"] == "conveyor":
+			for c in _r[id]["chev"]:
+				_v3_belt(c, true)
+	_v3_platforms()
 
+
+func _v3_belt(c: Dictionary, relay: bool) -> void:
+	## Round 3: the conveyor deck model (with its Treads) instead of the edge's module decks and the stand-in chevrons.
+	var L := _deck_len(c["a"], c["b"])
+	var nm := ("Deck_Conveyor_Relay_v3_%d" if relay else "Deck_Conveyor_v3_%d") % L
+	if not _kit(nm):
+		return
+	var a: Vector3 = c["a"]
+	var b: Vector3 = c["b"]
+	c["v3"] = _v3_piece(nm, a, (b - a).normalized())
+	c["v3_len"] = L
+	var tr := (c["v3"] as Node).find_child("Treads", true, false)
+	c["treads"] = tr
+	c["treads_x"] = (tr as Node3D).position.x if tr is Node3D else 0.0
+	c["v3_fwd"] = true
 
 # ------------------------------------------------------------------ pieces
 func _mat(c: Color, a := 1.0) -> StandardMaterial3D:
@@ -209,6 +239,51 @@ func _tint(mi: MeshInstance3D, c: Color) -> void:
 	m.emission = c
 
 
+static func _kit(name: String) -> bool:
+	return ResourceLoader.exists(Cosmetics.kit_path(name))
+
+
+func _deck_len(a: Vector3, b: Vector3) -> int:
+	## The kit length (4 / 8 / 12 m) of the deck between pier lips a and b.
+	var d := Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z))
+	var best := 4
+	for L in [4, 8, 12]:
+		if absf(d - L) < absf(d - best):
+			best = L
+	return best
+
+
+func _v3_piece(name: String, at: Vector3, dir: Vector3) -> Node3D:
+	## A relays-4.0 kit piece at `at`, its local +X along `dir` (kit convention), drawing itself (never batched).
+	var p := MapBuilder.put(self, name, at, Rules.heading(dir))
+	p.name = name
+	return p
+
+
+func _hide_decks(ei: int) -> void:
+	for d in vis["edge_decks"].get(ei, []):
+		(d as Node3D).visible = false
+
+
+func _v3_platforms() -> void:
+	## Platform_Relay_v3 (the relay node: lit hex pedestal + inlaid ring) instead of the platform piece of every ferry /
+	## conveyor / launcher node.
+	if not _kit("Platform_Relay_v3"):
+		return
+	for n in sim.nodes:
+		if not str(n["relay"]) in V3_NODE_KINDS:
+			continue
+		var plat = vis[n["id"]].get("platform")
+		if not plat is Node3D or not is_instance_valid(plat):
+			continue
+		var p := MapBuilder.piece("Platform_Relay_v3")
+		add_child(p)
+		p.global_transform = (plat as Node3D).global_transform
+		p.name = "Platform_Relay_v3_%d" % n["id"]
+		(plat as Node3D).visible = false
+		_v3_plats[n["id"]] = p
+
+
 func _deck_ends(ei: int) -> Array:
 	## [the deck's A-end, its B-end] (pier ends, world).
 	var pts: Array = sim.deck_points(ei, sim.edges[ei]["a"])
@@ -257,6 +332,24 @@ func _ferry_deck(ei: int) -> Dictionary:
 	hole.position = (a + b) * 0.5 + Vector3(0, 0.25, 0)
 	hole.rotation.y = yaw
 	parts["hole"] = hole
+	var L := _deck_len(a, b)                       # round 3: the relays-4.0 barge + rails, when the kit has them
+	if _kit("Deck_Ferry_v3_%d" % L):
+		parts["v3"] = _v3_piece("Deck_Ferry_v3_%d" % L, a, u)
+		parts["v3_at"] = a
+	if _kit("Relay_Ferry_Rail_v3"):
+		for rail in parts["rails"]:
+			(rail as Node3D).queue_free()
+		for lamp in parts["lamps"]:
+			(lamp as Node3D).queue_free()
+		parts["rails"] = []
+		parts["lamps"] = []
+		for end in [[a, u], [b, -u]]:
+			var rv := _v3_piece("Relay_Ferry_Rail_v3", end[0], end[1])
+			parts["rails"].append(rv)
+			var light := rv.find_child("Light", true, false)
+			if light is MeshInstance3D:
+				(light as MeshInstance3D).material_override = _mat(Color.WHITE)
+				parts["lamps"].append(light)
 	var held := _label(64)                         # round 3: HELD n over the deck while its owner holds it
 	held.position = (a + b) * 0.5 + Vector3(0, 6.5, 0)   # (above the FERRY n / m CROSSED callout)
 	held.visible = false
@@ -495,7 +588,12 @@ func sync(dt: float) -> void:
 		for c in _belts:
 			var flow_ab: bool = int(sim._belt_edges[int(c["edge"])]) == 0
 			var mmi: MultiMeshInstance3D = c["mmi"]
-			mmi.visible = not sim.demolished.has(int(c["edge"])) and sim.is_edge_open(int(c["edge"]))
+			var shown: bool = not sim.demolished.has(int(c["edge"])) and sim.is_edge_open(int(c["edge"]))
+			if c.has("v3"):
+				mmi.visible = false
+				_v3_belt_sync(c, _belt_phase if flow_ab else -_belt_phase, flow_ab, shown)
+				continue
+			mmi.visible = shown
 			_run_chevrons(c, _belt_phase, flow_ab)
 	_flight_stream()
 	_speed_tags()
@@ -548,13 +646,20 @@ func _ferry_deck_sync(parts: Dictionary, fp: Dictionary, gone: bool) -> Color:
 	var down: bool = gone or sim.demolished.has(ei) or sim.collapsed.get(sim.edges[ei]["a"], false) \
 			or sim.collapsed.get(sim.edges[ei]["b"], false)
 	var decks: Array = vis["edge_decks"][ei]
-	for k in range(decks.size()):
-		var d: Node3D = decks[k]
-		d.visible = not down
-		d.transform = (vis["edge_base"][ei][k] as Transform3D).translated((parts["perp"] as Vector3) * off)
+	if parts.has("v3"):                              # round 3: the barge model slides; the module decks stay hidden
+		_hide_decks(ei)
+		(parts["v3"] as Node3D).visible = not down
+		(parts["v3"] as Node3D).position = (parts["v3_at"] as Vector3) + (parts["perp"] as Vector3) * off
+	else:
+		for k in range(decks.size()):
+			var d: Node3D = decks[k]
+			d.visible = not down
+			d.transform = (vis["edge_base"][ei][k] as Transform3D).translated((parts["perp"] as Vector3) * off)
 	var pulse := 0.5 + 0.5 * sin(sim.time * 7.0)
 	for rail in parts["rails"]:
 		(rail as Node3D).visible = not down
+		if not rail is MeshInstance3D:
+			continue                                     # (the relays-4.0 rail: its Light is the lamp below)
 		var rm := (rail as MeshInstance3D).material_override as StandardMaterial3D
 		rm.emission = Color("#5cff7a") if held > 0.0 else Rules.RELAY_GHOST_COLORS["ferry"]
 		rm.emission_energy_multiplier = (2.5 + 2.0 * pulse) if held > 0.0 else 1.4
@@ -585,6 +690,10 @@ func _conveyor(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 		col = Rules.state_color(sim.relay_state_key(n, n["relay_pending"])) if blink else Rules.state_color("warn")
 	for c in r["chev"]:
 		var mmi: MultiMeshInstance3D = c["mmi"]
+		if c.has("v3"):                                # round 3: the belt model's own Treads run instead
+			mmi.visible = false
+			_v3_belt_sync(c, float(r["phase"]), speed >= 0.0, not gone and sim.is_edge_open(int(c["edge"])))
+			continue
 		mmi.visible = not gone and sim.is_edge_open(int(c["edge"]))
 		_tint_mm(mmi, col)
 		_run_chevrons(c, float(r["phase"]), true)      # (the phase already runs backwards against A -> B)
@@ -594,6 +703,23 @@ func _conveyor(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 		var flow: Vector3 = ((c0["b"] as Vector3) - (c0["a"] as Vector3)) * sign
 		_aim(r["pointer"], top, flow)
 		_aim(r["ghost_pointer"], top + Vector3(0, 0.6, 0), -flow)
+
+
+func _v3_belt_sync(c: Dictionary, phase: float, forward: bool, shown: bool) -> void:
+	## The relays-4.0 belt: the deck model faces the flow (from A, or turned round from B) and its Treads scroll along.
+	var deck: Node3D = c["v3"]
+	_hide_decks(int(c["edge"]))
+	deck.visible = shown
+	if bool(c["v3_fwd"]) != forward:
+		c["v3_fwd"] = forward
+		var a: Vector3 = c["a"]
+		var b: Vector3 = c["b"]
+		deck.position = a if forward else b
+		deck.rotation.y = Rules.heading((b - a).normalized() * (1.0 if forward else -1.0))
+	var tr = c.get("treads")
+	if tr is Node3D:
+		var period: float = TREAD_PERIOD.get(int(c["v3_len"]), 1.0)
+		(tr as Node3D).position.x = float(c["treads_x"]) + fposmod(absf(phase) * 0.4, period)
 
 
 func _tint_mm(mmi: MultiMeshInstance3D, c: Color) -> void:
