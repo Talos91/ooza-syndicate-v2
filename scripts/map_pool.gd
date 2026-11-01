@@ -9,7 +9,7 @@ class_name MapPool
 ## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
 ## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
-const GROUP_ORDER := ["T", "N", "A", "M", "C", "B", "S", "X", "D"]   # A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
+const GROUP_ORDER := ["T", "N", "E", "A", "M", "C", "B", "S", "X", "D"]   # E = experimental E-01..E-10 (2026-10-28); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
                                                               # MAPS 5.0: N = the map builder's new maps (References/Ooze Syndicate maps 5.0)
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
@@ -56,7 +56,9 @@ static func all() -> Array:
 # MAPS 5.0 (Daniele 2026-09-29: "replace current pool with the new ones"): the player's pool is the map builder's
 # N- maps only. Every older map stays baked in maps4/ - the campaign's placeholder missions and the tutorial load
 # theirs by path, and test_maps4 still checks them all - but none is offered on 02 BATTLEFIELD or as a random rematch.
-const POOL_GROUPS: Array[String] = ["N"]
+# 2026-10-28 (Daniele: "all ten experimental maps go to the rulebook and the pool pipeline"): group E pooled beside N,
+# pending his play round (OPEN-QUESTIONS "Experimental maps E-01..E-10 pooled").
+const POOL_GROUPS: Array[String] = ["N", "E"]
 
 
 static func battlefield() -> Array:

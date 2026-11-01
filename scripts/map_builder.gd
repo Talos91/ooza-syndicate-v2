@@ -624,7 +624,12 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 		var platform: Node3D = null
 		if n.get("junction", "") != "":                # JUNCTION: the piece itself (a curve's origin is its start port)
 			var ji := map["nodes"][id] as Dictionary
-			platform = put(parent, "junctions/" + str(n["junction"]), n["pos"], deg_to_rad(float(ji.get("junctionYaw", 0.0))))
+			if ji.get("junctionDraw", true) == false:     # EXP Crossing: the over lane is a second node at the same point;
+				platform = Node3D.new()                   # the piece is drawn once, by the ground-lane node
+				parent.add_child(platform)
+				platform.position = n["pos"]
+			else:
+				platform = put(parent, "junctions/" + str(n["junction"]), n["pos"], deg_to_rad(float(ji.get("junctionYaw", 0.0))))
 			parts.append(platform)
 			var empty := Node3D.new()
 			parent.add_child(empty)
