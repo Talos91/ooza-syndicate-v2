@@ -62,11 +62,11 @@ func _init() -> void:
 	SeatAI.guard_on = _arg("guard", "on") != "off"
 	var paths := MapPool.battlefield()
 	print("%d maps in the pool" % paths.size())
-	# SEAT BIAS (Daniele 2026-10-27): N-24 / N-04 are out of 1v1 (MapPool.WITHHELD_MODES) - 1v1 is all they seat, so they
-	# leave the picker and the random rematch entirely; still baked and in all() (test_maps4 keeps checking them)
+	# SEAT BIAS: N-24 / N-04 were out of 1v1 from 0.23.15; back in since 0.23.18 (Daniele 2026-11-01, Desk vls-fair: the Very Last
+	# Stand tie-break fixed the bias) - offered in 1v1 and on 02 BATTLEFIELD again
 	for code in ["N-24", "N-04"]:
-		check(MapPool.WITHHELD_MODES.get(code, []).has("1v1") and not MapPool.mode_offered(code, "1v1"), "%s: never offered in 1v1" % code)
-		check(not paths.any(func(p): return p.get_file().begins_with(code)), "%s: not on 02 BATTLEFIELD / the random rematch" % code)
+		check(not MapPool.WITHHELD_MODES.get(code, []).has("1v1") and MapPool.mode_offered(code, "1v1"), "%s: offered in 1v1 again (vls-fair)" % code)
+		check(paths.any(func(p): return p.get_file().begins_with(code)), "%s: on 02 BATTLEFIELD / the random rematch again" % code)
 		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)), "%s: still baked and in MapPool.all()" % code)
 	check(MapPool.mode_offered("N-01", "1v1") and paths.any(func(p): return p.get_file().begins_with("N-01")), "an unbiased 1v1 map (N-01) is still offered")
 	check(not paths.any(func(p): return p.get_file().substr(0, 4) in MapPool.TUTORIAL_ONLY), "no tutorial map on 02 BATTLEFIELD")

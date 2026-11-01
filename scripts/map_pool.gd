@@ -21,7 +21,8 @@ const WITHHELD: Array[String] = []
 # SEAT BIAS (balance study 2026-10-27, Expert AI vs Expert AI, every faction pair from both seats): seat A wins 92 % on
 # N-24 K-Crossing and 78 % on N-04 Console - map geometry, not factions. Out of 1v1 (their only mode) until 🗺️ moves
 # the spawns (Daniele 2026-10-27: "withhold N-24 / N-04 from 1v1 until the map builder fixes their seats").
-const WITHHELD_MODES := {"N-24": ["1v1"], "N-04": ["1v1"]}
+# Daniele 2026-11-01, Desk vls-fair: the Very Last Stand tie-break (Sim._islands) fixed the seat bias, N-24 / N-04 are back in 1v1.
+const WITHHELD_MODES := {}
 # Not on phones (Daniele, Alpha 18: "if some map is not good for mobile still flag them and remove them"):
 # maps the phone-fit probe (tests/phone_fit.tscn) finds crowded on a phone; tablets and desktop keep them.
 # Maps 4.0 listed its 3v3 / 2v2v2 maps here; the 4.1 partial pack has none, and every 4.1 map passes.
