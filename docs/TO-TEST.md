@@ -1,11 +1,16 @@
-# To test - ALPHA 23.18 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.19 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
 
-## 0.23.18 (staging: https://oozesyndicate.com/staging/)
+## 0.23.19 hotfix (staging: https://oozesyndicate.com/staging/)
+- [ ] **Turn the phone mid-match** (portrait -> landscape, and back) in an online round and in a solo round: the board stays on screen, nothing hides behind the top bar.
+- [ ] **Fullscreen mid-match** (tap into fullscreen, or let the browser bars hide / show): the board refits and stays on screen.
+- [ ] **Menus** feel smoother again (PHONE back to 30 fps in menus / pause / results).
+
+## 0.23.18 (live)
 - [ ] **speed-15**: lines move and vats fill 15 % slower - does a match feel better paced or just slower?
 - [ ] **E maps**: E-01..E-10 show in 02 BATTLEFIELD (1V1 / 2V2) and play fine on the phone.
 - [ ] **UI batch**: bridges easier to tap for deck skills; Last Stand danger signs tiered (next node loud, the rest muted); SETUP > ADVANCED holds LAST STAND / ABILITIES.

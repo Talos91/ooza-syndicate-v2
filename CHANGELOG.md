@@ -1,5 +1,12 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.19 "Alpha 23" - 2026-11-02 (hotfix; staged 2026-11-02)
+
+- **0.23.19 hotfix**: the board stays on screen when a phone turns or goes fullscreen mid-match (0.23.18's scaled 3D view refitted the camera before it
+  took the new size; N-28 / E-07 reports) - RenderScale.sync() now runs first in main._on_resized, so the SubViewport has the window's size before the
+  safe area, HUD layout and camera fit; PHONE menus back to 30 fps (perf_profile idle_fps 15 -> 30); new tests/board_sweep (all 63 pool maps, portrait ->
+  landscape mid-match, four setups). Tested on desktop and in browser emulation only.
+
 ## 0.23.18 "Alpha 23" - 2026-11-01 (LIVE 2026-11-01 on Daniele's go; staged 2026-11-01: phone rendering, speed-15 trial, the E maps, UI batch)
 
 - **speed-15** (staging trial, Daniele 2026-11-01): BRAWL unit production and movement 15 % slower - Rules.BRAWL_TRIAL_15 0.85 on BRAWL_SPEED
