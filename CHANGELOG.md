@@ -6,6 +6,12 @@
   (5.7 -> 4.8 m/s) and vat PROD (1.0 / 1.6 / 2.4 / 3.5 -> 0.85 / 1.36 / 2.04 / 2.98 shown /s; neutral regrowth follows); door rate unchanged, so bodies
   walk 0.50 m apart (was 0.59); monster 3.4 -> 2.9 m/s.
 - **maps-exp**: experimental maps E-01..E-10 join the pool (group E; MapPool.POOL_GROUPS ["N", "E"]); the N-04 / N-24 consoles start down.
+- **Ultimates rework** (Daniele 2026-11-01, Desk: ship all three as proposed): **Superbloom** - every vat produces 2x for 12 s, on top of Spore Burst
+  (no cap; together 3.6x); **Relay Aegis** - a node and its neighbours take 2.5x less garrison damage, +50 % production, decks locked, 15 s; **Rewire** -
+  12 s: all your lines move 75 % faster and pour through doors twice as fast, fire up to 3 relays anywhere, enemy ones too. Charge unchanged (120 s).
+- **Very Last Stand tie-break** (Daniele 2026-11-01, Desk vls-fair): an exact island tie goes against the corner the collapse cycle is aiming at (and a
+  stranding drop moves the corner on), no longer always to the lowest node id - seat A had won 92 % on N-24 and 78 % on N-04 (43 % / 48 % with the fix).
+  N-24 K-Crossing and N-04 Console are back in 1v1 (MapPool.WITHHELD_MODES emptied).
 - **perf-ios**: phones render the 3D at 1.5 pixels per point through a linear-filtered SubViewport (0.75 of native on a dpr-2 iPhone, smooth edges,
   HUD at native); PHONE idles at 15 fps in menus / pause / results; one batching cell per map (M-39 phone: 357 -> 287 draw calls). FULL and LOW RES unchanged.
   (Also on staging alone as 0.23.17.)

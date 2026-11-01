@@ -9,6 +9,8 @@ Live build: https://oozesyndicate.com
 - [ ] **speed-15**: lines move and vats fill 15 % slower - does a match feel better paced or just slower?
 - [ ] **E maps**: E-01..E-10 show in 02 BATTLEFIELD (1V1 / 2V2) and play fine on the phone.
 - [ ] **UI batch**: bridges easier to tap for deck skills; Last Stand danger signs tiered (next node loud, the rest muted); SETUP > ADVANCED holds LAST STAND / ABILITIES.
+- [ ] **Ultimates**: Superbloom 2x, Relay Aegis 2.5x / +50 % / 15 s, Rewire 12 s mass-Surge - does any feel too strong (Rewire on small maps)?
+- [ ] **N-24 / N-04** back in 1v1: does seat B now win about as often?
 - [ ] **Phone rendering** (as 0.23.17): sharp enough at 0.75, cooler in menus.
 
 ## 0.23.16 (live)
