@@ -56,6 +56,14 @@ static func scale_now() -> float:
 	return current.scale if current != null and is_instance_valid(current) else 1.0
 
 
+static func sync() -> void:
+	## hotfix-02319 (0.23.18 live: N-28 / E-07 online showed only the sky): main._on_resized refits the camera through this
+	## SubViewport, and its size_changed handler runs before ours (connected first) - a phone turning to landscape or going
+	## fullscreen mid-match got its camera fitted to the old size, the map pushed off screen. main calls this first.
+	if current != null and is_instance_valid(current) and current.sub != null:
+		current._resize()
+
+
 static func viewport_3d(m: Node) -> Viewport:
 	## The viewport the match's 3D renders in: the SubViewport while the path is up, else m's own.
 	if current != null and is_instance_valid(current) and current.sub != null:

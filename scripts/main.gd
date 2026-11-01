@@ -963,6 +963,7 @@ func _on_resized() -> void:
 		return
 	var vp := get_viewport().get_visible_rect().size
 	_fitted_size = vp
+	RenderScale.sync()                                 # hotfix-02319: the scaled 3D's size first - the fit below measures through it
 	_apply_safe_area()
 	hud.layout(vp, margins)
 	combat.top_limit = hud.top_used() + 3.0 * 38.0 * hud.ui_scale   # the top bar and up to three toasts

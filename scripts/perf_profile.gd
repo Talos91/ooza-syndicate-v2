@@ -39,9 +39,9 @@ const FPS_MODES := ["auto", "30", "60"]
 # dpr-2 phone (1.5x instead of 2x: 44 % fewer 3D pixels), 1.0 on a dpr-1 desktop (nothing lost), never under
 # SCALE_3D_MIN. LOW RES keeps 1.0 (an open question for Daniele: it could take the same rule). --scale3d=0.75 forces a
 # scale for a test run (never saved; 1 = off).
-# Idle (perf-ios): PHONE idles at 15 fps - the menus (no tweens; the ARMIES preview turns slowly), the result screen, a
-# paused or ended match - where it idled at 30; a match being built under the VERSUS card is not idle (the staged load
-# paces itself by frames). LOW RES stays at 30 everywhere.
+# Idle: PHONE idles at 30 fps - the menus, the result screen, a paused or ended match; a match being built under the VERSUS
+# card is not idle (the staged load paces itself by frames). LOW RES stays at 30 everywhere. (perf-ios set 15 in 0.23.18;
+# hotfix-02319 put it back to 30: Daniele found the menus laggy on his phone.)
 const PHONE_3D_PX_PER_PT := 1.5          # PHONE: 3D pixels per CSS point (devicePixelRatio 2 -> scale 0.75)
 const SCALE_3D_MIN := 0.6                # never softer than this (a dpr-3 phone would compute 0.5)
 # per profile: 3D render scale (null: leave it; "dpr": the PHONE_3D_PX_PER_PT rule), fps while playing / idle, shadows,
@@ -49,7 +49,7 @@ const SCALE_3D_MIN := 0.6                # never softer than this (a dpr-3 phone
 const PROFILES := {
 	"full": {"scale": null, "fps": 60, "idle_fps": 60, "shadows": true, "glow": true, "fill_lights": true,
 			"low_detail": false, "lite": false, "particles": 1.0},
-	"phone": {"scale": "dpr", "fps": 45, "idle_fps": 15, "shadows": false, "glow": true, "fill_lights": true,
+	"phone": {"scale": "dpr", "fps": 45, "idle_fps": 30, "shadows": false, "glow": true, "fill_lights": true,
 			"low_detail": false, "lite": false, "particles": 1.0},
 	"low": {"scale": 1.0, "fps": 30, "idle_fps": 30, "shadows": false, "glow": false, "fill_lights": true,
 			"low_detail": true, "lite": true, "particles": 0.4},
