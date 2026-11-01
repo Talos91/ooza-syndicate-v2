@@ -1,6 +1,6 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.23.20 "Alpha 23" - 2026-11-02 (staged 2026-11-02: two doors, neon HUD marks, Solar v3 + faction look)
+## 0.23.20 "Alpha 23" - 2026-11-02 (LIVE 2026-11-02 on Daniele's go after reading the changelog; staged 2026-11-02: two doors, neon HUD marks, Solar v3 + faction look)
 
 - **Two doors in the main game** (Daniele 2026-11-02, after proto3 / proto4: "a success, promote it to the main game"; branch doors-main): every BRAWL
   platform has a second door opposite the front one. An arriving line goes round the ring to whichever door is nearer from the deck it arrives on
