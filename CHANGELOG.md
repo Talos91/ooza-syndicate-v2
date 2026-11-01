@@ -1,6 +1,6 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.23.19 "Alpha 23" - 2026-11-02 (hotfix; staged 2026-11-02)
+## 0.23.19 "Alpha 23" - 2026-11-02 (LIVE 2026-11-02 on Daniele's go after his phone test; hotfix; staged 2026-11-02)
 
 - **0.23.19 hotfix**: the board stays on screen when a phone turns or goes fullscreen mid-match (0.23.18's scaled 3D view refitted the camera before it
   took the new size; N-28 / E-07 reports) - RenderScale.sync() now runs first in main._on_resized, so the SubViewport has the window's size before the

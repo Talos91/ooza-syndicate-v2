@@ -1,5 +1,8 @@
 # Playtest notes
 
+## 2026-11-02 - Daniele's item answered in 0.23.19 (live hotfix)
+- "the board is gone" online on N-28 / E-07 (0.23.18, after the phone turned / went fullscreen mid-match) -> the camera refits after the scaled 3D view takes the new size; PHONE menus back to 30 fps; tests/board_sweep. Daniele tested staging on his phone before the promote.
+
 ## 2026-11-01 - Daniele's items answered in 0.23.18 (live)
 - "bridges are sometimes hard to click" -> deck tap band >= 44 pt; desktop shots soft -> perf-ios phone scale 0.75; 15 % slower trial (speed-15); Desk answers: ultimates rework, Very Last Stand tie-break, E maps in the pool.
 
