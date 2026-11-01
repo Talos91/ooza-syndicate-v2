@@ -78,6 +78,11 @@ var debug_button: Button
 var chat_button: Button
 var _chat_poll := 0.0
 var debug_panel: PanelContainer
+var debug_tag: Label                    # PROTO DEBUG: "DEBUG x4 · PROD x10" on screen while anything is not x1
+var _debug_proto: VBoxContainer         # PROTO DEBUG: the controls (hidden where the debug is off: online, lessons, missions)
+var _debug_off_note: Label
+var _debug_last_node := -1              # PROTO DEBUG: the node last opened (tapped) - the +100 target
+var _debug_add_button: Button
 var margins := Vector4(16, 12, 16, 12)
 var _last_fps_print := 0.0
 var version_label: Label
@@ -573,6 +578,7 @@ func layout(vp: Vector2, m: Vector4) -> void:
 		# ScrollContainer in _build_debug() lets the panel be shorter than its buttons and scroll them
 		debug_panel.size = Vector2(dp_natural.x, minf(dp_natural.y, vp.y - dp_y - 10.0))
 		debug_panel.position = Vector2(vp.x - m.z - debug_panel.size.x, dp_y)
+	_place_debug_tag()
 	if chat_button:
 		chat_button.position = Vector2(vp.x - m.z - chat_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # Debug's slot (hidden online)
 	rotate_hint.size = vp
@@ -965,6 +971,9 @@ func inspect(id: int, cam: Camera3D) -> void:
 	if id < 0 or sim.collapsed.get(id, false):
 		return
 	inspector_id = id
+	_debug_last_node = id                             # PROTO DEBUG: the +100 target
+	if _debug_proto and debug_panel.visible:
+		_debug_proto_refresh()
 	var n: Dictionary = sim.nodes[id]
 	var col := Rules.seat_color(n["owner"]) if n["owner"] != "" else Rules.NEUTRAL
 	inspector = Control.new()
@@ -2462,8 +2471,9 @@ func _build_debug() -> void:
 	debug_button.toggle_mode = true
 	debug_button.size = debug_button.custom_minimum_size
 	root.add_child(debug_button)
-	debug_button.visible = not main.online and Rules.debug_tools   # online: the rules are the host's, not live-tunable;
-	                                                               # offline only when DEBUG TOOLS is on in OPTIONS (0.18.7)
+	debug_button.visible = not main.online and (Rules.debug_tools or Rules.proto_debug)   # online: the rules are the host's,
+	                                                               # not live-tunable; offline only when DEBUG TOOLS is on in
+	                                                               # OPTIONS (0.18.7) or in a proto build (PROTO DEBUG)
 	chat_button = button("Chat", func(): Net.open_chat(), 110, 50 if not mobile else 78, 20)   # online: the room chat (78: >= 44 pt)
 	chat_button.size = chat_button.custom_minimum_size
 	chat_button.visible = main.online
@@ -2472,7 +2482,10 @@ func _build_debug() -> void:
 	debug_panel.visible = false
 	style_panel(debug_panel, Color("2ee6ff"))
 	root.add_child(debug_panel)
-	debug_button.toggled.connect(func(on: bool): debug_panel.visible = on)
+	debug_button.toggled.connect(func(on: bool):
+		debug_panel.visible = on
+		if on:
+			_debug_proto_refresh())
 	# the panel's own size is clamped to the screen in layout() (Daniele, 0.18.8: "the Debug panel's last
 	# button runs off the phone screen") - a ScrollContainer (Godot doesn't count its content against its
 	# own minimum size, unlike a bare VBoxContainer) lets that clamp actually take effect instead of the
@@ -2485,6 +2498,10 @@ func _build_debug() -> void:
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	debug_scroll.add_child(box)
 	box.add_child(text_label("Debug - live, resets on reload", 20))
+	if Rules.proto_debug:
+		_build_proto_debug(box)
+		if not Rules.debug_tools:
+			return
 	# (0.18.7: SIEGE is deactivated - its deck / platform / door / platform-fight tunables left the panel)
 	var forge := _debug_slider(box, "Forge bonus", 0.0, 200.0, 5.0, Rules.forge_bonus * 100.0, "+%.0f%% attack",
 			func(v: float): Rules.forge_bonus = v / 100.0)
@@ -2521,6 +2538,124 @@ func _build_debug() -> void:
 	var reset := button("Reset to rules", func():
 		forge.value = Rules.FORGE_BONUS_DEFAULT * 100.0, 0, 44, 18)
 	box.add_child(reset)
+
+
+func _build_proto_debug(box: VBoxContainer) -> void:
+	## PROTO DEBUG (Daniele, 2026-11-02: "speed up player production and speed up time so I can test fast"): GAME SPEED
+	## x1/2/4/8 (the whole sim), MY PRODUCTION x1/2/5/10 (the human seat), REFILL, +100 on the last tapped own node,
+	## LAST STAND NOW. Each row reads its value; debug_tag keeps "DEBUG ..." on screen while anything is not x1.
+	var h := 50.0 if not mobile else 78.0             # >= 44 pt on phones, as the Debug button
+	box.add_child(text_label("PROTO TEST TOOLS", 20, Color("ffd23f")))
+	_debug_off_note = text_label("", 18, Color("ffb238"))
+	_debug_off_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_debug_off_note.custom_minimum_size = Vector2(480 * ui_scale, 0)
+	box.add_child(_debug_off_note)
+	_debug_proto = VBoxContainer.new()
+	_debug_proto.add_theme_constant_override("separation", 6)
+	box.add_child(_debug_proto)
+	_debug_choice(_debug_proto, "GAME SPEED", Rules.DEBUG_SPEEDS, h,
+			func(): return float(Rules.debug_speed),
+			func(v: float): Rules.debug_speed = int(v))
+	_debug_choice(_debug_proto, "MY PRODUCTION", Rules.DEBUG_PRODS, h,
+			func(): return Rules.debug_prod,
+			func(v: float):
+				Rules.debug_prod = v
+				sim.debug_prod[human] = v)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	_debug_proto.add_child(row)
+	row.add_child(button("REFILL SKILLS", _debug_refill, 150, h, 17))
+	_debug_add_button = button("+%d" % Rules.DEBUG_ADD_UNITS, _debug_add, 190, h, 17)
+	row.add_child(_debug_add_button)
+	row.add_child(button("LAST STAND NOW", _debug_last_stand, 170, h, 17))
+	if Rules.debug_prod != 1.0:                       # the multiplier carries over from the last match (resets on reload)
+		sim.debug_prod[human] = Rules.debug_prod
+	debug_tag = text_label("", 18, Color("ffd23f"))
+	var ts := panel_style(Color("ffd23f"))
+	ts.bg_color = Color(0.08, 0.06, 0.0, 0.85)
+	ts.set_content_margin_all(6 * ui_scale)
+	debug_tag.add_theme_stylebox_override("normal", ts)
+	root.add_child(debug_tag)
+	_debug_proto_refresh()
+
+
+func _debug_refill() -> void:
+	var n := sim.debug_refill(human)
+	toast("DEBUG: skills ready%s" % ((", %d relay%s off cooldown" % [n, "" if n == 1 else "s"]) if n > 0 else ""))
+
+
+func _debug_add() -> void:
+	if sim.debug_add_units(_debug_last_node, human):
+		toast("DEBUG: +%d on node %d" % [Rules.DEBUG_ADD_UNITS, _debug_last_node])
+	else:
+		toast("DEBUG: tap one of your nodes first, then +%d" % Rules.DEBUG_ADD_UNITS, "warn")
+
+
+func _debug_last_stand() -> void:
+	if sim.last_stand_active:
+		toast("DEBUG: the Last Stand is already on")
+	else:
+		sim.start_last_stand_now()
+
+
+func _debug_proto_refresh() -> void:
+	## Where the debug may run (offline, outside lessons / missions) and the on-screen tag.
+	if _debug_proto == null:
+		return
+	var ok: bool = main.debug_allowed()
+	_debug_proto.visible = ok
+	_debug_off_note.visible = not ok
+	_debug_off_note.text = "Off in online rooms (every player's sim must stay in sync)" if main.online \
+			else "Off in lessons and campaign missions (they run on their own clocks)"
+	if _debug_add_button:
+		var mine: bool = _debug_last_node >= 0 and _debug_last_node < sim.nodes.size() and sim.nodes[_debug_last_node]["owner"] == human
+		_debug_add_button.text = ("+%d ON NODE %d" % [Rules.DEBUG_ADD_UNITS, _debug_last_node]) if mine \
+				else ("+%d: TAP YOUR NODE" % Rules.DEBUG_ADD_UNITS)
+	var bits := []
+	if ok and Rules.debug_speed != 1:
+		bits.append("x%d" % Rules.debug_speed)
+	if ok and Rules.debug_prod != 1.0:
+		bits.append("PROD x%d" % int(Rules.debug_prod))
+	debug_tag.text = "DEBUG " + " · ".join(bits)
+	debug_tag.visible = not bits.is_empty()
+	_place_debug_tag()
+
+
+func _place_debug_tag() -> void:
+	## PROTO DEBUG: the tag sits left of the Debug button (top right, under PAUSE), off the map's middle.
+	if debug_tag == null or debug_button == null:
+		return
+	debug_tag.size = debug_tag.get_combined_minimum_size()
+	debug_tag.position = Vector2(debug_button.position.x - debug_tag.size.x - 8.0,
+			debug_button.position.y + (debug_button.size.y - debug_tag.size.y) * 0.5)
+
+
+func _debug_choice(box: Control, text: String, values: Array, h: float, current: Callable, apply: Callable) -> void:
+	## One row: "<TEXT>  xN" (the readout) and a toggle per value; the pressed one is the value in force.
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	box.add_child(row)
+	var label := text_label("", 18)
+	label.custom_minimum_size = Vector2(190 * ui_scale, 0)
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(label)
+	var buttons := []
+	var show := func():
+		var cur: float = current.call()
+		label.text = "%s  x%d" % [text, int(cur)]
+		for b in buttons:
+			(b as Button).set_pressed_no_signal(is_equal_approx(float((b as Button).get_meta("v")), cur))
+	for v in values:
+		var b := button("x%d" % int(v), Callable(), 74, h, 18)
+		b.toggle_mode = true
+		b.set_meta("v", float(v))
+		b.pressed.connect(func():
+			apply.call(float(v))
+			show.call()
+			_debug_proto_refresh())
+		buttons.append(b)
+		row.add_child(b)
+	show.call()
 
 
 func _debug_slider(box: Control, text: String, lo: float, hi: float, step: float, value: float,

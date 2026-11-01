@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.23.15-proto5"
+const VERSION := "0.23.15-proto6"
 const VERSION_NAME := "Alpha 23"
 
 
@@ -167,6 +167,17 @@ static var hide_enemy_counts: bool = false
 # DEBUG TOOLS (Daniele, 0.18.7: "we are past debug tools ... you can hide them (in case we want to reactivate
 # them later maybe put in options)"): the in-match Debug button and panel, off unless switched on in OPTIONS.
 static var debug_tools: bool = false
+# PROTO DEBUG (Daniele, 2026-11-02: "for proto add debug features like speed up player production and speed up time so
+# I can test fast"): GAME SPEED and MY PRODUCTION in the Debug panel, plus refill / +100 / Last Stand now. On only in a
+# proto build (VERSION "...-proto<n>"), so the real game never reaches it; offline matches only (online the host's sim
+# must stay in sync). The panel sets the two values below; Sim.debug_prod holds the production multiplier per seat.
+static var proto_debug: bool = VERSION.contains("-proto")
+const DEBUG_SPEEDS := [1, 2, 4, 8]           # x whole sim time (production, movement, cooldowns, relays, the clock)
+const DEBUG_PRODS := [1.0, 2.0, 5.0, 10.0]   # x the human seat's production only
+const DEBUG_ADD_UNITS := 100                 # shown units (x SCALE in the sim) added to the selected own node
+const DEBUG_SUBSTEP := 0.1                   # sped-up frames step the sim in chunks of at most this (as --ff does)
+static var debug_speed: int = 1
+static var debug_prod: float = 1.0          # the human seat's (copied into Sim.debug_prod at each match start)
 # TERRITORY LOOK (Daniele, 0.18.7: "the lane fight chat did some try with goo instead of neons, can you
 # try adding it so i can get the feel of it and add it as a toggle (could be a cosmetic later on)").
 # false = NEON (today's owner-colour neon trims, pier stripes and rims); true = GOO: owned platforms and

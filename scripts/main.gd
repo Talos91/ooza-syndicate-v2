@@ -1669,6 +1669,16 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 	return [false, ""]
 
 
+func debug_allowed() -> bool:
+	## PROTO DEBUG: the Debug panel's GAME SPEED / MY PRODUCTION work only in a proto build, offline, outside lessons
+	## and campaign missions (their scripts run on their own clocks).
+	return Rules.proto_debug and not online and director == null and mission == null
+
+
+func debug_speed() -> int:
+	return Rules.debug_speed if debug_allowed() else 1
+
+
 # ------------------------------------------------------------------ loop
 func _process(delta: float) -> void:
 	if perf_on:
@@ -1704,15 +1714,23 @@ func _process(delta: float) -> void:
 		var sdt := dt
 		if director:                                   # TUTORIAL: the director first, then the Sim at its scale
 			sdt = _tutorial_step(dt)
-		for ai in ais:
-			ai.think(sim, sdt)
-		if scenario != "":
-			_run_scenario()
-		if not _cast_at.is_empty() or not _aim.is_empty():   # POWERS (DEBUG): --cast-at / --aim
-			_debug_casts()
-		sim.step(sdt)
-		if mission:                                    # CAMPAIGN: the objective after the Sim's step
-			mission.step(sdt)
+		# PROTO DEBUG: GAME SPEED runs the whole sim (AI included) xN in chunks of at most Rules.DEBUG_SUBSTEP
+		var reps := 1
+		var speed := debug_speed()
+		if speed > 1:
+			reps = int(ceil(sdt * speed / Rules.DEBUG_SUBSTEP - 0.0001))
+			sdt = sdt * speed / reps
+		for r in range(reps):
+			for ai in ais:
+				ai.think(sim, sdt)
+			if r == 0:
+				if scenario != "":
+					_run_scenario()
+				if not _cast_at.is_empty() or not _aim.is_empty():   # POWERS (DEBUG): --cast-at / --aim
+					_debug_casts()
+			sim.step(sdt)
+			if mission:                                    # CAMPAIGN: the objective after the Sim's step
+				mission.step(sdt)
 	hordes.sync(sim, HUMAN)
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]

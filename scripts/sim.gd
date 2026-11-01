@@ -78,6 +78,7 @@ var loadouts: Dictionary = {}        # seat -> {"active": id, "map": id, "ultima
 var skill_cd: Dictionary = {}        # seat -> {"active": s, "map": s} seconds of cooldown left
 var ult_charge: Dictionary = {}      # seat -> 0..1 ultimate charge (1 = ready)
 var ult_since: Dictionary = {}       # seat -> seconds since the match start or the last ultimate
+var debug_prod: Dictionary = {}      # PROTO DEBUG: seat -> production multiplier (Rules.proto_debug only)
 var effects: Array = []              # active skill effects, see _add_effect()
 var demolished: Dictionary = {}      # edge index -> seconds until the demolished deck rebuilds
 var has_relays := false              # the map has at least one relay (Bypass / Relay Hack need one)
@@ -348,6 +349,8 @@ func _base_production(n: Dictionary) -> float:
 	if n["owner"] == "" or not has_vat(n):
 		return 0.0
 	var p: float = Rules.PROD[n["tier"]] * stat(n["owner"], "production")
+	if Rules.proto_debug and not debug_prod.is_empty():   # PROTO DEBUG: MY PRODUCTION (readouts follow it too)
+		p *= float(debug_prod.get(n["owner"], 1.0))
 	return p * Rules.CATCHUP_PRODUCTION if _catchup.has(teams.get(n["owner"], n["owner"])) else p
 
 
@@ -3114,6 +3117,33 @@ func _start_very_last_stand() -> void:
 	events.append({"t": time, "type": "very_last_stand"})
 	fx_events.append({"type": "very_last_stand"})
 	_vls_queue_next()
+
+
+# ---------------------------------------------------------- PROTO DEBUG (Rules.proto_debug; the HUD's Debug panel)
+func debug_refill(seat: String) -> int:
+	## Every skill of `seat` ready now (actives, map skill, ultimate) and its own relays off cooldown. Returns the
+	## relays refilled. Nothing without Rules.proto_debug.
+	if not Rules.proto_debug or over:
+		return 0
+	var cds: Dictionary = skill_cd.get(seat, {})
+	for k in cds.keys():
+		cds[k] = 0.0
+	ult_charge[seat] = 1.0
+	ult_since[seat] = maxf(float(ult_since.get(seat, 0.0)), Rules.ULT_MIN_TIME)
+	var count := 0
+	for n in nodes:
+		if n["relay"] != "" and n["owner"] == seat and n["relay_cd"] > 0.0:
+			n["relay_cd"] = 0.0
+			count += 1
+	return count
+
+
+func debug_add_units(id: int, seat: String, shown_units: int = Rules.DEBUG_ADD_UNITS) -> bool:
+	## +shown_units (on-screen units) on `seat`'s own node `id`, over the cap if need be. Nothing without Rules.proto_debug.
+	if not Rules.proto_debug or over or id < 0 or id >= nodes.size() or nodes[id]["owner"] != seat:
+		return false
+	nodes[id]["units"] += float(shown_units) * Rules.SCALE
+	return true
 
 
 # ---------------------------------------------------------- TUTORIAL (L7): start the collapses on cue
