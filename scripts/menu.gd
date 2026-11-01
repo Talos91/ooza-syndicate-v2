@@ -3736,7 +3736,8 @@ func _selected_map() -> Dictionary:
 func show_setup() -> void:
 	## 03 SETUP (screen system 05; Daniele 2026-09-28: the match here, the rivals in step 04): the map (its preview,
 	## CHANGE -> BATTLEFIELD) and YOUR TEAM COLOUR on the left; your faction (CHANGE -> FACTION, its army preset ->
-	## ARMIES), DIFFICULTY and the MATCH OPTIONS - LAST STAND, ABILITIES, HIDDEN COUNTS (moved here from SETTINGS) - on
+	## ARMIES), DIFFICULTY and the MATCH OPTIONS - HIDDEN COUNTS (moved here from SETTINGS) and ADVANCED (LAST STAND, ABILITIES:
+	## show_setup_advanced, 2026-11-01) - on
 	## the right; NEXT: RIVALS (04, show_seats: the PLAYERS mode, every seat's army, DEPLOY). Each choice is the variable
 	## deploy() reads.
 	_last_show = show_setup                  # a resize that changes the phone sizing rebuilds it (_fit)
@@ -3787,33 +3788,100 @@ func show_setup() -> void:
 	ry += UiKit.tap_h(self, 44.0) + 16.0
 	_shell_add(UiKit.label(self, "MATCH OPTIONS", 12, UiKit.MUTED, true, 3), Vector2(rx, ry))
 	ry += UiKit.line_h(self, 12, true) + 6.0
-	# three switches in a row, or - where the longest name doesn't fit a third (phones) - two, and HIDDEN COUNTS under them
-	var tgw := (rw - 20.0) / 3.0
-	var one_row := UiKit.text_w(self, "HIDDEN COUNTS", 15) + UiKit.tap_h(self, 46.0) * 0.5 + 44.0 <= tgw
-	if not one_row:
-		tgw = (rw - 10.0) / 2.0
-	_toggle("LAST STAND", Rules.last_stand, Vector2(rx, ry), Vector2(tgw, 46), func():
-		Rules.last_stand = not Rules.last_stand
-		main.keep_own_settings()                      # AUDIT FIX: yours, put back after a room's round
-		show_setup())
-	_toggle("ABILITIES", Rules.abilities_on, Vector2(rx + tgw + 10.0, ry), Vector2(tgw, 46), func():   # SKILLS 2.0: Alpha 11's match setting
-		Rules.abilities_on = not Rules.abilities_on
-		main.keep_own_settings()
-		show_setup())
-	var hp := Vector2(rx + (tgw + 10.0) * 2.0, ry) if one_row else Vector2(rx, ry + UiKit.tap_h(self, 46.0) + 8.0)
-	_toggle("HIDDEN COUNTS", Rules.hide_enemy_counts, hp, Vector2(tgw, 46), func():
+	# 2026-11-01 (Daniele: "move them to a separate advanced tab"): HIDDEN COUNTS stays here; LAST STAND and ABILITIES
+	# live in ADVANCED (show_setup_advanced), whose button carries their readout, lit while anything is off-default
+	var tgw := (rw - 10.0) / 2.0
+	_toggle("HIDDEN COUNTS", Rules.hide_enemy_counts, Vector2(rx, ry), Vector2(tgw, 46), func():
 		Rules.hide_enemy_counts = not Rules.hide_enemy_counts   # (was SETTINGS > GAME > ENEMY COUNTS)
 		main.keep_own_settings()
 		show_setup())
-	ry = hp.y + UiKit.tap_h(self, 46.0) + 8.0
+	var adv_default := Rules.last_stand and Rules.abilities_on
+	var adv := UiKit.btn(self, "ADVANCED  ›", Vector2(rx + tgw + 10.0, ry), Vector2(tgw, 46), show_setup_advanced,
+			"secondary" if adv_default else "selected", faction, 15)
+	adv.add_theme_font_override("font", UiKit.BODY)
+	adv.tooltip_text = "LAST STAND and ABILITIES"
+	ry += UiKit.tap_h(self, 46.0) + 6.0
+	var readout := UiKit.label(self, "LAST STAND %s  ·  ABILITIES %s" % ["ON" if Rules.last_stand else "OFF", "ON" if Rules.abilities_on else "OFF"],
+			12, UiKit.MUTED if adv_default else UiKit.accent(faction), true, 2)
+	readout.clip_text = true
+	readout.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	readout.size = Vector2(rw, UiKit.line_h(self, 12, true))
+	readout.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	if ry + readout.size.y <= fy - 4.0:
+		_shell_add(readout, Vector2(rx, ry))
+		ry += readout.size.y + 8.0
 	nl.visible = ry <= fy - 4.0 or ry <= nl.position.y        # the foot's "mode · vs ..." line only where it has room
 	if not mobile:                                    # the phone skips the recap to save room
-		var tip := UiKit.label(self, "LAST STAND: the map collapses ring by ring late in the match.  ABILITIES off: no skills.  "
-				+ "HIDDEN COUNTS: no unit numbers on enemy nodes, so you scout.", 13, UiKit.MUTED)
+		var tip := UiKit.label(self, "HIDDEN COUNTS: no unit numbers on enemy nodes, so you scout.  "
+				+ "ADVANCED: the Last Stand collapse and the abilities, on or off.", 13, UiKit.MUTED)
 		tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		tip.custom_minimum_size = Vector2(rw, 0)
 		if ry + UiKit.text_h(self, tip.text, 13, rw) < fy - 8.0:
 			_shell_add(tip, Vector2(rx, ry))
+
+
+func show_setup_advanced() -> void:
+	## 03 SETUP > ADVANCED (Daniele 2026-11-01: "move to a separate advanced tab, not deleted"): the two switches that
+	## change the match's rules - LAST STAND and ABILITIES - out of SETUP's main flow. Defaults both ON; each row is the
+	## switch and what it does; RESET TO DEFAULTS shows only while something is off. The values are the same
+	## Rules.last_stand / Rules.abilities_on as before (main.keep_own_settings: yours, put back after a room's round).
+	## BACK -> SETUP.
+	_last_show = show_setup_advanced
+	var area := shell_open("OOZE / SETUP / ADVANCED", "play", show_setup, faction)
+	var x := shell_x()
+	var w := content.size.x - x * 2.0
+	var y := page_title(area, "03 / SETUP  ·  ADVANCED", "THE MATCH RULES.")
+	var th := UiKit.tap_h(self, 46.0)
+	var pad := 16.0
+	var card := UiKit.panel(self, Vector2(x, y), Vector2(w, 10.0), faction)   # sized once the rows are laid out
+	x += pad
+	w -= pad * 2.0
+	y += pad
+	var tw := clampf(w * 0.4, 200.0, 340.0)
+	var rows := [
+		["LAST STAND", Rules.last_stand,
+			"From %d:%02d the map collapses ring by ring toward the centre; the danger signs show the next node to fall. Off: every platform stands to the end."
+			% [int(Rules.LAST_STAND_TIME) / 60, int(Rules.LAST_STAND_TIME) % 60],
+			func():
+				Rules.last_stand = not Rules.last_stand
+				main.keep_own_settings()
+				show_setup_advanced()],
+		["ABILITIES", Rules.abilities_on,
+			"Every army fights with its loadout - an active skill, a map skill and the faction's ultimate (ARMIES). Off: no skills for anyone, vats and relays only.",
+			func():
+				Rules.abilities_on = not Rules.abilities_on
+				main.keep_own_settings()
+				show_setup_advanced()],
+	]
+	var side := w - tw - 18.0 >= 220.0                 # the text beside the switch, or under it on a narrow phone
+	for row in rows:
+		_toggle(row[0], row[1], Vector2(x, y), Vector2(tw, 46), row[3])
+		var d := UiKit.label(self, str(row[2]), 13, UiKit.MUTED)
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		if side:
+			var dw := w - tw - 18.0
+			d.custom_minimum_size = Vector2(dw, 0)
+			d.size = Vector2(dw, UiKit.text_h(self, d.text, 13, dw))
+			_shell_add(d, Vector2(x + tw + 18.0, y + maxf((th - d.size.y) / 2.0, 0.0)))
+			y += maxf(th, d.size.y) + 14.0
+		else:
+			d.custom_minimum_size = Vector2(w, 0)
+			d.size = Vector2(w, UiKit.text_h(self, d.text, 13, w))
+			_shell_add(d, Vector2(x, y + th + 4.0))
+			y += th + 4.0 + d.size.y + 14.0
+	var bh := UiKit.tap_h(self, 44.0)
+	var fy := y - 2.0                                  # the card's foot row: the default note, RESET while anything is off
+	var note := UiKit.label(self, "DEFAULT: BOTH ON", 12, UiKit.DIM, true, 2)
+	_shell_add(note, Vector2(x, fy + (bh - UiKit.line_h(self, 12, true)) / 2.0))
+	if not (Rules.last_stand and Rules.abilities_on):
+		var rt := "RESET TO DEFAULTS"
+		var rw := UiKit.text_w(self, rt, 15, true) + 44.0
+		UiKit.btn(self, rt, Vector2(x + w - rw, fy), Vector2(rw, 44), func():
+			Rules.last_stand = true
+			Rules.abilities_on = true
+			main.keep_own_settings()
+			show_setup_advanced(), "tertiary", faction, 15)
+	card.size.y = minf(fy + bh + pad - card.position.y, area.end.y - 12.0 - card.position.y)
 
 
 func _setup_map(pos: Vector2, dims: Vector2) -> void:

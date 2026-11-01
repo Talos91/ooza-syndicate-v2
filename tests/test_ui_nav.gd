@@ -8,7 +8,7 @@ extends Node
 ## (NOT --headless: the headless display server routes no input.) Exit code 0 = all passed.
 
 const TAB_PAGE := {"home": "home", "play": "play", "armies": "armies", "campaign": "campaign", "profile": "profile"}
-const FROM := ["main", "play", "armies", "chapters", "factions", "maps", "setup", "seats", "profile", "challenges",
+const FROM := ["main", "play", "armies", "chapters", "factions", "maps", "setup", "setup_advanced", "seats", "profile", "challenges",
 		"leaderboard", "history", "account", "options", "help", "online"]
 var m
 var failures := 0

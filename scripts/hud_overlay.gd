@@ -358,6 +358,10 @@ func _rotation_arrow(cam: Camera3D, node_id: int, col: Color) -> void:
 
 # ------------------------------------------------------------------ Last Stand danger symbols
 func _draw_danger_symbols(cam: Camera3D) -> void:
+	## 2026-11-01 (Daniele: a whole ring warned at once reads as noise): the symbols are tiered by the drop queue -
+	## the NEXT node to fall at full strength (pulsing), the one after it at medium (smaller, steady), every other warned
+	## node muted (small, low alpha, no pulse) until its turn comes. The "NODE n FALLS IN s" line (Hud) is unchanged.
+	var queue: Array = sim.last_stand_queue
 	for n in sim.nodes:
 		var id: int = n["id"]
 		if sim.collapsed.get(id, false) or not sim.is_warned(id):
@@ -365,13 +369,24 @@ func _draw_danger_symbols(cam: Camera3D) -> void:
 		var ns := _node_screen(id, cam)
 		var c: Vector2 = ns[0]
 		var r: float = float(ns[1])
+		var tier := mini(maxi(queue.find(id), 0), 2) if sim.v3 else 0   # 0 next, 1 after it, 2 the rest
 		# the camera-facing rim, clear of the platform's centre (Daniele: "a symbol of danger floating
 		# over the border of the platform in a way it doesn't cover what's going on")
 		var p := c + Vector2(0, r * 0.92)
-		var pulse := 0.55 + 0.45 * sin(_t * 6.0)
-		_warning_glyph(p, r * 0.36, Color(1.0, 0.22 * pulse + 0.1, 0.16 * pulse + 0.08, 1.0))
+		var pulse := 0.55 + 0.45 * sin(_t * 6.0) if tier == 0 else (0.75 if tier == 1 else 0.35)
+		var size: float = r * 0.36 * float(DANGER_SIZE[tier])
+		var col := Color(1.0, 0.22 * pulse + 0.1, 0.16 * pulse + 0.08, float(DANGER_ALPHA[tier]))
+		if tier == 2:
+			col = Color(0.72, 0.3, 0.26, float(DANGER_ALPHA[tier]))          # muted: dull red, no glow
+		_warning_glyph(p, size, col)
 		var secs := int(ceil(sim.drop_in(id) if sim.v3 else sim.last_stand_warn_t))
-		_label(p + Vector2(r * 0.55, -r * 0.12), "%d" % maxi(secs, 0), Color(1, 0.86, 0.82), 20)
+		var lc := Color(1, 0.86, 0.82, float(DANGER_ALPHA[tier])) if tier < 2 else Color(0.85, 0.7, 0.68, float(DANGER_ALPHA[tier]))
+		_label(p + Vector2(size * 1.5, -size * 0.33), "%d" % maxi(secs, 0), lc, int(DANGER_FONT[tier]))
+
+
+const DANGER_SIZE := [1.0, 0.78, 0.62]     # danger symbol per tier: next / after / the rest (x the full size)
+const DANGER_ALPHA := [1.0, 0.85, 0.55]
+const DANGER_FONT := [20, 16, 12]           # the seconds beside it (px before ui_scale)
 
 
 func _warning_glyph(c: Vector2, size: float, col: Color) -> void:
@@ -381,8 +396,8 @@ func _warning_glyph(c: Vector2, size: float, col: Color) -> void:
 	draw_colored_polygon(pts, col)
 	var outline := pts.duplicate()
 	outline.append(pts[0])
-	draw_polyline(outline, Color(0, 0, 0, 0.9), 2.0 * ui_scale, true)
+	draw_polyline(outline, Color(0, 0, 0, 0.9 * col.a), 2.0 * ui_scale, true)
 	var f := int(size * 1.3)
 	var s := "!"
 	var sz := Hud.UI_FONT.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
-	draw_string(Hud.UI_FONT, c + Vector2(-sz.x / 2.0, h * 0.28), s, HORIZONTAL_ALIGNMENT_LEFT, -1, f, Color.BLACK)
+	draw_string(Hud.UI_FONT, c + Vector2(-sz.x / 2.0, h * 0.28), s, HORIZONTAL_ALIGNMENT_LEFT, -1, f, Color(0, 0, 0, col.a))

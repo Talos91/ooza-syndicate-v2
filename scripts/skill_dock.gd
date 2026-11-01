@@ -626,8 +626,13 @@ func _deck_px(ei: int, cam: Camera3D) -> PackedVector2Array:
 
 
 func _deck_at(p: Vector2, cam: Camera3D) -> int:
-	## The deck under a tap (screen distance to its centre line), lit decks first.
-	var reach := (20.0 if not mobile else 30.0) * ui_scale
+	## The deck under a tap (screen distance to its centre line), lit decks first. 2026-11-01 (Daniele: "bridges are
+	## sometimes hard to click"): on a phone the band is at least Rules.DECK_HIT_PT across in real points (deck_reach)
+	## - invisible, the deck looks the same. The extra reach beyond the old band never takes a tap that sits on a
+	## node's platform (nodes keep priority where a tap is near both); inside the old band nothing changed.
+	var core := (20.0 if not mobile else 30.0) * ui_scale
+	var reach := deck_reach(core)
+	var on_node := reach > core and _platform_at(p, cam) >= 0
 	for pass_n in range(2):
 		var best := -1
 		var best_d := reach
@@ -636,11 +641,33 @@ func _deck_at(p: Vector2, cam: Camera3D) -> int:
 			var pts := _deck_px(int(ei), cam)
 			for k in range(pts.size() - 1):
 				var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, pts[k], pts[k + 1]))
-				if d < best_d:
+				if d < best_d and (d <= core or not on_node):
 					best_d = d
 					best = int(ei)
 		if best >= 0:
 			return best
+	return -1
+
+
+func deck_reach(core: float) -> float:
+	## Half the deck tap band in viewport pixels: the old band, or - on a phone - half Rules.DECK_HIT_PT in real points
+	## (UiKit.pt_per_px: the web page's CSS size, else the landscape-phone reference), whichever is wider.
+	if not mobile:
+		return core
+	var ppt := UiKit.pt_per_px(get_viewport().get_visible_rect().size)
+	return maxf(core, Rules.DECK_HIT_PT * 0.5 / maxf(ppt, 0.001))
+
+
+func _platform_at(p: Vector2, cam: Camera3D) -> int:
+	## The node whose platform (Rules.R on the ground) holds this screen point, or -1 (collapsed and junctions skipped).
+	var g: Vector3 = main._ground(p)
+	if g == Vector3.INF:
+		return -1
+	for n in sim.nodes:
+		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":
+			continue
+		if (n["pos"] as Vector3).distance_to(g) <= Rules.R:
+			return n["id"]
 	return -1
 
 
