@@ -81,15 +81,21 @@ static var door_rate: float = DOOR_RATE_DEFAULT        # live-tunable (Debug pan
 # Its mean hop is 284 px centre to centre; 2.0's is 21.9 m over the 99 maps (1.68 modules), so one
 # Alpha 11 px = 0.077 m: 115 px/s = 8.9 m/s, the same 2.5 s per hop, and 12 px = 0.93 m per shown
 # unit. Exit = entrance = 9.6 shown units/s (x SCALE internally). SIEGE keeps its own tunables.
-# (Those figures predate Alpha 17's and Alpha 18's -20 % each: now 5.7 m/s, ~0.59 m per shown unit.)
-const BRAWL_SPEED := 8.9 * 0.8 * 0.8                       # m/s, decks and platforms alike (Daniele, Alpha 17: "20% slower";
-                                                           # 0.18.4: "deck speed on brawl a bit slower ... reduce by 20%")
+# (Those figures predate Alpha 17's and Alpha 18's -20 % each: 5.7 m/s, ~0.59 m per shown unit; the 2026-11-01 staging
+# trial takes another 15 % off speed and vat production: 4.84 m/s, ~0.50 m per shown unit, door rate unchanged.)
+# Daniele 2026-11-01: 15 % slower, staging trial - one knob for unit movement (BRAWL_SPEED) and vat production (PROD).
+const BRAWL_TRIAL_15 := 0.85
+const BRAWL_SPEED := 8.9 * 0.8 * 0.8 * BRAWL_TRIAL_15      # m/s, decks and platforms alike (Daniele, Alpha 17: "20% slower";
+                                                           # 0.18.4: "deck speed on brawl a bit slower ... reduce by 20%";
+                                                           # Daniele 2026-11-01: 15 % slower, staging trial -> 4.84 m/s)
 const BRAWL_DOOR_RATE := 115.0 / 12.0 * 5.0               # internal units/s out of the door (and in)
 # Alpha 11's route (simulation.gd route/arc): out of the vat's FRONT (the side facing the camera),
 # round the platform on its route ring to the bridge, and at the target round the ring back to the
 # front and in. Its ring is 122 px (~ the platform edge); here 4.8 m inside the 6 m platform.
 const BRAWL_RING := 4.8
-const BRAWL_SPACING := BRAWL_SPEED / BRAWL_DOOR_RATE * 5.0   # metres between bodies: speed / Alpha 11 rate
+const BRAWL_SPACING := BRAWL_SPEED / BRAWL_DOOR_RATE * 5.0   # metres between bodies: speed / Alpha 11 rate (the door rate is not
+                                                             # production and stays: bodies walk slower out of the same door, so
+                                                             # they stand 15 % closer, 0.50 m per shown unit - speed-15 trial)
 const BRAWL_EXPAND := 85.0 * 21.9 / 284.0                 # 6.6 m: columns widen from single file (85 px)
 
 
@@ -315,7 +321,7 @@ const MATCH_HARD_END := 420.0        # 7:00 end: the side owning the Very Last S
 # for troops to reach the end and not all instantly die"): a dropped platform goes at once (its garrison and stored
 # troops with it); every deck on it then breaks OUTWARD from that end, one segment every LAST_STAND_WAVE_STEP s (the
 # first with the platform), LAST_STAND_WAVE_SEGMENT m per segment (Sim.breaking / _step_breaks). Bodies fall only
-# when THEIR segment breaks. 2 m every 0.5 s = 4 m/s, slower than a line (BRAWL_SPEED 5.7 m/s): a line walking away
+# when THEIR segment breaks. 2 m every 0.5 s = 4 m/s, slower than a line (BRAWL_SPEED 4.84 m/s since the speed-15 trial; 5.7 before): a line walking away
 # from the node always outruns the break and is safe once past the far pier; one walking toward the node meets the
 # break and pours off it segment by segment. A deck whose both ends dropped breaks from both ends.
 const LAST_STAND_WAVE_STEP := 0.5
@@ -351,7 +357,9 @@ const SCALE := 5.0
 # 0.18.10 (Daniele, 2026-09-27: "30 40 80 160 is good but i d change them slightly: 30/60/120/200"): owned
 # caps 30 / 60 / 120 / 200 shown; production unchanged.
 static var CAPS := {1: 150, 2: 300, 3: 600, 4: 1000}      # shown 30 / 60 / 120 / 200
-static var PROD := {1: 5.0, 2: 8.0, 3: 12.0, 4: 17.5}     # Alpha 11 1.0/1.6/2.4/3.5 units/s x5
+static var PROD := {1: 5.0 * BRAWL_TRIAL_15, 2: 8.0 * BRAWL_TRIAL_15, 3: 12.0 * BRAWL_TRIAL_15, 4: 17.5 * BRAWL_TRIAL_15}
+    # Alpha 11 1.0/1.6/2.4/3.5 units/s x5 = 5/8/12/17.5; Daniele 2026-11-01: 15 % slower, staging trial -> 4.25/6.8/10.2/14.875
+    # (shown 0.85/1.36/2.04/2.98 units/s). Neutral regen below reads PROD, so villages regrow at the new vat rate too.
 # NEUTRAL REGEN (Daniele, 0.18.9: "make neutral villages regenerate at the speed of their vat"): a chipped
 # neutral vat node grows back at its tier's PROD (no faction bonus), up to its starting garrison NEUTRAL_UNITS.
 const NEUTRAL_REGEN := true
@@ -409,7 +417,7 @@ const MONSTER_TAKE_MAX := 200.0           # 40 shown
 static var MONSTER_HUB_COST := 150        # 30 shown
 static var MONSTER_COST := 100            # 20 shown
 static var MONSTER_COOLDOWN := 40.0          # Daniele, 2026-09-27: "change charge to 40 seconds" (was 90)
-static var MONSTER_SPEED := 0.6           # x BRAWL_SPEED (~3.4 m/s)
+static var MONSTER_SPEED := 0.6           # x BRAWL_SPEED (~2.9 m/s since the speed-15 trial; ~3.4 before)
 static var MONSTER_REACH := 1             # bridges (plaza links don't count); Daniele 2026-09-28: "attack radius limited to 1 node" (was 3)
 const MONSTER_R := 1.4                    # metres: the monster's reach along the deck (half a deck width)
 const MONSTER_PLATFORM_R := 2.0           # metres: on a platform it crosses, bodies of lines in transit this close to its path are kicked
