@@ -951,8 +951,8 @@ func to_menu(page := "") -> void:
 
 # ------------------------------------------------------------------ world
 func _apply_quality() -> void:
-	## Phones: no shadows, no MSAA. (AUDIT FIX: the old 0.75 3D render scale is gone - PerfProfile renders every
-	## profile at full resolution, the unfiltered upscale gave the "minecraft" steps; a phone on FULL got it back.)
+	## Phones: no shadows, no MSAA. (AUDIT FIX: the old 0.75 3D render scale is gone - the unfiltered upscale gave the
+	## "minecraft" steps; perf-ios: PerfProfile scales PHONE through the linear-filtered RenderScale path instead.)
 	if mobile:
 		sun.shadow_enabled = false
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
@@ -2311,13 +2311,15 @@ func _perf(dt: float) -> void:
 	if _perf_t < 3.0:
 		return
 	_perf_t = 0.0
-	print("PERF fps=%d process=%.2fms physics=%.2fms nav=%.2fms objects=%d draw=%d prims=%d" % [
+	var px := RenderScale.current.pixels() if RenderScale.current != null else Vector2i(get_window().size)   # perf-ios: the 3D's pixels
+	print("PERF fps=%d process=%.2fms physics=%.2fms nav=%.2fms objects=%d draw=%d prims=%d 3d=%dx%d scale=%.2f dpr=%.2f" % [
 			Engine.get_frames_per_second(), Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
 			Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
 			Performance.get_monitor(Performance.TIME_NAVIGATION_PROCESS) * 1000.0,
 			Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
 			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
-			Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)])
+			Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME), px.x, px.y, RenderScale.scale_now(),
+			PerfProfile.device_pixel_ratio()])
 
 
 func _horde_at(p: Vector3) -> Dictionary:
