@@ -1,7 +1,14 @@
 # Ooze Syndicate 2.0 - changelog
 
-## Unreleased - branch `ui-quick` (2026-11-01, Daniele's backlog A; UI only, no rule change, no version bump)
+## 0.23.18 "Alpha 23" - 2026-11-01 (staging: phone rendering, speed-15 trial, the E maps, UI batch)
 
+- **speed-15** (staging trial, Daniele 2026-11-01): BRAWL unit production and movement 15 % slower - Rules.BRAWL_TRIAL_15 0.85 on BRAWL_SPEED
+  (5.7 -> 4.8 m/s) and vat PROD (1.0 / 1.6 / 2.4 / 3.5 -> 0.85 / 1.36 / 2.04 / 2.98 shown /s; neutral regrowth follows); door rate unchanged, so bodies
+  walk 0.50 m apart (was 0.59); monster 3.4 -> 2.9 m/s.
+- **maps-exp**: experimental maps E-01..E-10 join the pool (group E; MapPool.POOL_GROUPS ["N", "E"]); the N-04 / N-24 consoles start down.
+- **perf-ios**: phones render the 3D at 1.5 pixels per point through a linear-filtered SubViewport (0.75 of native on a dpr-2 iPhone, smooth edges,
+  HUD at native); PHONE idles at 15 fps in menus / pause / results; one batching cell per map (M-39 phone: 357 -> 287 draw calls). FULL and LOW RES unchanged.
+  (Also on staging alone as 0.23.17.)
 - **Bridges easier to tap** (Daniele: "bridges are sometimes hard to click"): the deck skills' tap band (Scorch, Mire, Anchor, Demolish, Backwash, Sever;
   SkillDock._deck_at) is at least 44 pt across on a phone (Rules.DECK_HIT_PT; was ~37 pt at most, 30 px x 1.15), invisible, the deck looks the same; the extra
   reach never takes a tap that sits on a node's platform. Probe `tests/deck_tap_probe.tscn`: median band A-01 37 -> 43 pt, M-39 30 -> 33 pt, M-57 32 -> 35 pt

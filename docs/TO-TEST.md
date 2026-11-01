@@ -1,9 +1,15 @@
-# To test - ALPHA 23.16 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.18 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.18 (staging: https://oozesyndicate.com/staging/)
+- [ ] **speed-15**: lines move and vats fill 15 % slower - does a match feel better paced or just slower?
+- [ ] **E maps**: E-01..E-10 show in 02 BATTLEFIELD (1V1 / 2V2) and play fine on the phone.
+- [ ] **UI batch**: bridges easier to tap for deck skills; Last Stand danger signs tiered (next node loud, the rest muted); SETUP > ADVANCED holds LAST STAND / ABILITIES.
+- [ ] **Phone rendering** (as 0.23.17): sharp enough at 0.75, cooler in menus.
 
 ## 0.23.16 (live)
 - [ ] A Forge costs 40; a monster reaching a node with more than 40 defenders kicks 40 and the node holds ("MONSTER KICKED 40 - n HOLD").
