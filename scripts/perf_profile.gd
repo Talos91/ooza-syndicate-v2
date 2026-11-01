@@ -13,7 +13,8 @@ extends Node
 ## choice), saved in user://settings.cfg [graphics]:
 ##   GRAPHICS  AUTO     - PHONE on a phone / tablet / touch browser (or --mobile), FULL on a desktop. PHONE
 ##                        is today's phone look (no shadows, all effects) at full 3D resolution (no more
-##                        pixel steps) with a 45 fps cap (30 while idle), and the light kit (hd() false).
+##                        pixel steps) with a 45 fps cap (15 while idle: menus, pause, results), and the light kit
+##                        (hd() false); perf-ios: its 3D renders at PHONE_3D_PX_PER_PT pixels per CSS point (RenderScale).
 ##             LOW RES  - the strongest savings (opt-in, weak phones): 30 fps, no shadows / glow, LOW
 ##                        detail (half effects, fewer river patches, no normal maps), the lite goo,
 ##                        particle bursts at 40 %. (The fill and rim lights stay: without them the board
@@ -31,14 +32,24 @@ const FPS_MODES := ["auto", "30", "60"]
 # cap. Only LOW RES, an explicit opt-in for weak phones, trades looks (effects, not pixels).
 # Render scale: GL Compatibility upscales a scaled 3D buffer WITHOUT filtering (measured in Alpha 21: at 0.75 -
 # main._apply_quality's phone default since Alpha 14 - and 0.6 the edges turn into hard pixel steps,
-# Daniele's "like minecraft"), so both lighter profiles render the 3D at full resolution (1.0) until a
-# linear-filtered path exists (a SubViewport shown through a linear TextureRect). No profile scales today.
-# per profile: 3D render scale (null: leave it), fps while playing / idle, shadows, glow, the fill and rim
-# lights, LOW detail, the lite goo shader, the share of each particle burst
+# Daniele's "like minecraft"), so no profile ever uses the viewport's own scaling_3d_scale below 1.0. perf-ios
+# (2026-11-01, her new iPhone hot after six matches: the 3D drawn at 2x resolution every frame): the linear-filtered
+# path exists now (RenderScale, render_scale.gd: the 3D in a SubViewport shown through a LINEAR TextureRect, the HUD at
+# native resolution), and PHONE uses it: "dpr" = PHONE_3D_PX_PER_PT 3D pixels per CSS point, so 0.75 of native on a
+# dpr-2 phone (1.5x instead of 2x: 44 % fewer 3D pixels), 1.0 on a dpr-1 desktop (nothing lost), never under
+# SCALE_3D_MIN. LOW RES keeps 1.0 (an open question for Daniele: it could take the same rule). --scale3d=0.75 forces a
+# scale for a test run (never saved; 1 = off).
+# Idle (perf-ios): PHONE idles at 15 fps - the menus (no tweens; the ARMIES preview turns slowly), the result screen, a
+# paused or ended match - where it idled at 30; a match being built under the VERSUS card is not idle (the staged load
+# paces itself by frames). LOW RES stays at 30 everywhere.
+const PHONE_3D_PX_PER_PT := 1.5          # PHONE: 3D pixels per CSS point (devicePixelRatio 2 -> scale 0.75)
+const SCALE_3D_MIN := 0.6                # never softer than this (a dpr-3 phone would compute 0.5)
+# per profile: 3D render scale (null: leave it; "dpr": the PHONE_3D_PX_PER_PT rule), fps while playing / idle, shadows,
+# glow, the fill and rim lights, LOW detail, the lite goo shader, the share of each particle burst
 const PROFILES := {
 	"full": {"scale": null, "fps": 60, "idle_fps": 60, "shadows": true, "glow": true, "fill_lights": true,
 			"low_detail": false, "lite": false, "particles": 1.0},
-	"phone": {"scale": 1.0, "fps": 45, "idle_fps": 30, "shadows": false, "glow": true, "fill_lights": true,
+	"phone": {"scale": "dpr", "fps": 45, "idle_fps": 15, "shadows": false, "glow": true, "fill_lights": true,
 			"low_detail": false, "lite": false, "particles": 1.0},
 	"low": {"scale": 1.0, "fps": 30, "idle_fps": 30, "shadows": false, "glow": false, "fill_lights": true,
 			"low_detail": true, "lite": true, "particles": 0.4},
@@ -49,6 +60,7 @@ static var _mode := ""                  # the saved GRAPHICS setting ("" until r
 static var _fps := ""                   # the saved FPS setting
 static var _level := ""                 # level(), cached until the setting changes
 static var _live: PerfProfile = null
+static var _scale_arg := -1.0           # --scale3d=<f>: a test run's 3D scale on every profile (never saved)
 static var _forced_low_detail := false  # LOW RES turned Rules.low_detail on (and turns it back off)
 static var _goo_lite: Shader = null
 
@@ -107,6 +119,8 @@ static func _load() -> void:
 			_mode = a.substr(11)
 		elif a.begins_with("--fps=") and a.substr(6) in FPS_MODES:
 			_fps = a.substr(6)
+		elif a.begins_with("--scale3d=") and a.substr(10).is_valid_float():
+			_scale_arg = clampf(float(a.substr(10)), 0.25, 1.0)
 
 
 static func _save() -> void:
@@ -190,6 +204,26 @@ static func hd() -> bool:
 static func lite() -> bool:
 	## Cheaper shaders (the goo): LOW RES only.
 	return bool(PROFILES[level()]["lite"])
+
+
+static func device_pixel_ratio() -> float:
+	## The screen's pixels per CSS point (the web's window.devicePixelRatio, which web/viewport-fix.js caps at 2 on iOS;
+	## a desktop's display scale otherwise; 1.0 when unknown).
+	var s := DisplayServer.screen_get_scale()
+	return s if s > 0.0 else 1.0
+
+
+static func scale_3d() -> float:
+	## The 3D render scale of the current profile, 1.0 = native (no scaled path). --scale3d= wins for a test run.
+	_load()
+	if _scale_arg > 0.0:
+		return _scale_arg
+	var sc = PROFILES[level()]["scale"]
+	if sc == null:
+		return 1.0
+	if sc is String:                                      # "dpr": PHONE_3D_PX_PER_PT 3D pixels per CSS point
+		return clampf(PHONE_3D_PX_PER_PT / device_pixel_ratio(), SCALE_3D_MIN, 1.0)
+	return clampf(float(sc), 0.25, 1.0)
 
 
 static func play_fps() -> int:
@@ -335,7 +369,10 @@ func _process(dt: float) -> void:
 		_applied_3d = true
 		_apply_3d(p)
 	var sim = main.get("sim")
-	var idle := not started or (bool(main.get("paused")) and not bool(main.get("online"))) \
+	# idle: the menus (not started, the menu up - a match being built under the VERSUS card keeps the play cap: the
+	# staged load paces itself by frames), a paused offline match, an ended one (the result screen)
+	var menu_up := main.get("menu_layer") != null and is_instance_valid(main.get("menu_layer"))
+	var idle := (not started and menu_up) or (bool(main.get("paused")) and not bool(main.get("online"))) \
 			or (sim != null and bool(sim.get("over")))
 	var play := play_fps()
 	var cap: int = mini(int(p["idle_fps"]), play) if idle else play
@@ -347,11 +384,16 @@ func _process(dt: float) -> void:
 
 func _apply_3d(p: Dictionary) -> void:
 	var vp := main.get_viewport()
-	if Scenery.ios_safe():                           # no off-screen 3D buffer on iOS (Scenery.ios_safe); scale 1.0 = no scaling
+	var sc := scale_3d()
+	if sc < 1.0:                                     # perf-ios: the linear-filtered scaled path (render_scale.gd)
+		var rs := RenderScale.attach(main, sc)
+		if rs != null:
+			vp = rs.sub
+	if Scenery.ios_safe():                           # no off-screen 3D buffer on iOS (Scenery.ios_safe); never the viewport's own scaling
 		vp.msaa_3d = Viewport.MSAA_DISABLED
-	elif p["scale"] != null:
+	elif p["scale"] != null:                         # (the viewport's own scaling stays at 1.0: it would upscale unfiltered)
 		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-		vp.scaling_3d_scale = float(p["scale"])
+		vp.scaling_3d_scale = 1.0
 		vp.msaa_3d = Viewport.MSAA_DISABLED
 	var sun = main.get("sun")
 	for c in main.get_children():
