@@ -479,6 +479,25 @@ const FACTIONS := {
 	"bloom": [0.236, Color("#6fff2a")], "ember": [0.085, Color("#ff3b1f")],
 	"solar": [0.12, Color("#ffbe19")],
 }
+# FACTION LOOK (Daniele, 2026-11-02: "add a per faction size factor ... bloom could be smaller and in more lines ...
+# to add variety to how the race appears"). Looks only, no rule: "size" multiplies a body's width (UnitView.UNIT_SIZE,
+# the flung bodies, Scenery.RESIDENT_SIZE), "across" is the lanes of a column (Alpha 11: 3); the lane spacing scales with
+# size, so a smaller race in more lanes keeps about the same column width. The models are fitted by width, so a tall model
+# stays tall (the v3 Solar egg). Defaults = today's look; Daniele picks the values. Debug: --look=bloom:0.75:4
+static var FACTION_LOOK := {
+	"vex": {"size": 1.0, "across": 3}, "null": {"size": 1.0, "across": 3}, "bloom": {"size": 1.0, "across": 3},
+	"ember": {"size": 1.0, "across": 3}, "solar": {"size": 1.0, "across": 3},
+}
+
+
+static func look_size(faction: String) -> float:
+	return float(FACTION_LOOK.get(faction, {}).get("size", 1.0))
+
+
+static func look_across(faction: String) -> int:
+	return maxi(1, int(FACTION_LOOK.get(faction, {}).get("across", 3)))
+
+
 # FACTION STAT PROFILES - Alpha 11's provisional tuning (faction_balance.gd), the GAME-RULES sec3
 # leans: one readable strength, one readable weakness each. speed = travel speed, health = damage
 # a horde takes (divides it), attack = damage dealt, production = vat output, garrison = damage a

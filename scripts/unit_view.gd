@@ -110,7 +110,7 @@ func _ready() -> void:
 		if not _mesh.has(f):
 			continue
 		var aabb: AABB = (_mesh[f] as Mesh).get_aabb()
-		_scale[f] = UNIT_SIZE / maxf(maxf(aabb.size.x, aabb.size.z), 0.001)
+		_scale[f] = UNIT_SIZE * Rules.look_size(f) / maxf(maxf(aabb.size.x, aabb.size.z), 0.001)   # FACTION LOOK size
 		var src := (_mesh[f] as Mesh).surface_get_material(0) as BaseMaterial3D
 		_tex[f] = src.albedo_texture if src else null
 	var disc_mesh := CylinderMesh.new()
@@ -322,6 +322,8 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 	var owner: String = h["owner"]
 	var batch: Batch = _batch(h["faction"], owner) if _mesh.has(h["faction"]) else null   # the column's key, once
 	var model_scale: float = _scale.get(h["faction"], 1.0)
+	var lanes := Rules.look_across(h["faction"])         # FACTION LOOK: lanes and lane width per race
+	var lane_w := LANE * Rules.look_size(h["faction"])
 	var disc_col := Rules.seat_color(owner) * (0.35 if _ghost else 1.0)
 	var cum: PackedFloat32Array = h["cum"]
 	var pts: PackedVector3Array = h["pts"]
@@ -335,7 +337,6 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 		var dist := head - j * gap
 		if dist < 0.0:
 			break                                     # still in the vat
-		var lanes := ACROSS
 		var col := j % lanes
 		var expansion := clampf(minf(dist, L - dist) / Rules.BRAWL_EXPAND, 0.0, 1.0)
 		var travel := dist + col * gap * expansion
@@ -385,7 +386,7 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 			fwd = fwd.normalized() if fwd.length() > 0.001 else (smp[1] as Vector3)
 		var side := fwd.cross(Vector3.UP).normalized()
 		var row_size := mini(lanes, count - int(j / lanes) * lanes)
-		var lateral := (col - (row_size - 1) * 0.5) * LANE * expansion
+		var lateral := (col - (row_size - 1) * 0.5) * lane_w * expansion
 		var facing := clampf(fwd.dot(screen_right) * 2.0, -1.0, 1.0)
 		var yaw := Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing))
 		var phase := fmod(j * 0.618 + float(id) * 0.137, 1.0)
@@ -551,8 +552,9 @@ func _spawn(h: Dictionary, mode: int, j: int, at: float, over: float, time: floa
 	fwd.y = 0.0
 	fwd = fwd.normalized() if fwd.length() > 0.001 else Vector3(1, 0, 0)
 	var side := fwd.cross(Vector3.UP)
-	var col := j % ACROSS
-	var p: Vector3 = (smp[0] as Vector3) + side * (col - 1) * LANE + Vector3(0, 0.08, 0)
+	var across := Rules.look_across(faction)                # FACTION LOOK (3 lanes: col - 1, as before)
+	var col := j % across
+	var p: Vector3 = (smp[0] as Vector3) + side * (col - (across - 1) * 0.5) * LANE * Rules.look_size(faction) + Vector3(0, 0.08, 0)
 	var screen_right := Vector3(1, 0, 0).rotated(Vector3.UP, Rules.view_yaw)
 	var yaw := Rules.heading(Rules.front_dir().rotated(Vector3.UP, TURN * clampf(fwd.dot(screen_right) * 2.0, -1.0, 1.0)))
 	if mode == 1:

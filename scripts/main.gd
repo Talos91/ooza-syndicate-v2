@@ -28,6 +28,7 @@ extends Node3D
 ##   --scenario=fight|rear|queue|build|inspect|switch|rotate --zoom=N  stage one situation up close
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
+##   --look=bloom:0.75:4[,solar:1.2:2]      FACTION LOOK debug: a race's body size and lanes (Rules.FACTION_LOOK)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
 ##   --inspect=N                            force the ring open on node N (0.23.x radial redesign shots)
 ##   --tutorial=N                           start tutorial N (1 quick start ... 5 team play; one not built yet plays the quick start) straight away
@@ -252,6 +253,11 @@ func _ready() -> void:
 			SEAT_FACTIONS[HUMAN] = arg.substr(10)
 		elif arg.begins_with("--rival="):
 			SEAT_FACTIONS["B"] = arg.substr(8)
+		elif arg.begins_with("--look="):             # FACTION LOOK debug: <faction>:<size>[:<across>], comma-separated
+			for item in arg.substr(7).split(","):
+				var p := item.split(":")
+				if p.size() >= 2 and Rules.FACTION_LOOK.has(p[0]):
+					Rules.FACTION_LOOK[p[0]] = {"size": float(p[1]), "across": int(p[2]) if p.size() >= 3 else Rules.look_across(p[0])}
 		elif arg.begins_with("--player-name="):
 			player_name = arg.substr(14)
 		elif arg.begins_with("--focus="):
