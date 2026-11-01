@@ -56,7 +56,7 @@ var _drop_meshes := {}   # seat -> SphereMesh with the seat's goo
 var units: UnitView                  # classic mode (bridge combat OFF): Alpha 11 unit models
 var classic := false                # true this frame when drawing the classic unit look
 var vis: Dictionary = {}             # MapBuilder's node entries (main): the vat models the drops come out of
-var _spouts := {}                    # node id -> {"vn", "spouts", "rims", "lands", "centre", "plat_y"} (see vat_drop)
+var _spouts := {}                    # node id -> {"vn", "spouts", "rims", "lands", "centre", "plat_y", "back"} (see vat_drop)
 var _fog := PackedVector3Array()     # POWERS: this frame's rival Fog of War circles over this screen: (x, z, radius^2)
 var _no_fog := PackedVector3Array()   # (never filled: "no fog" for a line)
 
@@ -468,7 +468,8 @@ func _drop_for(sim: Sim, h: Dictionary) -> Dictionary:
 	var src: Dictionary = sim.nodes[h["route"][0]]
 	if src["streaming"].get("hid", -1) != h["id"] or float(src["streaming"].get("remaining", 0.0)) <= 0.0:
 		return NO_DROP
-	var d := vat_drop(src)
+	var p0: Vector3 = (h["pts"] as PackedVector3Array)[0] - (src["pos"] as Vector3)
+	var d := vat_drop(src, Rules.TWO_DOORS and p0.dot(Rules.front_dir()) < 0.0)   # TWO DOORS: it leaves by the back
 	if d.is_empty():
 		return NO_DROP
 	var remaining: float = src["streaming"]["remaining"]
@@ -482,11 +483,12 @@ const NO_DROP := {}                  # (shared, read-only)
 # the vat) and relays: from the door
 
 
-func vat_drop(n: Dictionary) -> Dictionary:
+func vat_drop(n: Dictionary, back := false) -> Dictionary:
 	## Where a vat drops its units from: the model's `Spout_0`, `Spout_1`, ... markers when it has them
 	## (the vat redesign), else the top of each tank found from its liquid (Scenery.tank_info), the
 	## blob overflowing the rim. {} while there is no vat to drop from - a relay, T4, a vat being built,
-	## or a model still rising after a tier-down.
+	## or a model still rising after a tier-down. `back` (TWO DOORS): the line leaves by the back door, so the
+	## blobs fall off the far side of the tanks and land there instead of in front.
 	var id: int = n["id"]
 	if vis.is_empty() or not vis.has(id) or n["build_kind"] != "":
 		return {}
@@ -505,6 +507,9 @@ func vat_drop(n: Dictionary) -> Dictionary:
 		var sp := PackedVector3Array()
 		var rims := PackedVector3Array()
 		var lands := PackedVector3Array()
+		var rims_b := PackedVector3Array()             # TWO DOORS: the same drops toward the back door
+		var lands_b := PackedVector3Array()
+		var back_dir := -Rules.front_dir()
 		var centre: Vector3 = c["centre"]
 		var marks := node.find_children("Spout_*", "Node3D", true, false)
 		if not marks.is_empty():
@@ -514,6 +519,8 @@ func vat_drop(n: Dictionary) -> Dictionary:
 				sp.append(g)
 				rims.append(g)                          # an outlet: it squeezes straight out
 				lands.append(_land(centre, g, float(c["plat_y"])))
+				rims_b.append(g)
+				lands_b.append(_land(centre, g, float(c["plat_y"]), back_dir))
 		else:
 			for mi in node.find_children("*", "MeshInstance3D", true, false):
 				var info := Scenery.tank_info((mi as MeshInstance3D).mesh, key)
@@ -527,30 +534,35 @@ func vat_drop(n: Dictionary) -> Dictionary:
 					sp.append(top)
 					rims.append(rim)
 					lands.append(_land(centre, rim, float(c["plat_y"])))
+					var rim_b: Vector3 = top + _out(centre, top, back_dir) * (float(t["r"]) * 1.2 + 0.25)
+					rims_b.append(rim_b)
+					lands_b.append(_land(centre, rim_b, float(c["plat_y"]), back_dir))
 				break
 		c["spouts"] = sp
 		c["rims"] = rims
 		c["lands"] = lands
+		c["back"] = {"vn": vn, "centre": centre, "plat_y": c["plat_y"], "spouts": sp, "rims": rims_b, "lands": lands_b}
 		_spouts[id] = c
 	if (c["spouts"] as PackedVector3Array).is_empty():
 		return {}
-	return c
+	return c["back"] if back else c
 
 
 const TANK_CAP := 0.95               # m from a tank's liquid top to the top of its cap (build_kit_2_0 vat_tank)
 
 
-static func _out(centre: Vector3, p: Vector3) -> Vector3:
+static func _out(centre: Vector3, p: Vector3, door := Vector3.ZERO) -> Vector3:
 	## The way a blob leaves a tank: outward from the vat and toward the camera side (the door's side),
-	## so the drop reads in front of the tanks rather than behind them.
+	## so the drop reads in front of the tanks rather than behind them. `door`: toward that door instead
+	## (TWO DOORS: a line leaving by the back door).
 	var out := p - centre
 	out.y = 0.0
 	out = out.normalized() if out.length() > 0.01 else Vector3.ZERO
-	return (out + Rules.front_dir() * 1.3).normalized()
+	return (out + (Rules.front_dir() if door == Vector3.ZERO else door) * 1.3).normalized()
 
 
-static func _land(centre: Vector3, rim: Vector3, plat_y: float) -> Vector3:
-	return Vector3(rim.x, plat_y + UnitView.BLOB_R * 0.3, rim.z) + _out(centre, rim) * UnitView.DROP_OUT
+static func _land(centre: Vector3, rim: Vector3, plat_y: float, door := Vector3.ZERO) -> Vector3:
+	return Vector3(rim.x, plat_y + UnitView.BLOB_R * 0.3, rim.z) + _out(centre, rim, door) * UnitView.DROP_OUT
 
 
 static func _shove(t: float) -> Array:

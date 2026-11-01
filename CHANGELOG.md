@@ -1,5 +1,24 @@
 # Ooze Syndicate 2.0 - changelog
 
+## Unreleased - branch ui-neon (2026-11-02, Daniele on 0.23.18: "upgrade badges not appearing, unit count HUD disappearing, some of the alert signs disappear")
+
+- **Counts never vanish in the Last Stand**: a warned node keeps its count badge (0.19.0 hid the whole badge when the falling sign replaced its round badge;
+  with a v3 ring a whole ring is warned at once, so 6-12 counts - your own home's included - and their relay !n / build / drop-order tags went with it).
+- **Neon alarm signs** (HudOverlay._draw_danger_symbols): the next node to fall RED (30 pt), the one after YELLOW, every other warned node GREY - still
+  visible, seconds always >= 12.5 pt (0.23.18's muted sign was a 0.55-alpha dull-red triangle, ~8 pt on a phone: it read as gone). Each sign is a neon hex
+  plate with its seconds and a warning beacon on top, glowing tube and inner glow, a slight flicker; the red one breathes; a sign that is new or changes tier
+  (grey -> yellow -> red) pulses for 1.5 s (three beats, a hex ring swelling out). Signs sit on the platform's rim clear of every badge.
+- **Upgrade chip** bigger and neon: a 34 pt neon hex in your seat colour with a double chevron (was an 18 px card, ~11 pt on a phone, in the faction accent),
+  on the platform's upper rim clear of the badges and signs; it pulses for 1.5 s when it lights up.
+- A warned node's badge no longer repeats the seconds ("▼n": the sign shows them), so a warned relay keeps its "!n" switch warning and a
+  build its timer there (in a tutorial lesson without the signs the "▼n" stays).
+- Light on phones: every sign and chip is one rect from one texture baked at match load (~24 ms on desktop; no shader). perf_check PHONE M-39:
+  stock draw calls 309 -> 286 (0.75 scale 310 -> 287), objects 572 -> 552; in the Last Stand (`--ff=245 / 250 / 256`, 12 warned) draw calls
+  416 / 402 / 395 -> 371 / 376 / 362, objects 667 / 644 / 698 -> 750 / 740 / 787 (budget 800; most of the rise is the 12 restored badges).
+- New `tests/hud_marks_check.tscn` (windowed): into the Last Stand on N-08 / N-28 / M-39, fails if any standing node has no count, a warned node has no
+  sign or the tiers are wrong (one red, at most one yellow), a sign is under 20 pt or on its badge, a new sign does not pulse, or a ready vat has no chip
+  >= 33 pt; `shots=<dir>` saves the Last Stand and a pulse sequence. 0.23.18 fails it (6 / 12 counts missing).
+
 ## 0.23.19 "Alpha 23" - 2026-11-02 (LIVE 2026-11-02 on Daniele's go after his phone test; hotfix; staged 2026-11-02)
 
 - **0.23.19 hotfix**: the board stays on screen when a phone turns or goes fullscreen mid-match (0.23.18's scaled 3D view refitted the camera before it

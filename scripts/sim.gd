@@ -1404,15 +1404,14 @@ func _build_path3(route: Array) -> Dictionary:
 		pts.append(p)
 		fast.append(f)
 	var brawl := not Rules.bridge_combat
-	var front := Rules.front_dir()
-	var a_front := atan2(front.z, front.x)
 	var ring: float = Rules.BRAWL_RING if brawl else Rules.ARC_R
 	var a0: Dictionary = nodes[route[0]]
 	var ex0 := exit_of(_edge_index(route[0], route[1]), route[0])
 	var d0 := ((ex0 - a0["pos"]) as Vector3).normalized()
 	if brawl:
-		add.call(a0["pos"] + front * Rules.EXIT_R, 1)
-		for p in _arc(a0["pos"], a_front, atan2(d0.z, d0.x), ring):
+		var a_exit := Rules.exit_angle(atan2(d0.z, d0.x))   # the front door (DOOR_EXITS: or the back, if nearer)
+		add.call(a0["pos"] + _door_dir(a_exit) * Rules.EXIT_R, 1)
+		for p in _arc(a0["pos"], a_exit, atan2(d0.z, d0.x), ring):
 			add.call(p, 1)
 	else:
 		add.call(a0["pos"] + d0 * Rules.EXIT_R, 1)
@@ -1448,9 +1447,10 @@ func _build_path3(route: Array) -> Dictionary:
 			add.call(ex_out, 1)
 			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		elif brawl:                                   # Alpha 11: round the ring to the front door, then in
-			for p in _arc(b["pos"], atan2(din.z, din.x), a_front, ring):
+			var a_door := Rules.entry_angle(atan2(din.z, din.x))   # TWO_DOORS: or the back door, if nearer
+			for p in _arc(b["pos"], atan2(din.z, din.x), a_door, ring):
 				add.call(p, 1)
-			add.call(b["pos"] + front * Rules.EXIT_R, 1)
+			add.call(b["pos"] + _door_dir(a_door) * Rules.EXIT_R, 1)
 		else:                                         # onto the platform up to the tower's footprint
 			add.call(b["pos"] + din * Rules.ARC_R, 1)
 	var cum := PackedFloat32Array([0.0])
@@ -1474,11 +1474,10 @@ func _build_path_legacy(route: Array) -> Dictionary:
 	var a: Dictionary = nodes[route[0]]
 	var d := (nodes[route[1]]["pos"] - a["pos"]).normalized() as Vector3
 	var brawl := not Rules.bridge_combat
-	var front := Rules.front_dir()
-	var a_front := atan2(front.z, front.x)
 	if brawl:                                       # Alpha 11: out of the front door, round the ring to the bridge
-		add.call(a["pos"] + front * Rules.EXIT_R, true)
-		for p in _arc(a["pos"], a_front, atan2(d.z, d.x), Rules.BRAWL_RING):
+		var a_exit := Rules.exit_angle(atan2(d.z, d.x))
+		add.call(a["pos"] + _door_dir(a_exit) * Rules.EXIT_R, true)
+		for p in _arc(a["pos"], a_exit, atan2(d.z, d.x), Rules.BRAWL_RING):
 			add.call(p, true)
 	else:
 		add.call(a["pos"] + d * Rules.EXIT_R, true)
@@ -1510,9 +1509,10 @@ func _build_path_legacy(route: Array) -> Dictionary:
 			# destination: straight onto the platform from this side, up to the tower's footprint -
 			# the whole platform is the node, every side is an entrance
 			if brawl:                                   # Alpha 11: round the ring to the front door, then in
-				for p in _arc(b["pos"], a_in, a_front, Rules.BRAWL_RING):
+				var a_door := Rules.entry_angle(a_in)     # TWO_DOORS: or the back door, if nearer
+				for p in _arc(b["pos"], a_in, a_door, Rules.BRAWL_RING):
 					add.call(p, true)
-				add.call(b["pos"] + front * Rules.EXIT_R, true)
+				add.call(b["pos"] + _door_dir(a_door) * Rules.EXIT_R, true)
 			else:
 				add.call(b["pos"] - d * Rules.ARC_R, true)
 	var cum := PackedFloat32Array([0.0])
@@ -1536,6 +1536,22 @@ func _curve_centre(n: Dictionary) -> Vector3:
 	## (+Y in the piece, the scene's -Z), turned by the piece's yaw. A right turn is the same piece crossed backwards.
 	var yaw := deg_to_rad(float(n.get("junction_yaw", 0.0)))
 	return (n["pos"] as Vector3) + Vector3(-sin(yaw), 0.0, -cos(yaw)) * curve_r(str(n.get("junction", "")))
+
+
+static func _door_dir(a_door: float) -> Vector3:
+	## The door at a_door: the front door is exactly Rules.front_dir() (one door = today's paths to the bit); TWO_DOORS'
+	## back door is its opposite.
+	var front := Rules.front_dir()
+	return front if is_equal_approx(a_door, atan2(front.z, front.x)) else -front
+
+
+func entry_door_dir(h: Dictionary) -> Vector3:
+	## BRAWL: the door a line enters its target by (views: the fight at the door) - the end of its path.
+	var pts: PackedVector3Array = h["pts"]
+	var n: Dictionary = nodes[h["target"]]
+	var d: Vector3 = pts[pts.size() - 1] - (n["pos"] as Vector3)
+	d.y = 0.0
+	return d.normalized() if d.length() > 0.01 else Rules.front_dir()
 
 
 func _arc(c: Vector3, a0: float, a1: float, r: float) -> Array:
