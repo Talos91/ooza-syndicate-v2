@@ -207,6 +207,42 @@ const RELAY_COOLDOWN_BY_KIND := {"rotation": 10.0}
 static func relay_cooldown(kind: String) -> float:
 	return float(RELAY_COOLDOWN_BY_KIND.get(kind, RELAY_COOLDOWN))
 
+
+# TWO DOORS (Daniele, 2026-11-02: "a success, promote it to the main game"; tried on proto3/4 since 2026-11-01): every BRAWL
+# platform has a second door opposite the front one (the camera-far / top side). An ARRIVING line goes round the ring to
+# whichever door is nearer from the deck it arrives on (ties: the front door), then in; a LEAVING line likewise comes out
+# of the door nearer its bridge (DOOR_EXITS). Only doors in AND out keep the half-turn maps exactly even (N-11 / 14 / 20 /
+# 22 / 24 / 28: seat A vs B 0.00 s, tests/door_probe.gd). Readout: a floor arrow at each door that lights while a line uses
+# it (DoorView). Static vars so test_sim can measure every reading; false = Alpha 11's single front door.
+static var TWO_DOORS := true
+
+
+# Lines also LEAVE by the nearer of the two doors toward their bridge; false = entry-only (exits by the front door).
+# No effect without TWO_DOORS.
+static var DOOR_EXITS := true
+
+
+static func exit_angle(a_out: float) -> float:
+	## BRAWL: the angle of the door a line leaves by toward the ring point at a_out. The front door unless both switches.
+	if TWO_DOORS and DOOR_EXITS:
+		return entry_angle(a_out)
+	var front := front_dir()
+	return atan2(front.z, front.x)
+
+
+static func entry_angle(a_in: float) -> float:
+	## BRAWL: the angle (round the platform centre) of the door an arriving line walks to from the ring point at a_in.
+	## One door: the front. TWO_DOORS: the nearer of front / back along the ring, ties to the front.
+	var front := front_dir()
+	var a_front := atan2(front.z, front.x)
+	if not TWO_DOORS:
+		return a_front
+	var a_back := wrapf(a_front + PI, -PI, PI)
+	if absf(wrapf(a_back - a_in, -PI, PI)) < absf(wrapf(a_front - a_in, -PI, PI)) - 0.001:
+		return a_back
+	return a_front
+
+
 const RELAY_MOVE := 1.4              # seconds the deck visibly moves/dissolves (its troops fell when it started)
 # RELAY V2 (the relay redo, Alpha 22 - Daniele 2026-09-28 "they good"; Models/2.0/structures_2_1/relay_v2.json +
 # build_relay_v2.py): one standard BUTTON PLATFORM per relay off the rim (Relay_Button_<Kind>_v2, the tap target),

@@ -66,6 +66,7 @@ var ais: Array = []
 var vis: Dictionary
 var hordes: HordeView
 var fx: Fx
+var door_view: DoorView             # TWO DOORS (Rules.TWO_DOORS): a floor arrow at both doors of every platform
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var forge_pulse: ForgePulse                        # a forge coming online: the owner's 2 s power-up wave
 var skill_fx: SkillFx                              # Skills 2.0 in the world: every cast, lasting effect and end
@@ -456,6 +457,10 @@ func _start_map(path: String) -> void:
 	combat = CombatFx.new()
 	add_child(combat)
 	combat.setup(self, sim, vis, fx)
+	if DoorView.wanted(sim):
+		door_view = DoorView.new()
+		add_child(door_view)
+		door_view.setup(sim)
 	forge_pulse = ForgePulse.new()
 	add_child(forge_pulse)
 	forge_pulse.setup(sim, vis, combat)
@@ -1805,6 +1810,8 @@ func _process(delta: float) -> void:
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
 	fx.sync(dt)
+	if door_view:
+		door_view.sync(dt)                        # TWO DOORS - the arrow of the door a line uses lights up
 	combat.sync(dt, cam)                          # after Fx: it scales the tier-down's rising model
 	skill_fx.sync(dt, cam)                        # after Fx: it hides a demolished deck, whose pieces fall here
 	forge_pulse.sync(dt, cam)                     # after both (it pumps the models) and the views (their glows)
