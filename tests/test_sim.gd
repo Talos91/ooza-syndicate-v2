@@ -21,6 +21,11 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 
 func _init() -> void:
+	if "--only=two_doors" in OS.get_cmdline_user_args():      # PROTO: TWO DOORS alone (quick)
+		_two_doors()
+		print("two_doors: %d failure(s)" % failures)
+		quit(1 if failures else 0)
+		return
 	if "--only=relays_proto" in OS.get_cmdline_user_args():   # RELAYS 3.0 PROTOTYPES alone (quick)
 		_relays_proto()
 		print("relays_proto: %d failure(s)" % failures)
@@ -1027,6 +1032,7 @@ func _init() -> void:
 	_powers_tests()
 	_catchup_tests()
 	_relays_proto()
+	_two_doors()
 	_ai_relays(mr, seats_r)
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
@@ -1161,6 +1167,10 @@ func _catchup_tests() -> void:
 # ------------------------------------------------------------------ 2026-09-28: the audit fix pass (audit-sim A1-A5, Daniele's rule fixes)
 func _audit_fixes() -> void:
 	# Core Meltdown against an allied store: the kills split by troop share, the node falls only at total 0
+	# (PROTO: TWO DOORS - the fixture casts 12 m before arrival and counts on the whole line being out by then; the top
+	# door's shorter walk on Two Piers casts it mid-emission, so the fixture keeps the one-door path it was built on)
+	var doors_was: bool = Rules.PROTO_TWO_DOORS
+	Rules.PROTO_TWO_DOORS = false
 	for c in [[200.0, 200.0, false], [30.0, 30.0, true]]:
 		var s := _tp({3: "A", 4: "B"}, {"A": "ember", "B": "null"}, {"A": 0, "B": 1, "C": 1})
 		_ready_skills(s)
@@ -1187,6 +1197,7 @@ func _audit_fixes() -> void:
 					and absf(float(s.nodes[1]["allies"]["C"]) - c0 * (1.0 - frac)) < 0.01
 					and absf(s.combat_losses.get("C", 0.0) - lost_c0 - c0 * frac) < 0.01,
 					"Core Meltdown: %.0f kills split by share over the owner's %.0f and the ally's %.0f stored" % [kills, b0, c0])
+	Rules.PROTO_TWO_DOORS = doors_was
 	# a split line's front does not drain its source (_split_front: no eject_left / ghost_left)
 	var sp := _tp()
 	sp.nodes[3]["units"] = 200.0
@@ -3362,3 +3373,110 @@ func _relays_proto_maps() -> void:
 		check(not kinds.is_empty() and s.hordes.all(func(h): return h["s"] >= 0.0 and h["s"] <= h["L"] + 0.01),
 				"%s: %s set up, 120 s of Expert vs Expert (prototype fires %d, captures %d)" % [f.get_basename(), str(kinds.keys()),
 				fires, s.events.filter(func(e): return e["type"] == "capture").size()])
+
+
+func _door_send(m: Dictionary, seats: Dictionary, a: int, b: int, two: bool) -> Dictionary:
+	## PROTO: TWO DOORS - a 400-unit send a -> b (neighbours) with the switch as given: its path, the time until it starts
+	## pouring in (state "absorb"), and whether it took b.
+	Rules.PROTO_TWO_DOORS = two
+	var s := Sim.new()
+	s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null"}, 1)
+	s.nodes[a]["owner"] = "A"
+	s.nodes[a]["units"] = 400.0
+	s.nodes[b]["owner"] = ""
+	s.nodes[b]["units"] = 5.0
+	var h := s.send(a, b, 1.0)
+	var t := run_until(s, func(): return h["state"] == "absorb", 30.0, 0.02)
+	var path_l: float = (h["cum"] as PackedFloat32Array)[-1] if h.has("cum") else -1.0
+	run_until(s, func(): return s.nodes[b]["owner"] == "A", 15.0, 0.02)
+	var end: Vector3 = (h["pts"] as PackedVector3Array)[-1]
+	return {"t": t, "L": path_l, "route": h["route"], "end": end - (s.nodes[b]["pos"] as Vector3), "took": s.nodes[b]["owner"] == "A",
+			"garrison": s.nodes[b]["units"]}
+
+
+func _two_doors() -> void:
+	## PROTO: TWO DOORS (Rules.PROTO_TWO_DOORS, proto line): an arriving line takes the nearer door along the ring (ties: the
+	## front); exits keep the front door; switched off, every path is today's (front door in and out).
+	var was: bool = Rules.PROTO_TWO_DOORS
+	var front := Rules.front_dir()
+	var a_front := atan2(front.z, front.x)
+	var a_back := wrapf(a_front + PI, -PI, PI)
+	var m := MapBuilder.load_map("res://maps4/N-24-k-crossing.json")
+	var seats := {}
+	for st in m["seats"]["1v1"]:
+		seats[int(st["node"])] = str(st["seat"])
+	var probe := Sim.new()
+	probe.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null"}, 1)
+	var top := []                                      # [a, b]: the deck from a meets b's ring on the far (top) side
+	var bottom := []                                   # ... on the camera (front) side
+	for ei in range(probe.edges.size()):
+		var e: Dictionary = probe.edges[ei]
+		if e.get("plaza", false) or str(probe.nodes[e["a"]]["relay"]) != "" or str(probe.nodes[e["b"]]["relay"]) != "":
+			continue
+		for pair in [[e["a"], e["b"]], [e["b"], e["a"]]]:
+			var b: Dictionary = probe.nodes[pair[1]]
+			if b["node_kind"] == "junction" or probe.nodes[pair[0]]["node_kind"] == "junction" or seats.has(pair[1]) or seats.has(pair[0]):
+				continue
+			var din: Vector3 = probe.exit_of(ei, pair[1]) - (b["pos"] as Vector3)
+			var a_in := atan2(din.z, din.x)
+			var to_back := absf(wrapf(a_back - a_in, -PI, PI))
+			var to_front := absf(wrapf(a_front - a_in, -PI, PI))
+			if top.is_empty() and to_back < to_front - 0.6:
+				top = pair
+			if bottom.is_empty() and to_front < to_back - 0.6:
+				bottom = pair
+	check(not top.is_empty() and not bottom.is_empty(), "two doors: N-24 has a deck meeting a ring at the top %s and one at the bottom %s" % [str(top), str(bottom)])
+	if not top.is_empty():
+		var one := _door_send(m, seats, top[0], top[1], false)
+		var two := _door_send(m, seats, top[0], top[1], true)
+		check(one["route"].size() == 2 and two["route"].size() == 2, "two doors: the top-side send goes straight %s" % str(two["route"]))
+		check((one["end"] as Vector3).dot(front) > 1.0 and (two["end"] as Vector3).dot(front) < -1.0,
+				"two doors: one door enters at the front, two doors enter by the top door (end dot front %.2f -> %.2f)" % [
+				(one["end"] as Vector3).dot(front), (two["end"] as Vector3).dot(front)])
+		var saved: float = one["t"] - two["t"]
+		var want: float = (one["L"] - two["L"]) / Rules.BRAWL_SPEED
+		check(two["L"] < one["L"] - 1.0 and saved > 0.15 and absf(saved - want) < 0.1,
+				"two doors: the top door is shorter: %.2f m -> %.2f m, arrives %.2f s sooner (path says %.2f s)" % [one["L"], two["L"], saved, want])
+		check(one["took"] and two["took"], "two doors: once in, the fight is the same - 400 against the neutral takes it both ways (garrison left %.1f / %.1f)" % [
+				one["garrison"], two["garrison"]])
+	if not bottom.is_empty():
+		var one_b := _door_send(m, seats, bottom[0], bottom[1], false)
+		var two_b := _door_send(m, seats, bottom[0], bottom[1], true)
+		check(absf(one_b["L"] - two_b["L"]) < 0.001 and absf(one_b["t"] - two_b["t"]) < 0.001,
+				"two doors: a front-side arrival is unchanged (%.2f m, %.2f s)" % [two_b["L"], two_b["t"]])
+	# switched off: every path on N-24 and Two Piers (legacy builder) leaves and enters by the front door - today's rule
+	Rules.PROTO_TWO_DOORS = false
+	var bad := 0
+	var n_paths := 0
+	for path in ["res://maps4/N-24-k-crossing.json", "res://maps/004-two-piers.json"]:
+		var mm := MapBuilder.load_map(path)
+		var ss := {}
+		if mm.has("seats") and mm["seats"] is Dictionary and mm["seats"].has("1v1"):
+			for st in mm["seats"]["1v1"]:
+				ss[int(st["node"])] = str(st["seat"])
+		else:
+			ss = {3: "A", 4: "B"}
+		var sm := Sim.new()
+		sm.setup(mm, MapBuilder.layout(mm), ss, {"A": "null", "B": "null"}, 1)
+		for e in sm.edges:
+			for pair in [[e["a"], e["b"]], [e["b"], e["a"]]]:
+				if sm.nodes[pair[0]]["node_kind"] == "junction" or sm.nodes[pair[1]]["node_kind"] == "junction":
+					continue
+				var pth: Dictionary = sm.build_path(pair)
+				var pts: PackedVector3Array = pth["pts"]
+				var door_a: Vector3 = (sm.nodes[pair[0]]["pos"] as Vector3) + front * Rules.EXIT_R
+				var door_b: Vector3 = (sm.nodes[pair[1]]["pos"] as Vector3) + front * Rules.EXIT_R
+				n_paths += 1
+				if pts[0] != door_a or pts[pts.size() - 1] != door_b:
+					bad += 1
+	check(bad == 0 and n_paths > 20, "two doors OFF: all %d paths leave and enter by the front door exactly (today's rule), %d off" % [n_paths, bad])
+	Rules.PROTO_TWO_DOORS = true
+	var bad_exit := 0                                  # switched on: exits still leave by the front door
+	for e in probe.edges:
+		if probe.nodes[e["a"]]["node_kind"] == "junction" or probe.nodes[e["b"]]["node_kind"] == "junction":
+			continue
+		var p0: Vector3 = (probe.build_path([e["a"], e["b"]])["pts"] as PackedVector3Array)[0]
+		if p0 != (probe.nodes[e["a"]]["pos"] as Vector3) + front * Rules.EXIT_R:
+			bad_exit += 1
+	check(bad_exit == 0, "two doors ON: every exit still leaves by the front door (%d off)" % bad_exit)
+	Rules.PROTO_TWO_DOORS = was

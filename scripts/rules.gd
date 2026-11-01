@@ -226,6 +226,39 @@ const RELAYS_PROTO := {
 }
 
 
+# PROTO: TWO DOORS (Daniele, 2026-11-01; proto line only, never in the release line - its reading is false): every BRAWL
+# platform gets a second door opposite the front one (the camera-far / top side). An ARRIVING line goes round the ring to
+# whichever door is nearer from the deck it arrives on (ties: the front door), then in. Exits keep the front door. A static
+# var so test_sim can measure both readings; the release line has no switch (= false).
+static var PROTO_TWO_DOORS := true
+
+
+# Exits through the nearer door too (open question for Daniele; off = exits keep the front door, as briefed). Measured by
+# tests/door_probe.gd --exits=1; the proto build ships it OFF.
+static var PROTO_TWO_DOORS_EXITS := false
+
+
+static func exit_angle(a_out: float) -> float:
+	## BRAWL: the angle of the door a line leaves by toward the ring point at a_out. The front door unless both switches.
+	if PROTO_TWO_DOORS and PROTO_TWO_DOORS_EXITS:
+		return entry_angle(a_out)
+	var front := front_dir()
+	return atan2(front.z, front.x)
+
+
+static func entry_angle(a_in: float) -> float:
+	## BRAWL: the angle (round the platform centre) of the door an arriving line walks to from the ring point at a_in.
+	## One door: the front. PROTO_TWO_DOORS: the nearer of front / back along the ring, ties to the front.
+	var front := front_dir()
+	var a_front := atan2(front.z, front.x)
+	if not PROTO_TWO_DOORS:
+		return a_front
+	var a_back := wrapf(a_front + PI, -PI, PI)
+	if absf(wrapf(a_back - a_in, -PI, PI)) < absf(wrapf(a_front - a_in, -PI, PI)) - 0.001:
+		return a_back
+	return a_front
+
+
 static func is_proto(kind: String) -> bool:
 	## A Relays 3.0 prototype kind (test maps only).
 	return RELAYS_PROTO.has(kind)

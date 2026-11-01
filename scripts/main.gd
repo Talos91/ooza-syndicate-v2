@@ -67,6 +67,7 @@ var vis: Dictionary
 var hordes: HordeView
 var fx: Fx
 var proto_view: ProtoRelayView       # RELAYS 3.0 PROTOTYPES: only on a map that has one (the P test maps)
+var door_view: DoorView             # PROTO: TWO DOORS (Rules.PROTO_TWO_DOORS): both doors marked on every platform
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var forge_pulse: ForgePulse                        # a forge coming online: the owner's 2 s power-up wave
 var skill_fx: SkillFx                              # Skills 2.0 in the world: every cast, lasting effect and end
@@ -461,6 +462,10 @@ func _start_map(path: String) -> void:
 	combat = CombatFx.new()
 	add_child(combat)
 	combat.setup(self, sim, vis, fx)
+	if DoorView.wanted(sim):
+		door_view = DoorView.new()
+		add_child(door_view)
+		door_view.setup(sim)
 	forge_pulse = ForgePulse.new()
 	add_child(forge_pulse)
 	forge_pulse.setup(sim, vis, combat)
@@ -1808,6 +1813,8 @@ func _process(delta: float) -> void:
 	fx.sync(dt)
 	if proto_view:
 		proto_view.sync(dt)                       # after Fx: it hides the ferry's deck, sinks a lift's closed decks
+	if door_view:
+		door_view.sync(dt)                        # PROTO: TWO DOORS - the door a line pours in by flares
 	combat.sync(dt, cam)                          # after Fx: it scales the tier-down's rising model
 	skill_fx.sync(dt, cam)                        # after Fx: it hides a demolished deck, whose pieces fall here
 	forge_pulse.sync(dt, cam)                     # after both (it pumps the models) and the views (their glows)
