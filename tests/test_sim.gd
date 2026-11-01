@@ -3377,7 +3377,8 @@ func _relays_proto() -> void:
 	_skip_warning(lf2, 4)
 	check(lf2.fall_losses.get("B", 0.0) > 0.5, "lift: a line on a deck leaving the level falls (%.1f)" % lf2.fall_losses.get("B", 0.0))
 
-	# ---- TILT: P-95, the centre (4) tips toward exits [3, 1, 5, 7] in turn
+	# ---- TILT: P-95, the centre (4) tips toward exits [3, 1, 5, 7] in turn. Round 3 (Daniele, tilt-what = "redirect"):
+	# what steps on it while tipped goes to the node it points at; the rest of the line keeps its way; own +10 % / rival -10 %
 	var tl := _proto_sim("tilt")
 	tl.nodes[4]["owner"] = "A"
 	tl.nodes[4]["units"] = 25.0
@@ -3390,29 +3391,62 @@ func _relays_proto() -> void:
 		var pr: Array = tl._platform_range(he, 4)
 		return not pr.is_empty() and he["s"] >= pr[0] + 1.0, 12.0)
 	var g0: float = tl.nodes[4]["units"]
+	var b_total: float = he["units"]
 	check(tl.fire_relay(4), "tilt: the owner fires it")
 	_skip_warning(tl, 4)
-	check(he in tl.hordes and he["route"] == [5, 4, 1] and he["target"] == 1, "tilt: every line on it slides out the next exit as a new order (%s)" % str(he.get("route", [])))
+	tl.step(0.5)
+	var kids := tl.hordes.filter(func(x): return int(x.get("tilt_of", -1)) == 4 and x["owner"] == "B")
+	check(he.has("tilt_catch") and he["route"] == [5, 4, 3] and kids.size() == 1 and kids[0]["route"] == [5, 4, 1] and kids[0]["units"] > 0.5,
+			"tilt (round 3): the line is held at the platform and what steps on pours down the exit to 1 (%s)" % str(kids[0]["route"] if not kids.is_empty() else []))
 	check(absf(tl.nodes[4]["units"] - g0) < 0.5 and tl.nodes[4]["owner"] == "A", "tilt: the garrison stays (%.1f -> %.1f)" % [g0, tl.nodes[4]["units"]])
 	check(tl.tilt_next_exit(4) == 5, "tilt: the next fire tips toward the next exit (5)")
-	var n1: float = tl.nodes[1]["units"]
-	# round 2: it stays tipped RELAYS_PROTO.tilt.hold s - an attack walking onto it meanwhile slides out too
 	var hold: float = float(Rules.RELAYS_PROTO["tilt"]["hold"])
 	check(tl.nodes[4]["relay_phase"] == "moving" and absf(float(tl.nodes[4]["relay_move"]) - hold) < 0.001 and tl.proto_tag(4).begins_with("SLIDE"),
-			"tilt (round 2): tipped for %.0f s (%s)" % [hold, tl.proto_tag(4)])
+			"tilt: tipped for %.0f s (%s)" % [hold, tl.proto_tag(4)])
 	var ha := tl.send(5, 4, 0.5)                      # B attacks the tilt node itself while it is tipped
-	run_until(tl, func(): return (ha["route"] as Array).size() > 2 or not (ha in tl.hordes) or tl.nodes[4]["relay_phase"] != "moving", hold)
-	check(ha["route"] == [5, 4, 1] and tl.nodes[4]["owner"] == "A", "tilt: an attack arriving during the hold slides out the lit exit (%s)" % str(ha["route"]))
+	run_until(tl, func(): return ha.has("tilt_catch") or not (ha in tl.hordes) or tl.nodes[4]["relay_phase"] != "moving", hold)
+	check(ha.has("tilt_catch") and tl.nodes[4]["owner"] == "A", "tilt: an attack arriving during the hold is redirected too")
 	run_until(tl, func(): return tl.nodes[4]["relay_phase"] != "moving", hold)
-	tl.nodes[5]["units"] = 60.0
-	var hz := tl.send(5, 3, 0.3)
-	run_until(tl, func():
-		var pr: Array = tl._platform_range(hz, 4)
-		return not (hz in tl.hordes) or (not pr.is_empty() and hz["s"] > pr[1]), 12.0)
-	check(hz["route"] == [5, 4, 3], "tilt: back level, lines cross it as ordered (%s)" % str(hz["route"]))
-	run_until(tl, func(): return not (he in tl.hordes), 15.0)
-	check(tl.fall_losses.get("B", 0.0) < 0.01 and (tl.nodes[1]["owner"] == "B" or tl.nodes[1]["units"] < n1 - 0.5),
-			"tilt: the slid line reaches that neighbour (node 1: %s, %.1f -> %.1f)" % [tl.nodes[1]["owner"], n1, tl.nodes[1]["units"]])
+	var b_now := 0.0
+	for x in tl.hordes:
+		if x["owner"] == "B" and x != ha and not (x in [ha]) and (int(x.get("tilt_of", -1)) == 4 or x == he or (x["route"] as Array) == [5, 4, 1]):
+			b_now += x["units"]
+	check(not (he in tl.hordes) or not he.has("tilt_catch"), "tilt: the hold over, nothing stays held (%s)" % str(he["route"]))
+	check(b_now + float(tl.nodes[1]["units"] if tl.nodes[1]["owner"] == "B" else 0.0) <= b_total + 0.01 and tl.fall_losses.get("B", 0.0) < 0.01,
+			"tilt: nobody falls, nothing is made (B %.1f in play of %.1f)" % [b_now, b_total])
+	# a long line: only what steps on during the hold is redirected, the rest keeps its way
+	var tl2 := _proto_sim("tilt")
+	tl2.nodes[4]["owner"] = "A"
+	tl2.nodes[4]["relay_index"] = 1
+	tl2.nodes[5]["units"] = 900.0
+	var hlong := tl2.send(5, 3, 1.0)
+	run_until(tl2, func():
+		var pr: Array = tl2._platform_range(hlong, 4)
+		return not pr.is_empty() and hlong["s"] >= pr[0] + 1.0, 12.0)
+	tl2.fire_relay(4)
+	_skip_warning(tl2, 4)
+	run_until(tl2, func(): return tl2.nodes[4]["relay_phase"] != "moving", hold + 1.0)
+	var kid2 := tl2.hordes.filter(func(x): return (x["route"] as Array) == [5, 4, 1])
+	tl2.step(0.5)
+	check(hlong in tl2.hordes and not hlong.has("tilt_catch") and hlong["route"] == [5, 4, 3] and hlong["units"] > 30.0 and not kid2.is_empty(),
+			"tilt: a long line - %.0f redirected to 1, the rest (%.0f) walks on to 3 after the hold" % [kid2[0]["units"] if not kid2.is_empty() else -1.0, hlong["units"]])
+	# the arrival: own redirected units attack x1.1; rival units redirected into the owner's node attack x0.9
+	var tc: Dictionary = Rules.RELAYS_PROTO["tilt"]
+	check(absf(float(tc["own"]) - 1.1) < 0.001 and absf(float(tc["rival"]) - 0.9) < 0.001, "tilt: own x%.1f, rival x%.1f" % [tc["own"], tc["rival"]])
+	var lost := []
+	for case in [["A", ""], ["A", "A"], ["B", "A"]]:      # [the arriving line's owner, its tilt_by]; the target is the other seat's
+		var tm := _proto_sim("tilt")
+		tm.nodes[4]["owner"] = "A"
+		tm.nodes[0]["owner"] = "B" if case[0] == "A" else "A"
+		tm.nodes[0]["units"] = 50.0
+		var hx := {"id": 999, "owner": case[0], "faction": "null"}
+		if case[1] != "":
+			hx["tilt_by"] = case[1]
+		var before: float = tm.nodes[0]["units"]
+		tm._arrive(tm.nodes[0], hx, 20.0)
+		lost.append(before - float(tm.nodes[0]["units"]))
+	check(absf(lost[1] - lost[0] * 1.1) < 0.05 and absf(lost[2] - lost[0] * 0.9) < 0.05,
+			"tilt: 20 redirected units kill %.1f (own, x1.1) / %.1f (rival into A's node, x0.9) vs %.1f plain" % [lost[1], lost[2], lost[0]])
 	_relays_proto_ai()
 	_relays_proto_maps()
 

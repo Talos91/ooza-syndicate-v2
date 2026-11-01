@@ -16,7 +16,7 @@ extends Node3D
 ##   lift      (round 2) the platform rides up / down (RELAYS_PROTO.lift.rise view metres) on a piston; the closed level's
 ##             decks sunk, standing back and dimmed, the open ones with a lit strip; an UP / DOWN badge over the node
 ##   tilt      the platform tips toward the exit and stays tipped for the hold (round 2), chevrons running down that exit;
-##             the next exit's deck lit (bright in the warning)
+##             the next exit's deck lit (bright in the warning); round 3 (redirect): +10 % / -10 % over each redirected line
 ##   all       a pointer over the node: the slide, the flow, the target, up / down, the next exit (ghosted toward the
 ##             next state during the warning)
 ## Round 3 (Daniele's proto4 verdict, 2026-11-02): the ferry's HOLD (steady green lamps, glowing rails, HELD n over the deck),
@@ -884,12 +884,14 @@ func _tilt(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink: boo
 
 
 func _speed_tags() -> void:
+	## (round 3: also +10 % / -10 % over a TILT-redirected line - its attack at the node it was sent to)
 	## Conveyor: x2.25 (with the flow) / x0.3 (against) over every line with bodies on a belt (relay or plain).
 	var seen := {}
 	var cfg: Dictionary = Rules.RELAYS_PROTO["conveyor"]
 	for h in sim.hordes:
 		var sense: Array = sim.conveyor_sense(h)
-		if int(sense[0]) == 0:
+		var tm := sim.tilt_mult(h, sim.nodes[int(h["target"])]) if h.has("tilt_by") else 1.0   # round 3: a TILT-redirected line
+		if int(sense[0]) == 0 and is_equal_approx(tm, 1.0):
 			continue
 		var hid: int = h["id"]
 		seen[hid] = true
@@ -897,9 +899,13 @@ func _speed_tags() -> void:
 		if l == null:
 			l = _label(64)
 			_tags[hid] = l
-		var with := int(sense[0]) > 0
-		l.text = "x" + _num(float(cfg["with"] if with else cfg["against"]))
-		l.modulate = Rules.state_color("cAB") if with else Rules.state_color("warn")
+		if not is_equal_approx(tm, 1.0):              # its attack at the node it was sent to: +10 % / -10 %
+			l.text = "%+d %%" % int(roundf((tm - 1.0) * 100.0))
+			l.modulate = Rules.state_color("cAB") if tm > 1.0 else Rules.state_color("warn")
+		else:
+			var with := int(sense[0]) > 0
+			l.text = "x" + _num(float(cfg["with"] if with else cfg["against"]))
+			l.modulate = Rules.state_color("cAB") if with else Rules.state_color("warn")
 		l.position = (Sim.sample(h, h["s"])[0] as Vector3) + Vector3(0, 2.6, 0)
 	for hid in _tags.keys():
 		if not seen.has(hid):

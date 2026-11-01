@@ -1792,6 +1792,19 @@ func _process(delta: float) -> void:
 				var mine_l: bool = lseat == HUMAN or (lseat != "" and sim.allied(lseat, HUMAN))
 				hud.callout_node(int(ev["node"]), "YOUR LAUNCHER MISFIRES" if mine_l else ("LAUNCHER SCRAMBLED" if by == HUMAN else "LAUNCHER MISFIRE"),
 						"good" if by == HUMAN else "warn", by)
+			"tilt_slide":                              # RELAYS 3.0 round 3: a TILT redirects a line to the node it points at
+				var ts := str(ev.get("seat", ""))
+				var tby := str(sim.nodes[int(ev["node"])]["owner"])
+				var tex := int(ev.get("exit", -1))
+				var mine_t: bool = ts == HUMAN or sim.allied(ts, HUMAN)
+				if mine_t or tby == HUMAN:
+					var bonus := ""
+					if tby != "" and (ts == tby or sim.allied(ts, tby)):
+						bonus = " · +10 %"
+					elif tex >= 0 and sim.nodes[tex]["owner"] != "" and (sim.nodes[tex]["owner"] == tby or sim.allied(sim.nodes[tex]["owner"], tby)):
+						bonus = " · -10 %"
+					hud.callout_node(int(ev["node"]), ("YOUR LINE REDIRECTED" if mine_t else "ENEMY LINE REDIRECTED") + bonus,
+							"good" if (mine_t and bonus != " · -10 %") or (not mine_t) else "warn", tby)
 			"ferry_hold":                              # RELAYS 3.0 round 3: the owner holds the moving bridge in line
 				var fs := str(ev.get("seat", ""))
 				var mine_h: bool = fs == HUMAN or sim.allied(fs, HUMAN)

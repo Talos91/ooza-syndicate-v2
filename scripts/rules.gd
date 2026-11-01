@@ -237,13 +237,15 @@ static func relay_cooldown(kind: String) -> float:
 #             or a relay whose map sets "switch": false (it never flips)
 #   launcher  faster: lines pour into the air x`pour`, `flight` 2.0 -> 1.1 s, `land` 1.5 -> 0.5 s, the aim steps every
 #             `cycle` 10 -> 4 s; a rival's Relay Hack / Rewire makes it MISFIRE `misfire` s (throws into the void, lost)
-#   tilt      rule unchanged (tilt-what unanswered); the lag fixed (the platform left MapBatch's static slots)
+#   tilt      REDIRECT (Daniele, Hub Desk tilt-what): units stepping on it while tipped go to the node it points at, the rest
+#             of the line keeps its way; the owner's redirected units attack x`own` 1.1, rivals sent into the owner's node
+#             x`rival` 0.9. The lag fixed (the platform left MapBatch's static slots)
 const RELAYS_PROTO := {
 	"ferry": {"cooldown": 20.0, "survive": 0.5, "slide": 1.0, "away": 0.6, "side": 7.5, "hold": 4.0},   # side: the view's metres out of line
 	"conveyor": {"cooldown": 5.0, "with": 2.25, "against": 0.3, "move": 1.4},
 	"launcher": {"cooldown": 30.0, "armed": 8.0, "flight": 1.1, "land": 0.5, "reach": 3, "cycle": 4.0, "pour": 3.0, "misfire": 6.0},
 	"lift": {"cooldown": 10.0, "move": 1.4, "rise": 2.6},   # rise: the view's metres per level (🎨's model: 2.6)
-	"tilt": {"cooldown": 10.0, "move": 1.4, "hold": 6.0},
+	"tilt": {"cooldown": 10.0, "move": 1.4, "hold": 6.0, "own": 1.1, "rival": 0.9},   # round 3: redirect (own / rival attack)
 }
 
 

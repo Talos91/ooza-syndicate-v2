@@ -1024,7 +1024,7 @@ func _step_relays(dt: float) -> void:
 					else:
 						_launcher_catch(n, dt)
 				elif n["relay"] == "tilt":
-					_tilt_slide(n, int(n.get("tilt_exit", -1)))   # round 2: tipped for the hold, everyone who steps on slides
+					_tilt_slide(n, int(n.get("tilt_exit", -1)), dt)   # tipped for the hold: what steps on is redirected
 				if n["relay_t"] <= 0.0:
 					_relay_apply(n)
 		if n["relay"] == "launcher" and n["relay_phase"] == "":
@@ -1141,6 +1141,8 @@ func _relay_apply(n: Dictionary) -> void:
 	n["moving_edges"] = []
 	if n["relay"] == "launcher":
 		_launcher_release(n)
+	if n["relay"] == "tilt":
+		_tilt_release(n)
 	if n["relay"] == "ferry":
 		_ferry_unhold(n)
 	n["relay_phase"] = ""
@@ -1740,7 +1742,7 @@ func step(dt: float) -> void:
 	_step_breaks(dt)
 	_check_missing_decks()
 	for h in hordes:
-		if h.has("launch"):                           # RELAYS 3.0: parked on an armed launcher
+		if h.has("launch") or h.has("tilt_catch"):   # RELAYS 3.0: parked on an armed launcher / a tipped tilt
 			continue
 		if h["state"] == "move" and not h.get("blocked", false):
 			var here := sample(h, h["s"])
@@ -2288,7 +2290,9 @@ func _arrive(n: Dictionary, h: Dictionary, x: float) -> void:
 		_store_ally(n, owner, x)
 		return
 	if not Rules.bridge_combat:
+		_att_mult = tilt_mult(h, n) if h.has("tilt_by") else 1.0   # RELAYS 3.0 round 3: a TILT-redirected line
 		_land_classic(n, owner, x)
+		_att_mult = 1.0
 		return
 	n["siege"][owner] = n["siege"].get(owner, 0.0) + x
 	if not n["siege_dir"].has(owner):
@@ -2311,7 +2315,7 @@ func _land_classic(n: Dictionary, seat: String, x: float) -> void:
 	## garrison reaches zero the survivors take the node. Nothing sits outside as a siege.
 	## Team modes (GAME-RULES sec11, 0.18.10): the attackers fight the whole garrison - the owner's troops
 	## and every ally's stored troops - whose stats mix by troop share; the losses split by troop ratio.
-	var att: float = attack_of(seat)
+	var att: float = attack_of(seat) * _att_mult
 	var hp_att: float = stat(seat, "health")
 	var d_seat: String = n["owner"]
 	var total: float = garrison_total(n)
@@ -5475,6 +5479,7 @@ var _ferry_edges := {}               # ferry deck edge index -> its ferry node i
 var _conv_edges := {}                # conveyor deck edge index -> its conveyor node id
 var flights: Array = []              # launcher throws in the air: {seat, faction, units, left, from, to, t0, land, end}
 var _ferry_tally := {}               # horde id -> {node, edge, seat, ok, fell, shown} (the FERRY n / m CROSSED readout)
+var _att_mult := 1.0                 # round 3: the arriving line's TILT attack multiplier while _land_classic runs
 var _belt_edges := {}                # round 3: a plain belt deck (no relay) -> 0 flowing A -> B (its from -> to), 1 B -> A
 var _ferry_plain := {}               # round 3: a plain moving-bridge deck (no relay; _ferry_edges -1) -> its clock record
 
@@ -6166,32 +6171,108 @@ func _lift_riders(n: Dictionary, closing: Array) -> void:
 		fx_events.append({"type": "lift_ride", "node": id, "hid": h["id"], "seat": h["owner"]})
 
 
-# TILT: the motion's start slides every line on the platform (any owner; open point 3) out the exit the tower shows, as a
-# new order to that neighbour; the garrison stays. A closed exit deck is a missing deck: the slid line walks off its lip.
-func _tilt_slide(n: Dictionary, ex: int) -> void:
-	## Round 2: called when the tip starts and every step of the hold - a line already leaving by `ex` is left alone.
+# TILT (round 3, Daniele 2026-11-02, Hub Desk tilt-what = "redirect"): while the platform is tipped (RELAYS_PROTO.tilt.hold
+# s) every unit that steps on it is sent to the node it points at (its exit neighbour), whoever owns it - only the units on
+# the platform while it is tipped; the rest of the line keeps its way. A line whose head is on the platform is held at its
+# edge and pours down the exit at the platform's rate into a redirected line (one per line, "tilt_by" = the tilt's owner);
+# when the hold ends what is left walks on as ordered. Into a friendly node the redirected units reinforce, into an enemy
+# node they attack: the tilt owner's (and allies') redirected units attack x RELAYS_PROTO.tilt.own (1.1), rival units
+# redirected into a node the tilt owner (or an ally) holds attack x .rival (0.9). The garrison stays.
+func _tilt_slide(n: Dictionary, ex: int, dt := 0.0) -> void:
 	if ex < 0:
 		return
 	var id: int = n["id"]
+	var by: String = str(n["owner"])
 	for h in hordes.duplicate():
-		if not (h in hordes) or h.has("launch"):
-			continue
-		var pr := _platform_range(h, id)
-		if pr.is_empty() or h["s"] < pr[0] or h["s"] > pr[1]:
+		if not (h in hordes) or h.has("launch") or h.has("tilt_of"):
 			continue
 		var route: Array = h["route"]
-		var new_route: Array = route.slice(0, route.find(id) + 1) + [ex]
-		if new_route == route:
-			continue                                      # already leaving by that exit
-		_reroute_keep(h, new_route)
-		var pr2 := _platform_range(h, id)
-		if not pr2.is_empty():
-			h["s"] = clampf(h["s"], pr2[0], pr2[1])
-		h["state"] = "move"
-		h["slid"] = time
-		fx_events.append({"type": "tilt_slide", "node": id, "exit": ex, "hid": h["id"], "seat": h["owner"]})
-		events.append({"t": time, "type": "tilt_slide", "node": id, "seat": h["owner"], "units": h["units"],
-				"by": str(n.get("relay_by", n["owner"]))})
+		var k := route.find(id)
+		if k < 0:
+			continue
+		if k + 1 < route.size() and int(route[k + 1]) == ex and route.size() == k + 2:
+			h["tilt_by"] = by                           # already going there: sent there all the same
+			continue
+		if not h.has("tilt_catch"):
+			var pr := _platform_range(h, id)
+			if pr.is_empty() or h["s"] < pr[0] or h["s"] > pr[1]:
+				continue
+			h["tilt_catch"] = id                         # held at the platform's edge while it is tipped
+			h["s"] = pr[0] if int(route[0]) != id else h["s"]
+			h["state"] = "move"
+		if dt <= 0.0:
+			continue
+		var len := chain_length(h)
+		var rate: float = Rules.move_speed() * Rules.platform_mult() * h["units"] / maxf(len, 0.5)
+		var x: float = minf(h["units"], maxf(rate, Rules.POUR_MIN_RATE) * dt)
+		if x <= 0.0:
+			continue
+		var c := _horde(int(h.get("tilt_child", -1)))
+		if c.is_empty():
+			c = _tilt_child(h, n, ex)
+		h["units"] -= x
+		c["units"] = float(c["units"]) + x
+		c["ordered"] = float(c["ordered"]) + x
+		c["start_units"] = maxf(float(c["start_units"]), float(c["units"]))
+		if h["units"] <= 0.001 and not h["streaming"]:
+			hordes.erase(h)
+
+
+func _tilt_child(h: Dictionary, n: Dictionary, ex: int) -> Dictionary:
+	## The redirected part of line `h`: a new line on h's way up to the tilt node, then down the exit to `ex`.
+	var id: int = n["id"]
+	var route: Array = h["route"]
+	var f: Dictionary = h.duplicate()
+	f["id"] = _next_id
+	_next_id += 1
+	f["units"] = 0.0
+	f["ordered"] = 0.0
+	f["start_units"] = 1.0
+	f["streaming"] = false
+	f["fcut"] = 0.0
+	f["pour"] = false
+	f["pour_lip"] = -1.0
+	f["pour_k"] = 0.0
+	for key in ["pending_loss", "eject_left", "tilt_catch", "tilt_child", "launch", "conv"]:
+		f.erase(key)
+	if f.has("ghost_left"):
+		f["ghost_left"] = 0.0
+	_set_route(f, route.slice(0, route.find(id) + 1) + [ex])
+	var pr := _platform_range(f, id)
+	f["s"] = float(pr[0]) if not pr.is_empty() else float(h["s"])
+	f["state"] = "move"
+	f["tilt_of"] = id
+	f["tilt_by"] = str(n["owner"])
+	f["slid"] = time
+	hordes.append(f)
+	h["tilt_child"] = f["id"]
+	fx_events.append({"type": "tilt_slide", "node": id, "exit": ex, "hid": f["id"], "seat": h["owner"]})
+	events.append({"t": time, "type": "tilt_slide", "node": id, "seat": h["owner"], "units": h["units"],
+			"by": str(n.get("relay_by", n["owner"]))})
+	return f
+
+
+func _tilt_release(n: Dictionary) -> void:
+	## The hold is over: what is left of the held lines walks on as ordered; the redirected lines go on to their node.
+	for h in hordes:
+		if int(h.get("tilt_catch", -1)) == n["id"]:
+			h.erase("tilt_catch")
+			h.erase("tilt_child")
+		if int(h.get("tilt_of", -1)) == n["id"]:
+			h.erase("tilt_of")
+
+
+func tilt_mult(h: Dictionary, n: Dictionary) -> float:
+	## Round 3: the attack multiplier of a redirected line arriving at node n (1.0 for any other line).
+	var by := str(h.get("tilt_by", ""))
+	if by == "":
+		return 1.0
+	var cfg: Dictionary = Rules.RELAYS_PROTO["tilt"]
+	if h["owner"] == by or allied(h["owner"], by):
+		return float(cfg["own"])
+	if n["owner"] != "" and (n["owner"] == by or allied(n["owner"], by)):
+		return float(cfg["rival"])
+	return 1.0
 
 
 func tilt_next_exit(id: int) -> int:
