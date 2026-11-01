@@ -483,9 +483,9 @@ const FACTIONS := {
 # to add variety to how the race appears"). Looks only, no rule: "size" multiplies a body's width (UnitView.UNIT_SIZE,
 # the flung bodies, Scenery.RESIDENT_SIZE), "across" is the lanes of a column (Alpha 11: 3); the lane spacing scales with
 # size, so a smaller race in more lanes keeps about the same column width. The models are fitted by width, so a tall model
-# stays tall (the v3 Solar egg). Defaults = today's look; Daniele picks the values. Debug: --look=bloom:0.75:4
+# stays tall (the v3 Solar egg). Daniele picks the values (2026-11-02: Bloom 0.75 x 4 lanes). Debug: --look=bloom:0.75:4
 static var FACTION_LOOK := {
-	"vex": {"size": 1.0, "across": 3}, "null": {"size": 1.0, "across": 3}, "bloom": {"size": 1.0, "across": 3},
+	"vex": {"size": 1.0, "across": 3}, "null": {"size": 1.0, "across": 3}, "bloom": {"size": 0.75, "across": 4},
 	"ember": {"size": 1.0, "across": 3}, "solar": {"size": 1.0, "across": 3},
 }
 
