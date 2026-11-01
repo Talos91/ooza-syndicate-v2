@@ -1,5 +1,18 @@
 # Ooze Syndicate 2.0 - changelog
 
+## Unreleased - branch `ui-quick` (2026-11-01, Daniele's backlog A; UI only, no rule change, no version bump)
+
+- **Bridges easier to tap** (Daniele: "bridges are sometimes hard to click"): the deck skills' tap band (Scorch, Mire, Anchor, Demolish, Backwash, Sever;
+  SkillDock._deck_at) is at least 44 pt across on a phone (Rules.DECK_HIT_PT; was ~37 pt at most, 30 px x 1.15), invisible, the deck looks the same; the extra
+  reach never takes a tap that sits on a node's platform. Probe `tests/deck_tap_probe.tscn`: median band A-01 37 -> 43 pt, M-39 30 -> 33 pt, M-57 32 -> 35 pt
+  (the narrowest decks are capped by a neighbouring deck or platform, unchanged).
+- **Last Stand danger signs tiered** (HudOverlay._draw_danger_symbols): with a whole ring warned, only the NEXT node to fall pulses at full size, the one after it
+  is medium and steady, every other warned node is muted (small, low alpha, no pulse) until its turn; the "NODE n FALLS IN s" line is unchanged.
+- **SETUP > ADVANCED**: the LAST STAND and ABILITIES switches moved out of 03 SETUP's MATCH OPTIONS row into their own page (`show_setup_advanced`, BACK -> SETUP)
+  with a line on what each does and RESET TO DEFAULTS while anything is off; SETUP keeps HIDDEN COUNTS and an ADVANCED button with the two switches' readout
+  (lit while off-default). Defaults unchanged (both ON), the saved values are the same Rules.last_stand / Rules.abilities_on; the room lobby's switches untouched.
+  test_ui_nav / test_ui_sweep walk the new page.
+
 ## 0.23.16 "Alpha 23" - 2026-10-28 (LIVE 2026-10-28, straight to live: Daniele's Ooze Desk answers)
 
 - **Forge costs 40** (was 20; Rules.FORGE_COST 200 sim), the build buttons read it from Sim.build_cost.

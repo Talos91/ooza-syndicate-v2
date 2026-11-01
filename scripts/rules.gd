@@ -221,6 +221,8 @@ const RELAY_MIN_SEP := 25.97         # json min_separation_deg_from_any_bridge =
                                      # a smaller gap moves the pad out to CLEAR / sin(gap / 2) and stretches its Strut
 const RELAY_HIT_PT := 44.0           # the button's tap disc on a phone, points across (Apple's minimum; tests/phone_fit)
 const RELAY_HIT_PAD := 1.15          # the disc is at least the pad's projected radius x this (desktop / close-ups)
+const DECK_HIT_PT := 44.0            # a deck's tap band for the deck skills on a phone, points across (SkillDock._deck_at; 2026-11-01,
+                                     # Daniele: "bridges are sometimes hard to click"); invisible - the deck keeps its look
 const RELAY_GHOST := Color(0.85, 0.78, 1.0, 0.28)       # OS_Ghost: the neutral violet floor (the Pier_Ghost_v2 fallback)
 const RELAY_GHOST_EDGE := Color(0.92, 0.88, 1.0)        # OS_Ghost_Edge: its bright frame
 # v2g (Daniele: "the ghost should have also different colour so even as ghost you can see what is switch and what is
