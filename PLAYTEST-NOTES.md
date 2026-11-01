@@ -1,5 +1,8 @@
 # Playtest notes
 
+## 2026-11-01 - Daniele's items answered in 0.23.18 (live)
+- "bridges are sometimes hard to click" -> deck tap band >= 44 pt; desktop shots soft -> perf-ios phone scale 0.75; 15 % slower trial (speed-15); Desk answers: ultimates rework, Very Last Stand tie-break, E maps in the pool.
+
 ## 2026-10-27 / 28 - Daniele's items answered in 0.23.14 + 0.23.15 (live)
 - "on IOS it shows no background and looks broken" -> 0.23.14: the board draws on the sky's canvas on iOS, canvas capped 2x, compact menu for Safari's
   short landscape (checked in WebKit at 568x320 .. 932x430, not on a real iPhone).

@@ -1,6 +1,6 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.23.18 "Alpha 23" - 2026-11-01 (staging: phone rendering, speed-15 trial, the E maps, UI batch)
+## 0.23.18 "Alpha 23" - 2026-11-01 (LIVE 2026-11-01 on Daniele's go; staged 2026-11-01: phone rendering, speed-15 trial, the E maps, UI batch)
 
 - **speed-15** (staging trial, Daniele 2026-11-01): BRAWL unit production and movement 15 % slower - Rules.BRAWL_TRIAL_15 0.85 on BRAWL_SPEED
   (5.7 -> 4.8 m/s) and vat PROD (1.0 / 1.6 / 2.4 / 3.5 -> 0.85 / 1.36 / 2.04 / 2.98 shown /s; neutral regrowth follows); door rate unchanged, so bodies
