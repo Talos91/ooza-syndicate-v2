@@ -228,19 +228,21 @@ const RELAYS_PROTO := {
 
 # PROTO: TWO DOORS (Daniele, 2026-11-01; proto line only, never in the release line - its reading is false): every BRAWL
 # platform gets a second door opposite the front one (the camera-far / top side). An ARRIVING line goes round the ring to
-# whichever door is nearer from the deck it arrives on (ties: the front door), then in. Exits keep the front door. A static
-# var so test_sim can measure both readings; the release line has no switch (= false).
+# whichever door is nearer from the deck it arrives on (ties: the front door), then in; with PROTO_DOOR_EXITS a LEAVING
+# line likewise comes out of the door nearer its bridge. Static vars so test_sim can measure every reading; the release
+# line has no switch (= false).
 static var PROTO_TWO_DOORS := true
 
 
-# Exits through the nearer door too (open question for Daniele; off = exits keep the front door, as briefed). Measured by
-# tests/door_probe.gd --exits=1; the proto build ships it OFF.
-static var PROTO_TWO_DOORS_EXITS := false
+# Lines also LEAVE by the nearer of the two doors toward their bridge (🎛️ 2026-11-01: only entry + exit doors keep the
+# half-turn maps exactly even - tests/door_probe.gd). True on the proto line; false = PROTO_TWO_DOORS entry-only (exits
+# by the front door). No effect without PROTO_TWO_DOORS.
+static var PROTO_DOOR_EXITS := true
 
 
 static func exit_angle(a_out: float) -> float:
 	## BRAWL: the angle of the door a line leaves by toward the ring point at a_out. The front door unless both switches.
-	if PROTO_TWO_DOORS and PROTO_TWO_DOORS_EXITS:
+	if PROTO_TWO_DOORS and PROTO_DOOR_EXITS:
 		return entry_angle(a_out)
 	var front := front_dir()
 	return atan2(front.z, front.x)

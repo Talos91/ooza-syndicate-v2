@@ -399,7 +399,9 @@ func _init() -> void:
 		sim17c.setup(rem_map, rem_pos, {5: "A", 6: "B"}, {"A": "null", "B": "ember"}, 1)
 		sim17c.demolished[5] = 999999.0                   # edge "4-0": node 4's bypass is gone
 		sim17c.demolished[7] = 999999.0                   # edge "2-4" (m1): its other remote deck too
+		# (PROTO: TWO DOORS - with door exits the Veteran's lines walk less and it won the whole match before node 4)
 		sim17c.nodes[5]["units"] = 500.0
+		sim17c.nodes[6]["units"] = 5000.0                 # B's home holds: the check is about node 4, not about winning first
 		check(sim17c.find_route(5, 4).is_empty(), "node 4 is unreachable right now (m1: only edge 8 (m2) would reach it, and it is closed)")
 		var ai := SeatAI.new("A", 2.0, level)
 		var fired_m2 := false
@@ -643,8 +645,11 @@ func _init() -> void:
 	var hally := sim31.send(a_home, ally_home, 1.0)
 	check(not hally.is_empty(), "A can send to an ally's node")
 	run_until(sim31, func(): return not (hally in sim31.hordes), 40.0)
-	check(sim31.nodes[ally_home]["owner"] == ally and sim31.nodes[ally_home]["units"] > before_ally + 50.0,
-			"sending to an ally reinforces it, never captures it")
+	# (PROTO: TWO DOORS - the arriving troops are stored as allies (n["allies"]); "units" grew past +50 only through the
+	# ally's own production over a 10 s+ walk, which the top door's shorter walk no longer gives)
+	var stored_a: float = float(sim31.nodes[ally_home].get("allies", {}).get("A", 0.0))
+	check(sim31.nodes[ally_home]["owner"] == ally and sim31.nodes[ally_home]["units"] + stored_a > before_ally + 50.0,
+			"sending to an ally reinforces it, never captures it (%.0f of A's troops stored there)" % stored_a)
 	var ais_t := []
 	for s in tseats.values():
 		ais_t.append(SeatAI.new(s, 2.0, "Standard"))
@@ -3375,10 +3380,11 @@ func _relays_proto_maps() -> void:
 				fires, s.events.filter(func(e): return e["type"] == "capture").size()])
 
 
-func _door_send(m: Dictionary, seats: Dictionary, a: int, b: int, two: bool) -> Dictionary:
+func _door_send(m: Dictionary, seats: Dictionary, a: int, b: int, two: bool, exits := false) -> Dictionary:
 	## PROTO: TWO DOORS - a 400-unit send a -> b (neighbours) with the switch as given: its path, the time until it starts
-	## pouring in (state "absorb"), and whether it took b.
+	## pouring in (state "absorb"), and whether it took b. `exits`: Rules.PROTO_DOOR_EXITS for this send.
 	Rules.PROTO_TWO_DOORS = two
+	Rules.PROTO_DOOR_EXITS = exits
 	var s := Sim.new()
 	s.setup(m, MapBuilder.layout(m), seats, {"A": "null", "B": "null"}, 1)
 	s.nodes[a]["owner"] = "A"
@@ -3391,13 +3397,16 @@ func _door_send(m: Dictionary, seats: Dictionary, a: int, b: int, two: bool) -> 
 	run_until(s, func(): return s.nodes[b]["owner"] == "A", 15.0, 0.02)
 	var end: Vector3 = (h["pts"] as PackedVector3Array)[-1]
 	return {"t": t, "L": path_l, "route": h["route"], "end": end - (s.nodes[b]["pos"] as Vector3), "took": s.nodes[b]["owner"] == "A",
+			"start": (h["pts"] as PackedVector3Array)[0] - (s.nodes[a]["pos"] as Vector3),
 			"garrison": s.nodes[b]["units"]}
 
 
 func _two_doors() -> void:
 	## PROTO: TWO DOORS (Rules.PROTO_TWO_DOORS, proto line): an arriving line takes the nearer door along the ring (ties: the
-	## front); exits keep the front door; switched off, every path is today's (front door in and out).
+	## front); with PROTO_DOOR_EXITS a leaving line comes out of the door nearer its bridge; PROTO_DOOR_EXITS off keeps
+	## exits at the front door; switched off, every path is today's (front door in and out).
 	var was: bool = Rules.PROTO_TWO_DOORS
+	var was_exits: bool = Rules.PROTO_DOOR_EXITS
 	var front := Rules.front_dir()
 	var a_front := atan2(front.z, front.x)
 	var a_back := wrapf(a_front + PI, -PI, PI)
@@ -3471,12 +3480,55 @@ func _two_doors() -> void:
 					bad += 1
 	check(bad == 0 and n_paths > 20, "two doors OFF: all %d paths leave and enter by the front door exactly (today's rule), %d off" % [n_paths, bad])
 	Rules.PROTO_TWO_DOORS = true
-	var bad_exit := 0                                  # switched on: exits still leave by the front door
+	Rules.PROTO_DOOR_EXITS = false
+	var bad_exit := 0                                  # entry only: exits still leave by the front door
 	for e in probe.edges:
 		if probe.nodes[e["a"]]["node_kind"] == "junction" or probe.nodes[e["b"]]["node_kind"] == "junction":
 			continue
 		var p0: Vector3 = (probe.build_path([e["a"], e["b"]])["pts"] as PackedVector3Array)[0]
 		if p0 != (probe.nodes[e["a"]]["pos"] as Vector3) + front * Rules.EXIT_R:
 			bad_exit += 1
-	check(bad_exit == 0, "two doors ON: every exit still leaves by the front door (%d off)" % bad_exit)
+	check(bad_exit == 0, "two doors, entry only (PROTO_DOOR_EXITS off): every exit still leaves by the front door (%d off)" % bad_exit)
+	# PROTO_DOOR_EXITS: a line whose bridge leaves its node on the far side comes out of the top door, sooner
+	var top_out := []
+	for ei in range(probe.edges.size()):
+		var e: Dictionary = probe.edges[ei]
+		if e.get("plaza", false) or str(probe.nodes[e["a"]]["relay"]) != "" or str(probe.nodes[e["b"]]["relay"]) != "":
+			continue
+		for pair in [[e["a"], e["b"]], [e["b"], e["a"]]]:
+			if not top_out.is_empty() or seats.has(pair[0]) or seats.has(pair[1]):
+				continue
+			if probe.nodes[pair[0]]["node_kind"] == "junction" or probe.nodes[pair[1]]["node_kind"] == "junction":
+				continue
+			var a_node: Dictionary = probe.nodes[pair[0]]
+			var dout: Vector3 = probe.exit_of(ei, pair[0]) - (a_node["pos"] as Vector3)
+			var a_out := atan2(dout.z, dout.x)
+			if absf(wrapf(a_back - a_out, -PI, PI)) < absf(wrapf(a_front - a_out, -PI, PI)) - 0.6:
+				top_out = pair
+	check(not top_out.is_empty(), "door exits: N-24 has a deck leaving a ring at the top %s" % str(top_out))
+	if not top_out.is_empty():
+		var front_out := _door_send(m, seats, top_out[0], top_out[1], true, false)
+		var top_exit := _door_send(m, seats, top_out[0], top_out[1], true, true)
+		check((front_out["start"] as Vector3).dot(front) > 1.0 and (top_exit["start"] as Vector3).dot(front) < -1.0,
+				"door exits: entry only leaves by the front door, PROTO_DOOR_EXITS by the top door (start dot front %.2f -> %.2f)" % [
+				(front_out["start"] as Vector3).dot(front), (top_exit["start"] as Vector3).dot(front)])
+		var saved_o: float = front_out["t"] - top_exit["t"]
+		var want_o: float = (front_out["L"] - top_exit["L"]) / Rules.BRAWL_SPEED
+		check(top_exit["L"] < front_out["L"] - 1.0 and saved_o > 0.15 and absf(saved_o - want_o) < 0.1,
+				"door exits: the top exit is shorter: %.2f m -> %.2f m, arrives %.2f s sooner (path says %.2f s)" % [
+				front_out["L"], top_exit["L"], saved_o, want_o])
+		check(front_out["took"] and top_exit["took"], "door exits: the fight at the target is the same - it takes the node both ways")
+	Rules.PROTO_TWO_DOORS = true                       # both on: every path is half-turn fair on N-24 (seat A's walk to
+	Rules.PROTO_DOOR_EXITS = true                      # each node = seat B's walk to its image)
+	var ha := -1
+	var hb := -1
+	for id in seats:
+		if seats[id] == "A":
+			ha = id
+		else:
+			hb = id
+	var la: float = (probe.build_path(probe.find_route(ha, hb))["cum"] as PackedFloat32Array)[-1]
+	var lb: float = (probe.build_path(probe.find_route(hb, ha))["cum"] as PackedFloat32Array)[-1]
+	check(absf(la - lb) < 0.01, "two doors in and out: N-24 home to home is even (A %.2f m, B %.2f m)" % [la, lb])
 	Rules.PROTO_TWO_DOORS = was
+	Rules.PROTO_DOOR_EXITS = was_exits

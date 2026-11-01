@@ -41,6 +41,9 @@ func _run() -> void:
 		if a == "doors=0":
 			Rules.PROTO_TWO_DOORS = false
 			tag = "one"
+		if a == "exits=0":
+			Rules.PROTO_DOOR_EXITS = false
+			tag += "_entryonly"
 	var main_script = load("res://scripts/main.gd")
 	main_script.relaunch = {"faction": "null", "mode": "1v1", "map": MAP}
 	var inst: Node = (load(MAIN) as PackedScene).instantiate()
@@ -63,4 +66,12 @@ func _run() -> void:
 	await _shot(inst, "%s/doors_%s_2_pouring_in.png" % [out, tag])
 	await _step(inst, 1.5)
 	await _shot(inst, "%s/doors_%s_3_taken.png" % [out, tag])
+	# leaving: node 8's deck to 2 leaves its ring on the far side - with PROTO_DOOR_EXITS the line comes out of the top door
+	sim.nodes[8]["owner"] = "A"
+	sim.nodes[8]["units"] = 300.0
+	MapBuilder.apply_owner(inst.vis[8]["parts"], "A")
+	var ho := sim.send(8, 2, 1.0)
+	print("exit route ", ho.get("route"), " L ", ho.get("L"), " start ", (ho["pts"] as PackedVector3Array)[0] - (sim.nodes[8]["pos"] as Vector3))
+	await _step(inst, 1.6)
+	await _shot(inst, "%s/doors_%s_4_leaving.png" % [out, tag])
 	get_tree().quit(0)

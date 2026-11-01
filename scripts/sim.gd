@@ -1442,7 +1442,7 @@ func _build_path3(route: Array) -> Dictionary:
 	var ex0 := exit_of(_edge_index(route[0], route[1]), route[0])
 	var d0 := ((ex0 - a0["pos"]) as Vector3).normalized()
 	if brawl:
-		var a_exit := Rules.exit_angle(atan2(d0.z, d0.x))   # the front door (PROTO_TWO_DOORS_EXITS: or the back, if nearer)
+		var a_exit := Rules.exit_angle(atan2(d0.z, d0.x))   # the front door (PROTO_DOOR_EXITS: or the back, if nearer)
 		add.call(a0["pos"] + _door_dir(a_exit) * Rules.EXIT_R, 1)
 		for p in _arc(a0["pos"], a_exit, atan2(d0.z, d0.x), ring):
 			add.call(p, 1)

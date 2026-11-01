@@ -3,10 +3,12 @@ extends Node3D
 ## PROTO: TWO DOORS (Rules.PROTO_TWO_DOORS, proto line only) - the look of the two doors on every BRAWL platform.
 ## PLACEHOLDER GEOMETRY until a kit piece: an arch (two posts and a lintel) facing out of each door, and a chevron on the
 ## ring pointing in, in the owner's colour (neutral: pale). Proto_Door_Front faces the camera, Proto_Door_Back the far side.
-## Readout: a door flares while a line pours in through it, so the player sees which door a line took.
+## Readout: a door flares while a line pours in through it or (PROTO_DOOR_EXITS) streams out of it, so the player sees
+## which door a line took.
 ## Created by main.gd only while the switch is on; synced every frame after CombatFx.
 
-const ARCH_R := 3.15                 # m from the node centre to the arch (between the tank bottoms and the ring)
+const ARCH_R := 3.15                 # m from the node centre to the front arch (between the tank bottoms and the ring)
+const ARCH_R_BACK := 4.0             # the top door's arch stands further out so the tower does not hide it from the camera
 const CHEV_R := Rules.BRAWL_RING     # the chevron sits on the ring the lines walk
 const POST_H := 1.7
 const SPAN := 1.9                    # m between the posts
@@ -28,10 +30,10 @@ func setup(s: Sim) -> void:
 	for n in sim.nodes:
 		if n["node_kind"] == "junction":
 			continue
-		_doors[n["id"]] = [_door(n, front, "Proto_Door_Front"), _door(n, -front, "Proto_Door_Back")]
+		_doors[n["id"]] = [_door(n, front, "Proto_Door_Front", ARCH_R), _door(n, -front, "Proto_Door_Back", ARCH_R_BACK)]
 
 
-func _door(n: Dictionary, d: Vector3, label: String) -> Dictionary:
+func _door(n: Dictionary, d: Vector3, label: String, arch_r: float) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "%s_%d" % [label, n["id"]]
 	add_child(root)
@@ -47,7 +49,7 @@ func _door(n: Dictionary, d: Vector3, label: String) -> Dictionary:
 		var p := MeshInstance3D.new()
 		p.mesh = post
 		p.material_override = mat
-		p.position = Vector3(sx * SPAN * 0.5, POST_H * 0.5, ARCH_R)
+		p.position = Vector3(sx * SPAN * 0.5, POST_H * 0.5, arch_r)
 		p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(p)
 	var lintel := MeshInstance3D.new()
@@ -55,7 +57,7 @@ func _door(n: Dictionary, d: Vector3, label: String) -> Dictionary:
 	lm.size = Vector3(SPAN + 0.22, 0.22, 0.22)
 	lintel.mesh = lm
 	lintel.material_override = mat
-	lintel.position = Vector3(0, POST_H, ARCH_R)
+	lintel.position = Vector3(0, POST_H, arch_r)
 	lintel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(lintel)
 	var chev := MeshInstance3D.new()                  # a flat arrow on the ring, pointing in toward the door
@@ -84,6 +86,14 @@ func sync(dt: float) -> void:
 		if h["state"] != "absorb" or h["units"] <= 0.0:
 			continue
 		busy["%d:%d" % [h["target"], 0 if sim.entry_door_dir(h).dot(front) > 0.0 else 1]] = true
+	for n in sim.nodes:                                # a line streaming out: the door its path starts at
+		if n["streaming"].is_empty():
+			continue
+		var hs := sim._horde(n["streaming"]["hid"])
+		if hs.is_empty():
+			continue
+		var p0: Vector3 = (hs["pts"] as PackedVector3Array)[0] - (n["pos"] as Vector3)
+		busy["%d:%d" % [n["id"], 0 if p0.dot(front) > 0.0 else 1]] = true
 	for id in _doors:
 		var n: Dictionary = sim.nodes[id]
 		var gone: bool = sim.collapsed.get(id, false)
