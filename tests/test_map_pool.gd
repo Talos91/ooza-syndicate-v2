@@ -68,7 +68,10 @@ func _init() -> void:
 		check(MapPool.WITHHELD_MODES.get(code, []).has("1v1") and not MapPool.mode_offered(code, "1v1"), "%s: never offered in 1v1" % code)
 		check(not paths.any(func(p): return p.get_file().begins_with(code)), "%s: not on 02 BATTLEFIELD / the random rematch" % code)
 		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)), "%s: still baked and in MapPool.all()" % code)
-	check(MapPool.mode_offered("N-01", "1v1") and paths.any(func(p): return p.get_file().begins_with("N-01")), "an unbiased 1v1 map (N-01) is still offered")
+	if Rules.proto_debug:   # proto build: the picker lists only the prototype maps (MapPool.PROTO)
+		check(paths.size() == MapPool.PROTO.size() and paths.all(func(p): return p.get_file().substr(0, 4) in MapPool.PROTO), "proto build: the pool is exactly MapPool.PROTO")
+	else:
+		check(MapPool.mode_offered("N-01", "1v1") and paths.any(func(p): return p.get_file().begins_with("N-01")), "an unbiased 1v1 map (N-01) is still offered")
 	check(not paths.any(func(p): return p.get_file().substr(0, 4) in MapPool.TUTORIAL_ONLY), "no tutorial map on 02 BATTLEFIELD")
 	for map_path in paths:
 		var sm := MapBuilder.load_map(map_path)
