@@ -76,6 +76,7 @@ var monster_icon: MonsterIcon           # 0.19.2 spec H1: floats above your read
 var rotate_hint: Label
 var debug_button: Button
 var chat_button: Button
+var _chat_dot: Control                    # Alpha 24: the unread count on the chat button (the pack's notification dot)
 var _chat_poll := 0.0
 var debug_panel: PanelContainer
 var margins := Vector4(16, 12, 16, 12)
@@ -226,13 +227,9 @@ func _seat_groups() -> Array:
 func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
 	var chip := PanelContainer.new()
 	chip.custom_minimum_size = Vector2(TOP_CHIP_W, TOP_CHIP_H) * ui_scale
-	var st := StyleBoxFlat.new()
-	st.bg_color = Color(0.05, 0.07, 0.09, 0.8 if mine else 0.62)
-	st.border_color = Rules.seat_color(seat)
-	st.set_border_width_all(int((2 if mine else 1) * ui_scale))
-	st.set_corner_radius_all(int(8 * ui_scale))
-	st.set_content_margin_all(2 * ui_scale)
-	chip.add_theme_stylebox_override("panel", st)
+	# Alpha 24: the pack's score pill - the node badge frame (B7) with the seat's colour on its rim, yours the most solid
+	chip.add_theme_stylebox_override("panel", HudSkin.frame_box(Rules.seat_color(seat), 0.95 if mine else 0.72, ui_scale, 3.0 * ui_scale))
+	chip.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", int(4 * ui_scale))
@@ -245,14 +242,14 @@ func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
 	# TOP_NAME_W; AI seats keep the emblem alone. Yours is the highlighted chip, first on the left.
 	var who: Dictionary = main.seat_who(seat) if main.has_method("seat_who") else {}
 	if bool(who.get("human", false)) and str(who.get("name", "")) != "":
-		var nm := text_label(str(who["name"]), 15, Color("f2fbff") if mine else Color("c8e6ee"))
+		var nm := text_label(str(who["name"]), 15, UiKit.INK if mine else UiKit.MUTED)
 		nm.clip_text = true
 		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		nm.custom_minimum_size = Vector2(minf(TOP_NAME_W, UI_FONT.get_string_size(nm.text, HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * ui_scale)).x / ui_scale + 2.0) * ui_scale, 0)
 		nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(nm)
 		chip.custom_minimum_size.x += nm.custom_minimum_size.x + 4.0 * ui_scale
-	var lbl := text_label("000", 15)
+	var lbl := text_label("000", 15, UiKit.INK)
 	lbl.add_theme_font_override("font", SYMBOL_FONT)      # monospace: the digits never shift the chip
 	lbl.custom_minimum_size = Vector2(28 * ui_scale, 0)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -304,14 +301,14 @@ func setup(m: Node3D) -> void:
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		l.clip_text = true
 		l.add_theme_constant_override("outline_size", 3)
-		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		l.add_theme_color_override("font_outline_color", HudSkin.outline())
 		badge.add_child(l)
-		var sub := text_label("", BADGE_SUB_FONT, Color("c8e6ee"))
+		var sub := text_label("", BADGE_SUB_FONT, HudSkin.sub_ink())
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		sub.clip_text = true
 		sub.add_theme_constant_override("outline_size", 2)  # crisp on the see-through box
-		sub.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		sub.add_theme_color_override("font_outline_color", HudSkin.outline())
 		badge.add_child(sub)
 		var emblem := seat_emblem("", BADGE_EMBLEM)     # classic: Alpha 11's faction emblem under the count;
 		emblem.visible = false                          # the owner's emblem in the count's place where it is hidden
@@ -323,8 +320,8 @@ func setup(m: Node3D) -> void:
 		build_bar.add_theme_stylebox_override("fill", bb_fill)
 		build_bar.add_theme_stylebox_override("background", sb_bg)
 		var inset := 7.0 * ui_scale                     # clear of the rounded corners
-		build_bar.position = Vector2(inset, _badge_px.y - 4.0 * ui_scale)
-		build_bar.size = Vector2(_badge_px.x - 2.0 * inset, 2.0 * ui_scale)
+		build_bar.position = Vector2(inset, _badge_px.y - 6.5 * ui_scale)   # Alpha 24: the pack's pill bar (BadgeLayer: B19 / B20)
+		build_bar.size = Vector2(_badge_px.x - 2.0 * inset, 4.0 * ui_scale)
 		badge.add_child(build_bar)
 		_badge_model.add_child(badge)
 		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "build": build_bar, "owner": "?",
@@ -342,7 +339,8 @@ func setup(m: Node3D) -> void:
 	# highlighted, team modes grouped with a wider gap between groups. TUTORIAL: "topbar" gates the
 	# whole bar, "strength" the chips alone (clock-only in the early lessons, as before).
 	top_panel = PanelContainer.new()
-	style_panel(top_panel, accent)
+	top_panel.add_theme_stylebox_override("panel", UiTheme.box("A1", 0.2 * ui_scale, Color.WHITE, 6.0 * ui_scale))   # Alpha 24: the pack's panel
+	top_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(top_panel)
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", int(10 * ui_scale))
@@ -350,7 +348,7 @@ func setup(m: Node3D) -> void:
 	top_left = HBoxContainer.new()
 	top_left.add_theme_constant_override("separation", int(TOP_CHIP_GAP * ui_scale))
 	bar.add_child(top_left)
-	stats_label = text_label("00:00", 22)
+	stats_label = text_label("00:00", 22, UiKit.INK)
 	stats_label.add_theme_font_override("font", SYMBOL_FONT)   # monospace digits: the clock never shifts
 	stats_label.custom_minimum_size = Vector2(TOP_CLOCK_W * ui_scale, 0)
 	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -377,47 +375,54 @@ func setup(m: Node3D) -> void:
 	status_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_glow.visible = false
 	root.add_child(status_glow)
-	status_label = text_label("", 18, Color("ffb0b0"))
+	status_label = text_label("", 18, HudSkin.ink(Color("ff6a6a")) if HudSkin.light() else Color("ffb0b0"))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Alpha 24: the line sits on the pack's track pill (B19), as wide as its words (_fit_status); empty, nothing shows
+	status_label.add_theme_stylebox_override("normal", HudSkin.pill(0.22 * ui_scale, 14.0 * ui_scale, 2.0 * ui_scale))
+	status_label.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(status_label)
 	catchup_tag = PanelContainer.new()                 # CATCH-UP: your side only (the HUD shows no rival modifiers)
-	var cs := badge_style(accent)
-	cs.set_content_margin_all(4 * ui_scale)
+	var cs := HudSkin.frame_box(accent, 0.9, ui_scale, 4.0 * ui_scale)
 	cs.content_margin_left = 10 * ui_scale
 	cs.content_margin_right = 10 * ui_scale
 	catchup_tag.add_theme_stylebox_override("panel", cs)
 	catchup_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	catchup_tag.add_child(text_label("CATCH-UP +%d %%" % int(round((Rules.CATCHUP_PRODUCTION - 1.0) * 100.0)), 18, accent))
+	catchup_tag.add_child(text_label("CATCH-UP +%d %%" % int(round((Rules.CATCHUP_PRODUCTION - 1.0) * 100.0)), 18, HudSkin.ink(accent)))
 	catchup_tag.modulate.a = 0.0
 	catchup_tag.visible = false
 	root.add_child(catchup_tag)
-	pause_button = button("PAUSE", pause_menu, 100)
-	UiSkin.button(pause_button, main.SEAT_FACTIONS[human])
-	root.add_child(pause_button)
-	# MUSIC (Daniele 2026-09-29/30): left of PAUSE, same height - the top-right button's twin, a drawn note glyph
+	# Alpha 24: PAUSE and MUSIC are the pack's square icon buttons (B6 with the D pause / music icons), the same height as
+	# before (phones: 78 x ui_scale, >= 44 pt)
 	var pb_h: float = (52.0 if not mobile else 78.0) * ui_scale
+	pause_button = button("", pause_menu, pb_h / ui_scale, pb_h / ui_scale)
+	pause_button.tooltip_text = "PAUSE"
+	_icon_button(pause_button, "pause")
+	root.add_child(pause_button)
+	# MUSIC (Daniele 2026-09-29/30): left of PAUSE, same height - the top-right button's twin (its note: the D music icon)
 	music_button = button("", Callable(), pb_h, -1, 19)
 	music_button.custom_minimum_size = Vector2(pb_h, pb_h)
 	music_button.size = music_button.custom_minimum_size
-	UiSkin.button(music_button, main.SEAT_FACTIONS[human])
+	_icon_button(music_button, "")
 	music_button.tooltip_text = "MUSIC"
 	music_button.pressed.connect(func():
 		Music.toggle_on()                            # OFF at once, everywhere
 		_music_glyph.queue_redraw())
 	root.add_child(music_button)
 	_music_glyph = Control.new()
+	_music_glyph.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_music_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_music_glyph.size = music_button.size
 	_music_glyph.draw.connect(func(): _draw_music_note(_music_glyph))
 	music_button.add_child(_music_glyph)
 	# side command panel (Alpha 11: 100/75/50/25 + the selected vat's count)
 	side_panel = PanelContainer.new()
-	style_panel(side_panel)
+	side_panel.add_theme_stylebox_override("panel", UiTheme.box("A1", 0.2 * ui_scale, Color.WHITE, 10.0 * ui_scale))   # Alpha 24
+	side_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(side_panel)
 	side_box = VBoxContainer.new()
 	side_box.add_theme_constant_override("separation", 8)
 	side_panel.add_child(side_box)
-	var send_title := text_label("SEND", 15, Color("c8e6ee"))
+	var send_title := text_label("SEND", 15, UiKit.MUTED)
 	send_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	side_box.add_child(send_title)
 	var group := ButtonGroup.new()
@@ -426,17 +431,14 @@ func setup(m: Node3D) -> void:
 		b.toggle_mode = true
 		b.button_group = group
 		b.button_pressed = is_equal_approx(f, main.fraction)
-		UiSkin.button(b, main.SEAT_FACTIONS[human])         # Alpha 11's kit buttons
-		var sel := UiSkin.box("Buttons/%s/primary-default" % UiSkin.faction(main.SEAT_FACTIONS[human]))
-		b.add_theme_stylebox_override("pressed", sel)
-		b.add_theme_color_override("font_pressed_color", Color("08141c"))
+		_send_skin(b)                                     # Alpha 24: the pack's pills - the picked share is the cyan one
 		b.pressed.connect(func(): main.fraction = f)
 		b.gui_input.connect(func(event):                  # slide a finger over the buttons to pick
 			if (event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT) or event is InputEventScreenDrag:
 				b.button_pressed = true
 				main.fraction = f)
 		side_box.add_child(b)
-	count_label = text_label("DRAG A VAT", 14, accent)
+	count_label = text_label("DRAG A VAT", 14, HudSkin.ink(accent))
 	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	side_box.add_child(count_label)
 	# bottom: map title, hint, ability dock, version
@@ -506,10 +508,53 @@ func setup(m: Node3D) -> void:
 	root.add_child(monster_icon)
 
 
+func _icon_button(b: Button, icon_name: String) -> void:
+	## Alpha 24: a square HUD button in the pack's look (B6), its D icon centred and tinted like the menus' (UiKit.icon_btn).
+	UiKit.style_button(b, "icon")
+	b.size = b.custom_minimum_size
+	if icon_name != "":
+		var side := minf(b.size.x, b.size.y) * 0.46
+		b.add_child(UiTheme.icon_rect(icon_name, side, UiKit.INK, (b.size - Vector2(side, side)) / 2.0))
+
+
+func _send_skin(b: Button) -> void:
+	## Alpha 24: a SEND share button - the pack's secondary pill (A7), the picked one the cyan primary (A5) with dark words.
+	var sc := 0.3 * ui_scale
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	b.add_theme_stylebox_override("normal", UiTheme.box("A7", sc))
+	b.add_theme_stylebox_override("hover", UiTheme.box("A7", sc, Color(1.1, 1.1, 1.1) if not UiTheme.light() else Color(1.03, 1.03, 1.03)))
+	b.add_theme_stylebox_override("pressed", UiTheme.box("A5", sc))
+	b.add_theme_stylebox_override("hover_pressed", UiTheme.box("A5", sc, Color(1.08, 1.08, 1.08)))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	for k in ["font_color", "font_hover_color", "font_focus_color"]:
+		b.add_theme_color_override(k, UiKit.INK)
+	b.add_theme_color_override("font_pressed_color", UiKit.ON_PRIMARY)
+	b.add_theme_color_override("font_hover_pressed_color", UiKit.ON_PRIMARY)
+
+
+func _fit_status() -> void:
+	## Alpha 24: the status line's pill is as wide as its words, centred under the top bar; an empty line shows nothing (the
+	## label itself stays visible: the tutorial's reveal owns that).
+	var empty := status_label.text == ""
+	status_label.self_modulate.a = 0.0 if empty else 1.0
+	if empty:
+		return
+	var vp := root.get_viewport_rect().size
+	var w := status_label.get_combined_minimum_size().x
+	if absf(status_label.size.x - w) > 0.5:
+		status_label.size.x = w
+		status_label.position.x = (vp.x - w) / 2.0
+
+
 func _draw_music_note(c: Control) -> void:
-	## MUSIC (0.22.x): a drawn eighth-note, dim and slashed through when OFF (top_bar.gd's twin, no icon in the kit yet).
-	var q: float = c.size.y
+	## MUSIC (0.22.x): the note - Alpha 24: the D music / music_off icons, dimmed when OFF.
 	var on := Music.music_on()
+	var ic := UiTheme.icon("music" if on else "music_off")
+	if ic != null:
+		var side := c.size.y * 0.46
+		c.draw_texture_rect(ic, Rect2((c.size - Vector2(side, side)) / 2.0, Vector2(side, side)), false, Color(UiKit.INK, 1.0 if on else 0.55))
+		return
+	var q: float = c.size.y
 	var col := Color.WHITE if on else Color(1, 1, 1, 0.4)
 	var o := Vector2(q * 0.36, q * 0.66)
 	var r := q * 0.1
@@ -546,6 +591,10 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	pause_button.position = Vector2(vp.x - m.z - pause_button.size.x, m.y)
 	music_button.size = music_button.custom_minimum_size
 	music_button.position = Vector2(pause_button.position.x - 8.0 * ui_scale - music_button.size.x, pause_button.position.y)
+	for extra in [debug_button, chat_button]:          # Alpha 24: the top-right row, left of MUSIC (never both: offline / online)
+		if extra:
+			extra.size = extra.custom_minimum_size
+			extra.position = Vector2(music_button.position.x - 8.0 * ui_scale - extra.size.x, pause_button.position.y)
 	side_panel.size = side_panel.get_combined_minimum_size()
 	var side_y := (vp.y - side_panel.size.y) / 2.0
 	var top_bottom := top_panel.position.y + top_panel.size.y + 34.0   # below the top bar and status line
@@ -554,8 +603,13 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	map_title.position = Vector2(m.x + 8, vp.y - m.w - 30 * ui_scale)
 	hint.size = Vector2(vp.x * 0.5, 20)
 	hint.position = Vector2(vp.x * 0.5 - hint.size.x / 2.0, vp.y - m.w - 18)
+	# Alpha 24 (Hub Roadmap m05, "send on the left thumb, skills stacked on the right"): the skills stand in a column on the
+	# right edge under PAUSE, centred on the screen's height where there is room (the right thumb's reach)
 	dock.size = dock.get_combined_minimum_size()
-	dock.position = Vector2(vp.x * 0.5 - dock.size.x / 2.0, vp.y - m.w - dock.size.y - (26 if not mobile else 8))
+	var dock_top := pause_button.position.y + pause_button.size.y + 10.0 * ui_scale
+	var dock_bottom := vp.y - m.w - version_label.get_combined_minimum_size().y - 4.0 * ui_scale
+	var dock_y := clampf((vp.y - dock.size.y) / 2.0 + 10.0 * ui_scale, dock_top, maxf(dock_top, dock_bottom - dock.size.y))
+	dock.position = Vector2(vp.x - m.z - dock.size.x, dock_y)
 	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
@@ -566,15 +620,12 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	banner.size = banner.get_combined_minimum_size()
 	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	if debug_button:
-		debug_button.position = Vector2(vp.x - m.z - debug_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # under PAUSE, off the map
 		var dp_y := debug_button.position.y + debug_button.size.y + 8.0
 		var dp_natural := debug_panel.get_combined_minimum_size()
 		# clamp to what's actually left on screen (phones: the panel used to run off the bottom) - the
 		# ScrollContainer in _build_debug() lets the panel be shorter than its buttons and scroll them
 		debug_panel.size = Vector2(dp_natural.x, minf(dp_natural.y, vp.y - dp_y - 10.0))
 		debug_panel.position = Vector2(vp.x - m.z - debug_panel.size.x, dp_y)
-	if chat_button:
-		chat_button.position = Vector2(vp.x - m.z - chat_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # Debug's slot (hidden online)
 	rotate_hint.size = vp
 	rotate_hint.visible = vp.y > vp.x
 	if vp != _screens_vp and (end_panel.visible or pause_panel.visible or out_panel.visible):
@@ -593,15 +644,22 @@ func side_panel_width() -> float:
 	return side_panel.size.x if side_panel else 0.0
 
 
+func right_used() -> float:
+	## The right edge the map keeps clear of (main._fit_nodes): PAUSE's column, and the skill column when it shows.
+	var w := pause_button.size.x if pause_button else 0.0
+	if dock and dock.visible:
+		w = maxf(w, dock.size.x)
+	return margins.z + w + 12.0
+
+
 func top_used() -> float:
 	return margins.y + (top_panel.size.y if top_panel else 0.0) + 34.0
 
 
 func bottom_used() -> float:
-	var used := margins.w + 30.0 * ui_scale              # the map title and hint line (badges are fitted by the camera)
-	if dock and dock.visible:                             # the skill dock never covers the map: the camera fits above it
-		used = maxf(used, root.get_viewport_rect().size.y - dock.position.y + 6.0)
-	return used
+	# the map title and hint line (badges are fitted by the camera); Alpha 24: the skill dock is a column on the right now
+	# (right_used), no longer a bar across the bottom
+	return margins.w + 30.0 * ui_scale
 
 
 func pointer_over_ui(p: Vector2) -> bool:
@@ -652,7 +710,8 @@ func sync(dt: float, cam: Camera3D) -> void:
 		if _chat_poll <= 0.0:
 			_chat_poll = 0.5
 			var n := Net.chat_unread()
-			chat_button.text = "Chat (%d)" % n if n > 0 else "Chat"
+			_chat_dot.visible = n > 0                      # Alpha 24: the chat icon button's red dot (B12) with the count
+			(_chat_dot.get_child(0) as Label).text = str(mini(n, 99))
 		_reconnect_watch()
 	# 0.19.2 spec H6: the clock, centred, never shifts; a chip per seat either side, eliminated seats
 	# greyed. "topbar" gates the whole bar, "strength" the chips alone (clock-only in early lessons).
@@ -689,6 +748,7 @@ func sync(dt: float, cam: Camera3D) -> void:
 		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
 	else:
 		status_label.text = ""
+	_fit_status()
 	_sync_catchup(dt)
 	var source: int = main.drag_from if main.drag_from >= 0 else main.selected
 	if source >= 0 and sim.nodes[source]["owner"] == human:
@@ -746,7 +806,7 @@ func _badges(cam: Camera3D) -> bool:
 			b["owner"] = owner
 			var col := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
 			panel.add_theme_stylebox_override("panel", badge_style(col))
-			_font_color(b["label"] as Label, col if owner != "" else Color("d8e0e8"))
+			_font_color(b["label"] as Label, HudSkin.ink(col) if owner != "" else HudSkin.neutral_ink())
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
 		var classic := not Rules.bridge_combat
@@ -793,7 +853,7 @@ func _badges(cam: Camera3D) -> bool:
 		# i couldn't see any other indicator"): your own share on an ally's node stands out in your own
 		# colour, not the sub-label's default light blue - reset every frame, or a stale override would
 		# bleed into a later node that has none.
-		var sub_col := Color("c8e6ee")
+		var sub_col := HudSkin.sub_ink()
 		if has_allies and not masked:                       # GAME-RULES sec11: the total is shown above -
 			if owner == human:                               # this names the ally share / your own share of it
 				what += "+A%d" % Rules.shown(sim.allied_units(n))
@@ -801,7 +861,7 @@ func _badges(cam: Camera3D) -> bool:
 				var mine := sim.allied_units(n, human)
 				if mine > 0.0001:
 					what += " +%d" % Rules.shown(mine)
-					sub_col = Rules.seat_color(human)
+					sub_col = HudSkin.ink(Rules.seat_color(human))
 		_font_color(sub, sub_col)
 		var clock := ""
 		var worst := ""                                     # the clock's widest form (see below)
@@ -1600,6 +1660,8 @@ func _inspector_bounds() -> Rect2:
 	var l := margins.x + (side_panel.size.x + 16.0 * ui_scale if side_panel.visible else 0.0)
 	var t := top_used() + 8.0 * ui_scale
 	var r := vp.x - margins.z - 8.0 * ui_scale
+	if dock and dock.visible:                           # Alpha 24: the skill column on the right
+		r = minf(r, dock.position.x - 8.0 * ui_scale)
 	var bo := vp.y - bottom_used() - 8.0 * ui_scale
 	return Rect2(l, t, maxf(r - l, 20.0), maxf(bo - t, 20.0))
 
@@ -2019,7 +2081,7 @@ func skill_refusal(slot: int, msg: String) -> void:
 	var b: Control = dock.slots[slot]
 	var col := kind_color("warn")
 	callouts.add("slot:%d" % slot, [[msg, callout_px(Rules.HUD_REFUSAL_FONT, Rules.HUD_REFUSAL_MIN_PT), col.lerp(Color.WHITE, 0.25)]], col,
-			{"anchor": func(): return Vector2(b.get_global_rect().get_center().x, b.get_global_rect().position.y - 4.0 * ui_scale),
+			{"anchor": func(): return Vector2(b.get_global_rect().position.x - 6.0 * ui_scale, b.get_global_rect().get_center().y),
 			"glyph": "warn", "life": Rules.HUD_REFUSAL_LIFE, "arrow": false, "rise": 6.0})
 
 
@@ -2455,14 +2517,36 @@ func _show_screen(layer: Control) -> void:
 func _build_debug() -> void:
 	## Debug controls for playtests (Daniele, 2026-09-25): live sliders, thumb-sized, top-right under PAUSE,
 	## wide ranges on purpose. Also prints FPS to the console every 5 s while open.
-	debug_button = button("Debug", Callable(), 110, 50 if not mobile else 78, 20)   # 78: matches the phone-tuned default height (>= 44 pt)
+	# Alpha 24: Debug and Chat are square icon buttons in the top-right row, left of MUSIC (the skills took their column)
+	var sq: float = 52.0 if not mobile else 78.0
+	debug_button = button("DBG", Callable(), sq, sq, 15)   # 78: matches the phone-tuned default height (>= 44 pt)
 	debug_button.toggle_mode = true
-	debug_button.size = debug_button.custom_minimum_size
+	_icon_button(debug_button, "")
+	debug_button.add_theme_font_override("font", UiKit.HEAD)
+	debug_button.add_theme_stylebox_override("pressed", UiTheme.box("B6", UiTheme.SCALE, Color(0.75, 1.1, 1.15)))
 	root.add_child(debug_button)
 	debug_button.visible = not main.online and Rules.debug_tools   # online: the rules are the host's, not live-tunable;
 	                                                               # offline only when DEBUG TOOLS is on in OPTIONS (0.18.7)
-	chat_button = button("Chat", func(): Net.open_chat(), 110, 50 if not mobile else 78, 20)   # online: the room chat (78: >= 44 pt)
-	chat_button.size = chat_button.custom_minimum_size
+	chat_button = button("", func(): Net.open_chat(), sq, sq, 20)   # online: the room chat (78: >= 44 pt)
+	chat_button.tooltip_text = "CHAT"
+	_icon_button(chat_button, "chat")
+	_chat_dot = Panel.new()
+	var dot := StyleBoxTexture.new()
+	dot.texture = UiTheme.atlas("B")
+	var dr: Array = UiTheme.DATA.SPRITES["B12"]["rect"]
+	dot.region_rect = Rect2(dr[0], dr[1], dr[2], dr[3])
+	_chat_dot.add_theme_stylebox_override("panel", dot)
+	_chat_dot.size = Vector2(20, 20) * ui_scale
+	_chat_dot.position = Vector2(chat_button.size.x - _chat_dot.size.x * 0.75, -_chat_dot.size.y * 0.25)
+	_chat_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chat_dot.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	var dl := text_label("", 13, Color.WHITE)
+	dl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dl.size = _chat_dot.size
+	_chat_dot.add_child(dl)
+	_chat_dot.visible = false
+	chat_button.add_child(_chat_dot)
 	chat_button.visible = main.online
 	root.add_child(chat_button)
 	debug_panel = PanelContainer.new()

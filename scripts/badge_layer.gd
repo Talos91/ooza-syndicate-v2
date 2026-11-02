@@ -3,18 +3,20 @@ extends Control
 ## HUD pass (the stretch, Alpha 21 OPT-RENDER: the node badges were ~70 of the HUD's ~165 draw calls on M-39): every
 ## node badge drawn by one canvas item per KIND of thing instead of five nodes per badge. Hud still lays each badge
 ## out on its own Panel / Label / TextureRect / ProgressBar (_badges / _place_badge / _fit_text, unchanged), but
-## those sit under a hidden holder and never draw; this layer reads them and draws, in order: every box (one
-## nine-patch texture: the fills, then the rims), every build bar, the emblems (one child per seat: its tint
+## those sit under a hidden holder and never draw; this layer reads them and draws, in order: every frame (a nine-patch
+## per owner, sorted so each owner's frames batch), every build bar, the emblems (one child per seat: its tint
 ## material), then every count and sub line (the outlines, then the letters) - so the 2D renderer merges each
 ## pass into a batch or two, where a panel / text / emblem switch at every badge broke it every time.
+## Alpha 24 step 2: the frames are the round-3 pack's node badges (HudSkin.frame: B7 with the owner's colour on its rim -
+## own, enemy and neutral alike -, B10 where a rival's count is hidden), the build bar its progress track / fill (B19 /
+## B20), in the current theme.
 
-const FILL := Color(0.063, 0.078, 0.098, 0.42)     # = Hud.badge_style's box
-const RADIUS := 9                                  # its corner (px, not scaled - as the StyleBox had it)
 const TINT := preload("res://shaders/emblem_tint.gdshader")   # = Hud.EMBLEM_TINT (Hud itself needs the Net autoload)
 
 var hud                                            # Hud
-var _fill_tex: Texture2D                           # a white rounded box, and its 1 px rim, for the nine-patches
-var _rim_tex: Texture2D
+var _frames := {}                                  # owner key -> the baked frame texture
+var _bar_track: Texture2D                          # B19 / B20 baked to the build bar's height
+var _bar_fill: Texture2D
 var _groups := {}                                  # seat -> EmblemGroup
 var _text: TextPass
 
@@ -78,8 +80,9 @@ class TextPass:
 func setup(h) -> void:
 	hud = h
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_fill_tex = _box_texture(false)
-	_rim_tex = _box_texture(true)
+	var bh := maxi(int(round(4.0 * hud.ui_scale)), 3)
+	_bar_track = HudSkin.sprite("B19", Vector2i(bh * 6, bh))
+	_bar_fill = HudSkin.sprite("B20", Vector2i(bh * 6, bh))
 	for seat in hud.sim.factions.keys():              # every seat that can own a node, in a fixed order
 		var g := EmblemGroup.new()
 		g.layer = self
@@ -108,47 +111,55 @@ func refresh() -> void:
 	PerfProfile.lap("badges_refresh", _pt)
 
 
+func frame_tex(owner: String, hidden: bool) -> Texture2D:
+	## The frame of a badge owned by `owner` ("" neutral); HIDDEN (a rival's count not shown) is B10.
+	var key := "?" if hidden else owner
+	if not _frames.has(key):
+		var col := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
+		_frames[key] = HudSkin.frame(col, HudSkin.fill_a(), hud.ui_scale, hidden)
+	return _frames[key]
+
+
 func _draw() -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
-	var boxes := []
+	var by := {}                                       # frame texture -> its badges (one batch each)
+	var order := []
 	for id in hud.badges:
 		var b: Dictionary = hud.badges[id]
 		var p: Control = b["panel"]
-		if p.visible:
-			boxes.append(b)
-	var m := float(RADIUS + 1)
-	for rim in [false, true]:                          # the see-through fills, then the owner-coloured rims
-		for b in boxes:
-			var p: Control = b["panel"]
-			var col := FILL
-			if rim:
-				var owner := str(b["owner"])
-				col = Color(Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL, 0.8)
-			RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), Rect2(p.position, p.size), Rect2(Vector2.ZERO, _fill_tex.get_size()),
-					(_rim_tex if rim else _fill_tex).get_rid(), Vector2(m, m), Vector2(m, m),
-					RenderingServer.NINE_PATCH_STRETCH, RenderingServer.NINE_PATCH_STRETCH, true, col)
-	for b in boxes:                                    # the build bars along the bottom edges
+		if not p.visible:
+			continue
+		var t := frame_tex(str(b["owner"]), not (b["label"] as Label).visible and (b["emblem"] as TextureRect).visible)
+		if t == null:
+			continue
+		if not by.has(t):
+			by[t] = []
+			order.append(t)
+		by[t].append(p)
+	var m := float(HudSkin.frame_margin(hud.ui_scale))
+	for t in order:
+		var tx: Texture2D = t
+		for p in by[t]:
+			RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), Rect2(p.position, p.size), Rect2(Vector2.ZERO, tx.get_size()),
+					tx.get_rid(), Vector2(m, m), Vector2(m, m), RenderingServer.NINE_PATCH_STRETCH, RenderingServer.NINE_PATCH_STRETCH, true)
+	for id in hud.badges:                              # the build bars along the bottom edges: B19 track, B20 fill
+		var b: Dictionary = hud.badges[id]
 		var bar: ProgressBar = b["build"]
-		if not bar.visible:
+		if not (b["panel"] as Control).visible or not bar.visible:
 			continue
 		var r := Rect2((b["panel"] as Control).position + bar.position, bar.size)
-		draw_rect(r, Color(0, 0, 0, 0.55))
-		draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(bar.value / 100.0, 0.0, 1.0), r.size.y)), Rules.state_color("build"))
+		_bar(r, _bar_track, Color.WHITE)
+		var w := r.size.x * clampf(bar.value / 100.0, 0.0, 1.0)
+		if w >= 1.0:
+			_bar(Rect2(r.position, Vector2(maxf(w, r.size.y), r.size.y)), _bar_fill, Rules.state_color("build"))
 	PerfProfile.lap("badges_draw", _pt)
 
 
-static func _box_texture(rim: bool) -> Texture2D:
-	## A white rounded box (RADIUS corner) - filled, or only its 1 px rim - anti-aliased, for a nine-patch.
-	var n := RADIUS * 2 + 4
-	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
-	var half := n / 2.0
-	for y in range(n):
-		for x in range(n):
-			# signed distance from the pixel centre to the rounded box's edge (negative inside)
-			var q := Vector2(absf(x + 0.5 - half), absf(y + 0.5 - half)) - Vector2(half - RADIUS, half - RADIUS)
-			var d := Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length() + minf(maxf(q.x, q.y), 0.0) - RADIUS
-			var a := clampf(0.5 - d, 0.0, 1.0)                           # inside the box
-			if rim:
-				a = minf(a, clampf(d + 1.4, 0.0, 1.0))                     # ... and within ~1 px of its edge (the StyleBox's AA rim)
-			img.set_pixel(x, y, Color(1, 1, 1, a))
-	return ImageTexture.create_from_image(img)
+func _bar(r: Rect2, t: Texture2D, mod: Color) -> void:
+	## A pill bar (B19 / B20 baked to its height): only the middle stretches, the round ends keep their shape.
+	if t == null:
+		draw_rect(r, mod if mod != Color.WHITE else Color(0, 0, 0, 0.55))
+		return
+	var e := t.get_size().y * 0.5
+	RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), r, Rect2(Vector2.ZERO, t.get_size()), t.get_rid(),
+			Vector2(e, 0), Vector2(e, 0), RenderingServer.NINE_PATCH_STRETCH, RenderingServer.NINE_PATCH_STRETCH, true, mod)
