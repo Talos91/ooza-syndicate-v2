@@ -539,11 +539,11 @@ static func look_across(faction: String) -> int:
 # a horde takes (divides it), attack = damage dealt, production = vat output, garrison = damage a
 # garrison takes (divides it). Baseline 1.0 everywhere.
 static var FACTION_STATS := {
-	"vex": {"speed": 1.15, "garrison": 0.90},
+	"vex": {"speed": 1.15, "garrison": 0.95},   # 0.90 -> 0.95 (bal-02321-c2 proposal: VEX 40 -> 54 % with R1 on 0.23.20; needs Daniele's yes)
 	"null": {"production": 1.03},
 	"bloom": {"speed": 0.90, "production": 1.00},   # 1.06 -> 1.00 (0.23.21 balance, Daniele 2026-11-01 Hub Desk bal-abilities (a): set R1)
 	"ember": {"attack": 1.10, "production": 0.90},   # 1.02 -> 1.10 (0.23.21, set R1; reverses Daniele's 0.23.15 EMBER attack, accepted via (a))
-	"solar": {"health": 1.10, "garrison": 1.05, "speed": 0.90, "production": 0.93},
+	"solar": {"health": 1.10, "garrison": 1.05, "speed": 0.90, "production": 0.915},   # 0.93 -> 0.915 (bal-02321-c2 proposal: SOLAR 58 -> 50 %)
 }
 
 # BALANCE PRESETS (0.18.7 balance study - Daniele: "another thing we should revisit is balancing ... vat
