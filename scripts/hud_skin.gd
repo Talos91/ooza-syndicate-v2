@@ -13,19 +13,22 @@ extends RefCounted
 ##   skill_icon(id)                    the E icon of a skill id (ArmyPresets' SVG when the pack has none)
 ## Everything baked is cached per mode, colour and size; a mode switch mid-match is not supported (the HUD is built once).
 
-const FILL_A_DARK := 0.62                          # a badge's fill over the board (the old box was 0.42 of near-black)
+const FILL_A_DARK := 0.45                          # a badge's fill over the board (the old box was 0.42 of near-black)
 const FILL_A_LIGHT := 0.78
 # skill id -> the E sheet's icon name, where they differ (Rewire is OVERDRIVE since bal-02321: the E15 icon)
 const SKILL_ICON := {"evac": "emergency_evac", "fog": "fog_of_war", "rewire": "overdrive"}
 # the board icons (F) a HUD readout uses
 const BOARD_ICON := {"vat": "F1", "machinegoon": "F2", "laser": "F3", "forge": "F4", "monster_hub": "F5", "timer": "F17"}
 
+const MODE := "dark"                               # neon pass: the match HUD is dark glass in both themes (it sits on the board)
+const INK := Color("e8f6fa")
+const MUTED := Color("a6bfca")
 static var _img := {}                              # mode -> the B sheet as an Image (no mipmaps)
 static var _baked := {}                            # key -> ImageTexture
 
 
 static func light() -> bool:
-	return UiTheme.light()
+	return false                                   # (neon pass: see MODE - the pause / results screens follow the theme)
 
 
 static func fill_a() -> float:
@@ -55,17 +58,17 @@ static func outline() -> Color:
 
 
 static func text() -> Color:
-	return UiKit.INK
+	return INK
 
 
 static func muted() -> Color:
-	return UiKit.MUTED
+	return MUTED
 
 
 static func sheet() -> Image:
-	var m := UiTheme.mode()
+	var m := MODE
 	if not _img.has(m):
-		var t := UiTheme.atlas("B")
+		var t := UiTheme.atlas("B", m)
 		var im: Image = t.get_image() if t != null else null
 		if im != null:
 			im = im.duplicate()
@@ -107,7 +110,7 @@ static func recolor(im: Image, tint: Color, fill: float) -> void:
 
 static func sprite(id: String, px: Vector2i, tint := Color.WHITE, fill := 1.0) -> Texture2D:
 	## A B sprite resized to px (whole), its rim recoloured to `tint`, its fill's alpha x fill; null without the sheet.
-	var key := "%s|%s|%s|%s|%.2f" % [UiTheme.mode(), id, px, tint.to_html(), fill]
+	var key := "%s|%s|%s|%s|%.2f" % [MODE, id, px, tint.to_html(), fill]
 	if _baked.has(key):
 		return _baked[key]
 	var im := sprite_image(id, px, tint, fill)
@@ -135,10 +138,46 @@ static func frame_margin(ui_scale: float) -> int:
 	return int(round(frame_px(ui_scale) * 0.3))
 
 
+static func frame_glow(ui_scale: float) -> int:
+	## The neon halo baked round a badge frame (px each side): BadgeLayer draws the frame that much bigger.
+	return int(round(5.0 * ui_scale))
+
+
 static func frame(col: Color, fill: float, ui_scale: float, hidden := false) -> Texture2D:
-	## A node badge's frame: B7 with its rim in `col` (own / enemy / neutral alike), or B10 (HIDDEN) as drawn.
+	## A node badge's frame: B7 with its rim in `col` (own / enemy / neutral alike), or B10 (HIDDEN) as drawn - with a soft neon
+	## halo in `col` round it (neon pass), frame_glow px each side.
 	var s := frame_px(ui_scale)
-	return sprite("B10" if hidden else "B7", Vector2i(s, s), Color.WHITE if hidden else col, fill)
+	var g := frame_glow(ui_scale)
+	var key := "frame|%s|%.2f|%d|%s" % [col.to_html(), fill, s, hidden]
+	if _baked.has(key):
+		return _baked[key]
+	var im := sprite_image("B10" if hidden else "B7", Vector2i(s, s), Color.WHITE if hidden else col, fill)
+	if im == null:
+		_baked[key] = null
+		return null
+	var out := Image.create(s + 2 * g, s + 2 * g, false, Image.FORMAT_RGBA8)
+	# the halo: the rim's own alpha, blurred (down- then up-sampled), in the rim's colour
+	var halo := Image.create(s + 2 * g, s + 2 * g, false, Image.FORMAT_RGBA8)
+	for y in range(s):
+		for x in range(s):
+			var p := im.get_pixel(x, y)
+			var mx := maxf(p.r, maxf(p.g, p.b))
+			var mn := minf(p.r, minf(p.g, p.b))
+			var m := smoothstep(0.12, 0.42, mx - mn) if not hidden else 0.0
+			if m > 0.0:
+				halo.set_pixel(x + g, y + g, Color(col, p.a * m))
+	var small := maxi(int((s + 2 * g) / 5), 4)
+	halo.resize(small, small, Image.INTERPOLATE_BILINEAR)
+	halo.resize(s + 2 * g, s + 2 * g, Image.INTERPOLATE_CUBIC)
+	for y in range(halo.get_height()):
+		for x in range(halo.get_width()):
+			var h := halo.get_pixel(x, y)
+			halo.set_pixel(x, y, Color(col, clampf(h.a * 1.6, 0.0, 0.75)))
+	out.blend_rect(halo, Rect2i(0, 0, halo.get_width(), halo.get_height()), Vector2i.ZERO)
+	out.blend_rect(im, Rect2i(0, 0, s, s), Vector2i(g, g))
+	var t := ImageTexture.create_from_image(out)
+	_baked[key] = t
+	return t
 
 
 static func frame_box(col: Color, fill: float, ui_scale: float, content := 4.0) -> StyleBox:
@@ -155,7 +194,7 @@ static func frame_box(col: Color, fill: float, ui_scale: float, content := 4.0) 
 	var b := SkinBox.new()
 	b.texture = t
 	b.region = Rect2(Vector2.ZERO, t.get_size())
-	var m := float(frame_margin(ui_scale))
+	var m := float(frame_margin(ui_scale) + frame_glow(ui_scale))
 	b.slice = Vector4(m, m, m, m)
 	b.scale = 1.0
 	b.set_content_margin_all(content)
@@ -164,12 +203,12 @@ static func frame_box(col: Color, fill: float, ui_scale: float, content := 4.0) 
 
 static func b_box(id: String, scale := UiTheme.SCALE, mod := Color.WHITE, content := 0.0) -> StyleBox:
 	## A B sprite at its manifest slicing (fixed sprites draw whole, aspect kept).
-	return UiTheme.box(id, scale, mod, content)
+	return UiTheme.box(id, scale, mod, content, MODE)
 
 
 static func pill(scale: float, content_x: float, content_y: float, mod := Color.WHITE) -> StyleBox:
 	## The B19 track pill (the status line's, the bars' track) with room for words.
-	var b := UiTheme.box("B19", scale, mod, 0.0)
+	var b := UiTheme.box("B19", scale, mod, 0.0, MODE)
 	b.axis = "x"
 	b.content_margin_left = content_x
 	b.content_margin_right = content_x
@@ -194,4 +233,4 @@ static func draw_sprite(ci: CanvasItem, id: String, r: Rect2, mod := Color.WHITE
 	var src := Rect2(rc[0], rc[1], rc[2], rc[3])
 	var k := minf(r.size.x / src.size.x, r.size.y / src.size.y)
 	var d := src.size * k
-	ci.draw_texture_rect_region(UiTheme.atlas("B"), Rect2(r.position + (r.size - d) / 2.0, d), src, mod)
+	ci.draw_texture_rect_region(UiTheme.atlas("B", MODE), Rect2(r.position + (r.size - d) / 2.0, d), src, mod)

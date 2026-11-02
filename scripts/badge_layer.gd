@@ -136,11 +136,12 @@ func _draw() -> void:
 			by[t] = []
 			order.append(t)
 		by[t].append(p)
-	var m := float(HudSkin.frame_margin(hud.ui_scale))
+	var g := float(HudSkin.frame_glow(hud.ui_scale))
+	var m := float(HudSkin.frame_margin(hud.ui_scale)) + g
 	for t in order:
 		var tx: Texture2D = t
 		for p in by[t]:
-			RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), Rect2(p.position, p.size), Rect2(Vector2.ZERO, tx.get_size()),
+			RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), Rect2(p.position, p.size).grow(g), Rect2(Vector2.ZERO, tx.get_size()),
 					tx.get_rid(), Vector2(m, m), Vector2(m, m), RenderingServer.NINE_PATCH_STRETCH, RenderingServer.NINE_PATCH_STRETCH, true)
 	for id in hud.badges:                              # the build bars along the bottom edges: B19 track, B20 fill
 		var b: Dictionary = hud.badges[id]

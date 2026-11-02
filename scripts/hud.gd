@@ -228,7 +228,11 @@ func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
 	var chip := PanelContainer.new()
 	chip.custom_minimum_size = Vector2(TOP_CHIP_W, TOP_CHIP_H) * ui_scale
 	# Alpha 24: the pack's score pill - the node badge frame (B7) with the seat's colour on its rim, yours the most solid
-	chip.add_theme_stylebox_override("panel", HudSkin.frame_box(Rules.seat_color(seat), 0.95 if mine else 0.72, ui_scale, 3.0 * ui_scale))
+	var cg := GooBox.glass(Rules.seat_color(seat), ui_scale, 9.0, 0.88 if mine else 0.62, 1.0 if mine else 0.5)
+	cg.set_content_margin_all(3.0 * ui_scale)
+	cg.content_margin_left = 6.0 * ui_scale
+	cg.content_margin_right = 6.0 * ui_scale
+	chip.add_theme_stylebox_override("panel", cg)
 	chip.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -242,14 +246,14 @@ func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
 	# TOP_NAME_W; AI seats keep the emblem alone. Yours is the highlighted chip, first on the left.
 	var who: Dictionary = main.seat_who(seat) if main.has_method("seat_who") else {}
 	if bool(who.get("human", false)) and str(who.get("name", "")) != "":
-		var nm := text_label(str(who["name"]), 15, UiKit.INK if mine else UiKit.MUTED)
+		var nm := text_label(str(who["name"]), 15, HudSkin.INK if mine else HudSkin.MUTED)
 		nm.clip_text = true
 		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		nm.custom_minimum_size = Vector2(minf(TOP_NAME_W, UI_FONT.get_string_size(nm.text, HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * ui_scale)).x / ui_scale + 2.0) * ui_scale, 0)
 		nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(nm)
 		chip.custom_minimum_size.x += nm.custom_minimum_size.x + 4.0 * ui_scale
-	var lbl := text_label("000", 15, UiKit.INK)
+	var lbl := text_label("000", 15, HudSkin.INK)
 	lbl.add_theme_font_override("font", SYMBOL_FONT)      # monospace: the digits never shift the chip
 	lbl.custom_minimum_size = Vector2(28 * ui_scale, 0)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -339,7 +343,9 @@ func setup(m: Node3D) -> void:
 	# highlighted, team modes grouped with a wider gap between groups. TUTORIAL: "topbar" gates the
 	# whole bar, "strength" the chips alone (clock-only in the early lessons, as before).
 	top_panel = PanelContainer.new()
-	top_panel.add_theme_stylebox_override("panel", UiTheme.box("A1", 0.2 * ui_scale, Color.WHITE, 6.0 * ui_scale))   # Alpha 24: the pack's panel
+	var tg := GooBox.glass(Color("2ee6ff"), ui_scale, 14.0, 0.72, 0.6)   # Alpha 24 neon pass: dark glass, a neon rim
+	tg.set_content_margin_all(6.0 * ui_scale)
+	top_panel.add_theme_stylebox_override("panel", tg)
 	top_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(top_panel)
 	var bar := HBoxContainer.new()
@@ -348,7 +354,7 @@ func setup(m: Node3D) -> void:
 	top_left = HBoxContainer.new()
 	top_left.add_theme_constant_override("separation", int(TOP_CHIP_GAP * ui_scale))
 	bar.add_child(top_left)
-	stats_label = text_label("00:00", 22, UiKit.INK)
+	stats_label = text_label("00:00", 22, HudSkin.INK)
 	stats_label.add_theme_font_override("font", SYMBOL_FONT)   # monospace digits: the clock never shifts
 	stats_label.custom_minimum_size = Vector2(TOP_CLOCK_W * ui_scale, 0)
 	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -375,14 +381,20 @@ func setup(m: Node3D) -> void:
 	status_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_glow.visible = false
 	root.add_child(status_glow)
-	status_label = text_label("", 18, HudSkin.ink(Color("ff6a6a")) if HudSkin.light() else Color("ffb0b0"))
+	status_label = text_label("", 18, Color("ffb0b0"))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	# Alpha 24: the line sits on the pack's track pill (B19), as wide as its words (_fit_status); empty, nothing shows
-	status_label.add_theme_stylebox_override("normal", HudSkin.pill(0.22 * ui_scale, 14.0 * ui_scale, 2.0 * ui_scale))
+	var sp := GooBox.glass(Rules.state_color("warn"), ui_scale, 16.0, 0.78, 0.7)
+	sp.content_margin_left = 16.0 * ui_scale
+	sp.content_margin_right = 16.0 * ui_scale
+	sp.content_margin_top = 1.0 * ui_scale
+	sp.content_margin_bottom = 1.0 * ui_scale
+	status_label.add_theme_stylebox_override("normal", sp)
 	status_label.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(status_label)
 	catchup_tag = PanelContainer.new()                 # CATCH-UP: your side only (the HUD shows no rival modifiers)
-	var cs := HudSkin.frame_box(accent, 0.9, ui_scale, 4.0 * ui_scale)
+	var cs := GooBox.glass(accent, ui_scale, 9.0, 0.85, 0.8)
+	cs.set_content_margin_all(4.0 * ui_scale)
 	cs.content_margin_left = 10 * ui_scale
 	cs.content_margin_right = 10 * ui_scale
 	catchup_tag.add_theme_stylebox_override("panel", cs)
@@ -416,13 +428,15 @@ func setup(m: Node3D) -> void:
 	music_button.add_child(_music_glyph)
 	# side command panel (Alpha 11: 100/75/50/25 + the selected vat's count)
 	side_panel = PanelContainer.new()
-	side_panel.add_theme_stylebox_override("panel", UiTheme.box("A1", 0.2 * ui_scale, Color.WHITE, 10.0 * ui_scale))   # Alpha 24
+	var sg2 := GooBox.glass(Color("2ee6ff"), ui_scale, 14.0, 0.7, 0.5)   # Alpha 24 neon pass
+	sg2.set_content_margin_all(10.0 * ui_scale)
+	side_panel.add_theme_stylebox_override("panel", sg2)
 	side_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(side_panel)
 	side_box = VBoxContainer.new()
 	side_box.add_theme_constant_override("separation", 8)
 	side_panel.add_child(side_box)
-	var send_title := text_label("SEND", 15, UiKit.MUTED)
+	var send_title := text_label("SEND", 15, HudSkin.MUTED)
 	send_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	side_box.add_child(send_title)
 	var group := ButtonGroup.new()
@@ -510,26 +524,41 @@ func setup(m: Node3D) -> void:
 
 func _icon_button(b: Button, icon_name: String) -> void:
 	## Alpha 24: a square HUD button in the pack's look (B6), its D icon centred and tinted like the menus' (UiKit.icon_btn).
-	UiKit.style_button(b, "icon")
+	_goo_skin(b, Color("2ee6ff"), b.get_index() + icon_name.length())
+	b.add_theme_color_override("font_pressed_color", HudSkin.INK)
 	b.size = b.custom_minimum_size
 	if icon_name != "":
-		var side := minf(b.size.x, b.size.y) * 0.46
-		b.add_child(UiTheme.icon_rect(icon_name, side, UiKit.INK, (b.size - Vector2(side, side)) / 2.0))
+		var side := minf(b.size.x, b.size.y) * 0.44
+		b.add_child(UiTheme.icon_rect(icon_name, side, HudSkin.INK, (b.size - Vector2(side, side * 1.15)) / 2.0))
 
 
 func _send_skin(b: Button) -> void:
-	## Alpha 24: a SEND share button - the pack's secondary pill (A7), the picked one the cyan primary (A5) with dark words.
-	var sc := 0.3 * ui_scale
-	b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	b.add_theme_stylebox_override("normal", UiTheme.box("A7", sc))
-	b.add_theme_stylebox_override("hover", UiTheme.box("A7", sc, Color(1.1, 1.1, 1.1) if not UiTheme.light() else Color(1.03, 1.03, 1.03)))
-	b.add_theme_stylebox_override("pressed", UiTheme.box("A5", sc))
-	b.add_theme_stylebox_override("hover_pressed", UiTheme.box("A5", sc, Color(1.08, 1.08, 1.08)))
+	## Alpha 24 neon pass (Daniele: "buttons should have an oozie feel"): a SEND share button is a goo blob (GooBox) with a
+	## neon rim; the picked one is lit, filled with the ooze, its words dark.
+	_goo_skin(b, Color("2ee6ff"), b.get_index() * 7 + 3)
+
+
+func _goo_skin(b: Button, col: Color, seed_v: int) -> void:
+	## A HUD button as a lit blob of ooze (GooBox): glass + neon rim, brighter on hover, filled when pressed / picked.
+	var normal := GooBox.make(col, ui_scale, false, seed_v)
+	var hover := GooBox.make(col, ui_scale, false, seed_v)
+	hover.glow = 1.4
+	hover.fill = Color(0.05, 0.1, 0.13, 0.88)
+	var pressed := GooBox.make(col, ui_scale, true, seed_v)
+	var off := GooBox.make(col, ui_scale, false, seed_v)
+	off.dim = true
+	b.add_theme_stylebox_override("normal", normal)
+	b.add_theme_stylebox_override("hover", hover)
+	b.add_theme_stylebox_override("pressed", pressed)
+	b.add_theme_stylebox_override("hover_pressed", pressed)
+	b.add_theme_stylebox_override("disabled", off)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	for k in ["font_color", "font_hover_color", "font_focus_color"]:
-		b.add_theme_color_override(k, UiKit.INK)
-	b.add_theme_color_override("font_pressed_color", UiKit.ON_PRIMARY)
-	b.add_theme_color_override("font_hover_pressed_color", UiKit.ON_PRIMARY)
+		b.add_theme_color_override(k, HudSkin.INK)
+	b.add_theme_color_override("font_pressed_color", Color("05212a"))
+	b.add_theme_color_override("font_hover_pressed_color", Color("05212a"))
+	b.add_theme_color_override("font_disabled_color", HudSkin.MUTED)
+	b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 
 
 func _fit_status() -> void:
@@ -552,7 +581,7 @@ func _draw_music_note(c: Control) -> void:
 	var ic := UiTheme.icon("music" if on else "music_off")
 	if ic != null:
 		var side := c.size.y * 0.46
-		c.draw_texture_rect(ic, Rect2((c.size - Vector2(side, side)) / 2.0, Vector2(side, side)), false, Color(UiKit.INK, 1.0 if on else 0.55))
+		c.draw_texture_rect(ic, Rect2((c.size - Vector2(side, side)) / 2.0, Vector2(side, side)), false, Color(HudSkin.INK, 1.0 if on else 0.55))
 		return
 	var q: float = c.size.y
 	var col := Color.WHITE if on else Color(1, 1, 1, 0.4)
@@ -607,12 +636,14 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	# right edge under PAUSE, centred on the screen's height where there is room (the right thumb's reach)
 	dock.size = dock.get_combined_minimum_size()
 	var dock_top := pause_button.position.y + pause_button.size.y + 10.0 * ui_scale
-	var dock_bottom := vp.y - m.w - version_label.get_combined_minimum_size().y - 4.0 * ui_scale
+	var dock_bottom := vp.y - m.w - version_label.get_combined_minimum_size().y - 10.0 * ui_scale
 	var dock_y := clampf((vp.y - dock.size.y) / 2.0 + 10.0 * ui_scale, dock_top, maxf(dock_top, dock_bottom - dock.size.y))
 	dock.position = Vector2(vp.x - m.z - dock.size.x, dock_y)
 	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
+	if dock.visible:                                   # Alpha 24: beside the skill column's foot, not under its drips
+		version_label.position.x = dock.position.x - 10.0 * ui_scale - version_label.size.x
 	# HUD pass: the old stack's top-left corner stays as a mark only (a mission's strip pushes it down; note_line
 	# starts under whichever is lower)
 	notices.size = Vector2.ZERO
@@ -2523,7 +2554,6 @@ func _build_debug() -> void:
 	debug_button.toggle_mode = true
 	_icon_button(debug_button, "")
 	debug_button.add_theme_font_override("font", UiKit.HEAD)
-	debug_button.add_theme_stylebox_override("pressed", UiTheme.box("B6", UiTheme.SCALE, Color(0.75, 1.1, 1.15)))
 	root.add_child(debug_button)
 	debug_button.visible = not main.online and Rules.debug_tools   # online: the rules are the host's, not live-tunable;
 	                                                               # offline only when DEBUG TOOLS is on in OPTIONS (0.18.7)

@@ -106,7 +106,10 @@ class Slot:
 		var t := dock._t
 		var glow := 0.55 + 0.45 * sin(t * 4.0)
 		var disabled := id == "" or not dock.sim.abilities_on or dock.sim.over
-		var card: StyleBox = dock.card_box(armed)
+		var card := dock.card_box(index)
+		card.accent = Color.WHITE.lerp(col, 0.35) if armed else col
+		card.dim = disabled or not (is_ready or armed)
+		card.glow = (1.3 if armed else 0.75 + 0.35 * glow) if is_ready or armed else 0.6
 		card.draw(get_canvas_item(), Rect2(Vector2.ZERO, size))
 		var d := dock.round_d
 		var ic := Vector2(w / 2.0, dock.pad + d / 2.0)
@@ -136,7 +139,7 @@ class Slot:
 			if not is_ready:
 				tint = Color(HudSkin.muted(), 0.6)
 			if armed:
-				tint = UiKit.INK
+				tint = HudSkin.INK
 			draw_texture_rect(tex, Rect2(ic - isz / 2.0, isz), false, tint)
 		if not ult and cd > 0.0 and not disabled:
 			# the cooldown sweep over the icon: the part still cooling stays shaded, clockwise from the top
@@ -147,7 +150,7 @@ class Slot:
 				pts.append(ic + Vector2(cos(a), sin(a)) * d * 0.4)
 			if frac > 0.01:
 				draw_colored_polygon(pts, Color(1, 1, 1, 0.55) if HudSkin.light() else Color(0, 0, 0, 0.55))
-			_centred(str(int(ceil(cd))), ic, 22, UiKit.INK, true)
+			_centred(str(int(ceil(cd))), ic, 22, HudSkin.INK, true)
 		if ult and burst > 0.0:                            # READY: a ring bursting out of the button
 			var k := 1.0 - burst
 			draw_arc(ic, d * 0.5 + (4.0 + 26.0 * k) * s, 0.0, TAU, 48, Color(col, burst), (5.0 * burst + 1.0) * s, true)
@@ -170,19 +173,19 @@ class Slot:
 				ink if is_ready else HudSkin.muted(), tw - 8.0 * s, UI_FONT)
 		if dock.keys and not dock.mobile:
 			var kr := Rect2(Vector2(4.0, 4.0) * s, Vector2(14, 15) * s)
-			draw_rect(kr, Color(UiKit.INK, 0.08))
-			draw_rect(kr, Color(UiKit.INK, 0.3), false, 1.0)
-			_centred(str(index + 1), kr.get_center() + Vector2(0, 0.5 * s), 11, UiKit.MUTED, false)
+			draw_rect(kr, Color(HudSkin.INK, 0.08))
+			draw_rect(kr, Color(HudSkin.INK, 0.3), false, 1.0)
+			_centred(str(index + 1), kr.get_center() + Vector2(0, 0.5 * s), 11, HudSkin.MUTED, false)
 		var room := w - 2.0 * dock.pad
 		var y := tr.end.y + 2.0 * s + UI_FONT.get_ascent(dock.font_px(16))
-		_line(ArmyPresets.skill_name(id).to_upper(), Vector2(w / 2.0, y), 16, UiKit.INK if is_ready or armed else UiKit.MUTED, room, UI_FONT)
+		_line(ArmyPresets.skill_name(id).to_upper(), Vector2(w / 2.0, y), 16, HudSkin.INK if is_ready or armed else HudSkin.MUTED, room, UI_FONT)
 		var status := ""
-		var sc := UiKit.MUTED
+		var sc := HudSkin.MUTED
 		if armed:
 			status = "TAP A TARGET" if not (dock.src >= 0) else ("TAP THE EXIT" if dock._kind() == "node_pair" else "TAP WHERE IT GOES")   # (POWERS: Portal)
 			if fires > 0:
 				status = "TAP A RELAY · %d LEFT" % fires
-			sc = UiKit.INK
+			sc = HudSkin.INK
 		elif fires > 0:
 			status = "FIRE A RELAY · %d LEFT" % fires
 			sc = ink
@@ -274,7 +277,7 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		round_d = ROUND_D_PHONE * ui_scale
 	pad = 6.0 * ui_scale
 	tag_h = maxf(16.0 * ui_scale, font_px(11) + 6.0 * ui_scale)
-	var slot_h := pad + round_d + tag_h * 0.5 + 2.0 * ui_scale + UI_FONT.get_height(font_px(16)) + UI_FONT.get_height(font_px(13)) + 2.0 * ui_scale + pad
+	var slot_h := pad + round_d + tag_h * 0.5 + 2.0 * ui_scale + UI_FONT.get_height(font_px(16)) + UI_FONT.get_height(font_px(13)) + 2.0 * ui_scale + pad + 10.0 * ui_scale   # (+ the goo card's drips)
 	for i in range(3):
 		var b := Slot.new()
 		b.dock = self
@@ -294,8 +297,8 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint_panel = PanelContainer.new()
 	hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var st := UiTheme.box("A12", 0.22 * ui_scale, Color.WHITE, 8.0 * ui_scale)   # Alpha 24: the pack's callout plate
-	st.axis = "xy"
+	var st := GooBox.glass(accent, ui_scale, 12.0, 0.9, 0.8)   # Alpha 24 neon pass: dark glass, a neon rim
+	st.set_content_margin_all(8.0 * ui_scale)
 	st.content_margin_left = 16 * ui_scale
 	st.content_margin_right = 16 * ui_scale
 	hint_panel.add_theme_stylebox_override("panel", st)
@@ -303,7 +306,7 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 	hint_label = Label.new()
 	hint_label.add_theme_font_override("font", UI_FONT)
 	hint_label.add_theme_font_size_override("font_size", maxi(int(17 * ui_scale), int(ceil(_floor_px * 1.15))))
-	hint_label.add_theme_color_override("font_color", UiKit.INK)
+	hint_label.add_theme_color_override("font_color", HudSkin.INK)
 	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint_panel.add_child(hint_label)
 	hint_panel.visible = false
@@ -320,13 +323,11 @@ func font_px(fs: int) -> int:
 	return maxi(int(fs * ui_scale), int(ceil(_floor_px)))
 
 
-func card_box(armed_now: bool) -> StyleBox:
-	## The slot's card (Alpha 24): the pack's A3 card, A4 (card_selected) while the slot is armed.
-	if not _cards.has(armed_now):
-		var c := UiTheme.box("A4" if armed_now else "A3", 0.18 * ui_scale, Color(1, 1, 1, 0.94), 0.0)
-		c.axis = "xy"
-		_cards[armed_now] = c
-	return _cards[armed_now]
+func card_box(i: int) -> GooBox:
+	## The slot's card (Alpha 24 neon pass): a goo blob in the slot's colour (Slot._draw sets its state each frame).
+	if not _cards.has(i):
+		_cards[i] = GooBox.make(SLOT_ACCENT[i], ui_scale, false, 11 + i * 5)
+	return _cards[i]
 
 
 func tag_box() -> StyleBox:
