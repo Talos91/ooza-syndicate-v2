@@ -151,7 +151,7 @@ static func frame(col: Color, fill: float, ui_scale: float, hidden := false) -> 
 	var key := "frame|%s|%.2f|%d|%s" % [col.to_html(), fill, s, hidden]
 	if _baked.has(key):
 		return _baked[key]
-	var im := sprite_image("B10" if hidden else "B7", Vector2i(s, s), Color.WHITE if hidden else col, fill)
+	var im := _noir_badge(col, fill, s) if HudNoir.has("badge") and not hidden else sprite_image("B10" if hidden else "B7", Vector2i(s, s), Color.WHITE if hidden else col, fill)
 	if im == null:
 		_baked[key] = null
 		return null
@@ -178,6 +178,36 @@ static func frame(col: Color, fill: float, ui_scale: float, hidden := false) -> 
 	var t := ImageTexture.create_from_image(out)
 	_baked[key] = t
 	return t
+
+
+static func _noir_badge(col: Color, fill: float, s: int) -> Image:
+	## Neon Noir drop-in: the director's badge (badge_fill + its white badge_rim tinted `col`) baked like B7 - square, s px.
+	var f := HudNoir.part_texture("badge")
+	if f == null:
+		return null
+	var im := f.get_image().duplicate() as Image
+	if im.is_compressed():
+		im.decompress()
+	im.convert(Image.FORMAT_RGBA8)
+	im.resize(s, s, Image.INTERPOLATE_LANCZOS)
+	for y in range(s):
+		for x in range(s):
+			var p := im.get_pixel(x, y)
+			im.set_pixel(x, y, Color(p, p.a * fill))
+	var parts: Dictionary = HudNoir.DATA.PARTS
+	var rt := HudNoir.texture(str((parts["badge"] as Dictionary).get("rim", "")))
+	if rt != null:
+		var rim := rt.get_image().duplicate() as Image
+		if rim.is_compressed():
+			rim.decompress()
+		rim.convert(Image.FORMAT_RGBA8)
+		rim.resize(s, s, Image.INTERPOLATE_LANCZOS)
+		for y in range(s):
+			for x in range(s):
+				var p := rim.get_pixel(x, y)
+				rim.set_pixel(x, y, Color(p.r * col.r, p.g * col.g, p.b * col.b, p.a))
+		im.blend_rect(rim, Rect2i(0, 0, s, s), Vector2i.ZERO)
+	return im
 
 
 static func frame_box(col: Color, fill: float, ui_scale: float, content := 4.0) -> StyleBox:

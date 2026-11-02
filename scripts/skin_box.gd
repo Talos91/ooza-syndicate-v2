@@ -14,16 +14,23 @@ var slice := Vector4.ZERO                          # margins left, top, right, b
 var axis := "xy"
 var scale := 0.4                                   # source px -> canvas units, for "xy"
 var modulate := Color.WHITE
+var rim: Texture2D                                 # Neon Noir drop-in (HudNoir): a white RIM + GLOW layer cut to the same cell,
+var rim_modulate := Color.WHITE                    # drawn over `texture` with the same slicing, tinted per seat / faction
 
 
 func _draw(ci: RID, r: Rect2) -> void:
 	if texture == null or r.size.x <= 0.0 or r.size.y <= 0.0:
 		return
-	var rid := texture.get_rid()
+	_draw_layer(ci, r, texture.get_rid(), modulate)
+	if rim != null:
+		_draw_layer(ci, r, rim.get_rid(), rim_modulate)
+
+
+func _draw_layer(ci: RID, r: Rect2, rid: RID, mod: Color) -> void:
 	if axis == "fixed" or slice == Vector4.ZERO:
 		var kf := minf(r.size.x / region.size.x, r.size.y / region.size.y)
 		var d := region.size * kf
-		RenderingServer.canvas_item_add_texture_rect_region(ci, Rect2(r.position + (r.size - d) / 2.0, d), rid, region, modulate)
+		RenderingServer.canvas_item_add_texture_rect_region(ci, Rect2(r.position + (r.size - d) / 2.0, d), rid, region, mod)
 		return
 	var ky := r.size.y / region.size.y if axis == "x" else scale
 	ky = minf(ky, r.size.y / maxf(1.0, slice.y + slice.w))
@@ -51,4 +58,4 @@ func _draw(ci: RID, r: Rect2) -> void:
 					Vector2(cols[i][1] - cols[i][0], rows[j][1] - rows[j][0]))
 			var dst := Rect2(r.position + Vector2(dx[i], dy[j]), Vector2(dx[i + 1] - dx[i], dy[j + 1] - dy[j]))
 			if src.size.x > 0.0 and src.size.y > 0.0 and dst.size.x > 0.0 and dst.size.y > 0.0:
-				RenderingServer.canvas_item_add_texture_rect_region(ci, dst, rid, src, modulate)
+				RenderingServer.canvas_item_add_texture_rect_region(ci, dst, rid, src, mod)

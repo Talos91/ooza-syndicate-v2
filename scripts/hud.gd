@@ -227,12 +227,9 @@ func _seat_groups() -> Array:
 func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
 	var chip := PanelContainer.new()
 	chip.custom_minimum_size = Vector2(TOP_CHIP_W, TOP_CHIP_H) * ui_scale
-	# Alpha 24: the pack's score pill - the node badge frame (B7) with the seat's colour on its rim, yours the most solid
-	var cg := GooBox.glass(Rules.seat_color(seat), ui_scale, 9.0, 0.88 if mine else 0.62, 1.0 if mine else 0.5)
-	cg.set_content_margin_all(3.0 * ui_scale)
-	cg.content_margin_left = 6.0 * ui_scale
-	cg.content_margin_right = 6.0 * ui_scale
-	chip.add_theme_stylebox_override("panel", cg)
+	# Alpha 24 Neon Noir: the score pill - glass with the seat's colour on its rim (seat colours stay: every screen shows the
+	# room's colours), yours the brightest; a seat that is out dims (_sync_top_chips swaps the box)
+	chip.add_theme_stylebox_override("panel", _score_box(seat, "score_pill_mine" if mine else "score_pill"))
 	chip.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -259,7 +256,16 @@ func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	row.add_child(lbl)
 	into.add_child(chip)
-	top_chips[seat] = {"panel": chip, "emblem": emb, "label": lbl}
+	top_chips[seat] = {"panel": chip, "emblem": emb, "label": lbl, "box": "score_pill_mine" if mine else "score_pill"}
+
+
+func _score_box(seat: String, id: String) -> StyleBox:
+	var m := Vector4(6.0, 3.0, 6.0, 3.0) * ui_scale
+	return HudNoir.box(id, Rules.seat_color(seat), m)
+
+
+func _exit_tree() -> void:
+	UiTheme.match_dark(false)                         # Neon Noir: the menus follow the player's theme again
 
 
 # ------------------------------------------------------------------ build
@@ -276,7 +282,10 @@ func setup(m: Node3D) -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
-	var accent := Rules.seat_color(human)
+	# Alpha 24 Neon Noir (Daniele 2026-11-02): the match is dark only, its chrome in your faction's colour
+	UiTheme.match_dark(true)
+	HudNoir.setup(str(sim.factions.get(human, "vex")), ui_scale)
+	var accent := HudNoir.accent
 	# badges first (under everything else). Alpha 19 (Daniele: "they all look different size - we should
 	# make them have fixed size and have their inside content never get out of the box boundaries"):
 	# one fixed box per ui_scale, its parts placed by hand (_place_badge) and clipped to it.
@@ -343,9 +352,7 @@ func setup(m: Node3D) -> void:
 	# highlighted, team modes grouped with a wider gap between groups. TUTORIAL: "topbar" gates the
 	# whole bar, "strength" the chips alone (clock-only in the early lessons, as before).
 	top_panel = PanelContainer.new()
-	var tg := GooBox.glass(Color("2ee6ff"), ui_scale, 14.0, 0.72, 0.6)   # Alpha 24 neon pass: dark glass, a neon rim
-	tg.set_content_margin_all(6.0 * ui_scale)
-	top_panel.add_theme_stylebox_override("panel", tg)
+	top_panel.add_theme_stylebox_override("panel", HudNoir.box("top_capsule", Color(0, 0, 0, 0), Vector4(6, 6, 6, 6) * ui_scale))
 	top_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(top_panel)
 	var bar := HBoxContainer.new()
@@ -374,32 +381,25 @@ func setup(m: Node3D) -> void:
 		for seat in g:
 			_build_top_chip(seat, into, seat == human)
 	status_glow = Panel.new()                         # HUD pass: the Last Stand announcement pulses its own line
-	var sg := panel_style(Rules.state_color("warn"))
-	sg.set_border_width_all(2)
-	sg.bg_color = Color(0.25, 0.03, 0.05, 0.72)
-	status_glow.add_theme_stylebox_override("panel", sg)
+	status_glow.add_theme_stylebox_override("panel", HudNoir.box("status_pill", Color(0, 0, 0, 0), Vector4.ZERO))
 	status_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_glow.visible = false
 	root.add_child(status_glow)
 	status_label = text_label("", 18, Color("ffb0b0"))
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# Alpha 24: the line sits on the pack's track pill (B19), as wide as its words (_fit_status); empty, nothing shows
-	var sp := GooBox.glass(Rules.state_color("warn"), ui_scale, 16.0, 0.78, 0.7)
-	sp.content_margin_left = 16.0 * ui_scale
-	sp.content_margin_right = 16.0 * ui_scale
-	sp.content_margin_top = 1.0 * ui_scale
-	sp.content_margin_bottom = 1.0 * ui_scale
-	status_label.add_theme_stylebox_override("normal", sp)
+	# Alpha 24 Neon Noir: the line sits on the red status pill, as wide as its words (_fit_status); empty, nothing shows. The
+	# seconds ("9 s") sit in an amber capsule (_draw_status_secs, like the board's NEXT DROP 6s)
+	status_label.add_theme_stylebox_override("normal", HudNoir.box("status_pill", Color(0, 0, 0, 0), Vector4(16.0, 1.0, 16.0, 1.0) * ui_scale))
+	_status_secs = Control.new()
+	_status_secs.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_secs.draw.connect(_draw_status_secs)
+	status_label.add_child(_status_secs)
 	status_label.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(status_label)
 	catchup_tag = PanelContainer.new()                 # CATCH-UP: your side only (the HUD shows no rival modifiers)
-	var cs := GooBox.glass(accent, ui_scale, 9.0, 0.85, 0.8)
-	cs.set_content_margin_all(4.0 * ui_scale)
-	cs.content_margin_left = 10 * ui_scale
-	cs.content_margin_right = 10 * ui_scale
-	catchup_tag.add_theme_stylebox_override("panel", cs)
+	catchup_tag.add_theme_stylebox_override("panel", HudNoir.box("catchup_tag", Color(0, 0, 0, 0), Vector4(10, 4, 10, 4) * ui_scale))
 	catchup_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	catchup_tag.add_child(text_label("CATCH-UP +%d %%" % int(round((Rules.CATCHUP_PRODUCTION - 1.0) * 100.0)), 18, HudSkin.ink(accent)))
+	catchup_tag.add_child(text_label("CATCH-UP +%d %%" % int(round((Rules.CATCHUP_PRODUCTION - 1.0) * 100.0)), 18, HudNoir.GOOD))
 	catchup_tag.modulate.a = 0.0
 	catchup_tag.visible = false
 	root.add_child(catchup_tag)
@@ -428,15 +428,14 @@ func setup(m: Node3D) -> void:
 	music_button.add_child(_music_glyph)
 	# side command panel (Alpha 11: 100/75/50/25 + the selected vat's count)
 	side_panel = PanelContainer.new()
-	var sg2 := GooBox.glass(Color("2ee6ff"), ui_scale, 14.0, 0.7, 0.5)   # Alpha 24 neon pass
-	sg2.set_content_margin_all(10.0 * ui_scale)
-	side_panel.add_theme_stylebox_override("panel", sg2)
+	# Alpha 24 Neon Noir: the SEND housing - a container, so it holds living ooze and drips (its buttons never do)
+	side_panel.add_theme_stylebox_override("panel", HudNoir.box("send_housing", Color(0, 0, 0, 0), Vector4(10, 8, 10, 6) * ui_scale))
 	side_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(side_panel)
 	side_box = VBoxContainer.new()
 	side_box.add_theme_constant_override("separation", 8)
 	side_panel.add_child(side_box)
-	var send_title := text_label("SEND", 15, HudSkin.MUTED)
+	var send_title := text_label("SEND", 16, HudNoir.INK)
 	send_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	side_box.add_child(send_title)
 	var group := ButtonGroup.new()
@@ -452,7 +451,9 @@ func setup(m: Node3D) -> void:
 				b.button_pressed = true
 				main.fraction = f)
 		side_box.add_child(b)
-	count_label = text_label("DRAG A VAT", 14, HudSkin.ink(accent))
+	count_label = text_label("DRAG A VAT", 14, accent)
+	count_label.add_theme_constant_override("outline_size", int(3 * ui_scale))
+	count_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.75))
 	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	side_box.add_child(count_label)
 	# bottom: map title, hint, ability dock, version
@@ -523,8 +524,8 @@ func setup(m: Node3D) -> void:
 
 
 func _icon_button(b: Button, icon_name: String) -> void:
-	## Alpha 24: a square HUD button in the pack's look (B6), its D icon centred and tinted like the menus' (UiKit.icon_btn).
-	_goo_skin(b, Color("2ee6ff"), b.get_index() + icon_name.length())
+	## Alpha 24 Neon Noir: a square HUD button (part square_button: glass, the accent rim), its white D icon centred.
+	_noir_skin(b, "square_button")
 	b.add_theme_color_override("font_pressed_color", HudSkin.INK)
 	b.size = b.custom_minimum_size
 	if icon_name != "":
@@ -533,31 +534,28 @@ func _icon_button(b: Button, icon_name: String) -> void:
 
 
 func _send_skin(b: Button) -> void:
-	## Alpha 24 neon pass (Daniele: "buttons should have an oozie feel"): a SEND share button is a goo blob (GooBox) with a
-	## neon rim; the picked one is lit, filled with the ooze, its words dark.
-	_goo_skin(b, Color("2ee6ff"), b.get_index() * 7 + 3)
+	## Alpha 24 Neon Noir: a SEND share button is a clean glass pill (no drips: those stay on the housing); the picked one is
+	## filled with lit ooze in your faction's colour, its words dark.
+	_noir_skin(b, "send_button")
 
 
-func _goo_skin(b: Button, col: Color, seed_v: int) -> void:
-	## A HUD button as a lit blob of ooze (GooBox): glass + neon rim, brighter on hover, filled when pressed / picked.
-	var normal := GooBox.make(col, ui_scale, false, seed_v)
-	var hover := GooBox.make(col, ui_scale, false, seed_v)
-	hover.glow = 1.4
-	hover.fill = Color(0.05, 0.1, 0.13, 0.88)
-	var pressed := GooBox.make(col, ui_scale, true, seed_v)
-	var off := GooBox.make(col, ui_scale, false, seed_v)
-	off.dim = true
-	b.add_theme_stylebox_override("normal", normal)
-	b.add_theme_stylebox_override("hover", hover)
-	b.add_theme_stylebox_override("pressed", pressed)
-	b.add_theme_stylebox_override("hover_pressed", pressed)
-	b.add_theme_stylebox_override("disabled", off)
+func _noir_skin(b: Button, part: String) -> void:
+	## A HUD button in its Neon Noir part's states: <part>, _hover, _picked / _pressed, _disabled (HudNoir.box: the cut sprite
+	## when imported, else the placeholder).
+	var on := part + ("_picked" if HudNoir.PRESETS.has(part + "_picked") else "_pressed")
+	var c := Vector4(4, 4, 4, 4) * ui_scale
+	b.add_theme_stylebox_override("normal", HudNoir.box(part, Color(0, 0, 0, 0), c))
+	b.add_theme_stylebox_override("hover", HudNoir.box(part + "_hover", Color(0, 0, 0, 0), c))
+	b.add_theme_stylebox_override("pressed", HudNoir.box(on, Color(0, 0, 0, 0), c))
+	b.add_theme_stylebox_override("hover_pressed", HudNoir.box(on, Color(0, 0, 0, 0), c))
+	b.add_theme_stylebox_override("disabled", HudNoir.box(part + "_disabled", Color(0, 0, 0, 0), c))
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	for k in ["font_color", "font_hover_color", "font_focus_color"]:
-		b.add_theme_color_override(k, HudSkin.INK)
-	b.add_theme_color_override("font_pressed_color", Color("05212a"))
-	b.add_theme_color_override("font_hover_pressed_color", Color("05212a"))
-	b.add_theme_color_override("font_disabled_color", HudSkin.MUTED)
+		b.add_theme_color_override(k, HudNoir.INK)
+	b.add_theme_color_override("font_pressed_color", HudNoir.on_accent())
+	b.add_theme_color_override("font_hover_pressed_color", HudNoir.on_accent())
+	b.add_theme_color_override("font_disabled_color", HudNoir.MUTED)
 	b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
 
 
@@ -566,6 +564,10 @@ func _fit_status() -> void:
 	## label itself stays visible: the tutorial's reveal owns that).
 	var empty := status_label.text == ""
 	status_label.self_modulate.a = 0.0 if empty else 1.0
+	if _status_secs.get_meta("text", "") != status_label.text:
+		_status_secs.set_meta("text", status_label.text)
+		_status_secs.size = status_label.size
+		_status_secs.queue_redraw()
 	if empty:
 		return
 	var vp := root.get_viewport_rect().size
@@ -573,6 +575,27 @@ func _fit_status() -> void:
 	if absf(status_label.size.x - w) > 0.5:
 		status_label.size.x = w
 		status_label.position.x = (vp.x - w) / 2.0
+
+
+func _draw_status_secs() -> void:
+	## Neon Noir (the board's NEXT DROP 6s pill): the status line's seconds ("9 s", "12 s") in an amber capsule over the words.
+	var t := status_label.text
+	var m := _secs_re.search(t)
+	if m == null:
+		return
+	var font := status_label.get_theme_font("font")
+	var fs := status_label.get_theme_font_size("font_size")
+	var sb := status_label.get_theme_stylebox("normal")
+	var tw := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var inner := status_label.size.x - sb.content_margin_left - sb.content_margin_right
+	var x0 := sb.content_margin_left + (inner - tw) / 2.0 + font.get_string_size(t.substr(0, m.get_start()), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var w := font.get_string_size(m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var h := font.get_height(fs)
+	var y0 := (status_label.size.y - h) / 2.0
+	var r := Rect2(x0 - 2.5 * ui_scale, y0 + 1.5 * ui_scale, w + 5.0 * ui_scale, h - 3.0 * ui_scale)
+	if _secs_box == null:
+		_secs_box = HudNoir.box("status_secs", Color(0, 0, 0, 0), Vector4.ZERO)
+	_status_secs.draw_style_box(_secs_box, r)
 
 
 func _draw_music_note(c: Control) -> void:
@@ -634,16 +657,18 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	hint.position = Vector2(vp.x * 0.5 - hint.size.x / 2.0, vp.y - m.w - 18)
 	# Alpha 24 (Hub Roadmap m05, "send on the left thumb, skills stacked on the right"): the skills stand in a column on the
 	# right edge under PAUSE, centred on the screen's height where there is room (the right thumb's reach)
+	# Neon Noir: the column sits in its housing (SkillDock._draw, housing_margin: its rim round the slots, its drips below)
 	dock.size = dock.get_combined_minimum_size()
-	var dock_top := pause_button.position.y + pause_button.size.y + 10.0 * ui_scale
-	var dock_bottom := vp.y - m.w - version_label.get_combined_minimum_size().y - 10.0 * ui_scale
+	var hm := dock.housing_margin()
+	var dock_top := pause_button.position.y + pause_button.size.y + 8.0 * ui_scale + hm.y
+	var dock_bottom := vp.y - m.w - hm.w
 	var dock_y := clampf((vp.y - dock.size.y) / 2.0 + 10.0 * ui_scale, dock_top, maxf(dock_top, dock_bottom - dock.size.y))
-	dock.position = Vector2(vp.x - m.z - dock.size.x, dock_y)
+	dock.position = Vector2(vp.x - m.z - hm.z - dock.size.x, dock_y)
 	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
 	if dock.visible:                                   # Alpha 24: beside the skill column's foot, not under its drips
-		version_label.position.x = dock.position.x - 10.0 * ui_scale - version_label.size.x
+		version_label.position.x = dock.position.x - hm.x - 10.0 * ui_scale - version_label.size.x
 	# HUD pass: the old stack's top-left corner stays as a mark only (a mission's strip pushes it down; note_line
 	# starts under whichever is lower)
 	notices.size = Vector2.ZERO
@@ -679,7 +704,8 @@ func right_used() -> float:
 	## The right edge the map keeps clear of (main._fit_nodes): PAUSE's column, and the skill column when it shows.
 	var w := pause_button.size.x if pause_button else 0.0
 	if dock and dock.visible:
-		w = maxf(w, dock.size.x)
+		var hm := dock.housing_margin()
+		w = maxf(w, dock.size.x + hm.x + hm.z)
 	return margins.z + w + 12.0
 
 
@@ -696,6 +722,11 @@ func bottom_used() -> float:
 func pointer_over_ui(p: Vector2) -> bool:
 	for c in [top_panel, pause_button, music_button, side_panel, dock, debug_button, chat_button, monster_icon, spectate_button]:
 		if c and c.visible and c.get_global_rect().has_point(p):
+			return true
+	if dock and dock.visible:                         # Neon Noir: the skill column's housing round it
+		var hm := dock.housing_margin()
+		var dr := dock.get_global_rect()
+		if Rect2(dr.position - Vector2(hm.x, hm.y), dr.size + Vector2(hm.x + hm.z, hm.y + hm.w)).has_point(p):
 			return true
 	if debug_panel and debug_panel.visible and debug_panel.get_global_rect().has_point(p):
 		return true
@@ -756,7 +787,10 @@ func sync(dt: float, cam: Camera3D) -> void:
 			var c: Dictionary = top_chips[seat]
 			var out := _seat_out(seat)
 			(c["label"] as Label).text = "%03d" % Rules.shown(sim.seat_strength(seat))
-			(c["panel"] as Control).modulate = Color(1, 1, 1, 0.4) if out else Color.WHITE
+			(c["panel"] as Control).modulate = Color(1, 1, 1, 0.55) if out else Color.WHITE
+			if out and str(c["box"]) != "score_pill_out":          # Neon Noir: an out seat's pill sinks (grey rim, no glow)
+				c["box"] = "score_pill_out"
+				(c["panel"] as Control).add_theme_stylebox_override("panel", _score_box(seat, "score_pill_out"))
 	if not shows("status_line"):
 		status_label.text = ""
 	elif sim.very_last_stand_active:
@@ -2005,6 +2039,9 @@ const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade 
 const INFO_COLOR := Color("7fe9f5")
 var callouts: HudCallouts               # every placed message (see above)
 var status_glow: Panel                  # behind the status line while the Last Stand announcement pulses it
+var _status_secs: Control               # Neon Noir: the amber capsule round the status line's seconds
+var _secs_box: StyleBox
+var _secs_re := RegEx.create_from_string("\\d+ s\\b")
 var _ls_pulse := 0.0                    # s of that pulse left
 var _ls_how := ""                       # the method's one-line explanation, shown in the line meanwhile
 

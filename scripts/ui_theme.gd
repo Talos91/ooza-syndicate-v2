@@ -17,6 +17,7 @@ const SCALE := 0.36                                # source px -> canvas units: 
 const PILLS := ["A5", "A6", "A7", "A8", "A9", "A10", "A11"]   # the pill buttons scale with their height (round ends stay round)
 
 static var _mode := ""                             # "" until read
+static var _match_dark := false                    # a match is on: dark only (match_dark)
 static var _themes := {}                           # mode -> Theme
 static var _by_name := {}                          # icon name -> id
 
@@ -30,7 +31,18 @@ static func _arg_mode() -> String:
 	return ""
 
 
+static func match_dark(on: bool) -> void:
+	## Alpha 24 Neon Noir (Daniele 2026-11-02: the in-match HUD is dark only): while a match runs (Hud.setup ... Hud exits) every
+	## page built - pause, settings, results - is dark; the saved choice is untouched and comes back after the match.
+	if _match_dark == on:
+		return
+	_match_dark = on
+	UiKit.apply_tokens(light())
+
+
 static func mode() -> String:
+	if _match_dark:
+		return "dark"
 	if _mode == "":
 		_mode = _arg_mode()
 		if _mode == "":
@@ -49,7 +61,7 @@ static func set_mode(v: String) -> bool:
 	if not v in MODES:
 		return false
 	_mode = v
-	UiKit.apply_tokens(v == "light")
+	UiKit.apply_tokens(light())                        # (a match keeps dark until it ends)
 	var c := ConfigFile.new()
 	c.load(Rules.settings_path)                        # keep the rest of [display] / [audio]
 	c.set_value("display", "theme", v)
