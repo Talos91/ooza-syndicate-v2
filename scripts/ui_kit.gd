@@ -84,9 +84,10 @@ static func apply_tokens(light: bool) -> bool:
 const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Color("a1eb39"),
 		"ember": Color("ff7c19"), "solar": Color("ffce58")}
 const ORDER := ["vex", "null", "bloom", "ember", "solar"]
-const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "VIRIDIAN", "ember": "EMBER", "solar": "SOLAR"}
-const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "BLOOM", "ember": "MAW", "solar": "SHELLS"}
-const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "VIRIDIAN / BLOOM",
+## Daniele 2026-11-02: the faction is BLOOM - no VIRIDIAN anywhere; it has no second word (SUBS "")
+const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "BLOOM", "ember": "EMBER", "solar": "SOLAR"}
+const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "", "ember": "MAW", "solar": "SHELLS"}
+const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "BLOOM",
 		"ember": "EMBER / MAW", "solar": "SOLAR / SHELLS"}
 const CUT := 10                                    # the standard corner cut
 const CFG := "user://ui.cfg"

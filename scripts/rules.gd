@@ -671,7 +671,7 @@ static func _balance_set(k: String, v) -> void:
 		"FIGHT_RATE_K": FIGHT_RATE_K = v
 		"FACTION_STATS": FACTION_STATS = v
 		"forge_bonus": forge_bonus = v
-const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA CARTEL"], "bloom": ["VIRIDIAN", "BLOOM"],
+const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA CARTEL"], "bloom": ["BLOOM", ""],
 		"ember": ["EMBER", "MAW"], "solar": ["SOLAR", "SHELLS"]}
 const FACTION_TAGLINES := {"vex": "ADAPT. CONNECT. REDIRECT.", "null": "SAME SIGNAL. DIFFERENT TRUTH.",
 		"bloom": "A WILDER TOMORROW.", "ember": "PRESSURE BREEDS PROGRESS.", "solar": "HOLD THE LIGHT."}

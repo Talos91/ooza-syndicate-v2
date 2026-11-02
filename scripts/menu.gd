@@ -19,7 +19,7 @@ const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const K := 1280.0 / 1672.0
-const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "VIRIDIAN\nBLOOM", "ember": "EMBER\nMAW", "solar": "SOLAR\nSHELLS"}
+const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "BLOOM", "ember": "EMBER\nMAW", "solar": "SOLAR\nSHELLS"}
 
 var main: Node3D
 var content: Control
@@ -2251,7 +2251,7 @@ func _cosmetic_path(family: String, id: String) -> String:
 		return TutorialDirector.line("locked_cosmetic").to_upper()
 	if family == "vat" and id == "faction":
 		return "%d / %d WINS AS %s, ITS CAMPAIGN, OR UNLOCK" % [int(Progression.faction_stats(_army)["vat_wins"]),
-				int(Rules.PROGRESSION["faction_vat_wins"]), "VIRIDIAN" if _army == "bloom" else _army.to_upper()]
+				int(Rules.PROGRESSION["faction_vat_wins"]), _army.to_upper()]
 	return "UNLOCK WITH SCRAP OR CHIPS"
 
 
@@ -3993,9 +3993,9 @@ func _setup_faction(pos: Vector2, dims: Vector2) -> void:
 		skill_icon(ids[i], Vector2(10.0 + i * (isz + 6.0), (ab.size.y - isz) / 2.0), Vector2(isz, isz), ic, ab)
 	var tx := pos.x + pad + hs + 12.0
 	var tw := ab.position.x - 8.0 - tx
-	var sub := "%s  ·  SEAT A" % UiKit.SUBS[faction]
+	var sub := ("%s  ·  SEAT A" % UiKit.SUBS[faction]) if UiKit.SUBS[faction] != "" else "SEAT A"
 	if UiKit.text_w(self, sub, 13) > tw:                 # a narrow phone column (the iPhone SE): the name alone
-		sub = UiKit.SUBS[faction]
+		sub = UiKit.SUBS[faction] if UiKit.SUBS[faction] != "" else "SEAT A"
 	var lines := [[UiKit.NAMES[faction], 17, acc, true], [sub, 13, UiKit.MUTED, false]]
 	if not Rules.abilities_on:
 		lines.append(["ABILITIES OFF", 12, UiKit.DIM, false])
@@ -4155,7 +4155,7 @@ func show_seats() -> void:
 			UiKit.emblem_rect(self, faction, p + Vector2(16.0 + ph + 12.0, py + (ph - nl) / 2.0), nl)
 			var ct := "CHANGE"
 			var chw := UiKit.text_w(self, ct, 14, true) + 34.0
-			var nm := "%s  ·  %s" % [UiKit.NAMES[faction], UiKit.SUBS[faction]]
+			var nm := ("%s  ·  %s" % [UiKit.NAMES[faction], UiKit.SUBS[faction]]) if UiKit.SUBS[faction] != "" else str(UiKit.NAMES[faction])
 			var nx := 16.0 + ph + 12.0 + nl + 6.0
 			if nx + UiKit.text_w(self, nm, 15, true) > cw - 16.0 - chw - 10.0:   # iOS: the name alone where CHANGE needs the room
 				nm = UiKit.NAMES[faction]

@@ -25,13 +25,15 @@ func _draw(ci: RID, r: Rect2) -> void:
 		var d := region.size * kf
 		RenderingServer.canvas_item_add_texture_rect_region(ci, Rect2(r.position + (r.size - d) / 2.0, d), rid, region, modulate)
 		return
-	var k := r.size.y / region.size.y if axis == "x" else scale
-	k = minf(k, r.size.x / maxf(1.0, slice.x + slice.z))  # margins never overlap: a short or narrow box shrinks them
-	k = minf(k, r.size.y / maxf(1.0, slice.y + slice.w))
+	# the corner scale, per axis: a narrow box squeezes only its widths (a short pill like ON / OFF stays one smooth
+	# shape - one shared scale made the vertical edges stretch and showed seams where the caps met)
+	var ky := r.size.y / region.size.y if axis == "x" else scale
+	ky = minf(ky, r.size.y / maxf(1.0, slice.y + slice.w))
+	var kx := minf(ky, r.size.x / maxf(1.0, slice.x + slice.z))
 	var sx := [0.0, slice.x, region.size.x - slice.z, region.size.x]
 	var sy := [0.0, slice.y, region.size.y - slice.w, region.size.y]
-	var dx := [0.0, slice.x * k, r.size.x - slice.z * k, r.size.x]
-	var dy := [0.0, slice.y * k, r.size.y - slice.w * k, r.size.y]
+	var dx := [0.0, slice.x * kx, r.size.x - slice.z * kx, r.size.x]
+	var dy := [0.0, slice.y * ky, r.size.y - slice.w * ky, r.size.y]
 	for j in 3:
 		for i in 3:
 			var src := Rect2(region.position + Vector2(sx[i], sy[j]), Vector2(sx[i + 1] - sx[i], sy[j + 1] - sy[j]))
