@@ -183,7 +183,7 @@ func _play(path: String, mode: String, level: String, spec: Dictionary, seed_val
 	var dt := 0.1
 	var ev_i := 0
 	var ult_ctx := []                                 # bal-audit: [t, seat, id, own lines moving, their units (shown)] per ult cast
-	var mg := {}                                      # bal-audit: seat -> [MG node-seconds, MG kills shown, production forgone shown]
+	var mg := {}                                      # bal-audit: seat -> [MG node-seconds, MG kills shown, production forgone shown, T3 node-s, firing s]
 	while not sim.over and sim.time < 600.0:
 		for ai in ais:
 			ai.think(sim, dt)
@@ -196,8 +196,12 @@ func _play(path: String, mode: String, level: String, spec: Dictionary, seed_val
 			var n: Dictionary = sim.nodes[id]
 			if n["structure"] != "machinegoon" or n["owner"] == "":
 				continue
-			var row: Array = mg.get(n["owner"], [0.0, 0.0, 0.0])
+			var row: Array = mg.get(n["owner"], [0.0, 0.0, 0.0, 0.0, 0.0])
 			row[0] += dt
+			if n["tier"] >= 3:
+				row[3] += dt                         # bal-02321 re-check: T3 Machinegoon node-seconds
+			if not (n["shot"] as Dictionary).is_empty() and float(n["shot"].get("t", -1.0)) != shot_t[id]:
+				row[4] += dt                         # seconds it actually fired
 			if float(n["shot"].get("t", -1.0)) != shot_t[id]:
 				row[1] += Rules.shown_f(float(n["shot"].get("kills", 0.0)))
 			row[2] += Rules.shown_f(Rules.PROD[n["tier"]] * sim.stat(n["owner"], "production")) * (1.0 - Rules.MACHINEGOON_PROD) * dt
