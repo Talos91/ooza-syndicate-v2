@@ -2,7 +2,7 @@ extends Node
 ## Render probe for the SKILLS 2.0 dock (0.18.7; a dev tool, not a suite). Run windowed, as a scene (the Net
 ## autoload is needed):
 ##   Godot --path . res://tests/skills_probe.tscn -- state=<state> out=<png> [--mobile --window=1688x780] [--brawl]
-##       [map=res://maps4/M-03-drift-belt.json] [faction=null] [active=surge] [mapskill=mire]
+##       [map=res://maps4/M-03-drift-belt.json] [faction=null] [active=surge] [mapskill=portal]
 ## states: ready (every slot ready; the ultimate's READY burst), cooldown (active + map cooling, the ultimate
 ## charging), armed-line (Surge: your lines lit), armed-deck (the map skill's decks lit), armed-node (Ghost Line:
 ## the source picked, its destinations lit), toast (rivals' casts on you), overdrive (VEX's Overdrive running: relays
@@ -29,7 +29,7 @@ func _frames(n: int) -> void:
 func _run() -> void:
 	var state := str(args.get("state", "ready"))
 	var f := str(args.get("faction", "vex" if state == "overdrive" else "null"))
-	var lo := {"active": str(args.get("active", "ghost_line" if state == "armed-node" else "surge")), "map": str(args.get("mapskill", "mire"))}
+	var lo := {"active": str(args.get("active", "ghost_line" if state == "armed-node" else "surge")), "map": str(args.get("mapskill", "portal"))}
 	var main_script = load("res://scripts/main.gd")
 	main_script.relaunch = {"faction": f, "rival": "ember", "mode": "1v1", "map": str(args.get("map", "res://maps4/M-03-drift-belt.json")), "loadout": lo}
 	var inst: Node = (load(MAIN) as PackedScene).instantiate()
