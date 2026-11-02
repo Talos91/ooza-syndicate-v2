@@ -210,6 +210,8 @@ func clear_page(art: String) -> void:
 	top_bar = null
 	nav_bar = null
 	content = Control.new()
+	content.theme = UiTheme.theme()                   # Alpha 24: the DARK / LIGHT theme's plain controls (UiTheme)
+	content.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # (the round-3 sprites draw ~0.36x)
 	add_child(content)
 	_fit()
 	_built_pt = _pt_factor()
@@ -500,6 +502,10 @@ func shell_open(crumb: String, tab: String, back := Callable(), f := "") -> Rect
 		_backdrop.modulate = Color(0.55, 0.58, 0.62)
 		_backdrop_ay = 0.5
 		_place_backdrop()
+	if UiTheme.light() and tab != "home":              # Alpha 24 LIGHT: the art behind a pale wash (board D), so dark words
+		_backdrop.modulate = Color(0.95, 0.96, 0.97)   # read on it like on its light panels
+		content.add_child(UiKit.rect(Vector2(-safe.x, -safe.y), content.size + Vector2(safe.x + safe.z, safe.y + safe.w),
+				Color(UiKit.PANEL, 0.6)))
 	top_bar = TopBar.make(self, crumb, shell_f, shell_slim)
 	# (the bar's BACK / ? / gear / level block call bar_back / show_help / show_options / show_profile themselves - 0.22.1)
 	content.add_child(top_bar)
@@ -866,6 +872,9 @@ func show_options() -> void:
 					[["FULL", not Rules.low_detail, func(): Rules.low_detail = false], ["LOW", Rules.low_detail, func(): Rules.low_detail = true]])
 			y += _opt_row(y, w, "COLOUR-BLIND", "Player colours anyone can tell apart, with red-green or blue-yellow colour blindness. It picks every seat's colour in the match (your screen only). From the next match.",
 					[["OFF", not Rules.colour_blind(), func(): Rules.set_colour_blind(false)], ["ON", Rules.colour_blind(), func(): Rules.set_colour_blind(true)]])
+			# Alpha 24 (UI round 3, Daniele 2026-11-02): the interface theme - every page from the next one built (this one now)
+			y += _opt_row(y, w, "THEME", "The look of the menus and screens: DARK or LIGHT.",
+					[["DARK", not UiTheme.light(), func(): UiTheme.set_mode("dark")], ["LIGHT", UiTheme.light(), func(): UiTheme.set_mode("light")]])
 			# SOUND: the AUDIO group (sfx.gd, user://settings.cfg [audio]) - both heard at once, the tap itself included
 			y += _say("AUDIO", Vector2(0, y + 18.0), 12, UiKit.accent(shell_f), 0.0, true) + 18.0
 			y += _opt_row(y, w, "SOUND", "The match and the menus. OFF: silent (the VOLUME is kept for ON).",
