@@ -21,6 +21,7 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 
 func _init() -> void:
+	Rules.archived_on = true                          # 0.23.21: Mire / Anchor / Bypass are archived; their code is still tested
 	if "--only=two_doors" in OS.get_cmdline_user_args():      # TWO DOORS alone (quick)
 		_two_doors()
 		print("two_doors: %d failure(s)" % failures)
@@ -568,9 +569,9 @@ func _init() -> void:
 	check(tv < tn, "a VEX horde arrives before a NULL one on the same deck (%.2f vs %.2f s)" % [tv, tn])
 	var sim26 := Sim.new()
 	sim26.setup(map, pos, {3: "A", 4: "B"}, {"A": "bloom", "B": "ember"}, 1)
-	check(absf(sim26.production(sim26.nodes[3]) - Rules.PROD[1] * 1.06) < 0.001, "Bloom's home produces 6 % more (0.23.15: was 10 %)")
+	check(absf(sim26.production(sim26.nodes[3]) - Rules.PROD[1] * 1.00) < 0.001, "Bloom's home produces as much as anyone's (0.23.21 set R1: was 6 % more)")
 	check(absf(sim26.production(sim26.nodes[4]) - Rules.PROD[1] * 0.9) < 0.001, "Ember's home produces 10 % less")
-	check(absf(sim26.attack_of("B") - 1.02) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 2 % more damage (0.23.15: was 10 %)")
+	check(absf(sim26.attack_of("B") - 1.10) < 0.001 and absf(sim26.attack_of("A") - 1.0) < 0.001, "Ember deals 10 % more damage (0.23.21 set R1: was 2 %)")
 
 	# CLASSIC = Alpha 11's landing rule: each arriving unit is resolved at once, one-for-one at
 	# baseline; nothing waits outside as a siege; survivors take the node
@@ -1192,7 +1193,7 @@ func _audit_fixes() -> void:
 		var b0: float = s.nodes[1]["units"]
 		var c0: float = s.nodes[1]["allies"].get("C", 0.0)
 		var lost_c0: float = s.combat_losses.get("C", 0.0)
-		var kills: float = minf(maxf(line * 0.25, 20.0) * 3.0, 350.0)       # 0.23.15 balance: 3 per unit, cap 70 shown (was 4 / 90)
+		var kills: float = minf(maxf(line * 0.25, 20.0) * 4.0, 450.0)       # 0.23.21 set R1: 4 per unit, cap 90 shown (0.23.15: 3 / 70)
 		check(s.cast("A", "ultimate", h["id"]), "Core Meltdown vs an allied store: cast")
 		if c[2]:
 			check(s.nodes[1]["owner"] == "A" and s.nodes[1]["allies"].is_empty() and s.combat_losses.get("C", 0.0) - lost_c0 > c0 - 0.01,
@@ -2128,9 +2129,21 @@ func _skills_tests() -> void:
 		ok = ok and sk.has("name") and sk.has("slot") and sk.has("cd") and sk.has("target") and sk.has("desc")
 		if sk["slot"] == "ultimate":
 			ok = ok and Rules.FACTION_ULTIMATE_ID[sk["faction"]] == id
-	check(ok and Rules.ACTIVE_SKILLS.size() == 7 and Rules.MAP_SKILLS.size() == 10 and Rules.FACTION_ULTIMATE_ID.size() == 5 and Rules.SKILLS.size() == 22,
-			"skills table: 7 active + 10 map + 5 ultimates (POWERS 0.22.2), each with name, slot, cd, target and desc")
-	check(Rules.FACTION_ULTIMATE.values().map(func(v): return v[0]) == ["Rewire", "Echo Split", "Superbloom", "Core Meltdown", "Relay Aegis"],
+	check(ok and Rules.ACTIVE_SKILLS.size() == 7 and Rules.MAP_SKILLS.size() == 7 and Rules.ARCHIVED_SKILLS.size() == 3 and Rules.FACTION_ULTIMATE_ID.size() == 5 and Rules.SKILLS.size() == 22,
+			"skills table: 7 active + 7 map (+ 3 archived, 0.23.21) + 5 ultimates, each with name, slot, cd, target and desc")
+	var arch_ok := true
+	for f in Rules.FACTION_LOADOUT:
+		arch_ok = arch_ok and not Rules.FACTION_LOADOUT[f]["map"] in Rules.ARCHIVED_SKILLS and not Rules.FACTION_LOADOUT[f]["map_no_relays"] in Rules.ARCHIVED_SKILLS
+		for b in Rules.AI_LOADOUTS[f]:
+			arch_ok = arch_ok and b["map"] in Rules.MAP_SKILLS and b["active"] in Rules.ACTIVE_SKILLS
+	check(arch_ok, "0.23.21: no default loadout or AI build holds an archived skill (Mire, Anchor, Bypass)")
+	Rules.archived_on = false
+	var arch := _mk(sw, "vex", "bloom", {"A": {"active": "scorch", "map": "anchor"}})
+	check(arch.loadouts["A"]["map"] == "portal",
+			"an archived pick plays as the faction's default map skill")
+	Rules.archived_on = true
+	check(not Rules.SKILLS.has("rewire") and Rules.SKILLS["overdrive"]["name"] == "Overdrive" and Rules.FACTION_ULTIMATE_ID["vex"] == "overdrive", "Rewire is now Overdrive (0.23.21)")
+	check(Rules.FACTION_ULTIMATE.values().map(func(v): return v[0]) == ["Overdrive", "Echo Split", "Superbloom", "Core Meltdown", "Relay Aegis"],
 			"FACTION_ULTIMATE carries the approved names")
 	# ---------------------------------------------------------------- 0.19.2: skills start on their full cooldown
 	var fresh := Sim.new()
@@ -2144,7 +2157,7 @@ func _skills_tests() -> void:
 	check(fresh.can_cast("A", "active", fresh.homes["A"]), "...and is ready once its cooldown has run")
 	# ---------------------------------------------------------------- loadouts
 	var s := _mk(sw, "vex", "bloom", {"A": {"active": "scorch", "map": "anchor"}})
-	check(s.loadouts["A"] == {"active": "scorch", "map": "anchor", "ultimate": "rewire"}, "a chosen loadout; the ultimate follows the faction")
+	check(s.loadouts["A"] == {"active": "scorch", "map": "anchor", "ultimate": "overdrive"}, "a chosen loadout; the ultimate follows the faction")
 	check(s.loadouts["B"] == {"active": "spore_burst", "map": "backwash", "ultimate": "superbloom"}, "a seat without one gets its faction's default (POWERS 0.22.5 defaults)")
 	s = _mk(sw, "vex", "null", {"A": {"active": "nuke"}})
 	check(s.loadouts["A"]["active"] == "surge" and s.loadouts["A"]["map"] == "portal", "unknown ids fall back to the default")
@@ -2201,7 +2214,7 @@ func _skills_tests() -> void:
 	check(s.cast("A", "active", 3), "Spore Burst on an own vat")
 	u0 = s.nodes[3]["units"]
 	_steps(s, 1.0)
-	check(absf((s.nodes[3]["units"] - u0) / d0 - 1.8) < 0.02, "Spore Burst: the vat produces 1.8x (%.2f)" % ((s.nodes[3]["units"] - u0) / d0))
+	check(absf((s.nodes[3]["units"] - u0) / d0 - 1.5) < 0.02, "Spore Burst: the vat produces 1.5x (0.23.21: was 1.8x) (%.2f)" % ((s.nodes[3]["units"] - u0) / d0))
 	s.nodes[3]["units"] = Rules.CAPS[s.nodes[3]["tier"]] - 1.0
 	_steps(s, 1.0)
 	check(s.nodes[3]["units"] <= Rules.CAPS[s.nodes[3]["tier"]], "Spore Burst stays within the cap")
@@ -2401,19 +2414,26 @@ func _skills_tests() -> void:
 	s = _mk(sw, "null", "null", {"A": {"map": "relay_hack"}})
 	s.nodes[1]["owner"] = "A"
 	check("enemy or neutral" in s.cast_check("A", "map", 1), "not on your own relay")
-	# ---------------------------------------------------------------- Rewire
+	# ---------------------------------------------------------------- Overdrive
 	s = _mk(sw, "vex", "null")
 	s.nodes[1]["owner"] = "B"
-	check("charging" in s.cast_check("A", "ultimate", null), "Rewire needs its charge")
+	check("charging" in s.cast_check("A", "ultimate", null), "Overdrive needs its charge")
 	_charged(s, "A")
 	s.nodes[5]["units"] = 200.0
 	var hv := s.send(5, 0, 1.0)
-	check(s.cast("A", "ultimate", null) and s.rewire_left("A") == 3 and absf(s.skill_speed(hv) - 1.75) < 0.001 and s.door_mult(hv) == 2.0 and s.charge("A") == 0.0,
-			"Rewire: all own lines +75 % speed and doors 2x (ultimates rework, was +50 %), 3 relay fires, the charge spent")
-	check(s.cast("A", "ultimate", 1) and s.nodes[1]["relay_phase"] == "warning" and s.rewire_left("A") == 2, "Rewire fires an enemy relay")
-	check(s.cast("A", "ultimate", 2) and s.rewire_left("A") == 1 and not s.can_cast("A", "ultimate", 2), "and a neutral one, each relay once")
-	_steps(s, 12.1)
-	check(s.rewire_left("A") == 0 and s.skill_speed(hv) == 1.0 and s.door_mult(hv) == 1.0, "Rewire ends after 12 s (was 10)")
+	check(s.cast("A", "ultimate", null) and s.overdrive_left("A") == 3 and absf(s.skill_speed(hv) - 2.0) < 0.001 and s.door_mult(hv) == 3.0 and s.charge("A") == 0.0,
+			"Overdrive: all own lines 2x speed and doors 3x (0.23.21; Rewire was +75 % / 2x), 3 relay fires, the charge spent")
+	check(s.cast("A", "ultimate", 1) and s.nodes[1]["relay_phase"] == "warning" and s.overdrive_left("A") == 2, "Overdrive fires an enemy relay")
+	check(s.cast("A", "ultimate", 2) and s.overdrive_left("A") == 1 and not s.can_cast("A", "ultimate", 2), "and a neutral one, each relay once")
+	_steps(s, 14.0)
+	check(s.overdrive_left("A") > 0 or s.skill_speed(hv) > 1.0, "Overdrive still runs at 14 s")
+	_steps(s, 1.1)
+	check(s.overdrive_left("A") == 0 and s.skill_speed(hv) == 1.0 and s.door_mult(hv) == 1.0, "Overdrive ends after 15 s (0.23.21; Rewire 12)")
+	var od := _mk(sw, "vex", "null")
+	_steps(od, 59.0, 0.5)
+	check(od.charge("A") < 1.0 and absf(od.charge("B") - od.time / Rules.ULT_CHARGE_TIME) < 0.001, "Overdrive's own charge: not ready before 60 s; Echo Split charges on 120 s")
+	_steps(od, 16.5, 0.5)
+	check(od.charge("A") >= 1.0 and od.charge("B") < 1.0, "Overdrive charges in 75 s with no kills (0.23.21; the others 120 s)")
 	# ---------------------------------------------------------------- Echo Split: up to 3 echoes; a landing jams the node
 	s = _mk(rot, "null", "null", {}, {7: "A", 10: "B"})
 	for id in [8, 9, 12]:
@@ -2473,7 +2493,7 @@ func _skills_tests() -> void:
 	s.step(0.1)
 	var bb: float = Rules.PROD[4] * Rules.stat("bloom", "production") * 0.1
 	check(absf((s.nodes[3]["units"] - u0) / bb - 2.0 * float(Rules.SKILLS["spore_burst"]["mult"])) < 0.02,
-			"Superbloom stacks on Spore Burst: 2 x 1.8 = 3.6x (%.2f)" % ((s.nodes[3]["units"] - u0) / bb))
+			"Superbloom stacks on Spore Burst: 2 x 1.5 = 3.0x (%.2f)" % ((s.nodes[3]["units"] - u0) / bb))
 	Rules.SUPERBLOOM_MODE = "under_attack"
 	s = _mk(tp, "bloom", "null")
 	_charged(s, "A")
@@ -2521,13 +2541,13 @@ func _skills_tests() -> void:
 			var left := float(h["L"]) - float(h["s"]) if h in s.hordes else 0.0
 			check(not ev.is_empty() and left <= 12.0 + 0.5, tag + ": it goes off within 12 m of the target (%.1f m)" % left)
 			var sac: float = maxf(line * 0.25, 20.0)
-			var kills: float = minf(sac * 3.0, 350.0)
+			var kills: float = minf(sac * 4.0, 450.0)
 			if g0 <= kills:
 				check(s.nodes[1]["owner"] == "A" and not (h in s.hordes) and bool(ev.get("captured", false)),
 						tag + ": the garrison hits zero and the rest of the line captures")
 			else:
-				check(s.nodes[1]["owner"] == "B" and absf(float(ev["sacrificed"]) - sac) < 0.6 and absf(float(ev["killed"]) - minf(float(ev["sacrificed"]) * 3.0, 350.0)) < 0.01,
-						tag + ": 25 %% sacrificed (%.0f), 3 defenders each (%.0f killed)" % [float(ev["sacrificed"]), float(ev["killed"])])
+				check(s.nodes[1]["owner"] == "B" and absf(float(ev["sacrificed"]) - sac) < 0.6 and absf(float(ev["killed"]) - minf(float(ev["sacrificed"]) * 4.0, 450.0)) < 0.01,
+						tag + ": 25 %% sacrificed (%.0f), 4 defenders each (0.23.21: was 3) (%.0f killed)" % [float(ev["sacrificed"]), float(ev["killed"])])
 			check(absf(s.charge("B") - charge_b - 0.05 / Rules.ULT_CHARGE_TIME) < 0.0001, tag + ": no charge from the meltdown")
 	s = _mk(tp, "ember", "null")
 	s.nodes[3]["units"] = 1000.0
@@ -2541,7 +2561,7 @@ func _skills_tests() -> void:
 	var gm: float = s.nodes[2]["units"]
 	var lm: float = hm["units"]
 	s.cast("A", "ultimate", hm["id"])
-	check(lm * 0.25 * 3.0 > 350.0 and absf(gm - s.nodes[2]["units"] - 350.0) < 0.01 and absf(lm - hm["units"] - lm * 0.25) < 0.01, "a big line: no cap on the sacrifice, 70 shown kills at most (0.23.15: was 90) (cast in range: it goes off at once)")
+	check(lm * 0.25 * 4.0 > 450.0 and absf(gm - s.nodes[2]["units"] - 450.0) < 0.01 and absf(lm - hm["units"] - lm * 0.25) < 0.01, "a big line: no cap on the sacrifice, 90 shown kills at most (0.23.21 set R1: was 70) (cast in range: it goes off at once)")
 	# ---------------------------------------------------------------- Relay Aegis
 	s = _mk(tp, "solar", "null")
 	for id in [1, 0]:

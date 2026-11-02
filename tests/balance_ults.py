@@ -8,7 +8,7 @@ from collections import defaultdict
 d = sys.argv[1]
 pn = sys.argv[2] if len(sys.argv) > 2 else "noult"
 pm = sys.argv[3] if len(sys.argv) > 3 else "mat"
-ULT = {"vex": "rewire", "null": "echo_split", "bloom": "superbloom", "ember": "core_meltdown", "solar": "relay_aegis"}
+ULT = {"vex": "overdrive", "null": "echo_split", "bloom": "superbloom", "ember": "core_meltdown", "solar": "relay_aegis"}
 FACS = ["vex", "null", "bloom", "ember", "solar"]
 
 
@@ -25,7 +25,7 @@ def ci(x):
 
 
 def ult_casts(r, seat, uid=None):
-    """Activations only: Rewire's free relay fires are logged as ultimate casts too, so casts within 20 s count once."""
+    """Activations only: Overdrive's free relay fires are logged as ultimate casts too, so casts within 20 s count once."""
     n, last = 0, -99.0
     for x in r["casts"]:
         if x[1] == seat and x[3] == "ultimate" and (uid is None or x[2] == uid):

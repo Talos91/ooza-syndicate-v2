@@ -37,6 +37,7 @@ func check(cond: bool, what: String) -> void:
 
 
 func _initialize() -> void:
+	Rules.archived_on = true                          # 0.23.21: Mire / Anchor / Bypass archived; their net paths are still tested
 	_run.call_deferred()
 
 
@@ -782,8 +783,8 @@ func _test_skill_fx() -> void:
 		gfx.sync(dt, null)
 	for k in range(5):
 		frame.call(0.1)
-	cast.call("A", "ultimate", "rewire", null)
-	cast.call("A", "ultimate", "rewire", 7)            # the ultimate slot fires a relay while Rewire runs
+	cast.call("A", "ultimate", "overdrive", null)
+	cast.call("A", "ultimate", "overdrive", 7)            # the ultimate slot fires a relay while Overdrive runs
 	cast.call("A", "active", "surge", line["id"])
 	cast.call("A", "active", "spore_burst", 3)
 	cast.call("A", "active", "fortify", 1)
@@ -833,7 +834,7 @@ func _test_skill_fx() -> void:
 		if int(hfx.stats.get("cast_" + id, 0)) < 1:
 			missing.append(id)
 	check(missing.is_empty(), "the host's view shows a cast moment for all %d skills %s" % [Rules.SKILLS.size(), str(missing)])
-	var lasting := ["surge", "spore_burst", "fortify", "scorch", "demolish", "mire", "anchor", "bypass", "relay_hack", "rewire",
+	var lasting := ["surge", "spore_burst", "fortify", "scorch", "demolish", "mire", "anchor", "bypass", "relay_hack", "overdrive",
 			"superbloom", "relay_aegis"]
 	var gone := lasting.filter(func(id): return int(gfx.stats.get("slot_" + id, 0)) < 1)
 	check(gone.is_empty(), "a guest draws every lasting effect from the snapshots %s" % str(gone))

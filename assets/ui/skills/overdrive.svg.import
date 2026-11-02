@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dlvo582blqos7"
-path="res://.godot/imported/rewire.svg-99aef527597a94ed3a1bc207bc69a068.ctex"
+uid="uid://bi7vedy4h0ufh"
+path="res://.godot/imported/overdrive.svg-2926e5e2d5c7791c0a161a103d0f5777.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/skills/rewire.svg"
-dest_files=["res://.godot/imported/rewire.svg-99aef527597a94ed3a1bc207bc69a068.ctex"]
+source_file="res://assets/ui/skills/overdrive.svg"
+dest_files=["res://.godot/imported/overdrive.svg-2926e5e2d5c7791c0a161a103d0f5777.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

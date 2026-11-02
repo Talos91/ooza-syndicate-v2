@@ -1642,13 +1642,13 @@ func _ejects(sim: Sim) -> void:
 func _skills(sim: Sim) -> void:
 	if not sim.abilities_on or sim.over:
 		return
-	if sim.skill_id(seat, "ultimate") == "rewire" and sim.rewire_left(seat) > 0:
-		_rewire_fires(sim)                            # Rewire running: its relay fires are free
+	if sim.skill_id(seat, "ultimate") == "overdrive" and sim.overdrive_left(seat) > 0:
+		_overdrive_fires(sim)                            # Overdrive running: its relay fires are free
 	if sim.time < _skill_after:
 		return
 	for slot in ["ultimate", "active", "map"]:
 		var id := sim.skill_id(seat, slot)
-		if id == "" or (slot == "ultimate" and (sim.charge(seat) < 1.0 or sim.rewire_left(seat) > 0)) \
+		if id == "" or (slot == "ultimate" and (sim.charge(seat) < 1.0 or sim.overdrive_left(seat) > 0)) \
 				or (slot != "ultimate" and sim.cooldown(seat, slot) > 0.0):
 			continue
 		var pick := _pick(sim, id)
@@ -1880,7 +1880,7 @@ func _pick(sim: Sim, id: String) -> Array:
 				if Sim.has_vat(n) and n["units"] < Rules.CAPS[n["tier"]] * 0.5:
 					low += 1
 			return [null] if low >= 3 or (low >= 2 and Rules.SUPERBLOOM_MODE == "under_attack") else []
-		"rewire":                                     # a relay kill is on, or a big push is under way
+		"overdrive":                                     # a relay kill is on, or a big push is under way
 			var kill := 0.0
 			for n in sim.nodes:
 				if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
@@ -2042,8 +2042,8 @@ func _pick_power(sim: Sim, id: String) -> Array:
 	return []
 
 
-func _rewire_fires(sim: Sim) -> void:
-	## While Rewire runs: fire any relay (enemy ones too) that drops or flings more enemy than own.
+func _overdrive_fires(sim: Sim) -> void:
+	## While Overdrive runs: fire any relay (enemy ones too) that drops or flings more enemy than own.
 	for n in sim.nodes:
 		if n["node_kind"] == "junction":   # JUNCTION: never a target, a source, a team call or a route end
 			continue

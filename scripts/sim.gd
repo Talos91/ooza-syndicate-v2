@@ -945,7 +945,7 @@ func _edge_open(edge_index: int) -> bool:
 			return held
 		if is_bypassed(ctrl):                        # Bypass: the relay holds both states
 			return true
-		# a neutral relay sits at index 0 unless Relay Hack or Rewire fired it (0.18.7: it used to ignore
+		# a neutral relay sits at index 0 unless Relay Hack or Overdrive fired it (0.18.7: it used to ignore
 		# the index while unowned, which was the same thing - nobody could fire it)
 		index = nodes[ctrl]["relay_index"]
 	return _edge_open_at(edge_index, index)
@@ -961,7 +961,7 @@ func fire_relay(node_id: int) -> bool:
 
 
 func _fire_relay_by(n: Dictionary, seat: String) -> bool:
-	## Starts a relay's warning on behalf of `seat` (its owner, or a Relay Hack / Rewire caster).
+	## Starts a relay's warning on behalf of `seat` (its owner, or a Relay Hack / Overdrive caster).
 	if n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "" or is_relay_locked(n["id"]):
 		return false
 	if relay_states(n).is_empty():
@@ -1700,7 +1700,7 @@ func step(dt: float) -> void:
 			var here := sample(h, h["s"])
 			var fast_here: bool = here[2]
 			var mult: float = Rules.platform_mult() if fast_here else 1.0
-			var boost := skill_speed(h)                   # Surge / Rewire
+			var boost := skill_speed(h)                   # Surge / Overdrive
 			mult *= deck_slow(h) * boost                  # enemy goo (home advantage) or Mire, the stronger
 			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
@@ -3879,7 +3879,7 @@ func _monster_end(m: Dictionary) -> void:
 #   skill_id(seat, slot) -> String        slot: "active" | "map" | "ultimate"; "" if none
 #   cooldown(seat, slot) -> float         seconds left; ultimate: seconds of charge left (0 = ready)
 #   charge(seat) -> float                 ultimate charge 0..1 (1 = ready)
-#   rewire_left(seat) -> int              Rewire is running: relay fires left (then the ultimate slot fires relays)
+#   overdrive_left(seat) -> int              Overdrive is running: relay fires left (then the ultimate slot fires relays)
 #   cast_check(seat, slot, target) -> String   "" = castable, else a short reason for a toast
 #   can_cast(seat, slot, target) -> bool
 #   cast(seat, slot, target) -> bool      validates (cast_check), applies, starts the cooldown / spends the charge
@@ -3894,7 +3894,7 @@ func _monster_end(m: Dictionary) -> void:
 #   own_line: horde id  |  own_vat, own_node: node id  |  deck, fixed_deck: edge index  |  relay: node id
 #   enemy_relay: relay node id (fire) or [relay node id, "jam"] / [id, "fire"]
 #   vat_to_node: [source node id, destination node id] or [src, dst, fraction 0..1] (default SKILLS.ghost_line.fraction)
-#   none: null (anything). Rewire running: the ultimate slot takes a relay node id (any relay, once each).
+#   none: null (anything). Overdrive running: the ultimate slot takes a relay node id (any relay, once each).
 # STATE (all in snapshots)
 #   loadouts[seat] = {"active", "map", "ultimate"}; skill_cd[seat] = {"active": s, "map": s};
 #   ult_charge[seat] 0..1; ult_since[seat] s; demolished[edge] = s until it rebuilds;
@@ -3902,7 +3902,7 @@ func _monster_end(m: Dictionary) -> void:
 #       "t": s left, "dur": s total, ...extras}]. Extras: surge "mult" (speed), "door" (door rate, 0.19.2 - door_mult);
 #       scorch "left" (sim units it may still kill), "kills";
 #       demolish "phase" "warning" (3 s) / "down" (20 s); anchor and Aegis decks "open" (the frozen state);
-#       relay_hack "mode" "fire" / "jam"; rewire "fires" left, "fired" [relay ids]; superbloom "left" (extra
+#       relay_hack "mode" "fire" / "jam"; overdrive "fires" left, "fired" [relay ids]; superbloom "left" (extra
 #       sim units still allowed; -1 = uncapped); relay_aegis "center" (the node cast on); an Echo Split jam
 #       is {"id": "echo_split", "on": "node"}.
 #   Decoys (Ghost Line, echoes) are ordinary hordes with h["decoy"] = true (echoes also "echo"); they stream,
@@ -3914,7 +3914,7 @@ func _monster_end(m: Dictionary) -> void:
 # FX EVENTS (sim.fx_events; a key "private": seat = only that seat may see it - Net forwards it to that seat
 # only, views must skip it unless it is theirs)
 #   {"type": "skill", "id", "seat", "slot", "target", "pos": Vector3, "affects": [seats hit]}   every cast
-#       (Ghost Line's is private and carries "hid"; a Rewire relay fire has "fire": relay id)
+#       (Ghost Line's is private and carries "hid"; a Overdrive relay fire has "fire": relay id)
 #   {"type": "ghosts", "seat", "hids": [...], "private": seat}   Echo Split: which new lines are echoes
 #   {"type": "skill_end", "id", "seat", "on", "target"}          an effect ran out
 #   {"type": "demolish", "edge", "seat"} the deck goes | {"type": "deck_rebuilt", "edge"} |
@@ -3972,7 +3972,8 @@ func cooldown(seat: String, slot: String) -> float:
 		var c := charge(seat)
 		if c >= 1.0:
 			return 0.0
-		return maxf((1.0 - c) * Rules.ULT_CHARGE_TIME, Rules.ULT_MIN_TIME - float(ult_since.get(seat, 0.0)))
+		var u := skill_id(seat, "ultimate")            # 0.23.21: each ultimate's own charge (Overdrive 75 / 60 s)
+		return maxf((1.0 - c) * Rules.ult_charge_time(u), Rules.ult_min_time(u) - float(ult_since.get(seat, 0.0)))
 	return float(skill_cd.get(seat, {}).get(slot, 0.0))
 
 
@@ -3980,9 +3981,9 @@ func charge(seat: String) -> float:
 	return float(ult_charge.get(seat, 0.0))
 
 
-func rewire_left(seat: String) -> int:
+func overdrive_left(seat: String) -> int:
 	for e in _fx_seat.get(seat, []):
-		if e["id"] == "rewire":
+		if e["id"] == "overdrive":
 			return int(e["fires"])
 	return 0
 
@@ -4145,7 +4146,7 @@ func _produce(n: Dictionary, dt: float) -> void:
 
 
 func skill_speed(h: Dictionary) -> float:
-	## Surge / Rewire speed multiplier (they do not stack).
+	## Surge / Overdrive speed multiplier (they do not stack).
 	var m := 1.0
 	if not _fx_horde.is_empty():
 		for e in _fx_horde.get(h["id"], []):
@@ -4153,7 +4154,7 @@ func skill_speed(h: Dictionary) -> float:
 				m = maxf(m, float(e["mult"]))
 	if not _fx_seat.is_empty():
 		for e in _fx_seat.get(h["owner"], []):
-			if e["id"] == "rewire":
+			if e["id"] == "overdrive":
 				m = maxf(m, float(e["mult"]))
 	return m
 
@@ -4167,8 +4168,8 @@ func door_mult(h: Dictionary) -> float:
 	for e in _fx_horde.get(h["id"], []):
 		if e["id"] == "surge":
 			m = maxf(m, float(e.get("door", 1.0)))
-	for e in _fx_seat.get(h["owner"], []):             # ULTIMATES REWORK: Rewire doubles every own line's doors too
-		if e["id"] == "rewire":
+	for e in _fx_seat.get(h["owner"], []):             # ULTIMATES REWORK: Overdrive doubles every own line's doors too
+		if e["id"] == "overdrive":
 			m = maxf(m, float(e.get("door", 1.0)))
 	return m
 
@@ -4238,9 +4239,10 @@ func _step_charge(dt: float) -> void:
 		if eliminated.has(seat):
 			continue
 		ult_since[seat] = float(ult_since[seat]) + dt
-		var gain: float = dt / Rules.ULT_CHARGE_TIME \
-				+ Rules.shown_f(_kill_credit.get(seat, 0.0)) * Rules.ULT_KILL_SECONDS / Rules.ULT_CHARGE_TIME
-		ult_charge[seat] = minf(minf(1.0, float(ult_charge[seat]) + gain), float(ult_since[seat]) / Rules.ULT_MIN_TIME)
+		var u := skill_id(seat, "ultimate")            # 0.23.21: each ultimate's own charge (Overdrive 75 / 60 s)
+		var gain: float = dt / Rules.ult_charge_time(u) \
+				+ Rules.shown_f(_kill_credit.get(seat, 0.0)) * Rules.ULT_KILL_SECONDS / Rules.ult_charge_time(u)
+		ult_charge[seat] = minf(minf(1.0, float(ult_charge[seat]) + gain), float(ult_since[seat]) / Rules.ult_min_time(u))
 	_kill_credit = {}
 
 
@@ -4263,8 +4265,8 @@ func cast_check(seat: String, slot: String, target = null) -> String:
 		return "No skill in that slot"
 	var sk: Dictionary = Rules.SKILLS[id]
 	if slot == "ultimate":
-		if id == "rewire" and rewire_left(seat) > 0:
-			return _check_rewire_fire(seat, target)
+		if id == "overdrive" and overdrive_left(seat) > 0:
+			return _check_overdrive_fire(seat, target)
 		if charge(seat) < 1.0:
 			return "%s charging - %d %%" % [sk["name"], int(charge(seat) * 100.0)]
 	elif cooldown(seat, slot) > 0.0:
@@ -4413,13 +4415,13 @@ func _ghost_fraction(target) -> float:
 	return float(Rules.SKILLS["ghost_line"]["fraction"])
 
 
-func _check_rewire_fire(seat: String, target) -> String:
+func _check_overdrive_fire(seat: String, target) -> String:
 	var i := _as_int(target)
 	if not _node_ok(i) or nodes[i]["relay"] == "" or relay_states(nodes[i]).is_empty():
-		return "Rewire: pick a relay to fire"
+		return "Overdrive: pick a relay to fire"
 	for e in _fx_seat.get(seat, []):
-		if e["id"] == "rewire" and i in e["fired"]:
-			return "Rewire already fired that relay"
+		if e["id"] == "overdrive" and i in e["fired"]:
+			return "Overdrive already fired that relay"
 	if is_relay_locked(i):
 		return "That relay is locked"
 	if nodes[i]["relay_phase"] != "":
@@ -4437,10 +4439,10 @@ func cast(seat: String, slot: String, target = null) -> bool:
 	var id := skill_id(seat, slot)
 	var sk: Dictionary = Rules.SKILLS[id]
 	var ev := {"type": "skill", "id": id, "seat": seat, "slot": slot, "target": target}
-	if slot == "ultimate" and id == "rewire" and rewire_left(seat) > 0:
+	if slot == "ultimate" and id == "overdrive" and overdrive_left(seat) > 0:
 		var r := _as_int(target)
 		for e in _fx_seat.get(seat, []):
-			if e["id"] == "rewire":
+			if e["id"] == "overdrive":
 				e["fires"] = int(e["fires"]) - 1
 				(e["fired"] as Array).append(r)
 		_fire_relay_by(nodes[r], seat)
@@ -4508,7 +4510,7 @@ func cast(seat: String, slot: String, target = null) -> bool:
 			ev["affects"] = _hostile_list(seat, factions.keys())
 			ev["private"] = seat                         # POWERS (0.22.2): nobody else may learn the new lines are echoes
 			fx_events.append({"type": "ghosts", "seat": seat, "hids": hids, "private": seat})
-		"rewire":
+		"overdrive":
 			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "door": sk.get("door", 1.0), "fires": int(sk["fires"]), "fired": []})
 			ev["affects"] = _hostile_list(seat, factions.keys())
 		"superbloom":
@@ -4548,7 +4550,7 @@ func targets_for(seat: String, slot: String) -> Array:
 	if not Rules.SKILLS.has(id):
 		return []
 	var kind: String = Rules.SKILLS[id]["target"]
-	if slot == "ultimate" and id == "rewire" and rewire_left(seat) > 0:
+	if slot == "ultimate" and id == "overdrive" and overdrive_left(seat) > 0:
 		kind = "relay"
 	var cands := []
 	match kind:

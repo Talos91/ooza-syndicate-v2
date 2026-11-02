@@ -2765,7 +2765,7 @@ func _army_loadout(pos: Vector2, dims: Vector2) -> void:
 		ty += UiKit.line_h(self, 17, true)
 	var lines := [ArmyPresets.line(ult)] if ult_lines > 0 else []
 	if full:
-		lines.append("Charges in ~%d s (at least %d s); enemy kills speed it up" % [int(Rules.ULT_CHARGE_TIME), int(Rules.ULT_MIN_TIME)])
+		lines.append("Charges in ~%d s (at least %d s); enemy kills speed it up" % [int(Rules.ult_charge_time(ult)), int(Rules.ult_min_time(ult))])
 	for t in lines:
 		var l := UiKit.label(self, t, 13, UiKit.MUTED)
 		l.clip_text = true
@@ -2864,7 +2864,7 @@ func show_skills(slot: String = "active") -> void:
 	var tx := 16.0 + ic + 16.0
 	var dw := iw - tx - 14.0
 	var kick := "ULTIMATE  ·  %s ONLY  ·  FIXED" % UiKit.NAMES[_army]
-	var charge := "  ·  ~%d s CHARGE, ENEMY KILLS SPEED IT UP" % int(Rules.ULT_CHARGE_TIME)
+	var charge := "  ·  ~%d s CHARGE, ENEMY KILLS SPEED IT UP" % int(Rules.ult_charge_time(ult))
 	if UiKit.text_w(self, kick + charge, 11, true) + (kick + charge).length() * 2.0 <= dw:
 		kick += charge                                  # a phone keeps the kicker short
 	var udesc := str(Rules.SKILLS[ult]["desc"])

@@ -541,8 +541,8 @@ static func look_across(faction: String) -> int:
 static var FACTION_STATS := {
 	"vex": {"speed": 1.15, "garrison": 0.90},
 	"null": {"production": 1.03},
-	"bloom": {"speed": 0.90, "production": 1.06},   # 1.15 -> 1.10 (Daniele, 0.18.9 balance)
-	"ember": {"attack": 1.02, "production": 0.90},   # 1.15 -> 1.10 (Daniele, 0.18.9 balance)
+	"bloom": {"speed": 0.90, "production": 1.00},   # 1.06 -> 1.00 (0.23.21 balance, Daniele 2026-11-01 Hub Desk bal-abilities (a): set R1)
+	"ember": {"attack": 1.10, "production": 0.90},   # 1.02 -> 1.10 (0.23.21, set R1; reverses Daniele's 0.23.15 EMBER attack, accepted via (a))
 	"solar": {"health": 1.10, "garrison": 1.05, "speed": 0.90, "production": 0.93},
 }
 
@@ -710,7 +710,7 @@ static func faction_trait(faction: String) -> Array:
 	line = (line.substr(0, 1).to_upper() + line.substr(1) + ".") if line != "" else "No stat leans."
 	return [FACTION_TRAIT_NAMES.get(faction, ""), line]
 # the approved ultimates (SKILLS-2.0-DRAFT sec5 / sec5.2, Daniele 2026-09-26); [name, one short line]
-const FACTION_ULTIMATE := {"vex": ["Rewire", "faster lines, fire any 3 relays"],
+const FACTION_ULTIMATE := {"vex": ["Overdrive", "every line 2x speed, fire any 3 relays"],
 		"null": ["Echo Split", "moving lines spawn jamming decoys"],
 		"bloom": ["Superbloom", "every vat 2x for 12 s"],
 		"ember": ["Core Meltdown", "sacrifice part of a line to gut a garrison"],
@@ -744,19 +744,22 @@ const SKILLS := {
 	"surge": {"name": "Surge", "slot": "active", "cd": 22.0, "target": "own_line",
 			"desc": "One of your lines moves 75 % faster for 8 s, and pours out of and into doors twice as fast.",
 			"mult": 1.75, "door": 2.0, "dur": 8.0},
+	# 0.23.21 (set R1, Daniele 2026-11-01): mult 1.8 -> 1.5 (AI lift +22 -> +17, bal-audit)
 	"spore_burst": {"name": "Spore Burst", "slot": "active", "cd": 35.0, "target": "own_vat",
-			"desc": "One vat produces 1.8x for 10 s, within its cap.", "mult": 1.8, "dur": 10.0},
+			"desc": "One vat produces 1.5x for 10 s, within its cap.", "mult": 1.5, "dur": 10.0},
 	"fortify": {"name": "Fortify", "slot": "active", "cd": 35.0, "target": "own_node",
 			"desc": "One node's garrison takes 1.65x less damage for 10 s.", "div": 1.65, "dur": 10.0},
 	# Alpha 11 Scorch: 25 HP/s per unit caught (100 HP a unit), at most 1000 HP (10 units) per cast
-	"scorch": {"name": "Scorch", "slot": "active", "cd": 32.0, "target": "deck",
+	# 0.23.21 (set R1): cd 32 -> 45 (lift +20 -> +13)
+	"scorch": {"name": "Scorch", "slot": "active", "cd": 45.0, "target": "deck",
 			"desc": "A deck burns for 5 s: enemy lines on it lose units (up to 10).", "dur": 5.0,
 			"rate": 0.25, "cap_shown": 10.0},
 	# the decoy's length is the send fraction of the source vat (the fraction the player has set); no units spent
 	"ghost_line": {"name": "Ghost Line", "slot": "active", "cd": 24.0, "target": "vat_to_node",
 			"desc": "A decoy line that looks real and draws Laser tower and Machinegoon fire, but never fights.", "fraction": 0.5},
 	# ---- map pool (network skills)
-	"demolish": {"name": "Demolish", "slot": "map", "cd": 60.0, "target": "fixed_deck",
+	# 0.23.21 (set R1): cd 60 -> 80 (lift +25 -> +16)
+	"demolish": {"name": "Demolish", "slot": "map", "cd": 80.0, "target": "fixed_deck",
 			"desc": "A deck collapses after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
 	# speed x0.6 = 40 % slower; in SIEGE the stronger of this and the goo corridor slow applies (no stacking)
 	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
@@ -772,10 +775,11 @@ const SKILLS := {
 	# ---- POWERS (0.22.2, Daniele 2026-09-28: "we need more powers like demolish as its very fun and very op";
 	# spec + first numbers: 01 Rules/NEW-POWERS-2026-09-28.md, all to tune by play). "warn": the Demolish-style
 	# warning before a deck goes (the spec is silent; 1.5 s like Demolish, so a deck never vanishes unannounced).
-	"quake": {"name": "Quake", "slot": "map", "cd": 90.0, "target": "platform",
+	# 0.23.21 (set R1): cd 90 -> 105 (lift +17 -> +14); Sever cd 70 -> 90 (+21 -> +12)
+	"quake": {"name": "Quake", "slot": "map", "cd": 105.0, "target": "platform",
 			"desc": "A platform shakes: every deck touching it drops after 1.5 s, riders fall; back after 6 s.",
 			"warn": 1.5, "down": 6.0},
-	"sever": {"name": "Sever", "slot": "map", "cd": 70.0, "target": "deck",
+	"sever": {"name": "Sever", "slot": "map", "cd": 90.0, "target": "deck",
 			"desc": "Cut any deck, relay decks too, after 1.5 s: riders fall; it is back after 6 s.",
 			"warn": 1.5, "down": 6.0},
 	"backwash": {"name": "Backwash", "slot": "map", "cd": 32.0, "target": "deck",
@@ -803,11 +807,14 @@ const SKILLS := {
 			"desc": "Two thirds of an enemy node's garrison is forced out at once and runs for their nearest safe node.",
 			"share": 0.65, "burst": 8.0},
 	# ---- ultimates (one per faction; "cd" is the natural charge time, see ULT_CHARGE_TIME)
-	# Rewire: while it lasts, the ultimate slot fires any relay once (target = relay id), `fires` at most
+	# Overdrive (was Rewire; renamed by Daniele, 2026-11-01, Hub Desk bal-rewire (a)): while it lasts, the ultimate slot
+	# fires any relay once (target = relay id), `fires` at most.
 	# ULTIMATES REWORK (proposal, 2026-10-27; was dur 10, mult 1.5, no door): every line gets Surge's speed and doors, longer
-	"rewire": {"name": "Rewire", "slot": "ultimate", "faction": "vex", "cd": 120.0, "target": "none",
-			"desc": "12 s: all your lines move 75 % faster and pour through doors twice as fast; fire up to 3 relays anywhere, enemy ones too.",
-			"dur": 12.0, "mult": 1.75, "door": 2.0, "fires": 3},
+	# 0.23.21 (bal-rewire (a)): dur 12 -> 15, mult 1.75 -> 2.0, door 2 -> 3, and its own charge: "charge" 75 s natural
+	# (ULT_CHARGE_TIME 120 for the others), "charge_min" 60 s (ULT_MIN_TIME 90). AI lift +5 -> +17 (bal-audit).
+	"overdrive": {"name": "Overdrive", "slot": "ultimate", "faction": "vex", "cd": 75.0, "target": "none",
+			"desc": "15 s: all your lines move twice as fast and pour through doors 3x as fast; fire up to 3 relays anywhere, enemy ones too.",
+			"dur": 15.0, "mult": 2.0, "door": 3.0, "fires": 3, "charge": 75.0, "charge_min": 60.0},
 	"echo_split": {"name": "Echo Split", "slot": "ultimate", "faction": "null", "cd": 120.0, "target": "none",
 			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat, Laser tower and Machinegoon for 8 s.",
 			"echoes": 3, "disrupt": 8.0},
@@ -823,8 +830,8 @@ const SKILLS := {
 	# 60), castable from the START of the trip - the line is armed and it goes off when the head is within
 	# `range` metres of the target (or pouring in); a line that dies, falls or loses its target first wastes it.
 	"core_meltdown": {"name": "Core Meltdown", "slot": "ultimate", "faction": "ember", "cd": 120.0, "target": "own_line",
-			"desc": "Arm an attacking line: on arrival 25 % of it melts down, 3 defenders die per unit; a garrison at zero is captured.",
-			"share": 0.25, "min_shown": 4.0, "kills_per": 3.0, "cap_shown": 70.0, "range": 12.0},
+			"desc": "Arm an attacking line: on arrival 25 % of it melts down, 4 defenders die per unit; a garrison at zero is captured.",
+			"share": 0.25, "min_shown": 4.0, "kills_per": 4.0, "cap_shown": 90.0, "range": 12.0},   # 0.23.21 (set R1): 3 / 70 -> 4 / 90 (the 0.23.14 numbers)
 	# the node + its adjacent own nodes: garrison damage / div, production x prod, the decks between them anchored
 	# and any relay among them locked (nobody can fire it)
 	# ULTIMATES REWORK (proposal, 2026-10-27; was div 1.8, prod 1.2, 12 s). "rings" = how many bridges out it reaches (1; 2 rings
@@ -834,8 +841,20 @@ const SKILLS := {
 			"div": 2.5, "dur": 15.0, "prod": 1.5, "rings": 1},
 }
 const ACTIVE_SKILLS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line", "sinkhole", "evac"]   # POWERS: 5 -> 7
-const MAP_SKILLS := ["demolish", "mire", "anchor", "bypass", "relay_hack", "quake", "sever", "backwash", "fog", "portal"]   # POWERS: 5 -> 10
-const FACTION_ULTIMATE_ID := {"vex": "rewire", "null": "echo_split", "bloom": "superbloom", "ember": "core_meltdown", "solar": "relay_aegis"}
+const MAP_SKILLS := ["demolish", "relay_hack", "quake", "sever", "backwash", "fog", "portal"]   # POWERS: 5 -> 10; 0.23.21: 10 -> 7
+# ARCHIVED (Daniele, 2026-11-01, Hub Desk bal-abilities: "archive Bypass, Anchor and Mire for now"; the AI found no use for them,
+# bal-audit lift -0.4 / 0 / +0.5): out of MAP_SKILLS, so out of every loadout, the ARMIES picker, the shop, the AI builds and
+# the tutorial. Their SKILLS entries, Sim code, FX, icons and AI branches stay: to bring one back, move its id into MAP_SKILLS.
+const ARCHIVED_SKILLS := ["mire", "anchor", "bypass"]
+# The flag behind them: off in the game; tests that still exercise their code switch it on (then map_pool() lets them into
+# a loadout). The ARMIES picker and the shop read MAP_SKILLS and never show them.
+static var archived_on := false
+
+
+static func map_pool() -> Array:
+	## The map skills a loadout may hold: MAP_SKILLS, plus ARCHIVED_SKILLS while archived_on.
+	return MAP_SKILLS + ARCHIVED_SKILLS if archived_on else MAP_SKILLS
+const FACTION_ULTIMATE_ID := {"vex": "overdrive", "null": "echo_split", "bloom": "superbloom", "ember": "core_meltdown", "solar": "relay_aegis"}
 # default loadouts per faction - a seat without a chosen loadout (and every AI seat) gets its faction's;
 # between them the five cover every shared skill. "map_no_relays" replaces a relay skill on a map without
 # relays (the Ooze Factory greys Bypass / Relay Hack out there, draft sec4).
@@ -847,7 +866,7 @@ const FACTION_LOADOUT := {
 	"null": {"active": "ghost_line", "map": "fog", "map_no_relays": "fog"},
 	"bloom": {"active": "spore_burst", "map": "backwash", "map_no_relays": "backwash"},
 	"ember": {"active": "sinkhole", "map": "demolish", "map_no_relays": "demolish"},
-	"solar": {"active": "fortify", "map": "anchor", "map_no_relays": "anchor"},
+	"solar": {"active": "fortify", "map": "backwash", "map_no_relays": "backwash"},   # 0.23.21: Anchor archived -> Backwash
 }
 # ...and the AI mixes it up (same decision: "for AI do the same but mix it up, and don't repeat builds"): an AI seat with
 # no loadout of its own gets one of its faction's builds, picked by the match seed (the same on every screen online), and
@@ -855,11 +874,13 @@ const FACTION_LOADOUT := {
 # faction's "map_no_relays" (Sim._setup_skills). Only when Sim.ai_builds is on (real matches; tests keep the defaults).
 const AI_LOADOUTS := {
 	"vex": [{"active": "surge", "map": "portal"}, {"active": "surge", "map": "relay_hack"}, {"active": "evac", "map": "sever"}],
-	"null": [{"active": "ghost_line", "map": "fog"}, {"active": "ghost_line", "map": "sever"}, {"active": "evac", "map": "bypass"}],
-	"bloom": [{"active": "spore_burst", "map": "backwash"}, {"active": "spore_burst", "map": "mire"}, {"active": "fortify", "map": "quake"}],
+	"null": [{"active": "ghost_line", "map": "fog"}, {"active": "ghost_line", "map": "sever"}, {"active": "evac", "map": "portal"}],
+	"bloom": [{"active": "spore_burst", "map": "backwash"}, {"active": "spore_burst", "map": "portal"}, {"active": "fortify", "map": "quake"}],
 	"ember": [{"active": "sinkhole", "map": "demolish"}, {"active": "scorch", "map": "quake"}, {"active": "scorch", "map": "sever"}],
-	"solar": [{"active": "fortify", "map": "anchor"}, {"active": "evac", "map": "backwash"}, {"active": "fortify", "map": "mire"}],
+	"solar": [{"active": "fortify", "map": "backwash"}, {"active": "evac", "map": "backwash"}, {"active": "fortify", "map": "fog"}],
 }
+# 0.23.21 (archive): Bypass -> Portal (NULL), Mire -> Portal (BLOOM), Anchor -> Backwash / Mire -> Fog of War (SOLAR) - conservative
+# picks from skills each faction already had in its builds or the pool (OPEN-QUESTIONS, 2026-11-02).
 # SKILLS START ON COOLDOWN (0.19.2, Daniele 2026-09-27: every active and map skill is on its full cooldown at the
 # match start "as if they just got used" - otherwise e.g. the production skill is overpowered at second 1). The
 # ultimate still charges from 0 (below).
@@ -871,6 +892,16 @@ const SKILLS_START_ON_COOLDOWN := true
 const ULT_CHARGE_TIME := 120.0
 const ULT_MIN_TIME := 90.0
 const ULT_KILL_SECONDS := 0.3
+
+
+static func ult_charge_time(id: String) -> float:
+	## An ultimate's natural charge (s): its own "charge" (Overdrive 75) or ULT_CHARGE_TIME.
+	return float(SKILLS.get(id, {}).get("charge", ULT_CHARGE_TIME))
+
+
+static func ult_min_time(id: String) -> float:
+	## The least time between two casts of that ultimate: its own "charge_min" (Overdrive 60) or ULT_MIN_TIME.
+	return float(SKILLS.get(id, {}).get("charge_min", ULT_MIN_TIME))
 # Superbloom variant (Daniele, 0.18.7, "cap" chosen): "cap" = castable any time, extra production capped
 # at SKILLS.superbloom.cap_shown; "under_attack" = no cap, castable only while one of your nodes is under
 # attack (a hostile line headed for it, or hostile units on its platform).
@@ -889,7 +920,7 @@ static func skill_slot_id(faction: String, loadout: Dictionary, slot: String) ->
 		return FACTION_ULTIMATE_ID.get(faction, "echo_split")
 	var d: Dictionary = FACTION_LOADOUT.get(faction, FACTION_LOADOUT["null"])
 	var id := str(loadout.get(slot, d[slot]))
-	var pool: Array = ACTIVE_SKILLS if slot == "active" else MAP_SKILLS
+	var pool: Array = ACTIVE_SKILLS if slot == "active" else map_pool()
 	return id if id in pool else str(d[slot])
 # AI levels - Alpha 11's five (ai_balance.gd PROFILES, Daniele Alpha 17: "5 levels of difficulty with
 # scaling aggressiveness"). Identical economy and combat at every level: only reaction time, how many

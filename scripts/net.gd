@@ -890,7 +890,7 @@ static func _clean_loadout(lo) -> Dictionary:
 	if lo is Dictionary:
 		if str(lo.get("active", "")) in Rules.ACTIVE_SKILLS:
 			out["active"] = str(lo["active"])
-		if str(lo.get("map", "")) in Rules.MAP_SKILLS:
+		if str(lo.get("map", "")) in Rules.map_pool():   # 0.23.21: archived skills (Rules.ARCHIVED_SKILLS) are dropped
 			out["map"] = str(lo["map"])
 	return out
 
@@ -1964,7 +1964,7 @@ static func predict(s: Sim, dt: float) -> void:
 		if h["state"] != "move" or h.get("blocked", false):
 			continue
 		var mult: float = Rules.platform_mult() if Sim.sample(h, h["s"])[2] else 1.0
-		var boost := s.skill_speed(h)                 # Surge / Rewire
+		var boost := s.skill_speed(h)                 # Surge / Overdrive
 		mult *= s.deck_slow(h) * boost                # enemy goo or Mire, the stronger
 		var ds: float = Rules.move_speed() * h.get("speed", 1.0) * s.stat(h["owner"], "speed") * mult * dt
 		if h["streaming"]:

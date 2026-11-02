@@ -4,7 +4,7 @@ extends HBoxContainer
 ## shown only when ABILITIES are on. Daniele (0.18.7): "time to add armies presets and skills"; for all UI:
 ## "make sure it all is consistent, functional, cool, properly sized and that it looks good and modern".
 ## Each slot: the skill's icon, a cooldown sweep with the seconds left, a ready glow; the ultimate has a
-## charge ring and a READY burst; Rewire shows its relay fires left. Casting: tap a slot (or 1 / 2 / 3),
+## charge ring and a READY burst; Overdrive shows its relay fires left. Casting: tap a slot (or 1 / 2 / 3),
 ## the valid targets light up in the world (Sim.targets_for: lines, nodes, decks, relays), tap one to
 ## cast - Ghost Line takes its source node, then its destination. Tap the slot again or empty space to
 ## cancel (a cancel spends nothing). A tap on a wrong target says Sim.cast_check's reason just above the slot
@@ -48,7 +48,7 @@ var swapped := ""                             # the relay map skill this map rep
 var _cand_t := 0.0
 var _press := Vector2.INF
 var _t := 0.0
-var _prev: Array = []                         # per slot: [cooldown, charge, rewire fires] last frame
+var _prev: Array = []                         # per slot: [cooldown, charge, overdrive fires] last frame
 var _last_pulse := [-9.0, -9.0, -9.0]
 var _floor_px := 0.0                          # phones: the smallest font the slot words may use (HUD_DOCK_MIN_PT), 0 = none
 
@@ -61,7 +61,7 @@ class Slot:
 	var cd := 0.0                              # seconds left (ultimate: seconds of charge left)
 	var frac := 0.0                            # active / map: cooldown left 0..1; ultimate: charge 0..1
 	var is_ready := false
-	var fires := 0                             # Rewire running: relay fires left
+	var fires := 0                             # Overdrive running: relay fires left
 	var pulse := 0.0                           # a cast: 1 -> 0
 	var burst := 0.0                           # the ultimate turned ready: 1 -> 0
 	var warn := 0.0                            # a refused tap: 1 -> 0
@@ -145,7 +145,7 @@ class Slot:
 				draw_colored_polygon(pts, Color(0, 0, 0, 0.62))
 			draw_arc(ic, r, -PI / 2.0, -PI / 2.0 + TAU * (1.0 - frac), 40, Color(col, 0.85), 2.5 * s, true)
 			_centred(str(int(ceil(cd))), ic, 22, Color.WHITE, true)
-		if fires > 0:                            # Rewire: fires left, a badge on the disc
+		if fires > 0:                            # Overdrive: fires left, a badge on the disc
 			var bc := ic + Vector2(r * 0.78, -r * 0.78)
 			draw_circle(bc, 10.0 * s, col)
 			_centred("%d" % fires, bc, 14, Color("06121a"), false)
@@ -310,7 +310,7 @@ func sync(dt: float) -> void:
 		var id := sim.skill_id(human, slot)
 		var cd := sim.cooldown(human, slot)
 		var ch := sim.charge(human) if i == 2 else 0.0
-		var fires := sim.rewire_left(human) if i == 2 else 0
+		var fires := sim.overdrive_left(human) if i == 2 else 0
 		var ready := sim.abilities_on and not sim.over and (cd <= 0.0 or fires > 0) and id != ""
 		var frac := 0.0
 		if i == 2:
@@ -319,7 +319,7 @@ func sync(dt: float) -> void:
 			frac = clampf(cd / maxf(float(Rules.SKILLS.get(id, {}).get("cd", 1.0)), 0.01), 0.0, 1.0)
 		var p: Array = _prev[i]
 		# a cast happened (ours, or a guest's order the host accepted): the cooldown jumped up, the charge
-		# was spent, or a Rewire fire was used
+		# was spent, or a Overdrive fire was used
 		var cast := (i < 2 and float(p[0]) <= 0.05 and cd > 1.0) or (i == 2 and float(p[1]) >= 1.0 and ch < 0.5) or (i == 2 and fires < int(p[2]) and fires >= 0 and int(p[2]) > 0)
 		if cast and _t - float(_last_pulse[i]) > 0.6:
 			b.pulse = 1.0
@@ -335,8 +335,8 @@ func sync(dt: float) -> void:
 		b.state(id, cd, frac, ready, fires)
 	if armed >= 0:
 		var slot: String = SLOTS[armed]
-		var rewiring := armed == 2 and sim.rewire_left(human) > 0
-		if main.paused or sim.over or not sim.abilities_on or (not rewiring and sim.cooldown(human, slot) > 0.0):
+		var overdriving := armed == 2 and sim.overdrive_left(human) > 0
+		if main.paused or sim.over or not sim.abilities_on or (not overdriving and sim.cooldown(human, slot) > 0.0):
 			cancel()
 		else:
 			_cand_t -= dt
@@ -375,7 +375,7 @@ func _kind() -> String:
 	if armed < 0:
 		return ""
 	var id := sim.skill_id(human, SLOTS[armed])
-	if armed == 2 and id == "rewire" and sim.rewire_left(human) > 0:
+	if armed == 2 and id == "overdrive" and sim.overdrive_left(human) > 0:
 		return "relay"
 	return str(Rules.SKILLS.get(id, {}).get("target", "none"))
 
@@ -392,11 +392,11 @@ func press_slot(i: int) -> void:
 	var id := sim.skill_id(human, slot)
 	if id == "":
 		return
-	var rewiring := i == 2 and id == "rewire" and sim.rewire_left(human) > 0
-	if not sim.abilities_on or not (rewiring or sim.cooldown(human, slot) <= 0.0):
+	var overdriving := i == 2 and id == "overdrive" and sim.overdrive_left(human) > 0
+	if not sim.abilities_on or not (overdriving or sim.cooldown(human, slot) <= 0.0):
 		_refuse(i, sim.cast_check(human, slot, null))
 		return
-	var kind := "relay" if rewiring else str(Rules.SKILLS[id]["target"])
+	var kind := "relay" if overdriving else str(Rules.SKILLS[id]["target"])
 	if kind == "none":
 		var why := sim.cast_check(human, slot, null)
 		if why != "":
@@ -805,7 +805,7 @@ func on_event(ev: Dictionary) -> void:
 		"demolish": what = "a deck falls in %d s" % int(Rules.SKILLS["demolish"]["warn"])
 		"bypass": what = "a relay holds both states"
 		"relay_hack": what = "your relay is jammed" if ev.get("target") is Array else "your relay fires"
-		"rewire": what = "your relay fires" if ev.has("fire") else "their lines speed up"
+		"overdrive": what = "your relay fires" if ev.has("fire") else "their lines speed up"
 		"echo_split": what = "decoy lines on the move"
 		"core_meltdown": what = "an armed line is coming"   # POWERS (0.22.2): armed from the start of its trip
 		# POWERS (0.22.2): the new powers

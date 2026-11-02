@@ -5,7 +5,7 @@ extends Node
 ##       [map=res://maps4/M-03-drift-belt.json] [faction=null] [active=surge] [mapskill=mire]
 ## states: ready (every slot ready; the ultimate's READY burst), cooldown (active + map cooling, the ultimate
 ## charging), armed-line (Surge: your lines lit), armed-deck (the map skill's decks lit), armed-node (Ghost Line:
-## the source picked, its destinations lit), toast (rivals' casts on you), rewire (VEX's Rewire running: relays
+## the source picked, its destinations lit), toast (rivals' casts on you), overdrive (VEX's Overdrive running: relays
 ## lit, fires left). Every cast goes through the dock -> main.node_action("cast", ...): the probe prints the
 ## toasts it produced ("<Name> cast") and PROBE CAST ok / FAIL from the Sim's own cast events.
 
@@ -28,7 +28,7 @@ func _frames(n: int) -> void:
 
 func _run() -> void:
 	var state := str(args.get("state", "ready"))
-	var f := str(args.get("faction", "vex" if state == "rewire" else "null"))
+	var f := str(args.get("faction", "vex" if state == "overdrive" else "null"))
 	var lo := {"active": str(args.get("active", "ghost_line" if state == "armed-node" else "surge")), "map": str(args.get("mapskill", "mire"))}
 	var main_script = load("res://scripts/main.gd")
 	main_script.relaunch = {"faction": f, "rival": "ember", "mode": "1v1", "map": str(args.get("map", "res://maps4/M-03-drift-belt.json")), "loadout": lo}
@@ -85,18 +85,18 @@ func _run() -> void:
 			await _frames(3)
 			s.fx_events.append({"type": "skill", "id": "demolish", "seat": "B", "slot": "map", "target": 0, "pos": Vector3.ZERO, "affects": ["A"]})
 			await _frames(20)
-		"rewire":
+		"overdrive":
 			s.ult_charge["A"] = 1.0
 			s.ult_since["A"] = 100.0
 			await _frames(3)
-			dock.press_slot(2)                              # Rewire: no target, cast at once
+			dock.press_slot(2)                              # Overdrive: no target, cast at once
 			await _frames(10)
 			dock.press_slot(2)                              # ... then the slot fires relays
 			await _frames(20)
 	var casts := s.events.filter(func(e): return e["type"] == "skill" and e["seat"] == "A").size() - casts0
 	var toasts: Array = inst.hud.callouts.texts()        # HUD pass: the placed messages (no notification stack)
 	print("PROBE state=%s armed=%d cands=%d casts=%d toasts=%s" % [state, dock.armed, dock.cands.size(), casts, toasts])
-	if state in ["cooldown", "rewire"]:
+	if state in ["cooldown", "overdrive"]:
 		print("PROBE CAST %s" % ("ok" if casts >= 1 and toasts.any(func(t): return t.ends_with(" cast")) else "FAIL"))
 	await RenderingServer.frame_post_draw
 	var out := str(args.get("out", "user://skills_probe.png"))
