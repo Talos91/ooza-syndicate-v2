@@ -1,5 +1,36 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.21 "Alpha 23" - DRAFT (branch bal-02321; balance pass, Daniele's Hub Desk answers 2026-11-01: bal-abilities (a), bal-rewire (a))
+
+- **Ability balance, set R1** (Desk bal-abilities (a)). The six strongest skills come down, BLOOM loses its production lean and EMBER gets attack back.
+  Win rate of a seat that casts it vs one that never does (AI vs AI, 0.23.18 numbers -> R1):
+  - **Demolish** cooldown 60 -> **80 s** (+25 -> +16)
+  - **Sever** cooldown 70 -> **90 s** (+21 -> +12)
+  - **Scorch** cooldown 32 -> **45 s** (+20 -> +13)
+  - **Quake** cooldown 90 -> **105 s** (+17 -> +14)
+  - **Spore Burst** 1.8x -> **1.5x** for 10 s (+22 -> +17); Superbloom on top of it is now 2 x 1.5 = 3x
+  - **Core Meltdown** 3 kills per unit, cap 70 -> **4 per unit, cap 90** (the 0.23.14 numbers)
+  - **BLOOM** production 1.06 -> **1.00** (no production lean any more)
+  - **EMBER** attack 1.02 -> **1.10**. **This reverses Daniele's 0.23.15 EMBER numbers** (attack 1.10 -> 1.02), accepted with option (a): EMBER carries
+    Demolish / Scorch / Sever / Quake, the four skills trimmed here, and fell to ~37-41 % without it.
+- **Rewire is now OVERDRIVE** (VEX's ultimate; Desk bal-rewire (a) + the rename): **15 s** (was 12), every own line **2x speed** (was +75 %), doors
+  **3x** (was 2x), the 3 relay fires kept, and it **charges in 75 s** (at least 60 s after the last cast; the other ultimates stay 120 / 90 s). AI lift
+  +5 -> +17. New icon (a maxed-out gauge), the name and the numbers everywhere they show: skill dock, ARMIES card and its charge line
+  ("~75 s CHARGE"), the cast toast, the "OVERDRIVE" relay label. Rules: `SKILLS.overdrive` (`charge` / `charge_min`), `Rules.ult_charge_time()` / `ult_min_time()`.
+- **Mire, Anchor and Bypass are archived** (Daniele: "archive Bypass, Anchor and Mire for now"; the AI found no use for them: lift -0.4 / 0 / +0.5).
+  They leave the ARMIES picker, the shop, every default loadout and AI build; a saved pick plays as the faction's default. The code, FX, icons and AI
+  branches stay behind `Rules.archived_on` (off): moving an id back into `Rules.MAP_SKILLS` restores it. Replacements (conservative picks from skills each
+  faction already had in its builds or the pool; OPEN-QUESTIONS): SOLAR's default map skill **Anchor -> Backwash**; AI builds NULL Bypass -> Portal,
+  BLOOM Mire -> Portal, SOLAR Anchor -> Backwash and Mire -> Fog of War.
+- Faction win rates after the pass (AI vs AI, Expert, 1v1, 28 pooled maps, 1120 non-mirror matches per set, +-4.6):
+  0.23.20 VEX 38 / NULL 50 / BLOOM 69 / EMBER 40 / SOLAR 53 -> this branch VEX 40 / NULL 51 / BLOOM 49 / EMBER 52 / SOLAR 58 (median match 5:18).
+  VEX and SOLAR sit outside 45-55 on 0.23.20 (the R1 measurement ran on 0.23.18, before two doors: VEX 50, SOLAR 54).
+  **Option on Desk preview-02321 (needs Daniele's yes; sub-branch `bal-02321-c2`):** VEX garrison 0.90 -> 0.95, SOLAR production 0.93 -> 0.915 ->
+  VEX 54 / NULL 50 / BLOOM 46 / EMBER 51 / SOLAR 50. If taken, add: "VEX garrisons take 5 % more damage (was 10 %); SOLAR vats 8.5 % slower (was 7 %)".
+- The Machinegoon is unchanged (Desk bal-machinegoon is open again with the re-check).
+- Tests: test_sim, test_ai_curve (Training 25 < Casual 30 < Standard 49 < Veteran 70 < Expert 79 vs Standard), test_net, test_progression,
+  test_powers_ai, test_tutorial (test_sim + test_ai_curve again on bal-02321-c2). Headless only; nobody has played these numbers yet - staging is the check.
+
 ## 0.23.20 "Alpha 23" - 2026-11-02 (LIVE 2026-11-02 on Daniele's go after reading the changelog; staged 2026-11-02: two doors, neon HUD marks, Solar v3 + faction look)
 
 - **Two doors in the main game** (Daniele 2026-11-02, after proto3 / proto4: "a success, promote it to the main game"; branch doors-main): every BRAWL
