@@ -8,7 +8,7 @@ extends Node
 ##            one YELLOW, the rest GREY; none sits on its own node's badge; a sign just shown is pulsing
 ##   chip   - one of your vats that can upgrade shows the upgrade chip, at least CHIP_MIN_PT across, clear of its badge
 ##   Godot --path . --audio-driver Dummy --position -6000,-6000 res://tests/hud_marks_check.tscn -- --mobile --scale3d=0.75
-##       [maps=N-08,N-28,M-39] [window=1688x780] [out=<file>]
+##       [maps=N-08,N-28,M-39] [window=1688x780] [out=<file>] [faction=vex] [active=<skill id>] [shots=<dir>]
 ## Prints one line per map and HUD MARKS: PASS / FAIL (exit 1).
 
 const MAIN := "res://main.tscn"
@@ -57,7 +57,9 @@ func _run() -> void:
 			continue
 		var m := MapBuilder.load_map(path)
 		for attempt in range(TRIES):                       # an AI-vs-AI match on a small map can end before 4:00: again, no AI
-			main_script.relaunch = {"faction": "vex", "mode": str(m["modes"][0]), "map": path}
+			main_script.relaunch = {"faction": _arg("faction", "vex"), "mode": str(m["modes"][0]), "map": path}
+			if _arg("active", "") != "":                   # Neon Noir shots: a loadout's active skill (EMERGENCY EVAC's two lines)
+				main_script.relaunch["loadout"] = {"active": _arg("active", "")}
 			var inst: Node = (load(MAIN) as PackedScene).instantiate()
 			inst.mobile = true
 			get_tree().root.add_child(inst)

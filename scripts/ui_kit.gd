@@ -36,24 +36,58 @@ static func _add_symbol_fallback() -> bool:
 			fb.append(SYMBOLS)
 			f.fallbacks = fb
 	return true
-const BASE := Color("041016")                      # base surface
-const PANEL := Color("071820")                     # panel surface, opaque beneath text
-const INK := Color("e8f6fa")                       # primary text
-const MUTED := Color("a6bfca")                     # secondary text
-const DIM := Color("5f7a86")                       # captions, unavailable
-const FRAME := Color("255363")                     # quiet frame
-const CYAN := Color("14d3e4")                      # VEX / neutral action
-const STAR := Color("ffce68")                      # earned stars
-const WEAKER := Color("ff4f64")                    # a stat below baseline - a rose red no faction accent is near (Daniele:
+# Alpha 24 (UI round 3): the colour tokens follow the theme (UiTheme: DARK / LIGHT, SETTINGS > DISPLAY > THEME) -
+# static vars set by apply_tokens(), so every page built after a switch takes the new ones. DARK matches the round-3
+# pack's dark surfaces (board C "Dark Ooze"), LIGHT its light ones (board D "Light Ooze").
+static var BASE := Color("041016")                 # base surface
+static var PANEL := Color("071820")                # panel surface, opaque beneath text
+static var INK := Color("e8f6fa")                  # primary text
+static var MUTED := Color("a6bfca")                # secondary text
+static var DIM := Color("5f7a86")                  # captions, unavailable
+static var FRAME := Color("255363")                # quiet frame
+static var CYAN := Color("14d3e4")                 # VEX / neutral action
+static var STAR := Color("ffce68")                 # earned stars
+static var WEAKER := Color("ff4f64")               # a stat below baseline - a rose red no faction accent is near (Daniele:
                                                   # the old amber read like EMBER / SOLAR)
-const BAR := Color("041016f2")                     # top / bottom bars
-const CARD := Color("071820f0")                    # card fill
+static var BAR := Color("041016f2")                # top / bottom bars
+static var CARD := Color("071820f0")               # card fill
+const ON_PRIMARY := Color("05212a")                # text on the round-3 primary / selected pills (cyan in both themes)
+const TOKENS := {
+	"dark": {"BASE": Color("0a1018"), "PANEL": Color("0e1620"), "INK": Color("e8f6fa"), "MUTED": Color("a6bfca"),
+			"DIM": Color("62798a"), "FRAME": Color("2a4150"), "CYAN": Color("19d6ea"), "STAR": Color("ffce68"),
+			"WEAKER": Color("ff4f64"), "BAR": Color("0a1018f2"), "CARD": Color("0e1620f2")},
+	"light": {"BASE": Color("dce5eb"), "PANEL": Color("eef3f6"), "INK": Color("0f1c25"), "MUTED": Color("3e5562"),
+			"DIM": Color("6f8590"), "FRAME": Color("8ea3ad"), "CYAN": Color("0a8fa6"), "STAR": Color("c98a00"),
+			"WEAKER": Color("d42a44"), "BAR": Color("eef3f6f2"), "CARD": Color("eef3f6f4")},
+}
+# LIGHT: the faction accents as TEXT on a light surface (the dark theme's neon would vanish there - SOLAR's yellow most)
+const ACCENTS_LIGHT := {"vex": Color("0a8fa6"), "null": Color("b8158f"), "bloom": Color("3f8a0e"),
+		"ember": Color("c75400"), "solar": Color("a87800")}
+static var _tokens_ready := apply_tokens(UiTheme.light())
+
+
+static func apply_tokens(light: bool) -> bool:
+	## The colour tokens of a theme (UiTheme.set_mode calls it on a switch).
+	var t: Dictionary = TOKENS["light" if light else "dark"]
+	BASE = t["BASE"]
+	PANEL = t["PANEL"]
+	INK = t["INK"]
+	MUTED = t["MUTED"]
+	DIM = t["DIM"]
+	FRAME = t["FRAME"]
+	CYAN = t["CYAN"]
+	STAR = t["STAR"]
+	WEAKER = t["WEAKER"]
+	BAR = t["BAR"]
+	CARD = t["CARD"]
+	return true
 const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Color("a1eb39"),
 		"ember": Color("ff7c19"), "solar": Color("ffce58")}
 const ORDER := ["vex", "null", "bloom", "ember", "solar"]
-const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "VIRIDIAN", "ember": "EMBER", "solar": "SOLAR"}
-const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "BLOOM", "ember": "MAW", "solar": "SHELLS"}
-const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "VIRIDIAN / BLOOM",
+## Daniele 2026-11-02: the faction is BLOOM - no VIRIDIAN anywhere; it has no second word (SUBS "")
+const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "BLOOM", "ember": "EMBER", "solar": "SOLAR"}
+const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "", "ember": "MAW", "solar": "SHELLS"}
+const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "BLOOM",
 		"ember": "EMBER / MAW", "solar": "SOLAR / SHELLS"}
 const CUT := 10                                    # the standard corner cut
 const CFG := "user://ui.cfg"
@@ -63,6 +97,9 @@ const MIN_FONT_PT := 12.5
 
 
 static func accent(f: String) -> Color:
+	## The faction's UI accent - darker in LIGHT, where it is text and frames on a pale surface.
+	if UiTheme.light():
+		return ACCENTS_LIGHT.get(f, CYAN)
 	return ACCENTS.get(f, CYAN)
 
 
@@ -171,41 +208,86 @@ static func sb(fill: Color, border := Color(0, 0, 0, 0), bw := 0, cut := CUT, gl
 
 
 static func style_button(b: Button, kind: String, f := "vex") -> void:
+	## Alpha 24 (UI round 3): the buttons are the pack's sprites (UiTheme, A / G sheets) in the current theme -
+	##   primary    A5 primary (A6 pressed): the cyan pill, dark text - in both themes, as on Daniele's boards
+	##   secondary  A7 secondary pill (A8 pressed); a button with no text of its own: a row / wide tile G1 list_row, a
+	##              squarish tile (narrower than 2:1) A3 card
+	##   selected   A11 tab_selected (the cyan pill: chips, tabs, a picked option); a row / wide tile G2 list_selected, a
+	##              squarish tile A4 card_selected (its tick in the corner)
+	##   tertiary   text-led, no frame
+	##   icon       B6 icon_button (the square top-bar buttons)
+	## The faction accent stays in the words, kickers and emblems (the boards draw one cyan - see OPEN-QUESTIONS UI).
 	var a := accent(f)
-	var normal: StyleBoxFlat
-	var hover: StyleBoxFlat
-	var pressed: StyleBoxFlat
+	var tile := b.text == ""
+	var card := tile and b.size.x > 0.0 and b.size.x < b.size.y * 2.0
+	var normal: StyleBox
+	var hover: StyleBox
+	var pressed: StyleBox
+	var disabled: StyleBox = UiTheme.box("G3" if tile else "A9")
 	var fc := INK
+	var fh := INK
 	match kind:
-		"primary":                                    # solid accent, dark text, a soft glow of its own colour
-			normal = sb(a, a.lightened(0.25), 1, CUT, Color(a, 0.28))
-			hover = sb(a.lightened(0.12), a.lightened(0.4), 1, CUT, Color(a, 0.4))
-			pressed = sb(a.darkened(0.18), a, 1, CUT)
-			fc = BASE
-		"selected":                                   # tinted fill, accent frame (tabs, chips, picked tiles)
-			normal = sb(Color(a.darkened(0.72), 0.94), a, 2)
-			hover = sb(Color(a.darkened(0.62), 0.96), a.lightened(0.2), 2)
-			pressed = sb(Color(a.darkened(0.55), 0.96), a, 2)
+		"primary":
+			normal = UiTheme.box("A5")
+			hover = UiTheme.box("A5", UiTheme.SCALE, Color(1.12, 1.12, 1.12))
+			pressed = UiTheme.box("A6")
+			fc = ON_PRIMARY
+			fh = ON_PRIMARY
+		"selected":
+			if card:
+				normal = UiTheme.box("A4")
+				hover = UiTheme.box("A4", UiTheme.SCALE, Color(1.06, 1.06, 1.06))
+				pressed = UiTheme.box("A4", UiTheme.SCALE, Color(0.9, 0.9, 0.9))
+			elif tile:
+				normal = UiTheme.box("G2")
+				hover = UiTheme.box("G2", UiTheme.SCALE, Color(1.06, 1.06, 1.06))
+				pressed = UiTheme.box("G2", UiTheme.SCALE, Color(0.9, 0.9, 0.9))
+			else:
+				normal = UiTheme.box("A11")
+				hover = UiTheme.box("A11", UiTheme.SCALE, Color(1.1, 1.1, 1.1))
+				pressed = UiTheme.box("A6")
+				fc = ON_PRIMARY
+				fh = ON_PRIMARY
 		"tertiary":                                   # text-led
 			normal = sb(Color(0, 0, 0, 0))
 			hover = sb(Color(a, 0.08))
 			pressed = sb(Color(a, 0.16))
-		_:                                            # secondary: dark surface, quiet frame, the accent on hover
-			normal = sb(Color(PANEL, 0.94), FRAME, 1)
-			hover = sb(Color(PANEL.lightened(0.05), 0.96), a, 1)
-			pressed = sb(Color(a.darkened(0.7), 0.96), a, 1)
+			fh = a
+		"icon":
+			normal = UiTheme.box("B6")
+			hover = UiTheme.box("B6", UiTheme.SCALE, Color(1.12, 1.12, 1.12))
+			pressed = UiTheme.box("B6", UiTheme.SCALE, Color(0.85, 0.85, 0.85))
+			disabled = UiTheme.box("B6", UiTheme.SCALE, Color(1, 1, 1, 0.5))
+		_:                                            # secondary
+			var id := "A3" if card else ("G1" if tile else "A7")
+			normal = UiTheme.box(id)
+			hover = UiTheme.box(id, UiTheme.SCALE, Color(1.1, 1.1, 1.1) if not UiTheme.light() else Color(1.03, 1.03, 1.03))
+			pressed = UiTheme.box("A4" if card else ("G2" if tile else "A8"))
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	b.add_theme_stylebox_override("normal", normal)
 	b.add_theme_stylebox_override("hover", hover)
 	b.add_theme_stylebox_override("pressed", pressed)
 	b.add_theme_stylebox_override("hover_pressed", pressed)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	b.add_theme_stylebox_override("disabled", sb(Color(PANEL, 0.7), Color(FRAME, 0.5), 1))
+	b.add_theme_stylebox_override("disabled", disabled)
 	b.add_theme_color_override("font_color", fc)
-	b.add_theme_color_override("font_hover_color", fc if kind == "primary" else (a if kind == "tertiary" else INK))
-	b.add_theme_color_override("font_pressed_color", fc if kind == "primary" else INK)
-	b.add_theme_color_override("font_hover_pressed_color", fc if kind == "primary" else INK)
+	b.add_theme_color_override("font_hover_color", fh)
+	b.add_theme_color_override("font_pressed_color", fc)
+	b.add_theme_color_override("font_hover_pressed_color", fc)
 	b.add_theme_color_override("font_focus_color", fc)
 	b.add_theme_color_override("font_disabled_color", DIM)
+	for ic in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color", "icon_focus_color"]:
+		b.add_theme_color_override(ic, fc)
+	b.add_theme_color_override("icon_disabled_color", DIM)
+
+
+static func icon_btn(m, icon_name: String, dims: Vector2, call: Callable, kind := "secondary", f := "vex") -> Button:
+	## A square button showing a round-3 D icon (tinted like the button's text), not yet placed.
+	var b := make_btn(m, "", dims, call, kind, f)
+	var col: Color = b.get_theme_color("font_color")
+	var side := minf(b.size.x, b.size.y) * 0.46
+	b.add_child(UiTheme.icon_rect(icon_name, side, col, (b.size - Vector2(side, side)) / 2.0))
+	return b
 
 
 static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "secondary", f := "vex", size := 16.0) -> Button:
@@ -216,10 +298,10 @@ static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "se
 	b.add_theme_font_override("font", HEAD)
 	b.add_theme_font_size_override("font_size", px(m, size))
 	b.clip_text = true
-	style_button(b, kind, f)
 	dims.y = tap_h(m, dims.y)
 	b.custom_minimum_size = dims
 	b.size = dims
+	style_button(b, kind, f)                          # (after the size: a tile's sprite depends on its shape)
 	if call.is_valid():
 		var ui := "confirm" if kind == "primary" else "tap"   # SOUND: the primary action confirms, the rest tap (sfx.gd)
 		b.pressed.connect(func():
@@ -270,10 +352,15 @@ static func flat_button(m, text: String, size: float, col := INK) -> Button:
 
 static func panel(m, pos: Vector2, dims: Vector2, f := "", selected := false, fill := CARD) -> Panel:
 	## An opaque surface: the quiet frame, or the accent (with a tinted fill) when `selected`.
+	## Alpha 24: the round-3 A1 panel (G2's cyan frame when `selected`); a custom `fill` keeps the flat box.
 	var p := Panel.new()
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	var a := accent(f)
-	p.add_theme_stylebox_override("panel", sb(Color(a.darkened(0.8), 0.95) if selected else fill, a if selected else FRAME, 2 if selected else 1))
+	if fill != CARD:
+		p.add_theme_stylebox_override("panel", sb(Color(a.darkened(0.8), 0.95) if selected else fill, a if selected else FRAME, 2 if selected else 1))
+	else:
+		p.add_theme_stylebox_override("panel", UiTheme.box("G2" if selected else "A1"))
 	p.size = dims
 	return add(m, p, pos) as Panel
 

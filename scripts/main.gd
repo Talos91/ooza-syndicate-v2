@@ -1104,7 +1104,7 @@ func _fit_nodes(nodes: Array) -> Array:
 	if use_hud and mission_overlay:                    # CAMPAIGN: the map fits under the objective strip too
 		top = maxf(top, mission_overlay.strip_bottom() + 6.0)
 	var bottom: float = vp.y - (hud.bottom_used() if use_hud else 8.0)
-	var right: float = vp.x - (margins.z + hud.pause_button.size.x + 12.0 if use_hud else 8.0)   # PAUSE and Debug column
+	var right: float = vp.x - (hud.right_used() if use_hud else 8.0)   # PAUSE's column and the skill column (Alpha 24)
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
 	var pts := []
 	for n in nodes:
@@ -2120,6 +2120,7 @@ func _unhandled_input(event: InputEvent) -> void:
 						node_action("launch_monster", hub, {"to": target})
 					drag_mesh.clear_surfaces()
 					route_label.visible = false
+					_route_hud({})
 				return
 			if mb.pressed:
 				var n := _node_at(hit, mb.position)
@@ -2200,6 +2201,7 @@ func _end_drag() -> void:
 	monster_from = -1
 	drag_mesh.clear_surfaces()
 	route_label.visible = false
+	_route_hud({})
 
 
 func _ground(screen: Vector2) -> Vector3:
@@ -2242,11 +2244,18 @@ func _relay_button_at(p: Vector3, screen: Vector2) -> int:
 	return rb
 
 
+func _route_hud(r: Dictionary) -> void:
+	## Alpha 24: the HUD's 2D route feedback over the drag line (HudOverlay._draw_route): chevrons / blocks, target marker.
+	if hud and hud.overlay and (hud.overlay.route != r):
+		hud.overlay.route = r
+
+
 func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 	## The send preview follows the actual route along the decks (not a straight line), with an
 	## arrowhead at the target and the count + travel time at the cursor (Alpha 11's route label).
 	drag_mesh.clear_surfaces()
 	route_label.visible = false
+	_route_hud({})
 	if b == Vector3.INF:
 		return
 	var a: Vector3 = sim.nodes[from]["pos"]
@@ -2264,6 +2273,7 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 			route_label.text = "NO ROUTE"
 			route_label.position = sim.nodes[target]["pos"] + Vector3(0, 6, 0)
 			route_label.visible = true
+			_route_hud({"pts": PackedVector3Array([a, sim.nodes[target]["pos"]]), "ok": false, "target": target})
 			return
 		var path := sim.build_path(route)
 		var pts: PackedVector3Array = path["pts"]
@@ -2288,6 +2298,7 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 		route_label.text = "%s · %d units · %d s" % [verb.to_upper(), Rules.shown(count), int(round(seconds))]
 		route_label.position = tn["pos"] + Vector3(0, 6.5, 0)
 		route_label.visible = true
+		_route_hud({"pts": pts, "ok": true, "target": target})
 	else:
 		drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, mat)
 		for k in range(-1, 2):
@@ -2302,6 +2313,7 @@ func _draw_monster_drag(hub: int, hit: Vector3) -> void:
 	## coloured by whether the node under the cursor is in sim.monster_reach(hub).
 	drag_mesh.clear_surfaces()
 	route_label.visible = false
+	_route_hud({})
 	if hit == Vector3.INF:
 		return
 	var a: Vector3 = sim.nodes[hub]["pos"]
@@ -2317,6 +2329,7 @@ func _draw_monster_drag(hub: int, hit: Vector3) -> void:
 		route_label.text = "SEND MONSTER" if ok else "OUT OF REACH"
 		route_label.position = sim.nodes[target]["pos"] + Vector3(0, 6, 0)
 		route_label.visible = true
+		_route_hud({"pts": PackedVector3Array([a, sim.nodes[target]["pos"]]), "ok": ok, "target": target, "monster": true})
 
 
 var _perf_t := 0.0

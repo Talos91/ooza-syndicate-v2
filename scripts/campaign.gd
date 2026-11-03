@@ -201,7 +201,7 @@ const CAMPAIGNS := {
 		],
 	},
 	"null": {"title": "NULL DATA CARTEL", "episode": "OFF THE BOOKS", "tagline": "Coming later.", "rival": "solar", "districts": []},
-	"bloom": {"title": "VIRIDIAN BLOOM", "episode": "GROWTH MINDSET", "tagline": "Coming later.", "rival": "ember", "districts": []},
+	"bloom": {"title": "BLOOM", "episode": "GROWTH MINDSET", "tagline": "Coming later.", "rival": "ember", "districts": []},
 	"ember": {"title": "EMBER MAW", "episode": "SCORCHED EARNINGS", "tagline": "Coming later.", "rival": "vex", "districts": []},
 	"solar": {"title": "SOLAR SHELLS", "episode": "TERMS & CONDITIONS", "tagline": "Coming later.", "rival": "null", "districts": []},
 }

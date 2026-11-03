@@ -24,6 +24,7 @@ var _relay_cue_t := {}                 # node id -> seconds left showing that cu
 var _reach_hub := -1                  # perf pass (audit B2): sim.monster_reach of the shown hub, worked out once per
 var _reach_sig := []                   # hub and board (the decks' open states, the fallen nodes), not every frame
 var _reach: Array = []
+var route := {}                        # Alpha 24: the drag being aimed (main._route_hud): pts (world), ok, target, monster
 var _drew := true                      # the last frame drew something (a frame that draws nothing clears it once)
 const RELAY_CUE_MAX := 3               # only the first few times (Daniele's ask)
 const RELAY_CUE_SECONDS := 4.0
@@ -186,6 +187,8 @@ func _clear_spot(c: Vector2, offsets: Array, half: Vector2, avoid: Array) -> Vec
 func _draws_something() -> bool:
 	## Would _draw put anything on screen this frame (halos, relay cues, the monster reach, a relay preview, a
 	## danger symbol)? A cheap scan: false means the overlay can stay as it is.
+	if not route.is_empty():
+		return true
 	if main.monster_from >= 0 or hover_relay >= 0 or (hud.inspector_id >= 0 and hud.inspector_id < sim.nodes.size() 			and sim.nodes[hud.inspector_id]["structure"] == "monster_hub"):
 		return true
 	for n in sim.nodes:
@@ -239,9 +242,56 @@ func _draw() -> void:
 	if hud.shows("relay"):
 		for id in _relay_preview_nodes():
 			_draw_relay_preview(cam, id)
+	if not route.is_empty():
+		_draw_route(cam)
 	if hud.shows("danger"):
 		_draw_danger_symbols(cam)
 	PerfProfile.lap("overlay_draw", _pt)
+
+
+# ------------------------------------------------------------------ the aimed route (Alpha 24, round-3 ROUTE FEEDBACK)
+func _draw_route(cam: Camera3D) -> void:
+	## Over main's 3D drag line: the pack's route chevrons (B23) marching along a valid route in your colour, its NO ROUTE
+	## blocks (B24) on a blocked one, and the target's marker - VALID (B21) / INVALID (B22).
+	var ok := bool(route.get("ok", false))
+	var col := Rules.seat_color(human) if ok else Rules.state_color("warn")
+	var line := PackedVector2Array()
+	for q in (route.get("pts", PackedVector3Array()) as PackedVector3Array):
+		line.append(cam.unproject_position(q + Vector3(0, 1.0, 0)))
+	var s := ui_scale
+	if line.size() >= 2:
+		var step := (24.0 if ok else 26.0) * s
+		var k := fposmod(_t * (36.0 if ok else 0.0) * s, step)
+		var seg := 0
+		var done := 0.0                                  # path length before line[seg]
+		var total := 0.0
+		for i in range(line.size() - 1):
+			total += line[i].distance_to(line[i + 1])
+		var at := k
+		while at < total - 10.0 * s:
+			while seg < line.size() - 2 and done + line[seg].distance_to(line[seg + 1]) < at:
+				done += line[seg].distance_to(line[seg + 1])
+				seg += 1
+			var a: Vector2 = line[seg]
+			var b: Vector2 = line[seg + 1]
+			var l := maxf(a.distance_to(b), 0.001)
+			var pos := a.lerp(b, clampf((at - done) / l, 0.0, 1.0))
+			draw_set_transform(pos, (b - a).angle(), Vector2.ONE)
+			if ok:
+				var h := 9.0 * s
+				HudSkin.draw_sprite(self, "B23", Rect2(-h, -h, 2.0 * h, 2.0 * h), Color(col.lightened(0.25), 0.95))
+			else:
+				var bw := 16.0 * s
+				HudSkin.draw_sprite(self, "B24", Rect2(-bw / 2.0, -bw / 8.0, bw, bw / 4.0))
+			at += step
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var target := int(route.get("target", -1))
+	if target >= 0 and target < sim.nodes.size():
+		var ns := _node_screen(target, cam)
+		var r: float = float(ns[1]) * 1.2 + 6.0 * s
+		var breathe := 1.0 + 0.04 * sin(_t * 5.0)
+		HudSkin.draw_sprite(self, "B21" if ok else "B22", Rect2((ns[0] as Vector2) - Vector2(r, r) * breathe, Vector2(r, r) * 2.0 * breathe),
+				Color(col.lightened(0.2), 0.9) if ok else Color.WHITE)
 
 
 # ------------------------------------------------------------------ shared helpers (SkillDock's pattern)
@@ -363,7 +413,7 @@ func _draw_upgrade_arrows(cam: Camera3D, avoid: Array) -> void:
 		var grow := 1.0 + 0.3 * float(pk[0]) * float(pk[1])
 		_neon(NT_CHIP, c, R * grow, Color(1, 1, 1, 0.88 + 0.12 * k))
 		if float(pk[1]) > 0.0:
-			_pulse_ring(c, R, col, pk)
+			_pulse_ring(c, R, col, pk, NT_CHIP)
 
 
 # ------------------------------------------------------------------ the neon atlas (ui-neon)
@@ -379,13 +429,19 @@ enum { NT_RED, NT_YELLOW, NT_GREY, NT_CHIP, NT_TUBE }
 const NT_GLOW := [1.0, 0.8, 0.5, 0.8]  # how much each look glows (the grey one barely)
 static var _atlas: ImageTexture = null
 static var _atlas_chip := Color(0, 0, 0, 0)
+static var _atlas_mode := ""
 
 
 static func neon_atlas(chip: Color) -> Texture2D:
 	## The baked signs, one NT_W x NT_H cell each; rebuilt only when the chip's colour (your seat's) changes (~50k px).
-	if _atlas != null and _atlas_chip == chip:
+	## Alpha 24 (round-3 pack, current theme): the plates are the pack's alarm hexes (B16 red / B17 amber / B18 grey), the
+	## beacons its warning triangles (B13 next / B14 second / B15 queued), the chip its upgrade hex (B11, in your colour) with the
+	## E upgrade chevrons; the neon halo round each and the pulse tube stay drawn here. Without the pack: the ui-neon drawing.
+	var mode := UiTheme.mode()
+	if _atlas != null and _atlas_chip == chip and _atlas_mode == mode:
 		return _atlas
 	_atlas_chip = chip
+	_atlas_mode = mode
 	var img := Image.create(NT_W * 5, NT_H, false, Image.FORMAT_RGBA8)
 	var ap := NT_R * 0.8660254                          # the plate's apothem
 	var bc := Vector2(0, -NT_R * 1.086)                 # the beacon's centre, its half-width and height
@@ -393,6 +449,7 @@ static func neon_atlas(chip: Color) -> Texture2D:
 	var bh := bw * 1.5
 	var bl := sqrt(bh * bh + bw * bw)
 	var dark := Color(0.02, 0.03, 0.05)
+	var pack := HudSkin.sheet() != null
 	for cell in range(5):
 		var col: Color = chip if cell == NT_CHIP else (Color.WHITE if cell == NT_TUBE else SIGN_COL[cell])
 		var g: float = 1.0 if cell == NT_TUBE else float(NT_GLOW[cell])
@@ -400,11 +457,18 @@ static func neon_atlas(chip: Color) -> Texture2D:
 		for y in range(NT_H):
 			for x in range(NT_W):
 				var p := Vector2(x + 0.5 - NT_W / 2.0, y + 0.5 - NT_CY)
-				var d := maxf(absf(p.y), 0.8660254 * absf(p.x) + 0.5 * absf(p.y)) - ap   # flat-topped hex: signed distance (px)
+				# the pack's hexes stand on a point (the ui-neon ones lay flat): signed distance (px) to that hex
+				var d := (maxf(absf(p.x), 0.8660254 * absf(p.y) + 0.5 * absf(p.x)) if pack else maxf(absf(p.y), 0.8660254 * absf(p.x) + 0.5 * absf(p.y))) - ap
 				var tube := clampf(2.0 - absf(d), 0.0, 1.0)
 				var px := Color(col, 0.0)
 				if cell == NT_TUBE:
 					px = Color(1, 1, 1, tube)
+				elif pack:
+					px = Color(col, g * 0.5 * exp(-maxf(d, 0.0) / 5.0) if d > 0.0 else 0.0)                  # outer halo
+					var q := p - bc
+					var dt := maxf(q.y - 0.38 * bh, (absf(q.x) * bh - (q.y + 0.62 * bh) * bw) / bl)
+					if cell != NT_CHIP:
+						px = _over(px, Color(col, g * 0.4 * exp(-maxf(dt, 0.0) / 4.0) if dt > 0.0 else 0.0))   # the beacon's halo
 				else:
 					px = _over(px, Color(col, g * 0.45 * exp(-maxf(d, 0.0) / 5.5) if d > 0.0 else 0.0))   # outer halo
 					px = _over(px, Color(dark, 0.85 * clampf(0.5 - d, 0.0, 1.0)))                     # the plate
@@ -433,11 +497,85 @@ static func neon_atlas(chip: Color) -> Texture2D:
 						var dot := q.distance_to(Vector2(0, 0.24 * bh)) - 2.2
 						px = _over(px, Color(col.lightened(0.6), clampf(0.5 - minf(bar, dot), 0.0, 1.0)))
 				img.set_pixel(cell * NT_W + x, y, px)
+		if pack and cell != NT_TUBE:
+			_bake_pack_cell(img, cell, chip, bc, bw, bh)
 	if _atlas == null:
 		_atlas = ImageTexture.create_from_image(img)
 	else:
 		_atlas.update(img)
 	return _atlas
+
+
+# Neon Noir revision 6 (the art director): the alarm signs alert_sign_red / _amber / _grey (fixed colours) and the upgrade chip
+# (fill + white rim in your colour); measured on their 216 x 246 / 196 x 196 canvases: the plate's centre and circumradius (px)
+const NOIR_CELL := ["alert_sign_red", "alert_sign_amber", "alert_sign_grey", "upgrade_chip", "alert_sign_pulse"]
+const CHIP_SQUASH := 0.87             # upgrade_chip: drawn at 87 % height (its painted hex is 100 x 101, a regular one 100 x 87)
+const NOIR_PLATE := [Vector3(108, 145, 62), Vector3(108, 145, 62), Vector3(108, 145, 62), Vector3(98, 98, 50), Vector3(108, 145, 62)]
+
+
+static var _noir_tex := {}                # "cell|chip colour" -> the director's sign / chip, baked whole (glow band included)
+
+
+static func noir_tex(cell: int, chip: Color) -> Texture2D:
+	## One sign or the chip from the director's art, baked once at ~2x its usual size with mipmaps (drawn by _neon, not from
+	## the atlas: its glow band is wider than an atlas cell). null when not imported.
+	var key := "%d|%s" % [cell, chip.to_html()]
+	if not _noir_tex.has(key):
+		var pl: Vector3 = NOIR_PLATE[cell]
+		var im := HudSkin.noir_image(NOIR_CELL[cell], 2.0 * NT_R / pl.z, chip if cell == NT_CHIP else Color.WHITE)
+		if im != null:
+			if cell == NT_CHIP:                                # the art's hex is ~15 % taller than a regular one: squared up
+				im.resize(im.get_width(), int(round(im.get_height() * CHIP_SQUASH)), Image.INTERPOLATE_LANCZOS)
+			im.generate_mipmaps()
+		_noir_tex[key] = ImageTexture.create_from_image(im) if im != null else null
+	return _noir_tex[key]
+
+
+static func _bake_pack_cell(img: Image, cell: int, chip: Color, bc: Vector2, bw: float, bh: float) -> void:
+	## Alpha 24: one cell's sprites over its halo - the plate (a pointy hex of circumradius NT_R), then the beacon / chevrons.
+	var o := Vector2(cell * NT_W + NT_W / 2.0, NT_CY)       # the plate's centre in the atlas
+	var side := int(round(NT_R * 2.0))
+	var plate := HudSkin.sprite_image(["B16", "B17", "B18", "B11"][cell], Vector2i(side, side), chip if cell == NT_CHIP else Color.WHITE)
+	if plate != null:
+		img.blend_rect(plate, Rect2i(Vector2i.ZERO, plate.get_size()), Vector2i((o - Vector2(side, side) / 2.0).round()))
+	if cell == NT_CHIP:                                    # the E upgrade chevrons, dark on your colour
+		var t := UiTheme.icon("upgrade")
+		var ic: Image = t.get_image() if t != null else null
+		if ic != null:
+			ic = ic.duplicate()
+			if ic.is_compressed():
+				ic.decompress()
+			ic.clear_mipmaps()
+			ic.convert(Image.FORMAT_RGBA8)
+			var isz := int(round(NT_R * 1.25))
+			ic.resize(isz, isz, Image.INTERPOLATE_LANCZOS)
+			var ink := Color(0.02, 0.07, 0.1)
+			for y in range(isz):
+				for x in range(isz):
+					ic.set_pixel(x, y, Color(ink, ic.get_pixel(x, y).a))
+			img.blend_rect(ic, Rect2i(0, 0, isz, isz), Vector2i((o - Vector2(isz, isz) / 2.0).round()))
+		return
+	var tri_id: String = ["B13", "B14", "B15"][cell]
+	var rc: Array = UiTheme.DATA.SPRITES[tri_id]["rect"]
+	var tw := int(round(bw * 2.3))
+	var th := int(round(tw * float(rc[3]) / float(rc[2])))
+	var tri := HudSkin.sprite_image(tri_id, Vector2i(tw, th))
+	if tri == null:
+		return
+	var at := o + bc - Vector2(tw / 2.0, th * 0.58)
+	img.blend_rect(tri, Rect2i(0, 0, tw, th), Vector2i(at.round()))
+	if cell != NT_RED or UiTheme.light():                # B14 / B15 carry no "!" (LIGHT B13's is white on pale): draw it in the tier's colour
+		var col: Color = SIGN_COL[cell]
+		var ink := col.darkened(0.35) if UiTheme.light() else col.lightened(0.45)
+		var tc := o + bc + Vector2(0, th * 0.12)
+		for y in range(int(at.y), int(at.y) + th):
+			for x in range(int(at.x), int(at.x) + tw):
+				var q := Vector2(x + 0.5, y + 0.5) - tc
+				var bar := _seg_d(q, Vector2(0, -0.3 * bh), Vector2(0, 0.06 * bh)) - 1.6
+				var dot := q.distance_to(Vector2(0, 0.24 * bh)) - 1.9
+				var a := clampf(0.5 - minf(bar, dot), 0.0, 1.0)
+				if a > 0.0 and x >= 0 and y >= 0 and x < img.get_width() and y < img.get_height():
+					img.set_pixel(x, y, _over(img.get_pixel(x, y), Color(ink, a)))
 
 
 static func _over(dst: Color, src: Color) -> Color:
@@ -457,16 +595,30 @@ static func _seg_d(p: Vector2, a: Vector2, b: Vector2) -> float:
 
 func _neon(cell: int, c: Vector2, R: float, mod: Color) -> void:
 	## One baked sign with its plate's centre on c and circumradius R (screen units), tinted / faded by mod.
+	if HudNoir.has(NOIR_CELL[cell]):   # Neon Noir revision 6: the director's sign / chip, its plate on c
+		var t := noir_tex(cell, Rules.seat_color(human))
+		if t != null:
+			var pl: Vector3 = NOIR_PLATE[cell]
+			var kk := R / pl.z                                    # screen px per source px
+			var kb := 2.0 * NT_R / pl.z                           # texture px per source px
+			var sq := CHIP_SQUASH if cell == NT_CHIP else 1.0
+			draw_texture_rect(t, Rect2(c - Vector2(pl.x, pl.y * sq) * kk, t.get_size() * kk / kb), false, mod)
+			return
 	var k := R / NT_R
 	var sz := Vector2(NT_W, NT_H) * k
 	draw_texture_rect_region(neon_atlas(Rules.seat_color(human)), Rect2(c - Vector2(NT_W / 2.0, NT_CY) * k, sz),
 			Rect2(cell * NT_W, 0, NT_W, NT_H), mod)
 
 
-func _pulse_ring(c: Vector2, R: float, col: Color, pk: Array) -> void:
-	## A state-change beat: a hex outline swelling out from the plate and fading.
+func _pulse_ring(c: Vector2, R: float, col: Color, pk: Array, cell := NT_TUBE) -> void:
+	## A state-change beat: a hex outline swelling out from the plate and fading (Neon Noir: the director's pulse outline for a
+	## sign; the chip's own shape, faded, for the upgrade chip).
 	var ph := float(pk[2])
-	_neon(NT_TUBE, c, R * (1.1 + 0.9 * ph), Color(col, 0.75 * (1.0 - ph) * float(pk[1])))
+	var a := 0.75 * (1.0 - ph) * float(pk[1])
+	if cell == NT_CHIP and HudNoir.has("upgrade_chip"):
+		_neon(NT_CHIP, c, R * (1.1 + 0.9 * ph), Color(1, 1, 1, a * 0.6))
+		return
+	_neon(NT_TUBE, c, R * (1.1 + 0.9 * ph), Color(col, a))
 
 
 # ------------------------------------------------------------------ relay badge cues (0.19.0, Daniele:
@@ -650,4 +802,5 @@ func _draw_danger_symbols(_cam: Camera3D) -> void:
 		var sz := Hud.UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
 		words.append([(s[0] as Vector2) + Vector2(-sz.x / 2.0, Hud.UI_FONT.get_ascent(f) * 0.5 - 1.0), txt, f, col, a])
 	for w in words:                                      # (no outline pass: the plate is dark - every glyph is an object)
-		draw_string(Hud.UI_FONT, w[0], w[1], HORIZONTAL_ALIGNMENT_LEFT, -1, w[2], Color((w[3] as Color).lightened(0.55), w[4]))
+		var wc: Color = (w[3] as Color).darkened(0.45) if UiTheme.light() else (w[3] as Color).lightened(0.55)   # Alpha 24: a pale plate in LIGHT
+		draw_string(Hud.UI_FONT, w[0], w[1], HORIZONTAL_ALIGNMENT_LEFT, -1, w[2], Color(wc, w[4]))

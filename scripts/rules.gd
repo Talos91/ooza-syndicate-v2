@@ -678,7 +678,7 @@ static func _balance_set(k: String, v) -> void:
 		"FIGHT_RATE_K": FIGHT_RATE_K = v
 		"FACTION_STATS": FACTION_STATS = v
 		"forge_bonus": forge_bonus = v
-const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA CARTEL"], "bloom": ["VIRIDIAN", "BLOOM"],
+const FACTION_NAMES := {"vex": ["VEX", "BIOENGINEERS"], "null": ["NULL", "DATA CARTEL"], "bloom": ["BLOOM", ""],
 		"ember": ["EMBER", "MAW"], "solar": ["SOLAR", "SHELLS"]}
 const FACTION_TAGLINES := {"vex": "ADAPT. CONNECT. REDIRECT.", "null": "SAME SIGNAL. DIFFERENT TRUTH.",
 		"bloom": "A WILDER TOMORROW.", "ember": "PRESSURE BREEDS PROGRESS.", "solar": "HOLD THE LIGHT."}
@@ -1346,7 +1346,7 @@ const HUD_BANNER_FONT := 30
 const HUD_LINE_LIFE := 2.4             # a line with no place of its own (tutorial / campaign / debug), under the top bar
 const HUD_LS_PULSE := 4.5              # the Last Stand status line pulses and explains the method this long
 const HUD_DOCK_MIN_PT := 11.0          # the dock's ACTIVE / MAP / ULTIMATE and status words on a phone (iPhone sweep)
-const HUD_DOCK_PHONE_W := 212.0        # the dock slot's width on a phone (desktop: SkillDock.SLOT_SIZE.x) for those words
+const HUD_DOCK_PHONE_W := 130.0        # Alpha 24: the skill column's width on a phone (desktop: SkillDock.SLOT_W) - its words still fit at HUD_DOCK_MIN_PT
 const HUD_NAME_MAX := 12               # characters of a player's name before it is cut with an ellipsis
 # --- end HUD pass ---
 
