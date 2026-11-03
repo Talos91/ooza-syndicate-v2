@@ -509,6 +509,7 @@ static func neon_atlas(chip: Color) -> Texture2D:
 # Neon Noir revision 6 (the art director): the alarm signs alert_sign_red / _amber / _grey (fixed colours) and the upgrade chip
 # (fill + white rim in your colour); measured on their 216 x 246 / 196 x 196 canvases: the plate's centre and circumradius (px)
 const NOIR_CELL := ["alert_sign_red", "alert_sign_amber", "alert_sign_grey", "upgrade_chip", "alert_sign_pulse"]
+const CHIP_SQUASH := 0.87             # upgrade_chip: drawn at 87 % height (its painted hex is 100 x 101, a regular one 100 x 87)
 const NOIR_PLATE := [Vector3(108, 145, 62), Vector3(108, 145, 62), Vector3(108, 145, 62), Vector3(98, 98, 50), Vector3(108, 145, 62)]
 
 
@@ -523,6 +524,8 @@ static func noir_tex(cell: int, chip: Color) -> Texture2D:
 		var pl: Vector3 = NOIR_PLATE[cell]
 		var im := HudSkin.noir_image(NOIR_CELL[cell], 2.0 * NT_R / pl.z, chip if cell == NT_CHIP else Color.WHITE)
 		if im != null:
+			if cell == NT_CHIP:                                # the art's hex is ~15 % taller than a regular one: squared up
+				im.resize(im.get_width(), int(round(im.get_height() * CHIP_SQUASH)), Image.INTERPOLATE_LANCZOS)
 			im.generate_mipmaps()
 		_noir_tex[key] = ImageTexture.create_from_image(im) if im != null else null
 	return _noir_tex[key]
@@ -598,7 +601,8 @@ func _neon(cell: int, c: Vector2, R: float, mod: Color) -> void:
 			var pl: Vector3 = NOIR_PLATE[cell]
 			var kk := R / pl.z                                    # screen px per source px
 			var kb := 2.0 * NT_R / pl.z                           # texture px per source px
-			draw_texture_rect(t, Rect2(c - Vector2(pl.x, pl.y) * kk, t.get_size() * kk / kb), false, mod)
+			var sq := CHIP_SQUASH if cell == NT_CHIP else 1.0
+			draw_texture_rect(t, Rect2(c - Vector2(pl.x, pl.y * sq) * kk, t.get_size() * kk / kb), false, mod)
 			return
 	var k := R / NT_R
 	var sz := Vector2(NT_W, NT_H) * k

@@ -75,10 +75,11 @@ func _draw_layer(ci: RID, r: Rect2, rid: RID, mod: Color) -> void:
 	var rows := [[sy[0], sy[1]], [my - ch / 2.0, my + ch / 2.0], [sy[2], sy[3]]]
 	if whole_bottom:
 		rows[1] = [sy[2] - ch, sy[2]]                      # (the glass just above the pool: no step in its tone)
-		var bs := Rect2(region.position + Vector2(0, sy[2]), Vector2(region.size.x, sy[3] - sy[2]))
-		var bd := Rect2(r.position + Vector2(0, dy[2]), Vector2(r.size.x, dy[3] - dy[2]))
-		if bs.size.y > 0.0 and bd.size.y > 0.0:
-			RenderingServer.canvas_item_add_texture_rect_region(ci, bd, rid, bs, mod)
+		for i in 3:                                        # the pool's row: its whole middle, scaled, between the same caps
+			var bs := Rect2(region.position + Vector2(sx[i], sy[2]), Vector2(sx[i + 1] - sx[i], sy[3] - sy[2]))
+			var bd := Rect2(r.position + Vector2(dx[i], dy[2]), Vector2(dx[i + 1] - dx[i], dy[3] - dy[2]))
+			if bs.size.x > 0.0 and bs.size.y > 0.0 and bd.size.x > 0.0 and bd.size.y > 0.0:
+				RenderingServer.canvas_item_add_texture_rect_region(ci, bd, rid, bs, mod)
 	for j in (2 if whole_bottom else 3):
 		for i in 3:
 			var src := Rect2(region.position + Vector2(cols[i][0], rows[j][0]),
