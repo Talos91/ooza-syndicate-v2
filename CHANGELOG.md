@@ -36,8 +36,10 @@
 - **Rotor cooldown 10 -> 14 s** (Daniele 2026-11-03: rotation relays only, the same ratio as his "5 -> 7"; the other relays keep 5 s).
 - Telemetry: the match event now carries `match_id` (online "<room>-<round>", the server report's prefix; offline a local id) and `relay_types`
   (this seat's relay fires per kind), so relay use per map shows. The telemetry function's field list accepts both (redeploy `supabase/functions/telemetry`).
-- Tests: test_sim, test_ai_curve (Training 25 < Casual 30 < Standard 49 < Veteran 70 < Expert 79 vs Standard), test_net, test_progression,
-  test_powers_ai, test_tutorial (test_sim + test_ai_curve again on bal-02321-c2). Headless only; nobody has played these numbers yet - staging is the check.
+- Tests (rel-02321, assembled branch, headless, once): test_sim, test_net, test_map_pool, test_maps4 (47,034 checks), test_ai_curve (Training 29 <
+  Casual 32 < Standard 49 < Veteran 62 < Expert vs Veteran 63) and 15 more suites passed; test_preempt / rematch / room_limits / dedicated SKIP until the
+  room server has 0.23.21. **test_ai_coop fails one band**: Standard teamwork on vs off 52 % (wanted 55-90 %; 0.23.20: 58 %) - Veteran 67 % passes.
+  Nobody has played these numbers yet - staging is the check.
 
 ## 0.23.20 "Alpha 23" - 2026-11-02 (LIVE 2026-11-02 on Daniele's go after reading the changelog; staged 2026-11-02: two doors, neon HUD marks, Solar v3 + faction look)
 
