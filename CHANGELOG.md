@@ -1,6 +1,6 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.23.21 "Alpha 23" - DRAFT (branch bal-02321; balance pass, Daniele's Hub Desk answers 2026-11-01: bal-abilities (a), bal-rewire (a))
+## 0.23.21 "Alpha 23" - 2026-11-03 (STAGING; release rel-02321 = bal-02321 R1 + c2 + sim-armour + housekeeping-02321; Daniele's Hub Desk answers 2026-11-01..03)
 
 - **Ability balance, set R1** (Desk bal-abilities (a)). The six strongest skills come down, BLOOM loses its production lean and EMBER gets attack back.
   Win rate of a seat that casts it vs one that never does (AI vs AI, 0.23.18 numbers -> R1):
@@ -25,13 +25,15 @@
 - Faction win rates after the pass (AI vs AI, Expert, 1v1, 28 pooled maps, 1120 non-mirror matches per set, +-4.6):
   0.23.20 VEX 38 / NULL 50 / BLOOM 69 / EMBER 40 / SOLAR 53 -> this branch VEX 40 / NULL 51 / BLOOM 49 / EMBER 52 / SOLAR 58 (median match 5:18).
   VEX and SOLAR sit outside 45-55 on 0.23.20 (the R1 measurement ran on 0.23.18, before two doors: VEX 50, SOLAR 54).
-  **Option on Desk preview-02321 (needs Daniele's yes; sub-branch `bal-02321-c2`):** VEX garrison 0.90 -> 0.95, SOLAR production 0.93 -> 0.915 ->
-  VEX 54 / NULL 50 / BLOOM 46 / EMBER 51 / SOLAR 50. If taken, add: "VEX garrisons take 5 % more damage (was 10 %); SOLAR vats 8.5 % slower (was 7 %)".
+- **Balance set c2** (Daniele's yes, Desk preview-02321; branch `bal-02321-c2`): SOLAR production 0.93 -> **0.915** (SOLAR vats 8.5 % slower, was 7 %);
+  VEX garrison 0.90 -> 0.95 in c2, then **0.93** with vat armour below (Daniele 2026-11-03): VEX garrisons take **8 % more damage** (was 11 %).
+  Faction win rates (AI vs AI, Expert, 1v1, 6 shards, 1120 non-mirror, +-4.6): c2 VEX 54 / NULL 50 / BLOOM 46 / EMBER 51 / SOLAR 50; with armour
+  VEX 56.5 / NULL 49.8 / BLOOM 48.9 / EMBER 49.1 / SOLAR 45.8; with armour + VEX 0.93 **VEX 51.3 / NULL 50.9 / BLOOM 49.1 / EMBER 50.9 / SOLAR 47.8**.
 - The Machinegoon is unchanged (Desk bal-machinegoon is open again with the re-check).
 - **Vat armour** (Daniele, 2026-11-03; branch `sim-armour`): an owned vat's garrison takes 1.0 / 1.2 / 1.4 / 1.6x less damage at T1 / T2 / T3 / T4.
   A captured vat starts again at 1.0 (a T4 stays T4) and regains 0.01 a second to its tier's value: T2 in 20 s, T4 in 60 s. The node inspector shows
-  "Armour x1.30 -> x1.6 in 30 s". Faction win rates re-measured with it: see the sim-armour report (FACTIONS_AFTER_ARMOUR).
-- **Rotor cooldown 10 -> 14 s** (Daniele's "5 -> 7", applied as the same ratio to the rotation relay's 10 s; the other relays keep 5 s).
+  "Armour x1.30 -> x1.6 in 30 s". Faction win rates with it: the c2 bullet above.
+- **Rotor cooldown 10 -> 14 s** (Daniele 2026-11-03: rotation relays only, the same ratio as his "5 -> 7"; the other relays keep 5 s).
 - Telemetry: the match event now carries `match_id` (online "<room>-<round>", the server report's prefix; offline a local id) and `relay_types`
   (this seat's relay fires per kind), so relay use per map shows. The telemetry function's field list accepts both (redeploy `supabase/functions/telemetry`).
 - Tests: test_sim, test_ai_curve (Training 25 < Casual 30 < Standard 49 < Veteran 70 < Expert 79 vs Standard), test_net, test_progression,

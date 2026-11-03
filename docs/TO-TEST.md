@@ -1,9 +1,16 @@
-# To test - ALPHA 23.20 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.21 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.21 (staging: https://oozesyndicate.com/staging/)
+- [ ] **Vat armour**: tap an upgraded vat of yours - the inspector shows "Armour x1.x"; capture one and watch it climb back ("-> x1.6 in 60 s" on a T4).
+- [ ] **Balance R1 + c2**: Demolish / Sever / Scorch / Quake slower to recharge, Spore Burst 1.5x, Core Meltdown 4 per unit; BLOOM no production lean, EMBER attack 1.10, SOLAR vats a little slower, VEX garrisons 8 % softer (was 11 %).
+- [ ] **Overdrive** (was Rewire): VEX's ultimate, 15 s, lines 2x, doors 3x, charge ~75 s - name, icon and charge line right everywhere?
+- [ ] **Rotor cooldown 14 s**: a rotation relay waits 14 s before it fires again; other relays still 5 s.
+- [ ] Mire, Anchor and Bypass are gone from the ARMIES picker and the shop.
 
 ## 0.23.20 (staging: https://oozesyndicate.com/staging/)
 - [ ] **Two doors**: lines walk in by the nearer of the two doors and leave by the one nearer their bridge; the floor arrow at a door lights while a line uses it.
@@ -21,7 +28,7 @@ Live build: https://oozesyndicate.com
 - [ ] **speed-15**: lines move and vats fill 15 % slower - does a match feel better paced or just slower?
 - [ ] **E maps**: E-01..E-10 show in 02 BATTLEFIELD (1V1 / 2V2) and play fine on the phone.
 - [ ] **UI batch**: bridges easier to tap for deck skills; Last Stand danger signs tiered (next node loud, the rest muted); SETUP > ADVANCED holds LAST STAND / ABILITIES.
-- [ ] **Ultimates**: Superbloom 2x, Relay Aegis 2.5x / +50 % / 15 s, Rewire 12 s mass-Surge - does any feel too strong (Rewire on small maps)?
+- [ ] **Ultimates**: Superbloom 2x, Relay Aegis 2.5x / +50 % / 15 s, Overdrive 15 s mass-Surge (was Rewire 12 s) - does any feel too strong (Overdrive on small maps)?
 - [ ] **N-24 / N-04** back in 1v1: does seat B now win about as often?
 - [ ] **Phone rendering** (as 0.23.17): sharp enough at 0.75, cooler in menus.
 
