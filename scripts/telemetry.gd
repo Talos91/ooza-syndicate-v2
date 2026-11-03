@@ -583,7 +583,20 @@ static func match_event(sim: Sim, seat: String, info: Dictionary) -> bool:
 		return false
 	var won := sim.winner != "" and (sim.winner == seat or sim.allied(seat, sim.winner))
 	var st := Progression.seat_stats(sim, seat)
-	return event("match", {"map": str(info.get("map", "")), "mode": str(info.get("mode", "")),
+	# relay use per map (2026-11-03): this seat's fires per relay kind ("rotation" / "switch" / "remote" / "retract" ...)
+	var relay_types := {}
+	for e in sim.events:
+		if str(e.get("type", "")) == "relay_fired" and e.get("seat") == seat:
+			var nid := int(e.get("node", -1))
+			if nid >= 0 and nid < sim.nodes.size():
+				var kind := str(sim.nodes[nid]["relay"])
+				relay_types[kind] = int(relay_types.get(kind, 0)) + 1
+	# match id: online the room's "<room>-<round>" (the server report's match_id starts with it); offline a local id
+	var mid := str(info.get("match_id", ""))
+	if mid == "":
+		mid = "l%d-%04x" % [int(Time.get_unix_time_from_system() - sim.time), randi() % 0x10000]
+	return event("match", {"map": str(info.get("map", "")), "mode": str(info.get("mode", "")), "match_id": mid,
+			"relay_types": relay_types,
 			"faction": str(sim.factions.get(seat, "")),
 			"result": "left" if info.get("left_early", false) else ("draw" if sim.winner == "" else ("win" if won else "loss")),
 			"duration_s": snappedf(sim.time, 1.0), "ai_level": str(info.get("ai_level", "")),

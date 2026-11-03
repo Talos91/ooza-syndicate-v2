@@ -201,7 +201,8 @@ const RELAY_WARNING := 1.0          # Daniele (0.18.6): "bridge alert ... just 1
 const RELAY_COOLDOWN := 5.0        # Daniele (Alpha 13 playtest): "relay cooldown I'd set at 5 s"
 # Daniele (2026-09-28): rotors can be used as "meat grinders" (always connected, dropping what is on their decks) -> a longer
 # cooldown for ROTATION relays ("10 is fine for now"); other kinds keep RELAY_COOLDOWN.
-const RELAY_COOLDOWN_BY_KIND := {"rotation": 10.0}
+# Daniele (2026-11-03): rotor cooldown up by 7/5 ("5 -> 7" quoted on the base; rotors were at 10).
+const RELAY_COOLDOWN_BY_KIND := {"rotation": 14.0}
 
 
 static func relay_cooldown(kind: String) -> float:
@@ -442,6 +443,12 @@ static var LASER_RANGE := 12.0            # metres from the node's centre: cover
 # 20 % less damage (incoming / FORGE_DEFENCE). Forges do not stack.
 static var FORGE_COST := 200              # 40 shown (Daniele 2026-10-27, Ooze Desk: "Forge cost 20 -> 40"; was 100)
 const FORGE_DEFENCE := 1.25
+# VAT ARMOUR (Daniele, 2026-11-03): an owned vat's garrison takes ARMOUR_TIER[tier] times less damage (multiplied with
+# Fortify / Aegis and the forge, Sim.garrison_div). Capture (and an upgrade, a swap back to a vat) starts it at 1.0 and it
+# regains ARMOUR_REGAIN_PER_S up to the tier's value: T2 in 20 s, T3 40 s, T4 60 s. A captured T4 stays T4, armour 1.0.
+# Neutral nodes and non-vat structures: 1.0. Dimensionless, so the x5 shown scale does not apply.
+const ARMOUR_TIER := {1: 1.0, 2: 1.2, 3: 1.4, 4: 1.6}
+const ARMOUR_REGAIN_PER_S := 0.01
 const FORGE_BONUS_DEFAULT := 0.5
 static var forge_bonus: float = FORGE_BONUS_DEFAULT  # live-tunable (Alpha 11: +50 on the 100 attack scale)
 # MONSTER HUB (one per player): a monster costs MONSTER_COST units of the hub's garrison, then MONSTER_COOLDOWN s

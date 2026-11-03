@@ -28,6 +28,12 @@
   **Option on Desk preview-02321 (needs Daniele's yes; sub-branch `bal-02321-c2`):** VEX garrison 0.90 -> 0.95, SOLAR production 0.93 -> 0.915 ->
   VEX 54 / NULL 50 / BLOOM 46 / EMBER 51 / SOLAR 50. If taken, add: "VEX garrisons take 5 % more damage (was 10 %); SOLAR vats 8.5 % slower (was 7 %)".
 - The Machinegoon is unchanged (Desk bal-machinegoon is open again with the re-check).
+- **Vat armour** (Daniele, 2026-11-03; branch `sim-armour`): an owned vat's garrison takes 1.0 / 1.2 / 1.4 / 1.6x less damage at T1 / T2 / T3 / T4.
+  A captured vat starts again at 1.0 (a T4 stays T4) and regains 0.01 a second to its tier's value: T2 in 20 s, T4 in 60 s. The node inspector shows
+  "Armour x1.30 -> x1.6 in 30 s". Faction win rates re-measured with it: see the sim-armour report (FACTIONS_AFTER_ARMOUR).
+- **Rotor cooldown 10 -> 14 s** (Daniele's "5 -> 7", applied as the same ratio to the rotation relay's 10 s; the other relays keep 5 s).
+- Telemetry: the match event now carries `match_id` (online "<room>-<round>", the server report's prefix; offline a local id) and `relay_types`
+  (this seat's relay fires per kind), so relay use per map shows. The telemetry function's field list accepts both (redeploy `supabase/functions/telemetry`).
 - Tests: test_sim, test_ai_curve (Training 25 < Casual 30 < Standard 49 < Veteran 70 < Expert 79 vs Standard), test_net, test_progression,
   test_powers_ai, test_tutorial (test_sim + test_ai_curve again on bal-02321-c2). Headless only; nobody has played these numbers yet - staging is the check.
 

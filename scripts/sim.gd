@@ -164,11 +164,19 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"relay_cd": 0.0,        # cooldown before the next fire
 			"relay_anim": {},       # {"delta", "closing": [edge], "opening": [edge], "pairs": {c: o}}
 			"moving_edges": [],     # edges in motion this moment (closed to new routes)
+			"armour": 1.0,          # VAT ARMOUR: garrison damage divisor now (Rules.ARMOUR_TIER, regains after a capture)
+			"armour_cap": 1.0,      # ... the value it climbs to (the tier's on an owned vat, else 1.0)
+			"armour_from": 1.0,     # ... its value at armour_t0 (match time) - armour is recomputed from these, never summed
+			"armour_t0": 0.0,
 		})
 		adj[id] = []
 		if v3 and owner == "" and kind == "relay" and neutral is Dictionary and str(neutral.get("structure", "")) in ["cannon", "laser", "forge"]:
 			nodes[-1]["structure"] = "forge" if neutral["structure"] == "forge" else "laser"   # an armed relay (old cannons -> laser)
 		_sync_legacy(nodes[-1])
+		var cap0 := armour_cap(nodes[-1])              # VAT ARMOUR: homes start fully armoured
+		nodes[-1]["armour"] = cap0
+		nodes[-1]["armour_from"] = cap0
+		nodes[-1]["armour_cap"] = cap0
 	var geo: Array = map["layout"]["edges"] if v3 else []
 	for ek in range(map["edges"].size()):
 		var e: Dictionary = map["edges"][ek]
@@ -1676,6 +1684,7 @@ func step(dt: float) -> void:
 			n["units"] = minf(float(n.get("regen_cap", Rules.NEUTRAL_UNITS[n["tier"]])), n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)
 	_step_relays(dt)
 	_step_structures(dt)
+	_step_armour()
 	_step_skills(dt)
 	for n in nodes:                                   # the door emits the current order into its line
 		if n["streaming"].is_empty():
@@ -2553,6 +2562,7 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 	var second_hub := _second_hub(n, seat)             # (asked before the node is the capturer's)
 	n["owner"] = seat
 	n["units"] = garrison
+	_reset_armour(n)                                   # VAT ARMOUR: a captured vat (T4 included) starts again at 1.0
 	n["siege"] = {}
 	n["siege_dir"] = {}
 	n["allies"] = {}                                   # stored allied troops fell with the garrison
@@ -4083,10 +4093,43 @@ func is_disrupted(node_id: int) -> bool:
 
 func garrison_div(n: Dictionary) -> float:
 	## The garrison takes this many times less damage: Fortify / Relay Aegis (the strongest applies) x the
-	## owner's forge defence half (0.18.10, Rules.FORGE_DEFENCE while it holds a completed forge).
+	## owner's forge defence half (0.18.10, Rules.FORGE_DEFENCE while it holds a completed forge) x the vat's
+	## armour (2026-11-03, Rules.ARMOUR_TIER).
 	if n["owner"] == "":
 		return 1.0
-	return skill_div(n) * forge_defence(n["owner"])
+	return skill_div(n) * forge_defence(n["owner"]) * float(n.get("armour", 1.0))
+
+
+func armour_cap(n: Dictionary) -> float:
+	## VAT ARMOUR: what this node's armour climbs to - an owned vat's tier value, 1.0 for anything else.
+	if n["owner"] == "" or not has_vat(n):
+		return 1.0
+	return float(Rules.ARMOUR_TIER.get(int(n["tier"]), 1.0))
+
+
+func armour_full_in(n: Dictionary) -> float:
+	## VAT ARMOUR: seconds until the armour reaches its cap (0 when it is there).
+	return maxf(0.0, (float(n["armour_cap"]) - float(n["armour"])) / Rules.ARMOUR_REGAIN_PER_S)
+
+
+func _reset_armour(n: Dictionary) -> void:
+	n["armour"] = 1.0
+	n["armour_from"] = 1.0
+	n["armour_t0"] = time
+	n["armour_cap"] = armour_cap(n)
+
+
+func _step_armour() -> void:
+	## VAT ARMOUR: a closed form of match time (no per-step sum, so no drift whatever the step size): from armour_from at
+	## armour_t0 up at ARMOUR_REGAIN_PER_S to the cap. A cap change (upgrade, downgrade, swap, owner) re-anchors it at
+	## min(armour, new cap), so an upgraded vat climbs to its new tier too.
+	for n in nodes:
+		var cap := armour_cap(n)
+		if cap != float(n["armour_cap"]):
+			n["armour_from"] = minf(float(n["armour"]), cap)
+			n["armour_t0"] = time
+			n["armour_cap"] = cap
+		n["armour"] = minf(cap, float(n["armour_from"]) + Rules.ARMOUR_REGAIN_PER_S * (time - float(n["armour_t0"])))
 
 
 func skill_div(n: Dictionary) -> float:

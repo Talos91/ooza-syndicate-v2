@@ -1814,6 +1814,13 @@ func _refresh_inspector(cam: Camera3D) -> void:
 			lines.append("garrison %s | attack %d%%%s | speed %d%%" % [
 					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0), forge,
 					roundi(sim.stat(owner, "speed") * 100.0)])
+			if Sim.has_vat(n):
+				# VAT ARMOUR readout (2026-11-03): the divisor now, and while it climbs back after a capture / upgrade,
+				# the tier's value and the seconds to reach it
+				var arm := "Armour x%.2f" % float(n["armour"])
+				if float(n["armour"]) < float(n["armour_cap"]) - 0.0001:
+					arm += " -> x%.1f in %d s" % [float(n["armour_cap"]), int(ceil(sim.armour_full_in(n)))]
+				lines.append(arm)
 			if n["structure"] == "forge" and shows("forge_readout"):
 				# Forge readout (spec E): the attack half is in the line above (attack_of includes it)
 				lines.append("Forge: +%d%% attack, -%d%% damage taken" % [roundi(Rules.forge_bonus * 100.0), roundi((1.0 - 1.0 / Rules.FORGE_DEFENCE) * 100.0)])

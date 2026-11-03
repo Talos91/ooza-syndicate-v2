@@ -2541,13 +2541,14 @@ func _skills_tests() -> void:
 			var left := float(h["L"]) - float(h["s"]) if h in s.hordes else 0.0
 			check(not ev.is_empty() and left <= 12.0 + 0.5, tag + ": it goes off within 12 m of the target (%.1f m)" % left)
 			var sac: float = maxf(line * 0.25, 20.0)
-			var kills: float = minf(sac * 4.0, 450.0)
+			var div: float = s.garrison_div(s.nodes[1])   # Fortify / forge / VAT ARMOUR (2026-11-03) divide the kills
+			var kills: float = minf(sac * 4.0, 450.0) / div
 			if g0 <= kills:
 				check(s.nodes[1]["owner"] == "A" and not (h in s.hordes) and bool(ev.get("captured", false)),
 						tag + ": the garrison hits zero and the rest of the line captures")
 			else:
-				check(s.nodes[1]["owner"] == "B" and absf(float(ev["sacrificed"]) - sac) < 0.6 and absf(float(ev["killed"]) - minf(float(ev["sacrificed"]) * 4.0, 450.0)) < 0.01,
-						tag + ": 25 %% sacrificed (%.0f), 4 defenders each (0.23.21: was 3) (%.0f killed)" % [float(ev["sacrificed"]), float(ev["killed"])])
+				check(s.nodes[1]["owner"] == "B" and absf(float(ev["sacrificed"]) - sac) < 0.6 and absf(float(ev["killed"]) - minf(float(ev["sacrificed"]) * 4.0, 450.0) / div) < 0.01,
+						tag + ": 25 %% sacrificed (%.0f), 4 defenders each (0.23.21: was 3), / armour x%.2f (%.0f killed)" % [float(ev["sacrificed"]), div, float(ev["killed"])])
 			check(absf(s.charge("B") - charge_b - 0.05 / Rules.ULT_CHARGE_TIME) < 0.0001, tag + ": no charge from the meltdown")
 	s = _mk(tp, "ember", "null")
 	s.nodes[3]["units"] = 1000.0
@@ -2560,8 +2561,9 @@ func _skills_tests() -> void:
 	run_until(s, func(): return float(hm["L"]) - float(hm["s"]) <= 12.0, 30.0)
 	var gm: float = s.nodes[2]["units"]
 	var lm: float = hm["units"]
+	var gdiv: float = s.garrison_div(s.nodes[2])          # VAT ARMOUR (2026-11-03): the T4's armour divides the 450
 	s.cast("A", "ultimate", hm["id"])
-	check(lm * 0.25 * 4.0 > 450.0 and absf(gm - s.nodes[2]["units"] - 450.0) < 0.01 and absf(lm - hm["units"] - lm * 0.25) < 0.01, "a big line: no cap on the sacrifice, 90 shown kills at most (0.23.21 set R1: was 70) (cast in range: it goes off at once)")
+	check(lm * 0.25 * 4.0 > 450.0 and absf(gm - s.nodes[2]["units"] - 450.0 / gdiv) < 0.01 and absf(lm - hm["units"] - lm * 0.25) < 0.01, "a big line: no cap on the sacrifice, 90 shown kills at most (0.23.21 set R1: was 70) (cast in range: it goes off at once)")
 	# ---------------------------------------------------------------- Relay Aegis
 	s = _mk(tp, "solar", "null")
 	for id in [1, 0]:
