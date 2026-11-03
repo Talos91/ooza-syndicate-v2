@@ -1,5 +1,22 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.22 "Alpha 23" - 2026-11-04 (STAGING only; release rel-02322 = main 4376374 + ui-hud b083d09; Daniele: "in game ui ready for staging branch")
+
+- **Alpha 24 step 2: the Neon Noir in-game HUD** (the art director's revision 6, cut in by 🧩 ui-hud-cut3; Daniele's "Yes, cut it in"). Top capsule
+  with score pills, status pill + amber seconds capsule, CATCH-UP tag, SEND housing with four liquid vats (100 / 75 / 50 / 25, the picked one lit),
+  square buttons, the skill column as hex vessels whose liquid shows the charge, no slot labels, seconds inside the ring, two-line names where one
+  would cut (EMERGENCY EVAC, CORE MELTDOWN), noir build bar, alert signs, pulse and upgrade chip from the cut sprites.
+  - **The HUD is dark-only** during a match (`UiTheme.match_dark()`; the saved theme comes back on leaving the match), with the **faction accent
+    channel** (`HudNoir.ACCENT`, the `ooze` layer tinted per faction).
+  - **Rings fixed per slot** and **liquid colour fixed per slot** (Daniele 2026-11-03: fixed for now; one constant `HudNoir.RING`).
+  - Board marks, score pills and the node inspector keep the **seat colours** (same colours on every screen); the node inspector is still code-drawn;
+    the "attacked" badge is not hooked yet.
+- **Also in this merge (ui-hud sits on ui-a24, Alpha 24 step 1):** the round-3 UI pack in the **menus** with a **DARK / LIGHT theme switch**,
+  menus restyled (SkinBox 9-slice), and the faction name **BLOOM** everywhere (no VIRIDIAN, Daniele 2026-11-02). So the menus DO change in this
+  build: they carry the round-3 look from step 1, not the Neon Noir HUD look.
+- Merge note: one conflict in `scripts/skill_dock.gd` (the old disc drawing vs the HUD's vessel drawing); kept the HUD side, which already uses
+  main's Rewire -> Overdrive rename. `scripts/net.gd` and `server/` unchanged: protocol stays ooze20-net-8, no room server deploy.
+
 ## 0.23.21 "Alpha 23" - 2026-11-03 (STAGING; release rel-02321 = bal-02321 R1 + c2 + sim-armour + housekeeping-02321; Daniele's Hub Desk answers 2026-11-01..03)
 
 - **Ability balance, set R1** (Desk bal-abilities (a)). The six strongest skills come down, BLOOM loses its production lean and EMBER gets attack back.
