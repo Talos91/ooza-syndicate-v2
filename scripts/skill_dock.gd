@@ -55,6 +55,8 @@ var _t := 0.0
 var _prev: Array = []                         # per slot: [cooldown, charge, rewire fires] last frame
 var _last_pulse := [-9.0, -9.0, -9.0]
 var _floor_px := 0.0                          # phones: the smallest font the slot words may use (HUD_DOCK_MIN_PT), 0 = none
+var vessel := false                           # Neon Noir revision 6: hex vessels filling with lit ooze (HudLiquid) instead of round buttons
+var vessel_cy := 0.0                          # ... the vessel's centre below the slot's top (the skill card's socket, px)
 var round_d := 64.0                           # the round button's diameter (px), the card's inner pad, the tag pill's height
 var pad := 6.0
 var gap := 4.0                                # between the round button and the name
@@ -79,6 +81,8 @@ class Slot:
 	var burst := 0.0                           # the ultimate turned ready: 1 -> 0
 	var warn := 0.0                            # a refused tap: 1 -> 0
 	var _key := ""
+	var vessel: HudLiquid                      # Neon Noir: the hex vessel (the liquid = the charge) and, over it, the face:
+	var face: Control                          # icon, seconds, flashes
 
 	func _init() -> void:
 		focus_mode = Control.FOCUS_NONE
@@ -94,6 +98,8 @@ class Slot:
 		if key != _key or is_ready or pulse > 0.0 or burst > 0.0 or warn > 0.0 or dock.armed == index:
 			_key = key
 			queue_redraw()                     # a ready slot glows (animated): the only per-frame redraw
+			if face != null:
+				face.queue_redraw()
 
 	func _draw() -> void:
 		## Alpha 24 Neon Noir (the board's ABILITY CONTROL, Daniele's corrections 2026-11-02): a glass section of the skill
@@ -109,9 +115,13 @@ class Slot:
 		var disabled := id == "" or not dock.sim.abilities_on or dock.sim.over
 		draw_style_box(dock.card_box(armed), Rect2(Vector2.ZERO, size))
 		var d := dock.round_d
-		var ic := Vector2(w / 2.0, dock.pad + d / 2.0)
+		var ic := Vector2(w / 2.0, dock.vessel_cy if vessel != null else dock.pad + d / 2.0)
 		var state := "disabled" if disabled else ("armed" if armed else ("ready" if is_ready or fires > 0 else "cooling"))
 		var done := 1.0 if is_ready or fires > 0 or armed else (frac if ult else 1.0 - frac)
+		if vessel != null:
+			_vessel_state(state, done, col)
+			_draw_tail(w, ic, d, armed, disabled, ult, col)
+			return
 		if state == "ready":                              # a ready button breathes
 			draw_circle(ic, d * 0.5 + 3.0 * s, Color(col, 0.1 * glow))
 		HudNoir.draw_skill_button(self, ic, d, index, state, done)
@@ -147,11 +157,30 @@ class Slot:
 			draw_circle(bc, br, HudNoir.ENEMY)
 			draw_arc(bc, br, 0.0, TAU, 24, Color(1, 1, 1, 0.8), 1.2 * s, true)
 			_centred("%d" % fires, bc, 14, Color.WHITE, false)
+		_draw_tail(w, ic, d, armed, disabled, ult, col)
+		if pulse > 0.0:                          # a cast: a white flash through the button
+			draw_circle(ic, d * 0.5, Color(1, 1, 1, 0.3 * pulse))
+			draw_arc(ic, d * 0.5, 0.0, TAU, 48, Color(1, 1, 1, pulse), 3.0 * s, true)
+
+	func _draw_tail(w: float, ic: Vector2, d: float, armed: bool, disabled: bool, ult: bool, col: Color) -> void:
+		## The desktop key, the words, and READY rising out of the slot when the ultimate fills.
+		var s := dock.ui_scale
 		if dock.keys and not dock.mobile:
 			var kr := Rect2(Vector2(5.0, 5.0) * s, Vector2(14, 15) * s)
 			draw_rect(kr, Color(HudNoir.INK, 0.08))
 			draw_rect(kr, Color(HudNoir.INK, 0.3), false, 1.0)
 			_centred(str(index + 1), kr.get_center() + Vector2(0, 0.5 * s), 11, HudNoir.MUTED, false)
+		_draw_words(w, ic, d, armed, disabled, ult, col)
+		if burst > 0.0:                          # the ultimate turned ready: READY rises out of the slot
+			var rise := (1.0 - burst) * 16.0 * s
+			var rp := Vector2(w / 2.0, -10.0 * s - rise)
+			var f := int(22 * s)
+			var rsz := HEAD_FONT.get_string_size("READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f)
+			draw_string_outline(HEAD_FONT, rp - Vector2(rsz.x / 2.0, 0), "READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(6 * s), Color(0, 0, 0, 0.8 * burst))
+			draw_string(HEAD_FONT, rp - Vector2(rsz.x / 2.0, 0), "READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f, Color(col.lerp(Color.WHITE, 0.4), minf(1.0, burst * 1.6)))
+
+	func _draw_words(w: float, ic: Vector2, d: float, armed: bool, disabled: bool, ult: bool, col: Color) -> void:
+		## The skill's NAME (one or two lines) and its state word under the button / vessel.
 		var room := w - 2.0 * dock.pad
 		var nf := dock.font_px(16)
 		var lines: Array = dock.name_lines(id, room)
@@ -180,16 +209,67 @@ class Slot:
 			status = "COOLDOWN"
 		y += UI_FONT.get_height(dock.font_px(13)) * 0.1
 		_line(status, Vector2(w / 2.0, y), 13, sc, room, UI_FONT)
-		if burst > 0.0:                          # the ultimate turned ready: READY rises out of the slot
-			var rise := (1.0 - burst) * 16.0 * s
-			var rp := Vector2(w / 2.0, -10.0 * s - rise)
-			var f := int(22 * s)
-			var rsz := HEAD_FONT.get_string_size("READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f)
-			draw_string_outline(HEAD_FONT, rp - Vector2(rsz.x / 2.0, 0), "READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(6 * s), Color(0, 0, 0, 0.8 * burst))
-			draw_string(HEAD_FONT, rp - Vector2(rsz.x / 2.0, 0), "READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f, Color(col.lerp(Color.WHITE, 0.4), minf(1.0, burst * 1.6)))
-		if pulse > 0.0:                          # a cast: a white flash through the button
-			draw_circle(ic, d * 0.5, Color(1, 1, 1, 0.3 * pulse))
-			draw_arc(ic, d * 0.5, 0.0, TAU, 48, Color(1, 1, 1, pulse), 3.0 * s, true)
+
+	func _vessel_state(state: String, done: float, col: Color) -> void:
+		## Neon Noir: the hex vessel shows the charge as its liquid level (the slot's fixed colour); full = ready, breathing.
+		var rid := "skill_vessel_rim_disabled" if state == "disabled" else ("skill_vessel_rim_armed" if state == "armed" or state == "ready" else "")
+		var path := str(HudNoir.part_data(rid).get("file", "")) if rid != "" else str(HudNoir.part_data("skill_vessel").get("rim", ""))
+		vessel.set_rim(path, col)
+		vessel.set_liquid(col, 1.0 if state != "disabled" else 0.35)
+		vessel.set_level(0.0 if state == "disabled" else done)
+		vessel.ready_glow = state == "ready" or state == "armed"
+
+	func _draw_face(ci: Control) -> void:
+		## Over the vessel: the white icon (dark on a full vessel), the seconds while it fills, the flashes - a cast, a refused
+		## tap (red hex), the ultimate turning ready (a hex bursting out), Rewire's fires left.
+		var s := dock.ui_scale
+		var c := ci.size / 2.0
+		var d := ci.size.x
+		var col: Color = SkillDock.SLOT_ACCENT[index]
+		var ult := index == 2
+		var disabled := id == "" or not dock.sim.abilities_on or dock.sim.over
+		var full := is_ready or fires > 0 or dock.armed == index
+		var cooling := not disabled and not full and cd > 0.0
+		var tex := HudSkin.skill_icon(id)
+		if tex:
+			var isz := Vector2.ONE * d * (0.44 if not cooling else 0.32)
+			var at := c - isz / 2.0 - Vector2(0, d * 0.1 if cooling else 0.0)
+			var tint := Color(0.03, 0.05, 0.07, 0.9) if full and not disabled else (Color(1, 1, 1, 0.85) if not disabled else Color(HudNoir.MUTED, 0.5))
+			ci.draw_texture_rect(tex, Rect2(at, isz), false, tint)
+		if cooling:
+			var f := int(20 * s)
+			var txt := "%d s" % int(ceil(cd))
+			var sz := UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
+			var p := c + Vector2(-sz.x / 2.0, d * 0.2 + UI_FONT.get_ascent(f) / 2.0 - 1.0)
+			ci.draw_string_outline(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(4 * s), HudSkin.outline())
+			ci.draw_string(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, HudNoir.INK)
+		if warn > 0.0:                                     # a refused tap: the vessel's outline flashes the warning red
+			ci.draw_polyline(_hex(c, d * 0.5), Color(HudNoir.ENEMY, warn), 3.0 * s, true)
+		if ult and burst > 0.0:                            # READY: a hex bursting out of the vessel
+			var k := 1.0 - burst
+			ci.draw_polyline(_hex(c, d * 0.5 + (4.0 + 26.0 * k) * s), Color(col, burst), (5.0 * burst + 1.0) * s, true)
+			ci.draw_polyline(_hex(c, d * 0.5 + (2.0 + 14.0 * k) * s), Color(1, 1, 1, burst * 0.8), 2.0 * s, true)
+		if pulse > 0.0:                                    # a cast: a white flash through the vessel
+			ci.draw_colored_polygon(_hex(c, d * 0.48), Color(1, 1, 1, 0.3 * pulse))
+			ci.draw_polyline(_hex(c, d * 0.5), Color(1, 1, 1, pulse), 3.0 * s, true)
+		if fires > 0:                                      # Rewire / Overdrive: fires left, a count dot on the vessel
+			var bc := c + Vector2(d * 0.36, -d * 0.36)
+			var br := maxf(11.0 * s, dock._floor_px * 0.62)
+			ci.draw_circle(bc, br + 2.0 * s, Color(HudNoir.ENEMY, 0.3))
+			ci.draw_circle(bc, br, HudNoir.ENEMY)
+			ci.draw_arc(bc, br, 0.0, TAU, 24, Color(1, 1, 1, 0.8), 1.2 * s, true)
+			var f2 := int(14 * s)
+			var t2 := "%d" % fires
+			var z2 := UI_FONT.get_string_size(t2, HORIZONTAL_ALIGNMENT_LEFT, -1, f2)
+			ci.draw_string(UI_FONT, bc + Vector2(-z2.x / 2.0, UI_FONT.get_ascent(f2) / 2.0 - 1.0), t2, HORIZONTAL_ALIGNMENT_LEFT, -1, f2, Color.WHITE)
+
+	static func _hex(c: Vector2, r: float) -> PackedVector2Array:
+		## A flat-topped hexagon (the vessel's outline), closed.
+		var pts := PackedVector2Array()
+		for k in range(7):
+			var a := TAU * float(k % 6) / 6.0
+			pts.append(c + Vector2(cos(a), sin(a)) * r)
+		return pts
 
 	func _line(txt: String, centre_base: Vector2, fs: int, col: Color, room: float, font: Font) -> void:
 		## One line centred on centre_base.x, its baseline at centre_base.y, stepped down / cut to fit like _text.
@@ -261,16 +341,37 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 	gap = 4.0 * ui_scale
 	add_theme_constant_override("separation", int(6 * ui_scale))
 	slot_w -= 2.0 * HOUSING_PAD                   # Neon Noir: the housing's rim sits inside the column's old width (phone fit)
+	vessel = HudNoir.has("skill_vessel") and HudNoir.has("skill_card")
+	var top := pad
+	if vessel:                                    # the vessel is drawn at the card's scale, centred on its socket
+		var k := ui_scale / HudNoir.SPRITE_K
+		var vb: Array = HudNoir.part_data("skill_vessel").get("body", [0, 0, 270, 270])
+		var sock: Array = HudNoir.part_data("skill_card").get("socket", [0, 170])
+		round_d = float(vb[2]) * k
+		vessel_cy = float(sock[1]) * k
+		top = vessel_cy - round_d / 2.0
 	for i in range(3):
 		# Neon Noir: no slot label; the name takes a second line only where one line would cut it (EMERGENCY / EVAC)
 		var lines := name_lines(sim.skill_id(human, SLOTS[i]), slot_w * ui_scale - 2.0 * pad).size()
-		var slot_h := pad + round_d + gap + UI_FONT.get_height(font_px(16)) * (1.0 + 0.88 * float(lines - 1)) + UI_FONT.get_height(font_px(13)) * 1.1 + pad
+		var slot_h := top + round_d + gap + UI_FONT.get_height(font_px(16)) * (1.0 + 0.88 * float(lines - 1)) + UI_FONT.get_height(font_px(13)) * 1.1 + pad
 		var b := Slot.new()
 		b.dock = self
 		b.index = i
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		b.custom_minimum_size = Vector2(slot_w * ui_scale, slot_h).round()
 		b.pressed.connect(press_slot.bind(i))
+		if vessel:
+			b.vessel = HudLiquid.new()
+			b.vessel.setup("skill_vessel", SLOT_ACCENT[i], float(i) * 1.7)
+			b.vessel.position = Vector2(b.custom_minimum_size.x / 2.0 - round_d / 2.0, top).round()
+			b.vessel.size = Vector2(round_d, round_d)
+			b.add_child(b.vessel)
+			b.face = Control.new()
+			b.face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.face.position = b.vessel.position
+			b.face.size = b.vessel.size
+			b.face.draw.connect(b._draw_face.bind(b.face))
+			b.add_child(b.face)
 		b.tooltip_text = ""
 		add_child(b)
 		slots.append(b)
@@ -315,7 +416,8 @@ func card_box(armed_now: bool) -> StyleBox:
 func housing_margin() -> Vector4:
 	## The skill column's housing round the slots (l, t, r, b px - b holds its drips): Hud.layout keeps it on screen.
 	var m := HOUSING_PAD * ui_scale
-	return Vector4(m, m, m, m + HudNoir.drip_px("skill_housing"))
+	var pool := HudNoir.gel_px("skill_housing") * 0.55       # Neon Noir: the upper half of the pooled ooze shows under the last card
+	return Vector4(m, m, m, m + pool + HudNoir.drip_px("skill_housing"))
 
 
 func _draw() -> void:

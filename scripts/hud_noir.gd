@@ -103,26 +103,17 @@ static func box(id: String, rim := Color(0, 0, 0, 0), content := Vector4(6, 6, 6
 	## The look of HUD part `id`: the cut sprite when imported, else its NoirBox placeholder. `rim` replaces the accent channel
 	## (a seat's colour on its score pill, a slot's ring colour); content = margins l, t, r, b in px (the drips' zone is added).
 	var p: Dictionary = PRESETS.get(id, {})
-	var drip := float(p.get("drip", 0.0)) * ui_scale
+	var drip := drip_px(id)
 	var col := channel(str(p.get("rim", "")), rim)
 	var sb: StyleBox
+	var pool := float(p.get("ooze", 0.0)) * ui_scale * 0.6     # (words sit above the pooled ooze)
 	if has(id):
-		var parts: Dictionary = DATA.PARTS
-		var s: Dictionary = parts[id]
-		var t := texture(str(s["file"]))
+		var t := texture(str(part_data(id)["file"]))
 		if t != null:
-			var k := SkinBox.new()
-			k.texture = t
-			k.region = Rect2(Vector2.ZERO, t.get_size())
-			var sl = s.get("slice")
-			k.slice = Vector4(sl[0], sl[1], sl[2], sl[3]) if sl is Array else Vector4.ZERO
-			k.axis = str(s.get("axis", "xy")) if sl is Array else "fixed"
-			k.scale = ui_scale / SPRITE_K
-			k.rim = texture(str(s.get("rim", "")))
-			k.rim_modulate = col
-			if bool(p.get("dim", false)):
-				k.modulate = Color(0.75, 0.75, 0.75, 0.8)
-			sb = k
+			sb = sprite_box(id, col)
+			if id.ends_with("_picked") or id.ends_with("_pressed"):   # lit gel: the neutral fill takes your colour
+				(sb as SkinBox).modulate = accent
+			pool = float(part_data(id).get("gel", 0)) * ui_scale / SPRITE_K
 	if sb == null:
 		var b := NoirBox.new()
 		b.rim = col
@@ -142,15 +133,51 @@ static func box(id: String, rim := Color(0, 0, 0, 0), content := Vector4(6, 6, 6
 	sb.content_margin_left = content.x
 	sb.content_margin_top = content.y
 	sb.content_margin_right = content.z
-	sb.content_margin_bottom = content.w + drip + float(p.get("ooze", 0.0)) * ui_scale * 0.6   # (words sit above the pooled ooze)
+	sb.content_margin_bottom = content.w + drip + pool
 	return sb
+
+
+static func part_data(id: String) -> Dictionary:
+	var parts: Dictionary = DATA.PARTS
+	return parts.get(id, {})
+
+
+static func sprite_box(id: String, rim: Color, k := -1.0) -> SkinBox:
+	## Part `id`'s cut layers as a SkinBox sized to its BODY: fill, the white rim tinted `rim`, a housing's ooze in the accent and
+	## its shine untinted; the director's 48 px glow band (and a housing's drips) spill outside the box. k: source px -> canvas
+	## units (default: ui_scale / SPRITE_K, the phone shot's 1/3).
+	var s := part_data(id)
+	var t := texture(str(s.get("file", "")))
+	if t == null:
+		return null
+	var b := SkinBox.new()
+	b.texture = t
+	b.region = Rect2(Vector2.ZERO, t.get_size())
+	var sl = s.get("slice")
+	b.slice = Vector4(sl[0], sl[1], sl[2], sl[3]) if sl is Array else Vector4.ZERO
+	b.axis = "xy" if sl is Array else "fixed"
+	b.scale = k if k > 0.0 else ui_scale / SPRITE_K
+	var body: Array = s.get("body", [0, 0, 0, 0])
+	var size: Array = s.get("size", [0, 0])
+	b.band = Vector4(body[0], body[1], float(size[0]) - body[0] - body[2], float(size[1]) - body[1] - body[3] - float(s.get("drip", 0)))
+	b.rim = texture(str(s.get("rim", "")))
+	b.rim_modulate = rim
+	b.ooze = texture(str(s.get("ooze", "")))
+	b.ooze_modulate = accent
+	b.whole_bottom = b.ooze != null
+	b.shine = texture(str(s.get("shine", ""))) if str(s.get("ooze", "")) != "" else null   # (a vat's shine rides its liquid)
+	return b
+
+
+static func gel_px(id: String) -> float:
+	## The pooled ooze inside a housing's body bottom (px; 0 for a placeholder): words and slots keep above it.
+	return float(part_data(id).get("gel", 0)) * ui_scale / SPRITE_K if has(id) else 0.0
 
 
 static func drip_px(id: String) -> float:
 	## The drips' zone under a housing (px): layout keeps it clear of what sits below.
 	if has(id):
-		var parts: Dictionary = DATA.PARTS
-		return float((parts[id] as Dictionary).get("drip", 0.0)) * ui_scale / SPRITE_K
+		return float(part_data(id).get("drip", 0.0)) * ui_scale / SPRITE_K
 	return float(PRESETS.get(id, {}).get("drip", 0.0)) * ui_scale
 
 

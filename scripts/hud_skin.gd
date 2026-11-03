@@ -143,15 +143,55 @@ static func frame_glow(ui_scale: float) -> int:
 	return int(round(5.0 * ui_scale))
 
 
-static func frame(col: Color, fill: float, ui_scale: float, hidden := false) -> Texture2D:
+static func noir_image(id: String, k: float, rim := Color.WHITE) -> Image:
+	## Neon Noir (art director revision 6): part `id`'s layers composed at scale k (source px -> px): its fill, then its white
+	## rim tinted `rim`. The whole canvas, glow band included; null when the part is not imported.
+	var s := HudNoir.part_data(id)
+	var out: Image = null
+	for layer in [["file", Color.WHITE], ["rim", rim]]:
+		var t := HudNoir.texture(str(s.get(layer[0], "")))
+		if t == null:
+			continue
+		var im := t.get_image().duplicate() as Image
+		if im.is_compressed():
+			im.decompress()
+		im.clear_mipmaps()
+		im.convert(Image.FORMAT_RGBA8)
+		im.resize(maxi(2, int(round(im.get_width() * k))), maxi(2, int(round(im.get_height() * k))), Image.INTERPOLATE_LANCZOS)
+		var c: Color = layer[1]
+		if c != Color.WHITE:
+			for y in range(im.get_height()):
+				for x in range(im.get_width()):
+					var p := im.get_pixel(x, y)
+					im.set_pixel(x, y, Color(p.r * c.r, p.g * c.g, p.b * c.b, p.a))
+		if out == null:
+			out = im
+		else:
+			out.blend_rect(im, Rect2i(Vector2i.ZERO, im.get_size()), Vector2i.ZERO)
+	return out
+
+
+static func noir_badge_k(ui_scale: float) -> float:
+	## The director's badge is drawn at the phone shot's 1/3 (source px -> px).
+	return ui_scale / HudNoir.SPRITE_K
+
+
+static func frame(col: Color, fill: float, ui_scale: float, hidden := false, mine := false) -> Texture2D:
 	## A node badge's frame: B7 with its rim in `col` (own / enemy / neutral alike), or B10 (HIDDEN) as drawn - with a soft neon
-	## halo in `col` round it (neon pass), frame_glow px each side.
+	## halo in `col` round it (neon pass), frame_glow px each side. Neon Noir revision 6: the director's badge / badge_mine (your
+	## own nodes: the full-strength rim) / badge_hidden, rim in `col`, its glow band baked in (BadgeLayer grows the box by it).
+	if HudNoir.has("badge"):
+		var nk := "noir|%s|%s|%s|%.3f" % [col.to_html(), hidden, mine, ui_scale]
+		if not _baked.has(nk):
+			var im := noir_image("badge_hidden" if hidden else ("badge_mine" if mine else "badge"), noir_badge_k(ui_scale), col)
+			_baked[nk] = ImageTexture.create_from_image(im) if im != null else null
+		return _baked[nk]
 	var s := frame_px(ui_scale)
 	var g := frame_glow(ui_scale)
 	var key := "frame|%s|%.2f|%d|%s" % [col.to_html(), fill, s, hidden]
 	if _baked.has(key):
 		return _baked[key]
-	var im := _noir_badge(col, fill, s) if HudNoir.has("badge") and not hidden else sprite_image("B10" if hidden else "B7", Vector2i(s, s), Color.WHITE if hidden else col, fill)
+	var im := sprite_image("B10" if hidden else "B7", Vector2i(s, s), Color.WHITE if hidden else col, fill)
 	if im == null:
 		_baked[key] = null
 		return null
@@ -178,36 +218,6 @@ static func frame(col: Color, fill: float, ui_scale: float, hidden := false) -> 
 	var t := ImageTexture.create_from_image(out)
 	_baked[key] = t
 	return t
-
-
-static func _noir_badge(col: Color, fill: float, s: int) -> Image:
-	## Neon Noir drop-in: the director's badge (badge_fill + its white badge_rim tinted `col`) baked like B7 - square, s px.
-	var f := HudNoir.part_texture("badge")
-	if f == null:
-		return null
-	var im := f.get_image().duplicate() as Image
-	if im.is_compressed():
-		im.decompress()
-	im.convert(Image.FORMAT_RGBA8)
-	im.resize(s, s, Image.INTERPOLATE_LANCZOS)
-	for y in range(s):
-		for x in range(s):
-			var p := im.get_pixel(x, y)
-			im.set_pixel(x, y, Color(p, p.a * fill))
-	var parts: Dictionary = HudNoir.DATA.PARTS
-	var rt := HudNoir.texture(str((parts["badge"] as Dictionary).get("rim", "")))
-	if rt != null:
-		var rim := rt.get_image().duplicate() as Image
-		if rim.is_compressed():
-			rim.decompress()
-		rim.convert(Image.FORMAT_RGBA8)
-		rim.resize(s, s, Image.INTERPOLATE_LANCZOS)
-		for y in range(s):
-			for x in range(s):
-				var p := rim.get_pixel(x, y)
-				rim.set_pixel(x, y, Color(p.r * col.r, p.g * col.g, p.b * col.b, p.a))
-		im.blend_rect(rim, Rect2i(0, 0, s, s), Vector2i.ZERO)
-	return im
 
 
 static func frame_box(col: Color, fill: float, ui_scale: float, content := 4.0) -> StyleBox:

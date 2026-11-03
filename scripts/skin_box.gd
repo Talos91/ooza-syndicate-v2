@@ -16,18 +16,39 @@ var scale := 0.4                                   # source px -> canvas units, 
 var modulate := Color.WHITE
 var rim: Texture2D                                 # Neon Noir drop-in (HudNoir): a white RIM + GLOW layer cut to the same cell,
 var rim_modulate := Color.WHITE                    # drawn over `texture` with the same slicing, tinted per seat / faction
+var ooze: Texture2D                                # Neon Noir housings: the pooled ooze + drips (white, tinted ooze_modulate)
+var ooze_modulate := Color.WHITE
+var shine: Texture2D                               # ... and its wet highlights, drawn untinted on top
+var whole_bottom := false                          # Neon Noir housings: the bottom row (pooled ooze + drips) is one painting -
+                                                   # drawn whole across the width, the middle row meeting it seamlessly
+var band := Vector4.ZERO                           # source px of the art OUTSIDE the box (l, t, r, b): the director's glow band -
+                                                   # the box is the part's body, the band spills round it
 
 
 func _draw(ci: RID, r: Rect2) -> void:
 	if texture == null or r.size.x <= 0.0 or r.size.y <= 0.0:
 		return
+	if band != Vector4.ZERO:
+		if axis == "fixed" or slice == Vector4.ZERO:       # drawn whole: the body fits the box, the band round it
+			var body := region.size - Vector2(band.x + band.z, band.y + band.w)
+			var kf := minf(r.size.x / body.x, r.size.y / body.y)
+			r = Rect2(r.get_center() - (body / 2.0 + Vector2(band.x, band.y)) * kf, region.size * kf)
+		else:
+			r = Rect2(r.position - Vector2(band.x, band.y) * scale, r.size + Vector2(band.x + band.z, band.y + band.w) * scale)
 	_draw_layer(ci, r, texture.get_rid(), modulate)
 	if rim != null:
 		_draw_layer(ci, r, rim.get_rid(), rim_modulate)
+	if ooze != null:
+		_draw_layer(ci, r, ooze.get_rid(), ooze_modulate)
+	if shine != null:
+		_draw_layer(ci, r, shine.get_rid(), Color(1, 1, 1, ooze_modulate.a))
 
 
 func _draw_layer(ci: RID, r: Rect2, rid: RID, mod: Color) -> void:
 	if axis == "fixed" or slice == Vector4.ZERO:
+		if band != Vector4.ZERO:                           # (already placed by _draw)
+			RenderingServer.canvas_item_add_texture_rect_region(ci, r, rid, region, mod)
+			return
 		var kf := minf(r.size.x / region.size.x, r.size.y / region.size.y)
 		var d := region.size * kf
 		RenderingServer.canvas_item_add_texture_rect_region(ci, Rect2(r.position + (r.size - d) / 2.0, d), rid, region, mod)
@@ -52,7 +73,13 @@ func _draw_layer(ci: RID, r: Rect2, rid: RID, mod: Color) -> void:
 	var my: float = (sy[1] + sy[2]) / 2.0
 	var cols := [[sx[0], sx[1]], [mx - cw / 2.0, mx + cw / 2.0], [sx[2], sx[3]]]   # source spans: cap, middle, cap
 	var rows := [[sy[0], sy[1]], [my - ch / 2.0, my + ch / 2.0], [sy[2], sy[3]]]
-	for j in 3:
+	if whole_bottom:
+		rows[1] = [sy[2] - ch, sy[2]]                      # (the glass just above the pool: no step in its tone)
+		var bs := Rect2(region.position + Vector2(0, sy[2]), Vector2(region.size.x, sy[3] - sy[2]))
+		var bd := Rect2(r.position + Vector2(0, dy[2]), Vector2(r.size.x, dy[3] - dy[2]))
+		if bs.size.y > 0.0 and bd.size.y > 0.0:
+			RenderingServer.canvas_item_add_texture_rect_region(ci, bd, rid, bs, mod)
+	for j in (2 if whole_bottom else 3):
 		for i in 3:
 			var src := Rect2(region.position + Vector2(cols[i][0], rows[j][0]),
 					Vector2(cols[i][1] - cols[i][0], rows[j][1] - rows[j][0]))

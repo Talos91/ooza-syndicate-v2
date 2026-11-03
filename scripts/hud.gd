@@ -444,7 +444,7 @@ func setup(m: Node3D) -> void:
 		b.toggle_mode = true
 		b.button_group = group
 		b.button_pressed = is_equal_approx(f, main.fraction)
-		_send_skin(b)                                     # Alpha 24: the pack's pills - the picked share is the cyan one
+		_send_skin(b, f)                                  # Alpha 24 Neon Noir: a little vat holding its share; the picked one lit
 		b.pressed.connect(func(): main.fraction = f)
 		b.gui_input.connect(func(event):                  # slide a finger over the buttons to pick
 			if (event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT) or event is InputEventScreenDrag:
@@ -533,10 +533,47 @@ func _icon_button(b: Button, icon_name: String) -> void:
 		b.add_child(UiTheme.icon_rect(icon_name, side, HudSkin.INK, (b.size - Vector2(side, side * 1.15)) / 2.0))
 
 
-func _send_skin(b: Button) -> void:
-	## Alpha 24 Neon Noir: a SEND share button is a clean glass pill (no drips: those stay on the housing); the picked one is
-	## filled with lit ooze in your faction's colour, its words dark.
+func _send_skin(b: Button, share := 1.0) -> void:
+	## Alpha 24 Neon Noir: a SEND share button is a clean glass pill (no drips: those stay on the housing). With the director's
+	## revision-6 parts it is a little vat (HudLiquid) holding its share of lit ooze in your faction's colour - 100 / 75 / 50 /
+	## 25 % - dim while idle, lit when picked; the words stay white over it.
 	_noir_skin(b, "send_button")
+	if not HudNoir.has("send_button_liquid"):
+		return
+	var c := Vector4(4, 4, 4, 4) * ui_scale
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		var e := StyleBoxEmpty.new()
+		e.content_margin_left = c.x
+		e.content_margin_top = c.y
+		e.content_margin_right = c.z
+		e.content_margin_bottom = c.w
+		b.add_theme_stylebox_override(st, e)
+	for k in ["font_pressed_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(k, HudNoir.INK)
+	b.add_theme_constant_override("outline_size", int(4 * ui_scale))
+	var vat := HudLiquid.new()
+	vat.setup("send_button", HudNoir.accent, share * 3.1)
+	vat.show_behind_parent = true                     # (the button's words draw over it)
+	vat.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vat.set_level(share, true)
+	b.add_child(vat)
+	b.draw.connect(_send_vat_state.bind(b, vat))
+
+
+func _send_vat_state(b: Button, vat: HudLiquid) -> void:
+	## A SEND vat follows its button: idle (dim liquid, the normal rim), hover (brighter rim), picked (lit liquid, the picked
+	## rim), disabled.
+	var mode := b.get_draw_mode()
+	var picked := mode == BaseButton.DRAW_PRESSED or mode == BaseButton.DRAW_HOVER_PRESSED
+	var id := "send_button_disabled" if mode == BaseButton.DRAW_DISABLED else ("send_button_picked" if picked else
+			("send_button_hover" if mode == BaseButton.DRAW_HOVER else "send_button"))
+	var fill := "send_button_disabled" if mode == BaseButton.DRAW_DISABLED else ("send_button_hover" if mode == BaseButton.DRAW_HOVER else "send_button")
+	if vat.fill_part != fill:
+		vat.fill_part = fill
+		vat.queue_redraw()
+	vat.set_rim(str(HudNoir.part_data(id).get("rim", "")), HudNoir.accent)
+	vat.set_liquid(HudNoir.accent, 1.0 if picked else (0.2 if mode == BaseButton.DRAW_DISABLED else (0.5 if mode == BaseButton.DRAW_HOVER else 0.32)))
+	vat.ready_glow = picked
 
 
 func _noir_skin(b: Button, part: String) -> void:
@@ -596,6 +633,12 @@ func _draw_status_secs() -> void:
 	if _secs_box == null:
 		_secs_box = HudNoir.box("status_secs", Color(0, 0, 0, 0), Vector4.ZERO)
 	_status_secs.draw_style_box(_secs_box, r)
+	if HudNoir.has("status_secs"):                       # the director's capsule is dark glass: the seconds go on top of it
+		var at := Vector2(x0, y0 + font.get_ascent(fs))
+		var os := status_label.get_theme_constant("outline_size")
+		if os > 0:
+			_status_secs.draw_string_outline(font, at, m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, os, status_label.get_theme_color("font_outline_color"))
+		_status_secs.draw_string(font, at, m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.AMBER.lightened(0.35))
 
 
 func _draw_music_note(c: Control) -> void:

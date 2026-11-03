@@ -17,6 +17,7 @@ var hud                                            # Hud
 var _frames := {}                                  # owner key -> the baked frame texture
 var _bar_track: Texture2D                          # B19 / B20 baked to the build bar's height
 var _bar_fill: Texture2D
+var _noir_k := 0.0                                 # Neon Noir: the build bar's bake scale (source px -> px), 0 = the pack's bar
 var _groups := {}                                  # seat -> EmblemGroup
 var _text: TextPass
 
@@ -83,6 +84,16 @@ func setup(h) -> void:
 	var bh := maxi(int(round(4.0 * hud.ui_scale)), 3)
 	_bar_track = HudSkin.sprite("B19", Vector2i(bh * 6, bh))
 	_bar_fill = HudSkin.sprite("B20", Vector2i(bh * 6, bh))
+	if HudNoir.has("build_bar_track") and HudNoir.has("build_bar_fill"):   # Neon Noir: the director's bar, baked to its height
+		var nb := HudNoir.part_data("build_bar_track")
+		_noir_k = float(bh) / float((nb["body"] as Array)[3])
+		var tr := HudSkin.noir_image("build_bar_track", _noir_k)
+		var fl := HudSkin.noir_image("build_bar_fill", _noir_k)
+		if tr != null and fl != null:
+			_bar_track = ImageTexture.create_from_image(tr)
+			_bar_fill = ImageTexture.create_from_image(fl)
+		else:
+			_noir_k = 0.0
 	for seat in hud.sim.factions.keys():              # every seat that can own a node, in a fixed order
 		var g := EmblemGroup.new()
 		g.layer = self
@@ -113,10 +124,10 @@ func refresh() -> void:
 
 func frame_tex(owner: String, hidden: bool) -> Texture2D:
 	## The frame of a badge owned by `owner` ("" neutral); HIDDEN (a rival's count not shown) is B10.
-	var key := "?" if hidden else owner
+	var key := ("?" + owner) if hidden else owner
 	if not _frames.has(key):
 		var col := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
-		_frames[key] = HudSkin.frame(col, HudSkin.fill_a(), hud.ui_scale, hidden)
+		_frames[key] = HudSkin.frame(col, HudSkin.fill_a(), hud.ui_scale, hidden, owner != "" and owner == hud.human)
 	return _frames[key]
 
 
@@ -138,6 +149,11 @@ func _draw() -> void:
 		by[t].append(p)
 	var g := float(HudSkin.frame_glow(hud.ui_scale))
 	var m := float(HudSkin.frame_margin(hud.ui_scale)) + g
+	if HudNoir.has("badge"):                           # Neon Noir: the director's badge - its 48 px band, its 9-slice margins
+		var nb := HudNoir.part_data("badge")
+		var kb := HudSkin.noir_badge_k(hud.ui_scale)
+		g = float((nb["body"] as Array)[0]) * kb
+		m = float((nb["slice"] as Array)[0]) * kb
 	for t in order:
 		var tx: Texture2D = t
 		for p in by[t]:
@@ -160,6 +176,13 @@ func _bar(r: Rect2, t: Texture2D, mod: Color) -> void:
 	## A pill bar (B19 / B20 baked to its height): only the middle stretches, the round ends keep their shape.
 	if t == null:
 		draw_rect(r, mod if mod != Color.WHITE else Color(0, 0, 0, 0.55))
+		return
+	if _noir_k > 0.0:                                  # the director's bar: its glow band round the box, 9-sliced
+		var nb := HudNoir.part_data("build_bar_track")
+		var band := float((nb["body"] as Array)[0]) * _noir_k
+		var sl := float((nb["slice"] as Array)[0]) * _noir_k
+		RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), r.grow(band), Rect2(Vector2.ZERO, t.get_size()), t.get_rid(),
+				Vector2(sl, sl), Vector2(sl, sl), RenderingServer.NINE_PATCH_STRETCH, RenderingServer.NINE_PATCH_STRETCH, true, mod)
 		return
 	var e := t.get_size().y * 0.5
 	RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), r, Rect2(Vector2.ZERO, t.get_size()), t.get_rid(),

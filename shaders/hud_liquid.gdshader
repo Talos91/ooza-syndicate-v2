@@ -1,0 +1,69 @@
+shader_type canvas_item;
+// Alpha 24 Neon Noir (art director revision 4-6): a glass vessel holding lit ooze up to `level` - the skill vessels (hex) and
+// the SEND vats. One quad, the director's layers composited here (they share one canvas): the dark glass (TEXTURE), the white
+// liquid tinted `liquid_col` and clipped bottom-up under a wavy surface, its untinted shine, the meniscus strip riding the
+// waterline (scrolling), a few rising bubbles, then the white rim tinted `rim_col`. Cheap: 5 texture reads, no loops over
+// pixels, ~110 px quads.
+uniform sampler2D liquid_tex : filter_linear_mipmap;
+uniform sampler2D shine_tex : filter_linear_mipmap;
+uniform sampler2D rim_tex : filter_linear_mipmap;
+uniform sampler2D surface_tex : filter_linear_mipmap;
+uniform vec4 liquid_col : source_color = vec4(1.0);
+uniform vec4 rim_col : source_color = vec4(1.0);
+uniform float level : hint_range(0.0, 1.0) = 1.0;     // 0 empty .. 1 full, of the body's height
+uniform float liquid_a = 1.0;                          // idle SEND vats are dimmer than the picked one
+uniform float slosh = 0.0;                             // 1 right after the level jumped, eased to 0 by the script
+uniform float glow = 0.0;                              // full and ready: the ooze breathes brighter
+uniform vec4 body = vec4(0.13, 0.13, 0.74, 0.74);      // body x, y, w, h in canvas UV
+uniform vec4 strip = vec4(0.13, 0.35, 0.74, 0.29);     // the meniscus strip's body in ITS texture's UV (x, y, w, h)
+uniform float strip_h = 0.11;                          // the strip's body height in canvas UV (drawn centred on the waterline)
+uniform float seed = 0.0;
+
+vec4 over(vec4 dst, vec3 c, float a) {                 // premultiplied: c over dst
+	return vec4(c * a + dst.rgb * (1.0 - a), a + dst.a * (1.0 - a));
+}
+
+float ring(vec2 p, vec2 c, float r, float w) {
+	float d = abs(length(p - c) - r);
+	return 1.0 - smoothstep(w * 0.5, w, d);
+}
+
+void fragment() {
+	vec2 uv = UV;
+	vec4 f = texture(TEXTURE, uv);
+	vec4 o = vec4(f.rgb * f.a, f.a);
+	float bx = (uv.x - body.x) / body.z;                  // 0..1 across the body
+	float lv = clamp(level, 0.0, 1.0);
+	if (lv > 0.002) {
+		float amp = (0.012 + 0.05 * slosh) * body.w * step(lv, 0.985);
+		float wave = amp * (0.6 * sin(bx * 9.0 + TIME * 2.3 + seed) + 0.4 * sin(bx * 17.0 - TIME * 3.4 + seed * 2.0))
+				+ slosh * 0.04 * body.w * sin(TIME * 9.0) * (bx - 0.5);
+		float wl = body.y + body.w * (1.0 - lv) + wave;   // the waterline (canvas UV, y down)
+		float under = smoothstep(wl - 0.004, wl + 0.004, uv.y);
+		float la = texture(liquid_tex, uv).a;
+		vec3 lc = liquid_col.rgb * (1.0 + 0.35 * glow);
+		o = over(o, lc, la * under * liquid_a);
+		// bubbles: four small rings rising through the liquid, clipped by it
+		float b = 0.0;
+		for (int i = 0; i < 4; i++) {
+			float fi = float(i);
+			float sp = 0.06 + 0.035 * fract(fi * 0.37 + seed);
+			float t = fract(TIME * sp + fi * 0.29 + seed * 0.13);
+			vec2 c = vec2(body.x + body.z * (0.25 + 0.5 * fract(fi * 0.61 + seed * 0.7) + 0.04 * sin(TIME * 2.0 + fi)),
+					body.y + body.w * (1.0 - t * lv));
+			b = max(b, ring(uv, c, body.z * (0.018 + 0.01 * fract(fi * 0.53)), body.z * 0.008) * step(wl + 0.01, c.y));
+		}
+		o = over(o, mix(lc, vec3(1.0), 0.6), b * la * under * 0.7 * liquid_a);
+		o = over(o, vec3(1.0), texture(shine_tex, uv).a * under * liquid_a);
+		// the meniscus strip, centred on the waterline, scrolling sideways (its body tiles left-right)
+		float sv = (uv.y - wl) / strip_h + 0.5;
+		if (sv > 0.0 && sv < 1.0 && lv < 0.985) {
+			vec2 suv = vec2(strip.x + strip.z * fract(bx + TIME * 0.035 + seed), strip.y + strip.w * sv);
+			float sa = texture(surface_tex, suv).a * smoothstep(0.02, 0.2, la);
+			o = over(o, mix(lc, vec3(1.0), 0.45), sa * min(1.0, liquid_a + 0.2));
+		}
+	}
+	vec4 r = texture(rim_tex, uv);
+	o = over(o, rim_col.rgb, r.a * rim_col.a);
+	COLOR = vec4(o.rgb / max(o.a, 0.0001), o.a * COLOR.a);
+}

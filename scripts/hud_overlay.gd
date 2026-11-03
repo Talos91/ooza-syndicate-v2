@@ -413,7 +413,7 @@ func _draw_upgrade_arrows(cam: Camera3D, avoid: Array) -> void:
 		var grow := 1.0 + 0.3 * float(pk[0]) * float(pk[1])
 		_neon(NT_CHIP, c, R * grow, Color(1, 1, 1, 0.88 + 0.12 * k))
 		if float(pk[1]) > 0.0:
-			_pulse_ring(c, R, col, pk)
+			_pulse_ring(c, R, col, pk, NT_CHIP)
 
 
 # ------------------------------------------------------------------ the neon atlas (ui-neon)
@@ -506,6 +506,28 @@ static func neon_atlas(chip: Color) -> Texture2D:
 	return _atlas
 
 
+# Neon Noir revision 6 (the art director): the alarm signs alert_sign_red / _amber / _grey (fixed colours) and the upgrade chip
+# (fill + white rim in your colour); measured on their 216 x 246 / 196 x 196 canvases: the plate's centre and circumradius (px)
+const NOIR_CELL := ["alert_sign_red", "alert_sign_amber", "alert_sign_grey", "upgrade_chip", "alert_sign_pulse"]
+const NOIR_PLATE := [Vector3(108, 145, 62), Vector3(108, 145, 62), Vector3(108, 145, 62), Vector3(98, 98, 50), Vector3(108, 145, 62)]
+
+
+static var _noir_tex := {}                # "cell|chip colour" -> the director's sign / chip, baked whole (glow band included)
+
+
+static func noir_tex(cell: int, chip: Color) -> Texture2D:
+	## One sign or the chip from the director's art, baked once at ~2x its usual size with mipmaps (drawn by _neon, not from
+	## the atlas: its glow band is wider than an atlas cell). null when not imported.
+	var key := "%d|%s" % [cell, chip.to_html()]
+	if not _noir_tex.has(key):
+		var pl: Vector3 = NOIR_PLATE[cell]
+		var im := HudSkin.noir_image(NOIR_CELL[cell], 2.0 * NT_R / pl.z, chip if cell == NT_CHIP else Color.WHITE)
+		if im != null:
+			im.generate_mipmaps()
+		_noir_tex[key] = ImageTexture.create_from_image(im) if im != null else null
+	return _noir_tex[key]
+
+
 static func _bake_pack_cell(img: Image, cell: int, chip: Color, bc: Vector2, bw: float, bh: float) -> void:
 	## Alpha 24: one cell's sprites over its halo - the plate (a pointy hex of circumradius NT_R), then the beacon / chevrons.
 	var o := Vector2(cell * NT_W + NT_W / 2.0, NT_CY)       # the plate's centre in the atlas
@@ -570,16 +592,29 @@ static func _seg_d(p: Vector2, a: Vector2, b: Vector2) -> float:
 
 func _neon(cell: int, c: Vector2, R: float, mod: Color) -> void:
 	## One baked sign with its plate's centre on c and circumradius R (screen units), tinted / faded by mod.
+	if HudNoir.has(NOIR_CELL[cell]):   # Neon Noir revision 6: the director's sign / chip, its plate on c
+		var t := noir_tex(cell, Rules.seat_color(human))
+		if t != null:
+			var pl: Vector3 = NOIR_PLATE[cell]
+			var kk := R / pl.z                                    # screen px per source px
+			var kb := 2.0 * NT_R / pl.z                           # texture px per source px
+			draw_texture_rect(t, Rect2(c - Vector2(pl.x, pl.y) * kk, t.get_size() * kk / kb), false, mod)
+			return
 	var k := R / NT_R
 	var sz := Vector2(NT_W, NT_H) * k
 	draw_texture_rect_region(neon_atlas(Rules.seat_color(human)), Rect2(c - Vector2(NT_W / 2.0, NT_CY) * k, sz),
 			Rect2(cell * NT_W, 0, NT_W, NT_H), mod)
 
 
-func _pulse_ring(c: Vector2, R: float, col: Color, pk: Array) -> void:
-	## A state-change beat: a hex outline swelling out from the plate and fading.
+func _pulse_ring(c: Vector2, R: float, col: Color, pk: Array, cell := NT_TUBE) -> void:
+	## A state-change beat: a hex outline swelling out from the plate and fading (Neon Noir: the director's pulse outline for a
+	## sign; the chip's own shape, faded, for the upgrade chip).
 	var ph := float(pk[2])
-	_neon(NT_TUBE, c, R * (1.1 + 0.9 * ph), Color(col, 0.75 * (1.0 - ph) * float(pk[1])))
+	var a := 0.75 * (1.0 - ph) * float(pk[1])
+	if cell == NT_CHIP and HudNoir.has("upgrade_chip"):
+		_neon(NT_CHIP, c, R * (1.1 + 0.9 * ph), Color(1, 1, 1, a * 0.6))
+		return
+	_neon(NT_TUBE, c, R * (1.1 + 0.9 * ph), Color(col, a))
 
 
 # ------------------------------------------------------------------ relay badge cues (0.19.0, Daniele:
