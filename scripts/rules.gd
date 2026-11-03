@@ -257,6 +257,15 @@ const RELAY_MIN_SEP := 25.97         # json min_separation_deg_from_any_bridge =
                                      # a smaller gap moves the pad out to CLEAR / sin(gap / 2) and stretches its Strut
 const RELAY_HIT_PT := 44.0           # the button's tap disc on a phone, points across (Apple's minimum; tests/phone_fit)
 const RELAY_HIT_PAD := 1.15          # the disc is at least the pad's projected radius x this (desktop / close-ups)
+# SEND GESTURE (Daniele, 2026-11-03, relay review item 19): drag from your vat; the target snaps to the best reachable node in
+# the drag direction (main._send_pick), is ringed live, and release ANYWHERE sends. Release inside the dead zone without having
+# left it = no order (the phone's escape); dragged out and back onto the origin = HOLD (queued units stop, the bridge is committed).
+const SEND_CONE_DEG := 30.0          # half-angle of the aim cone from the origin's centre (+-30 deg)
+const SEND_DEAD_ZONE_PT := 24.0      # release within this radius of the press point, never left: the gesture is cancelled
+const SEND_FLICK_SECONDS := 0.25     # a release this soon after the press ...
+const SEND_FLICK_PT := 10.0          # ... after this much travel is a FLICK: it sends the current share in its direction
+const SEND_RING_PT := 40.0           # the live target ring, points across on a phone (>= 33 pt readable; tests/send_aim_check)
+const SEND_FAIL_LOG_KEPT := 200      # user://telemetry/send_failed.json keeps the newest this many failed sends
 const DECK_HIT_PT := 44.0            # a deck's tap band for the deck skills on a phone, points across (SkillDock._deck_at; 2026-11-01,
                                      # Daniele: "bridges are sometimes hard to click"); invisible - the deck keeps its look
 const RELAY_GHOST := Color(0.85, 0.78, 1.0, 0.28)       # OS_Ghost: the neutral violet floor (the Pier_Ghost_v2 fallback)

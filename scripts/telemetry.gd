@@ -33,7 +33,9 @@ static func save(sim: Sim, map_code: String, strength_trace: Array) -> String:
 		"deciding_event": last_capture, "units_lost_combat": sim.combat_losses,
 		"units_lost_falls": sim.fall_losses, "last_stand_reached": sim.last_stand_active,
 		"events": sim.events,
+		"send_failed": send_fails.duplicate(),     # SEND GESTURE: this match's failed send gestures, with their reason
 	}
+	send_fails.clear()
 	DirAccess.make_dir_recursive_absolute("user://telemetry")
 	var path := "user://telemetry/match_%d.json" % Time.get_unix_time_from_system()
 	var f := FileAccess.open(path, FileAccess.WRITE)
@@ -43,6 +45,34 @@ static func save(sim: Sim, map_code: String, strength_trace: Array) -> String:
 	f.close()
 	prune_logs("user://telemetry", int(Rules.TELEMETRY["match_logs_kept"]))
 	return ProjectSettings.globalize_path(path)
+
+
+static var send_fails: Array = []                 # this match's failed sends (save() writes them into the match log)
+static var send_fail_path := "user://telemetry/send_failed.json"   # the rolling device file; tests point this elsewhere
+
+
+static func send_failed(reason: String, data: Dictionary) -> void:
+	## SEND GESTURE (2026-11-03): a drag that placed no order, and why - "no_target" (nothing in the cone), "bridge_gone"
+	## (only unreachable nodes that way), "zero_units", "touch_lost" (a second finger, a pause, the HUD took it),
+	## "refused" (the order check said no). Device only: the match log and a rolling file of the newest
+	## Rules.SEND_FAIL_LOG_KEPT; nothing is uploaded (the upload's KINDS are unchanged).
+	var e := {"kind": "send_failed", "reason": reason, "at": int(Time.get_unix_time_from_system())}
+	e.merge(data)
+	send_fails.append(e)
+	var all: Array = []
+	if FileAccess.file_exists(send_fail_path):
+		var old = JSON.parse_string(FileAccess.get_file_as_string(send_fail_path))
+		if old is Array:
+			all = old
+	all.append(e)
+	while all.size() > int(Rules.SEND_FAIL_LOG_KEPT):
+		all.pop_front()
+	DirAccess.make_dir_recursive_absolute(send_fail_path.get_base_dir())
+	var f := FileAccess.open(send_fail_path, FileAccess.WRITE)
+	if f == null:                                   # user:// not writable: the match log still has it
+		return
+	f.store_string(JSON.stringify(all))
+	f.close()
 
 
 static func prune_logs(dir: String, keep: int) -> int:

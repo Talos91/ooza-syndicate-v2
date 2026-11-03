@@ -297,6 +297,18 @@ func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 	return h
 
 
+func hold(node_id: int) -> bool:
+	## HOLD (Daniele, 2026-11-03): an order to the origin itself. Like any redirect, only the units still in the vat stop
+	## (the door stops emitting); whatever is already out on the bridge is committed and walks on. False: nothing queued.
+	if over or node_id < 0 or node_id >= nodes.size():
+		return false
+	var src: Dictionary = nodes[node_id]
+	if src["owner"] == "" or src["streaming"].is_empty():
+		return false
+	_end_streaming(src, "held")
+	return true
+
+
 # ------------------------------------------------------------------ structures 2.1 (0.18.10)
 static func has_vat(n: Dictionary) -> bool:
 	## A producing vat stands here (not a machinegoon, not a relay structure).
