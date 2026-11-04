@@ -1,9 +1,15 @@
-# To test - ALPHA 23.24 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.25 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.25 (staging: https://oozesyndicate.com/staging/)
+- [ ] HOME PLAY starts a 1v1 vs AI in one tap; CHANGE opens the setup; CHANGE MAP works.
+- [ ] HOST ROOM / JOIN WITH CODE; the room fits one screen; seat cards show skills and READY; SIT HERE switches team.
+- [ ] Map picker 2 x 5 with ‹ › pages and mode tabs; ARMIES > SKILLS on one page; results two rows of buttons.
+- [ ] Nothing in the menus scrolls.
 
 ## 0.23.24 (staging: https://oozesyndicate.com/staging/)
 - [ ] A fully charged skill's hexagon glows neon in its colour (white / violet / amber); cooling ones don't.

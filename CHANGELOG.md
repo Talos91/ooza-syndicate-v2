@@ -1,5 +1,24 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.25 "Alpha 24 step 3" - 2026-11-04 (STAGING only; new menu flows, Daniele approved the flows, release rel-02325)
+
+New menu flows built from today's parts (Daniele: "this looks good so we can apply and then later on after we test redesign the actual
+ui and backgrounds etc"). The look (art, backgrounds) comes later as its own pass; this one changes taps and screens only.
+- **Four tabs: HOME / ARMIES / CAMPAIGN / PROFILE.** The PLAY tab and PLAY hub page are gone.
+- **1v1 vs AI in 1 tap** (was 6): HOME PLAY starts your last setup at once; CHANGE opens one MATCH SETUP screen with sheets
+  (faction, rivals, rules, colour, background) and an explicit CHANGE MAP. Custom setup = 2 taps.
+- **Online: host in 2 taps (was 4), join in 3 (was 4).** HOST ROOM on HOME creates the room; JOIN WITH CODE is a code sheet over HOME
+  (errors shown in it, the code kept).
+- **The room fits one screen**: code, share and chat, map (host: CHANGE MAP), mode and rules on the left; every seat as a card on the right
+  (a column per team; FFA in 2 columns) with each player's 3 skills and a big READY tick; MY PICKS (faction / colour / army) open sheets
+  over the room. Open seat on another team = SIT HERE (1 tap); the host can move a player in 2.
+- **Map picker**: always 2 rows x 5 maps, ‹ n / N › beside CHOOSE for more pages; mode tabs with counts, ★ / RECENT / RANDOM.
+- **ARMIES > SKILLS on one page**: the ultimate strip plus every active / map skill as icon + name tiles; tap = equip + description.
+- **Results**: two rows of equal length - PLAY AGAIN (wide) + MATCH DETAILS, then HOME / RANDOM MAP / CHANGE SETUP.
+- **No scrolling**: menu lists page with a ‹ n / N › strip; no up / down arrows.
+- Known gaps: online results have no BACK TO ROOM yet; 3v3 / 2v2v2 room layouts unseen (no pool map seats them). Online rooms on
+  staging fall back to browser hosting (room server stays 0.23.21).
+
 ## 0.23.24 "Alpha 23" - 2026-11-04 (STAGING only; skill column, Daniele's staging check of 0.23.23, release rel-02322)
 
 - **A charged skill's hexagon is lit neon in its slot colour** ("outline of skill hexagon should be neon lit in the color of the skill
