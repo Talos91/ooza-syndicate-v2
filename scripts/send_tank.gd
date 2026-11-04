@@ -33,9 +33,26 @@ func setup(h, m, s: float, font: Font) -> void:
 	_frame = HudNoir.box("send_tank" if HudNoir.has("send_tank") else "send_housing", HudNoir.accent if HudNoir.has("send_tank") else Color(0, 0, 0, 0), Vector4.ZERO)   # GMN-1: the tank's white neon rim in the accent
 
 
+# GMN-1: the glass inside the director's tank, measured on send_tank_liquid.png (canvas px): x 60..336, y 180..1060
+const GLASS := Rect2(60, 180, 276, 880)
+
+
+func gmn() -> bool:
+	return HudNoir.has("send_tank_liquid")
+
+
 func body_rect() -> Rect2:
 	## The tank's inside (the goo's room): the frame's rect minus its rim and the drips under it.
 	var drip := HudNoir.drip_px("send_tank" if HudNoir.has("send_tank") else "send_housing")
+	if gmn():                                     # the director's glass: caps top and bottom, the walls at the sides
+		var p := HudNoir.part_data("send_tank")
+		var bd: Array = p.get("body", [48, 48, 300, 1080])
+		var k := ui_scale / HudNoir.SPRITE_K
+		var h := size.y - drip
+		var top := (GLASS.position.y - float(bd[1])) * k
+		var bot := (float(bd[1]) + float(bd[3]) - GLASS.end.y) * k
+		var side := (GLASS.position.x - float(bd[0])) * k
+		return Rect2(Vector2(side, top), Vector2(size.x - 2.0 * side, h - top - bot))
 	var inset := 7.0 * ui_scale
 	return Rect2(Vector2(inset, inset), Vector2(size.x - 2.0 * inset, size.y - drip - 2.0 * inset))
 
@@ -116,6 +133,17 @@ func _draw() -> void:
 		var cp := NodeNoir.clean(part)
 		if cp.size() < 3:
 			continue
+		if gmn():                                 # GMN-1: the director's lit ooze (tinted) and its shine (white), in the glass
+			var uvs := PackedVector2Array()
+			var cs := PackedColorArray()
+			for p in cp:
+				var u := (p - b.position) / b.size
+				uvs.append(Vector2((GLASS.position.x + u.x * GLASS.size.x) / 396.0, (GLASS.position.y + u.y * GLASS.size.y) / 1284.0))
+				cs.append(acc)
+			draw_polygon(cp, cs, uvs, HudNoir.texture(str(HudNoir.part_data("send_tank_liquid").get("file", ""))))
+			cs.fill(Color.WHITE)
+			draw_polygon(cp, cs, uvs, HudNoir.texture(str(HudNoir.part_data("send_tank").get("shine", ""))))
+			continue
 		var cols := PackedColorArray()
 		for p in cp:
 			var d := clampf((p.y - level_y(lv)) / maxf(b.size.y * lv, 1.0), 0.0, 1.0)
@@ -137,9 +165,13 @@ func _draw() -> void:
 	if line.size() > 1:
 		draw_polyline(line, Color(acc.lerp(Color.WHITE, 0.55), 0.95), 2.0 * s, true)
 	# the wet streak down the glass, top-left
-	draw_line(b.position + Vector2(5.0 * s, rad), b.position + Vector2(5.0 * s, b.size.y * 0.45), Color(1, 1, 1, 0.16), 2.0 * s, true)
-	# the gauge: a tick per share on the right inner wall, its number beside it; the picked one lit
+	if not gmn():
+		draw_line(b.position + Vector2(5.0 * s, rad), b.position + Vector2(5.0 * s, b.size.y * 0.45), Color(1, 1, 1, 0.16), 2.0 * s, true)
 	var fs := maxi(int(13 * s), _floor_px())
+	if gmn():
+		_draw_gmn_gauge(b, fs)
+		return
+	# the gauge: a tick per share on the right inner wall, its number beside it; the picked one lit
 	for l in LEVELS:
 		var y := level_y(float(l)) + (2.0 * s if is_equal_approx(float(l), 1.0) else 0.0)
 		var on := is_equal_approx(float(l), float(main.fraction))
@@ -187,3 +219,40 @@ func _floor_px() -> int:
 	if not bool(hud.mobile):
 		return 0
 	return int(ceil(12.5 / maxf(UiKit.pt_per_px(get_viewport_rect().size), 0.01)))
+
+
+func _draw_gmn_gauge(b: Rect2, fs: int) -> void:
+	## GMN-1 (the director's tank, Daniele: "apply the correct vat"): a bold white line at each quarter with its share
+	## centred on it (- 75% -), the picked one lit in the accent; SEND on the top cap, the units on the bottom of the glass.
+	var s := ui_scale
+	var acc: Color = HudNoir.accent
+	var ol := Color(0, 0, 0, 0.75)
+	for l in LEVELS:
+		var y := level_y(float(l))
+		var on := is_equal_approx(float(l), float(main.fraction))
+		var t := "%d%%" % int(round(float(l) * 100.0))
+		var w := _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var cx := b.get_center().x
+		var gapx := w / 2.0 + 3.0 * s
+		var col := Color.WHITE if on else Color(1, 1, 1, 0.85)
+		var lw := (3.0 if on else 2.0) * s
+		for sg: float in [-1.0, 1.0]:
+			var x0 := cx + sg * gapx
+			var x1 := b.position.x + 2.0 * s if sg < 0.0 else b.end.x - 2.0 * s
+			if on:
+				draw_line(Vector2(x0, y), Vector2(x1, y), Color(acc, 0.45), lw * 3.0, true)
+			draw_line(Vector2(x0, y), Vector2(x1, y), col, lw, true)
+		var p := Vector2(cx - w / 2.0, y + (_font.get_ascent(fs) - _font.get_descent(fs)) / 2.0)
+		draw_string_outline(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(4 * s), ol)
+		draw_string(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, acc.lerp(Color.WHITE, 0.5) if on else Color.WHITE)
+	var hd := "SEND"
+	var hw := _font.get_string_size(hd, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var hp := Vector2(b.get_center().x - hw / 2.0, b.position.y * 0.5 + (_font.get_ascent(fs) - _font.get_descent(fs)) / 2.0)
+	draw_string_outline(_font, hp, hd, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(4 * s), ol)
+	draw_string(_font, hp, hd, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+	var units := _units_line()
+	if units != "":
+		var uw := _font.get_string_size(units, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var up := Vector2(b.get_center().x - uw / 2.0, b.end.y - 6.0 * s)
+		draw_string_outline(_font, up, units, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(4 * s), ol)
+		draw_string(_font, up, units, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)

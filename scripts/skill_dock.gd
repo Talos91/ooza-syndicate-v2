@@ -122,7 +122,11 @@ class Slot:
 			var st0 := "disabled" if disabled else ("armed" if armed else ("ready" if is_ready or fires > 0 else "cooling"))
 			_vessel_state(st0, 1.0 if is_ready or fires > 0 or armed else (frac if ult else 1.0 - frac), col)
 			if dock.plate:
-				draw_style_box(dock.card_box(armed, ult), Rect2(Vector2.ZERO, size))
+				# GMN-1: the plate drawn WHOLE at the slot's size (its window, socket and name strip stay where the
+				# director put them - a 9-slice moved the strip away from the name, Daniele: "text is not aligned")
+				var pid := "skill_card_ultimate_fill" if ult and HudNoir.has("skill_card_ultimate_fill") else ("skill_card_armed" if armed else "skill_card")
+				if not NodeNoir.sprite(self, pid, size / 2.0, size, Color.WHITE):
+					draw_style_box(dock.card_box(armed, ult), Rect2(Vector2.ZERO, size))
 			return
 		draw_style_box(dock.card_box(armed), Rect2(Vector2.ZERO, size))
 		var ic := Vector2(w / 2.0, dock.vessel_cy if vessel != null else dock.pad + d / 2.0)
@@ -197,7 +201,7 @@ class Slot:
 		var y := ic.y + d / 2.0 + dock.gap + UI_FONT.get_ascent(nf)
 		if dock.plate and dock.mobile:                   # GMN-1: the name in the plate's dark strip, low on the plate
 			var lh := UI_FONT.get_height(nf) * 0.88
-			y = size.y * 0.83 - lh * float(lines.size() - 1) / 2.0 + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
+			y = size.y * 0.80 - lh * float(lines.size() - 1) / 2.0 + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
 		for ln in lines:
 			_line(str(ln), Vector2(w / 2.0, y), 16, HudNoir.INK if is_ready or armed else HudNoir.MUTED, room, UI_FONT)
 			y += UI_FONT.get_height(nf) * 0.88

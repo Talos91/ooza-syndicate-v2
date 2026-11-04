@@ -248,6 +248,46 @@ static func tube(ci: CanvasItem, c: PackedVector2Array, col: Color, w: float, li
 	ci.draw_polyline(c, Color(col.lerp(Color.WHITE, 0.85), 0.95 * lit), maxf(w * 0.4, 1.0), true)
 
 
+static func stream_strip(ci: CanvasItem, line: PackedVector2Array, lens: PackedFloat32Array, col: Color, width: float, t: float, s: float) -> bool:
+	## GMN-1: the director's tileable goo strip (node_send_stream, body 240 x 48) laid along the route, flowing to the target:
+	## quads cut at every tile seam so each maps into the BODY rect (no repeat flag needed, no padding sampled).
+	var p := HudNoir.part_data("node_send_stream")
+	var tex := HudNoir.texture(str(p.get("file", "")))
+	if tex == null:
+		return false
+	var sz: Array = p.get("size", [336, 144])
+	var b: Array = p.get("body", [48, 48, 240, 48])
+	var u0 := float(b[0]) / float(sz[0])
+	var uw := float(b[2]) / float(sz[0])
+	var v0 := float(b[1]) / float(sz[1])
+	var v1 := (float(b[1]) + float(b[3])) / float(sz[1])
+	var tile := width * float(b[2]) / float(b[3])
+	var off := fposmod(t * 70.0 * s, tile)            # the goo flows toward the target
+	var total: float = lens[-1]
+	var d := 0.0
+	var i := 0
+	while d < total - 0.01 and i < line.size() - 1:
+		var seg_end: float = lens[i + 1]
+		var ph := fposmod(d - off, tile)
+		var d2 := minf(seg_end, d + maxf(tile - ph, 0.5))   # (>= 0.5 px a step: float rounding once froze the loop)
+		var a := line[i].lerp(line[i + 1], (d - lens[i]) / maxf(seg_end - lens[i], 0.001))
+		var c := line[i].lerp(line[i + 1], (d2 - lens[i]) / maxf(seg_end - lens[i], 0.001))
+		var dir := (line[i + 1] - line[i]).normalized()
+		var nrm := Vector2(-dir.y, dir.x) * width * 0.5
+		var ua := u0 + uw * ph / tile
+		var uc := u0 + uw * minf((ph + d2 - d) / tile, 1.0)
+		ci.draw_polygon(PackedVector2Array([a - nrm, c - nrm, c + nrm, a + nrm]),
+				PackedColorArray([col, col, col, col]),
+				PackedVector2Array([Vector2(ua, v0), Vector2(uc, v0), Vector2(uc, v1), Vector2(ua, v1)]), tex)
+		if d2 <= d:
+			i += 1
+			continue
+		d = d2
+		if d >= seg_end - 0.001:
+			i += 1
+	return true
+
+
 static func ribbon(ci: CanvasItem, line: PackedVector2Array, col: Color, s: float, t: float, ok := true) -> void:
 	## The send arrow as a GOO STREAM (Daniele 2026-11-04: "the attack arrow should be more in theme"): a thick tube of lit ooze
 	## with a dark skin and a wet highlight, fat blobs swelling and travelling toward the target, a drop-shaped head. A blocked
@@ -276,16 +316,21 @@ static func ribbon(ci: CanvasItem, line: PackedVector2Array, col: Color, s: floa
 		var seg := maxf(lens[i + 1] - lens[i], 0.001)
 		return [line[i].lerp(line[i + 1], clampf((d - lens[i]) / seg, 0.0, 1.0)), (line[i + 1] - line[i]).normalized()]
 	# the stream's body: a bloom, a dark skin, the goo, a highlight along the upper side
-	ci.draw_polyline(line, Color(col, 0.10), w * 3.2, true)
-	ci.draw_polyline(line, Color(col.darkened(0.6), 0.9), w * 1.25, true)
-	ci.draw_polyline(line, Color(col.darkened(0.1), 0.95), w, true)
-	ci.draw_polyline(line, Color(col.lerp(Color.WHITE, 0.25), 0.9), w * 0.55, true)
+	var tex_stream := HudNoir.has("node_send_stream") and stream_strip(ci, line, lens, col, w * 1.7, t, s)
+	if tex_stream:
+		ci.draw_polyline(line, Color(col, 0.10), w * 3.2, true)
+	else:
+		ci.draw_polyline(line, Color(col, 0.10), w * 3.2, true)
+	if not tex_stream:
+		ci.draw_polyline(line, Color(col.darkened(0.6), 0.9), w * 1.25, true)
+		ci.draw_polyline(line, Color(col.darkened(0.1), 0.95), w, true)
+		ci.draw_polyline(line, Color(col.lerp(Color.WHITE, 0.25), 0.9), w * 0.55, true)
 	var hi := PackedVector2Array()
 	for k in range(int(total / (6.0 * s)) + 1):
 		var r: Array = at_len.call(minf(k * 6.0 * s, total))
 		var d: Vector2 = r[1]
 		hi.append((r[0] as Vector2) + Vector2(d.y, -d.x).normalized() * w * 0.22 * (1.0 if d.x >= 0.0 else -1.0))
-	if hi.size() > 1:
+	if hi.size() > 1 and not tex_stream:
 		ci.draw_polyline(hi, Color(1, 1, 1, 0.45), maxf(1.0, 1.4 * s), true)
 	# blobs: swollen lumps of goo flowing to the target (each with a dark rim and a glint)
 	var step := 34.0 * s
@@ -296,9 +341,10 @@ static func ribbon(ci: CanvasItem, line: PackedVector2Array, col: Color, s: floa
 		var p: Vector2 = r2[0]
 		var swell := 1.0 + 0.25 * sin(t * 6.0 + j * 1.7)
 		var br := w * 0.78 * swell
-		ci.draw_circle(p, br * 1.2, Color(col.darkened(0.6), 0.85))
-		ci.draw_circle(p, br, Color(col.lerp(Color.WHITE, 0.12), 1.0))
-		ci.draw_circle(p - Vector2(br, br) * 0.35, br * 0.32, Color(1, 1, 1, 0.75))
+		if not sprite(ci, "node_send_blob", p, Vector2.ONE * br * 2.4, col):
+			ci.draw_circle(p, br * 1.2, Color(col.darkened(0.6), 0.85))
+			ci.draw_circle(p, br, Color(col.lerp(Color.WHITE, 0.12), 1.0))
+			ci.draw_circle(p - Vector2(br, br) * 0.35, br * 0.32, Color(1, 1, 1, 0.75))
 		at += step
 		j += 1
 	# the head: a fat drop pointing along the last segment

@@ -1419,7 +1419,7 @@ class ActionWedge:
 		var off := disabled
 		var a := accent.darkened(0.35) if off else accent
 		var poly := _slice(c, r_in, ro)
-		if lift > 0.01:
+		if lift > 0.01 and not HudNoir.has("node_wedge"):
 			draw_polyline(_edge(c, ro + 4.0 * s), Color(a, 0.25 * lift), 8.0 * s, true)
 		# Daniele 2026-11-04 (mockup 3): NO goo in the slices - a slice is LIT (affordable / free) or GREYED (not yet):
 		# "easy to just have grayed or not; the filling would also cost resources especially when open and close fast".
@@ -1437,10 +1437,11 @@ class ActionWedge:
 					var u := clampf(((q - c).length() - r_in) / maxf(ro - r_in, 1.0), 0.0, 1.0)
 					gc.append(Color(a.darkened(0.5).lerp(a, u), 0.16 + 0.22 * u))
 				draw_polygon(gp, gc)
-		var edge := poly.duplicate()
-		edge.append(poly[0])
-		draw_polyline(edge, Color(a, 0.3), 1.0 * s, true)
-		NodeNoir.neon(self, _edge(c, ro - 1.5 * s), a, (2.0 + 1.0 * lift) * s, 0.9 if lit else 0.2)
+		if not HudNoir.has("node_wedge"):              # (the director's slice brings its own rim: one edge, not two - Daniele)
+			var edge := poly.duplicate()
+			edge.append(poly[0])
+			draw_polyline(edge, Color(a, 0.3), 1.0 * s, true)
+			NodeNoir.neon(self, _edge(c, ro - 1.5 * s), a, (2.0 + 1.0 * lift) * s, 0.9 if lit else 0.2)
 		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)
 		if k <= 0.0:
 			return
