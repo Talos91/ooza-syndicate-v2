@@ -49,7 +49,7 @@ func _build(crumb: String, f: String) -> void:
 		x += back.size.x + 18.0
 	else:
 		var mark := TextureRect.new()                # the wordmark, left
-		mark.texture = load("res://assets/ui/Ooze-Syndicate-Wordmark%s.svg" % ("-light" if UiTheme.light() else ""))   # Alpha 24: dark ink on LIGHT
+		mark.texture = load("res://assets/ui/Ooze-Syndicate-Wordmark.svg")
 		mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -70,18 +70,25 @@ func _build(crumb: String, f: String) -> void:
 	var gear := _square("", help.position - Vector2(q + 8.0, 0), q, f)
 	gear.tooltip_text = "OPTIONS"
 	gear.pressed.connect(func(): UiKit.acknowledge(gear, Callable(menu, "show_options")))
-	gear.add_child(_icon("settings", q))            # Alpha 24: the round-3 D icon (was a drawn gear)
-	# MUSIC (Daniele 2026-09-29/30): the top-right instant mute - Music.toggle_on(); Alpha 24: the round-3 music /
-	# music_off icons (dim when OFF)
+	var glyph := Control.new()                       # a drawn gear (no icon for it in the kit yet)
+	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glyph.position = gear.position
+	glyph.size = gear.size
+	glyph.draw.connect(func(): _draw_gear(glyph, q))
+	add_child(glyph)
+	# MUSIC (Daniele 2026-09-29/30): the top-right instant mute - Music.toggle_on(), a drawn note glyph (slashed + dim OFF)
 	var music_btn := _square("", gear.position - Vector2(q + 8.0, 0), q, f)
 	music_btn.tooltip_text = "MUSIC"
-	var note := _icon("music" if Music.music_on() else "music_off", q)
-	music_btn.add_child(note)
+	var music_glyph := Control.new()
+	music_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	music_glyph.position = music_btn.position
+	music_glyph.size = music_btn.size
+	music_glyph.draw.connect(func(): _draw_note(music_glyph, q))
 	music_btn.pressed.connect(func():
-		var on := Music.toggle_on()                  # OFF at once, everywhere (Music.set_on stops the players itself)
+		Music.toggle_on()                            # OFF at once, everywhere (Music.set_on stops the players itself)
 		Sfx.play_ui("tap")
-		note.texture = UiTheme.icon("music" if on else "music_off")
-		note.self_modulate = UiKit.INK if on else UiKit.MUTED)
+		music_glyph.queue_redraw())
+	add_child(music_glyph)
 	var lf := Progression.level_for(Progression.xp)
 	_level = int(lf["level"])
 	var cf := f if Campaign.has_content(f) else "vex"
@@ -136,18 +143,37 @@ func _build(crumb: String, f: String) -> void:
 
 
 func _square(text: String, pos: Vector2, q: float, f: String) -> Button:
-	var b := UiKit.make_btn(menu, text, Vector2(q, q), Callable(), "icon", f, 20)
+	var b := UiKit.make_btn(menu, text, Vector2(q, q), Callable(), "selected", f, 20)
 	b.position = pos
 	b.clip_text = false
 	add_child(b)
 	return b
 
 
-func _icon(n: String, q: float) -> TextureRect:
-	## A round-3 D icon centred in a q-square top-bar button, in the text colour (MUSIC: dim while OFF).
-	var side := q * 0.46
-	var col := UiKit.MUTED if n == "music_off" else UiKit.INK
-	return UiTheme.icon_rect(n, side, col, Vector2(q - side, q - side) / 2.0)
+func _draw_gear(c: Control, q: float) -> void:
+	var o := Vector2(q, q) / 2.0
+	var r := q * 0.19
+	var col := UiKit.INK
+	for i in range(8):                                 # eight teeth
+		var a := TAU * i / 8.0
+		var d := Vector2(cos(a), sin(a))
+		c.draw_line(o + d * r * 0.9, o + d * r * 1.45, col, q * 0.085)
+	c.draw_arc(o, r, 0.0, TAU, 32, col, q * 0.07, true)
+	c.draw_arc(o, r * 0.42, 0.0, TAU, 20, col, q * 0.05, true)
+
+
+func _draw_note(c: Control, q: float) -> void:
+	## MUSIC (0.22.x): a drawn eighth-note - dim and slashed through when OFF (no icon for it in the kit yet).
+	var on := Music.music_on()
+	var col := UiKit.INK if on else UiKit.MUTED
+	var o := Vector2(q * 0.36, q * 0.66)
+	var r := q * 0.1
+	c.draw_circle(o, r, col)
+	var stem_top := o + Vector2(r * 0.92, -q * 0.36)
+	c.draw_line(o + Vector2(r * 0.92, 0), stem_top, col, q * 0.06)
+	c.draw_line(stem_top, stem_top + Vector2(q * 0.18, q * 0.1), col, q * 0.06)
+	if not on:
+		c.draw_line(Vector2(q * 0.16, q * 0.86), Vector2(q * 0.84, q * 0.14), col, q * 0.08)
 
 
 func _draw() -> void:

@@ -1,6 +1,6 @@
 # Ooze Syndicate 2.0 - changelog
 
-## 0.23.22 "Alpha 23" - 2026-11-04 (STAGING only; release rel-02322 = main 4376374 + ui-hud b083d09; Daniele: "in game ui ready for staging branch")
+## 0.23.22 "Alpha 23" - 2026-11-04 (STAGING only; release rel-02322 = main 4376374 + ui-hud b083d09 with the menus rolled back; Daniele: "in game ui ready for staging branch")
 
 - **Alpha 24 step 2: the Neon Noir in-game HUD** (the art director's revision 6, cut in by 🧩 ui-hud-cut3; Daniele's "Yes, cut it in"). Top capsule
   with score pills, status pill + amber seconds capsule, CATCH-UP tag, SEND housing with four liquid vats (100 / 75 / 50 / 25, the picked one lit),
@@ -11,9 +11,12 @@
   - **Rings fixed per slot** and **liquid colour fixed per slot** (Daniele 2026-11-03: fixed for now; one constant `HudNoir.RING`).
   - Board marks, score pills and the node inspector keep the **seat colours** (same colours on every screen); the node inspector is still code-drawn;
     the "attacked" badge is not hooked yet.
-- **Also in this merge (ui-hud sits on ui-a24, Alpha 24 step 1):** the round-3 UI pack in the **menus** with a **DARK / LIGHT theme switch**,
-  menus restyled (SkinBox 9-slice), and the faction name **BLOOM** everywhere (no VIRIDIAN, Daniele 2026-11-02). So the menus DO change in this
-  build: they carry the round-3 look from step 1, not the Neon Noir HUD look.
+- **Menus stay as in 0.23.21** (Daniele 2026-11-04: "i m ok with ingame interface but menu interface i want it roll back and abandon
+  light theme and all about round 3 design for now"). ui-hud sits on ui-a24 (Alpha 24 step 1: round-3 menus, DARK / LIGHT switch); its menu
+  changes are reverted here: `menu.gd`, `ui_kit.gd`, `top_bar.gd`, `nav_bar.gd`, `reward_strip.gd`, `reward_ticker.gd`, `campaign.gd`,
+  `match_screens.gd` are byte-identical to 0.23.21, the SETTINGS > THEME row is gone, `tests/lobby_ui_shot` removed. `UiTheme` stays only
+  as the HUD's sprite layer (B sheet, round-3 skill / board icons) and is **DARK only** (a saved LIGHT choice is ignored). Kept from step 1:
+  the name **BLOOM** (no VIRIDIAN; Daniele's naming call of 2026-11-02, not a look).
 - Merge note: one conflict in `scripts/skill_dock.gd` (the old disc drawing vs the HUD's vessel drawing); kept the HUD side, which already uses
   main's Rewire -> Overdrive rename. `scripts/net.gd` and `server/` unchanged: protocol stays ooze20-net-8, no room server deploy.
 

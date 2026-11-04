@@ -9,16 +9,6 @@ const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const XP_COLOUR := Color("5fd7ff")
 const GOLD := Color("ffd15c")
-const XP_LIGHT := Color("0a7fa0")                  # Alpha 24 LIGHT: the same, readable on the pale theme
-const GOLD_LIGHT := Color("a87000")
-
-
-static func xp_col() -> Color:
-	return XP_LIGHT if UiTheme.light() else XP_COLOUR
-
-
-static func gold() -> Color:
-	return GOLD_LIGHT if UiTheme.light() else GOLD
 
 
 static func make(r: Dictionary, scale: float) -> RewardStrip:
@@ -42,7 +32,7 @@ func _build(r: Dictionary, scale: float) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", int(14 * scale))
 	add_child(row)
-	var what := _label(" · ".join(names), 15, scale, UiKit.MUTED if UiTheme.light() else Color("c8e6ee"))
+	var what := _label(" · ".join(names), 15, scale, Color("c8e6ee"))
 	row.add_child(what)
 	var pt := func(n: float) -> float: return n * scale * 0.8
 	var tickers := []
@@ -60,7 +50,7 @@ func _build(r: Dictionary, scale: float) -> void:
 	add_child(bar)
 	var note := _note(r)
 	if note != "":
-		add_child(_label(note, 14, scale, gold()))
+		add_child(_label(note, 14, scale, GOLD))
 	# the count-ups start together once the strip is on screen
 	ready.connect(func():
 		for t in tickers:
@@ -135,16 +125,16 @@ class XpBar extends Control:
 		var fs := int(round(14 * scale_k))
 		var tag := "LEVEL %d" % int(lf["level"])
 		var tag_w := HEAD_FONT.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10 * scale_k
-		var col: Color = RewardStrip.xp_col().lerp(UiKit.INK, _flash)
+		var col := XP_COLOUR.lerp(Color.WHITE, _flash)
 		draw_string(HEAD_FONT, Vector2(0, size.y * 0.5 + fs * 0.36), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 		var gain := "+%d XP" % (to_xp - from_xp)
 		var gain_w := UI_FONT.get_string_size(gain, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10 * scale_k
 		var bar := Rect2(tag_w, size.y * 0.25, size.x - tag_w - gain_w, size.y * 0.5)
-		draw_rect(bar, Color(UiKit.BASE, 0.9))
+		draw_rect(bar, Color(0.02, 0.05, 0.07, 0.9))
 		var f := clampf(float(lf["into"]) / maxf(1.0, float(lf["need"])), 0.0, 1.0)
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * f, bar.size.y)), col)
-		draw_rect(bar, RewardStrip.xp_col().darkened(0.3), false, maxf(1.0, scale_k))
-		draw_string(UI_FONT, Vector2(size.x - gain_w + 10 * scale_k, size.y * 0.5 + fs * 0.36), gain, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, RewardStrip.xp_col())
+		draw_rect(bar, XP_COLOUR.darkened(0.3), false, maxf(1.0, scale_k))
+		draw_string(UI_FONT, Vector2(size.x - gain_w + 10 * scale_k, size.y * 0.5 + fs * 0.36), gain, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, XP_COLOUR)
 		if _flash > 0.0:
 			draw_string(HEAD_FONT, Vector2(bar.position.x + bar.size.x * 0.5 - 30 * scale_k, bar.position.y - 2 * scale_k),
-					"LEVEL UP", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(RewardStrip.gold(), _flash))
+					"LEVEL UP", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(GOLD, _flash))

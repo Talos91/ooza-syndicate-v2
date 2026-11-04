@@ -39,7 +39,7 @@ func _build(f: String) -> void:
 	var longest := 0.0                               # every tab as wide as the longest label needs (phones grow the text)
 	for t in TABS:
 		longest = maxf(longest, UiKit.text_w(menu, t[1], 15, true))
-	var tw := minf(maxf(150.0, longest + 48.0 + UiKit.px(menu, 15) * 1.25 + 8.0), (w - 40.0) / TABS.size())
+	var tw := minf(maxf(150.0, longest + 48.0), (w - 40.0) / TABS.size())
 	var x0 := (w - tw * TABS.size()) / 2.0
 	for i in range(TABS.size()):
 		var id: String = TABS[i][0]
@@ -48,14 +48,6 @@ func _build(f: String) -> void:
 				"selected" if id == active else "tertiary", f, 15)
 		if id != active:
 			b.add_theme_color_override("font_color", UiKit.MUTED)
-			b.add_theme_color_override("icon_normal_color", UiKit.MUTED)
-		# Alpha 24 (UI round 3): the tab's D icon (the pack names them as the tabs) before its name, where it fits
-		var iw := UiKit.px(menu, 15) * 1.25
-		if UiTheme.icon(id) != null and UiKit.text_w(menu, TABS[i][1], 15, true) + iw + 30.0 <= b.size.x:
-			b.icon = UiTheme.icon(id)
-			b.expand_icon = true
-			b.add_theme_constant_override("icon_max_width", int(iw))
-			b.add_theme_constant_override("h_separation", 8)
 		b.position = Vector2(x0 + i * tw + 6.0, (h - b.size.y) / 2.0)
 		add_child(b)
 		buttons[id] = b

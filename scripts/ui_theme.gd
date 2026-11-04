@@ -9,6 +9,9 @@ extends RefCounted
 ##   icon(name)            a D / E / F icon (white, 160 px canvas) - tint it with modulate / self_modulate
 ##   theme()               one Godot Theme per mode for the plain controls a page makes (LineEdit, Panel, ScrollBar...)
 ## UiKit's colour tokens follow the mode (UiKit.apply_tokens); the HUD keeps its own colours (Alpha 24 step 2).
+## 0.23.22 (Daniele 2026-11-04: "menu interface i want it roll back and abandon light theme and all about round 3 design for
+## now"): the menus are back to their 0.23.21 code (UiKit has no tokens again, no THEME row); this layer only serves the HUD's
+## B sheet and icons and is DARK only - mode() ignores the saved / --theme choice. The light branches stay for later.
 
 const DIR := "res://assets/ui/round3/"
 const DATA := preload("res://scripts/ui_round3_data.gd")
@@ -37,10 +40,11 @@ static func match_dark(on: bool) -> void:
 	if _match_dark == on:
 		return
 	_match_dark = on
-	UiKit.apply_tokens(light())
 
 
 static func mode() -> String:
+	if true:                                       # 0.23.22: DARK only (see the header)
+		return "dark"
 	if _match_dark:
 		return "dark"
 	if _mode == "":
@@ -61,7 +65,6 @@ static func set_mode(v: String) -> bool:
 	if not v in MODES:
 		return false
 	_mode = v
-	UiKit.apply_tokens(light())                        # (a match keeps dark until it ends)
 	var c := ConfigFile.new()
 	c.load(Rules.settings_path)                        # keep the rest of [display] / [audio]
 	c.set_value("display", "theme", v)

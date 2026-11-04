@@ -11,7 +11,6 @@ signal finished
 
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const COLOURS := {"soft": Color("e08a3a"), "premium": Color("f2c14e")}
-const COLOURS_LIGHT := {"soft": Color("b85f12"), "premium": Color("a87a00")}   # Alpha 24 LIGHT: readable on the pale theme
 const EDGE := Color(0.06, 0.07, 0.08, 0.9)
 const MAX_W := 280.0
 const H := 36.0                                    # pt, under the 44 pt ceiling
@@ -100,7 +99,7 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var h := _p(H)
-	var col: Color = (COLOURS_LIGHT if UiTheme.light() else COLOURS).get(currency, UiKit.INK)
+	var col: Color = COLOURS.get(currency, Color.WHITE)
 	var bump := sin(_pop * PI) * 0.18                 # the mark pops once when the count lands
 	var c := Vector2(h * 0.5, h * 0.5)
 	var r := h * 0.42 * (1.0 + bump)

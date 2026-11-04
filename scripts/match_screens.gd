@@ -160,7 +160,7 @@ func result(d: Dictionary) -> Dictionary:
 	UiKit.add(self, UiKit.label(self, str(d.get("kicker", "")).to_upper(), 13, acc, true, 3), Vector2(x, y))
 	y += UiKit.line_h(self, 13, true) + 2.0
 	var won := bool(d.get("won", false))
-	var hcol := UiKit.INK if won else (UiKit.MUTED if bool(d.get("draw", false)) else (UiKit.WEAKER if UiTheme.light() else DEFEAT_INK))
+	var hcol := UiKit.INK if won else (UiKit.MUTED if bool(d.get("draw", false)) else DEFEAT_INK)
 	var hsize := 60.0 if ph else 68.0
 	var head := str(d.get("headline", ""))
 	while hsize > 32.0 and UiKit.text_w(self, head, hsize, true) > w:   # the syndicate's longer lines shrink to fit

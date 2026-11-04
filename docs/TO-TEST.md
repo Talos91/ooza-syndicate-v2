@@ -7,8 +7,7 @@ Live build: https://oozesyndicate.com
 
 ## 0.23.22 (staging: https://oozesyndicate.com/staging/)
 - [ ] **Neon Noir HUD** in a match on the phone, one faction at a time: top capsule + scores, SEND vats (100/75/50/25), skill hex vessels filling with charge, seconds in the ring - readable and tappable?
-- [ ] HUD stays dark in a match even with the LIGHT theme picked; LIGHT comes back on the menus after the match.
-- [ ] **Menus** now carry the round-3 look with the DARK / LIGHT switch (from Alpha 24 step 1) - every BACK / page still works?
+- [ ] **Menus look exactly like 0.23.21** (no round-3 look, no THEME row in SETTINGS); pause / results screens too.
 
 ## 0.23.21 (staging: https://oozesyndicate.com/staging/)
 - [ ] **Vat armour**: tap an upgraded vat of yours - the inspector shows "Armour x1.x"; capture one and watch it climb back ("-> x1.6 in 60 s" on a T4).
