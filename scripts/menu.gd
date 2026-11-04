@@ -3003,17 +3003,22 @@ func _icon_box(id: String, pos: Vector2, s: float, col: Color, parent: Control =
 var _skills_args := false                          # SKILLS: the screenshot arg below was read
 
 
+var _skill_tip := ""                               # SKILLS: the skill whose description popup is open ("" none)
+
+
 func show_skills(slot: String = "active") -> void:
-	if not _skills_args:                              # screenshot arg: --skills-slot=map (open on the map pool)
+	if not _skills_args:                              # screenshot args: --skills-slot=map, --skills-tip=<id>
 		_skills_args = true
-		if "--skills-slot=map" in OS.get_cmdline_user_args():
-			slot = "map"
+		for a in OS.get_cmdline_user_args():
+			if a == "--skills-slot=map":
+				slot = "map"
+			elif a.begins_with("--skills-tip="):
+				_skill_tip = a.substr(13)
 	_last_show = func(): show_skills(slot)
-	## UI (Alpha 21, screen 07): ARMIES > SKILLS - the SKILLS 2.0 pools as they were (Daniele 2026-09-28: "skills i
-	## think are better how we have them now") in the new language: the faction's fixed ultimate, then the active skills
-	## and the map skills (Rules.ACTIVE_SKILLS / MAP_SKILLS, however many; a grid that wraps); tap a card to equip it at
-	## once, a locked one to unlock it (PROGRESSION).
-	## `slot` ("active" / "map", the row that opened it) lights its pool and scrolls to it where the page scrolls.
+	## ARMIES > SKILLS (round 2c, Daniele 2026-11-04: "skill selection should show all skill in one page show skill by
+	## name + icon and if selected a popup tooltip shows description"): ONE screen, no pages. The faction's fixed
+	## ultimate as a strip, then every ACTIVE and MAP skill as an icon + name tile (rows balanced); a tap equips it (a
+	## locked one offers UNLOCK) and opens its description popup next to the tile; a tap anywhere else closes it.
 	if _army == "":
 		_army = faction
 	if not _army_back.is_valid():
@@ -3022,179 +3027,157 @@ func show_skills(slot: String = "active") -> void:
 	var acc := UiKit.accent(_army)
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
-	var top := page_title(area, "ARMIES / SKILLS  ·  " + UiKit.TAGS[_army], "PICK YOUR SKILLS.")
+	var top := area.position.y + 10.0 if shell_slim else page_title(area, "ARMIES / SKILLS  ·  " + UiKit.TAGS[_army], "PICK YOUR SKILLS.")
 	var lo := ArmyPresets.loadout_for(_army)
-	var st := stack_open(Vector2(x, top), Vector2(w, area.end.y - 12.0 - top))
-	var scroll: TouchScroll = st["scroll"]
-	_quiet_bar(scroll)
-	var before := content.get_child_count()
-	var iw := w - 14.0                                  # room for the scroll bar
-	# the ultimate: fixed by the faction (one strip)
+	var bot := area.end.y - 10.0
+	var gap := 10.0
+	var lh := UiKit.line_h(self, 13, true)
+	# the ultimate: one strip (tap: its description)
 	var ult: String = Rules.FACTION_ULTIMATE_ID[_army]
-	var ic := 44.0
-	var tx := 16.0 + ic + 16.0
-	var dw := iw - tx - 14.0
-	var kick := "ULTIMATE  ·  %s ONLY  ·  FIXED" % UiKit.NAMES[_army]
-	var charge := "  ·  ~%d s CHARGE, ENEMY KILLS SPEED IT UP" % int(Rules.ult_charge_time(ult))
-	if UiKit.text_w(self, kick + charge, 11, true) + (kick + charge).length() * 2.0 <= dw:
-		kick += charge                                  # a phone keeps the kicker short
-	var udesc := str(Rules.SKILLS[ult]["desc"])
-	var uh := maxf(UiKit.tap_h(self, 0.0), 20.0 + UiKit.line_h(self, 11, true) + UiKit.line_h(self, 16, true) + UiKit.text_h(self, udesc, 13, dw))
-	UiKit.panel(self, Vector2.ZERO, Vector2(iw, uh))
-	content.add_child(UiKit.rect(Vector2(0, 10.0), Vector2(3.0, uh - 20.0), UiKit.STAR))
-	_icon_box(ult, Vector2(16.0, (uh - ic) / 2.0), ic, UiKit.STAR)
-	var ty := 10.0
-	_shell_add(UiKit.label(self, kick, 11, UiKit.STAR, true, 2), Vector2(tx, ty))
-	ty += UiKit.line_h(self, 11, true)
-	_shell_add(UiKit.label(self, ArmyPresets.skill_name(ult).to_upper(), 16, UiKit.INK, true), Vector2(tx, ty))
-	ty += UiKit.line_h(self, 16, true)
-	var ud := UiKit.label(self, udesc, 13, UiKit.MUTED)
-	ud.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	ud.custom_minimum_size = Vector2(dw, 0)
-	_shell_add(ud, Vector2(tx, ty))
-	var y := uh + 18.0
-	var map_y := 0.0
-	var pools := [["active", "01", "ACTIVE SKILL", "combat skills, every map", Rules.ACTIVE_SKILLS],
-			["map", "02", "MAP SKILL", "network skills; relay skills need a map with relays", Rules.MAP_SKILLS]]
-	var gap := 12.0
+	var uh := UiKit.tap_h(self, 50.0)
+	var ub := UiKit.btn(self, "", Vector2(x, top), Vector2(w, uh), func(): _toggle_tip(ult, slot), "secondary", _army)
+	ub.add_child(UiKit.rect(Vector2(0, 8.0), Vector2(3.0, ub.size.y - 16.0), UiKit.STAR))
+	var uic := ub.size.y - 12.0
+	_icon_box(ult, Vector2(12.0, 6.0), uic, UiKit.STAR, ub)
+	var ut := UiKit.label(self, ArmyPresets.skill_name(ult).to_upper(), 17, UiKit.INK, true)
+	ut.position = Vector2(12.0 + uic + 14.0, (ub.size.y - UiKit.line_h(self, 17, true)) / 2.0)
+	ub.add_child(ut)
+	var uk := UiKit.label(self, "ULTIMATE  ·  %s ONLY  ·  FIXED  ·  ~%d s CHARGE" % [UiKit.NAMES[_army], int(Rules.ult_charge_time(ult))], 12, UiKit.STAR, true, 2)
+	uk.position = Vector2(ut.position.x + UiKit.text_w(self, ut.text, 17, true) + 18.0, (ub.size.y - UiKit.line_h(self, 12, true)) / 2.0)
+	ub.add_child(uk)
+	var tile_rects := {}                               # id -> its tile's rect (the popup sits next to it)
+	tile_rects[ult] = Rect2(ub.position, ub.size)
+	var y := top + ub.size.y + 12.0
+	# the pools: a heading line each, then their tiles; rows share the height left
+	var pools := [["active", "ACTIVE SKILL  ·  PICK ONE", "combat skills, every map", Rules.ACTIVE_SKILLS],
+			["map", "MAP SKILL  ·  PICK ONE", "network skills; relay skills need a map with relays", Rules.MAP_SKILLS]]
+	var min_tw := UiKit.tap_h(self, 44.0) * 2.4        # a tile keeps its name readable
+	var plan := []                                     # [pool, cols, rows]
+	var total_rows := 0
 	for pool in pools:
+		var ids: Array = pool[3]
+		var rows := 1
+		while ceili(ids.size() / float(rows)) * (min_tw + gap) - gap > w and rows < ids.size():
+			rows += 1
+		plan.append([pool, ceili(ids.size() / float(rows)), rows])
+		total_rows += rows
+	var free_h := bot - y - pools.size() * (lh + 6.0 + 10.0) - gap * (total_rows - pools.size())
+	var th := clampf(floorf(free_h / total_rows), UiKit.tap_h(self, 44.0), UiKit.tap_h(self, 44.0) * 2.2)
+	for pl in plan:
+		var pool: Array = pl[0]
 		var ps: String = pool[0]
-		if ps == "map":
-			map_y = y
-		var lit := ps == slot
-		var n := UiKit.label(self, pool[1], 18, acc if lit else UiKit.MUTED, true)
-		_shell_add(n, Vector2(0, y))
-		var hx := UiKit.text_w(self, pool[1], 18, true) + 12.0
-		var ht := UiKit.label(self, pool[2] + "  ·  PICK ONE", 16, UiKit.INK, true)
-		_shell_add(ht, Vector2(hx, y + (UiKit.line_h(self, 18, true) - UiKit.line_h(self, 16, true)) / 2.0))
-		hx += UiKit.text_w(self, pool[2] + "  ·  PICK ONE", 16, true) + 16.0
-		_shell_add(UiKit.label(self, pool[3], 13, UiKit.MUTED), Vector2(hx, y + (UiKit.line_h(self, 18, true) - UiKit.line_h(self, 13)) / 2.0))
-		y += UiKit.line_h(self, 18, true) + 8.0
-		# UI (0.22.2, ⚡ Powers: 7 active + 10 map skills): a grid that wraps - as many cards a row as keep them readable
-		# (>= 210 units on desktop, 250 on phones), rows balanced (7 = 4 + 3, 10 = 5 + 5), each row as tall as its tallest card
-		var ids: Array = pool[4]
-		var min_w := 250.0 if UiKit.pt(self) > 0.0 else 210.0
-		var fit := clampi(int((iw + gap) / (min_w + gap)), 1, maxi(1, ids.size()))
-		var rows := int(ceil(ids.size() / float(fit)))
-		var cols := int(ceil(ids.size() / float(rows)))
-		var cw := (iw - gap * (cols - 1)) / cols
-		for r in range(rows):
-			var row_ids := ids.slice(r * cols, mini((r + 1) * cols, ids.size()))
-			var ch := 0.0
-			for id in row_ids:
-				ch = maxf(ch, _skill_card_h(id, cw))
-			for i in range(row_ids.size()):
-				_skill_card(row_ids[i], ps, lo[ps] == row_ids[i], Vector2(i * (cw + gap), y), Vector2(cw, ch), scroll)
-			y += ch + gap
-		y += 20.0 - gap
-	stack_capture(st, before)
-	stack_close(st, y - 8.0)
-	if slot == "map":
-		_scroll_later(scroll, map_y - 4.0)
+		var cols: int = pl[1]
+		var ids: Array = pool[3]
+		var hx := x
+		_say(pool[1], Vector2(hx, y), 13, acc if ps == slot else UiKit.INK, 0.0, true, 2)
+		hx += UiKit.text_w(self, pool[1], 13, true) + pool[1].length() * 2.0 + 14.0
+		_say(pool[2], Vector2(hx, y), 13, UiKit.MUTED)
+		y += lh + 6.0
+		var tw := floorf((w - gap * (cols - 1)) / cols)
+		for i in range(ids.size()):
+			var id: String = ids[i]
+			var p := Vector2(x + (i % cols) * (tw + gap), y + (i / cols) * (th + gap))
+			_skill_tile(id, ps, lo[ps] == id, p, Vector2(tw, th), slot)
+			tile_rects[id] = Rect2(p, Vector2(tw, th))
+		y += pl[2] * (th + gap) - gap + 10.0
+	if _skill_tip != "" and tile_rects.has(_skill_tip):
+		_skill_popup(_skill_tip, tile_rects[_skill_tip], slot)
+	shell_raise()
 
 
-func _skill_card_h(id: String, cw: float) -> float:
-	## A pool card's height at width `cw`: the icon row, the effect line wrapped, the state line.
-	return 12.0 + maxf(40.0, _skill_head_h(id, cw)) + 8.0 + UiKit.text_h(self, ArmyPresets.line(id), 13, cw - 24.0) 			+ 8.0 + UiKit.line_h(self, 12, true) + 12.0
+func _toggle_tip(id: String, slot: String) -> void:
+	_skill_tip = "" if _skill_tip == id else id
+	show_skills(slot)
 
 
-func _relays_inline(id: String, cw: float) -> bool:
-	## NEEDS RELAYS fits on the cooldown's line (else it takes its own line under it).
-	return 64.0 + UiKit.text_w(self, "%s CD" % ArmyPresets.cd_text(id), 13, true) + 10.0 			+ UiKit.text_w(self, "NEEDS RELAYS", 11, true) + 12.0 + 12.0 <= cw
+func _skill_tile(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vector2, page_slot: String) -> void:
+	## A pool skill as a tile: its icon over its name; EQUIPPED lit in the accent with a tick, LOCKED dimmed with a lock
+	## line. A tap equips it (locked: no change) and opens its description popup.
+	var acc := UiKit.accent(_army)
+	var locked := not Progression.is_unlocked("skill:" + id)
+	var b := UiKit.btn(self, "", pos, dims, func():
+		if not locked:
+			ArmyPresets.set_pick(_army, slot, id)
+			_preset_changed()
+		_skill_tip = id
+		show_skills(page_slot), "selected" if chosen else "secondary", _army)
+	var h := b.size.y
+	var nl := UiKit.line_h(self, 14, true)
+	var ic := clampf(h - nl - 16.0, 20.0, 64.0)
+	var col := acc if chosen else (Color("6f8792") if locked else Color("c9dbe3"))
+	var top := (h - ic - nl - 4.0) / 2.0
+	_icon_box(id, Vector2((dims.x - ic) / 2.0, top), ic, col, b)
+	var nfs := 14.0
+	while nfs > 10.0 and UiKit.text_w(self, ArmyPresets.skill_name(id).to_upper(), nfs, true) > dims.x - 12.0:
+		nfs -= 1.0                                     # a long name (EMERGENCY EVAC) shrinks before it is cut
+	var nm := UiKit.label(self, ArmyPresets.skill_name(id).to_upper(), nfs, acc if chosen else (UiKit.MUTED if locked else UiKit.INK), true)
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nm.clip_text = true
+	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	nm.position = Vector2(6.0, top + ic + 4.0)
+	nm.size = Vector2(dims.x - 12.0, nl)
+	b.add_child(nm)
+	var cs := UiKit.line_h(self, 12, true) * 0.8
+	if chosen:
+		_check(b, Vector2(dims.x - cs - 8.0, 8.0), cs, acc)
+	elif locked:
+		var lk := UiKit.label(self, "LOCKED", 11, LOCK_COL, true, 1)
+		lk.position = Vector2(8.0, 6.0)
+		b.add_child(lk)
+	if Rules.SKILLS[id].get("needs_relays", false):
+		var rl := UiKit.label(self, "RELAYS", 11, UiKit.STAR, true, 1)
+		rl.position = Vector2(dims.x - UiKit.text_w(self, "RELAYS", 11, true) - 14.0, h - UiKit.line_h(self, 11, true) - 4.0)
+		b.add_child(rl)
 
 
-func _skill_stacked(cw: float) -> bool:
-	## A narrow card (phones): the name goes under the icon row instead of beside the icon.
-	for id in Rules.ACTIVE_SKILLS + Rules.MAP_SKILLS:
-		if UiKit.text_w(self, ArmyPresets.skill_name(id).to_upper(), 16, true) > cw - 64.0 - 10.0:
-			return true
-	return false
-
-
-func _skill_head_h(id: String, cw: float) -> float:
-	## The block beside the icon: name + cooldown (+ NEEDS RELAYS); stacked, the icon row and the name under it.
-	if _skill_stacked(cw):
-		return 46.0 + UiKit.line_h(self, 16, true) + (UiKit.line_h(self, 11, true) if Rules.SKILLS[id].get("needs_relays", false) else 0.0)
-	var h := UiKit.line_h(self, 16, true) + UiKit.line_h(self, 13, true)
-	if Rules.SKILLS[id].get("needs_relays", false) and not _relays_inline(id, cw):
-		h += UiKit.line_h(self, 11, true)
-	return h
-
-
-func _skill_card(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vector2, scroll: TouchScroll) -> void:
-	## One pool skill as a tap target: icon, name, cooldown (and NEEDS RELAYS), one line in shown numbers (the full
-	## sentence as its tooltip), then its state - EQUIPPED (lit in the accent), LOCKED with its price, or TAP TO EQUIP.
+func _skill_popup(id: String, at: Rect2, slot: String) -> void:
+	## The description popup beside a tile: name, cooldown / charge, NEEDS RELAYS, the full sentence, its state (UNLOCK
+	## for a locked skill). A tap outside closes it.
+	var catcher := UiKit.rect(Vector2(-safe.x, -safe.y), content.size + Vector2(safe.x + safe.z, safe.y + safe.w), Color(0, 0, 0, 0.25))
+	catcher.mouse_filter = Control.MOUSE_FILTER_STOP
+	catcher.gui_input.connect(func(e):
+		if e is InputEventMouseButton and e.pressed:
+			_skill_tip = ""
+			show_skills.call_deferred(slot))
+	content.add_child(catcher)
 	var sk: Dictionary = Rules.SKILLS[id]
 	var acc := UiKit.accent(_army)
-	var locked := not Progression.is_unlocked("skill:" + id)   # PROGRESSION: tap a locked skill to unlock it
-	var b := UiKit.btn(self, "", pos, dims, func():
-		if scroll.was_drag():
-			return
-		if locked:
+	var is_ult: bool = id == Rules.FACTION_ULTIMATE_ID[_army]
+	var locked: bool = not is_ult and not Progression.is_unlocked("skill:" + id)
+	var lo := ArmyPresets.loadout_for(_army)
+	var equipped: bool = is_ult or lo.get("active", "") == id or lo.get("map", "") == id
+	var pw := minf(content.size.x - 40.0, maxf(at.size.x * 2.2, 520.0))
+	var iw := pw - 36.0
+	var desc := str(sk["desc"])
+	var sub := ("~%d s CHARGE, ENEMY KILLS SPEED IT UP" % int(Rules.ult_charge_time(id))) if is_ult else ("%s CD" % ArmyPresets.cd_text(id))
+	if sk.get("needs_relays", false):
+		sub += "  ·  NEEDS RELAYS"
+	var state := "ULTIMATE  ·  FIXED" if is_ult else ("EQUIPPED" if equipped else ("LOCKED  ·  " + Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false) if locked else ""))
+	var bh := UiKit.tap_h(self, 44.0)
+	var ph := 16.0 + UiKit.line_h(self, 18, true) + UiKit.line_h(self, 13, true) + 8.0 + UiKit.text_h(self, desc, 14, iw) + 10.0 \
+			+ (bh if locked else UiKit.line_h(self, 13, true)) + 16.0
+	var px := clampf(at.position.x + at.size.x / 2.0 - pw / 2.0, 20.0, content.size.x - 20.0 - pw)
+	var py := at.end.y + 8.0                            # under the tile, or over it when it doesn't fit
+	if py + ph > content.size.y - 10.0:
+		py = maxf(10.0, at.position.y - 8.0 - ph)
+	var panel := UiKit.panel(self, Vector2(px, py), Vector2(pw, ph), _army, true)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var y := py + 16.0
+	_say(ArmyPresets.skill_name(id).to_upper(), Vector2(px + 18.0, y), 18, UiKit.INK, 0.0, true)
+	y += UiKit.line_h(self, 18, true)
+	_say(sub, Vector2(px + 18.0, y), 13, UiKit.STAR if is_ult else acc, 0.0, true)
+	y += UiKit.line_h(self, 13, true) + 8.0
+	y += _say(desc, Vector2(px + 18.0, y), 14, UiKit.INK, iw) + 10.0
+	if locked:
+		var ut := "UNLOCK  ·  " + Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false)
+		var uw := UiKit.text_w(self, ut, 14, true) + 40.0
+		UiKit.btn(self, ut, Vector2(px + 18.0, y), Vector2(uw, 44), func():
+			_skill_tip = ""
 			_buy_prompt("skill:" + id, ArmyPresets.skill_name(id).to_upper(),
 					"Unlocks %s for every faction's loadout. Skills are earned with SCRAP only." % ArmyPresets.skill_name(id),
-					func(): show_skills(slot))
-			return
-		ArmyPresets.set_pick(_army, slot, id)
-		_preset_changed()
-		show_skills(slot), "selected" if chosen else "secondary", _army)
-	b.tooltip_text = str(sk["desc"])
-	var ic_col := acc if chosen else (Color("6f8792") if locked else Color("c9dbe3"))
-	var hh := _skill_head_h(id, dims.x)
-	var relays: bool = sk.get("needs_relays", false)
-	var tx := 64.0
-	var nm := UiKit.label(self, ArmyPresets.skill_name(id).to_upper(), 16, UiKit.INK if not locked else UiKit.MUTED, true)
-	nm.clip_text = true
-	var cd := UiKit.label(self, "%s CD" % ArmyPresets.cd_text(id), 13, acc if chosen else UiKit.MUTED, true)
-	var nr: Label = UiKit.label(self, "NEEDS RELAYS", 11, UiKit.STAR, true, 1) if relays else null
-	if _skill_stacked(dims.x):                         # icon | cooldown - then the name (and NEEDS RELAYS), full width
-		_icon_box(id, Vector2(12.0, 12.0), 40.0, ic_col, b)
-		cd.position = Vector2(tx, 12.0 + (40.0 - UiKit.line_h(self, 13, true)) / 2.0)
-		nm.position = Vector2(12.0, 12.0 + 46.0)
-		nm.size = Vector2(dims.x - 22.0, UiKit.line_h(self, 16, true))
-		if relays:
-			nr.position = nm.position + Vector2(0, UiKit.line_h(self, 16, true))
-	else:
-		_icon_box(id, Vector2(12.0, 12.0 + (maxf(40.0, hh) - 40.0) / 2.0), 40.0, ic_col, b)
-		var y0 := 12.0 + (maxf(40.0, hh) - hh) / 2.0
-		nm.position = Vector2(tx, y0)
-		nm.size = Vector2(dims.x - tx - 10.0, UiKit.line_h(self, 16, true))
-		cd.position = Vector2(tx, y0 + UiKit.line_h(self, 16, true))
-		if relays:
-			if _relays_inline(id, dims.x):
-				nr.position = cd.position + Vector2(UiKit.text_w(self, cd.text, 13, true) + 10.0,
-						(UiKit.line_h(self, 13, true) - UiKit.line_h(self, 11, true)) / 2.0)
-			else:
-				nr.position = cd.position + Vector2(0, UiKit.line_h(self, 13, true))
-	b.add_child(nm)
-	b.add_child(cd)
-	if relays:
-		b.add_child(nr)
-	var y := 12.0 + maxf(40.0, hh) + 8.0
-	var d := UiKit.label(self, ArmyPresets.line(id), 13, UiKit.MUTED)
-	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	d.position = Vector2(12.0, y)
-	d.custom_minimum_size = Vector2(dims.x - 24.0, 0)
-	d.size = Vector2(dims.x - 24.0, 0)
-	b.add_child(d)
-	var sy := dims.y - 12.0 - UiKit.line_h(self, 12, true)
-	var sx := 12.0
-	var state := "TAP TO EQUIP"
-	var scol := UiKit.DIM
-	if chosen:
-		state = "EQUIPPED"
-		scol = acc
-		var cs := UiKit.line_h(self, 12, true) * 0.75
-		_check(b, Vector2(sx, sy + (UiKit.line_h(self, 12, true) - cs) / 2.0), cs, acc)
-		sx += cs + 6.0
-	elif locked:
-		state = "LOCKED  ·  " + Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false)
-		scol = LOCK_COL
-	var s := UiKit.label(self, state, 12, scol, true, 1)
-	s.position = Vector2(sx, sy)
-	s.clip_text = true
-	s.size = Vector2(dims.x - sx - 12.0, UiKit.line_h(self, 12, true))
-	b.add_child(s)
+					func(): show_skills(slot)), "primary", _army, 14)
+	elif state != "":
+		_say(state, Vector2(px + 18.0, y), 13, acc, 0.0, true, 2)
 
 
 func _check(parent: Control, pos: Vector2, s: float, col: Color) -> void:
@@ -4812,10 +4795,8 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 			state = "AWAY"
 			state_col = UiKit.STAR
 		elif Net.is_ready(id):
-			state = "✓ READY"
+			state = "✓"                                 # (not ready = no tick; the foot counts who the room waits for)
 			state_col = col
-		else:
-			state = "NOT READY"
 	else:
 		var box := Panel.new()
 		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -4834,18 +4815,34 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 			state_col = UiKit.accent(shell_f)
 	var right := b.size.x - 10.0
 	if state != "":
-		var sw := UiKit.text_w(self, state, fs, true)
-		var st := UiKit.label(self, state, fs, state_col, true)
-		st.position = Vector2(right - sw, (h - UiKit.line_h(self, fs, true)) / 2.0)
+		var sfs := fl * 1.2 if state == "✓" else fs       # the READY tick reads at a glance
+		var sw := UiKit.text_w(self, state, sfs, true)
+		var st := UiKit.label(self, state, sfs, state_col, true)
+		st.position = Vector2(right - sw, (h - UiKit.line_h(self, sfs, true)) / 2.0)
 		b.add_child(st)
 		right -= sw + 8.0
 	var nx := tx + ts + 8.0
+	var ic := clampf(h * 0.28, 20.0, 46.0)               # ROUND 2c (Daniele): the player's skills as small icons by the name
+	var two := id >= 0 and h >= UiKit.line_h(self, fn, true) + ic + 18.0   # a tall chip: name over the icons
+	var lo_w := 3.0 * ic + 2.0 * 6.0 + 10.0 if (id >= 0 and not two) else 0.0
+	if lo_w > 0.0 and right - nx - lo_w < UiKit.text_w(self, name_t, fn, true) * 0.6:
+		lo_w = 0.0                                     # a short one-line chip: the name wins, the icons wait for the seat sheet
+	var nw := minf(UiKit.text_w(self, name_t, fn, true) + 4.0, maxf(10.0, right - nx - lo_w))
+	var ny := (h - UiKit.line_h(self, fn, true)) / 2.0
+	if two:
+		ny = (h - UiKit.line_h(self, fn, true) - ic - 6.0) / 2.0
 	var nl := UiKit.label(self, name_t, fn, UiKit.INK if id >= 0 else UiKit.MUTED, true)
 	nl.clip_text = true
 	nl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	nl.position = Vector2(nx, (h - UiKit.line_h(self, fn, true)) / 2.0)
-	nl.size = Vector2(maxf(10.0, right - nx), UiKit.line_h(self, fn, true))
+	nl.position = Vector2(nx, ny)
+	nl.size = Vector2(maxf(10.0, nw), UiKit.line_h(self, fn, true))
 	b.add_child(nl)
+	if id >= 0 and (two or lo_w > 0.0):
+		var lo = Net.roster[id].get("loadout", {})
+		if two:
+			_loadout_chips(b, str(Net.roster[id]["faction"]), lo if lo is Dictionary else {}, nx + 3.0 * ic + 12.0, ny + UiKit.line_h(self, fn, true) + 6.0 + ic / 2.0, ic)
+		else:
+			_loadout_chips(b, str(Net.roster[id]["faction"]), lo if lo is Dictionary else {}, nx + nw + lo_w, h / 2.0, ic)
 
 
 func _open_lobby_sheet(which: String) -> void:
