@@ -752,24 +752,23 @@ func show_main() -> void:
 	var bh := UiKit.tap_h(self, 46.0)
 	var th := pad + UiKit.line_h(self, 12, true) + 4.0 + UiKit.line_h(self, 16, true) + UiKit.line_h(self, 13) + 10.0 + bh + pad
 	var ty := area.end.y - th - 10.0
-	var fr := [0.25, 0.22, 0.16, 0.37]
-	var avail := w - gap * (fr.size() - 1)
+	# Daniele 2026-11-04: no CAMPAIGN tile (the tab has it); everything on the left, the hero's art free on the right
+	var fr := [0.31, 0.21, 0.48]
+	var avail := minf(w * 0.64, 900.0) - gap * (fr.size() - 1)
 	var tiles := []
 	var tx := x
 	for k in fr:
 		tiles.append(Rect2(tx, ty, floorf(avail * k), th))
 		tx += floorf(avail * k) + gap
 	_home_online(tiles[0], pad, bh)
-	_home_campaign(tiles[1], pad, bh)
-	_home_learn(tiles[2], pad)
-	_home_play(tiles[3], pad, bh)
-	# the headline over the tiles; CHALLENGES top right
+	_home_learn(tiles[1], pad)
+	_home_play(tiles[2], pad, bh)
+	# the headline over the tiles, CHALLENGES under it (all on the left)
 	var ready_n := Progression.claimable()
 	var ct := "CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else "")
 	var cw := UiKit.text_w(self, ct, 15, true) + 44.0
-	var cb := UiKit.btn(self, ct, Vector2(content.size.x - cw - x, area.position.y + 12.0), Vector2(cw, 42),
-			show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
-	var free := ty - area.position.y - 12.0
+	var chh := UiKit.tap_h(self, 42.0)
+	var free := ty - area.position.y - 12.0 - chh - 10.0
 	var hx := x + 8.0
 	var hy := area.position.y + 12.0
 	var sizes := [[44.0, "THE CITY IS\nYOURS TO TAKE."], [32.0, "THE CITY IS\nYOURS TO TAKE."], [26.0, "THE CITY IS YOURS TO TAKE."]]
@@ -783,7 +782,8 @@ func show_main() -> void:
 				_shell_add(UiKit.label(self, st[1], st[0], UiKit.INK, true), Vector2(hx - 3.0, hy))
 				hy += UiKit.line_h(self, st[0], true) * lines + 6.0
 			break
-	# FULLSCREEN (QUIT on desktop) and the version, under CHALLENGES
+	var cb := UiKit.btn(self, ct, Vector2(hx, hy + 4.0), Vector2(cw, 42), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
+	# FULLSCREEN (QUIT on desktop) and the version, beside CHALLENGES
 	var fh := UiKit.tap_h(self, 36.0)
 	var fb := UiKit.flat_button(self, "FULLSCREEN" if OS.has_feature("web") else "QUIT", 13, UiKit.MUTED)
 	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 20.0, fh)
@@ -794,16 +794,16 @@ func show_main() -> void:
 			get_tree().quit())
 	var ver := UiKit.label(self, Rules.version_label(), 12, UiKit.DIM)
 	var vw := UiKit.text_w(self, Rules.version_label(), 12)
-	var fy := hy + 2.0
-	if fy + fh <= ty - 4.0:
-		_shell_add(fb, Vector2(hx - 10.0, fy))
-		_shell_add(ver, Vector2(hx + fb.size.x, fy + (fh - ver.get_minimum_size().y) / 2.0))
+	var fy := cb.position.y + (cb.size.y - fh) / 2.0
+	if cb.position.x + cw + 12.0 + fb.size.x + vw <= x + avail + gap * 2.0:
+		_shell_add(fb, Vector2(cb.position.x + cw + 12.0, fy))
+		_shell_add(ver, Vector2(cb.position.x + cw + 12.0 + fb.size.x, fy + (fh - ver.get_minimum_size().y) / 2.0))
 	else:
 		fb.free()
 		ver.free()
 	shell_raise()
-	if _install_available() and cb.position.y + cb.size.y + 56.0 <= ty:
-		_install_button(Vector2(content.size.x - 300.0 - x, cb.position.y + cb.size.y + 8.0))
+	if _install_available():
+		_install_button(Vector2(content.size.x - 300.0 - x, area.position.y + 12.0))
 	if _install_guide_open:
 		_install_guide_panel()
 	if _join_open:
@@ -850,19 +850,6 @@ func _home_online(r: Rect2, pad: float, bh: float) -> void:
 	jb.disabled = not web
 	if not web:
 		hb.tooltip_text = "Online rooms run in the browser build"
-
-
-func _home_campaign(r: Rect2, pad: float, bh: float) -> void:
-	var cf := _hub_faction()
-	var key := Campaign.next_open(cf) if cf != "" else ""
-	var title := "ALL MISSIONS DONE"
-	if key != "":
-		var m := Campaign.mission(key)
-		title = "%s  %s" % [str(m.get("id", "")), str(m.get("title", ""))]
-	var sub := "%s  ·  ★ %d / %d" % [str(UiKit.NAMES.get(cf, "")), Campaign.stars_total(cf), Campaign.stars_max(cf)] if cf != "" else ""
-	var by := _home_tile(r, pad, "CAMPAIGN", title, sub)
-	UiKit.btn(self, "CONTINUE  →", Vector2(r.position.x + pad, by), Vector2(r.size.x - pad * 2.0, 46),
-			func(): show_campaign.call_deferred(), "secondary", faction, 14)
 
 
 func _home_learn(r: Rect2, pad: float) -> void:
@@ -1684,7 +1671,7 @@ func _column(pos: Vector2, dims: Vector2, selected := false) -> Dictionary:
 	bar.add_theme_stylebox_override("scroll", track)
 	for k in ["grabber", "grabber_highlight", "grabber_pressed"]:
 		bar.add_theme_stylebox_override(k, grab)
-	col["w"] = dims.x - 44.0
+	col["w"] = dims.x - 34.0 - UiKit.tap_h(self, 40.0)   # PAGES: the rows leave the pager's column free
 	return col
 
 
@@ -3731,8 +3718,13 @@ func show_maps() -> void:
 				else ("No recent maps yet." if _map_list == "recent" else "No map matches these filters."), 18, UiKit.MUTED), Vector2(x + 4.0, gy + 20.0))
 	var gap := 12.0
 	var cols := clampi(int((w + gap) / (270.0 + gap)), 3, 6)
-	var cw := floorf((w - 16.0 - gap * (cols - 1)) / cols)    # 16: the scroll bar's lane
 	var cap_h := UiKit.line_h(self, 13, true) + 12.0
+	var view_h := scroll.size.y                       # a page: the grid's height (the pager is a column at its right)
+	w -= UiKit.tap_h(self, 40.0) + 8.0
+	var cw := floorf((w - gap * (cols - 1)) / cols)
+	while cols < 8 and 2.0 * (6.0 + floorf((cw - 12.0) * 9.0 / 16.0) + cap_h) + gap > view_h:
+		cols += 1                                      # PAGES (Daniele 2026-11-04): two rows of maps on every page
+		cw = floorf((w - gap * (cols - 1)) / cols)
 	var thumb := Vector2(cw - 12.0, floorf((cw - 12.0) * 9.0 / 16.0))
 	var card := Vector2(cw, 6.0 + thumb.y + cap_h)
 	var grid := GridContainer.new()
