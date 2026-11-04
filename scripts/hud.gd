@@ -2472,10 +2472,17 @@ func _build_end() -> void:
 		where = "ROOM %s · %s" % [Net.room_code, where]
 	var primary := []
 	var quiet := []
-	if not main.online:                                # CONTINUE opens PLAY; RETRY replays this map as it was
-		primary = ["CONTINUE  →", func(): main.to_menu("play")] if won else ["RETRY  →", main.restart]
-		quiet = [["REMATCH · RANDOM MAP", main.rematch_random], ["CHANGE LOADOUT", func(): main.to_menu("armies")],
-				["HOME", main.to_menu]]
+	if not main.online:                                # UX pass (board 07): PLAY AGAIN = the same setup, one tap
+		primary = ["PLAY AGAIN  →", main.restart]
+		quiet = [["HOME", main.to_menu], ["CHANGE SETUP", func(): main.to_menu("setup")], ["NEW MAP", main.rematch_random]]
+		var lv: Array = Rules.AI_LEVELS.keys()
+		var li := lv.find(main.ai_level)
+		if not won and not draw and li > 1 and main.mode == "1v1":   # a loss above CASUAL: one tap to an easier AI
+			var easier: String = lv[li - 1]
+			quiet.append(["TRY %s AI" % easier.to_upper(), func():
+				main.ai_level = easier
+				UiKit.save_last_setup({"ai": easier})
+				main.restart()])
 	if _end_page == "details":
 		s.details({"name": str(main.map.get("name", "")), "sub": where, "outcome": outcome, "primary": primary,
 				"back": func():
