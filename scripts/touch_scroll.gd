@@ -119,7 +119,8 @@ func _layout() -> void:
 		page = 0
 		_show()
 		return
-	_side = not horizontal and _full_w >= ph * 5.0  # a wide list: the pager is a column at its right (the height stays whole)
+	_side = false                                  # ROUND 2b (Daniele 2026-11-04: "up and down arrows should be gone"): the pager is
+	                                               # always ‹ n / N › under the list, never a ▲ / ▼ column
 	var view := _full if (_side or horizontal) else _full - ph - 6.0   # a narrow rail: the pager under it
 	_set_len(view)
 	size.x = _full_w - ph - 8.0 if _side else (_full_w if not horizontal else size.x)

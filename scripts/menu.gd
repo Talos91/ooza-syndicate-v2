@@ -64,6 +64,7 @@ func telemetry_page_name() -> String:
 	## The page the menu shows, for the menu perf sample ("home", "faction", "settings"; an old-style page's _page).
 	return _tele_page if _tele_page != "" else _page
 var _map_scroll := 0
+var _map_page := -1                                # MAP PICKER: the open page of 10 (-1: the picked map's page)
 # map filters on 02 BATTLEFIELD (Daniele, 0.18.6: "add in game filters for maps like 1v1 2v2 ffa etc"): players
 # (a mode the map offers) and type (the map's group); static, so they survive a trip through the match
 static var map_filter_mode := "all"
@@ -683,6 +684,7 @@ func _open_maps() -> void:
 		map_filter_mode = "all" if Net.in_room() else mode
 		_map_list = ""
 		_map_scroll = 0
+		_map_page = -1
 		show_maps())
 
 
@@ -1671,7 +1673,7 @@ func _column(pos: Vector2, dims: Vector2, selected := false) -> Dictionary:
 	bar.add_theme_stylebox_override("scroll", track)
 	for k in ["grabber", "grabber_highlight", "grabber_pressed"]:
 		bar.add_theme_stylebox_override(k, grab)
-	col["w"] = dims.x - 34.0 - UiKit.tap_h(self, 40.0)   # PAGES: the rows leave the pager's column free
+	col["w"] = dims.x - 34.0                           # (the pager is a strip under the column, ROUND 2b)
 	return col
 
 
@@ -3606,10 +3608,9 @@ func _ward_looks(pos: Vector2, dims: Vector2, cat: String, looks: Array, sel: St
 
 
 func show_maps() -> void:
-	## MAP PICKER (round 2, Daniele 2026-11-04: tabs, never a scroll or a pager): row 1 = a tab per mode with its map
-	## count, then ★ FAVOURITES / RECENT tabs and RANDOM; row 2 = size tabs, only when the mode has more maps than one
-	## screen holds; the grid's cards are sized so every map of the open tab shows at once. A tap picks (lit), the foot
-	## names it, ☆ keeps it, CHOOSE takes it back to MATCH SETUP (or the room).
+	## MAP PICKER (round 2, Daniele 2026-11-04: never a scroll): a tab per mode with its map count, ★ FAVOURITES /
+	## RECENT tabs and RANDOM; the grid is always 2 rows of 5 big cards, more maps = pages turned by ‹ n / N › beside
+	## CHOOSE. A tap picks (lit), the foot names it, ☆ keeps it, CHOOSE takes it back to MATCH SETUP (or the room).
 	_last_show = show_maps                  # a resize that changes the phone sizing rebuilds it (_fit)
 	var room_host := Net.in_room() and Net.can_control()
 	if Net.in_room():
@@ -3620,40 +3621,17 @@ func show_maps() -> void:
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
 	var y := area.position.y + 10.0 if shell_slim else page_title(area, "MATCH SETUP / MAP", "CHOOSE YOUR CROSSING.")
-	var th := UiKit.tap_h(self, 40.0)
+	var th := UiKit.tap_h(self, 50.0)
 	var gap := 10.0
 	# the foot first (its height bounds the grid): the picked map, ☆, CHOOSE
 	var bh := UiKit.tap_h(self, 48.0)
 	var foot_h := bh
 	var fy := area.end.y - foot_h - 10.0
 	var cap_h := UiKit.line_h(self, 13, true) + 10.0
-	var grid_top := y + th + 8.0
-	var grid_h0 := fy - 10.0 - grid_top
-	# cards that fit: the fewest columns whose rows all fit the grid's height
-	var fit := func(n: int, gh: float) -> Array:
-		for cols in range(4, 10):
-			var cw := floorf((w - gap * (cols - 1)) / cols)
-			var card_h := 6.0 + floorf((cw - 12.0) * 9.0 / 16.0) + cap_h
-			var rows := ceili(n / float(cols))
-			if rows * card_h + (rows - 1) * gap <= gh:
-				return [cols, cw, card_h]
-		return []
 	# what the open tab holds
 	var by_mode := func(md: String) -> Array:
 		return maps.filter(func(e): return md in _modes_of(e["data"]) and (not Net.in_room() or e["path"] in Net.maps_for(Net.mode)))
-	var mode_maps: Array = by_mode.call(map_filter_mode)
-	var sizes := []                                    # the size tabs (only when the mode's maps need them)
-	var grid_h := grid_h0
-	if _map_list == "" and (fit.call(mode_maps.size(), grid_h0) as Array).is_empty():
-		for t in ["xs", "s", "m", "l", "none"]:
-			if mode_maps.any(func(e): return _size_key(e["data"]) == t):
-				sizes.append(t)
-		grid_h -= th + 8.0
-		if not map_filter_type in sizes:               # open on the picked map's size
-			var cur := mode_maps.filter(func(e): return e["path"] == map_path)
-			map_filter_type = _size_key(cur[0]["data"]) if not cur.is_empty() else str(sizes[0])
-	else:
-		map_filter_type = "all"
+	map_filter_type = "all"                            # ROUND 2b: no size tabs - 2 x 5 pages instead (Daniele)
 	var shown := _filtered_maps()
 	if not shown.is_empty() and not shown.any(func(e): return e["path"] == map_path):
 		map_path = shown[0]["path"]                    # a tab without the picked map: pick its first
@@ -3661,18 +3639,20 @@ func show_maps() -> void:
 		mode = map_filter_mode                         # a mode tab sets up that mode
 	# row 1: mode tabs | ★ FAVOURITES  RECENT  RANDOM
 	var rnd_w := UiKit.text_w(self, "RANDOM", 14, true) + 32.0
-	var rnd := UiKit.btn(self, "RANDOM", Vector2(x + w - rnd_w, y), Vector2(rnd_w, 40), func():
+	var rnd := UiKit.btn(self, "RANDOM", Vector2(x + w - rnd_w, y), Vector2(rnd_w, 50), func():
 		var pool := _filtered_maps()
 		if not pool.is_empty():
 			map_path = pool[randi() % pool.size()]["path"]
+		_map_page = -1
 		show_maps(), "secondary", faction, 14)
 	var rx := rnd.position.x - 8.0
 	for li in [["recent", "RECENT"], ["favourites", "★ %d" % UiKit.map_list("favourites").size()]]:
 		var lk: String = li[0]
 		var lw := UiKit.text_w(self, li[1], 14, true) + 32.0
 		rx -= lw
-		UiKit.btn(self, li[1], Vector2(rx, y), Vector2(lw, 40), func():
+		UiKit.btn(self, li[1], Vector2(rx, y), Vector2(lw, 50), func():
 			_map_list = "" if _map_list == lk else lk
+			_map_page = 0
 			show_maps(), "selected" if _map_list == lk else "secondary", faction, 14)
 		rx -= 8.0
 	var cx := x
@@ -3681,40 +3661,29 @@ func show_maps() -> void:
 		var n: int = (by_mode.call(md_now) as Array).size()
 		var text := "%s  %d" % [MODE_NAMES.get(md, md), n]
 		var tw := UiKit.text_w(self, text, 14, true) + 30.0
-		var tb := UiKit.btn(self, text, Vector2(cx, y), Vector2(tw, 40), func():
+		var tb := UiKit.btn(self, text, Vector2(cx, y), Vector2(tw, 50), func():
 			map_filter_mode = md_now
 			map_filter_type = "all"
 			_map_list = ""
+			_map_page = 0
 			show_maps(), "selected" if (md == map_filter_mode and _map_list == "") else "secondary", faction, 14)
 		tb.disabled = n == 0 or (Net.in_room() and md != Net.mode)
 		cx += tw + 6.0
 	y += th + 8.0
-	# row 2: size tabs
-	if not sizes.is_empty():
-		var sx := x
-		for t in sizes:
-			var t_now: String = t
-			var n: int = mode_maps.filter(func(e): return _size_key(e["data"]) == t_now).size()
-			var text := "%s  %d" % [MAP_TYPE_NAMES.get(t, "OTHER"), n]
-			var sw := UiKit.text_w(self, text, 13, true) + 28.0
-			UiKit.btn(self, text, Vector2(sx, y), Vector2(sw, 40), func():
-				map_filter_type = t_now
-				show_maps(), "selected" if t == map_filter_type else "secondary", faction, 13)
-			sx += sw + 6.0
-		y += th + 8.0
-	# the grid
-	var shape: Array = fit.call(shown.size(), fy - 10.0 - y)
-	var more := 0
-	if shape.is_empty():                               # still too many (a long favourites list): the first screenful
-		shape = [9, floorf((w - gap * 8.0) / 9.0), 0.0]
-		shape[2] = 6.0 + floorf((float(shape[1]) - 12.0) * 9.0 / 16.0) + cap_h
-		var rows := maxi(1, int((fy - 10.0 - y + gap) / (float(shape[2]) + gap)))
-		more = shown.size() - rows * 9
-		shown = shown.slice(0, rows * 9)
-	var cols: int = shape[0]
-	var cw: float = shape[1]
-	var card := Vector2(cw, float(shape[2]))
+	# the grid: always 2 rows of 5 (Daniele 2026-11-04); more maps = pages, ‹ › beside CHOOSE
+	var cols := 5
+	var per := 10
+	var pages := maxi(1, ceili(shown.size() / float(per)))
+	var sel_i := shown.map(func(e): return e["path"]).find(map_path)
+	if _map_page < 0:                                  # opening: the page with the picked map
+		_map_page = maxi(0, sel_i) / per
+	_map_page = clampi(_map_page, 0, pages - 1)
+	var total := shown.size()
+	shown = shown.slice(_map_page * per, _map_page * per + per)
+	var cw := floorf((w - gap * (cols - 1)) / cols)
+	var card := Vector2(cw, floorf((fy - 10.0 - y - gap) / 2.0))
 	var thumb := Vector2(cw - 12.0, card.y - 6.0 - cap_h)
+	var cap_fs := 13.0 if cw < 300.0 else 16.0
 	if shown.is_empty():
 		_shell_add(UiKit.label(self, "No favourite maps yet: tap ☆ on a map to keep it here." if _map_list == "favourites"
 				else ("No recent maps yet." if _map_list == "recent" else "No map matches."), 18, UiKit.MUTED), Vector2(x + 4.0, y + 20.0))
@@ -3740,11 +3709,11 @@ func show_maps() -> void:
 		tex.position = Vector2(6, 6)
 		tex.size = thumb
 		b.add_child(tex)
-		var cap := UiKit.label(self, str(m.get("name", "")).replace("*", "").to_upper(), 13, UiKit.accent(faction) if picked else UiKit.INK, true)
+		var cap := UiKit.label(self, str(m.get("name", "")).replace("*", "").to_upper(), cap_fs, UiKit.accent(faction) if picked else UiKit.INK, true)
 		cap.clip_text = true
 		cap.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		cap.position = Vector2(8, 6.0 + thumb.y + (cap_h - UiKit.line_h(self, 13, true)) / 2.0)
-		cap.size = Vector2(cw - 16.0, UiKit.line_h(self, 13, true))
+		cap.position = Vector2(8, 6.0 + thumb.y + (cap_h - UiKit.line_h(self, cap_fs, true)) / 2.0)
+		cap.size = Vector2(cw - 16.0, UiKit.line_h(self, cap_fs, true))
 		b.add_child(cap)
 	# the foot: the picked map, ☆, CHOOSE
 	var sel := _selected_map()
@@ -3762,13 +3731,27 @@ func show_maps() -> void:
 		UiKit.save_map_list("favourites", fl)
 		show_maps(), "selected" if is_fav else "secondary", faction, 20)
 	fvb.tooltip_text = "FAVOURITE"
+	var arrows_w := 0.0
+	if pages > 1:
+		var aw := UiKit.tap_h(self, 48.0)
+		var px := fvb.position.x - 10.0
+		var nx_b := UiKit.btn(self, "›", Vector2(px - aw, fy), Vector2(aw, 48), func():
+			_map_page += 1
+			show_maps(), "secondary", faction, 24)
+		nx_b.disabled = _map_page >= pages - 1
+		var pt := "%d / %d" % [_map_page + 1, pages]
+		var ptw := UiKit.text_w(self, pt, 15, true) + 16.0
+		_say(pt, Vector2(nx_b.position.x - ptw + 8.0, fy + (bh - UiKit.line_h(self, 15, true)) / 2.0), 15, UiKit.MUTED, 0.0, true)
+		var pv_b := UiKit.btn(self, "‹", Vector2(nx_b.position.x - ptw - aw, fy), Vector2(aw, 48), func():
+			_map_page -= 1
+			show_maps(), "secondary", faction, 24)
+		pv_b.disabled = _map_page <= 0
+		arrows_w = fvb.position.x - pv_b.position.x
 	var detail := "%s  ·  %d NODES%s" % [" · ".join(_modes_of(sel).map(func(v): return MODE_NAMES.get(v, v))), sel["nodes"].size(),
 			_relay_kinds(sel).replace("    /    ", "  ·  ")]
-	if more > 0:
-		detail += "  ·  +%d MORE: UN-STAR SOME" % more
 	if room_host:
 		detail += "  ·  THE ROOM SEES IT AFTER CHOOSE"
-	var iw := w - nw - bgw - 30.0
+	var iw := w - nw - bgw - 30.0 - arrows_w
 	var l1 := UiKit.line_h(self, 18, true)
 	var l2 := UiKit.line_h(self, 13)
 	var iy := fy + (bh - l1 - l2) / 2.0
@@ -4269,19 +4252,19 @@ func _setup_faction(pos: Vector2, dims: Vector2) -> void:
 		ly += l.size.y
 
 
-func _faction_picks(seat: String, pos: Vector2, width: float, back: Callable) -> float:
+func _faction_picks(seat: String, pos: Vector2, width: float, back: Callable, size := 0.0) -> float:
 	## An AI seat's faction pick (0.19.2 spec H3: one per enemy seat): ANY (drawn when you deploy) or one of the five -
 	## the characters, the picked one lit. Returns the row's height.
 	var pick := str(rival_picks.get(seat, "random"))
-	var s := UiKit.tap_h(self, 50.0)
+	var s := maxf(UiKit.tap_h(self, 50.0), size)
 	var aw := UiKit.text_w(self, "ANY", 14, true) + 36.0
 	var gap := clampf((width - aw - s * 5.0) / 5.0, 4.0, 10.0)
-	UiKit.btn(self, "ANY", pos, Vector2(aw, 50), func():
+	UiKit.btn(self, "ANY", pos, Vector2(aw, s), func():
 		rival_picks[seat] = "random"
 		back.call(), "selected" if pick == "random" else "secondary", faction, 14).tooltip_text = "ANY FACTION"
 	for i in range(FACTIONS.size()):
 		var f: String = FACTIONS[i]
-		var b := UiKit.btn(self, "", pos + Vector2(aw + gap + i * (s + gap), 0), Vector2(s, 50), func():
+		var b := UiKit.btn(self, "", pos + Vector2(aw + gap + i * (s + gap), 0), Vector2(s, s), func():
 			rival_picks[seat] = f
 			back.call(), "selected" if pick == f else "secondary", f)
 		b.tooltip_text = UiKit.NAMES[f]
@@ -4373,7 +4356,9 @@ func show_seats() -> void:
 	var kl := UiKit.line_h(self, 12, true)
 	var rows := ceili(cells.size() / 2.0)
 	var avail := fy - 10.0 - y
-	var card_h := minf(10.0 + kl + 6.0 + ph + 10.0, floorf((avail - gap * (rows - 1)) / rows))
+	var card_h := floorf((avail - gap * (rows - 1)) / rows)                 # ROUND 2b: the cards fill the page
+	var aw0 := UiKit.text_w(self, "ANY", 14, true) + 36.0
+	ph = clampf(minf(card_h - kl - 6.0 - 20.0, (cw - 28.0 - aw0 - 50.0) / 5.0), ph, ph * 1.8)   # bigger faction picks
 	var pad_y := maxf(4.0, (card_h - kl - 6.0 - ph) / 2.0)
 	for i in range(cells.size()):
 		var s: String = cells[i]
@@ -4396,11 +4381,11 @@ func show_seats() -> void:
 			var chw := UiKit.text_w(self, ct, 14, true) + 34.0
 			var nx := 14.0 + ph + 10.0 + nl + 6.0
 			_clip(str(UiKit.TAGS[faction]), Vector2(p.x + nx, ry + (ph - nl) / 2.0), 15, UiKit.INK, cw - nx - chw - 24.0, true)
-			UiKit.btn(self, ct, Vector2(p.x + cw - 14.0 - chw, ry), Vector2(chw, 50), func():
+			UiKit.btn(self, ct, Vector2(p.x + cw - 14.0 - chw, ry), Vector2(chw, ph), func():
 				_draft = {}
 				_pick(show_factions), "tertiary", faction, 14)
 		else:
-			_faction_picks(s, Vector2(p.x + 14.0, ry), cw - 28.0, show_seats)
+			_faction_picks(s, Vector2(p.x + 14.0, ry), cw - 28.0, show_seats, ph)
 	shell_raise()
 
 
@@ -4570,7 +4555,7 @@ func show_lobby() -> void:
 	var lw := floorf((content.size.x - x * 2.0 - gap) * 0.44)
 	var rx0 := x + lw + gap
 	var rw := content.size.x - x - rx0
-	var rowh := UiKit.tap_h(self, 44.0)
+	var rowh := UiKit.tap_h(self, 54.0)               # ROUND 2b (Daniele: "use the empty space"): bigger rows on phones
 	var locked := Net.ready_locked() or Net.active
 	var pad := 12.0
 	var rows_y := bot - rowh
@@ -4585,14 +4570,14 @@ func show_lobby() -> void:
 	var code := Net.room_code if Net.room_code != "" else "····"
 	var kick_w := UiKit.text_w(self, "CODE", 12, true) + 16.0
 	_say("CODE", Vector2(x, y + (rowh - UiKit.line_h(self, 12, true)) / 2.0), 12, UiKit.MUTED, 0.0, true, 3)
-	_say(code, Vector2(x + kick_w, y + (rowh - UiKit.line_h(self, 30, true)) / 2.0), 30, acc, 0.0, true, 6)
+	_say(code, Vector2(x + kick_w, y + (rowh - UiKit.line_h(self, 34, true)) / 2.0), 34, acc, 0.0, true, 6)
 	var chat_t := "CHAT (%d)" % Net.chat_unread() if Net.chat_unread() > 0 else "CHAT"
 	var chw := UiKit.text_w(self, "CHAT (99)", 14, true) + 30.0
-	var chat := UiKit.btn(self, chat_t, Vector2(x + lw - chw, y), Vector2(chw, 44), Net.open_chat, "secondary", shell_f, 14)
+	var chat := UiKit.btn(self, chat_t, Vector2(x + lw - chw, y), Vector2(chw, 54), Net.open_chat, "secondary", shell_f, 14)
 	chat.disabled = not Net.connected
 	_chat_btn = chat
 	var shw := UiKit.text_w(self, "SHARE", 14, true) + 30.0
-	var share := UiKit.btn(self, "SHARE", Vector2(chat.position.x - 8.0 - shw, y), Vector2(shw, 44), _share_code, "secondary", shell_f, 14)
+	var share := UiKit.btn(self, "SHARE", Vector2(chat.position.x - 8.0 - shw, y), Vector2(shw, 54), _share_code, "secondary", shell_f, 14)
 	share.disabled = Net.room_code == ""
 	y += rowh + 8.0
 	# LEFT: the map - its name, CHANGE MAP (host), the picture
@@ -4600,7 +4585,7 @@ func show_lobby() -> void:
 	if host:
 		var cmw := UiKit.text_w(self, "CHANGE MAP", 14, true) + 30.0
 		_clip(mname, Vector2(x, y + (rowh - UiKit.line_h(self, 17, true)) / 2.0), 17, UiKit.INK, lw - cmw - 10.0, true)
-		UiKit.btn(self, "CHANGE MAP", Vector2(x + lw - cmw, y), Vector2(cmw, 44), _open_maps, "tertiary", shell_f, 14)
+		UiKit.btn(self, "CHANGE MAP", Vector2(x + lw - cmw, y), Vector2(cmw, 54), _open_maps, "tertiary", shell_f, 14)
 		y += rowh + 6.0
 	else:
 		_clip(mname + "  ·  THE HOST PICKS", Vector2(x, y), 17, UiKit.INK, lw, true)
@@ -4648,19 +4633,22 @@ func show_lobby() -> void:
 			_say("TEAM %d%s" % [gi + 1, "  ·  YOURS" if mine else ""], Vector2(cx, sy), 13, UiKit.INK if mine else UiKit.MUTED, 0.0, true, 2)
 			content.add_child(UiKit.rect(Vector2(cx, sy + lh + 2.0), Vector2(cw, 3), hue))
 			var cy := sy + lh + 10.0
-			var chh := minf(rowh, floorf((seat_bot - cy - cgap * ((g[1] as Array).size() - 1)) / maxf(1.0, (g[1] as Array).size())))
+			var ns := maxf(1.0, (g[1] as Array).size())
+			var chh := clampf(floorf((seat_bot - cy - cgap * (ns - 1.0)) / ns), rowh, rowh * 2.0)   # the chips fill the column
 			for sl in g[1]:
-				_seat_chip(int(sl), by_slot.get(int(sl), -1), colours, Vector2(cx, cy), Vector2(cw, maxf(chh, rowh)), int(g[0]))
-				cy += maxf(chh, rowh) + cgap
+				_seat_chip(int(sl), by_slot.get(int(sl), -1), colours, Vector2(cx, cy), Vector2(cw, chh), int(g[0]))
+				cy += chh + cgap
 	else:
 		_say("SEATS  ·  %d / %d" % [Net.roster.size(), Net.slots()], Vector2(rx0, sy), 13, UiKit.MUTED, 0.0, true, 2)
 		var cy0 := sy + UiKit.line_h(self, 13, true) + 8.0
 		var n: int = Net.slots()
 		var ncol := 1 if n <= 3 else 2
 		var cw := floorf((rw - cgap * (ncol - 1)) / ncol)
+		var nr := ceili(n / float(ncol))
+		var chh := clampf(floorf((seat_bot - cy0 - cgap * (nr - 1)) / nr), rowh, rowh * 2.0)   # the chips fill the panel
 		for k in range(n):
-			var p := Vector2(rx0 + (k % ncol) * (cw + cgap), cy0 + (k / ncol) * (rowh + cgap))
-			_seat_chip(k, by_slot.get(k, -1), colours, p, Vector2(cw, rowh), -1)
+			var p := Vector2(rx0 + (k % ncol) * (cw + cgap), cy0 + (k / ncol) * (chh + cgap))
+			_seat_chip(k, by_slot.get(k, -1), colours, p, Vector2(cw, chh), -1)
 	rx0 = rx_full
 	rw = rw_full
 	# RIGHT: MY PICKS (sheets; ARMY opens ARMIES)
@@ -4731,14 +4719,15 @@ func _loadout_chips(parent: Control, f: String, lo: Dictionary, right_x: float, 
 	return x0
 
 
-func _colour_row(pos: Vector2, w: float) -> float:
+func _colour_row(pos: Vector2, w: float, d := 0.0) -> float:
 	## Your colour: one hexagon chip per hue, filled solid in its colour, border the same colour, no words (Daniele,
 	## 0.19.0 - the picked one is named in the caption above); taken hues (and, in team modes, another team's family)
 	## are dimmed and disabled. The picked chip gets HexChip's white ring + scale-up. Wraps on a narrow column; returns
 	## the height used.
 	var me := Net.local_id()
 	var mine := Net.colour_of(me)
-	var d := UiKit.tap_h(self, 44.0)
+	if d <= 0.0:
+		d = UiKit.tap_h(self, 44.0)
 	var per := maxi(1, int((w + 6.0) / (d + 6.0)))
 	for i in range(HUE_NAMES.size()):
 		var k: String = HUE_NAMES[i]
@@ -4760,16 +4749,16 @@ func _sum_btn(pos: Vector2, dims: Vector2, kicker: String, value: String, call: 
 	## A one-line summary that opens its sheet: KICKER (muted) then the value, a chevron at the right.
 	var b := UiKit.btn(self, "", pos, dims, call, "secondary", f if f != "" else shell_f)
 	var kx := 14.0
-	var k := UiKit.label(self, kicker, 12, UiKit.MUTED, true, 2)
-	k.position = Vector2(kx, (b.size.y - UiKit.line_h(self, 12, true)) / 2.0)
+	var k := UiKit.label(self, kicker, 13, UiKit.MUTED, true, 2)
+	k.position = Vector2(kx, (b.size.y - UiKit.line_h(self, 13, true)) / 2.0)
 	b.add_child(k)
 	if value != "":
-		var vx := kx + UiKit.text_w(self, kicker, 12, true) + kicker.length() * 2.0 + 10.0
-		var v := UiKit.label(self, value, 15, UiKit.INK, true)
+		var vx := kx + UiKit.text_w(self, kicker, 13, true) + kicker.length() * 2.0 + 10.0
+		var v := UiKit.label(self, value, 17, UiKit.INK, true)
 		v.clip_text = true
 		v.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		v.position = Vector2(vx, (b.size.y - UiKit.line_h(self, 15, true)) / 2.0)
-		v.size = Vector2(maxf(10.0, b.size.x - vx - 30.0), UiKit.line_h(self, 15, true))
+		v.position = Vector2(vx, (b.size.y - UiKit.line_h(self, 17, true)) / 2.0)
+		v.size = Vector2(maxf(10.0, b.size.x - vx - 30.0), UiKit.line_h(self, 17, true))
 		b.add_child(v)
 	var c := UiKit.label(self, "›", 20, UiKit.MUTED)
 	c.position = Vector2(b.size.x - 20.0, (b.size.y - UiKit.line_h(self, 20)) / 2.0)
@@ -4791,12 +4780,17 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 		call = func(): Net.switch_team(team)
 	var b := UiKit.btn(self, "", pos, dims, call, "selected" if me else "secondary", shell_f)
 	var h := b.size.y
+	var k := clampf(h / UiKit.tap_h(self, 54.0), 1.0, 1.5)   # a taller chip (fewer seats) gets bigger words
+	var fl := 18.0 * k
+	var fn := 17.0 * k
+	var fs := 13.0 * k
 	b.add_child(UiKit.rect(Vector2(0, 5), Vector2(4, h - 10.0), col))
-	var sl := UiKit.label(self, seat, 17, col, true)
-	sl.position = Vector2(12, (h - UiKit.line_h(self, 17, true)) / 2.0)
+	var sl := UiKit.label(self, seat, fl, col, true)
+	sl.position = Vector2(12, (h - UiKit.line_h(self, fl, true)) / 2.0)
 	b.add_child(sl)
-	var tx := 12.0 + UiKit.text_w(self, "W", 17, true) + 6.0
-	var ts := h - 8.0
+	var tx := 12.0 + UiKit.text_w(self, "W", fl, true) + 6.0
+	var ts := minf(h - 8.0, floorf(dims.x * 0.22))      # the character never crowds the name out
+	var ty0 := (h - ts) / 2.0
 	var name_t := ""
 	var state := ""
 	var state_col := UiKit.MUTED
@@ -4807,7 +4801,7 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		art.position = Vector2(tx, 4)
+		art.position = Vector2(tx, ty0)
 		art.size = Vector2(ts, ts)
 		b.add_child(art)
 		name_t = "YOU" if me else Net.name_of(id).to_upper()
@@ -4826,7 +4820,7 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 		var box := Panel.new()
 		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		box.add_theme_stylebox_override("panel", UiKit.sb(Color(UiKit.BASE, 0.9), UiKit.FRAME, 1, 6))
-		box.position = Vector2(tx, 4)
+		box.position = Vector2(tx, ty0)
 		box.size = Vector2(ts, ts)
 		b.add_child(box)
 		var mark := UiKit.label(self, "AI" if Net.ai_fill != "" else "+", 15, UiKit.MUTED, true)
@@ -4840,17 +4834,17 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 			state_col = UiKit.accent(shell_f)
 	var right := b.size.x - 10.0
 	if state != "":
-		var sw := UiKit.text_w(self, state, 12, true)
-		var st := UiKit.label(self, state, 12, state_col, true)
-		st.position = Vector2(right - sw, (h - UiKit.line_h(self, 12, true)) / 2.0)
+		var sw := UiKit.text_w(self, state, fs, true)
+		var st := UiKit.label(self, state, fs, state_col, true)
+		st.position = Vector2(right - sw, (h - UiKit.line_h(self, fs, true)) / 2.0)
 		b.add_child(st)
 		right -= sw + 8.0
 	var nx := tx + ts + 8.0
-	var nl := UiKit.label(self, name_t, 15, UiKit.INK if id >= 0 else UiKit.MUTED, true)
+	var nl := UiKit.label(self, name_t, fn, UiKit.INK if id >= 0 else UiKit.MUTED, true)
 	nl.clip_text = true
 	nl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	nl.position = Vector2(nx, (h - UiKit.line_h(self, 15, true)) / 2.0)
-	nl.size = Vector2(maxf(10.0, right - nx), UiKit.line_h(self, 15, true))
+	nl.position = Vector2(nx, (h - UiKit.line_h(self, fn, true)) / 2.0)
+	nl.size = Vector2(maxf(10.0, right - nx), UiKit.line_h(self, fn, true))
 	b.add_child(nl)
 
 
@@ -4881,7 +4875,7 @@ func _sheet_frame(kicker: String, headline: String, dims: Vector2) -> Rect2:
 		if e is InputEventMouseButton and e.pressed:
 			_close_lobby_sheet.call_deferred())
 	content.add_child(dim)
-	dims = Vector2(minf(dims.x, content.size.x - 40.0), minf(dims.y, content.size.y - 20.0))
+	dims = Vector2(content.size.x - 2.0 * maxf(60.0, shell_x() * 2.5), minf(dims.y, content.size.y - 20.0))   # ROUND 2b: wide sheets, big controls
 	var pos := Vector2(floorf((content.size.x - dims.x) / 2.0), floorf(content.size.y * 0.14))
 	var panel := UiKit.panel(self, pos, dims, shell_f)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -4915,21 +4909,23 @@ func _lobby_sheet_body(host: bool) -> void:
 	var rowh := UiKit.tap_h(self, 44.0)
 	var locked := Net.ready_locked() or Net.active
 	if which == "mode":
-		var r := _sheet_frame("ROOM / MODE", "HOW MANY PLAY." if host else "THE HOST PICKS THE MODE.", Vector2(620, 300))
-		var chips := []
-		for md in Net.MODES:
-			var m2: String = md
-			var mb := UiKit.chip(self, Net.MODE_LABELS[m2], Vector2.ZERO, func():
+		var r := _sheet_frame("ROOM / MODE", "HOW MANY PLAY." if host else "THE HOST PICKS THE MODE.", Vector2(900, 330))
+		var mcols := 4
+		var mw := floorf((r.size.x - 10.0 * (mcols - 1)) / mcols)
+		var mh := UiKit.tap_h(self, 60.0)
+		for i in range(Net.MODES.size()):
+			var m2: String = Net.MODES[i]
+			var mb := UiKit.btn(self, Net.MODE_LABELS[m2], r.position + Vector2((i % mcols) * (mw + 10.0), (i / mcols) * (mh + 10.0)), Vector2(mw, 60), func():
 				Net.set_mode(m2)
-				_close_lobby_sheet(), shell_f, m2 == Net.mode)
+				_close_lobby_sheet(), "selected" if m2 == Net.mode else "secondary", shell_f, 18)
 			mb.disabled = not host or Net.roster.size() > Net.SLOTS[m2] or Net.maps_for(m2).is_empty()
-			chips.append(mb)
-		var hh := _flow(chips, r.position, r.size.x)
+		var hh := ceilf(Net.MODES.size() / float(mcols)) * (mh + 10.0) - 10.0
 		_say("A mode needs a map that seats it; greyed modes have none, or fewer seats than players in the room.",
 				r.position + Vector2(0, hh + 10.0), 13, UiKit.MUTED, r.size.x)
 	elif which == "rules":
-		var r := _sheet_frame("ROOM / RULES", "MATCH RULES." if host else "THE HOST SETS THE RULES.", Vector2(700, 330))
+		var r := _sheet_frame("ROOM / RULES", "MATCH RULES." if host else "THE HOST SETS THE RULES.", Vector2(900, 330))
 		var tw := floorf((r.size.x - 10.0) / 2.0)
+		var big := UiKit.tap_h(self, 64.0)
 		var y := r.position.y
 		var bgs := ["auto", "rotate"]
 		for i in range(Scenery.BATTLE_BACKDROPS.size()):
@@ -4944,28 +4940,28 @@ func _lobby_sheet_body(host: bool) -> void:
 		for k in range(items.size()):
 			var it: Array = items[k]
 			var act: Callable = it[2]
-			var b := UiKit.btn(self, it[0], r.position + Vector2((k % 2) * (tw + 10.0), (k / 2) * (rowh + 10.0)), Vector2(tw, 44), func():
+			var b := UiKit.btn(self, it[0], r.position + Vector2((k % 2) * (tw + 10.0), (k / 2) * (big + 10.0)), Vector2(tw, 64), func():
 				act.call()
-				show_lobby(), "selected" if it[1] else "secondary", shell_f, 14)
+				show_lobby(), "selected" if it[1] else "secondary", shell_f, 18)
 			b.disabled = not host
-		y += 2.0 * (rowh + 10.0)
+		y += 2.0 * (big + 10.0)
 		var note := "Tap a rule to change it; everyone sees the change and READY resets." if host else "Only the host changes these."
 		if host and not Net.can_start():
 			note += " DEPLOY opens when every seat is filled (or EMPTY SEATS: AI) and every player is READY."
 		_say(note, Vector2(r.position.x, y), 13, UiKit.MUTED, r.size.x)
 	elif which == "faction":
-		var r := _sheet_frame("ROOM / YOUR FACTION", str(UiKit.TAGS[faction]) + ".", Vector2(640, 300))
+		var r := _sheet_frame("ROOM / YOUR FACTION", str(UiKit.TAGS[faction]) + ".", Vector2(900, 330))
 		var fr0 := content.get_child_count()
-		var fh := _faction_row(r.position, 64.0)
+		var fh := _faction_row(r.position, minf(190.0, r.size.x / 5.0 - 14.0))
 		if locked:
 			_ready_lock(fr0)
 		_say("Your ARMIES preset for it comes along (its skills). " + ("You're READY: UN-READY to change." if Net.ready_locked() else ""),
 				r.position + Vector2(0, fh + 10.0), 13, UiKit.MUTED, r.size.x)
 	elif which == "colour":
 		var mine := Net.colour_of(Net.local_id())
-		var r := _sheet_frame("ROOM / YOUR COLOUR", (mine.to_upper() if mine != "" else "PICK A COLOUR") + ".", Vector2(640, 300))
+		var r := _sheet_frame("ROOM / YOUR COLOUR", (mine.to_upper() if mine != "" else "PICK A COLOUR") + ".", Vector2(900, 330))
 		var cr0 := content.get_child_count()
-		var ch := _colour_row(r.position, r.size.x)
+		var ch := _colour_row(r.position, r.size.x, maxf(UiKit.tap_h(self, 70.0), floorf(r.size.x / 8.0) - 8.0))
 		if locked:
 			_ready_lock(cr0)
 		var hint := "Every seat has one colour, the same on every screen. " + (("Teammates share a hue family (%s); a colour from a free family moves your team to it." % " / ".join(
@@ -4982,11 +4978,11 @@ func _lobby_sheet_body(host: bool) -> void:
 		var seat: String = Net.SEATS[slot]
 		var me := id == Net.local_id()
 		var head := ("YOU" if me else Net.name_of(id).to_upper()) if id >= 0 else ("AI " + Net.ai_fill.to_upper() if Net.ai_fill != "" else "OPEN SEAT")
-		var r := _sheet_frame("ROOM / SEAT %s" % seat, head + ".", Vector2(640, 320))
+		var r := _sheet_frame("ROOM / SEAT %s" % seat, head + ".", Vector2(900, 330))
 		var y := r.position.y
 		if id >= 0:
 			var f: String = str(Net.roster[id]["faction"])
-			var ps := minf(r.size.y - rowh - 20.0, 110.0)
+			var ps := 150.0
 			portrait(f, Vector2(r.position.x, y), Vector2(ps, ps))
 			var tx := r.position.x + ps + 16.0
 			var tw := r.size.x - ps - 16.0
