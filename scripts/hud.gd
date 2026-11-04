@@ -1298,7 +1298,7 @@ class ActionWedge:
 	var grow := 1.0             # deal-out from the ring, 0..1
 	var type_scale := 1.0       # phones: 1.15 (the slice's name / price / glyph)
 	var lift := 0.0             # hover / held: the slice slides out along its own middle, 0..1
-	var afford := 1.0           # ui-node: your units / its price, 0..1 - the slice fills with goo from its inner edge
+	var afford := 1.0           # ui-node: your units / its price, 0..1 - 1 = the slice is lit (no goo fill since mockup 3)
 	var why := ""               # ui-node: a greyed slice's short reason (COOLDOWN, UNDER ATTACK ...), shown instead of the price
 	var _held := false
 
@@ -1397,8 +1397,8 @@ class ActionWedge:
 		return pts
 
 	func _draw() -> void:
-		## ui-node Neon Noir: a slice of smoked glass, lit goo filling it from the node outward as your units near its price
-		## (full = affordable: the goo glows), the neon tube on its outer edge, the glyph, the name, the price (or the reason).
+		## ui-node: a slice of smoked glass, LIT in the accent when you can do it, GREYED when not (no goo), the neon tube on its
+		## outer edge, the glyph, the name, the price (in red when you can't afford it) or the reason.
 		if grow <= 0.001 or a1 <= a0:
 			return
 		var s := ui_scale
@@ -1409,42 +1409,36 @@ class ActionWedge:
 		var poly := _slice(c, r_in, ro)
 		if lift > 0.01:
 			draw_polyline(_edge(c, ro + 4.0 * s), Color(a, 0.25 * lift), 8.0 * s, true)
-		if HudNoir.has("node_wedge"):                     # DROP-IN: the director's slice, unrolled onto this one
-			_mapped("node_wedge", c, r_in, ro, Color.WHITE)
-			if f_goo() > 0.0:
-				_mapped("node_wedge_goo", c, r_in, r_in + (ro - r_in) * f_goo(), Color(a, 0.95 if f_goo() >= 1.0 else 0.7))
-			_mapped_rim("node_wedge", c, r_in, ro, a)
+		# Daniele 2026-11-04 (mockup 3): NO goo in the slices - a slice is LIT (affordable / free) or GREYED (not yet):
+		# "easy to just have grayed or not; the filling would also cost resources especially when open and close fast".
+		var lit := not off and afford >= 1.0
+		if HudNoir.has("node_wedge"):                     # DROP-IN: the director's slice (lit / _fill_off), unrolled onto this one
+			_mapped("node_wedge_fill_off" if not lit and HudNoir.has("node_wedge_fill_off") else "node_wedge", c, r_in, ro,
+					Color.WHITE if lit or HudNoir.has("node_wedge_fill_off") else Color(0.55, 0.55, 0.6))
+			_mapped_rim("node_wedge", c, r_in, ro, a if lit else Color(a, 0.35))
 		else:
 			NodeNoir.glass(self, poly, 0.9, Color(a, 0.25 * lift))
-		var f := clampf(afford, 0.0, 1.0)
-		if f > 0.0 and not HudNoir.has("node_wedge"):     # the goo: from the inner edge out, a lit surface where it stands
-			var rf := r_in + (ro - r_in) * f
-			var gp := NodeNoir.clean(_slice(c, r_in, rf))
-			var gc := PackedColorArray()
-			for q in gp:
-				var u := clampf(((q - c).length() - r_in) / maxf(ro - r_in, 1.0), 0.0, 1.0)
-				var gcol := accent if off else a                # (a greyed slice still shows how close you are, in its own colour)
-				gc.append(Color(gcol.darkened(0.55).lerp(gcol, u * u), (0.5 if f >= 1.0 and not off else 0.42) * (0.45 + 0.55 * u)))
-			draw_polygon(gp, gc)
-			if f < 1.0:
-				draw_polyline(_edge(c, rf), Color(a.lerp(Color.WHITE, 0.4), 0.7), 1.4 * s, true)
+			if lit:                                       # lit glass: the accent glows through it, brightest at the rim
+				var gp := NodeNoir.clean(poly)
+				var gc := PackedColorArray()
+				for q in gp:
+					var u := clampf(((q - c).length() - r_in) / maxf(ro - r_in, 1.0), 0.0, 1.0)
+					gc.append(Color(a.darkened(0.5).lerp(a, u), 0.16 + 0.22 * u))
+				draw_polygon(gp, gc)
 		var edge := poly.duplicate()
 		edge.append(poly[0])
 		draw_polyline(edge, Color(a, 0.3), 1.0 * s, true)
-		NodeNoir.neon(self, _edge(c, ro - 1.5 * s), a, (2.0 + 1.0 * lift) * s, 0.25 if off else (0.9 if f >= 1.0 else 0.5))
+		NodeNoir.neon(self, _edge(c, ro - 1.5 * s), a, (2.0 + 1.0 * lift) * s, 0.9 if lit else 0.2)
 		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)
 		if k <= 0.0:
 			return
 		var p := content_point()
-		var ink := Color(HudNoir.INK, k) if not off else Color(HudNoir.MUTED, k)
-		_icon(p + Vector2(0, -16.0 * s * type_scale), 14.0 * s * type_scale, Color(a.lightened(0.2) if not off else HudNoir.MUTED, k))
+		var ink := Color(HudNoir.INK, k) if lit else Color(HudNoir.MUTED, k)
+		_icon(p + Vector2(0, -16.0 * s * type_scale), 14.0 * s * type_scale, Color(a.lightened(0.2) if lit else HudNoir.MUTED, k))
 		var maxw := minf(ro - r_in, (a1 - a0) * (r_in + ro) / 2.0) * 0.9
 		_text(title, p + Vector2(0, 9.0 * s * type_scale), 13.0, ink, maxw)
 		var low := why if why != "" else cost
-		_text(low, p + Vector2(0, 25.0 * s * type_scale), 12.0, Color(HudNoir.ENEMY.lightened(0.25) if off else a.lightened(0.35), k), maxw)
-
-	func f_goo() -> float:
-		return clampf(afford, 0.0, 1.0)
+		_text(low, p + Vector2(0, 25.0 * s * type_scale), 12.0, Color(HudNoir.ENEMY.lightened(0.25) if not lit else a.lightened(0.35), k), maxw)
 
 	func _uv_poly(c: Vector2, ri: float, ro2: float, full_ro: float) -> Array:
 		## The slice ri..ro2 with polar UVs into an unrolled-slice texture: u across a0 -> a1, v 0 at full_ro (its top = the
@@ -2153,7 +2147,7 @@ func _short_why(why: String) -> String:
 		return ""
 	var w := why.to_upper()
 	if "UNIT" in w or "AFFORD" in w or "ENOUGH" in w:
-		return ""                                     # the price in red says it, and the goo shows how close you are
+		return ""                                     # the price in red on the greyed slice says it
 	if "COOLDOWN" in w:
 		return "COOLDOWN"
 	if "SWITCHING" in w or "MOVING" in w:
