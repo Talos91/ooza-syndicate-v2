@@ -14,9 +14,10 @@
 - **Menus stay as in 0.23.21** (Daniele 2026-11-04: "i m ok with ingame interface but menu interface i want it roll back and abandon
   light theme and all about round 3 design for now"). ui-hud sits on ui-a24 (Alpha 24 step 1: round-3 menus, DARK / LIGHT switch); its menu
   changes are reverted here: `menu.gd`, `ui_kit.gd`, `top_bar.gd`, `nav_bar.gd`, `reward_strip.gd`, `reward_ticker.gd`, `campaign.gd`,
-  `match_screens.gd` are byte-identical to 0.23.21, the SETTINGS > THEME row is gone, `tests/lobby_ui_shot` removed. `UiTheme` stays only
+  `match_screens.gd` are identical to 0.23.21 except the faction name (below), the SETTINGS > THEME row is gone, `tests/lobby_ui_shot` removed. `UiTheme` stays only
   as the HUD's sprite layer (B sheet, round-3 skill / board icons) and is **DARK only** (a saved LIGHT choice is ignored). Kept from step 1:
-  the name **BLOOM** (no VIRIDIAN; Daniele's naming call of 2026-11-02, not a look).
+  the name **BLOOM** everywhere (no VIRIDIAN; Daniele's naming call of 2026-11-02, not a look): `UiKit.NAMES / SUBS / TAGS`, `Menu.NAMES`,
+  the vat-wins line and the campaign title, the same text lines ui-a24 18527f6 changed.
 - Merge note: one conflict in `scripts/skill_dock.gd` (the old disc drawing vs the HUD's vessel drawing); kept the HUD side, which already uses
   main's Rewire -> Overdrive rename. `scripts/net.gd` and `server/` unchanged: protocol stays ooze20-net-8, no room server deploy.
 
