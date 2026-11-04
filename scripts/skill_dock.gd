@@ -195,6 +195,9 @@ class Slot:
 		var nf := dock.font_px(16)
 		var lines: Array = dock.name_lines(id, room)
 		var y := ic.y + d / 2.0 + dock.gap + UI_FONT.get_ascent(nf)
+		if dock.plate and dock.mobile:                   # GMN-1: the name in the plate's dark strip, low on the plate
+			var lh := UI_FONT.get_height(nf) * 0.88
+			y = size.y * 0.83 - lh * float(lines.size() - 1) / 2.0 + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
 		for ln in lines:
 			_line(str(ln), Vector2(w / 2.0, y), 16, HudNoir.INK if is_ready or armed else HudNoir.MUTED, room, UI_FONT)
 			y += UI_FONT.get_height(nf) * 0.88
@@ -217,6 +220,8 @@ class Slot:
 			status = "CHARGING"
 		else:
 			status = "COOLDOWN"
+		if dock.plate and dock.mobile and not armed and fires <= 0:
+			return                                       # GMN-1 plate: the name alone (the window + ring say the state)
 		y += UI_FONT.get_height(dock.font_px(13)) * 0.1
 		_line(status, Vector2(w / 2.0, y), 13, sc, room, UI_FONT)
 
@@ -428,6 +433,18 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		round_d = float(vb[2]) * k
 		vessel_cy = float(sock[1]) * k
 		top = vessel_cy - round_d / 2.0
+	var plate_h := 0.0
+	if plate and mobile:                          # GMN-1 layout: plates 90 x 94.55 pt, 4.45 pt apart, the window from the plate
+		var ppx := 1.0 / maxf(UiKit.pt_per_px((Engine.get_main_loop() as SceneTree).root.get_visible_rect().size), 0.01)
+		var cb: Array = HudNoir.part_data("skill_card").get("body", [0, 0, 495, 520])
+		var pk := 90.0 * ppx / float(cb[2])
+		slot_w = 90.0 * ppx / ui_scale
+		round_d = float(HudNoir.part_data("skill_vessel").get("body", [0, 0, 270, 270])[2]) * pk
+		vessel_cy = float(HudNoir.part_data("skill_card").get("socket", [0, 200])[1]) * pk
+		top = vessel_cy - round_d / 2.0
+		plate_h = 94.55 * ppx
+		_floor_px = 13.0 * ppx                     # the director's plate words: 13 pt
+		add_theme_constant_override("separation", int(round(4.45 * ppx)))
 	for i in range(3):
 		# Neon Noir: no slot label; the name takes a second line only where one line would cut it (EMERGENCY / EVAC)
 		var lines := name_lines(sim.skill_id(human, SLOTS[i]), slot_w * ui_scale - 2.0 * pad).size()
@@ -436,7 +453,7 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		b.dock = self
 		b.index = i
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		b.custom_minimum_size = Vector2(slot_w * ui_scale, slot_h).round()
+		b.custom_minimum_size = Vector2(slot_w * ui_scale, maxf(slot_h, plate_h)).round()
 		b.pressed.connect(press_slot.bind(i))
 		if plate:
 			b.vessel = HudLiquid.new()

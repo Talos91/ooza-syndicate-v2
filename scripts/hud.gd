@@ -356,6 +356,11 @@ func setup(m: Node3D) -> void:
 	# side (faction emblem in the seat colour + strength, also monospace), your own chip first and
 	# highlighted, team modes grouped with a wider gap between groups. TUTORIAL: "topbar" gates the
 	# whole bar, "strength" the chips alone (clock-only in the early lessons, as before).
+	# GMN-1 layout (the director's QA/layout-*.json): on a phone the score words are 14 pt, the clock 16, the status line 13 -
+	# the top bar (capsule, pills, emblems, clock, status line) is built at that scale, everything else at ui_scale.
+	var keep_s := ui_scale
+	if mobile and HudNoir.has("top_capsule"):
+		ui_scale = maxf(ui_scale, pt(14.0) / 15.0)
 	top_panel = PanelContainer.new()
 	top_panel.add_theme_stylebox_override("panel", HudNoir.box("top_capsule", Color(0, 0, 0, 0), Vector4(6, 6, 6, 6) * ui_scale))
 	top_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
@@ -391,6 +396,7 @@ func setup(m: Node3D) -> void:
 	status_glow.visible = false
 	root.add_child(status_glow)
 	status_label = text_label("", 18, Color("ffb0b0"))
+	ui_scale = keep_s
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	# Alpha 24 Neon Noir: the line sits on the red status pill, as wide as its words (_fit_status); empty, nothing shows. The
 	# seconds ("9 s") sit in an amber capsule (_draw_status_secs, like the board's NEXT DROP 6s)
@@ -444,6 +450,8 @@ func setup(m: Node3D) -> void:
 	side_panel.add_child(side_box)
 	send_tank = SendTank.new()
 	send_tank.custom_minimum_size = Vector2(112.0, 4.0 * (78.0 if mobile else 66.0) + 74.0) * ui_scale
+	if mobile and HudNoir.has("send_tank"):          # GMN-1 layout: 4 bands of 60 pt, 59 wide, caps + drips round them
+		send_tank.custom_minimum_size = Vector2(pt(66.0), pt(4.0 * 60.0 + 64.0)).round()
 	send_tank.setup(self, main, ui_scale, UI_FONT)
 	side_box.add_child(send_tank)
 	count_label = text_label("", 14, accent)                # (kept, hidden: the tank shows the units on its goo)
@@ -1294,6 +1302,7 @@ class ActionWedge:
 	var a1 := 0.0
 	var r_in := 80.0            # apothems of the inner and outer hexagon (Daniele: "make the radial hexagonal")
 	var r_out := 200.0
+	var floor_px := 0           # GMN-1: a phone's 13 pt in px (the director's slice words); 0 on a desktop
 	const ROUND := true         # GMN-1: round ring (hex_r returns the radius); false = the 0.23.x hexagon pie
 	var hex_base := 0.0         # the direction of the flat edge the pie opens toward (its middle edge)
 	var grow := 1.0             # deal-out from the ring, 0..1
@@ -1437,11 +1446,12 @@ class ActionWedge:
 			return
 		var p := content_point()
 		var ink := Color(HudNoir.INK, k) if lit else Color(HudNoir.MUTED, k)
-		_icon(p + Vector2(0, -16.0 * s * type_scale), 14.0 * s * type_scale, Color(a.lightened(0.2) if lit else HudNoir.MUTED, k))
+		var lh := maxf(16.0 * s * type_scale, float(floor_px) * 1.2)   # GMN-1: lines spaced for the phone's 13 pt words
+		_icon(p + Vector2(0, -lh), maxf(14.0 * s * type_scale, float(floor_px) * 0.85), Color(a.lightened(0.2) if lit else HudNoir.MUTED, k))
 		var maxw := minf(ro - r_in, (a1 - a0) * (r_in + ro) / 2.0) * 0.9
-		_text(title, p + Vector2(0, 9.0 * s * type_scale), 13.0, ink, maxw)
+		_text(title, p + Vector2(0, lh * 0.55), 13.0, ink, maxw)
 		var low := why if why != "" else cost
-		_text(low, p + Vector2(0, 25.0 * s * type_scale), 12.0, Color(HudNoir.ENEMY.lightened(0.25) if not lit else a.lightened(0.35), k), maxw)
+		_text(low, p + Vector2(0, lh * 1.55), 12.0, Color(HudNoir.ENEMY.lightened(0.25) if not lit else a.lightened(0.35), k), maxw)
 
 	func _uv_poly(c: Vector2, ri: float, ro2: float, full_ro: float) -> Array:
 		## The slice ri..ro2 with polar UVs into an unrolled-slice texture: u across a0 -> a1, v 0 at full_ro (its top = the
@@ -1479,8 +1489,8 @@ class ActionWedge:
 		draw_polygon(pu[0], cols, pu[1], t)
 
 	func _text(t: String, at: Vector2, px: float, col: Color, maxw: float) -> void:
-		var fs := int(round(px * ui_scale * type_scale))
-		while fs > 7 and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > maxw:
+		var fs := maxi(int(round(px * ui_scale * type_scale)), floor_px)
+		while fs > maxi(7, floor_px - 1) and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > maxw:
 			fs -= 1
 		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		draw_string(font, Vector2(at.x - w / 2.0, at.y + (font.get_ascent(fs) - font.get_descent(fs)) / 2.0), t,
@@ -1630,6 +1640,7 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 	b.font = UI_FONT
 	b.symbol_font = SYMBOL_FONT
 	b.type_scale = 1.15 if mobile else 1.0
+	b.floor_px = int(ceil(pt(13.0))) if mobile else 0
 	var act := func():
 		if method == "launch_monster":                    # arm: drag from the hub, or tap a highlighted node
 			main.monster_from = id
@@ -1909,10 +1920,15 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 	var big := n >= 4
 	var r_in := ring + (5.0 + (18.0 if big else 0.0)) * s
 	var r_out := r_in + (INSPECTOR_PIE_W + (16.0 if mobile else 0.0) + (34.0 if big else 0.0)) * s
+	if mobile and ActionWedge.ROUND:                  # GMN-1 layout: ring 49 -> 119 pt, 50 deg a slice (40 for 4-5)
+		r_in = pt(49.0)
+		r_out = pt(119.0)
 	# one hexagon edge (60 deg) per action up to 3 - the half-hex; 4-5 take half an edge each (30 deg), so every
 	# seam still lands on a corner or an edge's midpoint and each slice stays a clean trapezoid (45 / 36 deg
 	# slices cut across the edges and came out as kites)
 	var span := PI / 3.0 if n <= 3 else PI / 6.0
+	if mobile and ActionWedge.ROUND:
+		span = deg_to_rad(50.0 if n <= 3 else 40.0)
 	var total := span * n
 	# the hexagon turned so the seams land on those points: flat edge to the front for 1, 3 or 4 slices, a
 	# corner for 2, 15 deg off for 5
@@ -2084,6 +2100,14 @@ func _refresh_inspector(cam: Camera3D) -> void:
 			var cost_now := int(a["cost"])                # a greyed slice names its reason on a phone (no tooltips there)
 			(b as ActionWedge).afford = 1.0 if cost_now <= 0 else clampf(float(n["units"]) / float(cost_now), 0.0, 1.0)
 			(b as ActionWedge).why = _short_why(why)
+
+
+func pt(v: float) -> float:
+	## GMN-1 (the director's layout, QA/layout-*.json, measured at 812 x 375 pt): v points in viewport px on a phone; on a
+	## desktop the old ui_scale sizing.
+	if not mobile:
+		return v * ui_scale
+	return v / maxf(UiKit.pt_per_px(root.get_viewport_rect().size), 0.01)
 
 
 func card_px(fs: int) -> int:
