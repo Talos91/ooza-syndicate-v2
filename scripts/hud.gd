@@ -47,6 +47,10 @@ var inspector_emblem: TextureRect       # the header: owner's emblem + faction n
 var inspector_who: Label
 var inspector_first: Label
 var inspector_progress: ProgressBar
+var inspector_tier: Control             # ui-node: the card's tier chip, units bar and armour shields (custom-drawn, NodeNoir)
+var inspector_units: Control
+var inspector_shields: Control
+var inspector_col := Color.WHITE        # ui-node: this node's UI colour (your accent on yours, the owner's seat colour else)
 var inspector_actions: Array = []
 var notices: Control                   # HUD pass: no stack any more - only where the old one began (a mission's
                                        # strip still pushes it down: note_line's lines start under it)
@@ -1047,7 +1051,9 @@ func _badges(cam: Camera3D) -> bool:
 					label.size, label.get_theme_font_size("font_size"), label.get_meta("font_color") if label.has_meta("font_color") else null, sub.visible, sub.text,
 					sub.position, sub.size, sub.get_theme_font_size("font_size"), sub.get_meta("font_color") if sub.has_meta("font_color") else null, emb.visible,
 					emb.texture, emb.position, emb.size, emb.get_meta("seat", ""), bar.visible, bar.position, bar.size,
-					bar.value if bar.visible else 0.0])
+					bar.value if bar.visible else 0.0,
+					# ui-node: the tier chip and the armour shields BadgeLayer draws round the badge (shields step 0.01 = 1 s)
+					n["tier"], n["structure"], n["relay"], int(round(float(n["armour"]) * 100.0)), float(n["armour_cap"])])
 		if sig != b.get("drawn", []):
 			b["drawn"] = sig
 			changed = true
@@ -1121,7 +1127,7 @@ func _place_badge(b: Dictionary, masked: bool, small: bool) -> void:
 ## (flipping it to the left only when the right has no room) and keeps the card inside _inspector_bounds.
 const INSPECTOR_RING_R := 76.0                    # the node's own hex ring (apothem), and the pie's inner edge
 const INSPECTOR_PIE_W := 112.0                    # the pie's depth, ring to outer edge (x ui_scale; phones +16)
-const INSPECTOR_CARD_W := 280.0
+const INSPECTOR_CARD_W := 196.0                   # ui-node: the compact card (Daniele 2026-11-04) - was 280 with 4-8 lines
 
 
 func inspect(id: int, cam: Camera3D) -> void:
@@ -1130,7 +1136,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 		return
 	inspector_id = id
 	var n: Dictionary = sim.nodes[id]
-	var col := Rules.seat_color(n["owner"]) if n["owner"] != "" else Rules.NEUTRAL
+	var col := NodeNoir.mine_or_seat(str(n["owner"]), human)   # ui-node: your accent on yours, the owner's seat colour else
+	inspector_col = col
 	inspector = Control.new()
 	inspector.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(inspector)
@@ -1148,21 +1155,21 @@ func inspect(id: int, cam: Camera3D) -> void:
 	hub.pressed.connect(func(): close_inspector.call_deferred())
 	inspector.add_child(hub)
 	inspector.set_meta("close", hub)
+	# ui-node (Daniele 2026-11-04, "compact card"): the node's card in the HUD's glass - [emblem] FACTION · STRUCTURE [T2], the
+	# units bar (units / cap in lit goo), the armour shields (vats: one per 0.1 of the tier's armour, filling as it regains),
+	# one status line, the build bar while building. The army stats line (garrison / attack / speed %) left the card.
 	var info_bg := PanelContainer.new()
 	info_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var info_style := panel_style(col)
-	info_style.bg_color = Color(0.05, 0.08, 0.11, 0.92)
-	info_style.set_border_width_all(2)
-	info_style.set_content_margin_all(10)
-	info_bg.add_theme_stylebox_override("panel", info_style)
+	info_bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	info_bg.add_theme_stylebox_override("panel", HudNoir.box("node_card", col, Vector4(12, 8, 12, 9) * ui_scale))
 	inspector.add_child(info_bg)
 	inspector.set_meta("card", info_bg)
 	var info_box := VBoxContainer.new()
-	info_box.add_theme_constant_override("separation", int(4 * ui_scale))
+	info_box.add_theme_constant_override("separation", int(5 * ui_scale))
 	info_box.custom_minimum_size = Vector2(INSPECTOR_CARD_W, 0) * ui_scale
 	info_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_bg.add_child(info_box)
-	var head := HBoxContainer.new()                   # [emblem] FACTION · first line: the owner, no seat letter
+	var head := HBoxContainer.new()
 	head.alignment = BoxContainer.ALIGNMENT_CENTER
 	head.add_theme_constant_override("separation", int(5 * ui_scale))
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1171,18 +1178,48 @@ func inspect(id: int, cam: Camera3D) -> void:
 	head.add_child(inspector_emblem)
 	inspector_who = text_label("", 16, Color("c8e6ee"))
 	head.add_child(inspector_who)
-	inspector_first = text_label("", 16, Color("c8e6ee"))
+	inspector_first = text_label("", 16, HudNoir.INK)
+	inspector_first.add_theme_font_size_override("font_size", card_px(16))
+	inspector_who.add_theme_font_size_override("font_size", card_px(16))
 	head.add_child(inspector_first)
-	info_box.add_child(HSeparator.new())              # a thin rule under the header (0.23.x: was a flat wall of text)
-	inspector_label = text_label("", 16, Color("c8e6ee"))
+	inspector_tier = Control.new()
+	inspector_tier.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inspector_tier.custom_minimum_size = Vector2(30, 20) * ui_scale
+	inspector_tier.draw.connect(func():
+		if inspector_id < 0:
+			return
+		var tn: Dictionary = sim.nodes[inspector_id]
+		NodeNoir.tier_chip(inspector_tier, inspector_tier.size / 2.0, maxf(18.0 * ui_scale, card_px(12) / 0.72), int(tn["tier"]), inspector_col, UI_FONT, ui_scale,
+				"M%d" % tn["tier"] if tn["structure"] == "machinegoon" else ""))
+	head.add_child(inspector_tier)
+	inspector_units = Control.new()
+	inspector_units.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inspector_units.custom_minimum_size = Vector2(0, maxf(20.0 * ui_scale, card_px(14) + 6.0))
+	inspector_units.draw.connect(_draw_card_units)
+	info_box.add_child(inspector_units)
+	inspector_shields = Control.new()
+	inspector_shields.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inspector_shields.custom_minimum_size = Vector2(0, maxf(22.0 * ui_scale, card_px(13) + 6.0))
+	inspector_shields.draw.connect(_draw_card_shields)
+	info_box.add_child(inspector_shields)
+	inspector_label = text_label("", 15, Color("c8e6ee"))
+	inspector_label.add_theme_font_size_override("font_size", card_px(15))
 	inspector_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspector_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info_box.add_child(inspector_label)
 	inspector_progress = ProgressBar.new()
-	inspector_progress.custom_minimum_size = Vector2(0, 10) * ui_scale
+	inspector_progress.custom_minimum_size = Vector2(0, 8) * ui_scale
 	inspector_progress.show_percentage = false
 	inspector_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	info_box.add_child(inspector_progress)             # 0.23.x: inside the card's own flow, not a loose fixed offset
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(NodeNoir.GLASS_LOW, 0.9)
+	track.set_corner_radius_all(int(4 * ui_scale))
+	var goo := StyleBoxFlat.new()
+	goo.bg_color = Color(col, 0.9)
+	goo.set_corner_radius_all(int(4 * ui_scale))
+	inspector_progress.add_theme_stylebox_override("background", track)
+	inspector_progress.add_theme_stylebox_override("fill", goo)
+	info_box.add_child(inspector_progress)
 	if n["owner"] == human:
 		_inspector_actions(n)
 	_refresh_inspector(cam)
@@ -1272,6 +1309,8 @@ class ActionWedge:
 	var grow := 1.0             # deal-out from the ring, 0..1
 	var type_scale := 1.0       # phones: 1.15 (the slice's name / price / glyph)
 	var lift := 0.0             # hover / held: the slice slides out along its own middle, 0..1
+	var afford := 1.0           # ui-node: your units / its price, 0..1 - the slice fills with goo from its inner edge
+	var why := ""               # ui-node: a greyed slice's short reason (COOLDOWN, UNDER ATTACK ...), shown instead of the price
 	var _held := false
 
 	func _init() -> void:
@@ -1369,32 +1408,45 @@ class ActionWedge:
 		return pts
 
 	func _draw() -> void:
+		## ui-node Neon Noir: a slice of smoked glass, lit goo filling it from the node outward as your units near its price
+		## (full = affordable: the goo glows), the neon tube on its outer edge, the glyph, the name, the price (or the reason).
 		if grow <= 0.001 or a1 <= a0:
 			return
 		var s := ui_scale
 		var c := centre() + _shift()
 		var ro := outer()
 		var off := disabled
-		var a := accent.darkened(0.35) if off else accent      # unaffordable: still its colour, just quieter
+		var a := accent.darkened(0.35) if off else accent
 		var poly := _slice(c, r_in, ro)
-		if lift > 0.01:                                   # a soft glow along the lifted slice's outer edge
+		if lift > 0.01:
 			draw_polyline(_edge(c, ro + 4.0 * s), Color(a, 0.25 * lift), 8.0 * s, true)
-		var fill := Color(0.03, 0.055, 0.08, 0.9).lerp(Color(a.darkened(0.6), 0.94), 0.55 * lift)
-		draw_colored_polygon(poly, fill)
-		draw_colored_polygon(_slice(c, ro - 14.0 * s * grow, ro), Color(a, 0.12 + 0.10 * lift))   # the lit rim band
+		NodeNoir.glass(self, poly, 0.9, Color(a, 0.25 * lift))
+		var f := clampf(afford, 0.0, 1.0)
+		if f > 0.0:                                       # the goo: from the inner edge out, a lit surface where it stands
+			var rf := r_in + (ro - r_in) * f
+			var gp := NodeNoir.clean(_slice(c, r_in, rf))
+			var gc := PackedColorArray()
+			for q in gp:
+				var u := clampf(((q - c).length() - r_in) / maxf(ro - r_in, 1.0), 0.0, 1.0)
+				var gcol := accent if off else a                # (a greyed slice still shows how close you are, in its own colour)
+				gc.append(Color(gcol.darkened(0.55).lerp(gcol, u * u), (0.5 if f >= 1.0 and not off else 0.42) * (0.45 + 0.55 * u)))
+			draw_polygon(gp, gc)
+			if f < 1.0:
+				draw_polyline(_edge(c, rf), Color(a.lerp(Color.WHITE, 0.4), 0.7), 1.4 * s, true)
 		var edge := poly.duplicate()
 		edge.append(poly[0])
-		draw_polyline(edge, Color(a, 0.32), 1.2 * s, true)
-		draw_polyline(_edge(c, ro - 1.0 * s), Color(a, 0.8 if off else 0.95), (2.2 + 1.2 * lift) * s, true)
-		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)     # the content fades in over the second half of the deal
+		draw_polyline(edge, Color(a, 0.3), 1.0 * s, true)
+		NodeNoir.neon(self, _edge(c, ro - 1.5 * s), a, (2.0 + 1.0 * lift) * s, 0.25 if off else (0.9 if f >= 1.0 else 0.5))
+		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)
 		if k <= 0.0:
 			return
 		var p := content_point()
-		var ink := Color(0.92, 0.97, 0.98, k) if not off else Color(0.72, 0.78, 0.82, k)
-		_icon(p + Vector2(0, -16.0 * s * type_scale), 14.0 * s * type_scale, Color(a.lightened(0.15), k * (0.7 if off else 1.0)))
+		var ink := Color(HudNoir.INK, k) if not off else Color(HudNoir.MUTED, k)
+		_icon(p + Vector2(0, -16.0 * s * type_scale), 14.0 * s * type_scale, Color(a.lightened(0.2) if not off else HudNoir.MUTED, k))
 		var maxw := minf(ro - r_in, (a1 - a0) * (r_in + ro) / 2.0) * 0.9
 		_text(title, p + Vector2(0, 9.0 * s * type_scale), 13.0, ink, maxw)
-		_text(cost, p + Vector2(0, 25.0 * s * type_scale), 12.0, Color(Color("ff8a7a") if off else a.lightened(0.3), k), maxw)
+		var low := why if why != "" else cost
+		_text(low, p + Vector2(0, 25.0 * s * type_scale), 12.0, Color(HudNoir.ENEMY.lightened(0.25) if off else a.lightened(0.35), k), maxw)
 
 	func _text(t: String, at: Vector2, px: float, col: Color, maxw: float) -> void:
 		var fs := int(round(px * ui_scale * type_scale))
@@ -1490,8 +1542,9 @@ class InspectorHub:
 		for i in range(7):
 			var a := hex_base + PI / 6.0 + i * PI / 3.0
 			hex.append(c + Vector2(cos(a), sin(a)) * r)
-		draw_colored_polygon(hex, Color(0.03, 0.055, 0.08, 0.92))
-		draw_polyline(hex, Color(accent, 1.0 if hot else 0.75), (2.0 + (1.0 if hot else 0.0)) * s, true)
+		if not NodeNoir.sprite(self, "node_hub", c, Vector2(r, r * 0.866) * 2.0, accent, hex_base):
+			NodeNoir.glass(self, hex.slice(0, 6), 0.92)        # ui-node: smoked glass, a neon rim breathing in the node's colour
+			NodeNoir.neon(self, hex, accent, (2.0 + (1.0 if hot else 0.0)) * s, 0.55 + 0.25 * sin(Time.get_ticks_msec() / 260.0) + (0.3 if hot else 0.0))
 		var k := r * 0.3
 		var ink := Color(0.92, 0.97, 0.98)
 		draw_line(c + Vector2(-k, -k), c + Vector2(k, k), ink, 2.4 * s, true)
@@ -1542,7 +1595,7 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 	b.kind = name
 	if method == "switch":
 		b.glyph = str(Rules.RELAY_GLYPH.get(sim.nodes[id]["relay"], ""))
-	b.accent = RELAY_ACCENT if method == "switch" else Rules.seat_color(human)
+	b.accent = RELAY_ACCENT if method == "switch" else HudNoir.accent   # ui-node: your faction accent (Daniele 2026-11-04)
 	b.ui_scale = ui_scale
 	b.font = UI_FONT
 	b.symbol_font = SYMBOL_FONT
@@ -1921,15 +1974,17 @@ func _draw_inspector_guides(col: Color) -> void:
 	var e: float = _fan["e"]
 	var g := _inspector_guides
 	var hexp := _hex_edge(Vector2.ZERO, hx, hx - PI, hx + PI, INSPECTOR_RING_R * s)
-	g.draw_colored_polygon(hexp.slice(0, hexp.size() - 1), Color(col, 0.08 * e))
-	g.draw_polyline(hexp, Color(col, 0.85 * e), 2.0 * s, true)
+	# ui-node: the selection hex as a neon tube (halo, tube, core) breathing in the node's colour, a faint wash inside
+	g.draw_colored_polygon(hexp.slice(0, hexp.size() - 1), Color(col, 0.06 * e))
+	if not NodeNoir.sprite(g, "node_select", Vector2.ZERO, Vector2.ONE * INSPECTOR_RING_R * s * 2.0, Color(col, e), hx):
+		NodeNoir.neon(g, hexp, col, 2.4 * s, (0.65 + 0.2 * sin(Time.get_ticks_msec() / 300.0)) * e, e)
 	if int(_fan["n"]) > 0:
 		var total: float = _fan["total"]
 		var outer := _hex_edge(Vector2.ZERO, hx, base - total / 2.0, base + total / 2.0, float(_fan["r_out"]) + 3.0 * s)
 		var inner := _hex_edge(Vector2.ZERO, hx, base - total / 2.0, base + total / 2.0, float(_fan["r_in"]) - 2.0 * s)
 		inner.reverse()
 		outer.append_array(inner)
-		g.draw_colored_polygon(outer, Color(0.0, 0.0, 0.0, 0.42 * e))
+		g.draw_colored_polygon(outer, Color(0.0, 0.0, 0.0, 0.5 * e))
 
 
 
@@ -1959,70 +2014,18 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		inspector_emblem.texture = emblem_texture(str(sim.factions.get(owner, "null")))
 		tint_emblem(inspector_emblem, Rules.seat_color(owner))
 	inspector_who.text = "NEUTRAL" if owner == "" else str(sim.factions.get(owner, "")).to_upper()
-	_font_color(inspector_who, Color("c8e6ee") if owner == "" else Rules.seat_color(owner))
-	var lines := []
-	if owner != "" and owner != human:
-		lines.append("population hidden")
-		lines.append(_structure_line(n))
-	else:
-		var what := _structure_line(n)
-		var units := "%d / %d units" % [Rules.shown(n["units"]), Rules.shown(sim.node_cap(n))]
-		lines.append("%s · %s" % [what, units])
-		if owner != "":
-			# Alpha 11's status line: production, and what a double-tap upgrade costs
-			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) \
-					else ("no production - garrison must be fed" if n["structure"] == "machinegoon" else "no vat here")
-			var up := sim.upgrade_cost(n)
-			if owner == human and up > 0 and shows("upgrade"):
-				status += " | Double-tap: %d units" % Rules.shown(up)
-			elif owner == human and n["structure"] in ["vat", "machinegoon"] and up <= 0 and shows("upgrade"):
-				status += " | MAX TIER"
-			lines.append(status)
-			var forge: String = " (forge +%d%%)" % roundi(Rules.forge_bonus * 100.0) if sim.has_forge(owner) else ""   # attack_of includes it
-			lines.append("garrison %s | attack %d%%%s | speed %d%%" % [
-					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0), forge,
-					roundi(sim.stat(owner, "speed") * 100.0)])
-			if Sim.has_vat(n):
-				# VAT ARMOUR readout (2026-11-03): the divisor now, and while it climbs back after a capture / upgrade,
-				# the tier's value and the seconds to reach it
-				var arm := "Armour x%.2f" % float(n["armour"])
-				if float(n["armour"]) < float(n["armour_cap"]) - 0.0001:
-					arm += " -> x%.1f in %d s" % [float(n["armour_cap"]), int(ceil(sim.armour_full_in(n)))]
-				lines.append(arm)
-			if n["structure"] == "forge" and shows("forge_readout"):
-				# Forge readout (spec E): the attack half is in the line above (attack_of includes it)
-				lines.append("Forge: +%d%% attack, -%d%% damage taken" % [roundi(Rules.forge_bonus * 100.0), roundi((1.0 - 1.0 / Rules.FORGE_DEFENCE) * 100.0)])
-			if n["structure"] == "monster_hub" and shows("monster"):
-				var mr := _monster_ready(n)
-				lines.append("Monster hub: %s" % ("READY" if mr == "" else mr.to_upper()))
-	if n["relay"] != "" and shows("relay"):
-		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
-		var nxt := sim.relay_state_key(n, sim.relay_next_index(n)).to_upper()
-		var rs := "%s relay %s -> %s" % [n["relay"].to_upper(), cur, nxt]
-		if n["relay_phase"] == "warning":
-			rs += " | SWITCHING IN %.1f s" % n["relay_t"]
-		elif n["relay_phase"] == "moving":
-			rs += " | MOVING"
-		elif n["relay_cd"] > 0.0:
-			rs += " | READY IN %.0f s" % ceil(n["relay_cd"])
-		else:
-			rs += " | READY"
-		lines.append(rs)
-	if n["structure"] == "laser" and owner == human:
-		lines.append("laser %s" % ("FIRING" if n["cannon_burst"] > 0.0 else ("READY" if n["cannon_cd"] <= 0.0 else "RECHARGING %.1f s" % n["cannon_cd"])))
-	if n["build_kind"] != "":
-		lines.append("BUILDING %s · %.1f s" % [str(n["build_target"].get("kind", n["build_kind"])).to_upper(), n["build_timer"]])
-	if n["swap_cd"] > 0.0 and owner == human:
-		lines.append("attachment swap in %.0f s" % ceil(n["swap_cd"]))
-	if sim.very_last_stand_active:
-		lines.append("VERY LAST STAND: %s" % ("THE LAST NODE - conquest decides" if sim.very_last_stand_gap <= 0.0
-				else ("falls in %d s" % int(ceil(sim.drop_in(n["id"]))) if sim.is_warned(n["id"]) else "could fall next")))
-	elif sim.last_stand_active:
-		var k := sim.drop_order_of(n["id"])
-		lines.append("LAST STAND: %s" % ((("falls in wave %d" if sim.v3 else "drop #%d") % k) if k > 0 else ("THE %s - never falls" % ("LAST RING" if sim.v3 else "FINAL") if sim.is_final(n["id"]) else "")))
-	inspector_first.text = "· " + str(lines.pop_front())
-	inspector_label.text = "\n".join(lines)
-	inspector_label.visible = not lines.is_empty()
+	_font_color(inspector_who, Color("c8e6ee") if owner == "" else inspector_col)
+	# ui-node compact card: STRUCTURE [tier chip] / units bar (yours, allies', neutral) / shields (vats) / ONE status line
+	inspector_first.text = "· " + _structure_word(n)
+	var hidden_pop := owner != "" and not sim.allied(owner, human)
+	inspector_tier.visible = n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon", ""]
+	inspector_units.visible = not hidden_pop
+	inspector_shields.visible = owner != "" and Sim.has_vat(n) and NodeNoir.shield_count(float(n["armour_cap"])) > 0
+	inspector_label.text = _status_line(n, hidden_pop)
+	inspector_label.visible = inspector_label.text != ""
+	inspector_tier.queue_redraw()
+	inspector_units.queue_redraw()
+	inspector_shields.queue_redraw()
 	inspector_progress.visible = n["build_kind"] != ""
 	inspector_progress.value = Sim.build_progress(n) * 100.0
 	_layout_inspector_wheel(p, vp)
@@ -2048,6 +2051,139 @@ func _refresh_inspector(cam: Camera3D) -> void:
 				why = _monster_ready(n)
 		b.disabled = why != ""
 		b.tooltip_text = why
+		if b is ActionWedge:                              # ui-node: the slice fills with goo as your units near its price;
+			var cost_now := int(a["cost"])                # a greyed slice names its reason on a phone (no tooltips there)
+			(b as ActionWedge).afford = 1.0 if cost_now <= 0 else clampf(float(n["units"]) / float(cost_now), 0.0, 1.0)
+			(b as ActionWedge).why = _short_why(why)
+
+
+func card_px(fs: int) -> int:
+	## A node-card word's font size: fs x ui_scale, never under the phone's 12.5 pt floor (PROJECT.md UI rules).
+	var floor_px := 12.5 / maxf(UiKit.pt_per_px(root.get_viewport_rect().size), 0.01) if mobile else 0.0
+	return maxi(int(fs * ui_scale), int(ceil(floor_px)))
+
+
+func _structure_word(n: Dictionary) -> String:
+	## The card's title (ui-node): what stands here; the tier sits in its own chip.
+	if n["relay"] != "":
+		return "%s RELAY" % str(n["relay"]).to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else "")
+	if n["structure"] == "machinegoon":
+		return "MACHINEGOON"
+	return STRUCT_LABEL.get(n["structure"], "VAT")
+
+
+func _status_line(n: Dictionary, hidden_pop: bool) -> String:
+	## The card's one status line (ui-node): the clock that matters most, else what the node does for you.
+	var owner: String = n["owner"]
+	if n["build_kind"] != "":
+		return "BUILDING %s · %d s" % [str(n["build_target"].get("kind", n["build_kind"])).to_upper().replace("_", " "), int(ceil(n["build_timer"]))]
+	if sim.very_last_stand_active:
+		if sim.very_last_stand_gap <= 0.0:
+			return "THE LAST NODE"
+		return "FALLS IN %d s" % int(ceil(sim.drop_in(n["id"]))) if sim.is_warned(n["id"]) else "COULD FALL NEXT"
+	if sim.last_stand_active and sim.is_warned(n["id"]):
+		return "FALLS IN %d s" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t))
+	if n["relay"] != "" and shows("relay"):
+		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
+		var nxt := sim.relay_state_key(n, sim.relay_next_index(n)).to_upper()
+		if n["relay_phase"] == "warning":
+			return "%s → %s IN %.1f s" % [cur, nxt, n["relay_t"]]
+		if n["relay_phase"] == "moving":
+			return "%s → %s · MOVING" % [cur, nxt]
+		if n["relay_cd"] > 0.0:
+			return "%s · NEXT %s · %d s" % [cur, nxt, int(ceil(n["relay_cd"]))]
+		return "%s · NEXT %s · READY" % [cur, nxt]
+	if hidden_pop:
+		return "POPULATION HIDDEN"
+	if owner == "":
+		return "NEUTRAL"
+	if n["structure"] == "laser" and owner == human:
+		return "LASER %s" % ("FIRING" if n["cannon_burst"] > 0.0 else ("READY" if n["cannon_cd"] <= 0.0 else "RECHARGING %d s" % int(ceil(n["cannon_cd"]))))
+	if n["structure"] == "monster_hub" and shows("monster"):
+		var mr := _monster_ready(n)
+		return "MONSTER %s" % ("READY" if mr == "" else mr.to_upper())
+	if n["structure"] == "forge" and shows("forge_readout"):
+		return "+%d%% ATTACK · -%d%% DAMAGE" % [roundi(Rules.forge_bonus * 100.0), roundi((1.0 - 1.0 / Rules.FORGE_DEFENCE) * 100.0)]
+	if n["structure"] == "machinegoon":
+		return "NO PRODUCTION · FEED IT"
+	if Sim.has_vat(n):
+		var up := sim.upgrade_cost(n)
+		var prod := "+%.1f / s" % Rules.shown_f(sim.production(n))
+		if owner == human and shows("upgrade"):
+			return prod + (" · MAX TIER" if up <= 0 else " · DOUBLE-TAP: UPGRADE")
+		return prod
+	return ""
+
+
+func _short_why(why: String) -> String:
+	## A greyed slice's reason in a few words (the Sim's sentences are tooltips; phones have none).
+	if why == "":
+		return ""
+	var w := why.to_upper()
+	if "UNIT" in w or "AFFORD" in w or "ENOUGH" in w:
+		return ""                                     # the price in red says it, and the goo shows how close you are
+	if "COOLDOWN" in w:
+		return "COOLDOWN"
+	if "SWITCHING" in w or "MOVING" in w:
+		return "SWITCHING"
+	if "ATTACK" in w:
+		return "UNDER ATTACK"
+	if "BUILD" in w:
+		return "BUILDING"
+	if "MAX" in w:
+		return "MAX TIER"
+	return w.left(16)
+
+
+func _draw_card_units() -> void:
+	## The card's units bar: a glass track, lit goo up to units / cap in the node's colour, "29 / 60" over it.
+	if inspector_id < 0 or not is_instance_valid(inspector_units):
+		return
+	var n: Dictionary = sim.nodes[inspector_id]
+	var c := inspector_units
+	var s := ui_scale
+	var r := Rect2(Vector2(0, 2.0 * s), Vector2(c.size.x, c.size.y - 4.0 * s))
+	var cap := maxf(float(sim.node_cap(n)), 1.0)
+	var units: float = sim.garrison_total(n) if sim.allied_units(n) > 0.0001 else float(n["units"])
+	var f := clampf(units / cap, 0.0, 1.0)
+	var pts := NoirBox.rounded(r, r.size.y / 2.0)
+	NodeNoir.glass(c, pts, 0.9)
+	if f > 0.0:
+		var fr := Rect2(r.position, Vector2(maxf(r.size.x * f, r.size.y), r.size.y))
+		var gp := NodeNoir.clean(NoirBox.rounded(fr, r.size.y / 2.0))
+		var cols := PackedColorArray()
+		for q in gp:
+			cols.append(Color(inspector_col.darkened(0.45).lerp(inspector_col.darkened(0.15), (q.y - r.position.y) / r.size.y), 0.9))
+		c.draw_polygon(gp, cols)
+	var loop := pts.duplicate()
+	loop.append(pts[0])
+	c.draw_polyline(loop, Color(inspector_col, 0.6), maxf(1.0, 1.2 * s), true)
+	var txt := "%d / %d" % [Rules.shown(units), Rules.shown(cap)]
+	var fs := card_px(14)
+	var tw := UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var base := Vector2(r.get_center().x - tw / 2.0, r.get_center().y + (UI_FONT.get_ascent(fs) - UI_FONT.get_descent(fs)) / 2.0)
+	c.draw_string_outline(UI_FONT, base, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(4 * s), Color(0, 0, 0, 0.85))
+	c.draw_string(UI_FONT, base, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.INK)
+
+
+func _draw_card_shields() -> void:
+	## The card's armour: the shields (one per 0.1 of the tier's armour) and, while they fill, the seconds to full.
+	if inspector_id < 0 or not is_instance_valid(inspector_shields):
+		return
+	var n: Dictionary = sim.nodes[inspector_id]
+	var c := inspector_shields
+	var s := ui_scale
+	var cap := float(n["armour_cap"])
+	var arm := float(n["armour"])
+	var h := c.size.y - 4.0 * s
+	var txt := "ARMOUR x%.1f" % arm if arm >= cap - 0.0001 else "FULL IN %d s" % int(ceil(sim.armour_full_in(n)))
+	var fs := card_px(13)
+	var tw := UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var rw := NodeNoir.shield_count(cap) * (h * 0.84 + 2.0 * s)
+	var x0 := (c.size.x - rw - 6.0 * s - tw) / 2.0
+	NodeNoir.shields_row(c, Vector2(x0 + rw / 2.0, c.size.y / 2.0), h, arm, cap, inspector_col, s, Time.get_ticks_msec() / 1000.0)
+	c.draw_string(UI_FONT, Vector2(x0 + rw + 6.0 * s, c.size.y / 2.0 + (UI_FONT.get_ascent(fs) - UI_FONT.get_descent(fs)) / 2.0), txt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.MUTED)
 
 
 func _structure_line(n: Dictionary) -> String:

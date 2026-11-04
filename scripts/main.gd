@@ -477,6 +477,7 @@ func _start_map(path: String) -> void:
 	skill_fx.setup(sim, vis, HUMAN)
 	drag_line = MeshInstance3D.new()
 	drag_line.mesh = drag_mesh
+	drag_line.visible = false                       # ui-node: the HUD overlay draws the send ribbon / rings (Neon Noir)
 	add_child(drag_line)
 	route_label = Label3D.new()
 	route_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -486,6 +487,8 @@ func _start_map(path: String) -> void:
 	route_label.no_depth_test = true
 	route_label.modulate = Rules.seat_color(HUMAN)
 	route_label.visible = false
+	route_label.modulate.a = 0.0                   # ui-node: its words show in the overlay's pill (kept: tests read it)
+	route_label.outline_modulate.a = 0.0
 	add_child(route_label)
 	for seat in seats.values():
 		if (seat != HUMAN or demo) and scenario == "" and not online and director == null:   # (a lesson scripts its rival)
@@ -2377,6 +2380,7 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 		route_label.text = "HOLD" if _queued_at(from) else "CANCEL"
 		route_label.position = a + Vector3(0, 6.5, 0)
 		route_label.visible = true
+		_route_hud({"hold": from, "label": route_label.text})
 		return
 	if aim["kind"] == "fail" and target >= 0:
 		var warn := Mats.glow(Rules.state_color("warn"))
@@ -2388,7 +2392,7 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 		route_label.text = "NO ROUTE"
 		route_label.position = sim.nodes[target]["pos"] + Vector3(0, 6, 0)
 		route_label.visible = true
-		_route_hud({"pts": PackedVector3Array([a, sim.nodes[target]["pos"]]), "ok": false, "target": target})
+		_route_hud({"pts": PackedVector3Array([a, sim.nodes[target]["pos"]]), "ok": false, "target": target, "label": "NO ROUTE"})
 		return
 	if aim["kind"] == "send":
 		var route := sim.find_route(from, target)
@@ -2416,8 +2420,9 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 		route_label.text = "%s · %d units · %d s" % [verb.to_upper(), Rules.shown(count), int(round(seconds))]
 		route_label.position = tn["pos"] + Vector3(0, 6.5, 0)
 		route_label.visible = true
-		_route_hud({"pts": pts, "ok": true, "target": target})
+		_route_hud({"pts": pts, "ok": true, "target": target, "label": route_label.text})
 		return
+	_route_hud({"pts": PackedVector3Array([a, b]), "ok": true, "free": true})   # ui-node: the finger's ribbon (overlay)
 	drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, mat)          # cancel / no node that way: the finger's line only
 	for k in range(-1, 2):
 		var off := (b - a).cross(Vector3.UP).normalized() * 0.1 * k
@@ -2470,11 +2475,13 @@ func _draw_monster_drag(hub: int, hit: Vector3) -> void:
 	drag_mesh.surface_add_vertex(a + up)
 	drag_mesh.surface_add_vertex((sim.nodes[target]["pos"] if target >= 0 else hit) + up)
 	drag_mesh.surface_end()
+	if target < 0 or target == hub:                     # ui-node: the aim line is the overlay's ribbon now
+		_route_hud({"pts": PackedVector3Array([a, hit]), "ok": true, "free": true})
 	if target >= 0 and target != hub:
 		route_label.text = "SEND MONSTER" if ok else "OUT OF REACH"
 		route_label.position = sim.nodes[target]["pos"] + Vector3(0, 6, 0)
 		route_label.visible = true
-		_route_hud({"pts": PackedVector3Array([a, sim.nodes[target]["pos"]]), "ok": ok, "target": target, "monster": true})
+		_route_hud({"pts": PackedVector3Array([a, sim.nodes[target]["pos"]]), "ok": ok, "target": target, "monster": true, "label": route_label.text})
 
 
 var _perf_t := 0.0
