@@ -780,10 +780,16 @@ func _layout_signs(cam: Camera3D, avoid: Array) -> void:
 		var r: float = float(ns[1])
 		var pk := _pulse_k(float(_sign_pulse.get(id, 0.0)))
 		var R: float = float(SIGN_PT[tier]) * pt * (1.0 + 0.3 * float(pk[0]) * float(pk[1]))
-		var below := r * 0.86 + R * 0.6
-		var lift := Vector2(0, R * 0.39)                # the sign's box centre sits that far over the plate's (the beacon)
-		var c := lift + _clear_spot((ns[0] as Vector2) - lift, [Vector2(0, -r * 0.86 - R * 0.6), Vector2(0, below),
-				Vector2(-r - R * 0.7, 0), Vector2(r + R * 0.7, 0)], Vector2(R, R * 1.26), avoid)
+		# the sign's real box (sign_rect: plate + beacon, + the NEXT DROP caption on the red one): its centre sits `lift` over
+		# the plate's centre, `half` its half size - the spots are tried with that box, so a caption never lands on a count
+		var cap := _caption_size() if tier == 0 else Vector2.ZERO
+		var half := Vector2(maxf(R, cap.x / 2.0), R * 1.26 + cap.y / 2.0)
+		var lift := Vector2(0, R * 0.39 + cap.y / 2.0)
+		var up := r * 0.86 + R * 0.6 + cap.y / 2.0
+		var side := r + R * 0.7
+		var c := lift + _clear_spot((ns[0] as Vector2) - lift, [Vector2(0, -up), Vector2(0, r * 0.86 + R * 0.6),
+				Vector2(-side, 0), Vector2(side, 0), Vector2(-side, -up * 0.7), Vector2(side, -up * 0.7),
+				Vector2(0, -up - half.y), Vector2(-side - half.x, 0), Vector2(side + half.x, 0)], half, avoid)
 		_signs[id] = [c, R, tier]
 		avoid.append(sign_rect(id))
 
