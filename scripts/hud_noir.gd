@@ -12,6 +12,7 @@ extends RefCounted
 ## any other part draws its NoirBox placeholder from PRESETS. Layout code never changes when a sprite lands.
 
 const DATA := preload("res://scripts/hud_noir_data.gd")
+const NODE_DATA := preload("res://scripts/node_noir_data.gd")   # ui-node: the node parts (tools/hud_noir_import.py --node)
 const ACCENT := {"vex": Color("19d6ea"), "null": Color("f327c3"), "bloom": Color("a1eb39"), "ember": Color("ff7c19"),
 		"solar": Color("ffce58")}
 const ENEMY := Color("ff3b4e")
@@ -46,6 +47,7 @@ const PRESETS := {
 	"skill_card": {"radius": 12.0, "glow": 0.0, "rim_a": 0.28, "fill_a": 0.5, "gloss": false, "rim_w": 1.2},
 	"skill_card_armed": {"radius": 12.0, "glow": 1.0, "rim_a": 1.0, "fill_a": 0.7, "gloss": false},
 	"hint_pill": {"radius": 12.0, "glow": 0.8, "fill_a": 0.9, "gloss": false},
+	"node_card": {"radius": 10.0, "glow": 0.7, "fill_a": 0.9, "gloss": false, "rim": "given"},   # ui-node: the compact node card
 }
 
 static var accent := Color("19d6ea")
@@ -62,7 +64,7 @@ static func setup(faction_id: String, scale: float) -> void:
 
 
 static func has(id: String) -> bool:
-	return DATA.PARTS.has(id)
+	return DATA.PARTS.has(id) or NODE_DATA.PARTS.has(id)
 
 
 static func texture(path: String) -> Texture2D:
@@ -75,8 +77,7 @@ static func texture(path: String) -> Texture2D:
 
 static func part_texture(id: String) -> Texture2D:
 	## A part's cut sprite (its FILL layer), or null while the part is a placeholder.
-	var parts: Dictionary = DATA.PARTS
-	return texture(str(parts[id]["file"])) if parts.has(id) else null
+	return texture(str(part_data(id)["file"])) if has(id) else null
 
 
 static func channel(name: String, given: Color) -> Color:
@@ -139,7 +140,7 @@ static func box(id: String, rim := Color(0, 0, 0, 0), content := Vector4(6, 6, 6
 
 static func part_data(id: String) -> Dictionary:
 	var parts: Dictionary = DATA.PARTS
-	return parts.get(id, {})
+	return parts.get(id, (NODE_DATA.PARTS as Dictionary).get(id, {}))
 
 
 static func sprite_box(id: String, rim: Color, k := -1.0) -> SkinBox:

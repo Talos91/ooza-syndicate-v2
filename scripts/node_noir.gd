@@ -187,7 +187,9 @@ static func tier_chip(ci: CanvasItem, centre: Vector2, h: float, tier: int, col:
 	var tw := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var w := tw + h * 0.9
 	var r := Rect2(centre - Vector2(w, h) / 2.0, Vector2(w, h))
-	if not sprite(ci, "node_tier_chip", centre, r.size, col):
+	if HudNoir.has("node_tier_chip"):                  # DROP-IN: a 9-slice chip (its width follows the text)
+		ci.draw_style_box(HudNoir.box("node_tier_chip", col, Vector4.ZERO), r)
+	else:
 		var e := h * 0.32
 		var pts := PackedVector2Array([r.position + Vector2(e, 0), Vector2(r.end.x - e, r.position.y), Vector2(r.end.x, centre.y),
 				Vector2(r.end.x - e, r.end.y), r.position + Vector2(e, h), Vector2(r.position.x, centre.y)])
@@ -206,7 +208,9 @@ static func pill(ci: CanvasItem, centre: Vector2, txt: String, col: Color, font:
 	var sz := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
 	var h := font.get_height(fs) + 8.0 * s
 	var r := Rect2(centre - Vector2(sz.x + 20.0 * s, h) / 2.0, Vector2(sz.x + 20.0 * s, h))
-	if not sprite(ci, "node_label_pill", centre, r.size, col):
+	if HudNoir.has("node_label_pill"):                 # DROP-IN: a 9-slice pill (its width follows the words)
+		ci.draw_style_box(HudNoir.box("node_label_pill", col, Vector4.ZERO), r)
+	else:
 		var pts := NoirBox.rounded(r, h / 2.0)
 		glass(ci, pts, 0.9)
 		pts.append(pts[0])

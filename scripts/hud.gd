@@ -1420,9 +1420,15 @@ class ActionWedge:
 		var poly := _slice(c, r_in, ro)
 		if lift > 0.01:
 			draw_polyline(_edge(c, ro + 4.0 * s), Color(a, 0.25 * lift), 8.0 * s, true)
-		NodeNoir.glass(self, poly, 0.9, Color(a, 0.25 * lift))
+		if HudNoir.has("node_wedge"):                     # DROP-IN: the director's slice, unrolled onto this one
+			_mapped("node_wedge", c, r_in, ro, Color.WHITE)
+			if f_goo() > 0.0:
+				_mapped("node_wedge_goo", c, r_in, r_in + (ro - r_in) * f_goo(), Color(a, 0.95 if f_goo() >= 1.0 else 0.7))
+			_mapped_rim("node_wedge", c, r_in, ro, a)
+		else:
+			NodeNoir.glass(self, poly, 0.9, Color(a, 0.25 * lift))
 		var f := clampf(afford, 0.0, 1.0)
-		if f > 0.0:                                       # the goo: from the inner edge out, a lit surface where it stands
+		if f > 0.0 and not HudNoir.has("node_wedge"):     # the goo: from the inner edge out, a lit surface where it stands
 			var rf := r_in + (ro - r_in) * f
 			var gp := NodeNoir.clean(_slice(c, r_in, rf))
 			var gc := PackedColorArray()
@@ -1447,6 +1453,44 @@ class ActionWedge:
 		_text(title, p + Vector2(0, 9.0 * s * type_scale), 13.0, ink, maxw)
 		var low := why if why != "" else cost
 		_text(low, p + Vector2(0, 25.0 * s * type_scale), 12.0, Color(HudNoir.ENEMY.lightened(0.25) if off else a.lightened(0.35), k), maxw)
+
+	func f_goo() -> float:
+		return clampf(afford, 0.0, 1.0)
+
+	func _uv_poly(c: Vector2, ri: float, ro2: float, full_ro: float) -> Array:
+		## The slice ri..ro2 with polar UVs into an unrolled-slice texture: u across a0 -> a1, v 0 at full_ro (its top = the
+		## outer rim) to 1 at r_in.
+		var pts := PackedVector2Array()
+		var uvs := PackedVector2Array()
+		var ang := _angles()
+		for t in ang:
+			pts.append(c + Vector2(cos(t), sin(t)) * hex_r(t, ro2, hex_base))
+			uvs.append(Vector2((t - a0) / (a1 - a0), 1.0 - (ro2 - r_in) / maxf(full_ro - r_in, 1.0)))
+		for i in range(ang.size() - 1, -1, -1):
+			var t: float = ang[i]
+			pts.append(c + Vector2(cos(t), sin(t)) * hex_r(t, ri, hex_base))
+			uvs.append(Vector2((t - a0) / (a1 - a0), 1.0 - (ri - r_in) / maxf(full_ro - r_in, 1.0)))
+		return [pts, uvs]
+
+	func _mapped(id: String, c: Vector2, ri: float, ro2: float, mod: Color) -> void:
+		var t := HudNoir.texture(str(HudNoir.part_data(id).get("file", "")))
+		if t == null:
+			return
+		var pu: Array = _uv_poly(c, ri, ro2, outer())
+		var cols := PackedColorArray()
+		cols.resize((pu[0] as PackedVector2Array).size())
+		cols.fill(mod)
+		draw_polygon(pu[0], cols, pu[1], t)
+
+	func _mapped_rim(id: String, c: Vector2, ri: float, ro2: float, mod: Color) -> void:
+		var t := HudNoir.texture(str(HudNoir.part_data(id).get("rim", "")))
+		if t == null:
+			return
+		var pu: Array = _uv_poly(c, ri, ro2, ro2)
+		var cols := PackedColorArray()
+		cols.resize((pu[0] as PackedVector2Array).size())
+		cols.fill(mod)
+		draw_polygon(pu[0], cols, pu[1], t)
 
 	func _text(t: String, at: Vector2, px: float, col: Color, maxw: float) -> void:
 		var fs := int(round(px * ui_scale * type_scale))
