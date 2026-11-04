@@ -6,7 +6,7 @@
   with score pills, status pill + amber seconds capsule, CATCH-UP tag, SEND housing with four liquid vats (100 / 75 / 50 / 25, the picked one lit),
   square buttons, the skill column as hex vessels whose liquid shows the charge, no slot labels, seconds inside the ring, two-line names where one
   would cut (EMERGENCY EVAC, CORE MELTDOWN), noir build bar, alert signs, pulse and upgrade chip from the cut sprites.
-  - **The HUD is dark-only** during a match (`UiTheme.match_dark()`; the saved theme comes back on leaving the match), with the **faction accent
+  - **The HUD is dark-only** (the menus have no LIGHT theme any more, see below), with the **faction accent
     channel** (`HudNoir.ACCENT`, the `ooze` layer tinted per faction).
   - **Rings fixed per slot** and **liquid colour fixed per slot** (Daniele 2026-11-03: fixed for now; one constant `HudNoir.RING`).
   - Board marks, score pills and the node inspector keep the **seat colours** (same colours on every screen); the node inspector is still code-drawn;
