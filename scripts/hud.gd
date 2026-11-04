@@ -2472,10 +2472,9 @@ func _build_end() -> void:
 		where = "ROOM %s · %s" % [Net.room_code, where]
 	var primary := []
 	var quiet := []
-	if not main.online:                                # CONTINUE opens PLAY; RETRY replays this map as it was
-		primary = ["CONTINUE  →", func(): main.to_menu("play")] if won else ["RETRY  →", main.restart]
-		quiet = [["REMATCH · RANDOM MAP", main.rematch_random], ["CHANGE LOADOUT", func(): main.to_menu("armies")],
-				["HOME", main.to_menu]]
+	if not main.online:                                # UX pass (board 07): PLAY AGAIN = the same setup, one tap
+		primary = ["PLAY AGAIN  →", main.restart]
+		quiet = [["HOME", main.to_menu], ["RANDOM MAP", main.rematch_random], ["CHANGE SETUP", func(): main.to_menu("setup")]]
 	if _end_page == "details":
 		s.details({"name": str(main.map.get("name", "")), "sub": where, "outcome": outcome, "primary": primary,
 				"back": func():

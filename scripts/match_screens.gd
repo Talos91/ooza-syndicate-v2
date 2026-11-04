@@ -173,14 +173,7 @@ func result(d: Dictionary) -> Dictionary:
 		y += UiKit.line_h(self, 20, true) + 4.0
 	# iOS (Safari's 320-340 pt, a narrow column): where the quiet buttons need a second row, the sub line (the matchup -
 	# MATCH DETAILS shows it too) gives them its height
-	var quiet_rows := 1
-	var fx := 0.0
-	for q in d.get("quiet", []):
-		var qw := minf(UiKit.text_w(self, str(q[0]), 14, true) + 36.0, w)
-		if fx > 0.0 and fx + qw > w:
-			quiet_rows += 1
-			fx = 0.0
-		fx += qw + 8.0
+	var quiet_rows := maxi(1, ceili((d.get("quiet", []) as Array).size() / 3.0))   # (three per row, equal widths)
 	var sub := str(d.get("sub", ""))
 	if quiet_rows > 1 and ph:
 		sub = ""
@@ -230,22 +223,24 @@ func result(d: Dictionary) -> Dictionary:
 		y += ms.y + 10.0
 	var prim: Array = d.get("primary", [])
 	var det: Callable = d.get("details", Callable())
-	var dw := UiKit.text_w(self, "MATCH DETAILS", 15, true) + 44.0 if det.is_valid() else 0.0
+	# UX pass (Daniele 2026-11-04): two rows of the same total width - the primary (2 parts) + MATCH DETAILS (1 part), then
+	# the quiet ways out sharing the second row in equal parts
+	var gap := 10.0
+	var dw := floorf((w - gap) / 3.0) if det.is_valid() else 0.0
 	if not prim.is_empty():
-		var pw := w - (dw + 12.0 if det.is_valid() else 0.0)
+		var pw := w - (dw + gap if det.is_valid() else 0.0)
 		out["primary"] = UiKit.btn(self, str(prim[0]), Vector2(x, y), Vector2(pw, 52.0), prim[1], "primary", f, 17)
 	if det.is_valid():
 		UiKit.btn(self, "MATCH DETAILS", Vector2(x + w - dw, y), Vector2(dw, 52.0), det, "secondary", f, 15)
 	y += UiKit.tap_h(self, 52.0) + 8.0
-	var qx := x
-	for q in d.get("quiet", []):                       # the quieter ways out: framed, >= 44 pt (the iPhone sweep: bare text
-		var qw := UiKit.text_w(self, str(q[0]), 14, true) + 36.0   # links were hard to hit), quiet next to the primary
-		qw = minf(qw, w)
-		if qx > x and qx + qw > x + w:                 # iOS: the next row rather than off the screen ("HO...")
-			qx = x
+	var quiet: Array = d.get("quiet", [])
+	var per := mini(maxi(quiet.size(), 1), 3)           # up to three per row, equal widths
+	var qw := floorf((w - gap * (per - 1)) / per)
+	for i in range(quiet.size()):
+		var q: Array = quiet[i]
+		if i > 0 and i % per == 0:
 			y += UiKit.tap_h(self, 44.0) + 8.0
-		UiKit.btn(self, str(q[0]), Vector2(qx, y), Vector2(qw, 44.0), q[1], "secondary", f, 14)
-		qx += qw + 8.0
+		UiKit.btn(self, str(q[0]), Vector2(x + (i % per) * (qw + gap), y), Vector2(qw, 44.0), q[1], "secondary", f, 14)
 	if not (d.get("quiet", []) as Array).is_empty():
 		y += UiKit.tap_h(self, 44.0)
 	page.position.y = clampf((v.y - y) / 2.0, 8.0, maxf(8.0, v.y - y - 8.0))

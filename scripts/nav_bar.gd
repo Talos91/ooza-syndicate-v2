@@ -6,7 +6,7 @@ extends Control
 
 signal tab_pressed(id: String)
 
-const TABS := [["home", "HOME"], ["play", "PLAY"], ["armies", "ARMIES"], ["campaign", "CAMPAIGN"], ["profile", "PROFILE"]]
+const TABS := [["home", "HOME"], ["armies", "ARMIES"], ["campaign", "CAMPAIGN"], ["profile", "PROFILE"]]   # UX pass: no PLAY tab (HOME plays)
 
 var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var active := ""
