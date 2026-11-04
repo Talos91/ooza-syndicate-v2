@@ -56,7 +56,7 @@ func _ready() -> void:
 	check(tabs_seen >= 16, "the tab bar was there to tap (%d taps)" % tabs_seen)
 	# BACK, touched: a meta page opened from HOME, and one from PROFILE (a NavBar tab of its own now, no BACK of its
 	# own - its sub-pages' BACK returns to it), go back where they came from
-	for path in [["main", "options"], ["profile", "leaderboard"], ["profile", "account"], ["play", "challenges"]]:
+	for path in [["main", "options"], ["profile", "leaderboard"], ["profile", "account"], ["armies", "challenges"]]   # (UX pass: no PLAY page):
 		for p in path:
 			m.call("show_" + p)
 			await _frames(3)
