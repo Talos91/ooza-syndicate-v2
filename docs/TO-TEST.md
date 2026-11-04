@@ -1,9 +1,14 @@
-# To test - ALPHA 23.22 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.23 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.23 (staging: https://oozesyndicate.com/staging/)
+- [ ] SEND vats and skill vessels: no dark notch / bright streak at the waterline any more.
+- [ ] CATCH-UP sits right under your own score pill.
+- [ ] Last Stand: the red sign says NEXT DROP and "8s", big enough, over the platform; the top line is short, seconds amber with no box.
 
 ## 0.23.22 (staging: https://oozesyndicate.com/staging/)
 - [ ] **Neon Noir HUD** in a match on the phone, one faction at a time: top capsule + scores, SEND vats (100/75/50/25), skill hex vessels filling with charge, seconds in the ring - readable and tappable?

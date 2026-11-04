@@ -1,5 +1,20 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.23 "Alpha 23" - 2026-11-04 (STAGING only; HUD fixes from Daniele's staging check of 0.23.22, release rel-02322)
+
+- **Liquid wave artifact fixed** ("the wave texture in the interface has a small artifact"): the waterline strip in the SEND vats and
+  skill vessels scrolled with a hard wrap - a mip jump plus the strip's transparent border made a dark notch / bright streak. Now two
+  samples half a tile apart are cross-faded, inset from the border, with the unwrapped gradients (`shaders/hud_liquid.gdshader`).
+- **CATCH-UP tag placed under your own score pill** ("catch up seems randomly positioned"): it used to hang under the status line's
+  empty slot at the bar's left end; now it sits right under your pill, and drops under the Last Stand line only when that line would
+  meet it (`Hud._place_catchup`).
+- **Last Stand node signs bigger, named and on top** ("way too small and anonymous and should be positioned on top not bottom"): plates
+  44 / 34 / 28 pt across (were 30 / 25 / 22), the seconds read "8s", the red one carries a **NEXT DROP** caption, and the sign goes over
+  the platform's top rim first (under it only when the top is taken).
+- **Last Stand line shorter, no orange box** ("the orange box for the time looks weird, also last stand message is too long"):
+  "LAST STAND · NEXT DROP 8 s · 2 LEFT" (was "LAST STAND · RINGS · RING 2 DROPPING · next node in 8 s (2 left)"); the method and how it
+  falls show only during the opening pulse; the seconds are amber text, the capsule behind them is gone.
+
 ## 0.23.22 "Alpha 23" - 2026-11-04 (STAGING only; release rel-02322 = main 4376374 + ui-hud b083d09 with the menus rolled back; Daniele: "in game ui ready for staging branch")
 
 - **Alpha 24 step 2: the Neon Noir in-game HUD** (the art director's revision 6, cut in by 🧩 ui-hud-cut3; Daniele's "Yes, cut it in"). Top capsule

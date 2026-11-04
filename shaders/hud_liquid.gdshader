@@ -55,11 +55,26 @@ void fragment() {
 		}
 		o = over(o, mix(lc, vec3(1.0), 0.6), b * la * under * 0.7 * liquid_a);
 		o = over(o, vec3(1.0), texture(shine_tex, uv).a * under * liquid_a);
-		// the meniscus strip, centred on the waterline, scrolling sideways (its body tiles left-right)
+		// the meniscus strip, centred on the waterline, scrolling sideways (its body tiles left-right). 0.23.23 (Daniele: "the
+		// wave texture has a small artifact"): fract() made a seam where it wrapped - a mip jump plus the strip's transparent
+		// border bled in (a dark notch / a bright streak). Two samples half a tile apart, cross-faded so neither is read near
+		// its wrap, inset from the strip's border, sampled with the unwrapped gradients.
 		float sv = (uv.y - wl) / strip_h + 0.5;
 		if (sv > 0.0 && sv < 1.0 && lv < 0.985) {
-			vec2 suv = vec2(strip.x + strip.z * fract(bx + TIME * 0.035 + seed), strip.y + strip.w * sv);
-			float sa = texture(surface_tex, suv).a * smoothstep(0.02, 0.2, la);
+			float u = bx + TIME * 0.035 + seed;
+			float u1 = fract(u);
+			float u2 = fract(u + 0.5);
+			float w1 = 1.0 - abs(2.0 * u1 - 1.0);           // 0 at u1's wrap, 1 half a tile away (where u2 wraps)
+			vec2 ts = vec2(textureSize(surface_tex, 0));
+			float inset = 2.0 / ts.x;
+			float sx = strip.x + inset;
+			float sw = strip.z - 2.0 * inset;
+			float sy = strip.y + strip.w * sv;
+			vec2 gx = vec2(dFdx(bx) * sw, dFdx(uv.y) / strip_h * strip.w);
+			vec2 gy = vec2(dFdy(bx) * sw, dFdy(uv.y) / strip_h * strip.w);
+			float sa1 = textureGrad(surface_tex, vec2(sx + sw * u1, sy), gx, gy).a;
+			float sa2 = textureGrad(surface_tex, vec2(sx + sw * u2, sy), gx, gy).a;
+			float sa = mix(sa2, sa1, w1) * smoothstep(0.02, 0.2, la);
 			o = over(o, mix(lc, vec3(1.0), 0.45), sa * min(1.0, liquid_a + 0.2));
 		}
 	}

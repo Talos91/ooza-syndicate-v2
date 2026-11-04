@@ -49,8 +49,13 @@ const UPGRADE_ARROW_SPEED := 2.4      # rad/s of the bob/pulse
 # greyed out ... like a NEON ALARM SIGN, not a flat HUD, and when one changes state it PULSES for a bit"): a neon hex plate with
 # the seconds, a warning beacon on top; tier 0 = next to fall, 1 = the one after, 2 = every other warned node.
 const SIGN_COL := [Color(1.0, 0.17, 0.22), Color(1.0, 0.82, 0.12), Color(0.64, 0.69, 0.77)]
-const SIGN_PT := [15.0, 12.5, 11.0]   # plate circumradius in points per tier (red 30 pt across)
-const SIGN_FONT_PT := [17.0, 14.5, 12.5]   # the seconds (text >= 12.5 pt on a phone)
+# 0.23.23 (Daniele on staging 0.23.22: "hud for last stand is way too small and anonymous and should be positioned on top not
+# bottom"): bigger plates, the seconds say "s", the red one carries a NEXT DROP caption, and the sign goes over the platform's
+# top rim first (under it only when the top is taken).
+const SIGN_PT := [22.0, 17.0, 14.0]   # plate circumradius in points per tier (red 44 pt across)
+const SIGN_FONT_PT := [20.0, 16.0, 13.5]   # the seconds (text >= 12.5 pt on a phone)
+const SIGN_CAPTION := "NEXT DROP"     # over the red sign
+const SIGN_CAPTION_PT := 12.5
 const SIGN_ALPHA := [1.0, 0.95, 0.8]
 const SIGN_PULSE_S := 1.5             # seconds a sign (or the upgrade chip) pulses after it changes state
 const SIGN_PULSE_BEATS := 3.0
@@ -745,15 +750,25 @@ func sign_rect(id: int) -> Rect2:
 	if s == null:
 		return Rect2()
 	var R := float(s[1])
-	return Rect2((s[0] as Vector2) - Vector2(R, R * 1.65), Vector2(2.0 * R, R * 2.52))
+	var r := Rect2((s[0] as Vector2) - Vector2(R, R * 1.65), Vector2(2.0 * R, R * 2.52))
+	if int(s[2]) == 0:                                    # the NEXT DROP caption over the beacon
+		var cap := _caption_size()
+		var top := r.position.y - cap.y
+		r = r.merge(Rect2(Vector2((s[0] as Vector2).x - cap.x / 2.0, top), cap))
+	return r
+
+
+func _caption_size() -> Vector2:
+	var f := int(round(SIGN_CAPTION_PT * _pt()))
+	return Vector2(Hud.UI_FONT.get_string_size(SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x + 6.0, Hud.UI_FONT.get_height(f))
 
 
 var _signs := {}                       # node id -> [plate centre, circumradius, tier]: laid out this frame
 
 
 func _layout_signs(cam: Camera3D, avoid: Array) -> void:
-	## Each warned node's sign: under the platform's camera-facing rim when that is clear of every badge, else over the
-	## top rim, else beside it (Daniele, 0.19.0: "floating over the border of the platform in a way it doesn't cover what's
+	## Each warned node's sign: over the platform's top rim when that is clear of every badge (0.23.23; it was under the
+	## camera-facing rim first), else under it, else beside it (Daniele, 0.19.0: "floating over the border of the platform in a way it doesn't cover what's
 	## going on"; ui-neon: and never over a count).
 	_signs.clear()
 	if not hud.shows("danger"):
@@ -767,7 +782,7 @@ func _layout_signs(cam: Camera3D, avoid: Array) -> void:
 		var R: float = float(SIGN_PT[tier]) * pt * (1.0 + 0.3 * float(pk[0]) * float(pk[1]))
 		var below := r * 0.86 + R * 0.6
 		var lift := Vector2(0, R * 0.39)                # the sign's box centre sits that far over the plate's (the beacon)
-		var c := lift + _clear_spot((ns[0] as Vector2) - lift, [Vector2(0, below), Vector2(0, -r * 0.86 - R * 0.6),
+		var c := lift + _clear_spot((ns[0] as Vector2) - lift, [Vector2(0, -r * 0.86 - R * 0.6), Vector2(0, below),
 				Vector2(-r - R * 0.7, 0), Vector2(r + R * 0.7, 0)], Vector2(R, R * 1.26), avoid)
 		_signs[id] = [c, R, tier]
 		avoid.append(sign_rect(id))
@@ -798,9 +813,20 @@ func _draw_danger_symbols(_cam: Camera3D) -> void:
 		var a: float = float(SIGN_ALPHA[tier]) * _flicker(id)
 		var secs := int(ceil(sim.drop_in(id) if sim.v3 else sim.last_stand_warn_t))
 		var f := int(round(float(SIGN_FONT_PT[tier]) * _pt()))
-		var txt := "%d" % maxi(secs, 0)
+		var txt := "%ds" % maxi(secs, 0)
 		var sz := Hud.UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
+		var room := float(s[1]) * 1.45                      # the plate's inner width: "12s" shrinks to fit
+		if sz.x > room:
+			f = int(floor(f * room / sz.x))
+			sz = Hud.UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
 		words.append([(s[0] as Vector2) + Vector2(-sz.x / 2.0, Hud.UI_FONT.get_ascent(f) * 0.5 - 1.0), txt, f, col, a])
+		if tier == 0:                                       # NEXT DROP over the beacon, outlined so it reads on any floor
+			var cf := int(round(SIGN_CAPTION_PT * _pt()))
+			var cs := Hud.UI_FONT.get_string_size(SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf)
+			var top := (s[0] as Vector2).y - float(s[1]) * 1.65
+			var at := Vector2((s[0] as Vector2).x - cs.x / 2.0, top - Hud.UI_FONT.get_descent(cf) - 1.0)
+			draw_string_outline(Hud.UI_FONT, at, SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf, maxi(2, int(round(3.0 * _pt()))), Color(0, 0, 0, 0.85 * a))
+			draw_string(Hud.UI_FONT, at, SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf, Color(col.lightened(0.35), a))
 	for w in words:                                      # (no outline pass: the plate is dark - every glyph is an object)
 		var wc: Color = (w[3] as Color).darkened(0.45) if UiTheme.light() else (w[3] as Color).lightened(0.55)   # Alpha 24: a pale plate in LIGHT
 		draw_string(Hud.UI_FONT, w[0], w[1], HORIZONTAL_ALIGNMENT_LEFT, -1, w[2], Color(wc, w[4]))

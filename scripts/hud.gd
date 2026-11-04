@@ -615,7 +615,7 @@ func _fit_status() -> void:
 
 
 func _draw_status_secs() -> void:
-	## Neon Noir (the board's NEXT DROP 6s pill): the status line's seconds ("9 s", "12 s") in an amber capsule over the words.
+	## Neon Noir: the status line's seconds ("9 s", "12 s") in amber over the words.
 	var t := status_label.text
 	var m := _secs_re.search(t)
 	if m == null:
@@ -626,19 +626,15 @@ func _draw_status_secs() -> void:
 	var tw := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var inner := status_label.size.x - sb.content_margin_left - sb.content_margin_right
 	var x0 := sb.content_margin_left + (inner - tw) / 2.0 + font.get_string_size(t.substr(0, m.get_start()), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var w := font.get_string_size(m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var h := font.get_height(fs)
 	var y0 := (status_label.size.y - h) / 2.0
-	var r := Rect2(x0 - 2.5 * ui_scale, y0 + 1.5 * ui_scale, w + 5.0 * ui_scale, h - 3.0 * ui_scale)
-	if _secs_box == null:
-		_secs_box = HudNoir.box("status_secs", Color(0, 0, 0, 0), Vector4.ZERO)
-	_status_secs.draw_style_box(_secs_box, r)
-	if HudNoir.has("status_secs"):                       # the director's capsule is dark glass: the seconds go on top of it
-		var at := Vector2(x0, y0 + font.get_ascent(fs))
-		var os := status_label.get_theme_constant("outline_size")
-		if os > 0:
-			_status_secs.draw_string_outline(font, at, m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, os, status_label.get_theme_color("font_outline_color"))
-		_status_secs.draw_string(font, at, m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.AMBER.lightened(0.35))
+	# 0.23.23 (Daniele: "the orange box for the time in the last stand warning looks weird"): no capsule any more - the
+	# seconds are simply amber over the line's own glyphs
+	var at := Vector2(x0, y0 + font.get_ascent(fs))
+	var os := status_label.get_theme_constant("outline_size")
+	if os > 0:
+		_status_secs.draw_string_outline(font, at, m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, os, status_label.get_theme_color("font_outline_color"))
+	_status_secs.draw_string(font, at, m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.AMBER.lightened(0.35))
 
 
 func _draw_music_note(c: Control) -> void:
@@ -837,20 +833,22 @@ func sync(dt: float, cam: Camera3D) -> void:
 	if not shows("status_line"):
 		status_label.text = ""
 	elif sim.very_last_stand_active:
-		status_label.text = ("VERY LAST STAND · a node drops every %d s" % int(round(sim.very_last_stand_gap))
-				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · one node stands - conquest decides")
+		# 0.23.23 (Daniele: "last stand message is too long"): the line says what drops when, nothing more
+		status_label.text = ("VERY LAST STAND · DROP EVERY %d s" % int(round(sim.very_last_stand_gap))
+				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · CONQUEST DECIDES")
 	elif sim.last_stand_active:
 		var next := ""
 		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
 		if sim.v3 and not sim.last_stand_warn.is_empty():
-			next = "RING %d DROPPING · next node in %d s (%d left)" % [sim.last_stand_next, int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
+			next = "NEXT DROP %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
 		elif sim.last_stand_warn_node >= 0:
-			next = "NODE %d FALLS IN %d s" % [sim.last_stand_warn_node, int(ceil(sim.last_stand_warn_t))]
+			next = "NEXT DROP %d s" % int(ceil(sim.last_stand_warn_t))
 		elif sim.last_stand_next < pending:
-			next = "next drop in %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
+			next = "NEXT DROP %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
 		else:
-			next = ("the last ring stands" if sim.v3 else "the final node stands") + " - conquest decides"
-		status_label.text = "LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how if _ls_pulse > 0.0 and _ls_how != "" else next]
+			next = "CONQUEST DECIDES"
+		# the method and how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop
+		status_label.text = ("LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how]) if _ls_pulse > 0.0 and _ls_how != "" 				else "LAST STAND · %s" % next
 	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
 		# mirrors sim._step_last_stand: no countdown when the Last Stand is off, over, or the map has none
 		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
@@ -2090,7 +2088,6 @@ const INFO_COLOR := Color("7fe9f5")
 var callouts: HudCallouts               # every placed message (see above)
 var status_glow: Panel                  # behind the status line while the Last Stand announcement pulses it
 var _status_secs: Control               # Neon Noir: the amber capsule round the status line's seconds
-var _secs_box: StyleBox
 var _secs_re := RegEx.create_from_string("\\d+ s\\b")
 var _ls_pulse := 0.0                    # s of that pulse left
 var _ls_how := ""                       # the method's one-line explanation, shown in the line meanwhile
@@ -2254,6 +2251,25 @@ func _sync_catchup(dt: float) -> void:
 	var a := move_toward(catchup_tag.modulate.a, 1.0 if on else 0.0, dt / Rules.HUD_CALLOUT_FADE)
 	catchup_tag.modulate.a = a
 	catchup_tag.visible = a > 0.0
+	if catchup_tag.visible:
+		_place_catchup()
+
+
+func _place_catchup() -> void:
+	## 0.23.23 (Daniele: "catch up seems randomly positioned"): it hung under the status line's slot, empty or not, at the bar's
+	## left end. Now it sits right under YOUR score pill, left-aligned with it; when the status line is up and would meet it,
+	## it drops under that line instead.
+	var gap := 4.0 * ui_scale
+	catchup_tag.size = catchup_tag.get_combined_minimum_size()
+	var x := maxf(top_panel.position.x, margins.x)
+	var y := top_panel.position.y + top_panel.size.y + gap
+	var c = top_chips.get(human)
+	if c != null and is_instance_valid(c["panel"]):
+		x = maxf((c["panel"] as Control).global_position.x - root.global_position.x, margins.x)
+	var r := Rect2(Vector2(x, y), catchup_tag.size)
+	if status_label.text != "" and r.intersects(Rect2(status_label.position, status_label.size).grow(gap)):
+		y = status_label.position.y + status_label.size.y + gap
+	catchup_tag.position = Vector2(x, y)
 
 
 func pulse_last_stand(how: String) -> void:
