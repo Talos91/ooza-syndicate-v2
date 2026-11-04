@@ -230,17 +230,21 @@ class Slot:
 		var disabled := id == "" or not dock.sim.abilities_on or dock.sim.over
 		var full := is_ready or fires > 0 or dock.armed == index
 		var cooling := not disabled and not full and cd > 0.0
+		if full and not disabled:                          # 0.23.24: charged = the outline lit neon in the slot's colour
+			_neon_hex(ci, c, d * 0.5, col, s)
 		var tex := HudSkin.skill_icon(id)
 		if tex:
-			var isz := Vector2.ONE * d * (0.44 if not cooling else 0.32)
-			var at := c - isz / 2.0 - Vector2(0, d * 0.1 if cooling else 0.0)
+			# 0.23.24 (Daniele: "the icons for the skill all seem of different proportions and size"): every icon at the same
+			# optical size (SkillDock.icon_fit: its drawn part, by area) and nearly the same size while it cools
+			var side := d * (0.42 if not cooling else 0.36)
+			var at := c - Vector2(0, d * 0.09 if cooling else 0.0)
 			var tint := Color(0.03, 0.05, 0.07, 0.9) if full and not disabled else (Color(1, 1, 1, 0.85) if not disabled else Color(HudNoir.MUTED, 0.5))
-			ci.draw_texture_rect(tex, Rect2(at, isz), false, tint)
+			SkillDock.draw_icon_fit(ci, tex, at, side, tint)
 		if cooling:
-			var f := int(20 * s)
+			var f := int(18 * s)
 			var txt := "%d s" % int(ceil(cd))
 			var sz := UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
-			var p := c + Vector2(-sz.x / 2.0, d * 0.2 + UI_FONT.get_ascent(f) / 2.0 - 1.0)
+			var p := c + Vector2(-sz.x / 2.0, d * 0.24 + UI_FONT.get_ascent(f) / 2.0 - 1.0)
 			ci.draw_string_outline(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(4 * s), HudSkin.outline())
 			ci.draw_string(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, HudNoir.INK)
 		if warn > 0.0:                                     # a refused tap: the vessel's outline flashes the warning red
@@ -262,6 +266,16 @@ class Slot:
 			var t2 := "%d" % fires
 			var z2 := UI_FONT.get_string_size(t2, HORIZONTAL_ALIGNMENT_LEFT, -1, f2)
 			ci.draw_string(UI_FONT, bc + Vector2(-z2.x / 2.0, UI_FONT.get_ascent(f2) / 2.0 - 1.0), t2, HORIZONTAL_ALIGNMENT_LEFT, -1, f2, Color.WHITE)
+
+	func _neon_hex(ci: Control, c: Vector2, r: float, col: Color, s: float) -> void:
+		## A charged vessel's outline as a neon tube in the slot's colour (white / violet / amber): a soft wide glow, a
+		## brighter halo, a near-white core; it breathes with the liquid's ready glow.
+		var k := 0.75 + 0.25 * sin(dock._t * 4.0 + float(index))
+		var hex := _hex(c, r)
+		ci.draw_polyline(hex, Color(col, 0.16 * k), 11.0 * s, true)
+		ci.draw_polyline(hex, Color(col, 0.38 * k), 6.0 * s, true)
+		ci.draw_polyline(hex, Color(col.lerp(Color.WHITE, 0.25), 0.95), 2.6 * s, true)
+		ci.draw_polyline(hex, Color(col.lerp(Color.WHITE, 0.7), 0.9 * k), 1.1 * s, true)
 
 	static func _hex(c: Vector2, r: float) -> PackedVector2Array:
 		## A flat-topped hexagon (the vessel's outline), closed.
@@ -997,3 +1011,60 @@ func on_event(ev: Dictionary) -> void:
 		hud.callout_at(ev["pos"], "skill:%s" % seat, "%s%s" % [ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn", seat)
 		return
 	_toast("seat %s cast %s%s" % [seat, ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn")
+
+
+static var _icon_fit := {}                     # texture -> [drawn part (Rect2 in px), scale for its optical size]
+
+
+static func icon_fit(tex: Texture2D) -> Array:
+	## 0.23.24: an icon's drawn part (alpha > 0.16) and the factor that gives every icon the same optical size: the pack's
+	## icons all touch their 160 px canvas on the long side, so a wide one (Ghost Line 160 x 107) looked smaller than a square
+	## one (Surge 160 x 160) - scaled by the square root of the drawn area, at most x1.25, never past the canvas.
+	if _icon_fit.has(tex):
+		return _icon_fit[tex]
+	var full := Rect2(Vector2.ZERO, tex.get_size())
+	var out := [full, 1.0]
+	var im := tex.get_image()
+	if im != null:
+		if im.is_compressed():
+			im.decompress()
+		var used := im.get_used_rect()
+		var bm := BitMap.new()
+		bm.create_from_image_alpha(im, 0.16)
+		var tight := Rect2i()
+		var w := im.get_width()
+		var h := im.get_height()
+		var x0 := w
+		var y0 := h
+		var x1 := -1
+		var y1 := -1
+		for y in range(0, h, 2):
+			for x in range(0, w, 2):
+				if bm.get_bit(x, y):
+					x0 = mini(x0, x)
+					y0 = mini(y0, y)
+					x1 = maxi(x1, x)
+					y1 = maxi(y1, y)
+		if x1 >= x0 and y1 >= y0:
+			tight = Rect2i(x0, y0, x1 - x0 + 2, y1 - y0 + 2).intersection(Rect2i(Vector2i.ZERO, Vector2i(w, h)))
+		elif used.size != Vector2i.ZERO:
+			tight = used
+		if tight.size != Vector2i.ZERO:
+			var side := float(maxi(w, h))
+			var k := clampf(side / sqrt(float(tight.size.x * tight.size.y)), 1.0, 1.25)
+			out = [Rect2(tight), k]
+	_icon_fit[tex] = out
+	return out
+
+
+static func draw_icon_fit(ci: CanvasItem, tex: Texture2D, centre: Vector2, side: float, tint: Color) -> void:
+	## The icon's drawn part centred on `centre`, sized as a `side`-square canvas icon would look (icon_fit), aspect kept.
+	var f := icon_fit(tex)
+	var src: Rect2 = f[0]
+	var canvas := maxf(tex.get_size().x, tex.get_size().y)
+	var px := side / canvas * float(f[1])                 # screen units per icon pixel
+	var sz := src.size * px
+	if maxf(sz.x, sz.y) > side * 1.1:                    # never much past the plain icon's square
+		sz *= side * 1.1 / maxf(sz.x, sz.y)
+	ci.draw_texture_rect_region(tex, Rect2(centre - sz / 2.0, sz), src, tint)
+

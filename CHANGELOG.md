@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.24 "Alpha 23" - 2026-11-04 (STAGING only; skill column, Daniele's staging check of 0.23.23, release rel-02322)
+
+- **A charged skill's hexagon is lit neon in its slot colour** ("outline of skill hexagon should be neon lit in the color of the skill
+  (white purple orange) when fully charged"): ACTIVE ice-white, MAP violet, ULTIMATE amber; a soft glow, a halo and a bright core
+  that breathe with the liquid. Cooling / charging vessels keep the plain rim.
+- **Skill icons at one optical size** ("the icons for the skill all seem of different proportions and size"): every pack icon touches
+  its 160 px canvas on the long side, so wide ones (Ghost Line, Fog of War) looked smaller than square ones (Surge, Portal); each is now
+  drawn from its visible part, scaled by area (at most x1.25). A cooling icon shrinks less (0.36 of the vessel, was 0.32 vs 0.44 ready);
+  the seconds sit a little lower and smaller (18 px).
+
 ## 0.23.23 "Alpha 23" - 2026-11-04 (STAGING only; HUD fixes from Daniele's staging check of 0.23.22, release rel-02322)
 
 - **Liquid wave artifact fixed** ("the wave texture in the interface has a small artifact"): the waterline strip in the SEND vats and
