@@ -36,6 +36,7 @@ var _music_glyph: Control
 var side_panel: PanelContainer
 var side_box: VBoxContainer
 var count_label: Label
+var send_tank: SendTank                 # ui-node: the SEND tank (one container, 4 levels)
 var badges := {}                     # node id -> {panel, label, sub, emblem, build, owner, count_w, sub_w, look}
 var _badge_px := Vector2.ZERO        # the one badge size on this screen (BADGE_SIZE x ui_scale)
 var badge_layer: BadgeLayer          # HUD pass: draws every badge, one pass per kind (see setup)
@@ -433,32 +434,20 @@ func setup(m: Node3D) -> void:
 	# side command panel (Alpha 11: 100/75/50/25 + the selected vat's count)
 	side_panel = PanelContainer.new()
 	# Alpha 24 Neon Noir: the SEND housing - a container, so it holds living ooze and drips (its buttons never do)
-	side_panel.add_theme_stylebox_override("panel", HudNoir.box("send_housing", Color(0, 0, 0, 0), Vector4(10, 8, 10, 6) * ui_scale))
+	# ui-node (Daniele 2026-11-04): ONE tank instead of four share buttons and no SEND / DRAG A VAT words - SendTank draws its own
+	# frame, the goo at the picked share, the gauge ticks and the share / units on the surface; the panel is just its holder.
+	side_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	side_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(side_panel)
 	side_box = VBoxContainer.new()
-	side_box.add_theme_constant_override("separation", 8)
+	side_box.add_theme_constant_override("separation", 0)
 	side_panel.add_child(side_box)
-	var send_title := text_label("SEND", 16, HudNoir.INK)
-	send_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	side_box.add_child(send_title)
-	var group := ButtonGroup.new()
-	for f in [1.0, 0.75, 0.5, 0.25]:
-		var b := button("%d%%" % int(f * 100), Callable(), 100, 66 if not mobile else 78, 26)   # 78: the phone-tuned default height (>= 44 pt), the send row was a touch under it
-		b.toggle_mode = true
-		b.button_group = group
-		b.button_pressed = is_equal_approx(f, main.fraction)
-		_send_skin(b, f)                                  # Alpha 24 Neon Noir: a little vat holding its share; the picked one lit
-		b.pressed.connect(func(): main.fraction = f)
-		b.gui_input.connect(func(event):                  # slide a finger over the buttons to pick
-			if (event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT) or event is InputEventScreenDrag:
-				b.button_pressed = true
-				main.fraction = f)
-		side_box.add_child(b)
-	count_label = text_label("DRAG A VAT", 14, accent)
-	count_label.add_theme_constant_override("outline_size", int(3 * ui_scale))
-	count_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.75))
-	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	send_tank = SendTank.new()
+	send_tank.custom_minimum_size = Vector2(112.0, 4.0 * (78.0 if mobile else 66.0) + 74.0) * ui_scale
+	send_tank.setup(self, main, ui_scale, UI_FONT)
+	side_box.add_child(send_tank)
+	count_label = text_label("", 14, accent)                # (kept, hidden: the tank shows the units on its goo)
+	count_label.visible = false
 	side_box.add_child(count_label)
 	# bottom: map title, hint, ability dock, version
 	map_title = text_label(str(main.map.get("name", "")).to_upper(), 20)
@@ -1685,11 +1674,10 @@ func action_rect(name: String) -> Rect2:
 
 
 func send_button_rect(fraction: float) -> Rect2:
-	## The SEND panel's button for `fraction` (1.0 / 0.75 / 0.5 / 0.25), for the tutorial's spotlight.
-	for c in side_box.get_children():
-		if c is Button and (c as Button).text == "%d%%" % int(round(fraction * 100.0)):
-			return (c as Control).get_global_rect() if side_panel.visible else Rect2()
-	return Rect2()
+	## The SEND tank's band for `fraction` (1.0 / 0.75 / 0.5 / 0.25), for the tutorial's spotlight (ui-node: was a button).
+	if send_tank == null or not side_panel.visible:
+		return Rect2()
+	return send_tank.level_rect(snappedf(fraction, 0.25))
 
 
 func badge_rect(id: int) -> Rect2:

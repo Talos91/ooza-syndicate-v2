@@ -27,6 +27,8 @@ var _reach: Array = []
 const CAPTURE_S := 0.9                 # ui-node: a capture's burst, seconds
 var _owner_prev := {}                  # ui-node: node id -> owner last frame (a change = a capture burst)
 var _captures := {}                    # ui-node: node id -> seconds since its capture (while < CAPTURE_S)
+var _lock_id := -2                    # ui-node: the target the ring last locked on, and when (the strike-up flicker)
+var _lock_t := 0.0
 var route := {}                        # Alpha 24: the drag being aimed (main._route_hud): pts (world), ok, target, monster
 var _drew := true                      # the last frame drew something (a frame that draws nothing clears it once)
 const RELAY_CUE_MAX := 3               # only the first few times (Daniele's ask)
@@ -282,7 +284,10 @@ func _draw_route(cam: Camera3D) -> void:
 	if hold >= 0 and hold < sim.nodes.size():
 		var hs := _node_screen(hold, cam)
 		var hr := _ring_px(hold, cam)
-		NodeNoir.target_hex(self, hs[0], hr, HudNoir.accent, s, _t)
+		if _lock_id != -10 - hold:
+			_lock_id = -10 - hold
+			_lock_t = _t
+		NodeNoir.target_hex(self, hs[0], hr, HudNoir.accent, s, _t, "", (_t - _lock_t) / 0.28)
 		NodeNoir.pill(self, (hs[0] as Vector2) + Vector2(0, -hr - 16.0 * s), str(route.get("label", "HOLD")), HudNoir.accent,
 				Hud.UI_FONT, maxi(int(16 * s), 13), s)
 		return
@@ -319,7 +324,10 @@ func _draw_route(cam: Camera3D) -> void:
 	if line.size() >= 2:
 		NodeNoir.ribbon(self, line, col, s, _t, ok)
 	if tr > 0.0:
-		NodeNoir.target_hex(self, ts, tr, col, s, _t)
+		if target != _lock_id:
+			_lock_id = target
+			_lock_t = _t
+		NodeNoir.target_hex(self, ts, tr, col, s, _t, "", (_t - _lock_t) / 0.28)
 		var txt := str(route.get("label", ""))
 		if txt != "":
 			NodeNoir.pill(self, ts + Vector2(0, -tr - 16.0 * s), txt, col, Hud.UI_FONT, maxi(int(15 * s), 13), s,

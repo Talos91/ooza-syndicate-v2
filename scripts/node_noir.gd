@@ -221,59 +221,103 @@ static func pill(ci: CanvasItem, centre: Vector2, txt: String, col: Color, font:
 
 
 # ------------------------------------------------------------------ the send ribbon (the attack direction arrow)
+static func tube(ci: CanvasItem, c: PackedVector2Array, col: Color, w: float, lit := 1.0) -> void:
+	## A real neon tube (Daniele 2026-11-04: "should be neonish"): a wide bloom, a halo, the coloured tube, a white-hot core.
+	if c.size() < 2:
+		return
+	for k in [[8.0, 0.10], [5.0, 0.18], [3.0, 0.32]]:
+		ci.draw_polyline(c, Color(col, float(k[1]) * lit), w * float(k[0]), true)
+	ci.draw_polyline(c, Color(col.lerp(Color.WHITE, 0.15), 0.98), w, true)
+	ci.draw_polyline(c, Color(col.lerp(Color.WHITE, 0.85), 0.95 * lit), maxf(w * 0.4, 1.0), true)
+
+
 static func ribbon(ci: CanvasItem, line: PackedVector2Array, col: Color, s: float, t: float, ok := true) -> void:
-	## The aimed route as a neon ribbon: a glow, the tube, pulses of lit goo marching toward the target, an arrowhead.
+	## The send arrow as a GOO STREAM (Daniele 2026-11-04: "the attack arrow should be more in theme"): a thick tube of lit ooze
+	## with a dark skin and a wet highlight, fat blobs swelling and travelling toward the target, a drop-shaped head. A blocked
+	## route: a broken red neon dash, no flow.
 	if line.size() < 2:
 		return
-	var w := 4.0 * s
-	if ok:
-		neon(ci, line, col, w, 1.0, 0.9)
-	else:                                               # blocked: a dashed red tube, no march
-		var total := 0.0
+	var w := 8.0 * s
+	if not ok:
+		var total0 := 0.0
 		for i in range(line.size() - 1):
-			total += line[i].distance_to(line[i + 1])
-		var a := line[0]
-		var b := line[-1]
-		var n := maxi(2, int(total / (14.0 * s)))
-		for k in range(0, n, 2):
-			neon(ci, PackedVector2Array([a.lerp(b, float(k) / n), a.lerp(b, float(k + 1) / n)]), col, w * 0.8, 0.6)
+			total0 += line[i].distance_to(line[i + 1])
+		var a0 := line[0]
+		var b0 := line[-1]
+		var n0 := maxi(2, int(total0 / (14.0 * s)))
+		for k in range(0, n0, 2):
+			tube(ci, PackedVector2Array([a0.lerp(b0, float(k) / n0), a0.lerp(b0, float(k + 1) / n0)]), col, 3.0 * s, 0.8)
 		return
-	# pulses: bright beads of goo travelling along the line
 	var lens := PackedFloat32Array([0.0])
 	for i in range(line.size() - 1):
 		lens.append(lens[-1] + line[i].distance_to(line[i + 1]))
-	var total2: float = lens[-1]
-	var step := 30.0 * s
-	var at := fposmod(t * 70.0 * s, step)
-	var seg := 0
-	while at < total2 - 14.0 * s:
-		while seg < line.size() - 2 and lens[seg + 1] < at:
-			seg += 1
-		var p := line[seg].lerp(line[seg + 1], clampf((at - lens[seg]) / maxf(lens[seg + 1] - lens[seg], 0.001), 0.0, 1.0))
-		ci.draw_circle(p, w * 0.95, Color(col.lerp(Color.WHITE, 0.55), 0.85))
+	var total: float = lens[-1]
+	var at_len := func(d: float) -> Array:            # [point, direction] at length d along the line
+		var i := 0
+		while i < line.size() - 2 and lens[i + 1] < d:
+			i += 1
+		var seg := maxf(lens[i + 1] - lens[i], 0.001)
+		return [line[i].lerp(line[i + 1], clampf((d - lens[i]) / seg, 0.0, 1.0)), (line[i + 1] - line[i]).normalized()]
+	# the stream's body: a bloom, a dark skin, the goo, a highlight along the upper side
+	ci.draw_polyline(line, Color(col, 0.10), w * 3.2, true)
+	ci.draw_polyline(line, Color(col.darkened(0.6), 0.9), w * 1.25, true)
+	ci.draw_polyline(line, Color(col.darkened(0.1), 0.95), w, true)
+	ci.draw_polyline(line, Color(col.lerp(Color.WHITE, 0.25), 0.9), w * 0.55, true)
+	var hi := PackedVector2Array()
+	for k in range(int(total / (6.0 * s)) + 1):
+		var r: Array = at_len.call(minf(k * 6.0 * s, total))
+		var d: Vector2 = r[1]
+		hi.append((r[0] as Vector2) + Vector2(d.y, -d.x).normalized() * w * 0.22 * (1.0 if d.x >= 0.0 else -1.0))
+	if hi.size() > 1:
+		ci.draw_polyline(hi, Color(1, 1, 1, 0.45), maxf(1.0, 1.4 * s), true)
+	# blobs: swollen lumps of goo flowing to the target (each with a dark rim and a glint)
+	var step := 34.0 * s
+	var at := fposmod(t * 60.0 * s, step)
+	var j := 0
+	while at < total - 16.0 * s:
+		var r2: Array = at_len.call(at)
+		var p: Vector2 = r2[0]
+		var swell := 1.0 + 0.25 * sin(t * 6.0 + j * 1.7)
+		var br := w * 0.78 * swell
+		ci.draw_circle(p, br * 1.2, Color(col.darkened(0.6), 0.85))
+		ci.draw_circle(p, br, Color(col.lerp(Color.WHITE, 0.12), 1.0))
+		ci.draw_circle(p - Vector2(br, br) * 0.35, br * 0.32, Color(1, 1, 1, 0.75))
 		at += step
-	# the arrowhead at the end, along the last segment
+		j += 1
+	# the head: a fat drop pointing along the last segment
 	var tip := line[-1]
 	var dir := (line[-1] - line[-2]).normalized()
 	var side := Vector2(-dir.y, dir.x)
-	var head := PackedVector2Array([tip + dir * 4.0 * s, tip - dir * 14.0 * s + side * 9.0 * s, tip - dir * 9.0 * s, tip - dir * 14.0 * s - side * 9.0 * s])
-	if not sprite(ci, "node_send_head", tip - dir * 5.0 * s, Vector2(18, 18) * s, col, dir.angle()):
-		ci.draw_colored_polygon(head, Color(col.lerp(Color.WHITE, 0.3), 0.95))
-		var hl := head.duplicate()
-		hl.append(head[0])
-		neon(ci, hl, col, maxf(1.0, 1.4 * s), 0.8)
+	if not sprite(ci, "node_send_head", tip - dir * 7.0 * s, Vector2(22, 22) * s, col, dir.angle()):
+		var c := tip - dir * 9.0 * s
+		var drop := PackedVector2Array()
+		for k in range(13):                          # the round back of the drop: one side, round the back, the other side
+			var ang := PI * float(k) / 12.0
+			drop.append(c + (side * cos(ang) - dir * sin(ang)) * 8.0 * s)
+		drop.append(tip + dir * 3.0 * s)               # the point
+		ci.draw_colored_polygon(drop, Color(col.darkened(0.55), 0.9))
+		var inner := PackedVector2Array()
+		for q in drop:
+			inner.append(c + (q - c) * 0.78)
+		ci.draw_colored_polygon(inner, Color(col.lerp(Color.WHITE, 0.15), 1.0))
+		ci.draw_circle(c - dir * 2.5 * s + side * 2.5 * s, 2.2 * s, Color(1, 1, 1, 0.8))
 
 
-static func target_hex(ci: CanvasItem, c: Vector2, r: float, col: Color, s: float, t: float, word := "") -> void:
-	## The snapped target / the HOLD ring: a neon hexagon round the node, corner ticks turning slowly; `word` in its pill.
+static func target_hex(ci: CanvasItem, c: Vector2, r: float, col: Color, s: float, t: float, word := "", lock := 1.0) -> void:
+	## The snapped target / the HOLD ring as a REAL neon hexagon (bloom, halo, tube, white-hot core), corner brackets turning
+	## slowly; `lock` 0 -> 1 over the first instant on a new target: it snaps in from wider and flickers like a tube striking.
+	var k := clampf(lock, 0.0, 1.0)
 	var breathe := 1.0 + 0.035 * sin(t * 5.0)
-	var rr := r * breathe
-	if not sprite(ci, "node_target_ring", c, Vector2(rr, rr) * 2.0, col):
-		neon(ci, hexagon(c, rr, PI / 6.0), col, 2.6 * s, 0.9)
-		for k in range(6):                              # corner ticks, slowly turning: "locked on"
-			var a := PI / 6.0 + TAU * k / 6.0 + t * 0.6
-			var p := c + Vector2(cos(a), sin(a)) * (rr + 7.0 * s)
-			ci.draw_line(p, p + Vector2(cos(a), sin(a)) * 6.0 * s, Color(col.lerp(Color.WHITE, 0.3), 0.9), 2.0 * s, true)
+	var rr := r * breathe * (1.0 + 0.35 * (1.0 - k) * (1.0 - k))
+	var flick := 1.0 if k >= 1.0 else (0.35 + 0.65 * absf(sin(k * 31.0)))
+	if not sprite(ci, "node_target_ring", c, Vector2(rr, rr) * 2.0, Color(col, flick)):
+		ci.draw_colored_polygon(hexagon(c, rr, PI / 6.0).slice(0, 6), Color(col, 0.07 * flick))   # a faint lit wash inside
+		tube(ci, hexagon(c, rr, PI / 6.0), col, maxf(3.6 * s, 2.6), flick)
+		for i in range(6):                              # corner brackets just outside, slowly turning: "locked on"
+			var a := PI / 6.0 + TAU * i / 6.0 + t * 0.6
+			var p := c + Vector2(cos(a), sin(a)) * (rr + 8.0 * s)
+			var ta := Vector2(-sin(a), cos(a))
+			tube(ci, PackedVector2Array([p - ta * 6.0 * s, p, p + Vector2(cos(a), sin(a)) * 6.0 * s]), col, maxf(2.0 * s, 1.5), 0.7 * flick)
 
 
 static func burst(ci: CanvasItem, c: Vector2, r: float, col: Color, k: float, s: float) -> void:

@@ -403,6 +403,8 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 	pad = 6.0 * ui_scale
 	gap = 4.0 * ui_scale
 	add_theme_constant_override("separation", int(6 * ui_scale))
+	if HudNoir.has("skill_vessel") and HudNoir.has("skill_card"):
+		add_theme_constant_override("separation", int(10 * ui_scale))   # ui-node: free-standing vats, a clear gap
 	slot_w -= 2.0 * HOUSING_PAD                   # Neon Noir: the housing's rim sits inside the column's old width (phone fit)
 	vessel = HudNoir.has("skill_vessel") and HudNoir.has("skill_card")
 	var top := pad
@@ -481,6 +483,8 @@ func card_box(armed_now: bool) -> StyleBox:
 
 func housing_margin() -> Vector4:
 	## The skill column's housing round the slots (l, t, r, b px - b holds its drips): Hud.layout keeps it on screen.
+	if vessel:                                    # ui-node (Daniele 2026-11-04): "remove the outside container ... leave only the
+		return Vector4.ZERO                       # 3 skills vats" - no housing round the vats
 	var m := HOUSING_PAD * ui_scale
 	var pool := HudNoir.gel_px("skill_housing") * 0.55       # Neon Noir: the upper half of the pooled ooze shows under the last card
 	return Vector4(m, m, m, m + pool + HudNoir.drip_px("skill_housing"))
@@ -489,6 +493,8 @@ func housing_margin() -> Vector4:
 func _draw() -> void:
 	## Neon Noir: the column's container - smoked glass with living ooze in its foot and the drips under it (the one place on
 	## the right thumb that drips; the slots themselves are clean glass).
+	if vessel:                                    # ui-node: the three vats stand alone
+		return
 	if _housing == null:
 		_housing = HudNoir.box("skill_housing", Color(0, 0, 0, 0), Vector4.ZERO)
 	var hm := housing_margin()
