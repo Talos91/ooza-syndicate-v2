@@ -108,6 +108,8 @@ func _layout() -> void:
 	var total := maxf(_len(box), box.get_combined_minimum_size().x if horizontal else box.get_combined_minimum_size().y)
 	var m = _menu()
 	var ph := UiKit.tap_h(m, 40.0) if m != null else 40.0
+	if m is CampaignPage:                          # its _pt_factor is in canvas units (no K): its own 44 pt minimum (0.23.25)
+		ph = m.rh(40.0)
 	if total <= _full + 2.0:                       # it fits: no pager, the whole length
 		_set_len(_full)
 		if not horizontal:
@@ -187,6 +189,8 @@ func _make_pager(m, ph: float) -> void:
 	_pager.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var bw := ph * 1.3
 	var lw := UiKit.text_w(m, "88 / 88", 14, true) + 20.0 if m != null else 70.0
+	if m is CampaignPage:
+		lw = maxf(lw, m.fsz(13) * 4.5 + 20.0)
 	var prev: Button
 	var next: Button
 	if m != null:
@@ -205,6 +209,8 @@ func _make_pager(m, ph: float) -> void:
 	next.set_meta("d", 1)
 	_label = UiKit.label(m, "", 13, UiKit.INK, true) if m != null else Label.new()
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if m is CampaignPage:                          # 12.5 pt text on its page (UiKit.px assumes the Menu's raw units)
+		_label.add_theme_font_size_override("font_size", m.fsz(13))
 	_label.size = Vector2(lw, ph)
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	var w := bw * 2.0 + lw
