@@ -74,6 +74,11 @@ func _run() -> void:
 	m._map_list = "favourites"
 	m.show_maps()
 	await shot("06-map-picker-favourites-empty")
+	m._map_list = ""
+	Menu.map_filter_mode = "1v1"
+	Menu.map_filter_type = "all"
+	m.show_maps()
+	await shot("06b-map-picker-1v1-size-tabs")
 	m._cancel_pick()
 	m._pick(m.show_factions)
 	await shot("07-faction-picker")
@@ -94,7 +99,22 @@ func _run() -> void:
 	m._open_maps()
 	await shot("12-room-host-map-picker")
 	m._cancel_pick()
+	for sh in [["rules", "14-room-sheet-rules"], ["mode", "15-room-sheet-mode"], ["seat:1", "16-room-sheet-seat"],
+			["faction", "17-room-sheet-faction"], ["colour", "18-room-sheet-colour"]]:
+		m._lobby_sheet = sh[0]
+		m.show_lobby()
+		await shot(sh[1])
+	m._lobby_sheet = ""
+	for md in [["3v3", "19-room-host-3v3"], ["2v2v2", "20-room-host-2v2v2"], ["FFA5", "21-room-host-ffa5"]]:
+		_fake_room(md[0], false, true)
+		m.show_lobby()
+		await shot(md[1])
 	_fake_room("1v1", true)
 	m.show_lobby()
 	await shot("13-room-guest-1v1")
+	_fake_room("2v2", true)
+	m._lobby_sheet = "seat:0"
+	m.show_lobby()
+	await shot("22-room-guest-2v2-seat-sheet")
+	m._lobby_sheet = ""
 	get_tree().quit()
