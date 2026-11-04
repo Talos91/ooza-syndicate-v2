@@ -78,7 +78,21 @@ static func hexagon(c: Vector2, r: float, rot := 0.0) -> PackedVector2Array:
 	return out
 
 
-static func sprite(ci: CanvasItem, id: String, centre: Vector2, body_px: Vector2, tint := Color.WHITE, rot := 0.0) -> bool:
+# GMN-1: parts whose base layer is FIXED colour (metal, dark glass, the target's black backing) - only their rim takes the tint
+const FIXED_FILL := ["node_card", "node_hub", "node_label_pill", "node_shield_empty", "node_target_ring_backing", "node_tier_chip",
+		"node_wedge", "node_wedge_fill_off"]
+
+
+static func floor_k(ci: CanvasItem) -> float:
+	## GMN-1 (Daniele: rings ROUND, FLAT ON THE PLATFORM FLOOR): the camera's foreshortening of a circle lying on the board -
+	## its height / width on screen (the delivered rings are top-down circles; squash them once, here).
+	var cam := ci.get_viewport().get_camera_3d() if ci.is_inside_tree() else null
+	if cam == null:
+		return 1.0
+	return clampf(absf(cam.global_transform.basis.z.y), 0.3, 1.0)
+
+
+static func sprite(ci: CanvasItem, id: String, centre: Vector2, body_px: Vector2, tint := Color.WHITE, rot := 0.0, squash := 1.0) -> bool:
 	## A delivered node part drawn whole, its BODY (the part's drawn size, without the glow band) at body_px round centre.
 	## False while the part is still a placeholder (the caller draws its geometry).
 	if not HudNoir.has(id):
@@ -92,8 +106,11 @@ static func sprite(ci: CanvasItem, id: String, centre: Vector2, body_px: Vector2
 	var k := Vector2(body_px.x / float(body[2]), body_px.y / float(body[3]))
 	var r := Rect2(-Vector2(float(body[0]) + float(body[2]) / 2.0, float(body[1]) + float(body[3]) / 2.0) * k,
 			Vector2(size_px[0], size_px[1]) * k)
-	ci.draw_set_transform(centre, rot, Vector2.ONE)
-	ci.draw_texture_rect(t, r, false, tint)
+	if squash < 1.0:                                   # a ring on the floor: squashed in screen y (no rotation then)
+		ci.draw_set_transform(centre, 0.0, Vector2(1.0, squash))
+	else:
+		ci.draw_set_transform(centre, rot, Vector2.ONE)
+	ci.draw_texture_rect(t, r, false, Color(1, 1, 1, tint.a) if id in FIXED_FILL else tint)
 	var rim := HudNoir.texture(str(p.get("rim", "")))
 	if rim != null:
 		ci.draw_texture_rect(rim, r, false, tint)
@@ -310,7 +327,10 @@ static func target_hex(ci: CanvasItem, c: Vector2, r: float, col: Color, s: floa
 	var breathe := 1.0 + 0.035 * sin(t * 5.0)
 	var rr := r * breathe * (1.0 + 0.35 * (1.0 - k) * (1.0 - k))
 	var flick := 1.0 if k >= 1.0 else (0.35 + 0.65 * absf(sin(k * 31.0)))
-	if not sprite(ci, "node_target_ring", c, Vector2(rr, rr) * 2.0, Color(col, flick)):
+	var fk := floor_k(ci)
+	sprite(ci, "node_target_ring_backing", c, Vector2(rr, rr) * 2.0, Color(1, 1, 1, flick), 0.0, fk)   # GMN-1: the dark outline
+	if not sprite(ci, "node_target_ring_strike" if k < 1.0 and HudNoir.has("node_target_ring_strike") else "node_target_ring",
+			c, Vector2(rr, rr) * 2.0, Color(col, flick), 0.0, fk):
 		ci.draw_colored_polygon(hexagon(c, rr, PI / 6.0).slice(0, 6), Color(col, 0.07 * flick))   # a faint lit wash inside
 		tube(ci, hexagon(c, rr, PI / 6.0), col, maxf(3.6 * s, 2.6), flick)
 		for i in range(6):                              # corner brackets just outside, slowly turning: "locked on"
@@ -322,7 +342,7 @@ static func target_hex(ci: CanvasItem, c: Vector2, r: float, col: Color, s: floa
 
 static func burst(ci: CanvasItem, c: Vector2, r: float, col: Color, k: float, s: float) -> void:
 	## A capture: two hexagons blooming out of the node in the new owner's colour, k 0 -> 1, a flash of goo at the start.
-	if not sprite(ci, "node_capture_burst", c, Vector2.ONE * r * 2.0 * (0.8 + 0.7 * k), Color(col, 1.0 - k)):
+	if not sprite(ci, "node_capture_burst", c, Vector2.ONE * r * 2.0 * (0.8 + 0.7 * k), Color(col, 1.0 - k), 0.0, floor_k(ci)):
 		neon(ci, hexagon(c, r * (0.8 + 0.7 * k), PI / 6.0), col, (4.0 * (1.0 - k) + 1.0) * s, 1.0, 1.0 - k)
 		neon(ci, hexagon(c, r * (0.6 + 0.35 * k), PI / 6.0), Color.WHITE, 2.0 * s, 0.0, (1.0 - k) * 0.8)
 	if k < 0.35:

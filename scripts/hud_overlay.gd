@@ -685,7 +685,7 @@ func _draw_relay_cues(cam: Camera3D) -> void:
 			var rp := PackedVector2Array()
 			for k in range(41):
 				rp.append((ns[0] as Vector2) + Vector2.from_angle(TAU * k / 40.0) * (float(ns[1]) + 5.0 * ui_scale))
-			if not NodeNoir.sprite(self, "node_relay_ring", ns[0], Vector2.ONE * (float(ns[1]) + 5.0 * ui_scale) * 2.0, Color(Hud.RELAY_ACCENT, a)):
+			if not NodeNoir.sprite(self, "node_relay_ring", ns[0], Vector2.ONE * (float(ns[1]) + 5.0 * ui_scale) * 2.0, Color(Hud.RELAY_ACCENT, a), 0.0, NodeNoir.floor_k(self)):
 				NodeNoir.neon(self, rp, Hud.RELAY_ACCENT, 2.2 * ui_scale, a, 0.6 + 0.4 * a)
 		if float(_relay_cue_t.get(id, 0.0)) > 0.0:      # the first few times: spell it out, in a pill (was 13 px loose text)
 			var f := maxi(int(14 * ui_scale), 13)

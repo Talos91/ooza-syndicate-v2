@@ -33,6 +33,7 @@ GAME = Path(__file__).resolve().parent.parent
 OUT = GAME / "assets/ui/hud_noir"
 DATA = "scripts/hud_noir_data.gd"
 LAYERS = ("_rim", "_ooze", "_shine")
+NODE = False
 
 
 def nums(cell: str):
@@ -53,6 +54,8 @@ def gel_top(png: Path, body) -> int:
 def main(delivery: Path) -> int:
     rows = {}
     for pl in sorted(delivery.glob("*/parts-list.txt")):
+        if (pl.parent.name == "E_node") != NODE:              # GMN-1 ships HUD + node in one delivery: each run takes its own
+            continue
         for line in pl.read_text(encoding="utf-8").splitlines():
             cells = [c.strip() for c in line.split("|")]
             if len(cells) < 5 or not cells[0].endswith(".png"):
@@ -126,5 +129,6 @@ if __name__ == "__main__":
     if args and args[0] == "--node":
         OUT = GAME / "assets/ui/node_noir"
         DATA = "scripts/node_noir_data.gd"
+        NODE = True
         args = args[1:]
     sys.exit(main(Path(args[0])))

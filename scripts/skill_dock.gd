@@ -57,6 +57,8 @@ var _prev: Array = []                         # per slot: [cooldown, charge, ove
 var _last_pulse := [-9.0, -9.0, -9.0]
 var _floor_px := 0.0                          # phones: the smallest font the slot words may use (HUD_DOCK_MIN_PT), 0 = none
 var vessel := false                           # Neon Noir revision 6: hex vessels filling with lit ooze (HudLiquid) instead of round buttons
+var plate := false                            # GMN-1 (mockup 3, Daniele's sketch): a METAL plate, a round glass window at its socket
+                                              # filling with goo, the neon ring lighting with it, the name under it
 var vessel_cy := 0.0                          # ... the vessel's centre below the slot's top (the skill card's socket, px)
 var round_d := 64.0                           # the round button's diameter (px), the card's inner pad, the tag pill's height
 var pad := 6.0
@@ -119,6 +121,8 @@ class Slot:
 		if vessel != null:
 			var st0 := "disabled" if disabled else ("armed" if armed else ("ready" if is_ready or fires > 0 else "cooling"))
 			_vessel_state(st0, 1.0 if is_ready or fires > 0 or armed else (frac if ult else 1.0 - frac), col)
+			if dock.plate:
+				draw_style_box(dock.card_box(armed, ult), Rect2(Vector2.ZERO, size))
 			return
 		draw_style_box(dock.card_box(armed), Rect2(Vector2.ZERO, size))
 		var ic := Vector2(w / 2.0, dock.vessel_cy if vessel != null else dock.pad + d / 2.0)
@@ -218,6 +222,14 @@ class Slot:
 
 	func _vessel_state(state: String, done: float, col: Color) -> void:
 		## Neon Noir: the hex vessel shows the charge as its liquid level (the slot's fixed colour); full = ready, breathing.
+		if dock.plate:                                  # GMN-1: dim tube ring, the burning one rising with the goo; ~20 % when off
+			var off := state == "disabled"
+			vessel.set_rim(str(HudNoir.part_data("skill_vessel_rim_disabled" if off else "skill_vessel").get("file" if off else "rim", "")), col)
+			vessel.set_rim_lit("" if off else str(HudNoir.part_data("skill_vessel_rim_armed").get("file", "")), col)
+			vessel.set_liquid(col, 1.0 if not off else 0.35)
+			vessel.set_level(0.0 if off else done)
+			vessel.ready_glow = state == "ready" or state == "armed"
+			return
 		var rid := CARD_PART + ("_disabled" if state == "disabled" else ("_picked" if state == "armed" or state == "ready" else ""))
 		var fill := CARD_PART + ("_disabled" if state == "disabled" else "")
 		if vessel.fill_part != fill:
@@ -245,14 +257,14 @@ class Slot:
 		var cooling := not disabled and not full and cd > 0.0
 		var card := Rect2(Vector2.ZERO, ci.size)
 		var rad := 12.0 * s
-		if full and not disabled:
+		if full and not disabled and not dock.plate:
 			_neon_card(ci, card, rad, col, s)
 		var level := vessel.shown if vessel != null else 0.0
 		var tex := HudSkin.skill_icon(id)
 		if tex:
 			var side := d * (0.5 if not cooling else 0.44)
 			# under the goo the icon goes dark (the SEND words stay white: an icon reads better as a dark cut-out in lit goo)
-			var under := level >= 1.0 - (c.y + side * 0.3) / ci.size.y
+			var under := level >= (0.55 if dock.plate else 1.0 - (c.y + side * 0.3) / ci.size.y)
 			var tint := Color(0.03, 0.05, 0.07, 0.9) if under and not disabled else (Color(1, 1, 1, 0.9) if not disabled else Color(HudNoir.MUTED, 0.5))
 			SkillDock.draw_icon_fit(ci, tex, c - Vector2(0, d * 0.06 if cooling else 0.0), side, tint)
 		if cooling:
@@ -407,6 +419,7 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		add_theme_constant_override("separation", int(10 * ui_scale))   # ui-node: free-standing vats, a clear gap
 	slot_w -= 2.0 * HOUSING_PAD                   # Neon Noir: the housing's rim sits inside the column's old width (phone fit)
 	vessel = HudNoir.has("skill_vessel") and HudNoir.has("skill_card")
+	plate = vessel and not HudNoir.has(CARD_PART)
 	var top := pad
 	if vessel:                                    # the vessel is drawn at the card's scale, centred on its socket
 		var k := ui_scale / HudNoir.SPRITE_K
@@ -425,7 +438,18 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		b.custom_minimum_size = Vector2(slot_w * ui_scale, slot_h).round()
 		b.pressed.connect(press_slot.bind(i))
-		if vessel:
+		if plate:
+			b.vessel = HudLiquid.new()
+			b.vessel.setup("skill_vessel", SLOT_ACCENT[i], float(i) * 1.7)
+			b.vessel.position = Vector2(b.custom_minimum_size.x / 2.0 - round_d / 2.0, top).round()
+			b.vessel.size = Vector2(round_d, round_d)
+			b.add_child(b.vessel)
+			b.face = Control.new()
+			b.face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.face.size = b.custom_minimum_size
+			b.face.draw.connect(b._draw_face.bind(b.face))
+			b.add_child(b.face)
+		elif vessel:
 			# Daniele 2026-11-04 (ui-node): "instead of having the hexagon in we only keep the main container and we make it
 			# all fill of goo ... similar to what we do for the send percentages" - the whole card is the vat (the SEND
 			# button's parts), its liquid = the charge in the slot's colour; no inner hex. The face draws icon + words over it.
@@ -474,11 +498,13 @@ func font_px(fs: int) -> int:
 	return maxi(int(fs * ui_scale), int(ceil(_floor_px)))
 
 
-func card_box(armed_now: bool) -> StyleBox:
-	## A slot's section of the housing (Neon Noir): faint glass, the accent rim lit while that slot is armed.
-	if not _cards.has(armed_now):
-		_cards[armed_now] = HudNoir.box("skill_card_armed" if armed_now else "skill_card", Color(0, 0, 0, 0), Vector4.ZERO)
-	return _cards[armed_now]
+func card_box(armed_now: bool, ult := false) -> StyleBox:
+	## A slot's section of the housing (Neon Noir): faint glass, the accent rim lit while that slot is armed. GMN-1: the metal
+	## plate; the ultimate's is hazard-striped (skill_card_ultimate_fill) when the delivery has it.
+	var id := "skill_card_ultimate_fill" if ult and HudNoir.has("skill_card_ultimate_fill") else ("skill_card_armed" if armed_now else "skill_card")
+	if not _cards.has(id):
+		_cards[id] = HudNoir.box(id, Color(0, 0, 0, 0), Vector4.ZERO)
+	return _cards[id]
 
 
 func housing_margin() -> Vector4:

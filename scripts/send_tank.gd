@@ -30,7 +30,7 @@ func setup(h, m, s: float, font: Font) -> void:
 	shown = float(main.fraction)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_frame = HudNoir.box("send_tank" if HudNoir.has("send_tank") else "send_housing", Color(0, 0, 0, 0), Vector4.ZERO)
+	_frame = HudNoir.box("send_tank" if HudNoir.has("send_tank") else "send_housing", HudNoir.accent if HudNoir.has("send_tank") else Color(0, 0, 0, 0), Vector4.ZERO)   # GMN-1: the tank's white neon rim in the accent
 
 
 func body_rect() -> Rect2:

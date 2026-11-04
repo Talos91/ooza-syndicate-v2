@@ -10,6 +10,8 @@ uniform sampler2D rim_tex : filter_linear_mipmap;
 uniform sampler2D surface_tex : filter_linear_mipmap;
 uniform vec4 liquid_col : source_color = vec4(1.0);
 uniform vec4 rim_col : source_color = vec4(1.0);
+uniform sampler2D rim_lit_tex : filter_linear_mipmap;       // GMN-1: the burning tube ring, revealed bottom-up with the level
+uniform vec4 rim_lit_col : source_color = vec4(0.0);    // a = 0: no lit ring (SEND, old parts)
 uniform float level : hint_range(0.0, 1.0) = 1.0;     // 0 empty .. 1 full, of the body's height
 uniform float liquid_a = 1.0;                          // idle SEND vats are dimmer than the picked one
 uniform float slosh = 0.0;                             // 1 right after the level jumped, eased to 0 by the script
@@ -80,5 +82,9 @@ void fragment() {
 	}
 	vec4 r = texture(rim_tex, uv);
 	o = over(o, rim_col.rgb, r.a * rim_col.a);
+	if (rim_lit_col.a > 0.0) {                          // the ring lights with the goo: from the bottom up to the waterline
+		float lit = step(body.y + body.w * (1.0 - clamp(level, 0.0, 1.0)) - 0.002, uv.y);
+		o = over(o, rim_lit_col.rgb * (1.0 + 0.3 * glow), texture(rim_lit_tex, uv).a * rim_lit_col.a * lit);
+	}
 	COLOR = vec4(o.rgb / max(o.a, 0.0001), o.a * COLOR.a);
 }

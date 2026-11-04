@@ -1294,6 +1294,7 @@ class ActionWedge:
 	var a1 := 0.0
 	var r_in := 80.0            # apothems of the inner and outer hexagon (Daniele: "make the radial hexagonal")
 	var r_out := 200.0
+	const ROUND := true         # GMN-1: round ring (hex_r returns the radius); false = the 0.23.x hexagon pie
 	var hex_base := 0.0         # the direction of the flat edge the pie opens toward (its middle edge)
 	var grow := 1.0             # deal-out from the ring, 0..1
 	var type_scale := 1.0       # phones: 1.15 (the slice's name / price / glyph)
@@ -1327,6 +1328,8 @@ class ActionWedge:
 
 	static func hex_r(t: float, apothem: float, base: float) -> float:
 		## The distance from the centre to a hexagon (flat edge facing `base`) along direction t.
+		if ROUND:                                       # GMN-1 (Daniele: no hexagons): the pie is a slice of a ROUND ring
+			return apothem
 		var rel := t - base
 		return apothem / cos(rel - round(rel / (PI / 3.0)) * (PI / 3.0))
 
@@ -1569,7 +1572,7 @@ class InspectorHub:
 		for i in range(7):
 			var a := hex_base + PI / 6.0 + i * PI / 3.0
 			hex.append(c + Vector2(cos(a), sin(a)) * r)
-		if not NodeNoir.sprite(self, "node_hub", c, Vector2(r, r * 0.866) * 2.0, accent, hex_base):
+		if not NodeNoir.sprite(self, "node_hub", c, Vector2(r, r) * (2.0 if ActionWedge.ROUND else 1.732), accent, hex_base):
 			NodeNoir.glass(self, hex.slice(0, 6), 0.92)        # ui-node: smoked glass, a neon rim breathing in the node's colour
 			NodeNoir.neon(self, hex, accent, (2.0 + (1.0 if hot else 0.0)) * s, 0.55 + 0.25 * sin(Time.get_ticks_msec() / 260.0) + (0.3 if hot else 0.0))
 		var k := r * 0.3
@@ -2002,7 +2005,7 @@ func _draw_inspector_guides(col: Color) -> void:
 	var hexp := _hex_edge(Vector2.ZERO, hx, hx - PI, hx + PI, INSPECTOR_RING_R * s)
 	# ui-node: the selection hex as a neon tube (halo, tube, core) breathing in the node's colour, a faint wash inside
 	g.draw_colored_polygon(hexp.slice(0, hexp.size() - 1), Color(col, 0.06 * e))
-	if not NodeNoir.sprite(g, "node_select", Vector2.ZERO, Vector2.ONE * INSPECTOR_RING_R * s * 2.0, Color(col, e), hx):
+	if not NodeNoir.sprite(g, "node_select", Vector2.ZERO, Vector2.ONE * INSPECTOR_RING_R * s * 2.0, Color(col, e), hx, NodeNoir.floor_k(g)):
 		NodeNoir.neon(g, hexp, col, 2.4 * s, (0.65 + 0.2 * sin(Time.get_ticks_msec() / 300.0)) * e, e)
 	if int(_fan["n"]) > 0:
 		var total: float = _fan["total"]
