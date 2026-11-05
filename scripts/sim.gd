@@ -346,11 +346,12 @@ static func gat_cap(n: Dictionary) -> float:
 
 func gat_rate(n: Dictionary) -> float:
 	## GOOGATLING: goo stock made per second now (sim units): Rules.GOOGATLING_PROD x the same-tier vat's PROD x the faction's
-	## production stat (it keeps making stock during an upgrade, like a vat); 0 unowned or jammed by an Echo Split echo.
-	if n["owner"] == "" or n["structure"] != "machinegoon" or is_disrupted(n["id"]):
+	## production stat (it keeps making stock during an upgrade, like a vat; a neutral one at the plain tier rate, like neutral
+	## regen); 0 when jammed by an Echo Split echo.
+	if n["structure"] != "machinegoon" or is_disrupted(n["id"]):
 		return 0.0
 	var t: int = clampi(int(n["tier"]), 1, 3)
-	return float(Rules.PROD[t]) * Rules.GOOGATLING_PROD * stat(n["owner"], "production")
+	return float(Rules.PROD[t]) * Rules.GOOGATLING_PROD * (stat(n["owner"], "production") if n["owner"] != "" else 1.0)
 
 
 static func gat_fire_rate(n: Dictionary) -> float:
