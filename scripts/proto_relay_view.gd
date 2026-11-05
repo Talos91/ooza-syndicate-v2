@@ -65,6 +65,11 @@ var _unbatched := false              # round 3: the lift / tilt platforms left M
 
 
 static func wanted(s: Sim) -> bool:
+	## A prototype relay node, OR a hazard with no relay (a plain ferry / belt deck: round 3 / round R). Round R fix
+	## (Daniele 2026-11-05, "ferry are invisible"): R-01 / R-03 / R-04 have hazards but no prototype node, so the view was
+	## never built - the decks stood still on screen while the sim moved them.
+	if not s._ferry_edges.is_empty() or not s._belt_edges.is_empty():
+		return true
 	for n in s.nodes:
 		if Rules.is_proto(str(n["relay"])):
 			return true
