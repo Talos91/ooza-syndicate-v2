@@ -636,6 +636,10 @@ func _ferry(n: Dictionary, r: Dictionary, top: Vector3, gone: bool) -> void:
 func _ferry_deck_sync(parts: Dictionary, fp: Dictionary, gone: bool) -> Color:
 	## One moving-bridge deck this frame; returns its lamps' colour.
 	var side: float = float(Rules.RELAYS_PROTO["ferry"]["side"])
+	var ei0: int = parts["edge"]
+	var lane3: bool = (sim._ferry_plain.get(ei0, {}) as Dictionary).has("group")   # round R: one hull over 2-3 lanes
+	if lane3:
+		side *= 0.35                                   # parallel lanes: the empty lane slides only a little out of line
 	var off: float = float(fp["off"]) * float(fp["side"]) * side
 	var open: bool = fp["part"] == "open"
 	var held: float = float(fp.get("held", 0.0))
@@ -675,6 +679,14 @@ func _ferry_deck_sync(parts: Dictionary, fp: Dictionary, gone: bool) -> Color:
 	if held > 0.0:
 		hl.text = "HELD · %d" % int(ceil(held))
 		hl.modulate = Color("#5cff7a")
+	elif lane3 and not down:                          # round R readout: which lane the ferry serves, and when
+		hl.visible = true
+		if open:
+			hl.text = "FERRY · %d" % int(ceil(float(fp["left"])))
+			hl.modulate = Color("#5cff7a")
+		else:
+			hl.text = "IN %d" % int(ceil(float(fp["next_open"])))
+			hl.modulate = Rules.RELAY_GHOST_COLORS["ferry"]
 	return lc
 
 

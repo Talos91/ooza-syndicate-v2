@@ -9,7 +9,7 @@ class_name MapPool
 ## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
 ## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
-const GROUP_ORDER := ["T", "N", "A", "M", "C", "B", "S", "X", "P", "D"]   # P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
+const GROUP_ORDER := ["T", "R", "N", "A", "M", "C", "B", "S", "X", "P", "D"]   # P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
                                                               # MAPS 5.0: N = the map builder's new maps (References/Ooze Syndicate maps 5.0)
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
@@ -95,7 +95,7 @@ static func battlefield() -> Array:
 # PROTO PICKER (Daniele 2026-11-03: "in the proto build the map picker must list ONLY the prototype maps"): a proto build
 # (Rules.proto_debug) offers just these - the Relays 3.0 test maps - and no older map fills a mode they lack (they are 1v1 only,
 # so the picker shows only the 1v1 chip). The release line never reaches this: its VERSION has no "-proto".
-const PROTO: Array[String] = ["P-01", "P-02", "P-03", "P-04", "P-05"]
+const PROTO: Array[String] = ["R-01", "R-05", "P-01", "P-02", "P-03", "P-04", "P-05"]   # + round R maps (2026-11-05, MAP-ROUND-2026-11)
 static var _battlefield_cache: Array = []
 static var _pooled_modes: Dictionary = {}              # the modes the new pool (POOL_GROUPS) offers
 

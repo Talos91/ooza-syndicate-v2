@@ -5511,6 +5511,7 @@ var flights: Array = []              # launcher throws in the air: {seat, factio
 var _ferry_tally := {}               # horde id -> {node, edge, seat, ok, fell, shown} (the FERRY n / m CROSSED readout)
 var _att_mult := 1.0                 # round 3: the arriving line's TILT attack multiplier while _land_classic runs
 var _belt_edges := {}                # round 3: a plain belt deck (no relay) -> 0 flowing A -> B (its from -> to), 1 B -> A
+var _ferry_groups := {}              # round R: 3-position ferry group -> {decks: {pos: edge}, seq: [pos ...]}
 var _ferry_plain := {}               # round 3: a plain moving-bridge deck (no relay; _ferry_edges -1) -> its clock record
 
 
@@ -5519,6 +5520,7 @@ func _setup_proto() -> void:
 	_conv_edges = {}
 	_belt_edges = {}
 	_ferry_plain = {}
+	_ferry_groups = {}
 	flights = []
 	_ferry_tally = {}
 	for i in edge_controller:
@@ -5536,6 +5538,21 @@ func _setup_proto() -> void:
 			"ferry":
 				_ferry_edges[i] = -1
 				_ferry_plain[i] = {"start": 0.5 if str((edges[i]["ferry"] as Dictionary).get("dock", "A")) == "B" else 0.0}
+				var fd: Dictionary = edges[i]["ferry"]
+				if fd.has("group"):                       # round R: one ferry over 2-3 bridges (up / mid / down)
+					var g := str(fd["group"])
+					if not _ferry_groups.has(g):
+						_ferry_groups[g] = {"decks": {}}
+					_ferry_groups[g]["decks"][int(fd.get("pos", 0))] = i
+					_ferry_plain[i]["group"] = g
+					_ferry_plain[i]["pos"] = int(fd.get("pos", 0))
+	for g in _ferry_groups:                           # the hull's lane order: 0 1 2 1 0 ... (0 1 0 for two bridges)
+		var ps: Array = (_ferry_groups[g]["decks"] as Dictionary).keys()
+		ps.sort()
+		var seq: Array = ps.duplicate()
+		for k in range(ps.size() - 2, 0, -1):
+			seq.append(ps[k])
+		_ferry_groups[g]["seq"] = seq
 	for n in nodes:
 		var k: String = n["relay"]
 		if not Rules.is_proto(k):
@@ -5709,6 +5726,8 @@ func ferry_phase_e(ei: int) -> Dictionary:
 	## ferry_phase for moving-bridge deck `ei` (relay or plain piece).
 	var c := ferry_cycle_e(ei)
 	var p: Dictionary = _ferry_rec(ei)
+	if p.has("group"):
+		return _ferry3_phase(ei, p)
 	if p.has("held_from"):                            # round 3: held in line by its owner
 		var id: int = int(_ferry_edges.get(ei, -1))
 		var held: float = float(nodes[id]["relay_t"]) if id >= 0 else 0.0
@@ -5733,6 +5752,77 @@ func ferry_phase_e(ei: int) -> Dictionary:
 		return {"part": "away", "left": aw - t, "side": side, "off": 1.0, "next_open": aw - t + sl, "held": 0.0}
 	t -= aw
 	return {"part": "back", "left": sl - t, "side": side, "off": 1.0 - smoothstep(0.0, 1.0, t / sl), "next_open": sl - t, "held": 0.0}
+
+
+# 3-POSITION FERRY (round R, Daniele 2026-11-04: "a ferry for up to 3 bridges alternating between the 3 positions (up mid
+# down), units need to time it"): ONE hull serves 2-3 parallel bridges; it sits in line on one of them `open` s (worked out
+# from the longest gap, like the 1-bridge ferry), then travels to the next lane in the order up, mid, down, mid, up ...
+# (2 x slide + away s). Only the lane the hull sits on is walkable; the others are out of line (whatever is on a lane when
+# the hull leaves falls; a line reaching an empty lane's lip pours into the void - the 1-bridge ferry's rules).
+func ferry3_slot(g: String) -> Dictionary:
+	## {open, move, slot, period} of ferry group `g` (cached).
+	var grp: Dictionary = _ferry_groups[g]
+	if grp.has("slot"):
+		return grp["slot"]
+	var cfg: Dictionary = Rules.RELAYS_PROTO["ferry"]
+	var open := 0.0
+	for pos in grp["decks"]:
+		var ei: int = grp["decks"][pos]
+		var gap := deck_length(ei)
+		var cross: float = gap / Rules.move_speed()
+		var sv: float = clampf(float(cfg["survive"]), 0.05, 0.9)
+		var mv: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
+		open = maxf(open, (cross + sv * mv) / (1.0 - sv))
+	var move: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
+	var s := {"open": open, "move": move, "slot": open + move, "period": (open + move) * float((grp["seq"] as Array).size())}
+	grp["slot"] = s
+	return s
+
+
+func ferry3_lane(g: String) -> Dictionary:
+	## Where the hull is: {at: lane pos it sits on or -1 while travelling, from, to, left: s in this part, moving: bool}.
+	var s := ferry3_slot(g)
+	var seq: Array = _ferry_groups[g]["seq"]
+	var t: float = fposmod(time, float(s["period"]))
+	var k: int = int(floor(t / float(s["slot"])))
+	var u: float = t - float(k) * float(s["slot"])
+	var here: int = seq[k % seq.size()]
+	var nxt: int = seq[(k + 1) % seq.size()]
+	if u < float(s["open"]):
+		return {"at": here, "from": here, "to": nxt, "left": float(s["open"]) - u, "moving": false, "u": u}
+	return {"at": -1, "from": here, "to": nxt, "left": float(s["slot"]) - u, "moving": true, "u": u - float(s["open"])}
+
+
+func _ferry3_phase(ei: int, p: Dictionary) -> Dictionary:
+	var g: String = p["group"]
+	var pos: int = p["pos"]
+	var s := ferry3_slot(g)
+	var cfg: Dictionary = Rules.RELAYS_PROTO["ferry"]
+	var sl: float = float(cfg["slide"])
+	var aw: float = float(cfg["away"])
+	var L := ferry3_lane(g)
+	var seq: Array = _ferry_groups[g]["seq"]
+	# seconds until this lane is in line again (0 while it is)
+	var nxt_open := 0.0
+	if not (L["at"] == pos):
+		var t: float = fposmod(time, float(s["period"]))
+		var k: int = int(floor(t / float(s["slot"])))
+		var acc: float = float(s["slot"]) * float(k + 1) - t
+		for j in range(1, seq.size() + 1):
+			if seq[(k + j) % seq.size()] == pos:
+				break
+			acc += float(s["slot"])
+		nxt_open = acc
+	var side := 1.0 if int(L["to"]) > int(L["from"]) else -1.0
+	if L["at"] == pos:
+		return {"part": "open", "left": L["left"], "side": side, "off": 0.0, "next_open": 0.0, "held": 0.0}
+	if L["moving"] and int(L["from"]) == pos and float(L["u"]) < sl:
+		return {"part": "out", "left": sl - float(L["u"]), "side": side, "off": smoothstep(0.0, 1.0, float(L["u"]) / sl),
+				"next_open": nxt_open, "held": 0.0}
+	if L["moving"] and int(L["to"]) == pos and float(L["u"]) >= sl + aw:
+		return {"part": "back", "left": L["left"], "side": -side, "off": 1.0 - smoothstep(0.0, 1.0, (float(L["u"]) - sl - aw) / sl),
+				"next_open": nxt_open, "held": 0.0}
+	return {"part": "away", "left": nxt_open, "side": side, "off": 1.0, "next_open": nxt_open, "held": 0.0}
 
 
 # FERRY HOLD (round 3, Daniele 2026-11-02 "maybe tweak the timing or how it is used"): a relay ferry's owner double-taps it
