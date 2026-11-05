@@ -2,6 +2,9 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto13** - 2026-11-05 (proto-r, staging/proto/): Lift bridges ramp to the raised platform (no more teleporting); lines
+  cross OVER the Crossing; speed-deck treads fit every deck length (Daniele's proto12 review).
+
 - **0.23.15-proto12** - 2026-11-05 (proto-r, staging/proto/): Round R wave 2: R-12 Crossfire, R-06 Fort, R-09 Stack, R-10 Crescent,
   R-13 Gearbox on the proto picker; speed lanes / belts carry over a Crossing (Sim._conv_pieces).
 
