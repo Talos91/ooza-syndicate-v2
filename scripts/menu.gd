@@ -3470,7 +3470,7 @@ func _ward_look_name(cat: String, id: String) -> String:
 
 func _ward_cats() -> Array:
 	## CUSTOMIZE's categories: WARDROBE_CATS minus the families archived out of the game (Rules.ARCHIVED_FAMILIES).
-	## The monster hub goes with an archived monster (conservative default, 2026-11-05).
+	## The monster hub goes with an archived monster (Daniele 2026-11-05: "Hide both").
 	var gone: Array = Rules.ARCHIVED_FAMILIES.duplicate()
 	if "monster" in gone:
 		gone.append("monster_hub")
