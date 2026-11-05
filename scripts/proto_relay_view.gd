@@ -45,8 +45,47 @@ const MISFIRE_FLING := 30.0          # m a misfired throw travels out before it 
 # instead of the ferry edge's module decks with Relay_Ferry_Rail_v3 at both lips (their Light = the lamp), and
 # Deck_Conveyor_Relay_v3_<L> / Deck_Conveyor_v3_<L> (plain belt) with their own scrolling Treads instead of the chevrons.
 # Not ticked (stand-ins kept): the launcher, lift and tilt pieces.
-const V3_NODE_KINDS := ["ferry", "conveyor", "launcher"]
+const V3_NODE_KINDS := ["ferry", "conveyor", "launcher"]   # (2026-11-05: _v3_platforms now dresses every relay node)
 const TREAD_PERIOD := {4: 0.9850, 8: 0.9943, 12: 0.9964}   # relays_4_0.json: the Treads' scroll period per deck length
+# Conveyors 4.1 (🎨 2026-11-05, Daniele: "conveyor for all type of bridge" + "a visually different conveyor" for the plain
+# belts): native deck lengths 2..20 m (Deck_Conveyor_Relay_v3_<L> treads / Deck_Conveyor_Belt_v4_<L> slats) and conveyor
+# versions of the curves (<Curve>_Conveyor_Relay_v4 / _Belt_v4) whose Treads turn round the curve centre.
+# Models/2.0/conveyors-4.1/conveyors_4_1.json: the scroll period of every piece (m; curves: radians).
+const CONV_LENGTHS := [2, 4, 6, 8, 10, 12, 14, 16, 20]
+const CONV_PERIOD := {
+		"Deck_Conveyor_Relay_v3_4": 0.985,
+		"Deck_Conveyor_Relay_v3_8": 0.9943,
+		"Deck_Conveyor_Relay_v3_12": 0.9964,
+		"Deck_Conveyor_v3_4": 0.985,
+		"Deck_Conveyor_v3_8": 0.9943,
+		"Deck_Conveyor_v3_12": 0.9964,
+		"Deck_Conveyor_Relay_v3_2": 0.4774,
+		"Deck_Conveyor_Relay_v3_6": 0.992,
+		"Deck_Conveyor_Relay_v3_10": 0.9956,
+		"Deck_Conveyor_Relay_v3_14": 0.9969,
+		"Deck_Conveyor_Relay_v3_16": 0.9973,
+		"Deck_Conveyor_Relay_v3_20": 0.9979,
+		"Curve_30_Conveyor_Relay_v4": 0.129293,
+		"Curve_60_Conveyor_Relay_v4": 0.130157,
+		"Curve_45_Conveyor_Relay_v4": 0.193929,
+		"Curve_90_Conveyor_Relay_v4": 0.195206,
+		"Curve_W45_Conveyor_Relay_v4": 0.097615,
+		"Curve_W90_Conveyor_Relay_v4": 0.09792,
+		"Deck_Conveyor_Belt_v4_2": 0.5041,
+		"Deck_Conveyor_Belt_v4_4": 1.0409,
+		"Deck_Conveyor_Belt_v4_6": 1.024,
+		"Deck_Conveyor_Belt_v4_8": 1.0171,
+		"Deck_Conveyor_Belt_v4_10": 1.0133,
+		"Deck_Conveyor_Belt_v4_12": 1.0109,
+		"Deck_Conveyor_Belt_v4_14": 1.0092,
+		"Deck_Conveyor_Belt_v4_16": 1.008,
+		"Deck_Conveyor_Belt_v4_20": 1.0063,
+		"Curve_30_Conveyor_Belt_v4": 0.136257,
+		"Curve_60_Conveyor_Belt_v4": 0.133141,
+		"Curve_45_Conveyor_Belt_v4": 0.204381,
+		"Curve_90_Conveyor_Belt_v4": 0.199705,
+		"Curve_W45_Conveyor_Belt_v4": 0.099863,
+		"Curve_W90_Conveyor_Belt_v4": 0.09896}
 
 var sim: Sim
 var vis: Dictionary
@@ -57,6 +96,9 @@ var _splash: MultiMeshInstance3D
 var _plain_ferry := []               # round 3: moving bridges with no relay (Sim._ferry_edges -1): their deck parts
 var _belts := []                     # round 3: plain belts with no relay (Sim._belt_edges): their chevrons
 var _belt_phase := 0.0
+var _fall_watch := []               # 2026-11-05 ("they all have destroy animation"): {node, edge, done} - a moving
+                                     # deck piece that tumbles down when an end node collapses (Fx._collapse's fall)
+var _belt_curves := []               # conveyors 4.1: the plain belts' curve pieces (_curve_treads)
 var _v3_plats := {}                  # round 3: node id -> its Platform_Relay_v3
 var _t := 0.0
 var _dt := 0.0
@@ -171,28 +213,40 @@ func setup(s: Sim, v: Dictionary) -> void:
 		if _r[id]["kind"] == "conveyor":
 			for c in _r[id]["chev"]:
 				_v3_belt(c, true)
-	_belts.append_array(_curve_chevrons(sim._belt_edges.keys(), Rules.state_color("cAB")))   # round R: speed curves
+	_belt_curves = _curve_treads(sim._belt_edges.keys(), false)   # round R: speed / belt curves (conveyors 4.1)
 	for id in _r:
 		if _r[id]["kind"] == "conveyor":
-			_r[id]["chev"].append_array(_curve_chevrons(sim.controlled_edges(id)))
+			_r[id]["curves"] = _curve_treads(sim.controlled_edges(id), true)
 	_v3_platforms()
 
 
 func _v3_belt(c: Dictionary, relay: bool) -> void:
 	## Round 3: the conveyor deck model (with its Treads) instead of the edge's module decks and the stand-in chevrons.
-	var L := _deck_len(c["a"], c["b"])
-	var nm := ("Deck_Conveyor_Relay_v3_%d" if relay else "Deck_Conveyor_v3_%d") % L
-	if not _kit(nm):
-		return
+	## Conveyors 4.1: the nearest native length (2..20 m), the plain belt in its own slat look.
 	var a: Vector3 = c["a"]
 	var b: Vector3 = c["b"]
-	c["v3"] = _v3_piece(nm, a, (b - a).normalized())
 	var d := Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z))
-	(c["v3"] as Node3D).scale = Vector3(d / float(L), 1.0, 1.0)   # round R decks of 2 / 6 / 10 / 14 / 16 m: the nearest kit
-	c["v3_len"] = L                                              # length stretched to the lips (the treads stay on the deck)
+	var L := 4
+	for l in CONV_LENGTHS:
+		if absf(d - l) < absf(d - L):
+			L = l
+	var nm := ("Deck_Conveyor_Relay_v3_%d" if relay else "Deck_Conveyor_Belt_v4_%d") % L
+	if not _kit(nm):                                  # (an older kit: the 4 / 8 / 12 m round-3 pieces, stretched)
+		L = _deck_len(a, b)
+		nm = ("Deck_Conveyor_Relay_v3_%d" if relay else "Deck_Conveyor_v3_%d") % L
+		if not _kit(nm):
+			return
+	c["v3"] = _v3_piece(nm, a, (b - a).normalized())
+	(c["v3"] as Node3D).scale = Vector3(d / float(L), 1.0, 1.0)   # the rest of the way to the lips (the treads stay on)
+	c["v3_len"] = L
+	_fall_watch.append({"node": c["v3"], "edge": int(c["edge"]), "done": false})
+	c["v3_period"] = float(CONV_PERIOD.get(nm, TREAD_PERIOD.get(L, 1.0)))
 	var tr := (c["v3"] as Node).find_child("Treads", true, false)
 	c["treads"] = tr
 	c["treads_x"] = (tr as Node3D).position.x if tr is Node3D else 0.0
+	var rv := (c["v3"] as Node).find_child("TreadsRev", true, false)
+	if rv is Node3D:                                  # (straight decks turn round instead)
+		(rv as Node3D).visible = false
 	c["v3_fwd"] = true
 
 # ------------------------------------------------------------------ pieces
@@ -277,21 +331,28 @@ func _hide_decks(ei: int) -> void:
 
 
 func _v3_platforms() -> void:
-	## Platform_Relay_v3 (the relay node: lit hex pedestal + inlaid ring) instead of the platform piece of every ferry /
-	## conveyor / launcher node.
+	## Platform_Relay_v3 (the relay node: lit hex pedestal + inlaid ring) on EVERY relay node (Daniele 2026-11-05: "apply
+	## new relay node model to all relay and make sure they all have destroy animation"): set INTO the node's own platform
+	## piece, whose meshes give way, so it rides the lift / tilt motion and falls with the node in Fx._collapse (it used to
+	## sit beside it and stay standing). The rotor keeps its turning platform and gets the inlaid ring (Relay_Node_Ring_v3).
 	if not _kit("Platform_Relay_v3"):
 		return
 	for n in sim.nodes:
-		if not str(n["relay"]) in V3_NODE_KINDS:
+		if str(n["relay"]) == "":
 			continue
 		var plat = vis[n["id"]].get("platform")
 		if not plat is Node3D or not is_instance_valid(plat):
 			continue
-		var p := MapBuilder.piece("Platform_Relay_v3")
-		add_child(p)
-		p.global_transform = (plat as Node3D).global_transform
+		var ring := str(n["relay"]) == "rotation"
+		if ring and not _kit("Relay_Node_Ring_v3"):
+			continue
+		if not ring:
+			for ch in (plat as Node).get_children():
+				if ch is Node3D:
+					(ch as Node3D).visible = false
+		var p := MapBuilder.piece("Relay_Node_Ring_v3" if ring else "Platform_Relay_v3")
 		p.name = "Platform_Relay_v3_%d" % n["id"]
-		(plat as Node3D).visible = false
+		(plat as Node).add_child(p)
 		_v3_plats[n["id"]] = p
 
 
@@ -344,7 +405,17 @@ func _ferry_deck(ei: int) -> Dictionary:
 	hole.rotation.y = yaw
 	parts["hole"] = hole
 	var L := _deck_len(a, b)                       # round 3: the relays-4.0 barge + rails, when the kit has them
-	if _kit("Deck_Ferry_v3_%d" % L):
+	var d := Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z))
+	var L4 := 4                                    # ferry 4.1 (🎨 2026-11-05, "better model for ferry including different
+	for l in CONV_LENGTHS:                         # sizes"): Deck_Ferry_v4_<L>, every length 2..20 m, stretched the rest
+		if absf(d - l) < absf(d - L4):
+			L4 = l
+	if _kit("Deck_Ferry_v4_%d" % L4):
+		parts["v3"] = _v3_piece("Deck_Ferry_v4_%d" % L4, a, u)
+		(parts["v3"] as Node3D).scale = Vector3(d / float(L4), 1.0, 1.0)
+		parts["v3_at"] = a
+		_fall_watch.append({"node": parts["v3"], "edge": ei, "done": false})
+	elif _kit("Deck_Ferry_v3_%d" % L):
 		parts["v3"] = _v3_piece("Deck_Ferry_v3_%d" % L, a, u)
 		parts["v3_at"] = a
 	if _kit("Relay_Ferry_Rail_v3"):
@@ -389,10 +460,12 @@ func _chevrons(eis: Array, col := Color.WHITE) -> Array:
 	return out
 
 
-func _curve_chevrons(eis: Array, col := Color.WHITE) -> Array:
-	## Round R (Daniele 2026-11-05: "speed and slow can be curves - the whole curve piece looks like a speed one"): chevrons
-	## along the arc of every curve junction (Sim._conv_pieces) at an end of these decks, laid out in the deck's own A -> B
-	## sense so they run and turn with it. Each curve once (the lower deck index carries it).
+func _curve_treads(eis: Array, relay: bool) -> Array:
+	## Round R (Daniele 2026-11-05: "speed and slow can be curves - the whole curve piece looks like a speed one"; proto13:
+	## "the speed relay bridge indicator needs to be consistent and look like on normal bridges"): every curve junction
+	## (Sim._conv_pieces) at an end of these decks wears its conveyor version (<Curve>_Conveyor_Relay_v4 on a relay lane,
+	## _Belt_v4 on a plain belt), set INTO the plain curve's node so it falls with it; its Treads turn round the curve
+	## centre in the deck's flow. Each curve once (the lower deck index carries it).
 	var out := []
 	for ei in eis:
 		var e: Dictionary = sim.edges[ei]
@@ -406,30 +479,38 @@ func _curve_chevrons(eis: Array, col := Color.WHITE) -> Array:
 			if other < 0 or other < ei:
 				continue
 			var j: Dictionary = sim.nodes[end]
-			var c := sim._curve_centre(j)
+			var nm := "%s_Conveyor_%s_v4" % [str(j["junction"]), "Relay" if relay else "Belt"]
+			var plat = vis.get(end, {}).get("platform")
+			if not _kit(nm) or not plat is Node3D:
+				continue
+			for ch in (plat as Node).get_children():      # the plain curve's own meshes give way to the conveyor one
+				if ch is Node3D:
+					(ch as Node3D).visible = false
+			var piece := MapBuilder.piece(nm)
+			piece.name = nm
+			(plat as Node).add_child(piece)               # same origin (start port) and yaw as the plain curve
+			var pos: Vector3 = j["pos"]
 			var p_this: Vector3 = sim.exit_of(ei, end)
 			var p_other: Vector3 = sim.exit_of(other, end)
-			var pts: Array = sim._arc(c, atan2(p_this.z - c.z, p_this.x - c.x), atan2(p_other.z - c.z, p_other.x - c.x),
-					Sim.curve_r(str(j["junction"])))
-			if end == e["a"]:                             # the flow A -> B enters the deck at A: the arc runs INTO it
-				pts.reverse()
-			var cum := [0.0]
-			for k in range(1, pts.size()):
-				cum.append(float(cum[-1]) + (pts[k] as Vector3).distance_to(pts[k - 1]))
-			var mm := MultiMesh.new()
-			mm.transform_format = MultiMesh.TRANSFORM_3D
-			var pm := PrismMesh.new()
-			pm.size = Vector3(2.0, 1.3, 0.12)
-			mm.mesh = pm
-			mm.instance_count = maxi(1, int(float(cum[-1]) / CHEVRON_GAP))
-			var mmi := MultiMeshInstance3D.new()
-			mmi.name = "Proto_Conveyor_Curve_Chevron"
-			mmi.multimesh = mm
-			mmi.material_override = _mat(col)
-			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			add_child(mmi)
-			out.append({"edge": ei, "mmi": mmi, "a": pts[0], "b": pts[-1], "L": float(cum[-1]), "pts": pts, "cum": cum})
+			var this_is_start := p_this.distance_to(pos) < p_other.distance_to(pos)
+			out.append({"edge": ei, "curve": piece, "treads": piece.find_child("Treads", true, false),
+					"treads_rev": piece.find_child("TreadsRev", true, false), "period": float(CONV_PERIOD.get(nm, 0.13)),
+					"r": Sim.curve_r(str(j["junction"])), "ab_is_start_end": this_is_start == (end == e["b"])})
 	return out
+
+
+func _curve_sync(c: Dictionary, phase: float, forward: bool, shown: bool) -> void:
+	## A conveyor curve: the Treads (start -> end) or TreadsRev (end -> start) shown for the flow, turned round the centre.
+	var se: bool = forward == bool(c["ab_is_start_end"])
+	var tr = c["treads"]
+	var rv = c["treads_rev"]
+	var ang := fposmod(absf(phase) * 0.4 / float(c["r"]), float(c["period"]))
+	if tr is Node3D:
+		(tr as Node3D).visible = shown and se
+		(tr as Node3D).rotation.y = ang
+	if rv is Node3D:
+		(rv as Node3D).visible = shown and not se
+		(rv as Node3D).rotation.y = -ang
 
 
 func _run_poly(c: Dictionary, phase: float, move_fwd: bool, face_fwd: bool, y: float) -> void:
@@ -630,6 +711,7 @@ func _exit_strips(n: Dictionary) -> Dictionary:
 func sync(dt: float) -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	_unbatch()
+	_watch_falls()
 	_t += dt
 	_dt = dt
 	for id in _r:
@@ -662,8 +744,12 @@ func sync(dt: float) -> void:
 				_tilt(n, r, top, phase, blink, gone)
 	for parts in _plain_ferry:                        # round 3: the plain pieces
 		_ferry_deck_sync(parts, sim.ferry_phase_e(int(parts["edge"])), false)
-	if not _belts.is_empty():
+	if not _belts.is_empty() or not _belt_curves.is_empty():
 		_belt_phase += dt * CHEVRON_SPEED * float(Rules.RELAYS_PROTO["conveyor"]["with"])
+		for c in _belt_curves:
+			var fab: bool = int(sim._belt_edges[int(c["edge"])]) == 0
+			_curve_sync(c, _belt_phase if fab else -_belt_phase, fab,
+					not sim.demolished.has(int(c["edge"])) and sim.is_edge_open(int(c["edge"])))
 		for c in _belts:
 			var flow_ab: bool = int(sim._belt_edges[int(c["edge"])]) == 0
 			var mmi: MultiMeshInstance3D = c["mmi"]
@@ -677,6 +763,30 @@ func sync(dt: float) -> void:
 	_flight_stream()
 	_speed_tags()
 	PerfProfile.lap("proto_view", _pt)
+
+
+func _watch_falls() -> void:
+	## A moving deck piece (ferry barge, conveyor deck) whose end node collapsed: a copy tumbles 26 m down over 1.5 s
+	## like the kit decks in Fx._fall_pieces (the piece itself is hidden by its sync as the edge closes).
+	for it in _fall_watch:
+		if it["done"] or not is_instance_valid(it["node"]):
+			continue
+		var e: Dictionary = sim.edges[int(it["edge"])]
+		if not (sim.collapsed.get(e["a"], false) or sim.collapsed.get(e["b"], false)):
+			continue
+		it["done"] = true
+		var src: Node3D = it["node"]
+		if not src.is_visible_in_tree():
+			continue
+		var cp := src.duplicate() as Node3D
+		add_child(cp)
+		cp.global_transform = src.global_transform
+		cp.name = src.name + "_Fall"
+		var spin := Vector3(randf_range(-1.0, 1.0), randf_range(-0.4, 0.4), randf_range(-1.0, 1.0)) * 1.2
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(cp, "position:y", cp.position.y - 26.0, 1.5).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(cp, "rotation", cp.rotation + spin, 1.5).set_ease(Tween.EASE_IN)
+		tw.chain().tween_callback(cp.queue_free)
 
 
 func _unbatch() -> void:
@@ -789,6 +899,8 @@ func _conveyor(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 		_tint_mm(mmi, col)
 		_run_chevrons(c, float(r["phase"]), true)      # (the phase already runs backwards against A -> B)
 		_face_chevrons(c, speed >= 0.0)
+	for c in r.get("curves", []):
+		_curve_sync(c, float(r["phase"]), speed >= 0.0, not gone and sim.is_edge_open(int(c["edge"])))
 	if not (r["chev"] as Array).is_empty():
 		var c0: Dictionary = r["chev"][0]
 		var flow: Vector3 = ((c0["b"] as Vector3) - (c0["a"] as Vector3)) * sign
@@ -809,7 +921,7 @@ func _v3_belt_sync(c: Dictionary, phase: float, forward: bool, shown: bool) -> v
 		deck.rotation.y = Rules.heading((b - a).normalized() * (1.0 if forward else -1.0))
 	var tr = c.get("treads")
 	if tr is Node3D:
-		var period: float = TREAD_PERIOD.get(int(c["v3_len"]), 1.0)
+		var period: float = float(c.get("v3_period", TREAD_PERIOD.get(int(c["v3_len"]), 1.0)))
 		(tr as Node3D).position.x = float(c["treads_x"]) + fposmod(absf(phase) * 0.4, period)
 
 

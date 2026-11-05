@@ -139,7 +139,7 @@ static func put_button(parent: Node3D, sim: Sim, n: Dictionary) -> Dictionary:
 	return pl
 
 
-const PROTO_V3_BUTTONS := ["ferry", "conveyor"]   # round 3: the relays-4.0 buttons Daniele ticked (Hub review-relay-looks)
+const PROTO_V3_BUTTONS := ["ferry", "conveyor", "launcher", "lift", "tilt"]   # round 3: the relays-4.0 buttons (ferry / conveyor ticked on the Hub; launcher / lift / tilt added 2026-11-05: "create all relay model that are missing")
 
 
 static func proto_button(kind: String) -> String:
