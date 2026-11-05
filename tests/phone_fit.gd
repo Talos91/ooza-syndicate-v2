@@ -95,11 +95,13 @@ func _measure(main: Node, pt_w: float) -> Dictionary:
 	var tap := INF
 	var worst := -1
 	for n in sim.nodes:
+		if n["node_kind"] == "junction":                  # JUNCTION (2026-10-28): pieces are never tapped nor tap targets
+			continue
 		var t := _circle_screen(cam, n["pos"], tap_r)
 		var size: float = 2.0 * minf(t["hx"], t["hy"])
 		var c0: Vector2 = t["c"]
 		for m in sim.nodes:
-			if m["id"] != n["id"]:
+			if m["id"] != n["id"] and m["node_kind"] != "junction":
 				size = minf(size, c0.distance_to(circ[m["id"]]["c"]))
 		if size < tap:
 			tap = size
