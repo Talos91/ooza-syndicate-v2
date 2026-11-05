@@ -374,9 +374,12 @@ static func target_hex(ci: CanvasItem, c: Vector2, r: float, col: Color, s: floa
 	var rr := r * breathe * (1.0 + 0.35 * (1.0 - k) * (1.0 - k))
 	var flick := 1.0 if k >= 1.0 else (0.35 + 0.65 * absf(sin(k * 31.0)))
 	var fk := floor_k(ci)
-	sprite(ci, "node_target_ring_backing", c, Vector2(rr, rr) * 2.0, Color(1, 1, 1, flick), 0.0, fk)   # GMN-1: the dark outline
+	sprite(ci, "node_target_ring_backing", c, Vector2(rr, rr) * 2.0, Color(1, 1, 1, 0.55 * flick), 0.0, fk)   # GMN-1: the dark outline
+	# (Daniele: the target "in the wrong colour" - the ring read brown: the backing at full strength under one dim pass) a lit
+	# pass in the accent, then the same ring again lighter on top = a neon tube with a hot core
+	sprite(ci, "node_target_ring", c, Vector2(rr, rr) * 2.0 * 1.04, Color(col, 0.6 * flick), 0.0, fk)
 	if not sprite(ci, "node_target_ring_strike" if k < 1.0 and HudNoir.has("node_target_ring_strike") else "node_target_ring",
-			c, Vector2(rr, rr) * 2.0, Color(col, flick), 0.0, fk):
+			c, Vector2(rr, rr) * 2.0, Color(col.lerp(Color.WHITE, 0.3), flick), 0.0, fk):
 		ci.draw_colored_polygon(hexagon(c, rr, PI / 6.0).slice(0, 6), Color(col, 0.07 * flick))   # a faint lit wash inside
 		tube(ci, hexagon(c, rr, PI / 6.0), col, maxf(3.6 * s, 2.6), flick)
 		for i in range(6):                              # corner brackets just outside, slowly turning: "locked on"

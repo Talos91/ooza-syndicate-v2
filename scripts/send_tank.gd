@@ -117,14 +117,17 @@ func _draw() -> void:
 	var inner := NodeNoir.clean(NoirBox.rounded(b, rad))
 	# the goo: everything under a wavy surface, clipped to the tank's inside
 	var lv := clampf(shown, 0.0, 1.0)
-	var amp := (1.5 + 6.0 * _slosh) * s
+	# GMN-1 (Daniele: "too stable ... not seamless"): a livelier surface - a slow idle sway that never stops, two travelling
+	# waves, the slosh on top - sampled finely (48) so the edge never steps; at 100 % it calms under the cap
+	var calm := 0.35 if lv >= 0.999 else 1.0
+	var amp := (2.6 + 6.0 * _slosh) * s * calm
+	var sway := 2.2 * s * calm * sin(_t * 1.3)
 	var surf := PackedVector2Array()
-	var n := 24
+	var n := 48
 	for k in range(n + 1):
 		var x := lerpf(b.position.x - 2.0, b.end.x + 2.0, float(k) / n)
 		var u := float(k) / n
-		var y := level_y(lv) + amp * (0.6 * sin(u * 9.0 + _t * 2.3) + 0.4 * sin(u * 17.0 - _t * 3.4)) \
-				+ _slosh * 5.0 * s * sin(_t * 9.0) * (u - 0.5)
+		var y := level_y(lv) + amp * (0.55 * sin(u * 7.0 + _t * 2.1) + 0.45 * sin(u * 13.0 - _t * 3.1)) 				+ (sway + _slosh * 5.0 * s * sin(_t * 9.0)) * (u - 0.5) * 2.0
 		surf.append(Vector2(x, y))
 	var goo := surf.duplicate()
 	goo.append(Vector2(b.end.x + 2.0, b.end.y + 2.0))
@@ -157,6 +160,8 @@ func _draw() -> void:
 		var by := b.end.y - (b.end.y - level_y(lv)) * tt
 		if by > level_y(lv) + 4.0 * s:
 			draw_arc(Vector2(bx, by), (1.6 + 1.2 * fposmod(fi * 0.53, 1.0)) * s, 0.0, TAU, 10, Color(1, 1, 1, 0.35), 1.0 * s, true)
+	if gmn():
+		_draw_gmn_drips(b, acc)
 	# the meniscus: a bright line riding the surface (inside the tank only)
 	var line := PackedVector2Array()
 	for p in surf:
@@ -251,3 +256,23 @@ func _draw_gmn_gauge(b: Rect2, fs: int) -> void:
 		var up := Vector2(b.get_center().x - uw / 2.0, b.end.y - 6.0 * s)
 		draw_string_outline(_font, up, units, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(4 * s), ol)
 		draw_string(_font, up, units, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+
+
+func _draw_gmn_drips(b: Rect2, acc: Color) -> void:
+	## GMN-1 (Daniele: "lacks the drip"): the goo hanging under the bottom cap - the director's liquid layer below the body
+	## (canvas y 1110..1246), tinted - and a drop that swells, falls and fades, again and again.
+	var tex := HudNoir.texture(str(HudNoir.part_data("send_tank_liquid").get("file", "")))
+	if tex == null:
+		return
+	var k := ui_scale / HudNoir.SPRITE_K
+	var cap_y := b.end.y + (1128.0 - GLASS.end.y) * k             # the body's bottom (canvas 1128): the cap's lower rim
+	var src := Rect2(48, 1110, 300, 136)
+	var dst := Rect2(Vector2(0.0, cap_y - 18.0 * k), Vector2(size.x, 136.0 * k))
+	draw_texture_rect_region(tex, dst, src, Color(acc, 0.95))
+	var cyc := fposmod(_t, 1.8) / 1.8                              # one drop every 1.8 s from the longest drip
+	var tip := Vector2(dst.position.x + dst.size.x * 0.32, dst.end.y - 8.0 * k)
+	var r := (2.2 + 1.6 * minf(cyc * 2.0, 1.0)) * ui_scale
+	var fall := maxf(0.0, cyc - 0.55) / 0.45
+	var p := tip + Vector2(0, 26.0 * ui_scale * fall * fall)
+	draw_circle(p, r * (1.0 - 0.3 * fall), Color(acc, 0.95 * (1.0 - fall)))
+	draw_circle(p - Vector2(r, r) * 0.3, r * 0.3, Color(1, 1, 1, 0.6 * (1.0 - fall)))

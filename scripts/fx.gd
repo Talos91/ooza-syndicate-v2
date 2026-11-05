@@ -146,7 +146,10 @@ func sync(dt: float) -> void:
 	if _sel_ring.visible:
 		var n: Dictionary = sim.nodes[selected]
 		_sel_ring.position = n["pos"] + Vector3(0, 0.25, 0)
-		_sel_ring.material_override = Mats.glow(Rules.seat_color(n["owner"]) if n["owner"] != "" else Color.WHITE, 0.8)
+		# GMN-1 (Daniele: the arrow's origin "in the wrong colour"): your own node's ring in your faction accent, like the
+		# stream, the reticle and the radial; another owner's in its seat colour
+		var own := str(n["owner"]) != "" and str(n["owner"]) == str(world.get("HUMAN"))
+		_sel_ring.material_override = Mats.glow(HudNoir.accent if own else (Rules.seat_color(n["owner"]) if n["owner"] != "" else Color.WHITE), 0.8)
 		_sel_ring.rotation.y += dt * 0.6
 	for p in _pulses.duplicate():
 		p["t"] += dt

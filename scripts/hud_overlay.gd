@@ -650,11 +650,30 @@ func _neon(cell: int, c: Vector2, R: float, mod: Color) -> void:
 			var kb := 2.0 * NT_R / pl.z                           # texture px per source px
 			var sq := CHIP_SQUASH if cell == NT_CHIP else 1.0
 			draw_texture_rect(t, Rect2(c - Vector2(pl.x, pl.y * sq) * kk, t.get_size() * kk / kb), false, mod)
+			_noir_glyph(cell, c, kk, mod)
 			return
 	var k := R / NT_R
 	var sz := Vector2(NT_W, NT_H) * k
 	draw_texture_rect_region(neon_atlas(Rules.seat_color(human)), Rect2(c - Vector2(NT_W / 2.0, NT_CY) * k, sz),
 			Rect2(cell * NT_W, 0, NT_W, NT_H), mod)
+
+
+func _noir_glyph(cell: int, c: Vector2, kk: float, mod: Color) -> void:
+	## GMN-1's sign and chip carry no glyph (Daniele: "last stand alert lacks the !", "upgrade has no symbol"): the "!" in the
+	## sign's neon triangle (its centre ~64 source px above the plate's), the up arrow on the chip's stud.
+	if cell == NT_CHIP:
+		var r := 24.0 * kk
+		var pts := PackedVector2Array([c + Vector2(-r, r * 0.35), c + Vector2(0, -r * 0.55), c + Vector2(r, r * 0.35)])
+		draw_polyline(pts, Color(0, 0, 0, 0.6 * mod.a), 9.0 * kk, true)
+		draw_polyline(pts, Color(Rules.seat_color(human).lerp(Color.WHITE, 0.55), mod.a), 5.5 * kk, true)
+		return
+	if cell > NT_GREY:
+		return
+	var tc := c + Vector2(0, -64.0 * kk)
+	var ink := Color(1, 1, 1, mod.a) if cell != NT_GREY else Color(0.85, 0.88, 0.92, mod.a)
+	draw_line(tc + Vector2(0, -11.0 * kk), tc + Vector2(0, 3.0 * kk), Color(0, 0, 0, 0.55 * mod.a), 7.5 * kk, true)
+	draw_line(tc + Vector2(0, -11.0 * kk), tc + Vector2(0, 3.0 * kk), ink, 4.5 * kk, true)
+	draw_circle(tc + Vector2(0, 9.5 * kk), 3.2 * kk, ink)
 
 
 func _pulse_ring(c: Vector2, R: float, col: Color, pk: Array, cell := NT_TUBE) -> void:

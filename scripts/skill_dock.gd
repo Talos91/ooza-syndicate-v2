@@ -125,7 +125,7 @@ class Slot:
 				# GMN-1: the plate drawn WHOLE at the slot's size (its window, socket and name strip stay where the
 				# director put them - a 9-slice moved the strip away from the name, Daniele: "text is not aligned")
 				var pid := "skill_card_ultimate_fill" if ult and HudNoir.has("skill_card_ultimate_fill") else ("skill_card_armed" if armed else "skill_card")
-				if not NodeNoir.sprite(self, pid, size / 2.0, size, Color.WHITE):
+				if not NodeNoir.sprite(self, pid, Vector2(size.x / 2.0, size.x * 520.0 / 495.0 / 2.0), Vector2(size.x, size.x * 520.0 / 495.0), Color.WHITE):
 					draw_style_box(dock.card_box(armed, ult), Rect2(Vector2.ZERO, size))
 			return
 		draw_style_box(dock.card_box(armed), Rect2(Vector2.ZERO, size))
@@ -440,15 +440,17 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 	var plate_h := 0.0
 	if plate and mobile:                          # GMN-1 layout: plates 90 x 94.55 pt, 4.45 pt apart, the window from the plate
 		var ppx := 1.0 / maxf(UiKit.pt_per_px((Engine.get_main_loop() as SceneTree).root.get_visible_rect().size), 0.01)
-		var cb: Array = HudNoir.part_data("skill_card").get("body", [0, 0, 495, 520])
-		var pk := 90.0 * ppx / float(cb[2])
 		slot_w = 90.0 * ppx / ui_scale
+		_floor_px = 13.0 * ppx                     # the director's plate words: 13 pt
+		add_theme_constant_override("separation", int(round(4.45 * ppx)))
+	if plate:                                     # the plate keeps ITS aspect (495 x 520 body): a taller slot warped it and moved
+		var cb: Array = HudNoir.part_data("skill_card").get("body", [0, 0, 495, 520])   # its window off the glass (Daniele)
+		var pw := (slot_w * ui_scale)
+		var pk := pw / float(cb[2])
 		round_d = float(HudNoir.part_data("skill_vessel").get("body", [0, 0, 270, 270])[2]) * pk
 		vessel_cy = float(HudNoir.part_data("skill_card").get("socket", [0, 200])[1]) * pk
 		top = vessel_cy - round_d / 2.0
-		plate_h = 94.55 * ppx
-		_floor_px = 13.0 * ppx                     # the director's plate words: 13 pt
-		add_theme_constant_override("separation", int(round(4.45 * ppx)))
+		plate_h = float(cb[3]) * pk
 	for i in range(3):
 		# Neon Noir: no slot label; the name takes a second line only where one line would cut it (EMERGENCY / EVAC)
 		var lines := name_lines(sim.skill_id(human, SLOTS[i]), slot_w * ui_scale - 2.0 * pad).size()
@@ -457,7 +459,7 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		b.dock = self
 		b.index = i
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		b.custom_minimum_size = Vector2(slot_w * ui_scale, maxf(slot_h, plate_h)).round()
+		b.custom_minimum_size = Vector2(slot_w * ui_scale, plate_h if plate else slot_h).round()
 		b.pressed.connect(press_slot.bind(i))
 		if plate:
 			b.vessel = HudLiquid.new()
