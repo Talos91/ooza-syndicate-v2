@@ -2,6 +2,9 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto14** - 2026-11-05 (proto-r, staging/proto/): R-13 Gearbox: a second drive under the gearbox, linked to the top one
+  (either flips both gears; new conveyor link); R-04 Gate 2 removed from the picker.
+
 - **0.23.15-proto13** - 2026-11-05 (proto-r, staging/proto/): Lift bridges ramp to the raised platform (no more teleporting); lines
   cross OVER the Crossing; speed-deck treads fit every deck length (Daniele's proto12 review).
 
