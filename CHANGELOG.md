@@ -2,6 +2,9 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto17** - 2026-11-06 (proto-r, staging/proto/): Launcher, lift and tilt wear their own models: the turret aims and throws,
+  the lift platform rises on its base, the tilt top tips and its dial points at the next exit; all fall with their node (🎨).
+
 - **0.23.15-proto16** - 2026-11-06 (proto-r, staging/proto/): Neutral machinegoons on 6 round-R maps (R-01, R-02, R-05, R-11, R-06,
   R-10; symmetric sets); neutral guns and lasers shoot everyone, capture keeps the gun; ferries swing faster (3-way 42 -> 21 s, about
   30 % of a crossing survives; a 1-bridge ferry cycles in 10.5 s). test_ai_curve fails 5 checks on the proto line (same on proto15).
