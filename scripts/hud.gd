@@ -1629,7 +1629,7 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 	if cost > 0:
 		price = "%d UNITS" % Rules.shown(cost)
 	elif method == "switch":
-		price = "%d s COOLDOWN" % int(Rules.relay_cooldown(str(sim.nodes[id]["relay"])))   # per kind: rotations 10 s
+		price = "FREE · %d s" % int(Rules.relay_cooldown(str(sim.nodes[id]["relay"])))   # free, then its cooldown (GMN-1: "5 s COOLDOWN" overflowed the 40 deg slice)
 	var b := ActionWedge.new()                            # 0.23.x: a slice of the hex pie (see ActionWedge)
 	b.title = title.get_slice("\n", 0)
 	b.cost = price
