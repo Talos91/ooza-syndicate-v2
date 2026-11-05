@@ -1424,7 +1424,10 @@ class ActionWedge:
 		# Daniele 2026-11-04 (mockup 3): NO goo in the slices - a slice is LIT (affordable / free) or GREYED (not yet):
 		# "easy to just have grayed or not; the filling would also cost resources especially when open and close fast".
 		var lit := not off and afford >= 1.0
-		if HudNoir.has("node_wedge"):                     # DROP-IN: the director's slice (lit / _fill_off), unrolled onto this one
+		var sec := sector_id()
+		if sec != "":                                     # GMN-2: the director's FINISHED slice (fixed 50 / 40 deg sector, own bolts and rim):
+			_sector(sec, c, lit, a)                       # OFF metal always, the LIT neon signal over it in the accent
+		elif HudNoir.has("node_wedge"):                   # DROP-IN: the director's slice (lit / _fill_off), unrolled onto this one
 			_mapped("node_wedge_fill_off" if not lit and HudNoir.has("node_wedge_fill_off") else "node_wedge", c, r_in, ro,
 					Color.WHITE if lit or HudNoir.has("node_wedge_fill_off") else Color(0.55, 0.55, 0.6))
 			_mapped_rim("node_wedge", c, r_in, ro, a if lit else Color(a, 0.35))
@@ -1437,7 +1440,7 @@ class ActionWedge:
 					var u := clampf(((q - c).length() - r_in) / maxf(ro - r_in, 1.0), 0.0, 1.0)
 					gc.append(Color(a.darkened(0.5).lerp(a, u), 0.16 + 0.22 * u))
 				draw_polygon(gp, gc)
-		if not HudNoir.has("node_wedge"):              # (the director's slice brings its own rim: one edge, not two - Daniele)
+		if sec == "" and not HudNoir.has("node_wedge"):  # (the director's slice brings its own rim: one edge, not two - Daniele)
 			var edge := poly.duplicate()
 			edge.append(poly[0])
 			draw_polyline(edge, Color(a, 0.3), 1.0 * s, true)
@@ -1453,6 +1456,36 @@ class ActionWedge:
 		_text(title, p + Vector2(0, lh * 0.55), 13.0, ink, maxw)
 		var low := why if why != "" else cost
 		_text(low, p + Vector2(0, lh * 1.55), 12.0, Color(HudNoir.ENEMY.lightened(0.25) if not lit else a.lightened(0.35), k), maxw)
+
+	static func sector_for(span: float) -> String:
+		## GMN-2: "50" / "40" when the director's finished sector of that angle is in the game and fits a slice of `span`
+		## (the phone layout: 50 deg up to 3 slices, 40 for 4-5), else "" (the unrolled node_wedge / code-drawn slice).
+		for deg in [50, 40]:
+			if absf(rad_to_deg(span) - deg) < 2.0 and HudNoir.has("node_slice_off_%d" % deg):
+				return str(deg)
+		return ""
+
+	func sector_id() -> String:
+		return sector_for(a1 - a0)
+
+	func _sector(deg: String, c: Vector2, lit: bool, a: Color) -> void:
+		## The sector sprites face +x with the ring centre outside their canvas (part socket = centre in body px, inner / outer
+		## radius 147 / 357 px): turned to the slice's middle, scaled so 357 px = this slice's outer edge, faded in with the deal-out.
+		var off: Dictionary = HudNoir.part_data("node_slice_off_" + deg)
+		var t := HudNoir.texture(str(off.get("file", "")))
+		if t == null:
+			return
+		var body: Array = off["body"]
+		var sock: Array = off["socket"] if off.get("socket") != null else [-133.0, 151.0]
+		var origin := -Vector2(float(body[0]) + float(sock[0]), float(body[1]) + float(sock[1]))   # canvas (0,0) from the centre
+		var k := outer() / 357.0
+		draw_set_transform(c, mid(), Vector2(k, k))
+		draw_texture(t, origin, Color(1, 1, 1, clampf(grow * 1.5, 0.0, 1.0)))
+		if lit:
+			var lt := HudNoir.texture(str(HudNoir.part_data("node_slice_lit_" + deg).get("file", "")))
+			if lt != null:
+				draw_texture(lt, origin, Color(a.lightened(0.15 * lift), clampf(grow * 1.5, 0.0, 1.0)))
+		draw_set_transform(Vector2.ZERO)
 
 	func _uv_poly(c: Vector2, ri: float, ro2: float, full_ro: float) -> Array:
 		## The slice ri..ro2 with polar UVs into an unrolled-slice texture: u across a0 -> a1, v 0 at full_ro (its top = the
@@ -2024,7 +2057,7 @@ func _draw_inspector_guides(col: Color) -> void:
 	g.draw_colored_polygon(hexp.slice(0, hexp.size() - 1), Color(col, 0.06 * e))
 	if not NodeNoir.sprite(g, "node_select", Vector2.ZERO, Vector2.ONE * INSPECTOR_RING_R * s * 2.0, Color(col, e), hx, NodeNoir.floor_k(g)):
 		NodeNoir.neon(g, hexp, col, 2.4 * s, (0.65 + 0.2 * sin(Time.get_ticks_msec() / 300.0)) * e, e)
-	if int(_fan["n"]) > 0:
+	if int(_fan["n"]) > 0 and ActionWedge.sector_for(float(_fan["total"]) / int(_fan["n"])) == "":   # GMN-2 sectors: no container
 		var total: float = _fan["total"]
 		var outer := _hex_edge(Vector2.ZERO, hx, base - total / 2.0, base + total / 2.0, float(_fan["r_out"]) + 3.0 * s)
 		var inner := _hex_edge(Vector2.ZERO, hx, base - total / 2.0, base + total / 2.0, float(_fan["r_in"]) - 2.0 * s)

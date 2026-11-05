@@ -35,6 +35,12 @@ func setup(h, m, s: float, font: Font) -> void:
 
 # GMN-1: the glass inside the director's tank, measured on send_tank_liquid.png (canvas px): x 60..336, y 180..1060
 const GLASS := Rect2(60, 180, 276, 880)
+const GLASS_GMN2 := Rect2(72, 177, 252, 810)      # GMN-2 (thin VEX tank, README "GEL REGISTRATION"): the glass / liquid interior
+
+
+func glass() -> Rect2:
+	## The canvas rect of the tank's glass: GMN-2's thinner tank when its boards are in (send_tank_drip ships with them).
+	return GLASS_GMN2 if HudNoir.has("send_tank_drip") else GLASS
 
 
 func gmn() -> bool:
@@ -49,9 +55,10 @@ func body_rect() -> Rect2:
 		var bd: Array = p.get("body", [48, 48, 300, 1080])
 		var k := ui_scale / HudNoir.SPRITE_K
 		var h := size.y - drip
-		var top := (GLASS.position.y - float(bd[1])) * k
-		var bot := (float(bd[1]) + float(bd[3]) - GLASS.end.y) * k
-		var side := (GLASS.position.x - float(bd[0])) * k
+		var gl := glass()
+		var top := (gl.position.y - float(bd[1])) * k
+		var bot := (float(bd[1]) + float(bd[3]) - gl.end.y) * k
+		var side := (gl.position.x - float(bd[0])) * k
 		return Rect2(Vector2(side, top), Vector2(size.x - 2.0 * side, h - top - bot))
 	var inset := 7.0 * ui_scale
 	return Rect2(Vector2(inset, inset), Vector2(size.x - 2.0 * inset, size.y - drip - 2.0 * inset))
@@ -132,6 +139,7 @@ func _draw() -> void:
 	var goo := surf.duplicate()
 	goo.append(Vector2(b.end.x + 2.0, b.end.y + 2.0))
 	goo.append(Vector2(b.position.x - 2.0, b.end.y + 2.0))
+	var gl := glass()
 	for part in Geometry2D.intersect_polygons(goo, inner):
 		var cp := NodeNoir.clean(part)
 		if cp.size() < 3:
@@ -141,7 +149,7 @@ func _draw() -> void:
 			var cs := PackedColorArray()
 			for p in cp:
 				var u := (p - b.position) / b.size
-				uvs.append(Vector2((GLASS.position.x + u.x * GLASS.size.x) / 396.0, (GLASS.position.y + u.y * GLASS.size.y) / 1284.0))
+				uvs.append(Vector2((gl.position.x + u.x * gl.size.x) / 396.0, (gl.position.y + u.y * gl.size.y) / 1284.0))
 				cs.append(acc)
 			draw_polygon(cp, cs, uvs, HudNoir.texture(str(HudNoir.part_data("send_tank_liquid").get("file", ""))))
 			cs.fill(Color.WHITE)
@@ -261,16 +269,29 @@ func _draw_gmn_gauge(b: Rect2, fs: int) -> void:
 func _draw_gmn_drips(b: Rect2, acc: Color) -> void:
 	## GMN-1 (Daniele: "lacks the drip"): the goo hanging under the bottom cap - the director's liquid layer below the body
 	## (canvas y 1110..1246), tinted - and a drop that swells, falls and fades, again and again.
+	var k := ui_scale / HudNoir.SPRITE_K
+	var cap_y := b.end.y + (1128.0 - glass().end.y) * k           # the body's bottom (canvas 1128): the cap's lower rim
+	var drip := HudNoir.texture(str(HudNoir.part_data("send_tank_drip").get("file", "")))
+	if drip != null:                                               # GMN-2: the director's send_tank_drip under the nozzle (white,
+		var sx := size.x / 300.0                                   # tinted), hanging from the cap and breathing a little, then the drop
+		var st := 1.0 + 0.07 * sin(_t * 2.3)
+		var src2 := Rect2(150, 1120, 96, 124)
+		var dst2 := Rect2(Vector2((src2.position.x - 48.0) * sx, cap_y + (src2.position.y - 1128.0) * k), Vector2(src2.size.x * sx, src2.size.y * k * st))
+		draw_texture_rect_region(drip, dst2, src2, Color(acc, 0.95))
+		_drop(Vector2((198.0 - 48.0) * sx, cap_y + (1233.0 - 1128.0) * k * st), acc)
+		return
 	var tex := HudNoir.texture(str(HudNoir.part_data("send_tank_liquid").get("file", "")))
 	if tex == null:
 		return
-	var k := ui_scale / HudNoir.SPRITE_K
-	var cap_y := b.end.y + (1128.0 - GLASS.end.y) * k             # the body's bottom (canvas 1128): the cap's lower rim
 	var src := Rect2(48, 1110, 300, 136)
 	var dst := Rect2(Vector2(0.0, cap_y - 18.0 * k), Vector2(size.x, 136.0 * k))
 	draw_texture_rect_region(tex, dst, src, Color(acc, 0.95))
-	var cyc := fposmod(_t, 1.8) / 1.8                              # one drop every 1.8 s from the longest drip
-	var tip := Vector2(dst.position.x + dst.size.x * 0.32, dst.end.y - 8.0 * k)
+	_drop(Vector2(dst.position.x + dst.size.x * 0.32, dst.end.y - 8.0 * k), acc)
+
+
+func _drop(tip: Vector2, acc: Color) -> void:
+	## A drop that swells at the drip's tip, falls and fades - one every 1.8 s.
+	var cyc := fposmod(_t, 1.8) / 1.8
 	var r := (2.2 + 1.6 * minf(cyc * 2.0, 1.0)) * ui_scale
 	var fall := maxf(0.0, cyc - 0.55) / 0.45
 	var p := tip + Vector2(0, 26.0 * ui_scale * fall * fall)
