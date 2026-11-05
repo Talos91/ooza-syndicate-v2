@@ -23,7 +23,7 @@ extends VBoxContainer
 const SLOTS := ["active", "map", "ultimate"]
 const TAGS := ["ACTIVE", "MAP", "ULTIMATE"]
 # 0.19.2 spec H5: each slot type gets its own ring colour instead of sharing the seat colour - Alpha 24 Neon Noir (Daniele
-# 2026-11-02, DECIDED): fixed per slot in every faction - ACTIVE ice-white, MAP violet, ULTIMATE amber (HudNoir.RING)
+# 2026-11-02, DECIDED): fixed per slot in every faction - ACTIVE icy cyan (ice-white until 2026-11-05), MAP violet, ULTIMATE amber (HudNoir.RING)
 const SLOT_ACCENT := HudNoir.RING
 const SLOT_W := 112.0                          # x ui_scale: a slot's width on desktop (phones: Rules.HUD_DOCK_PHONE_W)
 const ROUND_D := 64.0                          # x ui_scale: the round button (phones: ROUND_D_PHONE - 90 px on the phone profile, ~45 pt)

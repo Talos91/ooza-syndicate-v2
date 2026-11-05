@@ -1469,14 +1469,36 @@ class ActionWedge:
 		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)
 		if k <= 0.0:
 			return
-		var p := content_point()
+		## Daniele 2026-11-05: radial words - the glyph upright in the slice's INNER end, the name + price to its right, turned
+		## along the slice's middle ray (flipped 180 deg left of the centre so they never read upside down), centred in the rest.
 		var ink := Color(HudNoir.INK, k) if lit else Color(HudNoir.MUTED, k)
-		var lh := maxf(16.0 * s * type_scale, float(floor_px) * 1.2)   # GMN-1: lines spaced for the phone's 13 pt words
-		_icon(p + Vector2(0, -lh), maxf(14.0 * s * type_scale, float(floor_px) * 0.85), Color(a.lightened(0.2) if lit else HudNoir.MUTED, k))
-		var maxw := minf(ro - r_in, (a1 - a0) * (r_in + ro) / 2.0) * 0.9
-		_text(title, p + Vector2(0, lh * 0.55), 13.0, ink, maxw)
+		var lh := maxf(14.0 * s * type_scale, float(floor_px) * 1.1)   # GMN-1: lines spaced for the phone's 13 pt words
+		var ir := maxf(12.0 * s * type_scale, float(floor_px) * 0.8)
+		var m := mid()
+		var u := Vector2(cos(m), sin(m))
+		var c := centre() + _shift()
+		var ri := hex_r(m, r_in, hex_base)
+		var span := hex_r(m, ro, hex_base) - ri
+		var izone := ir * 2.5
+		_icon(c + u * (ri + ir * 1.3), ir, Color(a.lightened(0.2) if lit else HudNoir.MUTED, k))
+		var tr := ri + izone + (span - izone) * 0.5                      # the text block's centre on the ray
+		var maxw := (span - izone) * 0.94
+		var room := (a1 - a0) * tr * 0.92                                  # the slice's width across the ray there
+		var fs := maxi(int(round(13.0 * ui_scale * type_scale)), floor_px)
+		var min_fs := maxi(7, int(round(float(floor_px) * 10.0 / 13.0)))   # radial words may shrink to 10 pt (as the plate names)
+		var lines: Array = []
 		var low := why if why != "" else cost
-		_text(low, p + Vector2(0, lh * 1.55), 12.0, Color(HudNoir.ENEMY.lightened(0.25) if not lit else a.lightened(0.35), k), maxw)
+		for ln in [[str(SLICE_NAMES.get(title, title)), 13.0, ink], [low, 12.0, Color(HudNoir.ENEMY.lightened(0.25) if not lit else a.lightened(0.35), k)]]:
+			lines.append_array(_wrap(str(ln[0]), maxi(min_fs, int(round(fs * 0.85))), maxw).map(func(t): return [t, ln[1], ln[2]]))   # MONSTER / HUB, FREE / 5 s
+		var gap := minf(lh, room / float(lines.size()))
+		var ang := m + (PI if u.x < -0.01 else 0.0)
+		_ci.draw_set_transform(c + u * tr, ang)
+		for i in lines.size():
+			var ln: Array = lines[i]
+			_text(str(ln[0]), Vector2(0, (float(i) - (lines.size() - 1) / 2.0) * gap), float(ln[1]), ln[2], maxw, min_fs)
+		_ci.draw_set_transform(Vector2.ZERO)
+
+	const SLICE_NAMES := {"MACHINEGOON": "GOON", "MONSTER HUB": "HUB"}   # Daniele 2026-11-05: short names on the slice only (the card keeps the full)
 
 	static func sector_for(span: float) -> String:
 		## GMN-2: "50" / "40" when the director's finished sector of that angle is in the game and fits a slice of `span`
@@ -1543,9 +1565,22 @@ class ActionWedge:
 		cols.fill(mod)
 		draw_polygon(pu[0], cols, pu[1], t)
 
-	func _text(t: String, at: Vector2, px: float, col: Color, maxw: float) -> void:
+	func _wrap(t: String, fs: int, maxw: float) -> Array:
+		## A slice line too long for maxw at fs splits once: at " · " first, else at the space nearest the middle.
+		if font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x <= maxw:
+			return [t]
+		if " · " in t:
+			var i := t.find(" · ")
+			return [t.substr(0, i), t.substr(i + 3)]
+		var best := -1
+		for i in t.length():
+			if t[i] == " " and (best < 0 or absi(i - t.length() / 2) < absi(best - t.length() / 2)):
+				best = i
+		return [t] if best < 0 else [t.substr(0, best), t.substr(best + 1)]
+
+	func _text(t: String, at: Vector2, px: float, col: Color, maxw: float, min_fs := -1) -> void:
 		var fs := maxi(int(round(px * ui_scale * type_scale)), floor_px)
-		while fs > maxi(7, floor_px - 1) and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > maxw:
+		while fs > (min_fs if min_fs > 0 else maxi(7, floor_px - 1)) and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > maxw:
 			fs -= 1
 		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		_ci.draw_string(font, Vector2(at.x - w / 2.0, at.y + (font.get_ascent(fs) - font.get_descent(fs)) / 2.0), t,
@@ -2019,9 +2054,11 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 		w.custom_minimum_size = box
 		w.size = box
 		w.position = -box / 2.0
-		if w.get_child_count() > 0 and w.get_child(0) == switch_ring and is_instance_valid(switch_ring):
-			var gp := w.content_point() + Vector2(0, -16.0 * s * w.type_scale)
-			switch_ring.size = Vector2.ONE * 40.0 * s
+		if is_instance_valid(switch_ring) and switch_ring.get_parent() == w:   # (not child 0: the words layer is)
+			var u := Vector2(cos(w.mid()), sin(w.mid()))
+			var ir := maxf(12.0 * s * w.type_scale, float(w.floor_px) * 0.8)
+			var gp := w.centre() + w._shift() + u * (ActionWedge.hex_r(w.mid(), w.r_in, w.hex_base) + ir * 1.3)   # = _draw_words' glyph
+			switch_ring.size = Vector2.ONE * ir * 2.6
 			switch_ring.position = gp - switch_ring.size / 2.0
 	var hub: Control = inspector.get_meta("close")
 	if hub is InspectorHub:

@@ -5,7 +5,7 @@ extends RefCounted
 ##   dark only            the match forces UiTheme dark (UiTheme.match_dark); the light theme stays for the menus
 ##   accent channel       the player's own faction colour (ACCENT): rims, haze, container drips, the SEND pick
 ##   fixed channel        never recoloured: ENEMY red, NEUTRAL grey, GOOD green, AMBER (seconds), the skill rings per slot
-##                        (RING: ACTIVE ice-white, MAP violet, ULTIMATE amber with a white-hot core), skill icons white
+##                        (RING: ACTIVE icy cyan, MAP violet, ULTIMATE amber with a white-hot core), skill icons white
 ##   drips                only on the two container housings (SEND, the skill column); buttons and badges are clean glass
 ## DROP-IN: box(id) is the only way the HUD gets a part's look. A part listed in HudNoirData.PARTS (the director's cut sprite,
 ## imported by tools/hud_noir_import.py) draws as a SkinBox - FILL plus a white RIM layer tinted like the placeholder's rim -;
@@ -19,7 +19,7 @@ const ENEMY := Color("ff3b4e")
 const NEUTRAL := Color("8a96a8")
 const GOOD := Color("3ee07a")
 const AMBER := Color("ffc23d")
-const RING := [Color("ddf6fb"), Color("a45cff"), Color("ffc23d")]   # ACTIVE / MAP / ULTIMATE, every faction (decided 2026-11-02)
+const RING := [Color("87ebff"), Color("a45cff"), Color("ffc23d")]   # ACTIVE / MAP / ULTIMATE, every faction (2026-11-02; ACTIVE icy cyan = the director's neon halo, Daniele 2026-11-05: ice-white on ice-white goo hid the ring)
 const INK := Color("e8f6fa")
 const MUTED := Color("a6bfca")
 const SPRITE_K := 3.45                              # a cut sprite is drawn at 3x the phone shot, where ui_scale is 1.15
