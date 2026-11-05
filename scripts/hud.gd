@@ -1461,7 +1461,7 @@ class ActionWedge:
 		## GMN-2: "50" / "40" when the director's finished sector of that angle is in the game and fits a slice of `span`
 		## (the phone layout: 50 deg up to 3 slices, 40 for 4-5), else "" (the unrolled node_wedge / code-drawn slice).
 		for deg in [50, 40]:
-			if absf(rad_to_deg(span) - deg) < 2.0 and HudNoir.has("node_slice_off_%d" % deg):
+			if absf(rad_to_deg(span) - deg) < 4.0 and HudNoir.has("node_slice_off_%d" % deg):   # (a slice's span is its slot less 2 x 1.4 deg seams)
 				return str(deg)
 		return ""
 
