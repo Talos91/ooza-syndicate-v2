@@ -780,8 +780,10 @@ func show_main() -> void:
 	var rx := content.size.x - x - rw
 	var ry := area.position.y + 12.0
 	var cb := UiKit.btn(self, ct, Vector2(rx, ry), Vector2(rw, 46), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
-	var lb := UiKit.btn(self, lt + "  →", Vector2(rx, ry + cb.size.y + 8.0), Vector2(rw, 46), show_help if learned else show_tutorial,
-			"secondary" if learned else "selected", hero, 15)
+	# Daniele 2026-11-05: once every lesson is done (5 / 5) TRAINING leaves HOME - the GUIDE tab keeps it
+	var lb: Button = null
+	if not learned:
+		lb = UiKit.btn(self, lt + "  →", Vector2(rx, ry + cb.size.y + 8.0), Vector2(rw, 46), show_tutorial, "selected", hero, 15)
 	# the headline top left, FULLSCREEN (QUIT on desktop) and the version under it
 	var fh := UiKit.tap_h(self, 36.0)
 	var free := ty - area.position.y - 12.0 - fh - 10.0
@@ -816,7 +818,7 @@ YOURS TO TAKE."], [26.0, "THE CITY IS YOURS TO TAKE."]]
 	else:
 		fb.free()
 		ver.free()
-	_home_install_y = lb.position.y + lb.size.y + 8.0
+	_home_install_y = (lb.position.y + lb.size.y if lb != null else cb.position.y + cb.size.y) + 8.0
 	shell_raise()
 	if _install_available():
 		_install_button(Vector2(content.size.x - x - P(380, 56).x, _home_install_y))
