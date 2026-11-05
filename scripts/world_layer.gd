@@ -40,7 +40,7 @@ const SPLATS_PER_FALL := 3
 const CRAWL_PER_FALL := 6        # blobs per fall event (one per CRAWL_UNITS shown units, at least one)
 const CRAWL_UNITS := 8.0
 const CRAWL_V := 2.4             # m/s along the floor
-const CRAWL_MAX_T := 6.0         # a long way is crawled faster: never longer than this
+# Crawl time: whatever the distance takes (Daniele 2026-11-06: "takes whatever time the splatted goo needs").
 const RISE_V := 5.0              # m/s up the tube
 const SPLAT_LIFE := 7.0
 const SPLAT_MAX := 24
@@ -336,7 +336,7 @@ func _add_blob(at: Vector3, col: Color, seat := "") -> void:
 	var bd := INF
 	for i in range(_tubes.size()):
 		var tb: Dictionary = _tubes[i]
-		if not tb["alive"]:
+		if not tb["alive"] or not tb.get("shown", true):
 			continue
 		var d := Vector2(tb["x"] - at.x, tb["z"] - at.z).length()
 		if d < bd:
@@ -345,7 +345,7 @@ func _add_blob(at: Vector3, col: Color, seat := "") -> void:
 	if _blobs.size() >= CRAWL_MAX:
 		_blobs.pop_front()
 	var dist := maxf(bd - (_tubes[best]["r"] if best >= 0 else 0.0) - 0.2, 0.0)
-	var dur := minf(dist / CRAWL_V, CRAWL_MAX_T) if best >= 0 else 2.0
+	var dur := dist / CRAWL_V if best >= 0 else 2.0
 	_blobs.append({"p": at, "from": at, "tube": best, "col": col, "t0": _t + randf_range(0.0, 0.35), "mode": 0,
 			"dur": maxf(dur, 0.3), "size": randf_range(0.75, 1.15), "ph": randf() * TAU, "seat": seat})
 	blobs_made += 1
@@ -386,12 +386,16 @@ func _tubes_step(dt: float) -> void:
 		if sim.collapsed.get(tb["id"], false):        # Last Stand: the tube drains and sinks with its platform
 			tb["alive"] = false
 			tb["drain"] = minf(float(tb["drain"]) + dt / 1.2, 1.0)
-		if top <= floor_y + 0.4:
+		var has_structure := str(n.get("structure", "")) != ""   # Daniele: tubes only under a vat / structure
+		tb["shown"] = has_structure
+		if top <= floor_y + 0.4 or not has_structure:
 			if mi.visible:
 				mi.visible = false
 				_socket_mm.set_instance_color(int(tb["sock"]), Color(0, 0, 0, 0))
 			continue
-		mi.visible = true
+		if not mi.visible:                            # a structure (re)built: the socket lights again
+			mi.visible = true
+			_socket_mm.set_instance_color(int(tb["sock"]), tb["base"])
 		if absf(top - float(tb["top_y"])) > 0.01:
 			tb["top_y"] = top
 			var h := top - floor_y
