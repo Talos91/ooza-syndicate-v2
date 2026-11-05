@@ -199,7 +199,7 @@ func _wave2() -> void:
 	## speed relays whose lanes run over the Crossing), R-10 Crescent (a rotor + 2 speed relays), R-12 Crossfire (2 lifts + 4 belts
 	## over the Crossing), R-13 Gearbox (a rotor + ONE speed relay driving both gears). Each lift / rotor swaps its open decks
 	## when fired; a speed lane / belt crossing the overpass keeps pushing on the Crossing (Sim._conv_pieces).
-	var want := {"R-06": [2, 1, 0, 0, 0], "R-09": [2, 0, 2, 0, 2], "R-10": [0, 1, 2, 0, 0], "R-12": [2, 0, 0, 4, 2], "R-13": [0, 1, 1, 0, 0]}
+	var want := {"R-06": [2, 1, 0, 0, 0], "R-09": [2, 0, 2, 0, 2], "R-10": [0, 1, 2, 0, 0], "R-12": [2, 0, 0, 4, 2], "R-13": [0, 1, 2, 0, 0]}
 	for code in want:
 		var s := _sim(code)
 		check(s != null, "%s loads" % code)
@@ -260,6 +260,32 @@ func _wave2() -> void:
 
 
 
+func _gearbox_link() -> void:
+	## Daniele 2026-11-05 (R-13): the bottom drive Y is a second speed relay LINKED to the top drive X - firing either flips
+	## both gears' rims (one shared state), and the other drive waits with it.
+	var s := _sim("R-13")
+	var drives := []
+	for n in s.nodes:
+		if n["relay"] == "conveyor":
+			drives.append(n)
+	check(drives.size() == 2, "R-13: two drives (got %d)" % drives.size())
+	if drives.size() != 2:
+		return
+	var y: Dictionary = drives[0] if s.controlled_edges(drives[0]["id"]).is_empty() else drives[1]
+	var x: Dictionary = drives[1] if y == drives[0] else drives[0]
+	check(s.controlled_edges(x["id"]).size() >= 4 and s.controlled_edges(y["id"]).is_empty(), "R-13: X drives the rims, Y none of its own")
+	check(int(x["proto"].get("link", -1)) == y["id"] and int(y["proto"].get("link", -1)) == x["id"], "R-13: X and Y linked both ways")
+	var before: int = x["relay_index"]
+	y["owner"] = "B"
+	check(s.fire_relay(y["id"]), "R-13: Y fires")
+	for i in range(200):
+		s.step(0.05)
+		if y["relay_phase"] == "moving":
+			break
+	check(int(x["relay_index"]) != before and int(y["relay_index"]) == int(x["relay_index"]), "R-13: firing Y flips X's rims (%d -> %d)" % [before, x["relay_index"]])
+	check(float(x["relay_cd"]) > 0.0, "R-13: X waits with Y")
+
+
 func _play(code: String) -> void:
 	var m := {}
 	for f in DirAccess.get_files_at("res://maps4"):
@@ -286,6 +312,7 @@ func _init() -> void:
 	_pinwheel()
 	_gates()
 	_wave2()
+	_gearbox_link()
 	for code in ["R-01", "R-02", "R-04", "R-05", "R-11", "R-06", "R-09", "R-10", "R-12", "R-13"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
 		_play(code)
 	print("test_round_r: %d checks, %d failed" % [checks, fails])

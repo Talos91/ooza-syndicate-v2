@@ -5635,6 +5635,9 @@ func _setup_proto() -> void:
 					push_warning("RELAYS 3.0: ferry %d drives %d decks (wants exactly 1)" % [n["id"], mine.size()])
 			"conveyor":
 				n["relay_index"] = 1 if str(p.get("dir", "AB")) == "BA" else 0
+				if int(p.get("link", -1)) >= 0 and int(p["link"]) < nodes.size():   # round R (Daniele 2026-11-05, R-13: "another
+					(nodes[int(p["link"])]["proto"] as Dictionary)["link"] = n["id"]   # speed relay controlling the SAME
+																		# speed / slow"): two linked relays share one state
 			"lift":
 				n["relay_index"] = clampi(int(p.get("level", 0)), 0, 1)
 			"tilt":
@@ -5725,6 +5728,13 @@ func _proto_begin_move(n: Dictionary, old_index: int, new_index: int) -> void:
 			n["tilt_exit"] = int(exits[old_index % exits.size()]) if not exits.is_empty() else -1
 			_tilt_slide(n, int(n["tilt_exit"]))
 	n["relay_index"] = new_index
+	var lk := int((n["proto"] as Dictionary).get("link", -1))
+	if lk >= 0 and lk < nodes.size():                 # a linked speed relay (R-13): its twin flips with it and waits too
+		var o: Dictionary = nodes[lk]
+		o["relay_index"] = new_index
+		if o["relay_phase"] == "warning":
+			o["relay_phase"] = ""                      # (its own pending flip would undo this one)
+		o["relay_cd"] = maxf(float(o["relay_cd"]), float(n["relay_move"]) + Rules.relay_cooldown(k))
 	n["moving_edges"] = []
 	n["relay_anim"] = {"delta": 0.0, "closing": [], "opening": [], "pairs": {}, "progress": 0.0, "from": old_index, "to": new_index}
 	n["relay_phase"] = "moving"
