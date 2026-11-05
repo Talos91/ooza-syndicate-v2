@@ -677,8 +677,8 @@ func _new_gun(vn: Node3D, key: String, owner: String) -> Dictionary:
 	gauge.name = "GatGauge"
 	add_child(gauge)
 	var pip_mesh := SphereMesh.new()
-	pip_mesh.radius = 0.2
-	pip_mesh.height = 0.3
+	pip_mesh.radius = 0.32
+	pip_mesh.height = 0.44
 	pip_mesh.radial_segments = 10
 	pip_mesh.rings = 5
 	var pips := []
@@ -706,7 +706,7 @@ func _gat_gauge(g: Dictionary, n: Dictionary, root: Node3D) -> void:
 	var fill: float = clampf(float(n.get("gat_stock", 0.0)) / cap, 0.0, 1.0) if cap > 0.0 else 0.0
 	var lit := fill * GAT_PIPS
 	var full := fill >= 0.995
-	var goo: Color = Rules.seat_color(n["owner"]).lerp(Color(0.75, 1.0, 0.55), 0.18) if n["owner"] != "" else GAT_PIP_DIM
+	var goo: Color = Rules.seat_color(n["owner"]).lerp(Color(0.75, 1.0, 0.55), 0.3) if n["owner"] != "" else GAT_PIP_DIM
 	var pulse := 0.5 + 0.5 * sin(sim.time * 4.0) if full else 0.0
 	var c: Vector3 = root.global_position
 	var pips: Array = g["pips"]
@@ -715,7 +715,7 @@ func _gat_gauge(g: Dictionary, n: Dictionary, root: Node3D) -> void:
 		var a := PI * 0.5 + TAU * float(i) / GAT_PIPS       # from the camera-facing front, round the gun
 		var k := clampf(lit - float(i), 0.0, 1.0)
 		var pip: MeshInstance3D = pips[i]
-		pip.global_position = c + Vector3(cos(a) * GAT_PIP_R, 0.16, sin(a) * GAT_PIP_R)
+		pip.global_position = c + Vector3(cos(a) * GAT_PIP_R, 0.22, sin(a) * GAT_PIP_R)
 		pip.scale = Vector3.ONE * (lerpf(0.55, 1.0, k) + 0.2 * pulse)
 		(pmats[i] as StandardMaterial3D).albedo_color = GAT_PIP_DIM.lerp(goo * (1.35 + 0.35 * pulse), k)
 
