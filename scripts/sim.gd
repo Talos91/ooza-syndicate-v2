@@ -173,8 +173,11 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		})
 		if relay == "ferry":                              # the ferry node takes no structure in v1
 			nodes[-1]["buildable"] = []
+		if relay == "launcher":                           # 2026-11-06 (Daniele: "it should occupy the relay building slot and be
+			nodes[-1]["buildable"] = []                   # indestructible (new type of relays)"): the launcher's cannon IS its
+			nodes[-1]["indestructible"] = true            # building - nothing else is built there, and it never falls
 		adj[id] = []
-		if v3 and owner == "" and kind == "relay" and neutral is Dictionary and str(neutral.get("structure", "")) in ["cannon", "laser", "forge"]:
+		if v3 and owner == "" and kind == "relay" and relay != "launcher" and neutral is Dictionary and str(neutral.get("structure", "")) in ["cannon", "laser", "forge"]:
 			nodes[-1]["structure"] = "forge" if neutral["structure"] == "forge" else "laser"   # an armed relay (old cannons -> laser)
 		if v3 and owner == "" and kind == "common" and neutral is Dictionary and str(neutral.get("structure", "")) == "machinegoon":
 			nodes[-1]["structure"] = "machinegoon"        # round R (Daniele 2026-11-06): a map-placed neutral machinegoon - it
@@ -2803,6 +2806,9 @@ func _start_rings() -> void:
 		if n["ring"] == keep_ring:
 			last_stand_keep[n["id"]] = true
 	last_stand_final = last_stand_keep.keys()[0] if not last_stand_keep.is_empty() else -1
+	for n in nodes:                                       # 2026-11-06: an indestructible relay (the launcher) never falls
+		if n.get("indestructible", false):
+			last_stand_keep[n["id"]] = true
 	last_stand_corners = _corner_cycle()                  # drawn after the method and order: same seed, same picks
 	_ls_corner_k = 0
 	last_stand_waves = _plan_waves(order)
@@ -3437,6 +3443,8 @@ func _drop_node(id: int) -> void:
 	## breaks outward from this end segment by segment (_begin_break / _step_breaks); bodies on a deck fall
 	## with their segment (_check_missing_decks), so a line walking away can still reach the far pier.
 	var n: Dictionary = nodes[id]
+	if n.get("indestructible", false):      # 2026-11-06: the launcher never falls (its decks may: their far ends do)
+		return
 	if n["relay_phase"] == "moving":
 		_relay_apply(n)                     # finish the tick: the view restores the decks
 	collapsed[id] = true

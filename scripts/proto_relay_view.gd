@@ -372,7 +372,7 @@ func _v3_relay_models(n: Dictionary, plat: Node3D) -> void:
 	if not _r.has(id):
 		return
 	var r: Dictionary = _r[id]
-	var nm: String = {"launcher": "Relay_Launcher_v3", "lift": "Relay_Lift_Base_v3", "tilt": "Relay_Tilt_v3"}.get(str(n["relay"]), "")
+	var nm: String = {"launcher": "Relay_Cannon_v4" if _kit("Relay_Cannon_v4") else "Relay_Launcher_v3", "lift": "Relay_Lift_Base_v3", "tilt": "Relay_Tilt_v3"}.get(str(n["relay"]), "")
 	if nm == "" or not _kit(nm):
 		return
 	var p := MapBuilder.piece(nm)
@@ -387,7 +387,11 @@ func _v3_relay_models(n: Dictionary, plat: Node3D) -> void:
 			r["arm"] = p.find_child("Arm", true, false)
 			r["swing"] = 0.0
 			r["orbit"] = 0.0
-			p.scale = Vector3.ONE * LAUNCHER_SCALE
+			r["cannon"] = nm == "Relay_Cannon_v4"        # 2026-11-06 (Daniele): the old cannon IS the launcher's building
+			r["head"] = p.find_child("Head", true, false)
+			r["head_rest"] = (r["head"] as Node3D).position if r["head"] is Node3D else Vector3.ZERO
+			if not r["cannon"]:
+				p.scale = Vector3.ONE * LAUNCHER_SCALE
 			(r["pad"] as Node3D).visible = false
 		"lift":
 			(r["lift"]["piston"] as Node3D).visible = false
@@ -1047,7 +1051,17 @@ func _launcher(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 			var want := Rules.heading(((to3 - (n["pos"] as Vector3)) * Vector3(1, 0, 1)).normalized())
 			r["orbit"] = lerp_angle(float(r["orbit"]), want, minf(1.0, _dt * 4.0))
 		var v3n: Node3D = r["v3"]
-		if not gone:                                  # (once the node collapses, Fx._collapse's fall owns it)
+		if bool(r.get("cannon", false)):              # the cannon: on the node's building slot, turned to the target; its
+			if not gone:                              # head lifts for the lob while locked, kicks back on every throw
+				v3n.position = n["pos"]
+				v3n.rotation = Vector3(0.1 * sin(sim.time * 9.0), float(r["orbit"]), 0.1 * cos(sim.time * 7.0)) if misfire 						else Vector3(0.0, float(r["orbit"]), 0.0)
+				var hd = r.get("head")
+				if hd is Node3D:
+					var sw2 := clampf(float(r["swing"]), 0.0, 1.0)
+					var lift := deg_to_rad(28.0) if locked else deg_to_rad(8.0)
+					(hd as Node3D).rotation.z = lerp_angle((hd as Node3D).rotation.z, lift, minf(1.0, _dt * 4.0)) + deg_to_rad(10.0) * sw2
+					(hd as Node3D).position = (r["head_rest"] as Vector3) + Vector3(-0.7 * sw2 * sw2, 0.0, 0.0)
+		elif not gone:                                  # (once the node collapses, Fx._collapse's fall owns it)
 			var face := Vector3(cos(float(r["orbit"])), 0.0, -sin(float(r["orbit"])))   # (inverse of Rules.heading)
 			v3n.position = (n["pos"] as Vector3) - face * LAUNCHER_OFF
 			v3n.rotation = Vector3(0.12 * sin(sim.time * 9.0), float(r["orbit"]), 0.12 * cos(sim.time * 7.0)) if misfire 					else Vector3(0.0, float(r["orbit"]), 0.0)
