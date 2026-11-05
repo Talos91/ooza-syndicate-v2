@@ -516,7 +516,7 @@ func _lift_parts(n: Dictionary) -> Dictionary:
 		var lvl_col: Color = Rules.RELAY_GHOST_COLORS["lift"] if int(sim.edges[ei]["lift_level"]) == 1 else Rules.RELAY_GHOST_COLORS["ferry"]
 		var mi := _box("Proto_Lift_OpenStrip", Vector3(a.distance_to(b), 0.12, Rules.W * 0.5), Rules.RELAY_GHOST_COLORS["lift"], 0.85)
 		mi.position = (a + b) * 0.5 + Vector3(0, 0.42, 0)
-		mi.rotation.y = yaw
+		mi.basis = _along(a, b)                       # (an UP deck is a ramp to the raised platform: tilt with it)
 		strips[ei] = mi
 		# round 3 (Daniele: "players may misread the bridge animation"): a flat UP / DOWN painted on every lift deck in its
 		# level's colour (lit while it connects), a ghost of the deck where it docks when it is closed, and a glowing
@@ -537,7 +537,7 @@ func _lift_parts(n: Dictionary) -> Dictionary:
 		tags[ei] = tag
 		var ghost := _box("Proto_Lift_DockGhost", Vector3(a.distance_to(b), 0.3, Rules.W), lvl_col, 0.22)
 		ghost.position = (a + b) * 0.5 + Vector3(0, 0.2, 0)
-		ghost.rotation.y = yaw
+		ghost.basis = _along(a, b)
 		ghosts[ei] = ghost
 		var edge := _box("Proto_Lift_MovingEdge", Vector3(0.5, 0.5, Rules.W + 0.6), Color.WHITE, 0.95)
 		edge.rotation.y = yaw
@@ -1012,11 +1012,12 @@ func _lift(n: Dictionary, r: Dictionary, top: Vector3, phase: String) -> void:
 		elif not open:
 			off = 1.0
 		var shift := away * LIFT_GAP * off - Vector3(0, LIFT_SINK * off, 0)
+		var ramp := _ramp(ei, id)                    # an UP deck: sheared into a ramp up to the raised platform
 		var decks: Array = vis["edge_decks"][ei]
 		for k in range(decks.size()):
 			var d: Node3D = decks[k]
 			d.visible = true
-			d.transform = (vis["edge_base"][ei][k] as Transform3D).translated(shift)
+			d.transform = (ramp * (vis["edge_base"][ei][k] as Transform3D)).translated(shift)
 			for gi in d.find_children("*", "GeometryInstance3D", true, false):
 				(gi as GeometryInstance3D).transparency = LIFT_DIM * off
 		strip.visible = off < 0.99
@@ -1055,6 +1056,29 @@ func _lift(n: Dictionary, r: Dictionary, top: Vector3, phase: String) -> void:
 	_aim(r["pointer"], top + Vector3(0, rise, 0), Vector3.UP if up else Vector3.DOWN)
 	_aim(r["ghost_pointer"], top + Vector3(0, rise + 0.8, 0), Vector3.UP if int(n["relay_pending"]) == 1 else Vector3.DOWN)
 	_tint(r["pointer"], lvl_col)
+
+
+func _along(a: Vector3, b: Vector3) -> Basis:
+	## a box whose x runs a -> b (tilted when the ends stand at different heights)
+	var x := (b - a).normalized()
+	var z := x.cross(Vector3.UP).normalized()
+	return Basis(x, z.cross(x), z)
+
+
+func _ramp(ei: int, lift_id: int) -> Transform3D:
+	## Daniele 2026-11-05 ("the lift node raises and dips but the bridges it connects are all at the same level"): an UP
+	## deck's lift end docks RELAYS_PROTO.lift.rise up (Sim._lift_end_y), so its flat baked pieces are sheared into a
+	## ramp: height grows linearly from the far rim (ground) to the lift's rim - the same line Sim.deck_points walks.
+	var L: Vector3 = sim.exit_of(ei, lift_id)
+	var F: Vector3 = sim.exit_of(ei, sim._other_end(ei, lift_id))
+	var dy := L.y - F.y
+	if absf(dy) < 0.001:
+		return Transform3D.IDENTITY
+	var flat := Vector3(L.x - F.x, 0.0, L.z - F.z)
+	var dir := flat.normalized()
+	var k := dy / maxf(flat.length(), 0.01)
+	var m := Basis(Vector3(1.0, k * dir.x, 0.0), Vector3(0.0, 1.0, 0.0), Vector3(0.0, k * dir.z, 1.0))
+	return Transform3D(m, Vector3(0.0, F.y - k * dir.dot(Vector3(F.x, 0.0, F.z)), 0.0))
 
 
 func _tilt(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink: bool, gone: bool) -> void:

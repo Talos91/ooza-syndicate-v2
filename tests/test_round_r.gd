@@ -221,6 +221,17 @@ func _wave2() -> void:
 			if str(s.nodes[j].get("junction", "")) == "Crossing":
 				got[4] += 1
 		check(got == want[code], "%s: lifts, rotors, speed relays, belts, lanes over the Crossing = %s (got %s)" % [code, want[code], got])
+		var rise := float(Rules.RELAYS_PROTO["lift"]["rise"])
+		for n in fire:                                # Daniele 2026-11-05: a lift's UP decks ramp up to the raised platform
+			if str(n["relay"]) != "lift":
+				continue
+			for ei in s.controlled_edges(n["id"]):
+				var want_y := rise * float(int(s.edges[ei]["lift_level"]))
+				var line: Array = s.deck_line(ei)
+				var ys: Array = line.map(func(p): return snappedf((p as Vector3).y, 0.01))
+				check(absf(s.exit_of(ei, n["id"]).y - want_y) < 0.01 and absf(ys.max() - want_y) < 0.01 and ys.min() == 0.0,
+						"%s: lift %d deck %d ramps 0 -> %.1f m (got %s)" % [code, n["id"], ei, want_y, ys])
+			check(absf(s.node_y(n["id"]) - rise * float(int(n["relay_index"]) % 2)) < 0.01, "%s: lift %d walks at its level" % [code, n["id"]])
 		for n in fire:
 			var id: int = n["id"]
 			var open0 := s.controlled_edges(id).filter(func(ei): return s.is_edge_open(ei))

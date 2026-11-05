@@ -1434,7 +1434,24 @@ func exit_of(ei: int, node_id: int) -> Vector3:
 		return p + (o - p).normalized() * Rules.ARC_R
 	var g: Dictionary = e["geo"]
 	var q: Array = g["A"] if e["a"] == node_id else g["B"]
-	return Vector3(q[0], 0.0, q[1])
+	return Vector3(q[0], _lift_end_y(ei, node_id), q[1])
+
+
+func _lift_end_y(ei: int, node_id: int) -> float:
+	## Daniele 2026-11-05 ("the lift node raises and dips but the bridges it connects are all at the same level, so units
+	## teleport"): a lift deck's lift end stands at ITS level (UP decks dock RELAYS_PROTO.lift.rise up, DOWN decks on the
+	## ground), so the UP decks are ramps and a line walks up them onto the raised platform.
+	if str(edges[ei].get("proto", "")) != "lift" or str(nodes[node_id].get("relay", "")) != "lift":
+		return 0.0
+	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(int(edges[ei]["lift_level"]))
+
+
+func node_y(node_id: int) -> float:
+	## the walking height on a node: a lift platform stands at its level (0 / RELAYS_PROTO.lift.rise), everything else 0
+	var n: Dictionary = nodes[node_id]
+	if str(n.get("relay", "")) != "lift":
+		return 0.0
+	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(int(n["relay_index"]) % 2)
 
 
 func deck_line(ei: int) -> Array:
@@ -1466,14 +1483,15 @@ func _build_path3(route: Array) -> Dictionary:
 	var ring: float = Rules.BRAWL_RING if brawl else Rules.ARC_R
 	var a0: Dictionary = nodes[route[0]]
 	var ex0 := exit_of(_edge_index(route[0], route[1]), route[0])
-	var d0 := ((ex0 - a0["pos"]) as Vector3).normalized()
+	var y0 := Vector3.UP * node_y(route[0])          # a lift platform: walk at its level
+	var d0 := (((ex0 - a0["pos"]) as Vector3) * Vector3(1, 0, 1)).normalized()
 	if brawl:
 		var a_exit := Rules.exit_angle(atan2(d0.z, d0.x))   # the front door (DOOR_EXITS: or the back, if nearer)
-		add.call(a0["pos"] + _door_dir(a_exit) * Rules.EXIT_R, 1)
+		add.call(a0["pos"] + _door_dir(a_exit) * Rules.EXIT_R + y0, 1)
 		for p in _arc(a0["pos"], a_exit, atan2(d0.z, d0.x), ring):
-			add.call(p, 1)
+			add.call(p + y0, 1)
 	else:
-		add.call(a0["pos"] + d0 * Rules.EXIT_R, 1)
+		add.call(a0["pos"] + d0 * Rules.EXIT_R + y0, 1)
 	add.call(ex0, 1)
 	for i in range(route.size() - 1):
 		var b: Dictionary = nodes[route[i + 1]]
@@ -1488,10 +1506,11 @@ func _build_path3(route: Array) -> Dictionary:
 		add.call(ex_in, 1)
 		spans.append({"edge": ei, "s0": s0, "s1": _length(pts), "forward": e["a"] == route[i]})
 		var node_s0 := _length(pts)
-		var din := ((ex_in - b["pos"]) as Vector3).normalized()
+		var yb := Vector3.UP * node_y(route[i + 1])
+		var din := (((ex_in - b["pos"]) as Vector3) * Vector3(1, 0, 1)).normalized()
 		if i + 1 < route.size() - 1:
 			var ex_out := exit_of(_edge_index(route[i + 1], route[i + 2]), route[i + 1])
-			var dout := ((ex_out - b["pos"]) as Vector3).normalized()
+			var dout := (((ex_out - b["pos"]) as Vector3) * Vector3(1, 0, 1)).normalized()
 			if b["node_kind"] == "junction" and str(b["junction"]).begins_with("Curve_"):   # JUNCTION: along the curve's arc
 				var c := _curve_centre(b)
 				var a_in := atan2(ex_in.z - c.z, ex_in.x - c.x)
@@ -1502,16 +1521,16 @@ func _build_path3(route: Array) -> Dictionary:
 				add.call(b["pos"], 1)
 			else:
 				for p in _arc(b["pos"], atan2(din.z, din.x), atan2(dout.z, dout.x), ring):
-					add.call(p, 1)
+					add.call(p + yb, 1)
 			add.call(ex_out, 1)
 			node_spans.append({"node": route[i + 1], "s0": node_s0, "s1": _length(pts)})
 		elif brawl:                                   # Alpha 11: round the ring to the front door, then in
 			var a_door := Rules.entry_angle(atan2(din.z, din.x))   # TWO_DOORS: or the back door, if nearer
 			for p in _arc(b["pos"], atan2(din.z, din.x), a_door, ring):
-				add.call(p, 1)
-			add.call(b["pos"] + _door_dir(a_door) * Rules.EXIT_R, 1)
+				add.call(p + yb, 1)
+			add.call(b["pos"] + _door_dir(a_door) * Rules.EXIT_R + yb, 1)
 		else:                                         # onto the platform up to the tower's footprint
-			add.call(b["pos"] + din * Rules.ARC_R, 1)
+			add.call(b["pos"] + din * Rules.ARC_R + yb, 1)
 	var cum := PackedFloat32Array([0.0])
 	for k in range(1, pts.size()):
 		cum.append(cum[k - 1] + (pts[k] as Vector3).distance_to(pts[k - 1]))
@@ -1659,6 +1678,13 @@ func _deck_points3(ei: int, from_id: int) -> Array:
 		out.append(A + u * (float(g["p0"]) + float(g["r0"])) + Vector3.UP * h)
 		out.append(B - u * (float(g["p1"]) + float(g["r1"])) + Vector3.UP * h)
 	out.append(B - u * float(g["p1"]))
+	var ya := _lift_end_y(ei, e["a"])
+	var yb := _lift_end_y(ei, e["b"])
+	if ya != 0.0 or yb != 0.0:                        # a lift's UP deck: a ramp from the ground end to the raised end
+		var span := A.distance_to(B)
+		for k in range(out.size()):
+			var t := clampf(((out[k] as Vector3) - A).dot(u) / maxf(span, 0.01), 0.0, 1.0)
+			out[k] = (out[k] as Vector3) + Vector3.UP * lerpf(ya, yb, t)
 	if from_id != e["a"]:
 		out.reverse()
 	return out
