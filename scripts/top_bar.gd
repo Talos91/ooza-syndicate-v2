@@ -59,7 +59,8 @@ func _build(crumb: String, f: String) -> void:
 		x += 112.0 + 26.0
 	var c := UiKit.label(menu, crumb.to_upper(), 12, UiKit.MUTED, true, 3)
 	c.position = Vector2(x, (h - c.get_minimum_size().y) / 2.0)
-	add_child(c)
+	c.visible = false                                # Daniele 2026-11-05: "no need for breadcrumbs ... we are in game not a site"
+	add_child(c)                                     # (kept, hidden: the crumb string still names the page)
 	if slim:
 		queue_redraw()
 		return
@@ -138,7 +139,7 @@ func _build(crumb: String, f: String) -> void:
 	var cw := func(t: String) -> float: return UiKit.text_w(menu, t, 12, true) + t.length() * 3.0   # (a label's own
 	if cw.call(c.text) > room and crumb.contains("/"):                                            # size isn't ready yet)
 		c.text = crumb.get_slice("/", crumb.get_slice_count("/") - 1).strip_edges().to_upper()
-	c.visible = cw.call(c.text) <= room
+	c.visible = false and cw.call(c.text) <= room
 	queue_redraw()
 
 

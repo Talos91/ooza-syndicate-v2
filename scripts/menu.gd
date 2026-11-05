@@ -2767,6 +2767,14 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 		shell_raise()
 		return
 	var lw := floorf(w * 0.25)
+	# the skill rows need room for their longest word at the phone's font floor (EMERGENCY): the identity panel gives
+	# way (Daniele 2026-11-05: every tile the same text, nothing overflowing)
+	var longest := 0.0
+	for sid in Rules.ACTIVE_SKILLS + Rules.MAP_SKILLS:
+		for word in ArmyPresets.skill_name(sid).to_upper().split(" "):
+			longest = maxf(longest, UiKit.text_w(self, word, 12.0, true))
+	var need := maxi(Rules.ACTIVE_SKILLS.size(), Rules.MAP_SKILLS.size()) * (longest + 22.0) - 10.0
+	lw = minf(lw, floorf(w - 14.0 - need))
 	_army_identity(body.position, Vector2(lw, body.size.y))
 	_skills_body(Rect2(body.position.x + lw + 14.0, body.position.y, w - lw - 14.0, body.size.y), _skills_slot)
 	shell_raise()
@@ -2826,6 +2834,9 @@ func _army_identity(pos: Vector2, dims: Vector2) -> void:
 	UiKit.panel(self, pos, dims, _army)
 	var ftrait: Array = Rules.faction_trait(_army)
 	var stats_h := UiKit.line_h(self, 20, true) + UiKit.line_h(self, 12) + 30.0
+	if dims.x <= 520.0:                                  # ARMIES > SKILLS' narrow panel: the character beside the
+		_army_identity_narrow(pos, dims, ftrait)         # name, the trait under them at full width
+		return
 	var hs0 := minf(dims.y - 32.0, dims.x * (0.44 if dims.x > 520.0 else 0.3))   # a narrow panel (ARMIES > SKILLS) gives the words room
 	var tw := dims.x - 20.0 - hs0 - 16.0 - 18.0
 	# [text, size, colour, head, spacing, gap before, wraps, drop order (0 = always)]
@@ -2853,7 +2864,10 @@ func _army_identity(pos: Vector2, dims: Vector2) -> void:
 	var hs := minf(ah - 24.0, hs0)
 	UiKit.hero(self, _army, pos + Vector2(20.0, (ah - hs) / 2.0), Vector2(hs, hs))
 	var es := clampf(dims.y * 0.13, 36.0, 56.0)          # the race emblem, the panel's top-right corner
-	UiKit.emblem_rect(self, _army, pos + Vector2(dims.x - 16.0 - es, 16.0), es)
+	if dims.x > 520.0:                                   # (a narrow panel: the words need the corner)
+		UiKit.emblem_rect(self, _army, pos + Vector2(dims.x - 16.0 - es, 16.0), es)
+	elif UiKit.text_w(self, items[0][0], 12, true) + str(items[0][0]).length() * 3.0 > tw:
+		items[0][4] = 0                                  # the kicker loses its spacing before it runs out
 	var tx := pos.x + 20.0 + hs0 + 16.0
 	var ty := pos.y + (ah - _kept_h(items, heights, drop)) / 2.0
 	for i in range(items.size()):
@@ -2876,6 +2890,90 @@ func _army_identity(pos: Vector2, dims: Vector2) -> void:
 		var v := Rules.stat(_army, STAT_ROWS[i][0])
 		var col := acc if v > 1.001 else (UiKit.WEAKER if v < 0.999 else UiKit.INK)
 		UiKit.stat(self, Vector2(pos.x + 18.0 + i * cw, sy + 12.0), "%d%%" % roundi(v * 100.0), STAT_ROWS[i][1], col)
+
+
+func _army_identity_narrow(pos: Vector2, dims: Vector2, ftrait: Array) -> void:
+	## The narrow identity (round 3, Daniele 2026-11-05: "image of vex not needed as it's already on top, can just have
+	## the stats possibly using some icons"): KICKER / NAME, the trait across the panel, then the five stats as
+	## [icon  CAPTION  value] rows; the tagline only where the height allows.
+	var acc := UiKit.accent(_army)
+	var ix := pos.x + 18.0
+	var iw := dims.x - 36.0
+	var y := pos.y + 14.0
+	var sub := str(UiKit.SUBS[_army])
+	var sp := 3 if UiKit.text_w(self, sub, 12, true) + sub.length() * 3.0 <= iw else 0
+	_shell_add(UiKit.label(self, sub, 12, acc, true, sp), Vector2(ix, y))
+	y += UiKit.line_h(self, 12, true)
+	_shell_add(UiKit.label(self, UiKit.NAMES[_army], 30, acc, true), Vector2(ix - 2.0, y))
+	y += UiKit.line_h(self, 30, true) + 6.0
+	# the stats block, bottom up
+	var rh := UiKit.line_h(self, 15, true) + 4.0
+	var srows := ceili(STAT_ROWS.size() / 2.0)            # two columns of [icon  value] (the icon names the stat)
+	var sy := pos.y + dims.y - 12.0 - srows * rh
+	var tag := str(Rules.FACTION_TAGLINES[_army])
+	var th := UiKit.text_h(self, tag, 14, iw)
+	var trait_h := UiKit.line_h(self, 12, true) + UiKit.line_h(self, 16, true) + UiKit.text_h(self, str(ftrait[1]), 14, iw) + 2.0
+	if y + th + 10.0 + trait_h <= sy - 12.0:
+		var tl := UiKit.label(self, tag, 14, UiKit.MUTED)
+		tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tl.custom_minimum_size = Vector2(iw, 0)
+		_shell_add(tl, Vector2(ix, y))
+		y += th + 10.0
+	_shell_add(UiKit.label(self, "TRAIT", 12, acc, true, 3), Vector2(ix, y))
+	y += UiKit.line_h(self, 12, true)
+	var nm := str(ftrait[0]).to_upper()
+	var nfs := 16.0
+	while nfs > 10.0 and UiKit.text_w(self, nm, nfs, true) > iw:
+		nfs -= 1.0
+	_shell_add(UiKit.label(self, nm, nfs, UiKit.INK, true), Vector2(ix, y))
+	y += UiKit.line_h(self, 16, true) + 2.0
+	var dl := UiKit.label(self, str(ftrait[1]), 14, UiKit.MUTED)
+	dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dl.custom_minimum_size = Vector2(iw, 0)
+	_shell_add(dl, Vector2(ix, y))
+	content.add_child(UiKit.rect(Vector2(ix, sy - 8.0), Vector2(iw, 1.0), Color(UiKit.FRAME, 0.9)))
+	var gs := UiKit.line_h(self, 15, true) * 0.8
+	var cw := iw / 2.0
+	for i in range(STAT_ROWS.size()):
+		var v := Rules.stat(_army, STAT_ROWS[i][0])
+		var col := acc if v > 1.001 else (UiKit.WEAKER if v < 0.999 else UiKit.INK)
+		var ry := sy + (i / 2) * rh
+		var cx := ix + (i % 2) * cw
+		var g := Control.new()
+		g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		g.size = Vector2(gs, gs)
+		var kind: String = STAT_ROWS[i][0]
+		g.draw.connect(func(): _stat_glyph(g, kind, gs, col))
+		g.tooltip_text = STAT_ROWS[i][1]
+		_shell_add(g, Vector2(cx, ry + (rh - 4.0 - gs) / 2.0))
+		_shell_add(UiKit.label(self, "%d%%" % roundi(v * 100.0), 15, col, true), Vector2(cx + gs + 8.0, ry))
+
+
+func _stat_glyph(c: Control, kind: String, s: float, col: Color) -> void:
+	## A small line icon per stat (drawn; no art for them yet): SPEED chevrons, HEALTH cross, ATTACK sword,
+	## PRODUCTION goo drop, GARRISON shield.
+	var w := maxf(1.5, s * 0.12)
+	match kind:
+		"speed":
+			for k in [0.0, 0.38]:
+				c.draw_polyline(PackedVector2Array([Vector2(s * (0.12 + k), s * 0.15), Vector2(s * (0.48 + k), s * 0.5),
+						Vector2(s * (0.12 + k), s * 0.85)]), col, w, true)
+		"health":
+			c.draw_rect(Rect2(s * 0.38, s * 0.08, s * 0.24, s * 0.84), col)
+			c.draw_rect(Rect2(s * 0.08, s * 0.38, s * 0.84, s * 0.24), col)
+		"attack":
+			c.draw_line(Vector2(s * 0.15, s * 0.85), Vector2(s * 0.88, s * 0.12), col, w, true)
+			c.draw_line(Vector2(s * 0.12, s * 0.55), Vector2(s * 0.45, s * 0.88), col, w, true)
+		"production":
+			var pts := PackedVector2Array([Vector2(s * 0.5, s * 0.05)])
+			for k in range(13):
+				var a := PI * (0.0 - 0.15 + 1.3 * k / 12.0) + PI * -0.0
+				pts.append(Vector2(s * 0.5, s * 0.62) + Vector2(cos(a - PI * 0.0), sin(a)) * s * 0.32 * Vector2(1, 1))
+			pts.append(Vector2(s * 0.5, s * 0.05))
+			c.draw_polyline(pts, col, w, true)
+		"garrison":
+			c.draw_polyline(PackedVector2Array([Vector2(s * 0.5, s * 0.05), Vector2(s * 0.88, s * 0.2), Vector2(s * 0.82, s * 0.6),
+					Vector2(s * 0.5, s * 0.95), Vector2(s * 0.18, s * 0.6), Vector2(s * 0.12, s * 0.2), Vector2(s * 0.5, s * 0.05)]), col, w, true)
 
 
 func _kept_h(items: Array, heights: Array, drop: int) -> float:
@@ -3021,6 +3119,8 @@ var _skills_args := false                          # SKILLS: the screenshot arg 
 
 
 var _skill_tip := ""                               # SKILLS: the skill whose description popup is open ("" none)
+var _tile_fs := 14.0                               # SKILLS: the one tile font (all 14 tiles)
+var _tile_ic := 40.0                               # SKILLS: the one tile icon size
 
 
 func show_skills(slot: String = "active") -> void:
@@ -3064,7 +3164,7 @@ func _skills_body(r: Rect2, slot: String) -> void:
 	var ut := UiKit.label(self, ArmyPresets.skill_name(ult).to_upper(), 17, UiKit.INK, true)
 	ut.position = Vector2(12.0 + uic + 14.0, (ub.size.y - UiKit.line_h(self, 17, true)) / 2.0)
 	ub.add_child(ut)
-	var uk := UiKit.label(self, "ULTIMATE  ·  %s ONLY  ·  FIXED  ·  ~%d s CHARGE" % [UiKit.NAMES[_army], int(Rules.ult_charge_time(ult))], 12, UiKit.STAR, true, 2)
+	var uk := UiKit.label(self, "~%d s CHARGE" % int(Rules.ult_charge_time(ult)), 12, UiKit.STAR, true, 2)   # name + charge only (Daniele 2026-11-05)
 	uk.position = Vector2(ut.position.x + UiKit.text_w(self, ut.text, 17, true) + 18.0, (ub.size.y - UiKit.line_h(self, 12, true)) / 2.0)
 	ub.add_child(uk)
 	var tile_rects := {}                               # id -> its tile's rect (the popup sits next to it)
@@ -3085,6 +3185,16 @@ func _skills_body(r: Rect2, slot: String) -> void:
 		total_rows += rows
 	var free_h := bot - y - pools.size() * (lh + 6.0 + 10.0) - gap * (total_rows - pools.size())
 	var th := clampf(floorf(free_h / total_rows), UiKit.tap_h(self, 44.0), UiKit.tap_h(self, 44.0) * 2.2)
+	# ONE icon size and ONE font for all 14 tiles (Daniele 2026-11-05): the font is the largest at which every name fits
+	# its narrowest tile in at most two lines (whole words), and every tile keeps room for two lines under its icon
+	var tw_min := INF
+	for pl in plan:
+		tw_min = minf(tw_min, floorf((w - gap * (pl[1] - 1)) / pl[1]))
+	var all_ids: Array = Rules.ACTIVE_SKILLS + Rules.MAP_SKILLS
+	_tile_fs = 15.0
+	while _tile_fs > 9.0 and not all_ids.all(func(i): return _name_lines(ArmyPresets.skill_name(i).to_upper(), _tile_fs, tw_min - 12.0) <= 2):
+		_tile_fs -= 0.5
+	_tile_ic = clampf(th - UiKit.line_h(self, _tile_fs, true) * 2.0 - 12.0, 18.0, 64.0)
 	for pl in plan:
 		var pool: Array = pl[0]
 		var ps: String = pool[0]
@@ -3123,41 +3233,22 @@ func _skill_tile(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vec
 		_skill_tip = id
 		show_skills(page_slot), "selected" if chosen else "secondary", _army)
 	var h := b.size.y
-	var nfs := 14.0
+	var nfs := _tile_fs                                # shared by every tile (_skills_body picks it)
 	var nm_t := ArmyPresets.skill_name(id).to_upper()
-	while nfs > 10.0 and UiKit.text_w(self, nm_t, nfs, true) > dims.x - 12.0:
-		nfs -= 1.0                                     # a long name (EMERGENCY EVAC) shrinks, then wraps to two lines
-	var wrap := UiKit.text_w(self, nm_t, nfs, true) > dims.x - 12.0 and nm_t.contains(" ")
-	if wrap:                                           # two lines: every word must fit its line (never "EMERGENC / Y")
-		nfs = 14.0
-		var longest := ""
-		for word in nm_t.split(" "):
-			if word.length() > longest.length():
-				longest = word
-		while nfs > 9.0 and UiKit.text_w(self, longest, nfs, true) > dims.x - 10.0:
-			nfs -= 1.0
-		if UiKit.text_w(self, longest, nfs, true) > dims.x - 10.0:   # a phone's 12.5 pt floor: the short name (EVAC);
-			nm_t = nm_t.split(" ")[-1]                     # the popup spells it out
-			wrap = false
-			nfs = 14.0
-			while nfs > 10.0 and UiKit.text_w(self, nm_t, nfs, true) > dims.x - 12.0:
-				nfs -= 1.0
-	var nl := UiKit.line_h(self, nfs, true) * (2.0 if wrap else 1.0)
-	var ic := clampf(h - nl - 16.0, 18.0, 64.0)
+	var wrap := _name_lines(nm_t, nfs, dims.x - 12.0) > 1
+	var nl := UiKit.line_h(self, nfs, true) * 2.0     # two lines' room on every tile, so icons line up
+	var ic := _tile_ic
 	var col := acc if chosen else (Color("6f8792") if locked else Color("c9dbe3"))
 	var top := (h - ic - nl - 4.0) / 2.0
 	_icon_box(id, Vector2((dims.x - ic) / 2.0, top), ic, col, b)
 	var nm := UiKit.label(self, nm_t, nfs, acc if chosen else (UiKit.MUTED if locked else UiKit.INK), true)
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	if wrap:
-		nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		nm.max_lines_visible = 2
-	else:
-		nm.clip_text = true
-		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wrap else TextServer.AUTOWRAP_OFF
+	nm.max_lines_visible = 2
 	nm.position = Vector2(4.0, top + ic + 4.0)
 	nm.custom_minimum_size = Vector2(dims.x - 8.0, 0)
 	nm.size = Vector2(dims.x - 8.0, nl)
+	nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	b.add_child(nm)
 	var cs := UiKit.line_h(self, 12, true) * 0.8
 	if chosen:
@@ -3166,6 +3257,22 @@ func _skill_tile(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vec
 		var lk := UiKit.label(self, "LOCKED", 11, LOCK_COL, true, 1)
 		lk.position = Vector2(8.0, 6.0)
 		b.add_child(lk)
+
+
+func _name_lines(t: String, fs: float, room: float) -> int:
+	## How many lines a tile name needs at font fs in width room, wrapping on whole words (99 = a word doesn't fit).
+	var lines := 1
+	var cur := ""
+	for word in t.split(" "):
+		if UiKit.text_w(self, word, fs, true) > room:
+			return 99
+		var tryl := word if cur == "" else cur + " " + word
+		if UiKit.text_w(self, tryl, fs, true) > room:
+			lines += 1
+			cur = word
+		else:
+			cur = tryl
+	return lines
 
 
 func _skill_popup(id: String, at: Rect2, slot: String) -> void:
@@ -3300,6 +3407,10 @@ func show_cosmetics(f: String = "") -> void:
 				_ward_cat = arg.substr(15)
 			elif arg.begins_with("--wardrobe-look="):
 				_ward_sel[_ward_cat] = arg.substr(16)
+			elif arg.begins_with("--wardrobe-wear="):   # <family>:<id> worn, in a throwaway save (screenshots)
+				ArmyPresets.path = "user://shot-armies.cfg"
+				var fw := arg.substr(16).split(":")
+				ArmyPresets.set_cosmetic_pick(f if f != "" else (_army if _army != "" else faction), fw[0], fw[1])
 	if f != "" and f != _army:
 		_ward_sel = {}                                  # another faction: its own saved picks
 	if f != "":
@@ -3322,24 +3433,14 @@ func _customize_body(r: Rect2) -> void:
 	if not sel in looks:
 		sel = equipped
 	var h := r.size.y
-	# ARMIES SPLIT (no scrolling, no pages): the categories as one row of tabs, then the stage and every look in a grid
-	var tab_h := UiKit.tap_h(self, 44.0)
-	var tgap := 6.0
-	var ctw := floorf((w - tgap * (WARDROBE_CATS.size() - 1)) / WARDROBE_CATS.size())
-	for i in range(WARDROBE_CATS.size()):
-		var cc: String = WARDROBE_CATS[i]
-		var lab: String = COSMETIC_FAMILY_LABEL[cc]
-		var fs := 14.0
-		while fs > 10.0 and UiKit.text_w(self, lab, fs, true) > ctw - 12.0:
-			fs -= 1.0
-		UiKit.btn(self, lab, Vector2(x + i * (ctw + tgap), top), Vector2(ctw, 44), func():
-			_ward_cat = cc
-			show_cosmetics(), "selected" if cc == cat else "secondary", _army, fs)
-	var by := top + tab_h + 10.0
-	var bh := h - tab_h - 10.0
-	var looks_w := floorf(w * 0.4)
-	_ward_stage(Vector2(x, by), Vector2(w - looks_w - 14.0, bh), cat, sel, equipped)
-	_ward_looks_grid(Vector2(x + w - looks_w, by), Vector2(looks_w, bh), cat, looks, sel, equipped)
+	# Daniele 2026-11-05: back to rail | stage | looks - the rail shows each category as its MODEL (the default, or the
+	# look you wear), all seven at once; the looks column shows every look; nothing pages or scrolls
+	var rail_w := _ward_rail(Vector2(x, top), h, cat, played)
+	var looks_w := floorf(maxf(w * 0.27, 300.0))
+	var pv_x := x + rail_w + 12.0
+	var pv_w := w - rail_w - looks_w - 24.0
+	_ward_stage(Vector2(pv_x, top), Vector2(pv_w, h), cat, sel, equipped)
+	_ward_looks_grid(Vector2(pv_x + pv_w + 12.0, top), Vector2(looks_w, h), cat, looks, sel, equipped)
 
 
 func _ward_factions(y: float) -> void:
@@ -3369,42 +3470,43 @@ func _ward_look_name(cat: String, id: String) -> String:
 	return Cosmetics.label(cat, id, _army)
 
 
-func _ward_rail(pos: Vector2, dims: Vector2, cat: String, played: Dictionary) -> void:
-	## The categories, each with what it wears now; the open one lit. Scrolls where a phone runs out of height.
-	var st := stack_open(pos, dims)
-	var scroll: TouchScroll = st["scroll"]
-	_quiet_bar(scroll)
-	var before := content.get_child_count()
-	var rh := maxf(UiKit.tap_h(self, 58.0), 16.0 + UiKit.line_h(self, 15, true) + UiKit.line_h(self, 12))
-	var y := 0.0
-	var sel_y := 0.0
-	for c in WARDROBE_CATS:
-		var cc: String = c
-		var now := ArmyPresets.core_territory if c == "territory" else str(played[c])
-		var b := UiKit.btn(self, "", Vector2(0, y), Vector2(dims.x - 10.0, rh), func():
-			if scroll.was_drag():
-				return
+func _ward_rail(pos: Vector2, h: float, cat: String, played: Dictionary) -> float:
+	## The categories as model icons (Daniele 2026-11-05): each tile shows what that family wears now - its default
+	## model, or the equipped look's - so the rail reads as your whole army at a glance; TERRITORY shows its word
+	## (NEON / GOO). All seven fit in a grid of square tiles (2 or 3 columns); the open one lit. Returns the width used.
+	var gap := 6.0
+	var n := WARDROBE_CATS.size()
+	var cols := 2
+	var rows := ceili(n / float(cols))
+	var cell := floorf((h - gap * (rows - 1)) / rows)
+	if cell < UiKit.tap_h(self, 48.0):                  # a short screen: three columns of smaller tiles
+		cols = 3
+		rows = ceili(n / float(cols))
+		cell = floorf((h - gap * (rows - 1)) / rows)
+	cell = minf(cell, UiKit.tap_h(self, 44.0) * 2.0)
+	for i in range(n):
+		var cc: String = WARDROBE_CATS[i]
+		var now := ArmyPresets.core_territory if cc == "territory" else str(played[cc])
+		var b := UiKit.btn(self, "", pos + Vector2((i % cols) * (cell + gap), (i / cols) * (cell + gap)), Vector2(cell, cell), func():
 			_ward_cat = cc
-			show_cosmetics(), "selected" if c == cat else "secondary", _army)
-		var hh := UiKit.line_h(self, 15, true) + UiKit.line_h(self, 12)
-		var t := UiKit.label(self, COSMETIC_FAMILY_LABEL[c], 15, UiKit.INK, true)
-		t.position = Vector2(16.0, (rh - hh) / 2.0)
-		b.add_child(t)
-		var cap := _ward_look_name(c, now)
-		if c == "territory" and UiKit.text_w(self, cap + "  ·  ALL FACTIONS", 12) <= dims.x - 42.0:
-			cap += "  ·  ALL FACTIONS"
-		var s := UiKit.label(self, cap, 12, UiKit.accent(_army) if c == cat else UiKit.MUTED)
-		s.position = t.position + Vector2(0, UiKit.line_h(self, 15, true))
-		s.clip_text = true
-		s.size = Vector2(dims.x - 42.0, UiKit.line_h(self, 12))
-		b.add_child(s)
-		if c == cat:
-			sel_y = y
-		y += rh + 8.0
-	stack_capture(st, before)
-	stack_close(st, y - 8.0)
-	if y - 8.0 > dims.y:
-		_scroll_later(scroll, sel_y + rh - dims.y + 8.0)
+			show_cosmetics(), "selected" if cc == cat else "secondary", _army)
+		b.tooltip_text = COSMETIC_FAMILY_LABEL[cc]
+		if cc == "territory":
+			var word: String = TERRITORY_LOOKS[now][0]
+			var fs := 16.0
+			while fs > 10.0 and UiKit.text_w(self, word, fs, true) > cell - 12.0:
+				fs -= 1.0
+			var t := UiKit.label(self, word, fs, UiKit.accent(_army), true, 1)
+			t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			t.position = Vector2.ZERO
+			t.size = Vector2(cell, cell)
+			b.add_child(t)
+		else:
+			var pic := LookThumbs.rect(cc, now, _army, Vector2(cell - 8.0, cell - 8.0))
+			pic.position = Vector2(4.0, 4.0)
+			b.add_child(pic)
+	return cols * (cell + gap) - gap
 
 
 func _ward_state(cat: String, id: String, equipped: String) -> Dictionary:

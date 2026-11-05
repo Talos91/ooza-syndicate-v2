@@ -356,6 +356,12 @@ func _ready() -> void:
 				var out := arg.substr(12)
 				for i in range(20):
 					await get_tree().process_frame
+				var wait := 0                              # CUSTOMIZE's model icons finish first
+				while LookThumbs.busy() and wait < 600:
+					await get_tree().process_frame
+					wait += 1
+				for i in range(30 if wait > 0 else 0):    # (a stage skin that loaded meanwhile takes over)
+					await get_tree().process_frame
 				await RenderingServer.frame_post_draw
 				get_viewport().get_texture().get_image().save_png(out)
 				print("screenshot ", out)
