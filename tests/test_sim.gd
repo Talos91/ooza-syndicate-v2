@@ -3161,6 +3161,7 @@ func _relays_proto() -> void:
 	check(f.ferry_out(1) and f.ferry_phase(1)["part"] == "out" and f.find_route(3, 4) == [3, 4], "ferry: then it slides out (still routed)")
 	# a short send timed into the window crosses whole; one whose bridge slides out under it loses what is on it
 	var f2 := _proto_sim("ferry")
+	f2.time = fposmod(0.05 - _ferry_reach(), float(f2.ferry_cycle(1)["period"]))   # the head reaches the lip as it comes in line
 	f2.nodes[3]["units"] = 10.0 * Rules.SCALE
 	var hs := f2.send(3, 4, 1.0)
 	var tally := {}
@@ -3173,14 +3174,7 @@ func _relays_proto() -> void:
 			"ferry: 10 sent in the window, all cross (%.1f ok, %.1f fell)" % [tally.get("ok", -1.0), tally.get("fell", -1.0)])
 	var f3 := _proto_sim("ferry")
 	var c3 := f3.ferry_cycle(1)
-	var probe := _proto_sim("ferry")                   # how long the head takes to reach the lip (the swing is short since
-	probe.nodes[3]["units"] = 10.0 * Rules.SCALE       # 2026-11-06, "ferries need to be faster": time the send so the head
-	var hq := probe.send(3, 4, 1.0)                    # meets the lip with the bridge out of line)
-	var spq := _span_of(hq, 7)
-	var reach := 0.0
-	while reach < 10.0 and hq in probe.hordes and float(hq["s"]) < float(spq["s0"]) - 0.01:
-		probe.step(0.05)
-		reach += 0.05
+	var reach := _ferry_reach()                         # (the swing is short since 2026-11-06: time the send to the lip)
 	f3.time = fposmod(float(c3["open"]) + float(c3["slide"]) * 0.5 - reach, float(c3["period"]))   # out of line at the lip
 	f3.nodes[3]["units"] = 10.0 * Rules.SCALE
 	var hp := f3.send(3, 4, 1.0)
@@ -3222,7 +3216,7 @@ func _relays_proto() -> void:
 		lo = minf(lo, frac)
 		hi = maxf(hi, frac)
 		runs += 1
-	check(runs == 20 and absf(sum / maxf(runs, 1.0) - 0.5) < 0.08, "ferry: a 50 send crosses %.0f %% on average (%.0f-%.0f %%, %d runs)"
+	check(runs == 20 and absf(sum / maxf(runs, 1.0) - float(Rules.RELAYS_PROTO["ferry"]["survive"])) < 0.08, "ferry: a 50 send crosses %.0f %% on average (%.0f-%.0f %%, %d runs)"
 			% [100.0 * sum / maxf(runs, 1.0), lo * 100.0, hi * 100.0, runs])
 	var shown_tally := f2.fx_events.filter(func(e): return e["type"] == "ferry_tally" and int(e["hid"]) == int(hs["id"]))
 	check(not shown_tally.is_empty() and bool(shown_tally[-1]["done"]) and int(shown_tally[-1]["ok"]) == 10 and int(shown_tally[-1]["sent"]) == 10,
@@ -3471,6 +3465,19 @@ func _sim_of(m: Dictionary, lo := {}) -> Sim:
 	return s
 
 
+func _ferry_reach() -> float:
+	## seconds from a 10 send on the ferry test map (3 -> 4) until its head reaches the moving deck's lip
+	var probe := _proto_sim("ferry")
+	probe.nodes[3]["units"] = 10.0 * Rules.SCALE
+	var hq := probe.send(3, 4, 1.0)
+	var spq := _span_of(hq, 7)
+	var reach := 0.0
+	while reach < 10.0 and hq in probe.hordes and float(hq["s"]) < float(spq["s0"]) - 0.01:
+		probe.step(0.05)
+		reach += 0.05
+	return reach
+
+
 func _ferry_round3() -> void:
 	## RELAYS 3.0 round 3 (Daniele: the ferry "amazing; maybe tweak the timing or how it is used"; it can exist without a
 	## relay): the owner HOLDS the bridge in line RELAYS_PROTO.ferry.hold s (only while in line; its clock stops), the AI holds
@@ -3539,7 +3546,7 @@ func _ferry_round3() -> void:
 	check(parts.size() == 4 and pf.find_route(3, 4) == [3, 4], "plain ferry: it cycles in line, out, away, back on its own (%s), routed" % str(parts.keys()))
 	pf.time = 0.0
 	check(not pf.ferry_edge_out(7) and float(pf.ferry_phase_e(7)["side"]) < 0.0, "plain ferry: dock B starts half a cycle on (in line, sliding to the other side)")
-	pf.time = float(pc["half"]) + 0.1
+	pf.time = fposmod(float(pc["half"]) + 0.1 - _ferry_reach(), float(pc["period"]))   # in line when the head gets there
 	pf.nodes[3]["units"] = 10.0 * Rules.SCALE
 	var hp := pf.send(3, 4, 1.0)
 	var tally := {}
