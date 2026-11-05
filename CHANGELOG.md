@@ -1,5 +1,13 @@
 # Ooze Syndicate 2.0 - changelog
 
+## Proto line (staging/proto only, never main)
+
+- **0.23.15-proto8** - 2026-11-05 (proto-r, staging/proto/): round R maps on the proto picker: R-01 Strait, R-02 Gate, R-03 Strait 2,
+  R-04 Gate 2, R-05 Pinwheel (MapPool.PROTO, with P-01..P-05); the 3-position ferry hazard (lanes slide, FERRY n / IN n label); EXP piece
+  support; tests/test_round_r.gd. Open for Daniele: L05 waiver on R-01 / R-03, the speed-relay reading, R-04 has 2 doors (not 3) and no T-45 / K
+  piece. test_net fails (33 lines + timeout) exactly as on the untouched proto base aadf8ef (proto7): pre-existing on the proto line; proto
+  rooms are unranked browser hosting.
+
 ## 0.23.15 "Alpha 23" - 2026-10-27 (staging: balance pass, catch-up)
 
 - **0.23.15 - balance pass (Daniele approved 2026-10-27: "for me it's fine to follow its changes")**, measured by `tests/balance_study.gd`
