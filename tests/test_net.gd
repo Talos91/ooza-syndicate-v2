@@ -404,7 +404,7 @@ func _run() -> void:
 	hs.nodes[home_b]["units"] = 300.0
 	_to_host("g1", {"op": "order", "round": 1, "action": "build", "a": home_b, "args": {"kind": "machinegoon"}})
 	check(hs.nodes[home_b]["build_kind"] == "machinegoon", "a guest's build order runs on the host (a machinegoon on B's home)")
-	check(str(_payloads("g1", "feedback")[0]).begins_with("Machinegoon construction started"), "...answered with the Sim's feedback line")
+	check(str(_payloads("g1", "feedback")[0]).begins_with("Googatling construction started"), "...answered with the Sim's feedback line")
 	var g_id: int = g.assigned_id
 	check(host._execute(g_id, {"action": "build", "a": home_b, "args": {"kind": "nuke"}}) == [false, "Order rejected"]
 			and host._execute(g_id, {"action": "build", "a": home_b, "args": {"kind": 7}}) == [false, "Order rejected"],

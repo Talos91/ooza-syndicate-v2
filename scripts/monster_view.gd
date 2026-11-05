@@ -549,6 +549,8 @@ static func stage(main: Node, arg: String) -> void:
 				n["units"] = 60.0
 				n["structure"] = "machinegoon"
 				n["tier"] = (i + maxi(node, 0)) % 3 + 1          # guns:<k> rotates the tiers round the three nodes
+				n["gat_stock"] = Sim.gat_cap(n) * [1.0, 0.5, 0.0][i]   # GOOGATLING: full / half / empty stock gauges
+				print("STAGE guns: node %d T%d stock %.0f" % [n["id"], n["tier"], n["gat_stock"]])
 				Sim._sync_legacy(n)
 			for n in sim.nodes:
 				if n["node_kind"] == "relay":
