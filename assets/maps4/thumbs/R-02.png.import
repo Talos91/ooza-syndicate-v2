@@ -2,10 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
+uid="uid://dsjf5kis5uwx2"
+path="res://.godot/imported/R-02.png-e89e99bb8613c122dbef95a93210786a.ctex"
+metadata={
+"vram_texture": false
+}
 
 [deps]
 
 source_file="res://assets/maps4/thumbs/R-02.png"
+dest_files=["res://.godot/imported/R-02.png-e89e99bb8613c122dbef95a93210786a.ctex"]
 
 [params]
 

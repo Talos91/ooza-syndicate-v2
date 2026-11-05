@@ -5,7 +5,8 @@
 - **0.23.15-proto9** - 2026-11-05 (proto-r, staging/proto/): ferries and belts are drawn on the hazard maps (R-01, R-03, R-04 have no
   prototype relay node, so their ferry / belt decks never got a view while the sim moved them; ProtoRelayView.wanted() now builds it);
   phone_fit LEVELS check (cross-level taps on lift platforms). test_net still fails on the proto line as on proto7 / proto8 (proto picker
-  vs test_net's legacy roster); proto rooms are unranked browser hosting.
+  vs test_net's legacy roster); proto rooms are unranked browser hosting. R-02 Gate v2 (Daniele's review): the lower outer corners
+  link to their gatehouse; the hub speed relay joins six platforms with alternating fast / slow lanes; camera pitch 50.
 
 - **0.23.15-proto8** - 2026-11-05 (proto-r, staging/proto/): round R maps on the proto picker: R-01 Strait, R-02 Gate, R-03 Strait 2,
   R-04 Gate 2, R-05 Pinwheel (MapPool.PROTO, with P-01..P-05); the 3-position ferry hazard (lanes slide, FERRY n / IN n label); EXP piece
