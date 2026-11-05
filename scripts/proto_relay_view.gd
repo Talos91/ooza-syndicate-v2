@@ -187,7 +187,9 @@ func _v3_belt(c: Dictionary, relay: bool) -> void:
 	var a: Vector3 = c["a"]
 	var b: Vector3 = c["b"]
 	c["v3"] = _v3_piece(nm, a, (b - a).normalized())
-	c["v3_len"] = L
+	var d := Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z))
+	(c["v3"] as Node3D).scale = Vector3(d / float(L), 1.0, 1.0)   # round R decks of 2 / 6 / 10 / 14 / 16 m: the nearest kit
+	c["v3_len"] = L                                              # length stretched to the lips (the treads stay on the deck)
 	var tr := (c["v3"] as Node).find_child("Treads", true, false)
 	c["treads"] = tr
 	c["treads_x"] = (tr as Node3D).position.x if tr is Node3D else 0.0
@@ -395,8 +397,8 @@ func _curve_chevrons(eis: Array, col := Color.WHITE) -> Array:
 	for ei in eis:
 		var e: Dictionary = sim.edges[ei]
 		for end in [e["a"], e["b"]]:
-			if not sim._conv_pieces.has(end):
-				continue
+			if not sim._conv_pieces.has(end) or not str(sim.nodes[end]["junction"]).begins_with("Curve_"):
+				continue                                  # (a Crossing lane is straight: its decks' treads carry the look)
 			var other := -1
 			for k in range(sim.edges.size()):
 				if k != ei and (sim.edges[k]["a"] == end or sim.edges[k]["b"] == end):

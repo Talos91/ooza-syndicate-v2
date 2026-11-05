@@ -133,6 +133,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"node_kind": kind,       # "common" / "relay" / "special" (fixed at setup); JUNCTION: "junction"
 			"junction": junction,   # JUNCTION: the piece (Junction_X / T / Y / L / K / Fork, Curve_45 / 90; "" on a platform)
 			"junction_yaw": float(n.get("junctionYaw", 0.0)) if junction != "" else 0.0,   # JUNCTION: degrees, ccw seen from above
+			"lane": str(n.get("lane", "")),   # EXP Crossing: "over" on the raised lane's node (walked up its ramps, over its span)
 			"streaming": {},        # {hid, remaining}: the one order the door is emitting
 			"siege": {},            # seat -> units on the platform fighting the garrison (arrived)
 			"siege_dir": {},        # seat -> unit vector from the tower to where they landed
@@ -1437,6 +1438,10 @@ func exit_of(ei: int, node_id: int) -> Vector3:
 	return Vector3(q[0], _lift_end_y(ei, node_id), q[1])
 
 
+const CROSSING_OVER_H := 4.0       # EXP Crossing over lane: the span's height (build_connectors_exp.py H = OVER_H)
+const CROSSING_RAMP := 4.0         # m of ramp from each over-lane port to the span
+
+
 func _lift_end_y(ei: int, node_id: int) -> float:
 	## Daniele 2026-11-05 ("the lift node raises and dips but the bridges it connects are all at the same level, so units
 	## teleport"): a lift deck's lift end stands at ITS level (UP decks dock RELAYS_PROTO.lift.rise up, DOWN decks on the
@@ -1517,6 +1522,13 @@ func _build_path3(route: Array) -> Dictionary:
 				var a_out := atan2(ex_out.z - c.z, ex_out.x - c.x)
 				for p in _arc(c, a_in, a_out, curve_r(str(b["junction"]))):
 					add.call(p, 1)
+			elif b["node_kind"] == "junction" and b["lane"] == "over":   # EXP Crossing, over lane: up the ramp, over the span
+				var dv := ((ex_out - ex_in) as Vector3) * Vector3(1, 0, 1)         # (Daniele 2026-11-05: "lines go around the
+				var dl := dv.length()                                                # bridge instead of over it")
+				var du := dv / maxf(dl, 0.01)
+				var run := minf(CROSSING_RAMP, dl * 0.4)
+				add.call(ex_in + du * run + Vector3.UP * CROSSING_OVER_H, 1)
+				add.call(ex_out - du * run + Vector3.UP * CROSSING_OVER_H, 1)
 			elif b["node_kind"] == "junction":             # JUNCTION: straight across the junction plate
 				add.call(b["pos"], 1)
 			else:

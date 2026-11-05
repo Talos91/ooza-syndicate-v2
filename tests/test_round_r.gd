@@ -221,6 +221,21 @@ func _wave2() -> void:
 			if str(s.nodes[j].get("junction", "")) == "Crossing":
 				got[4] += 1
 		check(got == want[code], "%s: lifts, rotors, speed relays, belts, lanes over the Crossing = %s (got %s)" % [code, want[code], got])
+		for n in s.nodes:                             # Daniele 2026-11-05: a line on a Crossing's over lane goes OVER the span
+			if str(n.get("lane", "")) != "over":
+				continue
+			var ends := []
+			for e in s.edges:
+				if e["a"] == n["id"] or e["b"] == n["id"]:
+					ends.append(e["b"] if e["a"] == n["id"] else e["a"])
+			s.nodes[ends[0]]["owner"] = "A"
+			s.nodes[ends[0]]["units"] = 10.0
+			var h: Dictionary = s.send(ends[0], ends[1], 1.0)
+			var top := -1.0
+			if not h.is_empty():
+				for p in h["pts"]:
+					top = maxf(top, p.y)
+			check(absf(top - Sim.CROSSING_OVER_H) < 0.01, "%s: a line over the Crossing climbs to its span (top %.2f m)" % [code, top])
 		var rise := float(Rules.RELAYS_PROTO["lift"]["rise"])
 		for n in fire:                                # Daniele 2026-11-05: a lift's UP decks ramp up to the raised platform
 			if str(n["relay"]) != "lift":
