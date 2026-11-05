@@ -110,6 +110,35 @@ func _gates() -> void:
 		check(n_ret == 2, "R-02: two gatehouses (got %d)" % n_ret)
 	var r3 := _sim("R-03")
 	check(r3 != null and r3._ferry_plain.size() == 3 and r3._ferry_groups.is_empty(), "R-03: three 1-bridge ferries")
+	## R-04 Gate 2: each waist gatehouse pulls its top door and its waist door (2 decks); its bottom door and home road stay.
+	var r4 := _sim("R-04")
+	check(r4 != null, "R-04 loads")
+	if r4 != null:
+		var gates: Array = []
+		for n in r4.nodes:
+			if n["relay"] == "retract":
+				gates.append(n["id"])
+		check(gates.size() == 2, "R-04: two gatehouses (got %d)" % gates.size())
+		check(r4._belt_edges.size() == 2, "R-04: two plain belts (got %d)" % r4._belt_edges.size())
+		for g in gates:
+			var doors: Array = r4.controlled_edges(g)
+			check(doors.size() == 2, "R-04: gatehouse %d pulls 2 doors (got %d)" % [g, doors.size()])
+			var fixed := 0
+			for ei in range(r4.edges.size()):
+				var e: Dictionary = r4.edges[ei]
+				if (int(e["a"]) == g or int(e["b"]) == g) and not (ei in doors):
+					fixed += 1
+			check(fixed >= 2, "R-04: gatehouse %d keeps %d fixed decks" % [g, fixed])
+			r4.time = 0.0
+			for ei in doors:
+				check(r4.is_edge_open(ei), "R-04: door %d starts out" % ei)
+			r4.nodes[g]["owner"] = "A"
+			r4.fire_relay(g)
+		for i in range(80):
+			r4.step(0.05)
+		for g in gates:
+			for ei in r4.controlled_edges(g):
+				check(not r4.is_edge_open(ei), "R-04: door %d pulled in after the fire" % ei)
 
 
 func _play(code: String) -> void:
@@ -137,7 +166,7 @@ func _init() -> void:
 	_strait()
 	_pinwheel()
 	_gates()
-	for code in ["R-01", "R-02", "R-03", "R-05"]:
+	for code in ["R-01", "R-02", "R-03", "R-04", "R-05"]:
 		_play(code)
 	print("test_round_r: %d checks, %d failed" % [checks, fails])
 	print("ALL PASSED" if fails == 0 else "FAILED")

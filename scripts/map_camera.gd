@@ -21,10 +21,11 @@ const PITCH := {
 	"P-04": 50.0,
 	"P-05": 45.0,
 	# round R (2026-11-05, maps-r worker): the lowest pitch of the sweep 41-58 whose smallest tap clears 44 pt, nothing off
-	# screen or under the HUD (probe 1266x585, desktop emulation): R-01 44.4 pt, R-02 44.1, R-03 44.4, R-05 45.6
+	# screen or under the HUD (probe 1266x585, desktop emulation): R-01 44.4 pt, R-02 44.1, R-03 44.4, R-04 45.8, R-05 45.6
 	"R-01": 50.0,
 	"R-02": 45.0,
 	"R-03": 50.0,
+	"R-04": 41.0,
 	"R-05": 50.0,
 }
 
