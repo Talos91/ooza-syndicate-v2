@@ -108,6 +108,15 @@ func _gates() -> void:
 				n_ret += 1
 				check(s.controlled_edges(n["id"]).size() == 2, "R-02: gatehouse %d pulls 2 doors" % n["id"])
 		check(n_ret == 2, "R-02: two gatehouses (got %d)" % n_ret)
+		# Daniele 2026-11-05: the hub speed relay joined six ways, its four side decks speed / slow (alternated); each
+		# gatehouse also linked to its lower outer corner (5 decks: home, both corners, both doors)
+		for n in s.nodes:
+			var deg := s.edges.filter(func(e): return e["a"] == n["id"] or e["b"] == n["id"]).size()
+			if n["relay"] == "conveyor":
+				check(deg == 6, "R-02: the hub has 6 decks (got %d)" % deg)
+				check(s.controlled_edges(n["id"]).size() == 4, "R-02: the hub drives its 4 side decks (got %d)" % s.controlled_edges(n["id"]).size())
+			if n["relay"] == "retract":
+				check(deg == 5, "R-02: gatehouse %d has 5 decks (got %d)" % [n["id"], deg])
 	var r3 := _sim("R-03")
 	check(r3 != null and r3._ferry_plain.size() == 3 and r3._ferry_groups.is_empty(), "R-03: three 1-bridge ferries")
 	## R-04 Gate 2: each waist gatehouse pulls its top door and its waist door (2 decks); its bottom door and home road stay.

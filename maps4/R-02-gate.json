@@ -381,8 +381,20 @@
    "deckMetres": 4.0
   },
   {
+   "from": 5,
+   "to": 9,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": 9,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "proto": "conveyor"
+  },
+  {
    "from": 9,
-   "to": 5,
+   "to": 12,
    "tier": "S",
    "seconds": 2,
    "level": 0,
@@ -492,6 +504,17 @@
    "deckMetres": 8.0
   },
   {
+   "from": 15,
+   "to": 8,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 8.0
+  },
+  {
    "from": 2,
    "to": 1,
    "tier": "L",
@@ -540,7 +563,19 @@
    "modules": 3.5
   },
   {
-   "from": 6,
+   "from": 9,
+   "to": 6,
+   "tier": "S",
+   "seconds": 2,
+   "level": 0,
+   "state": null,
+   "relay": 9,
+   "retracts": false,
+   "deckMetres": 4.0,
+   "proto": "conveyor"
+  },
+  {
+   "from": 13,
    "to": 9,
    "tier": "S",
    "seconds": 2,
@@ -651,6 +686,17 @@
    "deckMetres": 8.0
   },
   {
+   "from": 16,
+   "to": 10,
+   "tier": "M",
+   "seconds": 4,
+   "level": 0,
+   "state": null,
+   "relay": null,
+   "retracts": false,
+   "deckMetres": 8.0
+  },
+  {
    "from": 3,
    "to": 0,
    "tier": "L",
@@ -732,9 +778,12 @@
    }
   ]
  },
- "note": "S, 13 platforms. Two roads round each side and one straight road through a gatehouse (G: a retract relay with a laser). G's owner pulls BOTH its doors into the hexagon at once (2 decks): the short road shuts and armies take the long S-bend roads past the gatehouse laser. The hub is a speed relay: its two side decks run out of the centre or into it (the middle road is fast one way, slow the other). Finale: the hexagon and its hub.",
+ "note": "S, 15 platforms. Two roads round each side and one straight road through a gatehouse (G: a retract relay with a laser); both outer road corners also link to the gatehouse. G's owner pulls BOTH its doors into the hexagon at once (2 decks): the short road shuts and armies take the long S-bend roads past the gatehouse laser. The hub is a speed relay joined six ways: its four side decks alternate (left: top fast in / bottom slow in; right: top slow in / bottom fast in - a flow round the hub); firing it reverses all four. Finale: the hexagon and its hub.",
  "geometricSymmetry": true,
  "experimental": false,
+ "ruleWaivers": {
+  "R07": "Daniele 2026-11-05 (R-02 review): the hub joined six ways, its side decks alternated speed / slow and the relay inverting them - each side always keeps one fast way in, so firing swaps WHICH lane is fast instead of moving the shortest route's length (the choke test reads lengths only)"
+ },
  "tags": {
   "size": "S",
   "family": "choke",
@@ -870,12 +919,33 @@
    },
    {
     "A": [
+     -11.4337,
+     -6.6003
+    ],
+    "B": [
      -5.1963,
      -2.9997
     ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     -5.1963,
+     2.9997
+    ],
     "B": [
      -11.4337,
-     -6.6003
+     6.6003
     ],
     "L": 7.202,
     "p0": 1.6,
@@ -1080,6 +1150,27 @@
    },
    {
     "A": [
+     -44.8672,
+     15.6578
+    ],
+    "B": [
+     -40.2328,
+     5.4622
+    ],
+    "L": 11.1995,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
      -41.4963,
      -22.4367
     ],
@@ -1164,12 +1255,33 @@
    },
    {
     "A": [
+     5.1963,
+     -2.9997
+    ],
+    "B": [
      11.4337,
      -6.6003
     ],
+    "L": 7.202,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     11.4337,
+     6.6003
+    ],
     "B": [
      5.1963,
-     -2.9997
+     2.9997
     ],
     "L": 7.202,
     "p0": 1.6,
@@ -1359,6 +1471,27 @@
     "B": [
      40.2328,
      -5.4622
+    ],
+    "L": 11.1995,
+    "p0": 1.6,
+    "p1": 1.6,
+    "lean0": 0.0,
+    "lean1": 0.0,
+    "plaza0": false,
+    "plaza1": false,
+    "h": 0.0,
+    "r0": 0.0,
+    "r1": 0.0,
+    "dock": false
+   },
+   {
+    "A": [
+     44.8672,
+     15.6578
+    ],
+    "B": [
+     40.2328,
+     5.4622
     ],
     "L": 11.1995,
     "p0": 1.6,
