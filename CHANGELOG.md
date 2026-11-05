@@ -2,6 +2,10 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto15** - 2026-11-05 (proto-r, staging/proto/): Conveyors on every bridge shape (speed curves with treads), a slat look
+  for plain belts, a new ferry in every length, the new relay node on every relay (🎨 conveyors 4.1 + ferry 4.1); launcher / lift /
+  tilt v3 buttons; moving decks tumble on collapse.
+
 - **0.23.15-proto14** - 2026-11-05 (proto-r, staging/proto/): R-13 Gearbox: a second drive under the gearbox, linked to the top one
   (either flips both gears; new conveyor link); R-04 Gate 2 removed from the picker.
 
