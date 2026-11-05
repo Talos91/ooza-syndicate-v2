@@ -858,7 +858,8 @@ const ARCHIVED_SKILLS := ["mire", "anchor", "bypass"]
 static var archived_on := false
 # Cosmetic families out of the game (Daniele 2026-11-05: "monster is archived so make sure that when [it] will be archived it
 # won't be shown anymore"): a family listed here leaves ARMIES > CUSTOMIZE (its rail tile and looks). Archiving the monster
-# = add "monster" (and "monster_hub" if the hub goes with it). Empty until that change lands.
+# = add "monster"; the monster hub leaves with it (conservative default, 2026-11-05, until Daniele says otherwise on the Desk).
+# Empty until that change lands.
 const ARCHIVED_FAMILIES: Array[String] = []
 
 

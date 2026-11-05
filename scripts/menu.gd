@@ -3470,7 +3470,11 @@ func _ward_look_name(cat: String, id: String) -> String:
 
 func _ward_cats() -> Array:
 	## CUSTOMIZE's categories: WARDROBE_CATS minus the families archived out of the game (Rules.ARCHIVED_FAMILIES).
-	return WARDROBE_CATS.filter(func(c): return not c in Rules.ARCHIVED_FAMILIES)
+	## The monster hub goes with an archived monster (conservative default, 2026-11-05).
+	var gone: Array = Rules.ARCHIVED_FAMILIES.duplicate()
+	if "monster" in gone:
+		gone.append("monster_hub")
+	return WARDROBE_CATS.filter(func(c): return not c in gone)
 
 
 func _ward_rail(pos: Vector2, h: float, cat: String, played: Dictionary) -> float:
