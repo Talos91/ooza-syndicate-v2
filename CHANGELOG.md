@@ -2,6 +2,10 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto10** - 2026-11-05 (proto-r, staging/proto/): R-11 Pinwheel B corrected to Daniele's sketch; speed / slow curves: the
+  curve pieces between speed decks now push lines (Sim conveyor reads the curve) and show running chevrons. test_net still skipped on the
+  proto line (proto picker vs its legacy roster).
+
 - **0.23.15-proto9** - 2026-11-05 (proto-r, staging/proto/): ferries and belts are drawn on the hazard maps (R-01, R-03, R-04 have no
   prototype relay node, so their ferry / belt decks never got a view while the sim moved them; ProtoRelayView.wanted() now builds it);
   phone_fit LEVELS check (cross-level taps on lift platforms). test_net still fails on the proto line as on proto7 / proto8 (proto picker
