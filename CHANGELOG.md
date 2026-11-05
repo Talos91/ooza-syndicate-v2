@@ -2,6 +2,11 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto9** - 2026-11-05 (proto-r, staging/proto/): ferries and belts are drawn on the hazard maps (R-01, R-03, R-04 have no
+  prototype relay node, so their ferry / belt decks never got a view while the sim moved them; ProtoRelayView.wanted() now builds it);
+  phone_fit LEVELS check (cross-level taps on lift platforms). test_net still fails on the proto line as on proto7 / proto8 (proto picker
+  vs test_net's legacy roster); proto rooms are unranked browser hosting.
+
 - **0.23.15-proto8** - 2026-11-05 (proto-r, staging/proto/): round R maps on the proto picker: R-01 Strait, R-02 Gate, R-03 Strait 2,
   R-04 Gate 2, R-05 Pinwheel (MapPool.PROTO, with P-01..P-05); the 3-position ferry hazard (lanes slide, FERRY n / IN n label); EXP piece
   support; tests/test_round_r.gd. Open for Daniele: L05 waiver on R-01 / R-03, the speed-relay reading, R-04 has 2 doors (not 3) and no T-45 / K
