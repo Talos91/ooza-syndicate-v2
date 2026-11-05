@@ -56,7 +56,7 @@ func _init() -> void:
 	check(card._button_text() == "OPEN", "set_action overrides the state's text")
 	card.free()
 	var ids := NavBar.TABS.map(func(t): return t[0])
-	check(ids == ["home", "armies", "profile"], "NavBar: HOME / ARMIES / PROFILE (no PLAY tab; CAMPAIGN is a HOME tile since 2026-11-05)")
+	check(ids == ["home", "armies", "profile", "guide"], "NavBar: HOME / ARMIES / PROFILE / GUIDE (no PLAY tab; CAMPAIGN is a HOME tile since 2026-11-05)")
 	var sc := TouchScroll.new()
 	check(not sc.horizontal, "TouchScroll is vertical by default")
 	sc.horizontal = true

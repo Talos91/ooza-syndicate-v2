@@ -575,6 +575,8 @@ func _on_tab(id: String) -> void:
 			show_chapters()                            # city map opens once you pick one (show_campaign)
 		"profile":                                     # UI (0.22.x): PROFILE is a tab of its own now, not a meta page
 			show_profile()
+		"guide":                                       # 2026-11-05: the quick guide (HELP) is a tab
+			show_help()
 
 
 func _shell_add(c: Control, pos: Vector2) -> Control:
@@ -756,7 +758,7 @@ func show_main() -> void:
 	var ty := area.end.y - th - 10.0
 	# Daniele 2026-11-05 (no PLAY menu, "every mode a tile"): PLAY VS AI left-most and biggest, CAMPAIGN, ONLINE; the
 	# hero's art free on the right; CHALLENGES and TRAINING top right above the art, the headline top left
-	var fr := [0.42, 0.31, 0.27]
+	var fr := [0.38, 0.38, 0.24]                      # Daniele 2026-11-05: ONLINE as big as PLAY, CAMPAIGN third and smallest
 	var avail := minf(w * 0.64, 900.0) - gap * (fr.size() - 1)
 	var tiles := []
 	var tx := x
@@ -764,8 +766,8 @@ func show_main() -> void:
 		tiles.append(Rect2(tx, ty, floorf(avail * k), th))
 		tx += floorf(avail * k) + gap
 	_home_play(tiles[0], pad, bh)
-	_home_campaign(tiles[1], pad, bh)
-	_home_online(tiles[2], pad, bh)
+	_home_online(tiles[1], pad, bh)
+	_home_campaign(tiles[2], pad, bh)
 	# top right, above the hero's art: CHALLENGES and TRAINING (the lesson count; HOW TO PLAY once every lesson is done)
 	var ready_n := Progression.claimable()
 	var ct := "CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else "")
@@ -944,9 +946,9 @@ func show_play() -> void:
 func show_help() -> void:
 	## HELP (screen system 24): the four things to know, and TRAINING.
 	_last_show = show_help
-	var area := shell_open("OOZE / HELP", _page if _page in ["home", "play", "armies", "campaign"] else "home", show_main)
+	var area := shell_open("OOZE / GUIDE", "guide", Callable())   # Daniele 2026-11-05: the quick guide is a tab of its own
 	var x := shell_x()
-	var y := page_title(area, "HELP", "OWN THE CROSSINGS.")
+	var y := page_title(area, "QUICK GUIDE", "OWN THE CROSSINGS.")
 	var gap := 14.0
 	var cw := (content.size.x - x * 2.0 - gap) / 2.0
 	var tips := [
@@ -1617,7 +1619,7 @@ func _challenge_card(c: Dictionary, kind: String, pos: Vector2, w: float, just_c
 # ------------------------------------------------------------------ UI: parts of the online / progression / settings pages (Alpha 21)
 var _meta_from := {}                               # page -> [the page it was opened from (its BACK), the tab kept lit]
 var _meta_returning := false                       # a BACK is under way: the page it lands on keeps its own record
-const META_TABS := ["home", "play", "armies", "campaign", "profile"]
+const META_TABS := ["home", "play", "armies", "campaign", "profile", "guide"]
 
 
 func _meta_open(page: String, fallback: Callable) -> String:
@@ -2738,33 +2740,34 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 	var area := shell_open("OOZE / ARMIES", "armies", (func(): _leave_armies()) if sub else Callable(), _army)
 	var x := shell_x()
 	var w := content.size.x - x * 2.0
-	var top := page_title(area, "ARMIES", "YOUR SYNDICATE. YOUR RULES.")
-	# COSMETICS and RESET, top right (left of the desktop BACK link)
-	var right := _title_right()
-	var bh := 44.0
-	var rt := "RESET TO DEFAULT"
-	var rw := UiKit.text_w(self, rt, 14, true) + 30.0
-	var cw := UiKit.text_w(self, "COSMETICS", 15, true) + 44.0
-	var by := area.position.y + (10.0 if shell_slim else 16.0)
-	var rs := UiKit.btn(self, rt, Vector2(right - cw - 10.0 - rw, by), Vector2(rw, bh), func():
-		ArmyPresets.reset(_army)
-		_preset_changed()
-		show_armies(), "tertiary", _army, 14)
-	rs.disabled = ArmyPresets.is_default(_army)
-	UiKit.btn(self, "COSMETICS", Vector2(right - cw, by), Vector2(cw, bh), func(): show_cosmetics(_army), "secondary", _army, 15)
-	var tight := UiKit.compact(self)                   # iOS (Safari's 320-340 pt): tighter gaps, the loadout drops lines
-	top = maxf(top, by + rs.size.y + (8.0 if tight else 12.0))   # never under the title row's buttons
-	# the roster
-	var th := UiKit.tap_h(self, 58.0)
-	var gap := 10.0
-	var tw := (w - gap * 4.0) / 5.0
+	# ARMIES SPLIT (Daniele 2026-11-05: "agree on armies split"): the five factions once, then two tabs - SKILLS (what
+	# the faction does: identity + the one-page skill tiles) and CUSTOMIZE (how it looks: the wardrobe). No title row.
+	var top := area.position.y + 10.0
+	var th := UiKit.tap_h(self, 54.0)
+	var gap := 8.0
+	var tabs := [["skills", "SKILLS"], ["customize", "CUSTOMIZE"]]
+	var tab_w := UiKit.text_w(self, "CUSTOMIZE", 15, true) + 40.0
+	var tabs_x := x + w - tab_w * 2.0 - gap
+	for i in range(tabs.size()):
+		var tid: String = tabs[i][0]
+		UiKit.btn(self, tabs[i][1], Vector2(tabs_x + i * (tab_w + gap), top), Vector2(tab_w, 54), func():
+			_army_tab = tid
+			show_armies(), "selected" if _army_tab == tid else "secondary", _army, 15)
+	var rw := tabs_x - 16.0 - x
+	var tw := (rw - gap * 4.0) / 5.0
 	for i in range(FACTIONS.size()):
 		_army_tile(FACTIONS[i], Vector2(x + i * (tw + gap), top), Vector2(tw, th))
-	var y := top + th + (8.0 if tight else 14.0)
-	var ph := area.end.y - (8.0 if tight else 16.0) - y
-	var lw := floorf((w - 14.0) * 0.5)
-	_army_identity(Vector2(x, y), Vector2(lw, ph))
-	_army_loadout(Vector2(x + lw + 14.0, y), Vector2(w - lw - 14.0, ph))
+	var body := Rect2(x, top + th + 12.0, w, area.end.y - 10.0 - (top + th + 12.0))
+	if _army_tab == "customize":
+		_customize_body(body)
+		return
+	var lw := floorf(w * 0.25)
+	_army_identity(body.position, Vector2(lw, body.size.y))
+	_skills_body(Rect2(body.position.x + lw + 14.0, body.position.y, w - lw - 14.0, body.size.y), _skills_slot)
+
+
+var _army_tab := "skills"                          # ARMIES: the open tab ("skills" | "customize")
+var _skills_slot := "active"
 
 
 func _title_right() -> float:
@@ -2817,14 +2820,14 @@ func _army_identity(pos: Vector2, dims: Vector2) -> void:
 	UiKit.panel(self, pos, dims, _army)
 	var ftrait: Array = Rules.faction_trait(_army)
 	var stats_h := UiKit.line_h(self, 20, true) + UiKit.line_h(self, 12) + 30.0
-	var hs0 := minf(dims.y - 32.0, dims.x * 0.44)
+	var hs0 := minf(dims.y - 32.0, dims.x * (0.44 if dims.x > 520.0 else 0.3))   # a narrow panel (ARMIES > SKILLS) gives the words room
 	var tw := dims.x - 20.0 - hs0 - 16.0 - 18.0
 	# [text, size, colour, head, spacing, gap before, wraps, drop order (0 = always)]
 	var items := [
 		[UiKit.SUBS[_army], 12, acc, true, 3, 0.0, false, 0],
 		[UiKit.NAMES[_army], 34, acc, true, 0, 0.0, false, 0],
 		[str(Rules.FACTION_TAGLINES[_army]), 14, UiKit.MUTED, false, 0, 2.0, true, 2],
-		["PERSISTENT TRAIT", 12, acc, true, 3, 16.0, false, 0],
+		["PERSISTENT TRAIT" if dims.x > 520.0 else "TRAIT", 12, acc, true, 3, 16.0, false, 0],
 		[str(ftrait[0]).to_upper(), 16, UiKit.INK, true, 0, 2.0, false, 0],
 		[str(ftrait[1]), 14, UiKit.MUTED, false, 0, 0.0, true, 0],
 	]
@@ -3015,6 +3018,7 @@ var _skill_tip := ""                               # SKILLS: the skill whose des
 
 
 func show_skills(slot: String = "active") -> void:
+	## ARMIES > SKILLS is a tab of ARMIES since the split (2026-11-05); old callers land on it.
 	if not _skills_args:                              # screenshot args: --skills-slot=map, --skills-tip=<id>
 		_skills_args = true
 		for a in OS.get_cmdline_user_args():
@@ -3022,28 +3026,32 @@ func show_skills(slot: String = "active") -> void:
 				slot = "map"
 			elif a.begins_with("--skills-tip="):
 				_skill_tip = a.substr(13)
-	_last_show = func(): show_skills(slot)
-	## ARMIES > SKILLS (round 2c, Daniele 2026-11-04: "skill selection should show all skill in one page show skill by
-	## name + icon and if selected a popup tooltip shows description"): ONE screen, no pages. The faction's fixed
-	## ultimate as a strip, then every ACTIVE and MAP skill as an icon + name tile (rows balanced); a tap equips it (a
-	## locked one offers UNLOCK) and opens its description popup next to the tile; a tap anywhere else closes it.
-	if _army == "":
-		_army = faction
-	if not _army_back.is_valid():
-		_army_back = show_main
-	var area := shell_open("OOZE / ARMIES / SKILLS", "armies", func(): show_armies(_army), _army)
+	_skills_slot = slot
+	_army_tab = "skills"
+	show_armies()
+
+
+func _skills_body(r: Rect2, slot: String) -> void:
+	## Every skill on one screen (round 2c): the fixed ultimate strip, then the ACTIVE and MAP pools as icon + name tiles;
+	## a tap equips (locked: no change) and opens the description popup.
 	var acc := UiKit.accent(_army)
-	var x := shell_x()
-	var w := content.size.x - x * 2.0
-	var top := area.position.y + 10.0 if shell_slim else page_title(area, "ARMIES / SKILLS  ·  " + UiKit.TAGS[_army], "PICK YOUR SKILLS.")
+	var x := r.position.x
+	var w := r.size.x
+	var top := r.position.y
 	var lo := ArmyPresets.loadout_for(_army)
-	var bot := area.end.y - 10.0
+	var bot := r.end.y
 	var gap := 10.0
 	var lh := UiKit.line_h(self, 13, true)
 	# the ultimate: one strip (tap: its description)
 	var ult: String = Rules.FACTION_ULTIMATE_ID[_army]
 	var uh := UiKit.tap_h(self, 50.0)
-	var ub := UiKit.btn(self, "", Vector2(x, top), Vector2(w, uh), func(): _toggle_tip(ult, slot), "secondary", _army)
+	var rsw := UiKit.text_w(self, "RESET", 14, true) + 34.0      # ARMIES SPLIT: RESET (to the default preset) beside it
+	var rs := UiKit.btn(self, "RESET", Vector2(x + w - rsw, top), Vector2(rsw, 50), func():
+		ArmyPresets.reset(_army)
+		_preset_changed()
+		show_armies(), "tertiary", _army, 14)
+	rs.disabled = ArmyPresets.is_default(_army)
+	var ub := UiKit.btn(self, "", Vector2(x, top), Vector2(w - rsw - 10.0, uh), func(): _toggle_tip(ult, slot), "secondary", _army)
 	ub.add_child(UiKit.rect(Vector2(0, 8.0), Vector2(3.0, ub.size.y - 16.0), UiKit.STAR))
 	var uic := ub.size.y - 12.0
 	_icon_box(ult, Vector2(12.0, 6.0), uic, UiKit.STAR, ub)
@@ -3059,7 +3067,7 @@ func show_skills(slot: String = "active") -> void:
 	# the pools: a heading line each, then their tiles; rows share the height left
 	var pools := [["active", "ACTIVE SKILL  ·  PICK ONE", "combat skills, every map", Rules.ACTIVE_SKILLS],
 			["map", "MAP SKILL  ·  PICK ONE", "network skills; relay skills need a map with relays", Rules.MAP_SKILLS]]
-	var min_tw := UiKit.tap_h(self, 44.0) * 2.4        # a tile keeps its name readable
+	var min_tw := UiKit.tap_h(self, 44.0) * 1.5        # one row per pool where it fits (names shrink to fit)
 	var plan := []                                     # [pool, cols, rows]
 	var total_rows := 0
 	for pool in pools:
@@ -3090,7 +3098,6 @@ func show_skills(slot: String = "active") -> void:
 		y += pl[2] * (th + gap) - gap + 10.0
 	if _skill_tip != "" and tile_rects.has(_skill_tip):
 		_skill_popup(_skill_tip, tile_rects[_skill_tip], slot)
-	shell_raise()
 
 
 func _toggle_tip(id: String, slot: String) -> void:
@@ -3110,20 +3117,41 @@ func _skill_tile(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vec
 		_skill_tip = id
 		show_skills(page_slot), "selected" if chosen else "secondary", _army)
 	var h := b.size.y
-	var nl := UiKit.line_h(self, 14, true)
-	var ic := clampf(h - nl - 16.0, 20.0, 64.0)
+	var nfs := 14.0
+	var nm_t := ArmyPresets.skill_name(id).to_upper()
+	while nfs > 10.0 and UiKit.text_w(self, nm_t, nfs, true) > dims.x - 12.0:
+		nfs -= 1.0                                     # a long name (EMERGENCY EVAC) shrinks, then wraps to two lines
+	var wrap := UiKit.text_w(self, nm_t, nfs, true) > dims.x - 12.0 and nm_t.contains(" ")
+	if wrap:                                           # two lines: every word must fit its line (never "EMERGENC / Y")
+		nfs = 14.0
+		var longest := ""
+		for word in nm_t.split(" "):
+			if word.length() > longest.length():
+				longest = word
+		while nfs > 9.0 and UiKit.text_w(self, longest, nfs, true) > dims.x - 10.0:
+			nfs -= 1.0
+		if UiKit.text_w(self, longest, nfs, true) > dims.x - 10.0:   # a phone's 12.5 pt floor: the short name (EVAC);
+			nm_t = nm_t.split(" ")[-1]                     # the popup spells it out
+			wrap = false
+			nfs = 14.0
+			while nfs > 10.0 and UiKit.text_w(self, nm_t, nfs, true) > dims.x - 12.0:
+				nfs -= 1.0
+	var nl := UiKit.line_h(self, nfs, true) * (2.0 if wrap else 1.0)
+	var ic := clampf(h - nl - 16.0, 18.0, 64.0)
 	var col := acc if chosen else (Color("6f8792") if locked else Color("c9dbe3"))
 	var top := (h - ic - nl - 4.0) / 2.0
 	_icon_box(id, Vector2((dims.x - ic) / 2.0, top), ic, col, b)
-	var nfs := 14.0
-	while nfs > 10.0 and UiKit.text_w(self, ArmyPresets.skill_name(id).to_upper(), nfs, true) > dims.x - 12.0:
-		nfs -= 1.0                                     # a long name (EMERGENCY EVAC) shrinks before it is cut
-	var nm := UiKit.label(self, ArmyPresets.skill_name(id).to_upper(), nfs, acc if chosen else (UiKit.MUTED if locked else UiKit.INK), true)
+	var nm := UiKit.label(self, nm_t, nfs, acc if chosen else (UiKit.MUTED if locked else UiKit.INK), true)
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	nm.clip_text = true
-	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	nm.position = Vector2(6.0, top + ic + 4.0)
-	nm.size = Vector2(dims.x - 12.0, nl)
+	if wrap:
+		nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		nm.max_lines_visible = 2
+	else:
+		nm.clip_text = true
+		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	nm.position = Vector2(4.0, top + ic + 4.0)
+	nm.custom_minimum_size = Vector2(dims.x - 8.0, 0)
+	nm.size = Vector2(dims.x - 8.0, nl)
 	b.add_child(nm)
 	var cs := UiKit.line_h(self, 12, true) * 0.8
 	if chosen:
@@ -3132,10 +3160,6 @@ func _skill_tile(id: String, slot: String, chosen: bool, pos: Vector2, dims: Vec
 		var lk := UiKit.label(self, "LOCKED", 11, LOCK_COL, true, 1)
 		lk.position = Vector2(8.0, 6.0)
 		b.add_child(lk)
-	if Rules.SKILLS[id].get("needs_relays", false):
-		var rl := UiKit.label(self, "RELAYS", 11, UiKit.STAR, true, 1)
-		rl.position = Vector2(dims.x - UiKit.text_w(self, "RELAYS", 11, true) - 14.0, h - UiKit.line_h(self, 11, true) - 4.0)
-		b.add_child(rl)
 
 
 func _skill_popup(id: String, at: Rect2, slot: String) -> void:
@@ -3255,7 +3279,6 @@ var _ward_args := false                            # COSMETICS: the screenshot a
 
 
 func show_cosmetics(f: String = "") -> void:
-	_last_show = func(): show_cosmetics(f)                  # a resize that changes the phone sizing rebuilds it (_fit)
 	## A look per structure family, per faction (GAME-BIBLE sec17; Daniele, 2026-09-27): DEFAULT / the
 	## faction set / GRADUATE / the skin lines for vats, DEFAULT / SPITTER / PEPPERBOX for the
 	## Machinegoon, and so on - saved in user://armies.cfg (ArmyPresets), applied at match start
@@ -3275,17 +3298,15 @@ func show_cosmetics(f: String = "") -> void:
 		_ward_sel = {}                                  # another faction: its own saved picks
 	if f != "":
 		_army = f
-	if _army == "":
-		_army = faction
-	if not _army_back.is_valid():                     # 0.19.2 spec H11: BACK did nothing reached directly
-		_army_back = show_main                         # (show_armies() sets this; a direct entry never did)
-	var area := shell_open("OOZE / ARMIES / COSMETICS", "armies", func(): show_armies(_army), _army)
-	var x := shell_x()
-	var w := content.size.x - x * 2.0
-	var top := page_title(area, "ARMIES / COSMETICS", "BUILT TO LOOK DIFFERENT.")
-	var fy := area.position.y + (10.0 if shell_slim else 16.0)
-	_ward_factions(fy)
-	top = maxf(top, fy + UiKit.tap_h(self, 50.0) + 10.0)
+	_army_tab = "customize"
+	show_armies()
+
+
+func _customize_body(r: Rect2) -> void:
+	## The wardrobe in the CUSTOMIZE tab: categories, the turning preview, the looks and EQUIP / UNLOCK.
+	var x := r.position.x
+	var w := r.size.x
+	var top := r.position.y
 	var cat := _ward_cat if _ward_cat in WARDROBE_CATS else "vat"
 	var looks: Array = TERRITORY_LOOKS.keys() if cat == "territory" else Cosmetics.OPTIONS[cat]
 	var played := ArmyPresets.cosmetic_loadout_for(_army)          # what plays (a locked pick plays as the default)
@@ -3294,15 +3315,25 @@ func show_cosmetics(f: String = "") -> void:
 	var sel := str(_ward_sel.get(cat, ArmyPresets.core_territory if cat == "territory" else str(saved[cat])))
 	if not sel in looks:
 		sel = equipped
-	var h := area.end.y - 14.0 - top
-	var rail_w := 180.0
-	for c in WARDROBE_CATS:
-		rail_w = maxf(rail_w, UiKit.text_w(self, COSMETIC_FAMILY_LABEL[c], 15, true) + 44.0)
-	var looks_w := clampf(w * 0.25, 270.0, 340.0)
-	var pv_w := w - rail_w - looks_w - 28.0
-	_ward_rail(Vector2(x, top), Vector2(rail_w, h), cat, played)
-	_ward_stage(Vector2(x + rail_w + 14.0, top), Vector2(pv_w, h), cat, sel, equipped)
-	_ward_looks(Vector2(x + rail_w + 14.0 + pv_w + 14.0, top), Vector2(looks_w, h), cat, looks, sel, equipped)
+	var h := r.size.y
+	# ARMIES SPLIT (no scrolling, no pages): the categories as one row of tabs, then the stage and every look in a grid
+	var tab_h := UiKit.tap_h(self, 44.0)
+	var tgap := 6.0
+	var ctw := floorf((w - tgap * (WARDROBE_CATS.size() - 1)) / WARDROBE_CATS.size())
+	for i in range(WARDROBE_CATS.size()):
+		var cc: String = WARDROBE_CATS[i]
+		var lab: String = COSMETIC_FAMILY_LABEL[cc]
+		var fs := 14.0
+		while fs > 10.0 and UiKit.text_w(self, lab, fs, true) > ctw - 12.0:
+			fs -= 1.0
+		UiKit.btn(self, lab, Vector2(x + i * (ctw + tgap), top), Vector2(ctw, 44), func():
+			_ward_cat = cc
+			show_cosmetics(), "selected" if cc == cat else "secondary", _army, fs)
+	var by := top + tab_h + 10.0
+	var bh := h - tab_h - 10.0
+	var looks_w := floorf(w * 0.4)
+	_ward_stage(Vector2(x, by), Vector2(w - looks_w - 14.0, bh), cat, sel, equipped)
+	_ward_looks_grid(Vector2(x + w - looks_w, by), Vector2(looks_w, bh), cat, looks, sel, equipped)
 
 
 func _ward_factions(y: float) -> void:
@@ -3535,6 +3566,45 @@ Open while testing: you can equip it now."
 	if not ArmyPresets.saved:
 		out += "\nThis browser keeps no storage: your picks last until the page closes."
 	return out
+
+
+func _ward_looks_grid(pos: Vector2, dims: Vector2, cat: String, looks: Array, sel: String, equipped: String) -> void:
+	## Every look of the category at once (ARMIES SPLIT, no pages): a grid sized to fit; the one on preview lit, the
+	## equipped one with a check, a locked one marked. Tap: preview it (EQUIP is on the stage).
+	var acc := UiKit.accent(_army)
+	var gap := 6.0
+	var th := UiKit.tap_h(self, 44.0)
+	var rows := maxi(1, int((dims.y + gap) / (th + gap)))
+	var cols := maxi(1, ceili(looks.size() / float(rows)))
+	rows = ceili(looks.size() / float(cols))
+	th = minf(floorf((dims.y - gap * (rows - 1)) / rows), th * 1.6)
+	var tw := floorf((dims.x - gap * (cols - 1)) / cols)
+	for i in range(looks.size()):
+		var lid: String = looks[i]
+		var s := _ward_state(cat, lid, equipped)
+		var b := UiKit.btn(self, "", pos + Vector2((i % cols) * (tw + gap), (i / cols) * (th + gap)), Vector2(tw, th), func():
+			_ward_sel[cat] = lid
+			show_cosmetics(), "selected" if lid == sel else "secondary", _army)
+		var nm := _ward_look_name(cat, lid)
+		var fs := 14.0
+		while fs > 10.0 and UiKit.text_w(self, nm, fs, true) > tw - 16.0:
+			fs -= 1.0
+		var two := b.size.y >= UiKit.line_h(self, fs, true) + UiKit.line_h(self, 11, true) + 8.0
+		var hh := UiKit.line_h(self, fs, true) + (UiKit.line_h(self, 11, true) if two else 0.0)
+		var n := UiKit.label(self, nm, fs, UiKit.MUTED if s["locked"] else UiKit.INK, true)
+		n.position = Vector2(8.0, (b.size.y - hh) / 2.0)
+		n.clip_text = true
+		n.size = Vector2(tw - 16.0, UiKit.line_h(self, fs, true))
+		b.add_child(n)
+		if two:
+			var line: String = "EQUIPPED" if s["equipped"] else ("LOCKED" if s["locked"] else "")
+			if line != "":
+				var sl := UiKit.label(self, line, 11, acc if s["equipped"] else s["col"], true, 1)
+				sl.position = n.position + Vector2(0, UiKit.line_h(self, fs, true))
+				b.add_child(sl)
+		elif s["equipped"]:
+			var cs := UiKit.line_h(self, 12, true) * 0.75
+			_check(b, Vector2(tw - cs - 6.0, 6.0), cs, acc)
 
 
 func _ward_looks(pos: Vector2, dims: Vector2, cat: String, looks: Array, sel: String, equipped: String) -> void:

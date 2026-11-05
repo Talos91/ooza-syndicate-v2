@@ -7,7 +7,7 @@ extends Node
 ##   Godot --path . --resolution 1136x640 res://tests/test_ui_nav.tscn -- --mobile --no-notice --no-account
 ## (NOT --headless: the headless display server routes no input.) Exit code 0 = all passed.
 
-const TAB_PAGE := {"home": "home", "play": "play", "armies": "armies", "campaign": "campaign", "profile": "profile"}
+const TAB_PAGE := {"home": "home", "play": "play", "armies": "armies", "campaign": "campaign", "profile": "profile", "guide": "guide"}
 const FROM := ["main", "play", "armies", "chapters", "factions", "maps", "setup", "setup_advanced", "seats", "profile", "challenges",
 		"leaderboard", "history", "account", "options", "help", "online"]
 var m
@@ -53,7 +53,7 @@ func _ready() -> void:
 			tabs_seen += 1
 			await _tap(m.nav_bar.buttons[tab])
 			check(m._page == TAB_PAGE[tab], "from %s, one tap on %s lands on %s (got %s)" % [from, tab.to_upper(), TAB_PAGE[tab], m._page])
-	check(tabs_seen >= 12, "the tab bar was there to tap (%d taps)" % tabs_seen)   # 3 tabs since 2026-11-05
+	check(tabs_seen >= 16, "the tab bar was there to tap (%d taps)" % tabs_seen)   # 4 tabs (GUIDE) since 2026-11-05
 	# BACK, touched: a meta page opened from HOME, and one from PROFILE (a NavBar tab of its own now, no BACK of its
 	# own - its sub-pages' BACK returns to it), go back where they came from
 	for path in [["main", "options"], ["profile", "leaderboard"], ["profile", "account"], ["armies", "challenges"]]:   # (UX pass: no PLAY page)
