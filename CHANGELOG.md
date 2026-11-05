@@ -2,6 +2,9 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto18** - 2026-11-06 (proto-r, staging/proto/): The launcher is bigger (1.3x) and stands beside its node's vat, opposite
+  its target, lobbing over it (Daniele: "scale it up").
+
 - **0.23.15-proto17** - 2026-11-06 (proto-r, staging/proto/): Launcher, lift and tilt wear their own models: the turret aims and throws,
   the lift platform rises on its base, the tilt top tips and its dial points at the next exit; all fall with their node (🎨).
 
