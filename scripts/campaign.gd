@@ -81,7 +81,7 @@ const CAMPAIGNS := {
 						"story": "Hold the warehouse till the whistle. Unpaid, naturally.",
 						"map": "res://maps4/B-02-switchback-foundry.json", "placeholder": true, "par": 180.0,
 						"objective": {"kind": "survive", "t": 180.0},
-						"optional": {"kind": "machinegoon_t3", "text": "Have a T3 Machinegoon standing at the whistle"},
+						"optional": {"kind": "machinegoon_t3", "text": "Have a T3 Googatling standing at the whistle"},
 						"ai": "Standard", "rival": "foreman", "stage": {"rival_units": 20},
 						"brief": [["handler", "EMBER wants the warehouse. Keep your home until {t}."],
 							["handler", "Overtime is voluntary. Volunteering is mandatory."]],

@@ -792,7 +792,7 @@ func _badges(cam: Camera3D) -> bool:
 				st = sim.proto_tag(n["id"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
-			what = "MGN%d" % n["tier"]
+			what = "GAT%d" % n["tier"]                   # GOOGATLING (was MGN, the Machinegoon)
 		else:
 			what = "T%d" % n["tier"]
 		# 0.20.13 (Daniele's 2v2 co-op playtest: "i sent troops to her node and except the count going up
@@ -1031,8 +1031,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 	_refresh_inspector(cam)
 
 
-const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "MACHINEGOON", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
-const BUILD_LABEL := {"machinegoon": "MACHINEGOON", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machinegoon": "GOOGATLING", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
 const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
                                          # buttons / models of the relays") - distinct from the seat colour
 
@@ -1361,7 +1361,7 @@ func _inspector_actions(n: Dictionary) -> void:
 		if n["tier"] < 4 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
 		if "machinegoon" in n["buildable"] and shows("machinegoon"):
-			_add_action("MACHINEGOON", "MACHINEGOON", sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
+			_add_action("MACHINEGOON", BUILD_LABEL["machinegoon"], sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
 	elif n["structure"] == "machinegoon":
 		if n["tier"] < 3 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
@@ -1813,7 +1813,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		if owner != "":
 			# Alpha 11's status line: production, and what a double-tap upgrade costs
 			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) \
-					else ("no production - garrison must be fed" if n["structure"] == "machinegoon" else "no vat here")
+					else (gat_line(n) if n["structure"] == "machinegoon" else "no vat here")
 			var up := sim.upgrade_cost(n)
 			if owner == human and up > 0 and shows("upgrade"):
 				status += " | Double-tap: %d units" % Rules.shown(up)
@@ -1885,11 +1885,19 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		b.tooltip_text = why
 
 
+func gat_line(n: Dictionary) -> String:
+	## GOOGATLING readout (Daniele 2026-11-06): "stock 24/30 · +0.4/s · fires 1.6/s" at Alpha 11 scale; EMPTY while it trickles.
+	var stock := float(n.get("gat_stock", 0.0))
+	var line := "stock %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(stock), Rules.shown(Sim.gat_cap(n)),
+			Rules.shown_f(sim.gat_rate(n)), Rules.shown_f(Sim.gat_fire_rate(n))]
+	return line + (" · EMPTY" if stock < 0.5 * Rules.SCALE else "")
+
+
 func _structure_line(n: Dictionary) -> String:
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
 	if n["structure"] == "machinegoon":
-		return "MACHINEGOON T%d" % n["tier"]
+		return "GOOGATLING T%d" % n["tier"]
 	return "VAT T%d" % n["tier"]
 
 
