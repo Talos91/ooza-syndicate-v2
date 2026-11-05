@@ -58,6 +58,13 @@ func set_rim(path: String, col: Color) -> void:
 	_mat.set_shader_parameter("rim_col", col)
 
 
+func set_rim_lit(path: String, col: Color) -> void:
+	## GMN-1 skill window: the burning ring (the armed rim) revealed from the bottom up to the level, over the dim rim; "" = off.
+	var t := HudNoir.texture(path)
+	_mat.set_shader_parameter("rim_lit_tex", t)
+	_mat.set_shader_parameter("rim_lit_col", col if t != null else Color(0, 0, 0, 0))
+
+
 func set_liquid(col: Color, alpha := 1.0) -> void:
 	_mat.set_shader_parameter("liquid_col", col)
 	_mat.set_shader_parameter("liquid_a", alpha)

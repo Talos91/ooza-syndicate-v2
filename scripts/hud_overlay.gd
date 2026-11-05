@@ -24,6 +24,11 @@ var _relay_cue_t := {}                 # node id -> seconds left showing that cu
 var _reach_hub := -1                  # perf pass (audit B2): sim.monster_reach of the shown hub, worked out once per
 var _reach_sig := []                   # hub and board (the decks' open states, the fallen nodes), not every frame
 var _reach: Array = []
+const CAPTURE_S := 0.9                 # ui-node: a capture's burst, seconds
+var _owner_prev := {}                  # ui-node: node id -> owner last frame (a change = a capture burst)
+var _captures := {}                    # ui-node: node id -> seconds since its capture (while < CAPTURE_S)
+var _lock_id := -2                    # ui-node: the target the ring last locked on, and when (the strike-up flicker)
+var _lock_t := 0.0
 var route := {}                        # Alpha 24: the drag being aimed (main._route_hud): pts (world), ok, target, monster
 var _drew := true                      # the last frame drew something (a frame that draws nothing clears it once)
 const RELAY_CUE_MAX := 3               # only the first few times (Daniele's ask)
@@ -92,6 +97,16 @@ func sync(dt: float) -> void:
 		if float(_relay_cue_t.get(id, 0.0)) > 0.0:
 			_relay_cue_t[id] = maxf(0.0, float(_relay_cue_t[id]) - dt)
 	_sync_pulses(dt)
+	for n in sim.nodes:                              # ui-node: a node that changed hands bursts in its new owner's colour
+		var nid: int = n["id"]
+		var o := str(n["owner"])
+		if _owner_prev.has(nid) and _owner_prev[nid] != o and o != "" and not sim.collapsed.get(nid, false):
+			_captures[nid] = 0.0
+		_owner_prev[nid] = o
+	for nid in _captures.keys():
+		_captures[nid] = float(_captures[nid]) + dt
+		if float(_captures[nid]) >= CAPTURE_S:
+			_captures.erase(nid)
 	# perf pass (audit B11): redrawn while it shows anything (it pulses), once more to clear, then left alone
 	var draws := _draws_something()
 	if draws or _drew:
@@ -192,7 +207,7 @@ func _clear_spot(c: Vector2, offsets: Array, half: Vector2, avoid: Array) -> Vec
 func _draws_something() -> bool:
 	## Would _draw put anything on screen this frame (halos, relay cues, the monster reach, a relay preview, a
 	## danger symbol)? A cheap scan: false means the overlay can stay as it is.
-	if not route.is_empty():
+	if not route.is_empty() or not _captures.is_empty():
 		return true
 	if main.monster_from >= 0 or hover_relay >= 0 or (hud.inspector_id >= 0 and hud.inspector_id < sim.nodes.size() 			and sim.nodes[hud.inspector_id]["structure"] == "monster_hub"):
 		return true
@@ -247,6 +262,10 @@ func _draw() -> void:
 	if hud.shows("relay"):
 		for id in _relay_preview_nodes():
 			_draw_relay_preview(cam, id)
+	for nid in _captures:                            # ui-node: capture bursts
+		var cs := _node_screen(int(nid), cam)
+		NodeNoir.burst(self, cs[0], float(cs[1]) * 1.25 + 8.0 * ui_scale,
+				NodeNoir.mine_or_seat(str(sim.nodes[int(nid)]["owner"]), human), float(_captures[nid]) / CAPTURE_S, ui_scale)
 	if not route.is_empty():
 		_draw_route(cam)
 	if hud.shows("danger"):
@@ -256,47 +275,70 @@ func _draw() -> void:
 
 # ------------------------------------------------------------------ the aimed route (Alpha 24, round-3 ROUTE FEEDBACK)
 func _draw_route(cam: Camera3D) -> void:
-	## Over main's 3D drag line: the pack's route chevrons (B23) marching along a valid route in your colour, its NO ROUTE
-	## blocks (B24) on a blocked one, and the target's marker - VALID (B21) / INVALID (B22).
+	## ui-node (Alpha 24 step 4, the attack direction arrow in Neon Noir): the aimed route as a neon ribbon in your faction
+	## accent with lit goo marching to the target and an arrowhead (a dashed red tube when there is no route), the snapped
+	## target in a neon hex with turning ticks, the order in a pill above it (ATTACK · 15 UNITS · 15 s / NO ROUTE); dragged
+	## back onto your vat, the HOLD ring sits there and says HOLD (CANCEL when nothing is queued). main's 3D line is hidden.
+	var s := ui_scale
+	var hold := int(route.get("hold", -1))
+	if hold >= 0 and hold < sim.nodes.size():
+		var hs := _node_screen(hold, cam)
+		var hr := _ring_px(hold, cam)
+		if _lock_id != -10 - hold:
+			_lock_id = -10 - hold
+			_lock_t = _t
+		NodeNoir.target_hex(self, hs[0], hr, HudNoir.accent, s, _t, "", (_t - _lock_t) / 0.28)
+		NodeNoir.pill(self, (hs[0] as Vector2) + Vector2(0, -hr - 16.0 * s), str(route.get("label", "HOLD")), HudNoir.accent,
+				Hud.UI_FONT, maxi(int(16 * s), 13), s)
+		return
 	var ok := bool(route.get("ok", false))
-	var col := Rules.seat_color(human) if ok else Rules.state_color("warn")
+	var col := HudNoir.accent if ok else HudNoir.ENEMY
 	var line := PackedVector2Array()
 	for q in (route.get("pts", PackedVector3Array()) as PackedVector3Array):
 		line.append(cam.unproject_position(q + Vector3(0, 1.0, 0)))
-	var s := ui_scale
-	if line.size() >= 2:
-		var step := (24.0 if ok else 26.0) * s
-		var k := fposmod(_t * (36.0 if ok else 0.0) * s, step)
-		var seg := 0
-		var done := 0.0                                  # path length before line[seg]
-		var total := 0.0
-		for i in range(line.size() - 1):
-			total += line[i].distance_to(line[i + 1])
-		var at := k
-		while at < total - 10.0 * s:
-			while seg < line.size() - 2 and done + line[seg].distance_to(line[seg + 1]) < at:
-				done += line[seg].distance_to(line[seg + 1])
-				seg += 1
-			var a: Vector2 = line[seg]
-			var b: Vector2 = line[seg + 1]
-			var l := maxf(a.distance_to(b), 0.001)
-			var pos := a.lerp(b, clampf((at - done) / l, 0.0, 1.0))
-			draw_set_transform(pos, (b - a).angle(), Vector2.ONE)
-			if ok:
-				var h := 9.0 * s
-				HudSkin.draw_sprite(self, "B23", Rect2(-h, -h, 2.0 * h, 2.0 * h), Color(col.lightened(0.25), 0.95))
-			else:
-				var bw := 16.0 * s
-				HudSkin.draw_sprite(self, "B24", Rect2(-bw / 2.0, -bw / 8.0, bw, bw / 4.0))
-			at += step
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var target := int(route.get("target", -1))
+	var tr := 0.0
+	var ts := Vector2.ZERO
 	if target >= 0 and target < sim.nodes.size():
-		var ns := _node_screen(target, cam)
-		var r: float = float(ns[1]) * 1.2 + 6.0 * s
-		var breathe := 1.0 + 0.04 * sin(_t * 5.0)
-		HudSkin.draw_sprite(self, "B21" if ok else "B22", Rect2((ns[0] as Vector2) - Vector2(r, r) * breathe, Vector2(r, r) * 2.0 * breathe),
-				Color(col.lightened(0.2), 0.9) if ok else Color.WHITE)
+		ts = (_node_screen(target, cam)[0]) as Vector2
+		tr = _ring_px(target, cam)
+	if line.size() >= 2 and tr > 0.0:                # the ribbon stops at the target's ring (the head touches it)
+		var cut := PackedVector2Array([line[0]])
+		for i in range(1, line.size()):
+			if line[i].distance_to(ts) > tr + 2.0 * s:
+				cut.append(line[i])
+			else:
+				var a2: Vector2 = cut[-1]
+				var d := (line[i] - a2)
+				var t0 := 0.0
+				var t1 := 1.0
+				for k in range(18):                    # bisect the ring crossing
+					var tm := (t0 + t1) / 2.0
+					if (a2 + d * tm).distance_to(ts) > tr + 2.0 * s:
+						t0 = tm
+					else:
+						t1 = tm
+				cut.append(a2 + d * t0)
+				break
+		line = cut
+	if line.size() >= 2:
+		NodeNoir.ribbon(self, line, col, s, _t, ok)
+	if tr > 0.0:
+		if target != _lock_id:
+			_lock_id = target
+			_lock_t = _t
+		NodeNoir.target_hex(self, ts, tr, col, s, _t, "", (_t - _lock_t) / 0.28)
+		var txt := str(route.get("label", ""))
+		if txt != "":
+			NodeNoir.pill(self, ts + Vector2(0, -tr - 16.0 * s), txt, col, Hud.UI_FONT, maxi(int(15 * s), 13), s,
+					HudNoir.INK)
+
+
+func _ring_px(id: int, cam: Camera3D) -> float:
+	## The send ring's radius on screen (main.ring_radius: around the platform, never under Rules.SEND_RING_PT across).
+	var c: Vector3 = sim.nodes[id]["pos"]
+	var rr: float = main.ring_radius(id) if main.has_method("ring_radius") else Rules.R * 1.15
+	return cam.unproject_position(c + cam.global_transform.basis.x * rr).distance_to(cam.unproject_position(c))
 
 
 # ------------------------------------------------------------------ shared helpers (SkillDock's pattern)
@@ -608,11 +650,30 @@ func _neon(cell: int, c: Vector2, R: float, mod: Color) -> void:
 			var kb := 2.0 * NT_R / pl.z                           # texture px per source px
 			var sq := CHIP_SQUASH if cell == NT_CHIP else 1.0
 			draw_texture_rect(t, Rect2(c - Vector2(pl.x, pl.y * sq) * kk, t.get_size() * kk / kb), false, mod)
+			_noir_glyph(cell, c, kk, mod)
 			return
 	var k := R / NT_R
 	var sz := Vector2(NT_W, NT_H) * k
 	draw_texture_rect_region(neon_atlas(Rules.seat_color(human)), Rect2(c - Vector2(NT_W / 2.0, NT_CY) * k, sz),
 			Rect2(cell * NT_W, 0, NT_W, NT_H), mod)
+
+
+func _noir_glyph(cell: int, c: Vector2, kk: float, mod: Color) -> void:
+	## GMN-1's sign and chip carry no glyph (Daniele: "last stand alert lacks the !", "upgrade has no symbol"): the "!" in the
+	## sign's neon triangle (its centre ~64 source px above the plate's), the up arrow on the chip's stud.
+	if cell == NT_CHIP:
+		var r := 24.0 * kk
+		var pts := PackedVector2Array([c + Vector2(-r, r * 0.35), c + Vector2(0, -r * 0.55), c + Vector2(r, r * 0.35)])
+		draw_polyline(pts, Color(0, 0, 0, 0.6 * mod.a), 9.0 * kk, true)
+		draw_polyline(pts, Color(Rules.seat_color(human).lerp(Color.WHITE, 0.55), mod.a), 5.5 * kk, true)
+		return
+	if cell > NT_GREY:
+		return
+	var tc := c + Vector2(0, -64.0 * kk)
+	var ink := Color(1, 1, 1, mod.a) if cell != NT_GREY else Color(0.85, 0.88, 0.92, mod.a)
+	draw_line(tc + Vector2(0, -11.0 * kk), tc + Vector2(0, 3.0 * kk), Color(0, 0, 0, 0.55 * mod.a), 7.5 * kk, true)
+	draw_line(tc + Vector2(0, -11.0 * kk), tc + Vector2(0, 3.0 * kk), ink, 4.5 * kk, true)
+	draw_circle(tc + Vector2(0, 9.5 * kk), 3.2 * kk, ink)
 
 
 func _pulse_ring(c: Vector2, R: float, col: Color, pk: Array, cell := NT_TUBE) -> void:
@@ -638,15 +699,17 @@ func _draw_relay_cues(cam: Camera3D) -> void:
 		var bs := RelayView.button_screen(cam, main.vis, id)   # RELAY V2: the glow and the cue sit on the button
 		if not bs.is_empty():
 			ns = bs
-		if ready:                                      # a ready glow round the button (Hud.RELAY_ACCENT)
-			var a := 0.5 + 0.5 * sin(_t * 3.0)
-			draw_arc(ns[0], float(ns[1]) + 5.0 * ui_scale, 0.0, TAU, 32, Color(Hud.RELAY_ACCENT, 0.55 * a), 2.5 * ui_scale, true)
-		if float(_relay_cue_t.get(id, 0.0)) > 0.0:      # the first few times: spell it out
-			var txt := "DOUBLE-TAP TO SWITCH"
-			var f := int(13 * ui_scale)
-			var sz := Hud.UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
-			var p: Vector2 = ns[0] + Vector2(-sz.x / 2.0, -float(ns[1]) - 16.0 * ui_scale)
-			_label(p, txt, Hud.RELAY_ACCENT, 13)
+		if ready:                                      # ui-node: a neon ring breathing round the button (Hud.RELAY_ACCENT)
+			var a := 0.55 + 0.45 * sin(_t * 3.0)
+			var rp := PackedVector2Array()
+			for k in range(41):
+				rp.append((ns[0] as Vector2) + Vector2.from_angle(TAU * k / 40.0) * (float(ns[1]) + 5.0 * ui_scale))
+			if not NodeNoir.sprite(self, "node_relay_ring", ns[0], Vector2.ONE * (float(ns[1]) + 5.0 * ui_scale) * 2.0, Color(Hud.RELAY_ACCENT, a), 0.0, NodeNoir.floor_k(self)):
+				NodeNoir.neon(self, rp, Hud.RELAY_ACCENT, 2.2 * ui_scale, a, 0.6 + 0.4 * a)
+		if float(_relay_cue_t.get(id, 0.0)) > 0.0:      # the first few times: spell it out, in a pill (was 13 px loose text)
+			var f := maxi(int(14 * ui_scale), 13)
+			NodeNoir.pill(self, (ns[0] as Vector2) + Vector2(0, -float(ns[1]) - 18.0 * ui_scale), "DOUBLE-TAP TO SWITCH",
+					Hud.RELAY_ACCENT, Hud.UI_FONT, f, ui_scale)
 
 
 # ------------------------------------------------------------------ monster launch reach / drag
