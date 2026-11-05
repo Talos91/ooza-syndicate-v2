@@ -1715,7 +1715,7 @@ func step(dt: float) -> void:
 	_check_handovers()                                # (an owner at zero hands over before producing again)
 	_catchup = catchup_sides()                        # CATCH-UP: who trails, from this step's node count
 	for n in nodes:                                   # production (vat nodes only), up to the cap
-		if n["owner"] != "" and has_vat(n) and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11)
+		if n["owner"] != "" and (has_vat(n) or (n["structure"] == "machinegoon" and Rules.GOOGATLING_VAT_PROD > 0.0)) and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11); GOOGATLING_VAT_PROD (off): a Googatling also producing
 			_produce(n, dt)
 		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and has_vat(n) and not collapsed.get(n["id"], false) 				and n["units"] < float(n.get("regen_cap", Rules.NEUTRAL_UNITS.get(n["tier"], 0))):   # (TUTORIAL: "regen_cap" - a staged node regrows only to that)
 			n["units"] = minf(float(n.get("regen_cap", Rules.NEUTRAL_UNITS[n["tier"]])), n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)

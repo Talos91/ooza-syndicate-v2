@@ -1631,6 +1631,17 @@ func _rules_0_18_10() -> void:
 	check(absf(kills[0] + kills[1] + kills[2] + kills[3] - (10.0 + gat_r * 4.0)) < 0.3, "every kill is paid from the stock (%.2f)" % (kills[0] + kills[1] + kills[2] + kills[3]))
 	s._capture(gf, "B", 5.0)
 	check(float(gf["gat_stock"]) == 0.0, "a captured googatling's stock is emptied")
+	Rules.apply_balance("", {"GOOGATLING_VAT_PROD": 1.0})   # the Desk option "it also produces like a vat" (off by default)
+	s = _tp()
+	var gv: Dictionary = s.nodes[1]
+	gv["owner"] = "A"
+	gv["structure"] = "machinegoon"
+	gv["tier"] = 1
+	gv["units"] = 20.0
+	for i in range(int(10.0 / 0.05)):
+		s.step(0.05)
+	check(gv["units"] > 20.0 + Rules.PROD[1] * 9.0 and float(gv["gat_stock"]) > 0.0, "GOOGATLING_VAT_PROD 1.0: it also grows its garrison like a vat (%.1f)" % gv["units"])
+	Rules.apply_balance("", {})
 	# ---------------------------------------------------------------- laser: 19 per 2 s burst, 2 s recharge, 12 m
 	check(Rules.LASER_KILL == 96.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
 			"laser numbers: 19 shown per 2 s burst (-40 %, Daniele 2026-09-28), 2 s recharge, 12 m, cost 40")
