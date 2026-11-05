@@ -2,6 +2,9 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto11** - 2026-11-05 (proto-r, staging/proto/): R-02 Gate: the hub's speed bridges mirror left / right (both tops flow
+  into the hub, both bottoms out), per Daniele's proto10 check. Map file only.
+
 - **0.23.15-proto10** - 2026-11-05 (proto-r, staging/proto/): R-11 Pinwheel B corrected to Daniele's sketch; speed / slow curves: the
   curve pieces between speed decks now push lines (Sim conveyor reads the curve) and show running chevrons. test_net still skipped on the
   proto line (proto picker vs its legacy roster).
