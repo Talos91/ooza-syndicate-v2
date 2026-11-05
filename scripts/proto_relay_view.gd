@@ -343,17 +343,55 @@ func _v3_platforms() -> void:
 		var plat = vis[n["id"]].get("platform")
 		if not plat is Node3D or not is_instance_valid(plat):
 			continue
-		var ring := str(n["relay"]) == "rotation"
+		var kind := str(n["relay"])
+		var ring := kind == "rotation"
 		if ring and not _kit("Relay_Node_Ring_v3"):
 			continue
 		if not ring:
 			for ch in (plat as Node).get_children():
 				if ch is Node3D:
 					(ch as Node3D).visible = false
-		var p := MapBuilder.piece("Relay_Node_Ring_v3" if ring else "Platform_Relay_v3")
+		_v3_relay_models(n, plat)
+		if kind == "tilt" and _r.get(n["id"], {}).has("v3"):
+			continue                                  # (Relay_Tilt_v3 carries its own base and top)
+		var nest := "Relay_Lift_Platform_v3" if kind == "lift" and _kit("Relay_Lift_Platform_v3") else "Platform_Relay_v3"
+		var p := MapBuilder.piece("Relay_Node_Ring_v3" if ring else nest)
 		p.name = "Platform_Relay_v3_%d" % n["id"]
 		(plat as Node).add_child(p)
 		_v3_plats[n["id"]] = p
+
+
+func _v3_relay_models(n: Dictionary, plat: Node3D) -> void:
+	## 2026-11-05 (Daniele: "create all relay model that are missing for the new relays"): the relays-4.0 pieces for the
+	## launcher (Relay_Launcher_v3: Turret aims, Arm throws), the lift (Relay_Lift_Base_v3 stays, the raised platform is
+	## Relay_Lift_Platform_v3 nested in the node's own platform) and the tilt (Relay_Tilt_v3: Top tips, Dial points at the
+	## next exit). Each joins the node's parts, so it falls with it (Fx._collapse).
+	var id: int = n["id"]
+	if not _r.has(id):
+		return
+	var r: Dictionary = _r[id]
+	var nm: String = {"launcher": "Relay_Launcher_v3", "lift": "Relay_Lift_Base_v3", "tilt": "Relay_Tilt_v3"}.get(str(n["relay"]), "")
+	if nm == "" or not _kit(nm):
+		return
+	var p := MapBuilder.piece(nm)
+	p.name = "%s_%d" % [nm, id]
+	add_child(p)
+	p.position = n["pos"]
+	(vis[id]["parts"] as Array).append(p)
+	r["v3"] = p
+	match str(n["relay"]):
+		"launcher":
+			r["turret"] = p.find_child("Turret", true, false)
+			r["arm"] = p.find_child("Arm", true, false)
+			r["swing"] = 0.0
+			(r["pad"] as Node3D).visible = false
+		"lift":
+			(r["lift"]["piston"] as Node3D).visible = false
+		"tilt":
+			var top = p.find_child("Top", true, false)
+			r["top"] = top
+			r["top_rest"] = (top as Node3D).transform if top is Node3D else Transform3D.IDENTITY
+			r["dial"] = p.find_child("Dial", true, false)
 
 
 func _deck_ends(ei: int) -> Array:
@@ -951,7 +989,7 @@ func _launcher(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 	var tgt: int = sim.launcher_aim(id)
 	var arc: MultiMeshInstance3D = r["arc"]
 	var pad: MeshInstance3D = r["pad"]
-	pad.visible = not gone
+	pad.visible = not gone and not r.has("v3")
 	var armed := phase == "moving"
 	var locked := phase != ""
 	if tgt != int(r["aim"]):
@@ -996,6 +1034,20 @@ func _launcher(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 	else:
 		pm.albedo_color = Rules.RELAY_GHOST_COLORS["launcher"]
 		pm.emission = Rules.RELAY_GHOST_COLORS["launcher"]
+	if r.has("v3"):                                   # the relays-4.0 launcher: turret aims, arm throws on each launch
+		if kick > 0.75 and float(r["swing"]) < 0.5:
+			r["swing"] = 1.0
+		r["swing"] = maxf(0.0, float(r["swing"]) - _dt * 1.4)
+		var tu = r.get("turret")
+		if tu is Node3D and tgt >= 0 and not misfire:
+			var to3: Vector3 = sim.nodes[tgt]["pos"]
+			(tu as Node3D).rotation.y = lerp_angle((tu as Node3D).rotation.y,
+					Rules.heading(((to3 - (n["pos"] as Vector3)) * Vector3(1, 0, 1)).normalized()), minf(1.0, _dt * 6.0))
+		var am = r.get("arm")
+		if am is Node3D:                               # Blender rot.y rest -12 / fire 125 deg = Godot rotation.z -angle
+			var sw := clampf(float(r["swing"]) * 1.6, 0.0, 1.0)
+			(am as Node3D).rotation.z = lerpf(deg_to_rad(12.0), deg_to_rad(-125.0), sw * sw * (3.0 - 2.0 * sw))
+		(r["v3"] as Node3D).rotation = Vector3(0.12 * sin(sim.time * 9.0), 0.0, 0.12 * cos(sim.time * 7.0)) if misfire and not gone else Vector3.ZERO
 	if misfire:
 		arc.visible = false                           # (no aim: the throws go anywhere)
 	var rings: Dictionary = r["rings"]
@@ -1215,6 +1267,16 @@ func _tilt(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink: boo
 				var t: Transform3D = base[part]
 				var rot := Basis(axis, angle)
 				(part as Node3D).transform = Transform3D(rot * t.basis, c + rot * (t.origin - c))
+	if r.has("v3") and not gone:                      # Relay_Tilt_v3: the Top tips about the platform centre (its
+		var tt = r.get("top")                         # origin), the Dial's arrow points at the next exit
+		if tt is Node3D:
+			var rest: Transform3D = r["top_rest"]
+			var rb := Basis(axis, angle)
+			(tt as Node3D).transform = Transform3D(rb * rest.basis, rb * rest.origin)
+		var dial = r.get("dial")
+		if dial is Node3D and next >= 0:
+			var want := Rules.heading(((sim.nodes[next]["pos"] as Vector3) - c) * Vector3(1, 0, 1))
+			(dial as Node3D).rotation.y = lerp_angle((dial as Node3D).rotation.y, want, minf(1.0, _dt * 5.0))
 	for x in r["strips"]:
 		var mi: MeshInstance3D = r["strips"][x]
 		var lit := int(x) == tipping
