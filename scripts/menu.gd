@@ -2811,7 +2811,7 @@ func _army_tile(tf: String, pos: Vector2, dims: Vector2) -> void:
 	art.size = Vector2(hs, hs)
 	b.add_child(art)
 	var n := UiKit.label(self, UiKit.NAMES[tf], 15, UiKit.accent(tf) if picked else UiKit.INK, true)
-	var lh := n.get_minimum_size().y + (UiKit.line_h(self, 11, true) if tf == faction else 0.0)
+	var lh := n.get_minimum_size().y
 	var es := n.get_minimum_size().y if with_em else 0.0
 	if with_em:
 		b.add_child(UiKit.emblem_node(tf, es, Vector2(8.0 + hs + 6.0, (dims.y - lh) / 2.0)))   # the race emblem before the name
@@ -2820,10 +2820,6 @@ func _army_tile(tf: String, pos: Vector2, dims: Vector2) -> void:
 	n.clip_text = true
 	n.size = Vector2(dims.x - tx - 6.0, n.get_minimum_size().y)
 	b.add_child(n)
-	if tf == faction:                                   # the faction you play
-		var you := UiKit.label(self, "YOU", 11, UiKit.STAR, true, 2)
-		you.position = n.position + Vector2(0, n.get_minimum_size().y)
-		b.add_child(you)
 	b.tooltip_text = UiKit.TAGS[tf]
 
 
@@ -3436,11 +3432,13 @@ func _customize_body(r: Rect2) -> void:
 	# Daniele 2026-11-05: back to rail | stage | looks - the rail shows each category as its MODEL (the default, or the
 	# look you wear), all seven at once; the looks column shows every look; nothing pages or scrolls
 	var rail_w := _ward_rail(Vector2(x, top), h, cat, played)
-	var looks_w := floorf(maxf(w * 0.27, 300.0))
+	# round 3d (Daniele 2026-11-05: "the preview box is too big and can be halved"): a narrow stage; the looks get the
+	# room - every look as its model picture, the look's line and EQUIP / UNLOCK under them
+	var pv_w := floorf(w * 0.26)
 	var pv_x := x + rail_w + 12.0
-	var pv_w := w - rail_w - looks_w - 24.0
 	_ward_stage(Vector2(pv_x, top), Vector2(pv_w, h), cat, sel, equipped)
-	_ward_looks_grid(Vector2(pv_x + pv_w + 12.0, top), Vector2(looks_w, h), cat, looks, sel, equipped)
+	var lx := pv_x + pv_w + 12.0
+	_ward_looks_grid(Vector2(lx, top), Vector2(x + w - lx, h), cat, looks, sel, equipped)
 
 
 func _ward_factions(y: float) -> void:
@@ -3476,14 +3474,9 @@ func _ward_rail(pos: Vector2, h: float, cat: String, played: Dictionary) -> floa
 	## (NEON / GOO). All seven fit in a grid of square tiles (2 or 3 columns); the open one lit. Returns the width used.
 	var gap := 6.0
 	var n := WARDROBE_CATS.size()
-	var cols := 2
+	var cols := 3                                       # 3 x 3: the biggest pictures the height allows
 	var rows := ceili(n / float(cols))
-	var cell := floorf((h - gap * (rows - 1)) / rows)
-	if cell < UiKit.tap_h(self, 48.0):                  # a short screen: three columns of smaller tiles
-		cols = 3
-		rows = ceili(n / float(cols))
-		cell = floorf((h - gap * (rows - 1)) / rows)
-	cell = minf(cell, UiKit.tap_h(self, 44.0) * 2.0)
+	var cell := floorf(minf((h - gap * (rows - 1)) / rows, UiKit.tap_h(self, 44.0) * 2.2))
 	for i in range(n):
 		var cc: String = WARDROBE_CATS[i]
 		var now := ArmyPresets.core_territory if cc == "territory" else str(played[cc])
@@ -3533,40 +3526,31 @@ func _ward_price(item: String) -> String:
 
 
 func _ward_stage(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped: String) -> void:
-	## The look on preview: "EMBER / VAT", its name and state, the large turning model (TERRITORY: what it does),
-	## what the look is or how to unlock it, the tier chips (vat T1-T4, Machinegoon T1-T3) and EQUIP / UNLOCK.
+	## The look on preview (round 3d, a narrow column): "VEX / VAT" and the look's name, the turning model (TERRITORY:
+	## its word) and the tier chips (vat T1-T4, Machinegoon T1-T3) under it. The look's line and EQUIP / UNLOCK sit
+	## under the looks (_ward_looks_grid).
 	var acc := UiKit.accent(_army)
 	UiKit.panel(self, pos, dims, _army)
-	var st := _ward_state(cat, sel, equipped)
-	var ix := pos.x + 18.0
-	var iw := dims.x - 36.0
-	var y := pos.y + 14.0
-	var k := UiKit.label(self, ("ALL FACTIONS" if cat == "territory" else UiKit.NAMES[_army]) + " / " + COSMETIC_FAMILY_LABEL[cat], 12, acc, true, 3)
+	var ix := pos.x + 14.0
+	var iw := dims.x - 28.0
+	var y := pos.y + 10.0
+	var kt: String = ("ALL FACTIONS" if cat == "territory" else UiKit.NAMES[_army]) + " / " + COSMETIC_FAMILY_LABEL[cat]
+	var ksp := 2 if UiKit.text_w(self, kt, 12, true) + kt.length() * 2.0 <= iw else 0
+	var k := UiKit.label(self, kt, 12, acc, true, ksp)
+	k.clip_text = true
+	k.size = Vector2(iw, UiKit.line_h(self, 12, true))
 	_shell_add(k, Vector2(ix, y))
 	y += UiKit.line_h(self, 12, true)
-	_shell_add(UiKit.label(self, _ward_look_name(cat, sel), 26, UiKit.INK, true), Vector2(ix - 1.0, y))
-	# the state badge, top right
-	var badge := "LOCKED" if st["locked"] else ("EQUIPPED" if st["equipped"] else "ON PREVIEW")
-	var bcol: Color = LOCK_COL if st["locked"] else (acc if st["equipped"] else UiKit.MUTED)
-	var bw := UiKit.text_w(self, badge, 12, true) + badge.length() * 2.0 + 26.0
-	var bl := UiKit.label(self, badge, 12, bcol, true, 2)
-	var bhh := bl.get_minimum_size().y + 10.0
-	var bp := Panel.new()
-	bp.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bp.add_theme_stylebox_override("panel", UiKit.sb(Color(UiKit.BASE, 0.92), Color(bcol, 0.8), 1, 5))
-	bp.size = Vector2(bw, bhh)
-	_shell_add(bp, Vector2(pos.x + dims.x - 18.0 - bw, pos.y + 16.0))
-	bl.position = Vector2(12.0, 5.0)
-	bp.add_child(bl)
-	y += UiKit.line_h(self, 26, true) + 8.0
-	# the foot: the look's line, then the tier chips and the action
-	var detail := _ward_detail(cat, sel, st)
-	var dh := UiKit.text_h(self, detail, 12, iw)       # Daniele 2026-11-05: a small line, the stage keeps the room
-	var ah := UiKit.tap_h(self, 44.0)
-	var ay := pos.y + dims.y - 12.0 - ah
-	var dy := ay - 6.0 - dh
-	var vh := dy - 10.0 - y
-	# the stage: a dark well with the accent's glow, the model turning in it
+	var nm := _ward_look_name(cat, sel)
+	var nfs := 22.0
+	while nfs > 13.0 and UiKit.text_w(self, nm, nfs, true) > iw:
+		nfs -= 1.0
+	_shell_add(UiKit.label(self, nm, nfs, UiKit.INK, true), Vector2(ix - 1.0, y))
+	y += UiKit.line_h(self, 22, true) + 4.0
+	var tiers := {"vat": 4, "machinegoon": 3}.get(cat, 0) as int
+	var ch_h := UiKit.tap_h(self, 44.0)
+	var foot := (ch_h + 10.0) if tiers > 0 else 0.0
+	var vh := pos.y + dims.y - 10.0 - foot - y
 	content.add_child(UiKit.rect(Vector2(ix, y), Vector2(iw, vh), Color(UiKit.BASE, 0.75)))
 	var g := TextureRect.new()
 	var grad := Gradient.new()
@@ -3583,63 +3567,52 @@ func _ward_stage(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped
 	g.size = Vector2(iw, vh)
 	_shell_add(g, Vector2(ix, y))
 	var pv: WardrobePreview = null
-	var tiers := {"vat": 4, "machinegoon": 3}.get(cat, 0) as int
 	if cat == "territory":
-		var big := UiKit.label(self, TERRITORY_LOOKS[sel][0], 64, acc, true, 6)
+		var big := UiKit.label(self, TERRITORY_LOOKS[sel][0], 44, acc, true, 4)
 		big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		big.size = Vector2(iw, big.get_minimum_size().y)
-		var tl := UiKit.label(self, "HOW THE GROUND YOU HOLD IS DRAWN", 13, UiKit.MUTED, true, 2)
-		tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		tl.custom_minimum_size = Vector2(iw - 24.0, 0)
-		tl.size = Vector2(iw - 24.0, UiKit.text_h(self, tl.text, 13, iw - 24.0 - tl.text.length() * 2.0, true))
-		var bh2 := big.size.y + tl.size.y + 6.0
-		_shell_add(big, Vector2(ix, y + (vh - bh2) / 2.0))
-		_shell_add(tl, Vector2(ix + 12.0, y + (vh - bh2) / 2.0 + big.size.y + 6.0))
+		_shell_add(big, Vector2(ix, y + (vh - big.size.y) / 2.0))
 	else:
 		var tier := clampi(_ward_tier, 1, tiers) if tiers > 0 else 0
 		pv = WardrobePreview.make(cat, sel, _army, tier, Vector2(iw, vh))
 		_shell_add(pv, Vector2(ix, y))
-	var dl := UiKit.label(self, detail, 12, LOCK_COL if st["locked"] else UiKit.MUTED)
-	dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	dl.custom_minimum_size = Vector2(iw, 0)
-	_shell_add(dl, Vector2(ix, dy))
-	# tier chips (in place: the preview switches its model, the page is not rebuilt)
-	if tiers > 0:
+	if tiers > 0:                                       # in place: the preview switches its model, no rebuild
 		var chips := []
-		var cx := ix
-		var tl := UiKit.label(self, "TIER", 12, UiKit.MUTED, true, 2)
-		_shell_add(tl, Vector2(cx, ay + (ah - tl.get_minimum_size().y) / 2.0))
-		cx += UiKit.text_w(self, "TIER", 12, true) + 16.0
+		var cgap := 6.0
+		var cw := floorf((iw - cgap * (tiers - 1)) / tiers)
+		var cy := pos.y + dims.y - 10.0 - ch_h
 		for t in range(1, tiers + 1):
 			var tt: int = t
-			var ch := UiKit.chip(self, "T%d" % t, Vector2(cx, ay), Callable(), _army, t == clampi(_ward_tier, 1, tiers))
-			ch.size.y = ah
+			var ch := UiKit.btn(self, "T%d" % t, Vector2(ix + (t - 1) * (cw + cgap), cy), Vector2(cw, 44), Callable(),
+					"selected" if t == clampi(_ward_tier, 1, tiers) else "secondary", _army, 14)
+			ch.tooltip_text = "TIER %d" % t
 			chips.append(ch)
 			ch.pressed.connect(func():
 				_ward_tier = tt
 				pv.set_tier(tt)
 				for i in range(chips.size()):
 					UiKit.style_button(chips[i], "selected" if i + 1 == tt else "secondary", _army))
-			cx += ch.size.x + 8.0
-	# the action
+
+
+func _ward_action(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped: String) -> void:
+	## EQUIP / EQUIPPED / UNLOCK / LOCKED for the look on preview.
+	var acc := UiKit.accent(_army)
+	var st := _ward_state(cat, sel, equipped)
 	var item := "" if cat == "territory" else Progression.cosmetic_item(cat, sel, _army)
-	var aw := minf(240.0, iw * 0.42)
-	var ap := Vector2(ix + iw - aw, ay)
 	if st["equipped"]:
-		var eb := UiKit.btn(self, "EQUIPPED", ap, Vector2(aw, ah), Callable(), "selected", _army, 16)
+		var eb := UiKit.btn(self, "EQUIPPED", pos, dims, Callable(), "selected", _army, 16)
 		eb.disabled = true
 		eb.add_theme_stylebox_override("disabled", eb.get_theme_stylebox("normal"))
 		eb.add_theme_color_override("font_disabled_color", acc)
 	elif st["locked"] and not Progression.price(item).is_empty():   # PROGRESSION: UNLOCK where it can be bought
-		UiKit.btn(self, "UNLOCK", ap, Vector2(aw, ah), func():
+		UiKit.btn(self, "UNLOCK", pos, dims, func():
 			_buy_prompt(item, _ward_look_name(cat, sel).to_upper(), "A look only: tier read, footprint and colour stay the same.",
 					func(): show_cosmetics()), "primary", _army, 16)
 	elif st["locked"]:
-		var lb := UiKit.btn(self, "LOCKED", ap, Vector2(aw, ah), Callable(), "secondary", _army, 16)
+		var lb := UiKit.btn(self, "LOCKED", pos, dims, Callable(), "secondary", _army, 16)
 		lb.disabled = true
 	else:
-		UiKit.btn(self, "EQUIP", ap, Vector2(aw, ah), func():
+		UiKit.btn(self, "EQUIP", pos, dims, func():
 			if cat == "territory":
 				ArmyPresets.set_core_territory(sel)
 			else:
@@ -3653,7 +3626,7 @@ func _ward_detail(cat: String, sel: String, st: Dictionary) -> String:
 	## The stage's line: what the look does (TERRITORY), how to unlock it, or what it is - and the no-storage warning.
 	var out := ""
 	if cat == "territory":
-		out = TERRITORY_LOOKS[sel][1] + " One pick for every faction."
+		out = TERRITORY_LOOKS[sel][1]                  # (the stage says ALL FACTIONS)
 	elif st["locked"] or not Progression.owns(Progression.cosmetic_item(cat, sel, _army)) and str(st["line"]) != "":
 		var item := Progression.cosmetic_item(cat, sel, _army)
 		out = "UNLOCK: " + _cosmetic_path(cat, sel)
@@ -3676,16 +3649,18 @@ func _ward_detail(cat: String, sel: String, st: Dictionary) -> String:
 
 
 func _ward_looks_grid(pos: Vector2, dims: Vector2, cat: String, looks: Array, sel: String, equipped: String) -> void:
-	## Every look of the category at once (ARMIES SPLIT, no pages): a grid sized to fit; the one on preview lit, the
-	## equipped one with a check, a locked one marked. Tap: preview it (EQUIP is on the stage).
+	## Every look of the category at once (no pages): each its model picture over its name (TERRITORY: its word); the
+	## one on preview lit, the equipped one with a check, a locked one dimmed with LOCKED. Tap: preview it. Under the
+	## grid: the look's line (what it is / how to unlock it) and EQUIP / UNLOCK.
 	var acc := UiKit.accent(_army)
-	var gap := 6.0
-	var th := UiKit.tap_h(self, 44.0)
-	var rows := maxi(1, int((dims.y + gap) / (th + gap)))
-	var cols := maxi(1, ceili(looks.size() / float(rows)))
-	rows = ceili(looks.size() / float(cols))
-	th = minf(floorf((dims.y - gap * (rows - 1)) / rows), th * 1.6)
+	var gap := 8.0
+	var ah := UiKit.tap_h(self, 44.0)
+	var gh := dims.y - ah - 10.0
+	var rows := 1 if looks.size() <= 4 else 2
+	var cols := ceili(looks.size() / float(rows))
 	var tw := floorf((dims.x - gap * (cols - 1)) / cols)
+	var th := floorf((gh - gap * (rows - 1)) / rows)
+	var nl := UiKit.line_h(self, 13, true)
 	for i in range(looks.size()):
 		var lid: String = looks[i]
 		var s := _ward_state(cat, lid, equipped)
@@ -3693,25 +3668,58 @@ func _ward_looks_grid(pos: Vector2, dims: Vector2, cat: String, looks: Array, se
 			_ward_sel[cat] = lid
 			show_cosmetics(), "selected" if lid == sel else "secondary", _army)
 		var nm := _ward_look_name(cat, lid)
-		var fs := 14.0
-		while fs > 10.0 and UiKit.text_w(self, nm, fs, true) > tw - 16.0:
-			fs -= 1.0
-		var two := b.size.y >= UiKit.line_h(self, fs, true) + UiKit.line_h(self, 11, true) + 8.0
-		var hh := UiKit.line_h(self, fs, true) + (UiKit.line_h(self, 11, true) if two else 0.0)
-		var n := UiKit.label(self, nm, fs, UiKit.MUTED if s["locked"] else UiKit.INK, true)
-		n.position = Vector2(8.0, (b.size.y - hh) / 2.0)
+		var fs := 13.0
+		while fs > 9.0 and UiKit.text_w(self, nm, fs, true) > tw - 10.0:
+			fs -= 0.5
+		var ps := minf(th - nl - 14.0, tw - 10.0)
+		if cat == "territory":
+			var wl := UiKit.label(self, TERRITORY_LOOKS[lid][0], 24, acc if lid == equipped else UiKit.INK, true, 2)
+			wl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			wl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			wl.size = Vector2(tw, th)
+			wl.position = Vector2.ZERO
+			b.add_child(wl)
+			if s["equipped"]:
+				_check(b, Vector2(tw - UiKit.line_h(self, 12, true) * 0.75 - 6.0, 6.0), UiKit.line_h(self, 12, true) * 0.75, acc)
+			continue
+		else:
+			var pic := LookThumbs.rect(cat, lid, _army, Vector2(ps, ps))
+			pic.position = Vector2((tw - ps) / 2.0, 6.0)
+			if s["locked"]:
+				pic.modulate = Color(1, 1, 1, 0.45)
+			b.add_child(pic)
+		var n := UiKit.label(self, nm, fs, UiKit.MUTED if s["locked"] else (acc if lid == sel else UiKit.INK), true)
+		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		n.position = Vector2(4.0, th - nl - 6.0)
+		n.size = Vector2(tw - 8.0, nl)
 		n.clip_text = true
-		n.size = Vector2(tw - 16.0, UiKit.line_h(self, fs, true))
 		b.add_child(n)
-		if two:
-			var line: String = "EQUIPPED" if s["equipped"] else ("LOCKED" if s["locked"] else "")
-			if line != "":
-				var sl := UiKit.label(self, line, 11, acc if s["equipped"] else s["col"], true, 1)
-				sl.position = n.position + Vector2(0, UiKit.line_h(self, fs, true))
-				b.add_child(sl)
-		elif s["equipped"]:
-			var cs := UiKit.line_h(self, 12, true) * 0.75
+		var cs := UiKit.line_h(self, 12, true) * 0.75
+		if s["equipped"]:
 			_check(b, Vector2(tw - cs - 6.0, 6.0), cs, acc)
+		elif s["locked"]:
+			var lk := UiKit.label(self, "LOCKED", 10, LOCK_COL, true, 1)
+			lk.position = Vector2(6.0, 4.0)
+			b.add_child(lk)
+	# the foot: the look's line, then its action
+	var st := _ward_state(cat, sel, equipped)
+	var aw := floorf(dims.x * 0.34)
+	var ay := pos.y + dims.y - ah
+	var dw := dims.x - aw - 12.0
+	var plate := Panel.new()                           # a dark plate: the line reads over the backdrop
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.add_theme_stylebox_override("panel", UiKit.sb(Color(UiKit.BASE, 0.88), Color(UiKit.FRAME, 0.9), 1, 6))
+	plate.size = Vector2(dw, ah)
+	_shell_add(plate, Vector2(pos.x, ay))
+	dw -= 20.0
+	var dl := UiKit.label(self, _ward_detail(cat, sel, st), 12, LOCK_COL if st["locked"] else UiKit.MUTED)
+	dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dl.custom_minimum_size = Vector2(dw, 0)
+	dl.size = Vector2(dw, ah)
+	dl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dl.max_lines_visible = 2
+	_shell_add(dl, Vector2(pos.x + 10.0, ay))
+	_ward_action(Vector2(pos.x + dims.x - aw, ay), Vector2(aw, ah), cat, sel, equipped)
 
 
 func _ward_looks(pos: Vector2, dims: Vector2, cat: String, looks: Array, sel: String, equipped: String) -> void:

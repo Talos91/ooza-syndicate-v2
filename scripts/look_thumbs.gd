@@ -29,6 +29,8 @@ static func rect(family: String, id: String, faction: String, dims: Vector2) -> 
 	if not _waiting.has(key):
 		_waiting[key] = []
 		_queue.append([family, id, faction, key])
+		if key.begins_with("skins/"):
+			Cosmetics._ready(key)                        # every skin starts loading now, side by side
 	(_waiting[key] as Array).append(r)
 	_ensure_stage()
 	return r
@@ -69,7 +71,13 @@ func _process(_dt: float) -> void:
 	if _job.is_empty():
 		if _queue.is_empty():
 			return
-		_job = _queue.pop_front()
+		var pick := 0                                    # a look whose model is in first
+		for qi in range(_queue.size()):
+			var qk: String = _queue[qi][3]
+			if not qk.begins_with("skins/") or Cosmetics._ready(qk):
+				pick = qi
+				break
+		_job = _queue.pop_at(pick)
 		family = _job[0]
 		id = _job[1]
 		faction = _job[2]
