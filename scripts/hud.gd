@@ -953,7 +953,7 @@ func _badges(cam: Camera3D) -> bool:
 			var st := sim.relay_state_key(n, n["relay_index"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
-			what = "MGN%d" % n["tier"]
+			what = "GAT%d" % n["tier"]                   # GOOGATLING (was MGN, the Machinegoon)
 		else:
 			what = "T%d" % n["tier"]
 		# 0.20.13 (Daniele's 2v2 co-op playtest: "i sent troops to her node and except the count going up
@@ -1187,7 +1187,7 @@ func inspect(id: int, cam: Camera3D) -> void:
 			return
 		var tn: Dictionary = sim.nodes[inspector_id]
 		NodeNoir.tier_chip(inspector_tier, inspector_tier.size / 2.0, maxf(18.0 * ui_scale, card_px(12) / 0.72), int(tn["tier"]), inspector_col, UI_FONT, ui_scale,
-				"M%d" % tn["tier"] if tn["structure"] == "machinegoon" else ""))
+				"G%d" % tn["tier"] if tn["structure"] == "machinegoon" else ""))
 	head.add_child(inspector_tier)
 	inspector_units = Control.new()
 	inspector_units.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1222,8 +1222,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 	_refresh_inspector(cam)
 
 
-const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "MACHINEGOON", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
-const BUILD_LABEL := {"machinegoon": "MACHINEGOON", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machinegoon": "GOOGATLING", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
 const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
                                          # buttons / models of the relays") - distinct from the seat colour
 
@@ -1498,7 +1498,7 @@ class ActionWedge:
 			_text(str(ln[0]), Vector2(0, (float(i) - (lines.size() - 1) / 2.0) * gap), float(ln[1]), ln[2], maxw, min_fs)
 		_ci.draw_set_transform(Vector2.ZERO)
 
-	const SLICE_NAMES := {"MACHINEGOON": "GOON", "MONSTER HUB": "HUB"}   # Daniele 2026-11-05: short names on the slice only (the card keeps the full)
+	const SLICE_NAMES := {"GOOGATLING": "GATLING", "MONSTER HUB": "HUB"}   # Daniele 2026-11-05: short names on the slice only (the card keeps the full); GATLING = the Googatling (proposed 2026-11-06, Desk)
 
 	static func sector_for(span: float) -> String:
 		## GMN-2: "50" / "40" when the director's finished sector of that angle is in the game and fits a slice of `span`
@@ -1700,7 +1700,7 @@ func _inspector_actions(n: Dictionary) -> void:
 		if n["tier"] < 4 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
 		if "machinegoon" in n["buildable"] and shows("machinegoon"):
-			_add_action("MACHINEGOON", "MACHINEGOON", sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
+			_add_action("MACHINEGOON", BUILD_LABEL["machinegoon"], sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
 	elif n["structure"] == "machinegoon":
 		if n["tier"] < 3 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
@@ -2213,7 +2213,7 @@ func _structure_word(n: Dictionary) -> String:
 	if n["relay"] != "":
 		return "%s RELAY" % str(n["relay"]).to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else "")
 	if n["structure"] == "machinegoon":
-		return "MACHINEGOON"
+		return "GOOGATLING"
 	return STRUCT_LABEL.get(n["structure"], "VAT")
 
 
@@ -2249,8 +2249,9 @@ func _status_line(n: Dictionary, hidden_pop: bool) -> String:
 		return "MONSTER %s" % ("READY" if mr == "" else mr.to_upper())
 	if n["structure"] == "forge" and shows("forge_readout"):
 		return "+%d%% ATTACK · -%d%% DAMAGE" % [roundi(Rules.forge_bonus * 100.0), roundi((1.0 - 1.0 / Rules.FORGE_DEFENCE) * 100.0)]
-	if n["structure"] == "machinegoon":
-		return "NO PRODUCTION · FEED IT"
+	if n["structure"] == "machinegoon":                  # GOOGATLING (Daniele 2026-11-06): its goo stock and how fast it refills
+		var stock := float(n.get("gat_stock", 0.0))
+		return "STOCK %d/%d · +%.1f / s" % [Rules.shown(stock), Rules.shown(Sim.gat_cap(n)), Rules.shown_f(sim.gat_rate(n))] + (" · EMPTY" if stock < 0.5 * Rules.SCALE else "")
 	if Sim.has_vat(n):
 		var up := sim.upgrade_cost(n)
 		var prod := "+%.1f / s" % Rules.shown_f(sim.production(n))
@@ -2331,11 +2332,19 @@ func _draw_card_shields() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.MUTED)
 
 
+func gat_line(n: Dictionary) -> String:
+	## GOOGATLING readout (Daniele 2026-11-06): "stock 24/30 · +0.4/s · fires 1.6/s" at Alpha 11 scale; EMPTY while it trickles.
+	var stock := float(n.get("gat_stock", 0.0))
+	var line := "stock %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(stock), Rules.shown(Sim.gat_cap(n)),
+			Rules.shown_f(sim.gat_rate(n)), Rules.shown_f(Sim.gat_fire_rate(n))]
+	return line + (" · EMPTY" if stock < 0.5 * Rules.SCALE else "")
+
+
 func _structure_line(n: Dictionary) -> String:
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
 	if n["structure"] == "machinegoon":
-		return "MACHINEGOON T%d" % n["tier"]
+		return "GOOGATLING T%d" % n["tier"]
 	return "VAT T%d" % n["tier"]
 
 

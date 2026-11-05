@@ -142,6 +142,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"allies": {},           # seat -> allied troops stored here (GAME-RULES sec11; "units" is the owner's)
 			"arrivals": [],         # allied seats in the order their troops arrived (ownership tie-break)
 			"shot": {},             # laser / machinegoon fire for the fx: {"t", "target_horde", "kills", "pos"}
+			"gat_stock": 0.0,       # GOOGATLING (id "machinegoon"): goo stock = its ammo, sim units (Rules.GOOGATLING_*)
 			"monster_ready_t": 0.0, # monster hub: match time from which its next monster may launch
 			"hub_monster": -1,      # monster hub: id of its monster still out (-1: none)
 			"attachment": "",       # LEGACY mirror of "structure" for views not yet on Structures 2.1 (_sync_legacy)
@@ -347,7 +348,32 @@ func production(n: Dictionary) -> float:
 	return _base_production(n) * prod_mult(n)
 
 
+static func gat_cap(n: Dictionary) -> float:
+	## GOOGATLING: the most goo stock this node holds (its tier's Rules.GOOGATLING_CAP; 0 when no Googatling stands).
+	if n["structure"] != "machinegoon":
+		return 0.0
+	var t: int = clampi(int(n["tier"]), 1, 3)
+	return float(Rules.GOOGATLING_CAP.get(t, Rules.GOOGATLING_CAP.get(str(t), 0)))
+
+
+func gat_rate(n: Dictionary) -> float:
+	## GOOGATLING: goo stock made per second now (sim units): Rules.GOOGATLING_PROD x the same-tier vat's PROD x the faction's
+	## production stat (it keeps making stock during an upgrade, like a vat); 0 unowned or jammed by an Echo Split echo.
+	if n["owner"] == "" or n["structure"] != "machinegoon" or is_disrupted(n["id"]):
+		return 0.0
+	var t: int = clampi(int(n["tier"]), 1, 3)
+	return float(Rules.PROD[t]) * Rules.GOOGATLING_PROD * stat(n["owner"], "production")
+
+
+static func gat_fire_rate(n: Dictionary) -> float:
+	## GOOGATLING: stock fired per second while a target is in range (= kills/s before Anchor).
+	var t: int = clampi(int(n["tier"]), 1, 3)
+	return float(Rules.MACHINEGOON_RATE.get(t, Rules.MACHINEGOON_RATE.get(str(t), 8.0)))
+
+
 func _base_production(n: Dictionary) -> float:
+	if n["owner"] != "" and n["structure"] == "machinegoon" and Rules.GOOGATLING_VAT_PROD > 0.0:
+		return Rules.PROD[n["tier"]] * stat(n["owner"], "production") * Rules.GOOGATLING_VAT_PROD   # (off by default: no normal units)
 	if n["owner"] == "" or not has_vat(n):
 		return 0.0
 	var p: float = Rules.PROD[n["tier"]] * stat(n["owner"], "production")
@@ -443,7 +469,7 @@ func has_hub(seat: String) -> bool:
 	return false
 
 
-const STRUCTURE_NAMES := {"vat": "Vat", "machinegoon": "Machinegoon", "laser": "Laser tower", "forge": "Forge",
+const STRUCTURE_NAMES := {"vat": "Vat", "machinegoon": "Googatling", "laser": "Laser tower", "forge": "Forge",
 		"monster_hub": "Monster hub"}
 
 
@@ -469,7 +495,7 @@ func can_build(node_id: int, seat: String, kind: String) -> String:
 				return "A relay holds a Laser tower, a Forge or a Monster hub"
 			"special":
 				return "A special node holds only its vat"
-		return "A node holds a vat or a Machinegoon"
+		return "A node holds a vat or a Googatling"
 	if n["structure"] == kind:
 		return "A %s already stands here" % STRUCTURE_NAMES[kind]
 	if n["structure"] != "" and n["swap_cd"] > 0.0:
@@ -517,7 +543,7 @@ func can_upgrade(node_id: int, seat: String) -> String:
 			return "Vats stop at T3 - a T4 only stands where the map puts it"
 	elif st == "machinegoon":
 		if n["tier"] >= 3:
-			return "Machinegoon is already at max tier"
+			return "Googatling is already at max tier"
 	elif st == "":
 		return "Nothing to upgrade here"
 	else:
@@ -633,6 +659,7 @@ func _finish_build(n: Dictionary) -> void:
 		n["cannon_cd"] = 0.0
 		n["cannon_burst"] = 0.0
 		n["shot"] = {}
+		n["gat_stock"] = 0.0                           # GOOGATLING: a new one starts empty and fills
 		if st == "monster_hub":
 			n["monster_ready_t"] = time + Rules.MONSTER_COOLDOWN   # charges from the hub's completion
 	_sync_legacy(n)
@@ -699,9 +726,15 @@ func _step_structures(dt: float) -> void:
 
 
 func _fire_machinegoon(n: Dictionary, dt: float) -> void:
-	## One stream at the nearest enemy line with any part within MACHINEGOON_RANGE: single target, good against
-	## trickles, weak against big blobs. Jammed by an Echo Split echo like a vat.
+	## GOOGATLING (id "machinegoon", Daniele 2026-11-06): the node makes goo stock (gat_rate) up to gat_cap; one stream at the
+	## nearest enemy line with any part within MACHINEGOON_RANGE fires that stock at gat_fire_rate (one stock unit per kill)
+	## until it is empty, then each unit as soon as it is made (fire > production: production-bound in a long fight).
+	## Single target, good against trickles, weak against big blobs. Jammed by an Echo Split echo like a vat.
+	var cap := gat_cap(n)
+	n["gat_stock"] = clampf(float(n.get("gat_stock", 0.0)) + gat_rate(n) * dt, 0.0, cap)   # (a tier drop clamps it too)
 	if n["owner"] == "" or is_disrupted(n["id"]):
+		return
+	if float(n["gat_stock"]) <= 0.0001:
 		return
 	var targets := _hordes_in_range(n, Rules.MACHINEGOON_RANGE)
 	if targets.is_empty():
@@ -714,11 +747,14 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 		if d < best_d:
 			best_d = d
 			best = h
-	var kill: float = minf(float(Rules.MACHINEGOON_RATE.get(n["tier"], Rules.MACHINEGOON_RATE[1])) * dt * _cannon_mult(best), best["units"])   # Anchor halves these too (Daniele, 2026-09-27)
+	var fire: float = minf(gat_fire_rate(n) * dt, float(n["gat_stock"]))   # the stock caps the burst: empty = trickle
+	var mult := _cannon_mult(best)                                          # Anchor halves these too (Daniele, 2026-09-27)
+	var kill: float = minf(fire * mult, best["units"])
+	n["gat_stock"] = maxf(0.0, float(n["gat_stock"]) - (kill / mult if mult > 0.0 else fire))
 	var at := _hit_point(n, best, Rules.MACHINEGOON_RANGE)
 	var hid: int = best["id"]
 	_structure_kill(n, best, kill, "machinegoon")
-	n["shot"] = {"t": time, "target_horde": hid, "kills": kill, "pos": at}
+	n["shot"] = {"t": time, "target_horde": hid, "kills": kill, "pos": at, "trickle": fire < gat_fire_rate(n) * dt * 0.99}
 
 
 func _structure_kill(n: Dictionary, h: Dictionary, kill: float, why: String) -> void:
@@ -2571,6 +2607,7 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 			n["tier"] = maxi(1, n["tier"] - 1)
 		if n["structure"] == "monster_hub":
 			n["monster_ready_t"] = time + Rules.MONSTER_COOLDOWN   # the new owner's hub charges afresh
+		n["gat_stock"] = 0.0                           # GOOGATLING: a capture empties the goo stock (conservative)
 	var second_hub := _second_hub(n, seat)             # (asked before the node is the capturer's)
 	n["owner"] = seat
 	n["units"] = garrison

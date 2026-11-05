@@ -194,7 +194,7 @@ func _node_marks() -> void:
 		var ch := maxf(15.0 * s, float(hud.card_px(12)) / 0.72)   # its "T2" never under the phone's 12.5 pt floor
 		# on the top rim, clear of the count
 		NodeNoir.tier_chip(self, Vector2(r.get_center().x, r.position.y - ch * 0.3), ch, int(n["tier"]), col, Hud.UI_FONT, s,
-				"M%d" % n["tier"] if n["structure"] == "machinegoon" else "")
+				"G%d" % n["tier"] if n["structure"] == "machinegoon" else "")
 		if Sim.has_vat(n) and NodeNoir.shield_count(float(n["armour_cap"])) > 0:
 			var sh := maxf(11.0 * s, 10.0)
 			NodeNoir.shields_row(self, Vector2(r.get_center().x, r.end.y + sh * 0.5 + 2.0 * s), sh, float(n["armour"]),

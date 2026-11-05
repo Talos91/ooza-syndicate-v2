@@ -1555,6 +1555,7 @@ func _rules_0_18_10() -> void:
 		gn["structure"] = "machinegoon"
 		gn["tier"] = tier
 		gn["units"] = 20.0
+		gn["gat_stock"] = Sim.gat_cap(gn)              # GOOGATLING: a full stock fires at the full rate
 		s.nodes[0]["owner"] = "B"
 		s.nodes[0]["units"] = 300.0
 		var hb := s.send(0, 3, 1.0)                   # B's line comes at the machinegoon (0 -> 1 -> 3)
@@ -1568,6 +1569,68 @@ func _rules_0_18_10() -> void:
 		check(absf(killed - Rules.MACHINEGOON_RATE[tier]) < 0.3, "a T%d machinegoon kills %.1f a second (%.2f)" % [tier, Rules.MACHINEGOON_RATE[tier], killed])
 		check(int(gn["shot"].get("target_horde", -1)) == hb["id"] and float(gn["shot"]["kills"]) > 0.0, "its shot names the line it streams at (fx)")
 		check(absf(gn["units"] - u1) < 0.01, "the machinegoon node produces nothing")
+	# ---------------------------------------------------------------- GOOGATLING (Daniele 2026-11-06): stock, fire, trickle
+	check(Rules.GOOGATLING_PROD == 0.5 and Rules.GOOGATLING_VAT_PROD == 0.0 and Rules.GOOGATLING_CAP == {1: 150, 2: 300, 3: 600},
+			"googatling numbers: stock at 0.5x the same-tier vat, no normal units, caps 30 / 60 / 120 shown")
+	for fac in ["vex", "null", "bloom", "ember", "solar"]:
+		var sf := _tp({3: "A", 4: "B"}, {"A": fac, "B": fac})
+		var fn: Dictionary = sf.nodes[1]
+		fn["owner"] = "A"
+		fn["structure"] = "machinegoon"
+		for t in [1, 2, 3]:
+			fn["tier"] = t
+			check(Sim.gat_fire_rate(fn) > sf.gat_rate(fn) * 2.0 and sf.gat_rate(fn) > 0.0,
+					"%s T%d googatling fires faster than it makes goo (%.1f > %.2f /s shown)" % [fac, t, Rules.shown_f(Sim.gat_fire_rate(fn)), Rules.shown_f(sf.gat_rate(fn))])
+	s = _tp()
+	var gg: Dictionary = s.nodes[1]
+	gg["owner"] = "A"
+	gg["structure"] = "machinegoon"
+	gg["tier"] = 1
+	gg["units"] = 20.0
+	gg["gat_stock"] = 0.0
+	var rate1: float = s.gat_rate(gg)
+	check(absf(rate1 - Rules.PROD[1] * 0.5 * s.stat("A", "production")) < 0.001, "a T1 googatling makes goo at half a T1 vat (%.3f /s)" % rate1)
+	for i in range(int(30.0 / 0.05)):
+		s._step_structures(0.05)
+	check(absf(float(gg["gat_stock"]) - rate1 * 30.0) < 0.05 and absf(gg["units"] - 20.0) < 0.001,
+			"its stock grows %.1f in 30 s with no rival in range; the garrison does not grow" % float(gg["gat_stock"]))
+	for i in range(int(200.0 / 0.05)):
+		s._step_structures(0.05)
+	check(absf(float(gg["gat_stock"]) - Sim.gat_cap(gg)) < 0.001, "the stock stops at its cap (%.1f / %.0f)" % [float(gg["gat_stock"]), Sim.gat_cap(gg)])
+	gg["tier"] = 3
+	for i in range(int(10.0 / 0.05)):
+		s._step_structures(0.05)
+	check(float(gg["gat_stock"]) > Rules.GOOGATLING_CAP[1] and float(gg["gat_stock"]) < Rules.GOOGATLING_CAP[3], "an upgrade raises the cap and it fills on")
+	gg["tier"] = 1
+	s._step_structures(0.05)
+	check(absf(float(gg["gat_stock"]) - Sim.gat_cap(gg)) < 0.2, "a tier drop clamps the stock to the lower cap")
+	# fires its stock at the fire rate, then each unit as it is made
+	s = _tp()
+	var gf: Dictionary = s.nodes[1]
+	gf["owner"] = "A"
+	gf["structure"] = "machinegoon"
+	gf["tier"] = 1
+	gf["units"] = 20.0
+	s.nodes[0]["owner"] = "B"
+	s.nodes[0]["units"] = 600.0
+	var hf := s.send(0, 3, 1.0)
+	gf["gat_stock"] = 0.0
+	run_until(s, func(): return (Sim.sample(hf, hf["s"])[0] as Vector3).distance_to(gf["pos"]) < Rules.MACHINEGOON_RANGE - 4.5, 20.0, 0.02)
+	hf["speed"] = 0.0
+	gf["gat_stock"] = 10.0
+	var kills := []
+	for sec in range(4):
+		var l0: float = s.combat_losses.get("B", 0.0)
+		for i in range(20):
+			s.step(0.05)
+		kills.append(s.combat_losses.get("B", 0.0) - l0)
+	var gat_r: float = s.gat_rate(gf)
+	check(absf(kills[0] - Sim.gat_fire_rate(gf)) < 0.3, "it fires its stock at the fire rate first (%.2f in 1 s)" % kills[0])
+	check(absf(kills[3] - gat_r) < 0.15 and float(gf["gat_stock"]) < 0.2, "empty, it fires each unit as it is made (%.2f in 1 s vs %.2f made)" % [kills[3], gat_r])
+	check(bool(gf["shot"].get("trickle", false)), "its shot reads as a trickle once the stock is empty (fx)")
+	check(absf(kills[0] + kills[1] + kills[2] + kills[3] - (10.0 + gat_r * 4.0)) < 0.3, "every kill is paid from the stock (%.2f)" % (kills[0] + kills[1] + kills[2] + kills[3]))
+	s._capture(gf, "B", 5.0)
+	check(float(gf["gat_stock"]) == 0.0, "a captured googatling's stock is emptied")
 	# ---------------------------------------------------------------- laser: 19 per 2 s burst, 2 s recharge, 12 m
 	check(Rules.LASER_KILL == 96.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
 			"laser numbers: 19 shown per 2 s burst (-40 %, Daniele 2026-09-28), 2 s recharge, 12 m, cost 40")
@@ -2353,6 +2416,7 @@ func _skills_tests() -> void:
 		s.nodes[1]["owner"] = "B"
 		s.nodes[1]["structure"] = "machinegoon"
 		s.nodes[1]["tier"] = 1
+		s.nodes[1]["gat_stock"] = Sim.gat_cap(s.nodes[1])
 		s.nodes[3]["units"] = 300.0
 		var hg := s.send(3, 1, 1.0)
 		s.nodes[3]["streaming"] = {}

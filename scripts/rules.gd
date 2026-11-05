@@ -439,6 +439,19 @@ static var MACHINEGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then up
 static var VAT_RESTORE_COST := 75         # machinegoon -> vat, 15 shown (Daniele, 2026-09-27: "cost price of a tier 1 vat ... maybe 15")
 static var MACHINEGOON_RATE := {1: 8.0, 2: 14.0, 3: 20.0} # kills/s (shown 1.6 / 2.8 / 4; -20 %, Daniele 2026-09-28)
 static var MACHINEGOON_RANGE := 10.0
+# GOOGATLING (Daniele, 2026-11-06: "machinegoon should be called googatling should produce units till its cap at 0.5 speed per
+# tier and shoots goo until it finish it and then each time its produced so fundamentally the default fire rate should be
+# higher than the production rate of it"). Internal id stays "machinegoon"; every shown name is GOOGATLING. The node fills its
+# own goo STOCK (its ammo, a separate counter "gat_stock", not the garrison) at GOOGATLING_PROD x the same-tier vat's PROD
+# (x the faction's production stat; an Echo jam stops it) up to GOOGATLING_CAP[tier] (= the node's cap). With an enemy line
+# in MACHINEGOON_RANGE it fires the stock at MACHINEGOON_RATE[tier] (its fire rate, one stock unit per kill) until empty, then
+# fires each unit as soon as it is made. Fire 8 / 14 / 20 > production 2.1 / 3.4 / 5.1 (sim units/s): production-bound in a
+# long fight. Conservative readings until he answers the Desk: 0.5 x the same-tier VAT rate; the node makes no normal units
+# (GOOGATLING_VAT_PROD 0.0: x the vat rate for its garrison; 1.0 = it also produces like a vat); cap = the node's own cap;
+# a capture empties the stock; a tier drop clamps it to the lower cap.
+static var GOOGATLING_PROD := 0.5
+static var GOOGATLING_VAT_PROD := 0.0
+static var GOOGATLING_CAP := {1: 150, 2: 300, 3: 600}      # shown 30 / 60 / 120 (= CAPS of the tier)
 # LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
 # a LASER_BURST s burst killing at most LASER_KILL bodies split across the lines in range (the cannon's code
 # path), then LASER_RECHARGE s. ~8 kills/s shown, below the door's 9.6/s.
@@ -567,7 +580,7 @@ static var FACTION_STATS := {
 # (BALANCE_PRESET ""), switched on only from the Debug panel or by tests/balance_probe.gd, and it travels
 # with an online room's rules. Values are internal units (shown x SCALE). Only BALANCE_KEYS can change.
 const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS", "VAT_COST", "BUILD_SECONDS",
-		"SWAP_COOLDOWN", "MACHINEGOON_COST", "MACHINEGOON_RATE", "MACHINEGOON_RANGE", "LASER_COST", "LASER_KILL",
+		"SWAP_COOLDOWN", "MACHINEGOON_COST", "MACHINEGOON_RATE", "MACHINEGOON_RANGE", "GOOGATLING_PROD", "GOOGATLING_VAT_PROD", "GOOGATLING_CAP", "LASER_COST", "LASER_KILL",
 		"LASER_BURST", "LASER_RECHARGE", "LASER_RANGE", "FORGE_COST", "MONSTER_HUB_COST", "MONSTER_COST",
 		"MONSTER_COOLDOWN", "MONSTER_SPEED", "MONSTER_REACH", "VAT_RESTORE_COST", "FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS",
 		"forge_bonus"]
@@ -639,6 +652,9 @@ static func _balance_get(k: String):
 		"MACHINEGOON_COST": return MACHINEGOON_COST
 		"MACHINEGOON_RATE": return MACHINEGOON_RATE
 		"MACHINEGOON_RANGE": return MACHINEGOON_RANGE
+		"GOOGATLING_PROD": return GOOGATLING_PROD
+		"GOOGATLING_VAT_PROD": return GOOGATLING_VAT_PROD
+		"GOOGATLING_CAP": return GOOGATLING_CAP
 		"LASER_COST": return LASER_COST
 		"LASER_KILL": return LASER_KILL
 		"LASER_BURST": return LASER_BURST
@@ -671,6 +687,9 @@ static func _balance_set(k: String, v) -> void:
 		"MACHINEGOON_COST": MACHINEGOON_COST = v
 		"MACHINEGOON_RATE": MACHINEGOON_RATE = v
 		"MACHINEGOON_RANGE": MACHINEGOON_RANGE = v
+		"GOOGATLING_PROD": GOOGATLING_PROD = v
+		"GOOGATLING_VAT_PROD": GOOGATLING_VAT_PROD = v
+		"GOOGATLING_CAP": GOOGATLING_CAP = v
 		"LASER_COST": LASER_COST = v
 		"LASER_KILL": LASER_KILL = v
 		"LASER_BURST": LASER_BURST = v
@@ -772,7 +791,7 @@ const SKILLS := {
 			"rate": 0.25, "cap_shown": 10.0},
 	# the decoy's length is the send fraction of the source vat (the fraction the player has set); no units spent
 	"ghost_line": {"name": "Ghost Line", "slot": "active", "cd": 24.0, "target": "vat_to_node",
-			"desc": "A decoy line that looks real and draws Laser tower and Machinegoon fire, but never fights.", "fraction": 0.5},
+			"desc": "A decoy line that looks real and draws Laser tower and Googatling fire, but never fights.", "fraction": 0.5},
 	# ---- map pool (network skills)
 	# 0.23.21 (set R1): cd 60 -> 80 (lift +25 -> +16)
 	"demolish": {"name": "Demolish", "slot": "map", "cd": 80.0, "target": "fixed_deck",
@@ -781,7 +800,7 @@ const SKILLS := {
 	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "Enemy lines on one deck are 40 % slower for 8 s.", "slow": 0.6, "dur": 8.0},
 	"anchor": {"name": "Anchor", "slot": "map", "cd": 45.0, "target": "deck",
-			"desc": "A deck is locked for 10 s: no relay moves it, Demolish fails, half the Laser tower and Machinegoon kills on your lines.",
+			"desc": "A deck is locked for 10 s: no relay moves it, Demolish fails, half the Laser tower and Googatling kills on your lines.",
 			"dur": 10.0, "cannon_mult": 0.5},
 	"bypass": {"name": "Bypass", "slot": "map", "cd": 45.0, "target": "relay", "needs_relays": true,
 			"desc": "A relay holds both of its states for 8 s.", "dur": 8.0},
@@ -832,7 +851,7 @@ const SKILLS := {
 			"desc": "15 s: all your lines move twice as fast and pour through doors 3x as fast; fire up to 3 relays anywhere, enemy ones too.",
 			"dur": 15.0, "mult": 2.0, "door": 3.0, "fires": 3, "charge": 75.0, "charge_min": 60.0},
 	"echo_split": {"name": "Echo Split", "slot": "ultimate", "faction": "null", "cd": 120.0, "target": "none",
-			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat, Laser tower and Machinegoon for 8 s.",
+			"desc": "Up to 3 moving lines spawn decoy echoes; an echo landing on an enemy node stops its vat, Laser tower and Googatling for 8 s.",
 			"echoes": 3, "disrupt": 8.0},
 	# Daniele (0.18.7): "i don't like that super bloom can be casted only under attack but i like the cap"
 	# ULTIMATES REWORK (proposal, 2026-10-27; was mult 1.5, cap_shown 40, no stacking): double, uncapped (cap_shown 0 = no
