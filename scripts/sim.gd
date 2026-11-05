@@ -358,11 +358,12 @@ static func gat_cap(n: Dictionary) -> float:
 
 func gat_rate(n: Dictionary) -> float:
 	## GOOGATLING: goo stock made per second now (sim units): Rules.GOOGATLING_PROD x the same-tier vat's PROD x the faction's
-	## production stat (it keeps making stock during an upgrade, like a vat); 0 unowned or jammed by an Echo Split echo.
-	if n["owner"] == "" or n["structure"] != "machinegoon" or is_disrupted(n["id"]):
+	## production stat (it keeps making stock during an upgrade, like a vat; a neutral one at the plain tier rate, like neutral
+	## regen); 0 when jammed by an Echo Split echo.
+	if n["structure"] != "machinegoon" or is_disrupted(n["id"]):
 		return 0.0
 	var t: int = clampi(int(n["tier"]), 1, 3)
-	return float(Rules.PROD[t]) * Rules.GOOGATLING_PROD * stat(n["owner"], "production")
+	return float(Rules.PROD[t]) * Rules.GOOGATLING_PROD * (stat(n["owner"], "production") if n["owner"] != "" else 1.0)
 
 
 static func gat_fire_rate(n: Dictionary) -> float:
@@ -1726,7 +1727,7 @@ func step(dt: float) -> void:
 	_check_handovers()                                # (an owner at zero hands over before producing again)
 	_catchup = catchup_sides()                        # CATCH-UP: who trails, from this step's node count
 	for n in nodes:                                   # production (vat nodes only), up to the cap
-		if n["owner"] != "" and has_vat(n) and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11)
+		if n["owner"] != "" and (has_vat(n) or (n["structure"] == "machinegoon" and Rules.GOOGATLING_VAT_PROD > 0.0)) and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11); GOOGATLING_VAT_PROD (off): a Googatling also producing
 			_produce(n, dt)
 		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and has_vat(n) and not collapsed.get(n["id"], false) 				and n["units"] < float(n.get("regen_cap", Rules.NEUTRAL_UNITS.get(n["tier"], 0))):   # (TUTORIAL: "regen_cap" - a staged node regrows only to that)
 			n["units"] = minf(float(n.get("regen_cap", Rules.NEUTRAL_UNITS[n["tier"]])), n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)
