@@ -754,39 +754,50 @@ func show_main() -> void:
 	var bh := UiKit.tap_h(self, 46.0)
 	var th := pad + UiKit.line_h(self, 12, true) + 4.0 + UiKit.line_h(self, 16, true) + UiKit.line_h(self, 13) + 10.0 + bh + pad
 	var ty := area.end.y - th - 10.0
-	# Daniele 2026-11-04: no CAMPAIGN tile (the tab has it); everything on the left, the hero's art free on the right
-	var fr := [0.31, 0.21, 0.48]
+	# Daniele 2026-11-05 (no PLAY menu, "every mode a tile"): PLAY VS AI left-most and biggest, CAMPAIGN, ONLINE; the
+	# hero's art free on the right; CHALLENGES and TRAINING top right above the art, the headline top left
+	var fr := [0.42, 0.31, 0.27]
 	var avail := minf(w * 0.64, 900.0) - gap * (fr.size() - 1)
 	var tiles := []
 	var tx := x
 	for k in fr:
 		tiles.append(Rect2(tx, ty, floorf(avail * k), th))
 		tx += floorf(avail * k) + gap
-	_home_online(tiles[0], pad, bh)
-	_home_learn(tiles[1], pad)
-	_home_play(tiles[2], pad, bh)
-	# the headline over the tiles, CHALLENGES under it (all on the left)
+	_home_play(tiles[0], pad, bh)
+	_home_campaign(tiles[1], pad, bh)
+	_home_online(tiles[2], pad, bh)
+	# top right, above the hero's art: CHALLENGES and TRAINING (the lesson count; HOW TO PLAY once every lesson is done)
 	var ready_n := Progression.claimable()
 	var ct := "CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else "")
-	var cw := UiKit.text_w(self, ct, 15, true) + 44.0
-	var chh := UiKit.tap_h(self, 42.0)
-	var free := ty - area.position.y - 12.0 - chh - 10.0
+	var n_done := TutorialDirector.done_count()
+	var learned := n_done >= TutorialDirector.TOTAL_LESSONS
+	var lt := "HOW TO PLAY" if learned else "TRAINING  %d / %d" % [n_done, TutorialDirector.TOTAL_LESSONS]
+	var rw := maxf(UiKit.text_w(self, ct, 15, true), UiKit.text_w(self, lt + "  →", 15, true)) + 44.0
+	var rx := content.size.x - x - rw
+	var ry := area.position.y + 12.0
+	var cb := UiKit.btn(self, ct, Vector2(rx, ry), Vector2(rw, 46), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
+	var lb := UiKit.btn(self, lt + "  →", Vector2(rx, ry + cb.size.y + 8.0), Vector2(rw, 46), show_help if learned else show_tutorial,
+			"secondary" if learned else "selected", hero, 15)
+	# the headline top left, FULLSCREEN (QUIT on desktop) and the version under it
+	var fh := UiKit.tap_h(self, 36.0)
+	var free := ty - area.position.y - 12.0 - fh - 10.0
 	var hx := x + 8.0
 	var hy := area.position.y + 12.0
-	var sizes := [[44.0, "THE CITY IS\nYOURS TO TAKE."], [32.0, "THE CITY IS\nYOURS TO TAKE."], [26.0, "THE CITY IS YOURS TO TAKE."]]
+	var hw := rx - 16.0 - hx
+	var sizes := [[44.0, "THE CITY IS
+YOURS TO TAKE."], [32.0, "THE CITY IS
+YOURS TO TAKE."], [26.0, "THE CITY IS YOURS TO TAKE."]]
 	for st in sizes:
-		var lines: int = str(st[1]).count("\n") + 1
+		var lines: int = str(st[1]).count("
+") + 1
 		var need: float = UiKit.line_h(self, 13, true) + 6.0 + UiKit.line_h(self, st[0], true) * lines
-		if need <= free or st == sizes[-1]:
+		if (need <= free and UiKit.text_w(self, "YOURS TO TAKE.", st[0], true) <= hw) or st == sizes[-1]:
 			_shell_add(UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 13, acc, true, 3), Vector2(hx, hy))
 			hy += UiKit.line_h(self, 13, true) + 6.0
 			if need <= free:
 				_shell_add(UiKit.label(self, st[1], st[0], UiKit.INK, true), Vector2(hx - 3.0, hy))
 				hy += UiKit.line_h(self, st[0], true) * lines + 6.0
 			break
-	var cb := UiKit.btn(self, ct, Vector2(hx, hy + 4.0), Vector2(cw, 42), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
-	# FULLSCREEN (QUIT on desktop) and the version, beside CHALLENGES
-	var fh := UiKit.tap_h(self, 36.0)
 	var fb := UiKit.flat_button(self, "FULLSCREEN" if OS.has_feature("web") else "QUIT", 13, UiKit.MUTED)
 	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 20.0, fh)
 	fb.pressed.connect(func():
@@ -795,21 +806,37 @@ func show_main() -> void:
 		else:
 			get_tree().quit())
 	var ver := UiKit.label(self, Rules.version_label(), 12, UiKit.DIM)
-	var vw := UiKit.text_w(self, Rules.version_label(), 12)
-	var fy := cb.position.y + (cb.size.y - fh) / 2.0
-	if cb.position.x + cw + 12.0 + fb.size.x + vw <= x + avail + gap * 2.0:
-		_shell_add(fb, Vector2(cb.position.x + cw + 12.0, fy))
-		_shell_add(ver, Vector2(cb.position.x + cw + 12.0 + fb.size.x, fy + (fh - ver.get_minimum_size().y) / 2.0))
+	if hy + fh <= ty - 6.0:
+		_shell_add(fb, Vector2(hx - 10.0, hy))
+		_shell_add(ver, Vector2(hx - 10.0 + fb.size.x, hy + (fh - ver.get_minimum_size().y) / 2.0))
 	else:
 		fb.free()
 		ver.free()
+	_home_install_y = lb.position.y + lb.size.y + 8.0
 	shell_raise()
 	if _install_available():
-		_install_button(Vector2(content.size.x - 300.0 - x, area.position.y + 12.0))
+		_install_button(Vector2(content.size.x - x - P(380, 56).x, _home_install_y))
 	if _install_guide_open:
 		_install_guide_panel()
 	if _join_open:
 		_join_sheet()
+
+
+var _home_install_y := 0.0                         # HOME: INSTALL THE GAME goes under the top-right buttons
+
+
+func _home_campaign(r: Rect2, pad: float, bh: float) -> void:
+	## CAMPAIGN (Daniele 2026-11-05: a tile of its own, the tab left the bar): the campaign on show, its stars, CONTINUE
+	## (its page: the city map or the mission cards, as used last).
+	var cf := _hub_faction()
+	if cf == "":
+		_home_tile(r, pad, "CAMPAIGN", "COMING LATER", "")
+		return
+	var nxt := Campaign.next_open(cf)
+	var by := _home_tile(r, pad, "CAMPAIGN", str(UiKit.NAMES[cf]), "★ %d / %d" % [Campaign.stars_total(cf), Campaign.stars_max(cf)])
+	UiKit.btn(self, "CONTINUE" if nxt != "" else "REPLAY", Vector2(r.position.x + pad, by), Vector2(r.size.x - pad * 2.0, 46), func():
+		_hub_f = cf
+		show_campaign(), "secondary", faction, 15)
 
 
 func _home_tile(r: Rect2, pad: float, kicker: String, title: String, sub: String, lit := false) -> float:
@@ -854,29 +881,10 @@ func _home_online(r: Rect2, pad: float, bh: float) -> void:
 		hb.tooltip_text = "Online rooms run in the browser build"
 
 
-func _home_learn(r: Rect2, pad: float) -> void:
-	## TRAINING (lit, "n / 10") until every lesson is done, then HOW TO PLAY; the whole tile is the button.
-	var n := TutorialDirector.done_count()
-	var done := n >= TutorialDirector.TOTAL_LESSONS
-	var b := UiKit.btn(self, "", r.position, r.size, show_help if done else show_tutorial, "secondary" if done else "selected", faction)
-	var y := pad
-	var iw := r.size.x - pad * 2.0
-	for ln in ([["HOW TO", 12, UiKit.accent(faction), true], ["PLAY", 16, UiKit.INK, true], ["Guide and lessons", 13, UiKit.MUTED, false]] if done else
-			[["TRAINING", 12, UiKit.accent(faction), true], ["%d / %d" % [n, TutorialDirector.TOTAL_LESSONS], 16, UiKit.INK, true],
-			["Start here  →" if n == 0 else "Next lesson  →", 13, UiKit.MUTED, false]]):
-		var l := UiKit.label(self, ln[0], ln[1], ln[2], ln[3])
-		l.clip_text = true
-		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		l.position = Vector2(pad, y)
-		l.size = Vector2(iw, UiKit.line_h(self, ln[1], ln[3]))
-		b.add_child(l)
-		y += l.size.y + 2.0
-
-
 func _home_play(r: Rect2, pad: float, bh: float) -> void:
 	## PLAY LAST SETUP: the summary, CHANGE (MATCH SETUP), PLAY (DEPLOY now).
 	var sm := _setup_summary()
-	var by := _home_tile(r, pad, "PLAY LAST SETUP", sm[0], sm[1], true)
+	var by := _home_tile(r, pad, "PLAY VS AI", sm[0], sm[1], true)
 	var ct := "CHANGE"
 	var cw := UiKit.text_w(self, ct, 14, true) + 36.0
 	var iw := r.size.x - pad * 2.0
