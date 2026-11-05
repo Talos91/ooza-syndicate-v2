@@ -1,9 +1,15 @@
-# To test - ALPHA 23.26 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.27 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.27 (staging: https://oozesyndicate.com/staging/)
+- [ ] PLAY VS AI and HOST ROOM open the same lobby; seat sheets set faction + AI level; ARMY > CHOOSE returns to the lobby; SAVE keeps the loadout.
+- [ ] Room chat beside the seats; host sets an open seat to AI and picks its faction.
+- [ ] In a match: GMN-2 HUD (SEND tank, skill plates, radial words), readable at phone size on every faction.
+- [ ] Drag a send out and back onto its vat = HOLD: the vat stops sending, units on the bridge walk on.
 
 ## 0.23.26 (staging: https://oozesyndicate.com/staging/)
 - [ ] HOME tiles PLAY VS AI / ONLINE / CAMPAIGN; tabs HOME / ARMIES / PROFILE / GUIDE; no breadcrumbs.

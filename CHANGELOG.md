@@ -1,5 +1,24 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.27 "Alpha 24 step 3c + step 4" - 2026-11-06 (STAGING only; menus round 4 + node UI / GMN-2 HUD + HOLD, release rel-02327)
+
+Two approved branches together: ui-menus 07fc8c7 (menus round 4 from Daniele's 0.23.26 staging review) and ui-node def2f17
+(in-game node UI, the full GMN-2 glass / metal / neon HUD art, and the send-order gesture with HOLD).
+- **Step 3c - one lobby for PLAY VS AI and online rooms**: map | seats the same size; MODE / MAP / BACKGROUND and ARMY / COLOUR / RULES
+  as tall buttons; foot = status + DEPLOY / READY. vs AI: seat chips (you + AI), a seat sheet per AI seat = faction + AI level.
+  Room: seats on one half, room chat on the other (code, SHARE, latest lines, TYPE A MESSAGE); the host sets an open seat to PLAYER or
+  AI, and an AI seat's faction (new Net.ai_picks, sent in the lobby message; older clients ignore it).
+- **ARMY** = the faction page in both modes; CHOOSE sends the pick and returns to the lobby; ARMIES opened from a lobby shows
+  SAVE · BACK TO LOBBY (loadout saved). Settings pager docks beside DONE. Rows tighter so words fit small phones.
+- **Step 4 - node UI + GMN-2 HUD** (all 80 pieces from the art director's locked round-07 geometry): SEND as one tank (tap / slide picks
+  25-100 %), skill plates with the name in the plate strip, radial ring with words along each slice (short names GOON / HUB), ACTIVE ring
+  and goo icy cyan, selection hex, tier chips, armour shields, capture burst, relay ring, target reticle, goo-stream send arrow.
+- **Send gesture**: cone snap to the target, live ring, release anywhere; dragged out and back onto the origin = **HOLD** (units still
+  queued in the vat stop; units already on the bridge walk on). Numbers in Rules.SEND_*; failed sends logged locally.
+- Tools: tools/board_cut.py and tools/board_geo_diff.py (geometry first, style second).
+- Online: VERSION_TAG stays ooze20-net-8, server/ unchanged; the room server stays 0.23.21, so staging rooms fall back to browser
+  hosting (unranked) until a 🖥️ deploy of 0.23.27.
+
 ## 0.23.26 "Alpha 24 step 3b" - 2026-11-05 (STAGING only; menus round 3, Daniele approved: "for now i think we are ready to push to staging", release rel-02326)
 
 Menus round 3 on top of 0.23.25's flows (ui-menus 1646755). Taps and screens only; the art pass comes later.
