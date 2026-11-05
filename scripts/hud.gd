@@ -1311,6 +1311,8 @@ class ActionWedge:
 	var afford := 1.0           # ui-node: your units / its price, 0..1 - 1 = the slice is lit (no goo fill since mockup 3)
 	var why := ""               # ui-node: a greyed slice's short reason (COOLDOWN, UNDER ATTACK ...), shown instead of the price
 	var _held := false
+	var _ci: CanvasItem = self   # where _text / _icon draw (the words child)
+	var _words: Control
 
 	func _init() -> void:
 		flat = true
@@ -1320,6 +1322,12 @@ class ActionWedge:
 		var empty := StyleBoxEmpty.new()
 		for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 			add_theme_stylebox_override(st, empty)
+		_words = Control.new()
+		_words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_words.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_words.z_index = 1
+		_words.draw.connect(_draw_words)
+		add_child(_words)
 		button_down.connect(func(): _held = true)
 		button_up.connect(func(): _held = false)
 
@@ -1445,6 +1453,19 @@ class ActionWedge:
 			edge.append(poly[0])
 			draw_polyline(edge, Color(a, 0.3), 1.0 * s, true)
 			NodeNoir.neon(self, _edge(c, ro - 1.5 * s), a, (2.0 + 1.0 * lift) * s, 0.9 if lit else 0.2)
+		_words.queue_redraw()
+
+	func _draw_words() -> void:
+		## The glyph, name and price / reason, drawn on a child ABOVE every slice (z 1): the next slice's steel rail no longer
+		## covers the words of a turned fan (GMN-2 sectors: "?0 UNITS").
+		_ci = _words
+		if grow <= 0.001 or a1 <= a0:
+			return
+		var s := ui_scale
+		var ro := outer()
+		var off := disabled
+		var a := accent.darkened(0.35) if off else accent
+		var lit := not off and afford >= 1.0
 		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)
 		if k <= 0.0:
 			return
@@ -1527,7 +1548,7 @@ class ActionWedge:
 		while fs > maxi(7, floor_px - 1) and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > maxw:
 			fs -= 1
 		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		draw_string(font, Vector2(at.x - w / 2.0, at.y + (font.get_ascent(fs) - font.get_descent(fs)) / 2.0), t,
+		_ci.draw_string(font, Vector2(at.x - w / 2.0, at.y + (font.get_ascent(fs) - font.get_descent(fs)) / 2.0), t,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 	func _icon(p: Vector2, r: float, col: Color) -> void:
@@ -1536,50 +1557,50 @@ class ActionWedge:
 		match kind:
 			"UPGRADE":
 				for dy in [-0.45, 0.2]:
-					draw_polyline(PackedVector2Array([p + Vector2(-0.75, dy + 0.4) * r, p + Vector2(0, dy - 0.3) * r,
+					_ci.draw_polyline(PackedVector2Array([p + Vector2(-0.75, dy + 0.4) * r, p + Vector2(0, dy - 0.3) * r,
 							p + Vector2(0.75, dy + 0.4) * r]), col, w, true)
 			"MACHINEGOON":
-				draw_arc(p, r * 0.62, 0.0, TAU, 24, col, w, true)
+				_ci.draw_arc(p, r * 0.62, 0.0, TAU, 24, col, w, true)
 				for d in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
-					draw_line(p + d * r * 0.3, p + d * r * 1.0, col, w, true)
-				draw_circle(p, r * 0.12, col)
+					_ci.draw_line(p + d * r * 0.3, p + d * r * 1.0, col, w, true)
+				_ci.draw_circle(p, r * 0.12, col)
 			"VAT":
 				var body := PackedVector2Array([p + Vector2(-0.6, -0.5) * r, p + Vector2(0.6, -0.5) * r, p + Vector2(0.6, 0.9) * r,
 						p + Vector2(-0.6, 0.9) * r, p + Vector2(-0.6, -0.5) * r])
-				draw_polyline(body, col, w, true)
-				draw_line(p + Vector2(-0.3, -0.85) * r, p + Vector2(0.3, -0.85) * r, col, w, true)
-				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.5, 0.25) * r, p + Vector2(0.5, 0.1) * r,
+				_ci.draw_polyline(body, col, w, true)
+				_ci.draw_line(p + Vector2(-0.3, -0.85) * r, p + Vector2(0.3, -0.85) * r, col, w, true)
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.5, 0.25) * r, p + Vector2(0.5, 0.1) * r,
 						p + Vector2(0.5, 0.8) * r, p + Vector2(-0.5, 0.8) * r]), Color(col, col.a * 0.55))
 			"SWITCH":
 				if glyph != "" and symbol_font:
 					var fs := int(round(r * 1.7))
 					var gw := symbol_font.get_string_size(glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-					draw_string(symbol_font, p + Vector2(-gw / 2.0, (symbol_font.get_ascent(fs) - symbol_font.get_descent(fs)) / 2.0),
+					_ci.draw_string(symbol_font, p + Vector2(-gw / 2.0, (symbol_font.get_ascent(fs) - symbol_font.get_descent(fs)) / 2.0),
 							glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 				else:
-					draw_arc(p, r * 0.7, -PI * 0.9, PI * 0.4, 20, col, w, true)
+					_ci.draw_arc(p, r * 0.7, -PI * 0.9, PI * 0.4, 20, col, w, true)
 			"LASER":
-				draw_colored_polygon(PackedVector2Array([p + Vector2(0.2, -1.0) * r, p + Vector2(-0.5, 0.12) * r,
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(0.2, -1.0) * r, p + Vector2(-0.5, 0.12) * r,
 						p + Vector2(-0.02, 0.12) * r, p + Vector2(-0.2, 1.0) * r, p + Vector2(0.5, -0.15) * r,
 						p + Vector2(0.02, -0.15) * r]), col)
 			"FORGE":
-				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.8, -0.75) * r, p + Vector2(0.35, -0.75) * r,
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.8, -0.75) * r, p + Vector2(0.35, -0.75) * r,
 						p + Vector2(0.35, -0.25) * r, p + Vector2(-0.8, -0.25) * r]), col)
-				draw_line(p + Vector2(-0.15, -0.25) * r, p + Vector2(0.55, 0.95) * r, col, w * 1.3, true)
+				_ci.draw_line(p + Vector2(-0.15, -0.25) * r, p + Vector2(0.55, 0.95) * r, col, w * 1.3, true)
 			"MONSTER HUB":
 				for dx in [-0.5, 0.0, 0.5]:
-					draw_line(p + Vector2(dx - 0.25, -0.85) * r, p + Vector2(dx + 0.2, 0.85) * r, col, w * 1.2, true)
+					_ci.draw_line(p + Vector2(dx - 0.25, -0.85) * r, p + Vector2(dx + 0.2, 0.85) * r, col, w * 1.2, true)
 			"LAUNCH":
-				draw_line(p + Vector2(0, 0.9) * r, p + Vector2(0, -0.75) * r, col, w, true)
-				draw_polyline(PackedVector2Array([p + Vector2(-0.55, -0.2) * r, p + Vector2(0, -0.85) * r,
+				_ci.draw_line(p + Vector2(0, 0.9) * r, p + Vector2(0, -0.75) * r, col, w, true)
+				_ci.draw_polyline(PackedVector2Array([p + Vector2(-0.55, -0.2) * r, p + Vector2(0, -0.85) * r,
 						p + Vector2(0.55, -0.2) * r]), col, w, true)
 			"EJECT":
-				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.15) * r, p + Vector2(0.75, 0.15) * r,
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.15) * r, p + Vector2(0.75, 0.15) * r,
 						p + Vector2(0, -0.8) * r]), col)
-				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.42) * r, p + Vector2(0.75, 0.42) * r,
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.42) * r, p + Vector2(0.75, 0.42) * r,
 						p + Vector2(0.75, 0.72) * r, p + Vector2(-0.75, 0.72) * r]), col)
 			_:
-				draw_circle(p, r * 0.4, col)
+				_ci.draw_circle(p, r * 0.4, col)
 
 
 class InspectorHub:

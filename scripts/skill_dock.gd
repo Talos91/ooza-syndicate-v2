@@ -199,11 +199,17 @@ class Slot:
 		var nf := dock.font_px(16)
 		var lines: Array = dock.name_lines(id, room)
 		var y := ic.y + d / 2.0 + dock.gap + UI_FONT.get_ascent(nf)
-		if dock.plate and dock.mobile:                   # GMN-1: the name in the plate's dark strip, low on the plate
-			var lh := UI_FONT.get_height(nf) * 0.88
-			y = size.y * 0.80 - lh * float(lines.size() - 1) / 2.0 + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
+		var least := -1
+		if dock.plate and dock.mobile:                   # GMN-2: ONE line inside the plate's dark label box [130, 416, 331, 96] of 591 x 616
+			room = w * 331.0 / 495.0 - 4.0 * dock._floor_px / 13.0     # (the box's width at the slot's size, 2 pt in each side)
+			lines = [SkillDock.plate_name(str(lines[0]) if lines.size() == 1 else "%s %s" % [lines[0], lines[1]])]
+			least = int(floor(dock._floor_px * 10.0 / 13.0))   # Daniele 2026-11-05 "shrink + short names": down to 10 pt in the box
+			nf = dock.font_px(16)
+			while nf > least and UI_FONT.get_string_size(str(lines[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, nf).x > room:
+				nf -= 1
+			y = size.y * 0.80 + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
 		for ln in lines:
-			_line(str(ln), Vector2(w / 2.0, y), 16, HudNoir.INK if is_ready or armed else HudNoir.MUTED, room, UI_FONT)
+			_line(str(ln), Vector2(w / 2.0, y), 16, HudNoir.INK if is_ready or armed else HudNoir.MUTED, room, UI_FONT, least)
 			y += UI_FONT.get_height(nf) * 0.88
 		var status := ""
 		var sc := HudNoir.MUTED
@@ -352,10 +358,11 @@ class Slot:
 			pts.append(c + Vector2(cos(a), sin(a)) * r)
 		return pts
 
-	func _line(txt: String, centre_base: Vector2, fs: int, col: Color, room: float, font: Font) -> void:
-		## One line centred on centre_base.x, its baseline at centre_base.y, stepped down / cut to fit like _text.
+	func _line(txt: String, centre_base: Vector2, fs: int, col: Color, room: float, font: Font, floor_px := -1) -> void:
+		## One line centred on centre_base.x, its baseline at centre_base.y, stepped down / cut to fit like _text (floor_px: a
+		## smaller floor where the art allows it - the plate's label box).
 		var f := dock.font_px(fs)
-		var least := maxi(int(fs * dock.ui_scale * 0.7), int(ceil(dock._floor_px)))
+		var least := floor_px if floor_px > 0 else maxi(int(fs * dock.ui_scale * 0.7), int(ceil(dock._floor_px)))
 		while f > least and font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x > room:
 			f -= 1
 		if font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x > room:
@@ -548,6 +555,13 @@ func _draw() -> void:
 		_housing = HudNoir.box("skill_housing", Color(0, 0, 0, 0), Vector4.ZERO)
 	var hm := housing_margin()
 	draw_style_box(_housing, Rect2(-hm.x, -hm.y, size.x + hm.x + hm.z, size.y + hm.y + hm.w))
+
+
+const PLATE_NAMES := {"CORE MELTDOWN": "MELTDOWN", "EMERGENCY EVAC": "EVAC"}   # Daniele 2026-11-05: short names on the plate only
+
+
+static func plate_name(full: String) -> String:
+	return str(PLATE_NAMES.get(full, full))
 
 
 func name_lines(id: String, room: float) -> Array:

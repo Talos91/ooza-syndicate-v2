@@ -20,6 +20,11 @@ uniform vec4 body = vec4(0.13, 0.13, 0.74, 0.74);      // body x, y, w, h in can
 uniform vec4 strip = vec4(0.13, 0.35, 0.74, 0.29);     // the meniscus strip's body in ITS texture's UV (x, y, w, h)
 uniform float strip_h = 0.11;                          // the strip's body height in canvas UV (drawn centred on the waterline)
 uniform float seed = 0.0;
+varying vec4 vcol;                                     // the node's own modulate (COLOR in fragment() is it x TEXTURE)
+
+void vertex() {
+	vcol = COLOR;
+}
 
 vec4 over(vec4 dst, vec3 c, float a) {                 // premultiplied: c over dst
 	return vec4(c * a + dst.rgb * (1.0 - a), a + dst.a * (1.0 - a));
@@ -86,5 +91,7 @@ void fragment() {
 		float lit = step(body.y + body.w * (1.0 - clamp(level, 0.0, 1.0)) - 0.002, uv.y);
 		o = over(o, rim_lit_col.rgb * (1.0 + 0.3 * glow), texture(rim_lit_tex, uv).a * rim_lit_col.a * lit);
 	}
-	COLOR = vec4(o.rgb / max(o.a, 0.0001), o.a * COLOR.a);
+	// GMN-2: COLOR.a here already carries the glass's alpha, which clipped every ring outside the glass (r 127): the skill
+	// window's neon at r 130 never showed. Fade by the node's modulate only.
+	COLOR = vec4(o.rgb / max(o.a, 0.0001), o.a * vcol.a);
 }
