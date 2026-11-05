@@ -28,6 +28,12 @@ const PITCH := {
 	"R-04": 41.0,
 	"R-05": 58.0,                 # 2026-11-05 rework (mirrored, 78 m tall): 41.7 pt, 5 badges over platforms
 	"R-11": 58.0,                 # version B of R-05 (same footprint)
+	# wave 2 (2026-11-05, maps-r-4; probe 1266x585, desktop emulation): R-06 48.6 pt, R-09 45.1, R-10 45.0, R-12 47.9, R-13 46.3 (6 badges over platforms)
+	"R-06": 50.0,
+	"R-09": 50.0,
+	"R-10": 50.0,
+	"R-12": 50.0,
+	"R-13": 54.0,
 }
 
 

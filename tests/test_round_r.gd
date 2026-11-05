@@ -194,6 +194,45 @@ func _gates() -> void:
 			for ei in r4.controlled_edges(g):
 				check(not r4.is_edge_open(ei), "R-04: door %d pulled in after the fire" % ei)
 
+func _wave2() -> void:
+	## Wave 2 (Daniele 2026-11-05: "make 5 more ... 1 xs 2 s 2 m"): R-06 Fort (2 lift gates + a rotor), R-09 Stack (2 lifts + 2
+	## speed relays whose lanes run over the Crossing), R-10 Crescent (a rotor + 2 speed relays), R-12 Crossfire (2 lifts + 4 belts
+	## over the Crossing), R-13 Gearbox (a rotor + ONE speed relay driving both gears). Each lift / rotor swaps its open decks
+	## when fired; a speed lane / belt crossing the overpass keeps pushing on the Crossing (Sim._conv_pieces).
+	var want := {"R-06": [2, 1, 0, 0, 0], "R-09": [2, 0, 2, 0, 2], "R-10": [0, 1, 2, 0, 0], "R-12": [2, 0, 0, 4, 2], "R-13": [0, 1, 1, 0, 0]}
+	for code in want:
+		var s := _sim(code)
+		check(s != null, "%s loads" % code)
+		if s == null:
+			continue
+		var got := [0, 0, 0, s._belt_edges.size(), 0]
+		var fire := []
+		for n in s.nodes:
+			match str(n["relay"]):
+				"lift":
+					got[0] += 1
+					fire.append(n)
+				"rotation":
+					got[1] += 1
+					fire.append(n)
+				"conveyor":
+					got[2] += 1
+		for j in s._conv_pieces:
+			if str(s.nodes[j].get("junction", "")) == "Crossing":
+				got[4] += 1
+		check(got == want[code], "%s: lifts, rotors, speed relays, belts, lanes over the Crossing = %s (got %s)" % [code, want[code], got])
+		for n in fire:
+			var id: int = n["id"]
+			var open0 := s.controlled_edges(id).filter(func(ei): return s.is_edge_open(ei))
+			n["owner"] = "A"
+			s.fire_relay(id)
+			for i in range(120):
+				s.step(0.05)
+			var open1 := s.controlled_edges(id).filter(func(ei): return s.is_edge_open(ei))
+			check(not open0.is_empty() and not open1.is_empty() and open1.filter(func(ei): return ei in open0).is_empty(),
+					"%s: firing %s %d swaps its decks (%s -> %s)" % [code, n["relay"], id, open0, open1])
+
+
 
 func _play(code: String) -> void:
 	var m := {}
@@ -220,7 +259,8 @@ func _init() -> void:
 	_strait()
 	_pinwheel()
 	_gates()
-	for code in ["R-01", "R-02", "R-04", "R-05", "R-11"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
+	_wave2()
+	for code in ["R-01", "R-02", "R-04", "R-05", "R-11", "R-06", "R-09", "R-10", "R-12", "R-13"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
 		_play(code)
 	print("test_round_r: %d checks, %d failed" % [checks, fails])
 	print("ALL PASSED" if fails == 0 else "FAILED")

@@ -5559,9 +5559,10 @@ func _setup_proto() -> void:
 					_ferry_plain[i]["group"] = g
 					_ferry_plain[i]["pos"] = int(fd.get("pos", 0))
 	_conv_pieces = {}
-	for n in nodes:                                   # round R: a curve between two speed decks of one relay is part of the lane
-		if str(n.get("node_kind", "")) != "junction" or not str(n.get("junction", "")).begins_with("Curve_"):
-			continue
+	for n in nodes:                                   # round R: a curve (or a Crossing lane) between two speed decks of one relay is part of the lane
+		var jn := str(n.get("junction", ""))
+		if str(n.get("node_kind", "")) != "junction" or not (jn.begins_with("Curve_") or jn == "Crossing"):
+			continue                                  # (a Crossing lane too: R-09 / R-12 run speed lanes / belts over it)
 		var es := []
 		for i in range(edges.size()):
 			if edges[i]["a"] == n["id"] or edges[i]["b"] == n["id"]:
