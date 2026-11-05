@@ -2,6 +2,10 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto16** - 2026-11-06 (proto-r, staging/proto/): Neutral machinegoons on 6 round-R maps (R-01, R-02, R-05, R-11, R-06,
+  R-10; symmetric sets); neutral guns and lasers shoot everyone, capture keeps the gun; ferries swing faster (3-way 42 -> 21 s, about
+  30 % of a crossing survives; a 1-bridge ferry cycles in 10.5 s). test_ai_curve fails 5 checks on the proto line (same on proto15).
+
 - **0.23.15-proto15** - 2026-11-05 (proto-r, staging/proto/): Conveyors on every bridge shape (speed curves with treads), a slat look
   for plain belts, a new ferry in every length, the new relay node on every relay (🎨 conveyors 4.1 + ferry 4.1); launcher / lift /
   tilt v3 buttons; moving decks tumble on collapse.
