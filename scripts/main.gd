@@ -69,6 +69,11 @@ var fx: Fx
 var proto_view: ProtoRelayView       # RELAYS 3.0 PROTOTYPES: only on a map that has one (the P test maps)
 var door_view: DoorView             # TWO DOORS (Rules.TWO_DOORS): both doors marked on every platform
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
+var world_layer: WorldLayer                         # WORLD LAYER: floor, node tubes, splats (view only)
+var _world_probe := -1.0                           # --world-probe=T: a 100-unit fall at T, frame times printed
+var _probe_ft: Array = []
+var _probe_t0 := 0
+var _probe_cost: Array = []                        # [world layer sync us, render cpu ms] per frame
 var forge_pulse: ForgePulse                        # a forge coming online: the owner's 2 s power-up wave
 var skill_fx: SkillFx                              # Skills 2.0 in the world: every cast, lasting effect and end
 var scenery: Scenery
@@ -282,6 +287,10 @@ func _ready() -> void:
 			var ap := arg.substr(6).split(":")
 			if ap.size() >= 3:
 				_aim = [float(ap[0]), ap[1], ap[2], ap[3] if ap.size() > 3 else ""]
+		elif arg == "--no-world":                     # WORLD LAYER off (before/after shots and frame times)
+			Rules.world_layer = false
+		elif arg.begins_with("--world-probe="):       # WORLD LAYER perf probe: a 100-shown-unit fall at T s
+			_world_probe = float(arg.substr(14))
 		elif arg.begins_with("--end-shot="):          # UI: screenshot an in-match screen (_end_shot)
 			end_shot = arg.substr(11)
 			map_explicit = true
@@ -455,6 +464,10 @@ func _start_map(path: String) -> void:
 	fx = Fx.new()
 	add_child(fx)
 	fx.setup(self, sim, vis, hordes)
+	if WorldLayer.wanted():                            # WORLD LAYER (view only): floor, tubes, splats
+		world_layer = WorldLayer.new()
+		add_child(world_layer)
+		world_layer.setup(self, sim, vis, mobile)
 	if ProtoRelayView.wanted(sim):
 		proto_view = ProtoRelayView.new()
 		add_child(proto_view)
@@ -1766,6 +1779,8 @@ func _process(delta: float) -> void:
 			mission.on_event(ev)
 		fx.handle(ev)
 		skill_fx.handle(ev)
+		if world_layer:
+			world_layer.handle(ev)
 		Sfx.on_fx(ev)                                 # SOUND: the same events (a guest's come from the host through Net)
 		match ev["type"]:
 			"skill":                                  # a rival's skill that touches you: a callout there (SkillDock.on_event)
@@ -1869,6 +1884,10 @@ func _process(delta: float) -> void:
 	_collapse_zoom(dt)
 	fx.selected = selected if drag_from < 0 else drag_from
 	fx.sync(dt)
+	if world_layer:
+		world_layer.sync(dt)
+	if _world_probe >= 0.0:
+		_world_probe_step()
 	if proto_view:
 		proto_view.sync(dt)                       # after Fx: it hides the ferry's deck, sinks a lift's closed decks
 	if door_view:
@@ -2374,6 +2393,73 @@ func _draw_monster_drag(hub: int, hit: Vector3) -> void:
 
 
 var _perf_t := 0.0
+func _world_probe_step() -> void:
+	## --world-probe=T (WORLD LAYER perf): frame times for 4 s before and 4 s after a forced 100-shown-unit fall off the
+	## longest bridge at T (the same event a real fall sends: Fx's bodies + the world layer's splats). Vsync off.
+	## Compare with --no-world. Prints one line, then quits.
+	var now := Time.get_ticks_usec()
+	if _probe_t0 == 0:
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		PerfProfile.uncapped = true                    # the phone profile caps at 45: measure uncapped
+		RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
+		_probe_t0 = now
+		_probe_ft = [[], []]
+		_probe_cost = [[], []]
+		return
+	var ft := float(now - _probe_t0) / 1000.0
+	_probe_t0 = now
+	var phase := 0 if sim.time < _world_probe else 1
+	if sim.time >= _world_probe - 4.0:
+		(_probe_ft[phase] as Array).append(ft)
+		(_probe_cost[phase] as Array).append([world_layer.sync_us if world_layer else 0,
+				RenderingServer.viewport_get_measured_render_time_cpu(get_viewport().get_viewport_rid())])
+	if phase == 1 and (_probe_ft[1] as Array).size() == 1:
+		var best := -1
+		var bl := 0.0
+		for i in range(sim.edges.size()):
+			var g: Dictionary = sim.edges[i]["geo"]
+			if not sim.edges[i]["plaza"] and float(g["L"]) > bl:
+				bl = float(g["L"])
+				best = i
+		var g2: Dictionary = sim.edges[best]["geo"]
+		var a := Vector3(g2["A"][0], (sim.nodes[sim.edges[best]["a"]]["pos"] as Vector3).y, g2["A"][1])
+		var b := Vector3(g2["B"][0], (sim.nodes[sim.edges[best]["b"]]["pos"] as Vector3).y, g2["B"][1])
+		var pts := []
+		for k in range(24):
+			pts.append(a.lerp(b, (k + 0.5) / 24.0) + Vector3(0, 0.3, 0))
+		var ev := {"type": "fall", "seat": HUMAN, "faction": SEAT_FACTIONS[HUMAN], "pts": pts,
+				"units": 100.0 * Rules.SCALE, "pour": false}
+		fx.handle(ev)
+		if world_layer:
+			world_layer.handle(ev)
+	if phase == 1 and sim.time >= _world_probe + 4.0:
+		var out := []
+		for arr in _probe_ft:
+			var a2: Array = (arr as Array).duplicate()
+			a2.sort()
+			var sum := 0.0
+			for f in a2:
+				sum += float(f)
+			out.append("avg %.2f ms p95 %.2f max %.2f (%d frames)" % [sum / maxf(a2.size(), 1.0),
+					a2[int(a2.size() * 0.95)] if not a2.is_empty() else 0.0, a2[-1] if not a2.is_empty() else 0.0, a2.size()])
+		for ph in range(2):
+			var wl := 0.0
+			var rc := 0.0
+			var wmax := 0.0
+			for c in _probe_cost[ph]:
+				wl += float(c[0])
+				rc += float(c[1])
+				wmax = maxf(wmax, float(c[0]))
+			var nn := maxf((_probe_cost[ph] as Array).size(), 1.0)
+			out[ph] += " [world sync avg %.3f ms max %.3f, render cpu avg %.2f ms]" % [wl / nn / 1000.0, wmax / 1000.0, rc / nn]
+		print("WORLD PROBE world=%s map=%s | before fall: %s | after fall: %s | splats %d blobs %d riders %d" % [
+				Rules.world_layer, map_path.get_file(), out[0], out[1],
+				world_layer.splats_made if world_layer else 0, world_layer.blobs_made if world_layer else 0,
+				world_layer.riders_done if world_layer else 0])
+		_world_probe = -1.0
+		get_tree().quit()
+
+
 func _perf(dt: float) -> void:
 	## --perf: print frame timing every 3 s (process / physics / draw calls / objects) to find hogs.
 	_perf_t += dt

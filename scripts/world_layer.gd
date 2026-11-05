@@ -1,0 +1,497 @@
+class_name WorldLayer
+extends Node3D
+## WORLD LAYER (Daniele, 2026-11-06: "background we have a setting with an actual floor, when units fall down they
+## splat on the floor underneath and return to tubes that send unit up from below ... those columns should be tubes
+## pumping goo up to our vats ... when they enter an enemy vat they invade the tube on that node until conquering ...
+## turning into goo of that color pushing the other one down (or simply conquering it if neutral) ... crawl to the
+## nearest tube (in form of goo not as units) here they enter and up the tube they go (just visual effect)").
+## Spec: Docs/Game Design/Ooze Syndicate 2.0/05 Handoff/WORLD-LAYER-2026-11.md. PLACEHOLDER art (primitives +
+## shaders) until the kit pieces from world-layer/WORLD-PROMPTS.md are built.
+## VIEW ONLY: reads sim.nodes (owner, units, siege), sim.collapsed and the "fall" / "fling" fx events. It never
+## writes to the Sim and adds nothing to the protocol - a guest draws the same from the host's snapshots and events.
+##  - the floor: a plane FLOOR_DEPTH under the lowest node, dark plates, hazed and faded out at the edges;
+##  - a tube per node platform (not junctions / plazas), from under the platform to the floor: goo flows up in the
+##    owner's colour; a siege pushes the attacker's colour down from the top (share of the fight); a capture pushes
+##    the old colour out of the bottom (neutral: the new colour just fills); a dropped node's tube drains and sinks;
+##  - falls: a splat where the bodies land + droplets, then goo blobs crawl to the nearest tube and ride up inside it.
+## Budget (phones): one draw per tube, one floor, three MultiMeshes (blobs, droplets, splats) with fixed pools;
+## a 100+ unit fall makes at most SPLATS_PER_FALL splats and CRAWL_PER_FALL blobs, the oldest are recycled.
+
+const SHADER_FLOOR := preload("res://shaders/world_floor.gdshader")
+const SHADER_TUBE := preload("res://shaders/world_tube.gdshader")
+const SHADER_GOO := preload("res://shaders/world_goo.gdshader")
+const SHADER_SPLAT := preload("res://shaders/world_splat.gdshader")
+const SHADER_SOCKET := preload("res://shaders/world_socket.gdshader")
+
+const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)
+const TUBE_R := 0.95             # a common platform's tube, under its machinery core
+const TUBE_R_PILLAR := 2.6       # a pillar node: a glass sleeve around the column
+const TUBE_TOP := -3.5           # under the platform centre (legs and core end at -3.6)
+const TUBE_TOP_PILLAR := -2.3    # under the pillar's collar
+const PUSH_T := 1.6              # s: a capture pushes the old colour out of the tube
+const INV_MAX := 0.6             # a siege fills at most this share of the tube from the top
+const INV_RATE := 0.8            # tube share per second the invader band moves
+const LAND_DROP := 26.0          # Fx.FLING_DROP: the bodies drop this far over FALL_S (ease-in)
+const FALL_S := 1.4
+const SPLATS_PER_FALL := 3
+const CRAWL_PER_FALL := 6        # blobs per fall event (one per CRAWL_UNITS shown units, at least one)
+const CRAWL_UNITS := 8.0
+const CRAWL_V := 2.4             # m/s along the floor
+const CRAWL_MAX_T := 6.0         # a long way is crawled faster: never longer than this
+const RISE_V := 5.0              # m/s up the tube
+const SPLAT_LIFE := 7.0
+const SPLAT_MAX := 24
+const CRAWL_MAX := 48
+const DROP_MAX := 96
+const DROPS_PER_SPLAT := 8
+const RIDERS_PER_TUBE := 4
+
+var sim: Sim
+var vis: Dictionary
+var floor_y := -16.0
+var _floor: MeshInstance3D
+var _tubes: Array = []           # [{id, mi, mat, r, top_off, owner, base, base_old, inv, inv_col, inv_seat, pushing, riders, alive, x, z, dirty}]
+var _t := 0.0
+var _pending: Array = []         # [land time, event]
+var _low := false
+# pools (ring buffers)
+var _blob_mm: MultiMesh
+var _drop_mm: MultiMesh
+var _splat_mm: MultiMesh
+var _socket_mm: MultiMesh         # one floor socket per tube (owner-coloured ring)
+const SOCKET_PAD := 1.8           # metres of collar and drains around a tube's foot
+var _blobs: Array = []           # {p, tube, col, t0, mode (0 hop, 1 crawl, 2 enter), v, dur, from}
+var _drops: Array = []           # {p, v, t0, col}
+var _splats: Array = []          # {p, size, t0, col, seed}
+var splats_made := 0             # probes read these
+var blobs_made := 0
+var riders_done := 0
+var sync_us := 0                 # the last sync's cost (perf probe)
+var _warm := 3                   # frames the pools draw one hidden instance so their shaders compile at load
+
+
+static func wanted() -> bool:
+	return Rules.world_layer
+
+
+func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
+	sim = s
+	vis = v
+	_low = mobile or PerfProfile.level() == "low"
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for n in sim.nodes:
+		var p: Vector3 = n["pos"]
+		lo = lo.min(p)
+		hi = hi.max(p)
+	if sim.nodes.is_empty():
+		lo = Vector3.ZERO
+		hi = Vector3.ZERO
+	floor_y = minf(lo.y, 0.0) - FLOOR_DEPTH
+	var centre := (lo + hi) / 2.0
+	var radius := Vector2(hi.x - lo.x, hi.z - lo.z).length() / 2.0
+	_build_floor(centre, radius)
+	for n in sim.nodes:
+		_build_tube(n)
+	_build_pools()
+
+
+func _build_floor(centre: Vector3, radius: float) -> void:
+	_floor = MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2.ONE * (radius * 2.0 + 260.0)
+	_floor.mesh = pm
+	var m := ShaderMaterial.new()
+	m.shader = SHADER_FLOOR
+	m.set_shader_parameter("abyss", Scenery.ABYSS)
+	m.set_shader_parameter("centre", Vector2(centre.x, centre.z))
+	m.set_shader_parameter("r0", radius + 30.0)
+	m.set_shader_parameter("r1", radius + 110.0)
+	m.render_priority = -10                          # the first transparent drawn: everything above blends over it
+	_floor.material_override = m
+	_floor.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_floor.position = Vector3(centre.x, floor_y, centre.z)
+	add_child(_floor)
+
+
+func _build_tube(n: Dictionary) -> void:
+	var id: int = n["id"]
+	if not vis.has(id) or str(n.get("junction", "")) != "" or str(n.get("lane", "")) == "over":
+		return
+	if vis[id].get("platform") == null:              # a plaza member: the plaza piece is shared (spec: later)
+		return
+	var pillar := MapBuilder.platform_piece(n) == "Platform_Pillar"
+	var r := TUBE_R_PILLAR if pillar else TUBE_R
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = r
+	cm.bottom_radius = r
+	cm.height = 1.0
+	cm.radial_segments = 20 if not _low else 14
+	cm.rings = 1
+	cm.cap_top = false
+	cm.cap_bottom = false
+	mi.mesh = cm
+	var m := ShaderMaterial.new()
+	m.shader = SHADER_TUBE
+	m.set_shader_parameter("abyss", Scenery.ABYSS)
+	m.set_shader_parameter("y_bot", floor_y)
+	m.set_shader_parameter("fade_top", Scenery.FOG_HEIGHT)
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	var owner: String = n["owner"]
+	var tb := {"id": id, "mi": mi, "mat": m, "r": r, "top_off": TUBE_TOP_PILLAR if pillar else TUBE_TOP,
+			"owner": owner, "base": _col(owner), "base_old": _col(owner), "inv": 0.0, "inv_col": _col(owner),
+			"inv_seat": "", "pushing": false, "riders": [], "alive": true, "drain": 0.0,
+			"x": (n["pos"] as Vector3).x, "z": (n["pos"] as Vector3).z, "top_y": 999.0}
+	_tubes.append(tb)
+
+
+static func _col(seat: String) -> Color:
+	if seat == "":
+		return Color(0, 0, 0, 0)                     # empty glass (neutral)
+	var c := Rules.seat_color(seat)
+	return Color(c.r, c.g, c.b, 1.0)
+
+
+func _build_pools() -> void:
+	var gm := ShaderMaterial.new()
+	gm.shader = SHADER_GOO
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.5
+	sphere.height = 1.0
+	sphere.radial_segments = 10
+	sphere.rings = 5
+	sphere.material = gm
+	_blob_mm = _mm(sphere, CRAWL_MAX, false)
+	var small := SphereMesh.new()
+	small.radius = 0.5
+	small.height = 1.0
+	small.radial_segments = 6
+	small.rings = 3
+	small.material = gm
+	_drop_mm = _mm(small, DROP_MAX if not _low else DROP_MAX / 2, false)
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE
+	var sm := ShaderMaterial.new()
+	sm.shader = SHADER_SPLAT
+	sm.render_priority = -9                          # over the floor
+	quad.material = sm
+	_splat_mm = _mm(quad, SPLAT_MAX, true)
+	var squad := PlaneMesh.new()
+	squad.size = Vector2.ONE
+	var skm := ShaderMaterial.new()
+	skm.shader = SHADER_SOCKET
+	skm.render_priority = -9
+	squad.material = skm
+	_socket_mm = _mm(squad, maxi(_tubes.size(), 1), true)
+	for i in range(_tubes.size()):
+		var tb: Dictionary = _tubes[i]
+		var half: float = float(tb["r"]) + SOCKET_PAD
+		_socket_mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(half * 2.0, 1.0, half * 2.0)),
+				Vector3(tb["x"], floor_y + 0.02, tb["z"])))
+		_socket_mm.set_instance_custom_data(i, Color(float(tb["r"]) / half, 0, 0, 0))
+		_socket_mm.set_instance_color(i, tb["base"])
+		tb["sock"] = i
+	_socket_mm.visible_instance_count = _tubes.size()
+
+
+func _mm(mesh: Mesh, count: int, custom: bool) -> MultiMesh:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.use_custom_data = custom
+	mm.mesh = mesh
+	mm.instance_count = count
+	mm.visible_instance_count = 0
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
+	return mm
+
+
+# ------------------------------------------------------------------ events
+func handle(ev: Dictionary) -> void:
+	var ty: String = ev.get("type", "")
+	if ty != "fall" and ty != "fling":
+		return
+	if bool(ev.get("decoy", false)):
+		return
+	var pts: Array = ev.get("pts", [])
+	if pts.is_empty():
+		return
+	var shown := float(ev.get("units", 0.0)) if ty == "fling" else Rules.shown_f(float(ev.get("units", 0.0)))
+	if shown <= 0.0:
+		return
+	var p0: Vector3 = pts[0]
+	var depth := clampf(p0.y - floor_y, 0.0, LAND_DROP)
+	var land := FALL_S * sqrt(depth / LAND_DROP)      # the bodies' ease-in drop reaches the floor here
+	if ev.get("pour", false):
+		land = 1.3                                    # horde_view's pour fallers (POUR_G): about the same
+	_pending.append([_t + land, ev, shown])
+
+
+func _land(ev: Dictionary, shown: float) -> void:
+	var pts: Array = ev["pts"]
+	var col := _col(str(ev.get("seat", "")))
+	if col.a <= 0.0:
+		col = Rules.seat_color("")
+	var n_spl := mini(SPLATS_PER_FALL, maxi(1, int(ceil(shown / 12.0))))
+	n_spl = mini(n_spl, pts.size())
+	var size := clampf(1.4 + 0.5 * sqrt(shown / float(n_spl)), 1.6, 5.0)
+	var n_crawl := clampi(int(ceil(shown / CRAWL_UNITS)), 1, CRAWL_PER_FALL)
+	var fling: bool = ev.get("type", "") == "fling"
+	var centre: Vector3 = ev.get("centre", Vector3.ZERO)
+	for k in range(n_spl):
+		var p: Vector3 = pts[int(float(k) * pts.size() / n_spl)]
+		var at := Vector3(p.x + randf_range(-1.2, 1.2), floor_y + 0.03, p.z + randf_range(-1.2, 1.2))
+		if fling:                                     # flung outward off the turning deck
+			var out := Vector3(p.x - centre.x, 0.0, p.z - centre.z)
+			if out.length() > 0.01:
+				at += out.normalized() * 4.0
+		_add_splat(at, size, col)
+		for j in range(DROPS_PER_SPLAT if not _low else DROPS_PER_SPLAT / 2):
+			var a := randf() * TAU
+			var sp := randf_range(2.0, 4.5)
+			_add_drop(at + Vector3(0, 0.2, 0), Vector3(cos(a) * sp, randf_range(3.0, 6.0), sin(a) * sp), col)
+		var mine := n_crawl / n_spl + (1 if k < n_crawl % n_spl else 0)
+		for j in range(mine):
+			_add_blob(at + Vector3(randf_range(-0.5, 0.5) * size * 0.5, 0, randf_range(-0.5, 0.5) * size * 0.5), col)
+
+
+func _add_splat(at: Vector3, size: float, col: Color) -> void:
+	if _splats.size() >= SPLAT_MAX:
+		_splats.pop_front()
+	_splats.append({"p": at, "size": size, "t0": _t, "col": col, "seed": randf()})
+	splats_made += 1
+
+
+func _add_drop(at: Vector3, v: Vector3, col: Color) -> void:
+	if _drops.size() >= _drop_mm.instance_count:
+		_drops.pop_front()
+	_drops.append({"p": at, "v": v, "t0": _t, "col": col})
+
+
+func _add_blob(at: Vector3, col: Color) -> void:
+	var best := -1
+	var bd := INF
+	for i in range(_tubes.size()):
+		var tb: Dictionary = _tubes[i]
+		if not tb["alive"]:
+			continue
+		var d := Vector2(tb["x"] - at.x, tb["z"] - at.z).length()
+		if d < bd:
+			bd = d
+			best = i
+	if _blobs.size() >= CRAWL_MAX:
+		_blobs.pop_front()
+	var dist := maxf(bd - (_tubes[best]["r"] if best >= 0 else 0.0) - 0.2, 0.0)
+	var dur := minf(dist / CRAWL_V, CRAWL_MAX_T) if best >= 0 else 2.0
+	_blobs.append({"p": at, "from": at, "tube": best, "col": col, "t0": _t + randf_range(0.0, 0.35), "mode": 0,
+			"dur": maxf(dur, 0.3), "size": randf_range(0.75, 1.15), "ph": randf() * TAU})
+	blobs_made += 1
+
+
+# ------------------------------------------------------------------ per frame
+func sync(dt: float) -> void:
+	var t0 := Time.get_ticks_usec()
+	_t += dt
+	while not _pending.is_empty() and _pending[0][0] <= _t:
+		var pe: Array = _pending.pop_front()
+		_land(pe[1], pe[2])
+	if _pending.size() > 1 and _pending[-1][0] < _pending[-2][0]:
+		_pending.sort_custom(func(a, b): return a[0] < b[0])
+	_tubes_step(dt)
+	_blobs_step(dt)
+	_drops_step()
+	_splats_step()
+	if _warm > 0:                                     # shader warm-up: one instance each, under the floor (the first
+		_warm -= 1                                    # real fall must not hitch on a compile - 63 ms seen without it)
+		var under := Transform3D(Basis.from_scale(Vector3.ONE * 0.01), Vector3(_floor.position.x, floor_y - 2.0, _floor.position.z))
+		for mm in [_blob_mm, _drop_mm, _splat_mm]:
+			if (mm as MultiMesh).visible_instance_count == 0:
+				(mm as MultiMesh).set_instance_transform(0, under)
+				(mm as MultiMesh).visible_instance_count = 1
+	sync_us = Time.get_ticks_usec() - t0
+
+
+func _tubes_step(dt: float) -> void:
+	for tb in _tubes:
+		var n: Dictionary = sim.nodes[tb["id"]]
+		var mi: MeshInstance3D = tb["mi"]
+		var plat = vis[tb["id"]].get("platform")
+		var top := floor_y + 0.5
+		if plat is Node3D and is_instance_valid(plat) and (plat as Node3D).is_visible_in_tree():
+			top = (plat as Node3D).global_position.y + float(tb["top_off"])
+		if sim.collapsed.get(tb["id"], false):        # Last Stand: the tube drains and sinks with its platform
+			tb["alive"] = false
+			tb["drain"] = minf(float(tb["drain"]) + dt / 1.2, 1.0)
+		if top <= floor_y + 0.4:
+			if mi.visible:
+				mi.visible = false
+				_socket_mm.set_instance_color(int(tb["sock"]), Color(0, 0, 0, 0))
+			continue
+		mi.visible = true
+		if absf(top - float(tb["top_y"])) > 0.01:
+			tb["top_y"] = top
+			var h := top - floor_y
+			mi.transform = Transform3D(Basis.from_scale(Vector3(1.0, h, 1.0)), Vector3(tb["x"], floor_y + h / 2.0, tb["z"]))
+			(tb["mat"] as ShaderMaterial).set_shader_parameter("y_top", top)
+		var owner: String = n["owner"]
+		if owner != tb["owner"]:                      # a capture: the capturer's goo pushes the old colour out
+			tb["base_old"] = tb["base_old"] if tb["pushing"] else tb["base"]
+			if tb["inv_seat"] != owner:
+				tb["inv"] = 0.0
+			tb["inv_seat"] = owner
+			tb["inv_col"] = _col(owner)
+			tb["base"] = _col(owner)
+			tb["owner"] = owner
+			tb["pushing"] = true
+			_socket_mm.set_instance_color(int(tb["sock"]), tb["base"])
+		if tb["pushing"]:
+			tb["inv"] = minf(float(tb["inv"]) + dt / PUSH_T, 1.0)
+			if tb["inv"] >= 1.0:
+				tb["pushing"] = false
+				tb["inv"] = 0.0
+				tb["base_old"] = tb["base"]
+		else:
+			var best_seat := ""
+			var best_u := 0.0
+			var siege: Dictionary = n.get("siege", {})
+			for s in siege:
+				if s != owner and float(siege[s]) > best_u:
+					best_u = float(siege[s])
+					best_seat = s
+			var target := 0.0
+			if best_seat != "":
+				target = INV_MAX * best_u / (best_u + maxf(float(n["units"]), 0.01))
+				if best_seat != tb["inv_seat"] and float(tb["inv"]) < 0.02:
+					tb["inv_seat"] = best_seat
+					tb["inv_col"] = _col(best_seat)
+			if best_seat != tb["inv_seat"]:
+				target = 0.0
+			tb["inv"] = move_toward(float(tb["inv"]), target, dt * INV_RATE)
+		var m: ShaderMaterial = tb["mat"]
+		var top_c: Color = tb["inv_col"]
+		var bot_c: Color = tb["base_old"] if tb["pushing"] else tb["base"]
+		var drain: float = tb["drain"]
+		if drain > 0.0:
+			top_c.a *= 1.0 - drain
+			bot_c.a *= 1.0 - drain
+		var sp: float = tb["inv"]
+		if tb["pushing"]:
+			sp = smoothstep(0.0, 1.0, sp)
+		m.set_shader_parameter("col_top", top_c)
+		m.set_shader_parameter("col_bot", bot_c)
+		m.set_shader_parameter("split", sp)
+		m.set_shader_parameter("push", 1.0 if tb["pushing"] else 0.0)
+		_riders_step(tb, dt, top)
+
+
+func _riders_step(tb: Dictionary, dt: float, top: float) -> void:
+	var riders: Array = tb["riders"]
+	if riders.is_empty() and not tb.get("had_riders", false):
+		return
+	var ys := Vector4(-999, -999, -999, -999)
+	var m: ShaderMaterial = tb["mat"]
+	var keep := []
+	for r in riders:
+		r[0] = float(r[0]) + RISE_V * dt
+		if r[0] < top - 0.3:
+			keep.append(r)
+		else:
+			riders_done += 1
+	tb["riders"] = keep
+	for i in range(mini(keep.size(), RIDERS_PER_TUBE)):
+		ys[i] = keep[i][0]
+		m.set_shader_parameter("rider_c%d" % i, keep[i][1])
+	m.set_shader_parameter("rider_y", ys)
+	tb["had_riders"] = not keep.is_empty()
+
+
+func _blobs_step(_dt: float) -> void:
+	var keep := []
+	var shown := 0
+	for b in _blobs:
+		var age: float = _t - float(b["t0"])
+		var tb: Dictionary = _tubes[b["tube"]] if int(b["tube"]) >= 0 else {}
+		var size: float = b["size"]
+		var p: Vector3 = b["p"]
+		var dir := Vector3.FORWARD
+		var squash := 1.0
+		var target := Vector3(tb["x"], floor_y, tb["z"]) if not tb.is_empty() else p
+		var to := Vector3(target.x - p.x, 0.0, target.z - p.z)
+		if to.length() > 0.01:
+			dir = to.normalized()
+		if age < 0.0:                                 # not out of the splat yet
+			keep.append(b)
+			continue
+		if age < 0.35:                                # recoil out of the splat
+			p = b["from"] + Vector3(0, sin(age / 0.35 * PI) * 0.5, 0)
+			squash = 1.0 + 0.4 * sin(age / 0.35 * PI)
+		elif age < 0.35 + float(b["dur"]):             # crawl
+			var k := (age - 0.35) / float(b["dur"])
+			var from: Vector3 = b["from"]
+			var end := Vector3(target.x, floor_y, target.z)
+			if not tb.is_empty():
+				var away := Vector3(from.x - target.x, 0.0, from.z - target.z)
+				end = Vector3(target.x, floor_y, target.z) + (away.normalized() if away.length() > 0.01 else Vector3.RIGHT) * (float(tb["r"]) + 0.15)
+			p = from.lerp(end, k)
+			p.y = floor_y + 0.12
+			squash = 1.0 + 0.25 * sin(age * 9.0 + float(b["ph"]))
+		elif age < 0.35 + float(b["dur"]) + 0.3 and not tb.is_empty():   # squeeze into the tube
+			var k2 := (age - 0.35 - float(b["dur"])) / 0.3
+			size *= 1.0 - k2
+		else:
+			if not tb.is_empty() and tb["alive"]:
+				(tb["riders"] as Array).append([floor_y + 0.4, b["col"]])
+			continue
+		b["p"] = p
+		var s := 0.95 * size
+		var basis := Basis.looking_at(dir, Vector3.UP).scaled(Vector3(s / squash, s * 0.5 * squash, s * squash))
+		_blob_mm.set_instance_transform(shown, Transform3D(basis, p))
+		_blob_mm.set_instance_color(shown, b["col"])
+		shown += 1
+		keep.append(b)
+	_blobs = keep
+	_blob_mm.visible_instance_count = shown
+
+
+func _drops_step() -> void:
+	var keep := []
+	var shown := 0
+	for d in _drops:
+		var age: float = _t - float(d["t0"])
+		if age > 1.2:
+			continue
+		var v: Vector3 = d["v"]
+		var p: Vector3 = (d["p"] as Vector3) + v * age + Vector3(0, -9.0 * age * age, 0)
+		if p.y < floor_y + 0.05:
+			p.y = floor_y + 0.05
+		var s := 0.22 * (1.0 - age / 1.2) + 0.05
+		_drop_mm.set_instance_transform(shown, Transform3D(Basis.from_scale(Vector3(s, s * (0.6 if p.y <= floor_y + 0.06 else 1.2), s)), p))
+		_drop_mm.set_instance_color(shown, d["col"])
+		shown += 1
+		keep.append(d)
+	_drops = keep
+	_drop_mm.visible_instance_count = shown
+
+
+func _splats_step() -> void:
+	var keep := []
+	var shown := 0
+	for s in _splats:
+		var age: float = _t - float(s["t0"])
+		if age > SPLAT_LIFE:
+			continue
+		var grow := 1.0 - pow(1.0 - clampf(age / 0.35, 0.0, 1.0), 3.0)
+		var size: float = float(s["size"]) * 2.0
+		_splat_mm.set_instance_transform(shown, Transform3D(Basis.from_scale(Vector3(size, 1.0, size)).rotated(Vector3.UP, float(s["seed"]) * TAU), s["p"]))
+		_splat_mm.set_instance_color(shown, s["col"])
+		_splat_mm.set_instance_custom_data(shown, Color(age / SPLAT_LIFE, s["seed"], grow, 0.0))
+		shown += 1
+		keep.append(s)
+	_splats = keep
+	_splat_mm.visible_instance_count = shown

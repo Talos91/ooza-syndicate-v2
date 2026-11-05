@@ -160,6 +160,9 @@ const GOO_PUSH := 0.67
 # no surface normal maps (for materials built after it is set) - to test whether the build is what
 # makes a machine "run like crazy" (Daniele, Alpha 13 playtest).
 static var low_detail: bool = false
+# WORLD LAYER (Daniele, 2026-11-06): the floor under the decks, a goo tube per node, capture push, fall splats and goo
+# crawling back to the tubes (world_layer.gd). View only - the Sim and the protocol never read it. --no-world turns it off.
+static var world_layer: bool = true
 # HIDE ENEMY COUNTS (Daniele, Alpha 16: a toggle in the options and Debug). On: no unit numbers on any
 # enemy node, in either mode (badges show the seat letter). Off: BRAWL shows every count as Alpha 11
 # did; SIEGE never shows enemy numbers (an identity rule of 2.0).

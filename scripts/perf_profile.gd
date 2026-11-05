@@ -192,6 +192,9 @@ static func lite() -> bool:
 	return bool(PROFILES[level()]["lite"])
 
 
+static var uncapped := false                          # main --world-probe: no frame cap while it measures
+
+
 static func play_fps() -> int:
 	## The frame cap while a match runs: the FPS setting, or the profile's own; LOW RES stays at 30.
 	var own: int = PROFILES[level()]["fps"]
@@ -339,6 +342,8 @@ func _process(dt: float) -> void:
 			or (sim != null and bool(sim.get("over")))
 	var play := play_fps()
 	var cap: int = mini(int(p["idle_fps"]), play) if idle else play
+	if PerfProfile.uncapped:                           # a frame-time probe (main --world-probe) measures uncapped
+		cap = 0
 	if Engine.max_fps != cap:
 		Engine.max_fps = cap
 	if not idle:
