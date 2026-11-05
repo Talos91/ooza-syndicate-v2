@@ -45,6 +45,8 @@ const MISFIRE_FLING := 30.0          # m a misfired throw travels out before it 
 # instead of the ferry edge's module decks with Relay_Ferry_Rail_v3 at both lips (their Light = the lamp), and
 # Deck_Conveyor_Relay_v3_<L> / Deck_Conveyor_v3_<L> (plain belt) with their own scrolling Treads instead of the chevrons.
 # Not ticked (stand-ins kept): the launcher, lift and tilt pieces.
+const LAUNCHER_SCALE := 1.3          # 2026-11-06 (Daniele: "scale it up"): the launcher stands off-centre, behind the
+const LAUNCHER_OFF := 3.9            # node's vat from its target, and lobs over it (it used to sit hidden inside the vat)
 const V3_NODE_KINDS := ["ferry", "conveyor", "launcher"]   # (2026-11-05: _v3_platforms now dresses every relay node)
 const TREAD_PERIOD := {4: 0.9850, 8: 0.9943, 12: 0.9964}   # relays_4_0.json: the Treads' scroll period per deck length
 # Conveyors 4.1 (🎨 2026-11-05, Daniele: "conveyor for all type of bridge" + "a visually different conveyor" for the plain
@@ -384,6 +386,8 @@ func _v3_relay_models(n: Dictionary, plat: Node3D) -> void:
 			r["turret"] = p.find_child("Turret", true, false)
 			r["arm"] = p.find_child("Arm", true, false)
 			r["swing"] = 0.0
+			r["orbit"] = 0.0
+			p.scale = Vector3.ONE * LAUNCHER_SCALE
 			(r["pad"] as Node3D).visible = false
 		"lift":
 			(r["lift"]["piston"] as Node3D).visible = false
@@ -1038,16 +1042,19 @@ func _launcher(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 		if kick > 0.75 and float(r["swing"]) < 0.5:
 			r["swing"] = 1.0
 		r["swing"] = maxf(0.0, float(r["swing"]) - _dt * 1.4)
-		var tu = r.get("turret")
-		if tu is Node3D and tgt >= 0 and not misfire:
-			var to3: Vector3 = sim.nodes[tgt]["pos"]
-			(tu as Node3D).rotation.y = lerp_angle((tu as Node3D).rotation.y,
-					Rules.heading(((to3 - (n["pos"] as Vector3)) * Vector3(1, 0, 1)).normalized()), minf(1.0, _dt * 6.0))
+		if tgt >= 0 and not misfire:                  # the whole launcher circles the vat to stand opposite its target,
+			var to3: Vector3 = sim.nodes[tgt]["pos"]     # facing it (turret +X at the target)
+			var want := Rules.heading(((to3 - (n["pos"] as Vector3)) * Vector3(1, 0, 1)).normalized())
+			r["orbit"] = lerp_angle(float(r["orbit"]), want, minf(1.0, _dt * 4.0))
+		var v3n: Node3D = r["v3"]
+		if not gone:                                  # (once the node collapses, Fx._collapse's fall owns it)
+			var face := Vector3(cos(float(r["orbit"])), 0.0, -sin(float(r["orbit"])))   # (inverse of Rules.heading)
+			v3n.position = (n["pos"] as Vector3) - face * LAUNCHER_OFF
+			v3n.rotation = Vector3(0.12 * sin(sim.time * 9.0), float(r["orbit"]), 0.12 * cos(sim.time * 7.0)) if misfire 					else Vector3(0.0, float(r["orbit"]), 0.0)
 		var am = r.get("arm")
 		if am is Node3D:                               # Blender rot.y rest -12 / fire 125 deg = Godot rotation.z -angle
 			var sw := clampf(float(r["swing"]) * 1.6, 0.0, 1.0)
 			(am as Node3D).rotation.z = lerpf(deg_to_rad(12.0), deg_to_rad(-125.0), sw * sw * (3.0 - 2.0 * sw))
-		(r["v3"] as Node3D).rotation = Vector3(0.12 * sin(sim.time * 9.0), 0.0, 0.12 * cos(sim.time * 7.0)) if misfire and not gone else Vector3.ZERO
 	if misfire:
 		arc.visible = false                           # (no aim: the throws go anywhere)
 	var rings: Dictionary = r["rings"]
