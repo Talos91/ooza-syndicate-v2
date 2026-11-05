@@ -3420,7 +3420,7 @@ func _customize_body(r: Rect2) -> void:
 	var x := r.position.x
 	var w := r.size.x
 	var top := r.position.y
-	var cat := _ward_cat if _ward_cat in WARDROBE_CATS else "vat"
+	var cat := _ward_cat if _ward_cat in _ward_cats() else "vat"
 	var looks: Array = TERRITORY_LOOKS.keys() if cat == "territory" else Cosmetics.OPTIONS[cat]
 	var played := ArmyPresets.cosmetic_loadout_for(_army)          # what plays (a locked pick plays as the default)
 	var saved := ArmyPresets.cosmetic_loadout_for(_army, true)     # the picks as saved
@@ -3468,17 +3468,23 @@ func _ward_look_name(cat: String, id: String) -> String:
 	return Cosmetics.label(cat, id, _army)
 
 
+func _ward_cats() -> Array:
+	## CUSTOMIZE's categories: WARDROBE_CATS minus the families archived out of the game (Rules.ARCHIVED_FAMILIES).
+	return WARDROBE_CATS.filter(func(c): return not c in Rules.ARCHIVED_FAMILIES)
+
+
 func _ward_rail(pos: Vector2, h: float, cat: String, played: Dictionary) -> float:
 	## The categories as model icons (Daniele 2026-11-05): each tile shows what that family wears now - its default
 	## model, or the equipped look's - so the rail reads as your whole army at a glance; TERRITORY shows its word
 	## (NEON / GOO). All seven fit in a grid of square tiles (2 or 3 columns); the open one lit. Returns the width used.
 	var gap := 6.0
-	var n := WARDROBE_CATS.size()
-	var cols := 3                                       # 3 x 3: the biggest pictures the height allows
-	var rows := ceili(n / float(cols))
+	var cats := _ward_cats()
+	var n := cats.size()
+	var rows := 3                                       # three rows: the tile size never changes, the columns follow
+	var cols := ceili(n / float(rows))                  # the categories (an archived family takes its column's room)
 	var cell := floorf(minf((h - gap * (rows - 1)) / rows, UiKit.tap_h(self, 44.0) * 2.2))
 	for i in range(n):
-		var cc: String = WARDROBE_CATS[i]
+		var cc: String = cats[i]
 		var now := ArmyPresets.core_territory if cc == "territory" else str(played[cc])
 		var b := UiKit.btn(self, "", pos + Vector2((i % cols) * (cell + gap), (i / cols) * (cell + gap)), Vector2(cell, cell), func():
 			_ward_cat = cc
