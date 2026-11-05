@@ -223,7 +223,7 @@ func _floor_px() -> int:
 
 func _draw_gmn_gauge(b: Rect2, fs: int) -> void:
 	## GMN-1 (the director's tank, Daniele: "apply the correct vat"): a bold white line at each quarter with its share
-	## centred on it (- 75% -), the picked one lit in the accent; SEND on the top cap, the units on the bottom of the glass.
+	## centred on it (- 75% -), the picked one lit in the accent; the units on the bottom of the glass. No SEND word (Daniele 2026-11-05: "Drop SEND").
 	var s := ui_scale
 	var acc: Color = HudNoir.accent
 	var ol := Color(0, 0, 0, 0.75)
@@ -245,11 +245,6 @@ func _draw_gmn_gauge(b: Rect2, fs: int) -> void:
 		var p := Vector2(cx - w / 2.0, y + (_font.get_ascent(fs) - _font.get_descent(fs)) / 2.0)
 		draw_string_outline(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(4 * s), ol)
 		draw_string(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, acc.lerp(Color.WHITE, 0.5) if on else Color.WHITE)
-	var hd := "SEND"
-	var hw := _font.get_string_size(hd, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var hp := Vector2(b.get_center().x - hw / 2.0, b.position.y * 0.5 + (_font.get_ascent(fs) - _font.get_descent(fs)) / 2.0)
-	draw_string_outline(_font, hp, hd, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(4 * s), ol)
-	draw_string(_font, hp, hd, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
 	var units := _units_line()
 	if units != "":
 		var uw := _font.get_string_size(units, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
