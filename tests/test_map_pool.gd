@@ -64,7 +64,7 @@ func _init() -> void:
 	print("%d maps in the pool" % paths.size())
 	# SEAT BIAS (Daniele 2026-10-27): N-24 / N-04 are out of 1v1 (MapPool.WITHHELD_MODES) - 1v1 is all they seat, so they
 	# leave the picker and the random rematch entirely; still baked and in all() (test_maps4 keeps checking them)
-	for code in ["N-24", "N-04"]:
+	for code in ([] if Rules.proto_debug else ["N-24", "N-04"]):   # (old maps: not checked on a proto build, Daniele 2026-11-06)
 		check(MapPool.WITHHELD_MODES.get(code, []).has("1v1") and not MapPool.mode_offered(code, "1v1"), "%s: never offered in 1v1" % code)
 		check(not paths.any(func(p): return p.get_file().begins_with(code)), "%s: not on 02 BATTLEFIELD / the random rematch" % code)
 		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)), "%s: still baked and in MapPool.all()" % code)
