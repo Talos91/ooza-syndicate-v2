@@ -18,6 +18,8 @@ var _full := -1.0                                  # the list's own length along
 var _full_w := -1.0                                # (vertical lists) its width before the pager took its column
 var _side := false                                 # the pager is a column at the right (wide lists) or a strip under (narrow)
 var _pager: Control = null
+var pager_dock := Rect2()                          # ROUND 4 (Daniele: "navigation can be next to done button"): when set (parent
+                                                   # coords), the ‹ n / N › strip sits there, right-aligned, its height; the list keeps its length
 var _label: Label = null
 var _queued := false
 var horizontal := false:
@@ -123,7 +125,9 @@ func _layout() -> void:
 		return
 	_side = false                                  # ROUND 2b (Daniele 2026-11-04: "up and down arrows should be gone"): the pager is
 	                                               # always ‹ n / N › under the list, never a ▲ / ▼ column
-	var view := _full if (_side or horizontal) else _full - ph - 6.0   # a narrow rail: the pager under it
+	if pager_dock.size.y > 0.0:
+		ph = pager_dock.size.y
+	var view := _full if (_side or horizontal or pager_dock.size.y > 0.0) else _full - ph - 6.0   # a narrow rail: the pager under it
 	_set_len(view)
 	size.x = _full_w - ph - 8.0 if _side else (_full_w if not horizontal else size.x)
 	pages = [0.0]
@@ -239,6 +243,8 @@ func _make_pager(m, ph: float) -> void:
 			next.position = Vector2(w - bw, 0)
 		_pager.size = Vector2(w, ph)
 		_pager.position = position + Vector2(_full_w - w, size.y + 6.0)
+		if pager_dock.size.y > 0.0:                # ROUND 4: docked beside the page's DONE
+			_pager.position = pager_dock.position + Vector2(pager_dock.size.x - w, 0)
 	else:
 		_pager.size = Vector2(w, _full)
 		_pager.position = position + Vector2(_full_w - w, 0)

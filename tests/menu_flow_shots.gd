@@ -50,6 +50,9 @@ func _fake_room(mode: String, guest: bool, ready_all := false) -> void:
 	for i in range(n):
 		Net.roster[i + 1] = {"faction": facs[i], "slot": i, "colour": "", "name": ["DANIELE", "MIRA", "LUCA", "GOOGIRL", "VEX-99"][i],
 				"ready": ready_all and i > 0}
+	Net.chat_history = [{"id": 1, "pid": 2, "who": "MIRA", "seat": "B", "text": "gl hf"},
+			{"id": 2, "pid": 1, "who": "DANIELE", "seat": "A", "text": "ready when you are"},
+			{"id": 3, "pid": 3, "who": "LUCA", "seat": "C", "text": "give me a sec, picking my army"}]
 
 
 func _run() -> void:
@@ -65,6 +68,11 @@ func _run() -> void:
 	m._join_open = false
 	m.show_setup()
 	await shot("03-match-setup")
+	for sh in [["seat:B", "03b-setup-seat-sheet"], ["mode", "03c-setup-mode-sheet"]]:   # ROUND 4
+		m._lobby_sheet = sh[0]
+		m.show_setup()
+		await shot(sh[1])
+	m._lobby_sheet = ""
 	m._bg_sheet = true
 	m.show_setup()
 	await shot("04-setup-background-sheet")
@@ -100,7 +108,7 @@ func _run() -> void:
 	await shot("12-room-host-map-picker")
 	m._cancel_pick()
 	for sh in [["rules", "14-room-sheet-rules"], ["mode", "15-room-sheet-mode"], ["seat:1", "16-room-sheet-seat"],
-			["faction", "17-room-sheet-faction"], ["colour", "18-room-sheet-colour"]]:
+			["background", "17-room-sheet-background"], ["colour", "18-room-sheet-colour"]]:
 		m._lobby_sheet = sh[0]
 		m.show_lobby()
 		await shot(sh[1])
@@ -117,4 +125,17 @@ func _run() -> void:
 	m.show_lobby()
 	await shot("22-room-guest-2v2-seat-sheet")
 	m._lobby_sheet = ""
+	m._pick(m.show_factions)                          # ROUND 4: ARMY from the room, then EDIT LOADOUT
+	await shot("23-room-army")
+	m.show_armies(m.faction, m.show_factions)
+	await shot("24-loadout-from-lobby")
+	m._save_armies()
+	await shot("24b-after-save")
+	_fake_room("2v2", false)
+	m._lobby_sheet = "seat:3"
+	m.show_lobby()
+	await shot("16b-room-host-open-seat-sheet")
+	m._lobby_sheet = ""
+	m.show_options()
+	await shot("25-settings")
 	get_tree().quit()
