@@ -97,6 +97,21 @@ func _pinwheel() -> void:
 	check(rot >= 0 and s.controlled_edges(rot).size() == 4, "R-05: the rotor drives 4 decks")
 
 
+func _gates() -> void:
+	## R-02 Gate: each gatehouse is a retract relay pulling BOTH its doors (2 decks); R-03: three 1-bridge ferries.
+	var s := _sim("R-02")
+	check(s != null, "R-02 loads")
+	if s != null:
+		var n_ret := 0
+		for n in s.nodes:
+			if n["relay"] == "retract":
+				n_ret += 1
+				check(s.controlled_edges(n["id"]).size() == 2, "R-02: gatehouse %d pulls 2 doors" % n["id"])
+		check(n_ret == 2, "R-02: two gatehouses (got %d)" % n_ret)
+	var r3 := _sim("R-03")
+	check(r3 != null and r3._ferry_plain.size() == 3 and r3._ferry_groups.is_empty(), "R-03: three 1-bridge ferries")
+
+
 func _play(code: String) -> void:
 	var m := {}
 	for f in DirAccess.get_files_at("res://maps4"):
@@ -121,8 +136,9 @@ func _play(code: String) -> void:
 func _init() -> void:
 	_strait()
 	_pinwheel()
-	_play("R-01")
-	_play("R-05")
+	_gates()
+	for code in ["R-01", "R-02", "R-03", "R-05"]:
+		_play(code)
 	print("test_round_r: %d checks, %d failed" % [checks, fails])
 	print("ALL PASSED" if fails == 0 else "FAILED")
 	quit(1 if fails else 0)

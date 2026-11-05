@@ -95,7 +95,7 @@ static func battlefield() -> Array:
 # PROTO PICKER (Daniele 2026-11-03: "in the proto build the map picker must list ONLY the prototype maps"): a proto build
 # (Rules.proto_debug) offers just these - the Relays 3.0 test maps - and no older map fills a mode they lack (they are 1v1 only,
 # so the picker shows only the 1v1 chip). The release line never reaches this: its VERSION has no "-proto".
-const PROTO: Array[String] = ["R-01", "R-05", "P-01", "P-02", "P-03", "P-04", "P-05"]   # + round R maps (2026-11-05, MAP-ROUND-2026-11)
+const PROTO: Array[String] = ["R-01", "R-02", "R-03", "R-05", "P-01", "P-02", "P-03", "P-04", "P-05"]   # + round R maps (2026-11-05, MAP-ROUND-2026-11)
 static var _battlefield_cache: Array = []
 static var _pooled_modes: Dictionary = {}              # the modes the new pool (POOL_GROUPS) offers
 
