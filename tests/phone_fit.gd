@@ -13,6 +13,7 @@ extends Node
 ##   bplat - badges covering another node's platform
 ##   relay buttons (RELAY V2) - the smallest button tap disc and the pad's own size (pt), discs off screen / under the
 ##           HUD, discs reaching over another node's platform (that node keeps those taps: RelayView.button_at)
+##   LEVELS (map round 2026-11) - per lift and level 0 / 1: _measure_levels below
 ## Output: one line per (map, pitch) and a CHOICE line per map (the sweep behind scripts/map_camera.gd).
 ## Args (after --): out=<file> pitches=auto|50,54,.. maps=C-05,S-19 (optional filter) pt=844
 
@@ -160,6 +161,75 @@ func _measure(main: Node, pt_w: float) -> Dictionary:
 			"btn": btn, "pad": pad, "bthud": bthud, "btclash": btclash}
 
 
+func _measure_levels(main: Node) -> PackedStringArray:
+	## LEVELS (MAP-ROUND-2026-11 rule 8: "the probe checks tap overlap across levels"). For every lift, at level 0 and at
+	## level 1 (set directly, view synced a few frames), through the game's own tap path (main._node_at(main._ground(s), s)):
+	##   own  - taps on the lift's DRAWN platform (centre + 8 points at 0.6 of its rim, raised `rise` x level) that select
+	##          the lift; other = they select another node, miss = nothing
+	##   steal - other platforms whose drawn centre now selects the lift (the upper level covering a lower level's tap)
+	##   cover - other platforms whose centre lies under the lift's drawn platform (rim shrunk 0.85)
+	## Levels CLEAN = steal 0 and cover 0 at both levels (the brief's gate); own < 9 is reported apart (a neighbour's
+	## badge / button over the lift's own platform: the same check as `bplat`, not a level overlap).
+	var out := PackedStringArray()
+	var sim = main.sim
+	var cam: Camera3D = main.cam
+	var lifts := []
+	for n in sim.nodes:
+		if str(n.get("relay", "")) == "lift":
+			lifts.append(n)
+	if lifts.is_empty():
+		return out
+	var rise_m: float = float(Rules.RELAYS_PROTO["lift"]["rise"])
+	var keep := {}
+	for n in lifts:
+		keep[n["id"]] = n["relay_index"]
+	for level in [0, 1]:
+		for n in lifts:
+			n["relay_index"] = level
+		for f in range(4):
+			await get_tree().process_frame
+		for n in lifts:
+			var id: int = n["id"]
+			var top: Vector3 = (n["pos"] as Vector3) + Vector3(0, rise_m * level, 0)
+			var c := _circle_screen(cam, top, Rules.R)
+			var pts := [c["c"]]
+			for k in range(8):
+				var a := TAU * k / 8.0
+				pts.append((c["c"] as Vector2) + Vector2(cos(a) * c["hx"], sin(a) * c["hy"]) * 0.6)
+			var own := 0
+			var other := 0
+			var miss := 0
+			var others := {}
+			for s in pts:
+				var hit: int = main._node_at(main._ground(s), s)
+				if hit == id:
+					own += 1
+				elif hit < 0:
+					miss += 1
+				else:
+					other += 1                                 # which path took it: a relay button, a badge, the ground
+					var g: Vector3 = main._ground(s)
+					var why := "button" if main._relay_button_at(g, s) >= 0 else ("badge" if main.hud.badge_at(s) >= 0 else "ground")
+					others["%d:%s" % [hit, why]] = true
+			var steal := []
+			var cover := []
+			for m in sim.nodes:
+				if m["id"] == id or m.get("node_kind", "") == "junction":
+					continue
+				var s2 := cam.unproject_position(m["pos"])
+				if main._node_at(main._ground(s2), s2) == id:
+					steal.append(m["id"])
+				if _rect_hits_circle(Rect2(s2, Vector2.ZERO), c):
+					cover.append(m["id"])
+			out.append("LEVELS lift %d level %d (rise %.1f m): own %d/9 other %d %s miss %d  steal %d %s  cover %d %s  %s" % [
+					id, level, rise_m * level, own, other, str(others.keys()), miss, steal.size(), str(steal), cover.size(),
+					str(cover), ("levels CLEAN" if steal.is_empty() and cover.is_empty() else "levels OVERLAP") + (
+					"" if own == 9 else " (own platform partly under another target)")])
+	for n in lifts:
+		n["relay_index"] = keep[n["id"]]
+	return out
+
+
 func _run() -> void:
 	var out_path := _arg("out", "user://phonefit.txt")
 	var pitches := []
@@ -198,6 +268,9 @@ func _run() -> void:
 				line += "  relay buttons: tap %.1f pt (pad %.1f pt) off/hud %d over-a-platform %d" % [r["btn"], r["pad"], r["bthud"], r["btclash"]]
 			print(line)
 			out_lines.append(line)
+			for ll in await _measure_levels(inst):       # LEVELS (map round 2026-11, plan rule 8): lifts only
+				print(ll)
+				out_lines.append(ll)
 			inst.queue_free()
 			for f in range(2):
 				await get_tree().process_frame
