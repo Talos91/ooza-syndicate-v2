@@ -856,6 +856,11 @@ const ARCHIVED_SKILLS := ["mire", "anchor", "bypass"]
 # The flag behind them: off in the game; tests that still exercise their code switch it on (then map_pool() lets them into
 # a loadout). The ARMIES picker and the shop read MAP_SKILLS and never show them.
 static var archived_on := false
+# Cosmetic families out of the game (Daniele 2026-11-05: "monster is archived so make sure that when [it] will be archived it
+# won't be shown anymore"): a family listed here leaves ARMIES > CUSTOMIZE (its rail tile and looks). Archiving the monster
+# = add "monster"; the monster hub leaves with it (Daniele 2026-11-05: "Hide both").
+# Empty until that change lands.
+const ARCHIVED_FAMILIES: Array[String] = []
 
 
 static func map_pool() -> Array:
