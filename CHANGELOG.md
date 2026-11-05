@@ -2,6 +2,10 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto21** - 2026-11-06 (proto-r, staging/proto/): R-14 Catapult Bay: a launcher map - pads throw over the bay, a ferry
+  crosses it, guns hold the crowns; the Very Last Stand skips launchers (they never fall). Proto suites now check only the MapPool.PROTO
+  maps (Daniele 2026-11-06).
+
 - **0.23.15-proto20** - 2026-11-06 (proto-r, staging/proto/): the cannon launcher 3x bigger ("the tower needs to be bigger"), T2 / T3
   cannons for the coming 3-tier launcher, and only its light strips glow. Includes proto19 (cannon launcher, never published: freeze).
 
