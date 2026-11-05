@@ -2,6 +2,9 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto12** - 2026-11-05 (proto-r, staging/proto/): Round R wave 2: R-12 Crossfire, R-06 Fort, R-09 Stack, R-10 Crescent,
+  R-13 Gearbox on the proto picker; speed lanes / belts carry over a Crossing (Sim._conv_pieces).
+
 - **0.23.15-proto11** - 2026-11-05 (proto-r, staging/proto/): R-02 Gate: the hub's speed bridges mirror left / right (both tops flow
   into the hub, both bottoms out), per Daniele's proto10 check. Map file only.
 
