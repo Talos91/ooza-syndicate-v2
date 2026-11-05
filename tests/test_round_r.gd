@@ -313,7 +313,7 @@ func _shot_at(s: Sim, g: Dictionary) -> bool:
 func _neutral_guns() -> void:
 	## Daniele 2026-11-06: map-placed NEUTRAL machinegoons, a symmetric set ("symmetry is key"), shoot every seat's lines
 	## ("neutral shoot all, apply that to laser neutral too"); "if you capture the goon it's yours like any other structure".
-	var want := {"R-01": 2, "R-02": 2, "R-05": 2, "R-11": 2, "R-06": 2, "R-10": 1}
+	var want := {"R-01": 2, "R-02": 2, "R-05": 2, "R-11": 2, "R-06": 2, "R-10": 1, "R-14": 2}
 	for code in want:
 		var s := _sim(code)
 		var goons := s.nodes.filter(func(n): return n["structure"] == "machinegoon")
@@ -326,6 +326,41 @@ func _neutral_guns() -> void:
 	var s2 := _sim("R-02")                              # the gatehouses: neutral relays with a laser
 	var lasers := s2.nodes.filter(func(n): return n["structure"] == "laser" and n["owner"] == "")
 	check(not lasers.is_empty() and _shot_at(s2, lasers[0]), "R-02: a neutral laser fires at a line of A")
+
+
+func _catapult() -> void:
+	## R-14 Catapult Bay (Daniele 2026-11-06: "design one" - a round-R launcher map): two launcher pads, each sweeping the
+	## enemy bank (3 targets), a 1-bridge ferry between them; an armed pad throws a line that walks onto it over the bay.
+	var s := _sim("R-14")
+	check(s != null, "R-14 loads")
+	if s == null:
+		return
+	var pads := s.nodes.filter(func(n): return n["relay"] == "launcher")
+	check(pads.size() == 2 and pads.all(func(n): return (n["proto"]["targets"] as Array).size() == 3), "R-14: two pads, each sweeping 3 targets")
+	check(s._ferry_plain.size() == 1, "R-14: one ferry across the bay (got %d)" % s._ferry_plain.size())
+	var pad: Dictionary = pads[0]
+	var front := -1
+	for e in s.edges:
+		for k in [["a", "b"], ["b", "a"]]:
+			var o: int = e[k[1]]
+			if e[k[0]] == pad["id"] and s.nodes[o]["relay"] == "" and s.nodes[o]["tier"] == 1 and s.nodes[o]["structure"] == "vat":
+				front = o
+	check(front >= 0, "R-14: the pad has a front platform")
+	if front < 0:
+		return
+	pad["owner"] = "A"
+	s.nodes[front]["owner"] = "A"
+	s.nodes[front]["units"] = 60.0
+	check(s.fire_relay(pad["id"]), "R-14: the pad arms")
+	var flew := false
+	for i in range(400):
+		s.step(0.05)
+		if pad["relay_phase"] == "moving" and s.hordes.filter(func(h): return h["owner"] == "A").is_empty() and not flew:
+			s.send(front, pad["id"], 1.0)
+		if not s.flights.is_empty():
+			flew = true
+			break
+	check(flew, "R-14: a line walking onto the armed pad is thrown over the bay")
 
 
 func _play(code: String) -> void:
@@ -356,7 +391,8 @@ func _init() -> void:
 	_wave2()
 	_gearbox_link()
 	_neutral_guns()
-	for code in ["R-01", "R-02", "R-04", "R-05", "R-11", "R-06", "R-09", "R-10", "R-12", "R-13"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
+	_catapult()
+	for code in ["R-01", "R-02", "R-04", "R-05", "R-11", "R-06", "R-09", "R-10", "R-12", "R-13", "R-14"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
 		_play(code)
 	print("test_round_r: %d checks, %d failed" % [checks, fails])
 	print("ALL PASSED" if fails == 0 else "FAILED")

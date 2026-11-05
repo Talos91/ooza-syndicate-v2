@@ -3222,9 +3222,11 @@ func start_very_last_stand_now(gap := -1.0) -> void:
 
 
 func _vls_surviving() -> Array:
+	## The platforms the Very Last Stand still has to drop: an indestructible node (the launcher, 5668f9d) never falls,
+	## so it is neither picked nor counted (R-14 has two: they would hold two of the last slots and stall the drops).
 	var out := []
 	for n in nodes:
-		if not collapsed.get(n["id"], false):
+		if not collapsed.get(n["id"], false) and not n.get("indestructible", false):
 			out.append(n["id"])
 	return out
 
@@ -3253,7 +3255,7 @@ func _vls_pick(gone: Dictionary) -> int:
 			survivors.append(n["id"])
 	var candidates := []
 	for id in survivors:
-		if _vls_open_links(id, gone) <= 2:
+		if _vls_open_links(id, gone) <= 2 and not nodes[id].get("indestructible", false):
 			candidates.append(id)
 	candidates.sort()
 	var safe := []
@@ -3264,7 +3266,7 @@ func _vls_pick(gone: Dictionary) -> int:
 			safe.append(id)
 	if not safe.is_empty():
 		return safe[rng.randi_range(0, safe.size() - 1)]
-	var pool: Array = candidates if not candidates.is_empty() else survivors.duplicate()   # no 1-2-conn
+	var pool: Array = candidates if not candidates.is_empty() else survivors.filter(func(x): return not nodes[x].get("indestructible", false))   # no 1-2-conn
 	pool.sort()                                                                            # platform at
 	var best_stranded := 999999                                                            # all: fall back
 	var ties := []                                                                         # to any survivor
