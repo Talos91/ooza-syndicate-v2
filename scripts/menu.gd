@@ -2426,7 +2426,7 @@ func _cosmetic_path(family: String, id: String) -> String:
 	if item == "vat:graduate":
 		return TutorialDirector.line("locked_cosmetic").to_upper()
 	if family == "vat" and id == "faction":
-		return "%d / %d WINS AS %s, ITS CAMPAIGN, OR UNLOCK" % [int(Progression.faction_stats(_army)["vat_wins"]),
+		return "%d / %d WINS AS %s OR ITS CAMPAIGN" % [int(Progression.faction_stats(_army)["vat_wins"]),
 				int(Rules.PROGRESSION["faction_vat_wins"]), "BLOOM" if _army == "bloom" else _army.to_upper()]
 	return "UNLOCK WITH SCRAP OR CHIPS"
 
@@ -3561,10 +3561,10 @@ func _ward_stage(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped
 	y += UiKit.line_h(self, 26, true) + 8.0
 	# the foot: the look's line, then the tier chips and the action
 	var detail := _ward_detail(cat, sel, st)
-	var dh := UiKit.text_h(self, detail, 14, iw)
-	var ah := UiKit.tap_h(self, 50.0)
-	var ay := pos.y + dims.y - 16.0 - ah
-	var dy := ay - 10.0 - dh
+	var dh := UiKit.text_h(self, detail, 12, iw)       # Daniele 2026-11-05: a small line, the stage keeps the room
+	var ah := UiKit.tap_h(self, 44.0)
+	var ay := pos.y + dims.y - 12.0 - ah
+	var dy := ay - 6.0 - dh
 	var vh := dy - 10.0 - y
 	# the stage: a dark well with the accent's glow, the model turning in it
 	content.add_child(UiKit.rect(Vector2(ix, y), Vector2(iw, vh), Color(UiKit.BASE, 0.75)))
@@ -3600,7 +3600,7 @@ func _ward_stage(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped
 		var tier := clampi(_ward_tier, 1, tiers) if tiers > 0 else 0
 		pv = WardrobePreview.make(cat, sel, _army, tier, Vector2(iw, vh))
 		_shell_add(pv, Vector2(ix, y))
-	var dl := UiKit.label(self, detail, 14, LOCK_COL if st["locked"] else UiKit.MUTED)
+	var dl := UiKit.label(self, detail, 12, LOCK_COL if st["locked"] else UiKit.MUTED)
 	dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dl.custom_minimum_size = Vector2(iw, 0)
 	_shell_add(dl, Vector2(ix, dy))
@@ -3656,7 +3656,7 @@ func _ward_detail(cat: String, sel: String, st: Dictionary) -> String:
 		out = TERRITORY_LOOKS[sel][1] + " One pick for every faction."
 	elif st["locked"] or not Progression.owns(Progression.cosmetic_item(cat, sel, _army)) and str(st["line"]) != "":
 		var item := Progression.cosmetic_item(cat, sel, _army)
-		out = "TO UNLOCK: " + _cosmetic_path(cat, sel)
+		out = "UNLOCK: " + _cosmetic_path(cat, sel)
 		var price := Progression.price(item)
 		var costs := []
 		for cur in ["soft", "premium"]:
@@ -3664,9 +3664,8 @@ func _ward_detail(cat: String, sel: String, st: Dictionary) -> String:
 				costs.append(Progression.amount_text(int(price[cur]), cur, false))
 		if not costs.is_empty():
 			out += "  ·  " + " OR ".join(costs)
-		if not st["locked"]:
-			out += "
-Open while testing: you can equip it now."
+		if not st["locked"] and not st["equipped"]:     # (worn already: nothing to add)
+			out += "  ·  OPEN WHILE TESTING"
 	else:
 		out = "A look only: tier read, footprint and colour stay the same."
 		if cat in ["monster_hub", "monster"] or sel == "faction":
