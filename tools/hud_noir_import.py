@@ -1,6 +1,12 @@
 """Alpha 24 Neon Noir: drops the art director's cut HUD parts into the game - each replaces its NoirBox placeholder.
 
     python tools/hud_noir_import.py "<...>/hud-redo/generated/parts/revision-6/delivery"
+    python tools/hud_noir_import.py --node "<...>/hud-redo/generated/node/revision-<n>/delivery"
+
+--node (Alpha 24 step 4, NODE UI): the node parts of NODE-PROMPTS.md (folder E_node: node_select, node_hub, node_wedge,
+node_card, node_tier_chip, node_shield_*, node_target_ring, node_send_head, node_label_pill, node_relay_ring,
+node_capture_burst) go to assets/ui/node_noir/ + scripts/node_noir_data.gd instead, so a node drop never touches the HUD's
+parts (and a HUD drop never touches the node's). Same parts-list format; HudNoir reads both tables.
 
 Re-runnable; the References are only read. The delivery holds part folders (A_top, B_send, C_right, D_board), each with
 transparent PNG layers and a `parts-list.txt`:
@@ -25,7 +31,9 @@ from pathlib import Path
 
 GAME = Path(__file__).resolve().parent.parent
 OUT = GAME / "assets/ui/hud_noir"
+DATA = "scripts/hud_noir_data.gd"
 LAYERS = ("_rim", "_ooze", "_shine")
+NODE = False
 
 
 def nums(cell: str):
@@ -46,6 +54,8 @@ def gel_top(png: Path, body) -> int:
 def main(delivery: Path) -> int:
     rows = {}
     for pl in sorted(delivery.glob("*/parts-list.txt")):
+        if (pl.parent.name == "E_node") != NODE:              # GMN-1 ships HUD + node in one delivery: each run takes its own
+            continue
         for line in pl.read_text(encoding="utf-8").splitlines():
             cells = [c.strip() for c in line.split("|")]
             if len(cells) < 5 or not cells[0].endswith(".png"):
@@ -65,7 +75,7 @@ def main(delivery: Path) -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     for lid, r in rows.items():
         shutil.copyfile(r["src"], OUT / f"{lid}.png")
-    res = lambda lid: f"res://assets/ui/hud_noir/{lid}.png"
+    res = lambda lid: f"res://{OUT.relative_to(GAME).as_posix()}/{lid}.png"
     used = set()
     parts = {}
     for lid, r in rows.items():                               # pairs first: <id>_fill + <id>_rim
@@ -105,8 +115,8 @@ def main(delivery: Path) -> int:
                   % (pid, p["file"], p["rim"], p["ooze"], p["shine"], p["size"][0], p["size"][1],
                      ", ".join(str(v) for v in p["body"]), sl, p["drip"], p["gel"], so))
     gd.append("}")
-    (GAME / "scripts/hud_noir_data.gd").write_text("\n".join(gd) + "\n", encoding="utf-8", newline="\n")
-    print(f"{len(rows)} layers, {len(parts)} parts -> {OUT.relative_to(GAME)}, scripts/hud_noir_data.gd")
+    (GAME / DATA).write_text("\n".join(gd) + "\n", encoding="utf-8", newline="\n")
+    print(f"{len(rows)} layers, {len(parts)} parts -> {OUT.relative_to(GAME)}, {DATA}")
     for imp in OUT.glob("*.png.import"):                      # the HUD draws them at ~1/3: mipmaps on
         t = imp.read_text(encoding="utf-8")
         if "mipmaps/generate=false" in t:
@@ -115,4 +125,10 @@ def main(delivery: Path) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(Path(sys.argv[1])))
+    args = sys.argv[1:]
+    if args and args[0] == "--node":
+        OUT = GAME / "assets/ui/node_noir"
+        DATA = "scripts/node_noir_data.gd"
+        NODE = True
+        args = args[1:]
+    sys.exit(main(Path(args[0])))

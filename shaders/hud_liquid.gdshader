@@ -10,6 +10,8 @@ uniform sampler2D rim_tex : filter_linear_mipmap;
 uniform sampler2D surface_tex : filter_linear_mipmap;
 uniform vec4 liquid_col : source_color = vec4(1.0);
 uniform vec4 rim_col : source_color = vec4(1.0);
+uniform sampler2D rim_lit_tex : filter_linear_mipmap;       // GMN-1: the burning tube ring, revealed bottom-up with the level
+uniform vec4 rim_lit_col : source_color = vec4(0.0);    // a = 0: no lit ring (SEND, old parts)
 uniform float level : hint_range(0.0, 1.0) = 1.0;     // 0 empty .. 1 full, of the body's height
 uniform float liquid_a = 1.0;                          // idle SEND vats are dimmer than the picked one
 uniform float slosh = 0.0;                             // 1 right after the level jumped, eased to 0 by the script
@@ -18,6 +20,11 @@ uniform vec4 body = vec4(0.13, 0.13, 0.74, 0.74);      // body x, y, w, h in can
 uniform vec4 strip = vec4(0.13, 0.35, 0.74, 0.29);     // the meniscus strip's body in ITS texture's UV (x, y, w, h)
 uniform float strip_h = 0.11;                          // the strip's body height in canvas UV (drawn centred on the waterline)
 uniform float seed = 0.0;
+varying vec4 vcol;                                     // the node's own modulate (COLOR in fragment() is it x TEXTURE)
+
+void vertex() {
+	vcol = COLOR;
+}
 
 vec4 over(vec4 dst, vec3 c, float a) {                 // premultiplied: c over dst
 	return vec4(c * a + dst.rgb * (1.0 - a), a + dst.a * (1.0 - a));
@@ -80,5 +87,11 @@ void fragment() {
 	}
 	vec4 r = texture(rim_tex, uv);
 	o = over(o, rim_col.rgb, r.a * rim_col.a);
-	COLOR = vec4(o.rgb / max(o.a, 0.0001), o.a * COLOR.a);
+	if (rim_lit_col.a > 0.0) {                          // the ring lights with the goo: from the bottom up to the waterline
+		float lit = step(body.y + body.w * (1.0 - clamp(level, 0.0, 1.0)) - 0.002, uv.y);
+		o = over(o, rim_lit_col.rgb * (1.0 + 0.3 * glow), texture(rim_lit_tex, uv).a * rim_lit_col.a * lit);
+	}
+	// GMN-2: COLOR.a here already carries the glass's alpha, which clipped every ring outside the glass (r 127): the skill
+	// window's neon at r 130 never showed. Fade by the node's modulate only.
+	COLOR = vec4(o.rgb / max(o.a, 0.0001), o.a * vcol.a);
 }

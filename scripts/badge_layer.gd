@@ -159,6 +159,7 @@ func _draw() -> void:
 		for p in by[t]:
 			RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), Rect2(p.position, p.size).grow(g), Rect2(Vector2.ZERO, tx.get_size()),
 					tx.get_rid(), Vector2(m, m), Vector2(m, m), RenderingServer.NINE_PATCH_STRETCH, RenderingServer.NINE_PATCH_STRETCH, true)
+	_node_marks()
 	for id in hud.badges:                              # the build bars along the bottom edges: B19 track, B20 fill
 		var b: Dictionary = hud.badges[id]
 		var bar: ProgressBar = b["build"]
@@ -170,6 +171,34 @@ func _draw() -> void:
 		if w >= 1.0:
 			_bar(Rect2(r.position, Vector2(maxf(w, r.size.y), r.size.y)), _bar_fill, Rules.state_color("build"))
 	PerfProfile.lap("badges_draw", _pt)
+
+
+func _node_marks() -> void:
+	## ui-node (Alpha 24 step 4): round every owned vat / machinegoon badge, its TIER CHIP astride the top rim (decided:
+	## chips T1-T4; machinegoon M1-M3) and, under a vat whose tier has armour, its SHIELDS - one per 0.1 of the tier's value,
+	## filling with goo as the armour regains after a capture or an upgrade (Daniele 2026-11-04: "a simple shield maybe many
+	## of them and they gradually fill"). In the badge's own colour (its seat's), so chip, shields and rim read as one mark.
+	var s: float = hud.ui_scale
+	var sim = hud.sim
+	for id in hud.badges:
+		var b: Dictionary = hud.badges[id]
+		var p: Control = b["panel"]
+		if not p.visible:
+			continue
+		var n: Dictionary = sim.nodes[id]
+		var owner := str(n["owner"])
+		if owner == "" or n["relay"] != "" or not (str(n["structure"]) in ["vat", "machinegoon"]):
+			continue
+		var col := Rules.seat_color(owner)               # the badge's own rim colour (badges keep seat colours: room colours rule)
+		var r := Rect2(p.position, p.size)
+		var ch := maxf(15.0 * s, float(hud.card_px(12)) / 0.72)   # its "T2" never under the phone's 12.5 pt floor
+		# on the top rim, clear of the count
+		NodeNoir.tier_chip(self, Vector2(r.get_center().x, r.position.y - ch * 0.3), ch, int(n["tier"]), col, Hud.UI_FONT, s,
+				"M%d" % n["tier"] if n["structure"] == "machinegoon" else "")
+		if Sim.has_vat(n) and NodeNoir.shield_count(float(n["armour_cap"])) > 0:
+			var sh := maxf(11.0 * s, 10.0)
+			NodeNoir.shields_row(self, Vector2(r.get_center().x, r.end.y + sh * 0.5 + 2.0 * s), sh, float(n["armour"]),
+					float(n["armour_cap"]), col, s, 0.0)
 
 
 func _bar(r: Rect2, t: Texture2D, mod: Color) -> void:

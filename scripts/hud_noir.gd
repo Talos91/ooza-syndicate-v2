@@ -5,20 +5,21 @@ extends RefCounted
 ##   dark only            the match forces UiTheme dark (UiTheme.match_dark); the light theme stays for the menus
 ##   accent channel       the player's own faction colour (ACCENT): rims, haze, container drips, the SEND pick
 ##   fixed channel        never recoloured: ENEMY red, NEUTRAL grey, GOOD green, AMBER (seconds), the skill rings per slot
-##                        (RING: ACTIVE ice-white, MAP violet, ULTIMATE amber with a white-hot core), skill icons white
+##                        (RING: ACTIVE icy cyan, MAP violet, ULTIMATE amber with a white-hot core), skill icons white
 ##   drips                only on the two container housings (SEND, the skill column); buttons and badges are clean glass
 ## DROP-IN: box(id) is the only way the HUD gets a part's look. A part listed in HudNoirData.PARTS (the director's cut sprite,
 ## imported by tools/hud_noir_import.py) draws as a SkinBox - FILL plus a white RIM layer tinted like the placeholder's rim -;
 ## any other part draws its NoirBox placeholder from PRESETS. Layout code never changes when a sprite lands.
 
 const DATA := preload("res://scripts/hud_noir_data.gd")
+const NODE_DATA := preload("res://scripts/node_noir_data.gd")   # ui-node: the node parts (tools/hud_noir_import.py --node)
 const ACCENT := {"vex": Color("19d6ea"), "null": Color("f327c3"), "bloom": Color("a1eb39"), "ember": Color("ff7c19"),
 		"solar": Color("ffce58")}
 const ENEMY := Color("ff3b4e")
 const NEUTRAL := Color("8a96a8")
 const GOOD := Color("3ee07a")
 const AMBER := Color("ffc23d")
-const RING := [Color("ddf6fb"), Color("a45cff"), Color("ffc23d")]   # ACTIVE / MAP / ULTIMATE, every faction (decided 2026-11-02)
+const RING := [Color("87ebff"), Color("a45cff"), Color("ffc23d")]   # ACTIVE / MAP / ULTIMATE, every faction (2026-11-02; ACTIVE icy cyan = the director's neon halo, Daniele 2026-11-05: ice-white on ice-white goo hid the ring)
 const INK := Color("e8f6fa")
 const MUTED := Color("a6bfca")
 const SPRITE_K := 3.45                              # a cut sprite is drawn at 3x the phone shot, where ui_scale is 1.15
@@ -46,6 +47,7 @@ const PRESETS := {
 	"skill_card": {"radius": 12.0, "glow": 0.0, "rim_a": 0.28, "fill_a": 0.5, "gloss": false, "rim_w": 1.2},
 	"skill_card_armed": {"radius": 12.0, "glow": 1.0, "rim_a": 1.0, "fill_a": 0.7, "gloss": false},
 	"hint_pill": {"radius": 12.0, "glow": 0.8, "fill_a": 0.9, "gloss": false},
+	"node_card": {"radius": 10.0, "glow": 0.7, "fill_a": 0.9, "gloss": false, "rim": "given"},   # ui-node: the compact node card
 }
 
 static var accent := Color("19d6ea")
@@ -62,7 +64,7 @@ static func setup(faction_id: String, scale: float) -> void:
 
 
 static func has(id: String) -> bool:
-	return DATA.PARTS.has(id)
+	return DATA.PARTS.has(id) or NODE_DATA.PARTS.has(id)
 
 
 static func texture(path: String) -> Texture2D:
@@ -75,8 +77,7 @@ static func texture(path: String) -> Texture2D:
 
 static func part_texture(id: String) -> Texture2D:
 	## A part's cut sprite (its FILL layer), or null while the part is a placeholder.
-	var parts: Dictionary = DATA.PARTS
-	return texture(str(parts[id]["file"])) if parts.has(id) else null
+	return texture(str(part_data(id)["file"])) if has(id) else null
 
 
 static func channel(name: String, given: Color) -> Color:
@@ -139,7 +140,7 @@ static func box(id: String, rim := Color(0, 0, 0, 0), content := Vector4(6, 6, 6
 
 static func part_data(id: String) -> Dictionary:
 	var parts: Dictionary = DATA.PARTS
-	return parts.get(id, {})
+	return parts.get(id, (NODE_DATA.PARTS as Dictionary).get(id, {}))
 
 
 static func sprite_box(id: String, rim: Color, k := -1.0) -> SkinBox:
