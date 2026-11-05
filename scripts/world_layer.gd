@@ -10,7 +10,10 @@ extends Node3D
 ## VIEW ONLY: reads sim.nodes (owner, units, siege), sim.collapsed and the "fall" / "fling" fx events. It never
 ## writes to the Sim and adds nothing to the protocol - a guest draws the same from the host's snapshots and events.
 ##  - the floor: a plane FLOOR_DEPTH under the lowest node, dark plates, hazed and faded out at the edges;
-##  - a tube per node platform (not junctions / plazas), from under the platform to the floor: goo flows up in the
+## Daniele's answers (2026-11-06, OPEN-QUESTIONS): the floor varies per map - street / factory / sewer / lab; NO tubes on
+## relays; drifting fog / clouds separate the arena from the floor; goo crawls to the nearest tube and an ENEMY tube's
+## door lasers it (a background detail).
+##  - a tube per node platform (not relays / junctions / plazas), from under the platform to the floor: goo flows up in the
 ##    owner's colour; a siege pushes the attacker's colour down from the top (share of the fight); a capture pushes
 ##    the old colour out of the bottom (neutral: the new colour just fills); a dropped node's tube drains and sinks;
 ##  - falls: a splat where the bodies land + droplets, then goo blobs crawl to the nearest tube and ride up inside it.
@@ -45,10 +48,18 @@ const CRAWL_MAX := 48
 const DROP_MAX := 96
 const DROPS_PER_SPLAT := 8
 const RIDERS_PER_TUBE := 4
+const FLOOR_KINDS := ["street", "factory", "sewer", "lab"]   # per map (code hash); --floor=<kind> forces one
+const MIST_ABOVE := 7.0          # the drifting fog layer between arena and floor, this far above the floor
+const MIST_DENSITY := 0.3
+const ZAP_T := 0.22              # an enemy tube's door laser: beam time
+const ZAP_POOL := 6
 
 var sim: Sim
 var vis: Dictionary
 var floor_y := -16.0
+var floor_kind := "factory"
+var _zaps: Array = []            # pooled beams: {mi, t0}
+var zaps_done := 0
 var _floor: MeshInstance3D
 var _tubes: Array = []           # [{id, mi, mat, r, top_off, owner, base, base_old, inv, inv_col, inv_seat, pushing, riders, alive, x, z, dirty}]
 var _t := 0.0
@@ -90,10 +101,52 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	floor_y = minf(lo.y, 0.0) - FLOOR_DEPTH
 	var centre := (lo + hi) / 2.0
 	var radius := Vector2(hi.x - lo.x, hi.z - lo.z).length() / 2.0
+	floor_kind = _floor_kind_for(str(_main.get("map_path")) if _main.get("map_path") != null else "")
 	_build_floor(centre, radius)
+	_build_mist(centre, radius)
 	for n in sim.nodes:
 		_build_tube(n)
 	_build_pools()
+
+
+static func _floor_kind_for(map_path: String) -> String:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--floor=") and a.substr(8) in FLOOR_KINDS:
+			return a.substr(8)
+	var code := map_path.get_file().substr(0, 4)
+	return FLOOR_KINDS[absi(hash(code)) % FLOOR_KINDS.size()] if code != "" else "factory"
+
+
+func _build_mist(centre: Vector3, radius: float) -> void:
+	## Daniele: "drifting fog/clouds separate arena and splat floor" - one more mist sheet (the void's own shader) between
+	## the decks and the floor, denser than the arena's near layer, drifting slower.
+	var noise := FastNoiseLite.new()
+	noise.seed = 23
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.012
+	noise.fractal_octaves = 3
+	var tex := NoiseTexture2D.new()
+	tex.width = 256
+	tex.height = 256
+	tex.seamless = true
+	tex.noise = noise
+	var mi := MeshInstance3D.new()
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE * (radius * 2.0 + 160.0)
+	mi.mesh = quad
+	var mat := ShaderMaterial.new()
+	mat.shader = Scenery.VOID_SHADER
+	mat.set_shader_parameter("noise_tex", tex)
+	mat.set_shader_parameter("mist_color", Scenery.ABYSS.lightened(0.18))
+	mat.set_shader_parameter("density", MIST_DENSITY)
+	mat.set_shader_parameter("scale", 0.009)
+	mat.set_shader_parameter("motes", 0.5)
+	mat.set_shader_parameter("wind", Vector2(0.004, 0.0018))
+	mat.render_priority = -5                         # after the floor, splats and sockets
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = Vector3(centre.x, floor_y + MIST_ABOVE, centre.z)
+	add_child(mi)
 
 
 func _build_floor(centre: Vector3, radius: float) -> void:
@@ -107,6 +160,7 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 	m.set_shader_parameter("centre", Vector2(centre.x, centre.z))
 	m.set_shader_parameter("r0", radius + 30.0)
 	m.set_shader_parameter("r1", radius + 110.0)
+	m.set_shader_parameter("kind", FLOOR_KINDS.find(floor_kind))
 	m.render_priority = -10                          # the first transparent drawn: everything above blends over it
 	_floor.material_override = m
 	_floor.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -117,6 +171,8 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 func _build_tube(n: Dictionary) -> void:
 	var id: int = n["id"]
 	if not vis.has(id) or str(n.get("junction", "")) != "" or str(n.get("lane", "")) == "over":
+		return
+	if str(n.get("relay", "")) != "":                # Daniele 2026-11-06: no tubes on relays
 		return
 	if vis[id].get("platform") == null:              # a plaza member: the plaza piece is shared (spec: later)
 		return
@@ -258,7 +314,8 @@ func _land(ev: Dictionary, shown: float) -> void:
 			_add_drop(at + Vector3(0, 0.2, 0), Vector3(cos(a) * sp, randf_range(3.0, 6.0), sin(a) * sp), col)
 		var mine := n_crawl / n_spl + (1 if k < n_crawl % n_spl else 0)
 		for j in range(mine):
-			_add_blob(at + Vector3(randf_range(-0.5, 0.5) * size * 0.5, 0, randf_range(-0.5, 0.5) * size * 0.5), col)
+			_add_blob(at + Vector3(randf_range(-0.5, 0.5) * size * 0.5, 0, randf_range(-0.5, 0.5) * size * 0.5), col,
+					str(ev.get("seat", "")))
 
 
 func _add_splat(at: Vector3, size: float, col: Color) -> void:
@@ -274,7 +331,7 @@ func _add_drop(at: Vector3, v: Vector3, col: Color) -> void:
 	_drops.append({"p": at, "v": v, "t0": _t, "col": col})
 
 
-func _add_blob(at: Vector3, col: Color) -> void:
+func _add_blob(at: Vector3, col: Color, seat := "") -> void:
 	var best := -1
 	var bd := INF
 	for i in range(_tubes.size()):
@@ -290,7 +347,7 @@ func _add_blob(at: Vector3, col: Color) -> void:
 	var dist := maxf(bd - (_tubes[best]["r"] if best >= 0 else 0.0) - 0.2, 0.0)
 	var dur := minf(dist / CRAWL_V, CRAWL_MAX_T) if best >= 0 else 2.0
 	_blobs.append({"p": at, "from": at, "tube": best, "col": col, "t0": _t + randf_range(0.0, 0.35), "mode": 0,
-			"dur": maxf(dur, 0.3), "size": randf_range(0.75, 1.15), "ph": randf() * TAU})
+			"dur": maxf(dur, 0.3), "size": randf_range(0.75, 1.15), "ph": randf() * TAU, "seat": seat})
 	blobs_made += 1
 
 
@@ -307,6 +364,7 @@ func sync(dt: float) -> void:
 	_blobs_step(dt)
 	_drops_step()
 	_splats_step()
+	_zaps_step()
 	if _warm > 0:                                     # shader warm-up: one instance each, under the floor (the first
 		_warm -= 1                                    # real fall must not hitch on a compile - 63 ms seen without it)
 		var under := Transform3D(Basis.from_scale(Vector3.ONE * 0.01), Vector3(_floor.position.x, floor_y - 2.0, _floor.position.z))
@@ -441,6 +499,9 @@ func _blobs_step(_dt: float) -> void:
 			p = from.lerp(end, k)
 			p.y = floor_y + 0.12
 			squash = 1.0 + 0.25 * sin(age * 9.0 + float(b["ph"]))
+		elif not tb.is_empty() and _hostile(tb, str(b["seat"])):   # an ENEMY tube: its door lasers the goo
+			_zap(tb, p, b["col"])                       # the blob pops (not kept)
+			continue
 		elif age < 0.35 + float(b["dur"]) + 0.3 and not tb.is_empty():   # squeeze into the tube
 			var k2 := (age - 0.35 - float(b["dur"])) / 0.3
 			size *= 1.0 - k2
@@ -457,6 +518,47 @@ func _blobs_step(_dt: float) -> void:
 		keep.append(b)
 	_blobs = keep
 	_blob_mm.visible_instance_count = shown
+
+
+func _hostile(tb: Dictionary, seat: String) -> bool:
+	var owner: String = tb["owner"]
+	return owner != "" and seat != "" and owner != seat and not sim.allied(owner, seat)
+
+
+func _zap(tb: Dictionary, at: Vector3, col: Color) -> void:
+	## Daniele: "an ENEMY tube's door lasers it" - a beam from the door at the tube's foot to the blob, the blob pops.
+	if _zaps.is_empty():
+		for i in range(ZAP_POOL):
+			var mi := MeshInstance3D.new()
+			var bm := BoxMesh.new()
+			bm.size = Vector3(0.08, 0.08, 1.0)
+			mi.mesh = bm
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.visible = false
+			add_child(mi)
+			_zaps.append({"mi": mi, "t0": -99.0})
+	var z: Dictionary = _zaps[zaps_done % ZAP_POOL]
+	zaps_done += 1
+	var dir := Vector3(at.x - float(tb["x"]), 0.0, at.z - float(tb["z"]))
+	dir = dir.normalized() if dir.length() > 0.01 else Vector3.RIGHT
+	var door := Vector3(tb["x"], floor_y + 0.7, tb["z"]) + dir * float(tb["r"])
+	var to := at + Vector3(0, 0.25, 0)
+	var mi2: MeshInstance3D = z["mi"]
+	var tc: Color = tb["base"]
+	mi2.material_override = Mats.glow(Color(tc.r, tc.g, tc.b).lightened(0.35))
+	var ln := maxf(door.distance_to(to), 0.05)
+	mi2.transform = Transform3D(Basis.looking_at((to - door) / ln, Vector3.UP).scaled(Vector3(1, 1, ln)), (door + to) / 2.0)
+	mi2.visible = true
+	z["t0"] = _t
+	for j in range(6):
+		var a := randf() * TAU
+		_add_drop(to, Vector3(cos(a) * 2.5, randf_range(2.0, 4.0), sin(a) * 2.5), col)
+
+
+func _zaps_step() -> void:
+	for z in _zaps:
+		if (z["mi"] as MeshInstance3D).visible and _t - float(z["t0"]) > ZAP_T:
+			(z["mi"] as MeshInstance3D).visible = false
 
 
 func _drops_step() -> void:

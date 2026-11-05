@@ -120,6 +120,10 @@ func _run() -> void:
 		await _shot(inst, "%s/%s-%s-5-fall-crawl-4s.png" % [out, code, tag])
 		await _wait(inst, 3.0)
 		await _shot(inst, "%s/%s-%s-6-fall-ride-7s.png" % [out, code, tag])
+		if inst.world_layer:
+			var wl: WorldLayer = inst.world_layer
+			print("%s world: floor %s, tubes %d, splats %d, blobs %d, riders %d, zaps %d" % [code, wl.floor_kind,
+					wl._tubes.size(), wl.splats_made, wl.blobs_made, wl.riders_done, wl.zaps_done])
 		inst.queue_free()
 		await _frames(3)
 	print("WORLD SHOTS DONE")

@@ -2395,7 +2395,7 @@ func _draw_monster_drag(hub: int, hit: Vector3) -> void:
 var _perf_t := 0.0
 func _world_probe_step() -> void:
 	## --world-probe=T (WORLD LAYER perf): frame times for 4 s before and 4 s after a forced 100-shown-unit fall off the
-	## longest bridge at T (the same event a real fall sends: Fx's bodies + the world layer's splats). Vsync off.
+	## longest bridge at T (after: 8 s, so the crawl, the enemy-door zaps and the rides finish) (the same event a real fall sends: Fx's bodies + the world layer's splats). Vsync off.
 	## Compare with --no-world. Prints one line, then quits.
 	var now := Time.get_ticks_usec()
 	if _probe_t0 == 0:
@@ -2432,7 +2432,7 @@ func _world_probe_step() -> void:
 		fx.handle(ev)
 		if world_layer:
 			world_layer.handle(ev)
-	if phase == 1 and sim.time >= _world_probe + 4.0:
+	if phase == 1 and sim.time >= _world_probe + 8.0:
 		var out := []
 		for arr in _probe_ft:
 			var a2: Array = (arr as Array).duplicate()
@@ -2452,10 +2452,10 @@ func _world_probe_step() -> void:
 				wmax = maxf(wmax, float(c[0]))
 			var nn := maxf((_probe_cost[ph] as Array).size(), 1.0)
 			out[ph] += " [world sync avg %.3f ms max %.3f, render cpu avg %.2f ms]" % [wl / nn / 1000.0, wmax / 1000.0, rc / nn]
-		print("WORLD PROBE world=%s map=%s | before fall: %s | after fall: %s | splats %d blobs %d riders %d" % [
+		print("WORLD PROBE world=%s map=%s | before fall: %s | after fall: %s | splats %d blobs %d riders %d zaps %d" % [
 				Rules.world_layer, map_path.get_file(), out[0], out[1],
 				world_layer.splats_made if world_layer else 0, world_layer.blobs_made if world_layer else 0,
-				world_layer.riders_done if world_layer else 0])
+				world_layer.riders_done if world_layer else 0, world_layer.zaps_done if world_layer else 0])
 		_world_probe = -1.0
 		get_tree().quit()
 
