@@ -14,6 +14,9 @@ Which board a piece comes from (the game tints white layers per seat / faction a
     node_slice_lit_*                       the W board: the lit SIGNAL only; the game draws node_slice_off_* (same metal and
                                            bolts) under it and tints the signal (README: "OFF colour piece plus the LIT W signal")
     other mixed pieces (metal + gel)       the colour board as painted; the W mask goes to <out>/_masks/ for a later material
+GEOMETRY GUARD: a 9-sliced piece whose shape (corner, bolt, cap) reaches into its stretch band gets its margins widened to
+the shape (printed, kept in cut.json as slice_given -> slice), so the game never bends it. Registered overlays (liquid, shine,
+tank rim / drip) are not 9-sliced and are left alone.
 Writes <out>/<folder>/<file>.png + <folder>/parts-list.txt (GMN-1 format, socket / ring centre in BODY px), <out>/cut.json
 (every piece's metadata + which board it came from) and checks every crop (canvas size, not empty unless the W box is meant
 to be empty). The boards are only read.
@@ -23,6 +26,24 @@ import sys
 from pathlib import Path
 
 from PIL import Image
+
+def shape_margins(im: Image.Image):
+    """The smallest 9-slice margins [l, t, r, b] that hold the piece's whole shape: every column (row) between them has the
+    same alpha as the middle one (+-12), so stretching that band never bends a corner, a bolt or a cap."""
+    import numpy as np
+    a = np.array(im.getchannel("A")).astype(int)
+    h, w = a.shape
+    sc = np.abs(a - a[:, w // 2:w // 2 + 1]).max(axis=0) > 12
+    sr = np.abs(a - a[h // 2:h // 2 + 1, :]).max(axis=1) > 12
+    xs, ys = np.where(sc)[0], np.where(sr)[0]
+    l = int(xs[xs < w // 2].max() + 1) if (xs < w // 2).any() else 0
+    r = int(w - xs[xs >= w // 2].min()) if (xs >= w // 2).any() else 0
+    t = int(ys[ys < h // 2].max() + 1) if (ys < h // 2).any() else 0
+    b = int(h - ys[ys >= h // 2].min()) if (ys >= h // 2).any() else 0
+    return [l, t, r, b]
+
+
+OVERLAY = ("_liquid", "_shine", "send_tank_rim", "send_tank_drip")   # registered layers the game clips / moves, never 9-slices
 
 HEAD = "file | canvas px | slice L,T,R,B or fixed | drip px | body rect | socket centre in body"
 
@@ -80,6 +101,13 @@ def main(boards: Path, out: Path) -> int:
         if sock is None and "ring_centre_canvas" in p:            # radial sectors: the ring centre (outside the canvas, left)
             sock = [p["ring_centre_canvas"][0] - bx, p["ring_centre_canvas"][1] - by]
         sl = p["slice"] if isinstance(p["slice"], list) else "fixed"
+        if sl != "fixed" and not any(o in p["name"] for o in OVERLAY):   # GEOMETRY GUARD: margins must hold the shape
+            need = shape_margins(im)
+            fix = [max(s, n) for s, n in zip(sl, need)]
+            if fix != sl and fix[0] + fix[2] < p["canvas"][0] and fix[1] + fix[3] < p["canvas"][1]:
+                print(f"{p['name']}: slice {sl} -> {fix} (the shape reaches {need} into the stretch band)")
+                p = dict(p, slice_given=sl, slice=fix)
+                sl = fix
         fmt = lambda v: "%g" % v
         rows.setdefault(p["folder"], []).append(" | ".join([
             p["file"], "[%d, %d]" % tuple(p["canvas"]), sl if sl == "fixed" else "[%s]" % ", ".join(str(v) for v in sl),
