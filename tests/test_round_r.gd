@@ -89,21 +89,30 @@ func _strait() -> void:
 
 
 func _pinwheel() -> void:
-	var s := _sim("R-05")
-	check(s != null, "R-05 loads")
-	if s == null:
-		return
-	var conv := 0
-	var rot := -1
-	for n in s.nodes:
-		if n["relay"] == "conveyor":
-			conv += 1
-		if n["relay"] == "rotation":
-			rot = n["id"]
-	check(conv == 2, "R-05: two speed relays (got %d)" % conv)
-	check(s._conv_edges.size() == 2, "R-05: two speed decks (got %d)" % s._conv_edges.size())
-	check(s._ferry_plain.size() == 1 and not (s._ferry_plain.values()[0] as Dictionary).has("group"), "R-05: one 1-bridge ferry hazard")
-	check(rot >= 0 and s.controlled_edges(rot).size() == 4, "R-05: the rotor drives 4 decks")
+	## Daniele 2026-11-05 (proto9 review): R-05 = three rotors on the middle line (4 decks each), a 1-bridge ferry top and
+	## bottom, two plain belts (top-left, bottom-right). R-11 (version B) = one rotor + two speed relays driving the outer
+	## roads above / below them (2 decks each), same ferries and belts.
+	for code in ["R-05", "R-11"]:
+		var s := _sim(code)
+		check(s != null, "%s loads" % code)
+		if s == null:
+			continue
+		var rots := []
+		var convs := []
+		for n in s.nodes:
+			if n["relay"] == "rotation":
+				rots.append(n["id"])
+			if n["relay"] == "conveyor":
+				convs.append(n["id"])
+		check(rots.size() == (3 if code == "R-05" else 1), "%s: rotors (got %d)" % [code, rots.size()])
+		check(convs.size() == (0 if code == "R-05" else 2), "%s: speed relays (got %d)" % [code, convs.size()])
+		for r in rots:
+			check(s.controlled_edges(r).size() == 4, "%s: rotor %d drives 4 decks" % [code, r])
+		for r in convs:
+			check(s.controlled_edges(r).size() == 2, "%s: speed relay %d drives 2 decks (got %d)" % [code, r, s.controlled_edges(r).size()])
+		var ones := s._ferry_plain.values().filter(func(f): return not (f as Dictionary).has("group"))
+		check(s._ferry_plain.size() == 2 and ones.size() == 2, "%s: two 1-bridge ferries (got %d)" % [code, s._ferry_plain.size()])
+		check(s._belt_edges.size() == 2, "%s: two plain belts (got %d)" % [code, s._belt_edges.size()])
 
 
 func _gates() -> void:
@@ -182,7 +191,7 @@ func _init() -> void:
 	_strait()
 	_pinwheel()
 	_gates()
-	for code in ["R-01", "R-02", "R-04", "R-05"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
+	for code in ["R-01", "R-02", "R-04", "R-05", "R-11"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
 		_play(code)
 	print("test_round_r: %d checks, %d failed" % [checks, fails])
 	print("ALL PASSED" if fails == 0 else "FAILED")

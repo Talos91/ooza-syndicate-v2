@@ -26,7 +26,8 @@ const PITCH := {
 	"R-02": 50.0,
 	"R-03": 50.0,
 	"R-04": 41.0,
-	"R-05": 50.0,
+	"R-05": 58.0,                 # 2026-11-05 rework (mirrored, 78 m tall): 41.7 pt, 5 badges over platforms
+	"R-11": 58.0,                 # version B of R-05 (same footprint)
 }
 
 
