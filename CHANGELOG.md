@@ -9,6 +9,7 @@
   link to their gatehouse; the hub speed relay joins six platforms with alternating fast / slow lanes; camera pitch 50.
   R-01 Strait = Strait 1 + Strait 2 merged (Daniele's review): 3-way ferry + two mirrored laser lifts, camera pitch 54; R-03 Strait 2
   off the proto picker.
+  R-05 Pinwheel reworked and new R-11 Pinwheel B on the proto picker (Daniele's review), camera pitch 58 on both.
 
 - **0.23.15-proto8** - 2026-11-05 (proto-r, staging/proto/): round R maps on the proto picker: R-01 Strait, R-02 Gate, R-03 Strait 2,
   R-04 Gate 2, R-05 Pinwheel (MapPool.PROTO, with P-01..P-05); the 3-position ferry hazard (lanes slide, FERRY n / IN n label); EXP piece
