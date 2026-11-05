@@ -2,6 +2,10 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto19** - 2026-11-06 (proto-r, staging/proto/): The launcher is the old cannon: it stands on the node's building slot
+  (nothing else is built there), turns and lobs at its target, and is indestructible (never falls in the Last Stand) - a new type of relay
+  (Daniele 2026-11-06; sim rule change, noted in OPEN-QUESTIONS).
+
 - **0.23.15-proto18** - 2026-11-06 (proto-r, staging/proto/): The launcher is bigger (1.3x) and stands beside its node's vat, opposite
   its target, lobbing over it (Daniele: "scale it up").
 
