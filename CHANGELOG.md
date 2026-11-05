@@ -1,5 +1,20 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.23.26 "Alpha 24 step 3b" - 2026-11-05 (STAGING only; menus round 3, Daniele approved: "for now i think we are ready to push to staging", release rel-02326)
+
+Menus round 3 on top of 0.23.25's flows (ui-menus 1646755). Taps and screens only; the art pass comes later.
+- **HOME has no PLAY menu**: three tiles PLAY VS AI | ONLINE | CAMPAIGN; CHALLENGES and TRAINING top right (TRAINING hides once all
+  5 lessons are done; it stays on GUIDE).
+- **Tabs HOME / ARMIES / PROFILE / GUIDE.** No breadcrumbs on any page; no "YOU" on your ARMIES faction tile (the highlight says it).
+- **ARMIES splits into SKILLS and CUSTOMIZE.** SKILLS: ultimate strip = name + "~N s CHARGE"; all 14 skill tiles at one icon size and one
+  font; the identity panel shows kicker, name, trait and the 5 stats as drawn icons (speed, health, attack, production, garrison).
+- **CUSTOMIZE**: a rail of model pictures by category | a half-width stage (name, turning model, tier chips) | every look as a model picture
+  (4 x 2) with its line and EQUIP / UNLOCK. Pictures are rendered once and cached (new scripts/look_thumbs.gd) on a slate-grey well.
+- **Rules.ARCHIVED_FAMILIES** (empty for now): a family listed there leaves CUSTOMIZE; an archived monster also hides the monster hub
+  (Daniele 2026-11-05: "Hide both").
+- Known gaps: Settings / Profile / History / Challenges pages still page with ‹ ›; online results lack BACK TO ROOM; 3v3 / 2v2v2 room
+  layouts unseen; campaign pages light the HOME tab. Online rooms on staging fall back to browser hosting (room server stays 0.23.21).
+
 ## 0.23.25 "Alpha 24 step 3" - 2026-11-04 (STAGING only; new menu flows, Daniele approved the flows, release rel-02325)
 
 New menu flows built from today's parts (Daniele: "this looks good so we can apply and then later on after we test redesign the actual

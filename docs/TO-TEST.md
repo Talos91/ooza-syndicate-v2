@@ -1,9 +1,13 @@
-# To test - ALPHA 23.25 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.26 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.26 (staging: https://oozesyndicate.com/staging/)
+- [ ] HOME tiles PLAY VS AI / ONLINE / CAMPAIGN; tabs HOME / ARMIES / PROFILE / GUIDE; no breadcrumbs.
+- [ ] ARMIES > SKILLS: all skill tiles the same size, stats as icons; ARMIES > CUSTOMIZE: model pictures load, EQUIP / UNLOCK work.
 
 ## 0.23.25 (staging: https://oozesyndicate.com/staging/)
 - [ ] HOME PLAY starts a 1v1 vs AI in one tap; CHANGE opens the setup; CHANGE MAP works.
