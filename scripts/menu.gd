@@ -559,6 +559,8 @@ func shell_raise() -> void:
 	## Keeps the bars over anything a page drew after shell_open().
 	if is_instance_valid(top_bar):
 		content.move_child(top_bar, -1)
+	if is_instance_valid(nav_bar) and nav_bar.get_parent() == content:
+		content.move_child(nav_bar, -1)                # (ARMIES SPLIT) the tab bar is never under a page's controls
 	if is_instance_valid(nav_bar):
 		content.move_child(nav_bar, -1)
 
@@ -2760,10 +2762,12 @@ func show_armies(f: String = "", back: Callable = Callable()) -> void:
 	var body := Rect2(x, top + th + 12.0, w, area.end.y - 10.0 - (top + th + 12.0))
 	if _army_tab == "customize":
 		_customize_body(body)
+		shell_raise()
 		return
 	var lw := floorf(w * 0.25)
 	_army_identity(body.position, Vector2(lw, body.size.y))
 	_skills_body(Rect2(body.position.x + lw + 14.0, body.position.y, w - lw - 14.0, body.size.y), _skills_slot)
+	shell_raise()
 
 
 var _army_tab := "skills"                          # ARMIES: the open tab ("skills" | "customize")
