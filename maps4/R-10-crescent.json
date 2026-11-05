@@ -362,7 +362,7 @@
    "home": false,
    "neutral": {
     "tier": 2,
-    "structure": "vat"
+    "structure": "machinegoon"
    },
    "buildable": [
     "vat"

@@ -286,6 +286,48 @@ func _gearbox_link() -> void:
 	check(float(x["relay_cd"]) > 0.0, "R-13: X waits with Y")
 
 
+func _shot_at(s: Sim, g: Dictionary) -> bool:
+	## a line of A sent past / onto neutral tower g from a neighbour: does g fire at it within 12 s?
+	var nb := -1
+	for e in s.edges:
+		if e["a"] == g["id"] or e["b"] == g["id"]:
+			var o: int = e["b"] if e["a"] == g["id"] else e["a"]
+			if s.nodes[o]["node_kind"] != "junction" and s.nodes[o]["relay"] == "" and s.is_edge_open(s._edge_index(g["id"], o)):
+				nb = o
+				break
+	if nb < 0:
+		return false
+	s.nodes[nb]["owner"] = "A"
+	s.nodes[nb]["units"] = 60.0
+	var h: Dictionary = s.send(nb, g["id"], 1.0)
+	if h.is_empty():
+		return false
+	for i in range(240):
+		s.step(0.05)
+		var shot: Dictionary = g.get("shot", {})
+		if not shot.is_empty():
+			return true
+	return false
+
+
+func _neutral_guns() -> void:
+	## Daniele 2026-11-06: map-placed NEUTRAL machinegoons, a symmetric set ("symmetry is key"), shoot every seat's lines
+	## ("neutral shoot all, apply that to laser neutral too"); "if you capture the goon it's yours like any other structure".
+	var want := {"R-01": 2, "R-02": 2, "R-05": 2, "R-11": 2, "R-06": 2, "R-10": 1}
+	for code in want:
+		var s := _sim(code)
+		var goons := s.nodes.filter(func(n): return n["structure"] == "machinegoon")
+		check(goons.size() == want[code] and goons.all(func(n): return n["owner"] == ""), "%s: %d neutral machinegoons (got %d)" % [code, want[code], goons.size()])
+		if code == "R-06" and not goons.is_empty():
+			var g: Dictionary = goons[0]
+			check(_shot_at(s, g), "R-06: a neutral machinegoon shoots a line of A")
+			s._capture(g, "B", 5.0)
+			check(g["owner"] == "B" and g["structure"] == "machinegoon", "R-06: the captured goon is B's machinegoon")
+	var s2 := _sim("R-02")                              # the gatehouses: neutral relays with a laser
+	var lasers := s2.nodes.filter(func(n): return n["structure"] == "laser" and n["owner"] == "")
+	check(not lasers.is_empty() and _shot_at(s2, lasers[0]), "R-02: a neutral laser fires at a line of A")
+
+
 func _play(code: String) -> void:
 	var m := {}
 	for f in DirAccess.get_files_at("res://maps4"):
@@ -313,6 +355,7 @@ func _init() -> void:
 	_gates()
 	_wave2()
 	_gearbox_link()
+	_neutral_guns()
 	for code in ["R-01", "R-02", "R-04", "R-05", "R-11", "R-06", "R-09", "R-10", "R-12", "R-13"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
 		_play(code)
 	print("test_round_r: %d checks, %d failed" % [checks, fails])

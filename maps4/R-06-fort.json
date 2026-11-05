@@ -61,8 +61,8 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 3,
-    "structure": "vat"
+    "tier": 2,
+    "structure": "machinegoon"
    },
    "buildable": [
     "vat"
@@ -286,8 +286,8 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
-    "structure": "vat"
+    "tier": 2,
+    "structure": "machinegoon"
    },
    "buildable": [
     "vat"

@@ -252,7 +252,7 @@ static func relay_cooldown(kind: String) -> float:
 #             of the line keeps its way; the owner's redirected units attack x`own` 1.1, rivals sent into the owner's node
 #             x`rival` 0.9. The lag fixed (the platform left MapBatch's static slots)
 const RELAYS_PROTO := {
-	"ferry": {"cooldown": 20.0, "survive": 0.5, "slide": 1.0, "away": 0.6, "side": 7.5, "hold": 4.0},   # side: the view's metres out of line
+	"ferry": {"cooldown": 20.0, "survive": 0.5, "slide": 0.4, "away": 0.2, "side": 7.5, "hold": 4.0},   # side: the view's metres out of line; slide / away 1.0 / 0.6 -> 0.4 / 0.2 (Daniele 2026-11-06: "ferries need to be faster")
 	"conveyor": {"cooldown": 5.0, "with": 2.25, "against": 0.3, "move": 1.4},
 	"launcher": {"cooldown": 30.0, "armed": 8.0, "flight": 1.1, "land": 0.5, "reach": 3, "cycle": 4.0, "pour": 3.0, "misfire": 6.0},
 	"lift": {"cooldown": 10.0, "move": 1.4, "rise": 2.6},   # rise: the view's metres per level (🎨's model: 2.6)

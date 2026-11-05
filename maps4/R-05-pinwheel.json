@@ -115,8 +115,8 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 3,
-    "structure": "vat"
+    "tier": 2,
+    "structure": "machinegoon"
    },
    "buildable": [
     "vat"
@@ -358,8 +358,8 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
-    "structure": "vat"
+    "tier": 2,
+    "structure": "machinegoon"
    },
    "buildable": [
     "vat"
@@ -967,7 +967,6 @@
  "geometricSymmetry": true,
  "experimental": false,
  "ruleWaivers": {
-  "R02": "Daniele 2026-11-05 (R-05 review): three rotors + two ferries + two belts = over the S budget 7 (a provisional number, tuned by play)",
   "R04": "Daniele 2026-11-05: mirrored top / bottom (a ferry pair above and below the star) - taller than the provisional 66 m line; the phone probe decides (plan rule 7)"
  },
  "tags": {

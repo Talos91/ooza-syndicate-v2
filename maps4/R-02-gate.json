@@ -97,8 +97,8 @@
    "relay": null,
    "home": false,
    "neutral": {
-    "tier": 1,
-    "structure": "vat"
+    "tier": 2,
+    "structure": "machinegoon"
    },
    "buildable": [
     "vat"
@@ -284,7 +284,7 @@
    "home": false,
    "neutral": {
     "tier": 2,
-    "structure": "vat"
+    "structure": "machinegoon"
    },
    "buildable": [
     "vat"
@@ -782,7 +782,7 @@
  "geometricSymmetry": true,
  "experimental": false,
  "ruleWaivers": {
-  "R07": "Daniele 2026-11-05 (R-02 review): the hub joined six ways, its side decks alternated speed / slow and the relay inverting them - each side always keeps one fast way in, so firing swaps WHICH lane is fast instead of moving the shortest route's length (the choke test reads lengths only)"
+  "R07": "Daniele 2026-11-05 (R-02 review): the hub joined six ways, its side decks speed / slow (top fast in, bottom slow in, mirrored left / right) and the relay inverting them - each side always keeps one fast way in, so firing swaps WHICH lane is fast instead of moving the shortest route's length"
  },
  "tags": {
   "size": "S",

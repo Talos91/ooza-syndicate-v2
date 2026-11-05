@@ -3173,7 +3173,15 @@ func _relays_proto() -> void:
 			"ferry: 10 sent in the window, all cross (%.1f ok, %.1f fell)" % [tally.get("ok", -1.0), tally.get("fell", -1.0)])
 	var f3 := _proto_sim("ferry")
 	var c3 := f3.ferry_cycle(1)
-	f3.time = float(c3["open"]) + 0.2                  # out of line: the line reaches an open gap
+	var probe := _proto_sim("ferry")                   # how long the head takes to reach the lip (the swing is short since
+	probe.nodes[3]["units"] = 10.0 * Rules.SCALE       # 2026-11-06, "ferries need to be faster": time the send so the head
+	var hq := probe.send(3, 4, 1.0)                    # meets the lip with the bridge out of line)
+	var spq := _span_of(hq, 7)
+	var reach := 0.0
+	while reach < 10.0 and hq in probe.hordes and float(hq["s"]) < float(spq["s0"]) - 0.01:
+		probe.step(0.05)
+		reach += 0.05
+	f3.time = fposmod(float(c3["open"]) + float(c3["slide"]) * 0.5 - reach, float(c3["period"]))   # out of line at the lip
 	f3.nodes[3]["units"] = 10.0 * Rules.SCALE
 	var hp := f3.send(3, 4, 1.0)
 	var sp3 := _span_of(hp, 7)

@@ -418,7 +418,7 @@ func _cannons_step(dt: float, cam: Camera3D) -> void:
 	for n in sim.nodes:
 		var id: int = n["id"]
 		var firing: bool = n.get("structure", "laser" if n["attachment"] == "cannon" else "") == "laser" \
-				and n["cannon_burst"] > 0.0 and n["owner"] != "" and not sim.collapsed.get(id, false)
+				and n["cannon_burst"] > 0.0 and not sim.collapsed.get(id, false)
 		if not _cannons.has(id):
 			if not firing:
 				continue
@@ -574,7 +574,7 @@ func _machinegoons_step(dt: float) -> void:
 			g = _new_gun(vn as Node3D, str(entry.get("model_key", "")), n["owner"])
 			_guns[id] = g
 		var shot: Dictionary = n.get("shot", {})
-		var firing: bool = not shot.is_empty() and n["owner"] != "" and sim.time - float(shot.get("t", -99.0)) <= GUN_HOLD
+		var firing: bool = not shot.is_empty() and sim.time - float(shot.get("t", -99.0)) <= GUN_HOLD
 		var turret: Node3D = g["turret"]
 		var root := vn as Node3D
 		var to: Vector3 = (shot.get("pos", Vector3.ZERO) as Vector3) + Vector3(0, 0.7, 0)

@@ -176,6 +176,9 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		adj[id] = []
 		if v3 and owner == "" and kind == "relay" and neutral is Dictionary and str(neutral.get("structure", "")) in ["cannon", "laser", "forge"]:
 			nodes[-1]["structure"] = "forge" if neutral["structure"] == "forge" else "laser"   # an armed relay (old cannons -> laser)
+		if v3 and owner == "" and kind == "common" and neutral is Dictionary and str(neutral.get("structure", "")) == "machinegoon":
+			nodes[-1]["structure"] = "machinegoon"        # round R (Daniele 2026-11-06): a map-placed neutral machinegoon - it
+														# shoots every seat's lines; whoever takes the platform keeps it
 		_sync_legacy(nodes[-1])
 	var geo: Array = map["layout"]["edges"] if v3 else []
 	for ek in range(map["edges"].size()):
@@ -664,7 +667,7 @@ func _step_structures(dt: float) -> void:
 		if n["structure"] == "machinegoon":
 			_fire_machinegoon(n, dt)
 			continue
-		if n["owner"] == "" or n["structure"] != "laser" or is_disrupted(n["id"]):
+		if n["structure"] != "laser" or is_disrupted(n["id"]):   # (a NEUTRAL laser fires too, at every seat: Daniele 2026-11-06)
 			n["cannon_burst"] = 0.0                       # (an Echo Split echo jams it: no burst, no recharge)
 			continue
 		if n["cannon_burst"] > 0.0:
@@ -706,8 +709,8 @@ func _step_structures(dt: float) -> void:
 func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 	## One stream at the nearest enemy line with any part within MACHINEGOON_RANGE: single target, good against
 	## trickles, weak against big blobs. Jammed by an Echo Split echo like a vat.
-	if n["owner"] == "" or is_disrupted(n["id"]):
-		return
+	if is_disrupted(n["id"]):                          # a NEUTRAL machinegoon fires too, at every seat (Daniele 2026-11-06:
+		return                                          # "neutral shoot all, apply that to laser neutral too")
 	var targets := _hordes_in_range(n, Rules.MACHINEGOON_RANGE)
 	if targets.is_empty():
 		return
