@@ -3496,6 +3496,7 @@ func _ward_rail(pos: Vector2, h: float, cat: String, played: Dictionary) -> floa
 			t.size = Vector2(cell, cell)
 			b.add_child(t)
 		else:
+			b.add_child(_model_well(Vector2(4.0, 4.0), Vector2(cell - 8.0, cell - 8.0)))
 			var pic := LookThumbs.rect(cc, now, _army, Vector2(cell - 8.0, cell - 8.0))
 			pic.position = Vector2(4.0, 4.0)
 			b.add_child(pic)
@@ -3551,7 +3552,10 @@ func _ward_stage(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped
 	var ch_h := UiKit.tap_h(self, 44.0)
 	var foot := (ch_h + 10.0) if tiers > 0 else 0.0
 	var vh := pos.y + dims.y - 10.0 - foot - y
-	content.add_child(UiKit.rect(Vector2(ix, y), Vector2(iw, vh), Color(UiKit.BASE, 0.75)))
+	if cat != "territory":                              # a model stands on the grey well (dark and white skins both read)
+		_shell_add(_model_well(Vector2.ZERO, Vector2(iw, vh)), Vector2(ix, y))
+	else:
+		content.add_child(UiKit.rect(Vector2(ix, y), Vector2(iw, vh), Color(UiKit.BASE, 0.75)))
 	var g := TextureRect.new()
 	var grad := Gradient.new()
 	grad.set_color(0, Color(acc, 0.2))
@@ -3592,6 +3596,28 @@ func _ward_stage(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped
 				pv.set_tier(tt)
 				for i in range(chips.size()):
 					UiKit.style_button(chips[i], "selected" if i + 1 == tt else "secondary", _army))
+
+
+func _model_well(pos: Vector2, dims: Vector2) -> TextureRect:
+	## The mid-grey backdrop every model picture sits on (Daniele 2026-11-05: "give them a gray background so they are
+	## easier to see, especially if they are dark ... works well also for grayish/white skins"): a slate grey, lighter
+	## in the middle - dark kits read against it, and white / bone skins stay brighter than its lightest point.
+	var grad := Gradient.new()
+	grad.set_color(0, Color("6b7782"))
+	grad.set_color(1, Color("444e57"))
+	var gt := GradientTexture2D.new()
+	gt.gradient = grad
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.45)
+	gt.fill_to = Vector2(1.05, 1.05)
+	var r := TextureRect.new()
+	r.texture = gt
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_SCALE
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.position = pos
+	r.size = dims
+	return r
 
 
 func _ward_action(pos: Vector2, dims: Vector2, cat: String, sel: String, equipped: String) -> void:
@@ -3683,6 +3709,10 @@ func _ward_looks_grid(pos: Vector2, dims: Vector2, cat: String, looks: Array, se
 				_check(b, Vector2(tw - UiKit.line_h(self, 12, true) * 0.75 - 6.0, 6.0), UiKit.line_h(self, 12, true) * 0.75, acc)
 			continue
 		else:
+			var well := _model_well(Vector2(6.0, 6.0), Vector2(tw - 12.0, ps))   # the tile's width: the picture sits in it
+			if s["locked"]:
+				well.modulate = Color(1, 1, 1, 0.6)
+			b.add_child(well)
 			var pic := LookThumbs.rect(cat, lid, _army, Vector2(ps, ps))
 			pic.position = Vector2((tw - ps) / 2.0, 6.0)
 			if s["locked"]:

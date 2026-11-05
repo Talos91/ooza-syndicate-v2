@@ -90,7 +90,7 @@ func _process(_dt: float) -> void:
 	_cam.fov = 32.0                                    # Preview frames the model for 32 degrees...
 	var was := _key
 	_refresh()
-	_cam.fov = 21.0                                    # ...the icon looks closer, so the model fills its tile
+	_cam.fov = 29.0                                    # ...the icon a touch closer: the whole model fits, with a margin
 	if _key != was:
 		_settle = 0
 	# a skin still loading: wait for it (up to ~2 s), else the picture shows the family's default
