@@ -581,28 +581,28 @@
    "deckMetres": 4.0
   },
   {
-   "from": 4,
-   "to": 0,
+   "from": 0,
+   "to": 4,
    "tier": "S",
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": null,
+   "relay": 10,
    "retracts": false,
    "deckMetres": 4.0,
-   "proto": "conveyor",
-   "belt": "AB"
+   "proto": "conveyor"
   },
   {
-   "from": 0,
-   "to": 1,
+   "from": 1,
+   "to": 0,
    "tier": "S",
    "seconds": 2.0,
    "level": 0,
    "state": null,
-   "relay": null,
+   "relay": 10,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor"
   },
   {
    "from": 18,
@@ -611,9 +611,10 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": null,
+   "relay": 10,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor"
   },
   {
    "from": 21,
@@ -622,9 +623,10 @@
    "seconds": 2.0,
    "level": 0,
    "state": null,
-   "relay": null,
+   "relay": 10,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor"
   },
   {
    "from": 11,
@@ -728,8 +730,8 @@
    "deckMetres": 12.0
   },
   {
-   "from": 6,
-   "to": 13,
+   "from": 13,
+   "to": 6,
    "tier": "L",
    "seconds": 6,
    "level": 0,
@@ -740,8 +742,8 @@
    "proto": "conveyor"
   },
   {
-   "from": 13,
-   "to": 20,
+   "from": 20,
+   "to": 13,
    "tier": "L",
    "seconds": 6,
    "level": 0,
@@ -780,9 +782,10 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": null,
+   "relay": 14,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor"
   },
   {
    "from": 3,
@@ -791,33 +794,34 @@
    "seconds": 2.0,
    "level": 0,
    "state": null,
-   "relay": null,
+   "relay": 14,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor"
   },
   {
-   "from": 20,
-   "to": 24,
+   "from": 24,
+   "to": 20,
    "tier": "S",
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": null,
+   "relay": 14,
    "retracts": false,
    "deckMetres": 4.0,
-   "proto": "conveyor",
-   "belt": "AB"
+   "proto": "conveyor"
   },
   {
-   "from": 24,
-   "to": 23,
+   "from": 23,
+   "to": 24,
    "tier": "S",
    "seconds": 2.0,
    "level": 0,
    "state": null,
-   "relay": null,
+   "relay": 14,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor"
   },
   {
    "from": 13,
@@ -929,11 +933,10 @@
    }
   ]
  },
- "note": "S, 17 platforms, mirrored both ways. The centre is a rotor (C: ACROSS opens the middle road, UP / DOWN the north / south points); the stone next to each home (M) is a SPEED relay driving the outer roads above and below it: the top one runs toward the centre (fast going in), the bottom one away (slow going in); firing M reverses both. A 1-bridge ferry joins the top pair and another the bottom pair. The outer roads to the top-left and bottom-right ferry piers are belts running toward the centre (the pinwheel's turn). Finale: the star round the centre rotor.",
+ "note": "S, 17 platforms, mirrored both ways. The centre is a rotor (C: ACROSS opens the middle road, UP / DOWN the north / south points); the stone next to each home (M) is a SPEED relay driving four roads: on the left the top pier road is slow going in, the top inner road fast, the bottom inner road slow, the bottom pier road fast (the curved pier roads are speed lanes end to end); the right side the same turned half round. Firing M reverses its four. A 1-bridge ferry joins the top pair and another the bottom pair. Finale: the star round the centre rotor.",
  "geometricSymmetry": true,
  "experimental": false,
  "ruleWaivers": {
-  "R02": "Daniele 2026-11-05 (R-05 review): a rotor, two speed relays + two ferries + two belts = over the S budget 7 (a provisional number, tuned by play)",
   "R04": "Daniele 2026-11-05: mirrored top / bottom (a ferry pair above and below the star) - taller than the provisional 66 m line; the phone probe decides (plan rule 7)",
   "R07": "Daniele 2026-11-05 (R-05 version B): the speed relays drive the outer roads; the straight middle road stays the shortest, so firing changes the outer roads' speed, not the shortest length"
  },
@@ -1285,16 +1288,16 @@
    },
    {
     "A": [
-     -35.2779,
-     -24.3237
-    ],
-    "B": [
      -32.3639,
      -29.1058
     ],
+    "B": [
+     -35.2779,
+     -24.3237
+    ],
     "L": 5.6,
-    "p0": 1.6,
-    "p1": 0.0,
+    "p0": 0.0,
+    "p1": 1.6,
     "lean0": 0.0,
     "lean1": 0.0,
     "plaza0": false,
@@ -1306,16 +1309,16 @@
    },
    {
     "A": [
-     -25.66,
-     -32.77
-    ],
-    "B": [
      -19.6,
      -32.76
     ],
+    "B": [
+     -25.66,
+     -32.77
+    ],
     "L": 6.06,
-    "p0": 0.0,
-    "p1": 1.6,
+    "p0": 1.6,
+    "p1": 0.0,
     "lean0": 0.0,
     "lean1": 0.0,
     "plaza0": false,
@@ -1558,12 +1561,12 @@
    },
    {
     "A": [
-     34.1574,
-     -14.9574
-    ],
-    "B": [
      23.4426,
      -4.2426
+    ],
+    "B": [
+     34.1574,
+     -14.9574
     ],
     "L": 15.153,
     "p0": 1.6,
@@ -1579,12 +1582,12 @@
    },
    {
     "A": [
-     23.4426,
-     4.2426
-    ],
-    "B": [
      34.1574,
      14.9574
+    ],
+    "B": [
+     23.4426,
+     4.2426
     ],
     "L": 15.153,
     "p0": 1.6,
@@ -1684,16 +1687,16 @@
    },
    {
     "A": [
-     35.2779,
-     24.3237
-    ],
-    "B": [
      32.3639,
      29.1058
     ],
+    "B": [
+     35.2779,
+     24.3237
+    ],
     "L": 5.6,
-    "p0": 1.6,
-    "p1": 0.0,
+    "p0": 0.0,
+    "p1": 1.6,
     "lean0": 0.0,
     "lean1": 0.0,
     "plaza0": false,
@@ -1705,16 +1708,16 @@
    },
    {
     "A": [
-     25.66,
-     32.77
-    ],
-    "B": [
      19.6,
      32.76
     ],
+    "B": [
+     25.66,
+     32.77
+    ],
     "L": 6.06,
-    "p0": 0.0,
-    "p1": 1.6,
+    "p0": 1.6,
+    "p1": 0.0,
     "lean0": 0.0,
     "lean1": 0.0,
     "plaza0": false,

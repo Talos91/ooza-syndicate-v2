@@ -5517,6 +5517,8 @@ func _portal_end(e: Dictionary) -> void:
 #             line on the platform meanwhile slides out that exit
 var _ferry_edges := {}               # ferry deck edge index -> its ferry node id
 var _conv_edges := {}                # conveyor deck edge index -> its conveyor node id
+var _conv_pieces := {}               # round R (Daniele 2026-11-05: "speed / slow can be curves"): a curve junction whose two decks are
+                                     # speed decks of one relay (or two plain belts) -> true; a line crossing it is pushed like on the decks
 var flights: Array = []              # launcher throws in the air: {seat, faction, units, left, from, to, t0, land, end}
 var _ferry_tally := {}               # horde id -> {node, edge, seat, ok, fell, shown} (the FERRY n / m CROSSED readout)
 var _att_mult := 1.0                 # round 3: the arriving line's TILT attack multiplier while _land_classic runs
@@ -5556,6 +5558,20 @@ func _setup_proto() -> void:
 					_ferry_groups[g]["decks"][int(fd.get("pos", 0))] = i
 					_ferry_plain[i]["group"] = g
 					_ferry_plain[i]["pos"] = int(fd.get("pos", 0))
+	_conv_pieces = {}
+	for n in nodes:                                   # round R: a curve between two speed decks of one relay is part of the lane
+		if str(n.get("node_kind", "")) != "junction" or not str(n.get("junction", "")).begins_with("Curve_"):
+			continue
+		var es := []
+		for i in range(edges.size()):
+			if edges[i]["a"] == n["id"] or edges[i]["b"] == n["id"]:
+				es.append(i)
+		if es.size() != 2:
+			continue
+		if _conv_edges.has(es[0]) and _conv_edges.has(es[1]) and int(_conv_edges[es[0]]) == int(_conv_edges[es[1]]):
+			_conv_pieces[n["id"]] = true
+		elif _belt_edges.has(es[0]) and _belt_edges.has(es[1]):
+			_conv_pieces[n["id"]] = true
 	for g in _ferry_groups:                           # the hull's lane order: 0 1 2 1 0 ... (0 1 0 for two bridges)
 		var ps: Array = (_ferry_groups[g]["decks"] as Dictionary).keys()
 		ps.sort()
@@ -6034,6 +6050,29 @@ func conveyor_sense(h: Dictionary) -> Array:
 			with_m += on
 		else:
 			against_m += on
+	if not _conv_pieces.is_empty():                   # round R: a speed curve - the line keeps the push of the deck it came off
+		for ns in h.get("node_spans", []):
+			if head < ns["s0"] or tail > ns["s1"] or not _conv_pieces.has(ns["node"]):
+				continue
+			for sp in h["spans"]:
+				if absf(float(sp["s1"]) - float(ns["s0"])) > 0.01:
+					continue
+				var f2 := 0
+				if _conv_edges.has(sp["edge"]):
+					id = _conv_edges[sp["edge"]]
+					if nodes[id]["relay_phase"] == "moving":
+						break
+					f2 = int(nodes[id]["relay_index"])
+				elif _belt_edges.has(sp["edge"]):
+					f2 = int(_belt_edges[sp["edge"]])
+				else:
+					break
+				var on2: float = maxf(minf(head, ns["s1"]) - maxf(tail, ns["s0"]), 0.01)
+				if (f2 == 0) == bool(sp["forward"]):
+					with_m += on2
+				else:
+					against_m += on2
+				break
 	if with_m <= 0.0 and against_m <= 0.0:
 		return [0, id]
 	return [1 if with_m >= against_m else -1, id]

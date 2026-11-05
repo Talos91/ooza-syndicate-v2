@@ -171,6 +171,10 @@ func setup(s: Sim, v: Dictionary) -> void:
 		if _r[id]["kind"] == "conveyor":
 			for c in _r[id]["chev"]:
 				_v3_belt(c, true)
+	_belts.append_array(_curve_chevrons(sim._belt_edges.keys(), Rules.state_color("cAB")))   # round R: speed curves
+	for id in _r:
+		if _r[id]["kind"] == "conveyor":
+			_r[id]["chev"].append_array(_curve_chevrons(sim.controlled_edges(id)))
 	_v3_platforms()
 
 
@@ -383,6 +387,69 @@ func _chevrons(eis: Array, col := Color.WHITE) -> Array:
 	return out
 
 
+func _curve_chevrons(eis: Array, col := Color.WHITE) -> Array:
+	## Round R (Daniele 2026-11-05: "speed and slow can be curves - the whole curve piece looks like a speed one"): chevrons
+	## along the arc of every curve junction (Sim._conv_pieces) at an end of these decks, laid out in the deck's own A -> B
+	## sense so they run and turn with it. Each curve once (the lower deck index carries it).
+	var out := []
+	for ei in eis:
+		var e: Dictionary = sim.edges[ei]
+		for end in [e["a"], e["b"]]:
+			if not sim._conv_pieces.has(end):
+				continue
+			var other := -1
+			for k in range(sim.edges.size()):
+				if k != ei and (sim.edges[k]["a"] == end or sim.edges[k]["b"] == end):
+					other = k
+			if other < 0 or other < ei:
+				continue
+			var j: Dictionary = sim.nodes[end]
+			var c := sim._curve_centre(j)
+			var p_this: Vector3 = sim.exit_of(ei, end)
+			var p_other: Vector3 = sim.exit_of(other, end)
+			var pts: Array = sim._arc(c, atan2(p_this.z - c.z, p_this.x - c.x), atan2(p_other.z - c.z, p_other.x - c.x),
+					Sim.curve_r(str(j["junction"])))
+			if end == e["a"]:                             # the flow A -> B enters the deck at A: the arc runs INTO it
+				pts.reverse()
+			var cum := [0.0]
+			for k in range(1, pts.size()):
+				cum.append(float(cum[-1]) + (pts[k] as Vector3).distance_to(pts[k - 1]))
+			var mm := MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			var pm := PrismMesh.new()
+			pm.size = Vector3(2.0, 1.3, 0.12)
+			mm.mesh = pm
+			mm.instance_count = maxi(1, int(float(cum[-1]) / CHEVRON_GAP))
+			var mmi := MultiMeshInstance3D.new()
+			mmi.name = "Proto_Conveyor_Curve_Chevron"
+			mmi.multimesh = mm
+			mmi.material_override = _mat(col)
+			mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(mmi)
+			out.append({"edge": ei, "mmi": mmi, "a": pts[0], "b": pts[-1], "L": float(cum[-1]), "pts": pts, "cum": cum})
+	return out
+
+
+func _run_poly(c: Dictionary, phase: float, move_fwd: bool, face_fwd: bool, y: float) -> void:
+	## A curve's chevrons: `phase` m along its arc, each turned along the arc there (A -> B, or B -> A).
+	var pts: Array = c["pts"]
+	var cum: Array = c["cum"]
+	var L: float = c["L"]
+	var mm: MultiMesh = (c["mmi"] as MultiMeshInstance3D).multimesh
+	for k in range(mm.instance_count):
+		var s := fposmod(float(k) * CHEVRON_GAP + (phase if move_fwd else -phase), maxf(L, 0.01))
+		var i := 1
+		while i < pts.size() - 1 and float(cum[i]) < s:
+			i += 1
+		var p0: Vector3 = pts[i - 1]
+		var p1: Vector3 = pts[i]
+		var seg := maxf(float(cum[i]) - float(cum[i - 1]), 0.001)
+		var u := (p1 - p0).normalized()
+		var face := u * (1.0 if face_fwd else -1.0)
+		var basis := Basis(Vector3.UP, Rules.heading(face)) * Basis(Vector3.RIGHT, PI / 2.0) * Basis(Vector3.BACK, -PI / 2.0)
+		mm.set_instance_transform(k, Transform3D(basis, p0.lerp(p1, clampf((s - float(cum[i - 1])) / seg, 0.0, 1.0)) + Vector3(0, y, 0)))
+
+
 func _platform_arrow(n: Dictionary, toward: int) -> Dictionary:
 	## Tilt (round 2): big chevrons across the platform from its centre to the rim toward `toward` - a tip toward or away
 	## from the camera barely shows, the running arrow always does. Same shape as a deck's chevrons (_run_chevrons).
@@ -407,6 +474,11 @@ func _platform_arrow(n: Dictionary, toward: int) -> Dictionary:
 
 func _run_chevrons(c: Dictionary, phase: float, forward: bool, y := 0.36) -> void:
 	## Lays the deck's chevrons out `phase` m along it, pointing A -> B (forward) or B -> A.
+	if c.has("pts"):                                   # round R: a speed curve
+		c["ph"] = phase
+		c["y"] = y
+		_run_poly(c, phase, forward, forward, y)
+		return
 	var a: Vector3 = c["a"]
 	var b: Vector3 = c["b"]
 	var u := (b - a).normalized()
@@ -747,6 +819,9 @@ func _tint_mm(mmi: MultiMeshInstance3D, c: Color) -> void:
 
 func _face_chevrons(c: Dictionary, forward: bool) -> void:
 	## Turns the deck's chevrons to point A -> B (forward) or B -> A, keeping where they are.
+	if c.has("pts"):                                   # round R: a speed curve (positions from its last run)
+		_run_poly(c, float(c.get("ph", 0.0)), true, forward, float(c.get("y", 0.36)))
+		return
 	var u := ((c["b"] as Vector3) - (c["a"] as Vector3)).normalized()
 	var face := u * (1.0 if forward else -1.0)
 	var basis := Basis(Vector3.UP, Rules.heading(face)) * Basis(Vector3.RIGHT, PI / 2.0) * Basis(Vector3.BACK, -PI / 2.0)

@@ -108,11 +108,40 @@ func _pinwheel() -> void:
 		check(convs.size() == (0 if code == "R-05" else 2), "%s: speed relays (got %d)" % [code, convs.size()])
 		for r in rots:
 			check(s.controlled_edges(r).size() == 4, "%s: rotor %d drives 4 decks" % [code, r])
-		for r in convs:
-			check(s.controlled_edges(r).size() == 2, "%s: speed relay %d drives 2 decks (got %d)" % [code, r, s.controlled_edges(r).size()])
+		for r in convs:                                # R-11 (Daniele's correction): 4 roads = 6 decks (2 curved roads of 2)
+			check(s.controlled_edges(r).size() == 6, "%s: speed relay %d drives 6 decks (got %d)" % [code, r, s.controlled_edges(r).size()])
+		if code == "R-11":
+			check(s._conv_pieces.size() == 4, "R-11: 4 curve pieces are speed lanes (got %d)" % s._conv_pieces.size())
+			# a line walking the left bottom pier road (P2 -> Dl, fast at the start) is pushed while on its curve
+			var cv: int = s._conv_pieces.keys()[0]
+			check(s.nodes[cv]["node_kind"] == "junction", "R-11: a speed curve is a junction piece")
+			# a short line standing wholly ON a speed curve is pushed (Sim.conveyor_sense reads the curve with its deck)
+			var pushed := 0
+			for j in s._conv_pieces:
+				var ends := []
+				for e in s.edges:
+					if e["a"] == j or e["b"] == j:
+						ends.append(e["b"] if e["a"] == j else e["a"])
+				var src: Dictionary = s.nodes[ends[0]]
+				src["owner"] = "A"
+				src["units"] = 3.0
+				var h: Dictionary = s.send(ends[0], ends[1], 1.0)
+				if h.is_empty():
+					continue
+				for ns in h["node_spans"]:
+					if ns["node"] == j:
+						h["s"] = (float(ns["s0"]) + float(ns["s1"])) * 0.5 + 0.01
+				var keep: Dictionary = s._conv_pieces
+				var on_curve: int = s.conveyor_sense(h)[0]
+				s._conv_pieces = {}
+				var without: int = s.conveyor_sense(h)[0]
+				s._conv_pieces = keep
+				if on_curve != 0 and without == 0:
+					pushed += 1
+			check(pushed == 4, "R-11: a line wholly on each speed curve is pushed (got %d of 4)" % pushed)
 		var ones := s._ferry_plain.values().filter(func(f): return not (f as Dictionary).has("group"))
 		check(s._ferry_plain.size() == 2 and ones.size() == 2, "%s: two 1-bridge ferries (got %d)" % [code, s._ferry_plain.size()])
-		check(s._belt_edges.size() == 2, "%s: two plain belts (got %d)" % [code, s._belt_edges.size()])
+		check(s._belt_edges.size() == (2 if code == "R-05" else 0), "%s: plain belts (got %d)" % [code, s._belt_edges.size()])
 
 
 func _gates() -> void:
