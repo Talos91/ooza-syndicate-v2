@@ -2,7 +2,7 @@ extends SceneTree
 ## ROUND R (map round 2026-11, MAP-ROUND-2026-11.md) - the round-R hazards and relays on the R maps:
 ##   Godot --headless --path . --script res://tests/test_round_r.gd
 ## R-01 Strait: the 3-position ferry (one hull, lanes 0 / 1 / 2: exactly one lane in line at a time, order 0 1 2 1, a line
-## on a lane the hull leaves falls), the retract pulling 2 decks at once, the two plain belts. R-05 Pinwheel: the two
+## on a lane the hull leaves falls), two mirrored laser lifts (top / bottom stone, 2 decks per level), the two plain belts. R-05 Pinwheel: the two
 ## speed relays (conveyor relays) flip, the rotor, the 1-bridge ferry hazard. Both maps play to the end with two AIs.
 
 var fails := 0
@@ -60,22 +60,31 @@ func _strait() -> void:
 	s.time = 0.0
 	var ph: Dictionary = s.ferry_phase_e(int(lanes[2]))
 	check(ph["part"] != "open" and float(ph["next_open"]) > float(slot["slot"]) * 1.5, "R-01: the down lane waits ~2 slots at t 0 (%s)" % [ph])
-	# retract: one relay, two decks
-	var rid := -1
+	# Daniele 2026-11-05 (Strait 1 + 2 merged): two laser LIFTS, top stone (starts DOWN: the outer roads) and bottom stone
+	# (starts UP: the banks' end platforms); each drives 4 decks, 2 per level, and firing swaps the level
+	var lifts := []
 	for n in s.nodes:
-		if n["relay"] == "retract":
-			rid = n["id"]
-	var mine: Array = s.controlled_edges(rid)
-	check(mine.size() == 2, "R-01: the retract drives 2 decks (got %d)" % mine.size())
+		if n["relay"] == "lift":
+			lifts.append(n)
+	check(lifts.size() == 2, "R-01: two lifts (got %d)" % lifts.size())
+	var starts := []
+	for n in lifts:
+		check(s.controlled_edges(n["id"]).size() == 4, "R-01: lift %d drives 4 decks" % n["id"])
+		starts.append(int(n["relay_index"]))
+		check(str(n.get("structure", n.get("neutral", {}).get("structure", ""))) != "" , "R-01: lift %d has a structure" % n["id"])
+	starts.sort()
+	check(starts == [0, 1], "R-01: one stone starts down, the other up (got %s)" % [starts])
 	s.time = 0.0
-	for ei in mine:
-		check(s.is_edge_open(ei), "R-01: retract deck %d starts out" % ei)
-	s.nodes[rid]["owner"] = "A"
-	s.fire_relay(rid)
-	for i in range(80):
+	var lt: Dictionary = lifts[0]
+	var lid: int = lt["id"]
+	var open0 := s.controlled_edges(lid).filter(func(ei): return s.is_edge_open(ei))
+	check(open0.size() == 2, "R-01: lift %d opens 2 decks at a time (got %d)" % [lid, open0.size()])
+	lt["owner"] = "A"
+	s.fire_relay(lid)
+	for i in range(120):
 		s.step(0.05)
-	for ei in mine:
-		check(not s.is_edge_open(ei), "R-01: retract deck %d pulled in after the fire" % ei)
+	var open1 := s.controlled_edges(lid).filter(func(ei): return s.is_edge_open(ei))
+	check(open1.size() == 2 and open1.filter(func(ei): return ei in open0).is_empty(), "R-01: firing lift %d swaps its decks (%s -> %s)" % [lid, open0, open1])
 	check(s._belt_edges.size() == 2, "R-01: two plain belts (got %d)" % s._belt_edges.size())
 
 
@@ -117,8 +126,6 @@ func _gates() -> void:
 				check(s.controlled_edges(n["id"]).size() == 4, "R-02: the hub drives its 4 side decks (got %d)" % s.controlled_edges(n["id"]).size())
 			if n["relay"] == "retract":
 				check(deg == 5, "R-02: gatehouse %d has 5 decks (got %d)" % [n["id"], deg])
-	var r3 := _sim("R-03")
-	check(r3 != null and r3._ferry_plain.size() == 3 and r3._ferry_groups.is_empty(), "R-03: three 1-bridge ferries")
 	## R-04 Gate 2: each waist gatehouse pulls its top door and its waist door (2 decks); its bottom door and home road stay.
 	var r4 := _sim("R-04")
 	check(r4 != null, "R-04 loads")
@@ -175,7 +182,7 @@ func _init() -> void:
 	_strait()
 	_pinwheel()
 	_gates()
-	for code in ["R-01", "R-02", "R-03", "R-04", "R-05"]:
+	for code in ["R-01", "R-02", "R-04", "R-05"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
 		_play(code)
 	print("test_round_r: %d checks, %d failed" % [checks, fails])
 	print("ALL PASSED" if fails == 0 else "FAILED")
