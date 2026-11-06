@@ -15,7 +15,7 @@ extends Node3D
 ## door lasers it (a background detail).
 ##  - a tube per node platform (not relays / junctions / plazas), from under the platform to the floor: goo flows up in the
 ##    owner's colour; a siege pushes the attacker's colour down from the top (share of the fight); a capture pushes
-##    the old colour out of the bottom (neutral: the new colour just fills); a dropped node's tube drains and sinks;
+##    the old colour out of the bottom (neutral: it pushes out the gray native goo); a dropped node's tube drains and sinks;
 ##  - falls: a splat where the bodies land + droplets, then goo blobs crawl to the nearest tube and ride up inside it.
 ## Budget (phones): one draw per tube, one floor, three MultiMeshes (blobs, droplets, splats) with fixed pools;
 ## a 100+ unit fall makes at most SPLATS_PER_FALL splats and CRAWL_PER_FALL blobs, the oldest are recycled.
@@ -48,6 +48,11 @@ const CRAWL_MAX := 48
 const DROP_MAX := 96
 const DROPS_PER_SPLAT := 8
 const RIDERS_PER_TUBE := 4
+# WORLD LORE (01 Rules/WORLD-LORE-2026-11.md): the native goo (the Locals) is plain GRAY - the colour no player picks. A
+# neutral tube holds gray native goo (a capture pushes it down); a splat is a "clock out": the goo turns gray on the
+# floor and crawls back gray, riding up the tube gray.
+const NATIVE_GRAY := Color(0.36, 0.37, 0.41, 1.0)
+const CLOCK_OUT_T := 1.2         # s for a splat's colour to fade to gray
 const FLOOR_KINDS := ["street", "factory", "sewer", "lab"]   # per map (code hash); --floor=<kind> forces one
 const MIST_ABOVE := 7.0          # the drifting fog layer between arena and floor, this far above the floor
 const MIST_DENSITY := 0.3
@@ -206,7 +211,7 @@ func _build_tube(n: Dictionary) -> void:
 
 static func _col(seat: String) -> Color:
 	if seat == "":
-		return Color(0, 0, 0, 0)                     # empty glass (neutral)
+		return NATIVE_GRAY                           # neutral: the planet's native gray goo
 	var c := Rules.seat_color(seat)
 	return Color(c.r, c.g, c.b, 1.0)
 
@@ -292,8 +297,6 @@ func handle(ev: Dictionary) -> void:
 func _land(ev: Dictionary, shown: float) -> void:
 	var pts: Array = ev["pts"]
 	var col := _col(str(ev.get("seat", "")))
-	if col.a <= 0.0:
-		col = Rules.seat_color("")
 	var n_spl := mini(SPLATS_PER_FALL, maxi(1, int(ceil(shown / 12.0))))
 	n_spl = mini(n_spl, pts.size())
 	var size := clampf(1.4 + 0.5 * sqrt(shown / float(n_spl)), 1.6, 5.0)
@@ -314,7 +317,7 @@ func _land(ev: Dictionary, shown: float) -> void:
 			_add_drop(at + Vector3(0, 0.2, 0), Vector3(cos(a) * sp, randf_range(3.0, 6.0), sin(a) * sp), col)
 		var mine := n_crawl / n_spl + (1 if k < n_crawl % n_spl else 0)
 		for j in range(mine):
-			_add_blob(at + Vector3(randf_range(-0.5, 0.5) * size * 0.5, 0, randf_range(-0.5, 0.5) * size * 0.5), col,
+			_add_blob(at + Vector3(randf_range(-0.5, 0.5) * size * 0.5, 0, randf_range(-0.5, 0.5) * size * 0.5), NATIVE_GRAY,
 					str(ev.get("seat", "")))
 
 
@@ -595,7 +598,7 @@ func _splats_step() -> void:
 		var grow := 1.0 - pow(1.0 - clampf(age / 0.35, 0.0, 1.0), 3.0)
 		var size: float = float(s["size"]) * 2.0
 		_splat_mm.set_instance_transform(shown, Transform3D(Basis.from_scale(Vector3(size, 1.0, size)).rotated(Vector3.UP, float(s["seed"]) * TAU), s["p"]))
-		_splat_mm.set_instance_color(shown, s["col"])
+		_splat_mm.set_instance_color(shown, (s["col"] as Color).lerp(NATIVE_GRAY, clampf(age / CLOCK_OUT_T, 0.0, 1.0)))
 		_splat_mm.set_instance_custom_data(shown, Color(age / SPLAT_LIFE, s["seed"], grow, 0.0))
 		shown += 1
 		keep.append(s)
