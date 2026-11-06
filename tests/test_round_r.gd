@@ -155,7 +155,7 @@ func _pinwheel() -> void:
 	## Daniele 2026-11-05 (proto9 review): R-05 = three rotors on the middle line (4 decks each), a 1-bridge ferry top and
 	## bottom, two plain belts (top-left, bottom-right). R-11 (version B) = one rotor + two speed relays driving the outer
 	## roads above / below them (2 decks each), same ferries and belts.
-	for code in ["R-05", "R-11"]:
+	for code in ["R-05", "R-11", "R-15", "R-16"]:          # R-15 / R-16: their 66 m tries (Daniele 2026-11-06)
 		var s := _sim(code)
 		check(s != null, "%s loads" % code)
 		if s == null:
@@ -167,13 +167,13 @@ func _pinwheel() -> void:
 				rots.append(n["id"])
 			if n["relay"] == "conveyor":
 				convs.append(n["id"])
-		check(rots.size() == (3 if code == "R-05" else 1), "%s: rotors (got %d)" % [code, rots.size()])
-		check(convs.size() == (0 if code == "R-05" else 2), "%s: speed relays (got %d)" % [code, convs.size()])
+		check(rots.size() == (3 if code in ["R-05", "R-15"] else 1), "%s: rotors (got %d)" % [code, rots.size()])
+		check(convs.size() == (0 if code in ["R-05", "R-15"] else 2), "%s: speed relays (got %d)" % [code, convs.size()])
 		for r in rots:
 			check(s.controlled_edges(r).size() == 4, "%s: rotor %d drives 4 decks" % [code, r])
 		for r in convs:                                # R-11 (Daniele's correction): 4 roads = 6 decks (2 curved roads of 2)
 			check(s.controlled_edges(r).size() == 6, "%s: speed relay %d drives 6 decks (got %d)" % [code, r, s.controlled_edges(r).size()])
-		if code == "R-11":
+		if code in ["R-11", "R-16"]:
 			check(s._conv_pieces.size() == 4, "R-11: 4 curve pieces are speed lanes (got %d)" % s._conv_pieces.size())
 			# a line walking the left bottom pier road (P2 -> Dl, fast at the start) is pushed while on its curve
 			var cv: int = s._conv_pieces.keys()[0]
@@ -204,7 +204,7 @@ func _pinwheel() -> void:
 			check(pushed == 4, "R-11: a line wholly on each speed curve is pushed (got %d of 4)" % pushed)
 		var ones := s._ferry_plain.values().filter(func(f): return not (f as Dictionary).has("group"))
 		check(s._ferry_plain.size() == 2 and ones.size() == 2, "%s: two 1-bridge ferries (got %d)" % [code, s._ferry_plain.size()])
-		check(s._belt_edges.size() == (2 if code == "R-05" else 0), "%s: plain belts (got %d)" % [code, s._belt_edges.size()])
+		check(s._belt_edges.size() == (2 if code in ["R-05", "R-15"] else 0), "%s: plain belts (got %d)" % [code, s._belt_edges.size()])
 
 
 func _gates() -> void:
@@ -376,7 +376,7 @@ func _shot_at(s: Sim, g: Dictionary) -> bool:
 func _neutral_guns() -> void:
 	## Daniele 2026-11-06: map-placed NEUTRAL machinegoons, a symmetric set ("symmetry is key"), shoot every seat's lines
 	## ("neutral shoot all, apply that to laser neutral too"); "if you capture the goon it's yours like any other structure".
-	var want := {"R-01": 2, "R-02": 2, "R-05": 2, "R-11": 2, "R-06": 2, "R-10": 1, "R-14": 2}
+	var want := {"R-01": 2, "R-02": 2, "R-05": 2, "R-11": 2, "R-06": 2, "R-10": 1, "R-14": 2, "R-15": 2, "R-16": 2}
 	for code in want:
 		var s := _sim(code)
 		var goons := s.nodes.filter(func(n): return n["structure"] == "machinegoon")
@@ -455,7 +455,7 @@ func _init() -> void:
 	_gearbox_link()
 	_neutral_guns()
 	_catapult()
-	for code in ["R-01", "R-02", "R-04", "R-05", "R-11", "R-06", "R-09", "R-10", "R-12", "R-13", "R-14"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
+	for code in ["R-01", "R-02", "R-04", "R-05", "R-11", "R-06", "R-09", "R-10", "R-12", "R-13", "R-14", "R-15", "R-16"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
 		_play(code)
 	print("test_round_r: %d checks, %d failed" % [checks, fails])
 	print("ALL PASSED" if fails == 0 else "FAILED")

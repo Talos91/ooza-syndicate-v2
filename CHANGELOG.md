@@ -2,6 +2,10 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto23** - 2026-11-07 (proto-r, staging/proto/): R-15 Pinwheel 66 and R-16 Pinwheel B 66 = 66 m tries of R-05 / R-11
+  (Daniele, Desk R04 "shrunk on top and bottom to be 66 m"): 64 m tall, 2 m centre-rotor spokes, ferry pair just above N / S; N / S
+  reachable only through the centre rotor. Both in MapPool.PROTO, camera pitch 58. R04 / R07 waiver texts marked ACCEPTED in the baked
+  R maps (text only).
 - **0.23.15-proto22** - 2026-11-06 (proto-r, staging/proto/): R-01 Strait review - belts push again on maps with no speed relay (R-01,
   R-05, R-12); neutral machinegoons grey instead of seat A cyan; every ferry 10 s in line / 10 s out (the 3-way hull 10 s per lane); R-01's
   top outer roads raised and bottom ones lowered, the two lifts dock at real levels (map node "level", lowered lift "base": -1, decks ramp
