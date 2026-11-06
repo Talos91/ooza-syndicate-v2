@@ -69,7 +69,9 @@ static func goo(seat: String) -> StandardMaterial3D:
 
 static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMaterial:
 	## Body hue = seat colour (hue-shifted texture), race colour as a rim accent (rules §5).
-	var key := "cr_%s_%s" % [faction, Rules.seat_color(seat).to_html()]
+	## ALPHA 24 UNITS v4: when tex is a v4 unit's own texture (it ships assets/units/<faction>_tint.png), the body keeps the
+	## AI's colour and the apparatus neon + logo take the seat colour (v4_setup; UnitView.style keeps it per look).
+	var key := "cr_%s_%s_%d" % [faction, Rules.seat_color(seat).to_html(), tex.get_instance_id() if tex else 0]
 	if not _cache.has(key):
 		var m := ShaderMaterial.new()
 		m.shader = CREATURE_SHADER
@@ -77,8 +79,48 @@ static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMat
 		var seat_hue: float = Rules.seat_color(seat).h
 		m.set_shader_parameter("hue_shift", fposmod(seat_hue - Rules.FACTIONS[faction][0], 1.0))
 		m.set_shader_parameter("accent", Rules.FACTIONS[faction][1])
+		v4_setup(m, faction, seat, tex)
 		_cache[key] = m
 	return _cache[key]
+
+
+const V4_TINT_MIX := 0.9             # the neon's albedo -> seat colour
+const V4_TINT_GLOW := 1.1            # the neon's emission in the seat colour (reads at phone scale on the dark board)
+const V4_EYE_GLOW := 0.5
+const V4_ALBEDO := 0.72            # the Rodin goo albedo is near full cyan: a little darker so the board light doesn't bleach it
+const V4_RIM := 0.8                # race rim gain (classic 2.2)
+const V4_SELF_GLOW := 0.05           # body glow (the classic units' 0.45 washes out the glossy goo)
+
+
+static func v4_tint(faction: String, tex: Texture2D) -> Texture2D:
+	## The v4 tint mask, only for the v4 unit texture itself (the monsters' minions keep the old mesh + texture).
+	if tex == null or tex.resource_path != "res://assets/units/%s_texture_diffuse.png" % faction:
+		return null
+	var path := "res://assets/units/%s_tint.png" % faction
+	return load(path) as Texture2D if ResourceLoader.exists(path) else null
+
+
+static func v4_setup(m: ShaderMaterial, faction: String, seat: String, tex: Texture2D) -> void:
+	var tint := v4_tint(faction, tex)
+	if tint == null:
+		return
+	m.set_shader_parameter("hue_shift", 0.0)
+	m.set_shader_parameter("tint_tex", tint)
+	m.set_shader_parameter("tint_color", Rules.seat_color(seat))
+	m.set_shader_parameter("tint_mix", V4_TINT_MIX)
+	m.set_shader_parameter("tint_glow", V4_TINT_GLOW)
+	m.set_shader_parameter("eye_glow", V4_EYE_GLOW)
+	m.set_shader_parameter("self_glow", V4_SELF_GLOW)
+	m.set_shader_parameter("albedo_gain", V4_ALBEDO)
+	m.set_shader_parameter("rim_gain", V4_RIM)
+	var mr_path := "res://assets/units/%s_texture_metallic-texture_roughness.png" % faction
+	if ResourceLoader.exists(mr_path):
+		m.set_shader_parameter("mr_tex", load(mr_path))
+		m.set_shader_parameter("use_mr", 1.0)
+
+
+static func is_v4(m: ShaderMaterial) -> bool:
+	return m != null and float(m.get_shader_parameter("tint_glow") if m.get_shader_parameter("tint_glow") != null else 0.0) > 0.0
 
 
 static func seam() -> StandardMaterial3D:

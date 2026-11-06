@@ -166,11 +166,15 @@ func _instance(faction: String, seat: String, ghost := false) -> MultiMeshInstan
 static func style(m: ShaderMaterial, faction: String, seat: String, goo: bool) -> void:
 	## The column look on a copy of Mats.creature: NEON = body in the seat colour (hue shift), race rim,
 	## self glow 0.45 (today); GOO = body in the race colour, player-colour rim.
+	## ALPHA 24 UNITS v4 (Mats.is_v4): the body is always the AI's colour; the seat colour is on the apparatus neon.
 	var seat_hue: float = Rules.seat_color(seat).h
-	m.set_shader_parameter("hue_shift", 0.0 if goo else fposmod(seat_hue - Rules.FACTIONS[faction][0], 1.0))
+	var v4 := Mats.is_v4(m)
+	m.set_shader_parameter("hue_shift", 0.0 if goo or v4 else fposmod(seat_hue - Rules.FACTIONS[faction][0], 1.0))
 	m.set_shader_parameter("accent", Rules.seat_color(seat) if goo else Rules.FACTIONS[faction][1])
-	m.set_shader_parameter("rim_gain", GOO_RIM_GAIN if goo else 2.2)
-	m.set_shader_parameter("self_glow", GOO_SELF_GLOW if goo else 0.45)
+	m.set_shader_parameter("rim_gain", GOO_RIM_GAIN if goo else (Mats.V4_RIM if v4 else 2.2))
+	m.set_shader_parameter("self_glow", Mats.V4_SELF_GLOW if v4 else (GOO_SELF_GLOW if goo else 0.45))
+	if v4:
+		m.set_shader_parameter("tint_color", Rules.seat_color(seat))
 
 
 func begin(now := -1.0) -> void:
