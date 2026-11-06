@@ -39,6 +39,7 @@ func _run() -> void:
 	var tag := "match"
 	var focus := -1
 	var colour := "A"
+	var south := false                 # south=1: the column walks toward the camera (the faces), focus = its target
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("out="):
 			out = a.substr(4)
@@ -52,6 +53,8 @@ func _run() -> void:
 			colour = a.substr(7)
 		if a.begins_with("focus="):
 			focus = int(a.substr(6))
+		if a == "south=1":
+			south = true
 	var main_script = load("res://scripts/main.gd")
 	main_script.relaunch = {"faction": "vex", "rival": rival, "mode": "1v1", "map": MAP, "colour": colour}
 	var inst: Node = (load(MAIN) as PackedScene).instantiate()
@@ -79,6 +82,17 @@ func _run() -> void:
 		return
 	var a: int = mine[0]
 	var b: int = theirs[0]
+	if south:                          # the nearest node that lies toward the camera from a
+		var pa: Vector3 = sim.nodes[a]["pos"]
+		var best := 1e9
+		for n in sim.nodes:
+			var off: Vector3 = (n["pos"] as Vector3) - pa
+			off.y = 0.0
+			if off.length() > 1.0 and off.normalized().dot(Rules.front_dir()) > 0.6 and off.length() < best and off.length() < 40.0:
+				best = off.length()
+				b = int(n["id"])
+		print("south target ", b, " at ", best, " m")
+		# pass focus=<that id> to frame it (the camera focus is set when the match starts)
 	sim.nodes[a]["units"] = 400.0
 	sim.nodes[b]["units"] = 400.0
 	sim.send(a, b, 0.6)
