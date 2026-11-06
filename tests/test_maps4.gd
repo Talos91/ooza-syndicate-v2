@@ -677,7 +677,7 @@ func _very_last_stand() -> void:
 				check(ok_degree, "%s: every dropped platform had 1-2 open connections when picked" % tag)
 				check(ok_conn, "%s: the map stays connected after every drop" % tag)
 				check(ok_gap, "%s: drops are evenly spaced (%.1f s apart)" % [tag, expected_gap])
-				var survivors := sim.nodes.filter(func(n): return not sim.collapsed.get(n["id"], false) and not n.get("indestructible", false))   # (a launcher never falls)
+				var survivors := sim.nodes.filter(func(n): return not sim.collapsed.get(n["id"], false))
 				check(survivors.size() == 1, "%s: exactly one platform survives before the hard end (%d left)" % [tag, survivors.size()])
 				if drops > 0:
 					check(last_drop_t <= Rules.MATCH_HARD_END + 0.35, "%s: the last drop lands at the hard end, not after" % tag)

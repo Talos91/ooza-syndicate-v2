@@ -149,8 +149,9 @@ func _init() -> void:
 	check(sim10.nodes[4]["structure"] == "machinegoon" and sim10.nodes[4]["tier"] == 2, "the vat became a machinegoon, tier kept")
 	var u4: float = sim10.nodes[4]["units"]
 	sim10.step(1.0)
-	check(not Sim.has_vat(sim10.nodes[4]) and sim10.production(sim10.nodes[4]) == 0.0 and absf(sim10.nodes[4]["units"] - u4) < 0.01,
-			"...and the node produces nothing (it keeps its garrison)")
+	var gp: float = Rules.PROD[2] * Rules.GOOGATLING_PROD * sim10.stat("A", "production")
+	check(not Sim.has_vat(sim10.nodes[4]) and absf(sim10.production(sim10.nodes[4]) - gp) < 0.001 and absf(sim10.nodes[4]["units"] - u4 - gp) < 0.05,
+			"...and the node grows its garrison (its ammo) at half a T2 vat (%.2f /s shown)" % Rules.shown_f(gp))
 	check(sim10.upgrade_cost(sim10.nodes[4]) == Rules.MACHINEGOON_COST[3], "the next machinegoon tier costs 30 shown")
 	sim10.nodes[4]["swap_cd"] = 0.0
 	check(sim10.restore_vat(4), "the machinegoon can give way to the vat again (free)")
@@ -1552,8 +1553,7 @@ func _rules_0_18_10() -> void:
 		gn["owner"] = "A"
 		gn["structure"] = "machinegoon"
 		gn["tier"] = tier
-		gn["units"] = 20.0
-		gn["gat_stock"] = Sim.gat_cap(gn)              # GOOGATLING: a full stock fires at the full rate
+		gn["units"] = Sim.gat_cap(gn)                 # GOOGAT: a full garrison (= its ammo) fires at the full rate
 		s.nodes[0]["owner"] = "B"
 		s.nodes[0]["units"] = 300.0
 		var hb := s.send(0, 3, 1.0)                   # B's line comes at the machinegoon (0 -> 1 -> 3)
@@ -1566,10 +1566,11 @@ func _rules_0_18_10() -> void:
 		var killed: float = s.combat_losses.get("B", 0.0) - l0
 		check(absf(killed - Rules.MACHINEGOON_RATE[tier]) < 0.3, "a T%d machinegoon kills %.1f a second (%.2f)" % [tier, Rules.MACHINEGOON_RATE[tier], killed])
 		check(int(gn["shot"].get("target_horde", -1)) == hb["id"] and float(gn["shot"]["kills"]) > 0.0, "its shot names the line it streams at (fx)")
-		check(absf(gn["units"] - u1) < 0.01, "the machinegoon node produces nothing")
-	# ---------------------------------------------------------------- GOOGATLING (Daniele 2026-11-06): stock, fire, trickle
-	check(Rules.GOOGATLING_PROD == 0.5 and Rules.GOOGATLING_VAT_PROD == 0.0 and Rules.GOOGATLING_CAP == {1: 150, 2: 300, 3: 600},
-			"googatling numbers: stock at 0.5x the same-tier vat, no normal units, caps 30 / 60 / 120 shown")
+		check(absf((u1 - gn["units"]) - (killed - s.gat_rate(gn))) < 0.2,
+				"every kill is paid from its garrison, which regrows meanwhile (%.2f spent = %.2f killed - %.2f made)" % [u1 - gn["units"], killed, s.gat_rate(gn)])
+	# ---------------------------------------------------------------- GOOGAT (Daniele 2026-11-06, Desk dec-googatling): its
+	# ammo IS its garrison, grown at half the same-tier vat rate up to the node's cap; it fires that, then each unit as made
+	check(Rules.GOOGATLING_PROD == 0.5, "googat numbers: ammo grows at 0.5x the same-tier vat")
 	for fac in ["vex", "null", "bloom", "ember", "solar"]:
 		var sf := _tp({3: "A", 4: "B"}, {"A": fac, "B": fac})
 		var fn: Dictionary = sf.nodes[1]
@@ -1577,45 +1578,37 @@ func _rules_0_18_10() -> void:
 		fn["structure"] = "machinegoon"
 		for t in [1, 2, 3]:
 			fn["tier"] = t
+			check(absf(Sim.gat_cap(fn) - float(Rules.CAPS[t])) < 0.001, "%s T%d googat: its ammo cap is the node's cap (%d shown)" % [fac, t, Rules.shown(Sim.gat_cap(fn))])
 			check(Sim.gat_fire_rate(fn) > sf.gat_rate(fn) * 2.0 and sf.gat_rate(fn) > 0.0,
-					"%s T%d googatling fires faster than it makes goo (%.1f > %.2f /s shown)" % [fac, t, Rules.shown_f(Sim.gat_fire_rate(fn)), Rules.shown_f(sf.gat_rate(fn))])
+					"%s T%d googat fires faster than it makes ammo (%.1f > %.2f /s shown)" % [fac, t, Rules.shown_f(Sim.gat_fire_rate(fn)), Rules.shown_f(sf.gat_rate(fn))])
 	s = _tp()
 	var gg: Dictionary = s.nodes[1]
 	gg["owner"] = "A"
 	gg["structure"] = "machinegoon"
 	gg["tier"] = 1
 	gg["units"] = 20.0
-	gg["gat_stock"] = 0.0
 	var rate1: float = s.gat_rate(gg)
-	check(absf(rate1 - Rules.PROD[1] * 0.5 * s.stat("A", "production")) < 0.001, "a T1 googatling makes goo at half a T1 vat (%.3f /s)" % rate1)
+	check(absf(rate1 - Rules.PROD[1] * 0.5 * s.stat("A", "production")) < 0.001 and absf(rate1 - s.production(gg)) < 0.001,
+			"a T1 googat grows its garrison at half a T1 vat (%.2f /s shown)" % Rules.shown_f(rate1))
 	for i in range(int(30.0 / 0.05)):
-		s._step_structures(0.05)
-	check(absf(float(gg["gat_stock"]) - rate1 * 30.0) < 0.05 and absf(gg["units"] - 20.0) < 0.001,
-			"its stock grows %.1f in 30 s with no rival in range; the garrison does not grow" % float(gg["gat_stock"]))
-	for i in range(int(200.0 / 0.05)):
-		s._step_structures(0.05)
-	check(absf(float(gg["gat_stock"]) - Sim.gat_cap(gg)) < 0.001, "the stock stops at its cap (%.1f / %.0f)" % [float(gg["gat_stock"]), Sim.gat_cap(gg)])
-	gg["tier"] = 3
-	for i in range(int(10.0 / 0.05)):
-		s._step_structures(0.05)
-	check(float(gg["gat_stock"]) > Rules.GOOGATLING_CAP[1] and float(gg["gat_stock"]) < Rules.GOOGATLING_CAP[3], "an upgrade raises the cap and it fills on")
-	gg["tier"] = 1
-	s._step_structures(0.05)
-	check(absf(float(gg["gat_stock"]) - Sim.gat_cap(gg)) < 0.2, "a tier drop clamps the stock to the lower cap")
-	# fires its stock at the fire rate, then each unit as it is made
+		s.step(0.05)
+	check(absf(gg["units"] - (20.0 + rate1 * 30.0)) < 0.1, "left alone its ammo (= garrison) regrows: %.1f after 30 s" % gg["units"])
+	for i in range(int(300.0 / 0.05)):
+		s.step(0.05)
+	check(absf(gg["units"] - Sim.gat_cap(gg)) < 0.001, "...up to the node's cap (%.1f / %.0f)" % [gg["units"], Sim.gat_cap(gg)])
+	# a column drains it: fires its ammo at the fire rate, then each unit as it is made
 	s = _tp()
 	var gf: Dictionary = s.nodes[1]
 	gf["owner"] = "A"
 	gf["structure"] = "machinegoon"
 	gf["tier"] = 1
-	gf["units"] = 20.0
+	gf["units"] = 0.0
 	s.nodes[0]["owner"] = "B"
 	s.nodes[0]["units"] = 600.0
 	var hf := s.send(0, 3, 1.0)
-	gf["gat_stock"] = 0.0
 	run_until(s, func(): return (Sim.sample(hf, hf["s"])[0] as Vector3).distance_to(gf["pos"]) < Rules.MACHINEGOON_RANGE - 4.5, 20.0, 0.02)
 	hf["speed"] = 0.0
-	gf["gat_stock"] = 10.0
+	gf["units"] = 10.0
 	var kills := []
 	for sec in range(4):
 		var l0: float = s.combat_losses.get("B", 0.0)
@@ -1623,12 +1616,24 @@ func _rules_0_18_10() -> void:
 			s.step(0.05)
 		kills.append(s.combat_losses.get("B", 0.0) - l0)
 	var gat_r: float = s.gat_rate(gf)
-	check(absf(kills[0] - Sim.gat_fire_rate(gf)) < 0.3, "it fires its stock at the fire rate first (%.2f in 1 s)" % kills[0])
-	check(absf(kills[3] - gat_r) < 0.15 and float(gf["gat_stock"]) < 0.2, "empty, it fires each unit as it is made (%.2f in 1 s vs %.2f made)" % [kills[3], gat_r])
-	check(bool(gf["shot"].get("trickle", false)), "its shot reads as a trickle once the stock is empty (fx)")
-	check(absf(kills[0] + kills[1] + kills[2] + kills[3] - (10.0 + gat_r * 4.0)) < 0.3, "every kill is paid from the stock (%.2f)" % (kills[0] + kills[1] + kills[2] + kills[3]))
+	check(absf(kills[0] - Sim.gat_fire_rate(gf)) < 0.3, "it fires its garrison at the fire rate first (%.2f in 1 s)" % kills[0])
+	check(absf(kills[3] - gat_r) < 0.15 and gf["units"] < 0.2, "run dry, it fires each unit as it is made (%.2f in 1 s vs %.2f made)" % [kills[3], gat_r])
+	check(bool(gf["shot"].get("trickle", false)), "its shot reads as a trickle once the ammo is gone (fx)")
+	check(absf(kills[0] + kills[1] + kills[2] + kills[3] - (10.0 + gat_r * 4.0)) < 0.3, "every kill is paid from the garrison (%.2f)" % (kills[0] + kills[1] + kills[2] + kills[3]))
+	gf["units"] += 30.0                                # units walking in are more ammo
+	var l1: float = s.combat_losses.get("B", 0.0)
+	for i in range(20):
+		s.step(0.05)
+	check(absf(s.combat_losses.get("B", 0.0) - l1 - Sim.gat_fire_rate(gf)) < 0.3, "units walking in are more ammo: full rate again")
 	s._capture(gf, "B", 5.0)
-	check(float(gf["gat_stock"]) == 0.0, "a captured googatling's stock is emptied")
+	check(absf(gf["units"] - 5.0) < 0.001, "a captured googat's ammo is the capturer's garrison")
+	var sn := _tp()                                    # a NEUTRAL one regrows its ammo at the same half rate, to its garrison
+	var gn2: Dictionary = sn.nodes[1]
+	gn2["structure"] = "machinegoon"
+	gn2["units"] = 0.0
+	for i in range(int(4.0 / 0.05)):
+		sn.step(0.05)
+	check(absf(gn2["units"] - Rules.PROD[int(gn2["tier"])] * 0.5 * 4.0) < 0.05, "a neutral googat regrows %.1f in 4 s (half rate)" % gn2["units"])
 	# ---------------------------------------------------------------- laser: 19 per 2 s burst, 2 s recharge, 12 m
 	check(Rules.LASER_KILL == 96.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
 			"laser numbers: 19 shown per 2 s burst (-40 %, Daniele 2026-09-28), 2 s recharge, 12 m, cost 40")
@@ -2380,7 +2385,7 @@ func _skills_tests() -> void:
 		s.nodes[1]["owner"] = "B"
 		s.nodes[1]["structure"] = "machinegoon"
 		s.nodes[1]["tier"] = 1
-		s.nodes[1]["gat_stock"] = Sim.gat_cap(s.nodes[1])
+		s.nodes[1]["units"] = Sim.gat_cap(s.nodes[1])      # GOOGAT: ammo = garrison
 		s.nodes[3]["units"] = 300.0
 		var hg := s.send(3, 1, 1.0)
 		s.nodes[3]["streaming"] = {}
@@ -3356,54 +3361,55 @@ func _relays_proto() -> void:
 			"launcher: the tag shows the aim's clock (%s) and the view gets the swing" % l.proto_tag(1))
 	run_until(l, func(): return l.launcher_aim(1) == 8, cyc * tg.size() + 0.5)
 	var u8: float = l.nodes[8]["units"]
-	check(l.launcher_aim(1) == 8 and l.fire_relay(1), "launcher: aiming at 8, the owner fires it")
-	check(int(l.nodes[1]["proto"]["target"]) == 8 and l.proto_tag(1) == "LOCK", "launcher: the fire LOCKS the aim (%s)" % l.proto_tag(1))
-	var stays := [true]
-	run_until(l, func():
-		stays[0] = stays[0] and l.launcher_aim(1) == 8
-		return l.nodes[1]["relay_phase"] == "moving", 3.0)
-	check(stays[0] and l.proto_tag(1).begins_with("ARMED"), "launcher: it stays locked through the warning, then ARMED (%s)" % l.proto_tag(1))
-	check(absf(float(l.nodes[1]["relay_move"]) - 8.0) < 0.01, "launcher: ARMED for 8 s")
-	l.nodes[5]["units"] = 40.0                        # B's line through the pad (5 -> 2 -> 1 -> 0)
-	var hbl := l.send(5, 0, 0.5)
-	var hl := l.send(0, 2, 1.0)                       # A's line through the pad (0 -> 1 -> 2)
+	l.nodes[1]["tier"] = 2                             # LAUNCHER TURRET: a T2 loads 100 shown for at most 4 s
+	l.nodes[5]["units"] = 40.0
+	var hbl := l.send(5, 0, 0.5)                       # B's line through the pad (5 -> 2 -> 1 -> 0)
+	var hl := l.send(0, 2, 1.0)                        # A's line through the pad (0 -> 1 -> 2)
 	check(1 in hl["route"] and 1 in hbl["route"], "launcher: both lines pass the pad (%s / %s)" % [str(hl["route"]), str(hbl["route"])])
-	var first_throw := -1.0
-	var first_land := -1.0
-	var b_thrown := false
-	var t := 0.0
-	var locked_ok := true
-	var t_rel := -1.0                                  # the arm's end, and when the aim first left 8 after it
-	var t_moved := -1.0
-	while t < 14.0:
-		l.step(0.05)
-		t += 0.05
-		if l.nodes[1]["relay_phase"] == "moving":
-			locked_ok = locked_ok and l.launcher_aim(1) == 8 and int(l.nodes[1]["proto"]["target"]) == 8
-		elif t_rel < 0.0 and first_throw > 0.0:
-			t_rel = l.time
-		if t_rel >= 0.0 and t_moved < 0.0 and l.launcher_aim(1) != 8:
-			t_moved = l.time
-		if first_throw < 0.0 and not l.flights.is_empty():
-			first_throw = l.time
-		if first_land < 0.0 and l.flights.any(func(fl): return fl.get("landed", false)):
-			first_land = l.time
-		if hbl in l.hordes and hbl.has("launch"):
-			b_thrown = true
-	check(first_throw > 0.0, "launcher: an own line entering the armed pad is thrown")
+	for hx in [[hl, 40.0], [hbl, 20.0]]:               # both heads just short of the platform
+		var hh: Dictionary = hx[0]
+		l.nodes[int(hh["route"][0])]["streaming"] = {}
+		hh["streaming"] = false
+		hh["units"] = hx[1]
+		hh["s"] = float(l._platform_range(hh, 1)[0]) - 0.3
+	check(l.launcher_aim(1) == 8 and l.fire_relay(1), "launcher: aiming at 8, the owner fires it")
+	var t_fire := l.time
+	check(int(l.nodes[1]["proto"]["target"]) == 8, "launcher turret: the tap freezes the aim on 8")
+	l.step(0.05)
+	check(l.nodes[1]["relay_phase"] == "moving" and l.proto_tag(1).begins_with("LOAD ") and l.proto_tag(1).ends_with("/100"),
+			"launcher turret: loading starts at once - no warning (%s)" % l.proto_tag(1))
+	check(absf(float(l.nodes[1]["relay_move"]) - 4.0) < 0.01, "launcher turret: a T2 loads for at most 4 s")
+	var b_in_air := [0.0]
+	var locked_ok := [true]
+	run_until(l, func():
+		locked_ok[0] = locked_ok[0] and (l.nodes[1]["relay_phase"] != "moving" or l.launcher_aim(1) == 8)
+		b_in_air[0] = maxf(b_in_air[0], l.flight_units("B"))
+		return not l.flights.is_empty(), 6.0)
+	var t_salvo := l.time
+	var fa: Array = l.flights.filter(func(fl): return fl["seat"] == "A")
+	var fb: Array = l.flights.filter(func(fl): return fl["seat"] == "B")
+	check(absf(t_salvo - t_fire - 4.0) < 0.15, "launcher turret: under its load it fires when the 4 s are up (%.2f s)" % (t_salvo - t_fire))
+	check(fa.size() == 1 and fb.size() == 1 and absf(float(fa[0]["units"]) - 40.0) < 0.05 and absf(float(fb[0]["units"]) - 20.0) < 0.05,
+			"launcher turret: own AND enemy lines entering are loaded - one salvo, one throw per seat (A %.1f, B %.1f)" % [
+			float(fa[0]["units"]) if not fa.is_empty() else -1.0, float(fb[0]["units"]) if not fb.is_empty() else -1.0])
+	check(not fa.is_empty() and not fb.is_empty() and float(fa[0]["land"]) == float(fb[0]["land"]) and int(fa[0]["to"]) == 8 and int(fb[0]["to"]) == 8,
+			"launcher turret: the salvo lands together at the frozen target")
+	check(b_in_air[0] > 19.9, "launcher turret: loaded units still count as their seat's (B %.1f)" % b_in_air[0])
+	check(l.events.any(func(e): return e["type"] == "launch_salvo" and absf(float(e["units"]) - 60.0) < 0.1)
+			and l.fx_events.any(func(e): return e["type"] == "launch_salvo"), "launcher turret: the salvo reaches the log and the view")
+	check(l.nodes[1]["relay_phase"] == "" and l.nodes[1]["relay_cd"] > 25.0, "launcher turret: then its 30 s cooldown (%.1f)" % l.nodes[1]["relay_cd"])
+	var t_rel := l.time
+	run_until(l, func(): return l.flights.is_empty(), 4.0)
 	var fl_s: float = float(Rules.RELAYS_PROTO["launcher"]["flight"])
-	check(first_land > 0.0 and first_land - first_throw >= fl_s - 0.05 and fl_s <= 1.2, "launcher (round 3): it flies %.1f s before landing (%.2f s)" % [fl_s, first_land - first_throw])
-	check(not b_thrown, "launcher: enemy lines are never thrown")
-	check(l.nodes[8]["owner"] == "A" or l.nodes[8]["units"] < u8 - 0.5, "launcher: the throw lands at the target as an arrival (owner %s)" % l.nodes[8]["owner"])
-	check(absf(float(Rules.RELAYS_PROTO["launcher"]["land"]) - 0.5) < 0.001 and l.nodes[1]["relay_cd"] > 20.0,
-			"launcher (round 3): lands over 0.5 s; 30 s cooldown after the arm (%.1f left)" % l.nodes[1]["relay_cd"])
-	check(locked_ok, "launcher: the aim never moved while armed")
-	if t_moved < 0.0 and t_rel >= 0.0:
-		run_until(l, func(): return l.launcher_aim(1) != 8, cyc + 0.5)
-		t_moved = l.time
-	var after_arm: float = t_moved - t_rel if t_rel >= 0.0 else -1.0
+	check(l.time - t_salvo >= fl_s - 0.05 and fl_s <= 1.2, "launcher (round 3): it flies %.1f s before landing (%.2f s)" % [fl_s, l.time - t_salvo])
+	check(l.nodes[8]["owner"] != "" or l.nodes[8]["units"] < u8 - 0.5, "launcher: the salvo lands at the target as an arrival (owner '%s')" % l.nodes[8]["owner"])
+	check(absf(float(Rules.RELAYS_PROTO["launcher"]["land"]) - 0.5) < 0.001, "launcher (round 3): lands over 0.5 s")
+	check(locked_ok[0], "launcher: the aim never moved while loading")
+	var t_moved := run_until(l, func(): return l.launcher_aim(1) != 8, cyc + 0.5)
+	var after_arm: float = l.time - t_rel
 	check(l.nodes[1]["relay_phase"] == "" and after_arm > 0.5 and after_arm <= cyc + 0.1,
-			"launcher: after the arm the aim moves on from the locked target (in %.1f s)" % after_arm)
+			"launcher: after the salvo the aim moves on from the locked target (in %.1f s)" % after_arm)
+	_launcher_turret()
 	# the landing is spread: a single throw lands over RELAYS_PROTO.launcher.land
 	var land_s: float = float(Rules.RELAYS_PROTO["launcher"]["land"])
 	var l2 := _proto_sim("launcher")
@@ -3677,6 +3683,7 @@ func _launcher_round3() -> void:
 	var mis: float = float(Rules.RELAYS_PROTO["launcher"]["misfire"])
 	var l := _proto_sim("launcher")
 	l.nodes[1]["owner"] = "A"
+	l.nodes[1]["tier"] = 3                            # (TURRET: a T3 holds 150 shown for 6 s - the whole 60 line fits)
 	l.nodes[0]["owner"] = "A"
 	l.nodes[0]["units"] = 60.0 * Rules.SCALE
 	run_until(l, func(): return l.launcher_aim(1) == 8, 20.0)
@@ -3691,7 +3698,7 @@ func _launcher_round3() -> void:
 		return caught[0] >= 0.0 and not (h0 in l.hordes), 10.0)
 	var took: float = l.time - float(caught[0]) if caught[0] >= 0.0 else 99.0
 	var x1: float = float(caught[1]) / (Rules.move_speed() * Rules.platform_mult())   # the round-2 pour: one line length at walk pace
-	check(pour >= 2.5 and caught[0] >= 0.0 and took < x1 * 0.6, "launcher (round 3): a 60 line is in the air in %.2f s (x1 would take ~%.2f s)" % [took, x1])
+	check(pour >= 2.5 and caught[0] >= 0.0 and took < x1 * 0.6, "launcher (round 3): a 60 line is loaded in %.2f s (x1 would take ~%.2f s)" % [took, x1])
 	# Relay Hack FIRE by the rival: after the warning it misfires instead of arming
 	var m := _proto_map("launcher")
 	var s := _sim_of(m, {"B": {"map": "relay_hack"}})
@@ -3722,7 +3729,7 @@ func _launcher_round3() -> void:
 	s3.nodes[1]["owner"] = "A"
 	s3.fire_relay(1)
 	_skip_warning(s3, 1)
-	check(s3.nodes[1].get("misfire", "") == "" and s3.proto_tag(1).begins_with("ARMED"), "launcher: the owner's own fire still arms it (%s)" % s3.proto_tag(1))
+	check(s3.nodes[1].get("misfire", "") == "" and s3.proto_tag(1).begins_with("LOAD"), "launcher: the owner's own fire still loads it (%s)" % s3.proto_tag(1))
 	# the garrison and a line leaving the pad are never thrown
 	var s4 := _sim_of(m, {"B": {"map": "relay_hack"}})
 	s4.nodes[1]["owner"] = "A"
@@ -3731,6 +3738,92 @@ func _launcher_round3() -> void:
 	var hl := s4.send(1, 0, 0.5)
 	run_until(s4, func(): return not (hl in s4.hordes), 10.0)
 	check(s4.fall_losses.get("A", 0.0) < 0.01 and s4.nodes[1]["units"] > 15.0 * Rules.SCALE, "launcher misfire: the garrison and a line leaving it are safe")
+
+
+func _launcher_turret() -> void:
+	## LAUNCHER TURRET (Daniele 2026-11-06; Desk dec-launcher-turret + his note): the load cap, the upgrade prices, never
+	## below T1 (capture, Sinkhole), falls in the Last Stand like any node, a misfire throws the load into the void.
+	check(Rules.LAUNCHER_COST == {1: 75, 2: 125, 3: 175} and Rules.shown(Rules.LAUNCHER_COST[2]) == 25 and Rules.shown(Rules.LAUNCHER_COST[3]) == 35,
+			"launcher turret: upgrades cost the Alpha cannon prices (T2 25, T3 35 shown)")
+	check(Rules.LAUNCHER_LOAD == {1: 250, 2: 500, 3: 750} and Rules.LAUNCHER_LOAD_S == {1: 2.0, 2: 4.0, 3: 6.0},
+			"launcher turret: loads 50 / 100 / 150 shown for at most 2 / 4 / 6 s")
+	# full before the clock: a T1 whose load is 4 shown (a test cap) fires at once, the rest of the line walks on
+	var keep: Dictionary = Rules.LAUNCHER_LOAD
+	Rules.LAUNCHER_LOAD = {1: 20, 2: 500, 3: 750}
+	var l := _proto_sim("launcher")
+	l.nodes[1]["owner"] = "A"
+	l.nodes[0]["owner"] = "A"
+	l.nodes[0]["units"] = 60.0
+	run_until(l, func(): return l.launcher_aim(1) == 8, 20.0)
+	var h := l.send(0, 2, 1.0)
+	l.nodes[0]["streaming"] = {}
+	h["streaming"] = false
+	h["units"] = 60.0
+	h["s"] = float(l._platform_range(h, 1)[0]) - 0.3
+	l.fire_relay(1)
+	var t0 := l.time
+	run_until(l, func(): return not l.flights.is_empty(), 3.0)
+	check(l.time - t0 < 1.9 and l.flights.size() == 1 and absf(float(l.flights[0]["units"]) - 20.0) < 0.01,
+			"launcher turret: full, it fires before its 2 s (%.2f s, %.2f loaded)" % [l.time - t0, float(l.flights[0]["units"]) if not l.flights.is_empty() else -1.0])
+	check(h in l.hordes and not h.has("launch") and absf(h["units"] - 40.0) < 0.05, "launcher turret: the rest of the line walks on (%.1f)" % h["units"])
+	Rules.LAUNCHER_LOAD = keep
+	# upgrades: T1 -> T2 (25) -> T3 (35), paid from the garrison, BUILD_SECONDS each; never while it loads
+	var u := _proto_sim("launcher")
+	var n: Dictionary = u.nodes[1]
+	n["owner"] = "A"
+	n["units"] = 200.0
+	check(int(n["tier"]) == 1 and u.upgrade_cost(n) == 125 and u.can_upgrade(1, "A") == "", "launcher turret: a T1 upgrades to T2 for 25 shown")
+	check(u.structure_order("A", "upgrade", 1)[0] and absf(n["units"] - 75.0) < 0.001 and n["build_kind"] == "launcher", "launcher turret: the upgrade is paid now")
+	for i in range(int((Rules.BUILD_SECONDS + 0.2) / 0.05)):
+		u._step_structures(0.05)
+	check(int(n["tier"]) == 2 and n["build_kind"] == "" and u.upgrade_cost(n) == 175, "launcher turret: T2 after %d s; T3 costs 35 shown" % int(Rules.BUILD_SECONDS))
+	check(u.can_upgrade(1, "A").begins_with("Upgrade needs 35"), "launcher turret: the T3 needs 35 here (%s)" % u.can_upgrade(1, "A"))
+	n["units"] = 200.0
+	u.fire_relay(1)
+	u.step(0.05)
+	check(u.can_upgrade(1, "A") != "", "launcher turret: no upgrade while it loads (%s)" % u.can_upgrade(1, "A"))
+	n["relay_phase"] = ""
+	check(u.upgrade(1, "A"), "launcher turret: T2 -> T3")
+	for i in range(int((Rules.BUILD_SECONDS + 0.2) / 0.05)):
+		u._step_structures(0.05)
+	check(int(n["tier"]) == 3 and u.upgrade_cost(n) == 0 and u.can_upgrade(1, "A") == "Launcher is already at max tier", "launcher turret: T3 is the top")
+	check(n["structure"] == "" and n["buildable"].is_empty(), "launcher turret: nothing else is built on its slot")
+	# never below T1: a capture costs a tier (min 1)
+	n["tier"] = 2
+	u._capture(n, "B", 5.0)
+	check(int(n["tier"]) == 1, "launcher turret: a captured T2 becomes T1")
+	u._capture(n, "A", 5.0)
+	check(int(n["tier"]) == 1, "launcher turret: a captured T1 stays T1 (min tier)")
+	# ...and a Sinkhole drops a T2 / T3 one tier but is refused on a T1
+	var m := _proto_map("launcher")
+	var sk := _sim_of(m, {"B": {"active": "sinkhole"}})
+	sk.nodes[1]["owner"] = "A"
+	sk.nodes[1]["tier"] = 1
+	check(sk.cast_check("B", "active", 1) == "A launcher never drops below T1" and not sk.cast("B", "active", 1),
+			"launcher turret: Sinkhole is refused on a T1 launcher (%s)" % sk.cast_check("B", "active", 1))
+	sk.nodes[1]["tier"] = 3
+	check(sk.cast("B", "active", 1) and int(sk.nodes[1]["tier"]) == 2 and sk.nodes[1]["relay"] == "launcher", "launcher turret: Sinkhole drops a T3 to T2")
+	# it falls in the Last Stand like any node (his note: not indestructible) - what it was loading falls with it
+	var d := _proto_sim("launcher")
+	check(1 in d._vls_surviving(), "launcher turret: the Very Last Stand counts it like any platform")
+	d.nodes[1]["owner"] = "A"
+	d.nodes[1]["units"] = 0.0
+	d.fire_relay(1)
+	d.step(0.05)
+	d.nodes[1]["load"] = {"A": {"units": 12.0, "faction": "null"}}
+	var fall0: float = d.fall_losses.get("A", 0.0)
+	d._drop_node(1)
+	check(d.collapsed.get(1, false) and d.flights.is_empty() and absf(d.fall_losses.get("A", 0.0) - fall0 - 12.0) < 0.001,
+			"launcher turret: it falls; its load falls with it (no salvo)")
+	# a rival's Relay Hack jam while it loads throws the load into the void
+	var j := _sim_of(m, {"B": {"map": "relay_hack"}})
+	j.nodes[1]["owner"] = "A"
+	j.fire_relay(1)
+	j.step(0.05)
+	j.nodes[1]["load"] = {"A": {"units": 9.0, "faction": "null"}}
+	check(j.cast("B", "map", [1, "jam"]) and (j.nodes[1]["load"] as Dictionary).is_empty()
+			and j.flights.any(func(fl): return fl.get("void", false) and fl["seat"] == "A" and absf(float(fl["units"]) - 9.0) < 0.001),
+			"launcher turret: a misfire throws what it loaded into the void")
 
 
 func _route_edges(s: Sim, route: Array) -> Array:

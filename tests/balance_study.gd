@@ -180,7 +180,7 @@ func _play(path: String, mode: String, level: String, spec: Dictionary, seed_val
 				if not sh.is_empty() and absf(float(sh["t"]) - sim.time) < 0.001:
 					g[1] += dt
 					g[3] += Rules.shown_f(float(sh["kills"]))
-				if float(n.get("gat_stock", 0.0)) < 0.5 * Rules.SCALE:
+				if float(n["units"]) < 0.5 * Rules.SCALE:
 					g[2] += dt
 				gat[n["owner"]] = g
 		if sim.time >= next_snap:

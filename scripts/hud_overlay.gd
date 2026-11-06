@@ -255,7 +255,7 @@ func _draw_relay_cues(cam: Camera3D) -> void:
 			var a := 0.5 + 0.5 * sin(_t * 3.0)
 			draw_arc(ns[0], float(ns[1]) + 5.0 * ui_scale, 0.0, TAU, 32, Color(Hud.RELAY_ACCENT, 0.55 * a), 2.5 * ui_scale, true)
 		if float(_relay_cue_t.get(id, 0.0)) > 0.0:      # the first few times: spell it out
-			var txt := "DOUBLE-TAP TO LOCK" if n["relay"] == "launcher" else "DOUBLE-TAP TO SWITCH"
+			var txt := "DOUBLE-TAP TO LOAD" if n["relay"] == "launcher" else "DOUBLE-TAP TO SWITCH"   # LAUNCHER TURRET: the tap loads
 			var f := int(13 * ui_scale)
 			var sz := Hud.UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
 			var p: Vector2 = ns[0] + Vector2(-sz.x / 2.0, -float(ns[1]) - 16.0 * ui_scale)

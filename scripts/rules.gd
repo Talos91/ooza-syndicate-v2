@@ -258,6 +258,19 @@ const RELAYS_PROTO := {
 	"lift": {"cooldown": 10.0, "move": 1.4, "rise": 2.6},   # rise: the view's metres per level (🎨's model: 2.6)
 	"tilt": {"cooldown": 10.0, "move": 1.4, "hold": 6.0, "own": 1.1, "rival": 0.9},   # round 3: redirect (own / rival attack)
 }
+# LAUNCHER TURRET (Daniele 2026-11-06, rule change: "a 3-tier loading cannon turret"; Desk dec-launcher-turret answered
+# 2026-11-06): the owner's tap freezes the aim and starts LOADING at once (no warning). Every line whose head enters the
+# platform meanwhile - own, allied AND enemy, not decoys, not a line leaving the node - is loaded into the cannon until it
+# holds LAUNCHER_LOAD[tier] or LAUNCHER_LOAD_S[tier] s have passed; then the whole load is fired at the frozen target as
+# one salvo (one throw per seat, RELAYS_PROTO.launcher.flight s in the air, landing together over .land s as a normal
+# arrival: the existing node combat with every faction's totals). Then RELAYS_PROTO.launcher.cooldown. Shown units: loads
+# 50 / 100 / 150; upgrade cost = the Alpha cannon prices 15 / 25 / 35 shown (T1 is the map's, so a T2 costs 25, a T3 35).
+# Not indestructible (his note): it falls in the Last Stand like any node, but nothing takes it below T1 - a capture costs a
+# tier (min T1, like a vat), a Sinkhole drops a T2 / T3 a tier and is refused on a T1. Nothing else is built on its slot.
+static var LAUNCHER_COST := {1: 75, 2: 125, 3: 175}        # shown 15 / 25 / 35 (T1 = the map's own; upgrades to T2 / T3)
+static var LAUNCHER_LOAD := {1: 250, 2: 500, 3: 750}       # shown 50 / 100 / 150: the most a salvo holds
+static var LAUNCHER_LOAD_S := {1: 2.0, 2: 4.0, 3: 6.0}     # seconds of loading at most
+const LAUNCHER_MAX_TIER := 3
 
 
 # TWO DOORS (Daniele, 2026-11-02: "a success, promote it to the main game"; tried on proto3/4 since 2026-11-01): every BRAWL
@@ -498,19 +511,17 @@ static var MACHINEGOON_COST := {1: 75, 2: 100, 3: 150}     # build (T1), then up
 static var VAT_RESTORE_COST := 75         # machinegoon -> vat, 15 shown (Daniele, 2026-09-27: "cost price of a tier 1 vat ... maybe 15")
 static var MACHINEGOON_RATE := {1: 8.0, 2: 14.0, 3: 20.0} # kills/s (shown 1.6 / 2.8 / 4; -20 %, Daniele 2026-09-28)
 static var MACHINEGOON_RANGE := 10.0
-# GOOGATLING (Daniele, 2026-11-06: "machinegoon should be called googatling should produce units till its cap at 0.5 speed per
-# tier and shoots goo until it finish it and then each time its produced so fundamentally the default fire rate should be
-# higher than the production rate of it"). Internal id stays "machinegoon"; every shown name is GOOGATLING. The node fills its
-# own goo STOCK (its ammo, a separate counter "gat_stock", not the garrison) at GOOGATLING_PROD x the same-tier vat's PROD
-# (x the faction's production stat; an Echo jam stops it) up to GOOGATLING_CAP[tier] (= the node's cap). With an enemy line
-# in MACHINEGOON_RANGE it fires the stock at MACHINEGOON_RATE[tier] (its fire rate, one stock unit per kill) until empty, then
-# fires each unit as soon as it is made. Fire 8 / 14 / 20 > production 2.1 / 3.4 / 5.1 (sim units/s): production-bound in a
-# long fight. Conservative readings until he answers the Desk: 0.5 x the same-tier VAT rate; the node makes no normal units
-# (GOOGATLING_VAT_PROD 0.0: x the vat rate for its garrison; 1.0 = it also produces like a vat); cap = the node's own cap;
-# a capture empties the stock; a tier drop clamps it to the lower cap.
+# GOOGAT / GOOGATLING (Daniele, 2026-11-06: "machinegoon should be called googatling should produce units till its cap at 0.5
+# speed per tier and shoots goo until it finish it and then each time its produced"; Desk dec-googatling answered 2026-11-06:
+# "0.5x = half the vat rate of the same tier", "ammo cap = the node's own cap", short name "GooGat", and "it produces but half
+# speed of a vat same tier ... a column of enemies attack eventually the googat will run out of ammunition if there are no new
+# units entering it ... if it has lots of units inside it can shoot"). Internal id stays "machinegoon". THE AMMO IS THE
+# GARRISON: the node grows its own units at GOOGATLING_PROD x the same-tier vat's rate (x the faction's production and the
+# usual production skills; an Echo jam stops it) up to the node's cap (CAPS[tier]); with an enemy line in MACHINEGOON_RANGE it
+# fires its garrison at MACHINEGOON_RATE[tier] (one unit per kill) until it is empty, then each unit as soon as it is made.
+# Units walking in (own lines, reinforcements) are more ammo. Fire 8 / 14 / 20 > production 2.5 / 4 / 6 sim units/s.
+# A neutral map-placed one fires its neutral garrison and regrows it at the same half rate (neutral regen) to its garrison.
 static var GOOGATLING_PROD := 0.5
-static var GOOGATLING_VAT_PROD := 0.0
-static var GOOGATLING_CAP := {1: 150, 2: 300, 3: 600}      # shown 30 / 60 / 120 (= CAPS of the tier)
 # LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
 # a LASER_BURST s burst killing at most LASER_KILL bodies split across the lines in range (the cannon's code
 # path), then LASER_RECHARGE s. ~8 kills/s shown, below the door's 9.6/s.
@@ -617,7 +628,7 @@ static var FACTION_STATS := {
 # (BALANCE_PRESET ""), switched on only from the Debug panel or by tests/balance_probe.gd, and it travels
 # with an online room's rules. Values are internal units (shown x SCALE). Only BALANCE_KEYS can change.
 const BALANCE_KEYS := ["CAPS", "PROD", "HOME_TIER", "HOME_UNITS", "NEUTRAL_UNITS", "VAT_COST", "BUILD_SECONDS",
-		"SWAP_COOLDOWN", "MACHINEGOON_COST", "MACHINEGOON_RATE", "MACHINEGOON_RANGE", "GOOGATLING_PROD", "GOOGATLING_VAT_PROD", "GOOGATLING_CAP", "LASER_COST", "LASER_KILL",
+		"SWAP_COOLDOWN", "MACHINEGOON_COST", "MACHINEGOON_RATE", "MACHINEGOON_RANGE", "GOOGATLING_PROD", "LAUNCHER_COST", "LAUNCHER_LOAD", "LAUNCHER_LOAD_S", "LASER_COST", "LASER_KILL",
 		"LASER_BURST", "LASER_RECHARGE", "LASER_RANGE", "FORGE_COST", "MONSTER_HUB_COST", "MONSTER_COST",
 		"MONSTER_COOLDOWN", "MONSTER_SPEED", "MONSTER_REACH", "VAT_RESTORE_COST", "FIGHT_RATE_BASE", "FIGHT_RATE_K", "FACTION_STATS",
 		"forge_bonus"]
@@ -690,8 +701,9 @@ static func _balance_get(k: String):
 		"MACHINEGOON_RATE": return MACHINEGOON_RATE
 		"MACHINEGOON_RANGE": return MACHINEGOON_RANGE
 		"GOOGATLING_PROD": return GOOGATLING_PROD
-		"GOOGATLING_VAT_PROD": return GOOGATLING_VAT_PROD
-		"GOOGATLING_CAP": return GOOGATLING_CAP
+		"LAUNCHER_COST": return LAUNCHER_COST
+		"LAUNCHER_LOAD": return LAUNCHER_LOAD
+		"LAUNCHER_LOAD_S": return LAUNCHER_LOAD_S
 		"LASER_COST": return LASER_COST
 		"LASER_KILL": return LASER_KILL
 		"LASER_BURST": return LASER_BURST
@@ -725,8 +737,9 @@ static func _balance_set(k: String, v) -> void:
 		"MACHINEGOON_RATE": MACHINEGOON_RATE = v
 		"MACHINEGOON_RANGE": MACHINEGOON_RANGE = v
 		"GOOGATLING_PROD": GOOGATLING_PROD = v
-		"GOOGATLING_VAT_PROD": GOOGATLING_VAT_PROD = v
-		"GOOGATLING_CAP": GOOGATLING_CAP = v
+		"LAUNCHER_COST": LAUNCHER_COST = v
+		"LAUNCHER_LOAD": LAUNCHER_LOAD = v
+		"LAUNCHER_LOAD_S": LAUNCHER_LOAD_S = v
 		"LASER_COST": LASER_COST = v
 		"LASER_KILL": LASER_KILL = v
 		"LASER_BURST": LASER_BURST = v

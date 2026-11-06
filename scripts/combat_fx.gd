@@ -700,10 +700,10 @@ func _new_gun(vn: Node3D, key: String, owner: String) -> Dictionary:
 
 
 func _gat_gauge(g: Dictionary, n: Dictionary, root: Node3D) -> void:
-	## GOOGATLING stock gauge: GAT_PIPS pips round the gun, lit in the owner's goo up to stock / cap (Sim.gat_cap); the next
-	## pip swells with the remainder (the trickle refilling it), all pulse when full. Guests read the host's n["gat_stock"].
+	## GOOGAT ammo gauge: GAT_PIPS pips round the gun, lit in the owner's goo up to ammo / cap (its ammo is its garrison,
+	## Sim.gat_cap = the node's cap); the next pip swells with the remainder (the trickle refilling it), all pulse when full.
 	var cap := Sim.gat_cap(n)
-	var fill: float = clampf(float(n.get("gat_stock", 0.0)) / cap, 0.0, 1.0) if cap > 0.0 else 0.0
+	var fill: float = clampf(float(n["units"]) / cap, 0.0, 1.0) if cap > 0.0 else 0.0
 	var lit := fill * GAT_PIPS
 	var full := fill >= 0.995
 	var goo: Color = Rules.seat_color(n["owner"]).lerp(Color(0.75, 1.0, 0.55), 0.3) if n["owner"] != "" else GAT_PIP_DIM

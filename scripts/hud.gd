@@ -791,6 +791,8 @@ func _badges(cam: Camera3D) -> bool:
 			if Rules.is_proto(n["relay"]):                # RELAYS 3.0: OPEN 3 / A>B / UP / EXIT 2 / AIM 7 / ARMED 5
 				st = sim.proto_tag(n["id"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
+			if n["relay"] == "launcher":                  # LAUNCHER TURRET: its tier first (➶T2 LOAD 40/100)
+				what = Rules.RELAY_GLYPH["launcher"] + "T%d " % int(n["tier"]) + (st.to_upper() if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
 			what = "GAT%d" % n["tier"]                   # GOOGATLING (was MGN, the Machinegoon)
 		else:
@@ -1032,7 +1034,7 @@ func inspect(id: int, cam: Camera3D) -> void:
 
 
 const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
-const BUILD_LABEL := {"machinegoon": "GOOGATLING", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machinegoon": "GOOGAT", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
 const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
                                          # buttons / models of the relays") - distinct from the seat colour
 
@@ -1350,8 +1352,10 @@ func _inspector_actions(n: Dictionary) -> void:
 	# (TUTORIAL: each action shows once its lesson is reached - shows(); outside the tutorial, always)
 	if n["relay"] != "":
 		if shows("relay") and not sim.relay_fixed(id):  # RELAYS 3.0: a ferry without the hold / a fixed belt runs on its own
-			var verb: String = {"launcher": "LOCK", "ferry": "HOLD"}.get(n["relay"], "SWITCH")   # round 3: the ferry HOLDS
-			_add_action("SWITCH", "%s\n%s" % [verb, Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)
+			var verb: String = {"launcher": "LOAD", "ferry": "HOLD"}.get(n["relay"], "SWITCH")   # round 3: the ferry HOLDS; the
+			_add_action("SWITCH", "%s\n%s" % [verb, Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)   # turret LOADS, then fires
+		if n["relay"] == "launcher" and int(n["tier"]) < Rules.LAUNCHER_MAX_TIER and shows("upgrade"):   # LAUNCHER TURRET: T2 / T3
+			_add_action("UPGRADE", "UPGRADE T%d" % (int(n["tier"]) + 1), sim.upgrade_cost(n), "upgrade", id)
 		for kind in ["laser", "forge", "monster_hub"]:
 			if kind in n["buildable"] and n["structure"] != kind and shows("relay_build"):
 				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})
@@ -1813,9 +1817,11 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		if owner != "":
 			# Alpha 11's status line: production, and what a double-tap upgrade costs
 			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) \
-					else (gat_line(n) if n["structure"] == "machinegoon" else "no vat here")
+					else (gat_line(n) if n["structure"] == "machinegoon" else (launcher_line(n) if n["relay"] == "launcher" else "no vat here"))
 			var up := sim.upgrade_cost(n)
-			if owner == human and up > 0 and shows("upgrade"):
+			if owner == human and up > 0 and shows("upgrade") and n["relay"] == "launcher":
+				status += " | UPGRADE T%d: %d units" % [int(n["tier"]) + 1, Rules.shown(up)]   # (a relay's double-tap fires it)
+			elif owner == human and up > 0 and shows("upgrade"):
 				status += " | Double-tap: %d units" % Rules.shown(up)
 			elif owner == human and n["structure"] in ["vat", "machinegoon"] and up <= 0 and shows("upgrade"):
 				status += " | MAX TIER"
@@ -1886,14 +1892,28 @@ func _refresh_inspector(cam: Camera3D) -> void:
 
 
 func gat_line(n: Dictionary) -> String:
-	## GOOGATLING readout (Daniele 2026-11-06): "stock 24/30 · +0.4/s · fires 1.6/s" at Alpha 11 scale; EMPTY while it trickles.
-	var stock := float(n.get("gat_stock", 0.0))
-	var line := "stock %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(stock), Rules.shown(Sim.gat_cap(n)),
+	## GOOGAT readout (Desk dec-googatling): its ammo IS its garrison - "ammo 24/30 · +0.5/s · fires 1.6/s" at Alpha 11
+	## scale (cap = the node's own cap, + = half the same-tier vat rate); EMPTY while it trickles.
+	var ammo := float(n["units"])
+	var line := "ammo %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(ammo), Rules.shown(Sim.gat_cap(n)),
 			Rules.shown_f(sim.gat_rate(n)), Rules.shown_f(Sim.gat_fire_rate(n))]
-	return line + (" · EMPTY" if stock < 0.5 * Rules.SCALE else "")
+	return line + (" · EMPTY" if ammo < 0.5 * Rules.SCALE else "")
+
+
+func launcher_line(n: Dictionary) -> String:
+	## LAUNCHER TURRET readout: "loads 50 in 2 s" idle; "LOADING 32/50 · 1.4 s" while it loads; the cooldown after a salvo.
+	var cap := Rules.shown(Sim.launcher_load(n))
+	if n["relay_phase"] == "moving" and n.get("misfire", "") == "":
+		return "LOADING %d/%d · %.1f s" % [Rules.shown(Sim.launcher_loaded(n)), cap, maxf(0.0, float(n["relay_t"]))]
+	var line := "loads %d in %d s" % [cap, int(Sim.launcher_load_s(n))]
+	if float(n["relay_cd"]) > 0.0:
+		line += " · ready in %d s" % int(ceil(float(n["relay_cd"])))
+	return line
 
 
 func _structure_line(n: Dictionary) -> String:
+	if n["relay"] == "launcher":
+		return "LAUNCHER T%d" % int(n["tier"])
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
 	if n["structure"] == "machinegoon":

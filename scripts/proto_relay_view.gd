@@ -372,7 +372,7 @@ func _v3_relay_models(n: Dictionary, plat: Node3D) -> void:
 	if not _r.has(id):
 		return
 	var r: Dictionary = _r[id]
-	var nm: String = {"launcher": "Relay_Cannon_v4" if _kit("Relay_Cannon_v4") else "Relay_Launcher_v3", "lift": "Relay_Lift_Base_v3", "tilt": "Relay_Tilt_v3"}.get(str(n["relay"]), "")
+	var nm: String = {"launcher": _cannon_name(int(n["tier"])), "lift": "Relay_Lift_Base_v3", "tilt": "Relay_Tilt_v3"}.get(str(n["relay"]), "")
 	if nm == "" or not _kit(nm):
 		return
 	var p := MapBuilder.piece(nm)
@@ -387,7 +387,9 @@ func _v3_relay_models(n: Dictionary, plat: Node3D) -> void:
 			r["arm"] = p.find_child("Arm", true, false)
 			r["swing"] = 0.0
 			r["orbit"] = 0.0
-			r["cannon"] = nm == "Relay_Cannon_v4"        # 2026-11-06 (Daniele): the old cannon IS the launcher's building
+			r["cannon"] = nm.begins_with("Relay_Cannon_v4")   # 2026-11-06 (Daniele): the old cannon IS the launcher's building
+			r["tier"] = int(n["tier"])                   # LAUNCHER TURRET: the cannon of its tier (T1 / T2 / T3, a bigger one each)
+			r["grow"] = 0.0
 			r["head"] = p.find_child("Head", true, false)
 			r["head_rest"] = (r["head"] as Node3D).position if r["head"] is Node3D else Vector3.ZERO
 			if not r["cannon"]:
@@ -400,6 +402,38 @@ func _v3_relay_models(n: Dictionary, plat: Node3D) -> void:
 			r["top"] = top
 			r["top_rest"] = (top as Node3D).transform if top is Node3D else Transform3D.IDENTITY
 			r["dial"] = p.find_child("Dial", true, false)
+
+
+func _cannon_name(tier: int) -> String:
+	## LAUNCHER TURRET: the kit's cannon for this tier (8a5fc1a: Relay_Cannon_v4 / _T2 / _T3), else the older stand-ins.
+	var nm := "Relay_Cannon_v4" + ("" if tier <= 1 else "_T%d" % mini(tier, 3))
+	if _kit(nm):
+		return nm
+	return "Relay_Cannon_v4" if _kit("Relay_Cannon_v4") else "Relay_Launcher_v3"
+
+
+func _cannon_retier(n: Dictionary, r: Dictionary) -> void:
+	## LAUNCHER TURRET: an upgrade (or a capture / Sinkhole that cost a tier) swaps the cannon for its tier's model, with a pop.
+	var id: int = n["id"]
+	var old: Node3D = r["v3"]
+	var nm := _cannon_name(int(n["tier"]))
+	r["tier"] = int(n["tier"])
+	if not _kit(nm) or old.name.begins_with(nm + "_"):
+		return
+	var p := MapBuilder.piece(nm)
+	p.name = "%s_%d" % [nm, id]
+	add_child(p)
+	p.position = old.position
+	p.rotation = old.rotation
+	var parts: Array = vis[id]["parts"]
+	parts.erase(old)
+	parts.append(p)
+	old.queue_free()
+	r["v3"] = p
+	r["head"] = p.find_child("Head", true, false)
+	r["head_rest"] = (r["head"] as Node3D).position if r["head"] is Node3D else Vector3.ZERO
+	r["arm"] = p.find_child("Arm", true, false)
+	r["grow"] = 1.0
 
 
 func _deck_ends(ei: int) -> Array:
@@ -1050,10 +1084,18 @@ func _launcher(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 			var to3: Vector3 = sim.nodes[tgt]["pos"]     # facing it (turret +X at the target)
 			var want := Rules.heading(((to3 - (n["pos"] as Vector3)) * Vector3(1, 0, 1)).normalized())
 			r["orbit"] = lerp_angle(float(r["orbit"]), want, minf(1.0, _dt * 4.0))
+		if bool(r.get("cannon", false)) and not gone and int(r.get("tier", 1)) != int(n["tier"]):
+			_cannon_retier(n, r)                      # LAUNCHER TURRET: a new tier, a bigger cannon
 		var v3n: Node3D = r["v3"]
 		if bool(r.get("cannon", false)):              # the cannon: on the node's building slot, turned to the target; its
 			if not gone:                              # head lifts for the lob while locked, kicks back on every throw
 				v3n.position = n["pos"]
+				# LAUNCHER TURRET: loading, it throbs and swells with its load (x1.12 full); an upgrade pops it
+				var fill: float = clampf(Sim.launcher_loaded(n) / maxf(Sim.launcher_load(n), 0.001), 0.0, 1.0) if armed and not misfire else 0.0
+				r["grow"] = maxf(0.0, float(r.get("grow", 0.0)) - _dt * 2.5)
+				var g := float(r["grow"])
+				v3n.scale = Vector3.ONE * (1.0 + 0.12 * fill + (0.035 * sin(sim.time * (8.0 + 10.0 * fill)) if armed and not misfire else 0.0)
+						+ 0.25 * g * (1.0 - g) * 4.0)
 				v3n.rotation = Vector3(0.1 * sin(sim.time * 9.0), float(r["orbit"]), 0.1 * cos(sim.time * 7.0)) if misfire 						else Vector3(0.0, float(r["orbit"]), 0.0)
 				var hd = r.get("head")
 				if hd is Node3D:
@@ -1097,7 +1139,10 @@ func _launcher(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink:
 	if tgt >= 0:
 		lab.position = (sim.nodes[tgt]["pos"] as Vector3) + Vector3(0, 7.5, 0)
 		var left := sim.launcher_aim_left(id)
-		if mine:
+		if mine and armed:                           # LAUNCHER TURRET: what it has loaded, over the frozen target
+			lab.text = "LOADING %d/%d" % [Rules.shown(Sim.launcher_loaded(n)), Rules.shown(Sim.launcher_load(n))]
+			lab.modulate = Color.WHITE
+		elif mine:
 			lab.text = "LOCKED" if locked else ("TARGET" if left == INF else "TARGET · %d" % int(ceil(left)))
 			lab.modulate = Color.WHITE if locked else ac
 		else:
