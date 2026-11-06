@@ -32,6 +32,9 @@ const HOP := 0.087 * UNIT_SIZE       # Alpha 11: 0.052 on a 0.6-unit body
 const ROLL := 0.07
 const SQUASH := 0.11
 const TURN := 0.65
+# FACE TRAVEL (Daniele 2026-11-06, Alpha 24 units: "units should face the direction they go"): a body looks along its
+# path heading. The Alpha 11 camera three-quarter (TURN) stays only for a body with no heading.
+const FACE_TRAVEL := true
 const SOFTNESS := {"ember": 0.4, "solar": 0.4}
 # Through the door (Daniele, Alpha 17: "units entering the building just clip"): over the last DOOR m
 # of the route a body shrinks and dips into the doorway, and a body leaving grows out of it the same
@@ -161,6 +164,14 @@ func _instance(faction: String, seat: String, ghost := false) -> MultiMeshInstan
 		if ghost:
 			_ghost_seed[key] = key.hash() % 97
 	return _mm[key]
+
+
+static func face_yaw(fwd: Vector3, to_cam: Vector3, screen_right: Vector3) -> float:
+	## The yaw add_unit takes: along the travel direction (FACE_TRAVEL), else Alpha 11's camera three-quarter turned
+	## toward the side it travels.
+	if FACE_TRAVEL and fwd.length() > 0.01:
+		return Rules.heading(fwd)
+	return Rules.heading(to_cam.rotated(Vector3.UP, TURN * clampf(fwd.dot(screen_right) * 2.0, -1.0, 1.0)))
 
 
 static func style(m: ShaderMaterial, faction: String, seat: String, goo: bool) -> void:
@@ -391,8 +402,7 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 		var side := fwd.cross(Vector3.UP).normalized()
 		var row_size := mini(lanes, count - int(j / lanes) * lanes)
 		var lateral := (col - (row_size - 1) * 0.5) * lane_w * expansion
-		var facing := clampf(fwd.dot(screen_right) * 2.0, -1.0, 1.0)
-		var yaw := Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing))
+		var yaw := face_yaw(fwd, to_cam, screen_right)
 		var phase := fmod(j * 0.618 + float(id) * 0.137, 1.0)
 		var wave := sin(time * WAVE + phase * TAU)
 		_put_unit(batch, model_scale, owner, disc_col, at + side * lateral * door + Vector3.DOWN * 0.35 * (1.0 - door), yaw,
@@ -474,9 +484,8 @@ func _drop_bodies(h: Dictionary, drop: Dictionary, head: float, count: int, time
 		if size > 0.01:
 			var dir: Vector3 = ph[3]
 			dir.y = 0.0
-			var facing := clampf(dir.normalized().dot(screen_right) * 2.0, -1.0, 1.0) if dir.length() > 0.01 else 0.0
 			var wave := sin(time * WAVE + fmod(j * 0.618 + float(h["id"]) * 0.137, 1.0) * TAU)
-			add_unit(h["faction"], h["owner"], ph[0], Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing)),
+			add_unit(h["faction"], h["owner"], ph[0], face_yaw(dir.normalized() if dir.length() > 0.01 else Vector3.ZERO, to_cam, screen_right),
 					maxf(0.0, wave) * HOP * size, wave * ROLL, wave * SQUASH * soft + (1.0 - size) * 0.3, lerpf(0.25, 1.0, size))
 
 
@@ -561,7 +570,7 @@ func _spawn(h: Dictionary, mode: int, j: int, at: float, over: float, time: floa
 	var col := j % across
 	var p: Vector3 = (smp[0] as Vector3) + side * (col - (across - 1) * 0.5) * LANE * Rules.look_size(faction) + Vector3(0, 0.08, 0)
 	var screen_right := Vector3(1, 0, 0).rotated(Vector3.UP, Rules.view_yaw)
-	var yaw := Rules.heading(Rules.front_dir().rotated(Vector3.UP, TURN * clampf(fwd.dot(screen_right) * 2.0, -1.0, 1.0)))
+	var yaw := face_yaw(fwd, Rules.front_dir(), screen_right)
 	if mode == 1:
 		pops += 1
 		_put_faller(key, p, Vector3.ZERO, Vector3.ZERO, time, yaw, 1)
