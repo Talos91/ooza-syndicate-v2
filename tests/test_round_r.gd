@@ -73,7 +73,46 @@ func _strait() -> void:
 		starts.append(int(n["relay_index"]))
 		check(str(n.get("structure", n.get("neutral", {}).get("structure", ""))) != "" , "R-01: lift %d has a structure" % n["id"])
 	starts.sort()
-	check(starts == [0, 1], "R-01: one stone starts down, the other up (got %s)" % [starts])
+	check(starts == [1, 1], "R-01: T starts on its raised road, B on the banks - both at their level 1 (got %s)" % [starts])
+	# Daniele 2026-11-06 (proto21): "top part of the map raised, bottom lowered so we can use the lifts". The outer roads
+	# stand at +1 / -1 x rise, each stone lifts between the banks (0) and its road's level; every lift deck is flat at its
+	# level (no ramp onto a 2 m deck any more), the curved roads from home ramp up / down onto the outer roads.
+	var rise := float(Rules.RELAYS_PROTO["lift"]["rise"])
+	var lv := {}
+	for n in s.nodes:
+		var y := snappedf((n["pos"] as Vector3).y, 0.01)
+		if y != 0.0:
+			lv[y] = int(lv.get(y, 0)) + 1
+	check(lv == {snappedf(rise, 0.01): 2, snappedf(-rise, 0.01): 2}, "R-01: two raised and two lowered outer roads (got %s)" % [lv])
+	for n in lifts:
+		var base := s.lift_base(n["id"])
+		for ei in s.controlled_edges(n["id"]):
+			var want := rise * float(base + int(s.edges[ei]["lift_level"]))
+			var ys: Array = s.deck_line(ei).map(func(p): return snappedf((p as Vector3).y, 0.01))
+			check(absf(ys.max() - want) < 0.01 and absf(ys.min() - want) < 0.01,
+					"R-01: lift %d deck %d lies flat at %.1f m (got %s)" % [n["id"], ei, want, ys])
+		for lvl in [0, 1]:
+			n["relay_index"] = lvl
+			check(absf(s.node_y(n["id"]) - rise * float(base + lvl)) < 0.01, "R-01: lift %d walks at level %d" % [n["id"], base + lvl])
+		n["relay_index"] = 1
+	var sl := _sim("R-01")                          # (a fresh sim: the lift checks below use this one's clock)
+	var home := -1
+	var up := -1
+	for bi in sl._belt_edges:                         # each home's middle road is a belt flowing out of it (AB)
+		var hn: int = sl.edges[bi]["a"]
+		if float((sl.nodes[hn]["pos"] as Vector3).x) < 80.0:
+			home = hn
+	for n in sl.nodes:
+		if snappedf((n["pos"] as Vector3).y, 0.01) == snappedf(rise, 0.01) and float((n["pos"] as Vector3).x) < 80.0:
+			up = n["id"]
+	sl.nodes[home]["owner"] = "A"
+	sl.nodes[home]["units"] = 20.0
+	var hu: Dictionary = sl.send(home, up, 1.0)
+	var top := -9.0
+	if not hu.is_empty():
+		for p in hu["pts"]:
+			top = maxf(top, p.y)
+	check(absf(top - rise) < 0.01, "R-01: a line from home climbs to the raised road (top %.2f m)" % top)
 	s.time = 0.0
 	var lt: Dictionary = lifts[0]
 	var lid: int = lt["id"]
@@ -86,6 +125,30 @@ func _strait() -> void:
 	var open1 := s.controlled_edges(lid).filter(func(ei): return s.is_edge_open(ei))
 	check(open1.size() == 2 and open1.filter(func(ei): return ei in open0).is_empty(), "R-01: firing lift %d swaps its decks (%s -> %s)" % [lid, open0, open1])
 	check(s._belt_edges.size() == 2, "R-01: two plain belts (got %d)" % s._belt_edges.size())
+	for code in ["R-01", "R-05", "R-12"]:            # Daniele 2026-11-06 (proto21): "the conveyors are not working" - maps with
+		var sb := _sim(code)                          # plain belts and no speed relay never pushed (Sim gated on _conv_edges)
+		var ei: int = sb._belt_edges.keys()[0]
+		var e: Dictionary = sb.edges[ei]
+		var fwd: bool = int(sb._belt_edges[ei]) == 0
+		var src: int = e["a"] if fwd else e["b"]
+		var dst: int = e["b"] if fwd else e["a"]
+		var via := ei
+		while sb.nodes[dst]["node_kind"] == "junction":   # a belt into a curve / Crossing: aim at the platform past it
+			for j in range(sb.edges.size()):
+				if j != via and (sb.edges[j]["a"] == dst or sb.edges[j]["b"] == dst):
+					via = j
+					dst = sb.edges[j]["b"] if sb.edges[j]["a"] == dst else sb.edges[j]["a"]
+					break
+		sb.nodes[src]["owner"] = "A"
+		sb.nodes[src]["units"] = 20.0
+		var hb: Dictionary = sb.send(src, dst, 1.0)
+		var pushed := false
+		for k in range(200):
+			sb.step(0.05)
+			if not (hb in sb.hordes):
+				break
+			pushed = pushed or int(hb.get("conv", 0)) == 1
+		check(pushed, "%s: a line on a plain belt, with its flow, is pushed (conv 1)" % code)
 
 
 func _pinwheel() -> void:

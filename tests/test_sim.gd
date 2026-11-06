@@ -3139,10 +3139,13 @@ func _relays_proto() -> void:
 	f.nodes[1]["owner"] = "A"
 	var fc := f.ferry_cycle(1)
 	var fcfg: Dictionary = Rules.RELAYS_PROTO["ferry"]
-	check(absf(float(fc["open"]) - float(fc["cross"]) - float(fcfg["survive"]) * float(fc["half"])) < 0.001
-			and absf(float(fc["cross"]) - f.deck_length(7) / Rules.move_speed()) < 0.001,
-			"ferry: in line %.2f s = the %.2f s crossing + %.0f %% of the %.2f s half cycle" % [fc["open"], fc["cross"],
-			float(fcfg["survive"]) * 100.0, fc["half"]])
+	# Daniele 2026-11-06 (proto21): "increase time per position to 10 seconds, 10 in 10 out" - fixed times replace the
+	# survive rule (in line = the crossing + survive x the half cycle)
+	check(absf(float(fc["open"]) - float(fcfg["open"])) < 0.001
+			and absf(2.0 * float(fc["slide"]) + float(fc["away"]) - float(fcfg["out"])) < 0.001
+			and absf(float(fc["cross"]) - f.deck_length(7) / Rules.move_speed()) < 0.001 and float(fc["cross"]) < float(fc["open"]),
+			"ferry: in line %.2f s, out of line %.2f s (the crossing takes %.2f s)" % [fc["open"],
+			2.0 * float(fc["slide"]) + float(fc["away"]), fc["cross"]])
 	check(not f.relay_fixed(1) and f.ferry_hold_refusal(1) == "", "ferry (round 3): its owner may HOLD it (in line now)")
 	var parts := {}
 	var t_f := 0.0

@@ -1171,7 +1171,7 @@ func _lift(n: Dictionary, r: Dictionary, top: Vector3, phase: String) -> void:
 	if phase == "moving":                             # relay_index is already the new level
 		var p := smoothstep(0.0, 1.0, float(n["relay_anim"].get("progress", 0.0)))
 		level = lerpf(1.0 - level, level, p)
-	var rise: float = float(Rules.RELAYS_PROTO["lift"]["rise"]) * level
+	var rise: float = float(Rules.RELAYS_PROTO["lift"]["rise"]) * (level + float(sim.lift_base(id)))   # base -1: a lowered lift
 	var gone: bool = sim.collapsed.get(id, false)
 	if not gone:
 		var base: Dictionary = r["base"]
@@ -1253,19 +1253,11 @@ func _along(a: Vector3, b: Vector3) -> Basis:
 
 
 func _ramp(ei: int, lift_id: int) -> Transform3D:
-	## Daniele 2026-11-05 ("the lift node raises and dips but the bridges it connects are all at the same level"): an UP
-	## deck's lift end docks RELAYS_PROTO.lift.rise up (Sim._lift_end_y), so its flat baked pieces are sheared into a
-	## ramp: height grows linearly from the far rim (ground) to the lift's rim - the same line Sim.deck_points walks.
-	var L: Vector3 = sim.exit_of(ei, lift_id)
-	var F: Vector3 = sim.exit_of(ei, sim._other_end(ei, lift_id))
-	var dy := L.y - F.y
-	if absf(dy) < 0.001:
-		return Transform3D.IDENTITY
-	var flat := Vector3(L.x - F.x, 0.0, L.z - F.z)
-	var dir := flat.normalized()
-	var k := dy / maxf(flat.length(), 0.01)
-	var m := Basis(Vector3(1.0, k * dir.x, 0.0), Vector3(0.0, 1.0, 0.0), Vector3(0.0, k * dir.z, 1.0))
-	return Transform3D(m, Vector3(0.0, F.y - k * dir.dot(Vector3(F.x, 0.0, F.z)), 0.0))
+	## Daniele 2026-11-05 ("the lift node raises and dips but the bridges it connects are all at the same level"): a lift
+	## deck's lift end docks at the lift's level (Sim._lift_end_y), its far end at its platform's level (round R levels,
+	## 2026-11-06), so its flat baked pieces are sheared into the ramp between the pier ends - the line Sim.deck_points walks.
+	var ends: Array = sim.ramp_ends(ei, lift_id)
+	return MapBuilder.ramp_xf(ends[0], ends[1])
 
 
 func _tilt(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink: bool, gone: bool) -> void:

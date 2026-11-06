@@ -1452,17 +1452,44 @@ func _lift_end_y(ei: int, node_id: int) -> float:
 	## Daniele 2026-11-05 ("the lift node raises and dips but the bridges it connects are all at the same level, so units
 	## teleport"): a lift deck's lift end stands at ITS level (UP decks dock RELAYS_PROTO.lift.rise up, DOWN decks on the
 	## ground), so the UP decks are ramps and a line walks up them onto the raised platform.
+	## Round R levels (Daniele 2026-11-06, R-01: "top part of the map is raised and bottom is lowered so we can use the
+	## lifts"): any other end stands at its platform's level (pos.y = level x rise, MapBuilder.layout3).
 	if str(edges[ei].get("proto", "")) != "lift" or str(nodes[node_id].get("relay", "")) != "lift":
-		return 0.0
-	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(int(edges[ei]["lift_level"]))
+		return float((nodes[node_id]["pos"] as Vector3).y)
+	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(lift_base(node_id) + int(edges[ei]["lift_level"]))
+
+
+func lift_base(node_id: int) -> int:
+	## a lift's lower level: 0 (levels 0 / +1) or -1 (a lowered lift: -1 / 0; map node "lift": {"base": -1})
+	var n: Dictionary = nodes[node_id]
+	if str(n.get("relay", "")) != "lift":
+		return 0
+	return int((n.get("proto", {}) as Dictionary).get("base", 0))
 
 
 func node_y(node_id: int) -> float:
-	## the walking height on a node: a lift platform stands at its level (0 / RELAYS_PROTO.lift.rise), everything else 0
+	## the walking height ADDED on a node: a lift platform stands at its level ((base + 0 / 1) x RELAYS_PROTO.lift.rise);
+	## every other node is 0 here (a raised / lowered platform carries its level in pos.y)
 	var n: Dictionary = nodes[node_id]
 	if str(n.get("relay", "")) != "lift":
 		return 0.0
-	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(int(n["relay_index"]) % 2)
+	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(lift_base(node_id) + int(n["relay_index"]) % 2)
+
+
+func ramp_ends(ei: int, near_id: int) -> Array:
+	## [near pier end, far pier end] of deck ei with their heights: a deck whose ends stand at different heights (a lift
+	## level, a raised / lowered platform) ramps between its pier ends, the piers stay flat at their platform's height.
+	var e: Dictionary = edges[ei]
+	var g: Dictionary = e["geo"]
+	var far_id := _other_end(ei, near_id)
+	var qn: Array = g["A"] if e["a"] == near_id else g["B"]
+	var qf: Array = g["A"] if e["a"] == far_id else g["B"]
+	var pn: float = float(g["p0"] if e["a"] == near_id else g["p1"])
+	var pf: float = float(g["p0"] if e["a"] == far_id else g["p1"])
+	var N := Vector3(qn[0], 0.0, qn[1])
+	var F := Vector3(qf[0], 0.0, qf[1])
+	var u := (F - N).normalized()
+	return [N + u * pn + Vector3.UP * _lift_end_y(ei, near_id), F - u * pf + Vector3.UP * _lift_end_y(ei, far_id)]
 
 
 func deck_line(ei: int) -> Array:
@@ -1698,10 +1725,12 @@ func _deck_points3(ei: int, from_id: int) -> Array:
 	out.append(B - u * float(g["p1"]))
 	var ya := _lift_end_y(ei, e["a"])
 	var yb := _lift_end_y(ei, e["b"])
-	if ya != 0.0 or yb != 0.0:                        # a lift's UP deck: a ramp from the ground end to the raised end
-		var span := A.distance_to(B)
+	if ya != 0.0 or yb != 0.0:                        # a lift's UP deck / a raised or lowered platform: flat on the piers,
+		var span := A.distance_to(B)                  # a ramp between the pier ends (MapBuilder / ProtoRelayView shear the
+		var r0: float = float(g["p0"])                # deck pieces along the same line)
+		var run := maxf(span - r0 - float(g["p1"]), 0.01)
 		for k in range(out.size()):
-			var t := clampf(((out[k] as Vector3) - A).dot(u) / maxf(span, 0.01), 0.0, 1.0)
+			var t := clampf((((out[k] as Vector3) - A).dot(u) - r0) / run, 0.0, 1.0)
 			out[k] = (out[k] as Vector3) + Vector3.UP * lerpf(ya, yb, t)
 	if from_id != e["a"]:
 		out.reverse()
@@ -1807,7 +1836,7 @@ func step(dt: float) -> void:
 			var mult: float = Rules.platform_mult() if fast_here else 1.0
 			var boost := skill_speed(h)                   # Surge / Rewire
 			mult *= deck_slow(h) * boost                  # enemy goo (home advantage) or Mire, the stronger
-			if not _conv_edges.is_empty():
+			if not _conv_edges.is_empty() or not _belt_edges.is_empty():   # (R-01 review: plain belts alone count too)
 				mult *= conveyor_mult(h)                  # RELAYS 3.0: with / against a conveyor's flow
 			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
@@ -4292,7 +4321,7 @@ func door_mult(h: Dictionary) -> float:
 	if h.get("evac", false):                           # POWERS: an Evac line leaves "at once" (burst x the door rate)
 		return float(Rules.SKILLS["evac"]["burst"])
 	var m := 1.0
-	if not _conv_edges.is_empty():                     # RELAYS 3.0 round 2: a belt pulls a line out of its vat faster
+	if not _conv_edges.is_empty() or not _belt_edges.is_empty():   # RELAYS 3.0 round 2: a belt pulls a line out of its vat faster
 		m = maxf(m, conveyor_mult(h))
 	if _fx_horde.is_empty():
 		return m
@@ -5652,7 +5681,7 @@ func _setup_proto() -> void:
 					(nodes[int(p["link"])]["proto"] as Dictionary)["link"] = n["id"]   # speed relay controlling the SAME
 																		# speed / slow"): two linked relays share one state
 			"lift":
-				n["relay_index"] = clampi(int(p.get("level", 0)), 0, 1)
+				n["relay_index"] = clampi(int(p.get("level", 0)), 0, 1)   # p.base -1: a lowered lift (levels -1 / 0)
 			"tilt":
 				var ex := []
 				for x in p.get("exits", []):
@@ -5788,9 +5817,12 @@ func ferry_cycle_e(ei: int) -> Dictionary:
 		gap = deck_length(ei)
 	var cross: float = gap / Rules.move_speed()
 	var sv: float = clampf(float(cfg["survive"]), 0.05, 0.9)
-	var moving: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
-	var open: float = (cross + sv * moving) / (1.0 - sv)
-	var c := {"open": open, "slide": float(cfg["slide"]), "away": float(cfg["away"]), "half": open + moving,
+	var away: float = float(cfg["away"])
+	if cfg.has("out"):                                # Daniele 2026-11-06: a fixed time out of line (slide out + away + slide back)
+		away = maxf(float(cfg["out"]) - 2.0 * float(cfg["slide"]), 0.0)
+	var moving: float = 2.0 * float(cfg["slide"]) + away
+	var open: float = float(cfg["open"]) if cfg.has("open") else (cross + sv * moving) / (1.0 - sv)
+	var c := {"open": open, "slide": float(cfg["slide"]), "away": away, "half": open + moving,
 			"period": 2.0 * (open + moving), "cross": cross, "gap": gap}
 	p["cycle"] = c
 	return c
@@ -5861,6 +5893,8 @@ func ferry3_slot(g: String) -> Dictionary:
 		var sv: float = clampf(float(cfg["survive"]), 0.05, 0.9)
 		var mv: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
 		open = maxf(open, (cross + sv * mv) / (1.0 - sv))
+	if cfg.has("open"):                               # Daniele 2026-11-06: 10 s on each lane
+		open = float(cfg["open"])
 	var move: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
 	var s := {"open": open, "move": move, "slot": open + move, "period": (open + move) * float((grp["seq"] as Array).size())}
 	grp["slot"] = s

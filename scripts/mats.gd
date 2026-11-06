@@ -41,6 +41,16 @@ static func ooze(seat: String) -> StandardMaterial3D:
 	return _cache[key]
 
 
+static func ooze_neutral() -> StandardMaterial3D:
+	## The kit's unowned ooze (Vat_T*'s OS_Ooze_Neutral): for models authored in seat A's colour standing neutral.
+	if not _cache.has("ooze_neutral"):
+		var m := StandardMaterial3D.new()
+		m.albedo_color = Color(0.035, 0.04, 0.045)
+		m.roughness = 0.2
+		_cache["ooze_neutral"] = m
+	return _cache["ooze_neutral"]
+
+
 static func goo(seat: String) -> StandardMaterial3D:
 	var key := "goo_" + Rules.seat_color(seat).to_html()
 	if not _cache.has(key):

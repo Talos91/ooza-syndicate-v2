@@ -36,7 +36,8 @@
    },
    "buildable": [
     "vat"
-   ]
+   ],
+   "level": 1
   },
   {
    "id": 1,
@@ -59,7 +60,8 @@
    ],
    "relayTag": "A",
    "lift": {
-    "level": 0
+    "level": 1,
+    "base": 0
    }
   },
   {
@@ -78,7 +80,8 @@
    },
    "buildable": [
     "vat"
-   ]
+   ],
+   "level": 1
   },
   {
    "id": 3,
@@ -294,7 +297,8 @@
    },
    "buildable": [
     "vat"
-   ]
+   ],
+   "level": -1
   },
   {
    "id": 16,
@@ -317,7 +321,8 @@
    ],
    "relayTag": "B",
    "lift": {
-    "level": 1
+    "level": 1,
+    "base": -1
    }
   },
   {
@@ -336,7 +341,8 @@
    },
    "buildable": [
     "vat"
-   ]
+   ],
+   "level": -1
   }
  ],
  "edges": [
@@ -389,7 +395,7 @@
    "deckMetres": 12.0,
    "proto": "lift",
    "lift": {
-    "level": 0
+    "level": 1
    }
   },
   {
@@ -405,7 +411,7 @@
    "modules": 0.5,
    "proto": "lift",
    "lift": {
-    "level": 1
+    "level": 0
    }
   },
   {
@@ -534,7 +540,7 @@
    "deckMetres": 12.0,
    "proto": "lift",
    "lift": {
-    "level": 0
+    "level": 1
    }
   },
   {
@@ -550,7 +556,7 @@
    "modules": 0.5,
    "proto": "lift",
    "lift": {
-    "level": 1
+    "level": 0
    }
   },
   {
@@ -712,7 +718,7 @@
    }
   ]
  },
- "note": "XS, 14 platforms, mirrored both ways. A strait runs down the middle; ONE ferry serves its three crossings and sits on the top, middle, bottom, middle lane in turn (time your send to the lane it is heading for). The dry ways over are the two stones, top and bottom - each a laser LIFT: DOWN it joins the two outer roads, UP the two banks' end platforms (the top one starts down, the bottom one up). Each home's straight middle road is a belt toward the strait. Finale: the two banks, split by the ferry.",
+ "note": "XS, 14 platforms, mirrored both ways. A strait runs down the middle; ONE ferry serves its three crossings and sits on the top, middle, bottom, middle lane in turn (time your send to the lane it is heading for). The dry ways over are the two stones, top and bottom - each a laser LIFT between the banks (ground) and its outer road: the top roads stand raised, the bottom roads lowered, so the top stone goes UP to its road and the bottom one DOWN to its road (the top one starts on its road, the bottom one on the banks). Each home's straight middle road is a belt toward the strait. Finale: the two banks, split by the ferry.",
  "geometricSymmetry": true,
  "experimental": false,
  "ruleWaivers": {
