@@ -2,6 +2,11 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto22** - 2026-11-06 (proto-r, staging/proto/): R-01 Strait review - belts push again on maps with no speed relay (R-01,
+  R-05, R-12); neutral machinegoons grey instead of seat A cyan; every ferry 10 s in line / 10 s out (the 3-way hull 10 s per lane); R-01's
+  top outer roads raised and bottom ones lowered, the two lifts dock at real levels (map node "level", lowered lift "base": -1, decks ramp
+  pier to pier).
+
 - **0.23.15-proto21** - 2026-11-06 (proto-r, staging/proto/): R-14 Catapult Bay: a launcher map - pads throw over the bay, a ferry
   crosses it, guns hold the crowns; the Very Last Stand skips launchers (they never fall). Proto suites now check only the MapPool.PROTO
   maps (Daniele 2026-11-06).
