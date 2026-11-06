@@ -3084,7 +3084,7 @@ func _leave_armies() -> void:
 
 # ------------------------------------------------------------------ ARMIES > COSMETICS (0.19.0, spec E/I; UI: screen 08)
 const COSMETIC_FAMILIES := ["vat", "machinegoon", "laser", "forge", "monster_hub", "monster"]
-const COSMETIC_FAMILY_LABEL := {"territory": "TERRITORY", "vat": "VAT", "machinegoon": "MACHINEGOON", "laser": "LASER",
+const COSMETIC_FAMILY_LABEL := {"territory": "TERRITORY", "vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER",
 		"forge": "FORGE", "monster_hub": "MONSTER HUB", "monster": "MONSTER"}
 const WARDROBE_CATS := ["territory", "vat", "machinegoon", "laser", "forge", "monster_hub", "monster"]
 const TERRITORY_LOOKS := {"neon": ["NEON", "Your colour in neon on the decks, piers and platform rims you hold."],

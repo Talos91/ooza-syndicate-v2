@@ -2,7 +2,7 @@ extends SceneTree
 ## BALANCE STUDY (2026-10-27, Architect helper, measurement only): AI-vs-AI headless matches on the pooled BRAWL maps with the
 ## game's real settings (abilities on, Sim.ai_builds - each AI seat plays one of its faction's AI_LOADOUTS builds -, Last Stand on).
 ##   Godot --headless --path . --script res://tests/balance_study.gd -- --mode=1v1|2v2 [--level=Expert] [--seeds=1] [--seed0=0]
-##       [--shard=k/n] [--out=user://x.jsonl] [--maps=N-01,N-02] [--fixed=a,b]
+##       [--shard=k/n] [--out=user://x.jsonl] [--maps=N-01,N-02] [--fixed=a,b] [--habits=noult,...] [--facs=vex,bloom]
 ## 1v1: every ordered faction pair (a in seat A, b in seat B; mirrors included) on every pooled 1v1 map, `seeds` times.
 ## 2v2: each seat gets a faction drawn from the seed (deterministic), every pooled 2v2 map, `seeds` times.
 ## One JSON line per match: winner, time, Last Stand, hard end, builds, casts, captures, snapshots (nodes / production /
@@ -26,7 +26,7 @@ func _run() -> void:
 	var seeds := int(args.get("seeds", "1"))
 	var seed0 := int(args.get("seed0", "0"))
 	var want: Array = Array(str(args.get("maps", "")).split(",", false))
-	var facs := ["vex", "null", "bloom", "ember", "solar"]
+	var facs: Array = Array(str(args.get("facs", "vex,null,bloom,ember,solar")).split(",", false))
 	var pool := []
 	for p in MapPool.battlefield():
 		var m := _map(p)
@@ -43,7 +43,7 @@ func _run() -> void:
 	for p in pool:
 		for s in range(seeds):
 			if study == "habit":
-				for h in ["noskills", "nomg", "noslot", "nomonster"]:
+				for h in str(args.get("habits", "noskills,nomg,noslot,nomonster")).split(",", false):
 					for f in facs:
 						for vs in ["A", "B"]:
 							var spec := {}
@@ -166,11 +166,23 @@ func _play(path: String, mode: String, level: String, spec: Dictionary, seed_val
 	var snaps := {}
 	var next_snap := 30.0
 	var dt := 0.1
+	var gat := {}                                     # GOOGATLING per seat: [node-s standing, node-s firing, node-s empty, kills shown]
 	while not sim.over and sim.time < 600.0:
 		for ai in ais:
 			ai.think(sim, dt)
 		sim.step(dt)
 		sim.fx_events.clear()
+		for n in sim.nodes:
+			if n["structure"] == "machinegoon" and n["owner"] != "":
+				var g: Array = gat.get(n["owner"], [0.0, 0.0, 0.0, 0.0])
+				g[0] += dt
+				var sh: Dictionary = n["shot"]
+				if not sh.is_empty() and absf(float(sh["t"]) - sim.time) < 0.001:
+					g[1] += dt
+					g[3] += Rules.shown_f(float(sh["kills"]))
+				if float(n.get("gat_stock", 0.0)) < 0.5 * Rules.SCALE:
+					g[2] += dt
+				gat[n["owner"]] = g
 		if sim.time >= next_snap:
 			snaps[str(int(next_snap))] = _snap(sim, seat_list)
 			next_snap += 30.0
@@ -218,4 +230,5 @@ func _play(path: String, mode: String, level: String, spec: Dictionary, seed_val
 	return {"map": str(m.get("code", path.get_file().substr(0, 4))), "file": path.get_file(), "spec": factions, "habits": {"A": spec["A"]["h"], "B": spec["B"]["h"]} if spec.has("B") else {}, "teams": teams,
 			"loadouts": sim.loadouts, "winner": sim.winner, "t": snappedf(sim.time, 0.1), "over": sim.over, "forced": forced,
 			"draw": draw, "ls_t": ls_t, "vls_t": vls_t, "builds": builds, "casts": casts, "caps": caps, "snaps": snaps,
-			"losses": losses, "bursts": bursts, "monsters": monsters, "elim": elim, "seed": seed_value}
+			"losses": losses, "bursts": bursts, "monsters": monsters, "elim": elim, "seed": seed_value,
+			"gat": gat}
