@@ -904,7 +904,7 @@
  "geometricSymmetry": true,
  "experimental": false,
  "ruleWaivers": {
-  "R07": "Daniele 2026-11-05: the bottom drive Y is linked to the top drive X (one shared state, the same rim lanes), so it drives no deck of its own; X's R07 margin is Y's"
+  "R07": "Daniele 2026-11-05: the bottom drive Y is linked to the top drive X (one shared state, the same rim lanes), so it drives no deck of its own; X's R07 margin is Y's - ACCEPTED by Daniele 2026-11-06 (Desk)"
  },
  "tags": {
   "size": "M",

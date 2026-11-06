@@ -782,7 +782,7 @@
  "geometricSymmetry": true,
  "experimental": false,
  "ruleWaivers": {
-  "R07": "Daniele 2026-11-05 (R-02 review): the hub joined six ways, its side decks speed / slow (top fast in, bottom slow in, mirrored left / right) and the relay inverting them - each side always keeps one fast way in, so firing swaps WHICH lane is fast instead of moving the shortest route's length"
+  "R07": "Daniele 2026-11-05 (R-02 review): the hub joined six ways, its side decks speed / slow (top fast in, bottom slow in, mirrored left / right) and the relay inverting them - each side always keeps one fast way in, so firing swaps WHICH lane is fast instead of moving the shortest route's length - ACCEPTED by Daniele 2026-11-06 (Desk)"
  },
  "tags": {
   "size": "S",

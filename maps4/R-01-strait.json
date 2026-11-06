@@ -723,8 +723,8 @@
  "experimental": false,
  "ruleWaivers": {
   "L05": "the finale's decision is the ferry between the banks (a hazard on its own clock: when to send, which lane); the rulebook's stand-in reads a hazard ferry as a fixed deck, so L05 cannot see it (round R, 2026-11-05)",
-  "R07": "Daniele 2026-11-05: two mirrored laser lifts, top and bottom - each stone has an equally short twin, so firing one alone never moves the shortest length (the other stone carries it); together they decide which roads cross dry",
-  "R04": "Daniele 2026-11-05 merge (stone above AND below the 3-lane strait over 2 m half decks): 67.5 m tall, 1.5 m over the provisional 66 m line; the phone probe decides (plan rule 7)"
+  "R07": "Daniele 2026-11-05: two mirrored laser lifts, top and bottom - each stone has an equally short twin, so firing one alone never moves the shortest length (the other stone carries it); together they decide which roads cross dry - ACCEPTED by Daniele 2026-11-06 (Desk)",
+  "R04": "Daniele 2026-11-05 merge (stone above AND below the 3-lane strait over 2 m half decks): 67.5 m tall, 1.5 m over the provisional 66 m line; the phone probe decides (plan rule 7) - ACCEPTED by Daniele 2026-11-06 (Desk)"
  },
  "tags": {
   "size": "XS",
