@@ -414,16 +414,20 @@ func _catapult() -> void:
 	pad["owner"] = "A"
 	s.nodes[front]["owner"] = "A"
 	s.nodes[front]["units"] = 60.0
-	check(s.fire_relay(pad["id"]), "R-14: the pad arms")
-	var flew := false
+	var h := s.send(front, pad["id"], 1.0)              # LAUNCHER TURRET: fire as the line reaches the pad, it loads and throws
 	for i in range(400):
+		var pr: Array = s._platform_range(h, pad["id"]) if h in s.hordes else []
+		if pr.is_empty() or float(h["s"]) >= float(pr[0]) - 0.5:
+			break
 		s.step(0.05)
-		if pad["relay_phase"] == "moving" and s.hordes.filter(func(h): return h["owner"] == "A").is_empty() and not flew:
-			s.send(front, pad["id"], 1.0)
+	check(s.fire_relay(pad["id"]), "R-14: the pad loads")
+	var flew := false
+	for i in range(200):
+		s.step(0.05)
 		if not s.flights.is_empty():
 			flew = true
 			break
-	check(flew, "R-14: a line walking onto the armed pad is thrown over the bay")
+	check(flew, "R-14: a line walking onto the loading pad is thrown over the bay")
 
 
 func _play(code: String) -> void:
