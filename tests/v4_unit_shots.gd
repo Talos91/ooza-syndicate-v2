@@ -2,7 +2,7 @@ extends Node
 ## ALPHA 24 UNITS v4 render probe (a dev tool, not a suite): a real 1v1 vs the AI, VEX (seat A) against rival=<faction>,
 ## columns of v4 VEX walking + clashing, shot at the window size. Run WINDOWED, off-screen, silent:
 ##   Godot --path . --resolution 812x375 --audio-driver Dummy --position -6000,-6000 res://tests/v4_unit_shots.tscn
-##          -- --no-telemetry out=<dir> [rival=ember] [zoom=34] [colour=A|gold|purple..] [focus=<node>] [tag=x]
+##          -- --no-telemetry out=<dir> [me=vex] [rival=ember] [zoom=34] [colour=A|gold|purple..] [focus=<node>] [tag=x]
 
 const MAIN := "res://main.tscn"
 const MAP := "res://maps4/N-24-k-crossing.json"
@@ -39,6 +39,7 @@ func _run() -> void:
 	var tag := "match"
 	var focus := -1
 	var colour := "A"
+	var me := "vex"                    # me=<faction>: the seat-A faction (units-v4: the other five)
 	var south := false                 # south=1: the column walks toward the camera (the faces), focus = its target
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("out="):
@@ -53,10 +54,12 @@ func _run() -> void:
 			colour = a.substr(7)
 		if a.begins_with("focus="):
 			focus = int(a.substr(6))
+		if a.begins_with("me="):
+			me = a.substr(3)
 		if a == "south=1":
 			south = true
 	var main_script = load("res://scripts/main.gd")
-	main_script.relaunch = {"faction": "vex", "rival": rival, "mode": "1v1", "map": MAP, "colour": colour}
+	main_script.relaunch = {"faction": me, "rival": rival, "mode": "1v1", "map": MAP, "colour": colour}
 	var inst: Node = (load(MAIN) as PackedScene).instantiate()
 	inst.demo = false
 	if zoom > 0.0:
