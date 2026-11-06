@@ -2,6 +2,10 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto24** - 2026-11-07 (proto-r, staging/proto/): Launcher = a 3-tier loading cannon: tap to freeze the aim and load every
+  line entering (yours and the enemy's) up to 50 / 100 / 150 or 2 / 4 / 6 s, then one salvo; upgrades 25 / 35; it can fall in the Last
+  Stand but never drops below T1. GooGat (the Googatling): its ammo is its garrison, grown at half a vat's rate up to the node cap; it
+  fires it, then each unit as made (Daniele, Desk dec-launcher-turret / dec-googatling).
 - **0.23.15-proto23** - 2026-11-07 (proto-r, staging/proto/): R-15 Pinwheel 66 and R-16 Pinwheel B 66 = 66 m tries of R-05 / R-11
   (Daniele, Desk R04 "shrunk on top and bottom to be 66 m"): 64 m tall, 2 m centre-rotor spokes, ferry pair just above N / S; N / S
   reachable only through the centre rotor. Both in MapPool.PROTO, camera pitch 58. R04 / R07 waiver texts marked ACCEPTED in the baked
