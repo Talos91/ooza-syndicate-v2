@@ -286,7 +286,10 @@ static func dress(node: Node3D, faction: String, seat: String) -> void:
 ## Factions whose unit model (assets/units/<faction>.glb) was replaced by a v3 creature with its own UV layout: the
 ## monsters' minion body is still the old creature mesh, so it keeps the old unit texture (faction-solar-v3, 2026-11-01).
 const MINION_TEX := {"solar": "res://assets/units/legacy/solar_v2_texture_diffuse.png",
-		"vex": "res://assets/units/legacy/vex_v2_texture_diffuse.png"}   # units-v4-vex (Alpha 24)
+		"vex": "res://assets/units/legacy/vex_v2_texture_diffuse.png",   # units-v4-vex (Alpha 24)
+		"bloom": "res://assets/units/legacy/bloom_v2_texture_diffuse.png",   # units-v4 (Alpha 24)
+		"null": "res://assets/units/legacy/null_v2_texture_diffuse.png",
+		"ember": "res://assets/units/legacy/ember_v2_texture_diffuse.png"}
 
 
 static func _tex_for(faction: String) -> Texture2D:
