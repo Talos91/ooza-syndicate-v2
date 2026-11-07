@@ -2,6 +2,8 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo4** - 2026-11-07 (demo-world, staging/demo/): foldables (ui-fold cdff7d6): the HUD scales with the screen (UiKit.hud_k),
+  phone_fit fold profiles, quality tier "hi" (3D at 2.0 px/pt on big capable screens, with fallback; OozeViewport.caps() in viewport-fix.js).
 - **0.23.27-demo3** - 2026-11-07 (demo-world, staging/demo/): VAT COLUMN (Daniele 2026-11-07, rule change): a vat makes nothing while it
   upgrades - the badge reads PAUSED n%, the inspector card "UPGRADING T2 63% · PAUSED · 4 s"; a cyan blueprint column fills over the vat, the
   module rises out of the pit and the tier switches at 100 %; tube doors per tier (vat-column 4b278c4).
