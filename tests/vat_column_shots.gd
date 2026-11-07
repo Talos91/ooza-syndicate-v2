@@ -151,6 +151,7 @@ func _run() -> void:
 		var u0: float = n["units"]
 		var shot_i := 0
 		var perf_done := false
+		var up_card := false
 		while n["build_kind"] != "":
 			var p := Sim.build_progress(n)
 			if shot_i < MARKS.size() and p >= MARKS[shot_i]:
@@ -164,6 +165,14 @@ func _run() -> void:
 				await _foot_shot(inst, wl, id, "%s/%s-foot-%02d.png" % [out, tag, int(MARKS[shot_i] * 100)])
 				_home(inst)
 				shot_i += 1
+			if p > 0.6 and not up_card:                  # the compact inspector card while paused
+				up_card = true
+				_home(inst)
+				inst.hud.inspect(id, inst.get_viewport().get_camera_3d())
+				await _frames(3)
+				await _shot(inst, "%s/%s-card-paused.png" % [out, tag])
+				print("VAT_COLUMN %s card: %s | badge clock %s" % [tag, inst.hud.inspector_label.text, str(Sim.build_progress(n))])
+				inst.hud.close_inspector()
 			if not perf_done and p > 0.25 and step[0] == 1:
 				perf_done = true
 				var busy := await _perf("upgrade (blueprint + module shown)", 120)
