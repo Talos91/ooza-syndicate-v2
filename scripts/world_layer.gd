@@ -32,6 +32,10 @@ const SHADER_ENTRANCE := preload("res://shaders/world_entrance.gdshader")
 # TUBE ENTRANCE v2 (build_tube_entrance_v2.py, 704 tris): the same foot with FOUR doors (+Z, +X, -Z, -X) so the Locals
 # walk to the door nearest their crater (world_locals.gd); v1 (one door, 536 tris) stays in assets for comparison.
 const ENTRANCE_GLB := "res://assets/world/tube_entrance_v2.glb"
+# VAT COLUMN (Daniele, 2026-11-07; build_tube_entrance_v3.py): the doors follow the vat's tier - T1 the front door only,
+# T2 front + back, T3 all four (= v2) - with the front turned to the feeding crater (world_locals' feed door). Visual only.
+const ENTRANCE_TIER := ["", "res://assets/world/tube_entrance_v3_t1.glb", "res://assets/world/tube_entrance_v3_t2.glb",
+		"res://assets/world/tube_entrance_v3_t3.glb"]
 const LAB_PIC := "res://assets/world/lab_clean_floor_rect.png"   # --floor=labpic: Daniele's painted lab floor, top-down
 const LAB_PIC_SIZE := Vector2(53.785, 40.744)    # metres (rectify_lab_clean_floor.py: 20 px/m, 1075 x 814)
 const LAB_PIC_GRID0 := Vector2(0.892, 0.375)     # metres from its top-left corner to its first 2 m grid line (x, z)
@@ -119,6 +123,8 @@ var _socket_mm: MultiMesh         # one floor socket per tube (owner-coloured ri
 const SOCKET_PAD := 1.8           # metres of collar and drains around a tube's foot
 var _ent_mm: MultiMesh            # one tube entrance per common tube (owner light in INSTANCE_CUSTOM)
 var _ent_mat: ShaderMaterial
+var _ent_mms: Array = [null, null, null, null]   # VAT COLUMN: one entrance MultiMesh per tier (1-3)
+var column: VatColumn            # VAT COLUMN: upgrade blueprint + the entrance module from the pit (vat_column.gd)
 var _blobs: Array = []           # {p, tube, col, t0, mode (0 hop, 1 crawl, 2 enter), v, dur, from}
 var _drops: Array = []           # {p, v, t0, col}
 var _splats: Array = []          # {p, size, t0, col, seed}
@@ -152,7 +158,8 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	floor_kind = _floor_kind_for(str(_main.get("map_path")) if _main.get("map_path") != null else "")
 	var args := OS.get_cmdline_user_args()
 	floor_pic = "--floor=labpic" in args
-	if floor_pic or "--floor=lab5" in args:
+	var demo_default: bool = Rules.demo and not Array(args).any(func(a): return str(a).begins_with("--floor"))   # DEMO BUILD: lab5 floor by default (Daniele, world pass 2)
+	if floor_pic or "--floor=lab5" in args or demo_default:
 		floor_kind = "lab"
 	floor_lab5 = floor_kind == "lab" and not floor_pic and not "--floor-v1" in args
 	if "--floor-clear" in args:
@@ -174,6 +181,10 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 		locals = WorldLocals.new()
 		add_child(locals)
 		locals.setup(self)
+	_orient_entrances()
+	column = VatColumn.new()
+	add_child(column)
+	column.setup(self)
 	if floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args(): add_child(WorldDressing.new())   # WORLD COMPLETE LAB
 
 
@@ -186,7 +197,7 @@ func _lab_backdrop(main: Node) -> void:
 		var sky := layer.get_child(0) as TextureRect
 		var vp := get_viewport().get_visible_rect().size if get_viewport() != null else Vector2(812, 375)
 		var side := "a" if "--lab-side=a" in OS.get_cmdline_user_args() else "b"
-		sky.texture = load(LAB_SIDE % [side, 1184 if vp.x / maxf(vp.y, 1.0) >= 2.0 else 1440])
+		sky.texture = load(PerfProfile.hi_path(LAB_SIDE % [side, 1184 if vp.x / maxf(vp.y, 1.0) >= 2.0 else 1440]))
 		var m := sky.material as ShaderMaterial
 		m.set_shader_parameter("abyss", LAB_FAR)
 		m.set_shader_parameter("tint", Color(1, 1, 1, 1))
@@ -274,7 +285,7 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 	m.set_shader_parameter("tiles", not v1 and not floor_pic and not floor_lab5)
 	if floor_lab5:
 		m.set_shader_parameter("lab5", true)
-		m.set_shader_parameter("t_lab5", load(LAB5_FLOOR))
+		m.set_shader_parameter("t_lab5", load(PerfProfile.hi_path(LAB5_FLOOR)))
 		m.set_shader_parameter("lab5_m", LAB5_TILE_M)
 		m.set_shader_parameter("lab5_gain", LAB5_GAIN)
 		m.set_shader_parameter("haze", LAB5_HAZE)
@@ -385,17 +396,21 @@ func _build_pools() -> void:
 	_ent_mat.set_shader_parameter("abyss", haze_abyss())
 	if floor_haze >= 0.0:
 		_ent_mat.set_shader_parameter("haze", floor_haze)
-	_ent_mm = MultiMesh.new()
-	_ent_mm.transform_format = MultiMesh.TRANSFORM_3D
-	_ent_mm.use_custom_data = true
-	_ent_mm.use_colors = true                        # white: the Compatibility renderer multiplies COLOR by it (0 without)
-	_ent_mm.mesh = ent_mesh
-	_ent_mm.instance_count = maxi(_tubes.size(), 1)
-	var emi := MultiMeshInstance3D.new()
-	emi.multimesh = _ent_mm
-	emi.material_override = _ent_mat
-	emi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(emi)
+	for t in range(1, 4):                            # VAT COLUMN: T1 / T2 / T3 doors (v2's four-door mesh if one is missing)
+		var tm: Mesh = _entrance_mesh(ENTRANCE_TIER[t])
+		var emm := MultiMesh.new()
+		emm.transform_format = MultiMesh.TRANSFORM_3D
+		emm.use_custom_data = true
+		emm.use_colors = true                        # white: the Compatibility renderer multiplies COLOR by it (0 without)
+		emm.mesh = tm if tm != null else ent_mesh
+		emm.instance_count = maxi(_tubes.size(), 1)
+		var emi := MultiMeshInstance3D.new()
+		emi.multimesh = emm
+		emi.material_override = _ent_mat
+		emi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(emi)
+		_ent_mms[t] = emm
+	_ent_mm = _ent_mms[3]
 	for i in range(_tubes.size()):
 		var tb: Dictionary = _tubes[i]
 		var half: float = float(tb["r"]) + SOCKET_PAD
@@ -405,19 +420,45 @@ func _build_pools() -> void:
 		var sx := Transform3D(Basis.from_scale(Vector3(half * 2.0, 1.0, half * 2.0)), Vector3(tb["x"], floor_y + 0.02, tb["z"]))
 		_socket_mm.set_instance_transform(i, HIDDEN if tb["ent"] else sx)
 		_socket_mm.set_instance_custom_data(i, Color(float(tb["r"]) / half, 0, 0, 0))
-		_ent_mm.set_instance_transform(i, HIDDEN)
-		_ent_mm.set_instance_custom_data(i, Color(0, 0, 0, 0))
-		_ent_mm.set_instance_color(i, Color.WHITE)
+		tb["ent_tier"] = ent_tier(sim.nodes[tb["id"]])
+		for t in range(1, 4):
+			(_ent_mms[t] as MultiMesh).set_instance_transform(i, HIDDEN)
+			(_ent_mms[t] as MultiMesh).set_instance_custom_data(i, Color(0, 0, 0, 0))
+			(_ent_mms[t] as MultiMesh).set_instance_color(i, Color.WHITE)
 		_sock_lit(tb, tb["base"])
 	_socket_mm.visible_instance_count = _tubes.size()
-	_ent_mm.visible_instance_count = _tubes.size() if ent_mesh != null else 0
+	for t in range(1, 4):
+		(_ent_mms[t] as MultiMesh).visible_instance_count = _tubes.size() if ent_mesh != null else 0
+
+
+static func ent_tier(n: Dictionary) -> int:
+	## VAT COLUMN: how many doors a tube's entrance shows - the vat's (or Machinegoon's) tier, 1-3 (the tier switches
+	## when an upgrade's fill reaches the top, so the doors follow it then)
+	return clampi(int(n.get("tier", 1)), 1, 3)
+
+
+func _orient_entrances() -> void:
+	## VAT COLUMN: the entrance's front door (its only door at T1) faces the crater that feeds the tube (world_locals'
+	## feed door); no Locals / craters: the v2 placement (front +Z)
+	for i in range(_tubes.size()):
+		var tb: Dictionary = _tubes[i]
+		if not tb.get("ent", false):
+			continue
+		var d := Vector2(0, 1)
+		if locals != null and locals.feeds.has(i):
+			d = locals.feeds[i]["dir"]
+		tb["ent_yaw"] = atan2(d.x, d.y)
+		tb["ent_xf"] = Transform3D(Basis(Vector3.UP, float(tb["ent_yaw"])), Vector3(tb["x"], floor_y, tb["z"]))
+		_sock_lit(tb, tb["base"] if (tb["mi"] as MeshInstance3D).visible else Color(0, 0, 0, 0))
 
 
 const HIDDEN := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3(0, -9999, 0))
 
 
-static func _entrance_mesh() -> Mesh:
-	var ps := load(ENTRANCE_GLB) as PackedScene
+static func _entrance_mesh(path := ENTRANCE_GLB) -> Mesh:
+	if not ResourceLoader.exists(path):
+		return null
+	var ps := load(path) as PackedScene
 	if ps == null:
 		return null
 	var root := ps.instantiate()
@@ -439,8 +480,11 @@ func _sock_lit(tb: Dictionary, c: Color) -> void:
 	if decals != null:
 		decals.tint_pool(i, c)
 	if tb.get("ent", false):
-		_ent_mm.set_instance_transform(i, HIDDEN if c.a <= 0.0 else tb["ent_xf"])
-		_ent_mm.set_instance_custom_data(i, c)
+		var et := int(tb.get("ent_tier", 3))
+		for t in range(1, 4):                        # VAT COLUMN: drawn in its tier's MultiMesh; hidden while the blueprint shows
+			var show: bool = t == et and c.a > 0.0 and not tb.get("holo", false)
+			(_ent_mms[t] as MultiMesh).set_instance_transform(i, tb["ent_xf"] if show else HIDDEN)
+			(_ent_mms[t] as MultiMesh).set_instance_custom_data(i, c)
 	else:
 		_socket_mm.set_instance_color(i, c)
 
@@ -609,6 +653,8 @@ func sync(dt: float) -> void:
 	_tubes_step(dt)
 	if locals != null:
 		locals.step(dt)
+	if column != null:
+		column.step(dt)
 	_blobs_step(dt)
 	_drops_step()
 	_splats_step()
@@ -631,6 +677,8 @@ func _tubes_step(dt: float) -> void:
 		var top := floor_y + 0.5
 		if plat is Node3D and is_instance_valid(plat) and (plat as Node3D).is_visible_in_tree():
 			top = (plat as Node3D).global_position.y + float(tb["top_off"])
+		elif tb.get("holo", false) and float(tb["top_y"]) < 900.0:   # VAT COLUMN: the platform is the blueprint now
+			top = float(tb["top_y"])
 		if sim.collapsed.get(tb["id"], false):        # Last Stand: the tube drains and sinks with its platform
 			tb["alive"] = false
 			tb["drain"] = minf(float(tb["drain"]) + dt / 1.2, 1.0)
@@ -643,6 +691,9 @@ func _tubes_step(dt: float) -> void:
 			continue
 		if not mi.visible:                            # a structure (re)built: the socket lights again
 			mi.visible = true
+			_sock_lit(tb, tb["base"])
+		if tb.get("ent", false) and int(tb.get("ent_tier", 3)) != ent_tier(n):   # VAT COLUMN: the doors follow the tier
+			tb["ent_tier"] = ent_tier(n)
 			_sock_lit(tb, tb["base"])
 		if absf(top - float(tb["top_y"])) > 0.01:
 			tb["top_y"] = top

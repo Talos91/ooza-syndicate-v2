@@ -283,10 +283,17 @@ static func dress(node: Node3D, faction: String, seat: String) -> void:
 		(mi as MeshInstance3D).material_override = m
 
 
+## Factions whose unit model (assets/units/<faction>.glb) was replaced by a v3 creature with its own UV layout: the
+## monsters' minion body is still the old creature mesh, so it keeps the old unit texture (faction-solar-v3, 2026-11-01).
+const MINION_TEX := {"solar": "res://assets/units/legacy/solar_v2_texture_diffuse.png"}
+
+
 static func _tex_for(faction: String) -> Texture2D:
 	if not _tex.has(faction):
 		_tex[faction] = null
-		if Rules.FACTIONS.has(faction):
+		if MINION_TEX.has(faction):
+			_tex[faction] = load(MINION_TEX[faction]) as Texture2D
+		elif Rules.FACTIONS.has(faction):
 			var root: Node = (load("res://assets/units/%s.glb" % faction) as PackedScene).instantiate()
 			for mi in root.find_children("*", "MeshInstance3D", true, false):
 				var src := (mi as MeshInstance3D).mesh.surface_get_material(0) as BaseMaterial3D

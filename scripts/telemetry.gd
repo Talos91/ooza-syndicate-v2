@@ -33,7 +33,9 @@ static func save(sim: Sim, map_code: String, strength_trace: Array) -> String:
 		"deciding_event": last_capture, "units_lost_combat": sim.combat_losses,
 		"units_lost_falls": sim.fall_losses, "last_stand_reached": sim.last_stand_active,
 		"events": sim.events,
+		"send_failed": send_fails.duplicate(),     # SEND GESTURE: this match's failed send gestures, with their reason
 	}
+	send_fails.clear()
 	DirAccess.make_dir_recursive_absolute("user://telemetry")
 	var path := "user://telemetry/match_%d.json" % Time.get_unix_time_from_system()
 	var f := FileAccess.open(path, FileAccess.WRITE)
@@ -43,6 +45,34 @@ static func save(sim: Sim, map_code: String, strength_trace: Array) -> String:
 	f.close()
 	prune_logs("user://telemetry", int(Rules.TELEMETRY["match_logs_kept"]))
 	return ProjectSettings.globalize_path(path)
+
+
+static var send_fails: Array = []                 # this match's failed sends (save() writes them into the match log)
+static var send_fail_path := "user://telemetry/send_failed.json"   # the rolling device file; tests point this elsewhere
+
+
+static func send_failed(reason: String, data: Dictionary) -> void:
+	## SEND GESTURE (2026-11-03): a drag that placed no order, and why - "no_target" (nothing in the cone), "bridge_gone"
+	## (only unreachable nodes that way), "zero_units", "touch_lost" (a second finger, a pause, the HUD took it),
+	## "refused" (the order check said no). Device only: the match log and a rolling file of the newest
+	## Rules.SEND_FAIL_LOG_KEPT; nothing is uploaded (the upload's KINDS are unchanged).
+	var e := {"kind": "send_failed", "reason": reason, "at": int(Time.get_unix_time_from_system())}
+	e.merge(data)
+	send_fails.append(e)
+	var all: Array = []
+	if FileAccess.file_exists(send_fail_path):
+		var old = JSON.parse_string(FileAccess.get_file_as_string(send_fail_path))
+		if old is Array:
+			all = old
+	all.append(e)
+	while all.size() > int(Rules.SEND_FAIL_LOG_KEPT):
+		all.pop_front()
+	DirAccess.make_dir_recursive_absolute(send_fail_path.get_base_dir())
+	var f := FileAccess.open(send_fail_path, FileAccess.WRITE)
+	if f == null:                                   # user:// not writable: the match log still has it
+		return
+	f.store_string(JSON.stringify(all))
+	f.close()
 
 
 static func prune_logs(dir: String, keep: int) -> int:
@@ -583,7 +613,20 @@ static func match_event(sim: Sim, seat: String, info: Dictionary) -> bool:
 		return false
 	var won := sim.winner != "" and (sim.winner == seat or sim.allied(seat, sim.winner))
 	var st := Progression.seat_stats(sim, seat)
-	return event("match", {"map": str(info.get("map", "")), "mode": str(info.get("mode", "")),
+	# relay use per map (2026-11-03): this seat's fires per relay kind ("rotation" / "switch" / "remote" / "retract" ...)
+	var relay_types := {}
+	for e in sim.events:
+		if str(e.get("type", "")) == "relay_fired" and e.get("seat") == seat:
+			var nid := int(e.get("node", -1))
+			if nid >= 0 and nid < sim.nodes.size():
+				var kind := str(sim.nodes[nid]["relay"])
+				relay_types[kind] = int(relay_types.get(kind, 0)) + 1
+	# match id: online the room's "<room>-<round>" (the server report's match_id starts with it); offline a local id
+	var mid := str(info.get("match_id", ""))
+	if mid == "":
+		mid = "l%d-%04x" % [int(Time.get_unix_time_from_system() - sim.time), randi() % 0x10000]
+	return event("match", {"map": str(info.get("map", "")), "mode": str(info.get("mode", "")), "match_id": mid,
+			"relay_types": relay_types,
 			"faction": str(sim.factions.get(seat, "")),
 			"result": "left" if info.get("left_early", false) else ("draw" if sim.winner == "" else ("win" if won else "loss")),
 			"duration_s": snappedf(sim.time, 1.0), "ai_level": str(info.get("ai_level", "")),

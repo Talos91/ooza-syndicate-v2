@@ -16,10 +16,26 @@ extends Node
 ##   LEVELS (map round 2026-11) - per lift and level 0 / 1: _measure_levels below
 ## Output: one line per (map, pitch) and a CHOICE line per map (the sweep behind scripts/map_camera.gd).
 ## Args (after --): out=<file> pitches=auto|50,54,.. maps=C-05,S-19 (optional filter) pt=844
+##   profile=<name>[,<name>..]|folds  FOLDABLES (ui-fold, 2026-11-07): run on these screen profiles (PROFILES below: the
+##   window is resized to the device's landscape CSS size, pt = its CSS width, the HUD's pt height = its CSS height, so
+##   UiKit.hud_k applies as on the device). Lines then start with the profile name. Desktop emulation, never a real device.
 
 const MAIN := "res://main.tscn"
 
 var out_lines: PackedStringArray = []
+# FOLDABLES: landscape CSS px of the screen (full screen, no browser bars). Sources and DPR: 05 Handoff/FOLDABLES-2026-11.md.
+const PROFILES := {
+	"phone":        Vector2i(812, 375),    # the GMN reference phone (iPhone X / 13 mini class)
+	"phone-wide":   Vector2i(844, 390),    # iPhone 13/14 class
+	"zfold7-inner": Vector2i(1092, 984),   # Galaxy Z Fold7 inner 1968x2184 @ DPR 2.0 (yesviz; DPR unconfirmed)
+	"zfold7-cover": Vector2i(840, 360),    # Galaxy Z Fold7 cover 1080x2520 @ DPR 3.0 (inferred)
+	"pixel-inner":  Vector2i(717, 692),    # Pixel 10 Pro Fold inner 2076x2152 @ DPR 3.0
+	"pixel-cover":  Vector2i(788, 360),    # Pixel 10 Pro Fold cover 1080x2364 @ DPR 3.0 (inferred)
+	"iphone-inner": Vector2i(890, 626),    # iPhone foldable inner 1878x2670 (reported) @ DPR 3.0 (assumed)
+	"iphone-cover": Vector2i(678, 466),    # iPhone foldable cover 1398x2034 (reported) @ DPR 3.0 (assumed)
+}
+const FOLDS := ["phone", "zfold7-inner", "zfold7-cover", "pixel-inner", "pixel-cover", "iphone-inner", "iphone-cover"]
+var tag := ""                                         # the profile name on every line ("" without profile=)
 
 
 func _ready() -> void:
@@ -78,6 +94,9 @@ func _measure(main: Node, pt_w: float) -> Dictionary:
 	panels.append(Rect2(0, 0, vp.x, hud.top_used()))
 	panels.append(Rect2(0, vp.y - hud.bottom_used(), vp.x, hud.bottom_used()))
 	panels.append(hud.pause_button.get_global_rect())
+	panels.append(hud.music_button.get_global_rect())
+	if hud.dock.visible:                                     # Alpha 24: the skill column on the right
+		panels.append(hud.dock.get_global_rect())
 	var screen := Rect2(Vector2.ZERO, vp)
 	var circ := {}
 	var off := 0
@@ -231,6 +250,23 @@ func _measure_levels(main: Node) -> PackedStringArray:
 
 
 func _run() -> void:
+	var prof := _arg("profile", "")
+	if prof == "":
+		await _run_one(float(_arg("pt", "844")))
+	else:
+		for name in (FOLDS if prof == "folds" else Array(prof.split(","))):
+			var wh: Vector2i = PROFILES[name]
+			get_window().size = wh                         # the canvas follows (stretch canvas_items / expand)
+			UiKit.test_pt_h = float(wh.y)                  # the HUD's points (UiKit.pt_per_px, hud_k)
+			for f in range(6):
+				await get_tree().process_frame
+			tag = "%s %dx%d hud_k %.2f | " % [name, wh.x, wh.y, UiKit.hud_k_for(float(wh.y))]
+			await _run_one(float(wh.x))
+	print("PHONEFIT DONE")
+	get_tree().quit()
+
+
+func _run_one(pt_w: float) -> void:
 	var out_path := _arg("out", "user://phonefit.txt")
 	var pitches := []
 	var auto := _arg("pitches", "auto") == "auto"
@@ -240,7 +276,6 @@ func _run() -> void:
 		for s in _arg("pitches", "").split(","):
 			pitches.append(float(s))
 	var only := _arg("maps", "")
-	var pt_w := float(_arg("pt", "844"))
 	var main_script = load("res://scripts/main.gd")
 	for path in MapPool.all():
 		var code: String = path.get_file().substr(0, 4)
@@ -262,7 +297,7 @@ func _run() -> void:
 			var r := _measure(inst, pt_w)
 			r["pitch"] = inst.cam_pitch
 			rows.append(r)
-			var line := "%s %-6s pitch %2.0f  tap %5.1f pt (node %d, platform %4.1f pt)  off %d hud %d  badges: over %d hit %d on-platform %d" % [
+			var line := tag + "%s %-6s pitch %2.0f  tap %5.1f pt (node %d, platform %4.1f pt)  off %d hud %d  badges: over %d hit %d on-platform %d" % [
 					code, md, r["pitch"], r["tap"], r["worst"], r["plat"], r["off"], r["hud"], r["bover"], r["bhit"], r["bplat"]]
 			if r["btn"] < INF:                               # RELAY V2
 				line += "  relay buttons: tap %.1f pt (pad %.1f pt) off/hud %d over-a-platform %d" % [r["btn"], r["pad"], r["bthud"], r["btclash"]]
@@ -286,11 +321,9 @@ func _run() -> void:
 			var pb: int = b["bover"] + b["bhit"] + b["bplat"]
 			return pa < pb if pa != pb else a["pitch"] > b["pitch"])
 		var c: Dictionary = near[0]
-		var line := "CHOICE %s pitch %2.0f tap %.1f pt platform %.1f pt off %d hud %d badges %d/%d/%d" % [code, c["pitch"], c["tap"], c["plat"], c["off"], c["hud"], c["bover"], c["bhit"], c["bplat"]]
+		var line := tag + "CHOICE %s pitch %2.0f tap %.1f pt platform %.1f pt off %d hud %d badges %d/%d/%d" % [code, c["pitch"], c["tap"], c["plat"], c["off"], c["hud"], c["bover"], c["bhit"], c["bplat"]]
 		print(line)
 		out_lines.append(line)
 		var fa := FileAccess.open(out_path, FileAccess.WRITE)
 		fa.store_string("\n".join(out_lines) + "\n")
 		fa.close()
-	print("PHONEFIT DONE")
-	get_tree().quit()

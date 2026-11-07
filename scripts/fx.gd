@@ -146,7 +146,10 @@ func sync(dt: float) -> void:
 	if _sel_ring.visible:
 		var n: Dictionary = sim.nodes[selected]
 		_sel_ring.position = n["pos"] + Vector3(0, 0.25, 0)
-		_sel_ring.material_override = Mats.glow(Rules.seat_color(n["owner"]) if n["owner"] != "" else Color.WHITE, 0.8)
+		# GMN-1 (Daniele: the arrow's origin "in the wrong colour"): your own node's ring in your faction accent, like the
+		# stream, the reticle and the radial; another owner's in its seat colour
+		var own := str(n["owner"]) != "" and str(n["owner"]) == str(world.get("HUMAN"))
+		_sel_ring.material_override = Mats.glow(HudNoir.accent if own else (Rules.seat_color(n["owner"]) if n["owner"] != "" else Color.WHITE), 0.8)
 		_sel_ring.rotation.y += dt * 0.6
 	for p in _pulses.duplicate():
 		p["t"] += dt
@@ -198,7 +201,7 @@ func floater(pos: Vector3, text: String, col: Color) -> void:
 
 
 func _construction(n: Dictionary, entry: Dictionary, dt: float) -> void:
-	var building: bool = n["build_kind"] != "" and n["owner"] != ""
+	var building: bool = n["build_kind"] != "" and n["owner"] != "" and not VatColumn.shows(n["id"])   # VAT COLUMN: the blueprint replaces the grow + ring
 	var model: Node3D = entry["vat_node"]
 	if building:
 		var p := smoothstep(0.0, 1.0, Sim.build_progress(n))
@@ -922,14 +925,16 @@ func _spawn_bodies(faction: String, seat: String, pts: Array, n: int) -> Array:
 		return out
 	var mat := _body_mat_for(faction, seat, body[2])
 	var line := _polyline(pts)
-	var rows := int(ceil(n / float(UnitView.ACROSS)))
+	var across := Rules.look_across(faction)                # FACTION LOOK, as UnitView lays the column
+	var lane_w := UnitView.LANE * Rules.look_size(faction)
+	var rows := int(ceil(n / float(across)))
 	for j in range(n):
-		var row := int(j / float(UnitView.ACROSS))
-		var col := j % UnitView.ACROSS
+		var row := int(j / float(across))
+		var col := j % across
 		var at := _along(line, 0.0 if rows <= 1 else float(row) / float(rows - 1))
 		var side: Vector3 = (at[1] as Vector3).cross(Vector3.UP).normalized()
-		var row_size := mini(UnitView.ACROSS, n - row * UnitView.ACROSS)
-		var p: Vector3 = (at[0] as Vector3) + side * (col - (row_size - 1) * 0.5) * UnitView.LANE + Vector3(0, 0.08, 0)
+		var row_size := mini(across, n - row * across)
+		var p: Vector3 = (at[0] as Vector3) + side * (col - (row_size - 1) * 0.5) * lane_w + Vector3(0, 0.08, 0)
 		var mi := MeshInstance3D.new()
 		mi.mesh = body[0]
 		mi.material_override = mat
@@ -987,7 +992,7 @@ func _body_for(faction: String) -> Array:
 				var mesh: Mesh = (mi as MeshInstance3D).mesh
 				var aabb := mesh.get_aabb()
 				var src := mesh.surface_get_material(0) as BaseMaterial3D
-				_body[faction] = [mesh, UnitView.UNIT_SIZE / maxf(maxf(aabb.size.x, aabb.size.z), 0.001),
+				_body[faction] = [mesh, UnitView.UNIT_SIZE * Rules.look_size(faction) / maxf(maxf(aabb.size.x, aabb.size.z), 0.001),
 						src.albedo_texture if src else null]
 				break
 			root.free()

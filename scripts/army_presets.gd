@@ -35,7 +35,7 @@ static func load_all() -> void:
 		var one := {}
 		for slot in ["active", "map"]:
 			var id := str(cf.get_value(f, slot, ""))
-			if id in (Rules.ACTIVE_SKILLS if slot == "active" else Rules.MAP_SKILLS):
+			if id in (Rules.ACTIVE_SKILLS if slot == "active" else Rules.map_pool()):   # an archived pick plays as the default
 				one[slot] = id
 		if not one.is_empty():
 			picks[f] = one
@@ -100,7 +100,7 @@ static func set_pick(faction: String, slot: String, id: String) -> bool:
 	_ensure()
 	if not Rules.FACTION_LOADOUT.has(faction) or not slot in ["active", "map"]:
 		return false
-	if not id in (Rules.ACTIVE_SKILLS if slot == "active" else Rules.MAP_SKILLS):
+	if not id in (Rules.ACTIVE_SKILLS if slot == "active" else Rules.map_pool()):
 		return false
 	var p: Dictionary = picks.get(faction, {})
 	p[slot] = id
@@ -218,10 +218,10 @@ static func skill_name(id: String) -> String:
 
 
 static func cd_text(id: String) -> String:
-	## "28 s" for the pools; the ultimate's charge: "~120 s charge".
+	## "28 s" for the pools; the ultimate's charge: "~120 s charge" (Overdrive "~75 s charge").
 	var sk: Dictionary = Rules.SKILLS.get(id, {})
 	if str(sk.get("slot", "")) == "ultimate":
-		return "~%d s charge" % int(Rules.ULT_CHARGE_TIME)
+		return "~%d s charge" % int(Rules.ult_charge_time(id))
 	return "%d s" % int(sk.get("cd", 0.0))
 
 
@@ -249,16 +249,18 @@ static func line(id: String) -> String:
 			return "A relay holds both of its states for %d s" % int(s["dur"])
 		"relay_hack":
 			return "Fire an enemy relay, or jam it +%d s" % int(s["jam"])
-		"rewire":
-			return "%d s: lines +%d %% speed, fire any %d relays" % [int(s["dur"]), _pct(s["mult"]), int(s["fires"])]
+		"overdrive":
+			return "%d s: lines +%d %% speed, doors %sx, fire any %d relays" % [int(s["dur"]), _pct(s["mult"]), _x(s.get("door", 1.0)), int(s["fires"])]
 		"echo_split":
 			return "%d moving lines spawn decoys that jam %d s" % [int(s["echoes"]), int(s["disrupt"])]
 		"superbloom":
+			if float(s["cap_shown"]) <= 0.0:          # ULTIMATES REWORK: uncapped, stacks with Spore Burst
+				return "Every vat %sx for %d s, on top of Spore Burst" % [_x(s["mult"]), int(s["dur"])]
 			return "Every vat %sx for %d s (at most +%d units)" % [_x(s["mult"]), int(s["dur"]), int(s["cap_shown"])]
 		"core_meltdown":                               # POWERS (0.22.2): armed from the start of the trip
 			return "Arm an attacking line: on arrival %d %% melts, %d kills a unit" % [roundi(float(s["share"]) * 100.0), int(s["kills_per"])]
 		"relay_aegis":
-			return "A node + neighbours: %sx less damage, %d s" % [_x(s["div"]), int(s["dur"])]
+			return "A node + neighbours: %sx less damage, +%d %% production, %d s" % [_x(s["div"]), _pct(s["prod"]), int(s["dur"])]
 		# POWERS (0.22.2)
 		"quake":
 			return "Every deck on a platform drops, back in %d s" % int(s["down"])

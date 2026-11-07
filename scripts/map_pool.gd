@@ -9,7 +9,7 @@ class_name MapPool
 ## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
 ## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
-const GROUP_ORDER := ["T", "R", "N", "A", "M", "C", "B", "S", "X", "P", "D"]   # P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
+const GROUP_ORDER := ["T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D"]   # R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
                                                               # MAPS 5.0: N = the map builder's new maps (References/Ooze Syndicate maps 5.0)
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
@@ -21,7 +21,8 @@ const WITHHELD: Array[String] = []
 # SEAT BIAS (balance study 2026-10-27, Expert AI vs Expert AI, every faction pair from both seats): seat A wins 92 % on
 # N-24 K-Crossing and 78 % on N-04 Console - map geometry, not factions. Out of 1v1 (their only mode) until 🗺️ moves
 # the spawns (Daniele 2026-10-27: "withhold N-24 / N-04 from 1v1 until the map builder fixes their seats").
-const WITHHELD_MODES := {"N-24": ["1v1"], "N-04": ["1v1"]}
+# Daniele 2026-11-01, Desk vls-fair: the Very Last Stand tie-break (Sim._islands) fixed the seat bias, N-24 / N-04 are back in 1v1.
+const WITHHELD_MODES := {}
 # Not on phones (Daniele, Alpha 18: "if some map is not good for mobile still flag them and remove them"):
 # maps the phone-fit probe (tests/phone_fit.tscn) finds crowded on a phone; tablets and desktop keep them.
 # Maps 4.0 listed its 3v3 / 2v2v2 maps here; the 4.1 partial pack has none, and every 4.1 map passes.
@@ -68,6 +69,9 @@ static func battlefield() -> Array:
 	if not _battlefield_cache.is_empty():
 		return _battlefield_cache
 	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY)
+	if Rules.demo:                                    # DEMO BUILD: R-01 STRAIT only
+		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in DEMO)
+		return _battlefield_cache
 	if Rules.proto_debug:
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in PROTO)
 		return _battlefield_cache
@@ -96,6 +100,7 @@ static func battlefield() -> Array:
 # (Rules.proto_debug) offers just these - the Relays 3.0 test maps - and no older map fills a mode they lack (they are 1v1 only,
 # so the picker shows only the 1v1 chip). The release line never reaches this: its VERSION has no "-proto".
 const PROTO: Array[String] = ["R-01", "R-02", "R-05", "R-06", "R-09", "R-10", "R-11", "R-12", "R-13", "P-01", "P-02", "P-03", "P-04", "P-05"]   # + round R maps (2026-11-05, MAP-ROUND-2026-11; R-03 merged into R-01 the same day; R-04 Gate 2 removed 2026-11-05, Daniele)
+const DEMO: Array[String] = ["R-01"]                  # DEMO BUILD (Rules.demo): the one playable map
 static var _battlefield_cache: Array = []
 static var _pooled_modes: Dictionary = {}              # the modes the new pool (POOL_GROUPS) offers
 

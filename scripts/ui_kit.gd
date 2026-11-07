@@ -51,9 +51,10 @@ const CARD := Color("071820f0")                    # card fill
 const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Color("a1eb39"),
 		"ember": Color("ff7c19"), "solar": Color("ffce58")}
 const ORDER := ["vex", "null", "bloom", "ember", "solar"]
-const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "VIRIDIAN", "ember": "EMBER", "solar": "SOLAR"}
-const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "BLOOM", "ember": "MAW", "solar": "SHELLS"}
-const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "VIRIDIAN / BLOOM",
+## Daniele 2026-11-02: the faction is BLOOM - no VIRIDIAN anywhere; it has no second word (SUBS "")
+const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "BLOOM", "ember": "EMBER", "solar": "SOLAR"}
+const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "", "ember": "MAW", "solar": "SHELLS"}
+const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "BLOOM",
 		"ember": "EMBER / MAW", "solar": "SOLAR / SHELLS"}
 const CUT := 10                                    # the standard corner cut
 const CFG := "user://ui.cfg"
@@ -422,6 +423,42 @@ static func pt_per_px(vp: Vector2) -> float:
 	return _ppp
 
 
+# ------------------------------------------------------------------ FOLDABLES (ui-fold, 2026-11-07): the HUD's screen factor
+# The GMN-1 / GMN-2 HUD is drawn in points for the 812 x 375 pt reference phone. hud_k scales the WHOLE pt-sized HUD by one
+# factor (every piece keeps its geometry and aspect; nothing is re-cut): a short screen (a book foldable's cover strip, ~360 pt
+# tall) shrinks it so the SEND tank and the skill column fit; a tall screen (a foldable's near-square inner screen, a tablet:
+# 500+ pt tall) grows it up to HUD_K_MAX so it uses the room. Phones 375-500 pt tall: 1.0, exactly as before.
+# Detection = the screen's real size in points only (UiKit.pt_per_px: the page's CSS size), never the brand. --hud-k=F forces it.
+const HUD_K_REF_H := 375.0                         # the reference phone's height (pt)
+const HUD_K_GROW_FROM := 500.0                     # taller than this: the HUD grows
+const HUD_K_GROW_SPAN := 350.0                     # ... reaching HUD_K_MAX at 850 pt
+const HUD_K_MAX := 1.35
+const HUD_K_MIN := 0.8
+static var test_hud_k := _arg_float("--hud-k=")
+
+
+static func _arg_float(prefix: String) -> float:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with(prefix):
+			return float(a.substr(prefix.length()))
+	return 0.0
+
+
+static func hud_k_for(h_pt: float) -> float:
+	if h_pt < HUD_K_REF_H:
+		return maxf(HUD_K_MIN, h_pt / HUD_K_REF_H)
+	if h_pt > HUD_K_GROW_FROM:
+		return minf(HUD_K_MAX, 1.0 + (h_pt - HUD_K_GROW_FROM) / HUD_K_GROW_SPAN * (HUD_K_MAX - 1.0))
+	return 1.0
+
+
+static func hud_k(vp: Vector2) -> float:
+	## The HUD's screen factor on this viewport (see above).
+	if test_hud_k > 0.0:
+		return test_hud_k
+	return hud_k_for(vp.y * pt_per_px(vp))
+
+
 const MIN_PHONE_REF := 390.0                       # = Menu.PHONE_PT_H: the landscape phone the sizes assume off the web
 
 
@@ -705,6 +742,41 @@ static func save_last_faction(f: String) -> bool:
 	var c := ConfigFile.new()
 	c.load(path)                                      # keep anything else saved there (none: a fresh file)
 	c.set_value("home", "faction", f)
+	return c.save(path) == OK
+
+
+# ------------------------------------------------------------------ the last setup (Alpha 24 step 3, UX): HOME's PLAY replays it
+static func last_setup() -> Dictionary:
+	## The setup DEPLOY used last: map, mode, ai, colour, rivals (seat -> pick). Empty until a first DEPLOY (or no storage).
+	var c := ConfigFile.new()
+	if c.load(path) != OK or not c.has_section("setup"):
+		return {}
+	var d := {}
+	for k in c.get_section_keys("setup"):
+		d[k] = c.get_value("setup", k)
+	return d
+
+
+static func save_last_setup(d: Dictionary) -> bool:
+	var c := ConfigFile.new()
+	c.load(path)
+	for k in d:
+		c.set_value("setup", k, d[k])
+	return c.save(path) == OK
+
+
+static func map_list(key: String) -> Array:
+	## MAP PICKER's lists: "recent" (newest first, 8) and "favourites" (map paths).
+	var c := ConfigFile.new()
+	if c.load(path) != OK:
+		return []
+	return Array(c.get_value("maps", key, []))
+
+
+static func save_map_list(key: String, list: Array) -> bool:
+	var c := ConfigFile.new()
+	c.load(path)
+	c.set_value("maps", key, list)
 	return c.save(path) == OK
 
 

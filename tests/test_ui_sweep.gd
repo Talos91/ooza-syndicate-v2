@@ -8,7 +8,7 @@ extends Node
 ##   Godot --path . --resolution 1280x720 res://tests/test_ui_sweep.tscn -- --no-notice --no-account
 ## (NOT --headless: the headless display server routes no input.) Exit code 0 = no button failed.
 
-const PAGES := ["main", "play", "factions", "maps", "setup", "seats", "armies", "skills", "cosmetics", "chapters", "_show_hub", "city_map",
+const PAGES := ["main", "play", "factions", "maps", "setup", "setup_advanced", "seats", "armies", "skills", "cosmetics", "chapters", "_show_hub", "city_map",
 		"online", "profile", "challenges", "leaderboard", "history", "account", "options", "privacy", "help", "tutorial"]
 const SKIP := ["QUIT", "FULLSCREEN", "INSTALL", "GOOGLE", "SIGN IN", "DELETE", "SHARE CODE", "JOIN ROOM", "CREATE ROOM",
 		"RECONNECT", "RENAME", "PRIVACY PAGE"]
