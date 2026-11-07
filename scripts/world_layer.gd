@@ -174,6 +174,7 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 		locals = WorldLocals.new()
 		add_child(locals)
 		locals.setup(self)
+	if floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args(): add_child(WorldDressing.new())   # WORLD COMPLETE LAB
 
 
 func _lab_backdrop(main: Node) -> void:

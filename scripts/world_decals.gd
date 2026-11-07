@@ -7,7 +7,9 @@ extends Node3D
 ##  - B march lane along every Local path (repeats along its length, chevrons point the walking direction),
 ##  - C tube-foot pool at each tube foot (white in the atlas: tinted with the owner colour, low alpha),
 ##  - a few F stains and D guide arcs on floor the default camera sees (the floor plan's mask), clear of the rest.
-## The E hazard patches are left out (they read as noise at the game camera).
+## WORLD COMPLETE LAB (world_dressing.gd): every cell is used - the E hazard patches too - and the stains, arcs and
+## hazards are placed with intent by the dressing (round the craters, under the props); the marks are pushed away from
+## the floor's mean (shader contrast) so they read at the default camera, still under the decks' brightness.
 
 const ATLAS := "res://assets/world/lab5_decals_2048.png"
 const SHADER := preload("res://shaders/world_decal.gdshader")
@@ -21,17 +23,20 @@ const POOL := Rect2(1312, 32, 192, 192)
 const ARCS := [Rect2(32, 640, 272, 272), Rect2(368, 640, 400, 400), Rect2(832, 640, 528, 528)]
 const STAINS := [Rect2(32, 1472, 160, 160), Rect2(256, 1472, 128, 128), Rect2(448, 1472, 96, 128), Rect2(608, 1472, 64, 96),
 		Rect2(736, 1472, 32, 64), Rect2(832, 1472, 160, 64), Rect2(1056, 1472, 96, 160), Rect2(1216, 1472, 128, 64)]
+const HAZARD := [Rect2(32, 1248, 128, 64), Rect2(224, 1248, 192, 96), Rect2(480, 1248, 96, 96)]
 const LANE_W := 1.6               # m: the lane strip's width under the 1 m Locals
 const POOL_A := 0.9               # the tube-foot pool's opacity (its own alpha is low: mean 0.17)
 # tints (rgb x, alpha x; COLOR is a half float: > 1 lifts): the atlas paints its marks close to the floor's own mean,
 # which vanishes under the arena's mist at the game camera - lanes, rings and arcs are lifted, stains stay dark goo
-const T_LANE := Color(1.5, 1.5, 1.6, 2.2)
-const T_RING := Color(1.45, 1.45, 1.5, 1.3)
-const T_ARC := Color(1.5, 1.5, 1.6, 1.2)
-const T_STAIN := Color(0.85, 0.85, 0.9, 1.0)
+const T_LANE := Color(1.35, 1.4, 1.55, 2.6)
+const T_RING := Color(1.35, 1.38, 1.5, 2.2)
+const T_ARC := Color(1.45, 1.5, 1.7, 2.4)
+const T_STAIN := Color(0.75, 0.78, 0.85, 1.8)
+const T_HAZARD := Color(1.25, 1.2, 1.1, 1.6)
+const CONTRAST := 2.4             # the marks pushed away from the floor's mean (world_decal.gdshader)
 const N_STAINS := 9
 const N_ARCS := 3
-const MAX := 160
+const MAX := 260
 
 var _mm: MultiMesh
 var _n := 0
@@ -47,6 +52,7 @@ func setup(floor_mat: ShaderMaterial, y: float) -> void:
 	m.set_shader_parameter("atlas", load(ATLAS))
 	for k in ["abyss", "centre", "r0", "r1", "haze"]:
 		m.set_shader_parameter(k, floor_mat.get_shader_parameter(k))
+	m.set_shader_parameter("contrast", CONTRAST)
 	m.render_priority = -9                           # over the floor (-10), under the splats (-8)
 	quad.material = m
 	_mm = MultiMesh.new()
@@ -114,6 +120,8 @@ func build(lc: WorldLocals, cam: Camera3D) -> void:
 	var stains := 0
 	var arcs := 0
 	var tries := 0
+	if wl.get_node_or_null("Dressing") != null:      # the dressing places the stains / arcs / hazards with intent
+		tries = 600
 	while (stains < N_STAINS or arcs < N_ARCS) and tries < 600:
 		tries += 1
 		var q := Vector2(rng.randf_range(b.position.x, b.end.x), rng.randf_range(b.position.y, b.end.y))

@@ -8,6 +8,8 @@ render_mode fog_disabled, unshaded, blend_mix, depth_draw_never, cull_disabled;
 uniform sampler2D atlas : source_color, hint_default_transparent, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float lane_m = 16.0;
 uniform float gain = 1.0;
+uniform float contrast = 1.0;    // marks pushed away from the floor's mean (mid) so they read through the mist
+uniform vec3 mid = vec3(0.0296, 0.0409, 0.0656);   // #343C4A (the lab5 floor's mean), linear
 uniform vec3 abyss : source_color = vec3(0.2, 0.17, 0.37);
 uniform vec2 centre = vec2(0.0);
 uniform float r0 = 40.0;
@@ -34,7 +36,7 @@ void fragment() {
 	vec2 du = abs(cell.zw);
 	vec2 a_uv = cell.xy + uv * du;
 	vec4 t = textureGrad(atlas, a_uv, dFdx(g) * du, dFdy(g) * du);
-	vec3 c = t.rgb * COLOR.rgb * gain;
+	vec3 c = max(mid + (t.rgb - mid) * contrast, vec3(0.0)) * COLOR.rgb * gain;
 	float d = length(wpos.xz - centre);
 	c = mix(c, abyss * 0.6, haze + (haze > 0.0 ? (1.0 - haze) * 0.7 * smoothstep(r0 * 0.4, r1, d) : 0.0));
 	ALBEDO = c;
