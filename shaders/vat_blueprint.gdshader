@@ -30,6 +30,10 @@ float gridline(float v, float w) {
 
 void fragment() {
 	float fy = fill_y;
+	// VAT COLUMN 2: below the fill the real model shows (vat_reveal.gdshader); the ghost draws only above it
+	if (wp.y < fy) {
+		discard;
+	}
 	float below = step(wp.y, fy);
 	// edges: the rim of every face toward the camera (fresnel) = the blueprint outline
 	float rim = pow(1.0 - abs(dot(normalize(wn), normalize(CAMERA_POSITION_WORLD - wp))), 2.2);
@@ -48,7 +52,7 @@ void fragment() {
 	// the fill front: a bright band at the fill height
 	float front = (1.0 - smoothstep(0.0, 0.18, abs(wp.y - fy))) * (1.0 - done);
 	vec3 c = mix(ghost, built, below);
-	c = mix(c, mix(line_col.rgb, vec3(1.0), 0.5), front);
+	c = mix(c, mix(fill_col.rgb, vec3(1.0), 0.35), front);   // the front band in the seat colour (the ring's)
 	ALBEDO = c * max(strength, 1.0);          // (> 1: the dock flash)
 	ALPHA = clamp(mix(ghost_a, built_a, below) + front * 0.8, 0.0, 1.0) * clamp(strength, 0.0, 1.0);
 }
