@@ -87,6 +87,7 @@ static func lap(name: String, t0: int) -> void:
 var main: Node3D
 var _batched := false
 var _applied_3d := false
+var _hi_checked := false                 # FOLDABLES: the hi tier's one frame-time check (_hi_check)
 # per-match frame stats (Alpha 21, for Progression's telemetry `perf` event): sampled only while the match plays
 const STATS_SKIP := 1.0                 # s after the match starts left out (the batching / first-frame hitch)
 const LONG_FRAME_MS := 50.0             # a frame slower than this counts as a long frame (under 20 fps)
@@ -214,6 +215,84 @@ static func device_pixel_ratio() -> float:
 	return s if s > 0.0 else 1.0
 
 
+# ------------------------------------------------------------------ FOLDABLES (ui-fold, 2026-11-07): quality tier "hi"
+# Daniele: "load backgrounds and graphics in higher quality when such a device is identified" (foldables, inner screen). The
+# rule is capability, never the brand: a BIG screen (CSS short side >= HI_MIN_SHORT_PT: a book foldable's inner screen, a
+# tablet) AND a capable GPU / device as the browser reports them (WebGL MAX_TEXTURE_SIZE >= HI_MIN_TEX; navigator.deviceMemory
+# >= HI_MIN_MEM_GB and hardwareConcurrency >= HI_MIN_CORES where the browser tells - Safari reports neither, so there the
+# texture size alone decides), on the PHONE profile only (LOW RES never; FULL is a desktop, already native). What hi changes:
+#   - the 3D renders at HI_3D_PX_PER_PT pixels per CSS point instead of PHONE_3D_PX_PER_PT (native on a DPR-2 screen);
+#   - hi_path() swaps a texture for its higher-resolution copy where one is shipped (HI_FILES; none yet, see there).
+# Safe fallback: after HI_CHECK_S s of play, if the median frame is slower than HI_MAX_MS, the 3D drops back to the PHONE
+# scale for the rest of the session (hi_dropped; the textures stay - memory only). --tier=hi / --tier=std force it (tests,
+# emulation captures; never saved).
+const HI_3D_PX_PER_PT := 2.0
+const HI_MIN_SHORT_PT := 560.0
+const HI_MIN_TEX := 8192
+const HI_MIN_MEM_GB := 6.0
+const HI_MIN_CORES := 6
+const HI_CHECK_S := 8.0
+const HI_MAX_MS := 1000.0 / 40.0
+# hi copies: shipped path -> its higher-resolution file. EMPTY on purpose (2026-11-07): no higher-resolution source exists yet -
+# the lab floor is R5-lab-floor-2048 (made from a 1254 px tile), the decal atlas is a native-resolution 2048 crop of
+# LAB-FLOOR-DECALS-4096, the lab sides are 2560 px natives. The director asks are in 05 Handoff/FOLDABLES-2026-11.md; a new file
+# goes in assets/world/hi/ and gets one row here (worlds load through hi_path).
+const HI_FILES := {}
+static var hi_dropped := false
+static var _caps := {}
+
+
+static func caps() -> Dictionary:
+	## What the browser reports about the device (web only; {} elsewhere): max_tex, mem (GB, 0 unknown), cores (0 unknown),
+	## short / long (the CSS screen, landscape), dpr. Read once (web/viewport-fix.js OozeViewport.caps()).
+	if not _caps.is_empty() or not OS.has_feature("web") or not Engine.has_singleton("JavaScriptBridge"):
+		return _caps
+	var js = JavaScriptBridge.eval("window.OozeViewport && OozeViewport.caps ? JSON.stringify(OozeViewport.caps()) : ''", true)
+	var d = JSON.parse_string(str(js)) if str(js) != "" else null
+	_caps = d if d is Dictionary else {"none": true}
+	return _caps
+
+
+static func tier_arg() -> String:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--tier="):
+			return a.substr(7)
+	return ""
+
+
+static func hi_capable() -> bool:
+	## The device test alone (big screen + capable GPU), before the profile and the fallback.
+	var t := tier_arg()
+	if t != "":
+		return t == "hi"
+	var c := caps()
+	if not c.has("max_tex"):
+		return false
+	var short := minf(float(c.get("w", 0)), float(c.get("h", 0)))
+	var mem := float(c.get("mem", 0))
+	var cores := int(c.get("cores", 0))
+	return short >= HI_MIN_SHORT_PT and int(c["max_tex"]) >= HI_MIN_TEX 			and (mem <= 0.0 or mem >= HI_MIN_MEM_GB) and (cores <= 0 or cores >= HI_MIN_CORES)
+
+
+static func hi() -> bool:
+	## Quality tier "hi" right now (see above).
+	if tier_arg() == "hi":
+		return not hi_dropped
+	return level() == "phone" and not hi_dropped and hi_capable()
+
+
+static func hi_textures() -> bool:
+	## The higher-resolution textures: chosen once at load, kept after a fallback (a swap mid-match would hitch).
+	return (tier_arg() == "hi") or (tier_arg() == "" and level() == "phone" and hi_capable())
+
+
+static func hi_path(path: String) -> String:
+	## A texture's hi copy when the tier is hi and one is shipped, else the path itself.
+	if hi_textures() and HI_FILES.has(path) and ResourceLoader.exists(HI_FILES[path]):
+		return HI_FILES[path]
+	return path
+
+
 static func scale_3d() -> float:
 	## The 3D render scale of the current profile, 1.0 = native (no scaled path). --scale3d= wins for a test run.
 	_load()
@@ -223,7 +302,7 @@ static func scale_3d() -> float:
 	if sc == null:
 		return 1.0
 	if sc is String:                                      # "dpr": PHONE_3D_PX_PER_PT 3D pixels per CSS point
-		return clampf(PHONE_3D_PX_PER_PT / device_pixel_ratio(), SCALE_3D_MIN, 1.0)
+		return clampf((HI_3D_PX_PER_PT if hi() else PHONE_3D_PX_PER_PT) / device_pixel_ratio(), SCALE_3D_MIN, 1.0)
 	return clampf(float(sc), 0.25, 1.0)
 
 
@@ -238,7 +317,7 @@ static func play_fps() -> int:
 static func label() -> String:
 	## The OPTIONS GRAPHICS button text.
 	if mode() == "auto":
-		return "GRAPHICS: AUTO (%s)" % ("PHONE" if is_phone() else "FULL")
+		return "GRAPHICS: AUTO (%s)" % (("PHONE HI" if hi() else "PHONE") if is_phone() else "FULL")   # FOLDABLES: the hi tier shows here; LOW RES turns it off
 	return "GRAPHICS: %s" % MODE_NAMES[mode()]
 
 
@@ -383,6 +462,27 @@ func _process(dt: float) -> void:
 		Engine.max_fps = cap
 	if not idle:
 		_sample(dt)
+		_hi_check()
+
+
+func _hi_check() -> void:
+	## FOLDABLES: the hi tier's safe fallback - too slow after HI_CHECK_S s of play: the 3D back to the PHONE scale.
+	if _hi_checked or not hi() or _play_time < HI_CHECK_S or _frame_ms.size() < 60:
+		return
+	_hi_checked = true
+	var ms := _frame_ms.duplicate()
+	ms.sort()
+	var p50 := _pct(ms, 0.5)
+	if p50 <= HI_MAX_MS:
+		return
+	hi_dropped = true
+	var sc := scale_3d()
+	print("PERF hi tier dropped: median frame %.1f ms > %.1f; 3D scale -> %.2f" % [p50, HI_MAX_MS, sc])
+	if RenderScale.current != null and is_instance_valid(RenderScale.current):
+		RenderScale.current.scale = sc
+		RenderScale.current._resize()
+	elif sc < 1.0:
+		RenderScale.attach(main, sc)
 
 
 func _apply_3d(p: Dictionary) -> void:
