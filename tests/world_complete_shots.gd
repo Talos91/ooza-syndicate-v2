@@ -4,9 +4,10 @@ extends Node
 ##   <tag>-game.png        the full composition at the default camera
 ##   <tag>-zoom.png        the closest pinch zoom on the first crater
 ##   <tag>-pan-left.png / -pan-right.png   the closest zoom panned to the left / right limits (the side backdrop shows)
+##   <tag>-zoomout.png     the max zoom-out (the fitted view: pinch clamps there)
 ##   <tag>-gif-NN.png      16 frames 0.25 s apart at a mid zoom on the first crater (drone, riders, arm, steam)
 ## and prints the dressing's build log, perf with the dressing shown vs hidden (draws, primitives, frame ms), decals.
-## only=game: just the game shot (backdrop A / B comparison, before / after).
+## only=game: just the game shot (backdrop A / B comparison, before / after); only=sheet: no GIF frames.
 ##   Godot --path . --resolution 812x375 --audio-driver Dummy --position -6000,-6000 res://tests/world_complete_shots.tscn -- \
 ##       out=<dir> tag=R-01-lab --craters=2 --floor=lab5 [--lab-side=a] [only=game]
 
@@ -162,6 +163,15 @@ func _run() -> void:
 	_pan(inst, -1.0, 0.6)
 	await _frames(15)
 	await _shot(inst, "%s/%s-pan-left-60.png" % [out, tag])
+	_home(inst)                                    # the max zoom-out (pinch clamps at the fitted view)
+	inst.cam_dist = float(inst._view_fit[1]) * 1.0
+	inst._place_camera()
+	await _frames(15)
+	await _shot(inst, "%s/%s-zoomout.png" % [out, tag])
+	if str(args.get("only", "")) == "sheet":
+		print("WORLD COMPLETE SHOTS DONE ", tag)
+		get_tree().quit()
+		return
 	_zoom_onto(inst, lc.craters[0], 0.5)
 	await _frames(15)
 	for k in range(16):

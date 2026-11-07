@@ -2,6 +2,8 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo6** - 2026-11-07 (demo-world, staging/demo/): lab pass 3 (props 1.5x up to 4.5 m, district 10 m past the board, flush
+  pavement floor; dressing 7.9k tris, was 11.1k) + fog lead: the arena's fog leans to the leading seat's colour (visual only, max 35 %).
 - **0.23.27-demo5** - 2026-11-07 (demo-world, staging/demo/): world dressing (world-dressing 1fe1374): R-01 lab district past the board ends,
   side backdrop framing, lab prop kit (~11k tris, 4 draws), decals with intent, light pools; R-01 floor plan + mask baked into res:// (no Drive).
 - **0.23.27-demo4** - 2026-11-07 (demo-world, staging/demo/): foldables (ui-fold cdff7d6): the HUD scales with the screen (UiKit.hud_k),

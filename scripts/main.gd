@@ -71,6 +71,7 @@ var proto_view: ProtoRelayView       # RELAYS 3.0 PROTOTYPES: only on a map that
 var door_view: DoorView             # TWO DOORS (Rules.TWO_DOORS): a floor arrow at both doors of every platform
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var world_layer: WorldLayer                         # WORLD LAYER: floor, node tubes, splats (view only)
+var fog_lead: FogLead                              # FOG LEAD: the arena's air leans to the leading seat's colour (view only)
 var _world_probe := -1.0                           # --world-probe=T: a 100-unit fall at T, frame times printed
 var _probe_ft: Array = []
 var _probe_t0 := 0
@@ -481,6 +482,9 @@ func _start_map(path: String) -> void:
 		world_layer = WorldLayer.new()
 		add_child(world_layer)
 		world_layer.setup(self, sim, vis, mobile)
+	fog_lead = FogLead.new()                          # FOG LEAD (fog_lead.gd): after the scenery and world layer it tints
+	add_child(fog_lead)
+	fog_lead.setup(self, sim)
 	if ProtoRelayView.wanted(sim):
 		proto_view = ProtoRelayView.new()
 		add_child(proto_view)
