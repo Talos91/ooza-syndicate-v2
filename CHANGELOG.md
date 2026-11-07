@@ -2,6 +2,8 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo5** - 2026-11-07 (demo-world, staging/demo/): world dressing (world-dressing 1fe1374): R-01 lab district past the board ends,
+  side backdrop framing, lab prop kit (~11k tris, 4 draws), decals with intent, light pools; R-01 floor plan + mask baked into res:// (no Drive).
 - **0.23.27-demo4** - 2026-11-07 (demo-world, staging/demo/): foldables (ui-fold cdff7d6): the HUD scales with the screen (UiKit.hud_k),
   phone_fit fold profiles, quality tier "hi" (3D at 2.0 px/pt on big capable screens, with fallback; OozeViewport.caps() in viewport-fix.js).
 - **0.23.27-demo3** - 2026-11-07 (demo-world, staging/demo/): VAT COLUMN (Daniele 2026-11-07, rule change): a vat makes nothing while it
