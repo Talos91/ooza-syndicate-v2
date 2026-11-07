@@ -12,6 +12,10 @@ class_name MapCamera
 ## P-01..P-05, the Relays 3.0 prototype test maps (2026-10-28; never pooled): the probe's smallest tap at each map's row (sweep
 ## 41-58, measured on the rulebook stand-in, same geometry): P-01 43.7 pt, P-02 39.7 (36.5 at its size pitch 50, the tallest
 ## map, 81 m), P-03 46.8, P-04 36.7 (54 puts a badge on a platform), P-05 45.7; nothing off screen or under the HUD.
+## E-01..E-10, the experimental maps (2026-10-28, maps-exp; pooled as group E): the lowest pitch of the sweep 41-58 whose smallest
+## tap clears 44 pt with no badge off screen / on another badge / on a platform (probe 1266x585, 844 x 390 pt, pieces skipped -
+## they are never tapped): E-01 46.0 pt @50, E-02 51.4 @41, E-03 51.7 @54, E-04 46.8 @45, E-05 45.0 @54, E-06 45.0 @50, E-07 45.7 @50,
+## E-08 54.8 @54, E-09 49.5 @58 (one badge on a platform at every pitch; 46.3 @54), E-10 44.5 @45; nothing off screen or under the HUD.
 const PITCH := {
 	"T-11": 41.0,
 	"T-12": 41.0,
@@ -34,6 +38,17 @@ const PITCH := {
 	"R-10": 50.0,
 	"R-12": 50.0,
 	"R-13": 54.0,
+	# experimental maps (main, maps-exp)
+	"E-01": 50.0,
+	"E-02": 41.0,
+	"E-03": 54.0,
+	"E-04": 45.0,
+	"E-05": 54.0,
+	"E-06": 50.0,
+	"E-07": 50.0,
+	"E-08": 54.0,
+	"E-09": 58.0,
+	"E-10": 45.0,
 }
 
 

@@ -1,5 +1,15 @@
 # Next session - start here
 
+## Live state (2026-11-02)
+**LIVE 0.23.20** (main = release-0.23.20 + this docs commit) = 0.23.19 + doors-main (two doors on every BRAWL platform, in and out by the nearer one; floor-arrow readout; half-turn maps exactly even) + ui-neon (Last Stand counts kept, neon alarm signs red / yellow / grey with a pulse, 34 pt upgrade chip) + faction-solar-v3 (Solar v3 unit, Rules.FACTION_LOOK, Bloom 0.75 x 4 lanes); test_net waits for a Backwash target. Room server 0.23.20. Browser check in Chromium phone emulation only; promoted on Daniele's go 2026-11-02 (no phone check of staging before the promote).
+**LIVE 0.23.19** (main = release-0.23.19 + this docs commit) = 0.23.18 + hotfix-02319: the board stays on screen when a phone turns or goes fullscreen mid-match (RenderScale.sync() first in main._on_resized), PHONE idle 30 fps, new tests/board_sweep (63 pool maps, four setups). Room server 0.23.19. Daniele tested staging on his phone, promoted on his go 2026-11-02.
+**LIVE 0.23.18** (main = release-0.23.18 + this docs commit) = 0.23.16 + perf-ios (phone 3D at 1.5 px/pt, idle 15 fps), speed-15 (BRAWL 4.8 m/s, vat PROD x 0.85, door rate kept), the E maps (E-01..E-10 in the pool), the ultimates rework, the Very Last Stand tie-break (N-24 / N-04 back in 1v1), the UI batch (44 pt deck taps, tiered danger signs, SETUP > ADVANCED). Room server 0.23.18. Checked in Chromium phone emulation only; promoted on Daniele's go 2026-11-01.
+**LIVE 0.23.16** = 0.23.15 + Daniele's Ooze Desk answers: Forge 40, a monster kicks at most 40 defenders, tutorial SCRAP 460 + 4 x 200, ARMIES traits from the stat leans.
+0.23.15 (main = release-0.23.15 + this docs commit): the balance pass (faction stats + power cooldowns, Daniele approved), the +15 % catch-up
+for a side under half the leader's nodes, N-24 / N-04 out of 1v1 (🗺️ to move their spawns, then back in), AI Expert margin 1.2. 0.23.14 (iPhone render +
+compact menu, rotation relay fix) went live the day before. Open: an iPhone check of 0.23.14 (Daniele has none), N-04's own maps4 fix, the relay
+prototypes (0.23.15-proto on https://oozesyndicate.com/staging/proto/, branch proto-0.23.15 - never merge it into the release line as is).
+
 ## Tutorial rewrite (0.23.8 phase 1; 0.23.10 the GUIDED quick start, branch `tutorial-guided`; phases 2 and 3 to do)
 0.23.10 (§3a): a tutorial's `steps` run IN ORDER (step i = GoalDirector stage i, unlocked when i-1 is done; `chapter` groups them on the strip;
 `read: true` = a GOT IT card; `enter` = its staging; `reveal` = its reveal stage). The AI is off until CONTINUE PLAYING. On the pie inspector the hand goes

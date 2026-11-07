@@ -1,9 +1,70 @@
-# To test - ALPHA 23.15 (Daniele, on the phone and with a second player)
+# To test - ALPHA 23.27 (Daniele, on the phone and with a second player)
 
 Everything below passed the headless suites and desktop renders only. Nothing was tried on a real phone or across two
 networks. Close and reopen the home-screen app after a publish.
 
 Live build: https://oozesyndicate.com
+
+## 0.23.27 (staging: https://oozesyndicate.com/staging/)
+- [ ] PLAY VS AI and HOST ROOM open the same lobby; seat sheets set faction + AI level; ARMY > CHOOSE returns to the lobby; SAVE keeps the loadout.
+- [ ] Room chat beside the seats; host sets an open seat to AI and picks its faction.
+- [ ] In a match: GMN-2 HUD (SEND tank, skill plates, radial words), readable at phone size on every faction.
+- [ ] Drag a send out and back onto its vat = HOLD: the vat stops sending, units on the bridge walk on.
+
+## 0.23.26 (staging: https://oozesyndicate.com/staging/)
+- [ ] HOME tiles PLAY VS AI / ONLINE / CAMPAIGN; tabs HOME / ARMIES / PROFILE / GUIDE; no breadcrumbs.
+- [ ] ARMIES > SKILLS: all skill tiles the same size, stats as icons; ARMIES > CUSTOMIZE: model pictures load, EQUIP / UNLOCK work.
+
+## 0.23.25 (staging: https://oozesyndicate.com/staging/)
+- [ ] HOME PLAY starts a 1v1 vs AI in one tap; CHANGE opens the setup; CHANGE MAP works.
+- [ ] HOST ROOM / JOIN WITH CODE; the room fits one screen; seat cards show skills and READY; SIT HERE switches team.
+- [ ] Map picker 2 x 5 with ‹ › pages and mode tabs; ARMIES > SKILLS on one page; results two rows of buttons.
+- [ ] Nothing in the menus scrolls.
+
+## 0.23.24 (staging: https://oozesyndicate.com/staging/)
+- [ ] A fully charged skill's hexagon glows neon in its colour (white / violet / amber); cooling ones don't.
+- [ ] Skill icons look the same size across the three slots and every faction.
+
+## 0.23.23 (staging: https://oozesyndicate.com/staging/)
+- [ ] SEND vats and skill vessels: no dark notch / bright streak at the waterline any more.
+- [ ] CATCH-UP sits right under your own score pill.
+- [ ] Last Stand: the red sign says NEXT DROP and "8s", big enough, over the platform; the top line is short, seconds amber with no box.
+
+## 0.23.22 (staging: https://oozesyndicate.com/staging/)
+- [ ] **Neon Noir HUD** in a match on the phone, one faction at a time: top capsule + scores, SEND vats (100/75/50/25), skill hex vessels filling with charge, seconds in the ring - readable and tappable?
+- [ ] **Menus look exactly like 0.23.21** (no round-3 look, no THEME row in SETTINGS); pause / results screens too.
+
+## 0.23.21 (staging: https://oozesyndicate.com/staging/)
+- [ ] **Vat armour**: tap an upgraded vat of yours - the inspector shows "Armour x1.x"; capture one and watch it climb back ("-> x1.6 in 60 s" on a T4).
+- [ ] **Balance R1 + c2**: Demolish / Sever / Scorch / Quake slower to recharge, Spore Burst 1.5x, Core Meltdown 4 per unit; BLOOM no production lean, EMBER attack 1.10, SOLAR vats a little slower, VEX garrisons 8 % softer (was 11 %).
+- [ ] **Overdrive** (was Rewire): VEX's ultimate, 15 s, lines 2x, doors 3x, charge ~75 s - name, icon and charge line right everywhere?
+- [ ] **Rotor cooldown 14 s**: a rotation relay waits 14 s before it fires again; other relays still 5 s.
+- [ ] Mire, Anchor and Bypass are gone from the ARMIES picker and the shop.
+
+## 0.23.20 (staging: https://oozesyndicate.com/staging/)
+- [ ] **Two doors**: lines walk in by the nearer of the two doors and leave by the one nearer their bridge; the floor arrow at a door lights while a line uses it.
+- [ ] **Neon HUD in the Last Stand**: every standing node keeps its count; the next node to fall has a RED sign, the one after YELLOW, the rest GREY; a new / changed sign pulses.
+- [ ] **Upgrade chip**: a 34 pt neon hex with a double chevron when a vat can upgrade - easy to see and tap?
+- [ ] **Solar v3**: the new Solar creature on the board and in its resident tank (the egg must not poke out); Solar monsters unchanged.
+- [ ] **Bloom 0.75 x 4 lanes**: smaller Bloom bodies in four lanes - does the race read better / more varied?
+
+## 0.23.19 hotfix (live)
+- [ ] **Turn the phone mid-match** (portrait -> landscape, and back) in an online round and in a solo round: the board stays on screen, nothing hides behind the top bar.
+- [ ] **Fullscreen mid-match** (tap into fullscreen, or let the browser bars hide / show): the board refits and stays on screen.
+- [ ] **Menus** feel smoother again (PHONE back to 30 fps in menus / pause / results).
+
+## 0.23.18 (live)
+- [ ] **speed-15**: lines move and vats fill 15 % slower - does a match feel better paced or just slower?
+- [ ] **E maps**: E-01..E-10 show in 02 BATTLEFIELD (1V1 / 2V2) and play fine on the phone.
+- [ ] **UI batch**: bridges easier to tap for deck skills; Last Stand danger signs tiered (next node loud, the rest muted); SETUP > ADVANCED holds LAST STAND / ABILITIES.
+- [ ] **Ultimates**: Superbloom 2x, Relay Aegis 2.5x / +50 % / 15 s, Overdrive 15 s mass-Surge (was Rewire 12 s) - does any feel too strong (Overdrive on small maps)?
+- [ ] **N-24 / N-04** back in 1v1: does seat B now win about as often?
+- [ ] **Phone rendering** (as 0.23.17): sharp enough at 0.75, cooler in menus.
+
+## 0.23.16 (live)
+- [ ] A Forge costs 40; a monster reaching a node with more than 40 defenders kicks 40 and the node holds ("MONSTER KICKED 40 - n HOLD").
+- [ ] ARMIES / HOME: each faction's trait line reads its real stat leans (no COMING SOON).
+- [ ] Tutorials: the quick start pays 460 SCRAP, each advanced tutorial 200.
 
 ## 0.23.15 (balance pass - phone check on staging: https://oozesyndicate.com/staging/)
 - [ ] **Ember** no longer runs away with games (attack +2 %, Core Meltdown 3 kills per unit, 70 at most) - does it still feel like the hard-hitting faction?

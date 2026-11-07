@@ -27,8 +27,11 @@ const MERGED_KIT := ["Pier_", "Relay_Mount",
 		"Relay_Button_", "Relay_Gate_Switch", "Relay_Gate_Remote", "Relay_Retract_"]   # RELAY V2: buttons + still gates
 const FIXED := ["OS_Plate", "OS_Dark", "OS_Steel", "OS_Recess", "OS_Shell"]   # materials no game code swaps
 const STATIC_GROUP := -1
-const CHUNK := 128.0                    # batches split into cells of at most this size over the map's bounds
-                                        # (per-cell frustum culling and LOD; most maps are one or two cells)
+const CHUNK := 256.0                    # batches split into cells of at most this size over the map's bounds
+                                        # (per-cell frustum culling and LOD). perf-ios (2026-11-01): 128 split a 130 m
+                                        # map into 2-3 cells and every owner-coloured surface batch with it (M-39 phone,
+                                        # perf_check: 357 draw calls); at 256 every map (max 202 x 83 m) is one cell (287), and a
+                                        # phone shows the whole map anyway, so per-cell culling bought nothing there.
 
 static var current: MapBatch = null     # the live match's batcher (null: nothing is batched)
 static var disabled := false            # --no-batch (A/B measurements)
@@ -40,6 +43,7 @@ var _polled: Array = []                 # structure Pieces checked every frame
 var _dirty := {}                        # Merged batches to rebuild this frame
 var _lo := Vector2.ZERO                 # the map's plan bounds and cell size (chunk_of)
 var _cell := Vector2(CHUNK, CHUNK)
+var _cells := Vector2i.ONE              # the grid: pieces past the nodes' bounds (a deck's far end) join the edge cell
 
 
 class Batch:
@@ -147,7 +151,8 @@ static func build(main: Node3D) -> MapBatch:
 		hi = hi.max(q)
 	var ext := (hi - lo).max(Vector2.ONE)
 	b._lo = lo
-	b._cell = Vector2(ext.x / ceilf(ext.x / CHUNK), ext.y / ceilf(ext.y / CHUNK))
+	b._cells = Vector2i(int(ceilf(ext.x / CHUNK)), int(ceilf(ext.y / CHUNK)))
+	b._cell = Vector2(ext.x / b._cells.x, ext.y / b._cells.y)
 	for n in sim.nodes:
 		var entry: Dictionary = vis[n["id"]]
 		var moving := [entry.get("vat_node"), entry.get("housing"), entry.get("attachment_node")]
@@ -233,7 +238,7 @@ func _track_polled(root) -> void:
 
 
 func _chunk_of(at: Vector3) -> String:
-	return "@%d,%d" % [clampi(floori((at.x - _lo.x) / _cell.x), 0, 64), clampi(floori((at.z - _lo.y) / _cell.y), 0, 64)]
+	return "@%d,%d" % [clampi(floori((at.x - _lo.x) / _cell.x), 0, _cells.x - 1), clampi(floori((at.z - _lo.y) / _cell.y), 0, _cells.y - 1)]
 
 
 static func _fixed(mat: Material) -> bool:

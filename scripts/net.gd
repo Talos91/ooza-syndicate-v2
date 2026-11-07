@@ -170,6 +170,7 @@ var _idle_t := 0.0                                 # dedicated: seconds without 
 var _idle_warned := false
 var _room_idle := ROOM_IDLE                        # tests: --idle-close=<s> (a local relay's --host-arg)
 var _closing := false
+var ai_picks := {}                                 # ROUND 4 (UI): host setting, seat letter -> an AI seat's faction (absent = any)
 var ai_fill := ""                                  # host setting: "" = every seat needs a player, else the AI level for empty seats
 # UI (Daniele 2026-09-28): the ROOM OWNER picks the match background for everyone - "auto" (the map's own) / "rotate" (the next
 # one each round) / "0".."n" (that one). The host resolves it to one index at launch (match_info "backdrop", -1 = the map's
@@ -584,6 +585,18 @@ func _backdrop_index() -> int:
 	return -1
 
 
+func set_ai_pick(seat: String, f: String) -> void:
+	## ROUND 4 (UI): the faction an empty seat's AI plays ("random" = any, drawn at launch as before).
+	if _ask_owner("ai_pick", [seat, f]):
+		return
+	if hosting and not active and seat in SEATS and (f in FACTIONS or f == "random"):
+		if f == "random":
+			ai_picks.erase(seat)
+		else:
+			ai_picks[seat] = f
+		publish_lobby()
+
+
 func set_ai_fill(level: String) -> void:
 	if _ask_owner("ai_fill", level):
 		return
@@ -728,6 +741,7 @@ func leave(forget := true) -> void:
 	match_info = {}
 	chat_history = []
 	chat_serial = 0
+	ai_picks = {}
 	_chat_limits = {}
 	_chat_revision = -1
 	_chat_connected = false
@@ -792,6 +806,9 @@ func _owner_op(id: int, p: Dictionary) -> void:
 				toggle_abilities()
 		"ai_fill":
 			set_ai_fill(str(arg))
+		"ai_pick":                                     # ROUND 4 (UI): [seat, faction]
+			if arg is Array and (arg as Array).size() == 2:
+				set_ai_pick(str(arg[0]), str(arg[1]))
 		"backdrop":                                    # UI: the owner's BACKGROUND pick
 			set_room_backdrop(str(arg))
 		"move":
@@ -890,7 +907,7 @@ static func _clean_loadout(lo) -> Dictionary:
 	if lo is Dictionary:
 		if str(lo.get("active", "")) in Rules.ACTIVE_SKILLS:
 			out["active"] = str(lo["active"])
-		if str(lo.get("map", "")) in Rules.MAP_SKILLS:
+		if str(lo.get("map", "")) in Rules.map_pool():   # 0.23.21: archived skills (Rules.ARCHIVED_SKILLS) are dropped
 			out["map"] = str(lo["map"])
 	return out
 
@@ -1033,7 +1050,7 @@ func _reseat(teams := {}) -> void:
 func publish_lobby() -> void:
 	_broadcast("lobby", {"roster": roster, "mode": mode, "map": map_path, "siege": siege,
 			"last_stand": last_stand, "round": match_round, "ai_fill": ai_fill, "abilities": abilities, "owner": room_owner,
-			"backdrop": room_backdrop})                # UI: an older client ignores it
+			"backdrop": room_backdrop, "ai_picks": ai_picks})   # UI: an older client ignores them
 	lobby_changed.emit()
 
 
@@ -1157,7 +1174,11 @@ func launch_round(fill := "") -> void:
 			if players.has(SEATS[slot]):
 				continue
 			var free := FACTIONS.filter(func(f): return not f in players.values())
-			players[SEATS[slot]] = free[randi() % free.size()] if not free.is_empty() else FACTIONS[randi() % FACTIONS.size()]
+			var pick := str(ai_picks.get(SEATS[slot], ""))   # ROUND 4 (UI): the host's pick for this seat, else any
+			if pick in FACTIONS:
+				players[SEATS[slot]] = pick
+			else:
+				players[SEATS[slot]] = free[randi() % free.size()] if not free.is_empty() else FACTIONS[randi() % FACTIONS.size()]
 			ai[SEATS[slot]] = level
 	var info := {"round": match_round + 1, "map": map_path, "mode": mode, "seed": randi() % 100000,
 			"players": players, "roster": roster, "ai": ai, "ai_fill": ai_fill, "colours": room_colours(), "loadouts": loadouts,
@@ -1964,7 +1985,7 @@ static func predict(s: Sim, dt: float) -> void:
 		if h["state"] != "move" or h.get("blocked", false):
 			continue
 		var mult: float = Rules.platform_mult() if Sim.sample(h, h["s"])[2] else 1.0
-		var boost := s.skill_speed(h)                 # Surge / Rewire
+		var boost := s.skill_speed(h)                 # Surge / Overdrive
 		mult *= s.deck_slow(h) * boost                # enemy goo or Mire, the stronger
 		var ds: float = Rules.move_speed() * h.get("speed", 1.0) * s.stat(h["owner"], "speed") * mult * dt
 		if h["streaming"]:
@@ -2243,6 +2264,8 @@ func _guest_handle(kind: String, bytes: PackedByteArray) -> void:
 			map_path = str(data["map"])
 			last_stand = bool(data["last_stand"])
 			ai_fill = str(data.get("ai_fill", ""))
+			var ap = data.get("ai_picks", {})          # ROUND 4 (UI)
+			ai_picks = ap if ap is Dictionary else {}
 			room_backdrop = str(data.get("backdrop", "auto"))   # UI
 			abilities = bool(data.get("abilities", true))
 			connected = true

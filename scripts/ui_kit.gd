@@ -51,9 +51,10 @@ const CARD := Color("071820f0")                    # card fill
 const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Color("a1eb39"),
 		"ember": Color("ff7c19"), "solar": Color("ffce58")}
 const ORDER := ["vex", "null", "bloom", "ember", "solar"]
-const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "VIRIDIAN", "ember": "EMBER", "solar": "SOLAR"}
-const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "BLOOM", "ember": "MAW", "solar": "SHELLS"}
-const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "VIRIDIAN / BLOOM",
+## Daniele 2026-11-02: the faction is BLOOM - no VIRIDIAN anywhere; it has no second word (SUBS "")
+const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "BLOOM", "ember": "EMBER", "solar": "SOLAR"}
+const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "", "ember": "MAW", "solar": "SHELLS"}
+const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "BLOOM",
 		"ember": "EMBER / MAW", "solar": "SOLAR / SHELLS"}
 const CUT := 10                                    # the standard corner cut
 const CFG := "user://ui.cfg"
@@ -705,6 +706,41 @@ static func save_last_faction(f: String) -> bool:
 	var c := ConfigFile.new()
 	c.load(path)                                      # keep anything else saved there (none: a fresh file)
 	c.set_value("home", "faction", f)
+	return c.save(path) == OK
+
+
+# ------------------------------------------------------------------ the last setup (Alpha 24 step 3, UX): HOME's PLAY replays it
+static func last_setup() -> Dictionary:
+	## The setup DEPLOY used last: map, mode, ai, colour, rivals (seat -> pick). Empty until a first DEPLOY (or no storage).
+	var c := ConfigFile.new()
+	if c.load(path) != OK or not c.has_section("setup"):
+		return {}
+	var d := {}
+	for k in c.get_section_keys("setup"):
+		d[k] = c.get_value("setup", k)
+	return d
+
+
+static func save_last_setup(d: Dictionary) -> bool:
+	var c := ConfigFile.new()
+	c.load(path)
+	for k in d:
+		c.set_value("setup", k, d[k])
+	return c.save(path) == OK
+
+
+static func map_list(key: String) -> Array:
+	## MAP PICKER's lists: "recent" (newest first, 8) and "favourites" (map paths).
+	var c := ConfigFile.new()
+	if c.load(path) != OK:
+		return []
+	return Array(c.get_value("maps", key, []))
+
+
+static func save_map_list(key: String, list: Array) -> bool:
+	var c := ConfigFile.new()
+	c.load(path)
+	c.set_value("maps", key, list)
 	return c.save(path) == OK
 
 

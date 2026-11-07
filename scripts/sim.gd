@@ -170,6 +170,10 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			# tilt.exits - 01 Rules/relays-proto-schema.md) and how long its current motion lasts (RELAY_MOVE otherwise)
 			"proto": (n.get(relay) as Dictionary).duplicate(true) if Rules.is_proto(relay) and n.get(relay) is Dictionary else {},
 			"relay_move": Rules.RELAY_MOVE,
+			"armour": 1.0,          # VAT ARMOUR: garrison damage divisor now (Rules.ARMOUR_TIER, regains after a capture)
+			"armour_cap": 1.0,      # ... the value it climbs to (the tier's on an owned vat, else 1.0)
+			"armour_from": 1.0,     # ... its value at armour_t0 (match time) - armour is recomputed from these, never summed
+			"armour_t0": 0.0,
 		})
 		if relay == "ferry":                              # the ferry node takes no structure in v1
 			nodes[-1]["buildable"] = []
@@ -183,6 +187,10 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			nodes[-1]["structure"] = "machinegoon"        # round R (Daniele 2026-11-06): a map-placed neutral machinegoon - it
 														# shoots every seat's lines; whoever takes the platform keeps it
 		_sync_legacy(nodes[-1])
+		var cap0 := armour_cap(nodes[-1])              # VAT ARMOUR: homes start fully armoured
+		nodes[-1]["armour"] = cap0
+		nodes[-1]["armour_from"] = cap0
+		nodes[-1]["armour_cap"] = cap0
 	var geo: Array = map["layout"]["edges"] if v3 else []
 	for ek in range(map["edges"].size()):
 		var e: Dictionary = map["edges"][ek]
@@ -324,6 +332,18 @@ func send(from_id: int, to_id: int, fraction: float) -> Dictionary:
 	events.append({"t": time, "type": "send", "seat": h["owner"], "from": from_id, "to": to_id, "units": count,
 			"target_owner": nodes[to_id]["owner"]})
 	return h
+
+
+func hold(node_id: int) -> bool:
+	## HOLD (Daniele, 2026-11-03): an order to the origin itself. Like any redirect, only the units still in the vat stop
+	## (the door stops emitting); whatever is already out on the bridge is committed and walks on. False: nothing queued.
+	if over or node_id < 0 or node_id >= nodes.size():
+		return false
+	var src: Dictionary = nodes[node_id]
+	if src["owner"] == "" or src["streaming"].is_empty():
+		return false
+	_end_streaming(src, "held")
+	return true
 
 
 # ------------------------------------------------------------------ structures 2.1 (0.18.10)
@@ -990,7 +1010,7 @@ func _edge_open(edge_index: int) -> bool:
 			return held
 		if is_bypassed(ctrl):                        # Bypass: the relay holds both states
 			return true
-		# a neutral relay sits at index 0 unless Relay Hack or Rewire fired it (0.18.7: it used to ignore
+		# a neutral relay sits at index 0 unless Relay Hack or Overdrive fired it (0.18.7: it used to ignore
 		# the index while unowned, which was the same thing - nobody could fire it)
 		index = nodes[ctrl]["relay_index"]
 	return _edge_open_at(edge_index, index)
@@ -1006,7 +1026,7 @@ func fire_relay(node_id: int) -> bool:
 
 
 func _fire_relay_by(n: Dictionary, seat: String) -> bool:
-	## Starts a relay's warning on behalf of `seat` (its owner, or a Relay Hack / Rewire caster).
+	## Starts a relay's warning on behalf of `seat` (its owner, or a Relay Hack / Overdrive caster).
 	if n["relay"] == "" or n["relay_cd"] > 0.0 or n["relay_phase"] != "" or is_relay_locked(n["id"]):
 		return false
 	if relay_states(n).is_empty() or relay_fixed(n["id"]):   # RELAYS 3.0: a ferry without a hold / a conveyor without a
@@ -1787,6 +1807,7 @@ func step(dt: float) -> void:
 			n["units"] = minf(float(n.get("regen_cap", Rules.NEUTRAL_UNITS[n["tier"]])), n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)
 	_step_relays(dt)
 	_step_structures(dt)
+	_step_armour()
 	_step_skills(dt)
 	for n in nodes:                                   # the door emits the current order into its line
 		if n["streaming"].is_empty():
@@ -1813,7 +1834,7 @@ func step(dt: float) -> void:
 			var here := sample(h, h["s"])
 			var fast_here: bool = here[2]
 			var mult: float = Rules.platform_mult() if fast_here else 1.0
-			var boost := skill_speed(h)                   # Surge / Rewire
+			var boost := skill_speed(h)                   # Surge / Overdrive
 			mult *= deck_slow(h) * boost                  # enemy goo (home advantage) or Mire, the stronger
 			if not _conv_edges.is_empty():
 				mult *= conveyor_mult(h)                  # RELAYS 3.0: with / against a conveyor's flow
@@ -2687,6 +2708,7 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 	var second_hub := _second_hub(n, seat)             # (asked before the node is the capturer's)
 	n["owner"] = seat
 	n["units"] = garrison
+	_reset_armour(n)                                   # VAT ARMOUR: a captured vat (T4 included) starts again at 1.0
 	n["siege"] = {}
 	n["siege_dir"] = {}
 	n["allies"] = {}                                   # stored allied troops fell with the garrison
@@ -2948,17 +2970,28 @@ func _islands(gone: Dictionary) -> Array:
 		groups.append(g)
 	if groups.size() <= 1:
 		return []
+	# 2026-10-28 PROPOSAL (🗺️ maps-exp worker, needs Daniele's / ⚡'s yes): an exact tie between two parts (the same
+	# last-ring count and size - N-24 / N-04's outward rims split into two equal halves in the Very Last Stand) used to
+	# keep the part found first, i.e. the one holding the lowest node id, which is seat A's side on every map (nodes are
+	# written top-left first): seat A won 92 % / 78 % of AI matches. The tie now goes against the corner the cycle is
+	# aiming at (the ring drops aim at the same corner), so over seeds it is a coin flip, like the first corner itself.
+	var corner: int = last_stand_corners[_ls_corner_k % last_stand_corners.size()] if not last_stand_corners.is_empty() else -1
 	var best := 0
 	var best_score := -1
+	var best_has_corner := false
 	for gi in range(groups.size()):
 		var keep_n := 0
+		var has_corner := false
 		for id in groups[gi]:
 			if last_stand_keep.has(id):
 				keep_n += 1
+			if id == corner:
+				has_corner = true
 		var score: int = keep_n * 1000 + (groups[gi] as Array).size()
-		if score > best_score:
+		if score > best_score or (score == best_score and best_has_corner and not has_corner):
 			best_score = score
 			best = gi
+			best_has_corner = has_corner
 	var out := []
 	for gi in range(groups.size()):
 		if gi != best:
@@ -3311,6 +3344,8 @@ func _vls_queue_next() -> void:
 	last_stand_queue = batch
 	last_stand_warn_node = batch[0]
 	last_stand_warn_t = very_last_stand_gap
+	if batch.size() > 1 and not last_stand_corners.is_empty():   # 2026-10-28 PROPOSAL: a stranding drop moves the corner on
+		_ls_corner_k = (_ls_corner_k + 1) % last_stand_corners.size()
 	for bid in batch:
 		fx_events.append({"type": "collapse_warning", "node": bid})
 	events.append({"t": time, "type": "collapse_warning", "nodes": batch.duplicate(), "very_last_stand": true})
@@ -3970,7 +4005,8 @@ func _monster_gone(m: Dictionary) -> void:
 
 func _monster_end(m: Dictionary) -> void:
 	## The end node: an enemy's or a neutral one is taken empty - its garrison (and any stored allied troops)
-	## kicked off, conquest's tier rule applied (a T4 keeps its tier); a friendly one (own or an ally's) loses
+	## kicked off, conquest's tier rule applied (a T4 keeps its tier) - unless it holds more than Rules.MONSTER_TAKE_MAX:
+	## then that many are kicked (each group its share) and the node keeps its owner ("held"); a friendly one (own or an ally's) loses
 	## a tier instead (min 1, a T4 excepted) and keeps its troops. Then the monster is gone.
 	var n: Dictionary = nodes[m["target"]]
 	if collapsed.get(n["id"], false):
@@ -3978,6 +4014,7 @@ func _monster_end(m: Dictionary) -> void:
 		return
 	var seat: String = m["seat"]
 	var friendly: bool = n["owner"] != "" and allied(n["owner"], seat)
+	var held := false                                  # more than Rules.MONSTER_TAKE_MAX defenders: kicked, not taken
 	if friendly:
 		if n["structure"] in ["vat", "machinegoon"] and n["tier"] < 4:
 			n["tier"] = maxi(1, n["tier"] - 1)
@@ -3988,6 +4025,19 @@ func _monster_end(m: Dictionary) -> void:
 			kicked[k] = kicked.get(k, 0.0) + float(n["allies"][k])
 		for k in n["siege"]:
 			kicked[k] = kicked.get(k, 0.0) + float(n["siege"][k])
+		var total := 0.0
+		for k in kicked:
+			total += maxf(float(kicked[k]), 0.0)
+		held = total > Rules.MONSTER_TAKE_MAX + 0.0001     # Rules.MONSTER_TAKE_MAX: more defenders than it can kick - the node holds
+		if held:
+			var f := Rules.MONSTER_TAKE_MAX / total        # every defender group loses its share of the 40
+			n["units"] = float(n["units"]) * (1.0 - f)
+			for k in n["allies"]:
+				n["allies"][k] = float(n["allies"][k]) * (1.0 - f)
+			for k in n["siege"]:
+				n["siege"][k] = float(n["siege"][k]) * (1.0 - f)
+			for k in kicked:
+				kicked[k] = float(kicked[k]) * f
 		for k in kicked:
 			if kicked[k] <= 0.0001:
 				continue
@@ -3996,11 +4046,13 @@ func _monster_end(m: Dictionary) -> void:
 				events.append({"t": time, "type": "monster_kick", "id": m["id"], "seat": seat, "seat_hit": k, "units": kicked[k]})
 			fx_events.append({"type": "monster_kick", "id": m["id"], "seat": seat, "seat_hit": k, "units": kicked[k],
 					"shown": Rules.shown(kicked[k]), "pos": n["pos"]})
-		_capture(n, seat, 0.0)
-		events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old, "monster": true})
-		captured.emit(n["id"], seat, old)
-	fx_events.append({"type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly})
-	events.append({"t": time, "type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly})
+		if not held:
+			_capture(n, seat, 0.0)
+			events.append({"t": time, "type": "capture", "node": n["id"], "seat": seat, "from": old, "monster": true})
+			captured.emit(n["id"], seat, old)
+	fx_events.append({"type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly, "held": held,
+			"left": Rules.shown(garrison_total(n)) if held else 0})
+	events.append({"t": time, "type": "monster_take", "id": m["id"], "seat": seat, "node": n["id"], "friendly": friendly, "held": held})
 	m["state"] = "done"
 	m["t"] = 0.0
 	_monster_gone(m)
@@ -4018,7 +4070,7 @@ func _monster_end(m: Dictionary) -> void:
 #   skill_id(seat, slot) -> String        slot: "active" | "map" | "ultimate"; "" if none
 #   cooldown(seat, slot) -> float         seconds left; ultimate: seconds of charge left (0 = ready)
 #   charge(seat) -> float                 ultimate charge 0..1 (1 = ready)
-#   rewire_left(seat) -> int              Rewire is running: relay fires left (then the ultimate slot fires relays)
+#   overdrive_left(seat) -> int              Overdrive is running: relay fires left (then the ultimate slot fires relays)
 #   cast_check(seat, slot, target) -> String   "" = castable, else a short reason for a toast
 #   can_cast(seat, slot, target) -> bool
 #   cast(seat, slot, target) -> bool      validates (cast_check), applies, starts the cooldown / spends the charge
@@ -4033,7 +4085,7 @@ func _monster_end(m: Dictionary) -> void:
 #   own_line: horde id  |  own_vat, own_node: node id  |  deck, fixed_deck: edge index  |  relay: node id
 #   enemy_relay: relay node id (fire) or [relay node id, "jam"] / [id, "fire"]
 #   vat_to_node: [source node id, destination node id] or [src, dst, fraction 0..1] (default SKILLS.ghost_line.fraction)
-#   none: null (anything). Rewire running: the ultimate slot takes a relay node id (any relay, once each).
+#   none: null (anything). Overdrive running: the ultimate slot takes a relay node id (any relay, once each).
 # STATE (all in snapshots)
 #   loadouts[seat] = {"active", "map", "ultimate"}; skill_cd[seat] = {"active": s, "map": s};
 #   ult_charge[seat] 0..1; ult_since[seat] s; demolished[edge] = s until it rebuilds;
@@ -4041,7 +4093,7 @@ func _monster_end(m: Dictionary) -> void:
 #       "t": s left, "dur": s total, ...extras}]. Extras: surge "mult" (speed), "door" (door rate, 0.19.2 - door_mult);
 #       scorch "left" (sim units it may still kill), "kills";
 #       demolish "phase" "warning" (3 s) / "down" (20 s); anchor and Aegis decks "open" (the frozen state);
-#       relay_hack "mode" "fire" / "jam"; rewire "fires" left, "fired" [relay ids]; superbloom "left" (extra
+#       relay_hack "mode" "fire" / "jam"; overdrive "fires" left, "fired" [relay ids]; superbloom "left" (extra
 #       sim units still allowed; -1 = uncapped); relay_aegis "center" (the node cast on); an Echo Split jam
 #       is {"id": "echo_split", "on": "node"}.
 #   Decoys (Ghost Line, echoes) are ordinary hordes with h["decoy"] = true (echoes also "echo"); they stream,
@@ -4053,7 +4105,7 @@ func _monster_end(m: Dictionary) -> void:
 # FX EVENTS (sim.fx_events; a key "private": seat = only that seat may see it - Net forwards it to that seat
 # only, views must skip it unless it is theirs)
 #   {"type": "skill", "id", "seat", "slot", "target", "pos": Vector3, "affects": [seats hit]}   every cast
-#       (Ghost Line's is private and carries "hid"; a Rewire relay fire has "fire": relay id)
+#       (Ghost Line's is private and carries "hid"; a Overdrive relay fire has "fire": relay id)
 #   {"type": "ghosts", "seat", "hids": [...], "private": seat}   Echo Split: which new lines are echoes
 #   {"type": "skill_end", "id", "seat", "on", "target"}          an effect ran out
 #   {"type": "demolish", "edge", "seat"} the deck goes | {"type": "deck_rebuilt", "edge"} |
@@ -4111,7 +4163,8 @@ func cooldown(seat: String, slot: String) -> float:
 		var c := charge(seat)
 		if c >= 1.0:
 			return 0.0
-		return maxf((1.0 - c) * Rules.ULT_CHARGE_TIME, Rules.ULT_MIN_TIME - float(ult_since.get(seat, 0.0)))
+		var u := skill_id(seat, "ultimate")            # 0.23.21: each ultimate's own charge (Overdrive 75 / 60 s)
+		return maxf((1.0 - c) * Rules.ult_charge_time(u), Rules.ult_min_time(u) - float(ult_since.get(seat, 0.0)))
 	return float(skill_cd.get(seat, {}).get(slot, 0.0))
 
 
@@ -4119,9 +4172,9 @@ func charge(seat: String) -> float:
 	return float(ult_charge.get(seat, 0.0))
 
 
-func rewire_left(seat: String) -> int:
+func overdrive_left(seat: String) -> int:
 	for e in _fx_seat.get(seat, []):
-		if e["id"] == "rewire":
+		if e["id"] == "overdrive":
 			return int(e["fires"])
 	return 0
 
@@ -4221,10 +4274,43 @@ func is_disrupted(node_id: int) -> bool:
 
 func garrison_div(n: Dictionary) -> float:
 	## The garrison takes this many times less damage: Fortify / Relay Aegis (the strongest applies) x the
-	## owner's forge defence half (0.18.10, Rules.FORGE_DEFENCE while it holds a completed forge).
+	## owner's forge defence half (0.18.10, Rules.FORGE_DEFENCE while it holds a completed forge) x the vat's
+	## armour (2026-11-03, Rules.ARMOUR_TIER).
 	if n["owner"] == "":
 		return 1.0
-	return skill_div(n) * forge_defence(n["owner"])
+	return skill_div(n) * forge_defence(n["owner"]) * float(n.get("armour", 1.0))
+
+
+func armour_cap(n: Dictionary) -> float:
+	## VAT ARMOUR: what this node's armour climbs to - an owned vat's tier value, 1.0 for anything else.
+	if n["owner"] == "" or not has_vat(n):
+		return 1.0
+	return float(Rules.ARMOUR_TIER.get(int(n["tier"]), 1.0))
+
+
+func armour_full_in(n: Dictionary) -> float:
+	## VAT ARMOUR: seconds until the armour reaches its cap (0 when it is there).
+	return maxf(0.0, (float(n["armour_cap"]) - float(n["armour"])) / Rules.ARMOUR_REGAIN_PER_S)
+
+
+func _reset_armour(n: Dictionary) -> void:
+	n["armour"] = 1.0
+	n["armour_from"] = 1.0
+	n["armour_t0"] = time
+	n["armour_cap"] = armour_cap(n)
+
+
+func _step_armour() -> void:
+	## VAT ARMOUR: a closed form of match time (no per-step sum, so no drift whatever the step size): from armour_from at
+	## armour_t0 up at ARMOUR_REGAIN_PER_S to the cap. A cap change (upgrade, downgrade, swap, owner) re-anchors it at
+	## min(armour, new cap), so an upgraded vat climbs to its new tier too.
+	for n in nodes:
+		var cap := armour_cap(n)
+		if cap != float(n["armour_cap"]):
+			n["armour_from"] = minf(float(n["armour"]), cap)
+			n["armour_t0"] = time
+			n["armour_cap"] = cap
+		n["armour"] = minf(cap, float(n["armour_from"]) + Rules.ARMOUR_REGAIN_PER_S * (time - float(n["armour_t0"])))
 
 
 func skill_div(n: Dictionary) -> float:
@@ -4257,7 +4343,12 @@ func _prod_info(n: Dictionary) -> Array:
 			m = maxf(m, float(e["prod"]))
 	var bloom = null
 	for e in _fx_seat.get(n["owner"], []):
-		if e["id"] == "superbloom" and float(e["left"]) != 0.0 and float(e["mult"]) > m:
+		if e["id"] != "superbloom" or float(e["left"]) == 0.0:
+			continue
+		if e.get("stack", false):                      # ULTIMATES REWORK: on top of Spore Burst / Relay Aegis
+			m *= float(e["mult"])
+			bloom = e
+		elif float(e["mult"]) > m:
 			m = float(e["mult"])
 			bloom = e
 	return [m, bloom]
@@ -4279,7 +4370,7 @@ func _produce(n: Dictionary, dt: float) -> void:
 
 
 func skill_speed(h: Dictionary) -> float:
-	## Surge / Rewire speed multiplier (they do not stack).
+	## Surge / Overdrive speed multiplier (they do not stack).
 	var m := 1.0
 	if not _fx_horde.is_empty():
 		for e in _fx_horde.get(h["id"], []):
@@ -4287,7 +4378,7 @@ func skill_speed(h: Dictionary) -> float:
 				m = maxf(m, float(e["mult"]))
 	if not _fx_seat.is_empty():
 		for e in _fx_seat.get(h["owner"], []):
-			if e["id"] == "rewire":
+			if e["id"] == "overdrive":
 				m = maxf(m, float(e["mult"]))
 	return m
 
@@ -4300,10 +4391,13 @@ func door_mult(h: Dictionary) -> float:
 	var m := 1.0
 	if not _conv_edges.is_empty():                     # RELAYS 3.0 round 2: a belt pulls a line out of its vat faster
 		m = maxf(m, conveyor_mult(h))
-	if _fx_horde.is_empty():
+	if _fx_horde.is_empty() and _fx_seat.is_empty():   # demo-world merge: Overdrive is a SEAT effect (main 0.23.21)
 		return m
 	for e in _fx_horde.get(h["id"], []):
 		if e["id"] == "surge":
+			m = maxf(m, float(e.get("door", 1.0)))
+	for e in _fx_seat.get(h["owner"], []):             # ULTIMATES REWORK: Overdrive doubles every own line's doors too
+		if e["id"] == "overdrive":
 			m = maxf(m, float(e.get("door", 1.0)))
 	return m
 
@@ -4373,9 +4467,10 @@ func _step_charge(dt: float) -> void:
 		if eliminated.has(seat):
 			continue
 		ult_since[seat] = float(ult_since[seat]) + dt
-		var gain: float = dt / Rules.ULT_CHARGE_TIME \
-				+ Rules.shown_f(_kill_credit.get(seat, 0.0)) * Rules.ULT_KILL_SECONDS / Rules.ULT_CHARGE_TIME
-		ult_charge[seat] = minf(minf(1.0, float(ult_charge[seat]) + gain), float(ult_since[seat]) / Rules.ULT_MIN_TIME)
+		var u := skill_id(seat, "ultimate")            # 0.23.21: each ultimate's own charge (Overdrive 75 / 60 s)
+		var gain: float = dt / Rules.ult_charge_time(u) \
+				+ Rules.shown_f(_kill_credit.get(seat, 0.0)) * Rules.ULT_KILL_SECONDS / Rules.ult_charge_time(u)
+		ult_charge[seat] = minf(minf(1.0, float(ult_charge[seat]) + gain), float(ult_since[seat]) / Rules.ult_min_time(u))
 	_kill_credit = {}
 
 
@@ -4398,8 +4493,8 @@ func cast_check(seat: String, slot: String, target = null) -> String:
 		return "No skill in that slot"
 	var sk: Dictionary = Rules.SKILLS[id]
 	if slot == "ultimate":
-		if id == "rewire" and rewire_left(seat) > 0:
-			return _check_rewire_fire(seat, target)
+		if id == "overdrive" and overdrive_left(seat) > 0:
+			return _check_overdrive_fire(seat, target)
 		if charge(seat) < 1.0:
 			return "%s charging - %d %%" % [sk["name"], int(charge(seat) * 100.0)]
 	elif cooldown(seat, slot) > 0.0:
@@ -4548,13 +4643,13 @@ func _ghost_fraction(target) -> float:
 	return float(Rules.SKILLS["ghost_line"]["fraction"])
 
 
-func _check_rewire_fire(seat: String, target) -> String:
+func _check_overdrive_fire(seat: String, target) -> String:
 	var i := _as_int(target)
 	if not _node_ok(i) or nodes[i]["relay"] == "" or relay_states(nodes[i]).is_empty():
-		return "Rewire: pick a relay to fire"
+		return "Overdrive: pick a relay to fire"
 	for e in _fx_seat.get(seat, []):
-		if e["id"] == "rewire" and i in e["fired"]:
-			return "Rewire already fired that relay"
+		if e["id"] == "overdrive" and i in e["fired"]:
+			return "Overdrive already fired that relay"
 	if is_relay_locked(i):
 		return "That relay is locked"
 	if nodes[i]["relay_phase"] != "":
@@ -4572,10 +4667,10 @@ func cast(seat: String, slot: String, target = null) -> bool:
 	var id := skill_id(seat, slot)
 	var sk: Dictionary = Rules.SKILLS[id]
 	var ev := {"type": "skill", "id": id, "seat": seat, "slot": slot, "target": target}
-	if slot == "ultimate" and id == "rewire" and rewire_left(seat) > 0:
+	if slot == "ultimate" and id == "overdrive" and overdrive_left(seat) > 0:
 		var r := _as_int(target)
 		for e in _fx_seat.get(seat, []):
-			if e["id"] == "rewire":
+			if e["id"] == "overdrive":
 				e["fires"] = int(e["fires"]) - 1
 				(e["fired"] as Array).append(r)
 		_fire_relay_by(nodes[r], seat)
@@ -4645,12 +4740,12 @@ func cast(seat: String, slot: String, target = null) -> bool:
 			ev["affects"] = _hostile_list(seat, factions.keys())
 			ev["private"] = seat                         # POWERS (0.22.2): nobody else may learn the new lines are echoes
 			fx_events.append({"type": "ghosts", "seat": seat, "hids": hids, "private": seat})
-		"rewire":
-			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "fires": int(sk["fires"]), "fired": []})
+		"overdrive":
+			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "door": sk.get("door", 1.0), "fires": int(sk["fires"]), "fired": []})
 			ev["affects"] = _hostile_list(seat, factions.keys())
 		"superbloom":
-			var left: float = float(sk["cap_shown"]) * Rules.SCALE if Rules.SUPERBLOOM_MODE == "cap" else -1.0
-			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "left": left})
+			var left: float = float(sk["cap_shown"]) * Rules.SCALE if Rules.SUPERBLOOM_MODE == "cap" and float(sk["cap_shown"]) > 0.0 else -1.0
+			_add_effect(id, seat, "seat", seat, sk["dur"], {"mult": sk["mult"], "left": left, "stack": sk.get("stack", false)})
 		"core_meltdown":                               # POWERS (0.22.2): armed now, goes off on arrival (_step_armed)
 			var hm := _horde(_as_int(target))
 			var goal: Dictionary = nodes[line_goal(hm)]
@@ -4685,7 +4780,7 @@ func targets_for(seat: String, slot: String) -> Array:
 	if not Rules.SKILLS.has(id):
 		return []
 	var kind: String = Rules.SKILLS[id]["target"]
-	if slot == "ultimate" and id == "rewire" and rewire_left(seat) > 0:
+	if slot == "ultimate" and id == "overdrive" and overdrive_left(seat) > 0:
 		kind = "relay"
 	var cands := []
 	match kind:
@@ -4913,10 +5008,16 @@ func _aegis(seat: String, id: int) -> void:
 	## decks between them are anchored and the relays among them locked, for `dur` seconds.
 	var sk: Dictionary = Rules.SKILLS["relay_aegis"]
 	var group := [id]
-	for link in adj[id]:
-		var nb: int = link[0]
-		if nodes[nb]["owner"] == seat and not collapsed.get(nb, false) and is_edge_open(link[1]) and not nb in group:
-			group.append(nb)
+	var ring := [id]
+	for _r in range(int(sk.get("rings", 1))):          # ULTIMATES REWORK: "rings" bridges out over open decks
+		var next := []
+		for c in ring:
+			for link in adj[c]:
+				var nb: int = link[0]
+				if nodes[nb]["owner"] == seat and not collapsed.get(nb, false) and is_edge_open(link[1]) and not nb in group:
+					group.append(nb)
+					next.append(nb)
+		ring = next
 	for g in group:
 		_drop_effects("node", g, "relay_aegis")
 		_add_effect("relay_aegis", seat, "node", g, sk["dur"], {"div": sk["div"], "prod": sk["prod"], "center": id})

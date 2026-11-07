@@ -158,7 +158,8 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	floor_kind = _floor_kind_for(str(_main.get("map_path")) if _main.get("map_path") != null else "")
 	var args := OS.get_cmdline_user_args()
 	floor_pic = "--floor=labpic" in args
-	if floor_pic or "--floor=lab5" in args:
+	var demo_default: bool = Rules.demo and not Array(args).any(func(a): return str(a).begins_with("--floor"))   # DEMO BUILD: lab5 floor by default (Daniele, world pass 2)
+	if floor_pic or "--floor=lab5" in args or demo_default:
 		floor_kind = "lab"
 	floor_lab5 = floor_kind == "lab" and not floor_pic and not "--floor-v1" in args
 	if "--floor-clear" in args:

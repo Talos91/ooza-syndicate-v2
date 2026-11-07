@@ -277,7 +277,7 @@ func _scan_events() -> void:
 					kicks += float(ev.get("units", 0.0))
 					moved = true
 			"monster_take":
-				if who == seat and not bool(ev.get("friendly", false)):
+				if who == seat and not bool(ev.get("friendly", false)) and not bool(ev.get("held", false)):
 					monster_took = true
 					moved = true
 			"capture", "handover":

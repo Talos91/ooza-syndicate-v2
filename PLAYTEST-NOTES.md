@@ -1,5 +1,21 @@
 # Playtest notes
 
+## 2026-11-02 - Daniele's items answered in 0.23.20 (live)
+- "upgrade badges not appearing, unit count HUD disappearing, some of the alert signs disappear" (0.23.18) -> ui-neon: counts always shown in the Last Stand, neon alarm signs by drop order, 34 pt upgrade chip (tests/hud_marks_check).
+- Two doors "a success, promote it to the main game" (proto3 / proto4) -> doors-main; Solar v3 kept (Desk review-solar-v3) + Bloom 0.75 x 4 lanes (his pick).
+
+## 2026-11-02 - Daniele's item answered in 0.23.19 (live hotfix)
+- "the board is gone" online on N-28 / E-07 (0.23.18, after the phone turned / went fullscreen mid-match) -> the camera refits after the scaled 3D view takes the new size; PHONE menus back to 30 fps; tests/board_sweep. Daniele tested staging on his phone before the promote.
+
+## 2026-11-01 - Daniele's items answered in 0.23.18 (live)
+- "bridges are sometimes hard to click" -> deck tap band >= 44 pt; desktop shots soft -> perf-ios phone scale 0.75; 15 % slower trial (speed-15); Desk answers: ultimates rework, Very Last Stand tie-break, E maps in the pool.
+
+## 2026-10-27 / 28 - Daniele's items answered in 0.23.14 + 0.23.15 (live)
+- "on IOS it shows no background and looks broken" -> 0.23.14: the board draws on the sky's canvas on iOS, canvas capped 2x, compact menu for Safari's
+  short landscape (checked in WebKit at 568x320 .. 932x430, not on a real iPhone).
+- "on rotation the animation always breaks" -> 0.23.14: the swing follows the relay's state online (relay_rot_probe 0 desyncs).
+- Balance (his yes to the measured table) -> 0.23.15: faction stats, power cooldowns, the +15 % catch-up, N-24 / N-04 out of 1v1, Expert retuned.
+
 ## 2026-09-25 - Daniele, first Two Piers demo (to do next)
 
 1. **Fight losses must show on the blob.** When hordes fight, the blob shrinks in step with the

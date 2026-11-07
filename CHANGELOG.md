@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## Demo line (staging/demo only, never main)
+
+- **0.23.27-demo2** - 2026-11-07 (demo-world, staging/demo/): Daniele's demo fixes from world pass 2 (world-entrance 3b17404): lab biome
+  R5 floor (lab5) + decals + side backdrop by default, true-3D falls splat where they hit, GPU Locals queue; craters layout 2 by default.
+  Still R-01 STRAIT only, no URL flags.
+- **0.23.27-demo1** - 2026-11-07 (demo-world, staging/demo/): one playable map, R-01 STRAIT, with the new world (lab floor
+  picture, containment-ring craters at the sides, Locals march into four-door tube entrances; world-entrance 3b43f94) and the new
+  interface (held release-0.23.27 30d264c = main 0.23.26 + ui-menus 07fc8c7 + ui-node def2f17, all 80 GMN-2 HUD pieces). Proto
+  rules of world-entrance's base (proto19: cannon launcher) plus main's 0.23.21-0.23.26 rules. Debug panel on (offline).
+
 ## Proto line (staging/proto only, never main)
 
 - **0.23.15-proto19** - 2026-11-06 (proto-r, staging/proto/): The launcher is the old cannon: it stands on the node's building slot
@@ -52,6 +62,220 @@
   rooms are unranked browser hosting.
 
 ## 0.23.15 "Alpha 23" - 2026-10-27 (staging: balance pass, catch-up)
+## 0.23.27 "Alpha 24 step 3c + step 4" - 2026-11-06 (STAGING only; menus round 4 + node UI / GMN-2 HUD + HOLD, release rel-02327)
+
+Two approved branches together: ui-menus 07fc8c7 (menus round 4 from Daniele's 0.23.26 staging review) and ui-node def2f17
+(in-game node UI, the full GMN-2 glass / metal / neon HUD art, and the send-order gesture with HOLD).
+- **Step 3c - one lobby for PLAY VS AI and online rooms**: map | seats the same size; MODE / MAP / BACKGROUND and ARMY / COLOUR / RULES
+  as tall buttons; foot = status + DEPLOY / READY. vs AI: seat chips (you + AI), a seat sheet per AI seat = faction + AI level.
+  Room: seats on one half, room chat on the other (code, SHARE, latest lines, TYPE A MESSAGE); the host sets an open seat to PLAYER or
+  AI, and an AI seat's faction (new Net.ai_picks, sent in the lobby message; older clients ignore it).
+- **ARMY** = the faction page in both modes; CHOOSE sends the pick and returns to the lobby; ARMIES opened from a lobby shows
+  SAVE · BACK TO LOBBY (loadout saved). Settings pager docks beside DONE. Rows tighter so words fit small phones.
+- **Step 4 - node UI + GMN-2 HUD** (all 80 pieces from the art director's locked round-07 geometry): SEND as one tank (tap / slide picks
+  25-100 %), skill plates with the name in the plate strip, radial ring with words along each slice (short names GOON / HUB), ACTIVE ring
+  and goo icy cyan, selection hex, tier chips, armour shields, capture burst, relay ring, target reticle, goo-stream send arrow.
+- **Send gesture**: cone snap to the target, live ring, release anywhere; dragged out and back onto the origin = **HOLD** (units still
+  queued in the vat stop; units already on the bridge walk on). Numbers in Rules.SEND_*; failed sends logged locally.
+- Tools: tools/board_cut.py and tools/board_geo_diff.py (geometry first, style second).
+- Online: VERSION_TAG stays ooze20-net-8, server/ unchanged; the room server stays 0.23.21, so staging rooms fall back to browser
+  hosting (unranked) until a 🖥️ deploy of 0.23.27.
+
+## 0.23.26 "Alpha 24 step 3b" - 2026-11-05 (STAGING only; menus round 3, Daniele approved: "for now i think we are ready to push to staging", release rel-02326)
+
+Menus round 3 on top of 0.23.25's flows (ui-menus 1646755). Taps and screens only; the art pass comes later.
+- **HOME has no PLAY menu**: three tiles PLAY VS AI | ONLINE | CAMPAIGN; CHALLENGES and TRAINING top right (TRAINING hides once all
+  5 lessons are done; it stays on GUIDE).
+- **Tabs HOME / ARMIES / PROFILE / GUIDE.** No breadcrumbs on any page; no "YOU" on your ARMIES faction tile (the highlight says it).
+- **ARMIES splits into SKILLS and CUSTOMIZE.** SKILLS: ultimate strip = name + "~N s CHARGE"; all 14 skill tiles at one icon size and one
+  font; the identity panel shows kicker, name, trait and the 5 stats as drawn icons (speed, health, attack, production, garrison).
+- **CUSTOMIZE**: a rail of model pictures by category | a half-width stage (name, turning model, tier chips) | every look as a model picture
+  (4 x 2) with its line and EQUIP / UNLOCK. Pictures are rendered once and cached (new scripts/look_thumbs.gd) on a slate-grey well.
+- **Rules.ARCHIVED_FAMILIES** (empty for now): a family listed there leaves CUSTOMIZE; an archived monster also hides the monster hub
+  (Daniele 2026-11-05: "Hide both").
+- Known gaps: Settings / Profile / History / Challenges pages still page with ‹ ›; online results lack BACK TO ROOM; 3v3 / 2v2v2 room
+  layouts unseen; campaign pages light the HOME tab. Online rooms on staging fall back to browser hosting (room server stays 0.23.21).
+
+## 0.23.25 "Alpha 24 step 3" - 2026-11-04 (STAGING only; new menu flows, Daniele approved the flows, release rel-02325)
+
+New menu flows built from today's parts (Daniele: "this looks good so we can apply and then later on after we test redesign the actual
+ui and backgrounds etc"). The look (art, backgrounds) comes later as its own pass; this one changes taps and screens only.
+- **Four tabs: HOME / ARMIES / CAMPAIGN / PROFILE.** The PLAY tab and PLAY hub page are gone.
+- **1v1 vs AI in 1 tap** (was 6): HOME PLAY starts your last setup at once; CHANGE opens one MATCH SETUP screen with sheets
+  (faction, rivals, rules, colour, background) and an explicit CHANGE MAP. Custom setup = 2 taps.
+- **Online: host in 2 taps (was 4), join in 3 (was 4).** HOST ROOM on HOME creates the room; JOIN WITH CODE is a code sheet over HOME
+  (errors shown in it, the code kept).
+- **The room fits one screen**: code, share and chat, map (host: CHANGE MAP), mode and rules on the left; every seat as a card on the right
+  (a column per team; FFA in 2 columns) with each player's 3 skills and a big READY tick; MY PICKS (faction / colour / army) open sheets
+  over the room. Open seat on another team = SIT HERE (1 tap); the host can move a player in 2.
+- **Map picker**: always 2 rows x 5 maps, ‹ n / N › beside CHOOSE for more pages; mode tabs with counts, ★ / RECENT / RANDOM.
+- **ARMIES > SKILLS on one page**: the ultimate strip plus every active / map skill as icon + name tiles; tap = equip + description.
+- **Results**: two rows of equal length - PLAY AGAIN (wide) + MATCH DETAILS, then HOME / RANDOM MAP / CHANGE SETUP.
+- **No scrolling**: menu lists page with a ‹ n / N › strip; no up / down arrows.
+- Known gaps: online results have no BACK TO ROOM yet; 3v3 / 2v2v2 room layouts unseen (no pool map seats them). Online rooms on
+  staging fall back to browser hosting (room server stays 0.23.21).
+
+## 0.23.24 "Alpha 23" - 2026-11-04 (STAGING only; skill column, Daniele's staging check of 0.23.23, release rel-02322)
+
+- **A charged skill's hexagon is lit neon in its slot colour** ("outline of skill hexagon should be neon lit in the color of the skill
+  (white purple orange) when fully charged"): ACTIVE ice-white, MAP violet, ULTIMATE amber; a soft glow, a halo and a bright core
+  that breathe with the liquid. Cooling / charging vessels keep the plain rim.
+- **Skill icons at one optical size** ("the icons for the skill all seem of different proportions and size"): every pack icon touches
+  its 160 px canvas on the long side, so wide ones (Ghost Line, Fog of War) looked smaller than square ones (Surge, Portal); each is now
+  drawn from its visible part, scaled by area (at most x1.25). A cooling icon shrinks less (0.36 of the vessel, was 0.32 vs 0.44 ready);
+  the seconds sit a little lower and smaller (18 px).
+
+## 0.23.23 "Alpha 23" - 2026-11-04 (STAGING only; HUD fixes from Daniele's staging check of 0.23.22, release rel-02322)
+
+- **Liquid wave artifact fixed** ("the wave texture in the interface has a small artifact"): the waterline strip in the SEND vats and
+  skill vessels scrolled with a hard wrap - a mip jump plus the strip's transparent border made a dark notch / bright streak. Now two
+  samples half a tile apart are cross-faded, inset from the border, with the unwrapped gradients (`shaders/hud_liquid.gdshader`).
+- **CATCH-UP tag placed under your own score pill** ("catch up seems randomly positioned"): it used to hang under the status line's
+  empty slot at the bar's left end; now it sits right under your pill, and drops under the Last Stand line only when that line would
+  meet it (`Hud._place_catchup`).
+- **Last Stand node signs bigger, named and on top** ("way too small and anonymous and should be positioned on top not bottom"): plates
+  44 / 34 / 28 pt across (were 30 / 25 / 22), the seconds read "8s", the red one carries a **NEXT DROP** caption, and the sign goes over
+  the platform's top rim first (under it only when the top is taken).
+- **Last Stand line shorter, no orange box** ("the orange box for the time looks weird, also last stand message is too long"):
+  "LAST STAND · NEXT DROP 8 s · 2 LEFT" (was "LAST STAND · RINGS · RING 2 DROPPING · next node in 8 s (2 left)"); the method and how it
+  falls show only during the opening pulse; the seconds are amber text, the capsule behind them is gone.
+
+## 0.23.22 "Alpha 23" - 2026-11-04 (STAGING only; release rel-02322 = main 4376374 + ui-hud b083d09 with the menus rolled back; Daniele: "in game ui ready for staging branch")
+
+- **Alpha 24 step 2: the Neon Noir in-game HUD** (the art director's revision 6, cut in by 🧩 ui-hud-cut3; Daniele's "Yes, cut it in"). Top capsule
+  with score pills, status pill + amber seconds capsule, CATCH-UP tag, SEND housing with four liquid vats (100 / 75 / 50 / 25, the picked one lit),
+  square buttons, the skill column as hex vessels whose liquid shows the charge, no slot labels, seconds inside the ring, two-line names where one
+  would cut (EMERGENCY EVAC, CORE MELTDOWN), noir build bar, alert signs, pulse and upgrade chip from the cut sprites.
+  - **The HUD is dark-only** (the menus have no LIGHT theme any more, see below), with the **faction accent
+    channel** (`HudNoir.ACCENT`, the `ooze` layer tinted per faction).
+  - **Rings fixed per slot** and **liquid colour fixed per slot** (Daniele 2026-11-03: fixed for now; one constant `HudNoir.RING`).
+  - Board marks, score pills and the node inspector keep the **seat colours** (same colours on every screen); the node inspector is still code-drawn;
+    the "attacked" badge is not hooked yet.
+- **Menus stay as in 0.23.21** (Daniele 2026-11-04: "i m ok with ingame interface but menu interface i want it roll back and abandon
+  light theme and all about round 3 design for now"). ui-hud sits on ui-a24 (Alpha 24 step 1: round-3 menus, DARK / LIGHT switch); its menu
+  changes are reverted here: `menu.gd`, `ui_kit.gd`, `top_bar.gd`, `nav_bar.gd`, `reward_strip.gd`, `reward_ticker.gd`, `campaign.gd`,
+  `match_screens.gd` are identical to 0.23.21 except the faction name (below), the SETTINGS > THEME row is gone, `tests/lobby_ui_shot` removed. `UiTheme` stays only
+  as the HUD's sprite layer (B sheet, round-3 skill / board icons) and is **DARK only** (a saved LIGHT choice is ignored). Kept from step 1:
+  the name **BLOOM** everywhere (no VIRIDIAN; Daniele's naming call of 2026-11-02, not a look): `UiKit.NAMES / SUBS / TAGS`, `Menu.NAMES`,
+  the vat-wins line and the campaign title, the same text lines ui-a24 18527f6 changed.
+- Merge note: one conflict in `scripts/skill_dock.gd` (the old disc drawing vs the HUD's vessel drawing); kept the HUD side, which already uses
+  main's Rewire -> Overdrive rename. `scripts/net.gd` and `server/` unchanged: protocol stays ooze20-net-8, no room server deploy.
+
+## 0.23.21 "Alpha 23" - 2026-11-03 (STAGING; release rel-02321 = bal-02321 R1 + c2 + sim-armour + housekeeping-02321; Daniele's Hub Desk answers 2026-11-01..03)
+
+- **Ability balance, set R1** (Desk bal-abilities (a)). The six strongest skills come down, BLOOM loses its production lean and EMBER gets attack back.
+  Win rate of a seat that casts it vs one that never does (AI vs AI, 0.23.18 numbers -> R1):
+  - **Demolish** cooldown 60 -> **80 s** (+25 -> +16)
+  - **Sever** cooldown 70 -> **90 s** (+21 -> +12)
+  - **Scorch** cooldown 32 -> **45 s** (+20 -> +13)
+  - **Quake** cooldown 90 -> **105 s** (+17 -> +14)
+  - **Spore Burst** 1.8x -> **1.5x** for 10 s (+22 -> +17); Superbloom on top of it is now 2 x 1.5 = 3x
+  - **Core Meltdown** 3 kills per unit, cap 70 -> **4 per unit, cap 90** (the 0.23.14 numbers)
+  - **BLOOM** production 1.06 -> **1.00** (no production lean any more)
+  - **EMBER** attack 1.02 -> **1.10**. **This reverses Daniele's 0.23.15 EMBER numbers** (attack 1.10 -> 1.02), accepted with option (a): EMBER carries
+    Demolish / Scorch / Sever / Quake, the four skills trimmed here, and fell to ~37-41 % without it.
+- **Rewire is now OVERDRIVE** (VEX's ultimate; Desk bal-rewire (a) + the rename): **15 s** (was 12), every own line **2x speed** (was +75 %), doors
+  **3x** (was 2x), the 3 relay fires kept, and it **charges in 75 s** (at least 60 s after the last cast; the other ultimates stay 120 / 90 s). AI lift
+  +5 -> +17. New icon (a maxed-out gauge), the name and the numbers everywhere they show: skill dock, ARMIES card and its charge line
+  ("~75 s CHARGE"), the cast toast, the "OVERDRIVE" relay label. Rules: `SKILLS.overdrive` (`charge` / `charge_min`), `Rules.ult_charge_time()` / `ult_min_time()`.
+- **Mire, Anchor and Bypass are archived** (Daniele: "archive Bypass, Anchor and Mire for now"; the AI found no use for them: lift -0.4 / 0 / +0.5).
+  They leave the ARMIES picker, the shop, every default loadout and AI build; a saved pick plays as the faction's default. The code, FX, icons and AI
+  branches stay behind `Rules.archived_on` (off): moving an id back into `Rules.MAP_SKILLS` restores it. Replacements (conservative picks from skills each
+  faction already had in its builds or the pool; OPEN-QUESTIONS): SOLAR's default map skill **Anchor -> Backwash**; AI builds NULL Bypass -> Portal,
+  BLOOM Mire -> Portal, SOLAR Anchor -> Backwash and Mire -> Fog of War.
+- Faction win rates after the pass (AI vs AI, Expert, 1v1, 28 pooled maps, 1120 non-mirror matches per set, +-4.6):
+  0.23.20 VEX 38 / NULL 50 / BLOOM 69 / EMBER 40 / SOLAR 53 -> this branch VEX 40 / NULL 51 / BLOOM 49 / EMBER 52 / SOLAR 58 (median match 5:18).
+  VEX and SOLAR sit outside 45-55 on 0.23.20 (the R1 measurement ran on 0.23.18, before two doors: VEX 50, SOLAR 54).
+- **Balance set c2** (Daniele's yes, Desk preview-02321; branch `bal-02321-c2`): SOLAR production 0.93 -> **0.915** (SOLAR vats 8.5 % slower, was 7 %);
+  VEX garrison 0.90 -> 0.95 in c2, then **0.93** with vat armour below (Daniele 2026-11-03): VEX garrisons take **8 % more damage** (was 11 %).
+  Faction win rates (AI vs AI, Expert, 1v1, 6 shards, 1120 non-mirror, +-4.6): c2 VEX 54 / NULL 50 / BLOOM 46 / EMBER 51 / SOLAR 50; with armour
+  VEX 56.5 / NULL 49.8 / BLOOM 48.9 / EMBER 49.1 / SOLAR 45.8; with armour + VEX 0.93 **VEX 51.3 / NULL 50.9 / BLOOM 49.1 / EMBER 50.9 / SOLAR 47.8**.
+- The Machinegoon is unchanged (Desk bal-machinegoon is open again with the re-check).
+- **Vat armour** (Daniele, 2026-11-03; branch `sim-armour`): an owned vat's garrison takes 1.0 / 1.2 / 1.4 / 1.6x less damage at T1 / T2 / T3 / T4.
+  A captured vat starts again at 1.0 (a T4 stays T4) and regains 0.01 a second to its tier's value: T2 in 20 s, T4 in 60 s. The node inspector shows
+  "Armour x1.30 -> x1.6 in 30 s". Faction win rates with it: the c2 bullet above.
+- **Rotor cooldown 10 -> 14 s** (Daniele 2026-11-03: rotation relays only, the same ratio as his "5 -> 7"; the other relays keep 5 s).
+- Telemetry: the match event now carries `match_id` (online "<room>-<round>", the server report's prefix; offline a local id) and `relay_types`
+  (this seat's relay fires per kind), so relay use per map shows. The telemetry function's field list accepts both (redeploy `supabase/functions/telemetry`).
+- Tests (rel-02321, assembled branch, headless, once): test_sim, test_net, test_map_pool, test_maps4 (47,034 checks), test_ai_curve (Training 29 <
+  Casual 32 < Standard 49 < Veteran 62 < Expert vs Veteran 63) and 15 more suites passed; test_preempt / rematch / room_limits / dedicated SKIP until the
+  room server has 0.23.21. **test_ai_coop fails one band**: Standard teamwork on vs off 52 % (wanted 55-90 %; 0.23.20: 58 %) - Veteran 67 % passes.
+  Nobody has played these numbers yet - staging is the check.
+
+## 0.23.20 "Alpha 23" - 2026-11-02 (LIVE 2026-11-02 on Daniele's go after reading the changelog; staged 2026-11-02: two doors, neon HUD marks, Solar v3 + faction look)
+
+- **Two doors in the main game** (Daniele 2026-11-02, after proto3 / proto4: "a success, promote it to the main game"; branch doors-main): every BRAWL
+  platform has a second door opposite the front one. An arriving line goes round the ring to whichever door is nearer from the deck it arrives on
+  (ties: the front door); a leaving line comes out of the door nearer its bridge (Rules.TWO_DOORS + DOOR_EXITS, both on). Doors in AND out keep the
+  half-turn maps exactly even (N-11 / 14 / 20 / 22 / 24 / 28: seat A vs B 0.00 s, tests/door_probe.gd). Readout: a **floor arrow** at each door that lights
+  while a line uses it (DoorView) - the floor arrow only, no other door marker. Mirrored maps (maps-mirror) are not shipped: two doors won.
+- **Solar v3** (Daniele's Rodin model, Desk review-solar-v3 = keep; branch faction-solar-v3): the Solar unit is the new creature - 4,800 tris (was 5,818),
+  1.90 m footprint like the other units, 1024 px textures incl. a new emissive map; the tall egg stays inside its resident tank (residents taller than the
+  old tallest sink by the excess). Solar monsters keep the old minion body and its old texture (assets/units/legacy/).
+- **Rules.FACTION_LOOK** (looks only, no rule): a per-faction body size and lanes per column; **Bloom 0.75 x 4 lanes** (Daniele 2026-11-02), every other
+  faction 1.0 x 3 as before. Lane spacing scales with size, so Bloom's column stays about as wide. Debug: --look=bloom:0.75:4.
+- **Neon HUD marks** (branch ui-neon, Daniele on 0.23.18: "upgrade badges not appearing, unit count HUD disappearing, some of the alert signs disappear") - the items below:
+- **Counts never vanish in the Last Stand**: a warned node keeps its count badge (0.19.0 hid the whole badge when the falling sign replaced its round badge;
+  with a v3 ring a whole ring is warned at once, so 6-12 counts - your own home's included - and their relay !n / build / drop-order tags went with it).
+- **Neon alarm signs** (HudOverlay._draw_danger_symbols): the next node to fall RED (30 pt), the one after YELLOW, every other warned node GREY - still
+  visible, seconds always >= 12.5 pt (0.23.18's muted sign was a 0.55-alpha dull-red triangle, ~8 pt on a phone: it read as gone). Each sign is a neon hex
+  plate with its seconds and a warning beacon on top, glowing tube and inner glow, a slight flicker; the red one breathes; a sign that is new or changes tier
+  (grey -> yellow -> red) pulses for 1.5 s (three beats, a hex ring swelling out). Signs sit on the platform's rim clear of every badge.
+- **Upgrade chip** bigger and neon: a 34 pt neon hex in your seat colour with a double chevron (was an 18 px card, ~11 pt on a phone, in the faction accent),
+  on the platform's upper rim clear of the badges and signs; it pulses for 1.5 s when it lights up.
+- A warned node's badge no longer repeats the seconds ("▼n": the sign shows them), so a warned relay keeps its "!n" switch warning and a
+  build its timer there (in a tutorial lesson without the signs the "▼n" stays).
+- Light on phones: every sign and chip is one rect from one texture baked at match load (~24 ms on desktop; no shader). perf_check PHONE M-39:
+  stock draw calls 309 -> 286 (0.75 scale 310 -> 287), objects 572 -> 552; in the Last Stand (`--ff=245 / 250 / 256`, 12 warned) draw calls
+  416 / 402 / 395 -> 371 / 376 / 362, objects 667 / 644 / 698 -> 750 / 740 / 787 (budget 800; most of the rise is the 12 restored badges).
+- New `tests/hud_marks_check.tscn` (windowed): into the Last Stand on N-08 / N-28 / M-39, fails if any standing node has no count, a warned node has no
+  sign or the tiers are wrong (one red, at most one yellow), a sign is under 20 pt or on its badge, a new sign does not pulse, or a ready vat has no chip
+  >= 33 pt; `shots=<dir>` saves the Last Stand and a pulse sequence. 0.23.18 fails it (6 / 12 counts missing).
+
+## 0.23.19 "Alpha 23" - 2026-11-02 (LIVE 2026-11-02 on Daniele's go after his phone test; hotfix; staged 2026-11-02)
+
+- **0.23.19 hotfix**: the board stays on screen when a phone turns or goes fullscreen mid-match (0.23.18's scaled 3D view refitted the camera before it
+  took the new size; N-28 / E-07 reports) - RenderScale.sync() now runs first in main._on_resized, so the SubViewport has the window's size before the
+  safe area, HUD layout and camera fit; PHONE menus back to 30 fps (perf_profile idle_fps 15 -> 30); new tests/board_sweep (all 63 pool maps, portrait ->
+  landscape mid-match, four setups). Tested on desktop and in browser emulation only.
+
+## 0.23.18 "Alpha 23" - 2026-11-01 (LIVE 2026-11-01 on Daniele's go; staged 2026-11-01: phone rendering, speed-15 trial, the E maps, UI batch)
+
+- **speed-15** (staging trial, Daniele 2026-11-01): BRAWL unit production and movement 15 % slower - Rules.BRAWL_TRIAL_15 0.85 on BRAWL_SPEED
+  (5.7 -> 4.8 m/s) and vat PROD (1.0 / 1.6 / 2.4 / 3.5 -> 0.85 / 1.36 / 2.04 / 2.98 shown /s; neutral regrowth follows); door rate unchanged, so bodies
+  walk 0.50 m apart (was 0.59); monster 3.4 -> 2.9 m/s.
+- **maps-exp**: experimental maps E-01..E-10 join the pool (group E; MapPool.POOL_GROUPS ["N", "E"]); the N-04 / N-24 consoles start down.
+- **Ultimates rework** (Daniele 2026-11-01, Desk: ship all three as proposed): **Superbloom** - every vat produces 2x for 12 s, on top of Spore Burst
+  (no cap; together 3.6x); **Relay Aegis** - a node and its neighbours take 2.5x less garrison damage, +50 % production, decks locked, 15 s; **Rewire** -
+  12 s: all your lines move 75 % faster and pour through doors twice as fast, fire up to 3 relays anywhere, enemy ones too. Charge unchanged (120 s).
+- **Very Last Stand tie-break** (Daniele 2026-11-01, Desk vls-fair): an exact island tie goes against the corner the collapse cycle is aiming at (and a
+  stranding drop moves the corner on), no longer always to the lowest node id - seat A had won 92 % on N-24 and 78 % on N-04 (43 % / 48 % with the fix).
+  N-24 K-Crossing and N-04 Console are back in 1v1 (MapPool.WITHHELD_MODES emptied).
+- **perf-ios**: phones render the 3D at 1.5 pixels per point through a linear-filtered SubViewport (0.75 of native on a dpr-2 iPhone, smooth edges,
+  HUD at native); PHONE idles at 15 fps in menus / pause / results; one batching cell per map (M-39 phone: 357 -> 287 draw calls). FULL and LOW RES unchanged.
+  (Also on staging alone as 0.23.17.)
+- **Bridges easier to tap** (Daniele: "bridges are sometimes hard to click"): the deck skills' tap band (Scorch, Mire, Anchor, Demolish, Backwash, Sever;
+  SkillDock._deck_at) is at least 44 pt across on a phone (Rules.DECK_HIT_PT; was ~37 pt at most, 30 px x 1.15), invisible, the deck looks the same; the extra
+  reach never takes a tap that sits on a node's platform. Probe `tests/deck_tap_probe.tscn`: median band A-01 37 -> 43 pt, M-39 30 -> 33 pt, M-57 32 -> 35 pt
+  (the narrowest decks are capped by a neighbouring deck or platform, unchanged).
+- **Last Stand danger signs tiered** (HudOverlay._draw_danger_symbols): with a whole ring warned, only the NEXT node to fall pulses at full size, the one after it
+  is medium and steady, every other warned node is muted (small, low alpha, no pulse) until its turn; the "NODE n FALLS IN s" line is unchanged.
+- **SETUP > ADVANCED**: the LAST STAND and ABILITIES switches moved out of 03 SETUP's MATCH OPTIONS row into their own page (`show_setup_advanced`, BACK -> SETUP)
+  with a line on what each does and RESET TO DEFAULTS while anything is off; SETUP keeps HIDDEN COUNTS and an ADVANCED button with the two switches' readout
+  (lit while off-default). Defaults unchanged (both ON), the saved values are the same Rules.last_stand / Rules.abilities_on; the room lobby's switches untouched.
+  test_ui_nav / test_ui_sweep walk the new page.
+
+## 0.23.16 "Alpha 23" - 2026-10-28 (LIVE 2026-10-28, straight to live: Daniele's Ooze Desk answers)
+
+- **Forge costs 40** (was 20; Rules.FORGE_COST 200 sim), the build buttons read it from Sim.build_cost.
+- **A monster kicks at most 40 defenders** at its end node (Rules.MONSTER_TAKE_MAX 200 sim; garrison + stored allies, each its share): a node holding
+  more keeps its owner and the rest of its troops ("MONSTER KICKED 40 - n HOLD" to the owner); the decks on the way are not capped. Missions don't
+  count a held take; the AI values a monster target at most 40.
+- **Tutorial SCRAP**: the quick start pays 460, each of the four advanced tutorials 200 (Rules.PROGRESSION tutorial_scrap; 1 260 in all, a 3rd skill as before).
+- **ARMIES / HOME faction traits** describe the real stat leans, written from FACTION_STATS (Rules.faction_trait: "Swift lines", "Steady vats",
+  "Rich vats", "Hard hitters", "Tough shells"); COMING SOON gone from those cards. No new passives.
+
+## 0.23.15 "Alpha 23" - 2026-10-28 (LIVE 2026-10-28 on Daniele's OK; staged 2026-10-28: balance pass, catch-up)
 
 - **0.23.15 - balance pass (Daniele approved 2026-10-27: "for me it's fine to follow its changes")**, measured by `tests/balance_study.gd`
   (Expert 1v1, 1400 games + a 4760-game power swap; write-up `05 Handoff/handoffs/architect-specs/balance-pass-2026-10-27.md`), `Rules` numbers only:
@@ -65,7 +289,7 @@
   curve 15 / 31 / 48 / 62 / 79 %). test_ai_coop's "coordinating team wins clearly more" floor 60 -> 55 % (the catch-up narrows team gaps).
 - Server: deploy.sh refuses to overwrite a pack a running room uses (🖥️ deploy-guard).
 
-## 0.23.14 "Alpha 23" - 2026-10-27 (staging: iPhone fixes, rotation relay)
+## 0.23.14 "Alpha 23" - 2026-10-27 (LIVE 2026-10-27: iPhone fixes, rotation relay)
 
 - **iPhone / iPad (every model)** (Daniele: "on IOS it shows no background and looks broken"):
   - the 3D board is drawn straight onto the canvas the sky is on (`Scenery.ios_safe`: no glow, no colour adjustment, no MSAA on iOS) - GL

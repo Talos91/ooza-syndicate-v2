@@ -78,6 +78,9 @@ func _measure(main: Node, pt_w: float) -> Dictionary:
 	panels.append(Rect2(0, 0, vp.x, hud.top_used()))
 	panels.append(Rect2(0, vp.y - hud.bottom_used(), vp.x, hud.bottom_used()))
 	panels.append(hud.pause_button.get_global_rect())
+	panels.append(hud.music_button.get_global_rect())
+	if hud.dock.visible:                                     # Alpha 24: the skill column on the right
+		panels.append(hud.dock.get_global_rect())
 	var screen := Rect2(Vector2.ZERO, vp)
 	var circ := {}
 	var off := 0

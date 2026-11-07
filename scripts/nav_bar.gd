@@ -6,7 +6,7 @@ extends Control
 
 signal tab_pressed(id: String)
 
-const TABS := [["home", "HOME"], ["play", "PLAY"], ["armies", "ARMIES"], ["campaign", "CAMPAIGN"], ["profile", "PROFILE"]]
+const TABS := [["home", "HOME"], ["armies", "ARMIES"], ["profile", "PROFILE"], ["guide", "GUIDE"]]   # UX pass: no PLAY tab (HOME plays); 2026-11-05: no CAMPAIGN tab (HOME's tile)
 
 var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var active := ""
@@ -17,6 +17,8 @@ static func make(m, p_active: String, f := "vex") -> NavBar:
 	var n := NavBar.new()
 	n.menu = m
 	n.active = p_active
+	if not TABS.any(func(t): return t[0] == p_active):
+		n.active = "home"                              # a page without a tab of its own (CAMPAIGN since 2026-11-05) sits under HOME
 	n._build(f)
 	return n
 

@@ -17,7 +17,7 @@ extends Node3D
 ##   Anchor         bolted rails along the deck, clamps at both ends and on its relay
 ##   Bypass         the relay glowing, every deck it controls shown at once as a hologram, a time-left ring
 ##   Relay Hack     fire: blocky static over the relay; jam: a clamp ring and the jam's seconds ("JAM 12")
-##   Rewire         every own line streaking; the relays its caster may still fire marked (caster only)
+##   Overdrive         every own line streaking; the relays its caster may still fire marked (caster only)
 ##   Echo Split     split flashes where the echoes leave (caster only); a node an echo hits: static, sparks,
 ##                  "OFFLINE" and its time-left ring for 8 s
 ##   Superbloom     every own vat blooming (petals, a ground glow), "+N / 40" over the caster's home
@@ -61,7 +61,7 @@ const POWER_SHADER := preload("res://shaders/skill_powers.gdshader")   # POWERS:
 const DARK_SHADER := preload("res://shaders/skill_dark.gdshader")      # POWERS: the fog cloud, the sinkhole pit
 
 const IDS := ["surge", "spore_burst", "fortify", "scorch", "ghost_line", "demolish", "mire", "anchor", "bypass",
-		"relay_hack", "rewire", "echo_split", "superbloom", "core_meltdown", "relay_aegis",
+		"relay_hack", "overdrive", "echo_split", "superbloom", "core_meltdown", "relay_aegis",
 		"quake", "sever", "fog", "portal"]         # POWERS: the new powers with a lasting effect (Backwash, Sinkhole, Evac: moments)
 const DECK_DROPS := ["demolish", "quake", "sever"]   # POWERS: Sim.DECK_DROPS - one deck-drop look for all three
 const ONS := ["node", "edge", "horde", "relay", "seat"]
@@ -132,7 +132,7 @@ var _strips := {}                   # edge -> ArrayMesh: the deck strip, built o
 var _hordes := {}                   # horde id -> horde (as of this frame): an event may name a line already gone
 var _pieces := {}                   # edge -> [{node, mis, base, u, v, spin}]: copies of the deck's pieces (Demolish)
 var _breaks := {}                   # edge -> seconds since it broke (its pieces falling)
-var _markers := {}                  # relay id -> {ring, rmat, chev, seen}: Rewire's relays you may fire
+var _markers := {}                  # relay id -> {ring, rmat, chev, seen}: Overdrive's relays you may fire
 var _blooms := {}                   # node id -> {glow, gmat, seen}: Superbloom's vats
 var _stars: Array = []              # pooled bursts: {mi, mat, t, dur, pos, s0, s1, col, i0}
 var _rings: Array = []              # pooled shock rings
@@ -346,12 +346,12 @@ func _on_cast(ev: Dictionary) -> void:
 	var col := Rules.seat_color(seat)
 	var up := Vector3.UP
 	_count_stat("cast_" + id)
-	if ev.has("fire"):                                # Rewire firing a relay
+	if ev.has("fire"):                                # Overdrive firing a relay
 		var r: Dictionary = sim.nodes[int(ev["fire"])]
 		_star_at(r["pos"] + up * 6.0, col.lerp(Color.WHITE, 0.3), 12.0, 0.45)
 		_ring_at(r["pos"], col, Rules.R * 2.4, 0.55)
 		_glitch_burst(r["pos"], col, 36)
-		_label_at("REWIRE", r["pos"] + up * 9.0, col, 1.1, 0.04)
+		_label_at("OVERDRIVE", r["pos"] + up * 9.0, col, 1.1, 0.04)
 		return
 	var pos = ev.get("pos", null)
 	if not pos is Vector3:
@@ -975,7 +975,7 @@ func _effects(dt: float) -> void:
 				_hide_pieces(int(slot["target"]))
 		else:
 			_fade(slot)
-	for id in _markers:                               # Rewire: a relay no longer offered
+	for id in _markers:                               # Overdrive: a relay no longer offered
 		var m: Dictionary = _markers[id]
 		if m["seen"] != _frame and (m["ring"] as Node3D).visible:
 			(m["ring"] as Node3D).visible = false
@@ -1185,12 +1185,12 @@ func _update(slot: Dictionary, e: Dictionary, dt: float) -> void:
 			var fl := 0.7 + 0.3 * float(int(_t * 9.0) % 2)
 			Mats.label_look(lab, Color(1.0, 0.35, 0.4, life * fl), 0.95 * life * fl)
 			_size_label(lab, n["pos"] + up * 9.0, 0.035)
-		"rewire":
+		"overdrive":
 			for h in sim.hordes:
 				if h["owner"] == seat:
 					_streaks(h, col, 40.0 * life * detail, dt)
 			if seat == viewer and int(e.get("fires", 0)) > 0:
-				_rewire_marks(seat, col)
+				_overdrive_marks(seat, col)
 		"superbloom":
 			var lf := float(e.get("left", -1.0))
 			var capped := lf == 0.0
@@ -1380,7 +1380,7 @@ func _line_len(h: Dictionary) -> float:
 
 
 func _streaks(h: Dictionary, col: Color, rate: float, dt: float) -> void:
-	## Surge / Rewire: speed streaks peeling off the line's bodies, left behind as it runs.
+	## Surge / Overdrive: speed streaks peeling off the line's bodies, left behind as it runs.
 	var length := _line_len(h)
 	if length <= 0.2 or h["state"] == "absorb":
 		return
@@ -1469,8 +1469,8 @@ func _glitch_burst(c: Vector3, col: Color, n: int) -> void:
 				(col if randf() < 0.6 else Color(0.8, 1.0, 1.0)) * 1.4, randf_range(0.14, 0.26), randf_range(0.1, 0.25), 0.0)
 
 
-func _rewire_marks(seat: String, col: Color) -> void:
-	## Rewire, caster only: every relay the ultimate slot may fire now gets a pulsing ring and a chevron.
+func _overdrive_marks(seat: String, col: Color) -> void:
+	## Overdrive, caster only: every relay the ultimate slot may fire now gets a pulsing ring and a chevron.
 	for n in sim.nodes:
 		if n["relay"] == "" or sim.cast_check(seat, "ultimate", n["id"]) != "":
 			continue
