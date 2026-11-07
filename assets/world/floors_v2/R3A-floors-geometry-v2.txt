@@ -1,0 +1,72 @@
+OOZE SYNDICATE R3A-2 / GEOMETRY v2
+X right, Y down; metres from top left. Master 1792px = 16m, 112px/m.
+Gray codes 0/64/128/191. White only annotations and board silhouettes.
+Depth-authorized recessed joints use 0% in factory/sewer/lab; services and stains 50%.
+75% coverage <=6% per tile, <=7% lab per user clarification.
+Phone previews use AREA/BOX averaging: intermediate gray values are filtering, not added geometry levels.
+A1b uses nearest sampling to preserve the four discrete geometry codes.
+Kerb/edge strips are X-periodic boundary transitions; interior floor/crust tiles repeat both axes.
+Polygon control points and traces: geometry-v2.json.
+
+set | element | size in m | position(s) in m | gray level
+STREET A | main surface | 16 x 16 | (0,0) | 25%
+STREET A | horizontal dashed lane | 3 x 0.25; gap 5; pitch 8 | (2,7.875),(10,7.875) | 75%
+STREET A | solid edge lines | 16 x 0.25 | center y=1.5,14.5 | 75%
+FACTORY A | main surface | 16 x 16 | (0,0) | 25%
+FACTORY A | plate grid / recessed joints | 4 x 4; true seam 0.06, drawn 0.12 | x,y=0,4,8,12,16 | 25%; depth 0%
+FACTORY A | four corner bolts per riveted plate | D 0.3; inset 0.45 | odd row+column checker; corners at local (0.45,0.45),(3.55,0.45),(0.45,3.55),(3.55,3.55) | 50%
+SEWER A | main surface | 16 x 16 | (0,0) | 25%
+SEWER A | brick running bond / recessed joints | 1.6 x 0.8; joint 0.08; alternate offset 0.8 | y=0.8j; x=1.6i+0.8(j mod 2) | 25%; depth 0%
+SEWER A | continuous water channel | 16 x 2.4; step depth 0.3 | (0,6.8) | 0% depth
+SEWER A | stone lips | 16 x 0.25 each (raised to minimum size) | (0,6.55),(0,9.2) | 50%
+LAB A | main surface | 16 x 16 | (0,0) | 25%
+LAB A | tile grid / incised joints | 2 x 2; true 0.04, drawn 0.08 | x,y=0,2,...16 | 25%; depth 0%
+LAB A | continuous guide lines | 0.25; pitch 8 | x=4,12; y=4,12 | 75%; authorized cap 7%
+CRUST | filled flow tongue 1 | control polygon in geometry-v2.json; smooth lobed front | periodic translations +/-16 in X,Y | 50%
+CRUST | filled flow tongue 2 | control polygon in geometry-v2.json; smooth lobed front | periodic translations +/-16 in X,Y | 50%
+CRUST | filled flow tongue 3 | control polygon in geometry-v2.json; smooth lobed front | periodic translations +/-16 in X,Y | 50%
+CRUST | filled flow tongue 4 | control polygon in geometry-v2.json; smooth lobed front | periodic translations +/-16 in X,Y | 50%
+CRUST | filled flow tongue 5 | control polygon in geometry-v2.json; smooth lobed front | periodic translations +/-16 in X,Y | 75%
+CRUST | filled flow tongue 6 | control polygon in geometry-v2.json; smooth lobed front | periodic translations +/-16 in X,Y | 75%
+CRUST | depth crack | width 0.25 | [(-1, 5), (1.2, 5.7), (2.2, 5.3), (3.5, 6.6), (4.8, 7.1), (6, 8.5)] | 0%
+CRUST | depth crack | width 0.15 | [(7.2, -1), (7.8, 1.1), (8.5, 2), (8.1, 3.7), (9.4, 4.9), (10.4, 5.1)] | 0%
+CRUST | depth crack | width 0.4 | [(11.9, 10), (12.5, 11.5), (13.3, 12.5), (14, 12.1), (15.2, 12.6)] | 0%
+CRUST | depth crack | width 0.25 | [(4.4, 12.8), (5.5, 14.2), (6.2, 15.1), (7.3, 15.6), (8.4, 15.1)] | 0%
+CRUST | bubble pit | D 0.5 | center (3.7,3) | 0%
+CRUST | bubble pit | D 0.8 | center (10.6,10.3) | 0%
+CRUST | bubble pit | D 0.3 | center (6.3,12.1) | 0%
+CRUST | bubble pit | D 1 | center (14.6,3.4) | 0%
+STREET B | manhole | D 0.9 | center (4.6,4.8) | 50%
+STREET C | drain inlet | 1.5 x 1; rim/bar 0.25; bar pitch 0.5 | top-left (10,10.5) | 50%; recessed slots 0%
+STREET D | asphalt patch | bbox 3 x 1.8 | [(6.5, 3.45), (7.1, 3), (8.45, 3.144), (9.5, 3.63), (9.05, 4.62), (7.55, 4.8), (6.65, 4.26)] | 50%
+STREET E | damage patch | bbox 2.8 x 2 | [(2.5, 11.0), (3.06, 10.5), (4.32, 10.66), (5.3, 11.2), (4.88, 12.3), (3.48, 12.5), (2.64, 11.9)] | 50%
+STREET E | open damage fissure | width 0.25 | [(11.5, 3.2), (12.2, 4), (11.8, 5.1), (13, 6.2)] | 0% depth
+STREET | shared 1 m border | 1 m | x<1 or x>=15 or y<1 or y>=15; base continuous pattern only; identical A-E | same base levels
+FACTORY B | hatch | D 1.2 | center (6,6) | 50%
+FACTORY C | grate pit | 2.5 x 2; rim/bar 0.25; bar pitch 0.5 | top-left (9,10) | 50%; recessed slots 0%
+FACTORY D | oil stain shape | bbox 3.3 x 2.2 | [(2, 9.55), (2.66, 9), (4.145, 9.176), (5.3, 9.77), (4.805, 10.98), (3.155, 11.2), (2.165, 10.54)] | 50%
+FACTORY E | hatch row left | D 1.2 | center (9.5,2.5) | 50%
+FACTORY E | hatch row right | D 1.2 | center (12.5,2.5) | 50%
+FACTORY | shared 1 m border | 1 m | x<1 or x>=15 or y<1 or y>=15; base continuous pattern only; identical A-E | same base levels
+SEWER B | floor grille | 1.5 x 1.5; rim/bar 0.25; bar pitch 0.5 | top-left (3,3) | 50%; recessed slots 0%
+SEWER C | collapsed floor exposing crust | bbox 3.8 x 3; broken rim 0.3 | [(9.5, 2.9), (10.26, 2), (11.4, 2.45), (12.16, 2.15), (13.3, 3.2), (12.73, 4.4), (11.4, 5), (10.07, 4.4)] | crust 25/50/75%, cracks 0%; rim 50%
+SEWER D | outfall mouth at channel lip | 2 x 1.5; rim/bar 0.25; bar pitch 0.5 | top-left (6,9.45) | 50%; recessed slots 0%
+SEWER E | collapsed floor exposing crust | bbox 3.6 x 3; broken rim 0.3 | [(4, 11.9), (4.72, 11), (5.8, 11.45), (6.52, 11.15), (7.6, 12.2), (7.0600000000000005, 13.4), (5.8, 14), (4.54, 13.4)] | crust 25/50/75%, cracks 0%; rim 50%
+SEWER | shared 1 m border | 1 m | x<1 or x>=15 or y<1 or y>=15; base continuous pattern only; identical A-E | same base levels
+LAB B | square grate | 1.5 x 1.5; rim/bar 0.25; bar pitch 0.5 | top-left (6.25,6.25) | 50%; recessed slots 0%
+LAB C | service panel group | three 1.8 x 1.8 inset panels | (2.1,8.1),(4.1,8.1),(4.1,10.1) | 50%
+LAB D | stain shape | bbox 3 x 2.8 | [(9, 6.0), (9.6, 5.3), (10.95, 5.524), (12, 6.279999999999999), (11.55, 7.82), (10.05, 8.1), (9.15, 7.26)] | 50%
+LAB E | damage stain group | bbox 3.5 x 1.7 | [(7, 13.025), (7.7, 12.6), (9.275, 12.735999999999999), (10.5, 13.195), (9.975, 14.129999999999999), (8.225, 14.299999999999999), (7.175, 13.79)] | 50%
+LAB | shared 1 m border | 1 m | x<1 or x>=15 or y<1 or y>=15; base continuous pattern only; identical A-E | same base levels
+STREET KERB | district boundary transition | asphalt 10; kerb 0.3; pavement 5.7; slabs 2 x 1; joint 0.08 | y=0..10 / 10..10.3 / 10.3..16; repeat X only | 25 / 75 / 50%; joints 25%
+STREET | scatter 4 x 4 | 64 x 64; base 10/16 = 62.5% | ABAA / AACE / DAAA / ABCA | A=base; B-E=variants
+FACTORY | scatter 4 x 4 | 64 x 64; base 10/16 = 62.5% | AACA / BAAD / AEAA / CABA | A=base; B-E=variants
+SEWER | scatter 4 x 4 | 64 x 64; base 10/16 = 62.5% | CABA / ADAB / AACA / AEAA | A=base; B-E=variants
+LAB | scatter 4 x 4 | 64 x 64; base 10/16 = 62.5% | AADA / CABA / ABAE / AACA | A=base; B-E=variants
+STREET EDGE | irregular tear + fallen chunks | 16 x 4; tear within y=1.5..2.5; chunks 0.3-1 | tear/chunk vertices in geometry-v2.json; periodic X only | district / crust; chunks 50%
+FACTORY EDGE | irregular tear + fallen chunks | 16 x 4; tear within y=1.5..2.5; chunks 0.3-1 | tear/chunk vertices in geometry-v2.json; periodic X only | district / crust; chunks 50%
+SEWER EDGE | irregular tear + fallen chunks | 16 x 4; tear within y=1.5..2.5; chunks 0.3-1 | tear/chunk vertices in geometry-v2.json; periodic X only | district / crust; chunks 50%
+LAB EDGE | irregular tear + fallen chunks | 16 x 4; tear within y=1.5..2.5; chunks 0.3-1 | tear/chunk vertices in geometry-v2.json; periodic X only | district / crust; chunks 50%
+CRUST | breach 4m | nominal hole D 4; irregular rim radial width 0.3-0.7; detached fragments 0.35-0.55 | inner/outer vertices in geometry-v2.json; decal 7 x 7 | crust inside; rim/chunks 50%; transparent outside
+CRUST | breach 8m | nominal hole D 8; irregular rim radial width 0.3-0.7; detached fragments 0.35-0.55 | inner/outer vertices in geometry-v2.json; decal 11 x 11 | crust inside; rim/chunks 50%; transparent outside
+CRUST | oldest continuous flow | 16 x 16 | entire tile, no uncovered background | 25%

@@ -12,6 +12,22 @@ uniform vec2 centre = vec2(0.0);
 uniform float r0 = 40.0;        // full floor out to here
 uniform float r1 = 90.0;        // gone (sky) from here
 uniform float haze = 0.12;      // how much of the void colour the floor carries at the centre
+// R3A-2 GEOMETRY v2 (director, 2026-11-07): flat gray-code tiles (0/64/128/191), 1792 px = 16 m, one tile per 16 m cell;
+// each cell picks the base (~60 %) or a variant B-E by a hash of the cell (all share an identical 1 m border); beyond the
+// district (r_district) the crust tile, hard boundary on the cell grid. Codes go through a TEMPORARY dark palette.
+uniform bool tiles = true;      // false: the old procedural placeholder above (--floor-v1)
+uniform sampler2D t_base : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D t_b : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D t_c : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D t_d : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D t_e : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D t_crust : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform float tile_m = 16.0;
+uniform float r_district = 60.0;
+uniform vec3 pal0 : source_color = vec3(0.035, 0.043, 0.059);   // code 0   #090B0F
+uniform vec3 pal1 : source_color = vec3(0.071, 0.094, 0.133);   // code 64  #121822
+uniform vec3 pal2 : source_color = vec3(0.102, 0.133, 0.188);   // code 128 #1A2230
+uniform vec3 pal3 : source_color = vec3(0.180, 0.212, 0.267);   // code 191 #2E3644
 
 varying vec3 wpos;
 
@@ -28,10 +44,38 @@ float grid(vec2 p, vec2 size, float w) {
 	return smoothstep(0.5 - w, 0.5, max(g.x, g.y));
 }
 
+vec3 palette(float v) {          // piecewise between the four codes (filtered texels fall in between)
+	float k = v * 255.0;
+	if (k < 64.0) return mix(pal0, pal1, k / 64.0);
+	if (k < 128.0) return mix(pal1, pal2, (k - 64.0) / 64.0);
+	return mix(pal2, pal3, clamp((k - 128.0) / 63.0, 0.0, 1.0));
+}
+
+vec3 tiled(vec2 p) {
+	vec2 cell = floor(p / tile_m);
+	vec2 uv = p / tile_m;                         // whole tile per cell; gradients stay continuous across cells
+	vec2 dx = dFdx(uv);
+	vec2 dy = dFdy(uv);
+	float v;
+	if (length((cell + 0.5) * tile_m - centre) > r_district) {
+		v = textureGrad(t_crust, uv, dx, dy).r;
+	} else {
+		float h = hash(cell + vec2(17.0, 3.0));
+		if (h < 0.6) v = textureGrad(t_base, uv, dx, dy).r;
+		else if (h < 0.7) v = textureGrad(t_b, uv, dx, dy).r;
+		else if (h < 0.8) v = textureGrad(t_c, uv, dx, dy).r;
+		else if (h < 0.9) v = textureGrad(t_d, uv, dx, dy).r;
+		else v = textureGrad(t_e, uv, dx, dy).r;
+	}
+	return palette(v);
+}
+
 void fragment() {
 	vec2 p = wpos.xz;
 	vec3 c;
-	if (kind == 0) {                                      // STREET
+	if (tiles) {
+		c = tiled(p);
+	} else if (kind == 0) {                                      // STREET
 		float speck = hash(floor(p * 3.0)) * 0.25;
 		c = vec3(0.045, 0.048, 0.058) * (0.9 + speck);
 		float lane = abs(fract(p.y / 12.0) - 0.5);
@@ -65,7 +109,7 @@ void fragment() {
 		c = mix(c, vec3(0.14, 0.12, 0.26), grid(p, vec2(16.0), 0.02));
 	}
 	float d = length(p - centre);
-	c = mix(c, abyss * 0.6, haze + (1.0 - haze) * 0.7 * smoothstep(r0 * 0.4, r1, d));
+	c = mix(c, abyss * 0.6, haze + (haze > 0.0 ? (1.0 - haze) * 0.7 * smoothstep(r0 * 0.4, r1, d) : 0.0));
 	ALBEDO = c;
 	ALPHA = 1.0 - smoothstep(r0, r1, d);
 }

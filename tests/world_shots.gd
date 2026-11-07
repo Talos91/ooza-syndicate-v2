@@ -70,6 +70,12 @@ func _run() -> void:
 		sim.fx_events.clear()
 		await _frames(40)
 		await _shot(inst, "%s/%s-%s-1-idle.png" % [out, code, tag])
+		var wl0 = inst.get("world_layer")
+		print("%s idle: floor %s, pitch %.1f" % [code, wl0.floor_kind if wl0 != null else "-", float(inst.get("cam_pitch"))])
+		if str(args.get("idle_only", "")) == "1":
+			inst.queue_free()
+			await _frames(5)
+			continue
 		# 2 a capture: let the AIs play in real time until an owner changes
 		for ai in ais:
 			inst.ais.append(ai)

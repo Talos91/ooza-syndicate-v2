@@ -21,6 +21,7 @@ extends Node3D
 ## a 100+ unit fall makes at most SPLATS_PER_FALL splats and CRAWL_PER_FALL blobs, the oldest are recycled.
 
 const SHADER_FLOOR := preload("res://shaders/world_floor.gdshader")
+const FLOORS_V2 := "res://assets/world/floors_v2/"   # R3A-2 geometry tiles: <kind>-base-v2.png, -variant-B..E-v2.png, crust
 const SHADER_TUBE := preload("res://shaders/world_tube.gdshader")
 const SHADER_GOO := preload("res://shaders/world_goo.gdshader")
 const SHADER_SPLAT := preload("res://shaders/world_splat.gdshader")
@@ -108,7 +109,8 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	var radius := Vector2(hi.x - lo.x, hi.z - lo.z).length() / 2.0
 	floor_kind = _floor_kind_for(str(_main.get("map_path")) if _main.get("map_path") != null else "")
 	_build_floor(centre, radius)
-	_build_mist(centre, radius)
+	if not "--floor-clear" in OS.get_cmdline_user_args():   # dev: --floor-clear = no floor fog sheet, no floor haze
+		_build_mist(centre, radius)
 	for n in sim.nodes:
 		_build_tube(n)
 	_build_pools()
@@ -166,6 +168,18 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 	m.set_shader_parameter("r0", radius + 30.0)
 	m.set_shader_parameter("r1", radius + 110.0)
 	m.set_shader_parameter("kind", FLOOR_KINDS.find(floor_kind))
+	# R3A-2 geometry v2 tiles (director, 2026-11-07); --floor-v1 keeps the old procedural placeholder for before/after.
+	var v1 := "--floor-v1" in OS.get_cmdline_user_args()
+	m.set_shader_parameter("tiles", not v1)
+	if not v1:
+		var dir := FLOORS_V2 + floor_kind
+		m.set_shader_parameter("t_base", load(dir + "-base-v2.png"))
+		for v in ["b", "c", "d", "e"]:
+			m.set_shader_parameter("t_" + v, load("%s-variant-%s-v2.png" % [dir, v.to_upper()]))
+		m.set_shader_parameter("t_crust", load(FLOORS_V2 + "crust-tile-v2.png"))
+		m.set_shader_parameter("r_district", radius + 30.0)
+	if "--floor-clear" in OS.get_cmdline_user_args():
+		m.set_shader_parameter("haze", 0.0)
 	m.render_priority = -10                          # the first transparent drawn: everything above blends over it
 	_floor.material_override = m
 	_floor.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
