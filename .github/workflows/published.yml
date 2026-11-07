@@ -1,0 +1,38 @@
+# After every GitHub Pages deploy: check that the four live URLs serve what gh-pages holds, then tag each source commit
+# v<version> and write a GitHub Release with the facts (owner: 🔧 Infra; tools/ci/published.sh).
+# deployment_status runs only from the default branch, so this works once it is on main. A push to infra/publish
+# runs it as a dry run (checks only, no tags or releases).
+name: published
+
+on:
+  deployment_status:
+  workflow_dispatch:
+  push:
+    branches: [infra/publish]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: published
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name != 'deployment_status' || (github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'github-pages')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: tools/ci
+
+      - name: gh-pages history (commits and trees only)
+        run: git fetch --filter=blob:none --depth=100 origin +refs/heads/gh-pages:refs/remotes/origin/gh-pages
+
+      - name: Check the live site, tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY: ${{ github.event_name == 'push' && '1' || '0' }}
+        run: bash tools/ci/published.sh

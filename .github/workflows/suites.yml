@@ -5,7 +5,7 @@ name: suites
 
 on:
   push:
-    branches-ignore: [gh-pages, infra/ci]
+    branches-ignore: [gh-pages, infra/ci, infra/publish]
   pull_request:
   workflow_dispatch:
     inputs:
