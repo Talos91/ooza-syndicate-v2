@@ -1,0 +1,4 @@
+FAIL  N-04: on 02 BATTLEFIELD / the random rematch again
+FAIL  N-24: on 02 BATTLEFIELD / the random rematch again
+FAIL  proto build: the pool is exactly MapPool.PROTO
+FAILURES (3 failed)
