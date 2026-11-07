@@ -1,0 +1,33 @@
+FAIL  1v1: a full room rejects a sixth player
+FAIL  1v1: distinct seats A..
+FAIL  1v1: every seat filled
+FAIL  1v1: first guest is seat B
+FAIL  1v1: guest sees the lobby
+FAIL  1v1: host can deploy
+FAIL  2v2: a full room rejects a sixth player
+FAIL  2v2: distinct seats A..
+FAIL  2v2: every seat filled
+FAIL  2v2: first guest is seat B
+FAIL  2v2: guest sees the lobby
+FAIL  2v2: host can deploy
+FAIL  FFA3: a full room rejects a sixth player
+FAIL  FFA3: distinct seats A..
+FAIL  FFA3: every seat filled
+FAIL  FFA3: first guest is seat B
+FAIL  FFA3: guest sees the lobby
+FAIL  FFA3: host can deploy
+FAIL  FFA4: a full room rejects a sixth player
+FAIL  FFA4: distinct seats A..
+FAIL  FFA4: every seat filled
+FAIL  FFA4: first guest is seat B
+FAIL  FFA4: guest sees the lobby
+FAIL  FFA4: host can deploy
+FAIL  FFA5: a full room rejects a sixth player
+FAIL  FFA5: distinct seats A..
+FAIL  FFA5: every seat filled
+FAIL  FFA5: first guest is seat B
+FAIL  FFA5: guest sees the lobby
+FAIL  FFA5: host can deploy
+FAIL  a different game version is rejected
+FAIL  back to 1v1
+FAIL  host widens the room; deploy waits for the new seat

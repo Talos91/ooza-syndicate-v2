@@ -1,0 +1,93 @@
+# Headless Godot suites on every push (owner: 🔧 Infra; plan: Talos Vault raw/notes/2026-11-07-ooze-infra-pass-plan.md).
+# Judged per line (main / proto / demo, from Rules.VERSION) against tools/ci/baseline/<line>/ - see tools/ci/run_suite.sh.
+# Does not replace the Release worker's full run on the assembled branch (orchestrator, 2026-11-07).
+name: suites
+
+on:
+  push:
+    branches-ignore: [gh-pages, infra/ci]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      long:
+        description: "Also run the long suites (ai_curve, ai_coop)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: suites-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.6.1"
+
+jobs:
+  suite:
+    name: ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [sim, net, maps4, map_pool, round_r, ui_kit]
+        include:
+          - suite: ai_curve
+            long: true
+            cap: 2000
+          - suite: ai_coop
+            long: true
+            cap: 2000
+    steps:
+      - name: Skip the long suites unless asked
+        id: gate
+        run: |
+          if [ "${{ matrix.long }}" = "true" ] && [ "${{ inputs.long }}" != "true" ]; then echo "run=false" >> "$GITHUB_OUTPUT"; else echo "run=true" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+
+      - name: Godot cache
+        id: godot
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux
+
+      - name: Download Godot
+        if: steps.gate.outputs.run == 'true' && steps.godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot && cd ~/godot
+          curl -sSLo godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip && rm godot.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot && chmod +x godot
+
+      - name: Import cache
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .godot
+          key: import-${{ env.GODOT_VERSION }}-${{ hashFiles('project.godot', '**/*.import') }}
+          restore-keys: import-${{ env.GODOT_VERSION }}-
+
+      - name: Import (twice, as on a fresh clone)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          mkdir -p ci-logs
+          for i in 1 2; do timeout 900 ~/godot/godot --headless --import --path . > ci-logs/import_$i.log 2>&1; echo "import $i exit=$?"; done
+
+      - name: test_${{ matrix.suite }}
+        if: steps.gate.outputs.run == 'true'
+        env:
+          CAP: ${{ matrix.cap || 900 }}
+        run: |
+          export GODOT="$HOME/godot/godot"
+          bash tools/ci/run_suite.sh ${{ matrix.suite }}
+
+      - name: Logs
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.suite }}
+          path: ci-logs/
+          retention-days: 14
