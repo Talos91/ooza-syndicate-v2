@@ -48,7 +48,9 @@ const LAB_PIC_MIRROR := true                     # mirror-repeat it over the flo
 # mean #343C4A), the side backdrop LAB-SIDE-B-MACHINERY (--lab-side=a: A-CALM), the floor decals from one atlas
 # (world_decals.gd). --floor=lab5 forces it on any map; --floor=labpic keeps the rectified picture, --floor-v1 the
 # procedural placeholder.
-const LAB5_FLOOR := "res://assets/world/lab5_floor_2048.png"
+const LAB5_FLOOR := "res://assets/world/lab5_floor_2048_flush.png"   # FLUSH slabs (Daniele 2026-11-07: one continuous
+                                                 # pavement; tools/floor_flush.py, 1 px seam 5 % darker); --floor-grout: the original
+const LAB5_FLOOR_GROUT := "res://assets/world/lab5_floor_2048.png"
 const LAB5_TILE_M := 32.0
 const LAB5_HAZE := 0.03                          # already mid-gray: a touch of floor haze only
 const LAB5_MIST := 0.45                          # the fog sheet between arena and floor, x its density
@@ -285,7 +287,7 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 	m.set_shader_parameter("tiles", not v1 and not floor_pic and not floor_lab5)
 	if floor_lab5:
 		m.set_shader_parameter("lab5", true)
-		m.set_shader_parameter("t_lab5", load(PerfProfile.hi_path(LAB5_FLOOR)))
+		m.set_shader_parameter("t_lab5", load(PerfProfile.hi_path(LAB5_FLOOR_GROUT if "--floor-grout" in OS.get_cmdline_user_args() else LAB5_FLOOR)))
 		m.set_shader_parameter("lab5_m", LAB5_TILE_M)
 		m.set_shader_parameter("lab5_gain", LAB5_GAIN)
 		m.set_shader_parameter("haze", LAB5_HAZE)
