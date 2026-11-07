@@ -532,6 +532,7 @@ var _fl_yaw := PackedFloat32Array()
 var _fl_mode := PackedByteArray()    # 0 free, 1 pop, 2 fall
 var _fl_scale := PackedFloat32Array() # the body's model scale
 var _fl_seat := PackedStringArray()   # its owner (a pop's goo splash)
+var _fl_land := PackedFloat32Array()  # WORLD PASS 2 (F1 / F2): the age it hits the world floor (FALL_T without one)
 var _fl_next := 0
 var falls_drawn := 0                 # bodies sent off a lip so far, spray included (probes read these)
 var falls_real := 0
@@ -590,6 +591,7 @@ func _put_faller(key: String, p: Vector3, v: Vector3, spin: Vector3, t0: float, 
 		_fl_mode.resize(FALL_MAX)
 		_fl_scale.resize(FALL_MAX)
 		_fl_seat.resize(FALL_MAX)
+		_fl_land.resize(FALL_MAX)
 	var i := _fl_next
 	_fl_next = (_fl_next + 1) % FALL_MAX
 	_fl_key[i] = key
@@ -601,6 +603,11 @@ func _put_faller(key: String, p: Vector3, v: Vector3, spin: Vector3, t0: float, 
 	_fl_mode[i] = mode
 	_fl_scale[i] = _scale[key.get_slice("|", 0)]
 	_fl_seat[i] = key.get_slice("|", 1)
+	_fl_land[i] = FALL_T
+	var wl := WorldLayer.active
+	if mode == 2 and wl != null:                      # true 3D down to the floor, where its splat appears
+		var drop := wl.fall_depth(p.y)
+		_fl_land[i] = (v.y + sqrt(v.y * v.y + 2.0 * POUR_G * drop)) / POUR_G
 
 
 func _draw_fallers() -> void:
@@ -610,7 +617,12 @@ func _draw_fallers() -> void:
 			continue
 		var age := _now - _fl_t[i]
 		var key: String = _fl_key[i]
-		if age > (POP_T if mode == 1 else FALL_T) or not _xf.has(key):
+		if age > (POP_T if mode == 1 else _fl_land[i]) or not _xf.has(key):
+			var wl := WorldLayer.active
+			if mode == 2 and wl != null and _xf.has(key):  # it hit the floor: the splat exactly there (F1)
+				var tl := _fl_land[i]
+				var vl: Vector3 = _fl_v[i]
+				wl.land_body(_fl_p[i] + Vector3(vl.x, 0.0, vl.z) * tl + Vector3.UP * (vl.y * tl - 0.5 * POUR_G * tl * tl), _fl_seat[i])
 			_fl_mode[i] = 0
 			continue
 		if age < 0.0:
@@ -631,7 +643,7 @@ func _draw_fallers() -> void:
 		else:
 			var sp: Vector3 = _fl_spin[i]
 			var v: Vector3 = _fl_v[i]
-			var shrink := 1.0 - 0.35 * smoothstep(FALL_T * 0.6, FALL_T, age)
+			var shrink := 1.0 - 0.35 * smoothstep(FALL_T * 0.6, FALL_T, age) if WorldLayer.active == null else 1.0
 			var stretch := 1.0 + 0.18 * clampf(age / 0.5, 0.0, 1.0)            # stretched by the fall
 			var sq := 1.0 / sqrt(stretch)
 			basis = Basis(Vector3.UP, _fl_yaw[i] + MODEL_YAW + sp.y * age) * Basis(Vector3(1, 0, 0), sp.x * age) \

@@ -2,6 +2,9 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo2** - 2026-11-07 (demo-world, staging/demo/): Daniele's demo fixes from world pass 2 (world-entrance 3b17404): lab biome
+  R5 floor (lab5) + decals + side backdrop by default, true-3D falls splat where they hit, GPU Locals queue; craters layout 2 by default.
+  Still R-01 STRAIT only, no URL flags.
 - **0.23.27-demo1** - 2026-11-07 (demo-world, staging/demo/): one playable map, R-01 STRAIT, with the new world (lab floor
   picture, containment-ring craters at the sides, Locals march into four-door tube entrances; world-entrance 3b43f94) and the new
   interface (held release-0.23.27 30d264c = main 0.23.26 + ui-menus 07fc8c7 + ui-node def2f17, all 80 GMN-2 HUD pieces). Proto
