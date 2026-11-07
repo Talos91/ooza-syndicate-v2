@@ -1,31 +1,39 @@
 class_name WorldLocals
 extends Node3D
-## LOCALS MARCH (cosmetic, VIEW ONLY, no rules): the lab's CONTAINMENT RING craters on the world floor, where the gray
-## native goo (the Locals, WORLD-LORE-2026-11) wells up. Locals rise out of a crater's pool, hop over the rim, walk the
-## floor to the NEAREST door of each tube's four-door entrance (each tube is fed by its nearest crater), queue in a short
-## line, squeeze in (squash + shrink at the door) and ride up the tube as gray goo (WorldLayer riders).
+## LOCALS (cosmetic, VIEW ONLY, no rules): the lab's CONTAINMENT RING craters on the world floor, where the gray native
+## goo (the Locals, WORLD-LORE-2026-11) wells up to load the vats. WORLD PASS 2 (Daniele: "a NON-STOP queue at every
+## tube"): each tube with a door is fed by its nearest crater; its Locals rise out of the pool, hop the rim and walk the
+## feed's path to the back of ONE line that runs from the tube's door back toward the crater (at most LINE_MAX, and no
+## more than the path holds; a full line = the crater stops sending to that tube). The line is read from the Sim
+## (read only): Locals enter the door at the node's production pace (shown units / s: one Local per shown unit, as fast
+## as the shuffle allows, WALK_V / GAP); a node at its cap (or with no vat) admits none, so its line stands still until
+## room returns, then moves up.
+## GPU-DRIVEN (L1): one MultiMesh; the CPU writes a Local's path data once per event (spawn, queue advance, door entry,
+## melt) into its instance transform and the vertex shader (shaders/world_local.gdshader) moves it from a per-frame
+## `now`: rise, droplets, hop, plop, walk, bob, breathing, door squash. Paths live in a small float texture (row per feed).
 ## Art: Models/2.0/world-1.0/build_containment_ring.py (ring v1) + build_tube_entrance_v2.py (four doors).
 ## Layouts (--craters=1|2|4): 1 = the map centre; 2 = the board's left and right side; 4 = near each corner of the
 ## board's bounding box - each nudged to the nearest floor the default camera sees (platforms and bridges block it).
-## Budget: two draws (one MultiMesh of rings, one of Locals), fixed pools, Locals gray only, no skeletons: bob and
-## squash in the shader (shaders/world_local.gdshader), the pool swirl in shaders/world_ring.gdshader.
+## Lab biome: the floor decals (world_decals.gd: spawn surrounds, march lanes, tube-foot pools, stains, arcs).
 
 const RING_GLB := "res://assets/world/containment_ring_v1.glb"
 const SHADER_RING := preload("res://shaders/world_ring.gdshader")
 const SHADER_LOCAL := preload("res://shaders/world_local.gdshader")
 
-const SPAWN_EVERY := 2.0          # s: one Local per fed tube (on average; small bursts make the queues)
-const WALK_V := 1.2               # m/s on the floor
-const LOCALS_MAX := 150           # the pool; a spawn waits while it is full
-const ADMIT_EVERY := 1.8          # s: a door takes one Local
-const SQUEEZE_T := 0.55           # s: squash + shrink through the door
-const EMERGE_T := 0.8             # s: rising out of the pool
-const HOP_T := 1.1                # s: the hop over the rim
-const QUEUE_GAP := 0.72           # m between queued Locals
-const QUEUE_LEN := 5              # the walk ends at the back of a line this long (the line may grow past it)
-const DOOR_OUT := 1.78            # m from the tube axis: the first queue slot (the hood's front is at 1.52)
+const LOCALS_MAX := 1500          # the pool (STRAIT steady state ~600)
+const LINE_MAX := 30              # Locals in one tube's line at most
+const LOCAL_SIZE := 1.0           # m long (L3; was 0.62)
+const WALK_V := 1.6               # m/s on the floor (the line shuffles at this too: WALK_V / GAP Locals / s at most)
+const GAP := 1.15                 # m between Locals in a line
+const SPAWN_GAP := 0.6            # s at most between two Locals sent to the same tube (faster for a faster vat)
+const EMERGE_T := 1.0             # s: rising out of the pool
+const HOP_T := 0.9                # s: the hop over the rim
+const SQUEEZE_T := 0.6            # s: squash + shrink through the door
+const MELT_T := 0.6
+const DOOR_OUT := 2.05            # m from the tube axis: the first slot of the line (the hood's front is at 1.52)
 const DOOR_MOUTH := 1.30          # m: where a Local vanishes into the door
-const LOCAL_SIZE := 0.62          # m wide (QUEUE KIT blob)
+const APPROACH := 3.0             # m: the last stretch runs straight along the door's axis
+const PATH_PTS := 16              # waypoints per feed in the paths texture (texel 16 = mouth, points, length)
 const RING_R := 5.0               # containment ring v1: outer radius
 const POOL_R := 3.5
 const POOL_H := 0.55
@@ -47,14 +55,15 @@ var layout := DEFAULT_LAYOUT
 var craters: Array = []           # Vector3 on the floor
 var targets: Array = []           # the layout's targets before the visibility nudge (debug view)
 var crater_vis: Array = []        # share of the ring the default camera sees
-var feeds: Dictionary = {}        # tube index -> {crater, dir, path, queue, next_spawn, next_admit}
+var feeds: Dictionary = {}        # tube index -> {crater, dir, path, len, row, cap, line, next_spawn, next_admit, rate}
 var placed := false
 var spawned := 0
 var admitted := 0
-var _locals: Array = []           # {st, t0, tube, p, path, d, ph, s, from, to, dir}
+var writes := 0                   # instance writes so far (the CPU touches a Local only on its events)
 var _t := 0.0
 var _ring_mm: MultiMesh
 var _loc_mm: MultiMesh
+var _loc_mat: ShaderMaterial
 var _syncs := 0
 var _debug: MeshInstance3D
 var plan: Dictionary = {}         # the floor plan JSON (empty: none for this map)
@@ -63,6 +72,23 @@ var _mask_px := 16.0
 var _mask_x0 := -80.0
 var _mask_z0 := -80.0
 var step_us := 0                  # the last step's CPU cost (perf probe)
+var decals: WorldDecals
+# per Local (slot) - the CPU's copy of what its instance holds
+var _ts := PackedFloat64Array()   # spawn time
+var _tw := PackedFloat64Array()   # walk clock start
+var _d0 := PackedFloat64Array()   # distance along the path at _tw
+var _d1 := PackedFloat64Array()   # its slot's distance (the walk stops there)
+var _td := PackedFloat64Array()   # door time (> 0), melt time (< 0), 0 none
+var _row := PackedInt32Array()    # the feed's path row
+var _px := PackedFloat32Array()   # where it wells up
+var _pz := PackedFloat32Array()
+var _seed := PackedFloat32Array()
+var _size := PackedFloat32Array()
+var _free: Array[int] = []
+var _hwm := 0
+var _dying: Array = []            # [slot, free at]
+var _alive := 0
+var _paths_tex: ImageTexture
 
 
 static func layout_arg() -> int:
@@ -81,11 +107,9 @@ func setup(w: WorldLayer) -> void:
 	var ring_mesh := _glb_mesh(RING_GLB)
 	var rm := ShaderMaterial.new()
 	rm.shader = SHADER_RING
-	rm.set_shader_parameter("abyss", Scenery.ABYSS)
-	if "--floor-clear" in OS.get_cmdline_user_args():
-		rm.set_shader_parameter("haze", 0.0)
-	elif wl.floor_pic:
-		rm.set_shader_parameter("haze", WorldLayer.LAB_PIC_HAZE)
+	rm.set_shader_parameter("abyss", wl.haze_abyss())
+	if wl.floor_haze >= 0.0:
+		rm.set_shader_parameter("haze", wl.floor_haze)
 	_ring_mm = MultiMesh.new()
 	_ring_mm.transform_format = MultiMesh.TRANSFORM_3D
 	_ring_mm.use_colors = true                       # the Compatibility renderer multiplies COLOR by it (black without)
@@ -98,30 +122,105 @@ func setup(w: WorldLayer) -> void:
 	rmi.material_override = rm
 	rmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(rmi)
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.5
-	sphere.height = 1.0
-	sphere.radial_segments = 8
-	sphere.rings = 5
-	var lm := ShaderMaterial.new()
-	lm.shader = SHADER_LOCAL
-	lm.set_shader_parameter("abyss", Scenery.ABYSS)
-	if "--floor-clear" in OS.get_cmdline_user_args():
-		lm.set_shader_parameter("haze", 0.0)
-	elif wl.floor_pic:
-		lm.set_shader_parameter("haze", WorldLayer.LAB_PIC_HAZE)
+	_loc_mat = ShaderMaterial.new()
+	_loc_mat.shader = SHADER_LOCAL
+	_loc_mat.set_shader_parameter("abyss", wl.haze_abyss())
+	if wl.floor_haze >= 0.0:
+		_loc_mat.set_shader_parameter("haze", wl.floor_haze)
+	_loc_mat.set_shader_parameter("floor_y", wl.floor_y)
+	_loc_mat.set_shader_parameter("pool_y", wl.floor_y + POOL_H)
+	_loc_mat.set_shader_parameter("walk_v", WALK_V)
+	_loc_mat.set_shader_parameter("emerge_t", EMERGE_T)
+	_loc_mat.set_shader_parameter("hop_t", HOP_T)
+	_loc_mat.set_shader_parameter("squeeze_t", SQUEEZE_T)
+	_loc_mat.set_shader_parameter("rim_h", RIM_H)
 	_loc_mm = MultiMesh.new()
 	_loc_mm.transform_format = MultiMesh.TRANSFORM_3D
-	_loc_mm.use_colors = true
-	_loc_mm.use_custom_data = true
-	_loc_mm.mesh = sphere
+	_loc_mm.use_colors = true                        # (white, set once per slot: see the Compatibility note above)
+	_loc_mm.mesh = local_mesh()
 	_loc_mm.instance_count = LOCALS_MAX
 	_loc_mm.visible_instance_count = 0
 	var lmi := MultiMeshInstance3D.new()
 	lmi.multimesh = _loc_mm
-	lmi.material_override = lm
+	lmi.material_override = _loc_mat
 	lmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	lmi.custom_aabb = AABB(Vector3(-2000, -500, -2000), Vector3(4000, 1000, 4000))   # the transforms hold data, not poses
 	add_child(lmi)
+	_ts.resize(LOCALS_MAX)                           # (packed arrays are values: each resized by name)
+	_tw.resize(LOCALS_MAX)
+	_d0.resize(LOCALS_MAX)
+	_d1.resize(LOCALS_MAX)
+	_td.resize(LOCALS_MAX)
+	_px.resize(LOCALS_MAX)
+	_pz.resize(LOCALS_MAX)
+	_seed.resize(LOCALS_MAX)
+	_size.resize(LOCALS_MAX)
+	_row.resize(LOCALS_MAX)
+
+
+static func local_mesh() -> ArrayMesh:
+	## L3: a Local - a glossy goo drop, LOCAL_SIZE long (+Z forward), 0.78 wide, 0.64 tall: 10 sides (the silhouette the
+	## 54 deg camera sees is the shoulder ring), a foot ring, the shoulder and a leaning crown (30 tris), plus two droplet
+	## quads (4 tris, UV.x = 1 / 2: the shader flings them while it wells up, round in the fragment). 34 tris.
+	var n := 10
+	var prof := [[0.0, 0.42, 0.0], [0.24, 0.50, 0.0]]   # [y, radius, z shift (a forward lean)]
+	var apex := Vector3(0, 0.64, 0.1)
+	var vs := PackedVector3Array()
+	var ns := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var idx := []
+	var sx := 0.78 * LOCAL_SIZE
+	var sz := 1.0 * LOCAL_SIZE
+	for r in prof:
+		for k in range(n):
+			var a := TAU * k / n
+			var p := Vector3(sin(a) * float(r[1]) * sx, float(r[0]) * LOCAL_SIZE, cos(a) * float(r[1]) * sz + float(r[2]))
+			vs.append(p)
+			ns.append(Vector3(p.x / sx, (p.y - 0.24) * 1.4, (p.z - float(r[2])) / sz).normalized())
+			uvs.append(Vector2.ZERO)
+	vs.append(apex * Vector3(1, LOCAL_SIZE, 1))
+	ns.append(Vector3.UP)
+	uvs.append(Vector2.ZERO)
+	var top := vs.size() - 1
+	for ring in range(prof.size() - 1):
+		for k in range(n):
+			var a0 := ring * n + k
+			var a1 := ring * n + (k + 1) % n
+			var b0 := a0 + n
+			var b1 := a1 + n
+			var out := (vs[a0] + vs[a1] + vs[b0] + vs[b1]) * Vector3(1, 0, 1)
+			_tri(vs, idx, a0, a1, b1, out)
+			_tri(vs, idx, a0, b1, b0, out)
+	var last := (prof.size() - 1) * n
+	for k in range(n):
+		var a0 := last + k
+		var a1 := last + (k + 1) % n
+		_tri(vs, idx, a0, a1, top, Vector3.UP + (vs[a0] + vs[a1]) * Vector3(1, 0, 1))
+	for j in range(2):                                   # droplets: corners in the camera plane (shader billboards them)
+		var b := vs.size()
+		for c in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(0.5, 0.5), Vector2(-0.5, 0.5)]:
+			vs.append(Vector3(c.x, c.y, 0.0))
+			ns.append(Vector3(0, 0, 1))
+			uvs.append(Vector2(1.0 + j, 0.0))
+		_tri(vs, idx, b, b + 1, b + 2, Vector3(0, 0, 1))
+		_tri(vs, idx, b, b + 2, b + 3, Vector3(0, 0, 1))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vs
+	arrays[Mesh.ARRAY_NORMAL] = ns
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array(idx)
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m
+
+
+static func _tri(vs: PackedVector3Array, idx: Array, a: int, b: int, c: int, out: Vector3) -> void:
+	## Godot's front face: (c - a) x (b - a) points out (SurfaceTool.generate_normals' convention)
+	if (vs[c] - vs[a]).cross(vs[b] - vs[a]).dot(out) < 0.0:
+		idx.append_array([a, c, b])
+	else:
+		idx.append_array([a, b, c])
 
 
 static func _glb_mesh(path: String) -> Mesh:
@@ -269,6 +368,12 @@ func place(cam: Camera3D) -> void:
 	_ring_mm.visible_instance_count = craters.size()
 	placed = true
 	_route_all()
+	if wl.floor_lab5 and not "--no-decals" in OS.get_cmdline_user_args():   # the lab floor decals (world pass 2)
+		decals = WorldDecals.new()
+		add_child(decals)
+		decals.setup(wl._floor.material_override as ShaderMaterial, wl.floor_y)
+		decals.build(self, cam)
+		wl.decals = decals
 
 
 func _clear(q: Vector2) -> bool:
@@ -340,10 +445,13 @@ const DOOR_DIRS := [Vector2(0, 1), Vector2(1, 0), Vector2(0, -1), Vector2(-1, 0)
 
 
 func _route_all() -> void:
+	## one feed per tube with a door: its nearest crater, the door facing it, a path from the crater's rim to the door's
+	## first slot (the last APPROACH metres straight on the door's axis) - the line forms back along that path
 	feeds.clear()
+	var rows := 0
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
-		if not tb.get("ent", false):
+		if not tb.get("ent", false) or craters.is_empty():
 			continue                                  # pillar sleeves have no doors
 		var t2 := Vector2(tb["x"], tb["z"])
 		var ci := 0
@@ -361,13 +469,39 @@ func _route_all() -> void:
 			if dist < dd:
 				dd = dist
 				dir = d2
-		var back := t2 + dir * (DOOR_OUT + (QUEUE_LEN - 1) * QUEUE_GAP)
-		var exit := c2 + (back - c2).normalized() * (RING_R + 0.4)
-		var path := _steer(exit, back, i, 0)
+		var slot0 := t2 + dir * DOOR_OUT
+		var appr := t2 + dir * (DOOR_OUT + APPROACH)
+		var exit := c2 + (appr - c2).normalized() * (RING_R + 0.4)
+		var path := _steer(exit, appr, i, 0)
 		path.push_front(exit)
-		path.append(back)
-		feeds[i] = {"crater": ci, "dir": dir, "path": path, "len": _plen(path), "queue": [],
-				"next_spawn": randf() * SPAWN_EVERY, "next_admit": 0.0}
+		path.append(appr)
+		path.append(slot0)
+		while path.size() > PATH_PTS:                 # (never seen: a path bends round at most a few feet)
+			path.remove_at(path.size() / 2)
+		var plen := _plen(path)
+		feeds[i] = {"crater": ci, "dir": dir, "path": path, "len": plen, "row": rows, "line": [],
+				"cap": clampi(int((plen - 0.6) / GAP) + 1, 1, LINE_MAX), "next_spawn": randf() * SPAWN_GAP,
+				"next_admit": 0.0, "rate": 0.0, "mouth": t2 + dir * DOOR_MOUTH}
+		rows += 1
+	_build_paths_tex(rows)
+
+
+func _build_paths_tex(rows: int) -> void:
+	## the feeds' paths for the vertex shader: RGBA32F, row = feed, texel k = (x, z, distance along), texel 16 = (mouth x,
+	## mouth z, points, length)
+	var img := Image.create(PATH_PTS + 1, maxi(rows, 1), false, Image.FORMAT_RGBAF)
+	for i in feeds:
+		var f: Dictionary = feeds[i]
+		var path: Array = f["path"]
+		var cum := 0.0
+		for k in range(path.size()):
+			if k > 0:
+				cum += (path[k] as Vector2).distance_to(path[k - 1])
+			img.set_pixel(k, int(f["row"]), Color((path[k] as Vector2).x, (path[k] as Vector2).y, cum, 0.0))
+		var m: Vector2 = f["mouth"]
+		img.set_pixel(PATH_PTS, int(f["row"]), Color(m.x, m.y, float(path.size()), cum))
+	_paths_tex = ImageTexture.create_from_image(img)
+	_loc_mat.set_shader_parameter("paths", _paths_tex)
 
 
 func _obstacles(skip_tube: int) -> Array:
@@ -434,15 +568,15 @@ static func _along(path: Array, d: float) -> Array:
 	return [path[-1], Vector2(0, 1)]
 
 
-# ------------------------------------------------------------------ per frame
+# ------------------------------------------------------------------ per frame (events only: the shader moves them)
 func prewarm(seconds: float) -> void:
-	## dev / shots: run the march so the frame shows the steady state (the game itself starts empty at the match start)
+	## dev / shots: run the lines so the frame shows the steady state (the game itself starts empty at the match start)
 	var n := int(seconds / 0.1)
 	for i in range(n):
 		step(0.1, false)
 
 
-func step(dt: float, draw := true) -> void:
+func step(dt: float, _draw := true) -> void:
 	_syncs += 1
 	if not placed:
 		var cam := get_viewport().get_camera_3d()
@@ -451,179 +585,136 @@ func step(dt: float, draw := true) -> void:
 		place(cam)
 	var t0 := Time.get_ticks_usec()
 	_t += dt
-	_spawn()
-	_move(dt)
-	if draw:
-		_draw()
+	_loc_mat.set_shader_parameter("now", _t)
+	while not _dying.is_empty() and _t >= float(_dying[0][1]):
+		_free.append(int(_dying.pop_front()[0]))      # its instance already draws nothing (the shader ended it)
+		_alive -= 1
+	for i in feeds:
+		_feed_step(i, feeds[i])
 	step_us = Time.get_ticks_usec() - t0
 
 
-func _spawn() -> void:
-	for i in feeds:
-		var f: Dictionary = feeds[i]
-		var tb: Dictionary = wl._tubes[i]
-		if _t < float(f["next_spawn"]):
-			continue
-		if not tb.get("shown", false) or not tb["alive"]:
-			f["next_spawn"] = _t + SPAWN_EVERY
-			continue
-		if _locals.size() >= LOCALS_MAX:
-			continue
-		# bursts of 1-3 Locals 0.4-0.7 s apart, then a gap that keeps the mean at SPAWN_EVERY: short lines at the door
-		var left := int(f.get("burst", 0))
-		if left <= 0:
-			var nb: int = [1, 1, 2, 3][randi() % 4]
-			left = nb
-			f["gap"] = nb * SPAWN_EVERY
-		left -= 1
-		f["burst"] = left
-		if left > 0:
-			var g := randf_range(0.4, 0.7)
-			f["gap"] = float(f["gap"]) - g
-			f["next_spawn"] = _t + g
-		else:
-			f["next_spawn"] = _t + maxf(float(f["gap"]), 0.4)
-		var cp: Vector3 = craters[int(f["crater"])]
-		var path: Array = f["path"]
-		var exit: Vector2 = path[0]
-		var dir2 := (exit - Vector2(cp.x, cp.z)).normalized()
-		var a := randf() * TAU
-		var rr := sqrt(randf()) * (POOL_R - 0.9)
-		var from := Vector2(cp.x + cos(a) * rr, cp.z + sin(a) * rr)
-		from = from.lerp(Vector2(cp.x, cp.z) + dir2 * (POOL_R - 1.0), 0.35)   # well up toward the exit side
-		_locals.append({"st": 0, "t0": _t, "tube": i, "from": from, "p": from, "d": 0.0, "ph": randf() * TAU,
-				"s": randf_range(0.85, 1.12), "dir": dir2})
-		spawned += 1
+func vat_rate(n: Dictionary) -> float:
+	## L2 (read only, no rule): the node's production now in shown units / s - an owned vat under its cap (allied troops
+	## count, as Sim.step), a neutral vat regrowing to its garrison; 0 at the cap or with no vat
+	var sim := wl.sim
+	if not Sim.has_vat(n) or sim.collapsed.get(n["id"], false):
+		return 0.0
+	if n["owner"] != "":
+		if sim.garrison_total(n) >= float(Rules.CAPS[n["tier"]]) - 0.001:
+			return 0.0
+		return Rules.shown_f(sim._base_production(n) * float(sim._prod_info(n)[0]))
+	if Rules.NEUTRAL_REGEN and float(n["units"]) < float(n.get("regen_cap", Rules.NEUTRAL_UNITS.get(n["tier"], 0))):
+		return Rules.shown_f(Rules.PROD[n["tier"]])
+	return 0.0
 
 
-func _move(dt: float) -> void:
-	var keep := []
-	for L in _locals:
-		var f: Dictionary = feeds.get(int(L["tube"]), {})
-		var tb: Dictionary = wl._tubes[int(L["tube"])]
-		var age := _t - float(L["t0"])
-		var st: int = L["st"]
-		if f.is_empty():
-			continue
-		if st >= 2 and st <= 3 and (not tb.get("shown", false) or not tb["alive"]):
-			L["st"] = 5                               # the tube is gone: the Local melts where it stands
-			L["t0"] = _t
-			st = 5
-			age = 0.0
-		match st:
-			0:
-				if age >= EMERGE_T:
-					L["st"] = 1
-					L["t0"] = _t
-			1:
-				if age >= HOP_T:
-					L["st"] = 2
-					L["t0"] = _t
-					L["d"] = 0.0
-			2:
-				L["d"] = float(L["d"]) + WALK_V * dt
-				var at: Array = _along(f["path"], float(L["d"]))
-				L["p"] = at[0]
-				L["dir"] = at[1]
-				if float(L["d"]) >= float(f["len"]):
-					L["st"] = 3
-					(f["queue"] as Array).append(L)
-			3:
-				var q: Array = f["queue"]
-				var slot := q.find(L)
-				var t2 := Vector2(tb["x"], tb["z"])
-				var dir: Vector2 = f["dir"]
-				var want := t2 + dir * (DOOR_OUT + slot * QUEUE_GAP)
-				var p: Vector2 = L["p"]
-				var to := want - p
-				if to.length() > 0.02:
-					var stp := minf(to.length(), WALK_V * dt)
-					L["p"] = p + to.normalized() * stp
-					L["dir"] = to.normalized()
-				else:
-					L["dir"] = -dir
-				if slot == 0 and to.length() <= 0.05 and _t >= float(f["next_admit"]):
-					q.pop_front()
-					L["st"] = 4
-					L["t0"] = _t
-					L["from"] = L["p"]
-					f["next_admit"] = _t + ADMIT_EVERY
-			4:
-				if age >= SQUEEZE_T:
-					admitted += 1
-					if tb["alive"]:
-						(tb["riders"] as Array).append([wl.floor_y + 0.4, WorldLayer.NATIVE_GRAY])
-					continue
-				var t2b := Vector2(tb["x"], tb["z"])
-				L["p"] = (L["from"] as Vector2).lerp(t2b + (f["dir"] as Vector2) * DOOR_MOUTH, age / SQUEEZE_T)
-				L["dir"] = -(f["dir"] as Vector2)
-			5:
-				if age >= 0.6:
-					var q2: Array = f["queue"]
-					q2.erase(L)
-					continue
-		keep.append(L)
-	_locals = keep
+func _feed_step(i: int, f: Dictionary) -> void:
+	var tb: Dictionary = wl._tubes[i]
+	var line: Array = f["line"]
+	if not tb.get("shown", false) or not tb["alive"]:
+		if not line.is_empty():                       # the tube is gone: its line melts where it stands
+			for s in line:
+				var dn := _dnow(s)
+				_d0[s] = dn
+				_d1[s] = dn
+				_tw[s] = _t
+				_td[s] = -_t
+				_write(s)
+				_dying.append([s, _t + MELT_T + 0.05])
+			line.clear()
+		f["rate"] = 0.0
+		return
+	var rate := vat_rate(wl.sim.nodes[tb["id"]])
+	f["rate"] = rate
+	var plen: float = f["len"]
+	# the door: the front Local goes in at the vat's pace, once it stands at the first slot
+	if rate > 0.0 and not line.is_empty() and _t >= float(f["next_admit"]):
+		var s0: int = line[0]
+		if _dnow(s0) >= plen - 0.02:
+			_td[s0] = _t
+			_write(s0)
+			_dying.append([s0, _t + SQUEEZE_T + 0.05])
+			line.pop_front()
+			admitted += 1
+			f["next_admit"] = _t + 1.0 / rate
+			for k in range(line.size()):              # the line moves up one slot
+				var s: int = line[k]
+				_d0[s] = _dnow(s)
+				_tw[s] = maxf(_t, _tw[s])
+				_d1[s] = plen - k * GAP
+				_write(s)
+	# the crater: one more Local toward the back of the line, unless the line is full (then it stops sending here)
+	if line.size() < int(f["cap"]) and _t >= float(f["next_spawn"]) and _alive < LOCALS_MAX:
+		var gap := clampf(0.8 / maxf(rate, 0.8), 0.3, SPAWN_GAP)
+		f["next_spawn"] = _t + gap * randf_range(0.75, 1.3)
+		_spawn(f, line)
 
 
-func _draw() -> void:
-	var n := 0
-	for L in _locals:
-		var st: int = L["st"]
-		var age := _t - float(L["t0"])
-		var s := LOCAL_SIZE * float(L["s"])
-		var p2: Vector2 = L["p"]
-		var y := wl.floor_y
-		var squeeze := 0.0
-		var walk := 0.0
-		var cp: Vector3 = craters[int((feeds[int(L["tube"])] as Dictionary)["crater"])] if st <= 1 else Vector3.ZERO
-		match st:
-			0:                                        # rise out of the pool
-				var k := clampf(age / EMERGE_T, 0.0, 1.0)
-				y = wl.floor_y + POOL_H - 0.35 * s * (1.0 - k)
-				s *= 0.35 + 0.65 * k
-				squeeze = -0.4 * (1.0 - k)            # stretched up as it rises
-			1:                                        # hop over the rim and down to the floor
-				var k := clampf(age / HOP_T, 0.0, 1.0)
-				var path: Array = (feeds[int(L["tube"])] as Dictionary)["path"]
-				p2 = (L["from"] as Vector2).lerp(path[0], k)
-				var base := lerpf(wl.floor_y + POOL_H, wl.floor_y, k)
-				y = base + sin(k * PI) * (RIM_H + 0.9)
-				L["p"] = p2
-				walk = 0.0
-			2, 3:
-				walk = 1.0
-			4:
-				squeeze = clampf(age / SQUEEZE_T, 0.0, 1.0)
-				s *= 1.0 - 0.75 * squeeze
-			5:
-				s *= 1.0 - clampf(age / 0.6, 0.0, 1.0)
-		if st == 3 and (L["dir"] as Vector2).dot(-(feeds[int(L["tube"])] as Dictionary)["dir"]) > 0.99:
-			walk = 0.25                               # waiting: a slow breathing bob
-		var d2: Vector2 = L["dir"]
-		var fwd := Vector3(d2.x, 0.0, d2.y)
-		if fwd.length() < 0.01:
-			fwd = Vector3(0, 0, 1)
-		var basis := Basis.looking_at(fwd.normalized(), Vector3.UP).scaled(Vector3(s, s * 0.78, s))
-		var h := s * 0.78 * 0.5
-		_loc_mm.set_instance_transform(n, Transform3D(basis, Vector3(p2.x, y + h, p2.y)))
-		_loc_mm.set_instance_custom_data(n, Color(float(L["ph"]), walk, squeeze, 0.0))
-		_loc_mm.set_instance_color(n, Color.WHITE)
-		n += 1
-		if n >= LOCALS_MAX:
-			break
-	_loc_mm.visible_instance_count = n
+func _spawn(f: Dictionary, line: Array) -> void:
+	var s: int
+	if not _free.is_empty():
+		s = _free.pop_back()
+	else:
+		s = _hwm
+		_hwm += 1
+		_loc_mm.set_instance_color(s, Color.WHITE)
+		_loc_mm.visible_instance_count = _hwm
+	var cp: Vector3 = craters[int(f["crater"])]
+	var exit: Vector2 = (f["path"] as Array)[0]
+	var dir2 := (exit - Vector2(cp.x, cp.z)).normalized()
+	var a := randf() * TAU
+	var rr := sqrt(randf()) * (POOL_R - 1.0)
+	var from := Vector2(cp.x + cos(a) * rr, cp.z + sin(a) * rr)
+	from = from.lerp(Vector2(cp.x, cp.z) + dir2 * (POOL_R - 1.1), 0.4)   # well up toward the exit side
+	_ts[s] = _t
+	_tw[s] = _t + EMERGE_T + HOP_T
+	_d0[s] = 0.0
+	_d1[s] = float(f["len"]) - line.size() * GAP
+	_td[s] = 0.0
+	_row[s] = int(f["row"])
+	_px[s] = from.x
+	_pz[s] = from.y
+	_seed[s] = randf()
+	_size[s] = randf_range(0.9, 1.1)
+	_write(s)
+	line.append(s)
+	spawned += 1
+	_alive += 1
+
+
+func _dnow(s: int) -> float:
+	return minf(_d0[s] + WALK_V * maxf(_t - _tw[s], 0.0), _d1[s])
+
+
+func _write(s: int) -> void:
+	## the one place a Local's instance changes: its path data (see shaders/world_local.gdshader)
+	_loc_mm.set_instance_transform(s, Transform3D(Basis(Vector3(_ts[s], _tw[s], _d0[s]), Vector3(_d1[s], _td[s], float(_row[s])),
+			Vector3(_px[s], _pz[s], _seed[s])), Vector3(_size[s], 0.0, 0.0)))
+	writes += 1
 
 
 func count() -> int:
-	return _locals.size()
+	return _alive
 
 
 func queued() -> int:
+	## Locals standing in a line (arrived at their slot)
 	var q := 0
 	for i in feeds:
-		q += ((feeds[i] as Dictionary)["queue"] as Array).size()
+		for s in (feeds[i] as Dictionary)["line"]:
+			if _dnow(s) >= _d1[s] - 0.02 and _t >= _tw[s]:
+				q += 1
 	return q
+
+
+func lines() -> Array:
+	## per fed tube: [node id, line length, cap, rate (shown / s)] (probes)
+	var out := []
+	for i in feeds:
+		var f: Dictionary = feeds[i]
+		out.append([int(wl._tubes[i]["id"]), (f["line"] as Array).size(), int(f["cap"]), snappedf(float(f["rate"]), 0.01)])
+	return out
 
 
 # ------------------------------------------------------------------ debug overlay (shots)
@@ -660,7 +751,7 @@ func debug_overlay(on: bool, cam: Camera3D = null) -> void:
 		var tb: Dictionary = wl._tubes[i]
 		var t2 := Vector2(tb["x"], tb["z"])
 		var dir: Vector2 = f["dir"]
-		_seg(im, t2 + dir * 1.2, t2 + dir * (DOOR_OUT + (QUEUE_LEN - 1) * QUEUE_GAP), 0.5, y + 0.05, Color(1, 1, 1))
+		_seg(im, t2 + dir * 1.2, t2 + dir * DOOR_OUT, 0.5, y + 0.05, Color(1, 1, 1))
 	for tg in targets:
 		_seg(im, tg + Vector2(-1.5, -1.5), tg + Vector2(1.5, 1.5), 0.3, y + 0.1, Color(1, 0.85, 0.1))
 		_seg(im, tg + Vector2(-1.5, 1.5), tg + Vector2(1.5, -1.5), 0.3, y + 0.1, Color(1, 0.85, 0.1))

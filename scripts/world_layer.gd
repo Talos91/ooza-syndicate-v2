@@ -40,6 +40,20 @@ const LAB_PIC_MIST := 0.5                        # and a thinner fog sheet betwe
 const LAB_PIC_GAIN := 1.8                        # x brightness: at 1.0 the picture (mean #20262F) vanishes under the
                                                  # arena's fog at the game camera; 1.8 lets its arcs, patches and grid read
 const LAB_PIC_MIRROR := true                     # mirror-repeat it over the floor (false: fade its edge into its mean colour)
+# WORLD PASS 2 (director round 5, 2026-11-07): the LAB biome's default floor is R5-lab-floor (a seamless 32 x 32 m tile,
+# mean #343C4A), the side backdrop LAB-SIDE-B-MACHINERY (--lab-side=a: A-CALM), the floor decals from one atlas
+# (world_decals.gd). --floor=lab5 forces it on any map; --floor=labpic keeps the rectified picture, --floor-v1 the
+# procedural placeholder.
+const LAB5_FLOOR := "res://assets/world/lab5_floor_2048.png"
+const LAB5_TILE_M := 32.0
+const LAB5_HAZE := 0.03                          # already mid-gray: a touch of floor haze only
+const LAB5_MIST := 0.45                          # the fog sheet between arena and floor, x its density
+const LAB5_GAIN := 1.0
+const LAB5_FOG_HEIGHT_DENSITY := 0.035           # the scene's height fog under the decks (Scenery 0.24): the falling
+                                                 # bodies stay visible down to the floor (F2) instead of fogging out at -10 m
+# the floor's far haze and the backdrop's middle meet in this colour (round 5: backdrop middle ~#2B3443, floor #333C4A)
+const LAB_FAR := Color(0.168, 0.204, 0.263)
+const LAB_SIDE := "res://assets/art/backdrops/lab-side-%s-%d.jpg"   # a / b, 1184 (phone, 2.16:1) or 1440 (16:9)
 
 const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)
 const TUBE_R := 0.95             # a common platform's tube, under its machinery core
@@ -58,7 +72,9 @@ const CRAWL_V := 2.4             # m/s along the floor
 # Crawl time: whatever the distance takes (Daniele 2026-11-06: "takes whatever time the splatted goo needs").
 const RISE_V := 5.0              # m/s up the tube
 const SPLAT_LIFE := 7.0
-const SPLAT_MAX := 24
+const SPLAT_MAX := 48
+const MERGE_R := 0.5             # m past a fresh splat's blot edge (0.62 x size) where a body landing grows it instead
+const MERGE_T := 0.9             # s: how long a splat stays "fresh" for that
 const CRAWL_MAX := 48
 const DROP_MAX := 96
 const DROPS_PER_SPLAT := 8
@@ -79,6 +95,14 @@ var vis: Dictionary
 var floor_y := -16.0
 var floor_kind := "factory"
 var floor_pic := false            # --floor=labpic
+var floor_lab5 := false           # the lab biome's R5 tile floor (default for "lab", --floor=lab5 anywhere)
+var floor_haze := -1.0            # the world props' haze toward the void (-1: each shader's own default)
+static var active: WorldLayer     # the match's world layer (the fall views drop their bodies onto its floor: F1 / F2)
+var decals: WorldDecals           # the floor decals (one MultiMesh, one atlas)
+var _landed: Array = []           # bodies that hit the floor this frame: [Vector3, seat]
+var bodies_landed := 0
+var log_landings := false         # probes: [landing, its splat's centre, size] per body
+var landing_log: Array = []
 var locals: WorldLocals          # LOCALS MARCH: containment ring craters + the Locals walking to the tube doors
 var _zaps: Array = []            # pooled beams: {mi, t0}
 var zaps_done := 0
@@ -126,10 +150,21 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	var centre := (lo + hi) / 2.0
 	var radius := Vector2(hi.x - lo.x, hi.z - lo.z).length() / 2.0
 	floor_kind = _floor_kind_for(str(_main.get("map_path")) if _main.get("map_path") != null else "")
-	floor_pic = "--floor=labpic" in OS.get_cmdline_user_args()
-	if floor_pic:
+	var args := OS.get_cmdline_user_args()
+	floor_pic = "--floor=labpic" in args
+	if floor_pic or "--floor=lab5" in args:
 		floor_kind = "lab"
+	floor_lab5 = floor_kind == "lab" and not floor_pic and not "--floor-v1" in args
+	if "--floor-clear" in args:
+		floor_haze = 0.0
+	elif floor_pic:
+		floor_haze = LAB_PIC_HAZE
+	elif floor_lab5:
+		floor_haze = LAB5_HAZE
+	active = self
 	_build_floor(centre, radius)
+	if floor_lab5:
+		_lab_backdrop(_main)
 	if not "--floor-clear" in OS.get_cmdline_user_args():   # dev: --floor-clear = no floor fog sheet, no floor haze
 		_build_mist(centre, radius)
 	for n in sim.nodes:
@@ -141,10 +176,48 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 		locals.setup(self)
 
 
+func _lab_backdrop(main: Node) -> void:
+	## the lab biome's side backdrop (round 5) on Scenery's sky layer, hazed toward LAB_FAR in the middle so the floor's
+	## fade ring melts into it; and the scene's height fog thinned so a fall stays visible down to the floor
+	var sc = main.get("scenery")
+	var layer: CanvasLayer = sc.backdrop if sc != null else null
+	if layer != null and layer.get_child_count() > 0 and layer.get_child(0) is TextureRect:
+		var sky := layer.get_child(0) as TextureRect
+		var vp := get_viewport().get_visible_rect().size if get_viewport() != null else Vector2(812, 375)
+		var side := "a" if "--lab-side=a" in OS.get_cmdline_user_args() else "b"
+		sky.texture = load(LAB_SIDE % [side, 1184 if vp.x / maxf(vp.y, 1.0) >= 2.0 else 1440])
+		var m := sky.material as ShaderMaterial
+		m.set_shader_parameter("abyss", LAB_FAR)
+		m.set_shader_parameter("tint", Color(1, 1, 1, 1))
+		m.set_shader_parameter("brightness", 0.9)
+		m.set_shader_parameter("abyss_haze", 0.55)
+	if sc != null:                                    # the arena's mist sheets: the lab's gray-blue air, not the violet void
+		for c in (sc as Node).get_children():
+			if c is MeshInstance3D and (c as MeshInstance3D).material_override is ShaderMaterial 					and ((c as MeshInstance3D).material_override as ShaderMaterial).shader == Scenery.VOID_SHADER:
+				((c as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("mist_color", LAB_FAR.lightened(0.12))
+	for c in main.get_children():
+		if c is WorldEnvironment and (c as WorldEnvironment).environment != null:
+			var env := (c as WorldEnvironment).environment
+			env.fog_height_density = LAB5_FOG_HEIGHT_DENSITY
+			env.fog_light_color = LAB_FAR
+
+
+func haze_abyss() -> Color:
+	## the colour the world props haze toward (the floor's far haze is this x 0.6)
+	return LAB_FAR / 0.6 if floor_lab5 else Scenery.ABYSS
+
+
+func _exit_tree() -> void:
+	if active == self:
+		active = null
+
+
 static func _floor_kind_for(map_path: String) -> String:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--floor=") and a.substr(8) in FLOOR_KINDS:
 			return a.substr(8)
+		if a == "--floor=lab5":
+			return "lab"
 	var code := map_path.get_file().substr(0, 4)
 	return FLOOR_KINDS[absi(hash(code)) % FLOOR_KINDS.size()] if code != "" else "factory"
 
@@ -170,7 +243,9 @@ func _build_mist(centre: Vector3, radius: float) -> void:
 	mat.shader = Scenery.VOID_SHADER
 	mat.set_shader_parameter("noise_tex", tex)
 	mat.set_shader_parameter("mist_color", Scenery.ABYSS.lightened(0.18))
-	mat.set_shader_parameter("density", MIST_DENSITY * (LAB_PIC_MIST if floor_pic else 1.0))
+	mat.set_shader_parameter("density", MIST_DENSITY * (LAB_PIC_MIST if floor_pic else (LAB5_MIST if floor_lab5 else 1.0)))
+	if floor_lab5:
+		mat.set_shader_parameter("mist_color", LAB_FAR.lightened(0.1))
 	mat.set_shader_parameter("scale", 0.009)
 	mat.set_shader_parameter("motes", 0.5)
 	mat.set_shader_parameter("wind", Vector2(0.004, 0.0018))
@@ -195,8 +270,15 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 	m.set_shader_parameter("kind", FLOOR_KINDS.find(floor_kind))
 	# R3A-2 geometry v2 tiles (director, 2026-11-07); --floor-v1 keeps the old procedural placeholder for before/after.
 	var v1 := "--floor-v1" in OS.get_cmdline_user_args()
-	m.set_shader_parameter("tiles", not v1 and not floor_pic)
-	if floor_pic:                                    # world-locked: centred under the board, its 2 m grid on the world's
+	m.set_shader_parameter("tiles", not v1 and not floor_pic and not floor_lab5)
+	if floor_lab5:
+		m.set_shader_parameter("lab5", true)
+		m.set_shader_parameter("t_lab5", load(LAB5_FLOOR))
+		m.set_shader_parameter("lab5_m", LAB5_TILE_M)
+		m.set_shader_parameter("lab5_gain", LAB5_GAIN)
+		m.set_shader_parameter("haze", LAB5_HAZE)
+		m.set_shader_parameter("abyss", LAB_FAR / 0.6)   # its far haze (abyss x 0.6) is the backdrop's middle
+	elif floor_pic:                                    # world-locked: centred under the board, its 2 m grid on the world's
 		var o := Vector2(centre.x, centre.z) - LAB_PIC_SIZE / 2.0
 		o = Vector2(snappedf(o.x + LAB_PIC_GRID0.x, 2.0) - LAB_PIC_GRID0.x, snappedf(o.y + LAB_PIC_GRID0.y, 2.0) - LAB_PIC_GRID0.y)
 		m.set_shader_parameter("pic", true)
@@ -286,7 +368,7 @@ func _build_pools() -> void:
 	quad.size = Vector2.ONE
 	var sm := ShaderMaterial.new()
 	sm.shader = SHADER_SPLAT
-	sm.render_priority = -9                          # over the floor
+	sm.render_priority = -8                          # over the floor and its decals
 	quad.material = sm
 	_splat_mm = _mm(quad, SPLAT_MAX, true)
 	var squad := PlaneMesh.new()
@@ -299,11 +381,9 @@ func _build_pools() -> void:
 	var ent_mesh := _entrance_mesh()
 	_ent_mat = ShaderMaterial.new()
 	_ent_mat.shader = SHADER_ENTRANCE
-	_ent_mat.set_shader_parameter("abyss", Scenery.ABYSS)
-	if "--floor-clear" in OS.get_cmdline_user_args():
-		_ent_mat.set_shader_parameter("haze", 0.0)
-	elif floor_pic:
-		_ent_mat.set_shader_parameter("haze", LAB_PIC_HAZE)
+	_ent_mat.set_shader_parameter("abyss", haze_abyss())
+	if floor_haze >= 0.0:
+		_ent_mat.set_shader_parameter("haze", floor_haze)
 	_ent_mm = MultiMesh.new()
 	_ent_mm.transform_format = MultiMesh.TRANSFORM_3D
 	_ent_mm.use_custom_data = true
@@ -355,6 +435,8 @@ func _sock_lit(tb: Dictionary, c: Color) -> void:
 	## the tube's foot shows its owner: the entrance's owner light (common tubes) or the flat socket ring (pillar
 	## sleeves); a clear colour hides it (no structure / tube gone)
 	var i := int(tb["sock"])
+	if decals != null:
+		decals.tint_pool(i, c)
 	if tb.get("ent", false):
 		_ent_mm.set_instance_transform(i, HIDDEN if c.a <= 0.0 else tb["ent_xf"])
 		_ent_mm.set_instance_custom_data(i, c)
@@ -387,6 +469,8 @@ func handle(ev: Dictionary) -> void:
 	var pts: Array = ev.get("pts", [])
 	if pts.is_empty():
 		return
+	if not Rules.bridge_combat and active == self:
+		return                                        # BRAWL (F1): every falling body reports where it hits (land_body)
 	var shown := float(ev.get("units", 0.0)) if ty == "fling" else Rules.shown_f(float(ev.get("units", 0.0)))
 	if shown <= 0.0:
 		return
@@ -396,6 +480,58 @@ func handle(ev: Dictionary) -> void:
 	if ev.get("pour", false):
 		land = 1.3                                    # horde_view's pour fallers (POUR_G): about the same
 	_pending.append([_t + land, ev, shown])
+
+
+func fall_depth(y: float) -> float:
+	## F2: metres from a falling body's start height down to the floor - the fall views (Fx, UnitView) drop it that far,
+	## in true 3D (no scaling: it shrinks with the perspective), and report the hit with land_body.
+	return maxf(y - floor_y, 0.5)
+
+
+func land_body(p: Vector3, seat: String) -> void:
+	## F1: a falling body hit the floor at p (x, z): the splat appears exactly there (sync, this frame)
+	if Rules.bridge_combat:
+		return                                        # SIEGE (paused): handle() keeps its event splats
+	_landed.append([p, seat])
+
+
+func _land_bodies() -> void:
+	## Each landing makes a splat at its own x, z - or grows a fresh splat of its colour it fell into (a line pouring
+	## off a lip lands as one growing puddle) - with droplets; one gray crawler per new splat and per CRAWL_UNITS bodies.
+	for L in _landed:
+		var p: Vector3 = L[0]
+		var seat: String = L[1]
+		var at := Vector3(p.x, floor_y + 0.03, p.z)
+		var col := _col(seat)
+		bodies_landed += 1
+		var hit: Dictionary = {}
+		for k in range(_splats.size() - 1, -1, -1):
+			var sp: Dictionary = _splats[k]
+			if _t - float(sp["t0"]) > MERGE_T:
+				break
+			var dxz := Vector2((sp["p"] as Vector3).x - at.x, (sp["p"] as Vector3).z - at.z).length()
+			if str(sp.get("seat", "?")) == seat and dxz < MERGE_R + float(sp["size"]) * 0.62 and dxz < 0.62 * 4.5 - 0.45:
+				hit = sp
+				hit["dxz"] = dxz
+				break
+		if hit.is_empty():
+			_add_splat(at, 1.1, col)
+			_splats[-1]["seat"] = seat
+			_splats[-1]["n"] = 1
+			_add_blob(at, NATIVE_GRAY, seat)
+		else:
+			hit["n"] = int(hit["n"]) + 1                # the blot grows to take it in (its edge at 0.62 x size)
+			hit["size"] = minf(maxf(float(hit["size"]) + 0.12, (float(hit["dxz"]) + 0.45) / 0.62), 4.5)
+			if int(hit["n"]) % int(CRAWL_UNITS) == 0:
+				_add_blob(hit["p"], NATIVE_GRAY, seat)
+		if log_landings:
+			var sp3: Dictionary = _splats[-1] if hit.is_empty() else hit
+			landing_log.append([at, sp3["p"], float(sp3["size"])])
+		for j in range(3 if not _low else 2):
+			var a := randf() * TAU
+			var sp2 := randf_range(1.5, 3.5)
+			_add_drop(at + Vector3(0, 0.2, 0), Vector3(cos(a) * sp2, randf_range(2.5, 5.0), sin(a) * sp2), col)
+	_landed.clear()
 
 
 func _land(ev: Dictionary, shown: float) -> void:
@@ -465,6 +601,8 @@ func sync(dt: float) -> void:
 	while not _pending.is_empty() and _pending[0][0] <= _t:
 		var pe: Array = _pending.pop_front()
 		_land(pe[1], pe[2])
+	if not _landed.is_empty():
+		_land_bodies()
 	if _pending.size() > 1 and _pending[-1][0] < _pending[-2][0]:
 		_pending.sort_custom(func(a, b): return a[0] < b[0])
 	_tubes_step(dt)
@@ -562,11 +700,11 @@ func _tubes_step(dt: float) -> void:
 
 
 func _riders_step(tb: Dictionary, dt: float, top: float) -> void:
+	## WORLD PASS 2 (F3, Daniele: no gray circle / slug riding up inside the tube - the tube's own flow already shows the
+	## goo going up): riders are counted (probes) but no longer drawn; the tube shader's rider_y stays at its -999 default.
 	var riders: Array = tb["riders"]
-	if riders.is_empty() and not tb.get("had_riders", false):
+	if riders.is_empty():
 		return
-	var ys := Vector4(-999, -999, -999, -999)
-	var m: ShaderMaterial = tb["mat"]
 	var keep := []
 	for r in riders:
 		r[0] = float(r[0]) + RISE_V * dt
@@ -575,11 +713,6 @@ func _riders_step(tb: Dictionary, dt: float, top: float) -> void:
 		else:
 			riders_done += 1
 	tb["riders"] = keep
-	for i in range(mini(keep.size(), RIDERS_PER_TUBE)):
-		ys[i] = keep[i][0]
-		m.set_shader_parameter("rider_c%d" % i, keep[i][1])
-	m.set_shader_parameter("rider_y", ys)
-	tb["had_riders"] = not keep.is_empty()
 
 
 func _blobs_step(_dt: float) -> void:

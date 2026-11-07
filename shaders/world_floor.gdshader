@@ -44,6 +44,13 @@ uniform float pic_gain = 1.0;            // brightness on the picture (the arena
 uniform vec3 pic_bg : source_color = vec3(0.127, 0.150, 0.187);
 uniform vec3 pic_line : source_color = vec3(0.150, 0.175, 0.215);
 
+// LAB FLOOR R5 (--floor=lab5, the lab default since world pass 2, director round 5): one seamless 32 x 32 m tile (2048 px,
+// 64 px/m, sixteen 2 m tiles), world-locked, plain repeat (no mirroring), mipmapped. Its mean is #343C4A.
+uniform bool lab5 = false;
+uniform sampler2D t_lab5 : source_color, hint_default_black, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float lab5_m = 32.0;
+uniform float lab5_gain = 1.0;
+
 varying vec3 wpos;
 
 void vertex() {
@@ -88,7 +95,9 @@ vec3 tiled(vec2 p) {
 void fragment() {
 	vec2 p = wpos.xz;
 	vec3 c;
-	if (pic) {
+	if (lab5) {
+		c = texture(t_lab5, p / lab5_m).rgb * lab5_gain;
+	} else if (pic) {
 		vec2 uv = (p - pic_origin) / pic_size;
 		if (pic_mirror) {
 			uv = 1.0 - abs(mod(uv, 2.0) - 1.0);                         // mirror-repeat: no seams, mirrored copies

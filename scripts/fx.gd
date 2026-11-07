@@ -699,11 +699,24 @@ func _fall_horde(ev: Dictionary) -> void:
 			for b in _spawn_bodies(faction, seat, pts, n):
 				_kick_body(b[0], b[1], along.normalized())
 			return
+		var wl := WorldLayer.active
 		for b in _spawn_bodies(faction, seat, ev["pts"], n):
 			var mi: MeshInstance3D = b[0]
 			var tw := create_tween()
 			tw.set_parallel(true)
 			var spin := Vector3(randf_range(-2.5, 2.5), randf_range(-1.0, 1.0), randf_range(-2.5, 2.5))
+			if wl != null:                                # WORLD PASS 2 (F1 / F2): a true 3D drop onto the floor, same
+				var p0: Vector3 = b[1]                    # acceleration, no scaling, the splat where it hits
+				var drop := wl.fall_depth(p0.y)
+				var dur := 1.4 * sqrt(drop / FLING_DROP)
+				var end := p0 + Vector3(randf_range(-1.5, 1.5), -drop, randf_range(-1.5, 1.5))
+				tw.tween_property(mi, "position", end, dur).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+				tw.tween_property(mi, "rotation", mi.rotation + spin * dur / 1.4, dur)
+				tw.chain().tween_callback(func():
+					if is_instance_valid(wl):
+						wl.land_body(end, seat)
+					mi.queue_free())
+				continue
 			tw.tween_property(mi, "position", (b[1] as Vector3) + Vector3(randf_range(-1.5, 1.5), -FLING_DROP, randf_range(-1.5, 1.5)), 1.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
 			tw.tween_property(mi, "rotation", mi.rotation + spin, 1.4)
 			tw.tween_property(mi, "scale", mi.scale * 0.7, 1.4)
@@ -763,7 +776,12 @@ func _relay_body(mi: MeshInstance3D, p: Vector3, relay: int, edge: int) -> void:
 	var drift := Vector3(randf_range(-0.6, 0.6), 0.0, randf_range(-0.6, 0.6))
 	var start_rot := mi.rotation
 	var start_scale := mi.scale
-	var dur := t0 + sqrt(2.0 * FLING_DROP / RELAY_G)
+	var wl := WorldLayer.active
+	var k_end := smoothstep(0.0, 1.0, t0 / Rules.RELAY_MOVE)
+	var ride_end := -6.0 * k_end * k_end if sinks else 0.0
+	var drop := wl.fall_depth(p.y + ride_end) if wl != null else FLING_DROP   # F2: down to the floor
+	var dur := t0 + sqrt(2.0 * drop / RELAY_G)
+	var shrink := 0.0 if wl != null else 0.3          # with a floor: true 3D, the perspective shrinks it
 	mi.position = p
 	var tw := create_tween()
 	tw.tween_method(func(t: float):
@@ -774,8 +792,11 @@ func _relay_body(mi: MeshInstance3D, p: Vector3, relay: int, edge: int) -> void:
 		var f := maxf(t - t0, 0.0)
 		mi.position = p + drift * f + Vector3(0, ride - 0.5 * RELAY_G * f * f, 0)
 		mi.rotation = start_rot + spin * f
-		mi.scale = start_scale * (1.0 - 0.3 * clampf(f / 1.2, 0.0, 1.0)), 0.0, dur, dur)
-	tw.tween_callback(mi.queue_free)
+		mi.scale = start_scale * (1.0 - shrink * clampf(f / 1.2, 0.0, 1.0)), 0.0, dur, dur)
+	tw.tween_callback(func():
+		if wl != null and is_instance_valid(wl) and is_instance_valid(mi):
+			wl.land_body(mi.position, _seat_of(mi))
+		mi.queue_free())
 
 
 # MONSTER KICKS (Structures 2.1, 0.19.0): every body a monster meets on its deck is booted off the side -
@@ -801,6 +822,9 @@ func _kick_body(mi: MeshInstance3D, p: Vector3, along: Vector3) -> void:
 	var start_rot := mi.rotation
 	var spin := Vector3(randf_range(-9.0, 9.0), randf_range(-5.0, 5.0), randf_range(-9.0, 9.0))
 	var start_scale := mi.scale
+	var wl := WorldLayer.active
+	var t_end := _hit_time(up, g, wl.fall_depth(p.y)) if wl != null else FLING_TIME   # F2: down to the floor
+	var shrink := 0.0 if wl != null else 0.3
 	mi.position = p
 	var tw := create_tween()
 	tw.tween_interval(randf_range(0.0, 0.08))
@@ -808,8 +832,20 @@ func _kick_body(mi: MeshInstance3D, p: Vector3, along: Vector3) -> void:
 		if is_instance_valid(mi):
 			mi.position = p + vel * t + Vector3(0, up * t - 0.5 * g * t * t, 0)
 			mi.rotation = start_rot + spin * t
-			mi.scale = start_scale * (1.0 - 0.3 * t / FLING_TIME), 0.0, FLING_TIME, FLING_TIME)
-	tw.tween_callback(mi.queue_free)
+			mi.scale = start_scale * (1.0 - shrink * t / FLING_TIME), 0.0, t_end, t_end)
+	tw.tween_callback(func():
+		if wl != null and is_instance_valid(wl) and is_instance_valid(mi):
+			wl.land_body(mi.position, _seat_of(mi))
+		mi.queue_free())
+
+
+static func _hit_time(up: float, g: float, drop: float) -> float:
+	## when a body thrown up at `up` m/s under g m/s2 is `drop` m below its start (the floor: F1 / F2)
+	return (up + sqrt(up * up + 2.0 * g * drop)) / g
+
+
+func _seat_of(mi: MeshInstance3D) -> String:
+	return str(mi.get_meta("seat", ""))
 
 
 static func _unsmooth(v: float) -> float:
@@ -901,6 +937,7 @@ func _spawn_bodies(faction: String, seat: String, pts: Array, n: int) -> Array:
 		mi.scale = Vector3.ONE * float(body[1])
 		mi.rotation.y = Rules.heading(Rules.front_dir()) + UnitView.MODEL_YAW + randf_range(-0.5, 0.5)
 		mi.position = p
+		mi.set_meta("seat", seat)                     # the floor splat's colour when it lands (WorldLayer.land_body)
 		add_child(mi)
 		out.append([mi, p])
 	return out
@@ -922,6 +959,9 @@ func _fling_body(mi: MeshInstance3D, p: Vector3, centre: Vector3, turn: float, e
 	var start_rot := mi.rotation
 	var spin := Vector3(randf_range(-7.0, 7.0), randf_range(-4.0, 4.0), randf_range(-7.0, 7.0))
 	var start_scale := mi.scale
+	var wl := WorldLayer.active
+	var t_end := _hit_time(up, g, wl.fall_depth(p.y)) if wl != null else FLING_TIME   # F2: down to the floor
+	var to_scale := start_scale if wl != null else end_scale                         # true 3D: no scaling
 	mi.position = p
 	var tw := create_tween()
 	tw.tween_interval(randf_range(0.0, 0.18))           # shaken off, not launched as one block
@@ -929,8 +969,11 @@ func _fling_body(mi: MeshInstance3D, p: Vector3, centre: Vector3, turn: float, e
 		if is_instance_valid(mi):
 			mi.position = p + vel * t + Vector3(0, up * t - 0.5 * g * t * t, 0)
 			mi.rotation = start_rot + spin * t
-			mi.scale = start_scale.lerp(end_scale, t / FLING_TIME), 0.0, FLING_TIME, FLING_TIME)
-	tw.tween_callback(mi.queue_free)
+			mi.scale = start_scale.lerp(to_scale, t / FLING_TIME), 0.0, t_end, t_end)
+	tw.tween_callback(func():
+		if wl != null and is_instance_valid(wl) and is_instance_valid(mi):
+			wl.land_body(mi.position, _seat_of(mi))
+		mi.queue_free())
 
 
 func _body_for(faction: String) -> Array:
