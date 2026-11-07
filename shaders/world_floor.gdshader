@@ -29,6 +29,21 @@ uniform vec3 pal1 : source_color = vec3(0.071, 0.094, 0.133);   // code 64  #121
 uniform vec3 pal2 : source_color = vec3(0.102, 0.133, 0.188);   // code 128 #1A2230
 uniform vec3 pal3 : source_color = vec3(0.180, 0.212, 0.267);   // code 191 #2E3644
 
+// LAB CLEAN FLOOR (--floor=labpic, Daniele 2026-11-07): his painted lab floor, rectified to top-down from its own 2 m grid
+// (Models/2.0/world-1.0/floor/rectify_lab_clean_floor.py), laid on the floor plane at 1:1 (its 2 m grid = 2 m), world-
+// locked (pans / zooms with the board). Past the picture: its mean colour plus the same faint 2 m grid, the picture's edge
+// fading into it over pic_fade metres (a noisy edge) - or, the default, mirror-repeated over the whole floor (the board's
+// visible floor is ~2x the picture: R-01's footprint is ~110 x 70 m, the picture 54 x 41 m).
+uniform bool pic = false;
+uniform sampler2D t_pic : source_color, hint_default_black, filter_linear_mipmap, repeat_disable;
+uniform vec2 pic_origin = vec2(0.0);     // world xz of the picture's top-left (far-left) corner
+uniform vec2 pic_size = vec2(53.8, 40.7);
+uniform float pic_fade = 7.0;
+uniform bool pic_mirror = true;
+uniform float pic_gain = 1.0;            // brightness on the picture (the arena's fog layers above swallow its darks)          // mirror-repeat the picture over the whole floor (false: fade into pic_bg)
+uniform vec3 pic_bg : source_color = vec3(0.127, 0.150, 0.187);
+uniform vec3 pic_line : source_color = vec3(0.150, 0.175, 0.215);
+
 varying vec3 wpos;
 
 void vertex() {
@@ -73,7 +88,19 @@ vec3 tiled(vec2 p) {
 void fragment() {
 	vec2 p = wpos.xz;
 	vec3 c;
-	if (tiles) {
+	if (pic) {
+		vec2 uv = (p - pic_origin) / pic_size;
+		if (pic_mirror) {
+			uv = 1.0 - abs(mod(uv, 2.0) - 1.0);                         // mirror-repeat: no seams, mirrored copies
+		}
+		vec2 m = pic_mirror ? vec2(1e4) : min(p - pic_origin, pic_origin + pic_size - p);   // metres inside the edge
+		float n = hash(floor(p * 0.7)) * 0.5 + 0.5 * sin(p.x * 0.31 + p.y * 0.17);
+		float k = smoothstep(0.0, pic_fade, min(m.x, m.y) - 1.0 + n * 2.0);
+		vec3 bg = pic_bg * (0.94 + 0.08 * hash(floor(p / 2.0)));
+		bg = mix(bg, pic_line, grid(p, vec2(2.0), 0.012) * 0.8);
+		vec3 tex = texture(t_pic, clamp(uv, vec2(0.001), vec2(0.999))).rgb;
+		c = mix(bg, tex, k) * pic_gain;
+	} else if (tiles) {
 		c = tiled(p);
 	} else if (kind == 0) {                                      // STREET
 		float speck = hash(floor(p * 3.0)) * 0.25;

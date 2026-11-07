@@ -29,7 +29,17 @@ const SHADER_SOCKET := preload("res://shaders/world_socket.gdshader")
 const SHADER_ENTRANCE := preload("res://shaders/world_entrance.gdshader")
 # TUBE ENTRANCE v1 (Models/2.0/world-1.0/build_tube_entrance.py): collar + foot housing + the Locals' door (+Z, toward
 # the camera) + lens + drains, for the r 0.95 tube; it replaces the flat socket ring there. Pillar sleeves (r 2.6) keep it.
-const ENTRANCE_GLB := "res://assets/world/tube_entrance_v1.glb"
+# TUBE ENTRANCE v2 (build_tube_entrance_v2.py, 704 tris): the same foot with FOUR doors (+Z, +X, -Z, -X) so the Locals
+# walk to the door nearest their crater (world_locals.gd); v1 (one door, 536 tris) stays in assets for comparison.
+const ENTRANCE_GLB := "res://assets/world/tube_entrance_v2.glb"
+const LAB_PIC := "res://assets/world/lab_clean_floor_rect.png"   # --floor=labpic: Daniele's painted lab floor, top-down
+const LAB_PIC_SIZE := Vector2(53.785, 40.744)    # metres (rectify_lab_clean_floor.py: 20 px/m, 1075 x 814)
+const LAB_PIC_GRID0 := Vector2(0.892, 0.375)     # metres from its top-left corner to its first 2 m grid line (x, z)
+const LAB_PIC_HAZE := 0.035                      # the picture is already dark: much less floor haze than the tiles
+const LAB_PIC_MIST := 0.5                        # and a thinner fog sheet between arena and floor (still on) so it reads
+const LAB_PIC_GAIN := 1.8                        # x brightness: at 1.0 the picture (mean #20262F) vanishes under the
+                                                 # arena's fog at the game camera; 1.8 lets its arcs, patches and grid read
+const LAB_PIC_MIRROR := true                     # mirror-repeat it over the floor (false: fade its edge into its mean colour)
 
 const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)
 const TUBE_R := 0.95             # a common platform's tube, under its machinery core
@@ -68,6 +78,8 @@ var sim: Sim
 var vis: Dictionary
 var floor_y := -16.0
 var floor_kind := "factory"
+var floor_pic := false            # --floor=labpic
+var locals: WorldLocals          # LOCALS MARCH: containment ring craters + the Locals walking to the tube doors
 var _zaps: Array = []            # pooled beams: {mi, t0}
 var zaps_done := 0
 var _floor: MeshInstance3D
@@ -114,12 +126,19 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	var centre := (lo + hi) / 2.0
 	var radius := Vector2(hi.x - lo.x, hi.z - lo.z).length() / 2.0
 	floor_kind = _floor_kind_for(str(_main.get("map_path")) if _main.get("map_path") != null else "")
+	floor_pic = "--floor=labpic" in OS.get_cmdline_user_args()
+	if floor_pic:
+		floor_kind = "lab"
 	_build_floor(centre, radius)
 	if not "--floor-clear" in OS.get_cmdline_user_args():   # dev: --floor-clear = no floor fog sheet, no floor haze
 		_build_mist(centre, radius)
 	for n in sim.nodes:
 		_build_tube(n)
 	_build_pools()
+	if not "--no-locals" in OS.get_cmdline_user_args():
+		locals = WorldLocals.new()
+		add_child(locals)
+		locals.setup(self)
 
 
 static func _floor_kind_for(map_path: String) -> String:
@@ -151,7 +170,7 @@ func _build_mist(centre: Vector3, radius: float) -> void:
 	mat.shader = Scenery.VOID_SHADER
 	mat.set_shader_parameter("noise_tex", tex)
 	mat.set_shader_parameter("mist_color", Scenery.ABYSS.lightened(0.18))
-	mat.set_shader_parameter("density", MIST_DENSITY)
+	mat.set_shader_parameter("density", MIST_DENSITY * (LAB_PIC_MIST if floor_pic else 1.0))
 	mat.set_shader_parameter("scale", 0.009)
 	mat.set_shader_parameter("motes", 0.5)
 	mat.set_shader_parameter("wind", Vector2(0.004, 0.0018))
@@ -176,8 +195,18 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 	m.set_shader_parameter("kind", FLOOR_KINDS.find(floor_kind))
 	# R3A-2 geometry v2 tiles (director, 2026-11-07); --floor-v1 keeps the old procedural placeholder for before/after.
 	var v1 := "--floor-v1" in OS.get_cmdline_user_args()
-	m.set_shader_parameter("tiles", not v1)
-	if not v1:
+	m.set_shader_parameter("tiles", not v1 and not floor_pic)
+	if floor_pic:                                    # world-locked: centred under the board, its 2 m grid on the world's
+		var o := Vector2(centre.x, centre.z) - LAB_PIC_SIZE / 2.0
+		o = Vector2(snappedf(o.x + LAB_PIC_GRID0.x, 2.0) - LAB_PIC_GRID0.x, snappedf(o.y + LAB_PIC_GRID0.y, 2.0) - LAB_PIC_GRID0.y)
+		m.set_shader_parameter("pic", true)
+		m.set_shader_parameter("t_pic", load(LAB_PIC))
+		m.set_shader_parameter("pic_origin", o)
+		m.set_shader_parameter("pic_size", LAB_PIC_SIZE)
+		m.set_shader_parameter("haze", LAB_PIC_HAZE)
+		m.set_shader_parameter("pic_gain", LAB_PIC_GAIN)
+		m.set_shader_parameter("pic_mirror", LAB_PIC_MIRROR and not "--labpic-fade" in OS.get_cmdline_user_args())
+	elif not v1:
 		var dir := FLOORS_V2 + floor_kind
 		m.set_shader_parameter("t_base", load(dir + "-base-v2.png"))
 		for v in ["b", "c", "d", "e"]:
@@ -273,6 +302,8 @@ func _build_pools() -> void:
 	_ent_mat.set_shader_parameter("abyss", Scenery.ABYSS)
 	if "--floor-clear" in OS.get_cmdline_user_args():
 		_ent_mat.set_shader_parameter("haze", 0.0)
+	elif floor_pic:
+		_ent_mat.set_shader_parameter("haze", LAB_PIC_HAZE)
 	_ent_mm = MultiMesh.new()
 	_ent_mm.transform_format = MultiMesh.TRANSFORM_3D
 	_ent_mm.use_custom_data = true
@@ -437,6 +468,8 @@ func sync(dt: float) -> void:
 	if _pending.size() > 1 and _pending[-1][0] < _pending[-2][0]:
 		_pending.sort_custom(func(a, b): return a[0] < b[0])
 	_tubes_step(dt)
+	if locals != null:
+		locals.step(dt)
 	_blobs_step(dt)
 	_drops_step()
 	_splats_step()
@@ -622,8 +655,9 @@ func _zap(tb: Dictionary, at: Vector3, col: Color) -> void:
 	var dir := Vector3(at.x - float(tb["x"]), 0.0, at.z - float(tb["z"]))
 	dir = dir.normalized() if dir.length() > 0.01 else Vector3.RIGHT
 	var door := Vector3(tb["x"], floor_y + 0.7, tb["z"]) + dir * float(tb["r"])
-	if tb.get("ent", false):                          # the entrance's lens, over the Locals' door (+Z)
-		door = Vector3(tb["x"], floor_y + 0.82, float(tb["z"]) + 1.22)
+	if tb.get("ent", false):                          # the lens over the entrance door that faces the blob
+		var ax := Vector3(signf(dir.x), 0, 0) if absf(dir.x) > absf(dir.z) else Vector3(0, 0, signf(dir.z))
+		door = Vector3(tb["x"], floor_y + 0.82, tb["z"]) + ax * 1.22
 	var to := at + Vector3(0, 0.25, 0)
 	var mi2: MeshInstance3D = z["mi"]
 	var tc: Color = tb["base"]
