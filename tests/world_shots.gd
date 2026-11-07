@@ -3,6 +3,8 @@ extends Node
 ## 1 idle (an AI match fast-forwarded to 60 s: both colours in the tubes), 2 a capture mid-push (the next real
 ## capture, or a forced one after 40 s), 3-5 a forced 100-shown-unit fall off the longest bridge (splat, crawl, ride).
 ## Run WINDOWED as a scene, off-screen and silent:
+## entrance=1 adds two TUBE ENTRANCE frames after the idle one: the player's closest zoom (Rules.CAM_ZOOM_MIN) panned
+## onto a lit tube's foot, and a debug close-up of that entrance (camera 14 m from it, same pitch).
 ##   Godot --path . --resolution 812x375 --audio-driver Dummy --position -6000,-6000 res://tests/world_shots.tscn -- out=<dir> maps=R-01,R-10 [noworld=1]
 
 const MAIN := "res://main.tscn"
@@ -48,6 +50,37 @@ func _open(path: String) -> Node:
 	return inst
 
 
+func _entrance_shots(inst: Node, wl: WorldLayer, base: String) -> void:
+	var pick: Dictionary = {}
+	for tb in wl._tubes:
+		if tb.get("ent", false) and tb.get("shown", false) and (pick.is_empty() or tb["owner"] == "A"):
+			pick = tb
+	if pick.is_empty():
+		print("entrance: no lit tube entrance")
+		return
+	var node_y: float = (inst.sim.nodes[pick["id"]]["pos"] as Vector3).y
+	var far: float = inst._view_fit[1]
+	var home: Vector3 = inst._view_fit[0]
+	var pitch := deg_to_rad(float(inst.cam_pitch))
+	var foot := Vector3(pick["x"], node_y, float(pick["z"]) + (node_y - wl.floor_y) / tan(pitch))
+	inst.cam_dist = far * Rules.CAM_ZOOM_MIN                 # the player's closest pinch zoom
+	var room := 1.0 - Rules.CAM_ZOOM_MIN
+	inst.cam_target = Vector3(clampf(foot.x, home.x - inst._map_half.x * room, home.x + inst._map_half.x * room), home.y,
+			clampf(foot.z, home.z - inst._map_half.z * room, home.z + inst._map_half.z * room))
+	inst._place_camera()
+	await _frames(20)
+	await _shot(inst, base + "-7-entrance-zoom.png")
+	inst.cam_target = Vector3(pick["x"], wl.floor_y + 0.5, pick["z"])
+	inst.cam_dist = 14.0
+	inst._place_camera()
+	await _frames(20)
+	await _shot(inst, base + "-8-entrance-debug-closeup.png")
+	print("entrance: node %d owner %s, zoom dist %.1f (fit %.1f)" % [pick["id"], pick["owner"], far * Rules.CAM_ZOOM_MIN, far])
+	inst.cam_target = home
+	inst.cam_dist = far
+	inst._place_camera()
+
+
 func _run() -> void:
 	var args := _args()
 	var out := str(args.get("out", "user://world_shots"))
@@ -72,6 +105,8 @@ func _run() -> void:
 		await _shot(inst, "%s/%s-%s-1-idle.png" % [out, code, tag])
 		var wl0 = inst.get("world_layer")
 		print("%s idle: floor %s, pitch %.1f" % [code, wl0.floor_kind if wl0 != null else "-", float(inst.get("cam_pitch"))])
+		if str(args.get("entrance", "")) == "1" and wl0 != null:
+			await _entrance_shots(inst, wl0, "%s/%s-%s" % [out, code, tag])
 		if str(args.get("idle_only", "")) == "1":
 			inst.queue_free()
 			await _frames(5)

@@ -26,6 +26,10 @@ const SHADER_TUBE := preload("res://shaders/world_tube.gdshader")
 const SHADER_GOO := preload("res://shaders/world_goo.gdshader")
 const SHADER_SPLAT := preload("res://shaders/world_splat.gdshader")
 const SHADER_SOCKET := preload("res://shaders/world_socket.gdshader")
+const SHADER_ENTRANCE := preload("res://shaders/world_entrance.gdshader")
+# TUBE ENTRANCE v1 (Models/2.0/world-1.0/build_tube_entrance.py): collar + foot housing + the Locals' door (+Z, toward
+# the camera) + lens + drains, for the r 0.95 tube; it replaces the flat socket ring there. Pillar sleeves (r 2.6) keep it.
+const ENTRANCE_GLB := "res://assets/world/tube_entrance_v1.glb"
 
 const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)
 const TUBE_R := 0.95             # a common platform's tube, under its machinery core
@@ -77,6 +81,8 @@ var _drop_mm: MultiMesh
 var _splat_mm: MultiMesh
 var _socket_mm: MultiMesh         # one floor socket per tube (owner-coloured ring)
 const SOCKET_PAD := 1.8           # metres of collar and drains around a tube's foot
+var _ent_mm: MultiMesh            # one tube entrance per common tube (owner light in INSTANCE_CUSTOM)
+var _ent_mat: ShaderMaterial
 var _blobs: Array = []           # {p, tube, col, t0, mode (0 hop, 1 crawl, 2 enter), v, dur, from}
 var _drops: Array = []           # {p, v, t0, col}
 var _splats: Array = []          # {p, size, t0, col, seed}
@@ -261,15 +267,68 @@ func _build_pools() -> void:
 	skm.render_priority = -9
 	squad.material = skm
 	_socket_mm = _mm(squad, maxi(_tubes.size(), 1), true)
+	var ent_mesh := _entrance_mesh()
+	_ent_mat = ShaderMaterial.new()
+	_ent_mat.shader = SHADER_ENTRANCE
+	_ent_mat.set_shader_parameter("abyss", Scenery.ABYSS)
+	if "--floor-clear" in OS.get_cmdline_user_args():
+		_ent_mat.set_shader_parameter("haze", 0.0)
+	_ent_mm = MultiMesh.new()
+	_ent_mm.transform_format = MultiMesh.TRANSFORM_3D
+	_ent_mm.use_custom_data = true
+	_ent_mm.use_colors = true                        # white: the Compatibility renderer multiplies COLOR by it (0 without)
+	_ent_mm.mesh = ent_mesh
+	_ent_mm.instance_count = maxi(_tubes.size(), 1)
+	var emi := MultiMeshInstance3D.new()
+	emi.multimesh = _ent_mm
+	emi.material_override = _ent_mat
+	emi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(emi)
 	for i in range(_tubes.size()):
 		var tb: Dictionary = _tubes[i]
 		var half: float = float(tb["r"]) + SOCKET_PAD
-		_socket_mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(half * 2.0, 1.0, half * 2.0)),
-				Vector3(tb["x"], floor_y + 0.02, tb["z"])))
-		_socket_mm.set_instance_custom_data(i, Color(float(tb["r"]) / half, 0, 0, 0))
-		_socket_mm.set_instance_color(i, tb["base"])
 		tb["sock"] = i
+		tb["ent"] = ent_mesh != null and is_equal_approx(float(tb["r"]), TUBE_R)
+		tb["ent_xf"] = Transform3D(Basis.IDENTITY, Vector3(tb["x"], floor_y, tb["z"]))
+		var sx := Transform3D(Basis.from_scale(Vector3(half * 2.0, 1.0, half * 2.0)), Vector3(tb["x"], floor_y + 0.02, tb["z"]))
+		_socket_mm.set_instance_transform(i, HIDDEN if tb["ent"] else sx)
+		_socket_mm.set_instance_custom_data(i, Color(float(tb["r"]) / half, 0, 0, 0))
+		_ent_mm.set_instance_transform(i, HIDDEN)
+		_ent_mm.set_instance_custom_data(i, Color(0, 0, 0, 0))
+		_ent_mm.set_instance_color(i, Color.WHITE)
+		_sock_lit(tb, tb["base"])
 	_socket_mm.visible_instance_count = _tubes.size()
+	_ent_mm.visible_instance_count = _tubes.size() if ent_mesh != null else 0
+
+
+const HIDDEN := Transform3D(Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), Vector3(0, -9999, 0))
+
+
+static func _entrance_mesh() -> Mesh:
+	var ps := load(ENTRANCE_GLB) as PackedScene
+	if ps == null:
+		return null
+	var root := ps.instantiate()
+	var found: Mesh = null
+	var stack: Array = [root]
+	while not stack.is_empty() and found == null:
+		var nd: Node = stack.pop_back()
+		if nd is MeshInstance3D:
+			found = (nd as MeshInstance3D).mesh
+		stack.append_array(nd.get_children())
+	root.free()
+	return found
+
+
+func _sock_lit(tb: Dictionary, c: Color) -> void:
+	## the tube's foot shows its owner: the entrance's owner light (common tubes) or the flat socket ring (pillar
+	## sleeves); a clear colour hides it (no structure / tube gone)
+	var i := int(tb["sock"])
+	if tb.get("ent", false):
+		_ent_mm.set_instance_transform(i, HIDDEN if c.a <= 0.0 else tb["ent_xf"])
+		_ent_mm.set_instance_custom_data(i, c)
+	else:
+		_socket_mm.set_instance_color(i, c)
 
 
 func _mm(mesh: Mesh, count: int, custom: bool) -> MultiMesh:
@@ -408,11 +467,11 @@ func _tubes_step(dt: float) -> void:
 		if top <= floor_y + 0.4 or not has_structure:
 			if mi.visible:
 				mi.visible = false
-				_socket_mm.set_instance_color(int(tb["sock"]), Color(0, 0, 0, 0))
+				_sock_lit(tb, Color(0, 0, 0, 0))
 			continue
 		if not mi.visible:                            # a structure (re)built: the socket lights again
 			mi.visible = true
-			_socket_mm.set_instance_color(int(tb["sock"]), tb["base"])
+			_sock_lit(tb, tb["base"])
 		if absf(top - float(tb["top_y"])) > 0.01:
 			tb["top_y"] = top
 			var h := top - floor_y
@@ -428,7 +487,7 @@ func _tubes_step(dt: float) -> void:
 			tb["base"] = _col(owner)
 			tb["owner"] = owner
 			tb["pushing"] = true
-			_socket_mm.set_instance_color(int(tb["sock"]), tb["base"])
+			_sock_lit(tb, tb["base"])
 		if tb["pushing"]:
 			tb["inv"] = minf(float(tb["inv"]) + dt / PUSH_T, 1.0)
 			if tb["inv"] >= 1.0:
@@ -563,6 +622,8 @@ func _zap(tb: Dictionary, at: Vector3, col: Color) -> void:
 	var dir := Vector3(at.x - float(tb["x"]), 0.0, at.z - float(tb["z"]))
 	dir = dir.normalized() if dir.length() > 0.01 else Vector3.RIGHT
 	var door := Vector3(tb["x"], floor_y + 0.7, tb["z"]) + dir * float(tb["r"])
+	if tb.get("ent", false):                          # the entrance's lens, over the Locals' door (+Z)
+		door = Vector3(tb["x"], floor_y + 0.82, float(tb["z"]) + 1.22)
 	var to := at + Vector3(0, 0.25, 0)
 	var mi2: MeshInstance3D = z["mi"]
 	var tc: Color = tb["base"]
