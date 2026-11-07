@@ -2,7 +2,7 @@
 
 ## Demo line (staging/demo only, never main)
 
-- **0.23.27-demo-world-1** - 2026-11-07 (demo-world, staging/demo/): one playable map, R-01 STRAIT, with the new world (lab floor
+- **0.23.27-demo1** - 2026-11-07 (demo-world, staging/demo/): one playable map, R-01 STRAIT, with the new world (lab floor
   picture, containment-ring craters at the sides, Locals march into four-door tube entrances; world-entrance 3b43f94) and the new
   interface (held release-0.23.27 30d264c = main 0.23.26 + ui-menus 07fc8c7 + ui-node def2f17, all 80 GMN-2 HUD pieces). Proto
   rules of world-entrance's base (proto19: cannon launcher) plus main's 0.23.21-0.23.26 rules. Debug panel on (offline).

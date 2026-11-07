@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.23.27-demo-world-1"   # DEMO (Daniele 2026-11-07): one playable map with the new world + HUD at staging/demo/
+const VERSION := "0.23.27-demo1"   # DEMO (Daniele 2026-11-07): one playable map with the new world + HUD at staging/demo/
 const VERSION_NAME := "Alpha 23"
 
 
@@ -180,10 +180,10 @@ static var debug_tools: bool = false
 # I can test fast"): GAME SPEED and MY PRODUCTION in the Debug panel, plus refill / +100 / Last Stand now. On only in a
 # proto build (VERSION "...-proto<n>"), so the real game never reaches it; offline matches only (online the host's sim
 # must stay in sync). The panel sets the two values below; Sim.debug_prod holds the production multiplier per seat.
-static var proto_debug: bool = VERSION.contains("-proto") or VERSION.contains("-demo-")   # the demo is a test line too
-# DEMO BUILD (Daniele 2026-11-07: "put somewhere else where there's just a playable demo of this"): VERSION "...-demo-<n>" =
+static var proto_debug: bool = VERSION.contains("-proto") or VERSION.contains("-demo")   # the demo is a test line too
+# DEMO BUILD (Daniele 2026-11-07: "put somewhere else where there's just a playable demo of this"): VERSION "...-demo<n>" =
 # the picker offers MapPool.DEMO only (R-01 STRAIT) and the world layer starts with the lab picture floor (no URL flags).
-static var demo: bool = VERSION.contains("-demo-")
+static var demo: bool = VERSION.contains("-demo")
 const DEBUG_SPEEDS := [1, 2, 4, 8]           # x whole sim time (production, movement, cooldowns, relays, the clock)
 const DEBUG_PRODS := [1.0, 2.0, 5.0, 10.0]   # x the human seat's production only
 const DEBUG_ADD_UNITS := 100                 # shown units (x SCALE in the sim) added to the selected own node
