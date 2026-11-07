@@ -36,6 +36,7 @@ var _music_glyph: Control
 var side_panel: PanelContainer
 var side_box: VBoxContainer
 var count_label: Label
+var send_tank: SendTank                 # ui-node: the SEND tank (one container, 4 levels)
 var badges := {}                     # node id -> {panel, label, sub, emblem, build, owner, count_w, sub_w, look}
 var _badge_px := Vector2.ZERO        # the one badge size on this screen (BADGE_SIZE x ui_scale)
 var badge_layer: BadgeLayer          # HUD pass: draws every badge, one pass per kind (see setup)
@@ -47,6 +48,10 @@ var inspector_emblem: TextureRect       # the header: owner's emblem + faction n
 var inspector_who: Label
 var inspector_first: Label
 var inspector_progress: ProgressBar
+var inspector_tier: Control             # ui-node: the card's tier chip, units bar and armour shields (custom-drawn, NodeNoir)
+var inspector_units: Control
+var inspector_shields: Control
+var inspector_col := Color.WHITE        # ui-node: this node's UI colour (your accent on yours, the owner's seat colour else)
 var inspector_actions: Array = []
 var notices: Control                   # HUD pass: no stack any more - only where the old one began (a mission's
                                        # strip still pushes it down: note_line's lines start under it)
@@ -76,6 +81,7 @@ var monster_icon: MonsterIcon           # 0.19.2 spec H1: floats above your read
 var rotate_hint: Label
 var debug_button: Button
 var chat_button: Button
+var _chat_dot: Control                    # Alpha 24: the unread count on the chat button (the pack's notification dot)
 var _chat_poll := 0.0
 var debug_panel: PanelContainer
 var debug_tag: Label                    # PROTO DEBUG: "DEBUG x4 · PROD x10" on screen while anything is not x1
@@ -233,13 +239,10 @@ func _seat_groups() -> Array:
 func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
 	var chip := PanelContainer.new()
 	chip.custom_minimum_size = Vector2(TOP_CHIP_W, TOP_CHIP_H) * ui_scale
-	var st := StyleBoxFlat.new()
-	st.bg_color = Color(0.05, 0.07, 0.09, 0.8 if mine else 0.62)
-	st.border_color = Rules.seat_color(seat)
-	st.set_border_width_all(int((2 if mine else 1) * ui_scale))
-	st.set_corner_radius_all(int(8 * ui_scale))
-	st.set_content_margin_all(2 * ui_scale)
-	chip.add_theme_stylebox_override("panel", st)
+	# Alpha 24 Neon Noir: the score pill - glass with the seat's colour on its rim (seat colours stay: every screen shows the
+	# room's colours), yours the brightest; a seat that is out dims (_sync_top_chips swaps the box)
+	chip.add_theme_stylebox_override("panel", _score_box(seat, "score_pill_mine" if mine else "score_pill"))
+	chip.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", int(4 * ui_scale))
@@ -252,20 +255,29 @@ func _build_top_chip(seat: String, into: HBoxContainer, mine: bool) -> void:
 	# TOP_NAME_W; AI seats keep the emblem alone. Yours is the highlighted chip, first on the left.
 	var who: Dictionary = main.seat_who(seat) if main.has_method("seat_who") else {}
 	if bool(who.get("human", false)) and str(who.get("name", "")) != "":
-		var nm := text_label(str(who["name"]), 15, Color("f2fbff") if mine else Color("c8e6ee"))
+		var nm := text_label(str(who["name"]), 15, HudSkin.INK if mine else HudSkin.MUTED)
 		nm.clip_text = true
 		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		nm.custom_minimum_size = Vector2(minf(TOP_NAME_W, UI_FONT.get_string_size(nm.text, HORIZONTAL_ALIGNMENT_LEFT, -1, int(15 * ui_scale)).x / ui_scale + 2.0) * ui_scale, 0)
 		nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(nm)
 		chip.custom_minimum_size.x += nm.custom_minimum_size.x + 4.0 * ui_scale
-	var lbl := text_label("000", 15)
+	var lbl := text_label("000", 15, HudSkin.INK)
 	lbl.add_theme_font_override("font", SYMBOL_FONT)      # monospace: the digits never shift the chip
 	lbl.custom_minimum_size = Vector2(28 * ui_scale, 0)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	row.add_child(lbl)
 	into.add_child(chip)
-	top_chips[seat] = {"panel": chip, "emblem": emb, "label": lbl}
+	top_chips[seat] = {"panel": chip, "emblem": emb, "label": lbl, "box": "score_pill_mine" if mine else "score_pill"}
+
+
+func _score_box(seat: String, id: String) -> StyleBox:
+	var m := Vector4(6.0, 3.0, 6.0, 3.0) * ui_scale
+	return HudNoir.box(id, Rules.seat_color(seat), m)
+
+
+func _exit_tree() -> void:
+	UiTheme.match_dark(false)                         # Neon Noir: the menus follow the player's theme again
 
 
 # ------------------------------------------------------------------ build
@@ -282,7 +294,10 @@ func setup(m: Node3D) -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(root)
-	var accent := Rules.seat_color(human)
+	# Alpha 24 Neon Noir (Daniele 2026-11-02): the match is dark only, its chrome in your faction's colour
+	UiTheme.match_dark(true)
+	HudNoir.setup(str(sim.factions.get(human, "vex")), ui_scale)
+	var accent := HudNoir.accent
 	# badges first (under everything else). Alpha 19 (Daniele: "they all look different size - we should
 	# make them have fixed size and have their inside content never get out of the box boundaries"):
 	# one fixed box per ui_scale, its parts placed by hand (_place_badge) and clipped to it.
@@ -311,14 +326,14 @@ func setup(m: Node3D) -> void:
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		l.clip_text = true
 		l.add_theme_constant_override("outline_size", 3)
-		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		l.add_theme_color_override("font_outline_color", HudSkin.outline())
 		badge.add_child(l)
-		var sub := text_label("", BADGE_SUB_FONT, Color("c8e6ee"))
+		var sub := text_label("", BADGE_SUB_FONT, HudSkin.sub_ink())
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		sub.clip_text = true
 		sub.add_theme_constant_override("outline_size", 2)  # crisp on the see-through box
-		sub.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		sub.add_theme_color_override("font_outline_color", HudSkin.outline())
 		badge.add_child(sub)
 		var emblem := seat_emblem("", BADGE_EMBLEM)     # classic: Alpha 11's faction emblem under the count;
 		emblem.visible = false                          # the owner's emblem in the count's place where it is hidden
@@ -330,8 +345,8 @@ func setup(m: Node3D) -> void:
 		build_bar.add_theme_stylebox_override("fill", bb_fill)
 		build_bar.add_theme_stylebox_override("background", sb_bg)
 		var inset := 7.0 * ui_scale                     # clear of the rounded corners
-		build_bar.position = Vector2(inset, _badge_px.y - 4.0 * ui_scale)
-		build_bar.size = Vector2(_badge_px.x - 2.0 * inset, 2.0 * ui_scale)
+		build_bar.position = Vector2(inset, _badge_px.y - 6.5 * ui_scale)   # Alpha 24: the pack's pill bar (BadgeLayer: B19 / B20)
+		build_bar.size = Vector2(_badge_px.x - 2.0 * inset, 4.0 * ui_scale)
 		badge.add_child(build_bar)
 		_badge_model.add_child(badge)
 		badges[n["id"]] = {"panel": badge, "label": l, "sub": sub, "emblem": emblem, "build": build_bar, "owner": "?",
@@ -348,8 +363,14 @@ func setup(m: Node3D) -> void:
 	# side (faction emblem in the seat colour + strength, also monospace), your own chip first and
 	# highlighted, team modes grouped with a wider gap between groups. TUTORIAL: "topbar" gates the
 	# whole bar, "strength" the chips alone (clock-only in the early lessons, as before).
+	# GMN-1 layout (the director's QA/layout-*.json): on a phone the score words are 14 pt, the clock 16, the status line 13 -
+	# the top bar (capsule, pills, emblems, clock, status line) is built at that scale, everything else at ui_scale.
+	var keep_s := ui_scale
+	if mobile and HudNoir.has("top_capsule"):
+		ui_scale = maxf(ui_scale, pt(14.0) / 15.0)
 	top_panel = PanelContainer.new()
-	style_panel(top_panel, accent)
+	top_panel.add_theme_stylebox_override("panel", HudNoir.box("top_capsule", Color(0, 0, 0, 0), Vector4(6, 6, 6, 6) * ui_scale))
+	top_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(top_panel)
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", int(10 * ui_scale))
@@ -357,7 +378,7 @@ func setup(m: Node3D) -> void:
 	top_left = HBoxContainer.new()
 	top_left.add_theme_constant_override("separation", int(TOP_CHIP_GAP * ui_scale))
 	bar.add_child(top_left)
-	stats_label = text_label("00:00", 22)
+	stats_label = text_label("00:00", 22, HudSkin.INK)
 	stats_label.add_theme_font_override("font", SYMBOL_FONT)   # monospace digits: the clock never shifts
 	stats_label.custom_minimum_size = Vector2(TOP_CLOCK_W * ui_scale, 0)
 	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -377,74 +398,71 @@ func setup(m: Node3D) -> void:
 		for seat in g:
 			_build_top_chip(seat, into, seat == human)
 	status_glow = Panel.new()                         # HUD pass: the Last Stand announcement pulses its own line
-	var sg := panel_style(Rules.state_color("warn"))
-	sg.set_border_width_all(2)
-	sg.bg_color = Color(0.25, 0.03, 0.05, 0.72)
-	status_glow.add_theme_stylebox_override("panel", sg)
+	status_glow.add_theme_stylebox_override("panel", HudNoir.box("status_pill", Color(0, 0, 0, 0), Vector4.ZERO))
 	status_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_glow.visible = false
 	root.add_child(status_glow)
 	status_label = text_label("", 18, Color("ffb0b0"))
+	ui_scale = keep_s
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Alpha 24 Neon Noir: the line sits on the red status pill, as wide as its words (_fit_status); empty, nothing shows. The
+	# seconds ("9 s") sit in an amber capsule (_draw_status_secs, like the board's NEXT DROP 6s)
+	status_label.add_theme_stylebox_override("normal", HudNoir.box("status_pill", Color(0, 0, 0, 0), Vector4(16.0, 1.0, 16.0, 1.0) * ui_scale))
+	_status_secs = Control.new()
+	_status_secs.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_secs.draw.connect(_draw_status_secs)
+	status_label.add_child(_status_secs)
+	status_label.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(status_label)
 	catchup_tag = PanelContainer.new()                 # CATCH-UP: your side only (the HUD shows no rival modifiers)
-	var cs := badge_style(accent)
-	cs.set_content_margin_all(4 * ui_scale)
-	cs.content_margin_left = 10 * ui_scale
-	cs.content_margin_right = 10 * ui_scale
-	catchup_tag.add_theme_stylebox_override("panel", cs)
+	catchup_tag.add_theme_stylebox_override("panel", HudNoir.box("catchup_tag", Color(0, 0, 0, 0), Vector4(10, 4, 10, 4) * ui_scale))
 	catchup_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	catchup_tag.add_child(text_label("CATCH-UP +%d %%" % int(round((Rules.CATCHUP_PRODUCTION - 1.0) * 100.0)), 18, accent))
+	catchup_tag.add_child(text_label("CATCH-UP +%d %%" % int(round((Rules.CATCHUP_PRODUCTION - 1.0) * 100.0)), 18, HudNoir.GOOD))
 	catchup_tag.modulate.a = 0.0
 	catchup_tag.visible = false
 	root.add_child(catchup_tag)
-	pause_button = button("PAUSE", pause_menu, 100)
-	UiSkin.button(pause_button, main.SEAT_FACTIONS[human])
-	root.add_child(pause_button)
-	# MUSIC (Daniele 2026-09-29/30): left of PAUSE, same height - the top-right button's twin, a drawn note glyph
+	# Alpha 24: PAUSE and MUSIC are the pack's square icon buttons (B6 with the D pause / music icons), the same height as
+	# before (phones: 78 x ui_scale, >= 44 pt)
 	var pb_h: float = (52.0 if not mobile else 78.0) * ui_scale
+	pause_button = button("", pause_menu, pb_h / ui_scale, pb_h / ui_scale)
+	pause_button.tooltip_text = "PAUSE"
+	_icon_button(pause_button, "pause")
+	root.add_child(pause_button)
+	# MUSIC (Daniele 2026-09-29/30): left of PAUSE, same height - the top-right button's twin (its note: the D music icon)
 	music_button = button("", Callable(), pb_h, -1, 19)
 	music_button.custom_minimum_size = Vector2(pb_h, pb_h)
 	music_button.size = music_button.custom_minimum_size
-	UiSkin.button(music_button, main.SEAT_FACTIONS[human])
+	_icon_button(music_button, "")
 	music_button.tooltip_text = "MUSIC"
 	music_button.pressed.connect(func():
 		Music.toggle_on()                            # OFF at once, everywhere
 		_music_glyph.queue_redraw())
 	root.add_child(music_button)
 	_music_glyph = Control.new()
+	_music_glyph.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_music_glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_music_glyph.size = music_button.size
 	_music_glyph.draw.connect(func(): _draw_music_note(_music_glyph))
 	music_button.add_child(_music_glyph)
 	# side command panel (Alpha 11: 100/75/50/25 + the selected vat's count)
 	side_panel = PanelContainer.new()
-	style_panel(side_panel)
+	# Alpha 24 Neon Noir: the SEND housing - a container, so it holds living ooze and drips (its buttons never do)
+	# ui-node (Daniele 2026-11-04): ONE tank instead of four share buttons and no SEND / DRAG A VAT words - SendTank draws its own
+	# frame, the goo at the picked share, the gauge ticks and the share / units on the surface; the panel is just its holder.
+	side_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	side_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	root.add_child(side_panel)
 	side_box = VBoxContainer.new()
-	side_box.add_theme_constant_override("separation", 8)
+	side_box.add_theme_constant_override("separation", 0)
 	side_panel.add_child(side_box)
-	var send_title := text_label("SEND", 15, Color("c8e6ee"))
-	send_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	side_box.add_child(send_title)
-	var group := ButtonGroup.new()
-	for f in [1.0, 0.75, 0.5, 0.25]:
-		var b := button("%d%%" % int(f * 100), Callable(), 100, 66 if not mobile else 78, 26)   # 78: the phone-tuned default height (>= 44 pt), the send row was a touch under it
-		b.toggle_mode = true
-		b.button_group = group
-		b.button_pressed = is_equal_approx(f, main.fraction)
-		UiSkin.button(b, main.SEAT_FACTIONS[human])         # Alpha 11's kit buttons
-		var sel := UiSkin.box("Buttons/%s/primary-default" % UiSkin.faction(main.SEAT_FACTIONS[human]))
-		b.add_theme_stylebox_override("pressed", sel)
-		b.add_theme_color_override("font_pressed_color", Color("08141c"))
-		b.pressed.connect(func(): main.fraction = f)
-		b.gui_input.connect(func(event):                  # slide a finger over the buttons to pick
-			if (event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT) or event is InputEventScreenDrag:
-				b.button_pressed = true
-				main.fraction = f)
-		side_box.add_child(b)
-	count_label = text_label("DRAG A VAT", 14, accent)
-	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	send_tank = SendTank.new()
+	send_tank.custom_minimum_size = Vector2(112.0, 4.0 * (78.0 if mobile else 66.0) + 74.0) * ui_scale
+	if mobile and HudNoir.has("send_tank"):          # GMN-1 layout: 4 bands of 60 pt, 59 wide, caps + drips round them
+		send_tank.custom_minimum_size = Vector2(pt(66.0), pt(4.0 * 60.0 + 64.0)).round()
+	send_tank.setup(self, main, ui_scale, UI_FONT)
+	side_box.add_child(send_tank)
+	count_label = text_label("", 14, accent)                # (kept, hidden: the tank shows the units on its goo)
+	count_label.visible = false
 	side_box.add_child(count_label)
 	# bottom: map title, hint, ability dock, version
 	map_title = text_label(str(main.map.get("name", "")).to_upper(), 20)
@@ -513,10 +531,129 @@ func setup(m: Node3D) -> void:
 	root.add_child(monster_icon)
 
 
+func _icon_button(b: Button, icon_name: String) -> void:
+	## Alpha 24 Neon Noir: a square HUD button (part square_button: glass, the accent rim), its white D icon centred.
+	_noir_skin(b, "square_button")
+	b.add_theme_color_override("font_pressed_color", HudSkin.INK)
+	b.size = b.custom_minimum_size
+	if icon_name != "":
+		var side := minf(b.size.x, b.size.y) * 0.44
+		b.add_child(UiTheme.icon_rect(icon_name, side, HudSkin.INK, (b.size - Vector2(side, side * 1.15)) / 2.0))
+
+
+func _send_skin(b: Button, share := 1.0) -> void:
+	## Alpha 24 Neon Noir: a SEND share button is a clean glass pill (no drips: those stay on the housing). With the director's
+	## revision-6 parts it is a little vat (HudLiquid) holding its share of lit ooze in your faction's colour - 100 / 75 / 50 /
+	## 25 % - dim while idle, lit when picked; the words stay white over it.
+	_noir_skin(b, "send_button")
+	if not HudNoir.has("send_button_liquid"):
+		return
+	var c := Vector4(4, 4, 4, 4) * ui_scale
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		var e := StyleBoxEmpty.new()
+		e.content_margin_left = c.x
+		e.content_margin_top = c.y
+		e.content_margin_right = c.z
+		e.content_margin_bottom = c.w
+		b.add_theme_stylebox_override(st, e)
+	for k in ["font_pressed_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(k, HudNoir.INK)
+	b.add_theme_constant_override("outline_size", int(4 * ui_scale))
+	var vat := HudLiquid.new()
+	vat.setup("send_button", HudNoir.accent, share * 3.1)
+	vat.show_behind_parent = true                     # (the button's words draw over it)
+	vat.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vat.set_level(share, true)
+	b.add_child(vat)
+	b.draw.connect(_send_vat_state.bind(b, vat))
+
+
+func _send_vat_state(b: Button, vat: HudLiquid) -> void:
+	## A SEND vat follows its button: idle (dim liquid, the normal rim), hover (brighter rim), picked (lit liquid, the picked
+	## rim), disabled.
+	var mode := b.get_draw_mode()
+	var picked := mode == BaseButton.DRAW_PRESSED or mode == BaseButton.DRAW_HOVER_PRESSED
+	var id := "send_button_disabled" if mode == BaseButton.DRAW_DISABLED else ("send_button_picked" if picked else
+			("send_button_hover" if mode == BaseButton.DRAW_HOVER else "send_button"))
+	var fill := "send_button_disabled" if mode == BaseButton.DRAW_DISABLED else ("send_button_hover" if mode == BaseButton.DRAW_HOVER else "send_button")
+	if vat.fill_part != fill:
+		vat.fill_part = fill
+		vat.queue_redraw()
+	vat.set_rim(str(HudNoir.part_data(id).get("rim", "")), HudNoir.accent)
+	vat.set_liquid(HudNoir.accent, 1.0 if picked else (0.2 if mode == BaseButton.DRAW_DISABLED else (0.5 if mode == BaseButton.DRAW_HOVER else 0.32)))
+	vat.ready_glow = picked
+
+
+func _noir_skin(b: Button, part: String) -> void:
+	## A HUD button in its Neon Noir part's states: <part>, _hover, _picked / _pressed, _disabled (HudNoir.box: the cut sprite
+	## when imported, else the placeholder).
+	var on := part + ("_picked" if HudNoir.PRESETS.has(part + "_picked") else "_pressed")
+	var c := Vector4(4, 4, 4, 4) * ui_scale
+	b.add_theme_stylebox_override("normal", HudNoir.box(part, Color(0, 0, 0, 0), c))
+	b.add_theme_stylebox_override("hover", HudNoir.box(part + "_hover", Color(0, 0, 0, 0), c))
+	b.add_theme_stylebox_override("pressed", HudNoir.box(on, Color(0, 0, 0, 0), c))
+	b.add_theme_stylebox_override("hover_pressed", HudNoir.box(on, Color(0, 0, 0, 0), c))
+	b.add_theme_stylebox_override("disabled", HudNoir.box(part + "_disabled", Color(0, 0, 0, 0), c))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	for k in ["font_color", "font_hover_color", "font_focus_color"]:
+		b.add_theme_color_override(k, HudNoir.INK)
+	b.add_theme_color_override("font_pressed_color", HudNoir.on_accent())
+	b.add_theme_color_override("font_hover_pressed_color", HudNoir.on_accent())
+	b.add_theme_color_override("font_disabled_color", HudNoir.MUTED)
+	b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+
+
+func _fit_status() -> void:
+	## Alpha 24: the status line's pill is as wide as its words, centred under the top bar; an empty line shows nothing (the
+	## label itself stays visible: the tutorial's reveal owns that).
+	var empty := status_label.text == ""
+	status_label.self_modulate.a = 0.0 if empty else 1.0
+	if _status_secs.get_meta("text", "") != status_label.text:
+		_status_secs.set_meta("text", status_label.text)
+		_status_secs.size = status_label.size
+		_status_secs.queue_redraw()
+	if empty:
+		return
+	var vp := root.get_viewport_rect().size
+	var w := status_label.get_combined_minimum_size().x
+	if absf(status_label.size.x - w) > 0.5:
+		status_label.size.x = w
+		status_label.position.x = (vp.x - w) / 2.0
+
+
+func _draw_status_secs() -> void:
+	## Neon Noir: the status line's seconds ("9 s", "12 s") in amber over the words.
+	var t := status_label.text
+	var m := _secs_re.search(t)
+	if m == null:
+		return
+	var font := status_label.get_theme_font("font")
+	var fs := status_label.get_theme_font_size("font_size")
+	var sb := status_label.get_theme_stylebox("normal")
+	var tw := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var inner := status_label.size.x - sb.content_margin_left - sb.content_margin_right
+	var x0 := sb.content_margin_left + (inner - tw) / 2.0 + font.get_string_size(t.substr(0, m.get_start()), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var h := font.get_height(fs)
+	var y0 := (status_label.size.y - h) / 2.0
+	# 0.23.23 (Daniele: "the orange box for the time in the last stand warning looks weird"): no capsule any more - the
+	# seconds are simply amber over the line's own glyphs
+	var at := Vector2(x0, y0 + font.get_ascent(fs))
+	var os := status_label.get_theme_constant("outline_size")
+	if os > 0:
+		_status_secs.draw_string_outline(font, at, m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, os, status_label.get_theme_color("font_outline_color"))
+	_status_secs.draw_string(font, at, m.get_string(), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.AMBER.lightened(0.35))
+
+
 func _draw_music_note(c: Control) -> void:
-	## MUSIC (0.22.x): a drawn eighth-note, dim and slashed through when OFF (top_bar.gd's twin, no icon in the kit yet).
-	var q: float = c.size.y
+	## MUSIC (0.22.x): the note - Alpha 24: the D music / music_off icons, dimmed when OFF.
 	var on := Music.music_on()
+	var ic := UiTheme.icon("music" if on else "music_off")
+	if ic != null:
+		var side := c.size.y * 0.46
+		c.draw_texture_rect(ic, Rect2((c.size - Vector2(side, side)) / 2.0, Vector2(side, side)), false, Color(HudSkin.INK, 1.0 if on else 0.55))
+		return
+	var q: float = c.size.y
 	var col := Color.WHITE if on else Color(1, 1, 1, 0.4)
 	var o := Vector2(q * 0.36, q * 0.66)
 	var r := q * 0.1
@@ -553,6 +690,10 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	pause_button.position = Vector2(vp.x - m.z - pause_button.size.x, m.y)
 	music_button.size = music_button.custom_minimum_size
 	music_button.position = Vector2(pause_button.position.x - 8.0 * ui_scale - music_button.size.x, pause_button.position.y)
+	for extra in [debug_button, chat_button]:          # Alpha 24: the top-right row, left of MUSIC (never both: offline / online)
+		if extra:
+			extra.size = extra.custom_minimum_size
+			extra.position = Vector2(music_button.position.x - 8.0 * ui_scale - extra.size.x, pause_button.position.y)
 	side_panel.size = side_panel.get_combined_minimum_size()
 	var side_y := (vp.y - side_panel.size.y) / 2.0
 	var top_bottom := top_panel.position.y + top_panel.size.y + 34.0   # below the top bar and status line
@@ -561,11 +702,20 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	map_title.position = Vector2(m.x + 8, vp.y - m.w - 30 * ui_scale)
 	hint.size = Vector2(vp.x * 0.5, 20)
 	hint.position = Vector2(vp.x * 0.5 - hint.size.x / 2.0, vp.y - m.w - 18)
+	# Alpha 24 (Hub Roadmap m05, "send on the left thumb, skills stacked on the right"): the skills stand in a column on the
+	# right edge under PAUSE, centred on the screen's height where there is room (the right thumb's reach)
+	# Neon Noir: the column sits in its housing (SkillDock._draw, housing_margin: its rim round the slots, its drips below)
 	dock.size = dock.get_combined_minimum_size()
-	dock.position = Vector2(vp.x * 0.5 - dock.size.x / 2.0, vp.y - m.w - dock.size.y - (26 if not mobile else 8))
+	var hm := dock.housing_margin()
+	var dock_top := pause_button.position.y + pause_button.size.y + 8.0 * ui_scale + hm.y
+	var dock_bottom := vp.y - m.w - hm.w
+	var dock_y := clampf((vp.y - dock.size.y) / 2.0 + 10.0 * ui_scale, dock_top, maxf(dock_top, dock_bottom - dock.size.y))
+	dock.position = Vector2(vp.x - m.z - hm.z - dock.size.x, dock_y)
 	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
 	version_label.position = Vector2(vp.x - m.z - version_label.size.x, vp.y - m.w - version_label.size.y)
+	if dock.visible:                                   # Alpha 24: beside the skill column's foot, not under its drips
+		version_label.position.x = dock.position.x - hm.x - 10.0 * ui_scale - version_label.size.x
 	# HUD pass: the old stack's top-left corner stays as a mark only (a mission's strip pushes it down; note_line
 	# starts under whichever is lower)
 	notices.size = Vector2.ZERO
@@ -573,12 +723,9 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	banner.size = banner.get_combined_minimum_size()
 	banner.position = Vector2((vp.x - banner.size.x) / 2.0, vp.y * 0.26)
 	if debug_button:
-		debug_button.position = Vector2(vp.x - m.z - debug_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # under PAUSE, off the map
-		_debug_vp = vp
+		_debug_vp = vp                                 # demo-world merge: the button sits in the top-right row (Alpha 24)
 		_size_debug_panel()
 	_place_debug_tag()
-	if chat_button:
-		chat_button.position = Vector2(vp.x - m.z - chat_button.size.x, pause_button.position.y + pause_button.size.y + 8.0)   # Debug's slot (hidden online)
 	rotate_hint.size = vp
 	rotate_hint.visible = vp.y > vp.x
 	if vp != _screens_vp and (end_panel.visible or pause_panel.visible or out_panel.visible):
@@ -597,20 +744,33 @@ func side_panel_width() -> float:
 	return side_panel.size.x if side_panel else 0.0
 
 
+func right_used() -> float:
+	## The right edge the map keeps clear of (main._fit_nodes): PAUSE's column, and the skill column when it shows.
+	var w := pause_button.size.x if pause_button else 0.0
+	if dock and dock.visible:
+		var hm := dock.housing_margin()
+		w = maxf(w, dock.size.x + hm.x + hm.z)
+	return margins.z + w + 12.0
+
+
 func top_used() -> float:
 	return margins.y + (top_panel.size.y if top_panel else 0.0) + 34.0
 
 
 func bottom_used() -> float:
-	var used := margins.w + 30.0 * ui_scale              # the map title and hint line (badges are fitted by the camera)
-	if dock and dock.visible:                             # the skill dock never covers the map: the camera fits above it
-		used = maxf(used, root.get_viewport_rect().size.y - dock.position.y + 6.0)
-	return used
+	# the map title and hint line (badges are fitted by the camera); Alpha 24: the skill dock is a column on the right now
+	# (right_used), no longer a bar across the bottom
+	return margins.w + 30.0 * ui_scale
 
 
 func pointer_over_ui(p: Vector2) -> bool:
 	for c in [top_panel, pause_button, music_button, side_panel, dock, debug_button, chat_button, monster_icon, spectate_button]:
 		if c and c.visible and c.get_global_rect().has_point(p):
+			return true
+	if dock and dock.visible:                         # Neon Noir: the skill column's housing round it
+		var hm := dock.housing_margin()
+		var dr := dock.get_global_rect()
+		if Rect2(dr.position - Vector2(hm.x, hm.y), dr.size + Vector2(hm.x + hm.z, hm.y + hm.w)).has_point(p):
 			return true
 	if debug_panel and debug_panel.visible and debug_panel.get_global_rect().has_point(p):
 		return true
@@ -656,7 +816,8 @@ func sync(dt: float, cam: Camera3D) -> void:
 		if _chat_poll <= 0.0:
 			_chat_poll = 0.5
 			var n := Net.chat_unread()
-			chat_button.text = "Chat (%d)" % n if n > 0 else "Chat"
+			_chat_dot.visible = n > 0                      # Alpha 24: the chat icon button's red dot (B12) with the count
+			(_chat_dot.get_child(0) as Label).text = str(mini(n, 99))
 		_reconnect_watch()
 	# 0.19.2 spec H6: the clock, centred, never shifts; a chip per seat either side, eliminated seats
 	# greyed. "topbar" gates the whole bar, "strength" the chips alone (clock-only in early lessons).
@@ -670,29 +831,35 @@ func sync(dt: float, cam: Camera3D) -> void:
 			var c: Dictionary = top_chips[seat]
 			var out := _seat_out(seat)
 			(c["label"] as Label).text = "%03d" % Rules.shown(sim.seat_strength(seat))
-			(c["panel"] as Control).modulate = Color(1, 1, 1, 0.4) if out else Color.WHITE
+			(c["panel"] as Control).modulate = Color(1, 1, 1, 0.55) if out else Color.WHITE
+			if out and str(c["box"]) != "score_pill_out":          # Neon Noir: an out seat's pill sinks (grey rim, no glow)
+				c["box"] = "score_pill_out"
+				(c["panel"] as Control).add_theme_stylebox_override("panel", _score_box(seat, "score_pill_out"))
 	if not shows("status_line"):
 		status_label.text = ""
 	elif sim.very_last_stand_active:
-		status_label.text = ("VERY LAST STAND · a node drops every %d s" % int(round(sim.very_last_stand_gap))
-				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · one node stands - conquest decides")
+		# 0.23.23 (Daniele: "last stand message is too long"): the line says what drops when, nothing more
+		status_label.text = ("VERY LAST STAND · DROP EVERY %d s" % int(round(sim.very_last_stand_gap))
+				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · CONQUEST DECIDES")
 	elif sim.last_stand_active:
 		var next := ""
 		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
 		if sim.v3 and not sim.last_stand_warn.is_empty():
-			next = "RING %d DROPPING · next node in %d s (%d left)" % [sim.last_stand_next, int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
+			next = "NEXT DROP %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
 		elif sim.last_stand_warn_node >= 0:
-			next = "NODE %d FALLS IN %d s" % [sim.last_stand_warn_node, int(ceil(sim.last_stand_warn_t))]
+			next = "NEXT DROP %d s" % int(ceil(sim.last_stand_warn_t))
 		elif sim.last_stand_next < pending:
-			next = "next drop in %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
+			next = "NEXT DROP %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
 		else:
-			next = ("the last ring stands" if sim.v3 else "the final node stands") + " - conquest decides"
-		status_label.text = "LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how if _ls_pulse > 0.0 and _ls_how != "" else next]
+			next = "CONQUEST DECIDES"
+		# the method and how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop
+		status_label.text = ("LAST STAND · %s · %s" % [sim.last_stand_method.to_upper(), _ls_how]) if _ls_pulse > 0.0 and _ls_how != "" 				else "LAST STAND · %s" % next
 	elif Rules.last_stand and not sim.over and sim.time > Rules.LAST_STAND_TIME - 15.0 and sim.time < Rules.LAST_STAND_TIME and not (sim.v3 and (sim._map_last_stand.get("methods", []) as Array).is_empty()):
 		# mirrors sim._step_last_stand: no countdown when the Last Stand is off, over, or the map has none
 		status_label.text = "LAST STAND in %d s" % int(ceil(Rules.LAST_STAND_TIME - sim.time))
 	else:
 		status_label.text = ""
+	_fit_status()
 	_sync_catchup(dt)
 	var source: int = main.drag_from if main.drag_from >= 0 else main.selected
 	if source >= 0 and sim.nodes[source]["owner"] == human:
@@ -741,16 +908,16 @@ func _badges(cam: Camera3D) -> bool:
 		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":   # JUNCTION: no badge
 			panel.visible = false
 			continue
-		if sim.is_warned(n["id"]):                    # 0.19.0: the floating danger symbol replaces the badge
-			panel.visible = false                     # circle instead (HudOverlay._draw_danger_symbols)
-			continue
+		# ui-neon (Daniele 2026-11-02, "unit count HUD disappearing"): a warned node keeps its badge - the count stays readable
+		# all through the Last Stand; the neon alarm sign (HudOverlay._draw_danger_symbols) sits beside it, clear of it.
+		# (0.19.0 hid the badge here, when the sign replaced a round badge; with a whole ring warned at once that hid 6 counts.)
 		panel.visible = true
 		var owner: String = n["owner"]
 		if b["owner"] != owner:
 			b["owner"] = owner
 			var col := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
 			panel.add_theme_stylebox_override("panel", badge_style(col))
-			_font_color(b["label"] as Label, col if owner != "" else Color("d8e0e8"))
+			_font_color(b["label"] as Label, HudSkin.ink(col) if owner != "" else HudSkin.neutral_ink())
 		var label: Label = b["label"]
 		var sub: Label = b["sub"]
 		var classic := not Rules.bridge_combat
@@ -799,7 +966,7 @@ func _badges(cam: Camera3D) -> bool:
 		# i couldn't see any other indicator"): your own share on an ally's node stands out in your own
 		# colour, not the sub-label's default light blue - reset every frame, or a stale override would
 		# bleed into a later node that has none.
-		var sub_col := Color("c8e6ee")
+		var sub_col := HudSkin.sub_ink()
 		if has_allies and not masked:                       # GAME-RULES sec11: the total is shown above -
 			if owner == human:                               # this names the ally share / your own share of it
 				what += "+A%d" % Rules.shown(sim.allied_units(n))
@@ -807,12 +974,12 @@ func _badges(cam: Camera3D) -> bool:
 				var mine := sim.allied_units(n, human)
 				if mine > 0.0001:
 					what += " +%d" % Rules.shown(mine)
-					sub_col = Rules.seat_color(human)
+					sub_col = HudSkin.ink(Rules.seat_color(human))
 		_font_color(sub, sub_col)
 		var clock := ""
 		var worst := ""                                     # the clock's widest form (see below)
-		if sim.is_warned(n["id"]):
-			clock = "▼%d" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t))
+		if sim.is_warned(n["id"]) and not shows("danger"):   # ui-neon: the alarm sign shows the seconds (no second copy here) -
+			clock = "▼%d" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t))   # so a warned relay keeps its !n
 			worst = "▼88"
 		elif n["relay"] != "" and n["relay_phase"] == "warning":
 			clock = "!%d" % int(ceil(n["relay_t"]))
@@ -887,7 +1054,9 @@ func _badges(cam: Camera3D) -> bool:
 					label.size, label.get_theme_font_size("font_size"), label.get_meta("font_color") if label.has_meta("font_color") else null, sub.visible, sub.text,
 					sub.position, sub.size, sub.get_theme_font_size("font_size"), sub.get_meta("font_color") if sub.has_meta("font_color") else null, emb.visible,
 					emb.texture, emb.position, emb.size, emb.get_meta("seat", ""), bar.visible, bar.position, bar.size,
-					bar.value if bar.visible else 0.0])
+					bar.value if bar.visible else 0.0,
+					# ui-node: the tier chip and the armour shields BadgeLayer draws round the badge (shields step 0.01 = 1 s)
+					n["tier"], n["structure"], n["relay"], int(round(float(n["armour"]) * 100.0)), float(n["armour_cap"])])
 		if sig != b.get("drawn", []):
 			b["drawn"] = sig
 			changed = true
@@ -961,7 +1130,7 @@ func _place_badge(b: Dictionary, masked: bool, small: bool) -> void:
 ## (flipping it to the left only when the right has no room) and keeps the card inside _inspector_bounds.
 const INSPECTOR_RING_R := 76.0                    # the node's own hex ring (apothem), and the pie's inner edge
 const INSPECTOR_PIE_W := 112.0                    # the pie's depth, ring to outer edge (x ui_scale; phones +16)
-const INSPECTOR_CARD_W := 280.0
+const INSPECTOR_CARD_W := 196.0                   # ui-node: the compact card (Daniele 2026-11-04) - was 280 with 4-8 lines
 
 
 func inspect(id: int, cam: Camera3D) -> void:
@@ -973,7 +1142,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 	if _debug_proto and debug_panel.visible:
 		_debug_proto_refresh()
 	var n: Dictionary = sim.nodes[id]
-	var col := Rules.seat_color(n["owner"]) if n["owner"] != "" else Rules.NEUTRAL
+	var col := NodeNoir.mine_or_seat(str(n["owner"]), human)   # ui-node: your accent on yours, the owner's seat colour else
+	inspector_col = col
 	inspector = Control.new()
 	inspector.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(inspector)
@@ -991,21 +1161,21 @@ func inspect(id: int, cam: Camera3D) -> void:
 	hub.pressed.connect(func(): close_inspector.call_deferred())
 	inspector.add_child(hub)
 	inspector.set_meta("close", hub)
+	# ui-node (Daniele 2026-11-04, "compact card"): the node's card in the HUD's glass - [emblem] FACTION · STRUCTURE [T2], the
+	# units bar (units / cap in lit goo), the armour shields (vats: one per 0.1 of the tier's armour, filling as it regains),
+	# one status line, the build bar while building. The army stats line (garrison / attack / speed %) left the card.
 	var info_bg := PanelContainer.new()
 	info_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var info_style := panel_style(col)
-	info_style.bg_color = Color(0.05, 0.08, 0.11, 0.92)
-	info_style.set_border_width_all(2)
-	info_style.set_content_margin_all(10)
-	info_bg.add_theme_stylebox_override("panel", info_style)
+	info_bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	info_bg.add_theme_stylebox_override("panel", HudNoir.box("node_card", col, Vector4(12, 8, 12, 9) * ui_scale))
 	inspector.add_child(info_bg)
 	inspector.set_meta("card", info_bg)
 	var info_box := VBoxContainer.new()
-	info_box.add_theme_constant_override("separation", int(4 * ui_scale))
+	info_box.add_theme_constant_override("separation", int(5 * ui_scale))
 	info_box.custom_minimum_size = Vector2(INSPECTOR_CARD_W, 0) * ui_scale
 	info_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_bg.add_child(info_box)
-	var head := HBoxContainer.new()                   # [emblem] FACTION · first line: the owner, no seat letter
+	var head := HBoxContainer.new()
 	head.alignment = BoxContainer.ALIGNMENT_CENTER
 	head.add_theme_constant_override("separation", int(5 * ui_scale))
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1014,18 +1184,48 @@ func inspect(id: int, cam: Camera3D) -> void:
 	head.add_child(inspector_emblem)
 	inspector_who = text_label("", 16, Color("c8e6ee"))
 	head.add_child(inspector_who)
-	inspector_first = text_label("", 16, Color("c8e6ee"))
+	inspector_first = text_label("", 16, HudNoir.INK)
+	inspector_first.add_theme_font_size_override("font_size", card_px(16))
+	inspector_who.add_theme_font_size_override("font_size", card_px(16))
 	head.add_child(inspector_first)
-	info_box.add_child(HSeparator.new())              # a thin rule under the header (0.23.x: was a flat wall of text)
-	inspector_label = text_label("", 16, Color("c8e6ee"))
+	inspector_tier = Control.new()
+	inspector_tier.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inspector_tier.custom_minimum_size = Vector2(30, 20) * ui_scale
+	inspector_tier.draw.connect(func():
+		if inspector_id < 0:
+			return
+		var tn: Dictionary = sim.nodes[inspector_id]
+		NodeNoir.tier_chip(inspector_tier, inspector_tier.size / 2.0, maxf(18.0 * ui_scale, card_px(12) / 0.72), int(tn["tier"]), inspector_col, UI_FONT, ui_scale,
+				"M%d" % tn["tier"] if tn["structure"] == "machinegoon" else ""))
+	head.add_child(inspector_tier)
+	inspector_units = Control.new()
+	inspector_units.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inspector_units.custom_minimum_size = Vector2(0, maxf(20.0 * ui_scale, card_px(14) + 6.0))
+	inspector_units.draw.connect(_draw_card_units)
+	info_box.add_child(inspector_units)
+	inspector_shields = Control.new()
+	inspector_shields.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inspector_shields.custom_minimum_size = Vector2(0, maxf(22.0 * ui_scale, card_px(13) + 6.0))
+	inspector_shields.draw.connect(_draw_card_shields)
+	info_box.add_child(inspector_shields)
+	inspector_label = text_label("", 15, Color("c8e6ee"))
+	inspector_label.add_theme_font_size_override("font_size", card_px(15))
 	inspector_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inspector_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	info_box.add_child(inspector_label)
 	inspector_progress = ProgressBar.new()
-	inspector_progress.custom_minimum_size = Vector2(0, 10) * ui_scale
+	inspector_progress.custom_minimum_size = Vector2(0, 8) * ui_scale
 	inspector_progress.show_percentage = false
 	inspector_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	info_box.add_child(inspector_progress)             # 0.23.x: inside the card's own flow, not a loose fixed offset
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(NodeNoir.GLASS_LOW, 0.9)
+	track.set_corner_radius_all(int(4 * ui_scale))
+	var goo := StyleBoxFlat.new()
+	goo.bg_color = Color(col, 0.9)
+	goo.set_corner_radius_all(int(4 * ui_scale))
+	inspector_progress.add_theme_stylebox_override("background", track)
+	inspector_progress.add_theme_stylebox_override("fill", goo)
+	info_box.add_child(inspector_progress)
 	if n["owner"] == human:
 		_inspector_actions(n)
 	_refresh_inspector(cam)
@@ -1111,11 +1311,17 @@ class ActionWedge:
 	var a1 := 0.0
 	var r_in := 80.0            # apothems of the inner and outer hexagon (Daniele: "make the radial hexagonal")
 	var r_out := 200.0
+	var floor_px := 0           # GMN-1: a phone's 13 pt in px (the director's slice words); 0 on a desktop
+	const ROUND := true         # GMN-1: round ring (hex_r returns the radius); false = the 0.23.x hexagon pie
 	var hex_base := 0.0         # the direction of the flat edge the pie opens toward (its middle edge)
 	var grow := 1.0             # deal-out from the ring, 0..1
 	var type_scale := 1.0       # phones: 1.15 (the slice's name / price / glyph)
 	var lift := 0.0             # hover / held: the slice slides out along its own middle, 0..1
+	var afford := 1.0           # ui-node: your units / its price, 0..1 - 1 = the slice is lit (no goo fill since mockup 3)
+	var why := ""               # ui-node: a greyed slice's short reason (COOLDOWN, UNDER ATTACK ...), shown instead of the price
 	var _held := false
+	var _ci: CanvasItem = self   # where _text / _icon draw (the words child)
+	var _words: Control
 
 	func _init() -> void:
 		flat = true
@@ -1125,6 +1331,12 @@ class ActionWedge:
 		var empty := StyleBoxEmpty.new()
 		for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 			add_theme_stylebox_override(st, empty)
+		_words = Control.new()
+		_words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_words.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_words.z_index = 1
+		_words.draw.connect(_draw_words)
+		add_child(_words)
 		button_down.connect(func(): _held = true)
 		button_up.connect(func(): _held = false)
 
@@ -1142,6 +1354,8 @@ class ActionWedge:
 
 	static func hex_r(t: float, apothem: float, base: float) -> float:
 		## The distance from the centre to a hexagon (flat edge facing `base`) along direction t.
+		if ROUND:                                       # GMN-1 (Daniele: no hexagons): the pie is a slice of a ROUND ring
+			return apothem
 		var rel := t - base
 		return apothem / cos(rel - round(rel / (PI / 3.0)) * (PI / 3.0))
 
@@ -1212,39 +1426,173 @@ class ActionWedge:
 		return pts
 
 	func _draw() -> void:
+		## ui-node: a slice of smoked glass, LIT in the accent when you can do it, GREYED when not (no goo), the neon tube on its
+		## outer edge, the glyph, the name, the price (in red when you can't afford it) or the reason.
 		if grow <= 0.001 or a1 <= a0:
 			return
 		var s := ui_scale
 		var c := centre() + _shift()
 		var ro := outer()
 		var off := disabled
-		var a := accent.darkened(0.35) if off else accent      # unaffordable: still its colour, just quieter
+		var a := accent.darkened(0.35) if off else accent
 		var poly := _slice(c, r_in, ro)
-		if lift > 0.01:                                   # a soft glow along the lifted slice's outer edge
+		if lift > 0.01 and not HudNoir.has("node_wedge"):
 			draw_polyline(_edge(c, ro + 4.0 * s), Color(a, 0.25 * lift), 8.0 * s, true)
-		var fill := Color(0.03, 0.055, 0.08, 0.9).lerp(Color(a.darkened(0.6), 0.94), 0.55 * lift)
-		draw_colored_polygon(poly, fill)
-		draw_colored_polygon(_slice(c, ro - 14.0 * s * grow, ro), Color(a, 0.12 + 0.10 * lift))   # the lit rim band
-		var edge := poly.duplicate()
-		edge.append(poly[0])
-		draw_polyline(edge, Color(a, 0.32), 1.2 * s, true)
-		draw_polyline(_edge(c, ro - 1.0 * s), Color(a, 0.8 if off else 0.95), (2.2 + 1.2 * lift) * s, true)
-		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)     # the content fades in over the second half of the deal
+		# Daniele 2026-11-04 (mockup 3): NO goo in the slices - a slice is LIT (affordable / free) or GREYED (not yet):
+		# "easy to just have grayed or not; the filling would also cost resources especially when open and close fast".
+		var lit := not off and afford >= 1.0
+		var sec := sector_id()
+		if sec != "":                                     # GMN-2: the director's FINISHED slice (fixed 50 / 40 deg sector, own bolts and rim):
+			_sector(sec, c, lit, a)                       # OFF metal always, the LIT neon signal over it in the accent
+		elif HudNoir.has("node_wedge"):                   # DROP-IN: the director's slice (lit / _fill_off), unrolled onto this one
+			_mapped("node_wedge_fill_off" if not lit and HudNoir.has("node_wedge_fill_off") else "node_wedge", c, r_in, ro,
+					Color.WHITE if lit or HudNoir.has("node_wedge_fill_off") else Color(0.55, 0.55, 0.6))
+			_mapped_rim("node_wedge", c, r_in, ro, a if lit else Color(a, 0.35))
+		else:
+			NodeNoir.glass(self, poly, 0.9, Color(a, 0.25 * lift))
+			if lit:                                       # lit glass: the accent glows through it, brightest at the rim
+				var gp := NodeNoir.clean(poly)
+				var gc := PackedColorArray()
+				for q in gp:
+					var u := clampf(((q - c).length() - r_in) / maxf(ro - r_in, 1.0), 0.0, 1.0)
+					gc.append(Color(a.darkened(0.5).lerp(a, u), 0.16 + 0.22 * u))
+				draw_polygon(gp, gc)
+		if sec == "" and not HudNoir.has("node_wedge"):  # (the director's slice brings its own rim: one edge, not two - Daniele)
+			var edge := poly.duplicate()
+			edge.append(poly[0])
+			draw_polyline(edge, Color(a, 0.3), 1.0 * s, true)
+			NodeNoir.neon(self, _edge(c, ro - 1.5 * s), a, (2.0 + 1.0 * lift) * s, 0.9 if lit else 0.2)
+		_words.queue_redraw()
+
+	func _draw_words() -> void:
+		## The glyph, name and price / reason, drawn on a child ABOVE every slice (z 1): the next slice's steel rail no longer
+		## covers the words of a turned fan (GMN-2 sectors: "?0 UNITS").
+		_ci = _words
+		if grow <= 0.001 or a1 <= a0:
+			return
+		var s := ui_scale
+		var ro := outer()
+		var off := disabled
+		var a := accent.darkened(0.35) if off else accent
+		var lit := not off and afford >= 1.0
+		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)
 		if k <= 0.0:
 			return
-		var p := content_point()
-		var ink := Color(0.92, 0.97, 0.98, k) if not off else Color(0.72, 0.78, 0.82, k)
-		_icon(p + Vector2(0, -16.0 * s * type_scale), 14.0 * s * type_scale, Color(a.lightened(0.15), k * (0.7 if off else 1.0)))
-		var maxw := minf(ro - r_in, (a1 - a0) * (r_in + ro) / 2.0) * 0.9
-		_text(title, p + Vector2(0, 9.0 * s * type_scale), 13.0, ink, maxw)
-		_text(cost, p + Vector2(0, 25.0 * s * type_scale), 12.0, Color(Color("ff8a7a") if off else a.lightened(0.3), k), maxw)
+		## Daniele 2026-11-05: radial words - the glyph upright in the slice's INNER end, the name + price to its right, turned
+		## along the slice's middle ray (flipped 180 deg left of the centre so they never read upside down), centred in the rest.
+		var ink := Color(HudNoir.INK, k) if lit else Color(HudNoir.MUTED, k)
+		var lh := maxf(14.0 * s * type_scale, float(floor_px) * 1.1)   # GMN-1: lines spaced for the phone's 13 pt words
+		var ir := maxf(12.0 * s * type_scale, float(floor_px) * 0.8)
+		var m := mid()
+		var u := Vector2(cos(m), sin(m))
+		var c := centre() + _shift()
+		var ri := hex_r(m, r_in, hex_base)
+		var span := hex_r(m, ro, hex_base) - ri
+		var izone := ir * 2.5
+		_icon(c + u * (ri + ir * 1.3), ir, Color(a.lightened(0.2) if lit else HudNoir.MUTED, k))
+		var tr := ri + izone + (span - izone) * 0.5                      # the text block's centre on the ray
+		var maxw := (span - izone) * 0.94
+		var room := (a1 - a0) * tr * 0.92                                  # the slice's width across the ray there
+		var fs := maxi(int(round(13.0 * ui_scale * type_scale)), floor_px)
+		var min_fs := maxi(7, int(round(float(floor_px) * 10.0 / 13.0)))   # radial words may shrink to 10 pt (as the plate names)
+		var lines: Array = []
+		var low := why if why != "" else cost
+		for ln in [[str(SLICE_NAMES.get(title, title)), 13.0, ink], [low, 12.0, Color(HudNoir.ENEMY.lightened(0.25) if not lit else a.lightened(0.35), k)]]:
+			lines.append_array(_wrap(str(ln[0]), maxi(min_fs, int(round(fs * 0.85))), maxw).map(func(t): return [t, ln[1], ln[2]]))   # MONSTER / HUB, FREE / 5 s
+		var gap := minf(lh, room / float(lines.size()))
+		var ang := m + (PI if u.x < -0.01 else 0.0)
+		_ci.draw_set_transform(c + u * tr, ang)
+		for i in lines.size():
+			var ln: Array = lines[i]
+			_text(str(ln[0]), Vector2(0, (float(i) - (lines.size() - 1) / 2.0) * gap), float(ln[1]), ln[2], maxw, min_fs)
+		_ci.draw_set_transform(Vector2.ZERO)
 
-	func _text(t: String, at: Vector2, px: float, col: Color, maxw: float) -> void:
-		var fs := int(round(px * ui_scale * type_scale))
-		while fs > 7 and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > maxw:
+	const SLICE_NAMES := {"MACHINEGOON": "GOON", "MONSTER HUB": "HUB"}   # Daniele 2026-11-05: short names on the slice only (the card keeps the full)
+
+	static func sector_for(span: float) -> String:
+		## GMN-2: "50" / "40" when the director's finished sector of that angle is in the game and fits a slice of `span`
+		## (the phone layout: 50 deg up to 3 slices, 40 for 4-5), else "" (the unrolled node_wedge / code-drawn slice).
+		for deg in [50, 40]:
+			if absf(rad_to_deg(span) - deg) < 4.0 and HudNoir.has("node_slice_off_%d" % deg):   # (a slice's span is its slot less 2 x 1.4 deg seams)
+				return str(deg)
+		return ""
+
+	func sector_id() -> String:
+		return sector_for(a1 - a0)
+
+	func _sector(deg: String, c: Vector2, lit: bool, a: Color) -> void:
+		## The sector sprites face +x with the ring centre outside their canvas (part socket = centre in body px, inner / outer
+		## radius 147 / 357 px): turned to the slice's middle, scaled so 357 px = this slice's outer edge, faded in with the deal-out.
+		var off: Dictionary = HudNoir.part_data("node_slice_off_" + deg)
+		var t := HudNoir.texture(str(off.get("file", "")))
+		if t == null:
+			return
+		var body: Array = off["body"]
+		var sock: Array = off["socket"] if off.get("socket") != null else [-133.0, 151.0]
+		var origin := -Vector2(float(body[0]) + float(sock[0]), float(body[1]) + float(sock[1]))   # canvas (0,0) from the centre
+		var k := outer() / 357.0
+		draw_set_transform(c, mid(), Vector2(k, k))
+		draw_texture(t, origin, Color(1, 1, 1, clampf(grow * 1.5, 0.0, 1.0)))
+		if lit:
+			var lt := HudNoir.texture(str(HudNoir.part_data("node_slice_lit_" + deg).get("file", "")))
+			if lt != null:
+				draw_texture(lt, origin, Color(a.lightened(0.15 * lift), clampf(grow * 1.5, 0.0, 1.0)))
+		draw_set_transform(Vector2.ZERO)
+
+	func _uv_poly(c: Vector2, ri: float, ro2: float, full_ro: float) -> Array:
+		## The slice ri..ro2 with polar UVs into an unrolled-slice texture: u across a0 -> a1, v 0 at full_ro (its top = the
+		## outer rim) to 1 at r_in.
+		var pts := PackedVector2Array()
+		var uvs := PackedVector2Array()
+		var ang := _angles()
+		for t in ang:
+			pts.append(c + Vector2(cos(t), sin(t)) * hex_r(t, ro2, hex_base))
+			uvs.append(Vector2((t - a0) / (a1 - a0), 1.0 - (ro2 - r_in) / maxf(full_ro - r_in, 1.0)))
+		for i in range(ang.size() - 1, -1, -1):
+			var t: float = ang[i]
+			pts.append(c + Vector2(cos(t), sin(t)) * hex_r(t, ri, hex_base))
+			uvs.append(Vector2((t - a0) / (a1 - a0), 1.0 - (ri - r_in) / maxf(full_ro - r_in, 1.0)))
+		return [pts, uvs]
+
+	func _mapped(id: String, c: Vector2, ri: float, ro2: float, mod: Color) -> void:
+		var t := HudNoir.texture(str(HudNoir.part_data(id).get("file", "")))
+		if t == null:
+			return
+		var pu: Array = _uv_poly(c, ri, ro2, outer())
+		var cols := PackedColorArray()
+		cols.resize((pu[0] as PackedVector2Array).size())
+		cols.fill(mod)
+		draw_polygon(pu[0], cols, pu[1], t)
+
+	func _mapped_rim(id: String, c: Vector2, ri: float, ro2: float, mod: Color) -> void:
+		var t := HudNoir.texture(str(HudNoir.part_data(id).get("rim", "")))
+		if t == null:
+			return
+		var pu: Array = _uv_poly(c, ri, ro2, ro2)
+		var cols := PackedColorArray()
+		cols.resize((pu[0] as PackedVector2Array).size())
+		cols.fill(mod)
+		draw_polygon(pu[0], cols, pu[1], t)
+
+	func _wrap(t: String, fs: int, maxw: float) -> Array:
+		## A slice line too long for maxw at fs splits once: at " · " first, else at the space nearest the middle.
+		if font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x <= maxw:
+			return [t]
+		if " · " in t:
+			var i := t.find(" · ")
+			return [t.substr(0, i), t.substr(i + 3)]
+		var best := -1
+		for i in t.length():
+			if t[i] == " " and (best < 0 or absi(i - t.length() / 2) < absi(best - t.length() / 2)):
+				best = i
+		return [t] if best < 0 else [t.substr(0, best), t.substr(best + 1)]
+
+	func _text(t: String, at: Vector2, px: float, col: Color, maxw: float, min_fs := -1) -> void:
+		var fs := maxi(int(round(px * ui_scale * type_scale)), floor_px)
+		while fs > (min_fs if min_fs > 0 else maxi(7, floor_px - 1)) and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > maxw:
 			fs -= 1
 		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		draw_string(font, Vector2(at.x - w / 2.0, at.y + (font.get_ascent(fs) - font.get_descent(fs)) / 2.0), t,
+		_ci.draw_string(font, Vector2(at.x - w / 2.0, at.y + (font.get_ascent(fs) - font.get_descent(fs)) / 2.0), t,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 	func _icon(p: Vector2, r: float, col: Color) -> void:
@@ -1253,50 +1601,50 @@ class ActionWedge:
 		match kind:
 			"UPGRADE":
 				for dy in [-0.45, 0.2]:
-					draw_polyline(PackedVector2Array([p + Vector2(-0.75, dy + 0.4) * r, p + Vector2(0, dy - 0.3) * r,
+					_ci.draw_polyline(PackedVector2Array([p + Vector2(-0.75, dy + 0.4) * r, p + Vector2(0, dy - 0.3) * r,
 							p + Vector2(0.75, dy + 0.4) * r]), col, w, true)
 			"MACHINEGOON":
-				draw_arc(p, r * 0.62, 0.0, TAU, 24, col, w, true)
+				_ci.draw_arc(p, r * 0.62, 0.0, TAU, 24, col, w, true)
 				for d in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
-					draw_line(p + d * r * 0.3, p + d * r * 1.0, col, w, true)
-				draw_circle(p, r * 0.12, col)
+					_ci.draw_line(p + d * r * 0.3, p + d * r * 1.0, col, w, true)
+				_ci.draw_circle(p, r * 0.12, col)
 			"VAT":
 				var body := PackedVector2Array([p + Vector2(-0.6, -0.5) * r, p + Vector2(0.6, -0.5) * r, p + Vector2(0.6, 0.9) * r,
 						p + Vector2(-0.6, 0.9) * r, p + Vector2(-0.6, -0.5) * r])
-				draw_polyline(body, col, w, true)
-				draw_line(p + Vector2(-0.3, -0.85) * r, p + Vector2(0.3, -0.85) * r, col, w, true)
-				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.5, 0.25) * r, p + Vector2(0.5, 0.1) * r,
+				_ci.draw_polyline(body, col, w, true)
+				_ci.draw_line(p + Vector2(-0.3, -0.85) * r, p + Vector2(0.3, -0.85) * r, col, w, true)
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.5, 0.25) * r, p + Vector2(0.5, 0.1) * r,
 						p + Vector2(0.5, 0.8) * r, p + Vector2(-0.5, 0.8) * r]), Color(col, col.a * 0.55))
 			"SWITCH":
 				if glyph != "" and symbol_font:
 					var fs := int(round(r * 1.7))
 					var gw := symbol_font.get_string_size(glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-					draw_string(symbol_font, p + Vector2(-gw / 2.0, (symbol_font.get_ascent(fs) - symbol_font.get_descent(fs)) / 2.0),
+					_ci.draw_string(symbol_font, p + Vector2(-gw / 2.0, (symbol_font.get_ascent(fs) - symbol_font.get_descent(fs)) / 2.0),
 							glyph, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 				else:
-					draw_arc(p, r * 0.7, -PI * 0.9, PI * 0.4, 20, col, w, true)
+					_ci.draw_arc(p, r * 0.7, -PI * 0.9, PI * 0.4, 20, col, w, true)
 			"LASER":
-				draw_colored_polygon(PackedVector2Array([p + Vector2(0.2, -1.0) * r, p + Vector2(-0.5, 0.12) * r,
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(0.2, -1.0) * r, p + Vector2(-0.5, 0.12) * r,
 						p + Vector2(-0.02, 0.12) * r, p + Vector2(-0.2, 1.0) * r, p + Vector2(0.5, -0.15) * r,
 						p + Vector2(0.02, -0.15) * r]), col)
 			"FORGE":
-				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.8, -0.75) * r, p + Vector2(0.35, -0.75) * r,
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.8, -0.75) * r, p + Vector2(0.35, -0.75) * r,
 						p + Vector2(0.35, -0.25) * r, p + Vector2(-0.8, -0.25) * r]), col)
-				draw_line(p + Vector2(-0.15, -0.25) * r, p + Vector2(0.55, 0.95) * r, col, w * 1.3, true)
+				_ci.draw_line(p + Vector2(-0.15, -0.25) * r, p + Vector2(0.55, 0.95) * r, col, w * 1.3, true)
 			"MONSTER HUB":
 				for dx in [-0.5, 0.0, 0.5]:
-					draw_line(p + Vector2(dx - 0.25, -0.85) * r, p + Vector2(dx + 0.2, 0.85) * r, col, w * 1.2, true)
+					_ci.draw_line(p + Vector2(dx - 0.25, -0.85) * r, p + Vector2(dx + 0.2, 0.85) * r, col, w * 1.2, true)
 			"LAUNCH":
-				draw_line(p + Vector2(0, 0.9) * r, p + Vector2(0, -0.75) * r, col, w, true)
-				draw_polyline(PackedVector2Array([p + Vector2(-0.55, -0.2) * r, p + Vector2(0, -0.85) * r,
+				_ci.draw_line(p + Vector2(0, 0.9) * r, p + Vector2(0, -0.75) * r, col, w, true)
+				_ci.draw_polyline(PackedVector2Array([p + Vector2(-0.55, -0.2) * r, p + Vector2(0, -0.85) * r,
 						p + Vector2(0.55, -0.2) * r]), col, w, true)
 			"EJECT":
-				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.15) * r, p + Vector2(0.75, 0.15) * r,
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.15) * r, p + Vector2(0.75, 0.15) * r,
 						p + Vector2(0, -0.8) * r]), col)
-				draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.42) * r, p + Vector2(0.75, 0.42) * r,
+				_ci.draw_colored_polygon(PackedVector2Array([p + Vector2(-0.75, 0.42) * r, p + Vector2(0.75, 0.42) * r,
 						p + Vector2(0.75, 0.72) * r, p + Vector2(-0.75, 0.72) * r]), col)
 			_:
-				draw_circle(p, r * 0.4, col)
+				_ci.draw_circle(p, r * 0.4, col)
 
 
 class InspectorHub:
@@ -1333,8 +1681,9 @@ class InspectorHub:
 		for i in range(7):
 			var a := hex_base + PI / 6.0 + i * PI / 3.0
 			hex.append(c + Vector2(cos(a), sin(a)) * r)
-		draw_colored_polygon(hex, Color(0.03, 0.055, 0.08, 0.92))
-		draw_polyline(hex, Color(accent, 1.0 if hot else 0.75), (2.0 + (1.0 if hot else 0.0)) * s, true)
+		if not NodeNoir.sprite(self, "node_hub", c, Vector2(r, r) * (2.0 if ActionWedge.ROUND else 1.732), accent, hex_base):
+			NodeNoir.glass(self, hex.slice(0, 6), 0.92)        # ui-node: smoked glass, a neon rim breathing in the node's colour
+			NodeNoir.neon(self, hex, accent, (2.0 + (1.0 if hot else 0.0)) * s, 0.55 + 0.25 * sin(Time.get_ticks_msec() / 260.0) + (0.3 if hot else 0.0))
 		var k := r * 0.3
 		var ink := Color(0.92, 0.97, 0.98)
 		draw_line(c + Vector2(-k, -k), c + Vector2(k, k), ink, 2.4 * s, true)
@@ -1379,18 +1728,19 @@ func _add_action(name: String, title: String, cost: int, method: String, id: int
 	if cost > 0:
 		price = "%d UNITS" % Rules.shown(cost)
 	elif method == "switch":
-		price = "%d s COOLDOWN" % int(Rules.relay_cooldown(str(sim.nodes[id]["relay"])))   # per kind: rotations 10 s
+		price = "FREE · %d s" % int(Rules.relay_cooldown(str(sim.nodes[id]["relay"])))   # free, then its cooldown (GMN-1: "5 s COOLDOWN" overflowed the 40 deg slice)
 	var b := ActionWedge.new()                            # 0.23.x: a slice of the hex pie (see ActionWedge)
 	b.title = title.get_slice("\n", 0)
 	b.cost = price
 	b.kind = name
 	if method == "switch":
 		b.glyph = str(Rules.RELAY_GLYPH.get(sim.nodes[id]["relay"], ""))
-	b.accent = RELAY_ACCENT if method == "switch" else Rules.seat_color(human)
+	b.accent = RELAY_ACCENT if method == "switch" else HudNoir.accent   # ui-node: your faction accent (Daniele 2026-11-04)
 	b.ui_scale = ui_scale
 	b.font = UI_FONT
 	b.symbol_font = SYMBOL_FONT
 	b.type_scale = 1.15 if mobile else 1.0
+	b.floor_px = int(ceil(pt(13.0))) if mobile else 0
 	var act := func():
 		if method == "launch_monster":                    # arm: drag from the hub, or tap a highlighted node
 			main.monster_from = id
@@ -1432,11 +1782,10 @@ func action_rect(name: String) -> Rect2:
 
 
 func send_button_rect(fraction: float) -> Rect2:
-	## The SEND panel's button for `fraction` (1.0 / 0.75 / 0.5 / 0.25), for the tutorial's spotlight.
-	for c in side_box.get_children():
-		if c is Button and (c as Button).text == "%d%%" % int(round(fraction * 100.0)):
-			return (c as Control).get_global_rect() if side_panel.visible else Rect2()
-	return Rect2()
+	## The SEND tank's band for `fraction` (1.0 / 0.75 / 0.5 / 0.25), for the tutorial's spotlight (ui-node: was a button).
+	if send_tank == null or not side_panel.visible:
+		return Rect2()
+	return send_tank.level_rect(snappedf(fraction, 0.25))
 
 
 func badge_rect(id: int) -> Rect2:
@@ -1610,6 +1959,8 @@ func _inspector_bounds() -> Rect2:
 	var l := margins.x + (side_panel.size.x + 16.0 * ui_scale if side_panel.visible else 0.0)
 	var t := top_used() + 8.0 * ui_scale
 	var r := vp.x - margins.z - 8.0 * ui_scale
+	if dock and dock.visible:                           # Alpha 24: the skill column on the right
+		r = minf(r, dock.position.x - 8.0 * ui_scale)
 	var bo := vp.y - bottom_used() - 8.0 * ui_scale
 	return Rect2(l, t, maxf(r - l, 20.0), maxf(bo - t, 20.0))
 
@@ -1669,10 +2020,15 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 	var big := n >= 4
 	var r_in := ring + (5.0 + (18.0 if big else 0.0)) * s
 	var r_out := r_in + (INSPECTOR_PIE_W + (16.0 if mobile else 0.0) + (34.0 if big else 0.0)) * s
+	if mobile and ActionWedge.ROUND:                  # GMN-1 layout: ring 49 -> 119 pt, 50 deg a slice (40 for 4-5)
+		r_in = pt(49.0)
+		r_out = pt(119.0)
 	# one hexagon edge (60 deg) per action up to 3 - the half-hex; 4-5 take half an edge each (30 deg), so every
 	# seam still lands on a corner or an edge's midpoint and each slice stays a clean trapezoid (45 / 36 deg
 	# slices cut across the edges and came out as kites)
 	var span := PI / 3.0 if n <= 3 else PI / 6.0
+	if mobile and ActionWedge.ROUND:
+		span = deg_to_rad(50.0 if n <= 3 else 40.0)
 	var total := span * n
 	# the hexagon turned so the seams land on those points: flat edge to the front for 1, 3 or 4 slices, a
 	# corner for 2, 15 deg off for 5
@@ -1708,9 +2064,11 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 		w.custom_minimum_size = box
 		w.size = box
 		w.position = -box / 2.0
-		if w.get_child_count() > 0 and w.get_child(0) == switch_ring and is_instance_valid(switch_ring):
-			var gp := w.content_point() + Vector2(0, -16.0 * s * w.type_scale)
-			switch_ring.size = Vector2.ONE * 40.0 * s
+		if is_instance_valid(switch_ring) and switch_ring.get_parent() == w:   # (not child 0: the words layer is)
+			var u := Vector2(cos(w.mid()), sin(w.mid()))
+			var ir := maxf(12.0 * s * w.type_scale, float(w.floor_px) * 0.8)
+			var gp := w.centre() + w._shift() + u * (ActionWedge.hex_r(w.mid(), w.r_in, w.hex_base) + ir * 1.3)   # = _draw_words' glyph
+			switch_ring.size = Vector2.ONE * ir * 2.6
 			switch_ring.position = gp - switch_ring.size / 2.0
 	var hub: Control = inspector.get_meta("close")
 	if hub is InspectorHub:
@@ -1763,15 +2121,17 @@ func _draw_inspector_guides(col: Color) -> void:
 	var e: float = _fan["e"]
 	var g := _inspector_guides
 	var hexp := _hex_edge(Vector2.ZERO, hx, hx - PI, hx + PI, INSPECTOR_RING_R * s)
-	g.draw_colored_polygon(hexp.slice(0, hexp.size() - 1), Color(col, 0.08 * e))
-	g.draw_polyline(hexp, Color(col, 0.85 * e), 2.0 * s, true)
-	if int(_fan["n"]) > 0:
+	# ui-node: the selection hex as a neon tube (halo, tube, core) breathing in the node's colour, a faint wash inside
+	g.draw_colored_polygon(hexp.slice(0, hexp.size() - 1), Color(col, 0.06 * e))
+	if not NodeNoir.sprite(g, "node_select", Vector2.ZERO, Vector2.ONE * INSPECTOR_RING_R * s * 2.0, Color(col, e), hx, NodeNoir.floor_k(g)):
+		NodeNoir.neon(g, hexp, col, 2.4 * s, (0.65 + 0.2 * sin(Time.get_ticks_msec() / 300.0)) * e, e)
+	if int(_fan["n"]) > 0 and ActionWedge.sector_for(float(_fan["total"]) / int(_fan["n"])) == "":   # GMN-2 sectors: no container
 		var total: float = _fan["total"]
 		var outer := _hex_edge(Vector2.ZERO, hx, base - total / 2.0, base + total / 2.0, float(_fan["r_out"]) + 3.0 * s)
 		var inner := _hex_edge(Vector2.ZERO, hx, base - total / 2.0, base + total / 2.0, float(_fan["r_in"]) - 2.0 * s)
 		inner.reverse()
 		outer.append_array(inner)
-		g.draw_colored_polygon(outer, Color(0.0, 0.0, 0.0, 0.42 * e))
+		g.draw_colored_polygon(outer, Color(0.0, 0.0, 0.0, 0.5 * e))
 
 
 
@@ -1801,63 +2161,18 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		inspector_emblem.texture = emblem_texture(str(sim.factions.get(owner, "null")))
 		tint_emblem(inspector_emblem, Rules.seat_color(owner))
 	inspector_who.text = "NEUTRAL" if owner == "" else str(sim.factions.get(owner, "")).to_upper()
-	_font_color(inspector_who, Color("c8e6ee") if owner == "" else Rules.seat_color(owner))
-	var lines := []
-	if owner != "" and owner != human:
-		lines.append("population hidden")
-		lines.append(_structure_line(n))
-	else:
-		var what := _structure_line(n)
-		var units := "%d / %d units" % [Rules.shown(n["units"]), Rules.shown(sim.node_cap(n))]
-		lines.append("%s · %s" % [what, units])
-		if owner != "":
-			# Alpha 11's status line: production, and what a double-tap upgrade costs
-			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) \
-					else ("no production - garrison must be fed" if n["structure"] == "machinegoon" else "no vat here")
-			var up := sim.upgrade_cost(n)
-			if owner == human and up > 0 and shows("upgrade"):
-				status += " | Double-tap: %d units" % Rules.shown(up)
-			elif owner == human and n["structure"] in ["vat", "machinegoon"] and up <= 0 and shows("upgrade"):
-				status += " | MAX TIER"
-			lines.append(status)
-			var forge: String = " (forge +%d%%)" % roundi(Rules.forge_bonus * 100.0) if sim.has_forge(owner) else ""   # attack_of includes it
-			lines.append("garrison %s | attack %d%%%s | speed %d%%" % [
-					"%d%%" % roundi(sim.stat(owner, "garrison") * 100.0), roundi(sim.attack_of(owner) * 100.0), forge,
-					roundi(sim.stat(owner, "speed") * 100.0)])
-			if n["structure"] == "forge" and shows("forge_readout"):
-				# Forge readout (spec E): the attack half is in the line above (attack_of includes it)
-				lines.append("Forge: +%d%% attack, -%d%% damage taken" % [roundi(Rules.forge_bonus * 100.0), roundi((1.0 - 1.0 / Rules.FORGE_DEFENCE) * 100.0)])
-			if n["structure"] == "monster_hub" and shows("monster"):
-				var mr := _monster_ready(n)
-				lines.append("Monster hub: %s" % ("READY" if mr == "" else mr.to_upper()))
-	if n["relay"] != "" and shows("relay"):
-		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
-		var nxt := sim.relay_state_key(n, sim.relay_next_index(n)).to_upper()
-		var rs := "%s relay %s -> %s" % [n["relay"].to_upper(), cur, nxt]
-		if n["relay_phase"] == "warning":
-			rs += " | SWITCHING IN %.1f s" % n["relay_t"]
-		elif n["relay_phase"] == "moving":
-			rs += " | MOVING"
-		elif n["relay_cd"] > 0.0:
-			rs += " | READY IN %.0f s" % ceil(n["relay_cd"])
-		else:
-			rs += " | READY"
-		lines.append(rs)
-	if n["structure"] == "laser" and owner == human:
-		lines.append("laser %s" % ("FIRING" if n["cannon_burst"] > 0.0 else ("READY" if n["cannon_cd"] <= 0.0 else "RECHARGING %.1f s" % n["cannon_cd"])))
-	if n["build_kind"] != "":
-		lines.append("BUILDING %s · %.1f s" % [str(n["build_target"].get("kind", n["build_kind"])).to_upper(), n["build_timer"]])
-	if n["swap_cd"] > 0.0 and owner == human:
-		lines.append("attachment swap in %.0f s" % ceil(n["swap_cd"]))
-	if sim.very_last_stand_active:
-		lines.append("VERY LAST STAND: %s" % ("THE LAST NODE - conquest decides" if sim.very_last_stand_gap <= 0.0
-				else ("falls in %d s" % int(ceil(sim.drop_in(n["id"]))) if sim.is_warned(n["id"]) else "could fall next")))
-	elif sim.last_stand_active:
-		var k := sim.drop_order_of(n["id"])
-		lines.append("LAST STAND: %s" % ((("falls in wave %d" if sim.v3 else "drop #%d") % k) if k > 0 else ("THE %s - never falls" % ("LAST RING" if sim.v3 else "FINAL") if sim.is_final(n["id"]) else "")))
-	inspector_first.text = "· " + str(lines.pop_front())
-	inspector_label.text = "\n".join(lines)
-	inspector_label.visible = not lines.is_empty()
+	_font_color(inspector_who, Color("c8e6ee") if owner == "" else inspector_col)
+	# ui-node compact card: STRUCTURE [tier chip] / units bar (yours, allies', neutral) / shields (vats) / ONE status line
+	inspector_first.text = "· " + _structure_word(n)
+	var hidden_pop := owner != "" and not sim.allied(owner, human)
+	inspector_tier.visible = n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon", ""]
+	inspector_units.visible = not hidden_pop
+	inspector_shields.visible = owner != "" and Sim.has_vat(n) and NodeNoir.shield_count(float(n["armour_cap"])) > 0
+	inspector_label.text = _status_line(n, hidden_pop)
+	inspector_label.visible = inspector_label.text != ""
+	inspector_tier.queue_redraw()
+	inspector_units.queue_redraw()
+	inspector_shields.queue_redraw()
 	inspector_progress.visible = n["build_kind"] != ""
 	inspector_progress.value = Sim.build_progress(n) * 100.0
 	_layout_inspector_wheel(p, vp)
@@ -1883,6 +2198,147 @@ func _refresh_inspector(cam: Camera3D) -> void:
 				why = _monster_ready(n)
 		b.disabled = why != ""
 		b.tooltip_text = why
+		if b is ActionWedge:                              # ui-node: the slice fills with goo as your units near its price;
+			var cost_now := int(a["cost"])                # a greyed slice names its reason on a phone (no tooltips there)
+			(b as ActionWedge).afford = 1.0 if cost_now <= 0 else clampf(float(n["units"]) / float(cost_now), 0.0, 1.0)
+			(b as ActionWedge).why = _short_why(why)
+
+
+func pt(v: float) -> float:
+	## GMN-1 (the director's layout, QA/layout-*.json, measured at 812 x 375 pt): v points in viewport px on a phone; on a
+	## desktop the old ui_scale sizing.
+	if not mobile:
+		return v * ui_scale
+	return v / maxf(UiKit.pt_per_px(root.get_viewport_rect().size), 0.01)
+
+
+func card_px(fs: int) -> int:
+	## A node-card word's font size: fs x ui_scale, never under the phone's 12.5 pt floor (PROJECT.md UI rules).
+	var floor_px := 12.5 / maxf(UiKit.pt_per_px(root.get_viewport_rect().size), 0.01) if mobile else 0.0
+	return maxi(int(fs * ui_scale), int(ceil(floor_px)))
+
+
+func _structure_word(n: Dictionary) -> String:
+	## The card's title (ui-node): what stands here; the tier sits in its own chip.
+	if n["relay"] != "":
+		return "%s RELAY" % str(n["relay"]).to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else "")
+	if n["structure"] == "machinegoon":
+		return "MACHINEGOON"
+	return STRUCT_LABEL.get(n["structure"], "VAT")
+
+
+func _status_line(n: Dictionary, hidden_pop: bool) -> String:
+	## The card's one status line (ui-node): the clock that matters most, else what the node does for you.
+	var owner: String = n["owner"]
+	if n["build_kind"] != "":
+		return "BUILDING %s · %d s" % [str(n["build_target"].get("kind", n["build_kind"])).to_upper().replace("_", " "), int(ceil(n["build_timer"]))]
+	if sim.very_last_stand_active:
+		if sim.very_last_stand_gap <= 0.0:
+			return "THE LAST NODE"
+		return "FALLS IN %d s" % int(ceil(sim.drop_in(n["id"]))) if sim.is_warned(n["id"]) else "COULD FALL NEXT"
+	if sim.last_stand_active and sim.is_warned(n["id"]):
+		return "FALLS IN %d s" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t))
+	if n["relay"] != "" and shows("relay"):
+		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
+		var nxt := sim.relay_state_key(n, sim.relay_next_index(n)).to_upper()
+		if n["relay_phase"] == "warning":
+			return "%s → %s IN %.1f s" % [cur, nxt, n["relay_t"]]
+		if n["relay_phase"] == "moving":
+			return "%s → %s · MOVING" % [cur, nxt]
+		if n["relay_cd"] > 0.0:
+			return "%s · NEXT %s · %d s" % [cur, nxt, int(ceil(n["relay_cd"]))]
+		return "%s · NEXT %s · READY" % [cur, nxt]
+	if hidden_pop:
+		return "POPULATION HIDDEN"
+	if owner == "":
+		return "NEUTRAL"
+	if n["structure"] == "laser" and owner == human:
+		return "LASER %s" % ("FIRING" if n["cannon_burst"] > 0.0 else ("READY" if n["cannon_cd"] <= 0.0 else "RECHARGING %d s" % int(ceil(n["cannon_cd"]))))
+	if n["structure"] == "monster_hub" and shows("monster"):
+		var mr := _monster_ready(n)
+		return "MONSTER %s" % ("READY" if mr == "" else mr.to_upper())
+	if n["structure"] == "forge" and shows("forge_readout"):
+		return "+%d%% ATTACK · -%d%% DAMAGE" % [roundi(Rules.forge_bonus * 100.0), roundi((1.0 - 1.0 / Rules.FORGE_DEFENCE) * 100.0)]
+	if n["structure"] == "machinegoon":
+		return "NO PRODUCTION · FEED IT"
+	if Sim.has_vat(n):
+		var up := sim.upgrade_cost(n)
+		var prod := "+%.1f / s" % Rules.shown_f(sim.production(n))
+		if owner == human and shows("upgrade"):
+			return prod + (" · MAX TIER" if up <= 0 else " · DOUBLE-TAP: UPGRADE")
+		return prod
+	return ""
+
+
+func _short_why(why: String) -> String:
+	## A greyed slice's reason in a few words (the Sim's sentences are tooltips; phones have none).
+	if why == "":
+		return ""
+	var w := why.to_upper()
+	if "UNIT" in w or "AFFORD" in w or "ENOUGH" in w:
+		return ""                                     # the price in red on the greyed slice says it
+	if "COOLDOWN" in w:
+		return "COOLDOWN"
+	if "SWITCHING" in w or "MOVING" in w:
+		return "SWITCHING"
+	if "ATTACK" in w:
+		return "UNDER ATTACK"
+	if "BUILD" in w:
+		return "BUILDING"
+	if "MAX" in w:
+		return "MAX TIER"
+	return w.left(16)
+
+
+func _draw_card_units() -> void:
+	## The card's units bar: a glass track, lit goo up to units / cap in the node's colour, "29 / 60" over it.
+	if inspector_id < 0 or not is_instance_valid(inspector_units):
+		return
+	var n: Dictionary = sim.nodes[inspector_id]
+	var c := inspector_units
+	var s := ui_scale
+	var r := Rect2(Vector2(0, 2.0 * s), Vector2(c.size.x, c.size.y - 4.0 * s))
+	var cap := maxf(float(sim.node_cap(n)), 1.0)
+	var units: float = sim.garrison_total(n) if sim.allied_units(n) > 0.0001 else float(n["units"])
+	var f := clampf(units / cap, 0.0, 1.0)
+	var pts := NoirBox.rounded(r, r.size.y / 2.0)
+	NodeNoir.glass(c, pts, 0.9)
+	if f > 0.0:
+		var fr := Rect2(r.position, Vector2(maxf(r.size.x * f, r.size.y), r.size.y))
+		var gp := NodeNoir.clean(NoirBox.rounded(fr, r.size.y / 2.0))
+		var cols := PackedColorArray()
+		for q in gp:
+			cols.append(Color(inspector_col.darkened(0.45).lerp(inspector_col.darkened(0.15), (q.y - r.position.y) / r.size.y), 0.9))
+		c.draw_polygon(gp, cols)
+	var loop := pts.duplicate()
+	loop.append(pts[0])
+	c.draw_polyline(loop, Color(inspector_col, 0.6), maxf(1.0, 1.2 * s), true)
+	var txt := "%d / %d" % [Rules.shown(units), Rules.shown(cap)]
+	var fs := card_px(14)
+	var tw := UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var base := Vector2(r.get_center().x - tw / 2.0, r.get_center().y + (UI_FONT.get_ascent(fs) - UI_FONT.get_descent(fs)) / 2.0)
+	c.draw_string_outline(UI_FONT, base, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, int(4 * s), Color(0, 0, 0, 0.85))
+	c.draw_string(UI_FONT, base, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.INK)
+
+
+func _draw_card_shields() -> void:
+	## The card's armour: the shields (one per 0.1 of the tier's armour) and, while they fill, the seconds to full.
+	if inspector_id < 0 or not is_instance_valid(inspector_shields):
+		return
+	var n: Dictionary = sim.nodes[inspector_id]
+	var c := inspector_shields
+	var s := ui_scale
+	var cap := float(n["armour_cap"])
+	var arm := float(n["armour"])
+	var h := c.size.y - 4.0 * s
+	var txt := "ARMOUR x%.1f" % arm if arm >= cap - 0.0001 else "FULL IN %d s" % int(ceil(sim.armour_full_in(n)))
+	var fs := card_px(13)
+	var tw := UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var rw := NodeNoir.shield_count(cap) * (h * 0.84 + 2.0 * s)
+	var x0 := (c.size.x - rw - 6.0 * s - tw) / 2.0
+	NodeNoir.shields_row(c, Vector2(x0 + rw / 2.0, c.size.y / 2.0), h, arm, cap, inspector_col, s, Time.get_ticks_msec() / 1000.0)
+	c.draw_string(UI_FONT, Vector2(x0 + rw + 6.0 * s, c.size.y / 2.0 + (UI_FONT.get_ascent(fs) - UI_FONT.get_descent(fs)) / 2.0), txt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.MUTED)
 
 
 func _structure_line(n: Dictionary) -> String:
@@ -1922,6 +2378,8 @@ const GOOD_WORDS := ["captured", "Sending", "Recalled", "reconnected", "Upgrade 
 const INFO_COLOR := Color("7fe9f5")
 var callouts: HudCallouts               # every placed message (see above)
 var status_glow: Panel                  # behind the status line while the Last Stand announcement pulses it
+var _status_secs: Control               # Neon Noir: the amber capsule round the status line's seconds
+var _secs_re := RegEx.create_from_string("\\d+ s\\b")
 var _ls_pulse := 0.0                    # s of that pulse left
 var _ls_how := ""                       # the method's one-line explanation, shown in the line meanwhile
 
@@ -2029,7 +2487,7 @@ func skill_refusal(slot: int, msg: String) -> void:
 	var b: Control = dock.slots[slot]
 	var col := kind_color("warn")
 	callouts.add("slot:%d" % slot, [[msg, callout_px(Rules.HUD_REFUSAL_FONT, Rules.HUD_REFUSAL_MIN_PT), col.lerp(Color.WHITE, 0.25)]], col,
-			{"anchor": func(): return Vector2(b.get_global_rect().get_center().x, b.get_global_rect().position.y - 4.0 * ui_scale),
+			{"anchor": func(): return Vector2(b.get_global_rect().position.x - 6.0 * ui_scale, b.get_global_rect().get_center().y),
 			"glyph": "warn", "life": Rules.HUD_REFUSAL_LIFE, "arrow": false, "rise": 6.0})
 
 
@@ -2084,6 +2542,25 @@ func _sync_catchup(dt: float) -> void:
 	var a := move_toward(catchup_tag.modulate.a, 1.0 if on else 0.0, dt / Rules.HUD_CALLOUT_FADE)
 	catchup_tag.modulate.a = a
 	catchup_tag.visible = a > 0.0
+	if catchup_tag.visible:
+		_place_catchup()
+
+
+func _place_catchup() -> void:
+	## 0.23.23 (Daniele: "catch up seems randomly positioned"): it hung under the status line's slot, empty or not, at the bar's
+	## left end. Now it sits right under YOUR score pill, left-aligned with it; when the status line is up and would meet it,
+	## it drops under that line instead.
+	var gap := 4.0 * ui_scale
+	catchup_tag.size = catchup_tag.get_combined_minimum_size()
+	var x := maxf(top_panel.position.x, margins.x)
+	var y := top_panel.position.y + top_panel.size.y + gap
+	var c = top_chips.get(human)
+	if c != null and is_instance_valid(c["panel"]):
+		x = maxf((c["panel"] as Control).global_position.x - root.global_position.x, margins.x)
+	var r := Rect2(Vector2(x, y), catchup_tag.size)
+	if status_label.text != "" and r.intersects(Rect2(status_label.position, status_label.size).grow(gap)):
+		y = status_label.position.y + status_label.size.y + gap
+	catchup_tag.position = Vector2(x, y)
 
 
 func pulse_last_stand(how: String) -> void:
@@ -2286,10 +2763,9 @@ func _build_end() -> void:
 		where = "ROOM %s · %s" % [Net.room_code, where]
 	var primary := []
 	var quiet := []
-	if not main.online:                                # CONTINUE opens PLAY; RETRY replays this map as it was
-		primary = ["CONTINUE  →", func(): main.to_menu("play")] if won else ["RETRY  →", main.restart]
-		quiet = [["REMATCH · RANDOM MAP", main.rematch_random], ["CHANGE LOADOUT", func(): main.to_menu("armies")],
-				["HOME", main.to_menu]]
+	if not main.online:                                # UX pass (board 07): PLAY AGAIN = the same setup, one tap
+		primary = ["PLAY AGAIN  →", main.restart]
+		quiet = [["HOME", main.to_menu], ["RANDOM MAP", main.rematch_random], ["CHANGE SETUP", func(): main.to_menu("setup")]]
 	if _end_page == "details":
 		s.details({"name": str(main.map.get("name", "")), "sub": where, "outcome": outcome, "primary": primary,
 				"back": func():
@@ -2465,15 +2941,36 @@ func _show_screen(layer: Control) -> void:
 func _build_debug() -> void:
 	## Debug controls for playtests (Daniele, 2026-09-25): live sliders, thumb-sized, top-right under PAUSE,
 	## wide ranges on purpose. Also prints FPS to the console every 5 s while open.
-	debug_button = button("Debug", Callable(), 110, 50 if not mobile else 78, 20)   # 78: matches the phone-tuned default height (>= 44 pt)
+	# Alpha 24: Debug and Chat are square icon buttons in the top-right row, left of MUSIC (the skills took their column)
+	var sq: float = 52.0 if not mobile else 78.0
+	debug_button = button("DBG", Callable(), sq, sq, 15)   # 78: matches the phone-tuned default height (>= 44 pt)
 	debug_button.toggle_mode = true
-	debug_button.size = debug_button.custom_minimum_size
+	_icon_button(debug_button, "")
+	debug_button.add_theme_font_override("font", UiKit.HEAD)
 	root.add_child(debug_button)
 	debug_button.visible = not main.online and (Rules.debug_tools or Rules.proto_debug)   # online: the rules are the host's,
 	                                                               # not live-tunable; offline only when DEBUG TOOLS is on in
 	                                                               # OPTIONS (0.18.7) or in a proto build (PROTO DEBUG)
-	chat_button = button("Chat", func(): Net.open_chat(), 110, 50 if not mobile else 78, 20)   # online: the room chat (78: >= 44 pt)
-	chat_button.size = chat_button.custom_minimum_size
+	chat_button = button("", func(): Net.open_chat(), sq, sq, 20)   # online: the room chat (78: >= 44 pt)
+	chat_button.tooltip_text = "CHAT"
+	_icon_button(chat_button, "chat")
+	_chat_dot = Panel.new()
+	var dot := StyleBoxTexture.new()
+	dot.texture = UiTheme.atlas("B")
+	var dr: Array = UiTheme.DATA.SPRITES["B12"]["rect"]
+	dot.region_rect = Rect2(dr[0], dr[1], dr[2], dr[3])
+	_chat_dot.add_theme_stylebox_override("panel", dot)
+	_chat_dot.size = Vector2(20, 20) * ui_scale
+	_chat_dot.position = Vector2(chat_button.size.x - _chat_dot.size.x * 0.75, -_chat_dot.size.y * 0.25)
+	_chat_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_chat_dot.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	var dl := text_label("", 13, Color.WHITE)
+	dl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dl.size = _chat_dot.size
+	_chat_dot.add_child(dl)
+	_chat_dot.visible = false
+	chat_button.add_child(_chat_dot)
 	chat_button.visible = main.online
 	root.add_child(chat_button)
 	debug_panel = PanelContainer.new()

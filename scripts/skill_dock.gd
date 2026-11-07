@@ -1,10 +1,11 @@
 class_name SkillDock
-extends HBoxContainer
-## SKILLS 2.0 in-match dock (0.18.7): the three slots ACTIVE / MAP / ULTIMATE at the bottom of the screen,
+extends VBoxContainer
+## SKILLS 2.0 in-match dock (0.18.7): the three slots ACTIVE / MAP / ULTIMATE - Alpha 24 (Hub Roadmap m05: "skills stacked
+## on the right, compact sizes"): a column of round buttons on the right edge (Hud.layout), in the round-3 pack's look,
 ## shown only when ABILITIES are on. Daniele (0.18.7): "time to add armies presets and skills"; for all UI:
 ## "make sure it all is consistent, functional, cool, properly sized and that it looks good and modern".
 ## Each slot: the skill's icon, a cooldown sweep with the seconds left, a ready glow; the ultimate has a
-## charge ring and a READY burst; Rewire shows its relay fires left. Casting: tap a slot (or 1 / 2 / 3),
+## charge ring and a READY burst; Overdrive shows its relay fires left. Casting: tap a slot (or 1 / 2 / 3),
 ## the valid targets light up in the world (Sim.targets_for: lines, nodes, decks, relays), tap one to
 ## cast - Ghost Line takes its source node, then its destination. Tap the slot again or empty space to
 ## cancel (a cancel spends nothing). A tap on a wrong target says Sim.cast_check's reason just above the slot
@@ -21,13 +22,17 @@ extends HBoxContainer
 
 const SLOTS := ["active", "map", "ultimate"]
 const TAGS := ["ACTIVE", "MAP", "ULTIMATE"]
-# 0.19.2 spec H5: each slot type gets its own border / label accent instead of sharing the seat colour -
-# three distinct, colour-blind-safe hues (Okabe-Ito: sky blue, bluish green, orange).
-const SLOT_ACCENT := [Color("56b4e9"), Color("009e73"), Color("e69f00")]
-const SLOT_SIZE := Vector2(196, 78)            # x ui_scale: 225 x 90 px on the phone profile = ~49 pt tall (was 72, 44.9 pt: another nudge, Daniele 0.18.8)
+# 0.19.2 spec H5: each slot type gets its own ring colour instead of sharing the seat colour - Alpha 24 Neon Noir (Daniele
+# 2026-11-02, DECIDED): fixed per slot in every faction - ACTIVE icy cyan (ice-white until 2026-11-05), MAP violet, ULTIMATE amber (HudNoir.RING)
+const SLOT_ACCENT := HudNoir.RING
+const SLOT_W := 112.0                          # x ui_scale: a slot's width on desktop (phones: Rules.HUD_DOCK_PHONE_W)
+const ROUND_D := 64.0                          # x ui_scale: the round button (phones: ROUND_D_PHONE - 90 px on the phone profile, ~45 pt)
+const ROUND_D_PHONE := 78.0
 const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const TAP_PIXELS := 14.0
+const CARD_PART := "send_button"              # ui-node: the skill card's vat = the SEND share button's parts (fill, liquid, rim)
+const HOUSING_PAD := 7.0                       # x ui_scale: the skill column's housing round its slots (Neon Noir)
 
 var main                                      # main.gd, or a test double: node_action, sim, HUMAN, fraction, paused
 var hud                                       # Hud (toasts, inspector) or null in tests
@@ -48,9 +53,22 @@ var swapped := ""                             # the relay map skill this map rep
 var _cand_t := 0.0
 var _press := Vector2.INF
 var _t := 0.0
-var _prev: Array = []                         # per slot: [cooldown, charge, rewire fires] last frame
+var _prev: Array = []                         # per slot: [cooldown, charge, overdrive fires] last frame
 var _last_pulse := [-9.0, -9.0, -9.0]
 var _floor_px := 0.0                          # phones: the smallest font the slot words may use (HUD_DOCK_MIN_PT), 0 = none
+var vessel := false                           # Neon Noir revision 6: hex vessels filling with lit ooze (HudLiquid) instead of round buttons
+var plate := false                            # GMN-1 (mockup 3, Daniele's sketch): a METAL plate, a round glass window at its socket
+                                              # filling with goo, the neon ring lighting with it, the name under it
+var vessel_cy := 0.0                          # ... the vessel's centre below the slot's top (the skill card's socket, px)
+var round_d := 64.0                           # the round button's diameter (px), the card's inner pad, the tag pill's height
+var pad := 6.0
+var gap := 4.0                                # between the round button and the name
+var _cards := {}                              # armed? -> the slot card's box (HudNoir skill_card / skill_card_armed)
+var _housing: StyleBox                        # Neon Noir: the column's container (HudNoir skill_housing: ooze, drips)
+var _names := {}                              # skill id -> its name in 1 or 2 lines (name_lines)
+var _bad := Vector2.INF                       # where the last wrong target was tapped (an INVALID mark there, fading)
+var _bad_t := 0.0
+var _last_tap := Vector2.INF                  # the world tap being judged (tap -> pick -> _refuse)
 
 
 class Slot:
@@ -61,11 +79,14 @@ class Slot:
 	var cd := 0.0                              # seconds left (ultimate: seconds of charge left)
 	var frac := 0.0                            # active / map: cooldown left 0..1; ultimate: charge 0..1
 	var is_ready := false
-	var fires := 0                             # Rewire running: relay fires left
+	var fires := 0                             # Overdrive running: relay fires left
 	var pulse := 0.0                           # a cast: 1 -> 0
 	var burst := 0.0                           # the ultimate turned ready: 1 -> 0
 	var warn := 0.0                            # a refused tap: 1 -> 0
 	var _key := ""
+	var _ci: CanvasItem = null                 # ui-node: the face the words draw on (null: the slot itself)
+	var vessel: HudLiquid                      # Neon Noir: the hex vessel (the liquid = the charge) and, over it, the face:
+	var face: Control                          # icon, seconds, flashes
 
 	func _init() -> void:
 		focus_mode = Control.FOCUS_NONE
@@ -81,107 +102,89 @@ class Slot:
 		if key != _key or is_ready or pulse > 0.0 or burst > 0.0 or warn > 0.0 or dock.armed == index:
 			_key = key
 			queue_redraw()                     # a ready slot glows (animated): the only per-frame redraw
+			if face != null:
+				face.queue_redraw()
 
 	func _draw() -> void:
+		## Alpha 24 Neon Noir (the board's ABILITY CONTROL, Daniele's corrections 2026-11-02): a glass section of the skill
+		## column's housing holding the round button - its ring fixed per slot (HudNoir.RING), the white icon -, then the skill's
+		## NAME (no slot label: no "ACTIVE", no "MAP ·"; one line, or two when it would be cut - EMERGENCY / EVAC) and its state.
 		var s := dock.ui_scale
 		var w := size.x
-		var h := size.y
-		var col: Color = SkillDock.SLOT_ACCENT[index]   # 0.19.2 spec H5: by slot type, not the seat colour
+		var col: Color = SkillDock.SLOT_ACCENT[index]
 		var armed := dock.armed == index
 		var ult := index == 2
 		var t := dock._t
-		var c := minf(12.0 * s, h * 0.2)
-		var poly := PackedVector2Array([Vector2(c, 0), Vector2(w - c, 0), Vector2(w, c), Vector2(w, h - c),
-				Vector2(w - c, h), Vector2(c, h), Vector2(0, h - c), Vector2(0, c)])
-		var fill := Color("040f16f0")
-		if armed:
-			fill = Color("0b2230f4")
-		draw_colored_polygon(poly, fill)
-		var edge := poly.duplicate()
-		edge.append(poly[0])
 		var glow := 0.55 + 0.45 * sin(t * 4.0)
-		if is_ready or armed:
-			for gw in [18.0, 11.0, 6.0]:
-				draw_polyline(edge, Color(col, (0.05 if not armed else 0.08) * (glow if not armed else 1.0)), gw * s, true)
-		var rim := Color(col, 0.95) if is_ready else Color("35505e")
-		if armed:
-			rim = Color.WHITE
-		if warn > 0.0:
-			rim = rim.lerp(Rules.state_color("warn"), warn)
-		draw_polyline(edge, rim, (2.2 if is_ready or armed else 1.2) * s, true)
-		# the icon disc
-		var r := h * 0.36
-		var ic := Vector2(h * 0.5, h * 0.5)
-		draw_circle(ic, r, Color(col, 0.14) if is_ready else Color(0.35, 0.45, 0.52, 0.12))
-		var tex := ArmyPresets.icon(id)
-		var isz := Vector2.ONE * r * 1.36
-		if tex:
-			var tint := col if is_ready else Color(0.62, 0.7, 0.76, 0.55)
-			if armed:
-				tint = Color.WHITE
+		var disabled := id == "" or not dock.sim.abilities_on or dock.sim.over
+		var d := dock.round_d
+		if vessel != null:
+			var st0 := "disabled" if disabled else ("armed" if armed else ("ready" if is_ready or fires > 0 else "cooling"))
+			_vessel_state(st0, 1.0 if is_ready or fires > 0 or armed else (frac if ult else 1.0 - frac), col)
+			if dock.plate:
+				# GMN-1: the plate drawn WHOLE at the slot's size (its window, socket and name strip stay where the
+				# director put them - a 9-slice moved the strip away from the name, Daniele: "text is not aligned")
+				var pid := "skill_card_ultimate_fill" if ult and HudNoir.has("skill_card_ultimate_fill") else ("skill_card_armed" if armed else "skill_card")
+				if not NodeNoir.sprite(self, pid, Vector2(size.x / 2.0, size.x * 520.0 / 495.0 / 2.0), Vector2(size.x, size.x * 520.0 / 495.0), Color.WHITE):
+					draw_style_box(dock.card_box(armed, ult), Rect2(Vector2.ZERO, size))
+			return
+		draw_style_box(dock.card_box(armed), Rect2(Vector2.ZERO, size))
+		var ic := Vector2(w / 2.0, dock.vessel_cy if vessel != null else dock.pad + d / 2.0)
+		var state := "disabled" if disabled else ("armed" if armed else ("ready" if is_ready or fires > 0 else "cooling"))
+		var done := 1.0 if is_ready or fires > 0 or armed else (frac if ult else 1.0 - frac)
+		if vessel != null:
+			_vessel_state(state, done, col)
+			_draw_tail(w, ic, d, armed, disabled, ult, col)
+			return
+		if state == "ready":                              # a ready button breathes
+			draw_circle(ic, d * 0.5 + 3.0 * s, Color(col, 0.1 * glow))
+		HudNoir.draw_skill_button(self, ic, d, index, state, done)
+		var ring_r := d * 0.46
+		var ring_w := d * 0.075
+		if warn > 0.0:                                     # a refused tap: the ring flashes the warning red
+			draw_arc(ic, ring_r, 0.0, TAU, 48, Color(HudNoir.ENEMY, warn), ring_w * 1.4, true)
+		var tex := HudSkin.skill_icon(id)
+		var isz := Vector2.ONE * d * 0.46
+		if tex:                                            # skill icons are white (Neon Noir: never tinted)
+			var tint := HudNoir.INK if is_ready or armed else Color(HudNoir.MUTED, 0.55)
 			draw_texture_rect(tex, Rect2(ic - isz / 2.0, isz), false, tint)
-		if ult:
-			# the charge ring round the disc: dim track, the charge in your colour, full + glowing when ready
-			draw_arc(ic, r + 3.0 * s, 0.0, TAU, 48, Color(1, 1, 1, 0.1), 3.0 * s, true)
-			if fires > 0 or is_ready:
-				draw_arc(ic, r + 3.0 * s, 0.0, TAU, 48, Color(col, 0.95), 3.5 * s, true)
-				draw_arc(ic, r + 3.0 * s, 0.0, TAU, 48, Color(col, 0.18 * glow), 9.0 * s, true)
-			elif frac > 0.0:
-				draw_arc(ic, r + 3.0 * s, -PI / 2.0, -PI / 2.0 + TAU * frac, 48, Color(col, 0.9), 3.5 * s, true)
-				var tip := ic + Vector2(cos(-PI / 2.0 + TAU * frac), sin(-PI / 2.0 + TAU * frac)) * (r + 3.0 * s)
-				draw_circle(tip, 3.2 * s, Color.WHITE)
-			if burst > 0.0:                     # READY: a ring bursting out of the disc
-				var k := 1.0 - burst
-				draw_arc(ic, r + (4.0 + 26.0 * k) * s, 0.0, TAU, 48, Color(col, burst), (5.0 * burst + 1.0) * s, true)
-				draw_arc(ic, r + (2.0 + 14.0 * k) * s, 0.0, TAU, 48, Color(1, 1, 1, burst * 0.8), 2.0 * s, true)
-		elif cd > 0.0:
-			# the cooldown sweep: the part still cooling stays dark, clockwise from the top
+		if not ult and cd > 0.0 and not disabled:
+			# the cooldown sweep over the icon: the part still cooling stays shaded, clockwise from the top
 			var pts := PackedVector2Array([ic])
 			var n := maxi(3, int(40.0 * frac))
 			for k in range(n + 1):
 				var a := -PI / 2.0 + TAU * (1.0 - frac) + TAU * frac * float(k) / float(n)
-				pts.append(ic + Vector2(cos(a), sin(a)) * r)
+				pts.append(ic + Vector2(cos(a), sin(a)) * d * 0.4)
 			if frac > 0.01:
-				draw_colored_polygon(pts, Color(0, 0, 0, 0.62))
-			draw_arc(ic, r, -PI / 2.0, -PI / 2.0 + TAU * (1.0 - frac), 40, Color(col, 0.85), 2.5 * s, true)
-			_centred(str(int(ceil(cd))), ic, 22, Color.WHITE, true)
-		if fires > 0:                            # Rewire: fires left, a badge on the disc
-			var bc := ic + Vector2(r * 0.78, -r * 0.78)
-			draw_circle(bc, 10.0 * s, col)
-			_centred("%d" % fires, bc, 14, Color("06121a"), false)
-		# the words: slot tag (+ key on desktop), skill name, status
-		var x0 := h + 2.0 * s
-		var room := w - x0 - 8.0 * s
-		var tag: String = SkillDock.TAGS[index]
-		if index == 1 and dock.swapped != "":
-			tag = "MAP · NO RELAYS"
-		var big := dock._floor_px > 0.0                # a phone: the three words sit a little lower, larger
-		_text(tag, Vector2(x0, (19.0 if big else 17.0) * s), 12, Color(col, 0.85) if is_ready else Color("7f98a6"), room, UI_FONT)
+				draw_colored_polygon(pts, Color(0, 0, 0, 0.55))
+			_centred("%d s" % int(ceil(cd)), ic, 22, HudNoir.INK, true)
+		elif ult and not is_ready and fires <= 0 and cd > 0.0 and not disabled:
+			_centred("%d s" % int(ceil(cd)), ic, 22, HudNoir.INK, true)
+		if ult and burst > 0.0:                            # READY: a ring bursting out of the button
+			var k := 1.0 - burst
+			draw_arc(ic, d * 0.5 + (4.0 + 26.0 * k) * s, 0.0, TAU, 48, Color(col, burst), (5.0 * burst + 1.0) * s, true)
+			draw_arc(ic, d * 0.5 + (2.0 + 14.0 * k) * s, 0.0, TAU, 48, Color(1, 1, 1, burst * 0.8), 2.0 * s, true)
+		if fires > 0:                                      # Rewire / Overdrive: fires left, a count dot on the button
+			var bc := ic + Vector2(d * 0.36, -d * 0.36)
+			var br := maxf(11.0 * s, dock._floor_px * 0.62)
+			draw_circle(bc, br + 2.0 * s, Color(HudNoir.ENEMY, 0.3))
+			draw_circle(bc, br, HudNoir.ENEMY)
+			draw_arc(bc, br, 0.0, TAU, 24, Color(1, 1, 1, 0.8), 1.2 * s, true)
+			_centred("%d" % fires, bc, 14, Color.WHITE, false)
+		_draw_tail(w, ic, d, armed, disabled, ult, col)
+		if pulse > 0.0:                          # a cast: a white flash through the button
+			draw_circle(ic, d * 0.5, Color(1, 1, 1, 0.3 * pulse))
+			draw_arc(ic, d * 0.5, 0.0, TAU, 48, Color(1, 1, 1, pulse), 3.0 * s, true)
+
+	func _draw_tail(w: float, ic: Vector2, d: float, armed: bool, disabled: bool, ult: bool, col: Color) -> void:
+		## The desktop key, the words, and READY rising out of the slot when the ultimate fills.
+		var s := dock.ui_scale
 		if dock.keys and not dock.mobile:
-			var kp := Vector2(w - 20.0 * s, 6.0 * s)
-			var kr := Rect2(kp, Vector2(14, 15) * s)
-			draw_rect(kr, Color(1, 1, 1, 0.08))
-			draw_rect(kr, Color(1, 1, 1, 0.3), false, 1.0)
-			_centred(str(index + 1), kr.get_center() + Vector2(0, 0.5 * s), 11, Color("b8ced6"), false)
-		_text(ArmyPresets.skill_name(id).to_upper(), Vector2(x0, (43.0 if big else 41.0) * s), 18, Color.WHITE if is_ready or armed else Color("b8c7cf"), room, HEAD_FONT)
-		var status := ""
-		var sc := Color("8fa6b2")
-		if armed:
-			status = "TAP A TARGET" if not (dock.src >= 0) else ("TAP THE EXIT" if dock._kind() == "node_pair" else "TAP WHERE IT GOES")   # (POWERS: Portal)
-			if fires > 0:
-				status = "TAP A RELAY · %d LEFT" % fires
-			sc = Color.WHITE
-		elif fires > 0:
-			status = "FIRE A RELAY · %d LEFT" % fires
-			sc = col
-		elif is_ready:
-			status = "READY"
-			sc = col
-		elif ult:
-			status = "CHARGING · %d s" % int(ceil(cd))
-		else:
-			status = "COOLDOWN"
-		_text(status, Vector2(x0, (64.0 if big else 61.0) * s), 14, sc, room, UI_FONT)
+			var kr := Rect2(Vector2(5.0, 5.0) * s, Vector2(14, 15) * s)
+			draw_rect(kr, Color(HudNoir.INK, 0.08))
+			draw_rect(kr, Color(HudNoir.INK, 0.3), false, 1.0)
+			_centred(str(index + 1), kr.get_center() + Vector2(0, 0.5 * s), 11, HudNoir.MUTED, false)
+		_draw_words(w, ic, d, armed, disabled, ult, col)
 		if burst > 0.0:                          # the ultimate turned ready: READY rises out of the slot
 			var rise := (1.0 - burst) * 16.0 * s
 			var rp := Vector2(w / 2.0, -10.0 * s - rise)
@@ -189,16 +192,195 @@ class Slot:
 			var rsz := HEAD_FONT.get_string_size("READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f)
 			draw_string_outline(HEAD_FONT, rp - Vector2(rsz.x / 2.0, 0), "READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(6 * s), Color(0, 0, 0, 0.8 * burst))
 			draw_string(HEAD_FONT, rp - Vector2(rsz.x / 2.0, 0), "READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f, Color(col.lerp(Color.WHITE, 0.4), minf(1.0, burst * 1.6)))
-		if pulse > 0.0:                          # a cast: a white flash through the frame
-			draw_colored_polygon(poly, Color(1, 1, 1, 0.28 * pulse))
-			draw_polyline(edge, Color(1, 1, 1, pulse), 3.0 * s, true)
+
+	func _draw_words(w: float, ic: Vector2, d: float, armed: bool, disabled: bool, ult: bool, col: Color) -> void:
+		## The skill's NAME (one or two lines) and its state word under the button / vessel.
+		var room := w - 2.0 * dock.pad
+		var nf := dock.font_px(16)
+		var lines: Array = dock.name_lines(id, room)
+		var y := ic.y + d / 2.0 + dock.gap + UI_FONT.get_ascent(nf)
+		var least := -1
+		if dock.plate and dock.mobile:                   # GMN-2: ONE line inside the plate's dark label box [130, 416, 331, 96] of 591 x 616
+			room = w * 331.0 / 495.0 - 4.0 * dock._floor_px / 13.0     # (the box's width at the slot's size, 2 pt in each side)
+			lines = [SkillDock.plate_name(str(lines[0]) if lines.size() == 1 else "%s %s" % [lines[0], lines[1]])]
+			least = int(floor(dock._floor_px * 10.0 / 13.0))   # Daniele 2026-11-05 "shrink + short names": down to 10 pt in the box
+			nf = dock.font_px(16)
+			while nf > least and UI_FONT.get_string_size(str(lines[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, nf).x > room:
+				nf -= 1
+			y = size.y * 0.80 + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
+		for ln in lines:
+			_line(str(ln), Vector2(w / 2.0, y), 16, HudNoir.INK if is_ready or armed else HudNoir.MUTED, room, UI_FONT, least)
+			y += UI_FONT.get_height(nf) * 0.88
+		var status := ""
+		var sc := HudNoir.MUTED
+		if armed:
+			status = "TAP A TARGET" if not (dock.src >= 0) else ("TAP THE EXIT" if dock._kind() == "node_pair" else "TAP WHERE IT GOES")   # (POWERS: Portal)
+			if fires > 0:
+				status = "TAP A RELAY · %d LEFT" % fires
+			sc = HudNoir.INK
+		elif fires > 0:
+			status = "FIRE A RELAY · %d LEFT" % fires
+			sc = col
+		elif disabled:
+			status = "OFF"
+		elif is_ready:
+			status = "READY"
+			sc = col
+		elif ult:
+			status = "CHARGING"
+		else:
+			status = "COOLDOWN"
+		if dock.plate and dock.mobile and not armed and fires <= 0:
+			return                                       # GMN-1 plate: the name alone (the window + ring say the state)
+		y += UI_FONT.get_height(dock.font_px(13)) * 0.1
+		_line(status, Vector2(w / 2.0, y), 13, sc, room, UI_FONT)
+
+	func _vessel_state(state: String, done: float, col: Color) -> void:
+		## Neon Noir: the hex vessel shows the charge as its liquid level (the slot's fixed colour); full = ready, breathing.
+		if dock.plate:                                  # GMN-1: dim tube ring, the burning one rising with the goo; ~20 % when off
+			var off := state == "disabled"
+			vessel.set_rim(str(HudNoir.part_data("skill_vessel_rim_disabled" if off else "skill_vessel").get("file" if off else "rim", "")), col)
+			vessel.set_rim_lit("" if off else str(HudNoir.part_data("skill_vessel_rim_armed").get("file", "")), col)
+			vessel.set_liquid(col, 1.0 if not off else 0.35)
+			vessel.set_level(0.0 if off else done)
+			vessel.ready_glow = state == "ready" or state == "armed"
+			return
+		var rid := CARD_PART + ("_disabled" if state == "disabled" else ("_picked" if state == "armed" or state == "ready" else ""))
+		var fill := CARD_PART + ("_disabled" if state == "disabled" else "")
+		if vessel.fill_part != fill:
+			vessel.fill_part = fill
+			vessel.queue_redraw()
+		vessel.set_rim(str(HudNoir.part_data(rid).get("rim", "")), col)
+		vessel.set_liquid(col, 0.95 if state == "ready" or state == "armed" else (0.7 if state != "disabled" else 0.25))
+		vessel.set_level(0.0 if state == "disabled" else done)
+		vessel.ready_glow = state == "ready" or state == "armed"
+
+	func _draw_face(ci: Control) -> void:
+		## Over the card's vat (ui-node, Daniele 2026-11-04: the whole card is the goo, no inner hex): the white icon (dark
+		## once the goo covers it), the seconds while it fills, the name and the state word, the flashes - a cast, a refused
+		## tap (red rim), the ultimate turning ready (the card's outline bursting out), Rewire's fires left. Charged = the
+		## card's outline lit neon in the slot's colour (0.23.24's lit hex, moved to the card).
+		var s := dock.ui_scale
+		var w := ci.size.x
+		var d := dock.round_d
+		var c := Vector2(w / 2.0, dock.vessel_cy)
+		var col: Color = SkillDock.SLOT_ACCENT[index]
+		var ult := index == 2
+		var armed := dock.armed == index
+		var disabled := id == "" or not dock.sim.abilities_on or dock.sim.over
+		var full := is_ready or fires > 0 or armed
+		var cooling := not disabled and not full and cd > 0.0
+		var card := Rect2(Vector2.ZERO, ci.size)
+		var rad := 12.0 * s
+		if full and not disabled and not dock.plate:
+			_neon_card(ci, card, rad, col, s)
+		var level := vessel.shown if vessel != null else 0.0
+		var tex := HudSkin.skill_icon(id)
+		if tex:
+			var side := d * (0.5 if not cooling else 0.44)
+			# under the goo the icon goes dark (the SEND words stay white: an icon reads better as a dark cut-out in lit goo)
+			var under := level >= (0.55 if dock.plate else 1.0 - (c.y + side * 0.3) / ci.size.y)
+			var tint := Color(0.03, 0.05, 0.07, 0.9) if under and not disabled else (Color(1, 1, 1, 0.9) if not disabled else Color(HudNoir.MUTED, 0.5))
+			SkillDock.draw_icon_fit(ci, tex, c - Vector2(0, d * 0.06 if cooling else 0.0), side, tint)
+		if cooling:
+			var f := int(18 * s)
+			var txt := "%d s" % int(ceil(cd))
+			var sz := UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
+			var p := c + Vector2(-sz.x / 2.0, d * 0.3 + UI_FONT.get_ascent(f) / 2.0 - 1.0)
+			ci.draw_string_outline(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(4 * s), HudSkin.outline())
+			ci.draw_string(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, HudNoir.INK)
+		_ci = ci
+		_draw_words_card(w, c, d, armed, disabled, ult, col)
+		_ci = null
+		var loop := NoirBox.rounded(card, rad)
+		loop.append(loop[0])
+		if warn > 0.0:                                     # a refused tap: the card's outline flashes the warning red
+			ci.draw_polyline(loop, Color(HudNoir.ENEMY, warn), 3.0 * s, true)
+		if ult and burst > 0.0:                            # READY: the card's outline bursting out
+			var k := 1.0 - burst
+			for e in [[4.0 + 22.0 * k, col, 5.0 * burst + 1.0], [2.0 + 12.0 * k, Color(1, 1, 1, 0.8), 2.0]]:
+				var bl := NoirBox.rounded(card.grow(float(e[0]) * s), rad + float(e[0]) * s)
+				bl.append(bl[0])
+				ci.draw_polyline(bl, Color(e[1] as Color, burst * (e[1] as Color).a), float(e[2]) * s, true)
+		if pulse > 0.0:                                    # a cast: a white flash through the card
+			ci.draw_colored_polygon(NoirBox.rounded(card.grow(-2.0 * s), rad), Color(1, 1, 1, 0.25 * pulse))
+			ci.draw_polyline(loop, Color(1, 1, 1, pulse), 3.0 * s, true)
+		if fires > 0:                                      # Rewire / Overdrive: fires left, a count dot on the card's corner
+			var bc := c + Vector2(d * 0.42, -d * 0.36)
+			var br := maxf(11.0 * s, dock._floor_px * 0.62)
+			ci.draw_circle(bc, br + 2.0 * s, Color(HudNoir.ENEMY, 0.3))
+			ci.draw_circle(bc, br, HudNoir.ENEMY)
+			ci.draw_arc(bc, br, 0.0, TAU, 24, Color(1, 1, 1, 0.8), 1.2 * s, true)
+			var f2 := int(14 * s)
+			var t2 := "%d" % fires
+			var z2 := UI_FONT.get_string_size(t2, HORIZONTAL_ALIGNMENT_LEFT, -1, f2)
+			ci.draw_string(UI_FONT, bc + Vector2(-z2.x / 2.0, UI_FONT.get_ascent(f2) / 2.0 - 1.0), t2, HORIZONTAL_ALIGNMENT_LEFT, -1, f2, Color.WHITE)
+
+	func _draw_words_card(w: float, ic: Vector2, d: float, armed: bool, disabled: bool, ult: bool, col: Color) -> void:
+		## The desktop key, the name and the state word over the card's goo (outlined, like the SEND words), READY rising.
+		var s := dock.ui_scale
+		if dock.keys and not dock.mobile:
+			_ci.draw_string(UI_FONT, Vector2(7.0, 17.0) * s, str(index + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, int(11 * s), HudNoir.MUTED)
+		_draw_words(w, ic, d, armed, disabled, ult, col)
+		if burst > 0.0:
+			var rise := (1.0 - burst) * 16.0 * s
+			var rp := Vector2(w / 2.0, -10.0 * s - rise)
+			var f := int(22 * s)
+			var rsz := HEAD_FONT.get_string_size("READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f)
+			_ci.draw_string_outline(HEAD_FONT, rp - Vector2(rsz.x / 2.0, 0), "READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(6 * s), Color(0, 0, 0, 0.8 * burst))
+			_ci.draw_string(HEAD_FONT, rp - Vector2(rsz.x / 2.0, 0), "READY", HORIZONTAL_ALIGNMENT_LEFT, -1, f, Color(col.lerp(Color.WHITE, 0.4), minf(1.0, burst * 1.6)))
+
+	func _neon_card(ci: Control, r: Rect2, rad: float, col: Color, s: float) -> void:
+		## A charged card's outline as a neon tube in the slot's colour, breathing with the goo's ready glow.
+		var k := 0.75 + 0.25 * sin(dock._t * 4.0 + float(index))
+		var loop := NoirBox.rounded(r, rad)
+		loop.append(loop[0])
+		ci.draw_polyline(loop, Color(col, 0.16 * k), 11.0 * s, true)
+		ci.draw_polyline(loop, Color(col, 0.38 * k), 6.0 * s, true)
+		ci.draw_polyline(loop, Color(col.lerp(Color.WHITE, 0.25), 0.95), 2.6 * s, true)
+		ci.draw_polyline(loop, Color(col.lerp(Color.WHITE, 0.7), 0.9 * k), 1.1 * s, true)
+
+	func _neon_hex(ci: Control, c: Vector2, r: float, col: Color, s: float) -> void:
+		## A charged vessel's outline as a neon tube in the slot's colour (white / violet / amber): a soft wide glow, a
+		## brighter halo, a near-white core; it breathes with the liquid's ready glow.
+		var k := 0.75 + 0.25 * sin(dock._t * 4.0 + float(index))
+		var hex := _hex(c, r)
+		ci.draw_polyline(hex, Color(col, 0.16 * k), 11.0 * s, true)
+		ci.draw_polyline(hex, Color(col, 0.38 * k), 6.0 * s, true)
+		ci.draw_polyline(hex, Color(col.lerp(Color.WHITE, 0.25), 0.95), 2.6 * s, true)
+		ci.draw_polyline(hex, Color(col.lerp(Color.WHITE, 0.7), 0.9 * k), 1.1 * s, true)
+
+	static func _hex(c: Vector2, r: float) -> PackedVector2Array:
+		## A flat-topped hexagon (the vessel's outline), closed.
+		var pts := PackedVector2Array()
+		for k in range(7):
+			var a := TAU * float(k % 6) / 6.0
+			pts.append(c + Vector2(cos(a), sin(a)) * r)
+		return pts
+
+	func _line(txt: String, centre_base: Vector2, fs: int, col: Color, room: float, font: Font, floor_px := -1) -> void:
+		## One line centred on centre_base.x, its baseline at centre_base.y, stepped down / cut to fit like _text (floor_px: a
+		## smaller floor where the art allows it - the plate's label box).
+		var f := dock.font_px(fs)
+		var least := floor_px if floor_px > 0 else maxi(int(fs * dock.ui_scale * 0.7), int(ceil(dock._floor_px)))
+		while f > least and font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x > room:
+			f -= 1
+		if font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x > room:
+			while txt.length() > 1 and font.get_string_size(txt + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, f).x > room:
+				txt = txt.substr(0, txt.length() - 1).strip_edges()
+			txt += "…"
+		var w := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x
+		var cv: CanvasItem = _ci if _ci != null else self
+		if _ci != null:                                    # over the card's goo: outlined like the SEND words
+			cv.draw_string_outline(font, Vector2(centre_base.x - w / 2.0, centre_base.y), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(4 * dock.ui_scale), HudSkin.outline())
+		cv.draw_string(font, Vector2(centre_base.x - w / 2.0, centre_base.y), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, col)
 
 	func _centred(txt: String, at: Vector2, fs: int, col: Color, outline: bool) -> void:
 		var f := int(fs * dock.ui_scale)
 		var sz := UI_FONT.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f)
 		var p := at + Vector2(-sz.x / 2.0, UI_FONT.get_ascent(f) / 2.0 - 1.0)
 		if outline:
-			draw_string_outline(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(4 * dock.ui_scale), Color(0, 0, 0, 0.85))
+			draw_string_outline(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, int(4 * dock.ui_scale), HudSkin.outline())
 		draw_string(UI_FONT, p, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, f, col)
 
 	func _text(txt: String, base: Vector2, fs: int, col: Color, room: float, font: Font) -> void:
@@ -221,7 +403,7 @@ class TargetLayer:
 	var dock: SkillDock
 
 	func _draw() -> void:
-		if dock and dock.armed >= 0:
+		if dock and (dock.armed >= 0 or dock._bad_t > 0.0):
 			dock._draw_targets(self)
 
 
@@ -233,23 +415,85 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 	ui_scale = scale_ui
 	mobile = is_mobile
 	hud = h
-	accent = Rules.seat_color(human)
-	add_theme_constant_override("separation", int(10 * ui_scale))
+	accent = HudNoir.accent                       # Neon Noir: the chrome takes your faction's colour
+	add_theme_constant_override("separation", int(8 * ui_scale))
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# the iPhone sweep (HUD pass): on a phone the slot words never drop under HUD_DOCK_MIN_PT real points, and the
-	# slot is a little wider (HUD_DOCK_PHONE_W) so they still fit - the height, and so the camera's room, is the same
-	var slot_size := SLOT_SIZE
+	# column is a little wider (HUD_DOCK_PHONE_W) so they still fit; the round button stays >= 44 pt
+	var slot_w := SLOT_W
+	round_d = ROUND_D * ui_scale
 	if mobile:
 		var tree := Engine.get_main_loop() as SceneTree   # (not in the tree yet: the window's canvas size)
 		var vp := tree.root.get_visible_rect().size if tree != null and tree.root != null else Vector2(1280, 720)
 		_floor_px = Rules.HUD_DOCK_MIN_PT / maxf(UiKit.pt_per_px(vp), 0.01)
-		slot_size.x = Rules.HUD_DOCK_PHONE_W
+		slot_w = Rules.HUD_DOCK_PHONE_W
+		round_d = ROUND_D_PHONE * ui_scale
+	pad = 6.0 * ui_scale
+	gap = 4.0 * ui_scale
+	add_theme_constant_override("separation", int(6 * ui_scale))
+	if HudNoir.has("skill_vessel") and HudNoir.has("skill_card"):
+		add_theme_constant_override("separation", int(10 * ui_scale))   # ui-node: free-standing vats, a clear gap
+	slot_w -= 2.0 * HOUSING_PAD                   # Neon Noir: the housing's rim sits inside the column's old width (phone fit)
+	vessel = HudNoir.has("skill_vessel") and HudNoir.has("skill_card")
+	plate = vessel and not HudNoir.has(CARD_PART)
+	var top := pad
+	if vessel:                                    # the vessel is drawn at the card's scale, centred on its socket
+		var k := ui_scale / HudNoir.SPRITE_K
+		var vb: Array = HudNoir.part_data("skill_vessel").get("body", [0, 0, 270, 270])
+		var sock: Array = HudNoir.part_data("skill_card").get("socket", [0, 170])
+		round_d = float(vb[2]) * k
+		vessel_cy = float(sock[1]) * k
+		top = vessel_cy - round_d / 2.0
+	var plate_h := 0.0
+	if plate and mobile:                          # GMN-1 layout: plates 90 x 94.55 pt, 4.45 pt apart, the window from the plate
+		var ppx := 1.0 / maxf(UiKit.pt_per_px((Engine.get_main_loop() as SceneTree).root.get_visible_rect().size), 0.01)
+		slot_w = 90.0 * ppx / ui_scale
+		_floor_px = 13.0 * ppx                     # the director's plate words: 13 pt
+		add_theme_constant_override("separation", int(round(4.45 * ppx)))
+	if plate:                                     # the plate keeps ITS aspect (495 x 520 body): a taller slot warped it and moved
+		var cb: Array = HudNoir.part_data("skill_card").get("body", [0, 0, 495, 520])   # its window off the glass (Daniele)
+		var pw := (slot_w * ui_scale)
+		var pk := pw / float(cb[2])
+		round_d = float(HudNoir.part_data("skill_vessel").get("body", [0, 0, 270, 270])[2]) * pk
+		vessel_cy = float(HudNoir.part_data("skill_card").get("socket", [0, 200])[1]) * pk
+		top = vessel_cy - round_d / 2.0
+		plate_h = float(cb[3]) * pk
 	for i in range(3):
+		# Neon Noir: no slot label; the name takes a second line only where one line would cut it (EMERGENCY / EVAC)
+		var lines := name_lines(sim.skill_id(human, SLOTS[i]), slot_w * ui_scale - 2.0 * pad).size()
+		var slot_h := top + round_d + gap + UI_FONT.get_height(font_px(16)) * (1.0 + 0.88 * float(lines - 1)) + UI_FONT.get_height(font_px(13)) * 1.1 + pad
 		var b := Slot.new()
 		b.dock = self
 		b.index = i
-		b.custom_minimum_size = (slot_size * ui_scale).round()
+		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		b.custom_minimum_size = Vector2(slot_w * ui_scale, plate_h if plate else slot_h).round()
 		b.pressed.connect(press_slot.bind(i))
+		if plate:
+			b.vessel = HudLiquid.new()
+			b.vessel.setup("skill_vessel", SLOT_ACCENT[i], float(i) * 1.7)
+			b.vessel.position = Vector2(b.custom_minimum_size.x / 2.0 - round_d / 2.0, top).round()
+			b.vessel.size = Vector2(round_d, round_d)
+			b.add_child(b.vessel)
+			b.face = Control.new()
+			b.face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.face.size = b.custom_minimum_size
+			b.face.draw.connect(b._draw_face.bind(b.face))
+			b.add_child(b.face)
+		elif vessel:
+			# Daniele 2026-11-04 (ui-node): "instead of having the hexagon in we only keep the main container and we make it
+			# all fill of goo ... similar to what we do for the send percentages" - the whole card is the vat (the SEND
+			# button's parts), its liquid = the charge in the slot's colour; no inner hex. The face draws icon + words over it.
+			b.vessel = HudLiquid.new()
+			b.vessel.setup(CARD_PART, SLOT_ACCENT[i], float(i) * 1.7)
+			b.vessel.position = Vector2.ZERO
+			b.vessel.size = b.custom_minimum_size
+			b.add_child(b.vessel)
+			b.face = Control.new()
+			b.face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.face.position = Vector2.ZERO
+			b.face.size = b.custom_minimum_size
+			b.face.draw.connect(b._draw_face.bind(b.face))
+			b.add_child(b.face)
 		b.tooltip_text = ""
 		add_child(b)
 		slots.append(b)
@@ -262,20 +506,12 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint_panel = PanelContainer.new()
 	hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var st := StyleBoxFlat.new()                  # Hud.panel_style's look (Hud itself needs the Net autoload)
-	st.border_color = accent
-	st.set_border_width_all(1)
-	st.corner_radius_top_left = 8
-	st.corner_radius_bottom_right = 8
-	st.bg_color = Color(0.02, 0.06, 0.09, 0.92)
-	st.set_content_margin_all(8 * ui_scale)
-	st.content_margin_left = 14 * ui_scale
-	st.content_margin_right = 14 * ui_scale
-	hint_panel.add_theme_stylebox_override("panel", st)
+	hint_panel.add_theme_stylebox_override("panel", HudNoir.box("hint_pill", Color(0, 0, 0, 0), Vector4(16, 8, 16, 8) * ui_scale))
+	hint_panel.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	hint_label = Label.new()
 	hint_label.add_theme_font_override("font", UI_FONT)
-	hint_label.add_theme_font_size_override("font_size", int(17 * ui_scale))
-	hint_label.add_theme_color_override("font_color", Color("e6f4f8"))
+	hint_label.add_theme_font_size_override("font_size", maxi(int(17 * ui_scale), int(ceil(_floor_px * 1.15))))
+	hint_label.add_theme_color_override("font_color", HudSkin.INK)
 	hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint_panel.add_child(hint_label)
 	hint_panel.visible = false
@@ -285,6 +521,65 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 	var wanted := Rules.skill_slot_id(f, lo if lo is Dictionary else {}, "map")
 	if sim.loadouts.has(human) and wanted != sim.skill_id(human, "map"):
 		swapped = wanted
+
+
+func font_px(fs: int) -> int:
+	## A slot word's font size: fs x ui_scale, never under the phone's floor (HUD_DOCK_MIN_PT).
+	return maxi(int(fs * ui_scale), int(ceil(_floor_px)))
+
+
+func card_box(armed_now: bool, ult := false) -> StyleBox:
+	## A slot's section of the housing (Neon Noir): faint glass, the accent rim lit while that slot is armed. GMN-1: the metal
+	## plate; the ultimate's is hazard-striped (skill_card_ultimate_fill) when the delivery has it.
+	var id := "skill_card_ultimate_fill" if ult and HudNoir.has("skill_card_ultimate_fill") else ("skill_card_armed" if armed_now else "skill_card")
+	if not _cards.has(id):
+		_cards[id] = HudNoir.box(id, Color(0, 0, 0, 0), Vector4.ZERO)
+	return _cards[id]
+
+
+func housing_margin() -> Vector4:
+	## The skill column's housing round the slots (l, t, r, b px - b holds its drips): Hud.layout keeps it on screen.
+	if vessel:                                    # ui-node (Daniele 2026-11-04): "remove the outside container ... leave only the
+		return Vector4.ZERO                       # 3 skills vats" - no housing round the vats
+	var m := HOUSING_PAD * ui_scale
+	var pool := HudNoir.gel_px("skill_housing") * 0.55       # Neon Noir: the upper half of the pooled ooze shows under the last card
+	return Vector4(m, m, m, m + pool + HudNoir.drip_px("skill_housing"))
+
+
+func _draw() -> void:
+	## Neon Noir: the column's container - smoked glass with living ooze in its foot and the drips under it (the one place on
+	## the right thumb that drips; the slots themselves are clean glass).
+	if vessel:                                    # ui-node: the three vats stand alone
+		return
+	if _housing == null:
+		_housing = HudNoir.box("skill_housing", Color(0, 0, 0, 0), Vector4.ZERO)
+	var hm := housing_margin()
+	draw_style_box(_housing, Rect2(-hm.x, -hm.y, size.x + hm.x + hm.z, size.y + hm.y + hm.w))
+
+
+const PLATE_NAMES := {"CORE MELTDOWN": "MELTDOWN", "EMERGENCY EVAC": "EVAC"}   # Daniele 2026-11-05: short names on the plate only
+
+
+static func plate_name(full: String) -> String:
+	return str(PLATE_NAMES.get(full, full))
+
+
+func name_lines(id: String, room: float) -> Array:
+	## The skill's name as drawn under its button: one line when it fits (down to 80 % of its size), else split at the space
+	## nearest the middle into two lines (EMERGENCY EVAC was cut to "EMERGENCY E..." on the phone).
+	if _names.has(id):
+		return _names[id]
+	var name := ArmyPresets.skill_name(id).to_upper() if id != "" else ""
+	var least := maxi(int(16 * ui_scale * 0.8), int(ceil(_floor_px)))
+	var out := [name]
+	if UI_FONT.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, least).x > room and name.contains(" "):
+		var best := -1
+		for k in range(name.length()):
+			if name[k] == " " and (best < 0 or absi(k - name.length() / 2) < absi(best - name.length() / 2)):
+				best = k
+		out = [name.substr(0, best), name.substr(best + 1)]
+	_names[id] = out
+	return out
 
 
 static func new_layer() -> Control:
@@ -304,13 +599,16 @@ func start_note() -> String:
 # ------------------------------------------------------------------ per frame
 func sync(dt: float) -> void:
 	_t += dt
+	if _bad_t > 0.0:
+		_bad_t = maxf(_bad_t - dt / 0.7, 0.0)
+		layer.queue_redraw()
 	for i in range(3):
 		var slot: String = SLOTS[i]
 		var b: Slot = slots[i]
 		var id := sim.skill_id(human, slot)
 		var cd := sim.cooldown(human, slot)
 		var ch := sim.charge(human) if i == 2 else 0.0
-		var fires := sim.rewire_left(human) if i == 2 else 0
+		var fires := sim.overdrive_left(human) if i == 2 else 0
 		var ready := sim.abilities_on and not sim.over and (cd <= 0.0 or fires > 0) and id != ""
 		var frac := 0.0
 		if i == 2:
@@ -319,7 +617,7 @@ func sync(dt: float) -> void:
 			frac = clampf(cd / maxf(float(Rules.SKILLS.get(id, {}).get("cd", 1.0)), 0.01), 0.0, 1.0)
 		var p: Array = _prev[i]
 		# a cast happened (ours, or a guest's order the host accepted): the cooldown jumped up, the charge
-		# was spent, or a Rewire fire was used
+		# was spent, or a Overdrive fire was used
 		var cast := (i < 2 and float(p[0]) <= 0.05 and cd > 1.0) or (i == 2 and float(p[1]) >= 1.0 and ch < 0.5) or (i == 2 and fires < int(p[2]) and fires >= 0 and int(p[2]) > 0)
 		if cast and _t - float(_last_pulse[i]) > 0.6:
 			b.pulse = 1.0
@@ -335,8 +633,8 @@ func sync(dt: float) -> void:
 		b.state(id, cd, frac, ready, fires)
 	if armed >= 0:
 		var slot: String = SLOTS[armed]
-		var rewiring := armed == 2 and sim.rewire_left(human) > 0
-		if main.paused or sim.over or not sim.abilities_on or (not rewiring and sim.cooldown(human, slot) > 0.0):
+		var overdriving := armed == 2 and sim.overdrive_left(human) > 0
+		if main.paused or sim.over or not sim.abilities_on or (not overdriving and sim.cooldown(human, slot) > 0.0):
 			cancel()
 		else:
 			_cand_t -= dt
@@ -375,7 +673,7 @@ func _kind() -> String:
 	if armed < 0:
 		return ""
 	var id := sim.skill_id(human, SLOTS[armed])
-	if armed == 2 and id == "rewire" and sim.rewire_left(human) > 0:
+	if armed == 2 and id == "overdrive" and sim.overdrive_left(human) > 0:
 		return "relay"
 	return str(Rules.SKILLS.get(id, {}).get("target", "none"))
 
@@ -392,11 +690,11 @@ func press_slot(i: int) -> void:
 	var id := sim.skill_id(human, slot)
 	if id == "":
 		return
-	var rewiring := i == 2 and id == "rewire" and sim.rewire_left(human) > 0
-	if not sim.abilities_on or not (rewiring or sim.cooldown(human, slot) <= 0.0):
+	var overdriving := i == 2 and id == "overdrive" and sim.overdrive_left(human) > 0
+	if not sim.abilities_on or not (overdriving or sim.cooldown(human, slot) <= 0.0):
 		_refuse(i, sim.cast_check(human, slot, null))
 		return
-	var kind := "relay" if rewiring else str(Rules.SKILLS[id]["target"])
+	var kind := "relay" if overdriving else str(Rules.SKILLS[id]["target"])
 	if kind == "none":
 		var why := sim.cast_check(human, slot, null)
 		if why != "":
@@ -440,6 +738,10 @@ func cancel() -> void:
 
 func _refuse(i: int, why: String) -> void:
 	(slots[i] as Slot).warn = 1.0
+	if armed >= 0 and _last_tap != Vector2.INF:       # a wrong target tapped while aiming: the pack's INVALID mark there
+		_bad = _last_tap
+		_bad_t = 1.0
+		_last_tap = Vector2.INF
 	if why == "":
 		return
 	if hud and hud.has_method("skill_refusal"):     # HUD pass: a small line just above the slot that was tapped
@@ -467,7 +769,9 @@ func _place_hint() -> void:
 	if not is_inside_tree():
 		return
 	var vp := get_viewport_rect().size
-	hint_panel.position = Vector2((vp.x - hint_panel.size.x) / 2.0, position.y - hint_panel.size.y - 8.0 * ui_scale)
+	var floor_y := vp.y - 40.0 * ui_scale                 # Alpha 24: bottom centre, over the map title's line (the dock is a column)
+	hint_panel.position = Vector2(clampf((vp.x - hint_panel.size.x) / 2.0, 0.0, maxf(position.x - hint_panel.size.x - 8.0 * ui_scale, 0.0)),
+			floor_y - hint_panel.size.y)
 
 
 func _cast(i: int, target) -> bool:
@@ -526,6 +830,7 @@ func tap(p: Vector2) -> void:
 	## A world tap while armed: what is under it, for this slot's kind of target (nothing: cancel).
 	var cam: Camera3D = main.cam
 	var raw = -1
+	_last_tap = p
 	match _kind():
 		"own_line":
 			raw = _line_at(p, cam)
@@ -626,8 +931,13 @@ func _deck_px(ei: int, cam: Camera3D) -> PackedVector2Array:
 
 
 func _deck_at(p: Vector2, cam: Camera3D) -> int:
-	## The deck under a tap (screen distance to its centre line), lit decks first.
-	var reach := (20.0 if not mobile else 30.0) * ui_scale
+	## The deck under a tap (screen distance to its centre line), lit decks first. 2026-11-01 (Daniele: "bridges are
+	## sometimes hard to click"): on a phone the band is at least Rules.DECK_HIT_PT across in real points (deck_reach)
+	## - invisible, the deck looks the same. The extra reach beyond the old band never takes a tap that sits on a
+	## node's platform (nodes keep priority where a tap is near both); inside the old band nothing changed.
+	var core := (20.0 if not mobile else 30.0) * ui_scale
+	var reach := deck_reach(core)
+	var on_node := reach > core and _platform_at(p, cam) >= 0
 	for pass_n in range(2):
 		var best := -1
 		var best_d := reach
@@ -636,11 +946,33 @@ func _deck_at(p: Vector2, cam: Camera3D) -> int:
 			var pts := _deck_px(int(ei), cam)
 			for k in range(pts.size() - 1):
 				var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, pts[k], pts[k + 1]))
-				if d < best_d:
+				if d < best_d and (d <= core or not on_node):
 					best_d = d
 					best = int(ei)
 		if best >= 0:
 			return best
+	return -1
+
+
+func deck_reach(core: float) -> float:
+	## Half the deck tap band in viewport pixels: the old band, or - on a phone - half Rules.DECK_HIT_PT in real points
+	## (UiKit.pt_per_px: the web page's CSS size, else the landscape-phone reference), whichever is wider.
+	if not mobile:
+		return core
+	var ppt := UiKit.pt_per_px(get_viewport().get_visible_rect().size)
+	return maxf(core, Rules.DECK_HIT_PT * 0.5 / maxf(ppt, 0.001))
+
+
+func _platform_at(p: Vector2, cam: Camera3D) -> int:
+	## The node whose platform (Rules.R on the ground) holds this screen point, or -1 (collapsed and junctions skipped).
+	var g: Vector3 = main._ground(p)
+	if g == Vector3.INF:
+		return -1
+	for n in sim.nodes:
+		if sim.collapsed.get(n["id"], false) or n.get("node_kind", "") == "junction":
+			continue
+		if (n["pos"] as Vector3).distance_to(g) <= Rules.R:
+			return n["id"]
 	return -1
 
 
@@ -678,8 +1010,11 @@ func _line_at(p: Vector2, cam: Camera3D) -> int:
 
 # ------------------------------------------------------------------ highlights (TargetLayer._draw)
 func _draw_targets(ci: CanvasItem) -> void:
+	if _bad_t > 0.0 and _bad != Vector2.INF:          # INVALID TARGET (B22) where a wrong pick was tapped
+		var br := (26.0 + 8.0 * (1.0 - _bad_t)) * ui_scale
+		HudSkin.draw_sprite(ci, "B22", Rect2(_bad - Vector2(br, br), Vector2(br, br) * 2.0), Color(1, 1, 1, _bad_t))
 	var cam: Camera3D = main.cam
-	if cam == null:
+	if cam == null or armed < 0:
 		return
 	var s := ui_scale
 	var a := 0.6 + 0.4 * sin(_t * 5.0)
@@ -733,6 +1068,9 @@ func _draw_targets(ci: CanvasItem) -> void:
 
 func _ring(ci: CanvasItem, c: Vector2, r: float, col: Color, a: float, solid: bool) -> void:
 	var s := ui_scale
+	# Alpha 24: the pack's VALID TARGET reticle (B21) round the target, in the cast's colour, gently breathing
+	var rr := r * (1.12 + 0.04 * a)
+	HudSkin.draw_sprite(ci, "B21", Rect2(c - Vector2(rr, rr), Vector2(rr, rr) * 2.0), Color(col.lightened(0.2), 0.85 if solid else 0.55 + 0.3 * a))
 	ci.draw_arc(c, r, 0.0, TAU, 48, Color(col, 0.22 * a), 12.0 * s, true)
 	ci.draw_arc(c, r, 0.0, TAU, 48, Color(col, 0.95 if solid else 0.75 + 0.25 * a), 2.5 * s, true)
 	for k in range(4):                          # four ticks turning round the ring: "tap me"
@@ -778,7 +1116,7 @@ func on_event(ev: Dictionary) -> void:
 		"demolish": what = "a deck falls in %d s" % int(Rules.SKILLS["demolish"]["warn"])
 		"bypass": what = "a relay holds both states"
 		"relay_hack": what = "your relay is jammed" if ev.get("target") is Array else "your relay fires"
-		"rewire": what = "your relay fires" if ev.has("fire") else "their lines speed up"
+		"overdrive": what = "your relay fires" if ev.has("fire") else "their lines speed up"
 		"echo_split": what = "decoy lines on the move"
 		"core_meltdown": what = "an armed line is coming"   # POWERS (0.22.2): armed from the start of its trip
 		# POWERS (0.22.2): the new powers
@@ -794,3 +1132,60 @@ func on_event(ev: Dictionary) -> void:
 		hud.callout_at(ev["pos"], "skill:%s" % seat, "%s%s" % [ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn", seat)
 		return
 	_toast("seat %s cast %s%s" % [seat, ArmyPresets.skill_name(id).to_upper(), (" - " + what) if what != "" else ""], "warn")
+
+
+static var _icon_fit := {}                     # texture -> [drawn part (Rect2 in px), scale for its optical size]
+
+
+static func icon_fit(tex: Texture2D) -> Array:
+	## 0.23.24: an icon's drawn part (alpha > 0.16) and the factor that gives every icon the same optical size: the pack's
+	## icons all touch their 160 px canvas on the long side, so a wide one (Ghost Line 160 x 107) looked smaller than a square
+	## one (Surge 160 x 160) - scaled by the square root of the drawn area, at most x1.25, never past the canvas.
+	if _icon_fit.has(tex):
+		return _icon_fit[tex]
+	var full := Rect2(Vector2.ZERO, tex.get_size())
+	var out := [full, 1.0]
+	var im := tex.get_image()
+	if im != null:
+		if im.is_compressed():
+			im.decompress()
+		var used := im.get_used_rect()
+		var bm := BitMap.new()
+		bm.create_from_image_alpha(im, 0.16)
+		var tight := Rect2i()
+		var w := im.get_width()
+		var h := im.get_height()
+		var x0 := w
+		var y0 := h
+		var x1 := -1
+		var y1 := -1
+		for y in range(0, h, 2):
+			for x in range(0, w, 2):
+				if bm.get_bit(x, y):
+					x0 = mini(x0, x)
+					y0 = mini(y0, y)
+					x1 = maxi(x1, x)
+					y1 = maxi(y1, y)
+		if x1 >= x0 and y1 >= y0:
+			tight = Rect2i(x0, y0, x1 - x0 + 2, y1 - y0 + 2).intersection(Rect2i(Vector2i.ZERO, Vector2i(w, h)))
+		elif used.size != Vector2i.ZERO:
+			tight = used
+		if tight.size != Vector2i.ZERO:
+			var side := float(maxi(w, h))
+			var k := clampf(side / sqrt(float(tight.size.x * tight.size.y)), 1.0, 1.25)
+			out = [Rect2(tight), k]
+	_icon_fit[tex] = out
+	return out
+
+
+static func draw_icon_fit(ci: CanvasItem, tex: Texture2D, centre: Vector2, side: float, tint: Color) -> void:
+	## The icon's drawn part centred on `centre`, sized as a `side`-square canvas icon would look (icon_fit), aspect kept.
+	var f := icon_fit(tex)
+	var src: Rect2 = f[0]
+	var canvas := maxf(tex.get_size().x, tex.get_size().y)
+	var px := side / canvas * float(f[1])                 # screen units per icon pixel
+	var sz := src.size * px
+	if maxf(sz.x, sz.y) > side * 1.1:                    # never much past the plain icon's square
+		sz *= side * 1.1 / maxf(sz.x, sz.y)
+	ci.draw_texture_rect_region(tex, Rect2(centre - sz / 2.0, sz), src, tint)
+

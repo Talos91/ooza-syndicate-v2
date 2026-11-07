@@ -127,6 +127,8 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	var radius := Vector2(hi.x - lo.x, hi.z - lo.z).length() / 2.0
 	floor_kind = _floor_kind_for(str(_main.get("map_path")) if _main.get("map_path") != null else "")
 	floor_pic = "--floor=labpic" in OS.get_cmdline_user_args()
+	if Rules.demo and not Array(OS.get_cmdline_user_args()).any(func(a): return str(a).begins_with("--floor")):
+		floor_pic = true                              # DEMO BUILD: Daniele's lab floor by default (craters: DEFAULT_LAYOUT 2)
 	if floor_pic:
 		floor_kind = "lab"
 	_build_floor(centre, radius)

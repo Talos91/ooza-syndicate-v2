@@ -26,6 +26,7 @@ const FOG_HEIGHT_DENSITY := 0.24     # per metre below FOG_HEIGHT: ~67 % at -10 
 const VOID_LAYERS := [[-9.0, 0.26, 0.010], [-21.0, 0.36, 0.006]]   # [height, peak alpha, noise scale]; the
                                                                    # deep layer only at full detail off phones
 const RESIDENT_SIZE := 0.62          # metres across a resident (a tank is ~1.7 m wide)
+const RESIDENT_MAX_H := 0.58         # tallest resident before the v3 creatures (Bloom 0.57 m): a taller one sinks by the excess
 const MAX_PER_TANK := 2
 const EASE := 1.8                    # liquid level easing, 1/s
 
@@ -36,6 +37,7 @@ var backdrop: CanvasLayer
 var _vats := {}                      # node id -> record (see _bind)
 static var _tanks := {}              # "model key#mesh id" -> {"tanks": [{c, r, y0, y1}], "y0", "y1", "surface"}
 var _mesh := {}                      # faction -> creature Mesh
+var _res_h := {}                     # faction -> resident height in metres (its model's height at _scale)
 var _res_mat := {}                   # "faction|owner" -> resident ShaderMaterial (seat colours fixed per match)
 var _tex := {}
 var _scale := {}
@@ -237,7 +239,8 @@ func _load_resident(f: String) -> void:
 	root.free()
 	if _mesh.has(f):
 		var aabb: AABB = (_mesh[f] as Mesh).get_aabb()
-		_scale[f] = RESIDENT_SIZE / maxf(maxf(aabb.size.x, aabb.size.z), 0.001)
+		_scale[f] = RESIDENT_SIZE * Rules.look_size(f) / maxf(maxf(aabb.size.x, aabb.size.z), 0.001)   # FACTION LOOK size
+		_res_h[f] = aabb.size.y * float(_scale[f])
 		var src := (_mesh[f] as Mesh).surface_get_material(0) as BaseMaterial3D
 		_tex[f] = src.albedo_texture if src else null
 
@@ -414,7 +417,7 @@ func _residents(rec: Dictionary, n: Dictionary, level: float, t: float) -> void:
 		var mi: MeshInstance3D = r[0]
 		var tank: Dictionary = tanks[r[1]]
 		var ph: float = r[2] * 2.4 + r[1] * 1.3 + n["id"] * 0.7
-		var top := minf(level, tank["y1"]) - RESIDENT_SIZE * 0.45
+		var top := minf(level, tank["y1"]) - RESIDENT_SIZE * 0.45 - maxf(0.0, float(_res_h.get(faction, 0.0)) - RESIDENT_MAX_H)
 		var bottom: float = tank["y0"] + RESIDENT_SIZE * 0.45
 		mi.visible = top > bottom                      # the liquid is below this tank: nobody home
 		if not mi.visible:

@@ -23,7 +23,7 @@ func _init() -> void:
 	Progression.reload_all()
 	# the shipped default (Daniele: "all open until lock switch"): a fresh profile has every skill and look open
 	check(Rules.UNLOCK_ALL_TESTING and Progression.unlock_all, "locks are off by default (UNLOCK_ALL_TESTING)")
-	check(Progression.is_unlocked("skill:mire") and Progression.is_unlocked("vat:biopod") and Progression.is_unlocked("monster:alt:ember")
+	check(Progression.is_unlocked("skill:quake") and Progression.is_unlocked("vat:biopod") and Progression.is_unlocked("monster:alt:ember")
 			and ArmyPresets.loadout_for("null") == {"active": str(Rules.FACTION_LOADOUT["null"]["active"]), "map": str(Rules.FACTION_LOADOUT["null"]["map"])},   # 0.22.4: Daniele's defaults (Ghost Line + Fog)
 			"a fresh profile: every skill and look unlocked, NULL keeps its own defaults")
 	check(not Progression.is_unlocked("vat:graduate"), "a fresh profile: only the Graduate vat waits for the tutorial")
@@ -97,21 +97,21 @@ func _levels() -> void:
 func _unlocks() -> void:
 	_fresh()
 	check(Progression.is_unlocked("skill:surge") and Progression.is_unlocked("skill:demolish"), "Surge + Demolish are free")
-	check(Progression.is_unlocked("skill:rewire"), "ultimates come with the faction")
-	check(not Progression.is_unlocked("skill:mire") and not Progression.is_unlocked("vat:biopod"), "others are locked")
+	check(Progression.is_unlocked("skill:overdrive"), "ultimates come with the faction")
+	check(not Progression.is_unlocked("skill:quake") and not Progression.is_unlocked("vat:biopod"), "others are locked")
 	check(Progression.is_unlocked("vat:default") and Progression.is_unlocked("machinegoon:default"), "defaults are open")
 	check(not Progression.is_unlocked("vat:graduate"), "the Graduate vat waits for the tutorial")
-	check(Progression.price("skill:mire") == {"soft": 1250}, "a skill costs 1 250 SCRAP, not sold for chips")
+	check(Progression.price("skill:quake") == {"soft": 1250}, "a skill costs 1 250 SCRAP, not sold for chips")
 	check(Progression.price("skill:surge").is_empty() and Progression.price("vat:graduate").is_empty()
 			and Progression.price("skill:nope").is_empty() and Progression.price("vat:default").is_empty(), "not for sale")
 	check(not Progression.price("machinegoon:spitter").is_empty() and not Progression.price("monster:alt:vex").is_empty()
 			and not Progression.price("vat:faction:bloom").is_empty(), "structure / monster / faction vat prices")
 	Progression.grant("t", 1300)
-	check(not Progression.spend("skill:mire", "premium"), "skills are never bought with chips")
-	check(Progression.spend("skill:mire") and Progression.is_unlocked("skill:mire") and Progression.balance() == 50,
+	check(not Progression.spend("skill:quake", "premium"), "skills are never bought with chips")
+	check(Progression.spend("skill:quake") and Progression.is_unlocked("skill:quake") and Progression.balance() == 50,
 			"buy Mire: 1 300 - 1 250 = 50")
-	check(not Progression.spend("skill:mire"), "an owned skill isn't bought twice")
-	check(not Progression.spend("skill:bypass"), "too poor for a second")
+	check(not Progression.spend("skill:quake"), "an owned skill isn't bought twice")
+	check(not Progression.spend("skill:sever"), "too poor for a second")
 	Progression.unlock_all = true
 	check(Progression.is_unlocked("vat:biopod") and not Progression.is_unlocked("vat:graduate"),
 			"the testing switch opens everything but the Graduate vat")
@@ -237,7 +237,7 @@ func _challenges() -> void:
 func _saving() -> void:
 	_fresh()
 	Progression.grant("campaign:vex:04", 150)
-	Progression.spend("skill:mire")               # too poor: nothing
+	Progression.spend("skill:quake")               # too poor: nothing
 	Progression.unlock("vat:faction:ember", "campaign:ember")
 	Progression.record_match({"faction": "ember", "won": true, "ai_level": "Veteran", "stats": {"captures": 3}})
 	var bal := Progression.balance()

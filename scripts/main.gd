@@ -28,6 +28,7 @@ extends Node3D
 ##   --scenario=fight|rear|queue|build|inspect|switch|rotate --zoom=N  stage one situation up close
 ##   --goo                                  TERRITORY: GOO (Rules.goo_territory) instead of the neon
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
+##   --look=bloom:0.75:4[,solar:1.2:2]      FACTION LOOK debug: a race's body size and lanes (Rules.FACTION_LOOK)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
 ##   --inspect=N                            force the ring open on node N (0.23.x radial redesign shots)
 ##   --tutorial=N                           start tutorial N (1 quick start ... 5 team play; one not built yet plays the quick start) straight away
@@ -67,7 +68,7 @@ var vis: Dictionary
 var hordes: HordeView
 var fx: Fx
 var proto_view: ProtoRelayView       # RELAYS 3.0 PROTOTYPES: only on a map that has one (the P test maps)
-var door_view: DoorView             # TWO DOORS (Rules.TWO_DOORS): both doors marked on every platform
+var door_view: DoorView             # TWO DOORS (Rules.TWO_DOORS): a floor arrow at both doors of every platform
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var world_layer: WorldLayer                         # WORLD LAYER: floor, node tubes, splats (view only)
 var _world_probe := -1.0                           # --world-probe=T: a 100-unit fall at T, frame times printed
@@ -101,6 +102,7 @@ const COLLAPSE_PITCH_DROP := 14.0                 # degrees the pitch lowers by 
 const COLLAPSE_PITCH_MIN := 44.0                  # never flatter than this
 var fraction := 0.5
 var drag_from := -1
+var _drag_out := false                            # SEND GESTURE: the finger has left the dead zone since the press
 var selected := -1
 var monster_from := -1                            # Structures 2.1: a hub's LAUNCH is armed - drag, or tap
                                                    # a highlighted node in sim.monster_reach(monster_from)
@@ -259,6 +261,11 @@ func _ready() -> void:
 			SEAT_FACTIONS[HUMAN] = arg.substr(10)
 		elif arg.begins_with("--rival="):
 			SEAT_FACTIONS["B"] = arg.substr(8)
+		elif arg.begins_with("--look="):             # FACTION LOOK debug: <faction>:<size>[:<across>], comma-separated
+			for item in arg.substr(7).split(","):
+				var p := item.split(":")
+				if p.size() >= 2 and Rules.FACTION_LOOK.has(p[0]):
+					Rules.FACTION_LOOK[p[0]] = {"size": float(p[1]), "across": int(p[2]) if p.size() >= 3 else Rules.look_across(p[0])}
 		elif arg.begins_with("--player-name="):
 			player_name = arg.substr(14)
 		elif arg.begins_with("--focus="):
@@ -359,6 +366,12 @@ func _ready() -> void:
 			if arg.begins_with("--menu-shot="):           # screenshot the title screen, then quit
 				var out := arg.substr(12)
 				for i in range(20):
+					await get_tree().process_frame
+				var wait := 0                              # CUSTOMIZE's model icons finish first
+				while LookThumbs.busy() and wait < 600:
+					await get_tree().process_frame
+					wait += 1
+				for i in range(30 if wait > 0 else 0):    # (a stage skin that loaded meanwhile takes over)
 					await get_tree().process_frame
 				await RenderingServer.frame_post_draw
 				get_viewport().get_texture().get_image().save_png(out)
@@ -489,6 +502,7 @@ func _start_map(path: String) -> void:
 	skill_fx.setup(sim, vis, HUMAN)
 	drag_line = MeshInstance3D.new()
 	drag_line.mesh = drag_mesh
+	drag_line.visible = false                       # ui-node: the HUD overlay draws the send ribbon / rings (Neon Noir)
 	add_child(drag_line)
 	route_label = Label3D.new()
 	route_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -498,6 +512,8 @@ func _start_map(path: String) -> void:
 	route_label.no_depth_test = true
 	route_label.modulate = Rules.seat_color(HUMAN)
 	route_label.visible = false
+	route_label.modulate.a = 0.0                   # ui-node: its words show in the overlay's pill (kept: tests read it)
+	route_label.outline_modulate.a = 0.0
 	add_child(route_label)
 	for seat in seats.values():
 		if (seat != HUMAN or demo) and scenario == "" and not online and director == null:   # (a lesson scripts its rival)
@@ -975,8 +991,8 @@ func to_menu(page := "") -> void:
 
 # ------------------------------------------------------------------ world
 func _apply_quality() -> void:
-	## Phones: no shadows, no MSAA. (AUDIT FIX: the old 0.75 3D render scale is gone - PerfProfile renders every
-	## profile at full resolution, the unfiltered upscale gave the "minecraft" steps; a phone on FULL got it back.)
+	## Phones: no shadows, no MSAA. (AUDIT FIX: the old 0.75 3D render scale is gone - the unfiltered upscale gave the
+	## "minecraft" steps; perf-ios: PerfProfile scales PHONE through the linear-filtered RenderScale path instead.)
 	if mobile:
 		sun.shadow_enabled = false
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
@@ -987,6 +1003,7 @@ func _on_resized() -> void:
 		return
 	var vp := get_viewport().get_visible_rect().size
 	_fitted_size = vp
+	RenderScale.sync()                                 # hotfix-02319: the scaled 3D's size first - the fit below measures through it
 	_apply_safe_area()
 	hud.layout(vp, margins)
 	combat.top_limit = hud.top_used() + 3.0 * 38.0 * hud.ui_scale   # the top bar and up to three toasts
@@ -1116,7 +1133,7 @@ func _fit_nodes(nodes: Array) -> Array:
 	if use_hud and mission_overlay:                    # CAMPAIGN: the map fits under the objective strip too
 		top = maxf(top, mission_overlay.strip_bottom() + 6.0)
 	var bottom: float = vp.y - (hud.bottom_used() if use_hud else 8.0)
-	var right: float = vp.x - (margins.z + hud.pause_button.size.x + 12.0 if use_hud else 8.0)   # PAUSE and Debug column
+	var right: float = vp.x - (hud.right_used() if use_hud else 8.0)   # PAUSE's column and the skill column (Alpha 24)
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
 	var pts := []
 	for n in nodes:
@@ -1626,7 +1643,11 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 		"send":
 			var to: int = int(args.get("to", -1))
 			var f: float = clampf(float(args.get("fraction", 0.5)), 0.0, 1.0)
-			if to < 0 or to >= sim.nodes.size() or to == id:
+			if to == id:                                # HOLD (2026-11-03): a send to the origin stops its queued units
+				if sim.hold(id):
+					return [true, "Hold - the queued units stay home"]
+				return [false, "Nothing queued to hold"]
+			if to < 0 or to >= sim.nodes.size():
 				return [false, ""]
 			var count := int(floorf(n["units"] * f))
 			if sim.send(id, to, f).is_empty():
@@ -1850,6 +1871,9 @@ func _process(delta: float) -> void:
 					var mine_f := fseat == HUMAN or sim.allied(fseat, HUMAN)
 					hud.callout_at(fmid, "ferry:%d" % int(ev["edge"]), "%sFERRY %d / %d CROSSED" % ["" if mine_f else "ENEMY ",
 							int(ev["ok"]), int(ev["sent"])], "good" if mine_f and int(ev["ok"]) * 2 >= int(ev["sent"]) else "warn", fseat)
+			"monster_take":                            # Rules.MONSTER_TAKE_MAX: your monster's target held - how many are left there
+				if bool(ev.get("held", false)) and str(ev.get("seat", "")) == HUMAN:
+					hud.callout_node(int(ev["node"]), "MONSTER KICKED %d · %d HOLD" % [Rules.shown(Rules.MONSTER_TAKE_MAX), int(ev.get("left", 0))], "warn", HUMAN)
 			"forge_lost":                              # red (spec E): the bonus is gone - at the forge it was
 				if str(ev.get("seat", "")) == HUMAN:
 					var at := int(_forge_node.get(HUMAN, -1))
@@ -1891,7 +1915,7 @@ func _process(delta: float) -> void:
 	if proto_view:
 		proto_view.sync(dt)                       # after Fx: it hides the ferry's deck, sinks a lift's closed decks
 	if door_view:
-		door_view.sync(dt)                        # TWO DOORS - the door a line pours in by flares
+		door_view.sync(dt)                        # TWO DOORS - the arrow of the door a line uses lights up
 	combat.sync(dt, cam)                          # after Fx: it scales the tier-down's rising model
 	skill_fx.sync(dt, cam)                        # after Fx: it hides a demolished deck, whose pieces fall here
 	forge_pulse.sync(dt, cam)                     # after both (it pumps the models) and the views (their glows)
@@ -2115,6 +2139,7 @@ func _telemetry_match(left_early: bool) -> void:
 	var hosted := online and Net.has_method("server_hosted") and bool(Net.call("server_hosted"))
 	Telemetry.match_event(sim, HUMAN, {"map": str(map.get("code", "")), "mode": mode, "online": online,
 			"server_hosted": hosted, "ai_level": "" if online else ai_level, "left_early": left_early,
+			"match_id": "%s-%d" % [Net.room_code, Net.match_round] if online else "",
 			"net": Net.call("round_net_stats") if online and Net.has_method("round_net_stats") else {}})   # NET: a guest's connection
 # --- end PROGRESSION: telemetry ---
 
@@ -2144,7 +2169,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event is InputEventMouseButton and not (event as InputEventMouseButton).pressed:
 			_swallow_release = false                  # a double-tap's release: never swallow the next one
 		if drag_from >= 0:
-			_end_drag()
+			_lose_drag()
 		return
 	if event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
@@ -2153,7 +2178,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			touches.erase(st.index)
 		if touches.size() == 2:
-			_end_drag()
+			_lose_drag()
 			_swallow_release = true                   # the first finger's (emulated) release never taps
 		_pinch = {}
 		return
@@ -2173,12 +2198,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				_zoom_at(mb.position, mb.position, step if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / step)
 			return
 		if mb.button_index == MOUSE_BUTTON_LEFT:
-			if hud.pointer_over_ui(mb.position):
+			# SEND GESTURE (2026-11-03): release ANYWHERE sends - a send dragged out over the HUD still goes
+			var over_send: bool = not mb.pressed and drag_from >= 0 and _drag_out
+			if hud.pointer_over_ui(mb.position) and not over_send:
 				if not mb.pressed:                      # a drag released on the HUD is cancelled, never left hanging
 					_swallow_release = false
-					_end_drag()
+					_lose_drag()
 				return
-			if hud.dock.take_input(mb):                 # SKILLS 2.0: a slot is armed - this tap picks its target
+			if not over_send and hud.dock.take_input(mb):   # SKILLS 2.0: a slot is armed - this tap picks its target
 				return
 			var hit := _ground(mb.position)
 			if monster_from >= 0:                       # LAUNCH armed: drag from the hub, or tap a reachable node
@@ -2193,6 +2220,7 @@ func _unhandled_input(event: InputEvent) -> void:
 						node_action("launch_monster", hub, {"to": target})
 					drag_mesh.clear_surfaces()
 					route_label.visible = false
+					_route_hud({})
 				return
 			if mb.pressed:
 				var n := _node_at(hit, mb.position)
@@ -2217,6 +2245,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					_tap_node = n
 					if sim.nodes[n]["owner"] == HUMAN:
 						drag_from = n
+						_drag_out = false
 					else:
 						selected = n
 				else:
@@ -2232,13 +2261,29 @@ func _unhandled_input(event: InputEvent) -> void:
 					_end_drag()
 					return
 				if drag_from >= 0:
-					var target := _node_at(hit, mb.position)
 					var moved := (mb.position - _press_pos).length() >= TAP_PIXELS
-					if moved and target != drag_from:
+					_note_drag_out(mb.position)
+					var aim := _send_aim(drag_from, mb.position)
+					if moved and aim["kind"] != "cancel":
 						_tap_node = -1                     # Alpha 11 (game.gd:723): a drag never arms the double-tap
-					if target >= 0 and target != drag_from and moved:
+					if aim["kind"] == "send":
+						var target: int = aim["to"]
+						var count := int(floorf(sim.nodes[drag_from]["units"] * fraction))
 						if node_action("send", drag_from, {"to": target, "fraction": fraction}):
 							fx._pulse(sim.nodes[target]["pos"], Rules.seat_color(HUMAN), Rules.R, 0.6)
+						else:
+							_send_failed("zero_units" if count < 1 else ("bridge_gone" if sim.find_route(drag_from, target).is_empty() else "refused"), drag_from, aim)
+						hud.close_inspector()
+						selected = drag_from
+					elif aim["kind"] == "hold":
+						if _queued_at(drag_from):           # HOLD: an order to the origin (net payload unchanged: "to" = the origin)
+							node_action("send", drag_from, {"to": drag_from, "fraction": fraction})
+						hud.close_inspector()
+						selected = drag_from
+					elif aim["kind"] == "fail":
+						_send_failed(str(aim["reason"]), drag_from, aim)
+						if hud.shows("notices"):
+							_placed_refusal("send", drag_from, "No route that way" if aim["reason"] == "bridge_gone" else "No node that way")
 						hud.close_inspector()
 						selected = drag_from
 					elif not moved:
@@ -2261,6 +2306,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		var hit := _ground((event as InputEventMouseMotion).position)
 		if drag_from >= 0:
+			_note_drag_out((event as InputEventMouseMotion).position)
 			_draw_drag(drag_from, hit, (event as InputEventMouseMotion).position)
 		elif monster_from >= 0:
 			_draw_monster_drag(monster_from, hit)
@@ -2270,9 +2316,92 @@ func _end_drag() -> void:
 	## Clears the send gesture (and a Monster hub's armed LAUNCH): no source node, no preview line, no
 	## route label.
 	drag_from = -1
+	_drag_out = false
 	monster_from = -1
 	drag_mesh.clear_surfaces()
 	route_label.visible = false
+	_route_hud({})
+
+
+func _lose_drag() -> void:
+	## A send gesture under way ends without its release (a second finger, a pause, a release on the HUD before it
+	## left the dead zone): logged as "touch_lost" when the finger had already aimed, then cleared.
+	if drag_from >= 0 and _drag_out:
+		_send_failed("touch_lost", drag_from, {})
+	_end_drag()
+
+
+# ------------------------------------------------------------------ SEND GESTURE (Daniele, 2026-11-03, review item 19)
+func _px_per_pt() -> float:
+	return 1.0 / maxf(UiKit.pt_per_px(get_viewport().get_visible_rect().size), 0.01)
+
+
+func _note_drag_out(screen: Vector2) -> void:
+	if (screen - _press_pos).length() >= Rules.SEND_DEAD_ZONE_PT * _px_per_pt():
+		_drag_out = true
+
+
+func _send_aim(from: int, screen: Vector2) -> Dictionary:
+	## What letting go here does: {"kind": "send", "to"} | {"kind": "hold"} | {"kind": "cancel"} | {"kind": "fail",
+	## "reason": "no_target" / "bridge_gone"}. Never left the dead zone: cancel, unless it was a quick FLICK (sends the
+	## current share the way it flicked). Back on the origin after leaving: HOLD. A node right under the finger wins;
+	## otherwise the cone pick (_send_pick).
+	var o := cam.unproject_position(sim.nodes[from]["pos"])
+	if not _drag_out:
+		var quick := Time.get_ticks_msec() / 1000.0 - _press_time <= Rules.SEND_FLICK_SECONDS
+		if not quick or (screen - _press_pos).length() < Rules.SEND_FLICK_PT * _px_per_pt():
+			return {"kind": "cancel"}
+		return _send_pick(from, o, screen - _press_pos, screen)
+	var under := _node_at(_ground(screen), screen)
+	if under == from or (screen - o).length() < Rules.SEND_DEAD_ZONE_PT * _px_per_pt():
+		return {"kind": "hold"}
+	if under >= 0:
+		if sim.find_route(from, under).is_empty():
+			return {"kind": "fail", "reason": "bridge_gone", "to": under}
+		return {"kind": "send", "to": under}
+	return _send_pick(from, o, screen - o, screen)
+
+
+func _send_pick(from: int, o: Vector2, dir: Vector2, finger: Vector2) -> Dictionary:
+	## The best REACHABLE node in the drag direction: inside the +-Rules.SEND_CONE_DEG cone from the origin's centre,
+	## nearest to the finger first (a short flick takes the near node, a long drag the far one). Only unreachable
+	## nodes in the cone: "bridge_gone"; none at all: "no_target".
+	if dir.length() < 1.0:
+		return {"kind": "fail", "reason": "no_target"}
+	var cos_max := cos(deg_to_rad(Rules.SEND_CONE_DEG))
+	var cands := []
+	for n in sim.nodes:
+		var id: int = n["id"]
+		if id == from or sim.collapsed.get(id, false) or n.get("node_kind", "") == "junction" or cam.is_position_behind(n["pos"]):
+			continue
+		var p := cam.unproject_position(n["pos"])
+		var v := p - o
+		if v.length() < 1.0 or v.normalized().dot(dir.normalized()) < cos_max:
+			continue
+		cands.append([p.distance_to(finger), id])
+	if cands.is_empty():
+		return {"kind": "fail", "reason": "no_target"}
+	cands.sort()
+	for c in cands:
+		if not sim.find_route(from, int(c[1])).is_empty():
+			return {"kind": "send", "to": int(c[1])}
+	return {"kind": "fail", "reason": "bridge_gone", "to": int(cands[0][1])}
+
+
+func _queued_at(from: int) -> bool:
+	## Units still queued at this vat's door (a HOLD has something to stop). Guests read the streaming line from snapshots.
+	if not (sim.nodes[from]["streaming"] as Dictionary).is_empty():
+		return true
+	for h in sim.hordes:
+		if h.get("streaming", false) and h["owner"] == HUMAN and int(h["route"][0]) == from:
+			return true
+	return false
+
+
+func _send_failed(reason: String, from: int, aim: Dictionary) -> void:
+	## TELEMETRY (device file only): why a send gesture placed no order.
+	Telemetry.send_failed(reason, {"from": from, "to": int(aim.get("to", -1)), "units": int(sim.nodes[from]["units"]),
+			"t": snappedf(sim.time, 0.1), "map": str(map.get("code", "")), "mobile": mobile, "online": online})
 
 
 func _ground(screen: Vector2) -> Vector3:
@@ -2315,29 +2444,48 @@ func _relay_button_at(p: Vector3, screen: Vector2) -> int:
 	return rb
 
 
+func _route_hud(r: Dictionary) -> void:
+	## Alpha 24: the HUD's 2D route feedback over the drag line (HudOverlay._draw_route): chevrons / blocks, target marker.
+	if hud and hud.overlay and (hud.overlay.route != r):
+		hud.overlay.route = r
+
+
 func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
-	## The send preview follows the actual route along the decks (not a straight line), with an
-	## arrowhead at the target and the count + travel time at the cursor (Alpha 11's route label).
+	## The send preview follows the actual route along the decks (not a straight line), with an arrowhead at the target
+	## and the count + travel time at the cursor (Alpha 11's route label). SEND GESTURE (2026-11-03): the target is the
+	## snapped one (_send_aim), ringed live; back on the origin the ring sits there and says HOLD.
 	drag_mesh.clear_surfaces()
 	route_label.visible = false
+	_route_hud({})
 	if b == Vector3.INF:
 		return
 	var a: Vector3 = sim.nodes[from]["pos"]
-	var target := _node_at(b, screen)
+	var aim := _send_aim(from, screen)
+	var target: int = int(aim.get("to", -1))
 	var up := Vector3(0, 1.0, 0)
 	var mat := Mats.line(HUMAN)
 	var count := int(floorf(sim.nodes[from]["units"] * fraction))
-	if target >= 0 and target != from:
+	if aim["kind"] == "hold":
+		_draw_ring(from, mat)
+		route_label.text = "HOLD" if _queued_at(from) else "CANCEL"
+		route_label.position = a + Vector3(0, 6.5, 0)
+		route_label.visible = true
+		_route_hud({"hold": from, "label": route_label.text})
+		return
+	if aim["kind"] == "fail" and target >= 0:
+		var warn := Mats.glow(Rules.state_color("warn"))
+		drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, warn)
+		drag_mesh.surface_add_vertex(a + up)
+		drag_mesh.surface_add_vertex(sim.nodes[target]["pos"] + up)
+		drag_mesh.surface_end()
+		_draw_ring(target, warn)
+		route_label.text = "NO ROUTE"
+		route_label.position = sim.nodes[target]["pos"] + Vector3(0, 6, 0)
+		route_label.visible = true
+		_route_hud({"pts": PackedVector3Array([a, sim.nodes[target]["pos"]]), "ok": false, "target": target, "label": "NO ROUTE"})
+		return
+	if aim["kind"] == "send":
 		var route := sim.find_route(from, target)
-		if route.is_empty():
-			drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, Mats.glow(Rules.state_color("warn")))
-			drag_mesh.surface_add_vertex(a + up)
-			drag_mesh.surface_add_vertex(sim.nodes[target]["pos"] + up)
-			drag_mesh.surface_end()
-			route_label.text = "NO ROUTE"
-			route_label.position = sim.nodes[target]["pos"] + Vector3(0, 6, 0)
-			route_label.visible = true
-			return
 		var path := sim.build_path(route)
 		var pts: PackedVector3Array = path["pts"]
 		# the real walk: path length at the constant speed, the owner's faction speed included
@@ -2356,18 +2504,48 @@ func _draw_drag(from: int, b: Vector3, screen: Vector2) -> void:
 			drag_mesh.surface_add_vertex(tip)
 			drag_mesh.surface_add_vertex(tip - dir * 1.6 + side * 0.9 * s)
 		drag_mesh.surface_end()
+		_draw_ring(target, mat)
 		var tn: Dictionary = sim.nodes[target]
 		var verb := "reinforce" if tn["owner"] == HUMAN else ("attack" if tn["owner"] != "" else "take")
 		route_label.text = "%s · %d units · %d s" % [verb.to_upper(), Rules.shown(count), int(round(seconds))]
 		route_label.position = tn["pos"] + Vector3(0, 6.5, 0)
 		route_label.visible = true
-	else:
-		drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, mat)
-		for k in range(-1, 2):
-			var off := (b - a).cross(Vector3.UP).normalized() * 0.1 * k
-			drag_mesh.surface_add_vertex(a + up + off)
-			drag_mesh.surface_add_vertex(b + up + off)
-		drag_mesh.surface_end()
+		_route_hud({"pts": pts, "ok": true, "target": target, "label": route_label.text})
+		return
+	_route_hud({"pts": PackedVector3Array([a, b]), "ok": true, "free": true})   # ui-node: the finger's ribbon (overlay)
+	drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, mat)          # cancel / no node that way: the finger's line only
+	for k in range(-1, 2):
+		var off := (b - a).cross(Vector3.UP).normalized() * 0.1 * k
+		drag_mesh.surface_add_vertex(a + up + off)
+		drag_mesh.surface_add_vertex(b + up + off)
+	drag_mesh.surface_end()
+
+
+func ring_radius(id: int) -> float:
+	## The live target ring's radius in world metres: around the platform, and never under Rules.SEND_RING_PT across on
+	## screen along either axis (a flat ring shows foreshortened by the camera pitch, so the shorter axis decides).
+	var c: Vector3 = sim.nodes[id]["pos"]
+	var p0 := cam.unproject_position(c)
+	var right := cam.global_transform.basis.x
+	var fwd := Vector3(right.z, 0.0, -right.x).normalized()
+	var px := minf(cam.unproject_position(c + right).distance_to(p0), cam.unproject_position(c + fwd).distance_to(p0))
+	var want := Rules.SEND_RING_PT * 0.5 * _px_per_pt() / maxf(px, 0.001)
+	return maxf(Rules.R * 1.15, want)
+
+
+func _draw_ring(id: int, mat: Material) -> void:
+	## Three thin concentric circles (the drag line's weight) around the node: the snapped target, or HOLD on the origin.
+	var c: Vector3 = sim.nodes[id]["pos"] + Vector3(0, 1.0, 0)
+	var r := ring_radius(id)
+	drag_mesh.surface_begin(Mesh.PRIMITIVE_LINES, mat)
+	for k in range(-1, 2):
+		var rr := r + 0.12 * k
+		for i in range(48):
+			var t0 := TAU * i / 48.0
+			var t1 := TAU * (i + 1) / 48.0
+			drag_mesh.surface_add_vertex(c + Vector3(cos(t0), 0, sin(t0)) * rr)
+			drag_mesh.surface_add_vertex(c + Vector3(cos(t1), 0, sin(t1)) * rr)
+	drag_mesh.surface_end()
 
 
 func _draw_monster_drag(hub: int, hit: Vector3) -> void:
@@ -2375,6 +2553,7 @@ func _draw_monster_drag(hub: int, hit: Vector3) -> void:
 	## coloured by whether the node under the cursor is in sim.monster_reach(hub).
 	drag_mesh.clear_surfaces()
 	route_label.visible = false
+	_route_hud({})
 	if hit == Vector3.INF:
 		return
 	var a: Vector3 = sim.nodes[hub]["pos"]
@@ -2386,10 +2565,13 @@ func _draw_monster_drag(hub: int, hit: Vector3) -> void:
 	drag_mesh.surface_add_vertex(a + up)
 	drag_mesh.surface_add_vertex((sim.nodes[target]["pos"] if target >= 0 else hit) + up)
 	drag_mesh.surface_end()
+	if target < 0 or target == hub:                     # ui-node: the aim line is the overlay's ribbon now
+		_route_hud({"pts": PackedVector3Array([a, hit]), "ok": true, "free": true})
 	if target >= 0 and target != hub:
 		route_label.text = "SEND MONSTER" if ok else "OUT OF REACH"
 		route_label.position = sim.nodes[target]["pos"] + Vector3(0, 6, 0)
 		route_label.visible = true
+		_route_hud({"pts": PackedVector3Array([a, sim.nodes[target]["pos"]]), "ok": ok, "target": target, "monster": true, "label": route_label.text})
 
 
 var _perf_t := 0.0
@@ -2466,13 +2648,15 @@ func _perf(dt: float) -> void:
 	if _perf_t < 3.0:
 		return
 	_perf_t = 0.0
-	print("PERF fps=%d process=%.2fms physics=%.2fms nav=%.2fms objects=%d draw=%d prims=%d" % [
+	var px := RenderScale.current.pixels() if RenderScale.current != null else Vector2i(get_window().size)   # perf-ios: the 3D's pixels
+	print("PERF fps=%d process=%.2fms physics=%.2fms nav=%.2fms objects=%d draw=%d prims=%d 3d=%dx%d scale=%.2f dpr=%.2f" % [
 			Engine.get_frames_per_second(), Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
 			Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
 			Performance.get_monitor(Performance.TIME_NAVIGATION_PROCESS) * 1000.0,
 			Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
 			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
-			Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)])
+			Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME), px.x, px.y, RenderScale.scale_now(),
+			PerfProfile.device_pixel_ratio()])
 
 
 func _horde_at(p: Vector3) -> Dictionary:
