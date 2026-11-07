@@ -2,6 +2,8 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo7** - 2026-11-07 (demo-world, staging/demo/): vat hologram 2 (Daniele's notes, visual only): the upgrade ring is bigger
+  than the structure in the seat colour, parts it has passed show the real material, tubes stay empty until the upgrade completes (vat-column-2).
 - **0.23.27-demo6** - 2026-11-07 (demo-world, staging/demo/): lab pass 3 (props 1.5x up to 4.5 m, district 10 m past the board, flush
   pavement floor; dressing 7.9k tris, was 11.1k) + fog lead: the arena's fog leans to the leading seat's colour (visual only, max 35 %).
 - **0.23.27-demo5** - 2026-11-07 (demo-world, staging/demo/): world dressing (world-dressing 1fe1374): R-01 lab district past the board ends,
