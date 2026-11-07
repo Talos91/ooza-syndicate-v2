@@ -793,6 +793,8 @@ func _badges(cam: Camera3D) -> bool:
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
 			what = "MGN%d" % n["tier"]
+		elif Sim.vat_paused(n):                             # VAT COLUMN: the blueprint fills, the vat makes nothing
+			what = "PAUSED"
 		else:
 			what = "T%d" % n["tier"]
 		# 0.20.13 (Daniele's 2v2 co-op playtest: "i sent troops to her node and except the count going up
@@ -817,6 +819,9 @@ func _badges(cam: Camera3D) -> bool:
 		elif n["relay"] != "" and n["relay_phase"] == "warning":
 			clock = "!%d" % int(ceil(n["relay_t"]))
 			worst = "!8"
+		elif Sim.vat_paused(n):                             # VAT COLUMN: "PAUSED 62%" over the build bar
+			clock = "%d%%" % int(floor(100.0 * Sim.build_progress(n)))
+			worst = "88%"
 		elif n["build_kind"] != "":
 			clock = "%ds" % int(ceil(n["build_timer"]))
 			worst = "88s"
@@ -1814,6 +1819,8 @@ func _refresh_inspector(cam: Camera3D) -> void:
 			# Alpha 11's status line: production, and what a double-tap upgrade costs
 			var status := "%.1f / s production" % Rules.shown_f(sim.production(n)) if Sim.has_vat(n) \
 					else ("no production - garrison must be fed" if n["structure"] == "machinegoon" else "no vat here")
+			if Sim.vat_paused(n):                           # VAT COLUMN (Daniele, 2026-11-07)
+				status = "PAUSED - no production while the upgrade builds"
 			var up := sim.upgrade_cost(n)
 			if owner == human and up > 0 and shows("upgrade"):
 				status += " | Double-tap: %d units" % Rules.shown(up)
@@ -1845,7 +1852,10 @@ func _refresh_inspector(cam: Camera3D) -> void:
 		lines.append(rs)
 	if n["structure"] == "laser" and owner == human:
 		lines.append("laser %s" % ("FIRING" if n["cannon_burst"] > 0.0 else ("READY" if n["cannon_cd"] <= 0.0 else "RECHARGING %.1f s" % n["cannon_cd"])))
-	if n["build_kind"] != "":
+	if Sim.vat_paused(n):                                   # VAT COLUMN (Daniele, 2026-11-07)
+		lines.append("UPGRADING T%d %d %% · PAUSED · %.1f s" % [int(n["build_target"].get("tier", n["tier"] + 1)),
+				int(floor(100.0 * Sim.build_progress(n))), n["build_timer"]])
+	elif n["build_kind"] != "":
 		lines.append("BUILDING %s · %.1f s" % [str(n["build_target"].get("kind", n["build_kind"])).to_upper(), n["build_timer"]])
 	if n["swap_cd"] > 0.0 and owner == human:
 		lines.append("attachment swap in %.0f s" % ceil(n["swap_cd"]))

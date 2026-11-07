@@ -1647,7 +1647,8 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 		"upgrade":
 			var cost := sim.upgrade_cost(n)
 			if sim.upgrade_structure(id):
-				return [true, "Upgrade started - %d units, %d s" % [Rules.shown(cost), int(Rules.BUILD_SECONDS)]]
+				return [true, ("Upgrade started - %d units, %d s" % [Rules.shown(cost), int(Rules.BUILD_SECONDS)])
+						+ (" - vat paused" if Sim.vat_paused(n) else "")]
 			elif n["build_kind"] != "":
 				return [false, "Construction already in progress"]
 			elif n["attachment"] == "cannon" and n["cannon_tier"] >= 3:

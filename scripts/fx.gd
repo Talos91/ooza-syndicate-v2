@@ -198,7 +198,7 @@ func floater(pos: Vector3, text: String, col: Color) -> void:
 
 
 func _construction(n: Dictionary, entry: Dictionary, dt: float) -> void:
-	var building: bool = n["build_kind"] != "" and n["owner"] != ""
+	var building: bool = n["build_kind"] != "" and n["owner"] != "" and not VatColumn.shows(n["id"])   # VAT COLUMN: the blueprint replaces the grow + ring
 	var model: Node3D = entry["vat_node"]
 	if building:
 		var p := smoothstep(0.0, 1.0, Sim.build_progress(n))

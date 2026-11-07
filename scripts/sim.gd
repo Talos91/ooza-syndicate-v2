@@ -337,6 +337,11 @@ static func vat_cost(n: Dictionary) -> int:
 	return Rules.VAT_COST.get(n["tier"], 0) if n["tier"] < Rules.VAT_MAX_UPGRADE else 0
 
 
+static func vat_paused(n: Dictionary) -> bool:
+	## VAT COLUMN (Daniele, 2026-11-07): a vat whose upgrade (blueprint) is filling makes nothing until it is done.
+	return Rules.VAT_UPGRADE_PAUSES and n["build_kind"] == "vat" and n["structure"] == "vat"
+
+
 static func build_progress(n: Dictionary) -> float:
 	if n["build_kind"] == "":
 		return 1.0
@@ -358,6 +363,8 @@ func production(n: Dictionary) -> float:
 
 func _base_production(n: Dictionary) -> float:
 	if n["owner"] == "" or not has_vat(n):
+		return 0.0
+	if vat_paused(n):                                      # VAT COLUMN: paused while the blueprint fills
 		return 0.0
 	var p: float = Rules.PROD[n["tier"]] * stat(n["owner"], "production")
 	if Rules.proto_debug and not debug_prod.is_empty():   # PROTO DEBUG: MY PRODUCTION (readouts follow it too)
@@ -571,7 +578,8 @@ func structure_order(seat: String, action: String, node_id: int, args := {}) -> 
 				return [false, why]
 			var cost := upgrade_cost(nodes[node_id])
 			upgrade(node_id, seat)
-			return [true, "Upgrade started - %d units, %d s" % [Rules.shown(cost), int(Rules.BUILD_SECONDS)]]
+			return [true, ("Upgrade started - %d units, %d s" % [Rules.shown(cost), int(Rules.BUILD_SECONDS)])
+					+ (" - vat paused" if vat_paused(nodes[node_id]) else "")]
 		"launch_monster":
 			var why := launch_monster(node_id, seat, int(args.get("to", -1)))
 			if why != "":

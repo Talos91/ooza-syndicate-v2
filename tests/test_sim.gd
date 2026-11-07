@@ -95,9 +95,27 @@ func _init() -> void:
 	check(absf(sim10.nodes[5]["units"] - 20.0) < 0.01, "the cost is paid from the vat (Alpha 11 logic)")
 	check(not sim10.upgrade(5, "A") and sim10.can_upgrade(5, "A") == "Construction already in progress", "can't start a second upgrade while one is running")
 	check(Sim.build_progress(sim10.nodes[5]) < 0.01, "build progress starts at 0")
+	# VAT COLUMN (Daniele, 2026-11-07): the vat is PAUSED while its blueprint fills; the tier switches at fill end
+	check(Sim.vat_paused(sim10.nodes[5]) and sim10.production(sim10.nodes[5]) == 0.0, "an upgrading vat is paused: production 0")
+	var u_pause: float = sim10.nodes[5]["units"]
+	var t_up := 0.0
+	var grew := false
+	var tier_early := false
 	while sim10.nodes[5]["build_kind"] != "":
 		sim10.step(0.5)
+		t_up += 0.5
+		if sim10.nodes[5]["build_kind"] != "":
+			grew = grew or sim10.nodes[5]["units"] > u_pause + 0.001
+			tier_early = tier_early or sim10.nodes[5]["tier"] != 1
+	check(not grew, "a paused vat makes no units during the whole fill")
+	check(not tier_early, "the vat stays T1 until the fill reaches the top")
+	check(absf(t_up - Rules.BUILD_SECONDS) <= 0.5 + 0.001, "the fill takes Rules.BUILD_SECONDS (%.1f s, took %.1f)" % [Rules.BUILD_SECONDS, t_up])
 	check(sim10.nodes[5]["tier"] == 2, "vat upgrade completes to T2 after Rules.BUILD_SECONDS")
+	check(not Sim.vat_paused(sim10.nodes[5]) and absf(sim10.production(sim10.nodes[5]) - Rules.PROD[2] * sim10.stat("A", "production")) < 0.0001,
+			"at fill end the vat produces again, at the new tier's rate")
+	var u_done: float = sim10.nodes[5]["units"]
+	sim10.step(1.0)
+	check(sim10.nodes[5]["units"] > u_done, "units grow again after the upgrade")
 	sim10.nodes[5]["tier"] = 3
 	sim10.nodes[5]["units"] = 500.0
 	check(not sim10.upgrade(5, "A") and sim10.can_upgrade(5, "A").begins_with("Vats stop at T3") and sim10.upgrade_cost(sim10.nodes[5]) == 0,

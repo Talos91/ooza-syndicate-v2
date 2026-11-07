@@ -487,6 +487,11 @@ static var HOME_UNITS := 5
 const VAT_MAX_UPGRADE := 3
 static var VAT_COST := {1: 50, 2: 100, 3: 150}            # tier t -> t+1 (3 -> 4 is never offered)
 static var BUILD_SECONDS := 10.0          # every build / upgrade / swap takes this long (GAME-RULES sec6)
+# VAT COLUMN (Daniele, 2026-11-07, approved rule change): while a vat upgrade runs, the whole column is a blueprint
+# hologram filling bottom to top and the vat is PAUSED - it makes nothing until the fill reaches the top (BUILD_SECONDS),
+# then it produces at the new tier. Its garrison still defends and can still be sent (only production stops).
+# Entrances per tier (T1 front, T2 + back, T3 + both sides) are VISUAL ONLY. false = the old rule (produce while upgrading).
+static var VAT_UPGRADE_PAUSES := true
 static var SWAP_COOLDOWN := 10.0          # after a structure swap completes, before the next swap
 # STRUCTURES 2.1 (Daniele, 2026-09-27; OPEN-QUESTIONS "Structures 2.1 numbers"). What a node can hold:
 #   common (normal vat node): a vat T1-T3 OR a Machinegoon T1-T3 in its place (swapping = a BUILD_SECONDS build,
