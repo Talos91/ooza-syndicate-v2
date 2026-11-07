@@ -1,0 +1,337 @@
+{
+ "map": "R-01",
+ "px_per_m": 16,
+ "world_rect_m": {
+  "x0": -80.0,
+  "x1": 80.0,
+  "z0": -80.0,
+  "z1": 80.0,
+  "y": -16.0
+ },
+ "image_px": [
+  2560,
+  2560
+ ],
+ "image_axes": "pixel (0,0) = world (x0, z0) corner; +x right, +z down; pixel centre i = x0 + (i+0.5)/16",
+ "tile": {
+  "size_m": 16.0,
+  "origin_xz": [
+   0.0,
+   0.0
+  ],
+  "tile_px": 256.0,
+  "note": "shader: cell = floor(world.xz / 16), uv = world.xz / 16 (texture +u = +x, +v = +z)"
+ },
+ "floor": {
+  "centre_xz": [
+   0.0,
+   0.0
+  ],
+  "depth": 16.0,
+  "district_r": 79.8703880310059,
+  "fade_r0": 79.8703880310059,
+  "fade_r1": 159.870388031006,
+  "kind": "factory",
+  "plane_size": 359.740776062012,
+  "radius": 49.8703880310059,
+  "tile_m": 16.0,
+  "tile_origin_xz": [
+   0.0,
+   0.0
+  ],
+  "y": -16.0
+ },
+ "tubes": [
+  {
+   "node": 0,
+   "x": -27.2,
+   "z": -27.73,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    844.8,
+    836.3
+   ]
+  },
+  {
+   "node": 2,
+   "x": 27.2,
+   "z": -27.73,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    1715.2,
+    836.3
+   ]
+  },
+  {
+   "node": 3,
+   "x": -13.6,
+   "z": -17.2,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    1062.4,
+    1004.8
+   ]
+  },
+  {
+   "node": 4,
+   "x": 13.6,
+   "z": -17.2,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    1497.6,
+    1004.8
+   ]
+  },
+  {
+   "node": 7,
+   "x": -40.8,
+   "z": 0.0,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    627.2,
+    1280.0
+   ]
+  },
+  {
+   "node": 8,
+   "x": -13.6,
+   "z": 0.0,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    1062.4,
+    1280.0
+   ]
+  },
+  {
+   "node": 9,
+   "x": 13.6,
+   "z": 0.0,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    1497.6,
+    1280.0
+   ]
+  },
+  {
+   "node": 10,
+   "x": 40.8,
+   "z": 0.0,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    1932.8,
+    1280.0
+   ]
+  },
+  {
+   "node": 13,
+   "x": -13.6,
+   "z": 17.2,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    1062.4,
+    1555.2
+   ]
+  },
+  {
+   "node": 14,
+   "x": 13.6,
+   "z": 17.2,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    1497.6,
+    1555.2
+   ]
+  },
+  {
+   "node": 15,
+   "x": -27.2,
+   "z": 27.73,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    844.8,
+    1723.7
+   ]
+  },
+  {
+   "node": 17,
+   "x": 27.2,
+   "z": 27.73,
+   "r_foot_drawn": 1.45,
+   "r_tube": 0.95,
+   "px": [
+    1715.2,
+    1723.7
+   ]
+  }
+ ],
+ "camera": {
+  "pitch_deg": 54.0,
+  "yaw_rad": 0.0,
+  "fov_v_deg": 42.0,
+  "default_target": [
+   -2.0569384098053,
+   0.0,
+   8.33457183837891
+  ],
+  "default_dist_m": 111.554878824461,
+  "zoom_range": [
+   0.35,
+   1.0
+  ],
+  "zoom_note": "cam_dist = fit_dist * zoom (player pinch/wheel, main._zoom_at)",
+  "pan_half_m_at_zoom": {
+   "x": 47.4500007629395,
+   "z": 33.7299995422363
+  },
+  "pan_note": "target within fit_target +- map_half * (1 - zoom)",
+  "states_sampled": 76,
+  "zooms": [
+   0.35,
+   0.5,
+   0.75,
+   1.0
+  ],
+  "frame_rendered_px": [
+   1559.0,
+   720.0
+  ],
+  "frame_phone_pt": [
+   812,
+   375
+  ],
+  "hud_zones_used": {
+   "left": 0.12,
+   "bottom": 0.18
+  },
+  "hud_real_px": {
+   "side_right": 148.0,
+   "top": 108.0,
+   "bottom": 598.0
+  },
+  "projection_check_px_max_err": 0.013
+ },
+ "mask_method": "ID pass: the game's own camera per state, floor material swapped for flat magenta (unshaded, no fog), mist sheet / floor decals / glow / fog / HUD hidden; a floor sample counts as seen when it projects inside the frame, outside the HUD zones, onto a magenta pixel",
+ "share_pct_rect": {
+  "white": 53.1,
+  "gray": 17.2,
+  "black": 29.7
+ },
+ "share_pct_map_disc": {
+  "white": 45.8,
+  "gray": 42.7,
+  "black": 11.5
+ },
+ "open_spots_default_view": [
+  {
+   "x": -61.2,
+   "z": 14.3,
+   "clear_r_m": 16.3,
+   "from_centre_m": 62.8
+  },
+  {
+   "x": 65.0,
+   "z": 4.2,
+   "clear_r_m": 14.7,
+   "from_centre_m": 65.2
+  },
+  {
+   "x": 20.8,
+   "z": -62.9,
+   "clear_r_m": 13.6,
+   "from_centre_m": 66.3
+  },
+  {
+   "x": -17.8,
+   "z": -64.9,
+   "clear_r_m": 12.6,
+   "from_centre_m": 67.3
+  },
+  {
+   "x": -62.6,
+   "z": -25.5,
+   "clear_r_m": 12.3,
+   "from_centre_m": 67.6
+  }
+ ],
+ "open_spots_inside_map_radius": [
+  {
+   "x": -30.4,
+   "z": -0.7,
+   "clear_r_m": 9.6,
+   "from_centre_m": 30.4
+  },
+  {
+   "x": 30.7,
+   "z": -1.1,
+   "clear_r_m": 9.2,
+   "from_centre_m": 30.7
+  },
+  {
+   "x": 34.8,
+   "z": -23.1,
+   "clear_r_m": 8.1,
+   "from_centre_m": 41.8
+  },
+  {
+   "x": -34.9,
+   "z": -23.0,
+   "clear_r_m": 8.1,
+   "from_centre_m": 41.8
+  }
+ ],
+ "white_regions": [
+  {
+   "area_m2": 11821,
+   "centroid_xz": [
+    0.3,
+    -29.3
+   ]
+  },
+  {
+   "area_m2": 539,
+   "centroid_xz": [
+    -30.1,
+    -27.1
+   ]
+  },
+  {
+   "area_m2": 534,
+   "centroid_xz": [
+    30.6,
+    -27.0
+   ]
+  },
+  {
+   "area_m2": 194,
+   "centroid_xz": [
+    0.4,
+    -24.5
+   ]
+  },
+  {
+   "area_m2": 153,
+   "centroid_xz": [
+    0.3,
+    -4.8
+   ]
+  },
+  {
+   "area_m2": 71,
+   "centroid_xz": [
+    -9.4,
+    -2.7
+   ]
+  }
+ ]
+}

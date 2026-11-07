@@ -44,10 +44,13 @@ const PLAT_R := Rules.R           # a platform's radius (the board's footprint)
 const BRIDGE_HALF := 1.4
 const SEARCH_R := 16.0            # m: how far a crater may move from its layout target to reach visible floor
 const DEFAULT_LAYOUT := 2
-# The parallel worker's floor plan (dev only; an exported build falls back to the ray test below): a visibility mask of
+# The parallel worker's floor plan (maps without one fall back to the ray test below): a visibility mask of
 # the floor at the default camera (255 seen, 128 seen only when panned / zoomed, 0 never; 16 px/m, world x,z -80..80,
 # pixel (0,0) = (-80,-80), +z down) and open spots. Layout 2 = the board's two side courtyards, layout 4 = the open
 # spots nearest the board's four corners, layout 1 = the map centre (Daniele) whatever shows of it.
+# The plan ships baked in res:// (PLAN_RES_DIR: the json plus the mask PNG imported as "keep", so the web export carries it);
+# the Drive folder (PLAN_DIR) is read only in an editor / tool run when no res:// copy exists (OOZE_NO_DRIVE_PLAN=1 skips it).
+const PLAN_RES_DIR := "res://assets/world/floor_plan/"
 const PLAN_DIR := "H:/My Drive/PROJECTS/Ooze Syndicate/References/Art direction 2026-11 - syndicate uniforms/DIRECTOR-PACKAGE/refs/09-floor-plan-%s/"
 
 var wl: WorldLayer
@@ -245,7 +248,11 @@ func _load_plan() -> void:
 	var code := str(mp).get_file().substr(0, 4) if mp != null else ""
 	if code == "":
 		return
-	var dir := PLAN_DIR % code
+	var dir := PLAN_RES_DIR
+	if not FileAccess.file_exists(dir + code + "-floor-plan.json"):
+		if OS.has_feature("template") or OS.get_environment("OOZE_NO_DRIVE_PLAN") == "1":
+			return
+		dir = PLAN_DIR % code
 	var jf := FileAccess.open(dir + code + "-floor-plan.json", FileAccess.READ)
 	if jf == null:
 		return
@@ -257,7 +264,9 @@ func _load_plan() -> void:
 	var wr: Dictionary = plan.get("world_rect_m", {})
 	_mask_x0 = float(wr.get("x0", -80.0))
 	_mask_z0 = float(wr.get("z0", -80.0))
-	var img := Image.load_from_file(dir + code + "-floor-visible-mask.png")
+	var img := Image.new()
+	if img.load_png_from_buffer(FileAccess.get_file_as_bytes(dir + code + "-floor-visible-mask.png")) != OK:
+		img = null
 	if img != null and not img.is_empty():
 		img.convert(Image.FORMAT_L8)
 		_mask = img
