@@ -4383,7 +4383,7 @@ func door_mult(h: Dictionary) -> float:
 	var m := 1.0
 	if not _conv_edges.is_empty():                     # RELAYS 3.0 round 2: a belt pulls a line out of its vat faster
 		m = maxf(m, conveyor_mult(h))
-	if _fx_horde.is_empty():
+	if _fx_horde.is_empty() and _fx_seat.is_empty():   # demo-world merge: Overdrive is a SEAT effect (main 0.23.21)
 		return m
 	for e in _fx_horde.get(h["id"], []):
 		if e["id"] == "surge":

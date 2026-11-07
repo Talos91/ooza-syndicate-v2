@@ -3203,7 +3203,10 @@ func _relays_proto() -> void:
 				proto_in_pool = true
 	check(not proto_in_pool, "RELAYS 3.0: no pool map uses a prototype relay kind")
 	# proto line only (POOL_GROUPS ["N", "P"]): the P maps ARE offered on 02 BATTLEFIELD here; the release line keeps them out
-	check(MapPool.battlefield().any(func(p): return p.get_file().begins_with("P-")), "RELAYS 3.0 (proto line): the P maps are in the battlefield pool")
+	if Rules.demo:                                    # DEMO BUILD: the picker offers MapPool.DEMO (R-01) only
+		check(MapPool.battlefield().map(func(p): return p.get_file().substr(0, 4)) == MapPool.DEMO, "DEMO: the battlefield pool is R-01 only")
+	else:
+		check(MapPool.battlefield().any(func(p): return p.get_file().begins_with("P-")), "RELAYS 3.0 (proto line): the P maps are in the battlefield pool")
 
 	# ---- FERRY (round 2, the MOVING BRIDGE): P-91, ferry node 1 drives deck 7 (3 -> 4, A's home to the centre)
 	var f := _proto_sim("ferry")
