@@ -86,7 +86,7 @@ func _foot_shot(inst: Node, wl: WorldLayer, id: int, file: String) -> void:
 		if t["id"] == id:
 			tb = t
 	var foot := Vector3(tb["x"], wl.floor_y, tb["z"])
-	var pit: Vector3 = wl.column._pit(tb)
+	var pit: Vector3 = wl.pipes.pit_of(tb)
 	var mid := foot.lerp(pit, 0.4)
 	var side := (pit - foot).normalized().cross(Vector3.UP)
 	var cam := Camera3D.new()
