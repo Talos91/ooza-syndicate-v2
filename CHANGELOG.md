@@ -2,6 +2,9 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo3** - 2026-11-07 (demo-world, staging/demo/): VAT COLUMN (Daniele 2026-11-07, rule change): a vat makes nothing while it
+  upgrades - the badge reads PAUSED n%, the inspector card "UPGRADING T2 63% · PAUSED · 4 s"; a cyan blueprint column fills over the vat, the
+  module rises out of the pit and the tier switches at 100 %; tube doors per tier (vat-column 4b278c4).
 - **0.23.27-demo2** - 2026-11-07 (demo-world, staging/demo/): Daniele's demo fixes from world pass 2 (world-entrance 3b17404): lab biome
   R5 floor (lab5) + decals + side backdrop by default, true-3D falls splat where they hit, GPU Locals queue; craters layout 2 by default.
   Still R-01 STRAIT only, no URL flags.
