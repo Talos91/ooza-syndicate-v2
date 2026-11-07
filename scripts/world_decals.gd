@@ -44,7 +44,7 @@ func setup(floor_mat: ShaderMaterial, y: float) -> void:
 	quad.size = Vector2.ONE
 	var m := ShaderMaterial.new()
 	m.shader = SHADER
-	m.set_shader_parameter("atlas", load(ATLAS))
+	m.set_shader_parameter("atlas", load(PerfProfile.hi_path(ATLAS)))   # FOLDABLES: its hi copy once one is shipped
 	for k in ["abyss", "centre", "r0", "r1", "haze"]:
 		m.set_shader_parameter(k, floor_mat.get_shader_parameter(k))
 	m.render_priority = -9                           # over the floor (-10), under the splats (-8)

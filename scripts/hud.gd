@@ -2214,7 +2214,8 @@ func pt(v: float) -> float:
 	## desktop the old ui_scale sizing.
 	if not mobile:
 		return v * ui_scale
-	return v / maxf(UiKit.pt_per_px(root.get_viewport_rect().size), 0.01)
+	var vp := root.get_viewport_rect().size
+	return v * UiKit.hud_k(vp) / maxf(UiKit.pt_per_px(vp), 0.01)   # FOLDABLES: x the screen factor (1.0 on phones)
 
 
 func card_px(fs: int) -> int:

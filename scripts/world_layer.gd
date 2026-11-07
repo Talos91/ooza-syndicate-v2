@@ -196,7 +196,7 @@ func _lab_backdrop(main: Node) -> void:
 		var sky := layer.get_child(0) as TextureRect
 		var vp := get_viewport().get_visible_rect().size if get_viewport() != null else Vector2(812, 375)
 		var side := "a" if "--lab-side=a" in OS.get_cmdline_user_args() else "b"
-		sky.texture = load(LAB_SIDE % [side, 1184 if vp.x / maxf(vp.y, 1.0) >= 2.0 else 1440])
+		sky.texture = load(PerfProfile.hi_path(LAB_SIDE % [side, 1184 if vp.x / maxf(vp.y, 1.0) >= 2.0 else 1440]))
 		var m := sky.material as ShaderMaterial
 		m.set_shader_parameter("abyss", LAB_FAR)
 		m.set_shader_parameter("tint", Color(1, 1, 1, 1))
@@ -284,7 +284,7 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 	m.set_shader_parameter("tiles", not v1 and not floor_pic and not floor_lab5)
 	if floor_lab5:
 		m.set_shader_parameter("lab5", true)
-		m.set_shader_parameter("t_lab5", load(LAB5_FLOOR))
+		m.set_shader_parameter("t_lab5", load(PerfProfile.hi_path(LAB5_FLOOR)))
 		m.set_shader_parameter("lab5_m", LAB5_TILE_M)
 		m.set_shader_parameter("lab5_gain", LAB5_GAIN)
 		m.set_shader_parameter("haze", LAB5_HAZE)
