@@ -2,6 +2,7 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo11** - 2026-11-09 (demo-world, staging/demo/): demo rules pass (demo-rules-pass 88da364): ferry docked 20 s + one travelling hull; laser relay replaces the lift nodes on R-01 / R-06 / R-09 / R-12 (maps re-baked); floor tube props off; conveyor and Googatling probes with no sim change. Known follow-up: AI fog / portal / evac on the new R-01 (test_powers_ai 3 fails, decided 2026-11-09).
 - **0.23.27-demo10** - 2026-11-09 (demo-world, staging/demo/): proto folded in (proto-into-demo 7e99f03 = proto25 66fa9e1): launcher turret + GooGat, Googatling, R-10 launchers / R-14 / R-15 / R-16 now on demo, proto suite scoping; desktop HUD sizing fix (ui-demo-hud-scale 9dea21f). The proto line is retired (staging/proto removed, tag archive/proto-r-final).
 - **0.23.27-demo9** - 2026-11-09 (demo-world, staging/demo/): vat upgrade warm-up (vat-frame-spike 070985a: the first upgrade no longer hitches on shader compile) + pits-tubes v2 (23e35c4: pits symmetric at the 4 corners, ordered tube fan-in on the stands, tubes build as the vat hologram; clip probe 0).
 - **0.23.27-demo8** - 2026-11-09 (demo-world, staging/demo/): pits, tubes and columns visuals (pits-tubes 88d1b2b, Daniele's 2026-11-07 notes, visual only: 4 corner pits, column tube sockets + doors, tubes to the nearest pit, pit colour toward feeding players; clip probe tests/pits_tubes_clip 0 hits on 14 proto maps) + infra/ci 9011766 (CI trigger fix).
