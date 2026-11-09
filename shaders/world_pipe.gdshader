@@ -2,8 +2,8 @@ shader_type spatial;
 // WORLD LAYER: the TRANSPORT TUBES from the column bases' corner sockets to the pits (scripts/world_tubes.gd). One mesh
 // for every tube of the map. UV = (round the tube 0..1, metres from the socket); UV2 = (slot + 0.5, share of the run
 // from the column 0..1). The slot's state is one texel of `state`: rgb = the goo colour, a = how far the goo has
-// filled the run from the column end (0 = empty glass, 1 = full and flowing), a < 0 = no tube (collapsed in vertex()).
-// Goo flows COLUMN -> PIT (rule 5): the bands and bubbles scroll toward the pit. Unshaded like the floor props, with
+// filled the run from the PIT end (0 = empty glass, 1 = full and flowing), a < 0 = no tube (collapsed in vertex()).
+// Goo flows PIT -> COLUMN (rule 5, Daniele 2026-11-07 final): the bands and bubbles scroll toward the column. Unshaded like the floor props, with
 // the floor's haze, steel couplings every 3 m.
 render_mode fog_disabled, unshaded, cull_back;
 
@@ -11,7 +11,7 @@ uniform sampler2D state : filter_nearest, repeat_disable;
 uniform float slots = 1.0;
 uniform vec3 abyss : source_color = vec3(0.02, 0.02, 0.03);
 uniform float haze = 0.12;
-uniform float flow_v = 2.2;      // m/s toward the pit
+uniform float flow_v = 2.2;      // m/s toward the column
 
 varying vec4 st;
 
@@ -28,10 +28,10 @@ void vertex() {
 
 void fragment() {
 	float s = UV.y;                                   // metres from the socket
-	float k = UV2.y;                                  // share of the run
+	float k = 1.0 - UV2.y;                            // share of the run from the pit
 	float fill = st.a;
 	float in_goo = step(k, fill) * step(0.0005, fill);
-	float flow = s - TIME * flow_v;
+	float flow = s + TIME * flow_v;                   // toward the socket (s falls)
 	float band = 0.5 + 0.5 * sin(flow * 2.4);
 	vec2 bc = vec2(floor(UV.x * 8.0), floor(flow * 1.4));
 	float bub = step(0.8, hash(bc)) * smoothstep(0.42, 0.1, length(fract(vec2(UV.x * 8.0, flow * 1.4)) - 0.5));
