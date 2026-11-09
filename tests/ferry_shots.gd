@@ -71,6 +71,25 @@ func _run() -> void:
 	else:
 		print("FERRY_PART no proto_relay_view")
 	print("FERRY_BOX %d %d %d %d" % [int(lo.x), int(lo.y), int(hi.x), int(hi.y)])
+	if str(args.get("gat", "")) != "":                # GOOGAT frames: A's 80-shown line from node 4 attacks R-01's neutral GooGat 9
+		var gid := int(args["gat"])
+		var gsp := cam.unproject_position(sim.nodes[gid]["pos"])
+		print("GAT_AT %d %d" % [int(gsp.x), int(gsp.y)])
+		sim.nodes[4]["owner"] = "A"
+		sim.nodes[4]["units"] = 80.0 * Rules.SCALE
+		MapBuilder.apply_owner(inst.vis[4]["parts"], "A")
+		sim.send(4, gid, 1.0)
+		var t0: float = sim.time
+		var j := 0
+		for at in [0.2, 2.0, 3.0, 4.5, 6.0]:
+			while sim.time - t0 < at:
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			inst.get_viewport().get_texture().get_image().save_png("%s/%s-gat-%d.png" % [out, code, j])
+			print("gat shot %d t %.1f garrison %.1f (shown %d) shot %s" % [j, sim.time - t0, sim.nodes[gid]["units"], Rules.shown(sim.nodes[gid]["units"]), sim.nodes[gid].get("shot", {}).get("kills", 0)])
+			j += 1
+		get_tree().quit()
+		return
 	# a line of A's onto lane 1 (deck 8 -> 9): node 8 is A's with 60 shown
 	var lane1: int = sim._ferry_groups[g]["decks"].get(1, -1)
 	var a_n: int = int(sim.edges[lane1]["a"]) if lane1 >= 0 else -1
