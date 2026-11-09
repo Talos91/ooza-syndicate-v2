@@ -21,6 +21,12 @@ const GOOD := Color("3ee07a")
 const AMBER := Color("ffc23d")
 const RING := [Color("87ebff"), Color("a45cff"), Color("ffc23d")]   # ACTIVE / MAP / ULTIMATE, every faction (2026-11-02; ACTIVE icy cyan = the director's neon halo, Daniele 2026-11-05: ice-white on ice-white goo hid the ring)
 const INK := Color("e8f6fa")
+# ui-neon-apply (Daniele 2026-11-09: "the whole interface should have the backlit neon in the same color of the vat goo,
+# especially the skills"): the steel frames keep their delivered metal; their rim layer (the delivery's COLOUR rim, a greyscale
+# soft spill) and the delivery's W *_rim_glow halo BEHIND them take the goo colour (the faction accent).
+const STEEL := ["top_capsule", "square_button", "square_button_hover", "square_button_pressed", "square_button_disabled",
+		"node_card", "node_hub", "skill_card", "skill_card_armed", "skill_card_ultimate_fill", "hint_pill"]
+const BACKLIT := 1.0                                 # the halo's strength (its PNG alpha tops at 115 / 255)
 const MUTED := Color("a6bfca")
 const SPRITE_K := 3.45                              # a cut sprite is drawn at 3x the phone shot, where ui_scale is 1.15
 # the placeholder of each part (NoirBox fields; radius / rim_w / drip / ooze in px x ui_scale); "rim" names the channel:
@@ -106,6 +112,8 @@ static func box(id: String, rim := Color(0, 0, 0, 0), content := Vector4(6, 6, 6
 	var p: Dictionary = PRESETS.get(id, {})
 	var drip := drip_px(id)
 	var col := channel(str(p.get("rim", "")), rim)
+	if has(id) and id in STEEL:
+		col = steel_rim(id)
 	var sb: StyleBox
 	var pool := float(p.get("ooze", 0.0)) * ui_scale * 0.6     # (words sit above the pooled ooze)
 	if has(id):
@@ -138,6 +146,22 @@ static func box(id: String, rim := Color(0, 0, 0, 0), content := Vector4(6, 6, 6
 	return sb
 
 
+static func steel_rim(id: String) -> Color:
+	## A steel frame's spill: the goo colour, dimmed on a disabled button.
+	return Color(accent, 0.45) if id.ends_with("_disabled") else accent
+
+
+static func glow_texture(id: String) -> Texture2D:
+	## A steel frame's backlight: the delivery's W <id>_rim_glow halo (same canvas as the part), or null.
+	if not id in STEEL:
+		return null
+	var base := id.trim_suffix("_fill")
+	if base == "skill_card_ultimate":
+		base = "skill_card"
+	var dir := "node_noir" if base.begins_with("node_") else "hud_noir"
+	return texture("res://assets/ui/%s/%s_rim_glow.png" % [dir, base])
+
+
 static func part_data(id: String) -> Dictionary:
 	var parts: Dictionary = DATA.PARTS
 	return parts.get(id, (NODE_DATA.PARTS as Dictionary).get(id, {}))
@@ -163,6 +187,8 @@ static func sprite_box(id: String, rim: Color, k := -1.0) -> SkinBox:
 	b.band = Vector4(body[0], body[1], float(size[0]) - body[0] - body[2], float(size[1]) - body[1] - body[3] - float(s.get("drip", 0)))
 	b.rim = texture(str(s.get("rim", "")))
 	b.rim_modulate = rim
+	b.glow = glow_texture(id)
+	b.glow_modulate = Color(steel_rim(id), steel_rim(id).a * BACKLIT)
 	b.ooze = texture(str(s.get("ooze", "")))
 	b.ooze_modulate = accent
 	b.whole_bottom = b.ooze != null
