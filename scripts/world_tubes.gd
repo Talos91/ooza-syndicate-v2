@@ -326,7 +326,8 @@ func _shape(way: Array, c2: Vector2, dir: Vector2) -> PackedVector3Array:
 		var y := lerpf(SOCK_Y, PIPE_Y, smoothstep(0.0, 1.2, cum))
 		y = lerpf(y, top, smoothstep(tot - 3.2, tot, cum))    # climbs to clear the rim
 		base_y.append(y)
-		lifts.append(_lift(flat[k], haz))             # over a Locals' lane / an earlier tube: a pipe bridge
+		var lf := _lift(flat[k], haz)                 # over a Locals' lane / an earlier tube: a pipe bridge
+		lifts.append(lf if lf > PIPE_Y + 0.05 else 0.0)   # a ramp's last few cm sit on the floor (no hovering foot)
 	for k in range(flat.size()):                      # bridges less than 6 m apart join into one (no zigzag)
 		var lm := 0.0
 		var rm := 0.0
