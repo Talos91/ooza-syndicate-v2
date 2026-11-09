@@ -513,7 +513,7 @@ func _end(i: int, up: Dictionary, tb: Dictionary, done: bool) -> void:
 			var at := Vector3(float(tb["x"]) + c.x, wl.floor_y + WorldTubes.SOCK_Y, float(tb["z"]) + c.y)
 			for j in range(3 if not wl._low else 2):
 				var a := randf() * TAU
-				wl._add_drop(at, Vector3(cos(a) * 2.0, randf_range(1.5, 3.0), sin(a) * 2.0), UiKit.CYAN)
+				wl._add_drop(at, Vector3(cos(a) * 2.0, randf_range(1.5, 3.0), sin(a) * 2.0), tb["base"])   # the owner's goo (one colour per player; was cyan)
 	else:
 		cancelled += 1
 	for c in up["copies"]:

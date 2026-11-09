@@ -10,9 +10,10 @@ extends Node
 ##   floating         on the floor run (not over a lane / tube bridge, not at the socket or the rim) the underside is <= FLOAT_TOL
 ##   pit_sym (v2)     the 4 pits mirror left/right and top/bottom about the board's centre (0.01 m); prints their coordinates
 ##   span / post_clip (v2) level runs held by stands <= SPAN_MAX apart; no stand on a Locals' lane or under another tube
-##   fan_cross (v2)   no two tubes of one pit cross on the floor plan within HDR_R + HDR_APPR + 2 m of its centre
-##   (v2 collectors: runs with col < 0 are a pit's header bar (sock -1) and riser (sock -2), radius HDR_RR; a tube's end on
-##   its header and the riser's start on the bar are joints, not clips)
+##   entry_cross (v3) no two tubes of one pit cross on the floor plan within RING_R + 0.9 + ENTRY_RUN + 2 m of its centre
+##   one_pit (v3)     a column's tubes go to different pits (Daniele 2026-11-10: "1 pit connected to 1 tube, no pit fed by
+##                    more than one tube"), at most 4; no collector runs (col < 0) exist any more
+##   rack (v3)        every level run away from the socket climb and the rim sits at >= RACK_Y (2 m) - prints rack_min
 ## Prints one PITS_CLIP line per check and PITS_CLIP TOTAL <n>; exit 0 when 0 failures.
 ##   Godot --headless --path . res://tests/pits_tubes_clip.tscn [-- map=R-05]   (or windowed off-screen + silent)
 
@@ -28,7 +29,7 @@ var worst := {}
 
 
 func _ready() -> void:
-	WorldLayer.FLOOR_TUBES = true                    # the floor tubes are off in the game since 2026-11-09; this probe checks them
+	WorldLayer.FLOOR_TUBES = true                    # (on in the game again since v3, 2026-11-10)
 	_run.call_deferred()
 
 
@@ -66,20 +67,12 @@ static func _samples(pts: PackedVector3Array) -> PackedVector3Array:
 	return out
 
 
-static func _rad(run: Array) -> float:
-	return WorldTubes.HDR_RR if int(run[0]) < 0 else WorldTubes.PIPE_R
+static func _rad(_run: Array) -> float:
+	return WorldTubes.PIPE_R
 
 
-static func _joint(a: Array, b: Array, at: Vector3) -> bool:
-	## v2: where a run meets b at a designed joint - a tube's last point on its pit's header, or the riser's first on the bar
-	if int(a[2]) != int(b[2]) or int(b[0]) >= 0:
-		return false
-	var pa: PackedVector3Array = a[3]
-	if int(a[0]) >= 0:                                # its plug on the header (the middle plug meets the riser there too)
-		return at.distance_to(pa[pa.size() - 1]) < WorldTubes.HDR_RR + WorldTubes.PIPE_R + 0.3
-	if int(a[1]) == -2 and int(b[1]) == -1:
-		return at.distance_to(pa[0]) < 2.0 * WorldTubes.HDR_RR + 0.6
-	return false
+static func _joint(_a: Array, _b: Array, _at: Vector3) -> bool:
+	return false                                      # v3: no collector joints any more
 
 
 func _run() -> void:
@@ -122,8 +115,32 @@ func _run() -> void:
 			_note("pit_sym_err", -d)
 			if d > 0.01:
 				_fail("pit_sym", "pit %d at (%.2f, %.2f), mirror wants (%.2f, %.2f)" % [k, crat[k].x, crat[k].z, want.x, want.y])
-	# ---- v2 fan: no two tubes cross (on the floor plan) within the fan's reach of a pit
-	var fan_r := WorldTubes.HDR_R + WorldTubes.HDR_APPR + 2.0
+	# ---- v3 one pit per tube: a column's tubes reach different pits
+	for i in tp.cols:
+		var ps: Array = tp.cols[i].get("pits", [])
+		var seen := {}
+		for p in ps:
+			if seen.has(p):
+				_fail("one_pit", "column %d feeds pit %d twice (%s)" % [i, p, str(ps)])
+			seen[p] = true
+		if ps.size() > 4:
+			_fail("one_pit", "column %d has %d tubes" % [i, ps.size()])
+	for rn in runs:
+		if int(rn[0]) < 0:
+			_fail("one_pit", "a collector run is still built (pit %d)" % int(rn[2]))
+	# ---- v3 rack: level runs at the 2 m rack (or higher, bridging over another tube)
+	for rn in runs:
+		var foot0 := Vector2(wl._tubes[int(rn[0])]["x"], wl._tubes[int(rn[0])]["z"])
+		var pc0: Vector3 = crat[int(rn[2])]
+		for q in _samples(rn[3]):
+			var q2 := Vector2(q.x, q.z)
+			if q2.distance_to(foot0) < WorldTubes.APOTHEM + WorldTubes.RAMP_RUN * 1.2 + 0.8 or q2.distance_to(Vector2(pc0.x, pc0.z)) < WorldLocals.RING_R + 0.9 + 3.3:
+				continue
+			_note("rack_min", q.y - fy - WorldTubes.RACK_Y)
+			if q.y - fy < WorldTubes.RACK_Y - 0.01:
+				_fail("rack", "slot of col %d at (%.1f, %.1f): centre %.2f m over the floor" % [int(rn[0]), q.x, q.z, q.y - fy])
+	# ---- v3 entry: no two tubes cross (on the floor plan) within the entry's reach of a pit
+	var fan_r := WorldLocals.RING_R + 0.9 + WorldTubes.ENTRY_RUN + 2.0
 	for a in range(runs.size()):
 		var pa: PackedVector3Array = runs[a][3]
 		if int(runs[a][0]) < 0:
@@ -147,7 +164,7 @@ func _run() -> void:
 					if x != null and (x as Vector2).distance_to(c2) <= fan_r:
 						hit = true
 			if hit:
-				_fail("fan_cross", "slot %d (col %d) x slot %d (col %d) cross within %.1f m of pit %d" % [a, runs[a][0], b, runs[b][0], fan_r, runs[a][2]])
+				_fail("entry_cross", "slot %d (col %d) x slot %d (col %d) cross within %.1f m of pit %d" % [a, runs[a][0], b, runs[b][0], fan_r, runs[a][2]])
 	# ---- tube x tube (segment pairs, submerged points skipped)
 	var pairs := 0
 	for a in range(runs.size()):
@@ -301,7 +318,7 @@ func _run() -> void:
 		fd.store_string(JSON.stringify(dump))
 		fd.close()
 	var total := 0
-	for kind in ["pit_sym", "fan_cross", "span", "post_clip", "tube_tube", "tube_locals", "tube_base", "tube_pillar", "tube_pit", "floating"]:
+	for kind in ["pit_sym", "one_pit", "rack", "entry_cross", "span", "post_clip", "tube_tube", "tube_locals", "tube_base", "tube_pillar", "tube_pit", "floating"]:
 		var n := (fails.get(kind, []) as Array).size()
 		total += n
 		print("PITS_CLIP %-12s %d" % [kind, n])
