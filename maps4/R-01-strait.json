@@ -47,7 +47,7 @@
    "socket": null,
    "ring": 1,
    "category": "relay",
-   "relay": "lift",
+   "relay": "laser_relay",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -59,10 +59,7 @@
     "monster_hub"
    ],
    "relayTag": "A",
-   "lift": {
-    "level": 1,
-    "base": 0
-   }
+   "level": 1
   },
   {
    "id": 2,
@@ -308,7 +305,7 @@
    "socket": null,
    "ring": 1,
    "category": "relay",
-   "relay": "lift",
+   "relay": "laser_relay",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -319,11 +316,7 @@
     "forge",
     "monster_hub"
    ],
-   "relayTag": "B",
-   "lift": {
-    "level": 1,
-    "base": -1
-   }
+   "relayTag": "B"
   },
   {
    "id": 17,
@@ -390,13 +383,9 @@
    "seconds": 6,
    "level": 0,
    "state": null,
-   "relay": 1,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 12.0,
-   "proto": "lift",
-   "lift": {
-    "level": 1
-   }
+   "deckMetres": 12.0
   },
   {
    "from": 1,
@@ -405,14 +394,10 @@
    "seconds": 1.0,
    "level": 0,
    "state": null,
-   "relay": 1,
+   "relay": null,
    "retracts": false,
    "deckMetres": 2.0,
-   "modules": 0.5,
-   "proto": "lift",
-   "lift": {
-    "level": 0
-   }
+   "modules": 0.5
   },
   {
    "from": 16,
@@ -421,13 +406,9 @@
    "seconds": 6,
    "level": 0,
    "state": null,
-   "relay": 16,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 12.0,
-   "proto": "lift",
-   "lift": {
-    "level": 0
-   }
+   "deckMetres": 12.0
   },
   {
    "from": 16,
@@ -436,14 +417,10 @@
    "seconds": 1.0,
    "level": 0,
    "state": null,
-   "relay": 16,
+   "relay": null,
    "retracts": false,
    "deckMetres": 2.0,
-   "modules": 0.5,
-   "proto": "lift",
-   "lift": {
-    "level": 1
-   }
+   "modules": 0.5
   },
   {
    "from": 7,
@@ -535,13 +512,9 @@
    "seconds": 6,
    "level": 0,
    "state": null,
-   "relay": 1,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 12.0,
-   "proto": "lift",
-   "lift": {
-    "level": 1
-   }
+   "deckMetres": 12.0
   },
   {
    "from": 1,
@@ -550,14 +523,10 @@
    "seconds": 1.0,
    "level": 0,
    "state": null,
-   "relay": 1,
+   "relay": null,
    "retracts": false,
    "deckMetres": 2.0,
-   "modules": 0.5,
-   "proto": "lift",
-   "lift": {
-    "level": 0
-   }
+   "modules": 0.5
   },
   {
    "from": 16,
@@ -566,13 +535,9 @@
    "seconds": 6,
    "level": 0,
    "state": null,
-   "relay": 16,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 12.0,
-   "proto": "lift",
-   "lift": {
-    "level": 0
-   }
+   "deckMetres": 12.0
   },
   {
    "from": 16,
@@ -581,14 +546,10 @@
    "seconds": 1.0,
    "level": 0,
    "state": null,
-   "relay": 16,
+   "relay": null,
    "retracts": false,
    "deckMetres": 2.0,
-   "modules": 0.5,
-   "proto": "lift",
-   "lift": {
-    "level": 1
-   }
+   "modules": 0.5
   },
   {
    "from": 10,

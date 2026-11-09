@@ -60,41 +60,33 @@ func _strait() -> void:
 	s.time = 0.0
 	var ph: Dictionary = s.ferry_phase_e(int(lanes[2]))
 	check(ph["part"] != "open" and float(ph["next_open"]) > float(slot["slot"]) * 1.5, "R-01: the down lane waits ~2 slots at t 0 (%s)" % [ph])
-	# Daniele 2026-11-05 (Strait 1 + 2 merged): two laser LIFTS, top stone (starts DOWN: the outer roads) and bottom stone
-	# (starts UP: the banks' end platforms); each drives 4 decks, 2 per level, and firing swaps the level
+	# LASER RELAY (Daniele 2026-11-09, proto25 review: "turn lift nodes into a LASER RELAY - a relay that can only hold a laser, no
+	# other function"): the two stones are laser relays now, baked by Tools/MapBuilder/packs/r_maps.py (LASER_RELAYS, "both":
+	# every deck of the old lift stays, as a plain deck). Each holds a laser, only a laser, moves no deck and is never fired.
 	var lifts := []
 	for n in s.nodes:
-		if n["relay"] == "lift":
+		check(n["relay"] != "lift", "R-01: no lift left (node %d)" % n["id"])
+		if n["relay"] == "laser_relay":
 			lifts.append(n)
-	check(lifts.size() == 2, "R-01: two lifts (got %d)" % lifts.size())
-	var starts := []
-	for n in lifts:
-		check(s.controlled_edges(n["id"]).size() == 4, "R-01: lift %d drives 4 decks" % n["id"])
-		starts.append(int(n["relay_index"]))
-		check(str(n.get("structure", n.get("neutral", {}).get("structure", ""))) != "" , "R-01: lift %d has a structure" % n["id"])
-	starts.sort()
-	check(starts == [1, 1], "R-01: T starts on its raised road, B on the banks - both at their level 1 (got %s)" % [starts])
-	# Daniele 2026-11-06 (proto21): "top part of the map raised, bottom lowered so we can use the lifts". The outer roads
-	# stand at +1 / -1 x rise, each stone lifts between the banks (0) and its road's level; every lift deck is flat at its
-	# level (no ramp onto a 2 m deck any more), the curved roads from home ramp up / down onto the outer roads.
+	check(lifts.size() == 2, "R-01: two laser relays (got %d)" % lifts.size())
 	var rise := float(Rules.RELAYS_PROTO["lift"]["rise"])
-	var lv := {}
-	for n in s.nodes:
-		var y := snappedf((n["pos"] as Vector3).y, 0.01)
-		if y != 0.0:
-			lv[y] = int(lv.get(y, 0)) + 1
-	check(lv == {snappedf(rise, 0.01): 2, snappedf(-rise, 0.01): 2}, "R-01: two raised and two lowered outer roads (got %s)" % [lv])
+	var ys_st := []
 	for n in lifts:
-		var base := s.lift_base(n["id"])
-		for ei in s.controlled_edges(n["id"]):
-			var want := rise * float(base + int(s.edges[ei]["lift_level"]))
-			var ys: Array = s.deck_line(ei).map(func(p): return snappedf((p as Vector3).y, 0.01))
-			check(absf(ys.max() - want) < 0.01 and absf(ys.min() - want) < 0.01,
-					"R-01: lift %d deck %d lies flat at %.1f m (got %s)" % [n["id"], ei, want, ys])
-		for lvl in [0, 1]:
-			n["relay_index"] = lvl
-			check(absf(s.node_y(n["id"]) - rise * float(base + lvl)) < 0.01, "R-01: lift %d walks at level %d" % [n["id"], base + lvl])
-		n["relay_index"] = 1
+		check(s.controlled_edges(n["id"]).is_empty(), "R-01: laser relay %d drives no deck" % n["id"])
+		check(n["buildable"] == ["laser"] and n["structure"] == "laser", "R-01: laser relay %d holds a laser, only a laser (%s / %s)" % [n["id"], n["buildable"], n["structure"]])
+		check(s.relay_fixed(n["id"]) and s.relay_states(n).is_empty(), "R-01: laser relay %d is never fired" % n["id"])
+		n["owner"] = "A"
+		check(not s.fire_relay(n["id"]), "R-01: firing laser relay %d is refused" % n["id"])
+		check(s.can_build(n["id"], "A", "forge") != "", "R-01: no forge on laser relay %d" % n["id"])
+		n["owner"] = ""
+		var open := 0
+		for ei in range(s.edges.size()):
+			if (s.edges[ei]["a"] == n["id"] or s.edges[ei]["b"] == n["id"]) and s.is_edge_open(ei):
+				open += 1
+		check(open == 4, "R-01: laser relay %d keeps all 4 decks of the old lift open (got %d)" % [n["id"], open])
+		ys_st.append(snappedf((n["pos"] as Vector3).y, 0.01))
+	ys_st.sort()
+	check(ys_st == [0.0, snappedf(rise, 0.01)], "R-01: the stones sit where the lifts started - top on its raised road, bottom on the banks (got %s)" % [ys_st])
 	var sl := _sim("R-01")                          # (a fresh sim: the lift checks below use this one's clock)
 	var home := -1
 	var up := -1
@@ -113,17 +105,6 @@ func _strait() -> void:
 		for p in hu["pts"]:
 			top = maxf(top, p.y)
 	check(absf(top - rise) < 0.01, "R-01: a line from home climbs to the raised road (top %.2f m)" % top)
-	s.time = 0.0
-	var lt: Dictionary = lifts[0]
-	var lid: int = lt["id"]
-	var open0 := s.controlled_edges(lid).filter(func(ei): return s.is_edge_open(ei))
-	check(open0.size() == 2, "R-01: lift %d opens 2 decks at a time (got %d)" % [lid, open0.size()])
-	lt["owner"] = "A"
-	s.fire_relay(lid)
-	for i in range(120):
-		s.step(0.05)
-	var open1 := s.controlled_edges(lid).filter(func(ei): return s.is_edge_open(ei))
-	check(open1.size() == 2 and open1.filter(func(ei): return ei in open0).is_empty(), "R-01: firing lift %d swaps its decks (%s -> %s)" % [lid, open0, open1])
 	check(s._belt_edges.size() == 2, "R-01: two plain belts (got %d)" % s._belt_edges.size())
 	for code in ["R-01", "R-05", "R-12"]:            # Daniele 2026-11-06 (proto21): "the conveyors are not working" - maps with
 		var sb := _sim(code)                          # plain belts and no speed relay never pushed (Sim gated on _conv_edges)
@@ -272,9 +253,11 @@ func _wave2() -> void:
 		var fire := []
 		for n in s.nodes:
 			match str(n["relay"]):
-				"lift":
+				"laser_relay":                        # LASER RELAY (2026-11-09): the old lifts, never fired
 					got[0] += 1
-					fire.append(n)
+					check(s.controlled_edges(n["id"]).is_empty() and n["buildable"] == ["laser"], "%s: laser relay %d holds only a laser, drives no deck" % [code, n["id"]])
+				"lift":
+					got[0] += 100                         # (no lift may be left)
 				"rotation":
 					got[1] += 1
 					fire.append(n)
@@ -283,7 +266,7 @@ func _wave2() -> void:
 		for j in s._conv_pieces:
 			if str(s.nodes[j].get("junction", "")) == "Crossing":
 				got[4] += 1
-		check(got == want[code], "%s: lifts, rotors, speed relays, belts, lanes over the Crossing = %s (got %s)" % [code, want[code], got])
+		check(got == want[code], "%s: laser relays (ex lifts), rotors, speed relays, belts, lanes over the Crossing = %s (got %s)" % [code, want[code], got])
 		if code == "R-10":                            # Daniele 2026-11-06 (Desk): its speed relays became LAUNCHERS (T1, 3 targets each)
 			var pads := s.nodes.filter(func(n): return n["relay"] == "launcher")
 			check(pads.size() == 2 and pads.all(func(n): return (n["proto"]["targets"] as Array).size() == 3 and int(n["tier"]) == 1), "R-10: two T1 launchers, each sweeping 3 targets (got %d)" % pads.size())

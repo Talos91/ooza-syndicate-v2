@@ -962,6 +962,8 @@ func _badges(cam: Camera3D) -> bool:
 			if Rules.is_proto(n["relay"]):                # RELAYS 3.0: OPEN 3 / A>B / UP / EXIT 2 / AIM 7 / ARMED 5
 				st = sim.proto_tag(n["id"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
+			if n["relay"] == "laser_relay":                     # LASER RELAY: ⊛LASER while its laser stands
+				what = Rules.RELAY_GLYPH["laser_relay"] + ("LASER" if n["structure"] == "laser" and shows("relay") else "")
 			if n["relay"] == "launcher":                  # LAUNCHER TURRET: its tier first (➶T2 LOAD 40/100)
 				what = Rules.RELAY_GLYPH["launcher"] + "T%d " % int(n["tier"]) + (st.to_upper() if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
@@ -2233,6 +2235,8 @@ func _structure_word(n: Dictionary) -> String:
 	## The card's title (ui-node): what stands here; the tier sits in its own chip.
 	if n["relay"] == "launcher":
 		return "LAUNCHER"
+	if n["relay"] == "laser_relay":                           # LASER RELAY (2026-11-09): one title, the laser is its only building
+		return "LASER RELAY"
 	if n["relay"] != "":
 		return "%s RELAY" % str(n["relay"]).to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else "")
 	if n["structure"] == "machinegoon":
@@ -2386,6 +2390,8 @@ func launcher_line(n: Dictionary) -> String:
 func _structure_line(n: Dictionary) -> String:
 	if n["relay"] == "launcher":
 		return "LAUNCHER T%d" % int(n["tier"])
+	if n["relay"] == "laser_relay":
+		return "LASER RELAY" + ("" if n["structure"] == "laser" else " (empty socket)")
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
 	if n["structure"] == "machinegoon":

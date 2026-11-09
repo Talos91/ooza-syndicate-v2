@@ -372,7 +372,7 @@ const RELAY_GHOST_EDGE := Color(0.92, 0.88, 1.0)        # OS_Ghost_Edge: its bri
 # rotation"): each kind's ghost in its own hue (relay_v2.json ghost_colors; OS_Ghost_<Kind> floor + OS_Ghost_<Kind>_Edge)
 const RELAY_GHOST_COLORS := {"rotation": Color("#4f8bff"), "switch": Color("#ffb238"), "remote": Color("#5cffb0"),
 		"retract": Color("#ff6a5a"), "ferry": Color("#4fd8ff"), "conveyor": Color("#7dff6a"), "launcher": Color("#ffd23f"),
-		"lift": Color("#ffe066"), "tilt": Color("#ff8c2a")}         # switch = Hud.RELAY_ACCENT
+		"lift": Color("#ffe066"), "tilt": Color("#ff8c2a"), "laser_relay": Color("#ff4f6a")}         # switch = Hud.RELAY_ACCENT
 const RELAY_GHOST_ALPHA := 0.45      # json: the kind ghosts' floor alpha (see-through; the edges are emissive)
 const RELAY_GHOST_WARN := 2.4        # x the ghost's brightness while its relay's warning runs (it is about to be real)
 # The remote's LINK (Daniele 2026-09-28: "the cable looks too weird, time to improve its look"): a thin glowing arc in
@@ -641,7 +641,8 @@ const STATE_COLORS := {
 	"t2": Color("#b88ae6"), "t3": Color("#ff4f9a"), "pad": Color("#ffd23f"),
 }
 const RELAY_GLYPH := {"rotation": "↻", "retract": "⇤", "switch": "⇄", "remote": "⌁",
-		"ferry": "⇋", "conveyor": "⇉", "launcher": "➶", "lift": "⇅", "tilt": "⇲"}   # (⛴ / ⟋ are not in DejaVu Sans Mono; ◮ read as a hazard sign)
+		"ferry": "⇋", "conveyor": "⇉", "launcher": "➶", "lift": "⇅", "tilt": "⇲",
+		"laser_relay": "⊛"}   # LASER RELAY (2026-11-09): the laser burst   # (⛴ / ⟋ are not in DejaVu Sans Mono; ◮ read as a hazard sign)
 const RELAY_GLYPH_EMISSION_MAX := 3.2   # 0.22.4 playtest (Daniele's cousins): the ready-breathing relay glyph
 # (Fx._relay_beacon / RelayView's "Glyph") saturated to white in close-ups at its uncapped peak (~5.8); capped
 # here so it keeps its state colour (Rules.state_color) instead of blowing out.

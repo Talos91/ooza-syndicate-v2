@@ -127,7 +127,7 @@
    "socket": null,
    "ring": 1,
    "category": "relay",
-   "relay": "lift",
+   "relay": "laser_relay",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -138,10 +138,7 @@
     "forge",
     "monster_hub"
    ],
-   "relayTag": "B",
-   "lift": {
-    "level": 0
-   }
+   "relayTag": "B"
   },
   {
    "id": 7,
@@ -208,7 +205,7 @@
    "socket": null,
    "ring": 1,
    "category": "relay",
-   "relay": "lift",
+   "relay": "laser_relay",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -219,10 +216,7 @@
     "forge",
     "monster_hub"
    ],
-   "relayTag": "C",
-   "lift": {
-    "level": 0
-   }
+   "relayTag": "C"
   },
   {
    "id": 11,
@@ -387,13 +381,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 6,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "lift",
-   "lift": {
-    "level": 0
-   }
+   "deckMetres": 4.0
   },
   {
    "from": 6,
@@ -402,13 +392,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 6,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "lift",
-   "lift": {
-    "level": 0
-   }
+   "deckMetres": 4.0
   },
   {
    "from": 5,
@@ -439,13 +425,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 6,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "lift",
-   "lift": {
-    "level": 1
-   }
+   "deckMetres": 4.0
   },
   {
    "from": 6,
@@ -454,13 +436,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 6,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "lift",
-   "lift": {
-    "level": 1
-   }
+   "deckMetres": 4.0
   },
   {
    "from": 3,
@@ -548,13 +526,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 10,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "lift",
-   "lift": {
-    "level": 0
-   }
+   "deckMetres": 4.0
   },
   {
    "from": 10,
@@ -563,13 +537,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 10,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "lift",
-   "lift": {
-    "level": 0
-   }
+   "deckMetres": 4.0
   },
   {
    "from": 11,
@@ -600,13 +570,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 10,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "lift",
-   "lift": {
-    "level": 1
-   }
+   "deckMetres": 4.0
   },
   {
    "from": 10,
@@ -615,13 +581,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 10,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "lift",
-   "lift": {
-    "level": 1
-   }
+   "deckMetres": 4.0
   },
   {
    "from": 4,

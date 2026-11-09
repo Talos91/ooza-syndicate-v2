@@ -178,6 +178,10 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		})
 		if relay == "ferry":                              # the ferry node takes no structure in v1
 			nodes[-1]["buildable"] = []
+		if relay == "laser_relay":                        # LASER RELAY (Daniele 2026-11-09, WIP: "a relay that can only hold a
+			nodes[-1]["buildable"] = ["laser"]            # laser, no other function"): replaces the round-R lift nodes; it moves
+															# no deck, is never fired, holds a laser only (relay prices / tiers,
+															# falls like any relay node)
 		if relay == "launcher":                           # 2026-11-06 (Daniele: "it should occupy the relay building slot"): the
 			nodes[-1]["buildable"] = []                   # launcher's cannon IS its building - nothing else is built there. The
 			nodes[-1]["tier"] = clampi(int((nodes[-1]["proto"] as Dictionary).get("tier", 1)), 1, Rules.LAUNCHER_MAX_TIER)   # TURRET
@@ -990,6 +994,8 @@ func relay_states(n: Dictionary) -> Array:
 	## The relay's fixed, visible state order (retract: out / in).
 	if n["relay"] == "retract":
 		return ["out", "retract"]
+	if n["relay"] == "laser_relay":                   # LASER RELAY: no states, nothing to fire
+		return []
 	if Rules.is_proto(n["relay"]):
 		return _proto_states(n)
 	var prefix: String = {"rotation": "r", "switch": "s", "remote": "m"}.get(n["relay"], "")
@@ -6126,6 +6132,8 @@ func relay_fixed(id: int) -> bool:
 			return float(Rules.RELAYS_PROTO["ferry"].get("hold", 0.0)) <= 0.0
 		"conveyor":
 			return n["proto"].get("switch", true) == false
+		"laser_relay":
+			return true                               # LASER RELAY: never fired
 	return false
 
 
