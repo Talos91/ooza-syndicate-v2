@@ -167,7 +167,9 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	var demo_default: bool = Rules.demo and not Array(args).any(func(a): return str(a).begins_with("--floor"))   # DEMO BUILD: lab5 floor by default (Daniele, world pass 2)
 	if floor_pic or "--floor=lab5" in args or demo_default:
 		floor_kind = "lab"
-	floor_lab5 = floor_kind == "lab" and not floor_pic and not "--floor-v1" in args
+	if _dbg_arg("--floor-tex=") != "":                # DEBUG (terrain-backdrop-shots, throwaway): any floor image
+		floor_kind = "lab"
+	floor_lab5 = floor_kind == "lab" and not floor_pic and not "--floor-v1" in args and not "--floor-r14" in args
 	if "--floor-clear" in args:
 		floor_haze = 0.0
 	elif floor_pic:
@@ -176,7 +178,7 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 		floor_haze = LAB5_HAZE
 	active = self
 	_build_floor(centre, radius)
-	if floor_lab5:
+	if floor_lab5 or _dbg_arg("--backdrop=") != "":
 		_lab_backdrop(_main)
 	if not "--floor-clear" in OS.get_cmdline_user_args():   # dev: --floor-clear = no floor fog sheet, no floor haze
 		_build_mist(centre, radius)
@@ -208,6 +210,9 @@ func _lab_backdrop(main: Node) -> void:
 		var vp := get_viewport().get_visible_rect().size if get_viewport() != null else Vector2(812, 375)
 		var side := "a" if "--lab-side=a" in OS.get_cmdline_user_args() else "b"
 		sky.texture = load(PerfProfile.hi_path(LAB_SIDE % [side, 1184 if vp.x / maxf(vp.y, 1.0) >= 2.0 else 1440]))
+		var bd := _dbg_arg("--backdrop=")                # DEBUG (terrain-backdrop-shots): an image file as the backdrop
+		if bd != "" and bd != "lab":
+			sky.texture = _dbg_tex(bd)
 		var m := sky.material as ShaderMaterial
 		m.set_shader_parameter("abyss", LAB_FAR)
 		m.set_shader_parameter("tint", Color(1, 1, 1, 1))
@@ -222,6 +227,26 @@ func _lab_backdrop(main: Node) -> void:
 			var env := (c as WorldEnvironment).environment
 			env.fog_height_density = LAB5_FOG_HEIGHT_DENSITY
 			env.fog_light_color = LAB_FAR
+
+
+static func _dbg_arg(prefix: String, fallback := "") -> String:
+	## DEBUG (branch terrain-backdrop-shots, throwaway, NOT for release): the value of a --key=value user arg
+	for a in OS.get_cmdline_user_args():
+		if str(a).begins_with(prefix):
+			return str(a).substr(prefix.length())
+	return fallback
+
+
+static func _dbg_tex(path: String) -> Texture2D:
+	## DEBUG: a PNG / JPG from disk (absolute path) as a mipmapped texture
+	var img := Image.load_from_file(path)
+	if img == null or img.is_empty():
+		push_error("debug texture not loaded: " + path)
+		return null
+	if img.get_format() != Image.FORMAT_RGB8:
+		img.convert(Image.FORMAT_RGB8)
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
 
 
 func haze_abyss() -> Color:
@@ -300,6 +325,11 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 		m.set_shader_parameter("lab5_gain", LAB5_GAIN)
 		m.set_shader_parameter("haze", LAB5_HAZE)
 		m.set_shader_parameter("abyss", LAB_FAR / 0.6)   # its far haze (abyss x 0.6) is the backdrop's middle
+		var ft := _dbg_arg("--floor-tex=")              # DEBUG (terrain-backdrop-shots): an assembled floor image,
+		if ft != "":                                     # --floor-tex-m=<metres it covers> (default 64 = 4 x 16 m tiles)
+			m.set_shader_parameter("t_lab5", _dbg_tex(ft))
+			m.set_shader_parameter("lab5_m", float(_dbg_arg("--floor-tex-m=", "64")))
+			m.set_shader_parameter("lab5_gain", float(_dbg_arg("--floor-gain=", "1")))
 	elif floor_pic:                                    # world-locked: centred under the board, its 2 m grid on the world's
 		var o := Vector2(centre.x, centre.z) - LAB_PIC_SIZE / 2.0
 		o = Vector2(snappedf(o.x + LAB_PIC_GRID0.x, 2.0) - LAB_PIC_GRID0.x, snappedf(o.y + LAB_PIC_GRID0.y, 2.0) - LAB_PIC_GRID0.y)
