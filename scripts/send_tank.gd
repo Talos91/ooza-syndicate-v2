@@ -77,7 +77,7 @@ func body_mid_y() -> float:
 
 func picture_size(k: float, ptk: float) -> Vector2:
 	## The control's size for canvas scale k and pt scale ptk: the picture plus the readout plate under it.
-	return Vector2(PIC_W * k, (PIC_BOTTOM - PIC_Y) * k + (PLATE_GAP_PT + PLATE_PT) * ptk)
+	return Vector2(PIC_W * k, (PIC_BOTTOM - PIC_Y) * k)       # (no readout plate: Daniele 2026-11-09 "remove the 50% form")
 
 
 func glass() -> Rect2:
@@ -419,7 +419,6 @@ func _draw_picture() -> void:
 	# the level marks + words at the liquid box's quarters, then the readout plate under the tank
 	var fs := maxi(int(ceil(13.0 * s)), _floor_px())
 	_draw_marks(fs)
-	_draw_plate(fs)
 
 
 func _draw_marks(fs: int) -> void:
