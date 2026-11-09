@@ -117,7 +117,9 @@ func build() -> void:
 	var placed: Array = []
 	for k in range(craters.size()):
 		placed.append([])
-	var runs: Array = []                              # [col index, socket k, pit, arrival angle]
+	var runs: Array = []                              # [col index, socket k, pit, arrival angle, world points]
+	var placed_best := {}
+	_laid.clear()                                     # the floor runs laid so far (later tubes bridge over them)
 	var near_first: Array = cols.keys()               # the columns nearest their pit lay their tubes first (inside)
 	var pd := func(i: int) -> float:
 		var best := INF
@@ -155,26 +157,35 @@ func build() -> void:
 			var want := angle_difference(lane, atan2(w.y - cp.y, w.x - cp.x))
 			sides[-1 if want < 0.0 else 1].append([absf(want), s])
 		for sg in [-1, 1]:
-			var bundle: Array = sides[sg]
-			bundle.sort_custom(func(x, y): return x[0] < y[0])    # nearest the lane first
-			var prev: float = lane + sg * (LANE_SEP - TUBE_SEP)
-			for j in range(bundle.size()):
-				var ang: float = prev + sg * TUBE_SEP      # each tube just outside the one before it, past lanes and tubes
-				for step in range(300):
-					var ok := true
-					for f in fixed[pi]:
-						if absf(angle_difference(ang, float(f))) < LANE_SEP:
-							ok = false
-					for p in placed[pi]:
-						if absf(angle_difference(ang, float(p))) < TUBE_SEP:
-							ok = false
-					if ok:
-						break
-					ang += sg * 0.02
-				prev = ang
-				placed[pi].append(ang)
-				runs.append([i, int(bundle[j][1]), pi, ang])
-				cols[i]["slots"].append(runs.size() - 1)
+			(sides[sg] as Array).sort_custom(func(x, y): return x[0] < y[0])    # nearest the lane first
+		# which side of the lane each bundle takes: as split (left sockets left), or all round one side - the layout whose
+		# tubes cross the fewest tubes already laid and Locals' lanes (each crossing is a pipe bridge)
+		var opts := [sides, {-1: sides[-1] + sides[1], 1: []}, {-1: [], 1: sides[-1] + sides[1]}]
+		var best_runs: Array = []
+		var best_x := INF
+		for o in range(opts.size()):
+			if o > 0 and ((opts[o][-1] as Array).is_empty() and (opts[o][1] as Array).size() == (sides[1] as Array).size()
+					or (opts[o][1] as Array).is_empty() and (opts[o][-1] as Array).size() == (sides[-1] as Array).size()):
+				continue                              # the same as the split
+			var pl: Array = placed[pi].duplicate()
+			var cand: Array = []
+			var x := 0
+			for sg in [-1, 1]:
+				var bundle: Array = opts[o][sg]
+				var angs: Array = _bundle(lane, sg, bundle.size(), fixed[pi], pl)[0]
+				for j in range(bundle.size()):
+					var pts := _path(i, int(bundle[j][1]), craters[pi], float(angs[j]))
+					x += _crossings(pts)
+					cand.append([i, int(bundle[j][1]), pi, float(angs[j]), pts])
+			if x < best_x:
+				best_x = x
+				best_runs = cand
+				placed_best[pi] = pl
+		placed[pi] = placed_best[pi]
+		for rn in best_runs:
+			_laid.append((rn[4] as PackedVector3Array).slice(0, (rn[4] as PackedVector3Array).size() - 6))
+			runs.append(rn)
+			cols[i]["slots"].append(runs.size() - 1)
 		# the slots in socket order (R1: the first tube built goes to the corner closest in direction to the pit)
 		var sl: Array = cols[i]["slots"]
 		sl.sort_custom(func(x, y): return order.find(int(runs[x][1])) < order.find(int(runs[y][1])))
@@ -185,6 +196,54 @@ func build() -> void:
 	_mat.set_shader_parameter("state", _tex)
 	built = true
 	_dirty = true
+
+
+func _crossings(pts: PackedVector3Array) -> int:
+	## how many laid tubes' and Locals' lanes' segments this run crosses (on the floor plan)
+	var n := 0
+	var others: Array = []
+	for run in _laid:
+		var o := []
+		for q in (run as PackedVector3Array):
+			o.append(Vector2(q.x, q.z))
+		others.append(o)
+	if wl.locals != null:
+		for fk in wl.locals.feeds:
+			others.append(wl.locals.feeds[fk]["path"])
+	for k in range(1, pts.size() - 6):
+		var a := Vector2(pts[k - 1].x, pts[k - 1].z)
+		var b := Vector2(pts[k].x, pts[k].z)
+		for o in others:
+			for j in range(1, (o as Array).size()):
+				if Geometry2D.segment_intersects_segment(a, b, o[j - 1], o[j]) != null:
+					n += 1
+	return n
+
+
+static func _bundle(lane: float, sg: int, n: int, fixed: Array, placed: Array) -> Array:
+	## n tubes on side sg of the lane exit, each just outside the one before it, past lanes (LANE_SEP) and tubes
+	## (TUBE_SEP); placed gets them. Returns [angles, passed another tube]
+	var out := []
+	var passed := false
+	var prev: float = lane + sg * (LANE_SEP - TUBE_SEP)
+	for j in range(n):
+		var ang: float = prev + sg * TUBE_SEP
+		for step in range(300):
+			var ok := true
+			for f in fixed:
+				if absf(angle_difference(ang, float(f))) < LANE_SEP:
+					ok = false
+			for p in placed:
+				if absf(angle_difference(ang, float(p))) < TUBE_SEP - 0.001:
+					ok = false
+					passed = true
+			if ok:
+				break
+			ang += sg * 0.02
+		prev = ang
+		placed.append(ang)
+		out.append(ang)
+	return [out, passed]
 
 
 func _side_point(foot: Vector2, to: Vector2, s: int) -> Vector2:
@@ -233,14 +292,24 @@ func _path(i: int, s: int, cp: Vector3, ang: float) -> PackedVector3Array:
 	var top := WorldLocals.RIM_H + PIPE_R + 0.18
 	var haz := _hazards(flat)
 	var ys := PackedFloat32Array()
+	var base_y := PackedFloat32Array()
+	var lifts := PackedFloat32Array()
 	var cum := 0.0
 	for k in range(flat.size()):
 		if k > 0:
 			cum += (flat[k] as Vector2).distance_to(flat[k - 1])
 		var y := lerpf(SOCK_Y, PIPE_Y, smoothstep(0.0, 1.2, cum))
 		y = lerpf(y, top, smoothstep(tot - 3.2, tot, cum))    # climbs to clear the rim
-		var lift := _lift(flat[k], haz)                   # over a Locals' lane / an earlier tube: a pipe bridge
-		ys.append(maxf(y, lift))
+		base_y.append(y)
+		lifts.append(_lift(flat[k], haz))             # over a Locals' lane / an earlier tube: a pipe bridge
+	for k in range(flat.size()):                      # bridges less than 6 m apart join into one (no zigzag)
+		var lm := 0.0
+		var rm := 0.0
+		for j in range(maxi(k - 12, 0), k + 1):
+			lm = maxf(lm, lifts[j])
+		for j in range(k, mini(k + 13, flat.size())):
+			rm = maxf(rm, lifts[j])
+		ys.append(maxf(base_y[k], maxf(lifts[k], minf(lm, rm))))
 	# keep the 0.5 m samples where the tube bends up or down, ~2.5 m steps elsewhere (the triangle budget)
 	var pts := PackedVector3Array()
 	var since := 0.0
@@ -349,7 +418,6 @@ func _steer(a: Vector2, b: Vector2, skip: int, _id: int, pit: Vector3, depth: in
 
 func _build_mesh(runs: Array, craters: Array) -> void:
 	var sides := 6
-	_laid.clear()
 	var vs := PackedVector3Array()
 	var ns := PackedVector3Array()
 	var uv := PackedVector2Array()
@@ -357,8 +425,7 @@ func _build_mesh(runs: Array, craters: Array) -> void:
 	var idx := PackedInt32Array()
 	for r in range(runs.size()):
 		var run: Array = runs[r]
-		var pts := _path(int(run[0]), int(run[1]), craters[int(run[2])], float(run[3]))
-		_laid.append(pts.slice(0, pts.size() - 6))     # its floor run (not the stretch over the rim)
+		var pts: PackedVector3Array = run[4]
 		var total := 0.0
 		for k in range(1, pts.size()):
 			total += pts[k].distance_to(pts[k - 1])
