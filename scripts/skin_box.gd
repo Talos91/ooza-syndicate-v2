@@ -16,6 +16,8 @@ var scale := 0.4                                   # source px -> canvas units, 
 var modulate := Color.WHITE
 var rim: Texture2D                                 # Neon Noir drop-in (HudNoir): a white RIM + GLOW layer cut to the same cell,
 var rim_modulate := Color.WHITE                    # drawn over `texture` with the same slicing, tinted per seat / faction
+var glow: Texture2D                                # ui-neon-apply: the backlight halo, drawn FIRST (behind the art), glow_modulate
+var glow_modulate := Color.WHITE
 var ooze: Texture2D                                # Neon Noir housings: the pooled ooze + drips (white, tinted ooze_modulate)
 var ooze_modulate := Color.WHITE
 var shine: Texture2D                               # ... and its wet highlights, drawn untinted on top
@@ -35,6 +37,8 @@ func _draw(ci: RID, r: Rect2) -> void:
 			r = Rect2(r.get_center() - (body / 2.0 + Vector2(band.x, band.y)) * kf, region.size * kf)
 		else:
 			r = Rect2(r.position - Vector2(band.x, band.y) * scale, r.size + Vector2(band.x + band.z, band.y + band.w) * scale)
+	if glow != null:
+		_draw_layer(ci, r, glow.get_rid(), glow_modulate)
 	_draw_layer(ci, r, texture.get_rid(), modulate)
 	if rim != null:
 		_draw_layer(ci, r, rim.get_rid(), rim_modulate)

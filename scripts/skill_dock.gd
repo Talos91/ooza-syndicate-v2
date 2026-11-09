@@ -200,7 +200,7 @@ class Slot:
 		var lines: Array = dock.name_lines(id, room)
 		var y := ic.y + d / 2.0 + dock.gap + UI_FONT.get_ascent(nf)
 		var least := -1
-		if dock.plate and dock.mobile:                   # GMN-2: ONE line inside the plate's dark label box [130, 416, 331, 96] of 591 x 616
+		if dock.plate:                                   # GMN-2: ONE line inside the plate's dark label box [130, 416, 331, 96] of 591 x 616 (desktop too: ui-neon-apply)
 			room = w * 331.0 / 495.0 - 4.0 * dock._floor_px / 13.0     # (the box's width at the slot's size, 2 pt in each side)
 			lines = [SkillDock.plate_name(str(lines[0]) if lines.size() == 1 else "%s %s" % [lines[0], lines[1]])]
 			least = int(floor(dock._floor_px * 10.0 / 13.0))   # Daniele 2026-11-05 "shrink + short names": down to 10 pt in the box
@@ -230,18 +230,16 @@ class Slot:
 			status = "CHARGING"
 		else:
 			status = "COOLDOWN"
-		if dock.plate and dock.mobile and not armed and fires <= 0:
+		if dock.plate and not armed and fires <= 0:
 			return                                       # GMN-1 plate: the name alone (the window + ring say the state)
 		y += UI_FONT.get_height(dock.font_px(13)) * 0.1
 		_line(status, Vector2(w / 2.0, y), 13, sc, room, UI_FONT)
 
 	func _vessel_state(state: String, done: float, col: Color) -> void:
 		## Neon Noir: the hex vessel shows the charge as its liquid level (the slot's fixed colour); full = ready, breathing.
-		if dock.plate:                                  # GMN-1: dim tube ring, the burning one rising with the goo; ~20 % when off
+		if dock.plate:                                  # ui-neon-apply: goo only in the window; the plate's delivered neon ring goes over it
 			var off := state == "disabled"
-			vessel.set_rim(str(HudNoir.part_data("skill_vessel_rim_disabled" if off else "skill_vessel").get("file" if off else "rim", "")), col)
-			vessel.set_rim_lit("" if off else str(HudNoir.part_data("skill_vessel_rim_armed").get("file", "")), col)
-			vessel.set_liquid(col, 1.0 if not off else 0.35)
+			vessel.set_liquid(HudNoir.accent, 0.9 if not off else 0.3)   # Daniele 2026-11-09: the goo in the circle = the faction colour
 			vessel.set_level(0.0 if off else done)
 			vessel.ready_glow = state == "ready" or state == "armed"
 			return
@@ -275,6 +273,8 @@ class Slot:
 		if full and not disabled and not dock.plate:
 			_neon_card(ci, card, rad, col, s)
 		var level := vessel.shown if vessel != null else 0.0
+		if dock.plate:                                     # ui-neon-apply: the delivered window ring (extra-neon) over the goo
+			_plate_ring(ci, full, disabled, pulse)
 		var tex := HudSkin.skill_icon(id)
 		if tex:
 			var side := d * (0.5 if not cooling else 0.44)
@@ -302,7 +302,7 @@ class Slot:
 				var bl := NoirBox.rounded(card.grow(float(e[0]) * s), rad + float(e[0]) * s)
 				bl.append(bl[0])
 				ci.draw_polyline(bl, Color(e[1] as Color, burst * (e[1] as Color).a), float(e[2]) * s, true)
-		if pulse > 0.0:                                    # a cast: a white flash through the card
+		if pulse > 0.0 and not dock.plate:                 # a cast: a white flash through the card (a plate: its ring flares)
 			ci.draw_colored_polygon(NoirBox.rounded(card.grow(-2.0 * s), rad), Color(1, 1, 1, 0.25 * pulse))
 			ci.draw_polyline(loop, Color(1, 1, 1, pulse), 3.0 * s, true)
 		if fires > 0:                                      # Rewire / Overdrive: fires left, a count dot on the card's corner
@@ -315,6 +315,24 @@ class Slot:
 			var t2 := "%d" % fires
 			var z2 := UI_FONT.get_string_size(t2, HORIZONTAL_ALIGNMENT_LEFT, -1, f2)
 			ci.draw_string(UI_FONT, bc + Vector2(-z2.x / 2.0, UI_FONT.get_ascent(f2) / 2.0 - 1.0), t2, HORIZONTAL_ALIGNMENT_LEFT, -1, f2, Color.WHITE)
+
+	const PLATE_NEON := ["res://assets/ui/hud_noir/skill_card_neon.png", "res://assets/ui/hud_noir/skill_card_armed_neon.png",
+			"res://assets/ui/hud_noir/skill_card_ultimate_neon.png"]   # ACTIVE cyan / MAP violet / ULTIMATE amber (the delivery's colours)
+
+	func _plate_ring(ci: Control, full: bool, disabled: bool, flare: float) -> void:
+		## ui-neon-apply: the 10-NEON-RESTYLE window ring, on the plate's own canvas (591 x 616, body 48, 48, 495 x 520): bright
+		## and breathing while charged, steady while it charges, faint when off; a cast flares it.
+		var t := HudNoir.texture(PLATE_NEON[index])
+		if t == null:
+			return
+		var k := ci.size.x / 495.0
+		var a := 0.3 if disabled else 1.0                # the delivered tube at full strength (designer: "more tube on the skill panel")
+		var r := Rect2(-Vector2(48, 48) * k, Vector2(591, 616) * k)
+		ci.draw_texture_rect(t, r, false, Color(1, 1, 1, a))
+		if full and not disabled:                          # charged: a second, breathing pass brightens the tube's core
+			ci.draw_texture_rect(t, r, false, Color(1.25, 1.25, 1.25, 0.45 + 0.25 * sin(dock._t * 4.0 + float(index))))
+		if flare > 0.0:
+			ci.draw_texture_rect(t, r, false, Color(1.6, 1.6, 1.6, flare))
 
 	func _draw_words_card(w: float, ic: Vector2, d: float, armed: bool, disabled: bool, ult: bool, col: Color) -> void:
 		## The desktop key, the name and the state word over the card's goo (outlined, like the SEND words), READY rising.
@@ -474,6 +492,7 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		if plate:
 			b.vessel = HudLiquid.new()
 			b.vessel.setup("skill_vessel", SLOT_ACCENT[i], float(i) * 1.7)
+			b.vessel.plain()
 			b.vessel.position = Vector2(b.custom_minimum_size.x / 2.0 - round_d / 2.0, top).round()
 			b.vessel.size = Vector2(round_d, round_d)
 			b.add_child(b.vessel)

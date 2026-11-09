@@ -110,10 +110,13 @@ static func sprite(ci: CanvasItem, id: String, centre: Vector2, body_px: Vector2
 		ci.draw_set_transform(centre, 0.0, Vector2(1.0, squash))
 	else:
 		ci.draw_set_transform(centre, rot, Vector2.ONE)
+	var halo := HudNoir.glow_texture(id)               # ui-neon-apply: the backlight behind a steel frame, in the goo colour
+	if halo != null:
+		ci.draw_texture_rect(halo, r, false, Color(HudNoir.steel_rim(id), tint.a * HudNoir.BACKLIT))
 	ci.draw_texture_rect(t, r, false, Color(1, 1, 1, tint.a) if id in FIXED_FILL else tint)
 	var rim := HudNoir.texture(str(p.get("rim", "")))
-	if rim != null:
-		ci.draw_texture_rect(rim, r, false, tint)
+	if rim != null:                                    # ui-neon-apply: a steel frame's spill is icy cyan (HudNoir.STEEL)
+		ci.draw_texture_rect(rim, r, false, Color(HudNoir.steel_rim(id), tint.a * HudNoir.steel_rim(id).a) if id in HudNoir.STEEL else tint)
 	var shine := HudNoir.texture(str(p.get("shine", "")))
 	if shine != null:
 		ci.draw_texture_rect(shine, r, false)

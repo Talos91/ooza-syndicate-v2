@@ -458,7 +458,14 @@ func setup(m: Node3D) -> void:
 	send_tank = SendTank.new()
 	send_tank.custom_minimum_size = Vector2(112.0, 4.0 * (78.0 if mobile else 66.0) + 74.0) * ui_scale
 	var tank_s := ui_scale
-	if mobile and HudNoir.has("send_tank"):          # GMN-1 layout: 4 bands of 60 pt, 59 wide, caps + drips round them
+	if HudNoir.has("send_tank_liquid"):              # ui-send-tank (designer spec 2026-11-09): the B_send art as ONE evenly scaled
+		var ptk := pt(1.0) * (1.0 if mobile else 1.2)  # picture - body 300 x 1080 canvas px = 256 pt tall x hud_k (desktop x 1.2)
+		var k := 300.0 * ptk / 1080.0                  # ui-neon-apply (Daniele 2026-11-09 "increase the height of the vat"): 256 -> 300 pt
+		send_tank.canvas_k = k
+		send_tank.pt_px = ptk
+		send_tank.custom_minimum_size = send_tank.picture_size(k, ptk).round()
+		tank_s = ptk
+	elif mobile and HudNoir.has("send_tank"):        # GMN-1 layout: 4 bands of 60 pt, 59 wide, caps + drips round them
 		send_tank.custom_minimum_size = Vector2(pt(66.0), pt(4.0 * 60.0 + 64.0)).round()
 	elif HudNoir.has("send_tank"):                   # ui-demo-hud-scale: the desktop tank keeps its own proportions, scaled as a whole
 		tank_s = ui_scale * pt(4.0 * 60.0 + 64.0) / send_tank.custom_minimum_size.y   # (caps, ticks, words) to the pt layout's height
@@ -700,7 +707,11 @@ func layout(vp: Vector2, m: Vector4) -> void:
 			extra.position = Vector2(music_button.position.x - 8.0 * ui_scale - extra.size.x, pause_button.position.y)
 	side_panel.size = side_panel.get_combined_minimum_size()
 	var side_y := (vp.y - side_panel.size.y) / 2.0
+	# ui-neon-apply (Daniele 2026-11-09): the tank picture centred on the height WITH its drip ("centre it keeping the droplet
+	# into consideration") - the plain centring above, the readout plate is gone
 	var top_bottom := top_panel.position.y + top_panel.size.y + 34.0   # below the top bar and status line
+	if send_tank and send_tank.picture() and top_panel.position.x > m.x + side_panel.size.x + 8.0:
+		top_bottom = m.y                                # ui-send-tank: the centred top bar is clear of the tank's column
 	side_y = maxf(side_y, top_bottom)
 	side_panel.position = Vector2(m.x, side_y)          # send controls on the LEFT, like Alpha 11 (Daniele)
 	map_title.position = Vector2(m.x + 8, vp.y - m.w - 30 * ui_scale)
@@ -1502,7 +1513,8 @@ class ActionWedge:
 		var ri := hex_r(m, r_in, hex_base)
 		var span := hex_r(m, ro, hex_base) - ri
 		var izone := ir * 2.5
-		_icon(c + u * (ri + ir * 1.3), ir, Color(a.lightened(0.2) if lit else HudNoir.MUTED, k))
+		var lit_col := HudNoir.AMBER if sector_id() != "" and not HudNoir.GOO_NEON else a   # (glyph / price match the lit tube)
+		_icon(c + u * (ri + ir * 1.3), ir, Color(lit_col.lightened(0.2) if lit else HudNoir.MUTED, k))
 		var tr := ri + izone + (span - izone) * 0.5                      # the text block's centre on the ray
 		var maxw := (span - izone) * 0.94
 		var room := (a1 - a0) * tr * 0.92                                  # the slice's width across the ray there
@@ -1510,7 +1522,7 @@ class ActionWedge:
 		var min_fs := maxi(7, int(round(float(floor_px) * 10.0 / 13.0)))   # radial words may shrink to 10 pt (as the plate names)
 		var lines: Array = []
 		var low := why if why != "" else cost
-		for ln in [[str(SLICE_NAMES.get(title, title)), 13.0, ink], [low, 12.0, Color(HudNoir.ENEMY.lightened(0.25) if not lit else a.lightened(0.35), k)]]:
+		for ln in [[str(SLICE_NAMES.get(title, title)), 13.0, ink], [low, 12.0, Color(HudNoir.ENEMY.lightened(0.25) if not lit else lit_col.lightened(0.35), k)]]:
 			lines.append_array(_wrap(str(ln[0]), maxi(min_fs, int(round(fs * 0.85))), maxw).map(func(t): return [t, ln[1], ln[2]]))   # MONSTER / HUB, FREE / 5 s
 		var gap := minf(lh, room / float(lines.size()))
 		var ang := m + (PI if u.x < -0.01 else 0.0)
@@ -1546,10 +1558,14 @@ class ActionWedge:
 		var k := outer() / 357.0
 		draw_set_transform(c, mid(), Vector2(k, k))
 		draw_texture(t, origin, Color(1, 1, 1, clampf(grow * 1.5, 0.0, 1.0)))
-		if lit:
-			var lt := HudNoir.texture(str(HudNoir.part_data("node_slice_lit_" + deg).get("file", "")))
+		if lit:                                           # ui-neon-apply (Daniele's 1:1 sheet): the tube in the goo colour (HudNoir.GOO_NEON; false = the delivered amber tube)
+			var lt: Texture2D = null if HudNoir.GOO_NEON else HudNoir.texture("res://assets/ui/node_noir/node_slice_lit_%s_colour.png" % deg)
+			var lc := Color(1, 1, 1, clampf(grow * 1.5, 0.0, 1.0)).lightened(0.12 * lift)
+			if lt == null:                                # (the W tube tinted, as before)
+				lt = HudNoir.texture(str(HudNoir.part_data("node_slice_lit_" + deg).get("file", "")))
+				lc = Color(a.lightened(0.15 * lift), lc.a)
 			if lt != null:
-				draw_texture(lt, origin, Color(a.lightened(0.15 * lift), clampf(grow * 1.5, 0.0, 1.0)))
+				draw_texture(lt, origin, lc)
 		draw_set_transform(Vector2.ZERO)
 
 	func _uv_poly(c: Vector2, ri: float, ro2: float, full_ro: float) -> Array:
@@ -2035,14 +2051,16 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 	var big := n >= 4
 	var r_in := ring + (5.0 + (18.0 if big else 0.0)) * s
 	var r_out := r_in + (INSPECTOR_PIE_W + (16.0 if mobile else 0.0) + (34.0 if big else 0.0)) * s
-	if mobile and ActionWedge.ROUND:                  # GMN-1 layout: ring 49 -> 119 pt, 50 deg a slice (40 for 4-5)
+	if ActionWedge.ROUND:                             # GMN-1 layout: ring 49 -> 119 pt, 50 deg a slice (40 for 4-5); ui-neon-apply:
+		# desktop too - its 60 / 30 deg slices had no delivered sector and fell back to a stretched unrolled wedge (Daniele:
+		# "the radials are the most broken part")
 		r_in = pt(49.0)
 		r_out = pt(119.0)
 	# one hexagon edge (60 deg) per action up to 3 - the half-hex; 4-5 take half an edge each (30 deg), so every
 	# seam still lands on a corner or an edge's midpoint and each slice stays a clean trapezoid (45 / 36 deg
 	# slices cut across the edges and came out as kites)
 	var span := PI / 3.0 if n <= 3 else PI / 6.0
-	if mobile and ActionWedge.ROUND:
+	if ActionWedge.ROUND:
 		span = deg_to_rad(50.0 if n <= 3 else 40.0)
 	var total := span * n
 	# the hexagon turned so the seams land on those points: flat edge to the front for 1, 3 or 4 slices, a

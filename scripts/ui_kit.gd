@@ -432,7 +432,7 @@ static func pt_per_px(vp: Vector2) -> float:
 const HUD_K_REF_H := 375.0                         # the reference phone's height (pt)
 const HUD_K_GROW_FROM := 500.0                     # taller than this: the HUD grows
 const HUD_K_GROW_SPAN := 350.0                     # ... reaching HUD_K_MAX at 850 pt
-const HUD_K_MAX := 1.35
+const HUD_K_MAX := 1.6                        # ui-send-tank: 1.35 -> 1.6 (Daniele: "bigger on foldables")
 const HUD_K_MIN := 0.8
 static var test_hud_k := _arg_float("--hud-k=")
 

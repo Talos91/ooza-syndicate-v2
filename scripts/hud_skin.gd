@@ -148,8 +148,10 @@ static func noir_image(id: String, k: float, rim := Color.WHITE) -> Image:
 	## rim tinted `rim`. The whole canvas, glow band included; null when the part is not imported.
 	var s := HudNoir.part_data(id)
 	var out: Image = null
-	for layer in [["file", Color.WHITE], ["rim", rim]]:
-		var t := HudNoir.texture(str(s.get(layer[0], "")))
+	# ui-neon-apply: a badge's backlight (the delivery's W <id>_rim_glow halo) behind it, in its rim colour
+	var glow_path := "res://assets/ui/hud_noir/%s_rim_glow.png" % id
+	for layer in [["glow", rim], ["file", Color.WHITE], ["rim", rim]]:
+		var t := HudNoir.texture(glow_path if layer[0] == "glow" and ResourceLoader.exists(glow_path) else str(s.get(layer[0], "")))
 		if t == null:
 			continue
 		var im := t.get_image().duplicate() as Image
@@ -181,6 +183,8 @@ static func frame(col: Color, fill: float, ui_scale: float, hidden := false, min
 	## halo in `col` round it (neon pass), frame_glow px each side. Neon Noir revision 6: the director's badge / badge_mine (your
 	## own nodes: the full-strength rim) / badge_hidden, rim in `col`, its glow band baked in (BadgeLayer grows the box by it).
 	if HudNoir.has("badge"):
+		if col.is_equal_approx(HudNoir.NEUTRAL):        # ui-neon-apply: a neutral badge's tube is lit too (light steel neon, not dull grey)
+			col = HudNoir.NEUTRAL.lightened(0.5)
 		var nk := "noir|%s|%s|%s|%.3f" % [col.to_html(), hidden, mine, ui_scale]
 		if not _baked.has(nk):
 			var im := noir_image("badge_hidden" if hidden else ("badge_mine" if mine else "badge"), noir_badge_k(ui_scale), col)
