@@ -14,6 +14,11 @@ extends Node3D
 ## Art: Models/2.0/world-1.0/build_containment_ring.py (ring v1) + build_tube_entrance_v2.py (four doors).
 ## Layouts (--craters=1|2|4): 1 = the map centre; 2 = the board's left and right side; 4 = near each corner of the
 ## board's bounding box - each nudged to the nearest floor the default camera sees (platforms and bridges block it).
+## PITS / TUBES (Daniele 2026-11-07, 05 Handoff/PITS-TUBES-2026-11.md): 4 pits at the map corners is the default (rule 1;
+## 1 / 2 stay as flags); the Locals enter the column base by its door nearest their pit (WorldTubes' base: 4 doors);
+## at the match start each pit sends a column of MARCH_N Locals to its nearest node (R6, ties: lower node id) - the
+## node's own feed when that pit feeds it, else a one-off march feed (key MARCH_KEY + pit) to the door facing the pit.
+## Every feed names its tube ("tube"); the pits' pool colour comes from WorldTubes (R7, tint_pit).
 ## Lab biome: the floor decals (world_decals.gd: spawn surrounds, march lanes, tube-foot pools, stains, arcs).
 
 const RING_GLB := "res://assets/world/containment_ring_v1.glb"
@@ -30,20 +35,24 @@ const EMERGE_T := 1.0             # s: rising out of the pool
 const HOP_T := 0.9                # s: the hop over the rim
 const SQUEEZE_T := 0.6            # s: squash + shrink through the door
 const MELT_T := 0.6
-const DOOR_OUT := 2.05            # m from the tube axis: the first slot of the line (the hood's front is at 1.52)
-const DOOR_MOUTH := 1.30          # m: where a Local vanishes into the door
+const DOOR_OUT := 2.3             # m from the tube axis: the first slot of the line (the base's door frame is at 1.68)
+const DOOR_MOUTH := 1.45          # m: where a Local vanishes into the door (inside the base's wall at 1.6)
 const APPROACH := 3.0             # m: the last stretch runs straight along the door's axis
 const PATH_PTS := 16              # waypoints per feed in the paths texture (texel 16 = mouth, points, length)
 const RING_R := 5.0               # containment ring v1: outer radius
 const POOL_R := 3.5
 const POOL_H := 0.55
 const RIM_H := 0.80
-const TUBE_AVOID := 2.0           # m: a path keeps this far from another tube's axis (collar r 1.45 + a blob)
+const TUBE_AVOID := 2.4           # m: a path keeps this far from another tube's axis (base corner r 1.73, sockets 1.92)
 const RING_AVOID := 5.6
 const PLAT_R := Rules.R           # a platform's radius (the board's footprint)
 const BRIDGE_HALF := 1.4
 const SEARCH_R := 16.0            # m: how far a crater may move from its layout target to reach visible floor
-const DEFAULT_LAYOUT := 2
+const DEFAULT_LAYOUT := 4         # PITS / TUBES rule 1 (was 2)
+const MARCH_N := 12               # R6: Locals in a pit's match-start column
+const MARCH_GAP := 0.32           # s between them leaving the pit
+const MARCH_KEY := 10000          # feeds key of pit k's march feed: MARCH_KEY + k
+const MARCH_WINDOW := 10.0        # s of sim time: pits placed later than this (a joined / fast-forwarded match) send none
 # The parallel worker's floor plan (maps without one fall back to the ray test below): a visibility mask of
 # the floor at the default camera (255 seen, 128 seen only when panned / zoomed, 0 never; 16 px/m, world x,z -80..80,
 # pixel (0,0) = (-80,-80), +z down) and open spots. Layout 2 = the board's two side courtyards, layout 4 = the open
@@ -372,11 +381,14 @@ func place(cam: Camera3D) -> void:
 	for i in range(craters.size()):
 		var p: Vector3 = craters[i]
 		_ring_mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, 0.37 * i), p))
-		_ring_mm.set_instance_custom_data(i, Color(float(i) * 1.7, 0, 0, 0))
+		var g := WorldLayer.NATIVE_GRAY
+		_ring_mm.set_instance_custom_data(i, Color(float(i) * 1.7, g.r, g.g, g.b))
 		_ring_mm.set_instance_color(i, Color.WHITE)
 	_ring_mm.visible_instance_count = craters.size()
 	placed = true
 	_route_all()
+	if wl.pipes != null:
+		wl.pipes.build()                              # the transport tubes keep clear of the lanes' exits
 	if wl.floor_lab5 and not "--no-decals" in OS.get_cmdline_user_args():   # the lab floor decals (world pass 2)
 		decals = WorldDecals.new()
 		add_child(decals)
@@ -488,11 +500,67 @@ func _route_all() -> void:
 		while path.size() > PATH_PTS:                 # (never seen: a path bends round at most a few feet)
 			path.remove_at(path.size() / 2)
 		var plen := _plen(path)
-		feeds[i] = {"crater": ci, "dir": dir, "path": path, "len": plen, "row": rows, "line": [],
+		feeds[i] = {"tube": i, "crater": ci, "dir": dir, "path": path, "len": plen, "row": rows, "line": [],
 				"cap": clampi(int((plen - 0.6) / GAP) + 1, 1, LINE_MAX), "next_spawn": randf() * SPAWN_GAP,
 				"next_admit": 0.0, "rate": 0.0, "mouth": t2 + dir * DOOR_MOUTH}
 		rows += 1
+	if wl.sim.time <= MARCH_WINDOW or "--march" in OS.get_cmdline_user_args():
+		rows = _route_marches(rows)
 	_build_paths_tex(rows)
+
+
+func _route_marches(rows: int) -> int:
+	## R6: each pit's match-start column to its nearest node with a door (ties: the lower node id)
+	for k in range(craters.size()):
+		var c2 := Vector2(craters[k].x, craters[k].z)
+		var best := -1
+		var bd := INF
+		for i in range(wl._tubes.size()):
+			var tb: Dictionary = wl._tubes[i]
+			if not tb.get("ent", false):
+				continue
+			var d := c2.distance_to(Vector2(tb["x"], tb["z"]))
+			if d < bd - 0.001 or (best >= 0 and absf(d - bd) <= 0.001 and int(tb["id"]) < int(wl._tubes[best]["id"])):
+				bd = d
+				best = i
+		if best < 0:
+			continue
+		if feeds.has(best) and int(feeds[best]["crater"]) == k:
+			feeds[best]["march"] = MARCH_N            # its own feed is the column: it leaves the pit at the march pace
+			continue
+		var tb2: Dictionary = wl._tubes[best]
+		var t2 := Vector2(tb2["x"], tb2["z"])
+		var taken: Vector2 = feeds[best]["dir"] if feeds.has(best) else Vector2.ZERO
+		var dir: Vector2 = DOOR_DIRS[0]
+		var dd := INF
+		for d2 in DOOR_DIRS:
+			if d2 == taken:
+				continue                              # another door than the node's own line
+			var dist: float = (t2 + d2 * DOOR_OUT).distance_to(c2)
+			if dist < dd:
+				dd = dist
+				dir = d2
+		var slot0 := t2 + dir * DOOR_OUT
+		var appr := t2 + dir * (DOOR_OUT + APPROACH)
+		var exit := c2 + (appr - c2).normalized() * (RING_R + 0.4)
+		var path := _steer(exit, appr, best, 0)
+		path.push_front(exit)
+		path.append(appr)
+		path.append(slot0)
+		while path.size() > PATH_PTS:
+			path.remove_at(path.size() / 2)
+		var plen := _plen(path)
+		feeds[MARCH_KEY + k] = {"tube": best, "crater": k, "dir": dir, "path": path, "len": plen, "row": rows, "line": [],
+				"cap": clampi(int((plen - 0.6) / GAP) + 1, 1, MARCH_N), "next_spawn": 0.0, "next_admit": 0.0, "rate": 0.0,
+				"mouth": t2 + dir * DOOR_MOUTH, "march": MARCH_N, "only_march": true}
+		rows += 1
+	return rows
+
+
+func tint_pit(k: int, c: Color) -> void:
+	## R7 (WorldTubes): the pit's pool colour (INSTANCE_CUSTOM gba; r stays its swirl phase)
+	if k < _ring_mm.visible_instance_count:
+		_ring_mm.set_instance_custom_data(k, Color(float(k) * 1.7, c.r, c.g, c.b))
 
 
 func _build_paths_tex(rows: int) -> void:
@@ -519,7 +587,7 @@ func _obstacles(skip_tube: int) -> Array:
 		var tb: Dictionary = wl._tubes[j]
 		var r := TUBE_AVOID if is_equal_approx(float(tb["r"]), WorldLayer.TUBE_R) else float(tb["r"]) + 0.8
 		if j == skip_tube:
-			r = 1.65                                  # its own housing: walk round it to the door side
+			r = 2.1                                   # its own base: walk round it to the door side
 		obs.append([Vector2(tb["x"], tb["z"]), r])
 	for p in craters:
 		obs.append([Vector2((p as Vector3).x, (p as Vector3).z), RING_AVOID])
@@ -599,7 +667,7 @@ func step(dt: float, _draw := true) -> void:
 		_free.append(int(_dying.pop_front()[0]))      # its instance already draws nothing (the shader ended it)
 		_alive -= 1
 	for i in feeds:
-		_feed_step(i, feeds[i])
+		_feed_step(int(feeds[i]["tube"]), feeds[i])
 	step_us = Time.get_ticks_usec() - t0
 
 
@@ -635,6 +703,9 @@ func _feed_step(i: int, f: Dictionary) -> void:
 		f["rate"] = 0.0
 		return
 	var rate := vat_rate(wl.sim.nodes[tb["id"]])
+	var only_march := bool(f.get("only_march", false))
+	if only_march:
+		rate = WALK_V / GAP                           # R6: the march column files in as fast as it walks
 	f["rate"] = rate
 	var plen: float = f["len"]
 	# the door: the front Local goes in at the vat's pace, once it stands at the first slot
@@ -654,9 +725,14 @@ func _feed_step(i: int, f: Dictionary) -> void:
 				_d1[s] = plen - k * GAP
 				_write(s)
 	# the crater: one more Local toward the back of the line, unless the line is full (then it stops sending here)
+	if only_march and int(f.get("march", 0)) <= 0:
+		return                                        # the march is out: this feed sends no more
 	if line.size() < int(f["cap"]) and _t >= float(f["next_spawn"]) and _alive < LOCALS_MAX:
-		var gap := clampf(0.8 / maxf(rate, 0.8), 0.3, SPAWN_GAP)
-		f["next_spawn"] = _t + gap * randf_range(0.75, 1.3)
+		var gap := clampf(0.8 / maxf(rate, 0.8), 0.3, SPAWN_GAP) * randf_range(0.75, 1.3)
+		if int(f.get("march", 0)) > 0:                # R6: the match-start column leaves the pit in step
+			gap = MARCH_GAP
+			f["march"] = int(f["march"]) - 1
+		f["next_spawn"] = _t + gap
 		_spawn(f, line)
 
 
@@ -722,7 +798,7 @@ func lines() -> Array:
 	var out := []
 	for i in feeds:
 		var f: Dictionary = feeds[i]
-		out.append([int(wl._tubes[i]["id"]), (f["line"] as Array).size(), int(f["cap"]), snappedf(float(f["rate"]), 0.01)])
+		out.append([int(wl._tubes[int(f["tube"])]["id"]), (f["line"] as Array).size(), int(f["cap"]), snappedf(float(f["rate"]), 0.01)])
 	return out
 
 
@@ -757,7 +833,7 @@ func debug_overlay(on: bool, cam: Camera3D = null) -> void:
 		var path: Array = f["path"]
 		for k in range(1, path.size()):
 			_seg(im, path[k - 1], path[k], 0.22, y, Color(0.2, 0.95, 1.0))
-		var tb: Dictionary = wl._tubes[i]
+		var tb: Dictionary = wl._tubes[int(f["tube"])]
 		var t2 := Vector2(tb["x"], tb["z"])
 		var dir: Vector2 = f["dir"]
 		_seg(im, t2 + dir * 1.2, t2 + dir * DOOR_OUT, 0.5, y + 0.05, Color(1, 1, 1))

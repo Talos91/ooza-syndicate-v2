@@ -305,6 +305,8 @@ func ok(q: Vector2, r: float, h: float, lanes := true) -> bool:
 	for o in _occ:
 		if q.distance_to(o[0]) < r + float(o[1]) + 0.7:
 			return false
+	if wl.pipes != null and wl.pipes.near(q, r + 0.4):   # PITS / TUBES: props keep off the transport tubes
+		return false
 	if lanes and _lane_d(q) < 1.5 + r:
 		return false
 	for k in range(9):
@@ -656,6 +658,8 @@ func _pipe_run(fi: int, f: Dictionary, side: float) -> void:
 			for c in wl.locals.craters:
 				if q.distance_to(Vector2((c as Vector3).x, (c as Vector3).z)) < 8.2:
 					good = false
+			if wl.pipes != null and wl.pipes.near(q, 0.6):   # PITS / TUBES: no lane pipe through a transport tube
+				good = false
 		if not good:
 			continue
 		var d2 := (b2 - a2) / L
@@ -695,6 +699,8 @@ func _rails(f: Dictionary) -> void:
 			for tb in wl._tubes:
 				if q.distance_to(Vector2(tb["x"], tb["z"])) < float(tb["r"]) + 1.0 or e.distance_to(Vector2(tb["x"], tb["z"])) < float(tb["r"]) + 1.0:
 					near_tube = true
+			if wl.pipes != null and (wl.pipes.near(q, 0.5) or wl.pipes.near(e, 0.5)):
+				near_tube = true                         # PITS / TUBES: no rail through a transport tube
 			if near_tube:
 				continue
 			_put("rail", _xf(q, yaw, "rail"))

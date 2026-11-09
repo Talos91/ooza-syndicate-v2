@@ -32,10 +32,9 @@ const SHADER_ENTRANCE := preload("res://shaders/world_entrance.gdshader")
 # TUBE ENTRANCE v2 (build_tube_entrance_v2.py, 704 tris): the same foot with FOUR doors (+Z, +X, -Z, -X) so the Locals
 # walk to the door nearest their crater (world_locals.gd); v1 (one door, 536 tris) stays in assets for comparison.
 const ENTRANCE_GLB := "res://assets/world/tube_entrance_v2.glb"
-# VAT COLUMN (Daniele, 2026-11-07; build_tube_entrance_v3.py): the doors follow the vat's tier - T1 the front door only,
-# T2 front + back, T3 all four (= v2) - with the front turned to the feeding crater (world_locals' feed door). Visual only.
-const ENTRANCE_TIER := ["", "res://assets/world/tube_entrance_v3_t1.glb", "res://assets/world/tube_entrance_v3_t2.glb",
-		"res://assets/world/tube_entrance_v3_t3.glb"]
+# PITS / TUBES (Daniele 2026-11-07, 05 Handoff/PITS-TUBES-2026-11.md): v2 and the per-tier v3 doors are superseded by ONE
+# column base for every tier - 4 corner tube sockets + 4 cardinal doors with a double laser (WorldTubes.column_base_mesh);
+# the transport tubes from the sockets to the pits are world_tubes.gd. The GLBs stay in assets for comparison.
 const LAB_PIC := "res://assets/world/lab_clean_floor_rect.png"   # --floor=labpic: Daniele's painted lab floor, top-down
 const LAB_PIC_SIZE := Vector2(53.785, 40.744)    # metres (rectify_lab_clean_floor.py: 20 px/m, 1075 x 814)
 const LAB_PIC_GRID0 := Vector2(0.892, 0.375)     # metres from its top-left corner to its first 2 m grid line (x, z)
@@ -125,7 +124,8 @@ var _socket_mm: MultiMesh         # one floor socket per tube (owner-coloured ri
 const SOCKET_PAD := 1.8           # metres of collar and drains around a tube's foot
 var _ent_mm: MultiMesh            # one tube entrance per common tube (owner light in INSTANCE_CUSTOM)
 var _ent_mat: ShaderMaterial
-var _ent_mms: Array = [null, null, null, null]   # VAT COLUMN: one entrance MultiMesh per tier (1-3)
+var _ent_mms: Array = [null, null, null, null]   # VAT COLUMN readers: [_, base, base, base] - one column base for every tier
+var pipes: WorldTubes            # PITS / TUBES: the transport tubes socket -> pit, the pits' colour
 var column: VatColumn            # VAT COLUMN: upgrade blueprint + the entrance module from the pit (vat_column.gd)
 var _blobs: Array = []           # {p, tube, col, t0, mode (0 hop, 1 crawl, 2 enter), v, dur, from}
 var _drops: Array = []           # {p, v, t0, col}
@@ -179,6 +179,9 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	for n in sim.nodes:
 		_build_tube(n)
 	_build_pools()
+	pipes = WorldTubes.new()                          # PITS / TUBES (built once the pits are placed: WorldLocals.place)
+	add_child(pipes)
+	pipes.setup(self)
 	if not "--no-locals" in OS.get_cmdline_user_args():
 		locals = WorldLocals.new()
 		add_child(locals)
@@ -392,27 +395,25 @@ func _build_pools() -> void:
 	skm.render_priority = -9
 	squad.material = skm
 	_socket_mm = _mm(squad, maxi(_tubes.size(), 1), true)
-	var ent_mesh := _entrance_mesh()
+	var ent_mesh: Mesh = WorldTubes.column_base_mesh()
 	_ent_mat = ShaderMaterial.new()
 	_ent_mat.shader = SHADER_ENTRANCE
 	_ent_mat.set_shader_parameter("abyss", haze_abyss())
 	if floor_haze >= 0.0:
 		_ent_mat.set_shader_parameter("haze", floor_haze)
-	for t in range(1, 4):                            # VAT COLUMN: T1 / T2 / T3 doors (v2's four-door mesh if one is missing)
-		var tm: Mesh = _entrance_mesh(ENTRANCE_TIER[t])
-		var emm := MultiMesh.new()
-		emm.transform_format = MultiMesh.TRANSFORM_3D
-		emm.use_custom_data = true
-		emm.use_colors = true                        # white: the Compatibility renderer multiplies COLOR by it (0 without)
-		emm.mesh = tm if tm != null else ent_mesh
-		emm.instance_count = maxi(_tubes.size(), 1)
-		var emi := MultiMeshInstance3D.new()
-		emi.multimesh = emm
-		emi.material_override = _ent_mat
-		emi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(emi)
-		_ent_mms[t] = emm
-	_ent_mm = _ent_mms[3]
+	var emm := MultiMesh.new()                       # PITS / TUBES: one column base for every tier
+	emm.transform_format = MultiMesh.TRANSFORM_3D
+	emm.use_custom_data = true
+	emm.use_colors = true                            # white: the Compatibility renderer multiplies COLOR by it (0 without)
+	emm.mesh = ent_mesh
+	emm.instance_count = maxi(_tubes.size(), 1)
+	var emi := MultiMeshInstance3D.new()
+	emi.multimesh = emm
+	emi.material_override = _ent_mat
+	emi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(emi)
+	_ent_mms = [null, emm, emm, emm]                 # (VatColumn reads _ent_mms[tier].mesh)
+	_ent_mm = emm
 	for i in range(_tubes.size()):
 		var tb: Dictionary = _tubes[i]
 		var half: float = float(tb["r"]) + SOCKET_PAD
@@ -422,26 +423,17 @@ func _build_pools() -> void:
 		var sx := Transform3D(Basis.from_scale(Vector3(half * 2.0, 1.0, half * 2.0)), Vector3(tb["x"], floor_y + 0.02, tb["z"]))
 		_socket_mm.set_instance_transform(i, HIDDEN if tb["ent"] else sx)
 		_socket_mm.set_instance_custom_data(i, Color(float(tb["r"]) / half, 0, 0, 0))
-		tb["ent_tier"] = ent_tier(sim.nodes[tb["id"]])
-		for t in range(1, 4):
-			(_ent_mms[t] as MultiMesh).set_instance_transform(i, HIDDEN)
-			(_ent_mms[t] as MultiMesh).set_instance_custom_data(i, Color(0, 0, 0, 0))
-			(_ent_mms[t] as MultiMesh).set_instance_color(i, Color.WHITE)
+		_ent_mm.set_instance_transform(i, HIDDEN)
+		_ent_mm.set_instance_custom_data(i, Color(0, 0, 0, 0))
+		_ent_mm.set_instance_color(i, Color.WHITE)
 		_sock_lit(tb, tb["base"])
 	_socket_mm.visible_instance_count = _tubes.size()
-	for t in range(1, 4):
-		(_ent_mms[t] as MultiMesh).visible_instance_count = _tubes.size() if ent_mesh != null else 0
-
-
-static func ent_tier(n: Dictionary) -> int:
-	## VAT COLUMN: how many doors a tube's entrance shows - the vat's (or Machinegoon's) tier, 1-3 (the tier switches
-	## when an upgrade's fill reaches the top, so the doors follow it then)
-	return clampi(int(n.get("tier", 1)), 1, 3)
+	_ent_mm.visible_instance_count = _tubes.size()
 
 
 func _orient_entrances() -> void:
-	## VAT COLUMN: the entrance's front door (its only door at T1) faces the crater that feeds the tube (world_locals'
-	## feed door); no Locals / craters: the v2 placement (front +Z)
+	## the base's front (+Z) door faces the crater that feeds the tube (world_locals' feed door; a quarter turn of the
+	## symmetric base, so its sockets stay on the world diagonals); no Locals / craters: front +Z
 	for i in range(_tubes.size()):
 		var tb: Dictionary = _tubes[i]
 		if not tb.get("ent", false):
@@ -481,12 +473,10 @@ func _sock_lit(tb: Dictionary, c: Color) -> void:
 	var i := int(tb["sock"])
 	if decals != null:
 		decals.tint_pool(i, c)
-	if tb.get("ent", false):
-		var et := int(tb.get("ent_tier", 3))
-		for t in range(1, 4):                        # VAT COLUMN: drawn in its tier's MultiMesh; hidden while the blueprint shows
-			var show: bool = t == et and c.a > 0.0 and not tb.get("holo", false)
-			(_ent_mms[t] as MultiMesh).set_instance_transform(i, tb["ent_xf"] if show else HIDDEN)
-			(_ent_mms[t] as MultiMesh).set_instance_custom_data(i, c)
+	if tb.get("ent", false):                         # (hidden while the VAT COLUMN blueprint shows)
+		var show: bool = c.a > 0.0 and not tb.get("holo", false)
+		_ent_mm.set_instance_transform(i, tb["ent_xf"] if show else HIDDEN)
+		_ent_mm.set_instance_custom_data(i, c)
 	else:
 		_socket_mm.set_instance_color(i, c)
 
@@ -635,6 +625,9 @@ func _add_blob(at: Vector3, col: Color, seat := "") -> void:
 	if _blobs.size() >= CRAWL_MAX:
 		_blobs.pop_front()
 	var dist := maxf(bd - (_tubes[best]["r"] if best >= 0 else 0.0) - 0.2, 0.0)
+	if best >= 0 and _tubes[best].get("ent", false):   # R8: it crawls to the nearest door
+		var df := _door_front(_tubes[best], at)
+		dist = Vector2(df.x - at.x, df.z - at.z).length()
 	var dur := dist / CRAWL_V if best >= 0 else 2.0
 	_blobs.append({"p": at, "from": at, "tube": best, "col": col, "t0": _t + randf_range(0.0, 0.35), "mode": 0,
 			"dur": maxf(dur, 0.3), "size": randf_range(0.75, 1.15), "ph": randf() * TAU, "seat": seat})
@@ -655,6 +648,8 @@ func sync(dt: float) -> void:
 	_tubes_step(dt)
 	if locals != null:
 		locals.step(dt)
+	if pipes != null:
+		pipes.step(dt)
 	if column != null:
 		column.step(dt)
 	_blobs_step(dt)
@@ -693,9 +688,6 @@ func _tubes_step(dt: float) -> void:
 			continue
 		if not mi.visible:                            # a structure (re)built: the socket lights again
 			mi.visible = true
-			_sock_lit(tb, tb["base"])
-		if tb.get("ent", false) and int(tb.get("ent_tier", 3)) != ent_tier(n):   # VAT COLUMN: the doors follow the tier
-			tb["ent_tier"] = ent_tier(n)
 			_sock_lit(tb, tb["base"])
 		if absf(top - float(tb["top_y"])) > 0.01:
 			tb["top_y"] = top
@@ -743,6 +735,9 @@ func _tubes_step(dt: float) -> void:
 		if drain > 0.0:
 			top_c.a *= 1.0 - drain
 			bot_c.a *= 1.0 - drain
+		if VatColumn.upgrading(n):                    # VAT COLUMN 2 / R4: the lift stays EMPTY glass while the upgrade builds
+			top_c.a = 0.0
+			bot_c.a = 0.0
 		var sp: float = tb["inv"]
 		if tb["pushing"]:
 			sp = smoothstep(0.0, 1.0, sp)
@@ -793,7 +788,9 @@ func _blobs_step(_dt: float) -> void:
 			var k := (age - 0.35) / float(b["dur"])
 			var from: Vector3 = b["from"]
 			var end := Vector3(target.x, floor_y, target.z)
-			if not tb.is_empty():
+			if not tb.is_empty() and tb.get("ent", false):   # R8: to the column base's nearest door
+				end = _door_front(tb, from)
+			elif not tb.is_empty():
 				var away := Vector3(from.x - target.x, 0.0, from.z - target.z)
 				end = Vector3(target.x, floor_y, target.z) + (away.normalized() if away.length() > 0.01 else Vector3.RIGHT) * (float(tb["r"]) + 0.15)
 			p = from.lerp(end, k)
@@ -820,6 +817,19 @@ func _blobs_step(_dt: float) -> void:
 	_blob_mm.visible_instance_count = shown
 
 
+func _door_front(tb: Dictionary, from: Vector3) -> Vector3:
+	## the point just in front of the column base's door nearest `from` (doors on the world's +-X / +-Z)
+	var best := Vector3.ZERO
+	var bd := INF
+	for d in WorldLocals.DOOR_DIRS:
+		var q := Vector3(float(tb["x"]) + d.x * (WorldTubes.APOTHEM + 0.3), floor_y, float(tb["z"]) + d.y * (WorldTubes.APOTHEM + 0.3))
+		var dd := Vector2(q.x - from.x, q.z - from.z).length()
+		if dd < bd:
+			bd = dd
+			best = q
+	return best
+
+
 func _hostile(tb: Dictionary, seat: String) -> bool:
 	var owner: String = tb["owner"]
 	return owner != "" and seat != "" and owner != seat and not sim.allied(owner, seat)
@@ -842,9 +852,9 @@ func _zap(tb: Dictionary, at: Vector3, col: Color) -> void:
 	var dir := Vector3(at.x - float(tb["x"]), 0.0, at.z - float(tb["z"]))
 	dir = dir.normalized() if dir.length() > 0.01 else Vector3.RIGHT
 	var door := Vector3(tb["x"], floor_y + 0.7, tb["z"]) + dir * float(tb["r"])
-	if tb.get("ent", false):                          # the lens over the entrance door that faces the blob
+	if tb.get("ent", false):                          # the upper laser strand of the base's door that faces the blob
 		var ax := Vector3(signf(dir.x), 0, 0) if absf(dir.x) > absf(dir.z) else Vector3(0, 0, signf(dir.z))
-		door = Vector3(tb["x"], floor_y + 0.82, tb["z"]) + ax * 1.22
+		door = Vector3(tb["x"], floor_y + WorldTubes.LASER_Y[1], tb["z"]) + ax * (WorldTubes.APOTHEM + 0.06)
 	var to := at + Vector3(0, 0.25, 0)
 	var mi2: MeshInstance3D = z["mi"]
 	var tc: Color = tb["base"]
