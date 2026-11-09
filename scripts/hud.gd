@@ -707,17 +707,14 @@ func layout(vp: Vector2, m: Vector4) -> void:
 			extra.position = Vector2(music_button.position.x - 8.0 * ui_scale - extra.size.x, pause_button.position.y)
 	side_panel.size = side_panel.get_combined_minimum_size()
 	var side_y := (vp.y - side_panel.size.y) / 2.0
-	if send_tank and send_tank.picture():               # ui-neon-apply (Daniele 2026-11-09 "should sit at the mid of the height"):
-		side_y = vp.y / 2.0 - (send_tank.position.y + send_tank.body_mid_y())   # the tank's BODY centred, the plate hangs under it
-		side_y = minf(side_y, vp.y - m.w - side_panel.size.y)
+	# ui-neon-apply (Daniele 2026-11-09): the tank picture centred on the height WITH its drip ("centre it keeping the droplet
+	# into consideration") - the plain centring above, the readout plate is gone
 	var top_bottom := top_panel.position.y + top_panel.size.y + 34.0   # below the top bar and status line
 	if send_tank and send_tank.picture() and top_panel.position.x > m.x + side_panel.size.x + 8.0:
 		top_bottom = m.y                                # ui-send-tank: the centred top bar is clear of the tank's column
 	side_y = maxf(side_y, top_bottom)
 	side_panel.position = Vector2(m.x, side_y)          # send controls on the LEFT, like Alpha 11 (Daniele)
 	map_title.position = Vector2(m.x + 8, vp.y - m.w - 30 * ui_scale)
-	if side_panel.visible and side_panel.position.y + side_panel.size.y > map_title.position.y:
-		map_title.position.x = m.x + side_panel.size.x + 10.0   # ui-send-tank: the tank's readout plate reaches the bottom
 	hint.size = Vector2(vp.x * 0.5, 20)
 	hint.position = Vector2(vp.x * 0.5 - hint.size.x / 2.0, vp.y - m.w - 18)
 	# Alpha 24 (Hub Roadmap m05, "send on the left thumb, skills stacked on the right"): the skills stand in a column on the
