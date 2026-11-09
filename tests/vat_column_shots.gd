@@ -110,6 +110,62 @@ func _map_file(code: String) -> String:
 	return ""
 
 
+func _stats(ts: Array) -> String:
+	if ts.is_empty():
+		return "no frames"
+	var s := ts.duplicate()
+	s.sort()
+	var avg := 0.0
+	for t in s:
+		avg += t
+	return "avg %.2f p95 %.2f max %.2f (%d frames)" % [avg / s.size(), s[int(s.size() * 0.95)], s[-1], s.size()]
+
+
+func _trace(inst: Node, sim: Sim, n: Dictionary, id: int) -> void:
+	## per-frame wall times from the upgrade order to 1 s after the dock, at the default camera: where the slow frames sit
+	_home(inst)
+	PerfProfile.sections_on = true
+	for step in [[1, 2], [2, 3]]:
+		var tag := "T%d-T%d" % step
+		n["units"] = 140.0
+		var last := Time.get_ticks_usec()
+		sim.upgrade(id, "A")
+		var start: Array = []                         # first 30 frames
+		var fill: Array = []                          # the rest of the fill
+		var dock: Array = []                          # the dock + 1 s
+		var i := 0
+		var tail := -1
+		while true:
+			await get_tree().process_frame
+			var now := Time.get_ticks_usec()
+			var dt := (now - last) / 1000.0
+			last = now
+			var p := Sim.build_progress(n) if n["build_kind"] != "" else 1.0
+			if dt > 20.0:
+				print("TRACE %s frame %d p %.3f dt %.2f ms" % [tag, i, p, dt])
+			if dt > 40.0:                             # what the script time went on (PerfProfile sections, this frame)
+				var parts := []
+				for k in PerfProfile.sections:
+					if int(PerfProfile.sections[k][0]) > 1000:
+						parts.append("%s %.1f" % [k, PerfProfile.sections[k][0] / 1000.0])
+				print("TRACE %s frame %d sections (ms): %s" % [tag, i, ", ".join(parts)])
+			PerfProfile.sections.clear()
+			if n["build_kind"] != "":
+				(start if i < 30 else fill).append(dt)
+			else:
+				dock.append(dt)
+				if tail < 0:
+					tail = i
+				if i - tail > 90:
+					break
+			i += 1
+		print("TRACE %s start (30 frames): %s" % [tag, _stats(start)])
+		print("TRACE %s fill: %s" % [tag, _stats(fill)])
+		print("TRACE %s dock + 1.5 s: %s" % [tag, _stats(dock)])
+		print("TRACE %s whole: %s" % [tag, _stats(start + fill + dock)])
+		await _frames(30)
+
+
 func _run() -> void:
 	var args := _args()
 	var out := str(args.get("out", "user://vat_column"))
@@ -141,6 +197,10 @@ func _run() -> void:
 	await _frames(30)
 	await _foot_shot(inst, wl, id, "%s/T1-foot-before.png" % out)
 	var idle := await _perf("idle (no upgrade)", 240)
+	if "trace" in args:                               # trace=1: no shots, every frame's time across both upgrades
+		await _trace(inst, sim, n, id)
+		get_tree().quit(0)
+		return
 	var at: Vector3 = n["pos"]
 	for step in [[1, 2], [2, 3]]:
 		var tag := "T%d-T%d" % step
