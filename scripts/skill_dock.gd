@@ -446,7 +446,8 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		top = vessel_cy - round_d / 2.0
 	var plate_h := 0.0
 	if plate:                                     # GMN-1 layout: plates 90 x 94.55 pt, 4.45 pt apart, the window from the plate
-		var dvp := (Engine.get_main_loop() as SceneTree).root.get_visible_rect().size   # (desktop too: ui-demo-hud-scale)
+		var dtree := Engine.get_main_loop() as SceneTree   # (desktop too: ui-demo-hud-scale; null in a headless test script)
+		var dvp := dtree.root.get_visible_rect().size if dtree != null and dtree.root != null else Vector2(1280, 720)
 		var ppx := UiKit.hud_px_per_pt(dvp, mobile)   # FOLDABLES: x the screen factor (1.0 on phones)
 		slot_w = 90.0 * ppx / ui_scale
 		if mobile:
