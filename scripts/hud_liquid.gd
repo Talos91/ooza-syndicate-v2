@@ -65,6 +65,18 @@ func set_rim_lit(path: String, col: Color) -> void:
 	_mat.set_shader_parameter("rim_lit_col", col if t != null else Color(0, 0, 0, 0))
 
 
+func plain() -> void:
+	## ui-neon-apply: the GMN plate's window - goo only (no round-1 rim, lit ring or shine): the plate's own neon ring is drawn
+	## over it (SkillDock.Slot._draw_face).
+	var none := ImageTexture.create_from_image(Image.create(1, 1, false, Image.FORMAT_RGBA8))
+	_mat.set_shader_parameter("shine_tex", none)
+	rim_tex = none
+	_mat.set_shader_parameter("rim_tex", none)
+	_mat.set_shader_parameter("rim_col", Color(0, 0, 0, 0))
+	_mat.set_shader_parameter("rim_lit_tex", none)
+	_mat.set_shader_parameter("rim_lit_col", Color(0, 0, 0, 0))
+
+
 func set_liquid(col: Color, alpha := 1.0) -> void:
 	_mat.set_shader_parameter("liquid_col", col)
 	_mat.set_shader_parameter("liquid_a", alpha)
