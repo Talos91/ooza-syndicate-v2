@@ -18,6 +18,9 @@ var rects := {}                                   # name -> Rect2 in layout pt
 var texts := []                                   # {name, w_pt, room_pt, size_pt}
 var banner_text := "NO RELAYS ON THIS MAP"
 var _n := 0
+var mode := "centre"
+var _fan := {}
+var _box0 := Rect2()
 var u := 1.0                                      # screen px per layout pt
 
 
@@ -27,6 +30,9 @@ static func wanted() -> bool:
 
 func setup(h) -> void:
 	hud = h
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--r18-radial="):
+			mode = a.substr(13)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	z_index = 40
@@ -141,32 +147,99 @@ func _draw() -> void:
 		_text(str(i + 1), wc * u, 30.0 * u, 18.0, TXT, 12.0, "key_%d" % i)
 		var nc := Vector2(px, yy) + Vector2(124 - 48 + 212, 408 - 48 + 48) / PX
 		_text(names[i], nc * u, 424.0 / PX * u, 12.5, TXT, 9.0, "plate_%d_%s" % [i, names[i]])
-	# ---- node radial, mock at the wireframe's example position: 3 slices (40 deg) + hub
+	if hud.send_tank:
+		var tg: Rect2 = hud.side_panel.get_global_rect()
+		rects["tank_panel"] = Rect2(tg.position / u, tg.size / u)
+	# ---- node radial: mode = centre (wireframe example position) | vat (your vat, left edge) | bottom (lowest node on screen)
 	var cx := W / 2.0 + 10.0
 	var cy := (46.0 + 40.0 + by) / 2.0 + 6.0
-	var o2 := Vector2(cx, cy) * u
+	var node_pt := Vector2(cx, cy)
+	var dir := -90.0
+	var fan := {"mode": mode}
+	if mode != "centre":
+		var best := -1
+		var bp := Vector2.ZERO
+		for n in hud.sim.nodes:
+			var sp: Vector2 = hud.main.cam.unproject_position(n["pos"]) / u
+			if mode == "vat" and n["owner"] == hud.human and n["structure"] == "vat" and (best < 0 or sp.x < bp.x):
+				best = n["id"]; bp = sp
+			elif mode == "bottom" and sp.x > 120.0 and sp.x < W - 130.0 and (best < 0 or sp.y > bp.y):
+				best = n["id"]; bp = sp
+		if best >= 0:
+			node_pt = bp
+		fan["node_id"] = best
+		# the fan opens away from the nearest of: tank column, skill column, banner / bar, bottom band
+		var tk: Rect2 = rects.get("tank_panel", Rect2(0, 0, 0, 0))
+		var lb := tk.end.x + 4.0
+		var rb := px - 4.0
+		var tb := 90.0
+		var dl := {"left": node_pt.x - lb, "right": rb - node_pt.x, "top": node_pt.y - tb, "bottom": by - node_pt.y}
+		var near := "left"
+		for k in dl:
+			if dl[k] < dl[near]:
+				near = k
+		dir = {"left": 0.0, "right": 180.0, "top": 90.0, "bottom": -90.0}[near]
+		fan["nearest_bound"] = near
+		fan["dir_deg"] = dir
+	var fan_pts := func(c: Vector2) -> Rect2:
+		var r := Rect2(c, Vector2.ZERO)
+		for ai in range(-60, 61, 5):
+			for rr in [38.0, 104.0]:
+				r = r.expand(c + Vector2.from_angle(deg_to_rad(dir + ai)) * rr)
+		return r.expand(c + Vector2(22, 22)).expand(c - Vector2(22, 22))
+	var box0: Rect2 = fan_pts.call(node_pt)
+	var centre_pt := node_pt
+	if mode != "centre":
+		var free := Rect2(Vector2((rects.get("tank_panel", Rect2()) as Rect2).end.x + 4.0, 90.0), Vector2.ZERO)
+		free.end = Vector2(px - 4.0, by)
+		var sh := Vector2.ZERO
+		if box0.position.x < free.position.x: sh.x = free.position.x - box0.position.x
+		elif box0.end.x > free.end.x: sh.x = free.end.x - box0.end.x
+		if box0.position.y < free.position.y: sh.y = free.position.y - box0.position.y
+		elif box0.end.y > free.end.y: sh.y = free.end.y - box0.end.y
+		centre_pt = node_pt + sh
+		fan["shift_pt"] = [snappedf(sh.x, 0.1), snappedf(sh.y, 0.1)]
+		fan["free_rect"] = [free.position.x, free.position.y, free.size.x, free.size.y]
+		draw_arc(node_pt * u, 12.0 * u, 0.0, TAU, 24, Color("ffffff"), 2.0)
+		_text("node", node_pt * u + Vector2(0, 22.0 * u), 40.0 * u, 12.5, Color("ffffff"), 9.0, "node_marker")
+		draw_line(node_pt * u, centre_pt * u, Color(1, 1, 1, 0.6), 2.0)
+	var o2 := centre_pt * u
 	var s := u / PX
 	var words := ["UPGRADE", "GOOGAT", "SWITCH"]
 	for i in range(3):
-		var a := deg_to_rad(-150.0 + (i + 0.5) * 40.0)
+		var a := deg_to_rad(dir + (i - 1) * 40.0)
 		draw_set_transform(o2, a, Vector2(s, s))
 		draw_texture(tex["slice_40"], Vector2(168, -245))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		var pm := Vector2(cx, cy) + Vector2.from_angle(a) * 71.0
-		_text(words[i], pm * u, 46.0 * u, 12.5, TXT, 9.0, "radial_%d" % i)
+		# corrected (designer): label centre at r 84 (chord ~52 pt), icon inward at r 58 (placeholder dot)
+		draw_circle((centre_pt + Vector2.from_angle(a) * 58.0) * u, 5.0 * u, Color(1, 1, 1, 0.35))
+		_text(words[i], (centre_pt + Vector2.from_angle(a) * 84.0) * u, 52.0 * u, 12.5, TXT, 9.0, "radial_%d_%s" % [i, words[i]])
 	draw_set_transform(o2 - Vector2(180, 180) * s, 0.0, Vector2(s, s))
 	draw_texture(tex["radial_hub"], Vector2.ZERO)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_text("X", o2, 40.0 * u, 16.0, TXT, 12.0, "hub_close")
-	rects["radial"] = Rect2(cx - 104.0, cy - 104.0, 208.0, 104.0 + 22.0)
-	if hud.send_tank:
-		var tg: Rect2 = hud.side_panel.get_global_rect()
-		rects["tank_panel"] = Rect2(tg.position / u, tg.size / u)
+	var box1: Rect2 = fan_pts.call(centre_pt)
+	rects["radial"] = box1
+	fan["bbox_unshifted"] = [snappedf(box0.position.x, 0.1), snappedf(box0.position.y, 0.1), snappedf(box0.size.x, 0.1), snappedf(box0.size.y, 0.1)]
+	fan["bbox"] = [snappedf(box1.position.x, 0.1), snappedf(box1.position.y, 0.1), snappedf(box1.size.x, 0.1), snappedf(box1.size.y, 0.1)]
+	fan["node_pt"] = [snappedf(node_pt.x, 0.1), snappedf(node_pt.y, 0.1)]
+	_fan = fan
+	_box0 = box0
 	report = {"W_pt": snappedf(W, 0.1), "H_pt": snappedf(H, 0.1), "u": snappedf(u, 0.001), "texts": texts.duplicate(), "rects": {}}
 	for k in rects:
 		var r: Rect2 = rects[k]
 		report["rects"][k] = [snappedf(r.position.x, 0.1), snappedf(r.position.y, 0.1), snappedf(r.size.x, 0.1), snappedf(r.size.y, 0.1)]
 	report["overlaps"] = overlaps()
+	var un := []
+	for k in rects:
+		if k in ["screen", "safe", "radial", "capsule"] or str(k).begins_with("pill") or k == "timer":
+			continue
+		if _box0.intersects(rects[k]):
+			un.append(k)
+	if (rects["capsule"] as Rect2).intersects(_box0):
+		un.append("capsule")
+	_fan["unshifted_overlaps"] = un
+	report["fan"] = _fan
 
 
 func overlaps() -> Array:
