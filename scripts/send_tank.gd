@@ -51,6 +51,7 @@ const PIC_Y := 48.0
 const PIC_W := 300.0
 const PIC_BOTTOM := 1250.0                        # under the drip's tip (canvas 1237) + the drop's room
 const LIQ_TOP := 177.0
+const LVL_TOP := 252.0                            # ui-neon-apply (Daniele 2026-11-09): 100 % ~9 % under the glass top (goo headroom)
 const LIQ_BOT := 987.0
 const LIQ_X0 := 72.0
 const LIQ_X1 := 324.0
@@ -67,6 +68,11 @@ func picture() -> bool:
 func cv(p: Vector2) -> Vector2:
 	## A canvas point in control px.
 	return Vector2((p.x - PIC_X) * canvas_k, (p.y - PIC_Y) * canvas_k)
+
+
+func body_mid_y() -> float:
+	## The tank body's centre (canvas y 48..1128) in control px: Hud.layout centres it on the screen.
+	return cv(Vector2(0, (PIC_Y + 1128.0) / 2.0)).y
 
 
 func picture_size(k: float, ptk: float) -> Vector2:
@@ -86,7 +92,7 @@ func gmn() -> bool:
 func body_rect() -> Rect2:
 	## The tank's inside (the goo's room): the frame's rect minus its rim and the drips under it.
 	if picture():                                 # the art's liquid box: x 72..324, y 177 (100 %) .. 987 (0 %)
-		var a := cv(Vector2(LIQ_X0, LIQ_TOP))
+		var a := cv(Vector2(LIQ_X0, LVL_TOP))
 		return Rect2(a, cv(Vector2(LIQ_X1, LIQ_BOT)) - a)
 	var drip := HudNoir.drip_px("send_tank" if HudNoir.has("send_tank") else "send_housing")
 	if gmn():                                     # the director's glass: caps top and bottom, the walls at the sides
@@ -359,11 +365,11 @@ func _draw_picture() -> void:
 	var s := pt_px
 	var acc: Color = HudNoir.accent
 	var lv := clampf(shown, 0.0, 1.0)
-	var ly := lerpf(LIQ_BOT, LIQ_TOP, lv)                                    # the level in canvas px
+	var ly := lerpf(LIQ_BOT, LVL_TOP, lv)                                    # the level in canvas px
 	_draw_layer(_layer("fill"), Rect2(PIC_X, PIC_Y, PIC_W, 1128.0 - PIC_Y), Color.WHITE)
 	# the goo: a gently moving surface over the art's liquid, clipped to the glass; UVs = the canvas itself (1:1, no stretch)
 	var full := lv >= 0.999
-	var calm := 0.35 if full else 1.0
+	var calm := 0.5 if full else 1.0
 	var amp := (5.0 + 14.0 * _slosh) * calm                                  # canvas px
 	var sway := 6.0 * calm * sin(_t * 1.3) + _slosh * 12.0 * sin(_t * 9.0)
 	var poly := PackedVector2Array()
@@ -372,7 +378,7 @@ func _draw_picture() -> void:
 		var u := float(k) / n
 		var x := lerpf(LIQ_X0, LIQ_X1, u)
 		var y := ly + amp * (0.55 * sin(u * 7.0 + _t * 2.1) + 0.45 * sin(u * 13.0 - _t * 3.1)) + sway * (u - 0.5) * 2.0
-		y = LIQ_TOP if full else clampf(y, LIQ_TOP, LIQ_BOT)                  # at 100 % the art's own meniscus shows
+		y = clampf(y, LIQ_TOP, LIQ_BOT)                                    # (100 % = LVL_TOP: the surface keeps moving under the cap)
 		poly.append(Vector2(x, y))
 	poly.append(Vector2(LIQ_X1, LIQ_BOT))
 	poly.append(Vector2(LIQ_X0, LIQ_BOT))
@@ -400,7 +406,7 @@ func _draw_picture() -> void:
 		if by > ly + 14.0:
 			draw_arc(cv(Vector2(bx, by)), (1.6 + 1.2 * fposmod(fi * 0.53, 1.0)) * s, 0.0, TAU, 10, Color(1, 1, 1, 0.35), 1.0 * s, true)
 	# the surface ring (art y 48..88, centre 68) and the rim glow (art centre 582.5 = the 50 % line) ride the level
-	if lv > 0.001 and not full:
+	if lv > 0.001:
 		_draw_layer(_layer("surface"), Rect2(48, 48, 300, 40), Color(acc.lerp(Color.WHITE, 0.35), 0.95), ly - 68.0 + sway * 0.3)
 		_draw_layer(_layer("rim"), Rect2(18, 560, 360, 45), Color(acc.lerp(Color.WHITE, 0.4), 0.95), ly - 582.5)
 	# the drip under the nozzle (tinted, breathing a little) and the drop
@@ -417,7 +423,7 @@ func _draw_picture() -> void:
 
 
 func _draw_marks(fs: int) -> void:
-	## 25 / 50 / 75 / 100 at y = lerp(987, 177, share): a white line each side of the word (- 75% -), the picked one lit.
+	## 25 / 50 / 75 / 100 at y = lerp(987, LVL_TOP, share): a white line each side of the word (- 75% -), the picked one lit.
 	var s := pt_px
 	var acc: Color = HudNoir.accent
 	var b := body_rect()
@@ -439,8 +445,6 @@ func _draw_marks(fs: int) -> void:
 			draw_line(Vector2(x0, y), Vector2(x1, y), Color(0, 0, 0, 0.5), lw + 2.0 * s, true)
 			draw_line(Vector2(x0, y), Vector2(x1, y), col, lw, true)
 		var p := Vector2(cx - w / 2.0, y + (_font.get_ascent(fs) - _font.get_descent(fs)) / 2.0)
-		if is_equal_approx(float(l), 1.0):          # designer: the 100% word stays inside the glass, clear of the cap's lip
-			p.y += _font.get_ascent(fs) * 0.45
 		draw_string_outline(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(3, int(4 * s)), ol)
 		draw_string(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
 

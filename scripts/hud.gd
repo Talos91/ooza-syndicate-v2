@@ -707,6 +707,9 @@ func layout(vp: Vector2, m: Vector4) -> void:
 			extra.position = Vector2(music_button.position.x - 8.0 * ui_scale - extra.size.x, pause_button.position.y)
 	side_panel.size = side_panel.get_combined_minimum_size()
 	var side_y := (vp.y - side_panel.size.y) / 2.0
+	if send_tank and send_tank.picture():               # ui-neon-apply (Daniele 2026-11-09 "should sit at the mid of the height"):
+		side_y = vp.y / 2.0 - (send_tank.position.y + send_tank.body_mid_y())   # the tank's BODY centred, the plate hangs under it
+		side_y = minf(side_y, vp.y - m.w - side_panel.size.y)
 	var top_bottom := top_panel.position.y + top_panel.size.y + 34.0   # below the top bar and status line
 	if send_tank and send_tank.picture() and top_panel.position.x > m.x + side_panel.size.x + 8.0:
 		top_bottom = m.y                                # ui-send-tank: the centred top bar is clear of the tank's column
