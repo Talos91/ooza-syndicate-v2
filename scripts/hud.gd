@@ -457,9 +457,13 @@ func setup(m: Node3D) -> void:
 	side_panel.add_child(side_box)
 	send_tank = SendTank.new()
 	send_tank.custom_minimum_size = Vector2(112.0, 4.0 * (78.0 if mobile else 66.0) + 74.0) * ui_scale
+	var tank_s := ui_scale
 	if mobile and HudNoir.has("send_tank"):          # GMN-1 layout: 4 bands of 60 pt, 59 wide, caps + drips round them
 		send_tank.custom_minimum_size = Vector2(pt(66.0), pt(4.0 * 60.0 + 64.0)).round()
-	send_tank.setup(self, main, ui_scale, UI_FONT)
+	elif HudNoir.has("send_tank"):                   # ui-demo-hud-scale: the desktop tank keeps its own proportions, scaled as a whole
+		tank_s = ui_scale * pt(4.0 * 60.0 + 64.0) / send_tank.custom_minimum_size.y   # (caps, ticks, words) to the pt layout's height
+		send_tank.custom_minimum_size = (send_tank.custom_minimum_size * tank_s / ui_scale).round()
+	send_tank.setup(self, main, tank_s, UI_FONT)
 	side_box.add_child(send_tank)
 	count_label = text_label("", 14, accent)                # (kept, hidden: the tank shows the units on its goo)
 	count_label.visible = false
@@ -2210,12 +2214,9 @@ func _refresh_inspector(cam: Camera3D) -> void:
 
 
 func pt(v: float) -> float:
-	## GMN-1 (the director's layout, QA/layout-*.json, measured at 812 x 375 pt): v points in viewport px on a phone; on a
-	## desktop the old ui_scale sizing.
-	if not mobile:
-		return v * ui_scale
-	var vp := root.get_viewport_rect().size
-	return v * UiKit.hud_k(vp) / maxf(UiKit.pt_per_px(vp), 0.01)   # FOLDABLES: x the screen factor (1.0 on phones)
+	## GMN-1 (the director's layout, QA/layout-*.json, measured at 812 x 375 pt): v points in viewport px - on a phone its real
+	## points x hud_k (FOLDABLES), on a desktop the canvas as a HUD_DESKTOP_PT_H pt screen (ui-demo-hud-scale, UiKit.hud_px_per_pt).
+	return v * UiKit.hud_px_per_pt(root.get_viewport_rect().size, mobile)
 
 
 func card_px(fs: int) -> int:
