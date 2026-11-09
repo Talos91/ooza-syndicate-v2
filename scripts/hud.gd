@@ -958,8 +958,10 @@ func _badges(cam: Camera3D) -> bool:
 			if Rules.is_proto(n["relay"]):                # RELAYS 3.0: OPEN 3 / A>B / UP / EXIT 2 / AIM 7 / ARMED 5
 				st = sim.proto_tag(n["id"])
 			what = Rules.RELAY_GLYPH[n["relay"]] + (("OUT" if st == "out" else "IN" if st == "retract" else st.to_upper()) if shows("relay") else "")
+			if n["relay"] == "launcher":                  # LAUNCHER TURRET: its tier first (➶T2 LOAD 40/100)
+				what = Rules.RELAY_GLYPH["launcher"] + "T%d " % int(n["tier"]) + (st.to_upper() if shows("relay") else "")
 		elif n["structure"] == "machinegoon":
-			what = "MGN%d" % n["tier"]
+			what = "GAT%d" % n["tier"]                   # GOOGATLING (was MGN, the Machinegoon)
 		elif Sim.vat_paused(n):                             # VAT COLUMN: the blueprint fills, the vat makes nothing
 			what = "PAUSED"
 		else:
@@ -1236,8 +1238,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 	_refresh_inspector(cam)
 
 
-const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "MACHINEGOON", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
-const BUILD_LABEL := {"machinegoon": "MACHINEGOON", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machinegoon": "GOOGAT", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
 const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
                                          # buttons / models of the relays") - distinct from the seat colour
 
@@ -1704,8 +1706,10 @@ func _inspector_actions(n: Dictionary) -> void:
 	# (TUTORIAL: each action shows once its lesson is reached - shows(); outside the tutorial, always)
 	if n["relay"] != "":
 		if shows("relay") and not sim.relay_fixed(id):  # RELAYS 3.0: a ferry without the hold / a fixed belt runs on its own
-			var verb: String = {"launcher": "LOCK", "ferry": "HOLD"}.get(n["relay"], "SWITCH")   # round 3: the ferry HOLDS
-			_add_action("SWITCH", "%s\n%s" % [verb, Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)
+			var verb: String = {"launcher": "LOAD", "ferry": "HOLD"}.get(n["relay"], "SWITCH")   # round 3: the ferry HOLDS; the
+			_add_action("SWITCH", "%s\n%s" % [verb, Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)   # turret LOADS, then fires
+		if n["relay"] == "launcher" and int(n["tier"]) < Rules.LAUNCHER_MAX_TIER and shows("upgrade"):   # LAUNCHER TURRET: T2 / T3
+			_add_action("UPGRADE", "UPGRADE T%d" % (int(n["tier"]) + 1), sim.upgrade_cost(n), "upgrade", id)
 		for kind in ["laser", "forge", "monster_hub"]:
 			if kind in n["buildable"] and n["structure"] != kind and shows("relay_build"):
 				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})
@@ -1715,7 +1719,7 @@ func _inspector_actions(n: Dictionary) -> void:
 		if n["tier"] < 4 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
 		if "machinegoon" in n["buildable"] and shows("machinegoon"):
-			_add_action("MACHINEGOON", "MACHINEGOON", sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
+			_add_action("MACHINEGOON", BUILD_LABEL["machinegoon"], sim.build_cost(n, "machinegoon"), "build", id, {"kind": "machinegoon"})
 	elif n["structure"] == "machinegoon":
 		if n["tier"] < 3 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
@@ -2170,7 +2174,7 @@ func _refresh_inspector(cam: Camera3D) -> void:
 	# ui-node compact card: STRUCTURE [tier chip] / units bar (yours, allies', neutral) / shields (vats) / ONE status line
 	inspector_first.text = "· " + _structure_word(n)
 	var hidden_pop := owner != "" and not sim.allied(owner, human)
-	inspector_tier.visible = n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon", ""]
+	inspector_tier.visible = (n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon", ""]) or n["relay"] == "launcher"   # the launcher has tiers (proto merge)
 	inspector_units.visible = not hidden_pop
 	inspector_shields.visible = owner != "" and Sim.has_vat(n) and NodeNoir.shield_count(float(n["armour_cap"])) > 0
 	inspector_label.text = _status_line(n, hidden_pop)
@@ -2226,10 +2230,12 @@ func card_px(fs: int) -> int:
 
 func _structure_word(n: Dictionary) -> String:
 	## The card's title (ui-node): what stands here; the tier sits in its own chip.
+	if n["relay"] == "launcher":
+		return "LAUNCHER"
 	if n["relay"] != "":
 		return "%s RELAY" % str(n["relay"]).to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else "")
 	if n["structure"] == "machinegoon":
-		return "MACHINEGOON"
+		return "GOOGATLING"
 	return STRUCT_LABEL.get(n["structure"], "VAT")
 
 
@@ -2247,6 +2253,12 @@ func _status_line(n: Dictionary, hidden_pop: bool) -> String:
 		return "FALLS IN %d s" % int(ceil(sim.drop_in(n["id"]))) if sim.is_warned(n["id"]) else "COULD FALL NEXT"
 	if sim.last_stand_active and sim.is_warned(n["id"]):
 		return "FALLS IN %d s" % int(ceil(sim.drop_in(n["id"]) if sim.v3 else sim.last_stand_warn_t))
+	if n["relay"] == "launcher" and owner != "" and not hidden_pop:   # LAUNCHER TURRET (proto merge): loads / LOADING / cooldown
+		var ls := launcher_line(n).to_upper()
+		var lup := sim.upgrade_cost(n)
+		if owner == human and lup > 0 and shows("upgrade"):
+			ls += " · UPGRADE T%d: %d" % [int(n["tier"]) + 1, Rules.shown(lup)]
+		return ls
 	if n["relay"] != "" and shows("relay"):
 		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
 		var nxt := sim.relay_state_key(n, sim.relay_next_index(n)).to_upper()
@@ -2268,8 +2280,8 @@ func _status_line(n: Dictionary, hidden_pop: bool) -> String:
 		return "MONSTER %s" % ("READY" if mr == "" else mr.to_upper())
 	if n["structure"] == "forge" and shows("forge_readout"):
 		return "+%d%% ATTACK · -%d%% DAMAGE" % [roundi(Rules.forge_bonus * 100.0), roundi((1.0 - 1.0 / Rules.FORGE_DEFENCE) * 100.0)]
-	if n["structure"] == "machinegoon":
-		return "NO PRODUCTION · FEED IT"
+	if n["structure"] == "machinegoon":                      # GOOGATLING (proto merge): its ammo is its garrison
+		return gat_line(n).to_upper()
 	if Sim.has_vat(n):
 		var up := sim.upgrade_cost(n)
 		var prod := "+%.1f / s" % Rules.shown_f(sim.production(n))
@@ -2350,11 +2362,33 @@ func _draw_card_shields() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudNoir.MUTED)
 
 
+func gat_line(n: Dictionary) -> String:
+	## GOOGAT readout (Desk dec-googatling): its ammo IS its garrison - "ammo 24/30 · +0.5/s · fires 1.6/s" at Alpha 11
+	## scale (cap = the node's own cap, + = half the same-tier vat rate); EMPTY while it trickles.
+	var ammo := float(n["units"])
+	var line := "ammo %d/%d · +%.1f/s · fires %.1f/s" % [Rules.shown(ammo), Rules.shown(Sim.gat_cap(n)),
+			Rules.shown_f(sim.gat_rate(n)), Rules.shown_f(Sim.gat_fire_rate(n))]
+	return line + (" · EMPTY" if ammo < 0.5 * Rules.SCALE else "")
+
+
+func launcher_line(n: Dictionary) -> String:
+	## LAUNCHER TURRET readout: "loads 50 in 2 s" idle; "LOADING 32/50 · 1.4 s" while it loads; the cooldown after a salvo.
+	var cap := Rules.shown(Sim.launcher_load(n))
+	if n["relay_phase"] == "moving" and n.get("misfire", "") == "":
+		return "LOADING %d/%d · %.1f s" % [Rules.shown(Sim.launcher_loaded(n)), cap, maxf(0.0, float(n["relay_t"]))]
+	var line := "loads %d in %d s" % [cap, int(Sim.launcher_load_s(n))]
+	if float(n["relay_cd"]) > 0.0:
+		line += " · ready in %d s" % int(ceil(float(n["relay_cd"])))
+	return line
+
+
 func _structure_line(n: Dictionary) -> String:
+	if n["relay"] == "launcher":
+		return "LAUNCHER T%d" % int(n["tier"])
 	if n["relay"] != "":
 		return "%s RELAY" % n["relay"].to_upper() + (" + %s" % STRUCT_LABEL.get(n["structure"], str(n["structure"]).to_upper()) if n["structure"] != "" else " (empty socket)")
 	if n["structure"] == "machinegoon":
-		return "MACHINEGOON T%d" % n["tier"]
+		return "GOOGATLING T%d" % n["tier"]
 	return "VAT T%d" % n["tier"]
 
 

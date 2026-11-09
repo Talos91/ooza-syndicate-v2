@@ -24,6 +24,29 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto25** - 2026-11-09 (proto-r, staging/proto/): R-10 Crescent - the speed relays become LAUNCHERS (Daniele, Desk
+  2026-11-06): the stone inside each horn is a T1 launcher sweeping the enemy horn; the outer arcs are plain decks; geometry unchanged.
+  CI: long suites (ai_curve, ai_coop) run only on a manual run with long=true.
+- **0.23.15-proto24** - 2026-11-07 (proto-r, staging/proto/): Launcher = a 3-tier loading cannon: tap to freeze the aim and load every
+  line entering (yours and the enemy's) up to 50 / 100 / 150 or 2 / 4 / 6 s, then one salvo; upgrades 25 / 35; it can fall in the Last
+  Stand but never drops below T1. GooGat (the Googatling): its ammo is its garrison, grown at half a vat's rate up to the node cap; it
+  fires it, then each unit as made (Daniele, Desk dec-launcher-turret / dec-googatling).
+- **0.23.15-proto23** - 2026-11-07 (proto-r, staging/proto/): R-15 Pinwheel 66 and R-16 Pinwheel B 66 = 66 m tries of R-05 / R-11
+  (Daniele, Desk R04 "shrunk on top and bottom to be 66 m"): 64 m tall, 2 m centre-rotor spokes, ferry pair just above N / S; N / S
+  reachable only through the centre rotor. Both in MapPool.PROTO, camera pitch 58. R04 / R07 waiver texts marked ACCEPTED in the baked
+  R maps (text only).
+- **0.23.15-proto22** - 2026-11-06 (proto-r, staging/proto/): R-01 Strait review - belts push again on maps with no speed relay (R-01,
+  R-05, R-12); neutral machinegoons grey instead of seat A cyan; every ferry 10 s in line / 10 s out (the 3-way hull 10 s per lane); R-01's
+  top outer roads raised and bottom ones lowered, the two lifts dock at real levels (map node "level", lowered lift "base": -1, decks ramp
+  pier to pier).
+
+- **0.23.15-proto21** - 2026-11-06 (proto-r, staging/proto/): R-14 Catapult Bay: a launcher map - pads throw over the bay, a ferry
+  crosses it, guns hold the crowns; the Very Last Stand skips launchers (they never fall). Proto suites now check only the MapPool.PROTO
+  maps (Daniele 2026-11-06).
+
+- **0.23.15-proto20** - 2026-11-06 (proto-r, staging/proto/): the cannon launcher 3x bigger ("the tower needs to be bigger"), T2 / T3
+  cannons for the coming 3-tier launcher, and only its light strips glow. Includes proto19 (cannon launcher, never published: freeze).
+
 - **0.23.15-proto19** - 2026-11-06 (proto-r, staging/proto/): The launcher is the old cannon: it stands on the node's building slot
   (nothing else is built there), turns and lobs at its target, and is indestructible (never falls in the Last Stand) - a new type of relay
   (Daniele 2026-11-06; sim rule change, noted in OPEN-QUESTIONS).

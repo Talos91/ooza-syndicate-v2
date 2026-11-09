@@ -548,7 +548,7 @@ func _relay_multi() -> void:
 
 func _heights() -> void:
 	## A raised deck crossing a ground deck: paths follow the height and the two lines never meet.
-	for path in MapPool.all():
+	for path in _pool:
 		var m := MapBuilder.load_map(path)
 		var geo: Array = m["layout"]["edges"]
 		for i in range(geo.size()):
@@ -571,7 +571,7 @@ func _heights() -> void:
 
 func _drop_timing() -> void:
 	## 0.18.4: after the ring's 10 s warning its platforms drop one at a time, Sim.last_stand_gap apart (adaptive, 2026-09-27).
-	for path in MapPool.all():
+	for path in _pool:
 		var m := MapBuilder.load_map(path)
 		if (m["lastStand"].get("methods", []) as Array).is_empty():
 			continue
@@ -622,7 +622,7 @@ func _very_last_stand() -> void:
 	## collapse (ring Last Stand, then Very Last Stand) with no orders, on maps of different sizes
 	## plus a tutorial (no ring Last Stand at all), and checks it never stalls the map.
 	var maps := []
-	for path in MapPool.all():
+	for path in _pool:
 		maps.append(MapBuilder.load_map(path))
 	maps.sort_custom(func(a, b): return (a["nodes"] as Array).size() < (b["nodes"] as Array).size())
 	var picks: Array = []
@@ -756,11 +756,24 @@ func _hubs(pool: Array) -> void:
 	check(seen > 0 or not pool.any(func(p): return str(p).contains("N-09")), "a hub map in the pool was checked (%d hubs)" % seen)
 
 
+var _pool: Array = []                               # the maps this run checks (see _run)
+
+
 func _run() -> void:
+	## SCOPE (Daniele 2026-11-06: "suites verify only the round-R / MapPool.PROTO maps; old-map failures are not blockers"):
+	## on a proto build (Rules.proto_debug) only the proto picker's maps are checked; `-- scope=all` checks every baked map.
+	var full := not Rules.proto_debug or "scope=all" in OS.get_cmdline_user_args()
 	var pool := MapPool.all()
+	if not full:
+		pool = pool.filter(func(p): return str(p).get_file().substr(0, 4) in MapPool.PROTO)
+		print("SCOPE proto: %d maps (MapPool.PROTO); -- scope=all for every baked map" % pool.size())
+	_pool = pool
 	var baked := Array(DirAccess.get_files_at(MapPool.DIR)).filter(func(f): return f.trim_suffix(".remap").ends_with(".json")).size()
-	check(pool.size() == baked - MapPool.WITHHELD.size() and pool.size() > 0, "every baked map is in the pool except the withheld (%d of %d)" % [pool.size(), baked])
-	for code in MapPool.WITHHELD_MODES:                # a per-mode withhold names a baked map and modes it really seats
+	if full:
+		check(pool.size() == baked - MapPool.WITHHELD.size() and pool.size() > 0, "every baked map is in the pool except the withheld (%d of %d)" % [pool.size(), baked])
+	else:
+		check(pool.size() == MapPool.PROTO.size(), "proto scope: every MapPool.PROTO map is baked (%d of %d)" % [pool.size(), MapPool.PROTO.size()])
+	for code in (MapPool.WITHHELD_MODES if full else {}):                # a per-mode withhold names a baked map and modes it really seats
 		var hit := pool.filter(func(p): return str(p).get_file().begins_with(code))
 		check(hit.size() == 1 and (MapPool.WITHHELD_MODES[code] as Array).all(func(md): return MapBuilder.load_map(hit[0])["seats"].has(md)),
 				"%s: WITHHELD_MODES %s names a baked map seating those modes" % [code, str(MapPool.WITHHELD_MODES[code])])

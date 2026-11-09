@@ -166,11 +166,23 @@ func _play(path: String, mode: String, level: String, spec: Dictionary, seed_val
 	var snaps := {}
 	var next_snap := 30.0
 	var dt := 0.1
+	var gat := {}                                     # GOOGATLING per seat: [node-s standing, node-s firing, node-s empty, kills shown]
 	while not sim.over and sim.time < 600.0:
 		for ai in ais:
 			ai.think(sim, dt)
 		sim.step(dt)
 		sim.fx_events.clear()
+		for n in sim.nodes:
+			if n["structure"] == "machinegoon" and n["owner"] != "":
+				var g: Array = gat.get(n["owner"], [0.0, 0.0, 0.0, 0.0])
+				g[0] += dt
+				var sh: Dictionary = n["shot"]
+				if not sh.is_empty() and absf(float(sh["t"]) - sim.time) < 0.001:
+					g[1] += dt
+					g[3] += Rules.shown_f(float(sh["kills"]))
+				if float(n["units"]) < 0.5 * Rules.SCALE:
+					g[2] += dt
+				gat[n["owner"]] = g
 		if sim.time >= next_snap:
 			snaps[str(int(next_snap))] = _snap(sim, seat_list)
 			next_snap += 30.0
@@ -218,4 +230,5 @@ func _play(path: String, mode: String, level: String, spec: Dictionary, seed_val
 	return {"map": str(m.get("code", path.get_file().substr(0, 4))), "file": path.get_file(), "spec": factions, "habits": {"A": spec["A"]["h"], "B": spec["B"]["h"]} if spec.has("B") else {}, "teams": teams,
 			"loadouts": sim.loadouts, "winner": sim.winner, "t": snappedf(sim.time, 0.1), "over": sim.over, "forced": forced,
 			"draw": draw, "ls_t": ls_t, "vls_t": vls_t, "builds": builds, "casts": casts, "caps": caps, "snaps": snaps,
-			"losses": losses, "bursts": bursts, "monsters": monsters, "elim": elim, "seed": seed_value}
+			"losses": losses, "bursts": bursts, "monsters": monsters, "elim": elim, "seed": seed_value,
+			"gat": gat}

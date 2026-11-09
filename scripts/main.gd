@@ -1666,6 +1666,9 @@ func perform(seat: String, method: String, id: int, args := {}) -> Array:
 				return [false, why if why != "" else "Relay is already switching"]
 			if sim.relay_fixed(id):                     # round 3: a conveyor whose map says "switch": false
 				return [false, "This belt runs on its own"]
+			if n["relay"] == "launcher" and sim.fire_relay(id):   # LAUNCHER TURRET: the aim freezes, loading starts now
+				return [true, "Loading - up to %d units in %d s, then it fires at the target (%d s cooldown)" % [
+						Rules.shown(Sim.launcher_load(n)), int(Sim.launcher_load_s(n)), int(Rules.relay_cooldown("launcher"))]]
 			if sim.fire_relay(id):
 				return [true, "Relay fired - switching in %d s, then %d s cooldown" % [int(Rules.RELAY_WARNING), int(Rules.relay_cooldown(str(n["relay"])))]]
 			return [false, "Relay on cooldown" if n["relay_cd"] > 0.0 else "Relay is already switching"]

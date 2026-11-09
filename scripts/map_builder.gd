@@ -481,12 +481,16 @@ static func apply_owner(parts: Array, seat: String) -> void:
 			for s in range(mesh.get_surface_count()):
 				var m := mesh.surface_get_material(s)
 				var name := m.resource_name if m else ""
+				# no owner: the model's own neutral look - unless the model was authored in seat A's colour
+				# (Machinegoon_T*: OS_Light_A / OS_Ooze_A), which takes the neutral grey (Daniele 2026-11-06, proto21:
+				# "GooN are default vex color instead of gray" - the neutral machinegoons on round R)
+				var seat_a := name.ends_with("_A")
 				if name.begins_with("OS_Light"):
-					mi.set_surface_override_material(s, Mats.light(seat) if seat != "" else null)
+					mi.set_surface_override_material(s, Mats.light(seat) if seat != "" else (Mats.light("") if seat_a else null))
 				elif name.begins_with("OS_Ooze"):
 					if mi.has_meta("vat_liquid"):             # a living liquid (Scenery) colours itself
 						continue
-					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else null)
+					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else (Mats.ooze_neutral() if seat_a else null))
 		MapBatch.refresh(p)                             # Alpha 21: a batched piece's light / ooze slots follow
 
 
@@ -506,9 +510,25 @@ const UNDER_BASE := 2.4              # Deck_Underpass depth as modelled (builder
 static func layout3(map: Dictionary) -> Dictionary:
 	var pos := {}
 	var nodes: Dictionary = map["layout"]["nodes"]
+	var lvl := {}                                    # round R levels (Daniele 2026-11-06, R-01): a platform's "level" (+1 raised /
+	for n in map.get("nodes", []):                   # -1 lowered) stands level x RELAYS_PROTO.lift.rise off the ground, so a lift
+		if int(n.get("level", 0)) != 0:              # docks it at one of its two heights
+			lvl[int(n["id"])] = float(n["level"]) * float(Rules.RELAYS_PROTO["lift"]["rise"])
 	for k in nodes:
-		pos[int(k)] = Vector3(nodes[k][0], 0.0, nodes[k][1])
+		pos[int(k)] = Vector3(nodes[k][0], float(lvl.get(int(k), 0.0)), nodes[k][1])
 	return pos
+
+
+static func ramp_xf(near: Vector3, far: Vector3) -> Transform3D:
+	## Shears flat deck pieces (laid at y 0) onto the line far -> near: height far.y at `far`, near.y at `near`, linear
+	## in between along the deck (Sim.ramp_ends gives the pier ends). Identity when both ends stand on the ground.
+	if absf(near.y) < 0.001 and absf(far.y) < 0.001:
+		return Transform3D.IDENTITY
+	var flat := Vector3(near.x - far.x, 0.0, near.z - far.z)
+	var dir := flat.normalized()
+	var k := (near.y - far.y) / maxf(flat.length(), 0.01)
+	var m := Basis(Vector3(1.0, k * dir.x, 0.0), Vector3(0.0, 1.0, 0.0), Vector3(0.0, k * dir.z, 1.0))
+	return Transform3D(m, Vector3(0.0, far.y - k * dir.dot(Vector3(far.x, 0.0, far.z)), 0.0))
 
 
 static func angled_pier(parent: Node3D, exit: Vector3, dir: Vector3, lean: float, switched: bool) -> Node3D:
@@ -769,6 +789,20 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 				rv.add_ghosts(ctrl, i, decks, gate_xf if kind == "rotation" else null)
 			(vis[ctrl]["state_hosts"] as Array).append_array(decks)
 			decks.append_array(swing)
+		if true:                                       # round R levels: piers flat at their platform's height, a non-lift deck
+			for pr in piers:                           # sheared into its ramp (a lift's decks: ProtoRelayView._ramp, live)
+				if pr is Node3D and not pr in swing:
+					var py: float = 0.0
+					for nid2 in [e["a"], e["b"]]:
+						if (vis[nid2]["parts"] as Array).has(pr):
+							py = float((sim.nodes[nid2]["pos"] as Vector3).y)
+					(pr as Node3D).position.y += py
+			if str(e.get("proto", "")) != "lift":
+				var ends: Array = sim.ramp_ends(i, e["b"])
+				var rx := ramp_xf(ends[0], ends[1])
+				if rx != Transform3D.IDENTITY:
+					for dk in decks:
+						(dk as Node3D).transform = rx * (dk as Node3D).transform
 		vis["edge_decks"][i] = decks
 		vis["edge_base"][i] = decks.map(func(x): return (x as Node3D).transform)
 		# RELAY V2: the remote's link - a glowing arc from its button to the receiver masts on this bridge's gate (the
