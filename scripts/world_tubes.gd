@@ -16,11 +16,18 @@ extends Node3D
 ##    upgrade builds, the tubes it adds show EMPTY glass; when the tier completes they fill from the pit to the column.
 ##    Goo flows PIT -> COLUMN (rule 5, Daniele 2026-11-07 final) in the column owner's goo colour (R3: WorldLayer._col, the colour the tubes used);
 ##    a capture recolours every tube of that column at once.
+##  - v2 (Daniele 2026-11-09, 3 corrections; WorldLocals mirrors the 4 pits on both axes): each pit has ONE COLLECTOR (a header
+##    bar outside its rim facing the board + a riser over the rim into the goo); a column's tubes run as one RIBBON (offsets
+##    HDR_PITCH from a filleted centre line), the ribbons are uncrossed as blocks and plug into the header side by side after a
+##    straight parallel approach. Runs sit level at RACK_Y on steel stands (the Locals walk under; no humps), bridging only
+##    over another tube. A tube a vat upgrade adds BUILDS as the vat's blueprint hologram (world_pipe_holo.gdshader, next
+##    pass): the ghost first, the real tube revealed from the column end with Sim.build_progress, then the goo fills.
 ##  - PIT COLOUR (R7): per pit, gray blended toward the tube-weighted mix of the players' colours by T / (T + L / 20).
 ## Budget: ONE draw for every tube of the map (one ArrayMesh, all potential slots: 4 per column; a slot's state lives in
 ## a 1-row float texture: rgb colour, a = fill 0..1 from the pit end, < 0 hidden -> the vertex shader collapses it).
 
 const SHADER_PIPE := preload("res://shaders/world_pipe.gdshader")
+const SHADER_HOLO := preload("res://shaders/world_pipe_holo.gdshader")   # v2: the build hologram (next pass)
 # the column base (metres; origin = the lift's axis on the floor, doors at +Z, +X, -Z, -X, sockets on the diagonals)
 const APOTHEM := 1.6             # centre to a face (doors and sockets sit on the faces)
 const WALL_H := 1.05
@@ -50,8 +57,20 @@ const TUBE_SEP := 0.18           # rad between two tubes over the rim (1.06 m; 0
 const LANE_CLEAR := 1.08         # m: a tube's centre over a Locals' lane (a Local is 0.64 tall: 15 cm under the glass)
 const LIFT_RAMP := 1.4           # m: a pipe bridge's ramp each side
 const GOO_R := 3.2              # m from the pit's centre: a tube's mouth under the goo (Locals emerge LANE_SEP aside)
-const RIB_OFF := 0.92            # m: a column's tubes run beside its Locals' lane, the nearest this far from its centre
-const RIB_PITCH := 0.70          # m between two tubes of one column (2 PIPE_R + 16 cm: siblings never touch or cross)
+const RACK_Y := 1.08             # m: v2 - the tube's centre on its LEVEL run (= LANE_CLEAR: the Locals walk under it, no humps)
+const POST_STEP := 3.0           # m between the steel stands under a level run
+const POST_HW := 0.07            # a stand's half width
+const SPAN_MAX := 12.0           # m: the longest unsupported level stretch (probe; stands every POST_STEP where the floor is free)
+const HDR_R := 7.0               # m: v2 - the collector header's axis from its pit's centre (outside the Locals' rim exits at 5.4)
+const HDR_APPR := 5.0            # m: each tube's last straight run, parallel to its neighbours, into the header
+const HDR_PITCH := 0.90          # m between two tubes' plugs on the header (2 PIPE_R + 36 cm: a stand fits between)
+const HDR_END := 0.95            # m: the header runs on past its outer plugs (its end stands stand there)
+const RISER_SEP := 0.34         # rad: the riser keeps this far round the pool from a Locals' exit (its mouth at GOO_R)
+const RIB_BEND := 3.0            # m: the ribbon centre's bend radius (4 tubes span 1.35 m either side of it)
+const RIB_HALF := 1.5            # m: half a 4-tube ribbon's width + a tube: the extra room _steer keeps round obstacles
+const RIB_STAGGER := 0.0         # m deeper per m nearer the bundle middle (tried 1.2: the bends crossed farther out; off)
+const RIB_START := 3.2           # m: a column's ribbon centre starts this far in front of its base, toward its pit
+const HDR_RR := 0.36             # m: the header's / riser's radius
 
 var wl: WorldLayer
 var built := false
@@ -65,6 +84,10 @@ var _mi: MeshInstance3D
 var _dirty := true
 var tris := 0                    # probes: the tube mesh's triangles
 var _laid: Array = []            # the tubes built so far (world points): later tubes bridge over them
+var headers: Array = []          # v2: per pit {c, dir (pit -> board), lat, half} ({} = no tubes)
+var _centres := {}               # [col, centre offset] -> its ribbon centre line
+var hdr_slots: Array = []        # v2: per pit [header slot, riser slot]
+var posts: Array = []            # v2: [slot, foot (world), top y] - the stands under the level runs (probes)
 var run_pts: Array = []          # probes (tests/pits_tubes_clip.gd): per slot [col index, socket, pit, world points]
 static var _base_mesh: ArrayMesh
 
@@ -118,20 +141,17 @@ func build() -> void:
 		var c: Vector3 = craters[int(f["crater"])]
 		var ex: Vector2 = (f["path"] as Array)[0]
 		fixed[int(f["crater"])].append(atan2(ex.y - c.z, ex.x - c.x))
-	var placed: Array = []
+	# v2 (Daniele 2026-11-09: "each pit should have its tube link to the vertical tube in an orderly fashion, right now feels
+	# incredibly messy"): every column takes its nearest pit; each pit gets ONE COLLECTOR - a steel header bar across the
+	# board-facing side just outside its rim (HDR_R m from the centre, at the rack height) with one RISER that carries the
+	# goo over the rim into the pool. Every tube of that pit runs the last HDR_APPR m PARALLEL to its neighbours and plugs
+	# into the header at its own slot, HDR_PITCH apart, in the order of its socket's place across the header - so the
+	# tubes fan in as one ordered bundle with one clean entry each, and none crosses another near the pit.
+	var fan: Array = []                               # per pit: [col index, socket, side point]
 	for k in range(craters.size()):
-		placed.append([])
-	var runs: Array = []                              # [col index, socket k, pit, arrival angle, world points]
-	var placed_best := {}
-	_laid.clear()                                     # the floor runs laid so far (later tubes bridge over them)
-	var near_first: Array = cols.keys()               # the columns nearest their pit lay their tubes first (inside)
-	var pd := func(i: int) -> float:
-		var best := INF
-		for c in craters:
-			best = minf(best, Vector2(wl._tubes[i]["x"], wl._tubes[i]["z"]).distance_to(Vector2(c.x, c.z)))
-		return best
-	near_first.sort_custom(func(x, y): return pd.call(x) < pd.call(y))
-	for i in near_first:
+		fan.append([])
+	var socks_of := {}
+	for i in cols:
 		var tb: Dictionary = wl._tubes[i]
 		var foot := Vector2(tb["x"], tb["z"])
 		var pi := 0
@@ -148,121 +168,142 @@ func build() -> void:
 		order.sort_custom(func(a, b): return corner_dir(a).dot(to) > corner_dir(b).dot(to))
 		var n0: Dictionary = wl.sim.nodes[tb["id"]]
 		var most := tubes_for(n0, int(cols[i]["start"]), bool(cols[i]["home"]), 3)   # the most it can ever hold
-		# its own lane's exit angle: the tubes split round it (left sockets left of the lane, right ones right), each
-		# side an ordered bundle TUBE_SEP apart, pushed outward past other lanes and tubes: no tube crosses its column's
-		# lane or a sibling
-		var lane := atan2(foot.y - cp.y, foot.x - cp.x)
-		var spine: Array = []
-		if wl.locals.feeds.has(i) and int(wl.locals.feeds[i]["crater"]) == pi:
-			var ex: Vector2 = (wl.locals.feeds[i]["path"] as Array)[0]
-			lane = atan2(ex.y - cp.y, ex.x - cp.x)
-			spine = _spine(wl.locals.feeds[i]["path"])
-		if not spine.is_empty():
-			# the column's tubes as a ribbon beside its own Locals' lane (the lane is routed round bases and rings already):
-			# each side's tubes in order, the inner one nearest the lane, so siblings never cross or touch
-			var rib := _ribbon_runs(i, order.slice(0, most), spine, craters[pi], pi, lane, fixed[pi], placed[pi])
-			for rn in rib:
-				_laid.append((rn[4] as PackedVector3Array).slice(0, (rn[4] as PackedVector3Array).size() - 6))
-				runs.append(rn)
-				cols[i]["slots"].append(runs.size() - 1)
-			var sl0: Array = cols[i]["slots"]
-			sl0.sort_custom(func(x, y): return order.find(int(runs[x][1])) < order.find(int(runs[y][1])))
-			continue
-		# (no lane to this pit: the free layout below)
-		var sides := {-1: [], 1: []}
+		socks_of[i] = order
 		for s in order.slice(0, most):
-			var w := _side_point(foot, to, s)
-			var want := angle_difference(lane, atan2(w.y - cp.y, w.x - cp.x))
-			sides[-1 if want < 0.0 else 1].append([absf(want), s])
-		for sg in [-1, 1]:
-			(sides[sg] as Array).sort_custom(func(x, y): return x[0] < y[0])    # nearest the lane first
-		# which side of the lane each bundle takes: as split (left sockets left), or all round one side - the layout whose
-		# tubes cross the fewest tubes already laid and Locals' lanes (each crossing is a pipe bridge)
-		var opts := [sides, {-1: sides[-1] + sides[1], 1: []}, {-1: [], 1: sides[-1] + sides[1]}]
-		var best_runs: Array = []
-		var best_x := INF
-		for o in range(opts.size()):
-			if o > 0 and ((opts[o][-1] as Array).is_empty() and (opts[o][1] as Array).size() == (sides[1] as Array).size()
-					or (opts[o][1] as Array).is_empty() and (opts[o][-1] as Array).size() == (sides[-1] as Array).size()):
-				continue                              # the same as the split
-			var pl: Array = placed[pi].duplicate()
-			var cand: Array = []
-			var x := 0
-			for sg in [-1, 1]:
-				var bundle: Array = opts[o][sg]
-				var angs: Array = _bundle(lane, sg, bundle.size(), fixed[pi], pl)[0]
-				for j in range(bundle.size()):
-					var pts := _path(i, int(bundle[j][1]), craters[pi], float(angs[j]))
-					x += _crossings(pts)
-					cand.append([i, int(bundle[j][1]), pi, float(angs[j]), pts])
-			if x < best_x:
-				best_x = x
-				best_runs = cand
-				placed_best[pi] = pl
-		placed[pi] = placed_best[pi]
-		for rn in best_runs:
-			_laid.append((rn[4] as PackedVector3Array).slice(0, (rn[4] as PackedVector3Array).size() - 6))
-			runs.append(rn)
+			fan[pi].append([i, s, _side_point(foot, to, s)])
+	var arrive := {}                                  # [col, socket] -> [pit, offset across the header]
+	headers.clear()
+	_centres.clear()
+	for k in range(craters.size()):
+		var tubes: Array = fan[k]
+		var c2 := Vector2(craters[k].x, craters[k].z)
+		if tubes.is_empty():
+			headers.append({})
+			continue
+		var m := Vector2.ZERO
+		for t in tubes:
+			m += ((t[2] as Vector2) - c2).normalized()
+		var mean := atan2(m.y, m.x)
+		var ang := mean                               # the riser's angle: the mean bearing, nudged off the Locals' exits
+		for dd in range(0, 160):
+			var cand := mean + float(dd / 2) * 0.02 * (1.0 if dd % 2 == 0 else -1.0)
+			var ok := true
+			for f in fixed[k]:
+				if absf(angle_difference(cand, float(f))) < RISER_SEP:
+					ok = false
+			if ok:
+				ang = cand
+				break
+		var dir := Vector2(cos(ang), sin(ang))
+		var lat := Vector2(-dir.y, dir.x)
+		var mouth := c2 + dir * (HDR_R + HDR_APPR)    # the bundle's mouth: its tubes ordered by their bearing from here
+		var key := func(t: Array) -> float:
+			var v: Vector2 = (t[2] as Vector2) - mouth
+			return angle_difference(ang, atan2(v.y, v.x))
+		tubes.sort_custom(func(x, y): return key.call(x) < key.call(y))
+		# whole columns keep their tubes side by side: groups in bearing order, then uncrossed (2-opt) as blocks
+		var groups: Array = []                        # [col index, [its tubes]]
+		for t in tubes:
+			if groups.is_empty() or int(groups[-1][0]) != int(t[0]):
+				var found := -1
+				for g in range(groups.size()):
+					if int(groups[g][0]) == int(t[0]):
+						found = g
+				if found < 0:
+					groups.append([int(t[0]), [t]])
+				else:
+					groups[found][1].append(t)
+			else:
+				groups[-1][1].append(t)
+		var n := tubes.size()
+		var pre := func(o: float) -> Vector2:
+			return c2 + dir * (HDR_R + HDR_APPR + 3.0) + lat * o
+		var centres := func(gs: Array) -> Array:
+			var out := []
+			var j := 0
+			for g in gs:
+				var m2: int = (g[1] as Array).size()
+				out.append((j + (m2 - 1) * 0.5 - (n - 1) * 0.5) * HDR_PITCH)
+				j += m2
+			return out
+		for _it in range(200):
+			var cs: Array = centres.call(groups)
+			var swapped := false
+			for ga in range(groups.size()):
+				for gb in range(ga + 1, groups.size()):
+					var fa: Vector2 = _col_start(int(groups[ga][0]), pre.call(cs[ga]))
+					var fb: Vector2 = _col_start(int(groups[gb][0]), pre.call(cs[gb]))
+					if Geometry2D.segment_intersects_segment(fa, pre.call(cs[ga]), fb, pre.call(cs[gb])) != null:
+						var t = groups[ga]
+						groups[ga] = groups[gb]
+						groups[gb] = t
+						swapped = true
+						cs = centres.call(groups)
+			if not swapped:
+				break
+		var cs2: Array = centres.call(groups)
+		var htmp := {"c": c2, "dir": dir, "lat": lat, "w": (n - 1) * 0.5 * HDR_PITCH}
+		for g in range(groups.size()):
+			var sibs: Array = groups[g][1]
+			var m2 := sibs.size()
+			# siblings across their OWN ribbon: by their socket's side of the ribbon's first stretch (right side = + offset)
+			var cl: Array = _centre(int(groups[g][0]), htmp, float(cs2[g]))
+			var t0: Vector2 = ((cl[mini(3, cl.size() - 1)] as Vector2) - (cl[0] as Vector2)).normalized()
+			var n0 := Vector2(t0.y, -t0.x)
+			var fo := Vector2(wl._tubes[int(groups[g][0])]["x"], wl._tubes[int(groups[g][0])]["z"])
+			sibs.sort_custom(func(x, y): return ((x[2] as Vector2) - fo).dot(n0) < ((y[2] as Vector2) - fo).dot(n0))
+			for q in range(m2):
+				var off: float = float(cs2[g]) + (q - (m2 - 1) * 0.5) * HDR_PITCH
+				arrive[[int(sibs[q][0]), int(sibs[q][1])]] = [k, off, float(cs2[g])]
+		headers.append({"c": c2, "dir": dir, "lat": lat, "w": (tubes.size() - 1) * 0.5 * HDR_PITCH, "half": (n - 1) * 0.5 * HDR_PITCH + HDR_END})
+	var runs: Array = []                              # [col index, socket k, pit, arrival angle, world points]
+	_laid.clear()                                     # the floor runs laid so far (later tubes bridge over them)
+	var near_first: Array = cols.keys()               # the columns nearest their pit lay their tubes first (inside)
+	var pd := func(i: int) -> float:
+		var c: Vector3 = craters[int(cols[i]["pit"])]
+		return Vector2(wl._tubes[i]["x"], wl._tubes[i]["z"]).distance_to(Vector2(c.x, c.z))
+	near_first.sort_custom(func(x, y): return pd.call(x) < pd.call(y))
+	for i in near_first:
+		var pi := int(cols[i]["pit"])
+		var order: Array = socks_of[i]
+		for s in order:
+			if not arrive.has([i, s]):
+				continue
+			var off: float = arrive[[i, s]][1]
+			var pts := _path(i, s, headers[pi], off, float(arrive[[i, s]][2]))
+			_laid.append(pts)
+			runs.append([i, s, pi, off, pts])
 			cols[i]["slots"].append(runs.size() - 1)
-		# the slots in socket order (R1: the first tube built goes to the corner closest in direction to the pit)
-		var sl: Array = cols[i]["slots"]
-		sl.sort_custom(func(x, y): return order.find(int(runs[x][1])) < order.find(int(runs[y][1])))
+	hdr_slots.clear()
+	for k in range(headers.size()):                   # the collectors: header bar + riser, two more slots per pit
+		var h: Dictionary = headers[k]
+		if h.is_empty():
+			hdr_slots.append([])
+			continue
+		var y := wl.floor_y + RACK_Y
+		var hc: Vector2 = h["c"] + h["dir"] * HDR_R
+		var e0: Vector2 = hc - h["lat"] * float(h["half"])
+		var e1: Vector2 = hc + h["lat"] * float(h["half"])
+		var bar := PackedVector3Array([Vector3(e0.x, y, e0.y), Vector3(hc.x, y, hc.y), Vector3(e1.x, y, e1.y)])
+		runs.append([-1, -1, k, 0.0, bar])
+		runs.append([-1, -2, k, 0.0, _riser(h)])
+		hdr_slots.append([runs.size() - 2, runs.size() - 1])
 	_slots = runs.size()
 	run_pts = runs.map(func(rn): return [rn[0], rn[1], rn[2], rn[4]])
+	_place_posts(runs, craters)
 	_build_mesh(runs, craters)
-	_state = Image.create(maxi(_slots, 1), 1, false, Image.FORMAT_RGBAF)
+	_state = Image.create(maxi(_slots, 1), 2, false, Image.FORMAT_RGBAF)   # row 0 colour + fill, row 1 build progress
+	for k in range(maxi(_slots, 1)):
+		_state.set_pixel(k, 1, Color(-1, 0, 0, 0))   # not building
 	_tex = ImageTexture.create_from_image(_state)
 	_mat.set_shader_parameter("state", _tex)
+	var holo := ShaderMaterial.new()
+	holo.shader = SHADER_HOLO
+	holo.set_shader_parameter("state", _tex)
+	holo.set_shader_parameter("slots", float(maxi(_slots, 1)))
+	_mat.next_pass = holo
 	built = true
 	_dirty = true
-
-
-func _crossings(pts: PackedVector3Array) -> int:
-	## how many laid tubes' and Locals' lanes' segments this run crosses (on the floor plan)
-	var n := 0
-	var others: Array = []
-	for run in _laid:
-		var o := []
-		for q in (run as PackedVector3Array):
-			o.append(Vector2(q.x, q.z))
-		others.append(o)
-	if wl.locals != null:
-		for fk in wl.locals.feeds:
-			others.append(wl.locals.feeds[fk]["path"])
-	for k in range(1, pts.size() - 6):
-		var a := Vector2(pts[k - 1].x, pts[k - 1].z)
-		var b := Vector2(pts[k].x, pts[k].z)
-		for o in others:
-			for j in range(1, (o as Array).size()):
-				if Geometry2D.segment_intersects_segment(a, b, o[j - 1], o[j]) != null:
-					n += 1
-	return n
-
-
-static func _bundle(lane: float, sg: int, n: int, fixed: Array, placed: Array) -> Array:
-	## n tubes on side sg of the lane exit, each just outside the one before it, past lanes (LANE_SEP) and tubes
-	## (TUBE_SEP); placed gets them. Returns [angles, passed another tube]
-	var out := []
-	var passed := false
-	var prev: float = lane + sg * (LANE_SEP - TUBE_SEP)
-	for j in range(n):
-		var ang: float = prev + sg * TUBE_SEP
-		for step in range(300):
-			var ok := true
-			for f in fixed:
-				if absf(angle_difference(ang, float(f))) < LANE_SEP:
-					ok = false
-			for p in placed:
-				if absf(angle_difference(ang, float(p))) < TUBE_SEP - 0.001:
-					ok = false
-					passed = true
-			if ok:
-				break
-			ang += sg * 0.02
-		prev = ang
-		placed.append(ang)
-		out.append(ang)
-	return [out, passed]
 
 
 func _side_point(foot: Vector2, to: Vector2, s: int) -> Vector2:
@@ -274,29 +315,130 @@ func _side_point(foot: Vector2, to: Vector2, s: int) -> Vector2:
 	return foot + cd * (APOTHEM + SOCK_D + 1.2)
 
 
-func _path(i: int, s: int, cp: Vector3, ang: float) -> PackedVector3Array:
-	## socket -> along the floor -> over the rim -> into the pool (world points)
+func _col_start(i: int, c2: Vector2) -> Vector2:
+	## where a column's tube ribbon leaves its base: RIB_START m in front of it, toward where it heads (its approach)
+	var foot := Vector2(wl._tubes[i]["x"], wl._tubes[i]["z"])
+	var to := (c2 - foot).normalized() if c2.distance_to(foot) > 0.01 else Vector2(0, 1)
+	return foot + to * RIB_START
+
+
+func _centre(i: int, h: Dictionary, coff: float) -> Array:
+	## the column's ribbon centre line (1 m samples): from in front of its base round other bases / pits to the start of
+	## its approach; every tube of the column runs parallel to it at its own offset (cached per column)
+	var key := [i, coff]
+	if _centres.has(key):
+		return _centres[key]
+	var tb: Dictionary = wl._tubes[i]
+	var c2: Vector2 = h["c"]
+	var e: Vector2 = c2 + (h["dir"] as Vector2) * (HDR_R + HDR_APPR + 3.0) + (h["lat"] as Vector2) * coff
+	# its last stretch runs straight toward the header (offsets = across it); inner ribbons turn onto it farther out, so the
+	# bends nest (the reference sheet's network overview) instead of overlapping
+	var e2: Vector2 = e + (h["dir"] as Vector2) * (6.0 + RIB_STAGGER * (float(h.get("w", 0.0)) - absf(coff)))
+	var a := _col_start(i, e2)
+	var way: Array = _fillet([a] + _steer(a, e2, i, int(tb["id"]), Vector3(c2.x, 0, c2.y), 0) + [e2, e], RIB_BEND)
+	var out: Array = []
+	for k in range(way.size() - 1):
+		var p: Vector2 = way[k]
+		var q: Vector2 = way[k + 1]
+		var m := maxi(int(p.distance_to(q)), 1)
+		for j in range(m):
+			out.append(p.lerp(q, float(j) / m))
+	out.append(e)
+	_centres[key] = out
+	return out
+
+
+static func _fillet(way: Array, rb: float) -> Array:
+	## every corner of the polyline replaced by a circular arc of radius rb (less where the legs are short), so a ribbon's
+	## inner tube never pinches against its sibling at a bend (its offset stays well under the bend's radius)
+	if way.size() < 3:
+		return way
+	var out: Array = [way[0]]
+	for k in range(1, way.size() - 1):
+		var p0: Vector2 = out[out.size() - 1]
+		var p: Vector2 = way[k]
+		var p1: Vector2 = way[k + 1]
+		var u := (p - p0)
+		var v := (p1 - p)
+		if u.length() < 0.01 or v.length() < 0.01:
+			continue
+		var phi := angle_difference(atan2(u.y, u.x), atan2(v.y, v.x))
+		if absf(phi) < 0.05:
+			out.append(p)
+			continue
+		var th := tan(minf(absf(phi), 2.6) * 0.5)
+		var t := minf(rb * th, minf(u.length() * 0.48, v.length() * 0.48))
+		var r := t / th
+		var un := u.normalized()
+		var vn := v.normalized()
+		var st := p - un * t
+		var nl := Vector2(-un.y, un.x) * signf(phi)    # toward the centre (left for a left turn)
+		var cc := st + nl * r
+		var a0 := atan2(st.y - cc.y, st.x - cc.x)
+		var steps := maxi(int(ceil(absf(phi) / 0.2)), 2)
+		for j in range(steps + 1):
+			var a := a0 + phi * float(j) / steps
+			out.append(cc + Vector2(cos(a), sin(a)) * r)
+		out[out.size() - 1] = p + vn * t
+	out.append(way[way.size() - 1])
+	return out
+
+
+func _path(i: int, s: int, h: Dictionary, off: float, coff: float) -> PackedVector3Array:
+	## socket -> up to the rack height -> its column's ribbon (parallel to its siblings, `off - coff` from the centre line)
+	## -> its approach lane (parallel to every tube of the pit, `off` across the header) -> into the pit's header
 	var tb: Dictionary = wl._tubes[i]
 	var foot := Vector2(tb["x"], tb["z"])
 	var cd := corner_dir(s)
+	var c2: Vector2 = h["c"]
+	var dir: Vector2 = h["dir"]
+	var lat: Vector2 = h["lat"]
 	var p0 := foot + cd * (APOTHEM + 0.05)
 	var p1 := foot + cd * (APOTHEM + SOCK_D + 1.2)    # straight out of its socket first
-	var dir := Vector2(cos(ang), sin(ang))
-	var c2 := Vector2(cp.x, cp.z)
-	var rim_out := c2 + dir * (WorldLocals.RING_R + 0.9)
-	var p2 := c2 + dir * (WorldLocals.RING_R + 3.0)
+	var hj := c2 + dir * HDR_R + lat * off            # its plug on the header
+	var aj := hj + dir * HDR_APPR                     # the start of its parallel approach
 	var way := [p0, p1]
 	var to := (c2 - foot).normalized()
 	if cd.dot(to) < 0.0:                              # a back socket: round the base's side, outside the front tubes
-		var lat := (cd - to * cd.dot(to)).normalized()
-		way.append(foot + lat * 3.4 + to * 0.6)
-	way += _steer(way[-1], p2, i, int(tb["id"]), cp, 0)   # round other columns' bases and other pits
-	way.append(p2)
-	way.append(rim_out)
-	return _shape(way, c2, dir)
+		var side := (cd - to * cd.dot(to)).normalized()
+		way.append(foot + side * 3.4 + to * 0.6)
+	var cl: Array = _centre(i, h, coff)
+	var d := off - coff
+	for k in range(2, cl.size() - 2):                 # the ribbon: the centre line shifted by d (left of travel = +lat side)
+		var t: Vector2 = (cl[k + 1] as Vector2) - (cl[k - 1] as Vector2)
+		t = t.normalized() if t.length() > 0.001 else -dir
+		var nrm := Vector2(t.y, -t.x)                 # (travel toward the pit: -dir; its right-hand normal is +lat)
+		way.append((cl[k] as Vector2) + nrm * d)
+	way.append(aj + dir * 3.0)                        # onto its approach line, so the approach itself is dead straight
+	way.append(aj + dir * 1.5)
+	way.append(aj)
+	way.append(aj.lerp(hj, 0.34))
+	way.append(aj.lerp(hj, 0.67))
+	way.append(hj)
+	return _shape(way, c2, dir, false)
 
 
-func _shape(way: Array, c2: Vector2, dir: Vector2) -> PackedVector3Array:
+func _riser(h: Dictionary) -> PackedVector3Array:
+	## the collector's riser: from the header's middle up over the rim and down into the goo (the pit end last)
+	var c2: Vector2 = h["c"]
+	var hd: Vector2 = h["dir"]
+	var fy := wl.floor_y
+	var top := WorldLocals.RIM_H + HDR_RR + 0.18
+	var pts := PackedVector3Array()
+	for k in range(0, 5):
+		var t := float(k) / 4.0
+		var q := c2 + hd * lerpf(HDR_R, WorldLocals.RING_R + 0.9, t)
+		pts.append(Vector3(q.x, fy + lerpf(RACK_Y, top, smoothstep(0.0, 1.0, t)), q.y))
+	for k in range(1, 7):
+		var t := float(k) / 6.0
+		var r := lerpf(WorldLocals.RING_R + 0.9, GOO_R, t)
+		var y := top + 0.12 * sin(t * PI) if r > WorldLocals.POOL_R else lerpf(top, WorldLocals.POOL_H - 0.25, smoothstep(WorldLocals.POOL_R, GOO_R, r))
+		var q := c2 + hd * r
+		pts.append(Vector3(q.x, fy + y, q.y))
+	return pts
+
+
+func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true) -> PackedVector3Array:
 	## waypoints (x z) -> world points: smooth along the floor, bridges over lanes / laid tubes, over the rim, into the pool
 	var fy := wl.floor_y
 	var rim_out: Vector2 = way[way.size() - 1]
@@ -323,11 +465,12 @@ func _shape(way: Array, c2: Vector2, dir: Vector2) -> PackedVector3Array:
 	for k in range(flat.size()):
 		if k > 0:
 			cum += (flat[k] as Vector2).distance_to(flat[k - 1])
-		var y := lerpf(SOCK_Y, PIPE_Y, smoothstep(0.0, 1.2, cum))
-		y = lerpf(y, top, smoothstep(tot - 3.2, tot, cum))    # climbs to clear the rim
+		var y := lerpf(SOCK_Y, RACK_Y, smoothstep(0.0, LIFT_RAMP + 0.4, cum))   # v2: up to the rack height out of the socket
+		if tail:
+			y = lerpf(y, top, smoothstep(tot - 3.2, tot, cum))    # climbs to clear the rim
 		base_y.append(y)
 		var lf := _lift(flat[k], haz)                 # over a Locals' lane / an earlier tube: a pipe bridge
-		lifts.append(lf if lf > PIPE_Y + 0.05 else 0.0)   # a ramp's last few cm sit on the floor (no hovering foot)
+		lifts.append(lf)                              # (a lane near the socket ramp lifts it to the rack early)
 	for k in range(flat.size()):                      # bridges less than 6 m apart join into one (no zigzag)
 		var lm := 0.0
 		var rm := 0.0
@@ -336,8 +479,8 @@ func _shape(way: Array, c2: Vector2, dir: Vector2) -> PackedVector3Array:
 		for j in range(k, mini(k + 13, flat.size())):
 			rm = maxf(rm, lifts[j])
 		var join := minf(lm, rm)
-		if join - PIPE_R < 0.5:
-			join = 0.0                                # never a low level span hovering over the floor (no clipping rule)
+		if join < RACK_Y + 0.05:
+			join = 0.0
 		ys.append(maxf(base_y[k], maxf(lifts[k], join)))
 	# keep the 0.5 m samples where the tube bends up or down, ~2.5 m steps elsewhere (the triangle budget)
 	var pts := PackedVector3Array()
@@ -351,6 +494,8 @@ func _shape(way: Array, c2: Vector2, dir: Vector2) -> PackedVector3Array:
 		if keep:
 			pts.append(Vector3(flat[k].x, fy + ys[k], flat[k].y))
 			since = 0.0
+	if not tail:
+		return pts
 	# over the rim (r RING_R + 0.9 -> 3.0) and down into the pool
 	for k in range(1, 7):
 		var t := float(k) / 6.0
@@ -361,155 +506,77 @@ func _shape(way: Array, c2: Vector2, dir: Vector2) -> PackedVector3Array:
 	return pts
 
 
-func _spine(path: Array) -> Array:
-	## the Locals' lane (rim exit ... 5.3 m in front of the door, the door slot) from the column end to the pit end, 0.5 m samples
-	var way: Array = path.slice(0, path.size() - 1)
-	way.reverse()
-	var out: Array = []
-	for k in range(way.size() - 1):
-		var a: Vector2 = way[maxi(k - 1, 0)]
-		var b: Vector2 = way[k]
-		var c: Vector2 = way[k + 1]
-		var d: Vector2 = way[mini(k + 2, way.size() - 1)]
-		var m := clampi(int(b.distance_to(c) / 0.5), 1, 200)
-		for j in range(m):
-			var t := float(j) / m
-			out.append(0.5 * ((2.0 * b) + (c - a) * t + (2.0 * a - 5.0 * b + 4.0 * c - d) * t * t + (3.0 * b - a - 3.0 * c + d) * t * t * t))
-	if not way.is_empty():
-		out.append(way[way.size() - 1])
-	return out if out.size() >= 4 else []
-
-
-static func _nrm_at(spine: Array, k: int) -> Vector2:
-	var t: Vector2 = (spine[mini(k + 1, spine.size() - 1)] - spine[maxi(k - 1, 0)])
-	t = t.normalized() if t.length() > 0.001 else Vector2(1, 0)
-	return Vector2(-t.y, t.x)
-
-
-func _ribbon_runs(i: int, socks: Array, spine: Array, cp: Vector3, pi: int, lane: float, fixed: Array, placed: Array) -> Array:
-	## [col, socket, pit, arrival angle, points] per tube: sockets split by the side of the lane they sit on, inner first
-	var tb: Dictionary = wl._tubes[i]
-	var foot := Vector2(tb["x"], tb["z"])
-	var c2 := Vector2(cp.x, cp.z)
-	var to := (c2 - foot).normalized() if c2.distance_to(foot) > 0.01 else Vector2(0, 1)
-	var a0: Vector2 = spine[0]
-	var td := (a0 - foot).normalized() if a0.distance_to(foot) > 0.01 else to   # the door's axis: left / right of it
-	var n0 := Vector2(-td.y, td.x)
-	var sides := {-1: [], 1: []}
-	for s in socks:
-		var lat := (_side_point(foot, to, s) - foot).dot(n0)
-		sides[1 if lat > 0.0 else -1].append([absf(lat), s])
-	var e: Vector2 = spine[spine.size() - 1]
-	var ne := _nrm_at(spine, spine.size() - 2)
-	var out: Array = []
-	for g in [-1, 1]:
-		var bundle: Array = sides[g]
-		if bundle.is_empty():
+func _place_posts(runs: Array, craters: Array) -> void:
+	## v2: a steel stand every POST_STEP m under each level run - never on a Locals' lane, under another tube, on a column
+	## base or inside a pit's ring (shifted along the run up to 1.4 m to find clear floor)
+	posts.clear()
+	var lanes: Array = []
+	if wl.locals != null:
+		for fk in wl.locals.feeds:
+			var f: Dictionary = wl.locals.feeds[fk]
+			var c: Vector3 = craters[int(f["crater"])]
+			lanes.append([Vector2(c.x, c.z)] + (f["path"] as Array))
+	var flat: Array = []
+	for rn in runs:
+		var o := []
+		for q in (rn[4] as PackedVector3Array):
+			o.append(Vector2(q.x, q.z))
+		flat.append(o)
+	for r in range(runs.size()):
+		var pts: PackedVector3Array = runs[r][4]
+		if int(runs[r][1]) == -1:                     # a header bar: a stand under each end
+			for e in [0, pts.size() - 1]:
+				var q: Vector3 = pts[e].lerp(pts[1], 0.3 / maxf(pts[e].distance_to(pts[1]), 0.01))
+				if _post_clear(Vector2(q.x, q.z), r, lanes, flat, craters):
+					posts.append([r, Vector3(q.x, wl.floor_y, q.z), q.y - HDR_RR + 0.06])
 			continue
-		bundle.sort_custom(func(x, y): return x[0] < y[0])
-		var tp: Vector2 = e + ne * float(g)
-		var sg := 1 if angle_difference(lane, atan2(tp.y - c2.y, tp.x - c2.x)) > 0.0 else -1
-		var k0 := placed.size()                      # this pit's tubes so far: each swings round the pit on its own arc
-		var angs: Array = _bundle(lane, sg, bundle.size(), fixed, placed)[0]
-		var best: Array = []
-		var best_d := -INF
-		for perm in ([[0, 1], [1, 0]] if bundle.size() == 2 else [range(bundle.size())]):
-			# two tubes on a side: the rim angles go the way round whose swing into the pit keeps them farther apart
-			var cand: Array = []
-			var n_laid := _laid.size()
-			for j in range(bundle.size()):
-				var s := int(bundle[j][1])
-				var a := float(angs[perm[j]])
-				cand.append([i, s, pi, a, _rib_path(i, s, cp, a, spine, g * (RIB_OFF + j * RIB_PITCH), j, k0 + j, sg)])
-				var pts: PackedVector3Array = cand[-1][4]
-				_laid.append(pts.slice(0, pts.size() - 6))   # the next sibling bridges over it wherever they meet
-			_laid.resize(n_laid)
-			var d := INF if cand.size() < 2 else _min_gap(cand[0][4], cand[1][4])
-			if d > best_d:
-				best_d = d
-				best = cand
-		out += best
-	return out
+		if int(runs[r][0]) < 0:
+			continue                                  # the riser rests on the rim and the pool
+		var cum := PackedFloat32Array([0.0])
+		for k in range(1, pts.size()):
+			cum.append(cum[k - 1] + pts[k].distance_to(pts[k - 1]))
+		var tot := cum[cum.size() - 1]
+		var at := LIFT_RAMP + 0.6
+		while at < tot - 0.9:                         # (the header holds the end)
+			var placed := false
+			for dd in [0.0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4, 1.75, -1.75, 2.1, -2.1, 2.45, -2.45, 2.8, -2.8]:
+				var q := _at(pts, cum, at + dd)
+				if q.y - wl.floor_y - PIPE_R < 0.3:
+					break                                 # resting low here (the socket ramp): no stand needed
+				if _post_clear(Vector2(q.x, q.z), r, lanes, flat, craters):
+					posts.append([r, Vector3(q.x, wl.floor_y, q.z), q.y - PIPE_R + 0.06])
+					placed = true
+					at += dd
+					break
+			at += POST_STEP if placed else 0.7
 
 
-static func _min_gap(p: PackedVector3Array, q: PackedVector3Array) -> float:
-	## the least distance between two tubes' centre lines
-	var d := INF
-	for i in range(1, p.size()):
-		for j in range(1, q.size()):
-			var cp := Geometry3D.get_closest_points_between_segments(p[i - 1], p[i], q[j - 1], q[j])
-			d = minf(d, (cp[0] as Vector3).distance_to(cp[1]))
-	return d
+static func _at(pts: PackedVector3Array, cum: PackedFloat32Array, d: float) -> Vector3:
+	for k in range(1, pts.size()):
+		if cum[k] >= d:
+			return pts[k - 1].lerp(pts[k], clampf((d - cum[k - 1]) / maxf(cum[k] - cum[k - 1], 0.001), 0.0, 1.0))
+	return pts[pts.size() - 1]
 
 
-func _rib_path(i: int, s: int, cp: Vector3, ang: float, spine: Array, off: float, j: int, kp: int, sg: int) -> PackedVector3Array:
-	## socket -> out of it (a back one round the base's side) -> its lane beside the Locals' lane -> the pit's rim at ang
-	var tb: Dictionary = wl._tubes[i]
-	var foot := Vector2(tb["x"], tb["z"])
-	var cd := corner_dir(s)
-	var c2 := Vector2(cp.x, cp.z)
-	var to := (c2 - foot).normalized() if c2.distance_to(foot) > 0.01 else Vector2(0, 1)
-	var way := [foot + cd * (APOTHEM + 0.05), foot + cd * (APOTHEM + SOCK_D + 1.2)]
-	if cd.dot(to) < 0.0:
-		var lat := (cd - to * cd.dot(to)).normalized()
-		way.append(foot + lat * 3.4 + to * 0.6)
-	var dir := Vector2(cos(ang), sin(ang))
-	var arc_r := WorldLocals.RING_R + 3.0 + kp * RIB_PITCH   # its arc round the pit (outer for later tubes: no two coincide)
-	var stop_r := maxf(WorldLocals.RING_R + 4.5, arc_r + 1.5)
-	var k := int((1.5 + 1.5 * j) / 0.5)              # outer tubes join their lane a little later (no crossing at the base)
-	while k < spine.size() - 1:
-		var q: Vector2 = spine[k]
-		if q.distance_to(c2) < stop_r:
-			break
-		way.append(q + _nrm_at(spine, k) * _rib_off(q, spine, k, off, j, i, c2))
-		k += 2                                        # 1 m steps (the shape smooths them)
-	# round the pit on its arc (the way its side goes, never across its own lane) to its rim angle, then straight in
-	var last: Vector2 = way[way.size() - 1]
-	var a0 := atan2(last.y - c2.y, last.x - c2.x)
-	var swing := fposmod(sg * (ang - a0), TAU)
-	if swing > PI * 1.6:
-		swing = 0.0                                   # (already a little past it)
-	if swing > 0.12:
-		var steps := int(ceil(swing / 0.2))
-		for m in range(1, steps + 1):
-			var a := a0 + sg * swing * float(m) / steps
-			way.append(c2 + Vector2(cos(a), sin(a)) * arc_r)
-	way.append(c2 + dir * (WorldLocals.RING_R + 3.0))
-	way.append(c2 + dir * (WorldLocals.RING_R + 0.9))
-	return _shape(way, c2, dir)
-
-
-func _rib_off(q: Vector2, spine: Array, k: int, off: float, j: int, skip: int, own_pit: Vector2) -> float:
-	## the tube's offset from its lane at spine sample k: an obstacle on its side (another column's base, a pillar sleeve,
-	## another pit's ring) is passed on its FAR side by the whole side bundle in order (j-th tube j pitches out), blended
-	## in over 4 m before / after it - the siblings keep their order and spacing, nothing collapses onto one circle
-	var sg := signf(off)
-	var o_max := RIB_OFF + 3.0 * RIB_PITCH                # the widest a side bundle can be (the same call for all siblings)
-	var t := (spine[mini(k + 1, spine.size() - 1)] - spine[maxi(k - 1, 0)]) as Vector2
-	t = t.normalized() if t.length() > 0.001 else Vector2(1, 0)
-	var n := Vector2(-t.y, t.x)
-	var obs: Array = []
-	for jj in range(wl._tubes.size()):
-		if jj == skip:
+func _post_clear(q: Vector2, r: int, lanes: Array, flat: Array, craters: Array) -> bool:
+	for pl in lanes:
+		for j in range(1, (pl as Array).size()):
+			if q.distance_to(Geometry2D.get_closest_point_to_segment(q, pl[j - 1], pl[j])) < 0.39 + POST_HW + 0.03:
+				return false
+	for o in range(flat.size()):
+		if o == r:
 			continue
-		var t2: Dictionary = wl._tubes[jj]
-		obs.append([Vector2(t2["x"], t2["z"]), 2.6 if t2.get("ent", false) else float(t2["r"]) + 1.0])
-	for cc in wl.locals.craters:
-		var c := Vector2((cc as Vector3).x, (cc as Vector3).z)
-		if c.distance_to(own_pit) > 0.1:
-			obs.append([c, WorldLocals.RING_R + 1.0])
-	var best := absf(off)
-	for ob in obs:
-		var rel: Vector2 = (ob[0] as Vector2) - q
-		var r: float = ob[1]
-		var along := rel.dot(t)
-		var lat := rel.dot(n)
-		if signf(lat) != sg or absf(along) > r + 4.0 or absf(lat) - r >= o_max + 0.1:
-			continue
-		var far := absf(lat) + sqrt(maxf(r * r - along * along, 0.0)) + RIB_OFF * 0.5 + j * RIB_PITCH
-		var w := 1.0 - smoothstep(r, r + 4.0, absf(along))
-		best = maxf(best, lerpf(absf(off), far, w))
-	return sg * best
+		var f: Array = flat[o]
+		for j in range(1, f.size()):
+			if q.distance_to(Geometry2D.get_closest_point_to_segment(q, f[j - 1], f[j])) < PIPE_R + POST_HW + 0.03:
+				return false
+	for t2 in wl._tubes:
+		if q.distance_to(Vector2(t2["x"], t2["z"])) < (2.0 if t2.get("ent", false) else float(t2["r"]) + 0.2):
+			return false
+	for c in craters:
+		if q.distance_to(Vector2((c as Vector3).x, (c as Vector3).z)) < WorldLocals.RING_R + 0.3:
+			return false
+	return true
 
 
 func _hazards(flat: Array) -> Array:
@@ -533,7 +600,7 @@ func _hazards(flat: Array) -> Array:
 		for k in range(1, pts.size()):
 			var a := Vector2(pts[k - 1].x, pts[k - 1].z)
 			var b := Vector2(pts[k].x, pts[k].z)
-			if _meets(flat, a, b, 2.0 * PIPE_R + 0.1, bb):
+			if _meets(flat, a, b, 2.0 * PIPE_R + 0.3, bb):   # (0.5 m samples: a near miss between two still lifts)
 				out.append([a, b, maxf(pts[k - 1].y, pts[k].y) - wl.floor_y + 2.0 * PIPE_R + 0.03, PIPE_R])
 	return out
 
@@ -573,9 +640,9 @@ func _steer(a: Vector2, b: Vector2, skip: int, _id: int, pit: Vector3, depth: in
 		if j == skip:
 			continue
 		var t2: Dictionary = wl._tubes[j]
-		obs.append([Vector2(t2["x"], t2["z"]), 2.6 if t2.get("ent", false) else float(t2["r"]) + 1.0])
-	for c in wl.locals.craters:                       # its own pit too: it arrives radially at r RING_R + 3
-		obs.append([Vector2((c as Vector3).x, (c as Vector3).z), WorldLocals.RING_R + 1.5])
+		obs.append([Vector2(t2["x"], t2["z"]), (2.6 if t2.get("ent", false) else float(t2["r"]) + 1.0) + RIB_HALF])
+	for c in wl.locals.craters:                       # its own pit too (and room for a whole ribbon past each)
+		obs.append([Vector2((c as Vector3).x, (c as Vector3).z), WorldLocals.RING_R + 1.5 + RIB_HALF])
 	for ob in obs:
 		var c: Vector2 = ob[0]
 		var r: float = ob[1]
@@ -606,6 +673,7 @@ func _build_mesh(runs: Array, craters: Array) -> void:
 	for r in range(runs.size()):
 		var run: Array = runs[r]
 		var pts: PackedVector3Array = run[4]
+		var rad := HDR_RR if int(run[0]) < 0 else PIPE_R  # v2: the collector's header / riser are a size up
 		var total := 0.0
 		for k in range(1, pts.size()):
 			total += pts[k].distance_to(pts[k - 1])
@@ -621,7 +689,7 @@ func _build_mesh(runs: Array, craters: Array) -> void:
 			for j in range(sides + 1):
 				var a := TAU * j / sides
 				var nrm := bx * cos(a) + by * sin(a)
-				vs.append(pts[k] + nrm * PIPE_R)
+				vs.append(pts[k] + nrm * rad)
 				ns.append(nrm)
 				uv.append(Vector2(float(j) / sides, cum))
 				uv2.append(Vector2(float(r) + 0.5, cum / maxf(total, 0.01)))
@@ -632,6 +700,63 @@ func _build_mesh(runs: Array, craters: Array) -> void:
 				# front face: (c - a) x (b - a) points out
 				_tri_out(vs, idx, a0, a0 + 1, b0 + 1, ns[a0] + ns[b0 + 1])
 				_tri_out(vs, idx, a0, b0 + 1, b0, ns[a0] + ns[b0])
+		if int(run[1]) == -1:                         # the header bar: closed ends (steel caps)
+			for e in [0, pts.size() - 1]:
+				var out: Vector3 = (pts[int(e)] - pts[1]).normalized()
+				var cb := vs.size()
+				vs.append(pts[e])
+				ns.append(out)
+				uv.append(Vector2(-1.0, 0.0))
+				uv2.append(Vector2(float(r) + 0.5, 0.5))
+				var ring0: int = base + int(e) * (sides + 1)
+				for j in range(sides + 1):
+					vs.append(vs[ring0 + j])
+					ns.append(out)
+					uv.append(Vector2(-1.0, 0.0))
+					uv2.append(Vector2(float(r) + 0.5, 0.5))
+				for j in range(sides):
+					_tri_out(vs, idx, cb, cb + 1 + j, cb + 2 + j, out)
+	for pp in posts:                                  # v2: the stands (UV.x < 0 = steel; UV2 = the slot, its share of the run)
+		var r: int = pp[0]
+		var foot: Vector3 = pp[1]
+		var top: float = pp[2]
+		var pr: PackedVector3Array = runs[r][4]
+		var share := 0.5
+		var best := INF
+		var tot := 0.0
+		var acc := PackedFloat32Array([0.0])
+		for k in range(1, pr.size()):
+			tot += pr[k].distance_to(pr[k - 1])
+			acc.append(tot)
+		for k in range(pr.size()):
+			var d := Vector2(pr[k].x - foot.x, pr[k].z - foot.z).length()
+			if d < best:
+				best = d
+				share = acc[k] / maxf(tot, 0.01)
+		for box in [[POST_HW, foot.y, top], [0.2, foot.y, foot.y + 0.04]]:
+			var hw: float = box[0]
+			var y0: float = box[1]
+			var y1: float = box[2]
+			var c := [Vector3(-hw, 0, -hw), Vector3(hw, 0, -hw), Vector3(hw, 0, hw), Vector3(-hw, 0, hw)]
+			for f in range(5):                        # 4 sides + top
+				var q: Array
+				var nrm: Vector3
+				if f < 4:
+					var a: Vector3 = c[f]
+					var b: Vector3 = c[(f + 1) % 4]
+					q = [foot + a + Vector3(0, y0 - foot.y, 0), foot + b + Vector3(0, y0 - foot.y, 0), foot + b + Vector3(0, y1 - foot.y, 0), foot + a + Vector3(0, y1 - foot.y, 0)]
+					nrm = ((a + b) * 0.5).normalized()
+				else:
+					q = [foot + c[0] + Vector3(0, y1 - foot.y, 0), foot + c[1] + Vector3(0, y1 - foot.y, 0), foot + c[2] + Vector3(0, y1 - foot.y, 0), foot + c[3] + Vector3(0, y1 - foot.y, 0)]
+					nrm = Vector3.UP
+				var b0 := vs.size()
+				for v in q:
+					vs.append(v)
+					ns.append(nrm)
+					uv.append(Vector2(-1.0, 0.0))
+					uv2.append(Vector2(float(r) + 0.5, share))
+				_tri_out(vs, idx, b0, b0 + 1, b0 + 2, nrm)
+				_tri_out(vs, idx, b0, b0 + 2, b0 + 3, nrm)
 	tris = idx.size() / 3
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
@@ -679,9 +804,11 @@ func step(_dt: float) -> void:
 		var live: bool = tb.get("shown", false) and tb["alive"] and (tb["mi"] as MeshInstance3D).visible
 		var full_n := maxi(int(c["n"]), tubes_for(n, int(c["start"]), bool(c["home"])))   # R4: never fewer
 		var want_n := full_n
-		if VatColumn.upgrading(n):                    # the tubes the upgrade adds: empty glass until the tier completes
+		var bp := -1.0
+		if VatColumn.upgrading(n):                    # the tubes the upgrade adds: built as a hologram, empty until the tier completes
 			var to := int((n["build_target"] as Dictionary).get("tier", int(n["tier"]) + 1))
 			want_n = maxi(full_n, tubes_for(n, int(c["start"]), bool(c["home"]), to))
+			bp = Sim.build_progress(n)
 		c["n"] = full_n
 		var col: Color = WorldLayer._col(str(n["owner"]))
 		var slots: Array = c["slots"]
@@ -700,6 +827,39 @@ func step(_dt: float) -> void:
 			var px := Color(col.r, col.g, col.b, fill)
 			if _state.get_pixel(int(slots[k]), 0) != px:
 				_state.set_pixel(int(slots[k]), 0, px)
+				changed = true
+			var b := Color(bp if live and k >= full_n and k < want_n else -1.0, 0, 0, 0)   # v2: building -> hologram
+			if _state.get_pixel(int(slots[k]), 1) != b:
+				_state.set_pixel(int(slots[k]), 1, b)
+				changed = true
+	for k in range(hdr_slots.size()):                 # v2: a collector shows once its pit has a tube; it builds with the first
+		var hs: Array = hdr_slots[k]
+		if hs.is_empty():
+			continue
+		var shown := false
+		var full := false
+		var bmax := -1.0
+		for i in cols:
+			if int(cols[i]["pit"]) != k:
+				continue
+			for sl in cols[i]["slots"]:
+				var st := _state.get_pixel(int(sl), 0)
+				var bb := _state.get_pixel(int(sl), 1).r
+				if st.a < 0.0:
+					continue
+				if bb >= 0.0:
+					bmax = maxf(bmax, bb)
+				else:
+					shown = true
+				if st.a >= 1.0:
+					full = true
+		var pc: Color = pit_cols[k] if k < pit_cols.size() else WorldLayer.NATIVE_GRAY
+		var px := Color(pc.r, pc.g, pc.b, (1.0 if full else 0.0) if shown or bmax >= 0.0 else -1.0)
+		var bx := Color(-1.0 if shown or bmax < 0.0 else bmax, 0, 0, 0)
+		for sl in hs:
+			if _state.get_pixel(int(sl), 0) != px or _state.get_pixel(int(sl), 1) != bx:
+				_state.set_pixel(int(sl), 0, px)
+				_state.set_pixel(int(sl), 1, bx)
 				changed = true
 	if changed or _dirty:
 		_tex.update(_state)
