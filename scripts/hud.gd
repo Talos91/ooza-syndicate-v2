@@ -1511,7 +1511,7 @@ class ActionWedge:
 		var ri := hex_r(m, r_in, hex_base)
 		var span := hex_r(m, ro, hex_base) - ri
 		var izone := ir * 2.5
-		var lit_col := HudNoir.AMBER if sector_id() != "" else a  # ui-neon-apply: a lit sector's glyph / price match its amber tube
+		var lit_col := HudNoir.AMBER if sector_id() != "" and not HudNoir.GOO_NEON else a   # (glyph / price match the lit tube)
 		_icon(c + u * (ri + ir * 1.3), ir, Color(lit_col.lightened(0.2) if lit else HudNoir.MUTED, k))
 		var tr := ri + izone + (span - izone) * 0.5                      # the text block's centre on the ray
 		var maxw := (span - izone) * 0.94
@@ -1556,8 +1556,8 @@ class ActionWedge:
 		var k := outer() / 357.0
 		draw_set_transform(c, mid(), Vector2(k, k))
 		draw_texture(t, origin, Color(1, 1, 1, clampf(grow * 1.5, 0.0, 1.0)))
-		if lit:                                           # ui-neon-apply (Daniele's 1:1 sheet): the DELIVERED amber tube, untinted
-			var lt := HudNoir.texture("res://assets/ui/node_noir/node_slice_lit_%s_colour.png" % deg)
+		if lit:                                           # ui-neon-apply (Daniele's 1:1 sheet): the tube in the goo colour (HudNoir.GOO_NEON; false = the delivered amber tube)
+			var lt: Texture2D = null if HudNoir.GOO_NEON else HudNoir.texture("res://assets/ui/node_noir/node_slice_lit_%s_colour.png" % deg)
 			var lc := Color(1, 1, 1, clampf(grow * 1.5, 0.0, 1.0)).lightened(0.12 * lift)
 			if lt == null:                                # (the W tube tinted, as before)
 				lt = HudNoir.texture(str(HudNoir.part_data("node_slice_lit_" + deg).get("file", "")))

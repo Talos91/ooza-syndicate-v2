@@ -26,7 +26,13 @@ const INK := Color("e8f6fa")
 # soft spill) and the delivery's W *_rim_glow halo BEHIND them take the goo colour (the faction accent).
 const STEEL := ["top_capsule", "square_button", "square_button_hover", "square_button_pressed", "square_button_disabled",
 		"node_card", "node_hub", "skill_card", "skill_card_armed", "skill_card_ultimate_fill", "hint_pill"]
-const BACKLIT := 1.0                                 # the halo's strength (its PNG alpha tops at 115 / 255)
+const BACKLIT := 0.4                                 # the halo's strength (its PNG alpha tops at 115 / 255); Daniele 2026-11-09:
+const SPILL_A := 0.55                                # "reduce the boxes neon colour (now is way too much)" - halo 1.0 -> 0.4, spill 0.55
+# THE SWITCH (designer 2026-11-09, until Daniele's answer is final): true = the goo colour everywhere (his "backlit neon in the
+# same color of the vat goo"; the lit radial tube = the W tube tinted); false = the delivery's own colours (icy cyan spill, the
+# amber lit radial tube) as on his START KIT | NEON RESTYLE 1:1 sheet.
+const GOO_NEON := true
+const DELIVERED_SPILL := Color("87ebff")
 const MUTED := Color("a6bfca")
 const SPRITE_K := 3.45                              # a cut sprite is drawn at 3x the phone shot, where ui_scale is 1.15
 # the placeholder of each part (NoirBox fields; radius / rim_w / drip / ooze in px x ui_scale); "rim" names the channel:
@@ -148,7 +154,8 @@ static func box(id: String, rim := Color(0, 0, 0, 0), content := Vector4(6, 6, 6
 
 static func steel_rim(id: String) -> Color:
 	## A steel frame's spill: the goo colour, dimmed on a disabled button.
-	return Color(accent, 0.45) if id.ends_with("_disabled") else accent
+	var c := accent if GOO_NEON else DELIVERED_SPILL
+	return Color(c, SPILL_A * (0.45 if id.ends_with("_disabled") else 1.0))
 
 
 static func glow_texture(id: String) -> Texture2D:
@@ -188,7 +195,7 @@ static func sprite_box(id: String, rim: Color, k := -1.0) -> SkinBox:
 	b.rim = texture(str(s.get("rim", "")))
 	b.rim_modulate = rim
 	b.glow = glow_texture(id)
-	b.glow_modulate = Color(steel_rim(id), steel_rim(id).a * BACKLIT)
+	b.glow_modulate = Color(steel_rim(id), BACKLIT * (0.45 if id.ends_with("_disabled") else 1.0))
 	b.ooze = texture(str(s.get("ooze", "")))
 	b.ooze_modulate = accent
 	b.whole_bottom = b.ooze != null
