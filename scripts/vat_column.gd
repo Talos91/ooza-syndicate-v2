@@ -43,6 +43,9 @@ var _t := 0.0
 var started := 0                 # probes / shots read these
 var docked := 0
 var cancelled := 0
+var _warm_left := 0              # frames the warm-up set still draws (see _warm)
+var _warm_node: Node3D
+var _pool := {}                  # reveal material key -> free ShaderMaterials (reused by the next upgrade)
 static var _reveal_glass: Shader                # vat_reveal with blend_mix (made once from REVEAL's code)
 static var _ring_mesh: TorusMesh
 static var _clip_cache := {}
@@ -62,6 +65,69 @@ func setup(w: WorldLayer) -> void:
 	_showing.clear()
 	sim = w.sim
 	vis = w.vis
+	_warm()
+
+
+func _warm() -> void:
+	## VAT FRAME SPIKE (2026-11-09): the first upgrade hitched ~75-80 ms on its first frame (desktop; the second upgrade
+	## didn't): the new tier's model and every shader the hologram adds (blueprint, vat_reveal + its glass variant, the
+	## clip-injected entrance / kit glass, the unshaded ring) compiled on first draw. Like WorldLayer._warm: draw each
+	## once, tiny, under the floor, for a few frames at load; the reveal materials made here go to the pool.
+	_warm_node = Node3D.new()
+	add_child(_warm_node)
+	var seats := {}
+	for nd in sim.nodes:
+		if str(nd.get("owner", "")) != "":
+			seats[str(nd["owner"])] = true
+	var keys := {}
+	for seat in seats:
+		for t in [2, 3]:
+			keys[Cosmetics.key_for("vat", seat, t)] = seat
+	var m := ShaderMaterial.new()
+	m.shader = BLUEPRINT
+	var made := []
+	var reals := []
+	for key in keys:
+		var src := MapBuilder.piece(key)
+		reals.append(src)
+		_warm_node.add_child(src)
+		MapBuilder.apply_owner([src], keys[key])
+		_copy_into(_warm_node, src, m)
+		var tmp := {"reveal": [], "pooled": []}
+		_real_copy(src, tmp, _warm_node)
+		made.append(tmp)
+	for t in [1, 2, 3]:
+		var mm = wl._ent_mms[t]
+		if mm is MultiMesh and (mm as MultiMesh).mesh != null:
+			var e := MeshInstance3D.new()
+			e.mesh = (mm as MultiMesh).mesh
+			var etmp := {"reveal": [], "pooled": []}
+			e.material_override = _pooled(etmp, "ent", func(): return _entrance_reveal())
+			made.append(etmp)
+			_warm_node.add_child(e)
+			break
+	var ring := MeshInstance3D.new()
+	ring.mesh = _ring()
+	ring.material_override = _ring_mat()
+	_warm_node.add_child(ring)
+	var glass := MeshInstance3D.new()                 # the glass variant (a copy may not have a transparent surface)
+	glass.mesh = BoxMesh.new()
+	glass.material_override = _reveal_mat(null, true)
+	_warm_node.add_child(glass)
+	for c in _warm_node.find_children("*", "GeometryInstance3D", true, false):   # (owned = false: duplicates)
+		(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for src in reals:                                 # the real model as the game draws it (its shadow pass too)
+		for c in (src as Node).find_children("*", "GeometryInstance3D", true, false):
+			(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	var fl = wl.get("_floor")
+	var at := Vector3(fl.position.x, wl.floor_y - 2.0, fl.position.z) if fl is Node3D else Vector3(0, wl.floor_y - 2.0, 0)
+	for c in _warm_node.get_children():
+		if c is Node3D:
+			(c as Node3D).global_transform = Transform3D(Basis.from_scale(Vector3.ONE * 0.01), at)
+	for tmp in made:                                  # the warm copies' materials serve the first real upgrade
+		for pk in tmp["pooled"]:
+			_release(pk)
+	_warm_left = 3
 
 
 static func upgrading(n: Dictionary) -> bool:
@@ -70,6 +136,11 @@ static func upgrading(n: Dictionary) -> bool:
 
 func step(dt: float) -> void:
 	_t += dt
+	if _warm_left > 0:
+		_warm_left -= 1
+		if _warm_left == 0 and is_instance_valid(_warm_node):
+			_warm_node.queue_free()
+			_warm_node = null
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
 		if not tb.get("ent", false):
@@ -119,7 +190,7 @@ func _start(i: int, tb: Dictionary, n: Dictionary) -> Dictionary:
 	var seat := Color(oc.r, oc.g, oc.b, 1.0)
 	var up := {"phase": "fill", "y_base": 0.0, "from": from, "to": to, "owner": n["owner"], "mat": m, "copies": [],
 			"plat": entry.get("platform"), "vat_src": null, "vat_copy": null, "y_mid": 0.0, "y_top": 0.0,
-			"t_dock": 0.0, "reveal": [], "vat_real": null}
+			"t_dock": 0.0, "reveal": [], "vat_real": null, "pooled": []}
 	# the new tier's entrance, in blueprint (above the ring) and in its real material (below it)
 	var ent_mesh: Mesh = (wl._ent_mms[to] as MultiMesh).mesh
 	var ent := MeshInstance3D.new()
@@ -131,7 +202,7 @@ func _start(i: int, tb: Dictionary, n: Dictionary) -> Dictionary:
 	up["copies"].append(ent)
 	var er := MeshInstance3D.new()
 	er.mesh = ent_mesh
-	er.material_override = _entrance_reveal()
+	er.material_override = _pooled(up, "ent", func(): return _entrance_reveal())
 	er.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(er)
 	er.transform = tb["ent_xf"]
@@ -146,10 +217,8 @@ func _start(i: int, tb: Dictionary, n: Dictionary) -> Dictionary:
 	# the rising ring, the player's seat colour in neon
 	var ring := MeshInstance3D.new()
 	ring.mesh = _ring()
-	var rm := StandardMaterial3D.new()
-	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var rm := _ring_mat()
 	rm.albedo_color = seat.lerp(Color.WHITE, 0.3)
-	rm.render_priority = 3
 	ring.material_override = rm
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(ring)
@@ -186,7 +255,34 @@ func _start(i: int, tb: Dictionary, n: Dictionary) -> Dictionary:
 	return up
 
 
+func _ring_mat() -> StandardMaterial3D:
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.render_priority = 3
+	return rm
+
+
+func _pooled(up: Dictionary, key: String, make: Callable) -> ShaderMaterial:
+	## a reveal material for `key` (source material + empty flag): a free one from the pool, else a new one; _end
+	## gives it back. Each upgrade owns its materials while it runs (clip_y differs per column).
+	var free: Array = _pool.get(key, [])
+	var m: ShaderMaterial = free.pop_back() if not free.is_empty() else make.call()
+	(up["pooled"] as Array).append([key, m])
+	return m
+
+
+func _release(pk: Array) -> void:
+	if not _pool.has(pk[0]):
+		_pool[pk[0]] = []
+	(pk[1] as ShaderMaterial).set_shader_parameter("clip_y", 100000.0)
+	(_pool[pk[0]] as Array).append(pk[1])
+
+
 func _copy(src: Node3D, m: Material) -> Node3D:
+	return _copy_into(self, src, m)
+
+
+func _copy_into(parent: Node, src: Node3D, m: Material) -> Node3D:
 	var c := src.duplicate() as Node3D
 	MapBatch.show_copy(c)                          # a copy of a batched piece draws itself
 	for mi in [c] + c.find_children("*", "MeshInstance3D", true, false):
@@ -195,7 +291,7 @@ func _copy(src: Node3D, m: Material) -> Node3D:
 			(mi as MeshInstance3D).layers = 1          # (a duplicate may keep the batch's layers = 0 without its meta)
 			(mi as MeshInstance3D).material_overlay = null
 			(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(c)
+	parent.add_child(c)
 	c.global_transform = Transform3D(src.global_transform.basis.orthonormalized(), src.global_transform.origin)   # full size
 	c.visible = true
 	return c
@@ -374,7 +470,7 @@ func _reveal_mat(src: Material, empty: bool) -> ShaderMaterial:
 	return m
 
 
-func _real_copy(src: Node3D, up: Dictionary) -> Node3D:
+func _real_copy(src: Node3D, up: Dictionary, parent: Node = null) -> Node3D:
 	## the new tier's model in its own materials, clipped at the ring (the goo surfaces empty)
 	var c := src.duplicate() as Node3D
 	MapBatch.show_copy(c)
@@ -395,14 +491,14 @@ func _real_copy(src: Node3D, up: Dictionary) -> Node3D:
 			var empty := nm.begins_with("OS_Ooze") or (liquid and sm is ShaderMaterial and str((sm as ShaderMaterial).shader.resource_path).ends_with("vat_liquid.gdshader"))
 			var key := "%d:%s" % [sm.get_instance_id() if sm != null else 0, empty]
 			if not made.has(key):
-				made[key] = _reveal_mat(sm, empty)
+				made[key] = _pooled(up, key, func(): return _reveal_mat(sm, empty))
 				up["reveal"].append(made[key])
 			d.set_surface_override_material(s, made[key])
 		d.material_override = null
 		d.material_overlay = null
 		d.layers = 1
 		d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(c)
+	(parent if parent != null else self).add_child(c)
 	c.global_transform = Transform3D(src.global_transform.basis.orthonormalized(), src.global_transform.origin)
 	c.visible = true
 	up["ring_c"] = Vector2(src.global_position.x, src.global_position.z)
@@ -423,6 +519,8 @@ func _end(i: int, up: Dictionary, tb: Dictionary, done: bool) -> void:
 	for c in up["copies"]:
 		if c != null and is_instance_valid(c):
 			(c as Node).queue_free()
+	for pk in up["pooled"]:
+		_release(pk)
 	var v = vis[tb["id"]].get("vat_node")
 	if v is Node3D and is_instance_valid(v):
 		(v as Node3D).visible = true
