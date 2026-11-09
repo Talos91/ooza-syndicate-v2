@@ -37,7 +37,7 @@
    "buildable": [
     "vat"
    ],
-   "level": 1
+   "level": -1
   },
   {
    "id": 1,
@@ -58,8 +58,7 @@
     "forge",
     "monster_hub"
    ],
-   "relayTag": "A",
-   "level": 1
+   "relayTag": "A"
   },
   {
    "id": 2,
@@ -78,7 +77,7 @@
    "buildable": [
     "vat"
    ],
-   "level": 1
+   "level": -1
   },
   {
    "id": 3,
