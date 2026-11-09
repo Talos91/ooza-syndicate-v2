@@ -1596,7 +1596,7 @@ func _rules_0_18_10() -> void:
 				"every kill is paid from its garrison, which regrows meanwhile (%.2f spent = %.2f killed - %.2f made)" % [u1 - gn["units"], killed, s.gat_rate(gn)])
 	# ---------------------------------------------------------------- GOOGAT (Daniele 2026-11-06, Desk dec-googatling): its
 	# ammo IS its garrison, grown at half the same-tier vat rate up to the node's cap; it fires that, then each unit as made
-	check(Rules.GOOGATLING_PROD == 0.5, "googat numbers: ammo grows at 0.5x the same-tier vat")
+	check(Rules.GOOGATLING_PROD == 0.25, "googat numbers: ammo regrows at 0.25x the same-tier vat (Daniele 2026-11-09: slower regrow; was 0.5)")
 	for fac in ["vex", "null", "bloom", "ember", "solar"]:
 		var sf := _tp({3: "A", 4: "B"}, {"A": fac, "B": fac})
 		var fn: Dictionary = sf.nodes[1]
@@ -1614,8 +1614,8 @@ func _rules_0_18_10() -> void:
 	gg["tier"] = 1
 	gg["units"] = 20.0
 	var rate1: float = s.gat_rate(gg)
-	check(absf(rate1 - Rules.PROD[1] * 0.5 * s.stat("A", "production")) < 0.001 and absf(rate1 - s.production(gg)) < 0.001,
-			"a T1 googat grows its garrison at half a T1 vat (%.2f /s shown)" % Rules.shown_f(rate1))
+	check(absf(rate1 - Rules.PROD[1] * Rules.GOOGATLING_PROD * s.stat("A", "production")) < 0.001 and absf(rate1 - s.production(gg)) < 0.001,
+			"a T1 googat grows its garrison at x%.2f a T1 vat (%.2f /s shown)" % [Rules.GOOGATLING_PROD, Rules.shown_f(rate1)])
 	for i in range(int(30.0 / 0.05)):
 		s.step(0.05)
 	check(absf(gg["units"] - (20.0 + rate1 * 30.0)) < 0.1, "left alone its ammo (= garrison) regrows: %.1f after 30 s" % gg["units"])
@@ -1659,7 +1659,7 @@ func _rules_0_18_10() -> void:
 	gn2["units"] = 0.0
 	for i in range(int(4.0 / 0.05)):
 		sn.step(0.05)
-	check(absf(gn2["units"] - Rules.PROD[int(gn2["tier"])] * 0.5 * 4.0) < 0.05, "a neutral googat regrows %.1f in 4 s (half rate)" % gn2["units"])
+	check(absf(gn2["units"] - Rules.PROD[int(gn2["tier"])] * Rules.GOOGATLING_PROD * 4.0) < 0.05, "a neutral googat regrows %.1f in 4 s (x%.2f rate)" % [gn2["units"], Rules.GOOGATLING_PROD])
 	# ---------------------------------------------------------------- laser: 19 per 2 s burst, 2 s recharge, 12 m
 	check(Rules.LASER_KILL == 96.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
 			"laser numbers: 19 shown per 2 s burst (-40 %, Daniele 2026-09-28), 2 s recharge, 12 m, cost 40")

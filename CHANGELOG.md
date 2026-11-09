@@ -9,6 +9,9 @@
     (Route choice stays belt-blind as before.)
   - R-01 STRAIT symmetric (Daniele 2026-11-09, Desk laser-relay-decks): the top laser relay and its outer roads now mirror the bottom ones
     (stone on the bank, outer roads lowered); the top's raised stone and its short S-ramp to the bank are gone. Re-baked from packs/r_maps.py.
+  - GooGat slower regrow (Daniele 2026-11-09, Desk googat-unlimited = c): ammo regrows at x0.25 of the same-tier vat (was x0.5) - shown
+    0.21 / 0.34 / 0.51 per s at T1 / T2 / T3 against fire 1.6 / 2.8 / 4; an owned T2 refills from empty in ~171 s (was ~86 s). Under a
+    steady 2-shown/s stream a T2 GooGat now runs dry at 37 s (before: it held). Readout "ammo n/cap · +x/s · fires y/s" unchanged.
 
 - **0.23.27-demo12** - 2026-11-10 (demo-world, staging/demo/): HUD only (ui-neon-apply 8c2dfef, 43 files under assets/ui + HUD scripts, no sim change). SEND tank = one evenly scaled picture with clipped goo, level marks, no readout, 100 % under the cap, HUD_K_MAX 1.6 for foldables. NEON-RESTYLE delivery applied 1:1: steel frames with cyan spill, skill ring freed, node card frame, radial slices from the delivered PNGs, neon badge rims; desktop skill-plate fixes.
 - **0.23.27-demo11** - 2026-11-09 (demo-world, staging/demo/): demo rules pass (demo-rules-pass 88da364): ferry docked 20 s + one travelling hull; laser relay replaces the lift nodes on R-01 / R-06 / R-09 / R-12 (maps re-baked); floor tube props off; conveyor and Googatling probes with no sim change. Known follow-up: AI fog / portal / evac on the new R-01 (test_powers_ai 3 fails, decided 2026-11-09).
