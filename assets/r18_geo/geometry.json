@@ -1,0 +1,666 @@
+{
+  "skill_plate_active": {
+    "body": [
+      48,
+      48,
+      576,
+      480
+    ],
+    "canvas": [
+      672,
+      576
+    ],
+    "radius": 44,
+    "bevel_width": 12,
+    "bolts": [
+      {
+        "centre": [
+          96,
+          96
+        ],
+        "diameter": 56
+      },
+      {
+        "centre": [
+          576,
+          96
+        ],
+        "diameter": 56
+      },
+      {
+        "centre": [
+          96,
+          480
+        ],
+        "diameter": 56
+      },
+      {
+        "centre": [
+          576,
+          480
+        ],
+        "diameter": 56
+      }
+    ],
+    "window": {
+      "centre": [
+        336,
+        234
+      ],
+      "diameter": 240
+    },
+    "ring": {
+      "centre": [
+        336,
+        234
+      ],
+      "outer_diameter": 276,
+      "width": 12
+    },
+    "name_slot": {
+      "rect": [
+        84,
+        408,
+        504,
+        96
+      ],
+      "radius": 25,
+      "clear_text_rect": [
+        124,
+        408,
+        424,
+        96
+      ]
+    },
+    "perimeter_tube": {
+      "inset": 22,
+      "width": 6
+    }
+  },
+  "skill_plate_map": {
+    "body": [
+      48,
+      48,
+      576,
+      480
+    ],
+    "canvas": [
+      672,
+      576
+    ],
+    "radius": 44,
+    "bevel_width": 12,
+    "bolts": [
+      {
+        "centre": [
+          96,
+          96
+        ],
+        "diameter": 56
+      },
+      {
+        "centre": [
+          576,
+          96
+        ],
+        "diameter": 56
+      },
+      {
+        "centre": [
+          96,
+          480
+        ],
+        "diameter": 56
+      },
+      {
+        "centre": [
+          576,
+          480
+        ],
+        "diameter": 56
+      }
+    ],
+    "window": {
+      "centre": [
+        336,
+        234
+      ],
+      "diameter": 240
+    },
+    "ring": {
+      "centre": [
+        336,
+        234
+      ],
+      "outer_diameter": 276,
+      "width": 12
+    },
+    "name_slot": {
+      "rect": [
+        84,
+        408,
+        504,
+        96
+      ],
+      "radius": 25,
+      "clear_text_rect": [
+        124,
+        408,
+        424,
+        96
+      ]
+    },
+    "perimeter_tube": {
+      "inset": 22,
+      "width": 6
+    }
+  },
+  "skill_plate_ultimate": {
+    "body": [
+      48,
+      48,
+      576,
+      480
+    ],
+    "canvas": [
+      672,
+      576
+    ],
+    "radius": 44,
+    "bevel_width": 12,
+    "bolts": [
+      {
+        "centre": [
+          96,
+          96
+        ],
+        "diameter": 56
+      },
+      {
+        "centre": [
+          576,
+          96
+        ],
+        "diameter": 56
+      },
+      {
+        "centre": [
+          96,
+          480
+        ],
+        "diameter": 56
+      },
+      {
+        "centre": [
+          576,
+          480
+        ],
+        "diameter": 56
+      }
+    ],
+    "hazard": {
+      "inset": 6,
+      "width": 14,
+      "continuous_flat_code": true
+    },
+    "window": {
+      "centre": [
+        336,
+        234
+      ],
+      "diameter": 240
+    },
+    "ring": {
+      "centre": [
+        336,
+        234
+      ],
+      "outer_diameter": 276,
+      "width": 12
+    },
+    "name_slot": {
+      "rect": [
+        84,
+        408,
+        504,
+        96
+      ],
+      "radius": 25,
+      "clear_text_rect": [
+        124,
+        408,
+        424,
+        96
+      ]
+    },
+    "perimeter_tube": {
+      "inset": 22,
+      "width": 6
+    }
+  },
+  "top_capsule": {
+    "body": [
+      48,
+      48,
+      1920,
+      216
+    ],
+    "canvas": [
+      2016,
+      312
+    ],
+    "radius": 47,
+    "bevel_width": 12,
+    "bolts": [
+      {
+        "centre": [
+          82,
+          82
+        ],
+        "diameter": 40
+      },
+      {
+        "centre": [
+          1934,
+          82
+        ],
+        "diameter": 40
+      },
+      {
+        "centre": [
+          82,
+          230
+        ],
+        "diameter": 40
+      },
+      {
+        "centre": [
+          1934,
+          230
+        ],
+        "diameter": 40
+      }
+    ],
+    "slots": [
+      [
+        84,
+        72,
+        672,
+        168
+      ],
+      [
+        792,
+        72,
+        432,
+        168
+      ],
+      [
+        1260,
+        72,
+        672,
+        168
+      ]
+    ],
+    "horizontal_spacing_pt": 6,
+    "vertical_margin_pt": 4,
+    "slot_radius": 25,
+    "stretch_zones": [
+      [
+        768,
+        60,
+        12,
+        192
+      ],
+      [
+        1236,
+        60,
+        12,
+        192
+      ]
+    ],
+    "resize_contract": "Two gap strips; split-score/timer layout, not a single whole-image 9-slice."
+  },
+  "score_pill": {
+    "body": [
+      48,
+      48,
+      672,
+      168
+    ],
+    "canvas": [
+      768,
+      264
+    ],
+    "radius": 37,
+    "bevel_width": 12,
+    "bolts": [],
+    "icon_rect": [
+      66,
+      72,
+      120,
+      120
+    ],
+    "text_rect": [
+      204,
+      72,
+      492,
+      120
+    ],
+    "neon_inset": 3,
+    "neon_width": 6
+  },
+  "score_pill_mine": {
+    "body": [
+      48,
+      48,
+      672,
+      168
+    ],
+    "canvas": [
+      768,
+      264
+    ],
+    "radius": 37,
+    "bevel_width": 12,
+    "bolts": [],
+    "icon_rect": [
+      66,
+      72,
+      120,
+      120
+    ],
+    "text_rect": [
+      204,
+      72,
+      492,
+      120
+    ],
+    "neon_inset": 3,
+    "neon_width": 6
+  },
+  "score_pill_out": {
+    "body": [
+      48,
+      48,
+      672,
+      168
+    ],
+    "canvas": [
+      768,
+      264
+    ],
+    "radius": 37,
+    "bevel_width": 12,
+    "bolts": [],
+    "icon_rect": [
+      66,
+      72,
+      120,
+      120
+    ],
+    "text_rect": [
+      204,
+      72,
+      492,
+      120
+    ],
+    "neon_inset": 3,
+    "neon_width": 6
+  },
+  "square_button": {
+    "body": [
+      48,
+      48,
+      240,
+      240
+    ],
+    "canvas": [
+      336,
+      336
+    ],
+    "radius": 37,
+    "bevel_width": 12,
+    "bolts": [
+      {
+        "centre": [
+          75,
+          75
+        ],
+        "diameter": 32
+      },
+      {
+        "centre": [
+          261,
+          75
+        ],
+        "diameter": 32
+      },
+      {
+        "centre": [
+          75,
+          261
+        ],
+        "diameter": 32
+      },
+      {
+        "centre": [
+          261,
+          261
+        ],
+        "diameter": 32
+      }
+    ],
+    "glass_rect": [
+      79,
+      79,
+      178,
+      178
+    ]
+  },
+  "banner": {
+    "body": [
+      48,
+      48,
+      1920,
+      216
+    ],
+    "canvas": [
+      2016,
+      312
+    ],
+    "radius": 47,
+    "bevel_width": 12,
+    "bolts": [
+      {
+        "centre": [
+          82,
+          82
+        ],
+        "diameter": 40
+      },
+      {
+        "centre": [
+          1934,
+          82
+        ],
+        "diameter": 40
+      },
+      {
+        "centre": [
+          82,
+          230
+        ],
+        "diameter": 40
+      },
+      {
+        "centre": [
+          1934,
+          230
+        ],
+        "diameter": 40
+      }
+    ],
+    "glass_rect": [
+      120,
+      84,
+      1776,
+      144
+    ],
+    "glass_radius": 25,
+    "icon_rect": [
+      120,
+      84,
+      144,
+      144
+    ],
+    "text_rect": [
+      288,
+      84,
+      1584,
+      144
+    ],
+    "neon_inset": 6,
+    "neon_width": 6,
+    "stretch_zones": [
+      [
+        1002,
+        60,
+        12,
+        192
+      ]
+    ],
+    "nine_slice_margins": [
+      1002,
+      84,
+      1002,
+      84
+    ]
+  },
+  "slice_40": {
+    "canvas": [
+      504,
+      490
+    ],
+    "body": [
+      48,
+      48,
+      408,
+      394
+    ],
+    "origin": [
+      -168,
+      245
+    ],
+    "inner_radius": 228,
+    "outer_radius": 624,
+    "nominal_degrees": 40,
+    "trim_each_side_degrees": 1.613965620086826,
+    "gap_at_midradius": 24,
+    "midradius": 426,
+    "outer_arc_neon_width": 6,
+    "bolts": [
+      {
+        "centre": [
+          80.00821399829272,
+          181.53405803600594
+        ],
+        "diameter": 20
+      },
+      {
+        "centre": [
+          80.00821399829272,
+          308.46594196399406
+        ],
+        "diameter": 20
+      },
+      {
+        "centre": [
+          402.9954649692263,
+          74.17793179867829
+        ],
+        "diameter": 20
+      },
+      {
+        "centre": [
+          402.9954649692263,
+          415.8220682013217
+        ],
+        "diameter": 20
+      }
+    ]
+  },
+  "radial_hub": {
+    "canvas": [
+      360,
+      360
+    ],
+    "body": [
+      48,
+      48,
+      264,
+      264
+    ],
+    "centre": [
+      180,
+      180
+    ],
+    "radius": 132,
+    "neon_width": 6,
+    "neon_inset": 6,
+    "bolts": []
+  },
+  "_notes": {
+    "units": "native px at 6px/pt; rectangles half-open",
+    "bolt_scale": "baseline native diameters preserved literally (skill56/top40/button32/radial20); not doubled",
+    "top_spacing": "6pt as approved wireframe; user said get on it after correction recommendation",
+    "overlay": "812x375pt screen cropped from original wireframe, at3px/pt; old SEND wireframe retained as out-of-scope reference, not final300pt tank",
+    "review_only": [
+      "GEOMETRY-SHEET",
+      "OVERLAY",
+      "OVERLAY-ANNOTATED",
+      "TEXT-FIT"
+    ],
+    "text_fit": [
+      {
+        "word": "OVERLOAD",
+        "font": "Rajdhani SemiBold",
+        "font_px_6x": 75,
+        "width_px_6x": 314.0,
+        "slot_clear_px_6x": 424,
+        "fits_clear": true,
+        "fits_nominal_504": true,
+        "stress_case": false
+      },
+      {
+        "word": "BACKWASH",
+        "font": "Rajdhani SemiBold",
+        "font_px_6x": 75,
+        "width_px_6x": 349.0,
+        "slot_clear_px_6x": 424,
+        "fits_clear": true,
+        "fits_nominal_504": true,
+        "stress_case": false
+      },
+      {
+        "word": "COOLDOWN",
+        "font": "Rajdhani SemiBold",
+        "font_px_6x": 75,
+        "width_px_6x": 344.0,
+        "slot_clear_px_6x": 424,
+        "fits_clear": true,
+        "fits_nominal_504": true,
+        "stress_case": false
+      },
+      {
+        "word": "WWWWWWWW",
+        "font": "Rajdhani SemiBold",
+        "font_px_6x": 75,
+        "width_px_6x": 480.0,
+        "slot_clear_px_6x": 424,
+        "fits_clear": false,
+        "fits_nominal_504": true,
+        "stress_case": true
+      }
+    ]
+  }
+}

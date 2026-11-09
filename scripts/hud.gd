@@ -540,6 +540,10 @@ func setup(m: Node3D) -> void:
 			main.monster_from = hub
 			note_monster_hint())
 	root.add_child(monster_icon)
+	if R18Geo.wanted():                                 # THROWAWAY ui-r18-geometry-check: the round-18 flat pieces, never released
+		var r18 := R18Geo.new()
+		root.add_child(r18)
+		r18.setup(self)
 
 
 func _icon_button(b: Button, icon_name: String) -> void:
