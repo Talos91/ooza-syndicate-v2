@@ -554,6 +554,12 @@ const GUN_SPIN := 26.0                   # rad/s of the barrel cluster at full f
 const STREAM_T := 0.28                   # s a goo blob flies from the muzzle to the target
 const STREAM_G := 16.0                   # its gravity (the spark MultiMesh's)
 const STREAM_RATE := 38.0                # blobs per second at full fire
+# GOOGATLING (Daniele 2026-11-06): the goo stock is a ring of GAT_PIPS glowing pips on the platform round the gun, filling
+# one by one as the stock grows (the next pip swells with the remainder), pulsing when full, dark when empty. Firing the
+# stock drains them; once empty it fires each unit as it is made: a thin sputtering stream (shot["trickle"]).
+const GAT_PIPS := 10
+const GAT_PIP_R := 3.4                   # metres from the structure's centre
+const GAT_PIP_DIM := Color(0.10, 0.12, 0.13, 1.0)
 
 
 func _machinegoons_step(dt: float) -> void:
@@ -571,6 +577,7 @@ func _machinegoons_step(dt: float) -> void:
 		if g.is_empty() or g["vn"] != vn:
 			if not g.is_empty():
 				(g["beam"] as Node3D).queue_free()
+				(g["gauge"] as Node3D).queue_free()
 			g = _new_gun(vn as Node3D, str(entry.get("model_key", "")), n["owner"])
 			_guns[id] = g
 		var shot: Dictionary = n.get("shot", {})
@@ -595,8 +602,10 @@ func _machinegoons_step(dt: float) -> void:
 		var sp: Node3D = g["spinner"]
 		if sp:
 			sp.rotation.z += float(g["spin_v"]) * dt
+		_gat_gauge(g, n, root)
+		var trickle: bool = firing and bool(shot.get("trickle", false))   # empty: each unit fired as it is made
 		var beam: MeshInstance3D = g["beam"]
-		g["power"] = lerpf(float(g["power"]), 1.0 if firing else 0.0, minf(1.0, dt * (12.0 if firing else 6.0)))
+		g["power"] = lerpf(float(g["power"]), (0.4 if trickle else 1.0) if firing else 0.0, minf(1.0, dt * (12.0 if firing else 6.0)))
 		if float(g["power"]) < 0.02:
 			beam.visible = false
 			continue
@@ -613,18 +622,18 @@ func _machinegoons_step(dt: float) -> void:
 		bmat.set_shader_parameter("p0", from)
 		bmat.set_shader_parameter("p1", to)
 		bmat.set_shader_parameter("color", goo)
-		bmat.set_shader_parameter("width", 0.6)
-		bmat.set_shader_parameter("power", 0.85 * float(g["power"]))
+		bmat.set_shader_parameter("width", 0.35 if trickle else 0.6)
+		bmat.set_shader_parameter("power", 0.85 * float(g["power"]) * ((0.55 + 0.45 * sin(sim.time * 31.0)) if trickle else 1.0))
 		bmat.set_shader_parameter("seed", float(id) * 3.1)
 		beam.visible = true
 		if not firing:
 			continue
 		var detail := 0.5 if Rules.low_detail else 1.0
 		var vel := (to - from) / STREAM_T + Vector3(0, 0.5 * STREAM_G * STREAM_T, 0)
-		for i in range(_count(STREAM_RATE * detail * dt)):   # the goo arcs out of the barrel
+		for i in range(_count(STREAM_RATE * detail * dt * (0.25 if trickle else 1.0))):   # the goo arcs out of the barrel
 			var jit := Vector3(randf_range(-1, 1), randf_range(-0.5, 1), randf_range(-1, 1)) * 0.9
 			_spark(from, vel + jit, goo * 1.4, randf_range(0.34, 0.55), STREAM_T * randf_range(0.9, 1.15), STREAM_G)
-		if randf() < dt * 14.0:                          # muzzle spit
+		if randf() < dt * (5.0 if trickle else 14.0):    # muzzle spit
 			_spark(from, Vector3.ZERO, goo.lerp(Color.WHITE, 0.35) * 1.5, randf_range(0.7, 1.0), 0.08, 0.0)
 		# a splash for every whole shown kill (the shot's kills are sim units per step)
 		if float(shot.get("t", -1.0)) != float(g["last_t"]):
@@ -640,6 +649,7 @@ func _machinegoons_step(dt: float) -> void:
 	for id in _guns.keys():                               # gone (swapped back to a vat, captured and rebuilt, fell)
 		if not seen.has(id):
 			(_guns[id]["beam"] as Node3D).queue_free()
+			(_guns[id]["gauge"] as Node3D).queue_free()
 			_guns.erase(id)
 
 
@@ -663,9 +673,51 @@ func _new_gun(vn: Node3D, key: String, owner: String) -> Dictionary:
 	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	beam.visible = false
 	add_child(beam)
+	var gauge := Node3D.new()                            # GOOGATLING: the goo stock pips (_gat_gauge)
+	gauge.name = "GatGauge"
+	add_child(gauge)
+	var pip_mesh := SphereMesh.new()
+	pip_mesh.radius = 0.32
+	pip_mesh.height = 0.44
+	pip_mesh.radial_segments = 10
+	pip_mesh.rings = 5
+	var pips := []
+	var pmats := []
+	for i in range(GAT_PIPS):
+		var pm := StandardMaterial3D.new()
+		pm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		pm.albedo_color = GAT_PIP_DIM
+		var pip := MeshInstance3D.new()
+		pip.mesh = pip_mesh
+		pip.material_override = pm
+		pip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		gauge.add_child(pip)
+		pips.append(pip)
+		pmats.append(pm)
 	return {"vn": vn, "turret": turret, "spinner": spinner, "muzzles": Cosmetics.points(key).get("muzzles", []),
 			"yaw": 0.0, "idle": 0.0, "spin_v": 0.0, "power": 0.0, "beam": beam, "bmat": bmat, "to": vn.global_position,
-			"last_t": -1.0, "debt": 0.0}
+			"last_t": -1.0, "debt": 0.0, "gauge": gauge, "pips": pips, "pmats": pmats}
+
+
+func _gat_gauge(g: Dictionary, n: Dictionary, root: Node3D) -> void:
+	## GOOGAT ammo gauge: GAT_PIPS pips round the gun, lit in the owner's goo up to ammo / cap (its ammo is its garrison,
+	## Sim.gat_cap = the node's cap); the next pip swells with the remainder (the trickle refilling it), all pulse when full.
+	var cap := Sim.gat_cap(n)
+	var fill: float = clampf(float(n["units"]) / cap, 0.0, 1.0) if cap > 0.0 else 0.0
+	var lit := fill * GAT_PIPS
+	var full := fill >= 0.995
+	var goo: Color = Rules.seat_color(n["owner"]).lerp(Color(0.75, 1.0, 0.55), 0.3) if n["owner"] != "" else GAT_PIP_DIM
+	var pulse := 0.5 + 0.5 * sin(sim.time * 4.0) if full else 0.0
+	var c: Vector3 = root.global_position
+	var pips: Array = g["pips"]
+	var pmats: Array = g["pmats"]
+	for i in range(GAT_PIPS):
+		var a := PI * 0.5 + TAU * float(i) / GAT_PIPS       # from the camera-facing front, round the gun
+		var k := clampf(lit - float(i), 0.0, 1.0)
+		var pip: MeshInstance3D = pips[i]
+		pip.global_position = c + Vector3(cos(a) * GAT_PIP_R, 0.22, sin(a) * GAT_PIP_R)
+		pip.scale = Vector3.ONE * (lerpf(0.55, 1.0, k) + 0.2 * pulse)
+		(pmats[i] as StandardMaterial3D).albedo_color = GAT_PIP_DIM.lerp(goo * (1.35 + 0.35 * pulse), k)
 
 
 func _horde_owner(hid: int) -> String:

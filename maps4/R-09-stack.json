@@ -960,7 +960,7 @@
  "geometricSymmetry": true,
  "experimental": false,
  "ruleWaivers": {
-  "R07": "PENDING Daniele's wave-2 review (like R-01): two mirrored laser lifts, above and below the knot - each stone has an equally short twin and the knot's speed lanes carry the shortest route, so firing one lift alone never moves the shortest length; together they decide which level crosses (the cut across the eight or the outer way over). The two speed relays pass R07 (19 / 16 m)"
+  "R07": "Wave-2 review (like R-01): two mirrored laser lifts, above and below the knot - each stone has an equally short twin and the knot's speed lanes carry the shortest route, so firing one lift alone never moves the shortest length; together they decide which level crosses (the cut across the eight or the outer way over). The two speed relays pass R07 (19 / 16 m) - ACCEPTED by Daniele 2026-11-06 (Desk)"
  },
  "tags": {
   "size": "S",

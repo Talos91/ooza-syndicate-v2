@@ -796,7 +796,7 @@
  "geometricSymmetry": true,
  "experimental": false,
  "ruleWaivers": {
-  "R07": "PENDING Daniele's wave-2 review - R-01's stones, other job: the two mirrored laser lifts, top and bottom, each have an equally short twin, and the shortest way across is the downhill belt (each side has its own), so firing a stone never moves the shortest length; the stones decide which way back UP is dry (the climb against the belts is the long way round the square) and which outer roads cross"
+  "R07": "Wave-2 review - R-01's stones, other job: the two mirrored laser lifts, top and bottom, each have an equally short twin, and the shortest way across is the downhill belt (each side has its own), so firing a stone never moves the shortest length; the stones decide which way back UP is dry (the climb against the belts is the long way round the square) and which outer roads cross - ACCEPTED by Daniele 2026-11-06 (Desk)"
  },
  "tags": {
   "size": "XS",

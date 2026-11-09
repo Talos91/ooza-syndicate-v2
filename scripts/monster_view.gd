@@ -546,9 +546,10 @@ static func stage(main: Node, arg: String) -> void:
 			for i in range(mini(3, picks.size())):
 				var n: Dictionary = picks[i]
 				n["owner"] = "A"
-				n["units"] = 60.0
 				n["structure"] = "machinegoon"
 				n["tier"] = (i + maxi(node, 0)) % 3 + 1          # guns:<k> rotates the tiers round the three nodes
+				n["units"] = Sim.gat_cap(n) * [1.0, 0.5, 0.0][i]  # GOOGAT: full / half / empty ammo (= garrison) gauges
+				print("STAGE guns: node %d T%d ammo %.0f" % [n["id"], n["tier"], n["units"]])
 				Sim._sync_legacy(n)
 			for n in sim.nodes:
 				if n["node_kind"] == "relay":

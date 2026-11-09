@@ -151,7 +151,7 @@
    "socket": null,
    "ring": 1,
    "category": "relay",
-   "relay": "conveyor",
+   "relay": "launcher",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -163,8 +163,13 @@
     "monster_hub"
    ],
    "relayTag": "B",
-   "conveyor": {
-    "dir": "AB"
+   "launcher": {
+    "target": 8,
+    "targets": [
+     3,
+     8,
+     17
+    ]
    }
   },
   {
@@ -175,7 +180,7 @@
    "socket": null,
    "ring": 1,
    "category": "relay",
-   "relay": "conveyor",
+   "relay": "launcher",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -187,8 +192,13 @@
     "monster_hub"
    ],
    "relayTag": "C",
-   "conveyor": {
-    "dir": "AB"
+   "launcher": {
+    "target": 7,
+    "targets": [
+     2,
+     7,
+     16
+    ]
    }
   },
   {
@@ -495,10 +505,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 7,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "conveyor"
+   "deckMetres": 4.0
   },
   {
    "from": 14,
@@ -507,10 +516,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 7,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "conveyor"
+   "deckMetres": 4.0
   },
   {
    "from": 16,
@@ -519,10 +527,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 7,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "conveyor"
+   "deckMetres": 4.0
   },
   {
    "from": 19,
@@ -531,11 +538,10 @@
    "seconds": 7.0,
    "level": 0,
    "state": null,
-   "relay": 7,
+   "relay": null,
    "retracts": false,
    "deckMetres": 14.0,
-   "modules": 3.5,
-   "proto": "conveyor"
+   "modules": 3.5
   },
   {
    "from": 7,
@@ -666,10 +672,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 8,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "conveyor"
+   "deckMetres": 4.0
   },
   {
    "from": 15,
@@ -678,10 +683,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 8,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "conveyor"
+   "deckMetres": 4.0
   },
   {
    "from": 17,
@@ -690,10 +694,9 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 8,
+   "relay": null,
    "retracts": false,
-   "deckMetres": 4.0,
-   "proto": "conveyor"
+   "deckMetres": 4.0
   },
   {
    "from": 20,
@@ -702,11 +705,10 @@
    "seconds": 7.0,
    "level": 0,
    "state": null,
-   "relay": 8,
+   "relay": null,
    "retracts": false,
    "deckMetres": 14.0,
-   "modules": 3.5,
-   "proto": "conveyor"
+   "modules": 3.5
   },
   {
    "from": 8,
@@ -776,7 +778,7 @@
    }
   ]
  },
- "note": "M, 18 platforms. A wide crescent bowing down like a smile, the homes on its two horns. Three ways round: the inner arc along the top, the middle lane through the crescent's body and the deep outer arc, with rungs between them. The stone inside each horn (X) is a SPEED relay driving its side's outer arc: at the start both outer arcs run fast down toward the bottom; firing one reverses its side, so the whole outer arc becomes a one-way fast road into that side's home (take the enemy's to rush in, take yours back to shut it). The centre is a ROTOR (R): at the start it carries the inner arc straight through - the short way between the homes; fired, it swings to the middle lane's two stones and cuts the inner arc at the middle (armies drop down the lens sides to the middle lane). Finale: the lens round the rotor - the inner arc's middle, the two stones below it and the curved bottom.",
+ "note": "M, 18 platforms. A wide crescent bowing down like a smile, the homes on its two horns. Three ways round: the inner arc along the top, the middle lane through the crescent's body and the deep outer arc, with rungs between them. The stone inside each horn (X) is a LAUNCHER: arm it and its aim sweeps the enemy horn - the inner arc stone, the horn stone, the outer arc stone - in turn; a line that walks onto the armed pad is thrown over the crescent and lands where the aim stood. The centre is a ROTOR (R): at the start it carries the inner arc straight through - the short way between the homes; fired, it swings to the middle lane's two stones and cuts the inner arc at the middle (armies drop down the lens sides to the middle lane). Finale: the lens round the rotor - the inner arc's middle, the two stones below it and the curved bottom.",
  "geometricSymmetry": true,
  "experimental": false,
  "tags": {

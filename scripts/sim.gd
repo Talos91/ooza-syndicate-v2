@@ -144,6 +144,7 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 			"allies": {},           # seat -> allied troops stored here (GAME-RULES sec11; "units" is the owner's)
 			"arrivals": [],         # allied seats in the order their troops arrived (ownership tie-break)
 			"shot": {},             # laser / machinegoon fire for the fx: {"t", "target_horde", "kills", "pos"}
+			"load": {},             # LAUNCHER TURRET: seat -> {"units", "faction"} loaded in the cannon this salvo
 			"monster_ready_t": 0.0, # monster hub: match time from which its next monster may launch
 			"hub_monster": -1,      # monster hub: id of its monster still out (-1: none)
 			"attachment": "",       # LEGACY mirror of "structure" for views not yet on Structures 2.1 (_sync_legacy)
@@ -177,9 +178,11 @@ func setup(map: Dictionary, positions: Dictionary, seats: Dictionary, seat_facti
 		})
 		if relay == "ferry":                              # the ferry node takes no structure in v1
 			nodes[-1]["buildable"] = []
-		if relay == "launcher":                           # 2026-11-06 (Daniele: "it should occupy the relay building slot and be
-			nodes[-1]["buildable"] = []                   # indestructible (new type of relays)"): the launcher's cannon IS its
-			nodes[-1]["indestructible"] = true            # building - nothing else is built there, and it never falls
+		if relay == "launcher":                           # 2026-11-06 (Daniele: "it should occupy the relay building slot"): the
+			nodes[-1]["buildable"] = []                   # launcher's cannon IS its building - nothing else is built there. The
+			nodes[-1]["tier"] = clampi(int((nodes[-1]["proto"] as Dictionary).get("tier", 1)), 1, Rules.LAUNCHER_MAX_TIER)   # TURRET
+			# (Desk dec-launcher-turret): tiers 1-3, T1 unless the map's "launcher": {"tier": n} says otherwise (the neutral
+			# tier keeps sizing its garrison); it falls in the Last Stand like any node (his note: not indestructible)
 		adj[id] = []
 		if v3 and owner == "" and kind == "relay" and relay != "launcher" and neutral is Dictionary and str(neutral.get("structure", "")) in ["cannon", "laser", "forge"]:
 			nodes[-1]["structure"] = "forge" if neutral["structure"] == "forge" else "laser"   # an armed relay (old cannons -> laser)
@@ -381,7 +384,32 @@ func production(n: Dictionary) -> float:
 	return _base_production(n) * prod_mult(n)
 
 
+static func gat_cap(n: Dictionary) -> float:
+	## GOOGAT: the most ammo it makes on its own = the node's cap at its tier (its ammo IS its garrison; 0: no GooGat here).
+	if n["structure"] != "machinegoon":
+		return 0.0
+	return float(Rules.CAPS[clampi(int(n["tier"]), 1, 3)])
+
+
+func gat_rate(n: Dictionary) -> float:
+	## GOOGAT: ammo (garrison units) made per second now: Rules.GOOGATLING_PROD x the same-tier vat's rate - an owned one
+	## through production() (faction stat, production skills, an Echo jam stops it), a neutral one at the plain half rate.
+	if n["structure"] != "machinegoon":
+		return 0.0
+	if n["owner"] != "":
+		return production(n)
+	return 0.0 if is_disrupted(n["id"]) else float(Rules.PROD[clampi(int(n["tier"]), 1, 3)]) * Rules.GOOGATLING_PROD
+
+
+static func gat_fire_rate(n: Dictionary) -> float:
+	## GOOGAT: garrison units fired per second while a target is in range (= kills/s before Anchor).
+	var t: int = clampi(int(n["tier"]), 1, 3)
+	return float(Rules.MACHINEGOON_RATE.get(t, Rules.MACHINEGOON_RATE.get(str(t), 8.0)))
+
+
 func _base_production(n: Dictionary) -> float:
+	if n["owner"] != "" and n["structure"] == "machinegoon":   # GOOGAT: its ammo = its garrison, grown at half the vat rate
+		return Rules.PROD[clampi(int(n["tier"]), 1, 3)] * stat(n["owner"], "production") * Rules.GOOGATLING_PROD
 	if n["owner"] == "" or not has_vat(n):
 		return 0.0
 	if vat_paused(n):                                      # VAT COLUMN: paused while the blueprint fills
@@ -481,7 +509,7 @@ func has_hub(seat: String) -> bool:
 	return false
 
 
-const STRUCTURE_NAMES := {"vat": "Vat", "machinegoon": "Machinegoon", "laser": "Laser tower", "forge": "Forge",
+const STRUCTURE_NAMES := {"vat": "Vat", "machinegoon": "Googatling", "laser": "Laser tower", "forge": "Forge",
 		"monster_hub": "Monster hub"}
 
 
@@ -507,7 +535,7 @@ func can_build(node_id: int, seat: String, kind: String) -> String:
 				return "A relay holds a Laser tower, a Forge or a Monster hub"
 			"special":
 				return "A special node holds only its vat"
-		return "A node holds a vat or a Machinegoon"
+		return "A node holds a vat or a Googatling"
 	if n["structure"] == kind:
 		return "A %s already stands here" % STRUCTURE_NAMES[kind]
 	if n["structure"] != "" and n["swap_cd"] > 0.0:
@@ -548,14 +576,19 @@ func can_upgrade(node_id: int, seat: String) -> String:
 	if n["build_kind"] != "":
 		return "Construction already in progress"
 	var st: String = n["structure"]
-	if st == "vat":
+	if n["relay"] == "launcher":                       # LAUNCHER TURRET: T1 -> T2 -> T3 (Desk dec-launcher-turret)
+		if n["tier"] >= Rules.LAUNCHER_MAX_TIER:
+			return "Launcher is already at max tier"
+		if n["relay_phase"] != "":
+			return "The launcher is busy - upgrade it between salvos"
+	elif st == "vat":
 		if n["tier"] >= 4:
 			return "Vat is already at max tier"
 		if n["tier"] >= Rules.VAT_MAX_UPGRADE:
 			return "Vats stop at T3 - a T4 only stands where the map puts it"
 	elif st == "machinegoon":
 		if n["tier"] >= 3:
-			return "Machinegoon is already at max tier"
+			return "Googatling is already at max tier"
 	elif st == "":
 		return "Nothing to upgrade here"
 	else:
@@ -572,12 +605,15 @@ func upgrade(node_id: int, seat: String) -> bool:
 		return false
 	var n: Dictionary = nodes[node_id]
 	n["units"] -= upgrade_cost(n)
-	_start_build(n, n["structure"], {"kind": n["structure"], "tier": n["tier"] + 1})
+	var kind: String = "launcher" if n["relay"] == "launcher" else n["structure"]
+	_start_build(n, kind, {"kind": kind, "tier": n["tier"] + 1})
 	return true
 
 
 func upgrade_cost(n: Dictionary) -> int:
 	## What the next tier costs here right now (HUD; 0 = no upgrade).
+	if n["relay"] == "launcher":
+		return int(Rules.LAUNCHER_COST.get(int(n["tier"]) + 1, 0)) if int(n["tier"]) < Rules.LAUNCHER_MAX_TIER else 0
 	if n["structure"] == "machinegoon":
 		return Rules.MACHINEGOON_COST.get(n["tier"] + 1, 0) if n["tier"] < 3 else 0
 	if n["structure"] == "vat":
@@ -660,7 +696,9 @@ func _finish_build(n: Dictionary) -> void:
 	var target: Dictionary = n["build_target"]
 	n["build_kind"] = ""
 	n["build_target"] = {}
-	if kind in ["vat", "machinegoon"] and n["structure"] == kind:
+	if kind == "launcher":                             # LAUNCHER TURRET: an upgrade (the cannon grows a tier)
+		n["tier"] = clampi(int(target.get("tier", n["tier"] + 1)), 1, Rules.LAUNCHER_MAX_TIER)
+	elif kind in ["vat", "machinegoon"] and n["structure"] == kind:
 		n["tier"] = mini(int(target.get("tier", n["tier"] + 1)), 4)   # an upgrade
 	else:
 		var st: String = "vat" if kind == "vat_restore" else kind
@@ -738,10 +776,16 @@ func _step_structures(dt: float) -> void:
 
 
 func _fire_machinegoon(n: Dictionary, dt: float) -> void:
-	## One stream at the nearest enemy line with any part within MACHINEGOON_RANGE: single target, good against
-	## trickles, weak against big blobs. Jammed by an Echo Split echo like a vat.
-	if is_disrupted(n["id"]):                          # a NEUTRAL machinegoon fires too, at every seat (Daniele 2026-11-06:
-		return                                          # "neutral shoot all, apply that to laser neutral too")
+	## GOOGAT (id "machinegoon", Daniele 2026-11-06 + Desk dec-googatling): its AMMO IS ITS GARRISON (n["units"], grown at half
+	## the vat rate up to the node's cap; lines walking in add to it). One stream at the nearest enemy line with any part
+	## within MACHINEGOON_RANGE fires that garrison at gat_fire_rate (one unit per kill) until it is empty, then each unit as
+	## soon as it is made (fire > production: a long column runs it dry unless new units enter). Single target, good against
+	## trickles, weak against big blobs. Jammed by an Echo Split echo like a vat. A neutral one fires its neutral garrison at
+	## every seat (Daniele 2026-11-06: "neutral shoot all").
+	if is_disrupted(n["id"]):
+		return
+	if float(n["units"]) <= 0.0001:
+		return
 	var targets := _hordes_in_range(n, Rules.MACHINEGOON_RANGE)
 	if targets.is_empty():
 		return
@@ -753,11 +797,14 @@ func _fire_machinegoon(n: Dictionary, dt: float) -> void:
 		if d < best_d:
 			best_d = d
 			best = h
-	var kill: float = minf(float(Rules.MACHINEGOON_RATE.get(n["tier"], Rules.MACHINEGOON_RATE[1])) * dt * _cannon_mult(best), best["units"])   # Anchor halves these too (Daniele, 2026-09-27)
+	var fire: float = minf(gat_fire_rate(n) * dt, float(n["units"]))   # the garrison caps the burst: empty = trickle
+	var mult := _cannon_mult(best)                                      # Anchor halves these too (Daniele, 2026-09-27)
+	var kill: float = minf(fire * mult, best["units"])
+	n["units"] = maxf(0.0, float(n["units"]) - (kill / mult if mult > 0.0 else fire))
 	var at := _hit_point(n, best, Rules.MACHINEGOON_RANGE)
 	var hid: int = best["id"]
 	_structure_kill(n, best, kill, "machinegoon")
-	n["shot"] = {"t": time, "target_horde": hid, "kills": kill, "pos": at}
+	n["shot"] = {"t": time, "target_horde": hid, "kills": kill, "pos": at, "trickle": fire < gat_fire_rate(n) * dt * 0.99}
 
 
 func _structure_kill(n: Dictionary, h: Dictionary, kill: float, why: String) -> void:
@@ -1040,6 +1087,8 @@ func _fire_relay_by(n: Dictionary, seat: String) -> bool:
 	n["relay_pending"] = relay_next_index(n)
 	n["relay_phase"] = "warning"
 	n["relay_t"] = Rules.RELAY_WARNING
+	if n["relay"] == "launcher" and not n.has("misfire_next"):
+		n["relay_t"] = 0.0                            # LAUNCHER TURRET: "you tap: the aim freezes and loading starts"
 	n["relay_by"] = seat                              # who fired it: its falls credit this seat (progression)
 	events.append({"t": time, "type": "relay_fired", "node": n["id"], "seat": seat, "index": n["relay_pending"]})
 	fx_events.append({"type": "relay_warning", "node": n["id"]})
@@ -1480,17 +1529,44 @@ func _lift_end_y(ei: int, node_id: int) -> float:
 	## Daniele 2026-11-05 ("the lift node raises and dips but the bridges it connects are all at the same level, so units
 	## teleport"): a lift deck's lift end stands at ITS level (UP decks dock RELAYS_PROTO.lift.rise up, DOWN decks on the
 	## ground), so the UP decks are ramps and a line walks up them onto the raised platform.
+	## Round R levels (Daniele 2026-11-06, R-01: "top part of the map is raised and bottom is lowered so we can use the
+	## lifts"): any other end stands at its platform's level (pos.y = level x rise, MapBuilder.layout3).
 	if str(edges[ei].get("proto", "")) != "lift" or str(nodes[node_id].get("relay", "")) != "lift":
-		return 0.0
-	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(int(edges[ei]["lift_level"]))
+		return float((nodes[node_id]["pos"] as Vector3).y)
+	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(lift_base(node_id) + int(edges[ei]["lift_level"]))
+
+
+func lift_base(node_id: int) -> int:
+	## a lift's lower level: 0 (levels 0 / +1) or -1 (a lowered lift: -1 / 0; map node "lift": {"base": -1})
+	var n: Dictionary = nodes[node_id]
+	if str(n.get("relay", "")) != "lift":
+		return 0
+	return int((n.get("proto", {}) as Dictionary).get("base", 0))
 
 
 func node_y(node_id: int) -> float:
-	## the walking height on a node: a lift platform stands at its level (0 / RELAYS_PROTO.lift.rise), everything else 0
+	## the walking height ADDED on a node: a lift platform stands at its level ((base + 0 / 1) x RELAYS_PROTO.lift.rise);
+	## every other node is 0 here (a raised / lowered platform carries its level in pos.y)
 	var n: Dictionary = nodes[node_id]
 	if str(n.get("relay", "")) != "lift":
 		return 0.0
-	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(int(n["relay_index"]) % 2)
+	return float(Rules.RELAYS_PROTO["lift"]["rise"]) * float(lift_base(node_id) + int(n["relay_index"]) % 2)
+
+
+func ramp_ends(ei: int, near_id: int) -> Array:
+	## [near pier end, far pier end] of deck ei with their heights: a deck whose ends stand at different heights (a lift
+	## level, a raised / lowered platform) ramps between its pier ends, the piers stay flat at their platform's height.
+	var e: Dictionary = edges[ei]
+	var g: Dictionary = e["geo"]
+	var far_id := _other_end(ei, near_id)
+	var qn: Array = g["A"] if e["a"] == near_id else g["B"]
+	var qf: Array = g["A"] if e["a"] == far_id else g["B"]
+	var pn: float = float(g["p0"] if e["a"] == near_id else g["p1"])
+	var pf: float = float(g["p0"] if e["a"] == far_id else g["p1"])
+	var N := Vector3(qn[0], 0.0, qn[1])
+	var F := Vector3(qf[0], 0.0, qf[1])
+	var u := (F - N).normalized()
+	return [N + u * pn + Vector3.UP * _lift_end_y(ei, near_id), F - u * pf + Vector3.UP * _lift_end_y(ei, far_id)]
 
 
 func deck_line(ei: int) -> Array:
@@ -1726,10 +1802,12 @@ func _deck_points3(ei: int, from_id: int) -> Array:
 	out.append(B - u * float(g["p1"]))
 	var ya := _lift_end_y(ei, e["a"])
 	var yb := _lift_end_y(ei, e["b"])
-	if ya != 0.0 or yb != 0.0:                        # a lift's UP deck: a ramp from the ground end to the raised end
-		var span := A.distance_to(B)
+	if ya != 0.0 or yb != 0.0:                        # a lift's UP deck / a raised or lowered platform: flat on the piers,
+		var span := A.distance_to(B)                  # a ramp between the pier ends (MapBuilder / ProtoRelayView shear the
+		var r0: float = float(g["p0"])                # deck pieces along the same line)
+		var run := maxf(span - r0 - float(g["p1"]), 0.01)
 		for k in range(out.size()):
-			var t := clampf(((out[k] as Vector3) - A).dot(u) / maxf(span, 0.01), 0.0, 1.0)
+			var t := clampf((((out[k] as Vector3) - A).dot(u) - r0) / run, 0.0, 1.0)
 			out[k] = (out[k] as Vector3) + Vector3.UP * lerpf(ya, yb, t)
 	if from_id != e["a"]:
 		out.reverse()
@@ -1801,8 +1879,11 @@ func step(dt: float) -> void:
 	_check_handovers()                                # (an owner at zero hands over before producing again)
 	_catchup = catchup_sides()                        # CATCH-UP: who trails, from this step's node count
 	for n in nodes:                                   # production (vat nodes only), up to the cap
-		if n["owner"] != "" and has_vat(n) and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11)
+		if n["owner"] != "" and (has_vat(n) or n["structure"] == "machinegoon") and garrison_total(n) < Rules.CAPS[n["tier"]]:   # allied troops count (sec11); a GooGat grows its ammo (half rate)
 			_produce(n, dt)
+		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and n["structure"] == "machinegoon" and not collapsed.get(n["id"], false) \
+				and n["units"] < float(n.get("regen_cap", Rules.NEUTRAL_UNITS.get(n["tier"], 0))):   # a neutral GooGat regrows its ammo (half rate)
+			n["units"] = minf(float(n.get("regen_cap", Rules.NEUTRAL_UNITS[n["tier"]])), n["units"] + gat_rate(n) * dt)
 		elif Rules.NEUTRAL_REGEN and n["owner"] == "" and has_vat(n) and not collapsed.get(n["id"], false) 				and n["units"] < float(n.get("regen_cap", Rules.NEUTRAL_UNITS.get(n["tier"], 0))):   # (TUTORIAL: "regen_cap" - a staged node regrows only to that)
 			n["units"] = minf(float(n.get("regen_cap", Rules.NEUTRAL_UNITS[n["tier"]])), n["units"] + Rules.PROD[n["tier"]] * dt)   # a neutral village regrows to its garrison (0.18.9)
 	_step_relays(dt)
@@ -1836,7 +1917,7 @@ func step(dt: float) -> void:
 			var mult: float = Rules.platform_mult() if fast_here else 1.0
 			var boost := skill_speed(h)                   # Surge / Overdrive
 			mult *= deck_slow(h) * boost                  # enemy goo (home advantage) or Mire, the stronger
-			if not _conv_edges.is_empty():
+			if not _conv_edges.is_empty() or not _belt_edges.is_empty():   # (R-01 review: plain belts alone count too)
 				mult *= conveyor_mult(h)                  # RELAYS 3.0: with / against a conveyor's flow
 			var ds: float = Rules.move_speed() * h.get("speed", 1.0) * stat(h["owner"], "speed") * mult * dt
 			if h["streaming"]:                        # the head cannot outrun the door: the line stays attached
@@ -2705,6 +2786,8 @@ func _capture(n: Dictionary, seat: String, garrison: float) -> void:
 			n["tier"] = maxi(1, n["tier"] - 1)
 		if n["structure"] == "monster_hub":
 			n["monster_ready_t"] = time + Rules.MONSTER_COOLDOWN   # the new owner's hub charges afresh
+		if n["relay"] == "launcher":                   # LAUNCHER TURRET: tiered like a vat - a conquest costs a tier, never below T1
+			n["tier"] = maxi(1, int(n["tier"]) - 1)
 	var second_hub := _second_hub(n, seat)             # (asked before the node is the capturer's)
 	n["owner"] = seat
 	n["units"] = garrison
@@ -2836,9 +2919,6 @@ func _start_rings() -> void:
 		if n["ring"] == keep_ring:
 			last_stand_keep[n["id"]] = true
 	last_stand_final = last_stand_keep.keys()[0] if not last_stand_keep.is_empty() else -1
-	for n in nodes:                                       # 2026-11-06: an indestructible relay (the launcher) never falls
-		if n.get("indestructible", false):
-			last_stand_keep[n["id"]] = true
 	last_stand_corners = _corner_cycle()                  # drawn after the method and order: same seed, same picks
 	_ls_corner_k = 0
 	last_stand_waves = _plan_waves(order)
@@ -3263,6 +3343,7 @@ func start_very_last_stand_now(gap := -1.0) -> void:
 
 
 func _vls_surviving() -> Array:
+	## The platforms the Very Last Stand still has to drop (a launcher too since the turret: Daniele 2026-11-06).
 	var out := []
 	for n in nodes:
 		if not collapsed.get(n["id"], false):
@@ -3305,7 +3386,7 @@ func _vls_pick(gone: Dictionary) -> int:
 			safe.append(id)
 	if not safe.is_empty():
 		return safe[rng.randi_range(0, safe.size() - 1)]
-	var pool: Array = candidates if not candidates.is_empty() else survivors.duplicate()   # no 1-2-conn
+	var pool: Array = candidates if not candidates.is_empty() else survivors   # no 1-2-conn
 	pool.sort()                                                                            # platform at
 	var best_stranded := 999999                                                            # all: fall back
 	var ties := []                                                                         # to any survivor
@@ -3486,8 +3567,10 @@ func _drop_node(id: int) -> void:
 	## breaks outward from this end segment by segment (_begin_break / _step_breaks); bodies on a deck fall
 	## with their segment (_check_missing_decks), so a line walking away can still reach the far pier.
 	var n: Dictionary = nodes[id]
-	if n.get("indestructible", false):      # 2026-11-06: the launcher never falls (its decks may: their far ends do)
-		return
+	for k in n.get("load", {}):              # LAUNCHER TURRET: what it was loading falls with it (no salvo)
+		if not bool(n["load"][k].get("decoy", false)):
+			fall_losses[k] = fall_losses.get(k, 0.0) + float(n["load"][k]["units"])
+	n["load"] = {}
 	if n["relay_phase"] == "moving":
 		_relay_apply(n)                     # finish the tick: the view restores the decks
 	collapsed[id] = true
@@ -4389,7 +4472,7 @@ func door_mult(h: Dictionary) -> float:
 	if h.get("evac", false):                           # POWERS: an Evac line leaves "at once" (burst x the door rate)
 		return float(Rules.SKILLS["evac"]["burst"])
 	var m := 1.0
-	if not _conv_edges.is_empty():                     # RELAYS 3.0 round 2: a belt pulls a line out of its vat faster
+	if not _conv_edges.is_empty() or not _belt_edges.is_empty():   # RELAYS 3.0 round 2: a belt pulls a line out of its vat faster
 		m = maxf(m, conveyor_mult(h))
 	if _fx_horde.is_empty() and _fx_seat.is_empty():   # demo-world merge: Overdrive is a SEAT effect (main 0.23.21)
 		return m
@@ -5313,7 +5396,10 @@ func _power_check(seat: String, id: String, target) -> String:
 			if not _node_ok(i) or nodes[i]["owner"] == "" or allied(nodes[i]["owner"], seat):
 				return "Pick an enemy structure"
 			var n: Dictionary = nodes[i]
-			if n["structure"] == "":
+			if n["relay"] == "launcher":              # LAUNCHER TURRET (Daniele 2026-11-06): a special relay keeps its T1
+				if int(n["tier"]) <= 1:
+					return "A launcher never drops below T1"
+			elif n["structure"] == "":
 				return "Nothing to sink there"
 			if n["structure"] in ["vat", "machinegoon"] and n["tier"] >= 4:
 				return "A T4 holds its ground"
@@ -5504,7 +5590,10 @@ func _sinkhole(seat: String, n: Dictionary) -> void:
 		n["build_kind"] = ""
 		n["build_target"] = {}
 	var destroyed := true
-	if old in ["vat", "machinegoon"] and from > 1:
+	if n["relay"] == "launcher":                            # LAUNCHER TURRET: one tier down (cast_check refuses a T1)
+		n["tier"] = maxi(1, from - 1)
+		destroyed = false
+	elif old in ["vat", "machinegoon"] and from > 1:
 		n["tier"] = from - 1
 		destroyed = false
 	else:
@@ -5759,7 +5848,7 @@ func _setup_proto() -> void:
 					(nodes[int(p["link"])]["proto"] as Dictionary)["link"] = n["id"]   # speed relay controlling the SAME
 																		# speed / slow"): two linked relays share one state
 			"lift":
-				n["relay_index"] = clampi(int(p.get("level", 0)), 0, 1)
+				n["relay_index"] = clampi(int(p.get("level", 0)), 0, 1)   # p.base -1: a lowered lift (levels -1 / 0)
 			"tilt":
 				var ex := []
 				for x in p.get("exits", []):
@@ -5838,7 +5927,8 @@ func _proto_begin_move(n: Dictionary, old_index: int, new_index: int) -> void:
 		"conveyor":
 			n["relay_move"] = float(cfg["move"])
 		"launcher":
-			n["relay_move"] = float(cfg["armed"])
+			n["relay_move"] = launcher_load_s(n)          # LAUNCHER TURRET: loading lasts 2 / 4 / 6 s at most
+			n["load"] = {}
 			if n.has("misfire_next"):                     # round 3: a rival fired it - it misfires instead of arming
 				n["relay_move"] = float(cfg["misfire"])
 				_misfire_start(n, str(n["misfire_next"]))
@@ -5895,9 +5985,12 @@ func ferry_cycle_e(ei: int) -> Dictionary:
 		gap = deck_length(ei)
 	var cross: float = gap / Rules.move_speed()
 	var sv: float = clampf(float(cfg["survive"]), 0.05, 0.9)
-	var moving: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
-	var open: float = (cross + sv * moving) / (1.0 - sv)
-	var c := {"open": open, "slide": float(cfg["slide"]), "away": float(cfg["away"]), "half": open + moving,
+	var away: float = float(cfg["away"])
+	if cfg.has("out"):                                # Daniele 2026-11-06: a fixed time out of line (slide out + away + slide back)
+		away = maxf(float(cfg["out"]) - 2.0 * float(cfg["slide"]), 0.0)
+	var moving: float = 2.0 * float(cfg["slide"]) + away
+	var open: float = float(cfg["open"]) if cfg.has("open") else (cross + sv * moving) / (1.0 - sv)
+	var c := {"open": open, "slide": float(cfg["slide"]), "away": away, "half": open + moving,
 			"period": 2.0 * (open + moving), "cross": cross, "gap": gap}
 	p["cycle"] = c
 	return c
@@ -5968,6 +6061,8 @@ func ferry3_slot(g: String) -> Dictionary:
 		var sv: float = clampf(float(cfg["survive"]), 0.05, 0.9)
 		var mv: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
 		open = maxf(open, (cross + sv * mv) / (1.0 - sv))
+	if cfg.has("open"):                               # Daniele 2026-11-06: 10 s on each lane
+		open = float(cfg["open"])
 	var move: float = 2.0 * float(cfg["slide"]) + float(cfg["away"])
 	var s := {"open": open, "move": move, "slot": open + move, "period": (open + move) * float((grp["seq"] as Array).size())}
 	grp["slot"] = s
@@ -6085,7 +6180,7 @@ func proto_tag(id: int) -> String:
 			if n["relay_phase"] == "moving":
 				if n.get("misfire", "") != "":
 					return "MISFIRE %d" % int(ceil(float(n["relay_t"])))
-				return "ARMED %d" % int(ceil(float(n["relay_t"])))
+				return "LOAD %d/%d" % [Rules.shown(launcher_loaded(n)), Rules.shown(launcher_load(n))]   # TURRET
 			if n["relay_phase"] == "warning":
 				return "LOCK"
 			var left := launcher_aim_left(id)
@@ -6247,25 +6342,49 @@ func conveyor_sense(h: Dictionary) -> Array:
 	return [1 if with_m >= against_m else -1, id]
 
 
-# LAUNCHER: armed, every own line whose head enters the node's platform parks there and pours into the air at the arrival
-# rate; each throw flies RELAYS_PROTO.launcher.flight s (immune, open point 2) and lands over .land s at the target as a
-# normal arrival (fights or garrisons). Enemy / allied lines walk on. When the arm ends the rest of a parked line walks on.
+# LAUNCHER TURRET (Daniele 2026-11-06; Desk dec-launcher-turret): loading, every line whose head enters the node's platform
+# - own, allied and enemy alike, not a decoy, not a line leaving the node - parks there and pours into the cannon at the
+# arrival rate (x RELAYS_PROTO.launcher.pour) until the load holds launcher_load(n) or launcher_load_s(n) s have passed;
+# the rest of a parked line walks on when it ends. Then _launcher_release fires the whole load at the frozen target: one
+# throw per seat, RELAYS_PROTO.launcher.flight s in the air (immune), all landing together over .land s as normal arrivals
+# (the existing node combat with every faction's totals; Desk answer 4). Loaded units still count as their seat's.
+static func launcher_load(n: Dictionary) -> float:
+	## The most this launcher's salvo holds (sim units; shown 50 / 100 / 150 at T1 / T2 / T3).
+	var t: int = clampi(int(n["tier"]), 1, Rules.LAUNCHER_MAX_TIER)
+	return float(Rules.LAUNCHER_LOAD.get(t, Rules.LAUNCHER_LOAD.get(str(t), 250)))
+
+
+static func launcher_load_s(n: Dictionary) -> float:
+	## The longest this launcher loads (s; 2 / 4 / 6 at T1 / T2 / T3).
+	var t: int = clampi(int(n["tier"]), 1, Rules.LAUNCHER_MAX_TIER)
+	return float(Rules.LAUNCHER_LOAD_S.get(t, Rules.LAUNCHER_LOAD_S.get(str(t), 2.0)))
+
+
+static func launcher_loaded(n: Dictionary) -> float:
+	## Units in the cannon now (every seat, sim units).
+	var t := 0.0
+	for k in n.get("load", {}):
+		t += float(n["load"][k]["units"])
+	return t
+
+
 func _launcher_catch(n: Dictionary, dt: float) -> void:
 	var id: int = n["id"]
 	var tgt: int = int(n["proto"].get("target", -1))
 	var ok: bool = n["owner"] != "" and tgt >= 0 and not collapsed.get(tgt, false)
 	var cfg: Dictionary = Rules.RELAYS_PROTO["launcher"]
+	var room: float = launcher_load(n) - launcher_loaded(n)
 	for h in hordes.duplicate():
 		if not (h in hordes):
 			continue
 		if h.has("launch"):
 			if int(h["launch"]) != id:
 				continue
-			if not ok or h["owner"] != n["owner"]:
-				h.erase("launch")                        # the pad changed hands: it walks on
+			if not ok or room <= 0.0001:
+				h.erase("launch")                        # full (or nothing to aim at): it walks on
 				continue
 		else:
-			if not ok or h["owner"] != n["owner"] or h.get("decoy", false) or int(h["route"][0]) == id:
+			if not ok or room <= 0.0001 or h.get("decoy", false) or int(h["route"][0]) == id:
 				continue
 			var pr := _platform_range(h, id)
 			if pr.is_empty() or h["s"] < pr[0] or h["s"] > pr[1]:
@@ -6276,19 +6395,18 @@ func _launcher_catch(n: Dictionary, dt: float) -> void:
 			fx_events.append({"type": "launch_catch", "node": id, "hid": h["id"], "seat": h["owner"]})
 		var len := chain_length(h)
 		var rate: float = Rules.move_speed() * Rules.platform_mult() * h["units"] / maxf(len, 0.5)
-		var x: float = minf(h["units"], maxf(rate, Rules.POUR_MIN_RATE) * float(cfg.get("pour", 1.0)) * dt)   # round 3: x pour
+		var x: float = minf(minf(h["units"], room), maxf(rate, Rules.POUR_MIN_RATE) * float(cfg.get("pour", 1.0)) * dt)
 		if x > 0.0:
 			h["units"] -= x
-			var last: Dictionary = flights[-1] if not flights.is_empty() else {}
-			if not last.is_empty() and last["seat"] == h["owner"] and int(last["from"]) == id and time - float(last["t0"]) < 0.25:
-				last["units"] = float(last["units"]) + x  # one throw per quarter second
-				last["left"] = float(last["left"]) + x
-			else:
-				var land: float = time + float(cfg["flight"])
-				flights.append({"seat": h["owner"], "faction": h["faction"], "units": x, "left": x, "from": id, "to": tgt,
-						"t0": time, "land": land, "end": land + float(cfg["land"])})
+			room -= x
+			var seat: String = h["owner"]
+			if not n["load"].has(seat):
+				n["load"][seat] = {"units": 0.0, "faction": h["faction"]}
+			n["load"][seat]["units"] = float(n["load"][seat]["units"]) + x
 		if h["units"] <= 0.001 and not h["streaming"]:
 			hordes.erase(h)
+	if ok and room <= 0.0001:
+		n["relay_t"] = 0.0                               # full: the salvo goes now (_step_relays applies it this step)
 
 
 func _launcher_release(n: Dictionary) -> void:
@@ -6298,9 +6416,39 @@ func _launcher_release(n: Dictionary) -> void:
 	if n.get("misfire", "") != "":
 		n.erase("misfire")
 		fx_events.append({"type": "launch_misfire_end", "node": n["id"]})
+	_launcher_salvo(n)
 	var p: Dictionary = n["proto"]                    # round 2: the aim moves on from the locked target
 	p["aim0"] = maxi(0, (p.get("targets", []) as Array).find(int(p.get("target", -1))))
 	p["aim_t0"] = time
+
+
+func _launcher_salvo(n: Dictionary) -> void:
+	## Fires the whole load at the frozen target: one throw per seat, all leaving now and landing together.
+	var load: Dictionary = n.get("load", {})
+	n["load"] = {}
+	if load.is_empty():
+		return
+	var cfg: Dictionary = Rules.RELAYS_PROTO["launcher"]
+	var tgt: int = int(n["proto"].get("target", -1))
+	var land: float = time + float(cfg["flight"])
+	var total := 0.0
+	var seats := load.keys()
+	seats.sort()                                      # (deterministic: host and replay land them in the same order)
+	for seat in seats:
+		var u: float = float(load[seat]["units"])
+		if u <= 0.0001:
+			continue
+		total += u
+		var f := {"seat": seat, "faction": load[seat]["faction"], "units": u, "left": u, "from": n["id"], "to": tgt,
+				"t0": time, "land": land, "end": land + float(cfg["land"]), "salvo": true}
+		if tgt < 0 or collapsed.get(tgt, false):        # nothing left to land on: into the void
+			f["void"] = true
+			f["heading"] = rng.randf_range(-PI, PI)
+			f["to"] = -1
+		flights.append(f)
+	events.append({"t": time, "type": "launch_salvo", "node": n["id"], "seat": n["owner"], "to": tgt, "units": total,
+			"seats": seats})
+	fx_events.append({"type": "launch_salvo", "node": n["id"], "to": tgt, "units": total, "shown": Rules.shown(total)})
 
 
 # LAUNCHER AIM (round 2, Daniele: "it switches its target on its own every 10 s, the player locks it and fires with a
@@ -6405,6 +6553,9 @@ func flight_units(seat: String) -> float:
 	for f in flights:
 		if f["seat"] == seat and not f.get("void", false):   # (round 3: a misfire's throw is lost)
 			t += float(f["left"])
+	for n in nodes:                                   # LAUNCHER TURRET: loaded in a cannon, waiting for the salvo
+		if not (n.get("load", {}) as Dictionary).is_empty() and n["load"].has(seat):
+			t += float(n["load"][seat]["units"])
 	return t
 
 
@@ -6438,6 +6589,16 @@ func launcher_misfire(id: int, seat: String) -> void:
 
 
 func _misfire_start(n: Dictionary, seat: String) -> void:
+	var load: Dictionary = n.get("load", {})           # LAUNCHER TURRET: what it had loaded goes into the void with it
+	n["load"] = {}
+	var cfg: Dictionary = Rules.RELAYS_PROTO["launcher"]
+	for k in load:
+		var u: float = float(load[k]["units"])
+		if u > 0.0001:
+			var land: float = time + float(cfg["flight"])
+			flights.append({"seat": k, "faction": load[k]["faction"], "units": u, "left": u, "from": n["id"], "to": -1,
+					"t0": time, "land": land, "end": land + float(cfg["land"]), "void": true, "by": seat,
+					"heading": rng.randf_range(-PI, PI)})
 	n["misfire"] = seat
 	n.erase("misfire_next")
 	n["relay_by"] = seat

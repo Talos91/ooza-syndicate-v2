@@ -708,7 +708,7 @@ func _draw_relay_cues(cam: Camera3D) -> void:
 				NodeNoir.neon(self, rp, Hud.RELAY_ACCENT, 2.2 * ui_scale, a, 0.6 + 0.4 * a)
 		if float(_relay_cue_t.get(id, 0.0)) > 0.0:      # the first few times: spell it out, in a pill (was 13 px loose text)
 			var f := maxi(int(14 * ui_scale), 13)
-			var txt := "DOUBLE-TAP TO LOCK" if n["relay"] == "launcher" else "DOUBLE-TAP TO SWITCH"
+			var txt := "DOUBLE-TAP TO LOAD" if n["relay"] == "launcher" else "DOUBLE-TAP TO SWITCH"   # LAUNCHER TURRET: the tap loads
 			NodeNoir.pill(self, (ns[0] as Vector2) + Vector2(0, -float(ns[1]) - 18.0 * ui_scale), txt,
 					Hud.RELAY_ACCENT, Hud.UI_FONT, f, ui_scale)
 
