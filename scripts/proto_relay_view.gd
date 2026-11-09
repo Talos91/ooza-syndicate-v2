@@ -824,6 +824,7 @@ func sync(dt: float) -> void:
 				_tilt(n, r, top, phase, blink, gone)
 	for parts in _plain_ferry:                        # round 3: the plain pieces
 		_ferry_deck_sync(parts, sim.ferry_phase_e(int(parts["edge"])), false)
+	_ferry3_hulls()
 	if not _belts.is_empty() or not _belt_curves.is_empty():
 		_belt_phase += dt * CHEVRON_SPEED * float(Rules.RELAYS_PROTO["conveyor"]["with"])
 		for c in _belt_curves:
@@ -957,6 +958,41 @@ func _ferry_deck_sync(parts: Dictionary, fp: Dictionary, gone: bool) -> Color:
 			hl.text = "IN %d" % int(ceil(float(fp["next_open"])))
 			hl.modulate = Rules.RELAY_GHOST_COLORS["ferry"]
 	return lc
+
+
+func _ferry3_hulls() -> void:
+	## Round R 3-lane ferry (demo-rules-pass, Daniele 2026-11-09: "ferry animation broken"): the rule is ONE hull serving the
+	## lanes (Sim.ferry3_lane), but every lane drew its own barge nudged 2.6 m aside, so nothing ever travelled. Now one
+	## barge is shown: in line on the lane the hull sits on, gliding from lane to lane (eased) while it moves; the other
+	## lanes' barges hide (their lips keep the red hole + IN n). A lane whose end node collapsed hides with it.
+	var by_group := {}
+	for parts in _plain_ferry:
+		var rec: Dictionary = sim._ferry_plain.get(int(parts["edge"]), {})
+		if not rec.has("group") or not parts.has("v3"):
+			continue
+		if not by_group.has(rec["group"]):
+			by_group[rec["group"]] = {}
+		by_group[rec["group"]][int(rec["pos"])] = parts
+	for g in by_group:
+		var lanes: Dictionary = by_group[g]
+		var L := sim.ferry3_lane(g)
+		var s := sim.ferry3_slot(g)
+		var from: int = int(L["from"])
+		var to: int = int(L["to"])
+		var hull_lane: int = int(L["at"]) if int(L["at"]) >= 0 else from
+		for pos in lanes:
+			var ei: int = lanes[pos]["edge"]
+			var down: bool = sim.demolished.has(ei) or sim.collapsed.get(sim.edges[ei]["a"], false) \
+					or sim.collapsed.get(sim.edges[ei]["b"], false)
+			(lanes[pos]["v3"] as Node3D).visible = pos == hull_lane and not down
+		if not lanes.has(hull_lane):
+			continue
+		var hull: Node3D = lanes[hull_lane]["v3"]
+		if bool(L["moving"]) and lanes.has(from) and lanes.has(to):
+			var k := smoothstep(0.0, 1.0, clampf(float(L["u"]) / maxf(float(s["move"]), 0.01), 0.0, 1.0))
+			hull.position = (lanes[from]["v3_at"] as Vector3).lerp(lanes[to]["v3_at"], k)
+		else:
+			hull.position = lanes[hull_lane]["v3_at"]
 
 
 func _conveyor(n: Dictionary, r: Dictionary, top: Vector3, phase: String, blink: bool, dt: float, gone: bool) -> void:

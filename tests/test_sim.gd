@@ -3380,8 +3380,12 @@ func _relays_proto() -> void:
 		lo = minf(lo, frac)
 		hi = maxf(hi, frac)
 		runs += 1
-	check(runs == 20 and absf(sum / maxf(runs, 1.0) - float(Rules.RELAYS_PROTO["ferry"]["survive"])) < 0.08, "ferry: a 50 send crosses %.0f %% on average (%.0f-%.0f %%, %d runs)"
-			% [100.0 * sum / maxf(runs, 1.0), lo * 100.0, hi * 100.0, runs])
+	# (demo-rules-pass: since "open" is fixed (2026-11-06; 20 s since 2026-11-09) the share that crosses is the cycle's own,
+	# (open - crossing) / half cycle, not RELAYS_PROTO.ferry.survive)
+	var fcyc := _proto_sim("ferry").ferry_cycle(1)
+	var expect: float = (float(fcyc["open"]) - float(fcyc["cross"])) / float(fcyc["half"])
+	check(runs == 20 and absf(sum / maxf(runs, 1.0) - expect) < 0.08, "ferry: a 50 send crosses %.0f %% on average (%.0f-%.0f %%, %d runs; the cycle gives %.0f %%)"
+			% [100.0 * sum / maxf(runs, 1.0), lo * 100.0, hi * 100.0, runs, 100.0 * expect])
 	var shown_tally := f2.fx_events.filter(func(e): return e["type"] == "ferry_tally" and int(e["hid"]) == int(hs["id"]))
 	check(not shown_tally.is_empty() and bool(shown_tally[-1]["done"]) and int(shown_tally[-1]["ok"]) == 10 and int(shown_tally[-1]["sent"]) == 10,
 			"ferry: the readout counts up and closes on FERRY 10 / 10 CROSSED (%s)" % str(shown_tally[-1] if not shown_tally.is_empty() else {}))
