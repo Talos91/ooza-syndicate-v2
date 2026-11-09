@@ -28,6 +28,7 @@ var worst := {}
 
 
 func _ready() -> void:
+	WorldLayer.FLOOR_TUBES = true                    # the floor tubes are off in the game since 2026-11-09; this probe checks them
 	_run.call_deferred()
 
 
