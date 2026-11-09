@@ -8,6 +8,11 @@ extends Node
 ##   tube x bases     >= BASE_R + PIPE_R from every OTHER column base's axis (own base: past its socket), >= r + PIPE_R from a
 ##                    pillar sleeve, >= RING_R + PIPE_R from every other pit (or above its rim)
 ##   floating         on the floor run (not over a lane / tube bridge, not at the socket or the rim) the underside is <= FLOAT_TOL
+##   pit_sym (v2)     the 4 pits mirror left/right and top/bottom about the board's centre (0.01 m); prints their coordinates
+##   span / post_clip (v2) level runs held by stands <= SPAN_MAX apart; no stand on a Locals' lane or under another tube
+##   fan_cross (v2)   no two tubes of one pit cross on the floor plan within HDR_R + HDR_APPR + 2 m of its centre
+##   (v2 collectors: runs with col < 0 are a pit's header bar (sock -1) and riser (sock -2), radius HDR_RR; a tube's end on
+##   its header and the riser's start on the bar are joints, not clips)
 ## Prints one PITS_CLIP line per check and PITS_CLIP TOTAL <n>; exit 0 when 0 failures.
 ##   Godot --headless --path . res://tests/pits_tubes_clip.tscn [-- map=R-05]   (or windowed off-screen + silent)
 
@@ -60,6 +65,22 @@ static func _samples(pts: PackedVector3Array) -> PackedVector3Array:
 	return out
 
 
+static func _rad(run: Array) -> float:
+	return WorldTubes.HDR_RR if int(run[0]) < 0 else WorldTubes.PIPE_R
+
+
+static func _joint(a: Array, b: Array, at: Vector3) -> bool:
+	## v2: where a run meets b at a designed joint - a tube's last point on its pit's header, or the riser's first on the bar
+	if int(a[2]) != int(b[2]) or int(b[0]) >= 0:
+		return false
+	var pa: PackedVector3Array = a[3]
+	if int(a[0]) >= 0:                                # its plug on the header (the middle plug meets the riser there too)
+		return at.distance_to(pa[pa.size() - 1]) < WorldTubes.HDR_RR + WorldTubes.PIPE_R + 0.3
+	if int(a[1]) == -2 and int(b[1]) == -1:
+		return at.distance_to(pa[0]) < 2.0 * WorldTubes.HDR_RR + 0.6
+	return false
+
+
 func _run() -> void:
 	var code := "R-01"
 	for a in OS.get_cmdline_user_args():
@@ -86,6 +107,46 @@ func _run() -> void:
 	var crat: Array = lc.craters
 	print("PITS_CLIP %s: %d pits, %d tube slots, %d feeds (marches %d), floor y %.2f" % [code, crat.size(), runs.size(), lc.feeds.size(),
 			lc.feeds.keys().filter(func(k): return int(k) >= WorldLocals.MARCH_KEY).size(), fy])
+	# ---- v2 pit symmetry (Daniele 2026-11-09): the 4 pits mirror left/right and top/bottom about the board's centre
+	var bc := lc.board_bounds().get_center()
+	print("PITS_CLIP pits %s centre (%.2f, %.2f): %s" % [code, bc.x, bc.y, str(crat.map(func(v): return "(%.2f, %.2f)" % [v.x, v.z]))])
+	if crat.size() != 4:
+		_fail("pit_sym", "%d pits (want 4)" % crat.size())
+	else:
+		var o: Vector2 = Vector2(absf(crat[0].x - bc.x), absf(crat[0].z - bc.y))
+		var sg := [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]
+		for k in range(4):
+			var want: Vector2 = bc + o * (sg[k] as Vector2)
+			var d := Vector2(crat[k].x, crat[k].z).distance_to(want)
+			_note("pit_sym_err", -d)
+			if d > 0.01:
+				_fail("pit_sym", "pit %d at (%.2f, %.2f), mirror wants (%.2f, %.2f)" % [k, crat[k].x, crat[k].z, want.x, want.y])
+	# ---- v2 fan: no two tubes cross (on the floor plan) within the fan's reach of a pit
+	var fan_r := WorldTubes.HDR_R + WorldTubes.HDR_APPR + 2.0
+	for a in range(runs.size()):
+		var pa: PackedVector3Array = runs[a][3]
+		if int(runs[a][0]) < 0:
+			continue                                      # the collector itself (the tubes end on it)
+		for b in range(a + 1, runs.size()):
+			if int(runs[a][2]) != int(runs[b][2]) or int(runs[b][0]) < 0:
+				continue
+			var pc: Vector3 = crat[int(runs[a][2])]
+			var c2 := Vector2(pc.x, pc.z)
+			var pb: PackedVector3Array = runs[b][3]
+			var hit := false
+			for i in range(1, pa.size()):
+				var a0 := Vector2(pa[i - 1].x, pa[i - 1].z)
+				var a1 := Vector2(pa[i].x, pa[i].z)
+				if a0.distance_to(c2) > fan_r and a1.distance_to(c2) > fan_r:
+					continue
+				for j in range(1, pb.size()):
+					var b0 := Vector2(pb[j - 1].x, pb[j - 1].z)
+					var b1 := Vector2(pb[j].x, pb[j].z)
+					var x = Geometry2D.segment_intersects_segment(a0, a1, b0, b1)
+					if x != null and (x as Vector2).distance_to(c2) <= fan_r:
+						hit = true
+			if hit:
+				_fail("fan_cross", "slot %d (col %d) x slot %d (col %d) cross within %.1f m of pit %d" % [a, runs[a][0], b, runs[b][0], fan_r, runs[a][2]])
 	# ---- tube x tube (segment pairs, submerged points skipped)
 	var pairs := 0
 	for a in range(runs.size()):
@@ -106,9 +167,12 @@ func _run() -> void:
 						continue
 					var cp := Geometry3D.get_closest_points_between_segments(a0, a1, b0, b1)
 					var d := (cp[0] as Vector3).distance_to(cp[1])
+					var rr := _rad(runs[a]) + _rad(runs[b])
+					if _joint(runs[a], runs[b], cp[0]) or _joint(runs[b], runs[a], cp[1]):
+						continue
 					pairs += 1
-					_note("tube_tube_gap", d - 2.0 * R)
-					if d < 2.0 * R - 0.005:
+					_note("tube_tube_gap", d - rr)
+					if d < rr - 0.005:
 						_fail("tube_tube", "slot %d (col %d sock %d) x slot %d (col %d sock %d) at (%.1f, %.1f, %.1f): centres %.3f m apart" % [
 								a, runs[a][0], runs[a][1], b, runs[b][0], runs[b][1], cp[0].x, cp[0].y - fy, cp[0].z, d])
 	# ---- the Locals' lanes (2D polylines) with the pool -> rim hop in front
@@ -122,8 +186,9 @@ func _run() -> void:
 	var samples := 0
 	for r in range(runs.size()):
 		var col: int = runs[r][0]
-		var own: Dictionary = wl._tubes[col]
+		var own: Dictionary = wl._tubes[col] if col >= 0 else {"x": 99999.0, "z": 99999.0}
 		var own_foot := Vector2(own["x"], own["z"])
+		R = _rad(runs[r])
 		var pit: Vector3 = crat[int(runs[r][2])]
 		var pit2 := Vector2(pit.x, pit.z)
 		var sp := _samples(runs[r][3])
@@ -175,6 +240,54 @@ func _run() -> void:
 					worst["float_gap_max"] = maxf(float(worst.get("float_gap_max", -INF)), under)
 					if under > FLOAT_TOL:
 						_fail("floating", "slot %d (col %d) at (%.1f, %.1f): %.3f m of air under a level run" % [r, col, q.x, q.z, under])
+	# ---- v2 stands: every level run is held up at most SPAN_MAX apart (socket, stands, pool end, floor contact); a stand
+	# never stands on a Locals' lane or under another tube
+	var by_slot := {}
+	for pp in tp.posts:
+		var ft: Vector3 = pp[1]
+		for ln in lanes:
+			var pl: Array = ln[1]
+			for j in range(1, pl.size()):
+				var q2 := Vector2(ft.x, ft.z)
+				if q2.distance_to(Geometry2D.get_closest_point_to_segment(q2, pl[j - 1], pl[j])) < LOCAL_HW + WorldTubes.POST_HW:
+					_fail("post_clip", "stand of slot %d at (%.1f, %.1f) on lane %s" % [pp[0], ft.x, ft.z, str(ln[0])])
+		for o in range(runs.size()):
+			if o == int(pp[0]):
+				continue
+			var po: PackedVector3Array = runs[o][3]
+			for j in range(1, po.size()):
+				var q2 := Vector2(ft.x, ft.z)
+				var cq := Geometry2D.get_closest_point_to_segment(q2, Vector2(po[j - 1].x, po[j - 1].z), Vector2(po[j].x, po[j].z))
+				if q2.distance_to(cq) < _rad(runs[o]) + WorldTubes.POST_HW:
+					_fail("post_clip", "stand of slot %d at (%.1f, %.1f) under slot %d" % [pp[0], ft.x, ft.z, o])
+		if not by_slot.has(int(pp[0])):
+			by_slot[int(pp[0])] = []
+		by_slot[int(pp[0])].append(Vector2(ft.x, ft.z))
+	for r in range(runs.size()):
+		var sp := _samples(runs[r][3])
+		var pit: Vector3 = crat[int(runs[r][2])]
+		var last := 0.0
+		var cum := 0.0
+		var held: Array = by_slot.get(r, [])
+		for k in range(sp.size()):
+			if k > 0:
+				cum += Vector2(sp[k].x - sp[k - 1].x, sp[k].z - sp[k - 1].z).length()
+			var q2 := Vector2(sp[k].x, sp[k].z)
+			var sup := sp[k].y - _rad(runs[r]) - fy <= FLOAT_TOL or q2.distance_to(Vector2(pit.x, pit.z)) < WorldLocals.RING_R + 0.9
+			if int(runs[r][0]) < 0:
+				for o in runs:                        # the header is held by the tubes plugged into it too
+					var po: PackedVector3Array = o[3]
+					if int(o[0]) >= 0 and int(o[2]) == int(runs[r][2]) and q2.distance_to(Vector2(po[po.size() - 1].x, po[po.size() - 1].z)) < STEP:
+						sup = true
+			for h in held:
+				if q2.distance_to(h) < STEP * 0.6:
+					sup = true
+			if sup or k == sp.size() - 1:
+				_note("span_room", WorldTubes.SPAN_MAX - (cum - last))
+				if cum - last > WorldTubes.SPAN_MAX:
+					_fail("span", "slot %d (col %d): %.1f m unsupported ending at (%.1f, %.1f)" % [r, runs[r][0], cum - last, q2.x, q2.y])
+				last = cum
+	print("PITS_CLIP stands %d" % tp.posts.size())
 	if OS.has_environment("PITS_CLIP_DUMP"):              # debug: every run + lane as JSON
 		var dump := {"runs": [], "lanes": [], "cols": {}}
 		for rn in runs:
@@ -187,7 +300,7 @@ func _run() -> void:
 		fd.store_string(JSON.stringify(dump))
 		fd.close()
 	var total := 0
-	for kind in ["tube_tube", "tube_locals", "tube_base", "tube_pillar", "tube_pit", "floating"]:
+	for kind in ["pit_sym", "fan_cross", "span", "post_clip", "tube_tube", "tube_locals", "tube_base", "tube_pillar", "tube_pit", "floating"]:
 		var n := (fails.get(kind, []) as Array).size()
 		total += n
 		print("PITS_CLIP %-12s %d" % [kind, n])

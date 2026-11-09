@@ -352,6 +352,10 @@ func place(cam: Camera3D) -> void:
 					Vector2(b.position.x - out, b.end.y + out), Vector2(b.end.x + out, b.end.y + out)]
 	craters.clear()
 	crater_vis.clear()
+	if layout == 4:                                   # v2 (Daniele 2026-11-09): the 4 corners MIRROR on both axes
+		_place_symmetric(cam, b)
+		_after_place(cam)
+		return
 	if not plan.is_empty():
 		targets = _plan_targets(b)
 	for tg in targets:
@@ -378,6 +382,66 @@ func place(cam: Camera3D) -> void:
 					best_v = v
 		craters.append(Vector3(best.x, wl.floor_y, best.y))
 		crater_vis.append(best_v)
+	_after_place(cam)
+
+
+func _place_symmetric(cam: Camera3D, b: Rect2) -> void:
+	## PITS v2 (Daniele 2026-11-09: "not symmetric, 2 on left and 2 on right"): ONE offset (dx, dz) from the board's centre,
+	## the pits at centre + (-dx, -dz), (+dx, -dz), (-dx, +dz), (+dx, +dz) - mirror-symmetric left/right and top/bottom.
+	## The offset starts just outside the footprint's corners and moves (both axes, all 4 pits together) to the one whose
+	## LEAST visible pit the default camera sees best, clear of every tube foot; nearest the corner target on a tie.
+	targets.clear()
+	var c := b.get_center()
+	var out := RING_R + 1.0
+	var ideal := b.size * 0.5 + Vector2.ONE * out
+	var min_d := Vector2(RING_R + 2.0, RING_R + 2.0)  # the two pits of a side never touch (2 RING_R + 4 apart)
+	var step := 1.0
+	var n := int(SEARCH_R * 1.5 / step)
+	var best := ideal
+	var best_s := -INF
+	var best_v := []
+	for ix in range(-n, n + 1):
+		for iz in range(-n, n + 1):
+			var o: Vector2 = ideal + Vector2(ix, iz) * step
+			if o.x < min_d.x or o.y < min_d.y:
+				continue
+			var d := o.distance_to(ideal)
+			if d > SEARCH_R * 1.5:
+				continue
+			var ok := true
+			var vmin := INF
+			var vs := []
+			for sg in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+				var q: Vector2 = c + o * sg
+				if not _clear_feet(q):
+					ok = false
+					break
+				var v := _ring_visible(cam, q)
+				vs.append(v)
+				vmin = minf(vmin, v)
+			if not ok:
+				continue
+			var s := vmin * 10.0 - d * 0.25
+			if s > best_s:
+				best_s = s
+				best = o
+				best_v = vs
+	for k in range(4):
+		var sg: Vector2 = [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)][k]
+		var q: Vector2 = c + best * sg
+		targets.append(c + ideal * sg)
+		craters.append(Vector3(q.x, wl.floor_y, q.y))
+		crater_vis.append(float(best_v[k]) if k < best_v.size() else 0.0)
+
+
+func _clear_feet(q: Vector2) -> bool:
+	for tb in wl._tubes:
+		if q.distance_to(Vector2(tb["x"], tb["z"])) < RING_R + float(tb["r"]) + 1.6:
+			return false
+	return true
+
+
+func _after_place(cam: Camera3D) -> void:
 	for i in range(craters.size()):
 		var p: Vector3 = craters[i]
 		_ring_mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, 0.37 * i), p))

@@ -6,6 +6,10 @@ extends Node
 ##   b-t2-foot.png         after T2: 2 tubes full, sockets + doors (low camera)   b-t2-game.png (default camera)
 ##   c-t3-foot.png         after T3: 4 tubes                                     c-t3-game.png
 ##   d-mixed-pit.png       a neutral column next to the same pit given to seat B at T3: two players' tubes into one pit
+## v2 (Daniele 2026-11-09):
+##   e-build-1..4.png      the T1 -> T2 tube BUILDING as a hologram at 15 / 40 / 70 / 95 % (camera over the whole new run)
+##   f-fan-pit.png         every column of seat A's pit at T3 (the full fan, all slots) close over that pit
+##   z-top-down.png        the whole map straight down (pit symmetry)
 ## and prints the tube counts, the base / tube triangle counts and draws with the tubes shown vs hidden.
 ## Run WINDOWED, off-screen and silent:
 ##   Godot --path . --resolution 812x375 --audio-driver Dummy --position -6000,-6000 res://tests/pits_tubes_shots.tscn -- \
@@ -87,17 +91,26 @@ func _draws(n: int) -> Array:
 	return [d / n, p / n]
 
 
-func _upgrade(inst: Node, sim: Sim, wl: WorldLayer, id: int, file_mid: String) -> void:
+func _upgrade(inst: Node, sim: Sim, wl: WorldLayer, id: int, file_mid: String, build_out := "") -> void:
 	var n: Dictionary = sim.nodes[id]
 	n["units"] = 140.0
 	var ok := sim.upgrade(id, "A")
 	print("PITS upgrade %d -> started %s" % [int(n["tier"]), ok])
 	var shot := false
+	var frames := [0.15, 0.4, 0.7, 0.95] if build_out != "" else []
+	var tb := _tube(wl, id)
+	var foot := Vector3(tb["x"], wl.floor_y, tb["z"])
+	var pit := wl.pipes.pit_of(tb)
 	while n["build_kind"] != "":
 		if not shot and Sim.build_progress(n) > 0.5 and file_mid != "":
 			shot = true
-			var tb := _tube(wl, id)
-			await _low_shot(inst, Vector3(tb["x"], wl.floor_y, tb["z"]), wl.pipes.pit_of(tb), 11.0, file_mid)
+			await _low_shot(inst, foot, pit, 11.0, file_mid)
+		if not frames.is_empty() and Sim.build_progress(n) >= float(frames[0]):
+			var k := 5 - frames.size()
+			frames.pop_front()
+			var mid := foot.lerp(pit, 0.45)
+			await _low_shot(inst, mid, pit, 8.0 + 0.55 * foot.distance_to(pit), "%s/e-build-%d.png" % [build_out, k])
+			print("PITS build frame %d at %.2f" % [k, Sim.build_progress(n)])
 		await get_tree().process_frame
 	await _wait_world(wl, WorldTubes.FILL_S + 0.8)
 
@@ -163,7 +176,7 @@ func _run() -> void:
 	var foot := Vector3(tb["x"], wl.floor_y, tb["z"])
 	await _low_shot(inst, foot, wl.pipes.pit_of(tb), 11.0, "%s/a-home-foot.png" % out)
 	sim.nodes[id]["tier"] = 1
-	await _upgrade(inst, sim, wl, id, "%s/b-t2-build-foot.png" % out)
+	await _upgrade(inst, sim, wl, id, "%s/b-t2-build-foot.png" % out, out)
 	print("PITS after T2: tier %d tubes %d" % [int(sim.nodes[id]["tier"]), _count(wl, id)])
 	await _low_shot(inst, foot, wl.pipes.pit_of(tb), 11.0, "%s/b-t2-foot.png" % out)
 	_home(inst)
@@ -203,4 +216,31 @@ func _run() -> void:
 		await _shot(inst, "%s/d-mixed-game.png" % out)
 	else:
 		print("PITS no second column feeds that pit")
+	# f: the full fan - every column of that pit at T3 (seat A), all slots full
+	for i in wl.pipes.cols:
+		var t4: Dictionary = wl._tubes[i]
+		if wl.pipes.pit_of(t4) == pit and int(t4["id"]) != other:
+			var n4: Dictionary = sim.nodes[t4["id"]]
+			n4["owner"] = "A"
+			n4["structure"] = "vat"
+			n4["tier"] = 3
+	await _wait_world(wl, WorldTubes.FILL_S + 3.0)
+	var away := Vector3(foot.x, wl.floor_y, foot.z)
+	var bc2 := lc.board_bounds().get_center()
+	away = Vector3(bc2.x, wl.floor_y, bc2.y)
+	await _low_shot(inst, pit.lerp(away, 0.18), away, 22.0, "%s/f-fan-pit.png" % out)
+	# z: the whole map straight down
+	var top := Camera3D.new()
+	top.fov = 50.0
+	top.far = 600.0
+	inst.add_child(top)
+	var bb := lc.board_bounds()
+	var ext := 0.0
+	for c in lc.craters:
+		ext = maxf(ext, maxf(absf((c as Vector3).x - bb.get_center().x) * 375.0 / 812.0, absf((c as Vector3).z - bb.get_center().y)) + WorldLocals.RING_R + 12.0)
+	top.global_position = Vector3(bb.get_center().x, wl.floor_y + ext / tan(deg_to_rad(25.0)), bb.get_center().y)
+	top.look_at(Vector3(bb.get_center().x, wl.floor_y, bb.get_center().y), Vector3(0, 0, -1))
+	top.make_current()
+	await _frames(3)
+	await _shot(inst, "%s/z-top-down.png" % out)
 	get_tree().quit(0)

@@ -5,6 +5,10 @@ shader_type spatial;
 // filled the run from the PIT end (0 = empty glass, 1 = full and flowing), a < 0 = no tube (collapsed in vertex()).
 // Goo flows PIT -> COLUMN (rule 5, Daniele 2026-11-07 final): the bands and bubbles scroll toward the column. Unshaded like the floor props, with
 // the floor's haze, steel couplings every 3 m.
+// v2 BUILD (Daniele 2026-11-09: "tube shouldn't just appear all of a sudden ... the same building hologram animation"): row 1
+// of `state` holds the slot's build progress (r, 0..1; < 0 = not building). While a vat upgrade builds the tube, this pass
+// draws only the part already built - revealed from the COLUMN end along the run - and world_pipe_holo.gdshader (next pass)
+// draws the rest as the blueprint hologram, with the seat-coloured front band between them (vat_blueprint's look).
 render_mode fog_disabled, unshaded, cull_back;
 
 uniform sampler2D state : filter_nearest, repeat_disable;
@@ -14,19 +18,24 @@ uniform float haze = 0.12;
 uniform float flow_v = 2.2;      // m/s toward the column
 
 varying vec4 st;
+varying float bp;
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
 void vertex() {
-	st = texture(state, vec2(UV2.x / slots, 0.5));
+	st = texture(state, vec2(UV2.x / slots, 0.25));
+	bp = texture(state, vec2(UV2.x / slots, 0.75)).r;
 	if (st.a < 0.0) {
 		VERTEX = vec3(0.0);                           // no tube in this slot: degenerate
 	}
 }
 
 void fragment() {
+	if (bp >= 0.0 && UV2.y > bp) {
+		discard;                                      // not built yet: the hologram pass draws it
+	}
 	float s = UV.y;                                   // metres from the socket
 	float k = 1.0 - UV2.y;                            // share of the run from the pit
 	float fill = st.a;
@@ -43,5 +52,13 @@ void fragment() {
 	c += vec3(0.9, 1.0, 1.0) * front * 0.7;           // the filling goo's front
 	float ring = step(fract(s / 3.0 + 0.5), 0.05);    // steel couplings every 3 m
 	c = mix(c, vec3(0.2, 0.22, 0.26) * 1.6, ring);
+	if (bp >= 0.0) {                                  // the build front (the vat ring's band) in the seat colour
+		float bf = 1.0 - smoothstep(0.0, 0.025, abs(UV2.y - bp));
+		c = mix(c, mix(st.rgb, vec3(1.0), 0.35), bf * step(bp, 0.999));
+	}
+	if (UV.x < -0.5) {                                // v2: a steel stand under the level run
+		float lit = 0.75 + 0.25 * abs(NORMAL.x) + 0.35 * max(NORMAL.y, 0.0);
+		c = vec3(0.2, 0.22, 0.26) * lit;
+	}
 	ALBEDO = mix(c, abyss * 0.6, haze);
 }
