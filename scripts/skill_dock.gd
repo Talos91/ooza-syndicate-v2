@@ -200,7 +200,7 @@ class Slot:
 		var lines: Array = dock.name_lines(id, room)
 		var y := ic.y + d / 2.0 + dock.gap + UI_FONT.get_ascent(nf)
 		var least := -1
-		if dock.plate and dock.mobile:                   # GMN-2: ONE line inside the plate's dark label box [130, 416, 331, 96] of 591 x 616
+		if dock.plate:                                   # GMN-2: ONE line inside the plate's dark label box [130, 416, 331, 96] of 591 x 616 (desktop too: ui-neon-apply)
 			room = w * 331.0 / 495.0 - 4.0 * dock._floor_px / 13.0     # (the box's width at the slot's size, 2 pt in each side)
 			lines = [SkillDock.plate_name(str(lines[0]) if lines.size() == 1 else "%s %s" % [lines[0], lines[1]])]
 			least = int(floor(dock._floor_px * 10.0 / 13.0))   # Daniele 2026-11-05 "shrink + short names": down to 10 pt in the box
@@ -230,7 +230,7 @@ class Slot:
 			status = "CHARGING"
 		else:
 			status = "COOLDOWN"
-		if dock.plate and dock.mobile and not armed and fires <= 0:
+		if dock.plate and not armed and fires <= 0:
 			return                                       # GMN-1 plate: the name alone (the window + ring say the state)
 		y += UI_FONT.get_height(dock.font_px(13)) * 0.1
 		_line(status, Vector2(w / 2.0, y), 13, sc, room, UI_FONT)
@@ -326,9 +326,11 @@ class Slot:
 		if t == null:
 			return
 		var k := ci.size.x / 495.0
-		var a := 0.22 if disabled else ((0.85 + 0.15 * sin(dock._t * 4.0 + float(index))) if full else 0.7)
+		var a := 0.3 if disabled else 1.0                # the delivered tube at full strength (designer: "more tube on the skill panel")
 		var r := Rect2(-Vector2(48, 48) * k, Vector2(591, 616) * k)
 		ci.draw_texture_rect(t, r, false, Color(1, 1, 1, a))
+		if full and not disabled:                          # charged: a second, breathing pass brightens the tube's core
+			ci.draw_texture_rect(t, r, false, Color(1.25, 1.25, 1.25, 0.45 + 0.25 * sin(dock._t * 4.0 + float(index))))
 		if flare > 0.0:
 			ci.draw_texture_rect(t, r, false, Color(1.6, 1.6, 1.6, flare))
 
