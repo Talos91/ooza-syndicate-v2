@@ -420,7 +420,7 @@ func _shortfall(sim: Sim, n: Dictionary) -> float:
 	for h in sim.hordes:
 		if h["target"] != n["id"] or h.get("retreat", false) or not _hostile(sim, h["owner"]):
 			continue
-		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0) * Sim.carry_mult(h)
 		var eta: float = maxf(0.0, float(h["L"]) - float(h["s"])) / maxf(v, 0.1)
 		if eta > ahead:
 			continue
@@ -802,7 +802,7 @@ func _eta(sim: Sim, node_id: int) -> float:
 	for h in sim.hordes:
 		if h["target"] != node_id or h.get("retreat", false) or not _hostile(sim, h["owner"]):
 			continue
-		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0) * Sim.carry_mult(h)
 		t = minf(t, maxf(0.0, float(h["L"]) - float(h["s"])) / maxf(v, 0.1))
 	return 0.0 if t == INF else t
 
@@ -957,7 +957,7 @@ func _on_decks(sim: Sim, edges: Array, ahead: float) -> Array:
 	var enemy := 0.0
 	var own := 0.0
 	for h in sim.hordes:
-		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0) * Sim.carry_mult(h)
 		var shift: float = v * ahead if h["state"] == "move" else 0.0
 		var head: float = minf(h["s"] + shift, h["L"])
 		var tail: float = head - Sim.chain_length(h)
@@ -977,7 +977,7 @@ func _fling_toll(sim: Sim, edges: Array, ahead: float) -> Array:
 	var enemy := 0.0
 	var own := 0.0
 	for h in sim.hordes:
-		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0) * Sim.carry_mult(h)
 		var shift: float = v * ahead if h["state"] == "move" and not h.get("blocked", false) else 0.0
 		var head: float = minf(h["s"] + shift, h["L"])
 		var length := Sim.chain_length(h)
@@ -1205,7 +1205,7 @@ func _cut_toll(sim: Sim, edges: Array, ahead: float) -> Array:
 	var enemy := 0.0
 	var own := 0.0
 	for h in sim.hordes:
-		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0)
+		var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * h.get("speed", 1.0) * Sim.carry_mult(h)
 		var shift: float = v * ahead if h["state"] == "move" and not h.get("blocked", false) else 0.0
 		var head: float = minf(h["s"] + shift, h["L"])
 		var length := maxf(Sim.chain_length(h), 0.001)
@@ -1320,7 +1320,7 @@ func _flip_at(sim: Sim, r: Dictionary, ei: int) -> float:
 		for h in sim.hordes:                             # a rival line about to take it
 			if h["target"] == r["id"] and not h.get("retreat", false) and not sim.allied(h["owner"], seat) \
 					and maxf(h["units"], h["ordered"]) > r["units"]:
-				var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed")
+				var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * Sim.carry_mult(h)
 				tick = minf(tick, (h["L"] - h["s"]) / maxf(v, 0.1) + Rules.RELAY_WARNING)
 		if tick == INF:
 			return INF
@@ -1855,7 +1855,7 @@ func _pick(sim: Sim, id: String) -> Array:
 			for h in sim.hordes:
 				if not _hostile(sim, h["owner"]) or h["units"] < 10.0 * Rules.SCALE or h["state"] != "move":
 					continue
-				var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed")
+				var v: float = Rules.move_speed() * sim.stat(h["owner"], "speed") * Sim.carry_mult(h)
 				for sp in h["spans"]:
 					var e: Dictionary = sim.edges[sp["edge"]]
 					if e["plaza"] or e["state"] != "" or e["retracts"] or sp["s0"] <= h["s"]:

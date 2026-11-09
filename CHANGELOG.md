@@ -2,6 +2,12 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo13 (unreleased)** - demo-rules-pass-2:
+  - CONVEYOR CARRY (Daniele 2026-11-10, rule change): a line a belt pushes keeps the belt's speed after it leaves it - x2.25 with the flow,
+    x0.3 against - until it reaches its target, any of it falls, or a belt the other way replaces the push. The line wears a speed trail
+    while it moves at a belt's speed (green streaks fast, blue dashes slow); AI arrival times count the carried speed.
+    (Route choice stays belt-blind as before.)
+
 - **0.23.27-demo12** - 2026-11-10 (demo-world, staging/demo/): HUD only (ui-neon-apply 8c2dfef, 43 files under assets/ui + HUD scripts, no sim change). SEND tank = one evenly scaled picture with clipped goo, level marks, no readout, 100 % under the cap, HUD_K_MAX 1.6 for foldables. NEON-RESTYLE delivery applied 1:1: steel frames with cyan spill, skill ring freed, node card frame, radial slices from the delivered PNGs, neon badge rims; desktop skill-plate fixes.
 - **0.23.27-demo11** - 2026-11-09 (demo-world, staging/demo/): demo rules pass (demo-rules-pass 88da364): ferry docked 20 s + one travelling hull; laser relay replaces the lift nodes on R-01 / R-06 / R-09 / R-12 (maps re-baked); floor tube props off; conveyor and Googatling probes with no sim change. Known follow-up: AI fog / portal / evac on the new R-01 (test_powers_ai 3 fails, decided 2026-11-09).
 - **0.23.27-demo10** - 2026-11-09 (demo-world, staging/demo/): proto folded in (proto-into-demo 7e99f03 = proto25 66fa9e1): launcher turret + GooGat, Googatling, R-10 launchers / R-14 / R-15 / R-16 now on demo, proto suite scoping; desktop HUD sizing fix (ui-demo-hud-scale 9dea21f). The proto line is retired (staging/proto removed, tag archive/proto-r-final).
