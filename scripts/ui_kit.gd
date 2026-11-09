@@ -459,6 +459,24 @@ static func hud_k(vp: Vector2) -> float:
 	return hud_k_for(vp.y * pt_per_px(vp))
 
 
+# ui-demo-hud-scale (2026-11-09, Daniele on demo8: "looks like it's warped to be small"): the GMN HUD's desktop size. On a desktop
+# (not mobile) the tank and the skill plates were laid out at the pre-GMN desktop numbers (1 pt = 1 canvas unit, legacy slot
+# widths): the tank came out 0.81x and the plates 0.73x as tall as staging 0.23.26's SEND panel and skill cards, and squat. Now the
+# desktop draws the SAME pt layout as the phone, as a screen HUD_DESKTOP_PT_H pt tall would (the canvas is 720 units tall at any
+# landscape window wider than 16:9, so the HUD keeps its share of the height): the tank's 304 pt = 59 % of the height, as staging's
+# SEND panel (58 %). Phones are untouched (hud_k / pt_per_px as before).
+const HUD_DESKTOP_PT_H := 515.0
+
+
+static func hud_px_per_pt(vp: Vector2, is_mobile: bool) -> float:
+	## Canvas units per HUD point: on a phone the page's real points x hud_k; on a desktop the canvas's 16:9 height / HUD_DESKTOP_PT_H
+	## (x a forced --hud-k=F).
+	if not is_mobile:
+		var h := minf(vp.y, vp.x * 9.0 / 16.0)     # a window squarer than 16:9 grows the canvas taller: keep the 16:9 height
+		return h / HUD_DESKTOP_PT_H * (test_hud_k if test_hud_k > 0.0 else 1.0)
+	return hud_k(vp) / maxf(pt_per_px(vp), 0.01)
+
+
 const MIN_PHONE_REF := 390.0                       # = Menu.PHONE_PT_H: the landscape phone the sizes assume off the web
 
 
