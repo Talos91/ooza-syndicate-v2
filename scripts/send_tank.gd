@@ -27,6 +27,11 @@ func setup(h, m, s: float, font: Font) -> void:
 	main = m
 	ui_scale = s
 	_font = font
+	for a in OS.get_cmdline_user_args():          # screenshots: --send-frac=0.25 starts the pick at that share
+		if a.begins_with("--send-frac="):
+			main.fraction = clampf(float(a.substr(12)), 0.25, 1.0)
+		elif a.begins_with("--send-select="):     # screenshots: one of your vats selected (the plate's 7 / 15 readout)
+			main.selected = int(a.substr(14))
 	shown = float(main.fraction)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
@@ -36,6 +41,37 @@ func setup(h, m, s: float, font: Font) -> void:
 # GMN-1: the glass inside the director's tank, measured on send_tank_liquid.png (canvas px): x 60..336, y 180..1060
 const GLASS := Rect2(60, 180, 276, 880)
 const GLASS_GMN2 := Rect2(72, 177, 252, 810)      # GMN-2 (thin VEX tank, README "GEL REGISTRATION"): the glass / liquid interior
+
+
+# ui-send-tank (designer spec, Daniele "Yes, send it" 2026-11-09): the NEON-RESTYLE B_send layers drawn as ONE evenly scaled
+# picture (no 9-slice). The control shows the canvas from x 48..348, y 48..PIC_BOTTOM (the body 300 x 1080 + the drip) and the
+# readout plate under it. Levels come from the art's liquid box: 100 % = canvas y 177, 0 % = y 987.
+const PIC_X := 48.0
+const PIC_Y := 48.0
+const PIC_W := 300.0
+const PIC_BOTTOM := 1250.0                        # under the drip's tip (canvas 1237) + the drop's room
+const LIQ_TOP := 177.0
+const LIQ_BOT := 987.0
+const LIQ_X0 := 72.0
+const LIQ_X1 := 324.0
+const PLATE_PT := 24.0                            # the readout plate's height (pt, x the tank's pt scale)
+const PLATE_GAP_PT := 2.0
+var canvas_k := 0.0                               # control px per canvas px (Hud sets it; 0 = the old frame path)
+var pt_px := 1.0                                  # control px per HUD point (Hud sets it)
+
+
+func picture() -> bool:
+	return canvas_k > 0.0 and gmn()
+
+
+func cv(p: Vector2) -> Vector2:
+	## A canvas point in control px.
+	return Vector2((p.x - PIC_X) * canvas_k, (p.y - PIC_Y) * canvas_k)
+
+
+func picture_size(k: float, ptk: float) -> Vector2:
+	## The control's size for canvas scale k and pt scale ptk: the picture plus the readout plate under it.
+	return Vector2(PIC_W * k, (PIC_BOTTOM - PIC_Y) * k + (PLATE_GAP_PT + PLATE_PT) * ptk)
 
 
 func glass() -> Rect2:
@@ -49,6 +85,9 @@ func gmn() -> bool:
 
 func body_rect() -> Rect2:
 	## The tank's inside (the goo's room): the frame's rect minus its rim and the drips under it.
+	if picture():                                 # the art's liquid box: x 72..324, y 177 (100 %) .. 987 (0 %)
+		var a := cv(Vector2(LIQ_X0, LIQ_TOP))
+		return Rect2(a, cv(Vector2(LIQ_X1, LIQ_BOT)) - a)
 	var drip := HudNoir.drip_px("send_tank" if HudNoir.has("send_tank") else "send_housing")
 	if gmn():                                     # the director's glass: caps top and bottom, the walls at the sides
 		var p := HudNoir.part_data("send_tank")
@@ -116,6 +155,9 @@ func _process(dt: float) -> void:
 
 
 func _draw() -> void:
+	if picture():
+		_draw_picture()
+		return
 	var s := ui_scale
 	var acc: Color = HudNoir.accent
 	draw_style_box(_frame, Rect2(Vector2.ZERO, size))
@@ -297,3 +339,130 @@ func _drop(tip: Vector2, acc: Color) -> void:
 	var p := tip + Vector2(0, 26.0 * ui_scale * fall * fall)
 	draw_circle(p, r * (1.0 - 0.3 * fall), Color(acc, 0.95 * (1.0 - fall)))
 	draw_circle(p - Vector2(r, r) * 0.3, r * 0.3, Color(1, 1, 1, 0.6 * (1.0 - fall)))
+
+
+func _layer(key: String) -> Texture2D:
+	## One B_send layer (canvas 396 x 1284) by its file stem: fill / liquid / surface / rim / shine / drip.
+	return HudNoir.texture("res://assets/ui/hud_noir/send_tank_%s.png" % key)
+
+
+func _draw_layer(tex: Texture2D, src: Rect2, col: Color, dy := 0.0) -> void:
+	## Draw a canvas region of a layer at its own place (moved dy canvas px), evenly scaled.
+	if tex == null or src.size.x <= 0.0 or src.size.y <= 0.0:
+		return
+	draw_texture_rect_region(tex, Rect2(cv(src.position + Vector2(0, dy)), src.size * canvas_k), src, col)
+
+
+func _draw_picture() -> void:
+	## ui-send-tank: fill (metal + glass) -> the liquid and its shine CLIPPED at the level (never stretched) -> bubbles ->
+	## the surface ring and the rim glow riding the level -> the drip + drop -> the level marks -> the readout plate.
+	var s := pt_px
+	var acc: Color = HudNoir.accent
+	var lv := clampf(shown, 0.0, 1.0)
+	var ly := lerpf(LIQ_BOT, LIQ_TOP, lv)                                    # the level in canvas px
+	_draw_layer(_layer("fill"), Rect2(PIC_X, PIC_Y, PIC_W, 1128.0 - PIC_Y), Color.WHITE)
+	# the goo: a gently moving surface over the art's liquid, clipped to the glass; UVs = the canvas itself (1:1, no stretch)
+	var full := lv >= 0.999
+	var calm := 0.35 if full else 1.0
+	var amp := (5.0 + 14.0 * _slosh) * calm                                  # canvas px
+	var sway := 6.0 * calm * sin(_t * 1.3) + _slosh * 12.0 * sin(_t * 9.0)
+	var poly := PackedVector2Array()
+	var n := 32
+	for k in range(n + 1):
+		var u := float(k) / n
+		var x := lerpf(LIQ_X0, LIQ_X1, u)
+		var y := ly + amp * (0.55 * sin(u * 7.0 + _t * 2.1) + 0.45 * sin(u * 13.0 - _t * 3.1)) + sway * (u - 0.5) * 2.0
+		y = LIQ_TOP if full else clampf(y, LIQ_TOP, LIQ_BOT)                  # at 100 % the art's own meniscus shows
+		poly.append(Vector2(x, y))
+	poly.append(Vector2(LIQ_X1, LIQ_BOT))
+	poly.append(Vector2(LIQ_X0, LIQ_BOT))
+	var pts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	for q in poly:
+		pts.append(cv(q))
+		uvs.append(q / Vector2(396.0, 1284.0))
+	var cols := PackedColorArray()
+	cols.resize(pts.size())
+	cols.fill(acc)
+	var liq := _layer("liquid")
+	if liq != null and lv > 0.001:
+		draw_polygon(pts, cols, uvs, liq)
+		var shine := _layer("shine")
+		if shine != null:
+			cols.fill(Color.WHITE)
+			draw_polygon(pts, cols, uvs, shine)
+	# rising bubbles inside the goo
+	for i in range(6):
+		var fi := float(i)
+		var tt := fposmod(_t * (0.07 + 0.03 * fposmod(fi * 0.37, 1.0)) + fi * 0.19, 1.0)
+		var bx := lerpf(LIQ_X0 + 30.0, LIQ_X1 - 30.0, fposmod(fi * 0.61, 1.0)) + 5.0 * sin(_t * 2.0 + fi)
+		var by := LIQ_BOT - 12.0 - (LIQ_BOT - 12.0 - ly) * tt
+		if by > ly + 14.0:
+			draw_arc(cv(Vector2(bx, by)), (1.6 + 1.2 * fposmod(fi * 0.53, 1.0)) * s, 0.0, TAU, 10, Color(1, 1, 1, 0.35), 1.0 * s, true)
+	# the surface ring (art y 48..88, centre 68) and the rim glow (art centre 582.5 = the 50 % line) ride the level
+	if lv > 0.001 and not full:
+		_draw_layer(_layer("surface"), Rect2(48, 48, 300, 40), Color(acc.lerp(Color.WHITE, 0.35), 0.95), ly - 68.0 + sway * 0.3)
+		_draw_layer(_layer("rim"), Rect2(18, 560, 360, 45), Color(acc.lerp(Color.WHITE, 0.4), 0.95), ly - 582.5)
+	# the drip under the nozzle (tinted, breathing a little) and the drop
+	var st := 1.0 + 0.07 * sin(_t * 2.3)
+	var dsrc := Rect2(150, 1120, 96, 124)
+	var drip := _layer("drip")
+	if drip != null:
+		draw_texture_rect_region(drip, Rect2(cv(dsrc.position), Vector2(dsrc.size.x, dsrc.size.y * st) * canvas_k), dsrc, Color(acc, 0.95))
+	_drop(cv(Vector2(198.0, 1120.0 + (1233.0 - 1120.0) * st)), acc)
+	# the level marks + words at the liquid box's quarters, then the readout plate under the tank
+	var fs := maxi(int(ceil(13.0 * s)), _floor_px())
+	_draw_marks(fs)
+	_draw_plate(fs)
+
+
+func _draw_marks(fs: int) -> void:
+	## 25 / 50 / 75 / 100 at y = lerp(987, 177, share): a white line each side of the word (- 75% -), the picked one lit.
+	var s := pt_px
+	var acc: Color = HudNoir.accent
+	var b := body_rect()
+	var ol := Color(0, 0, 0, 0.8)
+	for l in LEVELS:
+		var y := level_y(float(l))
+		var on := is_equal_approx(float(l), float(main.fraction))
+		var t := "%d%%" % int(round(float(l) * 100.0))
+		var w := _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var cx := b.get_center().x
+		var gapx := w / 2.0 + 3.0 * s
+		var col := Color.WHITE if on else Color(1, 1, 1, 0.8)
+		var lw := (2.4 if on else 1.4) * s
+		for sg: float in [-1.0, 1.0]:
+			var x0 := cx + sg * gapx
+			var x1 := b.position.x + 1.0 * s if sg < 0.0 else b.end.x - 1.0 * s
+			if on:
+				draw_line(Vector2(x0, y), Vector2(x1, y), Color(acc, 0.45), lw * 3.0, true)
+			draw_line(Vector2(x0, y), Vector2(x1, y), Color(0, 0, 0, 0.5), lw + 2.0 * s, true)
+			draw_line(Vector2(x0, y), Vector2(x1, y), col, lw, true)
+		var p := Vector2(cx - w / 2.0, y + (_font.get_ascent(fs) - _font.get_descent(fs)) / 2.0)
+		if is_equal_approx(float(l), 1.0):          # designer: the 100% word stays inside the glass, clear of the cap's lip
+			p.y += _font.get_ascent(fs) * 0.45
+		draw_string_outline(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(3, int(4 * s)), ol)
+		draw_string(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+
+
+func _draw_plate(fs: int) -> void:
+	## The readout under the tank: the units the pick sends (7 / 15) with one of your vats selected or dragged, else the share.
+	var s := pt_px
+	var acc: Color = HudNoir.accent
+	var top := (PIC_BOTTOM - PIC_Y) * canvas_k + PLATE_GAP_PT * s
+	var r := Rect2(Vector2(cv(Vector2(LIQ_X0 - 14.0, 0)).x, top), Vector2((LIQ_X1 - LIQ_X0 + 28.0) * canvas_k, PLATE_PT * s))
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.07, 0.09, 0.88)
+	sb.border_color = Color(acc, 0.85)
+	sb.set_border_width_all(maxi(1, int(round(1.5 * s))))
+	sb.set_corner_radius_all(int(6.0 * s))
+	draw_style_box(sb, r)
+	var units := _units_line()
+	var t := units if units != "" else "%d%%" % int(round(float(main.fraction) * 100.0))
+	var f := fs
+	while f > 8 and _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x > r.size.x - 6.0 * s:
+		f -= 1
+	var w := _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x
+	var p := Vector2(r.get_center().x - w / 2.0, r.get_center().y + (_font.get_ascent(f) - _font.get_descent(f)) / 2.0)
+	draw_string_outline(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, f, maxi(3, int(3 * s)), Color(0, 0, 0, 0.8))
+	draw_string(_font, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, f, Color.WHITE)

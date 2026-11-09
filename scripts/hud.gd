@@ -458,7 +458,14 @@ func setup(m: Node3D) -> void:
 	send_tank = SendTank.new()
 	send_tank.custom_minimum_size = Vector2(112.0, 4.0 * (78.0 if mobile else 66.0) + 74.0) * ui_scale
 	var tank_s := ui_scale
-	if mobile and HudNoir.has("send_tank"):          # GMN-1 layout: 4 bands of 60 pt, 59 wide, caps + drips round them
+	if HudNoir.has("send_tank_liquid"):              # ui-send-tank (designer spec 2026-11-09): the B_send art as ONE evenly scaled
+		var ptk := pt(1.0) * (1.0 if mobile else 1.2)  # picture - body 300 x 1080 canvas px = 256 pt tall x hud_k (desktop x 1.2)
+		var k := 256.0 * ptk / 1080.0
+		send_tank.canvas_k = k
+		send_tank.pt_px = ptk
+		send_tank.custom_minimum_size = send_tank.picture_size(k, ptk).round()
+		tank_s = ptk
+	elif mobile and HudNoir.has("send_tank"):        # GMN-1 layout: 4 bands of 60 pt, 59 wide, caps + drips round them
 		send_tank.custom_minimum_size = Vector2(pt(66.0), pt(4.0 * 60.0 + 64.0)).round()
 	elif HudNoir.has("send_tank"):                   # ui-demo-hud-scale: the desktop tank keeps its own proportions, scaled as a whole
 		tank_s = ui_scale * pt(4.0 * 60.0 + 64.0) / send_tank.custom_minimum_size.y   # (caps, ticks, words) to the pt layout's height
@@ -701,9 +708,13 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	side_panel.size = side_panel.get_combined_minimum_size()
 	var side_y := (vp.y - side_panel.size.y) / 2.0
 	var top_bottom := top_panel.position.y + top_panel.size.y + 34.0   # below the top bar and status line
+	if send_tank and send_tank.picture() and top_panel.position.x > m.x + side_panel.size.x + 8.0:
+		top_bottom = m.y                                # ui-send-tank: the centred top bar is clear of the tank's column
 	side_y = maxf(side_y, top_bottom)
 	side_panel.position = Vector2(m.x, side_y)          # send controls on the LEFT, like Alpha 11 (Daniele)
 	map_title.position = Vector2(m.x + 8, vp.y - m.w - 30 * ui_scale)
+	if side_panel.visible and side_panel.position.y + side_panel.size.y > map_title.position.y:
+		map_title.position.x = m.x + side_panel.size.x + 10.0   # ui-send-tank: the tank's readout plate reaches the bottom
 	hint.size = Vector2(vp.x * 0.5, 20)
 	hint.position = Vector2(vp.x * 0.5 - hint.size.x / 2.0, vp.y - m.w - 18)
 	# Alpha 24 (Hub Roadmap m05, "send on the left thumb, skills stacked on the right"): the skills stand in a column on the
