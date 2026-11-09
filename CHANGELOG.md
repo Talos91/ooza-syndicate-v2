@@ -2,6 +2,7 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo8** - 2026-11-09 (demo-world, staging/demo/): pits, tubes and columns visuals (pits-tubes 88d1b2b, Daniele's 2026-11-07 notes, visual only: 4 corner pits, column tube sockets + doors, tubes to the nearest pit, pit colour toward feeding players; clip probe tests/pits_tubes_clip 0 hits on 14 proto maps) + infra/ci 9011766 (CI trigger fix).
 - **0.23.27-demo7** - 2026-11-07 (demo-world, staging/demo/): vat hologram 2 (Daniele's notes, visual only): the upgrade ring is bigger
   than the structure in the seat colour, parts it has passed show the real material, tubes stay empty until the upgrade completes (vat-column-2).
 - **0.23.27-demo6** - 2026-11-07 (demo-world, staging/demo/): lab pass 3 (props 1.5x up to 4.5 m, district 10 m past the board, flush
