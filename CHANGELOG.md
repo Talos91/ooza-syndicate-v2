@@ -2,6 +2,9 @@
 
 ## Proto line (staging/proto only, never main)
 
+- **0.23.15-proto25** - 2026-11-09 (proto-r, staging/proto/): R-10 Crescent - the speed relays become LAUNCHERS (Daniele, Desk
+  2026-11-06): the stone inside each horn is a T1 launcher sweeping the enemy horn; the outer arcs are plain decks; geometry unchanged.
+  CI: long suites (ai_curve, ai_coop) run only on a manual run with long=true.
 - **0.23.15-proto24** - 2026-11-07 (proto-r, staging/proto/): Launcher = a 3-tier loading cannon: tap to freeze the aim and load every
   line entering (yours and the enemy's) up to 50 / 100 / 150 or 2 / 4 / 6 s, then one salvo; upgrades 25 / 35; it can fall in the Last
   Stand but never drops below T1. GooGat (the Googatling): its ammo is its garrison, grown at half a vat's rate up to the node cap; it
