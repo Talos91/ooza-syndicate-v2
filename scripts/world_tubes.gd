@@ -334,7 +334,10 @@ func _shape(way: Array, c2: Vector2, dir: Vector2) -> PackedVector3Array:
 			lm = maxf(lm, lifts[j])
 		for j in range(k, mini(k + 13, flat.size())):
 			rm = maxf(rm, lifts[j])
-		ys.append(maxf(base_y[k], maxf(lifts[k], minf(lm, rm))))
+		var join := minf(lm, rm)
+		if join - PIPE_R < 0.5:
+			join = 0.0                                # never a low level span hovering over the floor (no clipping rule)
+		ys.append(maxf(base_y[k], maxf(lifts[k], join)))
 	# keep the 0.5 m samples where the tube bends up or down, ~2.5 m steps elsewhere (the triangle budget)
 	var pts := PackedVector3Array()
 	var since := 0.0
@@ -405,14 +408,40 @@ func _ribbon_runs(i: int, socks: Array, spine: Array, cp: Vector3, pi: int, lane
 		bundle.sort_custom(func(x, y): return x[0] < y[0])
 		var tp: Vector2 = e + ne * float(g)
 		var sg := 1 if angle_difference(lane, atan2(tp.y - c2.y, tp.x - c2.x)) > 0.0 else -1
+		var k0 := placed.size()                      # this pit's tubes so far: each swings round the pit on its own arc
 		var angs: Array = _bundle(lane, sg, bundle.size(), fixed, placed)[0]
-		for j in range(bundle.size()):
-			var s := int(bundle[j][1])
-			out.append([i, s, pi, float(angs[j]), _rib_path(i, s, cp, float(angs[j]), spine, g * (RIB_OFF + j * RIB_PITCH), j)])
+		var best: Array = []
+		var best_d := -INF
+		for perm in ([[0, 1], [1, 0]] if bundle.size() == 2 else [range(bundle.size())]):
+			# two tubes on a side: the rim angles go the way round whose swing into the pit keeps them farther apart
+			var cand: Array = []
+			var n_laid := _laid.size()
+			for j in range(bundle.size()):
+				var s := int(bundle[j][1])
+				var a := float(angs[perm[j]])
+				cand.append([i, s, pi, a, _rib_path(i, s, cp, a, spine, g * (RIB_OFF + j * RIB_PITCH), j, k0 + j, sg)])
+				var pts: PackedVector3Array = cand[-1][4]
+				_laid.append(pts.slice(0, pts.size() - 6))   # the next sibling bridges over it wherever they meet
+			_laid.resize(n_laid)
+			var d := INF if cand.size() < 2 else _min_gap(cand[0][4], cand[1][4])
+			if d > best_d:
+				best_d = d
+				best = cand
+		out += best
 	return out
 
 
-func _rib_path(i: int, s: int, cp: Vector3, ang: float, spine: Array, off: float, j: int) -> PackedVector3Array:
+static func _min_gap(p: PackedVector3Array, q: PackedVector3Array) -> float:
+	## the least distance between two tubes' centre lines
+	var d := INF
+	for i in range(1, p.size()):
+		for j in range(1, q.size()):
+			var cp := Geometry3D.get_closest_points_between_segments(p[i - 1], p[i], q[j - 1], q[j])
+			d = minf(d, (cp[0] as Vector3).distance_to(cp[1]))
+	return d
+
+
+func _rib_path(i: int, s: int, cp: Vector3, ang: float, spine: Array, off: float, j: int, kp: int, sg: int) -> PackedVector3Array:
 	## socket -> out of it (a back one round the base's side) -> its lane beside the Locals' lane -> the pit's rim at ang
 	var tb: Dictionary = wl._tubes[i]
 	var foot := Vector2(tb["x"], tb["z"])
@@ -424,7 +453,8 @@ func _rib_path(i: int, s: int, cp: Vector3, ang: float, spine: Array, off: float
 		var lat := (cd - to * cd.dot(to)).normalized()
 		way.append(foot + lat * 3.4 + to * 0.6)
 	var dir := Vector2(cos(ang), sin(ang))
-	var stop_r := WorldLocals.RING_R + 4.5
+	var arc_r := WorldLocals.RING_R + 3.0 + kp * RIB_PITCH   # its arc round the pit (outer for later tubes: no two coincide)
+	var stop_r := maxf(WorldLocals.RING_R + 4.5, arc_r + 1.5)
 	var k := int((1.5 + 1.5 * j) / 0.5)              # outer tubes join their lane a little later (no crossing at the base)
 	while k < spine.size() - 1:
 		var q: Vector2 = spine[k]
@@ -432,6 +462,17 @@ func _rib_path(i: int, s: int, cp: Vector3, ang: float, spine: Array, off: float
 			break
 		way.append(q + _nrm_at(spine, k) * _rib_off(q, spine, k, off, j, i, c2))
 		k += 2                                        # 1 m steps (the shape smooths them)
+	# round the pit on its arc (the way its side goes, never across its own lane) to its rim angle, then straight in
+	var last: Vector2 = way[way.size() - 1]
+	var a0 := atan2(last.y - c2.y, last.x - c2.x)
+	var swing := fposmod(sg * (ang - a0), TAU)
+	if swing > PI * 1.6:
+		swing = 0.0                                   # (already a little past it)
+	if swing > 0.12:
+		var steps := int(ceil(swing / 0.2))
+		for m in range(1, steps + 1):
+			var a := a0 + sg * swing * float(m) / steps
+			way.append(c2 + Vector2(cos(a), sin(a)) * arc_r)
 	way.append(c2 + dir * (WorldLocals.RING_R + 3.0))
 	way.append(c2 + dir * (WorldLocals.RING_R + 0.9))
 	return _shape(way, c2, dir)

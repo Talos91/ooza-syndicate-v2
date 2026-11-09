@@ -9,7 +9,7 @@ extends Node
 ##                    pillar sleeve, >= RING_R + PIPE_R from every other pit (or above its rim)
 ##   floating         on the floor run (not over a lane / tube bridge, not at the socket or the rim) the underside is <= FLOAT_TOL
 ## Prints one PITS_CLIP line per check and PITS_CLIP TOTAL <n>; exit 0 when 0 failures.
-##   Godot --headless --path . res://tests/pits_tubes_clip.tscn   (or windowed off-screen + silent)
+##   Godot --headless --path . res://tests/pits_tubes_clip.tscn [-- map=R-05]   (or windowed off-screen + silent)
 
 const MAIN := "res://main.tscn"
 const LOCAL_H := 0.64            # a Local's height (world_tubes.gd _hazards)
@@ -61,7 +61,11 @@ static func _samples(pts: PackedVector3Array) -> PackedVector3Array:
 
 
 func _run() -> void:
-	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": "1v1", "map": "res://maps4/" + _map_file("R-01")}
+	var code := "R-01"
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("map="):
+			code = a.substr(4)                        # another map: -- map=R-05
+	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": "1v1", "map": "res://maps4/" + _map_file(code)}
 	var inst: Node = (load(MAIN) as PackedScene).instantiate()
 	inst.demo = false
 	get_tree().root.add_child(inst)
@@ -80,7 +84,7 @@ func _run() -> void:
 	var R := WorldTubes.PIPE_R
 	var runs: Array = tp.run_pts
 	var crat: Array = lc.craters
-	print("PITS_CLIP R-01: %d pits, %d tube slots, %d feeds (marches %d), floor y %.2f" % [crat.size(), runs.size(), lc.feeds.size(),
+	print("PITS_CLIP %s: %d pits, %d tube slots, %d feeds (marches %d), floor y %.2f" % [code, crat.size(), runs.size(), lc.feeds.size(),
 			lc.feeds.keys().filter(func(k): return int(k) >= WorldLocals.MARCH_KEY).size(), fy])
 	# ---- tube x tube (segment pairs, submerged points skipped)
 	var pairs := 0
@@ -115,9 +119,6 @@ func _run() -> void:
 		var pl: Array = [Vector2(c.x, c.z)] + (f["path"] as Array)
 		lanes.append([fk, pl])
 	# ---- per tube sample: Locals, bases, pits, floating
-	var homes := {}
-	for i in tp.cols:
-		homes[i] = true
 	var samples := 0
 	for r in range(runs.size()):
 		var col: int = runs[r][0]
@@ -126,19 +127,15 @@ func _run() -> void:
 		var pit: Vector3 = crat[int(runs[r][2])]
 		var pit2 := Vector2(pit.x, pit.z)
 		var sp := _samples(runs[r][3])
-		var flat_from := -1.0
 		for k in range(sp.size()):
 			var q := sp[k]
 			var q2 := Vector2(q.x, q.z)
 			var under := q.y - R - fy
 			samples += 1
-			var over_lane := false
 			for ln in lanes:
 				var pl: Array = ln[1]
 				for j in range(1, pl.size()):
 					var d := q2.distance_to(Geometry2D.get_closest_point_to_segment(q2, pl[j - 1], pl[j]))
-					if d < LOCAL_HW + R + WorldTubes.LIFT_RAMP:
-						over_lane = true
 					if d < LOCAL_HW + R:
 						var hop := 0.0
 						if j == 1:                        # the hop out of the pool over the rim: a Local tops RIM_H there
@@ -168,27 +165,16 @@ func _run() -> void:
 				_note("other_pit_gap", q2.distance_to(cc) - WorldLocals.RING_R - R)
 				if q2.distance_to(cc) < WorldLocals.RING_R + R and under < WorldLocals.RIM_H:
 					_fail("tube_pit", "slot %d (col %d) into another pit's ring at (%.1f, %.1f)" % [r, col, q.x, q.z])
-			# floating: the floor run = past the socket's 1.2 m drop, before the rim climb (3.2 m), away from bridges
+			# floating: a LEVEL stretch hovering FLOAT_TOL..0.5 m over the floor (a pipe bridge over a lane stands >= 0.8 m,
+			# one resting on another tube 0.57 m; ramps are not level), away from the socket and the rim
 			var from_sock := q2.distance_to(own_foot) - WorldTubes.APOTHEM
 			var to_rim := q2.distance_to(pit2) - WorldLocals.RING_R
-			if from_sock > WorldTubes.SOCK_D + 1.4 and to_rim > 4.0 and not over_lane:
-				var on_tube := false
-				for b in range(runs.size()):
-					if b == r:
-						continue
-					var pb: PackedVector3Array = runs[b][3]
-					for j in range(1, pb.size()):
-						var cp := Geometry3D.get_closest_point_to_segment(q, pb[j - 1], pb[j])
-						if Vector2(cp.x - q.x, cp.z - q.z).length() < 2.0 * R + WorldTubes.LIFT_RAMP + 0.3:
-							on_tube = true
-							break
-					if on_tube:
-						break
-				if not on_tube:
-					_note("float_gap_neg", -under)
+			if from_sock > WorldTubes.SOCK_D + 1.4 and to_rim > 4.0 and k > 0 and k < sp.size() - 1:
+				var level := absf(sp[k + 1].y - q.y) < 0.004 and absf(sp[k - 1].y - q.y) < 0.004
+				if level and under < 0.5:
 					worst["float_gap_max"] = maxf(float(worst.get("float_gap_max", -INF)), under)
 					if under > FLOAT_TOL:
-						_fail("floating", "slot %d (col %d) at (%.1f, %.1f): %.3f m of air under the floor run" % [r, col, q.x, q.z, under])
+						_fail("floating", "slot %d (col %d) at (%.1f, %.1f): %.3f m of air under a level run" % [r, col, q.x, q.z, under])
 	if OS.has_environment("PITS_CLIP_DUMP"):              # debug: every run + lane as JSON
 		var dump := {"runs": [], "lanes": [], "cols": {}}
 		for rn in runs:
