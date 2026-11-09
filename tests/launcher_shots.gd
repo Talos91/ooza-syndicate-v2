@@ -4,6 +4,7 @@ extends Node
 ## tag), 2 the salvo in the air, 3 the launcher at T3 (the bigger cannon) with its inspector open (UPGRADE / LOAD), 4 a
 ## GooGat at half ammo with its inspector (ammo n/cap). Run WINDOWED as a scene, off-screen and silent:
 ##   Godot --path . --resolution 812x375 --audio-driver Dummy --position -6000,-6000 res://tests/launcher_shots.tscn -- out=<dir>
+##   map=res://maps4/R-10-crescent.json   another launcher map (default R-14; proto25 R-10 Crescent)
 
 const MAIN := "res://main.tscn"
 const MAP := "res://maps4/R-14-catapult-bay.json"
@@ -45,7 +46,7 @@ func _frame_on(inst: Node, ids: Array, dist: float) -> void:
 func _run() -> void:
 	var out := str(_args().get("out", "user://launcher_shots"))
 	DirAccess.make_dir_recursive_absolute(out)
-	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": "1v1", "map": MAP}
+	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": "1v1", "map": str(_args().get("map", MAP))}
 	var inst: Node = (load(MAIN) as PackedScene).instantiate()
 	inst.demo = false
 	get_tree().root.add_child(inst)

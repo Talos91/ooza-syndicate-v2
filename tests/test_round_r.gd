@@ -259,10 +259,10 @@ func _gates() -> void:
 
 func _wave2() -> void:
 	## Wave 2 (Daniele 2026-11-05: "make 5 more ... 1 xs 2 s 2 m"): R-06 Fort (2 lift gates + a rotor), R-09 Stack (2 lifts + 2
-	## speed relays whose lanes run over the Crossing), R-10 Crescent (a rotor + 2 speed relays), R-12 Crossfire (2 lifts + 4 belts
+	## speed relays whose lanes run over the Crossing), R-10 Crescent (a rotor + 2 launchers since proto25, Desk 2026-11-06), R-12 Crossfire (2 lifts + 4 belts
 	## over the Crossing), R-13 Gearbox (a rotor + ONE speed relay driving both gears). Each lift / rotor swaps its open decks
 	## when fired; a speed lane / belt crossing the overpass keeps pushing on the Crossing (Sim._conv_pieces).
-	var want := {"R-06": [2, 1, 0, 0, 0], "R-09": [2, 0, 2, 0, 2], "R-10": [0, 1, 2, 0, 0], "R-12": [2, 0, 0, 4, 2], "R-13": [0, 1, 2, 0, 0]}
+	var want := {"R-06": [2, 1, 0, 0, 0], "R-09": [2, 0, 2, 0, 2], "R-10": [0, 1, 0, 0, 0], "R-12": [2, 0, 0, 4, 2], "R-13": [0, 1, 2, 0, 0]}
 	for code in want:
 		var s := _sim(code)
 		check(s != null, "%s loads" % code)
@@ -284,6 +284,10 @@ func _wave2() -> void:
 			if str(s.nodes[j].get("junction", "")) == "Crossing":
 				got[4] += 1
 		check(got == want[code], "%s: lifts, rotors, speed relays, belts, lanes over the Crossing = %s (got %s)" % [code, want[code], got])
+		if code == "R-10":                            # Daniele 2026-11-06 (Desk): its speed relays became LAUNCHERS (T1, 3 targets each)
+			var pads := s.nodes.filter(func(n): return n["relay"] == "launcher")
+			check(pads.size() == 2 and pads.all(func(n): return (n["proto"]["targets"] as Array).size() == 3 and int(n["tier"]) == 1), "R-10: two T1 launchers, each sweeping 3 targets (got %d)" % pads.size())
+			check(s._conv_edges.is_empty(), "R-10: no speed lanes left (got %d)" % s._conv_edges.size())
 		for n in s.nodes:                             # Daniele 2026-11-05: a line on a Crossing's over lane goes OVER the span
 			if str(n.get("lane", "")) != "over":
 				continue
