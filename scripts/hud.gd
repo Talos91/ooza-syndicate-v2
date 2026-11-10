@@ -656,6 +656,11 @@ func _tall_b_layout(vp: Vector2, u: float, ins: Vector4, W: float, H: float, cap
 	var y0 := maxf(room_top, room_top + (room_bottom - room_top - h - tag_h) / 2.0)
 	side_panel.position.y = y0 - a.y
 	map_title.position.y = y0 + h + 4.0 * u
+	# designer v4 (Daniele 2026-11-11: "the left send vat is too away from the border in the duo version"): the tank picture's
+	# left edge sits as far from the safe left as PAUSE from the safe right (4 pt); the map tag moves with it
+	var dx := (ins.x + 4.0) * u - (side_panel.position.x + a.x)
+	side_panel.position.x += dx
+	map_title.position.x += dx
 
 
 func tall_b_fit() -> Rect2:
