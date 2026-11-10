@@ -38,6 +38,8 @@ extends RefCounted
 ## Rules.AI_SKILL_GAP[level] s, each on a cheap heuristic of what it can see (_skills). It never reads
 ## another seat's decoy flag: a Ghost Line fools it as it fools a player.
 
+const PORTAL_MIN_GAIN := 3.0                 # s of trip a Portal shortcut must save (was 6 s; ai-launcher-laser 2026-11-10)
+
 var seat: String
 var level := "Standard"
 var cfg: Dictionary
@@ -1091,8 +1093,8 @@ func _proto_fire(sim: Sim, n: Dictionary) -> bool:
 				return false
 			for h in _my_lines(sim):
 				var k: int = (h["route"] as Array).find(id)
-				if k <= 0:
-					continue
+				if k <= 0 or (_fed.has(id) and sim.line_goal(h) == id):
+					continue                              # (a feed paying the launcher's upgrade is not a salvo)
 				var pr: Array = sim._platform_range(h, id)
 				if not pr.is_empty() and h["s"] <= pr[1]:
 					return true
@@ -1415,7 +1417,16 @@ func _build(sim: Sim) -> void:
 				and n["units"] >= sim.upgrade_cost(n) + reserve and _order(sim.upgrade(n["id"], seat)):
 			_invest_after = sim.time + float(cfg["invest"])
 			return
-	var vats := owned.filter(func(n): return Sim.has_vat(n))
+		# LAUNCHER (Daniele, 2026-11-07, info-launcher-readings: "ai can absolutely upgrade them like any other structure
+		# like a player would"): the machinegoon's rule above - the next tier's price (Rules.LAUNCHER_COST, 25 / 35 shown) plus the
+		# reserve, paid from its garrison, a BUILD_SECONDS build (Sim.upgrade). Never while it loads or flies a salvo
+		# (relay_phase / a load in it; the Sim refuses that too).
+		if n["relay"] == "launcher" and int(n["tier"]) < Rules.LAUNCHER_MAX_TIER and n["relay_phase"] == "" \
+				and (n["load"] as Dictionary).is_empty() and sim.upgrade_cost(n) > 0 \
+				and n["units"] >= sim.upgrade_cost(n) + reserve and _order(sim.upgrade(n["id"], seat)):
+			_invest_after = sim.time + float(cfg["invest"])
+			return
+	var vats :=owned.filter(func(n): return Sim.has_vat(n))
 	if int(cfg["relays"]) >= 2:                           # level 2+: a busy front relay's laser comes first
 		if _build_relay_slot(sim, owned, true):
 			return
@@ -1434,6 +1445,7 @@ func _build(sim: Sim) -> void:
 		return
 	if int(cfg["relays"]) >= 1:
 		_feed_relay_slot(sim, owned, vats, 5.0)
+		_feed_launcher(sim, owned, vats)
 
 
 func _note_raids(sim: Sim) -> void:
@@ -1585,9 +1597,29 @@ func _feed_relay_slot(sim: Sim, owned: Array, vats: Array, worth: float) -> void
 	if best.is_empty():
 		return
 	var slot: Dictionary = best["node"]
-	var need: float = sim.build_cost(slot, best["kind"]) + _reserve(sim, slot) + 2.0 * Rules.SCALE - slot["units"] - _incoming(sim, slot["id"], false)
+	_feed(sim, slot, sim.build_cost(slot, best["kind"]) + _reserve(sim, slot) + 2.0 * Rules.SCALE, vats)
+
+
+func _feed_launcher(sim: Sim, owned: Array, vats: Array) -> void:
+	## LAUNCHER (2026-11-07 answer, ai-launcher-laser): a launcher never grows either, so a player sends it the next
+	## tier's price before tapping UPGRADE - the AI does the same, one at a time (the launcher's rule in _build pays it).
+	for id in _fed.keys():
+		if float(_fed[id]) > _clock and sim.nodes[id]["owner"] == seat:
+			return                                        # a feed (slot or launcher) still on its way
+	for n in owned:
+		if n["relay"] != "launcher" or int(n["tier"]) >= Rules.LAUNCHER_MAX_TIER or n["build_kind"] != "" \
+				or _incoming(sim, n["id"], true) > 0.0 or _drops_soon(sim, n["id"]):
+			continue
+		if _feed(sim, n, sim.upgrade_cost(n) + _reserve(sim, n) + 4.0 * Rules.SCALE, vats):
+			return
+
+
+func _feed(sim: Sim, slot: Dictionary, want: float, vats: Array) -> bool:
+	## Send `slot` what it lacks of `want` (minus its garrison and its own lines on the way) from the nearest vat that
+	## can spare it over a safe route; true if a line left.
+	var need: float = want - slot["units"] - _incoming(sim, slot["id"], false)
 	if need <= 0.0:
-		return
+		return false
 	var pick := {}
 	var pick_t := INF
 	for d in vats:
@@ -1603,11 +1635,13 @@ func _feed_relay_slot(sim: Sim, owned: Array, vats: Array, worth: float) -> void
 			pick_t = t
 			pick = d
 	if pick.is_empty():
-		return
+		return false
 	var frac := clampf(need * 1.1 / maxf(pick["units"], 1.0), 0.05, 1.0)
 	if not _send(sim, pick["id"], slot["id"], frac).is_empty():
 		_busy[pick["id"]] = true
 		_fed[slot["id"]] = _clock + pick_t + 12.0
+		return true
+	return false
 
 
 # ------------------------------------------------------------------ monsters and EJECT (0.18.10)
@@ -2074,10 +2108,16 @@ func _pick_power(sim: Sim, id: String) -> Array:
 			return []
 		"portal":                                     # a shortcut for its biggest attack: enter ahead, come out near the target
 			var best := []
-			var best_gain := 6.0
+			# ai-launcher-laser (2026-11-10): 6 s -> PORTAL_MIN_GAIN 3 s. On the laser-relay R-01 every attack hop is one
+			# 38 m bridge (~4 s), so no shortcut ever saved 6 s and the AI never cast it; the skipped bridge is also the
+			# stretch under the stones' T3 lasers. AI tuning only (no rules.gd number).
+			var best_gain := PORTAL_MIN_GAIN
 			for h in _my_lines(sim):
 				var goal: int = sim.line_goal(h)
-				if not _hostile(sim, sim.nodes[goal]["owner"]) or h["units"] < 12.0 * Rules.SCALE or h.has("portal"):
+				# ai-launcher-laser (2026-11-10): a line still pouring out of its door weighs its whole order (like Core
+				# Meltdown), so a big order still pouring out counts from its first step, while a shortcut is still ahead.
+				var size: float = maxf(h["units"], float(h["ordered"])) if h["streaming"] else float(h["units"])
+				if not _hostile(sim, sim.nodes[goal]["owner"]) or size < 12.0 * Rules.SCALE or h.has("portal"):
 					continue
 				var route: Array = h["route"]
 				var entrance := -1
