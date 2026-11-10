@@ -166,6 +166,7 @@ func _backdrop() -> void:
 	mat.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(0.3))
 	mat.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
 	sky.material = mat
+	_centre_fog(tex, amt, lv)
 
 
 # ------------------------------------------------------------------ build (once the craters and lanes are placed)
@@ -857,3 +858,28 @@ func _add_mi(m: Mesh, mat: Material) -> void:
 	add_child(mi)
 	_mats.append(mat)
 	draws += 1
+
+
+func _centre_fog(tex: Texture2D, amt: Array, _lv: String) -> void:
+	## the same two layers as a plane between the decks and the floor: the board's centre gets cloud and fog too
+	var k := WorldLayer.CENTRE_FOG
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--centre-fog="):
+			k = float(a.substr(13))
+	var m := ShaderMaterial.new()
+	m.shader = preload("res://shaders/world_fog_layers.gdshader")
+	m.set_shader_parameter("noise_tex", tex)
+	m.set_shader_parameter("cloud_amt", float(amt[0]) * k)
+	m.set_shader_parameter("fog_amt", float(amt[1]) * k)
+	m.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(0.3))
+	m.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
+	m.render_priority = -4
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE * 600.0
+	var mi := MeshInstance3D.new()
+	mi.mesh = quad
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = Vector3(0, wl.floor_y + WorldLayer.MIST_ABOVE + 1.0, 0)
+	wl.add_child(mi)
+	wl.center_fog_mat = m

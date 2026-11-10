@@ -63,6 +63,8 @@ func _collect() -> void:
 				_add_mist((c as MeshInstance3D).material_override)
 	var wl: WorldLayer = main.get("world_layer")
 	if wl != null:
+		if wl.center_fog_mat != null:
+			_add_mat(wl.center_fog_mat, &"fog_col", 1.0)
 		for c in wl.get_children():
 			if c is MeshInstance3D:
 				_add_mist((c as MeshInstance3D).material_override)
