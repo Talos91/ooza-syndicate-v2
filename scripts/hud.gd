@@ -540,6 +540,10 @@ func setup(m: Node3D) -> void:
 			main.monster_from = hub
 			note_monster_hint())
 	root.add_child(monster_icon)
+	if TallMeasure.wanted() != "":                 # ui-tall-k: debug-only HUD measure (--tall-measure=<json>)
+		var tm := TallMeasure.new()
+		root.add_child(tm)
+		tm.setup(self)
 
 
 func _icon_button(b: Button, icon_name: String) -> void:
@@ -713,6 +717,9 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	if send_tank and send_tank.picture() and top_panel.position.x > m.x + side_panel.size.x + 8.0:
 		top_bottom = m.y                                # ui-send-tank: the centred top bar is clear of the tank's column
 	side_y = maxf(side_y, top_bottom)
+	var tall_room := _tall_room(vp)                     # ui-tall-k: (top, bottom) of the room between capsule and bottom band
+	if tall_room.y > tall_room.x:
+		side_y = maxf(side_y, tall_room.x + (tall_room.y - tall_room.x - side_panel.size.y) / 2.0)
 	side_panel.position = Vector2(m.x, side_y)          # send controls on the LEFT, like Alpha 11 (Daniele)
 	map_title.position = Vector2(m.x + 8, vp.y - m.w - 30 * ui_scale)
 	hint.size = Vector2(vp.x * 0.5, 20)
@@ -725,6 +732,8 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	var dock_top := pause_button.position.y + pause_button.size.y + 8.0 * ui_scale + hm.y
 	var dock_bottom := vp.y - m.w - hm.w
 	var dock_y := clampf((vp.y - dock.size.y) / 2.0 + 10.0 * ui_scale, dock_top, maxf(dock_top, dock_bottom - dock.size.y))
+	if tall_room.y > tall_room.x:
+		dock_y = maxf(dock_y, tall_room.x + (tall_room.y - tall_room.x - dock.size.y) / 2.0)
 	dock.position = Vector2(vp.x - m.z - hm.z - dock.size.x, dock_y)
 	dock._place_hint()
 	version_label.size = version_label.get_combined_minimum_size()
@@ -2235,6 +2244,18 @@ func _refresh_inspector(cam: Camera3D) -> void:
 			var cost_now := int(a["cost"])                # a greyed slice names its reason on a phone (no tooltips there)
 			(b as ActionWedge).afford = 1.0 if cost_now <= 0 else clampf(float(n["units"]) / float(cost_now), 0.0, 1.0)
 			(b as ActionWedge).why = _short_why(why)
+
+
+func _tall_room(vp: Vector2) -> Vector2:
+	## ui-tall-k (designer spec B, the wireframe v3 rule ty0 / py0): on a TALL screen (UiKit.is_tall, --tall-k=on) the tank and the
+	## plate columns sit centred in the room between the top capsule (+ 6 pt) and the bottom band (54 pt on the safe bottom + 4, or
+	## 12 pt up without a bottom band; - 6 pt). (0, 0) elsewhere: nothing moves.
+	if not mobile or not UiKit.is_tall(vp):
+		return Vector2.ZERO
+	var u := pt(1.0)
+	var sb := UiKit.safe_insets(vp).w
+	var by := (vp.y - sb - 58.0 * u) if sb > 0.0 else (vp.y - 66.0 * u)
+	return Vector2(top_panel.position.y + top_panel.size.y + 6.0 * u, by - 6.0 * u)
 
 
 func pt(v: float) -> float:

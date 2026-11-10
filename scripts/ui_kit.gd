@@ -453,10 +453,39 @@ static func hud_k_for(h_pt: float) -> float:
 
 
 static func hud_k(vp: Vector2) -> float:
-	## The HUD's screen factor on this viewport (see above).
+	## The HUD's screen factor on this viewport (see above; TALL screens below).
 	if test_hud_k > 0.0:
 		return test_hud_k
-	return hud_k_for(vp.y * pt_per_px(vp))
+	var ppp := pt_per_px(vp)
+	return hud_k_for_size(vp.x * ppp, vp.y * ppp)
+
+
+# ui-tall-k (designer spec B; Daniele 2026-11-10 on ui-r20-lock: "for duo phones the scale of the UI should be different as the
+# phones are much taller and the current ui is made for small screens"): hud_k_for reads the HEIGHT only, so a near-square screen
+# (iPhone Duo inner 890 x 626, Fold8 inner 816 x 616) got a phone-sized HUD. The TALL class = a landscape screen W / H < 1.6 (phones are
+# 2.0-2.2, the Fold7 cover 2.33): there k = max(today's k, clamp(min(W / 556, 0.9 x H / 375), 1.0, HUD_K_MAX)) - never smaller than
+# today; 556 pt = the narrowest layout proven at 0 overlaps (Duo at k 1.6, ui-r20-geo). Behind --tall-k=on (default off) until
+# Daniele picks; then the flag goes and on becomes the rule.
+const TALL_ASPECT := 1.6
+const TALL_REF_W := 556.0
+const TALL_H_SHARE := 0.9
+static var tall_k_on := "--tall-k=on" in OS.get_cmdline_user_args()
+
+
+static func is_tall_pt(w_pt: float, h_pt: float) -> bool:
+	## A landscape screen squarer than W / H 1.6 (only with --tall-k=on).
+	return tall_k_on and h_pt > 0.0 and w_pt >= h_pt and w_pt / h_pt < TALL_ASPECT
+
+
+static func is_tall(vp: Vector2) -> bool:
+	return is_tall_pt(vp.x, vp.y)                      # the aspect is the same in px and pt
+
+
+static func hud_k_for_size(w_pt: float, h_pt: float) -> float:
+	var k := hud_k_for(h_pt)
+	if is_tall_pt(w_pt, h_pt):
+		k = maxf(k, clampf(minf(w_pt / TALL_REF_W, TALL_H_SHARE * h_pt / HUD_K_REF_H), 1.0, HUD_K_MAX))
+	return k
 
 
 # ui-demo-hud-scale (2026-11-09, Daniele on demo8: "looks like it's warped to be small"): the GMN HUD's desktop size. On a desktop
