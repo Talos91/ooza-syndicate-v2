@@ -6,7 +6,7 @@ extends Node
 ##   2. MATCH: main.tscn 1v1 (human idle, rival AI), Engine.time_scale x4, 150 s of sim time. Every frame: Locals in a line
 ##      (or walking a march) to a node that is neutral right now (must be 0), each node's capture time and the time its first
 ##      Local walks after it.  NEUTRAL_LOCALS <map> ...  /  NEUTRAL_CAPTURE <map> node=<id> owner=<s> t=<s> first_local=<s>
-##   Godot --path . res://tests/neutral_probe.tscn -- map=R-01 [secs=150]   (windowed off-screen + silent, or --headless)
+##   Godot --path . res://tests/neutral_probe.tscn -- map=R-01 [secs=150]   (--headless: an off-screen window pauses the match)
 
 const MAIN := "res://main.tscn"
 
