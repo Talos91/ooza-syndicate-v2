@@ -95,7 +95,9 @@ static var _base_mesh: ArrayMesh
 const CONN_PAD := 0.8            # m the connector block extends past the crossing tubes
 const CONN_H := 1.5              # m: block height (centred on the tube level)
 var connectors := false
-const GRID_TURN := 7.0           # m-equivalent cost of a corner in the grid router (fewer corners)
+const GRID_CROSS := 14.0         # m-equivalent cost of crossing another tube (fewer crossings = fewer connectors)
+const GRID_BUNDLE := 0.35        # m-equivalent saving per step that runs right beside another tube (stripes form)
+const GRID_TURN := 10.0           # m-equivalent cost of a corner in the grid router (fewer corners)
 const GRID_CAP := 90000          # expansions per tube before the router gives up (the v3 route is the fallback)
 var grid_routed := 0             # probes: tubes the grid router placed
 var _gobs: Array = []            # grid router obstacles [centre, radius]
@@ -117,7 +119,10 @@ var _fixed: Array = []           # per pit: the bearings of the Locals' exits
 static func base45() -> bool:
 	## Daniele 2026-11-11: turn every node base 45 degrees - tube sockets on the CARDINALS, walk-in doors on the CORNERS (the
 	## base mesh is unchanged: its yaw comes from WorldLocals.door_dirs(), which become the diagonals). Dev: --base45.
-	return "--base45" in OS.get_cmdline_user_args()
+	for a in OS.get_cmdline_user_args():
+		if a == "--base45" or a == "--tubes=ortho" or a == "--tubes=connectors":
+			return true                                   # the ortho routings only make 90-degree turns on cardinal sockets
+	return false
 
 
 static func corner_dir(k: int) -> Vector2:
@@ -220,7 +225,11 @@ func build() -> void:
 		var pts := PackedVector3Array()
 		_from_ortho = false
 		if ortho:
-			pts = _path_ortho(i, s, craters[p], p)
+			pts = _path_grid(i, s, craters[p], p)
+			if not pts.is_empty():
+				grid_routed += 1
+			else:
+				pts = _path_ortho(i, s, craters[p], p)
 			ortho_stats[0 if not pts.is_empty() else 1] += 1
 			if pts.is_empty():
 				pts = _path_ortho3(i, s, craters[p], p)
@@ -325,6 +334,13 @@ func _lane_free(ax: String, coord: float, lo: float, hi: float) -> bool:
 		if lo < float(iv[1]) + 0.9 and hi > float(iv[0]) - 0.9:
 			return false
 	return true
+
+
+func _lane_covers(ax: String, coord: float, pos: float) -> bool:
+	for iv in _lanes.get(ax + str(roundi(coord / ORTHO_GAP)), []):
+		if pos >= float(iv[0]) - 0.05 and pos <= float(iv[1]) + 0.05:
+			return true
+	return false
 
 
 func _lane_take(ax: String, coord: float, lo: float, hi: float) -> void:
@@ -596,6 +612,11 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 				if not _lane_free(ax, coord, lo, hi):
 					continue
 				var ncost := cost + G + (GRID_TURN if nd != d else 0.0)
+				var perp := "Z" if nd < 2 else "X"
+				if _lane_covers(perp, b.x if nd < 2 else b.y, coord):
+					ncost += GRID_CROSS                    # it would cross another tube here
+				if not _lane_free(ax, coord + G, lo, hi) or not _lane_free(ax, coord - G, lo, hi):
+					ncost -= GRID_BUNDLE                   # it runs right beside another tube: stripes, not strands
 				var nkey := [nv.x, nv.y, nd]
 				if ncost < float(best.get(nkey, INF)) - 0.001:
 					best[nkey] = ncost
@@ -791,7 +812,7 @@ func _build_connectors() -> void:
 		var placed := -1
 		for gi in range(group.size()):
 			for m in group[gi]:
-				if (m[0] as Vector2).distance_to(h[0]) < 2.6:
+				if (m[0] as Vector2).distance_to(h[0]) < 4.5:
 					placed = gi
 					break
 			if placed >= 0:
