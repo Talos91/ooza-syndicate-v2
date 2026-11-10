@@ -99,7 +99,7 @@ const CONN_H := 1.5              # m: block height (centred on the tube level)
 var connectors := false
 const GRID_CROSS := 14.0         # m-equivalent cost of crossing another tube (fewer crossings = fewer connectors)
 const GRID_BUNDLE := 0.35        # m-equivalent saving per step that runs right beside another tube (stripes form)
-const GRID_MIN_RUN := 3          # cells (3.3 m) a tube runs straight before it may turn again: no zigzags, no tight kinks
+const GRID_MIN_RUN := 5          # cells (3.3 m) a tube runs straight before it may turn again: no zigzags, no tight kinks
 const GRID_TURN := 10.0           # m-equivalent cost of a corner in the grid router (fewer corners)
 const GRID_CAP := 90000          # expansions per tube before the router gives up (the v3 route is the fallback)
 var grid_routed := 0             # probes: tubes the grid router placed
@@ -111,7 +111,8 @@ var _conn_nodes: Array = []
 var _ortho_runs: Array = []      # indices into _laid of the runs that came from the ortho routes
 const ORTHO_GAP := 1.1           # m between two parallel lanes (tube diameter 0.54)
 const ORTHO_LEVEL_STEP := 0.9     # m: ortho mode - legs along x run at the rack level, legs along z this much higher, so crossings never touch
-const ORTHO_BEND := 1.4          # m: corner radius in ortho mode
+const FLOOR_RUN_Y := 0.35          # m: connectors mode - the tubes run ON the floor (the connector blocks hide the crossings, no rack)
+const ORTHO_BEND := 2.2          # m: corner radius in ortho mode
 const ORTHO_DEFAULT := false
 var ortho := ORTHO_DEFAULT
 var ortho_stats := [0, 0, 0]     # probes: tubes routed on the grid (1 corner) / fallen back to v3 / of those fallen back, routed with 2 corners
@@ -964,7 +965,9 @@ func _build_connectors() -> void:
 		var x1 := rr.end.x
 		var z0 := rr.position.y
 		var z1 := rr.end.y
-		var cen := Vector3((x0 + x1) * 0.5, wl.floor_y + y, (z0 + z1) * 0.5)
+		var cy := maxf(y, CONN_H * 0.5)
+		var ring_dy := y - cy
+		var cen := Vector3((x0 + x1) * 0.5, wl.floor_y + cy, (z0 + z1) * 0.5)
 		var mi := MeshInstance3D.new()
 		var bx := BoxMesh.new()
 		bx.size = Vector3(x1 - x0, CONN_H, z1 - z0)
@@ -985,12 +988,12 @@ func _build_connectors() -> void:
 		var n := 0
 		for lz2 in xl:                                  # x runs: left and right faces
 			for sg in [-1.0, 1.0]:
-				var pos := Vector3(sg * ((x1 - x0) * 0.5 + 0.04), 0.0, float(lz2) - cen.z)
+				var pos := Vector3(sg * ((x1 - x0) * 0.5 + 0.04), ring_dy, float(lz2) - cen.z)
 				mm.set_instance_transform(n, Transform3D(Basis(Quaternion(Vector3.UP, Vector3(sg, 0, 0))), pos))
 				n += 1
 		for lx2 in zl:                                  # z runs: up and down faces
 			for sg in [-1.0, 1.0]:
-				var pos := Vector3(float(lx2) - cen.x, 0.0, sg * ((z1 - z0) * 0.5 + 0.04))
+				var pos := Vector3(float(lx2) - cen.x, ring_dy, sg * ((z1 - z0) * 0.5 + 0.04))
 				mm.set_instance_transform(n, Transform3D(Basis(Quaternion(Vector3.UP, Vector3(0, 0, sg))), pos))
 				n += 1
 		var mmi := MultiMeshInstance3D.new()
@@ -1189,7 +1192,7 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 	if levels:
 		for k in range(flat.size()):
 			var tg: Vector2 = (flat[mini(k + 1, flat.size() - 1)] as Vector2) - (flat[maxi(k - 1, 0)] as Vector2)
-			lvl.append(RACK_Y if (connectors or absf(tg.x) >= absf(tg.y)) else RACK_Y + ORTHO_LEVEL_STEP)
+			lvl.append(FLOOR_RUN_Y if connectors else (RACK_Y if absf(tg.x) >= absf(tg.y) else RACK_Y + ORTHO_LEVEL_STEP))
 		var sm := lvl.duplicate()
 		for k in range(flat.size()):
 			var acc := 0.0
@@ -1250,6 +1253,9 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 
 
 func _place_posts(runs: Array, craters: Array) -> void:
+	if connectors:
+		posts.clear()
+		return                                          # floor-level tubes need no stands
 	## v2: a steel stand every POST_STEP m under each level run - never on a Locals' lane, under another tube, on a column
 	## base or inside a pit's ring (shifted along the run up to 1.4 m to find clear floor)
 	posts.clear()
