@@ -2,7 +2,7 @@
 
 ## Demo line (staging/demo only, never main)
 
-- **0.23.27-demo13 (unreleased)** - demo-rules-pass-2:
+- **0.23.27-demo13** - 2026-11-10 (demo-world, staging/demo/): demo-rules-pass-2 8ce50d4 + world-v3 1ebca8a. World v3: pit-to-node pipes back, no collector bar, 2 m rack, one pit per tube, GooGat tubes, one colour per player (seats).  demo-rules-pass-2:
   - CONVEYOR CARRY (Daniele 2026-11-10, rule change): a line a belt pushes keeps the belt's speed after it leaves it - x2.25 with the flow,
     x0.3 against - until it reaches its target, any of it falls, or a belt the other way replaces the push. The line wears a speed trail
     while it moves at a belt's speed (green streaks fast, blue dashes slow); AI arrival times count the carried speed.
