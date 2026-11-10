@@ -186,6 +186,31 @@ func _pinwheel() -> void:
 		var ones := s._ferry_plain.values().filter(func(f): return not (f as Dictionary).has("group"))
 		check(s._ferry_plain.size() == 2 and ones.size() == 2, "%s: two 1-bridge ferries (got %d)" % [code, s._ferry_plain.size()])
 		check(s._belt_edges.size() == (2 if code in ["R-05", "R-15"] else 0), "%s: plain belts (got %d)" % [code, s._belt_edges.size()])
+		# Daniele 2026-11-07 (Desk dec-pinwheel-66): N and S join their two ferry piers by fixed decks, the same way as on the
+		# 78 m R-05 (R-15 / R-16: 2 m half bridges), so they are never islands of the centre rotor
+		var c := -1
+		var best := 1e9
+		for r in rots:
+			var p: Vector3 = s.nodes[r]["pos"]
+			if Vector2(p.x, p.z).length() < best:
+				best = Vector2(p.x, p.z).length()
+				c = r
+		var cpos: Vector3 = s.nodes[c]["pos"]
+		var poles := 0
+		for k in s.controlled_edges(c):
+			var e: Dictionary = s.edges[k]
+			var o: int = e["b"] if e["a"] == c else e["a"]
+			var d: Vector3 = s.nodes[o]["pos"] - cpos
+			if absf(d.z) < absf(d.x):
+				continue                               # W / W': on the middle road
+			poles += 1
+			var fixed := 0
+			for i in range(s.edges.size()):
+				var f: Dictionary = s.edges[i]
+				if (f["a"] == o or f["b"] == o) and s.edge_controller.get(i, -1) < 0 and not s._ferry_plain.has(i):
+					fixed += 1
+			check(fixed == 2, "%s: pole %d keeps 2 fixed decks to its ferry piers (got %d)" % [code, o, fixed])
+		check(poles == 2, "%s: the centre rotor has 2 poles (N, S) (got %d)" % [code, poles])
 
 
 func _gates() -> void:

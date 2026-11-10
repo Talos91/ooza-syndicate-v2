@@ -922,9 +922,6 @@
  "note": "S, 14 platforms, mirrored both ways. The middle is a figure-eight: two round lobes whose roads cross at the centre on a Crossing - one lane passes over the other. Each strand of the eight is a speed lane, driven by the tip of the lobe next to its home: it starts fast from your lobe's top corner into the far lobe's bottom; firing the tip reverses it. Above and below the knot stand two stones, each a laser LIFT: DOWN it joins the two lobes' near corners (a short cut across the eight), UP it joins the outer high / low roads from the homes (the way over). The top one starts down, the bottom one up. Each home has three curved ways in: to its lobe's top corner, its tip and its bottom corner. Finale: the eight.",
  "geometricSymmetry": true,
  "experimental": false,
- "ruleWaivers": {
-  "R07": "Wave-2 review (like R-01): two mirrored laser lifts, above and below the knot - each stone has an equally short twin and the knot's speed lanes carry the shortest route, so firing one lift alone never moves the shortest length; together they decide which level crosses (the cut across the eight or the outer way over). The two speed relays pass R07 (19 / 16 m) - ACCEPTED by Daniele 2026-11-06 (Desk)"
- },
  "tags": {
   "size": "S",
   "family": "levels",

@@ -758,9 +758,6 @@
  "note": "XS, 12 platforms, mirrored left / right (and top / bottom to the eye). The centre is a square of four platforms round an overpass: its two diagonals cross OVER each other without meeting, and both are belts flowing DOWN (top-left slides to bottom-right, top-right to bottom-left; climbing back is the long way round the square). The square's top and bottom sides run through two laser LIFT stones on the axis: DOWN the stone joins the two corners beside it, UP it shuts that side and joins the two homes' outer roads over it (the dry way across). The top stone starts down, the bottom one up. Each home has three ways out: a curved high road to the top, a middle road to its side of the square, a curved low road to the bottom. Finale: the square and its two stones.",
  "geometricSymmetry": true,
  "experimental": false,
- "ruleWaivers": {
-  "R07": "Wave-2 review - R-01's stones, other job: the two mirrored laser lifts, top and bottom, each have an equally short twin, and the shortest way across is the downhill belt (each side has its own), so firing a stone never moves the shortest length; the stones decide which way back UP is dry (the climb against the belts is the long way round the square) and which outer roads cross - ACCEPTED by Daniele 2026-11-06 (Desk)"
- },
  "tags": {
   "size": "XS",
   "family": "choke",

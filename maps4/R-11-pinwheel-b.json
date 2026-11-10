@@ -937,8 +937,7 @@
  "geometricSymmetry": true,
  "experimental": false,
  "ruleWaivers": {
-  "R04": "Daniele 2026-11-05: mirrored top / bottom (a ferry pair above and below the star) - taller than the provisional 66 m line; the phone probe decides (plan rule 7); ACCEPTED by Daniele 2026-11-06 (Desk R04), the 66 m try is R-15 / R-16",
-  "R07": "Daniele 2026-11-05 (R-05 version B): the speed relays drive the outer roads; the straight middle road stays the shortest, so firing changes the outer roads' speed, not the shortest length. The centre rotor too moves the shortest length only ~2 m here (the fast lanes even it out) - ACCEPTED by Daniele 2026-11-06 (Desk)"
+  "R04": "Daniele 2026-11-05: mirrored top / bottom (a ferry pair above and below the star) - taller than the provisional 66 m line; the phone probe decides (plan rule 7); ACCEPTED by Daniele 2026-11-06 (Desk R04), the 66 m try is R-15 / R-16"
  },
  "tags": {
   "size": "S",
