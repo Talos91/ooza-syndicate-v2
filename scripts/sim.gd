@@ -402,6 +402,8 @@ func gat_rate(n: Dictionary) -> float:
 		return 0.0
 	if n["owner"] != "":
 		return production(n)
+	if not Rules.NEUTRAL_REGEN:                        # Daniele 2026-11-11: a neutral node regrows nothing (readouts read 0)
+		return 0.0
 	return 0.0 if is_disrupted(n["id"]) else float(Rules.PROD[clampi(int(n["tier"]), 1, 3)]) * Rules.GOOGATLING_PROD
 
 
