@@ -781,9 +781,6 @@
  "note": "S, 15 platforms. Two roads round each side and one straight road through a gatehouse (G: a retract relay with a laser); both outer road corners also link to the gatehouse. G's owner pulls BOTH its doors into the hexagon at once (2 decks): the short road shuts and armies take the long S-bend roads past the gatehouse laser. The hub is a speed relay joined six ways: its four side decks mirror left / right (top fast going in, bottom slow going in, on both sides); firing it reverses all four. Finale: the hexagon and its hub.",
  "geometricSymmetry": true,
  "experimental": false,
- "ruleWaivers": {
-  "R07": "Daniele 2026-11-05 (R-02 review): the hub joined six ways, its side decks speed / slow (top fast in, bottom slow in, mirrored left / right) and the relay inverting them - each side always keeps one fast way in, so firing swaps WHICH lane is fast instead of moving the shortest route's length - ACCEPTED by Daniele 2026-11-06 (Desk)"
- },
  "tags": {
   "size": "S",
   "family": "choke",
