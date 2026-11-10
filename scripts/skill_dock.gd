@@ -221,6 +221,11 @@ class Slot:
 			y = size.y * 0.80 + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
 			if dock.r19:
 				y = HudR19.PLATE_NAME.y * dock.r19_u + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
+		# ui-r21-import (designer correction): while armed, the round-21 hint strip carries the instruction - the plate keeps its
+		# name only; with no strip the plate shows the instruction alone (never both in the one name slot)
+		var strip_says := armed and dock.r19 and HudR21.on()
+		if dock.r19 and armed and not strip_says and fires <= 0:
+			lines = ["TAP A TARGET" if not (dock.src >= 0) else ("TAP THE EXIT" if dock._kind() == "node_pair" else "TAP WHERE IT GOES")]
 		if dock.r19:                                     # ui-r19-import: 12.5 pt in the name strip, down to 10 pt (as the GMN plate)
 			var ru: float = dock.r19_u
 			HudR19.text(_ci if _ci != null else self, str(lines[0]), Vector2(w / 2.0, HudR19.PLATE_NAME.y * ru), room, 12.5 * ru,
@@ -236,6 +241,8 @@ class Slot:
 			status = "TAP A TARGET" if not (dock.src >= 0) else ("TAP THE EXIT" if dock._kind() == "node_pair" else "TAP WHERE IT GOES")   # (POWERS: Portal)
 			if fires > 0:
 				status = "TAP A RELAY · %d LEFT" % fires
+			elif dock.r19:                               # ui-r21-import: in the strip (or in the name slot, above) - not twice
+				status = ""
 			sc = HudNoir.INK
 		elif fires > 0:
 			status = "FIRE A RELAY · %d LEFT" % fires

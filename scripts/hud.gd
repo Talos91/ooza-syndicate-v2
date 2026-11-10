@@ -3056,7 +3056,7 @@ func pause_menu() -> void:
 			var co = main.coach                       # (and the first run's SKIP TUTORIAL) live here now
 			acts.insert(1, [TutorialDirector.line("skip_step"), func(): main.paused = false; pause_panel.visible = false; co.skip_step.emit()])
 			if main.director.first_launch:
-				acts.insert(2, [TutorialDirector.line("skip_tutorial"), func(): co.skip_tutorial.emit()])
+				acts.insert(0, [TutorialDirector.line("skip_tutorial"), func(): co.skip_tutorial.emit()])   # (designer: at the top)
 		s.card({"kicker": where, "headline": "PAUSED.", "actions": acts})
 		_show_screen(pause_panel)
 		return
