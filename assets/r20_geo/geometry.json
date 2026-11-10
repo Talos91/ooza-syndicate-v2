@@ -1,0 +1,397 @@
+{
+  "toast": {
+    "body": [
+      48,
+      48,
+      1140,
+      120
+    ],
+    "canvas": [
+      1236,
+      216
+    ],
+    "radius": 30,
+    "bevel_width": 12,
+    "bolts": [],
+    "slots": [
+      {
+        "name": "text",
+        "rect": [
+          90,
+          66,
+          1056,
+          84
+        ],
+        "radius": 25
+      }
+    ],
+    "stretch_zones": [
+      [
+        618,
+        66,
+        12,
+        84
+      ]
+    ],
+    "kind_bar": {
+      "rect": [
+        108,
+        78,
+        18,
+        60
+      ],
+      "radius": 9
+    },
+    "text_safe_rect": [
+      144,
+      70,
+      982,
+      76
+    ],
+    "resize_body_pt": [
+      96,
+      190
+    ],
+    "fixed_horizontal_caps_body_px": [
+      120,
+      84
+    ]
+  },
+  "coach_card": {
+    "body": [
+      48,
+      48,
+      1698,
+      324
+    ],
+    "canvas": [
+      1794,
+      420
+    ],
+    "radius": 47,
+    "bevel_width": 12,
+    "bolts": [
+      {
+        "centre": [
+          1712,
+          82
+        ],
+        "diameter": 40
+      },
+      {
+        "centre": [
+          1712,
+          338
+        ],
+        "diameter": 40
+      }
+    ],
+    "slots": [
+      {
+        "name": "text",
+        "rect": [
+          396,
+          72,
+          1290,
+          276
+        ],
+        "radius": 25
+      }
+    ],
+    "stretch_zones": [
+      [
+        1056,
+        72,
+        12,
+        276
+      ]
+    ],
+    "perimeter_tube": {
+      "inset": 6,
+      "width": 6
+    },
+    "window": {
+      "centre": [
+        222,
+        210
+      ],
+      "diameter": 240
+    },
+    "ring": {
+      "centre": [
+        222,
+        210
+      ],
+      "outer_diameter": 276,
+      "width": 12,
+      "bezel_outer_diameter": 288
+    },
+    "next_marker": {
+      "rect": [
+        1614,
+        264,
+        48,
+        60
+      ],
+      "tube_width": 12,
+      "cap_radius": 6,
+      "slot_right_bottom_inset": 24
+    },
+    "text_safe_rect": [
+      412,
+      80,
+      1242,
+      255
+    ],
+    "last_line_safe_right": 1602,
+    "resize_body_pt": [
+      200,
+      640
+    ],
+    "fixed_horizontal_caps_body_px": [
+      384,
+      156
+    ],
+    "measured_clearances": {
+      "bolt_to_glass_pixel_edge_lower_bound_px": 7.544,
+      "slot_bolt_bbox_horizontal_gap_px": 6
+    }
+  },
+  "node_card": {
+    "body": [
+      48,
+      48,
+      1380,
+      324
+    ],
+    "canvas": [
+      1476,
+      420
+    ],
+    "radius": 47,
+    "bevel_width": 12,
+    "bolts": [
+      {
+        "centre": [
+          1394,
+          82
+        ],
+        "diameter": 40
+      },
+      {
+        "centre": [
+          1394,
+          338
+        ],
+        "diameter": 40
+      }
+    ],
+    "slots": [
+      {
+        "name": "line",
+        "rect": [
+          396,
+          78,
+          972,
+          84
+        ],
+        "radius": 25
+      },
+      {
+        "name": "units_track",
+        "rect": [
+          396,
+          180,
+          972,
+          60
+        ],
+        "radius": 30
+      },
+      {
+        "name": "status",
+        "rect": [
+          396,
+          258,
+          972,
+          84
+        ],
+        "radius": 25
+      }
+    ],
+    "stretch_zones": [],
+    "perimeter_tube": {
+      "inset": 6,
+      "width": 6
+    },
+    "window": {
+      "centre": [
+        222,
+        210
+      ],
+      "diameter": 240
+    },
+    "ring": {
+      "centre": [
+        222,
+        210
+      ],
+      "outer_diameter": 276,
+      "width": 12,
+      "bezel_outer_diameter": 288
+    },
+    "units_tube": {
+      "rect": [
+        414,
+        204,
+        936,
+        12
+      ],
+      "radius": 6,
+      "track_end_inset": 18
+    },
+    "text_safe_rects": [
+      [
+        412,
+        82,
+        940,
+        76
+      ],
+      [
+        412,
+        262,
+        940,
+        76
+      ]
+    ],
+    "measured_clearances": {
+      "bolt_to_glass_pixel_edge_lower_bound_px": 9.2956,
+      "slot_bolt_bbox_horizontal_gap_px": 6
+    }
+  },
+  "hint_strip": {
+    "body": [
+      48,
+      48,
+      1698,
+      168
+    ],
+    "canvas": [
+      1794,
+      264
+    ],
+    "radius": 37,
+    "bevel_width": 12,
+    "bolts": [],
+    "slots": [
+      {
+        "name": "shared_glass",
+        "rect": [
+          57,
+          57,
+          1680,
+          150
+        ],
+        "radius": 28
+      }
+    ],
+    "stretch_zones": [
+      [
+        897,
+        57,
+        12,
+        150
+      ]
+    ],
+    "icon_rect": [
+      66,
+      72,
+      120,
+      120
+    ],
+    "text_safe_rect": [
+      204,
+      94,
+      1514,
+      76
+    ],
+    "perimeter_tube": {
+      "inset": 3,
+      "width": 6
+    },
+    "resize_body_pt": [
+      200,
+      640
+    ],
+    "fixed_horizontal_caps_body_px": [
+      180,
+      48
+    ]
+  },
+  "_layout": {
+    "phone": {
+      "toasts": [
+        [
+          51,
+          4,
+          190,
+          20
+        ],
+        [
+          51,
+          27,
+          190,
+          20
+        ]
+      ],
+      "node_card": [
+        132,
+        296,
+        230,
+        54
+      ],
+      "coach_card": [
+        372,
+        296,
+        283,
+        54
+      ],
+      "hint_strip": [
+        372,
+        322,
+        283,
+        28
+      ],
+      "toast_bottom_tank_gap_pt": 1,
+      "toast_topcapsule_gap_pt": 5
+    },
+    "desktop": {
+      "screen": [
+        1280,
+        720
+      ],
+      "k": 1.2,
+      "node_card_px": [
+        102,
+        640.8,
+        276,
+        64.8
+      ],
+      "hint_strip_px": [
+        390,
+        672,
+        758,
+        34
+      ],
+      "skill_column_left_px": 1160,
+      "version_keepout_px": [
+        1160,
+        694,
+        116,
+        22
+      ],
+      "hint_skill_gap_px": 12
+    },
+    "note": "WF02 internally uses763x429 layoutpt, not1280/1.2; the explicit Round20 632pt->758px contract wins for desktop. WF02 retained faintly as reference, not a claim these grids agree."
+  },
+  "_resize_note": "12px magenta strips are sample/stretch markers, NOT the entire resizable centre. Preserve listed fixed caps and resize the broad blank centre, or use the parametric renderer. A literal12px-only nine-slice cannot shrink from283pt to200pt."
+}

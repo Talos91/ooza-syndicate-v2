@@ -540,6 +540,10 @@ func setup(m: Node3D) -> void:
 			main.monster_from = hub
 			note_monster_hint())
 	root.add_child(monster_icon)
+	if R20Geo.wanted():                                 # THROWAWAY ui-r20-geo: round-20 flat HUD pieces, never released
+		var r20 := R20Geo.new()
+		root.add_child(r20)
+		r20.setup(self)
 
 
 func _icon_button(b: Button, icon_name: String) -> void:
