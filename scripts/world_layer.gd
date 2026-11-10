@@ -126,10 +126,13 @@ var _ent_mm: MultiMesh            # one tube entrance per common tube (owner lig
 var _ent_mat: ShaderMaterial
 var _ent_mms: Array = [null, null, null, null]   # VAT COLUMN readers: [_, base, base, base] - one column base for every tier
 var pipes: WorldTubes            # PITS / TUBES: the transport tubes socket -> pit, the pits' colour (null while FLOOR_TUBES is off)
-# FLOOR TUBES OFF (Daniele 2026-11-09, proto25 review: "remove all tube props from the map floor for now"): the transport
-# tubes column -> pit (WorldTubes) and the lab dressing's floor pipe runs along the lanes are not built; the code stays.
-# true (or the dev arg --floor-tubes) brings both back. Pits, column bases (sockets, doors) and the Locals are unchanged.
-static var FLOOR_TUBES := false
+# FLOOR TUBES SPLIT (Daniele 2026-11-10, Desk floor-tubes: "I wanted only the props removed, not the coloured tubes from nodes
+# to pit in the colour of each faction, those remain"; chat on demo12: "why are the pipes from pit to node gone? they should be
+# there"): the transport tubes column -> pit (WorldTubes) are ON again; the lab dressing's floor pipe runs along the lanes
+# (the props, removed 2026-11-09 proto25 review) stay OFF - FLOOR_PIPE_PROPS or the dev arg --floor-pipe-props brings them back.
+# --no-floor-tubes hides the transport tubes (before / after shots).
+static var FLOOR_TUBES := true
+static var FLOOR_PIPE_PROPS := false
 var column: VatColumn            # VAT COLUMN: upgrade blueprint + the entrance module from the pit (vat_column.gd)
 var _blobs: Array = []           # {p, tube, col, t0, mode (0 hop, 1 crawl, 2 enter), v, dur, from}
 var _drops: Array = []           # {p, v, t0, col}
@@ -183,7 +186,7 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	for n in sim.nodes:
 		_build_tube(n)
 	_build_pools()
-	if FLOOR_TUBES or "--floor-tubes" in OS.get_cmdline_user_args():
+	if (FLOOR_TUBES or "--floor-tubes" in OS.get_cmdline_user_args()) and not "--no-floor-tubes" in OS.get_cmdline_user_args():
 		pipes = WorldTubes.new()                      # PITS / TUBES (built once the pits are placed: WorldLocals.place)
 		add_child(pipes)
 		pipes.setup(self)

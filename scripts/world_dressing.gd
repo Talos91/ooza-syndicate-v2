@@ -626,8 +626,8 @@ func _light(q: Vector2, r: float, col: Color, drone := false) -> void:
 # ------------------------------------------------------------------ pipes + rails along the lanes
 func _pipe_run(fi: int, f: Dictionary, side: float) -> void:
 	## a floor pipe from the crater's rim toward the tube foot, 2.6 m beside the lane; only the stretches the camera sees
-	if not (WorldLayer.FLOOR_TUBES or "--floor-tubes" in OS.get_cmdline_user_args()):
-		return                                         # FLOOR TUBES OFF (Daniele 2026-11-09): no floor pipe runs for now
+	if not (WorldLayer.FLOOR_PIPE_PROPS or "--floor-pipe-props" in OS.get_cmdline_user_args()):
+		return                                         # FLOOR PIPE PROPS OFF (Daniele 2026-11-09 / 11-10): only the props go
 	var S := _sc("pipe")
 	var path: Array = f["path"]
 	var pts: Array = []

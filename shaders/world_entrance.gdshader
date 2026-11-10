@@ -27,7 +27,7 @@ void fragment() {
 		vec3 g = tint.a > 0.0 ? tint.rgb : vec3(0.36, 0.37, 0.41) * 0.5;
 		c = g * (0.35 + 1.1 * v.r);
 	} else if (v.r > 0.6 && v.g < 0.3 && v.b < 0.3) {
-		c = vec3(1.0, 0.25, 0.15) * 1.4;              // the laser lens
+		c = (tint.a > 0.0 ? tint.rgb : vec3(0.36, 0.37, 0.41) * 0.5) * 1.4;   // the laser lens: the owner's colour (one colour per player, 2026-11-10; was fixed red)
 	}
 	ALBEDO = mix(c, abyss * 0.6, haze);
 }

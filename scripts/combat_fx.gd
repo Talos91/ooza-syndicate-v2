@@ -487,7 +487,7 @@ func _cannons_step(dt: float, cam: Camera3D) -> void:
 		hit.position = p1 + to_cam * 0.8                # in front of the bodies it hits
 		hit.scale = Vector3.ONE * (2.4 + 0.9 * absf(sin(t * 29.0 + 1.3))) * (0.6 + 0.4 * power)
 		var hmat: ShaderMaterial = c["hmat"]
-		hmat.set_shader_parameter("color", col.lerp(HOT, 0.35))
+		hmat.set_shader_parameter("color", col.lerp(HOT, 0.15))   # one colour per player: the hit keeps the seat colour (was 35 % white-hot)
 		hmat.set_shader_parameter("intensity", power * landed * 1.3)
 		hmat.set_shader_parameter("spin", -t * 3.0 + c["seed"])
 		var sc: MeshInstance3D = c["scorch"]            # scorch flicker on the deck under the hit
@@ -495,7 +495,7 @@ func _cannons_step(dt: float, cam: Camera3D) -> void:
 		sc.position = to - Vector3(0, 0.45, 0)            # on the deck (the target is 0.7 m up)
 		sc.scale = Vector3.ONE * (3.4 + 0.6 * smoothstep(0.0, 1.5, t))
 		var smat: ShaderMaterial = c["smat"]
-		smat.set_shader_parameter("color", col.lerp(Color(1.0, 0.45, 0.12), 0.55))
+		smat.set_shader_parameter("color", col.lerp(Color(1.0, 0.45, 0.12), 0.2))   # one colour per player (was 55 % orange)
 		smat.set_shader_parameter("intensity", landed * (1.6 * smoothstep(0.0, 0.5, t)) * (1.0 if c["on"] else 1.0 - c["fade"] / FADE_OUT))
 		if c["on"] and landed > 0.5:
 			var detail := 0.5 if Rules.low_detail else 1.0
@@ -617,7 +617,7 @@ func _machinegoons_step(dt: float) -> void:
 			to = g["to"]
 		g["to"] = to
 		var col := Rules.seat_color(n["owner"])
-		var goo: Color = col.lerp(Color(0.75, 1.0, 0.55), 0.18)
+		var goo: Color = col                           # ONE COLOUR PER PLAYER (Daniele 2026-11-10): the shot is the seat colour (was 18 % green)
 		var bmat: ShaderMaterial = g["bmat"]
 		bmat.set_shader_parameter("p0", from)
 		bmat.set_shader_parameter("p1", to)
@@ -706,7 +706,7 @@ func _gat_gauge(g: Dictionary, n: Dictionary, root: Node3D) -> void:
 	var fill: float = clampf(float(n["units"]) / cap, 0.0, 1.0) if cap > 0.0 else 0.0
 	var lit := fill * GAT_PIPS
 	var full := fill >= 0.995
-	var goo: Color = Rules.seat_color(n["owner"]).lerp(Color(0.75, 1.0, 0.55), 0.3) if n["owner"] != "" else GAT_PIP_DIM
+	var goo: Color = Rules.seat_color(n["owner"]) if n["owner"] != "" else GAT_PIP_DIM   # one colour per player (was 30 % green)
 	var pulse := 0.5 + 0.5 * sin(sim.time * 4.0) if full else 0.0
 	var c: Vector3 = root.global_position
 	var pips: Array = g["pips"]
