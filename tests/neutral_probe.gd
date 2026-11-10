@@ -73,7 +73,7 @@ func _run() -> void:
 		await get_tree().process_frame
 		tries += 1
 	if wl.locals == null or not wl.locals.placed:
-		print("NEUTRAL_LOCALS %s locals never placed" % code)
+		print("NEUTRAL_LOCALS %s locals never placed (locals %s, sim %s, world t %.1f, tries %d)" % [code, str(wl.locals), str(wl.sim), wl._t, tries])
 		get_tree().quit(1)
 		return
 	Engine.time_scale = 4.0

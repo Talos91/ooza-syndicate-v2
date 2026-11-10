@@ -1069,17 +1069,16 @@ func _init() -> void:
 	if SIEGE_TESTS:
 		_siege_tests(map, pos)
 
-	# ---------------------------------------------------------------- 0.18.9: neutral villages regenerate at their vat's speed
+	# ---------------------------------------------------------------- Daniele 2026-11-11: neutral nodes do not regrow (was 0.18.9)
 	var snr := Sim.new()
 	snr.setup(map, pos, {3: "A", 4: "B"}, {"A": "null", "B": "ember"}, 1)
 	var nn: Dictionary = snr.nodes.filter(func(x): return x["owner"] == "" and snr.has_vat(x))[0]
 	var full_nr: float = Rules.NEUTRAL_UNITS[nn["tier"]]
 	nn["units"] = full_nr - 40.0
-	snr.step(0.5)
-	check(absf(nn["units"] - (full_nr - 40.0 + Rules.PROD[nn["tier"]] * 0.5)) < 0.01, "a chipped neutral village regrows at its tier's production rate (node %d tier %s units %.2f expected %.2f, has_vat %s)" % [nn["id"], str(nn["tier"]), nn["units"], full_nr - 4.0 + Rules.PROD[nn["tier"]] * 0.5, str(snr.has_vat(nn))])
-	for i in range(40):
+	for i in range(41):
 		snr.step(0.5)
-	check(absf(nn["units"] - full_nr) < 0.01, "...and stops at its starting garrison (%.0f)" % full_nr)
+	check(not Rules.NEUTRAL_REGEN and absf(nn["units"] - (full_nr - 40.0)) < 0.01, "a chipped neutral village stays down: no regrowth in 20 s (node %d tier %s units %.2f, garrison %.0f)" % [nn["id"], str(nn["tier"]), nn["units"], full_nr])
+	check(snr.production(nn) == 0.0, "...and its readout rate is 0 (Sim.production)")
 
 	# ---------------------------------------------------------------- 0.18.7: balance presets (off by default)
 	check(Rules.BALANCE_PRESET == "" and Rules.VAT_COST == {1: 50, 2: 100, 3: 150} and Rules.NEUTRAL_UNITS == {1: 75, 2: 150, 3: 300, 4: 500}
@@ -1653,13 +1652,13 @@ func _rules_0_18_10() -> void:
 	check(absf(s.combat_losses.get("B", 0.0) - l1 - Sim.gat_fire_rate(gf)) < 0.3, "units walking in are more ammo: full rate again")
 	s._capture(gf, "B", 5.0)
 	check(absf(gf["units"] - 5.0) < 0.001, "a captured googat's ammo is the capturer's garrison")
-	var sn := _tp()                                    # a NEUTRAL one regrows its ammo at the same half rate, to its garrison
+	var sn := _tp()                                    # a NEUTRAL one regrows nothing (Daniele 2026-11-11: neutral nodes do not regrow)
 	var gn2: Dictionary = sn.nodes[1]
 	gn2["structure"] = "machinegoon"
 	gn2["units"] = 0.0
 	for i in range(int(4.0 / 0.05)):
 		sn.step(0.05)
-	check(absf(gn2["units"] - Rules.PROD[int(gn2["tier"])] * Rules.GOOGATLING_PROD * 4.0) < 0.05, "a neutral googat regrows %.1f in 4 s (x%.2f rate)" % [gn2["units"], Rules.GOOGATLING_PROD])
+	check(gn2["units"] < 0.001 and sn.gat_rate(gn2) == 0.0, "a neutral googat regrows no ammo (%.1f in 4 s, rate %.2f)" % [gn2["units"], sn.gat_rate(gn2)])
 	# ---------------------------------------------------------------- laser: 19 per 2 s burst, 2 s recharge, 12 m
 	check(Rules.LASER_KILL == 96.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
 			"laser numbers: 19 shown per 2 s burst (-40 %, Daniele 2026-09-28), 2 s recharge, 12 m, cost 40")
