@@ -51,7 +51,7 @@ const STEEL_D := Color(0.10, 0.11, 0.13)
 const STEEL_L := Color(0.27, 0.29, 0.33)
 const RECESS := Color(0.015, 0.015, 0.02)
 const FILL_S := 1.6              # s: a finished tube fills from the pit to the column
-const TUBE_ADD := {2: 1, 3: 2}   # tubes built by reaching this tier (rule 4)
+const TUBES_BY_TIER := {1: 1, 2: 2, 3: 4}   # tubes a column has at each tier (Daniele 2026-11-11; the tubes only grow, R4)
 const MAX_TUBES := 4
 const PIT_L_DIV := 20.0          # R7: strength = T / (T + L / 20)
 const LANE_SEP := 0.22           # rad round a pit kept clear of a Locals' lane exit (1.3 m at the rim, 0.70 m where a tube enters the goo)
@@ -115,13 +115,10 @@ static func corner_dir(k: int) -> Vector2:
 	return Vector2(sin(a), cos(a))
 
 
-static func tubes_for(n: Dictionary, start_tier: int, home: bool, tier := -1) -> int:
-	## rule 4: home 1, others 0; +1 reaching T2, +2 reaching T3 (counted from the column's start tier); max 4
-	var t := int(n.get("tier", 1)) if tier < 0 else tier
-	var c := 1 if home else 0
-	for k in range(start_tier + 1, mini(t, 3) + 1):
-		c += int(TUBE_ADD.get(k, 0))
-	return mini(c, MAX_TUBES)
+static func tubes_for(n: Dictionary, _start_tier: int, _home: bool, tier := -1) -> int:
+	## Daniele 2026-11-11: every column plugs into the pits with T1 = 1 tube, T2 = 2, T3 = 4 (was: home 1, +1 at T2, +2 at T3)
+	var t := clampi(int(n.get("tier", 1)) if tier < 0 else tier, 1, 3)
+	return int(TUBES_BY_TIER[t])
 
 
 func setup(w: WorldLayer) -> void:
@@ -361,16 +358,16 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 		if absf(cdc) < 0.01:
 			continue
 		var f0: float = foot.x if fx else foot.y
-		for dstub in [0, 1, -1, 2, -2, 3, -3, 4, -4]:                  # the first leg's lane: the grid line nearest the stub's end, then its neighbours
+		for dstub in [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 8, -8, 10, -10]:                  # the first leg's lane: the grid line nearest the stub's end, then its neighbours
 			var lane: float = (roundf((f0 + cdc * L0) / G) + dstub) * G
 			var L := (lane - f0) / cdc
 			if L < APOTHEM + 0.05 + RAMP_RUN + 0.2:
 				continue
 			var p1 := foot + cd * L
-			for o in [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G]:
+			for o in [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G, 4.0 * G, -4.0 * G]:
 				var latc: float = c2.y if fx else c2.x
 				var lat: float = roundf((latc + o) / G) * G
-				if absf(lat - latc) > 3.3:
+				if absf(lat - latc) > 4.6:
 					continue
 				var corner := Vector2(lane, lat) if fx else Vector2(lat, lane)
 				var rim := Vector2(c2.x + sgn * R0, lat) if fx else Vector2(lat, c2.y + sgn * R0)
@@ -446,16 +443,16 @@ func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 		var fl: float = foot.y if fx else foot.x
 		var latc: float = c2.y if fx else c2.x
 		var other := "Z" if fx else "X"
-		for dstub in [0, 1, -1, 2, -2, 3, -3]:
+		for dstub in [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6]:
 			var lane_l: float = (roundf((fl + cdl * L0) / G) + dstub) * G
 			var L := (lane_l - fl) / cdl
 			if L < APOTHEM + 0.05 + RAMP_RUN + 0.2:
 				continue
 			var p1 := foot + cd * L
 			var along1: float = p1.x if fx else p1.y
-			for o in [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G]:
+			for o in [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G, 4.0 * G, -4.0 * G]:
 				var lat: float = roundf((latc + o) / G) * G
-				if absf(lat - latc) > 3.3:
+				if absf(lat - latc) > 4.6:
 					continue
 				var rim := _mk(fx, (c2.x if fx else c2.y) + sgn * R0, lat)
 				var a_al: float = (c2.x if fx else c2.y) + sgn * (R0 + ENTRY_RUN)
@@ -506,8 +503,10 @@ func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 
 
 func _build_connectors() -> void:
-	## every crossing of two ortho runs (an x run over a z run, one level) gets a steel block that swallows the overlap; crossings
-	## closer than 2.6 m merge into one block (a stripe of lanes crossing a stripe is ONE connector with its doors)
+	## every crossing of two ortho runs (an x run over a z run, one level) gets a connector block that swallows the overlap.
+	## The block is cut to the LANES that cross there: k x-lanes enter its left / right faces, m z-lanes its up / down faces, one
+	## coupling ring per lane (2, 3 or 4 slots as the overlap needs), faces snapped to the lane grid like the stripes themselves.
+	## Crossings closer than 2.6 m merge into one block.
 	conn_count = 0
 	var pts2: Array = []
 	for ri in _ortho_runs:
@@ -515,7 +514,7 @@ func _build_connectors() -> void:
 		for q in (_laid[ri] as PackedVector3Array):
 			a.append(Vector2(q.x, q.z))
 		pts2.append(a)
-	var hits: Array = []
+	var hits: Array = []                               # [point, tube level y, the first run runs along x]
 	for i1 in range(pts2.size()):
 		var A: Array = pts2[i1]
 		var bbA := Rect2(A[0], Vector2.ZERO)
@@ -543,7 +542,8 @@ func _build_connectors() -> void:
 						continue
 					var hit = Geometry2D.segment_intersects_segment(a0, a1, b0, b1)
 					if hit != null:
-						hits.append([hit, (laid_y(i1, k) + laid_y(i2, j)) * 0.5])
+						var da := a1 - a0
+						hits.append([hit, (laid_y(i1, k) + laid_y(i2, j)) * 0.5, absf(da.x) >= absf(da.y)])
 	var group: Array = []                              # union by proximity
 	for h in hits:
 		var placed := -1
@@ -558,40 +558,77 @@ func _build_connectors() -> void:
 			group[placed].append(h)
 		else:
 			group.append([h])
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = SOCK_R
+	cyl.bottom_radius = SOCK_R
+	cyl.height = 0.3
+	cyl.radial_segments = 10
+	cyl.rings = 1
+	var ring_mat := StandardMaterial3D.new()
+	ring_mat.albedo_color = STEEL_D
+	ring_mat.metallic = 0.6
+	ring_mat.roughness = 0.4
 	for g in group:
-		var bb := Rect2(g[0][0], Vector2.ZERO)
+		var xl: Array = []                             # z coordinates of the x runs (one lane each, snapped to the grid)
+		var zl: Array = []                             # x coordinates of the z runs
 		var y := 0.0
 		for h in g:
-			bb = bb.expand(h[0])
 			y += float(h[1])
+			var pt: Vector2 = h[0]
+			var lx := roundf((pt.y if h[2] else pt.x) / ORTHO_GAP) * ORTHO_GAP
+			var lz := roundf((pt.x if h[2] else pt.y) / ORTHO_GAP) * ORTHO_GAP
+			var xs: float = lx
+			var zs: float = lz
+			if h[2]:
+				if not xl.has(xs): xl.append(xs)
+				if not zl.has(zs): zl.append(zs)
+			else:
+				if not zl.has(xs): zl.append(xs)
+				if not xl.has(zs): xl.append(zs)
 		y /= float(g.size())
-		bb = bb.grow(CONN_PAD + PIPE_R)
+		xl.sort()
+		zl.sort()
+		if xl.is_empty() or zl.is_empty():
+			continue
+		var half := ORTHO_GAP * 0.5 + 0.25
+		var x0: float = float(zl[0]) - half - CONN_PAD * 0.5      # the block spans the z lanes in x ...
+		var x1: float = float(zl[zl.size() - 1]) + half + CONN_PAD * 0.5
+		var z0: float = float(xl[0]) - half - CONN_PAD * 0.5      # ... and the x lanes in z
+		var z1: float = float(xl[xl.size() - 1]) + half + CONN_PAD * 0.5
+		var cen := Vector3((x0 + x1) * 0.5, wl.floor_y + y, (z0 + z1) * 0.5)
 		var mi := MeshInstance3D.new()
 		var bx := BoxMesh.new()
-		bx.size = Vector3(bb.size.x, CONN_H, bb.size.y)
+		bx.size = Vector3(x1 - x0, CONN_H, z1 - z0)
 		mi.mesh = bx
 		var m := StandardMaterial3D.new()
 		m.albedo_color = STEEL_L
 		m.metallic = 0.5
 		m.roughness = 0.5
 		mi.material_override = m
-		mi.position = Vector3(bb.get_center().x, wl.floor_y + y, bb.get_center().y)
+		mi.position = cen
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		_conn_nodes.append(mi)
-		for fk in range(4):                                # a dark door recess on each face (the connector's left / right / up / down)
-			var dm := BoxMesh.new()
-			var sx := fk % 2 == 0
-			dm.size = Vector3(0.06 if sx else minf(bb.size.x - 0.4, 2.0), 0.7, minf(bb.size.y - 0.4, 2.0) if sx else 0.06)
-			var dmi := MeshInstance3D.new()
-			dmi.mesh = dm
-			var dmat := StandardMaterial3D.new()
-			dmat.albedo_color = RECESS
-			dmi.material_override = dmat
-			var sgn := 1.0 if fk < 2 else -1.0
-			dmi.position = Vector3(sgn * (bb.size.x * 0.5 + 0.02) if sx else 0.0, 0.0, 0.0 if sx else sgn * (bb.size.y * 0.5 + 0.02))
-			dmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			mi.add_child(dmi)
+		var mm := MultiMesh.new()                       # one coupling ring per lane on the faces it enters
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = cyl
+		mm.instance_count = (xl.size() + zl.size()) * 2
+		var n := 0
+		for lz2 in xl:                                  # x runs: left and right faces
+			for sg in [-1.0, 1.0]:
+				var pos := Vector3(sg * ((x1 - x0) * 0.5 + 0.04), 0.0, float(lz2) - cen.z)
+				mm.set_instance_transform(n, Transform3D(Basis(Quaternion(Vector3.UP, Vector3(sg, 0, 0))), pos))
+				n += 1
+		for lx2 in zl:                                  # z runs: up and down faces
+			for sg in [-1.0, 1.0]:
+				var pos := Vector3(float(lx2) - cen.x, 0.0, sg * ((z1 - z0) * 0.5 + 0.04))
+				mm.set_instance_transform(n, Transform3D(Basis(Quaternion(Vector3.UP, Vector3(0, 0, sg))), pos))
+				n += 1
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.material_override = ring_mat
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.add_child(mmi)
 		conn_count += 1
 
 

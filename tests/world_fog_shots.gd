@@ -56,6 +56,9 @@ func _run() -> void:
 		n["owner"] = "A" if float(wl._tubes[i]["x"]) < 0.0 else "B"
 		n["structure"] = "vat"
 		n["tier"] = 3
+		for a in OS.get_cmdline_user_args():
+			if a == "tiers=mixed":                    # T1 / T2 / T3 by column, to see 1 / 2 / 4 tubes
+				n["tier"] = 1 + (i % 3)
 	var t0 := wl._t
 	while wl._t - t0 < WorldTubes.FILL_S + 4.0:
 		await get_tree().process_frame
