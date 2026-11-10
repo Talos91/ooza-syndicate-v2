@@ -461,18 +461,20 @@ static func hud_k(vp: Vector2) -> float:
 	return hud_k_for(vp.y * pt_per_px(vp))
 
 
-# ui-tall-b (designer CODE JOB SPEC D; Daniele 2026-11-10: "i agree with the hud for duo to put the stuff on the bottom and enlarge
-# map but i'll move the buttons to the center instead of side"): on a TALL screen (landscape W / H < 1.6: Duo inner / cover, Fold8
-# inner / cover, Fold8 Ultra, Fold7 inner) the map is limited by the WIDTH, so the HUD stays at phone size (k 1.0), the skill plates
+# ui-tall-b (designer CODE JOB SPEC D, v3: inner screens only, H >= 500 pt; Daniele 2026-11-10: "i agree with the hud for duo to put the stuff on the bottom and enlarge
+# map but i'll move the buttons to the center instead of side"): on a TALL screen (landscape W / H < 1.6 and >= 500 pt tall: Duo inner,
+# Fold8 inner, Fold8 Ultra, Fold7 inner) the map is limited by the WIDTH, so the HUD stays at phone size (k 1.0), the skill plates
 # move to one row centred on the safe bottom and the map is fitted to the freed rect (Hud.tall_b_fit). Phones (>= 1.6) and the
 # desktop are untouched. Behind --tall-b=on (default off) until Daniele's yes; then on becomes the rule and the flag goes.
 const TALL_ASPECT := 1.6
+const TALL_MIN_H_PT := 500.0
 static var tall_b_on := "--tall-b=on" in OS.get_cmdline_user_args()
 
 
 static func is_tall_b(vp: Vector2) -> bool:
-	## A landscape screen squarer than W / H 1.6 (only with --tall-b=on; the aspect is the same in px and pt).
-	return tall_b_on and vp.y > 0.0 and vp.x >= vp.y and vp.x / vp.y < TALL_ASPECT
+	## A landscape screen squarer than W / H 1.6 AND at least 500 pt tall (only with --tall-b=on; the aspect is the same in px
+	## and pt). Designer v2: the covers (Duo 466 pt, Fold8 416 pt) keep today's layout - a reserved band row left them no gain.
+	return tall_b_on and vp.y > 0.0 and vp.x >= vp.y and vp.x / vp.y < TALL_ASPECT and vp.y * pt_per_px(vp) >= TALL_MIN_H_PT
 
 
 # ui-demo-hud-scale (2026-11-09, Daniele on demo8: "looks like it's warped to be small"): the GMN HUD's desktop size. On a desktop

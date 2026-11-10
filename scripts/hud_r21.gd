@@ -268,13 +268,6 @@ static func _tall_b_band(d: Dictionary, row_px: Rect2, tag: Rect2) -> void:
 	d["coach_r"] = coach
 	d["hint_r"] = hint
 	d["row"] = row
-	var raised := 9999.0                           # the top of whatever goes above the plate row (the fit keeps clear of it)
-	if not node_beside:
-		raised = minf(raised, node.position.y)
-	if coach.position.y < by:
-		raised = minf(raised, coach.position.y)
-	if raised < 9999.0:
-		d["raise_top"] = raised
 
 
 static func coach_rect(hud) -> Rect2:

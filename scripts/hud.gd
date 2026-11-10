@@ -678,10 +678,6 @@ func tall_b_fit() -> Rect2:
 	var bottom := vp.y - ins.w - 8.0 * u
 	if dock and dock.visible:
 		bottom = dock.position.y - 6.0 * u
-		if r21:                                        # (designer v1 note 2) where the band's pieces go one row up (the covers),
-			var band := HudR21.band(self)              # that raised row is reserved always, so live nodes never sit under the
-			if band.has("raise_top"):                  # node card / hint strip and the map never jumps
-				bottom = minf(bottom, (float(band["raise_top"]) - 6.0) * u)
 	var right := vp.x - ins.z - 8.0 * u
 	return Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
 
