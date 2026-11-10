@@ -161,12 +161,20 @@ func _backdrop() -> void:
 	tex.seamless = true
 	tex.noise = noise
 	mat.set_shader_parameter("noise_tex", tex)
+	var dens: Array = WorldLayer.BACKDROP_DENSITY.duplicate()
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--fog-density="):
+			var pr := a.substr(14).split(",")
+			if pr.size() == 2:
+				dens = [float(pr[0]), float(pr[1])]
+	mat.set_shader_parameter("cloud_density", float(dens[0]))
+	mat.set_shader_parameter("fog_density", float(dens[1]))
 	mat.set_shader_parameter("cloud_amt", float(amt[0]))
 	mat.set_shader_parameter("fog_amt", float(amt[1]))
 	mat.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(0.3))
 	mat.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
 	sky.material = mat
-	_centre_fog(tex, amt, lv)
+	_centre_fog(tex, amt, lv, dens)
 
 
 # ------------------------------------------------------------------ build (once the craters and lanes are placed)
@@ -861,7 +869,7 @@ func _add_mi(m: Mesh, mat: Material) -> void:
 	draws += 1
 
 
-func _centre_fog(tex: Texture2D, amt: Array, _lv: String) -> void:
+func _centre_fog(tex: Texture2D, amt: Array, _lv: String, dens: Array) -> void:
 	## the same two layers as a plane between the decks and the floor: the board's centre gets cloud and fog too
 	var k := WorldLayer.CENTRE_FOG
 	for a in OS.get_cmdline_user_args():
@@ -870,6 +878,8 @@ func _centre_fog(tex: Texture2D, amt: Array, _lv: String) -> void:
 	var m := ShaderMaterial.new()
 	m.shader = preload("res://shaders/world_fog_layers.gdshader")
 	m.set_shader_parameter("noise_tex", tex)
+	m.set_shader_parameter("cloud_density", float(dens[0]))
+	m.set_shader_parameter("fog_density", float(dens[1]))
 	m.set_shader_parameter("cloud_amt", float(amt[0]) * k)
 	m.set_shader_parameter("fog_amt", float(amt[1]) * k)
 	m.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(0.3))

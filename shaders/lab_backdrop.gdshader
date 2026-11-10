@@ -13,6 +13,8 @@ uniform float abyss_haze = 0.45;     // the middle column's haze toward the lab 
 uniform sampler2D noise_tex : repeat_enable, filter_linear;
 uniform float cloud_amt = 0.0;       // world-fog: the CLOUD layer, opacity where it is present (0 = none, 1 = fully covers); roams
 uniform float fog_amt = 0.0;         // world-fog: the FOG layer underneath, drifting the other way; cloud 0.9 x fog 0.6 overlap = 96 % cover
+uniform float cloud_density = 0.55;   // 0 = sparse wisps .. 1 = a solid sheet (how much of the layer is present)
+uniform float fog_density = 0.55;
 uniform vec4 cloud_col : source_color = vec4(0.27, 0.31, 0.38, 1.0);
 uniform vec4 fog_col : source_color = vec4(0.2, 0.24, 0.31, 1.0);
 uniform float side_lift = 1.15;      // the framing machinery a touch brighter than the floor's far haze
@@ -30,7 +32,7 @@ void fragment() {
 	vec2 q = UV * vec2(2.2, 1.0);
 	float nf = texture(noise_tex, q * 0.9 + vec2(TIME * 0.006, TIME * -0.003)).r;
 	float nc = texture(noise_tex, q * 0.6 + vec2(TIME * -0.009, TIME * 0.004) + 0.37).r;
-	c = mix(c, fog_col.rgb, fog_amt * smoothstep(0.22, 0.5, nf));
-	c = mix(c, cloud_col.rgb, cloud_amt * smoothstep(0.25, 0.55, nc));
+	c = mix(c, fog_col.rgb, fog_amt * smoothstep(mix(0.62, -0.1, fog_density), mix(0.62, -0.1, fog_density) + 0.28, nf));
+	c = mix(c, cloud_col.rgb, cloud_amt * smoothstep(mix(0.62, -0.1, cloud_density), mix(0.62, -0.1, cloud_density) + 0.3, nc));
 	COLOR = vec4(c, 1.0);
 }

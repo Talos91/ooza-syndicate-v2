@@ -65,6 +65,7 @@ const LAB_FAR := Color(0.168, 0.204, 0.263)
 # units, goo and HUD are untouched. Strengths are [cloud, fog]; the default is mid. Dev: --backdrop-fog=<low|mid|high>.
 const BACKDROP_FOG_LEVELS := {"low": [0.6, 0.4], "mid": [0.9, 0.6], "high": [1.0, 0.8]}
 const BACKDROP_FOG := "mid"
+const BACKDROP_DENSITY := [0.55, 0.55]   # [cloud, fog] how much of each layer is present (0 sparse .. 1 solid); --fog-density=<c>,<f>
 const CENTRE_FOG := 0.0          # x the level's [cloud, fog] for the plane between decks and floor that covers the CENTRE
                                  # (0 = off, 1 = same numbers as the sides). Off by default: it hazes the floor under the goo falls.
 var center_fog_mat: ShaderMaterial   # set by WorldDressing._backdrop; FogLead tints its fog colour

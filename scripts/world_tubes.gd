@@ -90,6 +90,7 @@ static var _base_mesh: ArrayMesh
 # corner, every straight leg on a global lane grid (ORTHO_GAP) so neighbours run exactly side by side, and each tube enters its
 # pit along an axis. A tube the grid cannot place (an obstacle, a Locals' exit) falls back to the v3 route. Dev: --tubes=ortho.
 const ORTHO_GAP := 1.1           # m between two parallel lanes (tube diameter 0.54)
+const ORTHO_LEVEL_STEP := 0.9     # m: ortho mode - legs along x run at the rack level, legs along z this much higher, so crossings never touch
 const ORTHO_BEND := 1.4          # m: corner radius in ortho mode
 const ORTHO_DEFAULT := false
 var ortho := ORTHO_DEFAULT
@@ -410,7 +411,7 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 					for j in range(1, m + 1):
 						even.append(q0.lerp(q1, float(j) / m))
 				var axis := Vector2(sgn, 0.0) if fx else Vector2(0.0, sgn)
-				return _shape(even, c2, axis, true, axis)
+				return _shape(even, c2, axis, true, axis, true)
 	return PackedVector3Array()
 
 
@@ -496,7 +497,7 @@ func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 						for j in range(1, mm + 1):
 							even.append(q0.lerp(q1, float(j) / mm))
 					var axis := Vector2(sgn, 0.0) if fx else Vector2(0.0, sgn)
-					return _shape(even, c2, axis, true, axis)
+					return _shape(even, c2, axis, true, axis, true)
 	return PackedVector3Array()
 
 
@@ -739,7 +740,7 @@ func _path(i: int, s: int, pit: Vector3, ang: float) -> PackedVector3Array:
 	return _shape(_side_by_side(even), c2, dir, true)
 
 
-func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2.ZERO) -> PackedVector3Array:
+func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2.ZERO, levels := false) -> PackedVector3Array:
 	## waypoints (x z) -> world points: smooth along the floor, bridges over lanes / laid tubes, over the rim, into the pool
 	var fy := wl.floor_y
 	var rim_out: Vector2 = way[way.size() - 1]
@@ -758,7 +759,21 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 	for k in range(1, flat.size()):
 		tot += (flat[k] as Vector2).distance_to(flat[k - 1])
 	var top := WorldLocals.RIM_H + PIPE_R + 0.18
-	var haz := _hazards(flat)
+	var haz := _hazards(flat, levels)
+	var lvl := PackedFloat32Array()                   # ortho: the level each sample runs on (x legs low, z legs high), eased at corners
+	if levels:
+		for k in range(flat.size()):
+			var tg: Vector2 = (flat[mini(k + 1, flat.size() - 1)] as Vector2) - (flat[maxi(k - 1, 0)] as Vector2)
+			lvl.append(RACK_Y if absf(tg.x) >= absf(tg.y) else RACK_Y + ORTHO_LEVEL_STEP)
+		var sm := lvl.duplicate()
+		for k in range(flat.size()):
+			var acc := 0.0
+			var cnt := 0
+			for j in range(maxi(k - 6, 0), mini(k + 7, flat.size())):
+				acc += lvl[j]
+				cnt += 1
+			sm[k] = acc / float(cnt)
+		lvl = sm
 	var ys := PackedFloat32Array()
 	var base_y := PackedFloat32Array()
 	var lifts := PackedFloat32Array()
@@ -766,7 +781,7 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 	for k in range(flat.size()):
 		if k > 0:
 			cum += (flat[k] as Vector2).distance_to(flat[k - 1])
-		var y := lerpf(SOCK_Y, RACK_Y, _knee(cum / RAMP_RUN))   # v3: a straight climb at SOCK_ANG out of the socket, eased onto the rack
+		var y := lerpf(SOCK_Y, lvl[k] if levels else RACK_Y, _knee(cum / RAMP_RUN))   # v3: a straight climb at SOCK_ANG out of the socket, eased onto the rack
 		if tail:
 			y = lerpf(y, top, smoothstep(tot - 3.2, tot, cum))    # climbs to clear the rim
 		base_y.append(y)
@@ -887,7 +902,7 @@ func _post_clear(q: Vector2, r: int, lanes: Array, flat: Array, craters: Array) 
 	return true
 
 
-func _hazards(flat: Array) -> Array:
+func _hazards(flat: Array, levels := false) -> Array:
 	## what this tube must go over: [segment a, b (x z), clearance height of the tube's centre, half width]. The Locals'
 	## lanes (a Local is 0.64 m tall, 0.78 wide) and the tubes already laid (go over them, resting on them)
 	var out := []
@@ -904,6 +919,8 @@ func _hazards(flat: Array) -> Array:
 				if _meets(flat, a, b, 0.45 + PIPE_R + 0.1, bb):
 					out.append([a, b, LANE_CLEAR, 0.45])
 	for run in _laid:
+		if levels:
+			continue                                      # ortho: tube crossings are settled by the two levels, not by bridges
 		var pts: PackedVector3Array = run
 		for k in range(1, pts.size()):
 			var a := Vector2(pts[k - 1].x, pts[k - 1].z)

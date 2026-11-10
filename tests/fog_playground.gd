@@ -11,7 +11,7 @@ extends Node
 var inst: Node
 var sky_mat: ShaderMaterial
 var wl: WorldLayer
-var amt := {"cloud": 0.9, "fog": 0.6, "ccloud": 0.9, "cfog": 0.6}
+var amt := {"cloud": 0.9, "fog": 0.6, "ccloud": 0.9, "cfog": 0.6, "dcloud": 0.55, "dfog": 0.55}
 var _panel: PanelContainer
 var _share := {"A": 0.0, "B": 0.0}
 
@@ -51,7 +51,7 @@ func _build_panel() -> void:
 	cl.add_child(_panel)
 	var v := VBoxContainer.new()
 	_panel.add_child(v)
-	for k in [["cloud", "cloud (sides)"], ["fog", "fog (sides)"], ["ccloud", "cloud (centre)"], ["cfog", "fog (centre)"]]:
+	for k in [["cloud", "cloud (sides)"], ["fog", "fog (sides)"], ["ccloud", "cloud (centre)"], ["cfog", "fog (centre)"], ["dcloud", "cloud DENSITY"], ["dfog", "fog DENSITY"]]:
 		var h := HBoxContainer.new()
 		var l := Label.new()
 		l.text = k[1]
@@ -126,6 +126,9 @@ func _apply() -> void:
 	sky_mat.set_shader_parameter("fog_amt", amt["fog"])
 	wl.center_fog_mat.set_shader_parameter("cloud_amt", amt["ccloud"])
 	wl.center_fog_mat.set_shader_parameter("fog_amt", amt["cfog"])
+	for mt in [sky_mat, wl.center_fog_mat]:
+		mt.set_shader_parameter("cloud_density", amt["dcloud"])
+		mt.set_shader_parameter("fog_density", amt["dfog"])
 
 
 func _fog_test() -> void:
