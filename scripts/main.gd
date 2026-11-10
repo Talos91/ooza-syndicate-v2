@@ -1139,6 +1139,8 @@ func _fit_nodes(nodes: Array) -> Array:
 	var bottom: float = vp.y - (hud.bottom_used() if use_hud else 8.0)
 	var right: float = vp.x - (hud.right_used() if use_hud else 8.0)   # PAUSE's column and the skill column (Alpha 24)
 	var free := Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
+	if use_hud and hud.tall_b_fit().size.x > 0.0 and not mission_overlay:   # ui-tall-b (spec D): the rect the tall layout frees
+		free = hud.tall_b_fit()
 	var pts := []
 	for n in nodes:
 		var p: Vector3 = n["pos"]

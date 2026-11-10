@@ -1,5 +1,5 @@
 class_name SkillDock
-extends VBoxContainer
+extends BoxContainer                             # ui-tall-b: a BoxContainer (vertical, as the old VBoxContainer) so the tall layout can lay it as a row
 ## SKILLS 2.0 in-match dock (0.18.7): the three slots ACTIVE / MAP / ULTIMATE - Alpha 24 (Hub Roadmap m05: "skills stacked
 ## on the right, compact sizes"): a column of round buttons on the right edge (Hud.layout), in the round-3 pack's look,
 ## shown only when ABILITIES are on. Daniele (0.18.7): "time to add armies presets and skills"; for all UI:
@@ -456,6 +456,10 @@ class TargetLayer:
 
 
 # ------------------------------------------------------------------ build
+func _init() -> void:
+	vertical = true                               # the column, exactly as the VBoxContainer it was (Hud._tall_b_layout makes it a row)
+
+
 func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, targets: Control = null) -> void:
 	main = m
 	sim = s

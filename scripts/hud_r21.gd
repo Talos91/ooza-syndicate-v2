@@ -220,19 +220,70 @@ static func band(hud) -> Dictionary:
 	var narrow := (px - 10.0 - cx) < 200.0
 	var sx := mid if narrow else cx
 	var sw := minf(640.0, px - 10.0 - sx)
-	return {"u": u, "W": W, "H": H, "L": L, "R": R, "by": by, "tank": tank, "px": px, "mid": mid, "narrow": narrow,
+	var d := {"u": u, "W": W, "H": H, "L": L, "R": R, "by": by, "tank": tank, "px": px, "mid": mid, "narrow": narrow,
 			"sx": sx, "sw": sw, "safe": Rect2(ins.x, ins.y, W - ins.x - ins.z, H - ins.y - ins.w)}
+	if hud.has_method("tall_b") and hud.tall_b() and hud.dock and hud.dock.is_visible_in_tree():
+		var tag := Rect2()
+		if hud.map_title and hud.map_title.is_visible_in_tree():
+			tag = hud.map_title.get_global_rect()
+			tag = Rect2(tag.position / u, tag.size / u)
+		_tall_b_band(d, hud.dock.get_global_rect(), tag)
+	return d
+
+
+static func _tall_b_band(d: Dictionary, row_px: Rect2, tag: Rect2) -> void:
+	## ui-tall-b (designer spec D): the plate row is centred on the safe bottom, so the band runs BESIDE it: the node card left of
+	## the row (at the tank's right + 10, as on a phone), the coach card / hint strip right of it (row right + 10 to the safe right).
+	## Where a side has no room (node card: 230 pt; coach / hint: under 200 pt) the piece goes one row up, above the plate row
+	## (the r20 narrow rule); a second piece that does not fit beside it there goes one more row up.
+	var u: float = d["u"]
+	var row := Rect2(row_px.position / u, row_px.size / u)
+	var R: float = d["R"]
+	var mid: float = d["mid"]
+	var by := row.end.y - 54.0                      # the band's 54 pt pieces bottom-aligned with the row
+	var up := row.position.y - 6.0 - 54.0           # one row up, above the plates
+	var tank: Rect2 = d["tank"]
+	var node_beside := row.position.x - 10.0 - mid >= NODE_W
+	if not node_beside and maxf(tank.end.y, tag.end.y) < by - 4.0 and row.position.x - 10.0 - float(d["L"]) >= NODE_W:
+		mid = d["L"]                                # the tank column ends above the band: the card starts at the safe left
+		node_beside = true
+	var node := Rect2(mid, by if node_beside else up, NODE_W, 54.0)
+	var coach := Rect2()
+	var right_room := R - (row.end.x + 10.0)
+	if right_room >= 200.0:
+		coach = Rect2(row.end.x + 10.0, by, minf(640.0, right_room), 54.0)
+	elif not node_beside and R - (node.end.x + 10.0) >= 200.0:
+		coach = Rect2(node.end.x + 10.0, up, minf(640.0, R - node.end.x - 10.0), 54.0)
+	elif node_beside:
+		coach = Rect2(mid, up, minf(640.0, R - mid), 54.0)
+	else:
+		coach = Rect2(mid, up - 58.0, minf(640.0, R - mid), 54.0)
+	var hint := Rect2(coach.position.x, coach.end.y - 28.0, coach.size.x, 28.0)
+	d["by"] = by
+	d["px"] = row.position.x
+	d["narrow"] = coach.position.y < by
+	d["sx"] = coach.position.x
+	d["sw"] = coach.size.x
+	d["node_r"] = node
+	d["coach_r"] = coach
+	d["hint_r"] = hint
+	d["row"] = row
 
 
 static func coach_rect(hud) -> Rect2:
 	## The coach card's body, layout pt.
 	var b := band(hud)
+	if b.has("coach_r"):                           # ui-tall-b: beside / above the centred plate row
+		return b["coach_r"]
 	return Rect2(Vector2(b["sx"], b["by"] - (58.0 if b["narrow"] else 0.0)), Vector2(b["sw"], 54.0))
 
 
 static func hint_rect(hud, coach_up: bool) -> Rect2:
 	## The hint strip's body, layout pt: the band's lower row (one row up when narrow), above the coach card while it shows.
 	var b := band(hud)
+	if b.has("hint_r"):                            # ui-tall-b: the coach card's lower row; above the coach card while it shows
+		var c: Rect2 = b["coach_r"]
+		return Rect2(Vector2(c.position.x, c.position.y - 32.0), Vector2(c.size.x, 28.0)) if coach_up else b["hint_r"]
 	var y: float = b["by"] + 26.0
 	if b["narrow"]:
 		y = b["by"] - 32.0
@@ -330,7 +381,7 @@ class Layer:
 		node_card.visible = nid >= 0 and is_instance_valid(hud.inspector)
 		if node_card.visible:
 			var n: Dictionary = hud.sim.nodes[nid]
-			node_card.place(Vector2(b["mid"], b["by"]) * u, u, NODE_W)
+			node_card.place((b["node_r"].position if b.has("node_r") else Vector2(b["mid"], b["by"])) * u, u, NODE_W)
 			var col: Color = hud.inspector_col
 			var owner := str(n["owner"])
 			var hidden_pop: bool = owner != "" and not hud.sim.allied(owner, hud.human)
@@ -351,7 +402,7 @@ class Layer:
 			_hint_text = dock.hint_label.text
 			var r := HudR21.hint_rect(hud, coach_up)
 			var need := HudR21.text_w(_hint_text.replace("  ·  tap the slot again to cancel", ""), _px()) / u + 31.0
-			if not b["narrow"] and not coach_up and need > r.size.x:   # too short for the line: one row up from the node card's x
+			if not b.has("hint_r") and not b["narrow"] and not coach_up and need > r.size.x:   # too short for the line: one row up from the node card's x
 				r = Rect2(Vector2(b["mid"], b["by"] - 32.0), Vector2(minf(640.0, b["px"] - 10.0 - b["mid"]), 28.0))
 			hint.place(r.position * u, u, r.size.x)
 			hint.tints = {"hint_strip_rim": HudNoir.accent}

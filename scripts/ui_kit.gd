@@ -456,7 +456,23 @@ static func hud_k(vp: Vector2) -> float:
 	## The HUD's screen factor on this viewport (see above).
 	if test_hud_k > 0.0:
 		return test_hud_k
+	if is_tall_b(vp):                                  # ui-tall-b (designer spec D): phone size on a tall screen (pt are physical)
+		return 1.0
 	return hud_k_for(vp.y * pt_per_px(vp))
+
+
+# ui-tall-b (designer CODE JOB SPEC D; Daniele 2026-11-10: "i agree with the hud for duo to put the stuff on the bottom and enlarge
+# map but i'll move the buttons to the center instead of side"): on a TALL screen (landscape W / H < 1.6: Duo inner / cover, Fold8
+# inner / cover, Fold8 Ultra, Fold7 inner) the map is limited by the WIDTH, so the HUD stays at phone size (k 1.0), the skill plates
+# move to one row centred on the safe bottom and the map is fitted to the freed rect (Hud.tall_b_fit). Phones (>= 1.6) and the
+# desktop are untouched. Behind --tall-b=on (default off) until Daniele's yes; then on becomes the rule and the flag goes.
+const TALL_ASPECT := 1.6
+static var tall_b_on := "--tall-b=on" in OS.get_cmdline_user_args()
+
+
+static func is_tall_b(vp: Vector2) -> bool:
+	## A landscape screen squarer than W / H 1.6 (only with --tall-b=on; the aspect is the same in px and pt).
+	return tall_b_on and vp.y > 0.0 and vp.x >= vp.y and vp.x / vp.y < TALL_ASPECT
 
 
 # ui-demo-hud-scale (2026-11-09, Daniele on demo8: "looks like it's warped to be small"): the GMN HUD's desktop size. On a desktop

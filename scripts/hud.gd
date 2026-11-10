@@ -542,6 +542,10 @@ func setup(m: Node3D) -> void:
 			main.monster_from = hub
 			note_monster_hint())
 	root.add_child(monster_icon)
+	if TallBMeasure.wanted() != "":                # ui-tall-b: debug-only HUD measure (--tall-b-measure=<json>)
+		var tm := TallBMeasure.new()
+		root.add_child(tm)
+		tm.setup(self)
 	if HudR19.on():                                   # ui-r19-import (2026-11-10): round 19 inside the locked round-18 shapes - the
 		r19_top = HudR19.TopLayer.new()               # old top bar / status line / banner keep their logic and texts, drawn by r19_top
 		root.add_child(r19_top)
@@ -607,11 +611,75 @@ func _r19_layout(vp: Vector2) -> void:
 				extra.position.x = cap.position.x - 8.0 * ui_scale - extra.size.x
 	var by := (H - ins.w - 54.0 - 4.0) if ins.w > 0.0 else (H - 54.0 - 12.0)
 	var py0 := maxf(48.0, (46.0 + by - 6.0 - (3.0 * 80.0 + 2.0 * 6.0)) / 2.0)
+	if tall_b():
+		_tall_b_layout(vp, u, ins, W, H, cap)
+		return
+	if not dock.vertical:                              # (back from a tall screen: the column again)
+		dock.vertical = true
+		dock.size = Vector2.ZERO
 	dock.size = dock.get_combined_minimum_size()
 	dock.position = Vector2(R - 96.0, py0) * u
 	dock._place_hint()
 	if dock.visible:
 		version_label.position.x = dock.position.x - 10.0 * ui_scale - version_label.size.x
+
+
+func tall_b() -> bool:
+	## ui-tall-b (designer spec D, --tall-b=on): a phone / foldable whose landscape screen is squarer than W / H 1.6 (UiKit.is_tall_b).
+	return mobile and r19_top != null and UiKit.is_tall_b(root.get_viewport_rect().size)
+
+
+func _tall_b_layout(vp: Vector2, u: float, ins: Vector4, W: float, H: float, cap: Rect2) -> void:
+	## ui-tall-b (designer spec D, layout pt): the three skill plates in ONE row (same order left -> right as the column's top ->
+	## bottom, ultimate last), gap 6, centred on the screen's x, the row's bottom on the safe bottom - 4; the SEND tank stays left at
+	## phone size, centred vertically between the capsule (+ 6) and the map tag under it; capsule, PAUSE / MUSIC / DBG stay at the
+	## top. The map is fitted into tall_b_fit() (main._fit_nodes).
+	dock.vertical = false
+	dock.size = Vector2.ZERO
+	dock.size = dock.get_combined_minimum_size()
+	dock.position = Vector2((vp.x - dock.size.x) / 2.0, (H - ins.w - 4.0) * u - dock.size.y)
+	dock._place_hint()
+	if dock.visible:
+		version_label.position.x = dock.position.x - 10.0 * ui_scale - version_label.size.x
+	# the tank + its map tag as one block, centred between the capsule (+ 6) and the plate row (- 6); the tag right under the
+	# tank's drip, so the band's left corner stays free for the node card
+	var room_top := cap.end.y + 6.0 * u
+	var room_bottom := dock.position.y - 6.0 * u
+	var tag_h := map_title.size.y + 4.0 * u
+	var a := Vector2.ZERO
+	var h := side_panel.size.y
+	if send_tank and send_tank.picture():               # the tank picture itself (its drip included), not the panel's box
+		var o := side_panel.position
+		a = send_tank.get_global_rect().position + send_tank.cv(Vector2(send_tank.PIC_X, send_tank.PIC_Y)) - o
+		var b: Vector2 = send_tank.get_global_rect().position + send_tank.cv(Vector2(send_tank.PIC_X + send_tank.PIC_W, send_tank.PIC_BOTTOM)) - o
+		h = b.y - a.y
+	var y0 := maxf(room_top, room_top + (room_bottom - room_top - h - tag_h) / 2.0)
+	side_panel.position.y = y0 - a.y
+	map_title.position.y = y0 + h + 4.0 * u
+
+
+func tall_b_fit() -> Rect2:
+	## ui-tall-b (designer spec D): the rect the camera fits the map into on a tall screen (viewport px): x from the tank's right
+	## + 8 pt to the safe right - 8 pt, y from under the capsule + 6 pt to the plate row's top - 6 pt. Rect2() elsewhere.
+	if not tall_b():
+		return Rect2()
+	var vp := root.get_viewport_rect().size
+	var u := HudR19.u_of(self)
+	var ins := UiKit.safe_insets(vp)
+	var left := ins.x + 8.0 * u
+	if side_panel and side_panel.visible:
+		left = side_panel.position.x + side_panel_width() + 8.0 * u
+		if send_tank and send_tank.picture():
+			left = send_tank.get_global_rect().position.x + send_tank.cv(Vector2(send_tank.PIC_X + send_tank.PIC_W, 0.0)).x + 8.0 * u
+	var top := r19_top.capsule_rect().end.y + 6.0 * u
+	for c in [pause_button, music_button, debug_button, chat_button]:   # (the top-right row: DBG is taller than the capsule)
+		if c and c.is_visible_in_tree():
+			top = maxf(top, c.get_global_rect().end.y + 6.0 * u)
+	var bottom := vp.y - ins.w - 8.0 * u
+	if dock and dock.visible:
+		bottom = dock.position.y - 6.0 * u
+	var right := vp.x - ins.z - 8.0 * u
+	return Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
 
 
 func _icon_button(b: Button, icon_name: String) -> void:
@@ -2219,12 +2287,17 @@ func _inspector_bounds() -> Rect2:
 	var l := margins.x + (side_panel.size.x + 16.0 * ui_scale if side_panel.visible else 0.0)
 	var t := top_used() + 8.0 * ui_scale
 	var r := vp.x - margins.z - 8.0 * ui_scale
-	if dock and dock.visible:                           # Alpha 24: the skill column on the right
+	var tb := tall_b_fit()
+	if tb.size.x > 0.0:                                # ui-tall-b: the plates are a row at the bottom (bo below); the wheel keeps
+		l = maxf(l, tb.position.x)                     # right of the tank picture
+	elif dock and dock.visible:                         # Alpha 24: the skill column on the right
 		r = minf(r, dock.position.x - 8.0 * ui_scale)
 	var bo := vp.y - bottom_used() - 8.0 * ui_scale
 	if r21:                                           # ui-r21-import: the bottom band holds the node card (and the coach / hint)
 		var band := HudR21.band(self)
 		bo = minf(bo, (float(band["by"]) - 4.0) * float(band["u"]))
+		if band.has("row"):                            # ui-tall-b: the wheel stays above the centred plate row
+			bo = minf(bo, ((band["row"] as Rect2).position.y - 4.0) * float(band["u"]))
 	return Rect2(l, t, maxf(r - l, 20.0), maxf(bo - t, 20.0))
 
 
