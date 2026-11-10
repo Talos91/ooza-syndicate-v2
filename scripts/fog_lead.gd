@@ -31,6 +31,7 @@ var _applied := -1.0
 const FOG_GRAY := Color(0.22, 0.23, 0.26)
 const FOG_SEAT_DIM := 0.6        # the seat colours are dimmed so a full-colour haze stays a haze
 var _fog_mats: Array = []
+var fog_force: Dictionary = {}   # playground / probes: {seat: share 0..1} replaces the real node counts (the rest is gray)
 var _fog_goal := Color.BLACK     # linear
 var _fog_cur := Color.BLACK
 var _fog_applied := Color(-1, -1, -1)
@@ -102,13 +103,18 @@ func _add_mat(m: Material, param: StringName, scale: float) -> void:
 func _measure_fog() -> void:
 	var total := 0
 	var counts := {}
-	for n in sim.nodes:
-		if str(n.get("junction", "")) != "":
-			continue
-		total += 1
-		var o: String = n["owner"]
-		if o != "":
-			counts[o] = int(counts.get(o, 0)) + 1
+	if not fog_force.is_empty():
+		total = 1000
+		for seat in fog_force:
+			counts[seat] = int(float(fog_force[seat]) * 1000.0)
+	else:
+		for n in sim.nodes:
+			if str(n.get("junction", "")) != "":
+				continue
+			total += 1
+			var o: String = n["owner"]
+			if o != "":
+				counts[o] = int(counts.get(o, 0)) + 1
 	if total == 0:
 		return
 	var owned := 0

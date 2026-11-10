@@ -610,40 +610,87 @@ func _plan_hub(plan: Dictionary, craters: Array) -> void:
 		stations.append([cen, d, (float(g.size()) * ORTHO_GAP + 1.2) * 0.5, base])
 
 
+const HUB_A := 2.0              # m: half length of a long face (4 lanes of HUB_GAP + margins)
+const HUB_B := 3.2              # m: half width of the block; the small diagonal corner faces span HUB_A .. HUB_B
+const HUB_H := 2.6              # m: block height (the tubes' level run is at RACK_Y)
+
+
+func _st_add(st: SurfaceTool, m: Mesh, xf: Transform3D, col: Color) -> void:
+	var arr := m.surface_get_arrays(0)
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var n: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	st.set_color(col)
+	for k in idx:
+		st.set_normal((xf.basis * n[k]).normalized())
+		st.add_vertex(xf * v[k])
+
+
 func _build_stations() -> void:
-	## one steel connector block per station (a stand-in for the column-base style block: tubes pass through its 4-lane faces;
-	## the Locals' doors are a later pass)
-	for st in stations:
-		var cen: Vector2 = st[0]
-		var d: Vector2 = st[1]
-		var hw: float = st[2]
+	## the connector block (Daniele 2026-11-11): an octagon - FOUR long faces, each a line of 4 tube couplings (HUB_LANES at
+	## ORTHO_GAP), and four small diagonal corner faces with ONE walk-in door each (the Slims pass through the hub)
+	for stn in stations:
+		var cen: Vector2 = stn[0]
+		var d: Vector2 = stn[1]
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var A := HUB_A
+		var B := HUB_B
+		var poly: Array = [Vector2(A, B), Vector2(-A, B), Vector2(-B, A), Vector2(-B, -A), Vector2(-A, -B), Vector2(A, -B), Vector2(B, -A), Vector2(B, A)]
+		st.set_color(STEEL_L)
+		for k in range(poly.size()):                      # the walls
+			var p0: Vector2 = poly[k]
+			var p1: Vector2 = poly[(k + 1) % poly.size()]
+			var nrm2 := (p1 - p0).orthogonal().normalized()
+			if nrm2.dot((p0 + p1) * 0.5) < 0.0:
+				nrm2 = -nrm2
+			var nn := Vector3(nrm2.x, 0.0, nrm2.y)
+			var q := [Vector3(p0.x, 0.0, p0.y), Vector3(p1.x, 0.0, p1.y), Vector3(p1.x, HUB_H, p1.y), Vector3(p0.x, HUB_H, p0.y)]
+			for ti in [[0, 1, 2], [0, 2, 3]]:
+				for vi in ti:
+					st.set_normal(nn)
+					st.add_vertex(q[vi])
+		for k in range(1, poly.size() - 1):               # the roof
+			for pt in [poly[0], poly[k], poly[k + 1]]:
+				st.set_normal(Vector3.UP)
+				st.add_vertex(Vector3(pt.x, HUB_H, pt.y))
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = SOCK_R
+		cyl.bottom_radius = SOCK_R
+		cyl.height = 0.3
+		cyl.radial_segments = 10
+		cyl.rings = 1
+		for fk in range(4):                               # the 4 long faces: normals +z, -x, -z, +x
+			var nrm := [Vector3(0, 0, 1), Vector3(-1, 0, 0), Vector3(0, 0, -1), Vector3(1, 0, 0)][fk] as Vector3
+			var tan3 := Vector3.UP.cross(nrm)
+			for lane in range(HUB_LANES):
+				var off := (float(lane) - float(HUB_LANES - 1) * 0.5) * ORTHO_GAP
+				var pos := nrm * (B + 0.05) + tan3 * off + Vector3(0, RACK_Y, 0)
+				var xf := Transform3D(Basis(Quaternion(Vector3.UP, nrm)), pos)
+				_st_add(st, cyl, xf, STEEL_D)
+		var door := BoxMesh.new()
+		door.size = Vector3(1.0, 1.5, 0.08)
+		var frame := BoxMesh.new()
+		frame.size = Vector3(1.4, 1.8, 0.12)
+		for ck in range(4):                               # the 4 small diagonal faces: one door each
+			var cn := Vector3(1, 0, 1).rotated(Vector3.UP, PI / 2.0 * ck).normalized()
+			var cpos := cn * ((A + B) * 0.5 * 1.4142 * 0.5 + 0.0)
+			var cc := Vector3(1, 0, 1).rotated(Vector3.UP, PI / 2.0 * ck) * ((A + B) * 0.5)
+			var yaw := atan2(cn.x, cn.z)
+			_st_add(st, frame, Transform3D(Basis(Vector3.UP, yaw), cc + cn * 0.05 + Vector3(0, 0.9, 0)), STEEL_D)
+			_st_add(st, door, Transform3D(Basis(Vector3.UP, yaw), cc + cn * 0.1 + Vector3(0, 0.75, 0)), RECESS)
 		var mi := MeshInstance3D.new()
-		var bx := BoxMesh.new()
-		bx.size = Vector3(hw * 2.0, 2.6, STATION_LEN)   # local z runs along the stripe
-		mi.mesh = bx
+		mi.mesh = st.commit()
 		var m := StandardMaterial3D.new()
-		m.albedo_color = STEEL_L
-		m.metallic = 0.6
-		m.roughness = 0.45
+		m.vertex_color_use_as_albedo = true
+		m.metallic = 0.5
+		m.roughness = 0.5
 		mi.material_override = m
-		mi.position = Vector3(cen.x, wl.floor_y + 1.3, cen.y)
+		mi.position = Vector3(cen.x, wl.floor_y, cen.y)
 		mi.rotation.y = atan2(d.x, d.y)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		_station_nodes.append(mi)
-		for sgn2 in [-1.0, 1.0]:                        # the 4-lane coupling plates on the two faces the stripe crosses
-			var pl := MeshInstance3D.new()
-			var pb := BoxMesh.new()
-			pb.size = Vector3(hw * 2.0 + 0.3, 2.9, 0.18)
-			pl.mesh = pb
-			var m2 := StandardMaterial3D.new()
-			m2.albedo_color = STEEL_D
-			pl.material_override = m2
-			pl.position = mi.position + Vector3(d.x, 0.0, d.y) * (STATION_LEN * 0.5 * sgn2)
-			pl.rotation.y = mi.rotation.y
-			pl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			add_child(pl)
-			_station_nodes.append(pl)
 
 
 func _mk(fx: bool, along: float, lat: float) -> Vector2:

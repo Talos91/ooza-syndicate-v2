@@ -13,6 +13,7 @@ var sky_mat: ShaderMaterial
 var wl: WorldLayer
 var amt := {"cloud": 0.9, "fog": 0.6, "ccloud": 0.9, "cfog": 0.6}
 var _panel: PanelContainer
+var _share := {"A": 0.0, "B": 0.0}
 
 
 func _ready() -> void:
@@ -65,13 +66,30 @@ func _build_panel() -> void:
 		s.value_changed.connect(func(x): amt[k[0]] = x; _apply())
 		h.add_child(s)
 		v.add_child(h)
+	var lbl := Label.new()
+	lbl.text = "FOG COLOUR TEST: share of the nodes held (the rest is gray)"
+	v.add_child(lbl)
+	for k in [["A", "A (cyan) share"], ["B", "B (red) share"]]:
+		var h2 := HBoxContainer.new()
+		var l2 := Label.new()
+		l2.text = k[1]
+		l2.custom_minimum_size.x = 110
+		h2.add_child(l2)
+		var s2 := HSlider.new()
+		s2.min_value = 0.0
+		s2.max_value = 1.0
+		s2.step = 0.01
+		s2.value = 0.0
+		s2.custom_minimum_size.x = 180
+		s2.value_changed.connect(func(x): _share[k[0]] = x; _fog_test())
+		h2.add_child(s2)
+		v.add_child(h2)
+	var br := Button.new()
+	br.text = "fog: follow the real nodes again"
+	br.pressed.connect(func(): inst.fog_lead.fog_force = {})
+	v.add_child(br)
 	var row := HBoxContainer.new()
 	v.add_child(row)
-	for c in [["fog: default", Color(0.168, 0.204, 0.263)], ["fog: cyan", Color(0.2, 0.5, 0.65)], ["fog: red", Color(0.6, 0.2, 0.22)], ["fog: green", Color(0.25, 0.55, 0.3)]]:
-		var b := Button.new()
-		b.text = c[0]
-		b.pressed.connect(func(): _fog_col(c[1]))
-		row.add_child(b)
 	var row2 := HBoxContainer.new()
 	v.add_child(row2)
 	var be := Button.new()
@@ -110,6 +128,11 @@ func _apply() -> void:
 	sky_mat.set_shader_parameter("fog_amt", amt["fog"])
 	wl.center_fog_mat.set_shader_parameter("cloud_amt", amt["ccloud"])
 	wl.center_fog_mat.set_shader_parameter("fog_amt", amt["cfog"])
+
+
+func _fog_test() -> void:
+	## forces the fog mix: A and B hold these shares of the nodes, the rest is gray (the fog eases to it like in a match)
+	inst.fog_lead.fog_force = {"A": _share["A"], "B": _share["B"]}
 
 
 func _fog_col(c: Color) -> void:
