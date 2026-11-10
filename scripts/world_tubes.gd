@@ -100,6 +100,14 @@ const HUB_LANES := 4
 const STATION_OFF := 2.2         # m from the pit's rim run to the station block
 const STATION_LEN := 3.0         # m: the block's length along the stripe
 var hub := false
+# OPTION 4 "DIAG HUB": per pit up to three collectors on the pit's approach faces - one on the diagonal toward the board
+# centre, two on the cardinal faces beside it - each a 4-lane connector block HUB_DIST out; the tubes of the columns
+# nearest that face converge on it, in the order of their lateral position, and leave as one straight stripe into the pit.
+const HUB_DIST := 12.5           # m from the pit's rim run to the stripe's entry point F
+const HUB_BOX := 8.0             # m from the pit's rim run to the collector block's centre
+var diag := false
+var ortho_dbg := [0, 0]
+var _hub2_plan := {}             # [col, slot k] -> [rim point, stripe direction (away from the pit), entry point F]
 var stations: Array = []         # probes: [centre (x z), axis, half width]
 var _station_nodes: Array = []
 var _hub_plan := {}              # [col, slot k] -> [face_fx (1 = x), sgn, lat]
@@ -129,6 +137,9 @@ func setup(w: WorldLayer) -> void:
 		if a.begins_with("--tubes="):
 			ortho = a.substr(8) in ["ortho", "hub"]
 			hub = a.substr(8) == "hub"
+			diag = a.substr(8) == "diag"
+			if diag:
+				ortho = true
 	var homes: Array = wl.sim.homes.values()
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
@@ -193,9 +204,12 @@ func build() -> void:
 		for key in got:
 			angle_of[key] = got[key]
 	_hub_plan.clear()
+	_hub2_plan.clear()
 	stations.clear()
 	if ortho and hub:
 		_plan_hub(plan, craters)
+	elif ortho and diag:
+		_plan_diag(plan, craters)
 	var order: Array = plan.keys()                    # the shortest tubes are laid first (the long ones bridge over them)
 	var tlen := func(key: Array) -> float:
 		var c: Vector3 = craters[int(plan[key][0])]
@@ -211,7 +225,13 @@ func build() -> void:
 		var ang: float = angle_of[key]
 		var pts := PackedVector3Array()
 		if ortho:
-			if _hub_plan.has(key):
+			if _hub2_plan.has(key):
+				pts = _path_hub2(i, s, craters[p], _hub2_plan[key])
+				if pts.is_empty():
+					_hub2_plan.erase(key)
+				else:
+					ortho_stats[3] += 1
+			if pts.is_empty() and _hub_plan.has(key):
 				var hp: Array = _hub_plan[key]
 				pts = _path_ortho(i, s, craters[p], p, int(hp[0]), float(hp[1]), float(hp[2]), STATION_OFF + STATION_LEN - ENTRY_RUN + 1.0)
 				if pts.is_empty():
@@ -222,7 +242,7 @@ func build() -> void:
 						_hub_plan.erase(key)
 			if pts.is_empty():
 				pts = _path_ortho(i, s, craters[p], p)
-			if not pts.is_empty() and _hub_plan.has(key):
+			if not pts.is_empty() and _hub_plan.has(key) and not _hub2_plan.has(key):
 				ortho_stats[3] += 1
 			ortho_stats[0 if not pts.is_empty() else 1] += 1
 			if pts.is_empty():
@@ -299,10 +319,11 @@ func _side_by_side(way: Array) -> Array:
 	return out
 
 
-func rebuild(on: bool, with_hub := false) -> void:
+func rebuild(on: bool, with_hub := false, with_diag := false) -> void:
 	## the switch (playground / probes): re-lay every tube with the ortho routing on or off (and the hub stations)
 	ortho = on
 	hub = on and with_hub
+	diag = on and with_diag
 	for n in _station_nodes:
 		(n as Node).queue_free()
 	_station_nodes.clear()
@@ -430,6 +451,115 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int, face_fx := -1, face_sgn 
 	return PackedVector3Array()
 
 
+func _plan_diag(plan: Dictionary, craters: Array) -> void:
+	var bc := wl.locals.board_bounds().get_center()
+	var R0 := WorldLocals.RING_R + 0.9
+	for p in range(craters.size()):
+		var c2 := Vector2(craters[p].x, craters[p].z)
+		var u0 := (bc - c2).normalized()
+		var ud := Vector2(signf(u0.x) if absf(u0.x) > 0.05 else 1.0, signf(u0.y) if absf(u0.y) > 0.05 else 1.0).normalized()
+		var dirs: Array = [ud.rotated(-PI / 4.0), ud, ud.rotated(PI / 4.0)]
+		var take: Array = [[], [], []]
+		var mine: Array = []
+		for key in plan.keys():
+			if int(plan[key][0]) == p:
+				mine.append(key)
+		mine.sort_custom(func(a, b): return _src(int(a[0])).distance_to(c2) < _src(int(b[0])).distance_to(c2))
+		for key in mine:
+			var sv := (_src(int(key[0])) - c2).normalized()
+			var order := [0, 1, 2]
+			order.sort_custom(func(a, b): return (dirs[a] as Vector2).dot(sv) > (dirs[b] as Vector2).dot(sv))
+			for oi in order:
+				if (take[oi] as Array).size() < HUB_LANES:
+					(take[oi] as Array).append(key)
+					break
+		for di in range(3):
+			var g: Array = take[di]
+			if g.is_empty():
+				continue
+			var u: Vector2 = dirs[di]
+			var v := u.orthogonal()
+			g.sort_custom(func(a, b): return (_src(int(a[0])) - c2).dot(v) < (_src(int(b[0])) - c2).dot(v))
+			var ok := false
+			var recs := []
+			for rot in [0.0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6, 0.75, -0.75, 0.9, -0.9]:   # turn the collector until its lanes clear the Locals' exits
+				u = (dirs[di] as Vector2).rotated(rot)
+				v = u.orthogonal()
+				ok = true
+				recs = []
+				for k in range(g.size()):
+					var lat := (float(k) - float(g.size() - 1) * 0.5) * ORTHO_GAP
+					var rim := c2 + u * R0 + v * lat
+					var bear := atan2(rim.y - c2.y, rim.x - c2.x)
+					for fb in _fixed[p]:
+						if absf(angle_difference(bear, float(fb))) < LANE_SEP * 0.6:
+							ok = false
+					recs.append([rim, u, c2 + u * (R0 + HUB_DIST) + v * lat])
+				if ok:
+					break
+			if not ok:
+				continue
+			for k in range(g.size()):
+				_hub2_plan[g[k]] = recs[k]
+			stations.append([c2 + u * (R0 + HUB_BOX), u, (float(g.size()) * ORTHO_GAP + 1.2) * 0.5, 0.0])
+
+
+func _src(i: int) -> Vector2:
+	return Vector2(wl._tubes[i]["x"], wl._tubes[i]["z"])
+
+
+func _path_hub2(i: int, s: int, pit: Vector3, hp: Array) -> PackedVector3Array:
+	## socket stub -> one cardinal leg on a grid lane -> a second leg to the collector's entry point F -> the straight stripe
+	## through the collector into the pit's rim (the stripe runs along the collector's direction, diagonal or cardinal)
+	var rim: Vector2 = hp[0]
+	var u: Vector2 = hp[1]
+	var F: Vector2 = hp[2]
+	var foot := _src(i)
+	var cd := corner_dir(s)
+	var c2 := Vector2(pit.x, pit.z)
+	var G := ORTHO_GAP
+	var L0 := APOTHEM + 0.05 + RAMP_RUN + 0.9
+	var p0 := foot + cd * (APOTHEM + 0.05)
+	for variant in [0, 1]:                          # 0: first leg along x (z fixed on a lane), 1: along z
+		var cdc: float = cd.y if variant == 0 else cd.x
+		if absf(cdc) < 0.01:
+			continue
+		var f0: float = foot.y if variant == 0 else foot.x
+		for dstub in [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 8, -8, 10, -10, 12, -12]:
+			var lane: float = (roundf((f0 + cdc * L0) / G) + dstub) * G
+			var L := (lane - f0) / cdc
+			if L < APOTHEM + 0.05 + RAMP_RUN + 0.2:
+				continue
+			var p1 := foot + cd * L
+			var corner := Vector2(F.x, lane) if variant == 0 else Vector2(lane, F.y)
+			if not (_ortho_clear(p1, corner, i, c2) and _ortho_clear(corner, F, i, c2)):
+				ortho_dbg[0] += 1
+				continue
+			var ax := "X" if variant == 0 else "Z"
+			var lo: float = minf(p1.x, corner.x) if variant == 0 else minf(p1.y, corner.y)
+			var hi: float = maxf(p1.x, corner.x) if variant == 0 else maxf(p1.y, corner.y)
+			if corner.distance_to(p1) > 0.05 and not _lane_free(ax, lane, lo, hi):
+				ortho_dbg[1] += 1
+				continue
+			if corner.distance_to(p1) > 0.05:
+				_lane_take(ax, lane, lo, hi)
+			var way: Array = [p0, p1]
+			if corner.distance_to(p1) > 0.05:
+				way.append(corner)
+			way.append(F)
+			way.append(rim)
+			way = _fillet(way, ORTHO_BEND)
+			var even: Array = [way[0]]
+			for k in range(1, way.size()):
+				var q0: Vector2 = way[k - 1]
+				var q1: Vector2 = way[k]
+				var m := maxi(ceili(q0.distance_to(q1) / 1.5), 1)
+				for j in range(1, m + 1):
+					even.append(q0.lerp(q1, float(j) / m))
+			return _shape(even, c2, u, true, u)
+	return PackedVector3Array()
+
+
 func _plan_hub(plan: Dictionary, craters: Array) -> void:
 	## option 3: group the tubes by the pit face they arrive on; each group (<= HUB_LANES) gets parallel lanes in the order
 	## of its columns' lateral positions (so the stripe never crosses itself) and one station block
@@ -489,8 +619,7 @@ func _build_stations() -> void:
 		var hw: float = st[2]
 		var mi := MeshInstance3D.new()
 		var bx := BoxMesh.new()
-		var along := absf(d.x) > 0.5
-		bx.size = Vector3(STATION_LEN if along else hw * 2.0, 2.6, hw * 2.0 if along else STATION_LEN)
+		bx.size = Vector3(hw * 2.0, 2.6, STATION_LEN)   # local z runs along the stripe
 		mi.mesh = bx
 		var m := StandardMaterial3D.new()
 		m.albedo_color = STEEL_L
@@ -498,18 +627,20 @@ func _build_stations() -> void:
 		m.roughness = 0.45
 		mi.material_override = m
 		mi.position = Vector3(cen.x, wl.floor_y + 1.3, cen.y)
+		mi.rotation.y = atan2(d.x, d.y)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 		_station_nodes.append(mi)
 		for sgn2 in [-1.0, 1.0]:                        # the 4-lane coupling plates on the two faces the stripe crosses
 			var pl := MeshInstance3D.new()
 			var pb := BoxMesh.new()
-			pb.size = Vector3(0.18 if along else hw * 2.0 + 0.3, 2.9, hw * 2.0 + 0.3 if along else 0.18)
+			pb.size = Vector3(hw * 2.0 + 0.3, 2.9, 0.18)
 			pl.mesh = pb
 			var m2 := StandardMaterial3D.new()
 			m2.albedo_color = STEEL_D
 			pl.material_override = m2
 			pl.position = mi.position + Vector3(d.x, 0.0, d.y) * (STATION_LEN * 0.5 * sgn2)
+			pl.rotation.y = mi.rotation.y
 			pl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(pl)
 			_station_nodes.append(pl)

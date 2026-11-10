@@ -183,6 +183,7 @@ func _process(_dt: float) -> void:
 	_load_lib()
 	_place_all()
 	_finish()
+	_fog_bounds()
 	log_lines.append("dressing built in %.1f ms: %d tris, %d draws, %s" % [(Time.get_ticks_usec() - t0) / 1000.0, tris, draws,
 			str(counts)])
 	log_lines.append("placed: " + " ".join(where))
@@ -883,3 +884,12 @@ func _centre_fog(tex: Texture2D, amt: Array, _lv: String) -> void:
 	mi.position = Vector3(0, wl.floor_y + WorldLayer.MIST_ABOVE + 1.0, 0)
 	wl.add_child(mi)
 	wl.center_fog_mat = m
+
+
+func _fog_bounds() -> void:
+	## the centre fog's domain = the board's footprint (+ a margin); beyond it the layers fade out, so the SIDES switcher alone rules the sides
+	if wl.center_fog_mat == null or wl.locals == null:
+		return
+	var bb: Rect2 = wl.locals.board_bounds().grow(8.0)
+	wl.center_fog_mat.set_shader_parameter("zone_c", bb.get_center())
+	wl.center_fog_mat.set_shader_parameter("zone_h", bb.size * 0.5)
