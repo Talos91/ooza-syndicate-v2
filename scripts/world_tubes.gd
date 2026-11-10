@@ -89,21 +89,21 @@ static var _base_mesh: ArrayMesh
 # overlap as possible so the background is more orderly"): a switch. Off = the v3 free routing. On = socket stub, then ONE
 # corner, every straight leg on a global lane grid (ORTHO_GAP) so neighbours run exactly side by side, and each tube enters its
 # pit along an axis. A tube the grid cannot place (an obstacle, a Locals' exit) falls back to the v3 route. Dev: --tubes=ortho.
+# CONNECTORS (Daniele 2026-11-11, "build the connector version"): ortho tubes all on ONE level; where an x run crosses a z run
+# they meet inside a small steel CONNECTOR block (the tubes enter its left / right faces and its up / down faces through
+# doors), so the overlap is hidden in a node, not bridged. Dev: --tubes=connectors. (--tubes=ortho = the two-level version.)
+const CONN_PAD := 0.8            # m the connector block extends past the crossing tubes
+const CONN_H := 1.5              # m: block height (centred on the tube level)
+var connectors := false
+var _from_ortho := false
+var conn_count := 0
+var _conn_nodes: Array = []
+var _ortho_runs: Array = []      # indices into _laid of the runs that came from the ortho routes
 const ORTHO_GAP := 1.1           # m between two parallel lanes (tube diameter 0.54)
 const ORTHO_LEVEL_STEP := 0.9     # m: ortho mode - legs along x run at the rack level, legs along z this much higher, so crossings never touch
 const ORTHO_BEND := 1.4          # m: corner radius in ortho mode
 const ORTHO_DEFAULT := false
 var ortho := ORTHO_DEFAULT
-# BUNDLE (Daniele 2026-11-11, "v3 remains the best", proper version): v3's free routes, but the tubes that reach one pit from
-# the same heading are grouped (<= BUNDLE_MAX, <= BUNDLE_ARC rad apart as seen from the pit) into a RIBBON: one straight,
-# shared run toward the pit with the tubes exactly BUNDLE_GAP apart, ordered by their columns' sideways position (no crossings
-# inside it), entering the pit side by side. Before the ribbon each tube takes its own free (v3) route to its lane's start.
-const BUNDLE_GAP := 1.1
-const BUNDLE_MAX := 4
-const BUNDLE_ARC := 0.6
-var bundle := false
-var bundle_stats := [0, 0]       # probes: ribbons / tubes in ribbons
-var _bundle_plan := {}           # [col, slot k] -> [rim point, away-from-pit direction, lane start S]
 var ortho_stats := [0, 0, 0]     # probes: tubes routed on the grid (1 corner) / fallen back to v3 / of those fallen back, routed with 2 corners
 var _lanes := {}                 # "X<idx>" / "Z<idx>" -> [[lo, hi], ...] the stretches already taken
 var _fixed: Array = []           # per pit: the bearings of the Locals' exits
@@ -128,8 +128,8 @@ func setup(w: WorldLayer) -> void:
 	wl = w
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--tubes="):
-			ortho = a.substr(8) == "ortho"
-			bundle = a.substr(8) == "bundle"
+			ortho = a.substr(8) in ["ortho", "connectors"]
+			connectors = a.substr(8) == "connectors"
 	var homes: Array = wl.sim.homes.values()
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
@@ -159,6 +159,7 @@ func build() -> void:
 	for k in range(craters.size()):
 		pit_cols.append(WorldLayer.NATIVE_GRAY)
 	_lanes.clear()
+	_ortho_runs.clear()
 	ortho_stats = [0, 0, 0]
 	var fixed: Array = []                             # the Locals' lane exits round each pit (kept clear)
 	for k in range(craters.size()):
@@ -193,10 +194,6 @@ func build() -> void:
 		var got := _entry_angles(into[p], fixed[p])
 		for key in got:
 			angle_of[key] = got[key]
-	_bundle_plan.clear()
-	bundle_stats = [0, 0]
-	if bundle and not ortho:
-		_plan_bundle(plan, craters)
 	var order: Array = plan.keys()                    # the shortest tubes are laid first (the long ones bridge over them)
 	var tlen := func(key: Array) -> float:
 		var c: Vector3 = craters[int(plan[key][0])]
@@ -211,17 +208,19 @@ func build() -> void:
 		var s := int(plan[key][1])
 		var ang: float = angle_of[key]
 		var pts := PackedVector3Array()
-		if _bundle_plan.has(key):
-			pts = _path_bundle(i, s, craters[p], p, _bundle_plan[key])
+		_from_ortho = false
 		if ortho:
 			pts = _path_ortho(i, s, craters[p], p)
 			ortho_stats[0 if not pts.is_empty() else 1] += 1
 			if pts.is_empty():
 				pts = _path_ortho3(i, s, craters[p], p)
 				ortho_stats[2] += 1 if not pts.is_empty() else 0
+		_from_ortho = not pts.is_empty()
 		if pts.is_empty():
 			pts = _path(i, s, craters[p], ang)
 		_laid.append(pts)
+		if _from_ortho:
+			_ortho_runs.append(_laid.size() - 1)
 		runs.append([i, s, p, ang, pts])
 		slot_of[key] = runs.size() - 1
 	for i in cols:                                    # slots in tube order (k-th tube = k-th nearest pit)
@@ -233,6 +232,8 @@ func build() -> void:
 	run_pts = runs.map(func(rn): return [rn[0], rn[1], rn[2], rn[4]])
 	_place_posts(runs, craters)
 	_build_mesh(runs, craters)
+	if connectors:
+		_build_connectors()
 	_state = Image.create(maxi(_slots, 1), 2, false, Image.FORMAT_RGBAF)   # row 0 colour + fill, row 1 build progress
 	for k in range(maxi(_slots, 1)):
 		_state.set_pixel(k, 0, Color(0, 0, 0, -1))   # hidden until step()
@@ -289,10 +290,13 @@ func _side_by_side(way: Array) -> Array:
 	return out
 
 
-func rebuild(on: bool, with_bundle := false) -> void:
+func rebuild(on: bool, with_connectors := false) -> void:
 	## the switch (playground / probes): re-lay every tube with the ortho routing on or off
 	ortho = on
-	bundle = with_bundle
+	connectors = on and with_connectors
+	for n in _conn_nodes:
+		(n as Node).queue_free()
+	_conn_nodes.clear()
 	if _mi != null:
 		_mi.queue_free()
 		_mi = null
@@ -501,104 +505,99 @@ func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 	return PackedVector3Array()
 
 
-func _src(i: int) -> Vector2:
-	return Vector2(wl._tubes[i]["x"], wl._tubes[i]["z"])
-
-
-func _plan_bundle(plan: Dictionary, craters: Array) -> void:
-	var R0 := WorldLocals.RING_R + 0.9
-	for p in range(craters.size()):
-		var c2 := Vector2(craters[p].x, craters[p].z)
-		var mine: Array = []
-		for key in plan.keys():
-			if int(plan[key][0]) == p:
-				mine.append(key)
-		if mine.is_empty():
-			continue
-		mine.sort_custom(func(a, b): return fposmod((_src(int(a[0])) - c2).angle(), TAU) < fposmod((_src(int(b[0])) - c2).angle(), TAU))
-		var m := mine.size()
-		var big := 0                                   # break the circle at its widest gap
-		var gap := -1.0
-		for k in range(m):
-			var a0 := fposmod((_src(int(mine[k][0])) - c2).angle(), TAU)
-			var a1 := fposmod((_src(int(mine[(k + 1) % m][0])) - c2).angle(), TAU)
-			var g := fposmod(a1 - a0, TAU) if m > 1 else TAU
-			if g > gap:
-				gap = g
-				big = (k + 1) % m
-		var order: Array = []
-		for k in range(m):
-			order.append(mine[(big + k) % m])
-		var clusters: Array = []
-		var cur: Array = []
-		var cur_a0 := 0.0
-		for key in order:
-			var ang := (_src(int(key[0])) - c2).angle()
-			if not cur.is_empty() and (cur.size() >= BUNDLE_MAX or absf(angle_difference(cur_a0, ang)) > BUNDLE_ARC):
-				clusters.append(cur)
-				cur = []
-			if cur.is_empty():
-				cur_a0 = ang
-			cur.append(key)
-		if not cur.is_empty():
-			clusters.append(cur)
-		for cl in clusters:
-			var dir_sum := Vector2.ZERO
-			var near := INF
-			for key in cl:
-				var d := _src(int(key[0])) - c2
-				dir_sum += d.normalized()
-				near = minf(near, d.length())
-			var away0 := dir_sum.normalized() if dir_sum.length() > 0.01 else Vector2(1, 0)
-			var lb := clampf(near - R0 - 4.0, 4.0, 40.0)
-			var away := away0
-			var v := away.orthogonal()
-			var ok := false
-			for rot in [0.0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6]:   # turn it until its lanes clear the Locals' exits
-				away = away0.rotated(rot)
-				v = away.orthogonal()
-				ok = true
-				for k in range(cl.size()):
-					var lat := (float(k) - float(cl.size() - 1) * 0.5) * BUNDLE_GAP
-					var rim := c2 + away * R0 + v * lat
-					var bear := atan2(rim.y - c2.y, rim.x - c2.x)
-					for fb in _fixed[p]:
-						if absf(angle_difference(bear, float(fb))) < LANE_SEP * 0.6:
-							ok = false
-				if ok:
-					break
-			if not ok:
+func _build_connectors() -> void:
+	## every crossing of two ortho runs (an x run over a z run, one level) gets a steel block that swallows the overlap; crossings
+	## closer than 2.6 m merge into one block (a stripe of lanes crossing a stripe is ONE connector with its doors)
+	conn_count = 0
+	var pts2: Array = []
+	for ri in _ortho_runs:
+		var a: Array = []
+		for q in (_laid[ri] as PackedVector3Array):
+			a.append(Vector2(q.x, q.z))
+		pts2.append(a)
+	var hits: Array = []
+	for i1 in range(pts2.size()):
+		var A: Array = pts2[i1]
+		var bbA := Rect2(A[0], Vector2.ZERO)
+		for q in A:
+			bbA = bbA.expand(q)
+		for i2 in range(i1 + 1, pts2.size()):
+			var B: Array = pts2[i2]
+			var bbB := Rect2(B[0], Vector2.ZERO)
+			for q in B:
+				bbB = bbB.expand(q)
+			if not bbA.grow(0.5).intersects(bbB):
 				continue
-			cl.sort_custom(func(a, b): return (_src(int(a[0])) - c2).dot(v) < (_src(int(b[0])) - c2).dot(v))
-			for k in range(cl.size()):
-				var lat := (float(k) - float(cl.size() - 1) * 0.5) * BUNDLE_GAP
-				_bundle_plan[cl[k]] = [c2 + away * R0 + v * lat, away, c2 + away * (R0 + lb) + v * lat]
-			bundle_stats[0] += 1
-			bundle_stats[1] += cl.size()
+			for k in range(1, A.size()):
+				var a0: Vector2 = A[k - 1]
+				var a1: Vector2 = A[k]
+				var ra := Rect2(a0, Vector2.ZERO).expand(a1).grow(0.3)
+				if not ra.intersects(bbB):
+					continue
+				for j in range(1, B.size()):
+					var b0: Vector2 = B[j - 1]
+					var b1: Vector2 = B[j]
+					if not ra.intersects(Rect2(b0, Vector2.ZERO).expand(b1)):
+						continue
+					if absf((a1 - a0).normalized().dot((b1 - b0).normalized())) > 0.6:
+						continue
+					var hit = Geometry2D.segment_intersects_segment(a0, a1, b0, b1)
+					if hit != null:
+						hits.append([hit, (laid_y(i1, k) + laid_y(i2, j)) * 0.5])
+	var group: Array = []                              # union by proximity
+	for h in hits:
+		var placed := -1
+		for gi in range(group.size()):
+			for m in group[gi]:
+				if (m[0] as Vector2).distance_to(h[0]) < 2.6:
+					placed = gi
+					break
+			if placed >= 0:
+				break
+		if placed >= 0:
+			group[placed].append(h)
+		else:
+			group.append([h])
+	for g in group:
+		var bb := Rect2(g[0][0], Vector2.ZERO)
+		var y := 0.0
+		for h in g:
+			bb = bb.expand(h[0])
+			y += float(h[1])
+		y /= float(g.size())
+		bb = bb.grow(CONN_PAD + PIPE_R)
+		var mi := MeshInstance3D.new()
+		var bx := BoxMesh.new()
+		bx.size = Vector3(bb.size.x, CONN_H, bb.size.y)
+		mi.mesh = bx
+		var m := StandardMaterial3D.new()
+		m.albedo_color = STEEL_L
+		m.metallic = 0.5
+		m.roughness = 0.5
+		mi.material_override = m
+		mi.position = Vector3(bb.get_center().x, wl.floor_y + y, bb.get_center().y)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		_conn_nodes.append(mi)
+		for fk in range(4):                                # a dark door recess on each face (the connector's left / right / up / down)
+			var dm := BoxMesh.new()
+			var sx := fk % 2 == 0
+			dm.size = Vector3(0.06 if sx else minf(bb.size.x - 0.4, 2.0), 0.7, minf(bb.size.y - 0.4, 2.0) if sx else 0.06)
+			var dmi := MeshInstance3D.new()
+			dmi.mesh = dm
+			var dmat := StandardMaterial3D.new()
+			dmat.albedo_color = RECESS
+			dmi.material_override = dmat
+			var sgn := 1.0 if fk < 2 else -1.0
+			dmi.position = Vector3(sgn * (bb.size.x * 0.5 + 0.02) if sx else 0.0, 0.0, 0.0 if sx else sgn * (bb.size.y * 0.5 + 0.02))
+			dmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.add_child(dmi)
+		conn_count += 1
 
 
-func _path_bundle(i: int, s: int, pit: Vector3, _pi: int, hp: Array) -> PackedVector3Array:
-	## socket -> its own free v3 route to its lane's start S -> the straight shared run (3 m lead-in so the corner at S is
-	## rounded before the run) -> the rim, entering the pit along the ribbon's direction
-	var rim: Vector2 = hp[0]
-	var away: Vector2 = hp[1]
-	var S: Vector2 = hp[2]
-	var tb: Dictionary = wl._tubes[i]
-	var foot := Vector2(tb["x"], tb["z"])
-	var cd := corner_dir(s)
-	var c2 := Vector2(pit.x, pit.z)
-	var p0 := foot + cd * (APOTHEM + 0.05)
-	var p1 := foot + cd * (APOTHEM + 0.05 + RAMP_RUN + 0.9)
-	var mid: Array = _steer(p1, S, i, int(tb["id"]), pit, 0)
-	var way: Array = _fillet([p0, p1] + mid + [S, S - away * 3.0, rim], RIB_BEND)
-	var even: Array = [way[0]]
-	for k in range(1, way.size()):
-		var q0: Vector2 = way[k - 1]
-		var q1: Vector2 = way[k]
-		var m := maxi(ceili(q0.distance_to(q1) / 1.5), 1)
-		for j in range(1, m + 1):
-			even.append(q0.lerp(q1, float(j) / m))
-	return _shape(even, c2, away, true, away)
+func laid_y(ri: int, k: int) -> float:
+	var q: PackedVector3Array = _laid[_ortho_runs[ri]]
+	return q[mini(k, q.size() - 1)].y - wl.floor_y
 
 
 func _approach(i: int, s: int, pit: Vector3) -> float:
@@ -764,7 +763,7 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 	if levels:
 		for k in range(flat.size()):
 			var tg: Vector2 = (flat[mini(k + 1, flat.size() - 1)] as Vector2) - (flat[maxi(k - 1, 0)] as Vector2)
-			lvl.append(RACK_Y if absf(tg.x) >= absf(tg.y) else RACK_Y + ORTHO_LEVEL_STEP)
+			lvl.append(RACK_Y if (connectors or absf(tg.x) >= absf(tg.y)) else RACK_Y + ORTHO_LEVEL_STEP)
 		var sm := lvl.duplicate()
 		for k in range(flat.size()):
 			var acc := 0.0
