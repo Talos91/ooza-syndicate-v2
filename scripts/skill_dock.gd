@@ -57,6 +57,8 @@ var _prev: Array = []                         # per slot: [cooldown, charge, ove
 var _last_pulse := [-9.0, -9.0, -9.0]
 var _floor_px := 0.0                          # phones: the smallest font the slot words may use (HUD_DOCK_MIN_PT), 0 = none
 var vessel := false                           # Neon Noir revision 6: hex vessels filling with lit ooze (HudLiquid) instead of round buttons
+var r19 := false                              # ui-r19-import: the round-19 plates (HudR19, 96 x 80 pt, window d 40 at (48, 31))
+var r19_u := 1.0                              # ... screen px per layout pt (HudR19.u_of)
 var plate := false                            # GMN-1 (mockup 3, Daniele's sketch): a METAL plate, a round glass window at its socket
                                               # filling with goo, the neon ring lighting with it, the name under it
 var vessel_cy := 0.0                          # ... the vessel's centre below the slot's top (the skill card's socket, px)
@@ -85,6 +87,7 @@ class Slot:
 	var warn := 0.0                            # a refused tap: 1 -> 0
 	var _key := ""
 	var _ci: CanvasItem = null                 # ui-node: the face the words draw on (null: the slot itself)
+	var piece: HudR19.Piece                    # ui-r19-import: the plate (fill, goo backlight, rim tube; window ring drawn by the face)
 	var vessel: HudLiquid                      # Neon Noir: the hex vessel (the liquid = the charge) and, over it, the face:
 	var face: Control                          # icon, seconds, flashes
 
@@ -121,6 +124,12 @@ class Slot:
 		if vessel != null:
 			var st0 := "disabled" if disabled else ("armed" if armed else ("ready" if is_ready or fires > 0 else "cooling"))
 			_vessel_state(st0, 1.0 if is_ready or fires > 0 or armed else (frac if ult else 1.0 - frac), col)
+			if piece != null:                          # ui-r19-import: the round-19 plate is the piece child (dim when off)
+				var dm := 0.35 if disabled else 1.0
+				if piece.dim != dm:
+					piece.dim = dm
+					piece.redraw()
+				return
 			if dock.plate:
 				# GMN-1: the plate drawn WHOLE at the slot's size (its window, socket and name strip stay where the
 				# director put them - a 9-slice moved the strip away from the name, Daniele: "text is not aligned")
@@ -202,12 +211,22 @@ class Slot:
 		var least := -1
 		if dock.plate:                                   # GMN-2: ONE line inside the plate's dark label box [130, 416, 331, 96] of 591 x 616 (desktop too: ui-neon-apply)
 			room = w * 331.0 / 495.0 - 4.0 * dock._floor_px / 13.0     # (the box's width at the slot's size, 2 pt in each side)
+			if dock.r19:                                 # ui-r19-import: the round-18 name strip's clear text rect (70.7 pt)
+				room = HudR19.PLATE_NAME_W * dock.r19_u
 			lines = [SkillDock.plate_name(str(lines[0]) if lines.size() == 1 else "%s %s" % [lines[0], lines[1]])]
 			least = int(floor(dock._floor_px * 10.0 / 13.0))   # Daniele 2026-11-05 "shrink + short names": down to 10 pt in the box
 			nf = dock.font_px(16)
 			while nf > least and UI_FONT.get_string_size(str(lines[0]), HORIZONTAL_ALIGNMENT_LEFT, -1, nf).x > room:
 				nf -= 1
 			y = size.y * 0.80 + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
+			if dock.r19:
+				y = HudR19.PLATE_NAME.y * dock.r19_u + (UI_FONT.get_ascent(nf) - UI_FONT.get_descent(nf)) / 2.0
+		if dock.r19:                                     # ui-r19-import: 12.5 pt in the name strip, down to 10 pt (as the GMN plate)
+			var ru: float = dock.r19_u
+			HudR19.text(_ci if _ci != null else self, str(lines[0]), Vector2(w / 2.0, HudR19.PLATE_NAME.y * ru), room, 12.5 * ru,
+					HudNoir.INK if is_ready or armed else HudNoir.MUTED, 10.0 * ru)
+			lines = []
+			y = (HudR19.PLATE_NAME.y + 6.0) * ru
 		for ln in lines:
 			_line(str(ln), Vector2(w / 2.0, y), 16, HudNoir.INK if is_ready or armed else HudNoir.MUTED, room, UI_FONT, least)
 			y += UI_FONT.get_height(nf) * 0.88
@@ -322,6 +341,10 @@ class Slot:
 	func _plate_ring(ci: Control, full: bool, disabled: bool, flare: float) -> void:
 		## ui-neon-apply: the 10-NEON-RESTYLE window ring, on the plate's own canvas (591 x 616, body 48, 48, 495 x 520): bright
 		## and breathing while charged, steady while it charges, faint when off; a cast flares it.
+		if piece != null:                              # ui-r19-import: the round-19 window halo + tube (slot colour), over the goo
+			var br := (0.25 + 0.2 * sin(dock._t * 4.0 + float(index))) if full and not disabled else 0.0
+			piece.draw_window(ci, maxf(flare, br))
+			return
 		var t := HudNoir.texture(PLATE_NEON[index])
 		if t == null:
 			return
@@ -479,6 +502,19 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		vessel_cy = float(HudNoir.part_data("skill_card").get("socket", [0, 200])[1]) * pk
 		top = vessel_cy - round_d / 2.0
 		plate_h = float(cb[3]) * pk
+	r19 = plate and HudR19.on()
+	if r19:                                       # ui-r19-import: the locked round-18 plate - 96 x 80 pt, gap 6, window d 40 at (48, 31)
+		var rtree := Engine.get_main_loop() as SceneTree
+		var rvp := rtree.root.get_visible_rect().size if rtree != null and rtree.root != null else Vector2(1280, 720)
+		r19_u = UiKit.hud_px_per_pt(rvp, mobile) * (1.0 if mobile else 1.2)
+		slot_w = HudR19.BODY["skill_plate"].x * r19_u / ui_scale
+		plate_h = HudR19.BODY["skill_plate"].y * r19_u
+		round_d = HudR19.PLATE_WINDOW_D * r19_u
+		vessel_cy = HudR19.PLATE_WINDOW.y * r19_u
+		top = vessel_cy - round_d / 2.0
+		if mobile:
+			_floor_px = 12.5 * r19_u
+		add_theme_constant_override("separation", int(round(6.0 * r19_u)))
 	for i in range(3):
 		# Neon Noir: no slot label; the name takes a second line only where one line would cut it (EMERGENCY / EVAC)
 		var lines := name_lines(sim.skill_id(human, SLOTS[i]), slot_w * ui_scale - 2.0 * pad).size()
@@ -489,6 +525,14 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		b.custom_minimum_size = Vector2(slot_w * ui_scale, plate_h if plate else slot_h).round()
 		b.pressed.connect(press_slot.bind(i))
+		if r19:
+			b.piece = HudR19.Piece.new()
+			b.piece.set_base(["skill_plate_active", "skill_plate_map", "skill_plate_ultimate"][i])
+			b.piece.tint = HudNoir.accent
+			b.piece.neon_tint = SLOT_ACCENT[i]
+			b.piece.window = false
+			b.piece.place(Vector2.ZERO, r19_u, HudR19.BODY["skill_plate"])
+			b.add_child(b.piece)
 		if plate:
 			b.vessel = HudLiquid.new()
 			b.vessel.setup("skill_vessel", SLOT_ACCENT[i], float(i) * 1.7)
