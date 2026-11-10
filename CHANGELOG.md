@@ -2,6 +2,9 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo14** - 2026-11-10 (demo-world, staging/demo/): ai-launcher-laser 508b713 + maps-pinwheel-r07 75572b3 on demo13. ui-r19-import 12efabd NOT included (Hub item ui-r19-ship unanswered).
+  - AI upgrades launchers like any structure; Fog / Portal / Evac casts are back on the laser-relay R-01 (seed note: SeatAI.rng is seeded from seat + level, not the match seed).
+  - Pinwheel (R-15 / R-16, 66 m): N / S bridged to the ferry piers like R-05; rulebook R07 dropped from R-01 / R-02 / R-09 / R-11 / R-12 / R-13 / R-15 / R-16 waivers (ruleWaivers only).
 - **0.23.27-demo13** - 2026-11-10 (demo-world, staging/demo/): demo-rules-pass-2 8ce50d4 + world-v3 1ebca8a. World v3: pit-to-node pipes back, no collector bar, 2 m rack, one pit per tube, GooGat tubes, one colour per player (seats).  demo-rules-pass-2:
   - CONVEYOR CARRY (Daniele 2026-11-10, rule change): a line a belt pushes keeps the belt's speed after it leaves it - x2.25 with the flow,
     x0.3 against - until it reaches its target, any of it falls, or a belt the other way replaces the push. The line wears a speed trail
