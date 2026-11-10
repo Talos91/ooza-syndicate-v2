@@ -2,6 +2,9 @@
 
 ## Demo line (staging/demo only, never main)
 
+- **0.23.27-demo15** - 2026-11-10 (demo-world, staging/demo/): ui-hud-demo15 64ee55a = ui-r19-import b157b48 (round-19 HUD style) on demo14 fb4d38f (Hub ui-r19-ship-2 = a).
+  - Round-19 HUD style (hud.gd, hud_r19.gd, skill_dock.gd, neon_ramp shader, assets/ui/r19); shadow is neon-only (the dark side shadow is removed).
+  - Known: desktop version-tag x hint-strip overlap is pre-existing, wider on r19 (open UI item).
 - **0.23.27-demo14** - 2026-11-10 (demo-world, staging/demo/): ai-launcher-laser 508b713 + maps-pinwheel-r07 75572b3 on demo13. ui-r19-import 12efabd NOT included (Hub item ui-r19-ship unanswered).
   - AI upgrades launchers like any structure; Fog / Portal / Evac casts are back on the laser-relay R-01 (seed note: SeatAI.rng is seeded from seat + level, not the match seed).
   - Pinwheel (R-15 / R-16, 66 m): N / S bridged to the ferry piers like R-05; rulebook R07 dropped from R-01 / R-02 / R-09 / R-11 / R-12 / R-13 / R-15 / R-16 waivers (ruleWaivers only).
