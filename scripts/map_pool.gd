@@ -57,7 +57,7 @@ static func all() -> Array:
 # MAPS 5.0 (Daniele 2026-09-29: "replace current pool with the new ones"): the player's pool is the map builder's
 # N- maps only. Every older map stays baked in maps4/ - the campaign's placeholder missions and the tutorial load
 # theirs by path, and test_maps4 still checks them all - but none is offered on 02 BATTLEFIELD or as a random rematch.
-const POOL_GROUPS: Array[String] = ["N", "P"]   # proto line only: the Relays 3.0 test maps are offered in 02 BATTLEFIELD
+const POOL_GROUPS: Array[String] = ["N", "P", "R", "E"]   # 2026-11-10: + R (round R, MapPool.PROTO) and E (kept experimental maps); old N / A / B / C / M / S maps are ARCHIVED   # proto line only: the Relays 3.0 test maps are offered in 02 BATTLEFIELD
 
 
 static func battlefield() -> Array:
@@ -68,7 +68,7 @@ static func battlefield() -> Array:
 	## Daniele's "replace current pool with the new ones"; OPEN-QUESTIONS). Cached: the map files don't change at run time.
 	if not _battlefield_cache.is_empty():
 		return _battlefield_cache
-	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY)
+	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p))
 	if Rules.demo:                                    # DEMO BUILD: R-01 STRAIT only
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in DEMO)
 		return _battlefield_cache
@@ -96,6 +96,35 @@ static func battlefield() -> Array:
 	return _battlefield_cache
 
 
+# MAP KEEP LIST (Daniele 2026-11-10): the old maps he keeps playable. Every other old map is ARCHIVED = withheld from play (never in
+# battlefield() / mode_offered), its file stays baked in maps4/ and in all() - nothing is deleted; campaign placeholders and the
+# tutorial still load theirs by path. Per-map suites (test_maps4, test_map_pool, phone_fit) check TEST_SCOPE = PROTO + KEEP_OLD.
+const KEEP_OLD: Array[String] = ["E-01", "E-02", "E-03", "E-04", "E-05", "E-06", "E-07", "E-08", "E-09", "E-10",
+		"N-02", "N-03", "N-05", "N-16", "N-17", "N-20", "N-22"]
+const ARCHIVED: Array[String] = [
+	"A-01", "A-02", "A-03", "A-04", "B-01", "B-02", "B-03", "B-04", "B-05", "C-01", "C-02", "C-03", "C-04",
+	"C-05", "M-01", "M-02", "M-03", "M-04", "M-05", "M-06", "M-07", "M-08", "M-09", "M-10", "M-11", "M-12",
+	"M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19", "M-20", "M-21", "M-22", "M-23", "M-24", "M-25",
+	"M-26", "M-27", "M-28", "M-29", "M-30", "M-31", "M-32", "M-33", "M-34", "M-35", "M-36", "M-37", "M-38",
+	"M-39", "M-40", "M-51", "M-52", "M-53", "M-54", "M-55", "M-56", "M-57", "M-58", "M-59", "M-60", "N-01",
+	"N-04", "N-06", "N-07", "N-08", "N-09", "N-10", "N-11", "N-12", "N-13", "N-14", "N-15", "N-18", "N-19",
+	"N-21", "N-23", "N-24", "N-25", "N-26", "N-27", "N-28", "N-29", "N-30", "R-03", "R-04", "S-01", "S-02",
+	"S-03", "S-04", "S-05"
+]   # A, B, C, M, S packs + N maps not on the keep list + R-03 (merged into R-01) / R-04 (removed); regenerate = baked A/B/C/M/S/N/R codes minus KEEP_OLD minus PROTO
+
+
+static func test_scope() -> Array[String]:
+	## The maps the per-map suites verify: the round-R / proto set plus the kept old maps (Daniele 2026-11-10).
+	var out: Array[String] = []
+	out.append_array(PROTO)
+	out.append_array(KEEP_OLD)
+	return out
+
+
+static func archived(code_or_path: String) -> bool:
+	return code_or_path.get_file().substr(0, 4) in ARCHIVED
+
+
 # PROTO PICKER (Daniele 2026-11-03: "in the proto build the map picker must list ONLY the prototype maps"): a proto build
 # (Rules.proto_debug) offers just these - the Relays 3.0 test maps - and no older map fills a mode they lack (they are 1v1 only,
 # so the picker shows only the 1v1 chip). The release line never reaches this: its VERSION has no "-proto".
@@ -114,7 +143,7 @@ static func _offered_modes(path: String) -> Array:
 static func mode_offered(code_or_path: String, mode: String) -> bool:
 	## 0.23.0: may this map be played in `mode`? A pooled (new) map: every mode it seats. A kept older map: only the modes the
 	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps). Never a WITHHELD_MODES mode.
-	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []):
+	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path):
 		return false
 	if POOL_GROUPS.is_empty():
 		return true
