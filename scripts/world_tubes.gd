@@ -93,7 +93,17 @@ const ORTHO_GAP := 1.1           # m between two parallel lanes (tube diameter 0
 const ORTHO_BEND := 1.4          # m: corner radius in ortho mode
 const ORTHO_DEFAULT := false
 var ortho := ORTHO_DEFAULT
-var ortho_stats := [0, 0, 0]     # probes: tubes routed on the grid (1 corner) / fallen back to v3 / of those fallen back, routed with 2 corners
+# OPTION 3 "HUB" (Daniele 2026-11-11): on top of ortho, every pit gets a STATION per face its tubes arrive on - a connector block
+# with a stripe of up to HUB_LANES parallel tubes (HUB_GAP apart, in the order of their columns, so they never cross) running
+# straight through it into the pit. Before the station each tube comes in on the grid with 1-2 corners. Dev: --tubes=hub.
+const HUB_LANES := 4
+const STATION_OFF := 2.2         # m from the pit's rim run to the station block
+const STATION_LEN := 3.0         # m: the block's length along the stripe
+var hub := false
+var stations: Array = []         # probes: [centre (x z), axis, half width]
+var _station_nodes: Array = []
+var _hub_plan := {}              # [col, slot k] -> [face_fx (1 = x), sgn, lat]
+var ortho_stats := [0, 0, 0, 0]     # probes: tubes routed on the grid (1 corner) / fallen back to v3 / of those fallen back, routed with 2 corners
 var _lanes := {}                 # "X<idx>" / "Z<idx>" -> [[lo, hi], ...] the stretches already taken
 var _fixed: Array = []           # per pit: the bearings of the Locals' exits
 
@@ -117,7 +127,8 @@ func setup(w: WorldLayer) -> void:
 	wl = w
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--tubes="):
-			ortho = a.substr(8) == "ortho"
+			ortho = a.substr(8) in ["ortho", "hub"]
+			hub = a.substr(8) == "hub"
 	var homes: Array = wl.sim.homes.values()
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
@@ -147,7 +158,7 @@ func build() -> void:
 	for k in range(craters.size()):
 		pit_cols.append(WorldLayer.NATIVE_GRAY)
 	_lanes.clear()
-	ortho_stats = [0, 0, 0]
+	ortho_stats = [0, 0, 0, 0]
 	var fixed: Array = []                             # the Locals' lane exits round each pit (kept clear)
 	for k in range(craters.size()):
 		fixed.append([])
@@ -181,6 +192,10 @@ func build() -> void:
 		var got := _entry_angles(into[p], fixed[p])
 		for key in got:
 			angle_of[key] = got[key]
+	_hub_plan.clear()
+	stations.clear()
+	if ortho and hub:
+		_plan_hub(plan, craters)
 	var order: Array = plan.keys()                    # the shortest tubes are laid first (the long ones bridge over them)
 	var tlen := func(key: Array) -> float:
 		var c: Vector3 = craters[int(plan[key][0])]
@@ -196,7 +211,19 @@ func build() -> void:
 		var ang: float = angle_of[key]
 		var pts := PackedVector3Array()
 		if ortho:
-			pts = _path_ortho(i, s, craters[p], p)
+			if _hub_plan.has(key):
+				var hp: Array = _hub_plan[key]
+				pts = _path_ortho(i, s, craters[p], p, int(hp[0]), float(hp[1]), float(hp[2]), STATION_OFF + STATION_LEN - ENTRY_RUN + 1.0)
+				if pts.is_empty():
+					pts = _path_ortho3(i, s, craters[p], p, int(hp[0]), float(hp[1]), float(hp[2]), STATION_OFF + STATION_LEN - ENTRY_RUN + 1.0)
+					if not pts.is_empty():
+						ortho_stats[2] += 1
+					else:
+						_hub_plan.erase(key)
+			if pts.is_empty():
+				pts = _path_ortho(i, s, craters[p], p)
+			if not pts.is_empty() and _hub_plan.has(key):
+				ortho_stats[3] += 1
 			ortho_stats[0 if not pts.is_empty() else 1] += 1
 			if pts.is_empty():
 				pts = _path_ortho3(i, s, craters[p], p)
@@ -215,6 +242,7 @@ func build() -> void:
 	run_pts = runs.map(func(rn): return [rn[0], rn[1], rn[2], rn[4]])
 	_place_posts(runs, craters)
 	_build_mesh(runs, craters)
+	_build_stations()
 	_state = Image.create(maxi(_slots, 1), 2, false, Image.FORMAT_RGBAF)   # row 0 colour + fill, row 1 build progress
 	for k in range(maxi(_slots, 1)):
 		_state.set_pixel(k, 0, Color(0, 0, 0, -1))   # hidden until step()
@@ -271,9 +299,13 @@ func _side_by_side(way: Array) -> Array:
 	return out
 
 
-func rebuild(on: bool) -> void:
-	## the switch (playground / probes): re-lay every tube with the ortho routing on or off
+func rebuild(on: bool, with_hub := false) -> void:
+	## the switch (playground / probes): re-lay every tube with the ortho routing on or off (and the hub stations)
 	ortho = on
+	hub = on and with_hub
+	for n in _station_nodes:
+		(n as Node).queue_free()
+	_station_nodes.clear()
 	if _mi != null:
 		_mi.queue_free()
 		_mi = null
@@ -316,7 +348,7 @@ func _ortho_clear(a: Vector2, b: Vector2, i: int, pit_c: Vector2) -> bool:
 	return true
 
 
-func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
+func _path_ortho(i: int, s: int, pit: Vector3, pi: int, face_fx := -1, face_sgn := 0.0, forced_lat := 0.0, extra_run := 0.0) -> PackedVector3Array:
 	## socket stub (diagonal, climbing) -> one leg along an axis on a grid lane -> ONE corner -> the final leg along the other
 	## axis on a grid lane into the pit. Empty = no grid route (the caller uses the v3 path).
 	var tb: Dictionary = wl._tubes[i]
@@ -331,7 +363,9 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 	var axes: Array = ["X", "Z"] if absf(d0.x) >= absf(d0.y) else ["Z", "X"]   # the final leg's axis: the longer one first
 	for fa in axes:
 		var fx: bool = fa == "X"                         # the final leg runs along x (so the first leg runs along z)
-		var sgn := signf(d0.x if fx else d0.y)
+		if face_fx >= 0 and fx != (face_fx == 1):
+			continue
+		var sgn := signf(d0.x if fx else d0.y) if face_fx < 0 else face_sgn
 		if sgn == 0.0:
 			continue
 		var cdc: float = cd.x if fx else cd.y
@@ -344,14 +378,14 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 			if L < APOTHEM + 0.05 + RAMP_RUN + 0.2:
 				continue
 			var p1 := foot + cd * L
-			for o in [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G]:
+			for o in ([0.0] if face_fx >= 0 else [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G]):
 				var latc: float = c2.y if fx else c2.x
-				var lat: float = roundf((latc + o) / G) * G
-				if absf(lat - latc) > 3.3:
+				var lat: float = forced_lat if face_fx >= 0 else roundf((latc + o) / G) * G
+				if face_fx < 0 and absf(lat - latc) > 3.3:
 					continue
 				var corner := Vector2(lane, lat) if fx else Vector2(lat, lane)
 				var rim := Vector2(c2.x + sgn * R0, lat) if fx else Vector2(lat, c2.y + sgn * R0)
-				var a := Vector2(c2.x + sgn * (R0 + ENTRY_RUN), lat) if fx else Vector2(lat, c2.y + sgn * (R0 + ENTRY_RUN))
+				var a := Vector2(c2.x + sgn * (R0 + ENTRY_RUN + extra_run), lat) if fx else Vector2(lat, c2.y + sgn * (R0 + ENTRY_RUN + extra_run))
 				var along_c: float = corner.x if fx else corner.y
 				var along_a: float = a.x if fx else a.y
 				if (along_c - along_a) * sgn < 0.5:     # the corner must lie outside the approach run
@@ -396,11 +430,96 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 	return PackedVector3Array()
 
 
+func _plan_hub(plan: Dictionary, craters: Array) -> void:
+	## option 3: group the tubes by the pit face they arrive on; each group (<= HUB_LANES) gets parallel lanes in the order
+	## of its columns' lateral positions (so the stripe never crosses itself) and one station block
+	var groups := {}                                   # [pit, fx, sgn] -> [[key, source lateral coordinate], ...]
+	for key in plan.keys():
+		var i := int(key[0])
+		var p := int(plan[key][0])
+		var s := int(plan[key][1])
+		var tb: Dictionary = wl._tubes[i]
+		var foot := Vector2(tb["x"], tb["z"])
+		var c2 := Vector2(craters[p].x, craters[p].z)
+		var d0 := (foot + corner_dir(s) * (APOTHEM + 0.05 + RAMP_RUN + 0.9)) - c2
+		var fx := absf(d0.x) >= absf(d0.y)
+		var sgn := signf(d0.x if fx else d0.y)
+		if sgn == 0.0:
+			continue
+		var gk := [p, 1 if fx else 0, sgn]
+		if not groups.has(gk):
+			groups[gk] = []
+		groups[gk].append([key, foot.y if fx else foot.x])
+	for gk in groups:
+		var g: Array = groups[gk]
+		g.sort_custom(func(a, b): return float(a[1]) < float(b[1]))
+		if g.size() > HUB_LANES:
+			g = g.slice(0, HUB_LANES)                  # the rest stay on the plain grid routing
+		var p := int(gk[0])
+		var fx := int(gk[1]) == 1
+		var sgn := float(gk[2])
+		var c2 := Vector2(craters[p].x, craters[p].z)
+		var latc: float = c2.y if fx else c2.x
+		var base: float = roundf(latc / ORTHO_GAP) * ORTHO_GAP
+		var ok := true
+		var lats := []
+		for k in range(g.size()):
+			var lat: float = base + (float(k) - float(g.size() - 1) * 0.5) * ORTHO_GAP
+			lats.append(lat)
+			var rim := Vector2(c2.x + sgn * (WorldLocals.RING_R + 0.9), lat) if fx else Vector2(lat, c2.y + sgn * (WorldLocals.RING_R + 0.9))
+			var bear := atan2(rim.y - c2.y, rim.x - c2.x)
+			for fb in _fixed[p]:
+				if absf(angle_difference(bear, float(fb))) < LANE_SEP:
+					ok = false
+		if not ok:
+			continue
+		for k in range(g.size()):
+			_hub_plan[g[k][0]] = [1 if fx else 0, sgn, lats[k]]
+		var d := Vector2(sgn, 0.0) if fx else Vector2(0.0, sgn)
+		var cen := c2 + d * (WorldLocals.RING_R + 0.9 + STATION_OFF + STATION_LEN * 0.5)
+		stations.append([cen, d, (float(g.size()) * ORTHO_GAP + 1.2) * 0.5, base])
+
+
+func _build_stations() -> void:
+	## one steel connector block per station (a stand-in for the column-base style block: tubes pass through its 4-lane faces;
+	## the Locals' doors are a later pass)
+	for st in stations:
+		var cen: Vector2 = st[0]
+		var d: Vector2 = st[1]
+		var hw: float = st[2]
+		var mi := MeshInstance3D.new()
+		var bx := BoxMesh.new()
+		var along := absf(d.x) > 0.5
+		bx.size = Vector3(STATION_LEN if along else hw * 2.0, 2.6, hw * 2.0 if along else STATION_LEN)
+		mi.mesh = bx
+		var m := StandardMaterial3D.new()
+		m.albedo_color = STEEL_L
+		m.metallic = 0.6
+		m.roughness = 0.45
+		mi.material_override = m
+		mi.position = Vector3(cen.x, wl.floor_y + 1.3, cen.y)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		_station_nodes.append(mi)
+		for sgn2 in [-1.0, 1.0]:                        # the 4-lane coupling plates on the two faces the stripe crosses
+			var pl := MeshInstance3D.new()
+			var pb := BoxMesh.new()
+			pb.size = Vector3(0.18 if along else hw * 2.0 + 0.3, 2.9, hw * 2.0 + 0.3 if along else 0.18)
+			pl.mesh = pb
+			var m2 := StandardMaterial3D.new()
+			m2.albedo_color = STEEL_D
+			pl.material_override = m2
+			pl.position = mi.position + Vector3(d.x, 0.0, d.y) * (STATION_LEN * 0.5 * sgn2)
+			pl.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(pl)
+			_station_nodes.append(pl)
+
+
 func _mk(fx: bool, along: float, lat: float) -> Vector2:
 	return Vector2(along, lat) if fx else Vector2(lat, along)
 
 
-func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
+func _path_ortho3(i: int, s: int, pit: Vector3, pi: int, face_fx := -1, face_sgn := 0.0, forced_lat := 0.0, extra_run := 0.0) -> PackedVector3Array:
 	## two corners: stub -> a leg along the final axis on a grid lane -> across to the pit's lane -> final leg along the axis
 	var tb: Dictionary = wl._tubes[i]
 	var foot := Vector2(tb["x"], tb["z"])
@@ -414,7 +533,9 @@ func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 	var axes: Array = ["X", "Z"] if absf(d0.x) >= absf(d0.y) else ["Z", "X"]
 	for fa in axes:
 		var fx: bool = fa == "X"
-		var sgn := signf(d0.x if fx else d0.y)
+		if face_fx >= 0 and fx != (face_fx == 1):
+			continue
+		var sgn := signf(d0.x if fx else d0.y) if face_fx < 0 else face_sgn
 		if sgn == 0.0:
 			continue
 		var cdl: float = cd.y if fx else cd.x           # the stub's lateral component: it sets the first leg's lane
@@ -430,12 +551,12 @@ func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 				continue
 			var p1 := foot + cd * L
 			var along1: float = p1.x if fx else p1.y
-			for o in [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G]:
-				var lat: float = roundf((latc + o) / G) * G
-				if absf(lat - latc) > 3.3:
+			for o in ([0.0] if face_fx >= 0 else [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G]):
+				var lat: float = forced_lat if face_fx >= 0 else roundf((latc + o) / G) * G
+				if face_fx < 0 and absf(lat - latc) > 3.3:
 					continue
 				var rim := _mk(fx, (c2.x if fx else c2.y) + sgn * R0, lat)
-				var a_al: float = (c2.x if fx else c2.y) + sgn * (R0 + ENTRY_RUN)
+				var a_al: float = (c2.x if fx else c2.y) + sgn * (R0 + ENTRY_RUN + extra_run)
 				var a := _mk(fx, a_al, lat)
 				var bear := atan2(rim.y - c2.y, rim.x - c2.x)
 				var blocked := false

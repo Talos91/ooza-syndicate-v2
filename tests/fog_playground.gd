@@ -79,8 +79,15 @@ func _build_panel() -> void:
 	be.pressed.connect(_endgame)
 	row2.add_child(be)
 	var bt := Button.new()
-	bt.text = "tubes: v3 / ortho"
-	bt.pressed.connect(func(): wl.pipes.rebuild(not wl.pipes.ortho); print("tubes ortho=", wl.pipes.ortho, " stats ", wl.pipes.ortho_stats))
+	bt.text = "tubes: v3 / ortho / hub"
+	bt.pressed.connect(func():
+		if not wl.pipes.ortho:
+			wl.pipes.rebuild(true, false)
+		elif not wl.pipes.hub:
+			wl.pipes.rebuild(true, true)
+		else:
+			wl.pipes.rebuild(false)
+		print("tubes ortho=", wl.pipes.ortho, " hub=", wl.pipes.hub, " stats ", wl.pipes.ortho_stats))
 	row2.add_child(bt)
 	var bh := Button.new()
 	bh.text = "hide panel (H)"
