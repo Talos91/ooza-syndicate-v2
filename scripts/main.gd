@@ -2753,6 +2753,7 @@ func _tutorial_setup() -> void:
 	coach.set_labels({"skip_step": TutorialDirector.line("skip_step"), "restart": TutorialDirector.line("restart"),
 			"exit": TutorialDirector.line("exit"), "skip_tutorial": TutorialDirector.line("skip_tutorial")})
 	coach.button_pressed.connect(_on_coach_button)
+	coach.set_r21(hud)                                 # ui-r21-import: the round-21 coach card in the bottom band (when the Hud has it)
 	coach.skip_step.connect(func(): director.skip_step())
 	coach.restart.connect(restart)
 	coach.exit.connect(to_lessons)
@@ -2843,6 +2844,14 @@ func _coach_sync() -> void:
 			platforms.append(cam.unproject_position(q))
 			platforms.append(cam.unproject_position(q))   # (counted twice: a line matters more than a platform)
 	coach.set_obstacles(platforms)
+	if hud.r21:                                       # ui-r21-import: the goal strip keeps off the tank, the map title and the band
+		for c in [hud.side_panel, hud.map_title, hud.pause_button, hud.music_button, hud.debug_button, hud.dock]:
+			if c and c.visible:
+				busy.append(c.get_global_rect().grow(3.0))
+		if hud.r19_top:
+			busy.append(hud.r19_top.capsule_rect().grow(3.0))
+		var band := HudR21.band(hud)
+		busy.append(Rect2(Vector2(0.0, float(band["by"]) * float(band["u"])), Vector2(hud.root.get_viewport_rect().size.x, 1e5)))
 	coach.set_strip_avoid(busy)
 	var avoid := []                                   # the banner and the toasts never sit under the card
 	if hud.banner.visible:

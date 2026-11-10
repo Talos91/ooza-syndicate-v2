@@ -94,6 +94,7 @@ var _debug_box: VBoxContainer          # the Debug panel's content (its height: 
 var margins := Vector4(16, 12, 16, 12)
 var _last_fps_print := 0.0
 var version_label: Label
+var r21: HudR21.Layer                   # ui-r21-import: the round-21 toasts, node card and hint strip (HudR21)
 var r19_top: HudR19.TopLayer             # ui-r19-import: the round-19 top capsule, pills, clock and banner slot (HudR19)
 var ui_scale := 1.0
 # --- TUTORIAL reveal set (TUTORIAL-DESIGN.md §6) ---
@@ -552,6 +553,10 @@ func setup(m: Node3D) -> void:
 		banner.self_modulate.a = 0.0
 		for b in [pause_button, music_button]:
 			_r19_button(b)
+	if HudR21.on():                                   # ui-r21-import (designer spec C): the round-21 pieces at the round-20 places
+		r21 = HudR21.Layer.new()
+		root.add_child(r21)
+		r21.setup(self)
 
 
 func _r19_button(b: Button) -> void:
@@ -968,6 +973,9 @@ func sync(dt: float, cam: Camera3D) -> void:
 			banner.visible = false
 	if r19_top:
 		r19_top.sync()
+	if r21:
+		r21.sync(dt)
+		_r21_version_tag()
 	_last_fps_print += dt
 	if debug_panel.visible and _last_fps_print > 5.0:
 		_last_fps_print = 0.0
@@ -1275,6 +1283,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 	info_bg.add_theme_stylebox_override("panel", HudNoir.box("node_card", col, Vector4(12, 8, 12, 9) * ui_scale))
 	inspector.add_child(info_bg)
 	inspector.set_meta("card", info_bg)
+	if r21:                                           # ui-r21-import: the round-21 node card in the bottom band draws the card (HudR21)
+		info_bg.visible = false
 	var info_box := VBoxContainer.new()
 	info_box.add_theme_constant_override("separation", int(5 * ui_scale))
 	info_box.custom_minimum_size = Vector2(INSPECTOR_CARD_W, 0) * ui_scale
@@ -2080,6 +2090,8 @@ func reveal(keys: Array, glow: Array = []) -> void:
 	for k in glow:
 		var c: Control = {"send_panel": side_panel, "strength": top_panel, "dock": dock, "status_line": status_label,
 				"notices": callouts}.get(str(k), null)
+		if c and c.visible and r19_top and (c == top_panel or c == status_label):
+			continue                                  # ui-r21-import: round 19 draws these (r19_top); the old ones stay hidden
 		if c and c.visible:
 			c.modulate = Color(2.2, 2.2, 2.2, 0.0)
 			create_tween().set_trans(Tween.TRANS_SINE).tween_property(c, "modulate", Color.WHITE, 0.6)
@@ -2210,6 +2222,9 @@ func _inspector_bounds() -> Rect2:
 	if dock and dock.visible:                           # Alpha 24: the skill column on the right
 		r = minf(r, dock.position.x - 8.0 * ui_scale)
 	var bo := vp.y - bottom_used() - 8.0 * ui_scale
+	if r21:                                           # ui-r21-import: the bottom band holds the node card (and the coach / hint)
+		var band := HudR21.band(self)
+		bo = minf(bo, (float(band["by"]) - 4.0) * float(band["u"]))
 	return Rect2(l, t, maxf(r - l, 20.0), maxf(bo - t, 20.0))
 
 
@@ -2846,6 +2861,9 @@ func note_line(text: String, kind := "info", seat := "") -> void:
 	## which pushes `notices` down under it - mission_overlay.gd).
 	if not shows("notices") or callouts == null:
 		return
+	if r21:                                           # ui-r21-import: a round-21 toast under the capsule
+		r21.toast(text, kind)
+		return
 	var col := kind_color(kind)
 	var opts := _icon_opts(seat, kind)
 	opts["anchor"] = func(): return Vector2(root.get_viewport_rect().size.x * 0.5, _under_top() + 6.0 * ui_scale)
@@ -3020,6 +3038,8 @@ func pause_menu() -> void:
 		return
 	var s := MatchScreens.open(pause_panel, mobile, _my_faction())
 	var where := "%s · %s" % [str(main.map.get("name", "")).to_upper(), MatchScreens.clock(sim.time)]
+	if r21 and mobile:                                # ui-r21-import (designer r20 v3): on a phone the version shows here only
+		where += " · " + Rules.version_label()
 	if main.online:                                   # a room never pauses (Alpha 11): the menu only
 		s.card({"kicker": "ROOM %s" % Net.room_code, "headline": "MATCH MENU.",
 				"body": "%s · the match keeps running\n%s" % [where, Net.net_stats_line()],
@@ -3030,9 +3050,14 @@ func pause_menu() -> void:
 	main.paused = true
 	var resume := ["RESUME  →", func(): main.paused = false; pause_panel.visible = false]
 	if main.get("director") != null:                  # TUTORIAL: PAUSE keeps working and gains LESSONS (§6)
-		s.card({"kicker": where, "headline": "PAUSED.",
-				"actions": [resume, [TutorialDirector.line("paused_lessons"), main.to_lessons], ["RESTART MATCH", main.restart],
-				["SETTINGS", _pause_settings], ["MAIN MENU", main.to_menu, "secondary"]]})   # UI (0.22.1): framed
+		var acts := [resume, [TutorialDirector.line("paused_lessons"), main.to_lessons], ["RESTART MATCH", main.restart],
+				["SETTINGS", _pause_settings], ["MAIN MENU", main.to_menu, "secondary"]]   # UI (0.22.1): framed
+		if r21 and main.get("coach") != null:        # ui-r21-import: the round-21 coach card has no button row - SKIP GOAL
+			var co = main.coach                       # (and the first run's SKIP TUTORIAL) live here now
+			acts.insert(1, [TutorialDirector.line("skip_step"), func(): main.paused = false; pause_panel.visible = false; co.skip_step.emit()])
+			if main.director.first_launch:
+				acts.insert(2, [TutorialDirector.line("skip_tutorial"), func(): co.skip_tutorial.emit()])
+		s.card({"kicker": where, "headline": "PAUSED.", "actions": acts})
 		_show_screen(pause_panel)
 		return
 	s.card({"kicker": where, "headline": "PAUSED.",
@@ -3689,3 +3714,27 @@ func badge_anchor(n: Dictionary) -> Vector3:
 				best = d
 		_badge_dirs[id] = best
 	return n["pos"] + (_badge_dirs[id] as Vector3) * (Rules.R + 2.3) + Vector3(0, 0.3, 0)
+
+
+func _r21_version_tag() -> void:
+	## ui-r21-import (designer r20 v3): desktop - the version tag right-aligned under the skill column (else under PAUSE / MUSIC),
+	## inside the safe area; phone - in the pause menu only (pause_menu's kicker), hidden in the match.
+	if version_label == null:
+		return
+	if mobile:
+		version_label.modulate.a = 0.0
+		return
+	version_label.modulate.a = 1.0
+	var vp := root.get_viewport_rect().size
+	var ins := UiKit.safe_insets(vp)
+	var vw := version_label.size.x
+	var vh := version_label.size.y
+	var pos := Vector2(vp.x - ins.z - vw - 2.0, vp.y - ins.w - vh - 2.0)
+	if dock and dock.is_visible_in_tree():
+		var dg := dock.get_global_rect()
+		pos = Vector2(dg.end.x - vw, dg.end.y + 2.0)
+		if pos.y + vh > vp.y - ins.w or vw > dg.size.x:
+			var pb := pause_button.get_global_rect()
+			pos = Vector2(pb.end.x - vw, pb.end.y + 2.0)
+	pos.x = minf(pos.x, vp.x - ins.z - vw - 0.5)
+	version_label.position = pos

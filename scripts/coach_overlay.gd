@@ -597,6 +597,10 @@ var _strip: GoalStrip
 var _strip_rect := Rect2()             # where the goal strip sits now (the card keeps clear of it)
 var _strip_avoid: Array = []           # [Rect2] badges, platforms and HUD parts the strip must not cover
 var _strip_key := []
+# ui-r21-import (designer spec C): the round-21 coach card (HudR21, Hud's band places) replaces the panel when the Hud has it
+var _r21_hud = null                    # the Hud (set_r21); null = the old card
+var _r21: HudR21.Piece
+var _r21_t := 0.0                      # the NEXT chevron's blink clock
 
 
 func _ready() -> void:
@@ -623,6 +627,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _r21_hud != null and is_instance_valid(_card):
+		_r21_sync(delta)
 	if _typing:                                     # the line types in; the handler talks meanwhile
 		_typed += TYPE_RATE * delta
 		var total := _card_text.get_total_character_count()
@@ -812,6 +818,9 @@ func _build_card() -> void:
 	_card_bg.mouse_filter = Control.MOUSE_FILTER_STOP      # a tap on the card shows the whole line (and never
 	_card_bg.gui_input.connect(func(ev):                   # reaches the map)
 		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			if _r21_hud != null and not _typing and _card_button.visible:   # r21: the NEXT chevron (the whole card) = GOT IT
+				button_pressed.emit("got_it")
+				return
 			_finish_typing())
 	_card.add_child(_card_bg)
 	_handler = HandlerView.new()                           # the handler, at the card's left
@@ -1267,6 +1276,9 @@ func show_training_complete(title: String, lines: Array, primary_text: String, s
 
 # ------------------------------------------------------------------ layout
 func _resize_card() -> void:
+	if _r21_hud != null:
+		_r21_place()
+		return
 	## A deterministic height (not a live container measurement: an autowrap Label's minimum size
 	## only settles after a layout pass, and the card must be right the same frame show_step() is
 	## called). 0.20.6: the line's own wrapped height, measured with the font (Dr. Vesk's longer lines wrap to
@@ -1332,6 +1344,9 @@ func _target_bounds(vp: Vector2) -> Rect2:
 
 func _position_card() -> void:
 	if not is_instance_valid(_card) or not _card.visible:
+		return
+	if _r21_hud != null:
+		_r21_place()
 		return
 	var vp := get_viewport().get_visible_rect().size
 	if vp.x <= 0.0 or vp.y <= 0.0:
@@ -1477,3 +1492,71 @@ func _fill_complete(title: String, lines: Array, primary_text: String, secondary
 func _center_complete() -> void:
 	var vp := get_viewport().get_visible_rect().size
 	_complete.position = (vp - _complete.size) / 2.0
+
+
+# ------------------------------------------------------------------ ui-r21-import: the round-21 coach card
+func set_r21(hud) -> void:
+	## The Hud has the round-21 pieces: the card becomes the round-21 coach card at the band place HudR21.coach_rect gives -
+	## the handler in the ring (Dr. Vesk's colour), up to 3 lines at 12.5 pt, the NEXT chevron blinking while the step waits
+	## for GOT IT (a tap on the card). SKIP GOAL / RESTART / EXIT moved to PAUSE (Hud.pause_menu).
+	if hud == null or not HudR21.on() or not is_instance_valid(_card):
+		return
+	_r21_hud = hud
+	_r21 = HudR21.Piece.new("coach_card")
+	_r21.content = _r21_draw
+	_card.add_child(_r21)
+	_card.move_child(_r21, _card_bg.get_index() + 1)
+	_card_bg.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	_card_vb.visible = false
+	_r21_place()
+
+
+func _r21_place() -> void:
+	if _r21_hud == null or not is_instance_valid(_r21):
+		return
+	var u: float = HudR19.u_of(_r21_hud)
+	var r := HudR21.coach_rect(_r21_hud)
+	_card.custom_minimum_size = Vector2.ZERO
+	_card.position = r.position * u
+	_card.size = r.size * u
+	_card_dest = _card.position
+	_r21.place(Vector2.ZERO, u, r.size.x)
+	var d := 34.0 * u                                  # the handler in the ring window (d 40 pt)
+	_handler.size = Vector2(d * 0.78, d)
+	_handler.position = Vector2(_r21.cx(222.0), _r21.cy(210.0)) - _handler.size / 2.0
+	if _r21_hud.r21 != null:
+		_r21_hud.r21.coach_body = r
+
+
+func _r21_sync(delta: float) -> void:
+	_r21_t += delta
+	var waiting := _card.visible and not _typing and _card_button.visible
+	var blink := 0.55 + 0.45 * cos(_r21_t * TAU / 1.1)
+	_r21.tints = {"coach_card_rim": HudNoir.accent, "coach_card_ring": HudR21.VESK,
+			"coach_card_next": Color(HudR21.VESK, blink if waiting else 0.0)}
+	_r21_place()
+	_r21.redraw()
+	if _r21_hud.r21 != null:
+		_r21_hud.r21.coach_up = _card.visible
+
+
+func _r21_draw(ci: CanvasItem, p: HudR21.Piece) -> void:
+	var px := HudR21.TEXT_PT * p.u
+	var left := p.cx(412.0)
+	var right := p.size.x - (1746.0 - 1654.0) * p.s()
+	var last_right := p.size.x - (1746.0 - 1602.0) * p.s()
+	var lines := HudR21.wrap(_card_text.text, right - left, last_right - left, px)
+	var lead := 14.5 * p.u
+	var y0 := p.cy(207.5) - lead * (lines.size() - 1) / 2.0
+	var shown := _card_text.text.length() if not _typing else int(_typed)
+	var r21 = _r21_hud.r21
+	for i in range(lines.size()):
+		var ln: String = lines[i]
+		var room := (last_right if i == lines.size() - 1 else right) - left
+		HudR21.line(ci, ln.left(maxi(0, shown)), left, y0 + i * lead, px, HudR21.TXT)
+		shown -= ln.length() + 1
+		if r21 != null:
+			r21.texts.append({"name": "coach_line_%d" % (i + 1), "text": ln, "w_pt": snappedf(HudR21.text_w(ln, px) / p.u, 0.1),
+					"room_pt": snappedf(room / p.u, 0.1), "size_pt": snappedf(ceil(px) / p.u, 0.1), "fits": HudR21.text_w(ln, px) <= room + 0.5})
+	if r21 != null:
+		r21.texts.append({"name": "coach_lines", "count": lines.size(), "fits": lines.size() <= 3})
