@@ -50,7 +50,11 @@ const STEEL := Color(0.20, 0.22, 0.26)
 const STEEL_D := Color(0.10, 0.11, 0.13)
 const STEEL_L := Color(0.27, 0.29, 0.33)
 const RECESS := Color(0.015, 0.015, 0.02)
-const FILL_S := 1.6              # s: a finished tube fills from the pit to the column
+const FILL_S := 1.6              # s: a finished tube fills along its run (FLOW_FROM_NODE: column -> pit)
+# TUBE FLOW (Daniele 2026-11-11 on demo15: "when a tube is completed, its flow animation starts from the NODE end, not from
+# the pit"): true = the fill front and the goo bands start at the column socket and run to the pit (world_pipe.gdshader
+# from_node); false = the 2026-11-07 rule 5 look (pit -> column).
+const FLOW_FROM_NODE := true
 const TUBE_ADD := {2: 1, 3: 2}   # tubes built by reaching this tier (rule 4)
 const MAX_TUBES := 4
 const PIT_L_DIV := 20.0          # R7: strength = T / (T + L / 20)
@@ -710,6 +714,7 @@ func _build_mesh(runs: Array, craters: Array) -> void:
 	if wl.floor_haze >= 0.0:
 		_mat.set_shader_parameter("haze", wl.floor_haze)
 	_mat.set_shader_parameter("slots", float(maxi(runs.size(), 1)))
+	_mat.set_shader_parameter("from_node", FLOW_FROM_NODE and not "--tube-flow=pit" in OS.get_cmdline_user_args())   # dev: the old look
 	_mi = MeshInstance3D.new()
 	_mi.mesh = m
 	_mi.material_override = _mat

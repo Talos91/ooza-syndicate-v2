@@ -15,7 +15,10 @@ uniform sampler2D state : filter_nearest, repeat_disable;
 uniform float slots = 1.0;
 uniform vec3 abyss : source_color = vec3(0.02, 0.02, 0.03);
 uniform float haze = 0.12;
-uniform float flow_v = 2.2;      // m/s toward the column
+uniform float flow_v = 2.2;      // m/s along the run
+// TUBE FLOW (Daniele 2026-11-11 on demo15: "when a tube is completed, its flow animation starts from the NODE end, not from
+// the pit"): true = the fill front and the bands start at the column (node) and run toward the pit (WorldTubes.FLOW_FROM_NODE).
+uniform bool from_node = true;
 
 varying vec4 st;
 varying float bp;
@@ -37,10 +40,10 @@ void fragment() {
 		discard;                                      // not built yet: the hologram pass draws it
 	}
 	float s = UV.y;                                   // metres from the socket
-	float k = 1.0 - UV2.y;                            // share of the run from the pit
+	float k = from_node ? UV2.y : 1.0 - UV2.y;        // share of the run from where the goo starts (column or pit)
 	float fill = st.a;
 	float in_goo = step(k, fill) * step(0.0005, fill);
-	float flow = s + TIME * flow_v;                   // toward the socket (s falls)
+	float flow = from_node ? s - TIME * flow_v : s + TIME * flow_v;   // from_node: toward the pit (s rises)
 	float band = 0.5 + 0.5 * sin(flow * 2.4);
 	vec2 bc = vec2(floor(UV.x * 8.0), floor(flow * 1.4));
 	float bub = step(0.8, hash(bc)) * smoothstep(0.42, 0.1, length(fract(vec2(UV.x * 8.0, flow * 1.4)) - 0.5));

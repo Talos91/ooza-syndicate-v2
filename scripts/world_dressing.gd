@@ -758,7 +758,7 @@ func _crater_decals() -> void:
 		var sz := WorldDecals._m(cell)
 		var yaw: float = a[2]
 		var off := Vector3(-sz.x / 2.0, 0, -sz.y / 2.0).rotated(Vector3.UP, yaw)
-		wl.decals._add((a[0] as Vector2) + Vector2(off.x, off.z), sz, yaw, cell, WorldDecals.T_ARC, false, 0.012)
+		wl.decals._add((a[0] as Vector2) + Vector2(off.x, off.z), sz, yaw, cell, WorldDecals.ring_tint(WorldDecals.T_ARC), false, 0.012)
 	for k in range(lc.craters.size()):
 		var cp: Vector3 = lc.craters[k]
 		var c := Vector2(cp.x, cp.z)

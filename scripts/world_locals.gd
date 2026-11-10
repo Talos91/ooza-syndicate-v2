@@ -732,6 +732,7 @@ func step(dt: float, _draw := true) -> void:
 		_alive -= 1
 	for i in feeds:
 		_feed_step(int(feeds[i]["tube"]), feeds[i])
+		_trace(i, feeds[i])
 	step_us = Time.get_ticks_usec() - t0
 
 
@@ -830,6 +831,18 @@ func _spawn(f: Dictionary, line: Array) -> void:
 	line.append(s)
 	spawned += 1
 	_alive += 1
+
+
+func _trace(key: int, f: Dictionary) -> void:
+	## TRACE (Daniele 2026-11-11): the feed's lane decal shows only as far as its farthest Local has walked (the front
+	## of the line; a Local still rising / hopping counts 0) - nothing before the first Local steps off the rim
+	var line: Array = f["line"]
+	if line.is_empty() or wl.decals == null:
+		return
+	var w := _dnow(int(line[0]))
+	if w > float(f.get("walked", 0.0)):
+		f["walked"] = w
+		wl.decals.reveal_lane(key, w + 0.5)          # the lane runs just under the front Local
 
 
 func _dnow(s: int) -> float:
