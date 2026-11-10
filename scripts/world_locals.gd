@@ -526,7 +526,12 @@ func floor_visible(cam: Camera3D, p: Vector3) -> bool:
 
 
 # ------------------------------------------------------------------ routes
-const DOOR_DIRS := [Vector2(0, 1), Vector2(1, 0), Vector2(0, -1), Vector2(-1, 0)]   # +Z (v1's door), +X, -Z, -X
+static func door_dirs() -> Array:
+	## the base's walk-in doors: +Z (v1's door), +X, -Z, -X; with --base45 the diagonals
+	if WorldTubes.base45():
+		var r := 0.70710678
+		return [Vector2(r, r), Vector2(r, -r), Vector2(-r, -r), Vector2(-r, r)]
+	return [Vector2(0, 1), Vector2(1, 0), Vector2(0, -1), Vector2(-1, 0)]
 
 
 func _route_all() -> void:
@@ -547,9 +552,9 @@ func _route_all() -> void:
 				cd = d
 				ci = k
 		var c2 := Vector2(craters[ci].x, craters[ci].z)
-		var dir: Vector2 = DOOR_DIRS[0]
+		var dir: Vector2 = door_dirs()[0]
 		var dd := INF
-		for d2 in DOOR_DIRS:
+		for d2 in door_dirs():
 			var dist: float = (t2 + d2 * DOOR_OUT).distance_to(c2)
 			if dist < dd:
 				dd = dist
@@ -595,9 +600,9 @@ func _route_marches(rows: int) -> int:
 		var tb2: Dictionary = wl._tubes[best]
 		var t2 := Vector2(tb2["x"], tb2["z"])
 		var taken: Vector2 = feeds[best]["dir"] if feeds.has(best) else Vector2.ZERO
-		var dir: Vector2 = DOOR_DIRS[0]
+		var dir: Vector2 = door_dirs()[0]
 		var dd := INF
-		for d2 in DOOR_DIRS:
+		for d2 in door_dirs():
 			if d2 == taken:
 				continue                              # another door than the node's own line
 			var dist: float = (t2 + d2 * DOOR_OUT).distance_to(c2)

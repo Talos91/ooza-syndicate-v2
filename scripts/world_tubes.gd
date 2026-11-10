@@ -114,9 +114,15 @@ var _lanes := {}                 # "X<idx>" / "Z<idx>" -> [[lo, hi], ...] the st
 var _fixed: Array = []           # per pit: the bearings of the Locals' exits
 
 
+static func base45() -> bool:
+	## Daniele 2026-11-11: turn every node base 45 degrees - tube sockets on the CARDINALS, walk-in doors on the CORNERS (the
+	## base mesh is unchanged: its yaw comes from WorldLocals.door_dirs(), which become the diagonals). Dev: --base45.
+	return "--base45" in OS.get_cmdline_user_args()
+
+
 static func corner_dir(k: int) -> Vector2:
-	## the 4 corner sockets: +X+Z, +X-Z, -X-Z, -X+Z (unit, x z)
-	var a := PI / 4.0 + PI / 2.0 * k
+	## the 4 tube sockets: +X+Z, +X-Z, -X-Z, -X+Z (unit, x z); with --base45 the cardinals +Z, +X, -Z, -X
+	var a := (0.0 if base45() else PI / 4.0) + PI / 2.0 * k
 	return Vector2(sin(a), cos(a))
 
 

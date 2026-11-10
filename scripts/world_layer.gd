@@ -457,7 +457,7 @@ func _orient_entrances() -> void:
 		var tb: Dictionary = _tubes[i]
 		if not tb.get("ent", false):
 			continue
-		var d := Vector2(0, 1)
+		var d: Vector2 = WorldLocals.door_dirs()[0]
 		if locals != null and locals.feeds.has(i):
 			d = locals.feeds[i]["dir"]
 		tb["ent_yaw"] = atan2(d.x, d.y)
@@ -840,7 +840,7 @@ func _door_front(tb: Dictionary, from: Vector3) -> Vector3:
 	## the point just in front of the column base's door nearest `from` (doors on the world's +-X / +-Z)
 	var best := Vector3.ZERO
 	var bd := INF
-	for d in WorldLocals.DOOR_DIRS:
+	for d in WorldLocals.door_dirs():
 		var q := Vector3(float(tb["x"]) + d.x * (WorldTubes.APOTHEM + 0.3), floor_y, float(tb["z"]) + d.y * (WorldTubes.APOTHEM + 0.3))
 		var dd := Vector2(q.x - from.x, q.z - from.z).length()
 		if dd < bd:
@@ -873,6 +873,8 @@ func _zap(tb: Dictionary, at: Vector3, col: Color) -> void:
 	var door := Vector3(tb["x"], floor_y + 0.7, tb["z"]) + dir * float(tb["r"])
 	if tb.get("ent", false):                          # the upper laser strand of the base's door that faces the blob
 		var ax := Vector3(signf(dir.x), 0, 0) if absf(dir.x) > absf(dir.z) else Vector3(0, 0, signf(dir.z))
+		if WorldTubes.base45():
+			ax = Vector3(signf(dir.x), 0, signf(dir.z)).normalized()
 		door = Vector3(tb["x"], floor_y + WorldTubes.LASER_Y[1], tb["z"]) + ax * (WorldTubes.APOTHEM + 0.06)
 	var to := at + Vector3(0, 0.25, 0)
 	var mi2: MeshInstance3D = z["mi"]
