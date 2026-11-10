@@ -95,6 +95,7 @@ var _sim: Sim                        # the Sim of the last sync (Surge's door ra
 func sync(sim: Sim, viewer: String) -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
 	_sim = sim
+	speed_trails = 0
 	classic = not Rules.bridge_combat
 	if units == null:
 		units = UnitView.new()
@@ -136,6 +137,7 @@ func sync(sim: Sim, viewer: String) -> void:
 		alive[h["id"]] = true
 		units.fog = _no_fog if _fog.is_empty() or viewer == "" or sim.allied(str(h["owner"]), viewer) else _fog
 		_draw(h, viewer, roles.get(h["id"], {}), sim.time, dt, _drop_for(sim, h))
+		_draw_speed(h, sim.time)
 	units.fog = _no_fog
 	for id in pools.keys():
 		if not alive.has(id):
@@ -143,6 +145,8 @@ func sync(sim: Sim, viewer: String) -> void:
 				p.queue_free()
 			if pools[id].get("spray") != null:
 				(pools[id]["spray"] as Node).queue_free()
+			if pools[id].get("speed") != null:
+				(pools[id]["speed"] as Node).queue_free()
 			pools.erase(id)
 	_draw_fallers(sim.time)
 	var seen := _sync_contacts(sim, by_id)
@@ -294,6 +298,80 @@ func _draw(h: Dictionary, viewer: String, role: Dictionary, time: float, dt: flo
 
 const SLOTS := Rules.MAX_PATCHES + 1  # patch pool slots of a line whose front has been cut
 const TAPER := [0.55, 0.75, 0.9]
+
+
+# ------------------------------------------------------------------ CONVEYOR CARRY: the speed trail
+# Daniele 2026-11-10: a line a belt pushed keeps the belt's speed until its target, a fall or a belt the other way
+# (Sim.conveyor_mult). While it moves at a belt factor (on the belt or carried off it) it wears a trail: fast = long
+# green streaks racing back along both flanks from the head; slow = short blue dashes creeping, the line dragging them.
+const SPEED_STREAKS := 5             # per flank
+const SPEED_SPAN := 8.0              # metres behind the head the streaks run over
+const SPEED_SIDE := 1.5              # metres out from the line's centre
+const SPEED_UP := 0.8
+var _speed_mats := {}                # 1 / -1 -> StandardMaterial3D
+var _speed_mesh := {}                # 1 / -1 -> BoxMesh
+var speed_trails := 0                # lines wearing a trail this frame (probes read it)
+
+
+func _speed_kit(push: int) -> void:
+	if _speed_mats.has(push):
+		return
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.albedo_color = Color("#2bff3c") if push > 0 else Color("#3d7dff")
+	m.albedo_color.a = 0.95
+	_speed_mats[push] = m
+	var b := BoxMesh.new()
+	b.size = Vector3(0.32, 0.22, 2.6) if push > 0 else Vector3(0.42, 0.3, 0.8)
+	_speed_mesh[push] = b
+
+
+func _draw_speed(h: Dictionary, time: float) -> void:
+	var pool: Dictionary = pools.get(h["id"], {})
+	if pool.is_empty():
+		return
+	var push := int(h.get("conv", 0))
+	if push == 0:
+		push = int(h.get("conv_carry", 0))
+	var root: Node3D = pool.get("speed")
+	var hide: bool = push == 0 or h["state"] != "move" or float(h["s"]) < 1.0 			or (not units.fog.is_empty() and UnitView.fogged(units.fog, Sim.sample(h, h["s"])[0]))
+	if hide:
+		if root != null:
+			root.visible = false
+		return
+	_speed_kit(push)
+	if root == null or int(pool.get("speed_push", 0)) != push:
+		if root != null:
+			root.queue_free()
+		root = Node3D.new()
+		add_child(root)
+		for k in range(SPEED_STREAKS * 2):
+			var mi := MeshInstance3D.new()
+			mi.mesh = _speed_mesh[push]
+			mi.material_override = _speed_mats[push]
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(mi)
+		pool["speed"] = root
+		pool["speed_push"] = push
+	root.visible = true
+	speed_trails += 1
+	var span: float = minf(SPEED_SPAN, maxf(float(h["s"]) - 0.5, 1.0))
+	var rate: float = 2.4 if push > 0 else 0.35          # streak cycles per second (fast race back, slow ones creep)
+	var kids := root.get_children()
+	for k in range(kids.size()):
+		var mi: MeshInstance3D = kids[k]
+		var flank := 1.0 if k < SPEED_STREAKS else -1.0
+		var j := k % SPEED_STREAKS
+		var u := fposmod(time * rate + (float(j) + (0.5 if flank < 0.0 else 0.0)) / SPEED_STREAKS + h["id"] * 0.13, 1.0)
+		var s: float = float(h["s"]) - u * span
+		var smp := Sim.sample(h, s)
+		var fwd: Vector3 = smp[1]
+		mi.position = smp[0] + fwd.cross(Vector3.UP).normalized() * SPEED_SIDE * flank + Vector3.UP * SPEED_UP
+		mi.rotation = Vector3(0.0, Rules.heading(fwd), 0.0)
+		var fade := sin(PI * u)                          # streaks fade in at the head and out at the span's end
+		mi.scale = Vector3.ONE * (0.35 + 0.65 * fade)
 
 
 # ------------------------------------------------------------------ the front: cannon pops, the pour

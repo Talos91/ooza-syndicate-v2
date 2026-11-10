@@ -1596,7 +1596,7 @@ func _rules_0_18_10() -> void:
 				"every kill is paid from its garrison, which regrows meanwhile (%.2f spent = %.2f killed - %.2f made)" % [u1 - gn["units"], killed, s.gat_rate(gn)])
 	# ---------------------------------------------------------------- GOOGAT (Daniele 2026-11-06, Desk dec-googatling): its
 	# ammo IS its garrison, grown at half the same-tier vat rate up to the node's cap; it fires that, then each unit as made
-	check(Rules.GOOGATLING_PROD == 0.5, "googat numbers: ammo grows at 0.5x the same-tier vat")
+	check(Rules.GOOGATLING_PROD == 0.25, "googat numbers: ammo regrows at 0.25x the same-tier vat (Daniele 2026-11-09: slower regrow; was 0.5)")
 	for fac in ["vex", "null", "bloom", "ember", "solar"]:
 		var sf := _tp({3: "A", 4: "B"}, {"A": fac, "B": fac})
 		var fn: Dictionary = sf.nodes[1]
@@ -1614,8 +1614,8 @@ func _rules_0_18_10() -> void:
 	gg["tier"] = 1
 	gg["units"] = 20.0
 	var rate1: float = s.gat_rate(gg)
-	check(absf(rate1 - Rules.PROD[1] * 0.5 * s.stat("A", "production")) < 0.001 and absf(rate1 - s.production(gg)) < 0.001,
-			"a T1 googat grows its garrison at half a T1 vat (%.2f /s shown)" % Rules.shown_f(rate1))
+	check(absf(rate1 - Rules.PROD[1] * Rules.GOOGATLING_PROD * s.stat("A", "production")) < 0.001 and absf(rate1 - s.production(gg)) < 0.001,
+			"a T1 googat grows its garrison at x%.2f a T1 vat (%.2f /s shown)" % [Rules.GOOGATLING_PROD, Rules.shown_f(rate1)])
 	for i in range(int(30.0 / 0.05)):
 		s.step(0.05)
 	check(absf(gg["units"] - (20.0 + rate1 * 30.0)) < 0.1, "left alone its ammo (= garrison) regrows: %.1f after 30 s" % gg["units"])
@@ -1659,7 +1659,7 @@ func _rules_0_18_10() -> void:
 	gn2["units"] = 0.0
 	for i in range(int(4.0 / 0.05)):
 		sn.step(0.05)
-	check(absf(gn2["units"] - Rules.PROD[int(gn2["tier"])] * 0.5 * 4.0) < 0.05, "a neutral googat regrows %.1f in 4 s (half rate)" % gn2["units"])
+	check(absf(gn2["units"] - Rules.PROD[int(gn2["tier"])] * Rules.GOOGATLING_PROD * 4.0) < 0.05, "a neutral googat regrows %.1f in 4 s (x%.2f rate)" % [gn2["units"], Rules.GOOGATLING_PROD])
 	# ---------------------------------------------------------------- laser: 19 per 2 s burst, 2 s recharge, 12 m
 	check(Rules.LASER_KILL == 96.0 and Rules.LASER_BURST == 2.0 and Rules.LASER_RECHARGE == 2.0 and Rules.LASER_RANGE == 12.0 and Rules.LASER_COST == 200,
 			"laser numbers: 19 shown per 2 s burst (-40 %, Daniele 2026-09-28), 2 s recharge, 12 m, cost 40")
@@ -3426,7 +3426,8 @@ func _relays_proto() -> void:
 	check(c.conveyor_sense(hw)[0] == 0, "conveyor: once the whole line is off the belt, no push")
 	check(c.fire_relay(1), "conveyor: the owner fires it")
 	run_until(c, func(): return c.nodes[1]["relay_phase"] == "moving", 3.0)
-	check(absf(c.conveyor_mult(hb) - 1.0) < 0.001, "conveyor: while it flips there is no flow")
+	check(c.conveyor_sense(hb)[0] == 0 and absf(c.conveyor_mult(hb) - ca) < 0.001,
+			"conveyor: while it flips there is no flow (the line keeps the x%.1f it carries: CONVEYOR CARRY)" % ca)
 	run_until(c, func(): return c.nodes[1]["relay_phase"] == "", 3.0)
 	if hb in c.hordes and not _span_of(hb, 9).is_empty() and hb["s"] < float(spb["s1"]):
 		check(absf(c.conveyor_mult(hb) - cw) < 0.001, "conveyor: flipped, B's line now goes with the flow")
@@ -3434,6 +3435,7 @@ func _relays_proto() -> void:
 	check(absf(c.conveyor_mult(hw) - ca) < 0.001, "conveyor: and A's line against it")
 	check(c.fall_losses.get("A", 0.0) < 0.01 and c.fall_losses.get("B", 0.0) < 0.01, "conveyor: nothing falls")
 	_conveyor_round3()
+	_conveyor_carry()
 
 	# ---- LAUNCHER: P-93, launcher node 1 throws at node 8 (2 bridges: 1 - 4 - 8)
 	var l := _proto_sim("launcher")
@@ -3769,6 +3771,65 @@ func _conveyor_round3() -> void:
 	var spc := _span_of(hc, 7)
 	hc["s"] = (float(spc["s0"]) + float(spc["s1"])) * 0.5
 	check(absf(c.conveyor_mult(hc) - cw) < 0.001, "conveyor \"switch\": false - its flow still pushes x%.2f" % cw)
+
+
+func _carry_line(b: Sim, plain_after: bool) -> Dictionary:
+	## A small line 3 -> 5 over P-92's belt deck 7 (3 -> 4, with its flow), run until all of it is past the belt.
+	b.nodes[4]["owner"] = "A"
+	b.nodes[4]["units"] = 0.0
+	b.nodes[3]["units"] = 30.0
+	var h := b.send(3, 5, 0.2)
+	var sp := _span_of(h, 7)
+	if plain_after:
+		run_until(b, func(): return not (h in b.hordes) or float(h["s"]) - Sim.chain_length(h) > float(sp["s1"]) + 0.3, 30.0, 0.02)
+	else:
+		run_until(b, func(): return not (h in b.hordes) or int(h.get("conv", 0)) < 0 or h["state"] != "move", 30.0, 0.02)
+	return h
+
+
+func _conveyor_carry() -> void:
+	## CONVEYOR CARRY (Daniele 2026-11-10: "once a column passes on it, it accelerates / decelerates and goes at that speed
+	## until it meets the destination node, they fall, or another reverse conveyor (the slow)").
+	var cw: float = float(Rules.RELAYS_PROTO["conveyor"]["with"])
+	var ca: float = float(Rules.RELAYS_PROTO["conveyor"]["against"])
+	var m := _proto_map("conveyor")
+	m["edges"][7]["relay"] = null
+	m["edges"][7]["belt"] = "AB"                      # 3 -> 4, with a line 3 -> 5
+	m["edges"][9]["relay"] = null
+	m["edges"][9]["belt"] = null                      # 4 -> 5 plain
+	var b := _sim_of(m)
+	var h := _carry_line(b, true)
+	check(h in b.hordes and b.conveyor_sense(h)[0] == 0 and int(h.get("conv_carry", 0)) == 1,
+			"conveyor carry: off the belt, the line keeps the push (carry %s)" % h.get("conv_carry"))
+	var s0: float = h["s"]
+	var plain: float = Rules.move_speed() * b.stat("A", "speed") * b.deck_slow(h) * 0.1
+	b.step(0.1)
+	check(absf((float(h["s"]) - s0) - plain * cw) < plain * 0.05, "conveyor carry: off the belt it still walks x%.2f (%.2f m vs %.2f plain)" % [cw, float(h["s"]) - s0, plain])
+	check(absf(Sim.carry_mult(h) - cw) < 0.001, "conveyor carry: Sim.carry_mult (AI ETAs, the view's trail) reads x%.2f" % cw)
+	check(absf(b.door_mult(h) - 1.0) > -1.0, "conveyor carry: door_mult still answers")
+	run_until(b, func(): return not (h in b.hordes) or h["state"] == "absorb", 30.0, 0.02)
+	check(h["state"] == "absorb" and not h.has("conv_carry"), "conveyor carry (a): cleared when the line reaches its destination node")
+	# (b) a fall: a sliver of its tail drops off
+	var b2 := _sim_of(m)
+	var h2 := _carry_line(b2, true)
+	var tail: float = float(h2["s"]) - Sim.chain_length(h2)
+	b2._cut_range(h2, tail, tail + 0.2, false)
+	check(h2 in b2.hordes and not h2.has("conv_carry"), "conveyor carry (b): cleared when the line falls (part of it off a lip)")
+	var s2: float = h2["s"]
+	b2.step(0.1)
+	check(absf((float(h2["s"]) - s2) - plain) < plain * 0.05, "conveyor carry (b): after the fall it walks x1 (%.2f m vs %.2f)" % [float(h2["s"]) - s2, plain])
+	# (c) a belt the other way: deck 9 flows 5 -> 4, against the line
+	m["edges"][9]["belt"] = "BA"
+	var b3 := _sim_of(m)
+	var h3 := _carry_line(b3, false)
+	check(h3 in b3.hordes and int(h3.get("conv", 0)) == -1 and int(h3.get("conv_carry", 0)) == -1 			and absf(b3.conveyor_mult(h3) - ca) < 0.001, "conveyor carry (c): a belt against it replaces the push with x%.2f (in %s conv %s carry %s state %s s %.2f route %s)" % [ca,
+			h3 in b3.hordes, h3.get("conv"), h3.get("conv_carry"), h3["state"], h3["s"], h3["route"]])
+	var sp9 := _span_of(h3, 9)
+	h3["s"] = minf(float(sp9["s1"]) - 0.05, float(h3["L"]) - 0.05)
+	h3["units"] = 0.2
+	if b3.conveyor_sense(h3)[0] == -1:
+		h3["s"] = float(h3["L"]) - 0.01             # (the belt runs to the target: check the carry right at the end too)
+	check(int(h3.get("conv_carry", 0)) == -1, "conveyor carry (c): it keeps the slow push to the end")
 
 
 func _launcher_round3() -> void:

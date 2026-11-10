@@ -86,7 +86,7 @@ func _strait() -> void:
 		check(open == 4, "R-01: laser relay %d keeps all 4 decks of the old lift open (got %d)" % [n["id"], open])
 		ys_st.append(snappedf((n["pos"] as Vector3).y, 0.01))
 	ys_st.sort()
-	check(ys_st == [0.0, snappedf(rise, 0.01)], "R-01: the stones sit where the lifts started - top on its raised road, bottom on the banks (got %s)" % [ys_st])
+	check(ys_st == [0.0, 0.0], "R-01: both stones sit on the banks, top mirroring bottom (Daniele 2026-11-09: map needs to be symmetric) (got %s)" % [ys_st])
 	var sl := _sim("R-01")                          # (a fresh sim: the lift checks below use this one's clock)
 	var home := -1
 	var up := -1
@@ -95,16 +95,16 @@ func _strait() -> void:
 		if float((sl.nodes[hn]["pos"] as Vector3).x) < 80.0:
 			home = hn
 	for n in sl.nodes:
-		if snappedf((n["pos"] as Vector3).y, 0.01) == snappedf(rise, 0.01) and float((n["pos"] as Vector3).x) < 80.0:
-			up = n["id"]
+		if snappedf((n["pos"] as Vector3).y, 0.01) == snappedf(-rise, 0.01) and float((n["pos"] as Vector3).x) < 80.0 				and (up < 0 or float((n["pos"] as Vector3).z) < float((sl.nodes[up]["pos"] as Vector3).z)):
+			up = n["id"]                              # the TOP outer road's home-side platform (lowered like the bottom one)
 	sl.nodes[home]["owner"] = "A"
 	sl.nodes[home]["units"] = 20.0
 	var hu: Dictionary = sl.send(home, up, 1.0)
-	var top := -9.0
+	var low := 9.0
 	if not hu.is_empty():
 		for p in hu["pts"]:
-			top = maxf(top, p.y)
-	check(absf(top - rise) < 0.01, "R-01: a line from home climbs to the raised road (top %.2f m)" % top)
+			low = minf(low, p.y)
+	check(up >= 0 and absf(low + rise) < 0.01, "R-01: a line from home goes down to the lowered TOP road, like the bottom one (low %.2f m)" % low)
 	check(s._belt_edges.size() == 2, "R-01: two plain belts (got %d)" % s._belt_edges.size())
 	for code in ["R-01", "R-05", "R-12"]:            # Daniele 2026-11-06 (proto21): "the conveyors are not working" - maps with
 		var sb := _sim(code)                          # plain belts and no speed relay never pushed (Sim gated on _conv_edges)

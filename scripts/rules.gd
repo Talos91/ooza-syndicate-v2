@@ -550,9 +550,13 @@ static var MACHINEGOON_RANGE := 10.0
 # GARRISON: the node grows its own units at GOOGATLING_PROD x the same-tier vat's rate (x the faction's production and the
 # usual production skills; an Echo jam stops it) up to the node's cap (CAPS[tier]); with an enemy line in MACHINEGOON_RANGE it
 # fires its garrison at MACHINEGOON_RATE[tier] (one unit per kill) until it is empty, then each unit as soon as it is made.
-# Units walking in (own lines, reinforcements) are more ammo. Fire 8 / 14 / 20 > production 2.5 / 4 / 6 sim units/s.
+# Units walking in (own lines, reinforcements) are more ammo. Fire 8 / 14 / 20 > regrow 1.06 / 1.7 / 2.55 sim units/s (x0.25, below).
 # A neutral map-placed one fires its neutral garrison and regrows it at the same half rate (neutral regen) to its garrison.
-static var GOOGATLING_PROD := 0.5
+# Daniele 2026-11-09 (Desk googat-unlimited = c, "slower regrow"; his 2026-11-06 words: "a column of enemies attack eventually the
+# googat will run out of ammunition"): 0.5 -> 0.25 - a GooGat regrows at a QUARTER of the same-tier vat's rate (T1 1.06 / T2 1.7 /
+# T3 2.55 sim u/s = 0.21 / 0.34 / 0.51 shown/s) against fire 8 / 14 / 20; from empty, a neutral T2 refills its 30 shown in ~88 s (was ~44 s)
+# and an owned T2 its 60 shown in ~176 s (was ~88 s; tests/gat_regrow_probe.gd).
+static var GOOGATLING_PROD := 0.25
 # LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
 # a LASER_BURST s burst killing at most LASER_KILL bodies split across the lines in range (the cannon's code
 # path), then LASER_RECHARGE s. ~8 kills/s shown, below the door's 9.6/s.

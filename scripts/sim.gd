@@ -1304,6 +1304,7 @@ func _cut_range(h: Dictionary, s0: float, s1: float, reroute := true, fling = nu
 		return
 	var frac := clampf(on / maxf(len, 0.001), 0.0, 1.0)
 	var units_on: float = h["units"] * frac
+	h.erase("conv_carry")                             # CONVEYOR CARRY (Daniele 2026-11-10): a line that falls loses the belt's speed
 	# reroute false: the deck is gone but the order stands (Daniele, 0.18.6: "if someone retract a bridge
 	# and your troops had order to go on said bridge they should go even if the bridge is no longer there
 	# hence... waterfall"): the vat keeps sending and whatever is behind the deck marches off its lip
@@ -1933,6 +1934,7 @@ func step(dt: float) -> void:
 			if h["s"] >= h["L"]:
 				h["s"] = h["L"]
 				h["state"] = "absorb"
+				h.erase("conv_carry")                     # CONVEYOR CARRY: cleared at the destination node
 			if not _ferry_edges.is_empty():
 				_ferry_count(h, s_was)                    # RELAYS 3.0 round 2: bodies past the moving bridge's far end
 	_step_armed()                                     # POWERS: an armed Core Meltdown goes off on arrival
@@ -6289,12 +6291,39 @@ func _ferry_tally_step() -> void:
 # bodies stands on a belt - more of its length with the flow: x RELAYS_PROTO.conveyor.with, more against: x .against
 # (a line is one chain, its speed one number). A line still leaving its vat is fed out of the door that much faster
 # (door_mult), so a belt next to the vat is felt at once.
+#
+# CONVEYOR CARRY (Daniele 2026-11-10: "once a column passes on it, it accelerates / decelerates and goes at that speed until
+# it meets the destination node, they fall, or another reverse conveyor (the slow)"): a moving line that a belt pushes keeps
+# that push after it leaves the belt - h["conv_carry"] = 1 (x .with) / -1 (x .against) - until (a) it reaches its target
+# (cleared where it turns "absorb"), (b) any of it falls (_cut_range), or (c) a belt pushes it the other way, which
+# replaces the carry with its own. A line still on a belt moves at that belt's factor as before.
 func conveyor_mult(h: Dictionary) -> float:
-	## Also leaves h["conv"] = 1 (with) / -1 (against) / 0 for the view's speed tag.
+	## Also leaves h["conv"] = 1 (with) / -1 (against) / 0 for the view's speed tag (on a belt now) and h["conv_carry"]
+	## (the push it keeps off the belt; see CONVEYOR CARRY).
 	var sense := conveyor_sense(h)
 	h["conv"] = sense[0]
+	var push: int = sense[0]
+	if h["state"] == "move":
+		if push != 0:
+			h["conv_carry"] = push                    # (c): a belt the other way replaces the carry
+		else:
+			push = int(h.get("conv_carry", 0))
+	return conv_factor(push)
+
+
+static func conv_factor(push: int) -> float:
+	## The speed factor of a belt push: 1 with (x RELAYS_PROTO.conveyor.with), -1 against (x .against), 0 none (x1).
 	var cfg: Dictionary = Rules.RELAYS_PROTO["conveyor"]
-	return 1.0 if sense[0] == 0 else (float(cfg["with"]) if sense[0] > 0 else float(cfg["against"]))
+	return 1.0 if push == 0 else (float(cfg["with"]) if push > 0 else float(cfg["against"]))
+
+
+static func carry_mult(h: Dictionary) -> float:
+	## The belt factor this line moves at now (its belt, else the push it carries), from the last step - for ETAs
+	## (SeatAI) and the view's carried-speed trail.
+	var push := int(h.get("conv", 0))
+	if push == 0:
+		push = int(h.get("conv_carry", 0))
+	return conv_factor(push)
 
 
 func conveyor_sense(h: Dictionary) -> Array:
