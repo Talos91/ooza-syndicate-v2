@@ -95,6 +95,11 @@ static var _base_mesh: ArrayMesh
 const CONN_PAD := 0.8            # m the connector block extends past the crossing tubes
 const CONN_H := 1.5              # m: block height (centred on the tube level)
 var connectors := false
+const GRID_TURN := 7.0           # m-equivalent cost of a corner in the grid router (fewer corners)
+const GRID_CAP := 90000          # expansions per tube before the router gives up (the v3 route is the fallback)
+var grid_routed := 0             # probes: tubes the grid router placed
+var _gobs: Array = []            # grid router obstacles [centre, radius]
+var _gbox := Rect2i()
 var _from_ortho := false
 var conn_count := 0
 var _conn_nodes: Array = []
@@ -158,6 +163,8 @@ func build() -> void:
 	_lanes.clear()
 	_ortho_runs.clear()
 	ortho_stats = [0, 0, 0]
+	grid_routed = 0
+	_grid_prepare()
 	var fixed: Array = []                             # the Locals' lane exits round each pit (kept clear)
 	for k in range(craters.size()):
 		fixed.append([])
@@ -212,6 +219,10 @@ func build() -> void:
 			if pts.is_empty():
 				pts = _path_ortho3(i, s, craters[p], p)
 				ortho_stats[2] += 1 if not pts.is_empty() else 0
+				if pts.is_empty():
+					pts = _path_grid(i, s, craters[p], p)
+					if not pts.is_empty():
+						grid_routed += 1
 		_from_ortho = not pts.is_empty()
 		if pts.is_empty():
 			pts = _path(i, s, craters[p], ang)
@@ -414,6 +425,231 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 				var axis := Vector2(sgn, 0.0) if fx else Vector2(0.0, sgn)
 				return _shape(even, c2, axis, true, axis, true)
 	return PackedVector3Array()
+
+
+func _grid_prepare() -> void:
+	_gobs.clear()
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for j in range(wl._tubes.size()):
+		var t2: Dictionary = wl._tubes[j]
+		var c := Vector2(t2["x"], t2["z"])
+		_gobs.append([c, (2.0 if t2.get("ent", false) else float(t2["r"]) + 1.0) + 0.55])
+		lo = lo.min(c)
+		hi = hi.max(c)
+	if wl.locals != null:
+		for cr in wl.locals.craters:
+			var c := Vector2((cr as Vector3).x, (cr as Vector3).z)
+			_gobs.append([c, WorldLocals.RING_R + 1.5])
+			lo = lo.min(c)
+			hi = hi.max(c)
+	var G := ORTHO_GAP
+	lo -= Vector2(14, 14)
+	hi += Vector2(14, 14)
+	_gbox = Rect2i(Vector2i(floori(lo.x / G), floori(lo.y / G)), Vector2i(ceili((hi.x - lo.x) / G), ceili((hi.y - lo.y) / G)))
+
+
+func _grid_blocked(v: Vector2i, cache: Dictionary) -> bool:
+	if cache.has(v):
+		return cache[v]
+	var q := Vector2(v.x, v.y) * ORTHO_GAP
+	var b := false
+	for ob in _gobs:
+		if q.distance_to(ob[0]) < float(ob[1]):
+			b = true
+			break
+	cache[v] = b
+	return b
+
+
+func _path_grid(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
+	## the real ortho router for what the lane tries could not place: a shortest-path search on the global lane grid (a vertex every
+	## ORTHO_GAP), edges free of other tubes' lanes, a cost per corner (fewer corners), ending at one of the pit's entry lanes
+	var G := ORTHO_GAP
+	var tb: Dictionary = wl._tubes[i]
+	var foot := Vector2(tb["x"], tb["z"])
+	var cd := corner_dir(s)
+	var c2 := Vector2(pit.x, pit.z)
+	var R0 := WorldLocals.RING_R + 0.9
+	var L0 := APOTHEM + 0.05 + RAMP_RUN + 0.9
+	var p0 := foot + cd * (APOTHEM + 0.05)
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	# the end vertices: every face and lane the pit still offers
+	var ends := {}                                      # vertex -> [required direction index, rim, a]
+	for fx in [true, false]:
+		for sg in [1.0, -1.0]:
+			for o in [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G, 4.0 * G, -4.0 * G]:
+				var latc: float = c2.y if fx else c2.x
+				var lat: float = roundf((latc + o) / G) * G
+				if absf(lat - latc) > 4.6:
+					continue
+				var a_al: float = roundf(((c2.x if fx else c2.y) + sg * (R0 + ENTRY_RUN)) / G) * G
+				var a := Vector2(a_al, lat) if fx else Vector2(lat, a_al)
+				var rim := Vector2(c2.x + sg * R0, lat) if fx else Vector2(lat, c2.y + sg * R0)
+				var bear := atan2(rim.y - c2.y, rim.x - c2.x)
+				var blocked := false
+				for fb in _fixed[pi]:
+					if absf(angle_difference(bear, float(fb))) < LANE_SEP:
+						blocked = true
+				if blocked:
+					continue
+				var ax := "X" if fx else "Z"
+				var lo2: float = minf(a_al, (c2.x if fx else c2.y) + sg * R0)
+				var hi2: float = maxf(a_al, (c2.x if fx else c2.y) + sg * R0)
+				if not _lane_free(ax, lat, lo2, hi2):
+					continue
+				var di := (1 if sg > 0.0 else 0) if fx else (3 if sg > 0.0 else 2)   # arrives moving toward the pit
+				var vk := Vector2i(roundi(a.x / G), roundi(a.y / G))
+				if not ends.has(vk):
+					ends[vk] = [di, rim, a, sg, fx]
+	if ends.is_empty():
+		return PackedVector3Array()
+	var cache := {}
+	for variant in [0, 1]:                              # the first leg runs along x (z lane fixed) or along z
+		var cdc: float = cd.y if variant == 0 else cd.x
+		if absf(cdc) < 0.01:
+			continue
+		var f0: float = foot.y if variant == 0 else foot.x
+		for dstub in [0, 1, -1, 2, -2]:
+			var lane: float = (roundf((f0 + cdc * L0) / G) + dstub) * G
+			var L := (lane - f0) / cdc
+			if L < APOTHEM + 0.05 + RAMP_RUN + 0.2:
+				continue
+			var p1 := foot + cd * L
+			# start vertices: the two grid points flanking p1 on its line
+			var starts: Array = []
+			if variant == 0:
+				var ix := p1.x / G
+				starts.append([Vector2i(floori(ix), roundi(lane / G)), 1])
+				starts.append([Vector2i(ceili(ix), roundi(lane / G)), 0])
+			else:
+				var iz := p1.y / G
+				starts.append([Vector2i(roundi(lane / G), floori(iz)), 3])
+				starts.append([Vector2i(roundi(lane / G), ceili(iz)), 2])
+			var res := _grid_search(starts, ends, cache, dirs, p1)
+			if res.is_empty():
+				continue
+			return _grid_finish(res, ends, p0, p1, c2)
+	return PackedVector3Array()
+
+
+func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Array, p1: Vector2) -> Array:
+	## Dijkstra over (vertex, direction) states with a bucketed queue (cost in half metres); returns [vertex path, end record]
+	var G := ORTHO_GAP
+	var best := {}
+	var prev := {}
+	var buckets: Array = []
+	for _b in range(2400):
+		buckets.append([])
+	for st in starts:
+		var v: Vector2i = st[0]
+		if not _gbox.has_point(v) or _grid_blocked(v, cache):
+			continue
+		var key := [v.x, v.y, st[1]]
+		var c0 := Vector2(v.x, v.y) * G
+		var cost := p1.distance_to(c0)
+		best[key] = cost
+		prev[key] = null
+		buckets[mini(int(cost * 2.0), 2399)].append([cost, key])
+	var expansions := 0
+	for bi in range(buckets.size()):
+		var bucket: Array = buckets[bi]
+		var qi := 0
+		while qi < bucket.size():
+			var item: Array = bucket[qi]
+			qi += 1
+			var cost: float = item[0]
+			var key: Array = item[1]
+			if cost > float(best.get(key, INF)) + 0.001:
+				continue
+			expansions += 1
+			if expansions > GRID_CAP:
+				return []
+			var v := Vector2i(key[0], key[1])
+			var d: int = key[2]
+			if ends.has(v) and int(ends[v][0]) == d:
+				var path: Array = []
+				var cur = key
+				while cur != null:
+					path.append([cur[0], cur[1], cur[2]])
+					cur = prev.get(cur, null)
+				path.reverse()
+				return [path, ends[v]]
+			for nd in range(4):
+				if (nd == 0 and d == 1) or (nd == 1 and d == 0) or (nd == 2 and d == 3) or (nd == 3 and d == 2):
+					continue
+				var nv: Vector2i = v + dirs[nd]
+				if not _gbox.has_point(nv) or _grid_blocked(nv, cache):
+					continue
+				var a := Vector2(v.x, v.y) * G
+				var b := Vector2(nv.x, nv.y) * G
+				var ax := "X" if nd < 2 else "Z"
+				var coord: float = a.y if nd < 2 else a.x
+				var lo: float = minf(a.x if nd < 2 else a.y, b.x if nd < 2 else b.y)
+				var hi: float = maxf(a.x if nd < 2 else a.y, b.x if nd < 2 else b.y)
+				if not _lane_free(ax, coord, lo, hi):
+					continue
+				var ncost := cost + G + (GRID_TURN if nd != d else 0.0)
+				var nkey := [nv.x, nv.y, nd]
+				if ncost < float(best.get(nkey, INF)) - 0.001:
+					best[nkey] = ncost
+					prev[nkey] = key
+					var slot := mini(int(ncost * 2.0), 2399)
+					buckets[slot].append([ncost, nkey])
+	return []
+
+
+func _grid_finish(res: Array, ends: Dictionary, p0: Vector2, p1: Vector2, c2: Vector2) -> PackedVector3Array:
+	var G := ORTHO_GAP
+	var path: Array = res[0]
+	var rec: Array = res[1]
+	var rim: Vector2 = rec[1]
+	var a_end: Vector2 = rec[2]
+	var sg: float = rec[3]
+	var fx: bool = rec[4]
+	var way: Array = [p0, p1]
+	var seg_start := Vector2(path[0][0], path[0][1]) * G
+	way.append(seg_start)
+	var cur_dir: int = path[0][2]
+	var run_a := seg_start
+	var last := seg_start
+	for k in range(1, path.size()):
+		var v := Vector2(path[k][0], path[k][1]) * G
+		if int(path[k][2]) != cur_dir:
+			_grid_take(run_a, last, cur_dir)
+			way.append(last)
+			run_a = last
+			cur_dir = int(path[k][2])
+		last = v
+	_grid_take(run_a, last, cur_dir)
+	way.append(last)
+	way.append(a_end)
+	way.append(rim)
+	var ax := "X" if fx else "Z"
+	var lat: float = rim.y if fx else rim.x
+	_lane_take(ax, lat, minf(a_end.x if fx else a_end.y, rim.x if fx else rim.y), maxf(a_end.x if fx else a_end.y, rim.x if fx else rim.y))
+	# drop duplicate / collinear points
+	var clean: Array = [way[0]]
+	for k in range(1, way.size()):
+		if (way[k] as Vector2).distance_to(clean[clean.size() - 1]) > 0.05:
+			clean.append(way[k])
+	var f: Array = _fillet(clean, ORTHO_BEND)
+	var even: Array = [f[0]]
+	for k in range(1, f.size()):
+		var q0: Vector2 = f[k - 1]
+		var q1: Vector2 = f[k]
+		var m := maxi(ceili(q0.distance_to(q1) / 1.5), 1)
+		for j in range(1, m + 1):
+			even.append(q0.lerp(q1, float(j) / m))
+	var axis := Vector2(sg, 0.0) if fx else Vector2(0.0, sg)
+	return _shape(even, c2, axis, true, axis, true)
+
+
+func _grid_take(a: Vector2, b: Vector2, d: int) -> void:
+	if d < 2:
+		_lane_take("X", a.y, minf(a.x, b.x), maxf(a.x, b.x))
+	else:
+		_lane_take("Z", a.x, minf(a.y, b.y), maxf(a.y, b.y))
 
 
 func _mk(fx: bool, along: float, lat: float) -> Vector2:
