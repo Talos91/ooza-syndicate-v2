@@ -20,6 +20,8 @@ var u := 1.0
 var state := "hint"
 var report_narrow := false
 var vwhere := ""
+var tag_mode := "col"
+var vcand := {}
 var toast_mode := "spec"
 var _n := 0
 var _sz := {}                                      # name -> canvas size px
@@ -46,6 +48,8 @@ static func wanted() -> bool:
 func setup(h) -> void:
 	hud = h
 	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--r20-tag="):
+			tag_mode = a.substr(10)
 		if a.begins_with("--r20-toast="):
 			toast_mode = a.substr(12)
 		if a.begins_with("--r20-state="):
@@ -200,6 +204,28 @@ func _draw() -> void:
 	# correction 1.2: the version tag moves under the skill column (right aligned, inside the safe area, no wider than the column);
 	# if it does not fit there, right under the pause / music buttons
 	var vt: Control = hud.version_label
+	if tag_mode == "bl" and vt and hud.map_title:
+		# designer v3 (phone): bottom-left in the tank column under / after the map tag, never wider than the tank column,
+		# inside the safe area and clear of everything; else shown in the pause menu only (tag hidden here)
+		var mg: Rect2 = hud.map_title.get_global_rect()
+		var tcol_w: float = 83.3 * u
+		var cands := {"under map tag": Vector2(mg.position.x, mg.end.y + 1.0), "after map tag": Vector2(mg.end.x + 4.0, mg.position.y)}
+		vwhere = "pause menu only (no free spot)"
+		vt.modulate.a = 0.0
+		for k in cands:
+			var r := Rect2(cands[k], vt.size)
+			var rp := Rect2(r.position / u, r.size / u)
+			var ok := r.size.x <= tcol_w and (rects["safe"] as Rect2).encloses(rp)
+			for ok_k in ["node_card", "tank(art)"]:
+				if rects.has(ok_k) and (rects[ok_k] as Rect2).intersects(rp):
+					ok = false
+			vcand[k] = {"rect": [snappedf(rp.position.x, 0.1), snappedf(rp.position.y, 0.1), snappedf(rp.size.x, 0.1), snappedf(rp.size.y, 0.1)], "ok": ok}
+			if ok:
+				vt.position = cands[k]
+				vt.modulate.a = 1.0
+				vwhere = k
+				break
+		vt = null
 	if vt and hud.dock and hud.dock.is_visible_in_tree():
 		var dg: Rect2 = hud.dock.get_global_rect()
 		var vw := vt.size.x
@@ -220,6 +246,8 @@ func _draw() -> void:
 		if c and c.is_visible_in_tree() and c.size.x > 1.0:
 			var g := c.get_global_rect()
 			rects[pair[0]] = Rect2(g.position / u, g.size / u)
+	if vwhere.begins_with("pause"):
+		rects.erase("version_tag")
 	# ---- toasts: body 190 x 20 at (L, 4) and (L, 27); text-safe left 144-48 = 96 px from the body, right 62 px
 	var tw := 190.0
 	var tdata := [[toast_a, Color("5cf0a8"), 4.0, "toast_1"], [toast_b, Color("ff6b6b"), 27.0, "toast_2"]]
@@ -291,7 +319,7 @@ func _draw() -> void:
 		var left := m.x(204)
 		var right := m.bx + m.tw - (1746.0 - 1718.0) * m.s
 		_text(hint_txt, left, right - left, m.y(132), 12.5, "hint_line")
-	report = {"W_pt": snappedf(W, 0.1), "H_pt": snappedf(H, 0.1), "u": snappedf(u, 0.001), "state": state, "narrow": report_narrow, "version_where": vwhere, "texts": texts.duplicate(), "rects": {}}
+	report = {"W_pt": snappedf(W, 0.1), "H_pt": snappedf(H, 0.1), "u": snappedf(u, 0.001), "state": state, "narrow": report_narrow, "version_where": vwhere, "version_cands": vcand, "texts": texts.duplicate(), "rects": {}}
 	for k in rects:
 		var r: Rect2 = rects[k]
 		report["rects"][k] = [snappedf(r.position.x, 0.1), snappedf(r.position.y, 0.1), snappedf(r.size.x, 0.1), snappedf(r.size.y, 0.1)]
