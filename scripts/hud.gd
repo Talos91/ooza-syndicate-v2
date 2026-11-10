@@ -722,6 +722,11 @@ func layout(vp: Vector2, m: Vector4) -> void:
 		side_y = maxf(side_y, tall_room.x + (tall_room.y - tall_room.x - side_panel.size.y) / 2.0)
 	side_panel.position = Vector2(m.x, side_y)          # send controls on the LEFT, like Alpha 11 (Daniele)
 	map_title.position = Vector2(m.x + 8, vp.y - m.w - 30 * ui_scale)
+	if mobile and UiKit.is_tall(vp):                   # ui-tall-k (designer v2): the map tag follows hud_k on tall screens (12.5 pt x k)
+		map_title.add_theme_font_size_override("font_size", maxi(int(20 * ui_scale), ceili(12.5 * pt(1.0))))
+		map_title.size = Vector2.ZERO
+		map_title.size = map_title.get_combined_minimum_size()
+		map_title.position.y = vp.y - m.w - maxf(30 * ui_scale, map_title.size.y + 4.0)
 	hint.size = Vector2(vp.x * 0.5, 20)
 	hint.position = Vector2(vp.x * 0.5 - hint.size.x / 2.0, vp.y - m.w - 18)
 	# Alpha 24 (Hub Roadmap m05, "send on the left thumb, skills stacked on the right"): the skills stand in a column on the
