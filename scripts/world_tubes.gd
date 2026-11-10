@@ -93,10 +93,13 @@ static var _base_mesh: ArrayMesh
 # they meet inside a small steel CONNECTOR block (the tubes enter its left / right faces and its up / down faces through
 # doors), so the overlap is hidden in a node, not bridged. Dev: --tubes=connectors. (--tubes=ortho = the two-level version.)
 const CONN_PAD := 0.8            # m the connector block extends past the crossing tubes
+const CONN_MAX := 7.5             # m: the biggest trunk block
+const CONN_MERGE := 3.0           # m: blocks closer than this merge into one trunk block
 const CONN_H := 1.5              # m: block height (centred on the tube level)
 var connectors := false
 const GRID_CROSS := 14.0         # m-equivalent cost of crossing another tube (fewer crossings = fewer connectors)
 const GRID_BUNDLE := 0.35        # m-equivalent saving per step that runs right beside another tube (stripes form)
+const GRID_MIN_RUN := 3          # cells (3.3 m) a tube runs straight before it may turn again: no zigzags, no tight kinks
 const GRID_TURN := 10.0           # m-equivalent cost of a corner in the grid router (fewer corners)
 const GRID_CAP := 90000          # expansions per tube before the router gives up (the v3 route is the fallback)
 var grid_routed := 0             # probes: tubes the grid router placed
@@ -456,7 +459,7 @@ func _grid_prepare() -> void:
 	for j in range(wl._tubes.size()):
 		var t2: Dictionary = wl._tubes[j]
 		var c := Vector2(t2["x"], t2["z"])
-		_gobs.append([c, (2.0 if t2.get("ent", false) else float(t2["r"]) + 1.0) + 0.55])
+		_gobs.append([c, (2.0 if t2.get("ent", false) else float(t2["r"]) + 1.0) + 1.4])
 		lo = lo.min(c)
 		hi = hi.max(c)
 	if wl.locals != null:
@@ -567,7 +570,7 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 		var v: Vector2i = st[0]
 		if not _gbox.has_point(v) or _grid_blocked(v, cache):
 			continue
-		var key := [v.x, v.y, st[1]]
+		var key := [v.x, v.y, st[1], 0]
 		var c0 := Vector2(v.x, v.y) * G
 		var cost := p1.distance_to(c0)
 		best[key] = cost
@@ -589,17 +592,20 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 				return []
 			var v := Vector2i(key[0], key[1])
 			var d: int = key[2]
+			var run: int = key[3]
 			if ends.has(v) and int(ends[v][0]) == d:
 				var path: Array = []
 				var cur = key
 				while cur != null:
-					path.append([cur[0], cur[1], cur[2]])
+					path.append([cur[0], cur[1], cur[2]])   # (the run counter stays in the state key)
 					cur = prev.get(cur, null)
 				path.reverse()
 				return [path, ends[v]]
 			for nd in range(4):
 				if (nd == 0 and d == 1) or (nd == 1 and d == 0) or (nd == 2 and d == 3) or (nd == 3 and d == 2):
 					continue
+				if nd != d and run < GRID_MIN_RUN:
+					continue                                # a corner needs a straight run before it
 				var nv: Vector2i = v + dirs[nd]
 				if not _gbox.has_point(nv) or _grid_blocked(nv, cache):
 					continue
@@ -617,7 +623,7 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 					ncost += GRID_CROSS                    # it would cross another tube here
 				if not _lane_free(ax, coord + G, lo, hi) or not _lane_free(ax, coord - G, lo, hi):
 					ncost -= GRID_BUNDLE                   # it runs right beside another tube: stripes, not strands
-				var nkey := [nv.x, nv.y, nd]
+				var nkey := [nv.x, nv.y, nd, mini(run + 1, GRID_MIN_RUN) if nd == d else 1]
 				if ncost < float(best.get(nkey, INF)) - 0.001:
 					best[nkey] = ncost
 					prev[nkey] = key
@@ -831,6 +837,7 @@ func _build_connectors() -> void:
 	ring_mat.albedo_color = STEEL_D
 	ring_mat.metallic = 0.6
 	ring_mat.roughness = 0.4
+	var rects: Array = []                              # one [x0, x1, z0, z1, y, xl, zl] per group, then merged
 	for g in group:
 		var xl: Array = []                             # z coordinates of the x runs (one lane each, snapped to the grid)
 		var zl: Array = []                             # x coordinates of the z runs
@@ -840,24 +847,47 @@ func _build_connectors() -> void:
 			var pt: Vector2 = h[0]
 			var lx := roundf((pt.y if h[2] else pt.x) / ORTHO_GAP) * ORTHO_GAP
 			var lz := roundf((pt.x if h[2] else pt.y) / ORTHO_GAP) * ORTHO_GAP
-			var xs: float = lx
-			var zs: float = lz
 			if h[2]:
-				if not xl.has(xs): xl.append(xs)
-				if not zl.has(zs): zl.append(zs)
+				if not xl.has(lx): xl.append(lx)
+				if not zl.has(lz): zl.append(lz)
 			else:
-				if not zl.has(xs): zl.append(xs)
-				if not xl.has(zs): xl.append(zs)
+				if not zl.has(lx): zl.append(lx)
+				if not xl.has(lz): xl.append(lz)
 		y /= float(g.size())
-		xl.sort()
-		zl.sort()
 		if xl.is_empty() or zl.is_empty():
 			continue
-		var half := ORTHO_GAP * 0.5 + 0.25
-		var x0: float = float(zl[0]) - half - CONN_PAD * 0.5      # the block spans the z lanes in x ...
-		var x1: float = float(zl[zl.size() - 1]) + half + CONN_PAD * 0.5
-		var z0: float = float(xl[0]) - half - CONN_PAD * 0.5      # ... and the x lanes in z
-		var z1: float = float(xl[xl.size() - 1]) + half + CONN_PAD * 0.5
+		rects.append({"xl": xl, "zl": zl, "y": y})
+	var merged := true
+	while merged:                                      # trunk blocks: neighbouring crossings become one bigger block
+		merged = false
+		for i1 in range(rects.size()):
+			for i2 in range(i1 + 1, rects.size()):
+				var ra := _conn_rect(rects[i1])
+				var rb := _conn_rect(rects[i2])
+				if not ra.grow(CONN_MERGE).intersects(rb):
+					continue
+				var u := {"xl": (rects[i1]["xl"] as Array) + (rects[i2]["xl"] as Array), "zl": (rects[i1]["zl"] as Array) + (rects[i2]["zl"] as Array),
+						"y": (float(rects[i1]["y"]) + float(rects[i2]["y"])) * 0.5}
+				var ur := _conn_rect(u)
+				if ur.size.x > CONN_MAX or ur.size.y > CONN_MAX or _conn_hits_obstacle(ur):
+					continue                           # never swallow a column base or a pit, never grow into a slab
+				rects[i1] = u
+				rects.remove_at(i2)
+				merged = true
+				break
+			if merged:
+				break
+	for rc in rects:
+		var xl: Array = rc["xl"]
+		var zl: Array = rc["zl"]
+		var y: float = rc["y"]
+		xl.sort()
+		zl.sort()
+		var rr := _conn_rect(rc)
+		var x0 := rr.position.x
+		var x1 := rr.end.x
+		var z0 := rr.position.y
+		var z1 := rr.end.y
 		var cen := Vector3((x0 + x1) * 0.5, wl.floor_y + y, (z0 + z1) * 0.5)
 		var mi := MeshInstance3D.new()
 		var bx := BoxMesh.new()
@@ -893,6 +923,26 @@ func _build_connectors() -> void:
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.add_child(mmi)
 		conn_count += 1
+
+
+func _conn_rect(rc: Dictionary) -> Rect2:
+	var xl: Array = rc["xl"]
+	var zl: Array = rc["zl"]
+	var half := ORTHO_GAP * 0.5 + 0.25 + CONN_PAD * 0.5
+	var xs: Array = zl.duplicate()
+	var zs: Array = xl.duplicate()
+	xs.sort()
+	zs.sort()
+	return Rect2(Vector2(float(xs[0]) - half, float(zs[0]) - half), Vector2(float(xs[xs.size() - 1]) - float(xs[0]) + 2.0 * half, float(zs[zs.size() - 1]) - float(zs[0]) + 2.0 * half))
+
+
+func _conn_hits_obstacle(r: Rect2) -> bool:
+	for ob in _gobs:
+		var c: Vector2 = ob[0]
+		var q := Vector2(clampf(c.x, r.position.x, r.end.x), clampf(c.y, r.position.y, r.end.y))
+		if q.distance_to(c) < float(ob[1]) - 0.6:
+			return true
+	return false
 
 
 func laid_y(ri: int, k: int) -> float:
