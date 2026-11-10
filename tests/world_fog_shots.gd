@@ -93,6 +93,14 @@ func _run() -> void:
 			await RenderingServer.frame_post_draw
 			img = inst.get_viewport().get_texture().get_image()
 			img.save_png(out + "/" + nm + ".png")
+	var sp := []
+	for c in wl.locals.craters:
+		sp.append(Vector2(snappedf(c.x, 0.01), snappedf(c.z, 0.01)))
+	print("SYMPROBE craters ", sp)
+	var tp := []
+	for i in wl.pipes.cols:
+		tp.append(Vector2(snappedf(wl._tubes[i]["x"], 0.01), snappedf(wl._tubes[i]["z"], 0.01)))
+	print("SYMPROBE cols ", tp)
 	print("ORTHO stats ", wl.pipes.ortho_stats, " connectors ", wl.pipes.conn_count, " grid ", wl.pipes.grid_routed, " ortho=", wl.pipes.ortho)
 	var s := img.get_size()
 	var mid := Rect2i(s.x / 4, s.y / 4, s.x / 2, s.y / 2)

@@ -220,13 +220,18 @@ func build() -> void:
 	var runs: Array = []                              # [col index, socket, pit, entry angle, world points]
 	var slot_of := {}
 	_laid.clear()
+	var done := {}
 	for key in order:
+		if done.has(key):
+			continue
 		var i := int(key[0])
 		var p := int(plan[key][0])
 		var s := int(plan[key][1])
 		var ang: float = angle_of[key]
 		var pts := PackedVector3Array()
 		_from_ortho = false
+		_lane_log.clear()
+		_lane_logging = true
 		if ortho:
 			pts = _path_grid(i, s, craters[p], p)
 			if not pts.is_empty():
@@ -241,14 +246,20 @@ func build() -> void:
 					pts = _path_grid(i, s, craters[p], p)
 					if not pts.is_empty():
 						grid_routed += 1
+		_lane_logging = false
 		_from_ortho = not pts.is_empty()
 		if pts.is_empty():
 			pts = _path(i, s, craters[p], ang)
-		_laid.append(pts)
-		if _from_ortho:
-			_ortho_runs.append(_laid.size() - 1)
-		runs.append([i, s, p, ang, pts])
-		slot_of[key] = runs.size() - 1
+		_register(runs, slot_of, key, i, s, p, ang, pts, _from_ortho)
+		done[key] = true
+		# the map is symmetric (x and z mirrors): the mirrored tubes are THIS route mirrored, so the layout is symmetric too
+		for t in [Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
+			var pk = _mirror_key(key, t, plan, craters)
+			if pk == null or done.has(pk):
+				continue
+			_register(runs, slot_of, pk, int(pk[0]), int(plan[pk][1]), int(plan[pk][0]), angle_of[pk], _mirror_pts(pts, t), _from_ortho)
+			_mirror_lanes(t)
+			done[pk] = true
 	for i in cols:                                    # slots in tube order (k-th tube = k-th nearest pit)
 		var sl: Array = []
 		for k in range((cols[i]["pits"] as Array).size()):
@@ -346,7 +357,72 @@ func _lane_covers(ax: String, coord: float, pos: float) -> bool:
 	return false
 
 
+var _lane_log: Array = []
+var _lane_logging := false
+
+
+func _register(runs: Array, slot_of: Dictionary, key: Array, i: int, s: int, p: int, ang: float, pts: PackedVector3Array, from_ortho: bool) -> void:
+	_laid.append(pts)
+	if from_ortho:
+		_ortho_runs.append(_laid.size() - 1)
+	runs.append([i, s, p, ang, pts])
+	slot_of[key] = runs.size() - 1
+
+
+func _mirror_key(key: Array, t: Vector2, plan: Dictionary, craters: Array):
+	## the tube that is this one seen in the x / z mirror (the maps are symmetric), or null
+	var tb: Dictionary = wl._tubes[int(key[0])]
+	var foot := Vector2(float(tb["x"]) * t.x, float(tb["z"]) * t.y)
+	var cd := corner_dir(int(plan[key][1]))
+	var want_cd := Vector2(cd.x * t.x, cd.y * t.y)
+	var c: Vector3 = craters[int(plan[key][0])]
+	var want_c := Vector2(c.x * t.x, c.z * t.y)
+	for k2 in plan.keys():
+		var t2: Dictionary = wl._tubes[int(k2[0])]
+		if Vector2(float(t2["x"]), float(t2["z"])).distance_to(foot) > 0.1:
+			continue
+		var c2: Vector3 = craters[int(plan[k2][0])]
+		if Vector2(c2.x, c2.z).distance_to(want_c) > 0.1:
+			continue
+		if corner_dir(int(plan[k2][1])).distance_to(want_cd) > 0.05:
+			continue
+		return k2
+	return null
+
+
+static func _mirror_pts(pts: PackedVector3Array, t: Vector2) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for q in pts:
+		out.append(Vector3(q.x * t.x, q.y, q.z * t.y))
+	return out
+
+
+func _mirror_lanes(t: Vector2) -> void:
+	for e in _lane_log:
+		var ax: String = e[0]
+		var coord: float = e[1]
+		var lo: float = e[2]
+		var hi: float = e[3]
+		if ax == "X":                                 # an x run: z is its lane, x its interval
+			var a := lo * t.x
+			var b := hi * t.x
+			_lane_take_raw("X", coord * t.y, minf(a, b), maxf(a, b))
+		else:
+			var a2 := lo * t.y
+			var b2 := hi * t.y
+			_lane_take_raw("Z", coord * t.x, minf(a2, b2), maxf(a2, b2))
+
+
+func _lane_take_raw(ax: String, coord: float, lo: float, hi: float) -> void:
+	var key := ax + str(roundi(coord / ORTHO_GAP))
+	if not _lanes.has(key):
+		_lanes[key] = []
+	_lanes[key].append([lo, hi])
+
+
 func _lane_take(ax: String, coord: float, lo: float, hi: float) -> void:
+	if _lane_logging:
+		_lane_log.append([ax, coord, minf(lo, hi), maxf(lo, hi)])
 	var key := ax + str(roundi(coord / ORTHO_GAP))
 	if not _lanes.has(key):
 		_lanes[key] = []
