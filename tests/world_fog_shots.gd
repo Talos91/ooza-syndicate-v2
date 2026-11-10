@@ -62,10 +62,35 @@ func _run() -> void:
 	inst.cam_target = inst._view_fit[0]
 	inst.cam_dist = inst._view_fit[1]
 	inst._place_camera()
+	for a in OS.get_cmdline_user_args():
+		if a == "top=1":                              # straight down over the board (tube layout view)
+			var lc: WorldLocals = wl.locals
+			var bb := lc.board_bounds()
+			var ctr := Vector3(bb.get_center().x, wl.floor_y, bb.get_center().y)
+			var cam := Camera3D.new()
+			cam.fov = 40.0
+			cam.far = 600.0
+			inst.add_child(cam)
+			cam.global_position = ctr + Vector3(0, 125.0, 0.01)
+			cam.look_at(ctr, Vector3(0, 0, -1))
+			cam.make_current()
+			inst.get_node("..") if false else null
+			await get_tree().process_frame
+			await get_tree().process_frame
 	await _frames(3)
 	await RenderingServer.frame_post_draw
 	var img := inst.get_viewport().get_texture().get_image()
 	img.save_png(out + "/" + nm + ".png")
+	for a in OS.get_cmdline_user_args():
+		if a == "rebuild=1":                          # exercise the runtime switch: v3 -> ortho -> v3 -> ortho
+			wl.pipes.rebuild(true)
+			wl.pipes.rebuild(false)
+			wl.pipes.rebuild(true)
+			await _frames(30)
+			await RenderingServer.frame_post_draw
+			img = inst.get_viewport().get_texture().get_image()
+			img.save_png(out + "/" + nm + ".png")
+	print("ORTHO stats ", wl.pipes.ortho_stats, " ortho=", wl.pipes.ortho)
 	var s := img.get_size()
 	var mid := Rect2i(s.x / 4, s.y / 4, s.x / 2, s.y / 2)
 	var layer: CanvasLayer = inst.scenery.backdrop

@@ -85,6 +85,17 @@ var _laid: Array = []            # the tubes built so far (world points): later 
 var posts: Array = []            # v2: [slot, foot (world), top y] - the stands under the level runs (probes)
 var run_pts: Array = []          # probes (tests/pits_tubes_clip.gd): per slot [col index, socket, pit, world points]
 static var _base_mesh: ArrayMesh
+# ORTHO ROUTING (Daniele 2026-11-11, "try tubes aligned, moving only on cardinal axes, minimal corners, as much parallel
+# overlap as possible so the background is more orderly"): a switch. Off = the v3 free routing. On = socket stub, then ONE
+# corner, every straight leg on a global lane grid (ORTHO_GAP) so neighbours run exactly side by side, and each tube enters its
+# pit along an axis. A tube the grid cannot place (an obstacle, a Locals' exit) falls back to the v3 route. Dev: --tubes=ortho.
+const ORTHO_GAP := 1.1           # m between two parallel lanes (tube diameter 0.54)
+const ORTHO_BEND := 1.4          # m: corner radius in ortho mode
+const ORTHO_DEFAULT := false
+var ortho := ORTHO_DEFAULT
+var ortho_stats := [0, 0, 0]     # probes: tubes routed on the grid (1 corner) / fallen back to v3 / of those fallen back, routed with 2 corners
+var _lanes := {}                 # "X<idx>" / "Z<idx>" -> [[lo, hi], ...] the stretches already taken
+var _fixed: Array = []           # per pit: the bearings of the Locals' exits
 
 
 static func corner_dir(k: int) -> Vector2:
@@ -104,6 +115,9 @@ static func tubes_for(n: Dictionary, start_tier: int, home: bool, tier := -1) ->
 
 func setup(w: WorldLayer) -> void:
 	wl = w
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--tubes="):
+			ortho = a.substr(8) == "ortho"
 	var homes: Array = wl.sim.homes.values()
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
@@ -132,6 +146,8 @@ func build() -> void:
 	pit_cols.clear()
 	for k in range(craters.size()):
 		pit_cols.append(WorldLayer.NATIVE_GRAY)
+	_lanes.clear()
+	ortho_stats = [0, 0, 0]
 	var fixed: Array = []                             # the Locals' lane exits round each pit (kept clear)
 	for k in range(craters.size()):
 		fixed.append([])
@@ -140,6 +156,7 @@ func build() -> void:
 		var c: Vector3 = craters[int(f["crater"])]
 		var ex: Vector2 = (f["path"] as Array)[0]
 		fixed[int(f["crater"])].append(atan2(ex.y - c.z, ex.x - c.x))
+	_fixed = fixed
 	var into: Array = []                              # per pit: [col index, slot k, socket, wanted bearing]
 	for k in range(craters.size()):
 		into.append([])
@@ -177,7 +194,15 @@ func build() -> void:
 		var p := int(plan[key][0])
 		var s := int(plan[key][1])
 		var ang: float = angle_of[key]
-		var pts := _path(i, s, craters[p], ang)
+		var pts := PackedVector3Array()
+		if ortho:
+			pts = _path_ortho(i, s, craters[p], p)
+			ortho_stats[0 if not pts.is_empty() else 1] += 1
+			if pts.is_empty():
+				pts = _path_ortho3(i, s, craters[p], p)
+				ortho_stats[2] += 1 if not pts.is_empty() else 0
+		if pts.is_empty():
+			pts = _path(i, s, craters[p], ang)
 		_laid.append(pts)
 		runs.append([i, s, p, ang, pts])
 		slot_of[key] = runs.size() - 1
@@ -244,6 +269,217 @@ func _side_by_side(way: Array) -> Array:
 			for k in range(lo + 1, hi - 1):
 				out[k] = ((out[k - 1] as Vector2) + (out[k] as Vector2) * 2.0 + (out[k + 1] as Vector2)) / 4.0
 	return out
+
+
+func rebuild(on: bool) -> void:
+	## the switch (playground / probes): re-lay every tube with the ortho routing on or off
+	ortho = on
+	if _mi != null:
+		_mi.queue_free()
+		_mi = null
+	_laid.clear()
+	built = false
+	build()
+
+
+func _lane_free(ax: String, coord: float, lo: float, hi: float) -> bool:
+	var key := ax + str(roundi(coord / ORTHO_GAP))
+	for iv in _lanes.get(key, []):
+		if lo < float(iv[1]) + 0.9 and hi > float(iv[0]) - 0.9:
+			return false
+	return true
+
+
+func _lane_take(ax: String, coord: float, lo: float, hi: float) -> void:
+	var key := ax + str(roundi(coord / ORTHO_GAP))
+	if not _lanes.has(key):
+		_lanes[key] = []
+	_lanes[key].append([minf(lo, hi), maxf(lo, hi)])
+
+
+func _ortho_clear(a: Vector2, b: Vector2, i: int, pit_c: Vector2) -> bool:
+	## a straight leg keeps clear of every other column's base and of every pit but its own
+	for j in range(wl._tubes.size()):
+		if j == i:
+			continue
+		var t2: Dictionary = wl._tubes[j]
+		var r := (2.0 if t2.get("ent", false) else float(t2["r"]) + 1.0) + 0.35
+		var cc := Vector2(t2["x"], t2["z"])
+		if Geometry2D.get_closest_point_to_segment(cc, a, b).distance_to(cc) < r:
+			return false
+	for c in wl.locals.craters:
+		var cc := Vector2((c as Vector3).x, (c as Vector3).z)
+		if cc.distance_to(pit_c) < 0.1:
+			continue
+		if Geometry2D.get_closest_point_to_segment(cc, a, b).distance_to(cc) < WorldLocals.RING_R + 1.3:
+			return false
+	return true
+
+
+func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
+	## socket stub (diagonal, climbing) -> one leg along an axis on a grid lane -> ONE corner -> the final leg along the other
+	## axis on a grid lane into the pit. Empty = no grid route (the caller uses the v3 path).
+	var tb: Dictionary = wl._tubes[i]
+	var foot := Vector2(tb["x"], tb["z"])
+	var cd := corner_dir(s)
+	var c2 := Vector2(pit.x, pit.z)
+	var G := ORTHO_GAP
+	var R0 := WorldLocals.RING_R + 0.9
+	var L0 := APOTHEM + 0.05 + RAMP_RUN + 0.9
+	var p0 := foot + cd * (APOTHEM + 0.05)
+	var d0 := (foot + cd * L0) - c2
+	var axes: Array = ["X", "Z"] if absf(d0.x) >= absf(d0.y) else ["Z", "X"]   # the final leg's axis: the longer one first
+	for fa in axes:
+		var fx: bool = fa == "X"                         # the final leg runs along x (so the first leg runs along z)
+		var sgn := signf(d0.x if fx else d0.y)
+		if sgn == 0.0:
+			continue
+		var cdc: float = cd.x if fx else cd.y
+		if absf(cdc) < 0.01:
+			continue
+		var f0: float = foot.x if fx else foot.y
+		for dstub in [0, 1, -1, 2, -2, 3, -3, 4, -4]:                  # the first leg's lane: the grid line nearest the stub's end, then its neighbours
+			var lane: float = (roundf((f0 + cdc * L0) / G) + dstub) * G
+			var L := (lane - f0) / cdc
+			if L < APOTHEM + 0.05 + RAMP_RUN + 0.2:
+				continue
+			var p1 := foot + cd * L
+			for o in [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G]:
+				var latc: float = c2.y if fx else c2.x
+				var lat: float = roundf((latc + o) / G) * G
+				if absf(lat - latc) > 3.3:
+					continue
+				var corner := Vector2(lane, lat) if fx else Vector2(lat, lane)
+				var rim := Vector2(c2.x + sgn * R0, lat) if fx else Vector2(lat, c2.y + sgn * R0)
+				var a := Vector2(c2.x + sgn * (R0 + ENTRY_RUN), lat) if fx else Vector2(lat, c2.y + sgn * (R0 + ENTRY_RUN))
+				var along_c: float = corner.x if fx else corner.y
+				var along_a: float = a.x if fx else a.y
+				if (along_c - along_a) * sgn < 0.5:     # the corner must lie outside the approach run
+					continue
+				var bear := atan2(rim.y - c2.y, rim.x - c2.x)
+				var blocked := false
+				for fb in _fixed[pi]:
+					if absf(angle_difference(bear, float(fb))) < LANE_SEP:
+						blocked = true
+				if blocked:
+					continue
+				if not (_ortho_clear(p1, corner, i, c2) and _ortho_clear(corner, a, i, c2)):
+					continue
+				var d1 := (corner - p1).length()
+				var ax1 := "Z" if fx else "X"            # the first leg runs along the other axis
+				var lo1: float = minf(p1.y, corner.y) if fx else minf(p1.x, corner.x)
+				var hi1: float = maxf(p1.y, corner.y) if fx else maxf(p1.x, corner.x)
+				var lo2: float = minf(corner.x, rim.x) if fx else minf(corner.y, rim.y)
+				var hi2: float = maxf(corner.x, rim.x) if fx else maxf(corner.y, rim.y)
+				if d1 > 0.05 and not _lane_free(ax1, lane, lo1, hi1):
+					continue
+				if not _lane_free(fa, lat, lo2, hi2):
+					continue
+				if d1 > 0.05:
+					_lane_take(ax1, lane, lo1, hi1)
+				_lane_take(fa, lat, lo2, hi2)
+				var way: Array = [p0, p1]
+				if d1 > 0.05:
+					way.append(corner)
+				way.append(a)
+				way.append(rim)
+				way = _fillet(way, ORTHO_BEND)
+				var even: Array = [way[0]]
+				for k in range(1, way.size()):
+					var q0: Vector2 = way[k - 1]
+					var q1: Vector2 = way[k]
+					var m := maxi(ceili(q0.distance_to(q1) / 1.5), 1)
+					for j in range(1, m + 1):
+						even.append(q0.lerp(q1, float(j) / m))
+				var axis := Vector2(sgn, 0.0) if fx else Vector2(0.0, sgn)
+				return _shape(even, c2, axis, true, axis)
+	return PackedVector3Array()
+
+
+func _mk(fx: bool, along: float, lat: float) -> Vector2:
+	return Vector2(along, lat) if fx else Vector2(lat, along)
+
+
+func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
+	## two corners: stub -> a leg along the final axis on a grid lane -> across to the pit's lane -> final leg along the axis
+	var tb: Dictionary = wl._tubes[i]
+	var foot := Vector2(tb["x"], tb["z"])
+	var cd := corner_dir(s)
+	var c2 := Vector2(pit.x, pit.z)
+	var G := ORTHO_GAP
+	var R0 := WorldLocals.RING_R + 0.9
+	var L0 := APOTHEM + 0.05 + RAMP_RUN + 0.9
+	var p0 := foot + cd * (APOTHEM + 0.05)
+	var d0 := (foot + cd * L0) - c2
+	var axes: Array = ["X", "Z"] if absf(d0.x) >= absf(d0.y) else ["Z", "X"]
+	for fa in axes:
+		var fx: bool = fa == "X"
+		var sgn := signf(d0.x if fx else d0.y)
+		if sgn == 0.0:
+			continue
+		var cdl: float = cd.y if fx else cd.x           # the stub's lateral component: it sets the first leg's lane
+		if absf(cdl) < 0.01:
+			continue
+		var fl: float = foot.y if fx else foot.x
+		var latc: float = c2.y if fx else c2.x
+		var other := "Z" if fx else "X"
+		for dstub in [0, 1, -1, 2, -2, 3, -3]:
+			var lane_l: float = (roundf((fl + cdl * L0) / G) + dstub) * G
+			var L := (lane_l - fl) / cdl
+			if L < APOTHEM + 0.05 + RAMP_RUN + 0.2:
+				continue
+			var p1 := foot + cd * L
+			var along1: float = p1.x if fx else p1.y
+			for o in [0.0, G, -G, 2.0 * G, -2.0 * G, 3.0 * G, -3.0 * G]:
+				var lat: float = roundf((latc + o) / G) * G
+				if absf(lat - latc) > 3.3:
+					continue
+				var rim := _mk(fx, (c2.x if fx else c2.y) + sgn * R0, lat)
+				var a_al: float = (c2.x if fx else c2.y) + sgn * (R0 + ENTRY_RUN)
+				var a := _mk(fx, a_al, lat)
+				var bear := atan2(rim.y - c2.y, rim.x - c2.x)
+				var blocked := false
+				for fb in _fixed[pi]:
+					if absf(angle_difference(bear, float(fb))) < LANE_SEP:
+						blocked = true
+				if blocked:
+					continue
+				var dirm := signf(a_al - along1)
+				if dirm == 0.0:
+					continue
+				for step in range(1, 60):
+					var m: float = roundf((along1 + dirm * float(step) * G * 2.0) / G) * G
+					if (m - a_al) * dirm > 0.0:          # past the approach point: no
+						break
+					if (m - a_al) * sgn < 0.5:           # the cross leg must lie outside the approach run
+						continue
+					var c1 := _mk(fx, m, lane_l)
+					var c2p := _mk(fx, m, lat)
+					if not (_ortho_clear(p1, c1, i, c2) and _ortho_clear(c1, c2p, i, c2) and _ortho_clear(c2p, a, i, c2)):
+						continue
+					var lo1 := minf(along1, m)
+					var hi1 := maxf(along1, m)
+					var lo2 := minf(lane_l, lat)
+					var hi2 := maxf(lane_l, lat)
+					var rim_al: float = rim.x if fx else rim.y
+					var lo3 := minf(m, rim_al)
+					var hi3 := maxf(m, rim_al)
+					if not (_lane_free(fa, lane_l, lo1, hi1) and _lane_free(other, m, lo2, hi2) and _lane_free(fa, lat, lo3, hi3)):
+						continue
+					_lane_take(fa, lane_l, lo1, hi1)
+					_lane_take(other, m, lo2, hi2)
+					_lane_take(fa, lat, lo3, hi3)
+					var way: Array = _fillet([p0, p1, c1, c2p, a, rim], ORTHO_BEND)
+					var even: Array = [way[0]]
+					for k in range(1, way.size()):
+						var q0: Vector2 = way[k - 1]
+						var q1: Vector2 = way[k]
+						var mm := maxi(ceili(q0.distance_to(q1) / 1.5), 1)
+						for j in range(1, mm + 1):
+							even.append(q0.lerp(q1, float(j) / mm))
+					var axis := Vector2(sgn, 0.0) if fx else Vector2(0.0, sgn)
+					return _shape(even, c2, axis, true, axis)
+	return PackedVector3Array()
 
 
 func _approach(i: int, s: int, pit: Vector3) -> float:
@@ -385,7 +621,7 @@ func _path(i: int, s: int, pit: Vector3, ang: float) -> PackedVector3Array:
 	return _shape(_side_by_side(even), c2, dir, true)
 
 
-func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true) -> PackedVector3Array:
+func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2.ZERO) -> PackedVector3Array:
 	## waypoints (x z) -> world points: smooth along the floor, bridges over lanes / laid tubes, over the rim, into the pool
 	var fy := wl.floor_y
 	var rim_out: Vector2 = way[way.size() - 1]
@@ -449,6 +685,8 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true) -> PackedVector
 		var r := lerpf(WorldLocals.RING_R + 0.9, GOO_R, t)
 		var y := top + 0.12 * sin(t * PI) if r > WorldLocals.POOL_R else lerpf(top, WorldLocals.POOL_H - 0.25, smoothstep(WorldLocals.POOL_R, GOO_R, r))
 		var q := c2 + dir * r
+		if axis != Vector2.ZERO:                      # ortho: it dips in along its own axis (axis points away from the pit)
+			q = rim_out + axis * (r - (WorldLocals.RING_R + 0.9))
 		pts.append(Vector3(q.x, fy + y, q.y))
 	return pts
 

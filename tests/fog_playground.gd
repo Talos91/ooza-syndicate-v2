@@ -3,6 +3,7 @@ extends Node
 ##   cloud / fog         the side-band backdrop layers (0 = absent, 1 = fully opaque where present)
 ##   centre cloud / fog  the same layers on a plane between the decks and the floor, so the CENTRE gets them too (x factor)
 ##   fog colour          what the fog layer turns into when a seat leads (the clouds never change)
+##   tubes: v3 / ortho   switches the transport tubes between the free routing and the cardinal-axis grid routing
 ##   ENDGAME             every column built and every tube filled;  HUD  hides the game's HUD to see the picture
 ## Run (desktop):  Godot_v4.6.1-stable_win64.exe --path <Game/2.0 clone> res://tests/fog_playground.tscn -- --test
 ## Same layers in the game: --backdrop-fog=<low|mid|high|none>  --centre-fog=<0..1>
@@ -77,6 +78,10 @@ func _build_panel() -> void:
 	be.text = "ENDGAME"
 	be.pressed.connect(_endgame)
 	row2.add_child(be)
+	var bt := Button.new()
+	bt.text = "tubes: v3 / ortho"
+	bt.pressed.connect(func(): wl.pipes.rebuild(not wl.pipes.ortho); print("tubes ortho=", wl.pipes.ortho, " stats ", wl.pipes.ortho_stats))
+	row2.add_child(bt)
 	var bh := Button.new()
 	bh.text = "hide panel (H)"
 	bh.pressed.connect(func(): _panel.visible = false)
