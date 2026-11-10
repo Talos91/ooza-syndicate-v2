@@ -44,7 +44,24 @@ func _run() -> void:
 	get_tree().root.add_child(inst)
 	await _frames(5)
 	inst.ais.clear()
-	await get_tree().create_timer(4.0).timeout
+	# ENDGAME: every column built (T3 vat, left half A / right half B) and every transport tube filled
+	var sim: Sim = inst.sim
+	var wl: WorldLayer = inst.world_layer
+	var tries := 0
+	while (wl.pipes == null or not wl.pipes.built) and tries < 600:
+		await get_tree().process_frame
+		tries += 1
+	for i in wl.pipes.cols:
+		var n: Dictionary = sim.nodes[wl._tubes[i]["id"]]
+		n["owner"] = "A" if float(wl._tubes[i]["x"]) < 0.0 else "B"
+		n["structure"] = "vat"
+		n["tier"] = 3
+	var t0 := wl._t
+	while wl._t - t0 < WorldTubes.FILL_S + 4.0:
+		await get_tree().process_frame
+	inst.cam_target = inst._view_fit[0]
+	inst.cam_dist = inst._view_fit[1]
+	inst._place_camera()
 	await _frames(3)
 	await RenderingServer.frame_post_draw
 	var img := inst.get_viewport().get_texture().get_image()

@@ -59,11 +59,12 @@ const LAB5_FOG_HEIGHT_DENSITY := 0.035           # the scene's height fog under 
 # the floor's far haze and the backdrop's middle meet in this colour (round 5: backdrop middle ~#2B3443, floor #333C4A)
 const LAB_FAR := Color(0.168, 0.204, 0.263)
 # WORLD FOG (Daniele 2026-11-11: "the tubes in the background are a bit too distracting, increase the fog between the play
-# area and the background"): how far the whole lab side backdrop (lab_backdrop.gdshader fog_all, set in WorldDressing._backdrop)
-# is hazed toward LAB_FAR. It is a 2D layer behind the 3D scene: playfield, units, goo and HUD are untouched.
-# Dev: --backdrop-fog=<0..1>.
-const BACKDROP_FOG_LEVELS := {"low": 0.45, "mid": 0.65, "high": 0.82}
-const BACKDROP_FOG := 0.65                      # the default = BACKDROP_FOG_LEVELS.mid
+# area and the background"; then: "one layer of clouds roaming the map at 0.9 and a fog underneath drifting at 0.6, where
+# they overlap it completely covers"). Two noise layers over the lab side backdrop (lab_backdrop.gdshader cloud_amt / fog_amt,
+# set in WorldDressing._backdrop): 0 = absent, 1 = fully opaque where present. A 2D layer behind the 3D scene: playfield,
+# units, goo and HUD are untouched. Strengths are [cloud, fog]; the default is mid. Dev: --backdrop-fog=<low|mid|high>.
+const BACKDROP_FOG_LEVELS := {"low": [0.6, 0.4], "mid": [0.9, 0.6], "high": [1.0, 0.8]}
+const BACKDROP_FOG := "mid"
 const LAB_SIDE := "res://assets/art/backdrops/lab-side-%s-%d.jpg"   # a / b, 1184 (phone, 2.16:1) or 1440 (16:9)
 
 const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)

@@ -57,7 +57,7 @@ func _collect() -> void:
 	if sc != null:
 		var layer: CanvasLayer = sc.backdrop
 		if layer != null and layer.get_child_count() > 0 and layer.get_child(0) is TextureRect:
-			_add_mat((layer.get_child(0) as TextureRect).material, &"abyss", 1.0)
+			_add_mat((layer.get_child(0) as TextureRect).material, &"fog_col", 1.0)   # the backdrop FOG layer takes the leader colour; the clouds stay (Daniele 2026-11-11)
 		for c in (sc as Node).get_children():
 			if c is MeshInstance3D:
 				_add_mist((c as MeshInstance3D).material_override)

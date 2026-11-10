@@ -145,11 +145,26 @@ func _backdrop() -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = SHADER_SKY
 	mat.set_shader_parameter("abyss", WorldLayer.LAB_FAR)
-	var fog := WorldLayer.BACKDROP_FOG
+	var lv := WorldLayer.BACKDROP_FOG
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--backdrop-fog="):
-			fog = clampf(float(a.substr(15)), 0.0, 1.0)
-	mat.set_shader_parameter("fog_all", fog)
+			lv = a.substr(15)
+	var amt: Array = WorldLayer.BACKDROP_FOG_LEVELS.get(lv, [0.0, 0.0])
+	var noise := FastNoiseLite.new()
+	noise.seed = 31
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.012
+	noise.fractal_octaves = 3
+	var tex := NoiseTexture2D.new()
+	tex.width = 256
+	tex.height = 256
+	tex.seamless = true
+	tex.noise = noise
+	mat.set_shader_parameter("noise_tex", tex)
+	mat.set_shader_parameter("cloud_amt", float(amt[0]))
+	mat.set_shader_parameter("fog_amt", float(amt[1]))
+	mat.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(0.3))
+	mat.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
 	sky.material = mat
 
 
