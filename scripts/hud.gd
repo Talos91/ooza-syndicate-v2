@@ -94,6 +94,7 @@ var _debug_box: VBoxContainer          # the Debug panel's content (its height: 
 var margins := Vector4(16, 12, 16, 12)
 var _last_fps_print := 0.0
 var version_label: Label
+var r19_top: HudR19.TopLayer             # ui-r19-import: the round-19 top capsule, pills, clock and banner slot (HudR19)
 var ui_scale := 1.0
 # --- TUTORIAL reveal set (TUTORIAL-DESIGN.md §6) ---
 var gated := false                     # a lesson is on: only `revealed` keys show
@@ -540,6 +541,72 @@ func setup(m: Node3D) -> void:
 			main.monster_from = hub
 			note_monster_hint())
 	root.add_child(monster_icon)
+	if HudR19.on():                                   # ui-r19-import (2026-11-10): round 19 inside the locked round-18 shapes - the
+		r19_top = HudR19.TopLayer.new()               # old top bar / status line / banner keep their logic and texts, drawn by r19_top
+		root.add_child(r19_top)
+		root.move_child(r19_top, top_panel.get_index())
+		r19_top.setup(self)
+		top_panel.modulate.a = 0.0
+		status_label.modulate.a = 0.0
+		status_glow.self_modulate.a = 0.0
+		banner.self_modulate.a = 0.0
+		for b in [pause_button, music_button]:
+			_r19_button(b)
+
+
+func _r19_button(b: Button) -> void:
+	## ui-r19-import: PAUSE / MUSIC on the round-19 square button (4 states, the goo backlight), the glyph over it.
+	var e := StyleBoxEmpty.new()
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		b.add_theme_stylebox_override(st, e)
+	var p := HudR19.Piece.new()
+	p.set_base("square_button_normal")
+	p.tint = HudNoir.accent
+	b.add_child(p)
+	b.move_child(p, 0)
+	b.set_meta("r19", p)
+	b.draw.connect(func():
+		var st := {BaseButton.DRAW_HOVER: "hover", BaseButton.DRAW_PRESSED: "pressed", BaseButton.DRAW_HOVER_PRESSED: "pressed",
+				BaseButton.DRAW_DISABLED: "disabled"}.get(b.get_draw_mode(), "normal") as String
+		p.set_base("square_button_" + st))
+
+
+func _r19_layout(vp: Vector2) -> void:
+	## ui-r19-import: the round-18 places (wireframe v3, r18_geo.gd): capsule 320 x 36 at y 4 centred, banner slot y 50, PAUSE /
+	## MUSIC 40 pt at the right edge (gap 4), the skill plates 96 x 80 gap 6 in the right column; the SEND tank stays.
+	var u := HudR19.u_of(self)
+	r19_top.layout(vp)
+	var ins := UiKit.safe_insets(vp) / u
+	var W := vp.x / u
+	var H := vp.y / u
+	var R := W - ins.z - 4.0
+	var btns := [pause_button, music_button]
+	for i in range(2):
+		var b: Button = btns[i]
+		var old := b.size
+		b.custom_minimum_size = Vector2(40, 40) * u
+		b.size = b.custom_minimum_size
+		b.position = Vector2(R - 40.0 - i * 44.0, 4.0) * u
+		(b.get_meta("r19") as HudR19.Piece).place(Vector2.ZERO, u, HudR19.BODY["square_button"])
+		for c in b.get_children():
+			if c is TextureRect and old.x > 0.0:
+				(c as Control).size *= b.size.x / old.x
+				(c as Control).position = (b.size - (c as Control).size) / 2.0
+	_music_glyph.size = music_button.size
+	_music_glyph.queue_redraw()
+	var cap := r19_top.capsule_rect()
+	for extra in [debug_button, chat_button]:          # left of MUSIC; where that runs into the capsule (k 1.6 on a narrow inner
+		if extra:                                      # screen), left of the capsule instead
+			extra.position = Vector2(music_button.position.x - 8.0 * ui_scale - extra.size.x, 4.0 * u)
+			if extra.position.x < cap.end.x + 4.0 * u:
+				extra.position.x = cap.position.x - 8.0 * ui_scale - extra.size.x
+	var by := (H - ins.w - 54.0 - 4.0) if ins.w > 0.0 else (H - 54.0 - 12.0)
+	var py0 := maxf(48.0, (46.0 + by - 6.0 - (3.0 * 80.0 + 2.0 * 6.0)) / 2.0)
+	dock.size = dock.get_combined_minimum_size()
+	dock.position = Vector2(R - 96.0, py0) * u
+	dock._place_hint()
+	if dock.visible:
+		version_label.position.x = dock.position.x - 10.0 * ui_scale - version_label.size.x
 
 
 func _icon_button(b: Button, icon_name: String) -> void:
@@ -753,6 +820,8 @@ func layout(vp: Vector2, m: Vector4) -> void:
 			show_out_panel()
 	spectate_button.size = spectate_button.custom_minimum_size
 	spectate_button.position = Vector2(m.x, vp.y - m.w - spectate_button.size.y - 8.0)
+	if r19_top:
+		_r19_layout(vp)
 
 
 func side_panel_width() -> float:
@@ -897,6 +966,8 @@ func sync(dt: float, cam: Camera3D) -> void:
 		banner.modulate.a = clampf(_banner_time / 1.5, 0.0, 1.0)
 		if _banner_time <= 0.0:
 			banner.visible = false
+	if r19_top:
+		r19_top.sync()
 	_last_fps_print += dt
 	if debug_panel.visible and _last_fps_print > 5.0:
 		_last_fps_print = 0.0
@@ -1180,6 +1251,16 @@ func inspect(id: int, cam: Camera3D) -> void:
 	hub.accent = col
 	hub.ui_scale = ui_scale
 	hub.custom_minimum_size = Vector2.ONE * (60.0 if not mobile else 78.0) * ui_scale
+	if HudR19.on():                                   # ui-r19-import: the round-19 hub, r 22 pt (its rim in the node's colour)
+		var hu := HudR19.u_of(self)
+		hub.custom_minimum_size = HudR19.BODY["radial_hub"] * hu
+		var hp := HudR19.Piece.new()
+		hp.set_base("radial_hub")
+		hp.tint = col
+		hp.place(Vector2.ZERO, hu, HudR19.BODY["radial_hub"])
+		hp.show_behind_parent = true                  # (the hub's own x draws over it)
+		hub.add_child(hp)
+		hub.set_meta("r19", hp)
 	hub.size = hub.custom_minimum_size
 	hub.position = -hub.size / 2.0
 	hub.pressed.connect(func(): close_inspector.call_deferred())
@@ -1346,6 +1427,7 @@ class ActionWedge:
 	var _held := false
 	var _ci: CanvasItem = self   # where _text / _icon draw (the words child)
 	var _words: Control
+	var _tube: Control           # ui-r19-import: the lit outer-arc tube (white-core ramp shader), between the slice and its words
 
 	func _init() -> void:
 		flat = true
@@ -1355,6 +1437,13 @@ class ActionWedge:
 		var empty := StyleBoxEmpty.new()
 		for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 			add_theme_stylebox_override(st, empty)
+		_tube = Control.new()
+		_tube.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_tube.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_tube.material = HudR19.ramp()
+		_tube.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		_tube.draw.connect(_draw_r19_tube)
+		add_child(_tube)
 		_words = Control.new()
 		_words.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_words.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1465,6 +1554,11 @@ class ActionWedge:
 		# Daniele 2026-11-04 (mockup 3): NO goo in the slices - a slice is LIT (affordable / free) or GREYED (not yet):
 		# "easy to just have grayed or not; the filling would also cost resources especially when open and close fast".
 		var lit := not off and afford >= 1.0
+		if HudR19.on():                                   # ui-r19-import: the round-19 gunmetal slice (40 deg, r 38-104 pt), lit = its tube
+			_r19_slice(c, lit, a)
+			_tube.queue_redraw()
+			_words.queue_redraw()
+			return
 		var sec := sector_id()
 		if sec != "":                                     # GMN-2: the director's FINISHED slice (fixed 50 / 40 deg sector, own bolts and rim):
 			_sector(sec, c, lit, a)                       # OFF metal always, the LIT neon signal over it in the accent
@@ -1502,6 +1596,9 @@ class ActionWedge:
 		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)
 		if k <= 0.0:
 			return
+		if HudR19.on():
+			_draw_r19_words(lit, k)
+			return
 		## Daniele 2026-11-05: radial words - the glyph upright in the slice's INNER end, the name + price to its right, turned
 		## along the slice's middle ray (flipped 180 deg left of the centre so they never read upside down), centred in the rest.
 		var ink := Color(HudNoir.INK, k) if lit else Color(HudNoir.MUTED, k)
@@ -1531,6 +1628,124 @@ class ActionWedge:
 			var ln: Array = lines[i]
 			_text(str(ln[0]), Vector2(0, (float(i) - (lines.size() - 1) / 2.0) * gap), float(ln[1]), ln[2], maxw, min_fs)
 		_ci.draw_set_transform(Vector2.ZERO)
+
+	func _r19_xf(ci: CanvasItem) -> void:
+		## The slice canvas (504 x 490 px, ring centre at (-168, 245) px from its top-left: r18_geo.gd) turned to this slice's
+		## middle, scaled so the ring's outer edge (104 pt = 624 px) = r_out.
+		var k := outer() / (HudR19.SLICE_R[1] * HudR19.PX)
+		ci.draw_set_transform(centre() + _shift(), mid(), Vector2(k, k))
+
+	func _r19_slice(_c: Vector2, lit: bool, a: Color) -> void:
+		var ga := clampf(grow * 1.5, 0.0, 1.0)
+		_r19_xf(self)
+		draw_texture(HudR19.tex("slice_40_off"), Vector2(168, -245), Color(1, 1, 1, ga))
+		if lit:                                           # the tube's halo in the node colour (multiply), under the tube
+			draw_texture(HudR19.tex("slice_40_lit_glow"), Vector2(168, -245), Color(a.lightened(0.15 * lift), ga * HudR19.HALO_A))
+		draw_set_transform(Vector2.ZERO)
+
+	func _draw_r19_tube() -> void:
+		if not HudR19.on() or grow <= 0.001 or a1 <= a0 or disabled or afford < 1.0:
+			return
+		_r19_xf(_tube)
+		_tube.draw_texture(HudR19.tex("slice_40_lit"), Vector2(168, -245), Color(accent.lightened(0.15 * lift), clampf(grow * 1.5, 0.0, 1.0)))
+		_tube.draw_set_transform(Vector2.ZERO)
+
+	const R19_SHORT := {"UPGRADE": "UPG.", "GOOGAT": "GOOG.", "MONSTER HUB": "HUB", "MACHINEGOON": "GOON", "LAUNCH": "LNCH."}
+	var r19_measure: Array = []                   # the last drawn lines: {text, w, room, r} in pt (the sheet's measure json)
+
+	func _r19_inside(q: Vector2, u: float, r_lo: float) -> bool:
+		## q (local px) inside this slice, 4 pt in from every edge: r_lo..r_out - 4 and 4 pt off both side rays.
+		var c := centre() + _shift()
+		var v := q - c
+		var r := v.length() / u
+		if r < r_lo or r > HudR19.SLICE_R[1] - 4.0:
+			return false
+		for e in [[a0, 1.0], [a1, -1.0]]:               # signed distance from each side ray, toward the slice's inside
+			var dv := Vector2(cos(float(e[0])), sin(float(e[0])))
+			if (dv.x * v.y - dv.y * v.x) * float(e[1]) / u < 4.0:
+				return false
+		return true
+
+	func _r19_room(mid_pt: Vector2, u: float, r_lo: float, half_h: float) -> float:
+		## The widest upright line (px) centred on mid_pt whose box (half_h tall each side) stays inside the slice.
+		var lo := 0.0
+		var hi := 140.0 * u
+		for _i in range(14):
+			var w := (lo + hi) / 2.0
+			var ok := true
+			for corner in [Vector2(-w / 2.0, -half_h), Vector2(w / 2.0, -half_h), Vector2(-w / 2.0, half_h), Vector2(w / 2.0, half_h)]:
+				if not _r19_inside(mid_pt + corner, u, r_lo):
+					ok = false
+					break
+			if ok:
+				lo = w
+			else:
+				hi = w
+		return lo
+
+	func _r19_fit(forms: Array, room: float, px: int) -> String:
+		## The first form that fits room at the 12.5 pt floor; else the last one cut (ellipsis) to fit - never onto the board.
+		for f in forms:
+			if font.get_string_size(str(f), HORIZONTAL_ALIGNMENT_LEFT, -1, px).x <= room:
+				return str(f)
+		var t := str(forms[-1])
+		while t.length() > 1 and font.get_string_size(t + "…", HORIZONTAL_ALIGNMENT_LEFT, -1, px).x > room:
+			t = t.substr(0, t.length() - 1).strip_edges()
+		return t + "…"
+
+	func _draw_r19_words(lit: bool, k: float) -> void:
+		## Designer (r18 lock + r19 correction A): icon at r 58 (side fans: r 46), line 1 = the name, line 2 = tier + price
+		## ("T2 · 10 UNITS"); every line inside its slice (4 pt in from each edge) at the 12.5 pt floor, else a short form, else cut.
+		var u := outer() / HudR19.SLICE_R[1]
+		var m := mid()
+		var d := Vector2(cos(m), sin(m))
+		var c := centre() + _shift()
+		var a := accent.darkened(0.35) if disabled else accent
+		var ink := Color(HudNoir.INK, k) if lit else Color(HudNoir.MUTED, k)
+		var icol := Color(a.lightened(0.2) if lit else HudNoir.MUTED, k)
+		var nm := str(SLICE_NAMES.get(title, title))
+		var tier := ""
+		var rx := RegEx.create_from_string("^(.*) (T[0-9])$")
+		var mm := rx.search(nm)
+		if mm:
+			nm = mm.get_string(1)
+			tier = mm.get_string(2)
+		var low := why if why != "" else cost
+		var l2 := ("%s · %s" % [tier, low]) if tier != "" and low != "" else (tier + low)
+		var l2s := ("%s · %s" % [tier, low.replace(" UNITS", " U")]) if tier != "" and low != "" else (tier + low.replace(" UNITS", " U"))
+		var px := int(ceil(12.5 * u))
+		var half := 6.5 * u
+		var dy := 7.0 * u if l2 != "" else 0.0
+		var side := absf(d.x) > 0.5
+		# r19 correction A measured: two upright 12.5 pt lines + the icon at r 58 leave ~20 pt of room in a 40 deg slice (up fan), so
+		# every fan puts the icon at the ring's inner end (r 46) and the words between r 54 and 100 (side: the same since sheet v1)
+		var r_lo := 54.0
+		var rc := HudR19.SLICE_LABEL_R
+		if true:                                          # the radius where the two lines get the most room (r 84 = the lock's start)
+			var best := -1.0
+			for rr in range(58, 97, 1):
+				var at0 := c + d * float(rr) * u
+				var room0 := minf(_r19_room(at0 - Vector2(0, dy), u, r_lo, half), _r19_room(at0 + Vector2(0, dy), u, r_lo, half) if l2 != "" else INF)
+				if room0 > best:
+					best = room0
+					rc = float(rr)
+		_icon(c + d * 46.0 * u, 7.0 * u, icol)
+		var at := c + d * rc * u
+		r19_measure = []
+		var rows := [[[nm, str(R19_SHORT.get(nm, nm))], at - Vector2(0, dy), ink]]
+		if l2 != "":
+			var l2t := ("%s %s" % [tier, low.replace(" UNITS", "U")]) if tier != "" and low != "" else l2s
+			rows.append([[l2, l2s, l2t, low.replace(" UNITS", " U")], at + Vector2(0, dy), Color(HudNoir.ENEMY.lightened(0.25) if not lit else a.lightened(0.35), k)])
+		for row in rows:
+			var room := _r19_room(row[1], u, r_lo, half)
+			var t := _r19_fit(row[0], room, px)
+			var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+			var p: Vector2 = row[1]
+			var base := Vector2(p.x - w / 2.0, p.y + (font.get_ascent(px) - font.get_descent(px)) / 2.0)
+			_ci.draw_string(font, base + Vector2(0, maxf(1.0, px / 14.0)), t, HORIZONTAL_ALIGNMENT_LEFT, -1, px, Color(0, 0, 0, 0.7 * k))
+			_ci.draw_string(font, base, t, HORIZONTAL_ALIGNMENT_LEFT, -1, px, row[2])
+			r19_measure.append({"slice": title, "text": t, "w_pt": snappedf(w / u, 0.1), "room_pt": snappedf(room / u, 0.1),
+					"r_pt": snappedf(((p - c).length()) / u, 0.1), "size_pt": snappedf(px / u, 0.1), "fits": w <= room + 0.5})
 
 	const SLICE_NAMES := {"MACHINEGOON": "GOON", "MONSTER HUB": "HUB"}   # Daniele 2026-11-05: short names on the slice only (the card keeps the full)
 
@@ -1710,7 +1925,9 @@ class InspectorHub:
 		for i in range(7):
 			var a := hex_base + PI / 6.0 + i * PI / 3.0
 			hex.append(c + Vector2(cos(a), sin(a)) * r)
-		if not NodeNoir.sprite(self, "node_hub", c, Vector2(r, r) * (2.0 if ActionWedge.ROUND else 1.732), accent, hex_base):
+		if has_meta("r19"):
+			(get_meta("r19") as Control).modulate.a = grow
+		elif not NodeNoir.sprite(self, "node_hub", c, Vector2(r, r) * (2.0 if ActionWedge.ROUND else 1.732), accent, hex_base):
 			NodeNoir.glass(self, hex.slice(0, 6), 0.92)        # ui-node: smoked glass, a neon rim breathing in the node's colour
 			NodeNoir.neon(self, hex, accent, (2.0 + (1.0 if hot else 0.0)) * s, 0.55 + 0.25 * sin(Time.get_ticks_msec() / 260.0) + (0.3 if hot else 0.0))
 		var k := r * 0.3
@@ -2062,6 +2279,11 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 	var span := PI / 3.0 if n <= 3 else PI / 6.0
 	if ActionWedge.ROUND:
 		span = deg_to_rad(50.0 if n <= 3 else 40.0)
+	if HudR19.on():                                   # ui-r19-import: the locked ring r 38-104 pt, 40 deg slices (round 18)
+		var ru := HudR19.u_of(self)
+		r_in = HudR19.SLICE_R[0] * ru
+		r_out = HudR19.SLICE_R[1] * ru
+		span = deg_to_rad(HudR19.SLICE_DEG)
 	var total := span * n
 	# the hexagon turned so the seams land on those points: flat edge to the front for 1, 3 or 4 slices, a
 	# corner for 2, 15 deg off for 5
@@ -2079,10 +2301,15 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 					if score < best:
 						best = score
 						base = b
+	for arg in OS.get_cmdline_user_args():            # screenshot helper --r19-fan=up|down|left|right (ui-r19-import sheet)
+		if arg.begins_with("--r19-fan="):
+			base = {"up": -PI / 2.0, "down": PI / 2.0, "left": PI, "right": 0.0}.get(arg.substr(10), base)
 	var now := Time.get_ticks_msec() - _inspector_opened_ms
 	var box := Vector2.ONE * 2.0 * (r_out * 1.16 + 14.0 * s)
 	var hex_base := base + rot
 	var mirrored := cos(base) < 0.0                   # the left side: keep the first action on top there too
+	if HudR19.on():                                   # designer (r18): the action order reads left to right (top to bottom on a side fan)
+		mirrored = (cos(base) < 0.0 and absf(cos(base)) >= absf(sin(base))) or (sin(base) > 0.0 and absf(sin(base)) > absf(cos(base)))
 	for i in range(n):
 		var w: ActionWedge = inspector_actions[i]["button"]
 		var j := (n - 1 - i) if mirrored else i
@@ -2101,6 +2328,9 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 			var u := Vector2(cos(w.mid()), sin(w.mid()))
 			var ir := maxf(12.0 * s * w.type_scale, float(w.floor_px) * 0.8)
 			var gp := w.centre() + w._shift() + u * (ActionWedge.hex_r(w.mid(), w.r_in, w.hex_base) + ir * 1.3)   # = _draw_words' glyph
+			if HudR19.on():                           # ui-r19-import: the glyph at r 46 pt (correction A)
+				ir = 7.0 * w.outer() / HudR19.SLICE_R[1]
+				gp = w.centre() + w._shift() + u * 46.0 * w.outer() / HudR19.SLICE_R[1]
 			switch_ring.size = Vector2.ONE * ir * 2.6
 			switch_ring.position = gp - switch_ring.size / 2.0
 	var hub: Control = inspector.get_meta("close")
@@ -2137,10 +2367,62 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 			best_hit = hit
 			best_pos = lp
 	card.position = best_pos
+	if HudR19.on() and n > 0:                         # designer r19 correction B: the card leaves the fan's way
+		_r19_card(p, card, isz)
 	_fan = {"base": base, "hex": hex_base, "total": total, "r_in": r_in, "r_out": r_out, "n": n,
 			"e": 1.0 - pow(1.0 - clampf(now / 200.0, 0.0, 1.0), 3.0)}
 	if is_instance_valid(_inspector_guides):
 		_inspector_guides.queue_redraw()
+
+
+func _r19_card(p: Vector2, card: Control, isz: Vector2) -> void:
+	## Designer (r19 correction B): while the radial is open the node card sits in the bottom band, left (beside the tank,
+	## wireframe v3 BOTTOM); else the first spot that measures 0 overlap with the fan, tank, plates, banner and capsule.
+	var vp := root.get_viewport_rect().size
+	var u := HudR19.u_of(self)
+	var ins := UiKit.safe_insets(vp)
+	var by := (vp.y - ins.w - (54.0 + 4.0) * u) if ins.w > 0.0 else (vp.y - (54.0 + 12.0) * u)
+	var fan := Rect2()
+	for i in range(inspector_actions.size()):
+		var r: Rect2 = (inspector_actions[i]["button"] as ActionWedge).bbox_global()
+		fan = r if i == 0 else fan.merge(r)
+	var hub: Control = inspector.get_meta("close")
+	fan = fan.merge(hub.get_global_rect())
+	var blocks := {"fan": fan, "tank": side_panel.get_global_rect(), "plates": dock.get_global_rect(),
+			"capsule": r19_top.capsule_rect()}
+	if r19_top.ban.visible:
+		blocks["banner"] = Rect2(r19_top.ban.position, r19_top.ban.size)
+	var tank_r: Rect2 = blocks["tank"]
+	var pl: Rect2 = blocks["plates"]
+	var tries := [Vector2(tank_r.end.x + 4.0 * u, by), Vector2(pl.position.x - 4.0 * u - isz.x, by),
+			Vector2(tank_r.end.x + 4.0 * u, by - isz.y - 4.0 * u), Vector2(pl.position.x - 4.0 * u - isz.x, by - isz.y - 4.0 * u),
+			Vector2(tank_r.end.x + 4.0 * u, 90.0 * u), Vector2(pl.position.x - 4.0 * u - isz.x, 90.0 * u)]
+	var best: Vector2 = tries[0]
+	var best_hit := INF
+	var hits := {}
+	for t in tries:
+		var cr := Rect2(t, isz)
+		if cr.end.y > vp.y - ins.w:
+			cr.position.y = vp.y - ins.w - isz.y - 2.0
+		var hit := 0.0
+		var h := {}
+		for k in blocks:
+			var ov := cr.intersection(blocks[k]).get_area() if cr.intersects(blocks[k]) else 0.0
+			h[k] = snappedf(ov / (u * u), 0.1)
+			hit += ov
+		if hit < best_hit:
+			best_hit = hit
+			best = cr.position
+			hits = h
+		if hit <= 0.0:
+			break
+	card.position = best - p
+	if "--r19-measure" in OS.get_cmdline_user_args() and Engine.get_process_frames() % 20 == 0:
+		var texts := []
+		for a in inspector_actions:
+			texts.append_array((a["button"] as ActionWedge).r19_measure)
+		print("R19MEASURE ", JSON.stringify({"vp": [vp.x, vp.y], "u": snappedf(u, 0.001), "card_pt": [snappedf(best.x / u, 0.1),
+				snappedf(best.y / u, 0.1), snappedf(isz.x / u, 0.1), snappedf(isz.y / u, 0.1)], "card_overlap_pt2": hits, "radial_text": texts}))
 
 
 func _draw_inspector_guides(col: Color) -> void:
