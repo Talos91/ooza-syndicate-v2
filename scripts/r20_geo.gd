@@ -18,6 +18,8 @@ var rects := {}
 var texts := []
 var u := 1.0
 var state := "hint"
+var report_narrow := false
+var vwhere := ""
 var toast_mode := "spec"
 var _n := 0
 var _sz := {}                                      # name -> canvas size px
@@ -78,7 +80,7 @@ func _fit(t: String, room_px: float, size_px: float, min_px: float) -> float:
 	return s
 
 
-func _text(t: String, left_px: float, room_px: float, cy_px: float, size_pt: float, label: String, min_pt := 9.0, col := TXT) -> void:
+func _text(t: String, left_px: float, room_px: float, cy_px: float, size_pt: float, label: String, min_pt := 12.5, col := TXT) -> void:
 	## one line, left aligned from left_px, vertically centred on cy_px, shrunk to fit room_px (down to min_pt)
 	var s := _fit(t, room_px, size_pt * u, min_pt * u)
 	var si := int(ceil(s))
@@ -195,7 +197,25 @@ func _draw() -> void:
 		tank = Rect2(a / u, (b - a) / u)
 		rects["tank(art)"] = tank
 	# real HUD parts the new pieces must clear
-	for pair in [["top_panel(current)", hud.top_panel], ["dock(current)", hud.dock], ["version_tag", hud.version_label], ["map_title", hud.map_title]]:
+	# correction 1.2: the version tag moves under the skill column (right aligned, inside the safe area, no wider than the column);
+	# if it does not fit there, right under the pause / music buttons
+	var vt: Control = hud.version_label
+	if vt and hud.dock and hud.dock.is_visible_in_tree():
+		var dg: Rect2 = hud.dock.get_global_rect()
+		var vw := vt.size.x
+		var vh := vt.size.y
+		var safe_b: float = (rects["safe"] as Rect2).end.y * u
+		var pos := Vector2(dg.end.x - vw, dg.end.y + 2.0)
+		var where := "under skill column"
+		if pos.y + vh > safe_b or vw > dg.size.x:
+			var pb: Rect2 = hud.pause_button.get_global_rect()
+			pos = Vector2(pb.end.x - vw, pb.end.y + 2.0)
+			where = "under pause / music"
+		pos.x = minf(pos.x, (rects["safe"] as Rect2).end.x * u - vw - 0.5 * u)
+		vt.position = pos
+		vwhere = where
+	for pair in [["top_panel(current)", hud.top_panel], ["dock(current)", hud.dock], ["version_tag", hud.version_label], ["map_title", hud.map_title],
+			["pause_btn", hud.pause_button], ["music_btn", hud.music_button], ["banner(current)", hud.banner]]:
 		var c: Control = pair[1]
 		if c and c.is_visible_in_tree() and c.size.x > 1.0:
 			var g := c.get_global_rect()
@@ -203,12 +223,15 @@ func _draw() -> void:
 	# ---- toasts: body 190 x 20 at (L, 4) and (L, 27); text-safe left 144-48 = 96 px from the body, right 62 px
 	var tw := 190.0
 	var tdata := [[toast_a, Color("5cf0a8"), 4.0, "toast_1"], [toast_b, Color("ff6b6b"), 27.0, "toast_2"]]
-	var tx := L
-	if toast_mode == "right" and tank.size.x > 0.0:     # ALT (finding): start right of the tank art, end 5 pt before the capsule's locked left edge
-		tx = tank.end.x + 6.0
-		tw = clampf(W / 2.0 - 160.0 - 5.0 - tx, 96.0, 190.0)
+	# correction 1.1: centred under the top capsule, y = capsule bottom + 4 / + 27 (below the banner when one is up)
+	var tx := W / 2.0 - 95.0
+	var ty0 := 4.0
+	if rects.has("top_panel(current)"):
+		ty0 = (rects["top_panel(current)"] as Rect2).end.y + 4.0
+	if rects.has("banner(current)") and hud.banner.is_visible_in_tree() and hud.banner.text != "":
+		ty0 = (rects["banner(current)"] as Rect2).end.y + 4.0
 	for d in tdata:
-		var tl := Vector2(tx, d[2])
+		var tl := Vector2(tx, ty0 + (0.0 if d[3] == "toast_1" else 23.0))
 		var m := _piece("toast", tl, tw)
 		_bar(m, d[1])
 		var left := m.x(144)
@@ -231,11 +254,17 @@ func _draw() -> void:
 	dim.set_corner_radius_all(int(6.0 * mn.s))
 	draw_style_box(dim, Rect2(tube_x0 + tube_w * fill, mn.y(204), tube_w * (1.0 - fill), 12.0 * mn.s))
 	var uw := _w("5 / 8", int(ceil(12.5 * u)))
-	_text("5 / 8", mn.x(1352) - uw, uw + 2.0, mn.y(120), 12.5, "node_units", 9.0, Color("ffd9a8"))
+	_text("5 / 8", mn.x(1352) - uw, uw + 2.0, mn.y(120), 12.5, "node_units", 12.5, Color("ffd9a8"))
 	_text(node_status, mn.x(412), 940.0 * mn.s, mn.y(300), 12.5, "node_status")
 	var cx := mid + 240.0
 	var cw := minf(640.0, px - 10.0 - cx)
-	var ct := Vector2(cx, by)
+	var narrow := (px - 10.0 - cx) < 200.0
+	var sx := cx
+	if narrow:                                           # correction 1.3: one row up, from tank right + 10 to plate column - 10
+		sx = mid
+		cw = minf(640.0, px - 10.0 - sx)
+	report_narrow = narrow
+	var ct := Vector2(sx, by - 54.0 - 4.0 if narrow else by)
 	if state == "coach":
 		var m := _piece("coach_card", ct, cw)
 		rects["coach_card"] = Rect2(ct, Vector2(cw, 54))
@@ -253,14 +282,16 @@ func _draw() -> void:
 		texts.append({"name": "coach_lines", "count": lines.size(), "fits": lines.size() <= 3})
 	else:
 		var hy := by + 26.0
-		var m := _piece("hint_strip", Vector2(cx, hy), cw)
-		rects["hint_strip"] = Rect2(Vector2(cx, hy), Vector2(cw, 28))
+		if narrow:
+			hy = by - 28.0 - 4.0
+		var m := _piece("hint_strip", Vector2(sx, hy), cw)
+		rects["hint_strip"] = Rect2(Vector2(sx, hy), Vector2(cw, 28))
 		# icon reserve [66,72,120,120]: placeholder skill dot
 		draw_circle(Vector2(m.x(126), m.y(132)), 40.0 * m.s, Color("36e3ff"))
 		var left := m.x(204)
 		var right := m.bx + m.tw - (1746.0 - 1718.0) * m.s
 		_text(hint_txt, left, right - left, m.y(132), 12.5, "hint_line")
-	report = {"W_pt": snappedf(W, 0.1), "H_pt": snappedf(H, 0.1), "u": snappedf(u, 0.001), "state": state, "texts": texts.duplicate(), "rects": {}}
+	report = {"W_pt": snappedf(W, 0.1), "H_pt": snappedf(H, 0.1), "u": snappedf(u, 0.001), "state": state, "narrow": report_narrow, "version_where": vwhere, "texts": texts.duplicate(), "rects": {}}
 	for k in rects:
 		var r: Rect2 = rects[k]
 		report["rects"][k] = [snappedf(r.position.x, 0.1), snappedf(r.position.y, 0.1), snappedf(r.size.x, 0.1), snappedf(r.size.y, 0.1)]
@@ -269,7 +300,7 @@ func _draw() -> void:
 
 func overlaps() -> Array:
 	var out := []
-	var new_keys := ["toast_1", "toast_2", "node_card", "coach_card", "hint_strip"]
+	var new_keys := ["toast_1", "toast_2", "node_card", "coach_card", "hint_strip", "version_tag"]
 	for a in new_keys:
 		if not rects.has(a):
 			continue
