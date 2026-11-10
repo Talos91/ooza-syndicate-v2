@@ -26,7 +26,7 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	for path in MapPool.all():
 		var code: String = path.get_file().substr(0, 4)
-		if not code in MapPool.KEEP_OLD or (not only.is_empty() and not code in only):
+		if not (code in MapPool.KEEP_OLD or code in MapPool.MULTI_KEEP) or (not only.is_empty() and not code in only):
 			continue
 		var m := MapBuilder.load_map(path)
 		load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": m["modes"][0], "map": path}

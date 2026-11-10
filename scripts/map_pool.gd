@@ -79,14 +79,14 @@ static func battlefield() -> Array:
 		_battlefield_cache = offered
 		return offered
 	offered = offered.filter(func(p): return not _offered_modes(p).is_empty())   # WITHHELD_MODES took every mode it seats
-	var pooled := offered.filter(func(p): return p.get_file().substr(0, 1) in POOL_GROUPS)
+	var pooled := offered.filter(func(p): return p.get_file().substr(0, 1) in POOL_GROUPS or p.get_file().substr(0, 4) in MULTI_KEEP)
 	var modes := {}
 	for p in pooled:
 		for m in _offered_modes(p):
 			modes[m] = true
 	_pooled_modes = modes
 	var fill := offered.filter(func(p):
-		if p.get_file().substr(0, 1) in POOL_GROUPS:
+		if p.get_file().substr(0, 1) in POOL_GROUPS or p.get_file().substr(0, 4) in MULTI_KEEP:
 			return false
 		for m in _offered_modes(p):
 			if not modes.has(m):
@@ -101,13 +101,16 @@ static func battlefield() -> Array:
 # tutorial still load theirs by path. Per-map suites (test_maps4, test_map_pool, phone_fit) check TEST_SCOPE = PROTO + KEEP_OLD.
 const KEEP_OLD: Array[String] = ["E-01", "E-02", "E-03", "E-04", "E-05", "E-06", "E-07", "E-08", "E-09", "E-10",
 		"N-02", "N-03", "N-05", "N-16", "N-17", "N-20", "N-22"]
+# MULTI-PLAYER KEEP (Daniele 2026-11-10: "M15 N-05 and N-06 for now keep these has 2v2 and FFA but they all need major rework to be at the level of what we have now"):
+# playable for the modes they seat (M-15 2v2 + FFA4, N-06 2v2; N-05 seats 1v1 only, already in KEEP_OLD). REWORK NEEDED: not a baseline of quality.
+const MULTI_KEEP: Array[String] = ["M-15", "N-05", "N-06"]
 const ARCHIVED: Array[String] = [
 	"A-01", "A-02", "A-03", "A-04", "B-01", "B-02", "B-03", "B-04", "B-05", "C-01", "C-02", "C-03", "C-04",
 	"C-05", "M-01", "M-02", "M-03", "M-04", "M-05", "M-06", "M-07", "M-08", "M-09", "M-10", "M-11", "M-12",
-	"M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19", "M-20", "M-21", "M-22", "M-23", "M-24", "M-25",
+	"M-13", "M-14", "M-16", "M-17", "M-18", "M-19", "M-20", "M-21", "M-22", "M-23", "M-24", "M-25",
 	"M-26", "M-27", "M-28", "M-29", "M-30", "M-31", "M-32", "M-33", "M-34", "M-35", "M-36", "M-37", "M-38",
 	"M-39", "M-40", "M-51", "M-52", "M-53", "M-54", "M-55", "M-56", "M-57", "M-58", "M-59", "M-60", "N-01",
-	"N-04", "N-06", "N-07", "N-08", "N-09", "N-10", "N-11", "N-12", "N-13", "N-14", "N-15", "N-18", "N-19",
+	"N-04", "N-07", "N-08", "N-09", "N-10", "N-11", "N-12", "N-13", "N-14", "N-15", "N-18", "N-19",
 	"N-21", "N-23", "N-24", "N-25", "N-26", "N-27", "N-28", "N-29", "N-30", "R-03", "R-04", "S-01", "S-02",
 	"S-03", "S-04", "S-05"
 ]   # A, B, C, M, S packs + N maps not on the keep list + R-03 (merged into R-01) / R-04 (removed); regenerate = baked A/B/C/M/S/N/R codes minus KEEP_OLD minus PROTO
@@ -118,6 +121,9 @@ static func test_scope() -> Array[String]:
 	var out: Array[String] = []
 	out.append_array(PROTO)
 	out.append_array(KEEP_OLD)
+	for c in ["M-15", "N-06"]:   # rework needed (Daniele 2026-11-10): failing checks are baseline, not fixed
+		if not c in out:
+			out.append(c)
 	return out
 
 
@@ -148,7 +154,7 @@ static func mode_offered(code_or_path: String, mode: String) -> bool:
 	if POOL_GROUPS.is_empty():
 		return true
 	var c := code_or_path.get_file().substr(0, 1)
-	if c in POOL_GROUPS:
+	if c in POOL_GROUPS or code_or_path.get_file().substr(0, 4) in MULTI_KEEP:
 		return true
 	if _pooled_modes.is_empty():
 		battlefield()
