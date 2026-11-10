@@ -10,6 +10,7 @@ uniform float brightness = 1.0;
 uniform vec4 tint : source_color = vec4(1.0);
 uniform vec4 abyss : source_color = vec4(0.168, 0.204, 0.263, 1.0);
 uniform float abyss_haze = 0.45;     // the middle column's haze toward the lab air
+uniform float fog_all = 0.0;         // world-fog: the whole picture incl. the side bands (the pipes) hazed toward the lab air; 0 = off
 uniform float side_lift = 1.15;      // the framing machinery a touch brighter than the floor's far haze
 void fragment() {
 	vec2 wander = vec2(sin(TIME * speed), cos(TIME * speed * 0.7)) * drift;
@@ -20,5 +21,6 @@ void fragment() {
 	float d = length((UV - 0.5) * vec2(1.1, 1.0));
 	c *= mix(1.0, 0.72, smoothstep(0.55, 0.8, d));               // only the far corners darken
 	c = mix(c, abyss.rgb, abyss_haze * (1.0 - side));
+	c = mix(c, abyss.rgb, fog_all);                              // fog between the play area and the backdrop
 	COLOR = vec4(c, 1.0);
 }

@@ -58,6 +58,12 @@ const LAB5_FOG_HEIGHT_DENSITY := 0.035           # the scene's height fog under 
                                                  # bodies stay visible down to the floor (F2) instead of fogging out at -10 m
 # the floor's far haze and the backdrop's middle meet in this colour (round 5: backdrop middle ~#2B3443, floor #333C4A)
 const LAB_FAR := Color(0.168, 0.204, 0.263)
+# WORLD FOG (Daniele 2026-11-11: "the tubes in the background are a bit too distracting, increase the fog between the play
+# area and the background"): how far the whole lab side backdrop (lab_backdrop.gdshader fog_all, set in WorldDressing._backdrop)
+# is hazed toward LAB_FAR. It is a 2D layer behind the 3D scene: playfield, units, goo and HUD are untouched.
+# Dev: --backdrop-fog=<0..1>.
+const BACKDROP_FOG_LEVELS := {"low": 0.45, "mid": 0.65, "high": 0.82}
+const BACKDROP_FOG := 0.65                      # the default = BACKDROP_FOG_LEVELS.mid
 const LAB_SIDE := "res://assets/art/backdrops/lab-side-%s-%d.jpg"   # a / b, 1184 (phone, 2.16:1) or 1440 (16:9)
 
 const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)

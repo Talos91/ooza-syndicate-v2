@@ -145,6 +145,11 @@ func _backdrop() -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = SHADER_SKY
 	mat.set_shader_parameter("abyss", WorldLayer.LAB_FAR)
+	var fog := WorldLayer.BACKDROP_FOG
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--backdrop-fog="):
+			fog = clampf(float(a.substr(15)), 0.0, 1.0)
+	mat.set_shader_parameter("fog_all", fog)
 	sky.material = mat
 
 
