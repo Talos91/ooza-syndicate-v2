@@ -93,6 +93,16 @@ const ORTHO_GAP := 1.1           # m between two parallel lanes (tube diameter 0
 const ORTHO_BEND := 1.4          # m: corner radius in ortho mode
 const ORTHO_DEFAULT := false
 var ortho := ORTHO_DEFAULT
+# BUNDLE (Daniele 2026-11-11, "v3 remains the best", proper version): v3's free routes, but the tubes that reach one pit from
+# the same heading are grouped (<= BUNDLE_MAX, <= BUNDLE_ARC rad apart as seen from the pit) into a RIBBON: one straight,
+# shared run toward the pit with the tubes exactly BUNDLE_GAP apart, ordered by their columns' sideways position (no crossings
+# inside it), entering the pit side by side. Before the ribbon each tube takes its own free (v3) route to its lane's start.
+const BUNDLE_GAP := 1.1
+const BUNDLE_MAX := 4
+const BUNDLE_ARC := 0.6
+var bundle := false
+var bundle_stats := [0, 0]       # probes: ribbons / tubes in ribbons
+var _bundle_plan := {}           # [col, slot k] -> [rim point, away-from-pit direction, lane start S]
 var ortho_stats := [0, 0, 0]     # probes: tubes routed on the grid (1 corner) / fallen back to v3 / of those fallen back, routed with 2 corners
 var _lanes := {}                 # "X<idx>" / "Z<idx>" -> [[lo, hi], ...] the stretches already taken
 var _fixed: Array = []           # per pit: the bearings of the Locals' exits
@@ -118,6 +128,7 @@ func setup(w: WorldLayer) -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--tubes="):
 			ortho = a.substr(8) == "ortho"
+			bundle = a.substr(8) == "bundle"
 	var homes: Array = wl.sim.homes.values()
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
@@ -181,6 +192,10 @@ func build() -> void:
 		var got := _entry_angles(into[p], fixed[p])
 		for key in got:
 			angle_of[key] = got[key]
+	_bundle_plan.clear()
+	bundle_stats = [0, 0]
+	if bundle and not ortho:
+		_plan_bundle(plan, craters)
 	var order: Array = plan.keys()                    # the shortest tubes are laid first (the long ones bridge over them)
 	var tlen := func(key: Array) -> float:
 		var c: Vector3 = craters[int(plan[key][0])]
@@ -195,6 +210,8 @@ func build() -> void:
 		var s := int(plan[key][1])
 		var ang: float = angle_of[key]
 		var pts := PackedVector3Array()
+		if _bundle_plan.has(key):
+			pts = _path_bundle(i, s, craters[p], p, _bundle_plan[key])
 		if ortho:
 			pts = _path_ortho(i, s, craters[p], p)
 			ortho_stats[0 if not pts.is_empty() else 1] += 1
@@ -271,9 +288,10 @@ func _side_by_side(way: Array) -> Array:
 	return out
 
 
-func rebuild(on: bool) -> void:
+func rebuild(on: bool, with_bundle := false) -> void:
 	## the switch (playground / probes): re-lay every tube with the ortho routing on or off
 	ortho = on
+	bundle = with_bundle
 	if _mi != null:
 		_mi.queue_free()
 		_mi = null
@@ -480,6 +498,106 @@ func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 					var axis := Vector2(sgn, 0.0) if fx else Vector2(0.0, sgn)
 					return _shape(even, c2, axis, true, axis)
 	return PackedVector3Array()
+
+
+func _src(i: int) -> Vector2:
+	return Vector2(wl._tubes[i]["x"], wl._tubes[i]["z"])
+
+
+func _plan_bundle(plan: Dictionary, craters: Array) -> void:
+	var R0 := WorldLocals.RING_R + 0.9
+	for p in range(craters.size()):
+		var c2 := Vector2(craters[p].x, craters[p].z)
+		var mine: Array = []
+		for key in plan.keys():
+			if int(plan[key][0]) == p:
+				mine.append(key)
+		if mine.is_empty():
+			continue
+		mine.sort_custom(func(a, b): return fposmod((_src(int(a[0])) - c2).angle(), TAU) < fposmod((_src(int(b[0])) - c2).angle(), TAU))
+		var m := mine.size()
+		var big := 0                                   # break the circle at its widest gap
+		var gap := -1.0
+		for k in range(m):
+			var a0 := fposmod((_src(int(mine[k][0])) - c2).angle(), TAU)
+			var a1 := fposmod((_src(int(mine[(k + 1) % m][0])) - c2).angle(), TAU)
+			var g := fposmod(a1 - a0, TAU) if m > 1 else TAU
+			if g > gap:
+				gap = g
+				big = (k + 1) % m
+		var order: Array = []
+		for k in range(m):
+			order.append(mine[(big + k) % m])
+		var clusters: Array = []
+		var cur: Array = []
+		var cur_a0 := 0.0
+		for key in order:
+			var ang := (_src(int(key[0])) - c2).angle()
+			if not cur.is_empty() and (cur.size() >= BUNDLE_MAX or absf(angle_difference(cur_a0, ang)) > BUNDLE_ARC):
+				clusters.append(cur)
+				cur = []
+			if cur.is_empty():
+				cur_a0 = ang
+			cur.append(key)
+		if not cur.is_empty():
+			clusters.append(cur)
+		for cl in clusters:
+			var dir_sum := Vector2.ZERO
+			var near := INF
+			for key in cl:
+				var d := _src(int(key[0])) - c2
+				dir_sum += d.normalized()
+				near = minf(near, d.length())
+			var away0 := dir_sum.normalized() if dir_sum.length() > 0.01 else Vector2(1, 0)
+			var lb := clampf(near - R0 - 4.0, 4.0, 40.0)
+			var away := away0
+			var v := away.orthogonal()
+			var ok := false
+			for rot in [0.0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6]:   # turn it until its lanes clear the Locals' exits
+				away = away0.rotated(rot)
+				v = away.orthogonal()
+				ok = true
+				for k in range(cl.size()):
+					var lat := (float(k) - float(cl.size() - 1) * 0.5) * BUNDLE_GAP
+					var rim := c2 + away * R0 + v * lat
+					var bear := atan2(rim.y - c2.y, rim.x - c2.x)
+					for fb in _fixed[p]:
+						if absf(angle_difference(bear, float(fb))) < LANE_SEP * 0.6:
+							ok = false
+				if ok:
+					break
+			if not ok:
+				continue
+			cl.sort_custom(func(a, b): return (_src(int(a[0])) - c2).dot(v) < (_src(int(b[0])) - c2).dot(v))
+			for k in range(cl.size()):
+				var lat := (float(k) - float(cl.size() - 1) * 0.5) * BUNDLE_GAP
+				_bundle_plan[cl[k]] = [c2 + away * R0 + v * lat, away, c2 + away * (R0 + lb) + v * lat]
+			bundle_stats[0] += 1
+			bundle_stats[1] += cl.size()
+
+
+func _path_bundle(i: int, s: int, pit: Vector3, _pi: int, hp: Array) -> PackedVector3Array:
+	## socket -> its own free v3 route to its lane's start S -> the straight shared run (3 m lead-in so the corner at S is
+	## rounded before the run) -> the rim, entering the pit along the ribbon's direction
+	var rim: Vector2 = hp[0]
+	var away: Vector2 = hp[1]
+	var S: Vector2 = hp[2]
+	var tb: Dictionary = wl._tubes[i]
+	var foot := Vector2(tb["x"], tb["z"])
+	var cd := corner_dir(s)
+	var c2 := Vector2(pit.x, pit.z)
+	var p0 := foot + cd * (APOTHEM + 0.05)
+	var p1 := foot + cd * (APOTHEM + 0.05 + RAMP_RUN + 0.9)
+	var mid: Array = _steer(p1, S, i, int(tb["id"]), pit, 0)
+	var way: Array = _fillet([p0, p1] + mid + [S, S - away * 3.0, rim], RIB_BEND)
+	var even: Array = [way[0]]
+	for k in range(1, way.size()):
+		var q0: Vector2 = way[k - 1]
+		var q1: Vector2 = way[k]
+		var m := maxi(ceili(q0.distance_to(q1) / 1.5), 1)
+		for j in range(1, m + 1):
+			even.append(q0.lerp(q1, float(j) / m))
+	return _shape(even, c2, away, true, away)
 
 
 func _approach(i: int, s: int, pit: Vector3) -> float:

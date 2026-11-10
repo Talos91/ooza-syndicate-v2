@@ -90,7 +90,7 @@ func _run() -> void:
 			await RenderingServer.frame_post_draw
 			img = inst.get_viewport().get_texture().get_image()
 			img.save_png(out + "/" + nm + ".png")
-	print("ORTHO stats ", wl.pipes.ortho_stats, " ortho=", wl.pipes.ortho)
+	print("ORTHO stats ", wl.pipes.ortho_stats, " bundle ", wl.pipes.bundle_stats, " ortho=", wl.pipes.ortho)
 	var s := img.get_size()
 	var mid := Rect2i(s.x / 4, s.y / 4, s.x / 2, s.y / 2)
 	var layer: CanvasLayer = inst.scenery.backdrop
