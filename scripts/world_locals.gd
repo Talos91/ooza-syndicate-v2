@@ -450,6 +450,9 @@ func _after_place(cam: Camera3D) -> void:
 		_ring_mm.set_instance_color(i, Color.WHITE)
 	_ring_mm.visible_instance_count = craters.size()
 	placed = true
+	var m := wl.get_parent()
+	if m != null and m.has_method("tall_b_refit"):    # ui-tall-b: the tall layout's fit keeps these rings whole (main._fit_nodes)
+		m.tall_b_refit()
 	_route_all()
 	if wl.pipes != null:
 		wl.pipes.build()                              # the transport tubes keep clear of the lanes' exits

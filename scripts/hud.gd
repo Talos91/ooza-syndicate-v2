@@ -678,6 +678,10 @@ func tall_b_fit() -> Rect2:
 	var bottom := vp.y - ins.w - 8.0 * u
 	if dock and dock.visible:
 		bottom = dock.position.y - 6.0 * u
+		if r21:                                        # (designer v1 note 2) where the band's pieces go one row up (the covers),
+			var band := HudR21.band(self)              # that raised row is reserved always, so live nodes never sit under the
+			if band.has("raise_top"):                  # node card / hint strip and the map never jumps
+				bottom = minf(bottom, (float(band["raise_top"]) - 6.0) * u)
 	var right := vp.x - ins.z - 8.0 * u
 	return Rect2(left, top, maxf(right - left, 100.0), maxf(bottom - top, 100.0))
 
@@ -2289,7 +2293,9 @@ func _inspector_bounds() -> Rect2:
 	var r := vp.x - margins.z - 8.0 * ui_scale
 	var tb := tall_b_fit()
 	if tb.size.x > 0.0:                                # ui-tall-b: the plates are a row at the bottom (bo below); the wheel keeps
-		l = maxf(l, tb.position.x)                     # right of the tank picture
+		l = maxf(l, tb.position.x)                     # right of the tank picture, and under the two toast rows (HudR21: capsule
+		if r19_top:                                    # bottom + 4, rows of 20 every 23 pt)
+			t = maxf(t, r19_top.capsule_rect().end.y + 51.0 * HudR19.u_of(self))
 	elif dock and dock.visible:                         # Alpha 24: the skill column on the right
 		r = minf(r, dock.position.x - 8.0 * ui_scale)
 	var bo := vp.y - bottom_used() - 8.0 * ui_scale

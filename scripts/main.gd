@@ -1120,6 +1120,13 @@ func _pinch_move() -> void:
 	_pinch = {"d": d, "mid": mid}
 
 
+func tall_b_refit() -> void:
+	## ui-tall-b (designer v1 note 1): WorldLocals places its containment rings a few frames in (from this camera); on a tall
+	## screen the start view is fitted once more with them in, so they are whole on screen. Nothing elsewhere.
+	if hud != null and thumb_path == "" and hud.tall_b_fit().size.x > 0.0 and _zoom_t < 0.0 and _fit_gone == 0:
+		_fit_camera()
+
+
 func _fit_nodes(nodes: Array) -> Array:
 	## The fit of _fit_camera for a set of nodes: [cam_target, cam_dist] at the current pitch and yaw.
 	## It moves the camera to measure, then puts it back where it was.
@@ -1158,6 +1165,11 @@ func _fit_nodes(nodes: Array) -> Array:
 			var ba: Vector3 = hud.badge_anchor(n)            # room for the badge beside the platform
 			pts.append(ba)
 			pts.append(ba + (ba - p).normalized() * 2.0)
+	if use_hud and hud.tall_b_fit().size.x > 0.0 and world_layer and world_layer.locals and world_layer.locals.placed:   # ui-tall-b (designer v1 note 1): the
+		for cp in world_layer.locals.craters:          # containment rings at the board's sides stay whole on screen too
+			for k in range(12):
+				var a := TAU * k / 12.0
+				pts.append((cp as Vector3) + Vector3(cos(a), 0.0, sin(a)) * (WorldLocals.RING_R + 1.0))
 	cam_dist = 120.0
 	for it in range(24):
 		_place_camera()

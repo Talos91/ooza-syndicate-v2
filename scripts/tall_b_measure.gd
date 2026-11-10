@@ -116,6 +116,12 @@ func measure() -> Dictionary:
 			var a := TAU * kk / 12.0
 			var q := cam.unproject_position(p + Vector3(cos(a), 0.0, sin(a)) * (Rules.R + 1.0)) * ppp
 			box = Rect2(q, Vector2.ZERO) if box.size == Vector2.ZERO and box.position == Vector2.ZERO else box.expand(q)
+	var nodes_box := box                               # (the nodes only, as v1's table)
+	if main.world_layer and main.world_layer.locals:   # + the containment rings at the board's sides
+		for cp in main.world_layer.locals.craters:
+			for kk in range(12):
+				var a := TAU * kk / 12.0
+				box = box.expand(cam.unproject_position((cp as Vector3) + Vector3(cos(a), 0.0, sin(a)) * WorldLocals.RING_R) * ppp)
 	var map_over := []
 	for key in keys:
 		if key in ["radial"]:
@@ -132,7 +138,8 @@ func measure() -> Dictionary:
 		"tall_b_on": UiKit.tall_b_on, "tall_b": hud.tall_b() if hud.has_method("tall_b") else false, "safe": _arr(safe),
 		"rects": srect, "plates": plates, "overlaps": overlaps, "outside_safe": outside, "small_taps": small_taps,
 		"text_floor_pt": snappedf(floor_pt, 0.01), "text_min_pt": snappedf(min_pt, 0.01), "texts_under_floor": small, "texts_cut": cut,
-		"fit_rect": _arr(fit), "map_box": _arr(box), "map_box_area_pt2": snappedf(box.size.x * box.size.y, 1.0),
+		"fit_rect": _arr(fit), "map_box": _arr(box), "nodes_box": _arr(nodes_box), "map_on_screen": Rect2(0, 0, W, H).grow(0.5).encloses(box),
+		"craters": main.world_layer.locals.craters.size() if main.world_layer and main.world_layer.locals else 0, "map_box_area_pt2": snappedf(box.size.x * box.size.y, 1.0),
 		"hud_on_map_box": map_over, "cam_dist": snappedf(float(main.cam_dist), 0.01), "texts": texts}
 
 
