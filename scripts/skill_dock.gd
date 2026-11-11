@@ -258,7 +258,7 @@ class Slot:
 		## Neon Noir: the hex vessel shows the charge as its liquid level (the slot's fixed colour); full = ready, breathing.
 		if dock.plate:                                  # ui-neon-apply: goo only in the window; the plate's delivered neon ring goes over it
 			var off := state == "disabled"
-			vessel.set_liquid(HudNoir.accent, 0.9 if not off else 0.3)   # Daniele 2026-11-09: the goo in the circle = the faction colour
+			vessel.set_liquid(GooTone.mine(HudNoir.accent), 0.9 if not off else 0.3)   # Daniele 2026-11-09: the goo in the circle = the faction colour
 			vessel.set_level(0.0 if off else done)
 			vessel.ready_glow = state == "ready" or state == "armed"
 			return

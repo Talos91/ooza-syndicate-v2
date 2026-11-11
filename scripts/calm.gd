@@ -61,13 +61,8 @@ static var factions: Dictionary = {}          # seat -> faction (main sets it on
 
 
 static func goo(seat: String, fallback: Color) -> Color:
-	## C only: a seat's goo in its faction's body tone; anything else keeps `fallback`.
-	if not colour() or seat == "":
-		return fallback
-	var f := str(factions.get(seat, ""))
-	if not GOO_TONE.has(f):
-		return fallback
-	return (GOO_TONE[f] as Color).lightened(GOO_LIFT)
+	## (superseded: the body-tone goo is the default for everyone now - GooTone)
+	return GooTone.liquid(seat, fallback)
 
 
 static func desat(c: Color, keep: float) -> Color:

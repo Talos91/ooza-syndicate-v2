@@ -658,7 +658,7 @@ func _send_vat_state(b: Button, vat: HudLiquid) -> void:
 		vat.fill_part = fill
 		vat.queue_redraw()
 	vat.set_rim(str(HudNoir.part_data(id).get("rim", "")), HudNoir.accent)
-	vat.set_liquid(HudNoir.accent, 1.0 if picked else (0.2 if mode == BaseButton.DRAW_DISABLED else (0.5 if mode == BaseButton.DRAW_HOVER else 0.32)))
+	vat.set_liquid(GooTone.mine(HudNoir.accent), 1.0 if picked else (0.2 if mode == BaseButton.DRAW_DISABLED else (0.5 if mode == BaseButton.DRAW_HOVER else 0.32)))
 	vat.ready_glow = picked
 
 

@@ -362,7 +362,7 @@ func sync(dt: float) -> void:
 		var info: Dictionary = rec["info"]
 		var level: float = lerpf(info["y0"], info["y1"], rec["fill"])
 		var owner: String = n["owner"]
-		var col: Color = Calm.goo(owner, Rules.seat_color(owner)) if owner != "" else WorldLayer.NATIVE_GRAY   # (calm-pass C: body tone) neutral = the pits' / tubes' native gray goo (was NEUTRAL x 0.55)
+		var col: Color = GooTone.liquid(owner, Rules.seat_color(owner)) if owner != "" else WorldLayer.NATIVE_GRAY   # (body tone, GooTone) neutral = the pits' / tubes' native gray goo (was NEUTRAL x 0.55)
 		var mat: ShaderMaterial = rec["mat"]
 		if absf(level - float(rec["last_level"])) > 0.0005:   # uniforms only when they change
 			mat.set_shader_parameter("level", level)

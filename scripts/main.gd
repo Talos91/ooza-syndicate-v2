@@ -415,7 +415,9 @@ func _start_map(path: String) -> void:
 	sim = Sim.new()
 	sim.ai_builds = true                               # POWERS: AI seats mix their builds (Rules.AI_LOADOUTS)
 	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams, LOADOUTS)
-	Calm.factions = sim.factions                       # calm-pass C: goo tones by faction
+	Calm.factions = sim.factions
+	GooTone.factions = sim.factions                    # goo = body tone by faction (GooTone)
+	GooTone.human = HUMAN
 	_lm("sim_setup")
 	var lo := Vector3(INF, 0, INF)                     # the camera looks along the map's short side
 	var hi := Vector3(-INF, 0, -INF)
