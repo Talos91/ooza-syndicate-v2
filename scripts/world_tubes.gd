@@ -97,6 +97,12 @@ const CONN_MAX := 7.5             # m: the biggest trunk block
 const CONN_MERGE := 3.0           # m: blocks closer than this merge into one trunk block
 const CONN_H := 1.5              # m: block height (centred on the tube level)
 var connectors := false
+var floor2 := false              # Daniele 2026-11-11: TWO FLOOR LEVELS, no hubs - runs along x on the floor, runs along z one tube higher,
+                                 # so two tubes simply pass over each other (still under the walkways). Dev: --tubes=levels
+const FLOOR2_STEP := 0.62        # m between the two floor levels (tube diameter 0.54)
+var near_pits := false           # Daniele 2026-11-11: NEAR PITS ONLY - a column's tubes all go to its nearest pit (pits within 5 % of
+                                 # the nearest share them), so no tube crosses the board. Dev: --tube-pits=near
+var _flats: Array = []           # per laid tube: [its floor line (x z, the dip into the pit left out), bounds]
 const GRID_CROSS := 14.0         # m-equivalent cost of crossing another tube (fewer crossings = fewer connectors)
 const GRID_BUNDLE := 0.35        # m-equivalent saving per step that runs right beside another tube (stripes form)
 const GRID_MIN_RUN := 5          # cells (3.3 m) a tube runs straight before it may turn again: no zigzags, no tight kinks
@@ -113,7 +119,7 @@ var _ortho_runs: Array = []      # indices into _laid of the runs that came from
 const ORTHO_GAP := 1.1           # m between two parallel lanes (tube diameter 0.54)
 const ORTHO_LEVEL_STEP := 0.9     # m: ortho mode - legs along x run at the rack level, legs along z this much higher, so crossings never touch
 const FLOOR_RUN_Y := 0.35          # m: connectors mode - the tubes run ON the floor (the connector blocks hide the crossings, no rack)
-const ORTHO_BEND := 2.2          # m: corner radius in ortho mode
+const ORTHO_BEND := 0.8          # m: THE elbow of the lane grid. Under one lane gap (1.1), so a bend stays inside its own lane cell and cannot lean into a neighbour
 const ORTHO_DEFAULT := false
 var ortho := ORTHO_DEFAULT
 var ortho_stats := [0, 0, 0]     # probes: tubes routed on the grid (1 corner) / fallen back to v3 / of those fallen back, routed with 2 corners
@@ -125,7 +131,7 @@ static func base45() -> bool:
 	## Daniele 2026-11-11: turn every node base 45 degrees - tube sockets on the CARDINALS, walk-in doors on the CORNERS (the
 	## base mesh is unchanged: its yaw comes from WorldLocals.door_dirs(), which become the diagonals). Dev: --base45.
 	for a in OS.get_cmdline_user_args():
-		if a == "--base45" or a == "--tubes=ortho" or a == "--tubes=connectors":
+		if a == "--base45" or a == "--tubes=ortho" or a == "--tubes=connectors" or a == "--tubes=levels":
 			return true                                   # the ortho routings only make 90-degree turns on cardinal sockets
 	return false
 
@@ -146,8 +152,11 @@ func setup(w: WorldLayer) -> void:
 	wl = w
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--tubes="):
-			ortho = a.substr(8) in ["ortho", "connectors"]
+			ortho = a.substr(8) in ["ortho", "connectors", "levels"]
 			connectors = a.substr(8) == "connectors"
+			floor2 = a.substr(8) == "levels"
+		if a == "--tube-pits=near":
+			near_pits = true
 	var homes: Array = wl.sim.homes.values()
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
@@ -203,6 +212,15 @@ func build() -> void:
 		var n0: Dictionary = wl.sim.nodes[tb["id"]]
 		var most := mini(tubes_for(n0, int(cols[i]["start"]), bool(cols[i]["home"]), 3), mini(craters.size(), MAX_TUBES))
 		var pits: Array = porder.slice(0, most)
+		if near_pits:                                 # its nearest pit (and the pits just as near), tube after tube
+			var d0 := foot.distance_to(Vector2(craters[porder[0]].x, craters[porder[0]].z))
+			var mine: Array = []
+			for pk in porder:
+				if foot.distance_to(Vector2(craters[pk].x, craters[pk].z)) <= d0 * 1.05 + 0.1:
+					mine.append(pk)
+			pits = []
+			for k in range(most):
+				pits.append(mine[k % mine.size()])
 		var socks := _assign_sockets(foot, pits, craters)
 		cols[i]["pits"] = pits
 		cols[i]["pit"] = int(pits[0]) if not pits.is_empty() else -1
@@ -223,6 +241,7 @@ func build() -> void:
 	var runs: Array = []                              # [col index, socket, pit, entry angle, world points]
 	var slot_of := {}
 	_laid.clear()
+	_flats.clear()
 	var done := {}
 	for key in order:
 		if done.has(key):
@@ -260,7 +279,11 @@ func build() -> void:
 			var pk = _mirror_key(key, t, plan, craters)
 			if pk == null or done.has(pk):
 				continue
-			_register(runs, slot_of, pk, int(pk[0]), int(plan[pk][1]), int(plan[pk][0]), angle_of[pk], _mirror_pts(pts, t), _from_ortho)
+			var mpts := _mirror_pts(pts, t)
+			if _from_ortho and _clashes(_flat_of(mpts)):
+				continue                                    # the image would lie on a laid tube (a tube that crosses the mirror
+				                                            # axis meets its own image): that one is routed on its own, later
+			_register(runs, slot_of, pk, int(pk[0]), int(plan[pk][1]), int(plan[pk][0]), angle_of[pk], mpts, _from_ortho)
 			_mirror_lanes(t)
 			done[pk] = true
 	for i in cols:                                    # slots in tube order (k-th tube = k-th nearest pit)
@@ -334,10 +357,16 @@ func _side_by_side(way: Array) -> Array:
 	return out
 
 
-func rebuild(on: bool, with_connectors := false) -> void:
+func floor_mode() -> bool:
+	## the tubes run at floor level (hubs or two levels): the Locals take the walkways over them
+	return connectors or floor2
+
+
+func rebuild(on: bool, with_connectors := false, with_floor2 := false) -> void:
 	## the switch (playground / probes): re-lay every tube with the ortho routing on or off
 	ortho = on
 	connectors = on and with_connectors
+	floor2 = on and with_floor2 and not with_connectors
 	for n in _conn_nodes:
 		(n as Node).queue_free()
 	_conn_nodes.clear()
@@ -378,10 +407,60 @@ var _lane_logging := false
 
 func _register(runs: Array, slot_of: Dictionary, key: Array, i: int, s: int, p: int, ang: float, pts: PackedVector3Array, from_ortho: bool) -> void:
 	_laid.append(pts)
+	_flats.append(_flat_of(pts))
 	if from_ortho:
 		_ortho_runs.append(_laid.size() - 1)
 	runs.append([i, s, p, ang, pts])
 	slot_of[key] = runs.size() - 1
+
+
+func _flat_of(pts: PackedVector3Array) -> Array:
+	var a: Array = []
+	for q in pts:
+		var v := Vector2(q.x, q.z)
+		var inpit := false
+		for c in wl.locals.craters:
+			if v.distance_to(Vector2((c as Vector3).x, (c as Vector3).z)) < WorldLocals.RING_R + 0.85:
+				inpit = true
+		if not inpit:
+			a.append(v)
+	var bb := Rect2(a[0], Vector2.ZERO) if not a.is_empty() else Rect2()
+	for v in a:
+		bb = bb.expand(v)
+	return [a, bb]
+
+
+func _clashes(f: Array) -> bool:
+	## would this line run into / along a laid tube (closer than 0.6 m while not crossing it square)?
+	var A: Array = f[0]
+	var ba: Rect2 = (f[1] as Rect2).grow(1.0)
+	for g in _flats:
+		if not ba.intersects(g[1]):
+			continue
+		var B: Array = g[0]
+		for k in range(1, A.size()):
+			var a0: Vector2 = A[k - 1]
+			var a1: Vector2 = A[k]
+			var ra := Rect2(a0, Vector2.ZERO).expand(a1).grow(0.9)
+			if not ra.intersects(g[1]):
+				continue
+			var da := (a1 - a0).normalized()
+			for m in range(1, B.size()):
+				var b0: Vector2 = B[m - 1]
+				var b1: Vector2 = B[m]
+				if not ra.intersects(Rect2(b0, Vector2.ZERO).expand(b1)):
+					continue
+				var dotv := absf(da.dot((b1 - b0).normalized()))
+				if Geometry2D.segment_intersects_segment(a0, a1, b0, b1) != null:
+					if dotv > 0.3:
+						return true
+					continue
+				if dotv < 0.5:
+					continue
+				var cp := Geometry2D.get_closest_points_between_segments(a0, a1, b0, b1)
+				if cp[0].distance_to(cp[1]) < 0.6:
+					return true
+	return false
 
 
 func _mirror_key(key: Array, t: Vector2, plan: Dictionary, craters: Array):
@@ -867,12 +946,13 @@ func audit() -> Dictionary:
 					var dist := cp[0].distance_to(cp[1])
 					min_gap = minf(min_gap, dist)
 					if dist < 0.6:
+						if not bad_here and OS.has_environment("TUBE_DBG"): print("OVER ", i, " ", j, " d=", snappedf(dist, 0.01), " ", a0.snapped(Vector2(0.1, 0.1)), a1.snapped(Vector2(0.1, 0.1)), b0.snapped(Vector2(0.1, 0.1)), b1.snapped(Vector2(0.1, 0.1)))
 						bad_here = true
 			if bad_here:
 				overlaps += 1
 	return {"tubes": lines.size(), "free": lines.size() - _ortho_runs.size(), "off_axis": off_axis, "overlaps": overlaps, "min_gap": snappedf(min_gap, 0.01),
 			"crossings": crossings, "bad_cross": bad_cross, "corners_avg": snappedf(corners_sum / maxf(lines.size(), 1), 0.01),
-			"corners_max": snappedf(corners_max, 0.01), "blocks": conn_count, "route_ms": build_ms[0]}
+			"corners_max": snappedf(corners_max, 0.01), "blocks": conn_count if connectors else 0, "route_ms": build_ms[0]}
 
 
 func _grid_take(a: Vector2, b: Vector2, d: int) -> void:
@@ -1293,7 +1373,13 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 	var fy := wl.floor_y
 	var rim_out: Vector2 = way[way.size() - 1]
 	var flat := []
-	for k in range(way.size() - 1):                   # Catmull-Rom through the waypoints, 0.5 m samples
+	for k in range(way.size() - 1 if levels else 0):   # the lane grid: the polyline itself (straights + true arcs), 0.5 m samples
+		var e0: Vector2 = way[k]
+		var e1: Vector2 = way[k + 1]
+		var em := clampi(ceili(e0.distance_to(e1) / 0.5), 1, 400)
+		for j in range(em):
+			flat.append(e0.lerp(e1, float(j) / em))
+	for k in range(0 if levels else way.size() - 1):  # Catmull-Rom through the waypoints, 0.5 m samples
 		var a: Vector2 = way[maxi(k - 1, 0)]
 		var b: Vector2 = way[k]
 		var c: Vector2 = way[k + 1]
@@ -1312,7 +1398,7 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 	if levels:
 		for k in range(flat.size()):
 			var tg: Vector2 = (flat[mini(k + 1, flat.size() - 1)] as Vector2) - (flat[maxi(k - 1, 0)] as Vector2)
-			lvl.append(FLOOR_RUN_Y if connectors else (RACK_Y if absf(tg.x) >= absf(tg.y) else RACK_Y + ORTHO_LEVEL_STEP))
+			lvl.append(FLOOR_RUN_Y if connectors else ((FLOOR_RUN_Y if absf(tg.x) >= absf(tg.y) else FLOOR_RUN_Y + FLOOR2_STEP) if floor2 else (RACK_Y if absf(tg.x) >= absf(tg.y) else RACK_Y + ORTHO_LEVEL_STEP)))
 		var sm := lvl.duplicate()
 		for k in range(flat.size()):
 			var acc := 0.0
@@ -1355,6 +1441,8 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 		var keep := k == 0 or k == flat.size() - 1 or since >= 2.4
 		if not keep and absf(ys[k - 1] - 2.0 * ys[k] + ys[k + 1]) > 0.012:
 			keep = true
+		if not keep and levels and absf(((flat[k] as Vector2) - (flat[k - 1] as Vector2)).angle_to((flat[k + 1] as Vector2) - (flat[k] as Vector2))) > 0.03:
+			keep = true                                 # every sample of a bend stays (the 2.4 m steps turned arcs into chamfers)
 		if keep:
 			pts.append(Vector3(flat[k].x, fy + ys[k], flat[k].y))
 			since = 0.0
@@ -1373,7 +1461,7 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 
 
 func _place_posts(runs: Array, craters: Array) -> void:
-	if connectors:
+	if floor_mode():
 		posts.clear()
 		return                                          # floor-level tubes need no stands
 	## v2: a steel stand every POST_STEP m under each level run - never on a Locals' lane, under another tube, on a column
@@ -1461,7 +1549,7 @@ func _hazards(flat: Array, levels := false) -> Array:
 	for q in flat:
 		bb = bb.expand(q)
 	bb = bb.grow(2.0)
-	if wl.locals != null and not (connectors and wl.locals.walkways_wanted()):   # walkways: the tubes pass UNDER the Locals' lanes (Daniele 2026-11-11), never over
+	if wl.locals != null and not (floor_mode() and wl.locals.walkways_wanted()):   # walkways: the tubes pass UNDER the Locals' lanes (Daniele 2026-11-11), never over
 		for fk in wl.locals.feeds:
 			var path: Array = wl.locals.feeds[fk]["path"]
 			for k in range(1, path.size()):

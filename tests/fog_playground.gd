@@ -97,17 +97,32 @@ func _build_panel() -> void:
 	be.pressed.connect(_endgame)
 	row2.add_child(be)
 	var bt := Button.new()
-	bt.text = "tubes: default / ortho (2 levels) / connectors"
+	var tube_name := func() -> String:
+		var pp: WorldTubes = wl.pipes
+		return "TWO LEVELS, no hubs" if pp.floor2 else ("HUBS" if pp.connectors else ("rack (old)" if pp.ortho else "free (old)"))
+	bt.text = "tubes: " + str(tube_name.call())
 	bt.pressed.connect(func():
 		var pp: WorldTubes = wl.pipes
-		if not pp.ortho:
-			pp.rebuild(true, false)
-		elif not pp.connectors:
+		if pp.floor2:                                 # two levels -> hubs -> rack -> free -> two levels
 			pp.rebuild(true, true)
-		else:
+		elif pp.connectors:
+			pp.rebuild(true, false)
+		elif pp.ortho:
 			pp.rebuild(false)
-		print("tubes ortho=", pp.ortho, " connectors=", pp.connectors, " blocks ", pp.conn_count))
+		else:
+			pp.rebuild(true, false, true)
+		bt.text = "tubes: " + str(tube_name.call())
+		print("tubes ", tube_name.call(), " audit ", pp.audit()))
 	row2.add_child(bt)
+	var bn := Button.new()
+	bn.text = "pits: NEAR ONLY" if wl.pipes.near_pits else "pits: all 4"
+	bn.pressed.connect(func():
+		var pp: WorldTubes = wl.pipes
+		pp.near_pits = not pp.near_pits
+		pp.rebuild(pp.ortho, pp.connectors, pp.floor2)
+		bn.text = "pits: NEAR ONLY" if pp.near_pits else "pits: all 4"
+		print("pits near=", pp.near_pits, " audit ", pp.audit()))
+	row2.add_child(bn)
 	var bh := Button.new()
 	bh.text = "hide panel (H)"
 	bh.pressed.connect(func(): _panel.visible = false)

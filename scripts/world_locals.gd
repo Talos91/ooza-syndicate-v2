@@ -655,7 +655,7 @@ func _route_marches(rows: int) -> int:
 
 func walkways_wanted() -> bool:
 	## the walkway layer follows the tube mode (floor-level tubes in --tubes=connectors); --walkways=1|0 forces it
-	var on: bool = wl.pipes != null and wl.pipes.connectors
+	var on: bool = wl.pipes != null and wl.pipes.floor_mode()
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--walkways="):
 			on = a.substr(11) == "1"
