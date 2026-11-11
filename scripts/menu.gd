@@ -957,9 +957,9 @@ func show_help() -> void:
 	var gap := 14.0
 	var cw := (content.size.x - x * 2.0 - gap) / 2.0
 	var tips := [
-		["SEND UNITS", "Drag from your vat to a connected target. Pick 25 %, 50 %, 75 % or 100 % before sending."],
+		["SEND UNITS", "Drag from your vat to a connected target. Pick 25 %, 50 %, 75 % or 100 % before sending. Grey nodes never regrow: take them."],
 		["INSPECT & UPGRADE", "Tap a node to inspect it. Use UPGRADE in its panel, or double-tap a node you own."],
-		["RELAYS", "Relays change the bridges. Check the next state before you fire one."],
+		["RELAYS", "Relays move bridges: retract, switch, ferry, conveyor, launcher. A laser relay is a laser tower anyone can take. Neutral relay buildings fire only when attacked."],
 		["ABILITIES", "A ready ability has a bright frame. Tap it, then choose a valid target."],
 	]
 	# iOS: the cards are as tall as their wrapped text needs (the grown text ran out of the 110 they had)

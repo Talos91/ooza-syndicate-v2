@@ -403,6 +403,83 @@ func _neutral_guns() -> void:
 	check(not lasers.is_empty() and _shot_at(s2, lasers[0]), "R-02: a neutral laser fires at a line of A")
 
 
+func _pass_by(code: String, pick: Callable, owner: String) -> int:
+	## A line of A walking between two of A's nodes on a bridge that does NOT touch tower g (g = the first node `pick`
+	## accepts, set to `owner` with a laser), passing within the laser's range: 1 = g fired at it, 0 = it did not,
+	## -1 = no such bridge on this map. One fresh sim per candidate bridge, nearest first.
+	var s0 := _sim(code)
+	if s0 == null:
+		return -1
+	var gid := -1
+	for n in s0.nodes:
+		if pick.call(n):
+			gid = int(n["id"])
+			break
+	if gid < 0:
+		return -1
+	var gp: Vector3 = s0.nodes[gid]["pos"]
+	var cands: Array = []
+	for e in s0.edges:
+		var a: int = e["a"]
+		var b: int = e["b"]
+		if a == gid or b == gid:
+			continue
+		var na: Dictionary = s0.nodes[a]
+		var nb: Dictionary = s0.nodes[b]
+		if na["node_kind"] == "junction" or nb["node_kind"] == "junction" or na["relay"] != "" or nb["relay"] != "":
+			continue
+		var pa: Vector3 = na["pos"]
+		var pb: Vector3 = nb["pos"]
+		var d := Geometry3D.get_closest_point_to_segment(gp, pa, pb).distance_to(gp)
+		if d < Rules.LASER_RANGE:
+			cands.append([d, a, b])
+	cands.sort_custom(func(x, y): return x[0] < y[0])
+	for c in cands.slice(0, 4):
+		var s := _sim(code)
+		var g: Dictionary = s.nodes[gid]
+		g["owner"] = owner
+		g["structure"] = "laser"
+		Sim._sync_legacy(g)
+		if not s.is_edge_open(s._edge_index(c[1], c[2])):
+			continue
+		for k in [c[1], c[2]]:
+			s.nodes[k]["owner"] = "A"
+			s.nodes[k]["units"] = 60.0
+		var h: Dictionary = s.send(c[1], c[2], 1.0)
+		if h.is_empty():
+			continue
+		var near := false
+		for i in range(240):
+			s.step(0.05)
+			if not g.get("shot", {}).is_empty():
+				return 1
+			if not near and not s._hordes_in_range(g, Rules.LASER_RANGE).is_empty():
+				near = true
+		if near:
+			return 0                                      # it walked in range and was not shot
+	return -1
+
+
+func _relay_fire_rules() -> void:
+	## Daniele 2026-11-11 (staging 0.24.0): (a) prebuilt buildings on relays do NOT shoot players until conquered, but defend
+	## when troops attack them; (b) the laser relay may hit troops on a nearby bridge it does not connect to.
+	var neutral_laser := func(n): return n["node_kind"] == "relay" and n["structure"] == "laser" and n["owner"] == ""
+	var lr0 := func(n): return n["relay"] == "laser_relay"   # R-02's armed relays sit 17 m from any other bridge: R-01's laser relay, prebuilt
+	check(_pass_by("R-01", lr0, "") == 0, "relay rule (a): a NEUTRAL prebuilt relay laser holds fire at a line passing by (R-01)")
+	var s2 := _sim("R-02")
+	var lasers := s2.nodes.filter(neutral_laser)
+	check(not lasers.is_empty() and _shot_at(s2, lasers[0]), "relay rule (a): the neutral relay laser defends when a line attacks it (R-02)")
+	check(_pass_by("R-01", lr0, "B") == 1, "relay rule (a): once conquered it fires at a line passing by (R-01)")
+	var lr := func(n): return n["relay"] == "laser_relay"
+	var hit := -1
+	for code in ["R-01", "R-06", "R-09", "R-12"]:
+		hit = _pass_by(code, lr, "B")
+		if hit >= 0:
+			print("relay rule (b) checked on ", code)
+			break
+	check(hit == 1, "relay rule (b): an owned laser relay hits a line on a nearby bridge it does not connect to")
+
+
 func _catapult() -> void:
 	## R-14 Catapult Bay (Daniele 2026-11-06: "design one" - a round-R launcher map): two launcher pads, each sweeping the
 	## enemy bank (3 targets), a 1-bridge ferry between them; an armed pad throws a line that walks onto it over the bay.
@@ -470,6 +547,7 @@ func _init() -> void:
 	_wave2()
 	_gearbox_link()
 	_neutral_guns()
+	_relay_fire_rules()
 	_catapult()
 	for code in ["R-01", "R-02", "R-04", "R-05", "R-11", "R-06", "R-09", "R-10", "R-12", "R-13", "R-14", "R-15", "R-16"]:   # R-03 merged into R-01 (Daniele 2026-11-05)
 		_play(code)

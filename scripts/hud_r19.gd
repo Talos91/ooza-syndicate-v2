@@ -61,7 +61,10 @@ static func ramp() -> ShaderMaterial:
 
 
 static func on() -> bool:
-	## The round-19 HUD is THE HUD (no flag); off only where its art is missing (a stripped build).
+	## The round-19 HUD, behind Rules.HUD_R19 (staging 0.24.0, Daniele 2026-11-11: "staging keeps the old in-game HUD (switch,
+	## default off)"): off = the pre-r19 in-match HUD; dev --hud-r19 turns it on for one run. Off too where its art is missing.
+	if not (Rules.HUD_R19 or "--hud-r19" in OS.get_cmdline_user_args()):
+		return false
 	return tex("top_capsule_fill") != null
 
 

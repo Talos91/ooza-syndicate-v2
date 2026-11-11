@@ -742,11 +742,11 @@ func _step_structures(dt: float) -> void:
 		if n["structure"] == "machinegoon":
 			_fire_machinegoon(n, dt)
 			continue
-		if n["structure"] != "laser" or is_disrupted(n["id"]):   # (a NEUTRAL laser fires too, at every seat: Daniele 2026-11-06)
+		if n["structure"] != "laser" or is_disrupted(n["id"]):   # (a NEUTRAL laser fires too; on a relay only at lines attacking it: _attackers_only)
 			n["cannon_burst"] = 0.0                       # (an Echo Split echo jams it: no burst, no recharge)
 			continue
 		if n["cannon_burst"] > 0.0:
-			var targets := _hordes_in_range(n, Rules.LASER_RANGE, n["cannon_pull"])
+			var targets := _attackers_only(n, _hordes_in_range(n, Rules.LASER_RANGE, n["cannon_pull"]))
 			if targets.is_empty():
 				n["cannon_burst"] = 0.0
 				n["cannon_cd"] = Rules.LASER_RECHARGE
@@ -770,7 +770,7 @@ func _step_structures(dt: float) -> void:
 		n["cannon_cd"] -= dt
 		if n["cannon_cd"] > 0.0:
 			continue
-		var in_range := _hordes_in_range(n, Rules.LASER_RANGE)
+		var in_range := _attackers_only(n, _hordes_in_range(n, Rules.LASER_RANGE))
 		if in_range.is_empty():
 			continue
 		n["cannon_burst"] = Rules.LASER_BURST
@@ -779,6 +779,17 @@ func _step_structures(dt: float) -> void:
 		n["cannon_target"] = _hit_point(n, in_range[0], Rules.LASER_RANGE)
 		events.append({"t": time, "type": "cannon_burst", "node": n["id"], "seat": n["owner"]})
 		fx_events.append({"type": "cannon", "node": n["id"]})
+
+
+func _attackers_only(n: Dictionary, lines: Array) -> Array:
+	## PREBUILT RELAY BUILDINGS HOLD FIRE (Daniele 2026-11-11: "prebuilt buildings on relays do NOT shoot players until
+	## conquered, but defend when troops attack them"): a NEUTRAL relay's laser fires only at lines marching onto it. Once a
+	## seat owns it, it fires at every enemy line in range - also on a nearby bridge it does not connect to (Daniele
+	## 2026-11-11: the laser relay may hit troops on such a bridge; range is distance only, no edge check). Neutral
+	## machinegoons on common nodes keep "neutral shoot all" (2026-11-06): the rule names relays only.
+	if n["owner"] != "" or n["node_kind"] != "relay":
+		return lines
+	return lines.filter(func(h): return int(h["target"]) == int(n["id"]))
 
 
 func _fire_machinegoon(n: Dictionary, dt: float) -> void:

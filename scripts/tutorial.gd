@@ -60,7 +60,7 @@ const LINES := {
 	"soon": "SOON",
 	# titles and one-line goals of the five tutorials (the TRAINING page)
 	"T1.title": "QUICK START", "T1.goal": "Take, reinforce, upgrade, Googatling, a relay kill, the Last Stand",
-	"T2.title": "RELAYS", "T2.goal": "Retract, switch and remote relays",
+	"T2.title": "RELAYS", "T2.goal": "Retract, switch, ferry, conveyor, launcher and laser relays",   # 0.24.0: the relay set in play
 	"T3.title": "STRUCTURES", "T3.goal": "Laser tower, Forge, Monster hub",
 	"T4.title": "SKILLS", "T4.goal": "Surge, Demolish and your ultimate",
 	"T5.title": "TEAM PLAY", "T5.goal": "Shared garrison, handover, EJECT",
@@ -75,8 +75,8 @@ const LINES := {
 	"T1.upgrade_pie": "Tap UPGRADE in the menu - or double-tap the node next time. Costs {cost} units.",
 	"T1.upgrade_wait": "Building: {secs} s. Watch the bar on the badge. A T2 vat breeds faster.",
 	"T1.machinegoon_prep": "Take the grey node the hand shows. A Googatling goes there next.",
-	"T1.machinegoon": "Tap that node, then GOOGATLING. It stores goo and fires it at rival lines on its decks.",
-	"T1.machinegoon_pie": "Now tap GOOGATLING in the menu. It stores goo and fires it at rival lines on its decks.",
+	"T1.machinegoon": "Tap that node, then GOOGATLING. It stores goo and fires it at rival lines in range.",
+	"T1.machinegoon_pie": "Now tap GOOGATLING in the menu. It stores goo and fires it at rival lines in range.",
 	"T1.machinegoon_wait": "Building your Googatling: {secs} s. Security budget approved.",
 	"T1.machinegoon_watch": "Here comes a rival line. Watch it walk into your Googatling.",
 	# chapter 2, free play

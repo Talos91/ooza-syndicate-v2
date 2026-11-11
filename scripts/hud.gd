@@ -2564,6 +2564,8 @@ func _status_line(n: Dictionary, hidden_pop: bool) -> String:
 		if owner == human and lup > 0 and shows("upgrade"):
 			ls += " · UPGRADE T%d: %d" % [int(n["tier"]) + 1, Rules.shown(lup)]
 		return ls
+	if owner == "" and n["node_kind"] == "relay" and n["structure"] == "laser":   # Daniele 2026-11-11: a prebuilt relay laser holds
+		return "NEUTRAL LASER · FIRES ONLY IF ATTACKED"         # fire until taken, but defends (Sim._attackers_only)
 	if n["relay"] != "" and shows("relay"):
 		var cur := sim.relay_state_key(n, n["relay_index"]).to_upper()
 		var nxt := sim.relay_state_key(n, sim.relay_next_index(n)).to_upper()
