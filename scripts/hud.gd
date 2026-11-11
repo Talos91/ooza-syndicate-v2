@@ -836,6 +836,9 @@ func edge_gaps(vp: Vector2) -> Dictionary:
 	return {"vp": [vp.x, vp.y], "ins": [ins.x, ins.y, ins.z, ins.w], "left_px": gl, "right_px": gr, "left_pt": gl * ppp, "right_pt": gr * ppp}
 
 
+const EDGE_GAP_PT := 4.0
+
+
 func _align_tank_edge(vp: Vector2) -> void:
 	## hud-tank-margin (Daniele 2026-11-11: "the vat send is too separate from the side, ideally the same distance as the skill hud is
 	## from the right side"): the SEND tank's art stands as far from the safe left as the skill column's plates from the safe right. Only
@@ -843,8 +846,17 @@ func _align_tank_edge(vp: Vector2) -> void:
 	if "--tank-align=off" in OS.get_cmdline_user_args() or send_tank == null or not send_tank.picture() or dock == null or not dock.visible:
 		return
 	var ins := UiKit.safe_insets(vp)
-	var gr := vp.x - ins.z - (dock.position.x + dock.size.x + dock.housing_margin().z)
-	var dx := (ins.x + maxf(gr, 0.0)) - side_panel.position.x
+	var gap := EDGE_GAP_PT / UiKit.pt_per_px(vp)
+	if r19_top == null:                               # hud-margin-off (Daniele 2026-11-11): the staging HUD tightens to 4 pt on both sides too
+		var gr := vp.x - ins.z - (dock.position.x + dock.size.x + dock.housing_margin().z)
+		var ddx := gr - gap                               # the skill column moves right to 4 pt from the safe right
+		dock.position.x += ddx
+		dock._place_hint()
+		version_label.position.x += ddx if not dock.visible else 0.0
+		if dock.visible:
+			version_label.position.x = dock.position.x - dock.housing_margin().x - 10.0 * ui_scale - version_label.size.x
+	var gr2 := vp.x - ins.z - (dock.position.x + dock.size.x + dock.housing_margin().z)
+	var dx := (ins.x + maxf(gr2, 0.0)) - side_panel.position.x
 	side_panel.position.x += dx
 	map_title.position.x += dx
 
