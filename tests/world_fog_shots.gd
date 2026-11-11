@@ -41,7 +41,10 @@ func _run() -> void:
 	for g in DirAccess.get_files_at("res://maps4"):
 		if g.begins_with(mp) and g.ends_with(".json"):
 			f = g
-	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": "1v1", "map": "res://maps4/" + f}
+	var mode := "1v1"                                 # mode=2v2 / ffa4 for the multi maps (M-15, N-06)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("mode="): mode = a.substr(5)
+	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": mode, "map": "res://maps4/" + f}
 	var inst: Node = (load("res://main.tscn") as PackedScene).instantiate()
 	inst.demo = false
 	get_tree().root.add_child(inst)
