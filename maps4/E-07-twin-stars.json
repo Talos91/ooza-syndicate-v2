@@ -181,11 +181,11 @@
    "socket": null,
    "ring": 0,
    "category": "relay",
-   "relay": "laser_relay",
+   "relay": "switch",
    "home": false,
    "neutral": {
     "tier": 2,
-    "structure": "laser"
+    "structure": "forge"
    },
    "buildable": [
     "laser",
@@ -355,8 +355,8 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
+   "state": "s1",
+   "relay": 9,
    "retracts": false,
    "deckMetres": 4.0
   },
@@ -366,8 +366,8 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
+   "state": "s2",
+   "relay": 9,
    "retracts": false,
    "deckMetres": 4.0
   },
@@ -493,8 +493,8 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
+   "state": "s1",
+   "relay": 9,
    "retracts": false,
    "deckMetres": 4.0
   },
@@ -504,8 +504,8 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": null,
-   "relay": null,
+   "state": "s2",
+   "relay": 9,
    "retracts": false,
    "deckMetres": 4.0
   },
@@ -681,7 +681,7 @@
    }
   ]
  },
- "note": "Each home hangs off a Hub5 star; the stars face each other across a rotor (half-turn symmetry). The rotor joins north / south (r1: the stars' long top / bottom spokes) or west / east (r2: their inner spokes). A T-45 on each star's back spoke tilts the home off-axis, so the two stars spin like a pinwheel. Flex S-bridges close the outer arcs. [KEEP edit 2026-11-11: centre rotor -> laser relay (4 spokes fixed); the two outer flex arcs -> ferries.]",
+ "note": "Each home hangs off a Hub5 star; the stars face each other across a rotor (half-turn symmetry). The rotor joins north / south (r1: the stars' long top / bottom spokes) or west / east (r2: their inner spokes). A T-45 on each star's back spoke tilts the home off-axis, so the two stars spin like a pinwheel. Flex S-bridges close the outer arcs. [KEEP edit 2026-11-11: centre rotor -> switch (same decks per state); the two outer flex arcs -> ferries.]",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true
@@ -695,7 +695,7 @@
  "keepEdit": {
   "date": "2026-11-11",
   "source": "Ooze Syndicate maps - experimental/json/E-07-twin-stars.json",
-  "what": "centre rotor -> laser relay (4 spokes fixed); the two outer flex arcs -> ferries"
+  "what": "centre rotor -> switch (same decks per state); the two outer flex arcs -> ferries"
  },
  "layout": {
   "K": 1.0,

@@ -489,7 +489,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 8,
@@ -500,7 +502,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 5,
@@ -511,7 +515,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 6,
@@ -638,7 +644,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 16,
@@ -649,7 +657,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 19,
@@ -660,7 +670,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 18,
@@ -825,7 +837,7 @@
    }
   ]
  },
- "note": "One long snake from home to home (half-turn symmetry): three runs folded by hairpins (a Wide 90 and a 90 with a deck between), S-bends 2 / 4 m between half bridges along every run. Retract shortcuts cut across the folds: the centre relay drops both bridges to the far runs, the run-end relays drop the jumps onto the middle run. A flex S-bridge gives each home its back door.",
+ "note": "One long snake from home to home (half-turn symmetry): three runs folded by hairpins (a Wide 90 and a 90 with a deck between), S-bends 2 / 4 m between half bridges along every run. Retract shortcuts cut across the folds: the centre relay drops both bridges to the far runs, the run-end relays drop the jumps onto the middle run. A flex S-bridge gives each home its back door. [KEEP edit 2026-11-11: belts over both outer hairpin curves, flowing from the outer runs into the middle run toward the centre.]",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true
@@ -840,6 +852,11 @@
   "size": "M",
   "family": "choke",
   "finale": "inward"
+ },
+ "keepEdit": {
+  "date": "2026-11-11",
+  "source": "Ooze Syndicate maps - experimental/json/E-05-serpent.json",
+  "what": "belts over both outer hairpin curves, flowing from the outer runs into the middle run toward the centre"
  },
  "layout": {
   "K": 1.0,
