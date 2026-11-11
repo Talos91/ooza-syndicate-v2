@@ -108,10 +108,6 @@ func _build_panel() -> void:
 			pp.rebuild(false)
 		print("tubes ortho=", pp.ortho, " connectors=", pp.connectors, " blocks ", pp.conn_count))
 	row2.add_child(bt)
-	var bw := Button.new()
-	bw.text = "walkways on / off"
-	bw.pressed.connect(func(): wl.locals.set_walkways(not wl.locals.walkways))
-	row2.add_child(bw)
 	var bh := Button.new()
 	bh.text = "hide panel (H)"
 	bh.pressed.connect(func(): _panel.visible = false)

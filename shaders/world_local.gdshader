@@ -23,8 +23,6 @@ uniform float hop_t = 1.0;
 uniform float squeeze_t = 0.6;
 uniform float rim_h = 0.8;
 uniform float bob_hz = 1.9;
-uniform float walk_deck_h = 0.0;               // walkway layer: height of the raised deck over the floor (0 = none)
-uniform float walk_deck_ramp = 3.4;            // m of ramp up from the pit and down to the door
 uniform sampler2D paths : filter_nearest, repeat_disable;
 uniform vec3 abyss : source_color = vec3(0.02, 0.02, 0.03);
 uniform float haze = 0.12;
@@ -35,20 +33,23 @@ uniform float rim_k = 0.55;
 varying vec3 lp;
 varying float droplet;
 
-vec2 along(int f, float d, out vec2 dir) {
-	vec4 info = texelFetch(paths, ivec2(16, f), 0);
+vec2 along(int f, float d, out vec2 dir, out float hgt) {
+	vec4 info = texelFetch(paths, ivec2(32, f), 0);
 	int n = int(info.z + 0.5);
 	vec4 a = texelFetch(paths, ivec2(0, f), 0);
 	dir = vec2(0.0, 1.0);
-	for (int k = 1; k < 16; k++) {
+	hgt = a.w;
+	for (int k = 1; k < 32; k++) {
 		if (k >= n) {
 			break;
 		}
 		vec4 b = texelFetch(paths, ivec2(k, f), 0);
 		if (d <= b.z || k == n - 1) {
 			float seg = max(b.z - a.z, 0.001);
+			float u = clamp((d - a.z) / seg, 0.0, 1.0);
 			dir = (b.xy - a.xy) / seg;
-			return mix(a.xy, b.xy, clamp((d - a.z) / seg, 0.0, 1.0));
+			hgt = mix(a.w, b.w, u);
+			return mix(a.xy, b.xy, u);
 		}
 		a = b;
 	}
@@ -76,7 +77,7 @@ void vertex() {
 	vec3 sc = vec3(1.0);                      // x width, y height, z length
 	float alive = 1.0;
 	float lift = 0.0;
-	vec4 info = texelFetch(paths, ivec2(16, f), 0);
+	vec4 info = texelFetch(paths, ivec2(32, f), 0);
 	vec2 exit_p = texelFetch(paths, ivec2(0, f), 0).xy;
 	if (age < 0.0) {
 		alive = 0.0;
@@ -96,8 +97,9 @@ void vertex() {
 		dir = normalize(exit_p - pool + vec2(0.001));
 	} else {                                  // on the floor: walk the path to the queue slot (d1), wait there
 		float d = min(d0 + walk_v * max(now - t_walk0, 0.0), d1);
-		pos.xz = along(f, d, dir);
-		pos.y = floor_y + walk_deck_h * smoothstep(0.0, walk_deck_ramp, d) * smoothstep(0.0, walk_deck_ramp, info.w - d);
+		float hg = 0.0;
+		pos.xz = along(f, d, dir, hg);
+		pos.y = floor_y + hg;                     // walkway layer: the path's own height (texel .w per waypoint)
 		bool moving = d < d1 - 0.01;
 		float landed = age - emerge_t - hop_t;
 		float plop = landed < 0.35 ? sin(landed / 0.35 * 3.14159) * (1.0 - landed / 0.35) : 0.0;

@@ -38,7 +38,7 @@ const MELT_T := 0.6
 const DOOR_OUT := 2.3             # m from the tube axis: the first slot of the line (the base's door frame is at 1.68)
 const DOOR_MOUTH := 1.45          # m: where a Local vanishes into the door (inside the base's wall at 1.6)
 const APPROACH := 3.0             # m: the last stretch runs straight along the door's axis
-const PATH_PTS := 16              # waypoints per feed in the paths texture (texel 16 = mouth, points, length)
+const PATH_PTS := 32              # waypoints per feed in the paths texture (texel 32 = mouth, points, length; texel .w = height over the floor)
 const RING_R := 5.0               # containment ring v1: outer radius
 const POOL_R := 3.5
 const POOL_H := 0.55
@@ -49,8 +49,7 @@ const PLAT_R := Rules.R           # a platform's radius (the board's footprint)
 const BRIDGE_HALF := 1.4
 const SEARCH_R := 16.0            # m: how far a crater may move from its layout target to reach visible floor
 const DEFAULT_LAYOUT := 4         # PITS / TUBES rule 1 (was 2)
-const DECK_H := 1.75              # walkway layer (Daniele 2026-11-11): the Locals walk a raised deck over the tubes, pit to door
-const DECK_RAMP := 3.4
+const WALK_LEVELS := [1.75, 2.45, 3.15]   # walkway layer (Daniele 2026-11-11): 3 concentric rings, each closer to the centre one level higher
 const DECK_HW := 0.8              # deck half width
 const DECK_T := 0.16
 const MARCH_N := 12               # R6: Locals in a pit's match-start column
@@ -107,6 +106,8 @@ var _alive := 0
 var _paths_tex: ImageTexture
 var walkways := false
 var _deck_mi: MeshInstance3D
+var _rings: Array = []            # per ring (0 = outer): half extents (x, z) round _wctr
+var _wctr := Vector2.ZERO
 
 
 static func layout_arg() -> int:
@@ -545,6 +546,9 @@ func _route_all() -> void:
 	## one feed per tube with a door: its nearest crater, the door facing it, a path from the crater's rim to the door's
 	## first slot (the last APPROACH metres straight on the door's axis) - the line forms back along that path
 	feeds.clear()
+	walkways = walkways_wanted()
+	if walkways:
+		_walk_rings()
 	var rows := 0
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
@@ -573,11 +577,19 @@ func _route_all() -> void:
 		path.push_front(exit)
 		path.append(appr)
 		path.append(slot0)
+		var hs: Array = []
+		var wp := _walk_path(t2, c2, Vector2.ZERO) if walkways else {}
+		if not wp.is_empty():                         # walkway layer: pit -> ramp -> rings -> diagonal bridge -> door
+			dir = wp["dir"]
+			path = wp["pts"]
+			hs = wp["hs"]
 		while path.size() > PATH_PTS:                 # (never seen: a path bends round at most a few feet)
 			path.remove_at(path.size() / 2)
+			if not hs.is_empty():
+				hs.remove_at(hs.size() / 2)
 		var plen := _plen(path)
 		feeds[i] = {"tube": i, "crater": ci, "dir": dir, "path": path, "len": plen, "row": rows, "line": [],
-				"cap": clampi(int((plen - 0.6) / GAP) + 1, 1, LINE_MAX), "next_spawn": randf() * SPAWN_GAP,
+				"hs": hs, "cap": clampi(int((plen - 0.6) / GAP) + 1, 1, LINE_MAX), "next_spawn": randf() * SPAWN_GAP,
 				"next_admit": 0.0, "rate": 0.0, "mouth": t2 + dir * DOOR_MOUTH}
 		rows += 1
 	if wl.sim.time <= MARCH_WINDOW or "--march" in OS.get_cmdline_user_args():
@@ -623,54 +635,283 @@ func _route_marches(rows: int) -> int:
 		path.push_front(exit)
 		path.append(appr)
 		path.append(slot0)
+		var hs: Array = []
+		var wp := _walk_path(t2, c2, taken) if walkways else {}
+		if not wp.is_empty():
+			dir = wp["dir"]
+			path = wp["pts"]
+			hs = wp["hs"]
 		while path.size() > PATH_PTS:
 			path.remove_at(path.size() / 2)
+			if not hs.is_empty():
+				hs.remove_at(hs.size() / 2)
 		var plen := _plen(path)
 		feeds[MARCH_KEY + k] = {"tube": best, "crater": k, "dir": dir, "path": path, "len": plen, "row": rows, "line": [],
-				"cap": clampi(int((plen - 0.6) / GAP) + 1, 1, MARCH_N), "next_spawn": 0.0, "next_admit": 0.0, "rate": 0.0,
+				"hs": hs, "cap": clampi(int((plen - 0.6) / GAP) + 1, 1, MARCH_N), "next_spawn": 0.0, "next_admit": 0.0, "rate": 0.0,
 				"mouth": t2 + dir * DOOR_MOUTH, "march": MARCH_N, "only_march": true}
 		rows += 1
 	return rows
 
 
-func sync_walkways() -> void:
+func walkways_wanted() -> bool:
 	## the walkway layer follows the tube mode (floor-level tubes in --tubes=connectors); --walkways=1|0 forces it
 	var on: bool = wl.pipes != null and wl.pipes.connectors
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--walkways="):
 			on = a.substr(11) == "1"
-	if _deck_mi != null:                                  # the tubes may have moved: rebuild the stands
+	return on
+
+
+func reroute() -> void:
+	## the tube mode changed (WorldTubes.rebuild): the feeds' paths follow the walkways (or not)
+	_route_all()
+
+
+func sync_walkways() -> void:
+	## (re)builds the deck mesh once the tubes are laid (the stands keep clear of them)
+	if _deck_mi != null:
 		_deck_mi.queue_free()
 		_deck_mi = null
-	set_walkways(on)
-
-
-func set_walkways(on: bool) -> void:
-	walkways = on
-	_loc_mat.set_shader_parameter("walk_deck_h", DECK_H if on else 0.0)
-	_loc_mat.set_shader_parameter("walk_deck_ramp", DECK_RAMP)
-	if on and _deck_mi == null and not feeds.is_empty():
+	if walkways and not feeds.is_empty():
 		_build_walkways()
-	if _deck_mi != null:
-		_deck_mi.visible = on
 
 
-static func _deck_y(d: float, total: float) -> float:
-	return DECK_H * smoothstep(0.0, DECK_RAMP, d) * smoothstep(0.0, DECK_RAMP, total - d)
+func _walk_rings() -> void:
+	## 3 concentric rectangles round the board's centre, each between two rows / columns of vats; the outer one just past the outermost
+	var bb := board_bounds()
+	_wctr = bb.get_center()
+	var xs: Array = []
+	var zs: Array = []
+	for tb in wl._tubes:
+		if not tb.get("ent", false):
+			continue
+		var ax := snappedf(absf(float(tb["x"]) - _wctr.x), 0.5)
+		var az := snappedf(absf(float(tb["z"]) - _wctr.y), 0.5)
+		if not xs.has(ax):
+			xs.append(ax)
+		if not zs.has(az):
+			zs.append(az)
+	xs.sort()
+	zs.sort()
+	_rings.clear()
+	if xs.size() >= 3 and zs.size() >= 3:
+		var nx := xs.size()
+		var nz := zs.size()
+		_rings.append(Vector2(float(xs[nx - 1]) + (float(xs[nx - 1]) - float(xs[nx - 2])) * 0.5, float(zs[nz - 1]) + (float(zs[nz - 1]) - float(zs[nz - 2])) * 0.5))
+		_rings.append(Vector2((float(xs[nx - 1]) + float(xs[nx - 2])) * 0.5, (float(zs[nz - 1]) + float(zs[nz - 2])) * 0.5))
+		_rings.append(Vector2((float(xs[nx - 2]) + float(xs[nx - 3])) * 0.5, (float(zs[nz - 2]) + float(zs[nz - 3])) * 0.5))
+	else:                                                 # few rows: fractions of the board
+		for f in [0.97, 0.68, 0.4]:
+			_rings.append(bb.size * 0.5 * f)
 
 
-static func _path_at(path: Array, d: float) -> Array:
-	## [position, direction] at distance d along the polyline (what the shader walks)
-	var cum := 0.0
-	for k in range(1, path.size()):
-		var a: Vector2 = path[k - 1]
-		var b: Vector2 = path[k]
-		var sl := a.distance_to(b)
-		if d <= cum + sl or k == path.size() - 1:
-			var dir := (b - a) / maxf(sl, 0.001)
-			return [a.lerp(b, clampf((d - cum) / maxf(sl, 0.001), 0.0, 1.0)), dir]
-		cum += sl
-	return [path[path.size() - 1], Vector2(0, 1)]
+func _ring_pt(k: int, t: float) -> Vector2:
+	var X: float = _rings[k].x
+	var Z: float = _rings[k].y
+	var per := 4.0 * (X + Z)
+	t = fposmod(t, per)
+	if t < 2.0 * X:
+		return _wctr + Vector2(-X + t, -Z)
+	t -= 2.0 * X
+	if t < 2.0 * Z:
+		return _wctr + Vector2(X, -Z + t)
+	t -= 2.0 * Z
+	if t < 2.0 * X:
+		return _wctr + Vector2(X - t, Z)
+	t -= 2.0 * X
+	return _wctr + Vector2(-X, Z - t)
+
+
+func _ring_t(k: int, p: Vector2) -> float:
+	var X: float = _rings[k].x
+	var Z: float = _rings[k].y
+	var q := p - _wctr
+	if absf(q.y + Z) < 0.05:
+		return q.x + X
+	if absf(q.x - X) < 0.05:
+		return 2.0 * X + q.y + Z
+	if absf(q.y - Z) < 0.05:
+		return 2.0 * X + 2.0 * Z + (X - q.x)
+	return 4.0 * X + 2.0 * Z + (Z - q.y)
+
+
+func _ray_ring(s: Vector2, d: Vector2) -> Array:
+	## the first ring edge a ray from s along d crosses (at least 1 m out, at most 22 m): [ring, point] or []
+	var best := 22.0
+	var res: Array = []
+	var q := s - _wctr
+	for k in range(_rings.size()):
+		var X: float = _rings[k].x
+		var Z: float = _rings[k].y
+		for sx in [1.0, -1.0]:
+			if absf(d.x) > 0.01:
+				var u: float = (sx * X - q.x) / d.x
+				if u > 1.0 and u < best:
+					var y := q.y + u * d.y
+					if absf(y) <= Z + 0.01:
+						best = u
+						res = [k, _wctr + Vector2(sx * X, y)]
+		for sz in [1.0, -1.0]:
+			if absf(d.y) > 0.01:
+				var u2: float = (sz * Z - q.y) / d.y
+				if u2 > 1.0 and u2 < best:
+					var x := q.x + u2 * d.x
+					if absf(x) <= X + 0.01:
+						best = u2
+						res = [k, _wctr + Vector2(x, sz * Z)]
+	return res
+
+
+func _bridge_clear(a: Vector2, b: Vector2, skip: Vector2) -> bool:
+	for tb in wl._tubes:
+		var c := Vector2(tb["x"], tb["z"])
+		if c.distance_to(skip) < 0.1:
+			continue
+		if Geometry2D.get_closest_point_to_segment(c, a, b).distance_to(c) < (2.0 if tb.get("ent", false) else float(tb["r"]) + 1.0) + 1.6:
+			return false
+	return true
+
+
+func _ring_walk(a_pt: Vector2, b_pt: Vector2, kb: int) -> Array:
+	## shortest walk on the rings from a_pt (on ring 0) to b_pt (on ring kb): the loops' corners and side midpoints, a ramp
+	## between neighbouring rings at each midpoint. [[point, height], ...]
+	var npos: Array = []
+	var nring: Array = []
+	var nt: Array = []
+	var by_key := {}
+	var add := func(k: int, t: float, p: Vector2) -> int:
+		var key := Vector2i(k, roundi(t * 10.0))
+		if by_key.has(key):
+			return by_key[key]
+		npos.append(p)
+		nring.append(k)
+		nt.append(t)
+		by_key[key] = npos.size() - 1
+		return npos.size() - 1
+	var gate: Array = []
+	for k in range(_rings.size()):
+		var X: float = _rings[k].x
+		var Z: float = _rings[k].y
+		var cuts := [0.0, X, 2.0 * X, 2.0 * X + Z, 2.0 * X + 2.0 * Z, 3.0 * X + 2.0 * Z, 4.0 * X + 2.0 * Z, 4.0 * X + 3.0 * Z]
+		var gk: Array = []
+		for t in cuts:
+			gk.append(add.call(k, t, _ring_pt(k, t)))
+		gate.append(gk)
+	var ia: int = add.call(0, _ring_t(0, a_pt), a_pt)
+	var ib: int = add.call(kb, _ring_t(kb, b_pt), b_pt)
+	var n := npos.size()
+	var adj: Array = []
+	for i in range(n):
+		adj.append([])
+	for k in range(_rings.size()):
+		var ids: Array = []
+		for i in range(n):
+			if nring[i] == k:
+				ids.append(i)
+		ids.sort_custom(func(p, q): return nt[p] < nt[q])
+		var per := 4.0 * (float(_rings[k].x) + float(_rings[k].y))
+		for j in range(ids.size()):
+			var u: int = ids[j]
+			var v: int = ids[(j + 1) % ids.size()]
+			var cost: float = fposmod(float(nt[v]) - float(nt[u]), per)
+			adj[u].append([v, cost])
+			adj[v].append([u, cost])
+	for k in range(_rings.size() - 1):                    # ramps at the four side midpoints (cuts 1, 3, 5, 7)
+		for gi in [1, 3, 5, 7]:
+			var u: int = gate[k][gi]
+			var v: int = gate[k + 1][gi]
+			var cost := (npos[u] as Vector2).distance_to(npos[v]) + 3.0
+			adj[u].append([v, cost])
+			adj[v].append([u, cost])
+	var dist: Array = []
+	var prev: Array = []
+	var done: Array = []
+	for i in range(n):
+		dist.append(INF)
+		prev.append(-1)
+		done.append(false)
+	dist[ia] = 0.0
+	for _it in range(n):
+		var u := -1
+		for i in range(n):
+			if not done[i] and (u < 0 or dist[i] < dist[u]):
+				u = i
+		if u < 0 or dist[u] == INF:
+			break
+		done[u] = true
+		for e in adj[u]:
+			var v: int = e[0]
+			if dist[u] + float(e[1]) < dist[v]:
+				dist[v] = dist[u] + float(e[1])
+				prev[v] = u
+	if dist[ib] == INF:
+		return []
+	var ids2: Array = []
+	var cur := ib
+	while cur != -1:
+		ids2.push_front(cur)
+		cur = prev[cur]
+	var out: Array = []
+	for i in ids2:
+		out.append([npos[i], float(WALK_LEVELS[nring[i]])])
+	# drop the points that lie on a straight, level run
+	var keep: Array = [out[0]]
+	for j in range(1, out.size() - 1):
+		var a: Vector2 = keep[keep.size() - 1][0]
+		var b: Vector2 = out[j][0]
+		var c: Vector2 = out[j + 1][0]
+		var straight: bool = absf((b - a).cross(c - b)) < 0.05 and (b - a).dot(c - b) > 0.0 and is_equal_approx(float(keep[keep.size() - 1][1]), float(out[j][1])) and is_equal_approx(float(out[j][1]), float(out[j + 1][1]))
+		if not straight:
+			keep.append(out[j])
+	keep.append(out[out.size() - 1])
+	return keep
+
+
+func _walk_path(t2: Vector2, c2: Vector2, taken: Vector2) -> Dictionary:
+	## the walkway route of one feed: pit exit -> diagonal ramp to the nearest corner of the outer ring -> the rings -> a diagonal
+	## bridge to a door (the one with the shortest total walk; not `taken`). {dir, pts, hs} or {}
+	if _rings.is_empty():
+		return {}
+	var X0: float = _rings[0].x
+	var Z0: float = _rings[0].y
+	var best_c := Vector2.ZERO
+	var bd := INF
+	for sx in [1.0, -1.0]:
+		for sz in [1.0, -1.0]:
+			var cc := _wctr + Vector2(sx * X0, sz * Z0)
+			if cc.distance_to(c2) < bd:
+				bd = cc.distance_to(c2)
+				best_c = cc
+	var exit := c2 + (best_c - c2).normalized() * (RING_R + 0.4)
+	var best := {}
+	var bl := INF
+	for d2 in door_dirs():
+		if d2 == taken:
+			continue
+		var slot0: Vector2 = t2 + d2 * DOOR_OUT
+		var hit: Array = _ray_ring(slot0, d2)
+		if hit.is_empty():
+			continue
+		var bp: Vector2 = hit[1]
+		if not _bridge_clear(slot0, bp, t2):
+			continue
+		var walk: Array = _ring_walk(best_c, bp, int(hit[0]))
+		if walk.is_empty():
+			continue
+		var tot: float = exit.distance_to(best_c) + slot0.distance_to(bp)
+		for j in range(1, walk.size()):
+			tot += (walk[j][0] as Vector2).distance_to(walk[j - 1][0])
+		if tot < bl:
+			bl = tot
+			var pts: Array = [exit]
+			var hs: Array = [0.0]
+			for w in walk:
+				pts.append(w[0])
+				hs.append(w[1])
+			pts.append(slot0)
+			hs.append(0.0)
+			best = {"dir": d2, "pts": pts, "hs": hs}
+	return best
 
 
 func _build_walkways() -> void:
@@ -685,57 +926,68 @@ func _build_walkways() -> void:
 			var pts: PackedVector3Array = rn[3]
 			for k in range(1, pts.size()):
 				segs.append([Vector2(pts[k - 1].x, pts[k - 1].z), Vector2(pts[k].x, pts[k].z)])
+	var ribbons: Array = []                               # [a, b, ha, hb, extend]
+	for k in range(_rings.size()):                        # the rings
+		var h: float = WALK_LEVELS[k]
+		for j in range(4):
+			var t0: float = 0.0
+			var cs := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
+			var a: Vector2 = _wctr + Vector2(cs[j].x * float(_rings[k].x), cs[j].y * float(_rings[k].y))
+			var b: Vector2 = _wctr + Vector2(cs[(j + 1) % 4].x * float(_rings[k].x), cs[(j + 1) % 4].y * float(_rings[k].y))
+			ribbons.append([a, b, h, h, DECK_HW])
+	var seen := {}                                        # the ramps and bridges the feeds use (each once)
 	for fk in feeds:
 		var f: Dictionary = feeds[fk]
+		var hs: Array = f["hs"]
 		var path: Array = f["path"]
-		var total: float = f["len"]
-		var n := maxi(int(ceil(total / 0.5)), 2)
-		var cs: Array = []
-		var ns: Array = []
-		var ys: Array = []
-		for k in range(n + 1):
-			var d := total * float(k) / float(n)
-			var c: Vector2 = _path_at(path, d)[0]
-			var t0: Vector2 = _path_at(path, maxf(d - 0.6, 0.0))[1]
-			var t1: Vector2 = _path_at(path, minf(d + 0.6, total))[1]
-			var tg := (t0 + t1).normalized() if (t0 + t1).length() > 0.05 else t1
-			cs.append(c)
-			ns.append(Vector2(-tg.y, tg.x))
-			ys.append(fy + _deck_y(d, total))
-		for k in range(n):
-			var c0: Vector2 = cs[k]
-			var c1: Vector2 = cs[k + 1]
-			var n0: Vector2 = ns[k]
-			var n1: Vector2 = ns[k + 1]
-			var y0: float = ys[k]
-			var y1: float = ys[k + 1]
-			var hw := DECK_HW
-			var tl0 := Vector3(c0.x + n0.x * hw, y0, c0.y + n0.y * hw)
-			var tr0 := Vector3(c0.x - n0.x * hw, y0, c0.y - n0.y * hw)
-			var tl1 := Vector3(c1.x + n1.x * hw, y1, c1.y + n1.y * hw)
-			var tr1 := Vector3(c1.x - n1.x * hw, y1, c1.y - n1.y * hw)
-			var dn := Vector3(0, -DECK_T, 0)
-			_quad3(st, tl0, tl1, tr1, tr0, Vector3.UP)
-			_quad3(st, tl0 + dn, tl1 + dn, tr1 + dn, tr0 + dn, Vector3.DOWN)
-			_quad3(st, tl0, tl1, tl1 + dn, tl0 + dn, Vector3(n0.x, 0, n0.y))
-			_quad3(st, tr0, tr1, tr1 + dn, tr0 + dn, Vector3(-n0.x, 0, -n0.y))
-			var inset := 0.12                              # lit edge strips
-			var up := Vector3(0, 0.012, 0)
-			var gl0 := Vector3(c0.x + n0.x * (hw - inset), y0, c0.y + n0.y * (hw - inset)) + up
-			var gl1 := Vector3(c1.x + n1.x * (hw - inset), y1, c1.y + n1.y * (hw - inset)) + up
-			var gr0 := Vector3(c0.x - n0.x * (hw - inset), y0, c0.y - n0.y * (hw - inset)) + up
-			var gr1 := Vector3(c1.x - n1.x * (hw - inset), y1, c1.y - n1.y * (hw - inset)) + up
-			_quad3(sg, tl0 + up, tl1 + up, gl1, gl0, Vector3.UP)
-			_quad3(sg, tr0 + up, tr1 + up, gr1, gr0, Vector3.UP)
-		var d2 := 2.0                                      # stands under the raised part, clear of every tube
-		while d2 < total - 1.0:
-			var yy := _deck_y(d2, total)
+		if hs.is_empty():
+			continue
+		for k in range(1, path.size()):
+			if is_equal_approx(float(hs[k]), float(hs[k - 1])) and float(hs[k]) > 0.5:
+				continue                                  # a ring edge: drawn above
+			var key := Vector4(roundf((path[k - 1] as Vector2).x), roundf((path[k - 1] as Vector2).y), roundf((path[k] as Vector2).x), roundf((path[k] as Vector2).y))
+			if seen.has(key):
+				continue
+			seen[key] = true
+			ribbons.append([path[k - 1], path[k], float(hs[k - 1]), float(hs[k]), 0.0])
+	for rb in ribbons:
+		var a: Vector2 = rb[0]
+		var b: Vector2 = rb[1]
+		var ha: float = rb[2]
+		var hb: float = rb[3]
+		var dv := (b - a).normalized()
+		var a2 := a - dv * float(rb[4])
+		var b2 := b + dv * float(rb[4])
+		var nv := Vector2(-dv.y, dv.x)
+		var hw := DECK_HW
+		var ya := fy + ha
+		var yb := fy + hb
+		var tl0 := Vector3(a2.x + nv.x * hw, ya, a2.y + nv.y * hw)
+		var tr0 := Vector3(a2.x - nv.x * hw, ya, a2.y - nv.y * hw)
+		var tl1 := Vector3(b2.x + nv.x * hw, yb, b2.y + nv.y * hw)
+		var tr1 := Vector3(b2.x - nv.x * hw, yb, b2.y - nv.y * hw)
+		var dn := Vector3(0, -DECK_T, 0)
+		_quad3(st, tl0, tl1, tr1, tr0, Vector3.UP)
+		_quad3(st, tl0 + dn, tl1 + dn, tr1 + dn, tr0 + dn, Vector3.DOWN)
+		_quad3(st, tl0, tl1, tl1 + dn, tl0 + dn, Vector3(nv.x, 0, nv.y))
+		_quad3(st, tr0, tr1, tr1 + dn, tr0 + dn, Vector3(-nv.x, 0, -nv.y))
+		var inset := 0.12                                  # lit edge strips
+		var up := Vector3(0, 0.012, 0)
+		var gl0 := Vector3(a2.x + nv.x * (hw - inset), ya, a2.y + nv.y * (hw - inset)) + up
+		var gl1 := Vector3(b2.x + nv.x * (hw - inset), yb, b2.y + nv.y * (hw - inset)) + up
+		var gr0 := Vector3(a2.x - nv.x * (hw - inset), ya, a2.y - nv.y * (hw - inset)) + up
+		var gr1 := Vector3(b2.x - nv.x * (hw - inset), yb, b2.y - nv.y * (hw - inset)) + up
+		_quad3(sg, tl0 + up, tl1 + up, gl1, gl0, Vector3.UP)
+		_quad3(sg, tr0 + up, tr1 + up, gr1, gr0, Vector3.UP)
+		var ln := a2.distance_to(b2)                       # stands under the raised part, clear of every tube
+		var d2 := 1.0
+		while d2 < ln - 0.5:
+			var u := d2 / ln
+			var yy := lerpf(ha, hb, u)
 			if yy > 0.6:
-				var c: Vector2 = _path_at(path, d2)[0]
-				var tg: Vector2 = _path_at(path, d2)[1]
-				var nn := Vector2(-tg.y, tg.x)
+				var c: Vector2 = a2.lerp(b2, u)
 				for sd in [1.0, -1.0]:
-					var q: Vector2 = c + nn * sd * (DECK_HW - 0.1)
+					var q: Vector2 = c + nv * sd * (hw - 0.1)
 					var ok := true
 					for sg2 in segs:
 						if Geometry2D.get_closest_point_to_segment(q, sg2[0], sg2[1]).distance_to(q) < 1.3:
@@ -801,7 +1053,7 @@ func _build_paths_tex(rows: int) -> void:
 		for k in range(path.size()):
 			if k > 0:
 				cum += (path[k] as Vector2).distance_to(path[k - 1])
-			img.set_pixel(k, int(f["row"]), Color((path[k] as Vector2).x, (path[k] as Vector2).y, cum, 0.0))
+			img.set_pixel(k, int(f["row"]), Color((path[k] as Vector2).x, (path[k] as Vector2).y, cum, float((f["hs"] as Array)[k]) if not (f["hs"] as Array).is_empty() else 0.0))
 		var m: Vector2 = f["mouth"]
 		img.set_pixel(PATH_PTS, int(f["row"]), Color(m.x, m.y, float(path.size()), cum))
 	_paths_tex = ImageTexture.create_from_image(img)

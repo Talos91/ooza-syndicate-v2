@@ -345,6 +345,8 @@ func rebuild(on: bool, with_connectors := false) -> void:
 		_mi = null
 	_laid.clear()
 	built = false
+	if wl.locals != null:
+		wl.locals.reroute()                           # the walkway layer follows the tube mode
 	build()
 	if wl.locals != null:
 		wl.locals.sync_walkways()
@@ -1374,7 +1376,7 @@ func _hazards(flat: Array, levels := false) -> Array:
 	for q in flat:
 		bb = bb.expand(q)
 	bb = bb.grow(2.0)
-	if wl.locals != null:
+	if wl.locals != null and not (connectors and wl.locals.walkways_wanted()):   # walkways: the tubes pass UNDER the Locals' lanes (Daniele 2026-11-11), never over
 		for fk in wl.locals.feeds:
 			var path: Array = wl.locals.feeds[fk]["path"]
 			for k in range(1, path.size()):
