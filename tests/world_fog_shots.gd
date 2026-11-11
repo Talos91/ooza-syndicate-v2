@@ -130,6 +130,7 @@ func _run() -> void:
 			print("TUBEPERF tube_tris=", wl.pipes.tris, " deck_tris=", wl.locals.deck_tris, " frame_tris=", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
 				" draw_calls=", Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), " process_ms=", snappedf(t_us / 240.0, 0.01),
 				" fps=", Performance.get_monitor(Performance.TIME_FPS), " locals=", wl.locals.count(), " build_ms=", wl.pipes.build_ms)
+	print("WALKWAYS roundabouts ", wl.locals.about_count, " at ", wl.locals.about_at, " centre ", wl.locals.board_bounds().get_center(), " deck_tris ", wl.locals.deck_tris)
 	print("ORTHO stats ", wl.pipes.ortho_stats, " connectors ", wl.pipes.conn_count, " grid ", wl.pipes.grid_routed, " ortho=", wl.pipes.ortho)
 	var s := img.get_size()
 	var mid := Rect2i(s.x / 4, s.y / 4, s.x / 2, s.y / 2)

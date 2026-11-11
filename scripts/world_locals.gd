@@ -55,6 +55,8 @@ const DECK_T := 0.16
 const RAIL_H := 0.45              # the hand rails either side of a walkway
 const DASH := 0.9                 # the neon centre line: dash / gap (m)
 const DASH_GAP := 0.7
+const ABOUT_GAP := 0.3            # m between a column and the roundabout a walkway makes round it (Daniele 2026-11-11: a walkway that
+                                  # reaches a column never runs through it, it goes round - on any map)
 const LOW_DECK := 1.6             # m: a ramp / bridge lower than this is no place for a tube to pass under (the tubes keep off it)
 const MARCH_N := 12               # R6: Locals in a pit's match-start column
 const MARCH_GAP := 0.32           # s between them leaving the pit
@@ -110,6 +112,9 @@ var _alive := 0
 var _paths_tex: ImageTexture
 var walkways := false
 var _deck_mi: MeshInstance3D
+var _abouts: Array = []           # the roundabouts the feeds' paths take: [centre, radius, height, joint angle, joint angle]
+var about_at: Array = []          # probes: [centre, height] of each roundabout
+var about_count := 0              # probes: roundabouts built
 var deck_tris := 0                # probes: the walkway mesh's triangles
 var _rings: Array = []            # per ring (0 = outer): half extents (x, z) round _wctr
 var _wctr := Vector2.ZERO
@@ -551,6 +556,7 @@ func _route_all() -> void:
 	## one feed per tube with a door: its nearest crater, the door facing it, a path from the crater's rim to the door's
 	## first slot (the last APPROACH metres straight on the door's axis) - the line forms back along that path
 	feeds.clear()
+	_abouts.clear()
 	walkways = walkways_wanted()
 	if walkways:
 		_walk_rings()
@@ -991,7 +997,66 @@ func _walk_path(t2: Vector2, c2: Vector2, taken: Vector2) -> Dictionary:
 				pts.append(slot0)
 				hs.append(0.0)
 				best = {"dir": d2, "pts": pts, "hs": hs}
+	if not best.is_empty():
+		_add_abouts(best, t2)
 	return best
+
+
+func _about_hits(a: Vector2, b: Vector2, skip: Vector2) -> Array:
+	## the columns a walkway from a to b would run into, in order: [centre, roundabout radius, where it joins, where it leaves, t]
+	var out: Array = []
+	var dv := b - a
+	var ln := dv.length()
+	if ln < 0.5:
+		return out
+	dv /= ln
+	for tb in wl._tubes:
+		var c := Vector2(tb["x"], tb["z"])
+		if skip != Vector2.INF and c.distance_to(skip) < 0.1:
+			continue
+		var R: float = (0.95 if tb.get("ent", false) else float(tb["r"])) + ABOUT_GAP + DECK_HW
+		var t := (c - a).dot(dv)
+		var d := absf((c - a).cross(dv))
+		if d >= R - 0.05:
+			continue                                      # the deck passes clear of it
+		var half := sqrt(R * R - d * d)
+		if t - half < 0.3 or t + half > ln - 0.3:
+			continue                                      # (an end of the stretch is inside the circle: left as it is)
+		var foot := a + dv * t
+		out.append([c, R, foot - dv * half, foot + dv * half, t])
+	out.sort_custom(func(p1, p2): return float(p1[4]) < float(p2[4]))
+	return out
+
+
+func _add_abouts(wp: Dictionary, own: Vector2) -> void:
+	## the path goes ROUND every column it would run through (the short way), level with the deck there
+	var pts: Array = wp["pts"]
+	var hs: Array = wp["hs"]
+	var np: Array = [pts[0]]
+	var nh: Array = [hs[0]]
+	for k in range(1, pts.size()):
+		var a: Vector2 = pts[k - 1]
+		var b: Vector2 = pts[k]
+		for hit in _about_hits(a, b, own if k == pts.size() - 1 else Vector2.INF):
+			var c: Vector2 = hit[0]
+			var R: float = hit[1]
+			var e: Vector2 = hit[2]
+			var x: Vector2 = hit[3]
+			var hm := lerpf(float(hs[k - 1]), float(hs[k]), float(hit[4]) / a.distance_to(b))
+			if hm < 1.5:
+				continue                                  # too low to clear the base's roof: not a deck up there
+			var a0 := atan2(e.y - c.y, e.x - c.x)
+			var dl := angle_difference(a0, atan2(x.y - c.y, x.x - c.x))
+			var n := maxi(ceili(absf(dl) / 0.8), 1)
+			for j in range(n + 1):
+				var ang := a0 + dl * float(j) / n
+				np.append(c + Vector2(cos(ang), sin(ang)) * R)
+				nh.append(hm)
+			_abouts.append([c, R, hm, a0, a0 + dl])
+		np.append(b)
+		nh.append(hs[k])
+	wp["pts"] = np
+	wp["hs"] = nh
 
 
 func _build_walkways() -> void:
@@ -1008,7 +1073,8 @@ func _build_walkways() -> void:
 			var pts: PackedVector3Array = rn[3]
 			for k in range(1, pts.size()):
 				segs.append([Vector2(pts[k - 1].x, pts[k - 1].z), Vector2(pts[k].x, pts[k].z)])
-	var ribbons: Array = []                               # [a, b, ha, hb, extend]
+	var ribbons: Array = []                               # [a, b, ha, hb, rail trim at a, rail trim at b]
+	var abouts: Array = _abouts.duplicate()               # + the ones on the ring edges below
 	for k in range(_rings.size()):                        # the rings
 		var h: float = WALK_LEVELS[k]
 		for j in range(4):
@@ -1016,7 +1082,18 @@ func _build_walkways() -> void:
 			var cs := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
 			var a: Vector2 = _wctr + Vector2(cs[j].x * float(_rings[k].x), cs[j].y * float(_rings[k].y))
 			var b: Vector2 = _wctr + Vector2(cs[(j + 1) % 4].x * float(_rings[k].x), cs[(j + 1) % 4].y * float(_rings[k].y))
-			ribbons.append([a, b, h, h, DECK_HW])
+			var dv0 := (b - a).normalized()
+			var cur := a - dv0 * DECK_HW
+			var cur_trim := 1.7
+			for hit in _about_hits(a, b, Vector2.INF):        # a column on the ring: the ring goes round it
+				var hc: Vector2 = hit[0]
+				var he: Vector2 = hit[2]
+				var hx: Vector2 = hit[3]
+				ribbons.append([cur, he, h, h, cur_trim, 0.15])
+				abouts.append([hc, hit[1], h, atan2(he.y - hc.y, he.x - hc.x), atan2(hx.y - hc.y, hx.x - hc.x)])
+				cur = hx
+				cur_trim = 0.15
+			ribbons.append([cur, b + dv0 * DECK_HW, h, h, cur_trim, 1.7])
 	var seen := {}                                        # the ramps and bridges the feeds use (each once)
 	for fk in feeds:
 		var f: Dictionary = feeds[fk]
@@ -1031,15 +1108,23 @@ func _build_walkways() -> void:
 			if seen.has(key):
 				continue
 			seen[key] = true
-			ribbons.append([path[k - 1], path[k], float(hs[k - 1]), float(hs[k]), 0.0])
+			var on_about := false                         # a step of a roundabout: the round deck is drawn below
+			for ab in _abouts:
+				if absf((path[k - 1] as Vector2).distance_to(ab[0]) - float(ab[1])) < 0.06 and absf((path[k] as Vector2).distance_to(ab[0]) - float(ab[1])) < 0.06:
+					on_about = true
+			if on_about:
+				continue
+			ribbons.append([path[k - 1], path[k], float(hs[k - 1]), float(hs[k]), 1.1, 1.1])
 	for rb in ribbons:
 		var a: Vector2 = rb[0]
 		var b: Vector2 = rb[1]
 		var ha: float = rb[2]
 		var hb: float = rb[3]
 		var dv := (b - a).normalized()
-		var a2 := a - dv * float(rb[4])
-		var b2 := b + dv * float(rb[4])
+		var a2 := a
+		var b2 := b
+		if a.distance_to(b) < 0.2:
+			continue
 		var nv := Vector2(-dv.y, dv.x)
 		var hw := DECK_HW
 		var ya := fy + ha
@@ -1055,9 +1140,8 @@ func _build_walkways() -> void:
 		_quad3(st, tr0, tr1, tr1 + dn, tr0 + dn, Vector3(-nv.x, 0, -nv.y))
 		var ln := a2.distance_to(b2)
 		var up := Vector3(0, 0.012, 0)
-		var trim := 1.7 if float(rb[4]) > 0.0 else 1.1     # the rails stop short of the corners and junctions
-		var u0 := trim / ln
-		var u1 := 1.0 - trim / ln
+		var u0 := float(rb[4]) / ln                        # the rails stop short of the corners and junctions
+		var u1 := 1.0 - float(rb[5]) / ln
 		if u1 > u0:
 			for sd in [1.0, -1.0]:
 				var off: Vector2 = nv * sd * (hw - 0.05)
@@ -1099,6 +1183,62 @@ func _build_walkways() -> void:
 					if ok:
 						_box(st, Vector3(q.x, fy + (yy - DECK_T) * 0.5, q.y), Vector3(0.14, yy - DECK_T, 0.14))
 			d2 += 4.0
+	var merged := {}                                      # the roundabouts, each once: [centre, radius, height, joint angles]
+	for ab in abouts:
+		var key := Vector3(roundf((ab[0] as Vector2).x * 10.0), roundf((ab[0] as Vector2).y * 10.0), roundf(float(ab[2]) * 10.0))
+		if not merged.has(key):
+			merged[key] = [ab[0], ab[1], ab[2], []]
+		merged[key][3].append(float(ab[3]))
+		merged[key][3].append(float(ab[4]))
+	for key in merged:
+		var c: Vector2 = merged[key][0]
+		var R: float = merged[key][1]
+		var y: float = fy + float(merged[key][2])
+		var joints: Array = merged[key][3]
+		var gap := asin(minf((DECK_HW + 0.35) / (R + DECK_HW), 1.0))
+		var N := 32
+		var dn2 := Vector3(0, -DECK_T, 0)
+		var up2 := Vector3(0, 0.012, 0)
+		for j in range(N):
+			var t0 := TAU * j / N
+			var t1 := TAU * (j + 1) / N
+			var e0 := Vector2(cos(t0), sin(t0))
+			var e1 := Vector2(cos(t1), sin(t1))
+			var i0 := Vector3(c.x + e0.x * (R - DECK_HW), y, c.y + e0.y * (R - DECK_HW))
+			var i1 := Vector3(c.x + e1.x * (R - DECK_HW), y, c.y + e1.y * (R - DECK_HW))
+			var o0 := Vector3(c.x + e0.x * (R + DECK_HW), y, c.y + e0.y * (R + DECK_HW))
+			var o1 := Vector3(c.x + e1.x * (R + DECK_HW), y, c.y + e1.y * (R + DECK_HW))
+			var out3 := Vector3(e0.x, 0, e0.y)
+			_quad3(st, o0, o1, i1, i0, Vector3.UP)
+			_quad3(st, o0 + dn2, o1 + dn2, i1 + dn2, i0 + dn2, Vector3.DOWN)
+			_quad3(st, o0, o1, o1 + dn2, o0 + dn2, out3)
+			_quad3(st, i0, i1, i1 + dn2, i0 + dn2, -out3)
+			var rise := Vector3(0, RAIL_H, 0)
+			var in0 := i0 + out3 * 0.05
+			var in1 := i1 + Vector3(e1.x, 0, e1.y) * 0.05
+			_beam(sr, in0 + rise, in1 + rise, 0.07, 0.06)                     # the inner rail, all the way round the column
+			_beam(sr, in0 + Vector3(0, 0.09, 0), in1 + Vector3(0, 0.09, 0), 0.05, 0.09)
+			if j % 4 == 0:
+				_box(sr, in0 + rise * 0.5, Vector3(0.07, RAIL_H, 0.07))
+			var joint := false                                 # the outer rail opens where a walkway joins
+			for ja in joints:
+				if absf(angle_difference((t0 + t1) * 0.5, float(ja))) < gap:
+					joint = true
+			if not joint:
+				var on0 := o0 - out3 * 0.05
+				var on1 := o1 - Vector3(e1.x, 0, e1.y) * 0.05
+				_beam(sr, on0 + rise, on1 + rise, 0.07, 0.06)
+				_beam(sr, on0 + rise * 0.5, on1 + rise * 0.5, 0.04, 0.04)
+				_beam(sr, on0 + Vector3(0, 0.09, 0), on1 + Vector3(0, 0.09, 0), 0.05, 0.09)
+				if j % 4 == 0:
+					_box(sr, on0 + rise * 0.5, Vector3(0.07, RAIL_H, 0.07))
+			if j % 2 == 0:                                     # the dashed neon line goes round too
+				_quad3(sg, Vector3(c.x + e0.x * (R + 0.1), y, c.y + e0.y * (R + 0.1)) + up2, Vector3(c.x + e1.x * (R + 0.1), y, c.y + e1.y * (R + 0.1)) + up2,
+						Vector3(c.x + e1.x * (R - 0.1), y, c.y + e1.y * (R - 0.1)) + up2, Vector3(c.x + e0.x * (R - 0.1), y, c.y + e0.y * (R - 0.1)) + up2, Vector3.UP)
+	about_count = merged.size()
+	about_at = []
+	for key in merged:
+		about_at.append([merged[key][0], merged[key][2]])
 	var mesh := st.commit()
 	sg.commit(mesh)
 	sr.commit(mesh)
