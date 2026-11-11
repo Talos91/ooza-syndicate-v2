@@ -34,9 +34,12 @@ func _run() -> void:
 		if a.begins_with("out="): out = a.substr(4)
 		if a.begins_with("name="): nm = a.substr(5)
 	DirAccess.make_dir_recursive_absolute(out)
+	var mp := "R-01"
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("map="): mp = a.substr(4)
 	var f := ""
 	for g in DirAccess.get_files_at("res://maps4"):
-		if g.begins_with("R-01") and g.ends_with(".json"):
+		if g.begins_with(mp) and g.ends_with(".json"):
 			f = g
 	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": "1v1", "map": "res://maps4/" + f}
 	var inst: Node = (load("res://main.tscn") as PackedScene).instantiate()
@@ -115,6 +118,9 @@ func _run() -> void:
 	for i in wl.pipes.cols:
 		tp.append(Vector2(snappedf(wl._tubes[i]["x"], 0.01), snappedf(wl._tubes[i]["z"], 0.01)))
 	print("SYMPROBE cols ", tp)
+	for a in OS.get_cmdline_user_args():
+		if a == "audit=1":
+			print("TUBEAUDIT ", mp, " ", wl.pipes.audit())
 	print("ORTHO stats ", wl.pipes.ortho_stats, " connectors ", wl.pipes.conn_count, " grid ", wl.pipes.grid_routed, " ortho=", wl.pipes.ortho)
 	var s := img.get_size()
 	var mid := Rect2i(s.x / 4, s.y / 4, s.x / 2, s.y / 2)

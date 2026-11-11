@@ -791,6 +791,90 @@ func _grid_finish(res: Array, ends: Dictionary, p0: Vector2, p1: Vector2, c2: Ve
 	return _shape(even, c2, axis, true, axis, true)
 
 
+func audit() -> Dictionary:
+	## THE FRAMEWORK CHECK (any map): the routing invariants measured on the tubes as they were really laid.
+	##   off_axis   straight stretches that are not along x or z                      -> 0
+	##   overlaps   pairs of tubes that touch while not crossing square (< 0.6 m)     -> 0
+	##   min_gap    the closest two tubes come while running the same way (m)         -> >= lane gap
+	##   bad_cross  crossings that are not square (> 3 deg off 90)                    -> 0
+	##   free       tubes the lane grid could not place (fallback routing)            -> 0
+	var lines: Array = []
+	var boxes: Array = []
+	var cr: Array = []
+	for c in wl.locals.craters:
+		cr.append(Vector2((c as Vector3).x, (c as Vector3).z))
+	var off_axis := 0
+	var corners_max := 0.0
+	var corners_sum := 0.0
+	for rn in run_pts:
+		var a: Array = []
+		for q in (rn[3] as PackedVector3Array):
+			var v := Vector2(q.x, q.z)
+			var inpit := false
+			for c in cr:
+				if v.distance_to(c) < WorldLocals.RING_R + 0.85:
+					inpit = true
+			if not inpit:
+				a.append(v)
+		var bb := Rect2(a[0], Vector2.ZERO)
+		var turn := 0.0
+		for k in range(1, a.size()):
+			bb = bb.expand(a[k])
+			var d: Vector2 = (a[k] as Vector2) - (a[k - 1] as Vector2)
+			if d.length() > 0.9:
+				var ang := fposmod(atan2(d.y, d.x), PI / 2.0)
+				if minf(ang, PI / 2.0 - ang) > 0.035:
+					off_axis += 1
+			if k >= 2:
+				turn += absf(((a[k - 1] as Vector2) - (a[k - 2] as Vector2)).angle_to(d))
+		lines.append(a)
+		boxes.append(bb)
+		corners_max = maxf(corners_max, turn / (PI / 2.0))
+		corners_sum += turn / (PI / 2.0)
+	var overlaps := 0
+	var crossings := 0
+	var bad_cross := 0
+	var min_gap := INF
+	for i in range(lines.size()):
+		var A: Array = lines[i]
+		for j in range(i + 1, lines.size()):
+			if not (boxes[i] as Rect2).grow(1.6).intersects(boxes[j]):
+				continue
+			var B: Array = lines[j]
+			var bj: Rect2 = (boxes[j] as Rect2).grow(1.6)
+			var bad_here := false
+			for k in range(1, A.size()):
+				var a0: Vector2 = A[k - 1]
+				var a1: Vector2 = A[k]
+				var ra := Rect2(a0, Vector2.ZERO).expand(a1).grow(1.6)
+				if not ra.intersects(bj):
+					continue
+				var da := (a1 - a0).normalized()
+				for m in range(1, B.size()):
+					var b0: Vector2 = B[m - 1]
+					var b1: Vector2 = B[m]
+					if not ra.intersects(Rect2(b0, Vector2.ZERO).expand(b1)):
+						continue
+					var dotv := absf(da.dot((b1 - b0).normalized()))
+					if Geometry2D.segment_intersects_segment(a0, a1, b0, b1) != null:
+						crossings += 1
+						if dotv > 0.052:
+							bad_cross += 1
+						continue
+					if dotv < 0.5:
+						continue
+					var cp := Geometry2D.get_closest_points_between_segments(a0, a1, b0, b1)
+					var dist := cp[0].distance_to(cp[1])
+					min_gap = minf(min_gap, dist)
+					if dist < 0.6:
+						bad_here = true
+			if bad_here:
+				overlaps += 1
+	return {"tubes": lines.size(), "free": lines.size() - _ortho_runs.size(), "off_axis": off_axis, "overlaps": overlaps, "min_gap": snappedf(min_gap, 0.01),
+			"crossings": crossings, "bad_cross": bad_cross, "corners_avg": snappedf(corners_sum / maxf(lines.size(), 1), 0.01),
+			"corners_max": snappedf(corners_max, 0.01), "blocks": conn_count, "route_ms": build_ms[0]}
+
+
 func _grid_take(a: Vector2, b: Vector2, d: int) -> void:
 	if d < 2:
 		_lane_take("X", a.y, minf(a.x, b.x), maxf(a.x, b.x))
