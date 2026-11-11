@@ -97,10 +97,10 @@ const CONN_MAX := 7.5             # m: the biggest trunk block
 const CONN_MERGE := 3.0           # m: blocks closer than this merge into one trunk block
 const CONN_H := 1.5              # m: block height (centred on the tube level)
 var connectors := false
-var floor2 := false              # Daniele 2026-11-11: TWO FLOOR LEVELS, no hubs - runs along x on the floor, runs along z one tube higher,
+var floor2 := true               # Daniele 2026-11-11: TWO FLOOR LEVELS, no hubs - runs along x on the floor, runs along z one tube higher,
                                  # so two tubes simply pass over each other (still under the walkways). Dev: --tubes=levels
 const FLOOR2_STEP := 0.62        # m between the two floor levels (tube diameter 0.54)
-var near_pits := false           # Daniele 2026-11-11: NEAR PITS ONLY - a column's tubes all go to its nearest pit (pits within 5 % of
+var near_pits := true            # Daniele 2026-11-11: NEAR PITS ONLY - a column's tubes all go to its nearest pit (pits within 5 % of
                                  # the nearest share them), so no tube crosses the board. Dev: --tube-pits=near
 var _flats: Array = []           # per laid tube: [its floor line (x z, the dip into the pit left out), bounds]
 const GRID_CROSS := 14.0         # m-equivalent cost of crossing another tube (fewer crossings = fewer connectors)
@@ -120,7 +120,7 @@ const ORTHO_GAP := 1.1           # m between two parallel lanes (tube diameter 0
 const ORTHO_LEVEL_STEP := 0.9     # m: ortho mode - legs along x run at the rack level, legs along z this much higher, so crossings never touch
 const FLOOR_RUN_Y := 0.35          # m: connectors mode - the tubes run ON the floor (the connector blocks hide the crossings, no rack)
 const ORTHO_BEND := 0.8          # m: THE elbow of the lane grid. Under one lane gap (1.1), so a bend stays inside its own lane cell and cannot lean into a neighbour
-const ORTHO_DEFAULT := false
+const ORTHO_DEFAULT := true           # Daniele 2026-11-11: the default is NEAR PITS + TWO FLOOR LEVELS (--tubes=free / --tube-pits=all for the others)
 var ortho := ORTHO_DEFAULT
 var ortho_stats := [0, 0, 0]     # probes: tubes routed on the grid (1 corner) / fallen back to v3 / of those fallen back, routed with 2 corners
 var _lanes := {}                 # "X<idx>" / "Z<idx>" -> [[lo, hi], ...] the stretches already taken
@@ -131,9 +131,9 @@ static func base45() -> bool:
 	## Daniele 2026-11-11: turn every node base 45 degrees - tube sockets on the CARDINALS, walk-in doors on the CORNERS (the
 	## base mesh is unchanged: its yaw comes from WorldLocals.door_dirs(), which become the diagonals). Dev: --base45.
 	for a in OS.get_cmdline_user_args():
-		if a == "--base45" or a == "--tubes=ortho" or a == "--tubes=connectors" or a == "--tubes=levels":
-			return true                                   # the ortho routings only make 90-degree turns on cardinal sockets
-	return false
+		if a == "--tubes=free":
+			return false                                  # the old free routing keeps the sockets on the corners
+	return true                                       # the lane routings only make 90-degree turns on cardinal sockets
 
 
 static func corner_dir(k: int) -> Vector2:
@@ -157,6 +157,8 @@ func setup(w: WorldLayer) -> void:
 			floor2 = a.substr(8) == "levels"
 		if a == "--tube-pits=near":
 			near_pits = true
+		if a == "--tube-pits=all":
+			near_pits = false
 	var homes: Array = wl.sim.homes.values()
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
