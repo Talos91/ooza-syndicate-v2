@@ -281,6 +281,8 @@ func _run_one(pt_w: float) -> void:
 		var code: String = path.get_file().substr(0, 4)
 		if only != "" and not code in only.split(","):
 			continue
+		if only == "" and not code in MapPool.test_scope():   # proto + keep scope (Daniele 2026-11-10); maps=... overrides
+			continue
 		var m := MapBuilder.load_map(path)
 		var md: String = m["modes"][0]
 		var rows := []

@@ -28,18 +28,26 @@
    "socket": null,
    "ring": 0,
    "category": "relay",
-   "relay": "retract",
+   "relay": "launcher",
    "home": false,
    "neutral": {
     "tier": 2,
-    "structure": "forge"
+    "structure": "laser"
    },
    "buildable": [
     "laser",
     "forge",
     "monster_hub"
    ],
-   "relayTag": "B"
+   "relayTag": "B",
+   "launcher": {
+    "target": 10,
+    "targets": [
+     3,
+     10,
+     6
+    ]
+   }
   },
   {
    "id": 1,
@@ -166,7 +174,7 @@
    "socket": null,
    "ring": 1,
    "category": "relay",
-   "relay": "retract",
+   "relay": "laser_relay",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -235,7 +243,7 @@
    "socket": null,
    "ring": 1,
    "category": "relay",
-   "relay": "retract",
+   "relay": "laser_relay",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -373,18 +381,26 @@
    "socket": null,
    "ring": 0,
    "category": "relay",
-   "relay": "retract",
+   "relay": "launcher",
    "home": false,
    "neutral": {
     "tier": 2,
-    "structure": "forge"
+    "structure": "laser"
    },
    "buildable": [
     "laser",
     "forge",
     "monster_hub"
    ],
-   "relayTag": "D"
+   "relayTag": "D",
+   "launcher": {
+    "target": 10,
+    "targets": [
+     17,
+     10,
+     14
+    ]
+   }
   }
  ],
  "edges": [
@@ -407,8 +423,8 @@
    "seconds": 1.0,
    "level": 0,
    "state": null,
-   "relay": 8,
-   "retracts": true,
+   "relay": null,
+   "retracts": false,
    "deckMetres": 2.0,
    "modules": 0.5
   },
@@ -464,8 +480,8 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 0,
-   "retracts": true,
+   "relay": null,
+   "retracts": false,
    "deckMetres": 4.0
   },
   {
@@ -591,8 +607,8 @@
    "seconds": 1.0,
    "level": 0,
    "state": null,
-   "relay": 12,
-   "retracts": true,
+   "relay": null,
+   "retracts": false,
    "deckMetres": 2.0,
    "modules": 0.5
   },
@@ -648,8 +664,8 @@
    "seconds": 2,
    "level": 0,
    "state": null,
-   "relay": 20,
-   "retracts": true,
+   "relay": null,
+   "retracts": false,
    "deckMetres": 4.0
   },
   {
@@ -812,7 +828,7 @@
    }
   ]
  },
- "note": "Each home grows a tree of Wide forks (half-turn symmetry): a trunk relay, a fork into two limbs, and a fork on each limb whose twigs reach the middle line. Both trees' inner twigs meet at the T4 hill; their outer twigs meet at the top and bottom canopy relays, which retract them. The trunk relay drops the trunk; two root platforms keep each home on its limbs.",
+ "note": "Each home grows a tree of Wide forks (half-turn symmetry): a trunk relay, a fork into two limbs, and a fork on each limb whose twigs reach the middle line. Both trees' inner twigs meet at the T4 hill; their outer twigs meet at the top and bottom canopy relays, which retract them. The trunk relay drops the trunk; two root platforms keep each home on its limbs. [KEEP edit 2026-11-11: trunk retracts -> laser relays; canopy retracts -> launchers (targets: both upper / lower limbs + the hill).]",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true
@@ -827,6 +843,11 @@
   "size": "M",
   "family": "choke",
   "finale": "inward"
+ },
+ "keepEdit": {
+  "date": "2026-11-11",
+  "source": "Ooze Syndicate maps - experimental/json/E-09-tree.json",
+  "what": "trunk retracts -> laser relays; canopy retracts -> launchers (targets: both upper / lower limbs + the hill)"
  },
  "layout": {
   "K": 1.0,

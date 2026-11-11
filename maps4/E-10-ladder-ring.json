@@ -166,7 +166,7 @@
    "socket": null,
    "ring": 0,
    "category": "relay",
-   "relay": "retract",
+   "relay": "launcher",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -177,7 +177,15 @@
     "forge",
     "monster_hub"
    ],
-   "relayTag": "B"
+   "relayTag": "B",
+   "launcher": {
+    "target": 10,
+    "targets": [
+     5,
+     10,
+     14
+    ]
+   }
   },
   {
    "id": 9,
@@ -205,7 +213,7 @@
    "socket": null,
    "ring": 0,
    "category": "relay",
-   "relay": "retract",
+   "relay": "launcher",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -216,7 +224,15 @@
     "forge",
     "monster_hub"
    ],
-   "relayTag": "D"
+   "relayTag": "D",
+   "launcher": {
+    "target": 8,
+    "targets": [
+     13,
+     8,
+     4
+    ]
+   }
   },
   {
    "id": 11,
@@ -445,8 +461,8 @@
    "seconds": 6,
    "level": 0,
    "state": null,
-   "relay": 8,
-   "retracts": true,
+   "relay": null,
+   "retracts": false,
    "deckMetres": 12.0
   },
   {
@@ -559,8 +575,8 @@
    "seconds": 6,
    "level": 0,
    "state": null,
-   "relay": 10,
-   "retracts": true,
+   "relay": null,
+   "retracts": false,
    "deckMetres": 12.0
   },
   {
@@ -710,7 +726,7 @@
    }
   ]
  },
- "note": "Two rings, one inside the other, like a ladder bent round (half-turn symmetry): the outer rail curves round each home on Curve 60s, the inner rail is a ring of 2 m half bridges round the hill. Both rails break at the top and bottom, where a rotor sits between them: r1 closes the outer ring, r2 the inner one. Retract relays on the inner rail hold the half-bridge rungs to the homes and the long spokes to the hill.",
+ "note": "Two rings, one inside the other, like a ladder bent round (half-turn symmetry): the outer rail curves round each home on Curve 60s, the inner rail is a ring of 2 m half bridges round the hill. Both rails break at the top and bottom, where a rotor sits between them: r1 closes the outer ring, r2 the inner one. Retract relays on the inner rail hold the half-bridge rungs to the homes and the long spokes to the hill. [KEEP edit 2026-11-11: inner-rail retracts -> launchers (each aims at the enemy launcher and its two inner-ring neighbours); switches stay.]",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true
@@ -726,6 +742,11 @@
   "size": "M",
   "family": "choke",
   "finale": "inward"
+ },
+ "keepEdit": {
+  "date": "2026-11-11",
+  "source": "Ooze Syndicate maps - experimental/json/E-10-ladder-ring.json",
+  "what": "inner-rail retracts -> launchers (each aims at the enemy launcher and its two inner-ring neighbours); switches stay"
  },
  "layout": {
   "K": 1.0,

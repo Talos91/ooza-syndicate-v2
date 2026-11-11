@@ -181,7 +181,7 @@
    "socket": null,
    "ring": 0,
    "category": "relay",
-   "relay": "rotation",
+   "relay": "switch",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -355,7 +355,7 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": "r1",
+   "state": "s1",
    "relay": 9,
    "retracts": false,
    "deckMetres": 4.0
@@ -366,7 +366,7 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": "r2",
+   "state": "s2",
    "relay": 9,
    "retracts": false,
    "deckMetres": 4.0
@@ -481,7 +481,11 @@
    "retracts": false,
    "deckMetres": 16.43,
    "shape": "sbend",
-   "modules": 4.11
+   "modules": 4.11,
+   "proto": "ferry",
+   "ferry": {
+    "dock": "A"
+   }
   },
   {
    "from": 9,
@@ -489,7 +493,7 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": "r1",
+   "state": "s1",
    "relay": 9,
    "retracts": false,
    "deckMetres": 4.0
@@ -500,7 +504,7 @@
    "tier": "S",
    "seconds": 2,
    "level": 0,
-   "state": "r2",
+   "state": "s2",
    "relay": 9,
    "retracts": false,
    "deckMetres": 4.0
@@ -615,7 +619,11 @@
    "retracts": false,
    "deckMetres": 16.43,
    "shape": "sbend",
-   "modules": 4.11
+   "modules": 4.11,
+   "proto": "ferry",
+   "ferry": {
+    "dock": "A"
+   }
   },
   {
    "from": 17,
@@ -673,7 +681,7 @@
    }
   ]
  },
- "note": "Each home hangs off a Hub5 star; the stars face each other across a rotor (half-turn symmetry). The rotor joins north / south (r1: the stars' long top / bottom spokes) or west / east (r2: their inner spokes). A T-45 on each star's back spoke tilts the home off-axis, so the two stars spin like a pinwheel. Flex S-bridges close the outer arcs.",
+ "note": "Each home hangs off a Hub5 star; the stars face each other across a rotor (half-turn symmetry). The rotor joins north / south (r1: the stars' long top / bottom spokes) or west / east (r2: their inner spokes). A T-45 on each star's back spoke tilts the home off-axis, so the two stars spin like a pinwheel. Flex S-bridges close the outer arcs. [KEEP edit 2026-11-11: centre rotor -> switch (same decks per state); the two outer flex arcs -> ferries.]",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true
@@ -683,6 +691,11 @@
   "size": "M",
   "family": "choke",
   "finale": "inward"
+ },
+ "keepEdit": {
+  "date": "2026-11-11",
+  "source": "Ooze Syndicate maps - experimental/json/E-07-twin-stars.json",
+  "what": "centre rotor -> switch (same decks per state); the two outer flex arcs -> ferries"
  },
  "layout": {
   "K": 1.0,
