@@ -31,6 +31,11 @@ const POOL_A := 0.9               # the tube-foot pool's opacity (its own alpha 
 const T_LANE := Color(1.35, 1.4, 1.55, 2.6)
 const T_RING := Color(1.35, 1.38, 1.5, 2.2)
 const T_ARC := Color(1.45, 1.5, 1.7, 2.4)
+# FLOOR RINGS (Daniele 2026-11-11 on demo15: "the white circular floor decorations around nodes are too light, make them
+# darker"): the spawn surrounds (T_RING) and the guide arcs (T_ARC) keep their shape; their rgb lift is scaled by one
+# level. 1.0 = the demo15 look. Dev override --rings-dim=<soft|dark|0..1>.
+const FLOOR_RINGS_LEVELS := {"soft": 0.62, "dark": 0.42}
+const FLOOR_RINGS := 0.42         # DEFAULT = "dark" (recommended)
 const T_STAIN := Color(0.75, 0.78, 0.85, 1.8)
 const T_HAZARD := Color(1.25, 1.2, 1.1, 1.6)
 const CONTRAST := 2.4             # the marks pushed away from the floor's mean (world_decal.gdshader)
@@ -42,6 +47,25 @@ var _mm: MultiMesh
 var _n := 0
 var _pool_slot := {}              # tube index -> instance
 var tris := 0
+var _lanes := {}                  # feed key -> [[instance, start m, quad m, centre, yaw, shown 0..1]] (TRACE)
+static var _ring_k := -1.0
+
+
+static func ring_level() -> float:
+	## the FLOOR_RINGS level in use (the default, or --rings-dim=<soft|dark|0..1>)
+	if _ring_k < 0.0:
+		_ring_k = FLOOR_RINGS
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--rings-dim="):
+				var v := a.substr(12)
+				_ring_k = float(FLOOR_RINGS_LEVELS[v]) if FLOOR_RINGS_LEVELS.has(v) else clampf(v.to_float(), 0.0, 1.0)
+	return _ring_k
+
+
+static func ring_tint(t: Color) -> Color:
+	## T_RING / T_ARC darkened by the FLOOR_RINGS level (shape and opacity kept)
+	var k := ring_level()
+	return Color(t.r * k, t.g * k, t.b * k, t.a)
 
 
 func setup(floor_mat: ShaderMaterial, y: float) -> void:
@@ -69,10 +93,11 @@ func setup(floor_mat: ShaderMaterial, y: float) -> void:
 	position = Vector3(0, y, 0)
 
 
-func _add(c: Vector2, size: Vector2, yaw: float, cell: Rect2, tint: Color, lane := false, lift := 0.02) -> int:
+func _add(c: Vector2, size: Vector2, yaw: float, cell: Rect2, tint: Color, lane := false, lift := 0.02, reveal := 1.0) -> int:
 	if _n >= MAX:
 		return -1
-	var b := Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(size.x, 1.0, size.y))
+	# the Y scale (a flat quad never uses it) carries a lane's reveal 0..1 from its crater end (world_decal.gdshader)
+	var b := Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(size.x, maxf(reveal, 0.0001), size.y))
 	_mm.set_instance_transform(_n, Transform3D(b, Vector3(c.x, lift, c.y)))
 	var dv := cell.size.y / ATLAS_PX
 	_mm.set_instance_custom_data(_n, Color(cell.position.x / ATLAS_PX, cell.position.y / ATLAS_PX, cell.size.x / ATLAS_PX,
@@ -90,24 +115,35 @@ static func _m(cell: Rect2) -> Vector2:
 
 func build(lc: WorldLocals, cam: Camera3D) -> void:
 	var wl := lc.wl
-	# B: march lanes along every feed path (one quad per segment; a lane's top (chevrons) toward the door)
+	var _trace_always := "--trace-always" in OS.get_cmdline_user_args()   # dev: the demo15 look (every lane from the start)
+	# B: march lanes along every feed path (one quad per segment; a lane's top (chevrons) toward the door).
+	# TRACE (Daniele 2026-11-11 on demo15: the goo trace on a line must not appear until the Locals start walking it): every
+	# lane starts hidden and is revealed behind the feed's farthest walking Local (reveal_lane, from WorldLocals.step).
 	for i in lc.feeds:
 		var path: Array = (lc.feeds[i] as Dictionary)["path"]
 		if not ((lc.feeds[i] as Dictionary).get("hs", []) as Array).is_empty():
 			continue                                  # that Local walks a walkway: no goo trail on the floor under it (Daniele 2026-11-11)
+		var segs: Array = []
+		var at := 0.0
 		for k in range(1, path.size()):
 			var a: Vector2 = path[k - 1]
 			var b: Vector2 = path[k]
 			var d := b - a
 			if d.length() < 0.3:
+				at += d.length()
 				continue
 			# local -Z (the cell's top) along the walk: yaw so that Basis(UP, yaw) * (0, 0, -1) = (d.x, 0, d.y)
 			var yaw := atan2(-d.x, -d.y)
-			_add((a + b) / 2.0, Vector2(LANE_W, d.length() + 0.4), yaw, LANE, T_LANE, true, 0.015)
+			var ql := d.length() + 0.4
+			var s := _add((a + b) / 2.0, Vector2(LANE_W, ql), yaw, LANE, T_LANE, true, 0.015, 1.0 if _trace_always else 0.0)
+			if s >= 0:
+				segs.append([s, at - 0.2, ql, (a + b) / 2.0, yaw, 1.0 if _trace_always else 0.0])
+			at += d.length()
+		_lanes[i] = segs
 	# A1 / A2: the spawn surround under each crater (16 m, its empty 10 m centre = the ring)
 	for k in range(lc.craters.size()):
 		var p: Vector3 = lc.craters[k]
-		_add(Vector2(p.x, p.z), _m(A1), 0.6 * k, A1 if k % 2 == 0 else A2, T_RING, false, 0.025)
+		_add(Vector2(p.x, p.z), _m(A1), 0.6 * k, A1 if k % 2 == 0 else A2, ring_tint(T_RING), false, 0.025)
 	# C: the tube-foot pools (white, owner tint, low alpha) - only where a tube can show
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
@@ -136,7 +172,7 @@ func build(lc: WorldLocals, cam: Camera3D) -> void:
 		used.append([q, r])
 		if want_arc:
 			var cell: Rect2 = ARCS[arcs % ARCS.size()]
-			_add(q, _m(cell), rng.randf() * TAU, cell, T_ARC, false, 0.012)
+			_add(q, _m(cell), rng.randf() * TAU, cell, ring_tint(T_ARC), false, 0.012)
 			arcs += 1
 		else:
 			var cell2: Rect2 = STAINS[rng.randi() % STAINS.size()]
@@ -162,3 +198,25 @@ func tint_pool(tube: int, c: Color) -> void:
 	if not _pool_slot.has(tube) or int(_pool_slot[tube]) < 0:
 		return
 	_mm.set_instance_color(int(_pool_slot[tube]), Color(c.r, c.g, c.b, POOL_A * c.a))
+
+
+func reveal_lane(feed: int, walked: float) -> void:
+	## TRACE: show the feed's lane up to `walked` metres from the crater exit (its farthest walking Local); never shrinks
+	if not _lanes.has(feed):
+		return
+	for sg in _lanes[feed]:
+		var r := clampf((walked - float(sg[1])) / float(sg[2]), 0.0, 1.0)
+		if r <= float(sg[5]) + 0.002:
+			continue
+		sg[5] = r
+		var b := Basis(Vector3.UP, float(sg[4])) * Basis.from_scale(Vector3(LANE_W, maxf(r, 0.0001), float(sg[2])))
+		var c: Vector2 = sg[3]
+		_mm.set_instance_transform(int(sg[0]), Transform3D(b, Vector3(c.x, 0.015, c.y)))
+
+
+func lane_shown(feed: int) -> float:
+	## probes: metres of the feed's lane revealed so far
+	var m := 0.0
+	for sg in _lanes.get(feed, []):
+		m += float(sg[5]) * float(sg[2])
+	return m
