@@ -117,6 +117,8 @@ var _deck_mi: MeshInstance3D
 var _tq: Array = []               # the shared queues: one per stretch of walkway that several feeds walk (see _build_queues)
 var _abouts: Array = []           # the roundabouts the feeds' paths take: [centre, radius, height, joint angle, joint angle]
 var about_at: Array = []          # probes: [centre, height] of each roundabout
+var route_ms := 0.0                # probes: the feeds' routing / the deck mesh, ms
+var deck_ms := 0.0
 var about_count := 0              # probes: roundabouts built
 var deck_tris := 0                # probes: the walkway mesh's triangles
 var _rings: Array = []            # per ring (0 = outer): half extents (x, z) round _wctr
@@ -470,16 +472,18 @@ func _after_place(cam: Camera3D) -> void:
 		_ring_mm.set_instance_color(i, Color.WHITE)
 	_ring_mm.visible_instance_count = craters.size()
 	placed = true
+	var t_r := Time.get_ticks_usec()
 	_route_all()
-	if wl.pipes != null:
-		wl.pipes.build()                              # the transport tubes keep clear of the lanes' exits
-	sync_walkways()
+	route_ms = (Time.get_ticks_usec() - t_r) / 1000.0
 	if wl.floor_lab5 and not "--no-decals" in OS.get_cmdline_user_args():   # the lab floor decals (world pass 2)
 		decals = WorldDecals.new()
 		add_child(decals)
 		decals.setup(wl._floor.material_override as ShaderMaterial, wl.floor_y)
 		decals.build(self, cam)
 		wl.decals = decals
+	if wl.pipes != null:
+		await wl.pipes.build()                        # the transport tubes keep clear of the lanes' exits (laid over a few frames)
+	await sync_walkways()
 
 
 func _clear(q: Vector2) -> bool:
@@ -816,7 +820,10 @@ func sync_walkways() -> void:
 		_deck_mi.queue_free()
 		_deck_mi = null
 	if walkways and not feeds.is_empty():
-		_build_walkways()
+		var t_d := Time.get_ticks_usec()
+		await _build_walkways()
+		deck_ms = (Time.get_ticks_usec() - t_d) / 1000.0
+		print("WALKWAYS build: route %.0f ms, deck %.0f ms" % [route_ms, deck_ms])
 
 
 func _walk_rings() -> void:
@@ -902,6 +909,23 @@ func _ray_ring(s: Vector2, d: Vector2) -> Array:
 					if absf(x) <= X + 0.01:
 						best = u2
 						res = [k, _wctr + Vector2(x, sz * Z)]
+	return res
+
+
+func _near_ring(s: Vector2, own: Vector2) -> Array:
+	## the nearest point of any ring a clear straight bridge from s reaches (at most 30 m): [ring, point] or []
+	var best := 30.0
+	var res: Array = []
+	var q := s - _wctr
+	for k in range(_rings.size()):
+		var X: float = _rings[k].x
+		var Z: float = _rings[k].y
+		for cand in [Vector2(clampf(q.x, -X, X), -Z), Vector2(clampf(q.x, -X, X), Z), Vector2(-X, clampf(q.y, -Z, Z)), Vector2(X, clampf(q.y, -Z, Z))]:
+			var pt: Vector2 = _wctr + cand
+			var d := pt.distance_to(s)
+			if d > 2.0 and d < best and _bridge_clear(s, pt, own):
+				best = d
+				res = [k, pt]
 	return res
 
 
@@ -1108,11 +1132,11 @@ func _walk_path(t2: Vector2, c2: Vector2, taken: Vector2) -> Dictionary:
 				continue
 			var slot0: Vector2 = t2 + d2 * DOOR_OUT
 			var hit: Array = _ray_ring(slot0, d2)
+			if hit.is_empty() or not _bridge_clear(slot0, hit[1], t2):
+				hit = _near_ring(slot0, t2)                # (any map: no clear diagonal - the shortest clear bridge to a ring)
 			if hit.is_empty():
 				continue
 			var bp: Vector2 = hit[1]
-			if not _bridge_clear(slot0, bp, t2):
-				continue
 			var walk: Array = _ring_walk(land, bp, int(hit[0]))
 			if walk.is_empty():
 				continue
@@ -1288,6 +1312,8 @@ func _build_walkways() -> void:
 		cores.append([ca + cd * sa, cb - cd * sb, ha0, hb0, cd, maxf(cl - sa - sb, 0.01)])
 	for ri in range(ribbons.size()):
 		var rb: Array = ribbons[ri]
+		if wl.pipes != null:
+			await wl.pipes._breathe()                  # (the deck is built a few milliseconds a frame too)
 		var a: Vector2 = rb[0]
 		var b: Vector2 = rb[1]
 		var ha: float = rb[2]

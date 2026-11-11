@@ -52,6 +52,115 @@ const STEEL_L := Color(0.27, 0.29, 0.33)
 const RECESS := Color(0.015, 0.015, 0.02)
 const CONQUER_S := 3.0           # s: a tube that appears mid-match (a neutral column conquered) is built as a hologram first (Daniele 2026-11-11)
 var _stepped := false
+const PIT_TUBES_MAX := 20        # tubes one pit's rim takes (5 lanes a face, clear of the Locals' ramps): past that a column uses its next pit
+var _lows: Array = []
+var _skip_pit := -1               # the pit whose keep-out the grid search relaxes (last try for a tube boxed in beside its own pit)
+var _pit_ob := {}                # pit index -> its obstacle's index in _gobs
+
+
+func _hits_low(pts: PackedVector3Array) -> bool:
+	## does this tube run through a Locals' ramp where it is too low to pass under?
+	if _lows.is_empty():
+		return false
+	for q in pts:
+		var v := Vector2(q.x, q.z)
+		var inpit := false
+		for c in wl.locals.craters:
+			if v.distance_to(Vector2((c as Vector3).x, (c as Vector3).z)) < WorldLocals.RING_R + 0.85:
+				inpit = true
+		if inpit:
+			continue
+		for sgm in _lows:
+			if Geometry2D.get_closest_point_to_segment(v, sgm[0], sgm[1]).distance_to(v) < 1.1:
+				return true
+	return false
+
+
+func _lane_untake_log() -> void:
+	for e in _lane_log:
+		var arr: Array = _lanes.get(_lk(String(e[0]), float(e[1])), [])
+		for k in range(arr.size() - 1, -1, -1):
+			if absf(float(arr[k][0]) - float(e[2])) < 0.001 and absf(float(arr[k][1]) - float(e[3])) < 0.001:
+				arr.remove_at(k)
+				break
+	_lane_log.clear()
+
+
+const CACHE_VER := 4             # bump when the routing rules change: older cached layouts are then ignored
+var cache_hit := false           # probes: the last build() loaded its layout instead of routing it
+var restarts := 0                # probes: times the routing started over with a failed tube laid first
+
+
+func _cache_key(plan: Dictionary, craters: Array) -> String:
+	## everything the routing depends on: the mode, the pits, every column and its socket plan, the Locals' exits and low ramps
+	var parts: Array = [CACHE_VER, ortho, connectors, floor2, near_pits]
+	for c in craters:
+		parts.append(Vector2(snappedf((c as Vector3).x, 0.05), snappedf((c as Vector3).z, 0.05)))
+	for key in plan:
+		var tb: Dictionary = wl._tubes[int(key[0])]
+		parts.append([key, plan[key], snappedf(float(tb["x"]), 0.05), snappedf(float(tb["z"]), 0.05)])
+	for tb in wl._tubes:
+		parts.append([snappedf(float(tb["x"]), 0.05), snappedf(float(tb["z"]), 0.05), snappedf(float(tb["r"]), 0.05)])
+	for fb in _fixed:
+		for b in fb:
+			parts.append(snappedf(float(b), 0.01))
+	if wl.locals != null and floor_mode():
+		for sgm in wl.locals.low_decks():
+			parts.append([(sgm[0] as Vector2).snapped(Vector2(0.05, 0.05)), (sgm[1] as Vector2).snapped(Vector2(0.05, 0.05))])
+	return str(parts).md5_text()
+
+
+func _cache_load(ckey: String) -> Array:
+	if not ortho or "--no-tube-cache" in OS.get_cmdline_user_args():
+		return []
+	for dir in ["res://tube_cache/", "user://tube_cache/"]:      # baked with the game first, then what this device routed itself
+		var path: String = dir + ckey + ".json"
+		if FileAccess.file_exists(path):
+			var data = JSON.parse_string(FileAccess.get_file_as_string(path))
+			if data is Array and not (data as Array).is_empty():
+				return data
+	return []
+
+
+func _cache_save(ckey: String, runs: Array, slot_of: Dictionary) -> void:
+	if "--no-tube-cache" in OS.get_cmdline_user_args():
+		return
+	var key_of := {}
+	for k in slot_of:
+		key_of[int(slot_of[k])] = k
+	var out: Array = []
+	for r in range(runs.size()):
+		var fl: Array = []
+		for q in (runs[r][4] as PackedVector3Array):
+			fl.append(snappedf(q.x, 0.001))
+			fl.append(snappedf(q.y - wl.floor_y, 0.001))
+			fl.append(snappedf(q.z, 0.001))
+		out.append({"k": key_of[r], "s": runs[r][1], "p": runs[r][2], "a": runs[r][3], "o": _ortho_runs.has(r), "pts": fl})
+	DirAccess.make_dir_recursive_absolute("user://tube_cache")
+	var f := FileAccess.open("user://tube_cache/" + ckey + ".json", FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(out))
+
+
+const SLICE_US := 6000           # NO STALL AT MAP START (Daniele 2026-11-11): the routing and the meshes are laid a few milliseconds a frame
+var _slice_t := 0
+var _building := false
+var work_us := 0                 # probes: the CPU time the last build really took (its frames' waits left out)
+var mesh_ms := 0.0
+var slices := 0                  # probes: frames the last build was spread over
+
+
+func _breathe() -> void:
+	## hands the frame back when this slice has used its few milliseconds (--tubes-sync: never, for probes that need it at once)
+	var now := Time.get_ticks_usec()
+	if now - _slice_t < SLICE_US or "--tubes-sync" in OS.get_cmdline_user_args() or not is_inside_tree():
+		return
+	work_us += now - _slice_t
+	slices += 1
+	await get_tree().process_frame
+	_slice_t = Time.get_ticks_usec()
+
+
 const FILL_S := 1.6              # s: a finished tube fills from the pit to the column
 const TUBES_BY_TIER := {1: 1, 2: 2, 3: 4}   # tubes a column has at each tier (Daniele 2026-11-11; the tubes only grow, R4)
 const MAX_TUBES := 4
@@ -188,6 +297,10 @@ func build() -> void:
 	if craters.is_empty():
 		return
 	var t_build := Time.get_ticks_usec()
+	_building = true
+	built = false
+	_slice_t = t_build
+	work_us = 0
 	pit_cols.clear()
 	for k in range(craters.size()):
 		pit_cols.append(WorldLayer.NATIVE_GRAY)
@@ -206,6 +319,7 @@ func build() -> void:
 		fixed[int(f["crater"])].append(atan2(ex.y - c.z, ex.x - c.x))
 	_fixed = fixed
 	_lane_sep = 0.40 if (floor_mode() and wl.locals.walkways) else LANE_SEP   # a ramp is 1.6 m wide: 2.3 m from its centre line at the rim
+	var load := {}                                    # tubes planned into each pit
 	var into: Array = []                              # per pit: [col index, slot k, socket, wanted bearing]
 	for k in range(craters.size()):
 		into.append([])
@@ -226,7 +340,14 @@ func build() -> void:
 					mine.append(pk)
 			pits = []
 			for k in range(most):
-				pits.append(mine[k % mine.size()])
+				var pick: int = mine[k % mine.size()]
+				if int(load.get(pick, 0)) >= PIT_TUBES_MAX:      # that pit's rim is full: the next nearest pit with room
+					for pk in porder:
+						if int(load.get(pk, 0)) < PIT_TUBES_MAX:
+							pick = pk
+							break
+				load[pick] = int(load.get(pick, 0)) + 1
+				pits.append(pick)
 		var socks := _assign_sockets(foot, pits, craters)
 		cols[i]["pits"] = pits
 		cols[i]["pit"] = int(pits[0]) if not pits.is_empty() else -1
@@ -246,52 +367,100 @@ func build() -> void:
 	order.sort_custom(func(a, b): return tlen.call(a) < tlen.call(b))
 	var runs: Array = []                              # [col index, socket, pit, entry angle, world points]
 	var slot_of := {}
-	_laid.clear()
-	_flats.clear()
 	var done := {}
-	for key in order:
-		if done.has(key):
-			continue
-		var i := int(key[0])
-		var p := int(plan[key][0])
-		var s := int(plan[key][1])
-		var ang: float = angle_of[key]
-		var pts := PackedVector3Array()
-		_from_ortho = false
-		_lane_log.clear()
-		_lane_logging = true
-		if ortho:
-			pts = _path_grid(i, s, craters[p], p)
-			if not pts.is_empty():
-				grid_routed += 1
-			else:
-				pts = _path_ortho(i, s, craters[p], p)
-			ortho_stats[0 if not pts.is_empty() else 1] += 1
-			if pts.is_empty():
-				pts = _path_ortho3(i, s, craters[p], p)
-				ortho_stats[2] += 1 if not pts.is_empty() else 0
-				if pts.is_empty():
-					pts = _path_grid(i, s, craters[p], p)
-					if not pts.is_empty():
-						grid_routed += 1
-		_lane_logging = false
-		_from_ortho = not pts.is_empty()
-		if pts.is_empty():
-			pts = _path(i, s, craters[p], ang)
-		_register(runs, slot_of, key, i, s, p, ang, pts, _from_ortho)
-		done[key] = true
-		# the map is symmetric (x and z mirrors): the mirrored tubes are THIS route mirrored, so the layout is symmetric too
-		for t in [Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
-			var pk = _mirror_key(key, t, plan, craters)
-			if pk == null or done.has(pk):
+	var first: Array = []                             # tubes the lane grid failed to place: laid first on the next attempt
+	restarts = 0
+	cache_hit = false
+	var ckey := _cache_key(plan, craters)
+	var cached: Array = _cache_load(ckey)
+	if not cached.is_empty():                         # this exact layout was routed before (on this device, or baked with the game)
+		cache_hit = true
+		_laid.clear()
+		_flats.clear()
+		for e in cached:
+			var pv := PackedVector3Array()
+			var fl: Array = e["pts"]
+			for k in range(0, fl.size() - 2, 3):
+				pv.append(Vector3(fl[k], fl[k + 1] + wl.floor_y, fl[k + 2]))
+			var ck := [int(e["k"][0]), int(e["k"][1])]
+			_register(runs, slot_of, ck, ck[0], int(e["s"]), int(e["p"]), float(e["a"]), pv, bool(e["o"]))
+	for attempt in range(0 if cache_hit else 4):
+		var retry := false
+		_lanes.clear()
+		_ortho_runs.clear()
+		ortho_stats = [0, 0, 0]
+		grid_routed = 0
+		runs = []
+		slot_of = {}
+		_laid.clear()
+		_flats.clear()
+		done = {}
+		slices = 0
+		var seq: Array = first.duplicate()
+		for key in order:
+			if not first.has(key):
+				seq.append(key)
+		for key in seq:
+			if done.has(key):
 				continue
-			var mpts := _mirror_pts(pts, t)
-			if _from_ortho and _clashes(_flat_of(mpts)):
-				continue                                    # the image would lie on a laid tube (a tube that crosses the mirror
-				                                            # axis meets its own image): that one is routed on its own, later
-			_register(runs, slot_of, pk, int(pk[0]), int(plan[pk][1]), int(plan[pk][0]), angle_of[pk], mpts, _from_ortho)
-			_mirror_lanes(t)
-			done[pk] = true
+			await _breathe()
+			var i := int(key[0])
+			var p := int(plan[key][0])
+			var s := int(plan[key][1])
+			var ang: float = angle_of[key]
+			var pts := PackedVector3Array()
+			_from_ortho = false
+			_lane_log.clear()
+			_lane_logging = true
+			if ortho:
+				pts = await _path_grid(i, s, craters[p], p)
+				if not pts.is_empty():
+					grid_routed += 1
+				else:
+					pts = _path_ortho(i, s, craters[p], p)
+					if not pts.is_empty() and _hits_low(pts):
+						_lane_untake_log()                      # (the lane tries do not know the ramps: a route through a low one is dropped)
+						pts = PackedVector3Array()
+				ortho_stats[0 if not pts.is_empty() else 1] += 1
+				if pts.is_empty():
+					pts = _path_ortho3(i, s, craters[p], p)
+					if not pts.is_empty() and _hits_low(pts):
+						_lane_untake_log()
+						pts = PackedVector3Array()
+					ortho_stats[2] += 1 if not pts.is_empty() else 0
+					if pts.is_empty():
+						_skip_pit = p
+						pts = await _path_grid(i, s, craters[p], p)
+						_skip_pit = -1
+						if not pts.is_empty():
+							grid_routed += 1
+			_lane_logging = false
+			_from_ortho = not pts.is_empty()
+			if pts.is_empty() and ortho and attempt < 3:
+				first.append(key)                               # the lane grid could not place it: start over with this tube laid first
+				retry = true
+				break
+			if pts.is_empty():
+				pts = _path(i, s, craters[p], ang)
+			_register(runs, slot_of, key, i, s, p, ang, pts, _from_ortho)
+			done[key] = true
+			# the map is symmetric (x and z mirrors): the mirrored tubes are THIS route mirrored, so the layout is symmetric too
+			for t in [Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
+				var pk = _mirror_key(key, t, plan, craters)
+				if pk == null or done.has(pk):
+					continue
+				var mpts := _mirror_pts(pts, t)
+				if _from_ortho and (_clashes(_flat_of(mpts)) or _hits_low(mpts)):
+					continue                                    # the image would lie on a laid tube (a tube that crosses the mirror
+					                                            # axis meets its own image): that one is routed on its own, later
+				_register(runs, slot_of, pk, int(pk[0]), int(plan[pk][1]), int(plan[pk][0]), angle_of[pk], mpts, _from_ortho)
+				_mirror_lanes(t)
+				done[pk] = true
+		if not retry:
+			break
+		restarts += 1
+	if not cache_hit and ortho:
+		_cache_save(ckey, runs, slot_of)
 	for i in cols:                                    # slots in tube order (k-th tube = k-th nearest pit)
 		var sl: Array = []
 		for k in range((cols[i]["pits"] as Array).size()):
@@ -300,12 +469,16 @@ func build() -> void:
 	var t_route := Time.get_ticks_usec() - t_build
 	_slots = runs.size()
 	run_pts = runs.map(func(rn): return [rn[0], rn[1], rn[2], rn[4]])
+	await _breathe()
+	var t_mesh := Time.get_ticks_usec()
 	_place_posts(runs, craters)
 	_build_mesh(runs, craters)
+	mesh_ms = (Time.get_ticks_usec() - t_mesh) / 1000.0
 	if connectors:
 		_build_connectors()
 	build_ms = [t_route / 1000.0, (Time.get_ticks_usec() - t_build) / 1000.0]
-	print("TUBES build ms: routing %.0f, total %.0f (tubes %d)" % [build_ms[0], build_ms[1], _slots])
+	work_us += Time.get_ticks_usec() - _slice_t
+	print("TUBES build: %.0f ms of work over %d frames (%.0f ms wall), mesh %.0f ms, tubes %d" % [work_us / 1000.0, slices + 1, build_ms[1], mesh_ms, _slots])
 	_state = Image.create(maxi(_slots, 1), 2, false, Image.FORMAT_RGBAF)   # row 0 colour + fill, row 1 build progress
 	for k in range(maxi(_slots, 1)):
 		_state.set_pixel(k, 0, Color(0, 0, 0, -1))   # hidden until step()
@@ -319,6 +492,7 @@ func build() -> void:
 	holo.set_shader_parameter("slots", float(maxi(_slots, 1)))
 	_mat.next_pass = holo
 	built = true
+	_building = false
 	_dirty = true
 
 
@@ -370,6 +544,8 @@ func floor_mode() -> bool:
 
 func rebuild(on: bool, with_connectors := false, with_floor2 := false) -> void:
 	## the switch (playground / probes): re-lay every tube with the ortho routing on or off
+	if _building:
+		return                                        # (a build is still being laid, a few milliseconds a frame: one at a time)
 	ortho = on
 	connectors = on and with_connectors
 	floor2 = on and with_floor2 and not with_connectors
@@ -383,9 +559,9 @@ func rebuild(on: bool, with_connectors := false, with_floor2 := false) -> void:
 	built = false
 	if wl.locals != null:
 		wl.locals.reroute()                           # the walkway layer follows the tube mode
-	build()
+	await build()
 	if wl.locals != null:
-		wl.locals.sync_walkways()
+		await wl.locals.sync_walkways()
 
 
 static func _lk(ax: String, coord: float) -> int:
@@ -630,6 +806,7 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 
 func _grid_prepare() -> void:
 	_gobs.clear()
+	_pit_ob.clear()
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
 	for j in range(wl._tubes.size()):
@@ -641,11 +818,13 @@ func _grid_prepare() -> void:
 	if wl.locals != null:
 		for cr in wl.locals.craters:
 			var c := Vector2((cr as Vector3).x, (cr as Vector3).z)
-			_gobs.append([c, WorldLocals.RING_R + 1.5])
+			_gobs.append([c, WorldLocals.RING_R + 1.5, _gobs.size()])
+			_pit_ob[_pit_ob.size()] = _gobs.size() - 1
 			lo = lo.min(c)
 			hi = hi.max(c)
+	_lows = wl.locals.low_decks() if (wl.locals != null and floor_mode()) else []
 	if wl.locals != null and floor_mode():            # the Locals' ramps out of the pits and into the doors, where they are low
-		for sgm in wl.locals.low_decks():
+		for sgm in _lows:
 			var da: Vector2 = sgm[0]
 			var db: Vector2 = sgm[1]
 			var dn := maxi(ceili(da.distance_to(db) / 0.8), 1)
@@ -663,7 +842,10 @@ func _grid_blocked(v: Vector2i, cache: Dictionary) -> bool:
 	var q := Vector2(v.x, v.y) * ORTHO_GAP
 	var b := false
 	for ob in _gobs:
-		if q.distance_to(ob[0]) < float(ob[1]):
+		var orad: float = float(ob[1])
+		if _skip_pit >= 0 and (ob as Array).size() > 2 and int(ob[2]) == int(_pit_ob.get(_skip_pit, -9)):
+			orad = WorldLocals.RING_R + 0.4            # (a column right beside its own pit: only the ring itself is in the way)
+		if q.distance_to(ob[0]) < orad:
 			b = true
 			break
 	cache[v] = b
@@ -733,7 +915,7 @@ func _path_grid(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 				var iz := p1.y / G
 				starts.append([Vector2i(roundi(lane / G), floori(iz)), 3, p1])
 				starts.append([Vector2i(roundi(lane / G), ceili(iz)), 2, p1])
-	var res := _grid_search(starts, ends, cache, dirs)
+	var res: Array = await _grid_search(starts, ends, cache, dirs)
 	if res.is_empty() and OS.has_environment("TUBE_DBG"): print("GRIDFAIL col ", i, " sock ", s, " pit ", pi, " starts ", starts.size(), " ends ", ends.size())
 	if res.is_empty():
 		return PackedVector3Array()
@@ -777,6 +959,8 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 			if cost > float(best.get(key, INF)) + 0.001 + 0.0:
 				continue
 			expansions += 1
+			if expansions % 300 == 0:
+				await _breathe()
 			if expansions > GRID_CAP:
 				return []
 			var run: int = key % 8
@@ -979,7 +1163,7 @@ func audit() -> Dictionary:
 			low_hits += 1
 	return {"low_deck_hits": low_hits, "tubes": lines.size(), "free": lines.size() - _ortho_runs.size(), "off_axis": off_axis, "overlaps": overlaps, "min_gap": snappedf(min_gap, 0.01),
 			"crossings": crossings, "bad_cross": bad_cross, "corners_avg": snappedf(corners_sum / maxf(lines.size(), 1), 0.01),
-			"corners_max": snappedf(corners_max, 0.01), "blocks": conn_count if connectors else 0, "route_ms": build_ms[0]}
+			"corners_max": snappedf(corners_max, 0.01), "blocks": conn_count if connectors else 0, "restarts": restarts, "cached": cache_hit, "work_ms": snappedf(work_us / 1000.0, 1.0), "route_ms": build_ms[0]}
 
 
 func _grid_take(a: Vector2, b: Vector2, d: int) -> void:
