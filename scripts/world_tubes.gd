@@ -640,6 +640,13 @@ func _grid_prepare() -> void:
 			_gobs.append([c, WorldLocals.RING_R + 1.5])
 			lo = lo.min(c)
 			hi = hi.max(c)
+	if wl.locals != null and floor_mode():            # the Locals' ramps out of the pits and into the doors, where they are low
+		for sgm in wl.locals.low_decks():
+			var da: Vector2 = sgm[0]
+			var db: Vector2 = sgm[1]
+			var dn := maxi(ceili(da.distance_to(db) / 0.8), 1)
+			for j in range(dn + 1):
+				_gobs.append([da.lerp(db, float(j) / dn), 1.6])
 	var G := ORTHO_GAP
 	lo -= Vector2(14, 14)
 	hi += Vector2(14, 14)

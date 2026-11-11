@@ -121,6 +121,15 @@ func _run() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a == "audit=1":
 			print("TUBEAUDIT ", mp, " ", wl.pipes.audit())
+	for a in OS.get_cmdline_user_args():
+		if a == "perf=1":
+			var t_us := 0.0
+			for _i in range(240):
+				await get_tree().process_frame
+				t_us += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+			print("TUBEPERF tube_tris=", wl.pipes.tris, " deck_tris=", wl.locals.deck_tris, " frame_tris=", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
+				" draw_calls=", Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), " process_ms=", snappedf(t_us / 240.0, 0.01),
+				" fps=", Performance.get_monitor(Performance.TIME_FPS), " locals=", wl.locals.count(), " build_ms=", wl.pipes.build_ms)
 	print("ORTHO stats ", wl.pipes.ortho_stats, " connectors ", wl.pipes.conn_count, " grid ", wl.pipes.grid_routed, " ortho=", wl.pipes.ortho)
 	var s := img.get_size()
 	var mid := Rect2i(s.x / 4, s.y / 4, s.x / 2, s.y / 2)

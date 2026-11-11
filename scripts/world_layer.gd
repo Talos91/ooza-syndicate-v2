@@ -63,11 +63,11 @@ const LAB_FAR := Color(0.168, 0.204, 0.263)
 # they overlap it completely covers"). Two noise layers over the lab side backdrop (lab_backdrop.gdshader cloud_amt / fog_amt,
 # set in WorldDressing._backdrop): 0 = absent, 1 = fully opaque where present. A 2D layer behind the 3D scene: playfield,
 # units, goo and HUD are untouched. Strengths are [cloud, fog]; the default is mid. Dev: --backdrop-fog=<low|mid|high>.
-const BACKDROP_FOG_LEVELS := {"low": [0.6, 0.4], "mid": [0.6, 0.25], "high": [1.0, 0.8]}
+const BACKDROP_FOG_LEVELS := {"low": [0.6, 0.4], "mid": [0.4, 0.4], "high": [1.0, 0.8]}
 const BACKDROP_FOG := "mid"
-const BACKDROP_DENSITY := [0.45, 0.2]   # [cloud, fog] how much of each layer is present (0 sparse .. 1 solid); --fog-density=<c>,<f>
-const TUBE_GOO_DIM := 1.0        # transport-tube goo brightness: 1 = as before, 0 = black
-const CENTRE_LEVELS := [0.6, 0.35]   # Daniele 2026-11-11 (playground sliders): the centre plane's [cloud, fog] amounts
+const BACKDROP_DENSITY := [0.3, 0.55]   # [cloud, fog] how much of each layer is present (0 sparse .. 1 solid); --fog-density=<c>,<f>
+const TUBE_GOO_DIM := 0.6        # transport-tube goo brightness: 1 = as before, 0 = black
+const CENTRE_LEVELS := [0.35, 0.45]   # Daniele 2026-11-11 (playground sliders): the centre plane's [cloud, fog] amounts
 const CENTRE_FOG := 1.0          # x CENTRE_LEVELS for the plane between decks and floor that covers the CENTRE
                                  # (0 = off, 1 = same numbers as the sides). Off by default: it hazes the floor under the goo falls.
 var center_fog_mat: ShaderMaterial   # set by WorldDressing._backdrop; FogLead tints its fog colour

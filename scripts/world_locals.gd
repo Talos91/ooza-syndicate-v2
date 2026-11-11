@@ -52,6 +52,10 @@ const DEFAULT_LAYOUT := 4         # PITS / TUBES rule 1 (was 2)
 const WALK_LEVELS := [1.75, 2.45, 3.15]   # walkway layer (Daniele 2026-11-11): 3 concentric rings, each closer to the centre one level higher
 const DECK_HW := 0.8              # deck half width
 const DECK_T := 0.16
+const RAIL_H := 0.45              # the hand rails either side of a walkway
+const DASH := 0.9                 # the neon centre line: dash / gap (m)
+const DASH_GAP := 0.7
+const LOW_DECK := 1.6             # m: a ramp / bridge lower than this is no place for a tube to pass under (the tubes keep off it)
 const MARCH_N := 12               # R6: Locals in a pit's match-start column
 const MARCH_GAP := 0.32           # s between them leaving the pit
 const MARCH_KEY := 10000          # feeds key of pit k's march feed: MARCH_KEY + k
@@ -106,6 +110,7 @@ var _alive := 0
 var _paths_tex: ImageTexture
 var walkways := false
 var _deck_mi: MeshInstance3D
+var deck_tris := 0                # probes: the walkway mesh's triangles
 var _rings: Array = []            # per ring (0 = outer): half extents (x, z) round _wctr
 var _wctr := Vector2.ZERO
 
@@ -762,6 +767,59 @@ func _ray_ring(s: Vector2, d: Vector2) -> Array:
 	return res
 
 
+func _ray_ring0(s: Vector2, d: Vector2) -> Vector2:
+	## where a ray from s along d first meets the OUTER ring (2 .. 45 m out), or Vector2.INF
+	var X: float = _rings[0].x
+	var Z: float = _rings[0].y
+	var q := s - _wctr
+	var best := 45.0
+	var res := Vector2.INF
+	for sg in [1.0, -1.0]:
+		if absf(d.x) > 0.01:
+			var u: float = (sg * X - q.x) / d.x
+			if u > 2.0 and u < best and absf(q.y + u * d.y) <= Z:
+				best = u
+				res = _wctr + Vector2(sg * X, q.y + u * d.y)
+		if absf(d.y) > 0.01:
+			var u2: float = (sg * Z - q.y) / d.y
+			if u2 > 2.0 and u2 < best and absf(q.x + u2 * d.x) <= X:
+				best = u2
+				res = _wctr + Vector2(q.x + u2 * d.x, sg * Z)
+	return res
+
+
+func low_decks() -> Array:
+	## the stretches of ramp / bridge too low for a tube to pass under (x z segments): the tube router keeps off them, so a
+	## Locals' way out of a pit or into a door never has a tube through it
+	var out: Array = []
+	if not walkways:
+		return out
+	var seen := {}
+	for fk in feeds:
+		var hs: Array = feeds[fk]["hs"]
+		var path: Array = feeds[fk]["path"]
+		if hs.is_empty():
+			continue
+		for k in range(1, path.size()):
+			var h0: float = hs[k - 1]
+			var h1: float = hs[k]
+			if minf(h0, h1) >= LOW_DECK:
+				continue
+			var a: Vector2 = path[k - 1]
+			var b: Vector2 = path[k]
+			var key := Vector4(roundf(a.x), roundf(a.y), roundf(b.x), roundf(b.y))
+			if seen.has(key):
+				continue
+			seen[key] = true
+			if h0 < h1 and h1 > LOW_DECK:
+				out.append([a, a.lerp(b, (LOW_DECK - h0) / (h1 - h0))])
+			elif h1 < h0 and h0 > LOW_DECK:
+				out.append([a.lerp(b, (h0 - LOW_DECK) / (h0 - h1)), b])
+			else:
+				out.append([a, b])
+	return out
+
+
 func _bridge_clear(a: Vector2, b: Vector2, skip: Vector2) -> bool:
 	for tb in wl._tubes:
 		var c := Vector2(tb["x"], tb["z"])
@@ -874,43 +932,65 @@ func _walk_path(t2: Vector2, c2: Vector2, taken: Vector2) -> Dictionary:
 		return {}
 	var X0: float = _rings[0].x
 	var Z0: float = _rings[0].y
-	var best_c := Vector2.ZERO
-	var bd := INF
-	for sx in [1.0, -1.0]:
-		for sz in [1.0, -1.0]:
-			var cc := _wctr + Vector2(sx * X0, sz * Z0)
-			if cc.distance_to(c2) < bd:
-				bd = cc.distance_to(c2)
-				best_c = cc
-	var exit := c2 + (best_c - c2).normalized() * (RING_R + 0.4)
+	var r := 0.70710678
+	var to_c := (_wctr - c2).normalized()
+	var diag: Array = [Vector2(r, r), Vector2(r, -r), Vector2(-r, -r), Vector2(-r, r)]
+	diag.sort_custom(func(p1, p2): return (p1 as Vector2).dot(to_c) > (p2 as Vector2).dot(to_c))
+	var exits: Array = []                                 # [where the Locals leave the pit, where that ramp lands on the outer ring]
+	for k in range(2):                                    # Daniele 2026-11-11: out of the pit on BOTH diagonals that face the board
+		var dg: Vector2 = diag[k]
+		var ex: Vector2 = c2 + dg * (RING_R + 0.4)
+		var land := _ray_ring0(ex, dg)
+		if land == Vector2.INF:                               # it just misses the ring: it lands on the corner it passes (within 4 m)
+			for sx in [1.0, -1.0]:
+				for sz in [1.0, -1.0]:
+					var cc := _wctr + Vector2(sx * X0, sz * Z0)
+					var along := (cc - ex).dot(dg)
+					if along > 2.0 and absf((cc - ex).cross(dg)) < 4.0:
+						land = cc
+		if land != Vector2.INF:
+			exits.append([ex, land])
+	if exits.is_empty():                                  # (a pit no diagonal links to the ring: straight to its nearest corner)
+		var best_c := Vector2.ZERO
+		var bd := INF
+		for sx in [1.0, -1.0]:
+			for sz in [1.0, -1.0]:
+				var cc := _wctr + Vector2(sx * X0, sz * Z0)
+				if cc.distance_to(c2) < bd:
+					bd = cc.distance_to(c2)
+					best_c = cc
+		exits.append([c2 + (best_c - c2).normalized() * (RING_R + 0.4), best_c])
 	var best := {}
 	var bl := INF
-	for d2 in door_dirs():
-		if d2 == taken:
-			continue
-		var slot0: Vector2 = t2 + d2 * DOOR_OUT
-		var hit: Array = _ray_ring(slot0, d2)
-		if hit.is_empty():
-			continue
-		var bp: Vector2 = hit[1]
-		if not _bridge_clear(slot0, bp, t2):
-			continue
-		var walk: Array = _ring_walk(best_c, bp, int(hit[0]))
-		if walk.is_empty():
-			continue
-		var tot: float = exit.distance_to(best_c) + slot0.distance_to(bp)
-		for j in range(1, walk.size()):
-			tot += (walk[j][0] as Vector2).distance_to(walk[j - 1][0])
-		if tot < bl:
-			bl = tot
-			var pts: Array = [exit]
-			var hs: Array = [0.0]
-			for w in walk:
-				pts.append(w[0])
-				hs.append(w[1])
-			pts.append(slot0)
-			hs.append(0.0)
-			best = {"dir": d2, "pts": pts, "hs": hs}
+	for e in exits:
+		var exit: Vector2 = e[0]
+		var land: Vector2 = e[1]
+		for d2 in door_dirs():
+			if d2 == taken:
+				continue
+			var slot0: Vector2 = t2 + d2 * DOOR_OUT
+			var hit: Array = _ray_ring(slot0, d2)
+			if hit.is_empty():
+				continue
+			var bp: Vector2 = hit[1]
+			if not _bridge_clear(slot0, bp, t2):
+				continue
+			var walk: Array = _ring_walk(land, bp, int(hit[0]))
+			if walk.is_empty():
+				continue
+			var tot: float = exit.distance_to(land) + slot0.distance_to(bp)
+			for j in range(1, walk.size()):
+				tot += (walk[j][0] as Vector2).distance_to(walk[j - 1][0])
+			if tot < bl:
+				bl = tot
+				var pts: Array = [exit]
+				var hs: Array = [0.0]
+				for w in walk:
+					pts.append(w[0])
+					hs.append(w[1])
+				pts.append(slot0)
+				hs.append(0.0)
+				best = {"dir": d2, "pts": pts, "hs": hs}
 	return best
 
 
@@ -918,8 +998,10 @@ func _build_walkways() -> void:
 	var fy := wl.floor_y
 	var st := SurfaceTool.new()
 	var sg := SurfaceTool.new()
+	var sr := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	sg.begin(Mesh.PRIMITIVE_TRIANGLES)
+	sr.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var segs: Array = []                                  # the tubes' xz segments (a stand never lands on one)
 	if wl.pipes != null:
 		for rn in wl.pipes.run_pts:
@@ -971,15 +1053,36 @@ func _build_walkways() -> void:
 		_quad3(st, tl0 + dn, tl1 + dn, tr1 + dn, tr0 + dn, Vector3.DOWN)
 		_quad3(st, tl0, tl1, tl1 + dn, tl0 + dn, Vector3(nv.x, 0, nv.y))
 		_quad3(st, tr0, tr1, tr1 + dn, tr0 + dn, Vector3(-nv.x, 0, -nv.y))
-		var inset := 0.12                                  # lit edge strips
+		var ln := a2.distance_to(b2)
 		var up := Vector3(0, 0.012, 0)
-		var gl0 := Vector3(a2.x + nv.x * (hw - inset), ya, a2.y + nv.y * (hw - inset)) + up
-		var gl1 := Vector3(b2.x + nv.x * (hw - inset), yb, b2.y + nv.y * (hw - inset)) + up
-		var gr0 := Vector3(a2.x - nv.x * (hw - inset), ya, a2.y - nv.y * (hw - inset)) + up
-		var gr1 := Vector3(b2.x - nv.x * (hw - inset), yb, b2.y - nv.y * (hw - inset)) + up
-		_quad3(sg, tl0 + up, tl1 + up, gl1, gl0, Vector3.UP)
-		_quad3(sg, tr0 + up, tr1 + up, gr1, gr0, Vector3.UP)
-		var ln := a2.distance_to(b2)                       # stands under the raised part, clear of every tube
+		var trim := 1.7 if float(rb[4]) > 0.0 else 1.1     # the rails stop short of the corners and junctions
+		var u0 := trim / ln
+		var u1 := 1.0 - trim / ln
+		if u1 > u0:
+			for sd in [1.0, -1.0]:
+				var off: Vector2 = nv * sd * (hw - 0.05)
+				var q0: Vector2 = a2.lerp(b2, u0) + off
+				var q1: Vector2 = a2.lerp(b2, u1) + off
+				var y0 := lerpf(ya, yb, u0)
+				var y1 := lerpf(ya, yb, u1)
+				_beam(sr, Vector3(q0.x, y0 + RAIL_H, q0.y), Vector3(q1.x, y1 + RAIL_H, q1.y), 0.07, 0.06)      # hand rail
+				_beam(sr, Vector3(q0.x, y0 + RAIL_H * 0.5, q0.y), Vector3(q1.x, y1 + RAIL_H * 0.5, q1.y), 0.04, 0.04)   # mid rail
+				_beam(sr, Vector3(q0.x, y0 + 0.09, q0.y), Vector3(q1.x, y1 + 0.09, q1.y), 0.05, 0.09)          # kick plate
+				var np := maxi(int((u1 - u0) * ln / 2.2), 1)
+				for j in range(np + 1):
+					var uu := lerpf(u0, u1, float(j) / np)
+					var qp: Vector2 = a2.lerp(b2, uu) + off
+					_box(sr, Vector3(qp.x, lerpf(ya, yb, uu) + RAIL_H * 0.5, qp.y), Vector3(0.07, RAIL_H, 0.07))
+		var dd := 0.6                                       # the neon centre line, dashed
+		while dd + DASH < ln - 0.6:
+			var c0: Vector2 = a2.lerp(b2, dd / ln)
+			var c1: Vector2 = a2.lerp(b2, (dd + DASH) / ln)
+			var h0 := lerpf(ya, yb, dd / ln)
+			var h1 := lerpf(ya, yb, (dd + DASH) / ln)
+			var w2 := nv * 0.1
+			_quad3(sg, Vector3(c0.x + w2.x, h0, c0.y + w2.y) + up, Vector3(c1.x + w2.x, h1, c1.y + w2.y) + up,
+					Vector3(c1.x - w2.x, h1, c1.y - w2.y) + up, Vector3(c0.x - w2.x, h0, c0.y - w2.y) + up, Vector3.UP)
+			dd += DASH + DASH_GAP
 		var d2 := 1.0
 		while d2 < ln - 0.5:
 			var u := d2 / ln
@@ -998,8 +1101,17 @@ func _build_walkways() -> void:
 			d2 += 4.0
 	var mesh := st.commit()
 	sg.commit(mesh)
+	sr.commit(mesh)
+	var m3 := StandardMaterial3D.new()
+	m3.albedo_color = Color(0.72, 0.76, 0.84)
+	m3.metallic = 0.6
+	m3.roughness = 0.35
+	mesh.surface_set_material(2, m3)
+	deck_tris = 0
+	for si in range(mesh.get_surface_count()):
+		deck_tris += mesh.surface_get_array_len(si) / 3
 	var m1 := StandardMaterial3D.new()
-	m1.albedo_color = Color(0.46, 0.50, 0.58)
+	m1.albedo_color = Color(0.38, 0.42, 0.50)
 	m1.metallic = 0.45
 	m1.roughness = 0.6
 	m1.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -1025,6 +1137,16 @@ static func _quad3(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vecto
 	for v in [a, b, c, a, c, d]:
 		st.set_normal(n)
 		st.add_vertex(v)
+
+
+static func _beam(st: SurfaceTool, a: Vector3, b: Vector3, w: float, h: float) -> void:
+	## a straight bar from a to b (its top centre line), w wide and h tall; it follows the slope
+	var d := Vector3(b.x - a.x, 0, b.z - a.z).normalized()
+	var n := Vector3(-d.z, 0, d.x) * (w * 0.5)
+	var dn := Vector3(0, -h, 0)
+	_quad3(st, a + n, b + n, b - n, a - n, Vector3.UP)
+	_quad3(st, a + n, b + n, b + n + dn, a + n + dn, n)
+	_quad3(st, a - n, b - n, b - n + dn, a - n + dn, -n)
 
 
 static func _box(st: SurfaceTool, c: Vector3, s: Vector3) -> void:
