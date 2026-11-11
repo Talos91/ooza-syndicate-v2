@@ -26,7 +26,7 @@ const SHADER_RING := preload("res://shaders/world_ring.gdshader")
 const SHADER_LOCAL := preload("res://shaders/world_local.gdshader")
 
 const LOCALS_MAX := 1500          # the pool (STRAIT steady state ~600)
-const LINE_MAX := 30              # Locals in one tube's line at most
+const LINE_MAX := 90              # Locals in one tube's line at most (Daniele 2026-11-11: the line fills the whole walkway and moves at the vat's pace; was 30)
 const LOCAL_SIZE := 1.0           # m long (L3; was 0.62)
 const WALK_V := 1.6               # m/s on the floor (the line shuffles at this too: WALK_V / GAP Locals / s at most)
 const GAP := 1.15                 # m between Locals in a line
@@ -57,6 +57,7 @@ const DASH := 0.9                 # the neon centre line: dash / gap (m)
 const DASH_GAP := 0.7
 const ABOUT_GAP := 0.3            # m between a column and the roundabout a walkway makes round it (Daniele 2026-11-11: a walkway that
                                   # reaches a column never runs through it, it goes round - on any map)
+const RAMP_LEN := 3.2              # m: the ramp between the floor and a walkway (the rest of a bridge is level)
 const LOW_DECK := 1.6             # m: a ramp / bridge lower than this is no place for a tube to pass under (the tubes keep off it)
 const MARCH_N := 12               # R6: Locals in a pit's match-start column
 const MARCH_GAP := 0.32           # s between them leaving the pit
@@ -991,15 +992,36 @@ func _walk_path(t2: Vector2, c2: Vector2, taken: Vector2) -> Dictionary:
 				bl = tot
 				var pts: Array = [exit]
 				var hs: Array = [0.0]
+				if exit.distance_to(land) > RAMP_LEN + 0.6:      # a short ramp up out of the pit, then a LEVEL bridge to the ring:
+					pts.append(exit + (land - exit).normalized() * RAMP_LEN)   # the tubes pass under the bridge, only the ramp is in their way
+					hs.append(float(walk[0][1]))
 				for w in walk:
 					pts.append(w[0])
 					hs.append(w[1])
+				if bp.distance_to(slot0) > RAMP_LEN + 0.6:        # and the same down to the door
+					pts.append(slot0 + (bp - slot0).normalized() * RAMP_LEN)
+					hs.append(float(walk[walk.size() - 1][1]))
 				pts.append(slot0)
 				hs.append(0.0)
 				best = {"dir": d2, "pts": pts, "hs": hs}
 	if not best.is_empty():
 		_add_abouts(best, t2)
 	return best
+
+
+func _on_ring_edge(a: Vector2, b: Vector2, ha: float, hb: float) -> bool:
+	for k in range(_rings.size()):
+		if absf(ha - float(WALK_LEVELS[k])) > 0.01 or absf(hb - float(WALK_LEVELS[k])) > 0.01:
+			continue
+		var X: float = _rings[k].x
+		var Z: float = _rings[k].y
+		var qa := a - _wctr
+		var qb := b - _wctr
+		if absf(absf(qa.x) - X) < 0.06 and absf(qa.x - qb.x) < 0.06 and absf(qa.y) <= Z + 0.06 and absf(qb.y) <= Z + 0.06:
+			return true
+		if absf(absf(qa.y) - Z) < 0.06 and absf(qa.y - qb.y) < 0.06 and absf(qa.x) <= X + 0.06 and absf(qb.x) <= X + 0.06:
+			return true
+	return false
 
 
 func _about_hits(a: Vector2, b: Vector2, skip: Vector2) -> Array:
@@ -1102,7 +1124,7 @@ func _build_walkways() -> void:
 		if hs.is_empty():
 			continue
 		for k in range(1, path.size()):
-			if is_equal_approx(float(hs[k]), float(hs[k - 1])) and float(hs[k]) > 0.5:
+			if _on_ring_edge(path[k - 1], path[k], float(hs[k - 1]), float(hs[k])):
 				continue                                  # a ring edge: drawn above
 			var key := Vector4(roundf((path[k - 1] as Vector2).x), roundf((path[k - 1] as Vector2).y), roundf((path[k] as Vector2).x), roundf((path[k] as Vector2).y))
 			if seen.has(key):
@@ -1191,9 +1213,11 @@ func _build_walkways() -> void:
 			var c1: Vector2 = a2.lerp(b2, (dd + DASH) / ln)
 			var h0 := lerpf(ya, yb, dd / ln)
 			var h1 := lerpf(ya, yb, (dd + DASH) / ln)
-			var w2 := nv * 0.1
-			_quad3(sg, Vector3(c0.x + w2.x, h0, c0.y + w2.y) + up, Vector3(c1.x + w2.x, h1, c1.y + w2.y) + up,
-					Vector3(c1.x - w2.x, h1, c1.y - w2.y) + up, Vector3(c0.x - w2.x, h0, c0.y - w2.y) + up, Vector3.UP)
+			var w2 := nv * 0.06
+			for sd2 in [1.0, -1.0]:                             # one dashed strip along each side (Daniele 2026-11-11), inside the rails
+				var o2: Vector2 = nv * sd2 * (hw - 0.24)
+				_quad3(sg, Vector3(c0.x + o2.x + w2.x, h0, c0.y + o2.y + w2.y) + up, Vector3(c1.x + o2.x + w2.x, h1, c1.y + o2.y + w2.y) + up,
+						Vector3(c1.x + o2.x - w2.x, h1, c1.y + o2.y - w2.y) + up, Vector3(c0.x + o2.x - w2.x, h0, c0.y + o2.y - w2.y) + up, Vector3.UP)
 			dd += DASH + DASH_GAP
 		var d2 := 1.0
 		while d2 < ln - 0.5:
@@ -1258,8 +1282,9 @@ func _build_walkways() -> void:
 				if j % 6 == 0:
 					_box(sr, on0 + rise * 0.5, Vector3(0.07, RAIL_H, 0.07))
 			if j % 4 < 2:                                      # the dashed neon line goes round too
-				_quad3(sg, Vector3(c.x + e0.x * (R + 0.1), y, c.y + e0.y * (R + 0.1)) + up2, Vector3(c.x + e1.x * (R + 0.1), y, c.y + e1.y * (R + 0.1)) + up2,
-						Vector3(c.x + e1.x * (R - 0.1), y, c.y + e1.y * (R - 0.1)) + up2, Vector3(c.x + e0.x * (R - 0.1), y, c.y + e0.y * (R - 0.1)) + up2, Vector3.UP)
+				for rr in [R + DECK_HW - 0.24, R - DECK_HW + 0.24]:
+					_quad3(sg, Vector3(c.x + e0.x * (rr + 0.06), y, c.y + e0.y * (rr + 0.06)) + up2, Vector3(c.x + e1.x * (rr + 0.06), y, c.y + e1.y * (rr + 0.06)) + up2,
+							Vector3(c.x + e1.x * (rr - 0.06), y, c.y + e1.y * (rr - 0.06)) + up2, Vector3(c.x + e0.x * (rr - 0.06), y, c.y + e0.y * (rr - 0.06)) + up2, Vector3.UP)
 	about_count = merged.size()
 	about_at = []
 	for key in merged:

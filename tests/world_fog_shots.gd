@@ -130,6 +130,34 @@ func _run() -> void:
 			print("TUBEPERF tube_tris=", wl.pipes.tris, " deck_tris=", wl.locals.deck_tris, " frame_tris=", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
 				" draw_calls=", Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), " process_ms=", snappedf(t_us / 240.0, 0.01),
 				" fps=", Performance.get_monitor(Performance.TIME_FPS), " locals=", wl.locals.count(), " build_ms=", wl.pipes.build_ms)
+	for a in OS.get_cmdline_user_args():
+		if a == "conquer=1":                          # probe: a column goes neutral, then is conquered - its tubes must come back as a hologram
+			var ci: int = wl.pipes.cols.keys()[0]
+			var cn: Dictionary = sim.nodes[wl._tubes[ci]["id"]]
+			var sl: int = wl.pipes.cols[ci]["slots"][0]
+			var keep_s = cn.get("structure", "")
+			cn["owner"] = ""
+			cn["structure"] = ""
+			await _frames(90)
+			print("CONQUER neutral: fill=", wl.pipes._state.get_pixel(sl, 0).a, " holo=", wl.pipes._state.get_pixel(sl, 1).r)
+			cn["owner"] = "A"
+			cn["structure"] = keep_s
+			await _frames(60)
+			print("CONQUER +60 frames: fill=", wl.pipes._state.get_pixel(sl, 0).a, " holo=", wl.pipes._state.get_pixel(sl, 1).r)
+			await _frames(200)
+			print("CONQUER +260 frames: fill=", wl.pipes._state.get_pixel(sl, 0).a, " holo=", wl.pipes._state.get_pixel(sl, 1).r)
+	var missing := []                                 # nodes that can hold a vat / machinegoon but have no column base (tubes + Locals door)
+	var floor_feeds := 0
+	for i in range(wl._tubes.size()):
+		var tbn: Dictionary = wl._tubes[i]
+		var nd: Dictionary = sim.nodes[tbn["id"]]
+		var can: bool = "vat" in nd.get("buildable", []) or "machinegoon" in nd.get("buildable", [])
+		if can and not (wl.pipes.cols.has(i) and wl.locals.feeds.has(i)):
+			missing.append([tbn["id"], nd.get("kind", "?"), tbn["r"], nd.get("buildable", [])])
+	for fk in wl.locals.feeds:
+		if (wl.locals.feeds[fk]["hs"] as Array).is_empty():
+			floor_feeds += 1
+	print("NODECHECK tubes ", wl._tubes.size(), " cols ", wl.pipes.cols.size(), " feeds ", wl.locals.feeds.size(), " missing ", missing, " feeds_not_on_walkways ", floor_feeds)
 	print("WALKWAYS roundabouts ", wl.locals.about_count, " at ", wl.locals.about_at, " centre ", wl.locals.board_bounds().get_center(), " deck_tris ", wl.locals.deck_tris)
 	print("ORTHO stats ", wl.pipes.ortho_stats, " connectors ", wl.pipes.conn_count, " grid ", wl.pipes.grid_routed, " ortho=", wl.pipes.ortho)
 	var s := img.get_size()

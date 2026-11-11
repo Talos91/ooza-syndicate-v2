@@ -17,6 +17,8 @@ uniform float cloud_density = 0.55;   // 0 = sparse wisps .. 1 = a solid sheet (
 uniform float fog_density = 0.55;
 uniform vec4 cloud_col : source_color = vec4(0.27, 0.31, 0.38, 1.0);
 uniform vec4 fog_col : source_color = vec4(0.2, 0.24, 0.31, 1.0);
+uniform vec4 fog_col_b : source_color = vec4(0.2, 0.24, 0.31, 1.0);
+uniform float fog_split = 1.0;
 uniform float side_lift = 1.15;      // the framing machinery a touch brighter than the floor's far haze
 void fragment() {
 	vec2 wander = vec2(sin(TIME * speed), cos(TIME * speed * 0.7)) * drift;
@@ -32,7 +34,10 @@ void fragment() {
 	vec2 q = UV * vec2(2.2, 1.0);
 	float nf = texture(noise_tex, q * 0.9 + vec2(TIME * 0.006, TIME * -0.003)).r;
 	float nc = texture(noise_tex, q * 0.6 + vec2(TIME * -0.009, TIME * 0.004) + 0.37).r;
-	c = mix(c, fog_col.rgb, fog_amt * smoothstep(mix(0.62, -0.1, fog_density), mix(0.62, -0.1, fog_density) + 0.28, nf));
+	float nm = texture(noise_tex, q * 0.33 + vec2(TIME * 0.004, TIME * 0.0025) + 0.71).r;
+	float um = clamp(smoothstep(0.3, 0.7, nm), 0.0, 1.0) * 0.56 + 0.22;
+	vec3 fcol = mix(fog_col_b.rgb, fog_col.rgb, smoothstep(-0.2, 0.2, fog_split - um));   // patches of each faction's colour, by its share
+	c = mix(c, fcol, fog_amt * smoothstep(mix(0.62, -0.1, fog_density), mix(0.62, -0.1, fog_density) + 0.28, nf));
 	c = mix(c, cloud_col.rgb, cloud_amt * smoothstep(mix(0.62, -0.1, cloud_density), mix(0.62, -0.1, cloud_density) + 0.3, nc));
 	COLOR = vec4(c, 1.0);
 }

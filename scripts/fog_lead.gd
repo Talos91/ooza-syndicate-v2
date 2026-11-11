@@ -32,7 +32,13 @@ const FOG_GRAY := Color(0.22, 0.23, 0.26)
 const FOG_SEAT_DIM := 0.6        # the seat colours are dimmed so a full-colour haze stays a haze
 var _fog_mats: Array = []
 var fog_force: Dictionary = {}   # playground / probes: {seat: share 0..1} replaces the real node counts (the rest is gray)
+const FOG_PATCH_SAT := 0.5       # how much of a faction's own colour its fog patches carry (1 = full colour, 0 = neutral fog)
 var _fog_goal := Color.BLACK     # linear
+var _fog_goal_b := Color.BLACK   # the second faction's fog colour (Daniele 2026-11-11: 50 / 50 = half cyan fog, half red fog, never gray)
+var _fog_cur_b := Color.BLACK
+var _fog_split_goal := 1.0
+var _fog_split := 1.0
+var _fog_split_applied := -1.0
 var _fog_cur := Color.BLACK
 var _fog_applied := Color(-1, -1, -1)
 var _fog_started := false
@@ -118,17 +124,31 @@ func _measure_fog() -> void:
 	if total == 0:
 		return
 	var owned := 0
-	var acc := Color(0, 0, 0, 1)
-	for seat in counts:
-		var w := float(counts[seat]) / float(total)
+	var seats: Array = counts.keys()
+	seats.sort()
+	for seat in seats:
 		owned += int(counts[seat])
-		var c := Rules.seat_color(seat).srgb_to_linear() * FOG_SEAT_DIM
-		acc.r += c.r * w
-		acc.g += c.g * w
-		acc.b += c.b * w
-	var wg := float(total - owned) / float(total)
+	var wg := float(total - owned) / float(total)      # gray is only the NEUTRAL share: no neutral nodes, no gray
 	var g := FOG_GRAY.srgb_to_linear()
-	_fog_goal = Color(acc.r + g.r * wg, acc.g + g.g * wg, acc.b + g.b * wg, 1.0)
+	var ca := g
+	var cb := g
+	var split := 1.0
+	if owned > 0:
+		ca = Rules.seat_color(seats[0]).srgb_to_linear() * FOG_SEAT_DIM   # the first seat's fog
+		var wa := float(counts[seats[0]]) / float(owned)
+		split = wa
+		var rest := Color(0, 0, 0, 1)                   # the other seats' fog (one colour in 1v1)
+		for k in range(1, seats.size()):
+			var c2 := Rules.seat_color(seats[k]).srgb_to_linear() * FOG_SEAT_DIM
+			var w2 := float(counts[seats[k]]) / float(owned)
+			rest.r += c2.r * w2
+			rest.g += c2.g * w2
+			rest.b += c2.b * w2
+		cb = Color(rest.r / (1.0 - wa), rest.g / (1.0 - wa), rest.b / (1.0 - wa), 1.0) if wa < 0.999 else ca
+	var wq := 1.0 - (1.0 - wg) * FOG_PATCH_SAT          # a patch is the faction's colour toned toward the neutral fog, so it never outshouts the board
+	_fog_goal = Color(lerpf(ca.r, g.r, wq), lerpf(ca.g, g.g, wq), lerpf(ca.b, g.b, wq), 1.0)
+	_fog_goal_b = Color(lerpf(cb.r, g.r, wq), lerpf(cb.g, g.g, wq), lerpf(cb.b, g.b, wq), 1.0)
+	_fog_split_goal = split
 
 
 func _fog_step(delta: float, snap: bool) -> void:
@@ -136,15 +156,24 @@ func _fog_step(delta: float, snap: bool) -> void:
 		return
 	if snap:
 		_fog_cur = _fog_goal
+		_fog_cur_b = _fog_goal_b
+		_fog_split = _fog_split_goal
 	else:
-		_fog_cur = _fog_cur.lerp(_fog_goal, 1.0 - exp(-delta / TAU))
-	if _fog_cur.is_equal_approx(_fog_applied):
+		var kf := 1.0 - exp(-delta / TAU)
+		_fog_cur = _fog_cur.lerp(_fog_goal, kf)
+		_fog_cur_b = _fog_cur_b.lerp(_fog_goal_b, kf)
+		_fog_split = lerpf(_fog_split, _fog_split_goal, kf)
+	if _fog_cur.is_equal_approx(_fog_applied) and is_equal_approx(_fog_split, _fog_split_applied):
 		return
 	_fog_applied = _fog_cur
+	_fog_split_applied = _fog_split
 	var c := _fog_cur.linear_to_srgb()
+	var cb := _fog_cur_b.linear_to_srgb()
 	for m in _fog_mats:
 		if m is ShaderMaterial:
 			(m as ShaderMaterial).set_shader_parameter(&"fog_col", c)
+			(m as ShaderMaterial).set_shader_parameter(&"fog_col_b", cb)
+			(m as ShaderMaterial).set_shader_parameter(&"fog_split", _fog_split)
 
 
 func _measure() -> void:

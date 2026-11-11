@@ -50,6 +50,8 @@ const STEEL := Color(0.20, 0.22, 0.26)
 const STEEL_D := Color(0.10, 0.11, 0.13)
 const STEEL_L := Color(0.27, 0.29, 0.33)
 const RECESS := Color(0.015, 0.015, 0.02)
+const CONQUER_S := 3.0           # s: a tube that appears mid-match (a neutral column conquered) is built as a hologram first (Daniele 2026-11-11)
+var _stepped := false
 const FILL_S := 1.6              # s: a finished tube fills from the pit to the column
 const TUBES_BY_TIER := {1: 1, 2: 2, 3: 4}   # tubes a column has at each tier (Daniele 2026-11-11; the tubes only grow, R4)
 const MAX_TUBES := 4
@@ -102,6 +104,7 @@ var floor2 := true               # Daniele 2026-11-11: TWO FLOOR LEVELS, no hubs
 const FLOOR2_STEP := 0.62        # m between the two floor levels (tube diameter 0.54)
 var near_pits := true            # Daniele 2026-11-11: NEAR PITS ONLY - a column's tubes all go to its nearest pit (pits within 5 % of
                                  # the nearest share them), so no tube crosses the board. Dev: --tube-pits=near
+var _lane_sep := LANE_SEP        # rad kept clear either side of a Locals' exit (wider when the exit is a walkway ramp)
 var _flats: Array = []           # per laid tube: [its floor line (x z, the dip into the pit left out), bounds]
 const GRID_CROSS := 14.0         # m-equivalent cost of crossing another tube (fewer crossings = fewer connectors)
 const GRID_BUNDLE := 0.35        # m-equivalent saving per step that runs right beside another tube (stripes form)
@@ -202,6 +205,7 @@ func build() -> void:
 		var ex: Vector2 = (f["path"] as Array)[0]
 		fixed[int(f["crater"])].append(atan2(ex.y - c.z, ex.x - c.x))
 	_fixed = fixed
+	_lane_sep = 0.40 if (floor_mode() and wl.locals.walkways) else LANE_SEP   # a ramp is 1.6 m wide: 2.3 m from its centre line at the rim
 	var into: Array = []                              # per pit: [col index, slot k, socket, wanted bearing]
 	for k in range(craters.size()):
 		into.append([])
@@ -587,7 +591,7 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 				var bear := atan2(rim.y - c2.y, rim.x - c2.x)
 				var blocked := false
 				for fb in _fixed[pi]:
-					if absf(angle_difference(bear, float(fb))) < LANE_SEP:
+					if absf(angle_difference(bear, float(fb))) < _lane_sep:
 						blocked = true
 				if blocked:
 					continue
@@ -693,7 +697,7 @@ func _path_grid(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 				var bear := atan2(rim.y - c2.y, rim.x - c2.x)
 				var blocked := false
 				for fb in _fixed[pi]:
-					if absf(angle_difference(bear, float(fb))) < LANE_SEP:
+					if absf(angle_difference(bear, float(fb))) < _lane_sep:
 						blocked = true
 				if blocked:
 					continue
@@ -730,6 +734,7 @@ func _path_grid(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 				starts.append([Vector2i(roundi(lane / G), floori(iz)), 3, p1])
 				starts.append([Vector2i(roundi(lane / G), ceili(iz)), 2, p1])
 	var res := _grid_search(starts, ends, cache, dirs)
+	if res.is_empty() and OS.has_environment("TUBE_DBG"): print("GRIDFAIL col ", i, " sock ", s, " pit ", pi, " starts ", starts.size(), " ends ", ends.size())
 	if res.is_empty():
 		return PackedVector3Array()
 	return _grid_finish(res, ends, p0, res[2], c2)
@@ -959,7 +964,20 @@ func audit() -> Dictionary:
 						bad_here = true
 			if bad_here:
 				overlaps += 1
-	return {"tubes": lines.size(), "free": lines.size() - _ortho_runs.size(), "off_axis": off_axis, "overlaps": overlaps, "min_gap": snappedf(min_gap, 0.01),
+	var low_hits := 0                                   # tubes that run through a ramp / bridge where it is too low to pass under
+	var lows: Array = wl.locals.low_decks() if wl.locals != null else []
+	for A in lines:
+		var hit := false
+		for q in A:
+			for sgm in lows:
+				if Geometry2D.get_closest_point_to_segment(q, sgm[0], sgm[1]).distance_to(q) < 1.1:
+					hit = true
+					break
+			if hit:
+				break
+		if hit:
+			low_hits += 1
+	return {"low_deck_hits": low_hits, "tubes": lines.size(), "free": lines.size() - _ortho_runs.size(), "off_axis": off_axis, "overlaps": overlaps, "min_gap": snappedf(min_gap, 0.01),
 			"crossings": crossings, "bad_cross": bad_cross, "corners_avg": snappedf(corners_sum / maxf(lines.size(), 1), 0.01),
 			"corners_max": snappedf(corners_max, 0.01), "blocks": conn_count if connectors else 0, "route_ms": build_ms[0]}
 
@@ -1015,7 +1033,7 @@ func _path_ortho3(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 				var bear := atan2(rim.y - c2.y, rim.x - c2.x)
 				var blocked := false
 				for fb in _fixed[pi]:
-					if absf(angle_difference(bear, float(fb))) < LANE_SEP:
+					if absf(angle_difference(bear, float(fb))) < _lane_sep:
 						blocked = true
 				if blocked:
 					continue
@@ -1769,9 +1787,25 @@ func step(_dt: float) -> void:
 		c["n"] = full_n
 		var col: Color = WorldLayer._col(str(n["owner"]))
 		var slots: Array = c["slots"]
+		if not c.has("was"):
+			c["was"] = [false, false, false, false]
+			c["appear"] = [-1.0, -1.0, -1.0, -1.0]
 		for k in range(slots.size()):
 			var fill := -1.0                           # hidden
-			if live and k < want_n:
+			var shown_now: bool = live and k < want_n
+			if shown_now and k < full_n and not c["was"][k] and _stepped:
+				c["appear"][k] = now                   # it was not there a moment ago: the 3 s hologram first
+			c["was"][k] = shown_now
+			var holo := -1.0
+			if shown_now and k < full_n and float(c["appear"][k]) >= 0.0:
+				holo = (now - float(c["appear"][k])) / CONQUER_S
+				if holo >= 1.0:
+					holo = -1.0
+					c["appear"][k] = -1.0
+					c["full"][k] = false               # built: now it fills from the pit
+			if holo >= 0.0:
+				fill = 0.0
+			elif live and k < want_n:
 				fill = 0.0
 				if k < full_n:
 					if not c["full"][k]:
@@ -1785,10 +1819,11 @@ func step(_dt: float) -> void:
 			if _state.get_pixel(int(slots[k]), 0) != px:
 				_state.set_pixel(int(slots[k]), 0, px)
 				changed = true
-			var b := Color(bp if live and k >= full_n and k < want_n else -1.0, 0, 0, 0)   # v2: building -> hologram
+			var b := Color(holo if holo >= 0.0 else (bp if live and k >= full_n and k < want_n else -1.0), 0, 0, 0)   # v2: building -> hologram
 			if _state.get_pixel(int(slots[k]), 1) != b:
 				_state.set_pixel(int(slots[k]), 1, b)
 				changed = true
+	_stepped = true
 	if changed or _dirty:
 		_tex.update(_state)
 		_dirty = false
