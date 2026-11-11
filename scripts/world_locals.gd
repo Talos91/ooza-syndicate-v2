@@ -923,6 +923,8 @@ func _near_ring(s: Vector2, own: Vector2) -> Array:
 		for cand in [Vector2(clampf(q.x, -X, X), -Z), Vector2(clampf(q.x, -X, X), Z), Vector2(-X, clampf(q.y, -Z, Z)), Vector2(X, clampf(q.y, -Z, Z))]:
 			var pt: Vector2 = _wctr + cand
 			var d := pt.distance_to(s)
+			if (pt - s).dot(s - own) < 0.0:
+				continue                                   # (fog-maps-fix: never back along its own column's face - its tube sockets are there)
 			if d > 2.0 and d < best and _bridge_clear(s, pt, own):
 				best = d
 				res = [k, pt]

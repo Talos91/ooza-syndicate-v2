@@ -62,6 +62,10 @@ func _run() -> void:
 		for a in OS.get_cmdline_user_args():
 			if a == "tiers=mixed":                    # T1 / T2 / T3 by column, to see 1 / 2 / 4 tubes
 				n["tier"] = 1 + (i % 3)
+	if not wl.pipes.built:
+		print("SHOTS tubes never built")
+		get_tree().quit(3)
+		return
 	var t0 := wl._t
 	while wl._t - t0 < WorldTubes.FILL_S + 4.0:
 		await get_tree().process_frame

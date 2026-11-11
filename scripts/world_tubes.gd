@@ -76,6 +76,39 @@ func _hits_low(pts: PackedVector3Array) -> bool:
 	return false
 
 
+static var _dbg_f: FileAccess = null
+
+
+static func _dbg(msg: String) -> void:
+	## probes: TUBE_TRACE=<file> - progress lines flushed at once (survives a timeout kill)
+	if not OS.has_environment("TUBE_TRACE"):
+		return
+	if _dbg_f == null:
+		_dbg_f = FileAccess.open(OS.get_environment("TUBE_TRACE"), FileAccess.WRITE)
+	if _dbg_f != null:
+		_dbg_f.store_line("%d %s" % [Time.get_ticks_msec(), msg])
+		_dbg_f.flush()
+
+
+func _seg_hits_low(a: Vector2, b: Vector2, lim: float) -> bool:
+	## does the straight a -> b (outside the pits' rims) pass within lim of a Locals' low ramp?
+	if _glows.is_empty():
+		return false
+	var n := maxi(ceili(a.distance_to(b) / 0.3), 1)
+	for j in range(n + 1):
+		var q := a.lerp(b, float(j) / n)
+		var inpit := false
+		for c in wl.locals.craters:
+			if q.distance_to(Vector2((c as Vector3).x, (c as Vector3).z)) < WorldLocals.RING_R + 0.85:
+				inpit = true
+		if inpit:
+			continue
+		for sg in _glows:
+			if Geometry2D.get_closest_point_to_segment(q, sg[0], sg[1]).distance_to(q) < lim:
+				return true
+	return false
+
+
 func _lane_untake_log() -> void:
 	for e in _lane_log:
 		var arr: Array = _lanes.get(_lk(String(e[0]), float(e[1])), [])
@@ -86,7 +119,7 @@ func _lane_untake_log() -> void:
 	_lane_log.clear()
 
 
-const CACHE_VER := 4             # bump when the routing rules change: older cached layouts are then ignored
+const CACHE_VER := 5             # bump when the routing rules change: older cached layouts are then ignored
 var cache_hit := false           # probes: the last build() loaded its layout instead of routing it
 var restarts := 0                # probes: times the routing started over with a failed tube laid first
 
@@ -287,6 +320,7 @@ func setup(w: WorldLayer) -> void:
 
 
 func build() -> void:
+	_dbg("tubes build start")
 	## once the pits are placed (WorldLocals.place): every potential tube of every column into one mesh
 	## v3 (Daniele 2026-11-09/10: "I don't like the collector bar, it defeats the purpose of showing nodes go to take goo from
 	## inside the pits; the vertical tube is the tube underneath a node" + "each door has 4 tube connections and we have 4
@@ -377,6 +411,8 @@ func build() -> void:
 		cache_hit = true
 		_laid.clear()
 		_flats.clear()
+		_stubs.clear()
+		_gmark_stub.clear()
 		for e in cached:
 			var pv := PackedVector3Array()
 			var fl: Array = e["pts"]
@@ -394,6 +430,8 @@ func build() -> void:
 		slot_of = {}
 		_laid.clear()
 		_flats.clear()
+		_stubs.clear()
+		_gmark_stub.clear()
 		done = {}
 		slices = 0
 		var seq: Array = first.duplicate()
@@ -408,6 +446,7 @@ func build() -> void:
 			var p := int(plan[key][0])
 			var s := int(plan[key][1])
 			var ang: float = angle_of[key]
+			_dbg("attempt %d key %s pit %d sock %d" % [attempt, str(key), p, s])
 			var pts := PackedVector3Array()
 			_from_ortho = false
 			_lane_log.clear()
@@ -556,6 +595,8 @@ func rebuild(on: bool, with_connectors := false, with_floor2 := false) -> void:
 		_mi.queue_free()
 		_mi = null
 	_laid.clear()
+	_stubs.clear()
+	_gmark_stub.clear()
 	built = false
 	if wl.locals != null:
 		wl.locals.reroute()                           # the walkway layer follows the tube mode
@@ -587,7 +628,22 @@ var _lane_log: Array = []
 var _lane_logging := false
 
 
+const STUB_LEN := 4.2             # m of a laid tube from its socket (the off-grid stub and its first elbow) later tubes keep clear of
+const STUB_R := 0.95              # m: ... by this much (two tube centres >= 0.6 m apart, with the elbows' bulge)
+var _stubs: Array = []            # [a, b] floor segments of the laid tubes' stubs
+
+
 func _register(runs: Array, slot_of: Dictionary, key: Array, i: int, s: int, p: int, ang: float, pts: PackedVector3Array, from_ortho: bool) -> void:
+	var run_l := 0.0
+	for k in range(1, pts.size()):
+		var a := Vector2(pts[k - 1].x, pts[k - 1].z)
+		var b := Vector2(pts[k].x, pts[k].z)
+		if a.distance_to(b) > 0.001:
+			_stubs.append([a, b])
+			_mark(_gmark_stub, a, b, STUB_R, STUB_R)
+		run_l += a.distance_to(b)
+		if run_l > STUB_LEN:
+			break
 	_laid.append(pts)
 	_flats.append(_flat_of(pts))
 	if from_ortho:
@@ -804,8 +860,35 @@ func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 	return PackedVector3Array()
 
 
+var _gmark_low := {}              # lane-grid vertices a Locals' low ramp blocks (laid once per build)
+var _gmark_stub := {}             # ... and the laid tubes' stubs (grows as tubes are laid)
+
+
+func _mark(into: Dictionary, a0: Vector2, a1: Vector2, side_r: float, end_r: float) -> void:
+	## every lane-grid vertex closer than side_r to the segment a0 -> a1 (end_r past its ends)
+	var G := ORTHO_GAP
+	var lo := a0.min(a1) - Vector2.ONE * side_r
+	var hi := a0.max(a1) + Vector2.ONE * side_r
+	var ab := a1 - a0
+	var l2 := maxf(ab.length_squared(), 0.0001)
+	for ix in range(floori(lo.x / G), ceili(hi.x / G) + 1):
+		for iz in range(floori(lo.y / G), ceili(hi.y / G) + 1):
+			var q := Vector2(ix, iz) * G
+			var t := (q - a0).dot(ab) / l2
+			var lim := side_r if (t >= 0.0 and t <= 1.0) else end_r
+			if q.distance_to(a0 + ab * clampf(t, 0.0, 1.0)) < lim:
+				into[Vector2i(ix, iz)] = true
+
+
+const LOW_SIDE_R := 1.6           # m: grid vertices kept this far from a low ramp's centre line (deck half width 0.8 + tube + margin)
+const LOW_END_R := 1.2            # m: ... and this far past its ends (the audit's limit is 1.1)
+var _glows: Array = []
+
+
 func _grid_prepare() -> void:
 	_gobs.clear()
+	_glows.clear()
+	_gmark_low.clear()
 	_pit_ob.clear()
 	var lo := Vector2(INF, INF)
 	var hi := Vector2(-INF, -INF)
@@ -824,12 +907,9 @@ func _grid_prepare() -> void:
 			hi = hi.max(c)
 	_lows = wl.locals.low_decks() if (wl.locals != null and floor_mode()) else []
 	if wl.locals != null and floor_mode():            # the Locals' ramps out of the pits and into the doors, where they are low
-		for sgm in _lows:
-			var da: Vector2 = sgm[0]
-			var db: Vector2 = sgm[1]
-			var dn := maxi(ceili(da.distance_to(db) / 0.8), 1)
-			for j in range(dn + 1):
-				_gobs.append([da.lerp(db, float(j) / dn), 1.6])
+		for sgm in _lows:                              # (fog-maps-fix: a ramp's low stretch is a capsule 1.6 m wide each side, but its ends
+			_glows.append([sgm[0], sgm[1]])           # reach only LOW_END_R: past them the deck is high or the pit / door is in the way)
+			_mark(_gmark_low, sgm[0], sgm[1], LOW_SIDE_R, LOW_END_R)
 	var G := ORTHO_GAP
 	lo -= Vector2(14, 14)
 	hi += Vector2(14, 14)
@@ -848,6 +928,8 @@ func _grid_blocked(v: Vector2i, cache: Dictionary) -> bool:
 		if q.distance_to(ob[0]) < orad:
 			b = true
 			break
+	if not b and (_gmark_low.has(v) or _gmark_stub.has(v)):
+		b = true
 	cache[v] = b
 	return b
 
@@ -883,6 +965,8 @@ func _path_grid(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 						blocked = true
 				if blocked:
 					continue
+				if _seg_hits_low(a, rim, LOW_END_R):          # (fog-maps-fix: the straight entry under a Locals' ramp)
+					continue
 				var ax := "X" if fx else "Z"
 				var lo2: float = minf(a_al, (c2.x if fx else c2.y) + sg * R0)
 				var hi2: float = maxf(a_al, (c2.x if fx else c2.y) + sg * R0)
@@ -907,6 +991,8 @@ func _path_grid(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 			if L < APOTHEM + 0.05 + RAMP_RUN + 0.2:
 				continue
 			var p1 := foot + cd * L
+			if _seg_hits_low(p0, p1, LOW_END_R):          # (fog-maps-fix: the socket's stub under a Locals' ramp)
+				continue
 			if variant == 0:
 				var ix := p1.x / G
 				starts.append([Vector2i(floori(ix), roundi(lane / G)), 1, p1])
@@ -916,10 +1002,20 @@ func _path_grid(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 				starts.append([Vector2i(roundi(lane / G), floori(iz)), 3, p1])
 				starts.append([Vector2i(roundi(lane / G), ceili(iz)), 2, p1])
 	var res: Array = await _grid_search(starts, ends, cache, dirs)
-	if res.is_empty() and OS.has_environment("TUBE_DBG"): print("GRIDFAIL col ", i, " sock ", s, " pit ", pi, " starts ", starts.size(), " ends ", ends.size())
+	if res.is_empty() and _gfail == "cap":           # (fog-maps-fix: a long crowded route - one more try with a bigger budget)
+		_gcap = GRID_CAP * 5
+		res = await _grid_search(starts, ends, {}, dirs)
+		_gcap = GRID_CAP
+	if res.is_empty() and OS.has_environment("TUBE_DBG"): print("GRIDFAIL col ", i, " sock ", s, " pit ", pi, " starts ", starts.size(), " live ", _gfail_starts, " ends ", ends.size(), " ", _gfail, " skip ", _skip_pit, " starts ", starts.map(func(x): return [x[0], x[1]]))
 	if res.is_empty():
 		return PackedVector3Array()
+	if OS.has_environment("TUBE_DBG"): print("GRIDOK col ", i, " sock ", s, " pit ", pi, " p1 ", res[2], " path ", (res[0] as Array).map(func(x): return Vector2i(x[0], x[1])), " blocked0 ", _grid_blocked(Vector2i(res[0][0][0], res[0][0][1]), {}))
 	return _grid_finish(res, ends, p0, res[2], c2)
+
+
+var _gfail := ""
+var _gcap := GRID_CAP
+var _gfail_starts := 0
 
 
 func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Array) -> Array:
@@ -948,6 +1044,12 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 		prev[key] = -1
 		buckets[mini(int(cost * 2.0), 2399)].append([cost, key])
 	var expansions := 0
+	_gfail = "exhausted"
+	var live := 0
+	for st in starts:
+		if _gbox.has_point(st[0]) and not _grid_blocked(st[0], cache):
+			live += 1
+	_gfail_starts = live
 	for bi in range(buckets.size()):
 		var bucket: Array = buckets[bi]
 		var qi := 0
@@ -961,7 +1063,8 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 			expansions += 1
 			if expansions % 300 == 0:
 				await _breathe()
-			if expansions > GRID_CAP:
+			if expansions > _gcap:
+				_gfail = "cap"
 				return []
 			var run: int = key % 8
 			var rest := key / 8
@@ -1144,18 +1247,42 @@ func audit() -> Dictionary:
 					var dist := cp[0].distance_to(cp[1])
 					min_gap = minf(min_gap, dist)
 					if dist < 0.6:
-						if not bad_here and OS.has_environment("TUBE_DBG"): print("OVER ", i, " ", j, " d=", snappedf(dist, 0.01), " ", a0.snapped(Vector2(0.1, 0.1)), a1.snapped(Vector2(0.1, 0.1)), b0.snapped(Vector2(0.1, 0.1)), b1.snapped(Vector2(0.1, 0.1)))
+						if not bad_here and OS.has_environment("TUBE_DBG"): print("OVER ", i, " ", j, " cols ", run_pts[i][0], "/", run_pts[j][0], " socks ", run_pts[i][1], "/", run_pts[j][1], " pits ", run_pts[i][2], "/", run_pts[j][2]," d=", snappedf(dist, 0.01), " ", a0.snapped(Vector2(0.1, 0.1)), a1.snapped(Vector2(0.1, 0.1)), b0.snapped(Vector2(0.1, 0.1)), b1.snapped(Vector2(0.1, 0.1)))
 						bad_here = true
 			if bad_here:
 				overlaps += 1
 	var low_hits := 0                                   # tubes that run through a ramp / bridge where it is too low to pass under
 	var lows: Array = wl.locals.low_decks() if wl.locals != null else []
-	for A in lines:
+	if OS.has_environment("TUBE_DUMP"):                 # probes: every run, deck, pit and column as JSON (tools/plot)
+		var dump := {"runs": [], "lows": [], "craters": [], "cols": [], "feeds": [], "lows_build": _glows.map(func(g): return [g[0].x, g[0].y, g[1].x, g[1].y])}
+		for rn in run_pts:
+			var pl: Array = []
+			for q in (rn[3] as PackedVector3Array):
+				pl.append([snappedf(q.x, 0.01), snappedf(q.y - wl.floor_y, 0.01), snappedf(q.z, 0.01)])
+			dump["runs"].append({"col": rn[0], "sock": rn[1], "pit": rn[2], "pts": pl})
+		for sgm in lows:
+			dump["lows"].append([sgm[0].x, sgm[0].y, sgm[1].x, sgm[1].y])
+		for c in cr:
+			dump["craters"].append([c.x, c.y])
+		for j in range(wl._tubes.size()):
+			dump["cols"].append([wl._tubes[j]["x"], wl._tubes[j]["z"], wl._tubes[j]["r"], wl._tubes[j].get("ent", false), wl._tubes[j]["id"]])
+		for fk in wl.locals.feeds:
+			var fp: Array = []
+			for v in (wl.locals.feeds[fk]["path"] as Array):
+				fp.append([(v as Vector2).x, (v as Vector2).y])
+			dump["feeds"].append({"col": fk, "path": fp, "hs": wl.locals.feeds[fk]["hs"]})
+		var fh := FileAccess.open(OS.get_environment("TUBE_DUMP"), FileAccess.WRITE)
+		if fh != null:
+			fh.store_string(JSON.stringify(dump))
+			fh.close()
+	for li in range(lines.size()):
+		var A: Array = lines[li]
 		var hit := false
 		for q in A:
 			for sgm in lows:
 				if Geometry2D.get_closest_point_to_segment(q, sgm[0], sgm[1]).distance_to(q) < 1.1:
 					hit = true
+					if OS.has_environment("TUBE_DBG"): print("LOWHIT run ", li, " col ", run_pts[li][0], " sock ", run_pts[li][1], " pit ", run_pts[li][2], " at ", (q as Vector2).snapped(Vector2(0.1, 0.1)), " deck ", (sgm[0] as Vector2).snapped(Vector2(0.1, 0.1)), (sgm[1] as Vector2).snapped(Vector2(0.1, 0.1)), " ortho ", _ortho_runs.has(li))
 					break
 			if hit:
 				break

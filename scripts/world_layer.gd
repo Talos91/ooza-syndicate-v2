@@ -352,7 +352,10 @@ func _build_tube(n: Dictionary) -> void:
 	if vis[id].get("platform") == null:              # a plaza member: the plaza piece is shared (spec: later)
 		return
 	var pillar := MapBuilder.platform_piece(n) == "Platform_Pillar"
-	var r := TUBE_R_PILLAR if pillar else TUBE_R
+	var b: Array = n.get("buildable", [])
+	# fog-maps-fix (P-03 node 7): a pillar that can hold a vat / machinegoon gets the common column (base, doors, sockets) so its
+	# tubes and Locals exist like every other buildable node's; the wide glass sleeve stays on the pillars that cannot
+	var r := TUBE_R_PILLAR if (pillar and not ("vat" in b or "machinegoon" in b)) else TUBE_R
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
 	cm.top_radius = r
