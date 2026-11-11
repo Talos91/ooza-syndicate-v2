@@ -880,8 +880,8 @@ func _centre_fog(tex: Texture2D, amt: Array, _lv: String, dens: Array) -> void:
 	m.set_shader_parameter("noise_tex", tex)
 	m.set_shader_parameter("cloud_density", float(dens[0]))
 	m.set_shader_parameter("fog_density", float(dens[1]))
-	m.set_shader_parameter("cloud_amt", float(amt[0]) * k)
-	m.set_shader_parameter("fog_amt", float(amt[1]) * k)
+	m.set_shader_parameter("cloud_amt", float(WorldLayer.CENTRE_LEVELS[0]) * k)
+	m.set_shader_parameter("fog_amt", float(WorldLayer.CENTRE_LEVELS[1]) * k)
 	m.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(0.3))
 	m.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
 	m.render_priority = -4

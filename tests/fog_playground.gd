@@ -11,7 +11,7 @@ extends Node
 var inst: Node
 var sky_mat: ShaderMaterial
 var wl: WorldLayer
-var amt := {"cloud": 0.9, "fog": 0.6, "ccloud": 0.9, "cfog": 0.6, "dcloud": 0.55, "dfog": 0.55}
+var amt := {"cloud": 0.6, "fog": 0.25, "ccloud": 0.6, "cfog": 0.35, "dcloud": 0.45, "dfog": 0.2}
 var _panel: PanelContainer
 var _share := {"A": 0.0, "B": 0.0}
 
