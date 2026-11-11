@@ -99,6 +99,8 @@ func _run() -> void:
 			cam2.global_position = c0 + Vector3(float(v[0]), float(v[1]), float(v[2]))
 			cam2.look_at(c0 + Vector3(float(v[3]), float(v[4]), float(v[5])))
 			cam2.make_current()
+		if a == "nohud=1" and inst.hud != null:      # close-ups: no HUD / node labels over the floor
+			inst.hud.visible = false
 		if a.begins_with("frames="):
 			await _frames(int(a.substr(7)))
 	await _frames(3)

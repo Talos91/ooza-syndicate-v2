@@ -39,6 +39,8 @@ const FRAME := 0.09
 const FRAME_D := 0.08            # the frame stands this proud of the face
 const LASER_Y := [0.26, 0.5]
 const SOCK_Y := 0.62             # socket centre over the floor (v3: raised for the coupling tilted up)
+const SOCK_Y_LOW := 0.35         # Daniele 2026-11-11 (two floor levels): the x-face sockets are flat plugs at the floor level (FLOOR_RUN_Y),
+                                 # the z-face sockets keep the upward tilt (their tubes run one level up)
 const SOCK_ANG := 0.70           # rad (40 deg): v3 - the socket coupling and the tube leaving it point up toward the rack
 #   (Daniele 2026-11-09 pt2-rack: "have their connection to the base be angled towards the top")
 const SOCK_R := 0.36
@@ -119,7 +121,7 @@ func _lane_untake_log() -> void:
 	_lane_log.clear()
 
 
-const CACHE_VER := 5             # bump when the routing rules change: older cached layouts are then ignored
+const CACHE_VER := 6             # bump when the routing rules change: older cached layouts are then ignored
 var cache_hit := false           # probes: the last build() loaded its layout instead of routing it
 var restarts := 0                # probes: times the routing started over with a failed tube laid first
 
@@ -456,6 +458,8 @@ func build() -> void:
 				if not pts.is_empty():
 					grid_routed += 1
 				else:
+					pts = _path_direct(i, s, craters[p], p)       # (fog-maps-fix: a column right beside its pit - one straight run)
+				if pts.is_empty():
 					pts = _path_ortho(i, s, craters[p], p)
 					if not pts.is_empty() and _hits_low(pts):
 						_lane_untake_log()                      # (the lane tries do not know the ramps: a route through a low one is dropped)
@@ -778,6 +782,47 @@ func _ortho_clear(a: Vector2, b: Vector2, i: int, pit_c: Vector2) -> bool:
 		if Geometry2D.get_closest_point_to_segment(cc, a, b).distance_to(cc) < WorldLocals.RING_R + 1.3:
 			return false
 	return true
+
+
+func _path_direct(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
+	## a socket that faces its pit straight on, the pit too close for the lane grid (E-07, N-03): one straight run along the
+	## socket's axis from the socket into the rim. Empty when the socket does not face the pit, the run would meet a Locals' exit,
+	## a low ramp or a laid tube.
+	var tb: Dictionary = wl._tubes[i]
+	var foot := Vector2(tb["x"], tb["z"])
+	var cd := corner_dir(s)
+	var c2 := Vector2(pit.x, pit.z)
+	var R0 := WorldLocals.RING_R + 0.9
+	var d := c2 - foot
+	var along := d.dot(cd)
+	var lat := absf(d.x * cd.y - d.y * cd.x)
+	if along < R0 + APOTHEM + 1.0 or lat > 4.0:
+		return PackedVector3Array()
+	var p0 := foot + cd * (APOTHEM + 0.05)
+	var rim := foot + cd * (along - sqrt(maxf(R0 * R0 - lat * lat, 0.0)))
+	var bear := atan2(rim.y - c2.y, rim.x - c2.x)
+	if OS.has_environment("TUBE_DBG"): print("DIRECT col ", i, " sock ", s, " along ", snappedf(along, 0.01), " lat ", snappedf(lat, 0.01), " R0 ", R0, " bear ", snappedf(rad_to_deg(bear), 1), " fixed ", (_fixed[pi] as Array).map(func(x): return snappedf(rad_to_deg(x), 1)), " lowhit ", _seg_hits_low(p0, rim, LOW_END_R))
+	for fb in _fixed[pi]:
+		if absf(angle_difference(bear, float(fb))) < _lane_sep:
+			return PackedVector3Array()
+	if _seg_hits_low(p0, rim, LOW_END_R):
+		return PackedVector3Array()
+	var fx := absf(cd.x) > 0.5
+	var ax := "X" if fx else "Z"
+	var coord: float = p0.y if fx else p0.x
+	var lo: float = minf(p0.x, rim.x) if fx else minf(p0.y, rim.y)
+	var hi: float = maxf(p0.x, rim.x) if fx else maxf(p0.y, rim.y)
+	if not _lane_free(ax, coord, lo, hi):
+		return PackedVector3Array()
+	var even: Array = []
+	var m := maxi(ceili(p0.distance_to(rim) / 1.5), 2)
+	for j in range(m + 1):
+		even.append(p0.lerp(rim, float(j) / m))
+	var pts := _shape(even, c2, -cd, true, -cd, true)          # (axis = from the pit outward, as _grid_finish passes it)
+	if _clashes(_flat_of(pts)) or _hits_low(pts):
+		return PackedVector3Array()
+	_lane_take(ax, coord, lo, hi)
+	return pts
 
 
 func _path_ortho(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
@@ -1746,6 +1791,9 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 				cnt += 1
 			sm[k] = acc / float(cnt)
 		lvl = sm
+	var y0 := SOCK_Y                                  # an x-face socket is a flat plug at the floor level (floor2): no climb out of it
+	if levels and floor2 and base45() and flat.size() > 1 and absf(((flat[1] as Vector2) - (flat[0] as Vector2)).x) > absf(((flat[1] as Vector2) - (flat[0] as Vector2)).y):
+		y0 = SOCK_Y_LOW
 	var ys := PackedFloat32Array()
 	var base_y := PackedFloat32Array()
 	var lifts := PackedFloat32Array()
@@ -1753,7 +1801,7 @@ func _shape(way: Array, c2: Vector2, dir: Vector2, tail := true, axis := Vector2
 	for k in range(flat.size()):
 		if k > 0:
 			cum += (flat[k] as Vector2).distance_to(flat[k - 1])
-		var y := lerpf(SOCK_Y, lvl[k] if levels else RACK_Y, _knee(cum / RAMP_RUN))   # v3: a straight climb at SOCK_ANG out of the socket, eased onto the rack
+		var y := lerpf(y0, lvl[k] if levels else RACK_Y, _knee(cum / RAMP_RUN))   # v3: a straight climb at SOCK_ANG out of the socket, eased onto the rack
 		if tail:
 			y = lerpf(y, top, smoothstep(tot - 3.2, tot, cum))    # climbs to clear the rim
 		base_y.append(y)
@@ -2234,6 +2282,8 @@ static func column_base_mesh() -> ArrayMesh:
 		var c := out * APOTHEM
 		if f % 2 == 0:
 			_door(vs, ns, cs, c, out, side)
+		elif base45() and (f == 1 or f == 5):         # the faces world_layer turns onto world x (_orient_entrances): flat, on the floor
+			_socket(vs, ns, cs, c + Vector3.UP * SOCK_Y_LOW, out, side, 0.0)
 		else:
 			_socket(vs, ns, cs, c + Vector3.UP * SOCK_Y, out, side)
 	var arrays := []
@@ -2317,11 +2367,11 @@ static func _door(vs: PackedVector3Array, ns: PackedVector3Array, cs: PackedColo
 			_quad(vs, ns, cs, a + (u + v) * h, b + (u + v) * h, b + (u - v) * h, a + (u - v) * h, _key(1.0), u)
 
 
-static func _socket(vs: PackedVector3Array, ns: PackedVector3Array, cs: PackedColorArray, c: Vector3, flat_out: Vector3, side: Vector3) -> void:
-	## v3: the coupling's axis is tilted SOCK_ANG up (the tube leaves it climbing to the rack); it starts inside the wall
-	var out := flat_out * cos(SOCK_ANG) + Vector3.UP * sin(SOCK_ANG)
-	var up := Vector3.UP * cos(SOCK_ANG) - flat_out * sin(SOCK_ANG)
-	var back := -SOCK_R * sin(SOCK_ANG) - 0.04
+static func _socket(vs: PackedVector3Array, ns: PackedVector3Array, cs: PackedColorArray, c: Vector3, flat_out: Vector3, side: Vector3, ang := SOCK_ANG) -> void:
+	## v3: the coupling's axis is tilted ang up (the tube leaves it climbing); it starts inside the wall
+	var out := flat_out * cos(ang) + Vector3.UP * sin(ang)
+	var up := Vector3.UP * cos(ang) - flat_out * sin(ang)
+	var back := -SOCK_R * sin(ang) - 0.04
 	var n := 10
 	var ring := func(r: float, d: float, k: int) -> Vector3:
 		var a := TAU * k / n

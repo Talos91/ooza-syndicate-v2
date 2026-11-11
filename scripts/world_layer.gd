@@ -467,6 +467,9 @@ func _orient_entrances() -> void:
 		if locals != null and locals.feeds.has(i):
 			d = locals.feeds[i]["dir"]
 		tb["ent_yaw"] = atan2(d.x, d.y)
+		if WorldTubes.base45():                       # the base is 4-fold symmetric: the quarter turn that puts its flat (floor-level)
+			var yw := float(tb["ent_yaw"])            # sockets on world x (mesh faces 1 / 5) and the tilted ones on world z
+			tb["ent_yaw"] = PI / 4.0 if absf(angle_difference(yw, PI / 4.0)) <= PI / 2.0 else PI / 4.0 + PI
 		tb["ent_xf"] = Transform3D(Basis(Vector3.UP, float(tb["ent_yaw"])), Vector3(tb["x"], floor_y, tb["z"]))
 		_sock_lit(tb, tb["base"] if (tb["mi"] as MeshInstance3D).visible else Color(0, 0, 0, 0))
 
