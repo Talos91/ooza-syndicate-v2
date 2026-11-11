@@ -3285,7 +3285,7 @@ func _relays_proto() -> void:
 	for path in MapPool.all():
 		var m := MapBuilder.load_map(path)
 		for n in m["nodes"]:
-			if n.get("relay") != null and Rules.is_proto(str(n["relay"])) and not path.get_file().substr(0, 2) in ["P-", "R-"]:   # round R maps use the proto kinds until step 7 (MAP-ROUND-2026-11)
+			if n.get("relay") != null and Rules.is_proto(str(n["relay"])) and not path.get_file().substr(0, 2) in ["P-", "R-"] and not path.get_file().substr(0, 4) in MapPool.KEEP_OLD:   # round R maps use the proto kinds until step 7 (MAP-ROUND-2026-11); KEEP maps carry them since keep-maps-edit (Daniele 2026-11-11 relay notes)
 				proto_in_pool = true
 	check(not proto_in_pool, "RELAYS 3.0: no pool map uses a prototype relay kind")
 	# proto line only (POOL_GROUPS ["N", "P"]): the P maps ARE offered on 02 BATTLEFIELD here; the release line keeps them out
