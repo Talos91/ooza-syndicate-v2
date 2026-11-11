@@ -1704,8 +1704,12 @@ func vat_rate(n: Dictionary) -> float:
 func _feed_step(i: int, f: Dictionary) -> void:
 	var tb: Dictionary = wl._tubes[i]
 	var line: Array = f["line"]
-	if not tb.get("shown", false) or not tb["alive"]:
-		if not line.is_empty():                       # the tube is gone: its line melts where it stands
+	# Daniele 2026-11-11: "locals don't march to them until a player captured it" - a neutral node gets no Local (its own
+	# line and a pit's match-start march wait, march count kept, and start once a player owns it); a line whose node
+	# falls back to neutral melts like a dead tube's.
+	var unowned := str(wl.sim.nodes[tb["id"]]["owner"]) == ""
+	if not tb.get("shown", false) or not tb["alive"] or unowned:
+		if not line.is_empty():                       # the tube is gone (or the node neutral): its line melts where it stands
 			for s in line:
 				var dn := _dnow(s)
 				_d0[s] = dn

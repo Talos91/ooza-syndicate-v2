@@ -508,7 +508,10 @@ static var PROD := {1: 5.0 * BRAWL_TRIAL_15, 2: 8.0 * BRAWL_TRIAL_15, 3: 12.0 * 
     # (shown 0.85/1.36/2.04/2.98 units/s). Neutral regen below reads PROD, so villages regrow at the new vat rate too.
 # NEUTRAL REGEN (Daniele, 0.18.9: "make neutral villages regenerate at the speed of their vat"): a chipped
 # neutral vat node grows back at its tier's PROD (no faction bonus), up to its starting garrison NEUTRAL_UNITS.
-const NEUTRAL_REGEN := true
+# NEUTRAL REGEN OFF (Daniele 2026-11-11: "neutral nodes stop regenerating troops, and locals don't march to them until a
+# player captured it"): a neutral garrison (vat or GooGat ammo) beaten down stays down until someone captures the node;
+# WorldLocals sends no Local to a neutral node (its line and its match-start march wait for the capture).
+const NEUTRAL_REGEN := false
 # CATCH-UP (Daniele, 2026-10-27: "include both in 0.23.15: the +15 % catch-up for the trailing side"; balance study: the node
 # leader at 2:00 won 77 %): while a side (a seat, or a team in team modes) holds fewer than CATCHUP_NODE_RATIO of the leading
 # side's nodes, its vats produce x CATCHUP_PRODUCTION (vats only: not forges, not neutral regen). Strictly under half: exactly
@@ -551,7 +554,7 @@ static var MACHINEGOON_RANGE := 10.0
 # usual production skills; an Echo jam stops it) up to the node's cap (CAPS[tier]); with an enemy line in MACHINEGOON_RANGE it
 # fires its garrison at MACHINEGOON_RATE[tier] (one unit per kill) until it is empty, then each unit as soon as it is made.
 # Units walking in (own lines, reinforcements) are more ammo. Fire 8 / 14 / 20 > regrow 1.06 / 1.7 / 2.55 sim units/s (x0.25, below).
-# A neutral map-placed one fires its neutral garrison and regrows it at the same half rate (neutral regen) to its garrison.
+# A neutral map-placed one fires its neutral garrison; it regrows nothing while neutral (NEUTRAL_REGEN off, Daniele 2026-11-11).
 # Daniele 2026-11-09 (Desk googat-unlimited = c, "slower regrow"; his 2026-11-06 words: "a column of enemies attack eventually the
 # googat will run out of ammunition"): 0.5 -> 0.25 - a GooGat regrows at a QUARTER of the same-tier vat's rate (T1 1.06 / T2 1.7 /
 # T3 2.55 sim u/s = 0.21 / 0.34 / 0.51 shown/s) against fire 8 / 14 / 20; from empty, a neutral T2 refills its 30 shown in ~88 s (was ~44 s)
