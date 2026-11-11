@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.24.0"   # STAGING 0.24.0 candidate (Daniele 2026-11-11 agenda item 3; the number awaits his OK)
+const VERSION := "0.24.1"   # STAGING 0.24.1 candidate (Daniele 2026-11-11)
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const HUD_R19 := false   # round-19 in-match HUD (HudR19.on): OFF on staging 0.24.0 = the old in-game HUD (Daniele 2026-11-11); dev --hud-r19
 const VERSION_NAME := "Alpha 23"
