@@ -47,6 +47,11 @@ const TUBE_AVOID := 2.4           # m: a path keeps this far from another tube's
 const RING_AVOID := 5.6
 const PLAT_R := Rules.R           # a platform's radius (the board's footprint)
 const BRIDGE_HALF := 1.4
+const PIT_OUT := 2.0              # m (Daniele 2026-11-11, E-07): after placing, the pits move up to this much further out (radially) while as visible
+const FEET_CLEAR := 1.6           # m: a pit ring keeps at least this clear of a tube foot's edge (hard)
+const FEET_ROOM := 2.6            # m: ...and prefers this much (Daniele 2026-11-11, E-07 cols 3/10 sat 1.3 m from the ring): a closer spot
+const FEET_ROOM_COST := 1.5       #    scores this much worse (one ring point of the 9 seen = 1.11), so pits keep room unless it hides them
+var out_push := 0.0               # m: how far the last placement pushed the pits out (PIT_OUT, for the audit)
 const SEARCH_R := 16.0            # m: how far a crater may move from its layout target to reach visible floor
 const DEFAULT_LAYOUT := 4         # PITS / TUBES rule 1 (was 2)
 const WALK_LEVELS := [1.75, 2.45, 3.15]   # walkway layer (Daniele 2026-11-11): 3 concentric rings, each closer to the centre one level higher
@@ -416,20 +421,22 @@ func _place_symmetric(cam: Camera3D, b: Rect2) -> void:
 	var c := b.get_center()
 	var out := RING_R + 1.0
 	var ideal := b.size * 0.5 + Vector2.ONE * out
+	var win := ideal
 	var min_d := Vector2(RING_R + 2.0, RING_R + 2.0)  # the two pits of a side never touch (2 RING_R + 4 apart)
 	var step := 1.0
 	var n := int(SEARCH_R * 1.5 / step)
-	var best := ideal
+	var best := win
 	var best_s := -INF
+	out_push = 0.0
 	var best_v := []
 	for ix in range(-n, n + 1):
 		for iz in range(-n, n + 1):
-			var o: Vector2 = ideal + Vector2(ix, iz) * step
+			var o: Vector2 = win + Vector2(ix, iz) * step
 			if o.x < min_d.x or o.y < min_d.y:
 				continue
-			var d := o.distance_to(ideal)
-			if d > SEARCH_R * 1.5:
+			if o.distance_to(win) > SEARCH_R * 1.5:
 				continue
+			var d := o.distance_to(ideal)
 			var ok := true
 			var vmin := INF
 			var vs := []
@@ -444,10 +451,44 @@ func _place_symmetric(cam: Camera3D, b: Rect2) -> void:
 			if not ok:
 				continue
 			var s := vmin * 10.0 - d * 0.25
+			for sg in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+				if _feet_gap(c + o * sg) < FEET_ROOM:
+					s -= FEET_ROOM_COST
+					break
 			if s > best_s:
 				best_s = s
 				best = o
 				best_v = vs
+	# Daniele 2026-11-11 ("moving the pits a little more outside, all 4 of them on all maps"): then push all 4 pits outward
+	# (away from the board's centre) by up to PIT_OUT, as far as they stay as visible and clear of every tube foot.
+	# Pushes are whole metres per axis (the search grid; off-grid pits broke E-04's lanes), longest first, the most radial on a
+	# tie; none when a pit is not seen at all (nothing to keep in frame: those stay where they were).
+	if not best_v.is_empty() and float(best_v.min()) > 0.0:
+		var vmin0: float = best_v.min()
+		var dir := best.normalized()
+		var pushes := []
+		for px in range(0, 3):
+			for pz in range(0, 3):
+				var pv := Vector2(px, pz)
+				if pv.length() > 0.0 and pv.length() <= PIT_OUT + 0.01:
+					pushes.append(pv)
+		pushes.sort_custom(func(u, v): return u.length() > v.length() + 0.01 or (absf(u.length() - v.length()) <= 0.01 and u.normalized().dot(dir) > v.normalized().dot(dir)))
+		for pv in pushes:
+			var o2: Vector2 = best + pv
+			var vs2 := []
+			var ok2 := true
+			for sg in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+				var q2: Vector2 = c + o2 * sg
+				if not _clear_feet(q2) or _feet_gap(q2) < minf(FEET_ROOM, _feet_gap(c + best * sg)):
+					ok2 = false
+					break
+				vs2.append(_ring_visible(cam, q2))
+			if ok2 and float(vs2.min()) >= vmin0:
+				best = o2
+				best_v = vs2
+				out_push = pv.length()
+				break
+	if OS.has_environment("TUBE_DBG"): print("PITPLACE push ", snappedf(out_push, 0.01), "  centre ", c, " half ", b.size * 0.5, " ideal ", ideal, " best ", best, " vis ", best_v)
 	for k in range(4):
 		var sg: Vector2 = [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)][k]
 		var q: Vector2 = c + best * sg
@@ -458,9 +499,17 @@ func _place_symmetric(cam: Camera3D, b: Rect2) -> void:
 
 func _clear_feet(q: Vector2) -> bool:
 	for tb in wl._tubes:
-		if q.distance_to(Vector2(tb["x"], tb["z"])) < RING_R + float(tb["r"]) + 1.6:
+		if q.distance_to(Vector2(tb["x"], tb["z"])) < RING_R + float(tb["r"]) + FEET_CLEAR:
 			return false
 	return true
+
+
+func _feet_gap(q: Vector2) -> float:
+	## the room between a pit's ring and the nearest tube foot's edge
+	var g := INF
+	for tb in wl._tubes:
+		g = minf(g, q.distance_to(Vector2(tb["x"], tb["z"])) - RING_R - float(tb["r"]))
+	return g
 
 
 func _after_place(cam: Camera3D) -> void:
@@ -488,7 +537,7 @@ func _after_place(cam: Camera3D) -> void:
 
 func _clear(q: Vector2) -> bool:
 	for tb in wl._tubes:
-		if q.distance_to(Vector2(tb["x"], tb["z"])) < RING_R + float(tb["r"]) + 1.6:
+		if q.distance_to(Vector2(tb["x"], tb["z"])) < RING_R + float(tb["r"]) + FEET_CLEAR:
 			return false
 	for p in craters:
 		if q.distance_to(Vector2((p as Vector3).x, (p as Vector3).z)) < RING_R * 2.0 + 4.0:

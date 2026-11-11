@@ -41,7 +41,10 @@ func _run() -> void:
 	for g in DirAccess.get_files_at("res://maps4"):
 		if g.begins_with(mp) and g.ends_with(".json"):
 			f = g
-	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": "1v1", "map": "res://maps4/" + f}
+	var mode := "1v1"                                 # mode=2v2 / ffa4 for the multi maps (M-15, N-06)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("mode="): mode = a.substr(5)
+	load("res://scripts/main.gd").relaunch = {"faction": "vex", "rival": "ember", "mode": mode, "map": "res://maps4/" + f}
 	var inst: Node = (load("res://main.tscn") as PackedScene).instantiate()
 	inst.demo = false
 	get_tree().root.add_child(inst)
@@ -99,6 +102,8 @@ func _run() -> void:
 			cam2.global_position = c0 + Vector3(float(v[0]), float(v[1]), float(v[2]))
 			cam2.look_at(c0 + Vector3(float(v[3]), float(v[4]), float(v[5])))
 			cam2.make_current()
+		if a == "nohud=1" and inst.hud != null:      # close-ups: no HUD / node labels over the floor
+			inst.hud.visible = false
 		if a.begins_with("frames="):
 			await _frames(int(a.substr(7)))
 	await _frames(3)
