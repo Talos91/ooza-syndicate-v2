@@ -53,6 +53,7 @@ const WALK_LEVELS := [1.75, 2.45, 3.15]   # walkway layer (Daniele 2026-11-11): 
 const DECK_HW := 0.8              # deck half width
 const DECK_T := 0.16
 const RAIL_H := 0.45              # the hand rails either side of a walkway
+const NEON_DASH := false          # Daniele 2026-11-11: no dashed neon line on the walkways, the rails are enough (true brings it back)
 const DASH := 0.9                 # the neon centre line: dash / gap (m)
 const DASH_GAP := 0.7
 const ABOUT_GAP := 0.3            # m between a column and the roundabout a walkway makes round it (Daniele 2026-11-11: a walkway that
@@ -1208,7 +1209,7 @@ func _build_walkways() -> void:
 					var qp: Vector2 = q0.lerp(q1, uu)
 					_box(sr, Vector3(qp.x, fy + lerpf(y0, y1, uu) + RAIL_H * 0.5, qp.y), Vector3(0.07, RAIL_H, 0.07))
 		var dd := 0.6                                       # the neon centre line, dashed
-		while dd + DASH < ln - 0.6:
+		while NEON_DASH and dd + DASH < ln - 0.6:
 			var c0: Vector2 = a2.lerp(b2, dd / ln)
 			var c1: Vector2 = a2.lerp(b2, (dd + DASH) / ln)
 			var h0 := lerpf(ya, yb, dd / ln)
@@ -1281,7 +1282,7 @@ func _build_walkways() -> void:
 				_beam(sr, on0 + Vector3(0, 0.09, 0), on1 + Vector3(0, 0.09, 0), 0.05, 0.09)
 				if j % 6 == 0:
 					_box(sr, on0 + rise * 0.5, Vector3(0.07, RAIL_H, 0.07))
-			if j % 4 < 2:                                      # the dashed neon line goes round too
+			if NEON_DASH and j % 4 < 2:                                      # the dashed neon line goes round too
 				for rr in [R + DECK_HW - 0.24, R - DECK_HW + 0.24]:
 					_quad3(sg, Vector3(c.x + e0.x * (rr + 0.06), y, c.y + e0.y * (rr + 0.06)) + up2, Vector3(c.x + e1.x * (rr + 0.06), y, c.y + e1.y * (rr + 0.06)) + up2,
 							Vector3(c.x + e1.x * (rr - 0.06), y, c.y + e1.y * (rr - 0.06)) + up2, Vector3(c.x + e0.x * (rr - 0.06), y, c.y + e0.y * (rr - 0.06)) + up2, Vector3.UP)
@@ -1290,13 +1291,14 @@ func _build_walkways() -> void:
 	for key in merged:
 		about_at.append([merged[key][0], merged[key][2]])
 	var mesh := st.commit()
-	sg.commit(mesh)
+	if NEON_DASH:
+		sg.commit(mesh)
 	sr.commit(mesh)
 	var m3 := StandardMaterial3D.new()
 	m3.albedo_color = Color(0.72, 0.76, 0.84)
 	m3.metallic = 0.6
 	m3.roughness = 0.35
-	mesh.surface_set_material(2, m3)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, m3)
 	deck_tris = 0
 	for si in range(mesh.get_surface_count()):
 		deck_tris += mesh.surface_get_array_len(si) / 3
@@ -1310,7 +1312,8 @@ func _build_walkways() -> void:
 	m2.albedo_color = Color(0.75, 0.92, 1.0)
 	m2.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mesh.surface_set_material(0, m1)
-	mesh.surface_set_material(1, m2)
+	if NEON_DASH:
+		mesh.surface_set_material(1, m2)
 	_deck_mi = MeshInstance3D.new()
 	_deck_mi.mesh = mesh
 	_deck_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
