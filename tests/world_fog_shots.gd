@@ -127,6 +127,11 @@ func _run() -> void:
 			for _i in range(240):
 				await get_tree().process_frame
 				t_us += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+			var caps := 0
+			for fk in wl.locals.feeds:
+				caps += int(wl.locals.feeds[fk]["cap"])
+			var lm: Mesh = WorldLocals.local_mesh()
+			print("LOCALSPERF line_caps_total=", caps, " local_mesh_tris=", lm.surface_get_array_len(0) / 3 if lm.surface_get_array_index_len(0) == 0 else lm.surface_get_array_index_len(0) / 3, " pool=", WorldLocals.LOCALS_MAX, " step_us=", wl.locals.step_us)
 			print("TUBEPERF tube_tris=", wl.pipes.tris, " deck_tris=", wl.locals.deck_tris, " frame_tris=", Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
 				" draw_calls=", Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), " process_ms=", snappedf(t_us / 240.0, 0.01),
 				" fps=", Performance.get_monitor(Performance.TIME_FPS), " locals=", wl.locals.count(), " build_ms=", wl.pipes.build_ms)
@@ -158,6 +163,15 @@ func _run() -> void:
 		if (wl.locals.feeds[fk]["hs"] as Array).is_empty():
 			floor_feeds += 1
 	print("NODECHECK tubes ", wl._tubes.size(), " cols ", wl.pipes.cols.size(), " feeds ", wl.locals.feeds.size(), " missing ", missing, " feeds_not_on_walkways ", floor_feeds)
+	var tq := []
+	for T in wl.locals._tq:
+		tq.append([snappedf(T["s0"], 0.1), snappedf(T["s1"], 0.1), T["cap"], (T["line"] as Array).size(), T["parent"]])
+	var lq := []
+	var worst := INF                                    # the closest two Locals of one pit's network stand along their path (m)
+	for fk in wl.locals.feeds:
+		var ff: Dictionary = wl.locals.feeds[fk]
+		lq.append([ff["cap"], (ff["line"] as Array).size(), ff["parent"]])
+	print("QUEUES trunks [s0, s1, cap, n, parent] ", tq, " doors [cap, n, trunk] ", lq)
 	print("WALKWAYS roundabouts ", wl.locals.about_count, " at ", wl.locals.about_at, " centre ", wl.locals.board_bounds().get_center(), " deck_tris ", wl.locals.deck_tris)
 	print("ORTHO stats ", wl.pipes.ortho_stats, " connectors ", wl.pipes.conn_count, " grid ", wl.pipes.grid_routed, " ortho=", wl.pipes.ortho)
 	var s := img.get_size()

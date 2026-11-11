@@ -114,6 +114,7 @@ var _alive := 0
 var _paths_tex: ImageTexture
 var walkways := false
 var _deck_mi: MeshInstance3D
+var _tq: Array = []               # the shared queues: one per stretch of walkway that several feeds walk (see _build_queues)
 var _abouts: Array = []           # the roundabouts the feeds' paths take: [centre, radius, height, joint angle, joint angle]
 var about_at: Array = []          # probes: [centre, height] of each roundabout
 var about_count := 0              # probes: roundabouts built
@@ -607,7 +608,136 @@ func _route_all() -> void:
 		rows += 1
 	if wl.sim.time <= MARCH_WINDOW or "--march" in OS.get_cmdline_user_args():
 		rows = _route_marches(rows)
+	_build_queues()
 	_build_paths_tex(rows)
+
+
+func _lcp(pa: Array, pb: Array) -> float:
+	## how far two paths run together from the pit (m)
+	if (pa[0] as Vector2).distance_to(pb[0]) > 0.05:
+		return 0.0
+	var ia := 1
+	var ib := 1
+	var pos: Vector2 = pa[0]
+	var d := 0.0
+	while ia < pa.size() and ib < pb.size():
+		var da: Vector2 = (pa[ia] as Vector2) - pos
+		var db: Vector2 = (pb[ib] as Vector2) - pos
+		if da.length() < 0.02:
+			ia += 1
+			continue
+		if db.length() < 0.02:
+			ib += 1
+			continue
+		if da.normalized().dot(db.normalized()) < 0.999:
+			break
+		var stp := minf(da.length(), db.length())
+		pos += da.normalized() * stp
+		d += stp
+	return d
+
+
+func _build_queues() -> void:
+	## Daniele 2026-11-11: Locals never overlap. Where several feeds walk the same stretch of walkway, that stretch is ONE queue
+	## (a trunk); a Local standing in it belongs to no door yet. When a door's own line has room, the trunk's first Local walks
+	## on into it and the trunk moves up, drawing the next one from the trunk before it (or from the pit). A tree per pit exit.
+	_tq.clear()
+	var groups := {}
+	for fk in feeds:
+		var f: Dictionary = feeds[fk]
+		f["parent"] = -1
+		f["q0"] = 0.0
+		var e: Vector2 = (f["path"] as Array)[0]
+		var gk := Vector3(float(f["crater"]), roundf(e.x * 10.0), roundf(e.y * 10.0))
+		if not groups.has(gk):
+			groups[gk] = []
+		groups[gk].append(fk)
+	for gk in groups:
+		_queue_tree(groups[gk], 0.0, -1)
+	for fk in feeds:
+		var f: Dictionary = feeds[fk]
+		var room := int((float(f["len"]) - float(f["q0"]) - 0.7 * GAP) / GAP) + 1
+		f["cap"] = clampi(mini(room, int(f["cap"])), 1, LINE_MAX)
+
+
+func _queue_tree(keys: Array, start: float, parent: int) -> void:
+	if keys.size() == 1:
+		feeds[keys[0]]["parent"] = parent
+		feeds[keys[0]]["q0"] = start
+		return
+	var m := INF                                          # how far ALL of them run together
+	for i in range(keys.size()):
+		for j in range(i + 1, keys.size()):
+			m = minf(m, _lcp(feeds[keys[i]]["path"], feeds[keys[j]]["path"]))
+	var node := parent
+	var from := start
+	if m > start + GAP * 1.5:
+		var lo := maxf(start, 1.0)
+		_tq.append({"s0": start, "s1": m, "row": int(feeds[keys[0]]["row"]), "rep": keys[0], "line": [], "parent": parent,
+				"cap": maxi(int((m - lo) / GAP), 1), "next_spawn": 0.0, "want": {}, "last": -1})
+		node = _tq.size() - 1
+		from = m
+	var clusters: Array = []
+	for k in keys:
+		var placed_in := -1
+		for ci in range(clusters.size()):
+			if _lcp(feeds[k]["path"], feeds[clusters[ci][0]]["path"]) > m + 0.05:
+				placed_in = ci
+				break
+		if placed_in >= 0:
+			clusters[placed_in].append(k)
+		else:
+			clusters.append([k])
+	if clusters.size() == 1:                              # (identical paths: each keeps its own line)
+		for k in keys:
+			feeds[k]["parent"] = node
+			feeds[k]["q0"] = from
+		return
+	for cl in clusters:
+		_queue_tree(cl, from, node)
+
+
+func _take(ti: int, into: Array, row: int, d1: float, who: int) -> bool:
+	## the first Local of trunk ti walks on to slot d1 of `into` (a door's line or the next trunk); the trunk moves up
+	var tl: Array = _tq[ti]["line"]
+	var want: Dictionary = _tq[ti]["want"]
+	want[who] = _syncs
+	if tl.is_empty():
+		return false
+	if int(_tq[ti]["last"]) == who:                    # turns: whoever took the last one waits while another line is asking
+		for w in want:
+			if w != who and int(want[w]) >= _syncs - 1:
+				return false
+	_tq[ti]["last"] = who
+	var s: int = tl.pop_front()
+	_d0[s] = _dnow(s)
+	_tw[s] = maxf(_t, _tw[s])
+	_d1[s] = d1
+	_row[s] = row
+	_write(s)
+	into.append(s)
+	for k in range(tl.size()):
+		var s2: int = tl[k]
+		_d0[s2] = _dnow(s2)
+		_tw[s2] = maxf(_t, _tw[s2])
+		_d1[s2] = float(_tq[ti]["s1"]) - (k + 1) * GAP
+		_write(s2)
+	return true
+
+
+func _trunk_step() -> void:
+	## every trunk keeps itself full: from the trunk before it, or from the pit (never closer than one Local's gap)
+	for ti in range(_tq.size()):
+		var T: Dictionary = _tq[ti]
+		var tl: Array = T["line"]
+		if tl.size() >= int(T["cap"]):
+			continue
+		var d1: float = float(T["s1"]) - (tl.size() + 1) * GAP
+		if int(T["parent"]) >= 0:
+			_take(int(T["parent"]), tl, int(T["row"]), d1, 1000 + ti)
+		elif _t >= float(T["next_spawn"]) and _alive < LOCALS_MAX and feeds.has(T["rep"]):
+			T["next_spawn"] = _t + GAP / WALK_V * randf_range(1.0, 1.25)
+			_spawn(feeds[T["rep"]], tl, d1)
 
 
 func _route_marches(rows: int) -> int:
@@ -1523,6 +1653,7 @@ func step(dt: float, _draw := true) -> void:
 		_alive -= 1
 	for i in feeds:
 		_feed_step(int(feeds[i]["tube"]), feeds[i])
+	_trunk_step()
 	step_us = Time.get_ticks_usec() - t0
 
 
@@ -1582,16 +1713,22 @@ func _feed_step(i: int, f: Dictionary) -> void:
 	# the crater: one more Local toward the back of the line, unless the line is full (then it stops sending here)
 	if only_march and int(f.get("march", 0)) <= 0:
 		return                                        # the march is out: this feed sends no more
-	if line.size() < int(f["cap"]) and _t >= float(f["next_spawn"]) and _alive < LOCALS_MAX:
-		var gap := clampf(0.8 / maxf(rate, 0.8), 0.3, SPAWN_GAP) * randf_range(0.75, 1.3)
+	if line.size() >= int(f["cap"]):
+		return
+	if int(f.get("parent", -1)) >= 0:                 # its line fills from the shared walkway queue, never straight from the pit
+		if _take(int(f["parent"]), line, int(f["row"]), plen - line.size() * GAP, int(f["row"])) and int(f.get("march", 0)) > 0:
+			f["march"] = int(f["march"]) - 1
+		return
+	if _t >= float(f["next_spawn"]) and _alive < LOCALS_MAX:
+		var gap := clampf(0.8 / maxf(rate, 0.8), GAP / WALK_V, 1.2) * randf_range(1.0, 1.3)   # never closer than one Local's gap at walking pace
 		if int(f.get("march", 0)) > 0:                # R6: the match-start column leaves the pit in step
-			gap = MARCH_GAP
+			gap = maxf(MARCH_GAP, GAP / WALK_V)
 			f["march"] = int(f["march"]) - 1
 		f["next_spawn"] = _t + gap
 		_spawn(f, line)
 
 
-func _spawn(f: Dictionary, line: Array) -> void:
+func _spawn(f: Dictionary, line: Array, d1 := -1.0) -> void:
 	var s: int
 	if not _free.is_empty():
 		s = _free.pop_back()
@@ -1610,7 +1747,7 @@ func _spawn(f: Dictionary, line: Array) -> void:
 	_ts[s] = _t
 	_tw[s] = _t + EMERGE_T + HOP_T
 	_d0[s] = 0.0
-	_d1[s] = float(f["len"]) - line.size() * GAP
+	_d1[s] = d1 if d1 >= 0.0 else float(f["len"]) - line.size() * GAP
 	_td[s] = 0.0
 	_row[s] = int(f["row"])
 	_px[s] = from.x
