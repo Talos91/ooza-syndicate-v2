@@ -80,6 +80,20 @@ func _run() -> void:
 			inst.get_node("..") if false else null
 			await get_tree().process_frame
 			await get_tree().process_frame
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("cam="):                      # cam=px,py,pz,tx,ty,tz (metres from the board centre): a free close-up camera
+			var v := a.substr(4).split(",")
+			var bb2 := wl.locals.board_bounds()
+			var c0 := Vector3(bb2.get_center().x, wl.floor_y, bb2.get_center().y)
+			var cam2 := Camera3D.new()
+			cam2.fov = 50.0
+			cam2.far = 600.0
+			inst.add_child(cam2)
+			cam2.global_position = c0 + Vector3(float(v[0]), float(v[1]), float(v[2]))
+			cam2.look_at(c0 + Vector3(float(v[3]), float(v[4]), float(v[5])))
+			cam2.make_current()
+		if a.begins_with("frames="):
+			await _frames(int(a.substr(7)))
 	await _frames(3)
 	await RenderingServer.frame_post_draw
 	var img := inst.get_viewport().get_texture().get_image()

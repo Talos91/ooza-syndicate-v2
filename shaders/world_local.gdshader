@@ -23,6 +23,8 @@ uniform float hop_t = 1.0;
 uniform float squeeze_t = 0.6;
 uniform float rim_h = 0.8;
 uniform float bob_hz = 1.9;
+uniform float walk_deck_h = 0.0;               // walkway layer: height of the raised deck over the floor (0 = none)
+uniform float walk_deck_ramp = 3.4;            // m of ramp up from the pit and down to the door
 uniform sampler2D paths : filter_nearest, repeat_disable;
 uniform vec3 abyss : source_color = vec3(0.02, 0.02, 0.03);
 uniform float haze = 0.12;
@@ -95,7 +97,7 @@ void vertex() {
 	} else {                                  // on the floor: walk the path to the queue slot (d1), wait there
 		float d = min(d0 + walk_v * max(now - t_walk0, 0.0), d1);
 		pos.xz = along(f, d, dir);
-		pos.y = floor_y;
+		pos.y = floor_y + walk_deck_h * smoothstep(0.0, walk_deck_ramp, d) * smoothstep(0.0, walk_deck_ramp, info.w - d);
 		bool moving = d < d1 - 0.01;
 		float landed = age - emerge_t - hop_t;
 		float plop = landed < 0.35 ? sin(landed / 0.35 * 3.14159) * (1.0 - landed / 0.35) : 0.0;

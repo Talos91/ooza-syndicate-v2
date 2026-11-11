@@ -346,6 +346,8 @@ func rebuild(on: bool, with_connectors := false) -> void:
 	_laid.clear()
 	built = false
 	build()
+	if wl.locals != null:
+		wl.locals.sync_walkways()
 
 
 static func _lk(ax: String, coord: float) -> int:

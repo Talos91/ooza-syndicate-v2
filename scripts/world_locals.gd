@@ -49,6 +49,10 @@ const PLAT_R := Rules.R           # a platform's radius (the board's footprint)
 const BRIDGE_HALF := 1.4
 const SEARCH_R := 16.0            # m: how far a crater may move from its layout target to reach visible floor
 const DEFAULT_LAYOUT := 4         # PITS / TUBES rule 1 (was 2)
+const DECK_H := 1.75              # walkway layer (Daniele 2026-11-11): the Locals walk a raised deck over the tubes, pit to door
+const DECK_RAMP := 3.4
+const DECK_HW := 0.8              # deck half width
+const DECK_T := 0.16
 const MARCH_N := 12               # R6: Locals in a pit's match-start column
 const MARCH_GAP := 0.32           # s between them leaving the pit
 const MARCH_KEY := 10000          # feeds key of pit k's march feed: MARCH_KEY + k
@@ -101,6 +105,8 @@ var _hwm := 0
 var _dying: Array = []            # [slot, free at]
 var _alive := 0
 var _paths_tex: ImageTexture
+var walkways := false
+var _deck_mi: MeshInstance3D
 
 
 static func layout_arg() -> int:
@@ -453,6 +459,7 @@ func _after_place(cam: Camera3D) -> void:
 	_route_all()
 	if wl.pipes != null:
 		wl.pipes.build()                              # the transport tubes keep clear of the lanes' exits
+	sync_walkways()
 	if wl.floor_lab5 and not "--no-decals" in OS.get_cmdline_user_args():   # the lab floor decals (world pass 2)
 		decals = WorldDecals.new()
 		add_child(decals)
@@ -624,6 +631,157 @@ func _route_marches(rows: int) -> int:
 				"mouth": t2 + dir * DOOR_MOUTH, "march": MARCH_N, "only_march": true}
 		rows += 1
 	return rows
+
+
+func sync_walkways() -> void:
+	## the walkway layer follows the tube mode (floor-level tubes in --tubes=connectors); --walkways=1|0 forces it
+	var on: bool = wl.pipes != null and wl.pipes.connectors
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--walkways="):
+			on = a.substr(11) == "1"
+	if _deck_mi != null:                                  # the tubes may have moved: rebuild the stands
+		_deck_mi.queue_free()
+		_deck_mi = null
+	set_walkways(on)
+
+
+func set_walkways(on: bool) -> void:
+	walkways = on
+	_loc_mat.set_shader_parameter("walk_deck_h", DECK_H if on else 0.0)
+	_loc_mat.set_shader_parameter("walk_deck_ramp", DECK_RAMP)
+	if on and _deck_mi == null and not feeds.is_empty():
+		_build_walkways()
+	if _deck_mi != null:
+		_deck_mi.visible = on
+
+
+static func _deck_y(d: float, total: float) -> float:
+	return DECK_H * smoothstep(0.0, DECK_RAMP, d) * smoothstep(0.0, DECK_RAMP, total - d)
+
+
+static func _path_at(path: Array, d: float) -> Array:
+	## [position, direction] at distance d along the polyline (what the shader walks)
+	var cum := 0.0
+	for k in range(1, path.size()):
+		var a: Vector2 = path[k - 1]
+		var b: Vector2 = path[k]
+		var sl := a.distance_to(b)
+		if d <= cum + sl or k == path.size() - 1:
+			var dir := (b - a) / maxf(sl, 0.001)
+			return [a.lerp(b, clampf((d - cum) / maxf(sl, 0.001), 0.0, 1.0)), dir]
+		cum += sl
+	return [path[path.size() - 1], Vector2(0, 1)]
+
+
+func _build_walkways() -> void:
+	var fy := wl.floor_y
+	var st := SurfaceTool.new()
+	var sg := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	sg.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var segs: Array = []                                  # the tubes' xz segments (a stand never lands on one)
+	if wl.pipes != null:
+		for rn in wl.pipes.run_pts:
+			var pts: PackedVector3Array = rn[3]
+			for k in range(1, pts.size()):
+				segs.append([Vector2(pts[k - 1].x, pts[k - 1].z), Vector2(pts[k].x, pts[k].z)])
+	for fk in feeds:
+		var f: Dictionary = feeds[fk]
+		var path: Array = f["path"]
+		var total: float = f["len"]
+		var n := maxi(int(ceil(total / 0.5)), 2)
+		var cs: Array = []
+		var ns: Array = []
+		var ys: Array = []
+		for k in range(n + 1):
+			var d := total * float(k) / float(n)
+			var c: Vector2 = _path_at(path, d)[0]
+			var t0: Vector2 = _path_at(path, maxf(d - 0.6, 0.0))[1]
+			var t1: Vector2 = _path_at(path, minf(d + 0.6, total))[1]
+			var tg := (t0 + t1).normalized() if (t0 + t1).length() > 0.05 else t1
+			cs.append(c)
+			ns.append(Vector2(-tg.y, tg.x))
+			ys.append(fy + _deck_y(d, total))
+		for k in range(n):
+			var c0: Vector2 = cs[k]
+			var c1: Vector2 = cs[k + 1]
+			var n0: Vector2 = ns[k]
+			var n1: Vector2 = ns[k + 1]
+			var y0: float = ys[k]
+			var y1: float = ys[k + 1]
+			var hw := DECK_HW
+			var tl0 := Vector3(c0.x + n0.x * hw, y0, c0.y + n0.y * hw)
+			var tr0 := Vector3(c0.x - n0.x * hw, y0, c0.y - n0.y * hw)
+			var tl1 := Vector3(c1.x + n1.x * hw, y1, c1.y + n1.y * hw)
+			var tr1 := Vector3(c1.x - n1.x * hw, y1, c1.y - n1.y * hw)
+			var dn := Vector3(0, -DECK_T, 0)
+			_quad3(st, tl0, tl1, tr1, tr0, Vector3.UP)
+			_quad3(st, tl0 + dn, tl1 + dn, tr1 + dn, tr0 + dn, Vector3.DOWN)
+			_quad3(st, tl0, tl1, tl1 + dn, tl0 + dn, Vector3(n0.x, 0, n0.y))
+			_quad3(st, tr0, tr1, tr1 + dn, tr0 + dn, Vector3(-n0.x, 0, -n0.y))
+			var inset := 0.12                              # lit edge strips
+			var up := Vector3(0, 0.012, 0)
+			var gl0 := Vector3(c0.x + n0.x * (hw - inset), y0, c0.y + n0.y * (hw - inset)) + up
+			var gl1 := Vector3(c1.x + n1.x * (hw - inset), y1, c1.y + n1.y * (hw - inset)) + up
+			var gr0 := Vector3(c0.x - n0.x * (hw - inset), y0, c0.y - n0.y * (hw - inset)) + up
+			var gr1 := Vector3(c1.x - n1.x * (hw - inset), y1, c1.y - n1.y * (hw - inset)) + up
+			_quad3(sg, tl0 + up, tl1 + up, gl1, gl0, Vector3.UP)
+			_quad3(sg, tr0 + up, tr1 + up, gr1, gr0, Vector3.UP)
+		var d2 := 2.0                                      # stands under the raised part, clear of every tube
+		while d2 < total - 1.0:
+			var yy := _deck_y(d2, total)
+			if yy > 0.6:
+				var c: Vector2 = _path_at(path, d2)[0]
+				var tg: Vector2 = _path_at(path, d2)[1]
+				var nn := Vector2(-tg.y, tg.x)
+				for sd in [1.0, -1.0]:
+					var q: Vector2 = c + nn * sd * (DECK_HW - 0.1)
+					var ok := true
+					for sg2 in segs:
+						if Geometry2D.get_closest_point_to_segment(q, sg2[0], sg2[1]).distance_to(q) < 1.3:
+							ok = false
+							break
+					if ok:
+						_box(st, Vector3(q.x, fy + (yy - DECK_T) * 0.5, q.y), Vector3(0.14, yy - DECK_T, 0.14))
+			d2 += 4.0
+	var mesh := st.commit()
+	sg.commit(mesh)
+	var m1 := StandardMaterial3D.new()
+	m1.albedo_color = Color(0.46, 0.50, 0.58)
+	m1.metallic = 0.45
+	m1.roughness = 0.6
+	m1.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var m2 := StandardMaterial3D.new()
+	m2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m2.albedo_color = Color(0.75, 0.92, 1.0)
+	m2.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, m1)
+	mesh.surface_set_material(1, m2)
+	_deck_mi = MeshInstance3D.new()
+	_deck_mi.mesh = mesh
+	_deck_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_deck_mi)
+
+
+static func _quad3(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, hint: Vector3) -> void:
+	var n := (b - a).cross(c - a)
+	if n.length() < 0.00001:
+		n = (c - a).cross(d - a)
+	n = n.normalized()
+	if n.dot(hint) < 0.0:
+		n = -n
+	for v in [a, b, c, a, c, d]:
+		st.set_normal(n)
+		st.add_vertex(v)
+
+
+static func _box(st: SurfaceTool, c: Vector3, s: Vector3) -> void:
+	var h := s * 0.5
+	var p := [Vector3(-h.x, -h.y, -h.z), Vector3(h.x, -h.y, -h.z), Vector3(h.x, h.y, -h.z), Vector3(-h.x, h.y, -h.z),
+			Vector3(-h.x, -h.y, h.z), Vector3(h.x, -h.y, h.z), Vector3(h.x, h.y, h.z), Vector3(-h.x, h.y, h.z)]
+	var faces := [[0, 1, 2, 3, Vector3(0, 0, -1)], [5, 4, 7, 6, Vector3(0, 0, 1)], [4, 0, 3, 7, Vector3(-1, 0, 0)], [1, 5, 6, 2, Vector3(1, 0, 0)], [3, 2, 6, 7, Vector3(0, 1, 0)]]
+	for fc in faces:
+		_quad3(st, c + p[fc[0]], c + p[fc[1]], c + p[fc[2]], c + p[fc[3]], fc[4])
 
 
 func tint_pit(k: int, c: Color) -> void:
