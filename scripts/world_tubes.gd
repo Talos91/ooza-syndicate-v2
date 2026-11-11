@@ -532,7 +532,7 @@ func build() -> void:
 		_state.set_pixel(k, 1, Color(-1, 0, 0, 0))   # not building
 	_tex = ImageTexture.create_from_image(_state)
 	_mat.set_shader_parameter("state", _tex)
-	_mat.set_shader_parameter("goo_dim", WorldLayer.TUBE_GOO_DIM)
+	_mat.set_shader_parameter("goo_dim", Calm.TUBE_GOO_DIM if Calm.world() else WorldLayer.TUBE_GOO_DIM)   # calm-pass A: a hint
 	var holo := ShaderMaterial.new()
 	holo.shader = SHADER_HOLO
 	holo.set_shader_parameter("state", _tex)

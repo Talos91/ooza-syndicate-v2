@@ -369,6 +369,8 @@ func _build_tube(n: Dictionary) -> void:
 	var m := ShaderMaterial.new()
 	m.shader = SHADER_TUBE
 	m.set_shader_parameter("abyss", Scenery.ABYSS)
+	if Calm.world():                                  # calm-pass A: the column tubes glow less
+		m.set_shader_parameter("glow", Calm.TUBE_GLOW)
 	m.set_shader_parameter("y_bot", floor_y)
 	m.set_shader_parameter("fade_top", Scenery.FOG_HEIGHT)
 	mi.material_override = m
@@ -386,6 +388,10 @@ static func _col(seat: String) -> Color:
 	if seat == "":
 		return NATIVE_GRAY                           # neutral: the planet's native gray goo
 	var c := Rules.seat_color(seat)
+	if Calm.colour():                                 # calm-pass C: the faction's body tone (goo = body, neon = signal)
+		c = Calm.goo(seat, c).darkened(0.15)
+	elif Calm.world():                                # calm-pass A: the tubes' goo keeps only some of the seat colour
+		c = Calm.desat(c, Calm.TUBE_SAT).darkened(0.25)
 	return Color(c.r, c.g, c.b, 1.0)
 
 

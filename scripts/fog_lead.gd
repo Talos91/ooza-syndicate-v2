@@ -58,7 +58,7 @@ func setup(m: Node, s: Sim) -> void:
 
 
 static func tint_for(lead: float) -> float:
-	return smoothstep(LEAD_LO, LEAD_HI, lead) * MAX_TINT
+	return smoothstep(LEAD_LO, LEAD_HI, lead) * (Calm.LEAD_MAX_TINT if Calm.world() else MAX_TINT)
 
 
 func _collect() -> void:
@@ -157,6 +157,23 @@ func _measure_fog() -> void:
 			wsum += w
 		mix = Color.from_hsv(h, sat, val).srgb_to_linear() * FOG_SEAT_DIM
 	_fog_goal = Color(lerpf(mix.r, g.r, wg), lerpf(mix.g, g.g, wg), lerpf(mix.b, g.b, wg), 1.0)
+	if Calm.world():                                  # calm-pass A: a neutral, darker fog; the leading seat tints it a little at most
+		var n0 := Calm.FOG_GRAY.srgb_to_linear()
+		var lead_seat := ""
+		var lead_n := 0
+		var second_n := 0
+		for seat in seats:
+			var c_n := int(counts[seat])
+			if c_n > lead_n:
+				second_n = lead_n
+				lead_n = c_n
+				lead_seat = seat
+			elif c_n > second_n:
+				second_n = c_n
+		_fog_goal = n0
+		if lead_seat != "" and lead_n > second_n:
+			var k := Calm.FOG_OWNER_TINT * clampf(float(lead_n - second_n) / float(total) * 2.0, 0.0, 1.0)
+			_fog_goal = n0.lerp(Rules.seat_color(lead_seat).srgb_to_linear() * FOG_SEAT_DIM, k)
 	_fog_goal_b = _fog_goal
 	_fog_split_goal = 1.0
 

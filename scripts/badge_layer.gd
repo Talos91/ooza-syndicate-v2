@@ -53,10 +53,11 @@ class TextPass:
 			var p: Control = b["panel"]
 			if not p.visible:
 				continue
+			var small := Calm.labels() and str(b["owner"]) == ""   # calm-pass B: neutral = smaller, grey
 			for k in ["label", "sub"]:
 				var l: Label = b[k]
 				if l.visible and l.text != "":
-					labels.append([l, p.position + l.position])
+					labels.append([l, p.position + l.position, (Rect2(p.position, p.size).get_center()) if small else Vector2.INF])
 		for outline in [true, false]:
 			for e in labels:
 				var l: Label = e[0]
@@ -70,12 +71,55 @@ class TextPass:
 					w = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
 				var at: Vector2 = e[1]
 				var pos := Vector2(at.x + (room - w) * 0.5, at.y + (l.size.y - font.get_height(px)) * 0.5 + font.get_ascent(px)).round()
+				var ink := l.get_theme_color("font_color")
+				var cen: Vector2 = e[2]
+				if cen != Vector2.INF:                   # calm-pass B: the neutral badge's words, scaled with its box, grey
+					var k := Calm.NEUTRAL_BADGE_K
+					var mid := Vector2(at.x + room * 0.5, at.y + l.size.y * 0.5)
+					var mid2 := cen + (mid - cen) * k
+					px = maxi(int(round(px * k)), 8)
+					w = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+					pos = Vector2(mid2.x - w * 0.5, mid2.y - font.get_height(px) * 0.5 + font.get_ascent(px)).round()
+					ink = Calm.NEUTRAL_INK
 				if outline:
 					var os := l.get_theme_constant("outline_size")
 					if os > 0:
 						draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, os, l.get_theme_color("font_outline_color"))
 				else:
-					draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, l.get_theme_color("font_color"))
+					draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, ink)
+
+
+func neutral_small(p: Control) -> bool:
+	## calm-pass B: is this badge panel a neutral node's (drawn smaller and grey)?
+	if not Calm.labels():
+		return false
+	for id in hud.badges:
+		if hud.badges[id]["panel"] == p:
+			return str(hud.badges[id]["owner"]) == ""
+	return false
+
+
+static func shrink(r: Rect2) -> Rect2:
+	var c := r.get_center()
+	return Rect2(c - r.size * Calm.NEUTRAL_BADGE_K * 0.5, r.size * Calm.NEUTRAL_BADGE_K)
+
+
+static func chip_rect(r: Rect2, ch: float) -> Rect2:
+	## The tier chip's box over badge `r` (generous: "T4" / "M3" at its widest) - the probe and the band check.
+	return Rect2(r.get_center().x - ch * 1.1, r.position.y - ch * 0.8, ch * 2.2, ch)
+
+
+func chip_h() -> float:
+	return maxf(15.0 * hud.ui_scale, float(hud.card_px(12)) / 0.72)
+
+
+func under_band(rr: Rect2) -> bool:
+	if not TopBand.on:
+		return false
+	for b in hud.top_band_rects():
+		if rr.intersects(b as Rect2):
+			return true
+	return false
 
 
 func setup(h) -> void:
@@ -157,8 +201,13 @@ func _draw() -> void:
 	for t in order:
 		var tx: Texture2D = t
 		for p in by[t]:
-			RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), Rect2(p.position, p.size).grow(g), Rect2(Vector2.ZERO, tx.get_size()),
-					tx.get_rid(), Vector2(m, m), Vector2(m, m), RenderingServer.NINE_PATCH_STRETCH, RenderingServer.NINE_PATCH_STRETCH, true)
+			var fr := Rect2(p.position, p.size)
+			var mod := Color.WHITE
+			if neutral_small(p):                       # calm-pass B: a neutral garrison's box is smaller and grey
+				fr = shrink(fr)
+				mod = Calm.NEUTRAL_BADGE_MOD
+			RenderingServer.canvas_item_add_nine_patch(get_canvas_item(), fr.grow(g), Rect2(Vector2.ZERO, tx.get_size()),
+					tx.get_rid(), Vector2(m, m), Vector2(m, m), RenderingServer.NINE_PATCH_STRETCH, RenderingServer.NINE_PATCH_STRETCH, true, mod)
 	_node_marks()
 	for id in hud.badges:                              # the build bars along the bottom edges: B19 track, B20 fill
 		var b: Dictionary = hud.badges[id]
@@ -193,11 +242,19 @@ func _node_marks() -> void:
 		var r := Rect2(p.position, p.size)
 		var ch := maxf(15.0 * s, float(hud.card_px(12)) / 0.72)   # its "T2" never under the phone's 12.5 pt floor
 		# on the top rim, clear of the count
-		NodeNoir.tier_chip(self, Vector2(r.get_center().x, r.position.y - ch * 0.3), ch, int(n["tier"]), col, Hud.UI_FONT, s,
-				"M%d" % n["tier"] if n["structure"] == "machinegoon" else "")
+		var sh_y := 0.0                                  # (the shields drop by this when the chip moved under the badge)
+		if not Calm.labels():                          # calm-pass B: the tier is the badge's sub line instead (Hud._badges)
+			var cy := r.position.y - ch * 0.3
+			if under_band(chip_rect(r, ch)):           # calm-pass: never under the score bar / status line - under the badge then
+				cy = r.end.y + ch * 0.5
+				sh_y = ch
+			NodeNoir.tier_chip(self, Vector2(r.get_center().x, cy), ch, int(n["tier"]), col, Hud.UI_FONT, s,
+					"M%d" % n["tier"] if n["structure"] == "machinegoon" else "")
+		if Calm.labels() and float(n["armour"]) >= float(n["armour_cap"]) - 0.001:
+			continue                                     # calm-pass B: full armour = the tier says it; the shields show while they refill
 		if Sim.has_vat(n) and NodeNoir.shield_count(float(n["armour_cap"])) > 0:
 			var sh := maxf(11.0 * s, 10.0)
-			NodeNoir.shields_row(self, Vector2(r.get_center().x, r.end.y + sh * 0.5 + 2.0 * s), sh, float(n["armour"]),
+			NodeNoir.shields_row(self, Vector2(r.get_center().x, r.end.y + sh_y + sh * 0.5 + 2.0 * s), sh, float(n["armour"]),
 					float(n["armour_cap"]), col, s, 0.0)
 
 

@@ -28,15 +28,15 @@ static func light_color(c: Color, key := "") -> StandardMaterial3D:
 
 
 static func ooze(seat: String) -> StandardMaterial3D:
-	var key := "ooze_" + Rules.seat_color(seat).to_html()
+	var c: Color = Calm.goo(seat, Rules.seat_color(seat))   # calm-pass C: the faction's body tone
+	var key := "ooze_" + c.to_html()
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
-		var c: Color = Rules.seat_color(seat)
 		m.albedo_color = c * 0.6
 		m.roughness = 0.2
 		m.emission_enabled = true
 		m.emission = c
-		m.emission_energy_multiplier = 1.2
+		m.emission_energy_multiplier = 0.5 if Calm.colour() else 1.2   # calm-pass C: glossy body, not a light
 		_cache[key] = m
 	return _cache[key]
 

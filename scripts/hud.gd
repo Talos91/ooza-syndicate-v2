@@ -875,7 +875,13 @@ func right_used() -> float:
 
 
 func top_used() -> float:
-	return margins.y + (top_panel.size.y if top_panel else 0.0) + 34.0
+	var reserve := 34.0
+	if TopBand.on and status_label:                   # calm-pass: the status line's own height (+ its pulse frame), never less
+		var sb := status_label.get_theme_stylebox("normal")
+		var h := status_label.get_theme_font("font").get_height(status_label.get_theme_font_size("font_size"))
+		h += (sb.content_margin_top + sb.content_margin_bottom) if sb else 0.0
+		reserve = maxf(reserve, maxf(h, status_label.size.y) + 2.0 + 8.0 * ui_scale)
+	return margins.y + (top_panel.size.y if top_panel else 0.0) + reserve
 
 
 func bottom_used() -> float:
@@ -998,6 +1004,10 @@ func sync(dt: float, cam: Camera3D) -> void:
 	_sync_status_pulse(dt)
 	if not callouts.items.is_empty():
 		callouts.sync(dt, cam, callout_area(root.get_viewport_rect().size), callout_blocked())
+	if _band_keeper == null:                          # calm-pass: no in-world text under the score bar / status line - run
+		_band_keeper = TopBand.Keeper.new()            # LAST in the frame, after every owner moved its labels (TopBand.Keeper)
+		_band_keeper.hud = self
+		root.add_child(_band_keeper)
 	if _banner_time > 0.0:
 		_banner_time -= dt
 		banner.modulate.a = clampf(_banner_time / 1.5, 0.0, 1.0)
@@ -1070,6 +1080,8 @@ func _badges(cam: Camera3D) -> bool:
 			emb.set_meta("seat", owner)
 			tint_emblem(emb, Rules.seat_color(owner))
 		sub.visible = (not classic or n["build_kind"] != "" or sim.last_stand_active) and not fogged   # (POWERS: fog)
+		if Calm.labels() and not fogged and owner != "" and n["relay"] == "" and str(n["structure"]) in ["vat", "machinegoon"]:
+			sub.visible = true                          # calm-pass B: the tier chip folded into the badge ("T3" / "GAT2")
 		# Alpha 19 (Daniele: "some text is too long, like the word FINAL isn't necessary"): two compact
 		# tags at most - what the node is (relay glyph + state, CN3 cannon, FRG forge, T2 tier) and the
 		# one clock that matters most: the falling countdown (a down triangle), the relay's !n switch
@@ -1113,9 +1125,11 @@ func _badges(cam: Camera3D) -> bool:
 		elif n["relay"] != "" and n["relay_phase"] == "warning":
 			clock = "!%d" % int(ceil(n["relay_t"]))
 			worst = "!8"
-		elif Sim.vat_paused(n):                             # VAT COLUMN: "PAUSED 62%" over the build bar
+		elif Sim.vat_paused(n) and not Calm.labels():       # VAT COLUMN: "PAUSED 62%" over the build bar (calm-pass B: the bar says the %)
 			clock = "%d%%" % int(floor(100.0 * Sim.build_progress(n)))
 			worst = "88%"
+		elif Sim.vat_paused(n):
+			pass
 		elif n["build_kind"] != "":
 			clock = "%ds" % int(ceil(n["build_timer"]))
 			worst = "88s"
@@ -2949,6 +2963,14 @@ func _place_catchup() -> void:
 	var r := Rect2(Vector2(x, y), catchup_tag.size)
 	if status_label.text != "" and r.intersects(Rect2(status_label.position, status_label.size).grow(gap)):
 		y = status_label.position.y + status_label.size.y + gap
+		if TopBand.on:                                 # calm-pass: on the status row, left of the pill (the band, not the board)
+			var vp := root.get_viewport_rect().size
+			var sw := status_label.get_theme_font("font").get_string_size(status_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+					status_label.get_theme_font_size("font_size")).x + 36.0 * ui_scale
+			var x2 := vp.x * 0.5 - sw * 0.5 - gap * 2.0 - catchup_tag.size.x
+			if x2 >= margins.x + side_panel_width() * 0.0:
+				x = x2
+				y = status_label.position.y + (status_label.size.y - catchup_tag.size.y) * 0.5
 	catchup_tag.position = Vector2(x, y)
 
 
@@ -3006,6 +3028,29 @@ func callout_blocked() -> Array:
 	if is_instance_valid(inspector) and inspector_id >= 0:
 		out.append(inspector_rect())
 	out.append_array(extra_ui_rects)
+	return out
+
+
+var _band_keeper: Node = null
+
+
+func top_band_rects() -> Array:
+	## calm-pass (Daniele 2026-11-12: "top hud bar covers ingame text"): the top band's boxes - the score bar, the status
+	## line's pill (with its pulse frame), the banner and the catch-up tag - that in-world text keeps clear of (TopBand).
+	var out := []
+	var vp := root.get_viewport_rect().size
+	if top_panel.is_visible_in_tree():
+		out.append(top_panel.get_global_rect().grow(3.0 * ui_scale))
+	if r19_top and (r19_top as Control).is_visible_in_tree():
+		out.append((r19_top as Control).get_global_rect())
+	if status_label.text != "" and status_label.is_visible_in_tree():
+		var sw := status_label.get_theme_font("font").get_string_size(status_label.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+				status_label.get_theme_font_size("font_size")).x + 36.0 * ui_scale
+		out.append(Rect2(vp.x * 0.5 - sw * 0.5, status_label.position.y - 3.0 * ui_scale, sw, status_label.size.y + 8.0 * ui_scale))   # (+ its pulse frame, as callout_blocked)
+	if banner.visible and banner.modulate.a > 0.05:
+		out.append(banner.get_global_rect())
+	if catchup_tag.is_visible_in_tree():
+		out.append(catchup_tag.get_global_rect())
 	return out
 
 

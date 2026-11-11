@@ -867,6 +867,7 @@ func after_swap(n: Dictionary, entry: Dictionary) -> void:
 
 func _tier_label(text: String, col: Color, size: int) -> Label3D:
 	var l := Label3D.new()
+	TopBand.tag(l)
 	l.text = text
 	l.font = Hud.UI_FONT
 	l.font_size = size

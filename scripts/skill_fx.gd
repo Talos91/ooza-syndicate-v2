@@ -1905,6 +1905,7 @@ func _step_tint(dt: float) -> void:
 
 func _new_label(size: int) -> Label3D:
 	var l := Label3D.new()
+	TopBand.tag(l)
 	l.font = UI_FONT
 	l.font_size = size
 	l.outline_size = int(size * 0.22)
