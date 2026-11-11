@@ -822,6 +822,31 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	spectate_button.position = Vector2(m.x, vp.y - m.w - spectate_button.size.y - 8.0)
 	if r19_top:
 		_r19_layout(vp)
+	_align_tank_edge(vp)
+	if "--edge-gap" in OS.get_cmdline_user_args():
+		print("EDGE_GAP ", JSON.stringify(edge_gaps(vp)))
+
+
+func edge_gaps(vp: Vector2) -> Dictionary:
+	## hud-tank-margin: the gap (px, pt) from the SEND tank's art to the safe left and from the skill column's plates to the safe right.
+	var ins := UiKit.safe_insets(vp)
+	var gl := side_panel.position.x - ins.x
+	var gr := vp.x - ins.z - (dock.position.x + dock.size.x + dock.housing_margin().z)
+	var ppp := UiKit.pt_per_px(vp)
+	return {"vp": [vp.x, vp.y], "ins": [ins.x, ins.y, ins.z, ins.w], "left_px": gl, "right_px": gr, "left_pt": gl * ppp, "right_pt": gr * ppp}
+
+
+func _align_tank_edge(vp: Vector2) -> void:
+	## hud-tank-margin (Daniele 2026-11-11: "the vat send is too separate from the side, ideally the same distance as the skill hud is
+	## from the right side"): the SEND tank's art stands as far from the safe left as the skill column's plates from the safe right. Only
+	## x moves; the map tag under the tank moves with it.
+	if "--tank-align=off" in OS.get_cmdline_user_args() or send_tank == null or not send_tank.picture() or dock == null or not dock.visible:
+		return
+	var ins := UiKit.safe_insets(vp)
+	var gr := vp.x - ins.z - (dock.position.x + dock.size.x + dock.housing_margin().z)
+	var dx := (ins.x + maxf(gr, 0.0)) - side_panel.position.x
+	side_panel.position.x += dx
+	map_title.position.x += dx
 
 
 func side_panel_width() -> float:

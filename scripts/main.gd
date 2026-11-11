@@ -1031,6 +1031,11 @@ func _apply_safe_area() -> void:
 			top = maxf(float(f[1]) * kw, top)
 			right = maxf(float(f[2]) * kw, right)
 			bottom = maxf(float(f[3]) * kw, bottom)
+	if UiKit.test_insets.x >= 0.0:                     # hud-tank-margin: --safe-insets=l,t,r,b (viewport px) stands for a notched phone here too
+		left = maxf(left, UiKit.test_insets.x)
+		top = maxf(top, UiKit.test_insets.y)
+		right = maxf(right, UiKit.test_insets.z)
+		bottom = maxf(bottom, UiKit.test_insets.w)
 	if OS.has_feature("mobile"):
 		var screen := Vector2(DisplayServer.screen_get_size())
 		var safe := Rect2(DisplayServer.get_display_safe_area())
