@@ -93,6 +93,8 @@ func build(lc: WorldLocals, cam: Camera3D) -> void:
 	# B: march lanes along every feed path (one quad per segment; a lane's top (chevrons) toward the door)
 	for i in lc.feeds:
 		var path: Array = (lc.feeds[i] as Dictionary)["path"]
+		if not ((lc.feeds[i] as Dictionary).get("hs", []) as Array).is_empty():
+			continue                                  # that Local walks a walkway: no goo trail on the floor under it (Daniele 2026-11-11)
 		for k in range(1, path.size()):
 			var a: Vector2 = path[k - 1]
 			var b: Vector2 = path[k]

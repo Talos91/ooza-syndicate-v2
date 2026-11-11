@@ -26,6 +26,22 @@ var _goal_col := Color.BLACK     # the leader's colour (linear)
 var _amt := 0.0                  # eased
 var _col := Color.BLACK          # eased (linear)
 var _applied := -1.0
+# FOG MIX (Daniele 2026-11-11): the backdrop / centre FOG layer's colour = the share of nodes nobody owns in GRAY plus each
+# seat's share in its colour (linear mix), so it starts gray and drifts toward whoever holds the nodes. The clouds never change.
+const FOG_GRAY := Color(0.22, 0.23, 0.26)
+const FOG_SEAT_DIM := 0.6        # the seat colours are dimmed so a full-colour haze stays a haze
+var _fog_mats: Array = []
+var fog_force: Dictionary = {}   # playground / probes: {seat: share 0..1} replaces the real node counts (the rest is gray)
+const FOG_PATCH_SAT := 0.5       # how much of a faction's own colour its fog patches carry (1 = full colour, 0 = neutral fog)
+var _fog_goal := Color.BLACK     # linear
+var _fog_goal_b := Color.BLACK   # the second faction's fog colour (Daniele 2026-11-11: 50 / 50 = half cyan fog, half red fog, never gray)
+var _fog_cur_b := Color.BLACK
+var _fog_split_goal := 1.0
+var _fog_split := 1.0
+var _fog_split_applied := -1.0
+var _fog_cur := Color.BLACK
+var _fog_applied := Color(-1, -1, -1)
+var _fog_started := false
 var _force_seat := ""
 var _force_lead := -1.0
 
@@ -57,12 +73,14 @@ func _collect() -> void:
 	if sc != null:
 		var layer: CanvasLayer = sc.backdrop
 		if layer != null and layer.get_child_count() > 0 and layer.get_child(0) is TextureRect:
-			_add_mat((layer.get_child(0) as TextureRect).material, &"abyss", 1.0)
+			_fog_mats.append((layer.get_child(0) as TextureRect).material)   # the FOG layer follows the node mix (_fog_step); the clouds stay
 		for c in (sc as Node).get_children():
 			if c is MeshInstance3D:
 				_add_mist((c as MeshInstance3D).material_override)
 	var wl: WorldLayer = main.get("world_layer")
 	if wl != null:
+		if wl.center_fog_mat != null:
+			_fog_mats.append(wl.center_fog_mat)
 		for c in wl.get_children():
 			if c is MeshInstance3D:
 				_add_mist((c as MeshInstance3D).material_override)
@@ -88,7 +106,88 @@ func _add_mat(m: Material, param: StringName, scale: float) -> void:
 		_targets.append([m, param, Color(v.x, v.y, v.z).srgb_to_linear(), scale, v])
 
 
+func _measure_fog() -> void:
+	var total := 0
+	var counts := {}
+	if not fog_force.is_empty():
+		total = 1000
+		for seat in fog_force:
+			counts[seat] = int(float(fog_force[seat]) * 1000.0)
+	else:
+		for n in sim.nodes:
+			if str(n.get("junction", "")) != "":
+				continue
+			total += 1
+			var o: String = n["owner"]
+			if o != "":
+				counts[o] = int(counts.get(o, 0)) + 1
+	if total == 0:
+		return
+	var owned := 0
+	var seats: Array = counts.keys()
+	seats.sort()
+	for seat in seats:
+		owned += int(counts[seat])
+	var wg := float(total - owned) / float(total)      # gray is only the NEUTRAL share: no neutral nodes, no gray
+	var g := FOG_GRAY.srgb_to_linear()
+	var mix := g
+	if owned > 0:
+		# a COLOUR mix (Daniele 2026-11-11): the factions' hues are blended round the colour wheel, not averaged in RGB (cyan + red
+		# averaged is gray). Hues far apart meet through GREEN, so 50 / 50 cyan and red reads as a green; near hues take the short way.
+		var h := 0.0
+		var sat := 0.0
+		var val := 0.0
+		var wsum := 0.0
+		for seat in seats:
+			var c := Rules.seat_color(seat)
+			var w := float(counts[seat]) / float(owned)
+			if wsum == 0.0:
+				h = c.h
+			else:
+				var t := w / (wsum + w)
+				var d := c.h - h                            # along the wheel, 0 .. 1
+				if absf(d) > 0.25:                          # far apart: the way that passes green (hue 1/3)
+					var lo := minf(h, c.h)
+					var hi := maxf(h, c.h)
+					if not (lo <= 1.0 / 3.0 and 1.0 / 3.0 <= hi):
+						d = d - signf(d)                    # green is on the other arc: go round through 0
+				h = fposmod(h + d * t, 1.0)
+			sat += c.s * w
+			val += c.v * w
+			wsum += w
+		mix = Color.from_hsv(h, sat, val).srgb_to_linear() * FOG_SEAT_DIM
+	_fog_goal = Color(lerpf(mix.r, g.r, wg), lerpf(mix.g, g.g, wg), lerpf(mix.b, g.b, wg), 1.0)
+	_fog_goal_b = _fog_goal
+	_fog_split_goal = 1.0
+
+
+func _fog_step(delta: float, snap: bool) -> void:
+	if _fog_mats.is_empty():
+		return
+	if snap:
+		_fog_cur = _fog_goal
+		_fog_cur_b = _fog_goal_b
+		_fog_split = _fog_split_goal
+	else:
+		var kf := 1.0 - exp(-delta / TAU)
+		_fog_cur = _fog_cur.lerp(_fog_goal, kf)
+		_fog_cur_b = _fog_cur_b.lerp(_fog_goal_b, kf)
+		_fog_split = lerpf(_fog_split, _fog_split_goal, kf)
+	if _fog_cur.is_equal_approx(_fog_applied) and is_equal_approx(_fog_split, _fog_split_applied):
+		return
+	_fog_applied = _fog_cur
+	_fog_split_applied = _fog_split
+	var c := _fog_cur.linear_to_srgb()
+	var cb := _fog_cur_b.linear_to_srgb()
+	for m in _fog_mats:
+		if m is ShaderMaterial:
+			(m as ShaderMaterial).set_shader_parameter(&"fog_col", c)
+			(m as ShaderMaterial).set_shader_parameter(&"fog_col_b", cb)
+			(m as ShaderMaterial).set_shader_parameter(&"fog_split", _fog_split)
+
+
 func _measure() -> void:
+	_measure_fog()
 	if _force_lead >= 0.0:
 		_goal_col = Rules.seat_color(_force_seat).srgb_to_linear()
 		_goal_amt = tint_for(_force_lead)
@@ -127,14 +226,17 @@ func _process(delta: float) -> void:
 		return
 	if not _collected:
 		_collect()
+	var first_fog := not _fog_started
 	_measure_t -= delta
 	if _measure_t <= 0.0:
 		_measure_t = MEASURE_EVERY
+		_fog_started = true
 		var first := _applied < 0.0
 		_measure()
 		if first or _force_lead >= 0.0:            # start (and forced shots) at the value, no ease-in
 			_amt = _goal_amt
 			_col = _goal_col
+	_fog_step(delta, first_fog)
 	var k := 1.0 - exp(-delta / TAU)
 	if _amt < 0.001 and _goal_amt > 0.0:          # rising from default: take the leader's colour at once
 		_col = _goal_col

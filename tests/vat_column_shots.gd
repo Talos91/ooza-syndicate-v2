@@ -178,6 +178,10 @@ func _run() -> void:
 	inst.ais.clear()                                  # nobody else acts: the column alone
 	var sim: Sim = inst.sim
 	var wl: WorldLayer = inst.world_layer
+	var tries := 0                                    # the tubes are laid a few ms a frame since world-fog (or --tubes-sync)
+	while (wl.pipes == null or not wl.pipes.built) and tries < 900:
+		await get_tree().process_frame
+		tries += 1
 	var col: VatColumn = wl.column
 	# seat A's vat with an entrance (a common tube)
 	var id := -1

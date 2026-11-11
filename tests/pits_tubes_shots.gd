@@ -80,6 +80,10 @@ func _wait_world(wl: WorldLayer, s: float) -> void:
 	var t0 := wl._t
 	while wl._t - t0 < s:
 		await get_tree().process_frame
+	var tries := 0                                    # the tubes are laid a few ms a frame since world-fog (or --tubes-sync)
+	while (wl.pipes == null or not wl.pipes.built) and tries < 900:
+		await get_tree().process_frame
+		tries += 1
 
 
 func _draws(n: int) -> Array:

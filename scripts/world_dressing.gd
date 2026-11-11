@@ -145,7 +145,36 @@ func _backdrop() -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = SHADER_SKY
 	mat.set_shader_parameter("abyss", WorldLayer.LAB_FAR)
+	var lv := WorldLayer.BACKDROP_FOG
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--backdrop-fog="):
+			lv = a.substr(15)
+	var amt: Array = WorldLayer.BACKDROP_FOG_LEVELS.get(lv, [0.0, 0.0])
+	var noise := FastNoiseLite.new()
+	noise.seed = 31
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.012
+	noise.fractal_octaves = 3
+	var tex := NoiseTexture2D.new()
+	tex.width = 256
+	tex.height = 256
+	tex.seamless = true
+	tex.noise = noise
+	mat.set_shader_parameter("noise_tex", tex)
+	var dens: Array = WorldLayer.BACKDROP_DENSITY.duplicate()
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--fog-density="):
+			var pr := a.substr(14).split(",")
+			if pr.size() == 2:
+				dens = [float(pr[0]), float(pr[1])]
+	mat.set_shader_parameter("cloud_density", float(dens[0]))
+	mat.set_shader_parameter("fog_density", float(dens[1]))
+	mat.set_shader_parameter("cloud_amt", float(amt[0]))
+	mat.set_shader_parameter("fog_amt", float(amt[1]))
+	mat.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(WorldLayer.CLOUD_TONE))
+	mat.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
 	sky.material = mat
+	_centre_fog(tex, amt, lv, dens)
 
 
 # ------------------------------------------------------------------ build (once the craters and lanes are placed)
@@ -162,6 +191,7 @@ func _process(_dt: float) -> void:
 	_load_lib()
 	_place_all()
 	_finish()
+	_fog_bounds()
 	log_lines.append("dressing built in %.1f ms: %d tris, %d draws, %s" % [(Time.get_ticks_usec() - t0) / 1000.0, tris, draws,
 			str(counts)])
 	log_lines.append("placed: " + " ".join(where))
@@ -837,3 +867,39 @@ func _add_mi(m: Mesh, mat: Material) -> void:
 	add_child(mi)
 	_mats.append(mat)
 	draws += 1
+
+
+func _centre_fog(tex: Texture2D, amt: Array, _lv: String, dens: Array) -> void:
+	## the same two layers as a plane between the decks and the floor: the board's centre gets cloud and fog too
+	var k := WorldLayer.CENTRE_FOG
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--centre-fog="):
+			k = float(a.substr(13))
+	var m := ShaderMaterial.new()
+	m.shader = preload("res://shaders/world_fog_layers.gdshader")
+	m.set_shader_parameter("noise_tex", tex)
+	m.set_shader_parameter("cloud_density", float(dens[0]))
+	m.set_shader_parameter("fog_density", float(dens[1]))
+	m.set_shader_parameter("cloud_amt", float(WorldLayer.CENTRE_LEVELS[0]) * k)
+	m.set_shader_parameter("fog_amt", float(WorldLayer.CENTRE_LEVELS[1]) * k)
+	m.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(WorldLayer.CLOUD_TONE))
+	m.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
+	m.render_priority = -4
+	var quad := PlaneMesh.new()
+	quad.size = Vector2.ONE * 600.0
+	var mi := MeshInstance3D.new()
+	mi.mesh = quad
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = Vector3(0, wl.floor_y + WorldLayer.MIST_ABOVE + 1.0, 0)
+	wl.add_child(mi)
+	wl.center_fog_mat = m
+
+
+func _fog_bounds() -> void:
+	## the centre fog's domain = the board's footprint (+ a margin); beyond it the layers fade out, so the SIDES switcher alone rules the sides
+	if wl.center_fog_mat == null or wl.locals == null:
+		return
+	var bb: Rect2 = wl.locals.board_bounds().grow(8.0)
+	wl.center_fog_mat.set_shader_parameter("zone_c", bb.get_center())
+	wl.center_fog_mat.set_shader_parameter("zone_h", bb.size * 0.5)

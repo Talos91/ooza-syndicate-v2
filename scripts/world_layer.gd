@@ -58,6 +58,20 @@ const LAB5_FOG_HEIGHT_DENSITY := 0.035           # the scene's height fog under 
                                                  # bodies stay visible down to the floor (F2) instead of fogging out at -10 m
 # the floor's far haze and the backdrop's middle meet in this colour (round 5: backdrop middle ~#2B3443, floor #333C4A)
 const LAB_FAR := Color(0.168, 0.204, 0.263)
+# WORLD FOG (Daniele 2026-11-11: "the tubes in the background are a bit too distracting, increase the fog between the play
+# area and the background"; then: "one layer of clouds roaming the map at 0.9 and a fog underneath drifting at 0.6, where
+# they overlap it completely covers"). Two noise layers over the lab side backdrop (lab_backdrop.gdshader cloud_amt / fog_amt,
+# set in WorldDressing._backdrop): 0 = absent, 1 = fully opaque where present. A 2D layer behind the 3D scene: playfield,
+# units, goo and HUD are untouched. Strengths are [cloud, fog]; the default is mid. Dev: --backdrop-fog=<low|mid|high>.
+const BACKDROP_FOG_LEVELS := {"low": [0.6, 0.4], "mid": [0.4, 0.4], "high": [1.0, 0.8]}
+const BACKDROP_FOG := "mid"
+const BACKDROP_DENSITY := [0.3, 0.55]   # [cloud, fog] how much of each layer is present (0 sparse .. 1 solid); --fog-density=<c>,<f>
+const CLOUD_TONE := 0.08         # how much lighter than the far lab colour the clouds are (was 0.3: too white, Daniele 2026-11-11)
+const TUBE_GOO_DIM := 0.6        # transport-tube goo brightness: 1 = as before, 0 = black
+const CENTRE_LEVELS := [0.35, 0.45]   # Daniele 2026-11-11 (playground sliders): the centre plane's [cloud, fog] amounts
+const CENTRE_FOG := 1.0          # x CENTRE_LEVELS for the plane between decks and floor that covers the CENTRE
+                                 # (0 = off, 1 = same numbers as the sides). Off by default: it hazes the floor under the goo falls.
+var center_fog_mat: ShaderMaterial   # set by WorldDressing._backdrop; FogLead tints its fog colour
 const LAB_SIDE := "res://assets/art/backdrops/lab-side-%s-%d.jpg"   # a / b, 1184 (phone, 2.16:1) or 1440 (16:9)
 
 const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)
@@ -338,7 +352,10 @@ func _build_tube(n: Dictionary) -> void:
 	if vis[id].get("platform") == null:              # a plaza member: the plaza piece is shared (spec: later)
 		return
 	var pillar := MapBuilder.platform_piece(n) == "Platform_Pillar"
-	var r := TUBE_R_PILLAR if pillar else TUBE_R
+	var b: Array = n.get("buildable", [])
+	# fog-maps-fix (P-03 node 7): a pillar that can hold a vat / machinegoon gets the common column (base, doors, sockets) so its
+	# tubes and Locals exist like every other buildable node's; the wide glass sleeve stays on the pillars that cannot
+	var r := TUBE_R_PILLAR if (pillar and not ("vat" in b or "machinegoon" in b)) else TUBE_R
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
 	cm.top_radius = r
@@ -446,7 +463,7 @@ func _orient_entrances() -> void:
 		var tb: Dictionary = _tubes[i]
 		if not tb.get("ent", false):
 			continue
-		var d := Vector2(0, 1)
+		var d: Vector2 = WorldLocals.door_dirs()[0]
 		if locals != null and locals.feeds.has(i):
 			d = locals.feeds[i]["dir"]
 		tb["ent_yaw"] = atan2(d.x, d.y)
@@ -829,7 +846,7 @@ func _door_front(tb: Dictionary, from: Vector3) -> Vector3:
 	## the point just in front of the column base's door nearest `from` (doors on the world's +-X / +-Z)
 	var best := Vector3.ZERO
 	var bd := INF
-	for d in WorldLocals.DOOR_DIRS:
+	for d in WorldLocals.door_dirs():
 		var q := Vector3(float(tb["x"]) + d.x * (WorldTubes.APOTHEM + 0.3), floor_y, float(tb["z"]) + d.y * (WorldTubes.APOTHEM + 0.3))
 		var dd := Vector2(q.x - from.x, q.z - from.z).length()
 		if dd < bd:
@@ -862,6 +879,8 @@ func _zap(tb: Dictionary, at: Vector3, col: Color) -> void:
 	var door := Vector3(tb["x"], floor_y + 0.7, tb["z"]) + dir * float(tb["r"])
 	if tb.get("ent", false):                          # the upper laser strand of the base's door that faces the blob
 		var ax := Vector3(signf(dir.x), 0, 0) if absf(dir.x) > absf(dir.z) else Vector3(0, 0, signf(dir.z))
+		if WorldTubes.base45():
+			ax = Vector3(signf(dir.x), 0, signf(dir.z)).normalized()
 		door = Vector3(tb["x"], floor_y + WorldTubes.LASER_Y[1], tb["z"]) + ax * (WorldTubes.APOTHEM + 0.06)
 	var to := at + Vector3(0, 0.25, 0)
 	var mi2: MeshInstance3D = z["mi"]
