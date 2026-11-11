@@ -130,25 +130,35 @@ func _measure_fog() -> void:
 		owned += int(counts[seat])
 	var wg := float(total - owned) / float(total)      # gray is only the NEUTRAL share: no neutral nodes, no gray
 	var g := FOG_GRAY.srgb_to_linear()
-	var ca := g
-	var cb := g
-	var split := 1.0
+	var mix := g
 	if owned > 0:
-		ca = Rules.seat_color(seats[0]).srgb_to_linear() * FOG_SEAT_DIM   # the first seat's fog
-		var wa := float(counts[seats[0]]) / float(owned)
-		split = wa
-		var rest := Color(0, 0, 0, 1)                   # the other seats' fog (one colour in 1v1)
-		for k in range(1, seats.size()):
-			var c2 := Rules.seat_color(seats[k]).srgb_to_linear() * FOG_SEAT_DIM
-			var w2 := float(counts[seats[k]]) / float(owned)
-			rest.r += c2.r * w2
-			rest.g += c2.g * w2
-			rest.b += c2.b * w2
-		cb = Color(rest.r / (1.0 - wa), rest.g / (1.0 - wa), rest.b / (1.0 - wa), 1.0) if wa < 0.999 else ca
-	var wq := 1.0 - (1.0 - wg) * FOG_PATCH_SAT          # a patch is the faction's colour toned toward the neutral fog, so it never outshouts the board
-	_fog_goal = Color(lerpf(ca.r, g.r, wq), lerpf(ca.g, g.g, wq), lerpf(ca.b, g.b, wq), 1.0)
-	_fog_goal_b = Color(lerpf(cb.r, g.r, wq), lerpf(cb.g, g.g, wq), lerpf(cb.b, g.b, wq), 1.0)
-	_fog_split_goal = split
+		# a COLOUR mix (Daniele 2026-11-11): the factions' hues are blended round the colour wheel, not averaged in RGB (cyan + red
+		# averaged is gray). Hues far apart meet through GREEN, so 50 / 50 cyan and red reads as a green; near hues take the short way.
+		var h := 0.0
+		var sat := 0.0
+		var val := 0.0
+		var wsum := 0.0
+		for seat in seats:
+			var c := Rules.seat_color(seat)
+			var w := float(counts[seat]) / float(owned)
+			if wsum == 0.0:
+				h = c.h
+			else:
+				var t := w / (wsum + w)
+				var d := c.h - h                            # along the wheel, 0 .. 1
+				if absf(d) > 0.25:                          # far apart: the way that passes green (hue 1/3)
+					var lo := minf(h, c.h)
+					var hi := maxf(h, c.h)
+					if not (lo <= 1.0 / 3.0 and 1.0 / 3.0 <= hi):
+						d = d - signf(d)                    # green is on the other arc: go round through 0
+				h = fposmod(h + d * t, 1.0)
+			sat += c.s * w
+			val += c.v * w
+			wsum += w
+		mix = Color.from_hsv(h, sat, val).srgb_to_linear() * FOG_SEAT_DIM
+	_fog_goal = Color(lerpf(mix.r, g.r, wg), lerpf(mix.g, g.g, wg), lerpf(mix.b, g.b, wg), 1.0)
+	_fog_goal_b = _fog_goal
+	_fog_split_goal = 1.0
 
 
 func _fog_step(delta: float, snap: bool) -> void:
