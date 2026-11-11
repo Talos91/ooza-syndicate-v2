@@ -66,6 +66,7 @@ const LAB_FAR := Color(0.168, 0.204, 0.263)
 const BACKDROP_FOG_LEVELS := {"low": [0.6, 0.4], "mid": [0.4, 0.4], "high": [1.0, 0.8]}
 const BACKDROP_FOG := "mid"
 const BACKDROP_DENSITY := [0.3, 0.55]   # [cloud, fog] how much of each layer is present (0 sparse .. 1 solid); --fog-density=<c>,<f>
+const CLOUD_TONE := 0.08         # how much lighter than the far lab colour the clouds are (was 0.3: too white, Daniele 2026-11-11)
 const TUBE_GOO_DIM := 0.6        # transport-tube goo brightness: 1 = as before, 0 = black
 const CENTRE_LEVELS := [0.35, 0.45]   # Daniele 2026-11-11 (playground sliders): the centre plane's [cloud, fog] amounts
 const CENTRE_FOG := 1.0          # x CENTRE_LEVELS for the plane between decks and floor that covers the CENTRE

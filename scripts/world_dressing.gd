@@ -171,7 +171,7 @@ func _backdrop() -> void:
 	mat.set_shader_parameter("fog_density", float(dens[1]))
 	mat.set_shader_parameter("cloud_amt", float(amt[0]))
 	mat.set_shader_parameter("fog_amt", float(amt[1]))
-	mat.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(0.3))
+	mat.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(WorldLayer.CLOUD_TONE))
 	mat.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
 	sky.material = mat
 	_centre_fog(tex, amt, lv, dens)
@@ -882,7 +882,7 @@ func _centre_fog(tex: Texture2D, amt: Array, _lv: String, dens: Array) -> void:
 	m.set_shader_parameter("fog_density", float(dens[1]))
 	m.set_shader_parameter("cloud_amt", float(WorldLayer.CENTRE_LEVELS[0]) * k)
 	m.set_shader_parameter("fog_amt", float(WorldLayer.CENTRE_LEVELS[1]) * k)
-	m.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(0.3))
+	m.set_shader_parameter("cloud_col", WorldLayer.LAB_FAR.lightened(WorldLayer.CLOUD_TONE))
 	m.set_shader_parameter("fog_col", WorldLayer.LAB_FAR)
 	m.render_priority = -4
 	var quad := PlaneMesh.new()

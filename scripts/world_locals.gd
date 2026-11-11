@@ -1115,7 +1115,26 @@ func _build_walkways() -> void:
 			if on_about:
 				continue
 			ribbons.append([path[k - 1], path[k], float(hs[k - 1]), float(hs[k]), 1.1, 1.1])
+	var discs: Array = []                                 # the roundabouts, each once: [centre, radius, height]
+	var dseen := {}
+	for ab in abouts:
+		var dkey := Vector3(roundf((ab[0] as Vector2).x * 10.0), roundf((ab[0] as Vector2).y * 10.0), roundf(float(ab[2]) * 10.0))
+		if not dseen.has(dkey):
+			dseen[dkey] = true
+			discs.append([ab[0], ab[1], ab[2]])
+	var cores: Array = []                                 # per ribbon: its deck as [a, b, ha, hb, direction, length] (ring corners' overhang left out)
 	for rb in ribbons:
+		var ca: Vector2 = rb[0]
+		var cb: Vector2 = rb[1]
+		var cd := (cb - ca).normalized()
+		var cl := ca.distance_to(cb)
+		var sa := DECK_HW if float(rb[4]) > 1.5 else 0.0
+		var sb := DECK_HW if float(rb[5]) > 1.5 else 0.0
+		var ha0 := lerpf(float(rb[2]), float(rb[3]), sa / maxf(cl, 0.01))
+		var hb0 := lerpf(float(rb[2]), float(rb[3]), 1.0 - sb / maxf(cl, 0.01))
+		cores.append([ca + cd * sa, cb - cd * sb, ha0, hb0, cd, maxf(cl - sa - sb, 0.01)])
+	for ri in range(ribbons.size()):
+		var rb: Array = ribbons[ri]
 		var a: Vector2 = rb[0]
 		var b: Vector2 = rb[1]
 		var ha: float = rb[2]
@@ -1140,23 +1159,32 @@ func _build_walkways() -> void:
 		_quad3(st, tr0, tr1, tr1 + dn, tr0 + dn, Vector3(-nv.x, 0, -nv.y))
 		var ln := a2.distance_to(b2)
 		var up := Vector3(0, 0.012, 0)
-		var u0 := float(rb[4]) / ln                        # the rails stop short of the corners and junctions
-		var u1 := 1.0 - float(rb[5]) / ln
-		if u1 > u0:
-			for sd in [1.0, -1.0]:
-				var off: Vector2 = nv * sd * (hw - 0.05)
-				var q0: Vector2 = a2.lerp(b2, u0) + off
-				var q1: Vector2 = a2.lerp(b2, u1) + off
-				var y0 := lerpf(ya, yb, u0)
-				var y1 := lerpf(ya, yb, u1)
-				_beam(sr, Vector3(q0.x, y0 + RAIL_H, q0.y), Vector3(q1.x, y1 + RAIL_H, q1.y), 0.07, 0.06)      # hand rail
-				_beam(sr, Vector3(q0.x, y0 + RAIL_H * 0.5, q0.y), Vector3(q1.x, y1 + RAIL_H * 0.5, q1.y), 0.04, 0.04)   # mid rail
-				_beam(sr, Vector3(q0.x, y0 + 0.09, q0.y), Vector3(q1.x, y1 + 0.09, q1.y), 0.05, 0.09)          # kick plate
-				var np := maxi(int((u1 - u0) * ln / 2.2), 1)
+		var ra := 0.05 if float(rb[4]) > 1.5 else 0.0      # a rail runs the whole deck (to the corner's own rail line at a ring corner)
+		var rbb := 0.05 if float(rb[5]) > 1.5 else 0.0
+		for sd in [1.0, -1.0]:
+			var off: Vector2 = nv * sd * (hw - 0.05)
+			var q0: Vector2 = a2 + dv * ra + off
+			var q1: Vector2 = b2 - dv * rbb + off
+			var y0 := lerpf(ha, hb, ra / ln)
+			var y1 := lerpf(ha, hb, 1.0 - rbb / ln)
+			var rl := q0.distance_to(q1)
+			for run in _rail_runs(q0, q1, y0, y1, ri, cores, discs):   # ...minus what lies on another deck: the rails plug into each other
+				var r0: float = run[0]
+				var r1: float = run[1]
+				if (r1 - r0) * rl < 0.12:
+					continue
+				var p0: Vector2 = q0.lerp(q1, r0)
+				var p1: Vector2 = q0.lerp(q1, r1)
+				var h0r := fy + lerpf(y0, y1, r0)
+				var h1r := fy + lerpf(y0, y1, r1)
+				_beam(sr, Vector3(p0.x, h0r + RAIL_H, p0.y), Vector3(p1.x, h1r + RAIL_H, p1.y), 0.07, 0.06)      # hand rail
+				_beam(sr, Vector3(p0.x, h0r + RAIL_H * 0.5, p0.y), Vector3(p1.x, h1r + RAIL_H * 0.5, p1.y), 0.04, 0.04)   # mid rail
+				_beam(sr, Vector3(p0.x, h0r + 0.09, p0.y), Vector3(p1.x, h1r + 0.09, p1.y), 0.05, 0.09)          # kick plate
+				var np := maxi(ceili((r1 - r0) * rl / 2.2), 1)
 				for j in range(np + 1):
-					var uu := lerpf(u0, u1, float(j) / np)
-					var qp: Vector2 = a2.lerp(b2, uu) + off
-					_box(sr, Vector3(qp.x, lerpf(ya, yb, uu) + RAIL_H * 0.5, qp.y), Vector3(0.07, RAIL_H, 0.07))
+					var uu := lerpf(r0, r1, float(j) / np)
+					var qp: Vector2 = q0.lerp(q1, uu)
+					_box(sr, Vector3(qp.x, fy + lerpf(y0, y1, uu) + RAIL_H * 0.5, qp.y), Vector3(0.07, RAIL_H, 0.07))
 		var dd := 0.6                                       # the neon centre line, dashed
 		while dd + DASH < ln - 0.6:
 			var c0: Vector2 = a2.lerp(b2, dd / ln)
@@ -1195,8 +1223,7 @@ func _build_walkways() -> void:
 		var R: float = merged[key][1]
 		var y: float = fy + float(merged[key][2])
 		var joints: Array = merged[key][3]
-		var gap := asin(minf((DECK_HW + 0.35) / (R + DECK_HW), 1.0))
-		var N := 32
+		var N := 48
 		var dn2 := Vector3(0, -DECK_T, 0)
 		var up2 := Vector3(0, 0.012, 0)
 		for j in range(N):
@@ -1218,21 +1245,19 @@ func _build_walkways() -> void:
 			var in1 := i1 + Vector3(e1.x, 0, e1.y) * 0.05
 			_beam(sr, in0 + rise, in1 + rise, 0.07, 0.06)                     # the inner rail, all the way round the column
 			_beam(sr, in0 + Vector3(0, 0.09, 0), in1 + Vector3(0, 0.09, 0), 0.05, 0.09)
-			if j % 4 == 0:
+			if j % 6 == 0:
 				_box(sr, in0 + rise * 0.5, Vector3(0.07, RAIL_H, 0.07))
-			var joint := false                                 # the outer rail opens where a walkway joins
-			for ja in joints:
-				if absf(angle_difference((t0 + t1) * 0.5, float(ja))) < gap:
-					joint = true
+			var tm := (t0 + t1) * 0.5                          # the outer rail opens where a walkway joins
+			var joint := _rail_blocked(c + Vector2(cos(tm), sin(tm)) * (R + DECK_HW - 0.05), float(merged[key][2]), -1, cores, [], 1.2)
 			if not joint:
 				var on0 := o0 - out3 * 0.05
 				var on1 := o1 - Vector3(e1.x, 0, e1.y) * 0.05
 				_beam(sr, on0 + rise, on1 + rise, 0.07, 0.06)
 				_beam(sr, on0 + rise * 0.5, on1 + rise * 0.5, 0.04, 0.04)
 				_beam(sr, on0 + Vector3(0, 0.09, 0), on1 + Vector3(0, 0.09, 0), 0.05, 0.09)
-				if j % 4 == 0:
+				if j % 6 == 0:
 					_box(sr, on0 + rise * 0.5, Vector3(0.07, RAIL_H, 0.07))
-			if j % 2 == 0:                                     # the dashed neon line goes round too
+			if j % 4 < 2:                                      # the dashed neon line goes round too
 				_quad3(sg, Vector3(c.x + e0.x * (R + 0.1), y, c.y + e0.y * (R + 0.1)) + up2, Vector3(c.x + e1.x * (R + 0.1), y, c.y + e1.y * (R + 0.1)) + up2,
 						Vector3(c.x + e1.x * (R - 0.1), y, c.y + e1.y * (R - 0.1)) + up2, Vector3(c.x + e0.x * (R - 0.1), y, c.y + e0.y * (R - 0.1)) + up2, Vector3.UP)
 	about_count = merged.size()
@@ -1251,7 +1276,7 @@ func _build_walkways() -> void:
 	for si in range(mesh.get_surface_count()):
 		deck_tris += mesh.surface_get_array_len(si) / 3
 	var m1 := StandardMaterial3D.new()
-	m1.albedo_color = Color(0.38, 0.42, 0.50)
+	m1.albedo_color = Color(0.20, 0.22, 0.28)
 	m1.metallic = 0.45
 	m1.roughness = 0.6
 	m1.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -1268,15 +1293,76 @@ func _build_walkways() -> void:
 
 
 static func _quad3(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, hint: Vector3) -> void:
+	## a quad that FACES hint: its normal and its winding agree (a quad wound the other way is lit as its back, darker)
 	var n := (b - a).cross(c - a)
 	if n.length() < 0.00001:
 		n = (c - a).cross(d - a)
 	n = n.normalized()
-	if n.dot(hint) < 0.0:
+	var vs := [a, b, c, a, c, d]
+	if n.dot(hint) > 0.0:
+		vs = [a, c, b, a, d, c]                         # (front faces are clockwise)
+	else:
 		n = -n
-	for v in [a, b, c, a, c, d]:
+	for v in vs:
 		st.set_normal(n)
 		st.add_vertex(v)
+
+
+func _rail_blocked(q: Vector2, y: float, skip: int, cores: Array, discs: Array, ext := 0.005) -> bool:
+	## is this point of a rail ON another deck (same level)? Then there is no rail there: the walkways open into each other
+	for i in range(cores.size()):
+		if i == skip:
+			continue
+		var cr: Array = cores[i]
+		var rel: Vector2 = q - (cr[0] as Vector2)
+		var t := rel.dot(cr[4])
+		if t < -ext or t > float(cr[5]) + ext:
+			continue
+		if absf(rel.cross(cr[4])) > DECK_HW - 0.055:
+			continue
+		if absf(lerpf(float(cr[2]), float(cr[3]), clampf(t / float(cr[5]), 0.0, 1.0)) - y) > 0.6:
+			continue
+		return true
+	for d in discs:
+		if q.distance_to(d[0]) < float(d[1]) + DECK_HW - 0.055 and absf(float(d[2]) - y) < 0.6:
+			return true
+	return false
+
+
+func _rail_runs(q0: Vector2, q1: Vector2, y0: float, y1: float, skip: int, cores: Array, discs: Array) -> Array:
+	## the stretches [u0, u1] of a rail that stand free (0.25 m samples, the ends found to the centimetre)
+	var ln := q0.distance_to(q1)
+	var n := maxi(ceili(ln / 0.25), 1)
+	var runs: Array = []
+	var open := -1.0
+	var prev_free := false
+	var prev_u := 0.0
+	for j in range(n + 1):
+		var u := float(j) / n
+		var free := not _rail_blocked(q0.lerp(q1, u), lerpf(y0, y1, u), skip, cores, discs)
+		if j == 0:
+			if free:
+				open = 0.0
+		elif free != prev_free:
+			var lo := prev_u
+			var hi := u
+			for _i in range(7):
+				var m := (lo + hi) * 0.5
+				if (not _rail_blocked(q0.lerp(q1, m), lerpf(y0, y1, m), skip, cores, discs)) == prev_free:
+					lo = m
+				else:
+					hi = m
+			var edge := (lo + hi) * 0.5
+			if free:
+				open = edge
+			else:
+				runs.append([open, edge])
+				open = -1.0
+		prev_free = free
+		prev_u = u
+	if open >= 0.0:
+		runs.append([open, 1.0])
+	return runs
 
 
 static func _beam(st: SurfaceTool, a: Vector3, b: Vector3, w: float, h: float) -> void:
