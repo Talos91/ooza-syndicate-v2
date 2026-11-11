@@ -100,9 +100,10 @@ var connectors := false
 const GRID_CROSS := 14.0         # m-equivalent cost of crossing another tube (fewer crossings = fewer connectors)
 const GRID_BUNDLE := 0.35        # m-equivalent saving per step that runs right beside another tube (stripes form)
 const GRID_MIN_RUN := 5          # cells (3.3 m) a tube runs straight before it may turn again: no zigzags, no tight kinks
-const GRID_TURN := 10.0           # m-equivalent cost of a corner in the grid router (fewer corners)
-const GRID_CAP := 90000          # expansions per tube before the router gives up (the v3 route is the fallback)
+const GRID_TURN := 30.0           # m-equivalent cost of a corner in the grid router (fewer corners)
+const GRID_CAP := 60000          # expansions per tube before the router gives up (the v3 route is the fallback)
 var grid_routed := 0             # probes: tubes the grid router placed
+var build_ms := [0.0, 0.0]       # probes: [routing ms, routing + mesh + connectors ms] of the last build()
 var _gobs: Array = []            # grid router obstacles [centre, radius]
 var _gbox := Rect2i()
 var _from_ortho := false
@@ -172,6 +173,7 @@ func build() -> void:
 	var craters: Array = wl.locals.craters if wl.locals != null else []
 	if craters.is_empty():
 		return
+	var t_build := Time.get_ticks_usec()
 	pit_cols.clear()
 	for k in range(craters.size()):
 		pit_cols.append(WorldLayer.NATIVE_GRAY)
@@ -266,12 +268,15 @@ func build() -> void:
 		for k in range((cols[i]["pits"] as Array).size()):
 			sl.append(slot_of[[i, k]])
 		cols[i]["slots"] = sl
+	var t_route := Time.get_ticks_usec() - t_build
 	_slots = runs.size()
 	run_pts = runs.map(func(rn): return [rn[0], rn[1], rn[2], rn[4]])
 	_place_posts(runs, craters)
 	_build_mesh(runs, craters)
 	if connectors:
 		_build_connectors()
+	build_ms = [t_route / 1000.0, (Time.get_ticks_usec() - t_build) / 1000.0]
+	print("TUBES build ms: routing %.0f, total %.0f (tubes %d)" % [build_ms[0], build_ms[1], _slots])
 	_state = Image.create(maxi(_slots, 1), 2, false, Image.FORMAT_RGBAF)   # row 0 colour + fill, row 1 build progress
 	for k in range(maxi(_slots, 1)):
 		_state.set_pixel(k, 0, Color(0, 0, 0, -1))   # hidden until step()
@@ -343,8 +348,12 @@ func rebuild(on: bool, with_connectors := false) -> void:
 	build()
 
 
+static func _lk(ax: String, coord: float) -> int:
+	return (100000 if ax == "X" else 200000) + roundi(coord / ORTHO_GAP) + 50000
+
+
 func _lane_free(ax: String, coord: float, lo: float, hi: float) -> bool:
-	var key := ax + str(roundi(coord / ORTHO_GAP))
+	var key := _lk(ax, coord)
 	for iv in _lanes.get(key, []):
 		if lo < float(iv[1]) + 0.9 and hi > float(iv[0]) - 0.9:
 			return false
@@ -352,7 +361,7 @@ func _lane_free(ax: String, coord: float, lo: float, hi: float) -> bool:
 
 
 func _lane_covers(ax: String, coord: float, pos: float) -> bool:
-	for iv in _lanes.get(ax + str(roundi(coord / ORTHO_GAP)), []):
+	for iv in _lanes.get(_lk(ax, coord), []):
 		if pos >= float(iv[0]) - 0.05 and pos <= float(iv[1]) + 0.05:
 			return true
 	return false
@@ -415,7 +424,7 @@ func _mirror_lanes(t: Vector2) -> void:
 
 
 func _lane_take_raw(ax: String, coord: float, lo: float, hi: float) -> void:
-	var key := ax + str(roundi(coord / ORTHO_GAP))
+	var key := _lk(ax, coord)
 	if not _lanes.has(key):
 		_lanes[key] = []
 	_lanes[key].append([lo, hi])
@@ -424,7 +433,7 @@ func _lane_take_raw(ax: String, coord: float, lo: float, hi: float) -> void:
 func _lane_take(ax: String, coord: float, lo: float, hi: float) -> void:
 	if _lane_logging:
 		_lane_log.append([ax, coord, minf(lo, hi), maxf(lo, hi)])
-	var key := ax + str(roundi(coord / ORTHO_GAP))
+	var key := _lk(ax, coord)
 	if not _lanes.has(key):
 		_lanes[key] = []
 	_lanes[key].append([minf(lo, hi), maxf(lo, hi)])
@@ -607,6 +616,7 @@ func _path_grid(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 	if ends.is_empty():
 		return PackedVector3Array()
 	var cache := {}
+	var starts: Array = []                              # every first-leg lane the stub can reach: [vertex, direction, p1]
 	for variant in [0, 1]:                              # the first leg runs along x (z lane fixed) or along z
 		var cdc: float = cd.y if variant == 0 else cd.x
 		if absf(cdc) < 0.01:
@@ -618,28 +628,30 @@ func _path_grid(i: int, s: int, pit: Vector3, pi: int) -> PackedVector3Array:
 			if L < APOTHEM + 0.05 + RAMP_RUN + 0.2:
 				continue
 			var p1 := foot + cd * L
-			# start vertices: the two grid points flanking p1 on its line
-			var starts: Array = []
 			if variant == 0:
 				var ix := p1.x / G
-				starts.append([Vector2i(floori(ix), roundi(lane / G)), 1])
-				starts.append([Vector2i(ceili(ix), roundi(lane / G)), 0])
+				starts.append([Vector2i(floori(ix), roundi(lane / G)), 1, p1])
+				starts.append([Vector2i(ceili(ix), roundi(lane / G)), 0, p1])
 			else:
 				var iz := p1.y / G
-				starts.append([Vector2i(roundi(lane / G), floori(iz)), 3])
-				starts.append([Vector2i(roundi(lane / G), ceili(iz)), 2])
-			var res := _grid_search(starts, ends, cache, dirs, p1)
-			if res.is_empty():
-				continue
-			return _grid_finish(res, ends, p0, p1, c2)
-	return PackedVector3Array()
+				starts.append([Vector2i(roundi(lane / G), floori(iz)), 3, p1])
+				starts.append([Vector2i(roundi(lane / G), ceili(iz)), 2, p1])
+	var res := _grid_search(starts, ends, cache, dirs)
+	if res.is_empty():
+		return PackedVector3Array()
+	return _grid_finish(res, ends, p0, res[2], c2)
 
 
-func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Array, p1: Vector2) -> Array:
-	## Dijkstra over (vertex, direction) states with a bucketed queue (cost in half metres); returns [vertex path, end record]
+func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Array) -> Array:
+	## A* over (vertex, direction, run) states with integer keys and a bucketed queue (cost in half metres); returns [vertex path, end record]
 	var G := ORTHO_GAP
+	var W := _gbox.size.y + 2
 	var best := {}
 	var prev := {}
+	var hmemo := {}
+	var root_p1 := {}
+	var end_v: Array = ends.keys()
+	var hstep := (G - GRID_BUNDLE) * 0.98
 	var buckets: Array = []
 	for _b in range(2400):
 		buckets.append([])
@@ -647,11 +659,13 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 		var v: Vector2i = st[0]
 		if not _gbox.has_point(v) or _grid_blocked(v, cache):
 			continue
-		var key := [v.x, v.y, st[1], 0]
+		var key := (((v.x - _gbox.position.x) * W + (v.y - _gbox.position.y)) * 4 + int(st[1])) * 8
 		var c0 := Vector2(v.x, v.y) * G
+		var p1: Vector2 = st[2]
 		var cost := p1.distance_to(c0)
+		root_p1[key] = p1
 		best[key] = cost
-		prev[key] = null
+		prev[key] = -1
 		buckets[mini(int(cost * 2.0), 2399)].append([cost, key])
 	var expansions := 0
 	for bi in range(buckets.size()):
@@ -661,23 +675,30 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 			var item: Array = bucket[qi]
 			qi += 1
 			var cost: float = item[0]
-			var key: Array = item[1]
-			if cost > float(best.get(key, INF)) + 0.001:
+			var key: int = item[1]
+			if cost > float(best.get(key, INF)) + 0.001 + 0.0:
 				continue
 			expansions += 1
 			if expansions > GRID_CAP:
 				return []
-			var v := Vector2i(key[0], key[1])
-			var d: int = key[2]
-			var run: int = key[3]
+			var run: int = key % 8
+			var rest := key / 8
+			var d: int = rest % 4
+			rest = rest / 4
+			var v := Vector2i(rest / W + _gbox.position.x, rest % W + _gbox.position.y)
 			if ends.has(v) and int(ends[v][0]) == d:
 				var path: Array = []
-				var cur = key
-				while cur != null:
-					path.append([cur[0], cur[1], cur[2]])   # (the run counter stays in the state key)
-					cur = prev.get(cur, null)
+				var cur := key
+				var cur0 := key
+				while cur != -1:
+					cur0 = cur
+					var r2 := cur / 8
+					var d2: int = r2 % 4
+					r2 = r2 / 4
+					path.append([r2 / W + _gbox.position.x, r2 % W + _gbox.position.y, d2])
+					cur = int(prev[cur])
 				path.reverse()
-				return [path, ends[v]]
+				return [path, ends[v], root_p1[cur0]]
 			for nd in range(4):
 				if (nd == 0 and d == 1) or (nd == 1 and d == 0) or (nd == 2 and d == 3) or (nd == 3 and d == 2):
 					continue
@@ -700,12 +721,22 @@ func _grid_search(starts: Array, ends: Dictionary, cache: Dictionary, dirs: Arra
 					ncost += GRID_CROSS                    # it would cross another tube here
 				if not _lane_free(ax, coord + G, lo, hi) or not _lane_free(ax, coord - G, lo, hi):
 					ncost -= GRID_BUNDLE                   # it runs right beside another tube: stripes, not strands
-				var nkey := [nv.x, nv.y, nd, mini(run + 1, GRID_MIN_RUN) if nd == d else 1]
+				var nrun := mini(run + 1, GRID_MIN_RUN) if nd == d else 1
+				var nkey := (((nv.x - _gbox.position.x) * W + (nv.y - _gbox.position.y)) * 4 + nd) * 8 + nrun
 				if ncost < float(best.get(nkey, INF)) - 0.001:
 					best[nkey] = ncost
 					prev[nkey] = key
-					var slot := mini(int(ncost * 2.0), 2399)
-					buckets[slot].append([ncost, nkey])
+					var hv := 0.0
+					var hk := nkey / 32
+					if hmemo.has(hk):
+						hv = hmemo[hk]
+					else:
+						hv = INF
+						for ev in end_v:
+							hv = minf(hv, float(absi(nv.x - (ev as Vector2i).x) + absi(nv.y - (ev as Vector2i).y)))
+						hv *= hstep
+						hmemo[hk] = hv
+					buckets[mini(int((ncost + hv) * 2.0), 2399)].append([ncost, nkey])
 	return []
 
 
