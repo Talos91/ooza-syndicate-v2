@@ -15,6 +15,7 @@ uniform sampler2D state : filter_nearest, repeat_disable;
 uniform float slots = 1.0;
 uniform vec3 abyss : source_color = vec3(0.02, 0.02, 0.03);
 uniform float haze = 0.12;
+uniform float goo_dim = 1.0;      // 1 = the goo colour as is, 0 = black (dev switch / WorldLayer.TUBE_GOO_DIM)
 uniform float flow_v = 2.2;      // m/s toward the column
 
 varying vec4 st;
@@ -44,7 +45,7 @@ void fragment() {
 	float band = 0.5 + 0.5 * sin(flow * 2.4);
 	vec2 bc = vec2(floor(UV.x * 8.0), floor(flow * 1.4));
 	float bub = step(0.8, hash(bc)) * smoothstep(0.42, 0.1, length(fract(vec2(UV.x * 8.0, flow * 1.4)) - 0.5));
-	vec3 goo = st.rgb * (0.75 + 0.3 * band + 0.6 * bub);
+	vec3 goo = st.rgb * (0.75 + 0.3 * band + 0.6 * bub) * goo_dim;
 	float fres = pow(1.0 - clamp(abs(dot(NORMAL, VIEW)), 0.0, 1.0), 2.0);
 	vec3 glass = vec3(0.07, 0.1, 0.13) + vec3(0.25, 0.35, 0.42) * fres * 0.6;
 	vec3 c = mix(glass, goo + vec3(0.6, 0.7, 0.75) * fres * 0.25, in_goo);
