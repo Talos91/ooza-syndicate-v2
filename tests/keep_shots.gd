@@ -45,8 +45,14 @@ func _run() -> void:
 				var vpz: Vector2 = inst.cam.get_viewport().get_visible_rect().size
 				var sp: Vector2 = inst.cam.unproject_position(n["pos"]) * Vector2(img.get_width() / vpz.x, img.get_height() / vpz.y)
 				relays.append({"id": n["id"], "kind": str(n["relay"]), "structure": str(n.get("structure", "")), "x": sp.x, "y": sp.y})
+		var pts := []                                      # keep-maps-edit 2026-11-11: every node's screen point (deck annotations)
+		var vps: Vector2 = inst.cam.get_viewport().get_visible_rect().size
+		for n in sim.nodes:
+			var q: Vector2 = inst.cam.unproject_position(n["pos"]) * Vector2(img.get_width() / vps.x, img.get_height() / vps.y)
+			pts.append([q.x, q.y])
 		var info := {"code": code, "name": m.get("name", ""), "mode": m["modes"][0], "modes": m["modes"], "frame": m.get("frame", {}),
-				"nodes": sim.nodes.size(), "relays": relays, "pitch": inst.cam_pitch, "viewport": [img.get_width(), img.get_height()]}
+				"nodes": sim.nodes.size(), "relays": relays, "pitch": inst.cam_pitch, "viewport": [img.get_width(), img.get_height()],
+				"pts": pts}
 		var f := FileAccess.open("%s/%s.json" % [out, code], FileAccess.WRITE)
 		f.store_string(JSON.stringify(info))
 		f.close()

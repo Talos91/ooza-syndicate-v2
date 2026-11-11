@@ -325,7 +325,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 2,
@@ -336,7 +338,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 9,
@@ -404,7 +408,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 12,
@@ -415,7 +421,9 @@
    "state": null,
    "relay": null,
    "retracts": false,
-   "deckMetres": 4.0
+   "deckMetres": 4.0,
+   "proto": "conveyor",
+   "belt": "BA"
   },
   {
    "from": 5,
@@ -519,7 +527,7 @@
    }
   ]
  },
- "note": "Two arms curl out of a rotor core (half-turn symmetry). The rotor joins the arm tips (north / south, r1) or the inner pockets (west / east, r2), so the shortest road swaps between the arms. Wide 90 curves, flex S-bridges into the pockets, a long bottom / top lane to the enemy arm tip.",
+ "note": "Two arms curl out of a rotor core (half-turn symmetry). The rotor joins the arm tips (north / south, r1) or the inner pockets (west / east, r2), so the shortest road swaps between the arms. Wide 90 curves, flex S-bridges into the pockets, a long bottom / top lane to the enemy arm tip. [KEEP edit 2026-11-11: belts on the two round (Wide 90) bridges, flowing from each home's arm toward the centre.]",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true
@@ -533,6 +541,11 @@
   "size": "S",
   "family": "choke",
   "finale": "inward"
+ },
+ "keepEdit": {
+  "date": "2026-11-11",
+  "source": "Ooze Syndicate maps - experimental/json/E-01-spiral.json",
+  "what": "belts on the two round (Wide 90) bridges, flowing from each home's arm toward the centre"
  },
  "layout": {
   "K": 1.0,
