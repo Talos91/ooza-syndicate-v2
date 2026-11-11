@@ -61,7 +61,15 @@ func _arg(key: String, fallback: String) -> String:
 func _init() -> void:
 	SeatAI.guard_on = _arg("guard", "on") != "off"
 	var paths := MapPool.battlefield()
+	if Rules.proto_debug:   # proto / demo build: check the proto + keep-list scope (Daniele 2026-11-10), not just the demo's one map
+		paths = MapPool.all().filter(func(p): return p.get_file().substr(0, 4) in MapPool.test_scope())
 	print("%d maps in the pool" % paths.size())
+	# KEEP LIST (Daniele 2026-11-10): every kept old map is baked and not archived; every archived map is baked, withheld and unmodeled
+	for code in MapPool.KEEP_OLD:
+		check(not code in MapPool.ARCHIVED and MapPool.all().any(func(p): return p.get_file().begins_with(code)), "%s: kept, baked, not archived" % code)
+	for code in MapPool.ARCHIVED:
+		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)) and not MapPool.mode_offered(code, "1v1"), "%s: archived (file kept, no mode offered)" % code)
+	check(not MapPool.battlefield().any(func(p): return MapPool.archived(p)), "no archived map on the battlefield")
 	# SEAT BIAS: N-24 / N-04 were out of 1v1 from 0.23.15; back in since 0.23.18 (Daniele 2026-11-01, Desk vls-fair: the Very Last
 	# Stand tie-break fixed the bias) - offered in 1v1 and on 02 BATTLEFIELD again
 	for code in ([] if Rules.proto_debug else ["N-24", "N-04"]):   # (old maps: not checked on a proto/demo build, Daniele 2026-11-06)
@@ -69,7 +77,7 @@ func _init() -> void:
 		check(paths.any(func(p): return p.get_file().begins_with(code)), "%s: on 02 BATTLEFIELD / the random rematch again" % code)
 		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)), "%s: still baked and in MapPool.all()" % code)
 	if Rules.proto_debug:   # proto build: the picker lists only the prototype maps (MapPool.PROTO)
-		check(paths.size() == MapPool.PROTO.size() and paths.all(func(p): return p.get_file().substr(0, 4) in MapPool.PROTO), "proto build: the pool is exactly MapPool.PROTO")
+		check(paths.size() == MapPool.test_scope().size() and paths.all(func(p): return p.get_file().substr(0, 4) in MapPool.test_scope()), "proto build: the checked scope is exactly MapPool.PROTO + KEEP_OLD (%d)" % paths.size())
 	else:
 		check(MapPool.mode_offered("N-01", "1v1") and paths.any(func(p): return p.get_file().begins_with("N-01")), "an unbiased 1v1 map (N-01) is still offered")
 	check(not paths.any(func(p): return p.get_file().substr(0, 4) in MapPool.TUTORIAL_ONLY), "no tutorial map on 02 BATTLEFIELD")

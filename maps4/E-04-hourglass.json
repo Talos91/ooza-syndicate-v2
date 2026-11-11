@@ -389,7 +389,11 @@
    "retracts": false,
    "deckMetres": 21.28,
    "shape": "sbend",
-   "modules": 5.32
+   "modules": 5.32,
+   "proto": "ferry",
+   "ferry": {
+    "dock": "A"
+   }
   },
   {
    "from": 7,
@@ -512,7 +516,11 @@
    "retracts": false,
    "deckMetres": 21.28,
    "shape": "sbend",
-   "modules": 5.32
+   "modules": 5.32,
+   "proto": "ferry",
+   "ferry": {
+    "dock": "A"
+   }
   }
  ],
  "rings": {
@@ -548,7 +556,7 @@
    }
   ]
  },
- "note": "Two bowls (home rings) pinched into a waist of K 30 junctions (mirror). A rotor at the top and bottom of the waist joins the two K arms through the neck (r1) or the bowls' rims over the shoulders (r2): the crossing always exists, but it jumps between the neck and the rims.",
+ "note": "Two bowls (home rings) pinched into a waist of K 30 junctions (mirror). A rotor at the top and bottom of the waist joins the two K arms through the neck (r1) or the bowls' rims over the shoulders (r2): the crossing always exists, but it jumps between the neck and the rims. [KEEP edit 2026-11-11: the long bridge between the two platforms next to each home (BU - BD) is a ferry; the waist switches stay.]",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true
@@ -562,6 +570,11 @@
   "size": "S",
   "family": "choke",
   "finale": "inward"
+ },
+ "keepEdit": {
+  "date": "2026-11-11",
+  "source": "Ooze Syndicate maps - experimental/json/E-04-hourglass.json",
+  "what": "the long bridge between the two platforms next to each home (BU - BD) is a ferry; the waist switches stay"
  },
  "layout": {
   "K": 1.0,

@@ -79,7 +79,7 @@
    "socket": null,
    "ring": 0,
    "category": "relay",
-   "relay": "retract",
+   "relay": "laser_relay",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -210,7 +210,7 @@
    "socket": null,
    "ring": 0,
    "category": "relay",
-   "relay": "retract",
+   "relay": "laser_relay",
    "home": false,
    "neutral": {
     "tier": 2,
@@ -294,8 +294,8 @@
    "seconds": 4,
    "level": 0,
    "state": null,
-   "relay": 3,
-   "retracts": true,
+   "relay": null,
+   "retracts": false,
    "deckMetres": 8.0
   },
   {
@@ -382,8 +382,8 @@
    "seconds": 4,
    "level": 0,
    "state": null,
-   "relay": 10,
-   "retracts": true,
+   "relay": null,
+   "retracts": false,
    "deckMetres": 8.0
   },
   {
@@ -508,7 +508,7 @@
    }
   ]
  },
- "note": "A Crossing piece in the middle stacks two diagonal lanes (half-turn symmetry). The ground lane runs through two rotors: open in r1, and in r2 they swing to the bypass platforms. The over lane is held by two retract relays that drop its ramps. Bypass triangles round the top and bottom.",
+ "note": "A Crossing piece in the middle stacks two diagonal lanes (half-turn symmetry). The ground lane runs through two rotors: open in r1, and in r2 they swing to the bypass platforms. The over lane is held by two retract relays that drop its ramps. Bypass triangles round the top and bottom. [KEEP edit 2026-11-11: over-lane retracts -> laser relays (ramps fixed); ground-lane switches unchanged (conservative reading of 'rework').]",
  "geometricSymmetry": true,
  "labVariant": {
   "junctions": true
@@ -525,6 +525,11 @@
   "size": "S",
   "family": "choke",
   "finale": "inward"
+ },
+ "keepEdit": {
+  "date": "2026-11-11",
+  "source": "Ooze Syndicate maps - experimental/json/E-06-overpass.json",
+  "what": "over-lane retracts -> laser relays (ramps fixed); ground-lane switches unchanged (conservative reading of 'rework')"
  },
  "layout": {
   "K": 1.0,

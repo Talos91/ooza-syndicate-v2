@@ -765,14 +765,14 @@ func _run() -> void:
 	var full := not Rules.proto_debug or "scope=all" in OS.get_cmdline_user_args()
 	var pool := MapPool.all()
 	if not full:
-		pool = pool.filter(func(p): return str(p).get_file().substr(0, 4) in MapPool.PROTO)
-		print("SCOPE proto: %d maps (MapPool.PROTO); -- scope=all for every baked map" % pool.size())
+		pool = pool.filter(func(p): return str(p).get_file().substr(0, 4) in MapPool.test_scope())
+		print("SCOPE proto + keep: %d maps (MapPool.PROTO + KEEP_OLD); -- scope=all for every baked map" % pool.size())
 	_pool = pool
 	var baked := Array(DirAccess.get_files_at(MapPool.DIR)).filter(func(f): return f.trim_suffix(".remap").ends_with(".json")).size()
 	if full:
 		check(pool.size() == baked - MapPool.WITHHELD.size() and pool.size() > 0, "every baked map is in the pool except the withheld (%d of %d)" % [pool.size(), baked])
 	else:
-		check(pool.size() == MapPool.PROTO.size(), "proto scope: every MapPool.PROTO map is baked (%d of %d)" % [pool.size(), MapPool.PROTO.size()])
+		check(pool.size() == MapPool.test_scope().size(), "proto + keep scope: every MapPool.PROTO / KEEP_OLD map is baked (%d of %d)" % [pool.size(), MapPool.test_scope().size()])
 	for code in (MapPool.WITHHELD_MODES if full else {}):                # a per-mode withhold names a baked map and modes it really seats
 		var hit := pool.filter(func(p): return str(p).get_file().begins_with(code))
 		check(hit.size() == 1 and (MapPool.WITHHELD_MODES[code] as Array).all(func(md): return MapBuilder.load_map(hit[0])["seats"].has(md)),
