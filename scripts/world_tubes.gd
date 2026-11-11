@@ -121,7 +121,7 @@ func _lane_untake_log() -> void:
 	_lane_log.clear()
 
 
-const CACHE_VER := 6             # bump when the routing rules change: older cached layouts are then ignored
+const CACHE_VER := 7             # bump when the routing rules change: older cached layouts are then ignored
 var cache_hit := false           # probes: the last build() loaded its layout instead of routing it
 var restarts := 0                # probes: times the routing started over with a failed tube laid first
 
