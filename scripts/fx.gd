@@ -183,6 +183,7 @@ func floater(pos: Vector3, text: String, col: Color) -> void:
 		var old: Dictionary = _floaters.pop_front()
 		(old["label"] as Label3D).queue_free()
 	var l := Label3D.new()
+	TopBand.tag(l)
 	l.text = text
 	l.font = Hud.UI_FONT
 	l.font_size = 72
@@ -311,6 +312,7 @@ func _relay_look(n: Dictionary, entry: Dictionary) -> Dictionary:
 			hi = maxf(hi, box.end.y)
 		top = Vector3(host.global_position.x, hi if hi > -INF else top.y, host.global_position.z)
 	var label := Label3D.new()
+	TopBand.tag(label)
 	label.text = Rules.RELAY_GLYPH.get(n["relay"], "?")
 	label.font = SYMBOL_FONT
 	label.font_size = 128
@@ -1437,6 +1439,11 @@ func _brawl_color(owner: String) -> Color:
 	return Rules.seat_color(owner) if owner != "" else NEUTRAL_TRIM
 
 
+func _deck_color(owner: String) -> Color:
+	## calm-pass C: deck halves and pier stripes neutral (the owner colour stays on the platform rims)
+	return NEUTRAL_TRIM if Calm.colour() else _brawl_color(owner)
+
+
 func _half_trims() -> void:
 	## BRAWL deck halves: shown while the deck is open, each half in its end's owner colour.
 	var on := not Rules.bridge_combat and not Rules.goo_look()   # GOO: GooTerritory covers the halves
@@ -1456,7 +1463,7 @@ func _half_trims() -> void:
 				continue
 			(mi as MeshInstance3D).visible = show
 			if show:
-				(mi as MeshInstance3D).material_override = Mats.light_color(_brawl_color(oa if h == 0 else ob))
+				(mi as MeshInstance3D).material_override = Mats.light_color(_deck_color(oa if h == 0 else ob))
 
 
 func _neon() -> void:
@@ -1478,7 +1485,7 @@ func _neon() -> void:
 			_pier_key[i * 2 + end] = key + ("|goo" if goo else "")
 			_neon_merge.dirty = true
 			(mi as MeshInstance3D).visible = (brawl or SIEGE_PIER_STRIPES) and not goo
-			(mi as MeshInstance3D).material_override = Mats.light_color(_brawl_color(key)) if brawl else _siege_light(i, key)
+			(mi as MeshInstance3D).material_override = Mats.light_color(_deck_color(key)) if brawl else _siege_light(i, key)
 	for id in _rims:
 		if sim.collapsed.get(id, false):
 			continue

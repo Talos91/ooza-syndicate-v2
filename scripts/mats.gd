@@ -28,10 +28,10 @@ static func light_color(c: Color, key := "") -> StandardMaterial3D:
 
 
 static func ooze(seat: String) -> StandardMaterial3D:
-	var key := "ooze_" + Rules.seat_color(seat).to_html()
+	var c: Color = GooTone.liquid(seat, Rules.seat_color(seat))   # goo = the faction's body tone (GooTone)
+	var key := "ooze_" + c.to_html()
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
-		var c: Color = Rules.seat_color(seat)
 		m.albedo_color = c * 0.6
 		m.roughness = 0.2
 		m.emission_enabled = true
@@ -52,10 +52,10 @@ static func ooze_neutral() -> StandardMaterial3D:
 
 
 static func goo(seat: String) -> StandardMaterial3D:
-	var key := "goo_" + Rules.seat_color(seat).to_html()
+	var c: Color = GooTone.of_seat(seat, Rules.seat_color(seat))   # goo = the faction's body tone (GooTone)
+	var key := "goo_" + c.to_html()
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
-		var c: Color = Rules.seat_color(seat)
 		m.albedo_color = Color(c.r * 0.55, c.g * 0.55, c.b * 0.55)
 		m.roughness = 0.1
 		m.clearcoat_enabled = true

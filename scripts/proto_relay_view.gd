@@ -278,6 +278,7 @@ func _pointer(ghost := false) -> MeshInstance3D:
 
 func _label(font_size: int) -> Label3D:
 	var l := Label3D.new()
+	TopBand.tag(l)
 	l.font = Fx.SYMBOL_FONT
 	l.font_size = font_size
 	l.pixel_size = 0.03
@@ -685,6 +686,7 @@ func _lift_parts(n: Dictionary) -> Dictionary:
 		# level's colour (lit while it connects), a ghost of the deck where it docks when it is closed, and a glowing
 		# edge riding the deck's platform end while it moves
 		var tag := Label3D.new()
+		TopBand.tag(tag)
 		tag.font = Fx.SYMBOL_FONT
 		tag.font_size = 96
 		tag.pixel_size = 0.02
@@ -957,6 +959,8 @@ func _ferry_deck_sync(parts: Dictionary, fp: Dictionary, gone: bool) -> Color:
 		else:
 			hl.text = "IN %d" % int(ceil(float(fp["next_open"])))
 			hl.modulate = Rules.RELAY_GHOST_COLORS["ferry"]
+			if Calm.labels() and float(fp["next_open"]) > Calm.IN_TAG_S:
+				hl.visible = false                         # calm-pass B: the lane's IN n only while it is about to open
 	return lc
 
 

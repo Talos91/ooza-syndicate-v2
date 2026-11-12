@@ -57,8 +57,15 @@ func setup(m: Node, s: Sim) -> void:
 				_force_lead = clampf(float(kv[1]), 0.0, 1.0)
 
 
+# NEUTRAL FOG (Daniele 2026-11-12: "fog: apply the change you showed me before so no more green"): the default now - the fog keeps
+# its neutral FOG_GRAY and takes at most Calm.FOG_OWNER_TINT of the LEADING seat's colour by its lead (a tie stays neutral), instead
+# of the 2026-11-11 hue mix (cyan + red read green, "a colour not belonging to anything"); the air's lead tint tops at
+# Calm.LEAD_MAX_TINT. Dev: --fog-mix = the 0.24.1 hue mix.
+static var neutral_fog := not ("--fog-mix" in OS.get_cmdline_user_args())
+
+
 static func tint_for(lead: float) -> float:
-	return smoothstep(LEAD_LO, LEAD_HI, lead) * MAX_TINT
+	return smoothstep(LEAD_LO, LEAD_HI, lead) * (Calm.LEAD_MAX_TINT if neutral_fog or Calm.world() else MAX_TINT)
 
 
 func _collect() -> void:
@@ -157,6 +164,23 @@ func _measure_fog() -> void:
 			wsum += w
 		mix = Color.from_hsv(h, sat, val).srgb_to_linear() * FOG_SEAT_DIM
 	_fog_goal = Color(lerpf(mix.r, g.r, wg), lerpf(mix.g, g.g, wg), lerpf(mix.b, g.b, wg), 1.0)
+	if neutral_fog or Calm.world():                   # NEUTRAL FOG (default): neutral, the leading seat tints it a little at most
+		var n0 := Calm.FOG_GRAY.srgb_to_linear()
+		var lead_seat := ""
+		var lead_n := 0
+		var second_n := 0
+		for seat in seats:
+			var c_n := int(counts[seat])
+			if c_n > lead_n:
+				second_n = lead_n
+				lead_n = c_n
+				lead_seat = seat
+			elif c_n > second_n:
+				second_n = c_n
+		_fog_goal = n0
+		if lead_seat != "" and lead_n > second_n:
+			var k := Calm.FOG_OWNER_TINT * clampf(float(lead_n - second_n) / float(total) * 2.0, 0.0, 1.0)
+			_fog_goal = n0.lerp(Rules.seat_color(lead_seat).srgb_to_linear() * FOG_SEAT_DIM, k)
 	_fog_goal_b = _fog_goal
 	_fog_split_goal = 1.0
 

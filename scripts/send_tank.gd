@@ -165,7 +165,7 @@ func _draw() -> void:
 		_draw_picture()
 		return
 	var s := ui_scale
-	var acc: Color = HudNoir.accent
+	var acc: Color = GooTone.mine(HudNoir.accent)     # the goo = your faction's body tone (GooTone); ticks / rim stay neon
 	draw_style_box(_frame, Rect2(Vector2.ZERO, size))
 	var b := body_rect()
 	var rad := 10.0 * s
@@ -363,7 +363,7 @@ func _draw_picture() -> void:
 	## ui-send-tank: fill (metal + glass) -> the liquid and its shine CLIPPED at the level (never stretched) -> bubbles ->
 	## the surface ring and the rim glow riding the level -> the drip + drop -> the level marks -> the readout plate.
 	var s := pt_px
-	var acc: Color = HudNoir.accent
+	var acc: Color = GooTone.mine(HudNoir.accent)     # the goo = your faction's body tone (GooTone); ticks / rim stay neon
 	var lv := clampf(shown, 0.0, 1.0)
 	var ly := lerpf(LIQ_BOT, LVL_TOP, lv)                                    # the level in canvas px
 	_draw_layer(_layer("fill"), Rect2(PIC_X, PIC_Y, PIC_W, 1128.0 - PIC_Y), Color.WHITE)

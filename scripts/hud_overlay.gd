@@ -196,6 +196,9 @@ func _clear_spot(c: Vector2, offsets: Array, half: Vector2, avoid: Array) -> Vec
 		for a in avoid:
 			var x := box.intersection(a as Rect2)
 			cover += x.get_area()
+		if TopBand.on:                                   # calm-pass: a spot under the top band costs far more than one on a badge
+			for br in hud.top_band_rects():
+				cover += box.intersection(br as Rect2).get_area() * 1000.0
 		if cover <= 0.0:
 			return q
 		if cover < best_cover:
@@ -245,6 +248,8 @@ func _draw() -> void:
 	if hud.shows("halos"):
 		_draw_halos(cam)
 	var avoid := _badge_rects()                      # ui-neon: the signs, then the upgrade chips, clear of the counts
+	if TopBand.on:                                   # calm-pass: and clear of the score bar / status line (never under them)
+		avoid.append_array(hud.top_band_rects())
 	_layout_signs(cam, avoid)
 	_chips.clear()
 	if hud.shows("upgrade_arrow"):
@@ -456,8 +461,14 @@ func _draw_upgrade_arrows(cam: Camera3D, avoid: Array) -> void:
 		_chips[id] = [c, R]
 		avoid.append(upgrade_chip_rect(id))              # (the next chip keeps clear of this one too)
 		c.y -= UPGRADE_ARROW_BOB * pt * k
-		_chips[id] = [c, R]
 		var grow := 1.0 + 0.3 * float(pk[0]) * float(pk[1])
+		if TopBand.on:                                   # calm-pass: the chip (bob and pulse included) never under the top band
+			var half := Vector2(R, R * 0.866) * 1.3
+			for br in hud.top_band_rects():
+				var b2: Rect2 = br
+				if Rect2(c - half, half * 2.0).intersects(b2.grow(2.0)):
+					c.y = b2.end.y + 4.0 + half.y
+		_chips[id] = [c, R]
 		_neon(NT_CHIP, c, R * grow, Color(1, 1, 1, 0.88 + 0.12 * k))
 		if float(pk[1]) > 0.0:
 			_pulse_ring(c, R, col, pk, NT_CHIP)
@@ -840,6 +851,8 @@ func _layout_signs(cam: Camera3D, avoid: Array) -> void:
 	var pt := _pt()
 	for id in _sign_tier:
 		var tier: int = _sign_tier[id]
+		if tier >= 2 and Calm.labels():                  # calm-pass B: only the next two drops get a sign (R# in the badge for the rest)
+			continue
 		var ns := _node_screen(id, cam)
 		var r: float = float(ns[1])
 		var pk := _pulse_k(float(_sign_pulse.get(id, 0.0)))
@@ -855,6 +868,14 @@ func _layout_signs(cam: Camera3D, avoid: Array) -> void:
 				Vector2(-side, 0), Vector2(side, 0), Vector2(-side, -up * 0.7), Vector2(side, -up * 0.7),
 				Vector2(0, -up - half.y), Vector2(-side - half.x, 0), Vector2(side + half.x, 0)], half, avoid)
 		_signs[id] = [c, R, tier]
+		if TopBand.on:                                   # calm-pass: never under the score bar / status line
+			var sr := sign_rect(id)
+			for br in hud.top_band_rects():
+				var b2: Rect2 = br
+				if sr.intersects(b2.grow(2.0)):
+					c.y += b2.end.y + 4.0 - sr.position.y
+					_signs[id] = [c, R, tier]
+					sr = sign_rect(id)
 		avoid.append(sign_rect(id))
 
 

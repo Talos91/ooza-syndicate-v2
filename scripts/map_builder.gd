@@ -486,6 +486,9 @@ static func apply_owner(parts: Array, seat: String) -> void:
 				# "GooN are default vex color instead of gray" - the neutral machinegoons on round R)
 				var seat_a := name.ends_with("_A")
 				if name.begins_with("OS_Light"):
+					if Calm.colour() and seat != "":         # calm-pass C: structures neutral (owner colour on rims, units, HUD)
+						mi.set_surface_override_material(s, Mats.light(""))
+						continue
 					mi.set_surface_override_material(s, Mats.light(seat) if seat != "" else (Mats.light("") if seat_a else null))
 				elif name.begins_with("OS_Ooze"):
 					if mi.has_meta("vat_liquid"):             # a living liquid (Scenery) colours itself

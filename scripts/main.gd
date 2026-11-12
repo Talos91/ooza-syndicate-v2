@@ -415,6 +415,9 @@ func _start_map(path: String) -> void:
 	sim = Sim.new()
 	sim.ai_builds = true                               # POWERS: AI seats mix their builds (Rules.AI_LOADOUTS)
 	sim.setup(map, MapBuilder.layout(map), seats, SEAT_FACTIONS, seed_value, teams, LOADOUTS)
+	Calm.factions = sim.factions
+	GooTone.factions = sim.factions                    # goo = body tone by faction (GooTone)
+	GooTone.human = HUMAN
 	_lm("sim_setup")
 	var lo := Vector3(INF, 0, INF)                     # the camera looks along the map's short side
 	var hi := Vector3(-INF, 0, -INF)
@@ -509,6 +512,7 @@ func _start_map(path: String) -> void:
 	drag_line.visible = false                       # ui-node: the HUD overlay draws the send ribbon / rings (Neon Noir)
 	add_child(drag_line)
 	route_label = Label3D.new()
+	TopBand.tag(route_label)
 	route_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	route_label.pixel_size = 0.018
 	route_label.font_size = 72
