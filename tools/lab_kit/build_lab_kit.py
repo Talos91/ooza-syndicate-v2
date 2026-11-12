@@ -1225,7 +1225,7 @@ def arch_door(bm, f):
     for fc in fr:
         fc.material_index = DE
     for ly in LASER_Y:                                            # the door laser: owner light (thin strands)
-        box_at(bm, xfm(c + Vector((0, 0, ly)) + out * 0.05, side, out, Vector((0, 0, 1))), (2 * DOOR_HW, 0.044, 0.044), LT)
+        box_at(bm, xfm(c + Vector((0, 0, ly)) + out * 0.05, side, out, Vector((0, 0, 1))), (2 * DOOR_HW, 0.044, 0.044), DE)   # (designer 4, 11-12: detail, not neon)
 
 
 def socket(bm, f, y, ang):
@@ -1236,7 +1236,7 @@ def socket(bm, f, y, ang):
     c = out * APO + Vector((0, 0, y))
     M = xfm(c, side, up, ax)
     prim_at(bm, "tube", SOCK_RI, SOCK_R, SOCK_D - back, DE, M, zc=(SOCK_D + back) / 2)          # the coupling sleeve
-    prim_at(bm, "tube", SOCK_R - 0.005, SOCK_R + 0.025, 0.035, LT, M, zc=SOCK_D - 0.06)         # thin owner ring
+    prim_at(bm, "tube", SOCK_R - 0.005, SOCK_R + 0.025, 0.035, DE, M, zc=SOCK_D - 0.06)         # detail ring (designer 4, 11-12: neon on the top ring only)
     prim_at(bm, "tube", SOCK_RI - 0.03, SOCK_RI, 0.04, SH, M, zc=SOCK_D - 0.02)                 # cream lip
     prim_at(bm, "cyl", SOCK_RI - 0.005, 0, 0.03, DK, M, zc=0.03)                                # dark bore
 
@@ -1247,7 +1247,7 @@ def node_base(name, flat=True):
     3 / 7 tilted 40 deg at 0.62), a thin owner ring round the foot and a cream collar with a thin owner ring round the lift."""
     bm = bmesh.new()
     prof = [(0.97, 0.0), (APO, 0.0), (APO, 0.09), (APO, 0.13), (APO, 0.92), (APO, WALL_H), (ROOF_A, ROOF_H), (0.97, ROOF_H)]
-    lathe(bm, prof, [DK, DE, LT, SH, DK, SH, SH, DK], poly=8)
+    lathe(bm, prof, [DK, DE, DE, SH, DK, SH, SH, DK], poly=8)   # foot band detail: neon on the top ring only
     prim_at(bm, "tube", 0.97, 1.20, 0.10, SH, Matrix.Translation((0, 0, ROOF_H + 0.05)))      # collar round the lift
     prim_at(bm, "tube", 1.00, 1.06, 0.02, LT, Matrix.Translation((0, 0, ROOF_H + 0.11)))      # thin owner ring on it
     prim_at(bm, "tube", 1.12, 1.20, 0.03, DE, Matrix.Translation((0, 0, ROOF_H + 0.115)))
