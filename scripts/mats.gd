@@ -240,7 +240,7 @@ static func apply_detail(node: Node) -> void:
 				continue
 			if DETAILED.has(src.resource_name):
 				(mi as MeshInstance3D).set_surface_override_material(s, detail(src))
-			elif src.resource_name == "OS_Glass":           # 0.18.7: lit-rim glass instead of a grey film
+			elif src.resource_name == "OS_Glass" or src.resource_name == "OS_Glass_Low":   # (lab kit vats: the clearer lower band)           # 0.18.7: lit-rim glass instead of a grey film
 				(mi as MeshInstance3D).set_surface_override_material(s, glass(Look.GLASS if Look.lab else Rules.NEUTRAL))   # LAB LOOK TEST: mint glass
 
 

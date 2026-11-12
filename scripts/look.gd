@@ -4,9 +4,13 @@ extends RefCounted
 ##  - the kit pieces to their "_lab" recolours (assets/kit/<key>_lab.glb, Models/2.0/look-lab/recolour_kit_lab.py;
 ##    geometry identical, colours from the 26S-structure-A zone sheets: ivory shell, mint glass, goo = AI tint,
 ##    neon = the thin player rim only), when the file is there (else the normal piece);
+##  - lab2 (default): the PRODUCTION LAB KIT first (assets/kit/labkit/<key>.glb, branch lab-kit 9d2f186: vats = the
+##    capneon set, Daniele's pick; structures, piers, conveyors, platforms; node base + pit as vertex-colour meshes for
+##    the world shaders), then the "_lab2" recolour, then the normal piece. Runtime tint slots kept (OS_Light / OS_Ooze_*).
 ##  - the floor to deliveries/26F-floors-B/TILE-LAB.png (2048 px = 16 m);
-##  - a screen-pinned surround (generated/look-test-2026-11-12/LAB-SURROUND-cutout.png) in front of the floor,
-##    behind the board and the HUD (lines up only at the default camera, ~2.15:1).
+##  - a screen-pinned surround in front of the floor, behind the board and the HUD: lab2 = the 26B2 surround
+##    (deliveries/26B2-lab-surround/SURROUND-*-WALLS.png, tools/lab_wire/make_surround.py): the PHONE plate on phone
+##    aspects, the WIDE plate on 16:9 and narrower; v1 = generated/look-test-2026-11-12/LAB-SURROUND-cutout.png.
 ## Pure view: no rule changes.
 
 static var lab := _arg() in ["lab", "lab2"]
@@ -21,7 +25,11 @@ static var _missing := {}
 const GLASS := Color("#AECAC7")    # 26S GLASS (neutral mint)
 const FLOOR := "res://assets/world/look_lab/tile_lab.png"
 const FLOOR_M := 16.0
-const SURROUND := "res://assets/world/look_lab/lab_surround_cutout.png"
+const SURROUND := "res://assets/world/look_lab/lab_surround_cutout.png"     # v1 only (out of the Web export)
+const SURROUND_PHONE := "res://assets/world/look_lab/lab_surround_phone.png"  # 26B2, 2436 x 1125 (3248 x 1500 source)
+const SURROUND_WIDE := "res://assets/world/look_lab/lab_surround_wide.png"    # 26B2, 2560 x 1440 (3840 x 2160 source)
+const LABKIT := "res://assets/kit/labkit/%s.glb"
+const LABKIT_SKIP := ["Relay_Mount"]   # fx / goo_territory match its path; the kit's reference pieces are not kit keys
 const SURROUND_SHADER := preload("res://shaders/look_surround.gdshader")
 const SURROUND_DROP := 3.0       # metres under the lowest deck: the surround plane (board above it, floor under it)
 
@@ -44,6 +52,10 @@ static func kit_key(key: String) -> String:
 	## The lab twin of a kit key when --look=lab and the file exists; logs each key without a twin once.
 	if not lab or key.begins_with("skins/") or key in ["Relay_Mount", "Relay_Retract"]:   # fx / goo_territory match those paths
 		return key
+	if v2:
+		var lk := ("labkit/%s_capneon" % key) if key.begins_with("Vat_T") else "labkit/" + key
+		if not key in LABKIT_SKIP and ResourceLoader.exists(LABKIT % lk.substr(7)):
+			return lk
 	var k := key + ("_lab2" if v2 else "_lab")
 	if ResourceLoader.exists("res://assets/kit/%s.glb" % k):
 		return k
@@ -65,8 +77,14 @@ static func add_surround(parent: Node3D, deck_low_y: float) -> MeshInstance3D:
 	mi.mesh = pm
 	var m := ShaderMaterial.new()
 	m.shader = SURROUND_SHADER
-	m.set_shader_parameter("tex", load(SURROUND))
-	m.set_shader_parameter("tex_aspect", 1840.0 / 854.0)
+	if v2:
+		var vs := parent.get_viewport().get_visible_rect().size if parent.is_inside_tree() else Vector2(812, 375)
+		var phone := vs.x / maxf(vs.y, 1.0) > 1.97      # between 16:9 (1.78) and the phone plate (2.165)
+		m.set_shader_parameter("tex", load(SURROUND_PHONE if phone else SURROUND_WIDE))
+		m.set_shader_parameter("tex_aspect", 3248.0 / 1500.0 if phone else 16.0 / 9.0)
+	else:
+		m.set_shader_parameter("tex", load(SURROUND))
+		m.set_shader_parameter("tex_aspect", 1840.0 / 854.0)
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.position = Vector3(0, deck_low_y - SURROUND_DROP, 0)
@@ -150,3 +168,51 @@ static func _rim_mat(c: Color) -> StandardMaterial3D:
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED      # a flat band seen from above whatever its winding
 		_rim_mats[k] = m
 	return _rim_mats[k]
+
+
+static func kit_vc_mesh(key: String, light_k := 0.6, goo := true) -> ArrayMesh:
+	## lab2: a production lab-kit piece (assets/kit/labkit/<key>.glb) merged into ONE vertex-colour surface for the world
+	## shaders (world_entrance / world_ring), so it drops into their MultiMesh as the procedural mesh did: OS_Light* = the
+	## magenta owner-light key (k, 0, k), OS_Ooze* = the green goo key (0, 0.6, 0) when goo, every other material its albedo
+	## (display value) - the shaders' kit branch shades it like the kit pieces. Null when not lab2 or the file is not there.
+	if not v2 or not ResourceLoader.exists(LABKIT % key):
+		return null
+	var root := (load(LABKIT % key) as PackedScene).instantiate()
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := 0
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		var m3 := mi as MeshInstance3D
+		var xf := m3.transform
+		var p := m3.get_parent()
+		while p != null and p != root and p is Node3D:
+			xf = (p as Node3D).transform * xf
+			p = p.get_parent()
+		for s in range(m3.mesh.get_surface_count()):
+			var mat := m3.mesh.surface_get_material(s)
+			var nm := mat.resource_name if mat != null else ""
+			var c := Color(0.5, 0.5, 0.5)
+			if nm.begins_with("OS_Light"):
+				c = Color(light_k, 0.0, light_k)
+			elif goo and nm.begins_with("OS_Ooze"):
+				c = Color(0.0, 0.6, 0.0)
+			elif mat is StandardMaterial3D:
+				c = (mat as StandardMaterial3D).albedo_color           # display values: the world shaders output COLOR as is
+				if c.g < 0.02 and c.r > 0.03 and absf(c.r - c.b) < 0.03:
+					c.g = 0.03                                  # never read as the owner key
+			var arr := m3.mesh.surface_get_arrays(s)
+			var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+			var ns: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+			var idx = arr[Mesh.ARRAY_INDEX]
+			var order: Array = range(vs.size()) if idx == null else Array(idx)
+			for i in order:
+				st.set_color(c)
+				st.set_normal((xf.basis * ns[i]).normalized() if ns.size() > i else Vector3.UP)
+				st.add_vertex(xf * vs[i])
+				n += 1
+	root.free()
+	if n == 0:
+		return null
+	var out := st.commit()
+	out.resource_name = "labkit"                         # world_layer: the entrance shader's kit branch
+	return out

@@ -435,6 +435,7 @@ func _build_pools() -> void:
 	_ent_mat = ShaderMaterial.new()
 	_ent_mat.shader = SHADER_ENTRANCE
 	_ent_mat.set_shader_parameter("abyss", haze_abyss())
+	_ent_mat.set_shader_parameter("kit", Look.v2 and ent_mesh != null and ent_mesh.resource_name == "labkit")
 	if floor_haze >= 0.0:
 		_ent_mat.set_shader_parameter("haze", floor_haze)
 	var emm := MultiMesh.new()                       # PITS / TUBES: one column base for every tier

@@ -1560,8 +1560,8 @@ func _build_connectors() -> void:
 		bx.size = Vector3(x1 - x0, CONN_H, z1 - z0)
 		mi.mesh = bx
 		var m := StandardMaterial3D.new()
-		m.albedo_color = STEEL_L
-		m.metallic = 0.5
+		m.albedo_color = Color("#E2CFAE") if Look.v2 else STEEL_L   # lab-wire: cream like labkit/Tube_Connector_*
+		m.metallic = 0.0 if Look.v2 else 0.5
 		m.roughness = 0.5
 		mi.material_override = m
 		mi.position = cen
@@ -2266,6 +2266,10 @@ func pit_strength(k: int) -> Dictionary:
 static func column_base_mesh() -> ArrayMesh:
 	if _base_mesh != null:
 		return _base_mesh
+	if Look.v2:                                       # lab-wire: the production lab kit's node base (labkit/Node_Base*, same
+		_base_mesh = Look.kit_vc_mesh("Node_Base" if base45() else "Node_Base_Tilted", 0.6, false)   # dims; owner light on the
+		if _base_mesh != null:                         # lift collar's thin top ring only)
+			return _base_mesh
 	var vs := PackedVector3Array()
 	var ns := PackedVector3Array()
 	var cs := PackedColorArray()

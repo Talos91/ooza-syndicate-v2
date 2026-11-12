@@ -143,11 +143,15 @@ func setup(w: WorldLayer) -> void:
 	wl = w
 	layout = layout_arg()
 	_load_plan()
-	var ring_mesh := _glb_mesh(RING_GLB)
+	var ring_mesh: Mesh = Look.kit_vc_mesh("Pit")       # lab-wire: the production lab kit's pit (ring v1 profile, goo = green key)
+	var kit_ring := ring_mesh != null
+	if not kit_ring:
+		ring_mesh = _glb_mesh(RING_GLB)
 	var rm := ShaderMaterial.new()
 	rm.shader = SHADER_RING
 	rm.set_shader_parameter("abyss", wl.haze_abyss())
-	rm.set_shader_parameter("lab", Look.lab)          # LAB LOOK TEST
+	rm.set_shader_parameter("lab", Look.lab and not kit_ring)          # LAB LOOK TEST (v1 remap of the old ring)
+	rm.set_shader_parameter("kit", kit_ring)
 	if wl.floor_haze >= 0.0:
 		rm.set_shader_parameter("haze", wl.floor_haze)
 	_ring_mm = MultiMesh.new()
@@ -1506,6 +1510,10 @@ func _build_walkways() -> void:
 	m3.albedo_color = Color(0.72, 0.76, 0.84)
 	m3.metallic = 0.6
 	m3.roughness = 0.35
+	if Look.v2:                                           # lab-wire: the lab kit's walkway (labkit/Walkway_*): detail rails
+		m3.albedo_color = Color("#718A83")
+		m3.metallic = 0.0
+		m3.roughness = 0.8
 	mesh.surface_set_material(mesh.get_surface_count() - 1, m3)
 	deck_tris = 0
 	for si in range(mesh.get_surface_count()):
@@ -1514,6 +1522,10 @@ func _build_walkways() -> void:
 	m1.albedo_color = Color(0.20, 0.22, 0.28)
 	m1.metallic = 0.45
 	m1.roughness = 0.6
+	if Look.v2:                                           # lab-wire: cream deck (labkit/Walkway_*, satin, no metal)
+		m1.albedo_color = Color("#EAD9BC")
+		m1.metallic = 0.0
+		m1.roughness = 0.8
 	m1.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var m2 := StandardMaterial3D.new()
 	m2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED

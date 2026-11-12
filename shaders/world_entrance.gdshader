@@ -8,7 +8,8 @@ render_mode fog_disabled, unshaded, cull_back;
 
 uniform vec3 abyss : source_color = vec3(0.02, 0.02, 0.03);
 uniform float haze = 0.12;       // the floor's haze (world_floor.gdshader), so the entrance sits in the same air
-uniform float lift = 1.9;        // steel brightness against the floor tiles
+uniform float lift = 1.9;
+uniform bool kit = false;        // lab-wire: the lab kit's Node_Base (Look.kit_vc_mesh): vertex colours = its linear albedo        // steel brightness against the floor tiles
 
 varying vec4 tint;
 varying vec3 wn;
@@ -21,7 +22,7 @@ void vertex() {
 void fragment() {
 	vec3 v = COLOR.rgb;
 	float sun = 0.5 + 0.5 * clamp(dot(normalize(wn), normalize(vec3(0.35, 1.0, 0.55))), 0.0, 1.0);
-	vec3 c = v * sun * lift;
+	vec3 c = kit ? v * (0.55 + 0.6 * sun) : v * sun * lift;
 	bool key = v.g < 0.02 && v.r > 0.03 && abs(v.r - v.b) < 0.03;
 	if (key) {
 		vec3 g = tint.a > 0.0 ? tint.rgb : vec3(0.36, 0.37, 0.41) * 0.5;
