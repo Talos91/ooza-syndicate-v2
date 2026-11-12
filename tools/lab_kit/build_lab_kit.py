@@ -252,55 +252,145 @@ def vat_caps(ob, piece):
 CAPNEON = "--capneon" in sys.argv
 
 
-def vat_capneon(ob, piece):
-    """VARIANT (Daniele's sketch via Designer 4, 2026-11-12): on each stepped cap the step between the outer cap and the raised
-    centre boss gets a THIN player-neon ring (OS_Light, the base ring's runtime slot); the rest stays solid cream.
-    The decimated kit mesh has no clean ring faces left, so the rings are new geometry: one child mesh "CapNeon" (flat annuli
-    0.012 m thick), each seated 4 mm over the highest cap point found by 48 downward rays under it.
-    Side tanks: r 0.62-0.78 of the tank glass radius round the cap boss. Main cap: r 0.29-0.41 m round the steel boss
-    (the spire cone's top step, tip top - 0.73 m)."""
-    from mathutils.bvhtree import BVHTree
-    me = ob.data
-    li = slot_index(ob, "OS_Light", piece)
-    bm = bmesh.new()
-    bm.from_mesh(me)
-    names = [base_name(m.name) if m else "" for m in me.materials]
-    tanks = [_tank(c) for c in _clusters(_islands(bm, [f for f in bm.faces if names[f.material_index].startswith("OS_Glass")]))]
-    tree = BVHTree.FromBMesh(bm)
-    ztop = max(v.co.z for v in bm.verts)
-    bm.free()
-    rings = []                                        # (cx, cy, r_in, r_out, z_from, z_to): ray band
-    for cx, cy, z0, z1, rmin, isl in tanks:
-        if z1 - z0 > 3.0:                              # T4's glass core: its cap is the spire's, handled below
-            continue
-        rings.append((cx, cy, 0.62 * rmin, 0.78 * rmin, z1 + 0.6, z1 - 0.05))
-    rings.append((0.0, 0.0, 0.29, 0.41, ztop - 0.5, ztop - 1.0))
-    out = bmesh.new()
-    segs = 48
-    log = []
-    for cx, cy, ri, ro, zs, zfloor in rings:
-        hz = -1e9
-        for k in range(segs):
-            a = 2 * math.pi * k / segs
-            for rr in (ri, (ri + ro) / 2, ro):
-                hit = tree.ray_cast(Vector((cx + rr * math.cos(a), cy + rr * math.sin(a), zs)), Vector((0, 0, -1)), zs - zfloor)
-                if hit[0] is not None:
-                    hz = max(hz, hit[0].z)
-        if hz < -1e8:
-            log.append("no cap at (%.2f, %.2f)" % (cx, cy))
-            continue
-        z0, z1 = hz + 0.004, hz + 0.016
+TANK_R = {"Vat_T1": 0.86, "Vat_T2": 0.92, "Vat_T3": 0.95, "Vat_T4": 1.0}       # build_kit_2_0.VAT_SIZES tank radius
+
+
+def _prim(bm, kind, c, r0, r1, h, mi, segs=64):
+    """Clean primitive into bm: 'cyl' (r0), 'cone' (r0 bottom, r1 top) or 'tube' (r0 inner, r1 outer), centred at c,
+    height h; flat caps, smooth sides."""
+    x, y, z = c
+    if kind == "tube":
         rows = []
-        for r, z in ((ro, z0), (ro, z1), (ri, z1), (ri, z0)):
-            rows.append([out.verts.new((cx + r * math.cos(2 * math.pi * i / segs), cy + r * math.sin(2 * math.pi * i / segs), z))
+        for r, zz in ((r1, z - h / 2), (r1, z + h / 2), (r0, z + h / 2), (r0, z - h / 2)):
+            rows.append([bm.verts.new((x + r * math.cos(2 * math.pi * i / segs), y + r * math.sin(2 * math.pi * i / segs), zz))
                          for i in range(segs)])
+        fs = []
         for k in range(4):
             A, B = rows[k], rows[(k + 1) % 4]
             for i in range(segs):
                 j = (i + 1) % segs
-                out.faces.new((A[i], A[j], B[j], B[i]))
-        log.append("r %.2f-%.2f at z %.2f" % (ri, ro, z0))
-    bmesh.ops.recalc_face_normals(out, faces=out.faces[:])
+                fs.append(bm.faces.new((A[i], A[j], B[j], B[i])))
+    else:
+        res = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=segs, radius1=r0,
+                                    radius2=r1 if kind == "cone" else r0, depth=h, matrix=Matrix.Translation((x, y, z)))
+        fs = list({f for v in res["verts"] for f in v.link_faces})
+    bmesh.ops.recalc_face_normals(bm, faces=fs)
+    for f in fs:
+        f.material_index = mi
+        f.smooth = abs(f.normal.z) < 0.5
+    return fs
+
+
+def vat_strip_goo(ob, piece):
+    """Daniele 2026-11-12 (on the spire's front strip): "add goo color to this strip it should fill as much as the vats". The
+    front strip (build_kit_2_0.vat_spire: 0.06 x 0.12 m bar at 0.86 m in front, base + 2.4 up to col_z1 - 0.4 / - 0.9 with
+    dots) moves from OS_Detail to OS_Ooze_Neutral: it takes the AI goo tint and, as its own goo island, the same runtime fill
+    cut as the tanks (scenery.gd). T4 has no strip (its glass core is the gauge)."""
+    if piece == "Vat_T4":
+        return "strip: none (T4)"
+    me = ob.data
+    names = [base_name(m.name) if m else "" for m in me.materials]
+    det = [i for i, n in enumerate(names) if n == "OS_Detail"]
+    goo = slot_index(ob, "OS_Ooze_Neutral", piece)
+    cz = max(v.co.z for v in me.vertices) - 1.83
+    z1 = cz - (0.9 if piece == "Vat_T3" else 0.4) + 0.05
+    n = 0
+    for p in me.polygons:
+        c = p.center
+        if p.material_index in det and abs(c.x) < 0.1 and -0.95 < c.y < -0.8 and 2.3 < c.z < z1:
+            p.material_index = goo
+            n += 1
+    return "strip goo %d faces" % n
+
+
+def vat_clean_caps(ob, piece):
+    """Daniele 2026-11-12 (in Blender, on the capneon variant): "the cream caps seem the top of them is made of too many
+    polygons and looks jagged fix the model of all of them". The deployed vats are decimated, so the cap faces are deleted
+    and the caps rebuilt clean (64 segments, flat tops, smooth sides) from build_kit_2_0's own dimensions, all solid OS_Shell
+    cream except the spire tip (OS_Light): tank cap = band r 1.08 x 0.26 + top plate r 1.0 x 0.06 + boss r 0.38 x 0.14;
+    spire = head r 0.95 x 0.5 + crown lip r 0.975 + cone r 0.9 -> 0.42 + steel boss r 0.26 + tip r 0.16 (T4: also its core
+    collar). A tank with another tank stacked on it keeps its hidden centre (under the upper bowl): only its outer band /
+    plate ring (>= 0.72 r) is rebuilt."""
+    me = ob.data
+    shell = slot_index(ob, "OS_Shell", piece)
+    light = slot_index(ob, "OS_Light", piece)
+    names = [base_name(m.name) if m else "" for m in me.materials]
+    keep = {i for i, n in enumerate(names) if n.startswith("OS_Glass") or n.startswith("OS_Ooze")}
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    tanks = [_tank(c) for c in _clusters(_islands(bm, [f for f in bm.faces if names[f.material_index].startswith("OS_Glass")]))]
+    ztop = max(v.co.z for v in bm.verts)
+    cz = ztop - 1.83                                             # build_kit_2_0.vat_spire col_z1
+    r = TANK_R[piece]
+    t4 = piece == "Vat_T4"
+    side = [t for t in tanks if t[3] - t[2] < 3.0]
+    caps = []                                                    # (cx, cy, zt, stacked)
+    for cx, cy, z0, z1, rmin, isl in side:
+        stacked = any(abs(o[0] - cx) < 0.3 and abs(o[1] - cy) < 0.3 and o[2] > z1 for o in side)
+        caps.append((cx, cy, z1, stacked))
+    dead = set()
+    for f in bm.faces:
+        if f.material_index in keep:
+            continue
+        c = f.calc_center_median()
+        for cx, cy, zt, stacked in caps:
+            d = math.hypot(c.x - cx, c.y - cy)
+            if stacked:
+                if 0.72 * r <= d <= 1.14 * r and zt - 0.005 <= c.z <= zt + 0.33:
+                    dead.add(f)
+            elif d <= 1.14 * r and zt - 0.005 <= c.z <= zt + 0.47:
+                dead.add(f)
+        rr = math.hypot(c.x, c.y)
+        if t4:
+            rail = abs(c.y) < 0.25 and abs(c.x) > 0.9 and c.z < cz + 0.12
+            if rr <= 1.21 and c.z >= cz - 0.26 and not rail:
+                dead.add(f)
+        elif rr <= 1.0 and c.z >= cz - 0.002:
+            dead.add(f)
+    bmesh.ops.delete(bm, geom=list(dead), context="FACES")
+    for cx, cy, zt, stacked in caps:
+        if stacked:
+            _prim(bm, "tube", (cx, cy, zt + 0.13), 0.72 * r, 1.08 * r, 0.26, shell)
+            _prim(bm, "tube", (cx, cy, zt + 0.28), 0.72 * r, 1.0 * r, 0.06, shell)
+        else:
+            _prim(bm, "cyl", (cx, cy, zt + 0.13), 1.08 * r, 0, 0.26, shell)
+            _prim(bm, "cyl", (cx, cy, zt + 0.28), 1.0 * r, 0, 0.06, shell)
+            _prim(bm, "cyl", (cx, cy, zt + 0.37), 0.38 * r, 0, 0.14, shell, segs=48)
+    if t4:
+        _prim(bm, "cyl", (0, 0, cz - 0.12), 1.16, 0, 0.26, shell)
+        _prim(bm, "cyl", (0, 0, cz + 0.04), 1.18, 0, 0.05, shell)
+        _prim(bm, "cone", (0, 0, cz + 0.2), 1.12, 0.95, 0.3, shell)
+    _prim(bm, "cyl", (0, 0, cz + 0.25), 0.95, 0, 0.5, shell)
+    _prim(bm, "cyl", (0, 0, cz + 0.22), 0.975, 0, 0.09, shell)
+    _prim(bm, "cone", (0, 0, cz + 0.8), 0.9, 0.42, 0.6, shell)
+    _prim(bm, "cyl", (0, 0, cz + 1.2), 0.26, 0, 0.3, shell, segs=32)
+    _prim(bm, "cyl", (0, 0, cz + 1.58), 0.16, 0, 0.5, light, segs=32)
+    bm.to_mesh(me)
+    bm.free()
+    return "clean caps: %d tank caps (%d stacked) + spire cap, %d faces replaced" % (len(caps), sum(c[3] for c in caps), len(dead))
+
+
+def vat_capneon(ob, piece):
+    """VARIANT (Daniele's sketch via Designer 4, 2026-11-12; "love it" 2026-11-12): a THIN player-neon ring (OS_Light, the base
+    ring's runtime slot) in the step between each exposed tank cap and its boss, and round the spire's steel boss. Child mesh
+    "CapNeon": flat annuli 0.012 m thick seated 2 mm over the clean cap plates (vat_clean_caps). Tanks with a tank stacked on
+    them get none (hidden under the upper bowl)."""
+    me = ob.data
+    li = slot_index(ob, "OS_Light", piece)
+    names = [base_name(m.name) if m else "" for m in me.materials]
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    side = [t for t in (_tank(c) for c in _clusters(_islands(bm, [f for f in bm.faces if names[f.material_index].startswith("OS_Glass")])))
+            if t[3] - t[2] < 3.0]
+    ztop = max(v.co.z for v in bm.verts)
+    bm.free()
+    r = TANK_R[piece]
+    rings = [(cx, cy, 0.6 * r, 0.8 * r, z1 + 0.312) for cx, cy, z0, z1, rm, isl in side
+             if not any(abs(o[0] - cx) < 0.3 and abs(o[1] - cy) < 0.3 and o[2] > z1 for o in side)]
+    rings.append((0.0, 0.0, 0.29, 0.41, ztop - 1.83 + 1.102))
+    out = bmesh.new()
+    for cx, cy, ri, ro, z in rings:
+        _prim(out, "tube", (cx, cy, z + 0.006), ri, ro, 0.012, 0)
     rm = bpy.data.meshes.new("CapNeon")
     out.to_mesh(rm)
     out.free()
@@ -309,7 +399,7 @@ def vat_capneon(ob, piece):
     for c in ob.users_collection:
         c.objects.link(ring_ob)
     ring_ob.parent = ob
-    return "capneon rings %d: %s" % (len(log), "; ".join(log))
+    return "capneon rings %d" % len(rings)
 
 
 def vat_goo(ob, piece):
@@ -496,7 +586,7 @@ def main():
             elif kind == "platform":
                 note = rim_band(root, name)
             elif kind == "vat":
-                note = vat_goo(root, name) + " | " + vat_neon(root, name) + " | " + vat_caps(root, name)
+                note = vat_goo(root, name) + " | " + vat_neon(root, name) + " | " + vat_caps(root, name) + " | " + vat_clean_caps(root, name) + " | " + vat_strip_goo(root, name)
                 if CAPNEON:
                     note += " | " + vat_capneon(root, name)
             else:
