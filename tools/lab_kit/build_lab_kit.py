@@ -187,6 +187,35 @@ def _tank(isl):
     return (cx, cy, z0, z1, rmin, isl)
 
 
+PLINTH_R = {"Vat_T1": 1.7, "Vat_T2": 1.8, "Vat_T3": 1.9, "Vat_T4": 2.05}   # build_kit_2_0.VAT_SIZES
+PLINTH_TOP = 0.40                                                          # SOCKET_Z + PLINTH_H
+
+
+def vat_neon(ob, piece):
+    """Designer 4 (2026-11-12, on a1c5075): neon is a thin rim only. On a vat the player neon stays on the base ring (the
+    plinth's lit halo ring) and the spire's glowing tip; cap rings, dashed bands, the vertical slot, fin strips, door
+    edges, nozzle mouths and clamp lights move to OS_Detail (#718A83)."""
+    me = ob.data
+    li = slot_index(ob, "OS_Light", piece)
+    di = slot_index(ob, "OS_Detail", piece)
+    pr = PLINTH_R[piece]
+    ztop = max(v.co.z for v in me.vertices)
+    kept_ring = kept_tip = moved = 0
+    for p in me.polygons:
+        if p.material_index != li:
+            continue
+        c = p.center
+        r = math.hypot(c.x, c.y)
+        if pr - 0.40 <= r <= pr - 0.21 and PLINTH_TOP - 0.03 <= c.z <= PLINTH_TOP + 0.07:
+            kept_ring += 1
+        elif r < 0.25 and c.z > ztop - 0.6:
+            kept_tip += 1
+        else:
+            p.material_index = di
+            moved += 1
+    return "neon kept: base ring %d faces, tip %d; moved to detail %d" % (kept_ring, kept_tip, moved)
+
+
 def vat_goo(ob, piece):
     me = ob.data
     gi = slot_index(ob, "OS_Glass", piece)
@@ -371,7 +400,7 @@ def main():
             elif kind == "platform":
                 note = rim_band(root, name)
             elif kind == "vat":
-                note = vat_goo(root, name)
+                note = vat_goo(root, name) + " | " + vat_neon(root, name)
             else:
                 note = "zones " + ",".join(mats)
         for m in list(bpy.data.materials):
