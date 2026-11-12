@@ -100,15 +100,19 @@ func _run() -> void:
 	check(await _play_round(a, b, 2), "round 2 ended")
 
 	var ffa := ""
-	for p in a.maps_for("FFA3"):
-		ffa = p
-		break
-	a.propose_rematch(ffa, "FFA3")                     # the owner's REMATCH ON A RANDOM MAP picked a 3-seat mode
+	var big := ""                                      # a mode with more seats than players that the pool still offers
+	for m in ["FFA3", "FFA4", "2v2"]:                  # (0.24.1's pool has no FFA3 map)
+		if not a.maps_for(m).is_empty():
+			big = m
+			ffa = a.maps_for(m)[0]
+			break
+	a.propose_rematch(ffa, big)                        # the owner's REMATCH ON A RANDOM MAP picked a bigger mode
 	b.request_rematch()
 	check(await _wait(func(): return int(a.match_round) == 3 and a.active, 15.0),
 			"a random map for more seats than players still starts (no fall back to the lobby)")
-	check(a.mode == "FFA3" and (a.match_info.get("ai", {}) as Dictionary).size() == 1 and a.match_info["ai"].values()[0] == "Standard",
-			"the extra seat is AI (%s, ai %s)" % [a.mode, str(a.match_info.get("ai", {}))])
+	var ai_seats: Dictionary = a.match_info.get("ai", {})
+	check(big != "" and a.mode == big and ai_seats.size() == int(a.SLOTS[big]) - 2 and ai_seats.values().all(func(v): return v == "Standard"),
+			"the extra seats are AI (%s, ai %s)" % [a.mode, str(a.match_info.get("ai", {}))])
 
 	a.leave()
 	b.leave()

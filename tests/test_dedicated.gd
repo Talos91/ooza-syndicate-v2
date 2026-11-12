@@ -80,12 +80,18 @@ func _run() -> void:
 	check(not b.can_control() and b.room_owner == a.assigned_id, "the second player sees the owner, and has no controls")
 	check(a.server_hosted() and b.server_hosted(), "both players know the room is server-hosted (ranked)")
 
-	b.set_mode("FFA3")
+	var big := ""                                      # a mode with more seats than players that the pool still offers
+	for m in ["FFA3", "FFA4", "2v2"]:                  # (0.24.1's pool has no FFA3 map: set_mode keeps 1v1 then)
+		if not a.maps_for(m).is_empty():
+			big = m
+			break
+	check(big != "", "the pool offers a mode with more than two seats")
+	b.set_mode(big)
 	await _wait(func(): return false, 1.0)
 	check(a.mode == "1v1" and b.mode == "1v1", "a non-owner's lobby change is ignored")
-	a.set_mode("FFA3")
-	check(await _wait(func(): return a.mode == "FFA3" and b.mode == "FFA3"), "the owner changes the mode for everyone")
-	check(not a.can_start(), "FFA 3 with two players cannot DEPLOY")
+	a.set_mode(big)
+	check(await _wait(func(): return a.mode == big and b.mode == big), "the owner changes the mode for everyone (%s)" % big)
+	check(not a.can_start(), "%s with two players cannot DEPLOY" % big)
 	a.set_mode("1v1")
 	var ls: bool = a.last_stand
 	a.toggle_last_stand()

@@ -32,11 +32,22 @@ func _run() -> void:
 	check(MatchReport.map_code("res://maps4/M-07-twin-docks.json") == "M-07" and MatchReport.map_code("res://maps4/A-01-orbital-nexus.json") == "A-01",
 			"map codes from map paths")
 
+	# any baked map with FFA3 seats: the report does not depend on the pool (0.24.1's pool has no FFA3 map, and the old
+	# pool-only search left path "" -> load_map("") -> a script error and a hang to the 900 s cap)
 	var path := ""
-	for p in MapPool.battlefield():
-		if MapBuilder.load_map(p).get("seats", {}).has("FFA3"):
+	var candidates: Array = MapPool.battlefield()
+	for f in DirAccess.get_files_at("res://maps4"):
+		if f.ends_with(".json"):
+			candidates.append("res://maps4/" + f)
+	for p in candidates:
+		var mp = MapBuilder.load_map(p)
+		if mp is Dictionary and (mp as Dictionary).get("seats", {}).has("FFA3"):
 			path = p
 			break
+	check(path != "", "a map with FFA3 seats to report on")
+	if path == "":
+		quit(1)
+		return
 	var sim := _sim(path, "FFA3", {"A": "vex", "B": "bloom", "C": "ember"})
 	for i in range(200):                               # a few seconds of play so the counters exist
 		sim.step(0.05)
