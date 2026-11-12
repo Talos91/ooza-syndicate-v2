@@ -34,6 +34,7 @@ const PITCH := {
 	"R-11": 58.0,                 # version B of R-05 (same footprint)
 	"R-15": 58.0,                 # R-05 shrunk to 66 m (2026-11-07): 50.3 pt, 2 badge overlaps, 4 badges over platforms
 	"R-16": 58.0,                 # R-11 shrunk to 66 m (same footprint as R-15)
+	"R-17": 54.0,                 # R-01 minus its middle crossing (Daniele 2026-11-12), 91 x 50 m: 65.6 pt at 54 (R-01's pitch; 49.7 pt at 41), 1266x585 emulation
 	# wave 2 (2026-11-05, maps-r-4; probe 1266x585, desktop emulation): R-06 48.6 pt, R-09 45.1, R-10 45.0, R-12 47.9, R-13 46.3 (6 badges over platforms)
 	"R-06": 50.0,
 	"R-09": 50.0,
