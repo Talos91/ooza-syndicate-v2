@@ -958,6 +958,66 @@ def doors(ob, piece, dist, base, angs, w=1.1, hgt=1.5):
 FRONT, BACK = -math.pi / 2, math.pi / 2
 
 
+FORGE_BLOCK = (-1.65, 1.65, -0.55, 1.65, 0.58, 4.74)       # the deployed Forge block: x0, x1, y0, y1, z0, z1
+FORGE_TANK_R, FORGE_TANK_Y = 0.55, 0.55                      # side tanks: glass r, centre y (block centre); half set into the block
+
+
+def forge_rework(ob, piece):
+    """FORGE 2 (Daniele, 2026-11-12: "modify the forge model put the goo vat on left and right side and keep door infront with
+    some decoation so it still look good"). Removes the front goo tube + lid, the front radiator fins and the two side add-ons
+    (islands centred in front of the block's front face or outside its sides, above the plinth), then adds: a goo tank on each
+    side (cream foot collar + cap, glass with two detail bands, goo at 85 %, a feed pipe into the block), a framed front door
+    (doors(), the same frame as the back) under a cream canopy on two detail posts, a radiator fin bank either side of the door,
+    a slate band and a round vent emblem above. No new neon (halo + chimney rings stay as before)."""
+    x0, x1, y0, y1, z0, z1 = FORGE_BLOCK
+    me = ob.data
+    sh, de, dk, gl, go = (slot_index(ob, n, piece) for n in ("OS_Shell", "OS_Detail", "OS_Dark", "OS_Glass", "OS_Ooze_Neutral"))
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    gone = []
+    for isl in _islands(bm, bm.faces[:]):
+        bx0, by0, bz0, bx1, by1, bz1 = _bbox(isl)
+        cx, cy, cz = (bx0 + bx1) / 2, (by0 + by1) / 2, (bz0 + bz1) / 2
+        if bz0 < 0.635 or bz1 > z1 - 0.02 or bx1 - bx0 > 3.5:      # plinth rings, the block itself, the top block / chimneys
+            continue
+        if cy < y0 - 0.05 or abs(cx) > x1 + 0.02:
+            gone.extend(isl)
+    n_gone = len(gone)
+    bmesh.ops.delete(bm, geom=list(set(gone)), context="FACES")
+    # side tanks
+    for sx in (-1, 1):
+        cx = sx * x1
+        _pr(bm, "tube", FORGE_TANK_R - 0.03, FORGE_TANK_R + 0.08, 0.30, sh, (cx, FORGE_TANK_Y, 0.62 + 0.15))      # foot collar
+        _pr(bm, "tube", FORGE_TANK_R + 0.08, FORGE_TANK_R + 0.11, 0.06, de, (cx, FORGE_TANK_Y, 0.62 + 0.24))      # its slate band
+        _pr(bm, "tube", FORGE_TANK_R - 0.03, FORGE_TANK_R, 3.0, gl, (cx, FORGE_TANK_Y, 0.92 + 1.5))               # glass 0.92..3.92
+        _pr(bm, "cyl", FORGE_TANK_R - 0.08, 0, 2.55, go, (cx, FORGE_TANK_Y, 0.94 + 1.275))                         # goo 0.94..3.49
+        for zb in (1.9, 2.9):
+            _pr(bm, "tube", FORGE_TANK_R + 0.002, FORGE_TANK_R + 0.05, 0.07, de, (cx, FORGE_TANK_Y, zb))          # detail bands
+        _pr(bm, "cyl", FORGE_TANK_R + 0.08, 0, 0.26, sh, (cx, FORGE_TANK_Y, 3.92 + 0.13))                          # cap
+        _pr(bm, "cyl", FORGE_TANK_R - 0.12, 0, 0.08, de, (cx, FORGE_TANK_Y, 4.18 + 0.04))                          # cap boss
+        _pr(bm, "cyl", 0.18, 0, 0.06, dk, (cx, FORGE_TANK_Y, 4.26 + 0.03))                                         # filler port
+    # front: canopy on two posts, fin banks, slate band, vent emblem
+    yf = y0
+    _rbox(bm, (0, yf - 0.32, 2.52), (2.1, 0.66, 0.12), sh, 0)                     # canopy
+    _rbox(bm, (0, yf - 0.64, 2.52), (2.12, 0.04, 0.14), de, 0)                    # its detail edge
+    for sx in (-1, 1):
+        _rbox(bm, (sx * 0.92, yf - 0.52, 0.62 + 0.92), (0.14, 0.14, 1.84), de, 0)   # posts 0.62..2.46
+        _rbox(bm, (sx * 0.92, yf - 0.52, 0.66), (0.26, 0.26, 0.08), sh, 0)          # post feet
+        for k in range(5):                                                         # radiator fins either side of the door
+            _rbox(bm, (sx * (1.08 + 0.11 * k), yf - 0.16, 1.45), (0.04, 0.32, 1.3), de, 0)
+        _rbox(bm, (sx * 1.30, yf - 0.06, 0.78), (0.56, 0.12, 0.06), sh, 0)          # fin base rail
+        _rbox(bm, (sx * 1.30, yf - 0.06, 2.12), (0.56, 0.12, 0.06), sh, 0)          # fin top rail
+    _rbox(bm, (0, yf - 0.02, 3.05), (3.3, 0.04, 0.10), dk, 0)                      # slate band across the front
+    M = Matrix.Translation((0, yf, 3.75)) @ Matrix.Rotation(math.pi / 2, 4, "X")   # round vent emblem (axis -> -Y)
+    prim_at(bm, "tube", 0.34, 0.46, 0.08, sh, M, zc=0.04)
+    prim_at(bm, "cyl", 0.34, 0, 0.03, dk, M, zc=0.015)
+    for k in range(3):
+        _rbox(bm, (0, yf - 0.035, 3.75 - 0.18 + 0.18 * k), (0.56, 0.03, 0.05), de, 0)
+    bm.to_mesh(me)
+    bm.free()
+    return "forge 2: removed %d faces (front tube, fins, side bits); 2 side tanks, canopy, fins, emblem" % n_gone
+
+
 def cream(ob, piece, test):
     """OS_Dark primitives that read as caps / collars -> OS_Shell cream (whole primitives, so no ragged edges)."""
     me = ob.data
@@ -988,7 +1048,9 @@ def structure(piece):
                 + struct_neon(collar, piece, keep=lambda c: c.z > 7.2))       # the top hoop stays neon
     if fam == "Forge":                     # top block + chimneys (z > 4.72) and the ooze tube's lid -> cream
         col = cream(root, piece, lambda c: c.z > 4.72 or (math.hypot(c.x, c.y + 0.95) <= 1.01 and 4.2 <= c.z <= 4.55))
-        col += " | back " + doors(root, piece, 1.65, 0.06 + 0.56, [BACK])           # on the plinth top, block back face
+        col += " | " + forge_rework(root, piece)                                     # Forge 2: tanks to the sides, door in front
+        col += " | front + back " + doors(root, piece, 0.55, 0.06 + 0.56, [FRONT])        # block front face (was behind the goo tube)
+        col += " / " + doors(root, piece, 1.65, 0.06 + 0.56, [BACK])               # on the plinth top, block back face
         return struct_neon(root, piece, keep=lambda c: c.z > 5.9 and abs(c.y - 0.5) < 0.5) + " | " + col   # 3 chimney rings
     if fam == "Machinegoon":
         return gatling(piece)
