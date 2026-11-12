@@ -6,7 +6,12 @@ only the glTF JSON material block changes; the binary buffer (vertices, indices,
 checked. Runtime slots stay runtime: OS_Light* = player neon rim, OS_Ooze* = goo (AI tint via GooTone), OS_State* =
 relay state, OS_Glass = Mats.glass (the game tints it #AECAC7 under --look=lab), OS_Hazard / OS_Conveyor = function cues.
 
-usage: python recolour_kit_lab.py <game>/assets/kit
+usage: python recolour_kit_lab.py <game>/assets/kit [--v2]
+
+--v2 (designer's changes 2026-11-12) writes <key>_lab2.glb: warm cream instead of ivory (decks #E2CFAE, walkways a touch
+lighter #EAD9BC), satin roughness 0.8, no metal anywhere (the metallic DETAIL reflected the sky to white); the old kit's
+platform / vat tops are OS_Steel, so on platforms, vats and relay buttons OS_Steel is the deck cream; neutral OS_Light
+(the rim strip when nobody owns the node) takes the deck cream with no emission = rimless; owners override it at runtime.
 """
 import json, struct, sys, os, glob, hashlib
 
@@ -44,26 +49,44 @@ def write(p, j, rest):
     total = 12 + 8 + len(js) + len(rest)
     open(p, 'wb').write(b'glTF' + struct.pack('<II', 2, total) + struct.pack('<I', len(js)) + b'JSON' + js + rest)
 
-def main(kit):
+ZONES_V2 = {
+    'DECK': ('#E2CFAE', 0.0, 0.80), 'WALK': ('#EAD9BC', 0.0, 0.80), 'GLASS': ('#AECAC7', 0.0, 0.12),
+    'DETAIL': ('#718A83', 0.0, 0.62), 'RECESS': ('#3D5758', 0.0, 0.80),
+}
+WALKWAYS = ('Deck_', 'Pier_', 'junctions/', 'Relay_Ferry_Rail')
+
+def zone_v2(piece, mat):
+    walk = piece.startswith(WALKWAYS)
+    top = 'WALK' if walk else 'DECK'
+    return {'OS_Plate': top, 'OS_Shell': 'DECK', 'OS_Steel': 'DETAIL' if walk else 'DECK',
+            'OS_Dark': 'RECESS', 'OS_Recess': 'RECESS', 'OS_Glass': 'GLASS', 'OS_Light': top}.get(mat)
+
+
+def main(kit, v2=False):
     out = []
     for pat in PIECES:
         for p in sorted(glob.glob(os.path.join(kit, pat + '.glb'))):
-            if p.endswith('_lab.glb'):
+            if p.endswith('_lab.glb') or p.endswith('_lab2.glb'):
                 continue
+            piece = os.path.relpath(p, kit).replace(os.sep, '/')
             j, rest = read(p)
             changed = []
             for m in j.get('materials', []):
-                z = MAT_ZONE.get(m.get('name', '').split('.')[0])
+                base = m.get('name', '').split('.')[0]
+                z = zone_v2(piece, base) if v2 else MAT_ZONE.get(base)
                 if not z:
                     continue
-                hx, met, rough = ZONES[z]
+                hx, met, rough = (ZONES_V2 if v2 else ZONES)[z]
+                if base == 'OS_Light':                    # v2 neutral rim: blends into the shell, no glow
+                    m.pop('emissiveFactor', None)
+                    m.get('extensions', {}).pop('KHR_materials_emissive_strength', None)
                 pb = m.setdefault('pbrMetallicRoughness', {})
                 a = pb.get('baseColorFactor', [1, 1, 1, 1])[3]
                 pb['baseColorFactor'] = lin(hx) + [a]
                 pb['metallicFactor'] = met
                 pb['roughnessFactor'] = rough
                 changed.append(m['name'] + '>' + z)
-            q = p[:-4] + '_lab.glb'
+            q = p[:-4] + ('_lab2.glb' if v2 else '_lab.glb')
             write(q, j, rest)
             j2, rest2 = read(q)
             geo_same = rest2 == rest and j2.get('meshes') == j.get('meshes') and j2.get('nodes') == j.get('nodes') \
@@ -75,4 +98,4 @@ def main(kit):
     print(len(out), 'files written (originals untouched)')
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    main(sys.argv[1], '--v2' in sys.argv)

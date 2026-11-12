@@ -22,7 +22,7 @@ static func light_color(c: Color, key := "") -> StandardMaterial3D:
 		m.albedo_color = c
 		m.emission_enabled = true
 		m.emission = c
-		m.emission_energy_multiplier = 3.0
+		m.emission_energy_multiplier = Look.light_energy()   # 3.0 (LAB LOOK TEST v2: brighter owner neon)
 		_cache[key] = m
 	return _cache[key]
 
@@ -152,6 +152,9 @@ static func glass(c: Color) -> ShaderMaterial:
 		var m := ShaderMaterial.new()
 		m.shader = GLASS_SHADER
 		m.set_shader_parameter("tint", c)
+		if Look.v2:                                 # LAB LOOK TEST v2: clearer glass, softer white rim
+			m.set_shader_parameter("body_alpha", 0.03)
+			m.set_shader_parameter("rim_glow", 0.45)
 		_cache[key] = m
 	return _cache[key]
 

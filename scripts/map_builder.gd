@@ -494,6 +494,7 @@ static func apply_owner(parts: Array, seat: String) -> void:
 					if mi.has_meta("vat_liquid"):             # a living liquid (Scenery) colours itself
 						continue
 					mi.set_surface_override_material(s, Mats.ooze(seat) if seat != "" else (Mats.ooze_neutral() if seat_a else null))
+		Look.rim(p, seat)                               # LAB LOOK TEST v2: the owner rim band (no-op otherwise)
 		MapBatch.refresh(p)                             # Alpha 21: a batched piece's light / ooze slots follow
 
 
