@@ -249,6 +249,69 @@ def vat_caps(ob, piece):
     return "caps to shell: tank caps %d faces, spire cap %d" % (caps, head)
 
 
+CAPNEON = "--capneon" in sys.argv
+
+
+def vat_capneon(ob, piece):
+    """VARIANT (Daniele's sketch via Designer 4, 2026-11-12): on each stepped cap the step between the outer cap and the raised
+    centre boss gets a THIN player-neon ring (OS_Light, the base ring's runtime slot); the rest stays solid cream.
+    The decimated kit mesh has no clean ring faces left, so the rings are new geometry: one child mesh "CapNeon" (flat annuli
+    0.012 m thick), each seated 4 mm over the highest cap point found by 48 downward rays under it.
+    Side tanks: r 0.62-0.78 of the tank glass radius round the cap boss. Main cap: r 0.29-0.41 m round the steel boss
+    (the spire cone's top step, tip top - 0.73 m)."""
+    from mathutils.bvhtree import BVHTree
+    me = ob.data
+    li = slot_index(ob, "OS_Light", piece)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    names = [base_name(m.name) if m else "" for m in me.materials]
+    tanks = [_tank(c) for c in _clusters(_islands(bm, [f for f in bm.faces if names[f.material_index].startswith("OS_Glass")]))]
+    tree = BVHTree.FromBMesh(bm)
+    ztop = max(v.co.z for v in bm.verts)
+    bm.free()
+    rings = []                                        # (cx, cy, r_in, r_out, z_from, z_to): ray band
+    for cx, cy, z0, z1, rmin, isl in tanks:
+        if z1 - z0 > 3.0:                              # T4's glass core: its cap is the spire's, handled below
+            continue
+        rings.append((cx, cy, 0.62 * rmin, 0.78 * rmin, z1 + 0.6, z1 - 0.05))
+    rings.append((0.0, 0.0, 0.29, 0.41, ztop - 0.5, ztop - 1.0))
+    out = bmesh.new()
+    segs = 48
+    log = []
+    for cx, cy, ri, ro, zs, zfloor in rings:
+        hz = -1e9
+        for k in range(segs):
+            a = 2 * math.pi * k / segs
+            for rr in (ri, (ri + ro) / 2, ro):
+                hit = tree.ray_cast(Vector((cx + rr * math.cos(a), cy + rr * math.sin(a), zs)), Vector((0, 0, -1)), zs - zfloor)
+                if hit[0] is not None:
+                    hz = max(hz, hit[0].z)
+        if hz < -1e8:
+            log.append("no cap at (%.2f, %.2f)" % (cx, cy))
+            continue
+        z0, z1 = hz + 0.004, hz + 0.016
+        rows = []
+        for r, z in ((ro, z0), (ro, z1), (ri, z1), (ri, z0)):
+            rows.append([out.verts.new((cx + r * math.cos(2 * math.pi * i / segs), cy + r * math.sin(2 * math.pi * i / segs), z))
+                         for i in range(segs)])
+        for k in range(4):
+            A, B = rows[k], rows[(k + 1) % 4]
+            for i in range(segs):
+                j = (i + 1) % segs
+                out.faces.new((A[i], A[j], B[j], B[i]))
+        log.append("r %.2f-%.2f at z %.2f" % (ri, ro, z0))
+    bmesh.ops.recalc_face_normals(out, faces=out.faces[:])
+    rm = bpy.data.meshes.new("CapNeon")
+    out.to_mesh(rm)
+    out.free()
+    rm.materials.append(me.materials[li])
+    ring_ob = bpy.data.objects.new("CapNeon", rm)
+    for c in ob.users_collection:
+        c.objects.link(ring_ob)
+    ring_ob.parent = ob
+    return "capneon rings %d: %s" % (len(log), "; ".join(log))
+
+
 def vat_goo(ob, piece):
     me = ob.data
     gi = slot_index(ob, "OS_Glass", piece)
@@ -434,12 +497,16 @@ def main():
                 note = rim_band(root, name)
             elif kind == "vat":
                 note = vat_goo(root, name) + " | " + vat_neon(root, name) + " | " + vat_caps(root, name)
+                if CAPNEON:
+                    note += " | " + vat_capneon(root, name)
             else:
                 note = "zones " + ",".join(mats)
         for m in list(bpy.data.materials):
             if m.users == 0:
                 bpy.data.materials.remove(m)
-        path = os.path.join(OUT, name + ".glb")
+        path = os.path.join(OUT, name + ("_capneon" if CAPNEON and kind == "vat" else "") + ".glb")
+        if CAPNEON and kind != "vat":
+            continue
         export(path)
         print("LABKIT %-28s %8d  %s" % (name, os.path.getsize(path), note))
 

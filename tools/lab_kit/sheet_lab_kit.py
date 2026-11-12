@@ -43,6 +43,11 @@ TILES = [  # piece, label, neon, goo, low fill
 ]
 
 
+if "--vats" in sys.argv:          # compare run: only the 8 vat tiles, of the files <Vat_Tn><suffix>.glb
+    SUF = sys.argv[sys.argv.index("--vats") + 1]
+    TILES = [(p + SUF, l, n, g, lo) for p, l, n, g, lo in TILES if p.startswith("Vat_")]
+
+
 def setup():
     sc = bpy.context.scene
     for eng in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
