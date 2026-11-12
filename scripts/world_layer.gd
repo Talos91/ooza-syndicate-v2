@@ -182,20 +182,26 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	var args := OS.get_cmdline_user_args()
 	floor_pic = "--floor=labpic" in args
 	var demo_default: bool = (Rules.demo or Rules.WORLD_LAB_FLOOR) and not Array(args).any(func(a): return str(a).begins_with("--floor"))   # DEMO BUILD: lab5 floor by default (Daniele, world pass 2)
-	if floor_pic or "--floor=lab5" in args or demo_default:
+	if floor_pic or "--floor=lab5" in args or demo_default or Look.lab:   # LAB LOOK TEST: the lab floor path, TILE-LAB below
 		floor_kind = "lab"
 	floor_lab5 = floor_kind == "lab" and not floor_pic and not "--floor-v1" in args
+	if Look.lab:
+		floor_pic = false
+		floor_lab5 = true
 	if "--floor-clear" in args:
 		floor_haze = 0.0
 	elif floor_pic:
 		floor_haze = LAB_PIC_HAZE
 	elif floor_lab5:
 		floor_haze = LAB5_HAZE
+	if Look.lab:
+		floor_haze = 0.0                              # LAB LOOK TEST: the tile at its own value
 	active = self
 	_build_floor(centre, radius)
+	Look.add_surround(self, minf(lo.y, 0.0))         # LAB LOOK TEST: the screen-pinned surround (null without --look=lab)
 	if floor_lab5:
 		_lab_backdrop(_main)
-	if not "--floor-clear" in OS.get_cmdline_user_args():   # dev: --floor-clear = no floor fog sheet, no floor haze
+	if not "--floor-clear" in OS.get_cmdline_user_args() and not Look.lab:   # dev: --floor-clear = no floor fog sheet, no floor haze
 		_build_mist(centre, radius)
 	for n in sim.nodes:
 		_build_tube(n)
@@ -212,7 +218,8 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	column = VatColumn.new()
 	add_child(column)
 	column.setup(self)
-	if floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args(): add_child(WorldDressing.new())   # WORLD COMPLETE LAB
+	if floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args() and not Look.lab: add_child(WorldDressing.new())   # WORLD COMPLETE LAB (LAB LOOK TEST: the surround replaces it)
+	Look.lab_world(_main)                            # LAB LOOK TEST (no-op without --look=lab)
 
 
 func _lab_backdrop(main: Node) -> void:
@@ -312,8 +319,8 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 	m.set_shader_parameter("tiles", not v1 and not floor_pic and not floor_lab5)
 	if floor_lab5:
 		m.set_shader_parameter("lab5", true)
-		m.set_shader_parameter("t_lab5", load(PerfProfile.hi_path(LAB5_FLOOR_GROUT if "--floor-grout" in OS.get_cmdline_user_args() else LAB5_FLOOR)))
-		m.set_shader_parameter("lab5_m", LAB5_TILE_M)
+		m.set_shader_parameter("t_lab5", load(Look.FLOOR) if Look.lab else load(PerfProfile.hi_path(LAB5_FLOOR_GROUT if "--floor-grout" in OS.get_cmdline_user_args() else LAB5_FLOOR)))
+		m.set_shader_parameter("lab5_m", Look.FLOOR_M if Look.lab else LAB5_TILE_M)
 		m.set_shader_parameter("lab5_gain", LAB5_GAIN)
 		m.set_shader_parameter("haze", LAB5_HAZE)
 		m.set_shader_parameter("abyss", LAB_FAR / 0.6)   # its far haze (abyss x 0.6) is the backdrop's middle

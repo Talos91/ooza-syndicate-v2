@@ -8,7 +8,8 @@ uniform vec4 liquid_color : source_color = vec4(0.2, 0.9, 1.0, 1.0);
 uniform float level = 2.0;
 uniform float y_min = 0.9;
 uniform float y_max = 4.0;
-uniform float agitation = 0.0;       // 0 calm .. 1 (construction / fighting)
+uniform float agitation = 0.0;
+uniform float lab_boost = 0.0;      // LAB LOOK TEST v2: denser, brighter goo so the AI colour reads through the glass       // 0 calm .. 1 (construction / fighting)
 varying vec3 lpos;
 void vertex() {
 	lpos = VERTEX;
@@ -30,7 +31,8 @@ void fragment() {
 	vec2 cell = floor(g);
 	float rnd = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
 	float bubbles = rnd > 0.8 - 0.15 * agitation ? smoothstep(0.24, 0.0, length(fract(g) - 0.5)) : 0.0;
-	float e = mix(0.55, 1.05, h) + surface * 1.4 + bubbles * 1.6;
+	float e = (mix(0.55, 1.05, h) + surface * 1.4 + bubbles * 1.6) * (1.0 + 0.5 * lab_boost);
+	ALBEDO *= 1.0 + 0.6 * lab_boost;
 	EMISSION = c * e * (FRONT_FACING ? 1.0 : 0.65);
-	ALPHA = clamp((FRONT_FACING ? 0.5 : 0.32) + surface * 0.35, 0.0, 0.92);   // see the residents inside (Alpha 11)
+	ALPHA = clamp((FRONT_FACING ? 0.5 : 0.32) + surface * 0.35 + 0.35 * lab_boost, 0.0, 0.92);   // see the residents inside (Alpha 11)
 }

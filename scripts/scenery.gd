@@ -225,7 +225,8 @@ func setup_steps(m: Node3D, s: Sim, v: Dictionary) -> Array[Callable]:
 		for n in s.nodes:
 			lo = lo.min(n["pos"])
 			hi = hi.max(n["pos"])
-		make_void(self, (lo + hi) / 2.0, Vector2(hi.x - lo.x, hi.z - lo.z), not (Rules.low_detail or main.mobile)))
+		if not Look.v2:                               # LAB LOOK TEST v2: no void mist (the surround is the air; the mist washed the 1920 frame)
+			make_void(self, (lo + hi) / 2.0, Vector2(hi.x - lo.x, hi.z - lo.z), not (Rules.low_detail or main.mobile)))
 	for f in Rules.FACTIONS.keys():
 		steps.append(func(): _load_resident(str(f)))
 	return steps
@@ -312,6 +313,7 @@ func _bind(id: int, entry: Dictionary) -> Dictionary:
 		mat.shader = LIQUID_SHADER
 		mat.set_shader_parameter("y_min", info["y0"])
 		mat.set_shader_parameter("y_max", info["y1"])
+		mat.set_shader_parameter("lab_boost", 1.0 if Look.v2 else 0.0)   # LAB LOOK TEST v2
 		(mi as MeshInstance3D).set_surface_override_material(info["surface"], mat)
 		mi.set_meta("vat_liquid", mat)                 # MapBuilder.apply_owner leaves it alone
 		rec["mi"] = mi
