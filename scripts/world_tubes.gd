@@ -2109,6 +2109,7 @@ func _build_mesh(runs: Array, craters: Array) -> void:
 	_mat = ShaderMaterial.new()
 	_mat.shader = SHADER_PIPE
 	_mat.set_shader_parameter("abyss", wl.haze_abyss())
+	_mat.set_shader_parameter("lab", Look.lab)        # LAB LOOK TEST
 	if wl.floor_haze >= 0.0:
 		_mat.set_shader_parameter("haze", wl.floor_haze)
 	_mat.set_shader_parameter("slots", float(maxi(runs.size(), 1)))

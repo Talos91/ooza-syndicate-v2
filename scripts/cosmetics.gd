@@ -252,6 +252,8 @@ static func kit_path(key: String) -> String:
 	## profile wants it and it is there to give, else the light one everybody already ships. Kicks off
 	## the HD pack fetch on first ask (web only; a no-op elsewhere) so it is ready for next time - never
 	## blocks, the light model shows meanwhile, exactly like an unloaded skin.
+	if Look.lab:                                    # LAB LOOK TEST (--look=lab, test branch): the "_lab" recolour, light kit only
+		return KIT % Look.kit_key(key)
 	if not PerfProfile.hd() or not _has_hd(key):
 		return KIT % key
 	var is_skin := key.begins_with("skins/")

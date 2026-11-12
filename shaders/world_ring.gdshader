@@ -10,6 +10,7 @@ uniform vec3 abyss : source_color = vec3(0.02, 0.02, 0.03);
 uniform float haze = 0.12;       // the floor's haze, so the ring sits in the same air
 uniform float lift = 1.9;        // steel brightness against the floor (as the tube entrance)
 uniform float swirl_speed = 0.12;
+uniform bool lab = false;        // LAB LOOK TEST (--look=lab): steel -> ivory shell, dark -> detail recess (26S Pit sheet)
 
 varying vec3 lp;
 varying vec3 wn;
@@ -28,6 +29,10 @@ void fragment() {
 	vec3 n = normalize(wn) * (FRONT_FACING ? 1.0 : -1.0);
 	float sun = 0.5 + 0.5 * clamp(dot(n, normalize(vec3(0.35, 1.0, 0.55))), 0.0, 1.0);
 	vec3 c = v * sun * lift;
+	if (lab) {
+		float l = dot(v, vec3(0.333));
+		c = mix(vec3(0.239, 0.341, 0.345), vec3(0.918, 0.886, 0.82), smoothstep(0.05, 0.3, l)) * sun * 1.1;
+	}
 	if (v.g > 0.5 && v.r < 0.05 && v.b < 0.05) {                       // GOO POOL
 		vec2 p = lp.xz;
 		float r = length(p);

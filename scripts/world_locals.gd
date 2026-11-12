@@ -147,6 +147,7 @@ func setup(w: WorldLayer) -> void:
 	var rm := ShaderMaterial.new()
 	rm.shader = SHADER_RING
 	rm.set_shader_parameter("abyss", wl.haze_abyss())
+	rm.set_shader_parameter("lab", Look.lab)          # LAB LOOK TEST
 	if wl.floor_haze >= 0.0:
 		rm.set_shader_parameter("haze", wl.floor_haze)
 	_ring_mm = MultiMesh.new()
