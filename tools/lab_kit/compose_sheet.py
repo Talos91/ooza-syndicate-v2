@@ -14,8 +14,9 @@ def font(sz):
     for f in ("C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/arialbd.ttf"):
         if os.path.exists(f): return ImageFont.truetype(f, sz)
     return ImageFont.load_default()
-d.text((PAD, 14), "Ooze Syndicate 2.0 - production LAB KIT (branch lab-kit, assets/kit/labkit/)", fill="#1E3A3C", font=font(34))
-d.text((PAD, 56), "26S zones + lab2 values (decks #E2CFAE, walkways #EAD9BC, satin 0.8, no metal). Fixes: owner rim 0.5 m band; vat goo dense + clear lower glass. Silhouettes = today's kit. Eevee render, 54 deg pitch, 25 deg turn; floor cue #2F4D4E.", fill="#3D5758", font=font(17))
+TITLE = sys.argv[3] if len(sys.argv) > 3 else "Ooze Syndicate 2.0 - production LAB KIT (branch lab-kit, assets/kit/labkit/)"
+d.text((PAD, 14), TITLE, fill="#1E3A3C", font=font(34))
+d.text((PAD, 56), sys.argv[4] if len(sys.argv) > 4 else "26S zones + lab2 values (decks #E2CFAE, walkways #EAD9BC, satin 0.8, no metal). Fixes: owner rim 0.5 m band; vat goo dense + clear lower glass. Silhouettes = today's kit. Eevee render, 54 deg pitch, 25 deg turn; floor cue #2F4D4E.", fill="#3D5758", font=font(17))
 for i, (fn, label) in enumerate(rows):
     r, c = divmod(i, COLS)
     x, y = PAD + c * (TW + PAD), HEAD + r * (TH + LH + PAD)

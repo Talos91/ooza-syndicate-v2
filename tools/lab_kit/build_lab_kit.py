@@ -57,7 +57,8 @@ def zone_of(piece, mat):
     top = "WALK" if walk else "DECK"
     return {"OS_Plate": top, "OS_Shell": "DECK", "OS_Steel": "DETAIL" if walk else "DECK",
             "OS_Dark": "RECESS", "OS_Recess": "RECESS", "OS_Glass": "GLASS", "OS_Glass_Low": "GLASS_LOW",
-            "OS_Light": top, "OS_Ooze_Neutral": "GOO", "OS_Detail": "DETAIL"}.get(mat)
+            "OS_Light": top, "OS_Ooze_Neutral": "GOO", "OS_Detail": "DETAIL",
+            "OS_Gunmetal": "DETAIL", "OS_Light_A": top, "OS_Ooze_A": "GOO"}.get(mat)   # Googatling (Machinegoon v2) slots
 
 
 def make_mat(name, zone):
@@ -544,6 +545,270 @@ def floor_tubes(kind):
     return "built"
 
 
+# ------------------------------------------------------------------ lab-kit 2: structures (Daniele 2026-11-12: "make all the
+# other structure in the new style (laser/forge/googatling/goocannon)"). Same language as the final (capneon) vats: cream shell,
+# slate recess bands, detail #718A83, glass, goo where liquid shows; player neon only as thin rings: the plinth's halo ring (kept
+# in place, as on the vats) and one clean ring per cap. Silhouettes unchanged; runtime slot names kept.
+PLINTH = {"Cannon": (1.75, 0.40), "Laser": (1.75, 0.40), "Forge": (2.3, 0.62)}   # build_kit_2_0.structure_plinth r, top
+
+
+def _family(piece):
+    return piece.split("_")[0]
+
+
+def struct_neon(ob, piece, keep=None):
+    """Every OS_Light* face -> OS_Detail except the plinth's halo ring (r - 0.36 .. r - 0.25 on the plinth top) and the
+    faces `keep(centre)` accepts. Returns kept / moved counts."""
+    me = ob.data
+    names = [base_name(m.name) if m else "" for m in me.materials]
+    lights = {i for i, n in enumerate(names) if n.startswith("OS_Light")}
+    if not lights:
+        return "neon: none"
+    di = slot_index(ob, "OS_Detail", piece)
+    pr, top = PLINTH.get(_family(piece), (None, None))
+    mw = ob.matrix_world
+    ring = kept = moved = 0
+    for p in me.polygons:
+        if p.material_index not in lights:
+            continue
+        c = mw @ p.center
+        r = math.hypot(c.x, c.y)
+        if pr and pr - 0.38 <= r <= pr - 0.23 and top - 0.01 <= c.z <= top + 0.05 and p.normal.z > 0.5:
+            ring += 1
+        elif keep and keep(c):
+            kept += 1
+        else:
+            p.material_index = di
+            moved += 1
+    return "neon kept: halo %d, caps %d; moved to detail %d" % (ring, kept, moved)
+
+
+def tower_head(ob, piece, tier):
+    """build_kit_2_0.cannon head: the decimated cone / emitter lens / emitter tube are deleted and rebuilt clean (64 seg);
+    the lens is detail, the tube recess, and a THIN neon ring (0.09 x 0.012 m, OS_Light) sits on the tube top (capneon)."""
+    me = ob.data
+    z = 0.06 + 2.4 + 1.18 * tier
+    plate = slot_index(ob, "OS_Plate", piece)
+    det = slot_index(ob, "OS_Detail", piece)
+    dark = slot_index(ob, "OS_Dark", piece)
+    light = slot_index(ob, "OS_Light", piece)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    dead = [f for f in bm.faces if not me.materials[f.material_index].name.startswith("OS_Glass")
+            and math.hypot(*f.calc_center_median().xy) <= 1.01 and f.calc_center_median().z >= z + 0.505]
+    bmesh.ops.delete(bm, geom=dead, context="FACES")
+    _prim(bm, "cone", (0, 0, z + 0.68), 1.0, 0.62, 0.36, plate)
+    _prim(bm, "cyl", (0, 0, z + 0.88), 0.5, 0, 0.06, det, segs=48)
+    _prim(bm, "tube", (0, 0, z + 0.89), 0.5, 0.62, 0.10, dark)
+    _prim(bm, "tube", (0, 0, z + 0.94 + 0.008), 0.515, 0.605, 0.012, light)
+    bm.to_mesh(me)
+    bm.free()
+    return "head rebuilt clean at z %.2f (%d faces replaced), emitter ring" % (z, len(dead))
+
+
+def _world_tree():
+    from mathutils.bvhtree import BVHTree
+    vs, fs = [], []
+    for o in bpy.data.objects:
+        if o.type != "MESH":
+            continue
+        k = len(vs)
+        vs += [o.matrix_world @ v.co for v in o.data.vertices]
+        fs += [[k + i for i in p.vertices] for p in o.data.polygons]
+    return BVHTree.FromPolygons(vs, fs)
+
+
+SEAT_LOG = []
+
+
+def _seat(tree, cx, cy, r0, r1, n=16, z_from=30.0):
+    """Top surface height under an annulus (rays straight down from z_from); None unless flat within 4 mm."""
+    zs = []
+    for r in (r0, (r0 + r1) / 2, r1):
+        for i in range(n):
+            a = 2 * math.pi * (i + 0.5) / n
+            h = tree.ray_cast(Vector((cx + r * math.cos(a), cy + r * math.sin(a), z_from)), Vector((0, 0, -1)))
+            if h[0] is None:
+                return None
+            zs.append(h[0].z)
+    zs.sort()
+    SEAT_LOG.append("seat (%.2f,%.2f) r %.2f-%.2f: z %.3f..%.3f median %.3f" % (cx, cy, r0, r1, zs[0], zs[-1], zs[len(zs) // 2]))
+    return max(zs) if max(zs) - min(zs) <= 0.004 else None
+
+
+def _ring_object(root, rings, mat, name):
+    """Child mesh of thin flat annuli (world coords) on `mat` (the piece's own OS_Light slot)."""
+    out = bmesh.new()
+    for cx, cy, ri, ro, z in rings:
+        _prim(out, "tube", (cx, cy, z + 0.002 + 0.006), ri, ro, 0.012, 0)
+    me = bpy.data.meshes.new(name)
+    out.to_mesh(me)
+    out.free()
+    me.materials.append(mat)
+    ob = bpy.data.objects.new(name, me)
+    for c in root.users_collection:
+        c.objects.link(ob)
+    ob.parent = root
+    ob.matrix_parent_inverse = root.matrix_world.inverted()
+    return ob
+
+
+def gatling(piece):
+    """Googatling (Machinegoon_T1..T3 = Base + Turret): every OS_Light_A face -> detail; NEW thin neon rings on OS_Light_A:
+    a base ring on the flat gunmetal ledge (r 1.47 .. 1.55, z 0.94) and one ring on each tank's cap (0.50 .. 0.64 of its
+    glass half-width), seated by ray casts and only where the surface is flat."""
+    base = next(o for o in bpy.data.objects if o.type == "MESH" and o.parent is None)
+    tur = next(o for o in bpy.data.objects if o.type == "MESH" and o.parent is base)
+    notes = [struct_neon(base, piece), struct_neon(tur, piece)]
+    light = next(m for m in tur.data.materials if m and base_name(m.name) == "OS_Light_A")
+    tree = _world_tree()
+    rings = []
+    del SEAT_LOG[:]
+    z = None
+    for r0, r1 in ((1.51, 1.575), (1.515, 1.575), (1.52, 1.575), (1.51, 1.565)):   # the flat gunmetal ledge (a steel slope reaches r 1.50)
+        z = _seat(tree, 0, 0, r0, r1, n=36, z_from=1.0)    # under the turret (T3 lowest part 1.03 m; ring top 0.956)
+        if z is not None:
+            rings.append((0, 0, r0, r1, z))
+            break
+    names = [base_name(m.name) if m else "" for m in tur.data.materials]
+    bm = bmesh.new()
+    bm.from_mesh(tur.data)
+    bm.transform(tur.matrix_world)
+    caps = 0
+    tanks = []                                                    # glass panels -> one box per tank (grouped in plan)
+    for isl in _islands(bm, [f for f in bm.faces if names[f.material_index].startswith("OS_Glass")]):
+        b = _bbox(isl)
+        cx, cy = (b[0] + b[3]) / 2, (b[1] + b[4]) / 2
+        t = next((t for t in tanks if math.hypot(t[0] - cx, t[1] - cy) < 0.15), None)
+        if t is None:
+            tanks.append([cx, cy, b])
+        else:
+            t[2] = [min(t[2][k], b[k]) for k in range(3)] + [max(t[2][k], b[k]) for k in range(3, 6)]
+    for _, _, (x0, y0, z0, x1, y1, z1) in tanks:
+        cx, cy, hw = (x0 + x1) / 2, (y0 + y1) / 2, min(x1 - x0, y1 - y0) / 2
+        zc = _seat(tree, cx, cy, 0.50 * hw, 0.64 * hw, z_from=z1 + 1.0)
+        if zc is not None and zc > z1 - 0.05:
+            rings.append((cx, cy, 0.50 * hw, 0.64 * hw, zc))
+            caps += 1
+            notes.append(cream(tur, piece, lambda c, cx=cx, cy=cy, hw=hw, z1=z1:       # the tank's cap -> cream
+                               math.hypot(c.x - cx, c.y - cy) <= 1.25 * hw and c.z >= z1 - 0.02))
+    bm.free()
+    _ring_object(base, rings, light, "CapNeon")
+    print("\n".join(SEAT_LOG))
+    return " | ".join(notes) + " | rings: base %s, tank caps %d" % ("yes" if z is not None else "NO", caps)
+
+
+SRGB = {"cream": (0xE2, 0xCF, 0xAE), "detail": (0x71, 0x8A, 0x83), "recess": (0x3D, 0x57, 0x58)}
+
+
+def textured_lab(piece):
+    """Goocannon (Relay_Cannon_v4 / _T2 / _T3, one textured material per tier): the diffuse is gradient-mapped into the lab
+    palette by its own luminance (dark seams -> recess #3D5758, mid -> detail #718A83, body -> cream #E2CFAE), the white
+    emissive stripes become detail lines with no glow, metal off and roughness 0.8 (lab: no metal); normal map kept.
+    The material keeps its name (no runtime slot today, so no player neon: same as the deployed model)."""
+    import numpy as np
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="labkit_tex_")
+    log = []
+    for m in bpy.data.materials:
+        if not m.use_nodes:
+            continue
+        nt = m.node_tree
+        bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
+        if bsdf is None:
+            continue
+
+        def src(inp):
+            for l in nt.links:
+                if l.to_socket == inp:
+                    return l
+        lb, le = src(bsdf.inputs["Base Color"]), src(bsdf.inputs["Emission Color"])
+        dif = lb.from_node if lb and lb.from_node.type == "TEX_IMAGE" else None
+        emi = le.from_node if le and le.from_node.type == "TEX_IMAGE" else None
+        if dif is None:
+            continue
+        w, h = dif.image.size
+        d = np.empty(w * h * 4, dtype=np.float32)
+        dif.image.pixels.foreach_get(d)
+        d = d.reshape(-1, 4)
+        L = 0.2126 * d[:, 0] + 0.7152 * d[:, 1] + 0.0722 * d[:, 2]
+        g = L.reshape(h, w)                                          # 5 x 5 box blur: the scan texture's speckle reads
+        acc = np.zeros_like(g)                                       # as dirt on a cream shell
+        for dy in range(-2, 3):
+            for dx in range(-2, 3):
+                acc += np.roll(np.roll(g, dy, 0), dx, 1)
+        L = (acc / 25).ravel()
+        stripe = np.zeros(len(L), dtype=bool)
+        if emi is not None and tuple(emi.image.size) == (w, h):
+            e = np.empty(w * h * 4, dtype=np.float32)
+            emi.image.pixels.foreach_get(e)
+            e = e.reshape(-1, 4)
+            stripe = (e[:, 0] + e[:, 1] + e[:, 2]) / 3 > 0.45
+        c = {k: np.array(v, dtype=np.float32) / 255 for k, v in SRGB.items()}
+        t1 = np.clip((L - 0.09) / 0.05, 0, 1)[:, None]            # 0.09 -> 0.14: recess -> detail
+        t2 = np.clip((L - 0.15) / 0.04, 0, 1)[:, None]            # 0.15 -> 0.19: detail -> cream
+        out = c["recess"] * (1 - t1) + c["detail"] * t1
+        out = out * (1 - t2) + c["cream"] * t2
+        shade = np.clip(0.95 + 0.2 * (L - 0.25), 0.9, 1.03)[:, None]     # keep a little of the panel shading
+        out = np.where(L[:, None] >= 0.19, c["cream"] * shade, out)
+        out[stripe] = c["detail"]
+        px = np.concatenate([np.clip(out, 0, 1), np.ones((len(L), 1), dtype=np.float32)], axis=1)
+        img = bpy.data.images.new(piece + "_lab_diffuse", w, h)
+        img.pixels.foreach_set(px.ravel())
+        img.filepath_raw = os.path.join(tmp, piece + "_lab_diffuse.jpg")
+        img.file_format = "JPEG"
+        img.save()
+        dif.image = img
+        for l in list(nt.links):                                     # no glow, no metal
+            if l.to_socket in (bsdf.inputs["Emission Color"], bsdf.inputs["Emission Strength"],
+                               bsdf.inputs["Metallic"], bsdf.inputs["Roughness"]):
+                nt.links.remove(l)
+        for n in list(nt.nodes):
+            if n.type in ("TEX_IMAGE", "SEPARATE_COLOR", "SEPRGB", "SEPARATE_RGB") and n.name != dif.name \
+                    and not any(l.from_node == n and l.to_node.type == "NORMAL_MAP" for l in nt.links):
+                nt.nodes.remove(n)
+        bsdf.inputs["Emission Strength"].default_value = 0.0
+        bsdf.inputs["Metallic"].default_value = 0.0
+        bsdf.inputs["Roughness"].default_value = 0.8
+        log.append("%s: %dx%d gradient-mapped, stripes %d px, cream %.0f %%" % (m.name, w, h, int(stripe.sum()),
+                                                                              100 * float((L >= 0.19).mean())))
+    return "; ".join(log)
+
+
+def cream(ob, piece, test):
+    """OS_Dark primitives that read as caps / collars -> OS_Shell cream (whole primitives, so no ragged edges)."""
+    me = ob.data
+    dark = {i for i, m in enumerate(me.materials) if m and base_name(m.name) == "OS_Dark"}
+    shell = slot_index(ob, "OS_Shell", piece)
+    mw = ob.matrix_world
+    n = 0
+    for p in me.polygons:
+        if p.material_index in dark and test(mw @ p.center):
+            p.material_index = shell
+            n += 1
+    return "cream %d faces" % n
+
+
+def structure(piece):
+    fam = _family(piece)
+    root = next(o for o in bpy.data.objects if o.parent is None and o.type == "MESH")
+    if fam in ("Cannon", "Laser"):                                    # ring collars (r 1.02 x 0.24) above the column foot
+        t = 3 if fam == "Laser" else int(piece[-1])
+        col = cream(root, piece, lambda c: 0.95 <= math.hypot(c.x, c.y) <= 1.04 and 2.45 <= c.z <= 2.46 + 1.18 * t)
+    if fam == "Cannon":
+        return struct_neon(root, piece) + " | " + tower_head(root, piece, int(piece[-1])) + " | " + col
+    if fam == "Laser":
+        collar = next(o for o in bpy.data.objects if o.type == "MESH" and o.parent is root)
+        return (struct_neon(root, piece) + " | " + tower_head(root, piece, 3) + " | " + col + " | collar "
+                + struct_neon(collar, piece, keep=lambda c: c.z > 7.2))       # the top hoop stays neon
+    if fam == "Forge":                     # top block + chimneys (z > 4.72) and the ooze tube's lid -> cream
+        col = cream(root, piece, lambda c: c.z > 4.72 or (math.hypot(c.x, c.y + 0.95) <= 1.01 and 4.2 <= c.z <= 4.55))
+        return struct_neon(root, piece, keep=lambda c: c.z > 5.9 and abs(c.y - 0.5) < 0.5) + " | " + col   # 3 chimney rings
+    if fam == "Machinegoon":
+        return gatling(piece)
+    return textured_lab(piece)
+
+
 # ------------------------------------------------------------------ pieces
 PIECES = [("kit/Platform_Standard", "Platform_Standard", "platform"),
           ("kit/Platform_Pillar", "Platform_Pillar", "platform"),
@@ -557,6 +822,9 @@ PIECES += [("kit/Relay_Mount", "Relay_Mount", "")]
 # Relay_Button_*: not on the 26S sheets (lab2 recolours cover them); their deployed Glyph / Strut fail the BVH check.
 PIECES += [("world/containment_ring_v1", "Pit_Ring", "pit")]
 PIECES += [(None, n, "tube") for n in ("Floor_Tube_Run_6m", "Floor_Tube_Elbow_R080")]   # crossings: procedural, on the connector blocks
+STRUCTURES = ["Laser", "Cannon_T1", "Cannon_T2", "Cannon_T3", "Forge", "Machinegoon_T1", "Machinegoon_T2", "Machinegoon_T3",
+              "Relay_Cannon_v4", "Relay_Cannon_v4_T2", "Relay_Cannon_v4_T3"]   # Goocannon = the launcher turret (proto_relay_view)
+PIECES += [("kit/" + n, n, "structure") for n in STRUCTURES]
 
 
 def export(path):
@@ -585,6 +853,8 @@ def main():
                 note = pit_zones(root, "Pit")
             elif kind == "platform":
                 note = rim_band(root, name)
+            elif kind == "structure":
+                note = structure(name)
             elif kind == "vat":
                 note = vat_goo(root, name) + " | " + vat_neon(root, name) + " | " + vat_caps(root, name) + " | " + vat_clean_caps(root, name) + " | " + vat_strip_goo(root, name)
                 if CAPNEON:

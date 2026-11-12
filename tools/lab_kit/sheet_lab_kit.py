@@ -43,6 +43,26 @@ TILES = [  # piece, label, neon, goo, low fill
 ]
 
 
+if "--structures" in sys.argv:    # lab-kit 2 (2026-11-12): laser / forge / Googatling / Goocannon
+    TILES = [
+        ("Cannon_T1", "Cannon_T1 (laser tower) - neutral", None, None, False),
+        ("Cannon_T1", "Cannon_T1 - owned", "cyan", None, False),
+        ("Cannon_T2", "Cannon_T2 - owned", "magenta", None, False),
+        ("Cannon_T3", "Cannon_T3 - owned", "cyan", None, False),
+        ("Laser", "Laser (relay laser) - owned", "magenta", None, False),
+        ("Forge", "Forge - owned, EMBER goo", "cyan", "EMBER", False),
+        ("Forge", "Forge - neutral goo", None, None, False),
+        ("Machinegoon_T1", "Googatling T1 - owned, VEX goo", "cyan", "VEX", False),
+        ("Machinegoon_T2", "Googatling T2 - owned, BLOOM goo", "magenta", "BLOOM", False),
+        ("Machinegoon_T3", "Googatling T3 - owned, NULL goo", "cyan", "NULL", False),
+        ("Relay_Cannon_v4", "Goocannon T1 (Relay_Cannon_v4)", None, None, False),
+        ("Relay_Cannon_v4_T2", "Goocannon T2", None, None, False),
+        ("Relay_Cannon_v4_T3", "Goocannon T3", None, None, False),
+        ("Machinegoon_T3", "Googatling T3 - 25 % garrison", "magenta", "SOLAR", True),
+        ("Vat_T2_capneon", "Vat_T2_capneon (reference, final vats)", "cyan", "EMBER", False),
+    ]
+
+
 if "--vats" in sys.argv:          # compare run: only the 8 vat tiles, of the files <Vat_Tn><suffix>.glb
     SUF = sys.argv[sys.argv.index("--vats") + 1]
     TILES = [(p + SUF, l, n, g, lo) for p, l, n, g, lo in TILES if p.startswith("Vat_")]
