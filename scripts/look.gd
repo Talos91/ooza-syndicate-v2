@@ -1,13 +1,13 @@
 class_name Look
 extends RefCounted
-## LAB LOOK TEST (Daniele 2026-11-12, test branch lab-look-test only - NOT for release): --look=lab swaps
+## LAB LOOK (Daniele 2026-11-12: lab2 = the new standard, default since 0.24.2 via Rules.LOOK_LAB2; --look-old = 0.24.1). --look=lab swaps
 ##  - the kit pieces to their "_lab" recolours (assets/kit/<key>_lab.glb, Models/2.0/look-lab/recolour_kit_lab.py;
 ##    geometry identical, colours from the 26S-structure-A zone sheets: ivory shell, mint glass, goo = AI tint,
 ##    neon = the thin player rim only), when the file is there (else the normal piece);
 ##  - the floor to deliveries/26F-floors-B/TILE-LAB.png (2048 px = 16 m);
 ##  - a screen-pinned surround (generated/look-test-2026-11-12/LAB-SURROUND-cutout.png) in front of the floor,
 ##    behind the board and the HUD (lines up only at the default camera, ~2.15:1).
-## With no flag the game is exactly the base branch. Pure view.
+## Pure view: no rule changes.
 
 static var lab := _arg() in ["lab", "lab2"]
 static var v2 := _arg() == "lab2"   # designer v2 (2026-11-12): cream satin shell kept under the glow, owner rim ~2x and brighter,
@@ -27,10 +27,17 @@ const SURROUND_DROP := 3.0       # metres under the lowest deck: the surround pl
 
 
 static func _arg() -> String:
-	for a in OS.get_cmdline_user_args():
+	## Default = "lab2" while Rules.LOOK_LAB2 (staging 0.24.2, Daniele 2026-11-12). Dev: --look-old = the 0.24.1 look,
+	## --look=lab = the v1 test (its _lab kit twins are not in the Web export, so on Web it falls back to the normal kit).
+	var args := OS.get_cmdline_user_args()
+	if "--look-old" in args:
+		return ""
+	for a in args:
 		if a.begins_with("--look="):
-			return a.substr(7).to_lower()
-	return ""
+			var v := a.substr(7).to_lower()
+			if v in ["lab", "lab2"]:
+				return v                      # (other --look= values are the FACTION LOOK debug in main.gd)
+	return "lab2" if Rules.LOOK_LAB2 else ""
 
 
 static func kit_key(key: String) -> String:

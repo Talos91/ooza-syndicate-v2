@@ -117,6 +117,18 @@
   piece. test_net fails (33 lines + timeout) exactly as on the untouched proto base aadf8ef (proto7): pre-existing on the proto line; proto
   rooms are unranked browser hosting.
 
+## 0.24.2 - 2026-11-12 (STAGING candidate, branch staging-0.24.2; not published)
+- **Lab look is the standard** (Daniele 2026-11-12: "the new status quo"): lab-look-test b74af6b v2 is the default, no flag (`Rules.LOOK_LAB2`).
+  Cream satin decks / walkways (the `_lab2` kit recolours: material factors only, same geometry), owner neon band on owned platform lips,
+  TILE-LAB floor + lab surround, neutral fill light, sun x0.45, no bloom, clearer vat glass. Dev: `--look-old` = the 0.24.1 look; `--look=lab` = test v1
+  (its `_lab` kit twins are left out of the Web export to keep the pck under the cap; on Web it falls back to the normal kit).
+- **Calm pass** (calm-pass 5afd7e4): goo in the owner's FACTION body tone (tubes, pits, vats, swarms, send tank, skill vessels; `--goo-neon` = old);
+  fog keeps its neutral grey with at most an 18 % tint of the leading seat (`--fog-mix` = old); top-band fix: in-world text never covers the
+  status line / score bar (0 overlaps on 36 maps x 6 moments in emulation). `--calm=a|b|c` stay dev-only.
+- **R-17 Strait 2** (maps-strait-2 6cd16ba) joins the pool beside R-01: R-01 without its middle crossing, 12 platforms, 91 x 50 m, no neutral
+  machinegoons (Daniele: "Leave without goons"); camera pitch 54; tube layout baked (tube_cache, CACHE_VER 7); tube audit clean on R-17 and R-01.
+- No rule change, no protocol change (net-8); rooms need the server on 0.24.2.
+
 ## 0.23.15 "Alpha 23" - 2026-10-27 (staging: balance pass, catch-up)
 ## 0.23.27 "Alpha 24 step 3c + step 4" - 2026-11-06 (STAGING only; menus round 4 + node UI / GMN-2 HUD + HOLD, release rel-02327)
 
