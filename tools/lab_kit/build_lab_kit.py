@@ -660,7 +660,7 @@ def gatling(piece):
     base = next(o for o in bpy.data.objects if o.type == "MESH" and o.parent is None)
     tur = next(o for o in bpy.data.objects if o.type == "MESH" and o.parent is base)
     notes = [struct_neon(base, piece), struct_neon(tur, piece)]
-    notes.append(doors(base, piece, 1.65, 0.19, [FRONT, BACK], w=0.8, hgt=0.62))   # low doors in the drum wall (skirt top 0.18)
+    notes.append(entrance(base, piece, 1.58, 2.25, 0.04, 0.88, 0.66, 1.0, 0.715, roof_r0=1.6))   # porch doors (roof under the barrels' sweep ~0.97 and clear of the ledge ring at 0.94)
     light = next(m for m in tur.data.materials if m and base_name(m.name) == "OS_Light_A")
     tree = _world_tree()
     rings = []
@@ -1018,6 +1018,46 @@ def forge_rework(ob, piece):
     return "forge 2: removed %d faces (front tube, fins, side bits); 2 side tanks, canopy, fins, emblem" % n_gone
 
 
+def clear_entries(ob, rmin, rmax, zmax, tol=math.radians(40), maxdim=1.6):
+    """Remove the small islands (old door boxes, the fins beside them) whose centre lies within `tol` of the front (-Y) or back
+    (+Y) axis, at plan radius rmin..rmax, centre height 0.3..zmax. The big shells (cone, bands, plinth) are kept (maxdim)."""
+    me = ob.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    gone = []
+    for isl in _islands(bm, bm.faces[:]):
+        x0, y0, z0, x1, y1, z1 = _bbox(isl)
+        cx, cy, cz = (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2
+        r = math.hypot(cx, cy)
+        if max(x1 - x0, y1 - y0) > maxdim or not (rmin <= r <= rmax) or not (0.3 <= cz <= zmax):
+            continue
+        a = math.atan2(cy, cx)
+        if min(abs(a - FRONT), abs(a - BACK)) <= tol:
+            gone.extend(isl)
+    bmesh.ops.delete(bm, geom=list(set(gone)), context="FACES")
+    bm.to_mesh(me)
+    bm.free()
+    return len(gone)
+
+
+def entrance(ob, piece, r0, r1, z0, z1, hw, door_w, door_h, roof_r0=None):
+    """ENTRANCE HOUSING front + back (Daniele 2026-11-12: "fix the doors for googatling and cannons, in first case are too small
+    in second is clipped in their base"): a cream housing from plan radius r0 to r1, z0..z1, half width hw, a slate strip at its
+    foot, a detail roof slab (from roof_r0) and the kit's framed door (doors()) on its outer face, standing on z0."""
+    sh, de, dk = (slot_index(ob, n, piece) for n in ("OS_Shell", "OS_Detail", "OS_Dark"))
+    rr0 = r0 if roof_r0 is None else roof_r0
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    for a in (FRONT, BACK):
+        d = Vector((math.cos(a), math.sin(a), 0))
+        _rbox(bm, d * ((r0 + r1) / 2) + Vector((0, 0, (z0 + z1) / 2)), ((r1 - r0), 2 * hw, z1 - z0), sh, a)
+        _rbox(bm, d * ((r0 + r1) / 2 + 0.01) + Vector((0, 0, z0 + 0.04)), ((r1 - r0), 2 * hw + 0.03, 0.08), dk, a)
+        _rbox(bm, d * ((rr0 + r1 + 0.08) / 2) + Vector((0, 0, z1 + 0.035)), ((r1 + 0.08 - rr0), 2 * hw + 0.1, 0.07), de, a)
+    bm.to_mesh(ob.data)
+    bm.free()
+    return "entrance r %.2f..%.2f z %.2f..%.2f + " % (r0, r1, z0, z1) + doors(ob, piece, r1, z0, [FRONT, BACK], w=door_w, hgt=door_h)
+
+
 def cream(ob, piece, test):
     """OS_Dark primitives that read as caps / collars -> OS_Shell cream (whole primitives, so no ragged edges)."""
     me = ob.data
@@ -1039,7 +1079,8 @@ def structure(piece):
         t = 3 if fam == "Laser" else int(piece[-1])
         col = cream(root, piece, lambda c: 0.95 <= math.hypot(c.x, c.y) <= 1.04 and 2.45 <= c.z <= 2.46 + 1.18 * t)
     if fam in ("Cannon", "Laser"):
-        col += " | back " + doors(root, piece, 1.25, 0.06, [BACK])
+        col += " | cleared %d faces (old doors + fins beside them)" % clear_entries(root, 0.55, 1.65, 1.88)
+        col += " | " + entrance(root, piece, 0.9, 1.5, 0.40, 1.78, 0.55, 0.8, 1.1)   # on the plinth top (0.40), front + back
     if fam == "Cannon":
         return struct_neon(root, piece) + " | " + tower_head(root, piece, int(piece[-1])) + " | " + col
     if fam == "Laser":
