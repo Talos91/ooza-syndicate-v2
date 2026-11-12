@@ -1295,8 +1295,8 @@ def tube_piece(name, path, sleeves, extra=None):
         L.append(L[-1] + (Vector(path[i]) - Vector(path[i - 1])).length)
     inner = [p for p, d in zip(path, L) if 0.02 <= d <= L[-1] - 0.02]
     sweep(o, inner, GOO_R, 0)
-    for p, t in sleeves:
-        sleeve(s, p, t, 0)
+    for sv in sleeves:                       # END sleeves are HALF length (Daniele 2026-11-12: two joined pieces = ONE connector,
+        sleeve(s, sv[0], sv[1], 0, l=sv[2] if len(sv) > 2 else SLEEVE_L / 2)   # not a double); a 3rd value = a full-length sleeve
     if extra:
         extra(s)
     root = bobj(name, g, [ms["OS_Glass"]])
@@ -1563,27 +1563,27 @@ def b_tube(name):
     up = Vector((0, 0, 1))
     if name == "Pit_Tube_Run_2m":
         return tube_piece(name, line((-1, 0, LOW_Y), (1, 0, LOW_Y), 8),
-                          [((-1 + SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0)), ((1 - SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0))])
+                          [((-1 + SLEEVE_L / 4, 0, LOW_Y), (1, 0, 0)), ((1 - SLEEVE_L / 4, 0, LOW_Y), (1, 0, 0))])
     if name == "Pit_Tube_Elbow_R080":                               # ORTHO_BEND 0.8: quarter bend + 0.3 m leads (sleeves)
         pts = [Vector((-0.3, 0, LOW_Y))] + [Vector((0.8 * math.sin(a), 0.8 - 0.8 * math.cos(a), LOW_Y))
                                             for a in (math.pi / 2 * s / 24 for s in range(25))] + [Vector((0.8, 1.1, LOW_Y))]
-        return tube_piece(name, pts, [((-0.3 + SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0)), ((0.8, 1.1 - SLEEVE_L / 2, LOW_Y), (0, 1, 0))])
+        return tube_piece(name, pts, [((-0.3 + SLEEVE_L / 4, 0, LOW_Y), (1, 0, 0)), ((0.8, 1.1 - SLEEVE_L / 4, LOW_Y), (0, 1, 0))])
     if name == "Pit_Tube_Step":                                     # floor level 0.35 -> second level 0.97 (FLOOR2_STEP 0.62)
         pts = [Vector((x, 0, LOW_Y + (FLOOR2_Y - LOW_Y) * (0.5 - 0.5 * math.cos(math.pi * min(max((x + 0.3) / 1.6, 0), 1)))))
                for x in [-0.6 + 0.05 * k for k in range(45)]]
-        return tube_piece(name, pts, [((pts[0].x + SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0)), ((pts[-1].x - SLEEVE_L / 2, 0, FLOOR2_Y), (1, 0, 0))])
+        return tube_piece(name, pts, [((pts[0].x + SLEEVE_L / 4, 0, LOW_Y), (1, 0, 0)), ((pts[-1].x - SLEEVE_L / 4, 0, FLOOR2_Y), (1, 0, 0))])
     if name == "Pit_Tube_Socket_Climb":                             # out of a tilted socket (40 deg at 0.62) to level 0.97
         way = [Vector((0, 0, SOCK_Y)), Vector(((FLOOR2_Y - SOCK_Y) / math.tan(SOCK_ANG), 0, FLOOR2_Y)),
                Vector((1.8, 0, FLOOR2_Y))]
         pts = fillet_path(way, 0.8)
-        return tube_piece(name, pts, [((1.8 - SLEEVE_L / 2, 0, FLOOR2_Y), (1, 0, 0))])
+        return tube_piece(name, pts, [((1.8 - SLEEVE_L / 4, 0, FLOOR2_Y), (1, 0, 0))])
     if name == "Pit_Tube_Rim_Dip":                                  # origin = pit centre: floor run in, over the rim, into the goo
         way = [Vector((7.2, 0, LOW_Y)), Vector((6.0, 0, LOW_Y)), Vector((5.0, 0, 1.22)), Vector((3.3, 0, 1.22)), Vector((2.7, 0, 0.25))]
         pts = fillet_path(way, 0.6)
 
         def clamp(bm):                                              # a clamp on the rim top
             box_at(bm, Matrix.Translation((4.3, 0, 0.865)), (0.30, 0.42, 0.13), 1)
-        return tube_piece(name, pts, [((7.2 - SLEEVE_L / 2, 0, LOW_Y), (-1, 0, 0)), ((4.3, 0, 1.22), (-1, 0, 0))], clamp)
+        return tube_piece(name, pts, [((7.2 - SLEEVE_L / 4, 0, LOW_Y), (-1, 0, 0)), ((4.3, 0, 1.22), (-1, 0, 0), SLEEVE_L)], clamp)   # rim clamp: full sleeve (a support, not a joint)
     raise ValueError(name)
 
 
