@@ -995,6 +995,501 @@ def structure(piece):
     raise ValueError(piece)
 
 
+# ------------------------------------------------------------------ lab-kit 3: the BOTTOM PART (Daniele 2026-11-12: "don t forget
+# the kit for the bottom part so the node tube, tube entrance and node connectors, walkways  pit to node tubes and the pit").
+# Sizes = the runtime meshes (world_tubes.gd column_base_mesh / _build_connectors / _build_mesh, world_layer.gd _build_tube,
+# world_locals.gd _build_walkways, containment_ring_v1): see the role note's inventory. Clean primitives (64 seg), lab zones,
+# player neon only as thin rings (OS_Light). Blender -Y = the runtime's +Z front (export_yup).
+B_ZONE = {"OS_Shell": "DECK", "OS_Plate": "WALK", "OS_Steel": "DETAIL", "OS_Detail": "DETAIL", "OS_Dark": "RECESS",
+          "OS_Glass": "GLASS", "OS_Ooze_Neutral": "GOO", "OS_Light": "DECK"}
+B_SLOTS = ["OS_Shell", "OS_Detail", "OS_Dark", "OS_Light", "OS_Plate", "OS_Steel"]
+SH, DE, DK, LT, PL, ST = range(6)
+# runtime numbers (world_tubes.gd / world_layer.gd / world_locals.gd)
+APO, WALL_H, ROOF_A, ROOF_H, DOOR_HW, DOOR_RECT, FRAME_W, FRAME_D = 1.6, 1.05, 1.08, 1.38, 0.42, 0.42, 0.09, 0.08
+LASER_Y, SOCK_Y, SOCK_Y_LOW, SOCK_ANG, SOCK_R, SOCK_RI, SOCK_D = (0.26, 0.5), 0.62, 0.35, math.radians(40), 0.36, 0.30, 0.32
+LIFT_R, LIFT_R_PILLAR, LIFT_H = 0.95, 2.6, 12.5          # TUBE_R / TUBE_R_PILLAR; floor -16 -> TUBE_TOP -3.5
+CONN_H, ORTHO_GAP, CONN_HALF = 1.5, 1.1, 1.2              # _conn_rect: half = gap / 2 + 0.25 + CONN_PAD / 2
+DECK_HW, DECK_T, RAIL_H, RAMP_LEN, WALK_LEVELS = 0.8, 0.16, 0.45, 3.2, (1.75, 2.45, 3.15)
+ABOUT_R = 0.95 + 0.3 + DECK_HW                            # roundabout centre radius round a column (ABOUT_GAP 0.3)
+FLOOR2_Y = LOW_Y + 0.62                                   # FLOOR2_STEP
+
+
+def _pr(bm, kind, r0, r1, h, mi, c, segs=64):
+    return _prim(bm, kind, c, r0, r1, h, mi, segs)
+
+
+def bmats(names=B_SLOTS):
+    return [bpy.data.materials.get(n) or make_mat(n, B_ZONE[n]) for n in names]
+
+
+def bobj(name, bm, mats, parent=None):
+    me = bpy.data.meshes.new(name)
+    bm.normal_update()
+    bm.to_mesh(me)
+    bm.free()
+    for m in mats:
+        me.materials.append(m)
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(ob)
+    if parent:
+        ob.parent = parent
+    return ob
+
+
+def xfm(c, x, y, z):
+    """4x4 with columns x, y, z (unit axes) and translation c."""
+    m = Matrix((x, y, z)).transposed().to_4x4()
+    m.translation = c
+    return m
+
+
+def prim_at(bm, kind, r0, r1, h, mi, M, segs=64, zc=0.0):
+    """_prim built round the local Z axis (centre zc), then moved by M."""
+    fs = _prim(bm, kind, (0, 0, zc), r0, r1, h, mi, segs)
+    bmesh.ops.transform(bm, matrix=M, verts=list({v for f in fs for v in f.verts}))
+    return fs
+
+
+def box_at(bm, M, s, mi, smooth=False):
+    r = bmesh.ops.create_cube(bm, size=1.0, matrix=M @ Matrix.Diagonal((*s, 1)))
+    for f in {f for v in r["verts"] for f in v.link_faces}:
+        f.material_index = mi
+        f.smooth = smooth
+
+
+def box_zoned(bm, c, s, top, side, bottom=None):
+    r = bmesh.ops.create_cube(bm, size=1.0, matrix=Matrix.Translation(c) @ Matrix.Diagonal((*s, 1)))
+    for f in {f for v in r["verts"] for f in v.link_faces}:
+        f.normal_update()
+        f.material_index = top if f.normal.z > 0.9 else (bottom if bottom is not None and f.normal.z < -0.9 else side)
+
+
+def lathe(bm, prof, mis, segs=64, closed=True, poly=None):
+    """Closed solid of revolution from (r, z) profile points (mis[i] = material of segment i -> i + 1). poly = 8 makes
+    an octagon (faces on the cardinals, r = apothem)."""
+    n = poly or segs
+    k = 1 / math.cos(math.pi / n) if poly else 1.0
+    off = math.pi / n if poly else 0.0
+    rings = [[bm.verts.new((r * k * math.cos(2 * math.pi * i / n + off), r * k * math.sin(2 * math.pi * i / n + off), z))
+              for i in range(n)] for r, z in prof]
+    cnt = len(prof) if closed else len(prof) - 1
+    for s in range(cnt):
+        A, Bb = rings[s], rings[(s + 1) % len(prof)]
+        for i in range(n):
+            j = (i + 1) % n
+            f = bm.faces.new((A[i], A[j], Bb[j], Bb[i]))
+            f.material_index = mis[s]
+            f.smooth = not poly
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+
+
+def sweep(bm, pts, r, mi, segs=64, caps=True):
+    """Tube of radius r along the polyline pts (parallel-transport frames), capped."""
+    pts = [Vector(p) for p in pts]
+    tg = []
+    for i in range(len(pts)):
+        a, b = pts[max(i - 1, 0)], pts[min(i + 1, len(pts) - 1)]
+        tg.append((b - a).normalized())
+    ref = Vector((0, 0, 1)) if abs(tg[0].z) < 0.9 else Vector((1, 0, 0))
+    u = tg[0].cross(ref).normalized()
+    rings = []
+    for i, p in enumerate(pts):
+        if i:
+            u = (u - tg[i] * u.dot(tg[i])).normalized()
+        v = tg[i].cross(u)
+        rings.append([bm.verts.new(p + (u * math.cos(2 * math.pi * k / segs) + v * math.sin(2 * math.pi * k / segs)) * r)
+                      for k in range(segs)])
+    fs = []
+    for i in range(len(rings) - 1):
+        for k in range(segs):
+            j = (k + 1) % segs
+            fs.append(bm.faces.new((rings[i][k], rings[i][j], rings[i + 1][j], rings[i + 1][k])))
+    for f in fs:
+        f.smooth = True
+    if caps:
+        fs.append(bm.faces.new(list(reversed(rings[0]))))
+        fs.append(bm.faces.new(rings[-1]))
+    bmesh.ops.recalc_face_normals(bm, faces=fs)
+    for f in fs:
+        f.material_index = mi
+    return fs
+
+
+def sleeve(bm, p, t, mi, r_out=SLEEVE_R, r_in=TUBE_R + 0.002, l=SLEEVE_L):
+    t = Vector(t).normalized()
+    ref = Vector((0, 0, 1)) if abs(t.z) < 0.9 else Vector((1, 0, 0))
+    x = t.cross(ref).normalized()
+    prim_at(bm, "tube", r_in, r_out, l, mi, xfm(Vector(p), x, t.cross(x), t))
+
+
+def fillet_path(way, R, step=0.06):
+    """Polyline with every inner corner replaced by an arc of radius R (sampled ~step m); straights resampled 0.25 m."""
+    way = [Vector(p) for p in way]
+    out = [way[0]]
+    for i in range(1, len(way) - 1):
+        a, b, c = way[i - 1], way[i], way[i + 1]
+        d0, d1 = (b - a).normalized(), (c - b).normalized()
+        th = d0.angle(d1)
+        if th < 1e-3:
+            out.append(b)
+            continue
+        p0 = b - d0 * (R * math.tan(th / 2))
+        ax = d0.cross(d1).normalized()
+        cen = p0 + ax.cross(d0).normalized() * R
+        n = max(int(th * R / step), 4)
+        for k in range(n + 1):
+            out.append(cen + Matrix.Rotation(th * k / n, 3, ax) @ (p0 - cen))
+    out.append(way[-1])
+    res = [out[0]]
+    for q in out[1:]:
+        L = (q - res[-1]).length
+        a = res[-1]
+        n = int(L / 0.25)
+        for k in range(1, n):
+            res.append(a.lerp(q, k / n))
+        if L > 1e-4:
+            res.append(q)
+    return res
+
+
+def tube_piece(name, path, sleeves, extra=None):
+    """A transport-tube piece: Glass (root, r 0.27), Goo child (r 0.22, ends 2 cm in), Sleeves child (cream, 2 mm clear)."""
+    ms = {n: bpy.data.materials.get(n) or make_mat(n, B_ZONE[n]) for n in ("OS_Glass", "OS_Ooze_Neutral", "OS_Shell", "OS_Detail")}
+    g, o, s = bmesh.new(), bmesh.new(), bmesh.new()
+    sweep(g, path, TUBE_R, 0)
+    L = [0.0]
+    for i in range(1, len(path)):
+        L.append(L[-1] + (Vector(path[i]) - Vector(path[i - 1])).length)
+    inner = [p for p, d in zip(path, L) if 0.02 <= d <= L[-1] - 0.02]
+    sweep(o, inner, GOO_R, 0)
+    for p, t in sleeves:
+        sleeve(s, p, t, 0)
+    if extra:
+        extra(s)
+    root = bobj(name, g, [ms["OS_Glass"]])
+    bobj(name + "_Goo", o, [ms["OS_Ooze_Neutral"]], root)
+    if len(s.verts):
+        bobj(name + "_Sleeves", s, [ms["OS_Shell"], ms["OS_Detail"]], root)
+    else:
+        s.free()
+    return root
+
+
+def line(a, b, n):
+    a, b = Vector(a), Vector(b)
+    return [a.lerp(b, k / n) for k in range(n + 1)]
+
+
+# ---------------------------------------------------------------- the pieces
+def _face(f):
+    """Runtime face f of the octagon (0 = +Z front ... f even = door): Blender out / side vectors."""
+    a = math.pi / 4 * f
+    out = Vector((math.sin(a), -math.cos(a), 0))
+    return out, Vector((-out.y, out.x, 0))
+
+
+def _arch(w, n=16):
+    pts = [(-w, 0.0), (-w, DOOR_RECT)]
+    for k in range(1, n):
+        a = math.pi - math.pi * k / n
+        pts.append((math.cos(a) * w, DOOR_RECT + math.sin(a) * w))
+    return pts + [(w, DOOR_RECT), (w, 0.0)]
+
+
+def arch_door(bm, f):
+    """The runtime arch door on face f: dark mouth, frame (detail) FRAME_W wide FRAME_D proud, two owner-light strands."""
+    out, side = _face(f)
+    c = out * APO
+    P = lambda q, d: c + side * q[0] + Vector((0, 0, q[1])) + out * d
+    inner, outer = _arch(DOOR_HW), _arch(DOOR_HW + FRAME_W)
+    mouth = [bm.verts.new(P(q, 0.012)) for q in inner]
+    back = [bm.verts.new(P(q, -0.001)) for q in inner]
+    fs = [bm.faces.new(mouth), bm.faces.new(list(reversed(back)))]
+    for k in range(len(inner) - 1):
+        fs.append(bm.faces.new((mouth[k], mouth[k + 1], back[k + 1], back[k])))
+    fs.append(bm.faces.new((mouth[-1], mouth[0], back[0], back[-1])))
+    for fc in fs:
+        fc.material_index = DK
+    fr = []
+    I0 = [bm.verts.new(P(q, 0.0)) for q in inner]
+    I1 = [bm.verts.new(P(q, FRAME_D)) for q in inner]
+    O0 = [bm.verts.new(P(q, 0.0)) for q in outer]
+    O1 = [bm.verts.new(P(q, FRAME_D)) for q in outer]
+    for k in range(len(inner) - 1):
+        for quad in ((I1[k], I1[k + 1], O1[k + 1], O1[k]), (I0[k], I0[k + 1], I1[k + 1], I1[k]),
+                     (O0[k], O0[k + 1], O1[k + 1], O1[k]), (I0[k], I0[k + 1], O0[k + 1], O0[k])):
+            fr.append(bm.faces.new(quad))
+    for e in (0, len(inner) - 1):
+        fr.append(bm.faces.new((I0[e], O0[e], O1[e], I1[e])))
+    bmesh.ops.recalc_face_normals(bm, faces=fr)
+    for fc in fr:
+        fc.material_index = DE
+    for ly in LASER_Y:                                            # the door laser: owner light (thin strands)
+        box_at(bm, xfm(c + Vector((0, 0, ly)) + out * 0.05, side, out, Vector((0, 0, 1))), (2 * DOOR_HW, 0.044, 0.044), LT)
+
+
+def socket(bm, f, y, ang):
+    out, side = _face(f)
+    ax = out * math.cos(ang) + Vector((0, 0, 1)) * math.sin(ang)
+    up = Vector((0, 0, 1)) * math.cos(ang) - out * math.sin(ang)
+    back = -SOCK_R * math.sin(ang) - 0.04
+    c = out * APO + Vector((0, 0, y))
+    M = xfm(c, side, up, ax)
+    prim_at(bm, "tube", SOCK_RI, SOCK_R, SOCK_D - back, DE, M, zc=(SOCK_D + back) / 2)          # the coupling sleeve
+    prim_at(bm, "tube", SOCK_R - 0.005, SOCK_R + 0.025, 0.035, LT, M, zc=SOCK_D - 0.06)         # thin owner ring
+    prim_at(bm, "tube", SOCK_RI - 0.03, SOCK_RI, 0.04, SH, M, zc=SOCK_D - 0.02)                 # cream lip
+    prim_at(bm, "cyl", SOCK_RI - 0.005, 0, 0.03, DK, M, zc=0.03)                                # dark bore
+
+
+def node_base(name, flat=True):
+    """TUBE ENTRANCE / column base: octagon (apothem 1.6, wall 1.05, sloped roof to 1.08 at 1.38), 4 cardinal walk-in doors
+    (front AND back + both sides), 4 sockets on the diagonal faces (flat=True: faces 1 / 5 flat at 0.35 = base45 default,
+    3 / 7 tilted 40 deg at 0.62), a thin owner ring round the foot and a cream collar with a thin owner ring round the lift."""
+    bm = bmesh.new()
+    prof = [(0.97, 0.0), (APO, 0.0), (APO, 0.09), (APO, 0.13), (APO, 0.92), (APO, WALL_H), (ROOF_A, ROOF_H), (0.97, ROOF_H)]
+    lathe(bm, prof, [DK, DE, LT, SH, DK, SH, SH, DK], poly=8)
+    prim_at(bm, "tube", 0.97, 1.20, 0.10, SH, Matrix.Translation((0, 0, ROOF_H + 0.05)))      # collar round the lift
+    prim_at(bm, "tube", 1.00, 1.06, 0.02, LT, Matrix.Translation((0, 0, ROOF_H + 0.11)))      # thin owner ring on it
+    prim_at(bm, "tube", 1.12, 1.20, 0.03, DE, Matrix.Translation((0, 0, ROOF_H + 0.115)))
+    for f in (0, 2, 4, 6):
+        arch_door(bm, f)
+    for f in (1, 3, 5, 7):
+        socket(bm, f, SOCK_Y_LOW if flat and f in (1, 5) else SOCK_Y, 0.0 if flat and f in (1, 5) else SOCK_ANG)
+    bobj(name, bm, bmats())
+    return "octagon apothem %.2f, 4 doors, 4 sockets (%s)" % (APO, "2 flat + 2 tilted" if flat else "4 tilted")
+
+
+def node_tube(name, r, h, bands=True, collar=True):
+    """The NODE TUBE (the lift): glass r (open-ended in game, closed here), goo core, detail bands every 2.5 m, cream collar
+    under the platform. Origin at the floor; h = floor to platform underside."""
+    ms = {n: bpy.data.materials.get(n) or make_mat(n, B_ZONE[n]) for n in ("OS_Glass", "OS_Ooze_Neutral", "OS_Shell", "OS_Detail", "OS_Light")}
+    g = bmesh.new()
+    _pr(g, "tube", r - 0.03, r, h, 0, (0, 0, h / 2))
+    o = bmesh.new()
+    _pr(o, "cyl", r - 0.09, 0, h - 0.04, 0, (0, 0, h / 2))
+    root = bobj(name, g, [ms["OS_Glass"]])
+    bobj(name + "_Goo", o, [ms["OS_Ooze_Neutral"]], root)
+    if bands or collar:
+        s = bmesh.new()
+        if bands:
+            z = 2.5
+            while z < h - 1.0:
+                _pr(s, "tube", r + 0.002, r + 0.05, 0.08, 1, (0, 0, z))
+                z += 2.5
+        if collar:
+            _pr(s, "tube", r + 0.002, r + 0.28, 0.34, 0, (0, 0, h - 0.17))                     # cream collar
+            _pr(s, "tube", r + 0.28, r + 0.31, 0.06, 1, (0, 0, h - 0.17))                      # slate band
+            _pr(s, "tube", r + 0.002, r + 0.10, 0.12, 0, (0, 0, h - 0.40))                     # step
+            _pr(s, "tube", r + 0.10, r + 0.13, 0.025, 2, (0, 0, h - 0.40))                     # thin owner ring
+        bobj(name + "_Bands", s, [ms["OS_Shell"], ms["OS_Detail"], ms["OS_Light"]], root)
+    return "r %.2f h %.2f" % (r, h)
+
+
+def connector(name, a, b):
+    """NODE / TUBE CONNECTOR block (world_tubes _build_connectors): a x-lanes enter the +-X faces, b z-lanes the +-Y faces,
+    lanes 1.1 m apart, block = 2.4 + (n - 1) x 1.1 per side, 1.5 m tall; one coupling per lane per face at the floor tube
+    level 0.35. Cream block, slate base + recess band, detail top panel, detail couplings with a cream lip."""
+    sx, sy = 2 * CONN_HALF + (b - 1) * ORTHO_GAP, 2 * CONN_HALF + (a - 1) * ORTHO_GAP
+    bm = bmesh.new()
+    box_zoned(bm, (0, 0, 0.06), (sx, sy, 0.12), DE, DE)                                        # slate foot
+    box_zoned(bm, (0, 0, 0.12 + (CONN_H - 0.22) / 2), (sx - 0.06, sy - 0.06, CONN_H - 0.22), SH, SH)
+    box_zoned(bm, (0, 0, 1.02), (sx - 0.02, sy - 0.02, 0.08), DK, DK)                          # recess band
+    box_zoned(bm, (0, 0, CONN_H - 0.05), (sx - 0.18, sy - 0.18, 0.10), SH, SH)                 # chamfer step
+    box_zoned(bm, (0, 0, CONN_H + 0.004), (sx - 0.5, sy - 0.5, 0.008), DE, DE)                 # top panel (8 mm proud: no z-fight)
+    lanes = lambda n: [(k - (n - 1) / 2) * ORTHO_GAP for k in range(n)]
+    for sg in (-1, 1):
+        for ly in lanes(a):
+            for M in (xfm(Vector((sg * (sx / 2 - 0.03), ly, LOW_Y)), Vector((0, 1, 0)), Vector((0, 0, 1)), Vector((sg, 0, 0))),):
+                prim_at(bm, "tube", SOCK_RI, SOCK_R, 0.30, DE, M, zc=0.07)
+                prim_at(bm, "tube", SOCK_R, SOCK_R + 0.04, 0.04, SH, M, zc=0.20)
+                prim_at(bm, "cyl", SOCK_RI, 0, 0.02, DK, M, zc=0.02)
+        for lx in lanes(b):
+            M = xfm(Vector((lx, sg * (sy / 2 - 0.03), LOW_Y)), Vector((1, 0, 0)), Vector((0, 0, 1)), Vector((0, sg, 0)))
+            prim_at(bm, "tube", SOCK_RI, SOCK_R, 0.30, DE, M, zc=0.07)
+            prim_at(bm, "tube", SOCK_R, SOCK_R + 0.04, 0.04, SH, M, zc=0.20)
+            prim_at(bm, "cyl", SOCK_RI, 0, 0.02, DK, M, zc=0.02)
+    bobj(name, bm, bmats())
+    return "%.2f x %.2f x %.1f, %d x-lanes, %d z-lanes" % (sx, sy, CONN_H, a, b)
+
+
+def _rails(bm, p0, p1, nrm, posts=True):
+    """Hand rail, mid rail, kick plate (world_locals _beam sizes) from p0 to p1 (deck-top points on the rail line)."""
+    d = (p1 - p0)
+    L = d.length
+    t = d.normalized()
+    up = nrm.cross(t).normalized()
+    if up.z < 0:
+        up = -up
+    zv = Vector((0, 0, 1))
+    for top, w, h in ((RAIL_H, 0.07, 0.06), (RAIL_H * 0.5, 0.04, 0.04), (0.09, 0.05, 0.09)):
+        c = (p0 + p1) / 2 + zv * (top - h / 2)
+        box_at(bm, xfm(c, t, nrm, t.cross(nrm)), (L, w, h), ST)
+    if posts:
+        n = max(math.ceil(L / 2.2), 1)
+        for k in range(n + 1):
+            q = p0.lerp(p1, k / n)
+            box_at(bm, Matrix.Translation(q + zv * (RAIL_H / 2)), (0.07, 0.07, RAIL_H), ST)
+
+
+def walk_straight(name, L=4.0):
+    """WALKWAY deck (world_locals _build_walkways): 1.6 m wide, 0.16 thick, rails 0.45 both sides; origin = deck top centre;
+    two slate inlay lines where the old neon dashes were (no neon on walkways, Daniele 2026-11-11)."""
+    bm = bmesh.new()
+    box_zoned(bm, (0, 0, -DECK_T / 2), (L, 2 * DECK_HW, DECK_T), PL, DE)
+    for sy in (-1, 1):
+        box_zoned(bm, (0, sy * 0.42, 0.002), (L, 0.04, 0.004), DE, DE)
+        y = sy * (DECK_HW - 0.035)
+        _rails(bm, Vector((-L / 2, y, 0)), Vector((L / 2, y, 0)), Vector((0, sy, 0)))
+    bobj(name, bm, bmats())
+    return "%.1f m x %.1f m" % (L, 2 * DECK_HW)
+
+
+def walk_ramp(name, rise=WALK_LEVELS[0], L=RAMP_LEN):
+    """WALKWAY RAMP floor -> level (3.2 m run); origin at the floor end."""
+    bm = bmesh.new()
+    ang = math.atan2(rise, L)
+    t = Vector((math.cos(ang), 0, math.sin(ang)))
+    nrm = Vector((-math.sin(ang), 0, math.cos(ang)))
+    S = math.hypot(L, rise)
+    c = Vector((L / 2, 0, rise / 2)) - nrm * (DECK_T / 2)
+    r = bmesh.ops.create_cube(bm, size=1.0, matrix=xfm(c, t, Vector((0, 1, 0)), nrm) @ Matrix.Diagonal((S, 2 * DECK_HW, DECK_T, 1)))
+    for f in {f for v in r["verts"] for f in v.link_faces}:
+        f.normal_update()
+        f.material_index = PL if f.normal.dot(nrm) > 0.9 else DE
+    for sy in (-1, 1):
+        y = sy * (DECK_HW - 0.035)
+        p0, p1 = Vector((0, y, 0)), Vector((L, y, rise))
+        d = p1 - p0
+        tt = d.normalized()
+        side = Vector((0, sy, 0))
+        for top, w, h in ((RAIL_H, 0.07, 0.06), (RAIL_H * 0.5, 0.04, 0.04), (0.09, 0.05, 0.09)):
+            cc = (p0 + p1) / 2 + Vector((0, 0, top - h / 2))
+            box_at(bm, xfm(cc, tt, side, tt.cross(side) if tt.cross(side).z > 0 else -tt.cross(side)), (d.length, w, h), ST)
+        for k in range(3):
+            q = p0.lerp(p1, k / 2)
+            box_at(bm, Matrix.Translation(q + Vector((0, 0, RAIL_H / 2))), (0.07, 0.07, RAIL_H), ST)
+    zt = rise - DECK_T / math.cos(ang) - 0.01                       # one stand under the top end
+    box_zoned(bm, (L - 0.3, 0, zt / 2), (0.14, 0.14, zt), ST, ST)
+    box_zoned(bm, (L - 0.3, 0, 0.02), (0.3, 0.3, 0.04), DE, DE)
+    bobj(name, bm, bmats())
+    return "run %.1f m, rise %.2f m" % (L, rise)
+
+
+def walk_stand(name):
+    bm = bmesh.new()
+    box_zoned(bm, (0, 0, 0.52), (0.14, 0.14, 0.96), ST, ST)
+    box_zoned(bm, (0, 0, 0.02), (0.30, 0.30, 0.04), DE, DE)
+    bobj(name, bm, bmats())
+    return "1 m (scale z), 0.14 sq + 0.30 foot"
+
+
+def walk_about(name, R=ABOUT_R):
+    """WALKWAY ROUNDABOUT round a column (R = lift 0.95 + 0.3 + 0.8); origin = deck top centre."""
+    bm = bmesh.new()
+    lathe(bm, [(R - DECK_HW, -DECK_T), (R + DECK_HW, -DECK_T), (R + DECK_HW, 0), (R - DECK_HW, 0)], [DE, DE, PL, DE])
+    for rr in (R - DECK_HW + 0.035, R + DECK_HW - 0.035):
+        for top, w, h in ((RAIL_H, 0.07, 0.06), (RAIL_H * 0.5, 0.04, 0.04), (0.09, 0.05, 0.09)):
+            _pr(bm, "tube", rr - w / 2, rr + w / 2, h, ST, (0, 0, top - h / 2))
+        n = max(math.ceil(2 * math.pi * rr / 2.2), 4)
+        for k in range(n):
+            a = 2 * math.pi * (k + 0.5) / n
+            box_at(bm, Matrix.Translation((rr * math.cos(a), rr * math.sin(a), RAIL_H / 2)) @ Matrix.Rotation(a, 4, "Z"),
+                   (0.07, 0.07, RAIL_H), ST)
+    _pr(bm, "tube", R - 0.44, R - 0.40, 0.004, DE, (0, 0, 0.002))
+    _pr(bm, "tube", R + 0.40, R + 0.44, 0.004, DE, (0, 0, 0.002))
+    bobj(name, bm, bmats())
+    return "R %.2f (deck %.2f..%.2f)" % (R, R - DECK_HW, R + DECK_HW)
+
+
+def pit(name):
+    """THE PIT (containment ring v1 measures: outer r 5.0, pool r 3.5 at 0.55, rim top 0.80), rebuilt as clean 64-seg
+    primitives: cream rim with a slate inner wall, recess groove, detail plinth, a bolt ring and 4 recess vent slots; the goo
+    pool (OS_Ooze_Neutral, R7 tint at runtime). Not entered (the Locals hop the rim): no doors."""
+    ms = bmats(["OS_Shell", "OS_Detail", "OS_Dark", "OS_Ooze_Neutral"])
+    bm = bmesh.new()
+    prof = [(3.5, 0.0), (5.0, 0.0), (5.0, 0.14), (4.82, 0.22), (4.76, 0.70), (4.62, 0.80), (4.12, 0.80), (4.12, 0.75),
+            (4.0, 0.75), (4.0, 0.80), (3.62, 0.80), (3.5, 0.72)]
+    lathe(bm, prof, [1, 1, 1, 0, 0, 0, 2, 2, 2, 0, 1, 1])
+    for k in range(28):                                             # bolt ring on the outer top band
+        a = 2 * math.pi * (k + 0.5) / 28
+        _pr(bm, "cyl", 0.045, 0, 0.03, 1, (4.37 * math.cos(a), 4.37 * math.sin(a), 0.815), segs=16)
+    for k in range(4):                                              # vent slots on the outer wall (the old grilles)
+        a = math.pi / 2 * k
+        out = Vector((math.cos(a), math.sin(a), 0))
+        for j in range(4):
+            box_at(bm, xfm(out * 4.80 + Vector((0, 0, 0.30 + 0.09 * j)), Vector((-out.y, out.x, 0)), Vector((0, 0, 1)), out),
+                   (0.9, 0.04, 0.04), 2)
+    root = bobj(name, bm, ms[:3])
+    g = bmesh.new()
+    _pr(g, "cyl", 3.49, 0, 0.53, 0, (0, 0, 0.285))
+    bobj(name + "_Goo", g, [ms[3]], root)
+    return "r 5.0, pool r 3.5 at 0.55, rim 0.80"
+
+
+def b_tube(name):
+    up = Vector((0, 0, 1))
+    if name == "Pit_Tube_Run_2m":
+        return tube_piece(name, line((-1, 0, LOW_Y), (1, 0, LOW_Y), 8),
+                          [((-1 + SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0)), ((1 - SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0))])
+    if name == "Pit_Tube_Elbow_R080":                               # ORTHO_BEND 0.8: quarter bend + 0.3 m leads (sleeves)
+        pts = [Vector((-0.3, 0, LOW_Y))] + [Vector((0.8 * math.sin(a), 0.8 - 0.8 * math.cos(a), LOW_Y))
+                                            for a in (math.pi / 2 * s / 24 for s in range(25))] + [Vector((0.8, 1.1, LOW_Y))]
+        return tube_piece(name, pts, [((-0.3 + SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0)), ((0.8, 1.1 - SLEEVE_L / 2, LOW_Y), (0, 1, 0))])
+    if name == "Pit_Tube_Step":                                     # floor level 0.35 -> second level 0.97 (FLOOR2_STEP 0.62)
+        pts = [Vector((x, 0, LOW_Y + (FLOOR2_Y - LOW_Y) * (0.5 - 0.5 * math.cos(math.pi * min(max((x + 0.3) / 1.6, 0), 1)))))
+               for x in [-0.6 + 0.05 * k for k in range(45)]]
+        return tube_piece(name, pts, [((pts[0].x + SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0)), ((pts[-1].x - SLEEVE_L / 2, 0, FLOOR2_Y), (1, 0, 0))])
+    if name == "Pit_Tube_Socket_Climb":                             # out of a tilted socket (40 deg at 0.62) to level 0.97
+        way = [Vector((0, 0, SOCK_Y)), Vector(((FLOOR2_Y - SOCK_Y) / math.tan(SOCK_ANG), 0, FLOOR2_Y)),
+               Vector((1.8, 0, FLOOR2_Y))]
+        pts = fillet_path(way, 0.8)
+        return tube_piece(name, pts, [((1.8 - SLEEVE_L / 2, 0, FLOOR2_Y), (1, 0, 0))])
+    if name == "Pit_Tube_Rim_Dip":                                  # origin = pit centre: floor run in, over the rim, into the goo
+        way = [Vector((7.2, 0, LOW_Y)), Vector((6.0, 0, LOW_Y)), Vector((5.0, 0, 1.22)), Vector((3.3, 0, 1.22)), Vector((2.7, 0, 0.25))]
+        pts = fillet_path(way, 0.6)
+
+        def clamp(bm):                                              # a clamp on the rim top
+            box_at(bm, Matrix.Translation((4.3, 0, 0.865)), (0.30, 0.42, 0.13), 1)
+        return tube_piece(name, pts, [((7.2 - SLEEVE_L / 2, 0, LOW_Y), (-1, 0, 0)), ((4.3, 0, 1.22), (-1, 0, 0))], clamp)
+    raise ValueError(name)
+
+
+def bottom(name):
+    if name == "Node_Base":
+        return node_base(name, True)
+    if name == "Node_Base_Tilted":
+        return node_base(name, False)
+    if name == "Node_Tube":
+        return node_tube(name, LIFT_R, LIFT_H)
+    if name == "Node_Tube_Unit_1m":
+        return node_tube(name, LIFT_R, 1.0, bands=False, collar=False)
+    if name == "Node_Tube_Pillar_Unit_1m":
+        return node_tube(name, LIFT_R_PILLAR, 1.0, bands=False, collar=False)
+    if name.startswith("Tube_Connector_"):
+        a, b = (int(v) for v in name.rsplit("_", 1)[1].split("x"))
+        return connector(name, a, b)
+    if name == "Walkway_Straight_4m":
+        return walk_straight(name)
+    if name == "Walkway_Ramp":
+        return walk_ramp(name)
+    if name == "Walkway_Stand_1m":
+        return walk_stand(name)
+    if name == "Walkway_Roundabout":
+        return walk_about(name)
+    if name == "Pit":
+        return pit(name)
+    if name.startswith("Pit_Tube_"):
+        b_tube(name)
+        return "transport tube r %.2f, goo %.2f" % (TUBE_R, GOO_R)
+    raise ValueError(name)
+
+
+BOTTOM = ["Node_Base", "Node_Base_Tilted", "Node_Tube", "Node_Tube_Unit_1m", "Node_Tube_Pillar_Unit_1m",
+          "Tube_Connector_1x1", "Tube_Connector_1x2", "Tube_Connector_2x2", "Tube_Connector_3x3",
+          "Walkway_Straight_4m", "Walkway_Ramp", "Walkway_Stand_1m", "Walkway_Roundabout",
+          "Pit", "Pit_Tube_Run_2m", "Pit_Tube_Elbow_R080", "Pit_Tube_Step", "Pit_Tube_Socket_Climb", "Pit_Tube_Rim_Dip"]
+
+
 # ------------------------------------------------------------------ pieces
 PIECES = [("kit/Platform_Standard", "Platform_Standard", "platform"),
           ("kit/Platform_Pillar", "Platform_Pillar", "platform"),
@@ -1011,6 +1506,7 @@ PIECES += [(None, n, "tube") for n in ("Floor_Tube_Run_6m", "Floor_Tube_Elbow_R0
 STRUCTURES = ["Laser", "Cannon_T1", "Cannon_T2", "Cannon_T3", "Forge", "Machinegoon_T1", "Machinegoon_T2", "Machinegoon_T3"]
 PIECES += [("kit/" + n, n, "structure") for n in STRUCTURES]
 PIECES += [(None, n, "goocannon") for n in ("Relay_Cannon_v4", "Relay_Cannon_v4_T2", "Relay_Cannon_v4_T3")]   # the launcher turret
+PIECES += [(None, n, "bottom") for n in BOTTOM]   # lab-kit 3: the bottom part (node base / tube, connectors, walkways, pit, pit tubes)
 
 
 def export(path):
@@ -1032,6 +1528,8 @@ def main():
             note = floor_tubes(name)
         elif kind == "goocannon":
             note = goocannon(name)
+        elif kind == "bottom":
+            note = bottom(name)
         else:
             bpy.ops.import_scene.gltf(filepath=os.path.join(SRC, src + ".glb"))
             mats = rezone(name if kind != "pit" else "Pit")

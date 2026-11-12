@@ -63,6 +63,31 @@ if "--structures" in sys.argv:    # lab-kit 2 (2026-11-12): laser / forge / Goog
     ]
 
 
+if "--bottom" in sys.argv:        # lab-kit 3 (2026-11-12): the bottom part - node base / tube, connectors, walkways, pit, pit tubes
+    TILES = [
+        ("Node_Base", "Node_Base (tube entrance) - owned, 4 doors", "cyan", None, False),
+        ("Node_Base", "Node_Base - neutral", None, None, False),
+        ("Node_Base_Tilted", "Node_Base_Tilted (4 tilted sockets) - owned", "magenta", None, False),
+        ("Node_Tube", "Node_Tube 12.5 m (lift) - owned, VEX goo", "cyan", "VEX", False),
+        ("Node_Tube_Pillar_Unit_1m", "Node_Tube_Pillar_Unit_1m (r 2.6) - EMBER", None, "EMBER", False),
+        ("Tube_Connector_1x1", "Tube_Connector_1x1 (2.4 m)", None, None, False),
+        ("Tube_Connector_1x2", "Tube_Connector_1x2", None, None, False),
+        ("Tube_Connector_2x2", "Tube_Connector_2x2", None, None, False),
+        ("Tube_Connector_3x3", "Tube_Connector_3x3 (4.6 m)", None, None, False),
+        ("Walkway_Straight_4m", "Walkway_Straight_4m", None, None, False),
+        ("Walkway_Ramp", "Walkway_Ramp (3.2 m, rise 1.75)", None, None, False),
+        ("Walkway_Roundabout", "Walkway_Roundabout (R 2.05)", None, None, False),
+        ("Walkway_Stand_1m", "Walkway_Stand_1m (scale z)", None, None, False),
+        ("Pit", "Pit (r 5.0) - neutral goo", None, None, False),
+        ("Pit", "Pit - BLOOM-tinted goo (R7)", None, "BLOOM", False),
+        ("Pit_Tube_Run_2m", "Pit_Tube_Run_2m - VEX", None, "VEX", False),
+        ("Pit_Tube_Elbow_R080", "Pit_Tube_Elbow_R080 - EMBER", None, "EMBER", False),
+        ("Pit_Tube_Step", "Pit_Tube_Step (0.35 -> 0.97) - SOLAR", None, "SOLAR", False),
+        ("Pit_Tube_Socket_Climb", "Pit_Tube_Socket_Climb (40 deg) - NULL", None, "NULL", False),
+        ("Pit_Tube_Rim_Dip", "Pit_Tube_Rim_Dip (over the rim) - VEX", None, "VEX", False),
+    ]
+
+
 if "--vats" in sys.argv:          # compare run: only the 8 vat tiles, of the files <Vat_Tn><suffix>.glb
     SUF = sys.argv[sys.argv.index("--vats") + 1]
     TILES = [(p + SUF, l, n, g, lo) for p, l, n, g, lo in TILES if p.startswith("Vat_")]
