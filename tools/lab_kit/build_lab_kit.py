@@ -216,6 +216,39 @@ def vat_neon(ob, piece):
     return "neon kept: base ring %d faces, tip %d; moved to detail %d" % (kept_ring, kept_tip, moved)
 
 
+def vat_caps(ob, piece):
+    """Daniele via Designer 4 (2026-11-12): "the top of the vats either full white or add a neon circle; right now just seem a
+    badly painted skin" -> every tank cap and the main spire cap are SOLID shell cream (OS_Shell, #E2CFAE): the slate band,
+    its (former neon) dashes and the cap ring become shell; no neon on the caps (the spire tip keeps its neon)."""
+    me = ob.data
+    names = [base_name(m.name) if m else "" for m in me.materials]
+    shell = slot_index(ob, "OS_Shell", piece)
+    paint = {i for i, n in enumerate(names) if n in ("OS_Dark", "OS_Detail", "OS_Recess")}
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    glass = [f for f in bm.faces if names[f.material_index].startswith("OS_Glass")]
+    tanks = [_tank(c) for c in _clusters(_islands(bm, glass))]
+    ztop = max(v.co.z for v in bm.verts)
+    col_z1 = ztop - 1.83                                    # build_kit_2_0.vat_spire: tip top = col_z1 + 1.83
+    caps = head = 0
+    for f in bm.faces:
+        if f.material_index not in paint:
+            continue
+        c = f.calc_center_median()
+        for cx, cy, z0, z1, rmin, isl in tanks:
+            if math.hypot(c.x - cx, c.y - cy) <= rmin * 1.2 + 0.05 and z1 - 0.05 <= c.z <= z1 + 0.45:
+                f.material_index = shell
+                caps += 1
+                break
+        else:
+            if math.hypot(c.x, c.y) < 1.25 and col_z1 - 0.3 <= c.z <= ztop - 0.6:
+                f.material_index = shell
+                head += 1
+    bm.to_mesh(me)
+    bm.free()
+    return "caps to shell: tank caps %d faces, spire cap %d" % (caps, head)
+
+
 def vat_goo(ob, piece):
     me = ob.data
     gi = slot_index(ob, "OS_Glass", piece)
@@ -400,7 +433,7 @@ def main():
             elif kind == "platform":
                 note = rim_band(root, name)
             elif kind == "vat":
-                note = vat_goo(root, name) + " | " + vat_neon(root, name)
+                note = vat_goo(root, name) + " | " + vat_neon(root, name) + " | " + vat_caps(root, name)
             else:
                 note = "zones " + ",".join(mats)
         for m in list(bpy.data.materials):
