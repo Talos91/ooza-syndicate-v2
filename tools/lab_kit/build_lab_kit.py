@@ -698,81 +698,124 @@ def gatling(piece):
     return " | ".join(notes) + " | rings: base %s, tank caps %d" % ("yes" if z is not None else "NO", caps)
 
 
-SRGB = {"cream": (0xE2, 0xCF, 0xAE), "detail": (0x71, 0x8A, 0x83), "recess": (0x3D, 0x57, 0x58)}
+def goocannon(piece):
+    """Goocannon = the launcher turret (Relay_Cannon_v4 / _T2 / _T3), REMADE as clean kit geometry (Daniele 2026-11-12: "the
+    cannon needs to be remade in blender as the original rodin model ... very hard to paint and would look different then
+    other models in game"). Proportions measured on the deployed GLBs (disc, ramp, pedestal, pivot, drum, barrel, rear tank),
+    built from clean primitives in the vat language, zoned by OS_* slots (so it now takes the owner's neon at runtime):
+    dark disc drum + cream top plate + ramp wedge (+X, the throw direction), thin neon halo on the plate, detail collar,
+    cream pedestal with side fins + a front recess, detail yoke arms; Head (origin on the yoke pivot, the game pitches it
+    and kicks it back along -X): cream drum on a Y axle, detail trunnion bosses (5 mm clear of the arms), detail neck,
+    cream muzzle with detail rings, recess bore + thin neon ring on the muzzle face, a hatch with a thin neon ring;
+    T2 / T3: the rear ammo tank has a glass window band with goo inside (the goo gauge)."""
+    T = {"Relay_Cannon_v4": dict(R=4.62, Hd=0.75, piv=3.21, top=2.25, col=2.6, p0=2.3, p1=1.9, xd=-0.9, dz=0.69, Rb=1.35,
+                                 Wb=1.1, neck=(0.3, 1.45, 0.75), muz=(1.45, 2.38, 0.95), rear=None),
+         "Relay_Cannon_v4_T2": dict(R=4.32, Hd=0.6, piv=3.72, top=2.9, col=2.47, p0=2.25, p1=2.0, xd=-0.4, dz=1.0, Rb=1.55,
+                                    Wb=1.25, neck=(0.6, 2.0, 0.55), muz=(2.0, 3.91, 1.12), rear=(-3.41, -1.0, 1.27)),
+         "Relay_Cannon_v4_T3": dict(R=4.85, Hd=0.7, piv=4.26, top=3.4, col=2.73, p0=2.55, p1=2.15, xd=-0.6, dz=1.2, Rb=1.72,
+                                    Wb=1.35, neck=(0.9, 1.6, 0.5), muz=(1.6, 3.55, 1.5), rear=(-4.3, -1.6, 1.55))}[piece]
+    names = ["OS_Shell", "OS_Detail", "OS_Dark", "OS_Light", "OS_Glass", "OS_Ooze_Neutral"]
+    mats = [make_mat(n, zone_of("Goocannon", n)) for n in names]
+    SH, DE, DK, LI, GL, GO = range(6)
 
+    def ax(bm, kind, c, r0, r1, h, mi, axis, segs=64):
+        """_prim along X or Y (built on Z at the origin, turned, moved to c)."""
+        fs = _prim(bm, kind, (0, 0, 0), r0, r1, h, mi, segs)
+        vs = list({v for f in fs for v in f.verts})
+        if axis == "X":
+            bmesh.ops.rotate(bm, verts=vs, cent=(0, 0, 0), matrix=Matrix.Rotation(math.pi / 2, 3, "Y"))
+        elif axis == "Y":
+            bmesh.ops.rotate(bm, verts=vs, cent=(0, 0, 0), matrix=Matrix.Rotation(-math.pi / 2, 3, "X"))
+        bmesh.ops.translate(bm, verts=vs, vec=c)
+        a = Vector({"X": (1, 0, 0), "Y": (0, 1, 0), "Z": (0, 0, 1)}[axis])
+        for f in fs:
+            f.normal_update()
+            f.smooth = abs(f.normal.dot(a)) < 0.5
+        return fs
 
-def textured_lab(piece):
-    """Goocannon (Relay_Cannon_v4 / _T2 / _T3, one textured material per tier): the diffuse is gradient-mapped into the lab
-    palette by its own luminance (dark seams -> recess #3D5758, mid -> detail #718A83, body -> cream #E2CFAE), the white
-    emissive stripes become detail lines with no glow, metal off and roughness 0.8 (lab: no metal); normal map kept.
-    The material keeps its name (no runtime slot today, so no player neon: same as the deployed model)."""
-    import numpy as np
-    import tempfile
-    tmp = tempfile.mkdtemp(prefix="labkit_tex_")
-    log = []
-    for m in bpy.data.materials:
-        if not m.use_nodes:
-            continue
-        nt = m.node_tree
-        bsdf = next((n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"), None)
-        if bsdf is None:
-            continue
+    def box(bm, c, s, mi):
+        r = bmesh.ops.create_cube(bm, size=1.0, matrix=Matrix.Translation(c) @ Matrix.Diagonal((*s, 1)))
+        for f in {f for v in r["verts"] for f in v.link_faces}:
+            f.material_index = mi
+            f.smooth = False
 
-        def src(inp):
-            for l in nt.links:
-                if l.to_socket == inp:
-                    return l
-        lb, le = src(bsdf.inputs["Base Color"]), src(bsdf.inputs["Emission Color"])
-        dif = lb.from_node if lb and lb.from_node.type == "TEX_IMAGE" else None
-        emi = le.from_node if le and le.from_node.type == "TEX_IMAGE" else None
-        if dif is None:
-            continue
-        w, h = dif.image.size
-        d = np.empty(w * h * 4, dtype=np.float32)
-        dif.image.pixels.foreach_get(d)
-        d = d.reshape(-1, 4)
-        L = 0.2126 * d[:, 0] + 0.7152 * d[:, 1] + 0.0722 * d[:, 2]
-        g = L.reshape(h, w)                                          # 5 x 5 box blur: the scan texture's speckle reads
-        acc = np.zeros_like(g)                                       # as dirt on a cream shell
-        for dy in range(-2, 3):
-            for dx in range(-2, 3):
-                acc += np.roll(np.roll(g, dy, 0), dx, 1)
-        L = (acc / 25).ravel()
-        stripe = np.zeros(len(L), dtype=bool)
-        if emi is not None and tuple(emi.image.size) == (w, h):
-            e = np.empty(w * h * 4, dtype=np.float32)
-            emi.image.pixels.foreach_get(e)
-            e = e.reshape(-1, 4)
-            stripe = (e[:, 0] + e[:, 1] + e[:, 2]) / 3 > 0.45
-        c = {k: np.array(v, dtype=np.float32) / 255 for k, v in SRGB.items()}
-        t1 = np.clip((L - 0.09) / 0.05, 0, 1)[:, None]            # 0.09 -> 0.14: recess -> detail
-        t2 = np.clip((L - 0.15) / 0.04, 0, 1)[:, None]            # 0.15 -> 0.19: detail -> cream
-        out = c["recess"] * (1 - t1) + c["detail"] * t1
-        out = out * (1 - t2) + c["cream"] * t2
-        shade = np.clip(0.95 + 0.2 * (L - 0.25), 0.9, 1.03)[:, None]     # keep a little of the panel shading
-        out = np.where(L[:, None] >= 0.19, c["cream"] * shade, out)
-        out[stripe] = c["detail"]
-        px = np.concatenate([np.clip(out, 0, 1), np.ones((len(L), 1), dtype=np.float32)], axis=1)
-        img = bpy.data.images.new(piece + "_lab_diffuse", w, h)
-        img.pixels.foreach_set(px.ravel())
-        img.filepath_raw = os.path.join(tmp, piece + "_lab_diffuse.jpg")
-        img.file_format = "JPEG"
-        img.save()
-        dif.image = img
-        for l in list(nt.links):                                     # no glow, no metal
-            if l.to_socket in (bsdf.inputs["Emission Color"], bsdf.inputs["Emission Strength"],
-                               bsdf.inputs["Metallic"], bsdf.inputs["Roughness"]):
-                nt.links.remove(l)
-        for n in list(nt.nodes):
-            if n.type in ("TEX_IMAGE", "SEPARATE_COLOR", "SEPRGB", "SEPARATE_RGB") and n.name != dif.name \
-                    and not any(l.from_node == n and l.to_node.type == "NORMAL_MAP" for l in nt.links):
-                nt.nodes.remove(n)
-        bsdf.inputs["Emission Strength"].default_value = 0.0
-        bsdf.inputs["Metallic"].default_value = 0.0
-        bsdf.inputs["Roughness"].default_value = 0.8
-        log.append("%s: %dx%d gradient-mapped, stripes %d px, cream %.0f %%" % (m.name, w, h, int(stripe.sum()),
-                                                                              100 * float((L >= 0.19).mean())))
-    return "; ".join(log)
+    def wedge(bm, x0, x1, hw, z0, z1, mi):
+        """Ramp: x0..x1 at half width hw, top from z0 (at x0) down to z1 (at x1), bottom on z 0."""
+        P = [(x0, -hw, 0), (x1, -hw, 0), (x1, hw, 0), (x0, hw, 0), (x0, -hw, z0), (x1, -hw, z1), (x1, hw, z1), (x0, hw, z0)]
+        v = [bm.verts.new(p) for p in P]
+        for q in ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
+            f = bm.faces.new([v[i] for i in q])
+            f.material_index = mi
+        bmesh.ops.recalc_face_normals(bm, faces=[f for f in bm.faces if f.verts[0] in v])
+
+    R, Hd, piv = T["R"], T["Hd"], T["piv"]
+    # ---------------------------------------------------------------- base (static)
+    b = bmesh.new()
+    _prim(b, "cyl", (0, 0, 0.3 * Hd), R, 0, 0.6 * Hd, DK)                         # dark disc drum
+    _prim(b, "cyl", (0, 0, 0.8 * Hd), R - 0.08, 0, 0.4 * Hd, SH)                   # cream top plate
+    _prim(b, "tube", (0, 0, Hd + 0.008), T["col"] + 0.18, T["col"] + 0.3, 0.012, LI)   # thin neon halo on the plate
+    wedge(b, 2.9, R + 0.35, 1.35, Hd + 0.24, 0.45 * Hd, SH)                       # the throw ramp (+X), past the rim
+    wedge(b, 2.9, R + 0.36, 0.25, Hd + 0.255, 0.45 * Hd + 0.015, DE)              # its centre strip
+    c0, c1 = Hd, Hd + 0.3
+    _prim(b, "cyl", (0, 0, (c0 + c1) / 2), T["col"], 0, c1 - c0, DE)              # detail collar
+    _prim(b, "cone", (0, 0, (c1 + T["top"]) / 2), T["p0"], T["p1"], T["top"] - c1, SH)   # cream pedestal
+    hp = T["top"] - c1
+    for sy in (-1, 1):                                                           # side fins
+        box(b, (0, sy * (T["p0"] - 0.05), c1 + hp * 0.4), (0.5, 0.36, hp * 0.8), DE)
+    box(b, ((T["p0"] + T["p1"]) / 2 - 0.12, 0, c1 + hp * 0.45), (0.3, 1.0, hp * 0.7), DK)   # front recess (door)
+    a0, a1 = T["Wb"] + 0.405, T["Wb"] + 0.75                                     # yoke arms, 5 mm clear of the bosses
+    for sy in (-1, 1):
+        box(b, (0, sy * (a0 + a1) / 2, (T["top"] - 0.05 + piv) / 2), (0.9, a1 - a0, piv - T["top"] + 0.05), DE)
+        ax(b, "cyl", (0, sy * (a0 + a1) / 2, piv), 0.45, 0, a1 - a0, DE, "Y", segs=48)
+    # ---------------------------------------------------------------- head (pivot at the origin)
+    h = bmesh.new()
+    xd, dz, Rb, Wb = T["xd"], T["dz"], T["Rb"], T["Wb"]
+    ax(h, "cyl", (xd, 0, dz), Rb, 0, 2 * Wb - 0.24, SH, "Y")                       # cream drum
+    for sy in (-1, 1):
+        f = ax(h, "cone", (xd, sy * (Wb - 0.06), dz), Rb, Rb - 0.12, 0.12, SH, "Y")   # chamfered ends
+        if sy < 0:
+            bmesh.ops.reverse_faces(h, faces=f)
+            bmesh.ops.rotate(h, verts=list({v for q in f for v in q.verts}), cent=(xd, -(Wb - 0.06), dz),
+                             matrix=Matrix.Rotation(math.pi, 3, "Z"))
+        ax(h, "cyl", (xd, sy * (Wb - 0.2), dz), Rb + 0.03, 0, 0.12, DE, "Y")      # drum rims
+        ax(h, "cyl", (xd, sy * (Wb + 0.01), dz), 0.62 * Rb, 0, 0.02, DE, "Y", segs=48)   # hub plates
+        ax(h, "cyl", (0, sy * (Wb + 0.2), 0), 0.5, 0, 0.40, DE, "Y", segs=48)      # trunnion bosses (to Wb + 0.40)
+        ax(h, "cyl", (0, sy * (Wb + 0.39), 0), 0.22, 0, 0.02, DK, "Y", segs=32)    # boss caps
+    nx0, nx1, nr = T["neck"]
+    ax(h, "cyl", ((nx0 + nx1) / 2, 0, dz), nr, 0, nx1 - nx0, DE, "X")             # neck
+    mx0, mx1, mr = T["muz"]
+    ax(h, "cyl", ((mx0 + mx1) / 2, 0, dz), mr, 0, mx1 - mx0, SH, "X")             # muzzle
+    for x in (mx0 + 0.1, mx1 - 0.1):
+        ax(h, "cyl", (x, 0, dz), mr + 0.05, 0, 0.16, DE, "X")                     # muzzle rings
+    ax(h, "cyl", (mx1 + 0.01, 0, dz), 0.55 * mr, 0, 0.02, DK, "X", segs=48)       # bore
+    ax(h, "tube", (mx1 + 0.002 + 0.006, 0, dz), 0.66 * mr, 0.78 * mr, 0.012, LI, "X")   # thin neon ring on the muzzle face
+    if T["rear"]:
+        rx0, rx1, rr = T["rear"]
+        g0, g1 = rx0 + 0.3 + 0.3 * (rx1 - rx0 - 0.3), rx1 - 0.25 * (rx1 - rx0)
+        ax(h, "cone", (rx0 + 0.15, 0, dz), 0.6 * rr, rr, 0.3, SH, "X")             # rear dome
+        ax(h, "cyl", ((rx0 + 0.3 + g0) / 2, 0, dz), rr, 0, g0 - (rx0 + 0.3), SH, "X")
+        ax(h, "cyl", ((g1 + rx1) / 2, 0, dz), rr, 0, rx1 - g1, SH, "X")
+        ax(h, "cyl", ((g0 + g1) / 2, 0, dz), rr - 0.05, 0, g1 - g0, GL, "X")       # glass window band (inset 5 cm)
+        ax(h, "cyl", ((g0 + g1) / 2, 0, dz), rr - 0.17, 0, g1 - g0 - 0.04, GO, "X")   # goo inside (the gauge)
+        hx, hz = (rx0 + 0.3 + g0) / 2, dz + rr                                     # hatch on the tank's back end
+    else:
+        hx, hz = xd, dz + Rb                                                       # T1: hatch on the drum
+    _prim(h, "cyl", (hx, 0, hz + 0.02), 0.34, 0, 0.24, DE, segs=48)               # hatch (sunk 0.1 into the shell)
+    _prim(h, "tube", (hx, 0, hz + 0.14 + 0.008), 0.18, 0.28, 0.012, LI, segs=48)  # thin neon ring on the hatch
+    obs = []
+    for nm, bm in (("Relay_Cannon_v4", b), ("Head", h)):
+        me = bpy.data.meshes.new(nm)
+        bm.to_mesh(me)
+        bm.free()
+        for m in mats:
+            me.materials.append(m)
+        ob = bpy.data.objects.new(nm, me)
+        bpy.context.scene.collection.objects.link(ob)
+        obs.append(ob)
+    obs[1].parent = obs[0]
+    obs[1].location = (0, 0, piv)
+    return "remade clean: base %d faces, head %d faces%s" % (len(obs[0].data.polygons), len(obs[1].data.polygons),
+                                                            ", rear tank + goo gauge" if T["rear"] else "")
 
 
 def cream(ob, piece, test):
@@ -806,7 +849,7 @@ def structure(piece):
         return struct_neon(root, piece, keep=lambda c: c.z > 5.9 and abs(c.y - 0.5) < 0.5) + " | " + col   # 3 chimney rings
     if fam == "Machinegoon":
         return gatling(piece)
-    return textured_lab(piece)
+    raise ValueError(piece)
 
 
 # ------------------------------------------------------------------ pieces
@@ -822,9 +865,9 @@ PIECES += [("kit/Relay_Mount", "Relay_Mount", "")]
 # Relay_Button_*: not on the 26S sheets (lab2 recolours cover them); their deployed Glyph / Strut fail the BVH check.
 PIECES += [("world/containment_ring_v1", "Pit_Ring", "pit")]
 PIECES += [(None, n, "tube") for n in ("Floor_Tube_Run_6m", "Floor_Tube_Elbow_R080")]   # crossings: procedural, on the connector blocks
-STRUCTURES = ["Laser", "Cannon_T1", "Cannon_T2", "Cannon_T3", "Forge", "Machinegoon_T1", "Machinegoon_T2", "Machinegoon_T3",
-              "Relay_Cannon_v4", "Relay_Cannon_v4_T2", "Relay_Cannon_v4_T3"]   # Goocannon = the launcher turret (proto_relay_view)
+STRUCTURES = ["Laser", "Cannon_T1", "Cannon_T2", "Cannon_T3", "Forge", "Machinegoon_T1", "Machinegoon_T2", "Machinegoon_T3"]
 PIECES += [("kit/" + n, n, "structure") for n in STRUCTURES]
+PIECES += [(None, n, "goocannon") for n in ("Relay_Cannon_v4", "Relay_Cannon_v4_T2", "Relay_Cannon_v4_T3")]   # the launcher turret
 
 
 def export(path):
@@ -844,6 +887,8 @@ def main():
         note = ""
         if kind == "tube":
             note = floor_tubes(name)
+        elif kind == "goocannon":
+            note = goocannon(name)
         else:
             bpy.ops.import_scene.gltf(filepath=os.path.join(SRC, src + ".glb"))
             mats = rezone(name if kind != "pit" else "Pit")

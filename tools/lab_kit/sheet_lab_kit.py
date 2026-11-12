@@ -55,9 +55,9 @@ if "--structures" in sys.argv:    # lab-kit 2 (2026-11-12): laser / forge / Goog
         ("Machinegoon_T1", "Googatling T1 - owned, VEX goo", "cyan", "VEX", False),
         ("Machinegoon_T2", "Googatling T2 - owned, BLOOM goo", "magenta", "BLOOM", False),
         ("Machinegoon_T3", "Googatling T3 - owned, NULL goo", "cyan", "NULL", False),
-        ("Relay_Cannon_v4", "Goocannon T1 (Relay_Cannon_v4)", None, None, False),
-        ("Relay_Cannon_v4_T2", "Goocannon T2", None, None, False),
-        ("Relay_Cannon_v4_T3", "Goocannon T3", None, None, False),
+        ("Relay_Cannon_v4", "Goocannon T1 (remade clean) - owned", "magenta", None, False),
+        ("Relay_Cannon_v4_T2", "Goocannon T2 - owned, VEX goo gauge", "cyan", "VEX", False),
+        ("Relay_Cannon_v4_T3", "Goocannon T3 - owned, BLOOM goo gauge", "magenta", "BLOOM", False),
         ("Machinegoon_T3", "Googatling T3 - 25 % garrison", "magenta", "SOLAR", True),
         ("Vat_T2_capneon", "Vat_T2_capneon (reference, final vats)", "cyan", "EMBER", False),
     ]
