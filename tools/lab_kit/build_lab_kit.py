@@ -699,21 +699,24 @@ def gatling(piece):
 
 
 def goocannon(piece):
-    """Goocannon = the launcher turret (Relay_Cannon_v4 / _T2 / _T3), REMADE as clean kit geometry (Daniele 2026-11-12: "the
+    """Goocannon = the launcher turret (Relay_Cannon_v4 / _T2 / _T3), REMADE as clean kit geometry. Daniele 2026-11-12: "the
     cannon needs to be remade in blender as the original rodin model ... very hard to paint and would look different then
-    other models in game"). Proportions measured on the deployed GLBs (disc, ramp, pedestal, pivot, drum, barrel, rear tank),
-    built from clean primitives in the vat language, zoned by OS_* slots (so it now takes the owner's neon at runtime):
-    dark disc drum + cream top plate + ramp wedge (+X, the throw direction), thin neon halo on the plate, detail collar,
-    cream pedestal with side fins + a front recess, detail yoke arms; Head (origin on the yoke pivot, the game pitches it
-    and kicks it back along -X): cream drum on a Y axle, detail trunnion bosses (5 mm clear of the arms), detail neck,
-    cream muzzle with detail rings, recess bore + thin neon ring on the muzzle face, a hatch with a thin neon ring;
-    T2 / T3: the rear ammo tank has a glass window band with goo inside (the goo gauge)."""
-    T = {"Relay_Cannon_v4": dict(R=4.62, Hd=0.75, piv=3.21, top=2.25, col=2.6, p0=2.3, p1=1.9, xd=-0.9, dz=0.69, Rb=1.35,
-                                 Wb=1.1, neck=(0.3, 1.45, 0.75), muz=(1.45, 2.38, 0.95), rear=None),
-         "Relay_Cannon_v4_T2": dict(R=4.32, Hd=0.6, piv=3.72, top=2.9, col=2.47, p0=2.25, p1=2.0, xd=-0.4, dz=1.0, Rb=1.55,
-                                    Wb=1.25, neck=(0.6, 2.0, 0.55), muz=(2.0, 3.91, 1.12), rear=(-3.41, -1.0, 1.27)),
-         "Relay_Cannon_v4_T3": dict(R=4.85, Hd=0.7, piv=4.26, top=3.4, col=2.73, p0=2.55, p1=2.15, xd=-0.6, dz=1.2, Rb=1.72,
-                                    Wb=1.35, neck=(0.9, 1.6, 0.5), muz=(1.6, 3.55, 1.5), rear=(-4.3, -1.6, 1.55))}[piece]
+    other models in game", then (on the first remake) "too lowquality make it more complicated and closer to the original
+    expecially T2vs T3 barely any difference". Proportions measured on the deployed GLBs; each tier keeps the original's
+    own anatomy:
+      T1 = ball head with a belt band, side ring bosses, short ribbed neck, double-ring muzzle; low pedestal.
+      T2 = rounded rear ammo capsule (glass goo window + top port), chamfered block body, hex-nut bosses, long ribbed neck,
+           banded muzzle with a flared lip; mid pedestal with 4 buttresses.
+      T3 = long finned rear tank (goo window, top port, 2 feed pipes), armoured body with a V-ridge roof and angled shoulder
+           plates, big ring bosses, heavy cooled muzzle drum with a slotted brake; tall pedestal, buttresses, bolted collar.
+    Every tier: dark disc drum, cream plate with a step ring and a bolt ring, +X throw ramp with a centre strip, detail
+    collar, cream pedestal with a framed front hatch, detail yoke arms. OS_* slots (owner neon only as thin rings: plinth
+    halo, muzzle face, port; goo = AI tint). Head = child on the yoke pivot (the game pitches it and kicks it along -X);
+    every head part stays >= 5 mm clear of the base (BVH)."""
+    T = {"Relay_Cannon_v4": dict(R=4.62, Hd=0.75, piv=3.21, top=2.25, col=2.6, p0=2.3, p1=1.9, fins=0, bolts=12),
+         "Relay_Cannon_v4_T2": dict(R=4.32, Hd=0.6, piv=3.72, top=2.9, col=2.47, p0=2.25, p1=1.85, fins=4, bolts=12),
+         "Relay_Cannon_v4_T3": dict(R=4.85, Hd=0.7, piv=4.26, top=3.4, col=2.73, p0=2.55, p1=2.05, fins=4, bolts=16)}[piece]
+    tier = 1 if piece == "Relay_Cannon_v4" else int(piece[-1])
     names = ["OS_Shell", "OS_Detail", "OS_Dark", "OS_Light", "OS_Glass", "OS_Ooze_Neutral"]
     mats = [make_mat(n, zone_of("Goocannon", n)) for n in names]
     SH, DE, DK, LI, GL, GO = range(6)
@@ -733,77 +736,176 @@ def goocannon(piece):
             f.smooth = abs(f.normal.dot(a)) < 0.5
         return fs
 
-    def box(bm, c, s, mi):
-        r = bmesh.ops.create_cube(bm, size=1.0, matrix=Matrix.Translation(c) @ Matrix.Diagonal((*s, 1)))
-        for f in {f for v in r["verts"] for f in v.link_faces}:
+    def box(bm, c, s, mi, bev=0.0, rz=0.0, ry=0.0, rx=0.0):
+        M = (Matrix.Translation(c) @ Matrix.Rotation(rz, 4, "Z") @ Matrix.Rotation(ry, 4, "Y") @ Matrix.Rotation(rx, 4, "X")
+             @ Matrix.Diagonal((*s, 1)))
+        r = bmesh.ops.create_cube(bm, size=1.0, matrix=M)
+        vs = r["verts"]
+        for f in {f for v in vs for f in v.link_faces}:
             f.material_index = mi
             f.smooth = False
+        if bev:
+            bmesh.ops.bevel(bm, geom=vs + list({e for v in vs for e in v.link_edges}), offset=bev, offset_type="OFFSET",
+                            segments=3, profile=0.5, affect="EDGES", clamp_overlap=True)
+
+    def ball(bm, c, r, mi, sx=1.0):
+        res = bmesh.ops.create_uvsphere(bm, u_segments=48, v_segments=24, radius=r,
+                                        matrix=Matrix.Translation(c) @ Matrix.Diagonal((sx, 1, 1, 1)))
+        for f in {f for v in res["verts"] for f in v.link_faces}:
+            f.material_index = mi
+            f.smooth = True
 
     def wedge(bm, x0, x1, hw, z0, z1, mi):
         """Ramp: x0..x1 at half width hw, top from z0 (at x0) down to z1 (at x1), bottom on z 0."""
         P = [(x0, -hw, 0), (x1, -hw, 0), (x1, hw, 0), (x0, hw, 0), (x0, -hw, z0), (x1, -hw, z1), (x1, hw, z1), (x0, hw, z0)]
         v = [bm.verts.new(p) for p in P]
+        fs = []
         for q in ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)):
             f = bm.faces.new([v[i] for i in q])
             f.material_index = mi
-        bmesh.ops.recalc_face_normals(bm, faces=[f for f in bm.faces if f.verts[0] in v])
+            fs.append(f)
+        bmesh.ops.recalc_face_normals(bm, faces=fs)
 
     R, Hd, piv = T["R"], T["Hd"], T["piv"]
     # ---------------------------------------------------------------- base (static)
     b = bmesh.new()
     _prim(b, "cyl", (0, 0, 0.3 * Hd), R, 0, 0.6 * Hd, DK)                         # dark disc drum
     _prim(b, "cyl", (0, 0, 0.8 * Hd), R - 0.08, 0, 0.4 * Hd, SH)                   # cream top plate
+    _prim(b, "tube", (0, 0, Hd + 0.03), 0.8 * R, 0.85 * R, 0.06, DE)               # step ring
     _prim(b, "tube", (0, 0, Hd + 0.008), T["col"] + 0.18, T["col"] + 0.3, 0.012, LI)   # thin neon halo on the plate
+    n = T["bolts"]
+    for i in range(n):                                                           # bolt ring (not under the ramp)
+        a = 2 * math.pi * (i + 0.5) / n
+        if abs(math.atan2(math.sin(a), math.cos(a))) > 0.42:
+            _prim(b, "cyl", ((0.92 * R) * math.cos(a), (0.92 * R) * math.sin(a), Hd + 0.02), 0.1, 0, 0.08, DE, segs=12)
     wedge(b, 2.9, R + 0.35, 1.35, Hd + 0.24, 0.45 * Hd, SH)                       # the throw ramp (+X), past the rim
     wedge(b, 2.9, R + 0.36, 0.25, Hd + 0.255, 0.45 * Hd + 0.015, DE)              # its centre strip
     c0, c1 = Hd, Hd + 0.3
     _prim(b, "cyl", (0, 0, (c0 + c1) / 2), T["col"], 0, c1 - c0, DE)              # detail collar
-    _prim(b, "cone", (0, 0, (c1 + T["top"]) / 2), T["p0"], T["p1"], T["top"] - c1, SH)   # cream pedestal
+    if tier == 3:
+        for i in range(12):                                                      # bolted collar
+            a = 2 * math.pi * (i + 0.5) / 12
+            r = (T["col"] + T["p0"]) / 2
+            _prim(b, "cyl", (r * math.cos(a), r * math.sin(a), c1 + 0.03), 0.06, 0, 0.08, DK, segs=10)
     hp = T["top"] - c1
-    for sy in (-1, 1):                                                           # side fins
-        box(b, (0, sy * (T["p0"] - 0.05), c1 + hp * 0.4), (0.5, 0.36, hp * 0.8), DE)
-    box(b, ((T["p0"] + T["p1"]) / 2 - 0.12, 0, c1 + hp * 0.45), (0.3, 1.0, hp * 0.7), DK)   # front recess (door)
-    a0, a1 = T["Wb"] + 0.405, T["Wb"] + 0.75                                     # yoke arms, 5 mm clear of the bosses
-    for sy in (-1, 1):
-        box(b, (0, sy * (a0 + a1) / 2, (T["top"] - 0.05 + piv) / 2), (0.9, a1 - a0, piv - T["top"] + 0.05), DE)
-        ax(b, "cyl", (0, sy * (a0 + a1) / 2, piv), 0.45, 0, a1 - a0, DE, "Y", segs=48)
+    _prim(b, "cone", (0, 0, (c1 + T["top"]) / 2), T["p0"], T["p1"], hp, SH)       # cream pedestal
+    _prim(b, "cyl", (0, 0, T["top"] - 0.06), T["p1"] + 0.05, 0, 0.12, DE)         # pedestal cap rim
+    tilt = math.atan2(T["p0"] - T["p1"], hp)
+    if T["fins"]:                                                                # buttresses on the diagonals
+        for k in range(4):
+            a = math.pi / 4 + k * math.pi / 2
+            rm = (T["p0"] + T["p1"]) / 2 + 0.12
+            box(b, (rm * math.cos(a), rm * math.sin(a), c1 + hp * 0.42), (0.55, 0.32, hp * 0.82), DE, bev=0.04, rz=a, ry=tilt)
+    else:
+        for sy in (-1, 1):                                                       # T1: side fins
+            box(b, (0, sy * (T["p0"] - 0.05), c1 + hp * 0.4), (0.5, 0.36, hp * 0.8), DE, bev=0.04)
+    hx = (T["p0"] + T["p1"]) / 2 - 0.1                                           # framed front hatch
+    box(b, (hx, 0, c1 + hp * 0.45), (0.3, 1.2, hp * 0.75), DE, bev=0.03, ry=tilt)
+    box(b, (hx + 0.1, 0, c1 + hp * 0.45), (0.3, 0.9, hp * 0.6), DK, ry=tilt)
+    # head numbers (local to the pivot): drum / body, bosses (|y| out to bo), arms (|y| a0..a1)
+    H = {1: dict(bo=1.75, br=0.55, dz=0.69),
+         2: dict(bo=1.9, br=0.6, dz=1.0),
+         3: dict(bo=2.25, br=0.75, dz=1.45)}[tier]
+    a0, a1 = H["bo"] + 0.005, H["bo"] + 0.4
+    aw = 0.9 if tier < 3 else 1.2
+    for sy in (-1, 1):                                                           # yoke arms
+        box(b, (0, sy * (a0 + a1) / 2, (T["top"] - 0.05 + piv) / 2), (aw, a1 - a0, piv - T["top"] + 0.05), DE, bev=0.04)
+        ax(b, "cyl", (0, sy * (a0 + a1) / 2, piv), aw / 2, 0, a1 - a0, DE, "Y", segs=48)
+        ax(b, "cyl", (0, sy * (a1 + 0.01), piv), 0.22, 0, 0.02, DK, "Y", segs=32)   # axle cap
     # ---------------------------------------------------------------- head (pivot at the origin)
     h = bmesh.new()
-    xd, dz, Rb, Wb = T["xd"], T["dz"], T["Rb"], T["Wb"]
-    ax(h, "cyl", (xd, 0, dz), Rb, 0, 2 * Wb - 0.24, SH, "Y")                       # cream drum
-    for sy in (-1, 1):
-        f = ax(h, "cone", (xd, sy * (Wb - 0.06), dz), Rb, Rb - 0.12, 0.12, SH, "Y")   # chamfered ends
-        if sy < 0:
-            bmesh.ops.reverse_faces(h, faces=f)
-            bmesh.ops.rotate(h, verts=list({v for q in f for v in q.verts}), cent=(xd, -(Wb - 0.06), dz),
-                             matrix=Matrix.Rotation(math.pi, 3, "Z"))
-        ax(h, "cyl", (xd, sy * (Wb - 0.2), dz), Rb + 0.03, 0, 0.12, DE, "Y")      # drum rims
-        ax(h, "cyl", (xd, sy * (Wb + 0.01), dz), 0.62 * Rb, 0, 0.02, DE, "Y", segs=48)   # hub plates
-        ax(h, "cyl", (0, sy * (Wb + 0.2), 0), 0.5, 0, 0.40, DE, "Y", segs=48)      # trunnion bosses (to Wb + 0.40)
-        ax(h, "cyl", (0, sy * (Wb + 0.39), 0), 0.22, 0, 0.02, DK, "Y", segs=32)    # boss caps
-    nx0, nx1, nr = T["neck"]
-    ax(h, "cyl", ((nx0 + nx1) / 2, 0, dz), nr, 0, nx1 - nx0, DE, "X")             # neck
-    mx0, mx1, mr = T["muz"]
-    ax(h, "cyl", ((mx0 + mx1) / 2, 0, dz), mr, 0, mx1 - mx0, SH, "X")             # muzzle
-    for x in (mx0 + 0.1, mx1 - 0.1):
-        ax(h, "cyl", (x, 0, dz), mr + 0.05, 0, 0.16, DE, "X")                     # muzzle rings
-    ax(h, "cyl", (mx1 + 0.01, 0, dz), 0.55 * mr, 0, 0.02, DK, "X", segs=48)       # bore
-    ax(h, "tube", (mx1 + 0.002 + 0.006, 0, dz), 0.66 * mr, 0.78 * mr, 0.012, LI, "X")   # thin neon ring on the muzzle face
-    if T["rear"]:
-        rx0, rx1, rr = T["rear"]
-        g0, g1 = rx0 + 0.3 + 0.3 * (rx1 - rx0 - 0.3), rx1 - 0.25 * (rx1 - rx0)
-        ax(h, "cone", (rx0 + 0.15, 0, dz), 0.6 * rr, rr, 0.3, SH, "X")             # rear dome
-        ax(h, "cyl", ((rx0 + 0.3 + g0) / 2, 0, dz), rr, 0, g0 - (rx0 + 0.3), SH, "X")
-        ax(h, "cyl", ((g1 + rx1) / 2, 0, dz), rr, 0, rx1 - g1, SH, "X")
-        ax(h, "cyl", ((g0 + g1) / 2, 0, dz), rr - 0.05, 0, g1 - g0, GL, "X")       # glass window band (inset 5 cm)
-        ax(h, "cyl", ((g0 + g1) / 2, 0, dz), rr - 0.17, 0, g1 - g0 - 0.04, GO, "X")   # goo inside (the gauge)
-        hx, hz = (rx0 + 0.3 + g0) / 2, dz + rr                                     # hatch on the tank's back end
+    dz = H["dz"]
+
+    def boss(y0, y1, r, hexnut):
+        for sy in (-1, 1):
+            ax(h, "cyl", (0, sy * (y0 + y1) / 2, 0), r, 0, y1 - y0, DE, "Y", segs=48)
+            ax(h, "tube", (0, sy * (y1 - 0.06), 0), r - 0.02, r + 0.06, 0.08, SH, "Y", segs=48)   # boss ring
+            if hexnut:
+                ax(h, "cyl", (0, sy * (y1 - 0.03), 0), 0.32 * r / 0.6, 0, 0.06, DK, "Y", segs=6)
+            else:
+                ax(h, "cyl", (0, sy * (y1 - 0.01), 0), 0.25, 0, 0.02, DK, "Y", segs=32)
+
+    def muzzle(x0, x1, r, bands, flare, brake=False):
+        ax(h, "cyl", ((x0 + x1) / 2, 0, dz), r, 0, x1 - x0, SH, "X")
+        for k in range(bands):
+            x = x0 + 0.12 + k * (x1 - x0 - 0.24) / max(1, bands - 1)
+            ax(h, "cyl", (x, 0, dz), r + 0.05, 0, 0.12, DE, "X")
+        if flare:
+            ax(h, "cone", (x1 + 0.12, 0, dz), r, r + 0.1, 0.24, SH, "X")
+            x1 += 0.24
+        if brake:                                                                # slotted brake: dark slots round the lip
+            for k in range(6):
+                a = 2 * math.pi * k / 6
+                box(h, (x1 - 0.35, (r + 0.005) * math.cos(a), dz + (r + 0.005) * math.sin(a)), (0.4, 0.06, 0.24), DK, rx=a)
+        ax(h, "cyl", (x1 + 0.01, 0, dz), 0.55 * r, 0, 0.02, DK, "X", segs=48)      # bore
+        ax(h, "tube", (x1 + 0.002 + 0.006, 0, dz), 0.64 * r, 0.76 * r, 0.012, LI, "X")   # thin neon ring on the face
+
+    def neck(x0, x1, r, ribs):
+        ax(h, "cyl", ((x0 + x1) / 2, 0, dz), r, 0, x1 - x0, DE, "X")
+        for k in range(ribs):
+            ax(h, "cyl", (x0 + (k + 1) * (x1 - x0) / (ribs + 1), 0, dz), r + 0.07, 0, 0.08, SH, "X")
+
+    def port(x, z):                                                              # hatch / port with a neon ring
+        _prim(h, "cyl", (x, 0, z + 0.02), 0.34, 0, 0.24, DE, segs=48)
+        _prim(h, "tube", (x, 0, z + 0.14 + 0.008), 0.18, 0.28, 0.012, LI, segs=48)
+
+    def rear_tank(x0, x1, rr, fins, body_x):
+        """Rounded ammo capsule along X: a flattened back dome at x0, then (behind the body, which starts at body_x)
+        cooling fins and a glass goo window band (the gauge)."""
+        de = x0 + 0.55 * rr                                                        # dome end
+        ball(h, (de, 0, dz), rr, SH, sx=0.55)
+        f0 = de + 0.12
+        for k in range(fins):
+            ax(h, "cyl", (f0 + k * 0.2, 0, dz), rr + 0.07, 0, 0.07, DE, "X")      # cooling fins
+        g0 = f0 + fins * 0.2 + 0.12
+        g1 = body_x - 0.2
+        ax(h, "cyl", ((de + g0) / 2, 0, dz), rr, 0, g0 - de, SH, "X")             # tank shell, split round the window
+        ax(h, "cyl", ((g1 + x1) / 2, 0, dz), rr, 0, x1 - g1, SH, "X")
+        ax(h, "cyl", ((g0 + g1) / 2, 0, dz), rr + 0.02, 0, g1 - g0, GL, "X")      # glass window band
+        ax(h, "cyl", ((g0 + g1) / 2, 0, dz), rr - 0.08, 0, g1 - g0 - 0.04, GO, "X")   # goo inside (the gauge)
+        for x in (g0 - 0.05, g1 + 0.05):
+            ax(h, "cyl", (x, 0, dz), rr + 0.06, 0, 0.1, DE, "X")                  # window rims
+        return (de + f0) / 2
+
+    if tier == 1:
+        Rb, xb = 1.4, -0.95
+        ball(h, (xb, 0, dz), Rb, SH)                                              # ball head
+        ax(h, "tube", (xb, 0, dz), Rb - 0.03, Rb + 0.04, 0.22, DE, "Y")           # belt band over the top
+        ax(h, "cyl", (xb + 1.15, 0, dz), 0.85, 0, 0.3, DE, "X")                   # neck collar
+        boss(0.7, H["bo"], H["br"], False)
+        neck(0.4, 1.45, 0.7, 2)
+        muzzle(1.45, 2.3, 0.95, 2, False)
+        port(xb, dz + Rb)
+    elif tier == 2:
+        box(h, (-0.4, 0, 0.8), (2.0, 2.5, 3.05), SH, bev=0.32)                   # chamfered block body
+        box(h, (-0.4, 0, 2.33), (1.4, 1.6, 0.12), DE, bev=0.04)                   # roof plate
+        ax(h, "cyl", (0.62, 0, dz), 0.8, 0, 0.24, DE, "X")                        # barrel collar
+        boss(1.2, H["bo"], H["br"], True)
+        px = rear_tank(-3.41, -1.0, 1.25, 0, -1.4)
+        port(px - 0.25, dz + 1.25)
+        neck(0.74, 2.0, 0.55, 3)
+        muzzle(2.0, 3.67, 1.12, 3, True)
     else:
-        hx, hz = xd, dz + Rb                                                       # T1: hatch on the drum
-    _prim(h, "cyl", (hx, 0, hz + 0.02), 0.34, 0, 0.24, DE, segs=48)               # hatch (sunk 0.1 into the shell)
-    _prim(h, "tube", (hx, 0, hz + 0.14 + 0.008), 0.18, 0.28, 0.012, LI, segs=48)  # thin neon ring on the hatch
+        box(h, (-0.7, 0, 0.95), (2.6, 3.0, 3.4), SH, bev=0.3)                    # armoured body
+        P = [(-1.9, -1.35, 2.62), (0.5, -1.35, 2.62), (0.5, 1.35, 2.62), (-1.9, 1.35, 2.62), (-1.9, 0, 3.05), (0.5, 0, 3.05)]
+        v = [h.verts.new(q) for q in P]                                          # V-ridge roof (a prism along X)
+        fs = [h.faces.new([v[i] for i in q]) for q in ((0, 3, 2, 1), (0, 1, 5, 4), (2, 3, 4, 5), (0, 4, 3), (1, 2, 5))]
+        bmesh.ops.recalc_face_normals(h, faces=fs)
+        for f in fs:
+            f.material_index = DE
+        for sy in (-1, 1):
+            for zz in (0.2, 1.6):                                                # side armour ribs
+                box(h, (-0.7, sy * 1.5, zz), (2.2, 0.08, 0.18), DE, bev=0.03)
+        ax(h, "cyl", (0.66, 0, dz), 1.1, 0, 0.3, DE, "X")                         # barrel collar
+        boss(1.45, H["bo"], H["br"], False)
+        px = rear_tank(-4.3, -1.7, 1.5, 3, -2.0)
+        port(px - 0.3, dz + 1.5)
+        for sy in (-1, 1):                                                       # feed pipes, tank -> body
+            ax(h, "cyl", (-2.2, sy * 0.95, dz - 1.2), 0.16, 0, 1.0, DE, "X", segs=24)
+        neck(0.8, 1.6, 0.62, 1)
+        muzzle(1.6, 3.4, 1.5, 4, False, brake=True)
     obs = []
-    for nm, bm in (("Relay_Cannon_v4", b), ("Head", h)):
+    for nm, bm in (("Relay_Cannon_v4", b), ("Head", h)):                          # the game's names in every tier
         me = bpy.data.meshes.new(nm)
         bm.to_mesh(me)
         bm.free()
@@ -814,8 +916,7 @@ def goocannon(piece):
         obs.append(ob)
     obs[1].parent = obs[0]
     obs[1].location = (0, 0, piv)
-    return "remade clean: base %d faces, head %d faces%s" % (len(obs[0].data.polygons), len(obs[1].data.polygons),
-                                                            ", rear tank + goo gauge" if T["rear"] else "")
+    return "remade clean T%d: base %d faces, head %d faces" % (tier, len(obs[0].data.polygons), len(obs[1].data.polygons))
 
 
 def cream(ob, piece, test):
