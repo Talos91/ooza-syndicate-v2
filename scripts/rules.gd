@@ -15,6 +15,7 @@ extends RefCounted
 const VERSION := "0.24.2"   # STAGING 0.24.2 candidate: lab2 look default + calm-pass goo / fog + R-17 (Daniele 2026-11-12)
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
+const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD; dev --hud-old = the pre-lab HUD
 const HUD_R19 := false   # round-19 in-match HUD (HudR19.on): OFF on staging 0.24.0 = the old in-game HUD (Daniele 2026-11-11); dev --hud-r19
 const VERSION_NAME := "Alpha 23"
 

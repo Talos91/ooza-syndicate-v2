@@ -29,6 +29,8 @@ class EmblemGroup:
 	var seat := ""
 
 	func _draw() -> void:
+		if HudLab.on():                                # hud-lab: no emblems on the lab badges (Daniele 2026-11-13)
+			return
 		for id in layer.hud.badges:
 			var b: Dictionary = layer.hud.badges[id]
 			var e: TextureRect = b["emblem"]
@@ -47,6 +49,8 @@ class TextPass:
 	var layer: BadgeLayer
 
 	func _draw() -> void:
+		if HudLab.on():                                # hud-lab: the lab badges draw their own count (HudLab.draw_badges)
+			return
 		var labels := []
 		for id in layer.hud.badges:
 			var b: Dictionary = layer.hud.badges[id]
@@ -177,6 +181,11 @@ func frame_tex(owner: String, hidden: bool) -> Texture2D:
 
 func _draw() -> void:
 	var _pt := Time.get_ticks_usec()                 # perf pass: PerfProfile.lap (off in play)
+	if HudLab.on():                                    # hud-lab (2026-11-13): PAINT-badge 28 x 21 pt, owner outline, count centred, no emblem
+		HudLab.draw_badges(self, hud)
+		_node_marks()
+		PerfProfile.lap("badges_draw", _pt)
+		return
 	var by := {}                                       # frame texture -> its badges (one batch each)
 	var order := []
 	for id in hud.badges:
@@ -243,7 +252,7 @@ func _node_marks() -> void:
 		var ch := maxf(15.0 * s, float(hud.card_px(12)) / 0.72)   # its "T2" never under the phone's 12.5 pt floor
 		# on the top rim, clear of the count
 		var sh_y := 0.0                                  # (the shields drop by this when the chip moved under the badge)
-		if not Calm.labels():                          # calm-pass B: the tier is the badge's sub line instead (Hud._badges)
+		if not Calm.labels() and not HudLab.on():      # calm-pass B (hud-lab: the badge's own tier tag): the tier is the badge's sub line instead (Hud._badges)
 			var cy := r.position.y - ch * 0.3
 			if under_band(chip_rect(r, ch)):           # calm-pass: never under the score bar / status line - under the badge then
 				cy = r.end.y + ch * 0.5

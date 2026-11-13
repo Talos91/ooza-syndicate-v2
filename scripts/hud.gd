@@ -94,6 +94,8 @@ var _debug_box: VBoxContainer          # the Debug panel's content (its height: 
 var margins := Vector4(16, 12, 16, 12)
 var _last_fps_print := 0.0
 var version_label: Label
+var lab_tube: HudLab.Tube                  # hud-lab (2026-11-13): the round-30 score tube (timer only) - the lab HUD's top
+var lab_feed: HudLab.SkillFeed             # hud-lab: the round-30 skill feed beside the keys
 var r19_top: HudR19.TopLayer             # ui-r19-import: the round-19 top capsule, pills, clock and banner slot (HudR19)
 var ui_scale := 1.0
 # --- TUTORIAL reveal set (TUTORIAL-DESIGN.md §6) ---
@@ -306,6 +308,8 @@ func setup(m: Node3D) -> void:
 	# nodes are the layout only - under a hidden holder, never drawn; BadgeLayer draws every badge from them,
 	# one pass per kind (boxes, bars, emblems, words), so the 2D renderer batches each pass.
 	_badge_px = (BADGE_SIZE * ui_scale).round()
+	if HudLab.on():                                  # hud-lab: LOCKED 28 x 21 pt on every node (Daniele 2026-11-13)
+		_badge_px = (HudLab.BADGE_PT * HudLab.u_of(self)).round()
 	badge_layer = BadgeLayer.new()
 	root.add_child(badge_layer)                           # where the badges always drew: under everything else
 	_badge_model = Control.new()
@@ -425,6 +429,8 @@ func setup(m: Node3D) -> void:
 	# Alpha 24: PAUSE and MUSIC are the pack's square icon buttons (B6 with the D pause / music icons), the same height as
 	# before (phones: 78 x ui_scale, >= 44 pt)
 	var pb_h: float = (52.0 if not mobile else 78.0) * ui_scale
+	if HudLab.on():                                  # hud-lab: 32 pt shells in 40 pt taps (PIECES.json hit boxes)
+		pb_h = HudLab.BUTTON_HIT * HudLab.u_of(self)
 	pause_button = button("", pause_menu, pb_h / ui_scale, pb_h / ui_scale)
 	pause_button.tooltip_text = "PAUSE"
 	_icon_button(pause_button, "pause")
@@ -472,6 +478,8 @@ func setup(m: Node3D) -> void:
 		tank_s = ui_scale * pt(4.0 * 60.0 + 64.0) / send_tank.custom_minimum_size.y   # (caps, ticks, words) to the pt layout's height
 		send_tank.custom_minimum_size = (send_tank.custom_minimum_size * tank_s / ui_scale).round()
 	send_tank.setup(self, main, tank_s, UI_FONT)
+	if HudLab.on():                                  # hud-lab: the round-25 vat + round-30 feed, x1.2 (LOCKED 2026-11-13)
+		send_tank.lab_setup(HudLab.u_of(self))
 	side_box.add_child(send_tank)
 	count_label = text_label("", 14, accent)                # (kept, hidden: the tank shows the units on its goo)
 	count_label.visible = false
@@ -541,7 +549,9 @@ func setup(m: Node3D) -> void:
 			main.monster_from = hub
 			note_monster_hint())
 	root.add_child(monster_icon)
-	if HudR19.on():                                   # ui-r19-import (2026-11-10): round 19 inside the locked round-18 shapes - the
+	if HudLab.on():                                   # hud-lab (2026-11-13): the round-29/30 lab HUD
+		_lab_setup()
+	elif HudR19.on():                                 # ui-r19-import (2026-11-10): round 19 inside the locked round-18 shapes - the
 		r19_top = HudR19.TopLayer.new()               # old top bar / status line / banner keep their logic and texts, drawn by r19_top
 		root.add_child(r19_top)
 		root.move_child(r19_top, top_panel.get_index())
@@ -552,6 +562,63 @@ func setup(m: Node3D) -> void:
 		banner.self_modulate.a = 0.0
 		for b in [pause_button, music_button]:
 			_r19_button(b)
+
+
+func _lab_setup() -> void:
+	## hud-lab: the score tube replaces the top capsule (its logic kept, drawn invisible: the status line still sits under it),
+	## the skill feed goes under the keys, MUSIC / PAUSE become the round-25 shells, the banner the round-29 banner.
+	lab_tube = HudLab.Tube.new()
+	root.add_child(lab_tube)
+	root.move_child(lab_tube, top_panel.get_index())
+	lab_tube.setup(self)
+	top_panel.modulate.a = 0.0
+	lab_feed = HudLab.SkillFeed.new()
+	root.add_child(lab_feed)
+	root.move_child(lab_feed, dock.get_index())
+	lab_feed.setup(dock)
+	var u := HudLab.u_of(self)
+	for pair in [[pause_button, "pause-glyph"], [music_button, "music-glyph"]]:
+		var b: Button = pair[0]
+		var empty := StyleBoxEmpty.new()
+		for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+			b.add_theme_stylebox_override(st, empty)
+		b.icon = null
+		b.text = ""
+		for c in b.get_children():
+			if c is CanvasItem:
+				(c as CanvasItem).visible = false
+		b.custom_minimum_size = Vector2.ONE * HudLab.BUTTON_HIT * u
+		b.size = b.custom_minimum_size
+		var g: String = pair[1]
+		b.draw.connect(func(): HudLab.button_face(b, g, HudLab.u_of(self), g == "music-glyph" and not Music.music_on()))
+	var frame := Control.new()                        # the banner's plate, behind its words
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.show_behind_parent = true
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	frame.draw.connect(func(): HudLab.draw_banner(frame, Rules.state_color("warn")))
+	banner.add_child(frame)
+	var bs := StyleBoxEmpty.new()
+	bs.set_content_margin_all(18.0 * u)
+	bs.content_margin_top = 8.0 * u
+	bs.content_margin_bottom = 8.0 * u
+	banner.add_theme_stylebox_override("normal", bs)
+	banner.add_theme_color_override("font_color", HudLab.INK)
+	banner.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
+	banner.add_theme_font_size_override("font_size", int(round(30.0 * u)))
+	banner.custom_minimum_size = Vector2(0, HudLab.BANNER_PT.y * u)
+
+
+func _lab_layout(vp: Vector2) -> void:
+	## hud-lab: tube top centre (its top edge = the screen top), PAUSE / MUSIC at the pack's places from the safe top-right
+	## (taps 40 pt, 6 pt overlap: nearest centre), the skill feed registered to the first key (x1.2 with the keys).
+	var u := HudLab.u_of(self)
+	lab_tube.lay(vp, u)
+	var ins := margins
+	pause_button.position = Vector2(vp.x - ins.z - HudLab.BUTTON_HIT * u, ins.y + 2.0 * u)
+	music_button.position = pause_button.position - Vector2(34.0 * u, 0)
+	if dock.slots.size() > 0:
+		lab_feed.lay(dock.position + (dock.slots[0] as Control).position, u)
 
 
 func _r19_button(b: Button) -> void:
@@ -823,6 +890,8 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	if r19_top:
 		_r19_layout(vp)
 	_align_tank_edge(vp)
+	if lab_tube:
+		_lab_layout(vp)
 	if "--edge-gap" in OS.get_cmdline_user_args():
 		print("EDGE_GAP ", JSON.stringify(edge_gaps(vp)))
 
@@ -951,6 +1020,12 @@ func sync(dt: float, cam: Camera3D) -> void:
 	top_panel.visible = shows("topbar")
 	stats_label.text = "%02d:%02d" % [int(sim.time) / 60, int(sim.time) % 60]
 	var show_chips := shows("strength")
+	if lab_tube:                                     # hud-lab: the tube's goo = each seat's share, no numbers; the clock
+		lab_tube.visible = top_panel.visible
+		lab_tube.show_shares = show_chips
+		lab_tube.sync()
+		if is_instance_valid(lab_feed) and dock.slots.size() > 0:
+			lab_feed.lay(dock.position + (dock.slots[0] as Control).position, HudLab.u_of(self))
 	top_left.visible = show_chips
 	top_right.visible = show_chips
 	if show_chips:
@@ -1312,6 +1387,8 @@ func inspect(id: int, cam: Camera3D) -> void:
 		hp.show_behind_parent = true                  # (the hub's own x draws over it)
 		hub.add_child(hp)
 		hub.set_meta("r19", hp)
+	if HudLab.on():
+		hub.custom_minimum_size = Vector2.ONE * HudLab.CLOSE_PT * HudLab.u_of(self)
 	hub.size = hub.custom_minimum_size
 	hub.position = -hub.size / 2.0
 	hub.pressed.connect(func(): close_inspector.call_deferred())
@@ -1325,12 +1402,21 @@ func inspect(id: int, cam: Camera3D) -> void:
 	info_bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	info_bg.add_theme_stylebox_override("panel", HudNoir.box("node_card", col, Vector4(12, 8, 12, 9) * ui_scale))
 	inspector.add_child(info_bg)
+	var lab := HudLab.on()
+	if lab:                                           # hud-lab: PAINT-card 196 x 66 pt, drawn whole (its words live: HudLab.draw_card)
+		info_bg.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		info_bg.custom_minimum_size = HudLab.CARD_PT * HudLab.u_of(self)
+		info_bg.draw.connect(func(): HudLab.draw_card(self, info_bg))
 	inspector.set_meta("card", info_bg)
 	var info_box := VBoxContainer.new()
 	info_box.add_theme_constant_override("separation", int(5 * ui_scale))
 	info_box.custom_minimum_size = Vector2(INSPECTOR_CARD_W, 0) * ui_scale
 	info_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	info_bg.add_child(info_box)
+	if lab:                                           # (its labels keep the words the lab card draws; never shown, out of the card's size)
+		info_bg.remove_child(info_box)
+		inspector.add_child(info_box)
+		info_box.visible = false
 	var head := HBoxContainer.new()
 	head.alignment = BoxContainer.ALIGNMENT_CENTER
 	head.add_theme_constant_override("separation", int(5 * ui_scale))
@@ -1388,7 +1474,7 @@ func inspect(id: int, cam: Camera3D) -> void:
 
 
 const STRUCT_LABEL := {"vat": "VAT", "machinegoon": "GOOGATLING", "laser": "LASER TOWER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
-const BUILD_LABEL := {"machinegoon": "GOOGAT", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
+const BUILD_LABEL := {"machinegoon": "GOOGATLING", "vat": "VAT", "laser": "LASER", "forge": "FORGE", "monster_hub": "MONSTER HUB"}
 const RELAY_ACCENT := Color("ffb238")   # 0.19.0: SWITCH's own accent (Daniele: "add some visibility to the
                                          # buttons / models of the relays") - distinct from the seat colour
 
@@ -1605,6 +1691,10 @@ class ActionWedge:
 		# Daniele 2026-11-04 (mockup 3): NO goo in the slices - a slice is LIT (affordable / free) or GREYED (not yet):
 		# "easy to just have grayed or not; the filling would also cost resources especially when open and close fast".
 		var lit := not off and afford >= 1.0
+		if HudLab.on():                                   # hud-lab: the round-29 A5 slice, its states from the masks
+			HudLab.draw_slice(self, lit)
+			_words.queue_redraw()
+			return
 		if HudR19.on():                                   # ui-r19-import: the round-19 gunmetal slice (40 deg, r 38-104 pt), lit = its tube
 			_r19_slice(c, lit, a)
 			_tube.queue_redraw()
@@ -1646,6 +1736,9 @@ class ActionWedge:
 		var lit := not off and afford >= 1.0
 		var k := clampf((grow - 0.5) * 2.0, 0.0, 1.0)
 		if k <= 0.0:
+			return
+		if HudLab.on():
+			HudLab.draw_slice_words(self, lit, k)
 			return
 		if HudR19.on():
 			_draw_r19_words(lit, k)
@@ -1971,6 +2064,9 @@ class InspectorHub:
 		var s := ui_scale
 		var c := size / 2.0
 		var r := size.x / 2.0 * (0.55 + 0.45 * grow)       # the hexagon's corner radius
+		if HudLab.on():                                   # hud-lab: PAINT-close, its rim in the node owner's colour
+			HudLab.draw_close(self, accent, size.x / HudLab.CLOSE_PT)
+			return
 		var hot := is_hovered() or button_pressed
 		var hex := PackedVector2Array()
 		for i in range(7):
@@ -2000,7 +2096,10 @@ func _inspector_actions(n: Dictionary) -> void:
 			_add_action("SWITCH", "%s\n%s" % [verb, Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)   # turret LOADS, then fires
 		if n["relay"] == "launcher" and int(n["tier"]) < Rules.LAUNCHER_MAX_TIER and shows("upgrade"):   # LAUNCHER TURRET: T2 / T3
 			_add_action("UPGRADE", "UPGRADE T%d" % (int(n["tier"]) + 1), sim.upgrade_cost(n), "upgrade", id)
-		for kind in ["laser", "forge", "monster_hub"]:
+		# Daniele 2026-11-13: relay = SWITCH, LASER, FORGE; a special relay (the launcher, a MONSTER HUB) = SWITCH, UPGRADE - MONSTER
+		# HUB is a special relay, no longer a relay action (hud-lab: the player's pie only; Sim / AI rules untouched, OPEN-QUESTIONS)
+		var special: bool = n["relay"] == "launcher" or n["structure"] == "monster_hub"
+		for kind in ([] if special else ["laser", "forge"]):
 			if kind in n["buildable"] and n["structure"] != kind and shows("relay_build"):
 				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})
 		if n["structure"] == "monster_hub" and shows("monster"):
@@ -2015,7 +2114,7 @@ func _inspector_actions(n: Dictionary) -> void:
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)
 		if shows("machinegoon"):
 			_add_action("VAT", "VAT", sim.build_cost(n, "vat"), "build", id, {"kind": "vat"})
-	if sim.allied_units(n) > 0.0001 and shows("eject"):
+	if sim.allied_units(n) > 0.0001 and shows("eject") and inspector_actions.size() < 3:   # max 3 slices (Daniele 2026-11-13)
 		_add_action("EJECT", "EJECT", 0, "eject", id)
 
 
@@ -2379,7 +2478,10 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 			var u := Vector2(cos(w.mid()), sin(w.mid()))
 			var ir := maxf(12.0 * s * w.type_scale, float(w.floor_px) * 0.8)
 			var gp := w.centre() + w._shift() + u * (ActionWedge.hex_r(w.mid(), w.r_in, w.hex_base) + ir * 1.3)   # = _draw_words' glyph
-			if HudR19.on():                           # ui-r19-import: the glyph at r 46 pt (correction A)
+			if HudLab.on():                           # hud-lab: round the upright glyph
+				ir = 11.0 * w.r_out / HudLab.SLICE_R[1]
+				gp = HudLab.slice_glyph_at(w)
+			elif HudR19.on():                         # ui-r19-import: the glyph at r 46 pt (correction A)
 				ir = 7.0 * w.outer() / HudR19.SLICE_R[1]
 				gp = w.centre() + w._shift() + u * 46.0 * w.outer() / HudR19.SLICE_R[1]
 			switch_ring.size = Vector2.ONE * ir * 2.6
@@ -2504,6 +2606,8 @@ func _draw_inspector_guides(col: Color) -> void:
 func _refresh_inspector(cam: Camera3D) -> void:
 	if not is_instance_valid(inspector) or inspector_id < 0:
 		return
+	if HudLab.on():
+		(inspector.get_meta("card") as Control).queue_redraw()
 	var n: Dictionary = sim.nodes[inspector_id]
 	if sim.collapsed.get(inspector_id, false):
 		close_inspector()
@@ -2845,7 +2949,7 @@ func callout_px(base: float, min_pt: float) -> int:
 
 func _icon_opts(seat: String, kind: String) -> Dictionary:
 	## The callout's icon: the seat's emblem in its colour, else the kind's mark.
-	if seat != "" and sim.factions.has(seat):
+	if seat != "" and sim.factions.has(seat) and not HudLab.on():   # hud-lab: no faction emblems in toasts (Daniele 2026-11-13)
 		return {"seat": seat, "emblem_tex": emblem_texture(str(sim.factions[seat]))}
 	return {"glyph": "good" if kind == "good" else ("warn" if kind == "warn" else "info")}
 
@@ -2905,6 +3009,12 @@ func note_line(text: String, kind := "info", seat := "") -> void:
 	opts["side"] = "below"
 	opts["arrow"] = false
 	opts["life"] = Rules.HUD_LINE_LIFE
+	if HudLab.on():                                   # hud-lab: the line sits on the round-29 toast (its kind bar = the kind colour)
+		opts["glyph"] = ""
+		opts["toast"] = HudLab.u_of(self)
+		opts["anchor"] = func(): return Vector2(root.get_viewport_rect().size.x * 0.5, _under_top() + 10.0 * ui_scale)
+		callouts.add("line", [[text, int(round(16.0 * HudLab.u_of(self))), HudLab.INK]], col, opts)
+		return
 	callouts.add("line", [[text, callout_px(Rules.HUD_CALLOUT_FONT * 0.9, Rules.HUD_CALLOUT_MIN_PT), col.lerp(Color.WHITE, 0.2)]], col, opts)
 
 

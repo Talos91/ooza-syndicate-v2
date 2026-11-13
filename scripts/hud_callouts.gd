@@ -47,6 +47,7 @@ func add(place: String, lines: Array, col: Color, opts := {}) -> Dictionary:
 	it["arrow"] = bool(opts.get("arrow", true))
 	it["hold"] = opts.get("hold", Callable())
 	it["rise"] = float(opts.get("rise", Rules.HUD_CALLOUT_RISE)) * ui_scale
+	it["toast"] = float(opts.get("toast", 0.0))       # hud-lab: > 0 = drawn on the round-29 toast at that px per pt
 	var seat := str(opts.get("seat", ""))
 	var tex: Texture2D = opts.get("emblem_tex", null)
 	if it["emblem"] != null and (seat == "" or tex == null):
@@ -314,6 +315,9 @@ func _draw() -> void:
 		var col: Color = it["col"]
 		var lines: Array = it["lines"]
 		var y := box.position.y
+		var toast := float(it.get("toast", 0.0))
+		if toast > 0.0:
+			HudLab.draw_toast(self, box, col, a, toast)
 		for i in range(lines.size()):
 			var l: Array = lines[i]
 			var f := _font(l)
@@ -327,8 +331,9 @@ func _draw() -> void:
 					_glyph(str(it["glyph"]), it["icon_c"], _icon_r(it), col, a)
 			var base := y + f.get_ascent(px)
 			var lc: Color = l[2]
-			draw_string_outline(f, Vector2(x, base), text, HORIZONTAL_ALIGNMENT_LEFT, -1, px,
-					maxi(3, int(px * 0.24)), Color(0.02, 0.02, 0.05, 0.92 * a))
+			if toast <= 0.0:
+				draw_string_outline(f, Vector2(x, base), text, HORIZONTAL_ALIGNMENT_LEFT, -1, px,
+						maxi(3, int(px * 0.24)), Color(0.02, 0.02, 0.05, 0.92 * a))
 			draw_string(f, Vector2(x, base), text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, Color(lc, lc.a * a))
 			y += _line_h(l)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

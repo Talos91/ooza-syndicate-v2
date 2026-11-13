@@ -57,12 +57,63 @@ const LIQ_X0 := 72.0
 const LIQ_X1 := 324.0
 const PLATE_PT := 24.0                            # the readout plate's height (pt, x the tank's pt scale)
 const PLATE_GAP_PT := 2.0
+var lab := false                                  # hud-lab (2026-11-13): the round-25 vat + round-30 feed (HudLab), x1.2 (LOCKED)
+var lab_u := 1.0                                  # ... screen px per pt
+var _lab_goo: HudLab.Goo
+var _lab_feed: HudLab.Goo
+var _lab_over: Control
 var canvas_k := 0.0                               # control px per canvas px (Hud sets it; 0 = the old frame path)
 var pt_px := 1.0                                  # control px per HUD point (Hud sets it)
 
 
 func picture() -> bool:
-	return canvas_k > 0.0 and gmn()
+	return lab or (canvas_k > 0.0 and gmn())
+
+
+func lab_k() -> float:
+	return HudLab.VAT_K * lab_u
+
+
+func lab_cv(p_pt: Vector2) -> Vector2:
+	## A point of the vat canvas (pt at 1x) in control px: the control starts at the vat body (its feed stub reaches left of it).
+	return (p_pt - Vector2(HudLab.VAT_BODY_X, 0)) * lab_k()
+
+
+func lab_setup(u: float) -> void:
+	## hud-lab: the control = the vat body (88 x 253 pt at x1.2); the feed stub and the round-30 glass inlet run left of it to the
+	## screen edge. Stack: shell (this _draw), feed shell + window, feed goo, feed glass, vat goo (shader), glass + logo + gauge.
+	lab = true
+	lab_u = u
+	var k := lab_k()
+	custom_minimum_size = Vector2((HudLab.VAT_CANVAS.x - HudLab.VAT_BODY_X) * k, HudLab.VAT_CANVAS.y * k).round()
+	var fp := lab_cv(HudLab.VAT_FEED_AT)
+	var fs := HudLab.VAT_FEED_PT * k
+	var feed := HudLab.Pic.new([["r30-vat-feed-shell"], ["r30-vat-feed-window"]])
+	HudLab.place(feed, fp, fs)
+	add_child(feed)
+	_lab_feed = HudLab.Goo.new(HudLab.tex("r30-vat-feed-goo-white"), 2)
+	_lab_feed.p("axis", 0.0)
+	_lab_feed.p("v_top", 0.0)
+	_lab_feed.p("v_bot", 1.0)
+	HudLab.place(_lab_feed, fp, fs)
+	add_child(_lab_feed)
+	var fg := HudLab.Pic.new([["r30-vat-feed-glass"]])
+	HudLab.place(fg, fp, fs)
+	add_child(fg)
+	_lab_goo = HudLab.Goo.new(HudLab.tex("vat-goo-white"), 0)
+	var ts := Vector2(261, 633)
+	_lab_goo.p("v_top", HudLab.VAT_GOO_PX.position.y / ts.y)
+	_lab_goo.p("v_bot", HudLab.VAT_GOO_PX.end.y / ts.y)
+	_lab_goo.p("u_left", HudLab.VAT_GOO_PX.position.x / ts.x)
+	_lab_goo.p("u_right", HudLab.VAT_GOO_PX.end.x / ts.x)
+	HudLab.place(_lab_goo, lab_cv(Vector2.ZERO), HudLab.VAT_CANVAS * k)
+	add_child(_lab_goo)
+	_lab_over = Control.new()
+	_lab_over.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lab_over.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	HudLab.place(_lab_over, lab_cv(Vector2.ZERO), HudLab.VAT_CANVAS * k)
+	_lab_over.draw.connect(_draw_lab_over)
+	add_child(_lab_over)
 
 
 func cv(p: Vector2) -> Vector2:
@@ -91,6 +142,9 @@ func gmn() -> bool:
 
 func body_rect() -> Rect2:
 	## The tank's inside (the goo's room): the frame's rect minus its rim and the drips under it.
+	if lab:                                       # hud-lab: the goo master's box: 0 % at its bottom, 100 % at its top
+		var a0 := lab_cv(HudLab.VAT_GOO_PX.position / HudLab.PX)
+		return Rect2(a0, HudLab.VAT_GOO_PX.size / HudLab.PX * lab_k())
 	if picture():                                 # the art's liquid box: x 72..324, y 177 (100 %) .. 987 (0 %)
 		var a := cv(Vector2(LIQ_X0, LVL_TOP))
 		return Rect2(a, cv(Vector2(LIQ_X1, LIQ_BOT)) - a)
@@ -157,10 +211,65 @@ func _process(dt: float) -> void:
 		_slosh = 1.0
 	shown = lerpf(shown, want, 1.0 - exp(-EASE * dt))
 	_slosh = maxf(0.0, _slosh - dt / 1.1)
+	if lab:                                       # hud-lab: the goo's level / slosh / tint from the match, every frame
+		var tint := GooTone.mine(HudNoir.accent)
+		_lab_goo.p("level", clampf(shown, 0.0, 1.0))
+		_lab_goo.p("slosh", _slosh)
+		_lab_goo.p("tint", tint)
+		_lab_feed.p("tint", tint)
+		_lab_feed.p("pulse_rate", _lab_rate())
+		_lab_over.queue_redraw()
+		return
 	queue_redraw()
 
 
+func _lab_rate() -> float:
+	## The feed pulses at your production rate (README round 30, conservative): units / s made by your vats, as pulses / s.
+	var sim = main.sim
+	var r := 0.0
+	for n in sim.nodes:
+		if str(n["owner"]) == str(main.HUMAN) and Sim.has_vat(n):
+			r += float(sim.production(n))
+	return clampf(0.15 + r * 0.25, 0.15, 1.6)
+
+
+func _draw_lab_over() -> void:
+	## hud-lab: the glass and the empty logo window over the goo, then the gauge drawn live: 100 / 75 / 50 / 25 % with short ticks
+	## inside the glass, placed by fill level (README LOCKED); the picked share lit; the units it sends on the surface.
+	var c := _lab_over
+	var k := lab_k()
+	HudLab.art(c, "vat-glass", Vector2.ZERO, k)
+	HudLab.art(c, "vat-logo", Vector2.ZERO, k)
+	var off := lab_cv(Vector2.ZERO)
+	var b := body_rect()
+	b.position -= off
+	var fs := maxi(int(round(12.5 * lab_u)), _floor_px())
+	for l in LEVELS:
+		var y := b.end.y - b.size.y * float(l)
+		var on := is_equal_approx(float(l), float(main.fraction))
+		var x0 := b.position.x + 3.0 * lab_u
+		var x1 := x0 + (8.0 if on else 5.0) * lab_u
+		var col := Color.WHITE if on else Color(1, 1, 1, 0.78)
+		c.draw_line(Vector2(x0, y), Vector2(x1, y), Color(0, 0, 0, 0.45), 3.4 * lab_u, true)
+		c.draw_line(Vector2(x0, y), Vector2(x1, y), col, (2.0 if on else 1.4) * lab_u, true)
+		var t := "%d%%" % int(round(float(l) * 100.0))
+		var f: Font = HudLab.bold() if on else _font
+		var p := Vector2(x1 + 3.0 * lab_u, y + (f.get_ascent(fs) - f.get_descent(fs)) / 2.0)
+		if is_equal_approx(float(l), 1.0):
+			p.y += 4.0 * lab_u
+		c.draw_string_outline(f, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(2, int(3.0 * lab_u)), Color(0, 0, 0, 0.65))
+		c.draw_string(f, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+	var units := _units_line()
+	if units != "":
+		var us := maxi(int(round(13.0 * lab_u)), _floor_px())
+		var y2 := clampf(level_y(clampf(shown, 0.0, 1.0)) - off.y + _font.get_ascent(us) + 6.0 * lab_u, b.position.y + us, b.end.y - 4.0 * lab_u)
+		HudLab.text_c(c, units, Vector2(b.get_center().x + 6.0 * lab_u, y2 - us * 0.35), us, Color.WHITE, HudLab.bold(), maxi(2, int(3.0 * lab_u)))
+
+
 func _draw() -> void:
+	if lab:
+		HudLab.art(self, "vat-shell", lab_cv(Vector2.ZERO), lab_k())
+		return
 	if picture():
 		_draw_picture()
 		return

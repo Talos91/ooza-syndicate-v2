@@ -58,6 +58,8 @@ var _last_pulse := [-9.0, -9.0, -9.0]
 var _floor_px := 0.0                          # phones: the smallest font the slot words may use (HUD_DOCK_MIN_PT), 0 = none
 var vessel := false                           # Neon Noir revision 6: hex vessels filling with lit ooze (HudLiquid) instead of round buttons
 var r19 := false                              # ui-r19-import: the round-19 plates (HudR19, 96 x 80 pt, window d 40 at (48, 31))
+var lab := false                              # hud-lab (2026-11-13): the round-25 keys (HudLab.draw_key), x1.2 = ~76 x 68 pt (LOCKED)
+var lab_u := 1.0                              # ... screen px per pt
 var r19_u := 1.0                              # ... screen px per layout pt (HudR19.u_of)
 var plate := false                            # GMN-1 (mockup 3, Daniele's sketch): a METAL plate, a round glass window at its socket
                                               # filling with goo, the neon ring lighting with it, the name under it
@@ -112,6 +114,9 @@ class Slot:
 		## Alpha 24 Neon Noir (the board's ABILITY CONTROL, Daniele's corrections 2026-11-02): a glass section of the skill
 		## column's housing holding the round button - its ring fixed per slot (HudNoir.RING), the white icon -, then the skill's
 		## NAME (no slot label: no "ACTIVE", no "MAP ·"; one line, or two when it would be cut - EMERGENCY / EVAC) and its state.
+		if dock.lab:                               # hud-lab: the round-25 key, states built at run time
+			HudLab.draw_key(self)
+			return
 		var s := dock.ui_scale
 		var w := size.x
 		var col: Color = SkillDock.SLOT_ACCENT[index]
@@ -515,6 +520,20 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		if mobile:
 			_floor_px = 12.5 * r19_u
 		add_theme_constant_override("separation", int(round(6.0 * r19_u)))
+	lab = HudLab.on()
+	if lab:                                       # hud-lab: KEY-SHELL 62 x 57 pt x1.2, pitch 60 x1.2 (the round-30 feed's branches)
+		var ltree := Engine.get_main_loop() as SceneTree
+		var lvp := ltree.root.get_visible_rect().size if ltree != null and ltree.root != null else Vector2(1280, 720)
+		lab_u = HudLab.u_for(lvp, mobile)
+		var kk := HudLab.KEY_K * lab_u
+		slot_w = HudLab.KEY_PT.x * kk / ui_scale
+		plate_h = HudLab.KEY_PT.y * kk
+		round_d = 31.0 * kk
+		vessel_cy = HudLab.KEY_WINDOW_C.y * kk
+		top = vessel_cy - round_d / 2.0
+		if mobile:
+			_floor_px = 12.5 * lab_u
+		add_theme_constant_override("separation", int(round((HudLab.KEY_PITCH - HudLab.KEY_PT.y) * kk)))
 	for i in range(3):
 		# Neon Noir: no slot label; the name takes a second line only where one line would cut it (EMERGENCY / EVAC)
 		var lines := name_lines(sim.skill_id(human, SLOTS[i]), slot_w * ui_scale - 2.0 * pad).size()
@@ -523,9 +542,9 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		b.dock = self
 		b.index = i
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		b.custom_minimum_size = Vector2(slot_w * ui_scale, plate_h if plate else slot_h).round()
+		b.custom_minimum_size = Vector2(slot_w * ui_scale, plate_h if plate or lab else slot_h).round()
 		b.pressed.connect(press_slot.bind(i))
-		if r19:
+		if r19 and not lab:
 			b.piece = HudR19.Piece.new()
 			b.piece.set_base(["skill_plate_active", "skill_plate_map", "skill_plate_ultimate"][i])
 			b.piece.tint = HudNoir.accent
@@ -533,7 +552,9 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 			b.piece.window = false
 			b.piece.place(Vector2.ZERO, r19_u, HudR19.BODY["skill_plate"])
 			b.add_child(b.piece)
-		if plate:
+		if lab:
+			pass                                  # hud-lab: the slot draws its key itself (HudLab.draw_key)
+		elif plate:
 			b.vessel = HudLiquid.new()
 			b.vessel.setup("skill_vessel", SLOT_ACCENT[i], float(i) * 1.7)
 			b.vessel.plain()
@@ -605,7 +626,7 @@ func card_box(armed_now: bool, ult := false) -> StyleBox:
 
 func housing_margin() -> Vector4:
 	## The skill column's housing round the slots (l, t, r, b px - b holds its drips): Hud.layout keeps it on screen.
-	if vessel:                                    # ui-node (Daniele 2026-11-04): "remove the outside container ... leave only the
+	if vessel or lab:                             # ui-node (Daniele 2026-11-04): "remove the outside container ... leave only the
 		return Vector4.ZERO                       # 3 skills vats" - no housing round the vats
 	var m := HOUSING_PAD * ui_scale
 	var pool := HudNoir.gel_px("skill_housing") * 0.55       # Neon Noir: the upper half of the pooled ooze shows under the last card
@@ -615,7 +636,7 @@ func housing_margin() -> Vector4:
 func _draw() -> void:
 	## Neon Noir: the column's container - smoked glass with living ooze in its foot and the drips under it (the one place on
 	## the right thumb that drips; the slots themselves are clean glass).
-	if vessel:                                    # ui-node: the three vats stand alone
+	if vessel or lab:                             # ui-node: the three vats stand alone
 		return
 	if _housing == null:
 		_housing = HudNoir.box("skill_housing", Color(0, 0, 0, 0), Vector4.ZERO)
