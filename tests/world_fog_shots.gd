@@ -181,6 +181,7 @@ func _run() -> void:
 		var ff: Dictionary = wl.locals.feeds[fk]
 		lq.append([ff["cap"], (ff["line"] as Array).size(), ff["parent"]])
 	print("QUEUES trunks [s0, s1, cap, n, parent] ", tq, " doors [cap, n, trunk] ", lq)
+	print("PITAUDIT ", wl.locals.pit_audit())
 	print("WALKWAYS roundabouts ", wl.locals.about_count, " at ", wl.locals.about_at, " centre ", wl.locals.board_bounds().get_center(), " deck_tris ", wl.locals.deck_tris)
 	print("ORTHO stats ", wl.pipes.ortho_stats, " connectors ", wl.pipes.conn_count, " grid ", wl.pipes.grid_routed, " ortho=", wl.pipes.ortho)
 	var s := img.get_size()
