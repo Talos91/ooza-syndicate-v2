@@ -81,7 +81,7 @@ static func add_surround(parent: Node3D, deck_low_y: float) -> MeshInstance3D:
 	if v2:
 		var vs := parent.get_viewport().get_visible_rect().size if parent.is_inside_tree() else Vector2(812, 375)
 		var phone := vs.x / maxf(vs.y, 1.0) > 1.97      # between 16:9 (1.78) and the phone plate (2.165)
-		m.set_shader_parameter("tex", load(SURROUND_PHONE if phone else SURROUND_WIDE))
+		m.set_shader_parameter("tex", load(LookTheme.world("surround_phone", SURROUND_PHONE) if phone else LookTheme.world("surround_wide", SURROUND_WIDE)))   # THEMES
 		m.set_shader_parameter("tex_aspect", 3248.0 / 1500.0 if phone else 16.0 / 9.0)
 	else:
 		m.set_shader_parameter("tex", load(SURROUND))
@@ -181,6 +181,7 @@ static func kit_vc_mesh(key: String, light_k := 0.6, goo := true) -> ArrayMesh:
 	if not v2 or not ResourceLoader.exists(LABKIT % key):
 		return null
 	var root := (load(LABKIT % key) as PackedScene).instantiate()
+	var kind := LookTheme.kind_of(key + ".glb")         # THEMES: Node_Base = deck zones, Pit = pit zones
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var n := 0
@@ -201,6 +202,9 @@ static func kit_vc_mesh(key: String, light_k := 0.6, goo := true) -> ArrayMesh:
 				c = Color(0.0, 0.6, 0.0)
 			elif mat is StandardMaterial3D:
 				c = (mat as StandardMaterial3D).albedo_color           # display values: the world shaders output COLOR as is
+				var th := LookTheme.role(kind, nm)
+				if not th.is_empty():
+					c = th[0]
 				if c.g < 0.02 and c.r > 0.03 and absf(c.r - c.b) < 0.03:
 					c.g = 0.03                                  # never read as the owner key
 			var arr := m3.mesh.surface_get_arrays(s)

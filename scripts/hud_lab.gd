@@ -55,10 +55,12 @@ static func on() -> bool:
 
 
 static func tex(n: String) -> Texture2D:
-	if not _tex.has(n):
+	var k := LookTheme.current + "/" + n              # THEMES: the setting's painted shell (the 14 shells), else the lab's
+	if not _tex.has(k):
+		var tp := LookTheme.hud_path(n)
 		var p := DIR + n + ".png"
-		_tex[n] = load(p) if ResourceLoader.exists(p) else null
-	return _tex[n]
+		_tex[k] = load(tp) if tp != "" else (load(p) if ResourceLoader.exists(p) else null)
+	return _tex[k]
 
 
 static func u_for(vp: Vector2, mobile: bool) -> float:

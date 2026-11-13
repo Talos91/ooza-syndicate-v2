@@ -21,6 +21,9 @@ uniform float flow_v = 2.2;      // m/s along the run
 // the pit"): true = the fill front and the bands start at the column (node) and run toward the pit (WorldTubes.FLOW_FROM_NODE).
 uniform bool from_node = true;
 uniform bool lab = false;        // LAB LOOK TEST (--look=lab): 26S zones - mint glass, ivory sleeves, detail-grey stand
+uniform vec3 lab_sleeve = vec3(0.92, 0.886, 0.82);     // THEMES (LookTheme): the lab's values by default
+uniform vec3 lab_stand = vec3(0.443, 0.541, 0.514);
+uniform vec3 lab_glass = vec3(0.42, 0.55, 0.54);
 
 varying vec4 st;
 varying float bp;
@@ -51,14 +54,14 @@ void fragment() {
 	float bub = step(0.8, hash(bc)) * smoothstep(0.42, 0.1, length(fract(vec2(UV.x * 8.0, flow * 1.4)) - 0.5));
 	vec3 goo = st.rgb * (0.75 + 0.3 * band + 0.6 * bub) * goo_dim;
 	float fres = pow(1.0 - clamp(abs(dot(NORMAL, VIEW)), 0.0, 1.0), 2.0);
-	vec3 glass = lab ? vec3(0.42, 0.55, 0.54) * 0.55 + vec3(0.68, 0.79, 0.78) * fres * 0.5 : vec3(0.07, 0.1, 0.13) + vec3(0.25, 0.35, 0.42) * fres * 0.6;
+	vec3 glass = lab ? lab_glass * 0.55 + vec3(0.68, 0.79, 0.78) * fres * 0.5 : vec3(0.07, 0.1, 0.13) + vec3(0.25, 0.35, 0.42) * fres * 0.6;
 	vec3 c = mix(glass, goo + vec3(0.6, 0.7, 0.75) * fres * 0.25, in_goo);
 	float front = smoothstep(0.02, 0.0, abs(k - fill)) * step(0.0005, fill) * step(fill, 0.999);
 	c += vec3(0.9, 1.0, 1.0) * front * 0.7;           // the filling goo's front
 	float ring = step(fract(s / 3.0 + 0.5), 0.05);    // steel couplings every 3 m
 	if (lab) {
 		ring = step(fract(s / 3.0 + 0.5), 0.0933);        // 0.28 m ivory sleeve every 3 m
-		c = mix(c, vec3(0.92, 0.886, 0.82), ring);
+		c = mix(c, lab_sleeve, ring);
 	} else {
 		c = mix(c, vec3(0.2, 0.22, 0.26) * 1.6, ring);
 	}
@@ -68,7 +71,7 @@ void fragment() {
 	}
 	if (UV.x < -0.5) {                                // v2: a steel stand under the level run
 		float lit = 0.75 + 0.25 * abs(NORMAL.x) + 0.35 * max(NORMAL.y, 0.0);
-		c = (lab ? vec3(0.443, 0.541, 0.514) : vec3(0.2, 0.22, 0.26)) * lit;
+		c = (lab ? lab_stand : vec3(0.2, 0.22, 0.26)) * lit;
 	}
 	ALBEDO = mix(c, abyss * 0.6, haze);
 }

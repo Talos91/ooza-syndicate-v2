@@ -319,7 +319,7 @@ func _build_floor(centre: Vector3, radius: float) -> void:
 	m.set_shader_parameter("tiles", not v1 and not floor_pic and not floor_lab5)
 	if floor_lab5:
 		m.set_shader_parameter("lab5", true)
-		m.set_shader_parameter("t_lab5", load(Look.FLOOR) if Look.lab else load(PerfProfile.hi_path(LAB5_FLOOR_GROUT if "--floor-grout" in OS.get_cmdline_user_args() else LAB5_FLOOR)))
+		m.set_shader_parameter("t_lab5", load(LookTheme.world("tile", Look.FLOOR)) if Look.lab else load(PerfProfile.hi_path(LAB5_FLOOR_GROUT if "--floor-grout" in OS.get_cmdline_user_args() else LAB5_FLOOR)))
 		m.set_shader_parameter("lab5_m", Look.FLOOR_M if Look.lab else LAB5_TILE_M)
 		m.set_shader_parameter("lab5_gain", LAB5_GAIN)
 		m.set_shader_parameter("haze", LAB5_HAZE)

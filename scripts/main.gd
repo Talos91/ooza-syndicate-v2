@@ -385,6 +385,7 @@ func _start_map(path: String) -> void:
 	map_path = path
 	last_map_path = path                               # MAIN MENU remembers it (0.19.0)
 	map = MapBuilder.load_map(path)
+	LookTheme.pick(str(map.get("code", "")))          # THEMES: the map's setting (lab by default) before the world is built
 	_lm("map_json")
 	if not pitch_forced:                               # Alpha 18: each map's own camera angle (phone-fit probe)
 		cam_pitch = MapCamera.pitch_for(str(map.get("code", "")), str((map.get("tags", {}) as Dictionary).get("size", "")))

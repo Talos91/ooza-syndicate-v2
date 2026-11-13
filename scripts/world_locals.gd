@@ -1514,6 +1514,11 @@ func _build_walkways() -> void:
 		m3.albedo_color = Color("#718A83")
 		m3.metallic = 0.0
 		m3.roughness = 0.8
+		var wt := LookTheme.zone("walkway")            # THEMES: the setting's walkway grating (trim on the rails)
+		if not wt.is_empty():
+			m3.albedo_color = Color(wt[1])
+			m3.metallic = wt[4]
+			m3.roughness = wt[2]
 	mesh.surface_set_material(mesh.get_surface_count() - 1, m3)
 	deck_tris = 0
 	for si in range(mesh.get_surface_count()):
@@ -1526,6 +1531,11 @@ func _build_walkways() -> void:
 		m1.albedo_color = Color("#EAD9BC")
 		m1.metallic = 0.0
 		m1.roughness = 0.8
+		var wb := LookTheme.zone("walkway")            # THEMES: the setting's walkway grating (base on the deck)
+		if not wb.is_empty():
+			m1.albedo_color = Color(wb[0])
+			m1.metallic = wb[3]
+			m1.roughness = wb[2]
 	m1.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var m2 := StandardMaterial3D.new()
 	m2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED

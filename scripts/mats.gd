@@ -232,16 +232,35 @@ static func _detail_textures(kind: String, normals: bool) -> Array:
 
 
 static func apply_detail(node: Node) -> void:
+	var kind := LookTheme.kind_of(node.scene_file_path) if LookTheme.active() else ""   # THEMES: the piece kind for its material set
 	for mi in node.find_children("*", "MeshInstance3D", true, false):
 		var mesh := (mi as MeshInstance3D).mesh
 		for s in range(mesh.get_surface_count()):
 			var src := mesh.surface_get_material(s)
 			if src == null or (mi as MeshInstance3D).get_surface_override_material(s) != null:
 				continue
-			if DETAILED.has(src.resource_name):
+			if kind != "" and src is StandardMaterial3D and not LookTheme.role(kind, src.resource_name).is_empty():
+				(mi as MeshInstance3D).set_surface_override_material(s, themed(src, kind))
+			elif DETAILED.has(src.resource_name):
 				(mi as MeshInstance3D).set_surface_override_material(s, detail(src))
 			elif src.resource_name == "OS_Glass" or src.resource_name == "OS_Glass_Low":   # (lab kit vats: the clearer lower band)           # 0.18.7: lit-rim glass instead of a grey film
-				(mi as MeshInstance3D).set_surface_override_material(s, glass(Look.GLASS if Look.lab else Rules.NEUTRAL))   # LAB LOOK TEST: mint glass
+				(mi as MeshInstance3D).set_surface_override_material(s, glass(LookTheme.glass() if Look.lab else Rules.NEUTRAL))   # LAB LOOK TEST: mint glass; THEMES: the setting's glass
+
+
+static func themed(src: Material, kind: String) -> Material:
+	## THEMES: the kit material in the theme's zone colour / roughness / metalness (MATERIALS-<S>.md), keeping the detail
+	## texture of the plate / grain materials. One material per theme + kind + slot (MapBatch batches by material).
+	var nm := src.resource_name.get_slice(".", 0)
+	var key := "theme_%s_%s_%s" % [LookTheme.current, kind, nm]
+	if not _cache.has(key):
+		var r := LookTheme.role(kind, src.resource_name)
+		var m := (detail(src) if DETAILED.has(src.resource_name) else src).duplicate() as StandardMaterial3D
+		m.resource_name = src.resource_name           # MapBatch.FIXED / game code match by name
+		m.albedo_color = r[0]
+		m.roughness = r[1]
+		m.metallic = r[2]
+		_cache[key] = m
+	return _cache[key]
 
 
 # ------------------------------------------------------------------ Label3D looks (perf pass)

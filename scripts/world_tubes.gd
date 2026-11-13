@@ -1561,6 +1561,8 @@ func _build_connectors() -> void:
 		mi.mesh = bx
 		var m := StandardMaterial3D.new()
 		m.albedo_color = Color("#E2CFAE") if Look.v2 else STEEL_L   # lab-wire: cream like labkit/Tube_Connector_*
+		if not LookTheme.zone("tubes").is_empty():
+			m.albedo_color = Color(LookTheme.zone("tubes")[0])     # THEMES: the setting's tube casing
 		m.metallic = 0.0 if Look.v2 else 0.5
 		m.roughness = 0.5
 		mi.material_override = m
@@ -2110,6 +2112,11 @@ func _build_mesh(runs: Array, craters: Array) -> void:
 	_mat.shader = SHADER_PIPE
 	_mat.set_shader_parameter("abyss", wl.haze_abyss())
 	_mat.set_shader_parameter("lab", Look.lab)        # LAB LOOK TEST
+	if LookTheme.active():                            # THEMES: sleeves = tube trim (couplers), stand = tube casing, glass tint
+		_mat.set_shader_parameter("lab_sleeve", LookTheme.c3("tubes", 1, Vector3(0.92, 0.886, 0.82)))
+		_mat.set_shader_parameter("lab_stand", LookTheme.c3("tubes", 0, Vector3(0.443, 0.541, 0.514)))
+		var g := LookTheme.glass()
+		_mat.set_shader_parameter("lab_glass", Vector3(g.r, g.g, g.b) * 0.62)   # lab: #AECAC7 -> (0.42, 0.55, 0.54)
 	if wl.floor_haze >= 0.0:
 		_mat.set_shader_parameter("haze", wl.floor_haze)
 	_mat.set_shader_parameter("slots", float(maxi(runs.size(), 1)))
@@ -2263,9 +2270,11 @@ func pit_strength(k: int) -> Dictionary:
 
 
 # ------------------------------------------------------------------ the column base mesh
+static var _base_theme := ""
 static func column_base_mesh() -> ArrayMesh:
-	if _base_mesh != null:
+	if _base_mesh != null and _base_theme == LookTheme.current:
 		return _base_mesh
+	_base_theme = LookTheme.current                   # THEMES: rebuilt when the setting changes
 	if Look.v2:                                       # lab-wire: the production lab kit's node base (labkit/Node_Base*, same
 		_base_mesh = Look.kit_vc_mesh("Node_Base" if base45() else "Node_Base_Tilted", 0.6, false)   # dims; owner light on the
 		if _base_mesh != null:                         # lift collar's thin top ring only)
