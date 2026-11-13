@@ -97,6 +97,10 @@ func _measure(main: Node, pt_w: float) -> Dictionary:
 	panels.append(hud.music_button.get_global_rect())
 	if hud.dock.visible:                                     # Alpha 24: the skill column on the right
 		panels.append(hud.dock.get_global_rect())
+		if hud.lab_feed and hud.lab_feed.visible:            # hud-lab: the round-30 skill feed beside the keys
+			panels.append(hud.lab_feed.get_global_rect())
+	if hud.lab_tube and hud.lab_tube.visible:                # hud-lab: the score tube
+		panels.append(hud.lab_tube.get_global_rect())
 	var screen := Rect2(Vector2.ZERO, vp)
 	var circ := {}
 	var off := 0

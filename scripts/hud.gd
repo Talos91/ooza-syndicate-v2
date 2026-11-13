@@ -940,6 +940,8 @@ func right_used() -> float:
 	if dock and dock.visible:
 		var hm := dock.housing_margin()
 		w = maxf(w, dock.size.x + hm.x + hm.z)
+		if lab_feed:                                  # hud-lab: the skill feed runs down the keys' outside (19 pt at x1.2)
+			w = maxf(w, dock.size.x - HudLab.SKILL_FEED_OFF.x * HudLab.KEY_K * HudLab.u_of(self))
 	return margins.z + w + 12.0
 
 
@@ -950,7 +952,10 @@ func top_used() -> float:
 		var h := status_label.get_theme_font("font").get_height(status_label.get_theme_font_size("font_size"))
 		h += (sb.content_margin_top + sb.content_margin_bottom) if sb else 0.0
 		reserve = maxf(reserve, maxf(h, status_label.size.y) + 2.0 + 8.0 * ui_scale)
-	return margins.y + (top_panel.size.y if top_panel else 0.0) + reserve
+	var top_h := top_panel.size.y if top_panel else 0.0
+	if lab_tube:                                      # hud-lab: the score tube (42 pt from the screen top)
+		top_h = maxf(top_h, lab_tube.size.y - margins.y)
+	return margins.y + top_h + reserve
 
 
 func bottom_used() -> float:

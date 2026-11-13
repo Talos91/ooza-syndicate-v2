@@ -1251,6 +1251,15 @@ func _stage_scenario() -> void:
 		"notices":                                      # HUD pass: the normal view (--focus=N: a close-up)
 			if focus_node >= 0 and focus_node < sim.nodes.size():
 				scenario_focus = sim.nodes[focus_node]["pos"]
+		"labpie":                                       # hud-lab shots: --inspect=N owned by A with units to spend; --lab-build=<kind>
+			var lid := maxi(_debug_inspect_node, 0)       # builds that structure there first (Sim.build + _finish_build, no wait)
+			sim.nodes[lid]["owner"] = "A"
+			sim.nodes[lid]["units"] = 300.0
+			for a in OS.get_cmdline_user_args():
+				if a.begins_with("--lab-build=") and sim.build(lid, "A", a.substr(12)):
+					sim._finish_build(sim.nodes[lid])
+					sim.nodes[lid]["units"] = 300.0
+			scenario_focus = sim.nodes[lid]["pos"]
 		"build", "inspect":
 			sim.nodes[1]["owner"] = "A"
 			sim.nodes[1]["units"] = 300.0

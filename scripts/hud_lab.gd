@@ -522,7 +522,7 @@ static func draw_card(hud, ci: Control) -> void:
 		art_part(ci, "mask-card-bar-fill", Vector2.ZERO, k, Rect2(24, 159, 540.0 * f, 24), hud.inspector_col)
 	var who := str(hud.inspector_who.text).strip_edges()
 	var first := str(hud.inspector_first.text).strip_edges()
-	var head := who + (" · " if who != "" and first != "" else "") + first
+	var head := who.trim_suffix("·").strip_edges() + (" · " if who != "" and first != "" else "") + first.trim_prefix("·").strip_edges()
 	if int(n["tier"]) > 0 and n["relay"] == "" and not ("T%d" % int(n["tier"])) in head:
 		head += " T%d" % int(n["tier"])
 	var fnt := bold()
