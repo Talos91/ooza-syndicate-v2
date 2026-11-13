@@ -163,11 +163,6 @@ static func pipe_run(ci: CanvasItem, pre: String, src: Rect2, dest: Rect2, goo: 
 			ci.draw_texture_rect_region(t, dest, src, l[1])
 
 
-static func screen_edge(c: Control) -> Vector2:
-	## The bottom-right corner of the physical screen in c's local px (the HUD layers have no transform of their own).
-	return c.get_global_transform_with_canvas().affine_inverse() * c.get_viewport_rect().size
-
-
 static func place(c: Control, pos: Vector2, sz: Vector2) -> void:
 	c.position = pos
 	c.size = sz
@@ -353,17 +348,9 @@ class SkillFeed:
 	var flow: Pic
 	var _t := 0.0
 
-	var ext: Control                             # the straight runs to the right and bottom screen edges, behind the art
-	var _lv := 0.0
-
 	func setup(d) -> void:
 		dock = d
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ext = Control.new()
-		ext.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ext.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		ext.draw.connect(_draw_ext)
-		add_child(ext)
 		var shell := HudLab.Pic.new([["r30-skill-feed-shell"], ["r30-skill-feed-window"]])
 		add_child(shell)
 		goo = HudLab.Goo.new(HudLab.tex("r30-skill-feed-goo-white"), 3)
@@ -382,23 +369,6 @@ class SkillFeed:
 		size = HudLab.SKILL_FEED_PT * k
 		for c in get_children():
 			HudLab.place(c, Vector2.ZERO, size)
-		ext.queue_redraw()
-
-	const TOP_RUN := Rect2(262, 0, 16, 66)      # the top run's straight part (3x px): a 16 px slice (1 px samples empty under mipmaps)
-	const DOWN_RUN := Rect2(0, 472, 66, 16)     # the down run between the last collar and the bottom bend (16 px slice)
-
-	func _draw_ext() -> void:
-		## The top run on to the right screen edge (upstream: goo while anything charges), the down run on past the last key's
-		## branch to the bottom edge (downstream: goo once all three are full). Drawn behind the art, so its bend stays on top.
-		var s := size.x / 279.0                      # local px per 3x art px
-		var edge := HudLab.screen_edge(ext)
-		var tint := GooTone.mine(HudNoir.accent)
-		var x0 := TOP_RUN.position.x * s
-		HudLab.pipe_run(ext, "r30-skill-feed-", TOP_RUN,
-				Rect2(x0, TOP_RUN.position.y * s, edge.x - x0 + 2.0, TOP_RUN.size.y * s), Color(tint, 1.0 if _lv > 0.01 else 0.0))
-		var y0 := DOWN_RUN.position.y * s
-		HudLab.pipe_run(ext, "r30-skill-feed-", DOWN_RUN,
-				Rect2(DOWN_RUN.position.x * s, y0, DOWN_RUN.size.x * s, edge.y - y0 + 2.0), Color(tint, smoothstep(0.92, 1.0, _lv)))
 
 	func _process(dt: float) -> void:
 		_t += dt
@@ -412,9 +382,6 @@ class SkillFeed:
 		var lv := tot / maxf(float(dock.slots.size()), 1.0)
 		goo.p("level", clampf(lv, 0.0, 1.0))
 		goo.p("tint", GooTone.mine(HudNoir.accent))
-		if absf(lv - _lv) > 0.01:
-			_lv = lv
-			ext.queue_redraw()
 		flow.layers[0][1] = Color(1, 1, 1, 0.18 + 0.18 * sin(_t * 2.4))
 		flow.queue_redraw()
 
