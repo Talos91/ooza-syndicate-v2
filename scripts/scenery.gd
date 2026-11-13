@@ -104,19 +104,11 @@ static func build_environment(parent: Node, _mobile: bool) -> DirectionalLight3D
 	return sun
 
 
-# CAMPAIGN: the match backdrop per map (Daniele, 2026-09-28; still WIP - "we'll get back later"). A campaign mission
-# shows its own background (Campaign.backdrop_of: assets/art/campaign/vex-<id>.jpg); a battle map one of the general
-# backgrounds, fixed per map code so every client of a room sees the same one; tutorial (T-) and debug (D-) maps and
-# anything unknown keep the cloud-city sky. The shader stays as it is (the status quo); per-background tint / haze
-# variants come later (Alpha 22-23).
+# CAMPAIGN: the match backdrop per map (Daniele, 2026-09-28). A campaign mission shows its own background
+# (Campaign.backdrop_of: assets/art/campaign/vex-<id>.jpg); everything else the cloud-city sky. SETTING PICK (2026-11-13):
+# the five battle backdrops (assets/art/backdrops/battle-*.jpg) and their BACKGROUND pick are retired - the setting
+# (LookTheme: WALLS surround + floor + kit + HUD) is the match's background now; the files stay in git, out of the Web export.
 const DEFAULT_BACKDROP := "res://assets/art/city-background.png"
-const BATTLE_BACKDROPS := [
-	"res://assets/art/backdrops/battle-connection-not-guaranteed.jpg",
-	"res://assets/art/backdrops/battle-forecast-liability.jpg",
-	"res://assets/art/backdrops/battle-future-is-cloudy.jpg",
-	"res://assets/art/backdrops/battle-some-assembly-required.jpg",
-	"res://assets/art/backdrops/battle-water-is-a-privilege.jpg",
-]
 
 
 static func backdrop_for(map_code: String, mission_key := "") -> String:
@@ -124,27 +116,7 @@ static func backdrop_for(map_code: String, mission_key := "") -> String:
 		var p := Campaign.backdrop_of(mission_key)
 		if p != "":
 			return p
-	if map_code == "" or map_code.begins_with("T-") or map_code.begins_with("D-"):
-		return DEFAULT_BACKDROP
-	var auto_i := absi(hash(map_code)) % BATTLE_BACKDROPS.size()
-	var bi := auto_i
-	var room := _room_backdrop()                       # UI: online, the room owner's pick for everyone (Net.match_info)
-	if room == -2:
-		bi = UiKit.battle_backdrop(auto_i, BATTLE_BACKDROPS.size())   # offline: your BATTLEFIELD > BACKGROUND pick
-	elif room >= 0:
-		bi = room % BATTLE_BACKDROPS.size()
-	var p2: String = BATTLE_BACKDROPS[bi]
-	return p2 if ResourceLoader.exists(p2) else DEFAULT_BACKDROP
-
-
-static func _room_backdrop() -> int:
-	## UI: -2 = not in an online match (your own pick applies); -1 = the room plays the map's own; else the owner's index.
-	## Net by path: headless --script runs have no autoloads.
-	var tree := Engine.get_main_loop() as SceneTree
-	var net = tree.root.get_node_or_null("Net") if tree != null else null
-	if net == null or not bool(net.get("active")):
-		return -2
-	return int((net.get("match_info") as Dictionary).get("backdrop", -1))
+	return DEFAULT_BACKDROP
 
 
 static func make_backdrop(parent: Node, path := DEFAULT_BACKDROP) -> CanvasLayer:

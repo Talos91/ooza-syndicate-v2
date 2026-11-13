@@ -4020,23 +4020,64 @@ func _map_type(m: Dictionary) -> String:
 	return str(m.get("tags", {}).get("size", "")).to_lower()
 
 
-# --- UI: BATTLEFIELD > BACKGROUND (Daniele 2026-09-28): the match background, your screen only (UiKit.backdrop_choice) ---
-var _bg_sheet := "--backdrop-sheet" in OS.get_cmdline_user_args()   # the BACKGROUND sheet is open (screenshots: open)
+# --- SETTING PICK (2026-11-13, Daniele: "when you pick AI there should also be a pick of the setting"; it "completely
+# supersedes the old backgrounds"): the match's setting (LookTheme: world + HUD shells). PLAY VS AI: yours (UiKit.setting_choice,
+# remembered); the online room: the owner's for everyone (Net.room_backdrop, LookTheme.room_value). ---
+var _bg_sheet := "--setting-sheet" in OS.get_cmdline_user_args()   # the SETTING sheet is open (screenshots: open)
+var _setting_room := ""                            # the room the owner's remembered SETTING was last brought into
 
 
-func _backdrop_short(v: String) -> String:
-	if v == "auto":
-		return "AUTO"
-	if v == "rotate":
-		return "ROTATE"
-	if not v.is_valid_int() or int(v) >= Scenery.BATTLE_BACKDROPS.size():
-		return "AUTO"
-	return UiKit.backdrop_name(int(v), Scenery.BATTLE_BACKDROPS[int(v)]).get_slice(" ", 0).trim_suffix(":")
+func _setting_tiles(r: Rect2, mine: String, on_pick: Callable, f: String, enabled := true) -> float:
+	## The five settings in one row inside r, each by its picture (R-01 in that setting), its name and its line; the current
+	## lit. Returns the height used. No scrolling: the row shrinks to fit (Daniele 2026-11-04).
+	var n := LookTheme.IDS.size()
+	var gap := 10.0
+	var tw := floorf((r.size.x - gap * (n - 1)) / n)
+	var two := false                                  # a narrow tile: the lines wrap to two rows (never cut)
+	for id in LookTheme.IDS:
+		two = two or UiKit.text_w(self, str(LookTheme.TAGLINES[id]), 12) > tw - 16.0
+	var sub_h := UiKit.line_h(self, 12)
+	if two:                                           # the wrapped height as the font draws it (2 x line_h clipped the 2nd row)
+		for id in LookTheme.IDS:
+			sub_h = maxf(sub_h, UiKit.text_h(self, str(LookTheme.TAGLINES[id]), 12, tw - 16.0) + 2.0)
+	var cap := UiKit.line_h(self, 13, true) + sub_h + 10.0
+	var th := floorf(minf(tw * 9.0 / 16.0, maxf(40.0, r.size.y - cap - 12.0)))
+	var tile := Vector2(tw, th + cap + 10.0)
+	for k in range(n):
+		var id: String = LookTheme.IDS[k]
+		var b := UiKit.btn(self, "", r.position + Vector2(k * (tw + gap), 0), tile, func(): on_pick.call(id),
+				"selected" if id == mine else "secondary", f)
+		b.disabled = not enabled
+		var tex := LookTheme.preview(id)
+		if tex != null:
+			var pic := TextureRect.new()
+			pic.texture = tex
+			pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			pic.position = Vector2(5, 5)
+			pic.size = Vector2(tw - 10.0, th)
+			b.add_child(pic)
+		var title := str(LookTheme.NAMES[id])
+		if UiKit.text_w(self, title, 13, true) > tw - 16.0:
+			title = str(LookTheme.SHORT_NAMES[id])       # CORPORATE CAMPUS -> CAMPUS on a phone
+		var nm := UiKit.label(self, title, 13, UiKit.accent(f) if id == mine else UiKit.INK, true)
+		nm.clip_text = true
+		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		nm.position = Vector2(8, th + 10.0)
+		nm.size = Vector2(tw - 16.0, UiKit.line_h(self, 13, true))
+		b.add_child(nm)
+		var sub := UiKit.label(self, str(LookTheme.TAGLINES[id]), 12, UiKit.MUTED)
+		sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if two else TextServer.AUTOWRAP_OFF
+		sub.clip_text = not two
+		sub.position = Vector2(8, th + 10.0 + nm.size.y)
+		sub.size = Vector2(tw - 16.0, sub_h)
+		b.add_child(sub)
+	return tile.y
 
 
-func _backdrop_sheet(sel: Dictionary) -> void:
-	## Over BATTLEFIELD: AUTO (the map's own background - what everyone in a room sees), ROTATE (a new one every match)
-	## and the five, each by its picture; the current pick lit. A pick saves and closes; so does a tap outside.
+func _setting_sheet(_sel: Dictionary) -> void:
+	## Over PLAY VS AI: the five settings; a pick saves and closes; so does a tap outside.
 	var dim := UiKit.rect(Vector2(-safe.x, -safe.y), content.size + Vector2(safe.x + safe.z, safe.y + safe.w), Color(0, 0, 0, 0.62))
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	dim.gui_input.connect(func(e):
@@ -4044,67 +4085,31 @@ func _backdrop_sheet(sel: Dictionary) -> void:
 			_bg_sheet = false
 			_redraw.call_deferred())
 	content.add_child(dim)
-	var pw := minf(content.size.x - 60.0, 1080.0)
-	var cols := 4
-	var gap := 12.0
-	var tw := floorf((pw - 48.0 - gap * (cols - 1)) / cols)
-	var th := floorf(tw * 9.0 / 16.0)
-	var cap := UiKit.line_h(self, 13, true) + UiKit.line_h(self, 12) + 12.0
-	var tile := Vector2(tw, th + cap + 12.0)
-	var note := "For your matches here. In an online room its owner picks the background for everyone (the lobby's BACKGROUND). Campaign missions and training keep their own."
+	var pw := minf(content.size.x - 40.0, 1180.0)
+	var note := "Where your matches here are played: the walls, the floor, the kit and the HUD. Online, the room's host picks it for everyone. Campaign missions and training keep their own."
 	var head := UiKit.line_h(self, 12, true) + UiKit.line_h(self, 26, true) + UiKit.text_h(self, note, 13, pw - 48.0) + 28.0
-	var ph := minf(content.size.y - 24.0, head + 2.0 * tile.y + gap + 24.0)
+	var ph := minf(content.size.y - 24.0, head + floorf((pw - 48.0 - 40.0) / 5.0) * 9.0 / 16.0 + 104.0)
 	var pos := ((content.size - Vector2(pw, ph)) / 2.0).floor()
 	var panel := UiKit.panel(self, pos, Vector2(pw, ph), faction)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var ty := UiKit.title(self, pos.x + 24.0, pos.y + 18.0, "MATCH SETUP / BACKGROUND", "PICK THE SKY.", faction, 26.0)
+	var ty := UiKit.title(self, pos.x + 24.0, pos.y + 18.0, "MATCH SETUP / SETTING", "PICK THE PLACE.", faction, 26.0)
 	_say(note, Vector2(pos.x + 24.0, ty + 2.0), 13, UiKit.MUTED, pw - 48.0)
-	var mine := UiKit.backdrop_choice()
-	var auto_i := absi(hash(str(sel.get("code", "")))) % Scenery.BATTLE_BACKDROPS.size()
-	var opts := [["auto", auto_i, "AUTO", "This map's own"], ["rotate", -1, "ROTATE", "A new one every match"]]
-	for i in range(Scenery.BATTLE_BACKDROPS.size()):
-		opts.append([str(i), i, UiKit.backdrop_name(i, Scenery.BATTLE_BACKDROPS[i]), "%d / %d" % [i + 1, Scenery.BATTLE_BACKDROPS.size()]])
-	var gy := pos.y + head
-	for k in range(opts.size()):
-		var o: Array = opts[k]
-		var v: String = o[0]
-		var tp := Vector2(pos.x + 24.0 + (k % cols) * (tw + gap), gy + (k / cols) * (tile.y + gap))
-		var b := UiKit.btn(self, "", tp, tile, func():
-			UiKit.save_backdrop_choice(v)
-			_bg_sheet = false
-			_redraw(), "selected" if v == mine else "secondary", faction)
-		var idx: int = o[1]
-		if idx >= 0:                                   # the picture (ROTATE: the five in a strip)
-			var pic := TextureRect.new()
-			pic.texture = UiKit.tex(Scenery.BATTLE_BACKDROPS[idx])
-			pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-			pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			pic.position = Vector2(6, 6)
-			pic.size = Vector2(tw - 12.0, th)
-			b.add_child(pic)
-		else:
-			var n := Scenery.BATTLE_BACKDROPS.size()
-			var sw := (tw - 12.0) / n
-			for j in range(n):
-				var strip := TextureRect.new()
-				strip.texture = UiKit.tex(Scenery.BATTLE_BACKDROPS[j])
-				strip.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-				strip.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-				strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				strip.position = Vector2(6.0 + j * sw, 6)
-				strip.size = Vector2(sw - 2.0, th)
-				b.add_child(strip)
-		var nm := UiKit.label(self, str(o[2]), 13, UiKit.accent(faction) if v == mine else UiKit.INK, true)
-		nm.clip_text = true
-		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		nm.position = Vector2(10, th + 12.0)
-		nm.size = Vector2(tw - 20.0, UiKit.line_h(self, 13, true))
-		b.add_child(nm)
-		var sub := UiKit.label(self, str(o[3]), 12, UiKit.MUTED)
-		sub.position = Vector2(10, th + 12.0 + nm.size.y)
-		b.add_child(sub)
-# --- end UI: BACKGROUND ---
+	_setting_tiles(Rect2(pos.x + 24.0, pos.y + head, pw - 48.0, ph - head - 18.0), UiKit.setting_choice(), func(id):
+		UiKit.save_setting_choice(id)
+		_bg_sheet = false
+		_redraw(), faction)
+
+
+func _setting_owner_remembered(host: bool) -> void:
+	## The room owner's remembered SETTING comes along into a new room (once per room; a later pick there is theirs).
+	if not host or Net.room_code == "" or Net.room_code == _setting_room:
+		return
+	_setting_room = Net.room_code
+	if Net.room_backdrop == "auto":
+		Net.set_room_backdrop.call_deferred(LookTheme.room_value(UiKit.setting_choice()))
+
+
+# --- end SETTING PICK ---
 
 
 func _filtered_maps() -> Array:
@@ -4192,7 +4197,7 @@ func _selected_map() -> Dictionary:
 
 func show_setup() -> void:
 	## ROUND 4 (Daniele 2026-11-05, his staging review of 0.23.26): PLAY VS AI and the online room are ONE lobby - the same
-	## grid (_lobby_grid): LEFT the map (a smaller picture) over MODE | MAP | BACKGROUND, RIGHT the seats (the map's size)
+	## grid (_lobby_grid): LEFT the map (a smaller picture) over MODE | MAP | SETTING, RIGHT the seats (the map's size)
 	## over ARMY | COLOUR | RULES, the foot = the summary + DEPLOY. Only the seats differ: here every other seat is an AI
 	## (tap -> its sheet: faction + AI level). ARMY = faction + loadout in one (-> the faction page, EDIT LOADOUT there).
 	_last_show = show_setup                  # a resize that changes the phone sizing rebuilds it (_fit)
@@ -4203,14 +4208,14 @@ func show_setup() -> void:
 		mode = modes[0]
 	var area := shell_open("OOZE / PLAY VS AI", "home", show_main, faction)
 	var g := _lobby_grid(area)
-	# LEFT: the map, then MODE | MAP | BACKGROUND
+	# LEFT: the map, then MODE | MAP | SETTING
 	_lobby_map(g["map"], true)
 	var l3 := _thirds(g["lrow"])
 	_big_btn(l3[0], "MODE", MODE_NAMES.get(mode, mode), func(): _open_lobby_sheet("mode"))
 	_big_btn(l3[1], "MAP", "CHANGE", _open_maps)
-	_big_btn(l3[2], "BACKGROUND", _backdrop_short(UiKit.backdrop_choice()), func():
+	_big_btn(l3[2], "SETTING", str(LookTheme.SHORT_NAMES[UiKit.setting_choice()]), func():
 		_bg_sheet = true
-		show_setup())
+		show_setup(), "", LookTheme.preview(UiKit.setting_choice()))
 	# RIGHT: the seats (you + the AI), then ARMY | COLOUR | RULES
 	_setup_seats(g["seats"])
 	var r3 := _thirds(g["rrow"])
@@ -4238,7 +4243,7 @@ func show_setup() -> void:
 	if _lobby_sheet != "":
 		_setup_sheet_draw()
 	elif _bg_sheet:
-		_backdrop_sheet(sel)
+		_setting_sheet(sel)
 
 
 # --- ROUND 4: the shared lobby grid (PLAY VS AI and the online room) ---
@@ -4278,12 +4283,25 @@ func _fit_fs(t: String, hi: float, lo: float, width: float, bold := true) -> flo
 	return fs
 
 
-func _big_btn(r: Rect2, kicker: String, value: String, call: Callable, f := "") -> Button:
+func _big_btn(r: Rect2, kicker: String, value: String, call: Callable, f := "", pic: Texture2D = null) -> Button:
 	## A big summary button: KICKER (muted) over the value (large), a chevron at the right. Opens its page / sheet.
+	## pic (SETTING): a small picture before the chevron when the words still fit beside it.
 	var b := UiKit.btn(self, "", r.position, r.size, call, "secondary", f if f != "" else shell_f)
 	var room := b.size.x - 14.0 - 26.0
-	if kicker == "BACKGROUND" and UiKit.text_w(self, kicker, 12, true) + kicker.length() * 2.0 > room:
-		kicker = "BACKDROP"                            # a narrow phone (the 12.5 pt floor): the shorter word
+	if pic != null:
+		var ph := floorf(b.size.y - 16.0)
+		var pw := floorf(ph * 16.0 / 9.0)
+		var need := maxf(UiKit.text_w(self, kicker, 12, true) + kicker.length() * 2.0, UiKit.text_w(self, value, 14, true))
+		if ph >= 24.0 and room - pw - 10.0 >= need:
+			var tr := TextureRect.new()
+			tr.texture = pic
+			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			tr.position = Vector2(b.size.x - 26.0 - pw, 8.0)
+			tr.size = Vector2(pw, ph)
+			b.add_child(tr)
+			room -= pw + 10.0
 	var kfs := _fit_fs(kicker, 12.0, 9.0, room - kicker.length() * 2.0)
 	var vfs := _fit_fs(value, 18.0, 12.0, room)
 	var kl := UiKit.line_h(self, kfs, true)
@@ -4297,7 +4315,7 @@ func _big_btn(r: Rect2, kicker: String, value: String, call: Callable, f := "") 
 		v.clip_text = true
 		v.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		v.position = Vector2(14, ty + kl + 2.0)
-		v.size = Vector2(maxf(10.0, b.size.x - 14.0 - 28.0), vl)
+		v.size = Vector2(maxf(10.0, room), vl)
 		b.add_child(v)
 	var c := UiKit.label(self, "›", 22, UiKit.MUTED)
 	c.position = Vector2(b.size.x - 22.0, (b.size.y - UiKit.line_h(self, 22)) / 2.0)
@@ -5019,13 +5037,15 @@ func show_lobby() -> void:
 		line = _lobby_note.to_upper() + "  ·  " + line
 	_say(line, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, line, 13, rx - x)) / 2.0)), 13, UiKit.STAR if _lobby_note != "" else UiKit.INK, rx - x)
 	var locked := Net.ready_locked() or Net.active
-	# LEFT: the map, then MODE | MAP | BACKGROUND (the host's; a guest sees them)
+	# LEFT: the map, then MODE | MAP | SETTING (the host's; a guest sees them)
 	_lobby_map(g["map"], host)
 	var l3 := _thirds(g["lrow"])
 	_big_btn(l3[0], "MODE", str(Net.MODE_LABELS[Net.mode]), func(): _open_lobby_sheet("mode"))
 	var mb := _big_btn(l3[1], "MAP", "CHANGE" if host else "HOST PICKS", _open_maps)
 	mb.disabled = not host
-	_big_btn(l3[2], "BACKGROUND", _backdrop_short(Net.room_backdrop), func(): _open_lobby_sheet("background"))
+	_setting_owner_remembered(host)
+	var room_set := LookTheme.of_room_value(Net.room_backdrop)
+	_big_btn(l3[2], "SETTING", str(LookTheme.SHORT_NAMES[room_set]), func(): _open_lobby_sheet("setting"), "", LookTheme.preview(room_set))
 	# RIGHT: the seats (half) and the room chat (half)
 	var sr: Rect2 = g["seats"]
 	var half := floorf((sr.size.x - 10.0) / 2.0)
@@ -5471,10 +5491,6 @@ func _lobby_sheet_body(host: bool) -> void:
 		var tw := floorf((r.size.x - 10.0) / 2.0)
 		var big := UiKit.tap_h(self, 64.0)
 		var y := r.position.y
-		var bgs := ["auto", "rotate"]
-		for i in range(Scenery.BATTLE_BACKDROPS.size()):
-			bgs.append(str(i))
-		var bgn := _backdrop_short(Net.room_backdrop)
 		var items := [
 			["LAST STAND  ·  %s" % ("ON" if Net.last_stand else "OFF"), Net.last_stand, func(): Net.toggle_last_stand()],
 			["ABILITIES  ·  %s" % ("ON" if Net.abilities else "OFF"), Net.abilities, func(): ArmyPresets.room_toggle_abilities(Net)],
@@ -5492,20 +5508,14 @@ func _lobby_sheet_body(host: bool) -> void:
 		if host and not Net.can_start():
 			note += " DEPLOY opens when every seat is filled (or EMPTY SEATS: AI) and every player is READY."
 		_say(note, Vector2(r.position.x, y), 13, UiKit.MUTED, r.size.x)
-	elif which == "background":                       # ROUND 4: its own button under the map
-		var r := _sheet_frame("ROOM / BACKGROUND", "THE BATTLE'S BACKDROP." if host else "THE HOST PICKS THE BACKDROP.", Vector2(900, 330))
-		var bgs := ["auto", "rotate"]
-		for i in range(Scenery.BATTLE_BACKDROPS.size()):
-			bgs.append(str(i))
-		var cols := 4
-		var bw := floorf((r.size.x - 10.0 * (cols - 1)) / cols)
-		var bh2 := UiKit.tap_h(self, 60.0)
-		for i in range(bgs.size()):
-			var v: String = bgs[i]
-			var b := UiKit.btn(self, _backdrop_short(v), r.position + Vector2((i % cols) * (bw + 10.0), (i / cols) * (bh2 + 10.0)), Vector2(bw, 60), func():
-				Net.set_room_backdrop(v)
-				_close_lobby_sheet(), "selected" if v == Net.room_backdrop else "secondary", shell_f, 16)
-			b.disabled = not host
+	elif which == "setting":                          # SETTING PICK: the owner's, for everyone (was BACKGROUND)
+		var r := _sheet_frame("ROOM / SETTING", "WHERE THE BATTLE IS FOUGHT." if host else "THE HOST PICKS THE SETTING.", Vector2(1100, 380))
+		var used := _setting_tiles(r, LookTheme.of_room_value(Net.room_backdrop), func(id):
+			UiKit.save_setting_choice(id)
+			Net.set_room_backdrop(LookTheme.room_value(id))
+			_close_lobby_sheet(), shell_f, host)
+		_say("Everyone in the room plays in it: the walls, the floor, the kit and the HUD." if host else "Only the host changes it.",
+				r.position + Vector2(0, used + 8.0), 13, UiKit.MUTED, r.size.x)
 	elif which == "faction":
 		var r := _sheet_frame("ROOM / YOUR FACTION", str(UiKit.TAGS[faction]) + ".", Vector2(900, 330))
 		var fr0 := content.get_child_count()

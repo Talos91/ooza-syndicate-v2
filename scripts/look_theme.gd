@@ -77,14 +77,65 @@ static func forced() -> String:
 	return ""
 
 
-static func pick(map_code: String) -> String:
-	## The map's theme (MapPool.THEMES, lab when unassigned); the dev flag wins. Called before the map is built.
+# SETTING PICK (Daniele 2026-11-13: "themes are independent of AI, it's just the new background selector, which completely
+# supersedes the old backgrounds"; "when you pick AI there should also be a pick of the setting"). The player picks the
+# setting in PLAY VS AI's SETTING (UiKit.setting_choice, remembered); online the room owner picks it for everyone through
+# the old BACKGROUND field (Net.room_backdrop "0".."4" -> match_info "backdrop" = the index in IDS; Net.BACKDROP_COUNT ==
+# IDS.size(), so net.gd and the protocol are unchanged; "auto" = the map's own = MapPool.THEMES, lab when unassigned).
+# Campaign missions and the tutorial / debug maps keep the map's own.
+const NAMES := {"lab": "THE LAB", "corporate_campus": "CORPORATE CAMPUS", "golden_hour": "GOLDEN HOUR",
+		"quota_parade": "QUOTA PARADE", "wellness_retreat": "WELLNESS RETREAT"}
+const SHORT_NAMES := {"lab": "LAB", "corporate_campus": "CAMPUS", "golden_hour": "GOLDEN HOUR",
+		"quota_parade": "QUOTA PARADE", "wellness_retreat": "WELLNESS"}
+const TAGLINES := {"lab": "Where it all started", "corporate_campus": "Thrive together", "golden_hour": "Protected for extraction",
+		"quota_parade": "Record output", "wellness_retreat": "Mandatory relaxation"}
+const PREVIEW := "res://assets/ui/settings/%s.jpg"     # tools/themes/make_setting_previews.py (R-01 at 1:40, per setting)
+
+
+static func preview(id: String) -> Texture2D:
+	var p := PREVIEW % id
+	return load(p) if ResourceLoader.exists(p) else null
+
+
+static func pick(map_code: String, use_choice := true) -> String:
+	## The match's setting, called before the map is built: the dev flag; else online the room's (match_info "backdrop");
+	## else (use_choice: not a campaign mission) your SETTING pick on a battle map; else the map's own (MapPool.THEMES, lab).
 	var f := forced()
-	current = f if f != "" else str(MapPool.THEMES.get(map_code, LAB))
+	var room := room_index()
+	if f != "":
+		current = f
+	elif room >= 0:
+		current = IDS[room % IDS.size()]
+	elif room == -2 and use_choice and map_code != "" and not map_code.begins_with("T-") and not map_code.begins_with("D-") 			and DisplayServer.get_name() != "headless":
+		current = UiKit.setting_choice()
+	else:
+		current = str(MapPool.THEMES.get(map_code, LAB))
 	if not current in IDS:
 		current = LAB
 	print("THEME ", current, " (map ", map_code, ")")
 	return current
+
+
+static func room_index() -> int:
+	## -2 = not in an online match (your own pick applies); -1 = the room plays the map's own; else the owner's index.
+	## Net by path: headless --script runs have no autoloads.
+	var tree := Engine.get_main_loop() as SceneTree
+	var net = tree.root.get_node_or_null("Net") if tree != null else null
+	if net == null or not bool(net.get("active")):
+		return -2
+	return int((net.get("match_info") as Dictionary).get("backdrop", -1))
+
+
+static func room_value(id: String) -> String:
+	## The Net.room_backdrop value for a setting ("0".."4").
+	return str(maxi(0, IDS.find(id)))
+
+
+static func of_room_value(v: String, map_code := "") -> String:
+	## Net.room_backdrop -> a setting id ("auto" = the map's own; "rotate", an old room value, reads as the map's own too).
+	if v.is_valid_int() and int(v) >= 0 and int(v) < IDS.size():
+		return IDS[int(v)]
+	return str(MapPool.THEMES.get(map_code, LAB))
 
 
 static func active() -> bool:

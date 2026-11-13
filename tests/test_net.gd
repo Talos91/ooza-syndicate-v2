@@ -603,7 +603,7 @@ func _run() -> void:
 	_open_room("1v1")
 	var bg1 := _join("gbg")
 	_deliver()
-	check(Net.BACKDROP_COUNT == Scenery.BATTLE_BACKDROPS.size(), "BACKGROUND: Net.BACKDROP_COUNT matches Scenery.BATTLE_BACKDROPS (🖥️: they drift otherwise)")
+	check(Net.BACKDROP_COUNT == LookTheme.IDS.size(), "SETTING: Net.BACKDROP_COUNT matches LookTheme.IDS (the old BACKGROUND field carries the setting)")
 	check(host.room_backdrop == "auto" and bg1.room_backdrop == "auto", "BACKGROUND: a new room plays the map's own")
 	host.set_room_backdrop("3")
 	_deliver()
@@ -620,6 +620,8 @@ func _run() -> void:
 			"BACKGROUND: the round's background is the same on every screen")
 	host.set_room_backdrop("rotate")                   # (in a match: owner settings wait for the lobby)
 	check(host.room_backdrop == "3", "BACKGROUND: no change mid-match")
+	check(LookTheme.IDS[int(bg1.match_info.get("backdrop", 0))] == "quota_parade",
+			"SETTING: index 3 = QUOTA PARADE on every screen")
 	host.leave()
 	check(host.room_backdrop == "auto", "BACKGROUND: leaving resets it")
 	bg1.leave()

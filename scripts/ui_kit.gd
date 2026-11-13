@@ -798,53 +798,24 @@ static func save_map_list(key: String, list: Array) -> bool:
 	return c.save(path) == OK
 
 
-# ------------------------------------------------------------------ the match background (Daniele 2026-09-28: "make sure new
-# backgrounds for maps are implemented and in rotation (can add to map selector a background selector part)"). Your pick
-# from BATTLEFIELD's BACKGROUND: "auto" (the map's own - Scenery.backdrop_for's, the same for everyone in a room), "rotate"
-# (the next of the five every match) or "0".."4" (that one). Your screen only, like COLOUR-BLIND; campaign missions and the
-# tutorial keep their own (Scenery.backdrop_for returns before it asks).
-const BACKDROP_NAMES := ["CONNECTION NOT GUARANTEED", "FORECAST: LIABILITY", "THE FUTURE IS CLOUDY", "SOME ASSEMBLY REQUIRED",
-		"WATER IS A PRIVILEGE"]
-
-
-static func backdrop_choice() -> String:
+# ------------------------------------------------------------------ SETTING PICK (2026-11-13): the match's setting, the
+# successor of the old BATTLEFIELD > BACKGROUND (retired with its five battle backdrops). A LookTheme id, LAB by default,
+# remembered here; your matches only (online the room owner's pick wins: LookTheme.pick).
+static func setting_choice() -> String:
 	var c := ConfigFile.new()
 	if c.load(path) != OK:
-		return "auto"
-	var v := str(c.get_value("match", "backdrop", "auto"))
-	return v if v in ["auto", "rotate"] or (v.is_valid_int() and int(v) >= 0 and int(v) < 64) else "auto"   # (the range: battle_backdrop)
+		return LookTheme.LAB
+	var v := str(c.get_value("match", "setting", LookTheme.LAB))
+	return v if v in LookTheme.IDS else LookTheme.LAB
 
 
-static func backdrop_name(i: int, p: String) -> String:
-	## The five's own names; a background added later is named after its file ("battle-some-thing" -> "SOME THING").
-	if i < BACKDROP_NAMES.size():
-		return BACKDROP_NAMES[i]
-	return p.get_file().get_basename().trim_prefix("battle-").replace("-", " ").to_upper()
-
-
-static func save_backdrop_choice(v: String) -> bool:
+static func save_setting_choice(v: String) -> bool:
+	if not v in LookTheme.IDS:
+		return false
 	var c := ConfigFile.new()
 	c.load(path)
-	c.set_value("match", "backdrop", v)
+	c.set_value("match", "setting", v)
 	return c.save(path) == OK
-
-
-static func battle_backdrop(auto_i: int, n: int) -> int:
-	## Scenery.backdrop_for's hook, once per match: the background index to show - `auto_i` (the map's own) unless you
-	## picked one or ROTATE (which moves on by one each match, starting after the map's own, and remembers where it is).
-	if n <= 0 or DisplayServer.get_name() == "headless":   # (a server's match host has no screen)
-		return auto_i
-	var v := backdrop_choice()
-	if v.is_valid_int():
-		return clampi(int(v), 0, n - 1)
-	if v != "rotate":
-		return auto_i
-	var c := ConfigFile.new()
-	c.load(path)
-	var i := (int(c.get_value("match", "rotate_i", auto_i)) + 1) % n
-	c.set_value("match", "rotate_i", i)
-	c.save(path)
-	return i
 
 
 static func campaign_view() -> String:

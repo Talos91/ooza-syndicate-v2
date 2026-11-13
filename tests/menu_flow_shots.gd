@@ -75,7 +75,7 @@ func _run() -> void:
 	m._lobby_sheet = ""
 	m._bg_sheet = true
 	m.show_setup()
-	await shot("04-setup-background-sheet")
+	await shot("04-setup-setting-sheet")
 	m._bg_sheet = false
 	m._open_maps()
 	await shot("05-map-picker")
@@ -108,7 +108,7 @@ func _run() -> void:
 	await shot("12-room-host-map-picker")
 	m._cancel_pick()
 	for sh in [["rules", "14-room-sheet-rules"], ["mode", "15-room-sheet-mode"], ["seat:1", "16-room-sheet-seat"],
-			["background", "17-room-sheet-background"], ["colour", "18-room-sheet-colour"]]:
+			["setting", "17-room-sheet-setting"], ["colour", "18-room-sheet-colour"]]:
 		m._lobby_sheet = sh[0]
 		m.show_lobby()
 		await shot(sh[1])

@@ -64,14 +64,19 @@ func _init() -> void:
 			and sc.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_SHOW_NEVER, "TouchScroll.horizontal pages sideways only (no bar)")
 	check(sc.pages.size() == 1 and sc.page == 0, "TouchScroll starts on page 1 of 1 (Daniele 2026-11-04: pages, never scrolling)")
 	sc.free()
-	# BATTLEFIELD > BACKGROUND: AUTO by default, a pick / ROTATE saved; a screenless run (a server's match host) keeps the map's own
+	# SETTING PICK (2026-11-13; it supersedes BATTLEFIELD > BACKGROUND): THE LAB by default, a pick saved, an unknown one refused
 	UiKit.path = CFG
-	check(UiKit.backdrop_choice() == "auto", "BACKGROUND is AUTO by default")
-	check(UiKit.save_backdrop_choice("2") and UiKit.backdrop_choice() == "2", "a BACKGROUND pick is saved")
-	check(UiKit.save_backdrop_choice("rotate") and UiKit.backdrop_choice() == "rotate", "... and ROTATE")
-	check(UiKit.save_backdrop_choice("nope") and UiKit.backdrop_choice() == "auto", "an unknown pick falls back to AUTO")
-	check(UiKit.backdrop_name(7, "res://assets/art/backdrops/battle-rent-is-due.jpg") == "RENT IS DUE", "a sixth background is named after its file")
-	check(UiKit.battle_backdrop(3, 5) == 3, "headless: the map's own background, whatever the pick")
+	check(UiKit.setting_choice() == "lab", "SETTING is THE LAB by default")
+	check(UiKit.save_setting_choice("golden_hour") and UiKit.setting_choice() == "golden_hour", "a SETTING pick is saved")
+	check(not UiKit.save_setting_choice("nope") and UiKit.setting_choice() == "golden_hour", "an unknown setting is refused")
+	check(LookTheme.room_value("wellness_retreat") == "4" and LookTheme.of_room_value("4") == "wellness_retreat"
+			and LookTheme.of_room_value("auto") == "lab", "SETTING <-> the room's value (0..4; auto = the map's own = lab)")
+	check(LookTheme.pick("R-01") == "lab", "headless: the map's own setting, whatever the pick (a server's match host)")
+	for id in LookTheme.IDS:
+		check(LookTheme.preview(id) != null and LookTheme.NAMES.has(id) and LookTheme.TAGLINES.has(id), "SETTING %s has its preview, name and line" % id)
+	check(not ResourceLoader.exists("res://assets/art/backdrops/battle-forecast-liability.jpg") or Scenery.backdrop_for("R-01") == Scenery.DEFAULT_BACKDROP,
+			"the old battle backdrops are retired")
+	UiKit.save_setting_choice("lab")
 	# COLOUR-BLIND MODE: off by default, saved, and every seat of a match on its palette
 	Rules.settings_path = CFG
 	Rules._colour_blind = -1
