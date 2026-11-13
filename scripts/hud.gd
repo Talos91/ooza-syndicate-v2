@@ -2101,14 +2101,15 @@ func _inspector_actions(n: Dictionary) -> void:
 			_add_action("SWITCH", "%s\n%s" % [verb, Rules.RELAY_GLYPH[n["relay"]]], 0, "switch", id)   # turret LOADS, then fires
 		if n["relay"] == "launcher" and int(n["tier"]) < Rules.LAUNCHER_MAX_TIER and shows("upgrade"):   # LAUNCHER TURRET: T2 / T3
 			_add_action("UPGRADE", "UPGRADE T%d" % (int(n["tier"]) + 1), sim.upgrade_cost(n), "upgrade", id)
+		elif n["structure"] == "monster_hub" and shows("upgrade"):   # Daniele 2026-11-13: MONSTER HUB = special relay, SWITCH + UPGRADE
+			_add_action("UPGRADE", "UPGRADE T%d" % (int(n["tier"]) + 1), sim.upgrade_cost(n), "upgrade", id)   # (Sim has no hub upgrade: greyed with its reason)
 		# Daniele 2026-11-13: relay = SWITCH, LASER, FORGE; a special relay (the launcher, a MONSTER HUB) = SWITCH, UPGRADE - MONSTER
 		# HUB is a special relay, no longer a relay action (hud-lab: the player's pie only; Sim / AI rules untouched, OPEN-QUESTIONS)
 		var special: bool = n["relay"] == "launcher" or n["structure"] == "monster_hub"
 		for kind in ([] if special else ["laser", "forge"]):
 			if kind in n["buildable"] and n["structure"] != kind and shows("relay_build"):
 				_add_action(BUILD_LABEL[kind], BUILD_LABEL[kind], sim.build_cost(n, kind), "build", id, {"kind": kind})
-		if n["structure"] == "monster_hub" and shows("monster"):
-			_add_action("LAUNCH", "LAUNCH", Rules.MONSTER_COST, "launch_monster", id)
+		# (hud-lab: LAUNCH left the hub's pie - max 3 slices, SWITCH + UPGRADE; the monster icon still launches it)
 	elif n["structure"] == "vat":
 		if n["tier"] < 4 and shows("upgrade"):
 			_add_action("UPGRADE", "UPGRADE T%d" % (n["tier"] + 1), sim.upgrade_cost(n), "upgrade", id)

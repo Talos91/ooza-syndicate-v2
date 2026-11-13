@@ -431,7 +431,7 @@ static func draw_badges(layer, hud) -> void:
 		var c := Vector2(p.position.x + p.size.x - side * 0.15, p.position.y - side * 0.2)
 		var rr := Rect2(c - Vector2(side, side) / 2.0, Vector2(side, side))
 		layer.draw_texture_rect(tag, rr, false)
-		text_c(layer, str(int(n["tier"])), c, fit_px("4", side * 0.78, side * 0.7, fnt), INK, fnt)
+		text_c(layer, str(int(n["tier"])), c, fit_px("4", side * 0.78, side * 0.7, fnt), LIGHT, fnt)
 
 
 # ------------------------------------------------------------------------------------------------ the radial (Hud.ActionWedge)
