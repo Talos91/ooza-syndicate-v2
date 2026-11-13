@@ -26,7 +26,7 @@ const PITCH := {
 	"P-05": 45.0,
 	# round R (2026-11-05, maps-r worker): the lowest pitch of the sweep 41-58 whose smallest tap clears 44 pt, nothing off
 	# screen or under the HUD (probe 1266x585, desktop emulation): R-01 44.4 pt, R-02 44.1, R-03 44.4, R-04 45.8, R-05 45.6
-	"R-01": 54.0,
+	"R-01": 52.0,                 # next-pass (Daniele 2026-11-13 "bend a little"): 54 -> 52 with ZOOM 0.92, phone_fit 8 profiles 0/0, min tap 47.3 pt
 	"R-02": 50.0,
 	"R-03": 50.0,
 	"R-04": 41.0,
@@ -34,7 +34,7 @@ const PITCH := {
 	"R-11": 58.0,                 # version B of R-05 (same footprint)
 	"R-15": 58.0,                 # R-05 shrunk to 66 m (2026-11-07): 50.3 pt, 2 badge overlaps, 4 badges over platforms
 	"R-16": 58.0,                 # R-11 shrunk to 66 m (same footprint as R-15)
-	"R-17": 54.0,                 # R-01 minus its middle crossing (Daniele 2026-11-12), 91 x 50 m: 65.6 pt at 54 (R-01's pitch; 49.7 pt at 41), 1266x585 emulation
+	"R-17": 52.0,                 # next-pass: 54 -> 52 with ZOOM 0.90 (8 profiles 0/0, min tap 59.6 pt). R-01 minus its middle crossing (Daniele 2026-11-12), 91 x 50 m: 65.6 pt at 54 (R-01's pitch; 49.7 pt at 41), 1266x585 emulation
 	# wave 2 (2026-11-05, maps-r-4; probe 1266x585, desktop emulation): R-06 48.6 pt, R-09 45.1, R-10 45.0, R-12 47.9, R-13 46.3 (6 badges over platforms)
 	"R-06": 50.0,
 	"R-09": 50.0,
@@ -60,6 +60,8 @@ const PITCH := {
 # little bit and zoom in a bit"): the whole-map fit's camera distance x this factor (< 1 = closer), picked per map with
 # tests/phone_fit.tscn (nothing off screen or under the HUD, taps >= 33 pt). The player's pinch-out ends at this view.
 const ZOOM := {
+	"R-01": 0.92,                 # 0.90 at 52: 3 platforms under the HUD on 4 phone profiles
+	"R-17": 0.90,                 # 0.88 at 50: 1 under the HUD
 }
 
 
