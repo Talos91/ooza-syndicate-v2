@@ -660,7 +660,7 @@ def gatling(piece):
     base = next(o for o in bpy.data.objects if o.type == "MESH" and o.parent is None)
     tur = next(o for o in bpy.data.objects if o.type == "MESH" and o.parent is base)
     notes = [struct_neon(base, piece), struct_neon(tur, piece)]
-    notes.append(entrance(base, piece, 1.58, 2.25, 0.04, 0.88, 0.66, 1.0, 0.715, roof_r0=1.6))   # porch doors (roof under the barrels' sweep ~0.97 and clear of the ledge ring at 0.94)
+    notes.append(drum_doors(base, piece))   # doors set into the drum, inside the base's footprint (v3)
     light = next(m for m in tur.data.materials if m and base_name(m.name) == "OS_Light_A")
     tree = _world_tree()
     rings = []
@@ -800,11 +800,18 @@ def goocannon(piece):
     else:
         for sy in (-1, 1):                                                       # T1: side fins
             box(b, (0, sy * (T["p0"] - 0.05), c1 + hp * 0.4), (0.5, 0.36, hp * 0.8), DE, bev=0.04)
-    hx = (T["p0"] + T["p1"]) / 2 - 0.1                                           # framed front hatch
-    box(b, (hx, 0, c1 + hp * 0.45), (0.3, 1.2, hp * 0.75), DE, bev=0.03, ry=tilt)
-    box(b, (hx + 0.1, 0, c1 + hp * 0.45), (0.3, 0.9, hp * 0.6), DK, ry=tilt)
-    box(b, (-hx, 0, c1 + hp * 0.45), (0.3, 1.2, hp * 0.75), DE, bev=0.03, ry=-tilt)   # back hatch (entrance front + back)
-    box(b, (-hx - 0.1, 0, c1 + hp * 0.45), (0.3, 0.9, hp * 0.6), DK, ry=-tilt)
+    # ENTRANCES front (+X, the throw side) + back (Daniele 2026-11-12: the tilted hatches sat "inside its base"): a cream housing
+    # standing on the plate (Hd) out of the pedestal, slate foot strip, detail roof slab, framed dark door (0.8 x 0.85 m)
+    ri, ro = T["p1"] - 0.1, min(T["p0"] + 0.35, 2.75)                            # ro < 2.9: clear of the throw ramp
+    zt = c1 + 1.0
+    for sg in (1, -1):
+        box(b, (sg * (ri + ro) / 2, 0, (Hd + zt) / 2), (ro - ri, 1.3, zt - Hd), SH)
+        box(b, (sg * ((ri + ro) / 2 + 0.01), 0, Hd + 0.04), (ro - ri, 1.33, 0.08), DK)
+        box(b, (sg * ((ri + ro) / 2 + 0.04), 0, zt + 0.035), (ro - ri + 0.08, 1.4, 0.07), DE)
+        box(b, (sg * (ro + 0.01), 0, Hd + 0.43), (0.04, 0.8, 0.85), DK)               # the door (z Hd + 0.005 .. Hd + 0.855)
+        for sy in (-1, 1):
+            box(b, (sg * (ro + 0.03), sy * 0.47, Hd + 0.47), (0.06, 0.14, 0.94), DE)    # jambs
+        box(b, (sg * (ro + 0.03), 0, Hd + 0.94), (0.06, 1.08, 0.12), DE)               # lintel
     # head numbers (local to the pivot): drum / body, bosses (|y| out to bo), arms (|y| a0..a1)
     H = {1: dict(bo=1.75, br=0.55, dz=0.69),
          2: dict(bo=1.9, br=0.6, dz=1.0),
@@ -1058,6 +1065,29 @@ def entrance(ob, piece, r0, r1, z0, z1, hw, door_w, door_h, roof_r0=None):
     return "entrance r %.2f..%.2f z %.2f..%.2f + " % (r0, r1, z0, z1) + doors(ob, piece, r1, z0, [FRONT, BACK], w=door_w, hgt=door_h)
 
 
+def drum_doors(ob, piece, r0=1.40, r1=1.68, hw=0.6, z1=0.90):
+    """Googatling doors v3 (Daniele 2026-11-12: the porch "extendo too much and won t fit on a node"): a shallow cream door block
+    set into the drum (r0..r1, inside the 1.75 skirt line but for its corners ~1.81) front + back, a 0.9 x 0.72 m dark door with a
+    flush detail frame, a slate foot strip and a detail top strip under the ledge ring (z 0.94)."""
+    sh, de, dk = (slot_index(ob, n, piece) for n in ("OS_Shell", "OS_Detail", "OS_Dark"))
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    for a in (FRONT, BACK):
+        d = Vector((math.cos(a), math.sin(a), 0))
+        P = lambda r, z: d * r + Vector((0, 0, z))
+        _rbox(bm, P((r0 + r1) / 2, z1 / 2 + 0.01), (r1 - r0, 2 * hw, z1 - 0.02), sh, a)        # door block 0.02..0.90
+        _rbox(bm, P((r0 + r1) / 2 + 0.005, 0.05), (r1 - r0, 2 * hw + 0.02, 0.06), dk, a)       # slate foot strip
+        _rbox(bm, P((r0 + r1) / 2 + 0.005, z1 - 0.03), (r1 - r0, 2 * hw + 0.02, 0.05), de, a)  # detail top strip
+        _rbox(bm, P(r1 + 0.008, 0.45), (0.02, 0.9, 0.70), dk, a)                               # the door 0.9 x 0.70 (z 0.10..0.80)
+        for sy in (-1, 1):                                                                     # flush frame: jambs + lintel
+            M = Vector((-d.y, d.x, 0)) * sy * 0.485
+            _rbox(bm, P(r1 + 0.012, 0.46) + M, (0.03, 0.07, 0.76), de, a)
+        _rbox(bm, P(r1 + 0.012, 0.83), (0.03, 1.04, 0.07), de, a)
+    bm.to_mesh(ob.data)
+    bm.free()
+    return "drum doors front + back r %.2f..%.2f, door 0.9 x 0.70" % (r0, r1)
+
+
 def cream(ob, piece, test):
     """OS_Dark primitives that read as caps / collars -> OS_Shell cream (whole primitives, so no ragged edges)."""
     me = ob.data
@@ -1265,8 +1295,8 @@ def tube_piece(name, path, sleeves, extra=None):
         L.append(L[-1] + (Vector(path[i]) - Vector(path[i - 1])).length)
     inner = [p for p, d in zip(path, L) if 0.02 <= d <= L[-1] - 0.02]
     sweep(o, inner, GOO_R, 0)
-    for p, t in sleeves:
-        sleeve(s, p, t, 0)
+    for sv in sleeves:                       # END sleeves are HALF length (Daniele 2026-11-12: two joined pieces = ONE connector,
+        sleeve(s, sv[0], sv[1], 0, l=sv[2] if len(sv) > 2 else SLEEVE_L / 2)   # not a double); a 3rd value = a full-length sleeve
     if extra:
         extra(s)
     root = bobj(name, g, [ms["OS_Glass"]])
@@ -1533,27 +1563,27 @@ def b_tube(name):
     up = Vector((0, 0, 1))
     if name == "Pit_Tube_Run_2m":
         return tube_piece(name, line((-1, 0, LOW_Y), (1, 0, LOW_Y), 8),
-                          [((-1 + SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0)), ((1 - SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0))])
+                          [((-1 + SLEEVE_L / 4, 0, LOW_Y), (1, 0, 0)), ((1 - SLEEVE_L / 4, 0, LOW_Y), (1, 0, 0))])
     if name == "Pit_Tube_Elbow_R080":                               # ORTHO_BEND 0.8: quarter bend + 0.3 m leads (sleeves)
         pts = [Vector((-0.3, 0, LOW_Y))] + [Vector((0.8 * math.sin(a), 0.8 - 0.8 * math.cos(a), LOW_Y))
                                             for a in (math.pi / 2 * s / 24 for s in range(25))] + [Vector((0.8, 1.1, LOW_Y))]
-        return tube_piece(name, pts, [((-0.3 + SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0)), ((0.8, 1.1 - SLEEVE_L / 2, LOW_Y), (0, 1, 0))])
+        return tube_piece(name, pts, [((-0.3 + SLEEVE_L / 4, 0, LOW_Y), (1, 0, 0)), ((0.8, 1.1 - SLEEVE_L / 4, LOW_Y), (0, 1, 0))])
     if name == "Pit_Tube_Step":                                     # floor level 0.35 -> second level 0.97 (FLOOR2_STEP 0.62)
         pts = [Vector((x, 0, LOW_Y + (FLOOR2_Y - LOW_Y) * (0.5 - 0.5 * math.cos(math.pi * min(max((x + 0.3) / 1.6, 0), 1)))))
                for x in [-0.6 + 0.05 * k for k in range(45)]]
-        return tube_piece(name, pts, [((pts[0].x + SLEEVE_L / 2, 0, LOW_Y), (1, 0, 0)), ((pts[-1].x - SLEEVE_L / 2, 0, FLOOR2_Y), (1, 0, 0))])
+        return tube_piece(name, pts, [((pts[0].x + SLEEVE_L / 4, 0, LOW_Y), (1, 0, 0)), ((pts[-1].x - SLEEVE_L / 4, 0, FLOOR2_Y), (1, 0, 0))])
     if name == "Pit_Tube_Socket_Climb":                             # out of a tilted socket (40 deg at 0.62) to level 0.97
         way = [Vector((0, 0, SOCK_Y)), Vector(((FLOOR2_Y - SOCK_Y) / math.tan(SOCK_ANG), 0, FLOOR2_Y)),
                Vector((1.8, 0, FLOOR2_Y))]
         pts = fillet_path(way, 0.8)
-        return tube_piece(name, pts, [((1.8 - SLEEVE_L / 2, 0, FLOOR2_Y), (1, 0, 0))])
+        return tube_piece(name, pts, [((1.8 - SLEEVE_L / 4, 0, FLOOR2_Y), (1, 0, 0))])
     if name == "Pit_Tube_Rim_Dip":                                  # origin = pit centre: floor run in, over the rim, into the goo
         way = [Vector((7.2, 0, LOW_Y)), Vector((6.0, 0, LOW_Y)), Vector((5.0, 0, 1.22)), Vector((3.3, 0, 1.22)), Vector((2.7, 0, 0.25))]
         pts = fillet_path(way, 0.6)
 
         def clamp(bm):                                              # a clamp on the rim top
             box_at(bm, Matrix.Translation((4.3, 0, 0.865)), (0.30, 0.42, 0.13), 1)
-        return tube_piece(name, pts, [((7.2 - SLEEVE_L / 2, 0, LOW_Y), (-1, 0, 0)), ((4.3, 0, 1.22), (-1, 0, 0))], clamp)
+        return tube_piece(name, pts, [((7.2 - SLEEVE_L / 4, 0, LOW_Y), (-1, 0, 0)), ((4.3, 0, 1.22), (-1, 0, 0), SLEEVE_L)], clamp)   # rim clamp: full sleeve (a support, not a joint)
     raise ValueError(name)
 
 
