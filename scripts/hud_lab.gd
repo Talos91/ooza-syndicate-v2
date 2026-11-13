@@ -150,6 +150,22 @@ class Pic:
 				draw_texture_rect(t, Rect2(Vector2.ZERO, size), false, l[1] if l.size() > 1 else Color.WHITE)
 
 
+static func pipe_run(ci: CanvasItem, pre: String, src: Rect2, dest: Rect2, goo: Color) -> void:
+	## Daniele 2026-11-13 (phone shot): a feed pipe runs off the PHYSICAL screen edge, never ends in mid-air. A straight run =
+	## a thin slice (src, 3x px; >= 8 px, 1 px samples empty under mipmaps) of the pipe's own layers stretched over dest: shell, window, the WHITE goo tinted `goo`, glass.
+	if dest.size.x <= 0.0 or dest.size.y <= 0.0:
+		return
+	for l in [["shell", Color.WHITE], ["window", Color.WHITE], ["goo-white", goo], ["glass", Color.WHITE]]:
+		var t := tex(pre + str(l[0]))
+		if t != null and (l[1] as Color).a > 0.0:
+			ci.draw_texture_rect_region(t, dest, src, l[1])
+
+
+static func screen_edge(c: Control) -> Vector2:
+	## The bottom-right corner of the physical screen in c's local px (the HUD layers have no transform of their own).
+	return c.get_global_transform_with_canvas().affine_inverse() * c.get_viewport_rect().size
+
+
 static func place(c: Control, pos: Vector2, sz: Vector2) -> void:
 	c.position = pos
 	c.size = sz
@@ -167,14 +183,22 @@ class Tube:
 	var strip: Goo
 	var elbows: Goo
 	var show_shares := true
+	var _force: Array = []                       # dev shots: --lab-tube=a,b,... fixed shares (the collar close-up)
 
 	func setup(h) -> void:
 		hud = h
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--lab-tube="):
+				for v in a.substr(11).split(","):
+					_force.append(float(v))
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		for g in hud._seat_groups():
-			for s in g:
+		var groups: Array = hud._seat_groups()
+		for gi in range(groups.size()):
+			for s in groups[gi]:
 				seats.append(s)
+			if gi == 0:
+				seats.append("")                     # Daniele 2026-11-13: the neutral share in GREY, after your side
 		var win := HudLab.Pic.new([["r30-tube-window"]])
 		add_child(win)
 		elbows = HudLab.Goo.new(HudLab.tex("r30-tube-goo-white"), 1)
@@ -203,7 +227,13 @@ class Tube:
 		var tot := 0.0
 		var vals: Array = []
 		for s in seats:
-			var v := 0.0 if hud._seat_out(s) else maxf(float(hud.sim.seat_strength(s)), 0.0)
+			var v := 0.0
+			if s == "":
+				v = _neutral_strength()
+			elif not hud._seat_out(s):
+				v = maxf(float(hud.sim.seat_strength(s)), 0.0)
+			if vals.size() < _force.size():
+				v = _force[vals.size()]
 			vals.append(v)
 			tot += v
 		var ends := PackedFloat32Array()
@@ -213,7 +243,7 @@ class Tube:
 		for i in range(n):
 			acc += (float(vals[i]) / tot) if tot > 0.0 else 1.0 / float(n)
 			ends.append(acc if i < n - 1 else 1.0)
-			cols.append(HudLab.seat_goo(str(seats[i]), hud.human))
+			cols.append(NEUTRAL_GOO if str(seats[i]) == "" else HudLab.seat_goo(str(seats[i]), hud.human))
 		while ends.size() < 6:
 			ends.append(1.0)
 			cols.append(Color.WHITE)
@@ -236,14 +266,64 @@ class Tube:
 	func _draw() -> void:
 		HudLab.art(self, "r30-tube-shell", Vector2.ZERO, u)
 
+	const NEUTRAL_GOO := Color("7a8285")            # neutral = grey goo (Daniele 2026-11-13)
+
+	func _neutral_strength() -> float:
+		## The neutral share, the same measure as Sim.seat_strength for a seat: the units held on neutral nodes.
+		var t := 0.0
+		for n in hud.sim.nodes:
+			if str(n["owner"]) == "":
+				t += maxf(float(n["units"]), 0.0)
+		return t
+
+	const COLLAR_W := 6.0                           # pt (designer 4, 0.24.2 look check: 2 pt read as a hairline)
+	const COLLAR_IVORY := Color("f1ead8")           # the tube shell's ivory: a ring round the glass between two goos
+	var _win_cols := PackedVector2Array()           # per strip column (3x px): the goo window's top / bottom (3x px)
+
+	func _window_cols() -> PackedVector2Array:
+		## The strip's own alpha = the tube window; the collar is clipped to it column by column (never on the shell).
+		if _win_cols.is_empty():
+			var t := HudLab.tex("tube-goo-strip-white")
+			var img: Image = t.get_image() if t != null else null
+			if img == null:
+				return _win_cols
+			if img.is_compressed():
+				img.decompress()
+			for x in range(img.get_width()):
+				var top := -1
+				var bot := -1
+				for y in range(img.get_height()):
+					if img.get_pixel(x, y).a > 0.5:
+						if top < 0:
+							top = y
+						bot = y + 1
+				_win_cols.append(Vector2(top, bot))
+		return _win_cols
+
+	func _collar(ci: Control, sx: float) -> void:
+		## A 6 pt ivory collar with ink edges at strip x = sx (pt), clipped to the window: drawn per 3x column, so the
+		## rounded ends and the window's edge stay goo-free outside the window.
+		var cols := _window_cols()
+		if cols.is_empty():
+			return
+		var px := HudLab.PX
+		var x0 := int(floor((sx - COLLAR_W / 2.0) * px))
+		var x1 := int(ceil((sx + COLLAR_W / 2.0) * px))
+		var at := HudLab.TUBE_STRIP_AT * u
+		var k := u / px
+		for x in range(maxi(x0, 0), mini(x1, cols.size())):
+			var c := cols[x]
+			if c.x < 0.0:
+				continue
+			var edge := x - x0 < 3 or x1 - x <= 3      # 1 pt ink line each side
+			var col := Color(HudLab.INK, 0.85) if edge else COLLAR_IVORY
+			ci.draw_rect(Rect2(at + Vector2(x * k, c.x * k), Vector2(k, (c.y - c.x) * k)), col)
+
 	func _draw_over(ci: Control) -> void:
-		if show_shares and has_meta("ends"):          # designer 4: the 6 px TUBE-COLLAR at each split so the sides read apart
+		if show_shares and has_meta("ends"):          # designer 4: the 6 pt TUBE-COLLAR at each split so the sides read apart
 			var ends: PackedFloat32Array = get_meta("ends")
-			var col_t := HudLab.tex("tube-collar")
 			for i in range(int(get_meta("n")) - 1):
-				var x := HudLab.TUBE_STRIP_AT.x * u + HudLab.TUBE_STRIP_PT.x * u * ends[i]
-				if col_t != null:
-					ci.draw_texture_rect(col_t, Rect2(Vector2(x - 1.0 * u, HudLab.TUBE_STRIP_AT.y * u), Vector2(2.0, 30.0) * u), false)
+				_collar(ci, HudLab.TUBE_STRIP_PT.x * ends[i])
 		HudLab.art(ci, "tube-glass", HudLab.TUBE_R25_AT * u, u)
 		HudLab.art(ci, "tube-timer-window", HudLab.TUBE_R25_AT * u, u)
 		var t: float = hud.sim.time
@@ -271,9 +351,17 @@ class SkillFeed:
 	var flow: Pic
 	var _t := 0.0
 
+	var ext: Control                             # the straight runs to the right and bottom screen edges, behind the art
+	var _lv := 0.0
+
 	func setup(d) -> void:
 		dock = d
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ext = Control.new()
+		ext.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ext.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		ext.draw.connect(_draw_ext)
+		add_child(ext)
 		var shell := HudLab.Pic.new([["r30-skill-feed-shell"], ["r30-skill-feed-window"]])
 		add_child(shell)
 		goo = HudLab.Goo.new(HudLab.tex("r30-skill-feed-goo-white"), 3)
@@ -292,6 +380,23 @@ class SkillFeed:
 		size = HudLab.SKILL_FEED_PT * k
 		for c in get_children():
 			HudLab.place(c, Vector2.ZERO, size)
+		ext.queue_redraw()
+
+	const TOP_RUN := Rect2(262, 0, 16, 66)      # the top run's straight part (3x px): a 16 px slice (1 px samples empty under mipmaps)
+	const DOWN_RUN := Rect2(0, 472, 66, 16)     # the down run between the last collar and the bottom bend (16 px slice)
+
+	func _draw_ext() -> void:
+		## The top run on to the right screen edge (upstream: goo while anything charges), the down run on past the last key's
+		## branch to the bottom edge (downstream: goo once all three are full). Drawn behind the art, so its bend stays on top.
+		var s := size.x / 279.0                      # local px per 3x art px
+		var edge := HudLab.screen_edge(ext)
+		var tint := GooTone.mine(HudNoir.accent)
+		var x0 := TOP_RUN.position.x * s
+		HudLab.pipe_run(ext, "r30-skill-feed-", TOP_RUN,
+				Rect2(x0, TOP_RUN.position.y * s, edge.x - x0 + 2.0, TOP_RUN.size.y * s), Color(tint, 1.0 if _lv > 0.01 else 0.0))
+		var y0 := DOWN_RUN.position.y * s
+		HudLab.pipe_run(ext, "r30-skill-feed-", DOWN_RUN,
+				Rect2(DOWN_RUN.position.x * s, y0, DOWN_RUN.size.x * s, edge.y - y0 + 2.0), Color(tint, smoothstep(0.92, 1.0, _lv)))
 
 	func _process(dt: float) -> void:
 		_t += dt
@@ -305,6 +410,9 @@ class SkillFeed:
 		var lv := tot / maxf(float(dock.slots.size()), 1.0)
 		goo.p("level", clampf(lv, 0.0, 1.0))
 		goo.p("tint", GooTone.mine(HudNoir.accent))
+		if absf(lv - _lv) > 0.01:
+			_lv = lv
+			ext.queue_redraw()
 		flow.layers[0][1] = Color(1, 1, 1, 0.18 + 0.18 * sin(_t * 2.4))
 		flow.queue_redraw()
 

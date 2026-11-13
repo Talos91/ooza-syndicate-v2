@@ -61,6 +61,7 @@ var lab := false                                  # hud-lab (2026-11-13): the ro
 var lab_u := 1.0                                  # ... screen px per pt
 var _lab_goo: HudLab.Goo
 var _lab_feed: HudLab.Goo
+var _lab_feed_ext: Control                        # the inlet's straight run on to the physical left edge (Daniele 2026-11-13)
 var _lab_over: Control
 var canvas_k := 0.0                               # control px per canvas px (Hud sets it; 0 = the old frame path)
 var pt_px := 1.0                                  # control px per HUD point (Hud sets it)
@@ -88,6 +89,12 @@ func lab_setup(u: float) -> void:
 	custom_minimum_size = Vector2((HudLab.VAT_CANVAS.x - HudLab.VAT_BODY_X) * k, HudLab.VAT_CANVAS.y * k).round()
 	var fp := lab_cv(HudLab.VAT_FEED_AT)
 	var fs := HudLab.VAT_FEED_PT * k
+	_lab_feed_ext = Control.new()
+	_lab_feed_ext.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lab_feed_ext.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	HudLab.place(_lab_feed_ext, fp, fs)
+	_lab_feed_ext.draw.connect(_draw_feed_ext)
+	add_child(_lab_feed_ext)
 	var feed := HudLab.Pic.new([["r30-vat-feed-shell"], ["r30-vat-feed-window"]])
 	HudLab.place(feed, fp, fs)
 	add_child(feed)
@@ -114,6 +121,16 @@ func lab_setup(u: float) -> void:
 	HudLab.place(_lab_over, lab_cv(Vector2.ZERO), HudLab.VAT_CANVAS * k)
 	_lab_over.draw.connect(_draw_lab_over)
 	add_child(_lab_over)
+
+
+func _draw_feed_ext() -> void:
+	## The glass inlet's left end runs on to the physical left edge (past the safe-area inset), never ending in mid-air.
+	var c := _lab_feed_ext
+	var s := c.size.x / 84.0                      # local px per 3x art px
+	var left := c.get_global_transform_with_canvas().affine_inverse() * Vector2.ZERO
+	var src := Rect2(1, 0, 8, 60)
+	var x1 := src.position.x * s
+	HudLab.pipe_run(c, "r30-vat-feed-", src, Rect2(left.x - 2.0, 0.0, x1 - left.x + 2.0, c.size.y), GooTone.mine(HudNoir.accent))
 
 
 func cv(p: Vector2) -> Vector2:
@@ -217,6 +234,7 @@ func _process(dt: float) -> void:
 		_lab_goo.p("slosh", _slosh)
 		_lab_goo.p("tint", tint)
 		_lab_feed.p("tint", tint)
+		_lab_feed_ext.queue_redraw()
 		_lab_feed.p("pulse_rate", _lab_rate())
 		_lab_over.queue_redraw()
 		return
@@ -234,7 +252,7 @@ func _lab_rate() -> float:
 
 
 func _draw_lab_over() -> void:
-	## hud-lab: the glass and the empty logo window over the goo, then the gauge drawn live: 100 / 75 / 50 / 25 % with short ticks
+	## hud-lab: the glass and the empty logo window over the goo, then the gauge drawn live: 75 / 50 / 25 % with short ticks
 	## inside the glass, placed by fill level (README LOCKED); the picked share lit; the units it sends on the surface.
 	var c := _lab_over
 	var k := lab_k()
@@ -245,8 +263,10 @@ func _draw_lab_over() -> void:
 	b.position -= off
 	var fs := maxi(int(round(12.5 * lab_u)), _floor_px())
 	var fb := HudLab.bold()
-	for l in LEVELS:                              # designer 4 (2026-11-13): 100 % ~5 pt under the window top, bold white + soft shadow
-		var y := b.end.y - b.size.y * float(l) + (5.0 * lab_u if is_equal_approx(float(l), 1.0) else 0.0)
+	for l in LEVELS:                              # designer 4 (2026-11-13): bold white + soft shadow
+		if is_equal_approx(float(l), 1.0):         # Daniele 2026-11-13: no 100 % label / tick (it sat on the cap; full needs none)
+			continue
+		var y := b.end.y - b.size.y * float(l)
 		var on := is_equal_approx(float(l), float(main.fraction))
 		var x0 := b.position.x + 3.0 * lab_u
 		var x1 := x0 + (8.0 if on else 5.0) * lab_u

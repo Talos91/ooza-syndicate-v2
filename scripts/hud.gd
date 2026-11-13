@@ -2502,8 +2502,11 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 	var isz: Vector2 = card.get_combined_minimum_size()
 	var sx := -signf(cos(base)) if absf(cos(base)) > 0.05 else -1.0
 	var shapes: Array = [_hex_edge(p, hex_base, hex_base - PI, hex_base + PI - 0.001, ring * 1.05)]
+	# designer 4 (0.24.2 look check): the card keeps >= 6 pt off the fan's outer rim (its tint), even with a slice lifted
+	# (ActionWedge._shift: 8 x ui_scale), so the fan's shape for the overlap test is that much wider
+	var rim_clear := r_out + 8.0 * s + pt(6.0)
 	if n > 0:
-		var pie_poly := _hex_edge(p, hex_base, base - total / 2.0, base + total / 2.0, r_out + 4.0 * s)
+		var pie_poly := _hex_edge(p, hex_base, base - total / 2.0, base + total / 2.0, rim_clear)
 		pie_poly.append(p)
 		shapes.append(pie_poly)
 	var rr := ring * 1.16 + 12.0 * s
@@ -2511,7 +2514,8 @@ func _layout_inspector_wheel(p: Vector2, _vp: Vector2) -> void:
 	var tries := [Vector2(sx * (rr + isz.x / 2.0), 0),
 			Vector2(sx * lean, -(rr + isz.y / 2.0)), Vector2(sx * lean, rr + isz.y / 2.0),
 			Vector2(0, -(rr + isz.y / 2.0)), Vector2(0, rr + isz.y / 2.0),
-			Vector2(-sx * (r_out * 1.16 + 12.0 * s + isz.x / 2.0), 0)]
+			Vector2(0, rim_clear + isz.y / 2.0), Vector2(0, -(rim_clear + isz.y / 2.0)),   # below / above the node, past the fan
+			Vector2(-sx * (maxf(rim_clear, r_out * 1.16 + 12.0 * s) + isz.x / 2.0), 0)]
 	var best_pos := Vector2.ZERO
 	var best_hit := INF
 	for cc in tries:

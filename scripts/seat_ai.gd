@@ -1507,9 +1507,7 @@ func _build_machinegoon(sim: Sim, owned: Array, vats: Array) -> bool:
 
 
 func _slot_kind(sim: Sim, n: Dictionary) -> String:
-	## What goes in an empty relay slot: its one monster hub first (a relay with a rival or neutral node in a
-	## monster's reach, once it holds two vats - the first monster charges from the hub's completion (MONSTER_COOLDOWN), so an
-	## early hub is the one that gets used), then the forge (one per seat, once it holds three vats), else a laser.
+	## What goes in an empty relay slot: the forge (one per seat, once it holds three vats), else a laser.
 	## Worked out once per slot per think (_kinds; _reserve asks for it on every donor).
 	if not _kinds.has(n["id"]):
 		_kinds[n["id"]] = _slot_kind_now(sim, n)
@@ -1517,21 +1515,13 @@ func _slot_kind(sim: Sim, n: Dictionary) -> String:
 
 
 func _slot_kind_now(sim: Sim, n: Dictionary) -> String:
+	## No monster hub (Daniele 2026-11-13, "Yes, AI too"): the AI no longer builds one, as players can't from a relay pie;
+	## a hub a map places stays a special relay the AI still launches from (_monsters).
 	var vats := _mine(sim).filter(func(x): return Sim.has_vat(x)).size()
-	if "monster_hub" in n["buildable"] and vats >= 2 and not sim.has_hub(seat) and _hub_front(sim, n):
-		return "monster_hub"
 	if not sim.has_forge(seat) and "forge" in n["buildable"] and vats >= 3 \
 			and not _mine(sim).any(func(x): return x["build_kind"] == "forge"):
 		return "forge"
 	return "laser" if "laser" in n["buildable"] else ""
-
-
-func _hub_front(sim: Sim, n: Dictionary) -> bool:
-	## A rival or neutral node within a monster's reach of this relay (routes as they stand now).
-	for id in _reach(sim, n["id"]):
-		if not sim.allied(sim.nodes[id]["owner"], seat):
-			return true
-	return false
 
 
 func _slot_value(sim: Sim, n: Dictionary, kind: String) -> float:

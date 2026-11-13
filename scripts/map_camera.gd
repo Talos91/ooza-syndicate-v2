@@ -56,6 +56,20 @@ const PITCH := {
 }
 
 
+# START-VIEW ZOOM (Daniele 2026-11-13, his phone on staging 0.24.2: "the map now seems zoomed too far, I believe we can bend a
+# little bit and zoom in a bit"): the whole-map fit's camera distance x this factor (< 1 = closer), picked per map with
+# tests/phone_fit.tscn (nothing off screen or under the HUD, taps >= 33 pt). The player's pinch-out ends at this view.
+const ZOOM := {
+}
+
+
+static func zoom_for(code: String) -> float:
+	for a in OS.get_cmdline_user_args():          # probe / shots: --fit-zoom=k for every map
+		if a.begins_with("--fit-zoom="):
+			return clampf(float(a.substr(11)), 0.5, 1.0)
+	return float(ZOOM.get(code, 1.0))
+
+
 static func pitch_for(code: String, size := "") -> float:
 	## A per-map override first, then by the map's size tag (tags.size): LARGE maps keep the original top-down pitch
 	## (Rules.CAM_PITCH_LARGE; Daniele 2026-09-30: "on large maps the tilt makes it very hard to play ... switch back to the

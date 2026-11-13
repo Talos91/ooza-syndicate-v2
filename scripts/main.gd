@@ -1074,6 +1074,7 @@ func _fit_camera() -> void:
 		_base_pitch = cam_pitch                       # (a probe may have set it after _start_map)
 	cam_pitch = _base_pitch                           # the start view stays exactly as it was
 	_start_fit = _fit_nodes(sim.nodes)
+	_start_fit[1] *= MapCamera.zoom_for(str(map.get("code", "")))   # Daniele 2026-11-13: "zoom in a bit" (per map, phone_fit)
 	cam_target = _start_fit[0]
 	cam_dist = _start_fit[1]
 	if _fit_gone > 0 and scenario_focus == Vector3.INF:   # resized after a Last Stand zoom: keep the survivors framed
@@ -1260,6 +1261,10 @@ func _stage_scenario() -> void:
 					sim._finish_build(sim.nodes[lid])
 					sim.nodes[lid]["units"] = 300.0
 			scenario_focus = sim.nodes[lid]["pos"]
+			for a in OS.get_cmdline_user_args():       # --lab-focus=M: centre node M instead (-1: no focus)
+				if a.begins_with("--lab-focus="):          # (-1: the normal whole-board view)
+					var fid := int(a.substr(12))
+					scenario_focus = sim.nodes[fid]["pos"] if fid >= 0 and fid < sim.nodes.size() else Vector3.INF
 		"build", "inspect":
 			sim.nodes[1]["owner"] = "A"
 			sim.nodes[1]["units"] = 300.0
