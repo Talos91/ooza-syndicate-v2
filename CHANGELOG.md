@@ -1,5 +1,36 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.3 "Alpha 24 step 6: settings + walkways" - 2026-11-13 (STAGING only; live is 0.23.21)
+
+- Release release-0.24.3 = setting-pick 2e7f244 (feed-fix 30b9cb6 on themes 92efa7a on next-pass 6b3d682) + walkways 5ff6e0f (off 6b3d682), merged clean. No net.gd / protocol change (ooze20-net-8). Props are not in this build (Daniele).
+  - AI (next-pass, Daniele 2026-11-13 "Yes, AI too"): the AI no longer builds Monster Hubs; map-placed hubs still launch. Expert AI vs AI seed 7: 0 hubs on R-01, R-17, E-03, E-06, E-08, E-10.
+  - HUD (next-pass + feed-fix): 6 pt ivory tube collar with ink edges at every split of the score tube; neutral share shown as grey (#7a8285, units held on neutral nodes); inspector card keeps 6 pt off the fan rim (opens below / above the node near a screen edge); vat send feed runs to the physical left edge; skill feed back to the 0.24.2 art ("ALPHA 24.2" fully visible); vat 100 % label dropped.
+  - CAMERA (next-pass): R-01 / R-17 tilt 52 and zoomed in (phone_fit 8 profiles: 0 overlaps, min tap R-01 47.3 pt, R-17 59.6 pt).
+  - SETTINGS (themes + setting-pick): four new looks beside the lab - Corporate Campus, Golden Hour, Quota Parade, Wellness Retreat (material sets per zone, own floor tile, surround and HUD shells; lab unchanged and the default). PLAY VS AI and the online room get MODE | MAP | SETTING: a sheet of 5 tiles (preview, name, slogan), remembered. In a room the host picks and guests see it greyed; it rides the old BACKGROUND field (Net.room_backdrop), so no protocol change. Old battle backdrops retired (left out of the Web export). Vat shell base colour per setting.
+  - WALKWAYS (walkways): lab deck is a darker sage-grey grating (#8E9F98, grate lines #5F716B; `--walkway-cream` = the old deck); every walkway keeps its deck edge >= 1.5 m from a pit rim (was over a pit on 15 layouts, < 1.5 m on 5; now min 1.62 m). tube_cache re-baked (35 files; 13 staging maps had a stale cache before). On the four other settings the walkway keeps the setting's own colour (release merge: the grating applies to the lab deck only).
+  - Checks: see the release report (worker-reports 2026-11/release-0243-report.md) and the Verifier's run on the release SHA. Not verified: real phone, online room on the staging box.
+
+## 0.24.2 "Alpha 24 step 5: the lab look" - 2026-11-13 (STAGING only; live is 0.23.21)
+
+- The full lab look on staging (main 76d5981, tag v0.24.2, gh-pages f50dfdf, staging/ index.pck 89,062,732; staging/demo/ demo15 and live root 0.23.21 untouched). Daniele's phone check pending. Release 76d5981 = hud-lab (lab-wire edfc6a2 + lab-kit 0cb3f48 + suite-fix e08f987); Verifier PASS on 76d5981 (full suite; test_map_pool 5 KNOWN old-map fails). Staging room pack ooze20-net-8_0.24.2 deployed (protocol unchanged, no bump); live room server stays 0.23.21.
+  - LOOK (Daniele 2026-11-12, "the new status quo"): lab look v2 is the default (`Rules.LOOK_LAB2`; dev `--look-old` = the 0.24.1 look): cream satin decks and walkways, owner neon band on owned platform lips, TILE-LAB floor, 26B2 WALLS surround (phone / wide plates), neutral fill light, sun x0.45, no bloom, clearer vat glass. Calm pass (calm-pass 5afd7e4): goo in the owner's faction body tone, fog neutral grey with at most an 18 % tint of the leading seat, top-band fix (in-world text never covers the status line / score bar).
+  - LAB KIT (lab-kit 0cb3f48, wired by lab-wire 195a448 / edfc6a2): `Look.kit_key` takes `labkit/<key>` first (Vat_T* -> `Vat_T*_capneon`), then `_lab2`, then the normal piece: cap-neon vats, structures (Laser, Cannon T1-3, Forge 2, Googatling T1-3, relay cannons), conveyors v4, platforms / piers, Node_Base + Pit, doors v3, bottom kit. Tube audit R-01 48 / R-17 40 tubes: 0 free, 0 off-axis, 0 overlaps, 0 low-deck hits.
+  - MAPS: R-17 Strait 2 (maps-strait-2 6cd16ba) joins the pool beside R-01 (12 platforms, 91 x 50 m, no neutral Googatlings, camera pitch 54, tube layout baked).
+  - HUD (hud-lab, `Rules.HUD_LAB` true; dev `--hud-old` = the pre-lab HUD): round-29 / 30 lab HUD from 29-hud-pieces-FINAL with a goo shader (tint per player, vat level = the picked share, slosh, bubbles, meniscus, glass highlight). Locked sizes: keys 74 x 68 pt at pitch 72 pt, vat body 88 x 253 pt, badges 28 x 21 pt on every node (count, owner outline, tier tag, no faction emblem), score tube 288 x 42 pt at the screen top = timer only (each seat's share shown as goo, no numbers). Pie per node; the machinegoon is renamed GOOGATLING (Daniele 2026-11-13). Keys READY / COOLING / LOCKED / ARMED drawn live. phone_fit R-01 + R-17, 8 profiles: 0 overlaps (desktop emulation only).
+  - TESTS: suite-fix e08f987 (tests only): test_match_report / test_dedicated / test_rematch no longer assume an FFA3 map (stale since the 0.24.1 pool); match_report quits on a missing map instead of hanging. Run recipe in handoffs/🔍 Verifier.md.
+  - Size: first export with the lab pack was 90,257,308 B (over the ~90 MB cap); `assets/ui/r19/*` (dev-only) left out of the Web preset -> 89,062,732.
+  - Checks (headless, empty APPDATA, Verifier on 76d5981): test_sim 828, test_net 247, test_maps4 55,999, test_ui_kit, test_tutorial 166, test_powers_ai, test_match_report 22, test_ui_nav --mobile --test 24 taps, test_dedicated 25, test_rematch 7, test_preempt 4 pass; test_map_pool 5 KNOWN fails (archived N-24 x2, N-04 x2, N-01); test_ai_curve skipped (Daniele). Server worker: test_dedicated + test_relay pass against the staging box. Not verified: real phone, a play of the export in a browser, feel.
+
+## 0.24.1 "Alpha 24 step 4" - 2026-11-11 (STAGING only; live is 0.23.21)
+
+- World + rules + KEEP maps on staging (main 8234b3e, tag v0.24.1, gh-pages 91965cc, staging/ index.pck 80,888,360; staging/demo/ demo15 and live root 0.23.21 untouched). Daniele's phone check pending. Release 8234b3e = staging-prep b13d1c5 + fog-maps-fix 5e6eccd + hud-tank-margin 5805aaa; Verifier PASS on 8234b3e (known failures only).
+  - WORLD (fog-maps-fix, on world-fog 4f7a2cc): faction fog = node-share colour mix (gray only from neutral nodes), cloud + fog layers over the lab floor (`Rules.WORLD_LAB_FLOOR` keeps it on every map), goo tubes from every pit to its node (grid router; 17 proto maps audit clean: no low-ramp hits, no touching, no overlaps), raised walkway rings with ramps and bridges that the Locals walk (one shared queue per shared stretch), conquest tubes build as a 3 s hologram, tubes and walkways built a few ms per frame (no map-start stall), routed layout cached per map (`tube_cache/*.json`, 34 layouts baked, CACHE_VER 7). Plugs: x-face sockets flat at floor level, z-face sockets tilted up. Pits further out (Daniele: all 4 on all maps; pit rings prefer 2.6 m from tube feet; audit 37/37 clean per the commit message). R-10: 441 draw calls / 45 fps on a desktop window (optimization input).
+  - RULES (rules-neutral 26fe896, Daniele 2026-11-11): neutral nodes no longer regrow (`Rules.NEUTRAL_REGEN` false; a neutral GooGat regrows no ammo) and no Local walks to a neutral node until a player captures it. A NEUTRAL relay's laser fires only at lines marching onto it (HUD "NEUTRAL LASER - FIRES ONLY IF ATTACKED"); once owned it fires at everything in range; its range is distance only, so an owned laser relay hits a line on a nearby unconnected bridge (test_round_r `_relay_fire_rules`, 4 checks). Neutral Googatlings on common nodes still shoot every seat.
+  - MAPS: pool = 36 (17 proto + 19 KEEP): 34 1v1, 2v2 on M-15 and N-06, FFA4 on M-15; FFA3 / FFA5 not selectable. KEEP maps carry relays from Daniele's notes, no geometry moved (except N-17): E-01 + N-16 conveyors, E-04 / E-07 / N-17 ferries, E-05 belts on both outer hairpins, E-06 + E-09 laser relays (E-09 canopy launchers), E-07 rotor -> switch, E-10 launchers; N-17 loses its rim node (23 nodes; S04 waiver 2.4 s pending Daniele). test_sim: KEEP maps may carry round-R relay kinds.
+  - HUD: `Rules.HUD_R19` false (round-19 HUD off; `--hud-r19` brings it back) = the demo's pre-r19 HUD with the GMN-2 SEND tank and skill plates; SEND vat and skill column 4 pt from the safe edges. Guide / tutorial text: relay kinds, laser relay a tower anyone can take, "Grey nodes never regrow: take them."
+  - `Rules.VERSION` 0.24.1 turns off `Rules.demo` / proto_debug (full pool in the picker, no PROTO DEBUG panel). Carries the whole demo line (0.23.27-demo4..15, below).
+  - Checks (headless, empty APPDATA): test_sim, test_round_r 181, test_maps4 55,669, test_net, test_tutorial, test_ui_kit pass; test_map_pool 5 KNOWN fails (archived old maps N-24 x2, N-04 x2, N-01); test_ai_curve 2 KNOWN (Veteran 74 % > Expert 71 %; skipped in release checks from now, Daniele 2026-11-11). Not verified: real phone, a play of the export, online rooms / server pack (separate step).
+
 ## Demo line (staging/demo only, never main)
 
 - **0.23.27-demo15** - 2026-11-10 (demo-world, staging/demo/): ui-hud-demo15 64ee55a = ui-r19-import b157b48 (round-19 HUD style) on demo14 fb4d38f (Hub ui-r19-ship-2 = a).
@@ -116,18 +147,6 @@
   support; tests/test_round_r.gd. Open for Daniele: L05 waiver on R-01 / R-03, the speed-relay reading, R-04 has 2 doors (not 3) and no T-45 / K
   piece. test_net fails (33 lines + timeout) exactly as on the untouched proto base aadf8ef (proto7): pre-existing on the proto line; proto
   rooms are unranked browser hosting.
-
-## 0.24.2 - 2026-11-12 (STAGING candidate, branch staging-0.24.2; not published)
-- **Lab look is the standard** (Daniele 2026-11-12: "the new status quo"): lab-look-test b74af6b v2 is the default, no flag (`Rules.LOOK_LAB2`).
-  Cream satin decks / walkways (the `_lab2` kit recolours: material factors only, same geometry), owner neon band on owned platform lips,
-  TILE-LAB floor + lab surround, neutral fill light, sun x0.45, no bloom, clearer vat glass. Dev: `--look-old` = the 0.24.1 look; `--look=lab` = test v1
-  (its `_lab` kit twins are left out of the Web export to keep the pck under the cap; on Web it falls back to the normal kit).
-- **Calm pass** (calm-pass 5afd7e4): goo in the owner's FACTION body tone (tubes, pits, vats, swarms, send tank, skill vessels; `--goo-neon` = old);
-  fog keeps its neutral grey with at most an 18 % tint of the leading seat (`--fog-mix` = old); top-band fix: in-world text never covers the
-  status line / score bar (0 overlaps on 36 maps x 6 moments in emulation). `--calm=a|b|c` stay dev-only.
-- **R-17 Strait 2** (maps-strait-2 6cd16ba) joins the pool beside R-01: R-01 without its middle crossing, 12 platforms, 91 x 50 m, no neutral
-  machinegoons (Daniele: "Leave without goons"); camera pitch 54; tube layout baked (tube_cache, CACHE_VER 7); tube audit clean on R-17 and R-01.
-- No rule change, no protocol change (net-8); rooms need the server on 0.24.2.
 
 ## 0.23.15 "Alpha 23" - 2026-10-27 (staging: balance pass, catch-up)
 ## 0.23.27 "Alpha 24 step 3c + step 4" - 2026-11-06 (STAGING only; menus round 4 + node UI / GMN-2 HUD + HOLD, release rel-02327)

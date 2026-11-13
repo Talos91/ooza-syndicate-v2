@@ -1715,7 +1715,7 @@ func _build_walkways() -> void:
 			m1.metallic = wb[3]
 			m1.roughness = wb[2]
 	m1.cull_mode = BaseMaterial3D.CULL_DISABLED
-	if Look.v2 and not "--walkway-cream" in OS.get_cmdline_user_args():
+	if Look.v2 and LookTheme.zone("walkway").is_empty() and not "--walkway-cream" in OS.get_cmdline_user_args():   # the grating is the lab deck; a SETTING keeps its own walkway colour (release-0.24.3 merge)
 		m1 = load(WALK_GRATE) as StandardMaterial3D   # Daniele 2026-11-13: the cream deck read as a bridge - darker sage-grey grating (designer 4)
 	var m2 := StandardMaterial3D.new()
 	m2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
