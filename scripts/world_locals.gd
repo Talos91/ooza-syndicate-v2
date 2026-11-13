@@ -64,6 +64,9 @@ const DASH_GAP := 0.7
 const ABOUT_GAP := 0.3            # m between a column and the roundabout a walkway makes round it (Daniele 2026-11-11: a walkway that
                                   # reaches a column never runs through it, it goes round - on any map)
 const RAMP_LEN := 3.2              # m: the ramp between the floor and a walkway (the rest of a bridge is level)
+const WALK_GRATE := "res://assets/world/walkway/walkway_grate.tres"   # base #8E9F98, grate #5F716B (tools/walkway/make_grate.py); --walkway-cream = the old deck
+const PIT_CLEAR := 1.5            # m: a walkway's deck edge keeps this clear of every pit's rim, and never crosses a pit (Daniele 2026-11-13: walkways
+                                  # over the pits / so close to them make no sense; designer 4's rule). Only a pit's own exit ramp touches its rim.
 const LOW_DECK := 1.6             # m: a ramp / bridge lower than this is no place for a tube to pass under (the tubes keep off it)
 const MARCH_N := 12               # R6: Locals in a pit's match-start column
 const MARCH_GAP := 0.32           # s between them leaving the pit
@@ -126,6 +129,9 @@ var route_ms := 0.0                # probes: the feeds' routing / the deck mesh,
 var deck_ms := 0.0
 var about_count := 0              # probes: roundabouts built
 var deck_tris := 0                # probes: the walkway mesh's triangles
+var ring_cut := 0                 # probes: rings the pit clearance trimmed
+var deck_ribbons: Array = []      # probes (pit_audit): the straight decks drawn [a, b, ...] and the roundabouts [centre, radius, height]
+var deck_discs: Array = []
 var _rings: Array = []            # per ring (0 = outer): half extents (x, z) round _wctr
 var _wctr := Vector2.ZERO
 
@@ -909,6 +915,92 @@ func _walk_rings() -> void:
 			_rings.append(bb.size * 0.5 * f)
 
 
+func _pit_clr() -> float:
+	## centre line of a deck to a pit's centre: the rim (RING_R) + PIT_CLEAR + half the deck
+	return RING_R + PIT_CLEAR + DECK_HW
+
+
+func _pt_pit_ok(p: Vector2, own := -1) -> bool:
+	for k in range(craters.size()):
+		if k != own and p.distance_to(Vector2(craters[k].x, craters[k].z)) < _pit_clr() - 0.01:
+			return false
+	return true
+
+
+func _seg_pit_ok(a: Vector2, b: Vector2, own := -1) -> bool:
+	## a straight deck from a to b keeps PIT_CLEAR off every pit's rim (own: the pit whose exit ramp this is)
+	for k in range(craters.size()):
+		var c := Vector2(craters[k].x, craters[k].z)
+		if k != own and Geometry2D.get_closest_point_to_segment(c, a, b).distance_to(c) < _pit_clr() - 0.01:
+			return false
+	return true
+
+
+func _ring_free(k: int, t0: float, t1: float) -> bool:
+	## the stretch of ring k from t0 forward to t1 keeps clear of the pits
+	var per := 4.0 * (float(_rings[k].x) + float(_rings[k].y))
+	var ln := fposmod(t1 - t0, per)
+	var n := maxi(ceili(ln / 0.2), 1)
+	for i in range(n + 1):
+		if not _pt_pit_ok(_ring_pt(k, t0 + ln * float(i) / n)):
+			return false
+	return true
+
+
+func _ring_kept(k: int) -> Array:
+	## Daniele 2026-11-13: no walkway over a pit or within PIT_CLEAR of its rim. The stretches of ring k that stay (t intervals,
+	## unwrapped): the whole loop when no pit comes near it; else each clear run trimmed back to the outermost points where a feed
+	## joins it, and dropped when no feed uses it (no dead-end stubs)
+	var per := 4.0 * (float(_rings[k].x) + float(_rings[k].y))
+	var step := 0.1
+	var n := ceili(per / step)
+	var blocked: Array = []
+	var any := false
+	for i in range(n):
+		var b := not _pt_pit_ok(_ring_pt(k, per * float(i) / n))
+		blocked.append(b)
+		any = any or b
+	if not any:
+		return [[0.0, per]]
+	var anchors: Array = []                               # where the feeds' paths touch ring k
+	for fk in feeds:
+		var hs: Array = feeds[fk]["hs"]
+		var path: Array = feeds[fk]["path"]
+		for j in range(hs.size()):
+			if absf(float(hs[j]) - float(WALK_LEVELS[k])) > 0.01:
+				continue
+			var q: Vector2 = (path[j] as Vector2) - _wctr
+			var X: float = _rings[k].x
+			var Z: float = _rings[k].y
+			var on := (absf(absf(q.x) - X) < 0.06 and absf(q.y) <= Z + 0.06) or (absf(absf(q.y) - Z) < 0.06 and absf(q.x) <= X + 0.06)
+			if on:
+				anchors.append(_ring_t(k, path[j]))
+	var i0 := blocked.find(true)
+	var out: Array = []
+	var i := 0
+	while i < n:                                          # the clear runs, walking round from a blocked sample
+		var a := (i0 + i) % n
+		if blocked[a]:
+			i += 1
+			continue
+		var j := i
+		while j < n and not blocked[(i0 + j) % n]:
+			j += 1
+		var rt0 := per * float(i0 + i) / n                # run [rt0, rt1] (unwrapped)
+		var rt1 := per * float(i0 + j - 1) / n
+		var lo := INF
+		var hi := -INF
+		for at in anchors:
+			var u: float = fposmod(float(at) - rt0, per)
+			if u <= rt1 - rt0 + step:
+				lo = minf(lo, rt0 + u)
+				hi = maxf(hi, rt0 + u)
+		if lo != INF:
+			out.append([lo, hi])
+		i = j
+	return out
+
+
 func _ring_pt(k: int, t: float) -> Vector2:
 	var X: float = _rings[k].x
 	var Z: float = _rings[k].y
@@ -979,16 +1071,16 @@ func _near_ring(s: Vector2, own: Vector2) -> Array:
 			var d := pt.distance_to(s)
 			if (pt - s).dot(s - own) < 0.0:
 				continue                                   # (fog-maps-fix: never back along its own column's face - its tube sockets are there)
-			if d > 2.0 and d < best and _bridge_clear(s, pt, own):
+			if d > 2.0 and d < best and _bridge_clear(s, pt, own) and _seg_pit_ok(s, pt):
 				best = d
 				res = [k, pt]
 	return res
 
 
-func _ray_ring0(s: Vector2, d: Vector2) -> Vector2:
-	## where a ray from s along d first meets the OUTER ring (2 .. 45 m out), or Vector2.INF
-	var X: float = _rings[0].x
-	var Z: float = _rings[0].y
+func _ray_ring0(s: Vector2, d: Vector2, k := 0) -> Vector2:
+	## where a ray from s along d first meets the OUTER ring (or ring k) (2 .. 45 m out), or Vector2.INF
+	var X: float = _rings[k].x
+	var Z: float = _rings[k].y
 	var q := s - _wctr
 	var best := 45.0
 	var res := Vector2.INF
@@ -1004,6 +1096,47 @@ func _ray_ring0(s: Vector2, d: Vector2) -> Vector2:
 				best = u2
 				res = _wctr + Vector2(q.x + u2 * d.x, sg * Z)
 	return res
+
+
+func pit_audit() -> Dictionary:
+	## probes: how close the drawn walkway decks come to the pits. gap = deck edge to pit rim (m); a pit's own exit ramp (a deck that
+	## starts at its rim) is not counted. bad = decks under PIT_CLEAR; over = decks over a pit (gap < 0)
+	var bad := 0
+	var over := 0
+	var worst := INF
+	var per: Array = []
+	var why: Array = []
+	for ci in range(craters.size()):
+		var c := Vector2(craters[ci].x, craters[ci].z)
+		var pmin := INF
+		for rb in deck_ribbons:
+			var a: Vector2 = rb[0]
+			var b: Vector2 = rb[1]
+			if minf(a.distance_to(c), b.distance_to(c)) < RING_R + 0.6:
+				continue                                  # its own exit ramp
+			var g := Geometry2D.get_closest_point_to_segment(c, a, b).distance_to(c) - DECK_HW - RING_R
+			pmin = minf(pmin, g)
+			if g < PIT_CLEAR - 0.01:
+				bad += 1
+				why.append(["deck", a.snapped(Vector2(0.1, 0.1)), b.snapped(Vector2(0.1, 0.1)), snappedf(g, 0.01)])
+				if g < 0.0:
+					over += 1
+		for dc in deck_discs:
+			var g2: float = (dc[0] as Vector2).distance_to(c) - float(dc[1]) - DECK_HW - RING_R
+			pmin = minf(pmin, g2)
+			if g2 < PIT_CLEAR - 0.01:
+				bad += 1
+				why.append(["about", (dc[0] as Vector2).snapped(Vector2(0.1, 0.1)), snappedf(float(dc[1]), 0.01), snappedf(g2, 0.01)])
+				if g2 < 0.0:
+					over += 1
+		per.append(snappedf(pmin, 0.01))
+		worst = minf(worst, pmin)
+	var used := 0
+	for fk in feeds:
+		if not (feeds[fk]["hs"] as Array).is_empty():
+			used += 1
+	return {"bad": bad, "over": over, "min_gap": snappedf(worst, 0.01), "pits": per, "decks": deck_ribbons.size(), "discs": deck_discs.size(),
+			"feeds": feeds.size(), "on_walkways": used, "why": why.slice(0, 6), "rings_cut": ring_cut}
 
 
 func low_decks() -> Array:
@@ -1048,7 +1181,7 @@ func _bridge_clear(a: Vector2, b: Vector2, skip: Vector2) -> bool:
 	return true
 
 
-func _ring_walk(a_pt: Vector2, b_pt: Vector2, kb: int) -> Array:
+func _ring_walk(a_pt: Vector2, b_pt: Vector2, kb: int, ka := 0) -> Array:
 	## shortest walk on the rings from a_pt (on ring 0) to b_pt (on ring kb): the loops' corners and side midpoints, a ramp
 	## between neighbouring rings at each midpoint. [[point, height], ...]
 	var npos: Array = []
@@ -1073,7 +1206,7 @@ func _ring_walk(a_pt: Vector2, b_pt: Vector2, kb: int) -> Array:
 		for t in cuts:
 			gk.append(add.call(k, t, _ring_pt(k, t)))
 		gate.append(gk)
-	var ia: int = add.call(0, _ring_t(0, a_pt), a_pt)
+	var ia: int = add.call(ka, _ring_t(ka, a_pt), a_pt)
 	var ib: int = add.call(kb, _ring_t(kb, b_pt), b_pt)
 	var n := npos.size()
 	var adj: Array = []
@@ -1090,6 +1223,8 @@ func _ring_walk(a_pt: Vector2, b_pt: Vector2, kb: int) -> Array:
 			var u: int = ids[j]
 			var v: int = ids[(j + 1) % ids.size()]
 			var cost: float = fposmod(float(nt[v]) - float(nt[u]), per)
+			if u == v or not _ring_free(k, float(nt[u]), float(nt[v])):
+				continue                                  # (a stretch near a pit: no walkway there)
 			adj[u].append([v, cost])
 			adj[v].append([u, cost])
 	for k in range(_rings.size() - 1):                    # ramps at the four side midpoints (cuts 1, 3, 5, 7)
@@ -1097,6 +1232,8 @@ func _ring_walk(a_pt: Vector2, b_pt: Vector2, kb: int) -> Array:
 			var u: int = gate[k][gi]
 			var v: int = gate[k + 1][gi]
 			var cost := (npos[u] as Vector2).distance_to(npos[v]) + 3.0
+			if not _seg_pit_ok(npos[u], npos[v]):
+				continue
 			adj[u].append([v, cost])
 			adj[v].append([u, cost])
 	var dist: Array = []
@@ -1154,6 +1291,10 @@ func _walk_path(t2: Vector2, c2: Vector2, taken: Vector2) -> Dictionary:
 	var to_c := (_wctr - c2).normalized()
 	var diag: Array = [Vector2(r, r), Vector2(r, -r), Vector2(-r, -r), Vector2(-r, r)]
 	diag.sort_custom(func(p1, p2): return (p1 as Vector2).dot(to_c) > (p2 as Vector2).dot(to_c))
+	var own := -1                                         # this pit (its exit ramp may start at its rim)
+	for k in range(craters.size()):
+		if Vector2(craters[k].x, craters[k].z).distance_to(c2) < 0.05:
+			own = k
 	var exits: Array = []                                 # [where the Locals leave the pit, where that ramp lands on the outer ring]
 	for k in range(2):                                    # Daniele 2026-11-11: out of the pit on BOTH diagonals that face the board
 		var dg: Vector2 = diag[k]
@@ -1166,8 +1307,14 @@ func _walk_path(t2: Vector2, c2: Vector2, taken: Vector2) -> Dictionary:
 					var along := (cc - ex).dot(dg)
 					if along > 2.0 and absf((cc - ex).cross(dg)) < 4.0:
 						land = cc
-		if land != Vector2.INF:
-			exits.append([ex, land])
+		if land != Vector2.INF and _seg_pit_ok(ex, land, own) and _pt_pit_ok(land):
+			exits.append([ex, land, 0])
+		else:                                             # (the outer ring is cut near this pit: the ramp lands on the next ring in that is clear)
+			for kk in range(1, _rings.size()):
+				var land2 := _ray_ring0(ex, dg, kk)
+				if land2 != Vector2.INF and _seg_pit_ok(ex, land2, own) and _pt_pit_ok(land2):
+					exits.append([ex, land2, kk])
+					break
 	if exits.is_empty():                                  # (a pit no diagonal links to the ring: straight to its nearest corner)
 		var best_c := Vector2.ZERO
 		var bd := INF
@@ -1177,7 +1324,9 @@ func _walk_path(t2: Vector2, c2: Vector2, taken: Vector2) -> Dictionary:
 				if cc.distance_to(c2) < bd:
 					bd = cc.distance_to(c2)
 					best_c = cc
-		exits.append([c2 + (best_c - c2).normalized() * (RING_R + 0.4), best_c])
+		var ex2 := c2 + (best_c - c2).normalized() * (RING_R + 0.4)
+		if _seg_pit_ok(ex2, best_c, own) and _pt_pit_ok(best_c):
+			exits.append([ex2, best_c, 0])
 	var best := {}
 	var bl := INF
 	for e in exits:
@@ -1188,12 +1337,12 @@ func _walk_path(t2: Vector2, c2: Vector2, taken: Vector2) -> Dictionary:
 				continue
 			var slot0: Vector2 = t2 + d2 * DOOR_OUT
 			var hit: Array = _ray_ring(slot0, d2)
-			if hit.is_empty() or not _bridge_clear(slot0, hit[1], t2):
+			if hit.is_empty() or not _bridge_clear(slot0, hit[1], t2) or not _seg_pit_ok(slot0, hit[1]):
 				hit = _near_ring(slot0, t2)                # (any map: no clear diagonal - the shortest clear bridge to a ring)
 			if hit.is_empty():
 				continue
 			var bp: Vector2 = hit[1]
-			var walk: Array = _ring_walk(land, bp, int(hit[0]))
+			var walk: Array = _ring_walk(land, bp, int(hit[0]), int(e[2]))
 			if walk.is_empty():
 				continue
 			var tot: float = exit.distance_to(land) + slot0.distance_to(bp)
@@ -1308,16 +1457,43 @@ func _build_walkways() -> void:
 				segs.append([Vector2(pts[k - 1].x, pts[k - 1].z), Vector2(pts[k].x, pts[k].z)])
 	var ribbons: Array = []                               # [a, b, ha, hb, rail trim at a, rail trim at b]
 	var abouts: Array = _abouts.duplicate()               # + the ones on the ring edges below
-	for k in range(_rings.size()):                        # the rings
+	ring_cut = 0
+	for k in range(_rings.size()):                        # the rings (the stretches the pit clearance keeps)
 		var h: float = WALK_LEVELS[k]
+		var X: float = _rings[k].x
+		var Z: float = _rings[k].y
+		var per := 4.0 * (X + Z)
+		var kept := _ring_kept(k)
+		if not (kept.size() == 1 and float(kept[0][0]) == 0.0 and float(kept[0][1]) == per):
+			ring_cut += 1
+		var cs := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
+		var pieces: Array = []                            # [a, b, side direction] per drawn stretch of a side
+		var s0 := 0.0
 		for j in range(4):
-			var t0: float = 0.0
-			var cs := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
-			var a: Vector2 = _wctr + Vector2(cs[j].x * float(_rings[k].x), cs[j].y * float(_rings[k].y))
-			var b: Vector2 = _wctr + Vector2(cs[(j + 1) % 4].x * float(_rings[k].x), cs[(j + 1) % 4].y * float(_rings[k].y))
-			var dv0 := (b - a).normalized()
-			var cur := a - dv0 * DECK_HW
-			var cur_trim := 1.7
+			var ca: Vector2 = _wctr + Vector2(cs[j].x * X, cs[j].y * Z)
+			var cb: Vector2 = _wctr + Vector2(cs[(j + 1) % 4].x * X, cs[(j + 1) % 4].y * Z)
+			var sl := ca.distance_to(cb)
+			var dv := (cb - ca) / sl
+			for kp in kept:
+				for sh in [-per, 0.0, per]:
+					var k0: float = float(kp[0]) + sh - s0
+					var k1: float = float(kp[1]) + sh - s0
+					var p0 := maxf(0.0, k0)
+					var p1 := minf(sl, k1)
+					if p1 < p0 - 0.001:
+						continue
+					if p1 - p0 < 0.01 and k1 - k0 > 0.01:
+						continue                          # (only touches this side's corner: the next side carries it)
+					pieces.append([ca + dv * p0, ca + dv * p1, dv])
+			s0 += sl
+		for pc in pieces:
+			var a: Vector2 = pc[0]
+			var b: Vector2 = pc[1]
+			var dv0: Vector2 = pc[2]
+			var ext_a := _pt_pit_ok(a - dv0 * DECK_HW)        # the square end past a corner / a cut, unless that end comes too near a pit
+			var ext_b := _pt_pit_ok(b + dv0 * DECK_HW)
+			var cur := a - dv0 * (DECK_HW if ext_a else 0.0)
+			var cur_trim := 1.7 if ext_a else 0.15
 			for hit in _about_hits(a, b, Vector2.INF):        # a column on the ring: the ring goes round it
 				var hc: Vector2 = hit[0]
 				var he: Vector2 = hit[2]
@@ -1326,7 +1502,7 @@ func _build_walkways() -> void:
 				abouts.append([hc, hit[1], h, atan2(he.y - hc.y, he.x - hc.x), atan2(hx.y - hc.y, hx.x - hc.x)])
 				cur = hx
 				cur_trim = 0.15
-			ribbons.append([cur, b + dv0 * DECK_HW, h, h, cur_trim, 1.7])
+			ribbons.append([cur, b + dv0 * (DECK_HW if ext_b else 0.0), h, h, cur_trim, 1.7 if ext_b else 0.15])
 	var seen := {}                                        # the ramps and bridges the feeds use (each once)
 	for fk in feeds:
 		var f: Dictionary = feeds[fk]
@@ -1355,6 +1531,8 @@ func _build_walkways() -> void:
 		if not dseen.has(dkey):
 			dseen[dkey] = true
 			discs.append([ab[0], ab[1], ab[2]])
+	deck_ribbons = ribbons
+	deck_discs = discs
 	var cores: Array = []                                 # per ribbon: its deck as [a, b, ha, hb, direction, length] (ring corners' overhang left out)
 	for rb in ribbons:
 		var ca: Vector2 = rb[0]
@@ -1537,6 +1715,8 @@ func _build_walkways() -> void:
 			m1.metallic = wb[3]
 			m1.roughness = wb[2]
 	m1.cull_mode = BaseMaterial3D.CULL_DISABLED
+	if Look.v2 and not "--walkway-cream" in OS.get_cmdline_user_args():
+		m1 = load(WALK_GRATE) as StandardMaterial3D   # Daniele 2026-11-13: the cream deck read as a bridge - darker sage-grey grating (designer 4)
 	var m2 := StandardMaterial3D.new()
 	m2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m2.albedo_color = Color(0.75, 0.92, 1.0)
