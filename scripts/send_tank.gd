@@ -244,26 +244,24 @@ func _draw_lab_over() -> void:
 	var b := body_rect()
 	b.position -= off
 	var fs := maxi(int(round(12.5 * lab_u)), _floor_px())
-	for l in LEVELS:
-		var y := b.end.y - b.size.y * float(l)
+	var fb := HudLab.bold()
+	for l in LEVELS:                              # designer 4 (2026-11-13): 100 % ~5 pt under the window top, bold white + soft shadow
+		var y := b.end.y - b.size.y * float(l) + (5.0 * lab_u if is_equal_approx(float(l), 1.0) else 0.0)
 		var on := is_equal_approx(float(l), float(main.fraction))
 		var x0 := b.position.x + 3.0 * lab_u
 		var x1 := x0 + (8.0 if on else 5.0) * lab_u
-		var col := Color.WHITE if on else Color(1, 1, 1, 0.78)
-		c.draw_line(Vector2(x0, y), Vector2(x1, y), Color(0, 0, 0, 0.45), 3.4 * lab_u, true)
-		c.draw_line(Vector2(x0, y), Vector2(x1, y), col, (2.0 if on else 1.4) * lab_u, true)
+		var col := Color.WHITE if on else Color(1, 1, 1, 0.88)
+		var sh := Vector2(1.0, 1.2) * lab_u
+		c.draw_line(Vector2(x0, y) + sh, Vector2(x1, y) + sh, Color(0, 0, 0, 0.5), (2.0 if on else 1.6) * lab_u, true)
+		c.draw_line(Vector2(x0, y), Vector2(x1, y), col, (2.0 if on else 1.6) * lab_u, true)
 		var t := "%d%%" % int(round(float(l) * 100.0))
-		var f: Font = HudLab.bold() if on else _font
-		var p := Vector2(x1 + 3.0 * lab_u, y + (f.get_ascent(fs) - f.get_descent(fs)) / 2.0)
-		if is_equal_approx(float(l), 1.0):
-			p.y += 4.0 * lab_u
-		c.draw_string_outline(f, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(2, int(3.0 * lab_u)), Color(0, 0, 0, 0.65))
-		c.draw_string(f, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+		var p := Vector2(x1 + 3.0 * lab_u, y + (fb.get_ascent(fs) - fb.get_descent(fs)) / 2.0)
+		c.draw_string(fb, p + sh, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.55))
+		c.draw_string(fb, p, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 	var units := _units_line()
-	if units != "":
+	if units != "":                               # designer 4: the units it sends sit in the base collar, clear of the labels
 		var us := maxi(int(round(13.0 * lab_u)), _floor_px())
-		var y2 := clampf(level_y(clampf(shown, 0.0, 1.0)) - off.y + _font.get_ascent(us) + 6.0 * lab_u, b.position.y + us, b.end.y - 4.0 * lab_u)
-		HudLab.text_c(c, units, Vector2(b.get_center().x + 6.0 * lab_u, y2 - us * 0.35), us, Color.WHITE, HudLab.bold(), maxi(2, int(3.0 * lab_u)))
+		HudLab.text_c(c, units, Vector2(b.get_center().x, b.end.y + 9.0 * lab_k()), us, HudLab.INK, fb)
 
 
 func _draw() -> void:

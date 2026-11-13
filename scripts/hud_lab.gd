@@ -221,7 +221,7 @@ class Tube:
 			(g as HudLab.Goo).p("seats", n)
 			(g as HudLab.Goo).p("seat_end", ends)
 			(g as HudLab.Goo).p("seat_tint", cols)
-			(g as HudLab.Goo).p("collar", 1.25 / HudLab.TUBE_STRIP_PT.x)
+			(g as HudLab.Goo).p("collar", 0.0)      # (the round-25 TUBE-COLLAR piece marks the splits: _draw_over)
 		var e2 := PackedFloat32Array([0.5, 1.0, 1.0, 1.0, 1.0, 1.0])   # the elbows: the first seat left, the last right
 		var c2 := PackedColorArray([cols[0], cols[maxi(n - 1, 0)], Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
 		elbows.p("seats", 2 if n > 1 else 1)
@@ -229,12 +229,21 @@ class Tube:
 		elbows.p("seat_tint", c2)
 		elbows.p("collar", 0.0)
 		strip.visible = show_shares
+		set_meta("ends", ends)
+		set_meta("n", n)
 		get_child(get_child_count() - 1).queue_redraw()
 
 	func _draw() -> void:
 		HudLab.art(self, "r30-tube-shell", Vector2.ZERO, u)
 
 	func _draw_over(ci: Control) -> void:
+		if show_shares and has_meta("ends"):          # designer 4: the 6 px TUBE-COLLAR at each split so the sides read apart
+			var ends: PackedFloat32Array = get_meta("ends")
+			var col_t := HudLab.tex("tube-collar")
+			for i in range(int(get_meta("n")) - 1):
+				var x := HudLab.TUBE_STRIP_AT.x * u + HudLab.TUBE_STRIP_PT.x * u * ends[i]
+				if col_t != null:
+					ci.draw_texture_rect(col_t, Rect2(Vector2(x - 1.0 * u, HudLab.TUBE_STRIP_AT.y * u), Vector2(2.0, 30.0) * u), false)
 		HudLab.art(ci, "tube-glass", HudLab.TUBE_R25_AT * u, u)
 		HudLab.art(ci, "tube-timer-window", HudLab.TUBE_R25_AT * u, u)
 		var t: float = hud.sim.time
