@@ -1,0 +1,2615 @@
+{
+  "units": "metres",
+  "coordinate_system": {
+    "X": "width",
+    "Y": "depth",
+    "Z": "up",
+    "front": "view from -Y",
+    "side": "view from +X",
+    "top": "view from +Z",
+    "origin": "placement datum at floor Z=0, centred on the primary assembly; use listed bounds for asymmetric footprints"
+  },
+  "scale_references_m": {
+    "bridge_deck_width": 4,
+    "node_platform_diameter": 6,
+    "unit_height": 0.6
+  },
+  "placement": {
+    "allowed": "green spawn-sketch areas that also satisfy keepouts",
+    "caution": "yellow requires map review for sightlines and route clearance",
+    "excluded": "red, bridge, walkway, node, pit",
+    "minimum_clearance_from_pit_rim_m": 1.5,
+    "clearance_reference": "nearest footprint edge"
+  },
+  "materials": {
+    "ivory": {
+      "sheet_gray": 221,
+      "label": "Ivory shell",
+      "shared_texture_group": "lab-surfaces"
+    },
+    "mint": {
+      "sheet_gray": 155,
+      "label": "Mint metal",
+      "shared_texture_group": "lab-surfaces"
+    },
+    "glass": {
+      "sheet_gray": 188,
+      "label": "Glass",
+      "shared_texture_group": "shared-glass"
+    },
+    "goo": {
+      "sheet_gray": 255,
+      "label": "White goo mask",
+      "shared_texture_group": "shared-goo"
+    },
+    "rubber": {
+      "sheet_gray": 74,
+      "label": "Dark rubber",
+      "shared_texture_group": "lab-surfaces"
+    },
+    "plant": {
+      "sheet_gray": 113,
+      "label": "Plant foliage",
+      "shared_texture_group": "lab-foliage"
+    }
+  },
+  "shared_texture_groups": {
+    "lab-surfaces": {
+      "kind": "shared atlas",
+      "maps": "ivory, mint, rubber"
+    },
+    "lab-foliage": {
+      "kind": "shared atlas",
+      "maps": "plant leaves"
+    },
+    "shared-glass": {
+      "kind": "shared shader/material",
+      "atlas_required": false
+    },
+    "shared-goo": {
+      "kind": "shared white tint mask/material",
+      "atlas_required": false
+    }
+  },
+  "props": {
+    "specimen-tank": {
+      "title": "Specimen tank",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            1.956,
+            1.532,
+            2.183
+          ],
+          "bounds_xyz_m": [
+            [
+              -0.806,
+              -0.766,
+              0.0
+            ],
+            [
+              1.15,
+              0.766,
+              2.183
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Tank lower cushion",
+              "material": "rubber",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.07749
+                ],
+                "diameter_m": 1.4267999999999998,
+                "length_m": 0.15498,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Tank base collar",
+              "material": "ivory",
+              "primitive": "bevelled_collar",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.29519999999999996
+                ],
+                "diameter_m": 1.6113,
+                "height_m": 0.2829,
+                "bevel_m": 0.065,
+                "sides": 10
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Tank chamber",
+              "material": "glass",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  1.1193
+                ],
+                "diameter_m": 1.3776000000000002,
+                "length_m": 1.4144999999999999,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "shared-glass"
+            },
+            {
+              "name": "Tank specimen",
+              "material": "goo",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.6642
+                ],
+                "size_xyz_m": [
+                  0.8855999999999999,
+                  0.8855999999999999,
+                  0.6027
+                ],
+                "radial_segments": 8,
+                "vertical_segments": 5
+              },
+              "shared_texture_group": "shared-goo"
+            },
+            {
+              "name": "Tank upper collar",
+              "material": "ivory",
+              "primitive": "bevelled_collar",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  1.8573
+                ],
+                "diameter_m": 1.5621,
+                "height_m": 0.3075,
+                "bevel_m": 0.065,
+                "sides": 10
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Tank cap",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  2.0909999999999997
+                ],
+                "diameter_m": 0.5903999999999999,
+                "length_m": 0.1845,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Side service pipe",
+              "material": "mint",
+              "primitive": "swept_tube",
+              "parameters_m": {
+                "centerline_xyz_m": [
+                  [
+                    0.61,
+                    0.0,
+                    0.91
+                  ],
+                  [
+                    0.83,
+                    0.0,
+                    0.91
+                  ],
+                  [
+                    0.98,
+                    0.0,
+                    0.79
+                  ],
+                  [
+                    0.98,
+                    0.0,
+                    0.17
+                  ]
+                ],
+                "diameter_m": 0.22,
+                "sides": 8
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Service foot",
+              "material": "rubber",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.98,
+                  0,
+                  0.095
+                ],
+                "diameter_m": 0.34,
+                "length_m": 0.19,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 468
+        }
+      },
+      "assembly_note": "One broad chamber, two soft collars and a chunky service return.",
+      "detail": "Glass is a closed proxy here. The dashed specimen contour locates the separate goo mesh."
+    },
+    "specimen-pods": {
+      "title": "Specimen pods",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            2.6,
+            1.44,
+            1.895
+          ],
+          "bounds_xyz_m": [
+            [
+              -1.3,
+              -0.72,
+              0.0
+            ],
+            [
+              1.3,
+              0.72,
+              1.895
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Common plinth",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.14
+                ],
+                "profile_width_depth_height_m": [
+                  2.6,
+                  1.44,
+                  0.28
+                ],
+                "profile_radius_m": 0.23,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Large pod lower cushion",
+              "material": "rubber",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.57,
+                  0,
+                  0.33733
+                ],
+                "diameter_m": 1.0555999999999999,
+                "length_m": 0.11466,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Large pod base collar",
+              "material": "ivory",
+              "primitive": "bevelled_collar",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.57,
+                  0,
+                  0.49840000000000007
+                ],
+                "diameter_m": 1.1921000000000002,
+                "height_m": 0.2093,
+                "bevel_m": 0.065,
+                "sides": 10
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Large pod chamber",
+              "material": "glass",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.57,
+                  0,
+                  1.1081
+                ],
+                "diameter_m": 1.0192,
+                "length_m": 1.0465,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "shared-glass"
+            },
+            {
+              "name": "Large pod specimen",
+              "material": "goo",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.57,
+                  0,
+                  0.7714000000000001
+                ],
+                "size_xyz_m": [
+                  0.6552,
+                  0.6552,
+                  0.4459
+                ],
+                "radial_segments": 8,
+                "vertical_segments": 5
+              },
+              "shared_texture_group": "shared-goo"
+            },
+            {
+              "name": "Large pod upper collar",
+              "material": "ivory",
+              "primitive": "bevelled_collar",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.57,
+                  0,
+                  1.6541000000000001
+                ],
+                "diameter_m": 1.1557,
+                "height_m": 0.2275,
+                "bevel_m": 0.065,
+                "sides": 10
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Large pod cap",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.57,
+                  0,
+                  1.827
+                ],
+                "diameter_m": 0.4368,
+                "length_m": 0.1365,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Small pod lower cushion",
+              "material": "rubber",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.62,
+                  0.1,
+                  0.32158000000000003
+                ],
+                "diameter_m": 0.7656,
+                "length_m": 0.08316,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Small pod base collar",
+              "material": "ivory",
+              "primitive": "bevelled_collar",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.62,
+                  0.1,
+                  0.4384
+                ],
+                "diameter_m": 0.8646,
+                "height_m": 0.15180000000000002,
+                "bevel_m": 0.065,
+                "sides": 10
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Small pod chamber",
+              "material": "glass",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.62,
+                  0.1,
+                  0.8806
+                ],
+                "diameter_m": 0.7392000000000001,
+                "length_m": 0.759,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "shared-glass"
+            },
+            {
+              "name": "Small pod specimen",
+              "material": "goo",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.62,
+                  0.1,
+                  0.6364000000000001
+                ],
+                "size_xyz_m": [
+                  0.4752,
+                  0.4752,
+                  0.3234
+                ],
+                "radial_segments": 8,
+                "vertical_segments": 5
+              },
+              "shared_texture_group": "shared-goo"
+            },
+            {
+              "name": "Small pod upper collar",
+              "material": "ivory",
+              "primitive": "bevelled_collar",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.62,
+                  0.1,
+                  1.2766000000000002
+                ],
+                "diameter_m": 0.8382000000000001,
+                "height_m": 0.165,
+                "bevel_m": 0.065,
+                "sides": 10
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Small pod cap",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.62,
+                  0.1,
+                  1.4020000000000001
+                ],
+                "diameter_m": 0.3168,
+                "length_m": 0.099,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 772
+        }
+      },
+      "assembly_note": "Two chamber sizes on one shared plinth. Reuse the tank chamber and collar profiles.",
+      "detail": "Each pod has its own glass and white goo masks."
+    },
+    "lab-bench": {
+      "title": "Lab bench",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            3.0,
+            1.55,
+            1.3
+          ],
+          "bounds_xyz_m": [
+            [
+              -1.5,
+              -0.775,
+              0.0
+            ],
+            [
+              1.5,
+              0.775,
+              1.3
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Bench base",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.53
+                ],
+                "profile_width_depth_height_m": [
+                  2.8,
+                  1.32,
+                  0.84
+                ],
+                "profile_radius_m": 0.15,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Rubber foot rail",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.1
+                ],
+                "profile_width_depth_height_m": [
+                  2.55,
+                  1.13,
+                  0.2
+                ],
+                "profile_radius_m": 0.14,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Work surface",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  1.07
+                ],
+                "profile_width_depth_height_m": [
+                  3,
+                  1.55,
+                  0.25
+                ],
+                "profile_radius_m": 0.17,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Shallow work tray",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  1.24
+                ],
+                "profile_width_depth_height_m": [
+                  1.52,
+                  0.86,
+                  0.12
+                ],
+                "profile_radius_m": 0.16,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Storage insert",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -1,
+                  -0.675,
+                  0.58
+                ],
+                "profile_width_depth_height_m": [
+                  0.46,
+                  0.37,
+                  0.1
+                ],
+                "profile_radius_m": 0.07,
+                "extrusion_axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Storage insert",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  1,
+                  -0.675,
+                  0.58
+                ],
+                "profile_width_depth_height_m": [
+                  0.46,
+                  0.37,
+                  0.1
+                ],
+                "profile_radius_m": 0.07,
+                "extrusion_axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 264
+        }
+      },
+      "assembly_note": "Soft cabinet body and broad work tray. The drawer inserts can share the front face atlas.",
+      "detail": ""
+    },
+    "goo-conveyor": {
+      "title": "Goo conveyor",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            3.28,
+            1.32,
+            1.335
+          ],
+          "bounds_xyz_m": [
+            [
+              -1.64,
+              -0.66,
+              0.0
+            ],
+            [
+              1.64,
+              0.66,
+              1.335
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Foot rail",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.12
+                ],
+                "profile_width_depth_height_m": [
+                  2.75,
+                  1.06,
+                  0.24
+                ],
+                "profile_radius_m": 0.14,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Support",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -1.12,
+                  0,
+                  0.39
+                ],
+                "profile_width_depth_height_m": [
+                  0.42,
+                  0.93,
+                  0.59
+                ],
+                "profile_radius_m": 0.12,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Support",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  1.12,
+                  0,
+                  0.39
+                ],
+                "profile_width_depth_height_m": [
+                  0.42,
+                  0.93,
+                  0.59
+                ],
+                "profile_radius_m": 0.12,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Belt surround",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.73
+                ],
+                "profile_width_depth_height_m": [
+                  3.28,
+                  1.32,
+                  0.3
+                ],
+                "profile_radius_m": 0.25,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Belt insert",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.905
+                ],
+                "profile_width_depth_height_m": [
+                  2.99,
+                  1.08,
+                  0.095
+                ],
+                "profile_radius_m": 0.24,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Goo 1",
+              "material": "goo",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -1.0,
+                  0,
+                  1.11
+                ],
+                "size_xyz_m": [
+                  0.57,
+                  0.6,
+                  0.45
+                ],
+                "radial_segments": 10,
+                "vertical_segments": 5
+              },
+              "shared_texture_group": "shared-goo"
+            },
+            {
+              "name": "Goo 2",
+              "material": "goo",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  1.11
+                ],
+                "size_xyz_m": [
+                  0.57,
+                  0.6,
+                  0.45
+                ],
+                "radial_segments": 10,
+                "vertical_segments": 5
+              },
+              "shared_texture_group": "shared-goo"
+            },
+            {
+              "name": "Goo 3",
+              "material": "goo",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  1.0,
+                  0,
+                  1.11
+                ],
+                "size_xyz_m": [
+                  0.57,
+                  0.6,
+                  0.45
+                ],
+                "radial_segments": 10,
+                "vertical_segments": 5
+              },
+              "shared_texture_group": "shared-goo"
+            }
+          ],
+          "guide_triangle_count": 520
+        }
+      },
+      "assembly_note": "A short belt with three repeatable goo blobs. The belt and legs can be one static assembly.",
+      "detail": ""
+    },
+    "robot-arm": {
+      "title": "Robot arm",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            1.615,
+            1.18,
+            2.095
+          ],
+          "bounds_xyz_m": [
+            [
+              -0.625,
+              -0.59,
+              0.0
+            ],
+            [
+              0.99,
+              0.59,
+              2.095
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Pedestal",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.2
+                ],
+                "profile_width_depth_height_m": [
+                  1.25,
+                  1.18,
+                  0.4
+                ],
+                "profile_radius_m": 0.2,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Turntable",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.51
+                ],
+                "diameter_m": 0.71,
+                "length_m": 0.23,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Lower link",
+              "material": "ivory",
+              "primitive": "swept_tube",
+              "parameters_m": {
+                "centerline_xyz_m": [
+                  [
+                    0.0,
+                    0.0,
+                    0.58
+                  ],
+                  [
+                    -0.24,
+                    0.0,
+                    1.38
+                  ]
+                ],
+                "diameter_m": 0.38,
+                "sides": 8
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Upper link",
+              "material": "ivory",
+              "primitive": "swept_tube",
+              "parameters_m": {
+                "centerline_xyz_m": [
+                  [
+                    -0.24,
+                    0.0,
+                    1.38
+                  ],
+                  [
+                    0.59,
+                    0.0,
+                    1.91
+                  ]
+                ],
+                "diameter_m": 0.34,
+                "sides": 8
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Elbow joint",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.24,
+                  0,
+                  1.38
+                ],
+                "diameter_m": 0.46,
+                "length_m": 0.48,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Wrist joint",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.59,
+                  0,
+                  1.91
+                ],
+                "diameter_m": 0.37,
+                "length_m": 0.41,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Gripper jaw",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.82,
+                  -0.19,
+                  1.68
+                ],
+                "profile_width_depth_height_m": [
+                  0.34,
+                  0.15,
+                  0.42
+                ],
+                "profile_radius_m": 0.05,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Gripper jaw",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.82,
+                  0.19,
+                  1.68
+                ],
+                "profile_width_depth_height_m": [
+                  0.34,
+                  0.15,
+                  0.42
+                ],
+                "profile_radius_m": 0.05,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 320
+        }
+      },
+      "assembly_note": "Two thick links and a two-jaw tool. Keep the open jaw shape legible from above.",
+      "detail": ""
+    },
+    "valve-manifold": {
+      "title": "Valve manifold",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            2.15,
+            1.505,
+            1.225
+          ],
+          "bounds_xyz_m": [
+            [
+              -1.075,
+              -0.895,
+              0.0
+            ],
+            [
+              1.075,
+              0.61,
+              1.225
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Header casing",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0.08,
+                  0.41
+                ],
+                "profile_width_depth_height_m": [
+                  2.15,
+                  1.06,
+                  0.72
+                ],
+                "profile_radius_m": 0.14,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Isolation pad",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0.08,
+                  0.06
+                ],
+                "profile_width_depth_height_m": [
+                  2.0,
+                  0.94,
+                  0.12
+                ],
+                "profile_radius_m": 0.12,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Branch outlet",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.65,
+                  -0.55,
+                  0.39
+                ],
+                "diameter_m": 0.33,
+                "length_m": 0.59,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "End collar",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.65,
+                  -0.8,
+                  0.39
+                ],
+                "diameter_m": 0.4,
+                "length_m": 0.19,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Branch outlet",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  -0.55,
+                  0.39
+                ],
+                "diameter_m": 0.33,
+                "length_m": 0.59,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "End collar",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  -0.8,
+                  0.39
+                ],
+                "diameter_m": 0.4,
+                "length_m": 0.19,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Branch outlet",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.65,
+                  -0.55,
+                  0.39
+                ],
+                "diameter_m": 0.33,
+                "length_m": 0.59,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "End collar",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.65,
+                  -0.8,
+                  0.39
+                ],
+                "diameter_m": 0.4,
+                "length_m": 0.19,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Valve stem",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0.08,
+                  0.9
+                ],
+                "diameter_m": 0.3,
+                "length_m": 0.4,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Cross handle A",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0.08,
+                  1.14
+                ],
+                "profile_width_depth_height_m": [
+                  0.87,
+                  0.22,
+                  0.15
+                ],
+                "profile_radius_m": 0.08,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Cross handle B",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0.08,
+                  1.15
+                ],
+                "profile_width_depth_height_m": [
+                  0.22,
+                  0.7,
+                  0.15
+                ],
+                "profile_radius_m": 0.08,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 484
+        }
+      },
+      "assembly_note": "Three capped outlets and a thick cross handle. Reuse the 0.40 m pipe flange profile.",
+      "detail": ""
+    },
+    "pipe-kit": {
+      "title": "Pipe kit",
+      "variants": {
+        "straight": {
+          "size_xyz_m": [
+            1.98,
+            0.72,
+            0.72
+          ],
+          "bounds_xyz_m": [
+            [
+              -0.99,
+              -0.36,
+              0.0
+            ],
+            [
+              0.99,
+              0.36,
+              0.72
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Support saddle",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.105
+                ],
+                "profile_width_depth_height_m": [
+                  0.83,
+                  0.67,
+                  0.21
+                ],
+                "profile_radius_m": 0.15,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Pipe barrel 1",
+              "material": "mint",
+              "primitive": "swept_tube",
+              "parameters_m": {
+                "centerline_xyz_m": [
+                  [
+                    -0.9,
+                    0.0,
+                    0.36
+                  ],
+                  [
+                    0.9,
+                    0.0,
+                    0.36
+                  ]
+                ],
+                "diameter_m": 0.5,
+                "sides": 8
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 1",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.9,
+                  0,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "X"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 2",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.9,
+                  0,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "X"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 160
+        },
+        "elbow": {
+          "size_xyz_m": [
+            1.97,
+            1.34,
+            0.72
+          ],
+          "bounds_xyz_m": [
+            [
+              -0.95,
+              -0.36,
+              0.0
+            ],
+            [
+              1.02,
+              0.98,
+              0.72
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Support saddle",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.105
+                ],
+                "profile_width_depth_height_m": [
+                  0.83,
+                  0.67,
+                  0.21
+                ],
+                "profile_radius_m": 0.15,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Pipe barrel 1",
+              "material": "mint",
+              "primitive": "swept_tube",
+              "parameters_m": {
+                "centerline_xyz_m": [
+                  [
+                    -0.86,
+                    0.0,
+                    0.36
+                  ],
+                  [
+                    0.11,
+                    0.0,
+                    0.36
+                  ],
+                  [
+                    0.252,
+                    0.019,
+                    0.36
+                  ],
+                  [
+                    0.385,
+                    0.074,
+                    0.36
+                  ],
+                  [
+                    0.499,
+                    0.161,
+                    0.36
+                  ],
+                  [
+                    0.586,
+                    0.275,
+                    0.36
+                  ],
+                  [
+                    0.641,
+                    0.408,
+                    0.36
+                  ],
+                  [
+                    0.66,
+                    0.55,
+                    0.36
+                  ],
+                  [
+                    0.66,
+                    0.89,
+                    0.36
+                  ]
+                ],
+                "diameter_m": 0.5,
+                "sides": 8
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 1",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.86,
+                  0,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "X"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 2",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.66,
+                  0.89,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 272
+        },
+        "tee": {
+          "size_xyz_m": [
+            1.98,
+            1.35,
+            0.72
+          ],
+          "bounds_xyz_m": [
+            [
+              -0.99,
+              -0.36,
+              0.0
+            ],
+            [
+              0.99,
+              0.99,
+              0.72
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Support saddle",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.105
+                ],
+                "profile_width_depth_height_m": [
+                  0.83,
+                  0.67,
+                  0.21
+                ],
+                "profile_radius_m": 0.15,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Pipe barrel 1",
+              "material": "mint",
+              "primitive": "swept_tube",
+              "parameters_m": {
+                "centerline_xyz_m": [
+                  [
+                    -0.9,
+                    0.0,
+                    0.36
+                  ],
+                  [
+                    0.9,
+                    0.0,
+                    0.36
+                  ]
+                ],
+                "diameter_m": 0.5,
+                "sides": 8
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Pipe barrel 2",
+              "material": "mint",
+              "primitive": "swept_tube",
+              "parameters_m": {
+                "centerline_xyz_m": [
+                  [
+                    0.0,
+                    0.0,
+                    0.36
+                  ],
+                  [
+                    0.0,
+                    0.9,
+                    0.36
+                  ]
+                ],
+                "diameter_m": 0.5,
+                "sides": 8
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 1",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.9,
+                  0,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "X"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 2",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.9,
+                  0,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "X"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 3",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0.9,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 232
+        },
+        "cross": {
+          "size_xyz_m": [
+            1.98,
+            1.98,
+            0.72
+          ],
+          "bounds_xyz_m": [
+            [
+              -0.99,
+              -0.99,
+              0.0
+            ],
+            [
+              0.99,
+              0.99,
+              0.72
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Support saddle",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.105
+                ],
+                "profile_width_depth_height_m": [
+                  0.83,
+                  0.67,
+                  0.21
+                ],
+                "profile_radius_m": 0.15,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Pipe barrel 1",
+              "material": "mint",
+              "primitive": "swept_tube",
+              "parameters_m": {
+                "centerline_xyz_m": [
+                  [
+                    -0.9,
+                    0.0,
+                    0.36
+                  ],
+                  [
+                    0.9,
+                    0.0,
+                    0.36
+                  ]
+                ],
+                "diameter_m": 0.5,
+                "sides": 8
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Pipe barrel 2",
+              "material": "mint",
+              "primitive": "swept_tube",
+              "parameters_m": {
+                "centerline_xyz_m": [
+                  [
+                    0.0,
+                    -0.9,
+                    0.36
+                  ],
+                  [
+                    0.0,
+                    0.9,
+                    0.36
+                  ]
+                ],
+                "diameter_m": 0.5,
+                "sides": 8
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 1",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.9,
+                  0,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "X"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 2",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.9,
+                  0,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "X"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 3",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  -0.9,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Socket 4",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0.9,
+                  0.36
+                ],
+                "diameter_m": 0.72,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "Y"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 276
+        }
+      },
+      "assembly_note": "Four reusable modules with the same 0.50 m barrel and 0.72 m socket envelope.",
+      "detail": "Weld or trim hidden tee and cross intersections. All ports sit at 0.36 m centre height."
+    },
+    "queue-rail": {
+      "title": "Queue rail",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            3.03,
+            0.47,
+            0.74
+          ],
+          "bounds_xyz_m": [
+            [
+              -1.515,
+              -0.235,
+              0.0
+            ],
+            [
+              1.515,
+              0.235,
+              0.74
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Rail body",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.57
+                ],
+                "profile_width_depth_height_m": [
+                  2.93,
+                  0.24,
+                  0.24
+                ],
+                "profile_radius_m": 0.1,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Stanchion",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -1.26,
+                  0,
+                  0.37
+                ],
+                "profile_width_depth_height_m": [
+                  0.33,
+                  0.31,
+                  0.74
+                ],
+                "profile_radius_m": 0.11,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Isolation pad",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -1.26,
+                  0,
+                  0.06
+                ],
+                "profile_width_depth_height_m": [
+                  0.51,
+                  0.47,
+                  0.12
+                ],
+                "profile_radius_m": 0.13,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Stanchion",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.37
+                ],
+                "profile_width_depth_height_m": [
+                  0.33,
+                  0.31,
+                  0.74
+                ],
+                "profile_radius_m": 0.11,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Isolation pad",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.06
+                ],
+                "profile_width_depth_height_m": [
+                  0.51,
+                  0.47,
+                  0.12
+                ],
+                "profile_radius_m": 0.13,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Stanchion",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  1.26,
+                  0,
+                  0.37
+                ],
+                "profile_width_depth_height_m": [
+                  0.33,
+                  0.31,
+                  0.74
+                ],
+                "profile_radius_m": 0.11,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Isolation pad",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  1.26,
+                  0,
+                  0.06
+                ],
+                "profile_width_depth_height_m": [
+                  0.51,
+                  0.47,
+                  0.12
+                ],
+                "profile_radius_m": 0.13,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 308
+        }
+      },
+      "assembly_note": "One wide rounded rail on three chunky stanchions. Use the footprint as a decorative boundary.",
+      "detail": ""
+    },
+    "floor-grate": {
+      "title": "Floor grate",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            1.62,
+            1.15,
+            0.575
+          ],
+          "bounds_xyz_m": [
+            [
+              -0.81,
+              -0.575,
+              -0.48
+            ],
+            [
+              0.81,
+              0.575,
+              0.095
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Recess sleeve",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  -0.24
+                ],
+                "profile_width_depth_height_m": [
+                  1.62,
+                  1.15,
+                  0.48
+                ],
+                "profile_radius_m": 0.17,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Opening",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.01
+                ],
+                "profile_width_depth_height_m": [
+                  1.39,
+                  0.94,
+                  0.1
+                ],
+                "profile_radius_m": 0.1,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Grate slat 1",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.5125,
+                  0,
+                  0.066
+                ],
+                "profile_width_depth_height_m": [
+                  0.105,
+                  0.98,
+                  0.058
+                ],
+                "profile_radius_m": 0.025,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Grate slat 2",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.3075,
+                  0,
+                  0.066
+                ],
+                "profile_width_depth_height_m": [
+                  0.105,
+                  0.98,
+                  0.058
+                ],
+                "profile_radius_m": 0.025,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Grate slat 3",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.1025,
+                  0,
+                  0.066
+                ],
+                "profile_width_depth_height_m": [
+                  0.105,
+                  0.98,
+                  0.058
+                ],
+                "profile_radius_m": 0.025,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Grate slat 4",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.1025,
+                  0,
+                  0.066
+                ],
+                "profile_width_depth_height_m": [
+                  0.105,
+                  0.98,
+                  0.058
+                ],
+                "profile_radius_m": 0.025,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Grate slat 5",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.3075,
+                  0,
+                  0.066
+                ],
+                "profile_width_depth_height_m": [
+                  0.105,
+                  0.98,
+                  0.058
+                ],
+                "profile_radius_m": 0.025,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Grate slat 6",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.5125,
+                  0,
+                  0.066
+                ],
+                "profile_width_depth_height_m": [
+                  0.105,
+                  0.98,
+                  0.058
+                ],
+                "profile_radius_m": 0.025,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 352
+        }
+      },
+      "assembly_note": "Flush service opening with six wide slats. Set the model origin at floor level.",
+      "detail": "0.575 m total height includes the recessed sleeve. Visible height above the floor is 0.095 m.",
+      "ground_z_m": 0,
+      "visible_height_m": 0.095,
+      "below_floor_depth_m": 0.48
+    },
+    "lamp-post": {
+      "title": "Lamp post",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            0.65,
+            0.65,
+            2.09
+          ],
+          "bounds_xyz_m": [
+            [
+              -0.325,
+              -0.325,
+              0.0
+            ],
+            [
+              0.325,
+              0.325,
+              2.09
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Foot",
+              "material": "rubber",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.07
+                ],
+                "diameter_m": 0.65,
+                "length_m": 0.14,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Base collar",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.22
+                ],
+                "diameter_m": 0.54,
+                "length_m": 0.22,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Stem",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.91
+                ],
+                "diameter_m": 0.23,
+                "length_m": 1.28,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Lantern base",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  1.56
+                ],
+                "diameter_m": 0.53,
+                "length_m": 0.21,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Lantern lens",
+              "material": "glass",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  1.79
+                ],
+                "diameter_m": 0.44,
+                "length_m": 0.28,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "shared-glass"
+            },
+            {
+              "name": "Top cap",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  2.0
+                ],
+                "diameter_m": 0.61,
+                "length_m": 0.18,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 264
+        }
+      },
+      "assembly_note": "One stout post and a wide capped lantern. Use a shared lens material for the apparent light.",
+      "detail": ""
+    },
+    "steam-vent": {
+      "title": "Steam vent",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            1.12,
+            1.12,
+            0.675
+          ],
+          "bounds_xyz_m": [
+            [
+              -0.56,
+              -0.56,
+              0.0
+            ],
+            [
+              0.56,
+              0.56,
+              0.675
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Foot ring",
+              "material": "rubber",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.075
+                ],
+                "diameter_m": 1.04,
+                "length_m": 0.15,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Vent body",
+              "material": "ivory",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.29
+                ],
+                "diameter_m": 1.12,
+                "length_m": 0.36,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Mint cap",
+              "material": "mint",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.53
+                ],
+                "diameter_m": 0.92,
+                "length_m": 0.17,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Inset aperture",
+              "material": "rubber",
+              "primitive": "cylinder",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.617
+                ],
+                "diameter_m": 0.48,
+                "length_m": 0.027,
+                "sides": 12,
+                "axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Aperture bridge",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  -0.15,
+                  0.65
+                ],
+                "profile_width_depth_height_m": [
+                  0.48,
+                  0.09,
+                  0.05
+                ],
+                "profile_radius_m": 0.025,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Aperture bridge",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0.15,
+                  0.65
+                ],
+                "profile_width_depth_height_m": [
+                  0.48,
+                  0.09,
+                  0.05
+                ],
+                "profile_radius_m": 0.025,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            }
+          ],
+          "guide_triangle_count": 264
+        }
+      },
+      "assembly_note": "Low, broad vent with a readable dark aperture. The static mesh ends at the lip.",
+      "detail": ""
+    },
+    "planter-box": {
+      "title": "Planter box",
+      "variants": {
+        "standard": {
+          "size_xyz_m": [
+            2.35,
+            1.39,
+            0.993
+          ],
+          "bounds_xyz_m": [
+            [
+              -1.175,
+              -0.695,
+              0.0
+            ],
+            [
+              1.175,
+              0.695,
+              0.993
+            ]
+          ],
+          "parts": [
+            {
+              "name": "Foot pad",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.055
+                ],
+                "profile_width_depth_height_m": [
+                  2.07,
+                  1.1,
+                  0.11
+                ],
+                "profile_radius_m": 0.18,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Planter body",
+              "material": "ivory",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.27
+                ],
+                "profile_width_depth_height_m": [
+                  2.28,
+                  1.32,
+                  0.42
+                ],
+                "profile_radius_m": 0.2,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Top collar",
+              "material": "mint",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.49
+                ],
+                "profile_width_depth_height_m": [
+                  2.35,
+                  1.39,
+                  0.14
+                ],
+                "profile_radius_m": 0.23,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Soil insert",
+              "material": "rubber",
+              "primitive": "rounded_prism",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0,
+                  0,
+                  0.568
+                ],
+                "profile_width_depth_height_m": [
+                  2.06,
+                  1.08,
+                  0.027
+                ],
+                "profile_radius_m": 0.2,
+                "extrusion_axis": "Z"
+              },
+              "shared_texture_group": "lab-surfaces"
+            },
+            {
+              "name": "Leaf cluster 1",
+              "material": "plant",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.62,
+                  -0.1,
+                  0.6996
+                ],
+                "size_xyz_m": [
+                  0.77,
+                  0.65,
+                  0.48
+                ],
+                "radial_segments": 8,
+                "vertical_segments": 4
+              },
+              "shared_texture_group": "lab-foliage"
+            },
+            {
+              "name": "Leaf cluster 2",
+              "material": "plant",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  -0.13,
+                  0.2,
+                  0.7131
+                ],
+                "size_xyz_m": [
+                  0.82,
+                  0.65,
+                  0.53
+                ],
+                "radial_segments": 8,
+                "vertical_segments": 4
+              },
+              "shared_texture_group": "lab-foliage"
+            },
+            {
+              "name": "Leaf cluster 3",
+              "material": "plant",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.54,
+                  0.05,
+                  0.7184999999999999
+                ],
+                "size_xyz_m": [
+                  0.88,
+                  0.65,
+                  0.55
+                ],
+                "radial_segments": 8,
+                "vertical_segments": 4
+              },
+              "shared_texture_group": "lab-foliage"
+            },
+            {
+              "name": "Leaf cluster 4",
+              "material": "plant",
+              "primitive": "ellipsoid",
+              "parameters_m": {
+                "center_xyz_m": [
+                  0.05,
+                  -0.24,
+                  0.6915
+                ],
+                "size_xyz_m": [
+                  0.72,
+                  0.65,
+                  0.45
+                ],
+                "radial_segments": 8,
+                "vertical_segments": 4
+              },
+              "shared_texture_group": "lab-foliage"
+            }
+          ],
+          "guide_triangle_count": 432
+        }
+      },
+      "assembly_note": "Four broad plant masses in a rounded trough. Use an opaque foliage atlas and keep the plants below 1 m.",
+      "detail": "The clusters can share one plant mesh and atlas."
+    }
+  }
+}

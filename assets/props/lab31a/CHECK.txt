@@ -1,0 +1,16 @@
+floor-grate            tris  428 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+goo-conveyor           tris  478 islands 4 overlaps 0 self 0 nonmanifold 0 floating - ok
+lab-bench              tris  294 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+lamp-post              tris  284 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+pipe-kit-cross         tris  370 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+pipe-kit-elbow         tris  302 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+pipe-kit-straight      tris  188 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+pipe-kit-tee           tris  284 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+planter-box            tris  466 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+queue-rail             tris  526 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+robot-arm              tris  380 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+specimen-pods          tris  712 islands 7 overlaps 0 self 0 nonmanifold 0 floating - ok
+specimen-tank          tris  510 islands 5 overlaps 0 self 0 nonmanifold 0 floating - ok
+steam-vent             tris  284 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+valve-manifold         tris  562 islands 1 overlaps 0 self 0 nonmanifold 0 floating - ok
+TOTAL files 15 failing 0

@@ -1,0 +1,16 @@
+name	tris	guide	bytes	size_xyz	surfaces
+specimen-tank	510	468	35172	1.956 1.532 2.183	surf,glass,goo
+specimen-pods	712	772	45320	2.600 1.440 1.895	surf,glass,goo
+lab-bench	294	264	18804	3.000 1.550 1.300	surf
+goo-conveyor	478	520	33308	3.280 1.320 1.335	surf,goo
+robot-arm	380	320	24204	1.615 1.180 2.095	surf
+valve-manifold	562	484	31140	2.150 1.505 1.225	surf
+pipe-kit-straight	188	160	14844	1.980 0.720 0.720	surf
+pipe-kit-elbow	302	272	19300	1.970 1.340 0.720	surf
+pipe-kit-tee	284	232	19380	1.980 1.350 0.720	surf
+pipe-kit-cross	370	276	23708	1.980 1.980 0.720	surf
+queue-rail	526	308	28488	3.030 0.470 0.740	surf
+floor-grate	428	352	26748	1.620 1.150 0.095	surf
+lamp-post	284	264	19272	0.650 0.650 2.090	surf,lens
+steam-vent	284	264	19480	1.120 1.120 0.675	surf
+planter-box	466	432	30440	2.350 1.390 0.993	surf,foliage
