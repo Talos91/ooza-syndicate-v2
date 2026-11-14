@@ -1,5 +1,12 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.3.1 "owner neon hotfix" - 2026-11-14 (STAGING only; live is 0.23.21)
+
+- Hotfix on 0.24.3 (main f0db6e3) = vat-neon f8c8204. Daniele 2026-11-13 ("needs fixing pronto"): the owner neon was far too faint. No rule / number change, no net.gd / protocol change (ooze20-net-8); version shown as "ALPHA 24.3.1".
+  - Cause: the lab look (0.24.2) set KIT_RIM_ENERGY 2.2 (the live look was 3.0-5.0), so the kit's owner rim band, deck / bridge light strips and relay lights glowed too faintly; the cream themes (0.24.3) made it worse. The HudLab vat badge only recoloured a thin edge mask.
+  - Fix: look.gd KIT_RIM_ENERGY 2.2 -> 4.5 (node rims, deck / bridge strips, every Mats.light); hud_lab.gd owned badge gets an owner-colour glow + bold outline (neutral unchanged). Bridge strip is brighter, not wider (a wider strip needs a kit mesh change).
+  - Checks: test_sim + test_maps4 on the release SHA; phone_fit not re-run (no camera / layout change). Not verified: real phone.
+
 ## 0.24.3 "Alpha 24 step 6: settings + walkways" - 2026-11-13 (STAGING only; live is 0.23.21)
 
 - Release release-0.24.3 = setting-pick 2e7f244 (feed-fix 30b9cb6 on themes 92efa7a on next-pass 6b3d682) + walkways 5ff6e0f (off 6b3d682), merged clean. No net.gd / protocol change (ooze20-net-8). Props are not in this build (Daniele).
