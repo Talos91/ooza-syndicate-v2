@@ -80,9 +80,10 @@ func _run() -> void:
 			g.position = Vector3((k - 2.5) * 1.5, 0, 0.55 * k / 6.0)
 			g.set_meta("k", k)
 			world.add_child(g)
+		cam.projection = Camera3D.PROJECTION_ORTHOGONAL   # no perspective skew: every phase is seen from the same angle
+		cam.size = 4.2
 		cam.position = Vector3(0, 0.9, 7.0)
 		cam.look_at(Vector3(0, 0.55, 0))
-		cam.fov = 40
 		await get_tree().process_frame
 		await get_tree().process_frame
 		await RenderingServer.frame_post_draw

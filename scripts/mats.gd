@@ -85,7 +85,7 @@ static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMat
 
 
 # WALK legs per faction: [amplitude (model units), feet radius from, to] - measured on the Rodin feet (low vertices' radius)
-const V4_LEGS := {"vex": [0.07, 0.30, 0.45], "null": [0.07, 0.42, 0.55], "bloom": [0.04, 0.32, 0.50], "ember": [0.07, 0.50, 0.65], "solar": [0.012, 0.18, 0.30]}
+const V4_LEGS := {"vex": [0.07, 0.30, 0.45], "null": [0.07, 0.42, 0.55], "bloom": [0.04, 0.32, 0.50], "ember": [0.07, 0.50, 0.65], "solar": [0.012, 0.18, 0.30, 0.03]}
 const V4_TINT_MIX := 0.9             # the neon's albedo -> seat colour
 const V4_TINT_GLOW := 1.6            # the neon's emission in the seat colour (reads at phone scale on the dark board)
 const V4_EYE_GLOW := 0.5
@@ -121,6 +121,7 @@ static func v4_setup(m: ShaderMaterial, faction: String, seat: String, tex: Text
 	var leg: Array = V4_LEGS.get(faction, [0.0, 0.3, 0.45])
 	m.set_shader_parameter("leg_amp", leg[0])
 	m.set_shader_parameter("leg_r", Vector2(leg[1], leg[2]))
+	m.set_shader_parameter("leg_bob", leg[3] if leg.size() > 3 else 0.0)
 	var mr_path := "res://assets/units/%s_texture_metallic-texture_roughness.png" % faction
 	if ResourceLoader.exists(mr_path):
 		m.set_shader_parameter("mr_tex", load(mr_path))

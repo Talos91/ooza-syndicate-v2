@@ -41,12 +41,17 @@ uniform float leg_amp = 0.0;                // model units (a Rodin unit is ~1.9
 uniform float leg_h = 0.22;                 // feet region height
 uniform vec2 leg_r = vec2(0.3, 0.45);       // radius range where the feet are fully weighted
 uniform float leg_stride = 0.55;            // metres of travel per leg cycle
+uniform float leg_bob = 0.0;                // whole-body squash-and-stretch on each step (a fraction), for a unit whose feet barely move
 
 void vertex() {
-	if (leg_amp > 0.0) {
-		float w = (1.0 - smoothstep(0.03, leg_h, VERTEX.y)) * smoothstep(leg_r.x, leg_r.y, length(VERTEX.xz));
+	if (leg_amp > 0.0 || leg_bob > 0.0) {
 		vec3 fwd = normalize(MODEL_MATRIX[2].xyz);
-		float ph = dot(MODEL_MATRIX[3].xz, fwd.xz) / leg_stride * 6.2831853 + (VERTEX.x * VERTEX.z > 0.0 ? 0.0 : 3.1415927);
+		float ph0 = dot(MODEL_MATRIX[3].xz, fwd.xz) / leg_stride * 6.2831853;
+		float bob = sin(ph0 * 2.0) * leg_bob;               // two steps per cycle
+		VERTEX.y *= 1.0 + bob;
+		VERTEX.xz *= 1.0 - 0.5 * bob;
+		float w = (1.0 - smoothstep(0.03, leg_h, VERTEX.y)) * smoothstep(leg_r.x, leg_r.y, length(VERTEX.xz));
+		float ph = ph0 + (VERTEX.x * VERTEX.z > 0.0 ? 0.0 : 3.1415927);
 		VERTEX.z += sin(ph) * leg_amp * w;
 		VERTEX.y += max(0.0, cos(ph)) * leg_amp * 0.6 * w;
 	}
