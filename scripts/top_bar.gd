@@ -95,12 +95,14 @@ func _build(crumb: String, f: String) -> void:
 	var cf := f if Campaign.has_content(f) else "vex"
 	var top := UiKit.label(menu, "LEVEL %d" % _level, 15, UiKit.INK, true)
 	var sub := UiKit.label(menu, "%d / %d campaign stars" % [Campaign.stars_total(cf), Campaign.stars_max(cf)], 12, UiKit.MUTED)
+	if not Campaign.ENABLED:                           # the campaign is off (Daniele 2026-11-15): no star count, LEVEL alone
+		sub.text = ""
 	var text_w := maxf(UiKit.text_w(menu, top.text, 15, true), UiKit.text_w(menu, sub.text, 12))
 	_ring_r = minf(17.0, h * 0.28)
 	var block_w := _ring_r * 2.0 + 12.0 + text_w
 	var bx := music_btn.position.x - 22.0 - block_w
 	_ring_c = Vector2(bx + _ring_r, h / 2.0)
-	var th := top.get_minimum_size().y + sub.get_minimum_size().y
+	var th := top.get_minimum_size().y + (sub.get_minimum_size().y if sub.text != "" else 0.0)
 	top.position = Vector2(bx + _ring_r * 2.0 + 12.0, (h - th) / 2.0)
 	sub.position = top.position + Vector2(0, top.get_minimum_size().y)
 	add_child(top)

@@ -754,7 +754,7 @@ func show_main() -> void:
 	if _backdrop:                                      # 35C2 (Daniele 2026-11-15): one painting for every setting and faction
 		_den.show_den(_backdrop)
 		_backdrop_ax = _den.backdrop_anchor_x()
-		_backdrop_ay = 0.5
+		_backdrop_ay = 0.0                             # (crop from the floor and tail, never the ceiling: the TV stays under the top bar)
 		_place_backdrop()
 	if top_bar != null:
 		top_bar.glass = true
@@ -788,13 +788,15 @@ func _home_column(area: Rect2, hero: String) -> void:
 	var tight := false                                 # a short phone (320 pt): no summary line, tighter gaps - the five rows must fit
 	if top + th + 4.0 * (bh + gap) > area.end.y - 4.0:
 		tight = true
-		gap = 5.0
-		pad = 6.0
+		gap = 3.0
+		pad = 4.0
+		top = area.position.y + 4.0
+		bh = minf(bh, (area.size.y - 8.0 - 4.0 * gap - 2.0 * pad) / 5.0)
 		th = pad + bh + pad
-		top = area.position.y + 5.0
 	var sm := _setup_summary()
 	# PLAY: a tile of its own (its last-setup line + CHANGE / PLAY)
 	var r := Rect2(x, top, cw, th)
+	_col_back(r)
 	UiKit.panel(self, r.position, r.size, faction, true)
 	var iw := cw - pad * 2.0
 	if not tight:
@@ -805,14 +807,17 @@ func _home_column(area: Rect2, hero: String) -> void:
 	UiKit.btn(self, "PLAY  →", Vector2(x + pad + chw + 8.0, by), Vector2(iw - chw - 8.0, bh), deploy, "primary", faction, 20)
 	var y := r.end.y + gap
 	# ONLINE
+	_col_back(Rect2(x, y, cw, bh))
 	_home_online_row(Rect2(x, y, cw, bh))
 	y += bh + gap
 	# CHALLENGES
 	var ready_n := Progression.claimable()
 	var ct := "CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else "")
+	_col_back(Rect2(x, y, cw, bh))
 	UiKit.btn(self, ct, Vector2(x, y), Vector2(cw, bh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 14)
 	y += bh + gap
 	# CAMPAIGN / TRAINING: disabled, COMING SOON (flip Campaign.ENABLED / TutorialDirector.ENABLED to bring them back)
+	_col_back(Rect2(x, y, cw, bh * 2.0 + gap))
 	var cb := UiKit.btn(self, "CAMPAIGN
 COMING SOON", Vector2(x, y), Vector2(cw, bh), show_chapters, "secondary", hero, 13)
 	y += bh + gap
@@ -834,12 +839,17 @@ COMING SOON", Vector2(x, y), Vector2(cw, bh), show_tutorial, "secondary", hero, 
 	for c in [fb, ver]:                                # (over the rug: an outline keeps both readable)
 		c.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 		c.add_theme_constant_override("outline_size", 4)
-	var vw := UiKit.text_w(self, Rules.version_label(), 12) + 6.0
+	var vw := UiKit.text_w(self, Rules.version_label(), 12) + 18.0
 	var rx := content.size.x - x - vw - fb.size.x
 	var fy := area.end.y - fh - 2.0
 	_shell_add(fb, Vector2(rx, fy))
 	_shell_add(ver, Vector2(rx + fb.size.x, fy + (fh - ver.get_minimum_size().y) / 2.0))
 	_home_install_y = fy - 8.0 - P(380, 56).y
+
+
+func _col_back(r: Rect2) -> void:
+	## HOME's column rows sit on an (almost) opaque dark plate: the painting never shows through a button (designer 8).
+	content.add_child(UiKit.rect(r.position, r.size, Color(UiKit.BASE, 0.9)))
 
 
 func _home_online_row(r: Rect2) -> void:

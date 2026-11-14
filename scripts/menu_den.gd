@@ -1,8 +1,7 @@
 class_name MenuDen
 extends Node2D
 ## MAIN MENU BACKGROUND (round 35C2, locked by Daniele 2026-11-15; 0.24.4): the overlord on his couch, seen from behind,
-## watching a TV. One painting for every setting, in two canvases (PHONE 3248 x 1500, WIDE 3840 x 2160, the nearer to the
-## screen's aspect), cover-scaled. Its TV picture is a hole (alpha 0 where the delivery's key is #FF00FF); behind the hole
+## watching a TV. One painting for every setting, in two canvases (WIDE 3840 x 2160 only: cropped from the floor, its extra ceiling keeps the TV under the top bar - designer 8), cover-scaled. Its TV picture is a hole (alpha 0 where the delivery's key is #FF00FF); behind the hole
 ## this node draws the screen: a looped capture of a real demo match (assets/art/menu/tv_loop.webp, 24 frames in a 6 x 4
 ## atlas, tools/make_tv_loop.py) on a quad mapped to the TV's four corners, and a faint glare layer over the painting.
 ## The loop is frames, not a second live match: a second Main in the same process shares Rules / GooTone / LookTheme /
@@ -13,9 +12,6 @@ extends Node2D
 ## quiet zone, where the menu column must stay.
 
 const CANVAS := {
-	"phone": {"bg": "res://assets/art/menu/menu_bg_phone.webp", "glass": "res://assets/art/menu/tv_glass_phone.png",
-			"size": Vector2(3248, 1500), "quiet": 975.0,
-			"tv": [Vector2(1975, 173), Vector2(3062, 85), Vector2(3061, 742), Vector2(1975, 714)]},
 	"wide": {"bg": "res://assets/art/menu/menu_bg_wide.webp", "glass": "res://assets/art/menu/tv_glass_wide.png",
 			"size": Vector2(3840, 2160), "quiet": 1153.0,
 			"tv": [Vector2(2335, 398), Vector2(3620, 293), Vector2(3619, 1070), Vector2(2335, 1037)]},
@@ -27,7 +23,7 @@ const LOOP_FRAME := Vector2(480, 270)
 const LOOP_FPS := 8.0
 
 var enabled_loop := true                  # false = one still frame (the Web fallback; Menu sets it from PerfProfile / the --menu-still arg)
-var _canvas := "phone"
+var _canvas := "wide"
 var _bg: Dictionary = {}
 var _tv := Polygon2D.new()
 var _glass := TextureRect.new()
@@ -54,7 +50,7 @@ func _init() -> void:
 
 func _pick() -> String:
 	var vp := get_viewport().get_visible_rect().size
-	return "phone" if vp.x / maxf(vp.y, 1.0) >= 1.97 else "wide"
+	return "wide"                          # always the WIDE canvas, cropped from the floor (ay 0): its extra ceiling keeps the TV under the top bar
 
 
 func show_den(backdrop: TextureRect) -> void:
