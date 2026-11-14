@@ -5,6 +5,9 @@ usage: python tools/units/build_rodin_units.py   -> assets/units/<f>.glb, <f>_te
 import struct, json, io, os, numpy as np
 from PIL import Image
 from scipy import ndimage
+from PIL import ImageDraw
+
+EDGE_TRI = None   # set per unit in build()
 
 SRC = "H:/My Drive/PROJECTS/Ooze Syndicate/Models/2.0/factions-v4/generated/"
 OUT = "assets/units/"
@@ -49,7 +52,46 @@ def disc(r):
 
 # Plates whose logo is a lighter-grey relief (not white): (x0, y0, x1, y1) at 2048, raised-stroke threshold over the plate's median value
 PLATES = {"solar": [(1545, 325, 1765, 605)]}
+# EDGE_STRIPES: steel/goo boundary triangles of the mesh whose height lies in [y0, y1] (model units) get a neon stripe LINE_R wide on the steel side,
+# for an edge the Rodin texture has no light line on (Daniele 2026-11-15: EMBER hat band top edge). Geometry-driven: triangles rasterised into UV space.
+EDGE_STRIPES = {"ember": (1.18, 0.03)}   # (top height of the band, stripe depth) in model units
 LINE_R = 5          # half-width of the regularised thin lines at 2048 (about 5 px wide at 1024)
+
+
+def edge_triangles(b, j, off, game, diff2k):
+    """Texels (a bool image at 2048) of the steel triangles within `depth` below the top height `ytop`: the interpolated model height is
+    rasterised into UV space, so the stripe follows the real top rim of the part."""
+    ytop, depth = EDGE_STRIPES[game]
+    pr = j["meshes"][0]["primitives"][0]
+    def acc(i, n, dt):
+        a = j["accessors"][i]; bv = j["bufferViews"][a["bufferView"]]
+        return np.frombuffer(b, dtype=dt, count=a["count"] * n, offset=off + bv.get("byteOffset", 0) + a.get("byteOffset", 0)).reshape(a["count"], n)
+    P = acc(pr["attributes"]["POSITION"], 3, "<f4"); UV = acc(pr["attributes"]["TEXCOORD_0"], 2, "<f4"); I = acc(pr["indices"], 1, "<u2").reshape(-1, 3).astype(int)
+    rgb = np.asarray(diff2k, np.float32) / 255.0
+    sat, val = hsv(rgb)
+    steel = (sat < 0.2) & (val > 0.25)
+    out = np.zeros((2048, 2048), bool)
+    U = UV * 2047.0
+    for t in I:
+        if P[t, 1].max() < ytop - depth or P[t, 1].min() > ytop + 0.01:
+            continue
+        pts = U[t]
+        x0, x1 = int(pts[:, 0].min()), int(pts[:, 0].max()) + 1
+        y0, y1 = int(pts[:, 1].min()), int(pts[:, 1].max()) + 1
+        if x1 - x0 > 400 or y1 - y0 > 400:      # a UV seam triangle
+            continue
+        xs, ys = np.meshgrid(np.arange(x0, x1), np.arange(y0, y1))
+        d = (pts[1, 1] - pts[2, 1]) * (pts[0, 0] - pts[2, 0]) + (pts[2, 0] - pts[1, 0]) * (pts[0, 1] - pts[2, 1])
+        if abs(d) < 1e-9:
+            continue
+        w0 = ((pts[1, 1] - pts[2, 1]) * (xs - pts[2, 0]) + (pts[2, 0] - pts[1, 0]) * (ys - pts[2, 1])) / d
+        w1 = ((pts[2, 1] - pts[0, 1]) * (xs - pts[2, 0]) + (pts[0, 0] - pts[2, 0]) * (ys - pts[2, 1])) / d
+        w2 = 1 - w0 - w1
+        ins = (w0 >= -0.01) & (w1 >= -0.01) & (w2 >= -0.01)
+        yy = w0 * P[t[0], 1] + w1 * P[t[1], 1] + w2 * P[t[2], 1]
+        sel = ins & (yy > ytop - depth) & (yy < ytop + 0.01)
+        out[ys[sel], xs[sel]] = True
+    return out & steel
 
 
 def neon_mask(diff2k, vmin=0.78, game=""):
@@ -74,6 +116,8 @@ def neon_mask(diff2k, vmin=0.78, game=""):
         thick = np.isin(lab, 1 + np.nonzero(sizes >= 1500)[0])
     thick = ndimage.gaussian_filter(thick.astype(np.float32), 4.0) > 0.5          # smooth, even edges on the wide parts (AEGIS cap rim)
     m = thick | line
+    if game in EDGE_STRIPES and EDGE_TRI is not None:
+        m |= ndimage.gaussian_filter(EDGE_TRI.astype(np.float32), 3.0) > 0.45
     for (x0, y0, x1, y1) in PLATES.get(game, []):
         g = (v[y0:y1, x0:x1]).copy()
         g = ndimage.gaussian_filter(g, 1.2)
@@ -102,6 +146,8 @@ def build(game, folder):
         r.save(f"{OUT}{game}_{name}.png")
         o = io.BytesIO(); r.save(o, "PNG", optimize=True); pngs.append((name, o.getvalue()))
     # mask: cut at 2048, area-downsample, threshold -> crisp 1024
+    global EDGE_TRI
+    EDGE_TRI = edge_triangles(b, j, off, game, diff) if game in EDGE_STRIPES else None
     m = neon_mask(diff, VMIN.get(game, 0.78), game).astype(np.float32)
     m1 = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).resize((1024, 1024), Image.BOX), np.float32) / 255.0
     tint = np.zeros((1024, 1024, 3), np.uint8)
