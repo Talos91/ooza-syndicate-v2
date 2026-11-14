@@ -288,7 +288,11 @@ func test_skipping() -> void:
 func test_first_launch() -> void:
 	_wipe()
 	TutorialDirector.reload_progress()
-	check(TutorialDirector.first_launch_due(PackedStringArray(), false), "first launch: no `offered` key -> straight into the quick start")
+	# Daniele 2026-11-15: the tutorial is disabled from 0.24.4 (TutorialDirector.ENABLED = false; being remade): no first-launch
+	# start, whatever the profile. The original expectation (a fresh profile starts the quick start) holds when ENABLED is true.
+	check(not TutorialDirector.ENABLED and not TutorialDirector.first_launch_due(PackedStringArray(), false), "first launch: DISABLED (Daniele 2026-11-15) -> no auto-start on a fresh profile")
+	if TutorialDirector.ENABLED:
+		check(TutorialDirector.first_launch_due(PackedStringArray(), false), "first launch: no `offered` key -> straight into the quick start")
 	for flag in ["--map=res://maps4/T-01-first-steps.json", "--scenario=hud19", "--stage=monster", "--thumb=x.png", "--shots=4", "--demo", "--tutorial=1", "--test"]:
 		check(not TutorialDirector.first_launch_due(PackedStringArray([flag]), false), "first launch: never with %s" % flag)
 	check(not TutorialDirector.first_launch_due(PackedStringArray(), true), "first launch: never in an online room or a Net reconnect")

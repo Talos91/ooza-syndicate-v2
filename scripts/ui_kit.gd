@@ -52,10 +52,10 @@ const ACCENTS := {"vex": Color("14d3e4"), "null": Color("f327c3"), "bloom": Colo
 		"ember": Color("ff7c19"), "solar": Color("ffce58")}
 const ORDER := ["vex", "null", "bloom", "ember", "solar"]
 ## Daniele 2026-11-02: the faction is BLOOM - no VIRIDIAN anywhere; it has no second word (SUBS "")
-const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "BLOOM", "ember": "EMBER", "solar": "SOLAR"}
+const NAMES := {"vex": "VEX", "null": "NULL", "bloom": "BLOOM", "ember": "EMBER", "solar": "AEGIS"}
 const SUBS := {"vex": "BIOENGINEERS", "null": "CARTEL", "bloom": "", "ember": "MAW", "solar": "SHELLS"}
 const TAGS := {"vex": "VEX / BIOENGINEERS", "null": "NULL / CARTEL", "bloom": "BLOOM",
-		"ember": "EMBER / MAW", "solar": "SOLAR / SHELLS"}
+		"ember": "EMBER / MAW", "solar": "AEGIS / SHELLS"}
 const CUT := 10                                    # the standard corner cut
 const CFG := "user://ui.cfg"
 const K := 1280.0 / 1672.0                       # = Menu.K, Menu.MIN_TAP_PT, Menu.MIN_FONT_PT - copied so the pieces

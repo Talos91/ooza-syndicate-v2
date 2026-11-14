@@ -95,12 +95,16 @@ func _build(crumb: String, f: String) -> void:
 	var cf := f if Campaign.has_content(f) else "vex"
 	var top := UiKit.label(menu, "LEVEL %d" % _level, 15, UiKit.INK, true)
 	var sub := UiKit.label(menu, "%d / %d campaign stars" % [Campaign.stars_total(cf), Campaign.stars_max(cf)], 12, UiKit.MUTED)
+	if not Campaign.ENABLED:                           # the campaign is off (Daniele 2026-11-15): no star count, LEVEL alone
+		sub.text = ""
 	var text_w := maxf(UiKit.text_w(menu, top.text, 15, true), UiKit.text_w(menu, sub.text, 12))
+	if sub.text == "":
+		text_w += 22.0                                 # (room for the "›" chevron, which sat on the 1 once the stars text left)
 	_ring_r = minf(17.0, h * 0.28)
 	var block_w := _ring_r * 2.0 + 12.0 + text_w
 	var bx := music_btn.position.x - 22.0 - block_w
 	_ring_c = Vector2(bx + _ring_r, h / 2.0)
-	var th := top.get_minimum_size().y + sub.get_minimum_size().y
+	var th := top.get_minimum_size().y + (sub.get_minimum_size().y if sub.text != "" else 0.0)
 	top.position = Vector2(bx + _ring_r * 2.0 + 12.0, (h - th) / 2.0)
 	sub.position = top.position + Vector2(0, top.get_minimum_size().y)
 	add_child(top)
@@ -177,9 +181,12 @@ func _draw_note(c: Control, q: float) -> void:
 		c.draw_line(Vector2(q * 0.16, q * 0.86), Vector2(q * 0.84, q * 0.14), col, q * 0.08)
 
 
+var glass := false                                 # HOME (35C2): the bar is a glass strip over the painting
+
+
 func _draw() -> void:
 	var sf: Vector4 = menu.safe                       # the back reaches over the notch bands and the status bar
-	draw_rect(Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y), UiKit.BAR)   # (drawn here: children would cover the ring)
+	draw_rect(Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y), Color(UiKit.BAR, 0.55) if glass else UiKit.BAR)   # (drawn here: children would cover the ring)
 	draw_rect(Rect2(-sf.x, size.y - 1.0, size.x + sf.x + sf.z, 1.0), Color(_ring_col, 0.3))
 	if slim:
 		return

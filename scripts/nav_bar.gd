@@ -10,6 +10,7 @@ const TABS := [["home", "HOME"], ["armies", "ARMIES"], ["profile", "PROFILE"], [
 
 var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var active := ""
+var shade: ColorRect                               # the bar's fill (HOME, 35C2: a glass strip over the painting)
 var buttons := {}                                  # id -> Button (tests, Hud.action_rect-style lookups)
 
 
@@ -36,7 +37,8 @@ func _build(f: String) -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	var acc := UiKit.accent(f)
 	var sf: Vector4 = menu.safe                        # the back reaches over the notch bands and the home indicator
-	add_child(UiKit.rect(Vector2(-sf.x, 0), Vector2(w + sf.x + sf.z, h + sf.w), UiKit.BAR))
+	shade = UiKit.rect(Vector2(-sf.x, 0), Vector2(w + sf.x + sf.z, h + sf.w), UiKit.BAR)
+	add_child(shade)
 	add_child(UiKit.rect(Vector2(-sf.x, 0), Vector2(w + sf.x + sf.z, 1.0), Color(acc, 0.25)))
 	var longest := 0.0                               # every tab as wide as the longest label needs (phones grow the text)
 	for t in TABS:
