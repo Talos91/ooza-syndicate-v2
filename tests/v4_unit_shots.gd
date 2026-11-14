@@ -50,6 +50,8 @@ func _run() -> void:
 			zoom = float(a.substr(5))
 		if a.begins_with("map="):
 			MAP = a.substr(4)
+		if a.begins_with("rim="):
+			Mats.v4_seat_rim = float(a.substr(4))
 		if a.begins_with("tag="):
 			tag = a.substr(4)
 		if a.begins_with("colour="):

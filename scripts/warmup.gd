@@ -231,8 +231,3 @@ func _units(spot: Vector3) -> void:
 		if mm.visible_instance_count == 0:
 			mm.set_instance_transform(0, Transform3D(Basis().scaled(Vector3.ONE * TINY), spot))
 			mm.visible_instance_count = 1
-	var dm: MultiMesh = uv._disc.multimesh
-	if dm.visible_instance_count == 0:
-		dm.set_instance_transform(0, Transform3D(Basis().scaled(Vector3.ONE * TINY), spot))
-		dm.set_instance_color(0, Color.WHITE)
-		dm.visible_instance_count = 1
