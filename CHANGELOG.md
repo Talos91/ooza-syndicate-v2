@@ -6,7 +6,7 @@
   - props-place: old floor decorations removed (props themselves pulled, parked in 726e6e9).
   - relay-v3-column: new relay column under the real relays, one foot per node.
   - units-wire: original Rodin units (upright, 1024 textures, crisp seat-colour neon, leg-sway walk); EMBER mask polish parked.
-  - hud-37 + play-fixes: round-37B2 HUD paint (comms, modal / pause, buttons, ivory end screen, P2 tags, final cues), hint strip removed; Googatling production 0.5x the same-tier vat, auto upgrade chevron, relay ready-to-fire cue.
+  - hud-37 + play-fixes: round-37B2 HUD paint (comms, buttons, P2 tags, final cues), hint strip removed; the P6 pause / out / settings shell and P8 end screen + match details are reverted to the 0.24.3.2 look (Daniele 2026-11-15 "Keep current ones"); Googatling production 0.5x the same-tier vat, auto upgrade chevron, relay ready-to-fire cue.
   - menu-bg-2: 35C2 overlord menu background on the staging HOME layout; CAMPAIGN / TRAINING COMING SOON, no tutorial auto-start; SOLAR shown as AEGIS.
   - Known: test_ui_nav --mobile 23 fails identically on ea32f19; test_map_pool 5 old-map fails.
 
