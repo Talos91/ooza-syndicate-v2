@@ -219,6 +219,11 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	add_child(column)
 	column.setup(self)
 	if floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args() and not Look.lab: add_child(WorldDressing.new())   # WORLD COMPLETE LAB (LAB LOOK TEST: the surround replaces it)
+	if Look.lab and floor_lab5 and not "--no-props" in OS.get_cmdline_user_args():   # SETTING PROPS (props-place 2026-11-14): baked placement, one merged mesh
+		var wp := WorldProps.new()
+		wp.code = WorldProps.code_of(str(_main.get("map_path")) if _main.get("map_path") != null else "")
+		wp.setting = LookTheme.current
+		add_child(wp)
 	Look.lab_world(_main)                            # LAB LOOK TEST (no-op without --look=lab)
 
 
