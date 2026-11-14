@@ -358,6 +358,8 @@ func _v3_platforms() -> void:
 		if kind == "tilt" and _r.get(n["id"], {}).has("v3"):
 			continue                                  # (Relay_Tilt_v3 carries its own base and top)
 		var nest := "Relay_Lift_Platform_v3" if kind == "lift" and _kit("Relay_Lift_Platform_v3") else "Platform_Relay_v3"
+		if nest == "Platform_Relay_v3":
+			nest += MapBuilder.deep_tag(n, sim.nodes)       # relay-v3-column: the column's one foot at this node's floor depth
 		var p := MapBuilder.piece("Relay_Node_Ring_v3" if ring else nest)
 		p.name = "Platform_Relay_v3_%d" % n["id"]
 		(plat as Node).add_child(p)

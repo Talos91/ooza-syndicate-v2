@@ -180,6 +180,19 @@ static func platform_piece(n: Dictionary) -> String:
 	return "Platform_Standard"
 
 
+static func deep_tag(n: Dictionary, nodes: Array) -> String:
+	## relay-v3-column (2026-11-15): the kit column carries ONE foot, cut at the floor (WorldLayer: 16 m under the map's lowest
+	## node). A node standing one level above the lowest has the floor 18.6 m under its deck: its "_D18" twin of the piece.
+	var lo := 0.0
+	for m in nodes:
+		lo = minf(lo, (m["pos"] as Vector3).y)
+	return "_D18" if (n["pos"] as Vector3).y - (lo - 16.0) > 17.3 else ""
+
+
+static func _deep(piece: String, n: Dictionary, nodes: Array) -> String:
+	return piece + deep_tag(n, nodes) if piece == "Platform_Pillar" else piece
+
+
 static func build(parent: Node3D, sim: Sim) -> Dictionary:
 	## Returns node id -> {"parts": [Node3D], "platform", "vat_node", "vat_tier", "attachment",
 	## "cannon_tier", "housing", "state_parts": [MeshInstance3D], "mount_dir"}, plus "stretched":
@@ -189,7 +202,7 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 	for n in sim.nodes:
 		var parts: Array = []
 		var relay: String = n["relay"]
-		var platform := put(parent, platform_piece(n), n["pos"])
+		var platform := put(parent, _deep(platform_piece(n), n, sim.nodes), n["pos"])
 		parts.append(platform)
 		var vat_node: Node3D
 		var housing: Node3D = null
@@ -663,7 +676,7 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 					"mount_dir": Vector3.FORWARD, "centre": n["pos"], "state_hosts": []}
 			continue
 		if not on_plaza:
-			platform = put(parent, platform_piece(n), n["pos"])
+			platform = put(parent, _deep(platform_piece(n), n, sim.nodes), n["pos"])
 			parts.append(platform)
 		var housing: Node3D = null
 		var mount_dir := Vector3.FORWARD
