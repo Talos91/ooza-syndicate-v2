@@ -32,6 +32,106 @@ static func open(parent: Control, is_mobile: bool, faction: String) -> MatchScre
 	return s
 
 
+# ------------------------------------------------------------------ round 37B2 paint (hud-37): P6 shell, AI mark sockets, P7 buttons
+var seat := ""                                      # the human's seat: the sockets' rim colour (neon = SEAT colour)
+var _hero_pending: Array = []
+
+
+func painted() -> bool:
+	return HudLab.on() and HudLab.tex37("PAINT-P6-SHELL") != null and HudLab.tex37("PAINT-P7") != null
+
+
+func ink() -> Color:
+	return HudLab.INK if painted() else UiKit.INK
+
+
+func muted() -> Color:
+	return Color(HudLab.INK, 0.72) if painted() else UiKit.MUTED
+
+
+func seat_col() -> Color:
+	return Rules.seat_color(seat) if seat != "" else UiKit.accent(f)
+
+
+func _nine(tex_name: String, r: Rect2, margin_px: Array, col := Color.WHITE) -> NinePatchRect:
+	var n := NinePatchRect.new()
+	n.texture = HudLab.tex37(tex_name)
+	n.patch_margin_left = margin_px[0]
+	n.patch_margin_top = margin_px[1]
+	n.patch_margin_right = margin_px[2]
+	n.patch_margin_bottom = margin_px[3]
+	n.axis_stretch_horizontal = NinePatchRect.AXIS_STRETCH_MODE_STRETCH
+	n.axis_stretch_vertical = NinePatchRect.AXIS_STRETCH_MODE_STRETCH
+	n.modulate = col
+	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	n.size = r.size
+	UiKit.add(self, n, r.position)
+	return n
+
+
+func shell(pos: Vector2, dims: Vector2) -> void:
+	## P6-SHELL: the ivory modal / report sheet, 9-sliced (56 / 60 px margins at 4x). Falls back to the old panel.
+	if not painted():
+		UiKit.panel(self, pos, dims, f, false, Color(UiKit.PANEL, 0.97))
+		return
+	_nine("PAINT-P6-SHELL", Rect2(pos, dims), [56, 56, 56, 60])
+	if HudLab.tex37("MASK-P6-OWNER-EDGE") != null:
+		_nine("MASK-P6-OWNER-EDGE", Rect2(pos, dims), [56, 56, 56, 60], seat_col())
+
+
+func socket(centre: Vector2, side: float, size_id: int) -> void:
+	## The AI MARK SOCKET (paint + seat rim); the mark inside is the faction emblem until round 36 lands (stand-in, flagged).
+	var d := side
+	if painted():
+		var r := Rect2(centre - Vector2(d, d) / 2.0, Vector2(d, d))
+		var base := HudLab.tex37("PAINT-SOCKET-%d" % size_id)
+		if base != null:
+			var t := TextureRect.new()
+			t.texture = base
+			t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			t.size = r.size
+			UiKit.add(self, t, r.position)
+	var inner := d * 0.62
+	UiKit.hero(self, f, centre - Vector2(inner, inner) / 2.0, Vector2(inner, inner), false)
+
+
+func pbtn(text: String, pos: Vector2, dims: Vector2, call: Callable, kind := "secondary", size := 16.0) -> Button:
+	## A P7 button (primary / secondary): painted, dark ink, the primary's accent rim in the faction accent.
+	var b := UiKit.btn(self, text, pos, dims, call, kind, f, size)
+	if not painted():
+		return b
+	var tn := "PAINT-P7" if kind == "primary" else "PAINT-P7-secondary"
+	var sb := StyleBoxTexture.new()
+	sb.texture = HudLab.tex37(tn)
+	sb.texture_margin_left = 40
+	sb.texture_margin_right = 40
+	sb.content_margin_left = 6
+	sb.content_margin_right = 6
+	sb.content_margin_top = 0
+	sb.content_margin_bottom = 0
+	sb.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+	sb.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+	var dim := sb.duplicate()
+	dim.modulate_color = Color(0.9, 0.9, 0.9)
+	for k in ["normal", "disabled"]:
+		b.add_theme_stylebox_override(k, sb)
+	for k in ["hover", "pressed", "hover_pressed"]:
+		b.add_theme_stylebox_override(k, dim)
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(k, HudLab.INK)
+	if kind == "primary" and HudLab.tex37("MASK-P7-ACCENT-RIM") != null:
+		var n := NinePatchRect.new()
+		n.texture = HudLab.tex37("MASK-P7-ACCENT-RIM")
+		n.patch_margin_left = 40
+		n.patch_margin_right = 40
+		n.modulate = UiKit.accent(f)
+		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		n.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		b.add_child(n)
+	return b
+
+
 func _pt_factor() -> float:
 	## Menu._pt_factor's formula on this canvas: 0.0 on desktop (no minimum applies).
 	if not mobile or layer == null or not layer.is_inside_tree():
@@ -102,6 +202,15 @@ func _group() -> Control:
 	return g
 
 
+func _title(x: float, y: float, kicker: String, headline: String, size := 34.0) -> float:
+	var k := UiKit.label(self, kicker.to_upper(), 12, UiKit.accent(f) if not painted() else ink().lerp(UiKit.accent(f), 0.35), true, 3)
+	UiKit.add(self, k, Vector2(x, y))
+	y += k.get_minimum_size().y + 2.0
+	var h := UiKit.label(self, headline.to_upper(), size, ink(), true)
+	UiKit.add(self, h, Vector2(x - 2.0, y))
+	return y + h.get_minimum_size().y
+
+
 func _wrapped(text: String, size: float, col: Color, pos: Vector2, w: float, head := false) -> float:
 	## A word-wrapped label; returns its height.
 	var l := UiKit.label(self, text, size, col, head)
@@ -139,6 +248,16 @@ func reward_scale(base: float) -> float:
 	return clampf(UiKit.px(self, 14) / 14.0, base, maxf(base, result_width() / 450.0))
 
 
+func _recolour(n: Node) -> void:
+	## Ivory sheet: the strip's light text goes to the pack's dark ink.
+	if "ink_text" in n:
+		n.set("ink_text", HudLab.INK)
+	if n is Label:
+		(n as Label).add_theme_color_override("font_color", HudLab.INK)
+	for c in n.get_children():
+		_recolour(c)
+
+
 func result(d: Dictionary) -> Dictionary:
 	## d: won, draw, kicker, headline, name, sub (a line under the name), stars (-1: not a mission), star_note,
 	## metrics [[value, caption] x 3], primary [text, Callable], details (Callable; invalid: no MATCH DETAILS),
@@ -151,16 +270,24 @@ func result(d: Dictionary) -> Dictionary:
 	var mg := margin()
 	var out := {"stars": []}
 	var split := _split()
-	_hero_block(mg, split - mg * 0.5, mg, v.y - mg)
+	var sheet: NinePatchRect = null
+	if painted():
+		socket(Vector2((mg + split - mg * 0.5) / 2.0, v.y / 2.0), minf(minf(split - mg * 1.5, v.y - mg * 2.0 - 40.0), 200.0 * maxf(1.0, v.y / 375.0 * 0.8)), 200)
+		var tg := str(UiKit.TAGS.get(f, ""))
+		var tw := UiKit.text_w(self, tg, 14, true) + tg.length() * 2.0 + 30.0
+		UiKit.tag(self, tg, Vector2((mg + split - mg * 0.5 - tw) / 2.0, v.y / 2.0 + minf(minf(split - mg * 1.5, v.y - mg * 2.0 - 40.0), 200.0 * maxf(1.0, v.y / 375.0 * 0.8)) / 2.0 + 10.0), f)
+		sheet = _nine("PAINT-P6-SHELL", Rect2(Vector2.ZERO, Vector2(10, 10)), [56, 56, 56, 60])
+	else:
+		_hero_block(mg, split - mg * 0.5, mg, v.y - mg)
 	var page := _group()
 	var x := split + mg * 0.4
 	var w := v.x - x - mg
 	var y := 0.0
-	var acc := UiKit.accent(f)
+	var acc := ink().lerp(UiKit.accent(f), 0.3) if painted() else UiKit.accent(f)
 	UiKit.add(self, UiKit.label(self, str(d.get("kicker", "")).to_upper(), 13, acc, true, 3), Vector2(x, y))
 	y += UiKit.line_h(self, 13, true) + 2.0
 	var won := bool(d.get("won", false))
-	var hcol := UiKit.INK if won else (UiKit.MUTED if bool(d.get("draw", false)) else DEFEAT_INK)
+	var hcol := ink() if won else (muted() if bool(d.get("draw", false)) else (HudLab.WARN_INK if painted() else DEFEAT_INK))
 	var hsize := 60.0 if ph else 68.0
 	var head := str(d.get("headline", ""))
 	while hsize > 32.0 and UiKit.text_w(self, head, hsize, true) > w:   # the syndicate's longer lines shrink to fit
@@ -169,7 +296,7 @@ func result(d: Dictionary) -> Dictionary:
 	y += UiKit.line_h(self, hsize, true) + 2.0
 	var name_text := str(d.get("name", "")).to_upper()
 	if name_text != "":
-		UiKit.add(self, UiKit.label(self, name_text, 20, UiKit.INK, true), Vector2(x, y))
+		UiKit.add(self, UiKit.label(self, name_text, 20, ink(), true), Vector2(x, y))
 		y += UiKit.line_h(self, 20, true) + 4.0
 	# iOS (Safari's 320-340 pt, a narrow column): where the quiet buttons need a second row, the sub line (the matchup -
 	# MATCH DETAILS shows it too) gives them its height
@@ -178,7 +305,7 @@ func result(d: Dictionary) -> Dictionary:
 	if quiet_rows > 1 and ph:
 		sub = ""
 	if sub != "":
-		y += _wrapped(sub, 15, UiKit.MUTED, Vector2(x, y), w) + 6.0
+		y += _wrapped(sub, 15, muted(), Vector2(x, y), w) + 6.0
 	var stars := int(d.get("stars", -1))
 	if stars >= 0:                                     # campaign missions: earned filled gold, and the count
 		var ss := 34.0
@@ -196,22 +323,25 @@ func result(d: Dictionary) -> Dictionary:
 		y += ss + 12.0
 		var note := str(d.get("star_note", ""))
 		if note != "":
-			y += _wrapped(note, 13, UiKit.MUTED, Vector2(x, y), w) + 6.0
+			y += _wrapped(note, 13, muted(), Vector2(x, y), w) + 6.0
 	page.add_child(UiKit.rect(Vector2(x, y), Vector2(w, 1.0), Color(UiKit.FRAME, 0.9)))
 	y += 12.0
 	var metrics: Array = d.get("metrics", [])
 	var cw := w / maxf(1.0, float(metrics.size()))
 	for i in range(metrics.size()):
 		var mv: Array = metrics[i]
-		UiKit.add(self, UiKit.label(self, str(mv[0]), 28, UiKit.INK, true), Vector2(x + i * cw, y))
-		UiKit.add(self, UiKit.label(self, str(mv[1]), 13, UiKit.MUTED), Vector2(x + i * cw, y + UiKit.line_h(self, 28, true)))
+		UiKit.add(self, UiKit.label(self, str(mv[0]), 28, ink(), true), Vector2(x + i * cw, y))
+		UiKit.add(self, UiKit.label(self, str(mv[1]), 13, muted()), Vector2(x + i * cw, y + UiKit.line_h(self, 28, true)))
 	if not metrics.is_empty():
 		y += UiKit.line_h(self, 28, true) + UiKit.line_h(self, 13) + 10.0
 		page.add_child(UiKit.rect(Vector2(x, y), Vector2(w, 1.0), Color(UiKit.FRAME, 0.9)))
 		y += 12.0
 	for c in d.get("extras", []):                      # Progression's strip (kept whole), the rematch line...
 		var ctl := c as Control
-		page.add_child(ctl)                            # (in the tree first: a container measures its children there)
+		page.add_child(ctl)
+		if painted():
+			_recolour(ctl)
+		# (in the tree first: a container measures its children there)
 		var ms := ctl.get_combined_minimum_size()
 		if ctl is RewardStrip:                         # its rows summed (the cached minimum lags a label behind)
 			ms.y = 0.0
@@ -229,9 +359,9 @@ func result(d: Dictionary) -> Dictionary:
 	var dw := floorf((w - gap) / 3.0) if det.is_valid() else 0.0
 	if not prim.is_empty():
 		var pw := w - (dw + gap if det.is_valid() else 0.0)
-		out["primary"] = UiKit.btn(self, str(prim[0]), Vector2(x, y), Vector2(pw, 52.0), prim[1], "primary", f, 17)
+		out["primary"] = pbtn(str(prim[0]), Vector2(x, y), Vector2(pw, 52.0), prim[1], "primary", 17)
 	if det.is_valid():
-		UiKit.btn(self, "MATCH DETAILS", Vector2(x + w - dw, y), Vector2(dw, 52.0), det, "secondary", f, 15)
+		pbtn("MATCH DETAILS", Vector2(x + w - dw, y), Vector2(dw, 52.0), det, "secondary", 15)
 	y += UiKit.tap_h(self, 52.0) + 8.0
 	var quiet: Array = d.get("quiet", [])
 	var per := mini(maxi(quiet.size(), 1), 3)           # up to three per row, equal widths
@@ -240,10 +370,14 @@ func result(d: Dictionary) -> Dictionary:
 		var q: Array = quiet[i]
 		if i > 0 and i % per == 0:
 			y += UiKit.tap_h(self, 44.0) + 8.0
-		UiKit.btn(self, str(q[0]), Vector2(x + (i % per) * (qw + gap), y), Vector2(qw, 44.0), q[1], "secondary", f, 14)
+		pbtn(str(q[0]), Vector2(x + (i % per) * (qw + gap), y), Vector2(qw, 44.0), q[1], "secondary", 14)
 	if not (d.get("quiet", []) as Array).is_empty():
 		y += UiKit.tap_h(self, 44.0)
 	page.position.y = clampf((v.y - y) / 2.0, 8.0, maxf(8.0, v.y - y - 8.0))
+	if sheet != null:
+		var sp := Vector2(x - 24.0, page.position.y - 16.0)
+		sheet.position = sp
+		sheet.size = Vector2(w + 48.0, y + 32.0)
 	out["page"] = page
 	content = layer
 	return out
@@ -258,7 +392,7 @@ func details(d: Dictionary, table: Dictionary) -> void:
 	var v := vp()
 	var ph := phone()
 	var mg := margin()
-	var acc := UiKit.accent(f)
+	var acc := ink().lerp(UiKit.accent(f), 0.3) if painted() else UiKit.accent(f)
 	var top := mg * (0.4 if ph else 0.7)
 	var y := UiKit.title(self, mg, top, "AFTER ACTION", "MATCH DETAILS.", f, 34.0 * (0.8 if ph else 1.0)) + 10.0
 	UiKit.back_link(self, v.x - mg, top, d.get("back", Callable()))
@@ -267,7 +401,7 @@ func details(d: Dictionary, table: Dictionary) -> void:
 	var prim: Array = d.get("primary", [])
 	if not prim.is_empty():
 		var bw := maxf(220.0, UiKit.text_w(self, str(prim[0]), 17, true) + 60.0)
-		UiKit.btn(self, str(prim[0]), Vector2(v.x - mg - bw, bottom), Vector2(bw, 50.0), prim[1], "primary", f, 17)
+		pbtn(str(prim[0]), Vector2(v.x - mg - bw, bottom), Vector2(bw, 50.0), prim[1], "primary", 17)
 	var sub := str(d.get("sub", ""))
 	if sub != "":
 		UiKit.add(self, UiKit.label(self, sub, 14, UiKit.MUTED), Vector2(mg, bottom + (bh - UiKit.line_h(self, 14)) / 2.0))
@@ -277,12 +411,12 @@ func details(d: Dictionary, table: Dictionary) -> void:
 	var inner_h := (notes.size() + rows.size()) * row_h
 	var head_h := 12.0 + maxf(UiKit.line_h(self, 18, true), UiKit.line_h(self, 12, true) + 10.0) + 10.0 + UiKit.line_h(self, 12, true) * 2.0 + 12.0
 	var box := Rect2(mg, y, v.x - 2.0 * mg, minf(bottom - 12.0 - y, head_h + inner_h + 10.0))   # no taller than its rows
-	UiKit.panel(self, box.position, box.size, f)
+	shell(box.position, box.size)
 	var pad := 18.0
 	var x0 := box.position.x + pad
 	var x1 := box.end.x - pad
-	var ty := box.position.y + 12.0
-	UiKit.add(self, UiKit.label(self, str(d.get("name", "")).to_upper(), 18, UiKit.INK, true), Vector2(x0, ty))
+	var ty := box.position.y + (20.0 if painted() else 12.0)
+	UiKit.add(self, UiKit.label(self, str(d.get("name", "")).to_upper(), 18, ink(), true), Vector2(x0, ty))
 	var outcome := str(d.get("outcome", ""))
 	if outcome != "":                                  # the result chip, top right
 		var ow := UiKit.text_w(self, outcome, 12, true) + outcome.length() + 24.0   # (+1 px a glyph: its spacing)
@@ -335,22 +469,22 @@ func details(d: Dictionary, table: Dictionary) -> void:
 		var mk := Mark.new()
 		mk.kind = str(n[0])
 		var ok := bool(n[2])
-		mk.color = (UiKit.STAR if ok else STAR_OFF) if mk.kind == "star" else (GOOD if ok else BAD)
+		mk.color = (Color("d99a1c") if ok else Color("9fb3b3")) if mk.kind == "star" else (Color("2f9a52") if ok else Color("c4383f"))
 		var ms := UiKit.line_h(self, 15) * 0.8
 		mk.size = Vector2(ms, ms)
 		UiKit.add(self, mk, Vector2(12.0, ry + (row_h - ms) / 2.0))
-		var nl := UiKit.label(self, str(n[1]), 15, UiKit.INK if ok else UiKit.MUTED)
+		var nl := UiKit.label(self, str(n[1]), 15, ink() if ok else muted())
 		nl.clip_text = true
 		nl.size = Vector2(inner.custom_minimum_size.x - ms - 30.0, UiKit.line_h(self, 15))
 		UiKit.add(self, nl, Vector2(ms + 24.0, ry + (row_h - UiKit.line_h(self, 15)) / 2.0))
 		inner.add_child(UiKit.rect(Vector2(0, ry + row_h - 1.0), Vector2(inner.custom_minimum_size.x, 1.0), Color(UiKit.FRAME, 0.6)))
 		ry += row_h
 	for r in rows:                                     # [label, [value per column]]
-		var ll := UiKit.label(self, str(r[0]), 15, UiKit.INK)
+		var ll := UiKit.label(self, str(r[0]), 15, ink())
 		UiKit.add(self, ll, Vector2(12.0, ry + (row_h - UiKit.line_h(self, 15)) / 2.0))
 		var vals: Array = r[1]
 		for i in range(vals.size()):
-			var vl := UiKit.label(self, str(vals[i]), 15, UiKit.INK if i == 0 else UiKit.MUTED)
+			var vl := UiKit.label(self, str(vals[i]), 15, ink() if i == 0 else muted())
 			vl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			vl.size = Vector2(col_w - 12.0, UiKit.line_h(self, 15))
 			UiKit.add(self, vl, Vector2(label_w + i * col_w, ry + (row_h - UiKit.line_h(self, 15)) / 2.0))
@@ -410,17 +544,17 @@ func card(d: Dictionary) -> Dictionary:
 		body_h = 0.0
 	var pos := ((v - Vector2(cw, ch)) / 2.0).floor()
 	pos.y = maxf(pos.y, 6.0)
-	UiKit.panel(self, pos, Vector2(cw, ch), f, false, Color(UiKit.PANEL, 0.97))
-	var y := UiKit.title(self, pos.x + pad, pos.y + pad, str(d.get("kicker", "")), str(d.get("headline", "")), f) + 6.0
+	shell(pos, Vector2(cw, ch))
+	var y := _title(pos.x + pad, pos.y + pad, str(d.get("kicker", "")), str(d.get("headline", ""))) + 6.0
 	if body != "":
-		y += _wrapped(body, 14, UiKit.MUTED, Vector2(pos.x + pad, y), cw - 2.0 * pad)
+		y += _wrapped(body, 14, muted(), Vector2(pos.x + pad, y), cw - 2.0 * pad)
 	y += 10.0
 	var block_h := maxf(col_h, hero_h)
 	var hs := minf(hero_h, block_h)
 	if rows == 0:
 		return {"buttons": []}
-	UiKit.hero(self, f, Vector2(pos.x + pad + (cw - bw - 3.0 * pad - hs) / 2.0, y + (block_h - hs) / 2.0), Vector2(hs, hs),
-			bool(d.get("glow", true)))
+	var sd := minf(hs, 150.0 if not ph else hs)
+	socket(Vector2(pos.x + pad + (cw - bw - 3.0 * pad) / 2.0, y + block_h / 2.0), sd, 120)
 	var bx := pos.x + cw - pad - bw
 	var by := y + (block_h - col_h) / 2.0
 	var out := {"buttons": []}
@@ -432,7 +566,7 @@ func card(d: Dictionary) -> Dictionary:
 		var ax := bx + (aw + 10.0 if half and (i - 1) % 2 == 1 else 0.0)
 		if half and (i - 1) % 2 == 0 and i == actions.size() - 1:
 			aw = bw                                    # an odd one out keeps the full width
-		var b := UiKit.btn(self, str(a[0]), Vector2(ax, by), Vector2(aw, bh), a[1], kind, f, 16 if not half else 14)
+		var b := pbtn(str(a[0]), Vector2(ax, by), Vector2(aw, bh), a[1], kind, 16 if not half else 14)
 		(out["buttons"] as Array).append(b)
 		if not half or (i - 1) % 2 == 1 or i == actions.size() - 1:
 			by += bh + row_gap
@@ -443,8 +577,8 @@ func card(d: Dictionary) -> Dictionary:
 				var pw := (bw - 10.0 * float((row as Array).size() - 1)) / float((row as Array).size())   # n toggles, 10 px gaps
 				for j in range((row as Array).size()):
 					var p: Array = row[j]
-					(out["buttons"] as Array).append(UiKit.btn(self, str(p[0]), Vector2(bx + j * (pw + 10.0), by), Vector2(pw, bh),
-							p[1], "secondary", f, 14))
+					(out["buttons"] as Array).append(pbtn(str(p[0]), Vector2(bx + j * (pw + 10.0), by), Vector2(pw, bh),
+							p[1], "secondary", 14))
 				by += bh + row_gap
 	return out
 

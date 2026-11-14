@@ -777,8 +777,22 @@ func _make_button(text: String, cb: Callable, primary := false) -> Button:
 	return b
 
 
-func _panel_style(glow := false) -> StyleBoxFlat:
+func _painted() -> bool:
+	return HudLab.on() and HudLab.tex37("PAINT-P4-SHELL") != null
+
+
+func _panel_style(glow := false) -> StyleBox:
 	## Alpha 21 UI pass: the shell's clipped-corner panel (UiKit.sb) framed in the coach's accent.
+	## Round 37B2 (P4): the ivory comms shell (9-slice), ink text; the seat colour rims it through the OWNER-EDGE mask (see _card_edge).
+	if _painted() and not glow:
+		var t := StyleBoxTexture.new()
+		t.texture = HudLab.tex37("PAINT-P4-SHELL")
+		t.texture_margin_left = 56
+		t.texture_margin_right = 56
+		t.texture_margin_top = 56
+		t.texture_margin_bottom = 60
+		t.modulate_color = Color(1, 1, 1, 0.98) if not glow else Color(1.06, 1.06, 1.06, 1.0)
+		return t
 	return UiKit.sb(Color(UiKit.PANEL, 0.96), Color(accent, 0.9 if glow else 0.7), 2 if glow else 1, UiKit.CUT,
 			Color(accent, 0.24) if glow else Color(0, 0, 0, 0))
 
@@ -788,6 +802,9 @@ func _style_button(b: Button) -> void:
 	var a := accent
 	var primary := bool(b.get_meta("primary", false))
 	var fc := UiKit.BASE if primary else UiKit.INK
+	if _painted():
+		_style_button_painted(b, primary)
+		return
 	if primary:
 		b.add_theme_stylebox_override("normal", UiKit.sb(a, a.lightened(0.25), 1, UiKit.CUT, Color(a, 0.28)))
 		b.add_theme_stylebox_override("hover", UiKit.sb(a.lightened(0.12), a.lightened(0.4), 1, UiKit.CUT, Color(a, 0.4)))
@@ -800,6 +817,26 @@ func _style_button(b: Button) -> void:
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
 		b.add_theme_color_override(c, fc)
+
+
+func _style_button_painted(b: Button, primary: bool) -> void:
+	var t := StyleBoxTexture.new()
+	t.texture = HudLab.tex37("PAINT-P7-comms") if not primary else HudLab.tex37("PAINT-P7-small")
+	t.texture_margin_left = 40
+	t.texture_margin_right = 40
+	t.content_margin_left = 6
+	t.content_margin_right = 6
+	t.content_margin_top = 0
+	t.content_margin_bottom = 0
+	var h := t.duplicate()
+	h.modulate_color = Color(0.9, 0.9, 0.9)
+	b.add_theme_stylebox_override("normal", t)
+	b.add_theme_stylebox_override("hover", h)
+	b.add_theme_stylebox_override("pressed", h)
+	b.add_theme_stylebox_override("hover_pressed", h)
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(c, HudLab.INK)
 
 
 func _build_card() -> void:
@@ -839,7 +876,7 @@ func _build_card() -> void:
 	_header_emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_header_emblem.visible = false                         # (0.19.3: the handler creature is the card's face now)
 	head_row.add_child(_header_emblem)
-	_card_header = _label(TutorialDirector.HANDLER_NAME, _header_fsz(), accent)
+	_card_header = _label(TutorialDirector.HANDLER_NAME, _header_fsz(), HudLab.INK if _painted() else accent)
 	_card_header.add_theme_font_override("font", UiKit.HEAD)
 	_card_header.clip_text = true
 	_card_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -848,7 +885,7 @@ func _build_card() -> void:
 	_card_dots.custom_minimum_size = Vector2(0, _dots_h())
 	_card_dots.dot_r = _pt(3.0) if mobile else 4.0
 	_card_vb.add_child(_card_dots)
-	_card_text = _label("", _body_fsz(), UiKit.INK)
+	_card_text = _label("", _body_fsz(), HudLab.INK if _painted() else UiKit.INK)
 	_card_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_card_text.visible_characters_behavior = TextServer.VC_CHARS_AFTER_SHAPING   # the typewriter never re-wraps: the
 		# layout (and the buttons under the text) is the full line's from the first frame (0.19.3 hotfix)
@@ -1000,7 +1037,7 @@ func set_accent(color: Color) -> void:
 	accent = color
 	if is_instance_valid(_card_bg):
 		_card_bg.add_theme_stylebox_override("panel", _panel_style())
-		_card_header.add_theme_color_override("font_color", accent)
+		_card_header.add_theme_color_override("font_color", HudLab.INK.lerp(accent, 0.3) if _painted() else accent)
 		for b in [_card_button] + _controls_row.get_children():
 			_style_button(b)
 	if is_instance_valid(_complete_bg):
