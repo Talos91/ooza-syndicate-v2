@@ -125,7 +125,7 @@ func pbtn(text: String, pos: Vector2, dims: Vector2, call: Callable, kind := "se
 		n.texture = HudLab.tex37("MASK-P7-ACCENT-RIM")
 		n.patch_margin_left = 40
 		n.patch_margin_right = 40
-		n.modulate = UiKit.accent(f)
+		n.modulate = seat_col()
 		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		n.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		b.add_child(n)
