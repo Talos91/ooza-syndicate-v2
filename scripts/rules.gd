@@ -565,7 +565,10 @@ static var MACHINEGOON_RANGE := 10.0
 # googat will run out of ammunition"): 0.5 -> 0.25 - a GooGat regrows at a QUARTER of the same-tier vat's rate (T1 1.06 / T2 1.7 /
 # T3 2.55 sim u/s = 0.21 / 0.34 / 0.51 shown/s) against fire 8 / 14 / 20; from empty, a neutral T2 refills its 30 shown in ~88 s (was ~44 s)
 # and an owned T2 its 60 shown in ~176 s (was ~88 s; tests/gat_regrow_probe.gd).
-static var GOOGATLING_PROD := 0.25
+# play-fixes 2026-11-14 (Daniele, playing 0.24.3.2: "the googatling doesn't generate troops while we said it should at a rate of 0.5
+# equivalent vat tier"): back to 0.5 - the 2026-11-09 0.25 made an owned T1 GooGat gain 0.21 shown/s (a unit every ~5 s), which
+# read as "no troops". Owned: T1 0.42 / T2 0.68 / T3 1.02 shown/s up to the cap; fire 1.6 / 2.8 / 4 shown/s stays above it.
+static var GOOGATLING_PROD := 0.5
 # LASER TOWER (replaces the three cannon tiers; Daniele: "give or take half way between current t2 and t3"):
 # a LASER_BURST s burst killing at most LASER_KILL bodies split across the lines in range (the cannon's code
 # path), then LASER_RECHARGE s. ~8 kills/s shown, below the door's 9.6/s.
