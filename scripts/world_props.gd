@@ -36,7 +36,7 @@ const SPEC := {
 			["lavender-bed", 3], ["towel-cart", 2], ["yoga-mat-roll-stack", 3], ["spa-lantern", 3]],
 }
 const HUD := [Rect2(0.0, 0.1, 0.16, 0.8), Rect2(0.88, 0.2, 0.12, 0.65), Rect2(0.38, 0.0, 0.24, 0.12),
-		Rect2(0.86, 0.0, 0.14, 0.12), Rect2(0.0, 0.92, 1.0, 0.08)]       # as WorldDressing: vat gauge, powers, capsule, buttons, hint line
+		Rect2(0.86, 0.0, 0.14, 0.12), Rect2(0.0, 0.92, 1.0, 0.08), Rect2(0.09, 0.0, 0.14, 0.26)]   # + the top-left sign       # as WorldDressing: vat gauge, powers, capsule, buttons, hint line
 const FALL_BAND := 3.0
 const GAP := 0.4                        # m between two props' footprints
 
@@ -251,6 +251,8 @@ func _on_node(p: Vector3) -> bool:
 
 func ok(q: Vector2, r: float, h: float) -> bool:
 	var lc := wl.locals
+	if lc.board_bounds().has_point(q):                  # never inside the board outline (designer 6: R-17, the cones under IN 16)
+		return false
 	for c in lc.craters:
 		if q.distance_to(Vector2((c as Vector3).x, (c as Vector3).z)) < WorldLocals.RING_R + WorldLocals.PIT_CLEAR + 1.0 + r:
 			return false
@@ -339,7 +341,7 @@ func bake(set_id: String, map_code: String, cam: Camera3D) -> Array:
 		var order: Array = [files[k % nh]]
 		var rest: Array = files.duplicate()
 		rest.sort_custom(func(x, y): return _dims(set_id, x)[0] > _dims(set_id, y)[0])
-		order.append_array(rest)                       # the wanted hero, else the biggest prop that fits (tight maps like R-17)
+		# (no fallback to smaller heroes: when no hero pair fits, place nothing - designer 6, R-17)
 		var hero := ""
 		var hd: Array = []
 		var best := Vector2.ZERO
