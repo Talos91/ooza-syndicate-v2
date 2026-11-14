@@ -177,9 +177,12 @@ func _draw_note(c: Control, q: float) -> void:
 		c.draw_line(Vector2(q * 0.16, q * 0.86), Vector2(q * 0.84, q * 0.14), col, q * 0.08)
 
 
+var glass := false                                 # HOME (35C2): the bar is a glass strip over the painting
+
+
 func _draw() -> void:
 	var sf: Vector4 = menu.safe                       # the back reaches over the notch bands and the status bar
-	draw_rect(Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y), UiKit.BAR)   # (drawn here: children would cover the ring)
+	draw_rect(Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y), Color(UiKit.BAR, 0.55) if glass else UiKit.BAR)   # (drawn here: children would cover the ring)
 	draw_rect(Rect2(-sf.x, size.y - 1.0, size.x + sf.x + sf.z, 1.0), Color(_ring_col, 0.3))
 	if slim:
 		return

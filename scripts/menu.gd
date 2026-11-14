@@ -44,6 +44,8 @@ var _prev_show := Callable()
 var _built_pt := 0.0                             # _pt_factor() the page was built with (0 while building)
 var _backdrop: TextureRect
 var _backdrop_art: Texture2D                     # the backdrop's own art (HOME swaps in the hero faction's scene)
+var _den: MenuDen                                 # HOME's 35C2 overlord painting + TV loop (menu_den.gd)
+var _backdrop_ax := 0.5                           # the backdrop's horizontal anchor when it crops
 var _backdrop_ay := 0.5                           # UI: the backdrop's vertical anchor when it crops (0.5 centred; HOME
                                                   # lower, so the wallpaper's creature stands above the tab bar)
 # UI: the Alpha 21 app shell (Daniele's navigation mockups, 2026-09-28): a shell page lays out full screen width in
@@ -153,6 +155,8 @@ func setup(m: Node3D) -> void:
 	main = m
 	mobile = m.mobile
 	ArmyPresets.load_all()                            # the saved army presets (none, or no storage: the defaults)
+	_den = MenuDen.new()                              # (behind the backdrop: it draws the TV's picture into the painting's hole)
+	add_child(_den)
 	_backdrop = TextureRect.new()                     # full-screen art behind the scaled page
 	var art: Texture2D = load("res://assets/art/ui-main.png")
 	var clean := AtlasTexture.new()                   # the art's right part: its left edge has Alpha 11's
@@ -500,6 +504,8 @@ func shell_open(crumb: String, tab: String, back := Callable(), f := "") -> Rect
 	shell_back = back
 	shell_slim = mobile and back.is_valid()
 	if _backdrop:
+		_den.hide_den()
+		_backdrop_ax = 0.5
 		var bg := UiKit.background(shell_f)
 		if bg != null:
 			_backdrop.texture = bg
@@ -598,7 +604,9 @@ func _place_backdrop() -> void:
 	_backdrop.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_backdrop.stretch_mode = TextureRect.STRETCH_SCALE
 	_backdrop.size = sz
-	_backdrop.position = Vector2((vp.x - sz.x) / 2.0, (vp.y - sz.y) * _backdrop_ay)
+	_backdrop.position = Vector2((vp.x - sz.x) * _backdrop_ax, (vp.y - sz.y) * _backdrop_ay)
+	if _den != null:
+		_den.place(_backdrop)
 
 
 func _backdrop_point(frac: Vector2) -> Vector2:
@@ -743,68 +751,78 @@ func show_main() -> void:
 	if _join_open:
 		_page = "online"                               # the code field's page (Net changes rebuild HOME with the sheet)
 	_code_box = null
-	if _backdrop:
-		var wall := UiKit.wallpaper(hero)
-		if wall != null:
-			_backdrop.texture = wall
-		_backdrop.modulate = Color(0.9, 0.9, 0.92)
-		_backdrop_ay = 0.7
+	if _backdrop:                                      # 35C2 (Daniele 2026-11-15): one painting for every setting and faction
+		_den.show_den(_backdrop)
+		_backdrop_ax = _den.backdrop_anchor_x()
+		_backdrop_ay = 0.5
 		_place_backdrop()
+	if top_bar != null:
+		top_bar.glass = true
+		top_bar.queue_redraw()
+	if nav_bar != null and nav_bar.shade != null:
+		nav_bar.shade.modulate.a = 0.55
+	_home_column(area, hero)
+	shell_raise()
+	if _install_available():
+		_install_button(Vector2(content.size.x - shell_x() - P(380, 56).x, _home_install_y))
+	if _install_guide_open:
+		_install_guide_panel()
+	if _join_open:
+		_join_sheet()
+
+
+func _home_column(area: Rect2, hero: String) -> void:
+	## HOME on the 35C2 painting: the menu is one column in the painting's quiet zone (its left ~30 %, never over the
+	## overlord, the TV or the terminal): PLAY (the last setup, CHANGE / PLAY), ONLINE (HOST / JOIN), CHALLENGES, and
+	## CAMPAIGN / TRAINING, both COMING SOON (Daniele 2026-11-15). The version (and FULLSCREEN / QUIT) sit in the bottom
+	## right corner, over the rug. No scrolling: the rows are sized to the free area.
 	var acc := UiKit.accent(hero)
-	_fade_left(area, content.size.x * 0.62)
 	var x := shell_x()
-	var w := content.size.x - x * 2.0
-	var gap := 12.0
-	var pad := 14.0
+	var qr := (_den.quiet_right() - content.position.x) / content.scale.x
+	var cw := clampf(qr - x - 4.0, 200.0, 340.0)
 	var bh := UiKit.tap_h(self, 46.0)
-	var th := pad + UiKit.line_h(self, 12, true) + 4.0 + UiKit.line_h(self, 16, true) + UiKit.line_h(self, 13) + 10.0 + bh + pad
-	var ty := area.end.y - th - 10.0
-	# Daniele 2026-11-05 (no PLAY menu, "every mode a tile"): PLAY VS AI left-most and biggest, CAMPAIGN, ONLINE; the
-	# hero's art free on the right; CHALLENGES and TRAINING top right above the art, the headline top left
-	var fr := [0.38, 0.38, 0.24]                      # Daniele 2026-11-05: ONLINE as big as PLAY, CAMPAIGN third and smallest
-	var avail := minf(w * 0.64, 900.0) - gap * (fr.size() - 1)
-	var tiles := []
-	var tx := x
-	for k in fr:
-		tiles.append(Rect2(tx, ty, floorf(avail * k), th))
-		tx += floorf(avail * k) + gap
-	_home_play(tiles[0], pad, bh)
-	_home_online(tiles[1], pad, bh)
-	_home_campaign(tiles[2], pad, bh)
-	# top right, above the hero's art: CHALLENGES and TRAINING (the lesson count; HOW TO PLAY once every lesson is done)
+	var pad := 8.0
+	var th := pad + UiKit.line_h(self, 13, true) + 3.0 + bh + pad
+	var gap := 8.0
+	var top := area.position.y + 8.0
+	var tight := false                                 # a short phone (320 pt): no summary line, tighter gaps - the five rows must fit
+	if top + th + 4.0 * (bh + gap) > area.end.y - 4.0:
+		tight = true
+		gap = 5.0
+		pad = 6.0
+		th = pad + bh + pad
+		top = area.position.y + 5.0
+	var sm := _setup_summary()
+	# PLAY: a tile of its own (its last-setup line + CHANGE / PLAY)
+	var r := Rect2(x, top, cw, th)
+	UiKit.panel(self, r.position, r.size, faction, true)
+	var iw := cw - pad * 2.0
+	if not tight:
+		_clip("PLAY  ·  %s" % str(sm[0]).replace("  ·  ", " · "), r.position + Vector2(pad, pad), 13, acc, iw, true)
+	var by := r.end.y - pad - bh
+	var chw := UiKit.text_w(self, "CHANGE", 14, true) + 28.0
+	UiKit.btn(self, "CHANGE", Vector2(x + pad, by), Vector2(chw, bh), show_setup, "secondary", faction, 14)
+	UiKit.btn(self, "PLAY  →", Vector2(x + pad + chw + 8.0, by), Vector2(iw - chw - 8.0, bh), deploy, "primary", faction, 20)
+	var y := r.end.y + gap
+	# ONLINE
+	_home_online_row(Rect2(x, y, cw, bh))
+	y += bh + gap
+	# CHALLENGES
 	var ready_n := Progression.claimable()
 	var ct := "CHALLENGES" + ("  ·  %d TO CLAIM" % ready_n if ready_n > 0 else "")
-	var n_done := TutorialDirector.done_count()
-	var learned := n_done >= TutorialDirector.TOTAL_LESSONS
-	var lt := "HOW TO PLAY" if learned else "TRAINING  %d / %d" % [n_done, TutorialDirector.TOTAL_LESSONS]
-	var rw := maxf(UiKit.text_w(self, ct, 15, true), UiKit.text_w(self, lt + "  →", 15, true)) + 44.0
-	var rx := content.size.x - x - rw
-	var ry := area.position.y + 12.0
-	var cb := UiKit.btn(self, ct, Vector2(rx, ry), Vector2(rw, 46), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
-	# Daniele 2026-11-05: once every lesson is done (5 / 5) TRAINING leaves HOME - the GUIDE tab keeps it
-	var lb: Button = null
-	if not learned:
-		lb = UiKit.btn(self, lt + "  →", Vector2(rx, ry + cb.size.y + 8.0), Vector2(rw, 46), show_tutorial, "selected", hero, 15)
-	# the headline top left, FULLSCREEN (QUIT on desktop) and the version under it
+	UiKit.btn(self, ct, Vector2(x, y), Vector2(cw, bh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 14)
+	y += bh + gap
+	# CAMPAIGN / TRAINING: disabled, COMING SOON (flip Campaign.ENABLED / TutorialDirector.ENABLED to bring them back)
+	var cb := UiKit.btn(self, "CAMPAIGN
+COMING SOON", Vector2(x, y), Vector2(cw, bh), show_chapters, "secondary", hero, 13)
+	y += bh + gap
+	var tb := UiKit.btn(self, "TRAINING
+COMING SOON", Vector2(x, y), Vector2(cw, bh), show_tutorial, "secondary", hero, 13)
+	cb.disabled = not Campaign.ENABLED
+	tb.disabled = not TutorialDirector.ENABLED
+	y += bh
+	# the corner: FULLSCREEN / QUIT and the version, bottom right (over the rug, under the painting's floor)
 	var fh := UiKit.tap_h(self, 36.0)
-	var free := ty - area.position.y - 12.0 - fh - 10.0
-	var hx := x + 8.0
-	var hy := area.position.y + 12.0
-	var hw := rx - 16.0 - hx
-	var sizes := [[44.0, "THE CITY IS
-YOURS TO TAKE."], [32.0, "THE CITY IS
-YOURS TO TAKE."], [26.0, "THE CITY IS YOURS TO TAKE."]]
-	for st in sizes:
-		var lines: int = str(st[1]).count("
-") + 1
-		var need: float = UiKit.line_h(self, 13, true) + 6.0 + UiKit.line_h(self, st[0], true) * lines
-		if (need <= free and UiKit.text_w(self, "YOURS TO TAKE.", st[0], true) <= hw) or st == sizes[-1]:
-			_shell_add(UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 13, acc, true, 3), Vector2(hx, hy))
-			hy += UiKit.line_h(self, 13, true) + 6.0
-			if need <= free:
-				_shell_add(UiKit.label(self, st[1], st[0], UiKit.INK, true), Vector2(hx - 3.0, hy))
-				hy += UiKit.line_h(self, st[0], true) * lines + 6.0
-			break
 	var fb := UiKit.flat_button(self, "FULLSCREEN" if OS.has_feature("web") else "QUIT", 13, UiKit.MUTED)
 	fb.size = Vector2(UiKit.text_w(self, fb.text, 13, true) + 20.0, fh)
 	fb.pressed.connect(func():
@@ -812,21 +830,43 @@ YOURS TO TAKE."], [26.0, "THE CITY IS YOURS TO TAKE."]]
 			FullscreenGate.request()
 		else:
 			get_tree().quit())
-	var ver := UiKit.label(self, Rules.version_label(), 12, UiKit.DIM)
-	if hy + fh <= ty - 6.0:
-		_shell_add(fb, Vector2(hx - 10.0, hy))
-		_shell_add(ver, Vector2(hx - 10.0 + fb.size.x, hy + (fh - ver.get_minimum_size().y) / 2.0))
-	else:
-		fb.free()
-		ver.free()
-	_home_install_y = (lb.position.y + lb.size.y if lb != null else cb.position.y + cb.size.y) + 8.0
-	shell_raise()
-	if _install_available():
-		_install_button(Vector2(content.size.x - x - P(380, 56).x, _home_install_y))
-	if _install_guide_open:
-		_install_guide_panel()
-	if _join_open:
-		_join_sheet()
+	var ver := UiKit.label(self, Rules.version_label(), 12, UiKit.MUTED)
+	for c in [fb, ver]:                                # (over the rug: an outline keeps both readable)
+		c.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		c.add_theme_constant_override("outline_size", 4)
+	var vw := UiKit.text_w(self, Rules.version_label(), 12) + 6.0
+	var rx := content.size.x - x - vw - fb.size.x
+	var fy := area.end.y - fh - 2.0
+	_shell_add(fb, Vector2(rx, fy))
+	_shell_add(ver, Vector2(rx + fb.size.x, fy + (fh - ver.get_minimum_size().y) / 2.0))
+	_home_install_y = fy - 8.0 - P(380, 56).y
+
+
+func _home_online_row(r: Rect2) -> void:
+	## ONLINE: HOST ROOM creates the room and opens MATCH SETUP with the room layer; JOIN WITH CODE opens the code sheet.
+	var bw := (r.size.x - 8.0) / 2.0
+	var web := OS.has_feature("web")
+	if not Net.rejoin.is_empty():                     # dropped out of a room: back into the same seat
+		var rb := UiKit.btn(self, "RECONNECT %s" % str(Net.rejoin["code"]), r.position, r.size, func():
+			ArmyPresets.send_to(Net, str(Net.rejoin.get("faction", faction)))
+			Net.reconnect()
+			show_lobby(), "selected", faction, 14)
+		rb.disabled = not web
+		return
+	var long := UiKit.text_w(self, "JOIN WITH CODE", 14, true) + 20.0 <= bw
+	var hb := UiKit.btn(self, "HOST ROOM" if long else "HOST", r.position, Vector2(bw, r.size.y), func():
+		ArmyPresets.send_to(Net, faction)
+		Net.host_room(faction)
+		show_lobby(), "secondary", faction, 14)
+	hb.disabled = not web
+	var jb := UiKit.btn(self, "JOIN WITH CODE" if long else "JOIN", r.position + Vector2(bw + 8.0, 0), Vector2(bw, r.size.y), func():
+		_join_open = true
+		Net.status = ""
+		_code_error = ""
+		show_main(), "secondary", faction, 14)
+	jb.disabled = not web
+	if not web:
+		hb.tooltip_text = "Online rooms run in the browser build"
 
 
 var _home_install_y := 0.0                         # HOME: INSTALL THE GAME goes under the top-right buttons
@@ -978,7 +1018,8 @@ func show_help() -> void:
 		_shell_add(l, p + Vector2(16, body_y))
 	var by := y + 2.0 * (chh + gap) + 8.0
 	_shell_add(UiKit.label(self, "Learn by doing.", 15, UiKit.MUTED), Vector2(x, by + 12.0))
-	UiKit.btn(self, "TRAINING  →", Vector2(content.size.x - x - 220.0, by), Vector2(220, 48), show_tutorial, "primary", shell_f, 16)
+	var tb := UiKit.btn(self, "TRAINING  →" if TutorialDirector.ENABLED else "TRAINING · COMING SOON", Vector2(content.size.x - x - 260.0, by), Vector2(260, 48), show_tutorial, "primary", shell_f, 16)
+	tb.disabled = not TutorialDirector.ENABLED          # Daniele 2026-11-15: the tutorial is being remade
 
 
 static var _opt_tab := "display"                   # SETTINGS: the open tab (kept while the game runs)

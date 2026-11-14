@@ -21,6 +21,7 @@ extends Node3D
 ##   --window=2340x1080                      size the window like a phone (landscape) for testing
 ##   --mobile                               force the phone quality profile on desktop
 ##   --pitch=58                              camera pitch in degrees above the horizon (MapCamera's per-map pitch otherwise)
+##   --clean-shots                          with --shots: hide the HUD in the frames (the main menu TV loop)
 ##   --thumb=<png>                          render the map's menu thumbnail (no HUD), then quit
 ##   --menu-page=<page> --menu-shot=<png>   open a menu page / screenshot the menu, then quit
 ##   --menu-filter=brawl                     screenshot helper: pre-set the BATTLEFIELD TYPE filter chip
@@ -148,6 +149,7 @@ const DOUBLE_TAP_WINDOW := 0.35
 const TAP_PIXELS := 14.0
 var started := false
 var thumb_path := ""
+var clean_shots := false  # --clean-shots: the --shots frames are taken with the HUD hidden (the main menu TV loop, tools/make_tv_loop.py)
 var perf_on := "--perf" in OS.get_cmdline_user_args()   # debug flag, read once
 var _pending_inspect := -1                    # single tap: inspector opens after the double-tap window
 var _pending_at := 0.0
@@ -273,6 +275,8 @@ func _ready() -> void:
 			focus_node = int(arg.substr(8))
 		elif arg.begins_with("--inspect="):           # screenshot helper: force the radial menu open on node N
 			_debug_inspect_node = int(arg.substr(10))
+		elif arg == "--clean-shots":                   # menu-bg: --shots frames without the HUD (the menu TV loop)
+			clean_shots = true
 		elif arg.begins_with("--thumb="):              # map thumbnail for the menu: no HUD, first frame
 			thumb_path = arg.substr(8)
 			map_explicit = true
@@ -1966,6 +1970,10 @@ func _process(delta: float) -> void:
 
 
 func _take_shot(t: float, last: bool) -> void:
+	if clean_shots and hud != null:
+		hud.root.visible = false
+		for l in find_children("*", "Label3D", true, false):   # (the board's text tags: FERRY / IN n)
+			(l as Label3D).visible = false
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
 	var path := "%s/shot_%05.1f.png" % [shot_dir if shot_dir != "" else OS.get_user_data_dir(), t]

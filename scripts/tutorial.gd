@@ -331,11 +331,15 @@ static func first_unfinished() -> int:
 	return FIRST_ID
 
 
+const ENABLED := false           # Daniele 2026-11-15: the tutorial is disabled from 0.24.4 (COMING SOON in the menu, no first-launch start;
+										# it is being remade). The director, lessons and test_tutorial stay; flip to true to bring the menu entries and the auto-start back.
+
+
 static func first_launch_due(user_args: PackedStringArray, net_busy: bool) -> bool:
 	## With no `offered` key the game opens straight into the quick start. Never for a launch with a map, scenario, stage,
 	## thumbnail, screenshot or test flag, an online room or a pending Net reconnect (`net_busy`).
 	_ensure()
-	if offered or net_busy:
+	if not ENABLED or offered or net_busy:
 		return false
 	for a in user_args:
 		for flag in ["--map=", "--scenario=", "--stage=", "--thumb=", "--shots=", "--demo", "--ff=", "--menu-page=",

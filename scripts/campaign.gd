@@ -1,5 +1,6 @@
 class_name Campaign
 extends RefCounted
+const ENABLED := false           # Daniele 2026-11-15: the campaign is disabled from 0.24.4 (COMING SOON in the menu; it is being remade). The data, pages and tests stay.
 ## The campaign: its data, progress, stars and rewards (Docs/Game Design/Ooze Syndicate 2.0/01 Rules/CAMPAIGN-DESIGN.md).
 ## Daniele, 2026-09-27: the sinking city is the campaign map (districts = chapters, missions = nodes, the last chapter
 ## descends under the city); dark comedy; linear with optional side nodes; one campaign per faction (VEX free, the other
