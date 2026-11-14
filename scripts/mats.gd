@@ -87,7 +87,7 @@ static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMat
 # WALK legs per faction: [amplitude (model units), feet radius from, to] - measured on the Rodin feet (low vertices' radius)
 const V4_LEGS := {"vex": [0.07, 0.30, 0.45], "null": [0.07, 0.42, 0.55], "bloom": [0.04, 0.32, 0.50], "ember": [0.07, 0.50, 0.65], "solar": [0.012, 0.18, 0.30]}
 const V4_TINT_MIX := 0.9             # the neon's albedo -> seat colour
-const V4_TINT_GLOW := 1.0            # the neon's emission in the seat colour (reads at phone scale on the dark board)
+const V4_TINT_GLOW := 1.6            # the neon's emission in the seat colour (reads at phone scale on the dark board)
 const V4_EYE_GLOW := 0.5
 const V4_ALBEDO := 0.72            # the Rodin goo albedo is near full cyan: a little darker so the board light doesn't bleach it
 static var v4_seat_rim := 0.0     # v4 bodies: > 0 = rim accent in the SEAT colour at this gain (0 = off until Daniele decides; 3.0 was the designer 6 pick, designer 7 says wait)

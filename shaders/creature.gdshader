@@ -57,12 +57,14 @@ void fragment() {
 	vec3 hsv = rgb2hsv(tex);
 	hsv.x = fract(hsv.x + hue_shift);
 	vec2 tm = texture(tint_tex, UV).rg;
-	ALBEDO = mix(hsv2rgb(hsv) * albedo_gain, tint_color * 0.45, tm.r * tint_mix);   // albedo kept dark: board light lifts it to pastel; the colour rides on the emission
+	ALBEDO = mix(hsv2rgb(hsv) * albedo_gain, tint_color * 0.25, tm.r * tint_mix);   // albedo kept dark: board light lifts it to pastel; the colour rides on the emission
 	vec3 base = ALBEDO;
 	vec3 mr = texture(mr_tex, UV).rgb;
 	ROUGHNESS = mix(0.3, mr.g, use_mr);
-	METALLIC = mr.b * use_mr;
+	METALLIC = mr.b * use_mr * (1.0 - tm.r);
+	ROUGHNESS = mix(ROUGHNESS, 0.9, tm.r);           // lit neon is matte: a glossy steel / goo highlight would whiten the seat colour
+	SPECULAR = mix(0.5, 0.0, tm.r);
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), rim_power);
 	EMISSION = accent * rim * rim_gain + base * self_glow * (1.0 - tm.r)   // self_glow: classic units read bright on a dark board
-			+ tint_color * tm.r * tint_glow + tex * tm.g * eye_glow;
+			+ max(mix(vec3(dot(tint_color, vec3(0.333))), tint_color, 1.45), vec3(0.0)) * tm.r * tint_glow + tex * tm.g * eye_glow;
 }

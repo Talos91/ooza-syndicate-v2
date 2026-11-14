@@ -26,10 +26,11 @@ def neon_mask(diff2k, vmin=0.78):
     m = (s < 0.16) & (v > vmin)
     m = ndimage.binary_opening(m, iterations=1)
     m = ndimage.binary_closing(m, iterations=2)
+    m = ndimage.binary_dilation(m, iterations=2)       # the anti-aliased fringe of the lit line (about 1 px at 1024), geometry-following
     lab, n = ndimage.label(m)
     if n:
         sizes = ndimage.sum(m, lab, range(1, n + 1))
-        keep = np.isin(lab, 1 + np.nonzero(sizes >= 600)[0])
+        keep = np.isin(lab, 1 + np.nonzero(sizes >= 500)[0])
         m = keep
     return m
 
