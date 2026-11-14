@@ -680,3 +680,38 @@ static func button_face(b: Button, glyph: String, u: float, off := false) -> voi
 	b.draw_texture_rect(tex(glyph), r, false, Color(INK, 0.4 if off else 1.0))
 	if off:
 		b.draw_line(r.position + r.size * 0.28, r.position + r.size * 0.72, INK, 2.0 * u, true)
+
+# ---- round 37B2 (hud-37): the HUD leftovers pack, 4x exports in assets/ui/lab37 (DIRECTOR-PACKAGE/deliveries/37-hud-leftovers-B2).
+# Neon masks take the SEAT colour, goo the faction colour (Daniele's colour rule, 2026-11-15).
+const DIR37 := "res://assets/ui/lab37/"
+const PX37 := 4.0                               # art px per pt in that pack
+const CUE_PT := Vector2(26, 22)                 # P1 / P1R canvas (pt)
+static var _tex37 := {}
+
+
+static func tex37(n: String) -> Texture2D:
+	if not _tex37.has(n):
+		var p := DIR37 + n + ".png"
+		_tex37[n] = load(p) if ResourceLoader.exists(p) else null
+	return _tex37[n]
+
+
+static func cue_ready() -> bool:
+	return tex37("PAINT-P1") != null and tex37("PAINT-P1R") != null
+
+
+static func draw_cue(ci: CanvasItem, relay: bool, centre: Vector2, pt: float, seat: Color, glow: float, alpha := 1.0) -> void:
+	## P1 (upgrade ready: chevron tag) / P1R (relay ready to fire: lozenge): an indicator, never a touch target.
+	## Paint, the owner edge in the seat colour, the READY layer pulsing with `glow` 0..1.
+	var id := "P1R" if relay else "P1"
+	var r := Rect2(centre - CUE_PT * pt * 0.5, CUE_PT * pt)
+	var base := tex37("PAINT-" + id)
+	if base == null:
+		return
+	ci.draw_texture_rect(base, r, false, Color(1, 1, 1, alpha))
+	var edge := tex37("MASK-%s-OWNER-EDGE" % id)
+	if edge != null:
+		ci.draw_texture_rect(edge, r, false, Color(seat.r, seat.g, seat.b, alpha))
+	var rd := tex37("MASK-%s-READY" % id)
+	if rd != null and glow > 0.0:
+		ci.draw_texture_rect(rd, r, false, Color(seat.r, seat.g, seat.b, glow * alpha))

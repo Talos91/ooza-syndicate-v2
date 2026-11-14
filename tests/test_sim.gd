@@ -161,6 +161,7 @@ func _init() -> void:
 	sim10.nodes[4]["owner"] = "A"
 	sim10.nodes[4]["tier"] = 2
 	sim10.nodes[4]["units"] = 100.0
+	var vat_rate4: float = sim10.production(sim10.nodes[4])   # play-fixes: the same-tier vat's rate, measured before the swap
 	check(sim10.build(4, "A", "machinegoon"), "a common node builds a machinegoon in place of its vat")
 	check(absf(sim10.nodes[4]["units"] - (100.0 - Rules.MACHINEGOON_COST[1])) < 0.01 and Rules.MACHINEGOON_COST == {1: 75, 2: 100, 3: 150},
 			"the machinegoon costs 15 shown (upgrades 20 / 30)")
@@ -172,6 +173,8 @@ func _init() -> void:
 	var gp: float = Rules.PROD[2] * Rules.GOOGATLING_PROD * sim10.stat("A", "production")
 	check(not Sim.has_vat(sim10.nodes[4]) and absf(sim10.production(sim10.nodes[4]) - gp) < 0.001 and absf(sim10.nodes[4]["units"] - u4 - gp) < 0.05,
 			"...and the node grows its garrison (its ammo) at half a T2 vat (%.2f /s shown)" % Rules.shown_f(gp))
+	check(vat_rate4 > 0.0 and absf(sim10.production(sim10.nodes[4]) / vat_rate4 - 0.5) < 0.001 and Rules.GOOGATLING_PROD == 0.5,
+			"play-fixes: a Googatling makes troops at 0.5x the same-tier vat (Daniele 2026-11-14), not 0.25x (%.2f)" % (sim10.production(sim10.nodes[4]) / maxf(vat_rate4, 0.001)))
 	check(sim10.upgrade_cost(sim10.nodes[4]) == Rules.MACHINEGOON_COST[3], "the next machinegoon tier costs 30 shown")
 	sim10.nodes[4]["swap_cd"] = 0.0
 	check(sim10.restore_vat(4), "the machinegoon can give way to the vat again (free)")
@@ -1595,7 +1598,7 @@ func _rules_0_18_10() -> void:
 				"every kill is paid from its garrison, which regrows meanwhile (%.2f spent = %.2f killed - %.2f made)" % [u1 - gn["units"], killed, s.gat_rate(gn)])
 	# ---------------------------------------------------------------- GOOGAT (Daniele 2026-11-06, Desk dec-googatling): its
 	# ammo IS its garrison, grown at half the same-tier vat rate up to the node's cap; it fires that, then each unit as made
-	check(Rules.GOOGATLING_PROD == 0.25, "googat numbers: ammo regrows at 0.25x the same-tier vat (Daniele 2026-11-09: slower regrow; was 0.5)")
+	check(Rules.GOOGATLING_PROD == 0.5, "googat numbers: ammo regrows at 0.5x the same-tier vat (Daniele 2026-11-14: back to 0.5; 0.25 read as no production)")
 	for fac in ["vex", "null", "bloom", "ember", "solar"]:
 		var sf := _tp({3: "A", 4: "B"}, {"A": fac, "B": fac})
 		var fn: Dictionary = sf.nodes[1]

@@ -59,7 +59,6 @@ var banner: Label
 var _banner_time := 0.0
 var status_label: Label                # Last Stand status under the top bar
 var catchup_tag: PanelContainer        # CATCH-UP (Rules.CATCHUP_*): "CATCH-UP +15 %" under your chips while your side trails
-var hint: Label
 var map_title: Label
 var dock: SkillDock
 var skill_targets: Control             # the dock's target highlights: over the badges, under the panels
@@ -484,15 +483,9 @@ func setup(m: Node3D) -> void:
 	count_label = text_label("", 14, accent)                # (kept, hidden: the tank shows the units on its goo)
 	count_label.visible = false
 	side_box.add_child(count_label)
-	# bottom: map title, hint, ability dock, version
+	# bottom: map title, ability dock, version
 	map_title = text_label(str(main.map.get("name", "")).to_upper(), 20)
 	root.add_child(map_title)
-	hint = text_label(_hint_text(), 14, Color("d0dceb"))
-	hint.add_theme_color_override("font_shadow_color", Color.BLACK)
-	hint.add_theme_constant_override("shadow_offset_x", 2)
-	hint.add_theme_constant_override("shadow_offset_y", 2)
-	hint.visible = not touch_ui()                      # (desktop words and the 1 2 3 keys: never on a touch screen)
-	root.add_child(hint)
 	dock = SkillDock.new()                            # SKILLS 2.0: ACTIVE / MAP / ULTIMATE, only when abilities are on
 	root.add_child(dock)
 	dock.setup(main, sim, human, ui_scale, mobile, self, skill_targets)
@@ -817,10 +810,6 @@ func touch_ui() -> bool:
 	return mobile or PerfProfile.is_phone()
 
 
-func _hint_text() -> String:
-	return "Drag to send  ·  Tap a node to inspect  ·  Double-tap to upgrade (a relay: its button)  ·  Tap your ready monster to launch it" + ("  ·  1 2 3: skills" if sim.abilities_on else "")
-
-
 func layout(vp: Vector2, m: Vector4) -> void:
 	margins = m
 	_ins_vp = Vector2(-1, -1)                         # the safe area is read again (a rotation, a new window size)
@@ -849,8 +838,6 @@ func layout(vp: Vector2, m: Vector4) -> void:
 	side_y = maxf(side_y, top_bottom)
 	side_panel.position = Vector2(m.x, side_y)          # send controls on the LEFT, like Alpha 11 (Daniele)
 	map_title.position = Vector2(m.x + 8, vp.y - m.w - 30 * ui_scale)
-	hint.size = Vector2(vp.x * 0.5, 20)
-	hint.position = Vector2(vp.x * 0.5 - hint.size.x / 2.0, vp.y - m.w - 18)
 	# Alpha 24 (Hub Roadmap m05, "send on the left thumb, skills stacked on the right"): the skills stand in a column on the
 	# right edge under PAUSE, centred on the screen's height where there is room (the right thumb's reach)
 	# Neon Noir: the column sits in its housing (SkillDock._draw, housing_margin: its rim round the slots, its drips below)
@@ -2256,7 +2243,6 @@ func _apply_reveal() -> void:
 	top_left.visible = shows("strength")
 	top_right.visible = shows("strength")
 	dock.visible = sim.abilities_on and shows("dock")
-	hint.visible = not touch_ui() and not gated
 	callouts.visible = shows("notices")
 	if is_instance_valid(inspector) and inspector_id >= 0:
 		inspect(inspector_id, main.cam)
@@ -2347,7 +2333,7 @@ func show_out_panel() -> void:
 	if not shows("out_panel"):
 		return
 	# UI (Alpha 21): a card in the pause's language over the dimmed match - SPECTATE first, the way out quieter
-	MatchScreens.open(out_panel, mobile, _my_faction()).card({"kicker": "%s  ·  ELIMINATED" % _who_line(human), "headline": "YOU'RE OUT.",
+	_screens_out().card({"kicker": "%s  ·  ELIMINATED" % _who_line(human), "headline": "YOU'RE OUT.",
 			"body": "Every node and line you had is gone - you can keep watching, or leave.", "glow": false,
 			"actions": [["SPECTATE  →", func():
 				out_panel.visible = false
@@ -3223,6 +3209,7 @@ func pause_menu() -> void:
 	if end_panel.visible:
 		return
 	var s := MatchScreens.open(pause_panel, mobile, _my_faction())
+	s.seat = human
 	var where := "%s · %s" % [str(main.map.get("name", "")).to_upper(), MatchScreens.clock(sim.time)]
 	if main.online:                                   # a room never pauses (Alpha 11): the menu only
 		s.card({"kicker": "ROOM %s" % Net.room_code, "headline": "MATCH MENU.",
@@ -3308,6 +3295,7 @@ func _build_end() -> void:
 	var won := sim.allied(winner, human)               # team modes: allies win together
 	var draw := winner == ""
 	var s := MatchScreens.open(end_panel, mobile, _my_faction())
+	s.seat = human
 	var seats: Array = sim.factions.keys()
 	var team := sim.teams.has(human)
 	var ffa := not team and seats.size() > 2
@@ -3440,6 +3428,7 @@ func _pause_settings() -> void:
 	## from the next match), FRAME RATE and DETAIL - one tap cycles each (PerfProfile / Rules, saved as in SETTINGS); SOUND /
 	## VOLUME and MUSIC / MUSIC VOL (Music) are two rows of toggles under BACK.
 	var s := MatchScreens.open(pause_panel, mobile, _my_faction())
+	s.seat = human
 	var fps_now := "AUTO (%d)" % int(PerfProfile.PROFILES[PerfProfile.level()]["fps"]) if PerfProfile.fps_mode() == "auto" 			else PerfProfile.fps_mode()
 	var gfx_now := "AUTO (%s)" % ("PHONE" if PerfProfile.is_phone() else "FULL") if PerfProfile.mode() == "auto" 			else str(PerfProfile.MODE_NAMES[PerfProfile.mode()])
 	s.card({"kicker": "PAUSED", "headline": "SETTINGS.",
@@ -3466,6 +3455,7 @@ func _pause_settings() -> void:
 func show_reconnect(left: int) -> void:
 	_reconnect_left = left
 	var s := MatchScreens.open(reconnect_panel, mobile, _my_faction())
+	s.seat = human
 	s.card({"kicker": "ONLINE MATCH", "headline": "CONNECTION INTERRUPTED.",
 			"body": "The match host stopped answering, so the match is frozen.
 RECONNECTING...  %d s
@@ -3893,3 +3883,9 @@ func badge_anchor(n: Dictionary) -> Vector3:
 				best = d
 		_badge_dirs[id] = best
 	return n["pos"] + (_badge_dirs[id] as Vector3) * (Rules.R + 2.3) + Vector3(0, 0.3, 0)
+
+
+func _screens_out() -> MatchScreens:
+	var s := MatchScreens.open(out_panel, mobile, _my_faction())
+	s.seat = human
+	return s

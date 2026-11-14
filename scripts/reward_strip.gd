@@ -120,13 +120,16 @@ class XpBar extends Control:
 		var k := clampf(_t / duration, 0.0, 1.0) if _t >= 0.0 else 0.0
 		return int(round(lerpf(from_xp, to_xp, 1.0 - pow(1.0 - k, 2.0))))
 
+	var ink_text := Color(0, 0, 0, 0)
+
 	func _draw() -> void:
 		var lf := Progression.level_for(_shown())
 		var fs := int(round(14 * scale_k))
 		var tag := "LEVEL %d" % int(lf["level"])
 		var tag_w := HEAD_FONT.get_string_size(tag, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10 * scale_k
 		var col := XP_COLOUR.lerp(Color.WHITE, _flash)
-		draw_string(HEAD_FONT, Vector2(0, size.y * 0.5 + fs * 0.36), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+		var tcol := col if ink_text.a <= 0.0 else ink_text      # on the ivory report sheet (round 37) the words go dark
+		draw_string(HEAD_FONT, Vector2(0, size.y * 0.5 + fs * 0.36), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, tcol)
 		var gain := "+%d XP" % (to_xp - from_xp)
 		var gain_w := UI_FONT.get_string_size(gain, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 10 * scale_k
 		var bar := Rect2(tag_w, size.y * 0.25, size.x - tag_w - gain_w, size.y * 0.5)
@@ -134,7 +137,7 @@ class XpBar extends Control:
 		var f := clampf(float(lf["into"]) / maxf(1.0, float(lf["need"])), 0.0, 1.0)
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * f, bar.size.y)), col)
 		draw_rect(bar, XP_COLOUR.darkened(0.3), false, maxf(1.0, scale_k))
-		draw_string(UI_FONT, Vector2(size.x - gain_w + 10 * scale_k, size.y * 0.5 + fs * 0.36), gain, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, XP_COLOUR)
+		draw_string(UI_FONT, Vector2(size.x - gain_w + 10 * scale_k, size.y * 0.5 + fs * 0.36), gain, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, XP_COLOUR if ink_text.a <= 0.0 else ink_text)
 		if _flash > 0.0:
 			draw_string(HEAD_FONT, Vector2(bar.position.x + bar.size.x * 0.5 - 30 * scale_k, bar.position.y - 2 * scale_k),
 					"LEVEL UP", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(GOLD, _flash))

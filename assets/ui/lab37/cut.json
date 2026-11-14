@@ -1,0 +1,1709 @@
+{
+  "boards": "boards\\B",
+  "pieces": [
+    {
+      "name": "PAINT-P8",
+      "file": "PAINT-P8.png",
+      "folder": "paint",
+      "board": 1,
+      "box": [
+        12,
+        12,
+        3248,
+        1500
+      ],
+      "canvas": [
+        3248,
+        1500
+      ],
+      "body_rect": [
+        0,
+        0,
+        3248,
+        1500
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          672,
+          808
+        ]
+      ],
+      "socket_centre_body": [
+        672,
+        808
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-P8-WHITE",
+      "file": "PAINT-P8-WHITE.png",
+      "folder": "paint",
+      "board": 1,
+      "box": [
+        12,
+        12,
+        3248,
+        1500
+      ],
+      "canvas": [
+        3248,
+        1500
+      ],
+      "body_rect": [
+        0,
+        0,
+        3248,
+        1500
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          672,
+          808
+        ]
+      ],
+      "socket_centre_body": [
+        672,
+        808
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-P10",
+      "file": "PAINT-P10.png",
+      "folder": "paint",
+      "board": 2,
+      "box": [
+        12,
+        12,
+        3248,
+        1500
+      ],
+      "canvas": [
+        3248,
+        1500
+      ],
+      "body_rect": [
+        0,
+        0,
+        3248,
+        1500
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          768,
+          648
+        ],
+        [
+          2480,
+          648
+        ]
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-P10-WHITE",
+      "file": "PAINT-P10-WHITE.png",
+      "folder": "paint",
+      "board": 2,
+      "box": [
+        12,
+        12,
+        3248,
+        1500
+      ],
+      "canvas": [
+        3248,
+        1500
+      ],
+      "body_rect": [
+        0,
+        0,
+        3248,
+        1500
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          768,
+          648
+        ],
+        [
+          2480,
+          648
+        ]
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-P9",
+      "file": "PAINT-P9.png",
+      "folder": "paint",
+      "board": 3,
+      "box": [
+        12,
+        12,
+        3040,
+        1200
+      ],
+      "canvas": [
+        3040,
+        1200
+      ],
+      "body_rect": [
+        0,
+        0,
+        3040,
+        1200
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          2008,
+          228
+        ],
+        [
+          2616,
+          228
+        ]
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-P9-WHITE",
+      "file": "PAINT-P9-WHITE.png",
+      "folder": "paint",
+      "board": 3,
+      "box": [
+        12,
+        12,
+        3040,
+        1200
+      ],
+      "canvas": [
+        3040,
+        1200
+      ],
+      "body_rect": [
+        0,
+        0,
+        3040,
+        1200
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          2008,
+          228
+        ],
+        [
+          2616,
+          228
+        ]
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-P6",
+      "file": "PAINT-P6.png",
+      "folder": "paint",
+      "board": 4,
+      "box": [
+        12,
+        12,
+        1680,
+        920
+      ],
+      "canvas": [
+        1680,
+        920
+      ],
+      "body_rect": [
+        0,
+        0,
+        1680,
+        920
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          296,
+          460
+        ]
+      ],
+      "socket_centre_body": [
+        296,
+        460
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-P6-WHITE",
+      "file": "PAINT-P6-WHITE.png",
+      "folder": "paint",
+      "board": 4,
+      "box": [
+        12,
+        12,
+        1680,
+        920
+      ],
+      "canvas": [
+        1680,
+        920
+      ],
+      "body_rect": [
+        0,
+        0,
+        1680,
+        920
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          296,
+          460
+        ]
+      ],
+      "socket_centre_body": [
+        296,
+        460
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-P6-SHELL",
+      "file": "PAINT-P6-SHELL.png",
+      "folder": "paint",
+      "board": 4,
+      "box": [
+        12,
+        944,
+        1680,
+        920
+      ],
+      "canvas": [
+        1680,
+        920
+      ],
+      "body_rect": [
+        0,
+        0,
+        1680,
+        920
+      ],
+      "slice": [
+        56,
+        56,
+        56,
+        60
+      ],
+      "has_tint": false,
+      "source": "colour",
+      "stretch_axes": "both"
+    },
+    {
+      "name": "PAINT-P6-SHELL-WHITE",
+      "file": "PAINT-P6-SHELL-WHITE.png",
+      "folder": "paint",
+      "board": 4,
+      "box": [
+        12,
+        944,
+        1680,
+        920
+      ],
+      "canvas": [
+        1680,
+        920
+      ],
+      "body_rect": [
+        0,
+        0,
+        1680,
+        920
+      ],
+      "slice": [
+        56,
+        56,
+        56,
+        60
+      ],
+      "has_tint": true,
+      "source": "W",
+      "stretch_axes": "both"
+    },
+    {
+      "name": "PAINT-P6-expanded",
+      "file": "PAINT-P6-expanded.png",
+      "folder": "paint",
+      "board": 4,
+      "box": [
+        12,
+        1876,
+        1680,
+        1200
+      ],
+      "canvas": [
+        1680,
+        1200
+      ],
+      "body_rect": [
+        0,
+        0,
+        1680,
+        1200
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          296,
+          600
+        ]
+      ],
+      "socket_centre_body": [
+        296,
+        600
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-P6-expanded-WHITE",
+      "file": "PAINT-P6-expanded-WHITE.png",
+      "folder": "paint",
+      "board": 4,
+      "box": [
+        12,
+        1876,
+        1680,
+        1200
+      ],
+      "canvas": [
+        1680,
+        1200
+      ],
+      "body_rect": [
+        0,
+        0,
+        1680,
+        1200
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          296,
+          600
+        ]
+      ],
+      "socket_centre_body": [
+        296,
+        600
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-P6-expanded-SHELL",
+      "file": "PAINT-P6-expanded-SHELL.png",
+      "folder": "paint",
+      "board": 4,
+      "box": [
+        12,
+        3088,
+        1680,
+        1200
+      ],
+      "canvas": [
+        1680,
+        1200
+      ],
+      "body_rect": [
+        0,
+        0,
+        1680,
+        1200
+      ],
+      "slice": [
+        56,
+        56,
+        56,
+        60
+      ],
+      "has_tint": false,
+      "source": "colour",
+      "stretch_axes": "both"
+    },
+    {
+      "name": "PAINT-P6-expanded-SHELL-WHITE",
+      "file": "PAINT-P6-expanded-SHELL-WHITE.png",
+      "folder": "paint",
+      "board": 4,
+      "box": [
+        12,
+        3088,
+        1680,
+        1200
+      ],
+      "canvas": [
+        1680,
+        1200
+      ],
+      "body_rect": [
+        0,
+        0,
+        1680,
+        1200
+      ],
+      "slice": [
+        56,
+        56,
+        56,
+        60
+      ],
+      "has_tint": true,
+      "source": "W",
+      "stretch_axes": "both"
+    },
+    {
+      "name": "PAINT-P4",
+      "file": "PAINT-P4.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        12,
+        1200,
+        256
+      ],
+      "canvas": [
+        1200,
+        256
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        256
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          128,
+          128
+        ]
+      ],
+      "socket_centre_body": [
+        128,
+        128
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-P4-WHITE",
+      "file": "PAINT-P4-WHITE.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        12,
+        1200,
+        256
+      ],
+      "canvas": [
+        1200,
+        256
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        256
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          128,
+          128
+        ]
+      ],
+      "socket_centre_body": [
+        128,
+        128
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-P4-SHELL",
+      "file": "PAINT-P4-SHELL.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        280,
+        1200,
+        256
+      ],
+      "canvas": [
+        1200,
+        256
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        256
+      ],
+      "slice": [
+        56,
+        56,
+        56,
+        60
+      ],
+      "has_tint": false,
+      "source": "colour",
+      "stretch_axes": "both"
+    },
+    {
+      "name": "PAINT-P4-SHELL-WHITE",
+      "file": "PAINT-P4-SHELL-WHITE.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        280,
+        1200,
+        256
+      ],
+      "canvas": [
+        1200,
+        256
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        256
+      ],
+      "slice": [
+        56,
+        56,
+        56,
+        60
+      ],
+      "has_tint": true,
+      "source": "W",
+      "stretch_axes": "both"
+    },
+    {
+      "name": "PAINT-P4-expanded",
+      "file": "PAINT-P4-expanded.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        548,
+        1200,
+        448
+      ],
+      "canvas": [
+        1200,
+        448
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        448
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          128,
+          128
+        ]
+      ],
+      "socket_centre_body": [
+        128,
+        128
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-P4-expanded-WHITE",
+      "file": "PAINT-P4-expanded-WHITE.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        548,
+        1200,
+        448
+      ],
+      "canvas": [
+        1200,
+        448
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        448
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          128,
+          128
+        ]
+      ],
+      "socket_centre_body": [
+        128,
+        128
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-P4-expanded-SHELL",
+      "file": "PAINT-P4-expanded-SHELL.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1008,
+        1200,
+        448
+      ],
+      "canvas": [
+        1200,
+        448
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        448
+      ],
+      "slice": [
+        56,
+        56,
+        56,
+        60
+      ],
+      "has_tint": false,
+      "source": "colour",
+      "stretch_axes": "both"
+    },
+    {
+      "name": "PAINT-P4-expanded-SHELL-WHITE",
+      "file": "PAINT-P4-expanded-SHELL-WHITE.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1008,
+        1200,
+        448
+      ],
+      "canvas": [
+        1200,
+        448
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        448
+      ],
+      "slice": [
+        56,
+        56,
+        56,
+        60
+      ],
+      "has_tint": true,
+      "source": "W",
+      "stretch_axes": "both"
+    },
+    {
+      "name": "PAINT-P5",
+      "file": "PAINT-P5.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1468,
+        1200,
+        112
+      ],
+      "canvas": [
+        1200,
+        112
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        112
+      ],
+      "slice": [
+        56,
+        0,
+        56,
+        0
+      ],
+      "has_tint": false,
+      "slice_given": [
+        56,
+        0,
+        56,
+        0
+      ],
+      "source": "colour",
+      "cutter_suggested_slice": [
+        56,
+        40,
+        56,
+        40
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P5-WHITE",
+      "file": "PAINT-P5-WHITE.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1468,
+        1200,
+        112
+      ],
+      "canvas": [
+        1200,
+        112
+      ],
+      "body_rect": [
+        0,
+        0,
+        1200,
+        112
+      ],
+      "slice": [
+        56,
+        0,
+        56,
+        0
+      ],
+      "has_tint": true,
+      "slice_given": [
+        56,
+        0,
+        56,
+        0
+      ],
+      "source": "W",
+      "cutter_suggested_slice": [
+        56,
+        40,
+        56,
+        40
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P2",
+      "file": "PAINT-P2.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1592,
+        256,
+        80
+      ],
+      "canvas": [
+        256,
+        80
+      ],
+      "body_rect": [
+        0,
+        0,
+        256,
+        80
+      ],
+      "slice": [
+        56,
+        0,
+        56,
+        0
+      ],
+      "has_tint": false,
+      "slice_given": [
+        56,
+        0,
+        56,
+        0
+      ],
+      "source": "colour",
+      "cutter_suggested_slice": [
+        56,
+        36,
+        56,
+        36
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P2-WHITE",
+      "file": "PAINT-P2-WHITE.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1592,
+        256,
+        80
+      ],
+      "canvas": [
+        256,
+        80
+      ],
+      "body_rect": [
+        0,
+        0,
+        256,
+        80
+      ],
+      "slice": [
+        56,
+        0,
+        56,
+        0
+      ],
+      "has_tint": true,
+      "slice_given": [
+        56,
+        0,
+        56,
+        0
+      ],
+      "source": "W",
+      "cutter_suggested_slice": [
+        56,
+        36,
+        56,
+        36
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P1",
+      "file": "PAINT-P1.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1684,
+        104,
+        88
+      ],
+      "canvas": [
+        104,
+        88
+      ],
+      "body_rect": [
+        0,
+        0,
+        104,
+        88
+      ],
+      "slice": null,
+      "has_tint": false,
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-P1-WHITE",
+      "file": "PAINT-P1-WHITE.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1684,
+        104,
+        88
+      ],
+      "canvas": [
+        104,
+        88
+      ],
+      "body_rect": [
+        0,
+        0,
+        104,
+        88
+      ],
+      "slice": null,
+      "has_tint": true,
+      "source": "W"
+    },
+    {
+      "name": "PAINT-P1R",
+      "file": "PAINT-P1R.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1784,
+        104,
+        88
+      ],
+      "canvas": [
+        104,
+        88
+      ],
+      "body_rect": [
+        0,
+        0,
+        104,
+        88
+      ],
+      "slice": null,
+      "has_tint": false,
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-P1R-WHITE",
+      "file": "PAINT-P1R-WHITE.png",
+      "folder": "paint",
+      "board": 5,
+      "box": [
+        12,
+        1784,
+        104,
+        88
+      ],
+      "canvas": [
+        104,
+        88
+      ],
+      "body_rect": [
+        0,
+        0,
+        104,
+        88
+      ],
+      "slice": null,
+      "has_tint": true,
+      "source": "W"
+    },
+    {
+      "name": "PAINT-P7",
+      "file": "PAINT-P7.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        12,
+        720,
+        136
+      ],
+      "canvas": [
+        720,
+        136
+      ],
+      "body_rect": [
+        0,
+        0,
+        720,
+        136
+      ],
+      "slice": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "has_tint": false,
+      "slice_given": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "source": "colour",
+      "cutter_suggested_slice": [
+        40,
+        27,
+        40,
+        27
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P7-WHITE",
+      "file": "PAINT-P7-WHITE.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        12,
+        720,
+        136
+      ],
+      "canvas": [
+        720,
+        136
+      ],
+      "body_rect": [
+        0,
+        0,
+        720,
+        136
+      ],
+      "slice": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "has_tint": true,
+      "slice_given": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "source": "W",
+      "cutter_suggested_slice": [
+        40,
+        27,
+        40,
+        27
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P7-secondary",
+      "file": "PAINT-P7-secondary.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        160,
+        720,
+        120
+      ],
+      "canvas": [
+        720,
+        120
+      ],
+      "body_rect": [
+        0,
+        0,
+        720,
+        120
+      ],
+      "slice": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "has_tint": false,
+      "slice_given": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "source": "colour",
+      "cutter_suggested_slice": [
+        40,
+        27,
+        40,
+        27
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P7-secondary-WHITE",
+      "file": "PAINT-P7-secondary-WHITE.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        160,
+        720,
+        120
+      ],
+      "canvas": [
+        720,
+        120
+      ],
+      "body_rect": [
+        0,
+        0,
+        720,
+        120
+      ],
+      "slice": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "has_tint": true,
+      "slice_given": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "source": "W",
+      "cutter_suggested_slice": [
+        40,
+        27,
+        40,
+        27
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P7-small",
+      "file": "PAINT-P7-small.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        292,
+        440,
+        112
+      ],
+      "canvas": [
+        440,
+        112
+      ],
+      "body_rect": [
+        0,
+        0,
+        440,
+        112
+      ],
+      "slice": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "has_tint": false,
+      "slice_given": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "source": "colour",
+      "cutter_suggested_slice": [
+        40,
+        27,
+        40,
+        27
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P7-small-WHITE",
+      "file": "PAINT-P7-small-WHITE.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        292,
+        440,
+        112
+      ],
+      "canvas": [
+        440,
+        112
+      ],
+      "body_rect": [
+        0,
+        0,
+        440,
+        112
+      ],
+      "slice": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "has_tint": true,
+      "slice_given": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "source": "W",
+      "cutter_suggested_slice": [
+        40,
+        27,
+        40,
+        27
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P7-comms",
+      "file": "PAINT-P7-comms.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        416,
+        288,
+        96
+      ],
+      "canvas": [
+        288,
+        96
+      ],
+      "body_rect": [
+        0,
+        0,
+        288,
+        96
+      ],
+      "slice": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "has_tint": false,
+      "slice_given": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "source": "colour",
+      "cutter_suggested_slice": [
+        40,
+        27,
+        40,
+        27
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-P7-comms-WHITE",
+      "file": "PAINT-P7-comms-WHITE.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        416,
+        288,
+        96
+      ],
+      "canvas": [
+        288,
+        96
+      ],
+      "body_rect": [
+        0,
+        0,
+        288,
+        96
+      ],
+      "slice": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "has_tint": true,
+      "slice_given": [
+        40,
+        0,
+        40,
+        0
+      ],
+      "source": "W",
+      "cutter_suggested_slice": [
+        40,
+        27,
+        40,
+        27
+      ],
+      "stretch_axes": "horizontal"
+    },
+    {
+      "name": "PAINT-SOCKET-20",
+      "file": "PAINT-SOCKET-20.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        524,
+        96,
+        96
+      ],
+      "canvas": [
+        96,
+        96
+      ],
+      "body_rect": [
+        0,
+        0,
+        96,
+        96
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          48,
+          48
+        ]
+      ],
+      "socket_centre_body": [
+        48,
+        48
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-SOCKET-20-WHITE",
+      "file": "PAINT-SOCKET-20-WHITE.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        524,
+        96,
+        96
+      ],
+      "canvas": [
+        96,
+        96
+      ],
+      "body_rect": [
+        0,
+        0,
+        96,
+        96
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          48,
+          48
+        ]
+      ],
+      "socket_centre_body": [
+        48,
+        48
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-SOCKET-44",
+      "file": "PAINT-SOCKET-44.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        632,
+        192,
+        192
+      ],
+      "canvas": [
+        192,
+        192
+      ],
+      "body_rect": [
+        0,
+        0,
+        192,
+        192
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          96,
+          96
+        ]
+      ],
+      "socket_centre_body": [
+        96,
+        96
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-SOCKET-44-WHITE",
+      "file": "PAINT-SOCKET-44-WHITE.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        632,
+        192,
+        192
+      ],
+      "canvas": [
+        192,
+        192
+      ],
+      "body_rect": [
+        0,
+        0,
+        192,
+        192
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          96,
+          96
+        ]
+      ],
+      "socket_centre_body": [
+        96,
+        96
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-SOCKET-120",
+      "file": "PAINT-SOCKET-120.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        836,
+        504,
+        504
+      ],
+      "canvas": [
+        504,
+        504
+      ],
+      "body_rect": [
+        0,
+        0,
+        504,
+        504
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          252,
+          252
+        ]
+      ],
+      "socket_centre_body": [
+        252,
+        252
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-SOCKET-120-WHITE",
+      "file": "PAINT-SOCKET-120-WHITE.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        836,
+        504,
+        504
+      ],
+      "canvas": [
+        504,
+        504
+      ],
+      "body_rect": [
+        0,
+        0,
+        504,
+        504
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          252,
+          252
+        ]
+      ],
+      "socket_centre_body": [
+        252,
+        252
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-SOCKET-150",
+      "file": "PAINT-SOCKET-150.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        1352,
+        624,
+        624
+      ],
+      "canvas": [
+        624,
+        624
+      ],
+      "body_rect": [
+        0,
+        0,
+        624,
+        624
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          312,
+          312
+        ]
+      ],
+      "socket_centre_body": [
+        312,
+        312
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-SOCKET-150-WHITE",
+      "file": "PAINT-SOCKET-150-WHITE.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        1352,
+        624,
+        624
+      ],
+      "canvas": [
+        624,
+        624
+      ],
+      "body_rect": [
+        0,
+        0,
+        624,
+        624
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          312,
+          312
+        ]
+      ],
+      "socket_centre_body": [
+        312,
+        312
+      ],
+      "source": "W"
+    },
+    {
+      "name": "PAINT-SOCKET-200",
+      "file": "PAINT-SOCKET-200.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        1988,
+        824,
+        824
+      ],
+      "canvas": [
+        824,
+        824
+      ],
+      "body_rect": [
+        0,
+        0,
+        824,
+        824
+      ],
+      "slice": null,
+      "has_tint": false,
+      "socket_centres_canvas_px": [
+        [
+          412,
+          412
+        ]
+      ],
+      "socket_centre_body": [
+        412,
+        412
+      ],
+      "source": "colour"
+    },
+    {
+      "name": "PAINT-SOCKET-200-WHITE",
+      "file": "PAINT-SOCKET-200-WHITE.png",
+      "folder": "paint",
+      "board": 6,
+      "box": [
+        12,
+        1988,
+        824,
+        824
+      ],
+      "canvas": [
+        824,
+        824
+      ],
+      "body_rect": [
+        0,
+        0,
+        824,
+        824
+      ],
+      "slice": null,
+      "has_tint": true,
+      "socket_centres_canvas_px": [
+        [
+          412,
+          412
+        ]
+      ],
+      "socket_centre_body": [
+        412,
+        412
+      ],
+      "source": "W"
+    }
+  ]
+}

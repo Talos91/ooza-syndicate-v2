@@ -46,7 +46,7 @@ const HALO_SPIN := 0.5                # rad/s the segments slowly turn (reads as
 # ui-neon (Daniele 2026-11-02: "the upgrade HUD is too small and flat too: make it neon as well"): the upgrade-ready chip is a
 # neon hex plate with a double chevron, sized in phone points (it was an 18 px card, ~11 pt on a phone), on the platform's rim
 # clear of the badges, pulsing for SIGN_PULSE_S when it lights up.
-const UPGRADE_CHIP_PT := 17.0         # hex circumradius in points: 34 pt across on a phone (>= 33 pt readable)
+const UPGRADE_CHIP_PT := 13.0         # hex circumradius in points: 34 pt across on a phone (>= 33 pt readable)
 const UPGRADE_ARROW_BOB := 2.0        # pt it gently bobs
 const UPGRADE_ARROW_SPEED := 2.4      # rad/s of the bob/pulse
 
@@ -255,6 +255,8 @@ func _draw() -> void:
 	if hud.shows("upgrade_arrow"):
 		_draw_upgrade_arrows(cam, avoid)
 	if hud.shows("relay"):
+		_draw_relay_ready(cam, avoid)
+	if hud.shows("relay"):
 		_draw_relay_cues(cam)
 	if hud.shows("monster"):
 		var reach_hub: int = main.monster_from
@@ -425,7 +427,7 @@ func _upgrade_ready(id: int) -> bool:
 	var n: Dictionary = sim.nodes[id]
 	if n["owner"] != human:
 		return false
-	return sim.can_upgrade(id, human) == "" and not sim.node_under_attack(id, human)
+	return sim.can_upgrade(id, human) == ""     # play-fixes (Daniele 2026-11-14): the chip shows exactly when a double-tap would upgrade
 
 
 func upgrade_chip_rect(id: int) -> Rect2:
@@ -469,9 +471,59 @@ func _draw_upgrade_arrows(cam: Camera3D, avoid: Array) -> void:
 				if Rect2(c - half, half * 2.0).intersects(b2.grow(2.0)):
 					c.y = b2.end.y + 4.0 + half.y
 		_chips[id] = [c, R]
-		_neon(NT_CHIP, c, R * grow, Color(1, 1, 1, 0.88 + 0.12 * k))
-		if float(pk[1]) > 0.0:
-			_pulse_ring(c, R, col, pk, NT_CHIP)
+		if HudLab.cue_ready():                           # hud-37: the round-37 P1 tag (indicator only), READY layer pulsing
+			HudLab.draw_cue(self, false, c, pt * grow, col, 0.35 + 0.65 * k)
+		else:
+			_neon(NT_CHIP, c, R * grow, Color(1, 1, 1, 0.88 + 0.12 * k))
+			if float(pk[1]) > 0.0:
+				_pulse_ring(c, R, col, pk, NT_CHIP)
+
+
+# ------------------------------------------------------------------ relay-ready symbol (play-fixes, Daniele 2026-11-14: "like for
+# the chevron a symbol to relays when they are ready to fire (again the double tap)"). An indicator only, like the upgrade chip:
+# on a relay you own whose double-tap fire is available right now (off cooldown, not mid-warning, not locked, not fixed).
+# Art: round 37B2 P1R (HudLab.draw_cue).
+var _relay_chips := {}                 # node id -> [centre, circumradius]: drawn this frame (tests)
+
+
+func relay_ready(id: int) -> bool:
+	var n: Dictionary = sim.nodes[id]
+	if n["relay"] == "" or n["owner"] != human or sim.collapsed.get(id, false) or sim.relay_fixed(id):
+		return false
+	return n["relay_cd"] <= 0.0 and n["relay_phase"] == "" and not sim.is_relay_locked(id) and not sim.relay_states(n).is_empty()
+
+
+func relay_chip_rect(id: int) -> Rect2:
+	var c = _relay_chips.get(id)
+	if c == null:
+		return Rect2()
+	var half := Vector2(float(c[1]), float(c[1]) * 0.866)
+	return Rect2((c[0] as Vector2) - half, half * 2.0)
+
+
+func _draw_relay_ready(cam: Camera3D, avoid: Array) -> void:
+	_relay_chips.clear()
+	var col := Rules.seat_color(human)
+	var pt := _pt()
+	for n in sim.nodes:
+		var id: int = n["id"]
+		if not relay_ready(id):
+			continue
+		var ns := _node_screen(id, cam)
+		var bs := RelayView.button_screen(cam, main.vis, id)
+		if not bs.is_empty():
+			ns = bs
+		var r: float = float(ns[1])
+		var k := 0.5 + 0.5 * sin(_t * UPGRADE_ARROW_SPEED + float(id))
+		var R := UPGRADE_CHIP_PT * pt
+		var d := r * 0.62
+		var c := _clear_spot(ns[0], [Vector2(d, -d), Vector2(-d, -d), Vector2(d, d * 0.7), Vector2(-d, d * 0.7)],
+				Vector2(R, R * 0.866), avoid)
+		avoid.append(Rect2(c - Vector2(R, R * 0.866), Vector2(R, R * 0.866) * 2.0))
+		c.y -= UPGRADE_ARROW_BOB * pt * k
+		_relay_chips[id] = [c, R]
+		HudLab.draw_cue(self, true, c, pt, col, 0.35 + 0.65 * k)   # hud-37: the round-37 P1R lozenge replaces the placeholder
+
 
 
 # ------------------------------------------------------------------ the neon atlas (ui-neon)
