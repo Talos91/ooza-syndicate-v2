@@ -18,8 +18,8 @@ static var v2 := _arg() == "lab2"   # designer v2 (2026-11-12): cream satin shel
                                     # goo shows through clearer glass; floor / surround / lights as v1
 const RIM_IN := 5.86                # v2 owner rim: a 0.28 m flat band on the platform lip (the kit band is 0.14 m on the side)
 const RIM_OUT := 6.14
-const RIM_ENERGY := 5.0             # v2 owned rim emission (Mats.light: 3.0)
-const KIT_RIM_ENERGY := 4.5         # vat-neon hotfix 0.24.4: was 2.2 (owner neon far too faint on a phone, Daniele 2026-11-13); owner reads at a glance
+const RIM_ENERGY := 1.5             # v2 owned rim emission (Mats.light: 3.0)
+const KIT_RIM_ENERGY := 1.5         # vat-neon round 2: 4.5 / 2.2 tonemapped every channel > 1 to WHITE (the owner colour only in the halo); <= ~1.5 keeps the hue. Was 2.2 (owner neon far too faint on a phone, Daniele 2026-11-13); owner reads at a glance
 static var _rim_mesh: ArrayMesh
 static var _missing := {}
 
@@ -124,8 +124,6 @@ static func rim(part: Node, seat: String) -> void:
 	## game camera); neutral platforms stay rimless (the _lab2 kit band is shell cream, no emission).
 	if not v2 or not is_instance_valid(part) or not (part as Node).scene_file_path.contains("/Platform_"):
 		return
-	if (part as Node).scene_file_path.contains("/labkit/"):   # lab-wire: the kit platform carries its own 0.5 m owner band
-		return                                                 # (designer 4: no halo on the cream, the rim band only)
 	var mi := (part as Node).get_node_or_null("LookRim") as MeshInstance3D
 	if mi == null:
 		if _rim_mesh == null:
@@ -164,7 +162,7 @@ static func _rim_mat(c: Color) -> StandardMaterial3D:
 	var k := c.to_html()
 	if not _rim_mats.has(k):
 		var m := StandardMaterial3D.new()
-		m.albedo_color = c
+		m.albedo_color = c * 0.35
 		m.emission_enabled = true
 		m.emission = c
 		m.emission_energy_multiplier = RIM_ENERGY

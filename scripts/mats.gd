@@ -19,7 +19,7 @@ static func light_color(c: Color, key := "") -> StandardMaterial3D:
 		key = "lc_" + c.to_html()
 	if not _cache.has(key):
 		var m := StandardMaterial3D.new()
-		m.albedo_color = c
+		m.albedo_color = c * 0.35 if Look.v2 else c   # vat-neon round 2: a dark albedo, the sun on cream albedo washed the owner colour to white
 		m.emission_enabled = true
 		m.emission = c
 		m.emission_energy_multiplier = Look.light_energy()   # 3.0 (LAB LOOK TEST v2: brighter owner neon)

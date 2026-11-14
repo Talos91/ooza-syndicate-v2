@@ -1436,7 +1436,9 @@ static func _rim_arc(st: SurfaceTool, a0: float, a1: float, closed: bool) -> voi
 
 
 func _brawl_color(owner: String) -> Color:
-	return Rules.seat_color(owner) if owner != "" else NEUTRAL_TRIM
+	if owner == "":
+		return Rules.NEUTRAL * 0.8 if Look.v2 else NEUTRAL_TRIM   # vat-neon round 2: unowned = neutral grey-blue (the orange Alpha 11 trim read as a colour on the cream decks)
+	return Rules.seat_color(owner)
 
 
 func _deck_color(owner: String) -> Color:
