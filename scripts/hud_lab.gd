@@ -491,6 +491,19 @@ static func draw_badges(layer, hud) -> void:
 		var owner := str(b["owner"])
 		var oc := Rules.seat_color(owner) if owner != "" and owner != "?" else Rules.NEUTRAL
 		layer.draw_texture_rect(paint, r, false)
+		if owner != "" and owner != "?":                  # vat-neon hotfix 0.24.4: the owner reads at a glance - a soft glow + a bolder outline
+			var gl := StyleBoxFlat.new()
+			gl.bg_color = Color(oc.r, oc.g, oc.b, 0.0)
+			gl.set_corner_radius_all(int(r.size.y * 0.22))
+			gl.shadow_color = Color(oc.r, oc.g, oc.b, 0.75)
+			gl.shadow_size = maxi(int(r.size.y * 0.30), 3)
+			layer.draw_style_box(gl, r)
+			var ol := StyleBoxFlat.new()
+			ol.bg_color = Color(0, 0, 0, 0)
+			ol.border_color = oc
+			ol.set_border_width_all(maxi(int(r.size.y * 0.11), 2))
+			ol.set_corner_radius_all(int(r.size.y * 0.22))
+			layer.draw_style_box(ol, r)
 		layer.draw_texture_rect(edge, r, false, oc)
 		var bar: ProgressBar = b["build"]
 		if bar.visible and strip != null:

@@ -19,7 +19,7 @@ static var v2 := _arg() == "lab2"   # designer v2 (2026-11-12): cream satin shel
 const RIM_IN := 5.86                # v2 owner rim: a 0.28 m flat band on the platform lip (the kit band is 0.14 m on the side)
 const RIM_OUT := 6.14
 const RIM_ENERGY := 5.0             # v2 owned rim emission (Mats.light: 3.0)
-const KIT_RIM_ENERGY := 2.2         # lab-wire: the kit's 0.5 m owner band (4x the old area) glows under the bloom spill (designer 4: halo at 1280)
+const KIT_RIM_ENERGY := 4.5         # vat-neon hotfix 0.24.4: was 2.2 (owner neon far too faint on a phone, Daniele 2026-11-13); owner reads at a glance
 static var _rim_mesh: ArrayMesh
 static var _missing := {}
 
