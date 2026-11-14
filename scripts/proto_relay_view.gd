@@ -1415,13 +1415,14 @@ func _speed_tags() -> void:
 		if l == null:
 			l = _label(64)
 			_tags[hid] = l
+			_p2_skin(l)
 		if not is_equal_approx(tm, 1.0):              # its attack at the node it was sent to: +10 % / -10 %
 			l.text = "%+d %%" % int(roundf((tm - 1.0) * 100.0))
-			l.modulate = Rules.state_color("cAB") if tm > 1.0 else Rules.state_color("warn")
+			_p2_tint(l, Rules.state_color("cAB") if tm > 1.0 else Rules.state_color("warn"))
 		else:
 			var with := int(sense[0]) > 0
 			l.text = "x" + _num(float(cfg["with"] if with else cfg["against"]))
-			l.modulate = Rules.state_color("cAB") if with else Rules.state_color("warn")
+			_p2_tint(l, Rules.state_color("cAB") if with else Rules.state_color("warn"))
 		l.position = (Sim.sample(h, h["s"])[0] as Vector3) + Vector3(0, 2.6, 0)
 	for hid in _tags.keys():
 		if not seen.has(hid):
@@ -1431,3 +1432,40 @@ func _speed_tags() -> void:
 
 static func _num(x: float) -> String:
 	return str(int(x)) if is_equal_approx(x, roundf(x)) else str(snappedf(x, 0.01))   # (round 3: x2.25)
+
+
+const P2_W_M := 8.6                   # world width (m) of the P2 board tag: the pack's 64 x 20 pt capsule at the label's size
+
+
+func _p2_skin(l: Label3D) -> void:
+	## hud-37 (round 37B2, P2): the speed tag is a board tag - the pack's ivory capsule behind dark ink text, its owner / state edge
+	## (a mask in the tag's colour) on the left end - not bare green text. Without the pack the plain coloured label stays.
+	var shell := HudLab.tex37("PAINT-P2")
+	var edge := HudLab.tex37("MASK-P2-OWNER-EDGE")
+	if shell == null:
+		return
+	l.set_meta("p2", true)
+	l.outline_size = 0
+	l.modulate = HudLab.INK
+	for pair in [[shell, 1, "shell"], [edge, 2, "edge"]]:
+		if pair[0] == null:
+			continue
+		var s := Sprite3D.new()
+		s.texture = pair[0]
+		s.pixel_size = P2_W_M / float((pair[0] as Texture2D).get_width())
+		s.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		s.no_depth_test = true
+		s.shaded = false
+		s.render_priority = int(pair[1])
+		s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		s.name = pair[2]
+		l.add_child(s)
+
+
+func _p2_tint(l: Label3D, col: Color) -> void:
+	if l.has_meta("p2"):
+		var e := l.get_node_or_null("edge") as Sprite3D
+		if e != null:
+			e.modulate = col
+	else:
+		l.modulate = col

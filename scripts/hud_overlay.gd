@@ -46,7 +46,7 @@ const HALO_SPIN := 0.5                # rad/s the segments slowly turn (reads as
 # ui-neon (Daniele 2026-11-02: "the upgrade HUD is too small and flat too: make it neon as well"): the upgrade-ready chip is a
 # neon hex plate with a double chevron, sized in phone points (it was an 18 px card, ~11 pt on a phone), on the platform's rim
 # clear of the badges, pulsing for SIGN_PULSE_S when it lights up.
-const UPGRADE_CHIP_PT := 17.0         # hex circumradius in points: 34 pt across on a phone (>= 33 pt readable)
+const UPGRADE_CHIP_PT := 13.0         # hex circumradius in points: 34 pt across on a phone (>= 33 pt readable)
 const UPGRADE_ARROW_BOB := 2.0        # pt it gently bobs
 const UPGRADE_ARROW_SPEED := 2.4      # rad/s of the bob/pulse
 
@@ -471,15 +471,18 @@ func _draw_upgrade_arrows(cam: Camera3D, avoid: Array) -> void:
 				if Rect2(c - half, half * 2.0).intersects(b2.grow(2.0)):
 					c.y = b2.end.y + 4.0 + half.y
 		_chips[id] = [c, R]
-		_neon(NT_CHIP, c, R * grow, Color(1, 1, 1, 0.88 + 0.12 * k))
-		if float(pk[1]) > 0.0:
-			_pulse_ring(c, R, col, pk, NT_CHIP)
+		if HudLab.cue_ready():                           # hud-37: the round-37 P1 tag (indicator only), READY layer pulsing
+			HudLab.draw_cue(self, false, c, pt * grow, col, 0.35 + 0.65 * k)
+		else:
+			_neon(NT_CHIP, c, R * grow, Color(1, 1, 1, 0.88 + 0.12 * k))
+			if float(pk[1]) > 0.0:
+				_pulse_ring(c, R, col, pk, NT_CHIP)
 
 
 # ------------------------------------------------------------------ relay-ready symbol (play-fixes, Daniele 2026-11-14: "like for
 # the chevron a symbol to relays when they are ready to fire (again the double tap)"). An indicator only, like the upgrade chip:
 # on a relay you own whose double-tap fire is available right now (off cooldown, not mid-warning, not locked, not fixed).
-# PLACEHOLDER art: a hex plate with a lightning bolt, drawn here - round 37's designer glyph replaces it.
+# Art: round 37B2 P1R (HudLab.draw_cue).
 var _relay_chips := {}                 # node id -> [centre, circumradius]: drawn this frame (tests)
 
 
@@ -519,17 +522,7 @@ func _draw_relay_ready(cam: Camera3D, avoid: Array) -> void:
 		avoid.append(Rect2(c - Vector2(R, R * 0.866), Vector2(R, R * 0.866) * 2.0))
 		c.y -= UPGRADE_ARROW_BOB * pt * k
 		_relay_chips[id] = [c, R]
-		var hex := PackedVector2Array()
-		for i in range(6):
-			hex.append(c + Vector2.from_angle(TAU * i / 6.0) * R * Vector2(1.0, 0.866))
-		draw_colored_polygon(hex, Color(0.05, 0.07, 0.1, 0.9))
-		hex.append(hex[0])
-		draw_polyline(hex, Color(col, 0.9), maxf(2.0, R * 0.09), true)
-		var u := R / 10.0                                          # a lightning bolt, 10 u tall each way
-		var bolt := PackedVector2Array([Vector2(1.5, -8), Vector2(-4.5, 1), Vector2(-0.5, 1), Vector2(-1.5, 8), Vector2(4.5, -1.5), Vector2(0.5, -1.5)])
-		for i in range(bolt.size()):
-			bolt[i] = c + bolt[i] * u
-		draw_colored_polygon(bolt, Color(1, 1, 1, 0.88 + 0.12 * k))
+		HudLab.draw_cue(self, true, c, pt, col, 0.35 + 0.65 * k)   # hud-37: the round-37 P1R lozenge replaces the placeholder
 
 
 

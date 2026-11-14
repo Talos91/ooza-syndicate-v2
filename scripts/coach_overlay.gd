@@ -1360,7 +1360,7 @@ func _position_card() -> void:
 	var br := Vector2(vp.x - cs.x - MARGIN, vp.y - cs.y - MARGIN)
 	if Rect2(br, cs).intersects(dock):
 		br.y = dock_top - cs.y - MARGIN
-	var corners := {"tl": tl, "tr": tr, "bl": bl, "br": br}
+	var corners := {"tl": tl, "bl": bl, "br": br}       # hud-37 (round 37 P4): the comms card never sits top-right, over the rival nodes there (tr kept above for the layout maths)
 	var target_center := _target_center(vp)
 	var best_key := "br"
 	var best_score := -INF
