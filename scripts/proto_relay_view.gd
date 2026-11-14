@@ -517,6 +517,7 @@ func _ferry_deck(ei: int) -> Dictionary:
 	held.position = (a + b) * 0.5 + Vector3(0, 6.5, 0)   # (above the FERRY n / m CROSSED callout)
 	held.visible = false
 	parts["held"] = held
+	_p2_skin(held)                                       # hud-37 P2: HELD / FERRY / IN n read as board tags too
 	return parts
 
 
@@ -950,15 +951,15 @@ func _ferry_deck_sync(parts: Dictionary, fp: Dictionary, gone: bool) -> Color:
 	hl.visible = not down and held > 0.0
 	if held > 0.0:
 		hl.text = "HELD · %d" % int(ceil(held))
-		hl.modulate = Color("#5cff7a")
+		_p2_tint(hl, Color("#5cff7a"))
 	elif lane3 and not down:                          # round R readout: which lane the ferry serves, and when
 		hl.visible = true
 		if open:
 			hl.text = "FERRY · %d" % int(ceil(float(fp["left"])))
-			hl.modulate = Color("#5cff7a")
+			_p2_tint(hl, Color("#5cff7a"))
 		else:
 			hl.text = "IN %d" % int(ceil(float(fp["next_open"])))
-			hl.modulate = Rules.RELAY_GHOST_COLORS["ferry"]
+			_p2_tint(hl, Rules.RELAY_GHOST_COLORS["ferry"])
 			if Calm.labels() and float(fp["next_open"]) > Calm.IN_TAG_S:
 				hl.visible = false                         # calm-pass B: the lane's IN n only while it is about to open
 	return lc
