@@ -19,19 +19,67 @@ def hsv(rgb):
 VMIN = {"ember": 0.56}   # EMBER: its brim neon is a thinner, greyer line than the others
 
 
-def neon_mask(diff2k, vmin=0.78):
-    """The white lit band edges of the Rodin diffuse: low saturation, high value; small specks dropped, holes closed, edges crisp."""
+def thin(img):
+    """Zhang-Suen thinning (numpy): the one-pixel centre line of every stroke."""
+    im = img.copy().astype(np.uint8)
+    while True:
+        changed = False
+        for step in (0, 1):
+            P = np.pad(im, 1)
+            p2, p3, p4, p5, p6, p7, p8, p9 = (P[:-2, 1:-1], P[:-2, 2:], P[1:-1, 2:], P[2:, 2:], P[2:, 1:-1], P[2:, :-2], P[1:-1, :-2], P[:-2, :-2])
+            nb = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9
+            seq = [p2, p3, p4, p5, p6, p7, p8, p9, p2]
+            tr = sum(((seq[i] == 0) & (seq[i + 1] == 1)).astype(np.uint8) for i in range(8))
+            if step == 0:
+                c = (p2 * p4 * p6 == 0) & (p4 * p6 * p8 == 0)
+            else:
+                c = (p2 * p4 * p8 == 0) & (p2 * p6 * p8 == 0)
+            rm = (im == 1) & (nb >= 2) & (nb <= 6) & (tr == 1) & c
+            if rm.any():
+                im[rm] = 0
+                changed = True
+        if not changed:
+            return im.astype(bool)
+
+
+def disc(r):
+    yy, xx = np.ogrid[-r:r + 1, -r:r + 1]
+    return (xx * xx + yy * yy) <= r * r
+
+
+# Plates whose logo is a lighter-grey relief (not white): (x0, y0, x1, y1) at 2048, raised-stroke threshold over the plate's median value
+PLATES = {"solar": [(1545, 325, 1765, 605)]}
+LINE_R = 5          # half-width of the regularised thin lines at 2048 (about 5 px wide at 1024)
+
+
+def neon_mask(diff2k, vmin=0.78, game=""):
+    """Clean, even neon: smoothed colour candidate; thick parts kept as they are, thin strokes replaced by their centre line grown to an even width;
+    short patchy bits dropped; relief logos cut inside their plate."""
     rgb = np.asarray(diff2k, np.float32) / 255.0
     s, v = hsv(rgb)
-    m = (s < 0.16) & (v > vmin)
-    m = ndimage.binary_opening(m, iterations=1)
-    m = ndimage.binary_closing(m, iterations=2)
-    m = ndimage.binary_dilation(m, iterations=2)       # the anti-aliased fringe of the lit line (about 1 px at 1024), geometry-following
-    lab, n = ndimage.label(m)
+    cand = (s < 0.16) & (v > vmin)
+    cand = ndimage.gaussian_filter(cand.astype(np.float32), 2.0) > 0.5
+    thick = ndimage.binary_opening(cand, structure=disc(8))
+    thick = ndimage.binary_dilation(thick, structure=disc(1))
+    thin_part = cand & ~ndimage.binary_dilation(thick, structure=disc(5))
+    sk = thin(thin_part)
+    lab, n = ndimage.label(sk, structure=np.ones((3, 3)))
     if n:
-        sizes = ndimage.sum(m, lab, range(1, n + 1))
-        keep = np.isin(lab, 1 + np.nonzero(sizes >= 500)[0])
-        m = keep
+        sizes = ndimage.sum(sk, lab, range(1, n + 1))
+        sk = np.isin(lab, 1 + np.nonzero(sizes >= 100)[0])
+    line = ndimage.binary_dilation(sk, structure=disc(LINE_R))
+    lab, n = ndimage.label(thick)
+    if n:
+        sizes = ndimage.sum(thick, lab, range(1, n + 1))
+        thick = np.isin(lab, 1 + np.nonzero(sizes >= 1500)[0])
+    m = thick | line
+    for (x0, y0, x1, y1) in PLATES.get(game, []):
+        g = (v[y0:y1, x0:x1]).copy()
+        g = ndimage.gaussian_filter(g, 1.2)
+        relief = g > (np.median(g) + 0.10)
+        relief = ndimage.binary_opening(relief, structure=disc(2))
+        relief = ndimage.binary_dilation(relief, structure=disc(2))
+        m[y0:y1, x0:x1] |= relief
     return m
 
 
@@ -53,7 +101,7 @@ def build(game, folder):
         r.save(f"{OUT}{game}_{name}.png")
         o = io.BytesIO(); r.save(o, "PNG", optimize=True); pngs.append((name, o.getvalue()))
     # mask: cut at 2048, area-downsample, threshold -> crisp 1024
-    m = neon_mask(diff, VMIN.get(game, 0.78)).astype(np.float32)
+    m = neon_mask(diff, VMIN.get(game, 0.78), game).astype(np.float32)
     m1 = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).resize((1024, 1024), Image.BOX), np.float32) / 255.0
     tint = np.zeros((1024, 1024, 3), np.uint8)
     tint[..., 0] = (m1 > 0.5) * 255
