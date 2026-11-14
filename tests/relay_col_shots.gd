@@ -23,6 +23,28 @@ func _shot(inst: Node, file: String) -> void:
 	inst.get_viewport().get_texture().get_image().save_png(file)
 	print("shot ", file)
 
+func _col(m) -> String:
+	if m is StandardMaterial3D:
+		return (m as StandardMaterial3D).emission.to_html(false)
+	return "-"
+
+func _probe(inst: Node, sim: Sim) -> void:
+	for n in sim.nodes:
+		if str(n["relay"]) == "":
+			continue
+		var plat: Node = inst.vis[n["id"]].get("platform")
+		var band := []
+		var piece := plat.get_node_or_null("Platform_Relay_v3_%d" % n["id"])
+		if piece:
+			for mi in piece.find_children("*", "MeshInstance3D", true, false):
+				var mesh: Mesh = (mi as MeshInstance3D).mesh
+				for s in range(mesh.get_surface_count()):
+					var m := mesh.surface_get_material(s)
+					if m and m.resource_name.begins_with("OS_Light"):
+						band.append(_col((mi as MeshInstance3D).get_surface_override_material(s)))
+		var rim := plat.get_node_or_null("LookRim")
+		print("PROBE node %d owner=%s band=%s rim=%s" % [n["id"], n["owner"], str(band), _col((rim as MeshInstance3D).material_override) if rim else "none"])
+
 func _run() -> void:
 	var args := _args()
 	var out := str(args.get("out", "user://relay_col"))
@@ -56,6 +78,7 @@ func _run() -> void:
 	await _frames(30)
 	var rel: Array = owned.call()
 	print("%s %s t=%.0f owned relays: %s" % [code, theme, sim.time, str(rel.map(func(n): return "%d:%s:%s" % [n["id"], n["relay"], n["owner"]]))])
+	_probe(inst, sim)
 	await _shot(inst, "%s/%s-%s-board.png" % [out, code, theme])
 	if not rel.is_empty():
 		var n: Dictionary = rel[0]
