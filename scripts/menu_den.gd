@@ -97,6 +97,17 @@ func backdrop_anchor_x() -> float:
 	return _ax
 
 
+func tv_bottom() -> float:
+	## Screen y of the TV's lowest corner (the menu keeps its keys above-clear of it), 0 when the painting is not shown.
+	if _bg.is_empty() or _backdrop == null:
+		return 0.0
+	var k := _backdrop.size.y / (_bg["size"] as Vector2).y
+	var m := 0.0
+	for c in _bg["tv"]:
+		m = maxf(m, (c as Vector2).y)
+	return _backdrop.position.y + m * k
+
+
 func quiet_right() -> float:
 	## Screen x of the quiet zone's right edge (the painting's left ~30 %), from the backdrop's current placement.
 	if _bg.is_empty() or _backdrop == null:
