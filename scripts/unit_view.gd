@@ -32,6 +32,9 @@ const HOP := 0.087 * UNIT_SIZE       # Alpha 11: 0.052 on a 0.6-unit body
 const ROLL := 0.07
 const SQUASH := 0.11
 const TURN := 0.65
+# FACE TRAVEL (Daniele 2026-11-06, Alpha 24 units: "units should face the direction they go"): a body looks along its
+# path heading. The Alpha 11 camera three-quarter (TURN) stays only for a body with no heading.
+const FACE_TRAVEL := true
 const SOFTNESS := {"ember": 0.4, "solar": 0.4}
 # Through the door (Daniele, Alpha 17: "units entering the building just clip"): over the last DOOR m
 # of the route a body shrinks and dips into the doorway, and a body leaving grows out of it the same
@@ -46,8 +49,6 @@ var _tex := {}                       # faction -> albedo Texture2D
 var _scale := {}                     # faction -> uniform scale to UNIT_SIZE
 var _mm := {}                        # "faction|seat" -> MultiMeshInstance3D
 var _xf := {}                        # "faction|seat" -> Batch: this frame's bodies
-var _disc: MultiMeshInstance3D
-var _discs := Batch.new(4096, true)  # this frame's discs (transform + colour)
 var _ghost_seed := {}                # "faction|seat|g" -> its flicker seed (SkillFx.ghost_alpha)
 
 
@@ -113,25 +114,6 @@ func _ready() -> void:
 		_scale[f] = UNIT_SIZE * Rules.look_size(f) / maxf(maxf(aabb.size.x, aabb.size.z), 0.001)   # FACTION LOOK size
 		var src := (_mesh[f] as Mesh).surface_get_material(0) as BaseMaterial3D
 		_tex[f] = src.albedo_texture if src else null
-	var disc_mesh := CylinderMesh.new()
-	disc_mesh.top_radius = 0.5
-	disc_mesh.bottom_radius = 0.5
-	disc_mesh.height = 0.05
-	disc_mesh.radial_segments = 12
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.vertex_color_use_as_albedo = true
-	disc_mesh.material = mat
-	var dm := MultiMesh.new()
-	dm.transform_format = MultiMesh.TRANSFORM_3D
-	dm.use_colors = true
-	dm.mesh = disc_mesh
-	dm.instance_count = 4096
-	dm.visible_instance_count = 0
-	_disc = MultiMeshInstance3D.new()
-	_disc.multimesh = dm
-	_disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_disc)
 
 
 func _instance(faction: String, seat: String, ghost := false) -> MultiMeshInstance3D:
@@ -163,14 +145,29 @@ func _instance(faction: String, seat: String, ghost := false) -> MultiMeshInstan
 	return _mm[key]
 
 
+static func face_yaw(fwd: Vector3, to_cam: Vector3, screen_right: Vector3) -> float:
+	## The yaw add_unit takes: along the travel direction (FACE_TRAVEL), else Alpha 11's camera three-quarter turned
+	## toward the side it travels.
+	if FACE_TRAVEL and fwd.length() > 0.01:
+		return Rules.heading(fwd)
+	return Rules.heading(to_cam.rotated(Vector3.UP, TURN * clampf(fwd.dot(screen_right) * 2.0, -1.0, 1.0)))
+
+
 static func style(m: ShaderMaterial, faction: String, seat: String, goo: bool) -> void:
 	## The column look on a copy of Mats.creature: NEON = body in the seat colour (hue shift), race rim,
 	## self glow 0.45 (today); GOO = body in the race colour, player-colour rim.
+	## ALPHA 24 UNITS v4 (Mats.is_v4): the body is always the AI's colour; the seat colour is on the apparatus neon.
 	var seat_hue: float = Rules.seat_color(seat).h
-	m.set_shader_parameter("hue_shift", 0.0 if goo else fposmod(seat_hue - Rules.FACTIONS[faction][0], 1.0))
+	var v4 := Mats.is_v4(m)
+	m.set_shader_parameter("hue_shift", 0.0 if goo or v4 else fposmod(seat_hue - Rules.FACTIONS[faction][0], 1.0))
 	m.set_shader_parameter("accent", Rules.seat_color(seat) if goo else Rules.FACTIONS[faction][1])
-	m.set_shader_parameter("rim_gain", GOO_RIM_GAIN if goo else 2.2)
-	m.set_shader_parameter("self_glow", GOO_SELF_GLOW if goo else 0.45)
+	m.set_shader_parameter("rim_gain", GOO_RIM_GAIN if goo else (Mats.V4_RIM if v4 else 2.2))
+	m.set_shader_parameter("self_glow", Mats.V4_SELF_GLOW if v4 else (GOO_SELF_GLOW if goo else 0.45))
+	if v4:
+		m.set_shader_parameter("tint_color", Rules.seat_color(seat))
+		if Mats.v4_seat_rim > 0.0:
+			m.set_shader_parameter("accent", Rules.seat_color(seat))
+			m.set_shader_parameter("rim_gain", Mats.v4_seat_rim)
 
 
 func begin(now := -1.0) -> void:
@@ -181,12 +178,10 @@ func begin(now := -1.0) -> void:
 			var m := (_mm[k] as MultiMeshInstance3D).material_override as ShaderMaterial
 			if m:
 				style(m, parts[0], parts[1], _goo)
-		_disc.visible = not _goo
 	for k in _xf:
 		(_xf[k] as Batch).n = 0
 	for k in _blob_xf:
 		(_blob_xf[k] as Batch).n = 0
-	_discs.n = 0
 	_seen.clear()
 	if now >= 0.0:
 		_now = now
@@ -207,7 +202,7 @@ func add_unit(faction: String, seat: String, pos: Vector3, heading: float, bob :
 		return
 	if not fog.is_empty() and fogged(fog, pos):       # POWERS: a rival's body inside a Fog of War this screen is blind to
 		return
-	_put_unit(_batch(faction, seat), _scale[faction], seat, Rules.seat_color(seat) * (0.35 if _ghost else 1.0), pos, heading,
+	_put_unit(_batch(faction, seat), _scale[faction], seat, pos, heading,
 			bob, roll, squeeze, size)
 
 
@@ -221,9 +216,9 @@ func _batch(faction: String, seat: String) -> Batch:
 	return _xf[key]
 
 
-func _put_unit(batch: Batch, scale: float, seat: String, disc: Color, pos: Vector3, heading: float, bob: float, roll: float,
+func _put_unit(batch: Batch, scale: float, seat: String, pos: Vector3, heading: float, bob: float, roll: float,
 		squeeze: float, size: float) -> void:
-	## One body and its disc (in colour `disc`); `scale` is its faction's model scale.
+	## One body (the seat disc is gone, Daniele 2026-11-14: the owner colour is on the tool neon / rim); `scale` is its faction's model scale.
 	if ForgePulse.live:                              # a forge coming online: the body glows, hops and swells in its wave
 		var b := ForgePulse.boost(seat, pos)
 		bob += ForgePulse.HOP * b
@@ -232,7 +227,6 @@ func _put_unit(batch: Batch, scale: float, seat: String, disc: Color, pos: Vecto
 	var basis := Basis(Vector3.UP, heading + MODEL_YAW) * Basis(Vector3(0, 0, 1), roll) \
 			* Basis.from_scale(Vector3(1.0 + squeeze * 0.6, 1.0 - squeeze, 1.0 + squeeze * 0.45) * s)
 	batch.put(Transform3D(basis, pos + Vector3(0, 0.08 + bob, 0)))
-	_discs.put_col(Transform3D(Basis().scaled(Vector3.ONE * size), pos + Vector3(0, 0.05, 0)), disc)   # the disc goes in with its body
 
 
 static func _seg(cum: PackedFloat32Array, s: float, lo: int) -> int:
@@ -324,7 +318,6 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 	var model_scale: float = _scale.get(h["faction"], 1.0)
 	var lanes := Rules.look_across(h["faction"])         # FACTION LOOK: lanes and lane width per race
 	var lane_w := LANE * Rules.look_size(h["faction"])
-	var disc_col := Rules.seat_color(owner) * (0.35 if _ghost else 1.0)
 	var cum: PackedFloat32Array = h["cum"]
 	var pts: PackedVector3Array = h["pts"]
 	var walk := cum.size() >= 2                       # (a one-point path: Sim.sample itself)
@@ -387,11 +380,10 @@ func add_horde(h: Dictionary, shown_units: float, time: float, drop := {}, ghost
 		var side := fwd.cross(Vector3.UP).normalized()
 		var row_size := mini(lanes, count - int(j / lanes) * lanes)
 		var lateral := (col - (row_size - 1) * 0.5) * lane_w * expansion
-		var facing := clampf(fwd.dot(screen_right) * 2.0, -1.0, 1.0)
-		var yaw := Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing))
+		var yaw := face_yaw(fwd, to_cam, screen_right)
 		var phase := fmod(j * 0.618 + float(id) * 0.137, 1.0)
 		var wave := sin(time * WAVE + phase * TAU)
-		_put_unit(batch, model_scale, owner, disc_col, at + side * lateral * door + Vector3.DOWN * 0.35 * (1.0 - door), yaw,
+		_put_unit(batch, model_scale, owner, at + side * lateral * door + Vector3.DOWN * 0.35 * (1.0 - door), yaw,
 				maxf(0.0, wave) * HOP * door, wave * ROLL, wave * SQUASH * soft, lerpf(0.12, 1.0, door))
 	while mask & 1:                                # the gone prefix is done with
 		mask >>= 1
@@ -470,9 +462,8 @@ func _drop_bodies(h: Dictionary, drop: Dictionary, head: float, count: int, time
 		if size > 0.01:
 			var dir: Vector3 = ph[3]
 			dir.y = 0.0
-			var facing := clampf(dir.normalized().dot(screen_right) * 2.0, -1.0, 1.0) if dir.length() > 0.01 else 0.0
 			var wave := sin(time * WAVE + fmod(j * 0.618 + float(h["id"]) * 0.137, 1.0) * TAU)
-			add_unit(h["faction"], h["owner"], ph[0], Rules.heading(to_cam.rotated(Vector3.UP, TURN * facing)),
+			add_unit(h["faction"], h["owner"], ph[0], face_yaw(dir.normalized() if dir.length() > 0.01 else Vector3.ZERO, to_cam, screen_right),
 					maxf(0.0, wave) * HOP * size, wave * ROLL, wave * SQUASH * soft + (1.0 - size) * 0.3, lerpf(0.25, 1.0, size))
 
 
@@ -557,7 +548,7 @@ func _spawn(h: Dictionary, mode: int, j: int, at: float, over: float, time: floa
 	var col := j % across
 	var p: Vector3 = (smp[0] as Vector3) + side * (col - (across - 1) * 0.5) * LANE * Rules.look_size(faction) + Vector3(0, 0.08, 0)
 	var screen_right := Vector3(1, 0, 0).rotated(Vector3.UP, Rules.view_yaw)
-	var yaw := Rules.heading(Rules.front_dir().rotated(Vector3.UP, TURN * clampf(fwd.dot(screen_right) * 2.0, -1.0, 1.0)))
+	var yaw := face_yaw(fwd, Rules.front_dir(), screen_right)
 	if mode == 1:
 		pops += 1
 		_put_faller(key, p, Vector3.ZERO, Vector3.ZERO, time, yaw, 1)
@@ -715,5 +706,4 @@ func flush() -> void:
 			var gm := (_mm[k] as MultiMeshInstance3D).material_override as ShaderMaterial
 			if gm:
 				gm.set_shader_parameter("ghost_alpha", 1.0 - SkillFx.ghost_alpha(_now, _ghost_seed[k]))
-	_send(_discs, _disc.multimesh)
 	PerfProfile.lap("units_flush", _pt)

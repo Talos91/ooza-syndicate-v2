@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b4jqt76fhcfg5"
-path="res://.godot/imported/bloom_texture_normal.png-90ff87df932a5b300f8d8a8e00dd6cdd.ctex"
+uid="uid://8fs32fy3nheo"
+path="res://.godot/imported/bloom_tint.png-2d4eaeab9c5bef7a8a96f0e8e5d24f88.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/bloom_texture_normal.png"
-dest_files=["res://.godot/imported/bloom_texture_normal.png-90ff87df932a5b300f8d8a8e00dd6cdd.ctex"]
+source_file="res://assets/units/bloom_tint.png"
+dest_files=["res://.godot/imported/bloom_tint.png-2d4eaeab9c5bef7a8a96f0e8e5d24f88.ctex"]
 
 [params]
 

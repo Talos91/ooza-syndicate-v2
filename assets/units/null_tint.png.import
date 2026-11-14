@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cjol88u2tyry0"
-path="res://.godot/imported/solar_texture_emissive.png-0d65e462e0de60a7f9e9500c10f15942.ctex"
+uid="uid://dyyqtniwlypkp"
+path="res://.godot/imported/null_tint.png-a47b8e5008d7188826ae2232c7f8f038.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "d5ad65c2e26aa9140d5b47f59747b5fc"
 }
 
 [deps]
 
-source_file="res://assets/units/solar_texture_emissive.png"
-dest_files=["res://.godot/imported/solar_texture_emissive.png-0d65e462e0de60a7f9e9500c10f15942.ctex"]
+source_file="res://assets/units/null_tint.png"
+dest_files=["res://.godot/imported/null_tint.png-a47b8e5008d7188826ae2232c7f8f038.ctex"]
 
 [params]
 

@@ -372,7 +372,8 @@ func _residents(rec: Dictionary, n: Dictionary, level: float, t: float) -> void:
 			var mk := faction + "|" + owner
 			if not _res_mat.has(mk):
 				var dm: ShaderMaterial = (Mats.creature(faction, owner, _tex[faction]) as ShaderMaterial).duplicate()
-				dm.set_shader_parameter("self_glow", 0.35)
+				if not Mats.is_v4(dm):                    # v4 units keep their own glow (glossy goo + seat neon)
+					dm.set_shader_parameter("self_glow", 0.35)
 				_res_mat[mk] = dm
 			var m: ShaderMaterial = _res_mat[mk]
 			for ti in range(tanks.size()):

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://rb6fu7tcbcoo"
-path="res://.godot/imported/ember_texture_normal.png-1ec86ea4a422c90d0e61a0e605890a4a.ctex"
+uid="uid://bsaxsuw3agcgt"
+path="res://.godot/imported/ember_v2_texture_diffuse.png-4f57c39c672a00b034186ce878d6dbda.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/ember_texture_normal.png"
-dest_files=["res://.godot/imported/ember_texture_normal.png-1ec86ea4a422c90d0e61a0e605890a4a.ctex"]
+source_file="res://assets/units/legacy/ember_v2_texture_diffuse.png"
+dest_files=["res://.godot/imported/ember_v2_texture_diffuse.png-4f57c39c672a00b034186ce878d6dbda.ctex"]
 
 [params]
 

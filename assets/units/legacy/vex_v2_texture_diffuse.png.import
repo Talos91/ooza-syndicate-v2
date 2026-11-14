@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ctmf2me26i8ap"
-path="res://.godot/imported/null_texture_normal.png-f91632fcb22ae95786edb9dc95b19048.ctex"
+uid="uid://07sredveul88"
+path="res://.godot/imported/vex_v2_texture_diffuse.png-abcec60e81b4b3cfb2181918cfcfc062.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/units/null_texture_normal.png"
-dest_files=["res://.godot/imported/null_texture_normal.png-f91632fcb22ae95786edb9dc95b19048.ctex"]
+source_file="res://assets/units/legacy/vex_v2_texture_diffuse.png"
+dest_files=["res://.godot/imported/vex_v2_texture_diffuse.png-abcec60e81b4b3cfb2181918cfcfc062.ctex"]
 
 [params]
 
