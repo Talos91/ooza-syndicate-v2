@@ -810,12 +810,12 @@ func _home_column(area: Rect2, hero: String) -> void:
 	var lbl := lt if not TutorialDirector.ENABLED else "TRAINING  →"
 	if ry < tvb + 6.0:                                 # a short phone: the stack would reach the TV, so the pair sits side by side
 		var sw := (content.size.x - x - cards_right - gap - 8.0) / 2.0
+		var sh := bh
+		var sy := maxf(ty + th - sh, tvb + 8.0)     # (>= 8 units under the TV bezel; the pair may end a little under the cards)
 		rx = cards_right + gap
-		_col_back(Rect2(rx, by2, sw * 2.0 + 8.0, bh))
-		UiKit.btn(self, ct.replace("  ·  ", "
-"), Vector2(rx, by2), Vector2(sw, bh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 13)
-		var lb2 := UiKit.btn(self, "TRAINING
-COMING SOON" if not TutorialDirector.ENABLED else lbl, Vector2(rx + sw + 8.0, by2), Vector2(sw, bh), show_tutorial, "selected", hero, 13)
+		_col_back(Rect2(rx, sy, sw * 2.0 + 8.0, sh))
+		UiKit.btn(self, ct, Vector2(rx, sy), Vector2(sw, sh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 13)
+		var lb2 := UiKit.btn(self, lbl if TutorialDirector.ENABLED else lt, Vector2(rx + sw + 8.0, sy), Vector2(sw, sh), show_tutorial, "selected", hero, 13)
 		lb2.disabled = not TutorialDirector.ENABLED
 	else:
 		_col_back(Rect2(rx, ry, rw, bh * 2.0 + 8.0))
