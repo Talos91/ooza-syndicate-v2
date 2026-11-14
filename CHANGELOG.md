@@ -1,5 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.4 "menu, HUD 37, Rodin units" - 2026-11-15 (STAGING only; live is 0.23.21)
+
+- Release release-0.24.4 = main 41ff925 + props-place 8d410bb, relay-v3-column f68a543, units-wire de04f0d, hud-37 8b54401 (contains play-fixes ea32f19), menu-bg-2 54b69ad, merged in that order, no conflicts. The finished branches as they are: no optimization / cleanup pass (Daniele 2026-11-15). No net.gd / protocol change (ooze20-net-8).
+  - props-place: old floor decorations removed (props themselves pulled, parked in 726e6e9).
+  - relay-v3-column: new relay column under the real relays, one foot per node.
+  - units-wire: original Rodin units (upright, 1024 textures, crisp seat-colour neon, leg-sway walk); EMBER mask polish parked.
+  - hud-37 + play-fixes: round-37B2 HUD paint (comms, modal / pause, buttons, ivory end screen, P2 tags, final cues), hint strip removed; Googatling production 0.5x the same-tier vat, auto upgrade chevron, relay ready-to-fire cue.
+  - menu-bg-2: 35C2 overlord menu background on the staging HOME layout; CAMPAIGN / TRAINING COMING SOON, no tutorial auto-start; SOLAR shown as AEGIS.
+  - Known: test_ui_nav --mobile 23 fails identically on ea32f19; test_map_pool 5 old-map fails.
+
 ## 0.24.3.2 "owner colour on rims + bridges" - 2026-11-14 (STAGING only; live is 0.23.21)
 
 - Hotfix round 2 on 0.24.3.1 (main caa3866) = vat-neon 5b54ae9. Daniele's phone check of 0.24.3.1: node rims and bridge strips showed white instead of the owner colour. No rule / number change, no net.gd / protocol change (ooze20-net-8); shown as "ALPHA 24.3.2".
