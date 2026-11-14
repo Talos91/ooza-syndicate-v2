@@ -18,7 +18,7 @@ const DIR := "res://assets/props/"
 const PLACEMENT := "res://assets/props/placement/%s_%s.json"
 const FOLDER := {"lab": "lab", "corporate_campus": "corporate-campus", "golden_hour": "golden-hour", "quota_parade": "quota-parade",
 		"wellness_retreat": "wellness-retreat"}
-const SCALE := {"lab": 2.05}            # lab props: Daniele's x2.05 (UI designer 5, lab-props addendum); the theme sets are built at real metres
+const SCALE := {"lab": 3.69, "corporate_campus": 1.8, "golden_hour": 1.8, "quota_parade": 1.8, "wellness_retreat": 1.8}            # lab = x2.05 (UI designer 5) x 1.8, themes real metres x 1.8 (UI designer 6: at 1.0 they read as debris, hero ~ half a node)
 const MAX_MESHES := 13
 const COUNT := 2                        # instances per unique mesh (the bake's default)
 # What each setting stands: [file, instances], biggest first. The lab drops the pipe kit's cross + elbow (13 meshes).
@@ -35,7 +35,7 @@ const SPEC := {
 	"wellness_retreat": [["small-fountain-basin", 2], ["lounge-chair-parasol", 3], ["zen-gravel-tray", 3], ["stepping-stone-pad", 3],
 			["lavender-bed", 3], ["towel-cart", 2], ["yoga-mat-roll-stack", 3], ["spa-lantern", 3]],
 }
-const HUD := [Rect2(0.0, 0.2, 0.1, 0.62), Rect2(0.9, 0.25, 0.1, 0.55), Rect2(0.38, 0.0, 0.24, 0.12),
+const HUD := [Rect2(0.0, 0.1, 0.16, 0.8), Rect2(0.88, 0.2, 0.12, 0.65), Rect2(0.38, 0.0, 0.24, 0.12),
 		Rect2(0.86, 0.0, 0.14, 0.12), Rect2(0.0, 0.92, 1.0, 0.08)]       # as WorldDressing: vat gauge, powers, capsule, buttons, hint line
 const FALL_BAND := 3.0
 const GAP := 0.4                        # m between two props' footprints
@@ -204,7 +204,7 @@ func _on_hud(p: Vector3) -> bool:
 	if s.x < 0.0 or s.y < 0.0 or s.x > 1.0 or s.y > 1.0:
 		return true
 	for r in HUD:
-		if (r as Rect2).grow(0.015).has_point(s):
+		if (r as Rect2).grow(0.03).has_point(s):
 			return true
 	return false
 
@@ -335,28 +335,36 @@ func bake(set_id: String, map_code: String, cam: Camera3D) -> Array:
 	var rows: Array = []
 	var anchors: Array = []
 	var ci := 0
-	for k in range(8):                                     # 8 clusters (4 + their twins) at most
-		var hero: String = files[k % nh]
-		var hd := _dims(set_id, hero)
+	for k in range(2):                                     # 2 pairs = 4 clusters at most
+		var order: Array = [files[k % nh]]
+		var rest: Array = files.duplicate()
+		rest.sort_custom(func(x, y): return _dims(set_id, x)[0] > _dims(set_id, y)[0])
+		order.append_array(rest)                       # the wanted hero, else the biggest prop that fits (tight maps like R-17)
+		var hero := ""
+		var hd: Array = []
 		var best := Vector2.ZERO
-		var best_s := -INF
-		for q in left:
-			var near_pit := INF
-			for c in wl.locals.craters:
-				near_pit = minf(near_pit, q.distance_to(Vector2((c as Vector3).x, (c as Vector3).z)))
-			var spread := 30.0
-			for aq in anchors:
-				spread = minf(spread, q.distance_to(aq))
-			var s := spread * 0.6 - absf(near_pit - 11.0) * 0.5 + rng.randf() * 1.5
-			if s > best_s and ok(q, hd[0], hd[1]):
-				best_s = s
-				best = q
-		if best_s == -INF:
-			continue
-		if not _try(rows, hero, best, hd, mid, rng):
+		for cand in order:
+			var cd := _dims(set_id, cand)
+			var best_s := -INF
+			for q in left:
+				var near_pit := INF
+				for c in wl.locals.craters:
+					near_pit = minf(near_pit, q.distance_to(Vector2((c as Vector3).x, (c as Vector3).z)))
+				var spread := 30.0
+				for aq in anchors:
+					spread = minf(spread, q.distance_to(aq))
+				var s := spread * 0.4 + absf(q.x - mid.x) * 0.15 + absf(q.y - mid.y) * 0.25 - absf(near_pit - 12.0) * 0.3 + rng.randf() * 1.5
+				if s > best_s and ok(q, cd[0], cd[1]) and ok(Vector2(2.0 * mid.x - q.x, q.y), cd[0], cd[1]):
+					best_s = s
+					best = q
+			if best_s > -INF and _try(rows, cand, best, cd, mid, rng):
+				hero = cand
+				hd = cd
+				break
+		if hero == "":
 			continue
 		anchors.append(best)
-		for j in range(3):                                 # satellites round the hero
+		for j in range(2):                                 # up to 2 satellites round the hero
 			var sat: String = files[(nh + ci + j) % files.size()] if files.size() > nh else files[(j + 1) % files.size()]
 			var sd := _dims(set_id, sat)
 			var placed := false
@@ -366,7 +374,7 @@ func bake(set_id: String, map_code: String, cam: Camera3D) -> Array:
 				if _try(rows, sat, q2, sd, mid, rng):
 					placed = true
 					break
-		ci += 3
+		ci += 2
 	var seen := {}
 	for r in rows:
 		seen[r["p"]] = int(seen.get(r["p"], 0)) + 1

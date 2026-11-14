@@ -11,9 +11,10 @@ extends Node3D
 ## hazards are placed with intent by the dressing (round the craters, under the props); the marks are pushed away from
 ## the floor's mean (shader contrast) so they read at the default camera, still under the decks' brightness.
 
-const ATLAS := "res://assets/world/lab5_decals_2048.png"
+const ATLAS := "res://assets/world/lab5_decals_lanes_pools.png"   # props-place 2026-11-14: cropped to the lane + pool cells (the old floor decorations are gone)
 const SHADER := preload("res://shaders/world_decal.gdshader")
-const ATLAS_PX := 2048.0
+const ATLAS_PX := 1536.0
+const ATLAS_PY := 576.0
 const PX_PER_M := 32.0
 # manifest rects (px): x, y, w, h
 const A1 := Rect2(32, 32, 512, 512)
@@ -99,8 +100,8 @@ func _add(c: Vector2, size: Vector2, yaw: float, cell: Rect2, tint: Color, lane 
 	# the Y scale (a flat quad never uses it) carries a lane's reveal 0..1 from its crater end (world_decal.gdshader)
 	var b := Basis(Vector3.UP, yaw) * Basis.from_scale(Vector3(size.x, maxf(reveal, 0.0001), size.y))
 	_mm.set_instance_transform(_n, Transform3D(b, Vector3(c.x, lift, c.y)))
-	var dv := cell.size.y / ATLAS_PX
-	_mm.set_instance_custom_data(_n, Color(cell.position.x / ATLAS_PX, cell.position.y / ATLAS_PX, cell.size.x / ATLAS_PX,
+	var dv := cell.size.y / ATLAS_PY
+	_mm.set_instance_custom_data(_n, Color(cell.position.x / ATLAS_PX, cell.position.y / ATLAS_PY, cell.size.x / ATLAS_PX,
 			-dv if lane else dv))
 	_mm.set_instance_color(_n, tint)
 	_n += 1
@@ -140,44 +141,14 @@ func build(lc: WorldLocals, cam: Camera3D) -> void:
 				segs.append([s, at - 0.2, ql, (a + b) / 2.0, yaw, 1.0 if _trace_always else 0.0])
 			at += d.length()
 		_lanes[i] = segs
-	# A1 / A2: the spawn surround under each crater (16 m, its empty 10 m centre = the ring)
-	for k in range(lc.craters.size()):
-		var p: Vector3 = lc.craters[k]
-		_add(Vector2(p.x, p.z), _m(A1), 0.6 * k, A1 if k % 2 == 0 else A2, ring_tint(T_RING), false, 0.025)
+	# (A1 / A2 spawn surrounds removed 2026-11-14, Daniele: "the old floor decorations around the pits need to go")
 	# C: the tube-foot pools (white, owner tint, low alpha) - only where a tube can show
 	for i in range(wl._tubes.size()):
 		var tb: Dictionary = wl._tubes[i]
 		var s := _add(Vector2(tb["x"], tb["z"]), _m(POOL), 0.0, POOL, Color(0, 0, 0, 0), false, 0.03)
 		_pool_slot[i] = s
 		tint_pool(i, tb["base"] if tb.get("shown", false) else Color(0, 0, 0, 0))
-	# F stains / D arcs: on floor the default camera sees, clear of tube feet, craters and each other
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 4242
-	var b := lc.board_bounds().grow(20.0)
-	var used: Array = []
-	var stains := 0
-	var arcs := 0
-	var tries := 0
-	if wl.get_node_or_null("Dressing") != null:      # the dressing places the stains / arcs / hazards with intent
-		tries = 600
-	while (stains < N_STAINS or arcs < N_ARCS) and tries < 600:
-		tries += 1
-		var q := Vector2(rng.randf_range(b.position.x, b.end.x), rng.randf_range(b.position.y, b.end.y))
-		var want_arc := arcs < N_ARCS and (stains >= N_STAINS or rng.randf() < 0.3)
-		var r := 9.0 if want_arc else 3.0
-		if not lc.floor_visible(cam, Vector3(q.x, wl.floor_y, q.y)):
-			continue
-		if not _clear(lc, q, r, used):
-			continue
-		used.append([q, r])
-		if want_arc:
-			var cell: Rect2 = ARCS[arcs % ARCS.size()]
-			_add(q, _m(cell), rng.randf() * TAU, cell, ring_tint(T_ARC), false, 0.012)
-			arcs += 1
-		else:
-			var cell2: Rect2 = STAINS[rng.randi() % STAINS.size()]
-			_add(q, _m(cell2), rng.randf() * TAU, cell2, T_STAIN, false, 0.018)
-			stains += 1
+	# (F stains / D arcs removed 2026-11-14: same call; the dressing's hazards / stains are off in the lab look already)
 
 
 static func _clear(lc: WorldLocals, q: Vector2, r: float, used: Array) -> bool:
