@@ -93,7 +93,7 @@ func _run() -> void:
 		for n in sim.nodes:
 			var off: Vector3 = (n["pos"] as Vector3) - pa
 			off.y = 0.0
-			if off.length() > 1.0 and off.normalized().dot(Rules.front_dir()) > 0.6 and off.length() < best and off.length() < 40.0:
+			if off.length() > 1.0 and off.normalized().dot(Rules.front_dir()) > 0.6 and off.length() < best and off.length() < 60.0 and n["node_kind"] != "junction" and sim.find_route(a, int(n["id"])).size() >= 2:
 				best = off.length()
 				b = int(n["id"])
 		print("south target ", b, " at ", best, " m")
@@ -101,6 +101,11 @@ func _run() -> void:
 	sim.nodes[a]["units"] = 400.0
 	sim.nodes[b]["units"] = 400.0
 	sim.send(a, b, 0.6)
+	if south:
+		await _step(inst, 4.8)
+		for k in range(1, 6):
+			await _step(inst, 0.5)
+			await _shot(inst, "%s/v4_%s_s%d.png" % [out, tag, k])
 	await _step(inst, 2.0)
 	sim.send(b, a, 0.6)
 	await _step(inst, 1.5)
