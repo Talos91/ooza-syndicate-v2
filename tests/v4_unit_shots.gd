@@ -5,7 +5,7 @@ extends Node
 ##          -- --no-telemetry out=<dir> [me=vex] [rival=ember] [zoom=34] [colour=A|gold|purple..] [focus=<node>] [tag=x]
 
 const MAIN := "res://main.tscn"
-const MAP := "res://maps4/N-24-k-crossing.json"
+var MAP := "res://maps4/N-24-k-crossing.json"
 
 
 func _ready() -> void:
@@ -48,6 +48,8 @@ func _run() -> void:
 			rival = a.substr(6)
 		if a.begins_with("zoom="):
 			zoom = float(a.substr(5))
+		if a.begins_with("map="):
+			MAP = a.substr(4)
 		if a.begins_with("tag="):
 			tag = a.substr(4)
 		if a.begins_with("colour="):

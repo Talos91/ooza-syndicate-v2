@@ -39,7 +39,7 @@ void fragment() {
 	vec3 hsv = rgb2hsv(tex);
 	hsv.x = fract(hsv.x + hue_shift);
 	vec2 tm = texture(tint_tex, UV).rg;
-	ALBEDO = mix(hsv2rgb(hsv) * albedo_gain, tint_color, tm.r * tint_mix);
+	ALBEDO = mix(hsv2rgb(hsv) * albedo_gain, tint_color * 0.45, tm.r * tint_mix);   // albedo kept dark: board light lifts it to pastel; the colour rides on the emission
 	vec3 base = ALBEDO;
 	vec3 mr = texture(mr_tex, UV).rgb;
 	ROUGHNESS = mix(0.3, mr.g, use_mr);

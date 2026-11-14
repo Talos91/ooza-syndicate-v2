@@ -85,7 +85,7 @@ static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMat
 
 
 const V4_TINT_MIX := 0.9             # the neon's albedo -> seat colour
-const V4_TINT_GLOW := 1.1            # the neon's emission in the seat colour (reads at phone scale on the dark board)
+const V4_TINT_GLOW := 0.9            # the neon's emission in the seat colour (reads at phone scale on the dark board)
 const V4_EYE_GLOW := 0.5
 const V4_ALBEDO := 0.72            # the Rodin goo albedo is near full cyan: a little darker so the board light doesn't bleach it
 const V4_RIM := 0.8                # race rim gain (classic 2.2)
