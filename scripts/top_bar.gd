@@ -98,6 +98,8 @@ func _build(crumb: String, f: String) -> void:
 	if not Campaign.ENABLED:                           # the campaign is off (Daniele 2026-11-15): no star count, LEVEL alone
 		sub.text = ""
 	var text_w := maxf(UiKit.text_w(menu, top.text, 15, true), UiKit.text_w(menu, sub.text, 12))
+	if sub.text == "":
+		text_w += 22.0                                 # (room for the "›" chevron, which sat on the 1 once the stars text left)
 	_ring_r = minf(17.0, h * 0.28)
 	var block_w := _ring_r * 2.0 + 12.0 + text_w
 	var bx := music_btn.position.x - 22.0 - block_w
