@@ -1,5 +1,12 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.3.2 "owner colour on rims + bridges" - 2026-11-14 (STAGING only; live is 0.23.21)
+
+- Hotfix round 2 on 0.24.3.1 (main caa3866) = vat-neon 5b54ae9. Daniele's phone check of 0.24.3.1: node rims and bridge strips showed white instead of the owner colour. No rule / number change, no net.gd / protocol change (ooze20-net-8); shown as "ALPHA 24.3.2".
+  - Cause: the 0.24.3.1 rim energy 4.5 pushed every colour channel above 1 so tonemapping clipped the owner colour to white.
+  - Fix (look.gd, mats.gd, fx.gd): emission energy 4.5 -> 1.5; light albedo 35 %; flat owner band on kit platforms; unowned strips neutral grey-blue.
+  - Checks: test_sim + test_maps4 on the release SHA. Not verified: real phone.
+
 ## 0.24.3.1 "owner neon hotfix" - 2026-11-14 (STAGING only; live is 0.23.21)
 
 - Hotfix on 0.24.3 (main f0db6e3) = vat-neon f8c8204. Daniele 2026-11-13 ("needs fixing pronto"): the owner neon was far too faint. No rule / number change, no net.gd / protocol change (ooze20-net-8); version shown as "ALPHA 24.3.1".
