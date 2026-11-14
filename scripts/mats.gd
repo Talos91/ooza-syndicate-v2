@@ -85,7 +85,7 @@ static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMat
 
 
 const V4_TINT_MIX := 0.9             # the neon's albedo -> seat colour
-const V4_TINT_GLOW := 0.9            # the neon's emission in the seat colour (reads at phone scale on the dark board)
+const V4_TINT_GLOW := 1.0            # the neon's emission in the seat colour (reads at phone scale on the dark board)
 const V4_EYE_GLOW := 0.5
 const V4_ALBEDO := 0.72            # the Rodin goo albedo is near full cyan: a little darker so the board light doesn't bleach it
 static var v4_seat_rim := 0.0     # v4 bodies: > 0 = rim accent in the SEAT colour at this gain (0 = off until Daniele decides; 3.0 was the designer 6 pick, designer 7 says wait)
@@ -97,7 +97,9 @@ static func v4_tint(faction: String, tex: Texture2D) -> Texture2D:
 	## The v4 tint mask, only for the v4 unit texture itself (the monsters' minions keep the old mesh + texture).
 	if tex == null or tex.resource_path != "res://assets/units/%s_texture_diffuse.png" % faction:
 		return null
-	var path := "res://assets/units/%s_tint.png" % faction
+	var path := "res://assets/units/%s_tint_w.png" % faction   # the widened neon mask (tools/units/widen_tint.py); *_tint.png is the original
+	if not ResourceLoader.exists(path):
+		path = "res://assets/units/%s_tint.png" % faction
 	return load(path) as Texture2D if ResourceLoader.exists(path) else null
 
 
