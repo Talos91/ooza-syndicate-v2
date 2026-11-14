@@ -72,6 +72,7 @@ def neon_mask(diff2k, vmin=0.78, game=""):
     if n:
         sizes = ndimage.sum(thick, lab, range(1, n + 1))
         thick = np.isin(lab, 1 + np.nonzero(sizes >= 1500)[0])
+    thick = ndimage.gaussian_filter(thick.astype(np.float32), 4.0) > 0.5          # smooth, even edges on the wide parts (AEGIS cap rim)
     m = thick | line
     for (x0, y0, x1, y1) in PLATES.get(game, []):
         g = (v[y0:y1, x0:x1]).copy()

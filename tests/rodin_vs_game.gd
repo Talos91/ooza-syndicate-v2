@@ -74,6 +74,16 @@ func _run() -> void:
 		await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png("%s/rvg_%s_%s.png" % [out, "all" if only == "" else only, seat])
+	elif mode == "single":                     # one in-game unit, front view, close (the neon on its gear)
+		var g1 := _game_unit(facs[0], "A")
+		world.add_child(g1)
+		cam.position = Vector3(0, 1.5, 3.4)
+		cam.look_at(Vector3(0, 0.95, 0))
+		cam.fov = 38
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png("%s/single_%s_%s.png" % [out, facs[0], seat])
 	else:
 		for k in range(6):                      # walk strip: the unit advances 1/6 stride per frame along its forward axis
 			var g := _game_unit(facs[0], "A")
