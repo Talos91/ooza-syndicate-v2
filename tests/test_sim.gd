@@ -3288,14 +3288,14 @@ func _relays_proto() -> void:
 	for path in MapPool.all():
 		var m := MapBuilder.load_map(path)
 		for n in m["nodes"]:
-			if n.get("relay") != null and Rules.is_proto(str(n["relay"])) and not path.get_file().substr(0, 2) in ["P-", "R-"] and not path.get_file().substr(0, 4) in MapPool.KEEP_OLD:   # round R maps use the proto kinds until step 7 (MAP-ROUND-2026-11); KEEP maps carry them since keep-maps-edit (Daniele 2026-11-11 relay notes)
+			if n.get("relay") != null and Rules.is_proto(str(n["relay"])) and not path.get_file().substr(0, 2) in ["P-", "R-", "G-"] and not path.get_file().substr(0, 4) in MapPool.KEEP_OLD and not MapPool.rework(path):   # G maps (POOL G 2026-11-15) and REWORK maps carry them too; round R maps use the proto kinds until step 7 (MAP-ROUND-2026-11); KEEP maps carry them since keep-maps-edit (Daniele 2026-11-11 relay notes)
 				proto_in_pool = true
 	check(not proto_in_pool, "RELAYS 3.0: no pool map uses a prototype relay kind")
 	# proto line only (POOL_GROUPS ["N", "P"]): the P maps ARE offered on 02 BATTLEFIELD here; the release line keeps them out
 	if Rules.demo:                                    # DEMO BUILD: the picker offers MapPool.DEMO (R-01) only
 		check(MapPool.battlefield().map(func(p): return p.get_file().substr(0, 4)) == MapPool.DEMO, "DEMO: the battlefield pool is R-01 only")
 	else:
-		check(MapPool.battlefield().any(func(p): return p.get_file().begins_with("P-")), "RELAYS 3.0 (proto line): the P maps are in the battlefield pool")
+		check(MapPool.battlefield().any(func(p): return MapBuilder.load_map(p).get("was", "").begins_with("P-")), "RELAYS 3.0: the kept P maps (G-07 / G-08 / G-09) are in the battlefield pool")
 
 	# ---- FERRY (round 2, the MOVING BRIDGE): P-91, ferry node 1 drives deck 7 (3 -> 4, A's home to the centre)
 	var f := _proto_sim("ferry")
@@ -4037,9 +4037,11 @@ func _relays_proto_ai() -> void:
 
 func _relays_proto_maps() -> void:
 	## The 🗺️ test maps P-01..P-05 (maps4/P-0x-*.json, branch maps-proto), when present: each kind set up from its map,
-	## and 120 s of Expert vs Expert on it without a stall (the AI uses the kinds it has a rule for).
+	## and 120 s of Expert vs Expert on it without a stall (the AI uses the kinds it has a rule for). POOL G (2026-11-15): P-01 / P-03 /
+	## P-05 are G-07 / G-08 / G-09 now (MapPool.RECODED), P-02 / P-04 stay P on REWORK.
+	var p_codes := MapPool.RECODED.keys().filter(func(c): return c.begins_with("P-")).map(func(c): return MapPool.RECODED[c])
 	for f in DirAccess.get_files_at("res://maps4"):
-		if not (f.begins_with("P-") and f.ends_with(".json")):
+		if not ((f.begins_with("P-") or f.substr(0, 4) in p_codes) and f.ends_with(".json")):
 			continue
 		var m := MapBuilder.load_map("res://maps4/" + f)
 		var seats := {}

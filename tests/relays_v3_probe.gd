@@ -33,7 +33,7 @@ func _cycle(s: Sim, id: int, slide: float, away: float, survive: float) -> Dicti
 
 
 func _ferry_run(variant: Array, shown: int, k: int, hold: bool) -> float:
-	var s := _sim("P-01")
+	var s := _sim("G-07")
 	var c := _cycle(s, 3, variant[1], variant[2], variant[3])
 	s.time = float(c["period"]) * float(k) / 40.0
 	s.nodes[3]["owner"] = "A"
@@ -56,7 +56,7 @@ func _ferry_run(variant: Array, shown: int, k: int, hold: bool) -> float:
 
 
 func _ferry() -> void:
-	var base := _sim("P-01")
+	var base := _sim("G-07")
 	var c0 := base.ferry_cycle(3)
 	var cfg: Dictionary = Rules.RELAYS_PROTO["ferry"]
 	print("FERRY P-01 node 3, deck %.1f m, crossing %.2f s; today: in line %.2f s, slide %.1f, away %.1f, period %.2f s; hold %.0f s, cooldown %.0f s"
@@ -68,7 +68,7 @@ func _ferry() -> void:
 		["kinder: survive 0.65", float(cfg["slide"]), float(cfg["away"]), 0.65, false],
 	]
 	for v in variants:
-		var cv := _cycle(_sim("P-01"), 3, v[1], v[2], v[3])
+		var cv := _cycle(_sim("G-07"), 3, v[1], v[2], v[3])
 		print("  %-34s in line %.2f s, period %.2f s" % [v[0], cv["open"], cv["period"]])
 		for shown in [10, 25, 50, 100]:
 			var fr := []
@@ -119,7 +119,7 @@ func _launcher() -> void:
 	var cfg: Dictionary = Rules.RELAYS_PROTO["launcher"]
 	print("LAUNCHER P-03 pad 6: pour x%.1f, flight %.1f s, land %.1f s, aim cycle %.0f s, armed %.0f s, misfire %.0f s" % [cfg["pour"],
 			cfg["flight"], cfg["land"], cfg["cycle"], cfg["armed"], cfg["misfire"]])
-	var s := _sim("P-03")
+	var s := _sim("G-08")
 	var ab := []
 	for la in s.adj[6]:
 		for lb in s.adj[6]:

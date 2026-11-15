@@ -1,6 +1,6 @@
 extends SceneTree
 func _initialize() -> void:
-	var codes: Array = ["R-01","R-02","R-05","R-06","R-09","R-10","R-11","R-12","R-13","R-14","R-15","R-16","R-17","P-01","P-02","P-03","P-04","P-05","E-03","E-08","E-09","E-10"]
+	var codes: Array = ["R-01","G-01","R-05","G-02","R-09","G-03","R-11","G-04","R-13","G-05","R-15","R-16","G-06","G-07","P-02","G-08","P-04","G-09","E-03","G-15","E-09","G-16"]
 	var all := {}
 	for f in DirAccess.get_files_at("res://maps4"):
 		if not f.ends_with(".json"): continue

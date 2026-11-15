@@ -60,7 +60,7 @@ func _shot(inst: Node, file: String) -> void:
 
 func _p_map(kind: String) -> String:
 	## The 🗺️ test map for this kind (maps4/P-0x-*.json), or "" if not baked yet.
-	var code: String = {"ferry": "P-01", "conveyor": "P-02", "launcher": "P-03", "lift": "P-04", "tilt": "P-05"}.get(kind, "")
+	var code: String = {"ferry": "G-07", "conveyor": "P-02", "launcher": "G-08", "lift": "P-04", "tilt": "G-09"}.get(kind, "")
 	for f in DirAccess.get_files_at("res://maps4"):
 		if code != "" and f.begins_with(code) and f.ends_with(".json"):
 			return "res://maps4/" + f

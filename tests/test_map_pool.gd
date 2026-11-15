@@ -70,6 +70,15 @@ func _init() -> void:
 	for code in MapPool.ARCHIVED:
 		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)) and not MapPool.mode_offered(code, "1v1"), "%s: archived (file kept, no mode offered)" % code)
 	check(not MapPool.battlefield().any(func(p): return MapPool.archived(p)), "no archived map on the battlefield")
+	# POOL G (Daniele 2026-11-15): the pool is the 19 G maps; the 18 REWORK maps stay baked but are never offered
+	check(MapPool.PROTO.size() == 19 and MapPool.PROTO.all(func(c): return MapPool.all().any(func(p): return p.get_file().begins_with(c))), "POOL G: 19 G maps, all baked")
+	for code in MapPool.REWORK:
+		check(MapPool.all().any(func(p): return p.get_file().begins_with(code)) and not MapPool.mode_offered(code, "1v1") and not MapPool.mode_offered(code, "2v2")
+				and not MapPool.battlefield().any(func(p): return p.get_file().begins_with(code)) and not code in MapPool.DEMO, "%s: REWORK (file kept, offered nowhere)" % code)
+	for old in MapPool.RECODED:
+		check(not MapPool.all().any(func(p): return p.get_file().begins_with(old)), "%s: re-coded %s (no old-coded file left)" % [old, MapPool.RECODED[old]])
+	if not Rules.proto_debug:
+		check(MapPool.battlefield().all(func(p): return p.get_file().begins_with("G-")), "POOL G: 02 BATTLEFIELD offers only G maps")
 	# SEAT BIAS: N-24 / N-04 were out of 1v1 from 0.23.15; back in since 0.23.18 (Daniele 2026-11-01, Desk vls-fair: the Very Last
 	# Stand tie-break fixed the bias) - offered in 1v1 and on 02 BATTLEFIELD again
 	for code in ([] if Rules.proto_debug else ["N-24", "N-04"]):   # (old maps: not checked on a proto/demo build, Daniele 2026-11-06)

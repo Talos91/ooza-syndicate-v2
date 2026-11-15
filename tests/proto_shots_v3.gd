@@ -112,7 +112,7 @@ func _run() -> void:
 			await _shot(inst, "%s/lift-%s-3-UP.png" % [out, view[0]])
 			await _close(inst)
 	if want.call("ferry"):
-		var inst: Node = await _open("P-01", 3, 62.0)
+		var inst: Node = await _open("G-07", 3, 62.0)
 		var sim: Sim = inst.sim
 		_own(inst, 3, "A", 250.0)
 		await _until(inst, func():
@@ -144,7 +144,7 @@ func _run() -> void:
 		await _shot(inst, "%s/conveyor-1-with-and-against.png" % out)
 		await _close(inst)
 	if want.call("launcher"):
-		var inst: Node = await _open("P-03")
+		var inst: Node = await _open("G-08")
 		var sim: Sim = inst.sim
 		var ab := _through(sim, 6)
 		print("launcher line ", ab)
@@ -163,7 +163,7 @@ func _run() -> void:
 		await _until(inst, func(): return sim.flights.any(func(f): return sim.time - float(f["land"]) > 0.1), 4.0)
 		await _shot(inst, "%s/launcher-4-landing.png" % out)
 		await _close(inst)
-		var inst2: Node = await _open("P-03")             # MISFIRE: B jams A's pad, A's line walks onto it
+		var inst2: Node = await _open("G-08")             # MISFIRE: B jams A's pad, A's line walks onto it
 		var sim2: Sim = inst2.sim
 		var ab2 := _through(sim2, 6)
 		_own(inst2, 6, "A", 20.0)
@@ -177,7 +177,7 @@ func _run() -> void:
 		await _shot(inst2, "%s/launcher-5-MISFIRE.png" % out)
 		await _close(inst2)
 	if want.call("tilt"):
-		var inst: Node = await _open("P-05", 5, 52.0)
+		var inst: Node = await _open("G-09", 5, 52.0)
 		var sim: Sim = inst.sim
 		_own(inst, 5, "A", 30.0)
 		_own(inst, 6, "A", 250.0)
