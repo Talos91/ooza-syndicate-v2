@@ -73,6 +73,7 @@ var _names := {}                              # skill id -> its name in 1 or 2 l
 var _bad := Vector2.INF                       # where the last wrong target was tapped (an INVALID mark there, fading)
 var _bad_t := 0.0
 var _last_tap := Vector2.INF                  # the world tap being judged (tap -> pick -> _refuse)
+var aim_pointer := Vector2.INF                 # DEMOLISH-TAP (DEBUG --aim shots): where the finger is, else the mouse
 
 
 class Slot:
@@ -1165,7 +1166,7 @@ func _line_at(p: Vector2, cam: Camera3D) -> int:
 
 
 # ------------------------------------------------------------------ highlights (TargetLayer._draw)
-func _draw_span(ci: CanvasItem, span: Array, col: Color, a: float, s: float) -> void:
+func _draw_span(ci: CanvasItem, span: Array, col: Color, a: float, s: float, focus := false) -> void:
 	## DEMOLISH-TAP: a bridge marked for destruction, rim to rim: a lit band over connector A, deck X and connector B,
 	## its outline, ticks where X meets A and B, and the centre line.
 	var pts: PackedVector2Array = span[0]
@@ -1174,26 +1175,28 @@ func _draw_span(ci: CanvasItem, span: Array, col: Color, a: float, s: float) -> 
 		return
 	var quads := span_quads(span)
 	for q in quads:
-		ci.draw_colored_polygon(q, Color(col, 0.14 + 0.1 * a))
+		ci.draw_colored_polygon(q, Color(col, (0.3 + 0.12 * a) if focus else 0.1 + 0.04 * a))   # designer 9: ~25 % at most
 	var left := PackedVector2Array()
 	var right := PackedVector2Array()
 	for q in quads:
 		left.append_array([q[0], q[1]])
 		right.append_array([q[3], q[2]])
 	if left.size() >= 2:
-		ci.draw_polyline(left, Color(col, 0.75 + 0.25 * a), 2.5 * s, true)
-		ci.draw_polyline(right, Color(col, 0.75 + 0.25 * a), 2.5 * s, true)
-		ci.draw_line(left[0], right[0], Color(col, 0.75 + 0.25 * a), 2.5 * s, true)
-		ci.draw_line(left[left.size() - 1], right[right.size() - 1], Color(col, 0.75 + 0.25 * a), 2.5 * s, true)
+		var oc := Color(col.lerp(Color.WHITE, 0.25) if focus else col, 1.0 if focus else 0.6 + 0.25 * a)
+		var ow := (3.5 if focus else 2.0) * s
+		ci.draw_polyline(left, oc, ow, true)
+		ci.draw_polyline(right, oc, ow, true)
+		ci.draw_line(left[0], right[0], oc, ow, true)
+		ci.draw_line(left[left.size() - 1], right[right.size() - 1], oc, ow, true)
 	for i in [1, pts.size() - 2]:                     # X | A and X | B: the connectors' inner ends
 		if i <= 0 or i >= pts.size() - 1:
 			continue
 		var d := pts[i + 1] - pts[i - 1]
 		var n := Vector2(-d.y, d.x).normalized() if d.length() > 0.5 else Vector2.UP
 		ci.draw_line(pts[i] + n * hw[i] * 0.7, pts[i] - n * hw[i] * 0.7, Color(col.lerp(Color.WHITE, 0.4), 0.5 + 0.3 * a), 1.5 * s, true)
-	ci.draw_polyline(pts, Color(col, 0.9), 3.0 * s, true)
+	ci.draw_polyline(pts, Color(col, 0.9 if focus else 0.55), (3.0 if focus else 2.0) * s, true)
 	var mid := pts[pts.size() / 2] if pts.size() % 2 == 1 else (pts[pts.size() / 2 - 1] + pts[pts.size() / 2]) / 2.0
-	ci.draw_circle(mid, 5.0 * s, Color(col, 0.6 + 0.4 * a))
+	ci.draw_circle(mid, (6.0 if focus else 4.0) * s, Color(col, 0.6 + 0.4 * a))
 
 
 func _draw_targets(ci: CanvasItem) -> void:
@@ -1219,9 +1222,21 @@ func _draw_targets(ci: CanvasItem) -> void:
 				if pts.size() >= 1:
 					_ring(ci, pts[0], 12.0 * s, col, a, false)
 		"deck", "fixed_deck":
-			if drop_span():                               # DEMOLISH-TAP: the whole A + X + B span is marked
+			if drop_span():                               # DEMOLISH-TAP: the whole A + X + B span is marked, in your
+				var seat_col := Rules.seat_color(human)       # SEAT colour (neon = seat); the one under the pointer lit full
+				var focus := -1
+				var mp := aim_pointer if aim_pointer != Vector2.INF else get_viewport().get_mouse_position()
+				var best_f := INF
 				for ei in cands:
-					_draw_span(ci, span_px(int(ei), cam, 0.0), col, a, s)
+					var d := span_hit(int(ei), mp, cam, 0.0)
+					if d < best_f:
+						best_f = d
+						focus = int(ei)
+				for ei in cands:
+					if int(ei) != focus:
+						_draw_span(ci, span_px(int(ei), cam, 0.0), seat_col, a, s, false)
+				if focus >= 0:
+					_draw_span(ci, span_px(focus, cam, 0.0), seat_col, a, s, true)
 				return
 			for ei in cands:
 				var pts := _deck_px(int(ei), cam)

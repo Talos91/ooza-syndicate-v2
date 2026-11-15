@@ -1384,6 +1384,7 @@ func _debug_casts() -> void:
 		sim.loadouts[HUMAN][slot] = str(_aim[2])
 		sim.skill_cd[HUMAN][slot] = 0.0
 		hud.dock.press_slot(i)
+		hud.dock.aim_pointer = get_viewport().get_visible_rect().size * 0.5   # (DEMOLISH-TAP: a finger at the centre)
 		if str(_aim[3]) != "" and hud.dock.armed == i:
 			hud.dock.pick(int(_aim[3]))
 		_aim = []

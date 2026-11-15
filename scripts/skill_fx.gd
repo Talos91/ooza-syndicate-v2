@@ -366,7 +366,10 @@ func _on_cast(ev: Dictionary) -> void:
 		_ring_at(p, col, Rules.R * (3.4 if ult else 1.9), 0.8 if ult else 0.55)
 	var name := str(Rules.SKILLS.get(id, {}).get("name", id)).to_upper()
 	if not (ev.get("pos") is Vector3 and touches(ev, sim, viewer)):   # (else the callout there names it)
-		_label_at(name, p + up * (8.0 if ult else 6.0), col, 1.5 if ult else 1.2, 0.06 if ult else 0.045)
+		# DEMOLISH-TAP (designer 9: tags piled up on relay / timer labels): a bridge drop shows its countdown on the
+		# deck instead of a name tag (the dock, the seat ring and the callout already say what it is)
+		if not id in Rules.DROP_SPAN_SKILLS:
+			_label_at(name, p + up * (8.0 if ult else 6.0), col, 1.5 if ult else 1.2, 0.06 if ult else 0.045)
 	if ult:
 		_tint_on(col)
 		_burst(p + up * 2.0, col, 40, 12.0, 0.7, 10.0)
@@ -591,7 +594,7 @@ func _deck_drop(slot: Dictionary, e: Dictionary, dt: float, col: Color, life: fl
 		if id == "quake":
 			lab.visible = false
 		else:
-			_countdown(slot, lab, float(slot["tl"]), mid + up * 5.0, heat, life)
+			_countdown(slot, lab, float(slot["tl"]), mid + up * (2.0 if id in Rules.DROP_SPAN_SKILLS else 5.0), heat, life)
 		for k in range(_count((8.0 + 40.0 * heat) * detail * dt)):   # grit shaking off the deck
 			_spark(_deck_at(ei, randf()) + Vector3(randf_range(-1.4, 1.4), 0.2, randf_range(-1.4, 1.4)),
 					Vector3(randf_range(-0.5, 0.5), randf_range(0.5, 2.0), randf_range(-0.5, 0.5)),
@@ -1651,13 +1654,14 @@ func _conn_pop(p: Dictionary) -> void:
 	## DEMOLISH-TAP: a connector (A or B) breaks off its platform a beat after deck X: grit, a hot star at its socket.
 	var at: Vector3 = (p["pop_at"] as Vector3) + Vector3(0, 0.5, 0)
 	var detail := 0.6 if Rules.low_detail else 1.0
-	for k in range(int(22 * detail)):
+	for k in range(int(34 * detail)):
 		var roll := randf()
 		_spark(at + Vector3(randf_range(-1.0, 1.0), randf_range(0.0, 0.4), randf_range(-1.0, 1.0)),
 				Vector3(randf_range(-3, 3), randf_range(1.0, 5.0), randf_range(-3, 3)),
 				HOT if roll < 0.35 else (Rules.state_color("warn") if roll < 0.65 else Color(0.62, 0.6, 0.7)), randf_range(0.18, 0.38),
 				randf_range(0.5, 1.0), 16.0)
-	_star_at(at + Vector3(0, 0.3, 0), HOT, 6.0, 0.3)
+	_star_at(at + Vector3(0, 0.3, 0), HOT, 10.0, 0.4)     # the same flash as X's break (designer 9: all three read as destroyed)
+	_burst(at, Rules.state_color("warn").lerp(HOT, 0.5), int(18 * detail), 6.0, 0.4, 14.0)
 
 
 func _rebuild_pieces(ei: int, k: float) -> void:
