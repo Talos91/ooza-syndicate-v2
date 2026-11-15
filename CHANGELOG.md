@@ -1,6 +1,15 @@
 # Ooze Syndicate 2.0 - changelog
 
-## (next) "readability D" - branch readability-d, not released yet (Release bumps the version)
+## 0.24.5 "map pool G, readability D, new menus, HUD 40B6" - 2026-11-15 (STAGING only; live is 0.23.21)
+
+- Release release-0.24.5 = main 8d50c11 + map-pool-g 8573deb, demolish-tap 7eeaf7a, readability-d 0369897, hud-40b6 19f90e1 (contains ui-import 93249a2), merged in that order, no conflicts. No net.gd / protocol change (ooze20-net-8).
+  - Map pool G: 19 shrunk maps G-01..G-19 at 2 / 4 / 6 m; 18 on MapPool.REWORK; G-01/02/03/04/06 bridges straightened (curves kept G-05/10/15/16). Unit speed unchanged.
+  - Demolish / Sever: tap-aim A+X+B on the connectors (piers or two-deck curve junctions); units standing on a connector fall with it.
+  - New menus / navigation / modals / end screens (ui-import, 40B2 look).
+  - Match HUD 40B6 with the 40B5 skill keys.
+  - Readability style D on all five settings (below).
+
+### readability D (branch readability-d)
 
 - Daniele 2026-11-15 ("cream everywhere" -> picked D on all five settings: "yes all five but pay attention you have pit shadows even if pit are actually at ground level"). View only: no rule / number change, no net.gd / protocol change, no new textures.
   - look_theme.gd: node platforms + pillars (Platform_*, Node_Base, Relay_Mount, pillar zone) in the setting's own dark = mix(pit, deck, 0.25 base / 0.35 trim); bridges (Deck_* / Pier_*, new kind "bridge") keep the setting's deck colour. The lab gets its own slate (deck #4B535B / #454D55, rim #30363C / #5E6A72, pillar #3A4148 / #56606A) without becoming an "active" theme (surround, floor, HUD shells, walkway, vats, relays, tubes, glass unchanged). Pits keep every setting's colours.
