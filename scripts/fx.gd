@@ -28,6 +28,7 @@ var _edge_light := {}       # edge -> owner key currently applied
 var _state_color := {}      # node id -> state key applied
 var _beacons := {}          # relay node id -> {label, mat, top}: the relay's big symbol and its own light material
 var _collapsed := {}
+var _conn_gone := {}                 # DEMOLISH-TAP: edge -> its connectors are hidden (the deck is down)
 var _break_per := {}         # THE WAVE (0.22.3): edge -> fall pieces per module while its deck breaks (_deck_break)
 var _lights_classic := false  # the mode the deck lights were last laid out for (true = BRAWL)
 var _pulses: Array = []     # transient rings: {mesh, t, dur, color}
@@ -656,6 +657,20 @@ func _decks() -> void:
 		var open := sim.is_edge_open(i)
 		for d in vis["edge_decks"][i]:
 			(d as Node3D).visible = open
+		var gone := sim.demolished.has(i)                 # DEMOLISH-TAP: connectors A, B go (and come back) with deck X
+		if gone != _conn_gone.get(i, false) and not sim.collapsed.get(e["a"], false) and not sim.collapsed.get(e["b"], false):
+			_conn_gone[i] = gone
+			for p in vis.get("edge_conn", {}).get(i, []):
+				if is_instance_valid(p):
+					(p as Node3D).visible = not gone
+			for nid in [e["a"], e["b"]]:                  # a pass curve at an end is that end's connector: gone while
+				if sim.pass_curve(nid):                   # either of its two decks is down
+					var down := false
+					for pair in sim.adj[nid]:
+						down = down or sim.demolished.has(int(pair[1]))
+					var piece = vis.get(nid, {}).get("platform")
+					if piece is Node3D and is_instance_valid(piece):
+						(piece as Node3D).visible = not down
 		if not Rules.bridge_combat:
 			continue                                      # BRAWL: _half_trims owns the lights
 		if sim.is_warned(e["a"]) or sim.is_warned(e["b"]):

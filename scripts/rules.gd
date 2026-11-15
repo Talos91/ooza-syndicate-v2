@@ -372,6 +372,12 @@ const SEND_RING_PT := 40.0           # the live target ring, points across on a 
 const SEND_FAIL_LOG_KEPT := 200      # user://telemetry/send_failed.json keeps the newest this many failed sends
 const DECK_HIT_PT := 44.0            # a deck's tap band for the deck skills on a phone, points across (SkillDock._deck_at; 2026-11-01,
                                      # Daniele: "bridges are sometimes hard to click"); invisible - the deck keeps its look
+# DEMOLISH-TAP (Daniele 2026-11-15: "if lets say bridge X is destructable and has at its edge connectors A and B the area
+# that is marked for destruction is the whole AXB and when clicked it destroys all 3 starting from X and then AB (in 1
+# second)"). The bridge-dropping skills (Demolish, Sever) aim at the whole span rim to rim: deck X plus its connectors A, B.
+const DROP_SPAN_W := 2.8 + 1.2       # m across: the AXB span's tap / highlight band on the ground (deck width W + a margin)
+const DROP_CONN_LAG := 0.4           # s after X goes: A and B go (X -> A, B well inside Daniele's 1 s)
+const DROP_SPAN_SKILLS := ["demolish", "sever"]   # the skills aimed at a deck that bring it down
 const RELAY_GHOST := Color(0.85, 0.78, 1.0, 0.28)       # OS_Ghost: the neutral violet floor (the Pier_Ghost_v2 fallback)
 const RELAY_GHOST_EDGE := Color(0.92, 0.88, 1.0)        # OS_Ghost_Edge: its bright frame
 # v2g (Daniele: "the ghost should have also different colour so even as ghost you can see what is switch and what is
@@ -921,7 +927,7 @@ const SKILLS := {
 	# ---- map pool (network skills)
 	# 0.23.21 (set R1): cd 60 -> 80 (lift +25 -> +16)
 	"demolish": {"name": "Demolish", "slot": "map", "cd": 80.0, "target": "fixed_deck",
-			"desc": "A deck collapses after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
+			"desc": "A bridge and both its connectors collapse after 1.5 s; lines pour off it; it rebuilds after 20 s.", "warn": 1.5, "down": 20.0},   # warn 1.5 s: 0.19.2 (was 3 s)
 	# speed x0.6 = 40 % slower; in SIEGE the stronger of this and the goo corridor slow applies (no stacking)
 	"mire": {"name": "Mire", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "Enemy lines on one deck are 40 % slower for 8 s.", "slow": 0.6, "dur": 8.0},
@@ -941,7 +947,7 @@ const SKILLS := {
 			"desc": "A platform shakes: every deck touching it drops after 1.5 s, riders fall; back after 6 s.",
 			"warn": 1.5, "down": 6.0},
 	"sever": {"name": "Sever", "slot": "map", "cd": 90.0, "target": "deck",
-			"desc": "Cut any deck, relay decks too, after 1.5 s: riders fall; it is back after 6 s.",
+			"desc": "Cut any bridge and its connectors after 1.5 s, relay bridges too: riders fall; back after 6 s.",
 			"warn": 1.5, "down": 6.0},
 	"backwash": {"name": "Backwash", "slot": "map", "cd": 32.0, "target": "deck",
 			"desc": "A wave shoves every enemy line on a deck back to the end it came from. No losses."},

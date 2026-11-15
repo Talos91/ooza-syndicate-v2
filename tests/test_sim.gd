@@ -2390,6 +2390,38 @@ func _skills_tests() -> void:
 	_steps(s, 3.5)
 	check(s.is_edge_open(e10b) and s.events.any(func(e): return e["type"] == "demolish_failed"), "Demolish fails on an anchored deck")
 	check("anchored" in s.cast_check("B", "map", e10b) or s.cooldown("B", "map") > 0.0, "and an anchored deck can't be demolished")
+	# ---------------------------------------------------------------- DEMOLISH-TAP (Daniele 2026-11-15): the A + X + B span
+	var cm := MapBuilder.load_map("res://maps4/R-10-crescent.json")
+	s = _mk(cm, "null", "ember")
+	var cx := s._edge_index(13, 12)                       # deck X: Curve_30 junction 13 -> platform 12
+	var cy := s.curve_other(cx, 13)                       # the walkway into the curve from the other side
+	var cp: int = s.edges[cy]["a"] if s.edges[cy]["b"] == 13 else s.edges[cy]["b"]
+	check(s.pass_curve(13) and cy >= 0 and not s.pass_curve(12), "DEMOLISH-TAP: a two-deck Curve_ junction is a pass curve, a platform is not")
+	var sl := s.span_line(cx)
+	check(sl.size() == s.deck_line(cx).size() + 1 and (sl[0] as Vector3).distance_to(s.exit_of(cy, 13)) < 0.01,
+			"DEMOLISH-TAP: the span runs from the curve's far port over deck X to the platform rim")
+	s.nodes[cp]["owner"] = "A"
+	s.nodes[cp]["units"] = 200.0
+	var ch := s.send(cp, 12, 1.0)
+	var on_curve := func() -> bool:
+		if not (ch in s.hordes):
+			return false
+		for ns in ch["node_spans"]:
+			if ns["node"] == 13:
+				return ch["s"] > float(ns["s0"]) + 0.3 and ch["s"] < float(ns["s1"])
+		return false
+	run_until(s, on_curve, 30.0)
+	check(on_curve.call(), "DEMOLISH-TAP: a line's head walks on the curve")
+	var c_s0 := 0.0
+	for ns in ch["node_spans"]:
+		if ns["node"] == 13:
+			c_s0 = float(ns["s0"])
+	var fell_c0: float = s.fall_losses.get("A", 0.0)
+	s.demolished[cx] = 20.0
+	s.step(0.05)
+	check(s.fall_losses.get("A", 0.0) > fell_c0 and (not (ch in s.hordes) or absf(float(ch["s"]) - c_s0) < 0.5),
+			"DEMOLISH-TAP: deck X down takes the curve with it: the line on the curve falls, its head pours off the curve's far port (fell %.2f -> %.2f, head %.2f, curve from %.2f, alive %s)"
+			% [fell_c0, s.fall_losses.get("A", 0.0), float(ch["s"]), c_s0, str(ch in s.hordes)])
 	# ---------------------------------------------------------------- Mire
 	for tag in ["BRAWL"]:
 		s = _mk(tp, "null", "bloom", {"B": {"map": "mire"}})
