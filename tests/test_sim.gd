@@ -22,6 +22,7 @@ func run_until(sim: Sim, cond: Callable, limit: float, dt := 0.05) -> float:
 
 func _init() -> void:
 	Rules.archived_on = true                          # 0.23.21: Mire / Anchor / Bypass are archived; their code is still tested
+	Rules.quota = false                               # the base Last Stand rules (a "-demo" build turns QUOTA on: tests/test_quota.gd)
 	if "--only=two_doors" in OS.get_cmdline_user_args():      # TWO DOORS alone (quick)
 		_two_doors()
 		print("two_doors: %d failure(s)" % failures)

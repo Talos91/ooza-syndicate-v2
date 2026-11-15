@@ -717,6 +717,8 @@ func _tubes_step(dt: float) -> void:
 		elif tb.get("holo", false) and float(tb["top_y"]) < 900.0:   # VAT COLUMN: the platform is the blueprint now
 			top = float(tb["top_y"])
 		if sim.collapsed.get(tb["id"], false):        # Last Stand: the tube drains and sinks with its platform
+			if Rules.quota:                           # QUOTA: the platform launches - the tube breaks off at its old top
+				top = minf(top, float(tb["top_y"]))
 			tb["alive"] = false
 			tb["drain"] = minf(float(tb["drain"]) + dt / 1.2, 1.0)
 		var has_structure := str(n.get("structure", "")) != ""   # Daniele: tubes only under a vat / structure
