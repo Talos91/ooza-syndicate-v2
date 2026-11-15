@@ -19,7 +19,7 @@ const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const K := 1280.0 / 1672.0
-const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "BLOOM", "ember": "EMBER\nMAW", "solar": "SOLAR\nSHELLS"}
+const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "BLOOM", "ember": "EMBER\nMAW", "solar": "AEGIS\nSHELLS"}
 
 var main: Node3D
 var content: Control
@@ -744,6 +744,8 @@ func show_main() -> void:
 	## row of tiles at the foot - ONLINE (HOST ROOM straight into a room; JOIN WITH CODE: the code sheet over HOME), CAMPAIGN
 	## (the next mission, CONTINUE), TRAINING / HOW TO PLAY, and PLAY LAST SETUP (its summary, CHANGE -> MATCH SETUP, PLAY =
 	## DEPLOY with the last setup: one tap to a match). The PLAY hub page is gone.
+	if _last_show != show_main:                 # HOME just opened (a rebuild of HOME keeps its words): the next pair
+		_home_words = _next_words(_home_words)
 	_last_show = show_main                  # a resize that changes the phone sizing rebuilds it (_fit)
 	var hero := faction
 	var area := shell_open("OOZE / HOME", "home", Callable(), hero)
@@ -769,6 +771,22 @@ func show_main() -> void:
 		_install_guide_panel()
 	if _join_open:
 		_join_sheet()
+
+
+## HOME's rotating words (Daniele 2026-11-15, designer 9): [tagline, title line 1, title line 2], one pair each time HOME opens.
+const HOME_WORDS := [
+	["DISAPPOINT THE OVERSEER ONCE.", "HIT QUOTA.", "OR BECOME IT."],
+	["THE OVERSEER LOVES A GOOD WAR.", "MORE GOO.", "FEWER COWORKERS."],
+	["PRODUCTIVITY IS MANDATORY.", "OUTPRODUCE.", "OUTOOZE."],
+	["GROWTH AT ANY COST. MOSTLY THEIRS.", "SEIZE SUPPLY.", "PLEASE THE BOSS."]]
+var _home_words := -1
+
+
+func _next_words(prev: int) -> int:
+	var n := randi() % HOME_WORDS.size()
+	if n == prev:
+		n = (n + 1) % HOME_WORDS.size()
+	return n
 
 
 func _home_column(area: Rect2, hero: String) -> void:
@@ -808,19 +826,20 @@ func _home_column(area: Rect2, hero: String) -> void:
 	var ry := by2 - 8.0 - bh                           # CHALLENGES' top
 	var tvb := (_den.tv_bottom() - content.position.y) / content.scale.y
 	var lbl := lt if not TutorialDirector.ENABLED else "TRAINING  →"
+	var lbl_s := lbl if TutorialDirector.ENABLED else "COMING SOON"
 	if ry < tvb + 6.0:                                 # a short phone: the stack would reach the TV, so the pair sits side by side
 		var sw := (content.size.x - x - cards_right - gap - 8.0) / 2.0
 		var sh := bh
 		var sy := maxf(ty + th - sh, tvb + 8.0)     # (>= 8 units under the TV bezel; the pair may end a little under the cards)
 		rx = cards_right + gap
 		_col_back(Rect2(rx, sy, sw * 2.0 + 8.0, sh))
-		UiKit.btn(self, ct, Vector2(rx, sy), Vector2(sw, sh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 13)
-		var lb2 := UiKit.btn(self, lbl if TutorialDirector.ENABLED else lt, Vector2(rx + sw + 8.0, sy), Vector2(sw, sh), show_tutorial, "selected", hero, 13)
+		UiKit.btn(self, ct, Vector2(rx, sy), Vector2(sw, sh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, UiKit.fit_size(self, ct, sw, 13.0))
+		var lb2 := UiKit.btn(self, UiKit.fit_text(self, lbl, lbl_s, sw, 13.0), Vector2(rx + sw + 8.0, sy), Vector2(sw, sh), show_tutorial, "selected", hero, UiKit.fit_size(self, lbl, sw, 13.0))
 		lb2.disabled = not TutorialDirector.ENABLED
 	else:
 		_col_back(Rect2(rx, ry, rw, bh * 2.0 + 8.0))
 		UiKit.btn(self, ct, Vector2(rx, ry), Vector2(rw, bh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
-		var lb := UiKit.btn(self, lbl, Vector2(rx, by2), Vector2(rw, bh), show_tutorial, "selected", hero, 15)
+		var lb := UiKit.btn(self, UiKit.fit_text(self, lbl, lbl_s, rw, 15.0), Vector2(rx, by2), Vector2(rw, bh), show_tutorial, "selected", hero, UiKit.fit_size(self, lbl, rw, 15.0))
 		lb.disabled = not TutorialDirector.ENABLED
 	# the headline top left, FULLSCREEN (QUIT on desktop) and the version under it
 	var fh := UiKit.tap_h(self, 36.0)
@@ -828,12 +847,15 @@ func _home_column(area: Rect2, hero: String) -> void:
 	var hx := x + 8.0
 	var hy := area.position.y + 12.0
 	var hw := maxf(qr - hx, 200.0)
-	var sizes := [[44.0, "THE CITY IS\nYOURS TO TAKE."], [32.0, "THE CITY IS\nYOURS TO TAKE."], [26.0, "THE CITY IS YOURS TO TAKE."]]
+	var words: Array = HOME_WORDS[maxi(_home_words, 0)]
+	var title2: String = "%s\n%s" % [words[1], words[2]]
+	var long_line: String = words[1] if str(words[1]).length() >= str(words[2]).length() else words[2]
+	var sizes := [[44.0, title2], [32.0, title2], [26.0, "%s %s" % [words[1], words[2]]]]
 	for st in sizes:
 		var lines: int = str(st[1]).count("\n") + 1
 		var need: float = UiKit.line_h(self, 13, true) + 6.0 + UiKit.line_h(self, st[0], true) * lines
-		if (need <= free and UiKit.text_w(self, "YOURS TO TAKE.", st[0], true) <= hw) or st == sizes[-1]:
-			_shell_add(UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 13, acc, true, 3), Vector2(hx, hy))
+		if (need <= free and UiKit.text_w(self, long_line, st[0], true) <= hw) or st == sizes[-1]:
+			_shell_add(UiKit.label(self, str(words[0]), 13, acc, true, 3), Vector2(hx, hy))
 			hy += UiKit.line_h(self, 13, true) + 6.0
 			if need <= free:
 				_shell_add(UiKit.label(self, st[1], st[0], UiKit.INK, true), Vector2(hx - 3.0, hy))
@@ -876,7 +898,7 @@ func _home_campaign(r: Rect2, pad: float, bh: float) -> void:
 		return
 	if not Campaign.ENABLED:                           # off for now (Daniele 2026-11-15): the card stays, its button is COMING SOON
 		var off_by := _home_tile(r, pad, "CAMPAIGN", "THE CITY", "Not open yet.")
-		var ob := UiKit.btn(self, "COMING SOON", Vector2(r.position.x + pad, off_by), Vector2(r.size.x - pad * 2.0, 46), show_chapters, "secondary", faction, 14)
+		var ob := UiKit.btn(self, UiKit.fit_text(self, "CAMPAIGN · COMING SOON", "COMING SOON", r.size.x - pad * 2.0, 14.0), Vector2(r.position.x + pad, off_by), Vector2(r.size.x - pad * 2.0, 46), show_chapters, "secondary", faction, UiKit.fit_size(self, "CAMPAIGN · COMING SOON", r.size.x - pad * 2.0, 14.0))
 		ob.disabled = true
 		return
 	var nxt := Campaign.next_open(cf)
@@ -888,7 +910,9 @@ func _home_campaign(r: Rect2, pad: float, bh: float) -> void:
 
 func _home_tile(r: Rect2, pad: float, kicker: String, title: String, sub: String, lit := false) -> float:
 	## One HOME tile: its frame, kicker, title and caption; returns the y where its buttons go.
-	UiKit.panel(self, r.position, r.size, faction, lit)
+	var pn := UiKit.panel(self, r.position, r.size, faction, lit)
+	if not lit:
+		pn.add_theme_stylebox_override("panel", MenuSkin.plate(0.6))            # HOME: container fill 60 % over the painting
 	var y := r.position.y + pad
 	var iw := r.size.x - pad * 2.0
 	_clip(kicker, Vector2(r.position.x + pad, y), 12, UiKit.accent(faction), iw, true)
@@ -1018,7 +1042,7 @@ func show_help() -> void:
 		_shell_add(l, p + Vector2(16, body_y))
 	var by := y + 2.0 * (chh + gap) + 8.0
 	_shell_add(UiKit.label(self, "Learn by doing.", 15, UiKit.MUTED), Vector2(x, by + 12.0))
-	var tb := UiKit.btn(self, "TRAINING  →" if TutorialDirector.ENABLED else "TRAINING · COMING SOON", Vector2(content.size.x - x - 260.0, by), Vector2(260, 48), show_tutorial, "primary", shell_f, 16)
+	var tb := UiKit.btn(self, "TRAINING  →" if TutorialDirector.ENABLED else UiKit.fit_text(self, "TRAINING · COMING SOON", "COMING SOON", 260.0, 16.0, 40.0), Vector2(content.size.x - x - 260.0, by), Vector2(260, 48), show_tutorial, "primary", shell_f, 16)
 	tb.disabled = not TutorialDirector.ENABLED          # Daniele 2026-11-15: the tutorial is being remade
 
 

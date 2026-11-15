@@ -172,6 +172,17 @@ static func sb(fill: Color, border := Color(0, 0, 0, 0), bw := 0, cut := CUT, gl
 
 
 static func style_button(b: Button, kind: String, f := "vex") -> void:
+	## 0.24.5: the 40B2 chrome (MenuSkin): primary / secondary = ivory keys, selected = dark glass tab with the seat rim,
+	## small = the nav key; tertiary stays text-led. The old flat boxes below remain for kinds the skin does not cover.
+	match kind:
+		"primary", "secondary", "small":
+			MenuSkin.style_ivory(b, kind)
+			b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+			return
+		"selected":
+			MenuSkin.style_tab(b, true)
+			b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+			return
 	var a := accent(f)
 	var normal: StyleBoxFlat
 	var hover: StyleBoxFlat
@@ -207,6 +218,19 @@ static func style_button(b: Button, kind: String, f := "vex") -> void:
 	b.add_theme_color_override("font_hover_pressed_color", fc if kind == "primary" else INK)
 	b.add_theme_color_override("font_focus_color", fc)
 	b.add_theme_color_override("font_disabled_color", DIM)
+
+
+static func fit_size(m, text: String, width: float, size: float, pad := 60.0) -> float:
+	## The largest font size <= `size` (never under 10) at which `text` fits a key `width` wide (COMING SOON labels).
+	var sz := size
+	while sz > 10.0 and text_w(m, text, sz, true) > width - pad:
+		sz -= 0.5
+	return sz
+
+
+static func fit_text(m, full: String, short: String, width: float, size: float, pad := 60.0) -> String:
+	## `full` if it fits a key `width` wide at the (phone-grown) size, else `short` (the 12.5 pt floor cannot shrink further).
+	return full if text_w(m, full, size, true) <= width - pad else short
 
 
 static func make_btn(m, text: String, dims: Vector2, call: Callable, kind := "secondary", f := "vex", size := 16.0) -> Button:
@@ -274,7 +298,10 @@ static func panel(m, pos: Vector2, dims: Vector2, f := "", selected := false, fi
 	var p := Panel.new()
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var a := accent(f)
-	p.add_theme_stylebox_override("panel", sb(Color(a.darkened(0.8), 0.95) if selected else fill, a if selected else FRAME, 2 if selected else 1))
+	if selected:
+		p.add_theme_stylebox_override("panel", sb(Color(a.darkened(0.8), 0.95), MenuSkin.seat(), 2))   # picked: the SEAT rim
+	else:
+		p.add_theme_stylebox_override("panel", MenuSkin.plate())                                         # M-E dark glass
 	p.size = dims
 	return add(m, p, pos) as Panel
 
