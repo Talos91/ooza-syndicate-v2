@@ -20,6 +20,7 @@ var currency := "soft"
 var duration := 0.9                                # seconds of counting; the pop after it is 0.25 s
 var pt: Callable
 var sign := true                                   # false: a balance ("1 260 SCRAP"), not a gain
+var chip := false                                  # 40B2 M-J chip: an ivory plate, the icon well and a fixed 5-digit number box (top bar balances)
 var named := true                                  # false: the number and its mark only ("1 260" + the nut)
 var _t := -1.0                                     # < 0: not playing
 var _shown := 0
@@ -76,6 +77,8 @@ func fit() -> void:
 func _resize() -> void:
 	var fs := _font_size()
 	var w := _p(H) + _p(8) + HEAD_FONT.get_string_size(_fmt(amount), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	if chip:
+		w = _p(H) + _p(8) + HEAD_FONT.get_string_size("88888", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + _p(10)
 	custom_minimum_size = Vector2(minf(w + _p(6), _p(MAX_W)), _p(H))
 	size = custom_minimum_size
 
@@ -100,6 +103,8 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var h := _p(H)
 	var col: Color = COLOURS.get(currency, Color.WHITE)
+	if chip:
+		draw_style_box(MenuSkin.box(MenuSkin.tinted("GEO-P7-small", "", Color.WHITE), Vector4(20, 0, 20, 0), Color.WHITE, Vector2(0, 0)), Rect2(Vector2.ZERO, size))
 	var bump := sin(_pop * PI) * 0.18                 # the mark pops once when the count lands
 	var c := Vector2(h * 0.5, h * 0.5)
 	var r := h * 0.42 * (1.0 + bump)
@@ -123,5 +128,8 @@ func _draw() -> void:
 	var fs := _font_size()
 	var x := h + _p(8)
 	var y := h * 0.5 + fs * 0.36
+	if chip:
+		draw_string(HEAD_FONT, Vector2(x, y), _text(), HORIZONTAL_ALIGNMENT_LEFT, size.x - x, fs, MenuSkin.INK_DARK)
+		return
 	draw_string_outline(HEAD_FONT, Vector2(x, y), _text(), HORIZONTAL_ALIGNMENT_LEFT, size.x - x, fs, maxi(2, int(_p(3))), EDGE)
 	draw_string(HEAD_FONT, Vector2(x, y), _text(), HORIZONTAL_ALIGNMENT_LEFT, size.x - x, fs, col.lerp(Color.WHITE, 0.35 + bump))

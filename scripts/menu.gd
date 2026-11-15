@@ -549,6 +549,7 @@ func page_title(area: Rect2, kicker: String, headline: String, size := 34.0) -> 
 			var hl := UiKit.label(self, headline.to_upper(), hs, UiKit.INK, true)
 			var kl := UiKit.label(self, kicker.to_upper(), 12, UiKit.accent(shell_f), true, 3)
 			var rowh := UiKit.line_h(self, hs, true)      # (font measures: a label off the tree reports its default size)
+			UiKit.band(self, Rect2(x - 14.0, ty - 6.0, kw + 18.0 + hw + 32.0, rowh + 12.0))
 			_shell_add(kl, Vector2(x, ty + (rowh - UiKit.line_h(self, 12, true)) / 2.0 + 2.0))
 			_shell_add(hl, Vector2(x + kw + 18.0, ty))
 			if shell_back.is_valid() and not shell_slim:
@@ -826,7 +827,8 @@ func _home_column(area: Rect2, hero: String) -> void:
 	var ry := by2 - 8.0 - bh                           # CHALLENGES' top
 	var tvb := (_den.tv_bottom() - content.position.y) / content.scale.y
 	var lbl := lt if not TutorialDirector.ENABLED else "TRAINING  →"
-	var lbl_s := lbl if TutorialDirector.ENABLED else "COMING SOON"
+	var lbl_s := lbl if TutorialDirector.ENABLED else "TRAINING
+COMING SOON"   # (a name is never dropped: two lines when one will not fit)
 	if ry < tvb + 6.0:                                 # a short phone: the stack would reach the TV, so the pair sits side by side
 		var sw := (content.size.x - x - cards_right - gap - 8.0) / 2.0
 		var sh := bh
@@ -855,6 +857,9 @@ func _home_column(area: Rect2, hero: String) -> void:
 		var lines: int = str(st[1]).count("\n") + 1
 		var need: float = UiKit.line_h(self, 13, true) + 6.0 + UiKit.line_h(self, st[0], true) * lines
 		if (need <= free and UiKit.text_w(self, long_line, st[0], true) <= hw) or st == sizes[-1]:
+			var bw: float = maxf(UiKit.text_w(self, str(words[0]), 13, true) + str(words[0]).length() * 3.0, UiKit.text_w(self, long_line, st[0], true))
+			if need <= free:
+				UiKit.band(self, Rect2(hx - 16.0, hy - 8.0, minf(bw + 40.0, qr - hx + 40.0), need + 18.0))   # 40B2 title plate: dark glass under tagline + title
 			_shell_add(UiKit.label(self, str(words[0]), 13, acc, true, 3), Vector2(hx, hy))
 			hy += UiKit.line_h(self, 13, true) + 6.0
 			if need <= free:
@@ -1042,7 +1047,8 @@ func show_help() -> void:
 		_shell_add(l, p + Vector2(16, body_y))
 	var by := y + 2.0 * (chh + gap) + 8.0
 	_shell_add(UiKit.label(self, "Learn by doing.", 15, UiKit.MUTED), Vector2(x, by + 12.0))
-	var tb := UiKit.btn(self, "TRAINING  →" if TutorialDirector.ENABLED else UiKit.fit_text(self, "TRAINING · COMING SOON", "COMING SOON", 260.0, 16.0, 40.0), Vector2(content.size.x - x - 260.0, by), Vector2(260, 48), show_tutorial, "primary", shell_f, 16)
+	var tb := UiKit.btn(self, "TRAINING  →" if TutorialDirector.ENABLED else UiKit.fit_text(self, "TRAINING · COMING SOON", "TRAINING
+COMING SOON", 260.0, 16.0, 40.0), Vector2(content.size.x - x - 260.0, by), Vector2(260, 48), show_tutorial, "primary", shell_f, 16)
 	tb.disabled = not TutorialDirector.ENABLED          # Daniele 2026-11-15: the tutorial is being remade
 
 

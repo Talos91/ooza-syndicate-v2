@@ -32,7 +32,8 @@ func bar_height() -> float:
 
 func _build(crumb: String, f: String) -> void:
 	var w: float = menu.content.size.x
-	var q := UiKit.tap_h(menu, 46.0)                  # the square buttons, a little over 44 pt on phones (the sweep: 43)
+	var pp := UiKit.pt(menu)                          # 40B2: the round keys are 30 pt with a 33 pt tap box (designer 9)
+	var q := (33.0 / pp) if pp > 0.0 else 46.0
 	var h := maxf(58.0, q + 10.0)
 	position = Vector2.ZERO
 	size = Vector2(w, h)
@@ -129,6 +130,7 @@ func _build(crumb: String, f: String) -> void:
 	for cur in ["premium", "soft"]:
 		var t := RewardTicker.make(Progression.balance(cur), cur, func(n: float) -> float: return n / p if p > 0.0 else n * 0.62 * 1.6 * UiKit.K)
 		t.sign = false
+		t.chip = true
 		t.named = false
 		t.tooltip_text = Rules.CURRENCY_NAMES.get(cur, "")
 		t.fit()
@@ -149,6 +151,8 @@ func _build(crumb: String, f: String) -> void:
 
 func _square(text: String, pos: Vector2, q: float, f: String) -> Button:
 	var b := UiKit.make_btn(menu, text, Vector2(q, q), Callable(), "small", f, 20)
+	b.custom_minimum_size = Vector2(q, q)               # (make_btn grows a key to 44 pt; the bar keeps 33)
+	b.size = Vector2(q, q)
 	b.position = pos
 	b.clip_text = false
 	add_child(b)

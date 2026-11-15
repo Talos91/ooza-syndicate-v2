@@ -307,8 +307,20 @@ static func panel(m, pos: Vector2, dims: Vector2, f := "", selected := false, fi
 
 
 # ------------------------------------------------------------------ text blocks
+static func band(m, r: Rect2, alpha := 0.82) -> Panel:
+	## A dark-glass band (40B2 M-C strip) behind a title block, so cyan kickers and white headlines hold >= 4.5:1 on any backdrop.
+	var p := Panel.new()
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", MenuSkin.strip(alpha))
+	p.size = r.size
+	return add(m, p, r.position) as Panel
+
+
 static func title(m, x: float, y: float, kicker: String, headline: String, f := "vex", size := 34.0) -> float:
 	## A page's kicker + headline; returns the y under them.
+	var kw := text_w(m, kicker.to_upper(), 12, true) + kicker.length() * 3.0
+	var hw := text_w(m, headline.to_upper(), size, true)
+	band(m, Rect2(x - 14.0, y - 8.0, maxf(kw, hw) + 32.0, line_h(m, 12, true) + 2.0 + line_h(m, size, true) + 16.0))
 	var k := label(m, kicker.to_upper(), 12, accent(f), true, 3)
 	add(m, k, Vector2(x, y))
 	y += k.get_minimum_size().y + 2.0
