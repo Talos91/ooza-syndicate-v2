@@ -121,15 +121,23 @@ static func strip(fill_alpha := 1.0) -> StyleBoxTexture:
 	return box(load(DIR + "SHELL-M-C.png"), Vector4(28, 14, 28, 14), Color(1, 1, 1, fill_alpha), Vector2(14, 0))
 
 
+static func _put(m, parent: Control, c: Control, pos: Vector2) -> void:
+	if parent != null:
+		c.position = pos
+		parent.add_child(c)
+	else:
+		UiKit.add(m, c, pos)
+
+
 static func mark_tex(f: String) -> Texture2D:
 	return load(DIR + "MARK-" + ("AEGIS" if f == "solar" else f.to_upper()) + ".png") as Texture2D
 
 
-static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "") -> void:
+static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "", parent: Control = null, rim := Color(0, 0, 0, 0)) -> void:
 	## The faction's AI mark (36A, its own colour) in a GEO-SOCKET (200 / 120) whose rim is the SEAT colour. mood "win": a soft
 	## seat-colour burst behind it; "loss": a dim ring, no burst.
 	var piece := "GEO-SOCKET-200" if s > 160.0 else "GEO-SOCKET-120"
-	var col := seat()
+	var col := seat() if rim.a == 0.0 else rim
 	if mood == "win":
 		var grad := Gradient.new()
 		grad.set_color(0, Color(col, 0.6))
@@ -144,7 +152,7 @@ static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "") -> void:
 		g.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		g.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		g.size = Vector2(s, s) * 1.7
-		UiKit.add(m, g, pos - Vector2(s, s) * 0.35)
+		_put(m, parent, g, pos - Vector2(s, s) * 0.35)
 	var rim_col := col.darkened(0.7) if mood == "loss" else col
 	var t := TextureRect.new()
 	t.texture = tinted(piece, "MASK-" + piece.substr(4) + "-SEAT-RIM", rim_col)
@@ -153,7 +161,9 @@ static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "") -> void:
 	t.size = Vector2(s, s)
 	if mood == "loss":
 		t.modulate = Color(0.78, 0.86, 1.0)
-	UiKit.add(m, t, pos)
+	_put(m, parent, t, pos)
+	if f == "":
+		return
 	var mk := TextureRect.new()
 	mk.texture = mark_tex(f)
 	mk.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -162,7 +172,7 @@ static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "") -> void:
 	mk.size = Vector2(s, s) * 0.64
 	if mood == "loss":
 		mk.modulate = Color(0.82, 0.84, 0.9)
-	UiKit.add(m, mk, pos + Vector2(s, s) * 0.18)
+	_put(m, parent, mk, pos + Vector2(s, s) * 0.18)
 
 
 static func _lum(c: Color) -> float:

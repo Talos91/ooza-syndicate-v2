@@ -4474,20 +4474,14 @@ func _ai_seat_chip(seat: String, r: Rect2, team: Dictionary) -> void:
 	b.add_child(sl)
 	var tx := 10.0 + UiKit.text_w(self, "W", fl, true) + 4.0
 	var ts := minf(h - 8.0, floorf(r.size.x * 0.24))
-	if pick != "random":
-		b.add_child(_cutout(pick, Vector2(tx, (h - ts) / 2.0), Vector2(ts, ts)))
-	else:
-		var box := Panel.new()
-		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		box.add_theme_stylebox_override("panel", UiKit.sb(Color(UiKit.BASE, 0.9), UiKit.FRAME, 1, 6))
-		box.position = Vector2(tx, (h - ts) / 2.0)
-		box.size = Vector2(ts, ts)
-		b.add_child(box)
-		var q := UiKit.label(self, "?", 20, UiKit.MUTED, true)
+	MenuSkin.ai_hero(self, pick if pick != "random" else "", Vector2(tx, (h - ts) / 2.0), ts, "", b, col)   # M-K: the AI mark in its socket, SEAT-coloured rim
+	if pick == "random":
+		var q := UiKit.label(self, "?", 22, UiKit.MUTED, true)
 		q.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		q.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		q.size = box.size
-		box.add_child(q)
+		q.position = Vector2(tx, (h - ts) / 2.0)
+		q.size = Vector2(ts, ts)
+		b.add_child(q)
 	var nx := tx + ts + 8.0
 	var nw := maxf(10.0, b.size.x - nx - 8.0)
 	var fn := clampf(h * 0.22, 14.0, 18.0)

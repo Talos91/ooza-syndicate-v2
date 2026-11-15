@@ -191,9 +191,8 @@ var glass := false                                 # HOME (35C2): the bar is a g
 func _draw() -> void:
 	var sf: Vector4 = menu.safe                       # the back reaches over the notch bands and the status bar
 	var r := Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y)
-	if slim:                                          # (the painted plate drew white behind a slim bar in the shots: a plain glass fill)
-		draw_rect(r, UiKit.BAR)
-		draw_rect(Rect2(r.position.x, size.y - 1.0, r.size.x, 1.0), Color(MenuSkin.seat(), 0.5))
+	if slim:
+		draw_style_box(MenuSkin.strip(1.0), r)
 		return
 	draw_style_box(MenuSkin.strip(0.6 if glass else 1.0), r)   # 40B2 dark glass bar (HOME: 60 % glass over the painting)
 	draw_circle(_ring_c, _ring_r, UiKit.BASE)
