@@ -71,7 +71,7 @@ static func battlefield() -> Array:
 	## Daniele's "replace current pool with the new ones"; OPEN-QUESTIONS). Cached: the map files don't change at run time.
 	if not _battlefield_cache.is_empty():
 		return _battlefield_cache
-	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p) and not rework(p))
+	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p) and (not rework(p) or p.get_file().substr(0, 4) in MULTI_FILL))
 	if Rules.demo:                                    # DEMO BUILD: R-01 STRAIT only
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in DEMO)
 		return _battlefield_cache
@@ -132,6 +132,11 @@ static func test_scope() -> Array[String]:
 const REWORK: Array[String] = ["R-01", "R-05", "R-09", "R-11", "R-13", "R-15", "R-16", "P-02", "P-04", "E-03", "E-05", "E-09", "N-06", "N-16", "N-17", "N-20", "N-22", "M-15"]
 
 
+# MULTI_FILL (hotfix 0.24.5.1, Daniele 2026-11-15: "Use M-15 / N-06 as is"): the G pool is all 1v1, so these two REWORK maps are offered as is for the modes
+# no G map offers (2v2, FFA ...) and never for 1v1 (battlefield() fill + mode_offered() already skip a mode the pool covers). They stay on REWORK.
+const MULTI_FILL: Array[String] = ["M-15", "N-06"]
+
+
 static func rework(code_or_path: String) -> bool:
 	return code_or_path.get_file().substr(0, 4) in REWORK
 
@@ -169,7 +174,7 @@ static func _offered_modes(path: String) -> Array:
 static func mode_offered(code_or_path: String, mode: String) -> bool:
 	## 0.23.0: may this map be played in `mode`? A pooled (new) map: every mode it seats. A kept older map: only the modes the
 	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps). Never a WITHHELD_MODES mode.
-	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path) or rework(code_or_path):
+	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path) or (rework(code_or_path) and not code_or_path.get_file().substr(0, 4) in MULTI_FILL):
 		return false
 	if POOL_GROUPS.is_empty():
 		return true

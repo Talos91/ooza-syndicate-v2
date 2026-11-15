@@ -1,5 +1,9 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.5.1 "M-15 / N-06 back for 2v2 + FFA" - 2026-11-15 (STAGING hotfix; live is 0.23.21)
+
+- The G pool is all 1v1, so 2v2 / FFA had no map. M-15 and N-06 are offered as is (Daniele: "Use M-15 / N-06 as is") through `MapPool.MULTI_FILL`, only for modes no G map seats, never for 1v1; they stay on REWORK. No net.gd / protocol change (ooze20-net-8).
+
 ## 0.24.5 "map pool G, readability D, new menus, HUD 40B6" - 2026-11-15 (STAGING only; live is 0.23.21)
 
 - Release release-0.24.5 = main 8d50c11 + map-pool-g 8573deb, demolish-tap 7eeaf7a, readability-d 0369897, hud-40b6 19f90e1 (contains ui-import 93249a2), merged in that order, no conflicts. No net.gd / protocol change (ooze20-net-8).
