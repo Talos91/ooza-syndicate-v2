@@ -534,6 +534,10 @@ func setup(m, s: Sim, seat: String, scale_ui: float, is_mobile: bool, h = null, 
 		if mobile:
 			_floor_px = 12.5 * lab_u
 		add_theme_constant_override("separation", int(round((HudLab.KEY_PITCH - HudLab.KEY_PT.y) * kk)))
+		if Hud40.on():                            # hud-40b6: the 40B5 keys at their registered places (slot = 77 x 68.5 pt, pitch 70.25)
+			slot_w = Hud40.SLOT_PT.x * lab_u / ui_scale
+			plate_h = Hud40.SLOT_PT.y * lab_u
+			add_theme_constant_override("separation", int(round(Hud40.SLOT_GAP * lab_u)))
 	for i in range(3):
 		# Neon Noir: no slot label; the name takes a second line only where one line would cut it (EMERGENCY / EVAC)
 		var lines := name_lines(sim.skill_id(human, SLOTS[i]), slot_w * ui_scale - 2.0 * pad).size()
