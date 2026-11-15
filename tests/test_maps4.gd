@@ -763,12 +763,13 @@ var _pool: Array = []                               # the maps this run checks (
 
 func _run() -> void:
 	## SCOPE (Daniele 2026-11-06: "suites verify only the round-R / MapPool.PROTO maps; old-map failures are not blockers"):
-	## on a proto build (Rules.proto_debug) only the proto picker's maps are checked; `-- scope=all` checks every baked map.
-	var full := not Rules.proto_debug or "scope=all" in OS.get_cmdline_user_args()
+	## on a proto build (Rules.proto_debug) only the proto picker's maps are checked; `-- scope=all` checks every baked map;
+	## `-- scope=pool` checks MapPool.test_scope() (the G pool, 2026-11-15) on any build.
+	var full := (not Rules.proto_debug and not "scope=pool" in OS.get_cmdline_user_args()) or "scope=all" in OS.get_cmdline_user_args()
 	var pool := MapPool.all()
 	if not full:
 		pool = pool.filter(func(p): return str(p).get_file().substr(0, 4) in MapPool.test_scope())
-		print("SCOPE proto + keep: %d maps (MapPool.PROTO + KEEP_OLD); -- scope=all for every baked map" % pool.size())
+		print("SCOPE pool: %d maps (MapPool.test_scope() = the G maps); -- scope=all for every baked map" % pool.size())
 	_pool = pool
 	var baked := Array(DirAccess.get_files_at(MapPool.DIR)).filter(func(f): return f.trim_suffix(".remap").ends_with(".json")).size()
 	if full:

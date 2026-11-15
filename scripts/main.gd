@@ -231,6 +231,8 @@ func _ready() -> void:
 			map_explicit = true
 		elif arg == "--demo":
 			demo = true
+		elif arg == "--quota" or arg == "--no-quota":  # LAST STAND = QUOTA (Rules.quota; on by default in a "-demo" build)
+			Rules.quota = arg == "--quota"
 		elif arg.begins_with("--ai="):
 			ai_level = arg.substr(5)
 		elif arg.begins_with("--shots="):
@@ -539,6 +541,8 @@ func _start_map(path: String) -> void:
 			sim.step(ff_dt)
 		sim.fx_events.clear()                           # the fast-forwarded bursts are stale by now
 		print("fast-forwarded to t=%.1f%s" % [sim.time, " (match already over)" if sim.over else ""])
+		if Rules.quota and sim.last_stand_warn_node >= 0:   # QUOTA shots: when the next platform launches (dev helper)
+			print("next launch: node %d at t=%.2f" % [sim.last_stand_warn_node, sim.time + maxf(sim.drop_in(sim.last_stand_warn_node), 0.0)])
 	if director:                                       # TUTORIAL: the lesson stages its board (tutorial.gd)
 		director.begin(sim, map, SEAT_FACTIONS[HUMAN])
 	if mission:                                        # CAMPAIGN: the mission stages its board (mission_director.gd)
@@ -1840,6 +1844,9 @@ func _process(delta: float) -> void:
 			world_layer.handle(ev)
 		Sfx.on_fx(ev)                                 # SOUND: the same events (a guest's come from the host through Net)
 		match ev["type"]:
+			"collapse":                               # LAST STAND = QUOTA: "+1 QUOTA" over the launching pad (HUD label)
+				if bool(ev.get("launch", false)) and str(ev.get("from", "")) != "" and hud.quota_bar:
+					hud.quota_bar.pop(sim.nodes[int(ev["node"])]["pos"], str(ev["from"]))
 			"skill":                                  # a rival's skill that touches you: a callout there (SkillDock.on_event)
 				hud.skill_event(ev)
 			"last_stand":

@@ -20,7 +20,7 @@ func _sim(code: String) -> Sim:
 
 
 func _ferry() -> void:
-	var probe := _sim("P-01")
+	var probe := _sim("G-07")
 	var c := probe.ferry_cycle(3)
 	print("FERRY P-01 node 3, deck %.1f m: crossing %.2f s, in line %.2f s, slide %.1f s, away %.1f s, half %.2f s, period %.2f s"
 			% [c["gap"], c["cross"], c["open"], c["slide"], c["away"], c["half"], c["period"]])
@@ -28,7 +28,7 @@ func _ferry() -> void:
 		var fr := []
 		var leak := 0.0                                 # the worst |crossed + fell - sent| / sent (the tally adds up)
 		for k in range(40):
-			var s := _sim("P-01")
+			var s := _sim("G-07")
 			s.time = float(c["period"]) * float(k) / 40.0
 			s.nodes[3]["owner"] = "A"
 			s.nodes[3]["units"] = float(shown) * Rules.SCALE

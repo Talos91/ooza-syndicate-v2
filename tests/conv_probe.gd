@@ -251,7 +251,7 @@ func _carry() -> void:
 	print("CONVEYOR CARRY (x%.2f with / x%.2f against; head speed / Rules.move_speed, node platforms left out)" % [
 			float(Rules.RELAYS_PROTO["conveyor"]["with"]), float(Rules.RELAYS_PROTO["conveyor"]["against"])])
 	for f in DirAccess.get_files_at("res://maps4"):
-		if not (f.begins_with("R-") and f.ends_with(".json")) or not f.substr(0, 4) in MapPool.PROTO:
+		if not f.ends_with(".json") or not f.substr(0, 4) in MapPool.PROTO:
 			continue
 		var s := _sim("res://maps4/" + f)
 		if s._conv_edges.is_empty() and s._belt_edges.is_empty():
@@ -267,7 +267,7 @@ func _init() -> void:
 		quit(0)
 		return
 	for f in DirAccess.get_files_at("res://maps4"):
-		if not (f.begins_with("R-") and f.ends_with(".json")) or not f.substr(0, 4) in MapPool.PROTO:
+		if not f.ends_with(".json") or not f.substr(0, 4) in MapPool.PROTO:
 			continue
 		var s := _sim("res://maps4/" + f)
 		var decks := s._conv_edges.keys() + s._belt_edges.keys()

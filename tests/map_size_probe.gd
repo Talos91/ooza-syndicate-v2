@@ -9,7 +9,7 @@ extends Node
 
 const MAIN := "res://main.tscn"
 const PROFILES := {"phone": Vector2i(812, 375), "phone-wide": Vector2i(844, 390), "zfold7-cover": Vector2i(840, 360)}
-const LS_DROPPED := [0, 1, 2, 3, 9, 10, 14]
+const LS_DROPPED := [0, 1, 2, 3, 9, 10, 13]   # R-10 ids 0,1,2,3,9,10,14; G-03 lost curve nodes 13 / 19 / 20 (straight decks), so 14 is 13
 
 
 func _ready() -> void:
@@ -76,7 +76,7 @@ func _run() -> void:
 			await get_tree().process_frame
 		var pt_w := float(wh.x)
 		# 1. CRESCENT at the last stand
-		var r10: Node = await _start("res://maps4/R-10-crescent.json")
+		var r10: Node = await _start("res://maps4/G-03-crescent.json")   # CRESCENT = G-03 since POOL G (2026-11-15)
 		var p_start := _plat_pt(r10, pt_w)
 		var d_start: float = r10.cam_dist
 		for id in LS_DROPPED:
@@ -87,7 +87,7 @@ func _run() -> void:
 		r10.cam_pitch = fit[2]
 		r10._place_camera()
 		var p_ls := _plat_pt(r10, pt_w)
-		var line := "SIZE %s R-10 LASTSTAND start plat %.1f pt dist %.1f pitch %.0f | last stand plat %.1f pt dist %.1f pitch %.1f | zoom-in x%.2f" % [
+		var line := "SIZE %s G-03 LASTSTAND start plat %.1f pt dist %.1f pitch %.0f | last stand plat %.1f pt dist %.1f pitch %.1f | zoom-in x%.2f" % [
 				name, p_start, d_start, r10._base_pitch, p_ls, fit[1], fit[2], d_start / float(fit[1])]
 		print(line)
 		out.append(line)

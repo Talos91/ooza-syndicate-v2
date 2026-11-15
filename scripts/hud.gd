@@ -95,6 +95,7 @@ var _last_fps_print := 0.0
 var version_label: Label
 var lab_tube: HudLab.Tube                  # hud-lab (2026-11-13): the round-30 score tube (timer only) - the lab HUD's top
 var lab_feed: HudLab.SkillFeed             # hud-lab: the round-30 skill feed beside the keys
+var quota_bar: QuotaBar                    # LAST STAND = QUOTA (Rules.quota): the match score under the tube
 var r19_top: HudR19.TopLayer             # ui-r19-import: the round-19 top capsule, pills, clock and banner slot (HudR19)
 var ui_scale := 1.0
 # --- TUTORIAL reveal set (TUTORIAL-DESIGN.md §6) ---
@@ -564,6 +565,10 @@ func _lab_setup() -> void:
 	root.add_child(lab_tube)
 	root.move_child(lab_tube, top_panel.get_index())
 	lab_tube.setup(self)
+	quota_bar = QuotaBar.new()
+	root.add_child(quota_bar)
+	root.move_child(quota_bar, lab_tube.get_index())  # under the tube: its rounded ends sit over the capsules
+	quota_bar.setup(self)
 	top_panel.modulate.a = 0.0
 	lab_feed = HudLab.SkillFeed.new()
 	root.add_child(lab_feed)
@@ -610,6 +615,8 @@ func _lab_layout(vp: Vector2) -> void:
 	var ins := margins
 	pause_button.position = Vector2(vp.x - ins.z - HudLab.BUTTON_HIT * u, ins.y + 2.0 * u)
 	music_button.position = pause_button.position - Vector2(34.0 * u, 0)
+	if quota_bar:                                    # QUOTA: the score on both flanks of the tube, clear of MUSIC
+		quota_bar.lay(Rect2(lab_tube.position, lab_tube.size), u, ins.x, music_button.position.x)
 	if dock.slots.size() > 0:
 		lab_feed.lay(dock.position + (dock.slots[0] as Control).position, u)
 
@@ -1016,6 +1023,9 @@ func sync(dt: float, cam: Camera3D) -> void:
 		lab_tube.visible = top_panel.visible
 		lab_tube.show_shares = show_chips
 		lab_tube.sync()
+		if quota_bar:
+			quota_bar.sync(dt)
+			quota_bar.visible = quota_bar.visible and lab_tube.visible
 		if is_instance_valid(lab_feed) and dock.slots.size() > 0:
 			lab_feed.lay(dock.position + (dock.slots[0] as Control).position, HudLab.u_of(self))
 	top_left.visible = show_chips
@@ -1033,17 +1043,17 @@ func sync(dt: float, cam: Camera3D) -> void:
 		status_label.text = ""
 	elif sim.very_last_stand_active:
 		# 0.23.23 (Daniele: "last stand message is too long"): the line says what drops when, nothing more
-		status_label.text = ("VERY LAST STAND · DROP EVERY %d s" % int(round(sim.very_last_stand_gap))
+		status_label.text = (("VERY LAST STAND · LAUNCH EVERY %d s" if Rules.quota else "VERY LAST STAND · DROP EVERY %d s") % int(round(sim.very_last_stand_gap))
 				if sim.very_last_stand_gap > 0.0 else "VERY LAST STAND · CONQUEST DECIDES")
 	elif sim.last_stand_active:
 		var next := ""
 		var pending: int = sim.last_stand_waves.size() if sim.v3 else sim.last_stand_order.size()
 		if sim.v3 and not sim.last_stand_warn.is_empty():
-			next = "NEXT DROP %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
+			next = _ls_word() + " %d s · %d LEFT" % [int(ceil(sim.last_stand_warn_t)), sim.last_stand_queue.size()]
 		elif sim.last_stand_warn_node >= 0:
-			next = "NEXT DROP %d s" % int(ceil(sim.last_stand_warn_t))
+			next = _ls_word() + " %d s" % int(ceil(sim.last_stand_warn_t))
 		elif sim.last_stand_next < pending:
-			next = "NEXT DROP %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
+			next = _ls_word() + " %d s" % int(ceil(maxf(sim._next_wave_at - sim.time, 0.0)))
 		else:
 			next = "CONQUEST DECIDES"
 		# the method and how it falls only while the announcement pulses (HUD_LS_PULSE s); then just the next drop
@@ -3324,6 +3334,10 @@ func _build_end() -> void:
 	sub = _versus_line(seats) + "\n" + sub           # HUD pass: who played - a human by name, an AI by faction and level
 	if draw and sim.draw_line != "":                   # 7:00, a neutral last platform: the funny call-out (0.19.0)
 		sub = str(sim.draw_line) + "\n" + sub
+	var quota_on: bool = Rules.quota and sim.last_stand_active   # LAST STAND = QUOTA: the score and how it was decided
+	if quota_on:
+		var why: String = {"unreachable": "QUOTA LEAD NOBODY COULD CATCH", "final": "QUOTA AFTER THE LAST LAUNCH"}.get(sim.quota_reason, "ELIMINATION")
+		sub = "%s  ·  %s" % [_quota_line(), why] + "\n" + sub
 	var st := Progression.seat_stats(sim, human)
 	var third := [str(st["captures"]), "Captures"]
 	if ffa:
@@ -3342,12 +3356,36 @@ func _build_end() -> void:
 	var out := s.result({"won": won, "draw": draw, "kicker": kicker, "headline": str(line[1]),
 			"name": str(main.map.get("name", "")), "sub": sub,
 			"metrics": [[MatchScreens.clock(sim.time), "Match time"],
-					["%d / %d" % [MatchScreens.nodes_held(sim, human), sim.nodes.size()], "Nodes held"], third],
+					(_quota_metric() if quota_on else ["%d / %d" % [MatchScreens.nodes_held(sim, human), sim.nodes.size()], "Nodes held"]), third],
 			"primary": primary, "details": show_end_details, "quiet": quiet, "extras": extras})
 	if main.online:
 		_end_rematch_btn = out.get("primary") as Button
 		_rematch_texts()
 	_show_screen(end_panel)
+
+
+func _ls_word() -> String:
+	## LAST STAND = QUOTA: platforms launch instead of dropping.
+	return "NEXT LAUNCH" if Rules.quota else "NEXT DROP"
+
+
+func _quota_metric() -> Array:
+	## LAST STAND = QUOTA: your side's quota against the best other side's ("3 - 2").
+	var best := 0
+	for s in sim.factions.keys():
+		if not sim.allied(s, human):
+			best = maxi(best, sim.quota_of(s))
+	return ["%d - %d" % [sim.quota_of(human), best], "Quota"]
+
+
+func _quota_line() -> String:
+	## "QUOTA  YOU 3 · EMBER 2": every side once, yours first.
+	var parts := []
+	for g in _seat_groups():
+		var seat := str(g[0])
+		var who := "YOU" if sim.allied(seat, human) else str(UiKit.NAMES.get(str(sim.factions.get(seat, "")), seat)).to_upper()
+		parts.append("%s %d" % [who, sim.quota_of(seat)])
+	return "QUOTA  " + " · ".join(parts)
 
 
 func _reward_strip(scale := 1.0) -> Control:

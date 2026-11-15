@@ -141,6 +141,22 @@ static var bridge_combat: bool = false:   # BRAWL (Daniele, 2026-09-26: "brawl i
 # LAST STAND toggle (Daniele: "add a toggle for Last Stand on or off in the match settings").
 # Off: no ring collapse; the Very Last Stand still runs at 6:00 and the 7:00 end still decides.
 static var last_stand: bool = true
+# LAST STAND = QUOTA (Daniele 2026-11-15, demo prototype; References/Art direction 2026-11 - backgrounds/DECISIONS.md:
+# "last stand is no longer a negative unfair thing but, its the score of the match, your quota"). A platform's drop is a
+# LAUNCH: same order, warnings and timing; its bridges break and fall, everything on it and on breaking decks splats; the
+# platform flies to orbit and pays QUOTA_PER_LAUNCH to its owner's side at liftoff (neutral: nobody). The Very Last Stand
+# runs down to the last platform, whose launch scores too. The match ends on elimination, on a lead no side can catch
+# (leader's lead > platforms still to launch; FFA: against the leader), or after the last launch: most quota wins, a tie
+# goes to the side that held the last platform (a neutral last platform on a tie: DRAW). On in a demo build (VERSION
+# "-demo") or with --quota; --no-quota turns it off. Main play (no "-demo") is untouched.
+static var quota: bool = VERSION.contains("-demo")
+const QUOTA_PER_LAUNCH := 1
+const QUOTA_END_SPARE := 1.0         # s: the Very Last Stand's last launch lands this long before the hard end (Sim._vls_queue_next)
+const QUOTA_LAUNCH_TIME := 1.5       # s: the platform's flight to orbit (Fx._launch; Daniele 11-15 "straight up, leaves the screen")
+const QUOTA_LAUNCH_RISE := 70.0      # m it climbs in that time (past the top edge at the phone camera)
+const QUOTA_AI_BONUS := 30.0         # AI target-score bonus for a doomed (warned) platform it can take before liftoff
+const QUOTA_AI_ARRIVE := 2.0         # s: the AI's line must land at least this long before the liftoff
+const QUOTA_AI_KEEP := 3.0           # shown units the AI leaves on its own doomed platform when it evacuates (to hold it)
 # CAMERA (Daniele, Alpha 14 playtest: "map size should be fixed, no zoom... too vertical"; "vats and
 # buildings should all face the viewer on every map"). The camera is fitted once per screen size
 # (the player may zoom in from that fit since 0.23.6, below); VIEW_YAW is set per map before it is built so every structure faces it.

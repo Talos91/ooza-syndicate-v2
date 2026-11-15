@@ -9,7 +9,7 @@ class_name MapPool
 ## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
 ## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
-const GROUP_ORDER := ["T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D", "H"]   # R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
+const GROUP_ORDER := ["G", "T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D", "H"]   # G = the forward pool (0.24.5, POOL G); R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
                                                               # MAPS 5.0: N = the map builder's new maps (References/Ooze Syndicate maps 5.0)
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
@@ -57,7 +57,10 @@ static func all() -> Array:
 # MAPS 5.0 (Daniele 2026-09-29: "replace current pool with the new ones"): the player's pool is the map builder's
 # N- maps only. Every older map stays baked in maps4/ - the campaign's placeholder missions and the tutorial load
 # theirs by path, and test_maps4 still checks them all - but none is offered on 02 BATTLEFIELD or as a random rematch.
-const POOL_GROUPS: Array[String] = ["N", "P", "R", "E"]   # 2026-11-10: + R (round R, MapPool.PROTO) and E (kept experimental maps); old N / A / B / C / M / S maps are ARCHIVED   # proto line only: the Relays 3.0 test maps are offered in 02 BATTLEFIELD
+# POOL G (Daniele 2026-11-15, map-pool-g: "the 14 pass and the 5 close fail remain (give them a new letter these identify the ones we
+# move forward with) the one that fail remove them from the next staging build but keep them around as we ll rework them"): the pool is
+# the G maps only. 2026-11-10 it was N / P / R / E (+ MULTI_KEEP); those maps are now G (re-coded) or REWORK (below).
+const POOL_GROUPS: Array[String] = ["G"]
 
 
 static func battlefield() -> Array:
@@ -68,7 +71,7 @@ static func battlefield() -> Array:
 	## Daniele's "replace current pool with the new ones"; OPEN-QUESTIONS). Cached: the map files don't change at run time.
 	if not _battlefield_cache.is_empty():
 		return _battlefield_cache
-	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p))
+	var offered := all().filter(func(p): return not p.get_file().substr(0, 4) in TUTORIAL_ONLY and not archived(p) and not rework(p))
 	if Rules.demo:                                    # DEMO BUILD: R-01 STRAIT only
 		_battlefield_cache = offered.filter(func(p): return p.get_file().substr(0, 4) in DEMO)
 		return _battlefield_cache
@@ -99,11 +102,10 @@ static func battlefield() -> Array:
 # MAP KEEP LIST (Daniele 2026-11-10): the old maps he keeps playable. Every other old map is ARCHIVED = withheld from play (never in
 # battlefield() / mode_offered), its file stays baked in maps4/ and in all() - nothing is deleted; campaign placeholders and the
 # tutorial still load theirs by path. Per-map suites (test_maps4, test_map_pool, phone_fit) check TEST_SCOPE = PROTO + KEEP_OLD.
-const KEEP_OLD: Array[String] = ["E-01", "E-02", "E-03", "E-04", "E-05", "E-06", "E-07", "E-08", "E-09", "E-10",
-		"N-02", "N-03", "N-05", "N-16", "N-17", "N-20", "N-22"]
+const KEEP_OLD: Array[String] = []   # 2026-11-15 (POOL G): every kept old map is now a G map or on REWORK
 # MULTI-PLAYER KEEP (Daniele 2026-11-10: "M15 N-05 and N-06 for now keep these has 2v2 and FFA but they all need major rework to be at the level of what we have now"):
 # playable for the modes they seat (M-15 2v2 + FFA4, N-06 2v2; N-05 seats 1v1 only, already in KEEP_OLD). REWORK NEEDED: not a baseline of quality.
-const MULTI_KEEP: Array[String] = ["M-15", "N-05", "N-06"]
+const MULTI_KEEP: Array[String] = []   # 2026-11-15 (POOL G): N-05 is G-19; M-15 / N-06 are on REWORK
 const ARCHIVED: Array[String] = [
 	"A-01", "A-02", "A-03", "A-04", "B-01", "B-02", "B-03", "B-04", "B-05", "C-01", "C-02", "C-03", "C-04",
 	"C-05", "M-01", "M-02", "M-03", "M-04", "M-05", "M-06", "M-07", "M-08", "M-09", "M-10", "M-11", "M-12",
@@ -117,14 +119,25 @@ const ARCHIVED: Array[String] = [
 
 
 static func test_scope() -> Array[String]:
-	## The maps the per-map suites verify: the round-R / proto set plus the kept old maps (Daniele 2026-11-10).
+	## The maps the per-map suites verify (test_maps4, test_map_pool, phone_fit): the G pool (Daniele 2026-11-15; before: PROTO + KEEP_OLD).
+	## REWORK maps are not checked and their failures are no blockers (TEST RULE 2026-11-06).
 	var out: Array[String] = []
 	out.append_array(PROTO)
-	out.append_array(KEEP_OLD)
-	for c in ["M-15", "N-06"]:   # rework needed (Daniele 2026-11-10): failing checks are baseline, not fixed
-		if not c in out:
-			out.append(c)
 	return out
+
+
+# REWORK (Daniele 2026-11-15): the 18 maps that failed the >= 60 pt start-view limit at decks 2 / 4 / 6 m (References/Map size 2026-11/
+# SHRINK-36.md). Out of battlefield(), out of every pool and every mode, NOT archived: their files stay baked in maps4/ (2 / 4 / 6 m)
+# and in all(), to be reworked (fewer platforms / rows) and then re-coded into G.
+const REWORK: Array[String] = ["R-01", "R-05", "R-09", "R-11", "R-13", "R-15", "R-16", "P-02", "P-04", "E-03", "E-05", "E-09", "N-06", "N-16", "N-17", "N-20", "N-22", "M-15"]
+
+
+static func rework(code_or_path: String) -> bool:
+	return code_or_path.get_file().substr(0, 4) in REWORK
+
+
+# OLD -> NEW CODES (POOL G, 2026-11-15): G-01..G-19 in the SHRINK-36 table order; names and file slugs kept; each map json says `was`.
+const RECODED := {"R-02": "G-01", "R-06": "G-02", "R-10": "G-03", "R-12": "G-04", "R-14": "G-05", "R-17": "G-06", "P-01": "G-07", "P-03": "G-08", "P-05": "G-09", "E-01": "G-10", "E-02": "G-11", "E-04": "G-12", "E-06": "G-13", "E-07": "G-14", "E-08": "G-15", "E-10": "G-16", "N-02": "G-17", "N-03": "G-18", "N-05": "G-19"}
 
 
 static func archived(code_or_path: String) -> bool:
@@ -134,14 +147,12 @@ static func archived(code_or_path: String) -> bool:
 # PROTO PICKER (Daniele 2026-11-03: "in the proto build the map picker must list ONLY the prototype maps"): a proto build
 # (Rules.proto_debug) offers just these - the Relays 3.0 test maps - and no older map fills a mode they lack (they are 1v1 only,
 # so the picker shows only the 1v1 chip). The release line never reaches this: its VERSION has no "-proto".
-const PROTO: Array[String] = ["R-01", "R-02", "R-05", "R-06", "R-09", "R-10", "R-11", "R-12", "R-13", "R-14", "R-15", "R-16", "R-17", "P-01", "P-02", "P-03", "P-04", "P-05"]   # + round R maps (2026-11-05, MAP-ROUND-2026-11; R-03 merged into R-01 the same day; R-04 Gate 2 removed 2026-11-05, Daniele)
+const PROTO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-07", "G-08", "G-09", "G-10", "G-11", "G-12", "G-13", "G-14", "G-15", "G-16", "G-17", "G-18", "G-19"]   # POOL G (2026-11-15): the G maps (was the round R + P maps; the kept ones are G now, the rest REWORK)
 # THEMES (2026-11-13): map code -> LookTheme id (corporate_campus / golden_hour / quota_parade / wellness_retreat). Empty = the LAB
 # on every map until Daniele assigns the round-32 settings; dev --theme=<id> forces one for shots.
 const THEMES := {}
-const DEMO: Array[String] = ["R-01", "R-02", "R-05", "R-06", "R-09", "R-10", "R-11", "R-12", "R-13", "R-14", "R-15", "R-16", "R-17",
-		"P-01", "P-02", "P-03", "P-04", "P-05", "E-01", "E-02", "E-03", "E-04", "E-05", "E-06", "E-07", "E-08", "E-09", "E-10",
-		"N-02", "N-03", "N-05", "N-06", "N-16", "N-17", "N-20", "N-22", "M-15",
-		"HX-1", "HX-2", "HX-3", "HX-4", "HX-5", "HX-6", "HX-7", "HX-8"]   # DEMO BUILD (Rules.demo): the 37 pool maps re-baked at deck tiers 2 / 4 / 6 m (map-shrink 2026-11-15, Daniele: maps too big on the phone; play them at full speed first) + the HX size ladder
+const DEMO: Array[String] = ["G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-07", "G-08", "G-09", "G-10", "G-11", "G-12", "G-13", "G-14", "G-15", "G-16", "G-17", "G-18", "G-19",
+		"HX-1", "HX-2", "HX-3", "HX-4", "HX-5", "HX-6", "HX-7", "HX-8"]   # DEMO BUILD (Rules.demo): the G pool (2026-11-15; the REWORK maps left it) + the HX size ladder
 # HX SIZE LADDER (map-size study 2026-11-15; Daniele: "lets do it in the demo staging, simply make lets say 4/8 maps with just a
 # honeycomb of nodes so we get the general idea of max limits"): HX-1..HX-8, generator References/Ooze Syndicate maps - size ladder
 # HX 2026-11/generator/honeycomb.py. DEMO ONLY: group "H" is not in POOL_GROUPS and the codes are not in PROTO.
@@ -158,7 +169,7 @@ static func _offered_modes(path: String) -> Array:
 static func mode_offered(code_or_path: String, mode: String) -> bool:
 	## 0.23.0: may this map be played in `mode`? A pooled (new) map: every mode it seats. A kept older map: only the modes the
 	## new pool doesn't offer (it fills a gap, it doesn't compete with the new maps). Never a WITHHELD_MODES mode.
-	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path):
+	if mode in WITHHELD_MODES.get(code_or_path.get_file().substr(0, 4), []) or archived(code_or_path) or rework(code_or_path):
 		return false
 	if POOL_GROUPS.is_empty():
 		return true

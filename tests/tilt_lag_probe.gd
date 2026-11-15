@@ -53,7 +53,7 @@ func _run() -> void:
 	PerfProfile.force_level(level)
 	var path := ""
 	for f in DirAccess.get_files_at("res://maps4"):
-		if f.begins_with("P-05") and f.ends_with(".json"):
+		if f.begins_with("G-09") and f.ends_with(".json"):
 			path = "res://maps4/" + f
 	load("res://scripts/main.gd").relaunch = {"faction": "null", "mode": "1v1", "map": path}
 	inst = (load(MAIN) as PackedScene).instantiate()

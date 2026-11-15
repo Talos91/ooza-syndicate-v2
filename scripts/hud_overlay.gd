@@ -59,7 +59,8 @@ const SIGN_COL := [Color(1.0, 0.17, 0.22), Color(1.0, 0.82, 0.12), Color(0.64, 0
 # top rim first (under it only when the top is taken).
 const SIGN_PT := [22.0, 17.0, 14.0]   # plate circumradius in points per tier (red 44 pt across)
 const SIGN_FONT_PT := [20.0, 16.0, 13.5]   # the seconds (text >= 12.5 pt on a phone)
-const SIGN_CAPTION := "NEXT DROP"     # over the red sign
+var SIGN_CAPTION: String:                # over the red sign (QUOTA: platforms launch)
+	get: return "NEXT LAUNCH" if Rules.quota else "NEXT DROP"
 const SIGN_CAPTION_PT := 12.5
 const SIGN_ALPHA := [1.0, 0.95, 0.8]
 const SIGN_PULSE_S := 1.5             # seconds a sign (or the upgrade chip) pulses after it changes state
