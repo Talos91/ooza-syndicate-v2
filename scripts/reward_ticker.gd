@@ -77,8 +77,10 @@ func fit() -> void:
 func _resize() -> void:
 	var fs := _font_size()
 	var w := _p(H) + _p(8) + HEAD_FONT.get_string_size(_fmt(amount), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	if chip:
-		w = _p(H) + _p(8) + HEAD_FONT.get_string_size("88888", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + _p(10)
+	if chip:                                          # 38A2 currency chip: 64 pt wide, 26 pt tall (20 pt icon well + 39 pt number box)
+		custom_minimum_size = Vector2(_p(64.0), _p(26.0))
+		size = custom_minimum_size
+		return
 	custom_minimum_size = Vector2(minf(w + _p(6), _p(MAX_W)), _p(H))
 	size = custom_minimum_size
 
@@ -101,7 +103,7 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
-	var h := _p(H)
+	var h := _p(26.0) if chip else _p(H)
 	var col: Color = COLOURS.get(currency, Color.WHITE)
 	if chip:
 		draw_style_box(MenuSkin.box(MenuSkin.tinted("GEO-P7-small", "", Color.WHITE), Vector4(20, 0, 20, 0), Color.WHITE, Vector2(0, 0)), Rect2(Vector2.ZERO, size))
@@ -125,8 +127,8 @@ func _draw() -> void:
 			inner.append(c + Vector2.from_angle(TAU * i / 6.0 + PI / 6.0) * r * 0.84)
 		draw_colored_polygon(inner, col)
 		draw_circle(c, r * 0.36, EDGE)               # the nut's hole
-	var fs := _font_size()
-	var x := h + _p(8)
+	var fs := _font_size() if not chip else int(round(_p(13.0)))
+	var x := h + _p(4)
 	var y := h * 0.5 + fs * 0.36
 	if chip:
 		draw_string(HEAD_FONT, Vector2(x, y), _text(), HORIZONTAL_ALIGNMENT_LEFT, size.x - x, fs, MenuSkin.INK_DARK)
