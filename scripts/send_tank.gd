@@ -63,6 +63,8 @@ var _lab_goo: HudLab.Goo
 var _lab_feed: HudLab.Goo
 var _lab_feed_ext: Control                        # the inlet's straight run on to the physical left edge (Daniele 2026-11-13)
 var _lab_over: Control
+var h40 := false                                  # hud-40b6 (2026-11-15): the 40B4 vat + 40B5 feeds (Hud40), at the pack's size
+var _h40_pipes: Hud40.PipeLayer
 var canvas_k := 0.0                               # control px per canvas px (Hud sets it; 0 = the old frame path)
 var pt_px := 1.0                                  # control px per HUD point (Hud sets it)
 
@@ -85,6 +87,9 @@ func lab_setup(u: float) -> void:
 	## screen edge. Stack: shell (this _draw), feed shell + window, feed goo, feed glass, vat goo (shader), glass + logo + gauge.
 	lab = true
 	lab_u = u
+	if Hud40.on():
+		_h40_setup(u)
+		return
 	var k := lab_k()
 	custom_minimum_size = Vector2((HudLab.VAT_CANVAS.x - HudLab.VAT_BODY_X) * k, HudLab.VAT_CANVAS.y * k).round()
 	var fp := lab_cv(HudLab.VAT_FEED_AT)
@@ -123,6 +128,61 @@ func lab_setup(u: float) -> void:
 	add_child(_lab_over)
 
 
+func _h40_setup(u: float) -> void:
+	## hud-40b6: the control = the vat canvas (66 x 244 pt). Stack: the two B5 feeds (behind, run on to the physical left edge),
+	## PAINT-VAT-FRAME + its neon in your seat colour (this _draw), the goo (hud_goo through MASK-VAT-GOO), glass, the bolted ticks.
+	h40 = true
+	custom_minimum_size = (Hud40.VAT_PT * u).round()
+	_h40_pipes = Hud40.PipeLayer.new(_draw_h40_pipes)
+	_h40_pipes.show_behind_parent = true
+	HudLab.place(_h40_pipes, Vector2.ZERO, Hud40.VAT_PT * u)
+	add_child(_h40_pipes)
+	_lab_goo = HudLab.Goo.new(Hud40.tex("MASK-VAT-GOO"), 0)
+	_lab_goo.p("v_top", Hud40.VAT_GOO.position.y / Hud40.VAT_PT.y)
+	_lab_goo.p("v_bot", Hud40.VAT_GOO.end.y / Hud40.VAT_PT.y)
+	_lab_goo.p("u_left", Hud40.VAT_GOO.position.x / Hud40.VAT_PT.x)
+	_lab_goo.p("u_right", Hud40.VAT_GOO.end.x / Hud40.VAT_PT.x)
+	HudLab.place(_lab_goo, Vector2.ZERO, Hud40.VAT_PT * u)
+	add_child(_lab_goo)
+	_lab_over = Control.new()
+	_lab_over.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lab_over.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	HudLab.place(_lab_over, Vector2.ZERO, Hud40.VAT_PT * u)
+	_lab_over.draw.connect(_draw_h40_over)
+	add_child(_lab_over)
+
+
+func _draw_h40_pipes(c: Control) -> void:
+	var u := lab_u
+	var left := (c.get_global_transform_with_canvas().affine_inverse() * Vector2.ZERO).x - 2.0
+	for p in Hud40.VAT_PIPES:
+		var a: Vector2 = (p - Hud40.VAT_AT) * u
+		var x1 := a.x + 26.5 * u
+		Hud40.run3(c, "PAINT-VAT-PIPE", Rect2(Vector2(minf(left, a.x), a.y), Vector2(x1 - minf(left, a.x), 15.0 * u)), 2.0, 10.0, u)
+
+
+func _draw_h40_over() -> void:
+	## Glass over the goo, then the 40B4 bolted ticks (lettering baked): the picked share lit with a seat-neon bar, the others
+	## a little dimmed; the units it sends under the window.
+	var c := _lab_over
+	var u := lab_u
+	Hud40.art(c, "PAINT-VAT-GLASS", Vector2.ZERO, u)
+	for l in Hud40.TICKS:
+		var on := is_equal_approx(float(l), float(main.fraction))
+		var at := Vector2(27.0, float(Hud40.TICKS[l])) * u           # (vat-canvas pt)
+		Hud40.art(c, "PAINT-VAT-TICK-%d" % int(round(float(l) * 100.0)), at, u, Color.WHITE if on else Color(0.8, 0.8, 0.8))
+		if on:                                                       # the picked share: a seat-neon frame round its plate
+			c.draw_rect(Rect2(at + Vector2(-0.5, -0.5) * u, Vector2(38, 16) * u), Color(Rules.seat_color(str(main.HUMAN)), 0.95), false, 1.6 * u, true)
+	if is_equal_approx(float(main.fraction), 1.0):
+		var b := body_rect()
+		c.draw_rect(Rect2(b.position.x, b.position.y - 2.0 * u, b.size.x, 1.6 * u), Color(Rules.seat_color(str(main.HUMAN)), 0.9))
+	var units := _units_line()
+	if units != "":
+		var b2 := body_rect()
+		var us := maxi(int(round(13.0 * u)), _floor_px())
+		HudLab.text_c(c, units, Vector2(b2.get_center().x, b2.end.y + 7.0 * u), us, HudLab.LIGHT, HudLab.bold(), maxi(2, int(3.0 * u)), Color(0, 0, 0, 0.7))
+
+
 func _draw_feed_ext() -> void:
 	## The glass inlet's left end runs on to the physical left edge (past the safe-area inset), never ending in mid-air.
 	var c := _lab_feed_ext
@@ -159,6 +219,8 @@ func gmn() -> bool:
 
 func body_rect() -> Rect2:
 	## The tank's inside (the goo's room): the frame's rect minus its rim and the drips under it.
+	if h40:                                       # hud-40b6: MASK-VAT-GOO's box
+		return Rect2(Hud40.VAT_GOO.position * lab_u, Hud40.VAT_GOO.size * lab_u)
 	if lab:                                       # hud-lab: the goo master's box: 0 % at its bottom, 100 % at its top
 		var a0 := lab_cv(HudLab.VAT_GOO_PX.position / HudLab.PX)
 		return Rect2(a0, HudLab.VAT_GOO_PX.size / HudLab.PX * lab_k())
@@ -233,6 +295,10 @@ func _process(dt: float) -> void:
 		_lab_goo.p("level", clampf(shown, 0.0, 1.0))
 		_lab_goo.p("slosh", _slosh)
 		_lab_goo.p("tint", tint)
+		if h40:
+			_h40_pipes.set_goo(tint)
+			_lab_over.queue_redraw()
+			return
 		_lab_feed.p("tint", tint)
 		_lab_feed_ext.queue_redraw()
 		_lab_feed.p("pulse_rate", _lab_rate())
@@ -285,6 +351,10 @@ func _draw_lab_over() -> void:
 
 
 func _draw() -> void:
+	if h40:
+		Hud40.art(self, "PAINT-VAT-FRAME", Vector2.ZERO, lab_u)
+		Hud40.art(self, "MASK-VAT-NEON-B4", Vector2.ZERO, lab_u, Color(Rules.seat_color(str(main.HUMAN)), 0.85))
+		return
 	if lab:
 		HudLab.art(self, "vat-shell", lab_cv(Vector2.ZERO), lab_k())
 		return

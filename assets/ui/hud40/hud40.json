@@ -1,0 +1,496 @@
+{
+ "PAINT-VAT-FRAME": {
+  "px2": [
+   132,
+   488
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   132,
+   488
+  ]
+ },
+ "MASK-VAT-GOO": {
+  "px2": [
+   132,
+   488
+  ],
+  "alpha_bbox_px2": [
+   12,
+   60,
+   118,
+   458
+  ]
+ },
+ "MASK-VAT-NEON-B4": {
+  "px2": [
+   132,
+   488
+  ],
+  "alpha_bbox_px2": [
+   3,
+   90,
+   130,
+   198
+  ]
+ },
+ "PAINT-VAT-GLASS": {
+  "px2": [
+   132,
+   488
+  ],
+  "alpha_bbox_px2": null
+ },
+ "PAINT-VAT-TICK-25": {
+  "px2": [
+   74,
+   30
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   74,
+   30
+  ]
+ },
+ "PAINT-VAT-TICK-50": {
+  "px2": [
+   74,
+   30
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   74,
+   30
+  ]
+ },
+ "PAINT-VAT-TICK-75": {
+  "px2": [
+   74,
+   30
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   74,
+   30
+  ]
+ },
+ "PAINT-SCORE-FRAME": {
+  "px2": [
+   548,
+   80
+  ],
+  "alpha_bbox_px2": [
+   4,
+   0,
+   544,
+   80
+  ]
+ },
+ "PAINT-SCORE-4P-FRAME": {
+  "px2": [
+   548,
+   80
+  ],
+  "alpha_bbox_px2": [
+   4,
+   0,
+   544,
+   80
+  ]
+ },
+ "MASK-SCORE-TUBE": {
+  "px2": [
+   548,
+   80
+  ],
+  "alpha_bbox_px2": [
+   97,
+   14,
+   451,
+   72
+  ]
+ },
+ "PAINT-SCORE-TUBE-GLASS": {
+  "px2": [
+   548,
+   80
+  ],
+  "alpha_bbox_px2": null
+ },
+ "PAINT-SCORE-TIMER": {
+  "px2": [
+   132,
+   54
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   132,
+   54
+  ]
+ },
+ "PAINT-SCORE-CAP": {
+  "px2": [
+   44,
+   44
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   44,
+   44
+  ]
+ },
+ "PAINT-SCORE-CAP-4P": {
+  "px2": [
+   44,
+   44
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   44,
+   44
+  ]
+ },
+ "MASK-SCORE-CAP-SEAT": {
+  "px2": [
+   44,
+   44
+  ],
+  "alpha_bbox_px2": [
+   2,
+   2,
+   42,
+   42
+  ]
+ },
+ "MASK-SCORE-CAP-SEAT-4P": {
+  "px2": [
+   44,
+   44
+  ],
+  "alpha_bbox_px2": [
+   2,
+   2,
+   42,
+   42
+  ]
+ },
+ "PAINT-TOPKEY-BRACKET": {
+  "px2": [
+   299,
+   84
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   299,
+   84
+  ]
+ },
+ "KEY-CHAT": {
+  "px2": [
+   61,
+   60
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   61,
+   60
+  ]
+ },
+ "KEY-DEBUG": {
+  "px2": [
+   61,
+   60
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   61,
+   60
+  ]
+ },
+ "GEO-SKILL-KEY": {
+  "px2": [
+   154,
+   137
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   154,
+   137
+  ]
+ },
+ "GEO-SKILL-KEY-2": {
+  "px2": [
+   144,
+   132
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   144,
+   132
+  ]
+ },
+ "GEO-SKILL-KEY-3": {
+  "px2": [
+   146,
+   131
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   146,
+   131
+  ]
+ },
+ "PAINT-VAT-PIPE": {
+  "px2": [
+   53,
+   30
+  ],
+  "alpha_bbox_px2": [
+   0,
+   1,
+   53,
+   29
+  ]
+ },
+ "PAINT-SCORE-MOUNT-LEFT": {
+  "px2": [
+   46,
+   46
+  ],
+  "alpha_bbox_px2": [
+   4,
+   0,
+   46,
+   46
+  ]
+ },
+ "PAINT-SCORE-MOUNT-RIGHT": {
+  "px2": [
+   46,
+   46
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   42,
+   46
+  ]
+ },
+ "PAINT-BRACKET-PIPE": {
+  "px2": [
+   30,
+   101
+  ],
+  "alpha_bbox_px2": [
+   1,
+   0,
+   29,
+   101
+  ]
+ },
+ "PAINT-RACK-MAIN-SHAFT": {
+  "px2": [
+   30,
+   352
+  ],
+  "alpha_bbox_px2": [
+   4,
+   0,
+   26,
+   352
+  ]
+ },
+ "PAINT-RACK-TOP-ELBOW": {
+  "px2": [
+   52,
+   52
+  ],
+  "alpha_bbox_px2": [
+   5,
+   5,
+   40,
+   40
+  ]
+ },
+ "PAINT-RACK-TOP-EXTENSION": {
+  "px2": [
+   32,
+   30
+  ],
+  "alpha_bbox_px2": [
+   0,
+   4,
+   32,
+   26
+  ]
+ },
+ "PAINT-CONNECTOR-SAGE-T": {
+  "px2": [
+   26,
+   34
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   26,
+   34
+  ]
+ },
+ "PAINT-SKILL-FEED": {
+  "px2": [
+   53,
+   30
+  ],
+  "alpha_bbox_px2": [
+   0,
+   1,
+   53,
+   29
+  ]
+ },
+ "PAINT-CONNECTOR-SKILL-T": {
+  "px2": [
+   29,
+   26
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   29,
+   26
+  ]
+ },
+ "PAINT-CONNECTOR-SCORE": {
+  "px2": [
+   30,
+   18
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   30,
+   18
+  ]
+ },
+ "MASK-SKILL-KEY-SEAT-RIM": {
+  "px2": [
+   154,
+   137
+  ],
+  "alpha_bbox_px2": [
+   1,
+   1,
+   153,
+   136
+  ]
+ },
+ "MASK-SKILL-KEY-DIM": {
+  "px2": [
+   154,
+   137
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   154,
+   137
+  ]
+ },
+ "MASK-SKILL-KEY-ICON-WELL": {
+  "px2": [
+   154,
+   137
+  ],
+  "alpha_bbox_px2": [
+   29,
+   13,
+   125,
+   93
+  ]
+ },
+ "MASK-SKILL-KEY-2-SEAT-RIM": {
+  "px2": [
+   144,
+   132
+  ],
+  "alpha_bbox_px2": [
+   1,
+   1,
+   143,
+   131
+  ]
+ },
+ "MASK-SKILL-KEY-2-DIM": {
+  "px2": [
+   144,
+   132
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   144,
+   132
+  ]
+ },
+ "MASK-SKILL-KEY-2-ICON-WELL": {
+  "px2": [
+   144,
+   132
+  ],
+  "alpha_bbox_px2": [
+   24,
+   13,
+   120,
+   93
+  ]
+ },
+ "MASK-SKILL-KEY-3-SEAT-RIM": {
+  "px2": [
+   146,
+   131
+  ],
+  "alpha_bbox_px2": [
+   1,
+   1,
+   145,
+   130
+  ]
+ },
+ "MASK-SKILL-KEY-3-DIM": {
+  "px2": [
+   146,
+   131
+  ],
+  "alpha_bbox_px2": [
+   0,
+   0,
+   146,
+   131
+  ]
+ },
+ "MASK-SKILL-KEY-3-ICON-WELL": {
+  "px2": [
+   146,
+   131
+  ],
+  "alpha_bbox_px2": [
+   25,
+   13,
+   121,
+   93
+  ]
+ }
+}

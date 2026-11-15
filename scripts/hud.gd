@@ -95,6 +95,7 @@ var _last_fps_print := 0.0
 var version_label: Label
 var lab_tube: HudLab.Tube                  # hud-lab (2026-11-13): the round-30 score tube (timer only) - the lab HUD's top
 var lab_feed: HudLab.SkillFeed             # hud-lab: the round-30 skill feed beside the keys
+var h40_rack: Hud40.Rack                  # hud-40b6 (2026-11-15): the 40B6 rack + top-key bracket (Hud40)
 var r19_top: HudR19.TopLayer             # ui-r19-import: the round-19 top capsule, pills, clock and banner slot (HudR19)
 var ui_scale := 1.0
 # --- TUTORIAL reveal set (TUTORIAL-DESIGN.md §6) ---
@@ -565,11 +566,20 @@ func _lab_setup() -> void:
 	root.move_child(lab_tube, top_panel.get_index())
 	lab_tube.setup(self)
 	top_panel.modulate.a = 0.0
+	var u := HudLab.u_of(self)
+	if Hud40.on():                                    # hud-40b6: the rack + bracket behind the keys; MUTE / PAUSE on the 40B4 keys
+		h40_rack = Hud40.Rack.new()
+		root.add_child(h40_rack)
+		root.move_child(h40_rack, top_panel.get_index())
+		h40_rack.setup(self)
+		for pair in [[pause_button, "PAUSE"], [music_button, "MUTE"]]:
+			_h40_key(pair[0], pair[1])
+		_lab_banner(u)
+		return
 	lab_feed = HudLab.SkillFeed.new()
 	root.add_child(lab_feed)
 	root.move_child(lab_feed, dock.get_index())
 	lab_feed.setup(dock)
-	var u := HudLab.u_of(self)
 	for pair in [[pause_button, "pause-glyph"], [music_button, "music-glyph"]]:
 		var b: Button = pair[0]
 		var empty := StyleBoxEmpty.new()
@@ -584,6 +594,30 @@ func _lab_setup() -> void:
 		b.size = b.custom_minimum_size
 		var g: String = pair[1]
 		b.draw.connect(func(): HudLab.button_face(b, g, HudLab.u_of(self), g == "music-glyph" and not Music.music_on()))
+	_lab_banner(u)
+
+
+func _h40_key(b: Button, nm: String) -> void:
+	## hud-40b6: a top key = its 40B4 face in a 33 pt tap (its logic and its other children untouched).
+	if b == null or b.has_meta("h40"):
+		return
+	b.set_meta("h40", nm)
+	var empty := StyleBoxEmpty.new()
+	for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+		b.add_theme_stylebox_override(st, empty)
+	b.icon = null
+	b.text = ""
+	for c in b.get_children():
+		if c is CanvasItem and c != _chat_dot:
+			(c as CanvasItem).visible = false
+	var u := HudLab.u_of(self)
+	b.custom_minimum_size = Vector2.ONE * Hud40.TOPKEY_HIT * u
+	b.size = b.custom_minimum_size
+	b.draw.connect(func(): Hud40.topkey_face(b, str(b.get_meta("h40")), HudLab.u_of(self),
+			nm == "MUTE" and not Music.music_on()))
+
+
+func _lab_banner(u: float) -> void:
 	var frame := Control.new()                        # the banner's plate, behind its words
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.show_behind_parent = true
@@ -608,10 +642,48 @@ func _lab_layout(vp: Vector2) -> void:
 	var u := HudLab.u_of(self)
 	lab_tube.lay(vp, u)
 	var ins := margins
+	if h40_rack:
+		_h40_layout(vp, u, ins)
+		return
 	pause_button.position = Vector2(vp.x - ins.z - HudLab.BUTTON_HIT * u, ins.y + 2.0 * u)
 	music_button.position = pause_button.position - Vector2(34.0 * u, 0)
 	if dock.slots.size() > 0:
 		lab_feed.lay(dock.position + (dock.slots[0] as Control).position, u)
+
+
+func _h40_layout(vp: Vector2, u: float, ins: Vector4) -> void:
+	## hud-40b6: the pack's places - the top keys right-aligned in the bracket (PAUSE, MUTE, then DEBUG / CHAT when they show),
+	## the skill keys on their registered boxes, the vat at (10.5, 66.5) from the safe left, centred on the height.
+	var r := h40_rack
+	r.u = u
+	r.right = vp.x - ins.z
+	r.top = ins.y
+	var slots := ["PAUSE", "MUTE", "DEBUG", "CHAT"]
+	var n := 0
+	for pair in [[pause_button, "PAUSE"], [music_button, "MUTE"], [debug_button, "DEBUG"], [chat_button, "CHAT"]]:
+		var b: Button = pair[0]
+		if b == null:
+			continue
+		_h40_key(b, pair[1])
+		if not b.visible:
+			continue
+		var place: String = slots[n]
+		b.size = Vector2.ONE * Hud40.TOPKEY_HIT * u
+		b.position = r.at(Hud40.TOPKEYS[place])
+		n += 1
+	r.keys = maxi(n, 1)
+	r.show_rack = dock.visible
+	if dock.slots.size() > 0:
+		dock.position = r.at(Hud40.KEYS[0].position) - (dock.slots[0] as Control).position
+		dock._place_hint()
+	if send_tank:
+		var oy := maxf((vp.y - Hud40.H * u) / 2.0, ins.y)
+		var want := Vector2(ins.x + Hud40.VAT_AT.x * u, oy + Hud40.VAT_AT.y * u)
+		var d := want - send_tank.global_position
+		side_panel.position += d
+		map_title.position.x = ins.x + 8.0
+	r.refresh(GooTone.mine(HudNoir.accent))
+	r.queue_redraw()
 
 
 func _r19_button(b: Button) -> void:
@@ -927,6 +999,8 @@ func right_used() -> float:
 	if dock and dock.visible:
 		var hm := dock.housing_margin()
 		w = maxf(w, dock.size.x + hm.x + hm.z)
+		if h40_rack:                                  # hud-40b6: the rack pipe runs at x 705.7 of 812
+			w = maxf(w, (Hud40.W - 705.7) * HudLab.u_of(self))
 		if lab_feed:                                  # hud-lab: the skill feed runs down the keys' outside (19 pt at x1.2)
 			w = maxf(w, dock.size.x - HudLab.SKILL_FEED_OFF.x * HudLab.KEY_K * HudLab.u_of(self))
 	return margins.z + w + 12.0

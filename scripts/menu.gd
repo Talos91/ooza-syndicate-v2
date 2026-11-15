@@ -19,7 +19,7 @@ const UI_FONT := preload("res://assets/fonts/Rajdhani-SemiBold.ttf")
 const HEAD_FONT := preload("res://assets/fonts/RussoOne-Regular.ttf")
 const FACTIONS := ["vex", "null", "bloom", "ember", "solar"]
 const K := 1280.0 / 1672.0
-const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "BLOOM", "ember": "EMBER\nMAW", "solar": "SOLAR\nSHELLS"}
+const NAMES := {"vex": "VEX\nBIOENGINEERS", "null": "NULL\nCARTEL", "bloom": "BLOOM", "ember": "EMBER\nMAW", "solar": "AEGIS\nSHELLS"}
 
 var main: Node3D
 var content: Control
@@ -549,6 +549,7 @@ func page_title(area: Rect2, kicker: String, headline: String, size := 34.0) -> 
 			var hl := UiKit.label(self, headline.to_upper(), hs, UiKit.INK, true)
 			var kl := UiKit.label(self, kicker.to_upper(), 12, UiKit.accent(shell_f), true, 3)
 			var rowh := UiKit.line_h(self, hs, true)      # (font measures: a label off the tree reports its default size)
+			UiKit.band(self, Rect2(x - 14.0, ty - 6.0, kw + 18.0 + hw + 32.0, rowh + 12.0))
 			_shell_add(kl, Vector2(x, ty + (rowh - UiKit.line_h(self, 12, true)) / 2.0 + 2.0))
 			_shell_add(hl, Vector2(x + kw + 18.0, ty))
 			if shell_back.is_valid() and not shell_slim:
@@ -744,6 +745,8 @@ func show_main() -> void:
 	## row of tiles at the foot - ONLINE (HOST ROOM straight into a room; JOIN WITH CODE: the code sheet over HOME), CAMPAIGN
 	## (the next mission, CONTINUE), TRAINING / HOW TO PLAY, and PLAY LAST SETUP (its summary, CHANGE -> MATCH SETUP, PLAY =
 	## DEPLOY with the last setup: one tap to a match). The PLAY hub page is gone.
+	if _last_show != show_main:                 # HOME just opened (a rebuild of HOME keeps its words): the next pair
+		_home_words = _next_words(_home_words)
 	_last_show = show_main                  # a resize that changes the phone sizing rebuilds it (_fit)
 	var hero := faction
 	var area := shell_open("OOZE / HOME", "home", Callable(), hero)
@@ -769,6 +772,22 @@ func show_main() -> void:
 		_install_guide_panel()
 	if _join_open:
 		_join_sheet()
+
+
+## HOME's rotating words (Daniele 2026-11-15, designer 9): [tagline, title line 1, title line 2], one pair each time HOME opens.
+const HOME_WORDS := [
+	["DISAPPOINT THE OVERSEER ONCE.", "HIT QUOTA.", "OR BECOME IT."],
+	["THE OVERSEER LOVES A GOOD WAR.", "MORE GOO.", "FEWER COWORKERS."],
+	["PRODUCTIVITY IS MANDATORY.", "OUTPRODUCE.", "OUTOOZE."],
+	["GROWTH AT ANY COST. MOSTLY THEIRS.", "SEIZE SUPPLY.", "PLEASE THE BOSS."]]
+var _home_words := -1
+
+
+func _next_words(prev: int) -> int:
+	var n := randi() % HOME_WORDS.size()
+	if n == prev:
+		n = (n + 1) % HOME_WORDS.size()
+	return n
 
 
 func _home_column(area: Rect2, hero: String) -> void:
@@ -808,19 +827,21 @@ func _home_column(area: Rect2, hero: String) -> void:
 	var ry := by2 - 8.0 - bh                           # CHALLENGES' top
 	var tvb := (_den.tv_bottom() - content.position.y) / content.scale.y
 	var lbl := lt if not TutorialDirector.ENABLED else "TRAINING  →"
+	var lbl_s := lbl if TutorialDirector.ENABLED else "TRAINING
+COMING SOON"   # (a name is never dropped: two lines when one will not fit)
 	if ry < tvb + 6.0:                                 # a short phone: the stack would reach the TV, so the pair sits side by side
 		var sw := (content.size.x - x - cards_right - gap - 8.0) / 2.0
 		var sh := bh
 		var sy := maxf(ty + th - sh, tvb + 8.0)     # (>= 8 units under the TV bezel; the pair may end a little under the cards)
 		rx = cards_right + gap
 		_col_back(Rect2(rx, sy, sw * 2.0 + 8.0, sh))
-		UiKit.btn(self, ct, Vector2(rx, sy), Vector2(sw, sh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 13)
-		var lb2 := UiKit.btn(self, lbl if TutorialDirector.ENABLED else lt, Vector2(rx + sw + 8.0, sy), Vector2(sw, sh), show_tutorial, "selected", hero, 13)
+		UiKit.btn(self, ct, Vector2(rx, sy), Vector2(sw, sh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, UiKit.fit_size(self, ct, sw, 13.0))
+		var lb2 := UiKit.btn(self, UiKit.fit_text(self, lbl, lbl_s, sw, 13.0), Vector2(rx + sw + 8.0, sy), Vector2(sw, sh), show_tutorial, "selected", hero, UiKit.fit_size(self, lbl, sw, 13.0))
 		lb2.disabled = not TutorialDirector.ENABLED
 	else:
 		_col_back(Rect2(rx, ry, rw, bh * 2.0 + 8.0))
 		UiKit.btn(self, ct, Vector2(rx, ry), Vector2(rw, bh), show_challenges, "primary" if ready_n > 0 else "secondary", hero, 15)
-		var lb := UiKit.btn(self, lbl, Vector2(rx, by2), Vector2(rw, bh), show_tutorial, "selected", hero, 15)
+		var lb := UiKit.btn(self, UiKit.fit_text(self, lbl, lbl_s, rw, 15.0), Vector2(rx, by2), Vector2(rw, bh), show_tutorial, "selected", hero, UiKit.fit_size(self, lbl, rw, 15.0))
 		lb.disabled = not TutorialDirector.ENABLED
 	# the headline top left, FULLSCREEN (QUIT on desktop) and the version under it
 	var fh := UiKit.tap_h(self, 36.0)
@@ -828,12 +849,18 @@ func _home_column(area: Rect2, hero: String) -> void:
 	var hx := x + 8.0
 	var hy := area.position.y + 12.0
 	var hw := maxf(qr - hx, 200.0)
-	var sizes := [[44.0, "THE CITY IS\nYOURS TO TAKE."], [32.0, "THE CITY IS\nYOURS TO TAKE."], [26.0, "THE CITY IS YOURS TO TAKE."]]
+	var words: Array = HOME_WORDS[maxi(_home_words, 0)]
+	var title2: String = "%s\n%s" % [words[1], words[2]]
+	var long_line: String = words[1] if str(words[1]).length() >= str(words[2]).length() else words[2]
+	var sizes := [[44.0, title2], [32.0, title2], [26.0, "%s %s" % [words[1], words[2]]]]
 	for st in sizes:
 		var lines: int = str(st[1]).count("\n") + 1
 		var need: float = UiKit.line_h(self, 13, true) + 6.0 + UiKit.line_h(self, st[0], true) * lines
-		if (need <= free and UiKit.text_w(self, "YOURS TO TAKE.", st[0], true) <= hw) or st == sizes[-1]:
-			_shell_add(UiKit.label(self, "BETTER SLUDGE. FEWER QUESTIONS.", 13, acc, true, 3), Vector2(hx, hy))
+		if (need <= free and UiKit.text_w(self, long_line, st[0], true) <= hw) or st == sizes[-1]:
+			var bw: float = maxf(UiKit.text_w(self, str(words[0]), 13, true) + str(words[0]).length() * 3.0, UiKit.text_w(self, long_line, st[0], true))
+			if need <= free:
+				UiKit.band(self, Rect2(hx - 16.0, hy - 8.0, minf(bw + 40.0, qr - hx + 40.0), need + 18.0))   # 40B2 title plate: dark glass under tagline + title
+			_shell_add(UiKit.label(self, str(words[0]), 13, acc, true, 3), Vector2(hx, hy))
 			hy += UiKit.line_h(self, 13, true) + 6.0
 			if need <= free:
 				_shell_add(UiKit.label(self, st[1], st[0], UiKit.INK, true), Vector2(hx - 3.0, hy))
@@ -876,7 +903,7 @@ func _home_campaign(r: Rect2, pad: float, bh: float) -> void:
 		return
 	if not Campaign.ENABLED:                           # off for now (Daniele 2026-11-15): the card stays, its button is COMING SOON
 		var off_by := _home_tile(r, pad, "CAMPAIGN", "THE CITY", "Not open yet.")
-		var ob := UiKit.btn(self, "COMING SOON", Vector2(r.position.x + pad, off_by), Vector2(r.size.x - pad * 2.0, 46), show_chapters, "secondary", faction, 14)
+		var ob := UiKit.btn(self, UiKit.fit_text(self, "CAMPAIGN · COMING SOON", "COMING SOON", r.size.x - pad * 2.0, 14.0), Vector2(r.position.x + pad, off_by), Vector2(r.size.x - pad * 2.0, 46), show_chapters, "secondary", faction, UiKit.fit_size(self, "CAMPAIGN · COMING SOON", r.size.x - pad * 2.0, 14.0))
 		ob.disabled = true
 		return
 	var nxt := Campaign.next_open(cf)
@@ -888,7 +915,9 @@ func _home_campaign(r: Rect2, pad: float, bh: float) -> void:
 
 func _home_tile(r: Rect2, pad: float, kicker: String, title: String, sub: String, lit := false) -> float:
 	## One HOME tile: its frame, kicker, title and caption; returns the y where its buttons go.
-	UiKit.panel(self, r.position, r.size, faction, lit)
+	var pn := UiKit.panel(self, r.position, r.size, faction, lit)
+	if not lit:
+		pn.add_theme_stylebox_override("panel", MenuSkin.plate(0.6))            # HOME: container fill 60 % over the painting
 	var y := r.position.y + pad
 	var iw := r.size.x - pad * 2.0
 	_clip(kicker, Vector2(r.position.x + pad, y), 12, UiKit.accent(faction), iw, true)
@@ -1018,7 +1047,8 @@ func show_help() -> void:
 		_shell_add(l, p + Vector2(16, body_y))
 	var by := y + 2.0 * (chh + gap) + 8.0
 	_shell_add(UiKit.label(self, "Learn by doing.", 15, UiKit.MUTED), Vector2(x, by + 12.0))
-	var tb := UiKit.btn(self, "TRAINING  →" if TutorialDirector.ENABLED else "TRAINING · COMING SOON", Vector2(content.size.x - x - 260.0, by), Vector2(260, 48), show_tutorial, "primary", shell_f, 16)
+	var tb := UiKit.btn(self, "TRAINING  →" if TutorialDirector.ENABLED else UiKit.fit_text(self, "TRAINING · COMING SOON", "TRAINING
+COMING SOON", 260.0, 16.0, 40.0), Vector2(content.size.x - x - 260.0, by), Vector2(260, 48), show_tutorial, "primary", shell_f, 16)
 	tb.disabled = not TutorialDirector.ENABLED          # Daniele 2026-11-15: the tutorial is being remade
 
 
@@ -1222,6 +1252,23 @@ func _cutout(f: String, pos: Vector2, dims: Vector2) -> TextureRect:
 	return r
 
 
+func _viewer_col() -> Color:
+	## The viewer's own seat colour in a room (the lobby's accents); seat A's in the menus.
+	var seat := Net.local_seat() if Net.in_room() else "A"
+	return Rules.HUES.get(str(Net.room_colours().get(seat, "")), Rules.SEATS.get(seat, MenuSkin.seat()))
+
+
+func _cutout_mark(f: String, pos: Vector2, dims: Vector2, rim := Color(0, 0, 0, 0)) -> Control:
+	## Small faction chips (pickers, room seats): the AI mark in its socket (40B2 M-L / M-K), seat-A rim.
+	var h := Control.new()
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.position = pos
+	h.size = dims
+	var side := minf(dims.x, dims.y)
+	MenuSkin.ai_hero(self, f, Vector2((dims.x - side) / 2.0, (dims.y - side) / 2.0), side, "", h, rim)
+	return h
+
+
 func _roster_tile(f: String, pos: Vector2, dims: Vector2) -> void:
 	## FACTION's roster tile: the character and the name; the picked one in its accent. A tap picks the faction.
 	var picked := f == faction
@@ -1235,7 +1282,7 @@ func _roster_tile(f: String, pos: Vector2, dims: Vector2) -> void:
 	var name_w := UiKit.text_w(self, UiKit.NAMES[f], 15, true)
 	var with_em := hs + 14.0 + nh + 6.0 + name_w + 8.0 <= b.size.x
 	hs = clampf(b.size.x - 14.0 - (nh + 6.0 if with_em else 0.0) - name_w - 8.0, hs * 0.55, hs)
-	b.add_child(_cutout(f, Vector2(6, (b.size.y - hs) / 2.0), Vector2(hs, hs)))
+	b.add_child(_cutout_mark(f, Vector2(6, (b.size.y - hs) / 2.0), Vector2(hs, hs)))
 	var two := nh + UiKit.line_h(self, 12) <= b.size.y - 6.0
 	var ty := (b.size.y - (nh + (UiKit.line_h(self, 12) if two else 0.0))) / 2.0
 	if with_em:
@@ -4444,20 +4491,14 @@ func _ai_seat_chip(seat: String, r: Rect2, team: Dictionary) -> void:
 	b.add_child(sl)
 	var tx := 10.0 + UiKit.text_w(self, "W", fl, true) + 4.0
 	var ts := minf(h - 8.0, floorf(r.size.x * 0.24))
-	if pick != "random":
-		b.add_child(_cutout(pick, Vector2(tx, (h - ts) / 2.0), Vector2(ts, ts)))
-	else:
-		var box := Panel.new()
-		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		box.add_theme_stylebox_override("panel", UiKit.sb(Color(UiKit.BASE, 0.9), UiKit.FRAME, 1, 6))
-		box.position = Vector2(tx, (h - ts) / 2.0)
-		box.size = Vector2(ts, ts)
-		b.add_child(box)
-		var q := UiKit.label(self, "?", 20, UiKit.MUTED, true)
+	MenuSkin.ai_hero(self, pick if pick != "random" else "", Vector2(tx, (h - ts) / 2.0), ts, "", b, col)   # M-K: the AI mark in its socket, SEAT-coloured rim
+	if pick == "random":
+		var q := UiKit.label(self, "?", 22, UiKit.MUTED, true)
 		q.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		q.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		q.size = box.size
-		box.add_child(q)
+		q.position = Vector2(tx, (h - ts) / 2.0)
+		q.size = Vector2(ts, ts)
+		b.add_child(q)
 	var nx := tx + ts + 8.0
 	var nw := maxf(10.0, b.size.x - nx - 8.0)
 	var fn := clampf(h * 0.22, 14.0, 18.0)
@@ -4502,7 +4543,7 @@ func _seat_rows(r: Rect2, cur_f: String, cur_lv: String, on_f: Callable, on_lv: 
 		if f != "random":
 			var ts := s - 8.0
 			var named := aw - ts - 14.0 >= UiKit.text_w(self, "BLOOM", 13, true)
-			b.add_child(_cutout(f, Vector2(6 if named else (aw - ts) / 2.0, 4), Vector2(ts, ts)))
+			b.add_child(_cutout_mark(f, Vector2(6 if named else (aw - ts) / 2.0, 4), Vector2(ts, ts)))
 			if not named:                              # a narrow phone: the character alone (+ its emblem)
 				UiKit.emblem_badge(b, f, s * 0.36)
 				continue
@@ -5180,7 +5221,7 @@ func _room_chat(r: Rect2) -> void:
 		cfs = _fit_fs(code + "    ", 26.0, 14.0, w - shw - 8.0)
 	else:
 		_say("CODE", Vector2(x, r.position.y + pad + (hh - UiKit.line_h(self, 12, true)) / 2.0), 12, UiKit.MUTED, 0.0, true, 3)
-	_say(code, Vector2(x + kw, r.position.y + pad + (hh - UiKit.line_h(self, cfs, true)) / 2.0), cfs, UiKit.accent(shell_f), 0.0, true, 4)
+	_say(code, Vector2(x + kw, r.position.y + pad + (hh - UiKit.line_h(self, cfs, true)) / 2.0), cfs, _viewer_col(), 0.0, true, 4)
 	var ty := r.position.y + pad + hh + 6.0
 	var ib := r.end.y - pad - hh
 	var tb := UiKit.btn(self, "TYPE A MESSAGE…", Vector2(x, ib), Vector2(w, 44), Net.open_chat, "tertiary", shell_f, 14)
@@ -5339,18 +5380,11 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 	var state_col := UiKit.MUTED
 	if id >= 0:
 		var f: String = str(Net.roster[id]["faction"])
-		var art := TextureRect.new()
-		art.texture = UiKit.tex(UiKit.hero_path(f))
-		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		art.position = Vector2(tx, ty0)
-		art.size = Vector2(ts, ts)
-		b.add_child(art)
+		b.add_child(_cutout_mark(f, Vector2(tx, ty0), Vector2(ts, ts), col))
 		name_t = "YOU" if me else Net.name_of(id).to_upper()
 		if id == Net.room_owner or (id == 1 and not Net.server_hosted()):
 			state = "HOST"
-			state_col = UiKit.accent(shell_f)
+			state_col = col
 		elif Net.is_away(id):
 			state = "AWAY"
 			state_col = UiKit.STAR
@@ -5372,13 +5406,15 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 		name_t = ("AI " + Net.ai_fill.to_upper()) if Net.ai_fill != "" else "OPEN"
 		if sit:
 			state = "SIT HERE"
-			state_col = UiKit.accent(shell_f)
+			state_col = _viewer_col()
 	var right := b.size.x - 10.0
+	var ic0 := clampf(h * 0.28, 20.0, 46.0)
+	var tall := id >= 0 and h >= UiKit.line_h(self, fn, true) + ic0 + 18.0
 	if state != "":
 		var sfs := fl * 1.2 if state == "✓" else fs       # the READY tick reads at a glance
 		var sw := UiKit.text_w(self, state, sfs, true)
 		var st := UiKit.label(self, state, sfs, state_col, true)
-		st.position = Vector2(right - sw, (h - UiKit.line_h(self, sfs, true)) / 2.0)
+		st.position = Vector2(right - sw, (h - UiKit.line_h(self, fn, true) - ic0 - 6.0) / 2.0 if tall else (h - UiKit.line_h(self, sfs, true)) / 2.0)
 		b.add_child(st)
 		right -= sw + 8.0
 	var nx := tx + ts + 8.0
@@ -5416,7 +5452,7 @@ func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: b
 	if w - ts - 10.0 < want:                           # a narrow phone: the name wins, the character goes
 		ts = 0.0
 	if id >= 0 and ts > 0.0:
-		var art := _cutout(str(Net.roster[id]["faction"]), Vector2(w - ts - 6.0, (h - ts) / 2.0), Vector2(ts, ts))
+		var art := _cutout_mark(str(Net.roster[id]["faction"]), Vector2(w - ts - 6.0, (h - ts) / 2.0), Vector2(ts, ts))
 		b.add_child(art)
 	var name_t := ""
 	var state := ""
@@ -5425,7 +5461,7 @@ func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: b
 		name_t = "YOU" if me else Net.name_of(id).to_upper()
 		if id == Net.room_owner or (id == 1 and not Net.server_hosted()):
 			state = "HOST"
-			state_col = UiKit.accent(shell_f)
+			state_col = col
 		elif Net.is_away(id):
 			state = "AWAY"
 			state_col = UiKit.STAR
@@ -5435,7 +5471,7 @@ func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: b
 	else:
 		name_t = "OPEN" if Net.ai_fill == "" else "AI"
 		state = ("SIT HERE" if UiKit.text_w(self, "SIT HERE", 12, true) <= w - 20.0 else "SIT") if sit else (Net.ai_fill.to_upper() if Net.ai_fill != "" else "")
-		state_col = UiKit.accent(shell_f) if sit else UiKit.MUTED
+		state_col = _viewer_col() if sit else UiKit.MUTED
 	var fl := 16.0
 	var lh1 := UiKit.line_h(self, fl, true)
 	var lh2 := UiKit.line_h(self, 12, true)

@@ -10,7 +10,7 @@ const TABS := [["home", "HOME"], ["armies", "ARMIES"], ["profile", "PROFILE"], [
 
 var menu                                           # the Menu (untyped: the pieces load without menu.gd)
 var active := ""
-var shade: ColorRect                               # the bar's fill (HOME, 35C2: a glass strip over the painting)
+var shade: Control                               # the bar's fill (HOME, 35C2: a glass strip over the painting)
 var buttons := {}                                  # id -> Button (tests, Hud.action_rect-style lookups)
 
 
@@ -37,9 +37,13 @@ func _build(f: String) -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	var acc := UiKit.accent(f)
 	var sf: Vector4 = menu.safe                        # the back reaches over the notch bands and the home indicator
-	shade = UiKit.rect(Vector2(-sf.x, 0), Vector2(w + sf.x + sf.z, h + sf.w), UiKit.BAR)
+	var sh := Panel.new()                              # 40B2 dark glass strip (HOME sets shade.modulate.a for the 60 % glass)
+	sh.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sh.add_theme_stylebox_override("panel", MenuSkin.strip())
+	sh.position = Vector2(-sf.x, 0)
+	sh.size = Vector2(w + sf.x + sf.z, h + sf.w)
+	shade = sh
 	add_child(shade)
-	add_child(UiKit.rect(Vector2(-sf.x, 0), Vector2(w + sf.x + sf.z, 1.0), Color(acc, 0.25)))
 	var longest := 0.0                               # every tab as wide as the longest label needs (phones grow the text)
 	for t in TABS:
 		longest = maxf(longest, UiKit.text_w(menu, t[1], 15, true))
@@ -49,7 +53,7 @@ func _build(f: String) -> void:
 		var id: String = TABS[i][0]
 		# UI (0.22.1): through the Menu (it outlives a rebuild during the tap's flash frame), not this bar's signal
 		var b := UiKit.make_btn(menu, TABS[i][1], Vector2(tw - 12.0, th), Callable(menu, "_on_tab").bind(id),
-				"selected" if id == active else "tertiary", f, 15)
+				"primary" if id == active else "tertiary", f, 15)
 		if id != active:
 			b.add_theme_color_override("font_color", UiKit.MUTED)
 		b.position = Vector2(x0 + i * tw + 6.0, (h - b.size.y) / 2.0)

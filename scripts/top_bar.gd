@@ -32,7 +32,8 @@ func bar_height() -> float:
 
 func _build(crumb: String, f: String) -> void:
 	var w: float = menu.content.size.x
-	var q := UiKit.tap_h(menu, 46.0)                  # the square buttons, a little over 44 pt on phones (the sweep: 43)
+	var pp := UiKit.pt(menu)                          # 40B2: the round keys are 30 pt with a 33 pt tap box (designer 9)
+	var q := (33.0 / pp) if pp > 0.0 else 46.0
 	var h := maxf(58.0, q + 10.0)
 	position = Vector2.ZERO
 	size = Vector2(w, h)
@@ -129,6 +130,7 @@ func _build(crumb: String, f: String) -> void:
 	for cur in ["premium", "soft"]:
 		var t := RewardTicker.make(Progression.balance(cur), cur, func(n: float) -> float: return n / p if p > 0.0 else n * 0.62 * 1.6 * UiKit.K)
 		t.sign = false
+		t.chip = true
 		t.named = false
 		t.tooltip_text = Rules.CURRENCY_NAMES.get(cur, "")
 		t.fit()
@@ -148,7 +150,9 @@ func _build(crumb: String, f: String) -> void:
 
 
 func _square(text: String, pos: Vector2, q: float, f: String) -> Button:
-	var b := UiKit.make_btn(menu, text, Vector2(q, q), Callable(), "selected", f, 20)
+	var b := UiKit.make_btn(menu, text, Vector2(q, q), Callable(), "small", f, 20)
+	b.custom_minimum_size = Vector2(q, q)               # (make_btn grows a key to 44 pt; the bar keeps 33)
+	b.size = Vector2(q, q)
 	b.position = pos
 	b.clip_text = false
 	add_child(b)
@@ -158,7 +162,7 @@ func _square(text: String, pos: Vector2, q: float, f: String) -> Button:
 func _draw_gear(c: Control, q: float) -> void:
 	var o := Vector2(q, q) / 2.0
 	var r := q * 0.19
-	var col := UiKit.INK
+	var col := MenuSkin.INK_DARK
 	for i in range(8):                                 # eight teeth
 		var a := TAU * i / 8.0
 		var d := Vector2(cos(a), sin(a))
@@ -170,7 +174,7 @@ func _draw_gear(c: Control, q: float) -> void:
 func _draw_note(c: Control, q: float) -> void:
 	## MUSIC (0.22.x): a drawn eighth-note - dim and slashed through when OFF (no icon for it in the kit yet).
 	var on := Music.music_on()
-	var col := UiKit.INK if on else UiKit.MUTED
+	var col := MenuSkin.INK_DARK if on else Color(MenuSkin.INK_DARK, 0.45)
 	var o := Vector2(q * 0.36, q * 0.66)
 	var r := q * 0.1
 	c.draw_circle(o, r, col)
@@ -186,10 +190,11 @@ var glass := false                                 # HOME (35C2): the bar is a g
 
 func _draw() -> void:
 	var sf: Vector4 = menu.safe                       # the back reaches over the notch bands and the status bar
-	draw_rect(Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y), Color(UiKit.BAR, 0.55) if glass else UiKit.BAR)   # (drawn here: children would cover the ring)
-	draw_rect(Rect2(-sf.x, size.y - 1.0, size.x + sf.x + sf.z, 1.0), Color(_ring_col, 0.3))
+	var r := Rect2(-sf.x, -sf.y, size.x + sf.x + sf.z, size.y + sf.y)
 	if slim:
+		draw_style_box(MenuSkin.strip(1.0), r)
 		return
+	draw_style_box(MenuSkin.strip(0.6 if glass else 1.0), r)   # 40B2 dark glass bar (HOME: 60 % glass over the painting)
 	draw_circle(_ring_c, _ring_r, UiKit.BASE)
 	draw_arc(_ring_c, _ring_r, 0.0, TAU, 40, Color(_ring_col, 0.9), 1.5, true)
 	var font := UiKit.BODY
