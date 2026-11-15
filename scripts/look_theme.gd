@@ -62,6 +62,16 @@ const ROLES := {
 }
 const DARK := ["OS_Dark", "OS_Recess"]
 
+# READABILITY D (0.24.5, Daniele 2026-11-15 "yes all five"): node platforms + pillars (Platform_*, Node_Base, Relay_Mount,
+# the pillar zone) in the setting's own dark, bridges (Deck_* / Pier_*, kind "bridge") keep the setting's deck colour.
+# Dark = mix(pit, deck, D_MIX base / trim). The lab (no SETS entry, its kit colours untouched otherwise) gets its own slate:
+# deck / rim / pillar zones below; walkway, vats, relays, tubes, pits, glass, goo stay the lab's. Pits: never darkened
+# (ground level, Daniele: "you have pit shadows even if pit are actually at ground level").
+const D_MIX := [0.25, 0.35]
+const LAB_D := {
+	"deck": ["#4B535B", "#454D55", 0.62, 0.0, 0.0], "rim": ["#30363C", "#5E6A72", 0.45, 0.4, 0.4],
+	"pillar": ["#3A4148", "#56606A", 0.55, 0.3, 0.3]}
+
 static var current := LAB
 
 
@@ -169,7 +179,9 @@ static func kind_of(path: String) -> String:
 		return "walkway"
 	if f.begins_with("Platform_Pillar"):
 		return "pillar"
-	if f.begins_with("Platform_") or f.begins_with("Pier_") or f.begins_with("Deck_") or f.begins_with("Relay_Mount") or f.begins_with("Node_Base"):
+	if f.begins_with("Pier_") or f.begins_with("Deck_"):
+		return "bridge"                                 # READABILITY D: the setting's deck colour (lab: untouched cream)
+	if f.begins_with("Platform_") or f.begins_with("Relay_Mount") or f.begins_with("Node_Base"):
 		return "deck"
 	if f.begins_with("Pit_Tube") or f.begins_with("Floor_Tube") or f.begins_with("Node_Tube") or f.begins_with("Tube_Connector"):
 		return "tubes"
@@ -185,22 +197,37 @@ static func zone(z: String) -> Array:
 	return (SETS[current] as Dictionary).get(z, []) if active() else []
 
 
+static func styled() -> bool:
+	## Kit materials take a zone set: every setting on the lab look path, the lab included (READABILITY D's lab slate).
+	return Look.v2
+
+
 static func role(kind: String, mat_name: String) -> Array:
 	## [Color, roughness, metalness] for a kit material on a piece kind, or [] (untouched: lights, goo, state, glass, ...).
-	if not active() or kind == "":
+	if not styled() or kind == "":
 		return []
 	var nm := mat_name.get_slice(".", 0)          # OS_Detail.001 -> OS_Detail
+	var rk := "deck" if kind == "bridge" else kind
+	if not active():                                # the lab: only READABILITY D's node platforms + pillars change
+		if not kind in ["deck", "pillar"] or not (ROLES[kind] as Dictionary).has(nm):
+			return []
+		var r0: Array = ROLES[kind][nm]
+		var lz: Array = LAB_D[r0[0]]
+		return [Color(lz[r0[1]]), float(lz[2]), float(lz[3 + int(r0[1])])]
 	var r: Array = []
 	if nm in DARK:
 		r = ["pit", 0]
-	elif (ROLES.get(kind, {}) as Dictionary).has(nm):
-		r = ROLES[kind][nm]
+	elif (ROLES.get(rk, {}) as Dictionary).has(nm):
+		r = ROLES[rk][nm]
 	if r.is_empty():
 		return []
 	var z := zone(r[0])
 	if z.is_empty():
 		return []
-	return [Color(z[r[1]]), float(z[2]), float(z[3 + int(r[1])])]
+	var col := Color(z[r[1]])
+	if kind != "bridge" and kind != "pit" and r[0] in ["deck", "pillar"]:   # READABILITY D: the setting's own dark
+		col = Color(zone("pit")[0]).lerp(Color(zone("deck")[0]), float(D_MIX[int(r[1])]))
+	return [col, float(z[2]), float(z[3 + int(r[1])])]
 
 
 static func glass() -> Color:

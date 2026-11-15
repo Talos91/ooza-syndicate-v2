@@ -1,5 +1,11 @@
 # Ooze Syndicate 2.0 - changelog
 
+## (next) "readability D" - branch readability-d, not released yet (Release bumps the version)
+
+- Daniele 2026-11-15 ("cream everywhere" -> picked D on all five settings: "yes all five but pay attention you have pit shadows even if pit are actually at ground level"). View only: no rule / number change, no net.gd / protocol change, no new textures.
+  - look_theme.gd: node platforms + pillars (Platform_*, Node_Base, Relay_Mount, pillar zone) in the setting's own dark = mix(pit, deck, 0.25 base / 0.35 trim); bridges (Deck_* / Pier_*, new kind "bridge") keep the setting's deck colour. The lab gets its own slate (deck #4B535B / #454D55, rim #30363C / #5E6A72, pillar #3A4148 / #56606A) without becoming an "active" theme (surround, floor, HUD shells, walkway, vats, relays, tubes, glass unchanged). Pits keep every setting's colours.
+  - contact_shade.gd + shaders/contact_shade.gdshader: seat plates (seat colour, alpha 0.4, soft edge, Rules.R x 1.86) on owned nodes, set on capture, not per frame (COLOUR RULE: neon / plate = seat, goo = faction); contact shadows 0.275: a soft floor drop shadow under each elevated platform and along each bridge (offset = height above the floor x (0.075, 0.1); band width = the measured Deck_S width x 1.2), a grounding ring under each building; nothing under 1 m above the floor, nothing on pits.
+
 ## 0.24.4 "menu, HUD 37, Rodin units" - 2026-11-15 (STAGING only; live is 0.23.21)
 
 - Release release-0.24.4 = main 41ff925 + props-place 8d410bb, relay-v3-column f68a543, units-wire de04f0d, hud-37 8b54401 (contains play-fixes ea32f19), menu-bg-2 54b69ad, merged in that order, no conflicts. The finished branches as they are: no optimization / cleanup pass (Daniele 2026-11-15). No net.gd / protocol change (ooze20-net-8).
