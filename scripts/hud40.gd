@@ -197,13 +197,13 @@ static func draw_key(sl) -> void:
 		art(sl, n.replace("GEO-", "MASK-") + "-DIM", off, u, Color(0, 0, 0, 0.35))
 		HudLab._padlock(sl, wc, 9.0 * u)
 	var seat: Color = Rules.seat_color(str(dock.human))   # neon = SEAT colour (colour rule)
-	var edge := 0.35                                  # the fine seat neon is always on (the pack's B2 rim); READY breathes it
+	var edge := 1.0                                   # the fine seat neon is always on (the B5 key's line, designer 10); READY glows over it
 	var ecol := seat
 	if armed:
 		edge = 1.0
 		ecol = col
-	elif full and not disabled:
-		edge = 0.65 + 0.35 * sin(t * 4.0)
+	elif disabled:
+		edge = 0.5
 	if sl.pulse > 0.0:
 		edge = maxf(edge, sl.pulse)
 		ecol = ecol.lerp(Color.WHITE, sl.pulse * 0.6)
@@ -212,8 +212,11 @@ static func draw_key(sl) -> void:
 		ecol = HudNoir.ENEMY
 	var rim := n.replace("GEO-", "MASK-") + "-SEAT-RIM"
 	art(sl, rim, off, u, Color(ecol, edge))
+	art(sl, rim, off, u, Color(ecol, edge * 0.8))       # twice: the thin line reads at phone size
 	if armed:
 		art(sl, rim, off, u, Color(ecol, 0.7))
+	elif full and not disabled:                        # READY: a breathing glow on top of the line
+		art(sl, rim, off - Vector2(0.5, 0.5) * u, u * 1.0, Color(ecol.lightened(0.3), 0.25 + 0.3 * sin(t * 4.0)))
 	var lb: Rect2 = KEY_LABEL[i]
 	var room := lb.size.x * u
 	var lines: Array = dock.name_lines(sl.id, room) if sl.id != "" else ["—"]

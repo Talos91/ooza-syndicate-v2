@@ -220,6 +220,10 @@ class Tube:
 
 	func _setup40() -> void:
 		h40 = true
+		if "--h40-4p" in OS.get_cmdline_user_args():     # dev review shot only: the 4-seat score (no 4-player map in the pool yet)
+			seats = [seats[0], "B", "", "C", "D"]
+			if _force.is_empty():
+				_force = [30.0, 22.0, 12.0, 20.0, 24.0]
 		for s in seats:
 			if str(s) != "":
 				players.append(str(s))
@@ -237,6 +241,9 @@ class Tube:
 		strip = HudLab.Goo.new(Hud40.tex("MASK-SCORE-TUBE"), 1)
 		strip.p("u_left", Hud40.SCORE_GOO_U.x)
 		strip.p("u_right", Hud40.SCORE_GOO_U.y)
+		strip.p("v_top", 14.0 / 80.0)               # MASK-SCORE-TUBE's alpha rows (2x px of 80)
+		strip.p("v_bot", 72.0 / 80.0)
+		strip.p("tube40", true)
 		elbows = null
 		var under := Control.new()               # the frame, above the mounts, under the goo
 		under.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -262,7 +269,7 @@ class Tube:
 		for i in range(mini(players.size(), caps.size())):
 			var seat: String = players[i]
 			var at: Vector2 = (caps[i] as Vector2) - Vector2(11, 11)
-			var out: bool = hud._seat_out(seat)
+			var out: bool = hud.sim.factions.has(seat) and hud._seat_out(seat)
 			Hud40.art(ci, "PAINT-SCORE-CAP-4P" if four else "PAINT-SCORE-CAP", at * u, u, Color(1, 1, 1, 0.55) if out else Color.WHITE)
 			Hud40.art(ci, "MASK-SCORE-CAP-SEAT-4P" if four else "MASK-SCORE-CAP-SEAT", at * u, u,
 					Color(Rules.seat_color(seat), 0.35 if out else 1.0))
@@ -293,7 +300,7 @@ class Tube:
 			var v := 0.0
 			if s == "":
 				v = _neutral_strength()
-			elif not hud._seat_out(s):
+			elif hud.sim.factions.has(s) and not hud._seat_out(s):
 				v = maxf(float(hud.sim.seat_strength(s)), 0.0)
 			if vals.size() < _force.size():
 				v = _force[vals.size()]
@@ -306,7 +313,7 @@ class Tube:
 		for i in range(n):
 			acc += (float(vals[i]) / tot) if tot > 0.0 else 1.0 / float(n)
 			ends.append(acc if i < n - 1 else 1.0)
-			cols.append(NEUTRAL_GOO if str(seats[i]) == "" else (Hud40.goo_of(str(seats[i]), hud.human) if h40 else HudLab.seat_goo(str(seats[i]), hud.human)))
+			cols.append((NEUTRAL_GOO_40 if h40 else NEUTRAL_GOO) if str(seats[i]) == "" else (Hud40.goo_of(str(seats[i]), hud.human) if h40 else HudLab.seat_goo(str(seats[i]), hud.human)))
 		while ends.size() < 6:
 			ends.append(1.0)
 			cols.append(Color.WHITE)
@@ -341,6 +348,7 @@ class Tube:
 			return
 		HudLab.art(self, "r30-tube-shell", Vector2.ZERO, u)
 
+	const NEUTRAL_GOO_40 := Color("3c474b")         # hud-40b6 (designer 10): a dark neutral middle, as the proof
 	const NEUTRAL_GOO := Color("7a8285")            # neutral = grey goo (Daniele 2026-11-13)
 
 	func _neutral_strength() -> float:
