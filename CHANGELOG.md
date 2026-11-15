@@ -1,8 +1,18 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.4-demo-river1 - 2026-11-16 (DEMO only, staging/demo/; staging and live untouched)
+
+- demo-river-quota = demo-shrink e7d5419 + quota-proto bd016a0 (Last Stand = QUOTA, on in demo builds) + river-world 839eeb5 (draining goo river + readability D). Release bumped the version.
+
 ## 0.24.4-demo-shrink1 - 2026-11-15 (DEMO only, staging/demo/; staging and live untouched)
 
 - map-shrink 536b97c (off main 8d50c11): the 37 pool maps re-baked with 2/4/6 m bridges at full unit speed (14 pass the ~60 pt limit, 23 need fewer platforms); MapPool.DEMO = those 37 + HX-1..8; VERSION "-demo" so the demo picker offers them. Thumbnails and tube_cache not re-baked. No rule or number changed.
+
+## (next) "readability D" - branch readability-d, not released yet (Release bumps the version)
+
+- Daniele 2026-11-15 ("cream everywhere" -> picked D on all five settings: "yes all five but pay attention you have pit shadows even if pit are actually at ground level"). View only: no rule / number change, no net.gd / protocol change, no new textures.
+  - look_theme.gd: node platforms + pillars (Platform_*, Node_Base, Relay_Mount, pillar zone) in the setting's own dark = mix(pit, deck, 0.25 base / 0.35 trim); bridges (Deck_* / Pier_*, new kind "bridge") keep the setting's deck colour. The lab gets its own slate (deck #4B535B / #454D55, rim #30363C / #5E6A72, pillar #3A4148 / #56606A) without becoming an "active" theme (surround, floor, HUD shells, walkway, vats, relays, tubes, glass unchanged). Pits keep every setting's colours.
+  - contact_shade.gd + shaders/contact_shade.gdshader: seat plates (seat colour, alpha 0.4, soft edge, Rules.R x 1.86) on owned nodes, set on capture, not per frame (COLOUR RULE: neon / plate = seat, goo = faction); contact shadows 0.275: a soft floor drop shadow under each elevated platform and along each bridge (offset = height above the floor x (0.075, 0.1); band width = the measured Deck_S width x 1.2), a grounding ring under each building; nothing under 1 m above the floor, nothing on pits.
 
 ## 0.24.4 "menu, HUD 37, Rodin units" - 2026-11-15 (STAGING only; live is 0.23.21)
 

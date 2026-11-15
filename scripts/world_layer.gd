@@ -147,6 +147,7 @@ var pipes: WorldTubes            # PITS / TUBES: the transport tubes socket -> p
 # --no-floor-tubes hides the transport tubes (before / after shots).
 static var FLOOR_TUBES := true
 static var FLOOR_PIPE_PROPS := false
+var river: WorldRiver            # RIVER WORLD (2026-11-15): canyon + draining goo river + drills (world_river.gd)
 var column: VatColumn            # VAT COLUMN: upgrade blueprint + the entrance module from the pit (vat_column.gd)
 var _blobs: Array = []           # {p, tube, col, t0, mode (0 hop, 1 crawl, 2 enter), v, dur, from}
 var _drops: Array = []           # {p, v, t0, col}
@@ -197,20 +198,27 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	if Look.lab:
 		floor_haze = 0.0                              # LAB LOOK TEST: the tile at its own value
 	active = self
-	_build_floor(centre, radius)
-	Look.add_surround(self, minf(lo.y, 0.0))         # LAB LOOK TEST: the screen-pinned surround (null without --look=lab)
-	if floor_lab5:
+	var rv := WorldRiver.enabled()                   # RIVER WORLD: no floor tile, surround, lab backdrop, pits / tubes, pit Locals
+	if rv:
+		floor_y = minf(lo.y, 0.0) - WorldRiver.TOP_DROP - WorldRiver.CHANNEL_DEPTH
+	else:
+		_build_floor(centre, radius)
+		Look.add_surround(self, minf(lo.y, 0.0))     # LAB LOOK TEST: the screen-pinned surround (null without --look=lab)
+	if floor_lab5 and not rv:
 		_lab_backdrop(_main)
 	if not "--floor-clear" in OS.get_cmdline_user_args() and not Look.lab:   # dev: --floor-clear = no floor fog sheet, no floor haze
 		_build_mist(centre, radius)
 	for n in sim.nodes:
 		_build_tube(n)
 	_build_pools()
-	if (FLOOR_TUBES or "--floor-tubes" in OS.get_cmdline_user_args()) and not "--no-floor-tubes" in OS.get_cmdline_user_args():
+	if rv:
+		river = WorldRiver.new()                      # (set up after the lab air below: its own air over it)
+		add_child(river)
+	if not rv and (FLOOR_TUBES or "--floor-tubes" in OS.get_cmdline_user_args()) and not "--no-floor-tubes" in OS.get_cmdline_user_args():
 		pipes = WorldTubes.new()                      # PITS / TUBES (built once the pits are placed: WorldLocals.place)
 		add_child(pipes)
 		pipes.setup(self)
-	if not "--no-locals" in OS.get_cmdline_user_args():
+	if not "--no-locals" in OS.get_cmdline_user_args() and not rv:
 		locals = WorldLocals.new()
 		add_child(locals)
 		locals.setup(self)
@@ -220,6 +228,8 @@ func setup(_main: Node3D, s: Sim, v: Dictionary, mobile := false) -> void:
 	column.setup(self)
 	if floor_lab5 and not "--no-dressing" in OS.get_cmdline_user_args() and not Look.lab: add_child(WorldDressing.new())   # WORLD COMPLETE LAB (LAB LOOK TEST: the surround replaces it)
 	Look.lab_world(_main)                            # LAB LOOK TEST (no-op without --look=lab)
+	if rv:
+		river.setup(self, _main, _low)               # (again: its air over the lab's)
 
 
 func _lab_backdrop(main: Node) -> void:
@@ -455,10 +465,10 @@ func _build_pools() -> void:
 		var tb: Dictionary = _tubes[i]
 		var half: float = float(tb["r"]) + SOCKET_PAD
 		tb["sock"] = i
-		tb["ent"] = ent_mesh != null and is_equal_approx(float(tb["r"]), TUBE_R)
+		tb["ent"] = ent_mesh != null and is_equal_approx(float(tb["r"]), TUBE_R) and not WorldRiver.enabled()
 		tb["ent_xf"] = Transform3D(Basis.IDENTITY, Vector3(tb["x"], floor_y, tb["z"]))
 		var sx := Transform3D(Basis.from_scale(Vector3(half * 2.0, 1.0, half * 2.0)), Vector3(tb["x"], floor_y + 0.02, tb["z"]))
-		_socket_mm.set_instance_transform(i, HIDDEN if tb["ent"] else sx)
+		_socket_mm.set_instance_transform(i, HIDDEN if tb["ent"] or WorldRiver.enabled() else sx)
 		_socket_mm.set_instance_custom_data(i, Color(float(tb["r"]) / half, 0, 0, 0))
 		_ent_mm.set_instance_transform(i, HIDDEN)
 		_ent_mm.set_instance_custom_data(i, Color(0, 0, 0, 0))
@@ -559,10 +569,17 @@ func handle(ev: Dictionary) -> void:
 	_pending.append([_t + land, ev, shown])
 
 
-func fall_depth(y: float) -> float:
+func fall_depth(y: float, xz := Vector2.INF) -> float:
 	## F2: metres from a falling body's start height down to the floor - the fall views (Fx, UnitView) drop it that far,
 	## in true 3D (no scaling: it shrinks with the perspective), and report the hit with land_body.
+	## RIVER WORLD: down to the river's surface, or the dry bed under xz (the river's level when xz is not given).
+	if river != null:
+		return maxf(y - (river.ground(xz.x, xz.y) if xz != Vector2.INF else river.level), 0.5)
 	return maxf(y - floor_y, 0.5)
+
+
+func ground_y(x: float, z: float) -> float:
+	return river.ground(x, z) if river != null else floor_y
 
 
 func land_body(p: Vector3, seat: String) -> void:
@@ -578,9 +595,18 @@ func _land_bodies() -> void:
 	for L in _landed:
 		var p: Vector3 = L[0]
 		var seat: String = L[1]
-		var at := Vector3(p.x, floor_y + 0.03, p.z)
+		var at := Vector3(p.x, ground_y(p.x, p.z) + 0.03, p.z)
 		var col := _col(seat)
 		bodies_landed += 1
+		if river != null and river.in_river(p.x, p.z):   # RIVER WORLD: the body plops into the goo - a ring that sinks, a splash
+			_add_splat(at, 1.0, col)
+			_splats[-1]["life"] = 1.4
+			_splats[-1]["seat"] = "~"
+			for j in range(4 if not _low else 2):
+				var a2 := randf() * TAU
+				var sp3 := randf_range(1.0, 2.5)
+				_add_drop(at + Vector3(0, 0.2, 0), Vector3(cos(a2) * sp3, randf_range(2.5, 4.5), sin(a2) * sp3), NATIVE_GRAY.lightened(0.15))
+			continue
 		var hit: Dictionary = {}
 		for k in range(_splats.size() - 1, -1, -1):
 			var sp: Dictionary = _splats[k]
@@ -622,7 +648,8 @@ func _land(ev: Dictionary, shown: float) -> void:
 	var centre: Vector3 = ev.get("centre", Vector3.ZERO)
 	for k in range(n_spl):
 		var p: Vector3 = pts[int(float(k) * pts.size() / n_spl)]
-		var at := Vector3(p.x + randf_range(-1.2, 1.2), floor_y + 0.03, p.z + randf_range(-1.2, 1.2))
+		var at := Vector3(p.x + randf_range(-1.2, 1.2), 0.0, p.z + randf_range(-1.2, 1.2))
+		at.y = ground_y(at.x, at.z) + 0.03
 		if fling:                                     # flung outward off the turning deck
 			var out := Vector3(p.x - centre.x, 0.0, p.z - centre.z)
 			if out.length() > 0.01:
@@ -648,10 +675,12 @@ func _add_splat(at: Vector3, size: float, col: Color) -> void:
 func _add_drop(at: Vector3, v: Vector3, col: Color) -> void:
 	if _drops.size() >= _drop_mm.instance_count:
 		_drops.pop_front()
-	_drops.append({"p": at, "v": v, "t0": _t, "col": col})
+	_drops.append({"p": at, "v": v, "t0": _t, "col": col, "fy": at.y - 0.2 if river != null else floor_y})
 
 
 func _add_blob(at: Vector3, col: Color, seat := "") -> void:
+	if river != null:
+		return                                        # RIVER WORLD: no crawlers (the goo joins the river; the dry canyon keeps its splats)
 	var best := -1
 	var bd := INF
 	for i in range(_tubes.size()):
@@ -685,6 +714,8 @@ func sync(dt: float) -> void:
 		_land_bodies()
 	if _pending.size() > 1 and _pending[-1][0] < _pending[-2][0]:
 		_pending.sort_custom(func(a, b): return a[0] < b[0])
+	if river != null:
+		river.step(dt)
 	_tubes_step(dt)
 	if locals != null:
 		locals.step(dt)
@@ -698,7 +729,8 @@ func sync(dt: float) -> void:
 	_zaps_step()
 	if _warm > 0:                                     # shader warm-up: one instance each, under the floor (the first
 		_warm -= 1                                    # real fall must not hitch on a compile - 63 ms seen without it)
-		var under := Transform3D(Basis.from_scale(Vector3.ONE * 0.01), Vector3(_floor.position.x, floor_y - 2.0, _floor.position.z))
+		var fp := _floor.position if _floor != null else Vector3.ZERO
+		var under := Transform3D(Basis.from_scale(Vector3.ONE * 0.01), Vector3(fp.x, floor_y - 2.0, fp.z))
 		for mm in [_blob_mm, _drop_mm, _splat_mm]:
 			if (mm as MultiMesh).visible_instance_count == 0:
 				(mm as MultiMesh).set_instance_transform(0, under)
@@ -711,7 +743,8 @@ func _tubes_step(dt: float) -> void:
 		var n: Dictionary = sim.nodes[tb["id"]]
 		var mi: MeshInstance3D = tb["mi"]
 		var plat = vis[tb["id"]].get("platform")
-		var top := floor_y + 0.5
+		var bot: float = tb.get("bot", floor_y)      # RIVER WORLD: the drill's foot in its crack
+		var top := bot + 0.5
 		if plat is Node3D and is_instance_valid(plat) and (plat as Node3D).is_visible_in_tree():
 			top = (plat as Node3D).global_position.y + float(tb["top_off"])
 		elif tb.get("holo", false) and float(tb["top_y"]) < 900.0:   # VAT COLUMN: the platform is the blueprint now
@@ -723,7 +756,9 @@ func _tubes_step(dt: float) -> void:
 			tb["drain"] = minf(float(tb["drain"]) + dt / 1.2, 1.0)
 		var has_structure := str(n.get("structure", "")) != ""   # Daniele: tubes only under a vat / structure
 		tb["shown"] = has_structure
-		if top <= floor_y + 0.4 or not has_structure:
+		if river != null:                             # RIVER WORLD: every platform is a drill (empty glass without a structure)
+			has_structure = true
+		if top <= bot + 0.4 or not has_structure:
 			if mi.visible:
 				mi.visible = false
 				_sock_lit(tb, Color(0, 0, 0, 0))
@@ -733,9 +768,10 @@ func _tubes_step(dt: float) -> void:
 			_sock_lit(tb, tb["base"])
 		if absf(top - float(tb["top_y"])) > 0.01:
 			tb["top_y"] = top
-			var h := top - floor_y
-			mi.transform = Transform3D(Basis.from_scale(Vector3(1.0, h, 1.0)), Vector3(tb["x"], floor_y + h / 2.0, tb["z"]))
+			var h := top - bot
+			mi.transform = Transform3D(Basis.from_scale(Vector3(1.0, h, 1.0)), Vector3(tb["x"], bot + h / 2.0, tb["z"]))
 			(tb["mat"] as ShaderMaterial).set_shader_parameter("y_top", top)
+			(tb["mat"] as ShaderMaterial).set_shader_parameter("y_bot", bot)
 		var owner: String = n["owner"]
 		if owner != tb["owner"]:                      # a capture: the capturer's goo pushes the old colour out
 			tb["base_old"] = tb["base_old"] if tb["pushing"] else tb["base"]
@@ -777,6 +813,9 @@ func _tubes_step(dt: float) -> void:
 		if drain > 0.0:
 			top_c.a *= 1.0 - drain
 			bot_c.a *= 1.0 - drain
+		if river != null and str(n.get("structure", "")) == "":   # RIVER WORLD: a bare platform's drill is empty glass
+			top_c.a = 0.0
+			bot_c.a = 0.0
 		if VatColumn.upgrading(n):                    # VAT COLUMN 2 / R4: the lift stays EMPTY glass while the upgrade builds
 			top_c.a = 0.0
 			bot_c.a = 0.0
@@ -927,10 +966,11 @@ func _drops_step() -> void:
 			continue
 		var v: Vector3 = d["v"]
 		var p: Vector3 = (d["p"] as Vector3) + v * age + Vector3(0, -9.0 * age * age, 0)
-		if p.y < floor_y + 0.05:
-			p.y = floor_y + 0.05
+		var fy: float = d.get("fy", floor_y)
+		if p.y < fy + 0.05:
+			p.y = fy + 0.05
 		var s := 0.22 * (1.0 - age / 1.2) + 0.05
-		_drop_mm.set_instance_transform(shown, Transform3D(Basis.from_scale(Vector3(s, s * (0.6 if p.y <= floor_y + 0.06 else 1.2), s)), p))
+		_drop_mm.set_instance_transform(shown, Transform3D(Basis.from_scale(Vector3(s, s * (0.6 if p.y <= fy + 0.06 else 1.2), s)), p))
 		_drop_mm.set_instance_color(shown, d["col"])
 		shown += 1
 		keep.append(d)
@@ -943,13 +983,14 @@ func _splats_step() -> void:
 	var shown := 0
 	for s in _splats:
 		var age: float = _t - float(s["t0"])
-		if age > SPLAT_LIFE:
+		var life: float = s.get("life", SPLAT_LIFE)
+		if age > life:
 			continue
 		var grow := 1.0 - pow(1.0 - clampf(age / 0.35, 0.0, 1.0), 3.0)
 		var size: float = float(s["size"]) * 2.0
 		_splat_mm.set_instance_transform(shown, Transform3D(Basis.from_scale(Vector3(size, 1.0, size)).rotated(Vector3.UP, float(s["seed"]) * TAU), s["p"]))
 		_splat_mm.set_instance_color(shown, (s["col"] as Color).lerp(NATIVE_GRAY, clampf(age / CLOCK_OUT_T, 0.0, 1.0)))
-		_splat_mm.set_instance_custom_data(shown, Color(age / SPLAT_LIFE, s["seed"], grow, 0.0))
+		_splat_mm.set_instance_custom_data(shown, Color(age / life, s["seed"], grow, 0.0))
 		shown += 1
 		keep.append(s)
 	_splats = keep

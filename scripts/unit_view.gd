@@ -597,7 +597,7 @@ func _put_faller(key: String, p: Vector3, v: Vector3, spin: Vector3, t0: float, 
 	_fl_land[i] = FALL_T
 	var wl := WorldLayer.active
 	if mode == 2 and wl != null:                      # true 3D down to the floor, where its splat appears
-		var drop := wl.fall_depth(p.y)
+		var drop := wl.fall_depth(p.y, Vector2(p.x, p.z))
 		_fl_land[i] = (v.y + sqrt(v.y * v.y + 2.0 * POUR_G * drop)) / POUR_G
 
 

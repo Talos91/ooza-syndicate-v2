@@ -283,7 +283,7 @@ static func _detail_textures(kind: String, normals: bool) -> Array:
 
 
 static func apply_detail(node: Node) -> void:
-	var kind := LookTheme.kind_of(node.scene_file_path) if LookTheme.active() else ""   # THEMES: the piece kind for its material set
+	var kind := LookTheme.kind_of(node.scene_file_path) if LookTheme.styled() else ""   # THEMES (+ READABILITY D on the lab): the piece kind for its material set
 	for mi in node.find_children("*", "MeshInstance3D", true, false):
 		var mesh := (mi as MeshInstance3D).mesh
 		for s in range(mesh.get_surface_count()):
