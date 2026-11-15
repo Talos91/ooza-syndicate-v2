@@ -1252,6 +1252,12 @@ func _cutout(f: String, pos: Vector2, dims: Vector2) -> TextureRect:
 	return r
 
 
+func _viewer_col() -> Color:
+	## The viewer's own seat colour in a room (the lobby's accents); seat A's in the menus.
+	var seat := Net.local_seat() if Net.in_room() else "A"
+	return Rules.HUES.get(str(Net.room_colours().get(seat, "")), Rules.SEATS.get(seat, MenuSkin.seat()))
+
+
 func _cutout_mark(f: String, pos: Vector2, dims: Vector2, rim := Color(0, 0, 0, 0)) -> Control:
 	## Small faction chips (pickers, room seats): the AI mark in its socket (40B2 M-L / M-K), seat-A rim.
 	var h := Control.new()
@@ -5215,7 +5221,7 @@ func _room_chat(r: Rect2) -> void:
 		cfs = _fit_fs(code + "    ", 26.0, 14.0, w - shw - 8.0)
 	else:
 		_say("CODE", Vector2(x, r.position.y + pad + (hh - UiKit.line_h(self, 12, true)) / 2.0), 12, UiKit.MUTED, 0.0, true, 3)
-	_say(code, Vector2(x + kw, r.position.y + pad + (hh - UiKit.line_h(self, cfs, true)) / 2.0), cfs, MenuSkin.seat(), 0.0, true, 4)
+	_say(code, Vector2(x + kw, r.position.y + pad + (hh - UiKit.line_h(self, cfs, true)) / 2.0), cfs, _viewer_col(), 0.0, true, 4)
 	var ty := r.position.y + pad + hh + 6.0
 	var ib := r.end.y - pad - hh
 	var tb := UiKit.btn(self, "TYPE A MESSAGE…", Vector2(x, ib), Vector2(w, 44), Net.open_chat, "tertiary", shell_f, 14)
@@ -5400,7 +5406,7 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 		name_t = ("AI " + Net.ai_fill.to_upper()) if Net.ai_fill != "" else "OPEN"
 		if sit:
 			state = "SIT HERE"
-			state_col = MenuSkin.seat()
+			state_col = _viewer_col()
 	var right := b.size.x - 10.0
 	var ic0 := clampf(h * 0.28, 20.0, 46.0)
 	var tall := id >= 0 and h >= UiKit.line_h(self, fn, true) + ic0 + 18.0
@@ -5465,7 +5471,7 @@ func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: b
 	else:
 		name_t = "OPEN" if Net.ai_fill == "" else "AI"
 		state = ("SIT HERE" if UiKit.text_w(self, "SIT HERE", 12, true) <= w - 20.0 else "SIT") if sit else (Net.ai_fill.to_upper() if Net.ai_fill != "" else "")
-		state_col = MenuSkin.seat() if sit else UiKit.MUTED
+		state_col = _viewer_col() if sit else UiKit.MUTED
 	var fl := 16.0
 	var lh1 := UiKit.line_h(self, fl, true)
 	var lh2 := UiKit.line_h(self, 12, true)
