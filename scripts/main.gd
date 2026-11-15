@@ -72,6 +72,7 @@ var proto_view: ProtoRelayView       # RELAYS 3.0 PROTOTYPES: only on a map that
 var door_view: DoorView             # TWO DOORS (Rules.TWO_DOORS): a floor arrow at both doors of every platform
 var combat: CombatFx                               # fights for a tower, conquest tier-downs, the cannon laser
 var world_layer: WorldLayer                         # WORLD LAYER: floor, node tubes, splats (view only)
+var contact_shade: ContactShade                     # READABILITY D (0.24.5): seat plates + contact shadows (view only)
 var fog_lead: FogLead                              # FOG LEAD: the arena's air leans to the leading seat's colour (view only)
 var _world_probe := -1.0                           # --world-probe=T: a 100-unit fall at T, frame times printed
 var _probe_ft: Array = []
@@ -490,6 +491,10 @@ func _start_map(path: String) -> void:
 		world_layer = WorldLayer.new()
 		add_child(world_layer)
 		world_layer.setup(self, sim, vis, mobile)
+	if ContactShade.wanted():                          # READABILITY D (0.24.5): seat plates + contact shadows (view only)
+		contact_shade = ContactShade.new()
+		add_child(contact_shade)
+		contact_shade.setup(sim, vis, world_layer.floor_y if world_layer != null else NAN)
 	fog_lead = FogLead.new()                          # FOG LEAD (fog_lead.gd): after the scenery and world layer it tints
 	add_child(fog_lead)
 	fog_lead.setup(self, sim)
@@ -552,6 +557,8 @@ func _start_map(path: String) -> void:
 	for n in sim.nodes:
 		vis[n["id"]]["model_key"] = MapBuilder.model_for(n)
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
+		if contact_shade:
+			contact_shade.set_seat(n["id"], n["owner"])
 	# --- 0.19.0 cosmetics (HUD agent, spec E/I): each seat's structure look, applied once. Offline:
 	# your ARMIES pick for your seat, every other seat (AI) the default. Online: every seat's pick came
 	# from the host's launch packet (net.gd's "cosmetics", built from each player's roster "cosmetic" -
@@ -1334,6 +1341,8 @@ func _stage_scenario() -> void:
 			scenario_focus = (sim.nodes[1]["pos"] + sim.nodes[0]["pos"]) / 2.0
 	for n in sim.nodes:
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
+		if contact_shade:
+			contact_shade.set_seat(n["id"], n["owner"])
 
 
 func _debug_casts() -> void:
@@ -2032,6 +2041,8 @@ func _on_captured(node_id: int, new_owner: String, _old: String) -> void:
 		mission.on_captured(node_id, new_owner, _old)
 	_took_from[node_id] = _old
 	MapBuilder.apply_owner(vis[node_id]["parts"], new_owner)
+	if contact_shade:
+		contact_shade.set_seat(node_id, new_owner)
 	# 0.20.6 declutter (Daniele: "remove all notices of things like send and capture - better is in game
 	# text coming out of the conquer place"): a fight is already visible on the node itself (fx.gd's
 	# capture pulse), so the toast becomes a short rising label there instead of covering the map.
