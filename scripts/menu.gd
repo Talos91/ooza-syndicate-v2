@@ -1252,6 +1252,17 @@ func _cutout(f: String, pos: Vector2, dims: Vector2) -> TextureRect:
 	return r
 
 
+func _cutout_mark(f: String, pos: Vector2, dims: Vector2) -> Control:
+	## Small faction chips (pickers, room seats): the AI mark in its socket (40B2 M-L / M-K), seat-A rim.
+	var h := Control.new()
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.position = pos
+	h.size = dims
+	var side := minf(dims.x, dims.y)
+	MenuSkin.ai_hero(self, f, Vector2((dims.x - side) / 2.0, (dims.y - side) / 2.0), side, "", h)
+	return h
+
+
 func _roster_tile(f: String, pos: Vector2, dims: Vector2) -> void:
 	## FACTION's roster tile: the character and the name; the picked one in its accent. A tap picks the faction.
 	var picked := f == faction
@@ -1265,7 +1276,7 @@ func _roster_tile(f: String, pos: Vector2, dims: Vector2) -> void:
 	var name_w := UiKit.text_w(self, UiKit.NAMES[f], 15, true)
 	var with_em := hs + 14.0 + nh + 6.0 + name_w + 8.0 <= b.size.x
 	hs = clampf(b.size.x - 14.0 - (nh + 6.0 if with_em else 0.0) - name_w - 8.0, hs * 0.55, hs)
-	b.add_child(_cutout(f, Vector2(6, (b.size.y - hs) / 2.0), Vector2(hs, hs)))
+	b.add_child(_cutout_mark(f, Vector2(6, (b.size.y - hs) / 2.0), Vector2(hs, hs)))
 	var two := nh + UiKit.line_h(self, 12) <= b.size.y - 6.0
 	var ty := (b.size.y - (nh + (UiKit.line_h(self, 12) if two else 0.0))) / 2.0
 	if with_em:
@@ -4526,7 +4537,7 @@ func _seat_rows(r: Rect2, cur_f: String, cur_lv: String, on_f: Callable, on_lv: 
 		if f != "random":
 			var ts := s - 8.0
 			var named := aw - ts - 14.0 >= UiKit.text_w(self, "BLOOM", 13, true)
-			b.add_child(_cutout(f, Vector2(6 if named else (aw - ts) / 2.0, 4), Vector2(ts, ts)))
+			b.add_child(_cutout_mark(f, Vector2(6 if named else (aw - ts) / 2.0, 4), Vector2(ts, ts)))
 			if not named:                              # a narrow phone: the character alone (+ its emblem)
 				UiKit.emblem_badge(b, f, s * 0.36)
 				continue
@@ -5440,7 +5451,7 @@ func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: b
 	if w - ts - 10.0 < want:                           # a narrow phone: the name wins, the character goes
 		ts = 0.0
 	if id >= 0 and ts > 0.0:
-		var art := _cutout(str(Net.roster[id]["faction"]), Vector2(w - ts - 6.0, (h - ts) / 2.0), Vector2(ts, ts))
+		var art := _cutout_mark(str(Net.roster[id]["faction"]), Vector2(w - ts - 6.0, (h - ts) / 2.0), Vector2(ts, ts))
 		b.add_child(art)
 	var name_t := ""
 	var state := ""
