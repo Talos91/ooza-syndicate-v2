@@ -96,9 +96,7 @@ func _run() -> void:
 		for f in range(3):
 			await get_tree().process_frame
 		# 2. every proto map
-		for code in (Array(_arg("maps", "").split(",")) if _arg("maps", "").begins_with("HX") else MapPool.PROTO):
-			if _arg("maps", "") != "" and not code in _arg("maps", "").split(","):
-				continue
+		for code in (Array(_arg("maps", "").split(",")) if _arg("maps", "") != "" else MapPool.PROTO):   # maps=<codes> (map-shrink: the pool)
 			var path := ""
 			for p in MapPool.all():
 				if p.get_file().substr(0, 4) == code:

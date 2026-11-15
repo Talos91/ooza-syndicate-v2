@@ -87,7 +87,9 @@ func _layout(m: Dictionary, path: String) -> void:
 			if str(ek.get("shape", "")) == "sbend":   # EXP flex S-bridge (maps E-*): walked at its S length, baked straight
 				print("WARN  %s: deck %d is a flex S-bridge (%.1f m of S, %.1f m straight)" % [code, k, float(ek.get("deckMetres", 0.0)), float(g["L"]) - float(g["p0"]) - float(g["p1"])])
 			elif float(g["h"]) == 0.0:                 # maps 4.1: a ground deck keeps its tier's honest length (Alpha 18:
-				var honest: float = Rules.S * (float(ek["modules"]) if ek.get("modules") != null else float({"S": 1, "M": 2, "L": 3}[ek["tier"]]))   # maps 4.0 ran 3.6x long); EXP: `modules`
+				# DECK KNOB (map-shrink 2026-11-15): the builder's DECK_K (Tools/MapBuilder mb/kit.py; 1 = tiers 4 / 8 / 12 m, 0.5 = 2 / 4 / 6 m)
+				# reaches the game through the map: each deck's `modules` (written by mb/shrink.py) or the map's `deckK` x its tier
+				var honest: float = Rules.S * (float(ek["modules"]) if ek.get("modules") != null else float({"S": 1, "M": 2, "L": 3}[ek["tier"]]) * float(m.get("deckK", 1.0)))   # maps 4.0 ran 3.6x long); EXP: `modules`
 				var off := absf(float(g["L"]) - float(g["p0"]) - float(g["p1"]) - honest)
 				check(debug or off <= 2.5, "%s: deck %d is its tier's honest %.1f m (off by %.1f m)" % [code, k, honest, off])
 				if off > 1.5:

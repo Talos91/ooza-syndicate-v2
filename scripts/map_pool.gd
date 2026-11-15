@@ -138,7 +138,10 @@ const PROTO: Array[String] = ["R-01", "R-02", "R-05", "R-06", "R-09", "R-10", "R
 # THEMES (2026-11-13): map code -> LookTheme id (corporate_campus / golden_hour / quota_parade / wellness_retreat). Empty = the LAB
 # on every map until Daniele assigns the round-32 settings; dev --theme=<id> forces one for shots.
 const THEMES := {}
-const DEMO: Array[String] = ["R-01", "HX-1", "HX-2", "HX-3", "HX-4", "HX-5", "HX-6", "HX-7", "HX-8"]   # DEMO BUILD (Rules.demo): R-01 + the HX size ladder
+const DEMO: Array[String] = ["R-01", "R-02", "R-05", "R-06", "R-09", "R-10", "R-11", "R-12", "R-13", "R-14", "R-15", "R-16", "R-17",
+		"P-01", "P-02", "P-03", "P-04", "P-05", "E-01", "E-02", "E-03", "E-04", "E-05", "E-06", "E-07", "E-08", "E-09", "E-10",
+		"N-02", "N-03", "N-05", "N-06", "N-16", "N-17", "N-20", "N-22", "M-15",
+		"HX-1", "HX-2", "HX-3", "HX-4", "HX-5", "HX-6", "HX-7", "HX-8"]   # DEMO BUILD (Rules.demo): the 37 pool maps re-baked at deck tiers 2 / 4 / 6 m (map-shrink 2026-11-15, Daniele: maps too big on the phone; play them at full speed first) + the HX size ladder
 # HX SIZE LADDER (map-size study 2026-11-15; Daniele: "lets do it in the demo staging, simply make lets say 4/8 maps with just a
 # honeycomb of nodes so we get the general idea of max limits"): HX-1..HX-8, generator References/Ooze Syndicate maps - size ladder
 # HX 2026-11/generator/honeycomb.py. DEMO ONLY: group "H" is not in POOL_GROUPS and the codes are not in PROTO.

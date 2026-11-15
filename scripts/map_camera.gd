@@ -22,7 +22,7 @@ const PITCH := {
 	"P-01": 50.0,
 	"P-02": 58.0,
 	"P-03": 50.0,
-	"P-04": 50.0,
+	"P-04": 54.0,
 	"P-05": 45.0,
 	# round R (2026-11-05, maps-r worker): the lowest pitch of the sweep 41-58 whose smallest tap clears 44 pt, nothing off
 	# screen or under the HUD (probe 1266x585, desktop emulation): R-01 44.4 pt, R-02 44.1, R-03 44.4, R-04 45.8, R-05 45.6
@@ -53,6 +53,19 @@ const PITCH := {
 	"E-09": 58.0,
 	"E-10": 45.0,
 	"R-14": 54.0,                 # Catapult Bay (2026-11-06): 47.1 pt (50: 43.7)
+	# MAP-SHRINK (2026-11-15, decks 2 / 4 / 6 m): every pool map re-picked with tests/phone_fit.tscn (zfold7-cover 840x360 + phone 812x375,
+	# sweep 41-58, desktop emulation): the map's pitch before is kept when its smallest tap is >= 44 pt with nothing off screen / under the HUD,
+	# else the next sweep pitch that passes (M-15 / N-16 / P-04; R-01 / R-17 keep 52, measured), else the best tap (N-06 / N-17 / N-22 at 58).
+	# Table: References/Map size 2026-11/SHRINK-36.md
+	"M-15": 50.0,
+	"N-02": 41.0,
+	"N-03": 50.0,
+	"N-05": 50.0,
+	"N-06": 58.0,
+	"N-16": 54.0,
+	"N-17": 58.0,
+	"N-20": 45.0,
+	"N-22": 58.0,
 }
 
 
