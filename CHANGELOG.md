@@ -1,5 +1,9 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.4-demo-shrink1 - 2026-11-15 (DEMO only, staging/demo/; staging and live untouched)
+
+- map-shrink 536b97c (off main 8d50c11): the 37 pool maps re-baked with 2/4/6 m bridges at full unit speed (14 pass the ~60 pt limit, 23 need fewer platforms); MapPool.DEMO = those 37 + HX-1..8; VERSION "-demo" so the demo picker offers them. Thumbnails and tube_cache not re-baked. No rule or number changed.
+
 ## 0.24.4 "menu, HUD 37, Rodin units" - 2026-11-15 (STAGING only; live is 0.23.21)
 
 - Release release-0.24.4 = main 41ff925 + props-place 8d410bb, relay-v3-column f68a543, units-wire de04f0d, hud-37 8b54401 (contains play-fixes ea32f19), menu-bg-2 54b69ad, merged in that order, no conflicts. The finished branches as they are: no optimization / cleanup pass (Daniele 2026-11-15). No net.gd / protocol change (ooze20-net-8).
