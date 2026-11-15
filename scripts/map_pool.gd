@@ -9,7 +9,7 @@ class_name MapPool
 ## test_ai_curve run over. `all()` itself still carries the tutorial-only maps - test_maps4 (every baked
 ## map) and the rules tests that walk MapPool.all() for coverage still need to see them.
 
-const GROUP_ORDER := ["T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D"]   # R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
+const GROUP_ORDER := ["T", "R", "N", "E", "A", "M", "C", "B", "S", "X", "P", "D", "H"]   # R = round R proto maps; E = experimental E-01..E-10; P = Relays 3.0 prototype test maps (never pooled); A = Alpha 11 classics; M = maps 4.3 / 4.4 classic + 4.6 relay;
                                                               # MAPS 5.0: N = the map builder's new maps (References/Ooze Syndicate maps 5.0)
                                                               # (Mushroom Wars style); D = debug / test maps
 const DIR := "res://maps4"
@@ -138,7 +138,10 @@ const PROTO: Array[String] = ["R-01", "R-02", "R-05", "R-06", "R-09", "R-10", "R
 # THEMES (2026-11-13): map code -> LookTheme id (corporate_campus / golden_hour / quota_parade / wellness_retreat). Empty = the LAB
 # on every map until Daniele assigns the round-32 settings; dev --theme=<id> forces one for shots.
 const THEMES := {}
-const DEMO: Array[String] = ["R-01"]                  # DEMO BUILD (Rules.demo): the one playable map
+const DEMO: Array[String] = ["R-01", "HX-1", "HX-2", "HX-3", "HX-4", "HX-5", "HX-6", "HX-7", "HX-8"]   # DEMO BUILD (Rules.demo): R-01 + the HX size ladder
+# HX SIZE LADDER (map-size study 2026-11-15; Daniele: "lets do it in the demo staging, simply make lets say 4/8 maps with just a
+# honeycomb of nodes so we get the general idea of max limits"): HX-1..HX-8, generator References/Ooze Syndicate maps - size ladder
+# HX 2026-11/generator/honeycomb.py. DEMO ONLY: group "H" is not in POOL_GROUPS and the codes are not in PROTO.
 static var _battlefield_cache: Array = []
 static var _pooled_modes: Dictionary = {}              # the modes the new pool (POOL_GROUPS) offers
 
