@@ -31,16 +31,12 @@ void fragment() {
 	vec2 sg = floor(vec2(uv.x * aspect, uv.y) * 180.0);
 	float st = step(0.996, h21(sg)) * (1.0 - smoothstep(0.0, 0.55, y));
 	c += vec3(0.8) * st * (0.6 + 0.4 * sin(TIME * 2.0 + h21(sg + 1.0) * 30.0));
-	// the station: a ring with spokes and a hub, seen a little from below
-	vec2 sp = vec2((uv.x - 0.79) * aspect, (uv.y - 0.075) * 2.4);
+	// the station (designer 9 FIX 4: no outline, a soft distant silhouette, left of the score bar, away from the keys)
+	vec2 sp = vec2((uv.x - 0.27) * aspect, (uv.y - 0.06) * 2.4);
 	float r = length(sp);
-	float ring = 1.0 - smoothstep(0.003, 0.009, abs(r - 0.055));
-	float ang = atan(sp.y, sp.x);
-	float spoke = (1.0 - smoothstep(0.003, 0.008, abs(sin(ang * 3.0 + TIME * 0.05)) * r)) * step(r, 0.055);
-	float hub = 1.0 - smoothstep(0.012, 0.018, r);
-	float sil = max(max(ring, spoke * 0.8), hub) * (1.0 - smoothstep(0.0, 0.9, y) * 0.3);
-	c = mix(c, top_col * 0.7, sil * 0.85);
-	float lights = step(0.5, sin(TIME * 3.0)) * (1.0 - smoothstep(0.0, 0.006, length(sp - vec2(0.055, 0.0))));
-	c += vec3(1.0, 0.85, 0.5) * lights * 0.8;
+	float ring = 1.0 - smoothstep(0.004, 0.016, abs(r - 0.05));
+	float hub = 1.0 - smoothstep(0.008, 0.022, r);
+	float sil = max(ring, hub) * 0.35;
+	c = mix(c, mid_col * 0.8, sil);
 	COLOR = vec4(c, 1.0);
 }

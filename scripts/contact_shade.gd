@@ -103,7 +103,7 @@ func setup(sim: Sim, vis: Dictionary, floor_y: float) -> void:
 		plates[id] = plate
 		var h := p.y - floor_y
 		if has_floor and h >= MIN_H:
-			_quad(Vector2.ONE * Rules.R * DROP_K, drop, Transform3D(Basis.IDENTITY, Vector3(p.x + SUN.x * h, floor_y + 0.06, p.z + SUN.y * h)))
+			_drops.append([_quad(Vector2.ONE * Rules.R * DROP_K, drop, Transform3D(Basis.IDENTITY, Vector3(p.x + SUN.x * h, floor_y + 0.06, p.z + SUN.y * h))), p])
 	if not has_floor:
 		return
 	var w := deck_width() * BAND_K
@@ -118,8 +118,31 @@ func setup(sim: Sim, vis: Dictionary, floor_y: float) -> void:
 		if L < 0.1 or h < MIN_H:
 			continue
 		var c := (a + b) / 2.0
-		_quad(Vector2(L, w), band, Transform3D(Basis(Vector3.UP, atan2(d.x, d.z) + PI / 2.0),
-				Vector3(c.x + SUN.x * h, floor_y + 0.05, c.z + SUN.y * h)))
+		_drops.append([_quad(Vector2(L, w), band, Transform3D(Basis(Vector3.UP, atan2(d.x, d.z) + PI / 2.0),
+				Vector3(c.x + SUN.x * h, floor_y + 0.05, c.z + SUN.y * h))), c])
+
+
+# RIVER WORLD: the drop shadows lie on the river's surface, or on the bed where it is higher, and slide down with the drain
+# (re-placed when the level has moved RIVER_STEP m, not every frame); the offset follows the deck's height above that ground.
+const RIVER_STEP := 0.1
+var _drops: Array = []                # [MeshInstance3D, deck centre Vector3]
+var _last_level := INF
+
+
+func _process(_dt: float) -> void:
+	var wl := WorldLayer.active
+	if wl == null or wl.river == null or not wl.river.built or absf(wl.river.level - _last_level) < RIVER_STEP:
+		return
+	_last_level = wl.river.level
+	for d in _drops:
+		var mi: MeshInstance3D = d[0]
+		var p: Vector3 = d[1]
+		var g := wl.river.ground(p.x, p.z)
+		var h := p.y - g
+		var at := Vector2(p.x + SUN.x * h, p.z + SUN.y * h)
+		g = maxf(wl.river.ground(at.x, at.y), g)
+		mi.visible = h >= MIN_H
+		mi.position = Vector3(at.x, g + 0.06, at.y)
 
 
 func _plate_mat(seat: String) -> ShaderMaterial:

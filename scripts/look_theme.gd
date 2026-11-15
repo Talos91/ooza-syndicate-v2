@@ -71,6 +71,12 @@ const D_MIX := [0.25, 0.35]
 const LAB_D := {
 	"deck": ["#4B535B", "#454D55", 0.62, 0.0, 0.0], "rim": ["#30363C", "#5E6A72", 0.45, 0.4, 0.4],
 	"pillar": ["#3A4148", "#56606A", 0.55, 0.3, 0.3]}
+# RIVER WORLD + D (orchestrator 2026-11-15, Daniele "Keep D"): the dark comes from the canyon crust the way D took it from
+# the pit: mix(crust dark #2B332F, lab deck cream #E1CEAD, 0.25 base / 0.35 trim); rims = the crust dark + the trim;
+# pillars a step darker (0.18 / 0.25). Bridges keep the lab cream (kind "bridge" is untouched on the lab path).
+const RIVER_D := {
+	"deck": ["#59594F", "#6B695C", 0.62, 0.0, 0.0], "rim": ["#2B332F", "#6B695C", 0.45, 0.4, 0.4],
+	"pillar": ["#4C4F47", "#59594F", 0.55, 0.3, 0.3]}
 
 static var current := LAB
 
@@ -212,7 +218,7 @@ static func role(kind: String, mat_name: String) -> Array:
 		if not kind in ["deck", "pillar"] or not (ROLES[kind] as Dictionary).has(nm):
 			return []
 		var r0: Array = ROLES[kind][nm]
-		var lz: Array = LAB_D[r0[0]]
+		var lz: Array = (RIVER_D if WorldRiver.enabled() else LAB_D)[r0[0]]
 		return [Color(lz[r0[1]]), float(lz[2]), float(lz[3 + int(r0[1])])]
 	var r: Array = []
 	if nm in DARK:
