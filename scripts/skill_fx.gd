@@ -1546,11 +1546,21 @@ func _pieces_of(ei: int) -> Array:
 		return _pieces[ei]
 	var out := []
 	var decks: Array = vis.get("edge_decks", {}).get(ei, [])
+	var conn: Array = (vis.get("edge_conn", {}).get(ei, []) as Array).duplicate()   # DEMOLISH-TAP: connectors A, B fall after deck X
+	var pop := {}                                     # connector -> where it bursts (a pass curve: between its ports)
+	if ei >= 0 and ei < sim.edges.size():
+		for nid in [sim.edges[ei]["a"], sim.edges[ei]["b"]]:
+			var oth := sim.curve_other(ei, nid)
+			var piece = vis.get(nid, {}).get("platform") if oth >= 0 else null
+			if piece is Node3D and is_instance_valid(piece):
+				conn.append(piece)
+				pop[piece] = (sim.exit_of(ei, nid) + sim.exit_of(oth, nid)) * 0.5
 	var line: Array = _line(ei)
 	var total: float = line[2]
-	for d in decks:
+	for d in decks + conn:
 		if not is_instance_valid(d):
 			continue
+		var is_conn: bool = d in conn
 		var src: Node3D = d
 		var g: Node3D = src.duplicate()
 		MapBatch.show_copy(g)                     # Alpha 21: a copy of a batched deck draws itself
@@ -1564,10 +1574,15 @@ func _pieces_of(ei: int) -> Array:
 			mis.append(mi)
 		var u := 0.5
 		if total > 0.01:
-			u = clampf(_nearest_u(ei, xf.origin), 0.0, 1.0)
+			u = clampf(_nearest_u(ei, pop.get(d, xf.origin)), 0.0, 1.0)
+		if is_conn:                                # a connector sits at its end of the span
+			u = 0.0 if u < 0.5 else 1.0
+		var pop_at: Vector3 = pop.get(d, xf.origin)
 		var v := Vector3(randf_range(-2.5, 2.5), randf_range(1.0, 3.5), randf_range(-2.5, 2.5))
 		var spin := Vector3(randf_range(-2.5, 2.5), randf_range(-1.5, 1.5), randf_range(-2.5, 2.5))
-		out.append({"node": g, "mis": mis, "base": xf, "u": u, "v": v, "spin": spin, "v0": v, "spin0": spin})   # (POWERS: v0 / spin0 kept for Sever)
+		# lag: X gives way in the middle first, then (DEMOLISH-TAP) A and B Rules.DROP_CONN_LAG s later
+		var lag := Rules.DROP_CONN_LAG if is_conn else absf(u - 0.5) * 0.4
+		out.append({"node": g, "mis": mis, "base": xf, "u": u, "v": v, "spin": spin, "v0": v, "spin0": spin, "lag": lag, "conn": is_conn, "pop_at": pop_at})   # (POWERS: v0 / spin0 kept for Sever)
 	_pieces[ei] = out
 	return out
 
@@ -1609,7 +1624,12 @@ func _step_breaks(dt: float) -> void:
 		_breaks[ei] = t
 		for p in _pieces_of(ei):
 			var g: Node3D = p["node"]
-			var a := t - absf(float(p["u"]) - 0.5) * 0.4             # it gives way in the middle first
+			var a := t - float(p["lag"])                             # it gives way in the middle first, then its connectors
+			if bool(p["conn"]) and a > 0.0 and not p.get("popped", false):
+				p["popped"] = true                               # DEMOLISH-TAP: connector A / B bursts as it goes
+				_conn_pop(p)
+			elif a <= 0.0:
+				p["popped"] = false
 			var base: Transform3D = p["base"]
 			g.visible = a < BREAK_T
 			if a <= 0.0:
@@ -1625,6 +1645,19 @@ func _step_breaks(dt: float) -> void:
 		if t > BREAK_T + 0.45:
 			_breaks.erase(ei)
 			_hide_pieces(ei)
+
+
+func _conn_pop(p: Dictionary) -> void:
+	## DEMOLISH-TAP: a connector (A or B) breaks off its platform a beat after deck X: grit, a hot star at its socket.
+	var at: Vector3 = (p["pop_at"] as Vector3) + Vector3(0, 0.5, 0)
+	var detail := 0.6 if Rules.low_detail else 1.0
+	for k in range(int(22 * detail)):
+		var roll := randf()
+		_spark(at + Vector3(randf_range(-1.0, 1.0), randf_range(0.0, 0.4), randf_range(-1.0, 1.0)),
+				Vector3(randf_range(-3, 3), randf_range(1.0, 5.0), randf_range(-3, 3)),
+				HOT if roll < 0.35 else (Rules.state_color("warn") if roll < 0.65 else Color(0.62, 0.6, 0.7)), randf_range(0.18, 0.38),
+				randf_range(0.5, 1.0), 16.0)
+	_star_at(at + Vector3(0, 0.3, 0), HOT, 6.0, 0.3)
 
 
 func _rebuild_pieces(ei: int, k: float) -> void:

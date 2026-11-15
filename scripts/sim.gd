@@ -1589,6 +1589,41 @@ func ramp_ends(ei: int, near_id: int) -> Array:
 	return [N + u * pn + Vector3.UP * _lift_end_y(ei, near_id), F - u * pf + Vector3.UP * _lift_end_y(ei, far_id)]
 
 
+func pass_curve(nid: int) -> bool:
+	## DEMOLISH-TAP (view / aim query, no state): a junction that only bends one path (a Curve_* or Sbend_* piece with
+	## exactly two decks): it is one of the connectors of each of its two bridges.
+	if nid < 0 or nid >= nodes.size():
+		return false
+	var j := str(nodes[nid].get("junction", ""))
+	return (j.begins_with("Curve_") or j.begins_with("Sbend_")) and (adj.get(nid, []) as Array).size() == 2
+
+
+func curve_other(ei: int, nid: int) -> int:
+	## The other deck at a pass curve (pass_curve), or -1.
+	if not pass_curve(nid):
+		return -1
+	for pair in adj[nid]:
+		if int(pair[1]) != ei:
+			return int(pair[1])
+	return -1
+
+
+func span_line(ei: int) -> Array:
+	## DEMOLISH-TAP: a bridge's whole A + X + B span, rim to rim: deck_line (deck X with its piers), carried on
+	## through a pass curve at either end (the curve piece is that end's connector), port to port.
+	var line := deck_line(ei)
+	if line.is_empty():
+		return line
+	var e: Dictionary = edges[ei]
+	var oa := curve_other(ei, e["a"])
+	if oa >= 0:
+		line = [exit_of(oa, e["a"])] + line
+	var ob := curve_other(ei, e["b"])
+	if ob >= 0:
+		line = line + [exit_of(ob, e["b"])]
+	return line
+
+
 func deck_line(ei: int) -> Array:
 	## A deck's centre line rim to rim, a to b, with its ramps (views: goo corridors, trims).
 	## Plaza links have no deck: [].
@@ -2063,9 +2098,10 @@ func _check_missing_decks() -> void:
 		for sp in h["spans"]:
 			if not (h in hordes):
 				break
-			if head < sp["s0"] or tail > sp["s1"]:
-				continue                                  # the line doesn't touch this deck
 			var ei: int = sp["edge"]
+			var gone_sp: Dictionary = _with_curves(h, sp) if demolished.has(ei) and not breaking.has(ei) else sp   # DEMOLISH-TAP
+			if head < gone_sp["s0"] or tail > gone_sp["s1"]:
+				continue                                  # the line doesn't touch this deck
 			if not closed.has(ei) and not breaking.has(ei):
 				continue
 			var fell0: float = fall_losses.get(h["owner"], 0.0)   # (RELAYS 3.0 round 2: the ferry's tally of the fallen)
@@ -2075,7 +2111,7 @@ func _check_missing_decks() -> void:
 			# THE WAVE (0.22.3): a breaking deck is gone only over the segments broken so far, from the dropped
 			# end(s); bodies on those fall, the rest of the line walks on - away from the node it outruns
 			# the break, toward it the head meets the break and pours off it, lip after lip
-			for r in _gone_ranges(sp):
+			for r in _gone_ranges(gone_sp):
 				if not (h in hordes):
 					break
 				var r0: float = r[0]
@@ -2108,6 +2144,25 @@ func _current_span(h: Dictionary) -> Dictionary:
 		if h["s"] >= sp["s0"] and h["s"] <= sp["s1"]:
 			return sp
 	return {}
+
+
+func _with_curves(h: Dictionary, sp: Dictionary) -> Dictionary:
+	## DEMOLISH-TAP (Daniele 2026-11-15: a dropped bridge takes its connectors A and B with it): a pass curve
+	## (pass_curve) at either end of a deck that is down is gone too, so the stretch of the line's path across it
+	## counts as missing - a line pours off at the curve's far port instead of walking across nothing.
+	var e: Dictionary = edges[sp["edge"]]
+	var out := sp
+	for ns in h["node_spans"]:
+		var nid: int = ns["node"]
+		if (nid != e["a"] and nid != e["b"]) or not pass_curve(nid):
+			continue
+		if absf(float(ns["s1"]) - float(out["s0"])) < 0.05:
+			out = out.duplicate()
+			out["s0"] = ns["s0"]
+		elif absf(float(ns["s0"]) - float(out["s1"])) < 0.05:
+			out = out.duplicate()
+			out["s1"] = ns["s1"]
+	return out
 
 
 func _gone_ranges(sp: Dictionary) -> Array:

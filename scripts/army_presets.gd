@@ -291,7 +291,7 @@ static func target_hint(id: String, stage := 0) -> String:
 		"enemy_node":                                  # POWERS (Emergency Evac, offensive since 2026-10-07)
 			return "tap an enemy node"
 		"deck", "fixed_deck":
-			return "tap a deck"
+			return "tap a bridge - it goes with both connectors" if id in Rules.DROP_SPAN_SKILLS else "tap a deck"   # DEMOLISH-TAP
 		"relay":
 			return "tap a relay"
 		"enemy_relay":

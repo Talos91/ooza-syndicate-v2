@@ -198,7 +198,7 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 	## "cannon_tier", "housing", "state_parts": [MeshInstance3D], "mount_dir"}, plus "stretched":
 	## [edge index], "edge_decks": edge -> [Node3D], "edge_base": edge -> [Transform3D],
 	## "edge_piers": edge -> [Node3D, Node3D], "conduits": edge -> MeshInstance3D.
-	var vis := {"stretched": [], "edge_decks": {}, "edge_base": {}, "edge_piers": {}, "conduits": {}}
+	var vis := {"stretched": [], "edge_decks": {}, "edge_base": {}, "edge_piers": {}, "edge_conn": {}, "conduits": {}}
 	for n in sim.nodes:
 		var parts: Array = []
 		var relay: String = n["relay"]
@@ -256,6 +256,7 @@ static func build(parent: Node3D, sim: Sim) -> Dictionary:
 		vis[e["a"]]["parts"].append(pier_a)
 		vis[e["b"]]["parts"].append(pier_b)
 		vis["edge_piers"][i] = [pier_a, pier_b]
+		vis["edge_conn"][i] = [pier_a, pier_b] if ctrl < 0 else []   # DEMOLISH-TAP: the connectors A, B that fall with deck X
 		var piece_name := "Deck_Retract" if e["retracts"] else ("Deck_Remote" if e["state"].begins_with("m") else "Deck_S")
 		var deck_nodes: Array = []
 		var base: Array = []
@@ -631,7 +632,7 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 	## STAGED LOAD (0.23.5): pace is called before each node and each edge; main._pace draws a frame once a budget of work
 	## has piled up (the await only suspends when pace does).
 	var lay: Dictionary = map["layout"]
-	var vis := {"stretched": [], "edge_decks": {}, "edge_base": {}, "edge_piers": {}, "conduits": {}, "plazas": {}}
+	var vis := {"stretched": [], "edge_decks": {}, "edge_base": {}, "edge_piers": {}, "edge_conn": {}, "conduits": {}, "plazas": {}}
 	var glb_nodes := {}
 	if str(lay.get("glb", "")) != "" and ResourceLoader.exists(lay["glb"]):
 		var inst: Node3D = (load(lay["glb"]) as PackedScene).instantiate()
@@ -705,6 +706,7 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 			vis["edge_decks"][i] = []
 			vis["edge_base"][i] = []
 			vis["edge_piers"][i] = []
+			vis["edge_conn"][i] = []
 			continue
 		var g: Dictionary = e["geo"]
 		var A := Vector3(g["A"][0], 0.0, g["A"][1])
@@ -719,6 +721,7 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 		var kind := RelayView.edge_kind(e) if ctrl >= 0 else ""   # RELAY V2: this bridge's relay kind
 		var g_end := RelayView.gate_end(sim, i) if kind != "" else -1
 		var swing := []                                # RELAY V2: a rotation's own pier + gate turn with its decks
+		var conn := []                                 # DEMOLISH-TAP (Daniele 2026-11-15): the bridge's plain connectors A, B
 		var gate_xf = null
 		for end in range(2):
 			var nid: int = e["a"] if end == 0 else e["b"]
@@ -742,6 +745,8 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 				pier = null
 			else:
 				pier = angled_pier(parent, exit, dir, lean, st.begins_with("s") and ctrl == nid and not gated)
+				if ctrl < 0:                               # (a relay's piers stay: its mechanism lives on them)
+					conn.append(pier)
 			var gate: Node3D = null
 			if gated:
 				# the kit pier frame (origin R + PIER behind the deck start): the rotation's ghost pier, the link's masts
@@ -763,6 +768,7 @@ static func build3_paced(parent: Node3D, sim: Sim, map: Dictionary, pace: Callab
 				if gate:
 					vis[nid]["parts"].append(gate)
 		vis["edge_piers"][i] = piers
+		vis["edge_conn"][i] = conn
 		var state_key: String = "retract" if e["retracts"] else st
 		var s0 := A + d * p0
 		var s1 := B - d * p1

@@ -1025,6 +1025,20 @@ func _deck_at(p: Vector2, cam: Camera3D) -> int:
 	var core := (20.0 if not mobile else 30.0) * ui_scale
 	var reach := deck_reach(core)
 	var on_node := reach > core and _platform_at(p, cam) >= 0
+	if drop_span():                                   # DEMOLISH-TAP: the whole A + X + B span takes the tap - on a
+		var hit := -1                                 # phone at least the DECK_HIT_PT band, which (as before) never
+		var hit_d := INF                              # reaches onto a platform beyond the drawn span
+		for ei in cands:
+			var d := span_hit(int(ei), p, cam, 0.0)
+			if d == INF and on_node:
+				continue
+			if d == INF:                              # (a drawn span always beats a widened band)
+				d = span_hit(int(ei), p, cam, reach) + 100000.0
+			if d < hit_d:
+				hit_d = d
+				hit = int(ei)
+		if hit >= 0:
+			return hit
 	for pass_n in range(2):
 		var best := -1
 		var best_d := reach
@@ -1039,6 +1053,61 @@ func _deck_at(p: Vector2, cam: Camera3D) -> int:
 		if best >= 0:
 			return best
 	return -1
+
+
+func drop_span() -> bool:
+	## DEMOLISH-TAP (Daniele 2026-11-15): the armed skill brings a bridge down (Demolish, Sever), so it aims at the
+	## bridge's whole span: deck X and its connectors A, B, rim to rim, Rules.DROP_SPAN_W across (at least the deck band).
+	return armed >= 0 and sim.skill_id(human, SLOTS[armed]) in Rules.DROP_SPAN_SKILLS
+
+
+func span_px(ei: int, cam: Camera3D, reach: float) -> Array:
+	## The A + X + B span on screen: [centre points, half-widths (px)], along Sim.span_line (piers or pass curves).
+	var pts := PackedVector2Array()
+	var hw := PackedFloat32Array()
+	var line: Array = sim.span_line(ei)
+	for i in range(line.size()):
+		var q: Vector3 = line[i]
+		var j := mini(i + 1, line.size() - 1)
+		var k := maxi(j - 1, 0)
+		var along: Vector3 = ((line[j] as Vector3) - (line[k] as Vector3)) * Vector3(1, 0, 1)
+		var side := Vector3(-along.z, 0.0, along.x).normalized() if along.length() > 0.001 else Vector3.RIGHT
+		var c := cam.unproject_position(q + Vector3(0, 0.3, 0))
+		var e := cam.unproject_position(q + Vector3(0, 0.3, 0) + side * Rules.DROP_SPAN_W * 0.5)
+		pts.append(c)
+		hw.append(maxf(c.distance_to(e), reach))
+	return [pts, hw]
+
+
+func span_quads(span: Array) -> Array:
+	## One quad per span segment (A, X, B and any ramps), its sides square to the segment on screen.
+	var pts: PackedVector2Array = span[0]
+	var hw: PackedFloat32Array = span[1]
+	var out := []
+	for k in range(pts.size() - 1):
+		var d := pts[k + 1] - pts[k]
+		if d.length() < 0.5:
+			continue
+		var n := Vector2(-d.y, d.x).normalized()
+		out.append(PackedVector2Array([pts[k] + n * hw[k], pts[k + 1] + n * hw[k + 1], pts[k + 1] - n * hw[k + 1], pts[k] - n * hw[k]]))
+	return out
+
+
+func span_hit(ei: int, p: Vector2, cam: Camera3D, reach: float) -> float:
+	## INF when p is outside the span, else its distance to the span's centre line (the nearest span wins).
+	var span := span_px(ei, cam, reach)
+	var inside := false
+	for q in span_quads(span):
+		if Geometry2D.is_point_in_polygon(p, q):
+			inside = true
+			break
+	if not inside:
+		return INF
+	var pts: PackedVector2Array = span[0]
+	var best := INF
+	for k in range(pts.size() - 1):
+		best = minf(best, p.distance_to(Geometry2D.get_closest_point_to_segment(p, pts[k], pts[k + 1])))
+	return best
 
 
 func deck_reach(core: float) -> float:
@@ -1096,6 +1165,37 @@ func _line_at(p: Vector2, cam: Camera3D) -> int:
 
 
 # ------------------------------------------------------------------ highlights (TargetLayer._draw)
+func _draw_span(ci: CanvasItem, span: Array, col: Color, a: float, s: float) -> void:
+	## DEMOLISH-TAP: a bridge marked for destruction, rim to rim: a lit band over connector A, deck X and connector B,
+	## its outline, ticks where X meets A and B, and the centre line.
+	var pts: PackedVector2Array = span[0]
+	var hw: PackedFloat32Array = span[1]
+	if pts.size() < 2:
+		return
+	var quads := span_quads(span)
+	for q in quads:
+		ci.draw_colored_polygon(q, Color(col, 0.14 + 0.1 * a))
+	var left := PackedVector2Array()
+	var right := PackedVector2Array()
+	for q in quads:
+		left.append_array([q[0], q[1]])
+		right.append_array([q[3], q[2]])
+	if left.size() >= 2:
+		ci.draw_polyline(left, Color(col, 0.75 + 0.25 * a), 2.5 * s, true)
+		ci.draw_polyline(right, Color(col, 0.75 + 0.25 * a), 2.5 * s, true)
+		ci.draw_line(left[0], right[0], Color(col, 0.75 + 0.25 * a), 2.5 * s, true)
+		ci.draw_line(left[left.size() - 1], right[right.size() - 1], Color(col, 0.75 + 0.25 * a), 2.5 * s, true)
+	for i in [1, pts.size() - 2]:                     # X | A and X | B: the connectors' inner ends
+		if i <= 0 or i >= pts.size() - 1:
+			continue
+		var d := pts[i + 1] - pts[i - 1]
+		var n := Vector2(-d.y, d.x).normalized() if d.length() > 0.5 else Vector2.UP
+		ci.draw_line(pts[i] + n * hw[i] * 0.7, pts[i] - n * hw[i] * 0.7, Color(col.lerp(Color.WHITE, 0.4), 0.5 + 0.3 * a), 1.5 * s, true)
+	ci.draw_polyline(pts, Color(col, 0.9), 3.0 * s, true)
+	var mid := pts[pts.size() / 2] if pts.size() % 2 == 1 else (pts[pts.size() / 2 - 1] + pts[pts.size() / 2]) / 2.0
+	ci.draw_circle(mid, 5.0 * s, Color(col, 0.6 + 0.4 * a))
+
+
 func _draw_targets(ci: CanvasItem) -> void:
 	if _bad_t > 0.0 and _bad != Vector2.INF:          # INVALID TARGET (B22) where a wrong pick was tapped
 		var br := (26.0 + 8.0 * (1.0 - _bad_t)) * ui_scale
@@ -1119,6 +1219,10 @@ func _draw_targets(ci: CanvasItem) -> void:
 				if pts.size() >= 1:
 					_ring(ci, pts[0], 12.0 * s, col, a, false)
 		"deck", "fixed_deck":
+			if drop_span():                               # DEMOLISH-TAP: the whole A + X + B span is marked
+				for ei in cands:
+					_draw_span(ci, span_px(int(ei), cam, 0.0), col, a, s)
+				return
 			for ei in cands:
 				var pts := _deck_px(int(ei), cam)
 				if pts.size() < 2:
