@@ -712,7 +712,7 @@ func _fall_horde(ev: Dictionary) -> void:
 			var spin := Vector3(randf_range(-2.5, 2.5), randf_range(-1.0, 1.0), randf_range(-2.5, 2.5))
 			if wl != null:                                # WORLD PASS 2 (F1 / F2): a true 3D drop onto the floor, same
 				var p0: Vector3 = b[1]                    # acceleration, no scaling, the splat where it hits
-				var drop := wl.fall_depth(p0.y)
+				var drop := wl.fall_depth(p0.y, Vector2(p0.x, p0.z))
 				var dur := 1.4 * sqrt(drop / FLING_DROP)
 				var end := p0 + Vector3(randf_range(-1.5, 1.5), -drop, randf_range(-1.5, 1.5))
 				tw.tween_property(mi, "position", end, dur).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
@@ -784,7 +784,7 @@ func _relay_body(mi: MeshInstance3D, p: Vector3, relay: int, edge: int) -> void:
 	var wl := WorldLayer.active
 	var k_end := smoothstep(0.0, 1.0, t0 / Rules.RELAY_MOVE)
 	var ride_end := -6.0 * k_end * k_end if sinks else 0.0
-	var drop := wl.fall_depth(p.y + ride_end) if wl != null else FLING_DROP   # F2: down to the floor
+	var drop := wl.fall_depth(p.y + ride_end, Vector2(p.x, p.z)) if wl != null else FLING_DROP   # F2: down to the floor
 	var dur := t0 + sqrt(2.0 * drop / RELAY_G)
 	var shrink := 0.0 if wl != null else 0.3          # with a floor: true 3D, the perspective shrinks it
 	mi.position = p
@@ -828,7 +828,7 @@ func _kick_body(mi: MeshInstance3D, p: Vector3, along: Vector3) -> void:
 	var spin := Vector3(randf_range(-9.0, 9.0), randf_range(-5.0, 5.0), randf_range(-9.0, 9.0))
 	var start_scale := mi.scale
 	var wl := WorldLayer.active
-	var t_end := _hit_time(up, g, wl.fall_depth(p.y)) if wl != null else FLING_TIME   # F2: down to the floor
+	var t_end := _hit_time(up, g, wl.fall_depth(p.y, Vector2(p.x, p.z))) if wl != null else FLING_TIME   # F2: down to the floor
 	var shrink := 0.0 if wl != null else 0.3
 	mi.position = p
 	var tw := create_tween()
@@ -967,7 +967,7 @@ func _fling_body(mi: MeshInstance3D, p: Vector3, centre: Vector3, turn: float, e
 	var spin := Vector3(randf_range(-7.0, 7.0), randf_range(-4.0, 4.0), randf_range(-7.0, 7.0))
 	var start_scale := mi.scale
 	var wl := WorldLayer.active
-	var t_end := _hit_time(up, g, wl.fall_depth(p.y)) if wl != null else FLING_TIME   # F2: down to the floor
+	var t_end := _hit_time(up, g, wl.fall_depth(p.y, Vector2(p.x, p.z))) if wl != null else FLING_TIME   # F2: down to the floor
 	var to_scale := start_scale if wl != null else end_scale                         # true 3D: no scaling
 	mi.position = p
 	var tw := create_tween()
