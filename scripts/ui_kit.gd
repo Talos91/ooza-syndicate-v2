@@ -321,7 +321,7 @@ static func title(m, x: float, y: float, kicker: String, headline: String, f := 
 	var kw := text_w(m, kicker.to_upper(), 12, true) + kicker.length() * 3.0
 	var hw := text_w(m, headline.to_upper(), size, true)
 	band(m, Rect2(x - 14.0, y - 8.0, maxf(kw, hw) + 32.0, line_h(m, 12, true) + 2.0 + line_h(m, size, true) + 16.0))
-	var k := label(m, kicker.to_upper(), 12, accent(f), true, 3)
+	var k := label(m, kicker.to_upper(), 12, MenuSkin.seat(), true, 3)   # kickers = the SEAT colour, never the faction's
 	add(m, k, Vector2(x, y))
 	y += k.get_minimum_size().y + 2.0
 	var h := label(m, headline.to_upper(), size, INK, true)
