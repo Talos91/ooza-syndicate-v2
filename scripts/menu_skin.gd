@@ -129,8 +129,30 @@ static func _put(m, parent: Control, c: Control, pos: Vector2) -> void:
 		UiKit.add(m, c, pos)
 
 
-static func mark_tex(f: String) -> Texture2D:
-	return load(DIR + "MARK-" + ("AEGIS" if f == "solar" else f.to_upper()) + ".png") as Texture2D
+static func mark_tex(f: String, frame := 0) -> Texture2D:
+	## 36B2 TECH LOOK mark: frame `frame` of the IDLE strip (12 x 512 px; frame 0 = the HUD pose).
+	var t := AtlasTexture.new()
+	t.atlas = load(DIR + "MARKS-" + ("AEGIS" if f == "solar" else f.to_upper()) + "-IDLE.png") as Texture2D
+	t.region = Rect2(frame * 512, 0, 512, 512)
+	return t
+
+
+class MarkAnim extends TextureRect:
+	## The IDLE loop (12 frames, 105 ms) for the big heroes.
+	var _f := ""
+	var _t := 0.0
+	var _n := 0
+
+	func start(f: String) -> void:
+		_f = f
+		set_process(true)
+
+	func _process(dt: float) -> void:
+		_t += dt
+		var n := int(_t / 0.105) % 12
+		if n != _n:
+			_n = n
+			texture = MenuSkin.mark_tex(_f, n)
 
 
 static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "", parent: Control = null, rim := Color(0, 0, 0, 0)) -> void:
@@ -140,8 +162,8 @@ static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "", parent: Co
 	var col := seat() if rim.a == 0.0 else rim
 	if mood == "win":
 		var grad := Gradient.new()
-		grad.set_color(0, Color(col, 0.6))
-		grad.set_color(1, Color(col, 0.0))
+		grad.offsets = PackedFloat32Array([0.0, 0.58, 0.8, 1.0])
+		grad.colors = PackedColorArray([Color(col, 0.9), Color(col, 0.85), Color(col, 0.3), Color(col, 0.0)])
 		var gt := GradientTexture2D.new()
 		gt.gradient = grad
 		gt.fill = GradientTexture2D.FILL_RADIAL
@@ -164,15 +186,17 @@ static func ai_hero(m, f: String, pos: Vector2, s: float, mood := "", parent: Co
 	_put(m, parent, t, pos)
 	if f == "":
 		return
-	var mk := TextureRect.new()
+	var mk: TextureRect = MarkAnim.new() if parent == null else TextureRect.new()
 	mk.texture = mark_tex(f)
+	if parent == null:
+		(mk as MarkAnim).start(f)
 	mk.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	mk.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	mk.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mk.size = Vector2(s, s) * 0.64
+	mk.size = Vector2(s, s) * 0.8
 	if mood == "loss":
 		mk.modulate = Color(0.82, 0.84, 0.9)
-	_put(m, parent, mk, pos + Vector2(s, s) * 0.18)
+	_put(m, parent, mk, pos + Vector2(s, s) * 0.1)
 
 
 static func _lum(c: Color) -> float:

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://de233l3p6s8mf"
-path="res://.godot/imported/MARK-EMBER.png-74c632b6520eda20ab310cee889750b4.ctex"
+uid="uid://d3w1vk7x3dl0k"
+path="res://.godot/imported/MARKS-NULL-IDLE.png-7b7f72e28ceaf39f1f8dec61ab542a3f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/menu40/MARK-EMBER.png"
-dest_files=["res://.godot/imported/MARK-EMBER.png-74c632b6520eda20ab310cee889750b4.ctex"]
+source_file="res://assets/ui/menu40/MARKS-NULL-IDLE.png"
+dest_files=["res://.godot/imported/MARKS-NULL-IDLE.png-7b7f72e28ceaf39f1f8dec61ab542a3f.ctex"]
 
 [params]
 

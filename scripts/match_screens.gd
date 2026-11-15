@@ -273,6 +273,8 @@ func _result_plates(page: Control, col: Rect2, title_h: float, won: bool, draw: 
 	tp.size = tr.size
 	if not won and not draw:
 		tp.modulate = Color(0.55, 0.68, 0.95)
+	elif won:
+		tp.modulate = Color(1.18, 1.02, 0.8)
 	page.add_child(tp)
 	page.move_child(tp, 1)
 	var fx := ResultFx.new()
@@ -295,7 +297,7 @@ class ResultFx extends Control:
 		var h := size.y
 		if mood == "win":
 			var warm := Color(1.0, 0.86, 0.5, 0.0)
-			var lit := Color(1.0, 0.86, 0.5, 0.22)
+			var lit := Color(1.0, 0.86, 0.5, 0.42)
 			draw_polygon(PackedVector2Array([Vector2(w * 0.38, 3.0), Vector2(w * 0.66, 3.0), Vector2(w * 0.54, h - 3.0), Vector2(w * 0.26, h - 3.0)]),
 					PackedColorArray([warm, warm, lit, lit]))
 			draw_rect(Rect2(3.0, 3.0, w - 6.0, h * 0.18), Color(1.0, 0.9, 0.62, 0.07))

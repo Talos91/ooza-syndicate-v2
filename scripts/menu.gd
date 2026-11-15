@@ -1252,14 +1252,14 @@ func _cutout(f: String, pos: Vector2, dims: Vector2) -> TextureRect:
 	return r
 
 
-func _cutout_mark(f: String, pos: Vector2, dims: Vector2) -> Control:
+func _cutout_mark(f: String, pos: Vector2, dims: Vector2, rim := Color(0, 0, 0, 0)) -> Control:
 	## Small faction chips (pickers, room seats): the AI mark in its socket (40B2 M-L / M-K), seat-A rim.
 	var h := Control.new()
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	h.position = pos
 	h.size = dims
 	var side := minf(dims.x, dims.y)
-	MenuSkin.ai_hero(self, f, Vector2((dims.x - side) / 2.0, (dims.y - side) / 2.0), side, "", h)
+	MenuSkin.ai_hero(self, f, Vector2((dims.x - side) / 2.0, (dims.y - side) / 2.0), side, "", h, rim)
 	return h
 
 
@@ -5215,7 +5215,7 @@ func _room_chat(r: Rect2) -> void:
 		cfs = _fit_fs(code + "    ", 26.0, 14.0, w - shw - 8.0)
 	else:
 		_say("CODE", Vector2(x, r.position.y + pad + (hh - UiKit.line_h(self, 12, true)) / 2.0), 12, UiKit.MUTED, 0.0, true, 3)
-	_say(code, Vector2(x + kw, r.position.y + pad + (hh - UiKit.line_h(self, cfs, true)) / 2.0), cfs, UiKit.accent(shell_f), 0.0, true, 4)
+	_say(code, Vector2(x + kw, r.position.y + pad + (hh - UiKit.line_h(self, cfs, true)) / 2.0), cfs, MenuSkin.seat(), 0.0, true, 4)
 	var ty := r.position.y + pad + hh + 6.0
 	var ib := r.end.y - pad - hh
 	var tb := UiKit.btn(self, "TYPE A MESSAGE…", Vector2(x, ib), Vector2(w, 44), Net.open_chat, "tertiary", shell_f, 14)
@@ -5374,18 +5374,11 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 	var state_col := UiKit.MUTED
 	if id >= 0:
 		var f: String = str(Net.roster[id]["faction"])
-		var art := TextureRect.new()
-		art.texture = UiKit.tex(UiKit.hero_path(f))
-		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		art.position = Vector2(tx, ty0)
-		art.size = Vector2(ts, ts)
-		b.add_child(art)
+		b.add_child(_cutout_mark(f, Vector2(tx, ty0), Vector2(ts, ts), col))
 		name_t = "YOU" if me else Net.name_of(id).to_upper()
 		if id == Net.room_owner or (id == 1 and not Net.server_hosted()):
 			state = "HOST"
-			state_col = UiKit.accent(shell_f)
+			state_col = col
 		elif Net.is_away(id):
 			state = "AWAY"
 			state_col = UiKit.STAR
@@ -5407,13 +5400,15 @@ func _seat_chip(i: int, id: int, colours: Dictionary, pos: Vector2, dims: Vector
 		name_t = ("AI " + Net.ai_fill.to_upper()) if Net.ai_fill != "" else "OPEN"
 		if sit:
 			state = "SIT HERE"
-			state_col = UiKit.accent(shell_f)
+			state_col = MenuSkin.seat()
 	var right := b.size.x - 10.0
+	var ic0 := clampf(h * 0.28, 20.0, 46.0)
+	var tall := id >= 0 and h >= UiKit.line_h(self, fn, true) + ic0 + 18.0
 	if state != "":
 		var sfs := fl * 1.2 if state == "✓" else fs       # the READY tick reads at a glance
 		var sw := UiKit.text_w(self, state, sfs, true)
 		var st := UiKit.label(self, state, sfs, state_col, true)
-		st.position = Vector2(right - sw, (h - UiKit.line_h(self, sfs, true)) / 2.0)
+		st.position = Vector2(right - sw, (h - UiKit.line_h(self, fn, true) - ic0 - 6.0) / 2.0 if tall else (h - UiKit.line_h(self, sfs, true)) / 2.0)
 		b.add_child(st)
 		right -= sw + 8.0
 	var nx := tx + ts + 8.0
@@ -5460,7 +5455,7 @@ func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: b
 		name_t = "YOU" if me else Net.name_of(id).to_upper()
 		if id == Net.room_owner or (id == 1 and not Net.server_hosted()):
 			state = "HOST"
-			state_col = UiKit.accent(shell_f)
+			state_col = col
 		elif Net.is_away(id):
 			state = "AWAY"
 			state_col = UiKit.STAR
@@ -5470,7 +5465,7 @@ func _seat_chip_compact(b: Button, i: int, id: int, col: Color, me: bool, sit: b
 	else:
 		name_t = "OPEN" if Net.ai_fill == "" else "AI"
 		state = ("SIT HERE" if UiKit.text_w(self, "SIT HERE", 12, true) <= w - 20.0 else "SIT") if sit else (Net.ai_fill.to_upper() if Net.ai_fill != "" else "")
-		state_col = UiKit.accent(shell_f) if sit else UiKit.MUTED
+		state_col = MenuSkin.seat() if sit else UiKit.MUTED
 	var fl := 16.0
 	var lh1 := UiKit.line_h(self, fl, true)
 	var lh2 := UiKit.line_h(self, 12, true)

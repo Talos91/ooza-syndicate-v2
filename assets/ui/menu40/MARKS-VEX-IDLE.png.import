@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b1gttk2jmx3lw"
-path="res://.godot/imported/MARK-BLOOM.png-1b25bc48e4f98f2ba4c6b9f972604ee6.ctex"
+uid="uid://decje3fr248l1"
+path="res://.godot/imported/MARKS-VEX-IDLE.png-53fc3bba5673002e291ffa3407c6b89e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/menu40/MARK-BLOOM.png"
-dest_files=["res://.godot/imported/MARK-BLOOM.png-1b25bc48e4f98f2ba4c6b9f972604ee6.ctex"]
+source_file="res://assets/ui/menu40/MARKS-VEX-IDLE.png"
+dest_files=["res://.godot/imported/MARKS-VEX-IDLE.png-53fc3bba5673002e291ffa3407c6b89e.ctex"]
 
 [params]
 
