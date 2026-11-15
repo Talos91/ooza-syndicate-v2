@@ -132,7 +132,7 @@ static func _settle(b: Button) -> void:
 	if not is_instance_valid(b) or not b.is_inside_tree():
 		return
 	var col := seat()
-	var big := b.size.y > 190.0 or b.size.x > 700.0 or b.get_child_count() > 0
+	var big := b.size.y > 190.0 or b.get_child_count() > 0
 	var tab: bool = str(b.get_meta("mskin", "")) == "tab"
 	if big:
 		var card := plate()

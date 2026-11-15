@@ -156,7 +156,7 @@ func result(d: Dictionary) -> Dictionary:
 	var x := split + mg * 0.4
 	var w := v.x - x - mg
 	var y := 0.0
-	var acc := UiKit.accent(f)
+	var acc := MenuSkin.seat()                         # 0.24.5: kickers / accents follow the SEAT (cyan for seat A), never the faction
 	UiKit.add(self, UiKit.label(self, str(d.get("kicker", "")).to_upper(), 13, acc, true, 3), Vector2(x, y))
 	y += UiKit.line_h(self, 13, true) + 2.0
 	var won := bool(d.get("won", false))
@@ -258,7 +258,7 @@ func details(d: Dictionary, table: Dictionary) -> void:
 	var v := vp()
 	var ph := phone()
 	var mg := margin()
-	var acc := UiKit.accent(f)
+	var acc := MenuSkin.seat()                         # 0.24.5: kickers / accents follow the SEAT (cyan for seat A), never the faction
 	var top := mg * (0.4 if ph else 0.7)
 	var y := UiKit.title(self, mg, top, "AFTER ACTION", "MATCH DETAILS.", f, 34.0 * (0.8 if ph else 1.0)) + 10.0
 	UiKit.back_link(self, v.x - mg, top, d.get("back", Callable()))
