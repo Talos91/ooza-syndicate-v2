@@ -113,7 +113,7 @@ static func style_tab(b: Button, active: bool) -> void:
 
 static func plate(fill_alpha := 1.0, strong := false) -> StyleBoxTexture:
 	## The content panel (M-E dark glass, 9-slice 14 pt = 28 px); `fill_alpha` < 1 lets the painting through (HOME: 0.6).
-	return box(load(DIR + "SHELL-M-E.png"), Vector4(28, 28, 28, 30), Color(1, 1, 1, fill_alpha), Vector2(14, 12))
+	return box(load(DIR + "GEO-M-E.png"), Vector4(28, 28, 28, 30), Color(1, 1, 1, fill_alpha), Vector2(14, 12))
 
 
 static func strip(fill_alpha := 1.0) -> StyleBoxTexture:
@@ -139,8 +139,8 @@ static func _settle(b: Button) -> void:
 		var ring := (UiKit.sb(Color(col.darkened(0.8), 0.96), col, 2) if (tab and b.get_meta("mrim", false)) else null)
 		var norm: StyleBox = ring if ring != null else card
 		b.add_theme_stylebox_override("normal", norm)
-		b.add_theme_stylebox_override("hover", ring if ring != null else box(load(DIR + "SHELL-M-E.png"), Vector4(28, 28, 28, 30), Color(1.25, 1.25, 1.25), Vector2(14, 12)))
-		b.add_theme_stylebox_override("pressed", ring if ring != null else box(load(DIR + "SHELL-M-E.png"), Vector4(28, 28, 28, 30), Color(0.75, 0.75, 0.75), Vector2(14, 12)))
+		b.add_theme_stylebox_override("hover", ring if ring != null else box(load(DIR + "GEO-M-E.png"), Vector4(28, 28, 28, 30), Color(1.25, 1.25, 1.25), Vector2(14, 12)))
+		b.add_theme_stylebox_override("pressed", ring if ring != null else box(load(DIR + "GEO-M-E.png"), Vector4(28, 28, 28, 30), Color(0.75, 0.75, 0.75), Vector2(14, 12)))
 		b.add_theme_stylebox_override("hover_pressed", b.get_theme_stylebox("pressed"))
 		b.add_theme_stylebox_override("disabled", plate(0.6))
 		for k in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:

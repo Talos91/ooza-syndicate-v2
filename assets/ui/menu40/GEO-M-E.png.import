@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cxpwgkdx5rrap"
-path="res://.godot/imported/SHELL-M-E.png-69095ca362ccc6d5fd70375a336dddfe.ctex"
+uid="uid://dewfvnps7e266"
+path="res://.godot/imported/GEO-M-E.png-3a9271e257b7031c34d1111550c85a9c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/menu40/SHELL-M-E.png"
-dest_files=["res://.godot/imported/SHELL-M-E.png-69095ca362ccc6d5fd70375a336dddfe.ctex"]
+source_file="res://assets/ui/menu40/GEO-M-E.png"
+dest_files=["res://.godot/imported/GEO-M-E.png-3a9271e257b7031c34d1111550c85a9c.ctex"]
 
 [params]
 
