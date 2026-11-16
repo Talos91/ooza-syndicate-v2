@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://v375xcqscwrp"
-path="res://.godot/imported/bloom.png-1348cfe8505a17c267d63991d3ba8c04.ctex"
+uid="uid://dhbr0p1oyu26r"
+path="res://.godot/imported/hero_neon_bloom.png-da3cd8c158aaee261e5f61146317f0cc.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/oozes/bloom.png"
-dest_files=["res://.godot/imported/bloom.png-1348cfe8505a17c267d63991d3ba8c04.ctex"]
+source_file="res://assets/art/ui/hero_neon_bloom.png"
+dest_files=["res://.godot/imported/hero_neon_bloom.png-da3cd8c158aaee261e5f61146317f0cc.ctex"]
 
 [params]
 

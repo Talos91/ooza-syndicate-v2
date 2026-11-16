@@ -18,7 +18,9 @@ UNITS = {"vex": "vex", "null": "null", "bloom": "bloom", "ember": "ember", "sola
 TWO_SIDED = 40      # px at 2048: max distance to the plate on each side of a neon texel
 CYAN_ONLY = {"null", "bloom", "ember", "solar"}   # goo never cyan: cyan touching the plate is neon too
 MIN_COMP = {"vex": 1200}
-CLOSE_GAPS = {"vex": 14}                           # px at 2048: VEX drops cyan specks between plate bits on its goo
+CLOSE_GAPS = {"vex": 14}
+MIN_Y = {"vex": 0.25}   # fraction of the model height: neon below it is a leak onto the goo; UV padding keeps neon only next to real band
+                        # texels (designer 10: a VEX front-left foot fleck came from padding bleeding into the foot island)                           # px at 2048: VEX drops cyan specks between plate bits on its goo
 GLOW = {"ember": ((0.10, 0.19), 0.55, 0.80)}       # tint G: (hue range, min sat, min value) = EMBER visor slit
 
 
@@ -56,12 +58,43 @@ def two_sided(steel, r):
     return out
 
 
-def masks(diff, game):
+def texel_height(b, j, off, res=2048):
+    """Model height (fraction of the max) rasterised into UV space at `res` (-1 = no triangle there)."""
+    pr = j["meshes"][0]["primitives"][0]
+    def acc(i, n, dt):
+        a = j["accessors"][i]; bv = j["bufferViews"][a["bufferView"]]
+        return np.frombuffer(b, dtype=dt, count=a["count"] * n, offset=off + bv.get("byteOffset", 0) + a.get("byteOffset", 0)).reshape(a["count"], n)
+    ia = j["accessors"][pr["indices"]]
+    P = acc(pr["attributes"]["POSITION"], 3, "<f4"); UV = acc(pr["attributes"]["TEXCOORD_0"], 2, "<f4")
+    I = acc(pr["indices"], 1, "<u2" if ia["componentType"] == 5123 else "<u4").reshape(-1, 3).astype(int)
+    Y = P[:, 1] / P[:, 1].max()
+    out = np.full((res, res), -1.0, np.float32)
+    U = UV * (res - 1)
+    for t in I:
+        pts = U[t]
+        x0, x1 = int(pts[:, 0].min()), int(pts[:, 0].max()) + 1
+        y0, y1 = int(pts[:, 1].min()), int(pts[:, 1].max()) + 1
+        if x1 - x0 > res // 5 or y1 - y0 > res // 5:
+            continue
+        xs, ys = np.meshgrid(np.arange(x0, x1 + 1), np.arange(y0, y1 + 1))
+        d = (pts[1, 1] - pts[2, 1]) * (pts[0, 0] - pts[2, 0]) + (pts[2, 0] - pts[1, 0]) * (pts[0, 1] - pts[2, 1])
+        if abs(d) < 1e-9:
+            continue
+        w0 = ((pts[1, 1] - pts[2, 1]) * (xs - pts[2, 0]) + (pts[2, 0] - pts[1, 0]) * (ys - pts[2, 1])) / d
+        w1 = ((pts[2, 1] - pts[0, 1]) * (xs - pts[2, 0]) + (pts[0, 0] - pts[2, 0]) * (ys - pts[2, 1])) / d
+        w2 = 1 - w0 - w1
+        ins = (w0 >= -0.02) & (w1 >= -0.02) & (w2 >= -0.02) & (xs < res) & (ys < res)
+        out[ys[ins], xs[ins]] = (w0 * Y[t[0]] + w1 * Y[t[1]] + w2 * Y[t[2]])[ins]
+    return out
+
+
+def masks(diff, game, height=None):
     rgb = np.asarray(diff, np.float32) / 255.0
     h, s, v = hsv(rgb)
     cyan = (h > 0.46) & (h < 0.60) & (s > 0.30) & (v > 0.40)
     steel = ndimage.binary_opening((s < 0.25) & (v > 0.10) & (v < 0.62), structure=disc(1))
-    m = cyan & two_sided(steel, TWO_SIDED)
+    brass = (h > 0.05) & (h < 0.16) & (s > 0.30) & (v > 0.25) & (v < 0.92) & ndimage.binary_dilation(steel, structure=disc(20))   # the glyph
+    m = cyan & two_sided(steel | brass, TWO_SIDED)
     if game in CYAN_ONLY:
         m |= cyan & ndimage.binary_dilation(steel, structure=disc(12))
     lab, n = ndimage.label(m)
@@ -70,6 +103,11 @@ def masks(diff, game):
         m = np.isin(lab, 1 + np.nonzero(sz >= MIN_COMP.get(game, 60))[0])
     if game in CLOSE_GAPS:                                         # bridge short breaks along the line (VEX band beside the glyph)
         m |= ndimage.binary_closing(m, structure=disc(CLOSE_GAPS[game])) & cyan
+    if game in MIN_Y and height is not None:
+        low = (height >= 0) & (height < MIN_Y[game])
+        m &= ~ndimage.binary_dilation(low, structure=disc(3))
+        real = m & (height >= 0)
+        m &= (height >= 0) | ndimage.binary_dilation(real, structure=disc(6))
     fringe = (h > 0.44) & (h < 0.62) & (s > 0.18) & ~steel        # the anti-aliased edge of the line, never the plate itself
     m |= ndimage.binary_dilation(m, structure=disc(2)) & fringe
     g = np.zeros_like(m)
@@ -101,7 +139,7 @@ def build(game, ai, review=None):
         r = im.resize((1024, 1024), Image.LANCZOS)
         r.save(f"{OUT}{game}_{name}.png", optimize=True)
         o = io.BytesIO(); r.save(o, "PNG", optimize=True); pngs.append((name, o.getvalue()))
-    m, g = masks(diff, game)
+    m, g = masks(diff, game, texel_height(b, j, off) if game in MIN_Y else None)
     def down(a):
         return np.asarray(Image.fromarray((a * 255).astype(np.uint8)).resize((1024, 1024), Image.BOX), np.float32) / 255.0
     tint = np.zeros((1024, 1024, 3), np.uint8)

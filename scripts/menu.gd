@@ -423,15 +423,13 @@ func atlas_picture(path: String, region: Rect2, pos: Vector2, dims: Vector2) -> 
 
 
 func portrait(f: String, pos: Vector2, dims: Vector2, neon := Color(0, 0, 0, 0)) -> TextureRect:
-	## OOZE MODELS 2026-11-17: the ooze rendered from its game model (tools/units: Blender portrait of assets/units/<f>.glb) with its
-	## neon line as a second layer in the seat colour (goo = faction colour, neon = seat colour); the old 2D faction art is the fallback.
-	var ooze := "res://assets/art/oozes/%s.png" % f
-	if ResourceLoader.exists(ooze):
-		var body := atlas_picture(ooze, Rect2(0, 0, 1, 1), pos, dims)
-		var line_path := "res://assets/art/oozes/%s_neon.png" % f
-		if neon.a > 0.0 and ResourceLoader.exists(line_path):
-			atlas_picture(line_path, Rect2(0, 0, 1, 1), pos, dims).modulate = Color(neon, 1.0)
-		return body
+	## OOZE HEROES 2026-11-17: the faction's ooze hero (UiKit.hero_path) with its neon line in the seat colour.
+	if Rules.FACTIONS.has(f):
+		var r := _cutout(f, pos, dims)
+		if neon.a > 0.0 and r.get_child_count() > 0:
+			(r.get_child(0) as TextureRect).modulate = Color(neon, 1.0)
+		content.add_child(r)
+		return r
 	if f == "vex":
 		return atlas_picture("res://assets/art/ui-faction.png", Rect2(0.02, 0.092, 0.333, 0.54), pos, dims)
 	return atlas_picture("res://assets/art/%s.png" % f, Rect2(0.43, 0.035, 0.54, 0.86), pos, dims)
@@ -1258,6 +1256,7 @@ func _cutout(f: String, pos: Vector2, dims: Vector2) -> TextureRect:
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	r.position = pos
 	r.size = dims
+	UiKit.hero_neon(r, f, _viewer_col())
 	return r
 
 
@@ -2925,6 +2924,7 @@ func _army_tile(tf: String, pos: Vector2, dims: Vector2) -> void:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.position = Vector2(8.0, (dims.y - hs) / 2.0)
 	art.size = Vector2(hs, hs)
+	UiKit.hero_neon(art, tf, _viewer_col())
 	b.add_child(art)
 	var n := UiKit.label(self, UiKit.NAMES[tf], 15, UiKit.accent(tf) if picked else UiKit.INK, true)
 	var lh := n.get_minimum_size().y
@@ -3587,6 +3587,7 @@ func _ward_factions(y: float) -> void:
 		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		art.position = Vector2.ONE * 5.0
 		art.size = Vector2.ONE * (s - 10.0)
+		UiKit.hero_neon(art, tf, _viewer_col())
 		b.add_child(art)
 		UiKit.emblem_badge(b, tf, s * 0.36)
 
@@ -5044,6 +5045,7 @@ func _faction_row(pos: Vector2, tile: float) -> float:
 		art.position = Vector2.ONE * tile * 0.1
 		art.size = Vector2.ONE * tile * 0.8
 		art.modulate = Color.WHITE if picked else Color(1, 1, 1, 0.72)
+		UiKit.hero_neon(art, f, _viewer_col())
 		b.add_child(art)
 		UiKit.emblem_badge(b, f, tile * 0.34)
 		var nm: String = UiKit.NAMES[f]

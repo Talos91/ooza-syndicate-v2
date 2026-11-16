@@ -2,22 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cuin1fh3e8qsf"
-path="res://.godot/imported/null.png-363353adf245a4c63c19cd5095a6ece1.ctex"
+uid="uid://bq1p2hmryl8sy"
+path="res://.godot/imported/ai_screen_null_blink.png-3a7a96e13fa71ca7eb009ab8e9dca4e1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/oozes/null.png"
-dest_files=["res://.godot/imported/null.png-363353adf245a4c63c19cd5095a6ece1.ctex"]
+source_file="res://assets/art/ui/ai_screen_null_blink.png"
+dest_files=["res://.godot/imported/ai_screen_null_blink.png-3a7a96e13fa71ca7eb009ab8e9dca4e1.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.8
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

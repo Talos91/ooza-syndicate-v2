@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://s2laukau0g67"
-path="res://.godot/imported/vex_neon.png-648d2024e1681aa4d8ca78d9416aaabb.ctex"
+uid="uid://cp7l3ld23ac73"
+path="res://.godot/imported/hero_neon_null.png-dc23efa18013ee036fe3837d7956c943.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/oozes/vex_neon.png"
-dest_files=["res://.godot/imported/vex_neon.png-648d2024e1681aa4d8ca78d9416aaabb.ctex"]
+source_file="res://assets/art/ui/hero_neon_null.png"
+dest_files=["res://.godot/imported/hero_neon_null.png-dc23efa18013ee036fe3837d7956c943.ctex"]
 
 [params]
 

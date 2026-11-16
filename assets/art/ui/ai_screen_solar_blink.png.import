@@ -2,22 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bl0x1rbq445lo"
-path="res://.godot/imported/null_neon.png-623c7660be57cb83091e1d5e047a073f.ctex"
+uid="uid://c5q5fwxf6dg38"
+path="res://.godot/imported/ai_screen_solar_blink.png-27421d31132546c00a99bc522c5905d7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/oozes/null_neon.png"
-dest_files=["res://.godot/imported/null_neon.png-623c7660be57cb83091e1d5e047a073f.ctex"]
+source_file="res://assets/art/ui/ai_screen_solar_blink.png"
+dest_files=["res://.godot/imported/ai_screen_solar_blink.png-27421d31132546c00a99bc522c5905d7.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.8
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

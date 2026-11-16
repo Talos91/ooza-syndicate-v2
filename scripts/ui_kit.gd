@@ -625,6 +625,7 @@ static func warm_menu(f: String) -> void:
 	var paths := ["res://assets/art/ui/page_%s.jpg" % f, "res://assets/art/ui/bg_%s.jpg" % f, "res://assets/art/ui/stage_%s.jpg" % f]
 	for g in ORDER:
 		paths.append(hero_path(g))
+		paths.append("res://assets/art/ui/hero_neon_%s.png" % g)
 		paths.append(emblem_path(g, true))
 		paths.append(emblem_path(g))
 	for c in ["vs_ai", "online", "training"]:
@@ -634,11 +635,35 @@ static func warm_menu(f: String) -> void:
 
 # ------------------------------------------------------------------ art
 static func hero_path(f: String) -> String:
+	## OOZE HEROES 2026-11-17 (Daniele: "use these wherever unit pictures appear"): the locked-lineup oozes, one shared crop
+	## (tools/units/build_heroes_1117.py), so every picture keeps the lineup's relative sizes; the neon line is a separate
+	## white layer (hero_neon) tinted the SEAT colour (goo = faction colour, neon = seat colour).
 	return "res://assets/art/ui/hero_%s.png" % (f if ACCENTS.has(f) else "vex")
 
 
-static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true) -> TextureRect:
-	## The faction's original character, standing in `dims` (tools/ui_art.py cut them from Alpha 12's references);
+static func hero_neon(r: TextureRect, f: String, col := Color(0, 0, 0, 0)) -> TextureRect:
+	## The hero's neon line over a hero TextureRect `r` (same box, same stretch), in `col` (the viewer's seat colour if unset).
+	var path := "res://assets/art/ui/hero_neon_%s.png" % (f if ACCENTS.has(f) else "vex")
+	if not ResourceLoader.exists(path):
+		return null
+	var n := TextureRect.new()
+	n.texture = tex(path)
+	n.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	n.stretch_mode = r.stretch_mode
+	n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	n.set_anchors_preset(Control.PRESET_FULL_RECT)
+	n.modulate = Color(MenuSkin.seat() if col.a == 0.0 else col, 1.0)
+	r.add_child(n)
+	return n
+
+
+static func ai_screen_path(f: String, blink := false) -> String:
+	## The faction AI's screen (ai-clean 2026-11-17: back, glitch in the AI colour, the AI, the brass bezel), pre-composited.
+	return "res://assets/art/ui/ai_screen_%s%s.png" % [f if ACCENTS.has(f) else "vex", "_blink" if blink else ""]
+
+
+static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true, neon := Color(0, 0, 0, 0)) -> TextureRect:
+	## The faction's ooze hero, standing in `dims`, its neon line in `neon` (the viewer's seat colour if unset);
 	## a soft accent glow behind it.
 	if glow:
 		var g := TextureRect.new()
@@ -661,6 +686,7 @@ static func hero(m, f: String, pos: Vector2, dims: Vector2, glow := true) -> Tex
 	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	r.size = dims
+	hero_neon(r, f, neon)
 	return add(m, r, pos) as TextureRect
 
 

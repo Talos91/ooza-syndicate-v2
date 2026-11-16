@@ -2,22 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cxwaljded6gvt"
-path="res://.godot/imported/vex.png-ad59ef873f53d9d77cc79b85a298289e.ctex"
+uid="uid://cp4epj4pxgsx4"
+path="res://.godot/imported/ai_screen_null.png-599ea6dd12711beb588161bfa3a58b72.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/oozes/vex.png"
-dest_files=["res://.godot/imported/vex.png-ad59ef873f53d9d77cc79b85a298289e.ctex"]
+source_file="res://assets/art/ui/ai_screen_null.png"
+dest_files=["res://.godot/imported/ai_screen_null.png-599ea6dd12711beb588161bfa3a58b72.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.8
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

@@ -118,6 +118,7 @@ func _rebuild() -> void:
 		hr.modulate = Color(0.5, 0.5, 0.5) if dim else Color.WHITE
 		hr.size = Vector2(ah * 0.95, ah * 0.95)
 		hr.position = Vector2(w - hr.size.x - 10.0, ah - hr.size.y + 6.0)
+		UiKit.hero_neon(hr, hero)
 		add_child(hr)
 		var es := clampf(ah * 0.24, 28.0, 48.0)       # the race emblem, the art's top-left corner
 		var em := UiKit.emblem_node(hero, es, Vector2(10, 10))

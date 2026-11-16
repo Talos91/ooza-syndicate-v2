@@ -39,6 +39,11 @@ var _gone := false
 var _shot := ""
 var online := false                                # ONLINE: a room's round (hold_online) - a loading screen, not a hold
 var net: Node = null                               # ONLINE: the Net the card watches (the autoload; tests hand in theirs)
+var _screens := []                                 # PREMATCH AI SCREENS: [TextureRect, faction, blink phase] - the AI blinks now and then
+const HERO_K := 0.76                               # the ooze's share of its cell (feet on the cell's floor), the AI screen above it
+const SCREEN_K := 0.30                             # the AI screen's size (of the cell)
+const BLINK_EVERY := 4.2
+const BLINK_FOR := 0.14
 var _frames := 0                                   # ONLINE: frames drawn under the card (the warm-up needs a few)
 var lobby := false                                 # 0.23.2: raised from the lobby on DEPLOY (hold_lobby), until the match scene's card replaces it
 var _lobby_view: Node = null                       # (the stand-in `main` a lobby card reads; freed with the card)
@@ -136,6 +141,9 @@ static func warm_art(factions: Array) -> void:
 	for f in factions:
 		UiKit.stage(str(f))
 		UiKit.tex(UiKit.hero_path(str(f)))
+		UiKit.tex("res://assets/art/ui/hero_neon_%s.png" % str(f))
+		UiKit.tex(UiKit.ai_screen_path(str(f)))
+		UiKit.tex(UiKit.ai_screen_path(str(f), true))
 
 
 static func _net_node() -> Node:
@@ -494,8 +502,21 @@ func _side(seats: Array, pos: Vector2, dims: Vector2, mine: bool) -> float:
 		cell.position = Vector2(pos.x + (dims.x - row_w) / 2.0 + (i % cols) * (hs + gap), y0 + r * (hs + name_h + gap))
 		cell.size = Vector2(hs, hs + name_h)
 		content.add_child(cell)
-		var hero := UiKit.hero(self, f, Vector2.ZERO, Vector2(hs, hs), false)
+		# PREMATCH (Daniele 2026-11-17: "both the unit and in smaller (should be like in a screen above them) the AI"): the
+		# seat's ooze hero, its neon in the SEAT colour, and its faction AI on a small screen above it.
+		var ss := hs * SCREEN_K
+		var scr := TextureRect.new()
+		scr.texture = UiKit.tex(UiKit.ai_screen_path(f))
+		scr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		scr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		scr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		scr.size = Vector2(ss, ss)
+		scr.position = Vector2((hs - ss) / 2.0, -ss * 0.04)
+		cell.add_child(scr)
+		_screens.append([scr, f, float(i) * 1.3 + (0.0 if mine else 0.7)])
+		var hero := UiKit.hero(self, f, Vector2.ZERO, Vector2(hs, hs) * HERO_K, false, Rules.seat_color(seat))
 		content.remove_child(hero)                    # the cutout, into the cell (on the stage: no glow)
+		hero.position = Vector2(hs * (1.0 - HERO_K) / 2.0, hs * (1.0 - HERO_K))
 		cell.add_child(hero)
 		var who := _title_of(seat, f)
 		if n > 1:                                    # compact: one short line under the name
@@ -608,6 +629,10 @@ func _tick_text() -> void:
 func _process(dt: float) -> void:
 	if _gone:
 		return
+	var now := Time.get_ticks_msec() / 1000.0
+	for sc in _screens:                              # the AI screens blink (ai-clean EYES-CLOSED), each on its own beat
+		if is_instance_valid(sc[0]):
+			(sc[0] as TextureRect).texture = UiKit.tex(UiKit.ai_screen_path(sc[1], fposmod(now + sc[2], BLINK_EVERY) < BLINK_FOR))
 	if online:                                       # a loading screen: goes by itself once loaded, running and MIN up
 		_frames += 1
 		_tick_text()

@@ -2,22 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cwguppwxf8ou0"
-path="res://.godot/imported/ember_neon.png-1061b9f14df490090e3746264bb51727.ctex"
+uid="uid://bvmq6s3u3mm5a"
+path="res://.godot/imported/ai_screen_vex.png-b759d7dfb5f1d7f958a16e414cbe0a41.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/oozes/ember_neon.png"
-dest_files=["res://.godot/imported/ember_neon.png-1061b9f14df490090e3746264bb51727.ctex"]
+source_file="res://assets/art/ui/ai_screen_vex.png"
+dest_files=["res://.godot/imported/ai_screen_vex.png-b759d7dfb5f1d7f958a16e414cbe0a41.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=1
 compress/high_quality=false
-compress/lossy_quality=0.7
+compress/lossy_quality=0.8
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

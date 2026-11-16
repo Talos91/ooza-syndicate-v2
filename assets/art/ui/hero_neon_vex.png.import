@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cj3bjimcj1x2m"
-path="res://.godot/imported/solar_neon.png-738f2ad7000bae5f19791dcba1dabbff.ctex"
+uid="uid://bseruse7dgawl"
+path="res://.godot/imported/hero_neon_vex.png-675b5d45f1adea4ecb757f4ad5056805.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/oozes/solar_neon.png"
-dest_files=["res://.godot/imported/solar_neon.png-738f2ad7000bae5f19791dcba1dabbff.ctex"]
+source_file="res://assets/art/ui/hero_neon_vex.png"
+dest_files=["res://.godot/imported/hero_neon_vex.png-675b5d45f1adea4ecb757f4ad5056805.ctex"]
 
 [params]
 
