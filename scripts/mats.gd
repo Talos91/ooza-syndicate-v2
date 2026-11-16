@@ -85,7 +85,8 @@ static func creature(faction: String, seat: String, tex: Texture2D) -> ShaderMat
 
 
 # WALK legs per faction: [amplitude (model units), feet radius from, to] - measured on the Rodin feet (low vertices' radius)
-const V4_LEGS := {"vex": [0.07, 0.30, 0.45], "null": [0.07, 0.42, 0.55], "bloom": [0.04, 0.32, 0.50], "ember": [0.07, 0.50, 0.65], "solar": [0.012, 0.18, 0.30, 0.03]}
+# OOZE MODELS 2026-11-17: radii rescaled by the new feet (median low-vertex radius new / old); AEGIS now has a puddle base like the others
+const V4_LEGS := {"vex": [0.07, 0.40, 0.59], "null": [0.07, 0.52, 0.69], "bloom": [0.04, 0.45, 0.70], "ember": [0.07, 0.60, 0.77], "solar": [0.06, 0.42, 0.60]}
 const V4_TINT_MIX := 0.9             # the neon's albedo -> seat colour
 const V4_TINT_GLOW := 1.6            # the neon's emission in the seat colour (reads at phone scale on the dark board)
 const V4_EYE_GLOW := 0.5

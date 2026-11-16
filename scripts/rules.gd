@@ -680,9 +680,12 @@ const FACTIONS := {
 # size, so a smaller race in more lanes keeps about the same column width. The models are fitted by width, so a tall model
 # stays tall (the v3 Solar egg). Daniele picks the values (2026-11-02: Bloom 0.75 x 4 lanes). Debug: --look=bloom:0.75:4
 static var FACTION_LOOK := {
-	"vex": {"size": 0.95, "across": 3}, "null": {"size": 1.0, "across": 3}, "bloom": {"size": 0.75, "across": 4},
-	"ember": {"size": 1.05, "across": 3}, "solar": {"size": 1.2, "across": 3},   # v4 units differ in size: BLOOM smallest, AEGIS (solar) biggest (Daniele 2026-11-14)
+	"vex": {"size": 0.95, "across": 3}, "null": {"size": 0.84, "across": 3}, "bloom": {"size": 0.82, "across": 4},
+	"ember": {"size": 1.17, "across": 3}, "solar": {"size": 1.02, "across": 3},
 }
+# OOZE MODELS 2026-11-17 (Daniele: "make ooze size as per the direction mockup"): sizes set so the in-game heights keep the
+# locked lineup's ratios (FINAL-LINEUP-LOCKED-2026-11-16, measured px: VEX 358, EMBER 310, AEGIS 397, BLOOM 298, NULL 265),
+# VEX anchored at its 0.95. size = width factor, so size = VEX height x ratio / (1.3 x model h/w).
 
 
 static func look_size(faction: String) -> float:

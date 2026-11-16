@@ -422,7 +422,16 @@ func atlas_picture(path: String, region: Rect2, pos: Vector2, dims: Vector2) -> 
 	return p
 
 
-func portrait(f: String, pos: Vector2, dims: Vector2) -> TextureRect:
+func portrait(f: String, pos: Vector2, dims: Vector2, neon := Color(0, 0, 0, 0)) -> TextureRect:
+	## OOZE MODELS 2026-11-17: the ooze rendered from its game model (tools/units: Blender portrait of assets/units/<f>.glb) with its
+	## neon line as a second layer in the seat colour (goo = faction colour, neon = seat colour); the old 2D faction art is the fallback.
+	var ooze := "res://assets/art/oozes/%s.png" % f
+	if ResourceLoader.exists(ooze):
+		var body := atlas_picture(ooze, Rect2(0, 0, 1, 1), pos, dims)
+		var line_path := "res://assets/art/oozes/%s_neon.png" % f
+		if neon.a > 0.0 and ResourceLoader.exists(line_path):
+			atlas_picture(line_path, Rect2(0, 0, 1, 1), pos, dims).modulate = Color(neon, 1.0)
+		return body
 	if f == "vex":
 		return atlas_picture("res://assets/art/ui-faction.png", Rect2(0.02, 0.092, 0.333, 0.54), pos, dims)
 	return atlas_picture("res://assets/art/%s.png" % f, Rect2(0.43, 0.035, 0.54, 0.86), pos, dims)
@@ -5627,7 +5636,7 @@ func _lobby_sheet_body(host: bool) -> void:
 		if id >= 0:
 			var f: String = str(Net.roster[id]["faction"])
 			var ps := 150.0
-			portrait(f, Vector2(r.position.x, y), Vector2(ps, ps))
+			portrait(f, Vector2(r.position.x, y), Vector2(ps, ps), Rules.seat_color(seat))
 			var tx := r.position.x + ps + 16.0
 			var tw := r.size.x - ps - 16.0
 			var words := ["HOST · DEPLOYS" if id == Net.room_owner or (id == 1 and not Net.server_hosted()) else "JOINED"]
