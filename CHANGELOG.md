@@ -1,5 +1,9 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.6.1 "AI screens centred" - 2026-11-17 (STAGING hotfix; live is 0.23.21)
+
+- Release = main 0c9263e + units-models-1117 f1a6b67 (merge). Daniele saw the AIs sitting too high and cut off in the VERSUS screens: each AI is now centred in the glass, sized by the largest, nothing clipped (only the ai_screen_* PNGs and their builder change). No net.gd / protocol change (ooze20-net-8).
+
 ## 0.24.6 "five new oozes, ooze heroes, AI screens in a new frame" - 2026-11-17 (STAGING only; live is 0.23.21)
 
 - Release release-0.24.6 = main 81169f0 + units-models-1117 149043b (fast-forward, 5 commits). No net.gd / protocol change (ooze20-net-8), so no room-server pack.

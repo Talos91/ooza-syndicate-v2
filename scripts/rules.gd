@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.24.6"   # STAGING 0.24.6: five new ooze models + ooze heroes in unit pictures + AI screens in the new frame + VEX neon fix (2026-11-17); STAGING 0.24.5.1 hotfix: M-15 / N-06 offered for 2v2 + FFA (MapPool.MULTI_FILL); STAGING 0.24.5: map pool G (19 shrunk maps), readability D, demolish tap, new menus, HUD 40B6 + 40B5 skill keys (2026-11-15)
+const VERSION := "0.24.6.1"   # STAGING 0.24.6.1: AI screens centred in the glass, sized by the largest; STAGING 0.24.6: five new ooze models + ooze heroes in unit pictures + AI screens in the new frame + VEX neon fix (2026-11-17); STAGING 0.24.5.1 hotfix: M-15 / N-06 offered for 2v2 + FFA (MapPool.MULTI_FILL); STAGING 0.24.5: map pool G (19 shrunk maps), readability D, demolish tap, new menus, HUD 40B6 + 40B5 skill keys (2026-11-15)
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD; dev --hud-old = the pre-lab HUD
