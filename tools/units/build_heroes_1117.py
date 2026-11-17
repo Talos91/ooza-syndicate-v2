@@ -6,7 +6,7 @@
 One shared crop for all five heroes, so the lineup's relative sizes hold in every picture (feet on one row).
 usage (repo root): python tools/units/build_heroes_1117.py"""
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageChops, ImageFilter
 
 REF = "H:/My Drive/PROJECTS/Ooze Syndicate/References/Art direction 2026-11 - syndicate uniforms/MODEL-DIRECTION-2026-11-16/"
 OUT = "assets/art/ui/"
@@ -54,23 +54,78 @@ def heroes():
         Image.fromarray(w).save(f"{OUT}hero_neon_{f}.png", optimize=True)
 
 
+FRAME_DIR = REF + "ai-screen-frame-2026-11-17/"
+FRAME_SRC = FRAME_DIR + "ai-screen-frame-daniele-2026-11-17.webp"
+FRAME_CLEAN = FRAME_DIR + "ai-screen-frame-daniele-2026-11-17_clean-alpha.png"   # derivative next to the immutable source
+
+
+def clean_frame():
+    """Daniele's frame (2026-11-17) with a clean alpha: the webp's alpha is ~252 across the metal and soft at the rim, with dark / white
+    contamination in the rim's colour. Fully opaque where >= 200, transparent where < 24, and every soft rim texel takes the colour of its
+    nearest solid texel (no halo on any background)."""
+    from scipy import ndimage
+    a = np.asarray(Image.open(FRAME_SRC).convert("RGBA")).copy()
+    al = a[..., 3]
+    solid = al >= 200
+    idx = ndimage.distance_transform_edt(~solid, return_distances=False, return_indices=True)
+    rgb = a[..., :3][idx[0], idx[1]]
+    out = np.zeros_like(a)
+    out[..., :3] = rgb
+    out[..., 3] = np.where(solid, 255, np.where(al < 24, 0, ((al.astype(np.float32) - 24) / 176 * 255).clip(0, 255))).astype(np.uint8)
+    out[out[..., 3] == 0, :3] = 0
+    im = Image.fromarray(out)
+    im.save(FRAME_CLEAN, optimize=True)
+    return im, a
+
+
+def screen_mask(im):
+    """The dark purple glass: the flood-filled dark region from the centre (frame metal is brighter)."""
+    from scipy import ndimage
+    a = np.asarray(im).astype(np.float32)
+    dark = (a[..., :3].max(-1) < 62) & (a[..., 3] > 200)
+    lab, _ = ndimage.label(dark)
+    m = lab == lab[a.shape[0] // 2, a.shape[1] // 2]
+    return ndimage.binary_fill_holes(m)
+
+
 def screens():
-    back, bezel, glitch = load("ai-clean/SCREEN-BACK.png"), load("ai-clean/SCREEN-BEZEL.png"), load("ai-clean/GLITCH-OVERLAY.png")
-    bb = over(back, bezel).getchannel("A").point(lambda v: 255 if v > 16 else 0).getbbox()
-    side = max(bb[2] - bb[0], bb[3] - bb[1])
-    cx, cy = (bb[0] + bb[2]) // 2, (bb[1] + bb[3]) // 2
+    from scipy import ndimage
+    frame, _ = clean_frame()
+    m = screen_mask(frame)
+    ys, xs = np.nonzero(m)
+    mb = (xs.min(), ys.min(), xs.max() + 1, ys.max() + 1)
+    mm = Image.fromarray((ndimage.binary_erosion(m, iterations=2) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2))
+    back, glitch = load("ai-clean/SCREEN-BACK.png"), load("ai-clean/GLITCH-OVERLAY.png")
+    bb = back.getchannel("A").point(lambda v: 255 if v > 16 else 0).getbbox()
+    print("frame glass bbox", mb, "portrait screen bbox", bb)
+    fb = frame.getchannel("A").getbbox()
+    side = max(fb[2] - fb[0], fb[3] - fb[1])
+    cx, cy = (fb[0] + fb[2]) // 2, (fb[1] + fb[3]) // 2
     crop = (cx - side // 2, cy - side // 2, cx - side // 2 + side, cy - side // 2 + side)
-    print("screen bbox", bb, "crop", crop)
+    k = min((mb[2] - mb[0]) / (bb[2] - bb[0]), (mb[3] - mb[1]) / (bb[3] - bb[1])) * 0.93     # contain: the whole portrait stays inside the glass (rounded corners still clip the glitch lines)
+    ox = (mb[0] + mb[2]) / 2 - (bb[0] + bb[2]) / 2 * k
+    oy = (mb[1] + mb[3]) / 2 - (bb[1] + bb[3]) / 2 * k
+    glass = Image.new("RGBA", frame.size, (22, 4, 28, 0))
+    glass.putalpha(mm)
+    holed = frame.copy()
+    holed.putalpha(ImageChops.multiply(frame.getchannel("A"), ImageChops.invert(mm)))
     for f, n in AI.items():
         for tag, eyes in (("", "EYES"), ("_blink", "EYES-CLOSED")):
-            im = back
+            im = Image.new("RGBA", back.size, (0, 0, 0, 0))
             im = over(im, tint(glitch, GLITCH[f]))
             for layer in ("GLOW", "BODY", eyes):
                 im = over(im, load(f"ai-clean/{n}-{layer}.png"))
-            im = over(im, bezel)
-            im.crop(crop).resize((SCREEN_PX, SCREEN_PX), Image.LANCZOS).save(f"{OUT}ai_screen_{f}{tag}.png", optimize=True)
+            im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+            cv = Image.new("RGBA", frame.size, (0, 0, 0, 0))
+            cv.paste(im, (round(ox), round(oy)))
+            r, g, b, a = cv.split()
+            cv = Image.merge("RGBA", (r, g, b, ImageChops.multiply(a, mm)))        # clipped to the glass's rounded corners
+            full = over(glass, cv)
+            full = over(full, holed)       # the frame over the portrait, its glass punched out
+            full.crop(crop).resize((SCREEN_PX, SCREEN_PX), Image.LANCZOS).save(f"{OUT}ai_screen_{f}{tag}.png", optimize=True)
 
 
 if __name__ == "__main__":
-    heroes()
+    if "--screens-only" not in __import__("sys").argv:
+        heroes()
     screens()
