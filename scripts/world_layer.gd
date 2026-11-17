@@ -79,6 +79,7 @@ const TUBE_R := 0.95             # a common platform's tube, under its machinery
 const TUBE_R_PILLAR := 2.6       # a pillar node: a glass sleeve around the column
 const TUBE_TOP := -3.5           # under the platform centre (legs and core end at -3.6)
 const TUBE_TOP_PILLAR := -2.3    # under the pillar's collar
+const TUBE_TOP_KIT2 := -1.75     # DEMO 2 (Rules.kit2): under the kit2 platform's hub cone (bake_demo2.py: HUB_B x S = -1.77)
 const PUSH_T := 1.6              # s: a capture pushes the old colour out of the tube
 const INV_MAX := 0.6             # a siege fills at most this share of the tube from the top
 const INV_RATE := 0.8            # tube share per second the invader band moves
@@ -394,7 +395,7 @@ func _build_tube(n: Dictionary) -> void:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	var owner: String = n["owner"]
-	var tb := {"id": id, "mi": mi, "mat": m, "r": r, "top_off": TUBE_TOP_PILLAR if pillar else TUBE_TOP,
+	var tb := {"id": id, "mi": mi, "mat": m, "r": r, "top_off": TUBE_TOP_PILLAR if pillar else (TUBE_TOP_KIT2 if Rules.kit2 else TUBE_TOP),
 			"owner": owner, "base": _col(owner), "base_old": _col(owner), "inv": 0.0, "inv_col": _col(owner),
 			"inv_seat": "", "pushing": false, "riders": [], "alive": true, "drain": 0.0,
 			"x": (n["pos"] as Vector3).x, "z": (n["pos"] as Vector3).z, "top_y": 999.0}

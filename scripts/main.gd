@@ -31,6 +31,7 @@ extends Node3D
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
 ##   --look=bloom:0.75:4[,solar:1.2:2]      FACTION LOOK debug: a race's body size and lanes (Rules.FACTION_LOOK)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
+##   --set-tier=3:4,7:3                     those nodes' vats at that tier from the start (DEMO 2 tier shots, dev)
 ##   --focus-y=-12                           with --focus: aim that many m over / under the deck (the river world's drills)
 ##   --inspect=N                            force the ring open on node N (0.23.x radial redesign shots)
 ##   --tutorial=N                           start tutorial N (1 quick start ... 5 team play; one not built yet plays the quick start) straight away
@@ -235,6 +236,8 @@ func _ready() -> void:
 			demo = true
 		elif arg == "--quota" or arg == "--no-quota":  # LAST STAND = QUOTA (Rules.quota; on by default in a "-demo" build)
 			Rules.quota = arg == "--quota"
+		elif arg == "--kit2" or arg == "--no-kit2":    # DEMO 2 kit look (Rules.kit2; on by default in a "-demo2" build)
+			Rules.kit2 = arg == "--kit2"
 		elif arg.begins_with("--ai="):
 			ai_level = arg.substr(5)
 		elif arg.begins_with("--shots="):
@@ -567,6 +570,12 @@ func _start_map(path: String) -> void:
 		MapBuilder.apply_owner(vis[n["id"]]["parts"], n["owner"])
 		if contact_shade:
 			contact_shade.set_seat(n["id"], n["owner"])
+	for a in OS.get_cmdline_user_args():              # --set-tier=N:T[,N:T] (DEMO 2 shots, dev): node N's vat at tier T
+		if a.begins_with("--set-tier="):                # (after the model keys: the next frame swaps the model)
+			for pr in a.substr(11).split(","):
+				var nt := pr.split(":")
+				if nt.size() == 2 and int(nt[0]) < sim.nodes.size() and sim.nodes[int(nt[0])]["structure"] == "vat":
+					sim.nodes[int(nt[0])]["tier"] = clampi(int(nt[1]), 1, 4)
 	# --- 0.19.0 cosmetics (HUD agent, spec E/I): each seat's structure look, applied once. Offline:
 	# your ARMIES pick for your seat, every other seat (AI) the default. Online: every seat's pick came
 	# from the host's launch packet (net.gd's "cosmetics", built from each player's roster "cosmetic" -

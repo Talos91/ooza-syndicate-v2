@@ -12,7 +12,7 @@ extends RefCounted
 
 # Bump this with every published playtest build (Daniele, 2026-09-25: "start versioning and have
 # it in the interface and a changelog") - shown in the HUD; see CHANGELOG.md for what changed.
-const VERSION := "0.24.4-demo-river2"   # DEMO quota-drill (drill node + launch + splat + NEXT LAUNCH tab); previous: 0.24.4-demo-river1 (river + quota); DEMO SHRINK (map-shrink 536b97c + this VERSION line only: "-demo" turns on Rules.demo = MapPool.DEMO picker); previous: STAGING 0.24.4: finished branches merged as they are - menu bg 35C2, HUD round 37, Rodin units, relay column, play-fixes (2026-11-15)
+const VERSION := "0.24.4-demo2-kit1"   # DEMO 2 (demo2-kit, 2026-11-18): the new kit look (mobile drill node, vats, wider-look platform, propulsors) on the river + quota demo; "-demo2" turns on Rules.kit2; previous: 0.24.4-demo-river2 = DEMO quota-drill (drill node + launch + splat + NEXT LAUNCH tab); previous: 0.24.4-demo-river1 (river + quota); DEMO SHRINK (map-shrink 536b97c + this VERSION line only: "-demo" turns on Rules.demo = MapPool.DEMO picker); previous: STAGING 0.24.4: finished branches merged as they are - menu bg 35C2, HUD round 37, Rodin units, relay column, play-fixes (2026-11-15)
 const WORLD_LAB_FLOOR := true   # the demo's lab5 floor on every map (the fog / tube work was tuned on it); was Rules.demo only
 const LOOK_LAB2 := true   # the lab2 world look (cream decks, owner rim band, lab floor + surround) is the default (Daniele 2026-11-12: "the new status quo"); dev --look-old = the 0.24.1 look, --look=lab = test v1
 const HUD_LAB := true    # hud-lab (2026-11-13): the round-29/30 lab HUD pack (HudLab) is THE in-match HUD; dev --hud-old = the pre-lab HUD
@@ -206,6 +206,10 @@ static var proto_debug: bool = VERSION.contains("-proto") or VERSION.contains("-
 # DEMO BUILD (Daniele 2026-11-07: "put somewhere else where there's just a playable demo of this"): VERSION "...-demo<n>" =
 # the picker offers MapPool.DEMO only (R-01 STRAIT) and the world layer starts with the lab picture floor (no URL flags).
 static var demo: bool = VERSION.contains("-demo")
+# DEMO 2 (demo2-kit 2026-11-18): the kit look pass baked from Models/2.0/kit-v2-detail (bake_demo2.py, MOBILE r1 shapes) into
+# assets/kit/kit2/: Platform_Standard (+ propulsor bells), Vat_T1..T4, the drill collar + legs (WorldDrill). View only; on in a
+# "-demo2" build (or --kit2 / --no-kit2). Lasers, machinegoon, bridges, pillars stay the current kit.
+static var kit2: bool = VERSION.contains("-demo2")
 const DEBUG_SPEEDS := [1, 2, 4, 8]           # x whole sim time (production, movement, cooldowns, relays, the clock)
 const DEBUG_PRODS := [1.0, 2.0, 5.0, 10.0]   # x the human seat's production only
 const DEBUG_ADD_UNITS := 100                 # shown units (x SCALE in the sim) added to the selected own node

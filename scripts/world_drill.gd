@@ -23,6 +23,25 @@ const RELEASE_T := 0.32        # s: the branches' kick-out at a launch
 const RELEASE_KICK := 0.45     # m outward
 const RELEASE_TILT := 0.32     # rad outward
 
+# DEMO 2 (Rules.kit2, demo2-kit 2026-11-18): the collar + bit and the legs are the baked kit look (assets/kit/kit2/Drill_Collar,
+# Drill_Leg: bake_demo2.py, the MOBILE r1 drill node's collar, bit and goo legs); the legs keep the blueprint's count by tier
+# (T1 1 / T2 2 / T3+ 4) and its release. Colours per instance: neon = seat colour (instance colour), goo = faction goo
+# (WorldLayer._col, instance custom data); the copper / wine / bronze keep the GLB's own.
+const KIT2_COLLAR := "res://assets/kit/kit2/Drill_Collar.glb"
+const KIT2_LEG := "res://assets/kit/kit2/Drill_Leg.glb"
+const KIT2_LEG_DROP := 1.96    # m: the leg GLB's foot bottom under its origin (the collar centre)
+const KIT2_COLLAR_R := 1.15    # m: the collar GLB's radius (a wide tube scales it like the code collar)
+const TINT_SHADER := """
+shader_type spatial;
+uniform bool goo = false;
+uniform float alb = 0.45;
+uniform float glow = 1.4;
+uniform float rough = 0.3;
+varying vec3 tint;
+void vertex() { tint = goo ? INSTANCE_CUSTOM.rgb : COLOR.rgb; }
+void fragment() { ALBEDO = tint * alb; EMISSION = tint * glow; ROUGHNESS = rough; }
+"""
+
 const STEEL := Color(0.30, 0.34, 0.38)
 const STEEL_DARK := Color(0.17, 0.19, 0.22)
 const STEEL_PALE := Color(0.55, 0.58, 0.60)
@@ -47,9 +66,14 @@ func build(r: WorldRiver) -> void:
 	wl = r.wl
 	sim = r.sim
 	var nt := wl._tubes.size()
-	_collar_mm = _mm(_collar_mesh(), nt, STEEL)
-	_bit_mm = _mm(_bit_mesh(), nt, STEEL_DARK)
-	_br_mm = _mm(_branch_mesh(), nt * 4, STEEL_PALE)
+	if Rules.kit2:
+		_collar_mm = _mm_glb(KIT2_COLLAR, nt)
+		_bit_mm = _mm(_bit_mesh(), 1, STEEL_DARK)          # (the bit is in the collar GLB; this one stays empty)
+		_br_mm = _mm_glb(KIT2_LEG, nt * 4)
+	else:
+		_collar_mm = _mm(_collar_mesh(), nt, STEEL)
+		_bit_mm = _mm(_bit_mesh(), nt, STEEL_DARK)
+		_br_mm = _mm(_branch_mesh(), nt * 4, STEEL_PALE)
 	# the camera's screen-right in world xz (blueprint: T1 / T2 branches read left-right, T3 as an X)
 	var right := Vector2(r.ax_u.x, r.ax_u.y)
 	var base_a := atan2(right.y, right.x)
@@ -62,6 +86,8 @@ func build(r: WorldRiver) -> void:
 				"spin": fposmod(x * 0.37 + z * 0.61, TAU), "base_a": base_a}
 		_d.append(d)
 		_place(i)
+		if Rules.kit2:
+			_tint(i)
 	made = nt
 
 
@@ -82,6 +108,73 @@ func _mm(mesh: Mesh, count: int, col: Color) -> MultiMesh:
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mmi)
 	return mm
+
+
+func _mm_glb(path: String, count: int) -> MultiMesh:
+	## DEMO 2: a kit2 GLB merged into one multi-surface mesh (node transforms applied); OS_Light -> seat neon (instance
+	## colour), OS_Ooze* -> faction goo (instance custom data), other surfaces keep their GLB material.
+	var mesh := ArrayMesh.new()
+	var root := (load(path) as PackedScene).instantiate()
+	var neon := ShaderMaterial.new()
+	neon.shader = Shader.new()
+	neon.shader.code = TINT_SHADER
+	var goo := ShaderMaterial.new()
+	goo.shader = neon.shader
+	goo.set_shader_parameter("goo", true)
+	goo.set_shader_parameter("alb", 0.6)
+	goo.set_shader_parameter("glow", 0.9)
+	goo.set_shader_parameter("rough", 0.12)
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		var xf := Transform3D.IDENTITY
+		var nd: Node = mi
+		while nd != root and nd is Node3D:
+			xf = (nd as Node3D).transform * xf
+			nd = nd.get_parent()
+		var src := (mi as MeshInstance3D).mesh
+		for s in range(src.get_surface_count()):
+			var arr := src.surface_get_arrays(s)
+			var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+			for k in range(v.size()):
+				v[k] = xf * v[k]
+			arr[Mesh.ARRAY_VERTEX] = v
+			if arr[Mesh.ARRAY_NORMAL] != null:
+				var nn: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+				for k in range(nn.size()):
+					nn[k] = (xf.basis * nn[k]).normalized()
+				arr[Mesh.ARRAY_NORMAL] = nn
+			arr[Mesh.ARRAY_TANGENT] = null
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+			var m := src.surface_get_material(s)
+			var nm := m.resource_name if m else ""
+			mesh.surface_set_material(mesh.get_surface_count() - 1,
+					neon if nm.begins_with("OS_Light") else (goo if nm.begins_with("OS_Ooze") else m))
+	root.free()
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.use_custom_data = true
+	mm.mesh = mesh
+	mm.instance_count = maxi(count, 1)
+	mm.visible_instance_count = 0
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
+	return mm
+
+
+func _tint(i: int) -> void:
+	## DEMO 2: drill i's neon in its owner's seat colour, its goo legs in the faction goo (neutral: Rules.NEUTRAL / native gray).
+	var d: Dictionary = _d[i]
+	var owner: String = str(d["tb"].get("owner", ""))
+	d["owner"] = owner
+	var neon := Rules.seat_color(owner) if owner != "" else Rules.NEUTRAL
+	var goo := WorldLayer._col(owner)
+	_collar_mm.set_instance_color(i, neon)
+	_collar_mm.set_instance_custom_data(i, goo)
+	for s in range(4):
+		_br_mm.set_instance_color(i * 4 + s, neon)
+		_br_mm.set_instance_custom_data(i * 4 + s, goo)
 
 
 func _angles(d: Dictionary, k: int) -> Array:
@@ -108,10 +201,14 @@ func _place(i: int) -> void:
 		_bit_mm.set_instance_transform(i, hide)
 	else:
 		var k: float = d["k"]                              # a wide (pillar) tube: the collar grows round it
-		_collar_mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(k, 1.0, k)), Vector3(x, jy, z)))
-		_bit_mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, float(d["spin"])), Vector3(x, jy - COLLAR_H * 0.5, z)))
+		if Rules.kit2:                                     # DEMO 2: the collar GLB carries its bit (origin = collar centre)
+			var k2 := maxf(1.0, (float(tb["r"]) + 0.2) / KIT2_COLLAR_R)
+			_collar_mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, float(d["spin"])).scaled(Vector3(k2, 1.0, k2)), Vector3(x, jy, z)))
+		else:
+			_collar_mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(k, 1.0, k)), Vector3(x, jy, z)))
+			_bit_mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, float(d["spin"])), Vector3(x, jy - COLLAR_H * 0.5, z)))
 	_collar_mm.visible_instance_count = _d.size()
-	_bit_mm.visible_instance_count = _d.size()
+	_bit_mm.visible_instance_count = 0 if Rules.kit2 else _d.size()
 
 
 func _place_branches(i: int) -> void:
@@ -138,11 +235,15 @@ func _place_branches(i: int) -> void:
 		var gy := river.bed_h(end.x, end.y)
 		var drop := maxf(jy - (gy - BR_SINK), 0.8)          # the bent tube's height, junction to its end in the bed
 		var sy := drop / (J_UP + BR_SINK)
+		if Rules.kit2:                                     # DEMO 2 leg: foot bottom KIT2_LEG_DROP under the collar centre
+			sy = maxf(jy - (gy - 0.12), 0.8) / KIT2_LEG_DROP
 		# local frame: +X outward along dir, +Y up; the mesh starts at the collar (x = COLLAR_R) and ends at (BR_OUT, -1)
 		var bx := Vector3(dir.x, 0, dir.y)
 		var bz := bx.cross(Vector3.UP)
 		var basis := Basis(bx, Vector3.UP * sy, bz)
 		var at := Vector3(x, jy, z) + Vector3(dir.x, 0, dir.y) * COLLAR_R * (float(d["k"]) - 1.0)
+		if Rules.kit2:
+			at = Vector3(x, jy, z) + Vector3(dir.x, 0, dir.y) * KIT2_COLLAR_R * (maxf(1.0, (float(tb["r"]) + 0.2) / KIT2_COLLAR_R) - 1.0)
 		if kick > 0.0:                                     # released: the stub kicks out and tips away, its foot in the bed
 			basis = Basis(bz.normalized(), -RELEASE_TILT * kick) * basis
 			at += bx * RELEASE_KICK * kick
@@ -170,6 +271,8 @@ func step(dt: float) -> void:
 				_place(i)
 		elif int(n["tier"]) != int(d["tier"]):
 			_place_branches(i)
+		if Rules.kit2 and str(tb.get("owner", "")) != str(d.get("owner", "")):
+			_tint(i)
 
 
 # ------------------------------------------------------------------ meshes (generated once)
