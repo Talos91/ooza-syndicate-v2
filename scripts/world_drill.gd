@@ -1,8 +1,8 @@
 class_name WorldDrill
 extends Node3D
 ## DRILL NODE (Daniele's blueprint 2026-11-16, References/Art direction 2026-11 - backgrounds/drill-node-blueprint-2026-11-16/;
-## DECISIONS.md "the drill node blueprint"): under every river-world platform a SKINNY central tube (WorldLayer's goo tube,
-## WorldLayer.DRILL_R) runs down to a branch JUNCTION collar just over the bed; a screw DRILL bit hangs under the collar,
+## DECISIONS.md "the drill node blueprint"): under every river-world platform the central tube (WorldLayer's goo tube, its
+## normal width - Daniele 11-17: "i didn t say to make normal node column skinnier just the relay") runs down to a branch JUNCTION collar just over the bed; a screw DRILL bit hangs under the collar,
 ## embedded in its crack; BRANCH tubes run from the junction into the bed by the vat's tier: T1 1, T2 2, T3 (and T4) 4
 ## (the central tube not counted).
 ## QUOTA launch (Fx._launch drives the platform; WorldLayer._tubes_step lifts the tube with it): the branches RELEASE (they
@@ -10,10 +10,10 @@ extends Node3D
 ## VIEW ONLY: reads sim.nodes (tier, collapsed) and WorldLayer's tubes; nothing in the Sim or the protocol.
 ## All geometry is generated here (no kit GLB: nothing to overwrite; pck + a few KB of script).
 
-const COLLAR_R := 0.78         # m: the junction collar (the tube is WorldLayer.DRILL_R = 0.45)
+const COLLAR_R := 1.25         # m: the junction collar round a common tube (WorldLayer.TUBE_R 0.95); wider tubes scale it
 const COLLAR_H := 0.75
 const J_UP := 2.1              # m: the junction's centre over the bed under the axis
-const BIT_R := 0.62            # m: the drill bit's top radius (under the collar)
+const BIT_R := 0.9            # m: the drill bit's top radius (under the collar)
 const BIT_LEN := 4.6           # m: collar bottom to tip (~2.6 m of it in the crack)
 const BIT_TURNS := 3.2         # screw flight turns over the bit
 const BR_R := 0.2              # m: a branch tube's radius
@@ -58,6 +58,7 @@ func build(r: WorldRiver) -> void:
 		var x: float = tb["x"]
 		var z: float = tb["z"]
 		var d := {"tb": tb, "bed": r.bed_h(x, z), "tier": -1, "rel": -1.0, "lift": 0.0, "gone": false,
+				"k": maxf(1.0, (float(tb["r"]) + 0.3) / COLLAR_R),
 				"spin": fposmod(x * 0.37 + z * 0.61, TAU), "base_a": base_a}
 		_d.append(d)
 		_place(i)
@@ -106,7 +107,8 @@ func _place(i: int) -> void:
 		_collar_mm.set_instance_transform(i, hide)
 		_bit_mm.set_instance_transform(i, hide)
 	else:
-		_collar_mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, Vector3(x, jy, z)))
+		var k: float = d["k"]                              # a wide (pillar) tube: the collar grows round it
+		_collar_mm.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(k, 1.0, k)), Vector3(x, jy, z)))
 		_bit_mm.set_instance_transform(i, Transform3D(Basis(Vector3.UP, float(d["spin"])), Vector3(x, jy - COLLAR_H * 0.5, z)))
 	_collar_mm.visible_instance_count = _d.size()
 	_bit_mm.visible_instance_count = _d.size()
@@ -140,7 +142,7 @@ func _place_branches(i: int) -> void:
 		var bx := Vector3(dir.x, 0, dir.y)
 		var bz := bx.cross(Vector3.UP)
 		var basis := Basis(bx, Vector3.UP * sy, bz)
-		var at := Vector3(x, jy, z)
+		var at := Vector3(x, jy, z) + Vector3(dir.x, 0, dir.y) * COLLAR_R * (float(d["k"]) - 1.0)
 		if kick > 0.0:                                     # released: the stub kicks out and tips away, its foot in the bed
 			basis = Basis(bz.normalized(), -RELEASE_TILT * kick) * basis
 			at += bx * RELEASE_KICK * kick

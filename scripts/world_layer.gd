@@ -77,7 +77,6 @@ const LAB_SIDE := "res://assets/art/backdrops/lab-side-%s-%d.jpg"   # a / b, 118
 const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)
 const TUBE_R := 0.95             # a common platform's tube, under its machinery core
 const TUBE_R_PILLAR := 2.6       # a pillar node: a glass sleeve around the column
-const DRILL_R := 0.45            # RIVER WORLD / DRILL NODE (Daniele 11-16: "make the column skinnier"): every drill's central tube
 const TUBE_TOP := -3.5           # under the platform centre (legs and core end at -3.6)
 const TUBE_TOP_PILLAR := -2.3    # under the pillar's collar
 const PUSH_T := 1.6              # s: a capture pushes the old colour out of the tube
@@ -374,8 +373,6 @@ func _build_tube(n: Dictionary) -> void:
 	# fog-maps-fix (P-03 node 7): a pillar that can hold a vat / machinegoon gets the common column (base, doors, sockets) so its
 	# tubes and Locals exist like every other buildable node's; the wide glass sleeve stays on the pillars that cannot
 	var r := TUBE_R_PILLAR if (pillar and not ("vat" in b or "machinegoon" in b)) else TUBE_R
-	if WorldRiver.enabled():
-		r = DRILL_R
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
 	cm.top_radius = r
