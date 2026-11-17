@@ -1132,72 +1132,260 @@ func _collapse(node_id: int, from := "", launch := false, _quota := 0) -> void:
 	_fall_pieces(falling, frags)
 
 
+const LAUNCH_IGNITE := 0.35       # s: DRILL NODE - the booster ring burns this long on the pad before the platform lifts
+const LAUNCH_JETS := 8            # nozzles round the booster ring
+const LAUNCH_JET_LEN := 4.2       # m: a nozzle's flame
+const LAUNCH_RING_R := 1.35       # m: the booster ring round the tube, under the platform
+const LAUNCH_SPLAT_K := 2.3       # the goo splat's diameter / Rules.R
+const SPLAT_SHADER := preload("res://shaders/launch_splat.gdshader")
+var _glow_tex: GradientTexture2D
+var launch_splats: Array = []     # probes / shots: the goo splats launches left (they stay for the match)
+
+
 func _launch(pos: Vector3, rising: Array, seat: String) -> void:
 	## LAST STAND = QUOTA (Daniele 2026-11-15: "the node flyes in orbit as if they were rockets going to deliver the
-	## resources accummulated"; "straight up and leaves the screen past the top edge"): the platform climbs
-	## Rules.QUOTA_LAUNCH_RISE m in Rules.QUOTA_LAUNCH_TIME s, easing in like a lift-off, on a thruster flame and a smoke trail
-	## in the owner's SEAT neon (neutral grey; COLOUR RULE: neon = seat).
+	## resources accummulated"; "straight up and leaves the screen past the top edge") with the DRILL NODE launch (blueprint
+	## 2026-11-16, DECISIONS.md): the BOOSTER RING round the tube under the platform fires (LAUNCH_IGNITE s on the pad; the
+	## branches release - WorldDrill), then platform + tube + drill climb Rules.QUOTA_LAUNCH_RISE m in Rules.QUOTA_LAUNCH_TIME s.
+	## The underside is hidden by the camera pitch, so the booster reads through effects: a bright halo round the platform,
+	## a downward JET hitting the goo / bed below and a plume trailing the rising node, all SEAT neon (COLOUR RULE: neon = seat;
+	## neutral grey). Where the jet hits, a goo SPLAT in the owner's FACTION goo colour stays for the rest of the match
+	## (Daniele 11-16 kept the circle a launch left behind; neutral = the native gray).
 	var col: Color = Rules.seat_color(seat) if seat != "" else Color(0.62, 0.65, 0.68)
+	var hot := col.lerp(Color.WHITE, 0.55)
 	MapBatch.release(rising)
 	_neon_merge.release(rising)
 	var dur := Rules.QUOTA_LAUNCH_TIME
 	var rise := Rules.QUOTA_LAUNCH_RISE
+	var wl := WorldLayer.active
+	var gy: float = wl.ground_y(pos.x, pos.z) if wl != null else pos.y - 16.0
+	var ring_y := pos.y + WorldLayer.TUBE_TOP + 0.35                 # under the platform, round the tube
 	var tw := create_tween()
 	tw.set_parallel(true)
 	for p in rising:
 		var node3d := p as Node3D
 		if not is_instance_valid(node3d):
 			continue
-		tw.tween_property(node3d, "position:y", node3d.position.y + rise, dur).set_delay(0.15).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
-	var rocket := Node3D.new()                         # the thruster rides under the platform
-	rocket.position = pos + Vector3(0, -0.6, 0)
+		tw.tween_property(node3d, "position:y", node3d.position.y + rise, dur).set_delay(LAUNCH_IGNITE).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
+	var rocket := Node3D.new()                         # the booster rides under the platform
+	rocket.position = Vector3(pos.x, ring_y, pos.z)
 	add_child(rocket)
-	var flame := MeshInstance3D.new()
+	var ring := MeshInstance3D.new()                   # the booster ring
+	var tm := TorusMesh.new()
+	tm.inner_radius = LAUNCH_RING_R - 0.22
+	tm.outer_radius = LAUNCH_RING_R + 0.22
+	tm.rings = 18
+	tm.ring_segments = 6
+	ring.mesh = tm
+	ring.material_override = Mats.glow(hot, 1.0)
+	rocket.add_child(ring)
+	var jets := Node3D.new()                           # the nozzles' flames, pointing down
+	rocket.add_child(jets)
 	var cone := CylinderMesh.new()
-	cone.top_radius = Rules.R * 0.55
-	cone.bottom_radius = 0.05
-	cone.height = 3.2
-	cone.radial_segments = 10
+	cone.top_radius = 0.34
+	cone.bottom_radius = 0.04
+	cone.height = 1.0
+	cone.radial_segments = 8
 	cone.rings = 1
-	flame.mesh = cone
-	flame.material_override = Mats.glow(col, 1.0)
-	flame.position = Vector3(0, -1.6, 0)
-	flame.scale = Vector3(1, 0.2, 1)
-	rocket.add_child(flame)
-	var trail := CPUParticles3D.new()                  # world-space smoke: it stays behind as the platform climbs
+	cone.cap_top = false
+	cone.cap_bottom = false
+	var jm := Mats.glow(col.lerp(Color.WHITE, 0.3), 0.85)
+	for k in range(LAUNCH_JETS):
+		var a := TAU * float(k) / LAUNCH_JETS
+		var f := MeshInstance3D.new()
+		f.mesh = cone
+		f.material_override = jm
+		f.position = Vector3(cos(a) * LAUNCH_RING_R, -0.5, sin(a) * LAUNCH_RING_R)
+		f.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		jets.add_child(f)
+	jets.scale = Vector3(1, 0.05, 1)
+	var halo := _glow_quad(Rules.R * 4.2, col, true)    # the halo round the rim: what the top-down camera sees of the booster
+	halo.position = Vector3(0, 1.4, 0)
+	rocket.add_child(halo)
+	# the downward jet: a column from the ring to the goo / bed, re-stretched every frame as the node climbs
+	var beam := MeshInstance3D.new()
+	var bc := CylinderMesh.new()
+	bc.top_radius = LAUNCH_RING_R * 0.85
+	bc.bottom_radius = LAUNCH_RING_R * 1.5
+	bc.height = 1.0
+	bc.radial_segments = 14
+	bc.rings = 1
+	bc.cap_top = false
+	bc.cap_bottom = false
+	beam.mesh = bc
+	beam.material_override = Mats.glow(col.lerp(Color.WHITE, 0.2), 0.5)
+	beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(beam)
+	var core := MeshInstance3D.new()                   # the jet's white-hot core
+	var cc := CylinderMesh.new()
+	cc.top_radius = LAUNCH_RING_R * 0.45
+	cc.bottom_radius = LAUNCH_RING_R * 0.7
+	cc.height = 1.0
+	cc.radial_segments = 10
+	cc.rings = 1
+	cc.cap_top = false
+	cc.cap_bottom = false
+	core.mesh = cc
+	core.material_override = Mats.glow(hot, 0.7)
+	core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	beam.add_child(core)
+	var impact := _glow_quad(Rules.R * 3.4, col, false)  # the jet's hit: a flat glow on the goo / bed
+	impact.position = Vector3(pos.x, gy + 0.25, pos.z)
+	impact.scale = Vector3.ONE * 0.2
+	add_child(impact)
+	var spray := _waterfall(seat, LAUNCH_RING_R * 1.2, 1.2)   # goo flung out flat where the jet hits (faction goo)
+	spray.position = Vector3(pos.x, gy + 0.3, pos.z)
+	spray.direction = Vector3.UP
+	spray.spread = 80.0
+	spray.initial_velocity_min = 5.0
+	spray.initial_velocity_max = 9.0
+	spray.amount = 70
+	add_child(spray)
+	_ground_splat(Vector3(pos.x, gy, pos.z), WorldLayer._col(seat), Rules.R * LAUNCH_SPLAT_K, 0.12)
+	var trail := CPUParticles3D.new()                  # world-space plume: it stays behind as the platform climbs
 	var puff := SphereMesh.new()
-	puff.radius = 0.35
-	puff.height = 0.7
+	puff.radius = 0.45
+	puff.height = 0.9
 	puff.radial_segments = 6
 	puff.rings = 3
-	puff.material = Mats.glow(col.lerp(Color.WHITE, 0.25), 0.32)   # (designer 9: the platform stays solid over its trail)
+	puff.material = Mats.glow(col.lerp(Color.WHITE, 0.35), 0.3)   # (designer 9: the platform stays solid over its trail)
 	trail.mesh = puff
 	trail.local_coords = false
-	trail.amount = 40
-	trail.lifetime = 0.8
-	trail.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
-	trail.emission_sphere_radius = Rules.R * 0.18
+	trail.amount = 70
+	trail.lifetime = 1.1
+	trail.emission_shape = CPUParticles3D.EMISSION_SHAPE_RING
+	trail.emission_ring_axis = Vector3.UP
+	trail.emission_ring_radius = LAUNCH_RING_R
+	trail.emission_ring_inner_radius = LAUNCH_RING_R * 0.6
+	trail.emission_ring_height = 0.2
 	trail.direction = Vector3.DOWN
-	trail.spread = 10.0
-	trail.initial_velocity_min = 2.0
-	trail.initial_velocity_max = 5.0
+	trail.spread = 12.0
+	trail.initial_velocity_min = 3.0
+	trail.initial_velocity_max = 7.0
 	trail.gravity = Vector3.ZERO
-	trail.scale_amount_min = 0.7
-	trail.scale_amount_max = 1.8
-	trail.position = Vector3(0, -3.6, 0)
+	trail.scale_amount_min = 0.8
+	trail.scale_amount_max = 2.2
+	trail.position = Vector3(0, -1.0, 0)
 	trail.emitting = true
 	rocket.add_child(trail)
-	tw.tween_property(flame, "scale", Vector3(1, 1, 1), 0.15)
-	tw.tween_property(rocket, "position:y", rocket.position.y + rise, dur).set_delay(0.15).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
+	var y0 := rocket.position.y
+	var beam_on := [true]
+	var fly := func(k: float) -> void:                  # k: 0 at ignition .. 1 when the node leaves the screen
+		var tt := k * (LAUNCH_IGNITE + dur)
+		var ig := clampf(tt / LAUNCH_IGNITE, 0.0, 1.0)
+		var up := 0.0
+		if tt > LAUNCH_IGNITE:
+			var r := (tt - LAUNCH_IGNITE) / dur
+			up = rise * r * r * r                      # the platform's EASE_IN cubic
+		rocket.position.y = y0 + up
+		var flick := 0.86 + 0.14 * sin(tt * 61.0) * sin(tt * 23.0)
+		jets.scale = Vector3(1.0, maxf(LAUNCH_JET_LEN * ig * flick, 0.05), 1.0)
+		halo.scale = Vector3.ONE * (0.35 + 0.65 * ig) * flick
+		var top := rocket.position.y - 0.4
+		var reach := clampf(tt / (LAUNCH_IGNITE * 0.7), 0.0, 1.0)   # the jet reaches the goo within the ignition
+		var fade := 1.0 - clampf((tt - LAUNCH_IGNITE - 0.45) / 0.5, 0.0, 1.0)   # and lets go once the node is high
+		var bot := lerpf(top, gy, reach)
+		var h := maxf(top - bot, 0.05)
+		beam.visible = fade > 0.01 and beam_on[0]
+		beam.position = Vector3(pos.x, bot + h * 0.5, pos.z)
+		beam.scale = Vector3(fade * flick, h, fade * flick)
+		impact.scale = Vector3.ONE * (0.2 + 0.9 * reach) * (0.5 + 0.5 * fade) * flick
+		impact.visible = reach > 0.5 and tt < LAUNCH_IGNITE + 1.4
+	tw.tween_method(fly, 0.0, 1.0, LAUNCH_IGNITE + dur)
 	tw.chain().tween_callback(func():
 		for p in rising:
 			if is_instance_valid(p):
 				(p as Node3D).visible = false
 		trail.emitting = false
-		flame.visible = false)
-	get_tree().create_timer(dur + 1.4).timeout.connect(rocket.queue_free)
-	_pulse(pos, col, Rules.R * 1.5, 0.7)               # the pad's shock ring, ~1.5x the platform (designer 9)
+		beam_on[0] = false
+		beam.visible = false
+		impact.visible = false
+		jets.visible = false
+		ring.visible = false
+		halo.visible = false)
+	get_tree().create_timer(LAUNCH_IGNITE + dur + 1.6).timeout.connect(func():
+		rocket.queue_free()
+		beam.queue_free()
+		impact.queue_free())
+	_pulse(Vector3(pos.x, gy + 0.1, pos.z), col, Rules.R * 1.6, 0.8)   # the jet's shock ring on the goo / bed (designer 9: ~1.5x)
 	# (the "+1 QUOTA" pop is the HUD's: QuotaBar.pop, from main's fx loop)
+
+
+func _glow_quad(size: float, col: Color, billboard: bool) -> MeshInstance3D:
+	## A soft additive glow (radial gradient): a camera-facing halo, or flat on the ground.
+	if _glow_tex == null:
+		var g := Gradient.new()
+		g.offsets = PackedFloat32Array([0.0, 0.22, 0.6, 1.0])
+		g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.75), Color(1, 1, 1, 0.22), Color(1, 1, 1, 0)])
+		_glow_tex = GradientTexture2D.new()
+		_glow_tex.gradient = g
+		_glow_tex.fill = GradientTexture2D.FILL_RADIAL
+		_glow_tex.fill_from = Vector2(0.5, 0.5)
+		_glow_tex.fill_to = Vector2(1.0, 0.5)
+		_glow_tex.width = 64
+		_glow_tex.height = 64
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.albedo_texture = _glow_tex
+	m.albedo_color = Color(col.lerp(Color.WHITE, 0.25), 1.0)
+	m.disable_fog = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	if billboard:
+		m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	var mi := MeshInstance3D.new()
+	if billboard:
+		var q := QuadMesh.new()
+		q.size = Vector2.ONE * size
+		mi.mesh = q
+	else:
+		var pm := PlaneMesh.new()
+		pm.size = Vector2.ONE * size
+		mi.mesh = pm
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
+func _ground_splat(at: Vector3, col: Color, size: float, delay: float) -> void:
+	## DRILL NODE launch: the goo splat the booster jet leaves on the goo / bed - a small grid laid on the ground under it
+	## (WorldLayer.ground_y: the river's surface or the dry bed), so it hugs the uneven canyon; it spreads, then stays.
+	var wl := WorldLayer.active
+	var n := 16
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var pts := []
+	for j in range(n + 1):
+		for i in range(n + 1):
+			var u := float(i) / n
+			var v := float(j) / n
+			var x := at.x + (u - 0.5) * size
+			var z := at.z + (v - 0.5) * size
+			var y: float = wl.ground_y(x, z) if wl != null else at.y
+			pts.append([Vector3(x - at.x, y - at.y + 0.3, z - at.z), Vector2(u, v)])
+	for j in range(n):
+		for i in range(n):
+			var a: int = j * (n + 1) + i
+			for q in [a, a + n + 1, a + 1, a + 1, a + n + 1, a + n + 2]:
+				st.set_uv(pts[q][1])
+				st.add_vertex(pts[q][0])
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	var m := ShaderMaterial.new()
+	m.shader = SPLAT_SHADER
+	m.set_shader_parameter("col", col)
+	m.set_shader_parameter("seed", randf())
+	m.set_shader_parameter("grow", 0.0)
+	m.render_priority = -7
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = at
+	add_child(mi)
+	launch_splats.append(mi)
+	var tw := create_tween()
+	tw.tween_interval(delay)
+	tw.tween_method(func(g: float): m.set_shader_parameter("grow", g), 0.0, 1.0, 0.7).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 
 
 func _deck_frags(deck: Node3D, per: int, falling: Array, frags: Array) -> void:

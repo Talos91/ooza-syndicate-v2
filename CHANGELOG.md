@@ -1,5 +1,14 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.4-demo-river2 - 2026-11-17 (DEMO only, staging/demo/; staging and live untouched)
+
+- quota-drill (Daniele's drill-node blueprint 2026-11-16). View only: no rule, number, net.gd or protocol change.
+  - DRILL NODE (scripts/world_drill.gd, new; river world): every platform's central tube is skinnier (WorldLayer.DRILL_R 0.45 m, was 0.95 / 2.6) and ends on a junction collar 2.1 m over the bed; a screw drill bit hangs under it into the crack; branch tubes run from the junction into the bed by tier: T1 1, T2 2, T3 / T4 4 (they follow upgrades and tier-downs). All geometry generated in code (no new GLB).
+  - LAUNCH (fx.gd _launch): the booster ring under the platform fires for 0.35 s on the pad (8 nozzle flames, a halo round the rim, a downward jet with a white core that hits the goo / bed, a shock ring and goo spray there), the branches release and stay in the bed as stubs, then platform + tube + drill climb 70 m in 1.5 s (Rules.QUOTA_LAUNCH_*, unchanged) on a seat-neon plume. Neon = seat colour.
+  - SPLAT: where the jet hits, a goo splat in the owner's FACTION goo colour (neutral gray) stays for the match, laid on the uneven bed (shaders/launch_splat.gdshader). The seat plate / grounding ring / drop shadow that used to stay floating go with the platform (ContactShade.lift_off).
+  - HUD: the red sign's NEXT LAUNCH caption is its own dark tab over the beacon and the captioned sign keeps 6 pt clear of every count badge (hud_overlay.gd).
+  - main.gd: --focus-y=N shot helper (aim under the deck at the drills).
+
 ## 0.24.4-demo-river1 - 2026-11-16 (DEMO only, staging/demo/; staging and live untouched)
 
 - demo-river-quota = demo-shrink e7d5419 + quota-proto bd016a0 (Last Stand = QUOTA, on in demo builds) + river-world 839eeb5 (draining goo river + readability D). Release bumped the version.

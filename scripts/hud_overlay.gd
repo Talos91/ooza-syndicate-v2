@@ -887,8 +887,17 @@ func sign_rect(id: int) -> Rect2:
 
 
 func _caption_size() -> Vector2:
+	## The caption's pill (quota-drill 11-17, designer nit "NEXT LAUNCH overlaps the node's count -> own line"): the words on
+	## a dark tab of their own over the beacon, CAPTION_GAP pt clear of it.
 	var f := int(round(SIGN_CAPTION_PT * _pt()))
-	return Vector2(Hud.UI_FONT.get_string_size(SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x + 6.0, Hud.UI_FONT.get_height(f))
+	return Vector2(Hud.UI_FONT.get_string_size(SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, f).x + CAPTION_PAD.x * 2.0 * _pt(),
+			Hud.UI_FONT.get_height(f) + (CAPTION_PAD.y * 2.0 + CAPTION_GAP) * _pt())
+
+
+const CAPTION_PAD := Vector2(6.0, 1.5)   # pt inside the caption's tab
+const CAPTION_GAP := 2.0                 # pt between the tab and the beacon
+var _cap_sb: StyleBoxFlat
+const CAPTION_CLEAR := 6.0               # pt the red sign (with its caption) keeps clear of every count badge
 
 
 var _signs := {}                       # node id -> [plate centre, circumradius, tier]: laid out this frame
@@ -917,9 +926,13 @@ func _layout_signs(cam: Camera3D, avoid: Array) -> void:
 		var lift := Vector2(0, R * 0.39 + cap.y / 2.0)
 		var up := r * 0.86 + R * 0.6 + cap.y / 2.0
 		var side := r + R * 0.7
+		var av := avoid
+		if tier == 0:                                    # the captioned sign keeps a margin round the counts (own line)
+			av = avoid.map(func(a): return (a as Rect2).grow(CAPTION_CLEAR * pt))
 		var c := lift + _clear_spot((ns[0] as Vector2) - lift, [Vector2(0, -up), Vector2(0, r * 0.86 + R * 0.6),
 				Vector2(-side, 0), Vector2(side, 0), Vector2(-side, -up * 0.7), Vector2(side, -up * 0.7),
-				Vector2(0, -up - half.y), Vector2(-side - half.x, 0), Vector2(side + half.x, 0)], half, avoid)
+				Vector2(0, -up - half.y), Vector2(-side - half.x, 0), Vector2(side + half.x, 0),
+				Vector2(0, r * 0.86 + R * 0.6 + half.y), Vector2(-side - half.x, -up * 0.7), Vector2(side + half.x, -up * 0.7)], half, av)
 		_signs[id] = [c, R, tier]
 		if TopBand.on:                                   # calm-pass: never under the score bar / status line
 			var sr := sign_rect(id)
@@ -967,10 +980,21 @@ func _draw_danger_symbols(_cam: Camera3D) -> void:
 		if tier == 0:                                       # NEXT DROP over the beacon, outlined so it reads on any floor
 			var cf := int(round(SIGN_CAPTION_PT * _pt()))
 			var cs := Hud.UI_FONT.get_string_size(SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf)
-			var top := (s[0] as Vector2).y - float(s[1]) * 1.65
-			var at := Vector2((s[0] as Vector2).x - cs.x / 2.0, top - Hud.UI_FONT.get_descent(cf) - 1.0)
-			draw_string_outline(Hud.UI_FONT, at, SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf, maxi(2, int(round(3.0 * _pt()))), Color(0, 0, 0, 0.85 * a))
-			draw_string(Hud.UI_FONT, at, SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf, Color(col.lightened(0.35), a))
+			var cap := _caption_size()
+			var top := (s[0] as Vector2).y - float(s[1]) * 1.65 - CAPTION_GAP * _pt()   # the tab's bottom, over the beacon
+			var tab := Rect2(Vector2((s[0] as Vector2).x - cap.x / 2.0, top - (cap.y - CAPTION_GAP * _pt())),
+					Vector2(cap.x, cap.y - CAPTION_GAP * _pt()))
+			if _cap_sb == null:
+				_cap_sb = StyleBoxFlat.new()
+			var sb := _cap_sb
+			sb.bg_color = Color(0.03, 0.04, 0.06, 0.88 * a)
+			sb.border_color = Color(col, 0.9 * a)
+			sb.set_border_width_all(maxi(1, int(round(1.5 * _pt()))))
+			sb.set_corner_radius_all(int(round(tab.size.y * 0.5)))
+			draw_style_box(sb, tab)
+			var at := Vector2(tab.position.x + (tab.size.x - cs.x) / 2.0,
+					tab.position.y + (tab.size.y - Hud.UI_FONT.get_height(cf)) / 2.0 + Hud.UI_FONT.get_ascent(cf))
+			draw_string(Hud.UI_FONT, at, SIGN_CAPTION, HORIZONTAL_ALIGNMENT_LEFT, -1, cf, Color(col.lightened(0.45), a))
 	for w in words:                                      # (no outline pass: the plate is dark - every glyph is an object)
 		var wc: Color = (w[3] as Color).darkened(0.45) if UiTheme.light() else (w[3] as Color).lightened(0.55)   # Alpha 24: a pale plate in LIGHT
 		draw_string(Hud.UI_FONT, w[0], w[1], HORIZONTAL_ALIGNMENT_LEFT, -1, w[2], Color(wc, w[4]))

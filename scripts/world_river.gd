@@ -72,6 +72,7 @@ var _goo: MeshInstance3D
 var _goo_mat: ShaderMaterial
 var _crack_mm: MultiMesh
 var _loc_mm: MultiMesh
+var drills: WorldDrill
 var _locals: Array = []         # {tube, p, from, end, t0, dur, size, ph}
 var _acc: Dictionary = {}       # tube index -> s accumulated toward the next Local
 var locals_made := 0            # probes
@@ -205,6 +206,9 @@ func build(cam: Camera3D) -> void:
 	_build_bed()
 	_build_goo()
 	_build_cracks()
+	drills = WorldDrill.new()                         # DRILL NODE (blueprint 11-16): junction, screw bit, branches by tier
+	add_child(drills)
+	drills.build(self)
 	_build_locals()
 
 
@@ -348,7 +352,7 @@ func _build_cracks() -> void:
 		_crack_mm.set_instance_transform(k, Transform3D(Basis(bx * s, up, bz * s), Vector3(x, h + 0.06, z)))
 		_crack_mm.set_instance_custom_data(k, Color(randf(), 0, 0, 0))
 		_crack_mm.set_instance_color(k, Color.WHITE)
-		tb["bot"] = h - DRILL_SINK
+		tb["bot"] = h + WorldDrill.J_UP + WorldDrill.COLLAR_H * 0.5   # DRILL NODE: the skinny tube ends on the junction collar
 		tb["top_y"] = 999.0                           # re-place the tube down to its crack
 		k += 1
 	_crack_mm.visible_instance_count = k
@@ -394,6 +398,8 @@ func step(dt: float) -> void:
 	_goo.visible = progress < 1.0
 	_bed_mat.set_shader_parameter("level", level)
 	_goo_mat.set_shader_parameter("t0", progress)
+	if drills != null:
+		drills.step(dt)
 	_locals_step(dt)
 
 

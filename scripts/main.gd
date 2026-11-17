@@ -31,6 +31,7 @@ extends Node3D
 ##   --faction=null --rival=null            your faction (seat A) and seat B's (a mirror match: the same one)
 ##   --look=bloom:0.75:4[,solar:1.2:2]      FACTION LOOK debug: a race's body size and lanes (Rules.FACTION_LOOK)
 ##   --focus=N --zoom=N                     frame node N up close (camera distance N m) in a normal match
+##   --focus-y=-12                           with --focus: aim that many m over / under the deck (the river world's drills)
 ##   --inspect=N                            force the ring open on node N (0.23.x radial redesign shots)
 ##   --tutorial=N                           start tutorial N (1 quick start ... 5 team play; one not built yet plays the quick start) straight away
 ##   --mission=vex:01                       CAMPAIGN: start that mission straight away (its briefing first)
@@ -556,6 +557,9 @@ func _start_map(path: String) -> void:
 		_stage_scenario()
 	elif focus_node >= 0 and focus_node < sim.nodes.size():
 		scenario_focus = sim.nodes[focus_node]["pos"]
+		for a in OS.get_cmdline_user_args():          # --focus-y=-12: aim that many m above / under the deck (drill shots)
+			if a.begins_with("--focus-y="):
+				scenario_focus.y += float(a.substr(10))
 	sim.captured.connect(_on_captured)
 	sim.finished.connect(_on_finished)
 	for n in sim.nodes:
@@ -1854,6 +1858,8 @@ func _process(delta: float) -> void:
 		Sfx.on_fx(ev)                                 # SOUND: the same events (a guest's come from the host through Net)
 		match ev["type"]:
 			"collapse":                               # LAST STAND = QUOTA: "+1 QUOTA" over the launching pad (HUD label)
+				if bool(ev.get("launch", false)) and contact_shade:   # its seat plate leaves with it (the splat stays: Fx)
+					contact_shade.lift_off(int(ev["node"]))
 				if bool(ev.get("launch", false)) and str(ev.get("from", "")) != "" and hud.quota_bar:
 					hud.quota_bar.pop(sim.nodes[int(ev["node"])]["pos"], str(ev["from"]))
 			"skill":                                  # a rival's skill that touches you: a callout there (SkillDock.on_event)

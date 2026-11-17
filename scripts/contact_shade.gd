@@ -23,6 +23,8 @@ const DECK_PIECE := "Deck_S"
 
 static var _deck_w := -1.0
 var plates := {}                      # node id -> MeshInstance3D
+var rings := {}                       # node id -> its grounding ring (MeshInstance3D)
+var drop_of := {}                     # node id -> its _drops entry
 var _plate_mats := {}                 # seat -> ShaderMaterial
 
 
@@ -97,13 +99,14 @@ func setup(sim: Sim, vis: Dictionary, floor_y: float) -> void:
 		if not _platformed(vis, n):
 			continue
 		var p: Vector3 = n["pos"]
-		_quad(Vector2.ONE * Rules.R * RING_K, ring, Transform3D(Basis.IDENTITY, p + Vector3.UP * 0.07))
+		rings[id] = _quad(Vector2.ONE * Rules.R * RING_K, ring, Transform3D(Basis.IDENTITY, p + Vector3.UP * 0.07))
 		var plate := _quad(Vector2.ONE * Rules.R * PLATE_K, _plate_mat("A"), Transform3D(Basis.IDENTITY, p + Vector3.UP * 0.05))
 		plate.visible = false
 		plates[id] = plate
 		var h := p.y - floor_y
 		if has_floor and h >= MIN_H:
 			_drops.append([_quad(Vector2.ONE * Rules.R * DROP_K, drop, Transform3D(Basis.IDENTITY, Vector3(p.x + SUN.x * h, floor_y + 0.06, p.z + SUN.y * h))), p])
+			drop_of[id] = _drops[-1]
 	if not has_floor:
 		return
 	var w := deck_width() * BAND_K
@@ -149,6 +152,20 @@ func _plate_mat(seat: String) -> ShaderMaterial:
 	if not _plate_mats.has(seat):
 		_plate_mats[seat] = _mat(PLATE_A, 0.80, 0, Rules.seat_color(seat))
 	return _plate_mats[seat]
+
+
+func lift_off(id: int) -> void:
+	## LAST STAND = QUOTA: the platform launched - its seat plate, grounding ring and drop shadow go with it (the circle it
+	## used to leave floating is the goo splat on the bed now: Fx._ground_splat, Daniele 11-16).
+	for d in [plates, rings]:
+		var mi: MeshInstance3D = d.get(id)
+		if mi != null:
+			mi.visible = false
+	var e = drop_of.get(id)
+	if e != null:
+		(e[0] as MeshInstance3D).visible = false
+		_drops.erase(e)
+		drop_of.erase(id)
 
 
 func set_seat(id: int, owner: String) -> void:

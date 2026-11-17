@@ -77,6 +77,7 @@ const LAB_SIDE := "res://assets/art/backdrops/lab-side-%s-%d.jpg"   # a / b, 118
 const FLOOR_DEPTH := 16.0        # metres under the lowest node (decks sit at 0 / -4: the floor at -16 / -20)
 const TUBE_R := 0.95             # a common platform's tube, under its machinery core
 const TUBE_R_PILLAR := 2.6       # a pillar node: a glass sleeve around the column
+const DRILL_R := 0.45            # RIVER WORLD / DRILL NODE (Daniele 11-16: "make the column skinnier"): every drill's central tube
 const TUBE_TOP := -3.5           # under the platform centre (legs and core end at -3.6)
 const TUBE_TOP_PILLAR := -2.3    # under the pillar's collar
 const PUSH_T := 1.6              # s: a capture pushes the old colour out of the tube
@@ -373,6 +374,8 @@ func _build_tube(n: Dictionary) -> void:
 	# fog-maps-fix (P-03 node 7): a pillar that can hold a vat / machinegoon gets the common column (base, doors, sockets) so its
 	# tubes and Locals exist like every other buildable node's; the wide glass sleeve stays on the pillars that cannot
 	var r := TUBE_R_PILLAR if (pillar and not ("vat" in b or "machinegoon" in b)) else TUBE_R
+	if WorldRiver.enabled():
+		r = DRILL_R
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
 	cm.top_radius = r
@@ -749,11 +752,26 @@ func _tubes_step(dt: float) -> void:
 			top = (plat as Node3D).global_position.y + float(tb["top_off"])
 		elif tb.get("holo", false) and float(tb["top_y"]) < 900.0:   # VAT COLUMN: the platform is the blueprint now
 			top = float(tb["top_y"])
+		var launched := false
 		if sim.collapsed.get(tb["id"], false):        # Last Stand: the tube drains and sinks with its platform
-			if Rules.quota:                           # QUOTA: the platform launches - the tube breaks off at its old top
+			if Rules.quota and river != null:         # QUOTA + DRILL NODE: the tube flies up with its platform, goo and all
+				launched = true
+				if not (plat is Node3D and is_instance_valid(plat) and (plat as Node3D).is_visible_in_tree()):
+					tb["gone"] = true                 # (Fx hides the platform once it is past the top edge)
+					tb["alive"] = false
+					if mi.visible:
+						mi.visible = false
+						_sock_lit(tb, Color(0, 0, 0, 0))
+					continue
+				tb["lift"] = maxf((plat as Node3D).global_position.y - float(tb.get("plat_y0", (plat as Node3D).global_position.y)), 0.0)
+				bot += float(tb["lift"])
+			elif Rules.quota:                         # QUOTA: the platform launches - the tube breaks off at its old top
 				top = minf(top, float(tb["top_y"]))
 			tb["alive"] = false
-			tb["drain"] = minf(float(tb["drain"]) + dt / 1.2, 1.0)
+			if not launched:
+				tb["drain"] = minf(float(tb["drain"]) + dt / 1.2, 1.0)
+		elif plat is Node3D and is_instance_valid(plat):
+			tb["plat_y0"] = (plat as Node3D).global_position.y
 		var has_structure := str(n.get("structure", "")) != ""   # Daniele: tubes only under a vat / structure
 		tb["shown"] = has_structure
 		if river != null:                             # RIVER WORLD: every platform is a drill (empty glass without a structure)
@@ -766,7 +784,7 @@ func _tubes_step(dt: float) -> void:
 		if not mi.visible:                            # a structure (re)built: the socket lights again
 			mi.visible = true
 			_sock_lit(tb, tb["base"])
-		if absf(top - float(tb["top_y"])) > 0.01:
+		if absf(top - float(tb["top_y"])) > 0.01 or launched:
 			tb["top_y"] = top
 			var h := top - bot
 			mi.transform = Transform3D(Basis.from_scale(Vector3(1.0, h, 1.0)), Vector3(tb["x"], bot + h / 2.0, tb["z"]))
