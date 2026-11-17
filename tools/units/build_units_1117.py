@@ -21,6 +21,10 @@ MIN_COMP = {"vex": 1200}
 CLOSE_GAPS = {"vex": 14}
 MIN_Y = {"vex": 0.25}   # fraction of the model height: neon below it is a leak onto the goo; UV padding keeps neon only next to real band
                         # texels (designer 10: a VEX front-left foot fleck came from padding bleeding into the foot island)                           # px at 2048: VEX drops cyan specks between plate bits on its goo
+# VEX right-side band piece beside the glyph (Daniele 2026-11-17: "a tiny error in the neon of vex on the right side"): the line there is a cyan wedge
+# between the gunmetal band (above) and the glyph stem (right) that the two-sided test cannot reach (steel on one side only), so it stayed blue next to the
+# seat-colour line. Blue-ish texels inside this UV box (px at 2048: x0, y0, x1, y1) are neon too.
+EXTRA_BOX = {"vex": [(395, 1120, 545, 1300)]}
 GLOW = {"ember": ((0.10, 0.19), 0.55, 0.80)}       # tint G: (hue range, min sat, min value) = EMBER visor slit
 
 
@@ -103,6 +107,9 @@ def masks(diff, game, height=None):
         m = np.isin(lab, 1 + np.nonzero(sz >= MIN_COMP.get(game, 60))[0])
     if game in CLOSE_GAPS:                                         # bridge short breaks along the line (VEX band beside the glyph)
         m |= ndimage.binary_closing(m, structure=disc(CLOSE_GAPS[game])) & cyan
+    for (x0, y0, x1, y1) in EXTRA_BOX.get(game, []):
+        box = np.zeros_like(m); box[y0:y1, x0:x1] = True
+        m |= box & (h > 0.44) & (h < 0.62) & (s > 0.28) & (v > 0.25)     # looser than `cyan`: the wedge's shaded edge reads darker
     if game in MIN_Y and height is not None:
         low = (height >= 0) & (height < MIN_Y[game])
         m &= ~ndimage.binary_dilation(low, structure=disc(3))
