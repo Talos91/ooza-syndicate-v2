@@ -54,6 +54,7 @@ def heroes():
         Image.fromarray(w).save(f"{OUT}hero_neon_{f}.png", optimize=True)
 
 
+FILL = 0.80          # the tallest / widest AI fills this share of the glass
 FRAME_DIR = REF + "ai-screen-frame-2026-11-17/"
 FRAME_SRC = FRAME_DIR + "ai-screen-frame-daniele-2026-11-17.webp"
 FRAME_CLEAN = FRAME_DIR + "ai-screen-frame-daniele-2026-11-17_clean-alpha.png"   # derivative next to the immutable source
@@ -102,9 +103,15 @@ def screens():
     side = max(fb[2] - fb[0], fb[3] - fb[1])
     cx, cy = (fb[0] + fb[2]) // 2, (fb[1] + fb[3]) // 2
     crop = (cx - side // 2, cy - side // 2, cx - side // 2 + side, cy - side // 2 + side)
-    k = min((mb[2] - mb[0]) / (bb[2] - bb[0]), (mb[3] - mb[1]) / (bb[3] - bb[1])) * 0.93     # contain: the whole portrait stays inside the glass (rounded corners still clip the glitch lines)
-    ox = (mb[0] + mb[2]) / 2 - (bb[0] + bb[2]) / 2 * k
-    oy = (mb[1] + mb[3]) / 2 - (bb[1] + bb[3]) / 2 * k
+    # Daniele 2026-11-17 (round 2): "the AIs look too high in the screen and cut" -> centre each AI's OWN body box in the glass and size
+    # every AI by the widest / tallest one (so they keep their relative sizes), with a margin; the glitch layer moves with it.
+    boxes = {}
+    for f, n in AI.items():
+        u = over(load(f"ai-clean/{n}-GLOW.png"), load(f"ai-clean/{n}-BODY.png"))
+        boxes[f] = u.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
+    gw, gh = mb[2] - mb[0], mb[3] - mb[1]
+    k = min(min(gw * FILL / (x[2] - x[0]), gh * FILL / (x[3] - x[1])) for x in boxes.values())
+    print("fill k", round(k, 3), {f: x for f, x in boxes.items()})
     glass = Image.new("RGBA", frame.size, (22, 4, 28, 0))
     glass.putalpha(mm)
     holed = frame.copy()
@@ -116,6 +123,9 @@ def screens():
             for layer in ("GLOW", "BODY", eyes):
                 im = over(im, load(f"ai-clean/{n}-{layer}.png"))
             im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+            x0, y0, x1, y1 = boxes[f]
+            ox = (mb[0] + mb[2]) / 2 - (x0 + x1) / 2 * k
+            oy = (mb[1] + mb[3]) / 2 - (y0 + y1) / 2 * k
             cv = Image.new("RGBA", frame.size, (0, 0, 0, 0))
             cv.paste(im, (round(ox), round(oy)))
             r, g, b, a = cv.split()
