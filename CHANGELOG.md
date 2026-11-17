@@ -1,5 +1,13 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.24.6 "five new oozes, ooze heroes, AI screens in a new frame" - 2026-11-17 (STAGING only; live is 0.23.21)
+
+- Release release-0.24.6 = main 81169f0 + units-models-1117 149043b (fast-forward, 5 commits). No net.gd / protocol change (ooze20-net-8), so no room-server pack.
+  - Five new ooze AI models (Daniele's 2026-11-17 models: VEX, EMBER, AEGIS, BLOOM, NULL) as the game units: original geometry, 1024 textures, neon line tinted the seat colour, sizes from the locked lineup heights.
+  - Ooze-heroes lineup in every unit picture: ARMIES tabs, army picker, cosmetics tabs, lobby army tiles, room seat portrait, frame cards, VERSUS (new hero + seat-colour neon layer).
+  - VERSUS (prematch) AI screens: each seat's ooze with its faction AI on a small screen above it, in Daniele's new bronze / steel frame, blinking on its own beat.
+  - VEX neon fix: the right-side neon wedge beside the glyph now takes the seat colour (it stayed blue); AEGIS albedo 1.0 (no longer mustard).
+
 ## 0.24.5.1 "M-15 / N-06 back for 2v2 + FFA" - 2026-11-15 (STAGING hotfix; live is 0.23.21)
 
 - The G pool is all 1v1, so 2v2 / FFA had no map. M-15 and N-06 are offered as is (Daniele: "Use M-15 / N-06 as is") through `MapPool.MULTI_FILL`, only for modes no G map seats, never for 1v1; they stay on REWORK. No net.gd / protocol change (ooze20-net-8).
