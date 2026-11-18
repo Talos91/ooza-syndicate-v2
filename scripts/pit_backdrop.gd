@@ -180,8 +180,12 @@ func count_inside() -> Array:
 	return [k, pts.size()]
 
 
+var placed_n := 0                     # bumped per placement (Pit3D rebuilds on a change)
+
+
 func place_bases() -> void:
 	_placed = true
+	placed_n += 1
 	if _mask == null:
 		var t := _tex(str((layout.get("lake_mask", {}) as Dictionary).get("file", "lake_mask.png")))
 		_mask = t.get_image() if t != null else null
@@ -256,6 +260,16 @@ func mirror_material() -> ShaderMaterial:
 		if _vp != Vector2.ZERO:
 			_mirror_uniforms(_vp)
 	return mirror
+
+
+func frame_uniforms(m: ShaderMaterial) -> void:
+	## pit_frame.gdshaderinc's uniforms (Pit3D's wall + goo): the crust / rim textures, the frame transform, the post-chain inverse
+	var mm := mirror_material()                       # (the same measured post values as the mirror plane)
+	for k in ["crust", "rim", "rim_pt", "ref", "tonemap_on", "srgb_bias", "exposure", "white", "contrast", "saturation"]:
+		m.set_shader_parameter(k, mm.get_shader_parameter(k))
+	m.set_shader_parameter("vp", _vp)
+	m.set_shader_parameter("frame_o", _o)
+	m.set_shader_parameter("frame_s", _s)
 
 
 func _mirror_uniforms(vp: Vector2) -> void:

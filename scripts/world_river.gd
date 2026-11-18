@@ -73,6 +73,7 @@ var _goo_mat: ShaderMaterial
 var _crack_mm: MultiMesh
 var _loc_mm: MultiMesh
 var drills: WorldDrill
+var pit3d: Pit3D                # ROUND 44 B4 job c: the real 3D pit (pit_3d.gd) in the painted pit
 var _locals: Array = []         # {tube, p, from, end, t0, dur, size, ph}
 var _acc: Dictionary = {}       # tube index -> s accumulated toward the next Local
 var locals_made := 0            # probes
@@ -214,6 +215,13 @@ func build(cam: Camera3D) -> void:
 		if sc != null and sc.get("pit") != null:
 			_goo.material_override = sc.pit.mirror_material()
 			_goo_mat = null
+			if Pit3D.enabled():                       # JOB C: the real 3D pit replaces the mirror plane once it is built;
+				pit3d = Pit3D.new()                   # the bed is flat at its floor and drains to it
+				pit3d.setup(self, sc.pit)
+				add_child(pit3d)
+				dry_y = pit3d.floor_y + 0.15
+				for tb in wl._tubes:                  # the tube ends on its drill's collar (centre), not at the deep floor
+					tb["bot"] = pit3d.floor_y + WorldDrill.J_UP
 	drills = WorldDrill.new()                         # DRILL NODE (blueprint 11-16): junction, screw bit, branches by tier
 	add_child(drills)
 	drills.build(self)
@@ -238,6 +246,8 @@ static func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
 
 func bed_h(x: float, z: float) -> float:
 	## The canyon bed's height at world x, z (bilinear); before the canyon is built: the deepest bed.
+	if pit3d != null:
+		return pit3d.floor_y                          # JOB C: the 3D pit's flat river bed
 	if not built:
 		return dry_y
 	var q := _to_uw(Vector2(x, z))
@@ -261,6 +271,8 @@ func ground(x: float, z: float) -> float:
 
 func surface_y() -> float:
 	## The goo surface as drawn (the painted pit keeps its plane at the 0:00 level; the canyon's drains): pieces under it are hidden.
+	if pit3d != null and pit3d.ok:
+		return level
 	return _goo.position.y if _goo != null else level
 
 
@@ -413,6 +425,10 @@ func step(dt: float) -> void:
 		_goo.visible = progress < 1.0
 		_bed_mat.set_shader_parameter("level", level)
 		_goo_mat.set_shader_parameter("t0", progress)
+	if pit3d != null:
+		pit3d.step(level, progress, get_viewport().get_camera_3d())
+		if _goo != null:
+			_goo.visible = not pit3d.ok               # the mirror plane only until the 3D pit is up
 	if drills != null:
 		drills.step(dt)
 	if _loc_mm != null:
