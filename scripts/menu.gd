@@ -756,6 +756,10 @@ func show_main() -> void:
 	if _last_show != show_main:                 # HOME just opened (a rebuild of HOME keeps its words): the next pair
 		_home_words = _next_words(_home_words)
 	_last_show = show_main                  # a resize that changes the phone sizing rebuilds it (_fit)
+	if _join_open:                                     # 45B: JOIN is a page of its own (the code field's page "online")
+		_code_box = null
+		_join_sheet()
+		return
 	var hero := faction
 	var area := shell_open("OOZE / HOME", "home", Callable(), hero)
 	_is_main = true
@@ -773,8 +777,6 @@ func show_main() -> void:
 		_install_button(Vector2(_home_install_x, _home_install_y))
 	if _install_guide_open:
 		_install_guide_panel()
-	if _join_open:
-		_join_sheet()
 
 
 ## HOME's rotating words (Daniele 2026-11-15, designer 9): [tagline, title line 1, title line 2], one pair each time HOME opens.
@@ -965,40 +967,42 @@ func _home_play(r: Rect2, pad: float, bh: float) -> void:
 
 
 func _join_sheet() -> void:
-	## JOIN WITH CODE over HOME: the ROOM CODE field (web: room-ui.js's native field on its frame), JOIN, what went wrong
-	## (an incomplete code, room not found / full: Net.status) under it, the code kept; CANCEL or a tap outside closes it.
-	var dim := UiKit.rect(Vector2(-safe.x, -safe.y), content.size + Vector2(safe.x + safe.z, safe.y + safe.w), Color(0, 0, 0, 0.62))
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	dim.gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.pressed:
-			_close_join.call_deferred())
-	content.add_child(dim)
+	## JOIN = the remake (45B sizes.json JOIN, a page of its own): ONLINE, the cabinet with JOIN A ROOM, the four letter
+	## boxes (CHAT-FIELD, the next one FOCUS), the error / status line, BACK and JOIN ROOM. Web: the native code field
+	## (OozeRoom.placeCode, phone keyboards) sits on the boxes' row (_code_box); the boxes show what was typed.
+	var st := _stage_page("OOZE / JOIN", "home", "ONLINE", "JOIN WITH A CODE", _close_join, faction)
+	_page = "online"
 	var web := OS.has_feature("web")
-	var pw := minf(content.size.x - 80.0, 560.0)
-	var bh := UiKit.tap_h(self, 48.0)
+	st.piece("HERO-CABINET", 212, 76, 388, 246, "STATIC", "388x246pt")
+	st.piece("HERO-TITLE-BAR", 224, 88, 364, 42, "STATIC", "364x42pt")
+	st.txt("JOIN A ROOM", 238, 100, 336, 18, 15.0, UiKit.INK, true, 1)
 	var err := _code_error if _code_error != "" else Net.status
-	var ph := 20.0 + UiKit.line_h(self, 12, true) + UiKit.line_h(self, 24, true) + 12.0 + bh + 10.0 \
-			+ (UiKit.text_h(self, err, 13, pw - 40.0) + 8.0 if err != "" else 0.0) + bh + 20.0
-	var pos := ((content.size - Vector2(pw, ph)) / 2.0).floor()
-	pos.y = minf(pos.y, content.size.y * 0.18)          # high on the screen: a phone keyboard comes up under it
-	var panel := UiKit.panel(self, pos, Vector2(pw, ph), faction)
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var px := pos.x + 20.0
-	var y := UiKit.title(self, px, pos.y + 18.0, "ONLINE / JOIN", "ENTER THE ROOM CODE.", faction, 24.0) + 12.0
-	var box := _line_edit(Vector2(px, y), Vector2(pw - 40.0, bh), "E.G. K7QX", "")
+	st.txt(err if err != "" else "Enter the four-letter room code.", 228, 145, 356, 32, 12.5, UiKit.STAR if err != "" else UiKit.MUTED, false, 1, 2)
+	var code := _code_value.to_upper()
+	for k in range(4):
+		var x := 263.0 + 74.0 * k
+		var p := st.piece("CHAT-FIELD", x, 183, 64, 51, "FOCUS" if k == mini(code.length(), 3) else "NORMAL")
+		p.tints = {"seat": Kit45.seat()}
+		st.txt(code.substr(k, 1) if k < code.length() else "", x + 16, 200, 32, 18, 20.0, UiKit.INK, true, 1)
+	var box := LineEdit.new()                          # the frame the HTML field sits on (never typed into)
 	box.editable = false
 	box.focus_mode = Control.FOCUS_NONE
+	for sn in ["normal", "read_only", "focus"]:
+		box.add_theme_stylebox_override(sn, StyleBoxEmpty.new())
+	var br := st.R(263, 183, 286, 51)
+	box.position = br.position
+	box.size = br.size
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	st.add_child(box)
 	_code_box = box
-	y += bh + 10.0
-	if err != "":
-		y += _say(err, Vector2(px, y), 13, UiKit.STAR, pw - 40.0) + 8.0
-	var jw := UiKit.text_w(self, "JOIN ROOM  →", 16, true) + 60.0
-	var join := UiKit.btn(self, "JOIN ROOM  →", Vector2(pos.x + pw - 20.0 - jw, y), Vector2(jw, 48), _join_from_field, "primary", faction, 16)
-	join.disabled = not web
-	var cw := UiKit.text_w(self, "CANCEL", 15, true) + 40.0
-	UiKit.btn(self, "CANCEL", Vector2(join.position.x - 12.0 - cw, y), Vector2(cw, 48), _close_join, "secondary", faction, 15)
+	st.key("KEY-SMALL", 230, 268.5, 115, 33, "BACK", _close_join)
+	var jb := st.key("PRIMARY-WIDE", 402, 268, 181, 33, "JOIN ROOM  →", _join_from_field, true, not web)
+	jb.size_pt = 14.0
+	if not web:
+		jb.tooltip_text = "Online rooms run in the browser build"
 	if web:
 		_place_code_field.call_deferred()
+	shell_raise()
 
 
 func _close_join() -> void:
@@ -3867,27 +3871,16 @@ func _ward_looks(pos: Vector2, dims: Vector2, cat: String, looks: Array, sel: St
 
 
 func show_maps() -> void:
-	## MAP PICKER (round 2, Daniele 2026-11-04: never a scroll): a tab per mode with its map count, ★ FAVOURITES /
-	## RECENT tabs and RANDOM; the grid is always 2 rows of 5 big cards, more maps = pages turned by ‹ n / N › beside
-	## CHOOSE. A tap picks (lit), the foot names it, ☆ keeps it, CHOOSE takes it back to MATCH SETUP (or the room).
 	_last_show = show_maps                  # a resize that changes the phone sizing rebuilds it (_fit)
+	## MAP PICKER = the remake (45B sizes.json MAP-PICKER): CHOOSE A MAP, the mode keys + RECENT / ★ / RANDOM at the top
+	## right, ten MAP-THUMB-CARDs (2 x 5 a page, the picked one SELECTED), CANCEL, ☆ (favourite) + the picked map's name
+	## and detail, ‹ p / n › by CHOOSE (Daniele 11-04: 2 x 5 with ‹ › by CHOOSE, no scrolling).
 	var room_host := Net.in_room() and Net.can_control()
 	if Net.in_room():
 		map_filter_mode = Net.mode                     # a room plays its own mode (the lobby's MODE sheet changes it)
 	elif map_filter_mode == "all" or not map_filter_mode in _pool_modes():
 		map_filter_mode = mode if mode in _pool_modes() else str(_pool_modes()[0])
-	var area := shell_open("OOZE / MATCH SETUP / MAP", "home", _cancel_pick, faction)
-	var x := shell_x()
-	var w := content.size.x - x * 2.0
-	var y := area.position.y + 10.0 if shell_slim else page_title(area, "MATCH SETUP / MAP", "CHOOSE YOUR CROSSING.")
-	var th := UiKit.tap_h(self, 50.0)
-	var gap := 10.0
-	# the foot first (its height bounds the grid): the picked map, ☆, CHOOSE
-	var bh := UiKit.tap_h(self, 48.0)
-	var foot_h := bh
-	var fy := area.end.y - foot_h - 10.0
-	var cap_h := UiKit.line_h(self, 13, true) + 10.0
-	# what the open tab holds
+	var st := _stage_page("OOZE / MATCH SETUP / MAP", "home", "CHOOSE A MAP", "", _cancel_pick, faction)
 	var by_mode := func(md: String) -> Array:
 		return maps.filter(func(e): return md in _modes_of(e["data"]) and (not Net.in_room() or e["path"] in Net.maps_for(Net.mode)))
 	map_filter_type = "all"                            # ROUND 2b: no size tabs - 2 x 5 pages instead (Daniele)
@@ -3896,126 +3889,109 @@ func show_maps() -> void:
 		map_path = shown[0]["path"]                    # a tab without the picked map: pick its first
 	if _map_list == "" and not shown.is_empty():
 		mode = map_filter_mode                         # a mode tab sets up that mode
-	# row 1: mode tabs | ★ FAVOURITES  RECENT  RANDOM
-	var rnd_w := UiKit.text_w(self, "RANDOM", 14, true) + 32.0
-	var rnd := UiKit.btn(self, "RANDOM", Vector2(x + w - rnd_w, y), Vector2(rnd_w, 50), func():
-		var pool := _filtered_maps()
-		if not pool.is_empty():
-			map_path = pool[randi() % pool.size()]["path"]
-		_map_page = -1
-		show_maps(), "secondary", faction, 14)
-	var rx := rnd.position.x - 8.0
-	for li in [["recent", "RECENT"], ["favourites", "★ %d" % UiKit.map_list("favourites").size()]]:
-		var lk: String = li[0]
-		var lw := UiKit.text_w(self, li[1], 14, true) + 32.0
-		rx -= lw
-		UiKit.btn(self, li[1], Vector2(rx, y), Vector2(lw, 50), func():
-			_map_list = "" if _map_list == lk else lk
-			_map_page = 0
-			show_maps(), "selected" if _map_list == lk else "secondary", faction, 14)
-		rx -= 8.0
-	var cx := x
+	# the top row: modes, RECENT, ★, RANDOM (KEY-SMALL 60 x 30, right-aligned)
+	var keys := []
 	for md in _pool_modes():
-		var md_now: String = md
-		var n: int = (by_mode.call(md_now) as Array).size()
-		var text := "%s  %d" % [MODE_NAMES.get(md, md), n]
-		var tw := UiKit.text_w(self, text, 14, true) + 30.0
-		var tb := UiKit.btn(self, text, Vector2(cx, y), Vector2(tw, 50), func():
-			map_filter_mode = md_now
-			map_filter_type = "all"
-			_map_list = ""
-			_map_page = 0
-			show_maps(), "selected" if (md == map_filter_mode and _map_list == "") else "secondary", faction, 14)
-		tb.disabled = n == 0 or (Net.in_room() and md != Net.mode)
-		cx += tw + 6.0
-	y += th + 8.0
-	# the grid: always 2 rows of 5 (Daniele 2026-11-04); more maps = pages, ‹ › beside CHOOSE
-	var cols := 5
+		keys.append(["mode", md])
+	keys += [["list", "recent"], ["list", "favourites"], ["random", ""]]
+	var kx := 797.0 - 64.0 * keys.size() + 4.0
+	for kk in keys:
+		var kind: String = kk[0]
+		var val: String = kk[1]
+		var label := ""
+		var lit := false
+		var off := false
+		var call := Callable()
+		match kind:
+			"mode":
+				label = str(MODE_NAMES.get(val, val))
+				lit = val == map_filter_mode and _map_list == ""
+				off = (by_mode.call(val) as Array).is_empty() or (Net.in_room() and val != Net.mode)
+				call = func():
+					map_filter_mode = val
+					map_filter_type = "all"
+					_map_list = ""
+					_map_page = 0
+					show_maps()
+			"list":
+				label = "RECENT" if val == "recent" else "★ %d" % UiKit.map_list("favourites").size()
+				lit = _map_list == val
+				call = func():
+					_map_list = "" if _map_list == val else val
+					_map_page = 0
+					show_maps()
+			"random":
+				label = "RANDOM"
+				call = func():
+					var pool := _filtered_maps()
+					if not pool.is_empty():
+						map_path = pool[randi() % pool.size()]["path"]
+					_map_page = -1
+					show_maps()
+		var b := st.key("KEY-SMALL", kx, 40, 60, 30, label, call, lit, off, "60x30pt")
+		b.size_pt = 12.5
+		kx += 64.0
+	# the cards: 2 x 5 a page
 	var per := 10
 	var pages := maxi(1, ceili(shown.size() / float(per)))
 	var sel_i := shown.map(func(e): return e["path"]).find(map_path)
 	if _map_page < 0:                                  # opening: the page with the picked map
 		_map_page = maxi(0, sel_i) / per
 	_map_page = clampi(_map_page, 0, pages - 1)
-	var total := shown.size()
 	shown = shown.slice(_map_page * per, _map_page * per + per)
-	var cw := floorf((w - gap * (cols - 1)) / cols)
-	var card := Vector2(cw, floorf((fy - 10.0 - y - gap) / 2.0))
-	var thumb := Vector2(cw - 12.0, card.y - 6.0 - cap_h)
-	var cap_fs := 13.0 if cw < 300.0 else 16.0
 	if shown.is_empty():
-		_shell_add(UiKit.label(self, "No favourite maps yet: tap ☆ on a map to keep it here." if _map_list == "favourites"
-				else ("No recent maps yet." if _map_list == "recent" else "No map matches."), 18, UiKit.MUTED), Vector2(x + 4.0, y + 20.0))
+		st.txt("No favourite maps yet: tap ☆ on a map to keep it here." if _map_list == "favourites"
+				else ("No recent maps yet." if _map_list == "recent" else "No map matches."), 15, 90, 600, 20, 14.0, UiKit.MUTED)
 	for k in range(shown.size()):
 		var entry: Dictionary = shown[k]
 		var m: Dictionary = entry["data"]
 		var mp: String = entry["path"]
 		var code: String = m.get("code", "")
 		var picked := mp == map_path
-		var b := UiKit.btn(self, "", Vector2(x + (k % cols) * (cw + gap), y + (k / cols) * (card.y + gap)), card, func():
+		var x := 15.0 + 158.0 * (k % 5)
+		var y := 75.0 + 107.0 * (k / 5)
+		var b := st.key("MAP-THUMB-CARD", x, y, 150, 100, str(m.get("name", "")).replace("*", "").to_upper(), func():
 			map_path = mp
-			show_maps(), "selected" if picked else "secondary", faction)
-		b.add_child(UiKit.rect(Vector2(6, 6), thumb, Color(UiKit.BASE, 0.9)))
-		var tex := TextureRect.new()
+			show_maps(), picked)
+		b.label_slot = true
+		b.size_pt = 12.5
+		var tex := st.pic(null, x + 6, y + 6, 138, 63)
 		var tp := MapPool.thumb(code)                  # the map alone; a thumbnail not loaded yet fills in later (_thumb_queue)
 		if UiKit.cached(tp):
 			tex.texture = UiKit.map_thumb(tp)
 		else:
 			_thumb_queue.append([tex, tp])
-		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED   # the whole map, never cropped (Daniele, 0.18.7)
-		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		tex.position = Vector2(6, 6)
-		tex.size = thumb
-		b.add_child(tex)
-		var cap := UiKit.label(self, str(m.get("name", "")).replace("*", "").to_upper(), cap_fs, UiKit.accent(faction) if picked else UiKit.INK, true)
-		cap.clip_text = true
-		cap.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		cap.position = Vector2(8, 6.0 + thumb.y + (cap_h - UiKit.line_h(self, cap_fs, true)) / 2.0)
-		cap.size = Vector2(cw - 16.0, UiKit.line_h(self, cap_fs, true))
-		b.add_child(cap)
-	# the foot: the picked map, ☆, CHOOSE
-	var sel := _selected_map()
-	var nt := "CHOOSE  →"
-	var nw := maxf(UiKit.text_w(self, nt, 17, true) + 48.0, 180.0)
-	UiKit.btn(self, nt, Vector2(x + w - nw, fy), Vector2(nw, 48), _choose_map, "primary", faction, 17)
+	# the foot: CANCEL, ☆ + the picked map, ‹ p / n ›, CHOOSE
+	st.key("KEY-SMALL", 15, 298, 115, 33, "CANCEL", _cancel_pick)
 	var is_fav := map_path in UiKit.map_list("favourites")
-	var bgw := UiKit.tap_h(self, 48.0)
-	var fvb := UiKit.btn(self, "★" if is_fav else "☆", Vector2(x + w - nw - 10.0 - bgw, fy), Vector2(bgw, 48), func():
+	var fv := st.key("KEY-SMALL", 138, 298, 36, 33, "★" if is_fav else "☆", func():
 		var fl := UiKit.map_list("favourites")
 		if map_path in fl:
 			fl.erase(map_path)
 		else:
 			fl.append(map_path)
 		UiKit.save_map_list("favourites", fl)
-		show_maps(), "selected" if is_fav else "secondary", faction, 20)
-	fvb.tooltip_text = "FAVOURITE"
-	var arrows_w := 0.0
-	if pages > 1:
-		var aw := UiKit.tap_h(self, 48.0)
-		var px := fvb.position.x - 10.0
-		var nx_b := UiKit.btn(self, "›", Vector2(px - aw, fy), Vector2(aw, 48), func():
-			_map_page += 1
-			show_maps(), "secondary", faction, 24)
-		nx_b.disabled = _map_page >= pages - 1
-		var pt := "%d / %d" % [_map_page + 1, pages]
-		var ptw := UiKit.text_w(self, pt, 15, true) + 16.0
-		_say(pt, Vector2(nx_b.position.x - ptw + 8.0, fy + (bh - UiKit.line_h(self, 15, true)) / 2.0), 15, UiKit.MUTED, 0.0, true)
-		var pv_b := UiKit.btn(self, "‹", Vector2(nx_b.position.x - ptw - aw, fy), Vector2(aw, 48), func():
-			_map_page -= 1
-			show_maps(), "secondary", faction, 24)
-		pv_b.disabled = _map_page <= 0
-		arrows_w = fvb.position.x - pv_b.position.x
-	var detail := "%s  ·  %d NODES%s" % [" · ".join(_modes_of(sel).map(func(v): return MODE_NAMES.get(v, v))), sel["nodes"].size(),
-			_relay_kinds(sel).replace("    /    ", "  ·  ")]
+		show_maps(), is_fav)
+	fv.size_pt = 16.0
+	fv.tooltip_text = "FAVOURITE"
+	var sel := _selected_map()
+	var detail := "%s · %d NODES%s" % [" · ".join(_modes_of(sel).map(func(v): return MODE_NAMES.get(v, v))), sel["nodes"].size(),
+			_relay_kinds(sel).replace("    /    ", " · ")]
 	if room_host:
-		detail += "  ·  THE ROOM SEES IT AFTER CHOOSE"
-	var iw := w - nw - bgw - 30.0 - arrows_w
-	var l1 := UiKit.line_h(self, 18, true)
-	var l2 := UiKit.line_h(self, 13)
-	var iy := fy + (bh - l1 - l2) / 2.0
-	_clip(str(sel.get("name", "")).replace("*", "").to_upper(), Vector2(x, iy), 18, UiKit.INK, iw, true)
-	_clip(detail, Vector2(x, iy + l1), 13, UiKit.accent(faction), iw)
+		detail += " · THE ROOM SEES IT AFTER CHOOSE"
+	st.txt(str(sel.get("name", "")).replace("*", "").to_upper(), 182, 296, 328, 18, 14.0, UiKit.INK, true)
+	st.txt(detail, 182, 313, 328, 18, 12.5, Kit45.KICK)
+	var lb := st.key("KEY-SMALL", 518, 298, 36, 33, "‹", func():
+		_map_page -= 1
+		show_maps(), false, _map_page <= 0)
+	lb.size_pt = 18.0
+	st.txt("%d / %d" % [_map_page + 1, pages], 556, 306, 38, 16, 12.5, UiKit.INK, true, 1)
+	var rb := st.key("KEY-SMALL", 594, 298, 36, 33, "›", func():
+		_map_page += 1
+		show_maps(), false, _map_page >= pages - 1)
+	rb.size_pt = 18.0
+	var cb := st.key("PRIMARY-WIDE", 638, 298, 159, 33, "CHOOSE  →", _choose_map, true)
+	cb.size_pt = 14.0
 	shell_raise()
 
 
@@ -5821,3 +5797,11 @@ func _table45(st: Kit45.Stage, cols: Array, rows: Array, page: String, redraw: C
 		for j in range(mini(cells.size(), cols.size())):
 			var col: Color = cc[j] if j < cc.size() and cc[j] is Color else UiKit.INK
 			st.txt(str(cells[j]), float(cols[j][1]), y + 8, float(cols[j][2]), 16, 12.5, col, j == 0 or j == 1)
+
+
+
+func show_join_demo() -> void:
+	## SCREENSHOT HELPER only (--menu-page=join_demo): the JOIN page with two letters typed.
+	_join_open = true
+	_code_value = "TS"
+	show_main()
