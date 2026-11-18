@@ -4004,10 +4004,12 @@ func _setting_tiles(r: Rect2, mine: String, on_pick: Callable, f: String, enable
 	var tile := Vector2(tw, th + cap + 10.0)
 	for k in range(n):
 		var id: String = LookTheme.IDS[k]
-		var b := UiKit.btn(self, "", r.position + Vector2(k * (tw + gap), 0), tile, func(): on_pick.call(id),
+		var b := UiKit.btn(self, "", r.position + Vector2(k * (tw + gap), 0), tile, func():
+			if enabled:
+				on_pick.call(id),
 				"selected" if id == mine else "secondary", f)
 		var live := LookTheme.is_live(id)                 # SETTINGS: B4 only; the others stay as dimmed COMING SOON tiles (no tap)
-		b.disabled = not enabled or not live
+		b.disabled = not live                               # (a guest's B4 stays enabled so it keeps the selected frame; its pick is a no-op)
 		var tex := LookTheme.preview(id)
 		if tex != null:
 			var pic := TextureRect.new()
@@ -4017,8 +4019,12 @@ func _setting_tiles(r: Rect2, mine: String, on_pick: Callable, f: String, enable
 			pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			pic.position = Vector2(5, 5)
 			pic.size = Vector2(tw - 10.0, th)
-			if not live:
-				pic.modulate = Color(0.42, 0.42, 0.46)
+			if not live:                                  # ~45 % brightness, desaturated
+				var gi := tex.get_image()
+				gi.convert(Image.FORMAT_LA8)
+				gi.convert(Image.FORMAT_RGBA8)
+				pic.texture = ImageTexture.create_from_image(gi)
+				pic.modulate = Color(0.45, 0.45, 0.45)
 			b.add_child(pic)
 		if not live:
 			var bh := minf(th * 0.4, UiKit.line_h(self, 13, true) + 14.0)
@@ -4036,13 +4042,13 @@ func _setting_tiles(r: Rect2, mine: String, on_pick: Callable, f: String, enable
 		var title := str(LookTheme.NAMES[id])
 		if UiKit.text_w(self, title, 13, true) > tw - 16.0:
 			title = str(LookTheme.SHORT_NAMES[id])       # CORPORATE CAMPUS -> CAMPUS on a phone
-		var nm := UiKit.label(self, title, 13, UiKit.accent(f) if id == mine else (UiKit.INK if live else UiKit.MUTED), true)
+		var nm := UiKit.label(self, title, 13, UiKit.accent(f) if id == mine else (UiKit.INK if live else UiKit.DIM), true)
 		nm.clip_text = true
 		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		nm.position = Vector2(8, th + 10.0)
 		nm.size = Vector2(tw - 16.0, UiKit.line_h(self, 13, true))
 		b.add_child(nm)
-		var sub := UiKit.label(self, str(LookTheme.TAGLINES[id]), 12, UiKit.MUTED)
+		var sub := UiKit.label(self, str(LookTheme.TAGLINES[id]), 12, UiKit.MUTED if live else UiKit.DIM)
 		sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if two else TextServer.AUTOWRAP_OFF
 		sub.clip_text = not two
 		sub.position = Vector2(8, th + 10.0 + nm.size.y)
