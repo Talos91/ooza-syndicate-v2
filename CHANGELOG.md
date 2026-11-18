@@ -1,5 +1,14 @@
 # Ooze Syndicate 2.0 - changelog
 
+## 0.25.0 "copper punk UI, HUD zones, map pass, max 4 seats" - 2026-11-18 (STAGING only; live is 0.23.21)
+
+- Release release-0.25.0 = main 2340236 + ui-build-43b ac44b3c (fast-forward-able; merge commit, 0 conflicts). net.gd changed (max 4 seats), protocol tag stays ooze20-net-8, so the staging room pack moves with the build.
+  - Copper punk menus and HUD from the director's 43B packs (plum ground, copper art-deco trim); designer 10 FIX rounds applied.
+  - HUD zones per Daniele's frame: notifications on the board (text / icons, no top banners), AI moods on the AI screens (1v1 each, 2v2 per team, FFA alternating), skill column and score goo shading.
+  - Map pass: 17 of 19 G maps refit to the pit (G-14 and G-19: 26 bridges, Daniele's call); zone sweep 0 overlaps.
+  - Max 4 seats (net.gd): FFA5, 3v3 and 2v2v2 archived; no selector, set_mode refuses them. Modes: 1v1, FFA3, FFA4, 2v2.
+  - Known gap: the start note has no home in the hud-43 layout.
+
 ## 0.24.6.1 "AI screens centred" - 2026-11-17 (STAGING hotfix; live is 0.23.21)
 
 - Release = main 0c9263e + units-models-1117 f1a6b67 (merge). Daniele saw the AIs sitting too high and cut off in the VERSUS screens: each AI is now centred in the glass, sized by the largest, nothing clipped (only the ai_screen_* PNGs and their builder change). No net.gd / protocol change (ooze20-net-8).
