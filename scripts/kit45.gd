@@ -383,7 +383,7 @@ class Btn extends Button:
 				lr = Rect2(lr.position.x, art.position.y, lr.size.x, art.size.y)   # vertically: the whole face (the floor may outgrow the slot)
 		if glyph != null and glyph_rect.size.x > 0.0:
 			var gr := Rect2(art.position + glyph_rect.position * u, glyph_rect.size * u)
-			draw_texture_rect(glyph, gr, false, Kit45.ink_on(fam, key, st, sl))
+			draw_texture_rect(Kit45.white(glyph), gr, false, ink if ink.a > 0.0 else Kit45.ink_on(fam, key, st, sl))   # 45B2: cream on copper
 			var gx := gr.end.x + 4.0 * u - art.position.x
 			lr = Rect2(art.position.x + gx, lr.position.y, art.size.x - gx - 6.0 * u, lr.size.y)
 		if label == "":
@@ -507,3 +507,28 @@ class KeyBox extends StyleBox:
 
 static func key_ink(st: String) -> Color:
 	return ink_on("PRIMARY-WIDE", "229x33pt", st, [])
+
+
+static var _white := {}
+
+
+static func white(t: Texture2D) -> Texture2D:
+	## A glyph painted in dark ink, as white with its alpha (cached), so it can be drawn in the face's ink colour.
+	if t == null:
+		return null
+	if _white.has(t):
+		return _white[t]
+	var img := t.get_image()
+	if img == null:
+		return t
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	var d := img.get_data()
+	for i in range(0, d.size(), 4):
+		d[i] = 255
+		d[i + 1] = 255
+		d[i + 2] = 255
+	var w := ImageTexture.create_from_image(Image.create_from_data(img.get_width(), img.get_height(), false, Image.FORMAT_RGBA8, d))
+	_white[t] = w
+	return w
