@@ -1523,201 +1523,78 @@ func _bar(pos: Vector2, dims: Vector2, f: float, col: Color) -> void:
 	content.add_child(fill)
 
 
-func _profile_card(pos: Vector2) -> void:
-	## MAIN, top right: level, XP to the next, both balances - tap for PROFILE; CHALLENGES under it with what is
-	## ready to claim.
-	var dims := P(360, 132)
-	var lf := Progression.level_for(Progression.xp)
-	nav_button("", pos, dims, show_profile, false, false)
-	content.add_child(neon_panel(pos, dims, Color("18dae8"), false, Color("030c12ec")))
-	label_at("LEVEL %d" % int(lf["level"]), pos + P(18, 8), 30, Color.WHITE, false)
-	label_at("PROFILE", pos + P(260, 18), 16, Color("839da9"), false)
-	_bar(pos + P(18, 56), P(324, 10), float(lf["into"]) / maxf(1.0, float(lf["need"])), Color("5fd7ff"))
-	_balance(Progression.balance("soft"), "soft", pos + P(14, 80), 0.62 * K * 1.6, false)      # the marks name them
-	_balance(Progression.balance("premium"), "premium", pos + P(196, 80), 0.62 * K * 1.6, false)
-	var ready_n := Progression.claimable()
-	var cb := nav_button("CHALLENGES" + (" · %d TO CLAIM" % ready_n if ready_n > 0 else ""), pos + P(0, 146), P(360, 64),
-			show_challenges, ready_n > 0)
-	cb.add_theme_font_size_override("font_size", int(round(fsz(21) * K)))
-
-
 func show_profile() -> void:
 	_last_show = show_profile                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## PROFILE (screen system 21; the top bar's level block; a NavBar tab of its own, Decisions ui-profile-access "ab"):
-	## level and XP, both balances and where they come from, per faction plays / wins and the faction vat's progress
-	## (25 wins online or vs Veteran / Expert AI), and whether it is saved on this device; CHALLENGES, LEADERBOARD,
-	## MATCH HISTORY and ACCOUNT as an equal row at the TOP (a guest's ACCOUNT lit: add Google there); the two columns
-	## under it. Its sub-pages' BACK returns here (_meta_open / _prev_show).
-	var area := shell_open("OOZE / PROFILE", "profile", Callable(), faction)
+	## PROFILE = the remake (45B sizes.json PROFILE): the four sub-tabs; LEVEL-CARD (avatar, LEVEL, XP bar in the seat colour,
+	## SCRAP and CHIPS rows with where they come from); FACTIONS-PANEL with a FACTION-ROW per faction (played / won, the
+	## faction vat's progress in the faction colour).
+	var st := _profile_tabs("", "OOZE / PROFILE")
 	_page = "profile"
-	var x := shell_x()
-	var acc := UiKit.accent(shell_f)
-	var top := page_title(area, "PROFILE", "YOUR SYNDICATE RECORD.")
 	var a := _account()
-	var bh := UiKit.tap_h(self, 46.0)
-	var items := [["CHALLENGES", show_challenges], ["LEADERBOARD", show_leaderboard], ["MATCH HISTORY", show_history],
-			["ACCOUNT", show_account]]                   # 0.20.5: LEADERBOARD, HISTORY, ACCOUNT
-	var all_w := content.size.x - x * 2.0
-	var bgap := 10.0
-	var bw := (all_w - bgap * (items.size() - 1)) / items.size()
-	for i in range(items.size()):
-		var l = items[i]
-		var lit: bool = l[0] == "ACCOUNT" and a.state == "guest"
-		UiKit.btn(self, l[0], Vector2(x + i * (bw + bgap), top), Vector2(bw, bh), l[1], "primary" if lit else "secondary", shell_f, 15)
-	top += bh + 20.0
-	var gap := 18.0
-	var lw := floorf((all_w - gap) * 0.42)
-	var ch := area.end.y - 12.0 - top
-	# left: level, XP, SCRAP and CHIPS and where they come from, where it is saved
-	var left := _column(Vector2(x, top), Vector2(lw, ch))
-	var w: float = left["w"]
-	var n0 := content.get_child_count()
 	var lf := Progression.level_for(Progression.xp)
-	var hs := 88.0
-	UiKit.hero(self, shell_f, Vector2(0, 0), Vector2(hs, hs), false)
-	var ly := 10.0
-	ly += _say("YOUR LEVEL", Vector2(hs + 14.0, ly), 12, acc, 0.0, true, 3) + 2.0
-	ly += _say("LEVEL %d" % int(lf["level"]), Vector2(hs + 12.0, ly), 34, UiKit.INK, 0.0, true)
-	var y := maxf(hs, ly) + 10.0
-	UiKit.bar(self, Vector2(0, y), Vector2(w, 8), float(lf["into"]) / maxf(1.0, float(lf["need"])), shell_f)
-	y += 16.0
-	y += _say("%d / %d XP TO LEVEL %d" % [int(lf["into"]), int(lf["need"]), int(lf["level"]) + 1], Vector2(0, y), 14, UiKit.INK, 0.0, true) + 2.0
 	var PR := Rules.PROGRESSION
-	y += _say("EVERY LEVEL +%d SCRAP  ·  EVERY %dTH ALSO +%d CHIPS" % [int(PR["level_soft"]), int(PR["level_premium_every"]),
-			int(PR["level_premium"])], Vector2(0, y), 12, UiKit.MUTED, w, true) + 14.0
-	for cur in ["soft", "premium"]:
-		content.add_child(UiKit.rect(Vector2(0, y), Vector2(w, 1.0), Color(UiKit.FRAME, 0.7)))
-		y += 12.0
-		var t := _ticker(Progression.balance(cur), cur, Vector2(-4.0, y))
-		y += t.size.y + 4.0
-		var why := ("Matches (from Veteran AI up), challenges, the tutorial and the campaign. A skill costs %s." % Progression.amount_text(int(Rules.PRICES["skill"]["soft"]), "soft", false)) if cur == "soft" \
-				else ("Weekly challenges and every %dth level; the store later. For looks only - never skills." % int(PR["level_premium_every"]))
-		y += _say(why, Vector2(0, y), 13, UiKit.MUTED, w) + 14.0
-	if Progression.unlock_all:
-		y += _say("UNLOCKS OPEN WHILE TESTING (SETTINGS > DEBUG > TEST SWITCH)", Vector2(0, y), 12, UiKit.STAR, w, true) + 10.0
-	var note := "Progress saved on this device" if Progression.saved else "This browser keeps no storage: progress lasts until the page closes"
-	if a.state == "linked":
-		note = "Progress saved on this device and in your account"
-	elif a.state == "guest":
-		note = "Guest account: add Google (ACCOUNT) to keep your progress on any device"
-	y += _say(note, Vector2(0, y), 13, UiKit.DIM if Progression.saved else UiKit.STAR, w)
-	_column_end(left, n0, y)
-	# right: the five factions - plays, wins, the faction vat
-	var right := _column(Vector2(x + lw + gap, top), Vector2(all_w - lw - gap, ch))
-	w = right["w"]
-	n0 = content.get_child_count()
-	y = 0.0
-	y += _say("FACTIONS", Vector2(0, y), 18, UiKit.INK, 0.0, true) + 2.0
+	st.piece("LEVEL-CARD", 15, 116, 329, 213)
+	st.piece("SEAT-AVATAR-WELL", 26, 127, 53, 45, "STATIC", "50x46pt")
+	st.add_child(_cutout_mark(faction, st.P(29, 129), Vector2(47, 41) * st.u))
+	st.txt(a.player_name.to_upper() if a.player_name != "" else "YOUR LEVEL", 91, 127, 230, 16, 12.5, Kit45.KICK, true)
+	st.txt("LEVEL %d" % int(lf["level"]), 91, 147, 230, 24, 22.0, UiKit.INK, true)
+	var xb := st.piece("XP-BAR", 26, 182, 307, 8)
+	xb.fill = float(lf["into"]) / maxf(1.0, float(lf["need"]))
+	xb.tints = {"fill": Kit45.seat()}
+	st.txt("%s / %s XP TO LEVEL %d" % [_thou(int(lf["into"])), _thou(int(lf["need"])), int(lf["level"]) + 1], 26, 196, 307, 16, 12.5, UiKit.INK, true)
+	var rows := [["soft", "CUR-1", "SCRAP", "Matches, challenges, tutorial. Buys skills."],
+			["premium", "CUR-2", "CHIPS", "Challenges, every %dth level. Looks only." % int(PR["level_premium_every"])]]
+	for k in range(2):
+		var y := 222.0 + 50.0 * k
+		st.piece("CURRENCY-ROW", 26, y, 307, 46)
+		st.pic(Kit45.art(str(rows[k][1])), 33, y + 6, 23, 23)
+		st.txt("%s %s" % [_thou(Progression.balance(str(rows[k][0]))), rows[k][2]], 64, y + 4, 258, 16, 13.0, UiKit.INK, true)
+		st.txt(str(rows[k][3]), 33, y + 27, 289, 16, 12.5, UiKit.MUTED)
+	# FACTIONS
+	st.piece("FACTIONS-PANEL", 354, 116, 443, 213)
 	var need: int = PR["faction_vat_wins"]
-	y += _say("%d WINS WITH A FACTION UNLOCK ITS VAT  ·  ONLINE, OR VS VETERAN / EXPERT AI" % need, Vector2(0, y), 12,
-			UiKit.MUTED, w, true) + 12.0
-	var l1 := UiKit.line_h(self, 16, true)
-	var l2 := UiKit.line_h(self, 13)
-	var rh := maxf(62.0, l1 + l2 + 16.0)
-	for f in FACTIONS:
-		var fa := UiKit.accent(f)
-		var st := Progression.faction_stats(f)
+	st.txt("FACTIONS", 366, 122, 415, 16, 13.0, UiKit.INK, true)
+	st.txt("%d wins with a faction unlock its vat (online or vs Veteran AI up)." % need, 366, 139, 415, 16, 12.5, UiKit.MUTED)
+	for i in range(FACTIONS.size()):
+		var f: String = FACTIONS[i]
+		var fs := Progression.faction_stats(f)
 		var owned := Progression.owns("vat:faction:" + f)
-		UiKit.panel(self, Vector2(0, y), Vector2(w, rh), f, false, Color(UiKit.BASE, 0.6))
-		UiKit.hero(self, f, Vector2(8, y + 5.0), Vector2(rh - 10.0, rh - 10.0), false)
-		var tx := rh + 8.0
-		var mid := floorf(w * 0.5)
-		var ty := y + (rh - l1 - l2) / 2.0
-		UiKit.emblem_rect(self, f, Vector2(tx, ty), l1)
-		_say(UiKit.NAMES[f], Vector2(tx + l1 + 6.0, ty), 16, fa, 0.0, true)
-		_say("PLAYED %d  ·  WON %d" % [int(st["plays"]), int(st["wins"])], Vector2(tx, ty + l1), 13, UiKit.INK)
-		UiKit.bar(self, Vector2(mid, y + rh / 2.0 - 9.0), Vector2(w - mid - 14.0, 6), 1.0 if owned else float(st["vat_wins"]) / float(need), f)
-		_say("VAT UNLOCKED" if owned else "VAT  %d / %d WINS" % [int(st["vat_wins"]), need], Vector2(mid, y + rh / 2.0 + 1.0), 12,
-				fa if owned else UiKit.MUTED, 0.0, true)
-		y += rh + 8.0
-	_column_end(right, n0, y)
+		var y := 157.0 + 34.0 * i
+		var row := st.piece("FACTION-ROW", 363, y, 425, 29, "NORMAL", "425x29pt")
+		row.fill = 1.0 if owned else float(fs["vat_wins"]) / float(need)
+		row.tints = {"fill": UiKit.accent(f)}
+		st.pic(UiKit.tex(UiKit.ai_screen_path(f)), 369, y + 4, 30, 21)
+		st.txt(str(UiKit.NAMES[f]), 407, y, 155, 15, 12.5, UiKit.accent(f), true)
+		st.txt("PLAYED %d · WON %d" % [int(fs["plays"]), int(fs["wins"])], 407, y + 14, 167, 15, 12.5, UiKit.INK)
+		st.txt("VAT UNLOCKED" if owned else "VAT %d / %d WINS" % [int(fs["vat_wins"]), need], 604, y + 14, 174, 14, 12.5,
+				UiKit.accent(f) if owned else UiKit.MUTED, true, 2)
+	shell_raise()
 
 
 func show_challenges(just_claimed := "") -> void:
 	_last_show = func(): show_challenges()                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## CHALLENGES (screen system 22): three daily and three weekly (the same for everyone, reset 00:00 UTC / Monday),
-	## progress from any finished match (tutorial lessons excluded), CLAIM pays (the card counts it up), one daily REROLL
-	## a day; PROFILE and PLAY at the foot. BACK returns to the page it was opened from (HOME's CHALLENGES, PROFILE...).
-	var tab := _meta_open("challenges", show_main)
-	var area := shell_open("OOZE / CHALLENGES", tab, func(): _meta_back("challenges", show_main), faction)
+	## CHALLENGES = the PROFILE > CHALLENGES tab (45B CHALLENGE-ROW 762 x 72): the dailies then the weeklies, three rows a
+	## page (‹ › at the top right), each with its text, progress bar + count, reward, and CLAIM / REROLL / IN PROGRESS / DONE.
+	_meta_open("challenges", show_main)
+	var kick := "DAILY RESET %s · WEEKLY %s" % [Progression.duration_text(Progression.seconds_to_reset("daily")).to_upper(),
+			Progression.duration_text(Progression.seconds_to_reset("weekly")).to_upper()]
+	var st := _profile_tabs("CHALLENGES", "OOZE / CHALLENGES", func(): _meta_back("challenges", show_main), kick, Vector2(200, 652))
 	_page = "challenges"
-	var x := shell_x()
-	var top := page_title(area, "CHALLENGES", "A LITTLE EXTRA PRESSURE.")
-	var bh := UiKit.tap_h(self, 48.0)
-	var fy := area.end.y - bh - 12.0
-	var play := UiKit.btn(self, "PLAY  →", Vector2(content.size.x - x - 200.0, fy), Vector2(200, 48), show_play, "primary", shell_f, 16)
-	var prof := UiKit.btn(self, "PROFILE", Vector2(play.position.x - 170.0, fy), Vector2(160, 48), show_profile, "secondary", shell_f, 15)
-	var note := "Play any match to progress, then claim. One reroll a day, for a daily you would rather swap."
-	var nw := prof.position.x - x - 16.0
-	_say(note, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, note, 13, nw)) / 2.0)), 13, UiKit.MUTED, nw)
-	var gap := 18.0
-	var cw := (content.size.x - x * 2.0 - gap) / 2.0
 	var rerolled: bool = Progression.challenges.get("daily", {}).get("rerolled", false)
-	for k in range(2):
-		var kind: String = ["daily", "weekly"][k]
-		var col := _column(Vector2(x + k * (cw + gap), top), Vector2(cw, fy - 12.0 - top))
-		var w: float = col["w"]
-		var n0 := content.get_child_count()
-		_say(kind.to_upper(), Vector2(0, 0), 18, UiKit.INK, 0.0, true)
-		var rs := "RESETS IN " + Progression.duration_text(Progression.seconds_to_reset(kind)).to_upper()
-		_say(rs, Vector2(w - UiKit.text_w(self, rs, 12, true) - 4.0, (UiKit.line_h(self, 18, true) - UiKit.line_h(self, 12, true)) / 2.0),
-				12, UiKit.MUTED, 0.0, true)
-		var y := UiKit.line_h(self, 18, true) + 10.0
+	var list := []
+	for kind in ["daily", "weekly"]:
 		for c in Progression.current_challenges(kind):
-			y += _challenge_card(c, kind, Vector2(0, y), w, just_claimed, rerolled) + 10.0
-		_column_end(col, n0, y)
-
-
-func _challenge_card(c: Dictionary, kind: String, pos: Vector2, w: float, just_claimed: String, rerolled: bool) -> float:
-	## One challenge on its card: the task, its progress bar and count, the reward; at the right CLAIM (done), REROLL (a
-	## daily, once a day), the paid SCRAP counting up (just claimed), CLAIMED, or IN PROGRESS. Returns the card's height.
-	var claimed: bool = c["claimed"]
-	var done: bool = c["done"]
-	var id: String = c["id"]
-	var bw := maxf(150.0, UiKit.text_w(self, "IN PROGRESS", 13, true) + 8.0)   # the right column fits its widest word
-	var bh := UiKit.tap_h(self, 42.0)
-	var text := str(c["text"])
-	var th := UiKit.text_h(self, text, 15, w - 28.0, true)
-	var lh := UiKit.line_h(self, 13)
-	var reward := "%s  ·  +%d XP" % [Progression.amount_text(int(c["soft"])), int(c["xp"])]
-	if int(c["premium"]) > 0:
-		reward += "  ·  " + Progression.amount_text(int(c["premium"]), "premium")
-	var rw := w - 28.0 - bw - 16.0
-	var rwh := UiKit.text_h(self, reward, 13, rw)
-	var body := maxf(bh, lh + 6.0 + rwh)
-	var h := 14.0 + th + 8.0 + body + 14.0
-	UiKit.panel(self, pos, Vector2(w, h), shell_f, done and not claimed, Color(UiKit.BASE, 0.6))
-	_say(text, pos + Vector2(14, 14), 15, UiKit.DIM if claimed else UiKit.INK, w - 28.0, true)
-	var by := pos.y + 14.0 + th + 8.0
-	var cnt := "%d / %d" % [int(c["progress"]), int(c["target"])]
-	var cnt_w := UiKit.text_w(self, cnt, 13, true)
-	var bar_w := rw - cnt_w - 10.0
-	UiKit.bar(self, Vector2(pos.x + 14.0, by + (lh - 6.0) / 2.0), Vector2(bar_w, 6), float(c["progress"]) / maxf(1.0, float(c["target"])), shell_f)
-	_say(cnt, Vector2(pos.x + 14.0 + bar_w + 10.0, by), 13, UiKit.INK, 0.0, true)
-	_say(reward, Vector2(pos.x + 14.0, by + lh + 6.0), 13, RewardTicker.COLOURS["soft"], rw)
-	var bp := Vector2(pos.x + w - 14.0 - bw, by + (body - bh) / 2.0)
-	var tag := ""
-	if claimed:
-		if id == just_claimed:                          # the paid SCRAP counts up on the card it came from
-			var t := _ticker(int(c["soft"]), "soft", bp, false)
-			t.position.x = pos.x + w - 14.0 - t.size.x
-			t.position.y = by + (body - t.size.y) / 2.0
-		else:
-			tag = "CLAIMED"
-	elif done:
-		UiKit.btn(self, "CLAIM", bp, Vector2(bw, 42), func():
-			if not Progression.claim(kind, id).is_empty():
-				show_challenges(id), "primary", shell_f, 15)
-	elif kind == "daily" and not rerolled:
-		UiKit.btn(self, "REROLL", bp, Vector2(bw, 42), func():
-			Progression.reroll(id)
-			show_challenges(), "secondary", shell_f, 15)
-	else:
-		tag = "IN PROGRESS"
-	if tag != "":
-		_say(tag, Vector2(pos.x + w - 14.0 - UiKit.text_w(self, tag, 13, true), by + (body - UiKit.line_h(self, 13, true)) / 2.0), 13,
-				UiKit.DIM, 0.0, true)
-	return h
+			list.append([kind, c])
+	var n_pages := maxi(1, ceili(list.size() / 3.0))
+	var p := _pager(st, "challenges", n_pages, func(): show_challenges(), 660, 39)
+	for k in range(3):
+		var i := p * 3 + k
+		if i >= list.size():
+			break
+		_challenge_row45(st, str(list[i][0]), list[i][1], 25, 113 + 72 * k, just_claimed, rerolled)
+	if list.is_empty():
+		st.txt("No challenges right now - they come back at the next reset.", 25, 150, 762, 20, 13.0, UiKit.MUTED)
+	shell_raise()
 
 
 # ------------------------------------------------------------------ UI: parts of the online / progression / settings pages (Alpha 21)
@@ -1884,115 +1761,95 @@ func _line_edit(pos: Vector2, dims: Vector2, placeholder: String, text := "") ->
 
 func show_account() -> void:
 	_last_show = show_account                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## ACCOUNT (Daniele: an automatic guest, then Google to keep progress on any device - no email: "its a game why
-	## would they want to do that"; a sign-in onto an account that already has progress keeps the account's). Guests are
-	## never asked to verify anything; the game plays offline without it. Left: the account's state and your NAME (a
-	## plain panel, never scrolled, so the web build's native name field stays exactly on its frame); right: sign in with
-	## an account linked elsewhere. BACK returns to PROFILE (or wherever it was opened from).
+	## ACCOUNT = PROFILE > ACCOUNT (45B): left PLAYER PROFILE (avatar, name, level), DISPLAY NAME field + SAVE NAME; right
+	## ACCOUNT STATUS (where progress is kept, the last note), SIGN IN WITH GOOGLE / ADD GOOGLE (guest), PRIVACY (the
+	## share switch + the policy) and DELETE ACCOUNT. Optional: the game plays offline without it.
 	var a := _account()
-	var tab := _meta_open("account", show_profile)
-	var back := func():
+	_meta_open("account", show_profile)
+	var st := _profile_tabs("ACCOUNT", "OOZE / ACCOUNT", func():
 		_account_note = ""
-		_meta_back("account", show_profile)
-	var area := shell_open("OOZE / ACCOUNT", tab, back, faction)
+		_meta_back("account", show_profile))
 	_page = "account"
-	var x := shell_x()
-	var top := page_title(area, "ACCOUNT  ·  OPTIONAL, THE GAME PLAYS OFFLINE WITHOUT IT", "KEEP YOUR PROGRESS.")
 	var web := OS.has_feature("web")
-	var gap := 18.0
-	var cw := (content.size.x - x * 2.0 - gap) / 2.0
-	var ch := area.end.y - 14.0 - top
-	var lp := UiKit.panel(self, Vector2(x, top), Vector2(cw, ch), shell_f)
-	var px := x + 20.0
-	var w := cw - 40.0
-	var status := "OFFLINE  -  no connection; you play as a guest on this device"
+	st.piece("HERO-CABINET", 15, 115, 385, 215, "STATIC", "385x215pt")
+	st.piece("HERO-CABINET", 412, 115, 385, 215, "STATIC", "385x215pt")
+	# left: the player
+	st.piece("SEAT-AVATAR-WELL", 30, 133, 40, 40, "STATIC", "40x40pt")
+	st.add_child(_cutout_mark(faction, st.P(33, 136), Vector2(34, 34) * st.u))
+	var lf := Progression.level_for(Progression.xp)
+	st.txt("PLAYER PROFILE", 85, 133, 293, 16, 12.5, Kit45.KICK, true)
+	st.txt("%s · LEVEL %d" % [(a.player_name if a.player_name != "" else "PLAYER").to_upper(), int(lf["level"])], 85, 151, 293, 18, 14.0, UiKit.INK, true)
+	st.txt("DISPLAY NAME", 30, 196, 350, 16, 12.5, Kit45.KICK, true)
+	var on := a.signed_in()
+	st.piece("CHAT-FIELD", 30, 219, 350, 33, "NORMAL" if on else "DISABLED")
+	var fr := st.R(36, 219, 338, 33)
+	var e := LineEdit.new()
+	e.size = fr.size
+	e.placeholder_text = "3-16 letters or digits"
+	e.text = a.player_name
+	e.add_theme_font_override("font", UiKit.HEAD)
+	e.add_theme_font_size_override("font_size", int(maxf(13.0 * st.u, Kit45.floor_px(self))))
+	e.add_theme_color_override("font_color", UiKit.INK)
+	e.add_theme_color_override("font_placeholder_color", UiKit.DIM)
+	e.add_theme_color_override("font_uneditable_color", UiKit.MUTED)
+	for sn in ["normal", "read_only", "focus"]:
+		e.add_theme_stylebox_override(sn, StyleBoxEmpty.new())
+	e.virtual_keyboard_enabled = true
+	e.position = fr.position
+	st.add_child(e)
+	if web:                                            # the HTML field sits on this frame (never typed into)
+		e.editable = false
+		e.focus_mode = Control.FOCUS_NONE
+		e.text = ""
+		e.placeholder_text = ""
+		_name_box = e
+		_name_enabled = on
+		_name_value = a.player_name
+		_place_name_field.call_deferred()
+	else:
+		e.editable = on
+	st.key("KEY-SMALL", 30, 279, 155, 34, "SAVE NAME", func():
+		if web:
+			_rename_from_field()
+			return
+		if await a.rename(e.text):
+			_account_note = "Name saved: " + a.player_name
+		else:
+			_account_note = a.last_error
+		show_account(), on, not on)
+	# right: the account
+	var status := "Offline: you play as a guest on this device."
 	var col := Color("ffd15c")
 	match a.state:
 		"guest":
-			status = "GUEST ACCOUNT  -  progress on this device, with a cloud copy"
+			status = "Guest account: this device, with a cloud copy."
 			col = Color("9cb2bf")
 		"linked":
-			status = "SIGNED IN WITH GOOGLE" + (("  -  " + a.email) if a.email != "" else "")
+			status = "Signed in with Google" + ((": " + a.email) if a.email != "" else ".")
 			col = Color("6fff2a")
 		"signing_in":
-			status = "SIGNING IN ..."
-		"deleted":                                  # PROGRESSION (Alpha 21): DELETE ACCOUNT done
-			status = "ACCOUNT DELETED  -  this device keeps its progress; a new guest account starts next time"
-			col = Color("ffd15c")
-	var y := top + 16.0
-	y += _say(status, Vector2(px, y), 15, col, w, true) + 16.0
-	y += _say("NAME", Vector2(px, y), 12, UiKit.MUTED, 0.0, true, 3) + 6.0
-	var rw := UiKit.text_w(self, "RENAME", 15, true) + 44.0
-	var fw := minf(w - rw - 12.0, 360.0)
-	if web:
-		# the web build: Godot's LineEdit doesn't raise a phone keyboard, and a field focused from Godot's own input
-		# handling doesn't either on Android (outside the tap's gesture - Daniele, 0.20.10: "keyboard still doesn't
-		# appear"). So the NAME box IS a native HTML <input> laid over it (_place_name_field): the tap lands on the DOM
-		# element itself and the phone raises its keyboard. RENAME (or Enter) saves what it holds.
-		var box := _line_edit(Vector2(px, y), Vector2(fw, 46), "", "")   # the frame the HTML field sits on (never typed into)
-		box.editable = false
-		box.focus_mode = Control.FOCUS_NONE
-		_name_box = box
-		_name_enabled = a.signed_in()
-		_name_value = a.player_name
-		_place_name_field.call_deferred()
-		var rn := UiKit.btn(self, "RENAME", Vector2(px + fw + 12.0, y), Vector2(rw, 46), func(): _rename_from_field(), "secondary", shell_f, 15)
-		rn.disabled = not a.signed_in()
-		y += box.size.y
-	else:
-		var nm := _line_edit(Vector2(px, y), Vector2(fw, 46), "3-16 letters or digits", a.player_name)
-		var rn := UiKit.btn(self, "RENAME", Vector2(px + fw + 12.0, y), Vector2(rw, 46), func():
-			if await a.rename(nm.text):
-				_account_note = "Name saved: " + a.player_name
-			else:
-				_account_note = a.last_error
-			show_account(), "secondary", shell_f, 15)
-		rn.disabled = not a.signed_in()
-		nm.editable = a.signed_in()
-		y += nm.size.y
-	y += 22.0
+			status = "Signing in ..."
+		"deleted":
+			status = "Account deleted: this device keeps its progress."
+	st.txt("ACCOUNT STATUS", 427, 133, 353, 16, 12.5, Kit45.KICK, true)
+	st.txt(status, 427, 153, 353, 18, 12.5, col, true)
+	var line2 := _account_note if _account_note != "" else ("Progress saved on this device." if Progression.saved else "This browser keeps no storage.")
+	st.txt(line2, 427, 174, 353, 32, 12.5, UiKit.STAR if _account_note != "" else UiKit.MUTED, false, 0, 2)
 	if web and not a.google_ready and a.state != "offline":
 		a.check_google()                           # redraws through Account.changed when the answer differs
 	var google_ok := web and a.google_ready
-	if a.state == "guest":
-		y += _say("KEEP YOUR PROGRESS ON ANY DEVICE", Vector2(px, y), 15, UiKit.INK, w, true) + 8.0
-		var gw := UiKit.text_w(self, "ADD GOOGLE", 16, true) + 60.0
-		var g := UiKit.btn(self, "ADD GOOGLE", Vector2(px, y), Vector2(gw, 48), func():
-			if not await a.google(true):
-				_account_note = a.last_error
-				show_account(), "primary" if google_ok else "secondary", shell_f, 16)
-		g.disabled = not google_ok
-		y += g.size.y + 10.0
-		var gn := "Your progress is already kept in this guest account; Google keeps it on your other devices too."
-		if y + UiKit.text_h(self, gn, 13, w) < top + ch - 10.0:      # a short phone keeps the panel's edge clear
-			y += _say(gn, Vector2(px, y), 13, UiKit.MUTED, w)
-	# right: sign in with an account linked elsewhere - its progress replaces this device's
-	var right := _column(Vector2(x + cw + gap, top), Vector2(cw, ch))
-	var rcw: float = right["w"]
-	var n0 := content.get_child_count()
-	var ry := 4.0
-	ry += _say("ALREADY HAVE AN ACCOUNT?", Vector2(0, ry), 15, UiKit.INK, rcw, true) + 6.0
-	ry += _say("Sign in with the Google account you linked on another device. Its progress replaces this device's.",
-			Vector2(0, ry), 14, UiKit.MUTED, rcw) + 14.0
-	var sw := UiKit.text_w(self, "SIGN IN WITH GOOGLE", 15, true) + 50.0
-	var gs := UiKit.btn(self, "SIGN IN WITH GOOGLE", Vector2(0, ry), Vector2(sw, 48), func():
+	st.key("KEY-SMALL", 427.5, 220, 155, 34, "SIGN IN", func():
 		if not await a.google(false):
 			_account_note = a.last_error
-			show_account(), "secondary", shell_f, 15)
-	gs.disabled = not google_ok
-	ry += gs.size.y + 10.0
-	if not web:
-		ry += _say("Google sign-in works in the browser build.", Vector2(0, ry), 13, UiKit.DIM, rcw) + 8.0
-	elif not a.google_ready and a.state != "offline":
-		ry += _say("Google sign-in isn't available right now.", Vector2(0, ry), 13, UiKit.DIM, rcw) + 8.0
-	if _account_note != "":
-		ry += _say(_account_note, Vector2(0, ry + 6.0), 15, UiKit.STAR, rcw) + 14.0
-	ry = _privacy_rows_account(ry, rcw)                # PROGRESSION (Alpha 21): the switch, PRIVACY, DELETE ACCOUNT
-	_column_end(right, n0, ry, true)
-	var both := minf(ch, maxf(y + 16.0 - top, (right["panel"] as Control).size.y))   # one height for the pair
-	lp.size.y = both
-	(right["panel"] as Control).size.y = both
-	(right["scroll"] as Control).size.y = both - 24.0
+			show_account(), a.state != "linked" and google_ok, not google_ok or a.state == "linked")
+	if a.state == "guest":
+		st.key("KEY-SMALL", 597.5, 220, 183, 34, "ADD GOOGLE", func():
+			if not await a.google(true):
+				_account_note = a.last_error
+				show_account(), google_ok, not google_ok)
+	st.key("KEY-SMALL", 427.5, 279, 155, 34, "PRIVACY", func(): show_privacy(show_account))
+	st.key("KEY-SMALL", 597.5, 279, 183, 34, "DELETE ACCOUNT", _delete_prompt, false, not a.signed_in())
+	shell_raise()
 
 
 # ------------------------------------------------------------------ PROGRESSION: PRIVACY (Alpha 21)
@@ -2006,31 +1863,6 @@ func _privacy_rows_options(y: float, w: float) -> float:
 	var b := UiKit.btn(self, "PRIVACY  →", Vector2(0, y + 12.0), Vector2(pw, 44), func(): show_privacy(show_options),
 			"secondary", shell_f, 15)
 	return y + 12.0 + b.size.y + 12.0
-
-
-func _privacy_rows_account(ry: float, rcw: float) -> float:
-	## ACCOUNT's right column, under the Google sign-in (§6-§7): the switch, the PRIVACY page, DELETE ACCOUNT. UiKit canvas
-	## units, rows at (0, ry), width rcw (the column scrolls); returns the next row's y.
-	var a := _account()
-	ry += 10.0
-	ry += _say("PRIVACY", Vector2(0, ry), 15, UiKit.INK, rcw, true) + 8.0   # no line under it: the rows stay on a 640 px phone
-	var sw := minf(rcw, UiKit.text_w(self, _share_label(), 15, true) + 44.0)
-	var sb := UiKit.btn(self, _share_label(), Vector2(0, ry), Vector2(sw, 48), func():
-		_toggle_share()
-		show_account(), "secondary", shell_f, 15)
-	ry += sb.size.y + 10.0
-	var pw := UiKit.text_w(self, "PRIVACY", 15, true) + 44.0
-	var dw := UiKit.text_w(self, "DELETE ACCOUNT", 15, true) + 44.0
-	var pb := UiKit.btn(self, "PRIVACY", Vector2(0, ry), Vector2(pw, 48), func(): show_privacy(show_account),
-			"secondary", shell_f, 15)
-	var dx := pw + 12.0
-	if dx + dw > rcw:                                  # a narrow phone column: DELETE ACCOUNT on its own row
-		ry += pb.size.y + 10.0
-		dx = 0.0
-	var del := UiKit.btn(self, "DELETE ACCOUNT", Vector2(dx, ry), Vector2(dw, 48), _delete_prompt, "secondary", shell_f, 15)
-	del.disabled = not a.signed_in()
-	ry += del.size.y + 10.0
-	return ry
 
 
 func _share_label() -> String:
@@ -2292,66 +2124,38 @@ func _install_guide_panel() -> void:
 
 func show_leaderboard() -> void:
 	_last_show = show_leaderboard              # a resize that changes the phone sizing rebuilds it (_fit)
-	## LEADERBOARD: WINS THIS SEASON (the UTC month) - online wins in server rooms with two or more players, written by
-	## the server only. Reads it when opened (LOADING / needs a connection / no wins yet say so); YOU, when you're not on
-	## the list, as a row of its own (0.20.13; "-" until you win one). REFRESH reads it again.
-	var tab := _meta_open("leaderboard", show_profile)
-	var back := func():
-		_board_state = "idle"
-		_meta_back("leaderboard", show_profile)
-	var area := shell_open("OOZE / LEADERBOARD", tab, back, faction)
-	_page = "leaderboard"
-	var x := shell_x()
+	## LEADERBOARD = PROFILE > LEADERBOARD (45B): this season's online wins (server rooms, two or more players), four rows
+	## a page; YOU last when you are not on the list. REFRESH at the top right.
+	_meta_open("leaderboard", show_profile)
 	var now := Time.get_datetime_dict_from_system(true)
-	var top := page_title(area, "LEADERBOARD  ·  %s %d" % [MONTHS[int(now["month"]) - 1], int(now["year"])], "WINS THIS SEASON.")
-	var bh := UiKit.tap_h(self, 48.0)
-	var fy := area.end.y - bh - 12.0
-	var rb := UiKit.btn(self, "REFRESH", Vector2(content.size.x - x - 180.0, fy), Vector2(180, 48), func():
+	var st := _profile_tabs("LEADERBOARD", "OOZE / LEADERBOARD", func():
 		_board_state = "idle"
-		show_leaderboard(), "secondary", shell_f, 15)
-	var nt := "Online wins in server rooms with two or more players, written by the server only."
-	var nw := rb.position.x - x - 16.0
-	_say(nt, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, nt, 13, nw)) / 2.0)), 13, UiKit.MUTED, nw)
-	var col := _column(Vector2(x, top), Vector2(content.size.x - x * 2.0, fy - 12.0 - top))
-	var w: float = col["w"]
-	var n0 := content.get_child_count()
-	var y := 4.0
+		_meta_back("leaderboard", show_profile), "SEASON %s %d · ONLINE WINS" % [MONTHS[int(now["month"]) - 1], int(now["year"])], Vector2(200, 672))
+	_page = "leaderboard"
+	st.key("KEY-SMALL", 681.5, 39, 115, 33, "REFRESH", func():
+		_board_state = "idle"
+		show_leaderboard())
 	if _board_state == "idle":
 		_board_state = "loading"
 		_load_board.call_deferred()                    # after this page is built (an offline answer comes back at once)
+	var cols := [["RANK", 35, 83], ["PLAYER", 132, 410], ["WINS", 561, 200]]
+	var rows := []
+	var acc := UiKit.accent(shell_f)
+	for row in _board_rows:
+		var me: bool = row.get("is_me", false) == true   # the server may send null
+		rows.append([["#%d" % int(row.get("rank", 0)), str(row.get("name", "")) + ("  (YOU)" if me else ""), "%d" % int(row.get("wins", 0))],
+				[UiKit.STAR, acc if me else UiKit.INK, acc if me else UiKit.INK]])
+	if not _board_me.is_empty():                      # YOU, when you're not on the list
+		var wins := int(_board_me.get("wins", 0))
+		rows.append([["#%d" % int(_board_me.get("rank", 0)) if wins > 0 else "-", str(_board_me.get("name", "")) + "  (YOU)", "%d" % wins],
+				[UiKit.STAR, acc, acc]])
+	var empty := "No wins yet this season - win an online match against another player to open the board."
 	if _board_state == "loading":
-		y += _say("LOADING ...", Vector2(4, y), 16, UiKit.MUTED, 0.0, true)
+		empty = "LOADING ..."
 	elif _board_state == "offline":
-		y += _say("The leaderboard needs a connection.", Vector2(4, y), 16, UiKit.STAR, w)
-	elif _board_rows.is_empty():
-		y += _say("No wins yet this season - win an online match against another player to open the board.", Vector2(4, y), 16,
-				UiKit.MUTED, w)
-	else:
-		y = 0.0
-		for row in _board_rows:
-			var me: bool = row.get("is_me", false) == true   # the server may send null
-			y += _board_row("#%d" % int(row.get("rank", 0)), str(row.get("name", "")) + ("  (YOU)" if me else ""),
-					"%d WINS" % int(row.get("wins", 0)), Vector2(0, y), w, me) + 6.0
-		if not _board_me.is_empty():                  # 0.20.13: YOU, when you're not on the list - a row like the rest
-			var wins := int(_board_me.get("wins", 0))
-			y += 8.0
-			y += _board_row("#%d" % int(_board_me.get("rank", 0)) if wins > 0 else "-", str(_board_me.get("name", "")) + "  (YOU)"
-					+ ("" if wins > 0 else "  ·  win an online round vs a player"), "%d WINS" % wins, Vector2(0, y), w, true, UiKit.STAR) + 6.0
-	_column_end(col, n0, y, true)
-
-
-func _board_row(rank: String, who: String, wins: String, pos: Vector2, w: float, me: bool, wins_col := UiKit.INK) -> float:
-	## One LEADERBOARD row: the rank, the name, the wins; your own row lit. Returns its height.
-	var lh := UiKit.line_h(self, 16, true)
-	var h := maxf(48.0, lh + 18.0)
-	UiKit.panel(self, pos, Vector2(w, h), shell_f, me, Color(UiKit.BASE, 0.6))
-	var ty := pos.y + (h - lh) / 2.0
-	_say(rank, Vector2(pos.x + 16.0, ty), 16, UiKit.STAR, 0.0, true)
-	var nx := 16.0 + UiKit.text_w(self, "#0000", 16, true) + 24.0
-	var ww := UiKit.text_w(self, wins, 16, true)
-	_clip(who, Vector2(pos.x + nx, ty), 16, UiKit.INK, w - nx - ww - 40.0, true)
-	_say(wins, Vector2(pos.x + w - 16.0 - ww, ty), 16, wins_col if not me or wins_col != UiKit.INK else UiKit.accent(shell_f), 0.0, true)
-	return h
+		empty = "The leaderboard needs a connection."
+	_table45(st, cols, rows, "leaderboard", show_leaderboard, empty)
+	shell_raise()
 
 
 func _load_board() -> void:
@@ -2367,89 +2171,41 @@ func _load_board() -> void:
 
 func show_history() -> void:
 	_last_show = show_history                  # a resize that changes the phone sizing rebuilds it (_fit)
-	## MATCH HISTORY (Daniele, 0.20.5): your recent matches - this device's log (offline, AI, and online rounds played
-	## here) plus the server's record of your online rounds from other devices; newest first, ONLINE / OFFLINE tags,
-	## WIN / LOSS / DRAW in words (and colour). MORE loads older online rounds.
+	## MATCH HISTORY = PROFILE > MATCH HISTORY (45B): this device's matches + the account's online rounds, four a page;
+	## › on the last page asks the server for older rounds.
 	var a := _account()
-	var tab := _meta_open("history", show_profile)
-	var back := func():
+	_meta_open("history", show_profile)
+	var st := _profile_tabs("MATCH HISTORY", "OOZE / MATCH HISTORY", func():
 		_history_state = "idle"
 		_history_online = []
-		_meta_back("history", show_profile)
-	var area := shell_open("OOZE / MATCH HISTORY", tab, back, faction)
+		_meta_back("history", show_profile), "THIS DEVICE" + (" + ONLINE ROUNDS" if a.signed_in() else "") + (" · LOADING ..." if _history_state == "loading" else ""), Vector2(200, 797))
 	_page = "history"
-	var x := shell_x()
-	var top := page_title(area, "MATCH HISTORY", "YOUR RECENT MATCHES.")
 	if _history_state == "idle" and a.signed_in():
 		_history_state = "loading"
 		_load_history.call_deferred(false)             # after this page is built
-	var list := Progression.merge_history(Progression.history, _history_online)
-	var bh := UiKit.tap_h(self, 48.0)
-	var fy := area.end.y - bh - 12.0
-	var nx := content.size.x - x
+	var cols := [["RESULT", 35, 79], ["MODE", 130, 90], ["MAP", 230, 155], ["FACTION", 395, 118], ["DURATION", 524, 128], ["DATE", 662, 118]]
+	var names := _map_names()
+	var rows := []
+	for h in Progression.merge_history(Progression.history, _history_online):
+		var won := bool(h.get("won", false))
+		var draw := bool(h.get("draw", false))
+		var res := "DRAW" if draw else ("WIN" if won else "LOSS")
+		var rc := Color("9cb2bf") if draw else (Color("6fff2a") if won else Color("ff5a4a"))
+		var mine := ""
+		for pl in h.get("players", []):
+			if pl is Dictionary and pl.get("is_me", false) == true:
+				mine = str(pl.get("faction", ""))
+		var code := str(h.get("map", ""))
+		var dur := int(h.get("duration_s", 0))
+		rows.append([[res, str(Menu.MODE_NAMES.get(str(h.get("mode", "")), str(h.get("mode", "")))),
+				str(names.get(code, code)).replace("*", "").to_upper(), str(UiKit.NAMES.get(mine, "-")),
+				"%02d:%02d" % [dur / 60, dur % 60], _date_text(int(h.get("t", 0)))],
+				[rc, UiKit.INK, UiKit.INK, UiKit.accent(mine) if mine != "" else UiKit.MUTED]])
+	var more := Callable()
 	if a.signed_in() and _history_more and not _history_online.is_empty():
-		var mb := UiKit.btn(self, "MORE", Vector2(nx - 160.0, fy), Vector2(160, 48), func(): _load_history(true), "secondary", shell_f, 15)
-		nx = mb.position.x - 16.0
-	var nt := "This device" + (" + your account's online rounds" if a.signed_in() else "") \
-			+ ("  ·  LOADING ONLINE ROUNDS ..." if _history_state == "loading" else "")
-	_say(nt, Vector2(x, fy + maxf(0.0, (bh - UiKit.text_h(self, nt, 13, nx - x)) / 2.0)), 13, UiKit.MUTED, nx - x)
-	var col := _column(Vector2(x, top), Vector2(content.size.x - x * 2.0, fy - 12.0 - top))
-	var w: float = col["w"]
-	var n0 := content.get_child_count()
-	var y := 0.0
-	if list.is_empty():
-		y += _say("No matches yet - finish one and it shows here.", Vector2(4, 4), 16, UiKit.MUTED, w) + 4.0
-	else:
-		var names := _map_names()
-		for h in list:
-			y += _history_row(h, names, Vector2(0, y), w) + 6.0
-	_column_end(col, n0, y, true)
-
-
-func _history_row(h: Dictionary, names: Dictionary, pos: Vector2, w: float) -> float:
-	## One match: ONLINE / OFFLINE and when, the map and mode and how long, everyone's faction mark and name, the result.
-	## Returns the row's height.
-	var won := bool(h.get("won", false))
-	var draw := bool(h.get("draw", false))
-	var res := "DRAW" if draw else ("WIN" if won else "LOSS")
-	var rc := Color("9cb2bf") if draw else (Color("6fff2a") if won else Color("ff5a4a"))
-	var l1 := UiKit.line_h(self, 15, true)
-	var l2 := UiKit.line_h(self, 13)
-	var rh := maxf(64.0, l1 + l2 + 20.0)
-	UiKit.panel(self, pos, Vector2(w, rh), shell_f, false, Color(UiKit.BASE, 0.6))
-	content.add_child(UiKit.rect(pos + Vector2(0, 6), Vector2(4, rh - 12.0), rc))   # the result at the row's edge too
-	var ty := pos.y + (rh - l1 - l2) / 2.0
-	var online := bool(h.get("online", false))
-	var c1 := 16.0
-	_say("ONLINE" if online else "OFFLINE", Vector2(pos.x + c1, ty + 2.0), 12, Color("5fd7ff") if online else UiKit.MUTED, 0.0, true, 2)
-	_say(_date_text(int(h.get("t", 0))), Vector2(pos.x + c1, ty + l1), 13, UiKit.MUTED)
-	var c2 := c1 + maxf(UiKit.text_w(self, "OFFLINE", 12, true) + 20.0, UiKit.text_w(self, "30 SEP 23:59", 13)) + 20.0
-	var c3 := c2 + floorf(w * 0.28)
-	var code := str(h.get("map", ""))
-	_clip(code + "  " + str(names.get(code, "")), Vector2(pos.x + c2, ty), 15, UiKit.INK, c3 - c2 - 14.0, true)
-	var dur := int(h.get("duration_s", 0))
-	_clip("%s  ·  %d:%02d" % [str(Menu.MODE_NAMES.get(str(h.get("mode", "")), str(h.get("mode", "")))), dur / 60, dur % 60],
-			Vector2(pos.x + c2, ty + l1), 13, UiKit.MUTED, c3 - c2 - 14.0)
-	var res_w := UiKit.text_w(self, "LOSS", 20, true) + 24.0
-	var players: Array = h.get("players", []).filter(func(p): return p is Dictionary)
-	var pw := minf(130.0, (w - c3 - res_w - 16.0) / float(maxi(1, players.size())))
-	var ic := minf(26.0, rh - l2 - 16.0)
-	var py := pos.y + (rh - ic - 2.0 - UiKit.line_h(self, 12)) / 2.0
-	var px := pos.x + c3
-	for p in players:
-		var f := str(p.get("faction", "null"))
-		if Rules.FACTIONS.has(f):                        # the race emblem, in its own colours
-			UiKit.emblem_rect(self, f, Vector2(px, py), ic)
-		var me: bool = p.get("is_me", false) == true   # (a null from the server)
-		var who := "YOU" if me and str(p.get("name", "")) == "" else str(p.get("name", ""))
-		if str(p.get("ai_level", "")) != "":
-			who = "AI" if str(p["ai_level"]) == "AI" else "AI " + str(p["ai_level"]).to_upper()
-		elif who == "":
-			who = "PLAYER"
-		_clip(who, Vector2(px, py + ic + 2.0), 12, UiKit.INK if me else UiKit.MUTED, pw - 8.0)
-		px += pw
-	_say(res, Vector2(pos.x + w - 16.0 - UiKit.text_w(self, res, 20, true), pos.y + (rh - UiKit.line_h(self, 20, true)) / 2.0), 20, rc, 0.0, true)
-	return rh
+		more = func(): _load_history(true)
+	_table45(st, cols, rows, "history", show_history, "No matches yet - finish one and it shows here.", more)
+	shell_raise()
 
 
 func _load_history(more: bool) -> void:
@@ -5813,7 +5569,7 @@ func _fit() -> void:
 
 
 
-func _stage_page(crumb: String, tab: String, title: String, sub := "", back := Callable(), f := "") -> Kit45.Stage:
+func _stage_page(crumb: String, tab: String, title: String, sub := "", back := Callable(), f := "", sub_box := Vector2(380, 797)) -> Kit45.Stage:
 	## A remake page (45B): the full header (37 pt) and nav (42 pt) on every screen (IMPORT-45B-SPEC fix 2), the remake's
 	## 812 x 375 pt canvas over the content (Kit45.Stage), the title at the top left and the kicker at the right.
 	## `back` = the page's own way back (Android back / Esc via bar_back); the remake has no BACK in the header.
@@ -5826,7 +5582,7 @@ func _stage_page(crumb: String, tab: String, title: String, sub := "", back := C
 	if title != "":
 		st.txt(title, 15, 45, 420, 26, 18.0, UiKit.INK, true)
 	if sub != "":
-		st.txt(sub, 380, 45, 417, 26, 12.5, Kit45.KICK, true, 2)
+		st.txt(sub, sub_box.x, 45, sub_box.y - sub_box.x, 26, 12.5, Kit45.KICK, true, 2)
 	return st
 
 
@@ -5881,9 +5637,10 @@ func _seat45(st: Kit45.Stage, i: int, id: int, colours: Dictionary, x: float, y:
 		var lo = Net.roster[id].get("loadout", {})
 		var eff := ArmyPresets.effective(f, lo if lo is Dictionary else {}, ArmyPresets.map_has_relays(_selected_map()))
 		var ids := [eff["active"], eff["map"], eff["ultimate"]]
-		for k in range(3):
-			st.piece("SKILL-CHIP", x + 54 + 21 * k, y + 47, 16, 16)
-			skill_icon(str(ids[k]), st.P(x + 57 + 21 * k, y + 50), Vector2(10, 10) * st.u, Color(UiKit.accent(f), 1.0 if Net.abilities else 0.35), st)
+		for k in range(3):                             # Daniele 11-18: chips 22 pt (the 30 pt part, rim intact), icons 16 pt, no glow
+			st.piece("SKILL-CHIP", x + 53 + 25 * k, y + 44, 22, 22, "STATIC", "30x30pt")
+			var ic := st.pic(ArmyPresets.icon(str(ids[k])), x + 56 + 25 * k, y + 47, 16, 16, false, Color(UiKit.accent(f), 1.0 if Net.abilities else 0.35))
+			ic.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	else:
 		st.txt("+", x + 17, y + 34, 20, 16, 16.0, UiKit.MUTED, true, 1)
 	st.txt(name_t, x + 53, y + 7, 108, 16, 13.0, ink if id >= 0 else Color(ink, 0.6), true)
@@ -5951,3 +5708,116 @@ func show_room_demo() -> void:
 	Net.chat_history = [{"id": 1, "pid": 2, "who": "Player 2", "text": "gl hf"}, {"id": 2, "pid": 1, "who": "you", "text": "ready when you are"}]
 	Net.map_path = map_path
 	show_lobby()
+
+
+
+var _pg := {}                                      # 45B pagers: page -> the page index shown (no scrolling: ‹ › pages)
+
+
+
+static func _thou(n: int) -> String:
+	## 6620 -> "6,620" (the remake's numbers)
+	var s := str(absi(n))
+	var out := ""
+	while s.length() > 3:
+		out = "," + s.substr(s.length() - 3) + out
+		s = s.substr(0, s.length() - 3)
+	return ("-" if n < 0 else "") + s + out
+
+
+
+func _profile_tabs(sel: String, crumb: String, back := Callable(), sub := "YOUR SYNDICATE RECORD", sub_box := Vector2(380, 797)) -> Kit45.Stage:
+	## The PROFILE family (45B): PROFILE / YOUR SYNDICATE RECORD over four SUB-TABs (CHALLENGES, LEADERBOARD, MATCH HISTORY,
+	## ACCOUNT); `sel` lit (copper + seat rim), "" on the overview. The nav keeps PROFILE lit.
+	var st := _stage_page(crumb, "profile", "PROFILE", sub, back, faction, sub_box)
+	var tabs := [["CHALLENGES", func(): show_challenges()], ["LEADERBOARD", show_leaderboard], ["MATCH HISTORY", show_history],
+			["ACCOUNT", show_account]]
+	for i in range(4):
+		var t: String = tabs[i][0]
+		var b := st.key("SUB-TAB", 15 + 197 * i, 74, 191, 34, t, tabs[i][1] if t != sel else Callable(), t == sel, false, "191x34pt")
+		b.size_pt = 13.0
+	return st
+
+
+
+func _pager(st: Kit45.Stage, page: String, n_pages: int, redraw: Callable, x := 331.0, y := 299.0, more := Callable()) -> int:
+	## ‹ p / n › (KEY-SMALL 36 x 33); returns the page index to show. `more`: › on the last page asks for more (history).
+	var p := clampi(int(_pg.get(page, 0)), 0, maxi(0, n_pages - 1))
+	_pg[page] = p
+	var lb := st.key("KEY-SMALL", x, y, 36, 33, "‹", func():
+		_pg[page] = p - 1
+		redraw.call(), false, p <= 0)
+	lb.size_pt = 18.0
+	st.txt("%d / %d" % [p + 1, maxi(1, n_pages)], x + 42, y + 8, 66, 16, 12.5, UiKit.INK, true, 1)
+	var last := p >= n_pages - 1
+	var rb := st.key("KEY-SMALL", x + 114, y, 36, 33, "›", func():
+		if last and more.is_valid():
+			more.call()
+		else:
+			_pg[page] = p + 1
+			redraw.call(), false, last and not more.is_valid())
+	rb.size_pt = 18.0
+	return p
+
+
+
+func _challenge_row45(st: Kit45.Stage, kind: String, c: Dictionary, x: float, y: float, just_claimed: String, rerolled: bool) -> void:
+	var claimed: bool = c["claimed"]
+	var done: bool = c["done"]
+	var id: String = c["id"]
+	var state := "DONE" if claimed else ("CLAIM" if done else "IN-PROGRESS")
+	var row := st.piece("CHALLENGE-ROW", x, y, 762, 72, state)
+	row.fill = float(c["progress"]) / maxf(1.0, float(c["target"]))
+	row.tints = {"fill": Kit45.seat(), "seat": Kit45.seat()}
+	var ink := Kit45.ink_on("CHALLENGE-ROW", row.key, state, [13, 9, 426, 16])
+	st.txt(("DAILY · " if kind == "daily" else "WEEKLY · ") + str(c["text"]), x + 13, y + 9, 426, 16, 13.0, Color(ink, 0.55) if claimed else ink, true)
+	st.txt("%d / %d" % [int(c["progress"]), int(c["target"])], x + 13, y + 29, 426, 16, 12.5, ink)
+	var reward := "%s  ·  +%d XP" % [Progression.amount_text(int(c["soft"])), int(c["xp"])]
+	if int(c["premium"]) > 0:
+		reward += "  ·  " + Progression.amount_text(int(c["premium"]), "premium")
+	st.txt(reward, x + 13, y + 49, 426, 16, 12.5, RewardTicker.COLOURS["soft"])
+	var kx := x + 640.0
+	var ky := y + 19.0
+	if claimed:
+		if id == just_claimed:                          # the paid SCRAP counts up on the row it came from
+			var t := _ticker(int(c["soft"]), "soft", st.P(kx, ky), false)
+			t.position.y = st.P(0, ky + 17).y - t.size.y / 2.0
+		else:
+			st.txt("DONE", kx, ky + 9, 109, 16, 13.0, Color(ink, 0.6), true, 1)
+	elif done:
+		st.key("KEY-SMALL", kx, ky, 109, 34, "CLAIM", func():
+			if not Progression.claim(kind, id).is_empty():
+				show_challenges(id), true)
+	elif kind == "daily" and not rerolled:
+		st.key("KEY-SMALL", kx, ky, 109, 34, "REROLL", func():
+			Progression.reroll(id)
+			show_challenges())
+	else:
+		st.txt("IN PROGRESS", kx, ky + 9, 109, 16, 12.5, Color(ink, 0.7), true, 1)
+
+
+
+func _table45(st: Kit45.Stage, cols: Array, rows: Array, page: String, redraw: Callable, empty: String, more := Callable()) -> void:
+	## The records table (45B LEADERBOARD / MATCH HISTORY): a HERO-CABINET, the column heads in bronze, four HERO-TITLE-BAR
+	## rows a page, ‹ p / n › under it. cols = [[head, x, w]]; a row = [cells] or [cells, colours].
+	st.piece("HERO-CABINET", 15, 114, 782, 180, "STATIC", "782x180pt")
+	for c in cols:
+		st.txt(str(c[0]), float(c[1]), 120, float(c[2]), 16, 12.5, Kit45.KICK, true)
+	var n_pages := maxi(1, ceili(rows.size() / 4.0))
+	var p := _pager(st, page, n_pages, redraw, 331, 299, more)
+	if rows.is_empty():
+		st.piece("HERO-TITLE-BAR", 26, 142, 760, 32, "STATIC", "760x32pt")
+		st.txt(empty, 35, 150, 740, 16, 12.5, UiKit.MUTED)
+		return
+	for k in range(4):
+		var i := p * 4 + k
+		if i >= rows.size():
+			break
+		var y := 142.0 + 36.0 * k
+		st.piece("HERO-TITLE-BAR", 26, y, 760, 32, "STATIC", "760x32pt")
+		var r: Array = rows[i]
+		var cells: Array = r[0]
+		var cc: Array = r[1] if r.size() > 1 else []
+		for j in range(mini(cells.size(), cols.size())):
+			var col: Color = cc[j] if j < cc.size() and cc[j] is Color else UiKit.INK
+			st.txt(str(cells[j]), float(cols[j][1]), y + 8, float(cols[j][2]), 16, 12.5, col, j == 0 or j == 1)
