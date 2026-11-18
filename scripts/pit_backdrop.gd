@@ -108,6 +108,10 @@ func _fit(vp: Vector2) -> void:
 	_s = Vector2(maxf(_s.x, vp.x / REF.x), maxf(_s.y, vp.y / REF.y))
 	_o = pr.get_center() - c * _s
 	_o = Vector2(clampf(_o.x, vp.x - REF.x * _s.x, 0.0), clampf(_o.y, vp.y - REF.y * _s.y, 0.0))
+	if grow > 1.0001:                                  # SIZE NUDGE: the pit block grows round the lake centre (place_bases)
+		var cen := _o + c * _s
+		_s *= grow
+		_o = cen - c * _s
 	if absf(drop_pt) > 0.001:                         # DROP (Daniele 11-18): the painted pit block lower by drop_pt (pt of the frame)
 		var cy := _o.y + c.y * _s.y + drop_pt * _s.y   # the lake centre's new screen y
 		_o.y += drop_pt * _s.y
@@ -123,9 +127,12 @@ func _fit(vp: Vector2) -> void:
 # the bottom of the node (as in the drill) the top can end up visibly outside as long as its base is IN the pit"). A node's base =
 # its drill foot at the goo surface (the river world's level at 0:00, WorldRiver.top_y), projected by the fitted start camera; the
 # map fit and per-map zoom stay 0.25.0's. drop_pt = the smallest move (pt, + = lower; DROP_RANGE) that lands every base on the lake
-# mask (lake_mask.png: the open goo eroded by 2 % of the lake's size). Picked once the start view is fitted (and again on a resize).
+# mask (lake_mask.png: the open goo eroded by 2 % of the lake's size); only when no drop does it, the block also grows round the lake
+# centre by the smallest step (x1.02 .. GROW_MAX) that does. Picked once the start view is fitted (and again on a resize).
 const DROP_RANGE := Vector2(-20.0, 90.0)
 var drop_pt := 0.0
+var grow := 1.0                       # only when no drop lands every base: the smallest size nudge that does (GROW_MAX)
+const GROW_MAX := 1.3
 var _mask: Image
 var _placed := false
 var bases_in := 0
@@ -181,25 +188,30 @@ func place_bases() -> void:
 		if _mask != null and _mask.is_compressed():
 			_mask.decompress()
 	var vp: Vector2 = main.get_viewport().get_visible_rect().size
-	var best := [-1, 0.0]
+	var best := [-1, 0.0, 1.0]
 	var cands: Array = []
 	for d in range(int(DROP_RANGE.x), int(DROP_RANGE.y) + 1):
 		cands.append(float(d))
 	cands.sort_custom(func(a, b): return absf(a) < absf(b) or (absf(a) == absf(b) and a > b))
-	for d in cands:
-		drop_pt = d
-		_relayout(vp)
-		var c := count_inside()
-		if int(c[0]) > int(best[0]):
-			best = [int(c[0]), d]
-		if int(c[0]) == int(c[1]):
-			break
+	var g := 1.0
+	while g <= GROW_MAX + 0.0001 and int(best[0]) < _bases_screen().size():
+		grow = g
+		for d in cands:
+			drop_pt = d
+			_relayout(vp)
+			var c := count_inside()
+			if int(c[0]) > int(best[0]):
+				best = [int(c[0]), d, g]
+			if int(c[0]) == int(c[1]):
+				break
+		g += 0.02
+	grow = best[2]
 	drop_pt = best[1]
 	_relayout(vp)
 	var c2 := count_inside()
 	bases_in = c2[0]
 	bases_n = c2[1]
-	print("PIT DROP %.0f pt: %d of %d bases inside (viewport %dx%d)" % [drop_pt, bases_in, bases_n, vp.x, vp.y])
+	print("PIT DROP %.0f pt, size x%.2f: %d of %d bases inside (viewport %dx%d)" % [drop_pt, grow, bases_in, bases_n, vp.x, vp.y])
 
 
 func _relayout(vp: Vector2) -> void:
