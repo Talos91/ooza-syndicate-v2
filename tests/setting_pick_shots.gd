@@ -59,7 +59,7 @@ func _fake_room(mode: String, guest: bool, ready_all := false) -> void:
 func _run() -> void:
 	await _frames(40)
 	m = main.menu_layer
-	UiKit.save_setting_choice("golden_hour")
+	UiKit.save_setting_choice("lab")
 	m.show_setup()
 	await shot("01-vs-ai-setup")
 	m._bg_sheet = true

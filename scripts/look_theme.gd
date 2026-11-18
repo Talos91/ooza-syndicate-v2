@@ -93,11 +93,20 @@ static func forced() -> String:
 # the old BACKGROUND field (Net.room_backdrop "0".."4" -> match_info "backdrop" = the index in IDS; Net.BACKDROP_COUNT ==
 # IDS.size(), so net.gd and the protocol are unchanged; "auto" = the map's own = MapPool.THEMES, lab when unassigned).
 # Campaign missions and the tutorial / debug maps keep the map's own.
-const NAMES := {"lab": "THE LAB", "corporate_campus": "CORPORATE CAMPUS", "golden_hour": "GOLDEN HOUR",
+# SETTINGS: B4 ONLY (Daniele 2026-11-19: "make them coming soon and have just the one we working on"). The B4 flat goo background
+# runs on every match, so the older settings no longer change anything: LIVE (the id "lab" = the default theme path, now shown
+# as B4) is the only pickable one; the rest stay in IDS (tiles + previews, protocol index unchanged) as COMING SOON. A saved
+# or room value of any other id reads as LIVE.
+const LIVE := "lab"
+static func is_live(id: String) -> bool:
+	return id == LIVE
+
+
+const NAMES := {"lab": "B4 FLAT GOO", "corporate_campus": "CORPORATE CAMPUS", "golden_hour": "GOLDEN HOUR",
 		"quota_parade": "QUOTA PARADE", "wellness_retreat": "WELLNESS RETREAT"}
-const SHORT_NAMES := {"lab": "LAB", "corporate_campus": "CAMPUS", "golden_hour": "GOLDEN HOUR",
+const SHORT_NAMES := {"lab": "B4", "corporate_campus": "CAMPUS", "golden_hour": "GOLDEN HOUR",
 		"quota_parade": "QUOTA PARADE", "wellness_retreat": "WELLNESS"}
-const TAGLINES := {"lab": "Where it all started", "corporate_campus": "Thrive together", "golden_hour": "Protected for extraction",
+const TAGLINES := {"lab": "The goo pit", "corporate_campus": "Thrive together", "golden_hour": "Protected for extraction",
 		"quota_parade": "Record output", "wellness_retreat": "Mandatory relaxation"}
 const PREVIEW := "res://assets/ui/settings/%s.jpg"     # tools/themes/make_setting_previews.py (R-01 at 1:40, per setting)
 
@@ -115,11 +124,11 @@ static func pick(map_code: String, use_choice := true) -> String:
 	if f != "":
 		current = f
 	elif room >= 0:
-		current = IDS[room % IDS.size()]
+		current = LIVE                                   # SETTINGS: B4 only - any room value (an old client's included) reads as B4
 	elif room == -2 and use_choice and map_code != "" and not map_code.begins_with("T-") and not map_code.begins_with("D-") 			and DisplayServer.get_name() != "headless":
-		current = UiKit.setting_choice()
+		current = LIVE
 	else:
-		current = str(MapPool.THEMES.get(map_code, LAB))
+		current = LIVE                                   # SETTINGS: B4 only (MapPool.THEMES is ignored)
 	if not current in IDS:
 		current = LAB
 	print("THEME ", current, " (map ", map_code, ")")
@@ -143,9 +152,7 @@ static func room_value(id: String) -> String:
 
 static func of_room_value(v: String, map_code := "") -> String:
 	## Net.room_backdrop -> a setting id ("auto" = the map's own; "rotate", an old room value, reads as the map's own too).
-	if v.is_valid_int() and int(v) >= 0 and int(v) < IDS.size():
-		return IDS[int(v)]
-	return str(MapPool.THEMES.get(map_code, LAB))
+	return LIVE                                          # SETTINGS: B4 only (any value: "0".."4", "auto", "rotate")
 
 
 static func active() -> bool:

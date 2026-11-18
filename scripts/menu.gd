@@ -3987,7 +3987,7 @@ var _setting_room := ""                            # the room the owner's rememb
 
 
 func _setting_tiles(r: Rect2, mine: String, on_pick: Callable, f: String, enabled := true) -> float:
-	## The five settings in one row inside r, each by its picture (R-01 in that setting), its name and its line; the current
+	## The five settings (B4 live, the rest COMING SOON) in one row inside r, each by its picture (R-01 in that setting), its name and its line; the current
 	## lit. Returns the height used. No scrolling: the row shrinks to fit (Daniele 2026-11-04).
 	var n := LookTheme.IDS.size()
 	var gap := 10.0
@@ -4006,7 +4006,8 @@ func _setting_tiles(r: Rect2, mine: String, on_pick: Callable, f: String, enable
 		var id: String = LookTheme.IDS[k]
 		var b := UiKit.btn(self, "", r.position + Vector2(k * (tw + gap), 0), tile, func(): on_pick.call(id),
 				"selected" if id == mine else "secondary", f)
-		b.disabled = not enabled
+		var live := LookTheme.is_live(id)                 # SETTINGS: B4 only; the others stay as dimmed COMING SOON tiles (no tap)
+		b.disabled = not enabled or not live
 		var tex := LookTheme.preview(id)
 		if tex != null:
 			var pic := TextureRect.new()
@@ -4016,11 +4017,26 @@ func _setting_tiles(r: Rect2, mine: String, on_pick: Callable, f: String, enable
 			pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			pic.position = Vector2(5, 5)
 			pic.size = Vector2(tw - 10.0, th)
+			if not live:
+				pic.modulate = Color(0.42, 0.42, 0.46)
 			b.add_child(pic)
+		if not live:
+			var bh := minf(th * 0.4, UiKit.line_h(self, 13, true) + 14.0)
+			var band := UiKit.rect(Vector2(5, 5 + (th - bh) / 2.0), Vector2(tw - 10.0, bh), Color(0.06, 0.04, 0.08, 0.82))
+			band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(band)
+			var soon := UiKit.label(self, "COMING SOON", 13, UiKit.accent(f), true)
+			soon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			soon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			soon.clip_text = true
+			soon.position = band.position
+			soon.size = band.size
+			soon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(soon)
 		var title := str(LookTheme.NAMES[id])
 		if UiKit.text_w(self, title, 13, true) > tw - 16.0:
 			title = str(LookTheme.SHORT_NAMES[id])       # CORPORATE CAMPUS -> CAMPUS on a phone
-		var nm := UiKit.label(self, title, 13, UiKit.accent(f) if id == mine else UiKit.INK, true)
+		var nm := UiKit.label(self, title, 13, UiKit.accent(f) if id == mine else (UiKit.INK if live else UiKit.MUTED), true)
 		nm.clip_text = true
 		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		nm.position = Vector2(8, th + 10.0)

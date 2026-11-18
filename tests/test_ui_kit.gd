@@ -66,11 +66,17 @@ func _init() -> void:
 	sc.free()
 	# SETTING PICK (2026-11-13; it supersedes BATTLEFIELD > BACKGROUND): THE LAB by default, a pick saved, an unknown one refused
 	UiKit.path = CFG
-	check(UiKit.setting_choice() == "lab", "SETTING is THE LAB by default")
-	check(UiKit.save_setting_choice("golden_hour") and UiKit.setting_choice() == "golden_hour", "a SETTING pick is saved")
-	check(not UiKit.save_setting_choice("nope") and UiKit.setting_choice() == "golden_hour", "an unknown setting is refused")
-	check(LookTheme.room_value("wellness_retreat") == "4" and LookTheme.of_room_value("4") == "wellness_retreat"
-			and LookTheme.of_room_value("auto") == "lab", "SETTING <-> the room's value (0..4; auto = the map's own = lab)")
+	check(UiKit.setting_choice() == LookTheme.LIVE, "SETTING is B4 by default")
+	check(UiKit.save_setting_choice(LookTheme.LIVE) and UiKit.setting_choice() == LookTheme.LIVE, "the B4 SETTING pick is saved")
+	check(not UiKit.save_setting_choice("golden_hour") and not UiKit.save_setting_choice("nope"), "COMING SOON / unknown settings are refused")
+	var oldc := ConfigFile.new()                       # an old saved choice (golden_hour) loads as B4
+	oldc.load(UiKit.path)
+	oldc.set_value("match", "setting", "golden_hour")
+	oldc.save(UiKit.path)
+	check(UiKit.setting_choice() == LookTheme.LIVE, "SETTINGS: an old saved choice loads as B4")
+	check(LookTheme.of_room_value("4") == LookTheme.LIVE and LookTheme.of_room_value("auto") == LookTheme.LIVE
+			and LookTheme.of_room_value("rotate") == LookTheme.LIVE and LookTheme.room_value(LookTheme.LIVE) == "0",
+			"SETTINGS: every room value (0..4, auto, rotate) reads as B4; the live value is 0 (protocol unchanged)")
 	check(LookTheme.pick("R-01") == "lab", "headless: the map's own setting, whatever the pick (a server's match host)")
 	for id in LookTheme.IDS:
 		check(LookTheme.preview(id) != null and LookTheme.NAMES.has(id) and LookTheme.TAGLINES.has(id), "SETTING %s has its preview, name and line" % id)

@@ -896,15 +896,11 @@ static func save_map_list(key: String, list: Array) -> bool:
 # successor of the old BATTLEFIELD > BACKGROUND (retired with its five battle backdrops). A LookTheme id, LAB by default,
 # remembered here; your matches only (online the room owner's pick wins: LookTheme.pick).
 static func setting_choice() -> String:
-	var c := ConfigFile.new()
-	if c.load(path) != OK:
-		return LookTheme.LAB
-	var v := str(c.get_value("match", "setting", LookTheme.LAB))
-	return v if v in LookTheme.IDS else LookTheme.LAB
+	return LookTheme.LIVE                               # SETTINGS: B4 only - an old saved pick reads as B4 (the file is left as is)
 
 
 static func save_setting_choice(v: String) -> bool:
-	if not v in LookTheme.IDS:
+	if not LookTheme.is_live(v):                        # SETTINGS: the others are COMING SOON
 		return false
 	var c := ConfigFile.new()
 	c.load(path)
