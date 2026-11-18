@@ -480,8 +480,8 @@ func _build_pools() -> void:
 		_ent_mm.set_instance_custom_data(i, Color(0, 0, 0, 0))
 		_ent_mm.set_instance_color(i, Color.WHITE)
 		_sock_lit(tb, tb["base"])
-	_socket_mm.visible_instance_count = _tubes.size()
-	_ent_mm.visible_instance_count = _tubes.size()
+	_socket_mm.visible_instance_count = 0 if flat else _tubes.size()   # (flat: none drawn - a zero-scale instance still costs its tris)
+	_ent_mm.visible_instance_count = 0 if flat else _tubes.size()
 
 
 func _orient_entrances() -> void:
